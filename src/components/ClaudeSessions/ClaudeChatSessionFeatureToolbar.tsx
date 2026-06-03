@@ -1,6 +1,7 @@
 import {
   CheckCircleOutlined,
   CommentOutlined,
+  CopyOutlined,
   DeleteOutlined,
   FieldTimeOutlined,
   QuestionCircleOutlined,
@@ -16,6 +17,7 @@ import {
   Table,
   Input,
   Select,
+  message,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { memo, type Dispatch, type RefObject, type SetStateAction } from "react";
@@ -46,6 +48,13 @@ function ClockIcon() {
       <circle cx="12" cy="12" r="8.5" stroke="currentColor" strokeWidth="1.8" />
       <path d="M12 7.5V12L15.5 13.8" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
+  );
+}
+
+function copySessionUserQuestionText(text: string) {
+  void navigator.clipboard.writeText(text).then(
+    () => message.success("已复制到剪贴板"),
+    () => message.error("复制失败"),
   );
 }
 
@@ -294,23 +303,37 @@ export const ClaudeChatSessionFeatureToolbar = memo(function ClaudeChatSessionFe
                       </div>
                     ) : (
                       sessionUserQuestions.map((row) => (
-                        <button
-                          key={row.id}
-                          type="button"
-                          className="app-claude-session-user-questions-popover__item"
-                          title={row.text}
-                          onClick={() => {
-                            scrollToSessionMessageId(row.id);
-                            setUserQuestionsPopoverOpen(false);
-                          }}
-                        >
-                          <span className="app-claude-session-user-questions-popover__item-text">
-                            {row.text}
-                          </span>
-                          <span className="app-claude-session-user-questions-popover__item-time">
-                            {formatShortQuestionTime(row.timestamp)}
-                          </span>
-                        </button>
+                        <div key={row.id} className="app-claude-session-user-questions-popover__item-row">
+                          <button
+                            type="button"
+                            className="app-claude-session-user-questions-popover__item"
+                            title={row.text}
+                            onClick={() => {
+                              scrollToSessionMessageId(row.id);
+                              setUserQuestionsPopoverOpen(false);
+                            }}
+                          >
+                            <span className="app-claude-session-user-questions-popover__item-text">
+                              {row.text}
+                            </span>
+                            <span className="app-claude-session-user-questions-popover__item-time">
+                              {formatShortQuestionTime(row.timestamp)}
+                            </span>
+                          </button>
+                          <Tooltip title="复制消息内容" mouseEnterDelay={0.35}>
+                            <Button
+                              type="text"
+                              size="small"
+                              className="app-claude-session-user-questions-popover__item-copy"
+                              icon={<CopyOutlined />}
+                              aria-label="复制消息内容"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                copySessionUserQuestionText(row.text);
+                              }}
+                            />
+                          </Tooltip>
+                        </div>
                       ))
                     )}
                   </div>

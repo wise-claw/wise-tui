@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ClaudeMessage, ClaudeSession } from "../types";
 import {
+  chatMessagePlainTextForCopy,
   enrichDispatchRecordMeta,
   formatDispatchRecordSentence,
   hasRenderableChatMessageBody,
@@ -8,6 +9,7 @@ import {
   isRenderableMessagePart,
   isSystemMessageDisplayNoiseText,
   parseDispatchRecord,
+  resolveChatMessageCopyText,
 } from "./claudeChatMessageDisplay";
 
 describe("isAssistantDisplayNoiseText", () => {
@@ -58,7 +60,7 @@ describe("parseDispatchRecord", () => {
     expect(meta?.dispatchContent).toBe("请检查天气接口");
     expect(meta?.targetSessionId).toBe("tab-worker-1");
     expect(formatDispatchRecordSentence(meta!)).toBe(
-      "终端01在2026/6/3 15:19:25执行请检查天气接口。",
+      "终端01 在 2026/6/3 15:19:25 执行 请检查天气接口。",
     );
   });
 
@@ -83,7 +85,51 @@ describe("parseDispatchRecord", () => {
     } as ClaudeSession;
     const enriched = enrichDispatchRecordMeta(legacy, [worker]);
     expect(formatDispatchRecordSentence(enriched)).toBe(
-      "终端01在2026/6/3 15:19:25执行你好。",
+      "终端01 在 2026/6/3 15:19:25 执行 你好。",
+    );
+  });
+});
+
+describe("chatMessagePlainTextForCopy", () => {
+  test("joins text, reasoning, and tool output", () => {
+    const msg: ClaudeMessage = {
+      id: 1,
+      role: "assistant",
+      content: "",
+      parts: [
+        { type: "reasoning", text: "先分析接口" },
+        { type: "text", text: "结论如下" },
+        {
+          type: "tool_use",
+          id: "tool-1",
+          name: "Read",
+          input: {},
+          output: "file content",
+          status: "completed",
+        },
+      ],
+      timestamp: 0,
+    };
+    expect(chatMessagePlainTextForCopy(msg)).toBe(
+      "[思考过程]\n先分析接口\n\n结论如下\n\n[Read]\nfile content",
+    );
+  });
+
+  test("resolveChatMessageCopyText uses dispatch sentence for system records", () => {
+    const msg: ClaudeMessage = {
+      id: 2,
+      role: "system",
+      content: [
+        "任务分发记录",
+        "- 类型：终端独立会话",
+        "- 目标：终端01",
+        "- 时间：2026/6/3 17:58:06",
+        "- 正文：/add-dir 你好",
+      ].join("\n"),
+      timestamp: 0,
+    };
+    expect(resolveChatMessageCopyText(msg)).toBe(
+      "终端01 在 2026/6/3 17:58:06 执行 /add-dir 你好。",
     );
   });
 });

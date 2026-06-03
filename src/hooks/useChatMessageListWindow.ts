@@ -63,16 +63,36 @@ export function useChatMessageListWindow({
   }, [initialVisible, listResetKey]);
 
   const slice = sliceChatMessageListRows(rows, visibleCount);
+  const rowsLengthRef = useRef(rows.length);
+  rowsLengthRef.current = rows.length;
+  const pendingTailExpandRafRef = useRef(0);
+  const pendingTailExpandDeltaRef = useRef(0);
 
   useEffect(() => {
     const prevLength = prevRowsLengthRef.current;
     const delta = rows.length - prevLength;
     prevRowsLengthRef.current = rows.length;
     if (delta <= 0 || !slice.windowActive) return;
-    // 尾部窗口已贴底展示时，新消息到达后扩展窗口以包含新行
+    // 尾部窗口已贴底展示时，新消息到达后扩展窗口以包含新行（每帧最多一次 setState）
     if (slice.hiddenRowCount === 0) {
-      setVisibleCount((current) => Math.min(rows.length, current + delta));
+      pendingTailExpandDeltaRef.current += delta;
+      if (pendingTailExpandRafRef.current !== 0) return;
+      pendingTailExpandRafRef.current = window.requestAnimationFrame(() => {
+        pendingTailExpandRafRef.current = 0;
+        const expandBy = pendingTailExpandDeltaRef.current;
+        pendingTailExpandDeltaRef.current = 0;
+        if (expandBy <= 0) return;
+        setVisibleCount((current) =>
+          Math.min(rowsLengthRef.current, current + expandBy),
+        );
+      });
     }
+    return () => {
+      if (pendingTailExpandRafRef.current !== 0) {
+        window.cancelAnimationFrame(pendingTailExpandRafRef.current);
+        pendingTailExpandRafRef.current = 0;
+      }
+    };
   }, [rows.length, slice.hiddenRowCount, slice.windowActive]);
 
   const loadMoreOlder = useCallback(() => {

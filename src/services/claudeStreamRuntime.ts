@@ -152,6 +152,82 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
   const deferredStderrErrors: Array<{ tid: string; msg: string }> = [];
   const deferredCompletes: Array<{ tid: string; payload: unknown; turnNonce: number }> = [];
   const DEFERRED_MAX = 256;
+
+  type SessionListUpdater = (prev: ClaudeSession[]) => ClaudeSession[];
+  const pendingStreamSessionUpdaters: SessionListUpdater[] = [];
+  let streamSessionFlushRaf: number | null = null;
+
+  function flushPendingStreamSessionUpdatesSync(): void {
+    if (streamSessionFlushRaf !== null) {
+      window.cancelAnimationFrame(streamSessionFlushRaf);
+      streamSessionFlushRaf = null;
+    }
+    if (pendingStreamSessionUpdaters.length === 0) return;
+    const updaters = pendingStreamSessionUpdaters.splice(0);
+    setSessions((prev) => {
+      let next = prev;
+      for (const updater of updaters) {
+        next = updater(next);
+      }
+      return next;
+    });
+  }
+
+  function schedulePendingStreamSessionFlush(): void {
+    if (streamSessionFlushRaf !== null) return;
+    streamSessionFlushRaf = window.requestAnimationFrame(() => {
+      streamSessionFlushRaf = null;
+      flushPendingStreamSessionUpdatesSync();
+    });
+  }
+
+  function enqueueStreamSessionUpdate(updater: SessionListUpdater): void {
+    pendingStreamSessionUpdaters.push(updater);
+    schedulePendingStreamSessionFlush();
+  }
+
+  function buildStreamSessionUpdater(
+    tid: string,
+    dedupedParts: MessagePart[],
+    isInit: boolean,
+    realSessionId: string | null,
+    opts: { syncStreamingTargetRefOnInit: boolean },
+  ): SessionListUpdater {
+    return (prev) =>
+      prev.map((s) => {
+        if (s.id !== tid && s.claudeSessionId !== tid) return s;
+        let updated = { ...s };
+        if (isInit && realSessionId) {
+          sessionIdMapRef.current.set(tid, realSessionId);
+          onClaudeSessionIdAssigned?.(tid, realSessionId);
+          const preserveWiseTabId = isTerminalWorkerWiseTab(updated);
+          if (preserveWiseTabId) {
+            updated = { ...updated, claudeSessionId: realSessionId };
+          } else {
+            updated = { ...updated, id: realSessionId, claudeSessionId: realSessionId };
+            if (opts.syncStreamingTargetRefOnInit) {
+              streamingTargetIdRef.current = realSessionId;
+            }
+            setActiveSessionId((aid) => (aid === tid ? realSessionId : aid));
+          }
+        }
+        if (dedupedParts.length > 0 && !isInit) {
+          const hasToolResults = dedupedParts.some(
+            (part) =>
+              part.type === "tool_use" &&
+              (part.status === "completed" ||
+                part.status === "error" ||
+                Boolean(part.output?.trim()) ||
+                Boolean(part.error?.trim())),
+          );
+          updated = hasToolResults
+            ? applyToolResultPartsToSession(updated, dedupedParts)
+            : appendAssistantStreamParts(updated, dedupedParts);
+          ingestTodosFromSessionMessages(tid, updated.messages);
+        }
+        return updated;
+      });
+  }
   function pushDeferred<T>(arr: T[], item: T): void {
     if (arr.length >= DEFERRED_MAX) arr.shift();
     arr.push(item);
@@ -305,41 +381,12 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     const mustPublishInit = Boolean(isInit && realSessionId);
     if (hidden && hasStreamUiUpdate && !mustPublishInit) {
       deferredStreamTabIds.add(tid);
-    } else {
-      setSessions((prev) =>
-        prev.map((s) => {
-          if (s.id !== tid && s.claudeSessionId !== tid) return s;
-          let updated = { ...s };
-          if (isInit && realSessionId) {
-            sessionIdMapRef.current.set(tid, realSessionId);
-            onClaudeSessionIdAssigned?.(tid, realSessionId);
-            const preserveWiseTabId = isTerminalWorkerWiseTab(updated);
-            if (preserveWiseTabId) {
-              updated = { ...updated, claudeSessionId: realSessionId };
-            } else {
-              updated = { ...updated, id: realSessionId, claudeSessionId: realSessionId };
-              if (opts.syncStreamingTargetRefOnInit) {
-                streamingTargetIdRef.current = realSessionId;
-              }
-              setActiveSessionId((aid) => (aid === tid ? realSessionId : aid));
-            }
-          }
-          if (dedupedParts.length > 0 && !isInit) {
-            const hasToolResults = dedupedParts.some(
-              (part) =>
-                part.type === "tool_use" &&
-                (part.status === "completed" ||
-                  part.status === "error" ||
-                  Boolean(part.output?.trim()) ||
-                  Boolean(part.error?.trim())),
-            );
-            updated = hasToolResults
-              ? applyToolResultPartsToSession(updated, dedupedParts)
-              : appendAssistantStreamParts(updated, dedupedParts);
-            ingestTodosFromSessionMessages(tid, updated.messages);
-          }
-          return updated;
-        }),
+    } else if (mustPublishInit) {
+      flushPendingStreamSessionUpdatesSync();
+      setSessions(buildStreamSessionUpdater(tid, dedupedParts, isInit, realSessionId, opts));
+    } else if (hasStreamUiUpdate) {
+      enqueueStreamSessionUpdate(
+        buildStreamSessionUpdater(tid, dedupedParts, false, null, opts),
       );
     }
 
@@ -431,6 +478,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
         return;
       }
     }
+    flushPendingStreamSessionUpdatesSync();
     setSessions((prev) =>
       finalizeSessionAfterComplete({
         sessions: prev.map((s) => {
@@ -513,6 +561,8 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
   }
 
   function dispose(): void {
+    flushPendingStreamSessionUpdatesSync();
+    pendingStreamSessionUpdaters.length = 0;
     if (hiddenUiFlushHandler === flushHiddenUiIfNeeded) {
       hiddenUiFlushHandler = null;
     }

@@ -3,6 +3,7 @@ import type { ClaudeMessage } from "../types";
 import {
   buildChatMessageListRows,
   shouldShowListEndThinkingHint,
+  tryPatchChatMessageListRowsTail,
 } from "./claudeChatMessageListRows";
 
 function msg(partial: Partial<ClaudeMessage> & Pick<ClaudeMessage, "id" | "role">): ClaudeMessage {
@@ -57,5 +58,39 @@ describe("buildChatMessageListRows", () => {
     expect(rows).toHaveLength(2);
     expect(rows[0]!.kind === "message" && rows[0]!.mergedWithPrevious).toBe(false);
     expect(rows[1]!.kind === "message" && rows[1]!.mergedWithPrevious).toBe(true);
+  });
+});
+
+describe("tryPatchChatMessageListRowsTail", () => {
+  test("reuses prefix rows when only the last message changes", () => {
+    const messages = [
+      msg({ id: 1, role: "user", content: "hello" }),
+      msg({ id: 2, role: "assistant", content: "world" }),
+    ];
+    const options = { sessionStatus: "running" as const, showListEndThinkingHint: true };
+    const initialRows = buildChatMessageListRows(messages, options);
+    const nextMessages = [
+      messages[0]!,
+      msg({ id: 2, role: "assistant", content: "world!" }),
+    ];
+    const patched = tryPatchChatMessageListRowsTail(messages, nextMessages, initialRows, options);
+    expect(patched).not.toBeNull();
+    expect(patched![0]).toBe(initialRows[0]);
+    expect(patched![1]!.kind === "message" && patched![1]!.msg.content).toBe("world!");
+    expect(patched!.map((row) => row.kind)).toEqual(["message", "message", "thinking-hint"]);
+  });
+
+  test("returns null when a prefix message reference changes", () => {
+    const messages = [
+      msg({ id: 1, role: "user", content: "hello" }),
+      msg({ id: 2, role: "assistant", content: "world" }),
+    ];
+    const options = { sessionStatus: "idle" as const, showListEndThinkingHint: false };
+    const initialRows = buildChatMessageListRows(messages, options);
+    const nextMessages = [
+      msg({ id: 1, role: "user", content: "hello!" }),
+      messages[1]!,
+    ];
+    expect(tryPatchChatMessageListRowsTail(messages, nextMessages, initialRows, options)).toBeNull();
   });
 });

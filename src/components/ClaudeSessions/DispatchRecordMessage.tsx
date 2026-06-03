@@ -1,3 +1,4 @@
+import { memo, useMemo } from "react";
 import type { ClaudeSession } from "../../types";
 import type { DispatchRecordMeta } from "../../utils/claudeChatMessageDisplay";
 import {
@@ -12,14 +13,15 @@ interface Props {
   onOpenTaskDetail?: (taskId: string) => void;
 }
 
-export function DispatchRecordMessage({
+function DispatchRecordMessageInner({
   dispatch,
   sessionsForDispatchLookup,
   onOpenHistorySessionInInspector,
   onOpenTaskDetail,
 }: Props) {
-  const sentence = formatDispatchRecordSentence(
-    enrichDispatchRecordMeta(dispatch, sessionsForDispatchLookup),
+  const sentence = useMemo(
+    () => formatDispatchRecordSentence(enrichDispatchRecordMeta(dispatch, sessionsForDispatchLookup)),
+    [dispatch, sessionsForDispatchLookup],
   );
   const sessionId = dispatch.targetSessionId?.trim();
   const canOpenSession = Boolean(sessionId && onOpenHistorySessionInInspector);
@@ -52,3 +54,5 @@ export function DispatchRecordMessage({
     </div>
   );
 }
+
+export const DispatchRecordMessage = memo(DispatchRecordMessageInner);

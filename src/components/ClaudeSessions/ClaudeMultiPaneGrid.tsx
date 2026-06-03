@@ -373,6 +373,10 @@ const MultiPaneExtraPaneCell = memo(
       paneSession?.status === "running" || paneSession?.status === "connecting";
     const offscreenDock = useDockSlice(lazyEnabled && paneSession ? paneSession.id : null);
     const [paneRef, inView] = useInViewActive("80px", lazyEnabled && Boolean(paneSession), null);
+    const wasEverInViewRef = useRef(false);
+    if (inView) {
+      wasEverInViewRef.current = true;
+    }
     const setPaneDivRef = useCallback(
       (node: HTMLDivElement | null) => {
         if (typeof paneRef === "function") {
@@ -388,7 +392,7 @@ const MultiPaneExtraPaneCell = memo(
         setMounted(true);
         return;
       }
-      if (inView || mustStayMounted) {
+      if (inView || mustStayMounted || wasEverInViewRef.current) {
         setMounted(true);
         return;
       }

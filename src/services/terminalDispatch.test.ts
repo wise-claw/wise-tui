@@ -71,6 +71,13 @@ describe("terminalDispatch", () => {
     expect(stripTerminalAgentSlashPrefix("/executor \n 你好", "executor")).toBe("你好");
   });
 
+  test("stripTerminalAgentSlashPrefix preserves user slash commands", () => {
+    expect(stripTerminalAgentSlashPrefix("/add-dir 你好", "executor")).toBe("/add-dir 你好");
+    expect(stripTerminalAgentSlashPrefix("/add-dir 你好", null)).toBe("/add-dir 你好");
+    const { outboundPrompt } = resolveTerminalDispatchPrompts("/add-dir 你好", "executor");
+    expect(outboundPrompt).toBe("/add-dir 你好");
+  });
+
   test("resolveTerminalMentionsInPrompt picks earliest mention", () => {
     const list = [
       employee({ id: "a", name: "终端A" }),

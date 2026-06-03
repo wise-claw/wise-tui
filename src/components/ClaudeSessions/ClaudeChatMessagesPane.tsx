@@ -29,6 +29,44 @@ export interface ClaudeChatMessagesPaneProps {
   companionMessageListWindow?: { initialVisible: number; loadStep: number };
 }
 
+function chatMessagesPanePropsEqual(
+  prev: Readonly<ClaudeChatMessagesPaneProps>,
+  next: Readonly<ClaudeChatMessagesPaneProps>,
+): boolean {
+  if (prev.session.id !== next.session.id) return false;
+  if (prev.session.status !== next.session.status) return false;
+  if (prev.session.diskTranscriptPartial !== next.session.diskTranscriptPartial) return false;
+  if (prev.showListEndThinkingHint !== next.showListEndThinkingHint) return false;
+  if (prev.loadMoreTranscriptLoading !== next.loadMoreTranscriptLoading) return false;
+  if (prev.fullTranscriptLoading !== next.fullTranscriptLoading) return false;
+  if (prev.messageListProfile !== next.messageListProfile) return false;
+  if (prev.companionMessageListWindow !== next.companionMessageListWindow) return false;
+  if (prev.messagesScrollRef !== next.messagesScrollRef) return false;
+  if (prev.messageListNavRef !== next.messageListNavRef) return false;
+  if (prev.sessionsForDispatchLookup !== next.sessionsForDispatchLookup) return false;
+  if (prev.onMessagesBlur !== next.onMessagesBlur) return false;
+  if (prev.onNavigateMessage !== next.onNavigateMessage) return false;
+  if (prev.onLoadMoreTranscriptFromDisk !== next.onLoadMoreTranscriptFromDisk) return false;
+  if (prev.onReloadFullDiskTranscript !== next.onReloadFullDiskTranscript) return false;
+  if (prev.onOpenTaskDetail !== next.onOpenTaskDetail) return false;
+  if (prev.onOpenHistorySessionInInspector !== next.onOpenHistorySessionInInspector) return false;
+  if (prev.onLoadMoreTranscriptStart !== next.onLoadMoreTranscriptStart) return false;
+  if (prev.onLoadMoreTranscriptEnd !== next.onLoadMoreTranscriptEnd) return false;
+  if (prev.onFullTranscriptStart !== next.onFullTranscriptStart) return false;
+  if (prev.onFullTranscriptEnd !== next.onFullTranscriptEnd) return false;
+  if (prev.session === next.session) return true;
+  const prevMessages = prev.session.messages;
+  const nextMessages = next.session.messages;
+  if (prevMessages.length !== nextMessages.length) return false;
+  for (let i = 0; i < prevMessages.length - 1; i += 1) {
+    if (prevMessages[i] !== nextMessages[i]) return false;
+  }
+  if (prevMessages.length > 0 && prevMessages[prevMessages.length - 1] !== nextMessages[nextMessages.length - 1]) {
+    return false;
+  }
+  return true;
+}
+
 export const ClaudeChatMessagesPane = memo(function ClaudeChatMessagesPane({
   session,
   messagesScrollRef,
@@ -122,4 +160,4 @@ export const ClaudeChatMessagesPane = memo(function ClaudeChatMessagesPane({
       )}
     </div>
   );
-});
+}, chatMessagesPanePropsEqual);

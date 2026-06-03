@@ -53,7 +53,18 @@ const TextPartDisplay = memo(function TextPartDisplay({
       <Markdown text={text} streaming={streaming} showPendingHint={showPendingHint} />
     </div>
   );
-});
+}, textPartDisplayEqual);
+
+function textPartDisplayEqual(
+  prev: Readonly<{ part: TextPart; streaming: boolean; showPendingHint: boolean }>,
+  next: Readonly<{ part: TextPart; streaming: boolean; showPendingHint: boolean }>,
+): boolean {
+  return (
+    prev.streaming === next.streaming &&
+    prev.showPendingHint === next.showPendingHint &&
+    (prev.part === next.part || prev.part.text === next.part.text)
+  );
+}
 
 // ── Reasoning Part ──
 
@@ -104,7 +115,18 @@ const ReasoningPartDisplay = memo(function ReasoningPartDisplay({
       )}
     </div>
   );
-});
+}, reasoningPartDisplayEqual);
+
+function reasoningPartDisplayEqual(
+  prev: Readonly<{ part: ReasoningPart; streaming: boolean; showPendingHint: boolean }>,
+  next: Readonly<{ part: ReasoningPart; streaming: boolean; showPendingHint: boolean }>,
+): boolean {
+  return (
+    prev.streaming === next.streaming &&
+    prev.showPendingHint === next.showPendingHint &&
+    (prev.part === next.part || prev.part.text === next.part.text)
+  );
+}
 
 // ── Tool Use Part ──
 
@@ -290,6 +312,27 @@ export function shouldRenderOutputAsMarkdown(part: ToolUsePart): boolean {
   return hasMarkdownCues;
 }
 
+function messagePartContentEqual(a: MessagePart, b: MessagePart): boolean {
+  if (a === b) return true;
+  if (a.type !== b.type) return false;
+  switch (a.type) {
+    case "text":
+      return b.type === "text" && a.text === b.text;
+    case "reasoning":
+      return b.type === "reasoning" && a.text === b.text;
+    case "tool_use":
+      return (
+        b.type === "tool_use" &&
+        a.name === b.name &&
+        a.status === b.status &&
+        a.output === b.output &&
+        a.error === b.error
+      );
+    default:
+      return false;
+  }
+}
+
 const ToolUsePartDisplay = memo(function ToolUsePartDisplay({ part }: { part: ToolUsePart }) {
   const isSkill = isSkillToolPart(part);
   const info = useMemo(() => getToolDisplayInfo(part), [part]);
@@ -310,6 +353,7 @@ const ToolUsePartDisplay = memo(function ToolUsePartDisplay({ part }: { part: To
       : typeof input.task_id === "string" && input.task_id.trim()
         ? input.task_id.trim()
         : "";
+  const outputStreaming = part.status === "running";
 
   function handleCopy(e: React.MouseEvent<HTMLButtonElement>) {
     e.stopPropagation();
@@ -395,9 +439,9 @@ const ToolUsePartDisplay = memo(function ToolUsePartDisplay({ part }: { part: To
           {part.error?.trim() ? <pre className="app-tool-error">{part.error.trim()}</pre> : null}
           {part.output?.trim() ? (
             shouldRenderOutputAsMarkdown(part) ? (
-              <Markdown text={part.output} className="app-tool-output-markdown" />
+              <Markdown text={part.output} streaming={outputStreaming} className="app-tool-output-markdown" />
             ) : (
-              <LinkifiedPre text={part.output} className="app-tool-output" />
+              <LinkifiedPre text={part.output} streaming={outputStreaming} className="app-tool-output" />
             )
           ) : null}
           <button type="button" className="app-tool-copy-btn" onClick={handleCopy} title="复制">
@@ -407,9 +451,30 @@ const ToolUsePartDisplay = memo(function ToolUsePartDisplay({ part }: { part: To
       ) : null}
     </div>
   );
-});
+}, toolPartDisplayEqual);
+
+function toolPartDisplayEqual(
+  prev: Readonly<{ part: ToolUsePart }>,
+  next: Readonly<{ part: ToolUsePart }>,
+): boolean {
+  return messagePartContentEqual(prev.part, next.part);
+}
 
 // ── Message Parts ──
+
+function messagePartsDisplayEqual(
+  prev: Readonly<{ parts: MessagePart[]; streaming: boolean; inlinePendingHint?: boolean }>,
+  next: Readonly<{ parts: MessagePart[]; streaming: boolean; inlinePendingHint?: boolean }>,
+): boolean {
+  if (prev.streaming !== next.streaming) return false;
+  if (prev.inlinePendingHint !== next.inlinePendingHint) return false;
+  if (prev.parts === next.parts) return true;
+  if (prev.parts.length !== next.parts.length) return false;
+  for (let i = 0; i < prev.parts.length; i += 1) {
+    if (!messagePartContentEqual(prev.parts[i]!, next.parts[i]!)) return false;
+  }
+  return true;
+}
 
 export const MessagePartsDisplay = memo(function MessagePartsDisplay({
   parts,
@@ -473,4 +538,4 @@ export const MessagePartsDisplay = memo(function MessagePartsDisplay({
       {streaming && inlinePendingHint && visibleParts[lastIdx]?.type === "tool_use" && <StreamingReplyHint />}
     </div>
   );
-});
+}, messagePartsDisplayEqual);

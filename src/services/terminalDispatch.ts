@@ -93,7 +93,7 @@ export function resolveTerminalMentionsInPrompt(
     .map((entry) => entry.employee);
 }
 
-/** 去掉终端派发误注入的 `/${agent}` 行（不再作为 Claude 斜杠命令发送）。 */
+/** 去掉终端派发历史误注入的 `/${agent}` 前缀；保留用户真实 slash 指令（如 `/add-dir`）。 */
 export function stripTerminalAgentSlashPrefix(
   prompt: string,
   agentType: string | null | undefined,
@@ -105,8 +105,6 @@ export function stripTerminalAgentSlashPrefix(
     const specific = new RegExp(`^/${escaped}(?:\\s*\\n|\\s+|$)`);
     text = text.replace(specific, "").trimStart();
   }
-  // 兜底：首行形如 `/executor` 的斜杠命令（非用户真实 slash 指令）
-  text = text.replace(/^\/[\w-]+(?:\s*\n|\s+)/, "").trimStart();
   return text;
 }
 

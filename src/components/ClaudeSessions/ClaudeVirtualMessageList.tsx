@@ -1,8 +1,6 @@
-import { forwardRef, useMemo, type RefObject } from "react";
+import { forwardRef, type RefObject } from "react";
 import type { ClaudeSession } from "../../types";
-import {
-  buildChatMessageListRows,
-} from "../../utils/claudeChatMessageListRows";
+import { useChatMessageListRows } from "../../hooks/useChatMessageListRows";
 import {
   ChatMessageListVirtualBody,
   type ChatMessageListNavigationHandle,
@@ -27,7 +25,7 @@ export const ClaudeVirtualMessageList = forwardRef<ChatMessageListNavigationHand
   function ClaudeVirtualMessageList(
     {
       session,
-      showListEndThinkingHint,
+      showListEndThinkingHint: _showListEndThinkingHint,
       scrollContainerRef,
       onOpenTaskDetail,
       onOpenHistorySessionInInspector,
@@ -39,14 +37,7 @@ export const ClaudeVirtualMessageList = forwardRef<ChatMessageListNavigationHand
     },
     ref,
   ) {
-    const rows = useMemo(
-      () =>
-        buildChatMessageListRows(session.messages, {
-          sessionStatus: session.status,
-          showListEndThinkingHint,
-        }),
-      [session.messages, session.status, showListEndThinkingHint],
-    );
+    const rows = useChatMessageListRows(session);
 
     if (rows.length === 0) {
       return null;

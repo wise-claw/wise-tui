@@ -577,9 +577,12 @@ fn diff_stats_totals(diff: &git2::Diff<'_>) -> (usize, usize) {
 
 /// 纯未跟踪文件（工作区新增、尚未 `git add`）的行数。
 /// libgit2 `diff_index_to_workdir` 的 `stats()` 不会计入这类文件，需与 `git_status` 逐文件逻辑对齐。
+const GIT_STATUS_UNTRACKED_LINE_COUNT_LIMIT: usize = 80;
+
 fn collect_pure_untracked_line_totals(repo: &Repository, repo_path: &str) -> (usize, usize) {
     let mut adds = 0usize;
     let mut dels = 0usize;
+    let mut counted = 0usize;
     let mut opts = StatusOptions::new();
     opts.include_untracked(true);
     opts.include_ignored(false);
@@ -588,12 +591,16 @@ fn collect_pure_untracked_line_totals(repo: &Repository, repo_path: &str) -> (us
         return (0, 0);
     };
     for entry in statuses.iter() {
+        if counted >= GIT_STATUS_UNTRACKED_LINE_COUNT_LIMIT {
+            break;
+        }
         let status = entry.status();
         let file_path = entry.path().unwrap_or("");
         if file_path.is_empty() {
             continue;
         }
         if status.is_wt_new() && !status.is_index_new() {
+            counted += 1;
             let (a, d) = count_file_lines_for_untracked(repo_path, file_path);
             adds += a;
             dels += d;

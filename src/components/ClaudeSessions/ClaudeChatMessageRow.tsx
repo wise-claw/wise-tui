@@ -9,6 +9,8 @@ import {
 } from "../../utils/claudeChatMessageDisplay";
 import { DispatchRecordMessage } from "./DispatchRecordMessage";
 import { UserMessageCollapsibleBody } from "./UserMessageCollapsibleBody";
+import { ChatMessageCopyButton } from "./ChatMessageCopyButton";
+import { useChatMessageCopyText } from "./useChatMessageCopyText";
 
 interface Props {
   msg: ClaudeMessage;
@@ -29,6 +31,8 @@ function ClaudeChatMessageRowInner({
   onOpenHistorySessionInInspector,
   sessionsForDispatchLookup,
 }: Props) {
+  const copyText = useChatMessageCopyText(msg, sessionsForDispatchLookup);
+
   function renderSystemBody(): ReactNode {
     const raw = systemMessagePlainText(msg);
     const dispatch = parseDispatchRecord(raw);
@@ -77,12 +81,17 @@ function ClaudeChatMessageRowInner({
         {toolUser ? "具" : msg.role === "user" ? "我" : msg.role === "assistant" ? "C" : "S"}
       </div>
       <div className="app-claude-message-body">
-        {showSender && (
+        {showSender ? (
           <div className="app-claude-message-header">
             <span className="app-claude-message-sender">
               {toolUser ? "工具" : "系统"}
             </span>
+            <span className="app-claude-message-header-actions">
+              <ChatMessageCopyButton text={copyText} />
+            </span>
           </div>
+        ) : (
+          <ChatMessageCopyButton text={copyText} />
         )}
         <div className="app-claude-message-content">
           {msg.role === "system" ? renderSystemBody() : renderNonSystemContent()}

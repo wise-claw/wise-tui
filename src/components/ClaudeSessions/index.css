@@ -2101,13 +2101,23 @@
   padding: 8px 6px;
 }
 
+.app-claude-session-user-questions-popover__item-row {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+}
+
+.app-claude-session-user-questions-popover__item-row:hover {
+  background: var(--ant-color-fill-quaternary);
+}
+
 .app-claude-session-user-questions-popover__item {
   display: flex;
   flex-direction: row;
   align-items: center;
   gap: 8px;
+  flex: 1;
   min-width: 0;
-  width: 100%;
   border: none;
   background: transparent;
   text-align: left;
@@ -2116,8 +2126,18 @@
   cursor: pointer;
 }
 
-.app-claude-session-user-questions-popover__item:hover {
-  background: var(--ant-color-fill-quaternary);
+.app-claude-session-user-questions-popover__item-copy {
+  flex-shrink: 0;
+  margin-right: 4px;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-claude-session-user-questions-popover__item-copy:hover {
+  color: var(--ant-color-primary);
+}
+
+.app-claude-session-user-questions-popover__item-copy:focus-visible {
+  color: var(--ant-color-primary);
 }
 
 .app-claude-session-user-questions-popover__item-text {
@@ -3553,23 +3573,70 @@
   min-width: 0;
   width: 0;
   max-width: 100%;
+  position: relative;
 }
 
 .app-claude-message-content {
   min-width: 0;
   max-width: 100%;
   width: 100%;
+  user-select: text;
 }
 
 .app-claude-message-header {
   display: flex;
   align-items: baseline;
   justify-content: space-between;
-  gap: 4px;
+  gap: 8px;
   margin-bottom: 2px; /* Clean gap before message content */
   min-height: 13px;
   position: relative;
-  padding-right: 64px;
+}
+
+.app-claude-message-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
+.app-claude-message-copy-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 4px;
+  background: var(--ant-color-bg-container);
+  color: var(--ant-color-text-tertiary);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease;
+  box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+}
+
+.app-claude-message-body > .app-claude-message-copy-btn {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 1;
+}
+
+.app-claude-message:hover .app-claude-message-copy-btn,
+.app-claude-message-copy-btn:hover,
+.app-claude-message-copy-btn:focus-visible {
+  opacity: 1;
+}
+
+.app-claude-message-copy-btn:hover {
+  color: var(--ant-color-text);
+  background: var(--ant-color-fill-secondary);
+}
+
+.app-claude-message-copy-btn[data-copied="true"] {
+  color: var(--ant-color-success);
 }
 
 .app-claude-message-sender {
@@ -3584,9 +3651,6 @@
   color: var(--ant-color-text-tertiary);
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
-  position: absolute;
-  top: 1px;
-  right: 0;
 }
 
 .app-claude-message-text {
@@ -3877,6 +3941,7 @@
   line-height: 1.5;
   color: var(--ant-color-text-secondary);
   word-break: break-word;
+  user-select: text;
 }
 
 .app-system-dispatch-card__sentence-link {
@@ -4727,6 +4792,12 @@ button.app-message-part-header:disabled:hover {
   width: 100%;
   overflow-wrap: break-word;
   word-break: normal;
+}
+
+.app-markdown-streaming-plain {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
 }
 
 /* Codex 等返回的 HTML 文档片段：与 Markdown 混排时独立容器，避免污染聊天气泡排版 */

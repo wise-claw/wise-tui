@@ -184,13 +184,70 @@ export function enrichDispatchRecordMeta(
 export function formatDispatchRecordSentence(meta: DispatchRecordMeta): string {
   const target = meta.targetName?.trim() || "未知目标";
   const time = meta.dispatchTime?.trim() || "";
-  const timePart = time ? `在${time}` : "";
+  const timePart = time ? `在 ${time}` : "";
   const content = normalizedDispatchContentForSentence(meta.dispatchContent);
+  const segments = [target];
+  if (timePart) segments.push(timePart);
   if (content) {
-    return `${target}${timePart}执行${content}。`;
+    segments.push("执行", content);
+    return `${segments.join(" ")}。`;
   }
   if (meta.dispatchType === "团队流程") {
-    return `${target}${timePart}发起了团队流程任务。`;
+    segments.push("发起了团队流程任务");
+    return `${segments.join(" ")}。`;
   }
-  return `${target}${timePart}执行了任务。`;
+  segments.push("执行了任务");
+  return `${segments.join(" ")}。`;
+}
+
+function messagePartPlainTextForCopy(part: MessagePart): string {
+  switch (part.type) {
+    case "text": {
+      const text = part.text.trim();
+      return text && !isAssistantDisplayNoiseText(part.text) ? text : "";
+    }
+    case "reasoning": {
+      const text = part.text.trim();
+      return text ? `[思考过程]\n${text}` : "";
+    }
+    case "tool_use": {
+      const label = part.name.trim() || "工具";
+      const body = part.output?.trim() || part.error?.trim() || "";
+      return body ? `[${label}]\n${body}` : `[${label}]`;
+    }
+    default:
+      return "";
+  }
+}
+
+/** 单条会话消息可复制纯文本（不含 Markdown 渲染差异）。 */
+export function chatMessagePlainTextForCopy(msg: ClaudeMessage): string {
+  const parts = msg.parts;
+  if (Array.isArray(parts) && parts.length > 0) {
+    const segments = parts
+      .filter(isRenderableMessagePart)
+      .map(messagePartPlainTextForCopy)
+      .filter(Boolean);
+    const joined = segments.join("\n\n").trim();
+    if (joined) return joined;
+  }
+  const content = (msg.content ?? "").trim();
+  if (msg.role === "assistant" && isAssistantDisplayNoiseText(content)) return "";
+  return content;
+}
+
+/** 列表复制按钮使用的最终文本（系统派发记录取展示句）。 */
+export function resolveChatMessageCopyText(
+  msg: ClaudeMessage,
+  sessions?: readonly ClaudeSession[],
+): string {
+  if (msg.role === "system") {
+    const raw = systemMessagePlainText(msg).trim();
+    const dispatch = parseDispatchRecord(raw);
+    if (dispatch) {
+      return formatDispatchRecordSentence(enrichDispatchRecordMeta(dispatch, sessions));
+    }
+    return raw;
+  }
+  return chatMessagePlainTextForCopy(msg);
 }

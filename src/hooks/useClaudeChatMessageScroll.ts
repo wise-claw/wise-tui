@@ -24,6 +24,8 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
   const scrollNavTimeoutRef = useRef<number | null>(null);
   const sessionStatusRef = useRef(session.status);
   sessionStatusRef.current = session.status;
+  const sessionMessagesRef = useRef(session.messages);
+  sessionMessagesRef.current = session.messages;
   const lastUserMessagePinIdRef = useRef<number | null>(null);
 
   const buildMessagesFollowFingerprint = useCallback((messages: ClaudeSession["messages"]) => {
@@ -45,11 +47,11 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
 
   const canScrollForNewContent = useCallback(() => {
     if (!awaitNewMessageBeforeFollowRef.current) return true;
-    const fp = buildMessagesFollowFingerprint(session.messages);
+    const fp = buildMessagesFollowFingerprint(sessionMessagesRef.current);
     if (fp === followFingerprintAtBlurRef.current) return false;
     awaitNewMessageBeforeFollowRef.current = false;
     return true;
-  }, [session.messages, buildMessagesFollowFingerprint]);
+  }, [buildMessagesFollowFingerprint]);
 
   const isSessionStreaming = useCallback(() => {
     const status = sessionStatusRef.current;
@@ -109,8 +111,8 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
     userPausedFollowRef.current = false;
     pinToBottomRef.current = true;
     awaitNewMessageBeforeFollowRef.current = true;
-    followFingerprintAtBlurRef.current = buildMessagesFollowFingerprint(session.messages);
-  }, [buildMessagesFollowFingerprint, session.messages]);
+    followFingerprintAtBlurRef.current = buildMessagesFollowFingerprint(sessionMessagesRef.current);
+  }, [buildMessagesFollowFingerprint]);
 
   const pauseAutoFollowForUserScroll = useCallback(() => {
     if (userPausedFollowRef.current) return;
@@ -305,8 +307,10 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
 
   useLayoutEffect(() => {
     if (hideMessages) return;
+    // 流式贴底由 RAF 环负责；此处同步 scroll 会在每条 token 更新时强制 layout，造成周期性卡顿。
+    if (isSessionStreaming()) return;
     scheduleScrollToBottom();
-  }, [session.messages, session.status, hideMessages, scheduleScrollToBottom]);
+  }, [session.messages, session.status, hideMessages, scheduleScrollToBottom, isSessionStreaming]);
 
   useEffect(() => {
     if (hideMessages) return;

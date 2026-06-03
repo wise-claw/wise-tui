@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback } from "react";
+import { useEffect, useRef, useCallback } from "react";
 import { message } from "antd";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
@@ -41,6 +41,25 @@ function renderMarkdown(text: string) {
     });
   } catch {
     return escapeHtml(text).replace(/\n/g, "<br>");
+  }
+}
+
+function canUseStreamingPlainText(text: string): boolean {
+  if (!text.trim()) return true;
+  const split = splitRichMessageContent(text);
+  return split.kind === "markdown";
+}
+
+function updateStreamingPlainText(container: HTMLDivElement, value: string): void {
+  let plainEl = container.querySelector<HTMLDivElement>(":scope > .app-markdown-streaming-plain");
+  if (!plainEl) {
+    container.replaceChildren();
+    plainEl = document.createElement("div");
+    plainEl.className = "app-markdown-streaming-plain";
+    container.appendChild(plainEl);
+  }
+  if (plainEl.textContent !== value) {
+    plainEl.textContent = value;
   }
 }
 
@@ -89,21 +108,34 @@ export function Markdown({ text, streaming, showPendingHint, className }: Props)
   const renderRafRef = useRef<number | null>(null);
 
   const lastRenderedTextRef = useRef<string | null>(null);
+  const lastRenderedStreamingRef = useRef(false);
 
   const updateDOM = useCallback(() => {
     const container = containerRef.current;
     if (!container) return;
     if (!text) {
       if (lastRenderedTextRef.current !== "") {
-        container.innerHTML = "";
+        container.replaceChildren();
         lastRenderedTextRef.current = "";
+        lastRenderedStreamingRef.current = false;
       }
       return;
     }
 
     // 内容未变时跳过完整的 marked+DOMPurify+DOM 管线
-    if (text === lastRenderedTextRef.current) return;
+    if (text === lastRenderedTextRef.current && Boolean(streaming) === lastRenderedStreamingRef.current) {
+      return;
+    }
 
+    // 流式纯 Markdown：仅 textContent 增量更新，避免每帧 marked + DOMPurify + replaceChildren
+    if (streaming && canUseStreamingPlainText(text)) {
+      updateStreamingPlainText(container, text);
+      lastRenderedTextRef.current = text;
+      lastRenderedStreamingRef.current = true;
+      return;
+    }
+
+    lastRenderedStreamingRef.current = false;
     const html = renderRichMessageInnerHtml(text);
     const temp = document.createElement("div");
     temp.innerHTML = html;
@@ -170,7 +202,7 @@ export function Markdown({ text, streaming, showPendingHint, className }: Props)
     // 直接移动子节点而非序列化/反序列化 innerHTML，减少一次完整 DOM 克隆开销
     container.replaceChildren(...temp.childNodes);
     lastRenderedTextRef.current = text;
-  }, [text]);
+  }, [text, streaming]);
 
   useEffect(() => {
     if (renderRafRef.current != null) {
@@ -246,62 +278,7 @@ export function Markdown({ text, streaming, showPendingHint, className }: Props)
   );
 }
 
-// ── Paced Text (streaming pacing) ──
-
-const PACE_MS = 40;
-const SNAP_RE = /[\s.,!?;:)\]]/;
-
-function paceStep(remaining: number) {
-  if (remaining <= 12) return 2;
-  if (remaining <= 48) return 4;
-  if (remaining <= 96) return 8;
-  return Math.min(24, Math.ceil(remaining / 8));
-}
-
-function paceNext(text: string, start: number) {
-  const end = Math.min(text.length, start + paceStep(text.length - start));
-  const max = Math.min(text.length, end + 8);
-  for (let i = end; i < max; i++) {
-    if (SNAP_RE.test(text[i] ?? "")) return i + 1;
-  }
-  return end;
-}
-
-export function usePacedText(text: string, streaming: boolean) {
-  const [shown, setShown] = useState(text);
-  const shownRef = useRef(text);
-  const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-
-  const sync = useCallback((t: string) => {
-    shownRef.current = t;
-    setShown(t);
-  }, []);
-
-  const tick = useCallback(() => {
-    timeoutRef.current = null;
-    const full = text;
-    if (!streaming) { sync(full); return; }
-    if (!full.startsWith(shownRef.current) || full.length <= shownRef.current.length) { sync(full); return; }
-    const end = paceNext(full, shownRef.current.length);
-    sync(full.slice(0, end));
-    if (end < full.length) timeoutRef.current = setTimeout(tick, PACE_MS);
-  }, [text, streaming, sync]);
-
-  useEffect(() => {
-    if (!streaming) { timeoutRef.current && clearTimeout(timeoutRef.current); sync(text); return; }
-    if (!text.startsWith(shownRef.current) || text.length < shownRef.current.length) {
-      timeoutRef.current && clearTimeout(timeoutRef.current);
-      sync(text);
-      return;
-    }
-    if (text.length > shownRef.current.length && !timeoutRef.current) {
-      timeoutRef.current = setTimeout(tick, PACE_MS);
-    }
-  }, [text, streaming, sync, tick]);
-
-  useEffect(() => {
-    return () => { timeoutRef.current && clearTimeout(timeoutRef.current); };
-  }, []);
-
-  return shown;
+/** @deprecated 流式期间曾用于打字机效果；现直接返回全文以避免叠加 setState 与 Markdown 重绘。 */
+export function usePacedText(text: string, _streaming?: boolean): string {
+  return text;
 }

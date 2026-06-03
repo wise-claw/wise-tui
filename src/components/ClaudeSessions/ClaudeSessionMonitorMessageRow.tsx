@@ -10,6 +10,8 @@ import {
 } from "../../utils/claudeChatMessageDisplay";
 import { DispatchRecordMessage } from "./DispatchRecordMessage";
 import { UserMessageCollapsibleBody } from "./UserMessageCollapsibleBody";
+import { ChatMessageCopyButton } from "./ChatMessageCopyButton";
+import { useChatMessageCopyText } from "./useChatMessageCopyText";
 
 interface Props {
   msg: ClaudeMessage;
@@ -30,6 +32,8 @@ function ClaudeSessionMonitorMessageRowInner({
   onOpenHistorySessionInInspector,
   sessionsForDispatchLookup,
 }: Props) {
+  const copyText = useChatMessageCopyText(msg, sessionsForDispatchLookup);
+
   function renderChatBody() {
     if (msg.parts && msg.parts.length > 0) {
       return (
@@ -60,13 +64,18 @@ function ClaudeSessionMonitorMessageRowInner({
         {toolUser ? "具" : msg.role === "user" ? "我" : msg.role === "assistant" ? "C" : "S"}
       </div>
       <div className="app-claude-message-body">
-        {mergedWithPrevious ? null : (
+        {mergedWithPrevious ? (
+          <ChatMessageCopyButton text={copyText} />
+        ) : (
           <div className="app-claude-message-header">
             <span className="app-claude-message-sender">
               {toolUser ? "工具" : msg.role === "user" ? "我" : msg.role === "assistant" ? "Claude" : "系统"}
             </span>
-            <span className="app-claude-message-time" title={new Date(msg.timestamp).toLocaleString("zh-CN")}>
-              {formatChatMessageListTime(msg.timestamp)}
+            <span className="app-claude-message-header-actions">
+              <ChatMessageCopyButton text={copyText} />
+              <span className="app-claude-message-time" title={new Date(msg.timestamp).toLocaleString("zh-CN")}>
+                {formatChatMessageListTime(msg.timestamp)}
+              </span>
             </span>
           </div>
         )}

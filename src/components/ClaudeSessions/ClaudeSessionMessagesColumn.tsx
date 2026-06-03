@@ -1,9 +1,6 @@
-import { useMemo, useRef, type RefObject } from "react";
+import { useRef, type RefObject } from "react";
 import type { ClaudeSession } from "../../types";
-import {
-  buildChatMessageListRows,
-  shouldShowListEndThinkingHint,
-} from "../../utils/claudeChatMessageListRows";
+import { useChatMessageListRows } from "../../hooks/useChatMessageListRows";
 import { ChatMessageListVirtualBody } from "./ChatMessageListVirtualBody";
 import "./index.css";
 
@@ -27,19 +24,7 @@ export function ClaudeSessionMessagesColumn({
 }: Props) {
   const internalScrollRef = useRef<HTMLDivElement>(null);
   const scrollRef = scrollContainerRef ?? internalScrollRef;
-
-  const showListEndThinkingHint = useMemo(
-    () => shouldShowListEndThinkingHint(session.messages, session.status),
-    [session.messages, session.status],
-  );
-  const rows = useMemo(
-    () =>
-      buildChatMessageListRows(session.messages, {
-        sessionStatus: session.status,
-        showListEndThinkingHint,
-      }),
-    [session.messages, session.status, showListEndThinkingHint],
-  );
+  const rows = useChatMessageListRows(session);
 
   return (
     <div className="app-claude-chat app-claude-session-messages-column">
