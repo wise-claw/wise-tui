@@ -1,4 +1,4 @@
-import { Popover } from "antd";
+import { Popover, Tooltip } from "antd";
 import { Suspense, lazy, useCallback, useState } from "react";
 import { IconClaudeCodeMascot } from "../icons/IconClaudeCodeMascot";
 import "./ClaudeCodeToolsTopbarTrigger.css";
@@ -38,19 +38,34 @@ export function ClaudeCodeToolsTopbarTrigger({ repositoryPath, variant = "chat" 
         </Suspense>
       }
     >
-      <button
-        type="button"
-        className={
-          (isSidebar ? "app-left-sidebar-topbar-btn" : "app-topbar-btn") +
-          " app-claude-code-tools-topbar-btn" +
-          (open ? (isSidebar ? " app-left-sidebar-topbar-btn--active" : " active") : "")
-        }
-        aria-label="Claude Code 工具"
-        aria-expanded={open}
-        title="Claude Code（MCP、技能、Hooks、子代理）"
-      >
-        <IconClaudeCodeMascot />
-      </button>
+      {isSidebar ? (
+        <Tooltip title="Claude Code（MCP、技能、Hooks、子代理）" mouseEnterDelay={0.35}>
+          <button
+            type="button"
+            className={
+              "app-left-sidebar-topbar-btn app-claude-code-tools-topbar-btn" +
+              (open ? " app-left-sidebar-topbar-btn--active" : "")
+            }
+            aria-label="Claude Code 工具"
+            aria-expanded={open}
+          >
+            <IconClaudeCodeMascot />
+          </button>
+        </Tooltip>
+      ) : (
+        <Tooltip title="Claude Code（MCP、技能、Hooks、子代理）" mouseEnterDelay={0.35}>
+          <button
+            type="button"
+            className={
+              "app-topbar-btn app-claude-code-tools-topbar-btn" + (open ? " active" : "")
+            }
+            aria-label="Claude Code 工具"
+            aria-expanded={open}
+          >
+            <IconClaudeCodeMascot />
+          </button>
+        </Tooltip>
+      )}
     </Popover>
   );
 }

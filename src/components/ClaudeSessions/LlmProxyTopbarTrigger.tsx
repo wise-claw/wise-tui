@@ -1,4 +1,4 @@
-import { Popover } from "antd";
+import { Popover, Tooltip } from "antd";
 import { useCallback, useState, useSyncExternalStore } from "react";
 import { LlmProxyTrafficPanel } from "../ProgressMonitorPanel/LlmProxyTrafficPanel";
 import {
@@ -69,26 +69,27 @@ export function LlmProxyTopbarTrigger({ repositoryPath }: Props) {
         />
       }
     >
-      <button
-        type="button"
-        className={
-          "app-topbar-btn app-llm-proxy-topbar-btn" + (open ? " active" : "")
-        }
-        aria-label="LLM 代理"
-        aria-expanded={open}
-        title="LLM 代理"
-      >
-        <IconLlmProxy />
-        {showBadge ? (
-          <span
-            className={
-              "app-llm-proxy-topbar-btn__badge" +
-              (listening ? " app-llm-proxy-topbar-btn__badge--live" : "")
-            }
-            aria-hidden
-          />
-        ) : null}
-      </button>
+      <Tooltip title="LLM 代理" mouseEnterDelay={0.35}>
+        <button
+          type="button"
+          className={
+            "app-topbar-btn app-llm-proxy-topbar-btn" + (open ? " active" : "")
+          }
+          aria-label="LLM 代理"
+          aria-expanded={open}
+        >
+          <IconLlmProxy />
+          {showBadge ? (
+            <span
+              className={
+                "app-llm-proxy-topbar-btn__badge" +
+                (listening ? " app-llm-proxy-topbar-btn__badge--live" : "")
+              }
+              aria-hidden
+            />
+          ) : null}
+        </button>
+      </Tooltip>
     </Popover>
   );
 }

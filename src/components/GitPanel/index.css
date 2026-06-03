@@ -390,7 +390,7 @@
 .git-panel-header-right {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 0;
   flex-shrink: 0;
   margin-left: auto;
 }
@@ -624,8 +624,18 @@
   flex-shrink: 0;
 }
 
+.git-panel-header-right .git-header-sync-actions.ant-space {
+  column-gap: 0 !important;
+  gap: 0 !important;
+}
+
 .git-panel-header-right .git-header-sync-actions {
   margin: 0;
+}
+
+.git-panel-header-right .git-sync-count-btn-wrap {
+  min-width: 0;
+  min-height: 0;
 }
 
 .git-panel-header .git-remote-browser-btn.ant-btn-sm,
@@ -633,6 +643,22 @@
 .git-sync-row .git-sync-count-btn.ant-btn-sm {
   padding-inline: 4px;
   gap: 1px;
+}
+
+.git-panel-header .git-remote-browser-btn.ant-btn-sm,
+.git-panel-header .git-sync-count-btn.ant-btn-sm {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  max-width: 22px;
+  padding: 0;
+  padding-inline: 0;
+  gap: 0;
+}
+
+.git-panel-header .git-sync-count-btn.ant-btn-sm .ant-btn-icon,
+.git-panel-header .git-remote-browser-btn.ant-btn-sm .ant-btn-icon {
+  margin-inline-end: 0;
 }
 
 .git-panel-header .git-remote-browser-btn.ant-btn-sm .anticon {
@@ -658,7 +684,6 @@
   cursor: default !important;
 }
 
-.git-panel-header .git-sync-count-btn.ant-btn-sm .ant-btn-icon,
 .git-sync-row .git-sync-count-btn.ant-btn-sm .ant-btn-icon {
   margin-inline-end: 1px;
 }

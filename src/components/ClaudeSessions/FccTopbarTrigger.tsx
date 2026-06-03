@@ -1,4 +1,4 @@
-import { Popover } from "antd";
+import { Popover, Tooltip } from "antd";
 import { useCallback, useState } from "react";
 import { useFreeClaudeCodeSetting } from "../DefaultConfigPanel/useFreeClaudeCodeSetting";
 import { FreeClaudeCodePanel } from "./FreeClaudeCodePanel";
@@ -55,24 +55,25 @@ export function FccTopbarTrigger() {
       }}
       content={<FreeClaudeCodePanel fcc={fcc} onClose={() => setOpen(false)} />}
     >
-      <button
-        type="button"
-        className={"app-topbar-btn app-fcc-topbar-btn" + (open ? " active" : "")}
-        aria-label="Free Claude Code"
-        aria-expanded={open}
-        title="Free Claude Code 代理"
-      >
-        <IconFccProxy />
-        {running || needsAttention ? (
-          <span
-            className={
-              "app-fcc-topbar-btn__badge" +
-              (running ? " app-fcc-topbar-btn__badge--live" : " app-fcc-topbar-btn__badge--warn")
-            }
-            aria-hidden
-          />
-        ) : null}
-      </button>
+      <Tooltip title="Free Claude Code 代理" mouseEnterDelay={0.35}>
+        <button
+          type="button"
+          className={"app-topbar-btn app-fcc-topbar-btn" + (open ? " active" : "")}
+          aria-label="Free Claude Code"
+          aria-expanded={open}
+        >
+          <IconFccProxy />
+          {running || needsAttention ? (
+            <span
+              className={
+                "app-fcc-topbar-btn__badge" +
+                (running ? " app-fcc-topbar-btn__badge--live" : " app-fcc-topbar-btn__badge--warn")
+              }
+              aria-hidden
+            />
+          ) : null}
+        </button>
+      </Tooltip>
     </Popover>
   );
 }

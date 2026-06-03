@@ -2134,10 +2134,6 @@
   margin-right: 4px;
 }
 
-.app-claude-session-user-questions-popover__item-action.app-claude-message-action {
-  opacity: 1;
-}
-
 .app-claude-session-user-questions-popover__item-text {
   flex: 1 1 auto;
   min-width: 0;
@@ -3427,42 +3423,63 @@
 .app-claude-messages-disk-partial {
   display: flex;
   align-items: center;
-  flex-wrap: wrap;
-  gap: 2px 6px;
+  flex-wrap: nowrap;
+  gap: 4px;
   flex-shrink: 0;
-  margin: 0 0 6px;
-  padding: 3px 8px;
-  border-radius: 6px;
+  margin: 0 0 4px;
+  padding: 1px 6px;
+  min-height: 20px;
+  border-radius: 4px;
   border: 1px solid var(--ant-color-primary-border);
   background: var(--ant-color-primary-bg);
-  font-size: 12px;
-  line-height: 1.35;
+  font-size: 11px;
+  line-height: 1.25;
   color: var(--ant-color-text-secondary);
+  overflow: hidden;
 }
 
 .app-claude-messages-disk-partial__icon {
   flex-shrink: 0;
-  font-size: 12px;
+  font-size: 11px;
   color: var(--ant-color-primary);
 }
 
-.app-claude-messages-disk-partial__label {
-  flex: 1 1 12rem;
+.app-claude-messages-disk-partial__text {
+  flex-shrink: 1;
   min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
-.app-claude-messages-disk-partial__actions {
-  display: inline-flex;
-  align-items: center;
+.app-claude-messages-disk-partial__sep {
   flex-shrink: 0;
-  margin-left: auto;
+  color: var(--ant-color-text-quaternary);
+  user-select: none;
 }
 
-.app-claude-messages-disk-partial__actions .ant-btn-link {
-  height: auto;
-  padding: 0 4px;
-  font-size: 12px;
-  line-height: 1.35;
+.app-claude-messages-disk-partial__action {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 11px;
+  line-height: 1.25;
+  color: var(--ant-color-primary);
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.app-claude-messages-disk-partial__action:hover:not(:disabled) {
+  color: var(--ant-color-primary-hover);
+  text-decoration: underline;
+}
+
+.app-claude-messages-disk-partial__action:disabled {
+  cursor: default;
+  opacity: 0.65;
 }
 
 .app-claude-messages-load-more {
@@ -3611,7 +3628,39 @@
   position: absolute;
   top: 0;
   right: 0;
-  z-index: 1;
+  z-index: 2;
+  padding: 0;
+  gap: 0;
+  border-radius: 3px;
+  background-color: var(--ant-color-bg-container);
+  border: 1px solid var(--ant-color-border-secondary);
+  box-shadow: none;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease;
+}
+
+.app-claude-message:hover .app-claude-message-floating-actions,
+.app-claude-message-floating-actions:focus-within {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.app-claude-message-floating-actions .app-claude-message-action.ant-btn {
+  opacity: 1;
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  border-radius: 2px;
+  background-color: var(--ant-color-bg-container);
+}
+
+.app-claude-message-floating-actions .app-claude-message-action.ant-btn .ant-btn-icon {
+  font-size: 12px;
+}
+
+.app-claude-message-floating-actions .app-claude-message-action.ant-btn:hover {
+  background-color: var(--ant-color-fill-secondary);
 }
 
 /* 消息行 / 历史消息：复制、填入输入框等轻量操作（Ant text btn） */
@@ -3658,6 +3707,18 @@
 .app-claude-message-action--copied.ant-btn,
 .app-claude-message-action--copied.ant-btn:hover {
   color: var(--ant-color-success);
+}
+
+/* 历史消息弹层：无 .app-claude-message 祖先，须覆盖消息行默认 opacity:0 */
+.app-claude-session-user-questions-popover__item-actions .app-claude-message-action.ant-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.app-claude-session-user-questions-popover__item-actions .app-claude-message-action.ant-btn:hover,
+.app-claude-session-user-questions-popover__item-actions
+  .app-claude-message-action.ant-btn:focus-visible {
+  opacity: 1;
 }
 
 .app-claude-message-sender {
@@ -4675,18 +4736,25 @@ button.app-message-part-header:disabled:hover {
   position: absolute;
   top: 5px;
   right: 5px;
+  z-index: 1;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
-  border: none;
-  border-radius: 4px;
-  background: var(--ant-color-bg-container);
+  width: 20px;
+  height: 20px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 3px;
+  background-color: var(--ant-color-bg-container);
   color: var(--ant-color-text-tertiary);
   cursor: pointer;
   opacity: 0;
-  transition: opacity 0.15s, color 0.15s;
+  box-shadow: none;
+  transition: opacity 0.15s, color 0.15s, background-color 0.15s;
+}
+
+.app-tool-copy-btn svg {
+  width: 12px;
+  height: 12px;
 }
 
 .app-message-part--tool .app-message-part-content:hover .app-tool-copy-btn,
@@ -4699,7 +4767,7 @@ button.app-message-part-header:disabled:hover {
 
 .app-tool-copy-btn:hover {
   color: var(--ant-color-text);
-  background: var(--ant-color-fill-content);
+  background-color: var(--ant-color-fill-secondary);
 }
 
 /* ── Markdown ── */

@@ -4,6 +4,7 @@ import { memo, type DragEvent } from "react";
 import { openExternalUrl } from "../../services/openExternal";
 import type { ClaudeModelProfile } from "../../types/claudeModelProfile";
 import { formatClaudeModelLabel } from "../../utils/claudeModel";
+import { formatModelProfileDisplayLabel } from "../../utils/modelProfileDisplay";
 import { normalizeModelProfileOfficialWebsite } from "../../utils/modelProfileOfficialWebsite";
 
 interface Props {
@@ -41,7 +42,8 @@ function ModelProfileListRowInner({
 }: Props) {
   const company = (item.company ?? "").trim();
   const name = (item.name ?? "").trim();
-  const modelLabel = formatClaudeModelLabel(item.modelId ?? "");
+  const displayLabel = formatModelProfileDisplayLabel(item);
+  const technicalModelLabel = formatClaudeModelLabel(item.modelId ?? "");
   const officialWebsiteUrl = normalizeModelProfileOfficialWebsite(item.officialWebsiteUrl ?? "");
 
   return (
@@ -118,21 +120,23 @@ function ModelProfileListRowInner({
           disabled={applying}
           aria-busy={applying}
           onClick={() => onApply(item.id)}
-          title={company ? `${company} ${modelLabel}` : item.name}
+          title={company ? `${company} ${displayLabel}` : item.name}
         >
           <span className="app-claude-model-topbar-panel__item-label">
             {company ? (
               <>
                 <span className="app-claude-model-topbar-panel__item-company">{company}</span>
-                <span className="app-claude-model-topbar-panel__item-model">{modelLabel}</span>
+                <span className="app-claude-model-topbar-panel__item-model">{displayLabel}</span>
               </>
             ) : (
               <>
                 <span className="app-claude-model-topbar-panel__item-name">
-                  {name || modelLabel}
+                  {name || displayLabel}
                 </span>
-                {name ? (
-                  <span className="app-claude-model-topbar-panel__item-model">{modelLabel}</span>
+                {name && technicalModelLabel !== displayLabel ? (
+                  <span className="app-claude-model-topbar-panel__item-model">
+                    {technicalModelLabel}
+                  </span>
                 ) : null}
               </>
             )}

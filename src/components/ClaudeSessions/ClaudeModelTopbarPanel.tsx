@@ -24,7 +24,7 @@ import {
   isModelProfileAutoFailoverEnabled,
   type ModelProfileEngine,
 } from "../../types/claudeModelProfile";
-import { formatClaudeModelLabel } from "../../utils/claudeModel";
+import { resolveActiveModelProfileDisplayLabel } from "../../utils/modelProfileDisplay";
 import {
   normalizeModelProfileLabelInput,
   validateModelProfileLabel,
@@ -327,8 +327,9 @@ export function ClaudeModelTopbarPanel({ store, setStore, loading, onApplied }: 
       setStore(next);
       message.success(
         resolveEffectiveModelForProfileEngine(profileEngine, next)?.trim()
-          ? `已保存全局配置，当前模型：${formatClaudeModelLabel(
-              resolveEffectiveModelForProfileEngine(profileEngine, next)!.trim(),
+          ? `已保存全局配置，当前模型：${resolveActiveModelProfileDisplayLabel(
+              profileEngine,
+              next,
             )}`
           : profileEngine === "codex"
             ? "已保存 Codex 档案"
@@ -444,7 +445,7 @@ export function ClaudeModelTopbarPanel({ store, setStore, loading, onApplied }: 
     profiles.length >= 2 && isModelProfileAutoFailoverEnabled(store);
 
   const activeProfileId = resolveActiveModelProfileId(panelEngine, store);
-  const effective = resolveEffectiveModelForProfileEngine(panelEngine, store)?.trim() || "—";
+  const currentDisplayLabel = resolveActiveModelProfileDisplayLabel(panelEngine, store);
   const engineLabel = modelProfileEngineLabel(panelEngine);
   const editingCodexProfile =
     configProfile != null && normalizeModelProfileEngine(configProfile.engine) === "codex";
@@ -466,7 +467,7 @@ export function ClaudeModelTopbarPanel({ store, setStore, loading, onApplied }: 
           </Button>
         </div>
         <Typography.Text type="secondary" className="app-claude-model-topbar-panel__effective">
-          当前：{formatClaudeModelLabel(effective)}
+          当前：{currentDisplayLabel}
         </Typography.Text>
         <Segmented
           size="small"

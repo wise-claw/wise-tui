@@ -1,4 +1,4 @@
-import { Popover } from "antd";
+import { Popover, Tooltip } from "antd";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { FccTrafficPanel } from "../ProgressMonitorPanel/FccTrafficPanel";
 import {
@@ -63,26 +63,27 @@ export function FccTrafficTopbarTrigger() {
       }}
       content={<FccTrafficPanel active={open} variant="popover" />}
     >
-      <button
-        type="button"
-        className={
-          "app-topbar-btn app-fcc-traffic-topbar-btn" + (open ? " active" : "")
-        }
-        aria-label="FCC 请求流量"
-        aria-expanded={open}
-        title="FCC 请求流量"
-      >
-        <IconFccTraffic />
-        {showBadge ? (
-          <span
-            className={
-              "app-fcc-traffic-topbar-btn__badge" +
-              (running ? " app-fcc-traffic-topbar-btn__badge--live" : "")
-            }
-            aria-hidden
-          />
-        ) : null}
-      </button>
+      <Tooltip title="FCC 请求流量" mouseEnterDelay={0.35}>
+        <button
+          type="button"
+          className={
+            "app-topbar-btn app-fcc-traffic-topbar-btn" + (open ? " active" : "")
+          }
+          aria-label="FCC 请求流量"
+          aria-expanded={open}
+        >
+          <IconFccTraffic />
+          {showBadge ? (
+            <span
+              className={
+                "app-fcc-traffic-topbar-btn__badge" +
+                (running ? " app-fcc-traffic-topbar-btn__badge--live" : "")
+              }
+              aria-hidden
+            />
+          ) : null}
+        </button>
+      </Tooltip>
     </Popover>
   );
 }

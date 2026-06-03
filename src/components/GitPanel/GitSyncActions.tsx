@@ -39,7 +39,7 @@ export function GitSyncActions({
   const behind = status.behind ?? 0;
 
   return (
-    <Space size={2} className="git-header-sync-actions">
+    <Space size={0} className="git-header-sync-actions">
       <Tooltip title="获取远程" placement="top" mouseEnterDelay={0.45}>
         <span className="git-sync-count-btn-wrap">
           <Button

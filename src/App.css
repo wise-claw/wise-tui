@@ -2637,6 +2637,16 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   gap: 0;
 }
 
+.app-left-sidebar-bottom-tab-content .git-panel-header-right .git-header-sync-actions.ant-space {
+  column-gap: 0 !important;
+  gap: 0 !important;
+}
+
+.app-left-sidebar-bottom-tab-content .git-panel-header-right .git-sync-count-btn-wrap {
+  min-width: 0;
+  min-height: 0;
+}
+
 .app-left-sidebar-bottom-tab-content .git-panel-header-right .ant-btn.ant-btn-sm,
 .app-left-sidebar-bottom-tab-content .git-panel-header > .ant-btn.ant-btn-text {
   width: 20px;
