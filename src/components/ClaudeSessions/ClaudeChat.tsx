@@ -1,8 +1,7 @@
+import { message, Modal, Spin } from "antd";
 import {
-  message,
-  Modal,
-} from "antd";
-import {
+  lazy,
+  Suspense,
   useRef,
   useEffect,
   useLayoutEffect,
@@ -12,6 +11,7 @@ import {
   useSyncExternalStore,
   type PointerEvent,
 } from "react";
+import { runWhenIdle } from "../../utils/deferIdle";
 import type {
   ClaudeComposerExecuteBubbleOptions,
   ClaudeSession,
@@ -25,7 +25,11 @@ import { useClaudeChatSessionFeaturePanel } from "../../hooks/useClaudeChatSessi
 import { resolveSessionOwnerInfo } from "../../hooks/claudeChatSessionFeaturePanelHelpers";
 import { ClaudeSessionTrajectoryDrawer } from "./ClaudeSessionTrajectoryDrawer";
 import { ClaudeChatQuickActionsChrome } from "./ClaudeChatQuickActionsChrome";
-import { ClaudeChatComposerTray } from "./ClaudeChatComposerTray";
+import { composerRegionChunk } from "./ClaudeChatComposerTray";
+
+const ClaudeChatComposerTrayLazy = lazy(() =>
+  import("./ClaudeChatComposerTray").then((module) => ({ default: module.ClaudeChatComposerTray })),
+);
 import { ClaudeChatMessagesPane } from "./ClaudeChatMessagesPane";
 import { ClaudeChatNotificationDock } from "./ClaudeChatNotificationDock";
 import { ClaudeChatSessionOwnerBar } from "./ClaudeChatSessionOwnerBar";
@@ -406,6 +410,18 @@ export function ClaudeChat({
     permissionRequest,
     onRestorePendingPermissionFromTranscript,
   ]);
+
+  useEffect(() => {
+    if (deferHeavySubtree) return;
+    const cancel = runWhenIdle(
+      () => {
+        void import("./ClaudeChatComposerTray");
+        void composerRegionChunk;
+      },
+      { timeoutMs: 900 },
+    );
+    return cancel;
+  }, [deferHeavySubtree, session.id]);
 
   useLayoutEffect(() => {
     if (deferHeavySubtree) return;
@@ -1745,52 +1761,69 @@ export function ClaudeChat({
             onAddWorktreeRepositoryToProject={onAddWorktreeRepositoryToProject}
           />
         ) : null}
-        <ClaudeChatComposerTray
-          composerTrayRef={composerTrayRef}
-          backgroundInvocationDockEnabled={backgroundInvocationDockEnabled}
-          session={session}
-          gitRepositoryPath={gitRepositoryPath}
-          employeesForDispatchRoute={employees}
-          pendingExecutionTaskCount={pendingTasks.length}
-          onExecute={handleComposerExecute}
-          onSessionModelChange={onSessionModelChange}
-          onSessionConnectionKindChange={onSessionConnectionKindChange}
-          sessionExecutionEngine={sessionExecutionEngine}
-          codexAvailable={codexAvailable}
-          cursorAvailable={cursorAvailable}
-          onOpenExecutionEnvironment={onOpenExecutionEnvironment}
-          onSessionExecutionEngineChange={handleSessionExecutionEngineChange}
-          onCancel={onCancel}
-          todos={todos}
-          questionRequest={questionRequest}
-          questionRequestQueueLength={questionRequestQueueLength}
-          questionRequestStatus={questionRequestStatus}
-          questionRequestError={questionRequestError}
-          questionDockTabs={questionDockTabs}
-          permissionRequest={permissionRequest}
-          permissionRequestStatus={permissionRequestStatus}
-          permissionRequestError={permissionRequestError}
-          followupItems={followupItems}
-          revertItems={revertItems}
-          respondQuestionAt={respondQuestionAt}
-          dismissQuestionAt={dismissQuestionAt}
-          onRespondToPermission={onRespondToPermission}
-          onClearTodos={onClearTodos}
-          onToggleTodo={onToggleTodo}
-          onClearFollowups={onClearFollowups}
-          onClearRevertItems={onClearRevertItems}
-          onSendFollowup={onSendFollowup}
-          onRestoreRevert={onRestoreRevert}
-          employeeMentions={mentionEmployees.map((item) => ({ id: item.id, name: item.name }))}
-          teamMentions={publishedTeamMentions}
-          projectRoleTagOptions={projectRoleTagOptions}
-          projectRepositoryMentionOptions={projectRepositoryMentionOptions}
-          hideEmployeesInAtMode={hideEmployeesInAtMode}
-          onEnqueueAsPendingTask={(payload) => addTask(payload)}
-          onTrackSendFlow={appendSessionSendTrace}
-          dualPaneRepositoryPicker={dualPaneRepositoryPicker}
-          missionContext={missionContext}
-        />
+        {!deferHeavySubtree ? (
+          <Suspense
+            fallback={
+              <div
+                ref={composerTrayRef}
+                className="app-claude-composer-tray app-claude-composer-tray__loading"
+                aria-busy="true"
+                aria-label="输入区加载中"
+              >
+                <Spin size="small" />
+              </div>
+            }
+          >
+            <ClaudeChatComposerTrayLazy
+              composerTrayRef={composerTrayRef}
+              backgroundInvocationDockEnabled={backgroundInvocationDockEnabled}
+              session={session}
+              gitRepositoryPath={gitRepositoryPath}
+              employeesForDispatchRoute={employees}
+              pendingExecutionTaskCount={pendingTasks.length}
+              onExecute={handleComposerExecute}
+              onSessionModelChange={onSessionModelChange}
+              onSessionConnectionKindChange={onSessionConnectionKindChange}
+              sessionExecutionEngine={sessionExecutionEngine}
+              codexAvailable={codexAvailable}
+              cursorAvailable={cursorAvailable}
+              onOpenExecutionEnvironment={onOpenExecutionEnvironment}
+              onSessionExecutionEngineChange={handleSessionExecutionEngineChange}
+              onCancel={onCancel}
+              todos={todos}
+              questionRequest={questionRequest}
+              questionRequestQueueLength={questionRequestQueueLength}
+              questionRequestStatus={questionRequestStatus}
+              questionRequestError={questionRequestError}
+              questionDockTabs={questionDockTabs}
+              permissionRequest={permissionRequest}
+              permissionRequestStatus={permissionRequestStatus}
+              permissionRequestError={permissionRequestError}
+              followupItems={followupItems}
+              revertItems={revertItems}
+              respondQuestionAt={respondQuestionAt}
+              dismissQuestionAt={dismissQuestionAt}
+              onRespondToPermission={onRespondToPermission}
+              onClearTodos={onClearTodos}
+              onToggleTodo={onToggleTodo}
+              onClearFollowups={onClearFollowups}
+              onClearRevertItems={onClearRevertItems}
+              onSendFollowup={onSendFollowup}
+              onRestoreRevert={onRestoreRevert}
+              employeeMentions={mentionEmployees.map((item) => ({ id: item.id, name: item.name }))}
+              teamMentions={publishedTeamMentions}
+              projectRoleTagOptions={projectRoleTagOptions}
+              projectRepositoryMentionOptions={projectRepositoryMentionOptions}
+              hideEmployeesInAtMode={hideEmployeesInAtMode}
+              onEnqueueAsPendingTask={(payload) => addTask(payload)}
+              onTrackSendFlow={appendSessionSendTrace}
+              dualPaneRepositoryPicker={dualPaneRepositoryPicker}
+              missionContext={missionContext}
+            />
+          </Suspense>
+        ) : (
+          <div ref={composerTrayRef} className="app-claude-composer-tray app-claude-composer-tray--deferred" aria-hidden />
+        )}
       </div>
         </div>
       </div>

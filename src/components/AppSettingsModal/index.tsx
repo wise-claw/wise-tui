@@ -4,8 +4,11 @@ import {
   LeftOutlined,
 } from "@ant-design/icons";
 import { Alert, Button, Empty, Modal, Spin } from "antd";
-import { useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
-import { MilkdownViewer } from "../MilkdownViewer";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useState, type ReactNode } from "react";
+
+const MilkdownViewerLazy = lazy(() =>
+  import("../MilkdownViewer").then((module) => ({ default: module.MilkdownViewer })),
+);
 import { SettingsViewModeProvider } from "../SettingsView";
 import {
   getExtensionSettingsTabs,
@@ -271,7 +274,9 @@ function ExtensionTabBody({ extension, body }: ExtensionTabBodyProps) {
       >
         来自扩展 · {extension}
       </div>
-      <MilkdownViewer text={body} />
+      <Suspense fallback={<Spin size="small" />}>
+        <MilkdownViewerLazy text={body} />
+      </Suspense>
     </div>
   );
 }

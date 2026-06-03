@@ -1,8 +1,7 @@
-import Editor from "@monaco-editor/react";
 import type { editor } from "monaco-editor";
 import type * as Monaco from "monaco-editor";
-import { Spin } from "antd";
-import { Suspense, useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
+import { LazyMonacoEditor } from "../LazyMonacoEditor";
 import {
   claudeSettingsEditorModelUri,
   configureMonacoClaudeSettingsJson,
@@ -38,7 +37,8 @@ function ClaudeSettingsJsonEditorInner({ value, onChange, height = 320, readOnly
 
   return (
     <div className="app-claude-settings-json-editor" style={{ height }}>
-      <Editor
+      <LazyMonacoEditor
+        loadingClassName="app-claude-settings-json-editor app-claude-settings-json-editor--loading"
         path={claudeSettingsEditorModelUri()}
         language="json"
         value={value}
@@ -79,15 +79,5 @@ function ClaudeSettingsJsonEditorInner({ value, onChange, height = 320, readOnly
 
 /** Claude Code `settings.json` 编辑区（Monaco JSON + 官方 Schema 补全）。 */
 export function ClaudeSettingsJsonEditor(props: Props) {
-  return (
-    <Suspense
-      fallback={
-        <div className="app-claude-settings-json-editor app-claude-settings-json-editor--loading">
-          <Spin size="small" />
-        </div>
-      }
-    >
-      <ClaudeSettingsJsonEditorInner {...props} />
-    </Suspense>
-  );
+  return <ClaudeSettingsJsonEditorInner {...props} />;
 }

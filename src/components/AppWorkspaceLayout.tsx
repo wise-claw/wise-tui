@@ -46,6 +46,7 @@ import { WorkspaceViewportLoading } from "./WorkspaceViewportLoading";
 /** 与 AppWorkspaceLayout 求值并行预拉取首屏关键子 chunk。 */
 const leftSidebarChunk = import("./LeftSidebar");
 const claudeSessionsChunk = import("./ClaudeSessions");
+const topbarChunk = import("./ClaudeSessions/Topbar");
 
 const LazyLeftSidebar = lazy(() =>
   leftSidebarChunk.then((module) => ({ default: module.LeftSidebar })),
@@ -53,7 +54,7 @@ const LazyLeftSidebar = lazy(() =>
 const LazyClaudeSessions = lazy(() =>
   claudeSessionsChunk.then((module) => ({ default: module.ClaudeSessions })),
 );
-const LazyTopbar = lazy(() => claudeSessionsChunk.then((module) => ({ default: module.Topbar })));
+const LazyTopbar = lazy(() => topbarChunk.then((module) => ({ default: module.Topbar })));
 const LazyAuthorPanel = lazy(() =>
   import("./AuthorPanel/AuthorPanel").then((module) => ({ default: module.AuthorPanel })),
 );

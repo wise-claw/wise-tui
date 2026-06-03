@@ -1,9 +1,11 @@
-import { Popover } from "antd";
-import { useCallback, useMemo, useState } from "react";
+import { Popover, Spin } from "antd";
+import { Suspense, useCallback, useMemo, useState } from "react";
 import { useModelProfileSwitcher } from "../../hooks/useClaudeModelProfileStore";
 import { pickBadgeEffectiveModel } from "../../types/claudeModelProfile";
-import { ClaudeModelTopbarPanel } from "./ClaudeModelTopbarPanel";
+import { ClaudeModelTopbarPanelLazy } from "./ClaudeModelTopbarPanel.lazy";
 import "./ClaudeModelTopbarTrigger.css";
+
+const claudeModelTopbarPanelChunk = import("./ClaudeModelTopbarPanel");
 
 function IconClaudeModel() {
   return (
@@ -36,6 +38,9 @@ export function ClaudeModelTopbarTrigger({ variant = "chat" }: Props) {
 
   const handleOpenChange = useCallback((next: boolean) => {
     setOpen(next);
+    if (next) {
+      void claudeModelTopbarPanelChunk;
+    }
   }, []);
 
   const effectiveModel = useMemo(
@@ -57,19 +62,29 @@ export function ClaudeModelTopbarTrigger({ variant = "chat" }: Props) {
       arrow={!isSidebar}
       open={open}
       onOpenChange={handleOpenChange}
-      destroyOnHidden={false}
+      destroyOnHidden
       classNames={{ root: "app-claude-model-topbar-popover" }}
       styles={{
         container: { padding: 0 },
         content: { padding: 0 },
       }}
       content={
-        <ClaudeModelTopbarPanel
-          store={store}
-          setStore={setStore}
-          loading={loading}
-          onApplied={() => setOpen(false)}
-        />
+        open ? (
+          <Suspense
+            fallback={
+              <div className="app-claude-model-topbar-panel app-claude-model-topbar-panel--loading">
+                <Spin />
+              </div>
+            }
+          >
+            <ClaudeModelTopbarPanelLazy
+              store={store}
+              setStore={setStore}
+              loading={loading}
+              onApplied={() => setOpen(false)}
+            />
+          </Suspense>
+        ) : null
       }
     >
       <button

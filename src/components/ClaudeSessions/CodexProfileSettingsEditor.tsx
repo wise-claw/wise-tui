@@ -1,6 +1,5 @@
-import Editor from "@monaco-editor/react";
-import { Spin } from "antd";
-import { Suspense, useEffect, useId, useRef } from "react";
+import { useEffect, useId, useRef } from "react";
+import { LazyMonacoEditor } from "../LazyMonacoEditor";
 import "./CodexProfileSettingsEditor.css";
 
 interface MonacoEditorProps {
@@ -28,7 +27,8 @@ function MonacoTextEditorInner({ language, value, onChange, height, path }: Mona
 
   return (
     <div className="app-codex-profile-settings-editor__pane" style={{ height }}>
-      <Editor
+      <LazyMonacoEditor
+        loadingClassName="app-codex-profile-settings-editor__pane app-codex-profile-settings-editor__pane--loading"
         path={path}
         language={language}
         value={value}
@@ -57,17 +57,7 @@ function MonacoTextEditorInner({ language, value, onChange, height, path }: Mona
 }
 
 function MonacoTextEditor(props: MonacoEditorProps) {
-  return (
-    <Suspense
-      fallback={
-        <div className="app-codex-profile-settings-editor__pane app-codex-profile-settings-editor__pane--loading">
-          <Spin size="small" />
-        </div>
-      }
-    >
-      <MonacoTextEditorInner {...props} />
-    </Suspense>
-  );
+  return <MonacoTextEditorInner {...props} />;
 }
 
 interface Props {

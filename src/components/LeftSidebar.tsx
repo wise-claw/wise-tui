@@ -1,5 +1,5 @@
-import { App as AntdApp, Layout, Tooltip } from "antd";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { App as AntdApp, Layout, Spin, Tooltip } from "antd";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ProjectItem, Repository } from "../types";
 import { repositoryFolderBasename } from "../utils/repositoryType";
 import {
@@ -13,7 +13,6 @@ import { resolveTrellisBootstrapPath } from "../utils/trellisBootstrapPath";
 import { resolveRepositoryForSession } from "../utils/repositoryMainSessionBinding";
 import { isMultiRepoProject } from "../utils/workspaceMode";
 import { runWhenIdle } from "../utils/deferIdle";
-import { AppSettingsModal } from "./AppSettingsModal";
 import { MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX } from "../constants/mainLayoutWidths";
 import { DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION } from "../constants/workspaceBootstrapAddons";
 import { cancelClaudeExecution } from "../services/claude";
@@ -40,9 +39,7 @@ import { ActiveRepositoryFilesPanel } from "./LeftSidebar/ActiveRepositoryFilesP
 import { LeftSidebarTopbar } from "./LeftSidebar/LeftSidebarTopbar";
 import { LeftSidebarHubQuickEntries } from "./LeftSidebar/LeftSidebarHubQuickEntries";
 import { ProjectRepositoryList } from "./LeftSidebar/ProjectRepositoryList";
-import { GitPanel } from "./GitPanel";
 import { GitPanelWorkspaceSelector } from "./GitPanel/GitPanelWorkspaceSelector";
-import { ProgressMonitorPanel } from "./ProgressMonitorPanel";
 import {
   readLeftFilesExplorerCollapsedFromStorage,
   writeLeftFilesExplorerCollapsedToStorage,
@@ -72,6 +69,16 @@ import { useSystemResourceSessions } from "./LeftSidebar/useSystemResourceSessio
 import { useSidebarRunningMainSessionIndicators } from "./LeftSidebar/useSidebarRunningMainSessionIndicators";
 import { notifySplitTodoCountUpdated } from "../utils/notifySplitTodoCountUpdated";
 import "./GitPanel/index.css";
+
+const ProgressMonitorPanelLazy = lazy(() =>
+  import("./ProgressMonitorPanel").then((module) => ({ default: module.ProgressMonitorPanel })),
+);
+const GitPanelLazy = lazy(() => import("./GitPanel").then((module) => ({ default: module.GitPanel })));
+const AppSettingsModalLazy = lazy(() =>
+  import("./AppSettingsModal").then((module) => ({ default: module.AppSettingsModal })),
+);
+
+const gitPanelChunk = import("./GitPanel");
 
 export function LeftSidebar({
   dark,
@@ -249,6 +256,19 @@ export function LeftSidebar({
     readLeftFilesExplorerCollapsedFromStorage,
   );
   const [leftBottomTab, setLeftBottomTab] = useState<LeftBottomTab>(readLeftBottomTabFromStorage);
+  const [monitorPanelMounted, setMonitorPanelMounted] = useState(false);
+
+  useEffect(() => {
+    if (!showLeftSidebarMonitorPanel) return;
+    const cancel = runWhenIdle(() => setMonitorPanelMounted(true), { timeoutMs: 500 });
+    return cancel;
+  }, [showLeftSidebarMonitorPanel]);
+
+  useEffect(() => {
+    if (leftBottomTab === "git") {
+      void gitPanelChunk;
+    }
+  }, [leftBottomTab]);
   const expandedFilesPanelOnMountRef = useRef(false);
   const projectRepositoryState = useProjectRepositorySidebarState({
     projects,
@@ -1020,9 +1040,10 @@ export function LeftSidebar({
           onStopRepositoryMainSession={handleStopRepositoryMainSession}
         />
 
-        {showLeftSidebarMonitorPanel ? (
+        {showLeftSidebarMonitorPanel && monitorPanelMounted ? (
           <div className="app-left-sidebar-monitor-panel">
-            <ProgressMonitorPanel
+            <Suspense fallback={null}>
+            <ProgressMonitorPanelLazy
               employeeItems={employeeMonitorItems}
               repositoryMemberItems={repositoryMemberMonitorItems}
               sessionConversationTaskItems={
@@ -1054,6 +1075,7 @@ export function LeftSidebar({
               repositoryMainBindings={repositoryMainSessionBindings}
               repositories={repositories}
             />
+            </Suspense>
           </div>
         ) : null}
 
@@ -1082,16 +1104,24 @@ export function LeftSidebar({
             ) : null}
             <div className="app-left-sidebar-bottom-tab-content">
               {leftBottomTab === "git" ? (
-                <GitPanel
-                  headerPrefix={repoPanelTabSwitcher}
-                  repositoryPath={effectiveRepoPanelPath}
-                  repositoryName={repoPanelRepositoryName}
-                  repositoryEntries={gitPanelRepositoryEntries}
-                  multiRepoContextTitle={gitPanelContextTitle}
-                  onOpenFile={onOpenActiveRepositoryFile}
-                  lazyMount
-                  {...repoPanelWorkspaceSelectorProps}
-                />
+                <Suspense
+                  fallback={
+                    <div className="app-file-editor-loading">
+                      <Spin size="small" />
+                    </div>
+                  }
+                >
+                  <GitPanelLazy
+                    headerPrefix={repoPanelTabSwitcher}
+                    repositoryPath={effectiveRepoPanelPath}
+                    repositoryName={repoPanelRepositoryName}
+                    repositoryEntries={gitPanelRepositoryEntries}
+                    multiRepoContextTitle={gitPanelContextTitle}
+                    onOpenFile={onOpenActiveRepositoryFile}
+                    lazyMount
+                    {...repoPanelWorkspaceSelectorProps}
+                  />
+                </Suspense>
               ) : (
                 <ActiveRepositoryFilesPanel
                   headerPrefix={filesExplorerSectionCollapsed ? undefined : repoPanelTabSwitcher}
@@ -1244,7 +1274,11 @@ export function LeftSidebar({
         onCancel={projectSddModeModal.cancel}
         onSubmit={() => void projectSddModeModal.submit()}
       />
-      <AppSettingsModal open={appSettingsOpen} onClose={() => setAppSettingsOpen(false)} />
+      {appSettingsOpen ? (
+        <Suspense fallback={null}>
+          <AppSettingsModalLazy open onClose={() => setAppSettingsOpen(false)} />
+        </Suspense>
+      ) : null}
     </Layout.Sider>
   );
 }

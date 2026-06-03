@@ -25,6 +25,7 @@ bootstrapDompurifyForTauriAssets();
 
 /** 与 App / AppImpl 解析并行预拉工作区首屏 chunk，缩短壳体出现后的等待。 */
 void import("./components/AppWorkspaceLayout.lazy");
+void import("./AppImpl");
 
 ReactDOM.createRoot(document.getElementById("root") as HTMLElement).render(
   <React.StrictMode>

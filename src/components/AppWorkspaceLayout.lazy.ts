@@ -7,6 +7,7 @@ const appWorkspaceLayoutModule = import("./AppWorkspaceLayout");
 void import("./LeftSidebar");
 const claudeSessionsEntry = import("./ClaudeSessions");
 void claudeSessionsEntry;
+void import("./ClaudeSessions/Topbar");
 /** 会话壳就绪后常用聊天主体，提前拉取缩短二次等待。 */
 void import("./ClaudeSessions/ClaudeSessionChatWithDock");
 

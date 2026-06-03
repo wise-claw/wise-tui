@@ -1659,6 +1659,19 @@
   position: relative;
 }
 
+.app-claude-composer-tray__loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 72px;
+  padding: 12px 0;
+}
+
+.app-claude-composer-tray--deferred {
+  min-height: 1px;
+  visibility: hidden;
+}
+
 .app-claude-status-panel {
   margin: 0 12px 8px;
   padding: 8px 10px;
