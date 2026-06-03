@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { UserOutlined } from "@ant-design/icons";
-import { App as AntdApp, Dropdown, Tooltip } from "antd";
+import { App as AntdApp, Dropdown, Popover, Tooltip } from "antd";
+import { openWorkspaceTodosFromSidebarMenu } from "../../utils/openWorkspaceTodosFromSidebar";
+import { workspaceTodosAnchorKey } from "../../utils/workspaceTodosAnchorKey";
 import type { Repository, StandaloneRepo, TaskMode, Workspace } from "../../types";
 import { repositoryFolderBasename } from "../../utils/repositoryType";
 import type { WorkspaceFocus } from "../../utils/workspaceMode";
@@ -36,6 +38,13 @@ import {
 import { useIsRepositoryRunCommandRunning } from "../../hooks/useIsRepositoryRunCommandRunning";
 import { RunningMainSessionDot } from "./RunningMainSessionDot";
 import { RepositorySddStackBadge } from "./RepositorySddStackBadge";
+import { WorkspaceTodosPopoverContent } from "./WorkspaceTodosPopoverContent";
+
+function workspaceTodosPopoverTitle(projectId: string | null, repositoryId: number | null): string {
+  if (repositoryId != null) return "仓库待办事项";
+  if (projectId?.trim()) return "工作区待办事项";
+  return "待办事项";
+}
 
 function repositoryTrellisEntrypointsEnabled(repository: Repository, trellisReady: boolean): boolean {
   return repository.sddMode !== "off" && (trellisReady || repository.sddMode !== "project_owned");
@@ -251,34 +260,70 @@ export function SidebarExecutableTasksAction({
 export function SidebarWorkspaceRemindersAction({
   incompleteCount,
   variant = "repo",
+  projectId,
+  repositoryId,
+  onOpen,
 }: {
   incompleteCount: number;
   variant?: "repo" | "project";
+  projectId: string | null;
+  repositoryId: number | null;
+  onOpen?: () => void;
 }) {
+  const [popoverOpen, setPopoverOpen] = useState(false);
+
   if (incompleteCount <= 0) return null;
 
   const badgeLabel = incompleteCount > 99 ? "99+" : String(incompleteCount);
   const scopeLabel = variant === "project" ? "工作区" : "仓库";
   const tooltip = `${scopeLabel}待办事项：${incompleteCount} 条未完成`;
+  const popoverTitle = workspaceTodosPopoverTitle(projectId, repositoryId);
 
   return (
-    <Tooltip title={tooltip} mouseEnterDelay={0.3}>
-      <button
-        type="button"
-        className={`app-repository-action app-repository-action--task app-repository-action--primary app-repository-action--workspace-reminders${variant === "project" ? " app-repository-action--project-quick" : ""}`}
-        aria-label={tooltip}
-        onClick={(e) => {
-          e.stopPropagation();
-        }}
+    <Popover
+      open={popoverOpen}
+      onOpenChange={(next) => {
+        setPopoverOpen(next);
+        if (next) onOpen?.();
+      }}
+      trigger="click"
+      placement="rightTop"
+      destroyOnHidden
+      getPopupContainer={() => document.body}
+      rootClassName="app-left-sidebar-workspace-todos-popover"
+      styles={{ root: { zIndex: 1200 } }}
+      title={popoverTitle}
+      content={
+        popoverOpen ? (
+          <WorkspaceTodosPopoverContent
+            projectId={projectId}
+            repositoryId={repositoryId}
+            title={popoverTitle}
+          />
+        ) : null
+      }
+    >
+      <span
+        className="app-repository-action-popover-trigger"
+        onClick={(e) => e.stopPropagation()}
       >
-        <span className="app-repository-action-icon-wrap">
-          <WorkspaceRemindersIcon />
-          <span className="app-repository-action-count-badge app-repository-action-count-badge--workspace-reminders">
-            {badgeLabel}
-          </span>
-        </span>
-      </button>
-    </Tooltip>
+        <Tooltip title={tooltip} mouseEnterDelay={0.3}>
+          <button
+            type="button"
+            className={`app-repository-action app-repository-action--task app-repository-action--primary app-repository-action--workspace-reminders${variant === "project" ? " app-repository-action--project-quick" : ""}`}
+            aria-label={tooltip}
+            aria-expanded={popoverOpen}
+          >
+            <span className="app-repository-action-icon-wrap">
+              <WorkspaceRemindersIcon />
+              <span className="app-repository-action-count-badge app-repository-action-count-badge--workspace-reminders">
+                {badgeLabel}
+              </span>
+            </span>
+          </button>
+        </Tooltip>
+      </span>
+    </Popover>
   );
 }
 
@@ -293,7 +338,6 @@ export function RepositoryRow({
   onOpenInTerminal,
   onOpenRepositoryInBrowser,
   onOpenRepositoryInEditor,
-  onOpenPromptsRepository,
   onOpenRepositoryMainOwner,
   onConfigureSddMode,
   onConfigureRepositoryMainSessionRun,
@@ -324,7 +368,6 @@ export function RepositoryRow({
   onOpenInTerminal?: (repository: Repository) => void;
   onOpenRepositoryInBrowser: (repository: Repository) => void;
   onOpenRepositoryInEditor: (repository: Repository) => void;
-  onOpenPromptsRepository?: (project: Workspace, repository: Repository) => void;
   onOpenRepositoryMainOwner?: (repository: Repository) => void;
   onConfigureSddMode?: (repository: Repository) => void;
   onConfigureRepositoryMainSessionRun?: (repository: Repository) => void;
@@ -352,7 +395,6 @@ export function RepositoryRow({
     trellisReady,
     trellisRootActionEnabled: false,
     onOpenRepositoryMainOwner: Boolean(onOpenRepositoryMainOwner),
-    onOpenPromptsRepository: Boolean(onOpenPromptsRepository),
     onConfigureSddMode: Boolean(onConfigureSddMode),
     onMainSessionRun: true,
     runCommandRunning,
@@ -464,7 +506,12 @@ export function RepositoryRow({
               onOpen={() => onOpenExecutableTasks(repository)}
             />
           ) : null}
-          <SidebarWorkspaceRemindersAction incompleteCount={incompleteTodoCount} />
+          <SidebarWorkspaceRemindersAction
+            incompleteCount={incompleteTodoCount}
+            projectId={project.id}
+            repositoryId={repository.id}
+            onOpen={() => onRepositorySelect(repository.id)}
+          />
           <RepositorySddStackBadge repository={repository} />
           <Dropdown
             rootClassName="app-sidebar-more-menu-dropdown"
@@ -472,13 +519,20 @@ export function RepositoryRow({
               className: "app-sidebar-more-menu-inner",
               items: moreItems,
               onClick: ({ key }) => {
+                if (key === "add-workspace-todo") {
+                  onRepositorySelect(repository.id);
+                  openWorkspaceTodosFromSidebarMenu({
+                    projectId: project.id,
+                    repositoryId: repository.id,
+                  });
+                  return;
+                }
                 if (key === "finder") onOpenInFinder(repository);
                 if (key === "editor") onOpenRepositoryInEditor(repository);
                 if (key === "open-terminal") onOpenInTerminal?.(repository);
                 if (key === "browser") onOpenRepositoryInBrowser(repository);
                 if (key === "main-owner") onOpenRepositoryMainOwner?.(repository);
                 if (key === "detach") onDetachFromProject(project.id, repository.id);
-                if (key === "prompts") onOpenPromptsRepository?.(project, repository);
                 if (key === "sdd-mode") onConfigureSddMode?.(repository);
                 if (key === "run-configure") onConfigureRepositoryMainSessionRun?.(repository);
                 if (key === "run-start") onStartRepositoryRunCommand?.(repository);
@@ -496,6 +550,7 @@ export function RepositoryRow({
               type="button"
               className="app-repository-action app-repository-action--more"
               aria-label="仓库更多操作"
+              data-workspace-todos-anchor={workspaceTodosAnchorKey(null, repository.id) ?? undefined}
               onClick={(e) => e.stopPropagation()}
             >
               <MoreIcon />
@@ -666,7 +721,12 @@ export function FloatingRepositoryRow({
               onOpen={() => onOpenExecutableTasks(repository)}
             />
           ) : null}
-          <SidebarWorkspaceRemindersAction incompleteCount={incompleteTodoCount} />
+          <SidebarWorkspaceRemindersAction
+            incompleteCount={incompleteTodoCount}
+            projectId={null}
+            repositoryId={repository.id}
+            onOpen={() => onRepositorySelect(repository.id)}
+          />
           <RepositorySddStackBadge repository={repository} />
           <Dropdown
             rootClassName="app-sidebar-more-menu-dropdown"
@@ -674,6 +734,14 @@ export function FloatingRepositoryRow({
               className: "app-sidebar-more-menu-inner",
               items: moreItems,
               onClick: ({ key }) => {
+                if (key === "add-workspace-todo") {
+                  onRepositorySelect(repository.id);
+                  openWorkspaceTodosFromSidebarMenu({
+                    projectId: null,
+                    repositoryId: repository.id,
+                  });
+                  return;
+                }
                 if (key === "finder") onOpenInFinder(repository);
                 if (key === "editor") onOpenRepositoryInEditor(repository);
                 if (key === "open-terminal") onOpenInTerminal?.(repository);
@@ -703,6 +771,7 @@ export function FloatingRepositoryRow({
               type="button"
               className="app-repository-action app-repository-action--more"
               aria-label="仓库更多操作"
+              data-workspace-todos-anchor={workspaceTodosAnchorKey(null, repository.id) ?? undefined}
               onClick={(e) => e.stopPropagation()}
             >
               <MoreIcon />
@@ -726,7 +795,6 @@ export function ProjectRepositoryRows({
   onOpenInTerminal,
   onOpenRepositoryInBrowser,
   openRepositoryInPreferredEditor,
-  onOpenPromptsRepository,
   onOpenRepositoryMainOwner,
   onReorderRepositoriesInProject,
   onMoveRepositoryToProject,
@@ -760,7 +828,6 @@ export function ProjectRepositoryRows({
   onOpenInTerminal?: (repository: Repository) => void;
   onOpenRepositoryInBrowser: (repository: Repository) => void;
   openRepositoryInPreferredEditor: (repository: Repository) => void;
-  onOpenPromptsRepository?: (project: Workspace, repository: Repository) => void;
   onOpenRepositoryMainOwner?: (repository: Repository) => void;
   onReorderRepositoriesInProject?: (projectId: string, repositoryIds: number[]) => void | Promise<void>;
   onMoveRepositoryToProject?: (targetProjectId: string, repositoryId: number) => void | Promise<void>;
@@ -826,7 +893,6 @@ export function ProjectRepositoryRows({
             onOpenInTerminal={onOpenInTerminal}
             onOpenRepositoryInBrowser={onOpenRepositoryInBrowser}
             onOpenRepositoryInEditor={openRepositoryInPreferredEditor}
-            onOpenPromptsRepository={onOpenPromptsRepository}
             onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}
             onConfigureSddMode={onConfigureSddMode}
             onConfigureRepositoryMainSessionRun={onConfigureRepositoryMainSessionRun}

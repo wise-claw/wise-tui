@@ -39,7 +39,11 @@ export function useWorkspaceTodos({ projectId, repositoryId }: UseWorkspaceTodos
   projectItemsRef.current = projectItems;
   repositoryItemsRef.current = repositoryItems;
 
+  const loadGenerationRef = useRef(0);
+
   const refresh = useCallback(async () => {
+    const generation = loadGenerationRef.current + 1;
+    loadGenerationRef.current = generation;
     setLoading(true);
     try {
       const [projectPayload, repositoryPayload] = await Promise.all([
@@ -50,17 +54,21 @@ export function useWorkspaceTodos({ projectId, repositoryId }: UseWorkspaceTodos
           ? loadRepositoryWorkspaceTodos(repositoryId)
           : Promise.resolve({ version: 1 as const, items: [] }),
       ]);
+      if (generation !== loadGenerationRef.current) return;
       setProjectItems(projectPayload.items);
       setRepositoryItems(repositoryPayload.items);
     } catch (error) {
-      message.error(persistErrorText(error));
+      if (generation === loadGenerationRef.current) message.error(persistErrorText(error));
     } finally {
-      setLoading(false);
+      if (generation === loadGenerationRef.current) setLoading(false);
     }
   }, [projectId, repositoryId]);
 
   useEffect(() => {
     void refresh();
+    return () => {
+      loadGenerationRef.current += 1;
+    };
   }, [refresh]);
 
   const displayItems = useMemo(() => {

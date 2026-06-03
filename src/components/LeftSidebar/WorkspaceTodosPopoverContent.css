@@ -1,0 +1,32 @@
+.app-workspace-todos-popover {
+  width: min(300px, calc(100vw - 48px));
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.app-workspace-todos-popover .app-workspace-todos-editor__done-toggle {
+  display: flex;
+  justify-content: flex-end;
+  padding: 2px 6px 0;
+}
+
+.app-workspace-todos-popover .app-workspace-todos-panel__list {
+  max-height: min(240px, 40vh);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
+.app-workspace-todos-popover .app-workspace-todos-panel__row {
+  grid-template-columns: 18px minmax(0, 1fr) 20px;
+}
+
+.app-workspace-todos-popover .app-workspace-todos-panel__list-empty,
+.app-workspace-todos-popover .app-workspace-todos-panel__empty-hint {
+  padding: 8px 10px;
+}
+
+.app-workspace-todos-popover .app-workspace-todos-panel__loading {
+  padding: 12px 0;
+}

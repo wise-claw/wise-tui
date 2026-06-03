@@ -27,6 +27,20 @@ export function createWorkspaceTodoId(): string {
   return `wtodo_${Date.now()}_${Math.random().toString(36).slice(2, 10)}`;
 }
 
+export function createWorkspaceTodoItem(title: string, now = Date.now()): WorkspaceTodoItem {
+  const trimmed = title.trim();
+  return {
+    id: createWorkspaceTodoId(),
+    title: trimmed || "无标题",
+    completed: false,
+    dueAt: null,
+    notes: "",
+    sortOrder: now,
+    createdAt: now,
+    updatedAt: now,
+  };
+}
+
 function normalizeItem(raw: unknown): WorkspaceTodoItem | null {
   if (!raw || typeof raw !== "object") return null;
   const row = raw as Partial<WorkspaceTodoItem>;

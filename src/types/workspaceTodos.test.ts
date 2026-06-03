@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  createWorkspaceTodoItem,
   isWorkspaceTodoOverdue,
   parseWorkspaceTodosPayload,
   sortWorkspaceTodoItems,
@@ -65,6 +66,13 @@ describe("workspaceTodos", () => {
         200,
       ),
     ).toBe(false);
+  });
+
+  test("createWorkspaceTodoItem trims title and assigns id", () => {
+    const item = createWorkspaceTodoItem("  修复网关  ");
+    expect(item.title).toBe("修复网关");
+    expect(item.id.length).toBeGreaterThan(0);
+    expect(item.completed).toBe(false);
   });
 
   test("sortWorkspaceTodoItems keeps stable ordering", () => {

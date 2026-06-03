@@ -14,39 +14,44 @@ export function RunningMainSessionDot({
   runningTitle = "运行指令执行中",
   stopTitle = "停止运行",
 }: RunningMainSessionDotProps) {
+  const dot = (
+    <span
+      className="app-repository-main-session-running-dot app-repository-run-command-running-dot--active"
+      aria-hidden={Boolean(onStop)}
+      aria-label={onStop ? undefined : runningTitle}
+    />
+  );
+
   if (!onStop) {
     return (
-      <span
-        className="app-repository-main-session-running-dot app-repository-run-command-running-dot--active"
-        aria-label={runningTitle}
-        title={runningTitle}
-      />
+      <Tooltip title={runningTitle} mouseEnterDelay={0.3}>
+        {dot}
+      </Tooltip>
     );
   }
 
   return (
-    <span
-      className="app-repository-main-session-running-dot-wrap app-repository-run-command-running-dot-wrap"
-      onClick={(event) => event.stopPropagation()}
-      onKeyDown={(event) => event.stopPropagation()}
-    >
+    <Tooltip title={runningTitle} mouseEnterDelay={0.3}>
       <span
-        className="app-repository-main-session-running-dot app-repository-run-command-running-dot--active"
-        aria-hidden
-      />
-      <Tooltip title={stopTitle} mouseEnterDelay={0.2}>
-        <button
-          type="button"
-          className="app-repository-main-session-running-stop"
-          aria-label={stopTitle}
-          onClick={(event) => {
-            event.stopPropagation();
-            onStop();
-          }}
-        >
-          <CloseOutlined />
-        </button>
-      </Tooltip>
-    </span>
+        className="app-repository-main-session-running-dot-wrap app-repository-run-command-running-dot-wrap"
+        onClick={(event) => event.stopPropagation()}
+        onKeyDown={(event) => event.stopPropagation()}
+      >
+        {dot}
+        <Tooltip title={stopTitle} mouseEnterDelay={0.2}>
+          <button
+            type="button"
+            className="app-repository-main-session-running-stop"
+            aria-label={stopTitle}
+            onClick={(event) => {
+              event.stopPropagation();
+              onStop();
+            }}
+          >
+            <CloseOutlined />
+          </button>
+        </Tooltip>
+      </span>
+    </Tooltip>
   );
 }

@@ -86,6 +86,7 @@ function repositoryTaskMenuItems(input: {
   onOpenRequirements?: boolean;
   onOpenScheduledTasks?: boolean;
   onOpenExecutableTasks?: boolean;
+  onAddWorkspaceTodo?: boolean;
 }): MenuItem[] {
   const {
     trellisEnabled = false,
@@ -93,9 +94,11 @@ function repositoryTaskMenuItems(input: {
     onOpenRequirements = false,
     onOpenScheduledTasks = false,
     onOpenExecutableTasks = false,
+    onAddWorkspaceTodo = true,
   } = input;
 
   return compactItems([
+    onAddWorkspaceTodo ? { key: "add-workspace-todo", label: "添加待办事项" } : null,
     trellisEnabled && onOpenRequirements ? { key: "requirements", label: requirementsLabel } : null,
     onOpenScheduledTasks ? { key: "scheduled-tasks", label: "定时任务" } : null,
     trellisEnabled && onOpenExecutableTasks ? { key: "executable-tasks", label: "可执行任务" } : null,
@@ -135,7 +138,6 @@ function repositoryConfigureMenuItems(input: {
   runCommandRunning?: boolean;
   trellisRootActionEnabled?: boolean;
   trellisReady?: boolean;
-  onOpenPromptsRepository?: boolean;
 }): MenuItem[] {
   const {
     onOpenRepositoryMainOwner,
@@ -145,7 +147,6 @@ function repositoryConfigureMenuItems(input: {
     runCommandRunning = false,
     trellisRootActionEnabled = false,
     trellisReady = false,
-    onOpenPromptsRepository,
   } = input;
 
   return compactItems([
@@ -155,7 +156,6 @@ function repositoryConfigureMenuItems(input: {
     onConfigureSddMode ? { key: "sdd-mode", label: "配置 Claude 插件" } : null,
     repositoryMainSessionRunMenuItem({ onMainSessionRun, runCommandRunning }),
     trellisRootActionEnabled && !trellisReady ? { key: "trellis-init", label: "启用 Wise Trellis" } : null,
-    onOpenPromptsRepository ? { key: "prompts", label: "提示词" } : null,
   ]);
 }
 
@@ -211,7 +211,6 @@ export function buildProjectMoreMenuItems(input: BuildProjectMoreMenuItemsInput)
         : null,
       sidebarMenuSection([
         onConfigureSddMode ? { key: "sdd-mode", label: "配置 Claude 插件" } : null,
-        { key: "prompts", label: "提示词" },
         onReconcileProject
           ? {
               key: "reconcile-submenu",
@@ -244,7 +243,6 @@ export interface BuildProjectRepositoryMoreMenuItemsInput {
   trellisReady?: boolean;
   trellisRootActionEnabled?: boolean;
   onOpenRepositoryMainOwner?: boolean;
-  onOpenPromptsRepository?: boolean;
   onConfigureSddMode?: boolean;
   /** 仓库运行指令（顶栏运行指令同款） */
   onMainSessionRun?: boolean;
@@ -265,7 +263,6 @@ export function buildProjectRepositoryMoreMenuItems(
     trellisEnabled = false,
     trellisReady = false,
     trellisRootActionEnabled = trellisEnabled,
-    onOpenPromptsRepository,
     onConfigureSddMode,
     onMainSessionRun,
     runCommandRunning = false,
@@ -296,7 +293,6 @@ export function buildProjectRepositoryMoreMenuItems(
           runCommandRunning,
           trellisRootActionEnabled,
           trellisReady,
-          onOpenPromptsRepository,
         }),
       ),
       sidebarMenuSection(

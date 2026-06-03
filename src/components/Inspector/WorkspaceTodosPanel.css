@@ -78,6 +78,10 @@
   line-height: 20px;
 }
 
+.app-workspace-todos-panel__row--no-scope {
+  grid-template-columns: 18px minmax(0, 1fr) 20px;
+}
+
 .app-workspace-todos-panel__row {
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr) auto 20px;

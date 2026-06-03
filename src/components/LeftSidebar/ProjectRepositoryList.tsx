@@ -10,6 +10,8 @@ import {
 } from "./useSidebarScheduledTasksMap";
 import { resolveWorkspaceMode, type WorkspaceFocus } from "../../utils/workspaceMode";
 import { buildProjectMoreMenuItems } from "./sidebarMoreMenuItems";
+import { openWorkspaceTodosFromSidebarMenu } from "../../utils/openWorkspaceTodosFromSidebar";
+import { workspaceTodosAnchorKey } from "../../utils/workspaceTodosAnchorKey";
 import {
   ExpandIcon,
   MoreIcon,
@@ -516,7 +518,6 @@ function ProjectRow({
   onTogglePinProject,
   onRenameProject,
   onDeleteProject,
-  onOpenPromptsProject,
   onOpenProjectTrellis,
   onAddRepositoryToProject,
   onCreateProjectTask,
@@ -531,7 +532,6 @@ function ProjectRow({
   onOpenRepositoryInBrowser,
   openRepositoryInPreferredEditor,
   openProjectInPreferredEditor,
-  onOpenPromptsRepository,
   onOpenRepositoryMainOwner,
   onConfigureRepositoryMainSessionRun,
   onStartRepositoryRunCommand,
@@ -668,6 +668,8 @@ function ProjectRow({
           <span className="app-repository-name">{project.name}</span>
           {mainSessionRunning ? (
             <RunningMainSessionDot
+              runningTitle="工作区主会话运行中"
+              stopTitle="结束工作区主会话"
               onStop={
                 onStopProjectMainSession ? () => onStopProjectMainSession(project.id) : undefined
               }
@@ -679,7 +681,11 @@ function ProjectRow({
             </span>
           ) : null}
           {isPinned ? (
-            <span className="app-repository-pin" aria-label="已置顶" title="已置顶" />
+            <Tooltip title="已置顶：工作区固定在列表顶部" mouseEnterDelay={0.3}>
+              <span className="app-repository-pin-hit" aria-label="已置顶：工作区固定在列表顶部">
+                <span className="app-repository-pin" aria-hidden />
+              </span>
+            </Tooltip>
           ) : null}
         </span>
         <div className="app-repository-row-actions app-repository-row-actions--project">
@@ -711,6 +717,9 @@ function ProjectRow({
           <SidebarWorkspaceRemindersAction
             variant="project"
             incompleteCount={projectIncompleteTodoCount}
+            projectId={project.id}
+            repositoryId={null}
+            onOpen={() => onProjectSelect(project.id)}
           />
           <Dropdown
             rootClassName="app-sidebar-more-menu-dropdown"
@@ -720,6 +729,14 @@ function ProjectRow({
               onClick: ({ key, domEvent }) => {
                 domEvent?.preventDefault();
                 domEvent?.stopPropagation();
+                if (key === "add-workspace-todo") {
+                  onProjectSelect(project.id);
+                  openWorkspaceTodosFromSidebarMenu({
+                    projectId: project.id,
+                    repositoryId: null,
+                  });
+                  return;
+                }
                 if (key === "pin") onTogglePinProject(project.id);
                 if (key === "rename") onRenameProject(project);
                 if (key === "open-directory") onOpenProjectInFinder?.(project);
@@ -736,7 +753,6 @@ function ProjectRow({
                 if (key === "reconcile-repos-graphs") {
                   void Promise.resolve(onReconcileProject?.(project.id, "repos_and_graphs"));
                 }
-                if (key === "prompts") onOpenPromptsProject?.(project);
                 if (key === "delete") onDeleteProject(project);
               },
             }}
@@ -747,6 +763,7 @@ function ProjectRow({
               type="button"
               className="app-repository-action app-repository-action--more"
               aria-label="工作区更多操作"
+              data-workspace-todos-anchor={workspaceTodosAnchorKey(project.id, null) ?? undefined}
               onClick={(e) => e.stopPropagation()}
             >
               <MoreIcon />
@@ -769,7 +786,6 @@ function ProjectRow({
             onOpenInTerminal={onOpenInTerminal}
             onOpenRepositoryInBrowser={onOpenRepositoryInBrowser}
             openRepositoryInPreferredEditor={openRepositoryInPreferredEditor}
-            onOpenPromptsRepository={onOpenPromptsRepository}
             onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}
             onReorderRepositoriesInProject={onReorderRepositoriesInProject}
             onMoveRepositoryToProject={onMoveRepositoryToProjectWithExpand}

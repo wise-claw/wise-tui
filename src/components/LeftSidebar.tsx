@@ -38,6 +38,7 @@ import { ActiveRepositoryFilesPanel } from "./LeftSidebar/ActiveRepositoryFilesP
 import { LeftSidebarTopbar } from "./LeftSidebar/LeftSidebarTopbar";
 import { LeftSidebarHubQuickEntries } from "./LeftSidebar/LeftSidebarHubQuickEntries";
 import { ProjectRepositoryList } from "./LeftSidebar/ProjectRepositoryList";
+import { SidebarWorkspaceTodoAddModal } from "./LeftSidebar/SidebarWorkspaceTodoAddModal";
 import { GitPanelWorkspaceSelector } from "./GitPanel/GitPanelWorkspaceSelector";
 import {
   readLeftFilesExplorerCollapsedFromStorage,
@@ -949,6 +950,7 @@ export function LeftSidebar({
           showLeftSidebarMonitorPanel && monitorPanelSectionCollapsed ? "true" : undefined
         }
       >
+        <SidebarWorkspaceTodoAddModal />
         <ProjectRepositoryList
           projects={projects}
           repositoriesById={projectRepositoryState.repositoriesById}
