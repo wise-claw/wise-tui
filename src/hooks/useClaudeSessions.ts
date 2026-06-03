@@ -39,6 +39,8 @@ import {
 } from "../services/cursorComposerPrompt";
 import { CURSOR_SDK_DEFAULT_MODEL } from "../constants/cursorSdk";
 import { resolveCursorLocalModelId } from "../utils/cursorModel";
+import { resolveCodexContextExecutionEngine, resolveCodexExecModelId } from "../utils/codexModel";
+import { getCachedModelProfileStore } from "../stores/modelProfileStoreCache";
 import { resolveCursorResumeAgentId } from "../utils/cursorAgentId";
 import {
   CLAUDE_CONNECTION_KIND_LABELS,
@@ -125,6 +127,11 @@ import {
 } from "../services/claudeSessionState";
 import { markSessionToolUseStopped } from "../utils/sessionConversationTasks";
 import { isTerminalWorkerWiseTab, sanitizeTerminalWorkerTranscriptMessages } from "../services/terminalDispatch";
+import {
+  resolveDiskTranscriptSessionKey,
+  sessionHasDiskTranscript,
+  usesWiseTabIdForDiskTranscript,
+} from "../utils/sessionExecutionEngine";
 import { createClaudeStreamRuntime } from "../services/claudeStreamRuntime";
 import {
   extractPartsFromStreamLine,
@@ -693,8 +700,10 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       repositoryPath: string;
       prompt: string;
       modelArg: string | undefined;
+      contextExecutionEngine: SessionExecutionEngine;
     }) => {
-      const { tabSessionId, turnNonce, repositoryPath, prompt, modelArg } = params;
+      const { tabSessionId, turnNonce, repositoryPath, prompt, modelArg, contextExecutionEngine } =
+        params;
       if (!streamRuntimeRef.current) {
         const deadline = Date.now() + CLAUDE_STREAM_RUNTIME_READY_WAIT_MS;
         while (!streamRuntimeRef.current && Date.now() < deadline) {
@@ -736,11 +745,16 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         }
       }
       const invocationKey = detach ? inv : undefined;
+      const codexModel = resolveCodexExecModelId({
+        sessionModel: modelArg,
+        contextExecutionEngine,
+        store: getCachedModelProfileStore(),
+      });
       try {
         await executeCodexCode(
           repositoryPath,
           prompt,
-          modelArg,
+          codexModel,
           invocationKey,
           tabSessionId,
           resolveTrellisContextId(tabSessionId),
@@ -1022,18 +1036,23 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       modelArg: string | undefined;
       resumeClaudeSid: string | null;
       cursorAttachments?: CursorSdkAttachment[];
+      codexContextExecutionEngine?: SessionExecutionEngine;
     }) => {
       const session = sessionsRef.current.find((s) => s.id === params.tabSessionId);
       const resolver = claudeSessionsOptionsRef.current?.resolveExecutionEngineRef?.current;
       const engine: SessionExecutionEngine =
         session && resolver ? resolver(session) : "claude";
       if (engine === "codex") {
+        const contextExecutionEngine =
+          params.codexContextExecutionEngine ??
+          (session && resolver ? resolver(session) : "claude");
         await runCodexOneshotWithInvocation({
           tabSessionId: params.tabSessionId,
           turnNonce: params.turnNonce,
           repositoryPath: params.repositoryPath,
           prompt: params.prompt,
           modelArg: params.modelArg,
+          contextExecutionEngine,
         });
         return;
       }
@@ -1235,7 +1254,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       const s = sessionsRef.current.find((x) => x.id === tab || x.claudeSessionId === cc);
       if (!s) return;
       const engine = resolveSessionExecutionEngine(s);
-      const diskKey = engine === "cursor" ? tab : cc;
+      const diskKey = resolveDiskTranscriptSessionKey(s, engine);
       if (!diskKey) return;
       try {
         const lines = await loadSessionTranscriptLines(s, diskKey, CLAUDE_DISK_JSONL_TAIL_LINES_RELOAD);
@@ -1354,6 +1373,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       /** 终端强制新回合等场景：不得用标签上残留的 `claudeSessionId` 覆盖显式 null。 */
       forceNewClaudeConversation?: boolean;
       cursorAttachments?: CursorSdkAttachment[];
+      codexContextExecutionEngine?: SessionExecutionEngine;
     }) => {
       const { tabSessionId, prompt, repositoryPath: repositoryPathInput, ...invokeRest } = params;
       const session = sessionsRef.current.find((s) => s.id === tabSessionId);
@@ -1388,12 +1408,15 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
       const resolver = claudeSessionsOptionsRef.current?.resolveExecutionEngineRef?.current;
       if (resolver?.(session) === "codex") {
+        const contextExecutionEngine =
+          params.codexContextExecutionEngine ?? resolver(session);
         await runCodexOneshotWithInvocation({
           tabSessionId,
           turnNonce: params.turnNonce,
           repositoryPath,
           prompt,
           modelArg: params.modelArg,
+          contextExecutionEngine,
         });
         return;
       }
@@ -1965,8 +1988,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     const s = sessionsRef.current.find((x) => x.id === activeSessionId);
     if (!s || s.messages.length > 0) return;
     const engine = resolveSessionExecutionEngine(s);
-    const hasDisk =
-      engine === "cursor" ? Boolean(s.id.trim()) : Boolean(s.claudeSessionId?.trim());
+    const hasDisk = sessionHasDiskTranscript(s, engine);
     if (!hasDisk) return;
     if (s.status === "running" || s.status === "connecting") return;
     if (diskLoadDoneRef.current.has(s.id)) return;
@@ -2002,8 +2024,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         const s = sessionsRef.current.find((x) => x.id === cid);
         if (!s || s.messages.length > 0) return;
         const engine = resolveSessionExecutionEngine(s);
-        const hasDisk =
-          engine === "cursor" ? Boolean(s.id.trim()) : Boolean(s.claudeSessionId?.trim());
+        const hasDisk = sessionHasDiskTranscript(s, engine);
         if (!hasDisk) return;
         if (s.status === "running" || s.status === "connecting") return;
         if (diskLoadDoneRef.current.has(s.id)) return;
@@ -2063,7 +2084,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
             diskTranscriptPartial: true,
           };
         }
-        const hasDisk = Boolean(s.claudeSessionId?.trim()) || resolveSessionExecutionEngine(s) === "cursor";
+        const hasDisk = sessionHasDiskTranscript(s, resolveSessionExecutionEngine(s));
         if (!hasDisk && s.messages.length > 0) return s;
         if (s.messages.length === 0) return s;
         changed = true;
@@ -2349,11 +2370,21 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       executeSessionRetryCountRef.current.delete(sessionId);
 
       const forceFreshClaudeSession = opts?.terminalFreshTurn === true;
+      const engineResolverEarly = claudeSessionsOptionsRef.current?.resolveExecutionEngineRef?.current;
+      const terminalEngine: SessionExecutionEngine =
+        engineResolverEarly?.(session) ?? "claude";
       if (forceFreshClaudeSession) {
         sessionIdMapRef.current.delete(sessionId);
         const staleClaudeSid = session.claudeSessionId?.trim();
-        if (staleClaudeSid) {
-          void cancelClaudeExecution(staleClaudeSid).catch(() => {});
+        const cancelIds = new Set<string>();
+        if (staleClaudeSid) cancelIds.add(staleClaudeSid);
+        if (usesWiseTabIdForDiskTranscript(terminalEngine)) {
+          cancelIds.add(sessionId);
+        }
+        for (const sid of cancelIds) {
+          void cancelClaudeExecution(sid).catch(() => {});
+        }
+        if (cancelIds.size > 0) {
           streamingProcessByTabRef.current.delete(sessionId);
         }
       }
@@ -2457,6 +2488,14 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
       const turnNonce = lastUserSendNonceRef.current;
 
+      const codexContextExecutionEngine = resolveCodexContextExecutionEngine({
+        tabSessionId: sessionId,
+        terminalFreshTurn: forceFreshClaudeSession,
+        activeSessionId,
+        sessions: sessionsRef.current,
+        resolveEngine: resolveSessionExecutionEngine,
+      });
+
       pendingTurnFailoverRef.current = {
         tabSessionId: sessionId,
         turnNonce,
@@ -2484,6 +2523,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
             resumeClaudeSid: claudeSid,
             forceNewClaudeConversation: forceFreshClaudeSession,
             cursorAttachments: opts?.cursorAttachments,
+            codexContextExecutionEngine,
           });
         } catch (err) {
           clearStreamStallTimer(sessionId);
@@ -2522,6 +2562,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       resolveSessionExecutionEngine,
       runClaudeTurnWithContextGuard,
       scheduleStreamStallTimer,
+      activeSessionId,
     ],
   );
 

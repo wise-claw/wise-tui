@@ -7,11 +7,15 @@ import {
 import { sessionMessagesFromJsonlLines } from "../utils/sessionMessagesMemory";
 import { isTerminalWorkerWiseTab, sanitizeTerminalWorkerTranscriptMessages } from "../services/terminalDispatch";
 import type { SessionExecutionEngine } from "../types";
+import {
+  resolveDiskTranscriptSessionKey,
+  sessionHasDiskTranscript,
+} from "../utils/sessionExecutionEngine";
 
 type SetSessions = (updater: (prev: ClaudeSession[]) => ClaudeSession[]) => void;
 
 function resolveDiskTranscriptKey(session: ClaudeSession, engine: SessionExecutionEngine): string {
-  return engine === "cursor" ? session.id.trim() : session.claudeSessionId?.trim() ?? "";
+  return resolveDiskTranscriptSessionKey(session, engine);
 }
 
 export async function reloadFullDiskTranscriptByKey(params: {
@@ -112,7 +116,7 @@ export async function loadMoreTranscriptByKey(params: {
   const session = params.sessions.find((x) => x.id === raw || x.claudeSessionId === raw);
   if (!session) return;
   const engine = params.resolveSessionExecutionEngine(session);
-  const hasDisk = engine === "cursor" ? Boolean(session.id.trim()) : Boolean(session.claudeSessionId?.trim());
+  const hasDisk = sessionHasDiskTranscript(session, engine);
   if (!hasDisk) return;
   const prevTail =
     params.diskTailLinesBySession.get(session.id) ?? CLAUDE_DISK_JSONL_TAIL_LINES_LAZY;

@@ -1,5 +1,9 @@
 import { message } from "antd";
 import type { ClaudeMessage, ClaudeSession, EmployeeItem, Repository } from "../types";
+import {
+  SESSION_EXECUTION_ENGINE_LABELS,
+  normalizeSessionExecutionEngine,
+} from "../constants/sessionExecutionEngine";
 import { extractBoundEmployeeNameFromSessionRepositoryName } from "./workflowGraphHelpers";
 import { isOmcMonitorEmployeeRecord } from "../utils/omcMonitorEmployeeSession";
 import {
@@ -151,14 +155,26 @@ export function sanitizeTerminalWorkerTranscriptMessages(
 export function formatTerminalDispatchRecord(
   terminalName: string,
   workerTabId: string,
+  executionEngine?: EmployeeItem["executionEngine"],
 ): string {
+  const engineLabel =
+    SESSION_EXECUTION_ENGINE_LABELS[
+      normalizeSessionExecutionEngine(executionEngine)
+    ].short;
   return [
     "任务分发记录",
     `- 类型：终端独立会话`,
     `- 目标：${terminalName}`,
+    `- 执行引擎：${engineLabel}`,
     `- 分发会话：${workerTabId}`,
     `- 时间：${new Date().toLocaleString("zh-CN", { hour12: false })}`,
   ].join("\n");
+}
+
+function terminalExecutionEngineTitle(terminal: EmployeeItem): string {
+  return SESSION_EXECUTION_ENGINE_LABELS[
+    normalizeSessionExecutionEngine(terminal.executionEngine)
+  ].title;
 }
 
 /** 终端 worker 标签（`repositoryName` 含 `员工:`）保留 Wise tab id，仅更新 `claudeSessionId`。 */
@@ -320,7 +336,7 @@ function mirrorTerminalToControlDock(
 }
 
 /**
- * @终端 → 终端 worker 标签：解析目标、创建/复用 Wise 标签、强制新 Claude 回合执行。
+ * @终端 → 终端 worker 标签：解析目标、创建/复用 Wise 标签、强制新回合执行（Claude / Codex / Cursor）。
  */
 export async function dispatchTerminalFromMainSession(
   deps: TerminalDispatchDeps,
@@ -379,7 +395,8 @@ export async function dispatchTerminalFromMainSession(
     userBubblePrompt,
   });
   if (!spawnOk) {
-    const failureText = `任务分发失败：终端「${terminal.name}」未能启动 Claude Code（请检查并发上限或网络）。`;
+    const engineTitle = terminalExecutionEngineTitle(terminal);
+    const failureText = `任务分发失败：终端「${terminal.name}」未能启动 ${engineTitle}（请检查并发上限、CLI 安装或网络）。`;
     message.warning(failureText);
     deps.appendSystemMessage(input.mainSessionId, failureText);
     return "failed";
@@ -395,7 +412,7 @@ export async function dispatchTerminalFromMainSession(
 
   deps.appendSystemMessage(
     input.mainSessionId,
-    formatTerminalDispatchRecord(terminal.name, workerTabId),
+    formatTerminalDispatchRecord(terminal.name, workerTabId, terminal.executionEngine),
   );
   mirrorTerminalToControlDock(deps, workerTabId, input.mainSessionId);
   deps.onDispatched?.(workerTabId);

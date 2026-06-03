@@ -40,7 +40,6 @@ import {
 import { sanitizeOmcDirectBatchPreviewLineForList } from "../../utils/claudeInvocationText";
 import { OmcDirectBatchInvocationDetailDrawer } from "./OmcDirectBatchInvocationDetailDrawer";
 import { HistorySessionRestoreButton } from "./HistorySessionRestoreButton";
-import { getSessionPreview } from "./historySessionDrawerChrome";
 import { buildMonitorSessionListRowModel } from "./monitorSessionDisplay";
 import {
   matchSessionByKeyword,

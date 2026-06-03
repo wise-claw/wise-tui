@@ -4,6 +4,9 @@ import {
   resolveEngineForSession,
   resolveSessionExecutionEngine,
   resolveExecutionRepositoryPath,
+  resolveDiskTranscriptSessionKey,
+  sessionHasDiskTranscript,
+  usesWiseTabIdForDiskTranscript,
 } from "./sessionExecutionEngine";
 
 const repo = (overrides: Partial<Repository> = {}): Repository =>
@@ -112,5 +115,34 @@ describe("resolveSessionExecutionEngine", () => {
         repo({ id: 1, name: "eco-ai-web", path: "/work/eco/eco-ai-web" }),
       ),
     ).toBe("/work/eco/eco-ai-web");
+  });
+});
+
+describe("disk transcript session keys", () => {
+  test("codex and cursor use Wise tab id", () => {
+    expect(usesWiseTabIdForDiskTranscript("codex")).toBe(true);
+    expect(usesWiseTabIdForDiskTranscript("cursor")).toBe(true);
+    expect(usesWiseTabIdForDiskTranscript("claude")).toBe(false);
+    expect(
+      resolveDiskTranscriptSessionKey(
+        { id: "tab-1", claudeSessionId: "claude-uuid" },
+        "codex",
+      ),
+    ).toBe("tab-1");
+  });
+
+  test("claude uses claudeSessionId", () => {
+    expect(
+      resolveDiskTranscriptSessionKey(
+        { id: "tab-1", claudeSessionId: "claude-uuid" },
+        "claude",
+      ),
+    ).toBe("claude-uuid");
+    expect(
+      sessionHasDiskTranscript({ id: "tab-1", claudeSessionId: null }, "codex"),
+    ).toBe(true);
+    expect(
+      sessionHasDiskTranscript({ id: "tab-1", claudeSessionId: null }, "claude"),
+    ).toBe(false);
   });
 });

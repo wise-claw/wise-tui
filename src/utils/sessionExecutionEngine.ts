@@ -106,3 +106,25 @@ export function resolveExecutionRepositoryPath(
 
   return session.repositoryPath.trim();
 }
+
+/** Cursor / Codex 以 Wise 标签 id 作为磁盘 transcript 与 cancel 的 session key。 */
+export function usesWiseTabIdForDiskTranscript(engine: SessionExecutionEngine): boolean {
+  return engine === "cursor" || engine === "codex";
+}
+
+export function resolveDiskTranscriptSessionKey(
+  session: { id: string; claudeSessionId?: string | null },
+  engine: SessionExecutionEngine,
+): string {
+  if (usesWiseTabIdForDiskTranscript(engine)) {
+    return session.id.trim();
+  }
+  return session.claudeSessionId?.trim() ?? "";
+}
+
+export function sessionHasDiskTranscript(
+  session: { id: string; claudeSessionId?: string | null },
+  engine: SessionExecutionEngine,
+): boolean {
+  return Boolean(resolveDiskTranscriptSessionKey(session, engine));
+}

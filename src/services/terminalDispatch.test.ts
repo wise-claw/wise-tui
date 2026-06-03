@@ -9,6 +9,7 @@ import {
   resolveTerminalDispatchPrompts,
   resolveTerminalMentionsInPrompt,
   stripTerminalAgentSlashPrefix,
+  formatTerminalDispatchRecord,
 } from "./terminalDispatch";
 import type { ClaudeSession, EmployeeItem } from "../types";
 
@@ -77,5 +78,11 @@ describe("terminalDispatch", () => {
     ];
     const hits = resolveTerminalMentionsInPrompt("@终端B 然后 @终端A", list);
     expect(hits.map((item) => item.id)).toEqual(["b", "a"]);
+  });
+
+  test("formatTerminalDispatchRecord includes execution engine", () => {
+    const record = formatTerminalDispatchRecord("终端01", "tab-1", "codex");
+    expect(record).toContain("Codex");
+    expect(record).toContain("终端01");
   });
 });
