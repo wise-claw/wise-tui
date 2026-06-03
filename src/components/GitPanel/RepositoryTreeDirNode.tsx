@@ -3,6 +3,7 @@ import { useRepositoryExplorerTreeActions } from "./RepositoryExplorerTreeAction
 import { ExplorerInlineCreateRow } from "./ExplorerInlineCreateRow";
 import { ExplorerTreeChevron, ExplorerTreeFolderIcon } from "./explorerTreeChrome";
 import { repositoryTreeDirShouldUpdate } from "./repositoryTreeNodeMemo";
+import { explorerDirKey } from "./repositoryExplorerDirKey";
 import { repositoryTreeDepthIndentPx } from "./repositoryTreeLayout";
 import { RepositoryTreeFileNode } from "./RepositoryTreeFileNode";
 import type { ExplorerInlineCreateState, RepositoryFileTreeNode } from "./types";
@@ -16,7 +17,7 @@ export interface RepositoryTreeDirNodeProps {
   selectedPath: string | null;
   expandedDirs: Set<string>;
   inlineCreate: ExplorerInlineCreateState | null;
-  loadingDirPath: string | null;
+  loadingDirKeys: ReadonlySet<string>;
 }
 
 function RepositoryTreeDirNodeInner({
@@ -28,15 +29,19 @@ function RepositoryTreeDirNodeInner({
   selectedPath,
   expandedDirs,
   inlineCreate,
-  loadingDirPath,
+  loadingDirKeys,
 }: RepositoryTreeDirNodeProps) {
   const { onToggleDir, onSelectNode, onInlineValueChange, onInlineCommit, onInlineCancel } =
     useRepositoryExplorerTreeActions();
   const depthIndentPx = repositoryTreeDepthIndentPx(depth);
   const isSelected = selectedPath === node.path;
   const showInlineHere = inlineCreate != null && inlineCreate.parentDir === node.path;
+  const nodeDirKey = explorerDirKey(node.path);
   const showChildren = isExpanded || showInlineHere;
-  const isLoadingChildren = loadingDirPath === node.path;
+  const childNodes = node.children;
+  const isLoadingChildren = loadingDirKeys.has(nodeDirKey) && childNodes === undefined;
+  const showEmptyDirHint =
+    isExpanded && !isLoadingChildren && Array.isArray(childNodes) && childNodes.length === 0;
 
   const activateDir = useCallback(() => {
     onSelectNode(node.path, true);
@@ -82,19 +87,24 @@ function RepositoryTreeDirNodeInner({
               加载中…
             </div>
           ) : null}
-          {(node.children ?? []).map((childNode) =>
+          {showEmptyDirHint ? (
+            <div className="repo-tree-children-loading" aria-live="polite">
+              空文件夹
+            </div>
+          ) : null}
+          {(childNodes ?? []).map((childNode) =>
             childNode.isDir ? (
               <RepositoryTreeDirNode
                 key={childNode.path}
                 node={childNode}
                 depth={depth + 1}
-                isExpanded={expandedDirs.has(childNode.path)}
+                isExpanded={expandedDirs.has(explorerDirKey(childNode.path))}
                 expandEpoch={expandEpoch}
                 lastExpandPath={lastExpandPath}
                 selectedPath={selectedPath}
                 expandedDirs={expandedDirs}
                 inlineCreate={inlineCreate}
-                loadingDirPath={loadingDirPath}
+                loadingDirKeys={loadingDirKeys}
               />
             ) : (
               <RepositoryTreeFileNode
@@ -137,8 +147,8 @@ function dirNodeMemoCompare(prev: Readonly<RepositoryTreeDirNodeProps>, next: Re
     nextLastExpandPath: next.lastExpandPath,
     prevInlineCreate: prev.inlineCreate,
     nextInlineCreate: next.inlineCreate,
-    prevLoadingDirPath: prev.loadingDirPath,
-    nextLoadingDirPath: next.loadingDirPath,
+    prevLoadingDirKeys: prev.loadingDirKeys,
+    nextLoadingDirKeys: next.loadingDirKeys,
   });
 }
 

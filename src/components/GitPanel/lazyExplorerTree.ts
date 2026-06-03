@@ -1,4 +1,5 @@
 import type { RepositoryExplorerEntry } from "../../services/repositoryFiles";
+import { explorerDirKey } from "./repositoryExplorerDirKey";
 import type { RepositoryFileTreeNode } from "./types";
 
 function entryBaseName(path: string): string {
@@ -26,7 +27,7 @@ function entriesToTreeNodes(
       isDir: entry.isDir,
     };
     if (entry.isDir) {
-      const childEntries = loadedByDir.get(entry.path);
+      const childEntries = loadedByDir.get(explorerDirKey(entry.path));
       if (childEntries !== undefined) {
         node.children = entriesToTreeNodes(childEntries, loadedByDir);
       }
@@ -43,7 +44,7 @@ export function repositoryDirNodeContentKey(node: RepositoryFileTreeNode): strin
     return node.path;
   }
   if (node.children === undefined) {
-    return `${node.path}:pending`;
+    return `${explorerDirKey(node.path)}:pending`;
   }
   return `${node.path}:${node.children.map((child) => child.path).join("/")}`;
 }
@@ -64,7 +65,7 @@ function patchNodesAtPath(
   const nextNodes = nodes.map((node) => {
     if (node.path === targetDir && node.isDir) {
       changed = true;
-      const childEntries = loadedByDir.get(targetDir);
+      const childEntries = loadedByDir.get(explorerDirKey(targetDir));
       return {
         ...node,
         children: childEntries !== undefined ? entriesToTreeNodes(childEntries, loadedByDir) : undefined,
@@ -88,7 +89,7 @@ export function patchLazyRepositoryFileTree(
   loadedByDir: ReadonlyMap<string, RepositoryExplorerEntry[]>,
   changedDir: string,
 ): RepositoryFileTreeNode[] {
-  const normalized = changedDir.trim();
+  const normalized = explorerDirKey(changedDir);
   if (!prevRoot.length || normalized === "") {
     return buildLazyRepositoryFileTree(loadedByDir);
   }

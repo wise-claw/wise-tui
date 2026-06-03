@@ -1,4 +1,5 @@
 import { memo } from "react";
+import { explorerDirKey } from "./repositoryExplorerDirKey";
 import { RepositoryTreeDirNode } from "./RepositoryTreeDirNode";
 import { RepositoryTreeFileNode } from "./RepositoryTreeFileNode";
 import type { ExplorerInlineCreateState, RepositoryFileTreeNode } from "./types";
@@ -10,7 +11,9 @@ export interface RepositoryTreeListProps {
   lastExpandPath: string;
   selectedPath: string | null;
   inlineCreate: ExplorerInlineCreateState | null;
-  loadingDirPath: string | null;
+  loadingDirKeys: ReadonlySet<string>;
+  /** Bumps when lazy map / derived tree changes — keeps memoized list in sync. */
+  treeContentRevision: number;
 }
 
 function repositoryTreeListShouldUpdate(
@@ -20,7 +23,8 @@ function repositoryTreeListShouldUpdate(
   if (prev.nodes !== next.nodes) return false;
   if (prev.selectedPath !== next.selectedPath) return false;
   if (prev.expandedDirs !== next.expandedDirs) return false;
-  if (prev.loadingDirPath !== next.loadingDirPath) return false;
+  if (prev.loadingDirKeys !== next.loadingDirKeys) return false;
+  if (prev.treeContentRevision !== next.treeContentRevision) return false;
   if (prev.inlineCreate?.parentDir !== next.inlineCreate?.parentDir) return false;
   if (prev.inlineCreate?.type !== next.inlineCreate?.type) return false;
   if (prev.inlineCreate?.value !== next.inlineCreate?.value) return false;
@@ -34,7 +38,8 @@ function RepositoryTreeListInner({
   lastExpandPath,
   selectedPath,
   inlineCreate,
-  loadingDirPath,
+  loadingDirKeys,
+  treeContentRevision: _treeContentRevision,
 }: RepositoryTreeListProps) {
   return (
     <>
@@ -44,13 +49,13 @@ function RepositoryTreeListInner({
             key={node.path}
             node={node}
             depth={0}
-            isExpanded={expandedDirs.has(node.path)}
+            isExpanded={expandedDirs.has(explorerDirKey(node.path))}
             expandEpoch={expandEpoch}
             lastExpandPath={lastExpandPath}
             selectedPath={selectedPath}
             expandedDirs={expandedDirs}
             inlineCreate={inlineCreate}
-            loadingDirPath={loadingDirPath}
+            loadingDirKeys={loadingDirKeys}
           />
         ) : (
           <RepositoryTreeFileNode

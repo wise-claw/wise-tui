@@ -8,6 +8,7 @@ import {
   useRef,
   useState,
 } from "react";
+import { flushSync } from "react-dom";
 import type { MouseEvent } from "react";
 import type { MenuProps } from "antd";
 import { message } from "antd";
@@ -27,12 +28,21 @@ import {
   type ExplorerSearchResultRow,
 } from "./fileTree";
 import { buildLazyRepositoryFileTree, pruneLoadedChildrenMap } from "./lazyExplorerTree";
-import { shouldApplyExplorerLoadResult } from "./repositoryExplorerLoad";
-import { sanitizeExplorerExpandedDirsForRestore } from "./repositoryExplorerSession";
 import {
-  normalizeRepositoryDirPath,
-  resolveRepositoryDirToggleIntent,
-} from "./repositoryExplorerToggle";
+  shouldApplyExplorerChildLoadResult,
+  shouldApplyExplorerLoadResult,
+} from "./repositoryExplorerLoad";
+import {
+  MAX_RESTORED_EXPLORER_EXPANDED_DIRS,
+  sanitizeExplorerExpandedDirsForRestore,
+} from "./repositoryExplorerSession";
+import {
+  explorerDirKey,
+  explorerParentDir,
+  normalizeExplorerEntries,
+} from "./repositoryExplorerDirKey";
+import { enqueueExplorerLoad, runExplorerUserLoad } from "./repositoryExplorerLoadQueue";
+import { resolveRepositoryDirToggleIntent } from "./repositoryExplorerToggle";
 import {
   clampExplorerMenuPosition,
   explorerTargetDirForCreate,
@@ -53,6 +63,27 @@ import {
   reduceRepositoryExplorerExpandState,
 } from "./repositoryExplorerExpandState";
 import type { ExplorerContextMenuState, ExplorerInlineCreateState } from "./types";
+
+export type ExplorerChildrenLoadOptions = {
+  force?: boolean;
+  /** Skip the background queue — show loading immediately on click. */
+  userInitiated?: boolean;
+};
+
+function addPendingLoadDir(prev: ReadonlySet<string>, dirKey: string): Set<string> {
+  const next = new Set(prev);
+  next.add(dirKey);
+  return next;
+}
+
+function removePendingLoadDir(prev: ReadonlySet<string>, dirKey: string): Set<string> {
+  if (!prev.has(dirKey)) {
+    return prev as Set<string>;
+  }
+  const next = new Set(prev);
+  next.delete(dirKey);
+  return next;
+}
 
 function searchPathsToRows(paths: string[]): ExplorerSearchResultRow[] {
   return paths.map((path) => {
@@ -90,6 +121,8 @@ export function useRepositoryFilesExplorer({
     Map<string, RepositoryExplorerEntry[]>
   >(() => new Map());
   const [loadingDirPath, setLoadingDirPath] = useState<string | null>(null);
+  const [pendingLoadDirs, setPendingLoadDirs] = useState<ReadonlySet<string>>(() => new Set());
+  const [childrenMapRevision, setChildrenMapRevision] = useState(0);
   const [searchResultRows, setSearchResultRows] = useState<ExplorerSearchResultRow[]>([]);
   const [searchPending, setSearchPending] = useState(false);
   const [expandState, dispatchExpand] = useReducer(
@@ -113,9 +146,23 @@ export function useRepositoryFilesExplorer({
   const explorerScanGenerationRef = useRef(0);
   const loadInFlightRef = useRef(new Set<string>());
   const loadedChildrenByDirRef = useRef(loadedChildrenByDir);
+  const pendingLoadDirsRef = useRef(pendingLoadDirs);
   const repositoryPathRef = useRef(repositoryPath);
   loadedChildrenByDirRef.current = loadedChildrenByDir;
+  pendingLoadDirsRef.current = pendingLoadDirs;
   repositoryPathRef.current = repositoryPath;
+
+  const commitLoadedChildrenByDir = useCallback(
+    (mutate: (prev: Map<string, RepositoryExplorerEntry[]>) => Map<string, RepositoryExplorerEntry[]>) => {
+      setLoadedChildrenByDir((prev) => {
+        const next = mutate(new Map(prev));
+        loadedChildrenByDirRef.current = next;
+        return next;
+      });
+      setChildrenMapRevision((revision) => revision + 1);
+    },
+    [],
+  );
 
   const treeStale = loadedRepositoryPath !== repositoryPath;
   const debouncedSearch = useDebouncedValue(search, 150);
@@ -127,12 +174,20 @@ export function useRepositoryFilesExplorer({
 
   const hasRootLoaded = !treeStale && loadedChildrenByDir.has("");
 
+  const loadingDirKeys = useMemo(() => {
+    const keys = new Set(pendingLoadDirs);
+    if (loadingDirPath) {
+      keys.add(loadingDirPath);
+    }
+    return keys;
+  }, [loadingDirPath, pendingLoadDirs]);
+
   const filteredTree = useMemo(() => {
     if (treeStale || !loadedChildrenByDir.has("")) {
       return [];
     }
     return buildLazyRepositoryFileTree(loadedChildrenByDir);
-  }, [loadedChildrenByDir, treeStale]);
+  }, [childrenMapRevision, loadedChildrenByDir, treeStale]);
 
   const prevSearchQueryRef = useRef("");
   useEffect(() => {
@@ -151,9 +206,9 @@ export function useRepositoryFilesExplorer({
     }
   }, [repositoryPath, searchQuery]);
 
-  const loadChildrenForDir = useCallback(
+  const loadChildrenForDirInner = useCallback(
     async (dirPath: string, options?: { force?: boolean }) => {
-      const normalizedDir = normalizeRepositoryDirPath(dirPath);
+      const normalizedDir = explorerDirKey(dirPath);
       const requestPath = repositoryPathRef.current.trim();
       if (!requestPath) {
         return;
@@ -165,47 +220,58 @@ export function useRepositoryFilesExplorer({
         return;
       }
       const requestGeneration = explorerScanGenerationRef.current;
+      const isRootDir = normalizedDir === "";
       loadInFlightRef.current.add(normalizedDir);
       setLoadingDirPath(normalizedDir);
       try {
-        const children = await listRepositoryExplorerChildren(requestPath, normalizedDir);
-        if (
-          !shouldApplyExplorerLoadResult({
-            requestGeneration,
-            currentGeneration: explorerScanGenerationRef.current,
-            requestRepositoryPath: requestPath,
-            currentRepositoryPath: repositoryPathRef.current.trim(),
-          })
-        ) {
+        const children = normalizeExplorerEntries(
+          await listRepositoryExplorerChildren(requestPath, normalizedDir),
+        );
+        const applyResult = isRootDir
+          ? shouldApplyExplorerLoadResult({
+              requestGeneration,
+              currentGeneration: explorerScanGenerationRef.current,
+              requestRepositoryPath: requestPath,
+              currentRepositoryPath: repositoryPathRef.current.trim(),
+            })
+          : shouldApplyExplorerChildLoadResult({
+              requestRepositoryPath: requestPath,
+              currentRepositoryPath: repositoryPathRef.current.trim(),
+            });
+        if (!applyResult) {
           return;
         }
-        startTransition(() => {
-          setLoadedChildrenByDir((prev) => {
-            const next = new Map(prev);
-            next.set(normalizedDir, children);
-            return next;
-          });
-          if (normalizedDir === "") {
-            setCachedRepositoryExplorerRootChildren(requestPath, children);
-            setLoadedRepositoryPath(requestPath);
-            setLoadError(null);
-          }
+        commitLoadedChildrenByDir((prev) => {
+          prev.set(normalizedDir, children);
+          return prev;
         });
+        loadInFlightRef.current.delete(normalizedDir);
+        setLoadingDirPath((current) => (current === normalizedDir ? null : current));
+        setPendingLoadDirs((prev) => removePendingLoadDir(prev, normalizedDir));
+        if (isRootDir) {
+          setCachedRepositoryExplorerRootChildren(requestPath, children);
+          setLoadedRepositoryPath(requestPath);
+          setLoadError(null);
+        }
       } catch (error) {
-        if (
-          !shouldApplyExplorerLoadResult({
-            requestGeneration,
-            currentGeneration: explorerScanGenerationRef.current,
-            requestRepositoryPath: requestPath,
-            currentRepositoryPath: repositoryPathRef.current.trim(),
-          })
-        ) {
+        const applyResult = isRootDir
+          ? shouldApplyExplorerLoadResult({
+              requestGeneration,
+              currentGeneration: explorerScanGenerationRef.current,
+              requestRepositoryPath: requestPath,
+              currentRepositoryPath: repositoryPathRef.current.trim(),
+            })
+          : shouldApplyExplorerChildLoadResult({
+              requestRepositoryPath: requestPath,
+              currentRepositoryPath: repositoryPathRef.current.trim(),
+            });
+        if (!applyResult) {
           return;
         }
         const msg = error instanceof Error ? error.message : String(error);
-        if (normalizedDir === "") {
+        if (isRootDir) {
           setLoadError(msg);
-          setLoadedChildrenByDir(new Map());
+          commitLoadedChildrenByDir(() => new Map());
         } else {
           message.error(`读取目录失败：${msg}`);
         }
@@ -214,13 +280,55 @@ export function useRepositoryFilesExplorer({
         setLoadingDirPath((current) => (current === normalizedDir ? null : current));
       }
     },
-    [],
+    [commitLoadedChildrenByDir],
+  );
+
+  const loadChildrenForDir = useCallback(
+    (dirPath: string, options?: ExplorerChildrenLoadOptions) => {
+      const normalizedDir = explorerDirKey(dirPath);
+      setPendingLoadDirs((prev) => addPendingLoadDir(prev, normalizedDir));
+      const run = async () => {
+        try {
+          await loadChildrenForDirInner(dirPath, options);
+        } finally {
+          setPendingLoadDirs((prev) => removePendingLoadDir(prev, normalizedDir));
+        }
+      };
+      if (options?.userInitiated) {
+        return runExplorerUserLoad(run);
+      }
+      return new Promise<void>((resolve) => {
+        enqueueExplorerLoad(async () => {
+          await run();
+          resolve();
+        });
+      });
+    },
+    [loadChildrenForDirInner],
+  );
+
+  const loadDirWithAncestors = useCallback(
+    async (dirPath: string, options?: ExplorerChildrenLoadOptions) => {
+      const key = explorerDirKey(dirPath);
+      if (!key) {
+        await loadChildrenForDir("", options);
+        return;
+      }
+      const parts = key.split("/").filter(Boolean);
+      let acc = "";
+      for (const part of parts) {
+        acc = acc ? `${acc}/${part}` : part;
+        await loadChildrenForDir(acc, options);
+      }
+    },
+    [loadChildrenForDir],
   );
 
   const reloadExplorer = useCallback(async () => {
     explorerScanGenerationRef.current += 1;
     loadInFlightRef.current.clear();
     setLoadingDirPath(null);
+    setPendingLoadDirs(new Set());
     setLoading(true);
     try {
       await yieldToPaint();
@@ -257,12 +365,14 @@ export function useRepositoryFilesExplorer({
       setLoading(false);
       loadInFlightRef.current.clear();
       setLoadingDirPath(null);
+      setPendingLoadDirs(new Set());
       return;
     }
     setLoadError(null);
     explorerScanGenerationRef.current += 1;
     loadInFlightRef.current.clear();
     setLoadingDirPath(null);
+    setPendingLoadDirs(new Set());
     const generation = explorerScanGenerationRef.current;
 
     const cachedRoot = getCachedRepositoryExplorerRootChildren(path);
@@ -271,7 +381,10 @@ export function useRepositoryFilesExplorer({
     );
 
     if (cachedRoot) {
-      setLoadedChildrenByDir(new Map([["", cachedRoot]]));
+      const initial = new Map([["", normalizeExplorerEntries(cachedRoot)]]);
+      loadedChildrenByDirRef.current = initial;
+      setLoadedChildrenByDir(initial);
+      setChildrenMapRevision((revision) => revision + 1);
       setLoadedRepositoryPath(path);
       dispatchExpand({ type: "replace", dirs: restoredExpanded });
       setSelected(null);
@@ -281,7 +394,7 @@ export function useRepositoryFilesExplorer({
       setLoading(false);
     } else {
       setLoadedChildrenByDir(new Map());
-      setLoadedRepositoryPath("");
+      setLoadedRepositoryPath(path);
       setLoading(true);
     }
 
@@ -290,7 +403,7 @@ export function useRepositoryFilesExplorer({
         if (cachedRoot) {
           return;
         }
-        const children = await listRepositoryExplorerChildren(path, "");
+        const children = normalizeExplorerEntries(await listRepositoryExplorerChildren(path, ""));
         if (
           !shouldApplyExplorerLoadResult({
             requestGeneration: generation,
@@ -303,12 +416,13 @@ export function useRepositoryFilesExplorer({
           return;
         }
         setCachedRepositoryExplorerRootChildren(path, children);
-        startTransition(() => {
-          setLoadedChildrenByDir(new Map([["", children]]));
-          setLoadedRepositoryPath(path);
-          dispatchExpand({ type: "replace", dirs: restoredExpanded });
-          setLoadError(null);
-        });
+        const initial = new Map([["", children]]);
+        loadedChildrenByDirRef.current = initial;
+        setLoadedChildrenByDir(initial);
+        setChildrenMapRevision((revision) => revision + 1);
+        setLoadedRepositoryPath(path);
+        dispatchExpand({ type: "replace", dirs: restoredExpanded });
+        setLoadError(null);
       } catch (error) {
         if (
           shouldApplyExplorerLoadResult({
@@ -344,6 +458,7 @@ export function useRepositoryFilesExplorer({
       cancelled = true;
       loadInFlightRef.current.clear();
       setLoadingDirPath(null);
+      setPendingLoadDirs(new Set());
     };
   }, [repositoryPath]);
 
@@ -383,26 +498,57 @@ export function useRepositoryFilesExplorer({
     inlineCreateRef.current = inlineCreate;
   }, [inlineCreate]);
 
+  /** Session-expanded folders: shallow-first background loads; re-run when parents land in the map. */
+  useEffect(() => {
+    if (!hasRootLoaded || treeStale) {
+      return;
+    }
+    const sorted = [...expandedDirs]
+      .map(explorerDirKey)
+      .filter(Boolean)
+      .sort((a, b) => a.length - b.length || a.localeCompare(b))
+      .slice(0, MAX_RESTORED_EXPLORER_EXPANDED_DIRS);
+    for (const dir of sorted) {
+      if (loadedChildrenByDirRef.current.has(dir) || loadInFlightRef.current.has(dir)) {
+        continue;
+      }
+      const parent = explorerParentDir(dir);
+      if (parent && !loadedChildrenByDirRef.current.has(parent)) {
+        continue;
+      }
+      void loadChildrenForDir(dir);
+    }
+  }, [childrenMapRevision, expandedDirs, hasRootLoaded, loadChildrenForDir, treeStale]);
+
   const expandedDirsRef = useRef(expandedDirs);
   expandedDirsRef.current = expandedDirs;
 
   const handleToggleDir = useCallback(
     (dirPath: string) => {
-      const normalizedDir = normalizeRepositoryDirPath(dirPath);
+      const normalizedDir = explorerDirKey(dirPath);
+      const loadStillRunning =
+        loadInFlightRef.current.has(normalizedDir) ||
+        pendingLoadDirsRef.current.has(normalizedDir);
       const intent = resolveRepositoryDirToggleIntent({
         isExpanded: expandedDirsRef.current.has(normalizedDir),
-        childrenLoaded: loadedChildrenByDirRef.current.has(normalizedDir),
+        childrenLoaded:
+          loadedChildrenByDirRef.current.has(normalizedDir) && !loadStillRunning,
       });
+      const userLoad: ExplorerChildrenLoadOptions = { userInitiated: true, force: true };
       if (intent === "load-children-only") {
-        void loadChildrenForDir(normalizedDir);
+        void loadDirWithAncestors(normalizedDir, userLoad);
+        return;
+      }
+      if (intent === "expand-and-load") {
+        flushSync(() => {
+          dispatchExpand({ type: "expandAncestors", parentDir: normalizedDir });
+        });
+        void loadDirWithAncestors(normalizedDir, userLoad);
         return;
       }
       dispatchExpand({ type: "toggle", path: normalizedDir });
-      if (intent === "expand-and-load") {
-        void loadChildrenForDir(normalizedDir);
-      }
     },
-    [loadChildrenForDir],
+    [loadDirWithAncestors],
   );
 
   const handleRefresh = useCallback(() => {
@@ -437,9 +583,7 @@ export function useRepositoryFilesExplorer({
         message.error(`删除失败：${msg}`);
         return false;
       }
-      startTransition(() => {
-        setLoadedChildrenByDir((prev) => pruneLoadedChildrenMap(prev, relativePath));
-      });
+      setLoadedChildrenByDir((prev) => pruneLoadedChildrenMap(prev, relativePath));
       const parentDir = relativePath.includes("/")
         ? relativePath.slice(0, relativePath.lastIndexOf("/"))
         : "";
@@ -462,18 +606,14 @@ export function useRepositoryFilesExplorer({
 
   const expandAncestorsForDir = useCallback(
     (parentDir: string) => {
-      if (!parentDir) {
+      const normalizedParent = explorerDirKey(parentDir);
+      if (!normalizedParent) {
         return;
       }
-      dispatchExpand({ type: "expandAncestors", parentDir });
-      const parts = parentDir.split("/").filter(Boolean);
-      let acc = "";
-      for (const part of parts) {
-        acc = acc ? `${acc}/${part}` : part;
-        void loadChildrenForDir(acc);
-      }
+      dispatchExpand({ type: "expandAncestors", parentDir: normalizedParent });
+      void loadDirWithAncestors(normalizedParent);
     },
-    [loadChildrenForDir],
+    [loadDirWithAncestors],
   );
 
   const openInlineCreate = useCallback(
@@ -672,7 +812,7 @@ export function useRepositoryFilesExplorer({
     loadError,
     treeStale,
     hasRootLoaded,
-    loadingDirPath,
+    loadingDirKeys,
     expandedDirs,
     selected,
     inlineCreate,
@@ -682,6 +822,7 @@ export function useRepositoryFilesExplorer({
     deletePop,
     setDeletePop,
     filteredTree,
+    childrenMapRevision,
     searchResultRows,
     explorerSearchTruncated: false,
     explorerSearchTooShort,

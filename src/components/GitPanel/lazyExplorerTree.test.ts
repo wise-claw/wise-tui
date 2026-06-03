@@ -47,6 +47,23 @@ describe("patchLazyRepositoryFileTree", () => {
     const patchedSrc = patched.find((n) => n.path === "src");
     expect(patchedSrc?.children?.map((n) => n.path)).toEqual(["src/index.ts"]);
   });
+
+  test("builds dot-directory branches when nested map keys exist", () => {
+    const loaded = new Map<string, RepositoryExplorerEntry[]>([
+      ["", [{ path: ".cursor", isDir: true }]],
+      [".cursor", [{ path: ".cursor/commands", isDir: true }]],
+      [
+        ".cursor/commands",
+        [{ path: ".cursor/commands/trellis-continue.md", isDir: false }],
+      ],
+    ]);
+    const tree = buildLazyRepositoryFileTree(loaded);
+    const cursor = tree.find((n) => n.path === ".cursor");
+    const commands = cursor?.children?.find((n) => n.path === ".cursor/commands");
+    expect(commands?.children?.map((n) => n.path)).toEqual([
+      ".cursor/commands/trellis-continue.md",
+    ]);
+  });
 });
 
 describe("pruneLoadedChildrenMap", () => {

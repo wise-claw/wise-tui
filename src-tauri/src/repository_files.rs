@@ -123,7 +123,7 @@ pub(crate) fn search_repository_files(root: String, query: String) -> Result<Vec
     }
 }
 
-#[derive(Serialize, Clone)]
+#[derive(Debug, Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct RepositoryExplorerEntry {
     path: String,
@@ -157,6 +157,14 @@ fn assert_resolved_path_under_repo(repo_canon: &Path, path: &Path) -> Result<(),
         .canonicalize()
         .map_err(|e| format!("解析路径失败: {e}"))?;
     if !canon.starts_with(repo_canon) {
+        return Err("路径越界".into());
+    }
+    Ok(())
+}
+
+/// Paths joined via `safe_join_repository_root` / `explorer_join_dir` only — no per-expand canonicalize.
+fn assert_joined_path_under_repo(repo_root: &Path, joined: &Path) -> Result<(), String> {
+    if !joined.starts_with(repo_root) {
         return Err("路径越界".into());
     }
     Ok(())
@@ -206,12 +214,12 @@ pub(crate) async fn list_repository_explorer_children(
     if !root_path.is_dir() {
         return Err(explorer_root_error_message(&root, &root_path));
     }
-    // Avoid canonicalize on every expand — it blocks the IPC thread on large / network volumes.
+    // Do not canonicalize here — it can block on `.cursor`, symlinks, or network roots and freeze the UI.
     let dir_path = explorer_join_dir(&root_path, &relative_dir)?;
     if !dir_path.is_dir() {
         return Err("目录不存在".into());
     }
-    assert_resolved_path_under_repo(&root_path, &dir_path)?;
+    assert_joined_path_under_repo(&root_path, &dir_path)?;
 
     let mut out: Vec<RepositoryExplorerEntry> = Vec::new();
     let read_dir = fs::read_dir(&dir_path).map_err(|e| format!("读取目录失败: {e}"))?;
@@ -381,4 +389,44 @@ pub(crate) fn delete_repository_entry(root: String, relative_path: String) -> Re
         return Err("不支持的文件类型".into());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod explorer_children_tests {
+    use super::*;
+    use std::fs;
+
+    #[tokio::test]
+    async fn lists_dot_cursor_commands_under_repo_root() {
+        let root = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("..");
+        let entries = list_repository_explorer_children(
+            root.to_string_lossy().to_string(),
+            ".cursor".to_string(),
+        )
+        .await
+        .expect("list .cursor");
+        let commands = entries.iter().find(|e| e.path.ends_with("commands") && e.is_dir);
+        assert!(commands.is_some(), "expected .cursor/commands entry: {entries:?}");
+
+        let cmd_entries = list_repository_explorer_children(
+            root.to_string_lossy().to_string(),
+            ".cursor/commands".to_string(),
+        )
+        .await
+        .expect("list .cursor/commands");
+        assert!(
+            cmd_entries.iter().any(|e| e.path.contains("trellis")),
+            "expected files under .cursor/commands: {cmd_entries:?}"
+        );
+    }
+
+    #[test]
+    fn joined_dot_path_stays_under_repo_without_canonicalize() {
+        let root = std::env::temp_dir().join("wise-explorer-join-test");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join(".cursor/commands")).unwrap();
+        let joined = explorer_join_dir(&root, ".cursor/commands").unwrap();
+        assert!(assert_joined_path_under_repo(&root, &joined).is_ok());
+        let _ = fs::remove_dir_all(&root);
+    }
 }

@@ -1,5 +1,28 @@
 import { describe, expect, test } from "bun:test";
-import { shouldApplyExplorerLoadResult } from "./repositoryExplorerLoad";
+import {
+  shouldApplyExplorerChildLoadResult,
+  shouldApplyExplorerLoadResult,
+} from "./repositoryExplorerLoad";
+
+describe("shouldApplyExplorerChildLoadResult", () => {
+  test("accepts when repository path unchanged", () => {
+    expect(
+      shouldApplyExplorerChildLoadResult({
+        requestRepositoryPath: "/repo",
+        currentRepositoryPath: "/repo",
+      }),
+    ).toBe(true);
+  });
+
+  test("rejects when repository path changed", () => {
+    expect(
+      shouldApplyExplorerChildLoadResult({
+        requestRepositoryPath: "/a",
+        currentRepositoryPath: "/b",
+      }),
+    ).toBe(false);
+  });
+});
 
 describe("shouldApplyExplorerLoadResult", () => {
   test("rejects cancelled or generation mismatch", () => {
@@ -40,6 +63,17 @@ describe("shouldApplyExplorerLoadResult", () => {
         currentGeneration: 2,
         requestRepositoryPath: "/repo",
         currentRepositoryPath: "/repo",
+      }),
+    ).toBe(true);
+  });
+
+  test("trims repository paths before compare", () => {
+    expect(
+      shouldApplyExplorerLoadResult({
+        requestGeneration: 1,
+        currentGeneration: 1,
+        requestRepositoryPath: "/repo ",
+        currentRepositoryPath: " /repo",
       }),
     ).toBe(true);
   });

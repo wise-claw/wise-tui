@@ -1,8 +1,11 @@
 /** How a directory row click should behave (pure — testable). */
 export type RepositoryDirToggleIntent = "collapse" | "expand-and-load" | "load-children-only";
 
+import { explorerDirKey } from "./repositoryExplorerDirKey";
+
+/** @deprecated Use explorerDirKey */
 export function normalizeRepositoryDirPath(dirPath: string): string {
-  return dirPath.trim();
+  return explorerDirKey(dirPath);
 }
 
 /**

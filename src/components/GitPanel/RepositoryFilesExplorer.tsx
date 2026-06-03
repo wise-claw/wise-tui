@@ -237,13 +237,15 @@ export function RepositoryFilesExplorer({
       ) : null}
       <RepositoryExplorerTreeActionsProvider value={treeActions}>
         <RepositoryTreeList
+          key={explorer.childrenMapRevision}
           nodes={explorer.filteredTree}
           expandedDirs={explorer.expandedDirs}
           expandEpoch={explorer.expandEpoch}
           lastExpandPath={explorer.lastExpandPath}
           selectedPath={explorer.selected?.path ?? null}
           inlineCreate={explorer.inlineCreate}
-          loadingDirPath={explorer.loadingDirPath}
+          loadingDirKeys={explorer.loadingDirKeys}
+          treeContentRevision={explorer.childrenMapRevision}
         />
       </RepositoryExplorerTreeActionsProvider>
     </div>
@@ -361,10 +363,7 @@ export function RepositoryFilesExplorer({
             : ""
         }`}
       >
-        {(explorer.loading ||
-          explorer.isRefreshing ||
-          switchingRepositoryTree ||
-          (explorer.treeStale && !explorer.loadError)) &&
+        {(explorer.loading || explorer.isRefreshing || switchingRepositoryTree) &&
         explorer.filteredTree.length === 0 ? (
           <div style={{ padding: 24, textAlign: "center" }}>
             <Spin size="small" description={switchingRepositoryTree ? "切换文件树中..." : "加载文件中..."} />

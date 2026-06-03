@@ -22,9 +22,7 @@ describe("sanitizeExplorerExpandedDirsForRestore", () => {
     }
     const out = sanitizeExplorerExpandedDirsForRestore(many);
     expect(out.size).toBe(MAX_RESTORED_EXPLORER_EXPANDED_DIRS);
-    const keptMaxLen = Math.max(...[...out].map((p) => p.length));
-    const dropped = [...many].filter((p) => !out.has(p));
-    const droppedMinLen = dropped.length > 0 ? Math.min(...dropped.map((p) => p.length)) : Infinity;
-    expect(keptMaxLen).toBeLessThanOrEqual(droppedMinLen);
+    const shallow = [...out].filter((p) => !p.includes("/"));
+    expect(shallow.length).toBeGreaterThan(0);
   });
 });

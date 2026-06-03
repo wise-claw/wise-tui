@@ -1,4 +1,5 @@
 import { expandTouchAffectsDir } from "./repositoryTreeNodeExpandTouch";
+import { explorerDirKey } from "./repositoryExplorerDirKey";
 import { repositoryDirNodeContentKey } from "./lazyExplorerTree";
 import type { ExplorerInlineCreateState, RepositoryFileTreeNode } from "./types";
 
@@ -17,15 +18,20 @@ export function repositoryTreeDirShouldUpdate(args: {
   nextLastExpandPath: string;
   prevInlineCreate: ExplorerInlineCreateState | null;
   nextInlineCreate: ExplorerInlineCreateState | null;
-  prevLoadingDirPath: string | null;
-  nextLoadingDirPath: string | null;
+  prevLoadingDirKeys: ReadonlySet<string>;
+  nextLoadingDirKeys: ReadonlySet<string>;
 }): boolean {
   if (repositoryDirNodeContentKey(args.prevNode) !== repositoryDirNodeContentKey(args.nextNode)) {
     return false;
   }
   if (args.prevDepth !== args.nextDepth) return false;
   if (args.prevExpanded !== args.nextExpanded) return false;
-  if (args.prevLoadingDirPath === args.prevNode.path !== (args.nextLoadingDirPath === args.nextNode.path)) {
+  const nodeKey = explorerDirKey(args.prevNode.path);
+  const prevLoading =
+    args.prevLoadingDirKeys.has(nodeKey) && args.prevNode.children === undefined;
+  const nextLoading =
+    args.nextLoadingDirKeys.has(nodeKey) && args.nextNode.children === undefined;
+  if (prevLoading !== nextLoading) {
     return false;
   }
 
