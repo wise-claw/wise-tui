@@ -156,6 +156,14 @@ fn codex_assistant_stream_line(text: &str) -> String {
     .to_string()
 }
 
+fn codex_session_clear_stream_line() -> String {
+    serde_json::json!({
+        "type": "codex_session",
+        "sessionId": "",
+    })
+    .to_string()
+}
+
 fn codex_init_stream_line(session_id: &str) -> String {
     serde_json::json!({
         "type": "system",
@@ -189,6 +197,69 @@ fn emit_codex_complete(app: &AppHandle, sid: &str, success: bool, invocation_key
     }
 }
 
+fn normalize_codex_resume_session_id(raw: Option<&str>) -> Option<String> {
+    let trimmed = raw?.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn append_codex_exec_shared_args(cmd: &mut Command, model: Option<&str>) {
+    cmd.arg("--json");
+    cmd.arg("--skip-git-repo-check");
+    if let Some(model_name) = normalize_codex_model(model) {
+        cmd.arg("-m").arg(model_name);
+    }
+}
+
+/// `codex exec [OPTIONS] [PROMPT]` — supports sandbox + color flags.
+fn append_codex_exec_fresh_args(cmd: &mut Command, model: Option<&str>) {
+    cmd.arg("--color").arg("never");
+    append_codex_exec_shared_args(cmd, model);
+    cmd.arg("-s").arg(WISE_CODEX_EXEC_SANDBOX);
+}
+
+/// `codex exec resume [OPTIONS] [SESSION_ID] [PROMPT]` — options must precede id/prompt; no `-s`/`--color`.
+fn append_codex_exec_resume_args(cmd: &mut Command, model: Option<&str>) {
+    append_codex_exec_shared_args(cmd, model);
+}
+
+fn configure_codex_exec_command(
+    cmd: &mut Command,
+    prompt: &str,
+    model: Option<&str>,
+    resume_session_id: Option<&str>,
+    force_new_session: bool,
+) {
+    cmd.arg("exec");
+    if !force_new_session {
+        if let Some(resume_id) = resume_session_id {
+            cmd.arg("resume");
+            append_codex_exec_resume_args(cmd, model);
+            cmd.arg(resume_id);
+            cmd.arg(prompt);
+            return;
+        }
+    }
+    append_codex_exec_fresh_args(cmd, model);
+    cmd.arg(prompt);
+}
+
+fn stderr_suggests_resume_session_missing(lines: &[String]) -> bool {
+    lines.iter().any(|line| {
+        let lower = line.to_lowercase();
+        lower.contains("session")
+            && (lower.contains("not found")
+                || lower.contains("no such")
+                || lower.contains("unknown")
+                || lower.contains("does not exist")
+                || lower.contains("找不到")
+                || lower.contains("不存在"))
+    })
+}
+
 #[tauri::command]
 pub(crate) async fn execute_codex_code(
     app: tauri::AppHandle,
@@ -199,6 +270,8 @@ pub(crate) async fn execute_codex_code(
     invocation_key: Option<String>,
     tab_session_id: Option<String>,
     trellis_context_id: Option<String>,
+    codex_resume_session_id: Option<String>,
+    force_new_session: Option<bool>,
 ) -> Result<(), String> {
     ensure_active_codex_profile_applied(&db)?;
 
@@ -212,16 +285,17 @@ pub(crate) async fn execute_codex_code(
         .unwrap_or_else(|| format!("codex-{}", Uuid::new_v4().simple()));
 
     let codex_path = find_codex_binary()?;
+    let resume_id = normalize_codex_resume_session_id(codex_resume_session_id.as_deref());
+    let force_new = force_new_session.unwrap_or(false);
+    let used_resume = !force_new && resume_id.is_some();
     let mut cmd = Command::new(&codex_path);
-    cmd.arg("exec");
-    cmd.arg("--json");
-    cmd.arg("--color").arg("never");
-    cmd.arg("--skip-git-repo-check");
-    cmd.arg("-s").arg(WISE_CODEX_EXEC_SANDBOX);
-    if let Some(model_name) = normalize_codex_model(model.as_deref()) {
-        cmd.arg("-m").arg(model_name);
-    }
-    cmd.arg(prompt);
+    configure_codex_exec_command(
+        &mut cmd,
+        prompt.trim(),
+        model.as_deref(),
+        resume_id.as_deref(),
+        force_new,
+    );
     cmd.current_dir(&project_path);
     cmd.stdin(Stdio::null());
     cmd.stdout(Stdio::piped());
@@ -319,6 +393,7 @@ pub(crate) async fn execute_codex_code(
     let active_child_by_invocation = process_state.active_child_by_invocation_key.clone();
     let active_child_by_session = process_state.active_child_by_claude_session.clone();
     let stderr_lines_wait = stderr_lines.clone();
+    let used_resume_wait = used_resume;
 
     tokio::spawn(async move {
         let exit_status = {
@@ -339,7 +414,22 @@ pub(crate) async fn execute_codex_code(
         let success = exit_status.map(|status| status.success()).unwrap_or(false);
         if !success {
             let lines = stderr_lines_wait.lock().await;
-            if let Some(last_line) = lines.iter().rev().find(|line| !line.trim().is_empty()) {
+            if used_resume_wait && stderr_suggests_resume_session_missing(lines.as_slice()) {
+                emit_codex_stdout_line(
+                    &app_wait,
+                    &session_id_wait,
+                    &codex_session_clear_stream_line(),
+                    invocation_key_wait.as_deref(),
+                );
+                let diagnostic =
+                    "Codex 会话已失效，已清除续接 id；请重试，必要时简要说明上一轮背景。";
+                emit_codex_stdout_line(
+                    &app_wait,
+                    &session_id_wait,
+                    &codex_assistant_stream_line(diagnostic),
+                    invocation_key_wait.as_deref(),
+                );
+            } else if let Some(last_line) = lines.iter().rev().find(|line| !line.trim().is_empty()) {
                 let diagnostic = format!("Codex 执行失败：{}", last_line.trim());
                 emit_codex_stdout_line(
                     &app_wait,
@@ -359,4 +449,83 @@ pub(crate) async fn execute_codex_code(
     });
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fresh_exec_argv_order() {
+        let mut cmd = Command::new("codex");
+        configure_codex_exec_command(&mut cmd, "hello", Some("gpt-5"), None, false);
+        let args: Vec<String> = cmd
+            .as_std()
+            .get_args()
+            .map(|s| s.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(
+            args,
+            vec![
+                "exec".to_string(),
+                "--color".to_string(),
+                "never".to_string(),
+                "--json".to_string(),
+                "--skip-git-repo-check".to_string(),
+                "-m".to_string(),
+                "gpt-5".to_string(),
+                "-s".to_string(),
+                WISE_CODEX_EXEC_SANDBOX.to_string(),
+                "hello".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn resume_exec_argv_order() {
+        let mut cmd = Command::new("codex");
+        configure_codex_exec_command(
+            &mut cmd,
+            "continue",
+            None,
+            Some("0199a213-81c0-7800-8aa1-bbab2a035a53"),
+            false,
+        );
+        let args: Vec<String> = cmd
+            .as_std()
+            .get_args()
+            .map(|s| s.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(
+            args,
+            vec![
+                "exec".to_string(),
+                "resume".to_string(),
+                "--json".to_string(),
+                "--skip-git-repo-check".to_string(),
+                "0199a213-81c0-7800-8aa1-bbab2a035a53".to_string(),
+                "continue".to_string(),
+            ]
+        );
+    }
+
+    #[test]
+    fn force_new_skips_resume() {
+        let mut cmd = Command::new("codex");
+        configure_codex_exec_command(
+            &mut cmd,
+            "fresh",
+            None,
+            Some("0199a213-81c0-7800-8aa1-bbab2a035a53"),
+            true,
+        );
+        let args: Vec<String> = cmd
+            .as_std()
+            .get_args()
+            .skip(1)
+            .map(|s| s.to_string_lossy().into_owned())
+            .collect();
+        assert!(!args.contains(&"resume".to_string()));
+        assert_eq!(args.last().map(String::as_str), Some("fresh"));
+    }
 }

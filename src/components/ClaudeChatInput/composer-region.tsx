@@ -41,6 +41,7 @@ import {
   insertPlainAt,
 } from "./composer-plain-utils";
 import {
+  focusComposerAtPlainOffset,
   getComposerEditorCaretRectAtPlainOffset,
   resolveComposerProseMirrorView,
   type ComposerProseMirrorEditor,
@@ -586,11 +587,24 @@ function ComposerInner({
       scheduleSafeAiChatSetContent(() => aiChatRef.current, plain, () => {
         repairTiptapTrailingSpaceIfNeeded(aiChatRef.current, plain);
         lastEditorPlainRef.current = plain;
-        aiChatRef.current?.focusEditor?.("end");
+        focusComposerAtPlainOffset(aiChatRef.current, c);
       });
     },
     focus: () => {
-      aiChatRef.current?.focusEditor?.("end");
+      const ed = aiChatRef.current?.getEditor?.() as
+        | { state?: { selection: { from: number }; doc: { textBetween: (a: number, b: number, s?: string) => string } } }
+        | undefined;
+      if (ed?.state?.doc) {
+        try {
+          const from = ed.state.selection.from;
+          const plainCursor = ed.state.doc.textBetween(0, from, "\n").length;
+          focusComposerAtPlainOffset(aiChatRef.current, plainCursor);
+          return;
+        } catch {
+          /* fall through */
+        }
+      }
+      focusComposerAtPlainOffset(aiChatRef.current, cursorRef.current);
     },
   };
 

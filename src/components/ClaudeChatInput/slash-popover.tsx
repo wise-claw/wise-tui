@@ -292,7 +292,6 @@ export function SlashPopover({
     (option: SlashOption) => {
       const surface = surfaceRef.current;
       if (!surface || !mode) return;
-      surface.focus();
 
       let plain = surface.getPlain();
       let cursor = surface.getCursor();

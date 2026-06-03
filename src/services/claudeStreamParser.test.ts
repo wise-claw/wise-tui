@@ -1,14 +1,32 @@
 import { describe, expect, test } from "bun:test";
 import {
+  extractCodexResumeSessionIdFromStreamLine,
   extractInitSessionIdFromInvocationStdoutLines,
   extractCursorAgentIdFromCompletePayload,
   extractCursorAgentIdFromStreamLine,
   extractPartsFromStreamLine,
   extractSystemErrorMessageFromStreamLine,
   parseStreamLineSessionId,
+  shouldClearCodexResumeSessionFromStreamLine,
 } from "./claudeStreamParser";
 
 describe("extractPartsFromStreamLine", () => {
+  test("parses codex session bind and clear markers", () => {
+    expect(
+      extractCodexResumeSessionIdFromStreamLine(
+        JSON.stringify({
+          type: "codex_session",
+          sessionId: "0199a213-81c0-7800-8aa1-bbab2a035a53",
+        }),
+      ),
+    ).toBe("0199a213-81c0-7800-8aa1-bbab2a035a53");
+    expect(
+      shouldClearCodexResumeSessionFromStreamLine(
+        JSON.stringify({ type: "codex_session", sessionId: "" }),
+      ),
+    ).toBe(true);
+  });
+
   test("parses cursor agent bind without treating it as Claude init", () => {
     expect(extractCursorAgentIdFromStreamLine(JSON.stringify({
       type: "cursor_agent",

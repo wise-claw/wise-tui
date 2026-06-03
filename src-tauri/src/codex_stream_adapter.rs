@@ -46,8 +46,27 @@ fn looks_like_codex_exec_event(event_type: &str) -> bool {
         || event_type == "error"
 }
 
+fn codex_session_stream_line(session_id: &str) -> String {
+    serde_json::json!({
+        "type": "codex_session",
+        "sessionId": session_id,
+    })
+    .to_string()
+}
+
 fn map_codex_exec_event(event_type: &str, value: &Value) -> Vec<String> {
     match event_type {
+        "thread.started" => {
+            let thread_id = value
+                .get("thread_id")
+                .and_then(Value::as_str)
+                .map(str::trim)
+                .filter(|s| !s.is_empty());
+            thread_id
+                .map(codex_session_stream_line)
+                .into_iter()
+                .collect()
+        }
         "error" => {
             let message = value
                 .get("message")
@@ -332,10 +351,14 @@ mod tests {
     }
 
     #[test]
-    fn ignores_thread_lifecycle_without_items() {
+    fn maps_thread_started_to_codex_session_line() {
         let line = r#"{"type":"thread.started","thread_id":"0199a213-81c0-7800-8aa1-bbab2a035a53"}"#;
         match map_codex_exec_stdout_line(line) {
-            CodexStdoutMap::StreamLines(lines) => assert!(lines.is_empty()),
+            CodexStdoutMap::StreamLines(lines) => {
+                assert_eq!(lines.len(), 1);
+                assert!(lines[0].contains(r#""type":"codex_session""#));
+                assert!(lines[0].contains("0199a213-81c0-7800-8aa1-bbab2a035a53"));
+            }
             other => panic!("{other:?}"),
         }
     }

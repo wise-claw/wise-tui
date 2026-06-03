@@ -7,8 +7,10 @@ import {
   capAssistantStreamBufferText,
 } from "./claudeStreamAssembler";
 import {
+  extractCodexResumeSessionIdFromStreamLine,
   extractCursorAgentIdFromCompletePayload,
   extractCursorAgentIdFromStreamLine,
+  shouldClearCodexResumeSessionFromStreamLine,
 } from "./claudeStreamParser";
 import {
   appendSystemMessageBySessionOrClaudeId,
@@ -333,6 +335,26 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
       } else {
         setSessions((prev) => appendSystemMessageBySessionOrClaudeId(prev, tid, systemErrMsg));
       }
+    }
+    if (shouldClearCodexResumeSessionFromStreamLine(line)) {
+      onStreamActivity?.(tid);
+      setSessions((prev) =>
+        prev.map((s) => {
+          if (s.id !== tid && s.claudeSessionId !== tid) return s;
+          return { ...s, claudeSessionId: null };
+        }),
+      );
+    }
+    const codexResumeSessionId = extractCodexResumeSessionIdFromStreamLine(line);
+    if (codexResumeSessionId) {
+      onStreamActivity?.(tid);
+      setSessions((prev) =>
+        prev.map((s) => {
+          if (s.id !== tid && s.claudeSessionId !== tid) return s;
+          return { ...s, claudeSessionId: codexResumeSessionId };
+        }),
+      );
+      onClaudeSessionIdAssigned?.(tid, codexResumeSessionId);
     }
     const cursorAgentId = extractCursorAgentIdFromStreamLine(line);
     if (cursorAgentId) {
