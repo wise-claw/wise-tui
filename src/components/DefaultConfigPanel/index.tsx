@@ -21,6 +21,9 @@ import { useRightPanelDefaultSetting } from "./useRightPanelDefaultSetting";
 import { useTopbarChromeDefaultSetting } from "./useTopbarChromeDefaultSetting";
 import { useDefaultTerminalSetting } from "./useDefaultTerminalSetting";
 import { useAtMentionDefaultSetting } from "./useAtMentionDefaultSetting";
+import { useAtMentionShortcuts } from "../../hooks/useAtMentionShortcuts";
+import { KeyShortcutCapture } from "./KeyShortcutCapture";
+import type { AtMentionDefaultTarget } from "../../constants/atMentionDefault";
 import { useWorkspaceInspectorPanelsSetting } from "./useWorkspaceInspectorPanelsSetting";
 import { listEmployees } from "../../services/employees";
 import type { EmployeeItem } from "../../types";
@@ -46,6 +49,7 @@ export function DefaultConfigPanel() {
   const monitorPanel = useMonitorPanelSetting();
   const execEnvDispatchHistory = useExecutionEnvironmentDispatchHistoryDaysSetting();
   const atMentionDefault = useAtMentionDefaultSetting();
+  const atMentionShortcuts = useAtMentionShortcuts();
   const defaultTerminal = useDefaultTerminalSetting();
   const workspaceInspectorPanels = useWorkspaceInspectorPanelsSetting();
   const [terminalEmployees, setTerminalEmployees] = useState<EmployeeItem[]>([]);
@@ -76,6 +80,25 @@ export function DefaultConfigPanel() {
   }, [terminalEmployees]);
 
   const atMentionDefaultSelectValue = encodeAtMentionDefaultSelectValue(atMentionDefault.target);
+
+  const atMentionShortcutRows = useMemo(() => {
+    const rows: Array<{ target: AtMentionDefaultTarget; label: string; group: string }> = [];
+    for (const engine of SESSION_EXECUTION_ENGINES) {
+      rows.push({
+        target: { kind: "execution_engine", engine },
+        label: SESSION_EXECUTION_ENGINE_LABELS[engine].title,
+        group: "执行环境",
+      });
+    }
+    for (const employee of terminalEmployees) {
+      rows.push({
+        target: { kind: "terminal", employeeName: employee.name },
+        label: employee.name,
+        group: "终端",
+      });
+    }
+    return rows;
+  }, [terminalEmployees]);
 
   return (
     <div className="app-default-config-panel">
@@ -182,6 +205,37 @@ export function DefaultConfigPanel() {
                 if (decoded) void atMentionDefault.save(decoded);
               }}
             />
+          </div>
+        </div>
+
+        <div
+          className="app-default-config-row app-default-config-row--at-mention-shortcuts"
+          aria-label="@ 快捷键"
+        >
+          <div className="app-default-config-row__main">
+            <span className="app-default-config-row__title">@ 快捷键</span>
+            <span className="app-default-config-row__hint">
+              主会话输入框聚焦时按下组合键，自动插入对应 @ 提及（须含 Mod/Alt/Shift 修饰键；Esc 取消录制）
+            </span>
+          </div>
+          <div className="app-default-config-row__control app-default-config-row__control--shortcut-list">
+            <ul className="app-default-config-at-mention-shortcuts">
+              {atMentionShortcutRows.map((row) => (
+                <li key={encodeAtMentionDefaultSelectValue(row.target)} className="app-default-config-at-mention-shortcuts__row">
+                  <span className="app-default-config-at-mention-shortcuts__label">
+                    <span className="app-default-config-at-mention-shortcuts__group">{row.group}</span>
+                    {row.label}
+                  </span>
+                  <KeyShortcutCapture
+                    value={atMentionShortcuts.chordForTarget(row.target)}
+                    disabled={atMentionShortcuts.loading || atMentionShortcuts.saving}
+                    onChange={(chord) => {
+                      void atMentionShortcuts.saveForTarget(row.target, chord);
+                    }}
+                  />
+                </li>
+              ))}
+            </ul>
           </div>
         </div>
 

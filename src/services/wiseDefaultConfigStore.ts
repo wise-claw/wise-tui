@@ -9,7 +9,9 @@ import {
   type LeftSidebarHubQuickEntryId,
 } from "../constants/leftSidebarHubQuickEntries";
 import {
+  decodeAtMentionDefaultSelectValue,
   DEFAULT_AT_MENTION_DEFAULT_TARGET,
+  encodeAtMentionDefaultSelectValue,
   normalizeAtMentionDefaultTarget,
   type AtMentionDefaultTarget,
 } from "../constants/atMentionDefault";
@@ -18,6 +20,7 @@ import {
   normalizeExecutionEnvironmentDispatchHistoryDays,
   type ExecutionEnvironmentDispatchHistoryDays,
 } from "../constants/executionEnvironmentDispatch";
+import { normalizeChord } from "../utils/atMentionShortcutChord";
 import { RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK, RIGHT_PANEL_DEFAULT_COLLAPSED_KEY } from "../utils/rightPanelStorage";
 import { deleteAppSetting, getAppSetting, setAppSetting, setAppSettingJson } from "./appSettingsStore";
 
@@ -54,6 +57,8 @@ export const WISE_EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAYS_CHANGED =
 
 export const WISE_AT_MENTION_DEFAULT_CHANGED = "wise:at-mention-default-changed";
 
+export const WISE_AT_MENTION_SHORTCUTS_CHANGED = "wise:at-mention-shortcuts-changed";
+
 export const WISE_WORKSPACE_INSPECTOR_PANELS_CHANGED = "wise:workspace-inspector-panels-changed";
 
 export type MonitorPanelPlacement = "left" | "right";
@@ -87,6 +92,8 @@ export interface WiseDefaultConfigV1 {
   executionEnvironmentDispatchHistoryDays: ExecutionEnvironmentDispatchHistoryDays;
   /** 主会话 @ 空查询打开时默认高亮的执行环境或终端。 */
   atMentionDefaultTarget: AtMentionDefaultTarget;
+  /** `encodeAtMentionDefaultSelectValue` → chord（如 `Mod+Shift+Digit2`）。 */
+  atMentionShortcutByTarget: Record<string, string>;
   /** 右栏工作区快捷操作卡片；默认显示。 */
   showWorkspaceQuickActionsPanel: boolean;
   /** 右栏备忘录卡片；默认显示。 */
@@ -108,6 +115,7 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   monitorPanelPlacement: "left",
   executionEnvironmentDispatchHistoryDays: DEFAULT_EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAYS,
   atMentionDefaultTarget: DEFAULT_AT_MENTION_DEFAULT_TARGET,
+  atMentionShortcutByTarget: {},
   showWorkspaceQuickActionsPanel: true,
   showWorkspaceMemosPanel: true,
   showWorkspaceTodosPanel: true,
@@ -128,6 +136,18 @@ function normalizeBoolean(raw: unknown, fallback = false): boolean {
 
 function normalizeConnectionKind(raw: unknown): ClaudeSessionConnectionKind | null {
   return raw === "streaming" || raw === "oneshot" ? raw : null;
+}
+
+function normalizeAtMentionShortcutByTarget(raw: unknown): Record<string, string> {
+  if (!raw || typeof raw !== "object") return {};
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(raw as Record<string, unknown>)) {
+    const targetKey = key.trim();
+    if (!targetKey || typeof value !== "string") continue;
+    const chord = normalizeChord(value);
+    if (chord) out[targetKey] = chord;
+  }
+  return out;
 }
 
 function normalizeRightPanelCollapsed(raw: unknown): boolean | null {
@@ -173,6 +193,10 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
         parsed.atMentionDefaultTarget === undefined
           ? DEFAULT_CONFIG.atMentionDefaultTarget
           : normalizeAtMentionDefaultTarget(parsed.atMentionDefaultTarget),
+      atMentionShortcutByTarget:
+        parsed.atMentionShortcutByTarget === undefined
+          ? DEFAULT_CONFIG.atMentionShortcutByTarget
+          : normalizeAtMentionShortcutByTarget(parsed.atMentionShortcutByTarget),
       showWorkspaceQuickActionsPanel:
         parsed.showWorkspaceQuickActionsPanel === undefined
           ? DEFAULT_CONFIG.showWorkspaceQuickActionsPanel
@@ -300,6 +324,7 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     monitorPanelPlacement: DEFAULT_CONFIG.monitorPanelPlacement,
     executionEnvironmentDispatchHistoryDays: DEFAULT_CONFIG.executionEnvironmentDispatchHistoryDays,
     atMentionDefaultTarget: DEFAULT_CONFIG.atMentionDefaultTarget,
+    atMentionShortcutByTarget: DEFAULT_CONFIG.atMentionShortcutByTarget,
     showWorkspaceQuickActionsPanel: DEFAULT_CONFIG.showWorkspaceQuickActionsPanel,
     showWorkspaceMemosPanel: DEFAULT_CONFIG.showWorkspaceMemosPanel,
     showWorkspaceTodosPanel: DEFAULT_CONFIG.showWorkspaceTodosPanel,
@@ -387,6 +412,7 @@ export async function saveWiseDefaultConfig(
       | "monitorPanelPlacement"
       | "executionEnvironmentDispatchHistoryDays"
       | "atMentionDefaultTarget"
+      | "atMentionShortcutByTarget"
       | "showWorkspaceQuickActionsPanel"
       | "showWorkspaceMemosPanel"
       | "showWorkspaceTodosPanel"
@@ -419,6 +445,10 @@ export async function saveWiseDefaultConfig(
       patch.atMentionDefaultTarget !== undefined
         ? normalizeAtMentionDefaultTarget(patch.atMentionDefaultTarget)
         : current.atMentionDefaultTarget,
+    atMentionShortcutByTarget:
+      patch.atMentionShortcutByTarget !== undefined
+        ? normalizeAtMentionShortcutByTarget(patch.atMentionShortcutByTarget)
+        : current.atMentionShortcutByTarget,
     showWorkspaceQuickActionsPanel:
       patch.showWorkspaceQuickActionsPanel ?? current.showWorkspaceQuickActionsPanel,
     showWorkspaceMemosPanel: patch.showWorkspaceMemosPanel ?? current.showWorkspaceMemosPanel,
@@ -456,6 +486,9 @@ export async function saveWiseDefaultConfig(
   }
   if (patch.atMentionDefaultTarget !== undefined) {
     next.atMentionDefaultTarget = normalizeAtMentionDefaultTarget(patch.atMentionDefaultTarget);
+  }
+  if (patch.atMentionShortcutByTarget !== undefined) {
+    next.atMentionShortcutByTarget = normalizeAtMentionShortcutByTarget(patch.atMentionShortcutByTarget);
   }
   if (patch.showWorkspaceQuickActionsPanel !== undefined) {
     next.showWorkspaceQuickActionsPanel = normalizeBoolean(patch.showWorkspaceQuickActionsPanel);
@@ -530,6 +563,12 @@ export async function saveWiseDefaultConfig(
     dispatchAtMentionDefaultTargetChanged(next.atMentionDefaultTarget);
   }
   if (
+    patch.atMentionShortcutByTarget !== undefined &&
+    JSON.stringify(next.atMentionShortcutByTarget) !== JSON.stringify(current.atMentionShortcutByTarget)
+  ) {
+    dispatchAtMentionShortcutsChanged(next.atMentionShortcutByTarget);
+  }
+  if (
     patch.showWorkspaceQuickActionsPanel !== undefined ||
     patch.showWorkspaceMemosPanel !== undefined ||
     patch.showWorkspaceTodosPanel !== undefined
@@ -574,6 +613,47 @@ export async function saveAtMentionDefaultTargetToStore(
   target: AtMentionDefaultTarget,
 ): Promise<void> {
   await saveWiseDefaultConfig({ atMentionDefaultTarget: normalizeAtMentionDefaultTarget(target) });
+}
+
+function dispatchAtMentionShortcutsChanged(shortcuts: Record<string, string>): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(WISE_AT_MENTION_SHORTCUTS_CHANGED, {
+      detail: { atMentionShortcutByTarget: shortcuts },
+    }),
+  );
+}
+
+export async function loadAtMentionShortcutByTargetFromStore(): Promise<Record<string, string>> {
+  return (await loadWiseDefaultConfig()).atMentionShortcutByTarget;
+}
+
+export async function saveAtMentionShortcutForTarget(
+  target: AtMentionDefaultTarget,
+  chord: string,
+): Promise<Record<string, string>> {
+  const targetKey = encodeAtMentionDefaultSelectValue(target);
+  const current = await loadWiseDefaultConfig();
+  const next = { ...current.atMentionShortcutByTarget };
+  const normalized = normalizeChord(chord);
+  if (!normalized) {
+    delete next[targetKey];
+  } else {
+    for (const [key, existing] of Object.entries(next)) {
+      if (key !== targetKey && existing === normalized) {
+        delete next[key];
+      }
+    }
+    next[targetKey] = normalized;
+  }
+  await saveWiseDefaultConfig({ atMentionShortcutByTarget: next });
+  return next;
+}
+
+export function resolveAtMentionTargetFromShortcutKey(
+  targetKey: string,
+): AtMentionDefaultTarget | null {
+  return decodeAtMentionDefaultSelectValue(targetKey);
 }
 
 export async function loadExecutionEnvironmentDispatchHistoryDaysFromStore(): Promise<ExecutionEnvironmentDispatchHistoryDays> {

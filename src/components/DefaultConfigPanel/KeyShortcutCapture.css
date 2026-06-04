@@ -1,0 +1,21 @@
+.app-key-shortcut-capture {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.app-key-shortcut-capture__kbd {
+  display: inline-block;
+  min-width: 72px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  border: 1px solid var(--ant-color-border-secondary);
+  background: var(--ant-color-fill-quaternary);
+  font-size: 11px;
+  font-family: var(--ant-font-family-code, ui-monospace, monospace);
+  line-height: 18px;
+  text-align: center;
+  color: var(--ant-color-text-secondary);
+}

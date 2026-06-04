@@ -50,6 +50,8 @@ import {
 import { ContextItems } from "./context-items";
 import { SlashPopover } from "./slash-popover";
 import { useAtMentionDefaultTarget } from "../../hooks/useAtMentionDefaultTarget";
+import { useAtMentionShortcuts } from "../../hooks/useAtMentionShortcuts";
+import { chordMatchesKeyboardEvent } from "../../utils/atMentionShortcutChord";
 import { ImageThumbnails } from "./attachment-manager";
 import { QuestionDock } from "./dock/question-dock";
 import { PermissionDock } from "./dock/permission-dock";
@@ -512,6 +514,7 @@ function ComposerInner({
   const dragOverLoggedRef = useRef(false);
   const { target: atMentionDefaultTarget, save: saveAtMentionDefaultTarget } =
     useAtMentionDefaultTarget();
+  const { bindings: atMentionShortcutBindings } = useAtMentionShortcuts();
   const [trigger, setTrigger] = useState<TriggerInfo>({ mode: null, query: "", rect: null });
   const [images, setImages] = useState<ImageAttachmentPart[]>([]);
   const [dragOverNativeFiles, setDragOverNativeFiles] = useState(false);
@@ -2354,6 +2357,32 @@ function ComposerInner({
     window.addEventListener("keydown", onGlobalKey, { capture: true });
     return () => window.removeEventListener("keydown", onGlobalKey, { capture: true });
   }, []);
+
+  /** 可配置的 @ 执行环境 / 终端快捷键：在输入框聚焦时插入对应提及。 */
+  useEffect(() => {
+    if (atMentionShortcutBindings.length === 0) return;
+    function onAtMentionShortcutKey(e: KeyboardEvent) {
+      if (trigger.mode) return;
+      const shell = shellRef.current;
+      if (!shell || !isProseMirrorFocused(shell)) return;
+      const surface = plainSurfaceRef.current;
+      if (!surface) return;
+      for (const binding of atMentionShortcutBindings) {
+        if (!chordMatchesKeyboardEvent(binding.chord, e)) continue;
+        e.preventDefault();
+        e.stopPropagation();
+        const plain = surface.getPlain();
+        const cursor = surface.getCursor();
+        let next = insertPlainAt(plain, cursor, binding.insertionText);
+        next = ensureSpaceAfterAtInsert(next.plain, next.cursor);
+        surface.setPlainAndCursor(next.plain, next.cursor);
+        surface.focus();
+        return;
+      }
+    }
+    window.addEventListener("keydown", onAtMentionShortcutKey, { capture: true });
+    return () => window.removeEventListener("keydown", onAtMentionShortcutKey, { capture: true });
+  }, [atMentionShortcutBindings, trigger.mode, session.id]);
 
   const handleScreenshot = useCallback(async () => {
     const result = await captureScreenshot();

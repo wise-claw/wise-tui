@@ -54,6 +54,11 @@ export const APP_SHORTCUT_GROUPS: AppShortcutGroup[] = [
         keys: "⌘R · Ctrl+R",
         description: "重新加载应用界面。",
       },
+      {
+        keys: "可配置",
+        description:
+          "主会话 @ 执行环境 / 终端：在「默认配置 → @ 快捷键」为每项录制组合键，输入框聚焦时插入对应 @ 提及。",
+      },
     ],
   },
 ];
