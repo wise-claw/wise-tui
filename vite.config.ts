@@ -5,7 +5,10 @@ import { fileURLToPath, URL } from "node:url";
 
 const root = fileURLToPath(new URL(".", import.meta.url));
 
-// @ts-expect-error process is a nodejs global
+/** 仅按需打开的功能块，不应出现在 index 入口的 modulepreload 里。 */
+const DEFERRED_MODULE_PRELOAD_CHUNK =
+  /(?:^|\/)assets\/(?:cc-wf-mermaid|cc-wf-reactflow|cc-wf-radix|WiseCcWorkflowStudioPanel|composer-region|milkdown-vendor|codemirror-vendor|monaco-vendor|terminal-vendor|graph-vendor|AuthorPanel|x6-vendor|driver-vendor)/;
+
 const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
@@ -52,6 +55,12 @@ export default defineConfig(async () => ({
     ],
   },
   build: {
+    modulePreload: {
+      resolveDependencies: (_filename, deps) =>
+        deps.filter((dep) => !DEFERRED_MODULE_PRELOAD_CHUNK.test(dep.replace(/\\/g, "/"))),
+    },
+    /** 已知 vendor（mermaid / antd / codemirror）体积大；避免构建日志被无行动意义的告警淹没。 */
+    chunkSizeWarningLimit: 700,
     rollupOptions: {
       input: {
         main: resolve(root, "index.html"),
@@ -66,6 +75,16 @@ export default defineConfig(async () => ({
           }
           if (id.includes("@tauri-apps")) {
             return "tauri-vendor";
+          }
+          if (
+            id.includes("node_modules/graphology") ||
+            id.includes("node_modules/sigma/") ||
+            id.includes("@sigma/")
+          ) {
+            return "graph-vendor";
+          }
+          if (id.includes("driver.js")) {
+            return "driver-vendor";
           }
           // 仅匹配核心 react / react-dom，勿用 `/react/`（会误伤 @milkdown/react 等）。
           if (id.includes("node_modules/react-dom/") || id.includes("node_modules/react/")) {
@@ -111,8 +130,7 @@ export default defineConfig(async () => ({
             return "terminal-vendor";
           }
           if (
-            id.includes("antd") ||
-            id.includes("@ant-design") ||
+            id.includes("node_modules/antd/") ||
             id.includes("/rc-") ||
             id.includes("/@rc-component/")
           ) {

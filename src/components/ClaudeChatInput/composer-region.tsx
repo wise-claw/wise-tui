@@ -8,6 +8,7 @@ import {
   type MouseEvent,
 } from "react";
 import { flushSync } from "react-dom";
+import "@douyinfe/semi-ui/lib/es/_base/base.css";
 import { AIChatInput, ConfigProvider as SemiConfigProvider } from "@douyinfe/semi-ui";
 import semiLocaleZhCN from "@douyinfe/semi-ui/lib/es/locale/source/zh_CN";
 import "./composer-semi-tokens.css";

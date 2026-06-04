@@ -9,11 +9,14 @@
 
 import type { Workflow } from '@shared/types/messages';
 import type React from 'react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useTranslation } from '../../i18n/i18n-context';
 import { InstructionsPanel, type InstructionsPanelHandle } from './InstructionsPanel';
-import { MermaidDiagram } from './MermaidDiagram';
 import { OverviewEmptyState } from './OverviewEmptyState';
+
+const MermaidDiagramLazy = lazy(() =>
+  import('./MermaidDiagram').then((module) => ({ default: module.MermaidDiagram })),
+);
 import { OverviewHeader } from './OverviewHeader';
 
 interface WorkflowOverviewProps {
@@ -261,11 +264,24 @@ export const WorkflowOverview: React.FC<WorkflowOverviewProps> = ({
             backgroundColor: 'var(--vscode-editor-background)',
           }}
         >
-          <MermaidDiagram
-            workflow={workflow}
-            onNodeClick={handleNodeClick}
-            activeSanitizedNodeId={activeSanitizedNodeId}
-          />
+          <Suspense
+            fallback={
+              <div
+                className="overview-mermaid-viewport"
+                style={{
+                  flex: 1,
+                  minHeight: 0,
+                  backgroundColor: 'var(--vscode-editor-background)',
+                }}
+              />
+            }
+          >
+            <MermaidDiagramLazy
+              workflow={workflow}
+              onNodeClick={handleNodeClick}
+              activeSanitizedNodeId={activeSanitizedNodeId}
+            />
+          </Suspense>
         </div>
         <div
           role="slider"

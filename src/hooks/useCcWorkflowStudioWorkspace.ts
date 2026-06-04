@@ -203,7 +203,7 @@ export function useCcWorkflowStudioWorkspace(p: UseCcWorkflowStudioWorkspacePara
     let ricId: number | undefined;
     let timeoutId: ReturnType<typeof setTimeout> | undefined;
     if (typeof globalThis.requestIdleCallback === "function") {
-      ricId = globalThis.requestIdleCallback(() => run(), { timeout: 2500 });
+      ricId = globalThis.requestIdleCallback(() => run(), { timeout: 5000 });
     } else {
       timeoutId = globalThis.setTimeout(run, 800);
     }

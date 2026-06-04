@@ -1,15 +1,21 @@
 import { lazy } from "react";
+import { runWhenIdle } from "../utils/deferIdle";
 
 /** 模块求值时即开始拉取工作区壳 chunk，与 AppImpl 首帧渲染并行。 */
 const appWorkspaceLayoutModule = import("./AppWorkspaceLayout");
 
-/** 与壳 chunk 并行预拉取首屏侧栏与会话区（不阻塞 AppImpl 主包解析）。 */
+/** 首屏：侧栏 + 顶栏（与工作区壳同屏出现）。 */
 void import("./LeftSidebar");
-const claudeSessionsEntry = import("./ClaudeSessions");
-void claudeSessionsEntry;
 void import("./ClaudeSessions/Topbar");
-/** 会话壳就绪后常用聊天主体，提前拉取缩短二次等待。 */
-void import("./ClaudeSessions/ClaudeSessionChatWithDock");
+
+/** 空闲后再预拉会话区与聊天主体，避免与 AppImpl / 大型 vendor 争抢首包带宽。 */
+runWhenIdle(
+  () => {
+    void import("./ClaudeSessions");
+    void import("./ClaudeSessions/ClaudeSessionChatWithDock");
+  },
+  { timeoutMs: 4000 },
+);
 
 export const LazyAppWorkspaceLayout = lazy(() =>
   appWorkspaceLayoutModule.then((module) => ({ default: module.AppWorkspaceLayout })),
