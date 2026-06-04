@@ -1,11 +1,12 @@
 import { SendOutlined } from "@ant-design/icons";
-import { Select, Tooltip, Typography } from "antd";
+import { Tooltip, Typography } from "antd";
 import { useCallback, useMemo, useState } from "react";
 import type { ClaudeSession, SessionConversationTaskItem } from "../../types";
 import {
-  EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAY_OPTIONS,
+  historyDaysToSinceMs,
   type ExecutionEnvironmentDispatchHistoryDays,
 } from "../../constants/executionEnvironmentDispatch";
+import { ExecutionEnvironmentDispatchHistoryDaysDropdown } from "../ProgressMonitorPanel/ExecutionEnvironmentDispatchHistoryDaysDropdown";
 import {
   canStopSessionConversationTask,
   filterExecutionEnvironmentDispatchTaskItems,
@@ -42,9 +43,17 @@ export function SessionConversationTasksPanel({
   ) => void | Promise<void>;
   executionEnvironmentDispatchHistoryDaysSaving?: boolean;
 }) {
+  const dispatchSinceMs = useMemo(
+    () =>
+      executionEnvironmentDispatchHistoryDays != null
+        ? historyDaysToSinceMs(executionEnvironmentDispatchHistoryDays)
+        : undefined,
+    [executionEnvironmentDispatchHistoryDays],
+  );
+
   const dispatchTaskItems = useMemo(
-    () => filterExecutionEnvironmentDispatchTaskItems(sessionConversationTaskItems),
-    [sessionConversationTaskItems],
+    () => filterExecutionEnvironmentDispatchTaskItems(sessionConversationTaskItems, dispatchSinceMs),
+    [sessionConversationTaskItems, dispatchSinceMs],
   );
   const [detailTarget, setDetailTarget] = useState<SessionConversationTaskDetailTarget | null>(null);
 
@@ -77,22 +86,10 @@ export function SessionConversationTasksPanel({
             </div>
             {executionEnvironmentDispatchHistoryDays != null &&
             onExecutionEnvironmentDispatchHistoryDaysChange ? (
-              <Select
-                size="small"
-                className="app-monitor-panel__session-tasks-days"
-                classNames={{ popup: { root: "app-monitor-panel__session-tasks-days-dropdown" } }}
-                aria-label="派发任务历史天数"
+              <ExecutionEnvironmentDispatchHistoryDaysDropdown
                 disabled={executionEnvironmentDispatchHistoryDaysSaving}
                 value={executionEnvironmentDispatchHistoryDays}
-                options={EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAY_OPTIONS.map((day) => ({
-                  value: day,
-                  label: `近 ${day} 天`,
-                }))}
-                onChange={(value) => {
-                  void onExecutionEnvironmentDispatchHistoryDaysChange(
-                    value as ExecutionEnvironmentDispatchHistoryDays,
-                  );
-                }}
+                onChange={onExecutionEnvironmentDispatchHistoryDaysChange}
               />
             ) : null}
           </div>

@@ -20,6 +20,11 @@ export const EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAY_OPTIONS = [1, 3, 5, 7] a
 export type ExecutionEnvironmentDispatchHistoryDays =
   (typeof EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAY_OPTIONS)[number];
 
+/** 持久化与内存 store 一次加载的最大历史窗口（避免切换天数时重复查库）。 */
+export const MAX_EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAYS = Math.max(
+  ...EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAY_OPTIONS,
+) as ExecutionEnvironmentDispatchHistoryDays;
+
 export const DEFAULT_EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAYS: ExecutionEnvironmentDispatchHistoryDays = 1;
 
 export function normalizeExecutionEnvironmentDispatchHistoryDays(
@@ -34,4 +39,8 @@ export function normalizeExecutionEnvironmentDispatchHistoryDays(
 
 export function historyDaysToSinceMs(days: ExecutionEnvironmentDispatchHistoryDays, now = Date.now()): number {
   return now - days * 24 * 60 * 60 * 1000;
+}
+
+export function maxExecutionEnvironmentDispatchHistorySinceMs(now = Date.now()): number {
+  return historyDaysToSinceMs(MAX_EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAYS, now);
 }

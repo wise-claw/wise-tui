@@ -1286,11 +1286,7 @@ export default function App() {
     [activeProjectId, activeRepositoryId, projects, repositoryMemberMonitorItems],
   );
   const executionEnvironmentDispatchHistory = useExecutionEnvironmentDispatchHistoryDays();
-  const sessionConversationTaskItems = useSessionConversationTasks(
-    activeSessionId,
-    sessions,
-    executionEnvironmentDispatchHistory.days,
-  );
+  const sessionConversationTaskItems = useSessionConversationTasks(activeSessionId, sessions);
   useExecutionEnvironmentDispatchWorkerTranscriptPreload(
     activeSessionId,
     sessions,
@@ -2951,10 +2947,8 @@ export default function App() {
         sessionConversationTaskItems,
         onStopSessionConversationTask: handleStopSessionConversationTask,
         executionEnvironmentDispatchHistoryDays: executionEnvironmentDispatchHistory.days,
-        onExecutionEnvironmentDispatchHistoryDaysChange: (days) => {
-          void executionEnvironmentDispatchHistory.save(days);
-        },
-        executionEnvironmentDispatchHistoryDaysSaving: executionEnvironmentDispatchHistory.saving,
+        onExecutionEnvironmentDispatchHistoryDaysChange: executionEnvironmentDispatchHistory.applyDays,
+        executionEnvironmentDispatchHistoryDaysSaving: false,
         projectId: activeProjectId,
         employeeMonitorItems: teamPanelEmployeeMonitorItems,
         repositoryMemberMonitorItems: scopedRepositoryMemberMonitorItems,
@@ -3361,10 +3355,8 @@ export default function App() {
         repositoryMemberMonitorItems: scopedRepositoryMemberMonitorItems,
         sessionConversationTaskItems,
         executionEnvironmentDispatchHistoryDays: executionEnvironmentDispatchHistory.days,
-        onExecutionEnvironmentDispatchHistoryDaysChange: (days) => {
-          void executionEnvironmentDispatchHistory.save(days);
-        },
-        executionEnvironmentDispatchHistoryDaysSaving: executionEnvironmentDispatchHistory.saving,
+        onExecutionEnvironmentDispatchHistoryDaysChange: executionEnvironmentDispatchHistory.applyDays,
+        executionEnvironmentDispatchHistoryDaysSaving: false,
         teamMonitorItems,
         monitorActiveTarget: monitorDrawerTarget,
         onOpenTeamMonitorDetail: (workflowId) => {

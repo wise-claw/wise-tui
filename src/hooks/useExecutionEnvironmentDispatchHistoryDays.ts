@@ -48,6 +48,12 @@ export function useExecutionEnvironmentDispatchHistoryDays() {
     };
   }, []);
 
+  /** 左栏临时切换：仅更新内存视图，不写默认配置。 */
+  const applyDays = useCallback((next: ExecutionEnvironmentDispatchHistoryDays) => {
+    if (next === days) return;
+    setDays(next);
+  }, [days]);
+
   const save = useCallback(
     async (next: ExecutionEnvironmentDispatchHistoryDays) => {
       if (next === days) return;
@@ -55,7 +61,6 @@ export function useExecutionEnvironmentDispatchHistoryDays() {
       try {
         await saveExecutionEnvironmentDispatchHistoryDaysToStore(next);
         setDays(next);
-        message.success(`已保存：派发任务默认展示近 ${next} 天`);
       } catch (err) {
         message.error(`保存失败：${err instanceof Error ? err.message : String(err)}`);
         throw err;
@@ -66,5 +71,5 @@ export function useExecutionEnvironmentDispatchHistoryDays() {
     [days],
   );
 
-  return { days, loading, saving, refresh, save };
+  return { days, loading, saving, refresh, applyDays, save };
 }

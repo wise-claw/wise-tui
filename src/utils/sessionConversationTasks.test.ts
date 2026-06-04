@@ -4,11 +4,13 @@ import {
   buildSessionConversationTasks,
   buildConversationTaskDetailMessages,
   canStopSessionConversationTask,
+  filterExecutionEnvironmentDispatchTaskItems,
   markSessionToolUseStopped,
   resolveExecutionEnvironmentTaskFromDispatchMeta,
   resolveExecutionEnvironmentTaskFromTaskItems,
   resolveExecutionEnvironmentWorkerConversationTaskStatus,
 } from "./sessionConversationTasks";
+import type { SessionConversationTaskItem } from "../types";
 import { parseDispatchRecord } from "./claudeChatMessageDisplay";
 
 function session(partial: Partial<ClaudeSession>): ClaudeSession {
@@ -662,5 +664,26 @@ describe("resolveExecutionEnvironmentTaskFromDispatchMeta", () => {
       },
     ]);
     expect(hit?.sessionId).toBe("worker-1");
+  });
+});
+
+describe("filterExecutionEnvironmentDispatchTaskItems", () => {
+  const execItem = (updatedAt: number): SessionConversationTaskItem => ({
+    key: `exec-${updatedAt}`,
+    label: "任务",
+    status: "completed",
+    previewText: "",
+    updatedAt,
+    source: "execution_environment",
+  });
+
+  test("filters by sinceMs without re-querying store", () => {
+    const items = [
+      execItem(100),
+      execItem(500),
+      { ...execItem(900), source: "tool" as const },
+    ];
+    const filtered = filterExecutionEnvironmentDispatchTaskItems(items, 400);
+    expect(filtered.map((row) => row.updatedAt)).toEqual([500]);
   });
 });

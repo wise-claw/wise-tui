@@ -373,12 +373,17 @@ export function buildExecutionEnvironmentConversationTasks(input: {
   return out.sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
-/** 左栏「任务派发」：仅展示执行环境派发历史，按更新时间倒序。 */
+/** 左栏「任务派发」：仅展示执行环境派发历史，按更新时间倒序；可选 sinceMs 做展示窗口过滤。 */
 export function filterExecutionEnvironmentDispatchTaskItems(
   items: readonly SessionConversationTaskItem[],
+  sinceMs?: number,
 ): SessionConversationTaskItem[] {
   return [...items]
-    .filter((item) => item.source === "execution_environment")
+    .filter((item) => {
+      if (item.source !== "execution_environment") return false;
+      if (sinceMs == null) return true;
+      return item.updatedAt >= sinceMs;
+    })
     .sort((a, b) => b.updatedAt - a.updatedAt);
 }
 

@@ -6,7 +6,7 @@ import {
   HistoryOutlined,
   StopOutlined,
 } from "@ant-design/icons";
-import { Collapse, Descriptions, Drawer, Empty, Popover, Select, Tag, Tooltip, Typography } from "antd";
+import { Collapse, Descriptions, Drawer, Empty, Popover, Tag, Tooltip, Typography } from "antd";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type {
   ClaudeMessage,
@@ -55,9 +55,10 @@ import { useAgentAssignments } from "../../hooks/useAgentAssignments";
 import { ExpandIcon } from "../LeftSidebar/SidebarIcons";
 import { SubagentStatusIndicator } from "./SubagentStatusIndicator";
 import {
-  EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAY_OPTIONS,
+  historyDaysToSinceMs,
   type ExecutionEnvironmentDispatchHistoryDays,
 } from "../../constants/executionEnvironmentDispatch";
+import { ExecutionEnvironmentDispatchHistoryDaysDropdown } from "./ExecutionEnvironmentDispatchHistoryDaysDropdown";
 import {
   canStopSessionConversationTask,
   filterExecutionEnvironmentDispatchTaskItems,
@@ -1113,9 +1114,21 @@ export function ProgressMonitorPanel({
     [omcDirectBatchInvocationsLive, onOpenOmcBatchInvocationDetail, sessions, sessionsForHistoryTranscript],
   );
 
+  const executionEnvironmentDispatchSinceMs = useMemo(
+    () =>
+      executionEnvironmentDispatchHistoryDays != null
+        ? historyDaysToSinceMs(executionEnvironmentDispatchHistoryDays)
+        : undefined,
+    [executionEnvironmentDispatchHistoryDays],
+  );
+
   const executionEnvironmentDispatchTaskItems = useMemo(
-    () => filterExecutionEnvironmentDispatchTaskItems(sessionConversationTaskItems),
-    [sessionConversationTaskItems],
+    () =>
+      filterExecutionEnvironmentDispatchTaskItems(
+        sessionConversationTaskItems,
+        executionEnvironmentDispatchSinceMs,
+      ),
+    [sessionConversationTaskItems, executionEnvironmentDispatchSinceMs],
   );
 
   const monitorRepositoryPath = useMemo(() => {
@@ -1451,22 +1464,10 @@ export function ProgressMonitorPanel({
             </div>
             {executionEnvironmentDispatchHistoryDays != null &&
             onExecutionEnvironmentDispatchHistoryDaysChange ? (
-              <Select
-                size="small"
-                className="app-monitor-panel__session-tasks-days"
-                classNames={{ popup: { root: "app-monitor-panel__session-tasks-days-dropdown" } }}
-                aria-label="派发任务历史天数"
+              <ExecutionEnvironmentDispatchHistoryDaysDropdown
                 disabled={executionEnvironmentDispatchHistoryDaysSaving}
                 value={executionEnvironmentDispatchHistoryDays}
-                options={EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAY_OPTIONS.map((day) => ({
-                  value: day,
-                  label: `近 ${day} 天`,
-                }))}
-                onChange={(value) => {
-                  void onExecutionEnvironmentDispatchHistoryDaysChange(
-                    value as ExecutionEnvironmentDispatchHistoryDays,
-                  );
-                }}
+                onChange={onExecutionEnvironmentDispatchHistoryDaysChange}
               />
             ) : null}
           </div>
