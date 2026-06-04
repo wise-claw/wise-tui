@@ -4,7 +4,7 @@ import {
 } from "./sessionQuickBuiltinAssistants";
 
 export const SESSION_QUICK_ACTIONS_LAYOUT_STORAGE_KEY = "wise.session.quickActionsLayout.v2";
-/** @deprecated 读取后迁移到 v2，并确保「需求」外显 */
+/** @deprecated 读取后迁移到 v2 */
 export const SESSION_QUICK_ACTIONS_LAYOUT_STORAGE_KEY_V1 = "wise.session.quickActionsLayout.v1";
 
 export type SessionQuickActionId =
@@ -76,7 +76,7 @@ export const DEFAULT_SESSION_QUICK_ACTIONS_LAYOUT: SessionQuickActionsLayoutV1 =
   version: 1,
   items: [
     { id: "new-session", visible: true, zone: "primary" },
-    { id: "builtin:prd-split", visible: true, zone: "primary" },
+    { id: "builtin:prd-split", visible: false, zone: "overflow" },
     { id: "push", visible: true, zone: "primary" },
     { id: "compact-context", visible: false, zone: "overflow" },
     { id: "builtin:word-doc", visible: true, zone: "overflow" },
@@ -117,13 +117,28 @@ function mergeQuickActionLayoutItem(
   };
 }
 
-/** 「需求」默认外显；用于 v1 布局迁移与恢复默认 */
+/** 将「需求」提升到主栏；仅用于用户显式恢复/定制，非默认布局 */
 export function ensurePrdSplitQuickActionPrimary(
   layout: SessionQuickActionsLayoutV1,
 ): SessionQuickActionsLayoutV1 {
   return updateLayoutItem(mergeSessionQuickActionsLayout(layout), "builtin:prd-split", {
     visible: true,
     zone: "primary",
+  });
+}
+
+/** 旧版默认把「需求」外显在主栏；迁移为默认隐藏（仍可在快捷条配置中打开）。 */
+export function migratePrdSplitOffPrimaryBar(
+  layout: SessionQuickActionsLayoutV1,
+): SessionQuickActionsLayoutV1 {
+  const normalized = mergeSessionQuickActionsLayout(layout);
+  const prd = normalized.items.find((item) => item.id === "builtin:prd-split");
+  if (!prd?.visible || prd.zone !== "primary") {
+    return normalized;
+  }
+  return updateLayoutItem(normalized, "builtin:prd-split", {
+    visible: false,
+    zone: "overflow",
   });
 }
 

@@ -14,6 +14,7 @@ import {
   type SessionExecutionEngine,
 } from "../../constants/sessionExecutionEngine";
 import { buildConnectionKindMenuItems } from "./ClaudeConnectionKindChip";
+import { ExecutionEnvironmentDropdownHeader } from "./ExecutionEnvironmentDropdownHeader";
 import { buildSessionExecutionEngineMenuItems } from "./SessionExecutionEngineChip";
 
 interface Props {
@@ -106,11 +107,7 @@ export function ComposerRuntimeSettingsTrigger({
         onProbeClick: () => setMenuOpen(false),
       });
       if (engineItems?.length) {
-        items.push({
-          type: "group",
-          label: "执行环境",
-          children: engineItems,
-        });
+        items.push(...engineItems);
       }
     }
 
@@ -120,6 +117,9 @@ export function ComposerRuntimeSettingsTrigger({
         defaultConnectionKind,
       );
       if (connectionItems?.length) {
+        if (showEngine && items.length > 0) {
+          items.push({ type: "divider" });
+        }
         items.push({
           type: "group",
           label: "连接方式",
@@ -187,6 +187,19 @@ export function ComposerRuntimeSettingsTrigger({
       onOpenChange={setMenuOpen}
       popupRender={(menu) => (
         <div className="app-claude-connection-kind-dropdown-container app-composer-runtime-settings-popover">
+          {showEngine ? (
+            <ExecutionEnvironmentDropdownHeader
+              showSubtitle={false}
+              onOpenConfig={
+                onOpenExecutionEnvironment
+                  ? () => {
+                      setMenuOpen(false);
+                      onOpenExecutionEnvironment();
+                    }
+                  : undefined
+              }
+            />
+          ) : null}
           {menu ?? null}
         </div>
       )}
@@ -202,10 +215,10 @@ export function ComposerRuntimeSettingsTrigger({
           aria-expanded={menuOpen}
           disabled={disabled}
         >
+          <RuntimeSettingsIcon />
           {engineLabel ? (
             <span className="app-composer-runtime-settings-btn__engine-label">{engineLabel}</span>
           ) : null}
-          <RuntimeSettingsIcon />
         </button>
       </Tooltip>
     </Dropdown>

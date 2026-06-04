@@ -19,13 +19,85 @@ export function formatModelProfileDisplayLabel(
   return formatClaudeModelLabel(profile.modelId ?? "");
 }
 
-/** Composer 底栏 / 与模型切换列表一致：`公司 + 自定义名称`。 */
+export type ModelProfileDropdownParts = {
+  company: string;
+  modelName: string;
+};
+
+/** 公司 + 模型名拼成单行（tooltip / aria）。 */
+export function formatModelProfileDropdownPartsTitle(
+  parts: ModelProfileDropdownParts,
+): string {
+  const { company, modelName } = parts;
+  if (!company) return modelName;
+  return `${company} ${modelName}`;
+}
+
+function normalizeDropdownModelName(
+  company: string,
+  name: string,
+  modelId: string,
+): string {
+  const modelIdLabel = formatClaudeModelLabel(modelId).trim();
+  const rawModelId = modelId.trim();
+  let modelName =
+    name && name !== company ? name : modelIdLabel || name || company;
+
+  if (!company || !modelName) {
+    return modelName || modelIdLabel || company;
+  }
+
+  const lowerCompany = company.toLowerCase();
+  const lowerModel = modelName.toLowerCase();
+
+  if (lowerModel === lowerCompany) {
+    return modelIdLabel || rawModelId || modelName;
+  }
+  if (modelName.startsWith(`${company} `)) {
+    const rest = modelName.slice(company.length + 1).trim();
+    return rest || modelIdLabel || rawModelId;
+  }
+  if (lowerModel.startsWith(`${lowerCompany}-`)) {
+    const rest = modelName.slice(company.length + 1).trim();
+    return rest || modelIdLabel || rawModelId;
+  }
+  return modelName;
+}
+
+/** 模型下拉两行展示：左侧公司、右侧模型名（去重司名前缀）。 */
+export function resolveModelProfileDropdownParts(
+  profile: Pick<ClaudeModelProfile, "company" | "name" | "modelId">,
+): ModelProfileDropdownParts {
+  const company = (profile.company ?? "").trim();
+  const name = (profile.name ?? "").trim();
+  const modelName = normalizeDropdownModelName(
+    company,
+    name,
+    profile.modelId ?? "",
+  );
+  return { company, modelName };
+}
+
+/** 模型下拉列表：`公司 + 模型名`（与 {@link resolveModelProfileDropdownParts} 一致）。 */
+export function formatModelProfileDropdownLabel(
+  profile: Pick<ClaudeModelProfile, "company" | "name" | "modelId">,
+): string {
+  const { company, modelName } = resolveModelProfileDropdownParts(profile);
+  if (!company) return modelName;
+  return `${company} ${modelName}`;
+}
+
+/** Composer 底栏按钮：`公司 + 自定义名称`（可与下拉不同，允许更短）。 */
 export function formatModelProfileComposerBarLabel(
   profile: Pick<ClaudeModelProfile, "company" | "name" | "modelId">,
 ): string {
   const company = (profile.company ?? "").trim();
   const displayLabel = formatModelProfileDisplayLabel(profile);
-  return company ? `${company} ${displayLabel}` : displayLabel;
+  if (!company) return displayLabel;
+  if (company === displayLabel) return displayLabel;
+  const companyPrefix = `${company} `;
+  if (displayLabel.startsWith(companyPrefix)) return displayLabel;
+  return `${company} ${displayLabel}`;
 }
 
 /** 当前引擎生效档案在 Composer 底栏的展示名；无档案时返回 null。 */
@@ -44,7 +116,24 @@ export function resolveActiveModelProfileComposerBarLabel(
   return formatModelProfileComposerBarLabel(profile);
 }
 
-/** 按 `modelId` 查找同引擎档案的展示名（下拉项等）。 */
+/** 按 `modelId` 查找同引擎档案的下拉展示名。 */
+export function resolveModelProfileDropdownLabelByModelId(
+  engine: ModelProfileEngine,
+  modelId: string,
+  store: ClaudeModelProfileStoreView | null | undefined,
+): string | null {
+  const trimmed = modelId.trim();
+  if (!trimmed || !store) return null;
+  const profile = store.profiles.find(
+    (p) =>
+      normalizeModelProfileEngine(p.engine) === engine &&
+      (p.modelId ?? "").trim() === trimmed,
+  );
+  if (!profile) return null;
+  return formatModelProfileDropdownLabel(profile);
+}
+
+/** 按 `modelId` 查找同引擎档案的展示名（底栏按钮等）。 */
 export function resolveModelProfileComposerBarLabelByModelId(
   engine: ModelProfileEngine,
   modelId: string,

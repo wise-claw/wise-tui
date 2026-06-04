@@ -548,9 +548,13 @@
 .app-composer-runtime-settings-btn--with-engine {
   width: auto;
   max-width: 160px;
-  gap: 4px;
-  padding: 0 2px;
+  gap: 5px;
+  padding: 0 3px 0 1px;
   font-family: inherit;
+}
+
+.app-composer-runtime-settings-btn--with-engine svg {
+  flex-shrink: 0;
 }
 
 .app-composer-runtime-settings-btn__engine-label {

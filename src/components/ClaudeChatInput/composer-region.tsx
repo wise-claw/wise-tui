@@ -73,6 +73,7 @@ import { Checkbox, Dropdown, Button, Empty, Input, InputNumber, Popover, Select,
 import { ContextCompactProgressRing } from "./ContextCompactProgressRing";
 import { useContextBreakdown } from "../../hooks/useContextBreakdown";
 import { ComposerRuntimeSettingsTrigger } from "./ComposerRuntimeSettingsTrigger";
+import { ComposerModelPicker } from "./ComposerModelPicker";
 import { useDefaultClaudeConnectionKind } from "../../hooks/useDefaultClaudeConnectionKind";
 import { useComposerSpeechDictation } from "../../hooks/useComposerSpeechDictation";
 import { useComposerSpeechPreferences } from "../../hooks/useComposerSpeechPreferences";
@@ -113,27 +114,14 @@ import {
   getContextPercentTone,
   getSessionContextMetrics,
 } from "../../services/claudeSessionContext";
-import { getClaudeModelPickerOptions } from "../../services/claude";
-import { listCursorModels, type CursorModelListItem } from "../../services/cursorAgent";
-import { CURSOR_SDK_DEFAULT_MODEL } from "../../constants/cursorSdk";
-import {
-  getClaudeModelProfileStore,
-  WISE_CLAUDE_USER_SETTINGS_CHANGED,
-  type ClaudeUserSettingsChangedDetail,
-} from "../../services/claudeModelProfiles";
-import { getCachedModelProfileStore, seedModelProfileStoreCache } from "../../stores/modelProfileStoreCache";
+import { WISE_CLAUDE_USER_SETTINGS_CHANGED } from "../../services/claudeModelProfiles";
+import { getCachedModelProfileStore } from "../../stores/modelProfileStoreCache";
 import type { ModelProfileEngine } from "../../types/claudeModelProfile";
-import {
-  resolveActiveModelProfileComposerBarLabel,
-  resolveModelProfileComposerBarLabelByModelId,
-} from "../../utils/modelProfileDisplay";
+import { resolveActiveModelProfileComposerBarLabel } from "../../utils/modelProfileDisplay";
 import { promptToLogicalPlainString } from "../../utils/serializeClaudePrompt";
 import { getWiseRepositoryFileDragPaths, isWiseRepositoryFileDrag } from "../../utils/repositoryFileDrag";
 import { formatClaudeModelLabel } from "../../utils/claudeModel";
-import {
-  buildCursorModelPickerOptions,
-  formatCursorModelLabel,
-} from "../../utils/cursorModel";
+import { formatCursorModelLabel } from "../../utils/cursorModel";
 import { inferPendingQueueTargetFromPrompt } from "../../utils/pendingQueueExecutor";
 import { SESSION_EXECUTION_ENGINE_LABELS } from "../../constants/sessionExecutionEngine";
 import { parseExecutionEnvironmentDispatch } from "../../utils/executionEnvironmentDispatch";
@@ -535,14 +523,14 @@ function ComposerInner({
   const [images, setImages] = useState<ImageAttachmentPart[]>([]);
   const [dragOverNativeFiles, setDragOverNativeFiles] = useState(false);
   const [historyIndex, setHistoryIndex] = useState(-1);
-  const [claudePicker, setClaudePicker] = useState<{
-    defaultModel: string | null;
-    availableModels: string[];
-  } | null>(null);
-  const [cursorModels, setCursorModels] = useState<CursorModelListItem[] | null>(null);
   const isCursorEngine = sessionExecutionEngine === "cursor";
   const [model, setModel] = useState(() => session.model?.trim() || "sonnet");
   const [profileStoreRevision, setProfileStoreRevision] = useState(0);
+  const profileEngineForPicker: ModelProfileEngine | null = isCursorEngine
+    ? null
+    : sessionExecutionEngine === "codex"
+      ? "codex"
+      : "claude";
   const defaultConnectionKind = useDefaultClaudeConnectionKind();
   const [activeBranch, setActiveBranch] = useState<string>("-");
   const [branchPopoverOpen, setBranchPopoverOpen] = useState(false);
@@ -700,141 +688,13 @@ function ComposerInner({
     });
   }, [displayPlain]);
 
-  const refreshClaudeModelPicker = useCallback(() => {
-    if (isCursorEngine) {
-      void listCursorModels().then(setCursorModels);
-      return;
-    }
-    void getClaudeModelPickerOptions(session.repositoryPath).then(setClaudePicker);
-  }, [isCursorEngine, session.repositoryPath]);
-
   useEffect(() => {
-    refreshClaudeModelPicker();
-  }, [refreshClaudeModelPicker]);
-
-  useEffect(() => {
-    if (!isCursorEngine) return;
-    const fromSession = session.model?.trim();
-    const looksLikeCursorModel =
-      Boolean(fromSession) &&
-      (fromSession === CURSOR_SDK_DEFAULT_MODEL ||
-        fromSession.startsWith("composer-") ||
-        fromSession.startsWith("claude-") ||
-        fromSession.startsWith("gpt-") ||
-        cursorModels?.some(
-          (item) => item.id === fromSession || (item.aliases ?? []).includes(fromSession),
-        ));
-    const nextModel =
-      looksLikeCursorModel && fromSession ? fromSession : CURSOR_SDK_DEFAULT_MODEL;
-    setModel(nextModel);
-    if (fromSession !== nextModel) {
-      onSessionModelChange(nextModel);
-    }
-  }, [isCursorEngine, session.id, session.model, cursorModels, onSessionModelChange]);
-
-  useEffect(() => {
-    void getClaudeModelProfileStore()
-      .then((store) => {
-        seedModelProfileStoreCache(store);
-        setProfileStoreRevision((n) => n + 1);
-      })
-      .catch(() => undefined);
-  }, []);
-
-  useEffect(() => {
-    const onSettingsChanged = (event: Event) => {
-      const detail = (event as CustomEvent<ClaudeUserSettingsChangedDetail>).detail;
-      if (detail?.storeSnapshot) {
-        seedModelProfileStoreCache(detail.storeSnapshot);
-        setProfileStoreRevision((n) => n + 1);
-      }
-      const fromProfile = detail?.effectiveModel?.trim();
-      if (fromProfile) {
-        setModel(fromProfile);
-        onSessionModelChange(fromProfile);
-      }
-      if (detail?.skipComposerPickerRefresh !== true) {
-        refreshClaudeModelPicker();
-      }
+    const onSettingsChanged = () => {
+      setProfileStoreRevision((n) => n + 1);
     };
     window.addEventListener(WISE_CLAUDE_USER_SETTINGS_CHANGED, onSettingsChanged);
     return () => window.removeEventListener(WISE_CLAUDE_USER_SETTINGS_CHANGED, onSettingsChanged);
-  }, [refreshClaudeModelPicker, onSessionModelChange]);
-
-  const claudeSettingsModel = claudePicker?.defaultModel?.trim() || null;
-  const pickerAllowlist = claudePicker?.availableModels;
-
-  useEffect(() => {
-    if (isCursorEngine) return;
-    const fromSession = session.model?.trim();
-    const fromCfg = claudeSettingsModel;
-    setModel(fromSession || fromCfg || "sonnet");
-  }, [session.id, session.model, claudeSettingsModel, isCursorEngine]);
-
-  const profileEngineForPicker: ModelProfileEngine | null = isCursorEngine
-    ? null
-    : sessionExecutionEngine === "codex"
-      ? "codex"
-      : "claude";
-
-  const modelOptions = useMemo(() => {
-    const profileStore = getCachedModelProfileStore();
-    const opts: { value: string; label: string }[] = [];
-    const seen = new Set<string>();
-    const push = (value: string, label?: string) => {
-      const v = value.trim();
-      if (!v || seen.has(v)) return;
-      seen.add(v);
-      const fromProfile =
-        profileEngineForPicker &&
-        resolveModelProfileComposerBarLabelByModelId(profileEngineForPicker, v, profileStore);
-      opts.push({
-        value: v,
-        label:
-          label ??
-          fromProfile ??
-          (isCursorEngine ? formatCursorModelLabel(v) : formatClaudeModelLabel(v)),
-      });
-    };
-
-    if (isCursorEngine) {
-      if (cursorModels && cursorModels.length > 0) {
-        for (const item of buildCursorModelPickerOptions(cursorModels)) {
-          push(item.value, item.label);
-        }
-      } else {
-        push(CURSOR_SDK_DEFAULT_MODEL);
-        push("composer-2.5");
-      }
-      if (session.model?.trim()) push(session.model.trim());
-      if (model.trim()) push(model.trim());
-      if (opts.length === 0) push(CURSOR_SDK_DEFAULT_MODEL);
-      return opts;
-    }
-
-    if (pickerAllowlist && pickerAllowlist.length > 0) {
-      for (const id of pickerAllowlist) push(id);
-    } else {
-      if (claudeSettingsModel) push(claudeSettingsModel);
-      if (session.model?.trim()) push(session.model.trim());
-      if (model.trim()) push(model.trim());
-      for (const p of ["opus", "sonnet", "haiku"]) push(p);
-    }
-    if (claudeSettingsModel) push(claudeSettingsModel);
-    if (session.model?.trim()) push(session.model.trim());
-    if (model.trim()) push(model.trim());
-    if (opts.length === 0) push("sonnet");
-    return opts;
-  }, [
-    isCursorEngine,
-    cursorModels,
-    pickerAllowlist,
-    claudeSettingsModel,
-    session.model,
-    model,
-    profileEngineForPicker,
-    profileStoreRevision,
-  ]);
+  }, []);
 
   const modelDisplayLabel = useMemo(() => {
     if (profileEngineForPicker) {
@@ -844,16 +704,15 @@ function ComposerInner({
       );
       if (fromActive) return fromActive;
     }
-    return modelOptions.find((o) => o.value === model)?.label ?? model;
-  }, [modelOptions, model, profileEngineForPicker, profileStoreRevision]);
+    return isCursorEngine ? formatCursorModelLabel(model) : formatClaudeModelLabel(model);
+  }, [isCursorEngine, model, profileEngineForPicker, profileStoreRevision]);
 
-  const modelMenuItems: MenuProps["items"] = useMemo(
-    () =>
-      modelOptions.map((o) => ({
-        key: o.value,
-        label: o.label,
-      })),
-    [modelOptions],
+  const handleComposerModelChange = useCallback(
+    (nextModel: string) => {
+      setModel(nextModel);
+      onSessionModelChange(nextModel);
+    },
+    [onSessionModelChange],
   );
 
   /** 主会话占用中：后续发送应入队，避免 Semi「生成中」拦截或重复 spawn */
@@ -2874,6 +2733,7 @@ function ComposerInner({
     ({ menuItem, className }: { menuItem: React.ReactNode[]; className: string }) => (
       <div
         className={`${className} app-claude-semi-footer-toolbar-right`}
+        onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
       >
         {isSessionBusy ? (
@@ -2906,43 +2766,13 @@ function ComposerInner({
           defaultConnectionKind={defaultConnectionKind}
           onConnectionKindChange={onSessionConnectionKindChange}
         />
-        <Dropdown
-          classNames={{ root: "app-claude-model-picker-dropdown" }}
-          menu={{
-            items: modelMenuItems,
-            selectable: true,
-            selectedKeys: [model],
-            onClick: ({ key }) => {
-              setModel(key);
-              onSessionModelChange(key);
-            },
-          }}
-          trigger={["click"]}
-          placement="topRight"
-        >
-          <button
-            type="button"
-            className="app-claude-model-picker"
-            aria-haspopup="menu"
-            aria-label="选择模型"
-          >
-            <span className="app-claude-model-picker__label">{modelDisplayLabel}</span>
-            <svg
-              className="app-claude-model-picker__chevron"
-              width="8"
-              height="8"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2.5"
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              aria-hidden
-            >
-              <polyline points="6 9 12 15 18 9" />
-            </svg>
-          </button>
-        </Dropdown>
+        <ComposerModelPicker
+          session={session}
+          sessionExecutionEngine={sessionExecutionEngine}
+          model={model}
+          onModelChange={handleComposerModelChange}
+          disabled={isSessionBusy}
+        />
         {menuItem}
       </div>
     ),
@@ -2957,11 +2787,10 @@ function ComposerInner({
       cursorAvailable,
       onSessionExecutionEngineChange,
       onOpenExecutionEnvironment,
+      handleComposerModelChange,
+      session,
+      sessionExecutionEngine,
       model,
-      modelDisplayLabel,
-      modelMenuItems,
-      onSessionModelChange,
-      setModel,
       composerCommonPhrases,
       composerCommonPhrasesLoading,
       composerCommonPhrasesSaving,

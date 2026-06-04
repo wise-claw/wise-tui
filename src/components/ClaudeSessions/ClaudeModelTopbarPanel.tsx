@@ -50,6 +50,8 @@ interface Props {
   store: ClaudeModelProfileStoreView | null;
   setStore: React.Dispatch<React.SetStateAction<ClaudeModelProfileStoreView | null>>;
   loading: boolean;
+  /** Composer 等入口打开时，优先展示与会话一致的引擎 Tab */
+  preferredEngine?: ModelProfileEngine;
   onApplied?: () => void;
 }
 
@@ -79,9 +81,24 @@ function validateSettingsJson(text: string, engine: ModelProfileEngine): string 
   }
 }
 
-export function ClaudeModelTopbarPanel({ store, setStore, loading, onApplied }: Props) {
-  const [panelEngine, setPanelEngine] = useState<ModelProfileEngine>("claude");
+export function ClaudeModelTopbarPanel({
+  store,
+  setStore,
+  loading,
+  preferredEngine,
+  onApplied,
+}: Props) {
+  const [panelEngine, setPanelEngine] = useState<ModelProfileEngine>(
+    preferredEngine ?? "claude",
+  );
   const engineInitializedRef = useRef(false);
+
+  useEffect(() => {
+    if (preferredEngine) {
+      setPanelEngine(preferredEngine);
+      engineInitializedRef.current = true;
+    }
+  }, [preferredEngine]);
 
   useEffect(() => {
     if (engineInitializedRef.current || !store) return;

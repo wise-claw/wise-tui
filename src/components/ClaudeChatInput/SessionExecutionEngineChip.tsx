@@ -5,6 +5,7 @@ import {
   SESSION_EXECUTION_ENGINES,
   type SessionExecutionEngine,
 } from "../../constants/sessionExecutionEngine";
+import { ExecutionEnvironmentDropdownHeader } from "./ExecutionEnvironmentDropdownHeader";
 
 interface PickerSectionProps {
   engine: SessionExecutionEngine;
@@ -155,10 +156,7 @@ export function SessionExecutionEnginePickerSection({
 
   return (
     <>
-      <div className="app-claude-connection-kind-dropdown-header">
-        <span className="app-claude-connection-kind-dropdown-header-title">执行环境</span>
-        <span className="app-claude-connection-kind-dropdown-header-subtitle">选择后台 AI 代码执行的 CLI 引擎</span>
-      </div>
+      <ExecutionEnvironmentDropdownHeader onOpenConfig={onOpenExecutionEnvironment} />
       <Menu
         className="app-composer-runtime-settings-menu"
         items={menuItems}
@@ -264,10 +262,16 @@ export function SessionExecutionEngineChip({
       onOpenChange={setMenuOpen}
       popupRender={(menu) => (
         <div className="app-claude-connection-kind-dropdown-container">
-          <div className="app-claude-connection-kind-dropdown-header">
-            <span className="app-claude-connection-kind-dropdown-header-title">执行环境</span>
-            <span className="app-claude-connection-kind-dropdown-header-subtitle">选择后台 AI 代码执行的 CLI 引擎</span>
-          </div>
+          <ExecutionEnvironmentDropdownHeader
+            onOpenConfig={
+              onOpenExecutionEnvironment
+                ? () => {
+                    setMenuOpen(false);
+                    onOpenExecutionEnvironment();
+                  }
+                : undefined
+            }
+          />
           {menu}
         </div>
       )}

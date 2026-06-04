@@ -1,0 +1,242 @@
+.app-composer-model-picker {
+  display: inline-flex;
+  align-items: center;
+  max-width: min(240px, 42vw);
+}
+
+.app-composer-model-picker__row {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.app-composer-model-picker__select {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  max-width: min(200px, 36vw);
+  padding: 0 3px 0 1px;
+  margin: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font-family: inherit;
+  line-height: 1.15;
+  color: var(--ant-color-text-secondary);
+  border-radius: var(--ant-border-radius-sm);
+}
+
+.app-composer-model-picker__select:hover:not(:disabled) {
+  color: var(--ant-color-text);
+}
+
+.app-composer-model-picker__select:hover:not(:disabled) .app-composer-model-picker-bar-label__model {
+  color: var(--ant-color-text);
+}
+
+.app-composer-model-picker__select:focus-visible {
+  outline: 2px solid var(--ant-color-primary-border);
+  outline-offset: 2px;
+}
+
+.app-composer-model-picker__select:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.app-composer-model-picker__select--open .app-composer-model-picker__chevron {
+  opacity: 1;
+}
+
+/* Composer 底栏：Dropdown 承载完整「模型切换」面板（与执行引擎下拉同一套触发） */
+.app-composer-model-picker-popover,
+.app-composer-model-picker-panel-dropdown {
+  z-index: 1200;
+}
+
+.app-composer-model-picker__trigger-wrap {
+  display: inline-flex;
+  align-items: center;
+  min-width: 0;
+}
+
+.app-composer-model-picker-panel-dropdown .ant-dropdown-menu {
+  display: none !important;
+}
+
+.app-composer-model-picker-panel-overlay {
+  width: min(94vw, 252px);
+  max-width: min(94vw, 252px);
+  overflow: hidden;
+  background: var(--app-workspace-glass-bg, var(--ant-color-bg-elevated));
+  -webkit-backdrop-filter: var(--app-workspace-glass-blur, blur(16px));
+  backdrop-filter: var(--app-workspace-glass-blur, blur(16px));
+  border: 1px solid var(--app-workspace-glass-border, var(--ant-color-border-secondary));
+  border-radius: 8px;
+  box-shadow:
+    0 12px 28px rgba(0, 0, 0, 0.14),
+    0 3px 8px rgba(0, 0, 0, 0.06);
+}
+
+.app-composer-model-picker-bar-label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 5px;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.app-composer-model-picker-bar-label__company {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--ant-color-text-tertiary);
+  white-space: nowrap;
+}
+
+.app-composer-model-picker-bar-label__model {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-composer-model-picker__icon {
+  flex-shrink: 0;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-composer-model-picker__select:hover:not(:disabled) .app-composer-model-picker__icon {
+  color: var(--ant-color-text-secondary);
+}
+
+.app-composer-model-picker__chevron {
+  flex-shrink: 0;
+  opacity: 0.72;
+}
+
+/* 外层 overlay：保留 Ant 定位，去掉默认浅色阴影避免与容器叠层冲突 */
+.app-composer-model-picker-dropdown-overlay.ant-dropdown {
+  z-index: 1100;
+}
+
+.app-composer-model-picker-dropdown-overlay .ant-dropdown-menu {
+  padding: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.app-composer-model-picker-dropdown-container {
+  width: max-content;
+  min-width: 148px;
+  max-width: min(90vw, 420px);
+  max-height: min(280px, 42vh);
+  overflow-x: auto;
+  overflow-y: auto;
+  background: var(--app-workspace-glass-bg, var(--ant-color-bg-elevated)) !important;
+  -webkit-backdrop-filter: var(--app-workspace-glass-blur, blur(16px));
+  backdrop-filter: var(--app-workspace-glass-blur, blur(16px));
+  border: 1px solid var(--app-workspace-glass-border, var(--ant-color-border-secondary)) !important;
+  border-radius: 8px !important;
+  box-shadow:
+    0 12px 28px rgba(0, 0, 0, 0.14),
+    0 3px 8px rgba(0, 0, 0, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+
+.app-composer-model-picker-dropdown-container .ant-dropdown-menu {
+  width: max-content;
+  min-width: 100%;
+  max-width: none;
+  padding: 2px !important;
+  background: transparent !important;
+  border: none !important;
+  box-shadow: none !important;
+}
+
+.app-composer-model-picker-dropdown-container .ant-dropdown-menu-item {
+  min-height: 22px !important;
+  height: auto !important;
+  width: 100%;
+  min-width: max-content;
+  max-width: none !important;
+  padding-block: 2px !important;
+  padding-inline: 7px 8px !important;
+  margin: 0 !important;
+  border-radius: 4px !important;
+  color: var(--ant-color-text);
+  transition: background-color 0.12s ease;
+}
+
+.app-composer-model-picker-dropdown-container .ant-dropdown-menu-item:hover:not(.ant-dropdown-menu-item-disabled) {
+  background: var(--ant-color-fill-tertiary) !important;
+}
+
+.app-composer-model-picker-dropdown-container .ant-dropdown-menu-item-selected,
+.app-composer-model-picker-dropdown-container .ant-dropdown-menu-item-selected:hover {
+  background: color-mix(in srgb, var(--ant-color-primary-bg) 88%, transparent) !important;
+  color: var(--ant-color-primary) !important;
+}
+
+.app-composer-model-picker-dropdown-container .ant-dropdown-menu-item-divider {
+  margin: 2px 5px;
+  background-color: var(--ant-color-border-secondary);
+}
+
+.app-composer-model-picker-dropdown-container .ant-dropdown-menu-title-content {
+  flex: 1 1 auto;
+  min-width: max-content;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: nowrap;
+  max-width: none;
+}
+
+/* 公司 + 模型名 分层 */
+.app-composer-model-picker-menu-label {
+  display: inline-grid;
+  grid-template-columns: minmax(4.5em, max-content) minmax(0, max-content);
+  align-items: center;
+  column-gap: 10px;
+  row-gap: 0;
+  min-width: 132px;
+  line-height: 1.15;
+}
+
+.app-composer-model-picker-menu-label--solo {
+  display: inline-block;
+  min-width: 0;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ant-color-text);
+}
+
+.app-composer-model-picker-menu-label__company {
+  justify-self: start;
+  font-size: 10px;
+  font-weight: 500;
+  letter-spacing: 0.01em;
+  color: var(--ant-color-text-tertiary);
+  white-space: nowrap;
+}
+
+.app-composer-model-picker-menu-label__model {
+  justify-self: start;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ant-color-text);
+  white-space: nowrap;
+}
+
+.app-composer-model-picker-dropdown-container .ant-dropdown-menu-item-selected .app-composer-model-picker-menu-label__company {
+  color: color-mix(in srgb, var(--ant-color-primary) 72%, var(--ant-color-text-tertiary));
+}
+
+.app-composer-model-picker-dropdown-container .ant-dropdown-menu-item-selected .app-composer-model-picker-menu-label__model,
+.app-composer-model-picker-dropdown-container .ant-dropdown-menu-item-selected .app-composer-model-picker-menu-label--solo {
+  color: var(--ant-color-primary);
+  font-weight: 600;
+}

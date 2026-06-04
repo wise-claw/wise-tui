@@ -1,7 +1,6 @@
 import { Tooltip } from "antd";
 import { ClaudeCodeUsageHeaderBtn } from "../ClaudeCodeUsagePopover";
 import { ClaudeCodeToolsTopbarTrigger } from "../ClaudeSessions/ClaudeCodeToolsTopbarTrigger";
-import { ClaudeModelTopbarTrigger } from "../ClaudeSessions/ClaudeModelTopbarTrigger";
 import { DefaultConfigTopbarTrigger } from "./DefaultConfigTopbarTrigger";
 import { IconSettings } from "../icons/IconSettings";
 import type { AuthorPane } from "../../types/viewMode";
@@ -40,7 +39,6 @@ export function LeftSidebarTopbar({
         </Tooltip>
         <DefaultConfigTopbarTrigger />
         <ClaudeCodeUsageHeaderBtn repositoryPath={activeRepositoryPath} />
-        <ClaudeModelTopbarTrigger variant="sidebar" />
         <ClaudeCodeToolsTopbarTrigger
           variant="sidebar"
           repositoryPath={activeRepositoryPath}

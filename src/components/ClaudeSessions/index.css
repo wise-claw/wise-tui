@@ -5366,6 +5366,38 @@ button.app-message-part-header:disabled:hover {
   background: color-mix(in srgb, var(--ant-color-fill-quaternary) 35%, transparent);
 }
 
+.app-claude-connection-kind-dropdown-header--with-action {
+  flex-direction: row;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.app-claude-connection-kind-dropdown-header__text {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.app-claude-connection-kind-dropdown-header-config-btn {
+  flex-shrink: 0;
+  border: none;
+  margin: 0;
+  padding: 0;
+  background: transparent;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.4;
+  color: var(--ant-color-primary);
+  cursor: pointer;
+}
+
+.app-claude-connection-kind-dropdown-header-config-btn:hover {
+  color: var(--ant-color-primary-hover);
+}
+
 .app-claude-connection-kind-dropdown-header-title {
   font-size: 11px;
   font-weight: 700;
@@ -5583,56 +5615,7 @@ button.app-message-part-header:disabled:hover {
   opacity: 0.72;
 }
 
-/* 模型下拉：scroll 在 overlay 根节点，避免 menu item 叠层 */
-.app-claude-model-picker-dropdown {
-  max-height: min(280px, 42vh);
-  overflow-x: hidden;
-  overflow-y: auto;
-}
-
-.app-claude-model-picker-dropdown .ant-dropdown-menu {
-  min-width: 96px;
-  max-width: 176px;
-  padding: 2px;
-  box-shadow: none;
-}
-
-.app-claude-model-picker-dropdown .ant-dropdown-menu-item,
-.app-claude-model-picker-dropdown .ant-dropdown-menu-submenu-title {
-  position: relative;
-  display: flex;
-  align-items: center;
-  box-sizing: border-box;
-  min-height: 26px !important;
-  height: auto !important;
-  padding-block: 3px !important;
-  padding-inline: 6px;
-  margin: 0;
-  font-size: 11px;
-  line-height: 1.25;
-  border-radius: 2px;
-  white-space: nowrap;
-  overflow: hidden;
-}
-
-.app-claude-model-picker-dropdown .ant-dropdown-menu-item + .ant-dropdown-menu-item {
-  margin-top: 0;
-}
-
-.app-claude-model-picker-dropdown .ant-dropdown-menu-title-content {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  font-size: 11px;
-  line-height: 1.25;
-}
-
-.app-claude-model-picker-dropdown .ant-dropdown-menu-item .ant-dropdown-menu-item-icon {
-  font-size: 11px;
-  min-width: 0;
-}
+/* 模型下拉样式见 ComposerModelPicker.css */
 
 .app-chat-input-tool-btn {
   color: var(--ant-color-text-secondary);

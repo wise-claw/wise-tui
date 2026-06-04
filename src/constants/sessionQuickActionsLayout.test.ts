@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   DEFAULT_SESSION_QUICK_ACTIONS_LAYOUT,
   ensurePrdSplitQuickActionPrimary,
+  migratePrdSplitOffPrimaryBar,
   mergeSessionQuickActionsLayout,
   moveLayoutItem,
   parseSessionQuickActionsLayout,
@@ -71,15 +72,25 @@ describe("sessionQuickActionsLayout", () => {
     expect(primary).toContain("builtin:prd-split");
   });
 
-  test("default layout shows 需求 on primary bar without compact-context pill", () => {
-    const { primary } = partitionSessionQuickActions(DEFAULT_SESSION_QUICK_ACTIONS_LAYOUT, {
+  test("default layout hides 需求 on primary bar", () => {
+    const { primary, overflow } = partitionSessionQuickActions(DEFAULT_SESSION_QUICK_ACTIONS_LAYOUT, {
       canNewSession: true,
       canWorkTree: false,
       canCompactContext: true,
     });
-    expect(primary.indexOf("builtin:prd-split")).toBeGreaterThan(-1);
-    expect(primary.indexOf("builtin:prd-split")).toBeLessThan(primary.indexOf("push"));
+    expect(primary).not.toContain("builtin:prd-split");
+    expect(overflow).not.toContain("builtin:prd-split");
     expect(primary).not.toContain("compact-context");
+    expect(primary).toContain("new-session");
+    expect(primary).toContain("push");
+  });
+
+  test("migratePrdSplitOffPrimaryBar hides legacy primary 需求", () => {
+    const legacy = ensurePrdSplitQuickActionPrimary(DEFAULT_SESSION_QUICK_ACTIONS_LAYOUT);
+    const migrated = migratePrdSplitOffPrimaryBar(legacy);
+    const prd = migrated.items.find((item) => item.id === "builtin:prd-split");
+    expect(prd?.visible).toBe(false);
+    expect(prd?.zone).toBe("overflow");
   });
 
   test("merge migrates legacy requirement-split to builtin:prd-split", () => {
