@@ -263,16 +263,19 @@ export function SidebarWorkspaceRemindersAction({
   projectId,
   repositoryId,
   onOpen,
+  enabled = true,
 }: {
   incompleteCount: number;
   variant?: "repo" | "project";
   projectId: string | null;
   repositoryId: number | null;
   onOpen?: () => void;
+  /** 默认配置关闭待办时隐藏侧栏徽章与 Popover。 */
+  enabled?: boolean;
 }) {
   const [popoverOpen, setPopoverOpen] = useState(false);
 
-  if (incompleteCount <= 0) return null;
+  if (!enabled || incompleteCount <= 0) return null;
 
   const badgeLabel = incompleteCount > 99 ? "99+" : String(incompleteCount);
   const scopeLabel = variant === "project" ? "工作区" : "仓库";
@@ -350,6 +353,7 @@ export function RepositoryRow({
   requirementUnsplitCount = 0,
   executableTaskCount = 0,
   incompleteTodoCount = 0,
+  workspaceTodosEnabled = true,
   onOpenScheduledTasks,
   onOpenRequirements,
   onOpenExecutableTasks,
@@ -380,6 +384,7 @@ export function RepositoryRow({
   requirementUnsplitCount?: number;
   executableTaskCount?: number;
   incompleteTodoCount?: number;
+  workspaceTodosEnabled?: boolean;
   onOpenScheduledTasks?: (repository: Repository) => void;
   onOpenRequirements?: (repository: Repository) => void;
   onOpenExecutableTasks?: (repository: Repository) => void;
@@ -394,6 +399,7 @@ export function RepositoryRow({
     trellisEnabled: workspaceTrellisEnabled,
     trellisReady,
     trellisRootActionEnabled: false,
+    onAddWorkspaceTodo: workspaceTodosEnabled,
     onOpenRepositoryMainOwner: Boolean(onOpenRepositoryMainOwner),
     onConfigureSddMode: Boolean(onConfigureSddMode),
     onMainSessionRun: true,
@@ -507,6 +513,7 @@ export function RepositoryRow({
             />
           ) : null}
           <SidebarWorkspaceRemindersAction
+            enabled={workspaceTodosEnabled}
             incompleteCount={incompleteTodoCount}
             projectId={project.id}
             repositoryId={repository.id}
@@ -520,6 +527,7 @@ export function RepositoryRow({
               items: moreItems,
               onClick: ({ key }) => {
                 if (key === "add-workspace-todo") {
+                  if (!workspaceTodosEnabled) return;
                   onRepositorySelect(repository.id);
                   openWorkspaceTodosFromSidebarMenu({
                     projectId: project.id,
@@ -550,7 +558,11 @@ export function RepositoryRow({
               type="button"
               className="app-repository-action app-repository-action--more"
               aria-label="仓库更多操作"
-              data-workspace-todos-anchor={workspaceTodosAnchorKey(null, repository.id) ?? undefined}
+              data-workspace-todos-anchor={
+                workspaceTodosEnabled
+                  ? workspaceTodosAnchorKey(null, repository.id) ?? undefined
+                  : undefined
+              }
               onClick={(e) => e.stopPropagation()}
             >
               <MoreIcon />
@@ -587,6 +599,7 @@ export function FloatingRepositoryRow({
   requirementUnsplitCount = 0,
   executableTaskCount = 0,
   incompleteTodoCount = 0,
+  workspaceTodosEnabled = true,
   onOpenScheduledTasks,
   onOpenRequirements,
   onOpenExecutableTasks,
@@ -619,6 +632,7 @@ export function FloatingRepositoryRow({
   requirementUnsplitCount?: number;
   executableTaskCount?: number;
   incompleteTodoCount?: number;
+  workspaceTodosEnabled?: boolean;
   onOpenScheduledTasks?: (repository: Repository) => void;
   onOpenRequirements?: (repository: Repository) => void;
   onOpenExecutableTasks?: (repository: Repository) => void;
@@ -636,6 +650,7 @@ export function FloatingRepositoryRow({
     joinableProjects,
     trellisEnabled,
     trellisReady,
+    onAddWorkspaceTodo: workspaceTodosEnabled,
     onOpenRepositoryMainOwner: Boolean(onOpenRepositoryMainOwner),
     onConfigureSddMode: Boolean(onConfigureSddMode),
     onMainSessionRun: true,
@@ -722,6 +737,7 @@ export function FloatingRepositoryRow({
             />
           ) : null}
           <SidebarWorkspaceRemindersAction
+            enabled={workspaceTodosEnabled}
             incompleteCount={incompleteTodoCount}
             projectId={null}
             repositoryId={repository.id}
@@ -735,6 +751,7 @@ export function FloatingRepositoryRow({
               items: moreItems,
               onClick: ({ key }) => {
                 if (key === "add-workspace-todo") {
+                  if (!workspaceTodosEnabled) return;
                   onRepositorySelect(repository.id);
                   openWorkspaceTodosFromSidebarMenu({
                     projectId: null,
@@ -771,7 +788,11 @@ export function FloatingRepositoryRow({
               type="button"
               className="app-repository-action app-repository-action--more"
               aria-label="仓库更多操作"
-              data-workspace-todos-anchor={workspaceTodosAnchorKey(null, repository.id) ?? undefined}
+              data-workspace-todos-anchor={
+                workspaceTodosEnabled
+                  ? workspaceTodosAnchorKey(null, repository.id) ?? undefined
+                  : undefined
+              }
               onClick={(e) => e.stopPropagation()}
             >
               <MoreIcon />
@@ -809,6 +830,7 @@ export function ProjectRepositoryRows({
   requirementUnsplitByRepoId = {},
   executableTasksByRepoId = {},
   incompleteTodoCountByRepositoryId = {},
+  workspaceTodosEnabled = true,
   onOpenScheduledTasks,
   onOpenRepositoryRequirements,
   onOpenRepositoryExecutableTasks,
@@ -842,6 +864,7 @@ export function ProjectRepositoryRows({
   requirementUnsplitByRepoId?: Record<number, number>;
   executableTasksByRepoId?: Record<number, number>;
   incompleteTodoCountByRepositoryId?: Record<number, number>;
+  workspaceTodosEnabled?: boolean;
   onOpenScheduledTasks?: (repository: Repository) => void;
   onOpenRepositoryRequirements?: (repository: Repository) => void;
   onOpenRepositoryExecutableTasks?: (repository: Repository) => void;
@@ -905,6 +928,7 @@ export function ProjectRepositoryRows({
             requirementUnsplitCount={requirementUnsplitByRepoId[repository.id] ?? 0}
             executableTaskCount={executableTasksByRepoId[repository.id] ?? 0}
             incompleteTodoCount={incompleteTodoCountByRepositoryId[repository.id] ?? 0}
+            workspaceTodosEnabled={workspaceTodosEnabled}
             onOpenScheduledTasks={onOpenScheduledTasks}
             onOpenRequirements={onOpenRepositoryRequirements}
             onOpenExecutableTasks={onOpenRepositoryExecutableTasks}

@@ -5,9 +5,7 @@ import type {
   EmployeeMonitorItem,
   ProjectItem,
 } from "../../types";
-import { WorkspaceMemosPanel } from "./WorkspaceMemosPanel";
-import { WorkspaceTodosPanel } from "./WorkspaceTodosPanel";
-import { WorkspaceQuickActionsPanel } from "./WorkspaceQuickActionsPanel";
+import { WorkspaceInspectorPanelsSection } from "./WorkspaceInspectorPanelsSection";
 import "./Inspector.css";
 
 const { Sider } = Layout;
@@ -65,19 +63,11 @@ export function CockpitInspector({
       theme={dark ? "dark" : "light"}
     >
       <div className="app-right-panel-inner app-cockpit-inspector-inner">
-        <WorkspaceQuickActionsPanel
+        <WorkspaceInspectorPanelsSection
           projectId={activeProjectId ?? activeProject?.id ?? null}
           repositoryId={activeRepositoryId}
-        />
-        <WorkspaceMemosPanel
-          projectId={activeProjectId ?? activeProject?.id ?? null}
-          repositoryId={activeRepositoryId}
-        />
-        <WorkspaceTodosPanel
-          projectId={activeProjectId ?? activeProject?.id ?? null}
-          repositoryId={activeRepositoryId}
-        />
-        <section className="app-cockpit-inspector-section" aria-label="Mission 概览">
+        >
+          <section className="app-cockpit-inspector-section" aria-label="Mission 概览">
           <header className="app-cockpit-inspector-section-header">
             <Text strong>Mission 概览</Text>
           </header>
@@ -138,7 +128,8 @@ export function CockpitInspector({
               </>
             )}
           </div>
-        </section>
+          </section>
+        </WorkspaceInspectorPanelsSection>
 
       </div>
     </Sider>

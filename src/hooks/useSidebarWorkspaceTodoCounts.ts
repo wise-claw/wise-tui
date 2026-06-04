@@ -23,12 +23,20 @@ function countIncomplete(items: { completed: boolean }[]): number {
 export function useSidebarWorkspaceTodoCounts(
   projects: ProjectItem[],
   floatingRepositories: Repository[],
+  enabled = true,
 ): SidebarWorkspaceTodoCounts {
   const [byProjectId, setByProjectId] = useState<Record<string, number>>({});
   const [byRepositoryId, setByRepositoryId] = useState<Record<number, number>>({});
   const [loading, setLoading] = useState(true);
 
   const refresh = useCallback(async () => {
+    if (!enabled) {
+      setByProjectId({});
+      setByRepositoryId({});
+      setLoading(false);
+      return;
+    }
+
     const projectIds = projects.map((p) => p.id).filter((id) => id.trim().length > 0);
     const repositoryIds = new Set<number>();
     for (const project of projects) {
@@ -79,19 +87,20 @@ export function useSidebarWorkspaceTodoCounts(
     } finally {
       setLoading(false);
     }
-  }, [projects, floatingRepositories]);
+  }, [enabled, projects, floatingRepositories]);
 
   useEffect(() => {
     void refresh();
   }, [refresh]);
 
   useEffect(() => {
+    if (!enabled) return;
     const onChanged = () => {
       void refresh();
     };
     window.addEventListener(WISE_WORKSPACE_TODOS_CHANGED, onChanged);
     return () => window.removeEventListener(WISE_WORKSPACE_TODOS_CHANGED, onChanged);
-  }, [refresh]);
+  }, [enabled, refresh]);
 
   return { byProjectId, byRepositoryId, loading };
 }

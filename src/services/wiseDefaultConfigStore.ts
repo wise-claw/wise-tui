@@ -47,7 +47,16 @@ export const WISE_MONITOR_PANEL_PLACEMENT_CHANGED = "wise:monitor-panel-placemen
 export const WISE_EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAYS_CHANGED =
   "wise:execution-environment-dispatch-history-days-changed";
 
+export const WISE_WORKSPACE_INSPECTOR_PANELS_CHANGED = "wise:workspace-inspector-panels-changed";
+
 export type MonitorPanelPlacement = "left" | "right";
+
+export type WorkspaceInspectorPanelsDefaults = Pick<
+  WiseDefaultConfigV1,
+  | "showWorkspaceQuickActionsPanel"
+  | "showWorkspaceMemosPanel"
+  | "showWorkspaceTodosPanel"
+>;
 
 export interface WiseDefaultConfigV1 {
   version: 1;
@@ -69,6 +78,12 @@ export interface WiseDefaultConfigV1 {
   monitorPanelPlacement: MonitorPanelPlacement;
   /** 左栏「任务派发」默认查询近 N 天历史；默认 1 天。 */
   executionEnvironmentDispatchHistoryDays: ExecutionEnvironmentDispatchHistoryDays;
+  /** 右栏工作区快捷操作卡片；默认显示。 */
+  showWorkspaceQuickActionsPanel: boolean;
+  /** 右栏备忘录卡片；默认显示。 */
+  showWorkspaceMemosPanel: boolean;
+  /** 右栏待办事项卡片；默认显示。 */
+  showWorkspaceTodosPanel: boolean;
 }
 
 const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
@@ -83,6 +98,9 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   showLeftSidebarMonitorPanel: true,
   monitorPanelPlacement: "left",
   executionEnvironmentDispatchHistoryDays: DEFAULT_EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAYS,
+  showWorkspaceQuickActionsPanel: true,
+  showWorkspaceMemosPanel: true,
+  showWorkspaceTodosPanel: true,
 };
 
 function normalizeMonitorPanelPlacement(raw: unknown): MonitorPanelPlacement | null {
@@ -141,6 +159,21 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
         parsed.executionEnvironmentDispatchHistoryDays === undefined
           ? DEFAULT_CONFIG.executionEnvironmentDispatchHistoryDays
           : normalizeExecutionEnvironmentDispatchHistoryDays(parsed.executionEnvironmentDispatchHistoryDays),
+      showWorkspaceQuickActionsPanel:
+        parsed.showWorkspaceQuickActionsPanel === undefined
+          ? DEFAULT_CONFIG.showWorkspaceQuickActionsPanel
+          : normalizeBoolean(
+              parsed.showWorkspaceQuickActionsPanel,
+              DEFAULT_CONFIG.showWorkspaceQuickActionsPanel,
+            ),
+      showWorkspaceMemosPanel:
+        parsed.showWorkspaceMemosPanel === undefined
+          ? DEFAULT_CONFIG.showWorkspaceMemosPanel
+          : normalizeBoolean(parsed.showWorkspaceMemosPanel, DEFAULT_CONFIG.showWorkspaceMemosPanel),
+      showWorkspaceTodosPanel:
+        parsed.showWorkspaceTodosPanel === undefined
+          ? DEFAULT_CONFIG.showWorkspaceTodosPanel
+          : normalizeBoolean(parsed.showWorkspaceTodosPanel, DEFAULT_CONFIG.showWorkspaceTodosPanel),
     };
   } catch {
     return null;
@@ -252,6 +285,9 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     showLeftSidebarMonitorPanel: DEFAULT_CONFIG.showLeftSidebarMonitorPanel,
     monitorPanelPlacement: DEFAULT_CONFIG.monitorPanelPlacement,
     executionEnvironmentDispatchHistoryDays: DEFAULT_CONFIG.executionEnvironmentDispatchHistoryDays,
+    showWorkspaceQuickActionsPanel: DEFAULT_CONFIG.showWorkspaceQuickActionsPanel,
+    showWorkspaceMemosPanel: DEFAULT_CONFIG.showWorkspaceMemosPanel,
+    showWorkspaceTodosPanel: DEFAULT_CONFIG.showWorkspaceTodosPanel,
   };
 }
 
@@ -278,6 +314,15 @@ function dispatchMonitorPanelPlacementChanged(placement: MonitorPanelPlacement):
   window.dispatchEvent(
     new CustomEvent(WISE_MONITOR_PANEL_PLACEMENT_CHANGED, {
       detail: { monitorPanelPlacement: placement },
+    }),
+  );
+}
+
+function dispatchWorkspaceInspectorPanelsChanged(panels: WorkspaceInspectorPanelsDefaults): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(WISE_WORKSPACE_INSPECTOR_PANELS_CHANGED, {
+      detail: { ...panels },
     }),
   );
 }
@@ -326,6 +371,9 @@ export async function saveWiseDefaultConfig(
       | "showLeftSidebarMonitorPanel"
       | "monitorPanelPlacement"
       | "executionEnvironmentDispatchHistoryDays"
+      | "showWorkspaceQuickActionsPanel"
+      | "showWorkspaceMemosPanel"
+      | "showWorkspaceTodosPanel"
     >
   >,
 ): Promise<WiseDefaultConfigV1> {
@@ -351,6 +399,10 @@ export async function saveWiseDefaultConfig(
       patch.executionEnvironmentDispatchHistoryDays !== undefined
         ? normalizeExecutionEnvironmentDispatchHistoryDays(patch.executionEnvironmentDispatchHistoryDays)
         : current.executionEnvironmentDispatchHistoryDays,
+    showWorkspaceQuickActionsPanel:
+      patch.showWorkspaceQuickActionsPanel ?? current.showWorkspaceQuickActionsPanel,
+    showWorkspaceMemosPanel: patch.showWorkspaceMemosPanel ?? current.showWorkspaceMemosPanel,
+    showWorkspaceTodosPanel: patch.showWorkspaceTodosPanel ?? current.showWorkspaceTodosPanel,
   };
   if (patch.connectionKind !== undefined) {
     next.connectionKind = normalizeConnectionKind(patch.connectionKind) ?? current.connectionKind;
@@ -381,6 +433,15 @@ export async function saveWiseDefaultConfig(
     next.executionEnvironmentDispatchHistoryDays = normalizeExecutionEnvironmentDispatchHistoryDays(
       patch.executionEnvironmentDispatchHistoryDays,
     );
+  }
+  if (patch.showWorkspaceQuickActionsPanel !== undefined) {
+    next.showWorkspaceQuickActionsPanel = normalizeBoolean(patch.showWorkspaceQuickActionsPanel);
+  }
+  if (patch.showWorkspaceMemosPanel !== undefined) {
+    next.showWorkspaceMemosPanel = normalizeBoolean(patch.showWorkspaceMemosPanel);
+  }
+  if (patch.showWorkspaceTodosPanel !== undefined) {
+    next.showWorkspaceTodosPanel = normalizeBoolean(patch.showWorkspaceTodosPanel);
   }
   await persistConfig(next);
   await deleteLegacyAppSettings();
@@ -438,6 +499,23 @@ export async function saveWiseDefaultConfig(
     next.executionEnvironmentDispatchHistoryDays !== current.executionEnvironmentDispatchHistoryDays
   ) {
     dispatchExecutionEnvironmentDispatchHistoryDaysChanged(next.executionEnvironmentDispatchHistoryDays);
+  }
+  if (
+    patch.showWorkspaceQuickActionsPanel !== undefined ||
+    patch.showWorkspaceMemosPanel !== undefined ||
+    patch.showWorkspaceTodosPanel !== undefined
+  ) {
+    if (
+      next.showWorkspaceQuickActionsPanel !== current.showWorkspaceQuickActionsPanel ||
+      next.showWorkspaceMemosPanel !== current.showWorkspaceMemosPanel ||
+      next.showWorkspaceTodosPanel !== current.showWorkspaceTodosPanel
+    ) {
+      dispatchWorkspaceInspectorPanelsChanged({
+        showWorkspaceQuickActionsPanel: next.showWorkspaceQuickActionsPanel,
+        showWorkspaceMemosPanel: next.showWorkspaceMemosPanel,
+        showWorkspaceTodosPanel: next.showWorkspaceTodosPanel,
+      });
+    }
   }
 
   return next;
@@ -562,6 +640,21 @@ export async function saveTopbarChromeDefaultsToStore(
       | "showSessionDataLinkTopbar"
     >
   >,
+): Promise<void> {
+  await saveWiseDefaultConfig(patch);
+}
+
+export async function loadWorkspaceInspectorPanelsFromStore(): Promise<WorkspaceInspectorPanelsDefaults> {
+  const config = await loadWiseDefaultConfig();
+  return {
+    showWorkspaceQuickActionsPanel: config.showWorkspaceQuickActionsPanel,
+    showWorkspaceMemosPanel: config.showWorkspaceMemosPanel,
+    showWorkspaceTodosPanel: config.showWorkspaceTodosPanel,
+  };
+}
+
+export async function saveWorkspaceInspectorPanelsToStore(
+  patch: Partial<WorkspaceInspectorPanelsDefaults>,
 ): Promise<void> {
   await saveWiseDefaultConfig(patch);
 }

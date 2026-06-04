@@ -65,6 +65,7 @@ import { useProjectSddModeModalController } from "./LeftSidebar/useProjectSddMod
 import { useRepositorySddModeModalController } from "./LeftSidebar/useRepositorySddModeModalController";
 import { useSidebarScheduledTasksMap } from "./LeftSidebar/useSidebarScheduledTasksMap";
 import { useSidebarWorkspaceTodoCounts } from "../hooks/useSidebarWorkspaceTodoCounts";
+import { useWorkspaceInspectorPanelsDefault } from "../hooks/useWorkspaceInspectorPanelsDefault";
 import { useSidebarRequirementUnsplitMap } from "./LeftSidebar/useSidebarRequirementUnsplitMap";
 import { useSidebarExecutableTasksMap } from "./LeftSidebar/useSidebarExecutableTasksMap";
 import { useSidebarTrellisReadyMap } from "./LeftSidebar/useSidebarTrellisReadyMap";
@@ -448,8 +449,9 @@ export function LeftSidebar({
     repositories,
     onUpdateProjectSddMode,
   });
+  const { showWorkspaceTodosPanel: workspaceTodosEnabled } = useWorkspaceInspectorPanelsDefault();
   const { byProjectId: incompleteTodoCountByProjectId, byRepositoryId: incompleteTodoCountByRepositoryId } =
-    useSidebarWorkspaceTodoCounts(projects, floatingRepositories);
+    useSidebarWorkspaceTodoCounts(projects, floatingRepositories, workspaceTodosEnabled);
   const { byId: scheduledTasksByRepoId } = useSidebarScheduledTasksMap(
     repositories,
   );
@@ -955,7 +957,7 @@ export function LeftSidebar({
           showLeftSidebarMonitorPanel && monitorPanelSectionCollapsed ? "true" : undefined
         }
       >
-        <SidebarWorkspaceTodoAddModal />
+        <SidebarWorkspaceTodoAddModal enabled={workspaceTodosEnabled} />
         <ProjectRepositoryList
           projects={projects}
           repositoriesById={projectRepositoryState.repositoriesById}
@@ -1064,6 +1066,7 @@ export function LeftSidebar({
           executableTasksByRepoId={executableTasksByRepoId}
           incompleteTodoCountByProjectId={incompleteTodoCountByProjectId}
           incompleteTodoCountByRepositoryId={incompleteTodoCountByRepositoryId}
+          workspaceTodosEnabled={workspaceTodosEnabled}
           onOpenScheduledTasksForRepository={openScheduledTasksForRepository}
           onOpenScheduledTasksForProject={openScheduledTasksForProject}
           onOpenExecutableTasksForProject={openExecutableTasksForProject}

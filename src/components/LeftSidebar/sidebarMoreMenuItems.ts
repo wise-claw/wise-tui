@@ -163,6 +163,7 @@ export interface BuildProjectMoreMenuItemsInput {
   isPinned: boolean;
   trellisEnabled?: boolean;
   trellisReady?: boolean;
+  onAddWorkspaceTodo?: boolean;
   onAddRepositoryToProject?: boolean;
   onOpenProjectDirectory?: boolean;
   onConfigureSddMode?: boolean;
@@ -189,6 +190,7 @@ export function buildProjectMoreMenuItems(input: BuildProjectMoreMenuItemsInput)
     onReconcileProject,
     onOpenProjectInEditor,
     onOpenProjectInTerminal,
+    onAddWorkspaceTodo = true,
   } = input;
 
   return sidebarMenuWithSectionsAndDanger(
@@ -231,6 +233,7 @@ export function buildProjectMoreMenuItems(input: BuildProjectMoreMenuItemsInput)
           onOpenRequirements: trellisEnabled,
           onOpenScheduledTasks: Boolean(onOpenScheduledTasksForProject),
           onOpenExecutableTasks: Boolean(onOpenExecutableTasksForProject),
+          onAddWorkspaceTodo,
         }),
       ),
     ],
@@ -239,6 +242,7 @@ export function buildProjectMoreMenuItems(input: BuildProjectMoreMenuItemsInput)
 }
 
 export interface BuildProjectRepositoryMoreMenuItemsInput {
+  onAddWorkspaceTodo?: boolean;
   trellisEnabled?: boolean;
   trellisReady?: boolean;
   trellisRootActionEnabled?: boolean;
@@ -271,6 +275,7 @@ export function buildProjectRepositoryMoreMenuItems(
     onOpenRequirements,
     onOpenExecutableTasks,
     onOpenRepositoryInTerminal,
+    onAddWorkspaceTodo = true,
   } = input;
 
   const openItems = repositoryOpenMenuItems({
@@ -301,6 +306,7 @@ export function buildProjectRepositoryMoreMenuItems(
           onOpenRequirements,
           onOpenScheduledTasks: Boolean(onOpenScheduledTasks),
           onOpenExecutableTasks: Boolean(onOpenExecutableTasks),
+          onAddWorkspaceTodo,
         }),
       ),
     ],
@@ -309,6 +315,7 @@ export function buildProjectRepositoryMoreMenuItems(
 }
 
 export interface BuildFloatingRepositoryMoreMenuItemsInput {
+  onAddWorkspaceTodo?: boolean;
   joinableProjects: Workspace[];
   trellisEnabled?: boolean;
   trellisReady?: boolean;
@@ -344,6 +351,7 @@ export function buildFloatingRepositoryMoreMenuItems(
     onOpenRepositoryInTerminal,
     onMainSessionRun,
     runCommandRunning = false,
+    onAddWorkspaceTodo = true,
   } = input;
 
   const openItems = repositoryOpenMenuItems({
@@ -380,6 +388,7 @@ export function buildFloatingRepositoryMoreMenuItems(
           onOpenRequirements,
           onOpenScheduledTasks: Boolean(onOpenScheduledTasks),
           onOpenExecutableTasks: Boolean(onOpenExecutableTasks),
+          onAddWorkspaceTodo,
         }),
       ),
       sidebarMenuSection([

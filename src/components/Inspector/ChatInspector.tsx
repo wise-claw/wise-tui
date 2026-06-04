@@ -11,9 +11,7 @@ import type {
 } from "../../types";
 import { MAIN_LAYOUT_RIGHT_SIDER_WIDTH_PX } from "../../constants/mainLayoutWidths";
 import { ProgressMonitorPanel } from "../ProgressMonitorPanel";
-import { WorkspaceMemosPanel } from "./WorkspaceMemosPanel";
-import { WorkspaceTodosPanel } from "./WorkspaceTodosPanel";
-import { WorkspaceQuickActionsPanel } from "./WorkspaceQuickActionsPanel";
+import { WorkspaceInspectorPanelsSection } from "./WorkspaceInspectorPanelsSection";
 import "./Inspector.css";
 
 const { Sider } = Layout;
@@ -131,12 +129,10 @@ export function ChatInspector({
       theme={dark ? "dark" : "light"}
     >
       <div className="app-right-panel-inner app-chat-inspector-inner">
-        <WorkspaceQuickActionsPanel
+        <WorkspaceInspectorPanelsSection
           projectId={projectId ?? null}
           repositoryId={activeRepositoryId}
         />
-        <WorkspaceMemosPanel projectId={projectId ?? null} repositoryId={activeRepositoryId} />
-        <WorkspaceTodosPanel projectId={projectId ?? null} repositoryId={activeRepositoryId} />
         <div className="app-chat-inspector-card app-chat-inspector-card--secondary">
           {monitorStats ? (
             <div className="app-chat-inspector-section app-chat-inspector-section--team" aria-label="我的团队">

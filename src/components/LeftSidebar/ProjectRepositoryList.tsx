@@ -94,6 +94,8 @@ interface ProjectRepositoryListProps {
   executableTasksByRepoId?: Record<number, number>;
   incompleteTodoCountByProjectId?: Record<string, number>;
   incompleteTodoCountByRepositoryId?: Record<number, number>;
+  /** 默认配置关闭待办时隐藏侧栏菜单、徽章与 Popover。 */
+  workspaceTodosEnabled?: boolean;
   onOpenScheduledTasksForRepository?: (repository: Repository) => void;
   onOpenScheduledTasksForProject?: (project: Workspace) => void;
   onOpenExecutableTasksForProject?: (project: Workspace) => void;
@@ -170,6 +172,7 @@ export function ProjectRepositoryList({
   executableTasksByRepoId = {},
   incompleteTodoCountByProjectId = {},
   incompleteTodoCountByRepositoryId = {},
+  workspaceTodosEnabled = true,
   onOpenScheduledTasksForRepository,
   onOpenScheduledTasksForProject,
   onOpenRepositoryRequirements,
@@ -335,6 +338,7 @@ export function ProjectRepositoryList({
                 requirementUnsplitCount={requirementUnsplitByRepoId[repository.id] ?? 0}
                 executableTaskCount={executableTasksByRepoId[repository.id] ?? 0}
                 incompleteTodoCount={incompleteTodoCountByRepositoryId[repository.id] ?? 0}
+                workspaceTodosEnabled={workspaceTodosEnabled}
                 onOpenScheduledTasks={onOpenScheduledTasksForRepository}
                 onOpenRequirements={onOpenRepositoryRequirements}
                 onOpenExecutableTasks={onOpenExecutableTasksForRepository}
@@ -409,6 +413,7 @@ export function ProjectRepositoryList({
             executableTasksByRepoId={executableTasksByRepoId}
             incompleteTodoCountByProjectId={incompleteTodoCountByProjectId}
             incompleteTodoCountByRepositoryId={incompleteTodoCountByRepositoryId}
+            workspaceTodosEnabled={workspaceTodosEnabled}
             onOpenExecutableTasksForProject={onOpenExecutableTasksForProject}
             onOpenExecutableTasksForRepository={onOpenExecutableTasksForRepository}
             mainSessionRunning={runningMainSessionByProjectId[project.id] === true}
@@ -492,6 +497,8 @@ interface ProjectRowProps {
   executableTasksByRepoId?: Record<number, number>;
   incompleteTodoCountByProjectId?: Record<string, number>;
   incompleteTodoCountByRepositoryId?: Record<number, number>;
+  /** 默认配置关闭待办时隐藏侧栏菜单、徽章与 Popover。 */
+  workspaceTodosEnabled?: boolean;
   onOpenScheduledTasksForRepository?: (repository: Repository) => void;
   onOpenScheduledTasksForProject?: (project: Workspace) => void;
   onOpenExecutableTasksForProject?: (project: Workspace) => void;
@@ -556,6 +563,7 @@ function ProjectRow({
   executableTasksByRepoId = {},
   incompleteTodoCountByProjectId = {},
   incompleteTodoCountByRepositoryId = {},
+  workspaceTodosEnabled = true,
   onOpenScheduledTasksForRepository,
   onOpenScheduledTasksForProject,
   onOpenRepositoryRequirements,
@@ -599,6 +607,7 @@ function ProjectRow({
     onOpenScheduledTasksForProject: Boolean(onOpenScheduledTasksForProject),
     onOpenExecutableTasksForProject: Boolean(onOpenExecutableTasksForProject),
     onReconcileProject: Boolean(onReconcileProject),
+    onAddWorkspaceTodo: workspaceTodosEnabled,
   });
 
   return (
@@ -715,6 +724,7 @@ function ProjectRow({
             />
           ) : null}
           <SidebarWorkspaceRemindersAction
+            enabled={workspaceTodosEnabled}
             variant="project"
             incompleteCount={projectIncompleteTodoCount}
             projectId={project.id}
@@ -730,6 +740,7 @@ function ProjectRow({
                 domEvent?.preventDefault();
                 domEvent?.stopPropagation();
                 if (key === "add-workspace-todo") {
+                  if (!workspaceTodosEnabled) return;
                   onProjectSelect(project.id);
                   openWorkspaceTodosFromSidebarMenu({
                     projectId: project.id,
@@ -763,7 +774,11 @@ function ProjectRow({
               type="button"
               className="app-repository-action app-repository-action--more"
               aria-label="工作区更多操作"
-              data-workspace-todos-anchor={workspaceTodosAnchorKey(project.id, null) ?? undefined}
+              data-workspace-todos-anchor={
+                workspaceTodosEnabled
+                  ? workspaceTodosAnchorKey(project.id, null) ?? undefined
+                  : undefined
+              }
               onClick={(e) => e.stopPropagation()}
             >
               <MoreIcon />
@@ -805,6 +820,7 @@ function ProjectRow({
             requirementUnsplitByRepoId={requirementUnsplitByRepoId}
             executableTasksByRepoId={executableTasksByRepoId}
             incompleteTodoCountByRepositoryId={incompleteTodoCountByRepositoryId}
+            workspaceTodosEnabled={workspaceTodosEnabled}
             onOpenScheduledTasks={onOpenScheduledTasksForRepository}
             onOpenRepositoryRequirements={onOpenRepositoryRequirements}
             onOpenRepositoryExecutableTasks={onOpenExecutableTasksForRepository}

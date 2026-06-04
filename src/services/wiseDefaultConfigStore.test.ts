@@ -23,6 +23,7 @@ import {
   WISE_MONITOR_PANEL_PLACEMENT_CHANGED,
   WISE_RIGHT_PANEL_DEFAULT_CHANGED,
   WISE_TOPBAR_CHROME_DEFAULT_CHANGED,
+  WISE_WORKSPACE_INSPECTOR_PANELS_CHANGED,
 } from "./wiseDefaultConfigStore";
 
 function installWindowLocalStorageStub(): Storage {
@@ -91,6 +92,9 @@ describe("wiseDefaultConfigStore", () => {
     expect(config.leftSidebarHubQuickEntries).toEqual(["mcp", "skills", "automation"]);
     expect(config.showLeftSidebarMonitorPanel).toBe(true);
     expect(config.monitorPanelPlacement).toBe("left");
+    expect(config.showWorkspaceQuickActionsPanel).toBe(true);
+    expect(config.showWorkspaceMemosPanel).toBe(true);
+    expect(config.showWorkspaceTodosPanel).toBe(true);
     expect(setAppSetting).toHaveBeenCalled();
     const payload = JSON.parse(String(setAppSetting.mock.calls[0]?.[1]));
     expect(payload).toMatchObject({
@@ -300,5 +304,42 @@ describe("wiseDefaultConfigStore", () => {
       showLlmProxyTopbar: true,
     });
     expect(seen).toEqual([{ showLlmProxyTopbar: true }]);
+  });
+
+  test("load backfills missing workspace inspector panels with product defaults", async () => {
+    getAppSetting.mockImplementation(async (key: string) =>
+      key === WISE_DEFAULT_CONFIG_KEY
+        ? JSON.stringify({
+            version: 1,
+            connectionKind: "streaming",
+            rightPanelDefaultCollapsed: false,
+          })
+        : null,
+    );
+    const config = await loadWiseDefaultConfig();
+    expect(config.showWorkspaceQuickActionsPanel).toBe(true);
+    expect(config.showWorkspaceMemosPanel).toBe(true);
+    expect(config.showWorkspaceTodosPanel).toBe(true);
+  });
+
+  test("save workspace inspector panels dispatches event", async () => {
+    getAppSetting.mockImplementation(async (key: string) => {
+      if (key === WISE_DEFAULT_CONFIG_ONESHOT_TO_STREAMING_MIGRATION_KEY) return "1";
+      if (key === WISE_DEFAULT_CONFIG_KEY) {
+        return JSON.stringify({
+          version: 1,
+          connectionKind: "streaming",
+          rightPanelDefaultCollapsed: false,
+          showWorkspaceTodosPanel: true,
+        });
+      }
+      return null;
+    });
+    const seen: Array<{ showWorkspaceTodosPanel?: boolean }> = [];
+    window.addEventListener(WISE_WORKSPACE_INSPECTOR_PANELS_CHANGED, (e: Event) => {
+      seen.push((e as CustomEvent<{ showWorkspaceTodosPanel?: boolean }>).detail ?? {});
+    });
+    await saveWiseDefaultConfig({ showWorkspaceTodosPanel: false });
+    expect(seen.at(-1)?.showWorkspaceTodosPanel).toBe(false);
   });
 });

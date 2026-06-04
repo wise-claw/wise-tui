@@ -11,10 +11,11 @@ import { EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAY_OPTIONS } from "../../consta
 import { useRightPanelDefaultSetting } from "./useRightPanelDefaultSetting";
 import { useTopbarChromeDefaultSetting } from "./useTopbarChromeDefaultSetting";
 import { useDefaultTerminalSetting } from "./useDefaultTerminalSetting";
+import { useWorkspaceInspectorPanelsSetting } from "./useWorkspaceInspectorPanelsSetting";
 import "./index.css";
 
 const DEFAULT_CONFIG_NOTES = [
-  "设置写入 SQLite app_settings（wise.defaultConfig.v1），保存后立即作用于主会话顶栏、运行面板栏位与左栏快捷入口。",
+  "设置写入 SQLite app_settings（wise.defaultConfig.v1），保存后立即作用于主会话顶栏、右栏工作区卡片、运行面板栏位与左栏快捷入口。",
   "默认终端（macOS）写入 wise.ui.default-terminal.v1，用于在资源管理器、Git 面板等位置「在外部终端打开」目录。",
   "Free Claude Code 的安装、启停与 Claude 对齐请在主会话顶栏 FCC 图标弹窗中操作；此处仅控制图标是否显示。",
   "长驻模式使用 --input-format stream-json，与终端 CLI 共享 MCP / Skills / Hooks。",
@@ -32,6 +33,7 @@ export function DefaultConfigPanel() {
   const monitorPanel = useMonitorPanelSetting();
   const execEnvDispatchHistory = useExecutionEnvironmentDispatchHistoryDaysSetting();
   const defaultTerminal = useDefaultTerminalSetting();
+  const workspaceInspectorPanels = useWorkspaceInspectorPanelsSetting();
 
   return (
     <div className="app-default-config-panel">
@@ -136,6 +138,75 @@ export function DefaultConfigPanel() {
               }))}
               onChange={(value) => {
                 void execEnvDispatchHistory.save(value);
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="app-default-config-row" aria-label="快捷操作">
+          <div className="app-default-config-row__main">
+            <span className="app-default-config-row__title">快捷操作</span>
+            <span className="app-default-config-row__hint">
+              控制 Chat / Cockpit 右栏工作区快捷操作卡片；侧栏与数据仍可通过菜单访问
+            </span>
+          </div>
+          <div className="app-default-config-row__control">
+            <DefaultConfigOptionPick<"hidden" | "visible">
+              aria-label="快捷操作右栏显示"
+              disabled={workspaceInspectorPanels.loading || workspaceInspectorPanels.saving}
+              value={workspaceInspectorPanels.showWorkspaceQuickActionsPanel ? "visible" : "hidden"}
+              options={[
+                { label: "隐藏", value: "hidden" },
+                { label: "显示", value: "visible" },
+              ]}
+              onChange={(value) => {
+                void workspaceInspectorPanels.saveQuickActions(value === "visible");
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="app-default-config-row" aria-label="备忘录">
+          <div className="app-default-config-row__main">
+            <span className="app-default-config-row__title">备忘录</span>
+            <span className="app-default-config-row__hint">
+              控制右栏备忘录列表卡片；编辑页与侧栏入口不受此项影响
+            </span>
+          </div>
+          <div className="app-default-config-row__control">
+            <DefaultConfigOptionPick<"hidden" | "visible">
+              aria-label="备忘录右栏显示"
+              disabled={workspaceInspectorPanels.loading || workspaceInspectorPanels.saving}
+              value={workspaceInspectorPanels.showWorkspaceMemosPanel ? "visible" : "hidden"}
+              options={[
+                { label: "隐藏", value: "hidden" },
+                { label: "显示", value: "visible" },
+              ]}
+              onChange={(value) => {
+                void workspaceInspectorPanels.saveMemos(value === "visible");
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="app-default-config-row" aria-label="待办事项">
+          <div className="app-default-config-row__main">
+            <span className="app-default-config-row__title">待办事项</span>
+            <span className="app-default-config-row__hint">
+              控制右栏待办卡片，以及左栏工作区「添加待办事项」菜单与未完成徽章
+            </span>
+          </div>
+          <div className="app-default-config-row__control">
+            <DefaultConfigOptionPick<"hidden" | "visible">
+              aria-label="待办事项右栏显示"
+              disabled={workspaceInspectorPanels.loading || workspaceInspectorPanels.saving}
+              value={workspaceInspectorPanels.showWorkspaceTodosPanel ? "visible" : "hidden"}
+              options={[
+                { label: "隐藏", value: "hidden" },
+                { label: "显示", value: "visible" },
+              ]}
+              onChange={(value) => {
+                void workspaceInspectorPanels.saveTodos(value === "visible");
               }}
             />
           </div>

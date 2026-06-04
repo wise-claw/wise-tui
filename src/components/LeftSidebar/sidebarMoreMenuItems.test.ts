@@ -61,6 +61,17 @@ describe("buildProjectMoreMenuItems", () => {
     expect(labels).toContain("删除工作区");
     expect(labels).toContain("添加待办事项");
   });
+
+  test("omits add-workspace-todo when disabled", () => {
+    const labels = menuLabels(
+      buildProjectMoreMenuItems({
+        isPinned: false,
+        onAddWorkspaceTodo: false,
+        onOpenScheduledTasksForProject: true,
+      }),
+    );
+    expect(labels).not.toContain("添加待办事项");
+  });
 });
 
 describe("buildProjectRepositoryMoreMenuItems", () => {
@@ -117,6 +128,16 @@ describe("buildProjectRepositoryMoreMenuItems", () => {
     expect(labels).toContain("停止");
     expect(labels).not.toContain("停止运行");
   });
+
+  test("omits add-workspace-todo when disabled", () => {
+    const labels = menuLabels(
+      buildProjectRepositoryMoreMenuItems({
+        onAddWorkspaceTodo: false,
+        onOpenScheduledTasks: true,
+      }),
+    );
+    expect(labels).not.toContain("添加待办事项");
+  });
 });
 
 describe("buildFloatingRepositoryMoreMenuItems", () => {
@@ -132,5 +153,16 @@ describe("buildFloatingRepositoryMoreMenuItems", () => {
     expect(labels).toContain("加入工作区");
     expect(labels).toContain("移除仓库");
     expect(labels).toContain("添加待办事项");
+  });
+
+  test("omits add-workspace-todo when disabled", () => {
+    const labels = menuLabels(
+      buildFloatingRepositoryMoreMenuItems({
+        joinableProjects: [],
+        onAddWorkspaceTodo: false,
+        onOpenScheduledTasks: true,
+      }),
+    );
+    expect(labels).not.toContain("添加待办事项");
   });
 });

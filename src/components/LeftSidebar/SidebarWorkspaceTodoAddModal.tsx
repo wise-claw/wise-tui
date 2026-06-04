@@ -22,7 +22,7 @@ function scopeHint(scope: WorkspaceTodoScope): string {
   return scope === "project" ? "保存到当前工作区" : "保存到当前仓库";
 }
 
-export function SidebarWorkspaceTodoAddModal() {
+export function SidebarWorkspaceTodoAddModal({ enabled = true }: { enabled?: boolean }) {
   const [session, setSession] = useState<WorkspaceTodosOpenDetail | null>(null);
   const [pendingOpen, setPendingOpen] = useState<WorkspaceTodosOpenDetail | null>(null);
   const [draftTitle, setDraftTitle] = useState("");
@@ -62,6 +62,7 @@ export function SidebarWorkspaceTodoAddModal() {
   }, []);
 
   useEffect(() => {
+    if (!enabled) return;
     const onOpen = (event: Event) => {
       const detail = (event as CustomEvent<WorkspaceTodosOpenDetail>).detail;
       if (!detail || detail.surface !== "modal") return;
@@ -69,7 +70,7 @@ export function SidebarWorkspaceTodoAddModal() {
     };
     window.addEventListener(WISE_WORKSPACE_TODOS_OPEN, onOpen);
     return () => window.removeEventListener(WISE_WORKSPACE_TODOS_OPEN, onOpen);
-  }, []);
+  }, [enabled]);
 
   useEffect(() => {
     if (!pendingOpen) return;
@@ -102,8 +103,10 @@ export function SidebarWorkspaceTodoAddModal() {
     }
   }, [close, draftTitle, getScopeItems, resolvedScope, submitting, todos]);
 
-  const open = session != null && todos.hasScope;
+  const open = enabled && session != null && todos.hasScope;
   const title = session ? modalTitle(projectId, repositoryId) : "添加待办事项";
+
+  if (!enabled) return null;
 
   return (
     <Modal
