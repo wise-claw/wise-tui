@@ -928,11 +928,15 @@
 }
 
 .app-monitor-panel__session-tasks-list {
+  --session-task-row-height: 20px;
+  --session-task-max-visible-rows: 6;
   display: flex;
   flex-direction: column;
   gap: 0;
-  max-height: 120px;
+  max-height: calc(var(--session-task-row-height) * var(--session-task-max-visible-rows));
+  overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .app-monitor-panel__session-task-row {
@@ -1080,8 +1084,18 @@
 .app-monitor-panel__subagent-detail-drawer-body {
   padding: 0;
   display: flex;
+  flex: 1 1 auto;
   min-height: 0;
+  height: 100%;
   flex-direction: column;
+  overflow: hidden;
+}
+
+.app-monitor-panel__subagent-detail-drawer-body.ant-drawer-body .app-monitor-panel__subagent-detail,
+.app-monitor-panel__subagent-detail-drawer-body.ant-drawer-body .app-monitor-panel__history-session-drawer-inner {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: min(calc(100vh - 88px), 720px);
 }
 
 .app-monitor-panel__subagent-detail {
@@ -1089,6 +1103,35 @@
   flex-direction: column;
   min-height: 0;
   flex: 1 1 0;
+}
+
+.app-monitor-panel__subagent-detail .app-monitor-panel__history-session-drawer-inner {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.app-monitor-panel__subagent-detail-drawer-scroll {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
+.app-monitor-panel__subagent-detail-messages {
+  display: block;
+  padding: 12px 12px 16px;
+  background: var(--ant-color-bg-container);
+  box-sizing: border-box;
+}
+
+/* 由外层 .app-monitor-panel__history-session-drawer-scroll 滚动，与终端历史抽屉一致 */
+.app-monitor-panel__subagent-detail-drawer-scroll .app-monitor-panel__subagent-detail-messages {
+  overflow: visible;
+}
+
+.app-monitor-panel__subagent-detail-drawer-scroll .app-claude-messages-empty {
+  padding: 40px 12px;
 }
 
 .app-monitor-panel__subagent-detail-section {
@@ -1549,7 +1592,7 @@
 .app-monitor-panel__history-drawer-context {
   flex-shrink: 0;
   display: flex;
-  flex-wrap: wrap;
+  flex-wrap: nowrap;
   align-items: center;
   gap: 4px 8px;
   padding: 8px 12px;
@@ -1558,10 +1601,15 @@
   color: var(--ant-color-text-secondary);
   background: var(--ant-color-fill-quaternary);
   border-bottom: 1px solid var(--ant-color-border-secondary);
+  width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow: hidden;
 }
 
 .app-monitor-panel__history-drawer-context__chip {
-  max-width: 100%;
+  flex: 0 1 auto;
+  max-width: 28%;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -1570,23 +1618,55 @@
 .app-monitor-panel__history-drawer-context__sep {
   color: var(--ant-color-text-quaternary);
   user-select: none;
+  flex-shrink: 0;
 }
 
 .app-monitor-panel__history-drawer-context__session-id {
   margin: 0;
   font-size: 12px;
-  max-width: 100%;
-  word-break: break-all;
+  flex: 1 1 auto;
+  min-width: 0;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .app-monitor-panel__history-drawer-context__session-id.ant-typography {
   margin-bottom: 0;
 }
 
+.app-monitor-panel__history-drawer-context__session-id .ant-typography-copy {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  min-width: 0;
+}
+
 .app-monitor-panel__history-session-drawer-scroll {
   flex: 1;
   min-height: 0;
   overflow-y: auto;
+}
+
+.app-monitor-panel__drawer-composer {
+  flex-shrink: 0;
+  border-top: 1px solid var(--ant-color-border-secondary);
+  padding: 10px 12px 12px;
+  background: var(--ant-color-bg-container);
+}
+
+.app-monitor-panel__drawer-composer-actions {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 8px;
+}
+
+.app-monitor-panel__drawer-composer-hint {
+  font-size: 11px;
+  color: var(--ant-color-text-quaternary);
+  line-height: 1.4;
 }
 
 /* 由外层抽屉滚动，避免与中栏相同的 .app-claude-messages 再套一层滚动 */

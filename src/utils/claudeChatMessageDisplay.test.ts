@@ -81,6 +81,19 @@ describe("parseDispatchRecord", () => {
     );
   });
 
+  test("parses execution environment dispatch batch id", () => {
+    const text = [
+      "任务分发记录",
+      "- 类型：执行环境",
+      "- 引擎：Claude Code",
+      "- 批次：exec-env-batch:123",
+      "- 时间：2026/6/4 08:15:13",
+      "- 正文：你好",
+    ].join("\n");
+    const meta = parseDispatchRecord(text);
+    expect(meta?.dispatchBatchId).toBe("exec-env-batch:123");
+  });
+
   test("enrichDispatchRecordMeta backfills body from worker session", () => {
     const legacy = parseDispatchRecord(
       [

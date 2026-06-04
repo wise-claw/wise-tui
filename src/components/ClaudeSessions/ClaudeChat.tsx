@@ -15,6 +15,7 @@ import { runWhenIdle } from "../../utils/deferIdle";
 import type {
   ClaudeComposerExecuteBubbleOptions,
   ClaudeSession,
+  SessionConversationTaskItem,
   TodoItem,
   QuestionRequest,
   PermissionRequest,
@@ -33,6 +34,18 @@ const ClaudeChatComposerTrayLazy = lazy(() =>
 import { ClaudeChatMessagesPane } from "./ClaudeChatMessagesPane";
 import { ClaudeChatNotificationDock } from "./ClaudeChatNotificationDock";
 import { ClaudeChatSessionOwnerBar } from "./ClaudeChatSessionOwnerBar";
+import {
+  SessionConversationTaskDetailDrawer,
+  type SessionConversationTaskDetailTarget,
+} from "../ProgressMonitorPanel/SessionConversationTaskDetailDrawer";
+import {
+  getExecutionEnvironmentDispatchesSnapshotForAnchor,
+  subscribeExecutionEnvironmentDispatches,
+} from "../../stores/executionEnvironmentDispatchStore";
+import {
+  buildExecutionEnvironmentConversationTasks,
+  filterExecutionEnvironmentDispatchTaskItems,
+} from "../../utils/sessionConversationTasks";
 import {
   ClaudeChatSessionFeaturePanel,
   type RefreshHistorySessionsScope,
@@ -180,6 +193,8 @@ interface Props {
   cursorAvailable?: boolean;
   onOpenExecutionEnvironment?: () => void;
   onCancel: (opts?: { retractLastUserTurn?: boolean }) => void;
+  /** 取消任意标签会话（如执行环境 worker） */
+  onCancelSessionById?: (sessionId: string, opts?: { retractLastUserTurn?: boolean }) => void;
   // Dock props
   todos: TodoItem[];
   questionRequest: QuestionRequest | null;
@@ -262,6 +277,8 @@ interface Props {
   onDeleteHistorySession?: (sessionId: string) => Promise<void>;
   /** 打开历史会话 transcript 抽屉；是否自动展开右栏由「默认配置 → 右侧面板」决定 */
   onOpenHistorySessionInInspector?: (sessionId: string) => void;
+  /** 结束侧栏同源的执行环境派发任务 */
+  onStopSessionConversationTask?: (item: SessionConversationTaskItem) => void;
   /** 将历史会话恢复为当前仓库主会话 */
   onRestoreHistorySessionAsMain?: (sessionId: string) => void | Promise<void>;
   /** App 侧 `omcBatchRuntime.active`：批量 OMC 调度中（含任务间隙），用于员工空闲判定 */
@@ -318,6 +335,7 @@ export function ClaudeChat({
   cursorAvailable = true,
   onOpenExecutionEnvironment,
   onCancel,
+  onCancelSessionById,
   todos,
   questionRequest,
   questionRequestQueueLength = 0,
@@ -365,6 +383,7 @@ export function ClaudeChat({
   onRefreshHistorySessions,
   onDeleteHistorySession,
   onOpenHistorySessionInInspector,
+  onStopSessionConversationTask,
   onRestoreHistorySessionAsMain,
   omcBatchPipelineActive = false,
   onAddWorktreeRepositoryToProject,
@@ -401,6 +420,31 @@ export function ClaudeChat({
     if (activeSessionId != null && session.id === activeSessionId) return true;
     return false;
   }, [activeSessionId, session.id, session.status]);
+
+  const executionEnvironmentDispatchRecords = useSyncExternalStore(
+    subscribeExecutionEnvironmentDispatches,
+    () => getExecutionEnvironmentDispatchesSnapshotForAnchor(session.id),
+    () => getExecutionEnvironmentDispatchesSnapshotForAnchor(session.id),
+  );
+
+  const executionEnvironmentTaskItems = useMemo(
+    () =>
+      filterExecutionEnvironmentDispatchTaskItems(
+        buildExecutionEnvironmentConversationTasks({
+          anchorSession: session,
+          sessions,
+          dispatchRecords: executionEnvironmentDispatchRecords,
+        }),
+      ),
+    [executionEnvironmentDispatchRecords, session, sessions],
+  );
+
+  const [sessionConversationTaskDetailTarget, setSessionConversationTaskDetailTarget] =
+    useState<SessionConversationTaskDetailTarget | null>(null);
+
+  const openSessionConversationTaskDetail = useCallback((task: SessionConversationTaskItem) => {
+    setSessionConversationTaskDetailTarget({ task });
+  }, []);
 
   useEffect(() => {
     if (todos.length > 0) return;
@@ -1720,6 +1764,8 @@ export function ClaudeChat({
           onReloadFullDiskTranscript={onReloadFullDiskTranscript}
           onOpenTaskDetail={onOpenTaskDetail}
           onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
+          onOpenSessionConversationTaskDetail={openSessionConversationTaskDetail}
+          executionEnvironmentDispatchRecords={executionEnvironmentDispatchRecords}
           sessionsForDispatchLookup={sessions}
           onMessagesBlur={handleMessagesBlur}
           onNavigateMessage={pauseFollowForMessageNavigation}
@@ -1852,6 +1898,20 @@ export function ClaudeChat({
       </div>
         </div>
       </div>
+
+      <SessionConversationTaskDetailDrawer
+        target={sessionConversationTaskDetailTarget}
+        sessions={sessions}
+        sessionConversationTaskItems={executionEnvironmentTaskItems}
+        onClose={() => setSessionConversationTaskDetailTarget(null)}
+        onStopTask={onStopSessionConversationTask}
+        onStopSessionConversationTask={onStopSessionConversationTask}
+        onCancelSession={onCancelSessionById}
+        onResumeSession={(sessionId, prompt) => {
+          const result = onExecute(sessionId, prompt, undefined, { userBubblePrompt: prompt });
+          return result === false ? false : true;
+        }}
+      />
     </div>
   );
 }

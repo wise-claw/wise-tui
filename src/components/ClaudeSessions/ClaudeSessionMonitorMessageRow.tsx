@@ -1,5 +1,5 @@
 import { memo } from "react";
-import type { ClaudeMessage, ClaudeSession } from "../../types";
+import type { ClaudeMessage, ClaudeSession, SessionConversationTaskItem } from "../../types";
 import { MessagePartsDisplay } from "./MessageParts";
 import { Markdown } from "./Markdown";
 import { SystemMessageContent } from "./SystemMessageContent";
@@ -12,6 +12,7 @@ import { DispatchRecordMessage } from "./DispatchRecordMessage";
 import { UserMessageCollapsibleBody } from "./UserMessageCollapsibleBody";
 import { ChatMessageRowActions } from "./ChatMessageRowActions";
 import { useChatMessageCopyText } from "./useChatMessageCopyText";
+import type { ExecutionEnvironmentDispatchRecord } from "../../stores/executionEnvironmentDispatchStore";
 
 interface Props {
   sessionId?: string;
@@ -19,8 +20,11 @@ interface Props {
   streamingThisBubble: boolean;
   mergedWithPrevious: boolean;
   toolUser: boolean;
+  anchorSession?: ClaudeSession | null;
+  executionEnvironmentDispatchRecords?: readonly ExecutionEnvironmentDispatchRecord[];
   onOpenTaskDetail?: (taskId: string) => void;
   onOpenHistorySessionInInspector?: (sessionId: string) => void;
+  onOpenSessionConversationTaskDetail?: (task: SessionConversationTaskItem) => void;
   sessionsForDispatchLookup?: readonly ClaudeSession[];
 }
 
@@ -30,8 +34,11 @@ function ClaudeSessionMonitorMessageRowInner({
   streamingThisBubble,
   mergedWithPrevious,
   toolUser,
+  anchorSession,
+  executionEnvironmentDispatchRecords,
   onOpenTaskDetail,
   onOpenHistorySessionInInspector,
+  onOpenSessionConversationTaskDetail,
   sessionsForDispatchLookup,
 }: Props) {
   const copyText = useChatMessageCopyText(msg, sessionsForDispatchLookup);
@@ -106,8 +113,11 @@ function ClaudeSessionMonitorMessageRowInner({
                   <DispatchRecordMessage
                     dispatch={dispatch}
                     sessionsForDispatchLookup={sessionsForDispatchLookup}
+                    anchorSession={anchorSession}
+                    executionEnvironmentDispatchRecords={executionEnvironmentDispatchRecords}
                     onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
                     onOpenTaskDetail={onOpenTaskDetail}
+                    onOpenSessionConversationTaskDetail={onOpenSessionConversationTaskDetail}
                   />
                 );
               })()

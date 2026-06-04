@@ -52,9 +52,14 @@
 }
 
 .app-left-sidebar-session-tasks-panel__scroll {
-  flex: 1 1 auto;
+  flex: 0 0 auto;
   min-height: 0;
-  overflow: auto;
-  padding: 0 0 0 0;
+  overflow: visible;
+  padding: 0;
+}
+
+.app-left-sidebar-session-tasks-panel__scroll .app-monitor-panel__session-tasks-list {
+  max-height: calc(var(--session-task-row-height, 20px) * var(--session-task-max-visible-rows, 6));
+  overflow-y: auto;
 }
 

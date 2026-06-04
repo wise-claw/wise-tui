@@ -65,6 +65,7 @@ export interface ChatInspectorProps {
   historyDrawerSessionId?: string | null;
   onHistoryDrawerSessionIdChange?: (sessionId: string | null) => void;
   onRestoreHistorySessionAsMain?: (sessionId: string) => void | Promise<void>;
+  onResumeSession?: (sessionId: string, prompt: string) => boolean | void;
   repositoryMainBindings?: Record<string, string>;
   repositories?: Repository[];
   /** 右栏快捷操作：关联当前工作区 / 仓库 */
@@ -113,6 +114,7 @@ export function ChatInspector({
   historyDrawerSessionId,
   onHistoryDrawerSessionIdChange,
   onRestoreHistorySessionAsMain,
+  onResumeSession,
   repositoryMainBindings,
   repositories,
   activeRepositoryId = null,
@@ -172,6 +174,7 @@ export function ChatInspector({
                 historyDrawerSessionId={historyDrawerSessionId}
                 onHistoryDrawerSessionIdChange={onHistoryDrawerSessionIdChange}
                 onRestoreHistorySessionAsMain={onRestoreHistorySessionAsMain}
+                onResumeSession={onResumeSession}
                 repositoryMainBindings={repositoryMainBindings}
                 repositories={repositories}
               />

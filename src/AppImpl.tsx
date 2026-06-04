@@ -3097,6 +3097,8 @@ export default function App() {
         historyDrawerSessionId: inspectorHistorySessionId,
         onHistoryDrawerSessionIdChange: setInspectorHistorySessionId,
         onRestoreHistorySessionAsMain: handleRestoreHistorySessionAsMain,
+        onResumeSession: (sessionId, prompt) =>
+          executeSession(sessionId, prompt, { userBubblePrompt: prompt }),
         employees,
         employeeTaskCounts,
         workflowTemplates,
@@ -3436,6 +3438,7 @@ export default function App() {
           : undefined,
         resolveTaskListOmcInvokeConcurrency,
         onDecideWorkflowTask: handleDecideWorkflowTask,
+        onStopSessionConversationTask: handleStopSessionConversationTask,
       }}
       chatInspectorProps={{
         dark,
@@ -3509,6 +3512,8 @@ export default function App() {
         historyDrawerSessionId: inspectorHistorySessionId,
         onHistoryDrawerSessionIdChange: setInspectorHistorySessionId,
         onRestoreHistorySessionAsMain: handleRestoreHistorySessionAsMain,
+        onResumeSession: (sessionId, prompt) =>
+          executeSession(sessionId, prompt, { userBubblePrompt: prompt }),
         repositoryMainBindings: repositoryMainSessionBindings,
         repositories,
       }}
@@ -3627,6 +3632,8 @@ export default function App() {
         onOpenHistorySessionInInspector: handleOpenHistorySessionInInspector,
         onRestoreSession: handleRestoreHistorySessionAsMain,
         canRestoreSession: canRestoreHistorySessionForDrawer,
+        onResumeSession: (sessionId, prompt) =>
+          executeSession(sessionId, prompt, { userBubblePrompt: prompt }),
       }}
       progressMonitorDrawerProps={{
         open: monitorDrawerTarget != null,
@@ -3659,6 +3666,8 @@ export default function App() {
         onOpenTaskDetail: (taskId) => {
           setMonitorDrawerTarget({ type: "task", taskId });
         },
+        onResumeSession: (sessionId, prompt) =>
+          executeSession(sessionId, prompt, { userBubblePrompt: prompt }),
       }}
     />
     </Suspense>

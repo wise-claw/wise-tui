@@ -5,7 +5,9 @@ import {
   buildConversationTaskDetailMessages,
   canStopSessionConversationTask,
   markSessionToolUseStopped,
+  resolveExecutionEnvironmentTaskFromDispatchMeta,
 } from "./sessionConversationTasks";
+import { parseDispatchRecord } from "./claudeChatMessageDisplay";
 
 function session(partial: Partial<ClaudeSession>): ClaudeSession {
   return {
@@ -448,5 +450,104 @@ describe("buildSessionConversationTasks", () => {
     expect(items[0]?.label).toBe("你好");
     expect(items[0]?.source).toBe("execution_environment");
     expect(items[0]?.updatedAt).toBe(2);
+  });
+});
+
+describe("resolveExecutionEnvironmentTaskFromDispatchMeta", () => {
+  test("matches dispatch record to execution environment task by batch id", () => {
+    const anchor = session({ id: "main-1" });
+    const worker = session({
+      id: "worker-1",
+      repositoryName: "demo/执行环境:claude:任务",
+      status: "completed",
+      messages: [{ id: 1, role: "user", content: "你好", timestamp: 1 }],
+    });
+    const dispatchRecords = [
+      {
+        batchId: "batch-1",
+        anchorSessionId: "main-1",
+        repositoryPath: "/repo",
+        executionEngine: "claude" as const,
+        createdAt: 1,
+        items: [
+          {
+            key: "k1",
+            batchId: "batch-1",
+            anchorSessionId: "main-1",
+            workerSessionId: "worker-1",
+            label: "任务",
+            previewText: "你好",
+            batchIndex: 1,
+            sessionCount: 1,
+            updatedAt: 2,
+          },
+        ],
+      },
+    ];
+    const meta = parseDispatchRecord(
+      [
+        "任务分发记录",
+        "- 类型：执行环境",
+        "- 引擎：Claude Code",
+        "- 批次：batch-1",
+        "- 时间：2026/6/4 08:15:13",
+        "- 正文：你好",
+      ].join("\n"),
+    )!;
+    const hit = resolveExecutionEnvironmentTaskFromDispatchMeta(meta, {
+      anchorSession: anchor,
+      sessions: [anchor, worker],
+      dispatchRecords,
+    });
+    expect(hit?.key).toBe("k1");
+    expect(hit?.sessionId).toBe("worker-1");
+  });
+
+  test("falls back to content and time for legacy dispatch records without batch id", () => {
+    const anchor = session({ id: "main-1" });
+    const worker = session({
+      id: "worker-1",
+      repositoryName: "demo/执行环境:claude:任务",
+      status: "completed",
+      messages: [{ id: 1, role: "user", content: "你好", timestamp: 1 }],
+    });
+    const dispatchedAt = new Date(2026, 5, 4, 8, 15, 13).getTime();
+    const dispatchRecords = [
+      {
+        batchId: "batch-legacy",
+        anchorSessionId: "main-1",
+        repositoryPath: "/repo",
+        executionEngine: "claude" as const,
+        createdAt: dispatchedAt,
+        items: [
+          {
+            key: "k1",
+            batchId: "batch-legacy",
+            anchorSessionId: "main-1",
+            workerSessionId: "worker-1",
+            label: "任务",
+            previewText: "你好",
+            batchIndex: 1,
+            sessionCount: 1,
+            updatedAt: dispatchedAt,
+          },
+        ],
+      },
+    ];
+    const meta = parseDispatchRecord(
+      [
+        "任务分发记录",
+        "- 类型：执行环境",
+        "- 引擎：Claude Code",
+        "- 时间：2026/6/4 08:15:13",
+        "- 正文：你好",
+      ].join("\n"),
+    )!;
+    const hit = resolveExecutionEnvironmentTaskFromDispatchMeta(meta, {
+      anchorSession: anchor,
+      sessions: [anchor, worker],
+      dispatchRecords,
+    });
+    expect(hit?.key).toBe("k1");
   });
 });

@@ -119,6 +119,8 @@ export interface DispatchRecordMeta {
   /** 执行环境派发：Claude Code / Codex CLI 等（与 `目标` 同源，兼容仅写 `引擎` 的历史记录） */
   engineName?: string;
   targetSessionId?: string;
+  /** 执行环境派发批次 id（`exec-env-batch:…`） */
+  dispatchBatchId?: string;
   taskId?: string;
   dispatchTime?: string;
   /** 终端派发时写入的可执行正文摘要 */
@@ -141,6 +143,7 @@ export function parseDispatchRecord(text: string): DispatchRecordMeta | null {
     if (key === "目标") meta.targetName = value;
     if (key === "引擎") meta.engineName = value;
     if (key === "分发会话") meta.targetSessionId = value;
+    if (key === "批次") meta.dispatchBatchId = value;
     if (key === "任务ID") meta.taskId = value;
     if (key === "时间") meta.dispatchTime = value;
     if (key === "正文") meta.dispatchContent = value;

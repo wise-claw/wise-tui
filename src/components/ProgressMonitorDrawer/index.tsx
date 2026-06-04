@@ -164,6 +164,8 @@ interface Props {
   onCancelSession?: (sessionId: string) => void;
   /** 历史消息内「查看任务详情」 */
   onOpenTaskDetail?: (taskId: string) => void;
+  /** 历史会话抽屉底部：resume 继续执行 */
+  onResumeSession?: (sessionId: string, prompt: string) => boolean | void;
 }
 
 interface SessionMessageRow {
@@ -589,6 +591,7 @@ export function ProgressMonitorDrawer({
   transcriptSourceSessions,
   onCancelSession,
   onOpenTaskDetail,
+  onResumeSession,
 }: Props) {
   const [employeeMessageLimit, setEmployeeMessageLimit] = useState(20);
   const [omcDirectBatchDetailSnapshot, setOmcDirectBatchDetailSnapshot] = useState<WorkflowInvocationStreamDetail | null>(null);
@@ -1215,6 +1218,7 @@ export function ProgressMonitorDrawer({
         const sid = sessionId.trim();
         if (sid) setHistoryPeekSessionId(sid);
       }}
+      onResumeSession={onResumeSession}
     />
     </>
   );

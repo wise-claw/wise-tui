@@ -178,6 +178,7 @@ export interface LeftSidebarProps {
   historyDrawerSessionId?: string | null;
   onHistoryDrawerSessionIdChange?: (sessionId: string | null) => void;
   onRestoreHistorySessionAsMain?: (sessionId: string) => void | Promise<void>;
+  onResumeSession?: (sessionId: string, prompt: string) => boolean | void;
   activeRepositoryPath?: string;
   activeRepositoryName?: string;
   onOpenActiveRepositoryFile?: (path: string, options?: GitPanelOpenFileOptions) => void;

@@ -10,6 +10,10 @@ import {
   historySessionStatusTagColor,
 } from "./historySessionDrawerChrome";
 import { HistorySessionRestoreButton } from "./HistorySessionRestoreButton";
+import {
+  MonitorDrawerSessionComposer,
+  type MonitorDrawerResumeSessionFn,
+} from "./MonitorDrawerSessionComposer";
 
 export interface MonitorHistorySessionTranscriptDrawerProps {
   open: boolean;
@@ -25,6 +29,8 @@ export interface MonitorHistorySessionTranscriptDrawerProps {
   onOpenHistorySessionInInspector?: (sessionId: string) => void;
   onRestoreSession?: (sessionId: string) => void;
   canRestoreSession?: (sessionId: string) => boolean;
+  /** 抽屉底部输入：对当前会话 resume 继续执行 */
+  onResumeSession?: MonitorDrawerResumeSessionFn;
 }
 
 function cloneSessionForDrawerSnapshot(session: ClaudeSession): ClaudeSession {
@@ -59,6 +65,7 @@ export function MonitorHistorySessionTranscriptDrawer({
   onOpenHistorySessionInInspector,
   onRestoreSession,
   canRestoreSession,
+  onResumeSession,
 }: MonitorHistorySessionTranscriptDrawerProps) {
   const [compactInFlight, setCompactInFlight] = useState(false);
   const [drawerSessionSnapshot, setDrawerSessionSnapshot] = useState<ClaudeSession | null>(null);
@@ -247,14 +254,23 @@ export function MonitorHistorySessionTranscriptDrawer({
       ) : displaySession.messages.length === 0 &&
         displaySession.status !== "running" &&
         displaySession.status !== "connecting" ? (
-        <Empty
-          image={Empty.PRESENTED_IMAGE_SIMPLE}
-          description={
-            displaySession.claudeSessionId?.trim()
-              ? "该会话暂无消息，可能任务未成功启动或 transcript 尚未落盘"
-              : "暂无消息"
-          }
-        />
+        <div className="app-monitor-panel__history-session-drawer-inner">
+          <HistorySessionDrawerContextBar session={displaySession} />
+          <div className="app-monitor-panel__history-session-drawer-scroll app-monitor-panel__history-session-drawer-scroll--empty">
+            <Empty
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description={
+                displaySession.claudeSessionId?.trim()
+                  ? "该会话暂无消息，可能任务未成功启动或 transcript 尚未落盘"
+                  : "暂无消息"
+              }
+            />
+          </div>
+          <MonitorDrawerSessionComposer
+            session={liveSession ?? displaySession}
+            onResumeSession={onResumeSession}
+          />
+        </div>
       ) : (
         <div className="app-monitor-panel__history-session-drawer-inner">
           <HistorySessionDrawerContextBar session={displaySession} />
@@ -267,6 +283,10 @@ export function MonitorHistorySessionTranscriptDrawer({
               showAllMessages
             />
           </div>
+          <MonitorDrawerSessionComposer
+            session={liveSession ?? displaySession}
+            onResumeSession={onResumeSession}
+          />
         </div>
       )}
     </Drawer>

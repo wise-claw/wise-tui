@@ -3,6 +3,7 @@ import type { ClaudeSession } from "../../types";
 import {
   buildMonitorSessionDrawerContextModel,
   buildMonitorSessionDrawerHeadline,
+  formatMonitorSessionDateTime,
 } from "./monitorSessionDisplay";
 
 export function getSessionPreview(session: ClaudeSession): string {
@@ -57,10 +58,17 @@ export function HistorySessionDrawerTitle({
 /** 正文上方元信息条：仓库、时间、会话 ID（不挤在标题里） */
 export function HistorySessionDrawerContextBar({
   session,
+  updatedAtMs,
 }: {
   session: ClaudeSession;
+  /** 覆盖默认的会话更新时间（如执行环境派发时间） */
+  updatedAtMs?: number;
 }) {
   const ctx = buildMonitorSessionDrawerContextModel(session);
+  const updatedAtText =
+    updatedAtMs != null && Number.isFinite(updatedAtMs) && updatedAtMs > 0
+      ? formatMonitorSessionDateTime(updatedAtMs)
+      : ctx.updatedAtText;
   return (
     <div className="app-monitor-panel__history-drawer-context" aria-label="会话元信息">
       <span className="app-monitor-panel__history-drawer-context__chip" title={session.repositoryName}>
@@ -69,7 +77,7 @@ export function HistorySessionDrawerContextBar({
       <span className="app-monitor-panel__history-drawer-context__sep" aria-hidden>
         ·
       </span>
-      <span className="app-monitor-panel__history-drawer-context__chip">{ctx.updatedAtText}</span>
+      <span className="app-monitor-panel__history-drawer-context__chip">{updatedAtText}</span>
       <span className="app-monitor-panel__history-drawer-context__sep" aria-hidden>
         ·
       </span>

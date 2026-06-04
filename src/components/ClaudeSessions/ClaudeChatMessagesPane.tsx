@@ -1,10 +1,11 @@
 import { InfoCircleOutlined } from "@ant-design/icons";
 import { memo, type FocusEvent, type RefObject } from "react";
-import type { ClaudeSession } from "../../types";
+import type { ClaudeSession, SessionConversationTaskItem } from "../../types";
 import {
   ClaudeVirtualMessageList,
   type ChatMessageListNavigationHandle,
 } from "./ClaudeVirtualMessageList";
+import type { ExecutionEnvironmentDispatchRecord } from "../../stores/executionEnvironmentDispatchStore";
 
 export interface ClaudeChatMessagesPaneProps {
   session: ClaudeSession;
@@ -15,8 +16,10 @@ export interface ClaudeChatMessagesPaneProps {
   fullTranscriptLoading: boolean;
   onLoadMoreTranscriptFromDisk?: (sessionId: string) => void | Promise<void>;
   onReloadFullDiskTranscript?: (sessionId: string) => void | Promise<void>;
+  executionEnvironmentDispatchRecords?: readonly ExecutionEnvironmentDispatchRecord[];
   onOpenTaskDetail?: (taskId: string) => void;
   onOpenHistorySessionInInspector?: (sessionId: string) => void;
+  onOpenSessionConversationTaskDetail?: (task: SessionConversationTaskItem) => void;
   sessionsForDispatchLookup?: readonly ClaudeSession[];
   onMessagesBlur: (event: FocusEvent<HTMLDivElement>) => void;
   onNavigateMessage: () => void;
@@ -49,6 +52,8 @@ function chatMessagesPanePropsEqual(
   if (prev.onReloadFullDiskTranscript !== next.onReloadFullDiskTranscript) return false;
   if (prev.onOpenTaskDetail !== next.onOpenTaskDetail) return false;
   if (prev.onOpenHistorySessionInInspector !== next.onOpenHistorySessionInInspector) return false;
+  if (prev.onOpenSessionConversationTaskDetail !== next.onOpenSessionConversationTaskDetail) return false;
+  if (prev.executionEnvironmentDispatchRecords !== next.executionEnvironmentDispatchRecords) return false;
   if (prev.onLoadMoreTranscriptStart !== next.onLoadMoreTranscriptStart) return false;
   if (prev.onLoadMoreTranscriptEnd !== next.onLoadMoreTranscriptEnd) return false;
   if (prev.onFullTranscriptStart !== next.onFullTranscriptStart) return false;
@@ -77,6 +82,8 @@ export const ClaudeChatMessagesPane = memo(function ClaudeChatMessagesPane({
   onReloadFullDiskTranscript,
   onOpenTaskDetail,
   onOpenHistorySessionInInspector,
+  onOpenSessionConversationTaskDetail,
+  executionEnvironmentDispatchRecords,
   sessionsForDispatchLookup,
   onMessagesBlur,
   onNavigateMessage,
@@ -157,8 +164,11 @@ export const ClaudeChatMessagesPane = memo(function ClaudeChatMessagesPane({
           session={session}
           showListEndThinkingHint={showListEndThinkingHint}
           scrollContainerRef={messagesScrollRef}
+          anchorSession={session}
+          executionEnvironmentDispatchRecords={executionEnvironmentDispatchRecords}
           onOpenTaskDetail={onOpenTaskDetail}
           onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
+          onOpenSessionConversationTaskDetail={onOpenSessionConversationTaskDetail}
           sessionsForDispatchLookup={sessionsForDispatchLookup}
           onNavigate={onNavigateMessage}
           messageListProfile={messageListProfile}

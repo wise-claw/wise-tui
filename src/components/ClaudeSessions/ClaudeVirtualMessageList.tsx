@@ -1,17 +1,21 @@
 import { forwardRef, type RefObject } from "react";
-import type { ClaudeSession } from "../../types";
+import type { ClaudeSession, SessionConversationTaskItem } from "../../types";
 import { useChatMessageListRows } from "../../hooks/useChatMessageListRows";
 import {
   ChatMessageListVirtualBody,
   type ChatMessageListNavigationHandle,
 } from "./ChatMessageListVirtualBody";
+import type { ExecutionEnvironmentDispatchRecord } from "../../stores/executionEnvironmentDispatchStore";
 
 interface Props {
   session: ClaudeSession;
   showListEndThinkingHint: boolean;
   scrollContainerRef: RefObject<HTMLDivElement | null>;
+  anchorSession?: ClaudeSession | null;
+  executionEnvironmentDispatchRecords?: readonly ExecutionEnvironmentDispatchRecord[];
   onOpenTaskDetail?: (taskId: string) => void;
   onOpenHistorySessionInInspector?: (sessionId: string) => void;
+  onOpenSessionConversationTaskDetail?: (task: SessionConversationTaskItem) => void;
   sessionsForDispatchLookup?: readonly ClaudeSession[];
   /** 主会话气泡 vs 监控/只读列（含时间戳头） */
   listVariant?: "chat" | "monitor";
@@ -27,8 +31,11 @@ export const ClaudeVirtualMessageList = forwardRef<ChatMessageListNavigationHand
       session,
       showListEndThinkingHint: _showListEndThinkingHint,
       scrollContainerRef,
+      anchorSession,
+      executionEnvironmentDispatchRecords,
       onOpenTaskDetail,
       onOpenHistorySessionInInspector,
+      onOpenSessionConversationTaskDetail,
       sessionsForDispatchLookup,
       listVariant = "chat",
       onNavigate,
@@ -51,8 +58,11 @@ export const ClaudeVirtualMessageList = forwardRef<ChatMessageListNavigationHand
         scrollContainerRef={scrollContainerRef}
         listResetKey={session.id}
         listVariant={listVariant}
+        anchorSession={anchorSession ?? session}
+        executionEnvironmentDispatchRecords={executionEnvironmentDispatchRecords}
         onOpenTaskDetail={onOpenTaskDetail}
         onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
+        onOpenSessionConversationTaskDetail={onOpenSessionConversationTaskDetail}
         sessionsForDispatchLookup={sessionsForDispatchLookup}
         onNavigate={onNavigate}
         messageListProfile={messageListProfile}

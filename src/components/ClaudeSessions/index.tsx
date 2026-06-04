@@ -8,6 +8,7 @@ import type {
   WorkflowGraph,
   WorkflowTaskItem,
   WorkflowTemplateItem,
+  SessionConversationTaskItem,
 } from "../../types";
 import { Button, Empty, Spin } from "antd";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -267,6 +268,7 @@ interface Props {
   onLoadMoreTranscriptFromDisk?: (sessionId: string) => void | Promise<void>;
   /** 手动执行 `/compact` 压缩指定标签会话历史 */
   onCompactSessionHistory?: (sessionId: string) => void | Promise<void>;
+  onStopSessionConversationTask?: (item: SessionConversationTaskItem) => void;
   missionContext?: {
     projectId?: string | null;
     rootPath?: string | null;
@@ -360,6 +362,7 @@ export function ClaudeSessions({
   onReloadFullDiskTranscript,
   onLoadMoreTranscriptFromDisk,
   onCompactSessionHistory,
+  onStopSessionConversationTask,
   missionContext,
 }: Props) {
   const sessions = useMemo(
@@ -773,6 +776,7 @@ export function ClaudeSessions({
     onReloadFullDiskTranscript,
     onLoadMoreTranscriptFromDisk,
     onCompactSessionHistory,
+    onStopSessionConversationTask,
     missionContext,
   });
 
@@ -881,6 +885,7 @@ export function ClaudeSessions({
             cursorAvailable={cursorAvailable}
             onOpenExecutionEnvironment={onOpenExecutionEnvironment}
             onCancel={(opts) => onCancelSession(activeSession.id, opts)}
+            onCancelSessionById={onCancelSession}
             respondQuestionAt={onRespondToQuestion}
             dismissQuestionAt={onDismissQuestion}
             onRespondToPermission={(response) => onRespondToPermission(activeSession.id, response)}
@@ -919,6 +924,7 @@ export function ClaudeSessions({
             onRefreshHistorySessions={onRefreshHistorySessions}
             onDeleteHistorySession={onDeleteHistorySession}
             onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
+            onStopSessionConversationTask={onStopSessionConversationTask}
             onRestoreHistorySessionAsMain={onRestoreHistorySessionAsMain}
             omcBatchPipelineActive={omcBatchPipelineActive}
             onAddWorktreeRepositoryToProject={onAddWorktreeRepositoryToProject}

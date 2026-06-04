@@ -1,13 +1,18 @@
-import { Button, Collapse, Drawer, Empty, Tag, Typography } from "antd";
+import { Button, Drawer, Empty, Tag } from "antd";
 import { memo, useMemo, useRef } from "react";
 import type { ClaudeSession, SessionConversationTaskItem } from "../../types";
 import {
   buildSessionConversationTaskDetailSession,
   canStopSessionConversationTask,
-  findMergedToolUseInSession,
   sessionConversationTaskStatusLabel,
 } from "../../utils/sessionConversationTasks";
+import { resolveMonitorSessionRepoShortLabel } from "./monitorSessionDisplay";
 import { ClaudeVirtualMessageList } from "../ClaudeSessions/ClaudeVirtualMessageList";
+import { HistorySessionDrawerContextBar } from "./historySessionDrawerChrome";
+import {
+  MonitorDrawerSessionComposer,
+  type MonitorDrawerResumeSessionFn,
+} from "./MonitorDrawerSessionComposer";
 import { SubagentStatusIndicator } from "./SubagentStatusIndicator";
 import "../ClaudeSessions/index.css";
 import "./index.css";
@@ -22,20 +27,6 @@ function taskStatusTagColor(status: SessionConversationTaskItem["status"]): stri
   return "success";
 }
 
-function sourceLabel(source: SessionConversationTaskItem["source"]): string {
-  if (source === "message_tool") return "对话工具";
-  if (source === "invocation_stream") return "后台流式";
-  if (source === "execution_environment") return "执行环境派发";
-  return "后台快照";
-}
-
-function compactId(value: string | undefined): string {
-  const normalized = value?.trim() ?? "";
-  if (!normalized) return "—";
-  if (normalized.length <= 18) return normalized;
-  return `${normalized.slice(0, 8)}…${normalized.slice(-6)}`;
-}
-
 export const SessionConversationTaskDetailDrawer = memo(function SessionConversationTaskDetailDrawer({
   target,
   sessions,
@@ -45,6 +36,7 @@ export const SessionConversationTaskDetailDrawer = memo(function SessionConversa
   onCancelSession,
   onCancelOmcDirectBatchInvocation,
   onStopSessionConversationTask,
+  onResumeSession,
 }: {
   target: SessionConversationTaskDetailTarget | null;
   sessions: readonly ClaudeSession[];
@@ -54,6 +46,7 @@ export const SessionConversationTaskDetailDrawer = memo(function SessionConversa
   onCancelSession?: (sessionId: string) => void;
   onCancelOmcDirectBatchInvocation?: (invocationKey: string) => void;
   onStopSessionConversationTask?: (item: SessionConversationTaskItem) => void;
+  onResumeSession?: MonitorDrawerResumeSessionFn;
 }) {
   const width = Math.min(760, typeof window !== "undefined" ? window.innerWidth - 40 : 760);
   const messagesScrollRef = useRef<HTMLDivElement>(null);
@@ -69,11 +62,16 @@ export const SessionConversationTaskDetailDrawer = memo(function SessionConversa
     if (hit) return hit;
     if (task?.source === "execution_environment" && task.repositoryPath?.trim()) {
       const prompt = task.previewText?.replace(/\s+/g, " ").trim() || task.label;
+      const repositoryPath = task.repositoryPath.trim();
+      const stubForRepoLabel = {
+        repositoryName: repositoryPath,
+        repositoryPath,
+      } as ClaudeSession;
       return {
         id: sid,
         claudeSessionId: null,
-        repositoryPath: task.repositoryPath.trim(),
-        repositoryName: task.subtitle?.trim() || "执行环境",
+        repositoryPath,
+        repositoryName: resolveMonitorSessionRepoShortLabel(stubForRepoLabel),
         model: "sonnet",
         status: task.status === "running" ? "running" : task.status === "failed" ? "error" : "completed",
         messages: prompt
@@ -99,11 +97,6 @@ export const SessionConversationTaskDetailDrawer = memo(function SessionConversa
     [session, task, sessions],
   );
 
-  const toolPart = useMemo(() => {
-    if (!session || !task?.toolUseId?.trim()) return null;
-    return findMergedToolUseInSession(session.messages, task.toolUseId);
-  }, [session, task]);
-
   const canStop = task
     ? canStopSessionConversationTask(task, {
         onCancelSession,
@@ -111,6 +104,16 @@ export const SessionConversationTaskDetailDrawer = memo(function SessionConversa
         onStopSessionConversationTask,
       })
     : false;
+
+  const sessionResolvableForResume = useMemo(() => {
+    const sid = task?.sessionId?.trim();
+    if (!sid) return false;
+    return sessions.some((row) => row.id === sid || row.claudeSessionId?.trim() === sid);
+  }, [sessions, task]);
+
+  const resumeDisabledReason = session && !sessionResolvableForResume
+    ? "执行会话尚未就绪或已结束，暂无法继续"
+    : null;
 
   return (
     <Drawer
@@ -126,7 +129,9 @@ export const SessionConversationTaskDetailDrawer = memo(function SessionConversa
       open={target !== null}
       onClose={onClose}
       destroyOnHidden
-      classNames={{ body: "app-monitor-panel__subagent-detail-drawer-body" }}
+      classNames={{
+        body: "app-monitor-panel__history-session-drawer-body app-monitor-panel__subagent-detail-drawer-body",
+      }}
       extra={
         task ? (
           <span className="app-monitor-panel__subagent-detail-drawer-extra">
@@ -152,26 +157,35 @@ export const SessionConversationTaskDetailDrawer = memo(function SessionConversa
         />
       ) : (
         <div className="app-monitor-panel__subagent-detail">
-          {task.status === "running" ? (
-            <div className="app-monitor-panel__subagent-detail-hint">
-              <span className="app-monitor-panel__subagent-detail-hint-dot" />
-              <span>
-                {task.source === "execution_environment"
-                  ? "执行会话进行中，消息将随对话流式更新…"
-                  : "子代理正在执行，内容随对话流式更新中..."}
-              </span>
-            </div>
-          ) : null}
-          <div className="app-claude-chat app-monitor-panel__subagent-detail-session app-monitor-panel__subagent-detail-session--chat-layout">
-            <div ref={messagesScrollRef} className="app-claude-messages">
+          <div className="app-monitor-panel__history-session-drawer-inner">
+            <HistorySessionDrawerContextBar
+              session={session}
+              updatedAtMs={task.source === "execution_environment" ? task.updatedAt : undefined}
+            />
+            {task.status === "running" ? (
+              <div className="app-monitor-panel__subagent-detail-hint">
+                <span className="app-monitor-panel__subagent-detail-hint-dot" />
+                <span>
+                  {task.source === "execution_environment"
+                    ? "执行会话进行中，消息将随对话流式更新…"
+                    : "子代理正在执行，内容随对话流式更新中..."}
+                </span>
+              </div>
+            ) : null}
+            <div
+              ref={messagesScrollRef}
+              className="app-monitor-panel__history-session-drawer-scroll app-monitor-panel__subagent-detail-drawer-scroll"
+            >
               {transcriptSession && transcriptSession.messages.length > 0 ? (
-                <ClaudeVirtualMessageList
-                  session={transcriptSession}
-                  showListEndThinkingHint={false}
-                  scrollContainerRef={messagesScrollRef}
-                  listVariant="chat"
-                  sessionsForDispatchLookup={sessions}
-                />
+                <div className="app-monitor-panel__subagent-detail-messages">
+                  <ClaudeVirtualMessageList
+                    session={transcriptSession}
+                    showListEndThinkingHint={false}
+                    scrollContainerRef={messagesScrollRef}
+                    listVariant="chat"
+                    sessionsForDispatchLookup={sessions}
+                  />
+                </div>
               ) : (
                 <div className="app-claude-messages-empty">
                   <p>
@@ -180,93 +194,12 @@ export const SessionConversationTaskDetailDrawer = memo(function SessionConversa
                 </div>
               )}
             </div>
+            <MonitorDrawerSessionComposer
+              session={session}
+              onResumeSession={onResumeSession}
+              disabledReason={resumeDisabledReason}
+            />
           </div>
-
-          <Collapse
-            size="small"
-            ghost
-            items={[
-              {
-                key: "metadata",
-                label: "元数据",
-                children: (
-                  <>
-                    <div className="app-monitor-panel__subagent-metadata-grid">
-                      <div className="app-monitor-panel__subagent-metadata-item">
-                        <span className="app-monitor-panel__subagent-metadata-label">名称</span>
-                        <span className="app-monitor-panel__subagent-metadata-value" title={task.label}>
-                          {task.label}
-                        </span>
-                      </div>
-                      {task.subtitle ? (
-                        <div className="app-monitor-panel__subagent-metadata-item">
-                          <span className="app-monitor-panel__subagent-metadata-label">类型</span>
-                          <span className="app-monitor-panel__subagent-metadata-value" title={task.subtitle}>
-                            {task.subtitle}
-                          </span>
-                        </div>
-                      ) : null}
-                      <div className="app-monitor-panel__subagent-metadata-item">
-                        <span className="app-monitor-panel__subagent-metadata-label">来源</span>
-                        <span className="app-monitor-panel__subagent-metadata-value">
-                          {sourceLabel(task.source)}
-                        </span>
-                      </div>
-                      <div className="app-monitor-panel__subagent-metadata-item">
-                        <span className="app-monitor-panel__subagent-metadata-label">仓库</span>
-                        <span className="app-monitor-panel__subagent-metadata-value" title={session.repositoryName || ""}>
-                          {session.repositoryName || "—"}
-                        </span>
-                      </div>
-                      <div className="app-monitor-panel__subagent-metadata-item">
-                        <span className="app-monitor-panel__subagent-metadata-label">会话 ID</span>
-                        <span className="app-monitor-panel__subagent-metadata-value">
-                          <Typography.Text code copyable={{ text: session.id }} className="app-monitor-panel__subagent-metadata-code">
-                            {compactId(session.id)}
-                          </Typography.Text>
-                        </span>
-                      </div>
-                      {task.toolUseId ? (
-                        <div className="app-monitor-panel__subagent-metadata-item">
-                          <span className="app-monitor-panel__subagent-metadata-label">Tool Use ID</span>
-                          <span className="app-monitor-panel__subagent-metadata-value">
-                            <Typography.Text code copyable={{ text: task.toolUseId }} className="app-monitor-panel__subagent-metadata-code">
-                              {compactId(task.toolUseId)}
-                            </Typography.Text>
-                          </span>
-                        </div>
-                      ) : null}
-                      {task.invocationKey ? (
-                        <div className="app-monitor-panel__subagent-metadata-item">
-                          <span className="app-monitor-panel__subagent-metadata-label">Invocation Key</span>
-                          <span className="app-monitor-panel__subagent-metadata-value">
-                            <Typography.Text code copyable={{ text: task.invocationKey }} className="app-monitor-panel__subagent-metadata-code">
-                              {compactId(task.invocationKey)}
-                            </Typography.Text>
-                          </span>
-                        </div>
-                      ) : null}
-                      {toolPart?.name ? (
-                        <div className="app-monitor-panel__subagent-metadata-item">
-                          <span className="app-monitor-panel__subagent-metadata-label">对应工具</span>
-                          <span className="app-monitor-panel__subagent-metadata-value" title={toolPart.name}>
-                            {toolPart.name}
-                          </span>
-                        </div>
-                      ) : null}
-                    </div>
-
-                    <div className="app-monitor-panel__subagent-detail-section">
-                      <Typography.Text strong className="app-monitor-panel__subagent-detail-section-title">
-                        摘要
-                      </Typography.Text>
-                      <pre className="app-monitor-panel__subagent-detail-pre">{task.previewText || "—"}</pre>
-                    </div>
-                  </>
-                ),
-              },
-            ]}
-          />
         </div>
       )}
     </Drawer>

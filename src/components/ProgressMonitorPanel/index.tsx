@@ -137,6 +137,8 @@ interface Props {
   onHistoryDrawerSessionIdChange?: (sessionId: string | null) => void;
   /** 将历史会话恢复为当前仓库主会话 */
   onRestoreHistorySessionAsMain?: (sessionId: string) => void | Promise<void>;
+  /** 历史 / 派发抽屉底部：resume 继续当前会话 */
+  onResumeSession?: (sessionId: string, prompt: string) => boolean | void;
   repositoryMainBindings?: Record<string, string>;
   repositories?: Repository[];
   sectionCollapsed?: boolean;
@@ -881,6 +883,7 @@ export function ProgressMonitorPanel({
   historyDrawerSessionId: _historyDrawerSessionIdProp,
   onHistoryDrawerSessionIdChange,
   onRestoreHistorySessionAsMain,
+  onResumeSession,
   repositoryMainBindings = {},
   repositories = [],
   sectionCollapsed = false,
@@ -1168,6 +1171,7 @@ export function ProgressMonitorPanel({
         onCancelSession={onCancelSession}
         onCancelOmcDirectBatchInvocation={onCancelOmcDirectBatchInvocation}
         onStopSessionConversationTask={onStopSessionConversationTask}
+        onResumeSession={onResumeSession}
       />
 
       <RepositorySubagentDetailDrawer

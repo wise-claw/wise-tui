@@ -132,7 +132,7 @@ export function buildMonitorSessionListRowModel(
   };
 }
 
-function formatMonitorSessionDateTime(value: number): string {
+export function formatMonitorSessionDateTime(value: number): string {
   if (!Number.isFinite(value) || value <= 0) {
     return "—";
   }

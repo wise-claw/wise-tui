@@ -188,6 +188,7 @@ export function LeftSidebar({
   historyDrawerSessionId,
   onHistoryDrawerSessionIdChange,
   onRestoreHistorySessionAsMain,
+  onResumeSession,
   activeRepositoryPath,
   activeRepositoryName,
   onOpenActiveRepositoryFile,
@@ -1122,6 +1123,7 @@ export function LeftSidebar({
               historyDrawerSessionId={historyDrawerSessionId}
               onHistoryDrawerSessionIdChange={onHistoryDrawerSessionIdChange}
               onRestoreHistorySessionAsMain={onRestoreHistorySessionAsMain}
+              onResumeSession={onResumeSession}
               repositoryMainBindings={repositoryMainSessionBindings}
               repositories={repositories}
             />

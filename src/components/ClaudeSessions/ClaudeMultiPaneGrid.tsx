@@ -8,6 +8,7 @@ import type {
   WorkflowGraph,
   WorkflowTaskItem,
   WorkflowTemplateItem,
+  SessionConversationTaskItem,
 } from "../../types";
 import { Button, Empty, message, TreeSelect } from "antd";
 import { LoadingOutlined } from "@ant-design/icons";
@@ -190,6 +191,7 @@ export interface MultiPaneSharedChatProps {
   onReloadFullDiskTranscript?: (sessionId: string) => void | Promise<void>;
   onLoadMoreTranscriptFromDisk?: (sessionId: string) => void | Promise<void>;
   onCompactSessionHistory?: (sessionId: string) => void | Promise<void>;
+  onStopSessionConversationTask?: (item: SessionConversationTaskItem) => void;
   missionContext?: {
     projectId?: string | null;
     rootPath?: string | null;
@@ -261,6 +263,7 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
         cursorAvailable={shared.cursorAvailable}
         onOpenExecutionEnvironment={shared.onOpenExecutionEnvironment}
         onCancel={onCancel}
+        onCancelSessionById={shared.onCancelSession}
         respondQuestionAt={shared.onRespondToQuestion}
         dismissQuestionAt={shared.onDismissQuestion}
         onRespondToPermission={onRespondToPermission}
@@ -300,6 +303,7 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
         onRefreshHistorySessions={shared.onRefreshHistorySessions}
         onDeleteHistorySession={shared.onDeleteHistorySession}
         onOpenHistorySessionInInspector={shared.onOpenHistorySessionInInspector}
+        onStopSessionConversationTask={shared.onStopSessionConversationTask}
         onRestoreHistorySessionAsMain={shared.onRestoreHistorySessionAsMain}
         omcBatchPipelineActive={shared.omcBatchPipelineActive}
         onAddWorktreeRepositoryToProject={shared.onAddWorktreeRepositoryToProject}
@@ -509,6 +513,7 @@ const MultiPaneExtraPaneCell = memo(
         cursorAvailable={shared.cursorAvailable}
             onOpenExecutionEnvironment={shared.onOpenExecutionEnvironment}
             onCancel={(opts) => shared.onCancelSession(sessionId, opts)}
+            onCancelSessionById={shared.onCancelSession}
             respondQuestionAt={shared.onRespondToQuestion}
             dismissQuestionAt={shared.onDismissQuestion}
             onRespondToPermission={(response) => shared.onRespondToPermission(sessionId, response)}
@@ -547,6 +552,7 @@ const MultiPaneExtraPaneCell = memo(
             onRefreshHistorySessions={shared.onRefreshHistorySessions}
             onDeleteHistorySession={shared.onDeleteHistorySession}
             onOpenHistorySessionInInspector={shared.onOpenHistorySessionInInspector}
+            onStopSessionConversationTask={shared.onStopSessionConversationTask}
             onRestoreHistorySessionAsMain={shared.onRestoreHistorySessionAsMain}
             omcBatchPipelineActive={shared.omcBatchPipelineActive}
             onAddWorktreeRepositoryToProject={shared.onAddWorktreeRepositoryToProject}

@@ -1,16 +1,20 @@
 import { memo } from "react";
-import type { ClaudeSession } from "../../types";
+import type { ClaudeSession, SessionConversationTaskItem } from "../../types";
 import type { ChatMessageListRow } from "../../utils/claudeChatMessageListRows";
 import { ClaudeChatMessageRow } from "./ClaudeChatMessageRow";
 import { ClaudeSessionMonitorMessageRow } from "./ClaudeSessionMonitorMessageRow";
 import { StreamingReplyHint } from "./Markdown";
+import type { ExecutionEnvironmentDispatchRecord } from "../../stores/executionEnvironmentDispatchStore";
 
 interface Props {
   row: ChatMessageListRow;
   sessionId?: string;
   listVariant?: "chat" | "monitor";
+  anchorSession?: ClaudeSession | null;
+  executionEnvironmentDispatchRecords?: readonly ExecutionEnvironmentDispatchRecord[];
   onOpenTaskDetail?: (taskId: string) => void;
   onOpenHistorySessionInInspector?: (sessionId: string) => void;
+  onOpenSessionConversationTaskDetail?: (task: SessionConversationTaskItem) => void;
   sessionsForDispatchLookup?: readonly ClaudeSession[];
 }
 
@@ -18,8 +22,11 @@ function ChatMessageListRowContentInner({
   row,
   sessionId,
   listVariant = "chat",
+  anchorSession,
+  executionEnvironmentDispatchRecords,
   onOpenTaskDetail,
   onOpenHistorySessionInInspector,
+  onOpenSessionConversationTaskDetail,
   sessionsForDispatchLookup,
 }: Props) {
   if (row.kind === "thinking-hint") {
@@ -37,8 +44,11 @@ function ChatMessageListRowContentInner({
         streamingThisBubble={row.streamingThisBubble}
         mergedWithPrevious={row.mergedWithPrevious}
         toolUser={row.toolUser}
+        anchorSession={anchorSession}
+        executionEnvironmentDispatchRecords={executionEnvironmentDispatchRecords}
         onOpenTaskDetail={onOpenTaskDetail}
         onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
+        onOpenSessionConversationTaskDetail={onOpenSessionConversationTaskDetail}
         sessionsForDispatchLookup={sessionsForDispatchLookup}
       />
     );
@@ -50,8 +60,11 @@ function ChatMessageListRowContentInner({
       streamingThisBubble={row.streamingThisBubble}
       mergedWithPrevious={row.mergedWithPrevious}
       toolUser={row.toolUser}
+      anchorSession={anchorSession}
+      executionEnvironmentDispatchRecords={executionEnvironmentDispatchRecords}
       onOpenTaskDetail={onOpenTaskDetail}
       onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
+      onOpenSessionConversationTaskDetail={onOpenSessionConversationTaskDetail}
       sessionsForDispatchLookup={sessionsForDispatchLookup}
     />
   );
@@ -62,6 +75,9 @@ function rowContentEqual(prev: Readonly<Props>, next: Readonly<Props>): boolean 
   if (prev.listVariant !== next.listVariant) return false;
   if (prev.onOpenTaskDetail !== next.onOpenTaskDetail) return false;
   if (prev.onOpenHistorySessionInInspector !== next.onOpenHistorySessionInInspector) return false;
+  if (prev.onOpenSessionConversationTaskDetail !== next.onOpenSessionConversationTaskDetail) return false;
+  if (prev.anchorSession !== next.anchorSession) return false;
+  if (prev.executionEnvironmentDispatchRecords !== next.executionEnvironmentDispatchRecords) return false;
   if (prev.sessionsForDispatchLookup !== next.sessionsForDispatchLookup) return false;
   if (prev.row === next.row) return true;
   if (prev.row.kind !== next.row.kind) return false;

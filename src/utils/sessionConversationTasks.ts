@@ -4,7 +4,7 @@ import type { ClaudeMessage, ClaudeSession, MessagePart, SessionConversationTask
 import { SESSION_EXECUTION_ENGINE_LABELS } from "../constants/sessionExecutionEngine";
 import type { ExecutionEnvironmentDispatchRecord } from "../stores/executionEnvironmentDispatchStore";
 import { sessionStatusToConversationTaskStatus } from "../stores/executionEnvironmentDispatchStore";
-import { indexOfLastRenderableUserMessage, isToolOnlyUserMessage } from "./claudeChatMessageDisplay";
+import { indexOfLastRenderableUserMessage, isToolOnlyUserMessage, type DispatchRecordMeta } from "./claudeChatMessageDisplay";
 import { isExecutionEnvironmentWorkerRepositoryName } from "./executionEnvironmentDispatch";
 import { isOmcDirectBatchInvocationRunning } from "./omcDirectBatchInvocationDisplay";
 import { formatChatMessageListTime } from "./formatChatMessageListTime";
@@ -282,6 +282,104 @@ export function filterExecutionEnvironmentDispatchTaskItems(
   return [...items]
     .filter((item) => item.source === "execution_environment")
     .sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+function normalizeDispatchContentForMatch(raw: string | undefined): string {
+  const trimmed = raw?.replace(/\s+/g, " ").trim();
+  if (!trimmed || trimmed === "（无正文）" || trimmed === "（无）") return "";
+  return trimmed;
+}
+
+function parseDispatchRecordDisplayTimeMs(time: string | undefined): number | null {
+  const trimmed = time?.trim();
+  if (!trimmed) return null;
+  const match = trimmed.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{2}):(\d{2})$/);
+  if (match) {
+    const [, y, mo, d, h, mi, s] = match;
+    return new Date(
+      Number(y),
+      Number(mo) - 1,
+      Number(d),
+      Number(h),
+      Number(mi),
+      Number(s),
+    ).getTime();
+  }
+  const parsed = Date.parse(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function executionEnvironmentEngineMatchesTask(
+  meta: DispatchRecordMeta,
+  task: SessionConversationTaskItem,
+): boolean {
+  const engine = meta.engineName?.trim() || meta.targetName?.trim();
+  if (!engine) return true;
+  const subtitle = task.subtitle?.trim() ?? "";
+  if (!subtitle) return true;
+  return subtitle.includes(engine) || engine.includes(subtitle.split(" · ")[0] ?? subtitle);
+}
+
+function pickExecutionEnvironmentBatchTask(
+  tasks: readonly SessionConversationTaskItem[],
+): SessionConversationTaskItem | null {
+  if (tasks.length === 0) return null;
+  return [...tasks].sort((a, b) => (a.batchIndex ?? 0) - (b.batchIndex ?? 0))[0] ?? null;
+}
+
+/** 主会话派发系统气泡 → 侧栏同源的执行环境任务项（用于点击打开详情 drawer）。 */
+export function resolveExecutionEnvironmentTaskFromDispatchMeta(
+  meta: DispatchRecordMeta,
+  input: {
+    anchorSession: ClaudeSession;
+    sessions: readonly ClaudeSession[];
+    dispatchRecords: readonly ExecutionEnvironmentDispatchRecord[];
+  },
+): SessionConversationTaskItem | null {
+  if (meta.dispatchType?.trim() !== "执行环境") return null;
+
+  const tasks = buildExecutionEnvironmentConversationTasks({
+    anchorSession: input.anchorSession,
+    sessions: input.sessions,
+    dispatchRecords: input.dispatchRecords,
+  });
+  if (tasks.length === 0) return null;
+
+  const batchId = meta.dispatchBatchId?.trim();
+  if (batchId) {
+    return pickExecutionEnvironmentBatchTask(tasks.filter((item) => item.dispatchBatchId === batchId));
+  }
+
+  const content = normalizeDispatchContentForMatch(meta.dispatchContent);
+  const timeMs = parseDispatchRecordDisplayTimeMs(meta.dispatchTime);
+  const candidates = tasks.filter((item) => executionEnvironmentEngineMatchesTask(meta, item));
+  if (content) {
+    const byContent = candidates.filter((item) => {
+      const label = item.label.replace(/\s+/g, " ").trim();
+      const preview = item.previewText?.replace(/\s+/g, " ").trim() ?? "";
+      return label === content || preview === content || label.startsWith(content);
+    });
+    if (byContent.length === 1) return byContent[0] ?? null;
+    if (byContent.length > 1 && timeMs != null) {
+      return (
+        [...byContent].sort(
+          (a, b) => Math.abs(a.updatedAt - timeMs) - Math.abs(b.updatedAt - timeMs),
+        )[0] ?? null
+      );
+    }
+  }
+
+  if (timeMs != null) {
+    const pool = candidates.length > 0 ? candidates : tasks;
+    const nearest = [...pool].sort(
+      (a, b) => Math.abs(a.updatedAt - timeMs) - Math.abs(b.updatedAt - timeMs),
+    )[0];
+    if (nearest && Math.abs(nearest.updatedAt - timeMs) <= 60_000) {
+      return nearest;
+    }
+  }
+
+  return null;
 }
 
 export function buildSessionConversationTasks(input: {

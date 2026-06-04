@@ -23,6 +23,7 @@ export function SessionConversationTasksPanel({
   sessions,
   sessionConversationTaskItems,
   onStopSessionConversationTask,
+  onResumeSession,
   executionEnvironmentDispatchHistoryDays,
   onExecutionEnvironmentDispatchHistoryDaysChange,
   executionEnvironmentDispatchHistoryDaysSaving = false,
@@ -30,6 +31,7 @@ export function SessionConversationTasksPanel({
   sessions: readonly ClaudeSession[];
   sessionConversationTaskItems: readonly SessionConversationTaskItem[];
   onStopSessionConversationTask?: (item: SessionConversationTaskItem) => void;
+  onResumeSession?: (sessionId: string, prompt: string) => boolean | void;
   executionEnvironmentDispatchHistoryDays?: ExecutionEnvironmentDispatchHistoryDays;
   onExecutionEnvironmentDispatchHistoryDaysChange?: (
     days: ExecutionEnvironmentDispatchHistoryDays,
@@ -154,6 +156,7 @@ export function SessionConversationTasksPanel({
         onClose={() => setDetailTarget(null)}
         onStopTask={onStopSessionConversationTask}
         onStopSessionConversationTask={onStopSessionConversationTask}
+        onResumeSession={onResumeSession}
       />
     </div>
   );
