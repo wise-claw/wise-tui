@@ -262,14 +262,12 @@ export function SidebarWorkspaceRemindersAction({
   variant = "repo",
   projectId,
   repositoryId,
-  onOpen,
   enabled = true,
 }: {
   incompleteCount: number;
   variant?: "repo" | "project";
   projectId: string | null;
   repositoryId: number | null;
-  onOpen?: () => void;
   /** 默认配置关闭待办时隐藏侧栏徽章与 Popover。 */
   enabled?: boolean;
 }) {
@@ -285,10 +283,7 @@ export function SidebarWorkspaceRemindersAction({
   return (
     <Popover
       open={popoverOpen}
-      onOpenChange={(next) => {
-        setPopoverOpen(next);
-        if (next) onOpen?.();
-      }}
+      onOpenChange={setPopoverOpen}
       trigger="click"
       placement="rightTop"
       destroyOnHidden
@@ -517,7 +512,6 @@ export function RepositoryRow({
             incompleteCount={incompleteTodoCount}
             projectId={project.id}
             repositoryId={repository.id}
-            onOpen={() => onRepositorySelect(repository.id)}
           />
           <RepositorySddStackBadge repository={repository} />
           <Dropdown
@@ -741,7 +735,6 @@ export function FloatingRepositoryRow({
             incompleteCount={incompleteTodoCount}
             projectId={null}
             repositoryId={repository.id}
-            onOpen={() => onRepositorySelect(repository.id)}
           />
           <RepositorySddStackBadge repository={repository} />
           <Dropdown

@@ -729,7 +729,6 @@ function ProjectRow({
             incompleteCount={projectIncompleteTodoCount}
             projectId={project.id}
             repositoryId={null}
-            onOpen={() => onProjectSelect(project.id)}
           />
           <Dropdown
             rootClassName="app-sidebar-more-menu-dropdown"
