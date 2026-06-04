@@ -5,6 +5,10 @@ import {
   upsertExecutionEnvironmentDispatchItem,
 } from "../stores/executionEnvironmentDispatchStore";
 import {
+  persistExecutionEnvironmentDispatchBatch,
+  persistExecutionEnvironmentDispatchItem,
+} from "./executionEnvironmentDispatchPersistence";
+import {
   SESSION_EXECUTION_ENGINE_LABELS,
 } from "../constants/sessionExecutionEngine";
 import {
@@ -82,6 +86,7 @@ export async function dispatchExecutionEnvironmentFromMainSession(
   }
 
   const batchId = newBatchId();
+  const batchCreatedAt = Date.now();
   const displayBase = repositoryDisplayBase(mainSession.repositoryName);
   const bubble =
     input.userBubblePrompt?.trim() ||
@@ -95,6 +100,20 @@ export async function dispatchExecutionEnvironmentFromMainSession(
     executionEngine: plan.executionEngine,
     sessionCount: plan.sessionCount,
     previewText: preview,
+    createdAt: batchCreatedAt,
+  });
+
+  void persistExecutionEnvironmentDispatchBatch({
+    batchId,
+    anchorSessionId: mainSession.id,
+    repositoryPath: mainSession.repositoryPath,
+    executionEngine: plan.executionEngine,
+    sessionCount: plan.sessionCount,
+    previewText: preview,
+    batchHint: plan.batchHint ?? null,
+    createdAtMs: batchCreatedAt,
+  }).catch(() => {
+    /* 持久化失败不阻断派发 */
   });
 
   const engineTitle = SESSION_EXECUTION_ENGINE_LABELS[plan.executionEngine].title;
@@ -135,6 +154,19 @@ export async function dispatchExecutionEnvironmentFromMainSession(
       batchIndex: i + 1,
       sessionCount: plan.sessionCount,
     });
+    void persistExecutionEnvironmentDispatchItem({
+      itemKey: `exec-env:${batchId}:${workerTabId}`,
+      batchId,
+      anchorSessionId: mainSession.id,
+      workerSessionId: workerTabId,
+      label,
+      previewText: preview,
+      batchIndex: i + 1,
+      sessionCount: plan.sessionCount,
+      updatedAtMs: Date.now(),
+    }).catch(() => {
+      /* 持久化失败不阻断派发 */
+    });
 
     const spawnOk = deps.executeSession(workerTabId, plan.cleanedPrompt, {
       userBubblePrompt: bubble,
@@ -142,15 +174,27 @@ export async function dispatchExecutionEnvironmentFromMainSession(
     if (spawnOk === false) {
       blocked += 1;
       const worker = deps.getSessions().find((s) => s.id === workerTabId);
+      const failPreview = worker?.status === "error" ? "派发失败" : preview;
       upsertExecutionEnvironmentDispatchItem({
         batchId,
         anchorSessionId: mainSession.id,
         workerSessionId: workerTabId,
         label,
-        previewText: worker?.status === "error" ? "派发失败" : preview,
+        previewText: failPreview,
         batchIndex: i + 1,
         sessionCount: plan.sessionCount,
       });
+      void persistExecutionEnvironmentDispatchItem({
+        itemKey: `exec-env:${batchId}:${workerTabId}`,
+        batchId,
+        anchorSessionId: mainSession.id,
+        workerSessionId: workerTabId,
+        label,
+        previewText: failPreview,
+        batchIndex: i + 1,
+        sessionCount: plan.sessionCount,
+        updatedAtMs: Date.now(),
+      }).catch(() => {});
       continue;
     }
     started += 1;

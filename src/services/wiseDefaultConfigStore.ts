@@ -8,6 +8,11 @@ import {
   normalizeLeftSidebarHubQuickEntries,
   type LeftSidebarHubQuickEntryId,
 } from "../constants/leftSidebarHubQuickEntries";
+import {
+  DEFAULT_EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAYS,
+  normalizeExecutionEnvironmentDispatchHistoryDays,
+  type ExecutionEnvironmentDispatchHistoryDays,
+} from "../constants/executionEnvironmentDispatch";
 import { RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK, RIGHT_PANEL_DEFAULT_COLLAPSED_KEY } from "../utils/rightPanelStorage";
 import { deleteAppSetting, getAppSetting, setAppSetting, setAppSettingJson } from "./appSettingsStore";
 
@@ -39,6 +44,9 @@ export const WISE_LEFT_SIDEBAR_MONITOR_PANEL_CHANGED = "wise:left-sidebar-monito
 
 export const WISE_MONITOR_PANEL_PLACEMENT_CHANGED = "wise:monitor-panel-placement-changed";
 
+export const WISE_EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAYS_CHANGED =
+  "wise:execution-environment-dispatch-history-days-changed";
+
 export type MonitorPanelPlacement = "left" | "right";
 
 export interface WiseDefaultConfigV1 {
@@ -59,6 +67,8 @@ export interface WiseDefaultConfigV1 {
   showLeftSidebarMonitorPanel: boolean;
   /** 运行面板默认栏位；默认左栏。 */
   monitorPanelPlacement: MonitorPanelPlacement;
+  /** 左栏「任务派发」默认查询近 N 天历史；默认 1 天。 */
+  executionEnvironmentDispatchHistoryDays: ExecutionEnvironmentDispatchHistoryDays;
 }
 
 const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
@@ -72,6 +82,7 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   leftSidebarHubQuickEntries: [...DEFAULT_LEFT_SIDEBAR_HUB_QUICK_ENTRIES],
   showLeftSidebarMonitorPanel: true,
   monitorPanelPlacement: "left",
+  executionEnvironmentDispatchHistoryDays: DEFAULT_EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAYS,
 };
 
 function normalizeMonitorPanelPlacement(raw: unknown): MonitorPanelPlacement | null {
@@ -126,6 +137,10 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
       monitorPanelPlacement:
         normalizeMonitorPanelPlacement(parsed.monitorPanelPlacement) ??
         DEFAULT_CONFIG.monitorPanelPlacement,
+      executionEnvironmentDispatchHistoryDays:
+        parsed.executionEnvironmentDispatchHistoryDays === undefined
+          ? DEFAULT_CONFIG.executionEnvironmentDispatchHistoryDays
+          : normalizeExecutionEnvironmentDispatchHistoryDays(parsed.executionEnvironmentDispatchHistoryDays),
     };
   } catch {
     return null;
@@ -236,6 +251,7 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     leftSidebarHubQuickEntries: [...DEFAULT_LEFT_SIDEBAR_HUB_QUICK_ENTRIES],
     showLeftSidebarMonitorPanel: DEFAULT_CONFIG.showLeftSidebarMonitorPanel,
     monitorPanelPlacement: DEFAULT_CONFIG.monitorPanelPlacement,
+    executionEnvironmentDispatchHistoryDays: DEFAULT_CONFIG.executionEnvironmentDispatchHistoryDays,
   };
 }
 
@@ -309,6 +325,7 @@ export async function saveWiseDefaultConfig(
       | "leftSidebarHubQuickEntries"
       | "showLeftSidebarMonitorPanel"
       | "monitorPanelPlacement"
+      | "executionEnvironmentDispatchHistoryDays"
     >
   >,
 ): Promise<WiseDefaultConfigV1> {
@@ -330,6 +347,10 @@ export async function saveWiseDefaultConfig(
     showLeftSidebarMonitorPanel:
       patch.showLeftSidebarMonitorPanel ?? current.showLeftSidebarMonitorPanel,
     monitorPanelPlacement: patch.monitorPanelPlacement ?? current.monitorPanelPlacement,
+    executionEnvironmentDispatchHistoryDays:
+      patch.executionEnvironmentDispatchHistoryDays !== undefined
+        ? normalizeExecutionEnvironmentDispatchHistoryDays(patch.executionEnvironmentDispatchHistoryDays)
+        : current.executionEnvironmentDispatchHistoryDays,
   };
   if (patch.connectionKind !== undefined) {
     next.connectionKind = normalizeConnectionKind(patch.connectionKind) ?? current.connectionKind;
@@ -355,6 +376,11 @@ export async function saveWiseDefaultConfig(
   if (patch.monitorPanelPlacement !== undefined) {
     next.monitorPanelPlacement =
       normalizeMonitorPanelPlacement(patch.monitorPanelPlacement) ?? current.monitorPanelPlacement;
+  }
+  if (patch.executionEnvironmentDispatchHistoryDays !== undefined) {
+    next.executionEnvironmentDispatchHistoryDays = normalizeExecutionEnvironmentDispatchHistoryDays(
+      patch.executionEnvironmentDispatchHistoryDays,
+    );
   }
   await persistConfig(next);
   await deleteLegacyAppSettings();
@@ -407,8 +433,35 @@ export async function saveWiseDefaultConfig(
   ) {
     dispatchMonitorPanelPlacementChanged(next.monitorPanelPlacement);
   }
+  if (
+    patch.executionEnvironmentDispatchHistoryDays !== undefined &&
+    next.executionEnvironmentDispatchHistoryDays !== current.executionEnvironmentDispatchHistoryDays
+  ) {
+    dispatchExecutionEnvironmentDispatchHistoryDaysChanged(next.executionEnvironmentDispatchHistoryDays);
+  }
 
   return next;
+}
+
+function dispatchExecutionEnvironmentDispatchHistoryDaysChanged(
+  days: ExecutionEnvironmentDispatchHistoryDays,
+): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(WISE_EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAYS_CHANGED, { detail: { days } }),
+  );
+}
+
+export async function loadExecutionEnvironmentDispatchHistoryDaysFromStore(): Promise<ExecutionEnvironmentDispatchHistoryDays> {
+  return (await loadWiseDefaultConfig()).executionEnvironmentDispatchHistoryDays;
+}
+
+export async function saveExecutionEnvironmentDispatchHistoryDaysToStore(
+  days: ExecutionEnvironmentDispatchHistoryDays,
+): Promise<void> {
+  await saveWiseDefaultConfig({
+    executionEnvironmentDispatchHistoryDays: normalizeExecutionEnvironmentDispatchHistoryDays(days),
+  });
 }
 
 export async function loadLeftSidebarHubQuickEntriesFromStore(): Promise<LeftSidebarHubQuickEntryId[]> {

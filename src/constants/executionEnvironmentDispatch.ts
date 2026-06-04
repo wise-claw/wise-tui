@@ -13,3 +13,25 @@ export const EXECUTION_ENVIRONMENT_ENGINE_MENTION_NAMES: Record<SessionExecution
   codex: SESSION_EXECUTION_ENGINE_LABELS.codex.title,
   cursor: SESSION_EXECUTION_ENGINE_LABELS.cursor.title,
 };
+
+/** 左栏「任务派发」历史查询可选天数。 */
+export const EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAY_OPTIONS = [1, 3, 5, 7] as const;
+
+export type ExecutionEnvironmentDispatchHistoryDays =
+  (typeof EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAY_OPTIONS)[number];
+
+export const DEFAULT_EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAYS: ExecutionEnvironmentDispatchHistoryDays = 1;
+
+export function normalizeExecutionEnvironmentDispatchHistoryDays(
+  raw: unknown,
+): ExecutionEnvironmentDispatchHistoryDays {
+  const n = typeof raw === "number" ? raw : Number.parseInt(String(raw ?? ""), 10);
+  if (EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAY_OPTIONS.includes(n as ExecutionEnvironmentDispatchHistoryDays)) {
+    return n as ExecutionEnvironmentDispatchHistoryDays;
+  }
+  return DEFAULT_EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAYS;
+}
+
+export function historyDaysToSinceMs(days: ExecutionEnvironmentDispatchHistoryDays, now = Date.now()): number {
+  return now - days * 24 * 60 * 60 * 1000;
+}

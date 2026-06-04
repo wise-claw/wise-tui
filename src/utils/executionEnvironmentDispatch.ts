@@ -132,25 +132,20 @@ export function listExecutionEnvironmentEngineMentionOptions(input: {
   cursorAvailable: boolean;
 }): ExecutionEnvironmentEngineMentionOption[] {
   const engines: SessionExecutionEngine[] = ["claude", "codex", "cursor"];
-  return engines.map((engine) => {
-    const meta = SESSION_EXECUTION_ENGINE_LABELS[engine];
-    const available = isExecutionEnvironmentEngineAvailable(
-      engine,
-      input.codexAvailable,
-      input.cursorAvailable,
-    );
-    return {
-      engine,
-      mentionName: EXECUTION_ENVIRONMENT_ENGINE_MENTION_NAMES[engine],
-      title: meta.title,
-      description: available
-        ? meta.description
-        : engine === "codex"
-          ? "未检测到 Codex CLI"
-          : "Cursor SDK 未就绪",
-      available,
-    };
-  });
+  return engines
+    .filter((engine) =>
+      isExecutionEnvironmentEngineAvailable(engine, input.codexAvailable, input.cursorAvailable),
+    )
+    .map((engine) => {
+      const meta = SESSION_EXECUTION_ENGINE_LABELS[engine];
+      return {
+        engine,
+        mentionName: EXECUTION_ENVIRONMENT_ENGINE_MENTION_NAMES[engine],
+        title: meta.title,
+        description: meta.description,
+        available: true,
+      };
+    });
 }
 
 export function findExecutionEnvironmentMentionIndex(text: string): number {

@@ -30,6 +30,11 @@ export interface ChatInspectorProps {
   employeeMonitorItems?: EmployeeMonitorItem[];
   repositoryMemberMonitorItems?: RepositoryMemberMonitorItem[];
   sessionConversationTaskItems?: SessionConversationTaskItem[];
+  executionEnvironmentDispatchHistoryDays?: import("../../constants/executionEnvironmentDispatch").ExecutionEnvironmentDispatchHistoryDays;
+  onExecutionEnvironmentDispatchHistoryDaysChange?: (
+    days: import("../../constants/executionEnvironmentDispatch").ExecutionEnvironmentDispatchHistoryDays,
+  ) => void | Promise<void>;
+  executionEnvironmentDispatchHistoryDaysSaving?: boolean;
   teamMonitorItems?: TeamMonitorItem[];
   monitorActiveTarget?: MonitorDrawerTarget | null;
   onOpenTeamMonitorDetail?: (workflowId: string) => void;
@@ -85,6 +90,9 @@ export function ChatInspector({
   employeeMonitorItems = [],
   repositoryMemberMonitorItems = [],
   sessionConversationTaskItems = [],
+  executionEnvironmentDispatchHistoryDays,
+  onExecutionEnvironmentDispatchHistoryDaysChange,
+  executionEnvironmentDispatchHistoryDaysSaving = false,
   teamMonitorItems = [],
   monitorActiveTarget,
   onOpenTeamMonitorDetail,
@@ -135,6 +143,13 @@ export function ChatInspector({
                 repositoryMemberItems={repositoryMemberMonitorItems}
                 sessionConversationTaskItems={sessionConversationTaskItems}
                 showSessionConversationTasks
+                executionEnvironmentDispatchHistoryDays={executionEnvironmentDispatchHistoryDays}
+                onExecutionEnvironmentDispatchHistoryDaysChange={
+                  onExecutionEnvironmentDispatchHistoryDaysChange
+                }
+                executionEnvironmentDispatchHistoryDaysSaving={
+                  executionEnvironmentDispatchHistoryDaysSaving
+                }
                 teamItems={teamMonitorItems}
                 sessions={sessionsForMonitor}
                 activeTarget={monitorActiveTarget}

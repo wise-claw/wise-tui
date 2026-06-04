@@ -136,6 +136,12 @@ export interface LeftSidebarProps {
   /** 当前对话内的子代理 / 后台任务执行态（左栏 Git 模块下方展示） */
   sessionConversationTaskItems?: readonly SessionConversationTaskItem[];
   onStopSessionConversationTask?: (item: SessionConversationTaskItem) => void;
+  /** 任务派发历史查询天数（1/3/5/7） */
+  executionEnvironmentDispatchHistoryDays?: import("../../constants/executionEnvironmentDispatch").ExecutionEnvironmentDispatchHistoryDays;
+  onExecutionEnvironmentDispatchHistoryDaysChange?: (
+    days: import("../../constants/executionEnvironmentDispatch").ExecutionEnvironmentDispatchHistoryDays,
+  ) => void | Promise<void>;
+  executionEnvironmentDispatchHistoryDaysSaving?: boolean;
   employees?: EmployeeItem[];
   employeeTaskCounts?: EmployeeTaskCountItem[];
   workflowTemplates?: WorkflowTemplateItem[];

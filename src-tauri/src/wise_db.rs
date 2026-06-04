@@ -50,6 +50,7 @@ const MIGRATION_029: &str =
 const MIGRATION_030: &str = include_str!("../migrations/030_employee_execution_engine.sql");
 const MIGRATION_031: &str = include_str!("../migrations/031_workspace_inspector.sql");
 const MIGRATION_033: &str = include_str!("../migrations/033_workspace_todos.sql");
+const MIGRATION_034: &str = include_str!("../migrations/034_execution_environment_dispatch.sql");
 const PLATFORM_SPLIT_PROMPT_SEED_JSON: &str =
     include_str!("../migrations/005_platform_split_prompt_seed.json");
 
@@ -195,6 +196,10 @@ const MIGRATIONS: &[Migration] = &[
     Migration {
         name: "033_workspace_todos",
         action: MigrationAction::Sql(MIGRATION_033),
+    },
+    Migration {
+        name: "034_execution_environment_dispatch",
+        action: MigrationAction::Sql(MIGRATION_034),
     },
 ];
 

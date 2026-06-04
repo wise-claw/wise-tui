@@ -6,6 +6,8 @@ import { useClaudeConnectionModeSetting } from "../ClaudeConfigDirPanel/useClaud
 import { DefaultConfigOptionPick } from "./DefaultConfigOptionPick";
 import { useLeftSidebarHubQuickEntriesSetting } from "./useLeftSidebarHubQuickEntriesSetting";
 import { useMonitorPanelSetting } from "./useMonitorPanelSetting";
+import { useExecutionEnvironmentDispatchHistoryDaysSetting } from "./useExecutionEnvironmentDispatchHistoryDaysSetting";
+import { EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAY_OPTIONS } from "../../constants/executionEnvironmentDispatch";
 import { useRightPanelDefaultSetting } from "./useRightPanelDefaultSetting";
 import { useTopbarChromeDefaultSetting } from "./useTopbarChromeDefaultSetting";
 import { useDefaultTerminalSetting } from "./useDefaultTerminalSetting";
@@ -28,6 +30,7 @@ export function DefaultConfigPanel() {
   const topbarChrome = useTopbarChromeDefaultSetting();
   const hubQuickEntries = useLeftSidebarHubQuickEntriesSetting();
   const monitorPanel = useMonitorPanelSetting();
+  const execEnvDispatchHistory = useExecutionEnvironmentDispatchHistoryDaysSetting();
   const defaultTerminal = useDefaultTerminalSetting();
 
   return (
@@ -109,6 +112,30 @@ export function DefaultConfigPanel() {
               ]}
               onChange={(value) => {
                 void monitorPanel.savePlacement(value);
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="app-default-config-row" aria-label="任务派发历史">
+          <div className="app-default-config-row__main">
+            <span className="app-default-config-row__title">任务派发历史</span>
+            <span className="app-default-config-row__hint">
+              左栏「任务派发」默认查询近 N 天的执行环境派发记录；可在列表头临时切换
+            </span>
+          </div>
+          <div className="app-default-config-row__control">
+            <Select
+              size="small"
+              aria-label="任务派发默认历史天数"
+              disabled={execEnvDispatchHistory.loading || execEnvDispatchHistory.saving}
+              value={execEnvDispatchHistory.days}
+              options={EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAY_OPTIONS.map((day) => ({
+                value: day,
+                label: `近 ${day} 天`,
+              }))}
+              onChange={(value) => {
+                void execEnvDispatchHistory.save(value);
               }}
             />
           </div>

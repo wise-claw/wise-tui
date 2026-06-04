@@ -41,8 +41,8 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin: 0 0 2px;
-  padding: 3px 8px 3px 0;
+  margin: 0 0 0;
+  padding: 2px 8px 2px 0;
   background: color-mix(in srgb, var(--ant-color-bg-container) 45%, transparent) !important;
   -webkit-backdrop-filter: var(--app-workspace-glass-blur);
   backdrop-filter: var(--app-workspace-glass-blur);
@@ -811,15 +811,128 @@
   }
 }
 
-.app-monitor-panel__section--session-tasks {
-  margin-bottom: 8px;
-  padding-bottom: 8px;
-  border-bottom: 1px solid var(--ant-color-border-secondary);
+.app-monitor-panel__section.app-monitor-panel__section--session-tasks {
+  margin: 4px 8px 0;
+  padding: 4px 6px 0;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 55%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 70%, transparent);
+  border-top: none;
 }
 
-.app-monitor-panel__section--session-tasks-empty {
-  margin-bottom: 4px;
-  padding-bottom: 4px;
+.app-monitor-panel__section + .app-monitor-panel__section--session-tasks,
+.app-monitor-panel__head + .app-monitor-panel__section--session-tasks,
+.app-monitor-panel__empty + .app-monitor-panel__section--session-tasks {
+  margin-top: 0;
+  padding-top: 0;
+}
+
+.app-monitor-panel__section--session-tasks-empty .app-monitor-panel__session-tasks-list {
+  display: none;
+}
+
+.app-monitor-panel__session-tasks-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  margin-bottom: 3px;
+  min-height: 20px;
+}
+
+.app-monitor-panel__session-tasks-toolbar .ant-typography {
+  margin: 0;
+}
+
+.app-monitor-panel__session-tasks-toolbar-start {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.app-monitor-panel__session-tasks-title {
+  margin: 0;
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ant-color-text-secondary);
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  line-height: 16px;
+}
+
+.app-monitor-panel__session-tasks-title-icon {
+  font-size: 10px;
+  color: var(--ant-color-primary);
+}
+
+.app-monitor-panel__session-tasks-count {
+  font-size: 9px;
+  line-height: 16px;
+  color: var(--ant-color-text-quaternary);
+  white-space: nowrap;
+}
+
+.app-monitor-panel__session-tasks-days {
+  flex: 0 0 auto;
+  min-width: 76px;
+  width: 76px;
+}
+
+.app-monitor-panel__session-tasks-days.ant-select {
+  font-size: 9px;
+}
+
+.app-monitor-panel__session-tasks-days .ant-select-selector {
+  min-height: 20px !important;
+  height: 20px !important;
+  padding: 0 18px 0 5px !important;
+  border-radius: 3px !important;
+  font-size: 9px !important;
+}
+
+.app-monitor-panel__session-tasks-days .ant-select-selection-item {
+  font-size: 9px !important;
+  line-height: 18px !important;
+  padding-inline-end: 0 !important;
+}
+
+.app-monitor-panel__session-tasks-days .ant-select-arrow {
+  font-size: 9px;
+  inset-inline-end: 6px;
+}
+
+.app-monitor-panel__session-tasks-days-dropdown.ant-select-dropdown {
+  min-width: 76px !important;
+}
+
+.app-monitor-panel__session-tasks-days-dropdown .ant-select-item {
+  font-size: 9px !important;
+  line-height: 16px !important;
+  min-height: 22px !important;
+  padding: 2px 6px !important;
+}
+
+.app-monitor-panel__session-tasks-days-dropdown .ant-select-item-option-content {
+  font-size: 9px !important;
+}
+
+.app-monitor-panel__session-tasks-empty-hint {
+  font-size: 9px;
+  line-height: 16px;
+  color: var(--ant-color-text-quaternary);
+  text-align: center;
+  padding: 2px 0 0;
+}
+
+.app-monitor-panel__session-tasks-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  max-height: 120px;
+  overflow-y: auto;
 }
 
 .app-monitor-panel__session-task-row {
@@ -828,20 +941,85 @@
   gap: 2px;
   min-width: 0;
   max-width: 100%;
+  min-height: 20px;
+  border-radius: 3px;
+  background: transparent;
+  border: none;
+}
+
+.app-monitor-panel__session-task-row:hover {
+  background: var(--ant-color-fill-quaternary);
 }
 
 .app-monitor-panel__session-task-row-main {
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  border: none;
+  background: transparent;
+  padding: 1px 4px;
+  min-height: 20px;
+  cursor: pointer;
+  text-align: left;
+}
+
+.app-monitor-panel__session-task-name {
+  font-size: 10px;
+  line-height: 16px;
+  color: var(--ant-color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.app-monitor-panel__session-task-meta {
+  font-size: 9px;
+  line-height: 16px;
+  color: var(--ant-color-text-quaternary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  flex: 0 0 auto;
+  max-width: 28%;
+}
+
+.app-monitor-panel__session-task-time {
+  font-size: 9px;
+  line-height: 16px;
+  color: var(--ant-color-text-quaternary);
+  white-space: nowrap;
+  flex: 0 0 auto;
+  font-variant-numeric: tabular-nums;
+}
+
+.app-monitor-panel__section--session-tasks .app-monitor-panel__subagent-status {
+  width: 14px;
+  height: 14px;
+}
+
+.app-monitor-panel__section--session-tasks .app-monitor-panel__subagent-status-svg {
+  width: 14px;
+  height: 14px;
+}
+
+.app-monitor-panel__section--session-tasks .app-monitor-panel__session-task-stop {
+  width: 12px;
+  height: 12px;
+  margin-right: 2px;
+  font-size: 6px;
 }
 
 .app-monitor-panel__session-task-actions {
   display: inline-flex;
   align-items: center;
-  gap: 0;
+  gap: 1px;
   flex-shrink: 0;
-  padding-right: 0;
+  padding-right: 3px;
 }
 
 .app-monitor-panel__session-task-row .app-monitor-panel__subagent-row {

@@ -2472,7 +2472,6 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   flex: 1 1 0;
   min-height: 120px;
   overflow: hidden;
-  margin-top: 4px;
   border-top: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 88%, var(--ant-color-border));
 }
 

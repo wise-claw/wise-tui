@@ -39,12 +39,19 @@ import {
   getExecutionEnvironmentDispatchesSnapshotForAnchor,
   subscribeExecutionEnvironmentDispatches,
 } from "../stores/executionEnvironmentDispatchStore";
+import type { ExecutionEnvironmentDispatchHistoryDays } from "../constants/executionEnvironmentDispatch";
 import { buildSessionConversationTasks } from "../utils/sessionConversationTasks";
+import { useExecutionEnvironmentDispatchPersistence } from "./useExecutionEnvironmentDispatchPersistence";
 
 export function useSessionConversationTasks(
   activeSessionId: string | null | undefined,
   sessions: ClaudeSession[],
+  executionEnvironmentDispatchHistoryDays: ExecutionEnvironmentDispatchHistoryDays,
 ): SessionConversationTaskItem[] {
+  useExecutionEnvironmentDispatchPersistence(
+    activeSessionId,
+    executionEnvironmentDispatchHistoryDays,
+  );
   const session = useMemo(
     () => (activeSessionId ? sessions.find((item) => item.id === activeSessionId) ?? null : null),
     [activeSessionId, sessions],

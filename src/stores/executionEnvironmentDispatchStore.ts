@@ -167,6 +167,35 @@ export function upsertExecutionEnvironmentDispatchItem(
   publishAnchor(anchorSessionId);
 }
 
+export function replaceExecutionEnvironmentDispatchesForAnchor(
+  anchorSessionId: string,
+  records: readonly ExecutionEnvironmentDispatchRecord[],
+): void {
+  const anchor = anchorSessionId.trim();
+  if (!anchor) return;
+
+  const prevIds = batchIdsByAnchor.get(anchor) ?? [];
+  for (const batchId of prevIds) {
+    recordsByBatch.delete(batchId);
+  }
+  batchIdsByAnchor.delete(anchor);
+
+  const nextIds: string[] = [];
+  for (const record of records) {
+    if (record.anchorSessionId.trim() !== anchor) continue;
+    const batchId = record.batchId.trim();
+    if (!batchId) continue;
+    recordsByBatch.set(batchId, {
+      ...record,
+      anchorSessionId: anchor,
+      items: [...record.items],
+    });
+    nextIds.push(batchId);
+  }
+  batchIdsByAnchor.set(anchor, nextIds.slice(0, MAX_BATCHES_PER_ANCHOR));
+  publishAnchor(anchor);
+}
+
 export function registerExecutionEnvironmentBatch(input: {
   batchId: string;
   anchorSessionId: string;
@@ -174,6 +203,7 @@ export function registerExecutionEnvironmentBatch(input: {
   executionEngine: SessionExecutionEngine;
   sessionCount: number;
   previewText: string;
+  createdAt?: number;
 }): void {
   const batchId = input.batchId.trim();
   const anchorSessionId = input.anchorSessionId.trim();
@@ -190,7 +220,7 @@ export function registerExecutionEnvironmentBatch(input: {
     anchorSessionId,
     repositoryPath: input.repositoryPath.trim(),
     executionEngine: input.executionEngine,
-    createdAt: Date.now(),
+    createdAt: input.createdAt ?? Date.now(),
     items: [],
   });
   const prev = batchIdsByAnchor.get(anchorSessionId) ?? [];

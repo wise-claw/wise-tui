@@ -122,6 +122,7 @@ import {
   filterRepositoryMemberMonitorItemsBySelection,
   useMonitorOverview,
 } from "./hooks/useMonitorOverview";
+import { useExecutionEnvironmentDispatchHistoryDays } from "./hooks/useExecutionEnvironmentDispatchHistoryDays";
 import { useSessionConversationTasks } from "./hooks/useSessionConversationTasks";
 import { dispatchExecutionEnvironmentFromMainSession } from "./services/executionEnvironmentDispatch";
 import { useIntervalSyncedState } from "./hooks/useIntervalSyncedState";
@@ -1379,7 +1380,12 @@ export default function App() {
       }),
     [activeProjectId, activeRepositoryId, projects, repositoryMemberMonitorItems],
   );
-  const sessionConversationTaskItems = useSessionConversationTasks(activeSessionId, sessions);
+  const executionEnvironmentDispatchHistory = useExecutionEnvironmentDispatchHistoryDays();
+  const sessionConversationTaskItems = useSessionConversationTasks(
+    activeSessionId,
+    sessions,
+    executionEnvironmentDispatchHistory.days,
+  );
   const activeProject = useMemo(
     () => (activeProjectId ? projects.find((p) => p.id === activeProjectId) ?? null : null),
     [activeProjectId, projects],
@@ -3037,6 +3043,11 @@ export default function App() {
         onSelectSession: jumpToSessionLeavingMcpHub,
         sessionConversationTaskItems,
         onStopSessionConversationTask: handleStopSessionConversationTask,
+        executionEnvironmentDispatchHistoryDays: executionEnvironmentDispatchHistory.days,
+        onExecutionEnvironmentDispatchHistoryDaysChange: (days) => {
+          void executionEnvironmentDispatchHistory.save(days);
+        },
+        executionEnvironmentDispatchHistoryDaysSaving: executionEnvironmentDispatchHistory.saving,
         projectId: activeProjectId,
         employeeMonitorItems: teamPanelEmployeeMonitorItems,
         repositoryMemberMonitorItems: scopedRepositoryMemberMonitorItems,
@@ -3440,6 +3451,11 @@ export default function App() {
         employeeMonitorItems: teamPanelEmployeeMonitorItems,
         repositoryMemberMonitorItems: scopedRepositoryMemberMonitorItems,
         sessionConversationTaskItems,
+        executionEnvironmentDispatchHistoryDays: executionEnvironmentDispatchHistory.days,
+        onExecutionEnvironmentDispatchHistoryDaysChange: (days) => {
+          void executionEnvironmentDispatchHistory.save(days);
+        },
+        executionEnvironmentDispatchHistoryDaysSaving: executionEnvironmentDispatchHistory.saving,
         teamMonitorItems,
         monitorActiveTarget: monitorDrawerTarget,
         onOpenTeamMonitorDetail: (workflowId) => {

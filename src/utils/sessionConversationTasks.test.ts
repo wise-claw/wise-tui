@@ -447,5 +447,6 @@ describe("buildSessionConversationTasks", () => {
     expect(items).toHaveLength(1);
     expect(items[0]?.label).toBe("你好");
     expect(items[0]?.source).toBe("execution_environment");
+    expect(items[0]?.updatedAt).toBe(2);
   });
 });

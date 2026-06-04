@@ -10,6 +10,7 @@ use crate::{
     trellis_runtime, wise_data_cleanup, wise_db, wise_mascot, wise_paths, wise_push,
     workspace_commands,
     workspace_inspector_commands,
+    execution_environment_dispatch_commands,
 };
 #[cfg(target_os = "macos")]
 use crate::macos_terminal_detect;
@@ -261,6 +262,9 @@ pub fn run() {
             workspace_inspector_commands::save_project_workspace_todos,
             workspace_inspector_commands::list_repository_workspace_todos,
             workspace_inspector_commands::save_repository_workspace_todos,
+            execution_environment_dispatch_commands::upsert_execution_environment_dispatch_batch,
+            execution_environment_dispatch_commands::upsert_execution_environment_dispatch_item,
+            execution_environment_dispatch_commands::list_execution_environment_dispatches_for_anchor,
             app_state_commands::settings_commands::get_prd_task_split_result,
             app_state_commands::settings_commands::get_prd_executable_tasks_result,
             app_state_commands::settings_commands::set_prd_task_split_result,

@@ -159,6 +159,9 @@ export function LeftSidebar({
   onSelectSession: _onSelectSession,
   sessionConversationTaskItems,
   onStopSessionConversationTask,
+  executionEnvironmentDispatchHistoryDays,
+  onExecutionEnvironmentDispatchHistoryDaysChange,
+  executionEnvironmentDispatchHistoryDaysSaving = false,
   employees: _employees = [],
   employeeTaskCounts: _employeeTaskCounts = [],
   workflowTemplates: _workflowTemplates = [],
@@ -1090,6 +1093,13 @@ export function LeftSidebar({
                 sessionConversationTaskItems ? [...sessionConversationTaskItems] : []
               }
               showSessionConversationTasks
+              executionEnvironmentDispatchHistoryDays={executionEnvironmentDispatchHistoryDays}
+              onExecutionEnvironmentDispatchHistoryDaysChange={
+                onExecutionEnvironmentDispatchHistoryDaysChange
+              }
+              executionEnvironmentDispatchHistoryDaysSaving={
+                executionEnvironmentDispatchHistoryDaysSaving
+              }
               teamItems={teamMonitorItems}
               sessions={sessions}
               activeTarget={monitorActiveTarget}

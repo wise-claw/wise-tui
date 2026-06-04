@@ -1,4 +1,5 @@
-import { Collapse, Descriptions, Drawer, Empty, InputNumber, Popover, Tag, Tooltip, Typography } from "antd";
+import { SendOutlined } from "@ant-design/icons";
+import { Collapse, Descriptions, Drawer, Empty, InputNumber, Popover, Select, Tag, Tooltip, Typography } from "antd";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type {
   ClaudeMessage,
@@ -51,7 +52,15 @@ import { ClaudeSessionMessagesColumn } from "../ClaudeSessions/ClaudeSessionMess
 import { useAgentAssignments } from "../../hooks/useAgentAssignments";
 import { ExpandIcon } from "../LeftSidebar/SidebarIcons";
 import { SubagentStatusIndicator } from "./SubagentStatusIndicator";
-import { canStopSessionConversationTask } from "../../utils/sessionConversationTasks";
+import {
+  EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAY_OPTIONS,
+  type ExecutionEnvironmentDispatchHistoryDays,
+} from "../../constants/executionEnvironmentDispatch";
+import {
+  canStopSessionConversationTask,
+  filterExecutionEnvironmentDispatchTaskItems,
+  formatExecutionEnvironmentDispatchTaskTime,
+} from "../../utils/sessionConversationTasks";
 import {
   SessionConversationTaskDetailDrawer,
   type SessionConversationTaskDetailTarget,
@@ -88,6 +97,11 @@ interface Props {
   sessionConversationTaskItems?: SessionConversationTaskItem[];
   /** 强制展示「子代理 / 任务」区块：即便列表为空也展示区块头（默认：仅当有数据时展示）。 */
   showSessionConversationTasks?: boolean;
+  executionEnvironmentDispatchHistoryDays?: ExecutionEnvironmentDispatchHistoryDays;
+  onExecutionEnvironmentDispatchHistoryDaysChange?: (
+    days: ExecutionEnvironmentDispatchHistoryDays,
+  ) => void | Promise<void>;
+  executionEnvironmentDispatchHistoryDaysSaving?: boolean;
   sessions: ClaudeSession[];
   activeTarget?: MonitorDrawerTarget | null;
   onOpenTeamDetail: (workflowId: string) => void;
@@ -843,6 +857,9 @@ export function ProgressMonitorPanel({
   teamItems,
   sessionConversationTaskItems = [],
   showSessionConversationTasks = false,
+  executionEnvironmentDispatchHistoryDays,
+  onExecutionEnvironmentDispatchHistoryDaysChange,
+  executionEnvironmentDispatchHistoryDaysSaving = false,
   sessions,
   activeTarget,
   onOpenTeamDetail,
@@ -1104,9 +1121,14 @@ export function ProgressMonitorPanel({
     [omcDirectBatchInvocationsLive, onOpenOmcBatchInvocationDetail, sessions, sessionsForHistoryTranscript],
   );
 
-  const runningSessionConversationTasks = useMemo(
-    () => sessionConversationTaskItems.filter((item) => item.status === "running"),
+  const executionEnvironmentDispatchTaskItems = useMemo(
+    () => filterExecutionEnvironmentDispatchTaskItems(sessionConversationTaskItems),
     [sessionConversationTaskItems],
+  );
+
+  const runningSessionConversationTasks = useMemo(
+    () => executionEnvironmentDispatchTaskItems.filter((item) => item.status === "running"),
+    [executionEnvironmentDispatchTaskItems],
   );
 
   const shouldShowSessionConversationTasks = showSessionConversationTasks;
@@ -1276,77 +1298,6 @@ export function ProgressMonitorPanel({
         </div>
       ) : null}
 
-      {shouldShowSessionConversationTasks ? (
-        <div
-          className={`app-monitor-panel__section app-monitor-panel__section--session-tasks${
-            sessionConversationTaskItems.length === 0 ? " app-monitor-panel__section--session-tasks-empty" : ""
-          }`}
-        >
-          <div className="app-monitor-panel__section-head">
-            <div className="app-monitor-panel__section-title-wrap">
-              <Typography.Text className="app-monitor-panel__section-title">
-                <span className="app-monitor-panel__section-icon"><RepositoryMiniIcon /></span>
-                任务派发
-              </Typography.Text>
-              <Typography.Text className="app-monitor-panel__meta">
-                {runningSessionConversationTasks.length > 0
-                  ? `进行中 ${runningSessionConversationTasks.length}`
-                  : `共 ${sessionConversationTaskItems.length} 项`}
-              </Typography.Text>
-            </div>
-          </div>
-          {sessionConversationTaskItems.length > 0 ? (
-            <div className="app-monitor-panel__subagent-tree" aria-label="当前会话派发任务">
-              {sessionConversationTaskItems.map((item) => {
-                const showStop = canStopSessionConversationTask(item, {
-                  onCancelSession,
-                  onCancelOmcDirectBatchInvocation,
-                  onStopSessionConversationTask,
-                });
-                return (
-                  <div className="app-monitor-panel__session-task-row" key={item.key}>
-                    <button
-                      type="button"
-                      className="app-monitor-panel__subagent-row app-monitor-panel__subagent-row--clickable app-monitor-panel__session-task-row-main"
-                      title={item.label}
-                      onClick={() => openSessionConversationTaskDetail(item)}
-                    >
-                      <span className="app-monitor-panel__subagent-branch" aria-hidden />
-                      <span className="app-monitor-panel__subagent-main">
-                        <span className="app-monitor-panel__subagent-name" title={item.label}>
-                          {item.label}
-                        </span>
-                        {item.subtitle ? (
-                          <span className="app-monitor-panel__subagent-stage">{item.subtitle}</span>
-                        ) : null}
-                      </span>
-                    </button>
-                    <span className="app-monitor-panel__session-task-actions">
-                      {showStop ? (
-                        <Tooltip title="结束执行">
-                          <button
-                            type="button"
-                            className="app-monitor-panel__session-task-stop"
-                            aria-label="结束执行"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              stopSessionConversationTask(item);
-                            }}
-                          >
-                            ■
-                          </button>
-                        </Tooltip>
-                      ) : null}
-                      <SubagentStatusIndicator status={item.status} />
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-
       {employeeItems.length > 0 ? (
       <div className="app-monitor-panel__section">
           {sortedEmployeeItems.map((item) => {
@@ -1459,6 +1410,101 @@ export function ProgressMonitorPanel({
             );
           })}
       </div>
+      ) : null}
+
+      {shouldShowSessionConversationTasks ? (
+        <div
+          className={`app-monitor-panel__section app-monitor-panel__section--session-tasks${
+            executionEnvironmentDispatchTaskItems.length === 0
+              ? " app-monitor-panel__section--session-tasks-empty"
+              : ""
+          }`}
+        >
+          <div className="app-monitor-panel__session-tasks-toolbar">
+            <div className="app-monitor-panel__session-tasks-toolbar-start">
+              <Typography.Text className="app-monitor-panel__session-tasks-title">
+                <SendOutlined className="app-monitor-panel__session-tasks-title-icon" aria-hidden />
+                任务派发
+              </Typography.Text>
+              <span className="app-monitor-panel__session-tasks-count">
+                {runningSessionConversationTasks.length > 0
+                  ? `进行中 ${runningSessionConversationTasks.length}`
+                  : `共 ${executionEnvironmentDispatchTaskItems.length} 项`}
+              </span>
+            </div>
+            {executionEnvironmentDispatchHistoryDays != null &&
+            onExecutionEnvironmentDispatchHistoryDaysChange ? (
+              <Select
+                size="small"
+                className="app-monitor-panel__session-tasks-days"
+                classNames={{ popup: { root: "app-monitor-panel__session-tasks-days-dropdown" } }}
+                aria-label="任务派发历史天数"
+                disabled={executionEnvironmentDispatchHistoryDaysSaving}
+                value={executionEnvironmentDispatchHistoryDays}
+                options={EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAY_OPTIONS.map((day) => ({
+                  value: day,
+                  label: `近 ${day} 天`,
+                }))}
+                onChange={(value) => {
+                  void onExecutionEnvironmentDispatchHistoryDaysChange(
+                    value as ExecutionEnvironmentDispatchHistoryDays,
+                  );
+                }}
+              />
+            ) : null}
+          </div>
+          {executionEnvironmentDispatchTaskItems.length > 0 ? (
+            <div className="app-monitor-panel__session-tasks-list" aria-label="当前会话派发任务">
+              {executionEnvironmentDispatchTaskItems.map((item) => {
+                const showStop = canStopSessionConversationTask(item, {
+                  onCancelSession,
+                  onCancelOmcDirectBatchInvocation,
+                  onStopSessionConversationTask,
+                });
+                return (
+                  <div className="app-monitor-panel__session-task-row" key={item.key}>
+                    <button
+                      type="button"
+                      className="app-monitor-panel__session-task-row-main"
+                      title={item.subtitle ? `${item.label} · ${item.subtitle}` : item.label}
+                      onClick={() => openSessionConversationTaskDetail(item)}
+                    >
+                      <span className="app-monitor-panel__session-task-name" title={item.label}>
+                        {item.label}
+                      </span>
+                      {item.subtitle ? (
+                        <span className="app-monitor-panel__session-task-meta">{item.subtitle}</span>
+                      ) : null}
+                      <span className="app-monitor-panel__session-task-time">
+                        {formatExecutionEnvironmentDispatchTaskTime(item.updatedAt)}
+                      </span>
+                    </button>
+                    <span className="app-monitor-panel__session-task-actions">
+                      {showStop ? (
+                        <Tooltip title="结束执行">
+                          <button
+                            type="button"
+                            className="app-monitor-panel__session-task-stop"
+                            aria-label="结束执行"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              stopSessionConversationTask(item);
+                            }}
+                          >
+                            ■
+                          </button>
+                        </Tooltip>
+                      ) : null}
+                      <SubagentStatusIndicator status={item.status} />
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <div className="app-monitor-panel__session-tasks-empty-hint">近 {executionEnvironmentDispatchHistoryDays ?? 1} 天暂无派发记录</div>
+          )}
+        </div>
       ) : null}
 
       {agentAssignments.length > 0 ? (

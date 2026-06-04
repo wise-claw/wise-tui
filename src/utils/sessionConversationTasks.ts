@@ -7,6 +7,9 @@ import { sessionStatusToConversationTaskStatus } from "../stores/executionEnviro
 import { indexOfLastRenderableUserMessage, isToolOnlyUserMessage } from "./claudeChatMessageDisplay";
 import { isExecutionEnvironmentWorkerRepositoryName } from "./executionEnvironmentDispatch";
 import { isOmcDirectBatchInvocationRunning } from "./omcDirectBatchInvocationDisplay";
+import { formatChatMessageListTime } from "./formatChatMessageListTime";
+
+export { formatChatMessageListTime as formatExecutionEnvironmentDispatchTaskTime };
 
 function truncate(text: string, max = 72): string {
   const normalized = text.replace(/\s+/g, " ").trim();
@@ -239,6 +242,7 @@ export function buildExecutionEnvironmentConversationTasks(input: {
           .join(" ")
           .trim()
           .slice(0, 72) || item.previewText;
+      const dispatchedAt = item.updatedAt > 0 ? item.updatedAt : batch.createdAt;
       const engineShort = SESSION_EXECUTION_ENGINE_LABELS[batch.executionEngine].short;
       const promptBody = item.previewText?.replace(/\s+/g, " ").trim();
       const label =
@@ -256,8 +260,7 @@ export function buildExecutionEnvironmentConversationTasks(input: {
             : engineShort,
         status,
         previewText: truncate(preview || promptBody || "执行中…"),
-        updatedAt:
-          worker?.messages[worker.messages.length - 1]?.timestamp ?? item.updatedAt,
+        updatedAt: dispatchedAt,
         source: "execution_environment",
         sessionId: item.workerSessionId,
         repositoryPath: batch.repositoryPath || anchor.repositoryPath,
@@ -269,7 +272,16 @@ export function buildExecutionEnvironmentConversationTasks(input: {
       });
     }
   }
-  return out;
+  return out.sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+/** 左栏「任务派发」：仅展示执行环境派发历史，按更新时间倒序。 */
+export function filterExecutionEnvironmentDispatchTaskItems(
+  items: readonly SessionConversationTaskItem[],
+): SessionConversationTaskItem[] {
+  return [...items]
+    .filter((item) => item.source === "execution_environment")
+    .sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
 export function buildSessionConversationTasks(input: {

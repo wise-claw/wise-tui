@@ -73,12 +73,22 @@ describe("execution environment worker repository name", () => {
 });
 
 describe("listExecutionEnvironmentEngineMentionOptions", () => {
-  test("marks codex unavailable when not detected", () => {
+  test("omits codex when not detected", () => {
     const rows = listExecutionEnvironmentEngineMentionOptions({
       codexAvailable: false,
       cursorAvailable: true,
     });
-    expect(rows.find((r) => r.engine === "codex")?.available).toBe(false);
+    expect(rows.find((r) => r.engine === "codex")).toBeUndefined();
     expect(rows.find((r) => r.engine === "claude")?.available).toBe(true);
+    expect(rows).toHaveLength(2);
+  });
+
+  test("omits cursor when not ready", () => {
+    const rows = listExecutionEnvironmentEngineMentionOptions({
+      codexAvailable: true,
+      cursorAvailable: false,
+    });
+    expect(rows.find((r) => r.engine === "cursor")).toBeUndefined();
+    expect(rows.map((r) => r.engine)).toEqual(["claude", "codex"]);
   });
 });
