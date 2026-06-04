@@ -133,7 +133,7 @@ interface Props {
   repositoryMemberItems: RepositoryMemberMonitorItem[];
   teamItems: TeamMonitorItem[];
   /** 当前对话子代理 / 任务（显示在「我的团队」上方） */
-  sessionConversationTaskItems?: SessionConversationTaskItem[];
+  sessionConversationTaskItems?: readonly SessionConversationTaskItem[];
   /** 强制展示「子代理 / 任务」区块：即便列表为空也展示区块头（默认：仅当有数据时展示）。 */
   showSessionConversationTasks?: boolean;
   executionEnvironmentDispatchHistoryDays?: ExecutionEnvironmentDispatchHistoryDays;
@@ -145,7 +145,7 @@ interface Props {
   /** 当前主会话 id，用于解析同仓库下的终端 worker 与派发任务归属 */
   activeSessionId?: string | null;
   activeTarget?: MonitorDrawerTarget | null;
-  onOpenTeamDetail: (workflowId: string) => void;
+  onOpenTeamDetail?: (workflowId: string) => void;
   onOpenEmployeeConfig?: () => void;
   onOpenWorkflowConfig?: () => void;
   onStopEmployee?: (employeeId: string) => void;
@@ -1499,7 +1499,7 @@ export function ProgressMonitorPanel({
                 <div
                   key={item.workflowId}
                   className={`app-monitor-panel__item ${activeTarget?.type === "team" && activeTarget.workflowId === item.workflowId ? "app-monitor-panel__item--active" : ""}`}
-                  onClick={() => onOpenTeamDetail(item.workflowId)}
+                  onClick={() => onOpenTeamDetail?.(item.workflowId)}
                 >
                   <div className="app-monitor-panel__item-row">
                     <span className="app-monitor-panel__item-name-wrap">
