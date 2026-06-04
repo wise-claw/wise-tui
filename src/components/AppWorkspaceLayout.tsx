@@ -131,8 +131,6 @@ type LeftSidebarProps = Omit<
   | "dark"
   | "collapsed"
   | "siderWidth"
-  | "compactLayoutMode"
-  | "onToggleCompactLayoutMode"
   | "onOpenActiveRepositoryFile"
 >;
 type PrdTaskSplitPanelProps = ComponentProps<typeof PrdTaskSplitPanelModule.PrdTaskSplitPanel>;
@@ -179,20 +177,16 @@ function useRepositoryFileEditorPanelContextValue(): RepositoryFileEditorPanelCo
 
 interface ConnectedLeftSidebarProps {
   collapsed: boolean;
-  compactLayoutMode: boolean;
   dark: boolean;
   leftSidebarProps: LeftSidebarProps;
-  onToggleCompactLayoutMode: () => void;
   parked: boolean;
   siderWidth: number;
 }
 
 const ConnectedLeftSidebar = memo(function ConnectedLeftSidebar({
   collapsed,
-  compactLayoutMode,
   dark,
   leftSidebarProps,
-  onToggleCompactLayoutMode,
   parked,
   siderWidth,
 }: ConnectedLeftSidebarProps) {
@@ -204,8 +198,6 @@ const ConnectedLeftSidebar = memo(function ConnectedLeftSidebar({
       collapsed={collapsed}
       parked={parked}
       siderWidth={siderWidth}
-      compactLayoutMode={compactLayoutMode}
-      onToggleCompactLayoutMode={onToggleCompactLayoutMode}
       onOpenActiveRepositoryFile={openRepositoryFile}
     />
   );
@@ -357,7 +349,6 @@ export interface AppWorkspaceLayoutProps {
   onCloseTrellisInspector: () => void;
   /** Cockpit 定时自动化 Hub 关闭（返回上一 ViewMode）。 */
   onCloseCockpitAutomationHub: () => void;
-  compactLayoutMode: boolean;
   effectiveRightCollapsed: boolean;
   mainLayoutContentRef: RefObject<HTMLElement | null>;
   mainLayoutLeftWidthPx: number;
@@ -403,7 +394,6 @@ export interface AppWorkspaceLayoutProps {
   prdTaskSplitPanelProps: PrdTaskSplitPanelProps;
   progressMonitorDrawerProps: ComponentProps<typeof ProgressMonitorDrawer>;
   historyTranscriptDrawerProps: ComponentProps<typeof MonitorHistorySessionTranscriptDrawer>;
-  onToggleCompactLayoutMode: () => void;
   onLeftWidthChange: (widthPx: number) => void;
   onRightWidthChange: (widthPx: number) => void;
   onConsumeRepositoryFileOpenRequest: () => void;
@@ -468,7 +458,6 @@ export function AppWorkspaceLayout({
   onCloseCcWorkflowStudio,
   onCloseTrellisInspector,
   onCloseCockpitAutomationHub,
-  compactLayoutMode,
   effectiveRightCollapsed,
   mainLayoutContentRef,
   mainLayoutLeftWidthPx,
@@ -503,7 +492,6 @@ export function AppWorkspaceLayout({
   prdTaskSplitPanelProps,
   progressMonitorDrawerProps,
   historyTranscriptDrawerProps,
-  onToggleCompactLayoutMode,
   onLeftWidthChange,
   onRightWidthChange,
   onConsumeRepositoryFileOpenRequest,
@@ -720,8 +708,6 @@ export function AppWorkspaceLayout({
                     collapsed={collapsed}
                     parked={authorMode || leftSidebarParked}
                     siderWidth={mainLayoutLeftWidthPx}
-                    compactLayoutMode={compactLayoutMode}
-                    onToggleCompactLayoutMode={onToggleCompactLayoutMode}
                     leftSidebarProps={leftSidebarProps}
                   />
                 </Suspense>

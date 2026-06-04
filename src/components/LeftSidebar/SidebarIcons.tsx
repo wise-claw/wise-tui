@@ -194,12 +194,19 @@ export function WorkflowStudioNavIcon() {
   );
 }
 
-export function IconCompactLayout() {
+/** 默认配置（Sliders）— 左栏顶栏弹窗入口 */
+export function IconDefaultConfig() {
   return (
     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-      <rect x="3" y="3" width="18" height="18" rx="2.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      <rect x="11" y="11" width="10" height="10" rx="1.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" fill="currentColor" fillOpacity="0.1" />
-      <path d="M14 10l-4 4m0 0h3m-3 0v-3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+      <path
+        d="M4 7h16M4 12h16M4 17h16"
+        stroke="currentColor"
+        strokeWidth="1.75"
+        strokeLinecap="round"
+      />
+      <circle cx="9" cy="7" r="2" fill="currentColor" />
+      <circle cx="15" cy="12" r="2" fill="currentColor" />
+      <circle cx="11" cy="17" r="2" fill="currentColor" />
     </svg>
   );
 }

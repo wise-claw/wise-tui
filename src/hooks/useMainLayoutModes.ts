@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { safeUnlisten } from "../utils/safeTauriUnlisten";
 import { message } from "antd";
@@ -50,8 +50,6 @@ import {
 } from "../utils/multiPaneSlots";
 import { resolveTrellisBootstrapPath } from "../utils/trellisBootstrapPath";
 
-const COMPACT_LAYOUT_WINDOW_WIDTH_PX = 700;
-const COMPACT_LAYOUT_WINDOW_HEIGHT_PX = 600;
 /** 多屏切换 in-flight 超时：防止 Tauri resize 挂起导致后续操作永久无响应。 */
 const PANE_CHANGE_IN_FLIGHT_TIMEOUT_MS = 8000;
 
@@ -109,15 +107,7 @@ export function useMainLayoutModes({
   const [rightPanelDefaultCollapsed, setRightPanelDefaultCollapsed] = useState(
     RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK,
   );
-  const [compactLayoutMode, setCompactLayoutMode] = useState(false);
-  const compactLayoutSnapshotRef = useRef<{ width: number; height: number } | null>(null);
-  const compactLayoutModeRef = useRef(false);
-  compactLayoutModeRef.current = compactLayoutMode;
-
-  const effectiveRightCollapsed = useMemo(
-    () => compactLayoutMode || rightCollapsed,
-    [compactLayoutMode, rightCollapsed],
-  );
+  const effectiveRightCollapsed = rightCollapsed;
   const {
     leftWidthPx: mainLayoutLeftWidthPx,
     rightWidthPx: mainLayoutRightWidthPx,
@@ -615,62 +605,13 @@ export function useMainLayoutModes({
     setExtraPanes((prev) => normalizeExtraPanesToPaneCount(paneCount, prev, createPaneSlot));
   }, [paneCount, setExtraPanes]);
 
-  const exitCompactLayoutMode = useCallback(async () => {
-    const snap = compactLayoutSnapshotRef.current;
-    compactLayoutSnapshotRef.current = null;
-    setCompactLayoutMode(false);
-    await waitLayoutFrames(2);
-    if (!snap) return;
-    try {
-      await setMainWindowLogicalInnerSize(snap.width, snap.height);
-    } catch {
-      /* browser dev / non-Tauri */
-    }
-  }, []);
-
-  const handleToggleCompactLayoutMode = useCallback(() => {
-    if (compactLayoutModeRef.current) {
-      void exitCompactLayoutMode();
-      return;
-    }
-    compactLayoutSnapshotRef.current = {
-      width: window.innerWidth,
-      height: window.innerHeight,
-    };
-    setCompactLayoutMode(true);
-    void (async () => {
-      await waitLayoutFrames(2);
-      if (!compactLayoutModeRef.current) return;
-      if (!compactLayoutSnapshotRef.current) return;
-      try {
-        await setMainWindowLogicalInnerSize(COMPACT_LAYOUT_WINDOW_WIDTH_PX, COMPACT_LAYOUT_WINDOW_HEIGHT_PX);
-      } catch {
-        /* browser dev / non-Tauri */
-      }
-    })();
-  }, [exitCompactLayoutMode]);
-
-  const handleToggleCompactLayoutModeRef = useRef(handleToggleCompactLayoutMode);
-  handleToggleCompactLayoutModeRef.current = handleToggleCompactLayoutMode;
-
   useEffect(() => {
-    let unlistenCompact: (() => void) | undefined;
     let unlistenMultiPane: (() => void) | undefined;
     let unlistenLegacyDualPane: (() => void) | undefined;
     let cancelled = false;
     const onCycleMultiPane = () => {
       handleCyclePaneCountRef.current();
     };
-    void listen("global-toggle-compact-layout", () => {
-      handleToggleCompactLayoutModeRef.current();
-    })
-      .then((fn) => {
-        if (!cancelled) unlistenCompact = fn;
-        else safeUnlisten(fn);
-      })
-      .catch(() => {
-        /* non-Tauri / event unavailable */
-      });
     void listen("global-cycle-multi-pane", onCycleMultiPane)
       .then((fn) => {
         if (!cancelled) unlistenMultiPane = fn;
@@ -690,28 +631,21 @@ export function useMainLayoutModes({
       });
     return () => {
       cancelled = true;
-      safeUnlisten(unlistenCompact);
       safeUnlisten(unlistenMultiPane);
       safeUnlisten(unlistenLegacyDualPane);
     };
   }, []);
 
   const handleToggleRightPanel = useCallback(() => {
-    if (compactLayoutModeRef.current) {
-      void exitCompactLayoutMode();
-      return;
-    }
     setRightCollapsed((c) => !c);
-  }, [exitCompactLayoutMode]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
     void loadRightPanelDefaultCollapsed().then((collapsed) => {
       if (cancelled) return;
       setRightPanelDefaultCollapsed(collapsed);
-      if (!compactLayoutModeRef.current) {
-        setRightCollapsed(collapsed);
-      }
+      setRightCollapsed(collapsed);
     });
     return () => {
       cancelled = true;
@@ -724,9 +658,7 @@ export function useMainLayoutModes({
       const collapsed = (event as CustomEvent<{ collapsed?: boolean }>).detail?.collapsed;
       if (typeof collapsed !== "boolean") return;
       setRightPanelDefaultCollapsed(collapsed);
-      if (!compactLayoutModeRef.current) {
-        setRightCollapsed(collapsed);
-      }
+      setRightCollapsed(collapsed);
     };
     window.addEventListener(WISE_RIGHT_PANEL_DEFAULT_CHANGED, handler);
     return () => window.removeEventListener(WISE_RIGHT_PANEL_DEFAULT_CHANGED, handler);
@@ -736,9 +668,7 @@ export function useMainLayoutModes({
     void saveRightPanelDefaultCollapsed(collapsed)
       .then(() => {
         setRightPanelDefaultCollapsed(collapsed);
-        if (!compactLayoutModeRef.current) {
-          setRightCollapsed(collapsed);
-        }
+        setRightCollapsed(collapsed);
       })
       .catch(() => {
         message.error("保存右侧面板默认状态失败");
@@ -746,7 +676,6 @@ export function useMainLayoutModes({
   }, []);
 
   return {
-    compactLayoutMode,
     effectiveRightCollapsed,
     handlePaneRepositorySelect,
     handlePaneProjectNewSession,
@@ -755,7 +684,6 @@ export function useMainLayoutModes({
     handleNewPaneProjectSessionInNextSlot,
     handleChangePaneCount,
     handleCyclePaneCount,
-    handleToggleCompactLayoutMode,
     handleToggleRightPanel,
     handleSetRightPanelDefaultCollapsed,
     rightPanelDefaultCollapsed,

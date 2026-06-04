@@ -90,8 +90,6 @@ export function LeftSidebar({
   collapsed,
   siderWidth = MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX,
   parked = false,
-  compactLayoutMode = false,
-  onToggleCompactLayoutMode,
   projects,
   activeProjectId,
   activeWorkspaceFocus = "repository",
@@ -918,8 +916,6 @@ export function LeftSidebar({
       theme={dark ? "dark" : "light"}
     >
       <LeftSidebarTopbar
-        compactLayoutMode={compactLayoutMode}
-        onToggleCompactLayoutMode={onToggleCompactLayoutMode}
         authorDisabled={authorDisabled}
         authorTooltip={authorDisabledTooltip}
         activeRepositoryPath={activeRepositoryPath}

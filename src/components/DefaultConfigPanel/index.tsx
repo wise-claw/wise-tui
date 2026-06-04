@@ -36,7 +36,6 @@ const DEFAULT_CONFIG_NOTES = [
   "Free Claude Code 的安装、启停与 Claude 对齐请在主会话顶栏 FCC 图标弹窗中操作；此处仅控制图标是否显示。",
   "长驻模式使用 --input-format stream-json，与终端 CLI 共享 MCP / Skills / Hooks。",
   "OMC 直连批量、PRD 拆分等编排仍使用独立 -p 子进程，不受会话默认影响。",
-  "小窗口模式会强制收起右栏，不受右侧面板默认影响。",
   "LLM 流量监听默认隐藏；开启后上游建议填 FCC 地址以便旁路抓包，勿把百炼 sk- key 写入 Claude env。",
 ] as const;
 

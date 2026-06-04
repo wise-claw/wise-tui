@@ -2,13 +2,11 @@ import { Tooltip } from "antd";
 import { ClaudeCodeUsageHeaderBtn } from "../ClaudeCodeUsagePopover";
 import { ClaudeCodeToolsTopbarTrigger } from "../ClaudeSessions/ClaudeCodeToolsTopbarTrigger";
 import { ClaudeModelTopbarTrigger } from "../ClaudeSessions/ClaudeModelTopbarTrigger";
+import { DefaultConfigTopbarTrigger } from "./DefaultConfigTopbarTrigger";
 import { IconSettings } from "../icons/IconSettings";
-import { IconCompactLayout } from "./SidebarIcons";
 import type { AuthorPane } from "../../types/viewMode";
 
 interface LeftSidebarTopbarProps {
-  compactLayoutMode: boolean;
-  onToggleCompactLayoutMode?: () => void;
   authorDisabled?: boolean;
   authorTooltip?: string;
   activeRepositoryPath?: string;
@@ -16,8 +14,6 @@ interface LeftSidebarTopbarProps {
 }
 
 export function LeftSidebarTopbar({
-  compactLayoutMode,
-  onToggleCompactLayoutMode,
   authorDisabled = false,
   authorTooltip = "单仓不支持工作台配置；升格为工作区后启用",
   activeRepositoryPath,
@@ -42,25 +38,7 @@ export function LeftSidebarTopbar({
             <IconSettings />
           </button>
         </Tooltip>
-        {onToggleCompactLayoutMode ? (
-          <Tooltip
-            title={
-              compactLayoutMode
-                ? "退出小窗口模式（⌥S）"
-                : "小窗口模式（收起右栏，窗口 700×600，快捷键 ⌥S）"
-            }
-            mouseEnterDelay={0.35}
-          >
-            <button
-              type="button"
-              className={`app-left-sidebar-topbar-btn${compactLayoutMode ? " app-left-sidebar-topbar-btn--active" : ""}`}
-              aria-label={compactLayoutMode ? "退出小窗口模式" : "小窗口模式"}
-              onClick={onToggleCompactLayoutMode}
-            >
-              <IconCompactLayout />
-            </button>
-          </Tooltip>
-        ) : null}
+        <DefaultConfigTopbarTrigger />
         <ClaudeCodeUsageHeaderBtn repositoryPath={activeRepositoryPath} />
         <ClaudeModelTopbarTrigger variant="sidebar" />
         <ClaudeCodeToolsTopbarTrigger

@@ -57,13 +57,13 @@ pub fn run() {
                 })
                 .map_err(|e| e.to_string())?;
 
-            // ⌥S / Alt+S：置顶主窗口并切换小窗口模式（与左栏按钮一致）
-            let toggle_compact_layout_shortcut = Shortcut::new(Some(Modifiers::ALT), Code::KeyS);
+            // ⌥S / Alt+S：置顶主窗口并打开默认配置弹窗（与左栏按钮一致）
+            let open_default_config_shortcut = Shortcut::new(Some(Modifiers::ALT), Code::KeyS);
             app.global_shortcut()
-                .on_shortcut(toggle_compact_layout_shortcut, |_app, _shortcut, event| {
+                .on_shortcut(open_default_config_shortcut, |_app, _shortcut, event| {
                     if event.state() == ShortcutState::Pressed {
                         let _ = wise_mascot::wise_main_window_focus(_app.clone());
-                        let _ = _app.emit("global-toggle-compact-layout", ());
+                        let _ = _app.emit("global-open-default-config", ());
                     }
                 })
                 .map_err(|e| e.to_string())?;

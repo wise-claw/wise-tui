@@ -23,7 +23,7 @@ export const APP_SHORTCUT_GROUPS: AppShortcutGroup[] = [
       },
       {
         keys: "⌥S · Alt+S",
-        description: "置顶主窗口，并切换小窗口模式（收起右栏、固定窗口尺寸）。",
+        description: "置顶主窗口，并打开默认配置弹窗。",
       },
       {
         keys: "⌥K · Alt+K",

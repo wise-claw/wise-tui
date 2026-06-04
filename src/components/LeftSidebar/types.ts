@@ -30,9 +30,6 @@ export interface LeftSidebarProps {
   siderWidth?: number;
   /** 为 true 时收起侧栏（需求拆分全屏叠层仍会用 fixed 盖住整窗）。 */
   parked?: boolean;
-  /** Compact window mode: collapses the right rail and shrinks the main window. */
-  compactLayoutMode?: boolean;
-  onToggleCompactLayoutMode?: () => void;
   projects: ProjectItem[];
   activeProjectId: string | null;
   /** 当前侧栏选中粒度：Workspace 项目 vs 具体仓库。 */

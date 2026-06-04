@@ -1857,7 +1857,6 @@ export default function App() {
   }, [enterAuthorWorkflows]);
 
   const {
-    compactLayoutMode,
     effectiveRightCollapsed,
     handlePaneRepositorySelect,
     handlePaneProjectNewSession,
@@ -1865,7 +1864,6 @@ export default function App() {
     handleNewPaneSessionInNextSlot,
     handleNewPaneProjectSessionInNextSlot,
     handleChangePaneCount,
-    handleToggleCompactLayoutMode,
     handleToggleRightPanel,
     handleSetRightPanelDefaultCollapsed,
     rightPanelDefaultCollapsed,
@@ -2843,7 +2841,6 @@ export default function App() {
       onCloseCcWorkflowStudio={onCloseCcWorkflowStudio}
       onCloseTrellisInspector={viewMode.back}
       onCloseCockpitAutomationHub={viewMode.back}
-      compactLayoutMode={compactLayoutMode}
       effectiveRightCollapsed={effectiveRightCollapsed}
       mainLayoutContentRef={mainLayoutContentRef}
       mainLayoutLeftWidthPx={mainLayoutLeftWidthPx}
@@ -2853,7 +2850,6 @@ export default function App() {
       workspaceMemosProjectId={activeProjectId}
       workspaceMemosRepositoryId={activeRepositoryId}
       onEnsureChatModeForMemo={() => viewMode.enter({ kind: "chat" })}
-      onToggleCompactLayoutMode={handleToggleCompactLayoutMode}
       onLeftWidthChange={setMainLayoutLeftWidthPx}
       onRightWidthChange={setMainLayoutRightWidthPx}
       onOpenRemoteChannels={() => enterAuthorPane("channels")}
