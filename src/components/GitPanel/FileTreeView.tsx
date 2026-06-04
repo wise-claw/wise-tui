@@ -7,6 +7,7 @@ import { ExplorerTreeChevron, ExplorerTreeFolderIcon } from "./explorerTreeChrom
 import { DiscardFilePopconfirm } from "./DiscardFilePopconfirm";
 import { FileRow } from "./FileRow";
 import { RevertIcon } from "./RevertIcon";
+import { gitTreeDirPaddingLeftPx, gitTreeFilePaddingLeftPx } from "./gitTreeLayout";
 import type { FileTreeNode, GitPanelOpenFileOptions } from "./types";
 
 interface FileTreeNodeProps {
@@ -39,7 +40,7 @@ function FileTreeNodeComponent({
       <>
         <div
           className="git-tree-node git-tree-node--dir"
-          style={{ paddingLeft: depth * 4 }}
+          style={{ paddingLeft: gitTreeDirPaddingLeftPx(depth) }}
         >
           <span
             className={`git-tree-node-arrow ${isExpanded ? "git-tree-node-arrow--expanded" : ""}`}
@@ -132,8 +133,9 @@ function FileTreeNodeComponent({
   return (
     <div
       className={`git-tree-node git-tree-node--file${onOpenFile ? " git-tree-node--file--clickable" : ""}`}
+      style={{ paddingLeft: gitTreeFilePaddingLeftPx(depth) }}
     >
-      {node.file && (
+      {node.file ? (
         <FileRow
           file={node.file}
           section={section}
@@ -142,7 +144,7 @@ function FileTreeNodeComponent({
           onDiscard={onDiscard}
           onOpenFile={onOpenFile}
         />
-      )}
+      ) : null}
     </div>
   );
 }

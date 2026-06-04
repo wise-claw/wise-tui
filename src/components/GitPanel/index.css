@@ -1106,11 +1106,27 @@
 }
 
 .git-tree-node--file {
-  padding: 0;
+  padding: 0 1px;
+  gap: 1px;
+}
+
+.git-tree-node--file .git-file-row {
+  flex: 1;
+  min-width: 0;
+}
+
+.git-tree-node--file .git-file-status-badge {
+  width: 16px;
+  height: 16px;
+  font-size: 8px;
 }
 
 .git-tree-node--file:hover {
   background: transparent;
+}
+
+.git-tree-node--file--clickable:hover .git-file-row {
+  background: var(--ant-color-fill-content);
 }
 
 .git-tree-node--file--clickable {
@@ -1118,7 +1134,7 @@
 }
 
 .git-tree-node--file--clickable:hover {
-  background: var(--ant-color-fill-content);
+  background: transparent;
 }
 
 .git-tree-node-arrow {
@@ -1208,8 +1224,8 @@
 }
 
 .git-tree-children {
-  margin-left: 10px;
-  padding-left: 4px;
+  margin-left: 3px;
+  padding-left: 0;
   border-left: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 72%, transparent);
   overflow-x: hidden;
 }

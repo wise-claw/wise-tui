@@ -1,16 +1,16 @@
-import type { editor, ISelection, IDisposable } from "monaco-editor";
+import type { editor, IDisposable } from "monaco-editor";
 import { Selection } from "monaco-editor";
 
 const ACCIDENTAL_MIN_LINE_SPAN = 3;
 const ACCIDENTAL_MIN_CHAR_COUNT = 120;
 
-function selectionLineSpan(selection: ISelection): number {
+function selectionLineSpan(selection: Selection): number {
   return Math.abs(selection.endLineNumber - selection.startLineNumber) + 1;
 }
 
 function isAccidentalBlockSelection(
   editor: editor.IStandaloneCodeEditor,
-  selection: ISelection,
+  selection: Selection,
 ): boolean {
   if (selection.isEmpty()) return false;
   if (selectionLineSpan(selection) >= ACCIDENTAL_MIN_LINE_SPAN) return true;
