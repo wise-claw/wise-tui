@@ -2257,7 +2257,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   flex-shrink: 0;
 }
 
-/* 工作区列表收起：仅保留标题行 + 摘要行，下方 Git/文件面板占满剩余高度 */
+/* 工作区列表收起：仅保留标题行，下方 Git/文件面板占满剩余高度 */
 .app-left-sidebar-project-and-files[data-workspace-list-section-collapsed="true"] {
   gap: 0;
 }

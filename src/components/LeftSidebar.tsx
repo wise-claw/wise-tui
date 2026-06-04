@@ -1133,39 +1133,7 @@ export function LeftSidebar({
 
         {showRepoPanel ? (
           <div className="app-left-sidebar-bottom-tabs">
-            {leftBottomTab === "files" && filesExplorerSectionCollapsed ? (
-              <div className="app-left-sidebar-repo-panel-header">
-                {repoPanelTabSwitcher}
-                <div className="app-left-sidebar-repo-panel-header__selector">
-                  <GitPanelWorkspaceSelector
-                    {...repoPanelWorkspaceSelectorProps}
-                    activeRepositoryPath={effectiveRepoPanelPath}
-                  />
-                </div>
-                {workspaceListSectionCollapsed ? (
-                  <Tooltip title="展开工作区列表" mouseEnterDelay={0.35}>
-                    <button
-                      type="button"
-                      className="app-left-sidebar-repo-panel-header__expand-icon"
-                      aria-label="展开工作区列表"
-                      onClick={() => handleWorkspaceListSectionCollapsedChange(false)}
-                    >
-                      <ExpandIcon expanded={false} />
-                    </button>
-                  </Tooltip>
-                ) : null}
-                <Tooltip title="展开文件树" mouseEnterDelay={0.35}>
-                  <button
-                    type="button"
-                    className="app-left-sidebar-repo-panel-header__expand-icon"
-                    aria-label="展开文件树"
-                    onClick={() => handleFilesExplorerSectionCollapsedChange(false)}
-                  >
-                    <ExpandIcon expanded={false} />
-                  </button>
-                </Tooltip>
-              </div>
-            ) : leftBottomTab === "git" && workspaceListSectionCollapsed ? (
+            {leftBottomTab === "git" && workspaceListSectionCollapsed ? (
               <div className="app-left-sidebar-repo-panel-header">
                 {repoPanelTabSwitcher}
                 <div className="app-left-sidebar-repo-panel-header__selector">
@@ -1208,7 +1176,7 @@ export function LeftSidebar({
                 </Suspense>
               ) : (
                 <ActiveRepositoryFilesPanel
-                  headerPrefix={filesExplorerSectionCollapsed ? undefined : repoPanelTabSwitcher}
+                  headerPrefix={repoPanelTabSwitcher}
                   activeRepositoryPath={effectiveRepoPanelPath}
                   activeRepositoryName={repoPanelRepositoryName}
                   search={repositoryFileTreeSearch}

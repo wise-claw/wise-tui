@@ -24,8 +24,8 @@
   overflow: visible;
 }
 
-.app-left-sidebar-monitor-panel--section-collapsed .app-monitor-panel {
-  border-top: none;
+.app-left-sidebar-monitor-panel--section-collapsed .app-monitor-panel--section-collapsed {
+  max-height: none;
 }
 
 /* 左栏运行面板：列表与区块紧凑密度 */

@@ -35,8 +35,6 @@ export interface RepositoryFilesExplorerProps {
   onSearchChange?: (value: string) => void;
   /** 左栏整合头部：Tab 切换等，渲染在仓库标题左侧 */
   headerPrefix?: ReactNode;
-  /** 收起态由外部头部承接时，不再渲染内置收起行 */
-  hideCollapsedChrome?: boolean;
   /** 与 Git 面板一致的工作区 / 仓库选择器 */
   workspaceSelector?: WorkspaceSelectorProps;
 }
@@ -52,7 +50,6 @@ export function RepositoryFilesExplorer({
   showSearchField = false,
   onSearchChange,
   headerPrefix,
-  hideCollapsedChrome = false,
   workspaceSelector,
 }: RepositoryFilesExplorerProps) {
   const trimmedRepositoryPath = repositoryPath.trim();
@@ -105,75 +102,6 @@ export function RepositoryFilesExplorer({
   }
   const setSectionCollapsed = onSectionCollapsedChange;
   const switchingRepositoryTree = explorer.treeStale && !explorer.hasRootLoaded;
-
-  if (sectionCollapsed && setSectionCollapsed) {
-    if (hideCollapsedChrome) {
-      return <div className="git-files-mode git-files-mode--section-collapsed git-files-mode--external-header" />;
-    }
-    const label = repositoryLabel || "资源管理器";
-    return (
-      <div className="git-files-mode git-files-mode--section-collapsed">
-        <div className="app-repository-row app-left-sidebar-files-explorer-collapsed-row">
-          <div
-            className="app-repository-item app-repository-item--repo app-repository-item--files-root app-repository-item--files-root-collapsed"
-            title={repositoryPath}
-          >
-            <span
-              className="app-repository-expand"
-              role="button"
-              tabIndex={0}
-              aria-expanded={false}
-              aria-label="展开文件树"
-              onClick={(e) => {
-                e.stopPropagation();
-                setSectionCollapsed(false);
-              }}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  e.stopPropagation();
-                  setSectionCollapsed(false);
-                }
-              }}
-            >
-              <ExpandIcon expanded={false} />
-            </span>
-            <span
-              className="app-repository-icon-wrap app-left-sidebar-files-explorer-collapsed-hit"
-              role="button"
-              tabIndex={0}
-              aria-label={`展开 ${label}`}
-              onClick={() => setSectionCollapsed(false)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  setSectionCollapsed(false);
-                }
-              }}
-            >
-              <span className="app-repository-icon app-repository-icon--folder">
-                <FolderOpenOutlined />
-              </span>
-            </span>
-            <span
-              className="app-repository-name app-left-sidebar-files-explorer-collapsed-hit"
-              role="button"
-              tabIndex={0}
-              onClick={() => setSectionCollapsed(false)}
-              onKeyDown={(e) => {
-                if (e.key === "Enter" || e.key === " ") {
-                  e.preventDefault();
-                  setSectionCollapsed(false);
-                }
-              }}
-            >
-              {label}
-            </span>
-          </div>
-        </div>
-      </div>
-    );
-  }
 
   const treeBody = explorer.loadError ? (
     <Empty
@@ -293,8 +221,30 @@ export function RepositoryFilesExplorer({
     </span>
   );
 
+  const sectionCollapseButton =
+    setSectionCollapsed != null ? (
+      <Tooltip
+        title={sectionCollapsed ? "展开文件树" : "收起文件树"}
+        mouseEnterDelay={0.35}
+      >
+        <button
+          type="button"
+          className="git-files-explorer-section-collapse"
+          aria-expanded={!sectionCollapsed}
+          aria-label={sectionCollapsed ? "展开文件树" : "收起文件树"}
+          onClick={() => setSectionCollapsed(!sectionCollapsed)}
+        >
+          <ExpandIcon expanded={!sectionCollapsed} />
+        </button>
+      </Tooltip>
+    ) : null;
+
   return (
-    <div className="git-files-mode">
+    <div
+      className={
+        "git-files-mode" + (sectionCollapsed ? " git-files-mode--section-collapsed" : "")
+      }
+    >
       <div className="git-files-explorer-bar">
         {headerPrefix ? <div className="git-files-explorer-bar-prefix">{headerPrefix}</div> : null}
         {workspaceSelector ? (
@@ -304,23 +254,6 @@ export function RepositoryFilesExplorer({
               activeRepositoryPath={repositoryPath}
             />
           </div>
-        ) : setSectionCollapsed ? (
-          <Tooltip title="点击收起文件树" mouseEnterDelay={0.35}>
-            <button
-              type="button"
-              className="git-files-explorer-title git-files-explorer-title--toggle git-files-explorer-title--with-expand"
-              title={repositoryPath}
-              onClick={() => setSectionCollapsed(true)}
-            >
-              <span className="git-files-explorer-expand" aria-hidden>
-                <ExpandIcon expanded />
-              </span>
-              <span className="git-files-explorer-title-icon-wrap" aria-hidden>
-                <FolderOpenOutlined />
-              </span>
-              <span className="git-files-explorer-title-text">{repositoryLabel || "资源管理器"}</span>
-            </button>
-          </Tooltip>
         ) : (
           <span className="git-files-explorer-title" title={repositoryPath}>
             <span className="git-files-explorer-title-icon-wrap" aria-hidden>
@@ -329,21 +262,10 @@ export function RepositoryFilesExplorer({
             <span className="git-files-explorer-title-text">{repositoryLabel || "资源管理器"}</span>
           </span>
         )}
-        {workspaceSelector && setSectionCollapsed ? (
-          <Tooltip title="收起文件树" mouseEnterDelay={0.35}>
-            <button
-              type="button"
-              className="git-files-explorer-section-collapse"
-              aria-label="收起文件树"
-              onClick={() => setSectionCollapsed(true)}
-            >
-              <ExpandIcon expanded />
-            </button>
-          </Tooltip>
-        ) : null}
-        {!toolbarInSearchRow ? explorerToolbarActions : null}
+        {sectionCollapseButton}
+        {!sectionCollapsed && !toolbarInSearchRow ? explorerToolbarActions : null}
       </div>
-      {toolbarInSearchRow ? (
+      {!sectionCollapsed && toolbarInSearchRow ? (
         <div className="git-files-explorer-search">
           <Input
             className="git-files-explorer-search-field"
@@ -356,6 +278,7 @@ export function RepositoryFilesExplorer({
           {explorerToolbarActions}
         </div>
       ) : null}
+      {!sectionCollapsed ? (
       <div
         className={`git-files-explorer-scroll-region${
           explorer.isRefreshing && explorer.filteredTree.length === 0
@@ -384,7 +307,8 @@ export function RepositoryFilesExplorer({
           </>
         )}
       </div>
-      {explorer.explorerCtx ? (
+      ) : null}
+      {!sectionCollapsed && explorer.explorerCtx ? (
         <>
           <div
             className="git-files-ctx-backdrop"
@@ -405,7 +329,7 @@ export function RepositoryFilesExplorer({
           />
         </>
       ) : null}
-      {explorer.deletePop ? (
+      {!sectionCollapsed && explorer.deletePop ? (
         <Popconfirm
           open
           title="确认删除"

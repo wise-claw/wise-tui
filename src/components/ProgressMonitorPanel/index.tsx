@@ -1164,13 +1164,6 @@ export function ProgressMonitorPanel({
     agentAssignments.length > 0 ||
     teamItems.length > 0;
 
-  const collapsedSummaryMeta = useMemo(() => {
-    const runningTerminals = employeeItems.filter((item) => item.status === "in_progress").length;
-    const runningTeams = teamItems.filter((item) => item.status === "in_progress").length;
-    const activeCount = runningTerminals + runningTeams + agentAssignments.length;
-    return activeCount > 0 ? `${activeCount} 活跃` : null;
-  }, [agentAssignments.length, employeeItems, teamItems]);
-
   const monitorDrawers = (
     <>
       <OmcDirectBatchInvocationDetailDrawer
@@ -1206,84 +1199,44 @@ export function ProgressMonitorPanel({
     </>
   );
 
-  if (sectionCollapsed && setSectionCollapsed) {
-    return (
-      <div className="app-monitor-panel app-monitor-panel--section-collapsed">
-        <div className="app-repository-row app-left-sidebar-monitor-panel-collapsed-row">
-          <div className="app-repository-item app-repository-item--project app-repository-item--monitor-panel-collapsed">
-            <span
-              className="app-repository-expand"
-              role="button"
-              tabIndex={0}
-              aria-expanded={false}
-              aria-label="展开运行面板"
-              onClick={(event) => {
-                event.stopPropagation();
-                setSectionCollapsed(false);
-              }}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  setSectionCollapsed(false);
-                }
-              }}
-            >
-              <ExpandIcon expanded={false} />
-            </span>
-            <span
-              className="app-repository-name-block app-left-sidebar-monitor-panel-collapsed-hit"
-              role="button"
-              tabIndex={0}
-              aria-label="展开运行面板"
-              onClick={() => setSectionCollapsed(false)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter" || event.key === " ") {
-                  event.preventDefault();
-                  setSectionCollapsed(false);
-                }
-              }}
-            >
-              <span className="app-repository-name">运行面板</span>
-              {collapsedSummaryMeta ? (
-                <span className="app-repository-meta" aria-label={collapsedSummaryMeta}>
-                  {collapsedSummaryMeta}
-                </span>
-              ) : null}
-            </span>
-          </div>
-        </div>
-        {monitorDrawers}
-      </div>
-    );
-  }
-
   return (
-    <div className="app-monitor-panel">
+    <div
+      className={
+        "app-monitor-panel" + (sectionCollapsed ? " app-monitor-panel--section-collapsed" : "")
+      }
+    >
       <div className="app-monitor-panel__head">
         <div className="app-monitor-panel__head-start">
           <div className="app-monitor-panel__title">运行面板</div>
-          <MonitorPanelHeadConfigActions
-            onOpenEmployeeConfig={onOpenEmployeeConfig}
-            onOpenWorkflowConfig={onOpenWorkflowConfig}
-          />
+          {!sectionCollapsed ? (
+            <MonitorPanelHeadConfigActions
+              onOpenEmployeeConfig={onOpenEmployeeConfig}
+              onOpenWorkflowConfig={onOpenWorkflowConfig}
+            />
+          ) : null}
         </div>
         <div className="app-monitor-panel__head-end">
           {setSectionCollapsed ? (
-            <Tooltip title="收起运行面板" mouseEnterDelay={0.35}>
+            <Tooltip
+              title={sectionCollapsed ? "展开运行面板" : "收起运行面板"}
+              mouseEnterDelay={0.35}
+            >
               <button
                 type="button"
                 className="app-monitor-panel__section-collapse-btn"
-                aria-label="收起运行面板"
-                onClick={() => setSectionCollapsed(true)}
+                aria-expanded={!sectionCollapsed}
+                aria-label={sectionCollapsed ? "展开运行面板" : "收起运行面板"}
+                onClick={() => setSectionCollapsed(!sectionCollapsed)}
               >
-                <ExpandIcon expanded />
+                <ExpandIcon expanded={!sectionCollapsed} />
               </button>
             </Tooltip>
           ) : null}
         </div>
       </div>
 
+      {!sectionCollapsed ? (
+      <>
       {!panelHasListContent ? (
         <div className="app-monitor-panel__empty app-monitor-panel__empty--with-action">
           <span>暂无终端</span>
@@ -1706,6 +1659,8 @@ export function ProgressMonitorPanel({
             })}
           </div>
         </div>
+      ) : null}
+      </>
       ) : null}
 
       {monitorDrawers}

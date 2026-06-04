@@ -14,11 +14,6 @@ export function WorkspaceTodosPanel({ projectId, repositoryId }: WorkspaceTodosP
   const todos = useWorkspaceTodos({ projectId, repositoryId });
   const [showCompleted, setShowCompleted] = useState(false);
 
-  const incompleteCount = useMemo(
-    () => todos.displayItems.filter((item) => !item.completed).length,
-    [todos.displayItems],
-  );
-
   const completedCount = useMemo(
     () => todos.displayItems.filter((item) => item.completed).length,
     [todos.displayItems],
@@ -30,7 +25,6 @@ export function WorkspaceTodosPanel({ projectId, repositoryId }: WorkspaceTodosP
       className="app-workspace-todos-panel"
       ariaLabel="待办事项"
       title="待办事项"
-      summaryMeta={incompleteCount > 0 ? String(incompleteCount) : null}
       headActions={
         completedCount > 0 ? (
           <div className="app-workspace-todos-panel__head-actions">

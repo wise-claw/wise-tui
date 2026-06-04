@@ -1381,9 +1381,6 @@
 .git-files-explorer-search .ant-input-affix-wrapper {
   font-size: 12px;
 }
-.git-files-mode--section-collapsed .git-files-explorer-bar {
-  display: none;
-}
 
 .git-files-explorer-expand {
   flex-shrink: 0;

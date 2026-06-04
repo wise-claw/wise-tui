@@ -51,7 +51,6 @@ export function ActiveRepositoryFilesPanel({
           onClearExplorerSearch={() => onSearchChange("")}
           sectionCollapsed={sectionCollapsed}
           onSectionCollapsedChange={onSectionCollapsedChange}
-          hideCollapsedChrome={sectionCollapsed}
           workspaceSelector={workspaceSelector}
         />
       </div>

@@ -75,7 +75,6 @@ function WorkspaceMemosPanelInner({ projectId, repositoryId }: WorkspaceMemosPan
       panelClassName="app-workspace-memos-panel"
       ariaLabel="备忘录"
       title="备忘录"
-      summaryMeta={memos.displayItems.length > 0 ? String(memos.displayItems.length) : null}
       headActions={
         <div className="app-workspace-memos-panel__head-actions">
           {newScopeOptions.length > 1 ? (

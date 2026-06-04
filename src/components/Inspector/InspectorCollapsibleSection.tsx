@@ -12,7 +12,6 @@ export interface InspectorCollapsibleSectionProps {
   panelClassName?: string;
   ariaLabel: string;
   title: string;
-  summaryMeta?: string | null;
   headActions?: ReactNode;
   children: ReactNode;
   trailing?: ReactNode;
@@ -30,7 +29,6 @@ export function InspectorCollapsibleSection({
   panelClassName,
   ariaLabel,
   title,
-  summaryMeta = null,
   headActions,
   children,
   trailing,
@@ -43,47 +41,29 @@ export function InspectorCollapsibleSection({
       className={`${className}${collapsed ? ` ${bemClass}--section-collapsed` : ""}`}
       aria-label={ariaLabel}
     >
-      {collapsed ? (
-        <div className="app-inspector-collapsible-section__collapsed-row">
-          <button
-            type="button"
-            className="app-inspector-collapsible-section__collapsed-main"
-            aria-expanded={false}
-            aria-label={`展开${title}`}
-            onClick={() => setCollapsed(false)}
+      <header className={`${bemClass}__head app-inspector-collapsible-section__head`}>
+        <Typography.Text strong className={`${bemClass}__title`}>
+          {title}
+        </Typography.Text>
+        <div className="app-inspector-collapsible-section__head-actions">
+          {headActions}
+          <Tooltip
+            title={collapsed ? `展开${title}` : `收起${title}`}
+            mouseEnterDelay={0.35}
           >
-            <span className="app-inspector-collapsible-section__expand" aria-hidden>
-              <ExpandIcon expanded={false} />
-            </span>
-            <span className="app-inspector-collapsible-section__collapsed-title">{title}</span>
-            {summaryMeta ? (
-              <span className="app-inspector-collapsible-section__collapsed-meta">{summaryMeta}</span>
-            ) : null}
-          </button>
+            <button
+              type="button"
+              className="app-inspector-collapsible-section__collapse-btn"
+              aria-expanded={!collapsed}
+              aria-label={collapsed ? `展开${title}` : `收起${title}`}
+              onClick={() => setCollapsed(!collapsed)}
+            >
+              <ExpandIcon expanded={!collapsed} />
+            </button>
+          </Tooltip>
         </div>
-      ) : (
-        <>
-          <header className={`${bemClass}__head app-inspector-collapsible-section__head`}>
-            <Typography.Text strong className={`${bemClass}__title`}>
-              {title}
-            </Typography.Text>
-            <div className="app-inspector-collapsible-section__head-actions">
-              {headActions}
-              <Tooltip title={`收起${title}`} mouseEnterDelay={0.35}>
-                <button
-                  type="button"
-                  className="app-inspector-collapsible-section__collapse-btn"
-                  aria-label={`收起${title}`}
-                  onClick={() => setCollapsed(true)}
-                >
-                  <ExpandIcon expanded />
-                </button>
-              </Tooltip>
-            </div>
-          </header>
-          {children}
-        </>
-      )}
+      </header>
+      {!collapsed ? children : null}
       {trailing}
     </section>
   );

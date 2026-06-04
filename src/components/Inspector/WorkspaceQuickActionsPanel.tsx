@@ -120,9 +120,6 @@ export function WorkspaceQuickActionsPanel({
       className="app-workspace-quick-actions-panel"
       ariaLabel="快捷操作"
       title="快捷操作"
-      summaryMeta={
-        quickActions.displayItems.length > 0 ? String(quickActions.displayItems.length) : null
-      }
       headActions={
         <Tooltip title="添加链接或本地目录" mouseEnterDelay={0.35}>
           <Button
