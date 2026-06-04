@@ -1,5 +1,14 @@
 import { Button, Checkbox, Select, Typography } from "antd";
+import { useEffect, useMemo, useState } from "react";
 import type { ClaudeSessionConnectionKind } from "../../constants/claudeConnection";
+import {
+  encodeAtMentionDefaultSelectValue,
+  decodeAtMentionDefaultSelectValue,
+} from "../../constants/atMentionDefault";
+import {
+  SESSION_EXECUTION_ENGINE_LABELS,
+  SESSION_EXECUTION_ENGINES,
+} from "../../constants/sessionExecutionEngine";
 import { LEFT_SIDEBAR_HUB_QUICK_ENTRY_LABELS } from "../../constants/leftSidebarHubQuickEntries";
 import type { LeftSidebarHubQuickEntryId } from "../../constants/leftSidebarHubQuickEntries";
 import { useClaudeConnectionModeSetting } from "../ClaudeConfigDirPanel/useClaudeConnectionModeSetting";
@@ -11,7 +20,11 @@ import { EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAY_OPTIONS } from "../../consta
 import { useRightPanelDefaultSetting } from "./useRightPanelDefaultSetting";
 import { useTopbarChromeDefaultSetting } from "./useTopbarChromeDefaultSetting";
 import { useDefaultTerminalSetting } from "./useDefaultTerminalSetting";
+import { useAtMentionDefaultSetting } from "./useAtMentionDefaultSetting";
 import { useWorkspaceInspectorPanelsSetting } from "./useWorkspaceInspectorPanelsSetting";
+import { listEmployees } from "../../services/employees";
+import type { EmployeeItem } from "../../types";
+import { isOmcMonitorEmployeeRecord } from "../../utils/omcMonitorEmployeeSession";
 import "./index.css";
 
 const DEFAULT_CONFIG_NOTES = [
@@ -32,8 +45,37 @@ export function DefaultConfigPanel() {
   const hubQuickEntries = useLeftSidebarHubQuickEntriesSetting();
   const monitorPanel = useMonitorPanelSetting();
   const execEnvDispatchHistory = useExecutionEnvironmentDispatchHistoryDaysSetting();
+  const atMentionDefault = useAtMentionDefaultSetting();
   const defaultTerminal = useDefaultTerminalSetting();
   const workspaceInspectorPanels = useWorkspaceInspectorPanelsSetting();
+  const [terminalEmployees, setTerminalEmployees] = useState<EmployeeItem[]>([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    void listEmployees().then((rows) => {
+      if (cancelled) return;
+      setTerminalEmployees(
+        rows.filter((item) => item.enabled && item.name.trim() && !isOmcMonitorEmployeeRecord(item)),
+      );
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const atMentionDefaultSelectOptions = useMemo(() => {
+    const engines = SESSION_EXECUTION_ENGINES.map((engine) => ({
+      value: encodeAtMentionDefaultSelectValue({ kind: "execution_engine", engine }),
+      label: `执行环境 · ${SESSION_EXECUTION_ENGINE_LABELS[engine].title}`,
+    }));
+    const terminals = terminalEmployees.map((employee) => ({
+      value: encodeAtMentionDefaultSelectValue({ kind: "terminal", employeeName: employee.name }),
+      label: `终端 · ${employee.name}`,
+    }));
+    return [...engines, ...terminals];
+  }, [terminalEmployees]);
+
+  const atMentionDefaultSelectValue = encodeAtMentionDefaultSelectValue(atMentionDefault.target);
 
   return (
     <div className="app-default-config-panel">
@@ -114,6 +156,30 @@ export function DefaultConfigPanel() {
               ]}
               onChange={(value) => {
                 void monitorPanel.savePlacement(value);
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="app-default-config-row" aria-label="@ 默认选中">
+          <div className="app-default-config-row__main">
+            <span className="app-default-config-row__title">@ 默认选中</span>
+            <span className="app-default-config-row__hint">
+              主会话输入 @ 打开补全且未输入筛选时，默认高亮的执行环境或终端（与列表键盘焦点一致）
+            </span>
+          </div>
+          <div className="app-default-config-row__control">
+            <Select
+              size="small"
+              showSearch
+              optionFilterProp="label"
+              aria-label="@ 默认选中"
+              disabled={atMentionDefault.loading || atMentionDefault.saving}
+              value={atMentionDefaultSelectValue}
+              options={atMentionDefaultSelectOptions}
+              onChange={(value) => {
+                const decoded = decodeAtMentionDefaultSelectValue(String(value));
+                if (decoded) void atMentionDefault.save(decoded);
               }}
             />
           </div>

@@ -5,7 +5,14 @@ import { searchRepositoryFiles } from "../../services/repositoryFiles";
 import type { ClaudeProjectSkill } from "../../types";
 import type { RepositoryMentionOption } from "../../utils/projectRoleTagOptions";
 import type { SessionExecutionEngine } from "../../constants/sessionExecutionEngine";
+import type { AtMentionDefaultTarget } from "../../constants/atMentionDefault";
+import {
+  atMentionDefaultTargetFromSlashOption,
+  DEFAULT_AT_MENTION_DEFAULT_TARGET,
+  isSlashOptionAtMentionDefault,
+} from "../../constants/atMentionDefault";
 import { listExecutionEnvironmentEngineMentionOptions } from "../../utils/executionEnvironmentDispatch";
+import { resolveAtMentionSelectedIndex } from "../../utils/atMentionDefaultSelection";
 import type { TriggerInfo } from "./slash-trigger";
 import { CLAUDE_BUILTIN_SLASH_COMMANDS } from "../../constants/claudeCodeSlashCommands";
 import {
@@ -56,6 +63,10 @@ interface SlashPopoverProps {
   hideEmployeesInAtMode?: boolean;
   codexAvailable?: boolean;
   cursorAvailable?: boolean;
+  /** @ 空查询打开时默认高亮项（配置中心可改）。 */
+  atMentionDefaultTarget?: AtMentionDefaultTarget;
+  /** 在菜单内将执行环境 / 终端设为 @ 默认。 */
+  onAtMentionDefaultTargetChange?: (target: AtMentionDefaultTarget) => void | Promise<void>;
 }
 
 const CLAUDE_BUILTIN_COMMANDS: SlashOption[] = CLAUDE_BUILTIN_SLASH_COMMANDS.map((cmd) => ({
@@ -212,6 +223,8 @@ export function SlashPopover({
   hideEmployeesInAtMode = false,
   codexAvailable = true,
   cursorAvailable = true,
+  atMentionDefaultTarget = DEFAULT_AT_MENTION_DEFAULT_TARGET,
+  onAtMentionDefaultTargetChange,
 }: SlashPopoverProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [fileResults, setFileResults] = useState<SlashOption[]>([]);
@@ -295,8 +308,12 @@ export function SlashPopover({
   );
 
   useEffect(() => {
+    if (mode === "at" && query.trim().length === 0) {
+      setSelectedIndex(resolveAtMentionSelectedIndex(options, atMentionDefaultTarget));
+      return;
+    }
     setSelectedIndex(0);
-  }, [query, mode]);
+  }, [query, mode, options, atMentionDefaultTarget]);
 
   const handleSelect = useCallback(
     (option: SlashOption) => {
@@ -330,6 +347,16 @@ export function SlashPopover({
       onSelect(option);
     },
     [mode, query, surfaceRef, onDismiss, onSelect],
+  );
+
+  const handleSetAtMentionDefault = useCallback(
+    (option: SlashOption) => {
+      const next = atMentionDefaultTargetFromSlashOption(option);
+      if (!next || !onAtMentionDefaultTargetChange) return;
+      if (isSlashOptionAtMentionDefault(option, atMentionDefaultTarget)) return;
+      void onAtMentionDefaultTargetChange(next);
+    },
+    [atMentionDefaultTarget, onAtMentionDefaultTargetChange],
   );
 
   useEffect(() => {
@@ -487,19 +514,57 @@ export function SlashPopover({
                 <div className="app-claude-slash-popover-group-title">终端</div>
               ) : null}
               <div
-                className={`app-claude-slash-popover-item ${i === selectedIndex ? "app-claude-slash-popover-item--active" : ""}${
-                  opt.type === "execution_engine" && opt.executionEngineAvailable === false
-                    ? " app-claude-slash-popover-item--disabled"
-                    : ""
+                className={`app-claude-slash-popover-item-wrap${
+                  i === selectedIndex ? " app-claude-slash-popover-item-wrap--active" : ""
                 }`}
-                onClick={() => {
-                  if (opt.type === "execution_engine" && opt.executionEngineAvailable === false) return;
-                  handleSelect(opt);
-                }}
                 onMouseEnter={() => setSelectedIndex(i)}
-                style={{ gap: 0, padding: "3px 4px" }}
               >
-                {renderOptionContent(opt)}
+                <div
+                  className={`app-claude-slash-popover-item${
+                    i === selectedIndex ? " app-claude-slash-popover-item--active" : ""
+                  }${
+                    opt.type === "execution_engine" && opt.executionEngineAvailable === false
+                      ? " app-claude-slash-popover-item--disabled"
+                      : ""
+                  }`}
+                  onClick={() => {
+                    if (opt.type === "execution_engine" && opt.executionEngineAvailable === false) return;
+                    handleSelect(opt);
+                  }}
+                  style={{ gap: 0, padding: "3px 4px" }}
+                >
+                  {renderOptionContent(
+                    opt,
+                    isSlashOptionAtMentionDefault(opt, atMentionDefaultTarget),
+                  )}
+                </div>
+                {atMentionDefaultTargetFromSlashOption(opt) && onAtMentionDefaultTargetChange ? (
+                  <button
+                    type="button"
+                    className={`app-claude-slash-popover-item__default-btn${
+                      isSlashOptionAtMentionDefault(opt, atMentionDefaultTarget)
+                        ? " app-claude-slash-popover-item__default-btn--current"
+                        : ""
+                    }`}
+                    title={
+                      isSlashOptionAtMentionDefault(opt, atMentionDefaultTarget)
+                        ? "已是 @ 打开时的默认选中项"
+                        : "设为 @ 打开时的默认选中项"
+                    }
+                    aria-label={
+                      isSlashOptionAtMentionDefault(opt, atMentionDefaultTarget)
+                        ? "已是默认"
+                        : "设为默认"
+                    }
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      handleSetAtMentionDefault(opt);
+                    }}
+                  >
+                    {isSlashOptionAtMentionDefault(opt, atMentionDefaultTarget) ? "默认" : "设为默认"}
+                  </button>
+                ) : null}
               </div>
             </div>
           );
@@ -509,7 +574,7 @@ export function SlashPopover({
   );
 }
 
-function renderOptionContent(opt: SlashOption) {
+function renderOptionContent(opt: SlashOption, isAtMentionDefault = false) {
   return (
     <>
       {opt.type !== "file" && (
@@ -633,8 +698,12 @@ function renderOptionContent(opt: SlashOption) {
             }}
           >
             {opt.description}
+            {isAtMentionDefault ? " (默认)" : ""}
           </span>
         )}
+        {opt.type === "agent" && isAtMentionDefault ? (
+          <span className="app-claude-slash-popover-item__default-badge">默认</span>
+        ) : null}
         {opt.type === "agent" && (
           <span className="app-claude-slash-popover__kind" title="终端">
             <MentionKindEmployeeIcon />

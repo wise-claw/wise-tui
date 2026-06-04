@@ -49,6 +49,7 @@ import {
 } from "./composer-trigger-anchor";
 import { ContextItems } from "./context-items";
 import { SlashPopover } from "./slash-popover";
+import { useAtMentionDefaultTarget } from "../../hooks/useAtMentionDefaultTarget";
 import { ImageThumbnails } from "./attachment-manager";
 import { QuestionDock } from "./dock/question-dock";
 import { PermissionDock } from "./dock/permission-dock";
@@ -509,6 +510,8 @@ function ComposerInner({
   const composerSendInFlightRef = useRef(false);
   const cursorRef = useRef(0);
   const dragOverLoggedRef = useRef(false);
+  const { target: atMentionDefaultTarget, save: saveAtMentionDefaultTarget } =
+    useAtMentionDefaultTarget();
   const [trigger, setTrigger] = useState<TriggerInfo>({ mode: null, query: "", rect: null });
   const [images, setImages] = useState<ImageAttachmentPart[]>([]);
   const [dragOverNativeFiles, setDragOverNativeFiles] = useState(false);
@@ -3025,6 +3028,8 @@ function ComposerInner({
                 hideEmployeesInAtMode={hideEmployeesInAtMode}
                 codexAvailable={codexAvailable}
                 cursorAvailable={cursorAvailable}
+                atMentionDefaultTarget={atMentionDefaultTarget}
+                onAtMentionDefaultTargetChange={(next) => void saveAtMentionDefaultTarget(next)}
               />
               <AIChatInput
                 ref={aiChatRef}

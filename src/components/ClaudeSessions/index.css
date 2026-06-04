@@ -5890,10 +5890,28 @@ button.app-message-part-header:disabled:hover {
   pointer-events: auto;
 }
 
+.app-claude-slash-popover-item-wrap {
+  display: flex;
+  align-items: stretch;
+  gap: 2px;
+  border-radius: 4px;
+}
+
+.app-claude-slash-popover-item-wrap--active {
+  background: var(--ant-color-primary-bg);
+}
+
+.app-claude-slash-popover-item-wrap--active .app-claude-slash-popover-item {
+  background: transparent;
+  color: var(--ant-color-primary);
+}
+
 .app-claude-slash-popover-item {
   display: flex;
   align-items: center;
   gap: 8px;
+  flex: 1 1 auto;
+  min-width: 0;
   padding: 6px 8px;
   border-radius: 4px;
   cursor: pointer;
@@ -5904,6 +5922,59 @@ button.app-message-part-header:disabled:hover {
 .app-claude-slash-popover-item--active {
   background: var(--ant-color-primary-bg);
   color: var(--ant-color-primary);
+}
+
+.app-claude-slash-popover-item-wrap--active .app-claude-slash-popover-item--active {
+  background: transparent;
+}
+
+.app-claude-slash-popover-item__default-btn {
+  flex-shrink: 0;
+  align-self: center;
+  margin-right: 4px;
+  padding: 0 6px;
+  height: 22px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 4px;
+  background: var(--ant-color-bg-container);
+  color: var(--ant-color-text-secondary);
+  font-size: 10px;
+  line-height: 20px;
+  cursor: pointer;
+  white-space: nowrap;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.app-claude-slash-popover-item-wrap--active .app-claude-slash-popover-item__default-btn {
+  border-color: color-mix(in srgb, var(--ant-color-primary) 35%, var(--ant-color-border-secondary));
+}
+
+.app-claude-slash-popover-item__default-btn:hover {
+  color: var(--ant-color-primary);
+  border-color: color-mix(in srgb, var(--ant-color-primary) 45%, transparent);
+  background: var(--ant-color-primary-bg);
+}
+
+.app-claude-slash-popover-item__default-btn--current {
+  color: var(--ant-color-primary);
+  border-color: color-mix(in srgb, var(--ant-color-primary) 35%, transparent);
+  background: var(--ant-color-primary-bg);
+  cursor: default;
+}
+
+.app-claude-slash-popover-item__default-badge {
+  flex-shrink: 0;
+  padding: 0 4px;
+  border-radius: 4px;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 14px;
+  color: var(--ant-color-primary);
+  background: var(--ant-color-primary-bg);
+  border: 1px solid color-mix(in srgb, var(--ant-color-primary) 25%, transparent);
 }
 
 .app-claude-slash-popover-group-title {

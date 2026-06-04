@@ -68,6 +68,7 @@ import {
   filterExecutionEnvironmentDispatchTaskItems,
   formatExecutionEnvironmentDispatchTaskTime,
 } from "../../utils/sessionConversationTasks";
+import { buildEmployeeTerminalConversationStatusById } from "../../utils/employeeTerminalDispatchStatus";
 import {
   SessionConversationTaskDetailDrawer,
   type SessionConversationTaskDetailTarget,
@@ -110,6 +111,8 @@ interface Props {
   ) => void | Promise<void>;
   executionEnvironmentDispatchHistoryDaysSaving?: boolean;
   sessions: ClaudeSession[];
+  /** 当前主会话 id，用于解析同仓库下的终端 worker 与派发任务归属 */
+  activeSessionId?: string | null;
   activeTarget?: MonitorDrawerTarget | null;
   onOpenTeamDetail: (workflowId: string) => void;
   onOpenEmployeeConfig?: () => void;
@@ -871,6 +874,7 @@ export function ProgressMonitorPanel({
   onExecutionEnvironmentDispatchHistoryDaysChange,
   executionEnvironmentDispatchHistoryDaysSaving = false,
   sessions,
+  activeSessionId = null,
   activeTarget,
   onOpenTeamDetail,
   onOpenEmployeeConfig,
@@ -1138,6 +1142,26 @@ export function ProgressMonitorPanel({
     [sessionConversationTaskItems],
   );
 
+  const monitorRepositoryPath = useMemo(() => {
+    if (activeSessionId) {
+      const hit = sessions.find((session) => session.id === activeSessionId);
+      if (hit?.repositoryPath?.trim()) return hit.repositoryPath.trim();
+    }
+    const fromDispatch = executionEnvironmentDispatchTaskItems.find((item) => item.repositoryPath?.trim());
+    return fromDispatch?.repositoryPath?.trim() ?? "";
+  }, [activeSessionId, executionEnvironmentDispatchTaskItems, sessions]);
+
+  const employeeTerminalConversationStatusById = useMemo(
+    () =>
+      buildEmployeeTerminalConversationStatusById({
+        employeeItems,
+        repositoryPath: monitorRepositoryPath,
+        sessions,
+        dispatchTasks: executionEnvironmentDispatchTaskItems,
+      }),
+    [employeeItems, executionEnvironmentDispatchTaskItems, monitorRepositoryPath, sessions],
+  );
+
   const runningSessionConversationTasks = useMemo(
     () => executionEnvironmentDispatchTaskItems.filter((item) => item.status === "running"),
     [executionEnvironmentDispatchTaskItems],
@@ -1320,6 +1344,10 @@ export function ProgressMonitorPanel({
           </div>
           <div className="app-monitor-panel__terminals-list">
             {sortedEmployeeItems.map((item) => {
+              const conversationStatus =
+                employeeTerminalConversationStatusById.get(item.employeeId) ?? "idle";
+              const terminalInProgress =
+                item.status === "in_progress" || conversationStatus === "running";
               const isOmcWorker = item.employeeId === "omc-worker";
               const employeePopoverOpen = employeeHistoryPopoverId === item.employeeId;
               const keyword =
@@ -1343,11 +1371,11 @@ export function ProgressMonitorPanel({
                     >
                       <span className="app-monitor-panel__item-name-wrap">
                         <span className="app-monitor-panel__item-name">{item.name}</span>
-                        {statusText(item.status)}
                       </span>
                     </button>
                     <span className="app-monitor-panel__item-actions">
-                      {item.status === "in_progress" ? (
+                      <SubagentStatusIndicator status={conversationStatus} />
+                      {terminalInProgress ? (
                         <Tooltip title="结束终端" mouseEnterDelay={0.35}>
                           <button
                             type="button"
@@ -1426,7 +1454,7 @@ export function ProgressMonitorPanel({
                           </Tooltip>
                         </Popover>
                       )}
-                      {taskResultTag(item.latestTaskStatus)}
+                      {conversationStatus === "idle" ? taskResultTag(item.latestTaskStatus) : null}
                     </span>
                   </div>
                 </div>

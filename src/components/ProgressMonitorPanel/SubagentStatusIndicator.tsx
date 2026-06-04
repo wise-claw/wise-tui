@@ -5,9 +5,11 @@ import { sessionConversationTaskStatusLabel } from "../../utils/sessionConversat
 
 export type SubagentStatusIndicatorStatus =
   | SessionConversationTaskItem["status"]
-  | RepositoryMemberMonitorSubagentItem["status"];
+  | RepositoryMemberMonitorSubagentItem["status"]
+  | "idle";
 
 function statusLabel(status: SubagentStatusIndicatorStatus): string {
+  if (status === "idle") return "空闲";
   if (status === "running") return "运行中";
   if (status === "stale") return "疑似断连";
   if (status === "reclaimed") return "已回收";
@@ -75,6 +77,7 @@ function StatusIcon({ status }: { status: SubagentStatusIndicatorStatus }) {
   if (status === "completed") return <CompletedIcon />;
   if (status === "failed") return <FailedIcon />;
   if (status === "stale") return <StaleIcon />;
+  if (status === "idle") return <IdleIcon />;
   return <IdleIcon />;
 }
 

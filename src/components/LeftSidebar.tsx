@@ -1107,6 +1107,7 @@ export function LeftSidebar({
               }
               teamItems={teamMonitorItems}
               sessions={sessions}
+              activeSessionId={activeSessionId}
               activeTarget={monitorActiveTarget}
               onOpenTeamDetail={(workflowId) => onOpenTeamMonitorDetail?.(workflowId)}
               onOpenEmployeeConfig={onOpenEmployeeConfig}

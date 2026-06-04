@@ -9,6 +9,11 @@ import {
   type LeftSidebarHubQuickEntryId,
 } from "../constants/leftSidebarHubQuickEntries";
 import {
+  DEFAULT_AT_MENTION_DEFAULT_TARGET,
+  normalizeAtMentionDefaultTarget,
+  type AtMentionDefaultTarget,
+} from "../constants/atMentionDefault";
+import {
   DEFAULT_EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAYS,
   normalizeExecutionEnvironmentDispatchHistoryDays,
   type ExecutionEnvironmentDispatchHistoryDays,
@@ -47,6 +52,8 @@ export const WISE_MONITOR_PANEL_PLACEMENT_CHANGED = "wise:monitor-panel-placemen
 export const WISE_EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAYS_CHANGED =
   "wise:execution-environment-dispatch-history-days-changed";
 
+export const WISE_AT_MENTION_DEFAULT_CHANGED = "wise:at-mention-default-changed";
+
 export const WISE_WORKSPACE_INSPECTOR_PANELS_CHANGED = "wise:workspace-inspector-panels-changed";
 
 export type MonitorPanelPlacement = "left" | "right";
@@ -78,6 +85,8 @@ export interface WiseDefaultConfigV1 {
   monitorPanelPlacement: MonitorPanelPlacement;
   /** 左栏「任务派发」默认查询近 N 天历史；默认 1 天。 */
   executionEnvironmentDispatchHistoryDays: ExecutionEnvironmentDispatchHistoryDays;
+  /** 主会话 @ 空查询打开时默认高亮的执行环境或终端。 */
+  atMentionDefaultTarget: AtMentionDefaultTarget;
   /** 右栏工作区快捷操作卡片；默认显示。 */
   showWorkspaceQuickActionsPanel: boolean;
   /** 右栏备忘录卡片；默认显示。 */
@@ -98,6 +107,7 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   showLeftSidebarMonitorPanel: true,
   monitorPanelPlacement: "left",
   executionEnvironmentDispatchHistoryDays: DEFAULT_EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAYS,
+  atMentionDefaultTarget: DEFAULT_AT_MENTION_DEFAULT_TARGET,
   showWorkspaceQuickActionsPanel: true,
   showWorkspaceMemosPanel: true,
   showWorkspaceTodosPanel: true,
@@ -159,6 +169,10 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
         parsed.executionEnvironmentDispatchHistoryDays === undefined
           ? DEFAULT_CONFIG.executionEnvironmentDispatchHistoryDays
           : normalizeExecutionEnvironmentDispatchHistoryDays(parsed.executionEnvironmentDispatchHistoryDays),
+      atMentionDefaultTarget:
+        parsed.atMentionDefaultTarget === undefined
+          ? DEFAULT_CONFIG.atMentionDefaultTarget
+          : normalizeAtMentionDefaultTarget(parsed.atMentionDefaultTarget),
       showWorkspaceQuickActionsPanel:
         parsed.showWorkspaceQuickActionsPanel === undefined
           ? DEFAULT_CONFIG.showWorkspaceQuickActionsPanel
@@ -285,6 +299,7 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     showLeftSidebarMonitorPanel: DEFAULT_CONFIG.showLeftSidebarMonitorPanel,
     monitorPanelPlacement: DEFAULT_CONFIG.monitorPanelPlacement,
     executionEnvironmentDispatchHistoryDays: DEFAULT_CONFIG.executionEnvironmentDispatchHistoryDays,
+    atMentionDefaultTarget: DEFAULT_CONFIG.atMentionDefaultTarget,
     showWorkspaceQuickActionsPanel: DEFAULT_CONFIG.showWorkspaceQuickActionsPanel,
     showWorkspaceMemosPanel: DEFAULT_CONFIG.showWorkspaceMemosPanel,
     showWorkspaceTodosPanel: DEFAULT_CONFIG.showWorkspaceTodosPanel,
@@ -371,6 +386,7 @@ export async function saveWiseDefaultConfig(
       | "showLeftSidebarMonitorPanel"
       | "monitorPanelPlacement"
       | "executionEnvironmentDispatchHistoryDays"
+      | "atMentionDefaultTarget"
       | "showWorkspaceQuickActionsPanel"
       | "showWorkspaceMemosPanel"
       | "showWorkspaceTodosPanel"
@@ -399,6 +415,10 @@ export async function saveWiseDefaultConfig(
       patch.executionEnvironmentDispatchHistoryDays !== undefined
         ? normalizeExecutionEnvironmentDispatchHistoryDays(patch.executionEnvironmentDispatchHistoryDays)
         : current.executionEnvironmentDispatchHistoryDays,
+    atMentionDefaultTarget:
+      patch.atMentionDefaultTarget !== undefined
+        ? normalizeAtMentionDefaultTarget(patch.atMentionDefaultTarget)
+        : current.atMentionDefaultTarget,
     showWorkspaceQuickActionsPanel:
       patch.showWorkspaceQuickActionsPanel ?? current.showWorkspaceQuickActionsPanel,
     showWorkspaceMemosPanel: patch.showWorkspaceMemosPanel ?? current.showWorkspaceMemosPanel,
@@ -433,6 +453,9 @@ export async function saveWiseDefaultConfig(
     next.executionEnvironmentDispatchHistoryDays = normalizeExecutionEnvironmentDispatchHistoryDays(
       patch.executionEnvironmentDispatchHistoryDays,
     );
+  }
+  if (patch.atMentionDefaultTarget !== undefined) {
+    next.atMentionDefaultTarget = normalizeAtMentionDefaultTarget(patch.atMentionDefaultTarget);
   }
   if (patch.showWorkspaceQuickActionsPanel !== undefined) {
     next.showWorkspaceQuickActionsPanel = normalizeBoolean(patch.showWorkspaceQuickActionsPanel);
@@ -501,6 +524,12 @@ export async function saveWiseDefaultConfig(
     dispatchExecutionEnvironmentDispatchHistoryDaysChanged(next.executionEnvironmentDispatchHistoryDays);
   }
   if (
+    patch.atMentionDefaultTarget !== undefined &&
+    JSON.stringify(next.atMentionDefaultTarget) !== JSON.stringify(current.atMentionDefaultTarget)
+  ) {
+    dispatchAtMentionDefaultTargetChanged(next.atMentionDefaultTarget);
+  }
+  if (
     patch.showWorkspaceQuickActionsPanel !== undefined ||
     patch.showWorkspaceMemosPanel !== undefined ||
     patch.showWorkspaceTodosPanel !== undefined
@@ -528,6 +557,23 @@ function dispatchExecutionEnvironmentDispatchHistoryDaysChanged(
   window.dispatchEvent(
     new CustomEvent(WISE_EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAYS_CHANGED, { detail: { days } }),
   );
+}
+
+function dispatchAtMentionDefaultTargetChanged(target: AtMentionDefaultTarget): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(WISE_AT_MENTION_DEFAULT_CHANGED, { detail: { atMentionDefaultTarget: target } }),
+  );
+}
+
+export async function loadAtMentionDefaultTargetFromStore(): Promise<AtMentionDefaultTarget> {
+  return (await loadWiseDefaultConfig()).atMentionDefaultTarget;
+}
+
+export async function saveAtMentionDefaultTargetToStore(
+  target: AtMentionDefaultTarget,
+): Promise<void> {
+  await saveWiseDefaultConfig({ atMentionDefaultTarget: normalizeAtMentionDefaultTarget(target) });
 }
 
 export async function loadExecutionEnvironmentDispatchHistoryDaysFromStore(): Promise<ExecutionEnvironmentDispatchHistoryDays> {
