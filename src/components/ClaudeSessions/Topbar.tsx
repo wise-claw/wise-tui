@@ -319,7 +319,11 @@ export function Topbar({
           />
         ) : null}
         {onSearch && (
-          <TopbarBtn icon={<IconSearch />} label="搜索文件 (Cmd+K)" onClick={onSearch} />
+          <TopbarBtn
+            icon={<IconSearch />}
+            label="搜索：⌘F 文件名 · ⌘⇧F 文件内容 · ⌘K 切换"
+            onClick={onSearch}
+          />
         )}
         <Popover
           trigger={[]}

@@ -180,13 +180,13 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
 
       const existing = fileEditorTabsRef.current.find((t) => t.relativePath === relativePath);
       if (existing && !existing.loading && existing.diffOriginal === undefined) {
-        if (options?.line != null) {
-          setFileEditorTabs((prev) =>
-            prev.map((tab) =>
-              tab.relativePath === relativePath ? { ...tab, focusLine: options.line ?? null } : tab,
-            ),
-          );
-        }
+        setFileEditorTabs((prev) =>
+          prev.map((tab) =>
+            tab.relativePath === relativePath
+              ? { ...tab, focusLine: options?.line ?? null }
+              : tab,
+          ),
+        );
         setFileEditorActivePath(relativePath);
         return;
       }

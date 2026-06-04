@@ -5,6 +5,12 @@ export interface RepositoryExplorerEntry {
   isDir: boolean;
 }
 
+export interface RepositoryFileContentMatch {
+  path: string;
+  line: number;
+  preview: string;
+}
+
 /**
  * Fast file search under a repository root (for @ mentions).
  */
@@ -14,6 +20,23 @@ export async function searchRepositoryFiles(
 ): Promise<string[]> {
   try {
     return await invoke<string[]>("search_repository_files", {
+      root: repositoryRoot,
+      query,
+    });
+  } catch {
+    return [];
+  }
+}
+
+/**
+ * Search plain-text file contents under a repository root (global search).
+ */
+export async function searchRepositoryFileContents(
+  repositoryRoot: string,
+  query: string,
+): Promise<RepositoryFileContentMatch[]> {
+  try {
+    return await invoke<RepositoryFileContentMatch[]>("search_repository_file_contents", {
       root: repositoryRoot,
       query,
     });

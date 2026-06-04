@@ -73,30 +73,21 @@ export function RepositoryFileEditorPanel({
   }, [activeTab, activeTypeScriptSources, repositoryPath]);
 
   useEffect(() => {
-    const editor = editorRef.current;
-    if (!editor || !activeTab || activeTab.loading || activeTab.diffOriginal !== undefined) {
+    lastAppliedFocusRef.current = null;
+    editorRef.current = null;
+  }, [activeTab?.relativePath]);
+
+  useEffect(() => {
+    if (!activeTab || activeTab.loading || activeTab.diffOriginal !== undefined) {
       return;
     }
-    const line = normalizeEditorLine(activeTab.focusLine);
-    if (line == null) return;
-    const focusKey = `${activeTab.relativePath}:${line}`;
-    if (lastAppliedFocusRef.current === focusKey) return;
-    const lineCount = Math.max(1, editor.getModel()?.getLineCount() ?? 1);
-    const targetLine = Math.min(Math.max(1, line), lineCount);
-    window.requestAnimationFrame(() => {
-      editor.setPosition({ lineNumber: targetLine, column: 1 });
-      const lineMaxColumn = Math.max(1, editor.getModel()?.getLineMaxColumn(targetLine) ?? 1);
-      editor.setSelection({
-        startLineNumber: targetLine,
-        startColumn: 1,
-        endLineNumber: targetLine,
-        endColumn: lineMaxColumn,
-      });
-      editor.revealLineInCenter(targetLine);
-      editor.focus();
-      lastAppliedFocusRef.current = focusKey;
+    const editor = editorRef.current;
+    if (!editor) return;
+    const frame = window.requestAnimationFrame(() => {
+      revealEditorLineFocus(editor, activeTab, lastAppliedFocusRef);
     });
-  }, [activeTab?.relativePath, activeTab?.loading, activeTab?.diffOriginal, activeTab?.focusLine]);
+    return () => window.cancelAnimationFrame(frame);
+  }, [activeTab, activeTab?.relativePath, activeTab?.loading, activeTab?.diffOriginal, activeTab?.focusLine]);
 
   useEffect(() => {
     function handleCloseTabShortcut(event: KeyboardEvent) {
@@ -226,6 +217,9 @@ export function RepositoryFileEditorPanel({
                         sourceFiles: activeTypeScriptSources,
                       });
                     }
+                    window.requestAnimationFrame(() => {
+                      revealEditorLineFocus(editor, activeTab, lastAppliedFocusRef);
+                    });
                   }}
                   onChange={(value) => onTabContentChange(activeTab.relativePath, value ?? "")}
                   theme={dark ? "vs-dark" : "vs"}
@@ -254,4 +248,28 @@ function normalizeEditorLine(value: number | null | undefined): number | null {
   if (typeof value !== "number" || !Number.isFinite(value)) return null;
   const line = Math.floor(value);
   return line > 0 ? line : null;
+}
+
+function revealEditorLineFocus(
+  editor: MonacoEditorNamespace.IStandaloneCodeEditor,
+  tab: FileEditorTab,
+  lastAppliedFocusRef: { current: string | null },
+): void {
+  const line = normalizeEditorLine(tab.focusLine);
+  if (line == null) return;
+  const focusKey = `${tab.relativePath}:${line}`;
+  if (lastAppliedFocusRef.current === focusKey) return;
+  const lineCount = Math.max(1, editor.getModel()?.getLineCount() ?? 1);
+  const targetLine = Math.min(Math.max(1, line), lineCount);
+  editor.setPosition({ lineNumber: targetLine, column: 1 });
+  const lineMaxColumn = Math.max(1, editor.getModel()?.getLineMaxColumn(targetLine) ?? 1);
+  editor.setSelection({
+    startLineNumber: targetLine,
+    startColumn: 1,
+    endLineNumber: targetLine,
+    endColumn: lineMaxColumn,
+  });
+  editor.revealLineInCenter(targetLine);
+  editor.focus();
+  lastAppliedFocusRef.current = focusKey;
 }

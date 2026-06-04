@@ -43,8 +43,16 @@ export const APP_SHORTCUT_GROUPS: AppShortcutGroup[] = [
         description: "打开或关闭终端面板（反引号键，数字 1 左侧；须用 Control，不是 ⌘）。",
       },
       {
+        keys: "⌘F · Ctrl+F",
+        description: "打开全局搜索（文件名模式）。",
+      },
+      {
         keys: "⌘K · Ctrl+K",
-        description: "打开或关闭命令面板。",
+        description: "打开或关闭全局搜索（文件名模式）。",
+      },
+      {
+        keys: "⌘⇧F · Ctrl+Shift+F",
+        description: "打开全局搜索（文件内容模式）。",
       },
       {
         keys: "⌘⇧M · Ctrl+Shift+M",

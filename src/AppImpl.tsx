@@ -54,6 +54,7 @@ import { useRepositoryList } from "./hooks/useRepositoryList";
 import { openRepositoryRemoteInBrowser } from "./services/openRepositoryRemote";
 import { openInFinder } from "./services/repository";
 import { tryOpenWorkspaceInDefaultTerminal } from "./services/openWorkspaceWithTerminalPreference";
+import type { CommandPaletteSearchMode } from "./components/CommandPalette";
 import { LazyAppWorkspaceLayout } from "./components/AppWorkspaceLayout.lazy";
 import { AppWorkspaceLayoutShell } from "./components/AppWorkspaceLayoutShell";
 import { RepositoryRunCommandModal } from "./components/RunCommand";
@@ -284,6 +285,7 @@ export default function App() {
   const paneLayoutHydratedRef = useRef(false);
   const [paneLayoutHydrated, setPaneLayoutHydrated] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  const [searchMode, setSearchMode] = useState<CommandPaletteSearchMode>("filename");
   /** 右侧 Inspector 历史会话消息抽屉（由中栏「历史会话」列表打开；默认收起右栏时不强制展开） */
   const [inspectorHistorySessionId, setInspectorHistorySessionId] = useState<string | null>(null);
 
@@ -2544,6 +2546,39 @@ export default function App() {
     setWorkflowTemplates(templates);
   }
 
+  const openFilenameSearchPalette = useCallback(() => {
+    setSearchMode("filename");
+    setSearchOpen(true);
+  }, []);
+
+  const openContentSearchPalette = useCallback(() => {
+    setSearchMode("content");
+    setSearchOpen(true);
+  }, []);
+
+  useEffect(() => {
+    let unlistenFilename: (() => void) | undefined;
+    let unlistenContent: (() => void) | undefined;
+    void listen("global-open-filename-search", () => {
+      openFilenameSearchPalette();
+    })
+      .then((fn) => {
+        unlistenFilename = fn;
+      })
+      .catch(() => undefined);
+    void listen("global-open-content-search", () => {
+      openContentSearchPalette();
+    })
+      .then((fn) => {
+        unlistenContent = fn;
+      })
+      .catch(() => undefined);
+    return () => {
+      void safeUnlisten(unlistenFilename);
+      void safeUnlisten(unlistenContent);
+    };
+  }, [openFilenameSearchPalette, openContentSearchPalette]);
+
   useEffect(() => {
     function handleGlobalKey(e: KeyboardEvent) {
       const mod = e.metaKey || e.ctrlKey;
@@ -2553,12 +2588,26 @@ export default function App() {
         setTerminalCollapsed((c) => !c);
         return;
       }
+      // 文件内容搜索：网页 keydown 在 macOS WKWebView 常被系统 Find 吞掉，桌面版以 Tauri global_shortcut 为准
+      if (mod && e.shiftKey && !e.altKey && e.code === "KeyF") {
+        e.preventDefault();
+        e.stopPropagation();
+        openContentSearchPalette();
+        return;
+      }
+      if (mod && !e.shiftKey && !e.altKey && e.code === "KeyF") {
+        e.preventDefault();
+        e.stopPropagation();
+        openFilenameSearchPalette();
+        return;
+      }
       if (mod && e.key === "k") {
         e.preventDefault();
+        setSearchMode("filename");
         setSearchOpen((prev) => !prev);
         return;
       }
-      if (mod && e.shiftKey && (e.code === "KeyM" || e.key === "M" || e.key === "m")) {
+      if (mod && e.shiftKey && (e.code === "KeyM" || e.key === "m" || e.key === "M")) {
         e.preventDefault();
         void wiseMascotShow().catch(() => {});
         return;
@@ -2572,7 +2621,7 @@ export default function App() {
     }
     window.addEventListener("keydown", handleGlobalKey, { capture: true });
     return () => window.removeEventListener("keydown", handleGlobalKey, { capture: true });
-  }, []);
+  }, [openContentSearchPalette, openFilenameSearchPalette]);
 
   useEffect(() => {
     function handleOpenTaskSplitPanel() {
@@ -3309,7 +3358,7 @@ export default function App() {
         rightPanelDefaultCollapsed,
         onSetRightPanelDefaultCollapsed: handleSetRightPanelDefaultCollapsed,
         onToggleTerminal: () => setTerminalCollapsed((c) => !c),
-        onSearch: () => setSearchOpen(true),
+        onSearch: openFilenameSearchPalette,
         collapsed,
         rightCollapsed: effectiveRightCollapsed,
         terminalCollapsed,
@@ -3451,13 +3500,15 @@ export default function App() {
         open: searchOpen,
         onClose: () => setSearchOpen(false),
         repositoryPath: activeRepository?.path,
-        onOpenInApp: (relativePath) => {
+        searchMode,
+        onSearchModeChange: setSearchMode,
+        onOpenInApp: (relativePath, options) => {
           if (!activeRepository) return;
           openRepositoryFileByEvent({
             repositoryId: activeRepository.id,
             repositoryPath: activeRepository.path,
             relativePath,
-            line: null,
+            line: options?.line ?? null,
           });
         },
       }}

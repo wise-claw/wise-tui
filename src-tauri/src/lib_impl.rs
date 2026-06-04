@@ -79,6 +79,36 @@ pub fn run() {
                 })
                 .map_err(|e| e.to_string())?;
 
+            // ⌘F / Ctrl+F：打开全局搜索并切换到「文件名」模式（WKWebView 会吞网页 keydown）
+            #[cfg(target_os = "macos")]
+            let filename_search_mods = Modifiers::SUPER;
+            #[cfg(not(target_os = "macos"))]
+            let filename_search_mods = Modifiers::CONTROL;
+            let filename_search_shortcut = Shortcut::new(Some(filename_search_mods), Code::KeyF);
+            app.global_shortcut()
+                .on_shortcut(filename_search_shortcut, |_app, _shortcut, event| {
+                    if event.state() == ShortcutState::Pressed {
+                        let _ = wise_mascot::wise_main_window_focus(_app.clone());
+                        let _ = _app.emit("global-open-filename-search", ());
+                    }
+                })
+                .map_err(|e| e.to_string())?;
+
+            // ⌘⇧F / Ctrl+Shift+F：打开全局搜索并切换到「文件内容」模式（WKWebView 会吞网页 keydown）
+            #[cfg(target_os = "macos")]
+            let content_search_mods = Modifiers::SUPER | Modifiers::SHIFT;
+            #[cfg(not(target_os = "macos"))]
+            let content_search_mods = Modifiers::CONTROL | Modifiers::SHIFT;
+            let content_search_shortcut = Shortcut::new(Some(content_search_mods), Code::KeyF);
+            app.global_shortcut()
+                .on_shortcut(content_search_shortcut, |_app, _shortcut, event| {
+                    if event.state() == ShortcutState::Pressed {
+                        let _ = wise_mascot::wise_main_window_focus(_app.clone());
+                        let _ = _app.emit("global-open-content-search", ());
+                    }
+                })
+                .map_err(|e| e.to_string())?;
+
             app.manage(wise_mascot::WiseToastMerge::default());
             app.manage(wise_push::WisePushControl::default());
             app.manage(dingtalk_stream_gateway::DingTalkStreamGatewayControl::default());
@@ -337,6 +367,7 @@ pub fn run() {
             workspace_commands::stop_git_watcher,
             workspace_commands::run_shell_command,
             repository_files::search_repository_files,
+            repository_files::search_repository_file_contents,
             repository_files::path_is_accessible_directory,
             repository_files::list_repository_explorer_entries,
             repository_files::list_repository_explorer_children,

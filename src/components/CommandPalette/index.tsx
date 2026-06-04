@@ -1,21 +1,73 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Input, Spin, message } from "antd";
-import { SearchOutlined } from "@ant-design/icons";
+import { FileOutlined, SearchOutlined } from "@ant-design/icons";
 import { openRepositoryFileWithStoredPreference } from "../../services/openWorkspaceWithPreference";
-import { searchRepositoryFiles } from "../../services/repositoryFiles";
+import {
+  searchRepositoryFileContents,
+  searchRepositoryFiles,
+  type RepositoryFileContentMatch,
+} from "../../services/repositoryFiles";
 import "./index.css";
+
+export type CommandPaletteSearchMode = "filename" | "content";
 
 interface Props {
   open: boolean;
   onClose: () => void;
   repositoryPath: string | undefined;
+  searchMode: CommandPaletteSearchMode;
+  onSearchModeChange: (mode: CommandPaletteSearchMode) => void;
   /** Enter / 单击：在 Wise 内打开仓库文件 */
-  onOpenInApp: (relativePath: string) => void;
+  onOpenInApp: (relativePath: string, options?: { line?: number | null }) => void;
 }
 
-interface FileResult {
+interface FilenameResult {
+  kind: "filename";
   path: string;
   display: string;
+}
+
+interface ContentResult {
+  kind: "content";
+  path: string;
+  line: number;
+  preview: string;
+  display: string;
+}
+
+type SearchResult = FilenameResult | ContentResult;
+
+const SEARCH_MODE_TABS: { mode: CommandPaletteSearchMode; label: string }[] = [
+  { mode: "filename", label: "文件名" },
+  { mode: "content", label: "文件内容" },
+];
+
+function CommandPaletteModeTabs({
+  searchMode,
+  onSearchModeChange,
+}: {
+  searchMode: CommandPaletteSearchMode;
+  onSearchModeChange: (mode: CommandPaletteSearchMode) => void;
+}) {
+  return (
+    <div className="app-command-palette-tabs" role="tablist" aria-label="搜索范围">
+      {SEARCH_MODE_TABS.map(({ mode, label }) => {
+        const active = searchMode === mode;
+        return (
+          <button
+            key={mode}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            className={`app-command-palette-tab${active ? " app-command-palette-tab--active" : ""}`}
+            onClick={() => onSearchModeChange(mode)}
+          >
+            {label}
+          </button>
+        );
+      })}
+    </div>
+  );
 }
 
 function CommandPaletteShortcutHints() {
@@ -33,27 +85,49 @@ function CommandPaletteShortcutHints() {
   );
 }
 
-export function CommandPalette({ open, onClose, repositoryPath, onOpenInApp }: Props) {
+function toContentResults(matches: RepositoryFileContentMatch[]): ContentResult[] {
+  return matches.map((match) => ({
+    kind: "content" as const,
+    path: match.path,
+    line: match.line,
+    preview: match.preview,
+    display: `${match.path}:${match.line}`,
+  }));
+}
+
+export function CommandPalette({
+  open,
+  onClose,
+  repositoryPath,
+  searchMode,
+  onSearchModeChange,
+  onOpenInApp,
+}: Props) {
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
-  const [results, setResults] = useState<FileResult[]>([]);
+  const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
 
   const openSearchResultInApp = useCallback(
-    (relativePath: string) => {
+    (item: SearchResult) => {
       if (!repositoryPath) return;
       onClose();
-      onOpenInApp(relativePath);
+      onOpenInApp(item.path, item.kind === "content" ? { line: item.line } : undefined);
     },
     [repositoryPath, onClose, onOpenInApp],
   );
 
   const openSearchResultExternal = useCallback(
-    (relativePath: string) => {
+    (item: SearchResult) => {
       if (!repositoryPath) return;
       onClose();
-      void openRepositoryFileWithStoredPreference(repositoryPath, relativePath).catch((e) => {
+      void openRepositoryFileWithStoredPreference(
+        repositoryPath,
+        item.path,
+        undefined,
+        item.kind === "content" ? { line: item.line } : undefined,
+      ).catch((e) => {
         message.error(e instanceof Error ? e.message : String(e));
       });
     },
@@ -68,7 +142,7 @@ export function CommandPalette({ open, onClose, repositoryPath, onOpenInApp }: P
       setLoading(false);
       inputRef.current?.focus();
     }
-  }, [open]);
+  }, [open, searchMode]);
 
   useEffect(() => {
     if (!open || !repositoryPath) {
@@ -89,26 +163,33 @@ export function CommandPalette({ open, onClose, repositoryPath, onOpenInApp }: P
     const timer = window.setTimeout(async () => {
       if (cancelled) return;
       try {
-        const paths = await searchRepositoryFiles(repositoryPath, q);
-        if (cancelled) return;
-        setResults(
-          paths.map((rel) => ({
-            path: rel,
-            display: rel,
-          })),
-        );
+        if (searchMode === "filename") {
+          const paths = await searchRepositoryFiles(repositoryPath, q);
+          if (cancelled) return;
+          setResults(
+            paths.map((rel) => ({
+              kind: "filename" as const,
+              path: rel,
+              display: rel,
+            })),
+          );
+        } else {
+          const matches = await searchRepositoryFileContents(repositoryPath, q);
+          if (cancelled) return;
+          setResults(toContentResults(matches));
+        }
       } catch {
         if (!cancelled) setResults([]);
       } finally {
         if (!cancelled) setLoading(false);
       }
-    }, 50);
+    }, searchMode === "content" ? 120 : 50);
 
     return () => {
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [open, query, repositoryPath]);
+  }, [open, query, repositoryPath, searchMode]);
 
   useEffect(() => {
     if (!open) return;
@@ -130,9 +211,9 @@ export function CommandPalette({ open, onClose, repositoryPath, onOpenInApp }: P
         if (item && repositoryPath) {
           e.preventDefault();
           if (e.shiftKey) {
-            openSearchResultExternal(item.path);
+            openSearchResultExternal(item);
           } else {
-            openSearchResultInApp(item.path);
+            openSearchResultInApp(item);
           }
         }
       }
@@ -150,6 +231,12 @@ export function CommandPalette({ open, onClose, repositoryPath, onOpenInApp }: P
     openSearchResultExternal,
   ]);
 
+  const placeholder =
+    searchMode === "filename" ? "输入文件名" : "搜索文件内容";
+  const emptyHint =
+    searchMode === "filename" ? "输入文件名搜索" : "输入关键词搜索文件内容";
+  const dialogLabel = searchMode === "filename" ? "文件搜索" : "文件内容搜索";
+
   if (!open) return null;
 
   return (
@@ -158,8 +245,11 @@ export function CommandPalette({ open, onClose, repositoryPath, onOpenInApp }: P
         className="app-command-palette"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
-        aria-label="文件搜索"
+        aria-label={dialogLabel}
       >
+        <div className="app-command-palette-header">
+          <CommandPaletteModeTabs searchMode={searchMode} onSearchModeChange={onSearchModeChange} />
+        </div>
         <div className="app-command-palette-input">
           <Input
             ref={inputRef as any}
@@ -173,7 +263,7 @@ export function CommandPalette({ open, onClose, repositoryPath, onOpenInApp }: P
             autoCapitalize="off"
             spellCheck={false}
             variant="borderless"
-            placeholder="输入文件名"
+            placeholder={placeholder}
             suffix={<CommandPaletteShortcutHints />}
             autoFocus
           />
@@ -186,21 +276,35 @@ export function CommandPalette({ open, onClose, repositoryPath, onOpenInApp }: P
           <div className="app-command-palette-list">
             {results.map((item, index) => (
               <div
-                key={item.path}
+                key={item.kind === "content" ? `${item.path}:${item.line}` : item.path}
                 className={`app-command-palette-item ${index === activeIndex ? "app-command-palette-item--active" : ""}`}
                 onClick={() => {
-                  openSearchResultInApp(item.path);
+                  openSearchResultInApp(item);
                 }}
                 onMouseEnter={() => setActiveIndex(index)}
               >
-                <span className="app-command-palette-item-label">{item.display}</span>
+                {item.kind === "content" ? (
+                  <div className="app-command-palette-item-content">
+                    <div className="app-command-palette-item-head">
+                      <FileOutlined className="app-command-palette-item-icon" />
+                      <span className="app-command-palette-item-path">{item.display}</span>
+                    </div>
+                    {item.preview ? (
+                      <div className="app-command-palette-item-preview">{item.preview}</div>
+                    ) : null}
+                  </div>
+                ) : (
+                  <span className="app-command-palette-item-label">{item.display}</span>
+                )}
               </div>
             ))}
           </div>
         ) : query ? (
-          <div className="app-command-palette-empty">没有找到文件</div>
+          <div className="app-command-palette-empty">
+            {searchMode === "filename" ? "没有找到文件" : "没有找到匹配内容"}
+          </div>
         ) : (
-          <div className="app-command-palette-empty">输入文件名搜索</div>
+          <div className="app-command-palette-empty">{emptyHint}</div>
         )}
       </div>
     </div>

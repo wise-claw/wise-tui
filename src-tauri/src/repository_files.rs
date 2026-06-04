@@ -2,6 +2,7 @@ use crate::project_workspace_paths::expand_tilde_in_path;
 use serde::Serialize;
 use std::collections::BTreeMap;
 use std::fs;
+use std::io::{BufRead, BufReader};
 use std::path::{Component, Path, PathBuf};
 use walkdir::WalkDir;
 
@@ -121,6 +122,200 @@ pub(crate) fn search_repository_files(root: String, query: String) -> Result<Vec
         scored.truncate(MAX_RESULTS);
         Ok(scored.into_iter().map(|(_, p)| p).collect())
     }
+}
+
+/// Extensions that are unlikely to contain searchable plain text.
+fn should_skip_content_search_file(path: &Path) -> bool {
+    let ext = path
+        .extension()
+        .and_then(|s| s.to_str())
+        .map(|s| s.to_ascii_lowercase())
+        .unwrap_or_default();
+    matches!(
+        ext.as_str(),
+        "png"
+            | "jpg"
+            | "jpeg"
+            | "gif"
+            | "webp"
+            | "ico"
+            | "bmp"
+            | "svg"
+            | "pdf"
+            | "zip"
+            | "gz"
+            | "tar"
+            | "rar"
+            | "7z"
+            | "jar"
+            | "war"
+            | "woff"
+            | "woff2"
+            | "ttf"
+            | "otf"
+            | "eot"
+            | "mp3"
+            | "mp4"
+            | "mov"
+            | "avi"
+            | "wasm"
+            | "exe"
+            | "dll"
+            | "so"
+            | "dylib"
+            | "bin"
+            | "class"
+            | "pyc"
+            | "o"
+            | "a"
+            | "sqlite"
+            | "db"
+            | "lock"
+    )
+}
+
+fn is_probably_binary_file(path: &Path) -> bool {
+    const SAMPLE: usize = 8192;
+    let Ok(meta) = fs::metadata(path) else {
+        return true;
+    };
+    if meta.len() == 0 {
+        return false;
+    }
+    let Ok(mut file) = fs::File::open(path) else {
+        return true;
+    };
+    let mut buf = vec![0u8; SAMPLE.min(meta.len() as usize)];
+    let Ok(n) = std::io::Read::read(&mut file, &mut buf) else {
+        return true;
+    };
+    buf.truncate(n);
+    buf.contains(&0)
+}
+
+fn build_content_preview(line: &str, query: &str, max_len: usize) -> String {
+    let trimmed = line.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    let lower = trimmed.to_lowercase();
+    let q = query.to_lowercase();
+    let Some(idx) = lower.find(&q) else {
+        return truncate_utf8_chars(trimmed, max_len);
+    };
+    let context = 24usize;
+    let start = idx.saturating_sub(context);
+    let end = (idx + q.len() + context).min(trimmed.len());
+    let mut slice = trimmed[start..end].to_string();
+    if start > 0 {
+        slice.insert(0, '…');
+    }
+    if end < trimmed.len() {
+        slice.push('…');
+    }
+    truncate_utf8_chars(&slice, max_len)
+}
+
+fn truncate_utf8_chars(s: &str, max_len: usize) -> String {
+    if s.chars().count() <= max_len {
+        return s.to_string();
+    }
+    s.chars().take(max_len).collect::<String>() + "…"
+}
+
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RepositoryFileContentMatch {
+    path: String,
+    line: u32,
+    preview: String,
+}
+
+/// Search plain-text file contents under a repository root (for global search).
+#[tauri::command]
+pub(crate) fn search_repository_file_contents(
+    root: String,
+    query: String,
+) -> Result<Vec<RepositoryFileContentMatch>, String> {
+    const MAX_RESULTS: usize = 80;
+    const MAX_SCAN_ENTRIES: usize = 300_000;
+    const MAX_FILE_BYTES: u64 = 1_048_576;
+
+    let root_path = PathBuf::from(&root);
+    if !root_path.is_dir() {
+        return Err("Not a directory".to_string());
+    }
+
+    let q = query.trim();
+    if q.is_empty() {
+        return Ok(Vec::new());
+    }
+    let q_lower = q.to_lowercase();
+
+    let walker = WalkDir::new(&root_path)
+        .follow_links(false)
+        .into_iter()
+        .filter_entry(|e| {
+            if e.depth() == 0 {
+                return true;
+            }
+            if e.file_type().is_dir() && should_skip_walk_dir(&e.file_name().to_string_lossy()) {
+                return false;
+            }
+            true
+        });
+
+    let mut scanned: usize = 0;
+    let mut out: Vec<RepositoryFileContentMatch> = Vec::new();
+
+    for entry in walker.filter_map(|e| e.ok()) {
+        scanned += 1;
+        if scanned > MAX_SCAN_ENTRIES || out.len() >= MAX_RESULTS {
+            break;
+        }
+        if !entry.file_type().is_file() {
+            continue;
+        }
+        let path = entry.path();
+        if should_skip_content_search_file(path) {
+            continue;
+        }
+        let Ok(meta) = fs::metadata(path) else {
+            continue;
+        };
+        if meta.len() > MAX_FILE_BYTES {
+            continue;
+        }
+        if is_probably_binary_file(path) {
+            continue;
+        }
+        let Some(rel) = project_file_rel_path(&root_path, path) else {
+            continue;
+        };
+
+        let Ok(file) = fs::File::open(path) else {
+            continue;
+        };
+        let reader = BufReader::new(file);
+        for (line_no, line_result) in reader.lines().enumerate() {
+            if out.len() >= MAX_RESULTS {
+                break;
+            }
+            let Ok(line) = line_result else {
+                break;
+            };
+            if !line.to_lowercase().contains(&q_lower) {
+                continue;
+            }
+            out.push(RepositoryFileContentMatch {
+                path: rel.clone(),
+                line: (line_no as u32).saturating_add(1),
+                preview: build_content_preview(&line, q, 160),
+            });
+        }
+    }
+
+    Ok(out)
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -389,6 +584,44 @@ pub(crate) fn delete_repository_entry(root: String, relative_path: String) -> Re
         return Err("不支持的文件类型".into());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod content_search_tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn search_repository_file_contents_finds_line_and_preview() {
+        let root = std::env::temp_dir().join("wise-content-search-test");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::write(
+            root.join("src/hello.ts"),
+            "export const alpha = 1;\nexport const beta = 2;\n",
+        )
+        .unwrap();
+
+        let matches =
+            search_repository_file_contents(root.to_string_lossy().to_string(), "beta".into())
+                .expect("search");
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].path, "src/hello.ts");
+        assert_eq!(matches[0].line, 2);
+        assert!(matches[0].preview.contains("beta"));
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn build_content_preview_truncates_long_lines() {
+        let preview = build_content_preview(
+            "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+            "bbbb",
+            20,
+        );
+        assert!(preview.chars().count() <= 21);
+    }
 }
 
 #[cfg(test)]
