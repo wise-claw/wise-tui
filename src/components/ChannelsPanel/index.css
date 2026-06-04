@@ -286,27 +286,52 @@
   margin-top: 2px;
 }
 
-/* 纯正扁平实色按钮样式约束 */
+/* 与渠道卡片一致的轻量主色描边按钮，避免饱和实心蓝与警告色提示撞色 */
 .app-channels-panel__ops-actions .ant-btn {
   font-weight: 500;
-}
-
-.app-channels-panel__ops-actions .ant-btn-primary {
-  background: var(--ant-color-primary) !important;
-  border-color: var(--ant-color-primary) !important;
   box-shadow: none !important;
 }
 
-.app-channels-panel__ops-actions .ant-btn-primary:hover {
-  background: var(--ant-color-primary-hover) !important;
-  border-color: var(--ant-color-primary-hover) !important;
+.app-channels-panel__ops-actions .ant-btn-default:not(:disabled) {
+  background: color-mix(in srgb, var(--ant-color-bg-container) 80%, transparent) !important;
+  border-color: color-mix(in srgb, var(--ant-color-border-secondary) 70%, transparent) !important;
+  color: var(--ant-color-text-secondary) !important;
+}
+
+.app-channels-panel__ops-actions .ant-btn-default:not(:disabled):hover {
+  color: var(--ant-color-text) !important;
+  border-color: var(--ant-color-border) !important;
+  background: var(--ant-color-fill-tertiary) !important;
+}
+
+.app-channels-panel__ops-actions .ant-btn-primary:not(:disabled) {
+  background: color-mix(in srgb, var(--ant-color-primary) 12%, var(--ant-color-bg-container)) !important;
+  border-color: color-mix(in srgb, var(--ant-color-primary) 38%, var(--ant-color-border-secondary)) !important;
+  color: var(--ant-color-primary) !important;
+}
+
+.app-channels-panel__ops-actions .ant-btn-primary:not(:disabled):hover {
+  background: color-mix(in srgb, var(--ant-color-primary) 18%, var(--ant-color-bg-container)) !important;
+  border-color: color-mix(in srgb, var(--ant-color-primary) 55%, var(--ant-color-border-secondary)) !important;
+  color: var(--ant-color-primary-hover) !important;
+}
+
+.app-channels-panel__ops-actions .ant-btn-primary:disabled {
+  background: color-mix(in srgb, var(--ant-color-fill-secondary) 80%, transparent) !important;
+  border-color: color-mix(in srgb, var(--ant-color-border-secondary) 60%, transparent) !important;
+  color: var(--ant-color-text-quaternary) !important;
 }
 
 .app-channels-panel__hint {
   display: block;
+  margin: 0;
+  padding: 6px 10px;
   font-size: 11.5px;
-  color: var(--ant-color-warning-text);
   line-height: 1.45;
+  color: var(--ant-color-text-secondary);
+  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 50%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 55%, transparent);
+  border-radius: 6px;
 }
 
 .app-channels-panel .app-dingtalk-ebot-popover {

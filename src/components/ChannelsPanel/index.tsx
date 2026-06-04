@@ -323,6 +323,11 @@ function DingtalkChannelBody({
             {status.lastError}
           </Typography.Text>
         ) : null}
+        {dingTalkConfigured ? null : (
+          <Typography.Text className="app-channels-panel__hint">
+            先保存 AppKey / AppSecret / robotCode 后再启动。
+          </Typography.Text>
+        )}
         <Space wrap className="app-channels-panel__ops-actions">
           <Button
             type="primary"
@@ -345,11 +350,6 @@ function DingtalkChannelBody({
             刷新
           </Button>
         </Space>
-        {dingTalkConfigured ? null : (
-          <Typography.Text type="warning" className="app-channels-panel__hint">
-            先保存 AppKey / AppSecret / robotCode 后再启动。
-          </Typography.Text>
-        )}
       </div>
       <Tabs
         size="small"

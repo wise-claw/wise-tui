@@ -1,0 +1,88 @@
+/* 顶栏：远程入口（多路长连接开关 + 跳转配置） */
+
+.app-topbar-remote-strip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+  margin-left: 4px;
+  -webkit-app-region: no-drag;
+}
+
+.app-topbar-remote-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ant-color-text-tertiary);
+  line-height: 1;
+  user-select: none;
+  white-space: nowrap;
+}
+
+.app-topbar-remote-strip--on .app-topbar-remote-label {
+  color: var(--ant-color-success);
+}
+
+.app-topbar-remote-entry {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+}
+
+.app-topbar-remote-entry-label {
+  font-size: 10px;
+  font-weight: 500;
+  color: var(--ant-color-text-tertiary);
+  line-height: 1;
+  user-select: none;
+}
+
+.app-topbar-remote-strip--on .app-topbar-remote-entry-label {
+  color: var(--ant-color-text-secondary);
+}
+
+.app-topbar-remote-entry-switch.ant-switch {
+  min-width: 28px;
+}
+
+.app-topbar-remote-entry-switch.app-topbar-remote-entry-switch--off:not(.ant-switch-checked) {
+  background: var(--ant-color-fill-secondary);
+  border: 1px solid var(--ant-color-border-secondary);
+}
+
+.app-topbar-remote-entry-switch.app-topbar-remote-entry-switch--on.ant-switch-checked {
+  background: var(--ant-color-success) !important;
+}
+
+.app-topbar-remote-entry-switch.ant-switch-checked:hover {
+  background: var(--ant-color-success-hover) !important;
+}
+
+.app-topbar-remote-entry-switch.ant-switch-loading {
+  background: var(--ant-color-warning-bg) !important;
+  border: 1px solid var(--ant-color-warning-border);
+}
+
+.app-topbar-remote-config-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ant-color-text-tertiary);
+  cursor: pointer;
+  font-size: 13px;
+  line-height: 1;
+}
+
+.app-topbar-remote-config-btn:hover {
+  color: var(--ant-color-text);
+  background: var(--ant-color-fill-secondary);
+}
+
+.app-topbar-remote-strip--on .app-topbar-remote-config-btn {
+  color: var(--ant-color-text-secondary);
+}

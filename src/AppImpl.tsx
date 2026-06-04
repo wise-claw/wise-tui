@@ -2856,6 +2856,7 @@ export default function App() {
       onToggleCompactLayoutMode={handleToggleCompactLayoutMode}
       onLeftWidthChange={setMainLayoutLeftWidthPx}
       onRightWidthChange={setMainLayoutRightWidthPx}
+      onOpenRemoteChannels={() => enterAuthorPane("channels")}
       activeRepositoryPath={activeRepository?.path}
       leftSidebarProps={{
         projects,

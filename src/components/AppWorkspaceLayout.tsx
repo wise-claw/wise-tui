@@ -365,6 +365,8 @@ export interface AppWorkspaceLayoutProps {
   leftSidebarProps: LeftSidebarProps;
   authorPanelProps: AuthorPanelProps;
   claudeSessionsProps: ClaudeSessionsProps;
+  /** 顶栏「远程」区跳转创作台远程入口 */
+  onOpenRemoteChannels?: () => void;
   /** 历史名 `rightPanelProps`，与 ChatInspector 的 props 一致。 */
   chatInspectorProps: RightPanelProps;
   /** Inspector 在 cockpit 模式下使用的 props（Mission 概览 + 子代理活动 + 活动仓库 Git）。 */
@@ -474,6 +476,7 @@ export function AppWorkspaceLayout({
   leftSidebarProps,
   authorPanelProps,
   claudeSessionsProps,
+  onOpenRemoteChannels,
   chatInspectorProps,
   cockpitInspectorProps,
   cockpitEmpty,
@@ -774,6 +777,7 @@ export function AppWorkspaceLayout({
                           onAutoFixRunError={claudeSessionsProps.onAutoFixRunError}
                           paneCount={claudeSessionsProps.paneCount}
                           onChangePaneCount={claudeSessionsProps.onChangePaneCount}
+                          onOpenRemoteChannels={onOpenRemoteChannels}
                         />
                       </Suspense>
                     ) : null}

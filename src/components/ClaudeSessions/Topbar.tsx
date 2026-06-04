@@ -2,7 +2,7 @@ import type { ClaudeSession, ProjectItem, Repository } from "../../types";
 import { Dropdown, message, Popover, Spin, Switch, Tooltip, type TooltipProps } from "antd";
 import { lazy, Suspense, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from "react";
 import { useWiseTopbarChromeVisibility } from "../../hooks/useWiseTopbarChromeVisibility";
-import { DingTalkStreamGatewayTopbarSwitch } from "../DingTalkStreamGatewayTopbarSwitch";
+import { RemoteEntryTopbarStrip } from "../RemoteEntryTopbarStrip";
 import { OpenAppMenu } from "../OpenAppMenu";
 import { FccTopbarTrigger } from "./FccTopbarTrigger";
 import { FccTrafficTopbarTrigger } from "./FccTrafficTopbarTrigger";
@@ -178,6 +178,8 @@ export interface TopbarProps {
   /** 多屏模式屏数 */
   paneCount?: PaneCount;
   onChangePaneCount?: (count: PaneCount) => void;
+  /** 打开创作台「远程入口」配置页 */
+  onOpenRemoteChannels?: () => void;
 }
 
 export function Topbar({
@@ -200,6 +202,7 @@ export function Topbar({
   onAutoFixRunError,
   paneCount = 1,
   onChangePaneCount,
+  onOpenRemoteChannels,
 }: TopbarProps) {
   const topbarChrome = useWiseTopbarChromeVisibility();
   const [selectedOpenAppId, setSelectedOpenAppId] = useState<string>(() => {
@@ -289,7 +292,7 @@ export function Topbar({
                   <span className="app-topbar-repository-trigger-label">{topbarLabel}</span>
                 </button>
               </Tooltip>
-              <DingTalkStreamGatewayTopbarSwitch />
+              <RemoteEntryTopbarStrip onOpenRemoteChannels={onOpenRemoteChannels} />
             </>
           ) : null}
         </div>
