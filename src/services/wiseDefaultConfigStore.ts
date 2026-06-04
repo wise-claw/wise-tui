@@ -20,6 +20,10 @@ import {
   normalizeExecutionEnvironmentDispatchHistoryDays,
   type ExecutionEnvironmentDispatchHistoryDays,
 } from "../constants/executionEnvironmentDispatch";
+import {
+  normalizeComposerCommonPhrases,
+  type ComposerCommonPhrase,
+} from "../constants/composerCommonPhrase";
 import { normalizeChord } from "../utils/atMentionShortcutChord";
 import { RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK, RIGHT_PANEL_DEFAULT_COLLAPSED_KEY } from "../utils/rightPanelStorage";
 import { deleteAppSetting, getAppSetting, setAppSetting, setAppSettingJson } from "./appSettingsStore";
@@ -59,6 +63,8 @@ export const WISE_AT_MENTION_DEFAULT_CHANGED = "wise:at-mention-default-changed"
 
 export const WISE_AT_MENTION_SHORTCUTS_CHANGED = "wise:at-mention-shortcuts-changed";
 
+export const WISE_COMPOSER_COMMON_PHRASES_CHANGED = "wise:composer-common-phrases-changed";
+
 export const WISE_WORKSPACE_INSPECTOR_PANELS_CHANGED = "wise:workspace-inspector-panels-changed";
 
 export type MonitorPanelPlacement = "left" | "right";
@@ -94,6 +100,8 @@ export interface WiseDefaultConfigV1 {
   atMentionDefaultTarget: AtMentionDefaultTarget;
   /** `encodeAtMentionDefaultSelectValue` → chord（如 `Mod+Shift+Digit2`）。 */
   atMentionShortcutByTarget: Record<string, string>;
+  /** 主会话常用语：快捷键发送或点击按钮发送。 */
+  composerCommonPhrases: ComposerCommonPhrase[];
   /** 右栏工作区快捷操作卡片；默认显示。 */
   showWorkspaceQuickActionsPanel: boolean;
   /** 右栏备忘录卡片；默认显示。 */
@@ -116,6 +124,7 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   executionEnvironmentDispatchHistoryDays: DEFAULT_EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAYS,
   atMentionDefaultTarget: DEFAULT_AT_MENTION_DEFAULT_TARGET,
   atMentionShortcutByTarget: {},
+  composerCommonPhrases: [],
   showWorkspaceQuickActionsPanel: true,
   showWorkspaceMemosPanel: true,
   showWorkspaceTodosPanel: true,
@@ -197,6 +206,10 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
         parsed.atMentionShortcutByTarget === undefined
           ? DEFAULT_CONFIG.atMentionShortcutByTarget
           : normalizeAtMentionShortcutByTarget(parsed.atMentionShortcutByTarget),
+      composerCommonPhrases:
+        parsed.composerCommonPhrases === undefined
+          ? DEFAULT_CONFIG.composerCommonPhrases
+          : normalizeComposerCommonPhrases(parsed.composerCommonPhrases),
       showWorkspaceQuickActionsPanel:
         parsed.showWorkspaceQuickActionsPanel === undefined
           ? DEFAULT_CONFIG.showWorkspaceQuickActionsPanel
@@ -325,6 +338,7 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     executionEnvironmentDispatchHistoryDays: DEFAULT_CONFIG.executionEnvironmentDispatchHistoryDays,
     atMentionDefaultTarget: DEFAULT_CONFIG.atMentionDefaultTarget,
     atMentionShortcutByTarget: DEFAULT_CONFIG.atMentionShortcutByTarget,
+    composerCommonPhrases: DEFAULT_CONFIG.composerCommonPhrases,
     showWorkspaceQuickActionsPanel: DEFAULT_CONFIG.showWorkspaceQuickActionsPanel,
     showWorkspaceMemosPanel: DEFAULT_CONFIG.showWorkspaceMemosPanel,
     showWorkspaceTodosPanel: DEFAULT_CONFIG.showWorkspaceTodosPanel,
@@ -413,6 +427,7 @@ export async function saveWiseDefaultConfig(
       | "executionEnvironmentDispatchHistoryDays"
       | "atMentionDefaultTarget"
       | "atMentionShortcutByTarget"
+      | "composerCommonPhrases"
       | "showWorkspaceQuickActionsPanel"
       | "showWorkspaceMemosPanel"
       | "showWorkspaceTodosPanel"
@@ -449,6 +464,10 @@ export async function saveWiseDefaultConfig(
       patch.atMentionShortcutByTarget !== undefined
         ? normalizeAtMentionShortcutByTarget(patch.atMentionShortcutByTarget)
         : current.atMentionShortcutByTarget,
+    composerCommonPhrases:
+      patch.composerCommonPhrases !== undefined
+        ? normalizeComposerCommonPhrases(patch.composerCommonPhrases)
+        : current.composerCommonPhrases,
     showWorkspaceQuickActionsPanel:
       patch.showWorkspaceQuickActionsPanel ?? current.showWorkspaceQuickActionsPanel,
     showWorkspaceMemosPanel: patch.showWorkspaceMemosPanel ?? current.showWorkspaceMemosPanel,
@@ -489,6 +508,9 @@ export async function saveWiseDefaultConfig(
   }
   if (patch.atMentionShortcutByTarget !== undefined) {
     next.atMentionShortcutByTarget = normalizeAtMentionShortcutByTarget(patch.atMentionShortcutByTarget);
+  }
+  if (patch.composerCommonPhrases !== undefined) {
+    next.composerCommonPhrases = normalizeComposerCommonPhrases(patch.composerCommonPhrases);
   }
   if (patch.showWorkspaceQuickActionsPanel !== undefined) {
     next.showWorkspaceQuickActionsPanel = normalizeBoolean(patch.showWorkspaceQuickActionsPanel);
@@ -569,6 +591,12 @@ export async function saveWiseDefaultConfig(
     dispatchAtMentionShortcutsChanged(next.atMentionShortcutByTarget);
   }
   if (
+    patch.composerCommonPhrases !== undefined &&
+    JSON.stringify(next.composerCommonPhrases) !== JSON.stringify(current.composerCommonPhrases)
+  ) {
+    dispatchComposerCommonPhrasesChanged(next.composerCommonPhrases);
+  }
+  if (
     patch.showWorkspaceQuickActionsPanel !== undefined ||
     patch.showWorkspaceMemosPanel !== undefined ||
     patch.showWorkspaceTodosPanel !== undefined
@@ -628,6 +656,25 @@ export async function loadAtMentionShortcutByTargetFromStore(): Promise<Record<s
   return (await loadWiseDefaultConfig()).atMentionShortcutByTarget;
 }
 
+function stripComposerChordFromPeers(
+  chord: string,
+  current: WiseDefaultConfigV1,
+  except: { atMentionTargetKey?: string; phraseId?: string },
+): Pick<WiseDefaultConfigV1, "atMentionShortcutByTarget" | "composerCommonPhrases"> {
+  const atMentionShortcutByTarget = { ...current.atMentionShortcutByTarget };
+  for (const [key, existing] of Object.entries(atMentionShortcutByTarget)) {
+    if (key !== except.atMentionTargetKey && existing === chord) {
+      delete atMentionShortcutByTarget[key];
+    }
+  }
+  const composerCommonPhrases = current.composerCommonPhrases.map((phrase) => {
+    if (phrase.id === except.phraseId || phrase.chord !== chord) return phrase;
+    const { chord: _removed, ...rest } = phrase;
+    return rest;
+  });
+  return { atMentionShortcutByTarget, composerCommonPhrases };
+}
+
 export async function saveAtMentionShortcutForTarget(
   target: AtMentionDefaultTarget,
   chord: string,
@@ -638,16 +685,55 @@ export async function saveAtMentionShortcutForTarget(
   const normalized = normalizeChord(chord);
   if (!normalized) {
     delete next[targetKey];
-  } else {
-    for (const [key, existing] of Object.entries(next)) {
-      if (key !== targetKey && existing === normalized) {
-        delete next[key];
-      }
-    }
-    next[targetKey] = normalized;
+    await saveWiseDefaultConfig({ atMentionShortcutByTarget: next });
+    return next;
   }
-  await saveWiseDefaultConfig({ atMentionShortcutByTarget: next });
+  const stripped = stripComposerChordFromPeers(normalized, current, { atMentionTargetKey: targetKey });
+  next[targetKey] = normalized;
+  await saveWiseDefaultConfig({
+    atMentionShortcutByTarget: next,
+    composerCommonPhrases: stripped.composerCommonPhrases,
+  });
   return next;
+}
+
+function dispatchComposerCommonPhrasesChanged(phrases: ComposerCommonPhrase[]): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(WISE_COMPOSER_COMMON_PHRASES_CHANGED, {
+      detail: { composerCommonPhrases: phrases },
+    }),
+  );
+}
+
+export async function loadComposerCommonPhrasesFromStore(): Promise<ComposerCommonPhrase[]> {
+  return [...(await loadWiseDefaultConfig()).composerCommonPhrases];
+}
+
+export async function saveComposerCommonPhrasesToStore(
+  phrases: ComposerCommonPhrase[],
+): Promise<ComposerCommonPhrase[]> {
+  const normalized = normalizeComposerCommonPhrases(phrases);
+  const current = await loadWiseDefaultConfig();
+  let atMentionShortcutByTarget = { ...current.atMentionShortcutByTarget };
+  for (const phrase of normalized) {
+    if (!phrase.chord) continue;
+    const stripped = stripComposerChordFromPeers(
+      phrase.chord,
+      {
+        ...current,
+        atMentionShortcutByTarget,
+        composerCommonPhrases: normalized,
+      },
+      { phraseId: phrase.id },
+    );
+    atMentionShortcutByTarget = stripped.atMentionShortcutByTarget;
+  }
+  await saveWiseDefaultConfig({
+    composerCommonPhrases: normalized,
+    atMentionShortcutByTarget,
+  });
+  return normalized;
 }
 
 export function resolveAtMentionTargetFromShortcutKey(

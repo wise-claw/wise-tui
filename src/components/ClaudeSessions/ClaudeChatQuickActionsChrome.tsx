@@ -1,6 +1,6 @@
 import { CloudUploadOutlined } from "@ant-design/icons";
 import { Button, Empty, Modal, Popover, Popconfirm, Spin, Tooltip, message } from "antd";
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { WORKFLOW_UI_EVENT_REPO_WORKTREES_MAY_HAVE_CHANGED } from "../../constants/workflowUiEvents";
 import type { RepoWorktreesMayHaveChangedDetail } from "../../constants/workflowUiEvents";
 import { useGitRepositoryStats } from "../../hooks/useGitRepositoryStats";
@@ -24,6 +24,10 @@ import {
   formatWorktreePathRelative,
   sessionRepoPathKey,
 } from "./claudeChatHelpers";
+import { filterComposerCommonPhrasesForQuickBar } from "../../constants/composerCommonPhrase";
+import { dispatchApplyComposerCommonPhrase } from "../../constants/composerCommonPhraseEvents";
+import { useComposerCommonPhrases } from "../../hooks/useComposerCommonPhrases";
+import { ComposerCommonPhrasesBar } from "../ClaudeChatInput/ComposerCommonPhrasesBar";
 import { SessionQuickActionsBar } from "./SessionQuickActionsBar";
 
 export interface ClaudeChatQuickActionsChromeProps {
@@ -36,6 +40,8 @@ export interface ClaudeChatQuickActionsChromeProps {
   onOpenWorkTrajectory: () => void;
   onSend?: (prompt: string) => void;
   onAddWorktreeRepositoryToProject?: (worktreePath: string) => void | Promise<void>;
+  /** 与输入区一致：会话忙且无法入队时禁用「直接发送」类常用语 */
+  composerSessionBusyWithoutEnqueue?: boolean;
 }
 
 export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActionsChrome({
@@ -48,7 +54,31 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
   onOpenWorkTrajectory,
   onSend,
   onAddWorktreeRepositoryToProject,
+  composerSessionBusyWithoutEnqueue = false,
 }: ClaudeChatQuickActionsChromeProps) {
+  const { phrases: composerCommonPhrases } = useComposerCommonPhrases();
+  const applyCommonPhrase = useCallback(
+    (phrase: Parameters<typeof dispatchApplyComposerCommonPhrase>[1]) => {
+      dispatchApplyComposerCommonPhrase(sessionId, phrase);
+    },
+    [sessionId],
+  );
+  const quickBarPhrases = useMemo(
+    () => filterComposerCommonPhrasesForQuickBar(composerCommonPhrases),
+    [composerCommonPhrases],
+  );
+  const commonPhrasesSlot = useMemo(
+    () =>
+      quickBarPhrases.length > 0 ? (
+        <ComposerCommonPhrasesBar
+          variant="quickBar"
+          phrases={quickBarPhrases}
+          sessionBusyWithoutEnqueue={composerSessionBusyWithoutEnqueue}
+          onApplyPhrase={applyCommonPhrase}
+        />
+      ) : null,
+    [applyCommonPhrase, quickBarPhrases, composerSessionBusyWithoutEnqueue],
+  );
   const stats = useGitRepositoryStats(gitRepositoryPath);
   const [reviewGitStatsPulse, setReviewGitStatsPulse] = useState(false);
   const prevGitStatsForPulseRef = useRef({ additions: 0, deletions: 0 });
@@ -457,6 +487,7 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
         showWorktreeInMore={Boolean(sessionRepositoryPath)}
         onOpenWorktreeMenu={handleOpenWorktreeMenu}
         pushControl={pushControl}
+        commonPhrasesSlot={commonPhrasesSlot}
       />
 
       {sessionRepositoryPath ? (

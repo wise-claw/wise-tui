@@ -1,0 +1,108 @@
+.app-composer-common-phrases-tooltip-overlay .ant-tooltip-inner {
+  max-width: min(320px, 72vw);
+  max-height: min(200px, 40vh);
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  line-height: 1.45;
+}
+
+.app-composer-common-phrases-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 0 0;
+  max-width: 100%;
+}
+
+.app-composer-common-phrases-bar--quick {
+  display: inline-flex;
+  flex-wrap: nowrap;
+  align-items: center;
+  gap: 4px;
+  padding: 0;
+  max-width: none;
+  flex-shrink: 0;
+}
+
+.app-composer-common-phrases-quick-label {
+  flex-shrink: 0;
+  margin: 0;
+  padding: 2px 4px;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ant-color-text);
+  font-family: inherit;
+  font-size: 11.5px;
+  font-weight: 500;
+  line-height: 1.15;
+  cursor: pointer;
+  white-space: nowrap;
+  touch-action: manipulation;
+  transition: color 0.12s ease, opacity 0.12s ease;
+}
+
+.app-composer-common-phrases-quick-label:hover:not(:disabled) {
+  color: var(--ant-color-primary);
+}
+
+.app-composer-common-phrases-quick-label:active:not(:disabled) {
+  opacity: 0.72;
+}
+
+.app-composer-common-phrases-quick-label:focus-visible {
+  outline: 2px solid var(--ant-color-primary);
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+
+.app-composer-common-phrases-quick-label:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.app-composer-common-phrases-quick-label--insert {
+  font-weight: 400;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-composer-common-phrases-quick-label--insert:hover:not(:disabled) {
+  color: var(--ant-color-primary);
+}
+
+.app-composer-common-phrases-bar__chip--insert {
+  border-style: dashed;
+}
+
+.app-composer-common-phrases-bar__chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 100%;
+  height: auto;
+  min-height: 22px;
+  padding: 0 6px;
+  line-height: 1.3;
+}
+
+.app-composer-common-phrases-bar__title {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 160px;
+  font-size: 11px;
+}
+
+.app-composer-common-phrases-bar__keys {
+  flex-shrink: 0;
+  padding: 0 4px;
+  border-radius: 3px;
+  border: 1px solid var(--ant-color-border-secondary);
+  background: var(--ant-color-fill-quaternary);
+  font-size: 10px;
+  font-family: var(--ant-font-family-code, ui-monospace, monospace);
+  color: var(--ant-color-text-tertiary);
+  line-height: 16px;
+}

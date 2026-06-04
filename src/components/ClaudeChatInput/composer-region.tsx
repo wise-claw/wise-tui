@@ -51,7 +51,16 @@ import { ContextItems } from "./context-items";
 import { SlashPopover } from "./slash-popover";
 import { useAtMentionDefaultTarget } from "../../hooks/useAtMentionDefaultTarget";
 import { useAtMentionShortcuts } from "../../hooks/useAtMentionShortcuts";
+import { resolveComposerCommonPhraseAction } from "../../constants/composerCommonPhrase";
+import type { ComposerCommonPhrase } from "../../constants/composerCommonPhrase";
+import {
+  WISE_UI_EVENT_APPLY_COMPOSER_COMMON_PHRASE,
+  type ApplyComposerCommonPhraseDetail,
+} from "../../constants/composerCommonPhraseEvents";
+import { useComposerCommonPhrases } from "../../hooks/useComposerCommonPhrases";
+import { applyComposerCommonPhraseToSurface } from "../../utils/applyComposerCommonPhrase";
 import { chordMatchesKeyboardEvent } from "../../utils/atMentionShortcutChord";
+import { ComposerCommonPhrasesManageTrigger } from "./ComposerCommonPhrasesManageTrigger";
 import { ImageThumbnails } from "./attachment-manager";
 import { QuestionDock } from "./dock/question-dock";
 import { PermissionDock } from "./dock/permission-dock";
@@ -515,6 +524,13 @@ function ComposerInner({
   const { target: atMentionDefaultTarget, save: saveAtMentionDefaultTarget } =
     useAtMentionDefaultTarget();
   const { bindings: atMentionShortcutBindings } = useAtMentionShortcuts();
+  const {
+    phrases: composerCommonPhrases,
+    bindings: composerCommonPhraseBindings,
+    loading: composerCommonPhrasesLoading,
+    saving: composerCommonPhrasesSaving,
+    persist: persistComposerCommonPhrases,
+  } = useComposerCommonPhrases();
   const [trigger, setTrigger] = useState<TriggerInfo>({ mode: null, query: "", rect: null });
   const [images, setImages] = useState<ImageAttachmentPart[]>([]);
   const [dragOverNativeFiles, setDragOverNativeFiles] = useState(false);
@@ -2358,16 +2374,39 @@ function ComposerInner({
     return () => window.removeEventListener("keydown", onGlobalKey, { capture: true });
   }, []);
 
-  /** 可配置的 @ 执行环境 / 终端快捷键：在输入框聚焦时插入对应提及。 */
+  const composerCommonPhraseBindingsRef = useRef(composerCommonPhraseBindings);
+  composerCommonPhraseBindingsRef.current = composerCommonPhraseBindings;
+  const atMentionShortcutBindingsRef = useRef(atMentionShortcutBindings);
+  atMentionShortcutBindingsRef.current = atMentionShortcutBindings;
+
+  /** 可配置的 @ 提及插入 / 常用语发送快捷键（输入框聚焦时）。 */
   useEffect(() => {
-    if (atMentionShortcutBindings.length === 0) return;
-    function onAtMentionShortcutKey(e: KeyboardEvent) {
-      if (trigger.mode) return;
+    function onComposerShortcutKey(e: KeyboardEvent) {
+      if (triggerRef.current.mode) return;
       const shell = shellRef.current;
       if (!shell || !isProseMirrorFocused(shell)) return;
+
+      const phraseBindings = composerCommonPhraseBindingsRef.current;
+      for (const binding of phraseBindings) {
+        if (!chordMatchesKeyboardEvent(binding.chord, e)) continue;
+        e.preventDefault();
+        e.stopPropagation();
+        if (binding.action === "insert") {
+          const surface = plainSurfaceRef.current;
+          if (surface) {
+            applyComposerCommonPhraseToSurface(surface, binding);
+          }
+        } else {
+          void handleSendRef.current(binding.text);
+        }
+        return;
+      }
+
+      const atBindings = atMentionShortcutBindingsRef.current;
+      if (atBindings.length === 0) return;
       const surface = plainSurfaceRef.current;
       if (!surface) return;
-      for (const binding of atMentionShortcutBindings) {
+      for (const binding of atBindings) {
         if (!chordMatchesKeyboardEvent(binding.chord, e)) continue;
         e.preventDefault();
         e.stopPropagation();
@@ -2380,9 +2419,40 @@ function ComposerInner({
         return;
       }
     }
-    window.addEventListener("keydown", onAtMentionShortcutKey, { capture: true });
-    return () => window.removeEventListener("keydown", onAtMentionShortcutKey, { capture: true });
-  }, [atMentionShortcutBindings, trigger.mode, session.id]);
+    window.addEventListener("keydown", onComposerShortcutKey, { capture: true });
+    return () => window.removeEventListener("keydown", onComposerShortcutKey, { capture: true });
+  }, [session.id]);
+
+  const applyComposerCommonPhrase = useCallback((phrase: ComposerCommonPhrase) => {
+    if (resolveComposerCommonPhraseAction(phrase) === "insert") {
+      const surface = plainSurfaceRef.current;
+      if (!surface) return;
+      applyComposerCommonPhraseToSurface(surface, phrase);
+      return;
+    }
+    void handleSendRef.current(phrase.text);
+  }, []);
+
+  useEffect(() => {
+    function handleApplyCommonPhrase(event: Event) {
+      const custom = event as CustomEvent<ApplyComposerCommonPhraseDetail>;
+      const targetSessionId = custom.detail?.sessionId?.trim();
+      if (!targetSessionId || targetSessionId !== session.id) return;
+      const phrase = custom.detail?.phrase;
+      if (!phrase?.text) return;
+      applyComposerCommonPhrase(phrase);
+    }
+    window.addEventListener(
+      WISE_UI_EVENT_APPLY_COMPOSER_COMMON_PHRASE,
+      handleApplyCommonPhrase as EventListener,
+    );
+    return () => {
+      window.removeEventListener(
+        WISE_UI_EVENT_APPLY_COMPOSER_COMMON_PHRASE,
+        handleApplyCommonPhrase as EventListener,
+      );
+    };
+  }, [applyComposerCommonPhrase, session.id]);
 
   const handleScreenshot = useCallback(async () => {
     const result = await captureScreenshot();
@@ -2819,6 +2889,12 @@ function ComposerInner({
             </Button>
           </Tooltip>
         ) : null}
+        <ComposerCommonPhrasesManageTrigger
+          phrases={composerCommonPhrases}
+          loading={composerCommonPhrasesLoading}
+          saving={composerCommonPhrasesSaving}
+          onPersist={persistComposerCommonPhrases}
+        />
         <ComposerRuntimeSettingsTrigger
           engine={sessionExecutionEngine}
           codexAvailable={codexAvailable}
@@ -2886,6 +2962,10 @@ function ComposerInner({
       modelMenuItems,
       onSessionModelChange,
       setModel,
+      composerCommonPhrases,
+      composerCommonPhrasesLoading,
+      composerCommonPhrasesSaving,
+      persistComposerCommonPhrases,
     ],
   );
 

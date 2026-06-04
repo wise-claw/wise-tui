@@ -1,0 +1,180 @@
+.app-composer-common-phrases-panel {
+  width: min(300px, 72vw);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.app-composer-common-phrases-panel__hint {
+  margin: 0;
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--ant-color-text-quaternary);
+}
+
+.app-composer-common-phrases-panel__empty {
+  margin: 0;
+  padding: 2px 0;
+  font-size: 11px;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-composer-common-phrases-panel__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  max-height: min(260px, 42vh);
+  overflow-y: auto;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 6px;
+  background: var(--ant-color-bg-container);
+}
+
+.app-composer-common-phrases-panel__item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 8px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+}
+
+.app-composer-common-phrases-panel__item:last-child {
+  border-bottom: none;
+}
+
+.app-composer-common-phrases-panel__item-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font-family: inherit;
+}
+
+.app-composer-common-phrases-panel__item-main:hover:not(:disabled) {
+  opacity: 0.88;
+}
+
+.app-composer-common-phrases-panel__item-main:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.app-composer-common-phrases-panel__item-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  min-width: 0;
+}
+
+.app-composer-common-phrases-panel__item-action {
+  flex-shrink: 0;
+  font-size: 9px;
+  line-height: 16px;
+  padding: 0 5px;
+  border-radius: 3px;
+  color: var(--ant-color-text-quaternary);
+  background: var(--ant-color-fill-tertiary);
+}
+
+.app-composer-common-phrases-panel__item-title {
+  flex-shrink: 0;
+  max-width: 88px;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ant-color-text);
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-composer-common-phrases-panel__item-preview {
+  display: block;
+  width: 100%;
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--ant-color-text-quaternary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-composer-common-phrases-panel__item-keys {
+  flex-shrink: 0;
+  padding: 0 4px;
+  border-radius: 3px;
+  border: 1px solid var(--ant-color-border-secondary);
+  background: var(--ant-color-fill-quaternary);
+  font-size: 9px;
+  line-height: 14px;
+  color: var(--ant-color-text-quaternary);
+  font-family: inherit;
+}
+
+.app-composer-common-phrases-panel__item-side {
+  display: flex;
+  flex-shrink: 0;
+  flex-direction: column;
+  align-items: flex-end;
+  justify-content: center;
+  gap: 4px;
+}
+
+.app-composer-common-phrases-panel__item-quick {
+  display: inline-flex;
+  flex-direction: row;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  cursor: default;
+  white-space: nowrap;
+}
+
+.app-composer-common-phrases-panel__item-quick-label {
+  font-size: 10px;
+  line-height: 1.2;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-composer-common-phrases-panel__item-quick .ant-switch {
+  margin: 0;
+}
+
+.app-composer-common-phrases-panel__item-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 0;
+}
+
+.app-composer-common-phrases-panel__item-edit.ant-btn,
+.app-composer-common-phrases-panel__item-delete.ant-btn {
+  height: 22px !important;
+  padding-inline: 4px !important;
+  font-size: 11px !important;
+  line-height: 22px !important;
+}
+
+.app-composer-common-phrases-panel__footer {
+  padding-top: 2px;
+}
+
+.app-composer-common-phrases-panel__add.ant-btn {
+  height: 28px !important;
+  font-size: 12px !important;
+  padding-block: 0 !important;
+  letter-spacing: normal;
+  white-space: nowrap;
+}

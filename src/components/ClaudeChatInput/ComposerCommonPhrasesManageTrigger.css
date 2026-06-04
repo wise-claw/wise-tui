@@ -1,0 +1,60 @@
+.app-composer-common-phrases-trigger {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 4px;
+  flex-shrink: 0;
+  height: 24px;
+  min-width: 52px;
+  margin: 0;
+  padding: 0 8px;
+  border: 1px solid var(--ant-color-border);
+  border-radius: 4px;
+  background: var(--ant-color-bg-container);
+  color: var(--ant-color-text-secondary);
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    color 0.15s ease,
+    border-color 0.15s ease,
+    background 0.15s ease;
+}
+
+.app-composer-common-phrases-trigger:hover {
+  color: var(--ant-color-text);
+  border-color: var(--ant-color-primary-border);
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-composer-common-phrases-trigger:focus-visible {
+  outline: 2px solid var(--ant-color-primary);
+  outline-offset: 1px;
+}
+
+.app-composer-common-phrases-trigger__label {
+  white-space: nowrap;
+}
+
+.app-composer-common-phrases-trigger__count {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 16px;
+  height: 16px;
+  padding: 0 4px;
+  border-radius: 8px;
+  background: var(--ant-color-fill-secondary);
+  color: var(--ant-color-text-tertiary);
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.app-composer-common-phrases-popover .ant-popover-inner {
+  padding: 6px 8px;
+}
+
+.app-composer-common-phrases-popover .ant-popover-inner-content {
+  padding: 0;
+}

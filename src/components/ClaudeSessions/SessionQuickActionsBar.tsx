@@ -34,6 +34,8 @@ export interface SessionQuickActionsBarProps {
   showWorktreeInMore?: boolean;
   /** 推送按钮（含 Popover 等交互，由父组件组装） */
   pushControl: ReactNode;
+  /** 常用语 chip，展示在快捷条主行（推送与「更多」之间） */
+  commonPhrasesSlot?: ReactNode;
 }
 
 const ACTION_MENU_ICONS: Partial<Record<SessionQuickActionId, ReactNode>> = {
@@ -62,6 +64,7 @@ export const SessionQuickActionsBar = memo(function SessionQuickActionsBar({
   onOpenWorktreeMenu,
   showWorktreeInMore = false,
   pushControl,
+  commonPhrasesSlot = null,
 }: SessionQuickActionsBarProps) {
   const { layout, setLayout, resetLayout, persistLayout } = useSessionQuickActionsLayout();
   const [customizeOpen, setCustomizeOpen] = useState(false);
@@ -227,6 +230,7 @@ export const SessionQuickActionsBar = memo(function SessionQuickActionsBar({
         <div className="app-session-quick-actions__row" role="toolbar" aria-label="会话快捷操作">
           <div className="app-session-quick-actions__primary">
             {primary.map((id) => renderPill(id))}
+            {commonPhrasesSlot}
           </div>
 
           <div className="app-session-quick-actions__more">

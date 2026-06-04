@@ -36,7 +36,17 @@ export function normalizeChord(raw: string): string {
       if (!normalized.includes("Shift")) normalized.push("Shift");
       continue;
     }
-    normalized.push(part.startsWith("Key") || part.startsWith("Digit") ? part : part);
+    const keyMatch = /^key([a-z0-9])$/i.exec(part);
+    const digitMatch = /^digit([0-9])$/i.exec(part);
+    if (keyMatch) {
+      normalized.push(`Key${keyMatch[1]!.toUpperCase()}`);
+    } else if (digitMatch) {
+      normalized.push(`Digit${digitMatch[1]}`);
+    } else if (part.startsWith("Key") || part.startsWith("Digit")) {
+      normalized.push(part.charAt(0).toUpperCase() + part.slice(1));
+    } else {
+      normalized.push(part);
+    }
   }
   const code = normalized.find((part) => !["Mod", "Alt", "Shift"].includes(part));
   if (!code) return "";
