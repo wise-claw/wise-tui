@@ -1,4 +1,10 @@
-import type { ClaudeSession, GitStatusResponse, TaskFlowStatus, TaskItem } from "../../types";
+import type {
+  ClaudeSession,
+  GitStatusResponse,
+  PendingExecutionTask,
+  TaskFlowStatus,
+  TaskItem,
+} from "../../types";
 import { repositoryPathsMatch } from "../../utils/repositoryMainSessionBinding";
 import { stripRedundantRepoBracketPrefix } from "../../utils/sessionRepositoryDisplay";
 import {
@@ -119,10 +125,41 @@ export function notificationConversationInSessionInboxScope(
   return notificationInboxConversationMatchesSession(c, sess, allSessions);
 }
 
-export function buildSessionsNotificationScopeFingerprint(sessions: ClaudeSession[]): string {
-  return sessions
+export function buildSessionsNotificationScopeFingerprint(sessions: readonly ClaudeSession[]): string {
+  return [...sessions]
     .map((s) => `${s.id}\0${s.repositoryPath ?? ""}\0${s.claudeSessionId ?? ""}`)
+    .sort()
     .join("\n");
+}
+
+export function buildPendingTasksQueueFingerprint(tasks: readonly PendingExecutionTask[]): string {
+  return tasks
+    .map((t) =>
+      [
+        t.id,
+        t.targetType ?? "main",
+        t.targetEmployeeName ?? "",
+        t.targetWorkflowId ?? "",
+      ].join(":"),
+    )
+    .join("\n");
+}
+
+/** 当前仓库内 running/connecting 会话 id，用于待办队列自动派发 gate（避免依赖 sessions 数组引用）。 */
+export function buildRepoRunningSessionsFingerprint(
+  sessions: readonly ClaudeSession[],
+  repositoryPath: string,
+): string {
+  const repoKey = sessionRepoPathKey(repositoryPath);
+  return sessions
+    .filter(
+      (s) =>
+        sessionRepoPathKey(s.repositoryPath) === repoKey &&
+        (s.status === "running" || s.status === "connecting"),
+    )
+    .map((s) => s.id)
+    .sort()
+    .join(",");
 }
 
 export function notificationRowInSessionInboxScope(

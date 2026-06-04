@@ -381,11 +381,20 @@ const MultiPaneExtraPaneCell = memo(
     const mustStayMounted =
       paneSession?.status === "running" || paneSession?.status === "connecting";
     const offscreenDock = useDockSlice(lazyEnabled && paneSession ? paneSession.id : null);
-    const [paneRef, inView] = useInViewActive("80px", lazyEnabled && Boolean(paneSession), null);
+    const isActivePane = paneSession?.id === activeSessionId;
+    const [paneRef, inView] = useInViewActive(
+      "80px",
+      lazyEnabled && Boolean(paneSession),
+      null,
+      lazyEnabled ? { enterDebounceMs: 150, leaveDebounceMs: 2400 } : undefined,
+    );
     const wasEverInViewRef = useRef(false);
     if (inView) {
       wasEverInViewRef.current = true;
     }
+    /** 非焦点窗格在 running 时始终用精简壳，避免 IO 边界反复挂载完整 ClaudeChat。 */
+    const pinOffscreenRunningShell =
+      lazyEnabled && Boolean(paneSession) && Boolean(mustStayMounted) && !isActivePane;
     const setPaneDivRef = useCallback(
       (node: HTMLDivElement | null) => {
         if (typeof paneRef === "function") {
@@ -394,7 +403,7 @@ const MultiPaneExtraPaneCell = memo(
       },
       [paneRef],
     );
-    const [mounted, setMounted] = useState(!lazyEnabled || inView);
+    const [mounted, setMounted] = useState(() => !lazyEnabled);
 
     useEffect(() => {
       if (!lazyEnabled) {
@@ -409,12 +418,12 @@ const MultiPaneExtraPaneCell = memo(
       return () => window.clearTimeout(timer);
     }, [inView, lazyEnabled, mustStayMounted]);
 
-    const deferHeavySubtree = lazyEnabled && mounted && !inView && Boolean(mustStayMounted);
+    const deferHeavySubtree =
+      lazyEnabled && mounted && Boolean(mustStayMounted) && (pinOffscreenRunningShell || !inView);
     const hidePaneMessages = shared.hideMessages || deferHeavySubtree;
     const useOffscreenRunningShell =
-      lazyEnabled &&
-      !inView &&
-      Boolean(mustStayMounted) &&
+      (pinOffscreenRunningShell ||
+        (lazyEnabled && !inView && Boolean(mustStayMounted))) &&
       shouldUseOffscreenRunningShell(paneCount) &&
       Boolean(paneSession) &&
       !offscreenDock.questionRequest;

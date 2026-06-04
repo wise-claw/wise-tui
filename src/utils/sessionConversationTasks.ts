@@ -16,6 +16,35 @@ import { assistantMessageVisiblePlainText } from "../services/claudeSessionState
 
 export { formatChatMessageListTime as formatExecutionEnvironmentDispatchTaskTime };
 
+/** 执行环境派发保存时间：运行面板展示，不含年份（M/D HH:mm:ss）。 */
+export function formatExecutionEnvironmentDispatchSavedTime(timestamp: number): string {
+  if (!Number.isFinite(timestamp) || timestamp <= 0) return "";
+  const d = new Date(timestamp);
+  const pad = (n: number) => String(n).padStart(2, "0");
+  return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
+}
+
+/** 派发任务列表关心执行环境 worker 会话；主会话流式正文不在此指纹内。 */
+export function executionEnvironmentWorkerSessionsFingerprint(
+  sessions: readonly ClaudeSession[],
+): string {
+  const chunks: string[] = [];
+  for (const session of sessions) {
+    if (!isExecutionEnvironmentWorkerRepositoryName(session.repositoryName)) continue;
+    const last = session.messages[session.messages.length - 1];
+    chunks.push(
+      [
+        session.id,
+        session.status,
+        String(session.messages.length),
+        String(last?.id ?? ""),
+        String(last?.content?.length ?? 0),
+      ].join("|"),
+    );
+  }
+  return chunks.join("\n");
+}
+
 function truncate(text: string, max = 72): string {
   const normalized = text.replace(/\s+/g, " ").trim();
   if (!normalized) return "";

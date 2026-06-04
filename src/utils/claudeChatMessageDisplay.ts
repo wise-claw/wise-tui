@@ -194,24 +194,17 @@ function resolveDispatchRecordDisplayTarget(meta: DispatchRecordMeta): string {
   return "未知目标";
 }
 
-/** 主会话系统气泡：任务分发记录展示句（与存储正文一致，不含「任务分发记录」标题行）。 */
+/** 主会话系统气泡：任务分发记录展示句（保存时间在运行面板展示，气泡不含时间）。 */
 export function formatDispatchRecordSentence(meta: DispatchRecordMeta): string {
   const target = resolveDispatchRecordDisplayTarget(meta);
-  const time = meta.dispatchTime?.trim() || "";
-  const timePart = time ? `在 ${time}` : "";
   const content = normalizedDispatchContentForSentence(meta.dispatchContent);
-  const segments = [target];
-  if (timePart) segments.push(timePart);
   if (content) {
-    segments.push("执行", content);
-    return `${segments.join(" ")}。`;
+    return `${target} 执行 ${content}。`;
   }
   if (meta.dispatchType === "团队流程") {
-    segments.push("发起了团队流程任务");
-    return `${segments.join(" ")}。`;
+    return `${target} 发起了团队流程任务。`;
   }
-  segments.push("执行了任务");
-  return `${segments.join(" ")}。`;
+  return `${target} 执行了任务。`;
 }
 
 function messagePartPlainTextForCopy(part: MessagePart): string {

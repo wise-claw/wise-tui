@@ -72,12 +72,10 @@ import { useSidebarTrellisReadyMap } from "./LeftSidebar/useSidebarTrellisReadyM
 import { useClaudeProcessWorkspaceLabelCache } from "../hooks/useClaudeProcessWorkspaceLabelCache";
 import { useSystemResourceSessions } from "./LeftSidebar/useSystemResourceSessions";
 import { useSidebarRunningMainSessionIndicators } from "./LeftSidebar/useSidebarRunningMainSessionIndicators";
+import { LeftSidebarMonitorPanelSlot } from "./LeftSidebar/LeftSidebarMonitorPanelSlot";
 import { notifySplitTodoCountUpdated } from "../utils/notifySplitTodoCountUpdated";
 import "./GitPanel/index.css";
-
-const ProgressMonitorPanelLazy = lazy(() =>
-  import("./ProgressMonitorPanel").then((module) => ({ default: module.ProgressMonitorPanel })),
-);
+import "./LeftSidebar/leftSidebarListPerformance.css";
 const GitPanelLazy = lazy(() => import("./GitPanel").then((module) => ({ default: module.GitPanel })));
 const AppSettingsModalLazy = lazy(() =>
   import("./AppSettingsModal").then((module) => ({ default: module.AppSettingsModal })),
@@ -153,6 +151,7 @@ export function LeftSidebar({
   onStartRepositoryRunCommand,
   onStopRepositoryRunCommand,
   sessions,
+  monitorPanelSessions,
   repositoryMainSessionBindings,
   activeSessionId,
   onSelectSession: _onSelectSession,
@@ -1077,58 +1076,45 @@ export function LeftSidebar({
         />
 
         {showLeftSidebarMonitorPanel && monitorPanelMounted ? (
-          <div
-            className={
-              "app-left-sidebar-monitor-panel" +
-              (monitorPanelSectionCollapsed ? " app-left-sidebar-monitor-panel--section-collapsed" : "")
+          <LeftSidebarMonitorPanelSlot
+            monitorPanelSectionCollapsed={monitorPanelSectionCollapsed}
+            onMonitorPanelSectionCollapsedChange={handleMonitorPanelSectionCollapsedChange}
+            monitorPanelSessions={monitorPanelSessions ?? sessions}
+            transcriptSourceSessions={sessions}
+            employeeMonitorItems={employeeMonitorItems}
+            repositoryMemberMonitorItems={repositoryMemberMonitorItems}
+            sessionConversationTaskItems={sessionConversationTaskItems}
+            showSessionConversationTasks
+            executionEnvironmentDispatchHistoryDays={executionEnvironmentDispatchHistoryDays}
+            onExecutionEnvironmentDispatchHistoryDaysChange={
+              onExecutionEnvironmentDispatchHistoryDaysChange
             }
-          >
-            <Suspense fallback={null}>
-            <ProgressMonitorPanelLazy
-              sectionCollapsed={monitorPanelSectionCollapsed}
-              onSectionCollapsedChange={handleMonitorPanelSectionCollapsedChange}
-              employeeItems={employeeMonitorItems}
-              repositoryMemberItems={repositoryMemberMonitorItems}
-              sessionConversationTaskItems={
-                sessionConversationTaskItems ? [...sessionConversationTaskItems] : []
-              }
-              showSessionConversationTasks
-              executionEnvironmentDispatchHistoryDays={executionEnvironmentDispatchHistoryDays}
-              onExecutionEnvironmentDispatchHistoryDaysChange={
-                onExecutionEnvironmentDispatchHistoryDaysChange
-              }
-              executionEnvironmentDispatchHistoryDaysSaving={
-                executionEnvironmentDispatchHistoryDaysSaving
-              }
-              teamItems={teamMonitorItems}
-              sessions={sessions}
-              activeSessionId={activeSessionId}
-              activeTarget={monitorActiveTarget}
-              onOpenTeamDetail={(workflowId) => onOpenTeamMonitorDetail?.(workflowId)}
-              onOpenEmployeeConfig={onOpenEmployeeConfig}
-              onOpenWorkflowConfig={onOpenWorkflowConfig}
-              onStopEmployee={(employeeId) => onStopEmployeeMonitor?.(employeeId)}
-              onStopTeam={(workflowId) => onStopTeamMonitor?.(workflowId)}
-              hideEmployeeUi={hideEmployeeUi}
-              onCancelSession={onCancelSessionFromMonitor}
-              onOpenTaskDetail={onOpenTaskDetailFromMonitor}
-              onOpenOmcBatchInvocationDetail={onOpenOmcBatchInvocationDetail}
-              onCancelOmcDirectBatchInvocation={onCancelOmcDirectBatchInvocation}
-              onStopSessionConversationTask={onStopSessionConversationTask}
-              onReloadFullDiskTranscript={onReloadFullDiskTranscript}
-              onCompactSessionHistory={onCompactSessionHistory}
-              transcriptSourceSessions={sessions}
-              projectId={projectId}
-              historyDrawerSessionId={historyDrawerSessionId}
-              onHistoryDrawerSessionIdChange={onHistoryDrawerSessionIdChange}
-              onRestoreHistorySessionAsMain={onRestoreHistorySessionAsMain}
-              onResumeSession={onResumeSession}
-              onPrepareSessionForMonitorDrawer={onPrepareSessionForMonitorDrawer}
-              repositoryMainBindings={repositoryMainSessionBindings}
-              repositories={repositories}
-            />
-            </Suspense>
-          </div>
+            executionEnvironmentDispatchHistoryDaysSaving={executionEnvironmentDispatchHistoryDaysSaving}
+            teamMonitorItems={teamMonitorItems}
+            activeSessionId={activeSessionId}
+            monitorActiveTarget={monitorActiveTarget}
+            onOpenTeamMonitorDetail={onOpenTeamMonitorDetail}
+            onOpenEmployeeConfig={onOpenEmployeeConfig}
+            onOpenWorkflowConfig={onOpenWorkflowConfig}
+            onStopEmployeeMonitor={onStopEmployeeMonitor}
+            onStopTeamMonitor={onStopTeamMonitor}
+            hideEmployeeUi={hideEmployeeUi}
+            onCancelSessionFromMonitor={onCancelSessionFromMonitor}
+            onOpenTaskDetailFromMonitor={onOpenTaskDetailFromMonitor}
+            onOpenOmcBatchInvocationDetail={onOpenOmcBatchInvocationDetail}
+            onCancelOmcDirectBatchInvocation={onCancelOmcDirectBatchInvocation}
+            onStopSessionConversationTask={onStopSessionConversationTask}
+            onReloadFullDiskTranscript={onReloadFullDiskTranscript}
+            onCompactSessionHistory={onCompactSessionHistory}
+            projectId={projectId}
+            historyDrawerSessionId={historyDrawerSessionId}
+            onHistoryDrawerSessionIdChange={onHistoryDrawerSessionIdChange}
+            onRestoreHistorySessionAsMain={onRestoreHistorySessionAsMain}
+            onResumeSession={onResumeSession}
+            onPrepareSessionForMonitorDrawer={onPrepareSessionForMonitorDrawer}
+            repositoryMainSessionBindings={repositoryMainSessionBindings}
+            repositories={repositories}
+          />
         ) : null}
 
         {showRepoPanel ? (

@@ -1,5 +1,5 @@
-/** 监控侧栏 / `useMonitorOverview` 使用的会话快照与主会话流式更新同步间隔（毫秒） */
-export const MONITOR_SESSIONS_SYNC_INTERVAL_MS = 380;
+/** 监控侧栏 / `useMonitorOverview` 指纹轮询间隔（毫秒）；流式正文由指纹分桶节流。 */
+export const MONITOR_SESSIONS_SYNC_INTERVAL_MS = 2800;
 
 /** 外部 Trellis CLI ingest：轮询读入的 jsonl 尾行（非详情全量） */
 export const MONITOR_TRELLIS_INGEST_TAIL_LINES = 600;

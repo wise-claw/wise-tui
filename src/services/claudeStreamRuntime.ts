@@ -1,4 +1,4 @@
-import type { MutableRefObject } from "react";
+import { startTransition, type MutableRefObject } from "react";
 import { sessionUsesStreamingConnection } from "../constants/claudeConnection";
 import type { ClaudeSession, MessagePart } from "../types";
 import {
@@ -167,12 +167,14 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     }
     if (pendingStreamSessionUpdaters.length === 0) return;
     const updaters = pendingStreamSessionUpdaters.splice(0);
-    setSessions((prev) => {
-      let next = prev;
-      for (const updater of updaters) {
-        next = updater(next);
-      }
-      return next;
+    startTransition(() => {
+      setSessions((prev) => {
+        let next = prev;
+        for (const updater of updaters) {
+          next = updater(next);
+        }
+        return next;
+      });
     });
   }
 

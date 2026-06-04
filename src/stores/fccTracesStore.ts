@@ -6,7 +6,7 @@ import type { FccTraceEntry } from "../types/fccTrace";
 import { mergeFccTraceEntries } from "../utils/mergeFccTraceEntries";
 import { readVisiblePollIntervalMs } from "../utils/adaptivePoll";
 
-const POLL_MS = readVisiblePollIntervalMs(2000, 10000);
+const POLL_MS = readVisiblePollIntervalMs(8000, 20000);
 
 type Listener = () => void;
 

@@ -2184,7 +2184,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   overflow-x: hidden;
   overflow-y: auto;
   gap: 2px;
-  padding: 2px 0 0;
+  padding: 0;
 }
 
 .app-left-sidebar-project-and-files > .app-repository-header {

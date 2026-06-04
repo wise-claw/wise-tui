@@ -1,5 +1,5 @@
 import { CloseOutlined } from "@ant-design/icons";
-import { Tooltip } from "antd";
+import { DeferredHoverTooltip } from "../shared/DeferredHoverTooltip";
 
 export type RunningMainSessionDotProps = {
   onStop?: () => void;
@@ -23,22 +23,18 @@ export function RunningMainSessionDot({
   );
 
   if (!onStop) {
-    return (
-      <Tooltip title={runningTitle} mouseEnterDelay={0.3}>
-        {dot}
-      </Tooltip>
-    );
+    return <DeferredHoverTooltip title={runningTitle}>{dot}</DeferredHoverTooltip>;
   }
 
   return (
-    <Tooltip title={runningTitle} mouseEnterDelay={0.3}>
+    <DeferredHoverTooltip title={runningTitle}>
       <span
         className="app-repository-main-session-running-dot-wrap app-repository-run-command-running-dot-wrap"
         onClick={(event) => event.stopPropagation()}
         onKeyDown={(event) => event.stopPropagation()}
       >
         {dot}
-        <Tooltip title={stopTitle} mouseEnterDelay={0.2}>
+        <DeferredHoverTooltip title={stopTitle}>
           <button
             type="button"
             className="app-repository-main-session-running-stop"
@@ -50,8 +46,8 @@ export function RunningMainSessionDot({
           >
             <CloseOutlined />
           </button>
-        </Tooltip>
+        </DeferredHoverTooltip>
       </span>
-    </Tooltip>
+    </DeferredHoverTooltip>
   );
 }

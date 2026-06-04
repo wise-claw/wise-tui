@@ -1,4 +1,3 @@
-import { Tooltip } from "antd";
 import { memo } from "react";
 import type { RepositoryMemberMonitorSubagentItem, SessionConversationTaskItem } from "../../types";
 import { sessionConversationTaskStatusLabel } from "../../utils/sessionConversationTasks";
@@ -100,10 +99,8 @@ export const SubagentStatusIndicator = memo(function SubagentStatusIndicator({
     .join(" ");
 
   return (
-    <Tooltip title={text} mouseEnterDelay={0.35}>
-      <span className={rootClass} role="status" aria-label={text}>
-        <StatusIcon status={status} />
-      </span>
-    </Tooltip>
+    <span className={rootClass} role="status" aria-label={text} title={text}>
+      <StatusIcon status={status} />
+    </span>
   );
 });

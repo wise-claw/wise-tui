@@ -1,5 +1,11 @@
 import type { PaneCount, PaneSlot } from "../constants/mainLayoutWidths";
 
+export function extraPanesLayoutFingerprint(panes: readonly PaneSlot[]): string {
+  return panes
+    .map((pane) => `${pane.slotId}:${pane.sessionId ?? ""}:${pane.repositoryId ?? ""}`)
+    .join("\n");
+}
+
 export function isPaneSlotEmpty(slot: PaneSlot): boolean {
   return !slot.sessionId?.trim();
 }

@@ -4,6 +4,7 @@ import {
   sortOmcDirectBatchInvocationsForStore,
   MAX_PERSISTED_OMC_DIRECT_BATCH_ITEMS,
 } from "../services/omcDirectBatchInvocationsPersistence";
+import { isOmcDirectBatchInvocationRunning } from "../utils/omcDirectBatchInvocationDisplay";
 
 type Listener = () => void;
 
@@ -12,9 +13,23 @@ const listeners = new Set<Listener>();
 /** 与 digest 对应的列表；仅 digest 变化时替换引用，便于 useSyncExternalStore 去重 */
 let snapshot: WorkflowInvocationStreamDetail[] = [];
 let snapshotDigest = "";
+let snapshotPipelineBusy = false;
+
+function recomputeSnapshotPipelineBusy(): boolean {
+  return snapshot.some(isOmcDirectBatchInvocationRunning);
+}
 
 export function getOmcDirectBatchInvocationsSnapshot(): WorkflowInvocationStreamDetail[] {
   return snapshot;
+}
+
+export function getOmcDirectBatchInvocationsDigest(): string {
+  return snapshotDigest;
+}
+
+/** 供 useSyncExternalStore：仅布尔值，避免列表引用变化导致 ClaudeChat 每帧重渲。 */
+export function getOmcDirectBatchPipelineBusySnapshot(): boolean {
+  return snapshotPipelineBusy;
 }
 
 export function subscribeOmcDirectBatchInvocations(listener: Listener): () => void {
@@ -46,6 +61,7 @@ export function setOmcDirectBatchInvocationsStore(list: WorkflowInvocationStream
   }
   snapshotDigest = cappedDigest;
   snapshot = capped;
+  snapshotPipelineBusy = recomputeSnapshotPipelineBusy();
   notify();
 }
 
@@ -55,5 +71,6 @@ export function resetOmcDirectBatchInvocationsStore(): void {
   }
   snapshotDigest = "";
   snapshot = [];
+  snapshotPipelineBusy = false;
   notify();
 }

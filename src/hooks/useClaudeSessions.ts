@@ -4,6 +4,7 @@ import {
   useEffect,
   useMemo,
   useRef,
+  startTransition,
   type SetStateAction,
 } from "react";
 import { message } from "antd";
@@ -2194,7 +2195,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       timer = window.setInterval(() => {
         if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
         void tick();
-      }, readVisiblePollIntervalMs(8000, 20000));
+      }, readVisiblePollIntervalMs(15_000, 30_000));
     };
 
     const tick = async () => {
@@ -2230,21 +2231,23 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         );
         publishRunningClaudeSessionIds(runningIds);
         pruneClaudeRegistryBootstrapWarmup(registryBootstrapDeadlineByClaudeSidRef, runningIds);
-        setSessions((prev) => {
-          const reconciled = reconcileSessionStatusesWithRunningRegistry(
-            prev,
-            runningIds,
-            registryBootstrapDeadlineByClaudeSidRef.current,
-            knownIds,
-          );
-          const next = includeHostSnapshot
-            ? applyStreamingResidentUiStatuses(
-                reconciled,
-                streamingProcessByTabRef.current,
-                defaultConnectionKindRef.current,
-              )
-            : reconciled;
-          return next === prev ? prev : next;
+        startTransition(() => {
+          setSessions((prev) => {
+            const reconciled = reconcileSessionStatusesWithRunningRegistry(
+              prev,
+              runningIds,
+              registryBootstrapDeadlineByClaudeSidRef.current,
+              knownIds,
+            );
+            const next = includeHostSnapshot
+              ? applyStreamingResidentUiStatuses(
+                  reconciled,
+                  streamingProcessByTabRef.current,
+                  defaultConnectionKindRef.current,
+                )
+              : reconciled;
+            return next === prev ? prev : next;
+          });
         });
       } catch {
         /* 与流式事件并存：拉取失败则保持当前 UI */

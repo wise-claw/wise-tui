@@ -43,6 +43,7 @@ import {
 import { RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK } from "../utils/rightPanelStorage";
 import {
   assignSessionToNormalizedExtraPanes,
+  extraPanesLayoutFingerprint,
   findFirstEmptyExtraPaneIndex,
   planNextPaneSlotPlacement,
   isSessionBoundInPanes,
@@ -75,6 +76,13 @@ interface UseMainLayoutModesOptions {
   setExtraPanes: (panes: PaneSlot[] | ((prev: PaneSlot[]) => PaneSlot[])) => void;
   /** AppImpl 多屏布局持久化 hydration 完成后为 true。 */
   paneLayoutHydrated?: boolean;
+}
+
+function sessionsIdSetFingerprint(sessions: readonly ClaudeSession[]): string {
+  return [...sessions]
+    .map((session) => session.id)
+    .sort()
+    .join(",");
 }
 
 let paneSlotCounter = 0;
@@ -130,6 +138,7 @@ export function useMainLayoutModes({
 
   const sessionsLatestRef = useRef(sessions);
   sessionsLatestRef.current = sessions;
+  const sessionsIdFingerprint = sessionsIdSetFingerprint(sessions);
   const extraPanesLatestRef = useRef(extraPanes);
   extraPanesLatestRef.current = extraPanes;
   const activeSessionIdLatestRef = useRef(activeSessionId);
@@ -584,10 +593,10 @@ export function useMainLayoutModes({
     })();
   }, [paneLayoutHydrated]);
 
-  // 清理已不存在的 session 引用
+  // 清理已不存在的 session 引用（勿依赖 sessions 数组引用，流式时每帧是新对象）
   useEffect(() => {
+    const sessionIds = new Set(sessionsLatestRef.current.map((s) => s.id));
     setExtraPanes((prev) => {
-      const sessionIds = new Set(sessions.map((s) => s.id));
       let changed = false;
       const cleaned = prev.map((slot) => {
         if (slot.sessionId && !sessionIds.has(slot.sessionId)) {
@@ -598,12 +607,20 @@ export function useMainLayoutModes({
       });
       return changed ? cleaned : prev;
     });
-  }, [sessions, setExtraPanes]);
+  }, [sessionsIdFingerprint, setExtraPanes]);
 
   // 持久化恢复或异常状态下，将 extraPanes 长度与 paneCount 对齐
   useEffect(() => {
-    setExtraPanes((prev) => normalizeExtraPanesToPaneCount(paneCount, prev, createPaneSlot));
-  }, [paneCount, setExtraPanes]);
+    if (!paneLayoutHydrated) return;
+    setExtraPanes((prev) => {
+      const next = normalizeExtraPanesToPaneCount(paneCount, prev, createPaneSlot);
+      if (next === prev) return prev;
+      if (extraPanesLayoutFingerprint(next) === extraPanesLayoutFingerprint(prev)) {
+        return prev;
+      }
+      return next;
+    });
+  }, [paneCount, paneLayoutHydrated, setExtraPanes]);
 
   useEffect(() => {
     let unlistenMultiPane: (() => void) | undefined;

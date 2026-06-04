@@ -1,0 +1,38 @@
+/* 左栏列表：快速划过工作区/终端/文件树时减少合成与 transition:all 开销 */
+
+/* 勿对运行面板列表项使用 contain：会与 Ant Typography 的 ResizeObserver 测量互相触发无限更新 */
+.app-left-sidebar .app-repository-item,
+.app-left-sidebar .repo-tree-node {
+  contain: layout style;
+}
+
+.app-left-sidebar .app-repository-item {
+  transition: background 0.05s ease, border-color 0.05s ease;
+}
+
+.app-left-sidebar .app-repository-action {
+  transition: color 0.05s ease, background 0.05s ease;
+}
+
+.app-left-sidebar .app-monitor-panel__item,
+.app-left-sidebar .app-monitor-panel__item--terminal-row {
+  transition: background 0.05s ease;
+}
+
+.app-left-sidebar .app-monitor-panel__item-action-icon-btn {
+  transition: opacity 0.05s ease, color 0.05s ease, background 0.05s ease;
+}
+
+.app-left-sidebar .repo-tree-node {
+  transition: background 0.05s ease;
+  box-shadow: none !important;
+}
+
+.app-left-sidebar .repo-tree-node--selected {
+  box-shadow: none !important;
+  background: var(--ant-color-fill-tertiary);
+}
+
+.app-left-sidebar .repo-tree-node--selected:hover {
+  background: var(--ant-color-fill-tertiary);
+}

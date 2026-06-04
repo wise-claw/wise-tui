@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Spin } from "antd";
 import { listClaudePluginCacheSkills, listClaudeProjectSkills } from "../../services/claude";
 import { searchRepositoryFiles } from "../../services/repositoryFiles";
@@ -9,6 +9,7 @@ import type { AtMentionDefaultTarget } from "../../constants/atMentionDefault";
 import {
   atMentionDefaultTargetFromSlashOption,
   DEFAULT_AT_MENTION_DEFAULT_TARGET,
+  encodeAtMentionDefaultSelectValue,
   isSlashOptionAtMentionDefault,
 } from "../../constants/atMentionDefault";
 import { listExecutionEnvironmentEngineMentionOptions } from "../../utils/executionEnvironmentDispatch";
@@ -189,6 +190,16 @@ function MentionKindEmployeeIcon() {
   );
 }
 
+function slashOptionsFingerprint(options: readonly SlashOption[]): string {
+  return options
+    .map((o) =>
+      [o.type, o.label, o.path ?? "", o.name ?? "", o.executionEngine ?? "", o.workflowId ?? ""].join(
+        ":",
+      ),
+    )
+    .join("\n");
+}
+
 function MentionKindTeamIcon() {
   return (
     <svg
@@ -295,25 +306,65 @@ export function SlashPopover({
     };
   }, [mode, query, repositoryPath]);
 
-  const options = getFilteredOptions(
-    mode,
-    query,
-    fileResults,
-    employeeOptions,
-    teamOptions,
-    skillSlashOptions,
-    hideEmployeesInAtMode,
-    codexAvailable,
-    cursorAvailable,
+  const employeeOptionsKey = useMemo(
+    () => employeeOptions.map((e) => `${e.id}:${e.name}`).join("\n"),
+    [employeeOptions],
   );
+  const teamOptionsKey = useMemo(
+    () => teamOptions.map((t) => `${t.id}:${t.name}`).join("\n"),
+    [teamOptions],
+  );
+  const fileResultsKey = useMemo(
+    () => fileResults.map((f) => `${f.path ?? ""}:${f.label}`).join("\n"),
+    [fileResults],
+  );
+  const skillSlashOptionsKey = useMemo(
+    () => skillSlashOptions.map((s) => s.label).join("\n"),
+    [skillSlashOptions],
+  );
+  const atMentionDefaultTargetKey = encodeAtMentionDefaultSelectValue(atMentionDefaultTarget);
+
+  const options = useMemo(
+    () =>
+      getFilteredOptions(
+        mode,
+        query,
+        fileResults,
+        employeeOptions,
+        teamOptions,
+        skillSlashOptions,
+        hideEmployeesInAtMode,
+        codexAvailable,
+        cursorAvailable,
+      ),
+    [
+      mode,
+      query,
+      fileResults,
+      fileResultsKey,
+      employeeOptions,
+      employeeOptionsKey,
+      teamOptions,
+      teamOptionsKey,
+      skillSlashOptions,
+      skillSlashOptionsKey,
+      hideEmployeesInAtMode,
+      codexAvailable,
+      cursorAvailable,
+    ],
+  );
+  const optionsFingerprint = useMemo(() => slashOptionsFingerprint(options), [options]);
+
+  const targetSelectedIndex = useMemo(() => {
+    if (mode === "at" && query.trim().length === 0) {
+      return resolveAtMentionSelectedIndex(options, atMentionDefaultTarget);
+    }
+    return 0;
+  }, [mode, query, options, atMentionDefaultTargetKey, atMentionDefaultTarget]);
 
   useEffect(() => {
-    if (mode === "at" && query.trim().length === 0) {
-      setSelectedIndex(resolveAtMentionSelectedIndex(options, atMentionDefaultTarget));
-      return;
-    }
-    setSelectedIndex(0);
-  }, [query, mode, options, atMentionDefaultTarget]);
+    setSelectedIndex((prev) => (prev === targetSelectedIndex ? prev : targetSelectedIndex));
+  }, [targetSelectedIndex]);
 
   const handleSelect = useCallback(
     (option: SlashOption) => {
@@ -399,7 +450,7 @@ export function SlashPopover({
 
     document.addEventListener("keydown", handleKeyDown, { capture: true });
     return () => document.removeEventListener("keydown", handleKeyDown, { capture: true });
-  }, [mode, options, selectedIndex, handleSelect, onDismiss, surfaceRef]);
+  }, [mode, options, optionsFingerprint, selectedIndex, handleSelect, onDismiss, surfaceRef]);
 
   if (!mode) return null;
 

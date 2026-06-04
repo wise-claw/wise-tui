@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   WORKFLOW_UI_EVENT_BACKGROUND_INVOCATION_BUNDLE_CHANGED,
   type BackgroundInvocationBundleChangedDetail,
@@ -39,7 +39,10 @@ import {
   getExecutionEnvironmentDispatchesSnapshotForAnchor,
   subscribeExecutionEnvironmentDispatches,
 } from "../stores/executionEnvironmentDispatchStore";
-import { buildSessionConversationTasks } from "../utils/sessionConversationTasks";
+import {
+  buildSessionConversationTasks,
+  executionEnvironmentWorkerSessionsFingerprint,
+} from "../utils/sessionConversationTasks";
 import { useExecutionEnvironmentDispatchPersistence } from "./useExecutionEnvironmentDispatchPersistence";
 
 export function useSessionConversationTasks(
@@ -47,9 +50,17 @@ export function useSessionConversationTasks(
   sessions: ClaudeSession[],
 ): SessionConversationTaskItem[] {
   useExecutionEnvironmentDispatchPersistence(activeSessionId);
+  const sessionsRef = useRef(sessions);
+  sessionsRef.current = sessions;
+
   const session = useMemo(
     () => (activeSessionId ? sessions.find((item) => item.id === activeSessionId) ?? null : null),
     [activeSessionId, sessions],
+  );
+
+  const workerSessionsFingerprint = useMemo(
+    () => executionEnvironmentWorkerSessionsFingerprint(sessions),
+    [sessions],
   );
 
   const directBatchInvocations = useSyncExternalStore(
@@ -107,8 +118,15 @@ export function useSessionConversationTasks(
         repositoryInvocations,
         bundleSnapshots,
         executionEnvironmentRecords,
-        allSessions: sessions,
+        allSessions: sessionsRef.current,
       }),
-    [session, directBatchInvocations, repositoryInvocations, bundleSnapshots, executionEnvironmentRecords, sessions],
+    [
+      session,
+      directBatchInvocations,
+      repositoryInvocations,
+      bundleSnapshots,
+      executionEnvironmentRecords,
+      workerSessionsFingerprint,
+    ],
   );
 }

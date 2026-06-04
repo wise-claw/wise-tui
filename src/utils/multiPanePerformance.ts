@@ -10,8 +10,8 @@ import {
 } from "../constants/claudeMessageList";
 import type { PaneCount } from "../constants/mainLayoutWidths";
 
-/** 多屏离屏窗格延迟卸载（ms），避免快速滚动时反复挂载。 */
-export const MULTI_PANE_LAZY_UNMOUNT_MS = 600;
+/** 多屏离屏窗格延迟卸载（ms），避免快速滚动时反复挂载完整 ClaudeChat。 */
+export const MULTI_PANE_LAZY_UNMOUNT_MS = 2400;
 
 /** 超过 2 屏时启用视口 lazy 挂载。 */
 export function shouldLazyMountMultiPaneExtraCells(paneCount: number): boolean {

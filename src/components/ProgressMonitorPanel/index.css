@@ -34,7 +34,7 @@
 }
 
 .app-left-sidebar-monitor-panel .app-monitor-panel__section + .app-monitor-panel__section {
-  margin-top: 2px;
+  margin-top: 0;
 }
 
 .app-left-sidebar-monitor-panel .app-monitor-panel__section-head {
@@ -53,6 +53,36 @@
 .app-left-sidebar-monitor-panel .app-monitor-panel__item-action-icon-btn {
   width: 16px;
   height: 16px;
+}
+
+/* 左栏终端列表：行高再收紧一档 */
+.app-left-sidebar-monitor-panel .app-monitor-panel__section--terminals .app-monitor-panel__item {
+  padding: 1px 6px;
+}
+
+.app-left-sidebar-monitor-panel .app-monitor-panel__section--terminals .app-monitor-panel__item-row--terminal {
+  min-height: 18px;
+}
+
+.app-left-sidebar-monitor-panel .app-monitor-panel__section--terminals .app-monitor-panel__item-row-main {
+  height: 16px;
+  min-height: 16px;
+}
+
+.app-left-sidebar-monitor-panel .app-monitor-panel__section--terminals .app-monitor-panel__subagent-status {
+  width: 14px;
+  height: 14px;
+}
+
+.app-left-sidebar-monitor-panel .app-monitor-panel__section--terminals .app-monitor-panel__subagent-status-svg {
+  width: 14px;
+  height: 14px;
+}
+
+.app-left-sidebar-monitor-panel .app-monitor-panel__section--terminals .app-monitor-panel__item-action-icon-btn {
+  width: 14px;
+  height: 14px;
+  font-size: 10px;
 }
 
 .app-left-sidebar-monitor-panel .app-monitor-panel__head-config-btn {
@@ -82,7 +112,7 @@
 
 .app-left-sidebar-monitor-panel .app-monitor-panel__session-task-row {
   min-height: 20px;
-  padding: 0 8px;
+  padding: 0 6px;
 }
 
 .app-left-sidebar-monitor-panel .app-monitor-panel__session-tasks-empty-hint {
@@ -487,7 +517,7 @@
   cursor: pointer;
   border: none;
   border-left: 3px solid transparent !important;
-  transition: all 0.2s ease;
+  transition: background 0.1s ease, border-color 0.1s ease;
 }
 
 .app-monitor-panel__item--readonly {
@@ -554,6 +584,29 @@
   flex: 1;
 }
 
+.app-monitor-panel__item-type-tag {
+  flex-shrink: 0;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: var(--ant-border-radius-sm);
+  padding: 0 4px;
+  font-size: 10px;
+  line-height: 14px;
+  font-weight: 500;
+  color: var(--ant-color-text-tertiary);
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-left-sidebar-monitor-panel .app-monitor-panel__item-type-tag {
+  padding: 0 3px;
+  font-size: 9px;
+  line-height: 12px;
+}
+
+.app-monitor-panel__section--terminals .app-monitor-panel__terminals-list,
+.app-monitor-panel__section--workflows .app-monitor-panel__workflows-list {
+  margin-top: 0;
+}
+
 .app-monitor-panel__item-action-icon-btn {
   display: inline-flex;
   align-items: center;
@@ -566,7 +619,7 @@
   color: var(--ant-color-text-tertiary);
   cursor: pointer;
   opacity: 0.65;
-  transition: all 0.2s ease;
+  transition: opacity 0.1s ease, color 0.1s ease, background 0.1s ease;
 }
 
 .app-monitor-panel__item:hover .app-monitor-panel__item-action-icon-btn {
@@ -962,15 +1015,19 @@
   color: var(--ant-color-text-quaternary);
 }
 
-.app-monitor-panel__session-tasks-days-dropdown .ant-dropdown-menu {
-  min-width: 76px;
+.app-monitor-panel__session-tasks-days-select {
+  appearance: none;
+  -webkit-appearance: none;
+  padding-right: 14px;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 12 12'%3E%3Cpath fill='%238c8c8c' d='M3 4.5 6 7.5 9 4.5'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 3px center;
+  background-size: 8px 8px;
+  cursor: pointer;
 }
 
-.app-monitor-panel__session-tasks-days-dropdown .ant-dropdown-menu-item {
-  font-size: 9px !important;
-  line-height: 16px !important;
-  min-height: 22px !important;
-  padding: 2px 8px !important;
+.app-monitor-panel__session-tasks-days-select:disabled {
+  cursor: not-allowed;
 }
 
 .app-monitor-panel__session-tasks-empty-hint {
@@ -1056,12 +1113,34 @@
   max-width: 35%;
 }
 
+.app-monitor-panel__session-task-name-wrap {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.app-monitor-panel__session-task-row-main .app-monitor-panel__item-name-wrap .app-monitor-panel__session-task-name {
+  flex: 1 1 auto;
+}
+
+.app-monitor-panel__session-tasks-head-actions {
+  display: flex;
+  justify-content: flex-end;
+  padding: 2px 8px 0;
+}
+
+.app-monitor-panel__head-end .app-monitor-panel__session-tasks-days {
+  margin-right: 2px;
+}
+
 .app-monitor-panel__session-task-time {
   font-size: 9px;
   line-height: 14px;
   color: var(--ant-color-text-quaternary);
   white-space: nowrap;
-  flex: 0 0 auto;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 0 1 auto;
+  max-width: 46%;
   font-variant-numeric: tabular-nums;
   margin-left: 2px;
 }
@@ -1071,7 +1150,6 @@
   align-items: center;
   gap: 2px;
   flex-shrink: 0;
-  padding-right: 6px;
   min-width: 20px;
   justify-content: flex-end;
 }

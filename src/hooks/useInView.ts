@@ -58,8 +58,12 @@ function useObservedElementRef(): [Ref<HTMLElement | null>, HTMLElement | null] 
   const ref = useRef<HTMLElement | null>(null);
   const [element, setElement] = useState<HTMLElement | null>(null);
   const setRef = useCallback((node: HTMLElement | null) => {
+    if (ref.current === node) return;
     ref.current = node;
-    setElement(node);
+    queueMicrotask(() => {
+      if (ref.current !== node) return;
+      setElement((prev) => (prev === node ? prev : node));
+    });
   }, []);
   return [setRef, element];
 }
@@ -106,12 +110,22 @@ export function useInView(
   return [setRef, enabled ? inView : false];
 }
 
+export type UseInViewActiveOptions = {
+  /** 进入视口后多久才视为 inView（ms） */
+  enterDebounceMs?: number;
+  /** 离开视口后多久才视为 out-of-view（ms）；宜明显大于 enter，避免懒加载边界抖动 */
+  leaveDebounceMs?: number;
+};
+
 /** 双向视口检测：离开视口时返回 false，便于卸载大对象。 */
 export function useInViewActive(
   rootMargin = "120px",
   enabled = true,
   root: InViewRoot = null,
+  options?: UseInViewActiveOptions,
 ): [Ref<HTMLElement | null>, boolean] {
+  const enterDebounceMs = options?.enterDebounceMs ?? 80;
+  const leaveDebounceMs = options?.leaveDebounceMs ?? 650;
   const [setRef, element] = useObservedElementRef();
   const [inView, setInView] = useState(false);
   const observerInViewRef = useRef(false);
@@ -139,7 +153,7 @@ export function useInViewActive(
         setInView(next);
         return;
       }
-      const delayMs = next ? 80 : 650;
+      const delayMs = next ? enterDebounceMs : leaveDebounceMs;
       debounceTimerRef.current = setTimeout(() => {
         debounceTimerRef.current = null;
         setInView(observerInViewRef.current);
@@ -167,7 +181,7 @@ export function useInViewActive(
         debounceTimerRef.current = null;
       }
     };
-  }, [enabled, element, root, rootMargin]);
+  }, [enabled, element, enterDebounceMs, leaveDebounceMs, root, rootMargin]);
 
   return [setRef, enabled ? inView : false];
 }

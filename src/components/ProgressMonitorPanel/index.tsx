@@ -1,12 +1,10 @@
 import {
-  SendOutlined,
-  SettingOutlined,
   CodeOutlined,
   DeploymentUnitOutlined,
   HistoryOutlined,
   StopOutlined,
 } from "@ant-design/icons";
-import { Collapse, Descriptions, Drawer, Empty, Popover, Tag, Tooltip, Typography } from "antd";
+import { Collapse, Descriptions, Drawer, Empty, Popover, Tag, Typography } from "antd";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type {
   ClaudeMessage,
@@ -27,6 +25,7 @@ import {
   isOmcDirectBatchInvocationRunning,
 } from "../../utils/omcDirectBatchInvocationDisplay";
 import {
+  getOmcDirectBatchInvocationsDigest,
   getOmcDirectBatchInvocationsSnapshot,
   subscribeOmcDirectBatchInvocations,
 } from "../../stores/omcDirectBatchInvocationsStore";
@@ -59,11 +58,9 @@ import {
   type ExecutionEnvironmentDispatchHistoryDays,
 } from "../../constants/executionEnvironmentDispatch";
 import { ExecutionEnvironmentDispatchHistoryDaysDropdown } from "./ExecutionEnvironmentDispatchHistoryDaysDropdown";
-import {
-  canStopSessionConversationTask,
-  filterExecutionEnvironmentDispatchTaskItems,
-  formatExecutionEnvironmentDispatchTaskTime,
-} from "../../utils/sessionConversationTasks";
+import { MonitorLazyClickPopover } from "./MonitorLazyClickPopover";
+import { canStopSessionConversationTask, filterExecutionEnvironmentDispatchTaskItems } from "../../utils/sessionConversationTasks";
+import { SessionConversationDispatchTaskRow } from "./SessionConversationDispatchTaskRow";
 import { buildEmployeeTerminalConversationStatusById } from "../../utils/employeeTerminalDispatchStatus";
 import {
   SessionConversationTaskDetailDrawer,
@@ -87,6 +84,10 @@ function RepositoryMiniIcon() {
   );
 }
 
+function MonitorItemTypeTag({ label }: { label: string }) {
+  return <span className="app-monitor-panel__item-type-tag">{label}</span>;
+}
+
 function MonitorPanelHeadConfigActions({
   onOpenEmployeeConfig,
   onOpenWorkflowConfig,
@@ -100,30 +101,28 @@ function MonitorPanelHeadConfigActions({
   return (
     <div className="app-monitor-panel__head-actions">
       {onOpenEmployeeConfig ? (
-        <Tooltip title="配置终端" mouseEnterDelay={0.35}>
-          <button
-            type="button"
-            className="app-monitor-panel__head-config-btn"
-            aria-label="配置终端"
-            onClick={() => onOpenEmployeeConfig()}
-          >
-            <CodeOutlined aria-hidden />
-            <span className="app-monitor-panel__head-config-label">终端</span>
-          </button>
-        </Tooltip>
+        <button
+          type="button"
+          className="app-monitor-panel__head-config-btn"
+          title="配置终端"
+          aria-label="配置终端"
+          onClick={() => onOpenEmployeeConfig()}
+        >
+          <CodeOutlined aria-hidden />
+          <span className="app-monitor-panel__head-config-label">终端</span>
+        </button>
       ) : null}
       {onOpenWorkflowConfig ? (
-        <Tooltip title="配置工作流" mouseEnterDelay={0.35}>
-          <button
-            type="button"
-            className="app-monitor-panel__head-config-btn"
-            aria-label="配置工作流"
-            onClick={() => onOpenWorkflowConfig()}
-          >
-            <DeploymentUnitOutlined aria-hidden />
-            <span className="app-monitor-panel__head-config-label">工作流</span>
-          </button>
-        </Tooltip>
+        <button
+          type="button"
+          className="app-monitor-panel__head-config-btn"
+          title="配置工作流"
+          aria-label="配置工作流"
+          onClick={() => onOpenWorkflowConfig()}
+        >
+          <DeploymentUnitOutlined aria-hidden />
+          <span className="app-monitor-panel__head-config-label">工作流</span>
+        </button>
       ) : null}
     </div>
   );
@@ -459,11 +458,34 @@ const OmcDirectBatchInProgressPopover = memo(function OmcDirectBatchInProgressPo
       : totalCount > 0
         ? `共 ${totalCount} 路子进程记录；新发起直连批量 OMC 时会清空并重建列表`
         : "查看直连批量 OMC 子进程列表（非 Wise 会话标签列表）";
+
+  const triggerButton = (
+    requestOpen: () => void,
+  ) => (
+    <button
+      type="button"
+      className="app-monitor-panel__item-action-icon-btn"
+      title={tooltipTitle}
+      aria-label="直连批量 OMC 子进程列表"
+      onClick={(event) => {
+        event.stopPropagation();
+        requestOpen();
+      }}
+    >
+      <HistoryOutlined />
+    </button>
+  );
+
+  if (!open) {
+    return triggerButton(() => onOpenChange(true));
+  }
+
   return (
     <Popover
       trigger="click"
       placement="bottomRight"
-      open={open}
+      open
+      destroyOnHidden
       onOpenChange={onOpenChange}
       overlayClassName="app-monitor-panel__history-popover"
       content={
@@ -476,15 +498,7 @@ const OmcDirectBatchInProgressPopover = memo(function OmcDirectBatchInProgressPo
         />
       }
     >
-      <Tooltip title={tooltipTitle} mouseEnterDelay={0.35}>
-        <button
-          type="button"
-          className="app-monitor-panel__item-action-icon-btn"
-          onClick={(event) => event.stopPropagation()}
-        >
-          <HistoryOutlined />
-        </button>
-      </Tooltip>
+      {triggerButton(() => {})}
     </Popover>
   );
 });
@@ -492,14 +506,17 @@ const OmcDirectBatchInProgressPopover = memo(function OmcDirectBatchInProgressPo
 function statusText(status: "in_progress" | "idle") {
   if (status === "in_progress") {
     return (
-      <Tooltip title="进行中">
-        <span className="app-monitor-panel__status-spinner" role="status" aria-label="进行中">
+      <span
+        className="app-monitor-panel__status-spinner"
+        role="status"
+        aria-label="进行中"
+        title="进行中"
+      >
           <svg className="app-monitor-panel__status-spinner-svg" viewBox="0 0 16 16" aria-hidden>
             <circle className="app-monitor-panel__status-spinner-track" cx="8" cy="8" r="6.25" fill="none" />
             <circle className="app-monitor-panel__status-spinner-arc" cx="8" cy="8" r="6.25" fill="none" />
           </svg>
         </span>
-      </Tooltip>
     );
   }
   return (
@@ -716,17 +733,9 @@ function RepositorySubagentDetailDrawer({
   );
 }
 
-function memberTooltipContent(memberNames?: string[]) {
-  if (!memberNames || memberNames.length === 0) {
-    return "暂无团队成员";
-  }
-  return (
-    <div className="app-monitor-panel__member-tooltip">
-      {memberNames.map((name) => (
-        <div key={name} className="app-monitor-panel__member-tooltip-line">{name}</div>
-      ))}
-    </div>
-  );
+function memberTooltipTitle(memberNames?: string[]): string {
+  if (!memberNames?.length) return "暂无团队成员";
+  return memberNames.join("、");
 }
 
 export function HistorySessionPopoverContent({
@@ -909,10 +918,19 @@ export function ProgressMonitorPanel({
     getOmcDirectBatchInvocationsSnapshot,
     getOmcDirectBatchInvocationsSnapshot,
   );
+  const omcDirectBatchInvocationsDigest = useSyncExternalStore(
+    subscribeOmcDirectBatchInvocations,
+    getOmcDirectBatchInvocationsDigest,
+    getOmcDirectBatchInvocationsDigest,
+  );
+  const omcDirectBatchDetailInvocationKey = omcDirectBatchDetailSnapshot?.invocationKey ?? null;
   useEffect(() => {
+    if (!omcDirectBatchDetailInvocationKey) return;
     setOmcDirectBatchDetailSnapshot((prev) => {
       if (!prev) return prev;
-      const fresh = omcDirectBatchInvocationsLive.find((i) => i.invocationKey === prev.invocationKey);
+      const fresh = getOmcDirectBatchInvocationsSnapshot().find(
+        (i) => i.invocationKey === prev.invocationKey,
+      );
       if (!fresh) return prev;
       const sid = fresh.subprocessSessionId?.trim() || prev.subprocessSessionId?.trim();
       const merged: WorkflowInvocationStreamDetail = {
@@ -932,7 +950,7 @@ export function ProgressMonitorPanel({
       }
       return merged;
     });
-  }, [omcDirectBatchInvocationsLive]);
+  }, [omcDirectBatchInvocationsDigest, omcDirectBatchDetailInvocationKey]);
 
   const employeeHistoryByNameCacheRef = useRef<{ fp: string; map: Map<string, ClaudeSession[]> } | null>(null);
   const employeeHistorySessionsByName = useMemo(() => {
@@ -1151,11 +1169,6 @@ export function ProgressMonitorPanel({
     [employeeItems, executionEnvironmentDispatchTaskItems, monitorRepositoryPath, sessions],
   );
 
-  const runningSessionConversationTasks = useMemo(
-    () => executionEnvironmentDispatchTaskItems.filter((item) => item.status === "running"),
-    [executionEnvironmentDispatchTaskItems],
-  );
-
   const shouldShowSessionConversationTasks = showSessionConversationTasks;
 
   const panelHasListContent =
@@ -1216,21 +1229,26 @@ export function ProgressMonitorPanel({
           ) : null}
         </div>
         <div className="app-monitor-panel__head-end">
+          {shouldShowSessionConversationTasks &&
+          executionEnvironmentDispatchHistoryDays != null &&
+          onExecutionEnvironmentDispatchHistoryDaysChange ? (
+            <ExecutionEnvironmentDispatchHistoryDaysDropdown
+              disabled={executionEnvironmentDispatchHistoryDaysSaving}
+              value={executionEnvironmentDispatchHistoryDays}
+              onChange={onExecutionEnvironmentDispatchHistoryDaysChange}
+            />
+          ) : null}
           {setSectionCollapsed ? (
-            <Tooltip
+            <button
+              type="button"
+              className="app-monitor-panel__section-collapse-btn"
               title={sectionCollapsed ? "展开运行面板" : "收起运行面板"}
-              mouseEnterDelay={0.35}
+              aria-expanded={!sectionCollapsed}
+              aria-label={sectionCollapsed ? "展开运行面板" : "收起运行面板"}
+              onClick={() => setSectionCollapsed(!sectionCollapsed)}
             >
-              <button
-                type="button"
-                className="app-monitor-panel__section-collapse-btn"
-                aria-expanded={!sectionCollapsed}
-                aria-label={sectionCollapsed ? "展开运行面板" : "收起运行面板"}
-                onClick={() => setSectionCollapsed(!sectionCollapsed)}
-              >
-                <ExpandIcon expanded={!sectionCollapsed} />
-              </button>
-            </Tooltip>
+              <ExpandIcon expanded={!sectionCollapsed} />
+            </button>
           ) : null}
         </div>
       </div>
@@ -1254,25 +1272,6 @@ export function ProgressMonitorPanel({
 
       {employeeItems.length > 0 ? (
         <div className="app-monitor-panel__section app-monitor-panel__section--terminals">
-          <div className="app-monitor-panel__section-head">
-            <div className="app-monitor-panel__section-title-wrap">
-              <Typography.Text className="app-monitor-panel__section-title">
-                <CodeOutlined className="app-monitor-panel__section-icon" aria-hidden />
-                终端列表
-              </Typography.Text>
-              {onOpenEmployeeConfig ? (
-                <Tooltip title="配置终端" mouseEnterDelay={0.35}>
-                  <button
-                    type="button"
-                    className="app-monitor-panel__section-config-btn"
-                    onClick={() => onOpenEmployeeConfig()}
-                  >
-                    <SettingOutlined />
-                  </button>
-                </Tooltip>
-              ) : null}
-            </div>
-          </div>
           <div className="app-monitor-panel__terminals-list">
             {sortedEmployeeItems.map((item) => {
               const conversationStatus =
@@ -1301,24 +1300,25 @@ export function ProgressMonitorPanel({
                       onClick={() => activateEmployeeTerminalRow(item)}
                     >
                       <span className="app-monitor-panel__item-name-wrap">
+                        <MonitorItemTypeTag label="终端" />
                         <span className="app-monitor-panel__item-name">{item.name}</span>
                       </span>
                     </button>
                     <span className="app-monitor-panel__item-actions">
                       <SubagentStatusIndicator status={conversationStatus} />
                       {terminalInProgress ? (
-                        <Tooltip title="结束终端" mouseEnterDelay={0.35}>
-                          <button
-                            type="button"
-                            className="app-monitor-panel__item-action-icon-btn app-monitor-panel__item-action-icon-btn--stop"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              onStopEmployee?.(item.employeeId);
-                            }}
-                          >
-                            <StopOutlined />
-                          </button>
-                        </Tooltip>
+                        <button
+                          type="button"
+                          className="app-monitor-panel__item-action-icon-btn app-monitor-panel__item-action-icon-btn--stop"
+                          title="结束终端"
+                          aria-label="结束终端"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onStopEmployee?.(item.employeeId);
+                          }}
+                        >
+                          <StopOutlined />
+                        </button>
                       ) : null}
                       {isOmcWorker ? (
                         <OmcDirectBatchInProgressPopover
@@ -1338,10 +1338,10 @@ export function ProgressMonitorPanel({
                           onCancelInvocation={onCancelOmcDirectBatchInvocation}
                         />
                       ) : (
-                        <Popover
-                          trigger="click"
+                        <MonitorLazyClickPopover
+                          open={employeePopoverOpen}
                           placement="bottomRight"
-                          open={employeeHistoryPopoverId === item.employeeId}
+                          overlayClassName="app-monitor-panel__history-popover"
                           onOpenChange={(nextOpen) => {
                             if (nextOpen) {
                               setEmployeeHistoryPopoverId(item.employeeId);
@@ -1351,7 +1351,6 @@ export function ProgressMonitorPanel({
                             setEmployeeHistoryPopoverId((prev) => (prev === item.employeeId ? null : prev));
                             setEmployeeHistorySearch("");
                           }}
-                          overlayClassName="app-monitor-panel__history-popover"
                           content={
                             <HistorySessionPopoverContent
                               searchValue={employeeHistorySearch}
@@ -1373,17 +1372,21 @@ export function ProgressMonitorPanel({
                               canRestoreSession={canRestoreHistorySession}
                             />
                           }
-                        >
-                          <Tooltip title="历史会话" mouseEnterDelay={0.35}>
+                          renderTrigger={({ requestOpen }) => (
                             <button
                               type="button"
                               className="app-monitor-panel__item-action-icon-btn"
-                              onClick={(event) => event.stopPropagation()}
+                              title="历史会话"
+                              aria-label="历史会话"
+                              onClick={(event) => {
+                                event.stopPropagation();
+                                requestOpen();
+                              }}
                             >
                               <HistoryOutlined />
                             </button>
-                          </Tooltip>
-                        </Popover>
+                          )}
+                        />
                       )}
                       {conversationStatus === "idle" ? taskResultTag(item.latestTaskStatus) : null}
                     </span>
@@ -1403,74 +1406,21 @@ export function ProgressMonitorPanel({
               : ""
           }`}
         >
-          <div className="app-monitor-panel__session-tasks-toolbar">
-            <div className="app-monitor-panel__session-tasks-toolbar-start">
-              <Typography.Text className="app-monitor-panel__session-tasks-title">
-                <SendOutlined className="app-monitor-panel__session-tasks-title-icon" aria-hidden />
-                派发任务
-              </Typography.Text>
-              <span className="app-monitor-panel__session-tasks-count">
-                {runningSessionConversationTasks.length > 0
-                  ? `进行中 ${runningSessionConversationTasks.length}`
-                  : `共 ${executionEnvironmentDispatchTaskItems.length} 项`}
-              </span>
-            </div>
-            {executionEnvironmentDispatchHistoryDays != null &&
-            onExecutionEnvironmentDispatchHistoryDaysChange ? (
-              <ExecutionEnvironmentDispatchHistoryDaysDropdown
-                disabled={executionEnvironmentDispatchHistoryDaysSaving}
-                value={executionEnvironmentDispatchHistoryDays}
-                onChange={onExecutionEnvironmentDispatchHistoryDaysChange}
-              />
-            ) : null}
-          </div>
           {executionEnvironmentDispatchTaskItems.length > 0 ? (
             <div className="app-monitor-panel__session-tasks-list" aria-label="当前会话派发任务">
-              {executionEnvironmentDispatchTaskItems.map((item) => {
-                const showStop = canStopSessionConversationTask(item, {
-                  onCancelSession,
-                  onCancelOmcDirectBatchInvocation,
-                  onStopSessionConversationTask,
-                });
-                return (
-                  <div className="app-monitor-panel__session-task-row" key={item.key}>
-                    <button
-                      type="button"
-                      className="app-monitor-panel__session-task-row-main"
-                      title={item.subtitle ? `${item.label} · ${item.subtitle}` : item.label}
-                      onClick={() => openSessionConversationTaskDetail(item)}
-                    >
-                      <span className="app-monitor-panel__session-task-name" title={item.label}>
-                        {item.label}
-                      </span>
-                      {item.subtitle ? (
-                        <span className="app-monitor-panel__session-task-meta">{item.subtitle}</span>
-                      ) : null}
-                      <span className="app-monitor-panel__session-task-time">
-                        {formatExecutionEnvironmentDispatchTaskTime(item.updatedAt)}
-                      </span>
-                    </button>
-                    <span className="app-monitor-panel__session-task-actions">
-                      {showStop ? (
-                        <Tooltip title="结束执行" mouseEnterDelay={0.35}>
-                          <button
-                            type="button"
-                            className="app-monitor-panel__session-task-stop"
-                            aria-label="结束执行"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              stopSessionConversationTask(item);
-                            }}
-                          >
-                            <StopOutlined />
-                          </button>
-                        </Tooltip>
-                      ) : null}
-                      <SubagentStatusIndicator status={item.status} />
-                    </span>
-                  </div>
-                );
-              })}
+              {executionEnvironmentDispatchTaskItems.map((item) => (
+                <SessionConversationDispatchTaskRow
+                  key={item.key}
+                  item={item}
+                  showStop={canStopSessionConversationTask(item, {
+                    onCancelSession,
+                    onCancelOmcDirectBatchInvocation,
+                    onStopSessionConversationTask,
+                  })}
+                  onOpenDetail={openSessionConversationTaskDetail}
+                  onStop={stopSessionConversationTask}
+                />
+              ))}
             </div>
           ) : (
             <div className="app-monitor-panel__session-tasks-empty-hint">近 {executionEnvironmentDispatchHistoryDays ?? 1} 天暂无派发记录</div>
@@ -1482,13 +1432,13 @@ export function ProgressMonitorPanel({
         <div className="app-monitor-panel__section">
           <div className="app-monitor-panel__section-head">
             <div className="app-monitor-panel__section-title-wrap">
-              <Typography.Text className="app-monitor-panel__section-title">
+              <span className="app-monitor-panel__section-title">
                 <span className="app-monitor-panel__section-icon"><RepositoryMiniIcon /></span>
                 Mission Agent
-              </Typography.Text>
-              <Typography.Text className="app-monitor-panel__meta">
+              </span>
+              <span className="app-monitor-panel__meta">
                 {agentAssignments.length} 活跃
-              </Typography.Text>
+              </span>
             </div>
           </div>
           {agentAssignments.map((a) => (
@@ -1531,25 +1481,6 @@ export function ProgressMonitorPanel({
 
       {teamItems.length > 0 ? (
         <div className="app-monitor-panel__section app-monitor-panel__section--workflows">
-          <div className="app-monitor-panel__section-head">
-            <div className="app-monitor-panel__section-title-wrap">
-              <Typography.Text className="app-monitor-panel__section-title">
-                <DeploymentUnitOutlined className="app-monitor-panel__section-icon" aria-hidden />
-                工作流列表
-              </Typography.Text>
-              {onOpenWorkflowConfig ? (
-                <Tooltip title="配置工作流" mouseEnterDelay={0.35}>
-                  <button
-                    type="button"
-                    className="app-monitor-panel__section-config-btn"
-                    onClick={() => onOpenWorkflowConfig()}
-                  >
-                    <SettingOutlined />
-                  </button>
-                </Tooltip>
-              ) : null}
-            </div>
-          </div>
           <div className="app-monitor-panel__workflows-list">
             {teamItems.map((item) => {
               const teamPopoverOpen = teamHistoryPopoverId === item.workflowId;
@@ -1572,30 +1503,34 @@ export function ProgressMonitorPanel({
                 >
                   <div className="app-monitor-panel__item-row">
                     <span className="app-monitor-panel__item-name-wrap">
-                      <Tooltip title={memberTooltipContent(item.memberNames)}>
-                        <span className="app-monitor-panel__item-name">{item.workflowName}</span>
-                      </Tooltip>
+                      <MonitorItemTypeTag label="工作流" />
+                      <span
+                        className="app-monitor-panel__item-name"
+                        title={memberTooltipTitle(item.memberNames) || item.workflowName}
+                      >
+                        {item.workflowName}
+                      </span>
                       {statusText(item.status)}
                     </span>
                     <span className="app-monitor-panel__item-actions">
                       {item.status === "in_progress" ? (
-                        <Tooltip title="结束工作流" mouseEnterDelay={0.35}>
-                          <button
-                            type="button"
-                            className="app-monitor-panel__item-action-icon-btn app-monitor-panel__item-action-icon-btn--stop"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              onStopTeam?.(item.workflowId);
-                            }}
-                          >
-                            <StopOutlined />
-                          </button>
-                        </Tooltip>
+                        <button
+                          type="button"
+                          className="app-monitor-panel__item-action-icon-btn app-monitor-panel__item-action-icon-btn--stop"
+                          title="结束工作流"
+                          aria-label="结束工作流"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            onStopTeam?.(item.workflowId);
+                          }}
+                        >
+                          <StopOutlined />
+                        </button>
                       ) : null}
-                      <Popover
-                        trigger="click"
+                      <MonitorLazyClickPopover
+                        open={teamPopoverOpen}
                         placement="bottomRight"
-                        open={teamHistoryPopoverId === item.workflowId}
+                        overlayClassName="app-monitor-panel__history-popover"
                         onOpenChange={(nextOpen) => {
                           if (nextOpen) {
                             setTeamHistoryPopoverId(item.workflowId);
@@ -1607,7 +1542,6 @@ export function ProgressMonitorPanel({
                           setTeamHistorySearch("");
                           setTeamHistoryEmployeeFilter("all");
                         }}
-                        overlayClassName="app-monitor-panel__history-popover"
                         content={
                           <HistorySessionPopoverContent
                             searchValue={teamHistorySearch}
@@ -1634,17 +1568,21 @@ export function ProgressMonitorPanel({
                             canRestoreSession={canRestoreHistorySession}
                           />
                         }
-                      >
-                        <Tooltip title="历史会话" mouseEnterDelay={0.35}>
+                        renderTrigger={({ requestOpen }) => (
                           <button
                             type="button"
                             className="app-monitor-panel__item-action-icon-btn"
-                            onClick={(event) => event.stopPropagation()}
+                            title="历史会话"
+                            aria-label="历史会话"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              requestOpen();
+                            }}
                           >
                             <HistoryOutlined />
                           </button>
-                        </Tooltip>
-                      </Popover>
+                        )}
+                      />
                       {taskResultTag(item.latestTaskStatus)}
                     </span>
                   </div>

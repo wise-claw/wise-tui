@@ -72,8 +72,8 @@ export function usePersistedMainLayoutSiderWidths(options: {
       peerRightWidthPx: r,
       peerLeftWidthPx: l,
     });
-    setLeftWidthPxState(l);
-    setRightWidthPxState(r);
+    setLeftWidthPxState((prev) => (prev === l ? prev : l));
+    setRightWidthPxState((prev) => (prev === r ? prev : r));
     try {
       writePersistedLeftSiderWidthToStorage(l);
       window.localStorage.setItem(STORAGE_RIGHT_KEY, String(r));

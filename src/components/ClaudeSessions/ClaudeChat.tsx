@@ -87,6 +87,8 @@ import {
 } from "../../utils/repositoryMainSessionBinding";
 import { normalizeSessionRepositoryPath } from "../../utils/sessionHistoryScope";
 import {
+  buildPendingTasksQueueFingerprint,
+  buildRepoRunningSessionsFingerprint,
   buildSessionsNotificationScopeFingerprint,
   countSessionUnreadNotifications,
   extractEmployeeNameFromBracketPreview,
@@ -102,10 +104,9 @@ import {
 } from "../../constants/workflowUiEvents";
 import { OMC_MONITOR_EMPLOYEE_NAME } from "../../constants/omcMonitor";
 import {
-  getOmcDirectBatchInvocationsSnapshot,
+  getOmcDirectBatchPipelineBusySnapshot,
   subscribeOmcDirectBatchInvocations,
 } from "../../stores/omcDirectBatchInvocationsStore";
-import { isOmcDirectBatchInvocationRunning } from "../../utils/omcDirectBatchInvocationDisplay";
 import {
   findDispatchableHeadTasksPerLane,
   findMainLaneHead,
@@ -498,10 +499,14 @@ export function ClaudeChat({
       el.style.setProperty("--app-session-owner-anchor-left", `${r.left}px`);
       el.style.setProperty("--app-session-owner-anchor-width", `${r.width}px`);
     }
+    let lastSyncAt = 0;
     function scheduleSyncSessionOwnerAnchor() {
       if (rafId != null) return;
       rafId = window.requestAnimationFrame(() => {
         rafId = null;
+        const now = Date.now();
+        if (now - lastSyncAt < 1200) return;
+        lastSyncAt = now;
         syncSessionOwnerAnchor();
       });
     }
@@ -512,11 +517,9 @@ export function ClaudeChat({
     });
     ro.observe(root);
     window.addEventListener("resize", scheduleSyncSessionOwnerAnchor);
-    window.addEventListener("scroll", scheduleSyncSessionOwnerAnchor, true);
     return () => {
       ro.disconnect();
       window.removeEventListener("resize", scheduleSyncSessionOwnerAnchor);
-      window.removeEventListener("scroll", scheduleSyncSessionOwnerAnchor, true);
       if (rafId != null) {
         window.cancelAnimationFrame(rafId);
       }
@@ -601,6 +604,8 @@ export function ClaudeChat({
 
   const wasRunningRef = useRef(session.status === "running");
   const deferredSendNextRef = useRef(false);
+  const deferredQueueHydratedRef = useRef(false);
+  const lastPendingFlushGateKeyRef = useRef("");
   const [deferredSendQueued, setDeferredSendQueued] = useState(false);
 
   const dispatchPendingTask = useCallback(
@@ -735,13 +740,12 @@ export function ClaudeChat({
 
   const isMainIdle = session.status !== "running" && session.status !== "connecting";
 
-  const directOmcInvocationsForIdle = useSyncExternalStore(
+  const omcDirectBatchPipelineBusy = useSyncExternalStore(
     subscribeOmcDirectBatchInvocations,
-    getOmcDirectBatchInvocationsSnapshot,
-    getOmcDirectBatchInvocationsSnapshot,
+    getOmcDirectBatchPipelineBusySnapshot,
+    () => false,
   );
-  const omcMonitorPipelineBusy =
-    omcBatchPipelineActive || directOmcInvocationsForIdle.some(isOmcDirectBatchInvocationRunning);
+  const omcMonitorPipelineBusy = omcBatchPipelineActive || omcDirectBatchPipelineBusy;
 
   const isEmployeeIdle = useCallback(
     (employeeName?: string) => {
@@ -869,6 +873,51 @@ export function ClaudeChat({
 
   flushPendingLaneDispatchesRef.current = flushPendingLaneDispatches;
 
+  const canDispatchHeadRef = useRef(canDispatchHead);
+  canDispatchHeadRef.current = canDispatchHead;
+
+  const pendingTasksFingerprint = useMemo(
+    () => buildPendingTasksQueueFingerprint(pendingTasks),
+    [pendingTasks],
+  );
+
+  const repoRunningSessionsFingerprint = buildRepoRunningSessionsFingerprint(
+    sessions,
+    session.repositoryPath,
+  );
+  const workflowBusyFingerprint = workflowTasks
+    .filter((task) => task.status === "in_progress")
+    .map((task) => `${task.id}:${task.workflowId ?? ""}`)
+    .sort()
+    .join(",");
+
+  const taskPendingEmployeesFingerprint = useMemo(() => {
+    return Object.entries(taskPendingEmployeesByTaskId)
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([taskId, rows]) => `${taskId}:${rows.map((row) => row.employeeId).join(",")}`)
+      .join("\n");
+  }, [taskPendingEmployeesByTaskId]);
+
+  const pendingDispatchGateKey = useMemo(
+    () =>
+      [
+        session.status,
+        omcMonitorPipelineBusy ? "1" : "0",
+        repoRunningSessionsFingerprint,
+        workflowBusyFingerprint,
+        taskPendingEmployeesFingerprint,
+        pendingTasksFingerprint,
+      ].join("|"),
+    [
+      session.status,
+      omcMonitorPipelineBusy,
+      repoRunningSessionsFingerprint,
+      workflowBusyFingerprint,
+      taskPendingEmployeesFingerprint,
+      pendingTasksFingerprint,
+    ],
+  );
+
   const getPendingTaskDispatchState = useCallback(
     (task: PendingExecutionTask): { label: string; tone: "ready" | "waiting" } => {
       const targetType = task.targetType ?? "main";
@@ -962,6 +1011,54 @@ export function ClaudeChat({
   }, [clearAll, session.id, session.repositoryPath]);
 
   useEffect(() => {
+    deferredQueueHydratedRef.current = false;
+    lastPendingFlushGateKeyRef.current = "";
+    const sid = session.id;
+    const rp = session.repositoryPath;
+    let cancelled = false;
+    void (async () => {
+      let stored = await readDeferredSendNext(sid, rp);
+      const queue = pendingTasksRef.current;
+      if (stored && queue.length === 0) {
+        await writeDeferredSendNext(sid, rp, false);
+        stored = false;
+      }
+      if (cancelled) return;
+      deferredQueueHydratedRef.current = true;
+      deferredSendNextRef.current = stored;
+      setDeferredSendQueued((prev) => (prev === stored ? prev : stored));
+      wasRunningRef.current = session.status === "running";
+
+      if (
+        stored &&
+        queue.length > 0 &&
+        session.status !== "running" &&
+        session.status !== "connecting"
+      ) {
+        if (session.status === "error" || session.status === "cancelled") {
+          await writeDeferredSendNext(sid, rp, false);
+          if (cancelled) return;
+          deferredSendNextRef.current = false;
+          setDeferredSendQueued((prev) => (prev === false ? prev : false));
+          message.warning("检测到上次「本轮结束后发送」预约，但会话未成功结束，已取消自动发送。");
+          return;
+        }
+        const dispatchable = findNextDispatchableLaneHead(queue, (task) => canDispatchHeadRef.current(task));
+        if (dispatchable) {
+          await writeDeferredSendNext(sid, rp, false);
+          if (cancelled) return;
+          deferredSendNextRef.current = false;
+          setDeferredSendQueued((prev) => (prev === false ? prev : false));
+          queueMicrotask(() => flushPendingLaneDispatchesRef.current());
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [session.id, session.repositoryPath]);
+
+  useEffect(() => {
     const running = session.status === "running";
     const prevWasRunning = wasRunningRef.current;
     wasRunningRef.current = running;
@@ -969,7 +1066,7 @@ export function ClaudeChat({
 
     if (!deferredSendNextRef.current) return;
     deferredSendNextRef.current = false;
-    setDeferredSendQueued(false);
+    setDeferredSendQueued((prev) => (prev === false ? prev : false));
     void writeDeferredSendNext(session.id, session.repositoryPath, false);
 
     if (session.status === "error" || session.status === "cancelled") {
@@ -979,78 +1076,33 @@ export function ClaudeChat({
       return;
     }
 
-    const dispatchable = findNextDispatchableLaneHead(pendingTasksRef.current, (task) => canDispatchHead(task));
+    const dispatchable = findNextDispatchableLaneHead(pendingTasksRef.current, (task) =>
+      canDispatchHeadRef.current(task),
+    );
     if (!dispatchable) return;
-    flushPendingLaneDispatches();
-  }, [
-    session.status,
-    session.id,
-    session.repositoryPath,
-    flushPendingLaneDispatches,
-    canDispatchHead,
-  ]);
+    lastPendingFlushGateKeyRef.current = "";
+    queueMicrotask(() => flushPendingLaneDispatchesRef.current());
+  }, [session.status, session.id, session.repositoryPath]);
 
   useEffect(() => {
+    if (!deferredQueueHydratedRef.current) return;
+
     if (pendingTasks.length === 0 && deferredSendQueued) {
       deferredSendNextRef.current = false;
-      setDeferredSendQueued(false);
+      setDeferredSendQueued((prev) => (prev === false ? prev : false));
       void writeDeferredSendNext(session.id, session.repositoryPath, false);
+      return;
     }
-  }, [pendingTasks.length, deferredSendQueued, session.id, session.repositoryPath]);
 
-  useEffect(() => {
-    flushPendingLaneDispatches();
-  }, [pendingTasks, session.id, flushPendingLaneDispatches]);
-
-  useEffect(() => {
-    const sid = session.id;
-    const rp = session.repositoryPath;
-    let cancelled = false;
-    void (async () => {
-      let stored = await readDeferredSendNext(sid, rp);
-      if (stored && pendingTasks.length === 0) {
-        await writeDeferredSendNext(sid, rp, false);
-        stored = false;
-      }
-      if (cancelled) return;
-      deferredSendNextRef.current = stored;
-      setDeferredSendQueued(stored);
-      wasRunningRef.current = session.status === "running";
-
-      if (
-        stored &&
-        pendingTasks.length > 0 &&
-        session.status !== "running" &&
-        session.status !== "connecting"
-      ) {
-        if (session.status === "error" || session.status === "cancelled") {
-          await writeDeferredSendNext(sid, rp, false);
-          if (cancelled) return;
-          deferredSendNextRef.current = false;
-          setDeferredSendQueued(false);
-          message.warning("检测到上次「本轮结束后发送」预约，但会话未成功结束，已取消自动发送。");
-          return;
-        }
-        const dispatchable = findNextDispatchableLaneHead(pendingTasks, (task) => canDispatchHead(task));
-        if (dispatchable) {
-          await writeDeferredSendNext(sid, rp, false);
-          if (cancelled) return;
-          deferredSendNextRef.current = false;
-          setDeferredSendQueued(false);
-          queueMicrotask(() => flushPendingLaneDispatches());
-        }
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
+    if (lastPendingFlushGateKeyRef.current === pendingDispatchGateKey) return;
+    lastPendingFlushGateKeyRef.current = pendingDispatchGateKey;
+    queueMicrotask(() => flushPendingLaneDispatchesRef.current());
   }, [
+    pendingDispatchGateKey,
     session.id,
     session.repositoryPath,
-    session.status,
-    pendingTasks,
-    flushPendingLaneDispatches,
-    canDispatchHead,
+    pendingTasks.length,
+    deferredSendQueued,
   ]);
 
   const {
@@ -1277,15 +1329,17 @@ export function ClaudeChat({
   });
 
   /** 当前仓库范围内未读通知（含员工/团队子会话），用于会话内消息通知面板列表与显隐 */
-  const [sessionsNotificationScopeKey, setSessionsNotificationScopeKey] = useState("");
-  useEffect(() => {
-    const next = buildSessionsNotificationScopeFingerprint(sessions);
-    setSessionsNotificationScopeKey((prev) => (prev === next ? prev : next));
-  }, [sessions]);
+  const sessionsNotificationScopeFingerprint = buildSessionsNotificationScopeFingerprint(sessions);
 
   const sessionUnreadNotificationRows = useMemo(
     () => notificationRows.filter((row) => notificationRowInSessionInboxScope(row, session, sessions)),
-    [notificationRows, session.id, session.repositoryPath, session.claudeSessionId, sessionsNotificationScopeKey],
+    [
+      notificationRows,
+      session.id,
+      session.repositoryPath,
+      session.claudeSessionId,
+      sessionsNotificationScopeFingerprint,
+    ],
   );
 
   const sessionUnreadCount = sessionUnreadNotificationRows.length;

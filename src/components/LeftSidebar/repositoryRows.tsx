@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { UserOutlined } from "@ant-design/icons";
-import { App as AntdApp, Dropdown, Popover, Tooltip } from "antd";
+import { App as AntdApp, Dropdown, Popover } from "antd";
+import { DeferredHoverTooltip } from "../shared/DeferredHoverTooltip";
 import { openWorkspaceTodosFromSidebarMenu } from "../../utils/openWorkspaceTodosFromSidebar";
 import { workspaceTodosAnchorKey } from "../../utils/workspaceTodosAnchorKey";
 import type { Repository, StandaloneRepo, TaskMode, Workspace } from "../../types";
@@ -81,7 +82,7 @@ function RepositoryRunCommandRunningAction({
   const running = useIsRepositoryRunCommandRunning(repositoryId);
   if (!running || !onStop) return null;
   return (
-    <Tooltip title="停止运行" mouseEnterDelay={0.2}>
+    <DeferredHoverTooltip title="停止运行">
       <button
         type="button"
         className="app-repository-action app-repository-action--run-stop"
@@ -93,13 +94,13 @@ function RepositoryRunCommandRunningAction({
       >
         <RunCommandStopIcon />
       </button>
-    </Tooltip>
+    </DeferredHoverTooltip>
   );
 }
 
 export function RepositoryConversationAction({ onOpen }: { onOpen: () => void }) {
   return (
-    <Tooltip title="打开仓库对话" mouseEnterDelay={0.3}>
+    <DeferredHoverTooltip title="打开仓库对话">
       <button
         type="button"
         className="app-repository-action app-repository-action--task app-repository-action--primary app-repository-action--chat"
@@ -111,7 +112,7 @@ export function RepositoryConversationAction({ onOpen }: { onOpen: () => void })
       >
         <ChatIcon />
       </button>
-    </Tooltip>
+    </DeferredHoverTooltip>
   );
 }
 
@@ -123,7 +124,7 @@ export function RepositoryTrellisAction({
   variant?: "repo" | "project";
 }) {
   return (
-    <Tooltip title={variant === "project" ? "工作区 Trellis" : "仓库 Trellis"} mouseEnterDelay={0.3}>
+    <DeferredHoverTooltip title={variant === "project" ? "工作区 Trellis" : "仓库 Trellis"}>
       <button
         type="button"
         className={`app-repository-action app-repository-action--task app-repository-action--primary app-repository-action--trellis${variant === "project" ? " app-repository-action--project-quick" : ""}`}
@@ -135,7 +136,7 @@ export function RepositoryTrellisAction({
       >
         <TrellisIcon />
       </button>
-    </Tooltip>
+    </DeferredHoverTooltip>
   );
 }
 
@@ -163,7 +164,7 @@ export function SidebarScheduledTasksAction({
       : `定时任务（共 ${totalCount} 个，均未启用）`;
 
   return (
-    <Tooltip title={tooltipTitle} mouseEnterDelay={0.3}>
+    <DeferredHoverTooltip title={tooltipTitle}>
       <button
         type="button"
         className={`app-repository-action app-repository-action--task app-repository-action--primary app-repository-action--scheduled-tasks${variant === "project" ? " app-repository-action--project-quick" : ""}`}
@@ -180,7 +181,7 @@ export function SidebarScheduledTasksAction({
           ) : null}
         </span>
       </button>
-    </Tooltip>
+    </DeferredHoverTooltip>
   );
 }
 
@@ -201,7 +202,7 @@ export function SidebarRequirementAction({
   const tooltip = `${scopeLabel}：${unsplitCount} 条尚未生成任务`;
 
   return (
-    <Tooltip title={tooltip} mouseEnterDelay={0.3}>
+    <DeferredHoverTooltip title={tooltip}>
       <button
         type="button"
         className={`app-repository-action app-repository-action--task app-repository-action--primary app-repository-action--requirement${variant === "project" ? " app-repository-action--project-quick" : ""}`}
@@ -218,7 +219,7 @@ export function SidebarRequirementAction({
           </span>
         </span>
       </button>
-    </Tooltip>
+    </DeferredHoverTooltip>
   );
 }
 
@@ -236,7 +237,7 @@ export function SidebarExecutableTasksAction({
   const badgeLabel = executableCount > 99 ? "99+" : String(executableCount);
 
   return (
-    <Tooltip title={`${executableCount} 个可执行任务`} mouseEnterDelay={0.3}>
+    <DeferredHoverTooltip title={`${executableCount} 个可执行任务`}>
       <button
         type="button"
         className={`app-repository-action app-repository-action--task app-repository-action--primary app-repository-action--executable-tasks${variant === "project" ? " app-repository-action--project-quick" : ""}`}
@@ -253,7 +254,7 @@ export function SidebarExecutableTasksAction({
           </span>
         </span>
       </button>
-    </Tooltip>
+    </DeferredHoverTooltip>
   );
 }
 
@@ -305,7 +306,7 @@ export function SidebarWorkspaceRemindersAction({
         className="app-repository-action-popover-trigger"
         onClick={(e) => e.stopPropagation()}
       >
-        <Tooltip title={tooltip} mouseEnterDelay={0.3}>
+        <DeferredHoverTooltip title={tooltip}>
           <button
             type="button"
             className={`app-repository-action app-repository-action--task app-repository-action--primary app-repository-action--workspace-reminders${variant === "project" ? " app-repository-action--project-quick" : ""}`}
@@ -319,7 +320,7 @@ export function SidebarWorkspaceRemindersAction({
               </span>
             </span>
           </button>
-        </Tooltip>
+        </DeferredHoverTooltip>
       </span>
     </Popover>
   );

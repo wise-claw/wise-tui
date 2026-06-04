@@ -5,6 +5,8 @@ import type { ChatMessageListNavigationHandle } from "../components/ClaudeSessio
 
 /** 流式贴底：每帧最多移动的像素（越大越跟手，越小越丝滑） */
 const SCROLL_FOLLOW_MAX_STEP_PX = 96;
+/** 流式贴底读 layout 的最小间隔，避免每 RAF 强制 sync layout */
+const SCROLL_FOLLOW_MIN_INTERVAL_MS = 36;
 
 export interface UseClaudeChatMessageScrollOptions {
   session: ClaudeSession;
@@ -21,6 +23,7 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
   const awaitNewMessageBeforeFollowRef = useRef(false);
   const followFingerprintAtBlurRef = useRef("");
   const scrollFollowLoopRafRef = useRef<number | null>(null);
+  const lastScrollFollowLayoutAtRef = useRef(0);
   const scrollNavTimeoutRef = useRef<number | null>(null);
   const sessionStatusRef = useRef(session.status);
   sessionStatusRef.current = session.status;
@@ -142,6 +145,14 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
     if (!sc) return;
 
     const streaming = isSessionStreaming();
+    const now = performance.now();
+    if (streaming && now - lastScrollFollowLayoutAtRef.current < SCROLL_FOLLOW_MIN_INTERVAL_MS) {
+      if (shouldAutoFollow()) {
+        scrollFollowLoopRafRef.current = window.requestAnimationFrame(() => tickScrollFollowLoopRef.current());
+      }
+      return;
+    }
+    lastScrollFollowLayoutAtRef.current = now;
     applyScrollTowardBottom(sc, { smooth: streaming });
 
     if (streaming && shouldAutoFollow()) {
@@ -240,6 +251,7 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
   }, [session.id, cancelScrollFollowLoop]);
 
   useEffect(() => {
+    if (isSessionStreaming()) return;
     if (session.messages.length === 0) return;
     const last = session.messages[session.messages.length - 1]!;
     if (last.role !== "user" && last.role !== "system") return;
@@ -252,10 +264,15 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => {
         snapScrollToBottom();
-        ensureScrollFollowLoop();
       });
     });
-  }, [session.messages, cancelScrollFollowLoop, snapScrollToBottom, ensureScrollFollowLoop]);
+  }, [
+    session.messages,
+    session.status,
+    cancelScrollFollowLoop,
+    snapScrollToBottom,
+    isSessionStreaming,
+  ]);
 
   useLayoutEffect(() => {
     if (hideMessages) return;
@@ -342,7 +359,8 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
         if (shouldAutoFollow()) scheduleScrollToBottom();
       });
     });
-    mo.observe(sc, { childList: true, subtree: true, characterData: true });
+    // 勿监听 characterData：流式 Markdown 每 token 都会触发 MO，主线程会周期性卡死。
+    mo.observe(sc, { childList: true, subtree: true });
 
     return () => {
       mo.disconnect();

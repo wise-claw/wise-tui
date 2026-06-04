@@ -1,5 +1,6 @@
 import type { MutableRefObject } from "react";
-import { Dropdown, Tooltip, Typography } from "antd";
+import { Dropdown, Typography } from "antd";
+import { DeferredHoverTooltip } from "../shared/DeferredHoverTooltip";
 import type { ReconcileProjectMode } from "../../constants/reconcileProjectMode";
 import type { Repository, StandaloneRepo, TaskMode, Workspace } from "../../types";
 import {
@@ -194,7 +195,7 @@ export function ProjectRepositoryList({
         </Typography.Text>
         <div className="app-repository-header-actions">
           {onAddFloatingRepositoryClick ? (
-            <Tooltip title="添加单仓（不绑定工作区）" mouseEnterDelay={0.3}>
+            <DeferredHoverTooltip title="添加单仓（不绑定工作区）">
               <button
                 className="app-repository-header-btn"
                 aria-label="添加单仓"
@@ -202,9 +203,9 @@ export function ProjectRepositoryList({
               >
                 <PlusIcon />
               </button>
-            </Tooltip>
+            </DeferredHoverTooltip>
           ) : null}
-          <Tooltip title="新建工作区" mouseEnterDelay={0.3}>
+          <DeferredHoverTooltip title="新建工作区">
             <button
               className="app-repository-header-btn"
               aria-label="新建工作区"
@@ -212,11 +213,10 @@ export function ProjectRepositoryList({
             >
               <ProjectIcon />
             </button>
-          </Tooltip>
+          </DeferredHoverTooltip>
           {setSectionCollapsed ? (
-            <Tooltip
+            <DeferredHoverTooltip
               title={sectionCollapsed ? "展开工作区列表" : "收起工作区列表"}
-              mouseEnterDelay={0.35}
             >
               <button
                 type="button"
@@ -227,7 +227,7 @@ export function ProjectRepositoryList({
               >
                 <ExpandIcon expanded={!sectionCollapsed} />
               </button>
-            </Tooltip>
+            </DeferredHoverTooltip>
           ) : null}
         </div>
       </div>
@@ -617,11 +617,11 @@ function ProjectRow({
             </span>
           ) : null}
           {isPinned ? (
-            <Tooltip title="已置顶：工作区固定在列表顶部" mouseEnterDelay={0.3}>
+            <DeferredHoverTooltip title="已置顶：工作区固定在列表顶部">
               <span className="app-repository-pin-hit" aria-label="已置顶：工作区固定在列表顶部">
                 <span className="app-repository-pin" aria-hidden />
               </span>
-            </Tooltip>
+            </DeferredHoverTooltip>
           ) : null}
         </span>
         <div className="app-repository-row-actions app-repository-row-actions--project">

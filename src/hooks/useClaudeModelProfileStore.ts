@@ -78,14 +78,18 @@ export function useModelProfileSwitcher(popoverOpen: boolean) {
 
   const setStore = useCallback(
     (value: React.SetStateAction<ClaudeModelProfileStoreView | null>) => {
+      let resolvedNext: ClaudeModelProfileStoreView | null = null;
       setStoreInternal((prev) => {
         const next = typeof value === "function" ? value(prev) : value;
+        resolvedNext = next;
         if (next) {
           seedModelProfileStoreCache(next);
-          setEffectiveModels(extractEffectiveModelsFromStore(next));
         }
         return next;
       });
+      if (resolvedNext) {
+        setEffectiveModels(extractEffectiveModelsFromStore(resolvedNext));
+      }
     },
     [],
   );

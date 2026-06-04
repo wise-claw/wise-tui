@@ -62,7 +62,7 @@ describe("parseDispatchRecord", () => {
     expect(meta?.dispatchContent).toBe("请检查天气接口");
     expect(meta?.targetSessionId).toBe("tab-worker-1");
     expect(formatDispatchRecordSentence(meta!)).toBe(
-      "终端01 在 2026/6/3 15:19:25 执行 请检查天气接口。",
+      "终端01 执行 请检查天气接口。",
     );
   });
 
@@ -77,7 +77,7 @@ describe("parseDispatchRecord", () => {
     const meta = parseDispatchRecord(text);
     expect(meta?.engineName).toBe("Claude Code");
     expect(formatDispatchRecordSentence(meta!)).toBe(
-      "Claude Code 在 2026/6/4 08:15:13 执行 你好。",
+      "Claude Code 执行 你好。",
     );
   });
 
@@ -115,7 +115,7 @@ describe("parseDispatchRecord", () => {
     } as ClaudeSession;
     const enriched = enrichDispatchRecordMeta(legacy, [worker]);
     expect(formatDispatchRecordSentence(enriched)).toBe(
-      "终端01 在 2026/6/3 15:19:25 执行 你好。",
+      "终端01 执行 你好。",
     );
   });
 });

@@ -125,11 +125,10 @@ import { useExecutionEnvironmentDispatchHistoryDays } from "./hooks/useExecution
 import { useExecutionEnvironmentDispatchWorkerTranscriptPreload } from "./hooks/useExecutionEnvironmentDispatchWorkerTranscriptPreload";
 import { useSessionConversationTasks } from "./hooks/useSessionConversationTasks";
 import { dispatchExecutionEnvironmentFromMainSession } from "./services/executionEnvironmentDispatch";
-import { useIntervalSyncedState } from "./hooks/useIntervalSyncedState";
+import { useMonitorSessionsForOverview } from "./hooks/useMonitorSessionsForOverview";
 import { useLeftSidebarHubQuickEntries } from "./hooks/useLeftSidebarHubQuickEntries";
 import { useMonitorPanelDefault } from "./hooks/useMonitorPanelDefault";
 import { useScheduledClaudeTaskRunner } from "./hooks/useScheduledClaudeTaskRunner";
-import { MONITOR_SESSIONS_SYNC_INTERVAL_MS } from "./constants/monitorUi";
 import { invalidateWorkflowRunCacheForRepository } from "./hooks/useWorkflowRun";
 import { deleteAppSetting, getAppSetting, setAppSetting } from "./services/appSettingsStore";
 import { loadWiseDefaultConfig } from "./services/wiseDefaultConfigStore";
@@ -907,12 +906,8 @@ export default function App() {
   const workflowTemplatesLatestRef = useRef(workflowTemplates);
   workflowTemplatesLatestRef.current = workflowTemplates;
 
-  /** 监控侧栏 / Drawer 用：与主会话流式更新解耦，避免 `useMonitorOverview` 等巨型 memo 同频重算卡死主线程 */
-  const sessionsSyncedForMonitorUi = useIntervalSyncedState(
-    sessions,
-    MONITOR_SESSIONS_SYNC_INTERVAL_MS,
-    sessions.length,
-  );
+  /** 监控侧栏 / Drawer 用：指纹节流，避免流式时每帧跑巨型 useMonitorOverview */
+  const sessionsSyncedForMonitorUi = useMonitorSessionsForOverview(sessions);
 
   const monitorPanelSessionsMerged = sessionsSyncedForMonitorUi;
 
@@ -2941,6 +2936,7 @@ export default function App() {
         onStartRepositoryRunCommand: handleStartRepositoryRunCommand,
         onStopRepositoryRunCommand: handleStopRepositoryRunCommand,
         sessions,
+        monitorPanelSessions: monitorPanelSessionsMerged,
         repositoryMainSessionBindings,
         activeSessionId,
         onSelectSession: jumpToSessionLeavingMcpHub,

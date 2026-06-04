@@ -128,6 +128,8 @@ export interface LeftSidebarProps {
   /** 停止仓库运行指令（与顶栏「停止运行」一致） */
   onStopRepositoryRunCommand?: (repository: Repository) => void;
   sessions: ClaudeSession[];
+  /** 运行面板列表用：指纹节流后的会话，避免流式时每 token 重算终端状态 */
+  monitorPanelSessions?: ClaudeSession[];
   repositoryMainSessionBindings: Record<string, string>;
   activeSessionId: string | null;
   onSelectSession: (sessionId: string) => void;
