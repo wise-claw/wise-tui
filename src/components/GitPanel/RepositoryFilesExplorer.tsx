@@ -1,4 +1,4 @@
-import { useMemo, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { Button, Empty, Input, Menu, Popconfirm, Spin, Tooltip } from "antd";
 import {
   ExclamationCircleOutlined,
@@ -13,7 +13,8 @@ import { GitPanelWorkspaceSelector, type GitPanelWorkspaceSelectorProps } from "
 import { ExplorerInlineCreateRow } from "./ExplorerInlineCreateRow";
 import { ExplorerSearchResultList } from "./ExplorerSearchResultList";
 import { RepositoryExplorerTreeActionsProvider } from "./RepositoryExplorerTreeActionsContext";
-import { RepositoryTreeList } from "./RepositoryTreeList";
+import { flattenRepositoryTreeRows } from "./repositoryTreeFlatten";
+import { RepositoryVirtualTreeList } from "./RepositoryVirtualTreeList";
 import { MIN_EXPLORER_SEARCH_QUERY_LEN } from "./fileTree";
 import type { GitPanelOpenFileOptions } from "./types";
 import { useRepositoryFilesExplorer } from "./useRepositoryFilesExplorer";
@@ -39,7 +40,7 @@ export interface RepositoryFilesExplorerProps {
   workspaceSelector?: WorkspaceSelectorProps;
 }
 
-export function RepositoryFilesExplorer({
+export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
   repositoryPath,
   repositoryLabel,
   search,
@@ -73,6 +74,44 @@ export function RepositoryFilesExplorer({
     !explorer.loading &&
     !explorer.isRefreshing &&
     explorer.searchResultRows.length === 0;
+
+  const scrollRegionRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const el = scrollRegionRef.current;
+    if (!el) return;
+    let scrollEndTimer: ReturnType<typeof setTimeout> | undefined;
+    const onScroll = () => {
+      el.classList.add("git-files-explorer-scroll-region--scrolling");
+      if (scrollEndTimer) clearTimeout(scrollEndTimer);
+      scrollEndTimer = setTimeout(() => {
+        el.classList.remove("git-files-explorer-scroll-region--scrolling");
+      }, 140);
+    };
+    el.addEventListener("scroll", onScroll, { passive: true });
+    return () => {
+      el.removeEventListener("scroll", onScroll);
+      if (scrollEndTimer) clearTimeout(scrollEndTimer);
+      el.classList.remove("git-files-explorer-scroll-region--scrolling");
+    };
+  }, [sectionCollapsed]);
+
+  const flatTreeRows = useMemo(
+    () =>
+      flattenRepositoryTreeRows({
+        nodes: explorer.filteredTree,
+        expandedDirs: explorer.expandedDirs,
+        loadingDirKeys: explorer.loadingDirKeys,
+        inlineCreate: explorer.inlineCreate,
+      }),
+    [
+      explorer.filteredTree,
+      explorer.expandedDirs,
+      explorer.loadingDirKeys,
+      explorer.inlineCreate,
+      explorer.childrenMapRevision,
+    ],
+  );
 
   const treeActions = useMemo(
     () => ({
@@ -164,16 +203,15 @@ export function RepositoryFilesExplorer({
         />
       ) : null}
       <RepositoryExplorerTreeActionsProvider value={treeActions}>
-        <RepositoryTreeList
-          key={explorer.childrenMapRevision}
-          nodes={explorer.filteredTree}
-          expandedDirs={explorer.expandedDirs}
-          expandEpoch={explorer.expandEpoch}
-          lastExpandPath={explorer.lastExpandPath}
+        <RepositoryVirtualTreeList
+          scrollRootRef={scrollRegionRef}
+          rows={flatTreeRows}
           selectedPath={explorer.selected?.path ?? null}
-          inlineCreate={explorer.inlineCreate}
           loadingDirKeys={explorer.loadingDirKeys}
-          treeContentRevision={explorer.childrenMapRevision}
+          inlineCreate={explorer.inlineCreate}
+          onInlineValueChange={explorer.handleInlineValueChange}
+          onInlineCommit={explorer.handleInlineCommit}
+          onInlineCancel={explorer.cancelInlineCreate}
         />
       </RepositoryExplorerTreeActionsProvider>
     </div>
@@ -280,6 +318,7 @@ export function RepositoryFilesExplorer({
       ) : null}
       {!sectionCollapsed ? (
       <div
+        ref={scrollRegionRef}
         className={`git-files-explorer-scroll-region${
           explorer.isRefreshing && explorer.filteredTree.length === 0
             ? " git-files-explorer-scroll-region--refreshing"
@@ -385,4 +424,4 @@ export function RepositoryFilesExplorer({
       ) : null}
     </div>
   );
-}
+});

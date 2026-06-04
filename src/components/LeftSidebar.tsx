@@ -73,6 +73,7 @@ import { useClaudeProcessWorkspaceLabelCache } from "../hooks/useClaudeProcessWo
 import { useSystemResourceSessions } from "./LeftSidebar/useSystemResourceSessions";
 import { useSidebarRunningMainSessionIndicators } from "./LeftSidebar/useSidebarRunningMainSessionIndicators";
 import { LeftSidebarMonitorPanelSlot } from "./LeftSidebar/LeftSidebarMonitorPanelSlot";
+import { buildSessionsNotificationScopeFingerprint } from "./ClaudeSessions/claudeChatHelpers";
 import { notifySplitTodoCountUpdated } from "../utils/notifySplitTodoCountUpdated";
 import "./GitPanel/index.css";
 import "./LeftSidebar/leftSidebarListPerformance.css";
@@ -257,6 +258,8 @@ export function LeftSidebar({
   const [repoPanelTreeSelection, setRepoPanelTreeSelection] =
     useState<WorkspaceRepositoryTreeSelection | null>(null);
   const lastSyncedGlobalSelectionKeyRef = useRef<string | null>(null);
+  const sessionsLatestRef = useRef(sessions);
+  sessionsLatestRef.current = sessions;
   const [filesExplorerSectionCollapsed, setFilesExplorerSectionCollapsed] = useState(
     readLeftFilesExplorerCollapsedFromStorage,
   );
@@ -586,29 +589,43 @@ export function LeftSidebar({
     [activeWorkspaceFocus, activeProjectId, activeRepositoryId],
   );
 
-  const activeSession = useMemo(
-    () => (activeSessionId ? (sessions.find((s) => s.id === activeSessionId) ?? null) : null),
-    [sessions, activeSessionId],
+  const sessionsScopeFingerprint = useMemo(
+    () => buildSessionsNotificationScopeFingerprint(sessions),
+    [sessions],
   );
 
   const activeSessionRepositoryPath = useMemo(() => {
-    const raw = activeSession?.repositoryPath?.trim();
+    if (!activeSessionId) return "";
+    const raw = sessionsLatestRef.current
+      .find((s) => s.id === activeSessionId)
+      ?.repositoryPath?.trim();
     if (!raw) return "";
     return normalizeSessionRepositoryPath(raw);
-  }, [activeSession?.repositoryPath]);
+  }, [activeSessionId, sessionsScopeFingerprint]);
 
   const sessionDerivedTreeSelection = useMemo((): WorkspaceRepositoryTreeSelection | null => {
-    if (!activeSession?.repositoryPath?.trim()) return null;
+    if (!activeSessionRepositoryPath) return null;
+    const liveSession = activeSessionId
+      ? (sessionsLatestRef.current.find((s) => s.id === activeSessionId) ?? null)
+      : null;
+    if (!liveSession?.repositoryPath?.trim()) return null;
     const repo = resolveRepositoryForSession({
-      session: activeSession,
+      session: liveSession,
       repositories,
       bindings: repositoryMainSessionBindings,
-      sessions,
+      sessions: sessionsLatestRef.current,
       preferredRepositoryId: activeRepositoryId ?? undefined,
     });
     if (repo) return { kind: "repository", repositoryId: repo.id };
     return null;
-  }, [activeSession, repositories, repositoryMainSessionBindings, sessions, activeRepositoryId]);
+  }, [
+    activeSessionId,
+    activeSessionRepositoryPath,
+    repositories,
+    repositoryMainSessionBindings,
+    sessionsScopeFingerprint,
+    activeRepositoryId,
+  ]);
 
   const repoPanelTreeSelectionSource = useMemo((): WorkspaceRepositoryTreeSelection | null => {
     // 侧栏选中具体仓库时，Git/文件树默认对齐该仓库（含多仓工作区成员仓）。
@@ -641,12 +658,30 @@ export function LeftSidebar({
       : `repo:${selection.repositoryId}`;
   }, [repoPanelTreeSelectionSource]);
 
+  const repoPanelTreeSelectionSourceRef = useRef(repoPanelTreeSelectionSource);
+  repoPanelTreeSelectionSourceRef.current = repoPanelTreeSelectionSource;
+
   useEffect(() => {
     if (!globalSelectionSyncKey) return;
     if (globalSelectionSyncKey === lastSyncedGlobalSelectionKeyRef.current) return;
     lastSyncedGlobalSelectionKeyRef.current = globalSelectionSyncKey;
-    setRepoPanelTreeSelection(repoPanelTreeSelectionSource);
-  }, [globalSelectionSyncKey, repoPanelTreeSelectionSource]);
+    const next = repoPanelTreeSelectionSourceRef.current;
+    setRepoPanelTreeSelection((prev) => {
+      if (!next && !prev) return prev;
+      if (!next || !prev) return next;
+      if (prev.kind === "project" && next.kind === "project" && prev.projectId === next.projectId) {
+        return prev;
+      }
+      if (
+        prev.kind === "repository" &&
+        next.kind === "repository" &&
+        prev.repositoryId === next.repositoryId
+      ) {
+        return prev;
+      }
+      return next;
+    });
+  }, [globalSelectionSyncKey]);
 
   const repoPanelTreeView = useMemo(() => {
     if (!repoPanelTreeSelection) return null;
@@ -661,18 +696,22 @@ export function LeftSidebar({
     repoPanelTreeView?.path.trim() ||
     activeSessionRepositoryPath ||
     (activeRepositoryPath?.trim() ? normalizeSessionRepositoryPath(activeRepositoryPath) : "");
+  const activeSessionRepositoryName = useMemo(() => {
+    if (!activeSessionId) return "";
+    return sessionsLatestRef.current.find((s) => s.id === activeSessionId)?.repositoryName?.trim() ?? "";
+  }, [activeSessionId, sessionsScopeFingerprint]);
+
   const repoPanelRepositoryName =
     repoPanelTreeView?.label.trim() ||
     activeRepositoryName?.trim() ||
-    activeSession?.repositoryName?.trim() ||
+    activeSessionRepositoryName ||
     repositoryFolderBasename({ path: repoPanelRepositoryPath, name: activeRepositoryName ?? "" });
   const [accessibleRepoPanelPath, setAccessibleRepoPanelPath] = useState(repoPanelRepositoryPath);
 
   useEffect(() => {
     const candidate = repoPanelRepositoryPath.trim();
-    if (candidate) {
-      setAccessibleRepoPanelPath(candidate);
-    }
+    if (!candidate) return;
+    setAccessibleRepoPanelPath((prev) => (prev === candidate ? prev : candidate));
   }, [repoPanelRepositoryPath]);
 
   useEffect(() => {

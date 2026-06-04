@@ -28,7 +28,6 @@ import { DiffMode } from "./DiffMode";
 import { GitSyncActions } from "./GitSyncActions";
 import { InitMode } from "./InitMode";
 import { hasUnstagedFilesUnderDirectory, GIT_WATCHER_REFRESH_MS, gitStatusSnapshotEqual } from "./gitPanelUtils";
-import { RepositoryFilesExplorer } from "./RepositoryFilesExplorer";
 import { GitMultiRepoPanel } from "./GitMultiRepoPanel";
 import type { GitPanelRepositoryEntry } from "../../utils/workspaceRepositoryTreeSelect";
 import { GitPanelWorkspaceSelector } from "./GitPanelWorkspaceSelector";
@@ -37,8 +36,8 @@ import type { WorkspaceFocus } from "../../utils/workspaceMode";
 import type { GitPanelOpenFileOptions } from "./types";
 import "./index.css";
 
-export { RepositoryFilesExplorer };
-export type { GitPanelOpenFileOptions };
+export { RepositoryFilesExplorer } from "./RepositoryFilesExplorer";
+export type { GitPanelOpenFileOptions } from "./types";
 
 interface Props {
   repositoryPath: string | undefined;

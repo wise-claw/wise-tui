@@ -24,6 +24,28 @@ export function formatExecutionEnvironmentDispatchSavedTime(timestamp: number): 
   return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
+/** 主会话当前轮次工具任务；流式正文按长度分桶，避免每 token 重算任务列表。 */
+export function anchorSessionConversationTasksFingerprint(
+  session: ClaudeSession | null | undefined,
+): string {
+  if (!session) return "";
+  const turnMessages = messagesForCurrentConversationTurn(session.messages);
+  const toolSig: string[] = [];
+  for (const part of mergeToolUseParts(turnMessages)) {
+    if (!isConversationTaskTool(part)) continue;
+    toolSig.push(
+      `${part.id}:${part.name}:${(part.output?.length ?? 0) + (part.error?.length ?? 0)}`,
+    );
+  }
+  return [
+    session.id,
+    session.status,
+    String(currentConversationTurnStartTimestamp(session.messages)),
+    String(turnMessages.length),
+    toolSig.join(","),
+  ].join("|");
+}
+
 /** 派发任务列表关心执行环境 worker 会话；主会话流式正文不在此指纹内。 */
 export function executionEnvironmentWorkerSessionsFingerprint(
   sessions: readonly ClaudeSession[],

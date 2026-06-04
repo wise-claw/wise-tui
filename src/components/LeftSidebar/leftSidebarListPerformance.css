@@ -1,9 +1,13 @@
 /* 左栏列表：快速划过工作区/终端/文件树时减少合成与 transition:all 开销 */
 
 /* 勿对运行面板列表项使用 contain：会与 Ant Typography 的 ResizeObserver 测量互相触发无限更新 */
-.app-left-sidebar .app-repository-item,
-.app-left-sidebar .repo-tree-node {
+.app-left-sidebar .app-repository-item {
   contain: layout style;
+}
+
+/* 文件树滚动时 avoid contain：与大量行叠加大面积重排 */
+.app-left-sidebar .repo-tree-node {
+  contain: none;
 }
 
 .app-left-sidebar .app-repository-item {

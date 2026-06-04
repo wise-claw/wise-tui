@@ -40,6 +40,7 @@ import {
   subscribeExecutionEnvironmentDispatches,
 } from "../stores/executionEnvironmentDispatchStore";
 import {
+  anchorSessionConversationTasksFingerprint,
   buildSessionConversationTasks,
   executionEnvironmentWorkerSessionsFingerprint,
 } from "../utils/sessionConversationTasks";
@@ -53,15 +54,24 @@ export function useSessionConversationTasks(
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
 
-  const session = useMemo(
-    () => (activeSessionId ? sessions.find((item) => item.id === activeSessionId) ?? null : null),
-    [activeSessionId, sessions],
-  );
-
   const workerSessionsFingerprint = useMemo(
     () => executionEnvironmentWorkerSessionsFingerprint(sessions),
     [sessions],
   );
+
+  const anchorSessionFingerprint = useMemo(() => {
+    const session = activeSessionId
+      ? sessionsRef.current.find((item) => item.id === activeSessionId) ?? null
+      : null;
+    return anchorSessionConversationTasksFingerprint(session);
+  }, [activeSessionId, workerSessionsFingerprint]);
+
+  const activeSessionRepositoryPath = useMemo(() => {
+    if (!activeSessionId) return "";
+    return (
+      sessionsRef.current.find((item) => item.id === activeSessionId)?.repositoryPath?.trim() ?? ""
+    );
+  }, [activeSessionId, workerSessionsFingerprint]);
 
   const directBatchInvocations = useSyncExternalStore(
     subscribeOmcDirectBatchInvocations,
@@ -82,13 +92,15 @@ export function useSessionConversationTasks(
   const [bundleSnapshots, setBundleSnapshots] = useState<BackgroundInvocationSnapshot[]>([]);
 
   useEffect(() => {
-    if (!session?.id || !session.repositoryPath?.trim()) {
+    if (!activeSessionId || !activeSessionRepositoryPath) {
       setBundleSnapshots([]);
       return;
     }
+    const sessionId = activeSessionId;
+    const repositoryPath = activeSessionRepositoryPath;
     let cancelled = false;
     const load = async () => {
-      const bundle = await readInvocationSnapshotBundle(session.id, session.repositoryPath);
+      const bundle = await readInvocationSnapshotBundle(sessionId, repositoryPath);
       if (cancelled) return;
       setBundleSnapshots(bundleSnapshotsForConversationTasks(bundle.items));
     };
@@ -97,7 +109,7 @@ export function useSessionConversationTasks(
     const onBundleChanged = (event: Event) => {
       const detail = (event as CustomEvent<BackgroundInvocationBundleChangedDetail>).detail;
       if (!detail) return;
-      if (detail.sessionId !== session.id || detail.repositoryPath !== session.repositoryPath) return;
+      if (detail.sessionId !== sessionId || detail.repositoryPath !== repositoryPath) return;
       void load();
     };
     window.addEventListener(WORKFLOW_UI_EVENT_BACKGROUND_INVOCATION_BUNDLE_CHANGED, onBundleChanged as EventListener);
@@ -108,25 +120,28 @@ export function useSessionConversationTasks(
         onBundleChanged as EventListener,
       );
     };
-  }, [session?.id, session?.repositoryPath]);
+  }, [activeSessionId, activeSessionRepositoryPath]);
 
-  return useMemo(
-    () =>
-      buildSessionConversationTasks({
-        session,
-        directBatchInvocations,
-        repositoryInvocations,
-        bundleSnapshots,
-        executionEnvironmentRecords,
-        allSessions: sessionsRef.current,
-      }),
-    [
+  return useMemo(() => {
+    const session = activeSessionId
+      ? sessionsRef.current.find((item) => item.id === activeSessionId) ?? null
+      : null;
+    return buildSessionConversationTasks({
       session,
       directBatchInvocations,
       repositoryInvocations,
       bundleSnapshots,
       executionEnvironmentRecords,
-      workerSessionsFingerprint,
-    ],
-  );
+      allSessions: sessionsRef.current,
+    });
+  }, [
+    activeSessionId,
+    anchorSessionFingerprint,
+    activeSessionRepositoryPath,
+    directBatchInvocations,
+    repositoryInvocations,
+    bundleSnapshots,
+    executionEnvironmentRecords,
+    workerSessionsFingerprint,
+  ]);
 }

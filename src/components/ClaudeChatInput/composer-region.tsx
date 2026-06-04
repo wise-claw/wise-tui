@@ -502,6 +502,17 @@ function ComposerInner({
   const composerEscapeRootRef = useRef<HTMLDivElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);
   const aiChatRef = useRef<InstanceType<typeof AIChatInput> | null>(null);
+  /** Semi Tiptap 在首帧 commit 时会 emit onContentChange；延迟挂载 AIChatInput 避免「未挂载就 setState」。 */
+  const semiEditorReadyRef = useRef(false);
+  const [semiEditorReady, setSemiEditorReady] = useState(false);
+  useEffect(() => {
+    semiEditorReadyRef.current = true;
+    setSemiEditorReady(true);
+    return () => {
+      semiEditorReadyRef.current = false;
+      setSemiEditorReady(false);
+    };
+  }, []);
   const plainSurfaceRef = useRef<ComposerPlainSurface | null>(null);
   const lastEditorPlainRef = useRef("");
   const ignoreNextContentSyncRef = useRef(false);
@@ -679,14 +690,59 @@ function ComposerInner({
     return () => window.removeEventListener("keydown", onKeyDown, { capture: true });
   }, [session.id]);
 
-  useLayoutEffect(() => {
+  useEffect(() => {
+    if (!semiEditorReady) return;
     if (lastEditorPlainRef.current === displayPlain) return;
     lastEditorPlainRef.current = displayPlain;
     ignoreNextContentSyncRef.current = true;
+    skipContentSyncRemainingRef.current = 3;
     scheduleSafeAiChatSetContent(() => aiChatRef.current, displayPlain, () => {
       repairTiptapTrailingSpaceIfNeeded(aiChatRef.current, displayPlain);
     });
-  }, [displayPlain]);
+  }, [displayPlain, semiEditorReady]);
+
+  const applySemiContentChange = useCallback((contents: Content[]) => {
+    if (!semiEditorReadyRef.current) return;
+    if (skipContentSyncRemainingRef.current > 0) {
+      skipContentSyncRemainingRef.current -= 1;
+      return;
+    }
+    if (ignoreNextContentSyncRef.current) {
+      ignoreNextContentSyncRef.current = false;
+      return;
+    }
+    const ed = aiChatRef.current?.getEditor?.();
+    let plain = contentsToPlain(contents);
+    if (ed) {
+      try {
+        plain = ed.getText?.({ blockSeparator: "\n" }) ?? plain;
+      } catch {
+        /* keep contentsToPlain */
+      }
+    }
+    let c = plain.length;
+    if (ed) {
+      try {
+        c = ed.state.doc.textBetween(0, ed.state.selection.from, "\n").length;
+      } catch {
+        c = plain.length;
+      }
+    }
+    cursorRef.current = c;
+    lastEditorPlainRef.current = plain;
+    set(singleTextPrompt(plain), c);
+    reportAtSlashTriggerFromPlain(
+      plain,
+      c,
+      setTrigger,
+      resolveAtSlashTriggerAnchorRect(aiChatRef.current, shellRef.current, plain, c),
+    );
+    if (plain.endsWith(" ")) {
+      queueMicrotask(() => {
+        repairTiptapTrailingSpaceIfNeeded(aiChatRef.current, plain);
+      });
+    }
+  }, [set]);
 
   useEffect(() => {
     const onSettingsChanged = () => {
@@ -2969,68 +3025,35 @@ function ComposerInner({
                 atMentionDefaultTarget={atMentionDefaultTarget}
                 onAtMentionDefaultTargetChange={(next) => void saveAtMentionDefaultTarget(next)}
               />
-              <AIChatInput
-                ref={aiChatRef}
-                placeholder="@ 终端/工作流/文件，/ 命令，Enter 发送，Shift+Enter 换行，↑/Esc 恢复上条（含图片）"
-                keepSkillAfterSend={false}
-                showUploadButton={false}
-                showUploadFile={false}
-                showReference={false}
-                showTemplateButton={false}
-                renderConfigureArea={renderSemiComposerConfigureArea}
-                renderActionArea={renderSemiComposerActionArea}
-                clearContentOnGenerating={false}
-                generating={false}
-                onStopGenerate={() => _onCancel()}
-                canSend={hasComposerPayload}
-                onMessageSend={(msg) => {
-                  const plain = contentsToPlain((msg.inputContents ?? []) as Content[]);
-                  void handleSendRef.current(plain);
-                }}
-                onContentChange={(contents: Content[]) => {
-                  if (skipContentSyncRemainingRef.current > 0) {
-                    skipContentSyncRemainingRef.current -= 1;
-                    return;
-                  }
-                  if (ignoreNextContentSyncRef.current) {
-                    ignoreNextContentSyncRef.current = false;
-                    return;
-                  }
-                  const ed = aiChatRef.current?.getEditor?.();
-                  // 以 ProseMirror 文本为准，避免 Semi onContentChange 的 JSON 在段落/换行上与 DOM 不一致导致多行被压扁
-                  let plain = contentsToPlain(contents);
-                  if (ed) {
-                    try {
-                      plain = ed.getText?.({ blockSeparator: "\n" }) ?? plain;
-                    } catch {
-                      /* keep contentsToPlain */
-                    }
-                  }
-                  let c = plain.length;
-                  if (ed) {
-                    try {
-                      c = ed.state.doc.textBetween(0, ed.state.selection.from, "\n").length;
-                    } catch {
-                      c = plain.length;
-                    }
-                  }
-                  cursorRef.current = c;
-                  lastEditorPlainRef.current = plain;
-                  set(singleTextPrompt(plain), c);
-                  reportAtSlashTriggerFromPlain(
-                    plain,
-                    c,
-                    setTrigger,
-                    resolveAtSlashTriggerAnchorRect(aiChatRef.current, shellRef.current, plain, c),
-                  );
-                  if (plain.endsWith(" ")) {
-                    queueMicrotask(() => {
-                      repairTiptapTrailingSpaceIfNeeded(aiChatRef.current, plain);
-                    });
-                  }
-                }}
-                style={{ width: "100%" }}
-              />
+              {semiEditorReady ? (
+                <AIChatInput
+                  ref={aiChatRef}
+                  placeholder="@ 终端/工作流/文件，/ 命令，Enter 发送，Shift+Enter 换行，↑/Esc 恢复上条（含图片）"
+                  keepSkillAfterSend={false}
+                  showUploadButton={false}
+                  showUploadFile={false}
+                  showReference={false}
+                  showTemplateButton={false}
+                  renderConfigureArea={renderSemiComposerConfigureArea}
+                  renderActionArea={renderSemiComposerActionArea}
+                  clearContentOnGenerating={false}
+                  generating={false}
+                  onStopGenerate={() => _onCancel()}
+                  canSend={hasComposerPayload}
+                  onMessageSend={(msg) => {
+                    const plain = contentsToPlain((msg.inputContents ?? []) as Content[]);
+                    void handleSendRef.current(plain);
+                  }}
+                  onContentChange={applySemiContentChange}
+                  style={{ width: "100%" }}
+                />
+              ) : (
+                <div
+                  className="app-claude-semi-chat-input-mount-placeholder"
+                  aria-busy="true"
+                  aria-label="输入区初始化"
+                />
+              )}
             </div>
           </SemiConfigProvider>
         </div>

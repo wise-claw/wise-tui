@@ -1,8 +1,6 @@
-import type { ReactNode } from "react";
-import {
-  RepositoryFilesExplorer,
-  type GitPanelOpenFileOptions,
-} from "../GitPanel";
+import { memo, type ReactNode } from "react";
+import { RepositoryFilesExplorer } from "../GitPanel/RepositoryFilesExplorer";
+import type { GitPanelOpenFileOptions } from "../GitPanel/types";
 import type { GitPanelWorkspaceSelectorProps } from "../GitPanel/GitPanelWorkspaceSelector";
 
 interface ActiveRepositoryFilesPanelProps {
@@ -17,7 +15,7 @@ interface ActiveRepositoryFilesPanelProps {
   workspaceSelector: Omit<GitPanelWorkspaceSelectorProps, "activeRepositoryPath">;
 }
 
-export function ActiveRepositoryFilesPanel({
+export const ActiveRepositoryFilesPanel = memo(function ActiveRepositoryFilesPanel({
   activeRepositoryPath,
   activeRepositoryName,
   search,
@@ -56,4 +54,4 @@ export function ActiveRepositoryFilesPanel({
       </div>
     </div>
   );
-}
+});

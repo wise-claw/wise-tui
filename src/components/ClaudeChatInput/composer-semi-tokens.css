@@ -1,4 +1,10 @@
 /* 将 Semi AIChatInput 用到的语义 token 接到 Ant Design 全局 CSS 变量，随主题 / 暗色模式一致 */
+.app-claude-semi-chat-input-mount-placeholder {
+  width: 100%;
+  min-height: calc(3em + 12px);
+  box-sizing: border-box;
+}
+
 .app-claude-semi-chat-input-wrap {
   position: relative;
   --semi-color-border: var(--ant-color-border-secondary);

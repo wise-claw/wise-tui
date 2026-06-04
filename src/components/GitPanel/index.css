@@ -1690,6 +1690,34 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-file
   overflow-x: hidden;
 }
 
+.repo-tree-virtual-list {
+  width: 100%;
+}
+
+.repo-tree-virtual-list__spacer {
+  position: relative;
+  width: 100%;
+}
+
+.repo-tree-virtual-list__row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  box-sizing: border-box;
+  overflow: hidden;
+}
+
+.repo-tree-virtual-list__hint {
+  min-height: 22px;
+  padding-top: 2px;
+  padding-bottom: 2px;
+  line-height: 18px;
+}
+
+.git-files-explorer-scroll-region--scrolling .repo-tree-node {
+  transition: none !important;
+}
+
 .repo-tree-node {
   display: flex;
   align-items: center;
@@ -1700,6 +1728,8 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-file
   font-size: 12px;
   color: var(--ant-color-text);
   transition: background 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
+  content-visibility: auto;
+  contain-intrinsic-size: 22px 200px;
   box-shadow: inset 0 0 0 0 transparent;
   touch-action: manipulation;
 }
