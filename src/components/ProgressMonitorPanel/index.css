@@ -69,12 +69,51 @@
   padding: 0;
 }
 
-.app-monitor-panel__head-concurrency {
-  display: flex;
+.app-monitor-panel__head-end {
+  display: inline-flex;
   align-items: center;
   gap: 6px;
   flex-shrink: 0;
-  margin-left: auto;
+}
+
+.app-monitor-panel__head-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.app-monitor-panel__head-config-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 3px;
+  height: 22px;
+  margin: 0;
+  padding: 0 6px;
+  border: 1px solid var(--app-workspace-glass-border, var(--ant-color-border-secondary));
+  border-radius: 5px;
+  background: var(--ant-color-fill-quaternary);
+  color: var(--ant-color-text-secondary);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  transition: color 0.15s ease, border-color 0.15s ease, background 0.15s ease;
+}
+
+.app-monitor-panel__head-config-btn:hover {
+  color: var(--ant-color-primary);
+  border-color: var(--ant-color-primary-border);
+  background: var(--ant-color-primary-bg);
+}
+
+.app-monitor-panel__head-config-btn .anticon {
+  font-size: 11px;
+}
+
+.app-monitor-panel__head-config-label {
+  font-weight: 500;
+  letter-spacing: 0.1px;
 }
 
 .app-monitor-panel__section-collapse-btn {
@@ -101,58 +140,6 @@
 .app-monitor-panel__section-collapse-btn svg {
   width: 14px;
   height: 14px;
-}
-
-.app-monitor-panel__concurrency {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-  padding: 1px 4px;
-  margin: 0;
-  border-radius: 4px;
-  border: 1px solid var(--app-workspace-glass-border, var(--ant-color-border-secondary));
-  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 60%, transparent);
-  cursor: default;
-  font-size: 11px;
-  line-height: 1.2;
-  color: var(--ant-color-text-secondary);
-  transition: all 0.2s ease;
-}
-
-.app-monitor-panel__concurrency:hover {
-  border-color: var(--ant-color-primary-border);
-  background: var(--ant-color-fill-tertiary);
-}
-
-.app-monitor-panel__concurrency-label {
-  font-weight: 600;
-  color: var(--ant-color-text-tertiary);
-  letter-spacing: 0.2px;
-}
-
-.app-monitor-panel__concurrency-value {
-  font-variant-numeric: tabular-nums;
-  font-weight: 600;
-  color: var(--ant-color-text);
-}
-
-.app-monitor-panel__concurrency-placeholder {
-  font-variant-numeric: tabular-nums;
-  min-width: 1.25em;
-  text-align: center;
-}
-
-.app-monitor-panel__concurrency-input {
-  width: 40px !important;
-}
-
-.app-monitor-panel__concurrency-input .ant-input-number-input {
-  text-align: center;
-  padding: 0;
-  font-size: 11px;
-  height: 16px;
-  line-height: 16px;
 }
 
 .app-monitor-panel__section {

@@ -24,7 +24,6 @@ import {
   repositoryTypeChineseLabel,
 } from "./utils/repositoryType";
 import { runWhenIdle } from "./utils/deferIdle";
-import { readVisiblePollIntervalMs } from "./utils/adaptivePoll";
 import { isSessionBoundAsRepositoryMain } from "./utils/repositoryMainSessionBinding";
 import {
   resolveEngineForSession,
@@ -136,17 +135,11 @@ import { deleteAppSetting, getAppSetting, setAppSetting } from "./services/appSe
 import { loadWiseDefaultConfig } from "./services/wiseDefaultConfigStore";
 import { migratePromptContextSessionKey } from "./components/ClaudeChatInput/prompt-context";
 import {
-  clampConcurrencyLimit,
-  claudeConcurrencyScopeKey,
-  getConcurrencyLimitForScope,
   loadClaudeConcurrencyLimits,
-  saveClaudeConcurrencyLimits,
   type ClaudeConcurrencyLimitsMap,
 } from "./services/claudeConcurrencyLimits";
-import { getClaudeSpawnSlotCount } from "./services/claudeSpawnSlots";
 import { resolveClaudeSpawnExtrasForSession } from "./services/claudeSpawnExtras";
 import {
-  countRunningClaudeSessionsInProjectRepository,
   evaluateBeforeSpawnClaudeCode,
   resolveClaudeConcurrencyInvokeContext,
 } from "./utils/claudeConcurrencyGate";
@@ -679,8 +672,6 @@ export default function App() {
   }, []);
 
   const [claudeConcurrencyLimitsMap, setClaudeConcurrencyLimitsMap] = useState<ClaudeConcurrencyLimitsMap>({});
-  /** Rust `spawn_slots_by_scope` 占用数（含无 UI 的批量 OMC）；`null` 表示尚未拉取或非桌面环境 */
-  const [rustSpawnSlotOccupied, setRustSpawnSlotOccupied] = useState<number | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -1256,95 +1247,6 @@ export default function App() {
     },
     [activeProjectId, activeSessionId, handleSendMessageWithTask, projects, repositories],
   );
-
-  const handleClaudeConcurrencyLimitChange = useCallback(
-    async (projectId: string, repositoryId: number, nextRaw: number) => {
-      const next = clampConcurrencyLimit(nextRaw);
-      const key = claudeConcurrencyScopeKey(projectId, repositoryId);
-      const nextMap: ClaudeConcurrencyLimitsMap = { ...claudeConcurrencyLimitsMap, [key]: next };
-      setClaudeConcurrencyLimitsMap(nextMap);
-      try {
-        await saveClaudeConcurrencyLimits(nextMap);
-      } catch (error) {
-        console.error("Failed to save Claude concurrency limits:", error);
-        message.error("保存并发上限失败");
-      }
-    },
-    [claudeConcurrencyLimitsMap],
-  );
-
-  useEffect(() => {
-    if (!activeProjectId || activeRepositoryId == null) {
-      setRustSpawnSlotOccupied(null);
-      return;
-    }
-    const proj = projects.find((p) => p.id === activeProjectId);
-    const repo = repositories.find((r) => r.id === activeRepositoryId);
-    if (!proj || !repo) {
-      setRustSpawnSlotOccupied(null);
-      return;
-    }
-    const sk = claudeConcurrencyScopeKey(proj.id, repo.id);
-    let cancelled = false;
-    setRustSpawnSlotOccupied(null);
-
-    const tick = async () => {
-      const n = await getClaudeSpawnSlotCount(sk);
-      if (cancelled) return;
-      if (n !== null) {
-        setRustSpawnSlotOccupied(n);
-      }
-    };
-
-    void tick();
-    const timer = window.setInterval(() => {
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-      void tick();
-    }, readVisiblePollIntervalMs(3000, 15000));
-    return () => {
-      cancelled = true;
-      window.clearInterval(timer);
-    };
-  }, [activeProjectId, activeRepositoryId, projects, repositories]);
-
-  const monitorClaudeConcurrency = useMemo(() => {
-    if (!activeProjectId || activeRepositoryId == null) {
-      return undefined;
-    }
-    const proj = projects.find((p) => p.id === activeProjectId);
-    const repo = repositories.find((r) => r.id === activeRepositoryId);
-    if (!proj || !repo) {
-      return undefined;
-    }
-    const limit = getConcurrencyLimitForScope(claudeConcurrencyLimitsMap, proj.id, repo.id);
-    const sessionActiveCount = countRunningClaudeSessionsInProjectRepository(
-      sessions,
-      proj,
-      repo,
-      projects,
-      repositories,
-      claudeConcurrencyLimitsMap,
-      activeProjectId,
-    );
-    const activeCount =
-      typeof rustSpawnSlotOccupied === "number"
-        ? Math.max(sessionActiveCount, rustSpawnSlotOccupied)
-        : sessionActiveCount;
-    return {
-      activeCount,
-      limit,
-      onLimitChange: (value: number) => void handleClaudeConcurrencyLimitChange(proj.id, repo.id, value),
-    };
-  }, [
-    activeProjectId,
-    activeRepositoryId,
-    projects,
-    repositories,
-    claudeConcurrencyLimitsMap,
-    sessions,
-    handleClaudeConcurrencyLimitChange,
-    rustSpawnSlotOccupied,
-  ]);
 
   const { omcInstalled } = useOmcPluginInstalled(true);
   const monitorPanelDefault = useMonitorPanelDefault();
@@ -3094,7 +2996,6 @@ export default function App() {
               message.error("结束团队任务失败");
             });
         },
-        monitorClaudeConcurrency,
         onOpenOmcBatchInvocationDetail: handleOpenOmcBatchInvocationDetail,
         onCancelOmcDirectBatchInvocation: handleCancelOmcDirectBatchInvocation,
         onCompactSessionHistory: compactSessionHistory,
@@ -3441,9 +3342,6 @@ export default function App() {
         onOpenTaskDetail: (taskId) => {
           setMonitorDrawerTarget({ type: "task", taskId });
         },
-        taskListConcurrentCapacity: monitorClaudeConcurrency
-          ? Math.max(0, monitorClaudeConcurrency.limit - monitorClaudeConcurrency.activeCount)
-          : undefined,
         resolveTaskListOmcInvokeConcurrency,
         onDecideWorkflowTask: handleDecideWorkflowTask,
         onStopSessionConversationTask: handleStopSessionConversationTask,
@@ -3506,7 +3404,6 @@ export default function App() {
             });
         },
         hideEmployeeUi: shouldHideEmployeeUi(activeProject),
-        monitorClaudeConcurrency,
         onCancelSessionFromMonitor: cancelSession,
         onOpenTaskDetailFromMonitor: (taskId) => {
           setMonitorDrawerTarget({ type: "task", taskId });

@@ -180,7 +180,6 @@ export function LeftSidebar({
   onStopEmployeeMonitor,
   onStopTeamMonitor,
   hideEmployeeUi = false,
-  monitorClaudeConcurrency = null,
   onOpenOmcBatchInvocationDetail,
   onCancelOmcDirectBatchInvocation,
   onCompactSessionHistory,
@@ -1111,7 +1110,6 @@ export function LeftSidebar({
               onStopEmployee={(employeeId) => onStopEmployeeMonitor?.(employeeId)}
               onStopTeam={(workflowId) => onStopTeamMonitor?.(workflowId)}
               hideEmployeeUi={hideEmployeeUi}
-              claudeConcurrency={monitorClaudeConcurrency}
               onCancelSession={onCancelSessionFromMonitor}
               onOpenTaskDetail={onOpenTaskDetailFromMonitor}
               onOpenOmcBatchInvocationDetail={onOpenOmcBatchInvocationDetail}

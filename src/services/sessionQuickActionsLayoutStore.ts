@@ -5,7 +5,6 @@
 import {
   DEFAULT_SESSION_QUICK_ACTIONS_LAYOUT,
   mergeSessionQuickActionsLayout,
-  migratePrdSplitOffPrimaryBar,
   parseSessionQuickActionsLayout,
   SESSION_QUICK_ACTIONS_LAYOUT_STORAGE_KEY,
   SESSION_QUICK_ACTIONS_LAYOUT_STORAGE_KEY_V1,
@@ -57,28 +56,17 @@ function normalizeForPersist(layout: SessionQuickActionsLayoutV1): SessionQuickA
   return mergeSessionQuickActionsLayout(layout);
 }
 
-async function finalizeLoadedLayout(layout: SessionQuickActionsLayoutV1): Promise<SessionQuickActionsLayoutV1> {
-  const normalized = mergeSessionQuickActionsLayout(layout);
-  const migrated = migratePrdSplitOffPrimaryBar(normalized);
-  const before = normalized.items.find((item) => item.id === "builtin:prd-split");
-  const after = migrated.items.find((item) => item.id === "builtin:prd-split");
-  if (before?.visible !== after?.visible || before?.zone !== after?.zone) {
-    await saveSessionQuickActionsLayout(migrated);
-  }
-  return migrated;
-}
-
 /** 从 v1 / localStorage 迁入 SQLite 时始终落库一次 */
 async function importLegacyLayout(raw: string): Promise<SessionQuickActionsLayoutV1> {
-  const migrated = migratePrdSplitOffPrimaryBar(parseSessionQuickActionsLayout(raw));
-  await saveSessionQuickActionsLayout(migrated);
-  return migrated;
+  const normalized = mergeSessionQuickActionsLayout(parseSessionQuickActionsLayout(raw));
+  await saveSessionQuickActionsLayout(normalized);
+  return normalized;
 }
 
 export async function loadSessionQuickActionsLayout(): Promise<SessionQuickActionsLayoutV1> {
   const rawV2 = await getAppSetting(SESSION_QUICK_ACTIONS_LAYOUT_STORAGE_KEY);
   if (rawV2?.trim()) {
-    return finalizeLoadedLayout(parseSessionQuickActionsLayout(rawV2));
+    return mergeSessionQuickActionsLayout(parseSessionQuickActionsLayout(rawV2));
   }
 
   const rawV1 = await getAppSetting(SESSION_QUICK_ACTIONS_LAYOUT_STORAGE_KEY_V1);

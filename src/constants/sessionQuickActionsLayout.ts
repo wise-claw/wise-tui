@@ -76,7 +76,7 @@ export const DEFAULT_SESSION_QUICK_ACTIONS_LAYOUT: SessionQuickActionsLayoutV1 =
   version: 1,
   items: [
     { id: "new-session", visible: true, zone: "primary" },
-    { id: "builtin:prd-split", visible: false, zone: "overflow" },
+    { id: "builtin:prd-split", visible: true, zone: "primary" },
     { id: "push", visible: true, zone: "primary" },
     { id: "compact-context", visible: false, zone: "overflow" },
     { id: "builtin:word-doc", visible: true, zone: "overflow" },
@@ -117,28 +117,13 @@ function mergeQuickActionLayoutItem(
   };
 }
 
-/** 将「需求」提升到主栏；仅用于用户显式恢复/定制，非默认布局 */
+/** 将「需求」提升到主栏外显（如「恢复默认」或配置面板一键外显） */
 export function ensurePrdSplitQuickActionPrimary(
   layout: SessionQuickActionsLayoutV1,
 ): SessionQuickActionsLayoutV1 {
   return updateLayoutItem(mergeSessionQuickActionsLayout(layout), "builtin:prd-split", {
     visible: true,
     zone: "primary",
-  });
-}
-
-/** 旧版默认把「需求」外显在主栏；迁移为默认隐藏（仍可在快捷条配置中打开）。 */
-export function migratePrdSplitOffPrimaryBar(
-  layout: SessionQuickActionsLayoutV1,
-): SessionQuickActionsLayoutV1 {
-  const normalized = mergeSessionQuickActionsLayout(layout);
-  const prd = normalized.items.find((item) => item.id === "builtin:prd-split");
-  if (!prd?.visible || prd.zone !== "primary") {
-    return normalized;
-  }
-  return updateLayoutItem(normalized, "builtin:prd-split", {
-    visible: false,
-    zone: "overflow",
   });
 }
 

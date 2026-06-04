@@ -230,8 +230,6 @@ interface Props {
   panelBelowMessages?: React.ReactNode;
   hideMessages?: boolean;
   hideSessionTools?: boolean;
-  /** 侧栏展示的当前仓库 Claude 槽位剩余（估算），不限制多选条数 */
-  taskListConcurrentCapacity?: number;
   /** 按标签会话解析并发槽位，供批量直接 OMC 与主发一致占槽 */
   resolveTaskListOmcInvokeConcurrency?: (session: ClaudeSession) => {
     concurrencyScopeKey: string;
@@ -353,7 +351,6 @@ export function ClaudeSessions({
   panelBelowMessages,
   hideMessages = false,
   hideSessionTools = false,
-  taskListConcurrentCapacity,
   resolveTaskListOmcInvokeConcurrency,
   repositoryMainBindings = {},
   onAppendSystemMessage,
@@ -768,7 +765,6 @@ export function ClaudeSessions({
     onOpenTaskDetail,
     hideMessages,
     hideSessionTools,
-    taskListConcurrentCapacity,
     resolveTaskListOmcInvokeConcurrency,
     repositoryMainBindings,
     onAppendSystemMessage,
@@ -925,7 +921,6 @@ export function ClaudeSessions({
             panelBelowMessages={panelBelowMessages}
             hideMessages={hideMessages}
             hideSessionTools={hideSessionTools}
-            taskListConcurrentCapacity={taskListConcurrentCapacity}
             resolveTaskListOmcInvokeConcurrency={resolveTaskListOmcInvokeConcurrency}
             repositoryMainBindings={repositoryMainBindings}
             onAppendSystemMessage={onAppendSystemMessage}

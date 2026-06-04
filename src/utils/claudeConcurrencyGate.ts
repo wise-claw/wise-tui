@@ -189,7 +189,7 @@ export function evaluateBeforeSpawnClaudeCode(params: {
   if (others >= limit) {
     return {
       ok: false,
-      message: `「${project.name} / ${repositoryFolderBasename(repository)}」Claude Code 并发已达上限（${limit}），请先结束其它会话或双击侧栏「并发」调大上限。`,
+      message: `「${project.name} / ${repositoryFolderBasename(repository)}」Claude Code 并发已达上限（${limit}），请先结束其它运行中的会话后再试。`,
     };
   }
   return { ok: true };

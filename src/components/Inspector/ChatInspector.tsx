@@ -42,11 +42,6 @@ export interface ChatInspectorProps {
   onStopTeamMonitor?: (workflowId: string) => void;
   /** 隐藏员工监控区块；`wise_trellis` 时头部仍显示「成员」配置按钮。 */
   hideEmployeeUi?: boolean;
-  monitorClaudeConcurrency?: {
-    activeCount: number;
-    limit: number;
-    onLimitChange: (value: number) => void | Promise<void>;
-  };
   onCancelSessionFromMonitor?: (sessionId: string) => void;
   onOpenTaskDetailFromMonitor?: (taskId: string) => void;
   onOpenOmcBatchInvocationDetail?: (input: {
@@ -100,7 +95,6 @@ export function ChatInspector({
   onStopEmployeeMonitor,
   onStopTeamMonitor,
   hideEmployeeUi = false,
-  monitorClaudeConcurrency,
   onCancelSessionFromMonitor,
   onOpenTaskDetailFromMonitor,
   onOpenOmcBatchInvocationDetail,
@@ -157,7 +151,6 @@ export function ChatInspector({
                 onStopEmployee={(employeeId) => onStopEmployeeMonitor?.(employeeId)}
                 onStopTeam={(workflowId) => onStopTeamMonitor?.(workflowId)}
                 hideEmployeeUi={hideEmployeeUi}
-                claudeConcurrency={monitorClaudeConcurrency ?? null}
                 onCancelSession={onCancelSessionFromMonitor}
                 onOpenTaskDetail={onOpenTaskDetailFromMonitor}
                 onOpenOmcBatchInvocationDetail={onOpenOmcBatchInvocationDetail}

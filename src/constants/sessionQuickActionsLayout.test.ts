@@ -2,7 +2,6 @@ import { describe, expect, test } from "bun:test";
 import {
   DEFAULT_SESSION_QUICK_ACTIONS_LAYOUT,
   ensurePrdSplitQuickActionPrimary,
-  migratePrdSplitOffPrimaryBar,
   mergeSessionQuickActionsLayout,
   moveLayoutItem,
   parseSessionQuickActionsLayout,
@@ -72,25 +71,19 @@ describe("sessionQuickActionsLayout", () => {
     expect(primary).toContain("builtin:prd-split");
   });
 
-  test("default layout hides 需求 on primary bar", () => {
+  test("default layout shows 需求 on primary bar", () => {
     const { primary, overflow } = partitionSessionQuickActions(DEFAULT_SESSION_QUICK_ACTIONS_LAYOUT, {
       canNewSession: true,
       canWorkTree: false,
       canCompactContext: true,
     });
-    expect(primary).not.toContain("builtin:prd-split");
+    expect(primary).toContain("builtin:prd-split");
+    expect(primary.indexOf("builtin:prd-split")).toBeGreaterThan(primary.indexOf("new-session"));
+    expect(primary.indexOf("push")).toBeGreaterThan(primary.indexOf("builtin:prd-split"));
     expect(overflow).not.toContain("builtin:prd-split");
     expect(primary).not.toContain("compact-context");
     expect(primary).toContain("new-session");
     expect(primary).toContain("push");
-  });
-
-  test("migratePrdSplitOffPrimaryBar hides legacy primary 需求", () => {
-    const legacy = ensurePrdSplitQuickActionPrimary(DEFAULT_SESSION_QUICK_ACTIONS_LAYOUT);
-    const migrated = migratePrdSplitOffPrimaryBar(legacy);
-    const prd = migrated.items.find((item) => item.id === "builtin:prd-split");
-    expect(prd?.visible).toBe(false);
-    expect(prd?.zone).toBe("overflow");
   });
 
   test("merge migrates legacy requirement-split to builtin:prd-split", () => {
@@ -104,5 +97,7 @@ describe("sessionQuickActionsLayout", () => {
     expect(prd?.visible).toBe(false);
     expect(prd?.zone).toBe("overflow");
     expect(merged.items.some((item) => (item.id as string) === "requirement-split")).toBe(false);
+    const promoted = ensurePrdSplitQuickActionPrimary(merged);
+    expect(promoted.items.find((item) => item.id === "builtin:prd-split")?.zone).toBe("primary");
   });
 });

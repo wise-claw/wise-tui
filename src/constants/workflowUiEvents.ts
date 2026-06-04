@@ -69,6 +69,20 @@ export interface CcWfStudioEnterExecutionWatchDetail {
   repositoryPath: string;
 }
 export const WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL = "wise:open-task-split-panel";
+
+/** 打开需求拆分助手（需求来源）；宿主按当前工作区/仓库解析上下文。 */
+export function requestOpenRequirementAssistant(detail: OpenAssistantDetail = {}): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent<OpenAssistantDetail>(WORKFLOW_UI_EVENT_OPEN_ASSISTANT, { detail }),
+  );
+}
+
+/** 与侧栏/快捷条一致：打开当前上下文下的需求拆分助手。 */
+export function requestOpenTaskSplitPanel(): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new CustomEvent(WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL));
+}
 /**
  * D13 / E4：助手宿主统一入口。
  * 替代旧的 `wise:open-prd-split-wizard` / `wise:open-mission-control`。

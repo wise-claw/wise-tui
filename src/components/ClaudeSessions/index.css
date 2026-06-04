@@ -2607,7 +2607,8 @@
   overflow: hidden;
 }
 
-.app-claude-task-list-drawer-inner > .app-claude-task-list-empty {
+.app-claude-task-list-drawer-inner > .app-claude-task-list-empty,
+.app-claude-task-list-drawer-inner > .app-task-list-empty-state {
   flex: 1 1 auto;
   min-height: 0;
   overflow: auto;

@@ -124,7 +124,6 @@ export interface UseClaudeChatSessionFeaturePanelInput {
   repositoryScopePath: string;
   sessionRepository: Repository | null;
   repositoryMainBindings: Record<string, string>;
-  taskListConcurrentCapacity?: number;
   omcBatchAnchorSessionId: string;
   omcBatchUserAbortRef: MutableRefObject<boolean>;
   omcBatchInFlightRef: MutableRefObject<boolean>;
@@ -189,7 +188,6 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
     repositoryScopePath,
     sessionRepository,
     repositoryMainBindings,
-    taskListConcurrentCapacity,
     omcBatchAnchorSessionId,
     omcBatchUserAbortRef,
     omcBatchInFlightRef,
@@ -787,10 +785,7 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
       [mentionEmployees],
     );
     const taskListTeamOptions = publishedTeamMentions;
-    /** 与侧栏「剩余槽位」解耦：可一次勾选多条，由后台按仓库并发上限排队执行 */
     const taskListMultiSelectCap = TASK_LIST_MAX_SELECTED;
-    const monitorClaudeSlotsRemaining =
-      typeof taskListConcurrentCapacity === "number" ? Math.max(0, Math.floor(taskListConcurrentCapacity)) : null;
     const taskListDrawerDataActive = taskListDrawerOpen;
     const filteredTaskList = useMemo(() => {
       if (!taskListDrawerDataActive) {
@@ -1653,7 +1648,6 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
       taskListSelectedIds,
       setTaskListSelectedIds,
       taskListSelectedSet,
-      monitorClaudeSlotsRemaining,
       omcBatchPopoverOpen,
       setOmcBatchPopoverOpen,
       omcBatchTemplateId,
@@ -1704,7 +1698,6 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
     filteredTaskList,
     taskListSelectedIds,
     taskListSelectedSet,
-    monitorClaudeSlotsRemaining,
     omcBatchPopoverOpen,
     omcBatchTemplateId,
     handleOmcBatchConfirmFromPopover,

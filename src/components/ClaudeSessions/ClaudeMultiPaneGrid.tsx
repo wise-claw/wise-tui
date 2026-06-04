@@ -166,7 +166,6 @@ export interface MultiPaneSharedChatProps {
   onOpenTaskDetail?: (taskId: string) => void;
   hideMessages: boolean;
   hideSessionTools: boolean;
-  taskListConcurrentCapacity?: number;
   resolveTaskListOmcInvokeConcurrency?: (session: ClaudeSession) => {
     concurrencyScopeKey: string;
     concurrencyLimit: number;
@@ -295,7 +294,6 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
             hideMessages={shared.hideMessages}
             hideSessionTools={shared.hideSessionTools}
             enableSessionNotificationFeed={false}
-            taskListConcurrentCapacity={shared.taskListConcurrentCapacity}
         resolveTaskListOmcInvokeConcurrency={shared.resolveTaskListOmcInvokeConcurrency}
         repositoryMainBindings={shared.repositoryMainBindings}
         onAppendSystemMessage={shared.onAppendSystemMessage}
@@ -545,7 +543,6 @@ const MultiPaneExtraPaneCell = memo(
             hideMessages={hidePaneMessages}
             hideSessionTools={shared.hideSessionTools}
             enableSessionNotificationFeed={false}
-            taskListConcurrentCapacity={shared.taskListConcurrentCapacity}
             resolveTaskListOmcInvokeConcurrency={shared.resolveTaskListOmcInvokeConcurrency}
             repositoryMainBindings={shared.repositoryMainBindings}
             onAppendSystemMessage={shared.onAppendSystemMessage}

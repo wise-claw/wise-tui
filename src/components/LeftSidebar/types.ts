@@ -161,11 +161,6 @@ export interface LeftSidebarProps {
   onStopEmployeeMonitor?: (employeeId: string) => void;
   onStopTeamMonitor?: (workflowId: string) => void;
   hideEmployeeUi?: boolean;
-  monitorClaudeConcurrency?: {
-    activeCount: number;
-    limit: number;
-    onLimitChange: (value: number) => void | Promise<void>;
-  } | null;
   onOpenOmcBatchInvocationDetail?: (input: {
     sessionId: string;
     repositoryPath: string;

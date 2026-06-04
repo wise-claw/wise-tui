@@ -2189,11 +2189,21 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 
 .app-left-sidebar-project-and-files > .app-repository-header {
   flex-shrink: 0;
-  min-height: 22px;
-  padding: 0 6px;
+  min-height: 28px;
+  margin: 0;
+  padding: 4px 8px;
+  background: var(--ant-color-bg-container);
+  border-bottom: 1px solid var(--app-workspace-glass-border, var(--ant-color-border-secondary));
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .app-left-sidebar-project-and-files > .app-repository-header .app-repository-header-title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ant-color-text);
+  letter-spacing: 0.2px;
   line-height: 1.2;
 }
 

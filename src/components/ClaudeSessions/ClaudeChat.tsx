@@ -238,10 +238,6 @@ interface Props {
    */
   enableSessionNotificationFeed?: boolean;
   /**
-   * 侧栏展示的「当前仓库 Claude 槽位剩余」估算（并发上限 − 运行中会话数），仅作提示，不再限制可执行任务多选条数。
-   */
-  taskListConcurrentCapacity?: number;
-  /**
    * 按当前 `session` 解析项目/仓库并发上下文（与主会话 `executeClaudeCode` 一致）；
    * 双栏时左右标签各自解析，避免误用主标签的 scope key。
    */
@@ -373,7 +369,6 @@ export function ClaudeChat({
   hideMessages = false,
   hideSessionTools = false,
   enableSessionNotificationFeed = false,
-  taskListConcurrentCapacity,
   resolveTaskListOmcInvokeConcurrency,
   repositoryMainBindings = {},
   onAppendSystemMessage,
@@ -1261,7 +1256,6 @@ export function ClaudeChat({
     repositoryScopePath,
     sessionRepository,
     repositoryMainBindings,
-    taskListConcurrentCapacity,
     omcBatchAnchorSessionId,
     omcBatchUserAbortRef,
     omcBatchInFlightRef,

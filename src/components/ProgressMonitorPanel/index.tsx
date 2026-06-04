@@ -6,7 +6,7 @@ import {
   HistoryOutlined,
   StopOutlined,
 } from "@ant-design/icons";
-import { Collapse, Descriptions, Drawer, Empty, InputNumber, Popover, Select, Tag, Tooltip, Typography } from "antd";
+import { Collapse, Descriptions, Drawer, Empty, Popover, Select, Tag, Tooltip, Typography } from "antd";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type {
   ClaudeMessage,
@@ -40,11 +40,6 @@ import {
   pickSubagentTranscriptSession,
   useSubagentDiskTranscript,
 } from "../../hooks/useSubagentDiskTranscript";
-import {
-  clampConcurrencyLimit,
-  MAX_CLAUDE_CONCURRENCY_LIMIT,
-  MIN_CLAUDE_CONCURRENCY_LIMIT,
-} from "../../services/claudeConcurrencyLimits";
 import { sanitizeOmcDirectBatchPreviewLineForList } from "../../utils/claudeInvocationText";
 import { OmcDirectBatchInvocationDetailDrawer } from "./OmcDirectBatchInvocationDetailDrawer";
 import { HistorySessionRestoreButton } from "./HistorySessionRestoreButton";
@@ -91,10 +86,46 @@ function RepositoryMiniIcon() {
   );
 }
 
-interface MonitorClaudeConcurrencyProps {
-  activeCount: number;
-  limit: number;
-  onLimitChange: (value: number) => void | Promise<void>;
+function MonitorPanelHeadConfigActions({
+  onOpenEmployeeConfig,
+  onOpenWorkflowConfig,
+}: {
+  onOpenEmployeeConfig?: () => void;
+  onOpenWorkflowConfig?: () => void;
+}) {
+  if (!onOpenEmployeeConfig && !onOpenWorkflowConfig) {
+    return null;
+  }
+  return (
+    <div className="app-monitor-panel__head-actions">
+      {onOpenEmployeeConfig ? (
+        <Tooltip title="配置终端" mouseEnterDelay={0.35}>
+          <button
+            type="button"
+            className="app-monitor-panel__head-config-btn"
+            aria-label="配置终端"
+            onClick={() => onOpenEmployeeConfig()}
+          >
+            <CodeOutlined aria-hidden />
+            <span className="app-monitor-panel__head-config-label">终端</span>
+          </button>
+        </Tooltip>
+      ) : null}
+      {onOpenWorkflowConfig ? (
+        <Tooltip title="配置工作流" mouseEnterDelay={0.35}>
+          <button
+            type="button"
+            className="app-monitor-panel__head-config-btn"
+            aria-label="配置工作流"
+            onClick={() => onOpenWorkflowConfig()}
+          >
+            <DeploymentUnitOutlined aria-hidden />
+            <span className="app-monitor-panel__head-config-label">工作流</span>
+          </button>
+        </Tooltip>
+      ) : null}
+    </div>
+  );
 }
 
 interface Props {
@@ -121,8 +152,6 @@ interface Props {
   onStopTeam?: (workflowId: string) => void;
   /** 当 `Project.sddMode === "wise_trellis"` 时由 AppImpl 传入 true，隐藏员工区块；头部仍显示「成员」配置按钮。 */
   hideEmployeeUi?: boolean;
-  /** 按当前项目 + 仓库的 Claude Code 并发展示与上限编辑 */
-  claudeConcurrency?: MonitorClaudeConcurrencyProps | null;
   /** 历史会话详情抽屉内：停止运行中 / 连接中的 Claude 会话 */
   onCancelSession?: (sessionId: string) => void;
   /** 历史消息内系统卡片「查看任务详情」 */
@@ -295,58 +324,6 @@ function HistorySessionPopoverListRow({
         {model.repoShort}
       </span>
     </>
-  );
-}
-
-function ConcurrencyControl({ activeCount, limit, onLimitChange }: MonitorClaudeConcurrencyProps) {
-  const [editing, setEditing] = useState(false);
-  const [draft, setDraft] = useState(limit);
-
-  useEffect(() => {
-    if (!editing) {
-      setDraft(limit);
-    }
-  }, [limit, editing]);
-
-  async function commit() {
-    const next = clampConcurrencyLimit(typeof draft === "number" ? draft : limit);
-    setEditing(false);
-    if (next !== limit) {
-      await onLimitChange(next);
-    }
-  }
-
-  return (
-    <Tooltip title="当前运行数 / 上限；双击修改上限（绑定当前项目与仓库）">
-      <div
-        className="app-monitor-panel__concurrency"
-        role="group"
-        aria-label="Claude Code 并发控制"
-        onDoubleClick={() => {
-          if (!editing) {
-            setEditing(true);
-          }
-        }}
-      >
-        <span className="app-monitor-panel__concurrency-label">并发</span>
-        {editing ? (
-          <InputNumber
-            size="small"
-            min={MIN_CLAUDE_CONCURRENCY_LIMIT}
-            max={MAX_CLAUDE_CONCURRENCY_LIMIT}
-            controls={false}
-            value={draft}
-            onChange={(v) => setDraft(typeof v === "number" ? v : limit)}
-            autoFocus
-            className="app-monitor-panel__concurrency-input"
-            onBlur={() => void commit()}
-            onPressEnter={() => void commit()}
-          />
-        ) : (
-          <span className="app-monitor-panel__concurrency-value">{activeCount}/{limit}</span>
-        )}
-      </div>
-    </Tooltip>
   );
 }
 
@@ -882,7 +859,6 @@ export function ProgressMonitorPanel({
   onStopEmployee,
   onStopTeam,
   hideEmployeeUi: _hideEmployeeUi = false,
-  claudeConcurrency = null,
   onCancelSession,
   onOpenTaskDetail: _onOpenTaskDetail,
   onOpenOmcBatchInvocationDetail,
@@ -1176,14 +1152,11 @@ export function ProgressMonitorPanel({
     teamItems.length > 0;
 
   const collapsedSummaryMeta = useMemo(() => {
-    if (claudeConcurrency) {
-      return `${claudeConcurrency.activeCount}/${claudeConcurrency.limit}`;
-    }
     const runningTerminals = employeeItems.filter((item) => item.status === "in_progress").length;
     const runningTeams = teamItems.filter((item) => item.status === "in_progress").length;
     const activeCount = runningTerminals + runningTeams + agentAssignments.length;
     return activeCount > 0 ? `${activeCount} 活跃` : null;
-  }, [agentAssignments.length, claudeConcurrency, employeeItems, teamItems]);
+  }, [agentAssignments.length, employeeItems, teamItems]);
 
   const monitorDrawers = (
     <>
@@ -1277,20 +1250,12 @@ export function ProgressMonitorPanel({
       <div className="app-monitor-panel__head">
         <div className="app-monitor-panel__head-start">
           <div className="app-monitor-panel__title">运行面板</div>
+          <MonitorPanelHeadConfigActions
+            onOpenEmployeeConfig={onOpenEmployeeConfig}
+            onOpenWorkflowConfig={onOpenWorkflowConfig}
+          />
         </div>
-        <div className="app-monitor-panel__head-concurrency">
-          {claudeConcurrency ? (
-            <ConcurrencyControl
-              activeCount={claudeConcurrency.activeCount}
-              limit={claudeConcurrency.limit}
-              onLimitChange={claudeConcurrency.onLimitChange}
-            />
-          ) : (
-            <span className="app-monitor-panel__concurrency app-monitor-panel__concurrency--muted" aria-hidden>
-              <span className="app-monitor-panel__concurrency-label">并发</span>
-              <span className="app-monitor-panel__concurrency-placeholder">—</span>
-            </span>
-          )}
+        <div className="app-monitor-panel__head-end">
           {setSectionCollapsed ? (
             <Tooltip title="收起运行面板" mouseEnterDelay={0.35}>
               <button

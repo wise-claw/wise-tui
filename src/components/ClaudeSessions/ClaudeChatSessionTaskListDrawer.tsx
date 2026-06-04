@@ -1,5 +1,6 @@
 import { Button, Drawer, message, Popover, Popconfirm, Empty } from "antd";
-import { memo, type Dispatch, type SetStateAction } from "react";
+import { memo, useCallback, type Dispatch, type SetStateAction } from "react";
+import { openRequirementSourceFromTaskDrawer, TaskListDrawerEmptyState } from "./TaskListDrawerEmptyState";
 import type { ProjectItem, TaskFlowStatus, TaskItem } from "../../types";
 import type { TrellisRequirementTaskRow } from "../../services/trellisTaskBridge";
 import type { OmcBatchTemplateId } from "../../constants/omcBatchTemplates";
@@ -32,7 +33,6 @@ export interface ClaudeChatSessionTaskListDrawerProps {
   taskListSelectedIds: string[];
   setTaskListSelectedIds: Dispatch<SetStateAction<string[]>>;
   taskListSelectedSet: Set<string>;
-  monitorClaudeSlotsRemaining: number | null;
   omcBatchPopoverOpen: boolean;
   setOmcBatchPopoverOpen: Dispatch<SetStateAction<boolean>>;
   omcBatchTemplateId: OmcBatchTemplateId;
@@ -94,7 +94,6 @@ export const ClaudeChatSessionTaskListDrawer = memo(function ClaudeChatSessionTa
     taskListSelectedIds,
     setTaskListSelectedIds,
     taskListSelectedSet,
-    monitorClaudeSlotsRemaining,
     omcBatchPopoverOpen,
     setOmcBatchPopoverOpen,
     omcBatchTemplateId,
@@ -128,6 +127,12 @@ export const ClaudeChatSessionTaskListDrawer = memo(function ClaudeChatSessionTa
     handleArchiveTrellisTask,
     handleRunTrellisTaskByEmployee,
   } = props;
+
+  const handleOpenRequirementSource = useCallback(() => {
+    openRequirementSourceFromTaskDrawer(onClose);
+  }, [onClose]);
+
+  const activeProjectName = activeProject?.name?.trim() || null;
 
   return (
     <Drawer
@@ -165,12 +170,11 @@ export const ClaudeChatSessionTaskListDrawer = memo(function ClaudeChatSessionTa
           </div>
         ) : null}
         {splitTodoTasks.length === 0 && visibleTrellisTasks.length === 0 ? (
-          <div className="app-claude-task-list-empty">
-            <Empty
-              image={Empty.PRESENTED_IMAGE_SIMPLE}
-              description={trellisTasksLoading ? "正在读取 Workspace Trellis 任务" : "暂无任务"}
-            />
-          </div>
+          <TaskListDrawerEmptyState
+            loading={trellisTasksLoading}
+            activeProjectName={activeProjectName}
+            onOpenRequirementSource={handleOpenRequirementSource}
+          />
         ) : (
           <div className="app-claude-task-list">
             {splitTodoTasks.length > 0 ? (
@@ -211,11 +215,6 @@ export const ClaudeChatSessionTaskListDrawer = memo(function ClaudeChatSessionTa
                   </label>
                   <span className="app-claude-task-list__batch-count">
                     已选 {taskListSelectedIds.length} / {taskListMultiSelectCap}
-                    {monitorClaudeSlotsRemaining != null ? (
-                      <span className="app-claude-task-list__batch-slots-hint">
-                        （槽位约剩 {monitorClaudeSlotsRemaining}）
-                      </span>
-                    ) : null}
                   </span>
                   <div className="app-claude-task-list__batch-actions">
                     <Popover
