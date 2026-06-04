@@ -204,6 +204,8 @@ interface Props {
   onOpenWorkflowConfig?: () => void;
   /** 从会话快捷条「更多」直达指定内置助手对话页 */
   onOpenBuiltinAssistant?: (assistantId: string) => void;
+  /** 从会话快捷条「更多」进入 Author 域「助手模板」 */
+  onOpenAssistantsHub?: () => void;
   /** 打开当前仓库定时任务叠层（主区+右栏，与技能市场同构） */
   onOpenRepositoryScheduledTasks?: () => void;
   employees?: EmployeeItem[];
@@ -335,6 +337,7 @@ export function ClaudeSessions({
   onAutoFixRunError: onAutoFixRunErrorFromProps,
   onOpenWorkflowConfig,
   onOpenBuiltinAssistant,
+  onOpenAssistantsHub,
   onOpenRepositoryScheduledTasks,
   employees = [],
   mentionEmployees = [],
@@ -751,6 +754,7 @@ export function ClaudeSessions({
     onRestoreRevert,
     onOpenWorkflowConfig,
     onOpenBuiltinAssistant,
+    onOpenAssistantsHub,
     onOpenRepositoryScheduledTasks,
     employees,
     mentionEmployees,
@@ -875,6 +879,7 @@ export function ClaudeSessions({
             onCreateNewSession={handleCreatePrimarySession}
             creatingNewSession={creatingPrimarySession}
             onOpenBuiltinAssistant={onOpenBuiltinAssistant}
+            onOpenAssistantsHub={onOpenAssistantsHub}
             onOpenRepositoryScheduledTasks={onOpenRepositoryScheduledTasks}
             onSend={onSendMessage}
             onExecute={onExecuteSession}

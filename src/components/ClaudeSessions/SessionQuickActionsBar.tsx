@@ -11,6 +11,7 @@ import {
   RocketOutlined,
   SettingOutlined,
   UnorderedListOutlined,
+  UserOutlined,
 } from "@ant-design/icons";
 import { Dropdown, type MenuProps } from "antd";
 import { memo, useMemo, useState, type ReactNode } from "react";
@@ -32,6 +33,8 @@ export interface SessionQuickActionsBarProps {
   onOpenWorkTrajectory: () => void;
   onOpenWorktreeMenu?: () => void;
   showWorktreeInMore?: boolean;
+  /** 进入 Author 域「助手模板」管理页 */
+  onOpenAssistantsHub?: () => void;
   /** 推送按钮（含 Popover 等交互，由父组件组装） */
   pushControl: ReactNode;
   /** 常用语 chip，展示在快捷条主行（推送与「更多」之间） */
@@ -63,6 +66,7 @@ export const SessionQuickActionsBar = memo(function SessionQuickActionsBar({
   onOpenWorkTrajectory,
   onOpenWorktreeMenu,
   showWorktreeInMore = false,
+  onOpenAssistantsHub,
   pushControl,
   commonPhrasesSlot = null,
 }: SessionQuickActionsBarProps) {
@@ -214,6 +218,14 @@ export const SessionQuickActionsBar = memo(function SessionQuickActionsBar({
       icon: <SettingOutlined />,
       onClick: () => setCustomizeOpen(true),
     });
+    if (onOpenAssistantsHub) {
+      items.push({
+        key: "__assistants-hub",
+        label: "助手模板",
+        icon: <UserOutlined />,
+        onClick: onOpenAssistantsHub,
+      });
+    }
     return items;
   }, [
     overflow,
@@ -222,6 +234,7 @@ export const SessionQuickActionsBar = memo(function SessionQuickActionsBar({
     onOpenBuiltinAssistant,
     onOpenWorkTrajectory,
     onOpenWorktreeMenu,
+    onOpenAssistantsHub,
   ]);
 
   return (

@@ -2866,12 +2866,12 @@ export default function App() {
         activeRepositoryId,
         authorDisabled: !activeProjectId && activeRepositoryId != null,
         authorDisabledTooltip: "Standalone Repo 不支持 Author 配置；升格为 Workspace 后启用",
-        onOpenAuthor: () => {
+        onOpenAuthor: (pane?: AuthorPane) => {
           if (!activeProjectId && activeRepositoryId != null) {
             message.warning("Standalone Repo 不支持 Author 配置；升格为 Workspace 后启用");
             return;
           }
-          enterAuthorPane(lastAuthorPane);
+          enterAuthorPane(pane ?? lastAuthorPane);
         },
         leftSidebarHubQuickEntryIds: leftSidebarHubQuickEntries.enabledEntryIds,
         showLeftSidebarMonitorPanel: showMonitorOnLeft,
@@ -3428,6 +3428,7 @@ export default function App() {
         terminalCollapsed,
         onOpenWorkflowConfig: openWorkflowConfigFromSidebar,
         onOpenBuiltinAssistant: openBuiltinAssistant,
+        onOpenAssistantsHub: openAssistantsFromSidebar,
         onOpenRepositoryScheduledTasks: activeRepository
           ? () => openScheduledTasksForRepository(activeRepository)
           : undefined,

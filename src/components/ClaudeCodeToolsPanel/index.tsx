@@ -28,6 +28,8 @@ import {
   isOmcPluginCacheSkill,
   isOmcSubagentItem,
 } from "../../utils/omcPluginDetect";
+import { claudeCodeToolsTabToAuthorPane } from "../../utils/claudeCodeToolsAuthorPane";
+import type { AuthorPane } from "../../types/viewMode";
 import "./index.css";
 
 const ClaudeMcpConfigPanel = lazy(() =>
@@ -52,6 +54,8 @@ interface Props {
   variant?: "inspector" | "popover";
   /** 弹层关闭时为 false，避免后台刷新 MCP/技能等 */
   surfaceActive?: boolean;
+  /** 跳转到工作台配置中与本 Tab 对应的页面 */
+  onOpenAuthorConfig?: (pane: AuthorPane) => void;
 }
 
 export function ClaudeCodeToolsPanel({
@@ -60,6 +64,7 @@ export function ClaudeCodeToolsPanel({
   onSectionCollapsedChange,
   variant = "inspector",
   surfaceActive = true,
+  onOpenAuthorConfig,
 }: Props) {
   const isPopover = variant === "popover";
   const panelActive = surfaceActive;
@@ -367,6 +372,19 @@ export function ClaudeCodeToolsPanel({
 
       <div className="app-claude-code-tools-toolbar">
         <div className="app-claude-code-tools-toolbar-left">
+          {onOpenAuthorConfig && claudeCodeToolsTabToAuthorPane(tab) ? (
+            <Button
+              type="link"
+              size="small"
+              className="app-claude-code-tools-config-btn"
+              onClick={() => {
+                const pane = claudeCodeToolsTabToAuthorPane(tab);
+                if (pane) onOpenAuthorConfig(pane);
+              }}
+            >
+              配置
+            </Button>
+          ) : null}
           <Button
             type="link"
             size="small"

@@ -21,6 +21,7 @@ import type { LeftSidebarHubQuickEntryId } from "../../constants/leftSidebarHubQ
 import type { WorkspaceFocus } from "../../utils/workspaceMode";
 import type { GitPanelOpenFileOptions } from "../GitPanel";
 import type { TaskCardsNavProps } from "../TaskCardsNav";
+import type { AuthorPane } from "../../types/viewMode";
 
 export interface LeftSidebarProps {
   dark: boolean;
@@ -40,7 +41,7 @@ export interface LeftSidebarProps {
   activeRepositoryId: number | null;
   authorDisabled?: boolean;
   authorDisabledTooltip?: string;
-  onOpenAuthor: () => void;
+  onOpenAuthor: (pane?: AuthorPane) => void;
   leftSidebarHubQuickEntryIds?: readonly LeftSidebarHubQuickEntryId[];
   /** 是否显示左栏运行面板；默认 true，由 `wise.defaultConfig.v1` 控制。 */
   showLeftSidebarMonitorPanel?: boolean;

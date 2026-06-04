@@ -152,6 +152,7 @@ export interface MultiPaneSharedChatProps {
   onRestoreRevert: (sessionId: string, itemId: string) => void | Promise<void>;
   onOpenWorkflowConfig?: () => void;
   onOpenBuiltinAssistant?: (assistantId: string) => void;
+  onOpenAssistantsHub?: () => void;
   onOpenRepositoryScheduledTasks?: () => void;
   employees: EmployeeItem[];
   mentionEmployees: EmployeeItem[];
@@ -252,6 +253,7 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
         onSwitchSession={shared.onSwitchSession}
         onCreateNewSession={onCreateNewSession}
         onOpenBuiltinAssistant={shared.onOpenBuiltinAssistant}
+        onOpenAssistantsHub={shared.onOpenAssistantsHub}
         onSend={shared.onSend}
         onExecute={shared.onExecute}
         onDispatchExecutionEnvironment={shared.onDispatchExecutionEnvironment}
@@ -501,6 +503,7 @@ const MultiPaneExtraPaneCell = memo(
             onSwitchSession={shared.onSwitchSession}
             onCreateNewSession={() => onCreatePaneSession(paneIdx)}
             onOpenBuiltinAssistant={shared.onOpenBuiltinAssistant}
+            onOpenAssistantsHub={shared.onOpenAssistantsHub}
             onOpenRepositoryScheduledTasks={shared.onOpenRepositoryScheduledTasks}
             onSend={shared.onSend}
             onExecute={shared.onExecute}

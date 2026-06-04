@@ -66,6 +66,7 @@ export function LeftSidebarTopbar({
         <ClaudeCodeToolsTopbarTrigger
           variant="sidebar"
           repositoryPath={activeRepositoryPath}
+          onOpenAuthorConfig={authorDisabled ? undefined : onOpenAuthor}
         />
       </div>
     </div>

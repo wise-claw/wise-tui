@@ -1,5 +1,6 @@
 import { Popover, Tooltip } from "antd";
 import { Suspense, lazy, useCallback, useState } from "react";
+import type { AuthorPane } from "../../types/viewMode";
 import { IconClaudeCodeMascot } from "../icons/IconClaudeCodeMascot";
 import "./ClaudeCodeToolsTopbarTrigger.css";
 
@@ -10,15 +11,29 @@ const ClaudeCodeToolsPanel = lazy(() =>
 interface Props {
   repositoryPath?: string;
   variant?: "chat" | "sidebar";
+  /** 打开工作台配置中与本 Tab 对应的页面 */
+  onOpenAuthorConfig?: (pane: AuthorPane) => void;
 }
 
-export function ClaudeCodeToolsTopbarTrigger({ repositoryPath, variant = "chat" }: Props) {
+export function ClaudeCodeToolsTopbarTrigger({
+  repositoryPath,
+  variant = "chat",
+  onOpenAuthorConfig,
+}: Props) {
   const [open, setOpen] = useState(false);
   const isSidebar = variant === "sidebar";
 
   const handleOpenChange = useCallback((next: boolean) => {
     setOpen(next);
   }, []);
+
+  const handleOpenAuthorConfig = useCallback(
+    (pane: AuthorPane) => {
+      setOpen(false);
+      onOpenAuthorConfig?.(pane);
+    },
+    [onOpenAuthorConfig],
+  );
 
   return (
     <Popover
@@ -34,6 +49,7 @@ export function ClaudeCodeToolsTopbarTrigger({ repositoryPath, variant = "chat" 
             repositoryPath={repositoryPath}
             variant="popover"
             surfaceActive={open}
+            onOpenAuthorConfig={onOpenAuthorConfig ? handleOpenAuthorConfig : undefined}
           />
         </Suspense>
       }

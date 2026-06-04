@@ -160,6 +160,8 @@ interface Props {
   creatingNewSession?: boolean;
   /** 从快捷条「更多」直达指定内置助手对话页 */
   onOpenBuiltinAssistant?: (assistantId: string) => void;
+  /** 从快捷条「更多」进入 Author 域「助手模板」 */
+  onOpenAssistantsHub?: () => void;
   onOpenRepositoryScheduledTasks?: () => void;
   onSend: (prompt: string) => void;
   onExecute: (
@@ -318,6 +320,7 @@ export function ClaudeChat({
   onCreateNewSession,
   creatingNewSession = false,
   onOpenBuiltinAssistant,
+  onOpenAssistantsHub,
   onOpenRepositoryScheduledTasks,
   onSend: _onSend,
   onExecute,
@@ -1812,6 +1815,7 @@ export function ClaudeChat({
             onCreateNewSession={onCreateNewSession}
             creatingNewSession={creatingNewSession}
             onOpenBuiltinAssistant={onOpenBuiltinAssistant}
+            onOpenAssistantsHub={onOpenAssistantsHub}
             onOpenWorkTrajectory={handleOpenWorkTrajectory}
             onSend={_onSend}
             onAddWorktreeRepositoryToProject={onAddWorktreeRepositoryToProject}

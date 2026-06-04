@@ -237,13 +237,14 @@ export function BuiltinSettingsMoved({ extTabCount }: { extTabCount: number }) {
     <div className="app-settings-modal__moved">
       <h2>工作台配置是唯一内置设置入口</h2>
       <p>
-        旧设置弹窗只承载扩展贡献的设置页。请从左侧齿轮进入工作台配置，按工作台、生态、运行设置三组管理内置能力。
+        旧设置弹窗只承载扩展贡献的设置页。请从左侧齿轮进入工作台配置，按工作台、Claude Code、生态、运行设置分组管理内置能力。
       </p>
       <div className="app-settings-modal__moved-grid" aria-label="内置设置迁移说明">
         <span>引擎环境 → 工作台配置 / 运行设置 / 引擎环境</span>
-        <span>助手模板 → 工作台配置 / 生态 / 助手模板</span>
-        <span>MCP 工具 → 工作台配置 / 生态 / MCP 工具</span>
-        <span>执行引擎 → 工作台配置 / 生态 / 执行引擎</span>
+        <span>助手模板 → 工作台配置 / Claude Code / 助手模板</span>
+        <span>MCP 工具 → 工作台配置 / Claude Code / MCP 工具</span>
+        <span>Hooks → 工作台配置 / Claude Code / Hooks</span>
+        <span>执行引擎 → 工作台配置 / 生态 / 执行环境</span>
         <span>默认配置 → 工作台配置 / 运行设置 / 默认配置</span>
         <span>快捷键 → 工作台配置 / 运行设置 / 快捷键</span>
         <span>Claude 沙箱 → 工作台配置 / 运行设置 / Claude 沙箱</span>

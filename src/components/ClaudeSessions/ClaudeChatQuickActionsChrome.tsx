@@ -37,6 +37,7 @@ export interface ClaudeChatQuickActionsChromeProps {
   onCreateNewSession?: () => void;
   creatingNewSession?: boolean;
   onOpenBuiltinAssistant?: (assistantId: string) => void;
+  onOpenAssistantsHub?: () => void;
   onOpenWorkTrajectory: () => void;
   onSend?: (prompt: string) => void;
   onAddWorktreeRepositoryToProject?: (worktreePath: string) => void | Promise<void>;
@@ -51,6 +52,7 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
   onCreateNewSession,
   creatingNewSession = false,
   onOpenBuiltinAssistant,
+  onOpenAssistantsHub,
   onOpenWorkTrajectory,
   onSend,
   onAddWorktreeRepositoryToProject,
@@ -483,6 +485,7 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
         onCreateNewSession={onCreateNewSession}
         creatingNewSession={creatingNewSession}
         onOpenBuiltinAssistant={onOpenBuiltinAssistant}
+        onOpenAssistantsHub={onOpenAssistantsHub}
         onOpenWorkTrajectory={onOpenWorkTrajectory}
         showWorktreeInMore={Boolean(sessionRepositoryPath)}
         onOpenWorktreeMenu={handleOpenWorktreeMenu}

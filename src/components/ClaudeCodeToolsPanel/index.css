@@ -108,7 +108,7 @@
 .app-claude-code-tools-toolbar-left {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
   flex: 1 1 auto;
 }
@@ -181,6 +181,7 @@
   box-shadow: var(--app-workspace-active-glow) !important;
 }
 
+.app-claude-code-tools-config-btn.ant-btn.ant-btn-link.ant-btn-sm,
 .app-claude-code-tools-guide-btn.ant-btn.ant-btn-link.ant-btn-sm {
   padding: 0;
   height: 22px;

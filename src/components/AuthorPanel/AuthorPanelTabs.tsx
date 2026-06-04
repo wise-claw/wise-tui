@@ -45,7 +45,7 @@ export const AUTHOR_TAB_GROUPS: Array<{ title: string; items: AuthorTabDefinitio
     ],
   },
   {
-    title: "生态",
+    title: "Claude Code",
     items: [
       {
         key: "my-extensions",
@@ -57,12 +57,18 @@ export const AUTHOR_TAB_GROUPS: Array<{ title: string; items: AuthorTabDefinitio
       { key: "assistants", label: "助手模板", description: "角色模板、模型和系统提示词", icon: <UserOutlined /> },
       { key: "mcp", label: "MCP 工具", description: "服务器、推荐项和扩展工具协议", icon: <ApiOutlined /> },
       { key: "skills", label: "技能市场", description: "skills.sh、外部目录和扩展技能", icon: <ToolOutlined /> },
+      { key: "hooks", label: "Hooks", description: "工具链事件、权限和自动化", icon: <ApartmentOutlined /> },
       {
         key: "claude-plugins",
         label: "插件市场",
         description: "精选 50+ 插件，一键安装 oh-my-claudecode 等",
         icon: <BlockOutlined />,
       },
+    ],
+  },
+  {
+    title: "生态",
+    items: [
       { key: "engine-registry", label: "执行环境", description: "本机 CLI 与 Cursor SDK 可编程引擎", icon: <ThunderboltOutlined /> },
       {
         key: "cursor-sdk-diagnostic",
@@ -90,7 +96,6 @@ export const AUTHOR_TAB_GROUPS: Array<{ title: string; items: AuthorTabDefinitio
       { key: "automation", label: "定时自动化", description: "Cron、Mission 和会话续跑", icon: <FieldTimeOutlined /> },
       { key: "channels", label: "远程入口", description: "钉钉、飞书、企微和 Telegram", icon: <GatewayOutlined /> },
       { key: "claude-config", label: "引擎环境", description: "配置目录与 agents", icon: <FolderOpenOutlined /> },
-      { key: "hooks", label: "触发器规则", description: "工具链事件、权限和自动化", icon: <ApartmentOutlined /> },
       { key: "shortcuts", label: "快捷键", description: "桌面操作和窗口控制", icon: <IconKeyboardShortcuts /> },
       { key: "sandbox", label: "Claude 沙箱", description: "权限、隔离和运行说明", icon: <IconClaudeSandboxHelp /> },
     ],
