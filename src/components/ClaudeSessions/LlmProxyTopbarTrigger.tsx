@@ -29,12 +29,21 @@ function IconLlmProxy() {
   );
 }
 
-interface Props {
+export interface LlmProxyTopbarTriggerProps {
   repositoryPath?: string;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  triggerHidden?: boolean;
 }
 
-export function LlmProxyTopbarTrigger({ repositoryPath }: Props) {
-  const [open, setOpen] = useState(false);
+export function LlmProxyTopbarTrigger({
+  repositoryPath,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
+  triggerHidden = false,
+}: LlmProxyTopbarTriggerProps) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen ?? internalOpen;
   const snapshot = useSyncExternalStore(
     subscribeClaudeLlmProxyStore,
     getClaudeLlmProxyStoreSnapshot,
@@ -43,12 +52,16 @@ export function LlmProxyTopbarTrigger({ repositoryPath }: Props) {
 
   const handleOpenChange = useCallback(
     (next: boolean) => {
-      setOpen(next);
+      if (controlledOnOpenChange) {
+        controlledOnOpenChange(next);
+      } else {
+        setInternalOpen(next);
+      }
       if (next) {
         void refreshClaudeLlmProxyStatus(repositoryPath);
       }
     },
-    [repositoryPath],
+    [controlledOnOpenChange, repositoryPath],
   );
 
   const recordCount = snapshot.records.length;
@@ -69,27 +82,31 @@ export function LlmProxyTopbarTrigger({ repositoryPath }: Props) {
         />
       }
     >
-      <Tooltip title="LLM 代理" mouseEnterDelay={0.35}>
-        <button
-          type="button"
-          className={
-            "app-topbar-btn app-llm-proxy-topbar-btn" + (open ? " active" : "")
-          }
-          aria-label="LLM 代理"
-          aria-expanded={open}
-        >
-          <IconLlmProxy />
-          {showBadge ? (
-            <span
-              className={
-                "app-llm-proxy-topbar-btn__badge" +
-                (listening ? " app-llm-proxy-topbar-btn__badge--live" : "")
-              }
-              aria-hidden
-            />
-          ) : null}
-        </button>
-      </Tooltip>
+      {triggerHidden ? (
+        <span className="app-topbar-overflow-anchor" tabIndex={-1} aria-hidden />
+      ) : (
+        <Tooltip title="LLM 代理" mouseEnterDelay={0.35}>
+          <button
+            type="button"
+            className={
+              "app-topbar-btn app-llm-proxy-topbar-btn" + (open ? " active" : "")
+            }
+            aria-label="LLM 代理"
+            aria-expanded={open}
+          >
+            <IconLlmProxy />
+            {showBadge ? (
+              <span
+                className={
+                  "app-llm-proxy-topbar-btn__badge" +
+                  (listening ? " app-llm-proxy-topbar-btn__badge--live" : "")
+                }
+                aria-hidden
+              />
+            ) : null}
+          </button>
+        </Tooltip>
+      )}
     </Popover>
   );
 }

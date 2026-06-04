@@ -24,19 +24,35 @@ function IconFccProxy() {
   );
 }
 
-export function FccTopbarTrigger() {
-  const [open, setOpen] = useState(false);
+export interface FccTopbarTriggerProps {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  /** 不渲染顶栏按钮，弹层锚定到中栏「更多」区域（供默认配置隐藏时唤起） */
+  triggerHidden?: boolean;
+}
+
+export function FccTopbarTrigger({
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
+  triggerHidden = false,
+}: FccTopbarTriggerProps = {}) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen ?? internalOpen;
   const fcc = useFreeClaudeCodeSetting();
   const { status, refresh } = fcc;
 
   const handleOpenChange = useCallback(
     (next: boolean) => {
-      setOpen(next);
+      if (controlledOnOpenChange) {
+        controlledOnOpenChange(next);
+      } else {
+        setInternalOpen(next);
+      }
       if (next) {
         void refresh();
       }
     },
-    [refresh],
+    [controlledOnOpenChange, refresh],
   );
 
   const running = status?.serverRunning === true;
@@ -53,27 +69,31 @@ export function FccTopbarTrigger() {
         container: { padding: 0 },
         content: { padding: 0 },
       }}
-      content={<FreeClaudeCodePanel fcc={fcc} onClose={() => setOpen(false)} />}
+      content={<FreeClaudeCodePanel fcc={fcc} onClose={() => handleOpenChange(false)} />}
     >
-      <Tooltip title="Free Claude Code 代理" mouseEnterDelay={0.35}>
-        <button
-          type="button"
-          className={"app-topbar-btn app-fcc-topbar-btn" + (open ? " active" : "")}
-          aria-label="Free Claude Code"
-          aria-expanded={open}
-        >
-          <IconFccProxy />
-          {running || needsAttention ? (
-            <span
-              className={
-                "app-fcc-topbar-btn__badge" +
-                (running ? " app-fcc-topbar-btn__badge--live" : " app-fcc-topbar-btn__badge--warn")
-              }
-              aria-hidden
-            />
-          ) : null}
-        </button>
-      </Tooltip>
+      {triggerHidden ? (
+        <span className="app-topbar-overflow-anchor" tabIndex={-1} aria-hidden />
+      ) : (
+        <Tooltip title="Free Claude Code 代理" mouseEnterDelay={0.35}>
+          <button
+            type="button"
+            className={"app-topbar-btn app-fcc-topbar-btn" + (open ? " active" : "")}
+            aria-label="Free Claude Code"
+            aria-expanded={open}
+          >
+            <IconFccProxy />
+            {running || needsAttention ? (
+              <span
+                className={
+                  "app-fcc-topbar-btn__badge" +
+                  (running ? " app-fcc-topbar-btn__badge--live" : " app-fcc-topbar-btn__badge--warn")
+                }
+                aria-hidden
+              />
+            ) : null}
+          </button>
+        </Tooltip>
+      )}
     </Popover>
   );
 }

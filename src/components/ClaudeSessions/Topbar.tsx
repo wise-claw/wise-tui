@@ -8,6 +8,7 @@ import { FccTopbarTrigger } from "./FccTopbarTrigger";
 import { FccTrafficTopbarTrigger } from "./FccTrafficTopbarTrigger";
 import { LlmProxyTopbarTrigger } from "./LlmProxyTopbarTrigger";
 import { SessionDataLinkTopbarTrigger } from "./SessionDataLinkTopbarTrigger";
+import { ClaudeChatSessionTopbarOverflow } from "./ClaudeChatSessionTopbarOverflow";
 import { DEFAULT_OPEN_APP_ID } from "../OpenAppMenu/constants";
 import { getOpenAppPreferenceSync, hydrateOpenAppPreference } from "../../services/openAppPreference";
 import { useRepositoryRunCommand } from "../../hooks/useRepositoryRunCommand";
@@ -403,6 +404,13 @@ export function Topbar({
           <TopbarBtn icon={<IconTerminal />} label="终端" active={!terminalCollapsed} onClick={onToggleTerminal} />
         )}
         <div className="app-topbar-divider" />
+        {topbarToolsReady ? (
+          <ClaudeChatSessionTopbarOverflow
+            repositoryPath={topbarOpenPath}
+            mainSessionForDataLink={mainSessionForDataLink}
+            onSessionInsightsAiAnalysis={onSessionInsightsAiAnalysis}
+          />
+        ) : null}
         {onToggleRightPanel && (
           <Popover
             trigger={[]}

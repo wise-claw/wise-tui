@@ -26,8 +26,19 @@ function IconFccTraffic() {
   );
 }
 
-export function FccTrafficTopbarTrigger() {
-  const [open, setOpen] = useState(false);
+export interface FccTrafficTopbarTriggerProps {
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  triggerHidden?: boolean;
+}
+
+export function FccTrafficTopbarTrigger({
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
+  triggerHidden = false,
+}: FccTrafficTopbarTriggerProps = {}) {
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen ?? internalOpen;
   const snapshot = useSyncExternalStore(
     subscribeFccTracesStore,
     getFccTracesStoreSnapshot,
@@ -39,12 +50,19 @@ export function FccTrafficTopbarTrigger() {
     return () => stopFccTracesPolling();
   }, []);
 
-  const handleOpenChange = useCallback((next: boolean) => {
-    setOpen(next);
-    if (next) {
-      void refreshFccTracesStoreNow();
-    }
-  }, []);
+  const handleOpenChange = useCallback(
+    (next: boolean) => {
+      if (controlledOnOpenChange) {
+        controlledOnOpenChange(next);
+      } else {
+        setInternalOpen(next);
+      }
+      if (next) {
+        void refreshFccTracesStoreNow();
+      }
+    },
+    [controlledOnOpenChange],
+  );
 
   const recordCount = snapshot.traces.length;
   const running = snapshot.status?.serverRunning === true;
@@ -63,27 +81,31 @@ export function FccTrafficTopbarTrigger() {
       }}
       content={<FccTrafficPanel active={open} variant="popover" />}
     >
-      <Tooltip title="FCC 请求流量" mouseEnterDelay={0.35}>
-        <button
-          type="button"
-          className={
-            "app-topbar-btn app-fcc-traffic-topbar-btn" + (open ? " active" : "")
-          }
-          aria-label="FCC 请求流量"
-          aria-expanded={open}
-        >
-          <IconFccTraffic />
-          {showBadge ? (
-            <span
-              className={
-                "app-fcc-traffic-topbar-btn__badge" +
-                (running ? " app-fcc-traffic-topbar-btn__badge--live" : "")
-              }
-              aria-hidden
-            />
-          ) : null}
-        </button>
-      </Tooltip>
+      {triggerHidden ? (
+        <span className="app-topbar-overflow-anchor" tabIndex={-1} aria-hidden />
+      ) : (
+        <Tooltip title="FCC 请求流量" mouseEnterDelay={0.35}>
+          <button
+            type="button"
+            className={
+              "app-topbar-btn app-fcc-traffic-topbar-btn" + (open ? " active" : "")
+            }
+            aria-label="FCC 请求流量"
+            aria-expanded={open}
+          >
+            <IconFccTraffic />
+            {showBadge ? (
+              <span
+                className={
+                  "app-fcc-traffic-topbar-btn__badge" +
+                  (running ? " app-fcc-traffic-topbar-btn__badge--live" : "")
+                }
+                aria-hidden
+              />
+            ) : null}
+          </button>
+        </Tooltip>
+      )}
     </Popover>
   );
 }

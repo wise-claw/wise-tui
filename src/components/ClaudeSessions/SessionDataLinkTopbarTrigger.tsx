@@ -27,13 +27,22 @@ export function IconSessionDataLink() {
   );
 }
 
-interface Props {
+export interface SessionDataLinkTopbarTriggerProps {
   /** 当前项目/仓库主会话（与侧栏「主会话」绑定一致） */
   mainSession: ClaudeSession | null;
   onRequestAiAnalysis?: (prompt: string) => void | Promise<void>;
+  open?: boolean;
+  onOpenChange?: (open: boolean) => void;
+  triggerHidden?: boolean;
 }
 
-export function SessionDataLinkTopbarTrigger({ mainSession, onRequestAiAnalysis }: Props) {
+export function SessionDataLinkTopbarTrigger({
+  mainSession,
+  onRequestAiAnalysis,
+  open: controlledOpen,
+  onOpenChange: controlledOnOpenChange,
+  triggerHidden = false,
+}: SessionDataLinkTopbarTriggerProps) {
   const uiSnap = useSyncExternalStore(
     subscribeClaudeUsageUiStore,
     getClaudeUsageUiStoreSnapshot,
@@ -41,9 +50,21 @@ export function SessionDataLinkTopbarTrigger({ mainSession, onRequestAiAnalysis 
   );
   const lastLinkOpenNonce = useRef(uiSnap.sessionDataLinkOpenNonce);
 
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = controlledOpen ?? internalOpen;
   const [initialViewMode, setInitialViewMode] = useState<SessionDataLinkOpenView>("list");
   const disabled = !mainSession;
+
+  const setOpen = useCallback(
+    (next: boolean) => {
+      if (controlledOnOpenChange) {
+        controlledOnOpenChange(next);
+      } else {
+        setInternalOpen(next);
+      }
+    },
+    [controlledOnOpenChange],
+  );
 
   useEffect(() => {
     if (uiSnap.sessionDataLinkOpenNonce === lastLinkOpenNonce.current) return;
@@ -51,13 +72,13 @@ export function SessionDataLinkTopbarTrigger({ mainSession, onRequestAiAnalysis 
     if (!mainSession) return;
     setInitialViewMode(uiSnap.sessionDataLinkInitialView);
     setOpen(true);
-  }, [uiSnap.sessionDataLinkOpenNonce, uiSnap.sessionDataLinkInitialView, mainSession]);
+  }, [uiSnap.sessionDataLinkOpenNonce, uiSnap.sessionDataLinkInitialView, mainSession, setOpen]);
 
   const handleClick = useCallback(() => {
     if (!mainSession) return;
     setInitialViewMode("list");
     setOpen(true);
-  }, [mainSession]);
+  }, [mainSession, setOpen]);
 
   const tooltipTitle = disabled
     ? "当前项目/仓库暂无主会话"
@@ -65,20 +86,24 @@ export function SessionDataLinkTopbarTrigger({ mainSession, onRequestAiAnalysis 
 
   return (
     <>
-      <Tooltip title={tooltipTitle} mouseEnterDelay={0.35}>
-        <button
-          type="button"
-          className={
-            "app-topbar-btn app-session-data-link-topbar-btn" + (open ? " active" : "") + (disabled ? " disabled" : "")
-          }
-          aria-label="全链路分析"
-          aria-expanded={open}
-          disabled={disabled}
-          onClick={handleClick}
-        >
-          <IconSessionDataLink />
-        </button>
-      </Tooltip>
+      {triggerHidden ? (
+        <span className="app-topbar-overflow-anchor" tabIndex={-1} aria-hidden />
+      ) : (
+        <Tooltip title={tooltipTitle} mouseEnterDelay={0.35}>
+          <button
+            type="button"
+            className={
+              "app-topbar-btn app-session-data-link-topbar-btn" + (open ? " active" : "") + (disabled ? " disabled" : "")
+            }
+            aria-label="全链路分析"
+            aria-expanded={open}
+            disabled={disabled}
+            onClick={handleClick}
+          >
+            <IconSessionDataLink />
+          </button>
+        </Tooltip>
+      )}
       <SessionDataLinkDrawer
         open={open}
         onClose={() => setOpen(false)}
