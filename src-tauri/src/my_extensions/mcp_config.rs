@@ -10,6 +10,7 @@ use super::paths::InstallScope;
 use crate::claude_config_dir;
 
 /// 解析 MCP 安装应写入的配置文件路径（优先更新已存在同名 server 的文件）。
+#[allow(dead_code)] // exercised by unit tests in this module
 pub fn resolve_mcp_install_path(scope: InstallScope, repo: Option<&Path>) -> Result<PathBuf, String> {
     let candidates = mcp_config_candidates(scope, repo)?;
     Ok(select_mcp_install_path(&candidates))

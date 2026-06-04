@@ -36,6 +36,7 @@ struct CodexDiskCache {
 
 static CODEX_DISK_CACHE: Mutex<Option<CodexDiskCache>> = Mutex::new(None);
 
+#[allow(dead_code)]
 pub(crate) fn invalidate_codex_disk_cache() {
     if let Ok(mut guard) = CODEX_DISK_CACHE.lock() {
         *guard = None;

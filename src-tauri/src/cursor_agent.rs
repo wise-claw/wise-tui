@@ -744,7 +744,7 @@ pub async fn cursor_agent_probe_agent_write(
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
         .ok_or_else(|| "请先在设置中配置 Cursor API Key".to_string())?;
-    let mut params = serde_json::json!({
+    let params = serde_json::json!({
         "repositoryPath": repo,
         "model": model
             .as_deref()
@@ -1044,8 +1044,6 @@ pub(crate) async fn execute_cursor_code(
     let cursor_agent_id_stdout = cursor_agent_id_shared.clone();
     let stream_success_stdout = stream_success.clone();
     let disk_project_path_stdout = project_path.clone();
-    let disk_session_id_stdout = session_id.clone();
-
     tokio::spawn(async move {
         let reader = BufReader::new(stdout);
         let mut lines = reader.lines();

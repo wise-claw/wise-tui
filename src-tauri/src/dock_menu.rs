@@ -4,6 +4,8 @@
 //! Built at startup (async) and refreshed on `dock-menu-refresh` events from the frontend.
 //! Clicking a repository emits `dock-menu-switch-repository` to the frontend.
 
+use std::sync::Mutex;
+
 use tauri::{AppHandle, Listener};
 
 use crate::app_state_commands::{StoredRepository, load_repositories};
@@ -80,14 +82,13 @@ fn set_dock_menu(app: &AppHandle, repos: &[StoredRepository]) {
     let ns_app_ptr = Retained::as_ptr(&ns_app) as *mut objc2_app_kit::NSApplication;
     let _: () = unsafe { msg_send![ns_app_ptr, setDockMenu: &*menu] };
 
-    // Store app handle globally for the action handler
-    unsafe {
-        DOCK_MENU_APP_HANDLE = Some(app.clone());
+    if let Ok(mut guard) = DOCK_MENU_APP_HANDLE.lock() {
+        *guard = Some(app.clone());
     }
 }
 
-/// Global app handle for the dock menu action callback.
-static mut DOCK_MENU_APP_HANDLE: Option<AppHandle> = None;
+/// Global app handle for the dock menu action callback (main thread only).
+static DOCK_MENU_APP_HANDLE: Mutex<Option<AppHandle>> = Mutex::new(None);
 
 /// Objective-C action handler for dock menu items.
 /// Called by `[NSMenuItem action]` when a menu item is clicked.
@@ -101,9 +102,10 @@ extern "C-unwind" fn dockMenuAction(sender: &objc2::runtime::AnyObject) {
 
     let tag: i64 = unsafe { msg_send![sender, tag] };
 
-    // SAFETY: DOCK_MENU_APP_HANDLE is only written from the main thread
-    // during setup, and read from the main thread during menu clicks.
-    let app = unsafe { DOCK_MENU_APP_HANDLE.clone() };
+    let app = DOCK_MENU_APP_HANDLE
+        .lock()
+        .ok()
+        .and_then(|guard| guard.clone());
     let Some(app) = app else { return };
 
     if tag == -1 {

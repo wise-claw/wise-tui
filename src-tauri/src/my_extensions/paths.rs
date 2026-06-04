@@ -33,6 +33,7 @@ pub fn extensions_packages_dir(scope: InstallScope, repository_path: Option<&Pat
 }
 
 /// Loose asset buckets: mcp / skills / plugins / hooks / scripts.
+#[allow(dead_code)]
 pub fn my_extensions_assets_root(scope: InstallScope, repository_path: Option<&Path>) -> Result<PathBuf, String> {
     match scope {
         InstallScope::Global => Ok(wise_paths::wise_dir()?.join("my-extensions")),
@@ -43,6 +44,7 @@ pub fn my_extensions_assets_root(scope: InstallScope, repository_path: Option<&P
     }
 }
 
+#[allow(dead_code)]
 pub fn asset_kind_dir(
     scope: InstallScope,
     repository_path: Option<&Path>,
@@ -51,6 +53,7 @@ pub fn asset_kind_dir(
     Ok(my_extensions_assets_root(scope, repository_path)?.join(kind))
 }
 
+#[allow(dead_code)]
 pub fn ensure_layout(scope: InstallScope, repository_path: Option<&Path>) -> Result<Vec<PathBuf>, String> {
     let packages = extensions_packages_dir(scope, repository_path)?;
     let assets = my_extensions_assets_root(scope, repository_path)?;

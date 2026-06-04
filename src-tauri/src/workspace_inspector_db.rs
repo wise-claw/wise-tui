@@ -860,6 +860,7 @@ impl WiseDb {
         replace_todos_conn(&g, "repository", &scope_id, &dedupe_todos(normalized))
     }
 
+    #[allow(dead_code)]
     pub fn delete_project_workspace_inspector_data(&self, project_id: &str) -> Result<(), String> {
         let id = project_id.trim();
         if id.is_empty() {
@@ -877,6 +878,7 @@ impl WiseDb {
         Ok(())
     }
 
+    #[allow(dead_code)]
     pub fn delete_repository_workspace_inspector_data(
         &self,
         repository_id: i64,

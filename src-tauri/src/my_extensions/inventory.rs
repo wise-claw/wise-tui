@@ -1,4 +1,5 @@
 //! Scan user extension packages and loose asset folders.
+#![allow(dead_code)] // list/inventory IPC not wired yet; used by capture/install via kind only
 
 use std::fs;
 use std::path::Path;

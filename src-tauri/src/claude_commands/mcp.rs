@@ -270,12 +270,6 @@ fn claude_plugin_data_dir_from_ref(plugin_ref: &str) -> PathBuf {
         .join(id)
 }
 
-fn resolve_plugin_relative_path(plugin_root: &Path, rel: &str) -> PathBuf {
-    let t = expand_env_vars_in_str(rel.trim());
-    let t = t.strip_prefix("./").unwrap_or(t.as_str());
-    plugin_root.join(t)
-}
-
 fn expand_plugin_vars_in_json_value(v: &mut serde_json::Value, root: &Path, data_dir: &str) {
     match v {
         serde_json::Value::String(s) => {
@@ -298,441 +292,474 @@ fn expand_plugin_vars_in_json_value(v: &mut serde_json::Value, root: &Path, data
     }
 }
 
-/// 将 `plugin.json` 的 `mcpServers` 字段（字符串路径 / 数组 / 内联对象）解析为若干 `(来源文件路径, 服务器表)`。
-fn collect_mcp_maps_from_plugin_mcp_spec(
-    plugin_root: &Path,
-    spec: &serde_json::Value,
-    hint_source: &str,
-    out: &mut Vec<(String, serde_json::Map<String, serde_json::Value>)>,
-) {
-    match spec {
-        serde_json::Value::String(rel) => {
-            let path = resolve_plugin_relative_path(plugin_root, rel);
-            if let Some(v) = read_json_file(&path) {
-                let sp = path.to_string_lossy().to_string();
-                if let Some(map) = v
+/// Plugin MCP discovery from `~/.claude/plugins/**` — retained while runtime collection is stubbed.
+#[allow(dead_code)]
+mod plugin_mcp_enumeration {
+    use super::*;
+
+    fn resolve_plugin_relative_path(plugin_root: &Path, rel: &str) -> PathBuf {
+        let t = expand_env_vars_in_str(rel.trim());
+        let t = t.strip_prefix("./").unwrap_or(t.as_str());
+        plugin_root.join(t)
+    }
+
+    /// 将 `plugin.json` 的 `mcpServers` 字段（字符串路径 / 数组 / 内联对象）解析为若干 `(来源文件路径, 服务器表)`。
+    fn collect_mcp_maps_from_plugin_mcp_spec(
+        plugin_root: &Path,
+        spec: &serde_json::Value,
+        hint_source: &str,
+        out: &mut Vec<(String, serde_json::Map<String, serde_json::Value>)>,
+    ) {
+        match spec {
+            serde_json::Value::String(rel) => {
+                let path = resolve_plugin_relative_path(plugin_root, rel);
+                if let Some(v) = read_json_file(&path) {
+                    let sp = path.to_string_lossy().to_string();
+                    if let Some(map) = v
+                        .get("mcpServers")
+                        .or_else(|| v.get("mcp_servers"))
+                        .and_then(|x| x.as_object())
+                    {
+                        out.push((sp, map.clone()));
+                    } else if let Some(map) = v.as_object() {
+                        if !map.is_empty() && map.values().all(|vv| vv.as_object().is_some()) {
+                            out.push((sp, map.clone()));
+                        }
+                    }
+                }
+            }
+            serde_json::Value::Array(arr) => {
+                for item in arr {
+                    collect_mcp_maps_from_plugin_mcp_spec(plugin_root, item, hint_source, out);
+                }
+            }
+            serde_json::Value::Object(obj) => {
+                if let Some(ms) = obj
                     .get("mcpServers")
-                    .or_else(|| v.get("mcp_servers"))
+                    .or_else(|| obj.get("mcp_servers"))
                     .and_then(|x| x.as_object())
                 {
-                    out.push((sp, map.clone()));
-                } else if let Some(map) = v.as_object() {
-                    if !map.is_empty() && map.values().all(|vv| vv.as_object().is_some()) {
-                        out.push((sp, map.clone()));
-                    }
+                    out.push((hint_source.to_string(), ms.clone()));
+                    return;
                 }
-            }
-        }
-        serde_json::Value::Array(arr) => {
-            for item in arr {
-                collect_mcp_maps_from_plugin_mcp_spec(plugin_root, item, hint_source, out);
-            }
-        }
-        serde_json::Value::Object(obj) => {
-            if let Some(ms) = obj
-                .get("mcpServers")
-                .or_else(|| obj.get("mcp_servers"))
-                .and_then(|x| x.as_object())
-            {
-                out.push((hint_source.to_string(), ms.clone()));
-                return;
-            }
-            if !obj.is_empty() && obj.values().all(|vv| vv.as_object().is_some()) {
-                out.push((hint_source.to_string(), obj.clone()));
-            }
-        }
-        _ => {}
-    }
-}
-
-/// 将已解析的 MCP 服务器表写入 `out`（展开 `${CLAUDE_PLUGIN_ROOT}` / `${CLAUDE_PLUGIN_DATA}`）。
-fn append_mcp_declaration_maps(
-    plugin_ref: &str,
-    plugin_root: &Path,
-    maps: Vec<(String, serde_json::Map<String, serde_json::Value>)>,
-    out: &mut Vec<ClaudeMcpItem>,
-) {
-    let data_dir = claude_plugin_data_dir_from_ref(plugin_ref);
-    let data_dir_str = data_dir.to_string_lossy().to_string();
-    for (src_path, map) in maps {
-        for (name, cfg_orig) in map.iter() {
-            let mut cfg = cfg_orig.clone();
-            expand_plugin_vars_in_json_value(&mut cfg, plugin_root, &data_dir_str);
-            let enabled = cfg.get("enabled").and_then(|x| x.as_bool()).unwrap_or(true)
-                && !cfg
-                    .get("disabled")
-                    .and_then(|x| x.as_bool())
-                    .unwrap_or(false);
-            let status = if enabled {
-                "connected".to_string()
-            } else {
-                "disconnected".to_string()
-            };
-            let command = parse_mcp_command(&cfg);
-            let tools = parse_mcp_tools(&cfg);
-            out.push(ClaudeMcpItem {
-                id: format!("plugin::{}::{}", plugin_ref, name),
-                name: name.to_string(),
-                command,
-                status,
-                enabled,
-                tools,
-                scope: "plugin".to_string(),
-                source_path: src_path.clone(),
-                claude_json_project_key: None,
-                plugin_ref: Some(plugin_ref.to_string()),
-                runtime_status: None,
-            });
-        }
-    }
-}
-
-/// 从单个插件根目录（cache 安装副本等）解析 MCP 条目并追加到 `out`。
-fn push_mcp_declarations_from_plugin_dir(
-    plugin_ref: &str,
-    plugin_root: &Path,
-    out: &mut Vec<ClaudeMcpItem>,
-) {
-    let manifest_path = plugin_root.join(".claude-plugin").join("plugin.json");
-
-    let mut maps: Vec<(String, serde_json::Map<String, serde_json::Value>)> = Vec::new();
-    if let Some(manifest_v) = read_json_file(&manifest_path) {
-        if let Some(spec) = manifest_v
-            .get("mcpServers")
-            .or_else(|| manifest_v.get("mcp_servers"))
-            .filter(|s| !s.is_null())
-        {
-            let hint = manifest_path.to_string_lossy().to_string();
-            collect_mcp_maps_from_plugin_mcp_spec(plugin_root, spec, &hint, &mut maps);
-        }
-    }
-    if maps.is_empty() {
-        let root_mcp = plugin_root.join(".mcp.json");
-        if let Some(v) = read_json_file(&root_mcp) {
-            if let Some(map) = v
-                .get("mcpServers")
-                .or_else(|| v.get("mcp_servers"))
-                .and_then(|x| x.as_object())
-            {
-                maps.push((root_mcp.to_string_lossy().to_string(), map.clone()));
-            }
-        }
-    }
-
-    append_mcp_declaration_maps(plugin_ref, plugin_root, maps, out);
-}
-
-/// 解析 `installed_plugins.json` 中的 `installPath` / `install_path`（支持 `~`、相对路径、`$HOME/`、环境变量）。
-fn resolve_claude_plugin_install_path(home: &Path, raw: &str) -> Option<PathBuf> {
-    let t = raw.trim();
-    if t.is_empty() {
-        return None;
-    }
-    let t = expand_env_vars_in_str(t);
-    let t = t.as_str();
-    let mut pb = if let Some(rest) = t.strip_prefix("~/") {
-        home.join(rest)
-    } else if t == "~" {
-        home.to_path_buf()
-    } else if let Some(rest) = t.strip_prefix("$HOME/") {
-        home.join(rest)
-    } else {
-        PathBuf::from(t)
-    };
-    if pb.as_path().is_relative() {
-        pb = home.join(pb);
-    }
-    let pb = fs::canonicalize(&pb).unwrap_or(pb);
-    if pb.is_dir() && !is_under_plugins_marketplaces(&pb) {
-        Some(pb)
-    } else {
-        None
-    }
-}
-
-fn dedupe_plugin_mcp_items(items: Vec<ClaudeMcpItem>) -> Vec<ClaudeMcpItem> {
-    let mut seen: HashSet<(String, String)> = HashSet::new();
-    let mut out: Vec<ClaudeMcpItem> = Vec::new();
-    for it in items {
-        let key = (it.name.clone(), it.command.clone());
-        if seen.insert(key) {
-            out.push(it);
-        }
-    }
-    out
-}
-
-fn claude_plugins_cache_dir() -> PathBuf {
-    crate::claude_config_dir::user_claude_dir()
-        .join("plugins")
-        .join("cache")
-}
-
-fn claude_plugins_marketplaces_dir() -> PathBuf {
-    crate::claude_config_dir::user_claude_dir()
-        .join("plugins")
-        .join("marketplaces")
-}
-
-/// Claude Code 市场清单目录（`plugins/marketplaces/**`）仅作市场浏览，不参与 MCP / 技能 / 子代理探测。
-pub(crate) fn is_under_plugins_marketplaces(path: &Path) -> bool {
-    let marketplaces = claude_plugins_marketplaces_dir();
-    let Ok(mp) = fs::canonicalize(&marketplaces) else {
-        return path.starts_with(&marketplaces);
-    };
-    let Ok(p) = fs::canonicalize(path) else {
-        return path.starts_with(&marketplaces);
-    };
-    p.starts_with(&mp)
-}
-
-fn dir_has_skill_md_subdirs(skills_dir: &Path) -> bool {
-    let Ok(rd) = fs::read_dir(skills_dir) else {
-        return false;
-    };
-    rd.flatten()
-        .any(|e| e.path().is_dir() && e.path().join("SKILL.md").is_file())
-}
-
-fn dir_has_agent_markdown(agents_dir: &Path) -> bool {
-    let Ok(rd) = fs::read_dir(agents_dir) else {
-        return false;
-    };
-    rd.flatten().any(|e| {
-        e.path().is_file()
-            && e.path()
-                .extension()
-                .and_then(|x| x.to_str())
-                .map(|x| x.eq_ignore_ascii_case("md"))
-                .unwrap_or(false)
-    })
-}
-
-/// 判定目录是否为 Claude Code 插件包根（用于扫描 `plugins/cache/**`，与 installed_plugins 是否登记无关）。
-fn is_claude_plugin_package_root(dir: &Path) -> bool {
-    if dir.join(".claude-plugin").join("plugin.json").is_file() || dir.join(".mcp.json").is_file() {
-        return true;
-    }
-    let agents = dir.join("agents");
-    if agents.is_dir() && dir_has_agent_markdown(&agents) {
-        return true;
-    }
-    let skills = dir.join("skills");
-    skills.is_dir() && dir_has_skill_md_subdirs(&skills)
-}
-
-fn walkdir_skip_plugin_noise(e: &walkdir::DirEntry) -> bool {
-    let name = e.file_name().to_string_lossy();
-    if e.depth() > 0
-        && (name == "node_modules"
-            || name == ".git"
-            || name == "target"
-            || name == ".venv"
-            || name == "dist")
-    {
-        return false;
-    }
-    true
-}
-
-/// 在 `root_canon` 目录树内枚举所有「插件包根」（含 `.claude-plugin/plugin.json`、根 `.mcp.json`、skills/agents 等）。
-fn discover_plugin_package_roots_in_tree(root_canon: &Path) -> Vec<PathBuf> {
-    if !root_canon.is_dir() {
-        return Vec::new();
-    }
-    let mut out: Vec<PathBuf> = Vec::new();
-    let mut seen: HashSet<String> = HashSet::new();
-    let walker = WalkDir::new(root_canon)
-        .follow_links(false)
-        .into_iter()
-        .filter_entry(walkdir_skip_plugin_noise);
-    for ent in walker.filter_map(|e| e.ok()) {
-        if !ent.file_type().is_dir() {
-            continue;
-        }
-        let path = ent.path();
-        if !is_claude_plugin_package_root(path) {
-            continue;
-        }
-        let canon = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
-        let key = canon.to_string_lossy().to_string();
-        if !seen.insert(key) {
-            continue;
-        }
-        out.push(canon);
-    }
-    out.sort_by(|a, b| a.to_string_lossy().cmp(&b.to_string_lossy()));
-    out
-}
-
-/// 插件目录是否在 manifest 或根 `.mcp.json` 中声明了 MCP（用于跳过无 MCP 的纯技能包，减少无效解析）。
-fn plugin_package_root_declares_mcp(plugin_root: &Path) -> bool {
-    let manifest = plugin_root.join(".claude-plugin").join("plugin.json");
-    if let Some(v) = read_json_file(&manifest) {
-        let spec = v.get("mcpServers").or_else(|| v.get("mcp_servers"));
-        if spec.is_some_and(|s| !s.is_null()) {
-            return true;
-        }
-    }
-    plugin_root.join(".mcp.json").is_file()
-}
-
-fn discover_plugin_roots_under_claude_cache_inner(require_mcp_declaration: bool) -> Vec<(String, PathBuf)> {
-    let cache = claude_plugins_cache_dir();
-    if !cache.is_dir() {
-        return Vec::new();
-    }
-    let cache_canon = match fs::canonicalize(&cache) {
-        Ok(p) => p,
-        Err(_) => return Vec::new(),
-    };
-    let mut out: Vec<(String, PathBuf)> = Vec::new();
-    for canon in discover_plugin_package_roots_in_tree(&cache_canon) {
-        if is_under_plugins_marketplaces(&canon) {
-            continue;
-        }
-        if require_mcp_declaration && !plugin_package_root_declares_mcp(&canon) {
-            continue;
-        }
-        let rel = match canon.strip_prefix(&cache_canon) {
-            Ok(r) => r.to_string_lossy().replace('\\', "/"),
-            Err(_) => canon.to_string_lossy().replace('\\', "/"),
-        };
-        let rel = rel.trim_matches('/').to_string();
-        out.push((rel, canon));
-    }
-    out.sort_by(|a, b| a.0.cmp(&b.0));
-    out
-}
-
-/// 枚举 `plugins/cache/**` 下声明了 MCP 的插件包根（不扫描 `plugins/marketplaces/**`）。
-pub(crate) fn discover_plugin_roots_under_claude_cache() -> Vec<(String, PathBuf)> {
-    discover_plugin_roots_under_claude_cache_inner(true)
-}
-
-/// 枚举 `plugins/cache/**` 下全部插件包根，供技能 / 子代理列表使用（不扫描 `plugins/marketplaces/**`）。
-pub(crate) fn discover_plugin_roots_under_claude_cache_for_skills_and_agents() -> Vec<(String, PathBuf)> {
-    discover_plugin_roots_under_claude_cache_inner(false)
-}
-
-/// `~/.claude/settings.json` 顶层 `"<plugin-slug>@<marketplace-id>": true`：解析市场真实根目录后读取 `plugins/<slug>/.claude-plugin/plugin.json` 等的 `mcpServers`。
-/// 市场根目录优先来自同文件 `extraKnownMarketplaces.<id>`：`source` 为 `directory` 时的嵌套 `path`，或仅顶层 `path`（如 digital-engine-plugin-marketplace）；否则回退到 `plugins/<id>` 或 `plugins/cache/**`（见 `resolve_plugin_marketplace_root_dir`，不读 `plugins/marketplaces`）。
-fn marketplace_plugin_toggle_value_enabled(val: &serde_json::Value) -> bool {
-    match val {
-        serde_json::Value::Bool(b) => *b,
-        serde_json::Value::String(s) => {
-            let t = s.trim();
-            t.eq_ignore_ascii_case("true")
-                || t == "1"
-                || t.eq_ignore_ascii_case("yes")
-                || t.eq_ignore_ascii_case("on")
-        }
-        serde_json::Value::Number(n) => n.as_i64() == Some(1) || n.as_f64() == Some(1.0),
-        serde_json::Value::Object(o) => {
-            let disabled = o.get("disabled").and_then(|v| v.as_bool()).unwrap_or(false);
-            // 与 Claude / 插件市场常见写法对齐：仅有 `{}` 或版本字段时也视为已启用
-            let enabled = o.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
-            enabled && !disabled
-        }
-        _ => false,
-    }
-}
-
-/// 解析 `plugin@marketplace` 键（折叠 `@` 右侧空白），返回 (plugin_slug, marketplace_id)。
-fn parse_settings_plugin_marketplace_toggle_key(key: &str) -> Option<(String, String)> {
-    let key = key.trim();
-    if !key.contains('@') {
-        return None;
-    }
-    let (a, b) = key.split_once('@')?;
-    let slug = a.trim().to_string();
-    let mkt = b.split_whitespace().collect::<String>();
-    let mkt = mkt.trim().to_string();
-    if slug.is_empty() || mkt.is_empty() {
-        return None;
-    }
-    Some((slug, mkt))
-}
-
-fn source_kind_is_directory(kind: &str) -> bool {
-    let k = kind.trim();
-    k.eq_ignore_ascii_case("directory")
-        || k.eq_ignore_ascii_case("dir")
-        || k.eq_ignore_ascii_case("local")
-}
-
-/// 从 `extraKnownMarketplaces` 单条 entry 提取「directory 类」本地根路径（兼容多种字段布局）。
-fn extract_extra_marketplace_directory_raw_path(
-    entry: &serde_json::Map<String, serde_json::Value>,
-) -> Option<String> {
-    // 形态 A：`{ "source": { "source": "directory", "path": "..." }, "autoUpdate": true }`
-    if let Some(src_v) = entry.get("source") {
-        match src_v {
-            serde_json::Value::Object(src) => {
-                let ty = src
-                    .get("source")
-                    .or_else(|| src.get("type"))
-                    .or_else(|| src.get("kind"))
-                    .and_then(|x| x.as_str())
-                    .unwrap_or("")
-                    .trim();
-                if source_kind_is_directory(ty) {
-                    let raw = [
-                        "path",
-                        "directory",
-                        "root",
-                        "localPath",
-                        "installPath",
-                        "install_path",
-                    ]
-                    .iter()
-                    .find_map(|k| {
-                        src.get(*k)
-                            .and_then(|v| v.as_str())
-                            .map(str::trim)
-                            .filter(|s| !s.is_empty())
-                    });
-                    if let Some(s) = raw {
-                        return Some(s.to_string());
-                    }
-                }
-            }
-            serde_json::Value::String(s_src) => {
-                if source_kind_is_directory(s_src.as_str()) {
-                    let raw = [
-                        "path",
-                        "directory",
-                        "root",
-                        "localPath",
-                        "installPath",
-                        "install_path",
-                    ]
-                    .iter()
-                    .find_map(|k| {
-                        entry
-                            .get(*k)
-                            .and_then(|v| v.as_str())
-                            .map(str::trim)
-                            .filter(|s| !s.is_empty())
-                    });
-                    if let Some(s) = raw {
-                        return Some(s.to_string());
-                    }
+                if !obj.is_empty() && obj.values().all(|vv| vv.as_object().is_some()) {
+                    out.push((hint_source.to_string(), obj.clone()));
                 }
             }
             _ => {}
         }
     }
-    // 形态 B：顶层 `type` / `kind` + `path`
-    let top_ty = entry
-        .get("type")
-        .or_else(|| entry.get("kind"))
-        .or_else(|| entry.get("source"))
-        .and_then(|v| v.as_str())
-        .unwrap_or("")
-        .trim();
-    if source_kind_is_directory(top_ty) {
-        let raw = [
+
+    /// 将已解析的 MCP 服务器表写入 `out`（展开 `${CLAUDE_PLUGIN_ROOT}` / `${CLAUDE_PLUGIN_DATA}`）。
+    fn append_mcp_declaration_maps(
+        plugin_ref: &str,
+        plugin_root: &Path,
+        maps: Vec<(String, serde_json::Map<String, serde_json::Value>)>,
+        out: &mut Vec<ClaudeMcpItem>,
+    ) {
+        let data_dir = claude_plugin_data_dir_from_ref(plugin_ref);
+        let data_dir_str = data_dir.to_string_lossy().to_string();
+        for (src_path, map) in maps {
+            for (name, cfg_orig) in map.iter() {
+                let mut cfg = cfg_orig.clone();
+                expand_plugin_vars_in_json_value(&mut cfg, plugin_root, &data_dir_str);
+                let enabled = cfg.get("enabled").and_then(|x| x.as_bool()).unwrap_or(true)
+                    && !cfg
+                        .get("disabled")
+                        .and_then(|x| x.as_bool())
+                        .unwrap_or(false);
+                let status = if enabled {
+                    "connected".to_string()
+                } else {
+                    "disconnected".to_string()
+                };
+                let command = parse_mcp_command(&cfg);
+                let tools = parse_mcp_tools(&cfg);
+                out.push(ClaudeMcpItem {
+                    id: format!("plugin::{}::{}", plugin_ref, name),
+                    name: name.to_string(),
+                    command,
+                    status,
+                    enabled,
+                    tools,
+                    scope: "plugin".to_string(),
+                    source_path: src_path.clone(),
+                    claude_json_project_key: None,
+                    plugin_ref: Some(plugin_ref.to_string()),
+                    runtime_status: None,
+                });
+            }
+        }
+    }
+
+    /// 从单个插件根目录（cache 安装副本等）解析 MCP 条目并追加到 `out`。
+    fn push_mcp_declarations_from_plugin_dir(
+        plugin_ref: &str,
+        plugin_root: &Path,
+        out: &mut Vec<ClaudeMcpItem>,
+    ) {
+        let manifest_path = plugin_root.join(".claude-plugin").join("plugin.json");
+
+        let mut maps: Vec<(String, serde_json::Map<String, serde_json::Value>)> = Vec::new();
+        if let Some(manifest_v) = read_json_file(&manifest_path) {
+            if let Some(spec) = manifest_v
+                .get("mcpServers")
+                .or_else(|| manifest_v.get("mcp_servers"))
+                .filter(|s| !s.is_null())
+            {
+                let hint = manifest_path.to_string_lossy().to_string();
+                collect_mcp_maps_from_plugin_mcp_spec(plugin_root, spec, &hint, &mut maps);
+            }
+        }
+        if maps.is_empty() {
+            let root_mcp = plugin_root.join(".mcp.json");
+            if let Some(v) = read_json_file(&root_mcp) {
+                if let Some(map) = v
+                    .get("mcpServers")
+                    .or_else(|| v.get("mcp_servers"))
+                    .and_then(|x| x.as_object())
+                {
+                    maps.push((root_mcp.to_string_lossy().to_string(), map.clone()));
+                }
+            }
+        }
+
+        append_mcp_declaration_maps(plugin_ref, plugin_root, maps, out);
+    }
+
+    /// 解析 `installed_plugins.json` 中的 `installPath` / `install_path`（支持 `~`、相对路径、`$HOME/`、环境变量）。
+    fn resolve_claude_plugin_install_path(home: &Path, raw: &str) -> Option<PathBuf> {
+        let t = raw.trim();
+        if t.is_empty() {
+            return None;
+        }
+        let t = expand_env_vars_in_str(t);
+        let t = t.as_str();
+        let mut pb = if let Some(rest) = t.strip_prefix("~/") {
+            home.join(rest)
+        } else if t == "~" {
+            home.to_path_buf()
+        } else if let Some(rest) = t.strip_prefix("$HOME/") {
+            home.join(rest)
+        } else {
+            PathBuf::from(t)
+        };
+        if pb.as_path().is_relative() {
+            pb = home.join(pb);
+        }
+        let pb = fs::canonicalize(&pb).unwrap_or(pb);
+        if pb.is_dir() && !is_under_plugins_marketplaces(&pb) {
+            Some(pb)
+        } else {
+            None
+        }
+    }
+
+    fn dedupe_plugin_mcp_items(items: Vec<ClaudeMcpItem>) -> Vec<ClaudeMcpItem> {
+        let mut seen: HashSet<(String, String)> = HashSet::new();
+        let mut out: Vec<ClaudeMcpItem> = Vec::new();
+        for it in items {
+            let key = (it.name.clone(), it.command.clone());
+            if seen.insert(key) {
+                out.push(it);
+            }
+        }
+        out
+    }
+
+    fn claude_plugins_cache_dir() -> PathBuf {
+        crate::claude_config_dir::user_claude_dir()
+            .join("plugins")
+            .join("cache")
+    }
+
+    fn claude_plugins_marketplaces_dir() -> PathBuf {
+        crate::claude_config_dir::user_claude_dir()
+            .join("plugins")
+            .join("marketplaces")
+    }
+
+    /// Claude Code 市场清单目录（`plugins/marketplaces/**`）仅作市场浏览，不参与 MCP / 技能 / 子代理探测。
+    pub(crate) fn is_under_plugins_marketplaces(path: &Path) -> bool {
+        let marketplaces = claude_plugins_marketplaces_dir();
+        let Ok(mp) = fs::canonicalize(&marketplaces) else {
+            return path.starts_with(&marketplaces);
+        };
+        let Ok(p) = fs::canonicalize(path) else {
+            return path.starts_with(&marketplaces);
+        };
+        p.starts_with(&mp)
+    }
+
+    fn dir_has_skill_md_subdirs(skills_dir: &Path) -> bool {
+        let Ok(rd) = fs::read_dir(skills_dir) else {
+            return false;
+        };
+        rd.flatten()
+            .any(|e| e.path().is_dir() && e.path().join("SKILL.md").is_file())
+    }
+
+    fn dir_has_agent_markdown(agents_dir: &Path) -> bool {
+        let Ok(rd) = fs::read_dir(agents_dir) else {
+            return false;
+        };
+        rd.flatten().any(|e| {
+            e.path().is_file()
+                && e.path()
+                    .extension()
+                    .and_then(|x| x.to_str())
+                    .map(|x| x.eq_ignore_ascii_case("md"))
+                    .unwrap_or(false)
+        })
+    }
+
+    /// 判定目录是否为 Claude Code 插件包根（用于扫描 `plugins/cache/**`，与 installed_plugins 是否登记无关）。
+    fn is_claude_plugin_package_root(dir: &Path) -> bool {
+        if dir.join(".claude-plugin").join("plugin.json").is_file() || dir.join(".mcp.json").is_file() {
+            return true;
+        }
+        let agents = dir.join("agents");
+        if agents.is_dir() && dir_has_agent_markdown(&agents) {
+            return true;
+        }
+        let skills = dir.join("skills");
+        skills.is_dir() && dir_has_skill_md_subdirs(&skills)
+    }
+
+    fn walkdir_skip_plugin_noise(e: &walkdir::DirEntry) -> bool {
+        let name = e.file_name().to_string_lossy();
+        if e.depth() > 0
+            && (name == "node_modules"
+                || name == ".git"
+                || name == "target"
+                || name == ".venv"
+                || name == "dist")
+        {
+            return false;
+        }
+        true
+    }
+
+    /// 在 `root_canon` 目录树内枚举所有「插件包根」（含 `.claude-plugin/plugin.json`、根 `.mcp.json`、skills/agents 等）。
+    fn discover_plugin_package_roots_in_tree(root_canon: &Path) -> Vec<PathBuf> {
+        if !root_canon.is_dir() {
+            return Vec::new();
+        }
+        let mut out: Vec<PathBuf> = Vec::new();
+        let mut seen: HashSet<String> = HashSet::new();
+        let walker = WalkDir::new(root_canon)
+            .follow_links(false)
+            .into_iter()
+            .filter_entry(walkdir_skip_plugin_noise);
+        for ent in walker.filter_map(|e| e.ok()) {
+            if !ent.file_type().is_dir() {
+                continue;
+            }
+            let path = ent.path();
+            if !is_claude_plugin_package_root(path) {
+                continue;
+            }
+            let canon = fs::canonicalize(path).unwrap_or_else(|_| path.to_path_buf());
+            let key = canon.to_string_lossy().to_string();
+            if !seen.insert(key) {
+                continue;
+            }
+            out.push(canon);
+        }
+        out.sort_by(|a, b| a.to_string_lossy().cmp(&b.to_string_lossy()));
+        out
+    }
+
+    /// 插件目录是否在 manifest 或根 `.mcp.json` 中声明了 MCP（用于跳过无 MCP 的纯技能包，减少无效解析）。
+    fn plugin_package_root_declares_mcp(plugin_root: &Path) -> bool {
+        let manifest = plugin_root.join(".claude-plugin").join("plugin.json");
+        if let Some(v) = read_json_file(&manifest) {
+            let spec = v.get("mcpServers").or_else(|| v.get("mcp_servers"));
+            if spec.is_some_and(|s| !s.is_null()) {
+                return true;
+            }
+        }
+        plugin_root.join(".mcp.json").is_file()
+    }
+
+    fn discover_plugin_roots_under_claude_cache_inner(require_mcp_declaration: bool) -> Vec<(String, PathBuf)> {
+        let cache = claude_plugins_cache_dir();
+        if !cache.is_dir() {
+            return Vec::new();
+        }
+        let cache_canon = match fs::canonicalize(&cache) {
+            Ok(p) => p,
+            Err(_) => return Vec::new(),
+        };
+        let mut out: Vec<(String, PathBuf)> = Vec::new();
+        for canon in discover_plugin_package_roots_in_tree(&cache_canon) {
+            if is_under_plugins_marketplaces(&canon) {
+                continue;
+            }
+            if require_mcp_declaration && !plugin_package_root_declares_mcp(&canon) {
+                continue;
+            }
+            let rel = match canon.strip_prefix(&cache_canon) {
+                Ok(r) => r.to_string_lossy().replace('\\', "/"),
+                Err(_) => canon.to_string_lossy().replace('\\', "/"),
+            };
+            let rel = rel.trim_matches('/').to_string();
+            out.push((rel, canon));
+        }
+        out.sort_by(|a, b| a.0.cmp(&b.0));
+        out
+    }
+
+    /// 枚举 `plugins/cache/**` 下声明了 MCP 的插件包根（不扫描 `plugins/marketplaces/**`）。
+    pub(crate) fn discover_plugin_roots_under_claude_cache() -> Vec<(String, PathBuf)> {
+        discover_plugin_roots_under_claude_cache_inner(true)
+    }
+
+    /// 枚举 `plugins/cache/**` 下全部插件包根，供技能 / 子代理列表使用（不扫描 `plugins/marketplaces/**`）。
+    pub(crate) fn discover_plugin_roots_under_claude_cache_for_skills_and_agents() -> Vec<(String, PathBuf)> {
+        discover_plugin_roots_under_claude_cache_inner(false)
+    }
+
+    /// `~/.claude/settings.json` 顶层 `"<plugin-slug>@<marketplace-id>": true`：解析市场真实根目录后读取 `plugins/<slug>/.claude-plugin/plugin.json` 等的 `mcpServers`。
+    /// 市场根目录优先来自同文件 `extraKnownMarketplaces.<id>`：`source` 为 `directory` 时的嵌套 `path`，或仅顶层 `path`（如 digital-engine-plugin-marketplace）；否则回退到 `plugins/<id>` 或 `plugins/cache/**`（见 `resolve_plugin_marketplace_root_dir`，不读 `plugins/marketplaces`）。
+    fn marketplace_plugin_toggle_value_enabled(val: &serde_json::Value) -> bool {
+        match val {
+            serde_json::Value::Bool(b) => *b,
+            serde_json::Value::String(s) => {
+                let t = s.trim();
+                t.eq_ignore_ascii_case("true")
+                    || t == "1"
+                    || t.eq_ignore_ascii_case("yes")
+                    || t.eq_ignore_ascii_case("on")
+            }
+            serde_json::Value::Number(n) => n.as_i64() == Some(1) || n.as_f64() == Some(1.0),
+            serde_json::Value::Object(o) => {
+                let disabled = o.get("disabled").and_then(|v| v.as_bool()).unwrap_or(false);
+                // 与 Claude / 插件市场常见写法对齐：仅有 `{}` 或版本字段时也视为已启用
+                let enabled = o.get("enabled").and_then(|v| v.as_bool()).unwrap_or(true);
+                enabled && !disabled
+            }
+            _ => false,
+        }
+    }
+
+    /// 解析 `plugin@marketplace` 键（折叠 `@` 右侧空白），返回 (plugin_slug, marketplace_id)。
+    fn parse_settings_plugin_marketplace_toggle_key(key: &str) -> Option<(String, String)> {
+        let key = key.trim();
+        if !key.contains('@') {
+            return None;
+        }
+        let (a, b) = key.split_once('@')?;
+        let slug = a.trim().to_string();
+        let mkt = b.split_whitespace().collect::<String>();
+        let mkt = mkt.trim().to_string();
+        if slug.is_empty() || mkt.is_empty() {
+            return None;
+        }
+        Some((slug, mkt))
+    }
+
+    fn source_kind_is_directory(kind: &str) -> bool {
+        let k = kind.trim();
+        k.eq_ignore_ascii_case("directory")
+            || k.eq_ignore_ascii_case("dir")
+            || k.eq_ignore_ascii_case("local")
+    }
+
+    /// 从 `extraKnownMarketplaces` 单条 entry 提取「directory 类」本地根路径（兼容多种字段布局）。
+    fn extract_extra_marketplace_directory_raw_path(
+        entry: &serde_json::Map<String, serde_json::Value>,
+    ) -> Option<String> {
+        // 形态 A：`{ "source": { "source": "directory", "path": "..." }, "autoUpdate": true }`
+        if let Some(src_v) = entry.get("source") {
+            match src_v {
+                serde_json::Value::Object(src) => {
+                    let ty = src
+                        .get("source")
+                        .or_else(|| src.get("type"))
+                        .or_else(|| src.get("kind"))
+                        .and_then(|x| x.as_str())
+                        .unwrap_or("")
+                        .trim();
+                    if source_kind_is_directory(ty) {
+                        let raw = [
+                            "path",
+                            "directory",
+                            "root",
+                            "localPath",
+                            "installPath",
+                            "install_path",
+                        ]
+                        .iter()
+                        .find_map(|k| {
+                            src.get(*k)
+                                .and_then(|v| v.as_str())
+                                .map(str::trim)
+                                .filter(|s| !s.is_empty())
+                        });
+                        if let Some(s) = raw {
+                            return Some(s.to_string());
+                        }
+                    }
+                }
+                serde_json::Value::String(s_src) => {
+                    if source_kind_is_directory(s_src.as_str()) {
+                        let raw = [
+                            "path",
+                            "directory",
+                            "root",
+                            "localPath",
+                            "installPath",
+                            "install_path",
+                        ]
+                        .iter()
+                        .find_map(|k| {
+                            entry
+                                .get(*k)
+                                .and_then(|v| v.as_str())
+                                .map(str::trim)
+                                .filter(|s| !s.is_empty())
+                        });
+                        if let Some(s) = raw {
+                            return Some(s.to_string());
+                        }
+                    }
+                }
+                _ => {}
+            }
+        }
+        // 形态 B：顶层 `type` / `kind` + `path`
+        let top_ty = entry
+            .get("type")
+            .or_else(|| entry.get("kind"))
+            .or_else(|| entry.get("source"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .trim();
+        if source_kind_is_directory(top_ty) {
+            let raw = [
+                "path",
+                "directory",
+                "root",
+                "localPath",
+                "installPath",
+                "install_path",
+            ]
+            .iter()
+            .find_map(|k| {
+                entry
+                    .get(*k)
+                    .and_then(|v| v.as_str())
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+            });
+            if let Some(s) = raw {
+                return Some(s.to_string());
+            }
+        }
+        // 形态 C：`extraKnownMarketplaces.<id>` 仅顶层 `path` / `root` 等（无 `source` / `type` 包裹），
+        // 与 digital-engine-plugin-marketplace 等本地市场一致；排除 http(s) 以免把远程 URL 当目录。
+        if let Some(s) = [
             "path",
             "directory",
             "root",
@@ -746,322 +773,302 @@ fn extract_extra_marketplace_directory_raw_path(
                 .get(*k)
                 .and_then(|v| v.as_str())
                 .map(str::trim)
-                .filter(|s| !s.is_empty())
-        });
-        if let Some(s) = raw {
-            return Some(s.to_string());
+                .filter(|t| !t.is_empty())
+        }) {
+            let lower = s.to_lowercase();
+            if !lower.starts_with("http://") && !lower.starts_with("https://") {
+                return Some(s.to_string());
+            }
         }
+        None
     }
-    // 形态 C：`extraKnownMarketplaces.<id>` 仅顶层 `path` / `root` 等（无 `source` / `type` 包裹），
-    // 与 digital-engine-plugin-marketplace 等本地市场一致；排除 http(s) 以免把远程 URL 当目录。
-    if let Some(s) = [
-        "path",
-        "directory",
-        "root",
-        "localPath",
-        "installPath",
-        "install_path",
-    ]
-    .iter()
-    .find_map(|k| {
-        entry
-            .get(*k)
-            .and_then(|v| v.as_str())
-            .map(str::trim)
-            .filter(|t| !t.is_empty())
-    }) {
-        let lower = s.to_lowercase();
-        if !lower.starts_with("http://") && !lower.starts_with("https://") {
-            return Some(s.to_string());
+
+    /// 展开配置中的路径字符串（不要求目录已存在）；存在且为目录时再 canonicalize。
+    /// 支持 `~`、`$HOME/` 前缀，以及任意位置的 `$VAR` / `${VAR}` / `%VAR%`（当前进程环境）。
+    fn expand_claude_config_path_string(home: &Path, raw: &str) -> PathBuf {
+        let t = raw.trim();
+        let t = t.strip_prefix("file://").unwrap_or(t);
+        if t.is_empty() {
+            return PathBuf::new();
         }
+        let t = expand_env_vars_in_str(t);
+        let t = t.as_str();
+        let mut pb = if let Some(rest) = t.strip_prefix("~/") {
+            home.join(rest)
+        } else if t == "~" {
+            home.to_path_buf()
+        } else if let Some(rest) = t.strip_prefix("$HOME/") {
+            home.join(rest)
+        } else {
+            PathBuf::from(t)
+        };
+        if pb.as_path().is_relative() {
+            pb = home.join(pb);
+        }
+        pb
     }
-    None
-}
 
-/// 展开配置中的路径字符串（不要求目录已存在）；存在且为目录时再 canonicalize。
-/// 支持 `~`、`$HOME/` 前缀，以及任意位置的 `$VAR` / `${VAR}` / `%VAR%`（当前进程环境）。
-fn expand_claude_config_path_string(home: &Path, raw: &str) -> PathBuf {
-    let t = raw.trim();
-    let t = t.strip_prefix("file://").unwrap_or(t);
-    if t.is_empty() {
-        return PathBuf::new();
-    }
-    let t = expand_env_vars_in_str(t);
-    let t = t.as_str();
-    let mut pb = if let Some(rest) = t.strip_prefix("~/") {
-        home.join(rest)
-    } else if t == "~" {
-        home.to_path_buf()
-    } else if let Some(rest) = t.strip_prefix("$HOME/") {
-        home.join(rest)
-    } else {
-        PathBuf::from(t)
-    };
-    if pb.as_path().is_relative() {
-        pb = home.join(pb);
-    }
-    pb
-}
-
-/// 从已解析的 `settings.json` 根对象读取 `extraKnownMarketplaces`：收集 directory 类本地根（键为 marketplace id）。
-fn extra_known_marketplace_directory_roots_from_settings_value(
-    home: &Path,
-    settings_root: &serde_json::Value,
-) -> HashMap<String, PathBuf> {
-    let Some(root) = settings_root.as_object() else {
-        return HashMap::new();
-    };
-    let Some(ekm) = root
-        .get("extraKnownMarketplaces")
-        .and_then(|x| x.as_object())
-    else {
-        return HashMap::new();
-    };
-    let mut out: HashMap<String, PathBuf> = HashMap::new();
-    for (marketplace_key, entry_v) in ekm {
-        let raw_path = if let Some(entry) = entry_v.as_object() {
-            extract_extra_marketplace_directory_raw_path(entry)
-        } else if let Some(s) = entry_v.as_str() {
-            let t = s.trim();
-            if t.is_empty() {
-                None
-            } else {
-                let lower = t.to_lowercase();
-                if lower.starts_with("http://") || lower.starts_with("https://") {
+    /// 从已解析的 `settings.json` 根对象读取 `extraKnownMarketplaces`：收集 directory 类本地根（键为 marketplace id）。
+    fn extra_known_marketplace_directory_roots_from_settings_value(
+        home: &Path,
+        settings_root: &serde_json::Value,
+    ) -> HashMap<String, PathBuf> {
+        let Some(root) = settings_root.as_object() else {
+            return HashMap::new();
+        };
+        let Some(ekm) = root
+            .get("extraKnownMarketplaces")
+            .and_then(|x| x.as_object())
+        else {
+            return HashMap::new();
+        };
+        let mut out: HashMap<String, PathBuf> = HashMap::new();
+        for (marketplace_key, entry_v) in ekm {
+            let raw_path = if let Some(entry) = entry_v.as_object() {
+                extract_extra_marketplace_directory_raw_path(entry)
+            } else if let Some(s) = entry_v.as_str() {
+                let t = s.trim();
+                if t.is_empty() {
                     None
                 } else {
-                    Some(t.to_string())
+                    let lower = t.to_lowercase();
+                    if lower.starts_with("http://") || lower.starts_with("https://") {
+                        None
+                    } else {
+                        Some(t.to_string())
+                    }
                 }
+            } else {
+                None
+            };
+            let Some(raw_path) = raw_path else {
+                continue;
+            };
+            let expanded = expand_claude_config_path_string(home, &raw_path);
+            if expanded.as_os_str().is_empty() {
+                continue;
             }
-        } else {
-            None
-        };
-        let Some(raw_path) = raw_path else {
-            continue;
-        };
-        let expanded = expand_claude_config_path_string(home, &raw_path);
-        if expanded.as_os_str().is_empty() {
-            continue;
-        }
-        // 与 installPath 一致：存在且为目录才采纳（避免误配空路径）
-        if expanded.is_dir() {
-            let pb = fs::canonicalize(&expanded).unwrap_or(expanded);
-            if !is_under_plugins_marketplaces(&pb) {
-                out.insert(marketplace_key.clone(), pb);
-            }
-        }
-    }
-    out
-}
-
-/// 定位「插件市场」根目录：`plugins/<id>`，再在 `plugins/cache/**` 内按目录名匹配（不扫描 `plugins/marketplaces/**`）。
-fn resolve_plugin_marketplace_root_dir(marketplace_id: &str) -> Option<PathBuf> {
-    let id_lower = marketplace_id.to_lowercase();
-    let user_claude = crate::claude_config_dir::user_claude_dir();
-    let flat = user_claude.join("plugins").join(marketplace_id);
-    if flat.is_dir() {
-        return fs::canonicalize(&flat).ok().or(Some(flat));
-    }
-    let cache = claude_plugins_cache_dir();
-    if let Ok(cache_canon) = fs::canonicalize(&cache) {
-        if cache_canon.is_dir() {
-            let walker = WalkDir::new(&cache_canon)
-                .follow_links(false)
-                .max_depth(16)
-                .into_iter()
-                .filter_entry(walkdir_skip_plugin_noise);
-            for ent in walker.filter_map(|e| e.ok()) {
-                if !ent.file_type().is_dir() || ent.depth() == 0 {
-                    continue;
-                }
-                if ent.file_name().to_string_lossy().to_lowercase() == id_lower {
-                    let p = ent.path().to_path_buf();
-                    return fs::canonicalize(&p).ok().or(Some(p));
+            // 与 installPath 一致：存在且为目录才采纳（避免误配空路径）
+            if expanded.is_dir() {
+                let pb = fs::canonicalize(&expanded).unwrap_or(expanded);
+                if !is_under_plugins_marketplaces(&pb) {
+                    out.insert(marketplace_key.clone(), pb);
                 }
             }
         }
+        out
     }
-    None
-}
 
-/// 在 `parent` 的一级子目录中按不区分大小写匹配目录名（用于 `plugins/dima-plugin` 与磁盘实际大小写不一致）。
-fn find_immediate_child_dir_case_insensitive(parent: &Path, name_wanted: &str) -> Option<PathBuf> {
-    let w = name_wanted.trim().to_lowercase();
-    if w.is_empty() {
-        return None;
-    }
-    let rd = fs::read_dir(parent).ok()?;
-    for ent in rd.flatten() {
-        if !ent.file_type().map(|t| t.is_dir()).unwrap_or(false) {
-            continue;
+    /// 定位「插件市场」根目录：`plugins/<id>`，再在 `plugins/cache/**` 内按目录名匹配（不扫描 `plugins/marketplaces/**`）。
+    fn resolve_plugin_marketplace_root_dir(marketplace_id: &str) -> Option<PathBuf> {
+        let id_lower = marketplace_id.to_lowercase();
+        let user_claude = crate::claude_config_dir::user_claude_dir();
+        let flat = user_claude.join("plugins").join(marketplace_id);
+        if flat.is_dir() {
+            return fs::canonicalize(&flat).ok().or(Some(flat));
         }
-        if ent.file_name().to_string_lossy().to_lowercase() == w {
-            return Some(ent.path());
+        let cache = claude_plugins_cache_dir();
+        if let Ok(cache_canon) = fs::canonicalize(&cache) {
+            if cache_canon.is_dir() {
+                let walker = WalkDir::new(&cache_canon)
+                    .follow_links(false)
+                    .max_depth(16)
+                    .into_iter()
+                    .filter_entry(walkdir_skip_plugin_noise);
+                for ent in walker.filter_map(|e| e.ok()) {
+                    if !ent.file_type().is_dir() || ent.depth() == 0 {
+                        continue;
+                    }
+                    if ent.file_name().to_string_lossy().to_lowercase() == id_lower {
+                        let p = ent.path().to_path_buf();
+                        return fs::canonicalize(&p).ok().or(Some(p));
+                    }
+                }
+            }
         }
+        None
     }
-    None
-}
 
-fn plugin_dir_root_if_valid(candidate: &Path) -> Option<PathBuf> {
-    if !candidate.is_dir() {
-        return None;
-    }
-    if candidate
-        .join(".claude-plugin")
-        .join("plugin.json")
-        .is_file()
-        || candidate.join(".mcp.json").is_file()
-        || is_claude_plugin_package_root(candidate)
-    {
-        return fs::canonicalize(candidate)
-            .ok()
-            .or_else(|| Some(candidate.to_path_buf()));
-    }
-    None
-}
-
-fn resolve_marketplace_plugin_root_from_slugs(
-    marketplace_id: &str,
-    plugin_slug: &str,
-    extra_marketplace_roots: &HashMap<String, PathBuf>,
-) -> Option<PathBuf> {
-    let mdir = extra_marketplace_roots
-        .get(marketplace_id)
-        .cloned()
-        .or_else(|| {
-            let id_lower = marketplace_id.to_lowercase();
-            extra_marketplace_roots
-                .iter()
-                .find(|(k, _)| k.to_lowercase() == id_lower)
-                .map(|(_, v)| v.clone())
-        })
-        .filter(|p| p.is_dir())
-        .map(|p| fs::canonicalize(&p).unwrap_or(p))
-        .or_else(|| resolve_plugin_marketplace_root_dir(marketplace_id))?;
-    if is_under_plugins_marketplaces(&mdir) {
-        return None;
-    }
-    let direct = [
-        mdir.join("plugins").join(plugin_slug),
-        mdir.join(plugin_slug),
-    ];
-    for c in &direct {
-        if let Some(p) = plugin_dir_root_if_valid(c) {
-            return Some(p);
+    /// 在 `parent` 的一级子目录中按不区分大小写匹配目录名（用于 `plugins/dima-plugin` 与磁盘实际大小写不一致）。
+    fn find_immediate_child_dir_case_insensitive(parent: &Path, name_wanted: &str) -> Option<PathBuf> {
+        let w = name_wanted.trim().to_lowercase();
+        if w.is_empty() {
+            return None;
         }
+        let rd = fs::read_dir(parent).ok()?;
+        for ent in rd.flatten() {
+            if !ent.file_type().map(|t| t.is_dir()).unwrap_or(false) {
+                continue;
+            }
+            if ent.file_name().to_string_lossy().to_lowercase() == w {
+                return Some(ent.path());
+            }
+        }
+        None
     }
-    let plugins_dir = mdir.join("plugins");
-    if plugins_dir.is_dir() {
-        if let Some(p) = find_immediate_child_dir_case_insensitive(&plugins_dir, plugin_slug) {
+
+    fn plugin_dir_root_if_valid(candidate: &Path) -> Option<PathBuf> {
+        if !candidate.is_dir() {
+            return None;
+        }
+        if candidate
+            .join(".claude-plugin")
+            .join("plugin.json")
+            .is_file()
+            || candidate.join(".mcp.json").is_file()
+            || is_claude_plugin_package_root(candidate)
+        {
+            return fs::canonicalize(candidate)
+                .ok()
+                .or_else(|| Some(candidate.to_path_buf()));
+        }
+        None
+    }
+
+    fn resolve_marketplace_plugin_root_from_slugs(
+        marketplace_id: &str,
+        plugin_slug: &str,
+        extra_marketplace_roots: &HashMap<String, PathBuf>,
+    ) -> Option<PathBuf> {
+        let mdir = extra_marketplace_roots
+            .get(marketplace_id)
+            .cloned()
+            .or_else(|| {
+                let id_lower = marketplace_id.to_lowercase();
+                extra_marketplace_roots
+                    .iter()
+                    .find(|(k, _)| k.to_lowercase() == id_lower)
+                    .map(|(_, v)| v.clone())
+            })
+            .filter(|p| p.is_dir())
+            .map(|p| fs::canonicalize(&p).unwrap_or(p))
+            .or_else(|| resolve_plugin_marketplace_root_dir(marketplace_id))?;
+        if is_under_plugins_marketplaces(&mdir) {
+            return None;
+        }
+        let direct = [
+            mdir.join("plugins").join(plugin_slug),
+            mdir.join(plugin_slug),
+        ];
+        for c in &direct {
+            if let Some(p) = plugin_dir_root_if_valid(c) {
+                return Some(p);
+            }
+        }
+        let plugins_dir = mdir.join("plugins");
+        if plugins_dir.is_dir() {
+            if let Some(p) = find_immediate_child_dir_case_insensitive(&plugins_dir, plugin_slug) {
+                if let Some(ok) = plugin_dir_root_if_valid(&p) {
+                    return Some(ok);
+                }
+            }
+        }
+        if let Some(p) = find_immediate_child_dir_case_insensitive(&mdir, plugin_slug) {
             if let Some(ok) = plugin_dir_root_if_valid(&p) {
                 return Some(ok);
             }
         }
-    }
-    if let Some(p) = find_immediate_child_dir_case_insensitive(&mdir, plugin_slug) {
-        if let Some(ok) = plugin_dir_root_if_valid(&p) {
-            return Some(ok);
-        }
-    }
-    for root in discover_plugin_package_roots_in_tree(&mdir) {
-        if root
-            .file_name()
-            .and_then(|n| n.to_str())
-            .is_some_and(|n| n.eq_ignore_ascii_case(plugin_slug))
-        {
-            return Some(root);
-        }
-    }
-    None
-}
-
-/// 单条 `plugin-slug@marketplace-id` 开关：解析磁盘上的插件根并写入 `out`（与根级、`enabledPlugins` 内写法共用）。
-fn push_mcp_from_settings_plugin_marketplace_toggle_if_enabled(
-    _home: &Path,
-    toggle_key: &str,
-    val: &serde_json::Value,
-    extra_marketplace_roots: &HashMap<String, PathBuf>,
-    seen_roots: &mut HashSet<String>,
-    out: &mut Vec<ClaudeMcpItem>,
-) {
-    let Some((ref plugin_slug, ref marketplace_id)) =
-        parse_settings_plugin_marketplace_toggle_key(toggle_key)
-    else {
-        return;
-    };
-    if !marketplace_plugin_toggle_value_enabled(val) {
-        return;
-    }
-    let Some(plugin_root) = resolve_marketplace_plugin_root_from_slugs(
-        marketplace_id.as_str(),
-        plugin_slug.as_str(),
-        extra_marketplace_roots,
-    ) else {
-        return;
-    };
-    let canon_key = plugin_root.to_string_lossy().to_string();
-    if !seen_roots.insert(canon_key) {
-        return;
-    }
-    let plugin_ref = format!("settingsToggle:{toggle_key}");
-    push_mcp_declarations_from_plugin_dir(&plugin_ref, &plugin_root, out);
-}
-
-/// 从用户级 settings.json（默认 `~/.claude/settings.json`，自定义目录时同步切换）读取 `plugin@marketplace` 启用项并解析对应插件包内的 MCP（与 `installed_plugins.json` / 目录扫描互补）。
-/// Claude Code 常把开关写在根级，或写在 `enabledPlugins` 对象内，两者都扫描。
-fn collect_mcp_from_claude_settings_marketplace_plugin_toggles(
-    home: &Path,
-    seen_roots: &mut HashSet<String>,
-    out: &mut Vec<ClaudeMcpItem>,
-) {
-    let path = crate::claude_config_dir::user_claude_dir().join("settings.json");
-    let Some(file_v) = read_json_file(&path) else {
-        return;
-    };
-    let extra_marketplace_roots =
-        extra_known_marketplace_directory_roots_from_settings_value(home, &file_v);
-    let Some(obj) = file_v.as_object() else {
-        return;
-    };
-    for (key, val) in obj {
-        let ks = key.as_str();
-        if matches!(
-            ks,
-            "mcpServers"
-                | "mcp_servers"
-                | "env"
-                | "permissions"
-                | "hooks"
-                | "attribution"
-                | "model"
-        ) {
-            continue;
-        }
-        if ks == "enabledPlugins" {
-            if let Some(ep) = val.as_object() {
-                for (toggle_key, ev) in ep {
-                    push_mcp_from_settings_plugin_marketplace_toggle_if_enabled(
-                        home,
-                        toggle_key.as_str(),
-                        ev,
-                        &extra_marketplace_roots,
-                        seen_roots,
-                        out,
-                    );
-                }
+        for root in discover_plugin_package_roots_in_tree(&mdir) {
+            if root
+                .file_name()
+                .and_then(|n| n.to_str())
+                .is_some_and(|n| n.eq_ignore_ascii_case(plugin_slug))
+            {
+                return Some(root);
             }
-            continue;
         }
-        push_mcp_from_settings_plugin_marketplace_toggle_if_enabled(
-            home,
-            ks,
-            val,
-            &extra_marketplace_roots,
-            seen_roots,
-            out,
-        );
+        None
+    }
+
+    /// 单条 `plugin-slug@marketplace-id` 开关：解析磁盘上的插件根并写入 `out`（与根级、`enabledPlugins` 内写法共用）。
+    fn push_mcp_from_settings_plugin_marketplace_toggle_if_enabled(
+        _home: &Path,
+        toggle_key: &str,
+        val: &serde_json::Value,
+        extra_marketplace_roots: &HashMap<String, PathBuf>,
+        seen_roots: &mut HashSet<String>,
+        out: &mut Vec<ClaudeMcpItem>,
+    ) {
+        let Some((ref plugin_slug, ref marketplace_id)) =
+            parse_settings_plugin_marketplace_toggle_key(toggle_key)
+        else {
+            return;
+        };
+        if !marketplace_plugin_toggle_value_enabled(val) {
+            return;
+        }
+        let Some(plugin_root) = resolve_marketplace_plugin_root_from_slugs(
+            marketplace_id.as_str(),
+            plugin_slug.as_str(),
+            extra_marketplace_roots,
+        ) else {
+            return;
+        };
+        let canon_key = plugin_root.to_string_lossy().to_string();
+        if !seen_roots.insert(canon_key) {
+            return;
+        }
+        let plugin_ref = format!("settingsToggle:{toggle_key}");
+        push_mcp_declarations_from_plugin_dir(&plugin_ref, &plugin_root, out);
+    }
+
+    /// 从用户级 settings.json（默认 `~/.claude/settings.json`，自定义目录时同步切换）读取 `plugin@marketplace` 启用项并解析对应插件包内的 MCP（与 `installed_plugins.json` / 目录扫描互补）。
+    /// Claude Code 常把开关写在根级，或写在 `enabledPlugins` 对象内，两者都扫描。
+    fn collect_mcp_from_claude_settings_marketplace_plugin_toggles(
+        home: &Path,
+        seen_roots: &mut HashSet<String>,
+        out: &mut Vec<ClaudeMcpItem>,
+    ) {
+        let path = crate::claude_config_dir::user_claude_dir().join("settings.json");
+        let Some(file_v) = read_json_file(&path) else {
+            return;
+        };
+        let extra_marketplace_roots =
+            extra_known_marketplace_directory_roots_from_settings_value(home, &file_v);
+        let Some(obj) = file_v.as_object() else {
+            return;
+        };
+        for (key, val) in obj {
+            let ks = key.as_str();
+            if matches!(
+                ks,
+                "mcpServers"
+                    | "mcp_servers"
+                    | "env"
+                    | "permissions"
+                    | "hooks"
+                    | "attribution"
+                    | "model"
+            ) {
+                continue;
+            }
+            if ks == "enabledPlugins" {
+                if let Some(ep) = val.as_object() {
+                    for (toggle_key, ev) in ep {
+                        push_mcp_from_settings_plugin_marketplace_toggle_if_enabled(
+                            home,
+                            toggle_key.as_str(),
+                            ev,
+                            &extra_marketplace_roots,
+                            seen_roots,
+                            out,
+                        );
+                    }
+                }
+                continue;
+            }
+            push_mcp_from_settings_plugin_marketplace_toggle_if_enabled(
+                home,
+                ks,
+                val,
+                &extra_marketplace_roots,
+                seen_roots,
+                out,
+            );
+        }
     }
 }
+
 
 /// Wise 不从 `~/.claude/plugins/**`（含 cache、marketplaces、installed_plugins.json）读取插件 MCP。
 fn collect_installed_plugin_mcp_items(_home: &Path) -> Vec<ClaudeMcpItem> {

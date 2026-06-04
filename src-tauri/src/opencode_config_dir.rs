@@ -26,6 +26,7 @@ struct OpencodeDiskState {
 
 static OPENCODE_DISK_STATE: Mutex<Option<OpencodeDiskState>> = Mutex::new(None);
 
+#[allow(dead_code)]
 pub(crate) fn invalidate_opencode_disk_cache() {
     if let Ok(mut guard) = OPENCODE_DISK_STATE.lock() {
         *guard = None;

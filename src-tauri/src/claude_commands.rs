@@ -1713,7 +1713,7 @@ async fn spawn_claude_process(
         let suppress_shared_stdout = invocation_key_clone.is_some()
             && (connection_mode_stdout == ClaudeConnectionMode::Oneshot
                 || connection_mode_stdout == ClaudeConnectionMode::Streaming);
-        let mut active_invocation_key = invocation_key_clone.clone();
+        let active_invocation_key = invocation_key_clone.clone();
         let mut active_suppress_shared = suppress_shared_stdout;
 
         while let Ok(Some(line)) = lines.next_line().await {
@@ -1914,18 +1914,6 @@ async fn spawn_claude_process(
             release_claude_spawn_slot(&slots_mtx_clone, acquired_scope_clone.clone()).await;
             return;
         }
-
-        let child_still_running = {
-            let mut slot = wait_child_mutex_clone.lock().await;
-            match slot.as_mut() {
-                Some(c) if c.id() == Some(spawned_pid_stdout) => c
-                    .try_wait()
-                    .ok()
-                    .flatten()
-                    .is_none(),
-                _ => false,
-            }
-        };
 
         let sid = real_session_id.as_deref().unwrap_or("unknown");
 

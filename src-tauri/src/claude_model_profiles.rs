@@ -10,7 +10,7 @@ use uuid::Uuid;
 use crate::claude_config_dir::user_claude_dir;
 use crate::codex_config_dir::{
     apply_codex_profile_envelope, codex_profile_envelope_to_json, effective_codex_model_from_disk,
-    parse_codex_profile_envelope, read_codex_profile_envelope, read_codex_user_settings_pretty,
+    parse_codex_profile_envelope, read_codex_user_settings_pretty,
     read_effective_codex_model_from_envelope, user_codex_dir,
 };
 use crate::opencode_config_dir::{
@@ -289,6 +289,7 @@ struct ClaudeSettingsPrettyCache {
 
 static CLAUDE_SETTINGS_PRETTY_CACHE: Mutex<Option<ClaudeSettingsPrettyCache>> = Mutex::new(None);
 
+#[allow(dead_code)]
 fn invalidate_claude_effective_model_cache() {
     if let Ok(mut guard) = CLAUDE_EFFECTIVE_MODEL_CACHE.lock() {
         *guard = None;
