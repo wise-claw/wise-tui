@@ -1,4 +1,11 @@
-import { SendOutlined } from "@ant-design/icons";
+import {
+  SendOutlined,
+  SettingOutlined,
+  CodeOutlined,
+  DeploymentUnitOutlined,
+  HistoryOutlined,
+  StopOutlined,
+} from "@ant-design/icons";
 import { Collapse, Descriptions, Drawer, Empty, InputNumber, Popover, Select, Tag, Tooltip, Typography } from "antd";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type {
@@ -139,6 +146,8 @@ interface Props {
   onRestoreHistorySessionAsMain?: (sessionId: string) => void | Promise<void>;
   /** 历史 / 派发抽屉底部：resume 继续当前会话 */
   onResumeSession?: import("./MonitorDrawerSessionComposer").MonitorDrawerResumeSessionFn;
+  /** 派发 / 执行会话抽屉打开前：从 tabs / 磁盘回退解析 worker */
+  onPrepareSessionForMonitorDrawer?: import("./MonitorDrawerSessionComposer").MonitorDrawerPrepareSessionFn;
   repositoryMainBindings?: Record<string, string>;
   repositories?: Repository[];
   sectionCollapsed?: boolean;
@@ -463,7 +472,6 @@ const OmcDirectBatchInProgressPopover = memo(function OmcDirectBatchInProgressPo
   );
   const runningCount = invocations.filter(isOmcDirectBatchInvocationRunning).length;
   const totalCount = invocations.length;
-  const linkLabel = "执行记录";
   const tooltipTitle =
     runningCount > 0
       ? `当前 ${runningCount} 路运行中（共 ${totalCount} 路；与「可执行任务」勾选条数不是同一概念）`
@@ -490,10 +498,10 @@ const OmcDirectBatchInProgressPopover = memo(function OmcDirectBatchInProgressPo
       <Tooltip title={tooltipTitle} mouseEnterDelay={0.35}>
         <button
           type="button"
-          className="app-monitor-panel__item-history-link"
+          className="app-monitor-panel__item-action-icon-btn"
           onClick={(event) => event.stopPropagation()}
         >
-          {linkLabel}
+          <HistoryOutlined />
         </button>
       </Tooltip>
     </Popover>
@@ -884,6 +892,7 @@ export function ProgressMonitorPanel({
   onHistoryDrawerSessionIdChange,
   onRestoreHistorySessionAsMain,
   onResumeSession,
+  onPrepareSessionForMonitorDrawer,
   repositoryMainBindings = {},
   repositories = [],
   sectionCollapsed = false,
@@ -1162,17 +1171,21 @@ export function ProgressMonitorPanel({
         onOpenInMainSessionBackground={onOpenOmcBatchInvocationDetail ? handleOmcBatchInvocationSelect : undefined}
       />
 
-      <SessionConversationTaskDetailDrawer
-        target={sessionConversationTaskDetailTarget}
-        sessions={sessionsForHistoryTranscript}
-        sessionConversationTaskItems={sessionConversationTaskItems ?? []}
-        onClose={() => setSessionConversationTaskDetailTarget(null)}
-        onStopTask={stopSessionConversationTask}
-        onCancelSession={onCancelSession}
-        onCancelOmcDirectBatchInvocation={onCancelOmcDirectBatchInvocation}
-        onStopSessionConversationTask={onStopSessionConversationTask}
-        onResumeSession={onResumeSession}
-      />
+      {sessionConversationTaskDetailTarget ? (
+        <SessionConversationTaskDetailDrawer
+          target={sessionConversationTaskDetailTarget}
+          sessions={sessionsForHistoryTranscript}
+          sessionConversationTaskItems={sessionConversationTaskItems ?? []}
+          onClose={() => setSessionConversationTaskDetailTarget(null)}
+          onStopTask={stopSessionConversationTask}
+          onCancelSession={onCancelSession}
+          onCancelOmcDirectBatchInvocation={onCancelOmcDirectBatchInvocation}
+          onStopSessionConversationTask={onStopSessionConversationTask}
+          onResumeSession={onResumeSession}
+          onReloadFullDiskTranscript={onReloadFullDiskTranscript}
+          onPrepareSessionForMonitorDrawer={onPrepareSessionForMonitorDrawer}
+        />
+      ) : null}
 
       <RepositorySubagentDetailDrawer
         target={repositorySubagentDetailTarget}
@@ -1240,24 +1253,6 @@ export function ProgressMonitorPanel({
       <div className="app-monitor-panel__head">
         <div className="app-monitor-panel__head-start">
           <div className="app-monitor-panel__title">运行面板</div>
-          <div className="app-monitor-panel__config-btns">
-            {onOpenEmployeeConfig ? (
-              <button
-                type="button"
-                className="app-monitor-panel__config-btn"
-                onClick={() => onOpenEmployeeConfig()}
-              >
-                终端
-              </button>
-            ) : null}
-            <button
-              type="button"
-              className="app-monitor-panel__config-btn"
-              onClick={() => onOpenWorkflowConfig?.()}
-            >
-              工作流
-            </button>
-          </div>
         </div>
         <div className="app-monitor-panel__head-concurrency">
           {claudeConcurrency ? (
@@ -1303,117 +1298,142 @@ export function ProgressMonitorPanel({
       ) : null}
 
       {employeeItems.length > 0 ? (
-      <div className="app-monitor-panel__section">
-          {sortedEmployeeItems.map((item) => {
-            const isOmcWorker = item.employeeId === "omc-worker";
-            const employeePopoverOpen = employeeHistoryPopoverId === item.employeeId;
-            const keyword =
-              employeePopoverOpen && !isOmcWorker ? normalizeSearchKeyword(employeeHistorySearch) : "";
-            const historySessions =
-              employeePopoverOpen && !isOmcWorker
-                ? (employeeHistorySessionsByName.get(normalizeMonitorEmployeeName(item.name)) ?? [])
-                : [];
-            const matchedEmployeeSessions =
-              employeePopoverOpen && !isOmcWorker
-                ? historySessions.filter((session) => matchSessionByKeyword(session, keyword)).slice(0, 30)
-                : [];
-            return (
-              <div key={item.employeeId} className="app-monitor-panel__item app-monitor-panel__item--terminal-row">
-              <div className="app-monitor-panel__item-row app-monitor-panel__item-row--terminal">
-                <button
-                  type="button"
-                  className="app-monitor-panel__item-row-main app-monitor-panel__subagent-row--clickable"
-                  title={`打开 ${item.name} 最新会话记录`}
-                  onClick={() => activateEmployeeTerminalRow(item)}
-                >
-                  <span className="app-monitor-panel__item-name-wrap">
-                    <span className="app-monitor-panel__item-name">{item.name}</span>
-                    {statusText(item.status)}
-                  </span>
-                </button>
-                <span className="app-monitor-panel__item-actions">
-                  {item.status === "in_progress" ? (
+        <div className="app-monitor-panel__section app-monitor-panel__section--terminals">
+          <div className="app-monitor-panel__section-head">
+            <div className="app-monitor-panel__section-title-wrap">
+              <Typography.Text className="app-monitor-panel__section-title">
+                <CodeOutlined className="app-monitor-panel__section-icon" aria-hidden />
+                终端列表
+              </Typography.Text>
+              {onOpenEmployeeConfig ? (
+                <Tooltip title="配置终端" mouseEnterDelay={0.35}>
+                  <button
+                    type="button"
+                    className="app-monitor-panel__section-config-btn"
+                    onClick={() => onOpenEmployeeConfig()}
+                  >
+                    <SettingOutlined />
+                  </button>
+                </Tooltip>
+              ) : null}
+            </div>
+          </div>
+          <div className="app-monitor-panel__terminals-list">
+            {sortedEmployeeItems.map((item) => {
+              const isOmcWorker = item.employeeId === "omc-worker";
+              const employeePopoverOpen = employeeHistoryPopoverId === item.employeeId;
+              const keyword =
+                employeePopoverOpen && !isOmcWorker ? normalizeSearchKeyword(employeeHistorySearch) : "";
+              const historySessions =
+                employeePopoverOpen && !isOmcWorker
+                  ? (employeeHistorySessionsByName.get(normalizeMonitorEmployeeName(item.name)) ?? [])
+                  : [];
+              const matchedEmployeeSessions =
+                employeePopoverOpen && !isOmcWorker
+                  ? historySessions.filter((session) => matchSessionByKeyword(session, keyword)).slice(0, 30)
+                  : [];
+              return (
+                <div key={item.employeeId} className="app-monitor-panel__item app-monitor-panel__item--terminal-row">
+                  <div className="app-monitor-panel__item-row app-monitor-panel__item-row--terminal">
                     <button
                       type="button"
-                      className="app-monitor-panel__item-action-btn"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onStopEmployee?.(item.employeeId);
-                      }}
+                      className="app-monitor-panel__item-row-main app-monitor-panel__subagent-row--clickable"
+                      title={`打开 ${item.name} 最新会话记录`}
+                      onClick={() => activateEmployeeTerminalRow(item)}
                     >
-                      结束
+                      <span className="app-monitor-panel__item-name-wrap">
+                        <span className="app-monitor-panel__item-name">{item.name}</span>
+                        {statusText(item.status)}
+                      </span>
                     </button>
-                  ) : null}
-                  {isOmcWorker ? (
-                    <OmcDirectBatchInProgressPopover
-                      open={employeeHistoryPopoverId === item.employeeId}
-                      onOpenChange={(nextOpen) => {
-                        if (nextOpen) {
-                          setEmployeeHistoryPopoverId(item.employeeId);
-                          setEmployeeHistorySearch("");
-                          return;
-                        }
-                        setEmployeeHistoryPopoverId((prev) => (prev === item.employeeId ? null : prev));
-                        setEmployeeHistorySearch("");
-                      }}
-                      searchValue={employeeHistorySearch}
-                      onSearchChange={setEmployeeHistorySearch}
-                      onRowActivate={handleOmcDirectBatchRowActivate}
-                      onCancelInvocation={onCancelOmcDirectBatchInvocation}
-                    />
-                  ) : (
-                    <Popover
-                      trigger="click"
-                      placement="bottomRight"
-                      open={employeeHistoryPopoverId === item.employeeId}
-                      onOpenChange={(nextOpen) => {
-                        if (nextOpen) {
-                          setEmployeeHistoryPopoverId(item.employeeId);
-                          setEmployeeHistorySearch("");
-                          return;
-                        }
-                        setEmployeeHistoryPopoverId((prev) => (prev === item.employeeId ? null : prev));
-                        setEmployeeHistorySearch("");
-                      }}
-                      overlayClassName="app-monitor-panel__history-popover"
-                      content={
-                        <HistorySessionPopoverContent
+                    <span className="app-monitor-panel__item-actions">
+                      {item.status === "in_progress" ? (
+                        <Tooltip title="结束终端" mouseEnterDelay={0.35}>
+                          <button
+                            type="button"
+                            className="app-monitor-panel__item-action-icon-btn app-monitor-panel__item-action-icon-btn--stop"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              onStopEmployee?.(item.employeeId);
+                            }}
+                          >
+                            <StopOutlined />
+                          </button>
+                        </Tooltip>
+                      ) : null}
+                      {isOmcWorker ? (
+                        <OmcDirectBatchInProgressPopover
+                          open={employeeHistoryPopoverId === item.employeeId}
+                          onOpenChange={(nextOpen) => {
+                            if (nextOpen) {
+                              setEmployeeHistoryPopoverId(item.employeeId);
+                              setEmployeeHistorySearch("");
+                              return;
+                            }
+                            setEmployeeHistoryPopoverId((prev) => (prev === item.employeeId ? null : prev));
+                            setEmployeeHistorySearch("");
+                          }}
                           searchValue={employeeHistorySearch}
                           onSearchChange={setEmployeeHistorySearch}
-                          rows={matchedEmployeeSessions.map((session) => ({
-                            session,
-                            employeeName: item.name,
-                          }))}
-                          listTitle={`${item.name} · 历史会话`}
-                          emptyDescription={employeeHistorySearch.trim() ? "未找到匹配会话" : "该终端暂无历史会话"}
-                          onSelectSession={(sessionId) => openHistoryMessagesDrawer(sessionId)}
-                          onRestoreSession={
-                            onRestoreHistorySessionAsMain
-                              ? (sessionId) => {
-                                  void Promise.resolve(onRestoreHistorySessionAsMain(sessionId));
-                                }
-                              : undefined
-                          }
-                          canRestoreSession={canRestoreHistorySession}
+                          onRowActivate={handleOmcDirectBatchRowActivate}
+                          onCancelInvocation={onCancelOmcDirectBatchInvocation}
                         />
-                      }
-                    >
-                      <button
-                        type="button"
-                        className="app-monitor-panel__item-history-link"
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        历史会话
-                      </button>
-                    </Popover>
-                  )}
-                  {taskResultTag(item.latestTaskStatus)}
-                </span>
-              </div>
-              </div>
-            );
-          })}
-      </div>
+                      ) : (
+                        <Popover
+                          trigger="click"
+                          placement="bottomRight"
+                          open={employeeHistoryPopoverId === item.employeeId}
+                          onOpenChange={(nextOpen) => {
+                            if (nextOpen) {
+                              setEmployeeHistoryPopoverId(item.employeeId);
+                              setEmployeeHistorySearch("");
+                              return;
+                            }
+                            setEmployeeHistoryPopoverId((prev) => (prev === item.employeeId ? null : prev));
+                            setEmployeeHistorySearch("");
+                          }}
+                          overlayClassName="app-monitor-panel__history-popover"
+                          content={
+                            <HistorySessionPopoverContent
+                              searchValue={employeeHistorySearch}
+                              onSearchChange={setEmployeeHistorySearch}
+                              rows={matchedEmployeeSessions.map((session) => ({
+                                session,
+                                employeeName: item.name,
+                              }))}
+                              listTitle={`${item.name} · 历史会话`}
+                              emptyDescription={employeeHistorySearch.trim() ? "未找到匹配会话" : "该终端暂无历史会话"}
+                              onSelectSession={(sessionId) => openHistoryMessagesDrawer(sessionId)}
+                              onRestoreSession={
+                                onRestoreHistorySessionAsMain
+                                  ? (sessionId) => {
+                                      void Promise.resolve(onRestoreHistorySessionAsMain(sessionId));
+                                    }
+                                  : undefined
+                              }
+                              canRestoreSession={canRestoreHistorySession}
+                            />
+                          }
+                        >
+                          <Tooltip title="历史会话" mouseEnterDelay={0.35}>
+                            <button
+                              type="button"
+                              className="app-monitor-panel__item-action-icon-btn"
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              <HistoryOutlined />
+                            </button>
+                          </Tooltip>
+                        </Popover>
+                      )}
+                      {taskResultTag(item.latestTaskStatus)}
+                    </span>
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       ) : null}
 
       {shouldShowSessionConversationTasks ? (
@@ -1485,7 +1505,7 @@ export function ProgressMonitorPanel({
                     </button>
                     <span className="app-monitor-panel__session-task-actions">
                       {showStop ? (
-                        <Tooltip title="结束执行">
+                        <Tooltip title="结束执行" mouseEnterDelay={0.35}>
                           <button
                             type="button"
                             className="app-monitor-panel__session-task-stop"
@@ -1495,7 +1515,7 @@ export function ProgressMonitorPanel({
                               stopSessionConversationTask(item);
                             }}
                           >
-                            ■
+                            <StopOutlined />
                           </button>
                         </Tooltip>
                       ) : null}
@@ -1563,110 +1583,135 @@ export function ProgressMonitorPanel({
       ) : null}
 
       {teamItems.length > 0 ? (
-      <div className="app-monitor-panel__section">
-          {teamItems.map((item) => {
-            const teamPopoverOpen = teamHistoryPopoverId === item.workflowId;
-            const keyword = teamPopoverOpen ? normalizeSearchKeyword(teamHistorySearch) : "";
-            const matchedTeamSessions = teamPopoverOpen
-              ? (teamHistorySessionsByWorkflowId.get(item.workflowId) ?? [])
-                  .filter((row) => {
-                    if (teamHistoryEmployeeFilter !== "all" && row.employeeName !== teamHistoryEmployeeFilter) {
-                      return false;
-                    }
-                    return matchSessionByKeyword(row.session, keyword, row.employeeName);
-                  })
-                  .slice(0, 30)
-              : [];
-            return (
-              <div
-                key={item.workflowId}
-                className={`app-monitor-panel__item ${activeTarget?.type === "team" && activeTarget.workflowId === item.workflowId ? "app-monitor-panel__item--active" : ""}`}
-                onClick={() => onOpenTeamDetail(item.workflowId)}
-              >
-              <div className="app-monitor-panel__item-row">
-                <span className="app-monitor-panel__item-name-wrap">
-                  <Tooltip title={memberTooltipContent(item.memberNames)}>
-                    <span className="app-monitor-panel__item-name">{item.workflowName}</span>
-                  </Tooltip>
-                  {statusText(item.status)}
-                </span>
-                <span className="app-monitor-panel__item-actions">
-                  {item.status === "in_progress" ? (
-                    <button
-                      type="button"
-                      className="app-monitor-panel__item-action-btn"
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        onStopTeam?.(item.workflowId);
-                      }}
-                    >
-                      结束
-                    </button>
-                  ) : null}
-                  <Popover
-                    trigger="click"
-                    placement="bottomRight"
-                    open={teamHistoryPopoverId === item.workflowId}
-                    onOpenChange={(nextOpen) => {
-                      if (nextOpen) {
-                        setTeamHistoryPopoverId(item.workflowId);
-                        setTeamHistorySearch("");
-                        setTeamHistoryEmployeeFilter("all");
-                        return;
-                      }
-                      setTeamHistoryPopoverId((prev) => (prev === item.workflowId ? null : prev));
-                      setTeamHistorySearch("");
-                      setTeamHistoryEmployeeFilter("all");
-                    }}
-                    overlayClassName="app-monitor-panel__history-popover"
-                    content={
-                      <HistorySessionPopoverContent
-                        searchValue={teamHistorySearch}
-                        onSearchChange={setTeamHistorySearch}
-                        employeeFilterValue={teamHistoryEmployeeFilter}
-                        onEmployeeFilterChange={setTeamHistoryEmployeeFilter}
-                        employeeOptions={item.memberNames ?? []}
-                        rows={matchedTeamSessions}
-                        listTitle={`${item.workflowName} · 历史会话`}
-                        memberFilterAllLabel="全部终端"
-                        emptyDescription={
-                          teamHistorySearch.trim() || teamHistoryEmployeeFilter !== "all"
-                            ? "未找到匹配会话"
-                            : "该工作流暂无历史会话"
-                        }
-                        onSelectSession={(sessionId) => openHistoryMessagesDrawer(sessionId)}
-                        onRestoreSession={
-                          onRestoreHistorySessionAsMain
-                            ? (sessionId) => {
-                                void Promise.resolve(onRestoreHistorySessionAsMain(sessionId));
-                              }
-                            : undefined
-                        }
-                        canRestoreSession={canRestoreHistorySession}
-                      />
-                    }
+        <div className="app-monitor-panel__section app-monitor-panel__section--workflows">
+          <div className="app-monitor-panel__section-head">
+            <div className="app-monitor-panel__section-title-wrap">
+              <Typography.Text className="app-monitor-panel__section-title">
+                <DeploymentUnitOutlined className="app-monitor-panel__section-icon" aria-hidden />
+                工作流列表
+              </Typography.Text>
+              {onOpenWorkflowConfig ? (
+                <Tooltip title="配置工作流" mouseEnterDelay={0.35}>
+                  <button
+                    type="button"
+                    className="app-monitor-panel__section-config-btn"
+                    onClick={() => onOpenWorkflowConfig()}
                   >
-                    <button
-                      type="button"
-                      className="app-monitor-panel__item-history-link"
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      历史会话
-                    </button>
-                  </Popover>
-                  {taskResultTag(item.latestTaskStatus)}
-                </span>
-              </div>
-              <div className="app-monitor-panel__item-meta-grid">
-                <span className="app-monitor-panel__item-sub">{item.progressText}</span>
-                {item.omcProgressText ? (
-                  <span className="app-monitor-panel__item-sub">{item.omcProgressText}</span>
-                ) : null}
-              </div>
-              </div>
-            );
-          })}
-      </div>
+                    <SettingOutlined />
+                  </button>
+                </Tooltip>
+              ) : null}
+            </div>
+          </div>
+          <div className="app-monitor-panel__workflows-list">
+            {teamItems.map((item) => {
+              const teamPopoverOpen = teamHistoryPopoverId === item.workflowId;
+              const keyword = teamPopoverOpen ? normalizeSearchKeyword(teamHistorySearch) : "";
+              const matchedTeamSessions = teamPopoverOpen
+                ? (teamHistorySessionsByWorkflowId.get(item.workflowId) ?? [])
+                    .filter((row) => {
+                      if (teamHistoryEmployeeFilter !== "all" && row.employeeName !== teamHistoryEmployeeFilter) {
+                        return false;
+                      }
+                      return matchSessionByKeyword(row.session, keyword, row.employeeName);
+                    })
+                    .slice(0, 30)
+                : [];
+              return (
+                <div
+                  key={item.workflowId}
+                  className={`app-monitor-panel__item ${activeTarget?.type === "team" && activeTarget.workflowId === item.workflowId ? "app-monitor-panel__item--active" : ""}`}
+                  onClick={() => onOpenTeamDetail(item.workflowId)}
+                >
+                  <div className="app-monitor-panel__item-row">
+                    <span className="app-monitor-panel__item-name-wrap">
+                      <Tooltip title={memberTooltipContent(item.memberNames)}>
+                        <span className="app-monitor-panel__item-name">{item.workflowName}</span>
+                      </Tooltip>
+                      {statusText(item.status)}
+                    </span>
+                    <span className="app-monitor-panel__item-actions">
+                      {item.status === "in_progress" ? (
+                        <Tooltip title="结束工作流" mouseEnterDelay={0.35}>
+                          <button
+                            type="button"
+                            className="app-monitor-panel__item-action-icon-btn app-monitor-panel__item-action-icon-btn--stop"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              onStopTeam?.(item.workflowId);
+                            }}
+                          >
+                            <StopOutlined />
+                          </button>
+                        </Tooltip>
+                      ) : null}
+                      <Popover
+                        trigger="click"
+                        placement="bottomRight"
+                        open={teamHistoryPopoverId === item.workflowId}
+                        onOpenChange={(nextOpen) => {
+                          if (nextOpen) {
+                            setTeamHistoryPopoverId(item.workflowId);
+                            setTeamHistorySearch("");
+                            setTeamHistoryEmployeeFilter("all");
+                            return;
+                          }
+                          setTeamHistoryPopoverId((prev) => (prev === item.workflowId ? null : prev));
+                          setTeamHistorySearch("");
+                          setTeamHistoryEmployeeFilter("all");
+                        }}
+                        overlayClassName="app-monitor-panel__history-popover"
+                        content={
+                          <HistorySessionPopoverContent
+                            searchValue={teamHistorySearch}
+                            onSearchChange={setTeamHistorySearch}
+                            employeeFilterValue={teamHistoryEmployeeFilter}
+                            onEmployeeFilterChange={setTeamHistoryEmployeeFilter}
+                            employeeOptions={item.memberNames ?? []}
+                            rows={matchedTeamSessions}
+                            listTitle={`${item.workflowName} · 历史会话`}
+                            memberFilterAllLabel="全部终端"
+                            emptyDescription={
+                              teamHistorySearch.trim() || teamHistoryEmployeeFilter !== "all"
+                                ? "未找到匹配会话"
+                                : "该工作流暂无历史会话"
+                            }
+                            onSelectSession={(sessionId) => openHistoryMessagesDrawer(sessionId)}
+                            onRestoreSession={
+                              onRestoreHistorySessionAsMain
+                                ? (sessionId) => {
+                                    void Promise.resolve(onRestoreHistorySessionAsMain(sessionId));
+                                  }
+                                : undefined
+                            }
+                            canRestoreSession={canRestoreHistorySession}
+                          />
+                        }
+                      >
+                        <Tooltip title="历史会话" mouseEnterDelay={0.35}>
+                          <button
+                            type="button"
+                            className="app-monitor-panel__item-action-icon-btn"
+                            onClick={(event) => event.stopPropagation()}
+                          >
+                            <HistoryOutlined />
+                          </button>
+                        </Tooltip>
+                      </Popover>
+                      {taskResultTag(item.latestTaskStatus)}
+                    </span>
+                  </div>
+                  <div className="app-monitor-panel__item-meta-grid">
+                    <span className="app-monitor-panel__item-sub">{item.progressText}</span>
+                    {item.omcProgressText ? (
+                      <span className="app-monitor-panel__item-sub">{item.omcProgressText}</span>
+                    ) : null}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
       ) : null}
 
       {monitorDrawers}

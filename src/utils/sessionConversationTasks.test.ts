@@ -508,6 +508,36 @@ describe("buildSessionConversationTasks", () => {
     });
     expect(resolveExecutionEnvironmentWorkerConversationTaskStatus(worker)).toBe("failed");
   });
+
+  test("uses last turn outcome when earlier turn succeeded but latest turn failed", () => {
+    const worker = session({
+      id: "worker-1",
+      repositoryName: "demo/执行环境:claude:任务",
+      status: "completed",
+      messages: [
+        { id: 1, role: "user", content: "第一轮", timestamp: 1 },
+        { id: 2, role: "assistant", content: "第一轮已完成", timestamp: 2 },
+        { id: 3, role: "user", content: "第二轮", timestamp: 3 },
+        { id: 4, role: "system", content: "Claude Hook 启动中", timestamp: 4 },
+      ],
+    });
+    expect(resolveExecutionEnvironmentWorkerConversationTaskStatus(worker)).toBe("failed");
+  });
+
+  test("uses last turn success when earlier turn failed", () => {
+    const worker = session({
+      id: "worker-1",
+      repositoryName: "demo/执行环境:claude:任务",
+      status: "error",
+      messages: [
+        { id: 1, role: "user", content: "第一轮", timestamp: 1 },
+        { id: 2, role: "system", content: "Claude Hook 启动中", timestamp: 2 },
+        { id: 3, role: "user", content: "第二轮", timestamp: 3 },
+        { id: 4, role: "assistant", content: "第二轮已成功", timestamp: 4 },
+      ],
+    });
+    expect(resolveExecutionEnvironmentWorkerConversationTaskStatus(worker)).toBe("completed");
+  });
 });
 
 describe("resolveExecutionEnvironmentTaskFromDispatchMeta", () => {

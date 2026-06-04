@@ -155,6 +155,7 @@ interface Props {
     executeOptions?: ClaudeComposerExecuteBubbleOptions,
   ) => boolean | void | Promise<boolean | void>;
   onResumeSessionFromMonitorDrawer?: import("../ProgressMonitorPanel/MonitorDrawerSessionComposer").MonitorDrawerResumeSessionFn;
+  onPrepareSessionForMonitorDrawer?: import("../ProgressMonitorPanel/MonitorDrawerSessionComposer").MonitorDrawerPrepareSessionFn;
   onDispatchExecutionEnvironment?: (input: {
     prompt: string;
     userBubblePrompt?: string;
@@ -297,6 +298,7 @@ export function ClaudeSessions({
   onOpenExecutionEnvironment,
   onExecuteSession,
   onResumeSessionFromMonitorDrawer,
+  onPrepareSessionForMonitorDrawer,
   onDispatchExecutionEnvironment,
   onSendMessage,
   onCancelSession,
@@ -877,6 +879,7 @@ export function ClaudeSessions({
             onSend={onSendMessage}
             onExecute={onExecuteSession}
             onResumeSessionFromMonitorDrawer={onResumeSessionFromMonitorDrawer}
+            onPrepareSessionForMonitorDrawer={onPrepareSessionForMonitorDrawer}
             onDispatchExecutionEnvironment={onDispatchExecutionEnvironment}
             onSessionModelChange={(model) => onUpdateSessionModel(activeSession.id, model)}
             onSessionConnectionKindChange={(kind) =>

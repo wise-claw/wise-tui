@@ -111,6 +111,13 @@ export interface UseClaudeSessionsReturn {
     repositoryDisplayName?: string;
     taskLabel?: string;
   }) => Promise<boolean>;
+  /** 监控 Drawer 打开前：从 tabs / 磁盘回退解析 worker 并 materialize 到内存 */
+  ensureSessionForMonitorDrawer: (input: {
+    sessionId: string;
+    repositoryPath?: string;
+    repositoryDisplayName?: string;
+    taskLabel?: string;
+  }) => Promise<ClaudeSession | null>;
   appendSystemMessage: (sessionId: string, text: string) => void;
   /** 仅写入用户气泡（不调用 Claude），供批量 OMC 等在标签内展示派发正文 */
   appendUserMessage: (sessionId: string, text: string) => void;

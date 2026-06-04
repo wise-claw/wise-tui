@@ -16,6 +16,11 @@ export type MonitorDrawerResumeSessionFn = (
   input: MonitorDrawerResumeSessionInput,
 ) => boolean | void | Promise<boolean | void>;
 
+/** 监控抽屉打开前：从 tabs / 磁盘回退解析 worker 标签并 materialize 到内存 */
+export type MonitorDrawerPrepareSessionFn = (
+  input: Omit<MonitorDrawerResumeSessionInput, "prompt">,
+) => Promise<ClaudeSession | null>;
+
 export function MonitorDrawerSessionComposer({
   session,
   onResumeSession,

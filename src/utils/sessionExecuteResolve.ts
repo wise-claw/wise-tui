@@ -104,9 +104,50 @@ export function findExecutionEnvironmentWorkerInRepository(
   const byTab = execEnvSessions.find((s) => s.id === workerKey);
   if (byTab) return byTab;
 
-  if (execEnvSessions.length === 1) return execEnvSessions[0];
+  // 无明确 worker id 时才允许「仓库内唯一 worker」回退；否则会把历史派发误绑到当前存活标签。
+  if (!workerKey && execEnvSessions.length === 1) return execEnvSessions[0];
 
   return undefined;
+}
+
+/**
+ * 执行会话详情 drawer：只按派发记录的 workerSessionId（及 id 映射）解析，不做标签/唯一 worker 回退。
+ */
+export function findExecutionEnvironmentWorkerForTaskDetail(
+  sessions: readonly ClaudeSession[],
+  input: {
+    workerSessionId: string;
+    repositoryPath?: string;
+    sessionIdMap?: ReadonlyMap<string, string>;
+  },
+): ClaudeSession | undefined {
+  const workerKey = input.workerSessionId.trim();
+  if (!workerKey) return undefined;
+
+  const direct = resolveSessionForExecuteKey(sessions, workerKey, input.sessionIdMap);
+  if (direct) return direct;
+
+  const repoPath = input.repositoryPath?.trim();
+  if (!repoPath) return undefined;
+
+  const execEnvSessions = sessions.filter(
+    (s) =>
+      repositoryPathsMatch(s.repositoryPath, repoPath) &&
+      isExecutionEnvironmentWorkerRepositoryName(s.repositoryName),
+  );
+
+  const mapped = input.sessionIdMap?.get(workerKey)?.trim();
+  if (mapped) {
+    const byMap = execEnvSessions.find(
+      (s) => s.id === mapped || s.claudeSessionId?.trim() === mapped,
+    );
+    if (byMap) return byMap;
+  }
+
+  return (
+    execEnvSessions.find((s) => s.id === workerKey) ??
+    execEnvSessions.find((s) => s.claudeSessionId?.trim() === workerKey)
+  );
 }
 
 export function findSessionForMonitorDrawerResume(

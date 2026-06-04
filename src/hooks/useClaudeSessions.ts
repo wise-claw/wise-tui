@@ -2653,6 +2653,77 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     [executeSession],
   );
 
+  const ensureSessionForMonitorDrawer = useCallback(
+    async (input: {
+      sessionId: string;
+      repositoryPath?: string;
+      repositoryDisplayName?: string;
+      taskLabel?: string;
+    }): Promise<ClaudeSession | null> => {
+      const workerKey = input.sessionId.trim();
+      if (!workerKey) return null;
+
+      const findWorker = () =>
+        findSessionForMonitorDrawerResume(sessionsRef.current, {
+          sessionId: workerKey,
+          repositoryPath: input.repositoryPath,
+          taskLabel: input.taskLabel,
+          sessionIdMap: sessionIdMapRef.current,
+        });
+
+      let hit = findWorker();
+      if (hit) return hit;
+
+      const repoPath = input.repositoryPath?.trim();
+      if (!repoPath) return null;
+
+      const repoName =
+        input.repositoryDisplayName?.trim() ||
+        sessionsRef.current.find((s) => s.id === workerKey)?.repositoryName ||
+        repoPath;
+      await refreshDiskSessionsForRepository(repoPath, repoName);
+      hit = findWorker();
+      if (hit) return hit;
+
+      try {
+        const tabs = await loadSessionTabsState();
+        const tabHit = tabs?.sessions.find(
+          (s) => s.id === workerKey || s.claudeSessionId?.trim() === workerKey,
+        );
+        if (tabHit) {
+          const materialized = materializeWorkerTabSession(tabHit, workerKey);
+          commitSessions((prev) => {
+            if (prev.some((s) => s.id === workerKey)) {
+              return prev.map((s) => (s.id === workerKey ? materialized : s));
+            }
+            return [...prev, materialized];
+          });
+          const claudeSid = materialized.claudeSessionId?.trim();
+          if (claudeSid) sessionIdMapRef.current.set(workerKey, claudeSid);
+          return materialized;
+        }
+      } catch {
+        /* ignore */
+      }
+
+      hit = findWorker();
+      if (!hit) return null;
+
+      if (hit.id !== workerKey) {
+        const materialized = materializeWorkerTabSession(hit, workerKey);
+        commitSessions((prev) => {
+          const filtered = prev.filter((s) => s.id !== hit!.id && s.id !== workerKey);
+          return [...filtered, materialized];
+        });
+        const claudeSid = materialized.claudeSessionId?.trim();
+        if (claudeSid) sessionIdMapRef.current.set(workerKey, claudeSid);
+        return materialized;
+      }
+      return hit;
+    },
+    [commitSessions, refreshDiskSessionsForRepository],
+  );
+
   const resumeSessionFromMonitorDrawer = useCallback(
     async (input: {
       sessionId: string;
@@ -2673,59 +2744,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           sessionIdMap: sessionIdMapRef.current,
         });
 
-      const ensureWorker = async (): Promise<ClaudeSession | null> => {
-        let hit = findWorker();
-        if (hit) return hit;
-
-        const repoPath = input.repositoryPath?.trim();
-        if (!repoPath) return null;
-
-        const repoName =
-          input.repositoryDisplayName?.trim() ||
-          sessionsRef.current.find((s) => s.id === workerKey)?.repositoryName ||
-          repoPath;
-        await refreshDiskSessionsForRepository(repoPath, repoName);
-        hit = findWorker();
-        if (hit) return hit;
-
-        try {
-          const tabs = await loadSessionTabsState();
-          const tabHit = tabs?.sessions.find(
-            (s) => s.id === workerKey || s.claudeSessionId?.trim() === workerKey,
-          );
-          if (tabHit) {
-            const materialized = materializeWorkerTabSession(tabHit, workerKey);
-            commitSessions((prev) => {
-              if (prev.some((s) => s.id === workerKey)) {
-                return prev.map((s) => (s.id === workerKey ? materialized : s));
-              }
-              return [...prev, materialized];
-            });
-            const claudeSid = materialized.claudeSessionId?.trim();
-            if (claudeSid) sessionIdMapRef.current.set(workerKey, claudeSid);
-            return materialized;
-          }
-        } catch {
-          /* ignore */
-        }
-
-        hit = findWorker();
-        if (!hit) return null;
-
-        if (hit.id !== workerKey) {
-          const materialized = materializeWorkerTabSession(hit, workerKey);
-          commitSessions((prev) => {
-            const filtered = prev.filter((s) => s.id !== hit!.id && s.id !== workerKey);
-            return [...filtered, materialized];
-          });
-          const claudeSid = materialized.claudeSessionId?.trim();
-          if (claudeSid) sessionIdMapRef.current.set(workerKey, claudeSid);
-          return materialized;
-        }
-        return hit;
-      };
-
-      const worker = await ensureWorker();
+      const worker = await ensureSessionForMonitorDrawer(input);
       if (!worker) return false;
 
       const tabId = worker.id;
@@ -2743,7 +2762,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       }
       return ok !== false;
     },
-    [commitSessions, executeSession, refreshDiskSessionsForRepository, reloadFullDiskTranscript],
+    [commitSessions, executeSession, ensureSessionForMonitorDrawer, reloadFullDiskTranscript],
   );
 
   const appendSystemMessage = useCallback((sessionId: string, text: string) => {
@@ -3585,6 +3604,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     executeSession,
     executeTerminalSession,
     resumeSessionFromMonitorDrawer,
+    ensureSessionForMonitorDrawer,
     appendSystemMessage,
     appendUserMessage,
     sendMessage,

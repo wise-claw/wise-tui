@@ -2806,7 +2806,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 
 /* 仅左栏：与 ProjectList 组件中的 .app-repository-list 区分，避免全局 flex 互相覆盖 */
 .app-left-sidebar .app-repository-list {
-  padding: 2px 6px 12px 2px;
+  padding: 2px 6px 0 2px;
 }
 
 .app-left-sidebar-hub-quick {

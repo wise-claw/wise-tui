@@ -41,53 +41,38 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  margin: 0 0 0;
-  padding: 2px 8px 2px 0;
-  background: color-mix(in srgb, var(--ant-color-bg-container) 45%, transparent) !important;
-  -webkit-backdrop-filter: var(--app-workspace-glass-blur);
-  backdrop-filter: var(--app-workspace-glass-blur);
+  margin: 0;
+  padding: 4px 8px;
+  background: var(--ant-color-bg-container) !important;
   border-bottom: 1px solid var(--app-workspace-glass-border, var(--ant-color-border-secondary));
+  position: sticky;
+  top: 0;
+  z-index: 10;
 }
 
 .app-monitor-panel__head-start {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 8px;
   min-width: 0;
   flex: 1;
 }
 
-.app-monitor-panel__config-btns {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-}
-
-.app-monitor-panel__config-btn {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0 2px;
-  margin: 0;
-  border: none;
-  border-radius: 0;
-  background: transparent;
-  color: var(--ant-color-primary);
-  font-size: 11px;
+.app-monitor-panel__title {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ant-color-text);
   line-height: 1.2;
-  cursor: pointer;
-  transition: color 0.15s;
-}
-
-.app-monitor-panel__config-btn:hover {
-  color: var(--ant-color-primary-hover);
+  letter-spacing: 0.2px;
+  flex-shrink: 0;
+  min-width: 0;
+  padding: 0;
 }
 
 .app-monitor-panel__head-concurrency {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 6px;
   flex-shrink: 0;
   margin-left: auto;
 }
@@ -96,15 +81,16 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   margin: 0;
   padding: 0;
   border: none;
-  border-radius: 6px;
+  border-radius: 4px;
   background: transparent;
   color: var(--ant-color-text-tertiary);
   cursor: pointer;
+  transition: all 0.2s ease;
 }
 
 .app-monitor-panel__section-collapse-btn:hover {
@@ -117,54 +103,26 @@
   height: 14px;
 }
 
-.app-monitor-panel__filters {
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  flex: 1;
-  min-width: 0;
-  justify-content: flex-end;
-  overflow-x: auto;
-  overflow-y: hidden;
-  scrollbar-width: none;
-  -ms-overflow-style: none;
-  padding-bottom: 1px;
-}
-
-.app-monitor-panel__filters::-webkit-scrollbar {
-  display: none;
-}
-
-.app-monitor-panel__title {
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--ant-color-text);
-  line-height: 1.2;
-  letter-spacing: 0.2px;
-  flex-shrink: 0;
-  min-width: 0;
-  padding: 3px 4px 3px 8px;
-}
-
 .app-monitor-panel__concurrency {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   flex-shrink: 0;
-  padding: 1px 3px;
-  margin: 2px 0;
-  border-radius: var(--ant-border-radius-sm);
-  border: 1px solid var(--ant-color-border-secondary);
-  background: var(--ant-color-fill-quaternary);
+  padding: 1px 4px;
+  margin: 0;
+  border-radius: 4px;
+  border: 1px solid var(--app-workspace-glass-border, var(--ant-color-border-secondary));
+  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 60%, transparent);
   cursor: default;
   font-size: 11px;
   line-height: 1.2;
   color: var(--ant-color-text-secondary);
+  transition: all 0.2s ease;
 }
 
-.app-monitor-panel__concurrency--muted {
-  cursor: default;
-  opacity: 0.75;
+.app-monitor-panel__concurrency:hover {
+  border-color: var(--ant-color-primary-border);
+  background: var(--ant-color-fill-tertiary);
 }
 
 .app-monitor-panel__concurrency-label {
@@ -186,47 +144,35 @@
 }
 
 .app-monitor-panel__concurrency-input {
-  width: 44px !important;
+  width: 40px !important;
 }
 
 .app-monitor-panel__concurrency-input .ant-input-number-input {
   text-align: center;
-  padding: 0 4px;
+  padding: 0;
   font-size: 11px;
-}
-
-.app-monitor-panel__filter-btn {
-  border: 1px solid var(--ant-color-border-secondary);
-  background: var(--ant-color-bg-container);
-  color: var(--ant-color-text-secondary);
-  border-radius: 999px;
-  font-size: 10px;
-  line-height: 1.1;
-  padding: 3px 8px;
-  cursor: pointer;
-  white-space: nowrap;
-  transition: all 0.15s;
-  flex-shrink: 0;
-}
-
-.app-monitor-panel__filter-btn--active {
-  border-color: var(--ant-color-primary-border);
-  background: var(--ant-color-primary-bg);
-  color: var(--ant-color-primary);
+  height: 16px;
+  line-height: 16px;
 }
 
 .app-monitor-panel__section {
   border: none;
   border-radius: 0;
   background: transparent;
-  padding: 0 8px 2px;
+  padding: 4px 8px;
   margin: 0;
+  box-shadow: none;
+  transition: none;
+}
+
+.app-monitor-panel__section:hover {
+  background: transparent;
+  border-color: transparent;
 }
 
 .app-monitor-panel__section + .app-monitor-panel__section {
   border-top: 1px solid var(--ant-color-border-secondary);
   margin-top: 4px;
-  padding-top: 5px;
 }
 
 .app-monitor-panel__section--repo-members {
@@ -299,22 +245,26 @@
 .app-monitor-panel__section-head {
   display: block;
   margin: 0 0 2px;
+  border-bottom: none;
+  padding-bottom: 0;
 }
 
 .app-monitor-panel__section-title-wrap {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 6px;
 }
 
 .app-monitor-panel__section-title {
-  font-size: 11px;
+  font-size: 10px;
   display: inline-flex;
   align-items: center;
   gap: 4px;
   color: var(--ant-color-text-secondary);
-  font-weight: bold;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .app-monitor-panel__section-icon {
@@ -323,12 +273,38 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--ant-color-text-tertiary);
+  color: var(--ant-color-primary);
 }
 
 .app-monitor-panel__section-icon svg {
   width: 12px;
   height: 12px;
+}
+
+.app-monitor-panel__section-config-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  border: none;
+  background: transparent;
+  color: var(--ant-color-text-tertiary);
+  cursor: pointer;
+  border-radius: 4px;
+  transition: all 0.2s ease;
+}
+
+.app-monitor-panel__section-config-btn:hover {
+  color: var(--ant-color-primary);
+  background: var(--ant-color-fill-secondary);
+}
+
+.app-monitor-panel__terminals-list,
+.app-monitor-panel__workflows-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
 }
 
 .app-monitor-panel__hustle-mascot {
@@ -452,10 +428,11 @@
 }
 
 .app-monitor-panel__item {
-  border-radius: 6px;
-  padding: 0 4px;
+  border-radius: 3px;
+  padding: 1px 4px;
   cursor: pointer;
   border: 1px solid transparent;
+  transition: all 0.2s ease;
 }
 
 .app-monitor-panel__item--readonly {
@@ -468,8 +445,8 @@
 }
 
 .app-monitor-panel__item:hover {
-  background: var(--ant-color-fill-quaternary);
-  border-color: var(--ant-color-border-secondary);
+  background: var(--ant-color-fill-secondary);
+  border-color: color-mix(in srgb, var(--ant-color-border-secondary) 50%, transparent);
 }
 
 .app-monitor-panel__item--active {
@@ -482,11 +459,11 @@
   align-items: center;
   justify-content: space-between;
   gap: 6px;
-  padding: 2px 0;
+  padding: 0;
 }
 
 .app-monitor-panel__item-row--terminal {
-  gap: 2px;
+  gap: 4px;
   min-width: 0;
 }
 
@@ -494,11 +471,16 @@
   flex: 1 1 auto;
   min-width: 0;
   overflow: hidden;
+  border: none;
+  background: transparent;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
 }
 
 .app-monitor-panel__item--terminal-row:hover {
-  background: var(--ant-color-fill-quaternary);
-  border-color: var(--ant-color-border-secondary);
+  background: var(--ant-color-fill-secondary);
+  border-color: color-mix(in srgb, var(--ant-color-border-secondary) 50%, transparent);
 }
 
 .app-monitor-panel__item-actions {
@@ -516,25 +498,40 @@
   flex: 1;
 }
 
-.app-monitor-panel__item-ops {
+.app-monitor-panel__item-action-icon-btn {
   display: inline-flex;
   align-items: center;
-  justify-content: flex-end;
-  margin-left: auto;
-  flex-shrink: 0;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ant-color-text-tertiary);
+  cursor: pointer;
+  opacity: 0.65;
+  transition: all 0.2s ease;
 }
 
-.app-monitor-panel__item-status-row {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  margin-top: 2px;
+.app-monitor-panel__item:hover .app-monitor-panel__item-action-icon-btn {
+  opacity: 0.85;
 }
 
-.app-monitor-panel__item-status {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
+.app-monitor-panel__item-action-icon-btn:hover {
+  opacity: 1 !important;
+  background: var(--ant-color-fill-tertiary);
+  color: var(--ant-color-primary);
+}
+
+.app-monitor-panel__item-action-icon-btn.ant-popover-open {
+  opacity: 1 !important;
+  color: var(--ant-color-primary);
+  background: var(--ant-color-fill-tertiary);
+}
+
+.app-monitor-panel__item-action-icon-btn--stop:hover {
+  color: var(--ant-color-error) !important;
+  background: color-mix(in srgb, var(--ant-color-error) 10%, transparent) !important;
 }
 
 .app-monitor-panel__item-action-btn {
@@ -812,19 +809,17 @@
 }
 
 .app-monitor-panel__section.app-monitor-panel__section--session-tasks {
-  margin: 4px 8px 0;
-  padding: 4px 6px 0;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 55%, transparent);
-  border: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 70%, transparent);
-  border-top: none;
+  margin: 0;
+  padding: 4px 8px;
+  border-radius: 0;
+  background: transparent;
+  border: none;
+  transition: none;
 }
 
-.app-monitor-panel__section + .app-monitor-panel__section--session-tasks,
-.app-monitor-panel__head + .app-monitor-panel__section--session-tasks,
-.app-monitor-panel__empty + .app-monitor-panel__section--session-tasks {
-  margin-top: 0;
-  padding-top: 0;
+.app-monitor-panel__section.app-monitor-panel__section--session-tasks:hover {
+  background: transparent;
+  border-color: transparent;
 }
 
 .app-monitor-panel__section--session-tasks-empty .app-monitor-panel__session-tasks-list {
@@ -836,8 +831,10 @@
   align-items: center;
   justify-content: space-between;
   gap: 4px;
-  margin-bottom: 3px;
+  margin-bottom: 2px;
   min-height: 20px;
+  border-bottom: none;
+  padding-bottom: 0;
 }
 
 .app-monitor-panel__session-tasks-toolbar .ant-typography {
@@ -855,16 +852,18 @@
 .app-monitor-panel__session-tasks-title {
   margin: 0;
   font-size: 10px;
-  font-weight: 600;
+  font-weight: 700;
   color: var(--ant-color-text-secondary);
   display: inline-flex;
   align-items: center;
-  gap: 3px;
+  gap: 4px;
   line-height: 16px;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
 }
 
 .app-monitor-panel__session-tasks-title-icon {
-  font-size: 10px;
+  font-size: 12px;
   color: var(--ant-color-primary);
 }
 
@@ -932,27 +931,30 @@
   --session-task-max-visible-rows: 6;
   display: flex;
   flex-direction: column;
-  gap: 0;
+  gap: 1px;
   max-height: calc(var(--session-task-row-height) * var(--session-task-max-visible-rows));
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
+  margin-top: 2px;
 }
 
 .app-monitor-panel__session-task-row {
   display: flex;
   align-items: center;
-  gap: 2px;
+  gap: 4px;
   min-width: 0;
   max-width: 100%;
   min-height: 20px;
-  border-radius: 3px;
+  border-radius: 4px;
   background: transparent;
-  border: none;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
 }
 
 .app-monitor-panel__session-task-row:hover {
-  background: var(--ant-color-fill-quaternary);
+  background: var(--ant-color-fill-secondary);
+  border-color: color-mix(in srgb, var(--ant-color-border-secondary) 30%, transparent);
 }
 
 .app-monitor-panel__session-task-row-main {
@@ -961,18 +963,19 @@
   overflow: hidden;
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 6px;
   border: none;
   background: transparent;
   padding: 1px 4px;
-  min-height: 20px;
+  min-height: 18px;
   cursor: pointer;
   text-align: left;
 }
 
 .app-monitor-panel__session-task-name {
   font-size: 10px;
-  line-height: 16px;
+  font-weight: 500;
+  line-height: 14px;
   color: var(--ant-color-text);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -982,60 +985,46 @@
 }
 
 .app-monitor-panel__session-task-meta {
-  font-size: 9px;
-  line-height: 16px;
-  color: var(--ant-color-text-quaternary);
+  font-size: 8.5px;
+  line-height: 12px;
+  color: var(--ant-color-text-tertiary);
+  background: var(--ant-color-fill-quaternary);
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 3px;
+  padding: 0 3px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   flex: 0 0 auto;
-  max-width: 28%;
+  max-width: 35%;
 }
 
 .app-monitor-panel__session-task-time {
   font-size: 9px;
-  line-height: 16px;
+  line-height: 14px;
   color: var(--ant-color-text-quaternary);
   white-space: nowrap;
   flex: 0 0 auto;
   font-variant-numeric: tabular-nums;
-}
-
-.app-monitor-panel__section--session-tasks .app-monitor-panel__subagent-status {
-  width: 14px;
-  height: 14px;
-}
-
-.app-monitor-panel__section--session-tasks .app-monitor-panel__subagent-status-svg {
-  width: 14px;
-  height: 14px;
-}
-
-.app-monitor-panel__section--session-tasks .app-monitor-panel__session-task-stop {
-  width: 12px;
-  height: 12px;
-  margin-right: 2px;
-  font-size: 6px;
+  margin-left: 2px;
 }
 
 .app-monitor-panel__session-task-actions {
   display: inline-flex;
   align-items: center;
-  gap: 1px;
+  gap: 2px;
   flex-shrink: 0;
-  padding-right: 3px;
-}
-
-.app-monitor-panel__session-task-row .app-monitor-panel__subagent-row {
-  flex: 1 1 auto;
-  min-width: 0;
+  padding-right: 6px;
+  min-width: 20px;
+  justify-content: flex-end;
 }
 
 .app-monitor-panel__session-task-stop {
+  display: none;
   flex: 0 0 auto;
   align-self: center;
-  width: 14px;
-  height: 14px;
+  width: 12px;
+  height: 12px;
   border: 1px solid color-mix(in srgb, var(--ant-color-error) 40%, transparent);
   border-radius: 3px;
   background: color-mix(in srgb, var(--ant-color-error) 8%, transparent);
@@ -1043,15 +1032,36 @@
   cursor: pointer;
   font-size: 7px;
   line-height: 1;
-  display: inline-flex;
   align-items: center;
   justify-content: center;
-  margin-right: 4px;
+  transition: all 0.2s ease;
 }
 
 .app-monitor-panel__session-task-stop:hover {
-  background: var(--ant-color-fill-secondary);
+  background: color-mix(in srgb, var(--ant-color-error) 15%, transparent);
+  border-color: var(--ant-color-error);
   color: var(--ant-color-error);
+}
+
+.app-monitor-panel__session-task-row:hover .app-monitor-panel__session-task-stop {
+  display: inline-flex;
+}
+
+.app-monitor-panel__session-task-row:hover .app-monitor-panel__session-task-stop + .app-monitor-panel__subagent-status {
+  display: none;
+}
+
+.app-monitor-panel__section--session-tasks .app-monitor-panel__subagent-status {
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-monitor-panel__section--session-tasks .app-monitor-panel__subagent-status-svg {
+  width: 14px;
+  height: 14px;
 }
 
 .app-monitor-panel__subagent-status--completed {

@@ -24,6 +24,8 @@ export function SessionConversationTasksPanel({
   sessionConversationTaskItems,
   onStopSessionConversationTask,
   onResumeSession,
+  onReloadFullDiskTranscript,
+  onPrepareSessionForMonitorDrawer,
   executionEnvironmentDispatchHistoryDays,
   onExecutionEnvironmentDispatchHistoryDaysChange,
   executionEnvironmentDispatchHistoryDaysSaving = false,
@@ -32,6 +34,8 @@ export function SessionConversationTasksPanel({
   sessionConversationTaskItems: readonly SessionConversationTaskItem[];
   onStopSessionConversationTask?: (item: SessionConversationTaskItem) => void;
   onResumeSession?: import("../ProgressMonitorPanel/MonitorDrawerSessionComposer").MonitorDrawerResumeSessionFn;
+  onReloadFullDiskTranscript?: (sessionKey: string) => void | Promise<void>;
+  onPrepareSessionForMonitorDrawer?: import("../ProgressMonitorPanel/MonitorDrawerSessionComposer").MonitorDrawerPrepareSessionFn;
   executionEnvironmentDispatchHistoryDays?: ExecutionEnvironmentDispatchHistoryDays;
   onExecutionEnvironmentDispatchHistoryDaysChange?: (
     days: ExecutionEnvironmentDispatchHistoryDays,
@@ -149,15 +153,19 @@ export function SessionConversationTasksPanel({
         </div>
       </div>
 
-      <SessionConversationTaskDetailDrawer
-        target={detailTarget}
-        sessions={sessions}
-        sessionConversationTaskItems={dispatchTaskItems}
-        onClose={() => setDetailTarget(null)}
-        onStopTask={onStopSessionConversationTask}
-        onStopSessionConversationTask={onStopSessionConversationTask}
-        onResumeSession={onResumeSession}
-      />
+      {detailTarget ? (
+        <SessionConversationTaskDetailDrawer
+          target={detailTarget}
+          sessions={sessions}
+          sessionConversationTaskItems={dispatchTaskItems}
+          onClose={() => setDetailTarget(null)}
+          onStopTask={onStopSessionConversationTask}
+          onStopSessionConversationTask={onStopSessionConversationTask}
+          onResumeSession={onResumeSession}
+          onReloadFullDiskTranscript={onReloadFullDiskTranscript}
+          onPrepareSessionForMonitorDrawer={onPrepareSessionForMonitorDrawer}
+        />
+      ) : null}
     </div>
   );
 }

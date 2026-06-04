@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ClaudeSession } from "../types";
 import { buildExecutionEnvironmentWorkerRepositoryName } from "./executionEnvironmentDispatch";
 import {
+  findExecutionEnvironmentWorkerForTaskDetail,
   findExecutionEnvironmentWorkerInRepository,
   preservesWorkerWiseTabId,
   resolveSessionForExecuteKey,
@@ -58,6 +59,49 @@ describe("resolveSessionForExecuteKey", () => {
     });
     const map = new Map([["tab-worker-1", "uuid-claude-1"]]);
     expect(resolveSessionForExecuteKey([worker], "tab-worker-1", map)?.id).toBe("uuid-claude-1");
+  });
+});
+
+describe("findExecutionEnvironmentWorkerForTaskDetail", () => {
+  test("does not bind historical worker id to the only surviving exec-env tab", () => {
+    const surviving = session({
+      id: "tab-new",
+      repositoryPath: "/repo",
+      repositoryName: buildExecutionEnvironmentWorkerRepositoryName("wise", "任务", "claude"),
+      messages: [{ id: 1, role: "assistant", content: "new run", parts: [], timestamp: 2 }],
+    });
+    const hit = findExecutionEnvironmentWorkerForTaskDetail([surviving], {
+      workerSessionId: "tab-old-0900",
+      repositoryPath: "/repo",
+    });
+    expect(hit).toBeUndefined();
+  });
+
+  test("finds worker by exact tab id when multiple exec-env tabs exist", () => {
+    const older = session({
+      id: "tab-old",
+      repositoryPath: "/repo",
+      repositoryName: buildExecutionEnvironmentWorkerRepositoryName("wise", "任务", "claude"),
+      messages: [{ id: 1, role: "user", content: "09:00", parts: [], timestamp: 1 }],
+    });
+    const newer = session({
+      id: "tab-new",
+      repositoryPath: "/repo",
+      repositoryName: buildExecutionEnvironmentWorkerRepositoryName("wise", "任务", "claude"),
+      messages: [{ id: 1, role: "user", content: "09:39", parts: [], timestamp: 2 }],
+    });
+    expect(
+      findExecutionEnvironmentWorkerForTaskDetail([older, newer], {
+        workerSessionId: "tab-old",
+        repositoryPath: "/repo",
+      })?.messages[0]?.content,
+    ).toBe("09:00");
+    expect(
+      findExecutionEnvironmentWorkerForTaskDetail([older, newer], {
+        workerSessionId: "tab-new",
+        repositoryPath: "/repo",
+      })?.messages[0]?.content,
+    ).toBe("09:39");
   });
 });
 

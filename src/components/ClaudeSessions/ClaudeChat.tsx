@@ -169,6 +169,7 @@ interface Props {
     executeOptions?: ClaudeComposerExecuteBubbleOptions,
   ) => boolean | void | Promise<boolean | void>;
   onResumeSessionFromMonitorDrawer?: import("../ProgressMonitorPanel/MonitorDrawerSessionComposer").MonitorDrawerResumeSessionFn;
+  onPrepareSessionForMonitorDrawer?: import("../ProgressMonitorPanel/MonitorDrawerSessionComposer").MonitorDrawerPrepareSessionFn;
   onDispatchExecutionEnvironment?: (input: {
     prompt: string;
     userBubblePrompt?: string;
@@ -321,6 +322,7 @@ export function ClaudeChat({
   onSend: _onSend,
   onExecute,
   onResumeSessionFromMonitorDrawer,
+  onPrepareSessionForMonitorDrawer,
   onDispatchExecutionEnvironment,
   onSessionModelChange,
   onSessionConnectionKindChange,
@@ -1886,12 +1888,14 @@ export function ClaudeChat({
       {sessionConversationTaskDetailTarget ? (
         <SessionConversationTaskDetailDrawer
           target={sessionConversationTaskDetailTarget}
-          sessions={sessions}
+          sessions={allSessionsForHistory ?? sessions}
           sessionConversationTaskItems={executionEnvironmentTaskItems}
           onClose={closeSessionConversationTaskDetail}
           onStopTask={onStopSessionConversationTask}
           onStopSessionConversationTask={onStopSessionConversationTask}
           onCancelSession={onCancelSessionById}
+          onReloadFullDiskTranscript={onReloadFullDiskTranscript}
+          onPrepareSessionForMonitorDrawer={onPrepareSessionForMonitorDrawer}
           onResumeSession={
             onResumeSessionFromMonitorDrawer ??
             (async (input) => {

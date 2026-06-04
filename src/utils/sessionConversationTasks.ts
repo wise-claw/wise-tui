@@ -6,6 +6,10 @@ import type { ExecutionEnvironmentDispatchRecord } from "../stores/executionEnvi
 import { sessionStatusToConversationTaskStatus } from "../stores/executionEnvironmentDispatchStore";
 import { indexOfLastRenderableUserMessage, isToolOnlyUserMessage, isAssistantDisplayNoiseText, type DispatchRecordMeta } from "./claudeChatMessageDisplay";
 import { isExecutionEnvironmentWorkerRepositoryName } from "./executionEnvironmentDispatch";
+import { resolveSessionExecutionEngine, sessionHasDiskTranscript } from "./sessionExecutionEngine";
+import {
+  findExecutionEnvironmentWorkerForTaskDetail,
+} from "./sessionExecuteResolve";
 import { isOmcDirectBatchInvocationRunning } from "./omcDirectBatchInvocationDisplay";
 import { formatChatMessageListTime } from "./formatChatMessageListTime";
 import { assistantMessageVisiblePlainText } from "../services/claudeSessionState";
@@ -231,21 +235,78 @@ export function workerHasMeaningfulAssistantReplyAfterDispatch(worker: ClaudeSes
   return false;
 }
 
+function workerLastTurnHasTrailingActivity(worker: ClaudeSession, lastUserIdx: number): boolean {
+  return lastUserIdx >= 0 && lastUserIdx < worker.messages.length - 1;
+}
+
+/** 派发 worker 是否需要从磁盘拉回完整 jsonl（侧栏状态 / 详情 drawer 依赖正文）。 */
+export function executionEnvironmentWorkerNeedsTranscriptHydration(
+  worker: ClaudeSession | null | undefined,
+): boolean {
+  if (!worker || !isExecutionEnvironmentWorkerRepositoryName(worker.repositoryName)) {
+    return false;
+  }
+  if (worker.status === "running" || worker.status === "connecting") return false;
+  if (!worker.claudeSessionId?.trim()) return true;
+  if (worker.messages.length === 0) return true;
+  if (worker.diskTranscriptPartial) return true;
+  if (!worker.transcriptMemoryUnlimited) return true;
+  return false;
+}
+
+/** 当前 anchor 下需要从磁盘预加载正文的派发 worker tab id（去重）。 */
+export function listExecutionEnvironmentWorkerIdsNeedingTranscriptHydration(
+  sessions: readonly ClaudeSession[],
+  dispatchRecords: readonly ExecutionEnvironmentDispatchRecord[],
+): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const batch of dispatchRecords) {
+    for (const item of batch.items) {
+      const workerId = item.workerSessionId.trim();
+      if (!workerId || seen.has(workerId)) continue;
+      seen.add(workerId);
+      const worker = findExecutionEnvironmentWorkerForTaskDetail(sessions, {
+        workerSessionId: workerId,
+        repositoryPath: batch.repositoryPath,
+      });
+      if (!worker || !executionEnvironmentWorkerNeedsTranscriptHydration(worker)) continue;
+      const engine = resolveSessionExecutionEngine(worker, [], []);
+      if (!sessionHasDiskTranscript(worker, engine)) continue;
+      out.push(worker.id);
+    }
+  }
+  return out;
+}
+
 /**
- * 执行环境 worker 任务态：Host 可能因 Hook/oneshot 退出码标 error/cancelled，
- * 但流式正文已落盘；有可见助手回复时按已完成展示。
+ * 执行环境 worker 任务态：按**最后一轮**用户消息后的结果推断，不用会话级 status 的历史残留。
+ * Host 可能因 Hook/oneshot 退出码标 error/cancelled，但最后一轮已有助手正文时仍按已完成展示。
  */
 export function resolveExecutionEnvironmentWorkerConversationTaskStatus(
   worker: ClaudeSession | null | undefined,
 ): SessionConversationTaskItem["status"] {
   if (!worker) return "completed";
   if (worker.status === "running" || worker.status === "connecting") return "running";
-  if (
-    (worker.status === "error" || worker.status === "cancelled") &&
-    workerHasMeaningfulAssistantReplyAfterDispatch(worker)
-  ) {
+
+  const lastUserIdx = indexOfLastRenderableUserMessage(worker.messages);
+  if (lastUserIdx < 0) {
+    return sessionStatusToConversationTaskStatus(worker.status);
+  }
+
+  if (workerHasMeaningfulAssistantReplyAfterDispatch(worker)) {
     return "completed";
   }
+
+  // 最后一轮尚无助手回复：以本轮执行结果为准，忽略上一轮遗留的 completed。
+  if (worker.status === "error" || worker.status === "cancelled") {
+    return "failed";
+  }
+
+  if (workerLastTurnHasTrailingActivity(worker, lastUserIdx)) {
+    return "failed";
+  }
+
   return sessionStatusToConversationTaskStatus(worker.status);
 }
 
@@ -261,7 +322,12 @@ export function buildExecutionEnvironmentConversationTasks(input: {
   for (const batch of input.dispatchRecords) {
     if (batch.anchorSessionId !== anchorId) continue;
     for (const item of batch.items) {
+      const repoPath = batch.repositoryPath || anchor.repositoryPath;
       const worker =
+        findExecutionEnvironmentWorkerForTaskDetail(input.sessions, {
+          workerSessionId: item.workerSessionId,
+          repositoryPath: repoPath,
+        }) ??
         input.sessions.find((s) => s.id === item.workerSessionId) ??
         input.sessions.find((s) => s.claudeSessionId?.trim() === item.workerSessionId);
       const status = worker
@@ -378,12 +444,68 @@ export function digestWorkerSessionsForExecutionEnvironmentTasks(
       parts.push(session.id);
       parts.push(session.status);
       parts.push(String(session.messages.length));
+      parts.push(String(indexOfLastRenderableUserMessage(session.messages)));
       const last = session.messages[session.messages.length - 1];
       parts.push(last?.role ?? "");
       parts.push(String(last?.id ?? ""));
     }
   }
   return parts.join("|");
+}
+
+/** 仅索引派发 worker 相关会话，避免主会话流式更新时全量 sessions 建 Map。 */
+export function indexDispatchWorkerSessions(
+  sessions: readonly ClaudeSession[],
+  dispatchRecords: readonly ExecutionEnvironmentDispatchRecord[],
+): Map<string, ClaudeSession> {
+  const neededIds = new Set<string>();
+  for (const batch of dispatchRecords) {
+    for (const item of batch.items) {
+      const workerId = item.workerSessionId.trim();
+      if (workerId) neededIds.add(workerId);
+    }
+  }
+  const map = new Map<string, ClaudeSession>();
+  if (neededIds.size === 0) return map;
+
+  const foundIds = new Set<string>();
+  for (const session of sessions) {
+    if (neededIds.has(session.id)) {
+      map.set(session.id, session);
+      foundIds.add(session.id);
+    }
+    const claudeSessionId = session.claudeSessionId?.trim();
+    if (claudeSessionId && neededIds.has(claudeSessionId)) {
+      map.set(claudeSessionId, session);
+      foundIds.add(claudeSessionId);
+    }
+    if (foundIds.size >= neededIds.size) break;
+  }
+  return map;
+}
+
+/** 执行会话 drawer：仅当 worker 消息/状态变化时更新视图 digest。 */
+export function digestSessionConversationTaskTranscript(
+  task: SessionConversationTaskItem,
+  session: ClaudeSession | null,
+): string {
+  if (!session) return `${task.key}|missing|${task.status}|${task.updatedAt}`;
+  const last = session.messages[session.messages.length - 1];
+  const lastTextLen =
+    typeof last?.content === "string" ? last.content.length : String(last?.content ?? "").length;
+  return [
+    task.key,
+    task.status,
+    task.updatedAt,
+    session.id,
+    session.status,
+    session.messages.length,
+    last?.role ?? "",
+    String(last?.id ?? ""),
+    String(lastTextLen),
+    session.claudeSessionId?.trim() ?? "",
+    session.transcriptMemoryUnlimited ? "1" : "0",
+  ].join("|");
 }
 
 /** 在已构建的任务列表上解析派发系统气泡（消息列表热路径，避免重复 build）。 */
@@ -409,7 +531,8 @@ export function resolveExecutionEnvironmentTaskFromTaskItems(
       return label === content || preview === content || label.startsWith(content);
     });
     if (byContent.length === 1) return byContent[0] ?? null;
-    if (byContent.length > 1 && timeMs != null) {
+    if (byContent.length > 1) {
+      if (timeMs == null) return null;
       return (
         [...byContent].sort(
           (a, b) => Math.abs(a.updatedAt - timeMs) - Math.abs(b.updatedAt - timeMs),
@@ -701,8 +824,10 @@ export function buildSessionConversationTaskDetailSession(
   if (task.source === "execution_environment") {
     const workerId = task.sessionId?.trim() ?? "";
     const worker =
-      sessions?.find((s) => s.id === workerId || s.claudeSessionId?.trim() === workerId) ??
-      (workerId && session.id === workerId ? session : null);
+      findExecutionEnvironmentWorkerForTaskDetail(sessions ?? [], {
+        workerSessionId: workerId,
+        repositoryPath: task.repositoryPath,
+      }) ?? (workerId && session.id === workerId ? session : null);
     if (worker && isExecutionEnvironmentWorkerRepositoryName(worker.repositoryName)) {
       const status: ClaudeSession["status"] =
         task.status === "running" ? "running" : task.status === "failed" ? "error" : "completed";

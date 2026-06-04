@@ -123,6 +123,7 @@ import {
   useMonitorOverview,
 } from "./hooks/useMonitorOverview";
 import { useExecutionEnvironmentDispatchHistoryDays } from "./hooks/useExecutionEnvironmentDispatchHistoryDays";
+import { useExecutionEnvironmentDispatchWorkerTranscriptPreload } from "./hooks/useExecutionEnvironmentDispatchWorkerTranscriptPreload";
 import { useSessionConversationTasks } from "./hooks/useSessionConversationTasks";
 import { dispatchExecutionEnvironmentFromMainSession } from "./services/executionEnvironmentDispatch";
 import { useIntervalSyncedState } from "./hooks/useIntervalSyncedState";
@@ -846,6 +847,7 @@ export default function App() {
     compactSessionHistory,
     releaseSessionHostProcess,
     resumeSessionFromMonitorDrawer,
+    ensureSessionForMonitorDrawer,
   } = useClaudeSessions({
     onClaudeTurnComplete: (p) => {
       advanceTeamAfterTurnRef.current(p);
@@ -1386,6 +1388,11 @@ export default function App() {
     activeSessionId,
     sessions,
     executionEnvironmentDispatchHistory.days,
+  );
+  useExecutionEnvironmentDispatchWorkerTranscriptPreload(
+    activeSessionId,
+    sessions,
+    reloadFullDiskTranscript,
   );
   const activeProject = useMemo(
     () => (activeProjectId ? projects.find((p) => p.id === activeProjectId) ?? null : null),
@@ -3099,6 +3106,7 @@ export default function App() {
         onHistoryDrawerSessionIdChange: setInspectorHistorySessionId,
         onRestoreHistorySessionAsMain: handleRestoreHistorySessionAsMain,
         onResumeSession: resumeSessionFromMonitorDrawer,
+        onPrepareSessionForMonitorDrawer: ensureSessionForMonitorDrawer,
         employees,
         employeeTaskCounts,
         workflowTemplates,
@@ -3366,6 +3374,7 @@ export default function App() {
         onOpenExecutionEnvironment: handleOpenExecutionEnvironment,
         onExecuteSession: handleComposerExecute,
         onResumeSessionFromMonitorDrawer: resumeSessionFromMonitorDrawer,
+        onPrepareSessionForMonitorDrawer: ensureSessionForMonitorDrawer,
         onDispatchExecutionEnvironment: handleDispatchExecutionEnvironment,
         onSendMessage: handleSendMessageWithAtMention,
         onCancelSession: cancelSession,
