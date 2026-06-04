@@ -23,6 +23,7 @@ import {
   message,
 } from "antd";
 import Editor from "@monaco-editor/react";
+import type { IDisposable } from "monaco-editor";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ClaudeProjectSkill, ClaudeProjectSkillFileEntry } from "../../types";
 import {
@@ -41,6 +42,8 @@ import { openWorkspaceIn } from "../../services/repository";
 import { DEFAULT_OPEN_APP_ID, DEFAULT_OPEN_APP_TARGETS } from "../OpenAppMenu/constants";
 import { getOpenAppPreferenceSync, hydrateOpenAppPreference } from "../../services/openAppPreference";
 import { isOmcPluginCacheSkill } from "../../utils/omcPluginDetect";
+import { installMonacoTrackpadSelectionGuard } from "../../utils/monacoTrackpadSelectionGuard";
+import { WISE_MONACO_EDITOR_OPTIONS } from "../../utils/wiseMonacoEditorOptions";
 
 // ── Helpers ──
 
@@ -142,17 +145,8 @@ function skillMatchesListSearch(
 }
 
 const MONACO_SKILL_EDITOR_OPTIONS = {
-  minimap: { enabled: false },
-  stickyScroll: { enabled: false },
+  ...WISE_MONACO_EDITOR_OPTIONS,
   fontSize: 12,
-  lineNumbers: "on" as const,
-  automaticLayout: true,
-  wordWrap: "on" as const,
-  tabSize: 2,
-  scrollBeyondLastLine: false,
-  dragAndDrop: false,
-  selectOnLineNumbers: false,
-  selectionClipboard: false,
 };
 
 function isValidSkillRelFilePath(p: string): boolean {
@@ -404,6 +398,7 @@ export function ProjectSkillsPanel({
   const [editSaving, setEditSaving] = useState(false);
   const [editFormatting, setEditFormatting] = useState(false);
   const [autoFormatOnSave, setAutoFormatOnSave] = useState(false);
+  const trackpadGuardRef = useRef<IDisposable | null>(null);
   const [readError, setReadError] = useState<string | null>(null);
 
   const [addFileOpen, setAddFileOpen] = useState(false);
@@ -649,6 +644,8 @@ export function ProjectSkillsPanel({
   }
 
   const closeEditor = useCallback(() => {
+    trackpadGuardRef.current?.dispose();
+    trackpadGuardRef.current = null;
     setEditingName(null);
     setSkillFiles([]);
     setSelectedPath(null);
@@ -1129,6 +1126,10 @@ export function ProjectSkillsPanel({
                   value={editContent}
                   onChange={(value) => setEditContent(value ?? "")}
                   options={MONACO_SKILL_EDITOR_OPTIONS}
+                  onMount={(editor) => {
+                    trackpadGuardRef.current?.dispose();
+                    trackpadGuardRef.current = installMonacoTrackpadSelectionGuard(editor);
+                  }}
                 />
               </div>
             )}

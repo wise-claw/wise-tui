@@ -1,6 +1,8 @@
 import { lazy, Suspense, useEffect, useRef } from "react";
 import { Spin } from "antd";
 import { configureWiseMonacoTypeScript } from "../services/monacoTypeScriptEnvironment";
+import { installMonacoTrackpadSelectionGuard } from "../utils/monacoTrackpadSelectionGuard";
+import { WISE_MONACO_EDITOR_OPTIONS } from "../utils/wiseMonacoEditorOptions";
 
 const DiffEditor = lazy(() =>
   import("@monaco-editor/react").then((m) => ({ default: m.DiffEditor })),
@@ -26,6 +28,7 @@ export function GitDiffMonacoPane({
   onModifiedChange,
 }: Props) {
   const modifiedListenerRef = useRef<{ dispose: () => void } | null>(null);
+  const trackpadGuardRef = useRef<{ dispose: () => void } | null>(null);
   const onModifiedChangeRef = useRef(onModifiedChange);
   onModifiedChangeRef.current = onModifiedChange;
 
@@ -33,6 +36,8 @@ export function GitDiffMonacoPane({
     () => () => {
       modifiedListenerRef.current?.dispose();
       modifiedListenerRef.current = null;
+      trackpadGuardRef.current?.dispose();
+      trackpadGuardRef.current = null;
     },
     [relativePath],
   );
@@ -61,23 +66,29 @@ export function GitDiffMonacoPane({
         onMount={(diffEditor) => {
           modifiedListenerRef.current?.dispose();
           modifiedListenerRef.current = null;
-          if (readOnly) {
-            return;
+          trackpadGuardRef.current?.dispose();
+          const guards = [
+            installMonacoTrackpadSelectionGuard(diffEditor.getOriginalEditor()),
+            installMonacoTrackpadSelectionGuard(diffEditor.getModifiedEditor()),
+          ];
+          trackpadGuardRef.current = {
+            dispose: () => {
+              for (const guard of guards) {
+                guard.dispose();
+              }
+            },
+          };
+          if (!readOnly) {
+            const mod = diffEditor.getModifiedEditor();
+            modifiedListenerRef.current = mod.onDidChangeModelContent(() => {
+              onModifiedChangeRef.current(mod.getValue());
+            });
           }
-          const mod = diffEditor.getModifiedEditor();
-          modifiedListenerRef.current = mod.onDidChangeModelContent(() => {
-            onModifiedChangeRef.current(mod.getValue());
-          });
         }}
         options={{
+          ...WISE_MONACO_EDITOR_OPTIONS,
           readOnly,
-          minimap: { enabled: false },
-          stickyScroll: { enabled: false },
           renderSideBySide: true,
-          automaticLayout: true,
-          fontSize: 13,
-          wordWrap: "on",
-          scrollBeyondLastLine: false,
         }}
       />
     </Suspense>

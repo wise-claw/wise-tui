@@ -1,4 +1,5 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, type MouseEvent } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useCallback, type MouseEvent } from "react";
+import type { IDisposable } from "monaco-editor";
 import { CloseOutlined } from "@ant-design/icons";
 import { Button, Spin } from "antd";
 import type * as Monaco from "monaco-editor";
@@ -12,6 +13,8 @@ import {
   monacoUriForRepositoryPath,
   syncMonacoRepositoryTypeScriptModels,
 } from "../services/monacoTypeScriptEnvironment";
+import { installMonacoTrackpadSelectionGuard } from "../utils/monacoTrackpadSelectionGuard";
+import { WISE_MONACO_EDITOR_OPTIONS } from "../utils/wiseMonacoEditorOptions";
 
 const MonacoEditor = lazy(() => import("@monaco-editor/react"));
 
@@ -46,6 +49,7 @@ export function RepositoryFileEditorPanel({
   const monacoRef = useRef<typeof Monaco | null>(null);
   const editorRef = useRef<MonacoEditorNamespace.IStandaloneCodeEditor | null>(null);
   const lastAppliedFocusRef = useRef<string | null>(null);
+  const trackpadGuardRef = useRef<IDisposable | null>(null);
   const activeTab = tabs.find((tab) => tab.relativePath === activePath) ?? null;
   const activeLanguage = monacoLanguageFromRepositoryPath(activeTab?.relativePath ?? null);
   const activeEditorPath =
@@ -75,7 +79,42 @@ export function RepositoryFileEditorPanel({
   useEffect(() => {
     lastAppliedFocusRef.current = null;
     editorRef.current = null;
+    trackpadGuardRef.current?.dispose();
+    trackpadGuardRef.current = null;
   }, [activeTab?.relativePath]);
+
+  useEffect(
+    () => () => {
+      trackpadGuardRef.current?.dispose();
+      trackpadGuardRef.current = null;
+    },
+    [],
+  );
+
+  const handleMonacoMount = useCallback(
+    (
+      editor: MonacoEditorNamespace.IStandaloneCodeEditor,
+      monaco: typeof Monaco,
+      tab: FileEditorTab,
+      tsSources: { relativePath: string; content: string }[],
+    ) => {
+      trackpadGuardRef.current?.dispose();
+      trackpadGuardRef.current = installMonacoTrackpadSelectionGuard(editor);
+      editorRef.current = editor;
+      monacoRef.current = monaco;
+      if (repositoryPath && isTypeScriptLikeRepositoryPath(tab.relativePath)) {
+        void syncMonacoRepositoryTypeScriptModels({
+          monaco,
+          repositoryPath,
+          sourceFiles: tsSources,
+        });
+      }
+      window.requestAnimationFrame(() => {
+        revealEditorLineFocus(editor, tab, lastAppliedFocusRef);
+      });
+    },
+    [repositoryPath],
+  );
 
   useEffect(() => {
     if (!activeTab || activeTab.loading || activeTab.diffOriginal !== undefined) {
@@ -208,32 +247,11 @@ export function RepositoryFileEditorPanel({
                     configureWiseMonacoTypeScript(monaco);
                   }}
                   onMount={(editor, monaco) => {
-                    editorRef.current = editor;
-                    monacoRef.current = monaco;
-                    if (repositoryPath && isTypeScriptLikeRepositoryPath(activeTab.relativePath)) {
-                      void syncMonacoRepositoryTypeScriptModels({
-                        monaco,
-                        repositoryPath,
-                        sourceFiles: activeTypeScriptSources,
-                      });
-                    }
-                    window.requestAnimationFrame(() => {
-                      revealEditorLineFocus(editor, activeTab, lastAppliedFocusRef);
-                    });
+                    handleMonacoMount(editor, monaco, activeTab, activeTypeScriptSources);
                   }}
                   onChange={(value) => onTabContentChange(activeTab.relativePath, value ?? "")}
                   theme={dark ? "vs-dark" : "vs"}
-                  options={{
-                    minimap: { enabled: false },
-                    stickyScroll: { enabled: false },
-                    fontSize: 13,
-                    lineNumbers: "on",
-                    automaticLayout: true,
-                    wordWrap: "on",
-                    tabSize: 2,
-                    scrollBeyondLastLine: false,
-                    dragAndDrop: false,
-                  }}
+                  options={WISE_MONACO_EDITOR_OPTIONS}
                 />
               </Suspense>
             )}
