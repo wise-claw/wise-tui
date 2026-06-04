@@ -95,14 +95,16 @@ type ComposerFocusableEditor = ComposerProseMirrorEditor & {
 };
 
 /** 在纯文本偏移处聚焦并放置光标（与 `plainOffsetToProseMirrorPos` 对齐）。 */
+/** Semi `AIChatInput` ref：`focusEditor` 要求 `FocusPosition`，与可选参数签名不结构兼容，故用宽松入参。 */
 export function focusComposerAtPlainOffset(
-  aiChat: { getEditor?: () => unknown; focusEditor?: (pos?: number | string) => void } | null,
+  aiChat: { getEditor?: () => unknown; focusEditor?: unknown } | null,
   plainOffset: number,
 ): void {
   if (!aiChat) return;
+  const focusEditor = aiChat.focusEditor as ((pos?: number | string) => void) | undefined;
   const raw = aiChat.getEditor?.();
   if (!raw || typeof raw !== "object") {
-    aiChat.focusEditor?.();
+    focusEditor?.();
     return;
   }
   try {
@@ -112,9 +114,9 @@ export function focusComposerAtPlainOffset(
       editor.chain().setTextSelection(pmPos).focus().run();
       return;
     }
-    aiChat.focusEditor?.(pmPos);
+    focusEditor?.(pmPos);
   } catch {
-    aiChat.focusEditor?.();
+    focusEditor?.();
   }
 }
 

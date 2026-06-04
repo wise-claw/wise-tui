@@ -563,7 +563,7 @@ function ComposerInner({
     [dockTabs, activeQuestionTabKey],
   );
 
-  const { prompt, cursor, contextItems, set, reset, contextAdd, draftBucketKey } = usePrompt();
+  const { prompt, contextItems, set, reset, contextAdd, draftBucketKey } = usePrompt();
 
   const displayPlain = useMemo(() => promptToDisplayPlain(prompt), [prompt]);
 

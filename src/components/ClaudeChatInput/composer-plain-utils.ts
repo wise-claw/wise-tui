@@ -24,12 +24,6 @@ export function singleTextPrompt(plain: string): Prompt {
   return [{ type: "text", text: t, start: 0, end: t.length }];
 }
 
-function currentLineBeforeCursor(text: string, cursor: number): string {
-  const beforeCursor = text.substring(0, cursor);
-  const lineStart = beforeCursor.lastIndexOf("\n") + 1;
-  return beforeCursor.substring(lineStart);
-}
-
 /** 行内 `/` 触发：允许「sds/」这类前缀，但排除 URL/path 里的 `://` 与 `//`。 */
 function matchInlineSlashTrigger(currentLine: string): RegExpMatchArray | null {
   const lastBreak = Math.max(currentLine.lastIndexOf(" "), currentLine.lastIndexOf("\t"));

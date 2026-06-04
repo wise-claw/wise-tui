@@ -9,7 +9,7 @@ import {
   useChatMessageListPendingScroll,
   useChatMessageListWindow,
 } from "../../hooks/useChatMessageListWindow";
-import type { SessionConversationTaskItem } from "../../types";
+import type { ClaudeSession, SessionConversationTaskItem } from "../../types";
 import type { DispatchRecordMeta } from "../../utils/claudeChatMessageDisplay";
 import type { ChatMessageListRow } from "../../utils/claudeChatMessageListRows";
 import { findChatMessageRowIndexByMessageId } from "../../utils/chatMessageListWindow";

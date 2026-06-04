@@ -1418,7 +1418,6 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       forceNewClaudeConversation?: boolean;
       cursorAttachments?: CursorSdkAttachment[];
       codexContextExecutionEngine?: SessionExecutionEngine;
-      forceNewClaudeConversation?: boolean;
     }) => {
       const { tabSessionId, prompt, repositoryPath: repositoryPathInput, ...invokeRest } = params;
       const session = sessionsRef.current.find((s) => s.id === tabSessionId);

@@ -81,7 +81,7 @@ function rowContentEqual(prev: Readonly<Props>, next: Readonly<Props>): boolean 
   }
   return (
     prev.row.msg === next.row.msg &&
-    prev.row.streamingThisBubble === next.streamingThisBubble &&
+    prev.row.streamingThisBubble === next.row.streamingThisBubble &&
     prev.row.mergedWithPrevious === next.row.mergedWithPrevious &&
     prev.row.toolUser === next.row.toolUser
   );
