@@ -7,6 +7,8 @@ import { MAX_REPO_DISK_INDEX_SESSIONS } from "../constants/claudeMessageListWind
 import { getClaudeConfigModel } from "../services/claude";
 import { setAppSetting } from "../services/appSettingsStore";
 import { isTerminalWorkerWiseTab } from "../services/terminalDispatch";
+import { preservesWorkerWiseTabId } from "../utils/sessionExecuteResolve";
+import { isExecutionEnvironmentWorkerRepositoryName } from "../utils/executionEnvironmentDispatch";
 import { createClaudeStreamRuntime } from "../services/claudeStreamRuntime";
 import { getSessionUpdatedAt } from "../components/ClaudeSessions/sessionGrouping";
 import { isClaudeSessionRunningByHostProcesses } from "../utils/claudeHostRunningSessionIds";
@@ -358,6 +360,7 @@ function sessionMatchesDiskId(s: ClaudeSession, diskSessionId: string): boolean 
 }
 
 function shouldPreserveRepositoryDisplayName(previous: string): boolean {
+  if (isExecutionEnvironmentWorkerRepositoryName(previous)) return true;
   const marker = "员工:";
   const idx = previous.lastIndexOf(marker);
   if (idx < 0) {
@@ -451,7 +454,7 @@ export function mergeRepositoryDiskSessions(
     const s = copy[i];
     const item = disk.find((d) => sessionMatchesDiskId(s, d.sessionId));
     if (item) {
-      const preserveWiseTabId = isTerminalWorkerWiseTab(s);
+      const preserveWiseTabId = isTerminalWorkerWiseTab(s) || preservesWorkerWiseTabId(s);
       copy[i] = {
         ...s,
         id: preserveWiseTabId ? s.id : item.sessionId,

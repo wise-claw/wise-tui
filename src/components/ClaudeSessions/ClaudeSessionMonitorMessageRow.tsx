@@ -1,5 +1,6 @@
-import { memo } from "react";
+import { memo, useMemo } from "react";
 import type { ClaudeMessage, ClaudeSession, SessionConversationTaskItem } from "../../types";
+import type { DispatchRecordMeta } from "../../utils/claudeChatMessageDisplay";
 import { MessagePartsDisplay } from "./MessageParts";
 import { Markdown } from "./Markdown";
 import { SystemMessageContent } from "./SystemMessageContent";
@@ -12,7 +13,6 @@ import { DispatchRecordMessage } from "./DispatchRecordMessage";
 import { UserMessageCollapsibleBody } from "./UserMessageCollapsibleBody";
 import { ChatMessageRowActions } from "./ChatMessageRowActions";
 import { useChatMessageCopyText } from "./useChatMessageCopyText";
-import type { ExecutionEnvironmentDispatchRecord } from "../../stores/executionEnvironmentDispatchStore";
 
 interface Props {
   sessionId?: string;
@@ -20,8 +20,7 @@ interface Props {
   streamingThisBubble: boolean;
   mergedWithPrevious: boolean;
   toolUser: boolean;
-  anchorSession?: ClaudeSession | null;
-  executionEnvironmentDispatchRecords?: readonly ExecutionEnvironmentDispatchRecord[];
+  resolveExecutionEnvironmentDispatchTask?: (meta: DispatchRecordMeta) => SessionConversationTaskItem | null;
   onOpenTaskDetail?: (taskId: string) => void;
   onOpenHistorySessionInInspector?: (sessionId: string) => void;
   onOpenSessionConversationTaskDetail?: (task: SessionConversationTaskItem) => void;
@@ -34,14 +33,21 @@ function ClaudeSessionMonitorMessageRowInner({
   streamingThisBubble,
   mergedWithPrevious,
   toolUser,
-  anchorSession,
-  executionEnvironmentDispatchRecords,
+  resolveExecutionEnvironmentDispatchTask,
   onOpenTaskDetail,
   onOpenHistorySessionInInspector,
   onOpenSessionConversationTaskDetail,
   sessionsForDispatchLookup,
 }: Props) {
   const copyText = useChatMessageCopyText(msg, sessionsForDispatchLookup);
+  const systemPlainText = useMemo(
+    () => (msg.role === "system" ? systemMessagePlainText(msg) : ""),
+    [msg],
+  );
+  const dispatchMeta = useMemo(
+    () => (systemPlainText ? parseDispatchRecord(systemPlainText) : null),
+    [systemPlainText],
+  );
 
   function renderChatBody() {
     if (msg.parts && msg.parts.length > 0) {
@@ -103,24 +109,20 @@ function ClaudeSessionMonitorMessageRowInner({
         )}
         <div className="app-claude-message-content">
           {msg.role === "system"
-            ? (() => {
-                const raw = systemMessagePlainText(msg);
-                const dispatch = parseDispatchRecord(raw);
-                if (!dispatch) {
-                  return <SystemMessageContent text={raw} />;
-                }
-                return (
+            ? dispatchMeta
+              ? (
                   <DispatchRecordMessage
-                    dispatch={dispatch}
+                    dispatch={dispatchMeta}
                     sessionsForDispatchLookup={sessionsForDispatchLookup}
-                    anchorSession={anchorSession}
-                    executionEnvironmentDispatchRecords={executionEnvironmentDispatchRecords}
+                    resolveExecutionEnvironmentDispatchTask={resolveExecutionEnvironmentDispatchTask}
                     onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
                     onOpenTaskDetail={onOpenTaskDetail}
                     onOpenSessionConversationTaskDetail={onOpenSessionConversationTaskDetail}
                   />
-                );
-              })()
+                )
+              : systemPlainText
+                ? <SystemMessageContent text={systemPlainText} />
+                : null
             : renderNonSystemContent()}
         </div>
       </div>

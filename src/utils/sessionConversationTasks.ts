@@ -4,10 +4,11 @@ import type { ClaudeMessage, ClaudeSession, MessagePart, SessionConversationTask
 import { SESSION_EXECUTION_ENGINE_LABELS } from "../constants/sessionExecutionEngine";
 import type { ExecutionEnvironmentDispatchRecord } from "../stores/executionEnvironmentDispatchStore";
 import { sessionStatusToConversationTaskStatus } from "../stores/executionEnvironmentDispatchStore";
-import { indexOfLastRenderableUserMessage, isToolOnlyUserMessage, type DispatchRecordMeta } from "./claudeChatMessageDisplay";
+import { indexOfLastRenderableUserMessage, isToolOnlyUserMessage, isAssistantDisplayNoiseText, type DispatchRecordMeta } from "./claudeChatMessageDisplay";
 import { isExecutionEnvironmentWorkerRepositoryName } from "./executionEnvironmentDispatch";
 import { isOmcDirectBatchInvocationRunning } from "./omcDirectBatchInvocationDisplay";
 import { formatChatMessageListTime } from "./formatChatMessageListTime";
+import { assistantMessageVisiblePlainText } from "../services/claudeSessionState";
 
 export { formatChatMessageListTime as formatExecutionEnvironmentDispatchTaskTime };
 
@@ -217,6 +218,37 @@ export function currentConversationTurnStartTimestamp(messages: ClaudeSession["m
   return messages[startIdx]?.timestamp ?? 0;
 }
 
+/** 派发轮次内是否存在可展示的助手正文（排除占位句）。 */
+export function workerHasMeaningfulAssistantReplyAfterDispatch(worker: ClaudeSession): boolean {
+  const turnStart = indexOfLastRenderableUserMessage(worker.messages);
+  if (turnStart < 0) return false;
+  for (let i = turnStart + 1; i < worker.messages.length; i += 1) {
+    const msg = worker.messages[i]!;
+    if (msg.role !== "assistant") continue;
+    const text = assistantMessageVisiblePlainText(msg);
+    if (text.trim() && !isAssistantDisplayNoiseText(text)) return true;
+  }
+  return false;
+}
+
+/**
+ * 执行环境 worker 任务态：Host 可能因 Hook/oneshot 退出码标 error/cancelled，
+ * 但流式正文已落盘；有可见助手回复时按已完成展示。
+ */
+export function resolveExecutionEnvironmentWorkerConversationTaskStatus(
+  worker: ClaudeSession | null | undefined,
+): SessionConversationTaskItem["status"] {
+  if (!worker) return "completed";
+  if (worker.status === "running" || worker.status === "connecting") return "running";
+  if (
+    (worker.status === "error" || worker.status === "cancelled") &&
+    workerHasMeaningfulAssistantReplyAfterDispatch(worker)
+  ) {
+    return "completed";
+  }
+  return sessionStatusToConversationTaskStatus(worker.status);
+}
+
 export function buildExecutionEnvironmentConversationTasks(input: {
   anchorSession: ClaudeSession | null | undefined;
   sessions: readonly ClaudeSession[];
@@ -233,7 +265,7 @@ export function buildExecutionEnvironmentConversationTasks(input: {
         input.sessions.find((s) => s.id === item.workerSessionId) ??
         input.sessions.find((s) => s.claudeSessionId?.trim() === item.workerSessionId);
       const status = worker
-        ? sessionStatusToConversationTaskStatus(worker.status)
+        ? resolveExecutionEnvironmentWorkerConversationTaskStatus(worker)
         : ("completed" as const);
       const preview =
         worker?.messages
@@ -327,22 +359,39 @@ function pickExecutionEnvironmentBatchTask(
   return [...tasks].sort((a, b) => (a.batchIndex ?? 0) - (b.batchIndex ?? 0))[0] ?? null;
 }
 
-/** 主会话派发系统气泡 → 侧栏同源的执行环境任务项（用于点击打开详情 drawer）。 */
-export function resolveExecutionEnvironmentTaskFromDispatchMeta(
+/** 仅跟踪执行环境 worker 会话的运行态/消息长度，避免主会话每条流式消息触发任务列表重算。 */
+export function digestWorkerSessionsForExecutionEnvironmentTasks(
+  sessionsById: ReadonlyMap<string, ClaudeSession>,
+  dispatchRecords: readonly ExecutionEnvironmentDispatchRecord[],
+): string {
+  if (dispatchRecords.length === 0) return "";
+  const parts: string[] = [];
+  for (const batch of dispatchRecords) {
+    for (const item of batch.items) {
+      const workerId = item.workerSessionId.trim();
+      if (!workerId) continue;
+      const session = sessionsById.get(workerId);
+      if (!session) {
+        parts.push(workerId, "missing");
+        continue;
+      }
+      parts.push(session.id);
+      parts.push(session.status);
+      parts.push(String(session.messages.length));
+      const last = session.messages[session.messages.length - 1];
+      parts.push(last?.role ?? "");
+      parts.push(String(last?.id ?? ""));
+    }
+  }
+  return parts.join("|");
+}
+
+/** 在已构建的任务列表上解析派发系统气泡（消息列表热路径，避免重复 build）。 */
+export function resolveExecutionEnvironmentTaskFromTaskItems(
   meta: DispatchRecordMeta,
-  input: {
-    anchorSession: ClaudeSession;
-    sessions: readonly ClaudeSession[];
-    dispatchRecords: readonly ExecutionEnvironmentDispatchRecord[];
-  },
+  tasks: readonly SessionConversationTaskItem[],
 ): SessionConversationTaskItem | null {
   if (meta.dispatchType?.trim() !== "执行环境") return null;
-
-  const tasks = buildExecutionEnvironmentConversationTasks({
-    anchorSession: input.anchorSession,
-    sessions: input.sessions,
-    dispatchRecords: input.dispatchRecords,
-  });
   if (tasks.length === 0) return null;
 
   const batchId = meta.dispatchBatchId?.trim();
@@ -380,6 +429,23 @@ export function resolveExecutionEnvironmentTaskFromDispatchMeta(
   }
 
   return null;
+}
+
+/** 主会话派发系统气泡 → 侧栏同源的执行环境任务项（用于点击打开详情 drawer）。 */
+export function resolveExecutionEnvironmentTaskFromDispatchMeta(
+  meta: DispatchRecordMeta,
+  input: {
+    anchorSession: ClaudeSession;
+    sessions: readonly ClaudeSession[];
+    dispatchRecords: readonly ExecutionEnvironmentDispatchRecord[];
+  },
+): SessionConversationTaskItem | null {
+  const tasks = buildExecutionEnvironmentConversationTasks({
+    anchorSession: input.anchorSession,
+    sessions: input.sessions,
+    dispatchRecords: input.dispatchRecords,
+  });
+  return resolveExecutionEnvironmentTaskFromTaskItems(meta, tasks);
 }
 
 export function buildSessionConversationTasks(input: {

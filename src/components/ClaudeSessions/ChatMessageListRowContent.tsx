@@ -1,17 +1,16 @@
 import { memo } from "react";
 import type { ClaudeSession, SessionConversationTaskItem } from "../../types";
+import type { DispatchRecordMeta } from "../../utils/claudeChatMessageDisplay";
 import type { ChatMessageListRow } from "../../utils/claudeChatMessageListRows";
 import { ClaudeChatMessageRow } from "./ClaudeChatMessageRow";
 import { ClaudeSessionMonitorMessageRow } from "./ClaudeSessionMonitorMessageRow";
 import { StreamingReplyHint } from "./Markdown";
-import type { ExecutionEnvironmentDispatchRecord } from "../../stores/executionEnvironmentDispatchStore";
 
 interface Props {
   row: ChatMessageListRow;
   sessionId?: string;
   listVariant?: "chat" | "monitor";
-  anchorSession?: ClaudeSession | null;
-  executionEnvironmentDispatchRecords?: readonly ExecutionEnvironmentDispatchRecord[];
+  resolveExecutionEnvironmentDispatchTask?: (meta: DispatchRecordMeta) => SessionConversationTaskItem | null;
   onOpenTaskDetail?: (taskId: string) => void;
   onOpenHistorySessionInInspector?: (sessionId: string) => void;
   onOpenSessionConversationTaskDetail?: (task: SessionConversationTaskItem) => void;
@@ -22,8 +21,7 @@ function ChatMessageListRowContentInner({
   row,
   sessionId,
   listVariant = "chat",
-  anchorSession,
-  executionEnvironmentDispatchRecords,
+  resolveExecutionEnvironmentDispatchTask,
   onOpenTaskDetail,
   onOpenHistorySessionInInspector,
   onOpenSessionConversationTaskDetail,
@@ -44,8 +42,7 @@ function ChatMessageListRowContentInner({
         streamingThisBubble={row.streamingThisBubble}
         mergedWithPrevious={row.mergedWithPrevious}
         toolUser={row.toolUser}
-        anchorSession={anchorSession}
-        executionEnvironmentDispatchRecords={executionEnvironmentDispatchRecords}
+        resolveExecutionEnvironmentDispatchTask={resolveExecutionEnvironmentDispatchTask}
         onOpenTaskDetail={onOpenTaskDetail}
         onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
         onOpenSessionConversationTaskDetail={onOpenSessionConversationTaskDetail}
@@ -60,8 +57,7 @@ function ChatMessageListRowContentInner({
       streamingThisBubble={row.streamingThisBubble}
       mergedWithPrevious={row.mergedWithPrevious}
       toolUser={row.toolUser}
-      anchorSession={anchorSession}
-      executionEnvironmentDispatchRecords={executionEnvironmentDispatchRecords}
+      resolveExecutionEnvironmentDispatchTask={resolveExecutionEnvironmentDispatchTask}
       onOpenTaskDetail={onOpenTaskDetail}
       onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
       onOpenSessionConversationTaskDetail={onOpenSessionConversationTaskDetail}
@@ -76,8 +72,7 @@ function rowContentEqual(prev: Readonly<Props>, next: Readonly<Props>): boolean 
   if (prev.onOpenTaskDetail !== next.onOpenTaskDetail) return false;
   if (prev.onOpenHistorySessionInInspector !== next.onOpenHistorySessionInInspector) return false;
   if (prev.onOpenSessionConversationTaskDetail !== next.onOpenSessionConversationTaskDetail) return false;
-  if (prev.anchorSession !== next.anchorSession) return false;
-  if (prev.executionEnvironmentDispatchRecords !== next.executionEnvironmentDispatchRecords) return false;
+  if (prev.resolveExecutionEnvironmentDispatchTask !== next.resolveExecutionEnvironmentDispatchTask) return false;
   if (prev.sessionsForDispatchLookup !== next.sessionsForDispatchLookup) return false;
   if (prev.row === next.row) return true;
   if (prev.row.kind !== next.row.kind) return false;
@@ -86,7 +81,7 @@ function rowContentEqual(prev: Readonly<Props>, next: Readonly<Props>): boolean 
   }
   return (
     prev.row.msg === next.row.msg &&
-    prev.row.streamingThisBubble === next.row.streamingThisBubble &&
+    prev.row.streamingThisBubble === next.streamingThisBubble &&
     prev.row.mergedWithPrevious === next.row.mergedWithPrevious &&
     prev.row.toolUser === next.row.toolUser
   );

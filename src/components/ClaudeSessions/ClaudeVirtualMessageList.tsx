@@ -1,18 +1,17 @@
 import { forwardRef, type RefObject } from "react";
 import type { ClaudeSession, SessionConversationTaskItem } from "../../types";
+import type { DispatchRecordMeta } from "../../utils/claudeChatMessageDisplay";
 import { useChatMessageListRows } from "../../hooks/useChatMessageListRows";
 import {
   ChatMessageListVirtualBody,
   type ChatMessageListNavigationHandle,
 } from "./ChatMessageListVirtualBody";
-import type { ExecutionEnvironmentDispatchRecord } from "../../stores/executionEnvironmentDispatchStore";
 
 interface Props {
   session: ClaudeSession;
   showListEndThinkingHint: boolean;
   scrollContainerRef: RefObject<HTMLDivElement | null>;
-  anchorSession?: ClaudeSession | null;
-  executionEnvironmentDispatchRecords?: readonly ExecutionEnvironmentDispatchRecord[];
+  resolveExecutionEnvironmentDispatchTask?: (meta: DispatchRecordMeta) => SessionConversationTaskItem | null;
   onOpenTaskDetail?: (taskId: string) => void;
   onOpenHistorySessionInInspector?: (sessionId: string) => void;
   onOpenSessionConversationTaskDetail?: (task: SessionConversationTaskItem) => void;
@@ -31,8 +30,7 @@ export const ClaudeVirtualMessageList = forwardRef<ChatMessageListNavigationHand
       session,
       showListEndThinkingHint: _showListEndThinkingHint,
       scrollContainerRef,
-      anchorSession,
-      executionEnvironmentDispatchRecords,
+      resolveExecutionEnvironmentDispatchTask,
       onOpenTaskDetail,
       onOpenHistorySessionInInspector,
       onOpenSessionConversationTaskDetail,
@@ -58,8 +56,7 @@ export const ClaudeVirtualMessageList = forwardRef<ChatMessageListNavigationHand
         scrollContainerRef={scrollContainerRef}
         listResetKey={session.id}
         listVariant={listVariant}
-        anchorSession={anchorSession ?? session}
-        executionEnvironmentDispatchRecords={executionEnvironmentDispatchRecords}
+        resolveExecutionEnvironmentDispatchTask={resolveExecutionEnvironmentDispatchTask}
         onOpenTaskDetail={onOpenTaskDetail}
         onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
         onOpenSessionConversationTaskDetail={onOpenSessionConversationTaskDetail}

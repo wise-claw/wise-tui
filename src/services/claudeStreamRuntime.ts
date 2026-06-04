@@ -18,6 +18,7 @@ import {
   finalizeSessionAfterComplete,
 } from "./claudeSessionState";
 import { isTerminalWorkerWiseTab } from "./terminalDispatch";
+import { preservesWorkerWiseTabId } from "../utils/sessionExecuteResolve";
 
 type SetSessions = (updater: (prev: ClaudeSession[]) => ClaudeSession[]) => void;
 type SetActiveSessionId = (updater: (prev: string | null) => string | null) => void;
@@ -202,7 +203,8 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
         if (isInit && realSessionId) {
           sessionIdMapRef.current.set(tid, realSessionId);
           onClaudeSessionIdAssigned?.(tid, realSessionId);
-          const preserveWiseTabId = isTerminalWorkerWiseTab(updated);
+          const preserveWiseTabId =
+            isTerminalWorkerWiseTab(updated) || preservesWorkerWiseTabId(updated);
           if (preserveWiseTabId) {
             updated = { ...updated, claudeSessionId: realSessionId };
           } else {
@@ -416,7 +418,8 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
       const sessionForTid =
         sessionsRef.current.find((s) => s.id === tid || s.claudeSessionId === tid) ?? null;
       const preserveWiseTabId =
-        sessionForTid != null && isTerminalWorkerWiseTab(sessionForTid);
+        sessionForTid != null &&
+        (isTerminalWorkerWiseTab(sessionForTid) || preservesWorkerWiseTabId(sessionForTid));
       migrateSessionKey(tid, realSessionId);
       const buf = assistantStreamTextByTabRef.current.get(tid);
       if (buf !== undefined) {

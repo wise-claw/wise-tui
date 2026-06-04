@@ -3,33 +3,53 @@ import { Button, Input, message } from "antd";
 import { useCallback, useState } from "react";
 import type { ClaudeSession } from "../../types";
 
+export type MonitorDrawerResumeSessionInput = {
+  sessionId: string;
+  prompt: string;
+  repositoryPath?: string;
+  repositoryDisplayName?: string;
+  /** 执行环境派发任务标签，用于 worker 标签漂移后的回退匹配 */
+  taskLabel?: string;
+};
+
 export type MonitorDrawerResumeSessionFn = (
-  sessionId: string,
-  prompt: string,
-) => boolean | void;
+  input: MonitorDrawerResumeSessionInput,
+) => boolean | void | Promise<boolean | void>;
 
 export function MonitorDrawerSessionComposer({
   session,
   onResumeSession,
   disabledReason,
+  resumeContext,
 }: {
   session: ClaudeSession | null | undefined;
   onResumeSession?: MonitorDrawerResumeSessionFn;
   disabledReason?: string | null;
+  resumeContext?: Omit<MonitorDrawerResumeSessionInput, "prompt" | "sessionId"> & {
+    sessionId?: string;
+  };
 }) {
   const [draft, setDraft] = useState("");
   const [sending, setSending] = useState(false);
 
-  const sessionId = session?.id?.trim() ?? "";
+  const sessionId = resumeContext?.sessionId?.trim() || session?.id?.trim() || "";
   const blocked = Boolean(disabledReason?.trim());
   const canSend = Boolean(onResumeSession && sessionId && draft.trim() && !blocked);
 
-  const handleSend = useCallback(() => {
+  const handleSend = useCallback(async () => {
     const prompt = draft.trim();
     if (!prompt || !sessionId || !onResumeSession || blocked) return;
     setSending(true);
     try {
-      const ok = onResumeSession(sessionId, prompt);
+      const ok = await Promise.resolve(
+        onResumeSession({
+          sessionId,
+          prompt,
+          repositoryPath: resumeContext?.repositoryPath ?? session?.repositoryPath,
+          repositoryDisplayName: resumeContext?.repositoryDisplayName ?? session?.repositoryName,
+          taskLabel: resumeContext?.taskLabel,
+        }),
+      );
       if (ok === false) {
         message.warning("未能发送，请确认会话仍可用或稍后再试");
         return;
@@ -38,7 +58,17 @@ export function MonitorDrawerSessionComposer({
     } finally {
       setSending(false);
     }
-  }, [blocked, draft, onResumeSession, sessionId]);
+  }, [
+    blocked,
+    draft,
+    onResumeSession,
+    resumeContext?.repositoryDisplayName,
+    resumeContext?.repositoryPath,
+    resumeContext?.taskLabel,
+    session?.repositoryName,
+    session?.repositoryPath,
+    sessionId,
+  ]);
 
   if (!onResumeSession) return null;
 
@@ -53,7 +83,7 @@ export function MonitorDrawerSessionComposer({
         onPressEnter={(event) => {
           if (event.shiftKey) return;
           event.preventDefault();
-          if (canSend) handleSend();
+          if (canSend) void handleSend();
         }}
       />
       <div className="app-monitor-panel__drawer-composer-actions">
@@ -64,7 +94,7 @@ export function MonitorDrawerSessionComposer({
           icon={<SendOutlined />}
           loading={sending}
           disabled={!canSend}
-          onClick={handleSend}
+          onClick={() => void handleSend()}
         >
           继续会话
         </Button>

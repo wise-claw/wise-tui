@@ -55,7 +55,7 @@ export function useExecutionEnvironmentDispatchHistoryDays() {
       try {
         await saveExecutionEnvironmentDispatchHistoryDaysToStore(next);
         setDays(next);
-        message.success(`已保存：任务派发默认展示近 ${next} 天`);
+        message.success(`已保存：派发任务默认展示近 ${next} 天`);
       } catch (err) {
         message.error(`保存失败：${err instanceof Error ? err.message : String(err)}`);
         throw err;

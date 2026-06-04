@@ -154,6 +154,7 @@ interface Props {
     dispatchTarget?: Pick<PendingExecutionTask, "targetType" | "targetEmployeeName" | "targetWorkflowId" | "targetWorkflowName">,
     executeOptions?: ClaudeComposerExecuteBubbleOptions,
   ) => boolean | void | Promise<boolean | void>;
+  onResumeSessionFromMonitorDrawer?: import("../ProgressMonitorPanel/MonitorDrawerSessionComposer").MonitorDrawerResumeSessionFn;
   onDispatchExecutionEnvironment?: (input: {
     prompt: string;
     userBubblePrompt?: string;
@@ -295,6 +296,7 @@ export function ClaudeSessions({
   cursorAvailable = true,
   onOpenExecutionEnvironment,
   onExecuteSession,
+  onResumeSessionFromMonitorDrawer,
   onDispatchExecutionEnvironment,
   onSendMessage,
   onCancelSession,
@@ -874,6 +876,7 @@ export function ClaudeSessions({
             onOpenRepositoryScheduledTasks={onOpenRepositoryScheduledTasks}
             onSend={onSendMessage}
             onExecute={onExecuteSession}
+            onResumeSessionFromMonitorDrawer={onResumeSessionFromMonitorDrawer}
             onDispatchExecutionEnvironment={onDispatchExecutionEnvironment}
             onSessionModelChange={(model) => onUpdateSessionModel(activeSession.id, model)}
             onSessionConnectionKindChange={(kind) =>

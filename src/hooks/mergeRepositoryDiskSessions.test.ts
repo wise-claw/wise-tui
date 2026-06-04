@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import { mergeRepositoryDiskSessions } from "./useClaudeSessions";
+import { buildExecutionEnvironmentWorkerRepositoryName } from "../utils/executionEnvironmentDispatch";
 import type { ClaudeDiskSessionItem, ClaudeSession } from "../types";
 
 const REPO = "/Users/dev/eco-ai-web";
@@ -33,6 +34,26 @@ describe("mergeRepositoryDiskSessions", () => {
     expect(merged).toBeDefined();
     expect(merged?.claudeSessionId).toBe(claudeId);
     expect(merged?.messages.length).toBe(1);
+  });
+
+  test("preserves Wise tab id for execution environment worker sessions", () => {
+    const claudeId = "cf69232b-0000-4000-8000-000000000002";
+    const worker: ClaudeSession = {
+      id: "wise-tab-exec-env-1",
+      claudeSessionId: claudeId,
+      repositoryPath: REPO,
+      repositoryName: buildExecutionEnvironmentWorkerRepositoryName("eco-ai-web", "你好", "claude"),
+      model: "sonnet",
+      status: "completed",
+      messages: [{ role: "user", content: "你好", parts: [{ type: "text", text: "你好" }] }],
+      createdAt: 1,
+      pendingPrompt: "",
+    };
+    const disk = [diskSession(claudeId)];
+    const next = mergeRepositoryDiskSessions([worker], REPO, "eco-ai-web", disk, "sonnet");
+    const merged = next.find((s) => s.id === "wise-tab-exec-env-1");
+    expect(merged).toBeDefined();
+    expect(merged?.claudeSessionId).toBe(claudeId);
   });
 
   test("still migrates main session tab id to Claude session id", () => {

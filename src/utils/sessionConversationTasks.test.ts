@@ -6,6 +6,8 @@ import {
   canStopSessionConversationTask,
   markSessionToolUseStopped,
   resolveExecutionEnvironmentTaskFromDispatchMeta,
+  resolveExecutionEnvironmentTaskFromTaskItems,
+  resolveExecutionEnvironmentWorkerConversationTaskStatus,
 } from "./sessionConversationTasks";
 import { parseDispatchRecord } from "./claudeChatMessageDisplay";
 
@@ -451,6 +453,61 @@ describe("buildSessionConversationTasks", () => {
     expect(items[0]?.source).toBe("execution_environment");
     expect(items[0]?.updatedAt).toBe(2);
   });
+
+  test("treats execution environment worker with assistant reply as completed when host status is error", () => {
+    const anchor = session({ id: "main-1" });
+    const worker = session({
+      id: "worker-1",
+      repositoryName: "demo/执行环境:claude:任务",
+      status: "error",
+      messages: [
+        { id: 1, role: "user", content: "@Claude Code 你好", timestamp: 1 },
+        { id: 2, role: "system", content: "Claude Hook 启动中", timestamp: 2 },
+        { id: 3, role: "assistant", content: "你好！有什么可以帮你的吗？", timestamp: 3 },
+      ],
+    });
+    const items = buildSessionConversationTasks({
+      session: anchor,
+      allSessions: [anchor, worker],
+      executionEnvironmentRecords: [
+        {
+          batchId: "batch-1",
+          anchorSessionId: "main-1",
+          repositoryPath: "/repo",
+          executionEngine: "claude" as const,
+          createdAt: 1,
+          items: [
+            {
+              key: "k1",
+              batchId: "batch-1",
+              anchorSessionId: "main-1",
+              workerSessionId: "worker-1",
+              label: "任务",
+              previewText: "你好",
+              batchIndex: 1,
+              sessionCount: 1,
+              updatedAt: 2,
+            },
+          ],
+        },
+      ],
+    });
+    expect(items).toHaveLength(1);
+    expect(items[0]?.status).toBe("completed");
+  });
+
+  test("keeps execution environment worker as failed when host error and no assistant reply", () => {
+    const worker = session({
+      id: "worker-1",
+      repositoryName: "demo/执行环境:claude:任务",
+      status: "error",
+      messages: [
+        { id: 1, role: "user", content: "你好", timestamp: 1 },
+        { id: 2, role: "system", content: "Claude Hook 启动中", timestamp: 2 },
+      ],
+    });
+    expect(resolveExecutionEnvironmentWorkerConversationTaskStatus(worker)).toBe("failed");
+  });
 });
 
 describe("resolveExecutionEnvironmentTaskFromDispatchMeta", () => {
@@ -549,5 +606,31 @@ describe("resolveExecutionEnvironmentTaskFromDispatchMeta", () => {
       dispatchRecords,
     });
     expect(hit?.key).toBe("k1");
+  });
+
+  test("resolveExecutionEnvironmentTaskFromTaskItems matches prebuilt task list", () => {
+    const meta = parseDispatchRecord(
+      [
+        "任务分发记录",
+        "- 类型：执行环境",
+        "- 引擎：Claude Code",
+        "- 批次：batch-1",
+        "- 正文：你好",
+      ].join("\n"),
+    )!;
+    const hit = resolveExecutionEnvironmentTaskFromTaskItems(meta, [
+      {
+        key: "k1",
+        label: "你好",
+        status: "completed",
+        previewText: "你好",
+        updatedAt: 1,
+        source: "execution_environment",
+        sessionId: "worker-1",
+        dispatchBatchId: "batch-1",
+        batchIndex: 1,
+      },
+    ]);
+    expect(hit?.sessionId).toBe("worker-1");
   });
 });

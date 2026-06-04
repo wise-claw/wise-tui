@@ -65,7 +65,7 @@ export interface ChatInspectorProps {
   historyDrawerSessionId?: string | null;
   onHistoryDrawerSessionIdChange?: (sessionId: string | null) => void;
   onRestoreHistorySessionAsMain?: (sessionId: string) => void | Promise<void>;
-  onResumeSession?: (sessionId: string, prompt: string) => boolean | void;
+  onResumeSession?: import("../ProgressMonitorPanel/MonitorDrawerSessionComposer").MonitorDrawerResumeSessionFn;
   repositoryMainBindings?: Record<string, string>;
   repositories?: Repository[];
   /** 右栏快捷操作：关联当前工作区 / 仓库 */

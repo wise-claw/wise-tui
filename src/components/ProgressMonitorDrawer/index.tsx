@@ -165,7 +165,7 @@ interface Props {
   /** 历史消息内「查看任务详情」 */
   onOpenTaskDetail?: (taskId: string) => void;
   /** 历史会话抽屉底部：resume 继续执行 */
-  onResumeSession?: (sessionId: string, prompt: string) => boolean | void;
+  onResumeSession?: import("../ProgressMonitorPanel/MonitorDrawerSessionComposer").MonitorDrawerResumeSessionFn;
 }
 
 interface SessionMessageRow {

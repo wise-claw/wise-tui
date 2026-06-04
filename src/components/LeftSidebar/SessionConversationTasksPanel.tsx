@@ -31,7 +31,7 @@ export function SessionConversationTasksPanel({
   sessions: readonly ClaudeSession[];
   sessionConversationTaskItems: readonly SessionConversationTaskItem[];
   onStopSessionConversationTask?: (item: SessionConversationTaskItem) => void;
-  onResumeSession?: (sessionId: string, prompt: string) => boolean | void;
+  onResumeSession?: import("../ProgressMonitorPanel/MonitorDrawerSessionComposer").MonitorDrawerResumeSessionFn;
   executionEnvironmentDispatchHistoryDays?: ExecutionEnvironmentDispatchHistoryDays;
   onExecutionEnvironmentDispatchHistoryDaysChange?: (
     days: ExecutionEnvironmentDispatchHistoryDays,
@@ -65,7 +65,7 @@ export function SessionConversationTasksPanel({
             <div className="app-monitor-panel__session-tasks-toolbar-start">
               <Typography.Text className="app-monitor-panel__session-tasks-title">
                 <SendOutlined className="app-monitor-panel__session-tasks-title-icon" aria-hidden />
-                任务派发
+                派发任务
               </Typography.Text>
               <span className="app-monitor-panel__session-tasks-count">
                 {runningCount > 0 ? `进行中 ${runningCount}` : `共 ${dispatchTaskItems.length} 项`}
@@ -77,7 +77,7 @@ export function SessionConversationTasksPanel({
                 size="small"
                 className="app-monitor-panel__session-tasks-days"
                 classNames={{ popup: { root: "app-monitor-panel__session-tasks-days-dropdown" } }}
-                aria-label="任务派发历史天数"
+                aria-label="派发任务历史天数"
                 disabled={executionEnvironmentDispatchHistoryDaysSaving}
                 value={executionEnvironmentDispatchHistoryDays}
                 options={EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAY_OPTIONS.map((day) => ({

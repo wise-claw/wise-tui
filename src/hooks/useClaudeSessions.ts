@@ -133,6 +133,11 @@ import {
   sessionHasDiskTranscript,
   usesWiseTabIdForDiskTranscript,
 } from "../utils/sessionExecutionEngine";
+import {
+  findSessionForMonitorDrawerResume,
+  materializeWorkerTabSession,
+  resolveSessionForExecuteKey,
+} from "../utils/sessionExecuteResolve";
 import { createClaudeStreamRuntime } from "../services/claudeStreamRuntime";
 import {
   extractPartsFromStreamLine,
@@ -2405,7 +2410,12 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       prompt: string,
       opts?: SessionExecuteOpts,
     ): boolean => {
-      const session = sessionsRef.current.find((s) => s.id === sessionId);
+      const session = resolveSessionForExecuteKey(
+        sessionsRef.current,
+        sessionId,
+        sessionIdMapRef.current,
+      );
+      const tabSessionId = session?.id ?? sessionId;
       if (!session) {
         const retried = executeSessionRetryCountRef.current.get(sessionId) ?? 0;
         if (retried < 8) {
@@ -2422,11 +2432,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
       const trimmedPrompt = prompt.trim();
       if (trimmedPrompt) {
-        const recent = recentExecutePromptBySessionRef.current.get(sessionId);
+        const recent = recentExecutePromptBySessionRef.current.get(tabSessionId);
         if (recent && recent.prompt === trimmedPrompt && Date.now() - recent.at < 900) {
           return true;
         }
-        recentExecutePromptBySessionRef.current.set(sessionId, {
+        recentExecutePromptBySessionRef.current.set(tabSessionId, {
           prompt: trimmedPrompt,
           at: Date.now(),
         });
@@ -2437,25 +2447,26 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       const terminalEngine: SessionExecutionEngine =
         engineResolverEarly?.(session) ?? "claude";
       if (forceFreshClaudeSession) {
-        sessionIdMapRef.current.delete(sessionId);
+        sessionIdMapRef.current.delete(tabSessionId);
         const staleClaudeSid = session.claudeSessionId?.trim();
         const cancelIds = new Set<string>();
         if (staleClaudeSid) cancelIds.add(staleClaudeSid);
         if (usesWiseTabIdForDiskTranscript(terminalEngine)) {
-          cancelIds.add(sessionId);
+          cancelIds.add(tabSessionId);
         }
         for (const sid of cancelIds) {
           void cancelClaudeExecution(sid).catch(() => {});
         }
         if (cancelIds.size > 0) {
-          streamingProcessByTabRef.current.delete(sessionId);
+          streamingProcessByTabRef.current.delete(tabSessionId);
         }
       }
       const claudeSidRaw =
-        session.claudeSessionId ?? sessionIdMapRef.current.get(sessionId) ?? null;
+        session.claudeSessionId ?? sessionIdMapRef.current.get(tabSessionId) ?? null;
       const claudeSid = forceFreshClaudeSession ? null : claudeSidRaw;
 
-      const liveSession = sessionsRef.current.find((s) => s.id === sessionId) ?? session;
+      const liveSession =
+        sessionsRef.current.find((s) => s.id === tabSessionId) ?? session;
       const engineResolver = claudeSessionsOptionsRef.current?.resolveExecutionEngineRef?.current;
       const executionEngine: SessionExecutionEngine =
         engineResolver && liveSession ? engineResolver(liveSession) : "claude";
@@ -2492,13 +2503,13 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         return true;
       }
 
-      streamingTargetIdRef.current = sessionId;
+      streamingTargetIdRef.current = tabSessionId;
       streamTurnSeqRef.current += 1;
       lastUserSendNonceRef.current = streamTurnSeqRef.current;
-      assistantStreamTextByTabRef.current.set(sessionId, "");
+      assistantStreamTextByTabRef.current.set(tabSessionId, "");
 
       const spawnSession =
-        sessionsRef.current.find((s) => s.id === sessionId) ?? liveSession;
+        sessionsRef.current.find((s) => s.id === tabSessionId) ?? liveSession;
 
       const modelArg =
         spawnSession.model.trim().length > 0 ? spawnSession.model : undefined;
@@ -2512,7 +2523,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         }
       }
 
-      expectedTurnNonceByTabIdRef.current.set(sessionId, lastUserSendNonceRef.current);
+      expectedTurnNonceByTabIdRef.current.set(tabSessionId, lastUserSendNonceRef.current);
       markClaudeRegistryBootstrapWarmup(registryBootstrapDeadlineByClaudeSidRef, claudeSid);
       const bubblePrompt = opts?.userBubblePrompt?.trim()
         ? opts.userBubblePrompt
@@ -2526,25 +2537,25 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         ) {
           return setSessionRunningReplacingUserBubbleAtIndex(
             prev,
-            sessionId,
+            tabSessionId,
             opts.replaceUserBubbleAtIndex,
             bubblePrompt,
           );
         }
         if (opts?.replaceLastUserBubble) {
-          return setSessionRunningReplacingLastUserBubble(prev, sessionId, bubblePrompt);
+          return setSessionRunningReplacingLastUserBubble(prev, tabSessionId, bubblePrompt);
         }
         if (opts?.replaceFirstUserBubble) {
-          return setSessionRunningReplacingFirstUserBubble(prev, sessionId, bubblePrompt);
+          return setSessionRunningReplacingFirstUserBubble(prev, tabSessionId, bubblePrompt);
         }
         if (forceFreshClaudeSession) {
-          return beginSessionTurnWithUserPrompt(prev, sessionId, bubblePrompt, {
+          return beginSessionTurnWithUserPrompt(prev, tabSessionId, bubblePrompt, {
             forceFreshClaudeSession: true,
           });
         }
-        return setSessionRunningWithUserPrompt(prev, sessionId, bubblePrompt);
+        return setSessionRunningWithUserPrompt(prev, tabSessionId, bubblePrompt);
       });
-      scheduleStreamStallTimer(sessionId);
+      scheduleStreamStallTimer(tabSessionId);
 
       const invokeConc =
         claudeSessionsOptionsRef.current?.claudeConcurrencyInvokeContextRef?.current?.(session) ?? null;
@@ -2552,7 +2563,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       const turnNonce = lastUserSendNonceRef.current;
 
       const codexContextExecutionEngine = resolveCodexContextExecutionEngine({
-        tabSessionId: sessionId,
+        tabSessionId,
         terminalFreshTurn: forceFreshClaudeSession,
         activeSessionId,
         sessions: sessionsRef.current,
@@ -2560,7 +2571,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       });
 
       pendingTurnFailoverRef.current = {
-        tabSessionId: sessionId,
+        tabSessionId,
         turnNonce,
         invokeConc,
         repositoryPath: spawnSession.repositoryPath,
@@ -2577,7 +2588,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       void (async () => {
         try {
           await runClaudeTurnWithContextGuard({
-            tabSessionId: sessionId,
+            tabSessionId,
             turnNonce,
             invokeConc,
             repositoryPath: spawnSession.repositoryPath,
@@ -2589,11 +2600,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
             codexContextExecutionEngine,
           });
         } catch (err) {
-          clearStreamStallTimer(sessionId);
+          clearStreamStallTimer(tabSessionId);
           const ctx = pendingTurnFailoverRef.current;
           const errText = err instanceof Error ? err.message : String(err);
           if (
-            ctx?.tabSessionId === sessionId &&
+            ctx?.tabSessionId === tabSessionId &&
             ctx.autoFailoverEnabled &&
             isRetryableModelApiError(errText)
           ) {
@@ -2610,8 +2621,8 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           }
           commitSessions((prev) =>
             appendSystemMessageBySessionId(
-              prev.map((s) => (s.id === sessionId ? { ...s, status: "error" as const } : s)),
-              sessionId,
+              prev.map((s) => (s.id === tabSessionId ? { ...s, status: "error" as const } : s)),
+              tabSessionId,
               claudeSid ? `发送失败: ${err}` : `启动失败: ${err}`,
             ),
           );
@@ -2640,6 +2651,99 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         userBubblePrompt: bubbleOpts?.userBubblePrompt,
       }),
     [executeSession],
+  );
+
+  const resumeSessionFromMonitorDrawer = useCallback(
+    async (input: {
+      sessionId: string;
+      prompt: string;
+      repositoryPath?: string;
+      repositoryDisplayName?: string;
+      taskLabel?: string;
+    }): Promise<boolean> => {
+      const workerKey = input.sessionId.trim();
+      const prompt = input.prompt.trim();
+      if (!workerKey || !prompt) return false;
+
+      const findWorker = () =>
+        findSessionForMonitorDrawerResume(sessionsRef.current, {
+          sessionId: workerKey,
+          repositoryPath: input.repositoryPath,
+          taskLabel: input.taskLabel,
+          sessionIdMap: sessionIdMapRef.current,
+        });
+
+      const ensureWorker = async (): Promise<ClaudeSession | null> => {
+        let hit = findWorker();
+        if (hit) return hit;
+
+        const repoPath = input.repositoryPath?.trim();
+        if (!repoPath) return null;
+
+        const repoName =
+          input.repositoryDisplayName?.trim() ||
+          sessionsRef.current.find((s) => s.id === workerKey)?.repositoryName ||
+          repoPath;
+        await refreshDiskSessionsForRepository(repoPath, repoName);
+        hit = findWorker();
+        if (hit) return hit;
+
+        try {
+          const tabs = await loadSessionTabsState();
+          const tabHit = tabs?.sessions.find(
+            (s) => s.id === workerKey || s.claudeSessionId?.trim() === workerKey,
+          );
+          if (tabHit) {
+            const materialized = materializeWorkerTabSession(tabHit, workerKey);
+            commitSessions((prev) => {
+              if (prev.some((s) => s.id === workerKey)) {
+                return prev.map((s) => (s.id === workerKey ? materialized : s));
+              }
+              return [...prev, materialized];
+            });
+            const claudeSid = materialized.claudeSessionId?.trim();
+            if (claudeSid) sessionIdMapRef.current.set(workerKey, claudeSid);
+            return materialized;
+          }
+        } catch {
+          /* ignore */
+        }
+
+        hit = findWorker();
+        if (!hit) return null;
+
+        if (hit.id !== workerKey) {
+          const materialized = materializeWorkerTabSession(hit, workerKey);
+          commitSessions((prev) => {
+            const filtered = prev.filter((s) => s.id !== hit!.id && s.id !== workerKey);
+            return [...filtered, materialized];
+          });
+          const claudeSid = materialized.claudeSessionId?.trim();
+          if (claudeSid) sessionIdMapRef.current.set(workerKey, claudeSid);
+          return materialized;
+        }
+        return hit;
+      };
+
+      const worker = await ensureWorker();
+      if (!worker) return false;
+
+      const tabId = worker.id;
+      if (worker.messages.length === 0) {
+        await reloadFullDiskTranscript(tabId).catch(() => {});
+      }
+
+      let ok = executeSession(tabId, prompt, { userBubblePrompt: prompt });
+      if (ok === false) {
+        await new Promise((resolve) => setTimeout(resolve, 200));
+        const again = findWorker();
+        if (again) {
+          ok = executeSession(again.id, prompt, { userBubblePrompt: prompt });
+        }
+      }
+      return ok !== false;
+    },
+    [commitSessions, executeSession, refreshDiskSessionsForRepository, reloadFullDiskTranscript],
   );
 
   const appendSystemMessage = useCallback((sessionId: string, text: string) => {
@@ -3480,6 +3584,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     updateSessionConnectionKind,
     executeSession,
     executeTerminalSession,
+    resumeSessionFromMonitorDrawer,
     appendSystemMessage,
     appendUserMessage,
     sendMessage,

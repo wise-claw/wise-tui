@@ -117,17 +117,17 @@ export function DefaultConfigPanel() {
           </div>
         </div>
 
-        <div className="app-default-config-row" aria-label="任务派发历史">
+        <div className="app-default-config-row" aria-label="派发任务历史">
           <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">任务派发历史</span>
+            <span className="app-default-config-row__title">派发任务历史</span>
             <span className="app-default-config-row__hint">
-              左栏「任务派发」默认查询近 N 天的执行环境派发记录；可在列表头临时切换
+              左栏「派发任务」默认查询近 N 天的执行环境派发记录；可在列表头临时切换
             </span>
           </div>
           <div className="app-default-config-row__control">
             <Select
               size="small"
-              aria-label="任务派发默认历史天数"
+              aria-label="派发任务默认历史天数"
               disabled={execEnvDispatchHistory.loading || execEnvDispatchHistory.saving}
               value={execEnvDispatchHistory.days}
               options={EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAY_OPTIONS.map((day) => ({

@@ -138,7 +138,7 @@ interface Props {
   /** 将历史会话恢复为当前仓库主会话 */
   onRestoreHistorySessionAsMain?: (sessionId: string) => void | Promise<void>;
   /** 历史 / 派发抽屉底部：resume 继续当前会话 */
-  onResumeSession?: (sessionId: string, prompt: string) => boolean | void;
+  onResumeSession?: import("./MonitorDrawerSessionComposer").MonitorDrawerResumeSessionFn;
   repositoryMainBindings?: Record<string, string>;
   repositories?: Repository[];
   sectionCollapsed?: boolean;
@@ -1428,7 +1428,7 @@ export function ProgressMonitorPanel({
             <div className="app-monitor-panel__session-tasks-toolbar-start">
               <Typography.Text className="app-monitor-panel__session-tasks-title">
                 <SendOutlined className="app-monitor-panel__session-tasks-title-icon" aria-hidden />
-                任务派发
+                派发任务
               </Typography.Text>
               <span className="app-monitor-panel__session-tasks-count">
                 {runningSessionConversationTasks.length > 0
@@ -1442,7 +1442,7 @@ export function ProgressMonitorPanel({
                 size="small"
                 className="app-monitor-panel__session-tasks-days"
                 classNames={{ popup: { root: "app-monitor-panel__session-tasks-days-dropdown" } }}
-                aria-label="任务派发历史天数"
+                aria-label="派发任务历史天数"
                 disabled={executionEnvironmentDispatchHistoryDaysSaving}
                 value={executionEnvironmentDispatchHistoryDays}
                 options={EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAY_OPTIONS.map((day) => ({

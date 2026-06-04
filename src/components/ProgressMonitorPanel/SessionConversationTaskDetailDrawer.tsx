@@ -105,15 +105,26 @@ export const SessionConversationTaskDetailDrawer = memo(function SessionConversa
       })
     : false;
 
-  const sessionResolvableForResume = useMemo(() => {
-    const sid = task?.sessionId?.trim();
-    if (!sid) return false;
-    return sessions.some((row) => row.id === sid || row.claudeSessionId?.trim() === sid);
-  }, [sessions, task]);
+  /** 派发 worker 的 tab id；合成 transcript id（含 ::exec-env::）不可用于 resume。 */
+  const resumeComposerSession = useMemo(() => {
+    if (!session || !task) return session;
+    const workerId = task.sessionId?.trim();
+    if (task.source !== "execution_environment" || !workerId) return session;
+    const live =
+      sessions.find((row) => row.id === workerId || row.claudeSessionId?.trim() === workerId) ?? session;
+    return live.id === workerId ? live : { ...live, id: workerId };
+  }, [session, task, sessions]);
 
-  const resumeDisabledReason = session && !sessionResolvableForResume
-    ? "执行会话尚未就绪或已结束，暂无法继续"
-    : null;
+  const resumeContext = useMemo(() => {
+    const workerId = task?.sessionId?.trim();
+    if (!workerId) return undefined;
+    return {
+      sessionId: workerId,
+      repositoryPath: task?.repositoryPath,
+      repositoryDisplayName: session?.repositoryName,
+      taskLabel: task?.label,
+    };
+  }, [session?.repositoryName, task]);
 
   return (
     <Drawer
@@ -195,9 +206,9 @@ export const SessionConversationTaskDetailDrawer = memo(function SessionConversa
               )}
             </div>
             <MonitorDrawerSessionComposer
-              session={session}
+              session={resumeComposerSession}
               onResumeSession={onResumeSession}
-              disabledReason={resumeDisabledReason}
+              resumeContext={resumeContext}
             />
           </div>
         </div>

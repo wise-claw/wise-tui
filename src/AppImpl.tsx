@@ -845,6 +845,7 @@ export default function App() {
     loadMoreTranscriptFromDisk,
     compactSessionHistory,
     releaseSessionHostProcess,
+    resumeSessionFromMonitorDrawer,
   } = useClaudeSessions({
     onClaudeTurnComplete: (p) => {
       advanceTeamAfterTurnRef.current(p);
@@ -3097,8 +3098,7 @@ export default function App() {
         historyDrawerSessionId: inspectorHistorySessionId,
         onHistoryDrawerSessionIdChange: setInspectorHistorySessionId,
         onRestoreHistorySessionAsMain: handleRestoreHistorySessionAsMain,
-        onResumeSession: (sessionId, prompt) =>
-          executeSession(sessionId, prompt, { userBubblePrompt: prompt }),
+        onResumeSession: resumeSessionFromMonitorDrawer,
         employees,
         employeeTaskCounts,
         workflowTemplates,
@@ -3365,6 +3365,7 @@ export default function App() {
         cursorAvailable,
         onOpenExecutionEnvironment: handleOpenExecutionEnvironment,
         onExecuteSession: handleComposerExecute,
+        onResumeSessionFromMonitorDrawer: resumeSessionFromMonitorDrawer,
         onDispatchExecutionEnvironment: handleDispatchExecutionEnvironment,
         onSendMessage: handleSendMessageWithAtMention,
         onCancelSession: cancelSession,
@@ -3512,8 +3513,7 @@ export default function App() {
         historyDrawerSessionId: inspectorHistorySessionId,
         onHistoryDrawerSessionIdChange: setInspectorHistorySessionId,
         onRestoreHistorySessionAsMain: handleRestoreHistorySessionAsMain,
-        onResumeSession: (sessionId, prompt) =>
-          executeSession(sessionId, prompt, { userBubblePrompt: prompt }),
+        onResumeSession: resumeSessionFromMonitorDrawer,
         repositoryMainBindings: repositoryMainSessionBindings,
         repositories,
       }}
@@ -3632,8 +3632,7 @@ export default function App() {
         onOpenHistorySessionInInspector: handleOpenHistorySessionInInspector,
         onRestoreSession: handleRestoreHistorySessionAsMain,
         canRestoreSession: canRestoreHistorySessionForDrawer,
-        onResumeSession: (sessionId, prompt) =>
-          executeSession(sessionId, prompt, { userBubblePrompt: prompt }),
+        onResumeSession: resumeSessionFromMonitorDrawer,
       }}
       progressMonitorDrawerProps={{
         open: monitorDrawerTarget != null,
@@ -3666,8 +3665,7 @@ export default function App() {
         onOpenTaskDetail: (taskId) => {
           setMonitorDrawerTarget({ type: "task", taskId });
         },
-        onResumeSession: (sessionId, prompt) =>
-          executeSession(sessionId, prompt, { userBubblePrompt: prompt }),
+        onResumeSession: resumeSessionFromMonitorDrawer,
       }}
     />
     </Suspense>

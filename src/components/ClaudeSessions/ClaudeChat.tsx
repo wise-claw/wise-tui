@@ -38,14 +38,7 @@ import {
   SessionConversationTaskDetailDrawer,
   type SessionConversationTaskDetailTarget,
 } from "../ProgressMonitorPanel/SessionConversationTaskDetailDrawer";
-import {
-  getExecutionEnvironmentDispatchesSnapshotForAnchor,
-  subscribeExecutionEnvironmentDispatches,
-} from "../../stores/executionEnvironmentDispatchStore";
-import {
-  buildExecutionEnvironmentConversationTasks,
-  filterExecutionEnvironmentDispatchTaskItems,
-} from "../../utils/sessionConversationTasks";
+import { useExecutionEnvironmentDispatchTasksForChat } from "../../hooks/useExecutionEnvironmentDispatchTasksForChat";
 import {
   ClaudeChatSessionFeaturePanel,
   type RefreshHistorySessionsScope,
@@ -175,6 +168,7 @@ interface Props {
     dispatchTarget?: Pick<PendingExecutionTask, "targetType" | "targetEmployeeName" | "targetWorkflowId" | "targetWorkflowName">,
     executeOptions?: ClaudeComposerExecuteBubbleOptions,
   ) => boolean | void | Promise<boolean | void>;
+  onResumeSessionFromMonitorDrawer?: import("../ProgressMonitorPanel/MonitorDrawerSessionComposer").MonitorDrawerResumeSessionFn;
   onDispatchExecutionEnvironment?: (input: {
     prompt: string;
     userBubblePrompt?: string;
@@ -326,6 +320,7 @@ export function ClaudeChat({
   onOpenRepositoryScheduledTasks,
   onSend: _onSend,
   onExecute,
+  onResumeSessionFromMonitorDrawer,
   onDispatchExecutionEnvironment,
   onSessionModelChange,
   onSessionConnectionKindChange,
@@ -421,29 +416,18 @@ export function ClaudeChat({
     return false;
   }, [activeSessionId, session.id, session.status]);
 
-  const executionEnvironmentDispatchRecords = useSyncExternalStore(
-    subscribeExecutionEnvironmentDispatches,
-    () => getExecutionEnvironmentDispatchesSnapshotForAnchor(session.id),
-    () => getExecutionEnvironmentDispatchesSnapshotForAnchor(session.id),
-  );
-
-  const executionEnvironmentTaskItems = useMemo(
-    () =>
-      filterExecutionEnvironmentDispatchTaskItems(
-        buildExecutionEnvironmentConversationTasks({
-          anchorSession: session,
-          sessions,
-          dispatchRecords: executionEnvironmentDispatchRecords,
-        }),
-      ),
-    [executionEnvironmentDispatchRecords, session, sessions],
-  );
+  const { taskItems: executionEnvironmentTaskItems, resolveDispatchTask: resolveExecutionEnvironmentDispatchTask } =
+    useExecutionEnvironmentDispatchTasksForChat(session, sessions);
 
   const [sessionConversationTaskDetailTarget, setSessionConversationTaskDetailTarget] =
     useState<SessionConversationTaskDetailTarget | null>(null);
 
   const openSessionConversationTaskDetail = useCallback((task: SessionConversationTaskItem) => {
     setSessionConversationTaskDetailTarget({ task });
+  }, []);
+
+  const closeSessionConversationTaskDetail = useCallback(() => {
+    setSessionConversationTaskDetailTarget(null);
   }, []);
 
   useEffect(() => {
@@ -1765,7 +1749,7 @@ export function ClaudeChat({
           onOpenTaskDetail={onOpenTaskDetail}
           onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
           onOpenSessionConversationTaskDetail={openSessionConversationTaskDetail}
-          executionEnvironmentDispatchRecords={executionEnvironmentDispatchRecords}
+          resolveExecutionEnvironmentDispatchTask={resolveExecutionEnvironmentDispatchTask}
           sessionsForDispatchLookup={sessions}
           onMessagesBlur={handleMessagesBlur}
           onNavigateMessage={pauseFollowForMessageNavigation}
@@ -1899,19 +1883,26 @@ export function ClaudeChat({
         </div>
       </div>
 
-      <SessionConversationTaskDetailDrawer
-        target={sessionConversationTaskDetailTarget}
-        sessions={sessions}
-        sessionConversationTaskItems={executionEnvironmentTaskItems}
-        onClose={() => setSessionConversationTaskDetailTarget(null)}
-        onStopTask={onStopSessionConversationTask}
-        onStopSessionConversationTask={onStopSessionConversationTask}
-        onCancelSession={onCancelSessionById}
-        onResumeSession={(sessionId, prompt) => {
-          const result = onExecute(sessionId, prompt, undefined, { userBubblePrompt: prompt });
-          return result === false ? false : true;
-        }}
-      />
+      {sessionConversationTaskDetailTarget ? (
+        <SessionConversationTaskDetailDrawer
+          target={sessionConversationTaskDetailTarget}
+          sessions={sessions}
+          sessionConversationTaskItems={executionEnvironmentTaskItems}
+          onClose={closeSessionConversationTaskDetail}
+          onStopTask={onStopSessionConversationTask}
+          onStopSessionConversationTask={onStopSessionConversationTask}
+          onCancelSession={onCancelSessionById}
+          onResumeSession={
+            onResumeSessionFromMonitorDrawer ??
+            (async (input) => {
+              const result = await onExecute(input.sessionId, input.prompt, undefined, {
+                userBubblePrompt: input.prompt,
+              });
+              return result !== false;
+            })
+          }
+        />
+      ) : null}
     </div>
   );
 }

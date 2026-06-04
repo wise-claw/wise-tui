@@ -103,6 +103,14 @@ export interface UseClaudeSessionsReturn {
     outboundPrompt: string,
     opts?: { userBubblePrompt?: string },
   ) => boolean;
+  /** 监控 Drawer 底部：恢复 worker 标签并 resume 执行（含磁盘 / tabs 回退） */
+  resumeSessionFromMonitorDrawer: (input: {
+    sessionId: string;
+    prompt: string;
+    repositoryPath?: string;
+    repositoryDisplayName?: string;
+    taskLabel?: string;
+  }) => Promise<boolean>;
   appendSystemMessage: (sessionId: string, text: string) => void;
   /** 仅写入用户气泡（不调用 Claude），供批量 OMC 等在标签内展示派发正文 */
   appendUserMessage: (sessionId: string, text: string) => void;

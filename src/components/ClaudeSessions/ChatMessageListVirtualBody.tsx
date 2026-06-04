@@ -9,12 +9,12 @@ import {
   useChatMessageListPendingScroll,
   useChatMessageListWindow,
 } from "../../hooks/useChatMessageListWindow";
-import type { ClaudeSession, SessionConversationTaskItem } from "../../types";
+import type { SessionConversationTaskItem } from "../../types";
+import type { DispatchRecordMeta } from "../../utils/claudeChatMessageDisplay";
 import type { ChatMessageListRow } from "../../utils/claudeChatMessageListRows";
 import { findChatMessageRowIndexByMessageId } from "../../utils/chatMessageListWindow";
 import { ChatMessageListRowContent } from "./ChatMessageListRowContent";
 import { chatMessageListRowClassName } from "./chatMessageListRowStyles";
-import type { ExecutionEnvironmentDispatchRecord } from "../../stores/executionEnvironmentDispatchStore";
 
 export interface ChatMessageListNavigationHandle {
   scrollToMessageId: (messageId: string | number) => boolean;
@@ -31,8 +31,7 @@ interface Props {
   /** 切换会话时重置尾部窗口 */
   listResetKey?: string;
   listVariant?: "chat" | "monitor";
-  anchorSession?: ClaudeSession | null;
-  executionEnvironmentDispatchRecords?: readonly ExecutionEnvironmentDispatchRecord[];
+  resolveExecutionEnvironmentDispatchTask?: (meta: DispatchRecordMeta) => SessionConversationTaskItem | null;
   onOpenTaskDetail?: (taskId: string) => void;
   onOpenHistorySessionInInspector?: (sessionId: string) => void;
   onOpenSessionConversationTaskDetail?: (task: SessionConversationTaskItem) => void;
@@ -68,8 +67,7 @@ export const ChatMessageListVirtualBody = forwardRef<ChatMessageListNavigationHa
       scrollContainerRef,
       listResetKey,
       listVariant = "chat",
-      anchorSession,
-      executionEnvironmentDispatchRecords,
+      resolveExecutionEnvironmentDispatchTask,
       onOpenTaskDetail,
       onOpenHistorySessionInInspector,
       onOpenSessionConversationTaskDetail,
@@ -186,8 +184,7 @@ export const ChatMessageListVirtualBody = forwardRef<ChatMessageListNavigationHa
                   row={row}
                   sessionId={sessionId}
                   listVariant={listVariant}
-                  anchorSession={anchorSession}
-                  executionEnvironmentDispatchRecords={executionEnvironmentDispatchRecords}
+                  resolveExecutionEnvironmentDispatchTask={resolveExecutionEnvironmentDispatchTask}
                   onOpenTaskDetail={onOpenTaskDetail}
                   onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
                   onOpenSessionConversationTaskDetail={onOpenSessionConversationTaskDetail}

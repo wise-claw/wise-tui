@@ -5,14 +5,11 @@ import {
   enrichDispatchRecordMeta,
   formatDispatchRecordSentence,
 } from "../../utils/claudeChatMessageDisplay";
-import { resolveExecutionEnvironmentTaskFromDispatchMeta } from "../../utils/sessionConversationTasks";
-import type { ExecutionEnvironmentDispatchRecord } from "../../stores/executionEnvironmentDispatchStore";
 
 interface Props {
   dispatch: DispatchRecordMeta;
   sessionsForDispatchLookup?: readonly ClaudeSession[];
-  anchorSession?: ClaudeSession | null;
-  executionEnvironmentDispatchRecords?: readonly ExecutionEnvironmentDispatchRecord[];
+  resolveExecutionEnvironmentDispatchTask?: (meta: DispatchRecordMeta) => SessionConversationTaskItem | null;
   onOpenHistorySessionInInspector?: (sessionId: string) => void;
   onOpenTaskDetail?: (taskId: string) => void;
   onOpenSessionConversationTaskDetail?: (task: SessionConversationTaskItem) => void;
@@ -21,8 +18,7 @@ interface Props {
 function DispatchRecordMessageInner({
   dispatch,
   sessionsForDispatchLookup,
-  anchorSession,
-  executionEnvironmentDispatchRecords = [],
+  resolveExecutionEnvironmentDispatchTask,
   onOpenHistorySessionInInspector,
   onOpenTaskDetail,
   onOpenSessionConversationTaskDetail,
@@ -36,19 +32,10 @@ function DispatchRecordMessageInner({
   const taskId = dispatch.taskId?.trim();
 
   const executionEnvironmentTask = useMemo(() => {
-    if (!anchorSession || !onOpenSessionConversationTaskDetail) return null;
-    return resolveExecutionEnvironmentTaskFromDispatchMeta(dispatch, {
-      anchorSession,
-      sessions: sessionsForDispatchLookup ?? [],
-      dispatchRecords: executionEnvironmentDispatchRecords,
-    });
-  }, [
-    anchorSession,
-    dispatch,
-    executionEnvironmentDispatchRecords,
-    onOpenSessionConversationTaskDetail,
-    sessionsForDispatchLookup,
-  ]);
+    if (!resolveExecutionEnvironmentDispatchTask || !onOpenSessionConversationTaskDetail) return null;
+    if (dispatch.dispatchType?.trim() !== "执行环境") return null;
+    return resolveExecutionEnvironmentDispatchTask(dispatch);
+  }, [dispatch, onOpenSessionConversationTaskDetail, resolveExecutionEnvironmentDispatchTask]);
 
   const canOpenExecutionEnvironmentTask = Boolean(executionEnvironmentTask && onOpenSessionConversationTaskDetail);
 
@@ -89,4 +76,24 @@ function DispatchRecordMessageInner({
   );
 }
 
-export const DispatchRecordMessage = memo(DispatchRecordMessageInner);
+function dispatchMetaEqual(a: DispatchRecordMeta, b: DispatchRecordMeta): boolean {
+  return (
+    a.dispatchType === b.dispatchType &&
+    a.targetName === b.targetName &&
+    a.engineName === b.engineName &&
+    a.targetSessionId === b.targetSessionId &&
+    a.dispatchBatchId === b.dispatchBatchId &&
+    a.taskId === b.taskId &&
+    a.dispatchTime === b.dispatchTime &&
+    a.dispatchContent === b.dispatchContent
+  );
+}
+
+export const DispatchRecordMessage = memo(DispatchRecordMessageInner, (prev, next) => {
+  if (prev.sessionsForDispatchLookup !== next.sessionsForDispatchLookup) return false;
+  if (prev.resolveExecutionEnvironmentDispatchTask !== next.resolveExecutionEnvironmentDispatchTask) return false;
+  if (prev.onOpenHistorySessionInInspector !== next.onOpenHistorySessionInInspector) return false;
+  if (prev.onOpenTaskDetail !== next.onOpenTaskDetail) return false;
+  if (prev.onOpenSessionConversationTaskDetail !== next.onOpenSessionConversationTaskDetail) return false;
+  return dispatchMetaEqual(prev.dispatch, next.dispatch);
+});
