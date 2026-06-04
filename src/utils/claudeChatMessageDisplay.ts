@@ -116,6 +116,8 @@ export function systemMessagePlainText(msg: ClaudeMessage): string {
 export interface DispatchRecordMeta {
   dispatchType?: string;
   targetName?: string;
+  /** 执行环境派发：Claude Code / Codex CLI 等（与 `目标` 同源，兼容仅写 `引擎` 的历史记录） */
+  engineName?: string;
   targetSessionId?: string;
   taskId?: string;
   dispatchTime?: string;
@@ -137,6 +139,7 @@ export function parseDispatchRecord(text: string): DispatchRecordMeta | null {
     if (!value) continue;
     if (key === "类型") meta.dispatchType = value;
     if (key === "目标") meta.targetName = value;
+    if (key === "引擎") meta.engineName = value;
     if (key === "分发会话") meta.targetSessionId = value;
     if (key === "任务ID") meta.taskId = value;
     if (key === "时间") meta.dispatchTime = value;
@@ -181,9 +184,16 @@ export function enrichDispatchRecordMeta(
   return { ...meta, dispatchContent: fromWorker };
 }
 
+function resolveDispatchRecordDisplayTarget(meta: DispatchRecordMeta): string {
+  const explicit = meta.targetName?.trim() || meta.engineName?.trim();
+  if (explicit) return explicit;
+  if (meta.dispatchType?.trim() === "执行环境") return "执行环境";
+  return "未知目标";
+}
+
 /** 主会话系统气泡：任务分发记录展示句（与存储正文一致，不含「任务分发记录」标题行）。 */
 export function formatDispatchRecordSentence(meta: DispatchRecordMeta): string {
-  const target = meta.targetName?.trim() || "未知目标";
+  const target = resolveDispatchRecordDisplayTarget(meta);
   const time = meta.dispatchTime?.trim() || "";
   const timePart = time ? `在 ${time}` : "";
   const content = normalizedDispatchContentForSentence(meta.dispatchContent);

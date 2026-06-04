@@ -49,7 +49,7 @@ export function SessionConversationTasksPanel({
                 <span className="app-monitor-panel__section-icon">
                   <RepositoryMiniIcon />
                 </span>
-                子代理 / 任务
+                任务派发
               </Typography.Text>
               <Typography.Text className="app-monitor-panel__meta">
                 {runningCount > 0 ? `进行中 ${runningCount}` : `共 ${sessionConversationTaskItems.length} 项`}

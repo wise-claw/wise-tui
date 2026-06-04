@@ -1,6 +1,7 @@
 import { normalizeSessionExecutionEngine, type SessionExecutionEngine } from "../constants/sessionExecutionEngine";
 import type { EmployeeItem, Repository } from "../types";
 import { normalizeEmployeeBindingName } from "./employeeBindingName";
+import { parseExecutionEnvironmentWorkerRepositoryName } from "./executionEnvironmentDispatch";
 import { isProjectRootSessionDisplayName, normalizeRepositoryPathKey } from "./repositoryMainSessionBinding";
 import { extractBoundEmployeeNameFromDisplay } from "./sessionOwnerHints";
 
@@ -86,6 +87,11 @@ export function resolveSessionExecutionEngine(
   employees: readonly EmployeeItem[],
   activeRepository?: Repository | null,
 ): SessionExecutionEngine {
+  const execWorker = parseExecutionEnvironmentWorkerRepositoryName(session.repositoryName ?? "");
+  if (execWorker) {
+    return normalizeSessionExecutionEngine(execWorker.engine);
+  }
+
   const employeeName = extractBoundEmployeeNameFromDisplay(session.repositoryName ?? "");
   if (employeeName) {
     const match = findEnabledEmployeeByBindingName(employees, employeeName);

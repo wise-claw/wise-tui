@@ -195,7 +195,13 @@ export interface SessionConversationTaskItem {
   status: "running" | "completed" | "failed";
   previewText: string;
   updatedAt: number;
-  source: "message_tool" | "invocation_stream" | "background_snapshot";
+  source: "message_tool" | "invocation_stream" | "background_snapshot" | "execution_environment";
+  /** 执行环境派发批次 id */
+  dispatchBatchId?: string;
+  /** 批次内序号（从 1 起） */
+  batchIndex?: number;
+  /** 本批次总会话数 */
+  batchSessionCount?: number;
   toolUseId?: string;
   invocationKey?: string;
   sessionId?: string;

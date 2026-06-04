@@ -162,6 +162,10 @@ interface Props {
     dispatchTarget?: Pick<PendingExecutionTask, "targetType" | "targetEmployeeName" | "targetWorkflowId" | "targetWorkflowName">,
     executeOptions?: ClaudeComposerExecuteBubbleOptions,
   ) => boolean | void | Promise<boolean | void>;
+  onDispatchExecutionEnvironment?: (input: {
+    prompt: string;
+    userBubblePrompt?: string;
+  }) => void | Promise<void>;
   onSessionModelChange: (model: string) => void;
   onSessionConnectionKindChange?: (kind: ClaudeSessionConnectionKind) => void;
   onUpdateRepositoryExecutionEngine?: (
@@ -305,6 +309,7 @@ export function ClaudeChat({
   onOpenRepositoryScheduledTasks,
   onSend: _onSend,
   onExecute,
+  onDispatchExecutionEnvironment,
   onSessionModelChange,
   onSessionConnectionKindChange,
   onUpdateRepositoryExecutionEngine,
@@ -1801,6 +1806,7 @@ export function ClaudeChat({
               employeesForDispatchRoute={employees}
               pendingExecutionTaskCount={pendingTasks.length}
               onExecute={handleComposerExecute}
+              onDispatchExecutionEnvironment={onDispatchExecutionEnvironment}
               onSessionModelChange={onSessionModelChange}
               onSessionConnectionKindChange={onSessionConnectionKindChange}
               sessionExecutionEngine={sessionExecutionEngine}

@@ -122,6 +122,8 @@ import {
   formatCursorModelLabel,
 } from "../../utils/cursorModel";
 import { inferPendingQueueTargetFromPrompt } from "../../utils/pendingQueueExecutor";
+import { SESSION_EXECUTION_ENGINE_LABELS } from "../../constants/sessionExecutionEngine";
+import { parseExecutionEnvironmentDispatch } from "../../utils/executionEnvironmentDispatch";
 import { isOmcMonitorDispatchMentionName } from "../../utils/omcMonitorEmployeeSession";
 import { captureScreenshot, screenshotResultToImagePart } from "../../services/screenshot";
 import {
@@ -200,6 +202,10 @@ interface ComposerInnerProps {
   onRestoreRevert: (id: string) => void;
   onClearRevertItems?: () => void;
   /** 发送前写入待执行队列；队列为空且会话空闲时返回新任务行供 onExecute 同 tick 出队，队列非空时仅入队尾由上层按序派发 */
+  onDispatchExecutionEnvironment?: (input: {
+    prompt: string;
+    userBubblePrompt?: string;
+  }) => void | Promise<void>;
   onEnqueueAsPendingTask?: (payload: {
     promptText: string;
     executorLabel: string;
@@ -476,6 +482,7 @@ function ComposerInner({
   onClearFollowups,
   onRestoreRevert,
   onClearRevertItems,
+  onDispatchExecutionEnvironment,
   onEnqueueAsPendingTask,
   employeeMentions = [],
   teamMentions = [],
@@ -1761,6 +1768,31 @@ function ComposerInner({
           return;
         }
 
+        const execPlanBusy = parseExecutionEnvironmentDispatch(logicalSnap);
+        if (execPlanBusy && onDispatchExecutionEnvironment) {
+          onTrackSendFlow?.({
+            sessionId: session.id,
+            composerText: logicalSnap.trim(),
+            outboundText: execPlanBusy.cleanedPrompt,
+            nodes: [
+              ...sendFlowNodes,
+              {
+                label: "执行环境派发",
+                timestamp: Date.now(),
+                detail: `${SESSION_EXECUTION_ENGINE_LABELS[execPlanBusy.executionEngine].short} · 并发 ${execPlanBusy.sessionCount} 路`,
+              },
+            ],
+          });
+          recordMissionMessage(logicalSnap);
+          postSendEscUndoRef.current = rollbackDraft;
+          finalizeSpeechTranscriptBaselineAfterSend();
+          void onDispatchExecutionEnvironment({
+            prompt: logicalSnap,
+            userBubblePrompt,
+          });
+          return;
+        }
+
         addToHistory(historyPrompt, "normal", undefined, rollbackDraft.images);
         setHistoryIndex(-1);
 
@@ -1902,6 +1934,30 @@ function ComposerInner({
         return;
       }
 
+      const execPlanIdle = parseExecutionEnvironmentDispatch(logicalSnap);
+      if (execPlanIdle && onDispatchExecutionEnvironment) {
+        sendFlowNodes.push({
+          label: "执行环境派发",
+          timestamp: Date.now(),
+          detail: `${SESSION_EXECUTION_ENGINE_LABELS[execPlanIdle.executionEngine].short} · 并发 ${execPlanIdle.sessionCount} 路`,
+        });
+        onTrackSendFlow?.({
+          sessionId: session.id,
+          composerText: logicalSnap.trim(),
+          outboundText: execPlanIdle.cleanedPrompt,
+          nodes: sendFlowNodes,
+        });
+        recordMissionMessage(logicalSnap);
+        lastSentDraftRef.current = null;
+        postSendEscUndoRef.current = rollbackDraft;
+        finalizeSpeechTranscriptBaselineAfterSend();
+        void onDispatchExecutionEnvironment({
+          prompt: logicalSnap,
+          userBubblePrompt,
+        });
+        return;
+      }
+
       addToHistory(historyPrompt, "normal", undefined, rollbackDraft.images);
       setHistoryIndex(-1);
 
@@ -2027,6 +2083,7 @@ function ComposerInner({
       images,
       session,
       setImages,
+      onDispatchExecutionEnvironment,
       onEnqueueAsPendingTask,
       pendingExecutionTaskCount,
       isCursorEngine,
@@ -2965,6 +3022,8 @@ function ComposerInner({
                 projectRoleTagOptions={projectRoleTagOptions}
                 projectRepositoryMentionOptions={projectRepositoryMentionOptions}
                 hideEmployeesInAtMode={hideEmployeesInAtMode}
+                codexAvailable={codexAvailable}
+                cursorAvailable={cursorAvailable}
               />
               <AIChatInput
                 ref={aiChatRef}
@@ -3096,6 +3155,10 @@ export interface ComposerRegionProps {
   onRestoreRevert: (id: string) => void;
   onClearRevertItems?: () => void;
   /** 发送前写入待执行队列；队列为空且会话空闲时返回新任务行供 onExecute 同 tick 出队，队列非空时仅入队尾由上层按序派发 */
+  onDispatchExecutionEnvironment?: (input: {
+    prompt: string;
+    userBubblePrompt?: string;
+  }) => void | Promise<void>;
   onEnqueueAsPendingTask?: (payload: {
     promptText: string;
     executorLabel: string;

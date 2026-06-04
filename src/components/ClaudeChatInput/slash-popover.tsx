@@ -4,6 +4,8 @@ import { listClaudePluginCacheSkills, listClaudeProjectSkills } from "../../serv
 import { searchRepositoryFiles } from "../../services/repositoryFiles";
 import type { ClaudeProjectSkill } from "../../types";
 import type { RepositoryMentionOption } from "../../utils/projectRoleTagOptions";
+import type { SessionExecutionEngine } from "../../constants/sessionExecutionEngine";
+import { listExecutionEnvironmentEngineMentionOptions } from "../../utils/executionEnvironmentDispatch";
 import type { TriggerInfo } from "./slash-trigger";
 import { CLAUDE_BUILTIN_SLASH_COMMANDS } from "../../constants/claudeCodeSlashCommands";
 import {
@@ -16,13 +18,15 @@ import { computeSlashPopoverPlacement } from "./composer-trigger-anchor";
 import { ExplorerTreeFileIcon } from "../GitPanel/explorerTreeChrome";
 
 export interface SlashOption {
-  type: "agent" | "team" | "file" | "command";
+  type: "agent" | "team" | "file" | "command" | "execution_engine";
   label: string;
   description?: string;
   path?: string;
   name?: string;
   workflowId?: string;
   group?: "omc" | "claude" | "skill";
+  executionEngine?: SessionExecutionEngine;
+  executionEngineAvailable?: boolean;
 }
 
 /** 与 Semi AIChatInput 搭配：用纯文本 + 光标操作 @ / 补全，不再依赖 contentEditable DOM。 */
@@ -50,6 +54,8 @@ interface SlashPopoverProps {
   projectRepositoryMentionOptions?: ReadonlyArray<RepositoryMentionOption>;
   /** 当 wise_trellis 项目隐藏员工 UI 时，把 @-mode 的员工行一并去除。 */
   hideEmployeesInAtMode?: boolean;
+  codexAvailable?: boolean;
+  cursorAvailable?: boolean;
 }
 
 const CLAUDE_BUILTIN_COMMANDS: SlashOption[] = CLAUDE_BUILTIN_SLASH_COMMANDS.map((cmd) => ({
@@ -204,6 +210,8 @@ export function SlashPopover({
   projectRoleTagOptions: _projectRoleTagOptions = [],
   projectRepositoryMentionOptions: _projectRepositoryMentionOptions = [],
   hideEmployeesInAtMode = false,
+  codexAvailable = true,
+  cursorAvailable = true,
 }: SlashPopoverProps) {
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [fileResults, setFileResults] = useState<SlashOption[]>([]);
@@ -282,6 +290,8 @@ export function SlashPopover({
     teamOptions,
     skillSlashOptions,
     hideEmployeesInAtMode,
+    codexAvailable,
+    cursorAvailable,
   );
 
   useEffect(() => {
@@ -297,12 +307,17 @@ export function SlashPopover({
       let cursor = surface.getCursor();
 
       if (mode === "at") {
+        if (option.type === "execution_engine" && option.executionEngineAvailable === false) {
+          return;
+        }
         ({ plain, cursor } = removeAtTriggerFromPlain(plain, cursor, query));
         if (option.type === "file" && option.path) {
           ({ plain, cursor } = insertPlainAt(plain, cursor, `@${option.path}`));
         } else if (option.type === "agent" && option.name) {
           ({ plain, cursor } = insertPlainAt(plain, cursor, `@${option.name}`));
         } else if (option.type === "team" && option.name) {
+          ({ plain, cursor } = insertPlainAt(plain, cursor, `@${option.name}`));
+        } else if (option.type === "execution_engine" && option.name) {
           ({ plain, cursor } = insertPlainAt(plain, cursor, `@${option.name}`));
         }
         ({ plain, cursor } = ensureSpaceAfterAtInsert(plain, cursor));
@@ -455,17 +470,40 @@ export function SlashPopover({
           })}
         </>
       ) : (
-        options.map((opt, i) => (
-          <div
-            key={`${opt.type}-${opt.group ?? ""}-${opt.label}-${opt.path ?? ""}-${opt.workflowId ?? ""}`}
-            className={`app-claude-slash-popover-item ${i === selectedIndex ? "app-claude-slash-popover-item--active" : ""}`}
-            onClick={() => handleSelect(opt)}
-            onMouseEnter={() => setSelectedIndex(i)}
-            style={{ gap: 0, padding: "3px 4px" }}
-          >
-            {renderOptionContent(opt)}
-          </div>
-        ))
+        options.map((opt, i) => {
+          const showExecutionEngineTitle =
+            opt.type === "execution_engine" &&
+            (i === 0 || options[i - 1]?.type !== "execution_engine");
+          const showEmployeeTitle =
+            opt.type === "agent" &&
+            (i === 0 || options[i - 1]?.type !== "execution_engine") &&
+            options[i - 1]?.type !== "agent";
+          return (
+            <div key={`${opt.type}-${opt.group ?? ""}-${opt.label}-${opt.path ?? ""}-${opt.workflowId ?? ""}`}>
+              {showExecutionEngineTitle ? (
+                <div className="app-claude-slash-popover-group-title">执行环境</div>
+              ) : null}
+              {showEmployeeTitle ? (
+                <div className="app-claude-slash-popover-group-title">终端</div>
+              ) : null}
+              <div
+                className={`app-claude-slash-popover-item ${i === selectedIndex ? "app-claude-slash-popover-item--active" : ""}${
+                  opt.type === "execution_engine" && opt.executionEngineAvailable === false
+                    ? " app-claude-slash-popover-item--disabled"
+                    : ""
+                }`}
+                onClick={() => {
+                  if (opt.type === "execution_engine" && opt.executionEngineAvailable === false) return;
+                  handleSelect(opt);
+                }}
+                onMouseEnter={() => setSelectedIndex(i)}
+                style={{ gap: 0, padding: "3px 4px" }}
+              >
+                {renderOptionContent(opt)}
+              </div>
+            </div>
+          );
+        })
       )}
     </div>
   );
@@ -476,7 +514,9 @@ function renderOptionContent(opt: SlashOption) {
     <>
       {opt.type !== "file" && (
         <span style={{ fontSize: "14px", flexShrink: 0, marginRight: "8px", display: "flex", alignItems: "center" }}>
-          {opt.type === "agent" ? (
+          {opt.type === "execution_engine" ? (
+            <ExecutionEngineMentionIcon engine={opt.executionEngine ?? "claude"} />
+          ) : opt.type === "agent" ? (
             // Robot SVG icon
             <svg
               className="app-claude-slash-popover__kind-svg"
@@ -580,7 +620,7 @@ function renderOptionContent(opt: SlashOption) {
             {opt.description ?? opt.path}
           </span>
         )}
-        {opt.type === "command" && opt.description && (
+        {(opt.type === "command" || opt.type === "execution_engine") && opt.description && (
           <span
             style={{
               color: "var(--ant-color-text-tertiary)",
@@ -610,6 +650,70 @@ function renderOptionContent(opt: SlashOption) {
   );
 }
 
+function ExecutionEngineMentionIcon({ engine }: { engine: SessionExecutionEngine }) {
+  if (engine === "claude") {
+    return (
+      <svg
+        className="app-claude-slash-popover__kind-svg"
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        style={{ display: "block" }}
+        aria-hidden
+      >
+        <polyline points="4 17 10 11 4 5" />
+        <line x1="12" y1="19" x2="20" y2="19" />
+      </svg>
+    );
+  }
+  if (engine === "codex") {
+    return (
+      <svg
+        className="app-claude-slash-popover__kind-svg"
+        width="16"
+        height="16"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        strokeWidth="2"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        style={{ display: "block" }}
+        aria-hidden
+      >
+        <polygon points="12 2 2 7 12 12 22 7 12 2" />
+        <polyline points="2 17 12 22 22 17" />
+        <polyline points="2 12 12 17 22 12" />
+      </svg>
+    );
+  }
+  return (
+    <svg
+      className="app-claude-slash-popover__kind-svg"
+      width="16"
+      height="16"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      style={{ display: "block" }}
+      aria-hidden
+    >
+      <path d="M12 3l8 4.5v9L12 21l-8-4.5v-9L12 3z" />
+      <path d="M12 12l8-4.5" />
+      <path d="M12 12v9" />
+      <path d="M12 12L4 7.5" />
+    </svg>
+  );
+}
+
 function getFilteredOptions(
   mode: "at" | "slash" | null,
   query: string,
@@ -618,6 +722,8 @@ function getFilteredOptions(
   teamOptions: Array<{ id: string; name: string }>,
   skillSlashOptions: SlashOption[],
   hideEmployeesInAtMode = false,
+  codexAvailable = true,
+  cursorAvailable = true,
 ): SlashOption[] {
   if (!mode) return [];
 
@@ -642,6 +748,18 @@ function getFilteredOptions(
     workflowId: team.id,
   }));
 
+  const executionEngines: SlashOption[] = listExecutionEnvironmentEngineMentionOptions({
+    codexAvailable,
+    cursorAvailable,
+  }).map((row) => ({
+    type: "execution_engine" as const,
+    label: row.title,
+    name: row.mentionName,
+    description: row.description,
+    executionEngine: row.engine,
+    executionEngineAvailable: row.available,
+  }));
+
   const agents: SlashOption[] = hideEmployeesInAtMode
     ? []
     : employeeOptions.map((employee) => ({
@@ -652,6 +770,15 @@ function getFilteredOptions(
 
   const q = query.toLowerCase();
   const filtered = [
+    ...executionEngines.filter(
+      (row) =>
+        !q ||
+        row.label.toLowerCase().includes(q) ||
+        (row.name ?? "").toLowerCase().includes(q) ||
+        (row.description ?? "").toLowerCase().includes(q) ||
+        "执行环境".includes(q) ||
+        "派发".includes(q),
+    ),
     ...agents.filter((a) => !q || a.label.toLowerCase().includes(q)),
     ...teams.filter((t) => !q || t.label.toLowerCase().includes(q)),
     ...fileResults.filter((f) => !q || f.label.toLowerCase().includes(q) || (f.description ?? "").toLowerCase().includes(q)),

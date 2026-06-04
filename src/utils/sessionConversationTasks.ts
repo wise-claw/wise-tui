@@ -1,7 +1,11 @@
 import type { BackgroundInvocationSnapshot } from "../services/backgroundInvocationSnapshot";
 import type { WorkflowInvocationStreamDetail } from "../constants/workflowUiEvents";
 import type { ClaudeMessage, ClaudeSession, MessagePart, SessionConversationTaskItem, ToolUsePart } from "../types";
+import { SESSION_EXECUTION_ENGINE_LABELS } from "../constants/sessionExecutionEngine";
+import type { ExecutionEnvironmentDispatchRecord } from "../stores/executionEnvironmentDispatchStore";
+import { sessionStatusToConversationTaskStatus } from "../stores/executionEnvironmentDispatchStore";
 import { indexOfLastRenderableUserMessage, isToolOnlyUserMessage } from "./claudeChatMessageDisplay";
+import { isExecutionEnvironmentWorkerRepositoryName } from "./executionEnvironmentDispatch";
 import { isOmcDirectBatchInvocationRunning } from "./omcDirectBatchInvocationDisplay";
 
 function truncate(text: string, max = 72): string {
@@ -210,11 +214,71 @@ export function currentConversationTurnStartTimestamp(messages: ClaudeSession["m
   return messages[startIdx]?.timestamp ?? 0;
 }
 
+export function buildExecutionEnvironmentConversationTasks(input: {
+  anchorSession: ClaudeSession | null | undefined;
+  sessions: readonly ClaudeSession[];
+  dispatchRecords: readonly ExecutionEnvironmentDispatchRecord[];
+}): SessionConversationTaskItem[] {
+  const anchor = input.anchorSession;
+  if (!anchor) return [];
+  const anchorId = anchor.id.trim();
+  const out: SessionConversationTaskItem[] = [];
+  for (const batch of input.dispatchRecords) {
+    if (batch.anchorSessionId !== anchorId) continue;
+    for (const item of batch.items) {
+      const worker =
+        input.sessions.find((s) => s.id === item.workerSessionId) ??
+        input.sessions.find((s) => s.claudeSessionId?.trim() === item.workerSessionId);
+      const status = worker
+        ? sessionStatusToConversationTaskStatus(worker.status)
+        : ("completed" as const);
+      const preview =
+        worker?.messages
+          .filter((m) => m.role === "assistant" || m.role === "user")
+          .map((m) => (typeof m.content === "string" ? m.content : ""))
+          .join(" ")
+          .trim()
+          .slice(0, 72) || item.previewText;
+      const engineShort = SESSION_EXECUTION_ENGINE_LABELS[batch.executionEngine].short;
+      const promptBody = item.previewText?.replace(/\s+/g, " ").trim();
+      const label =
+        promptBody.length > 0
+          ? item.sessionCount > 1
+            ? truncate(`${promptBody} (${item.batchIndex}/${item.sessionCount})`, 48)
+            : truncate(promptBody, 48)
+          : item.label;
+      out.push({
+        key: item.key,
+        label,
+        subtitle:
+          item.sessionCount > 1
+            ? `${engineShort} · ${item.batchIndex}/${item.sessionCount}`
+            : engineShort,
+        status,
+        previewText: truncate(preview || promptBody || "执行中…"),
+        updatedAt:
+          worker?.messages[worker.messages.length - 1]?.timestamp ?? item.updatedAt,
+        source: "execution_environment",
+        sessionId: item.workerSessionId,
+        repositoryPath: batch.repositoryPath || anchor.repositoryPath,
+        dispatchBatchId: item.batchId,
+        batchIndex: item.batchIndex,
+        batchSessionCount: item.sessionCount,
+        cancellable: status === "running",
+        cancelMode: status === "running" ? "session" : undefined,
+      });
+    }
+  }
+  return out;
+}
+
 export function buildSessionConversationTasks(input: {
   session: ClaudeSession | null | undefined;
   directBatchInvocations?: readonly WorkflowInvocationStreamDetail[];
   repositoryInvocations?: readonly WorkflowInvocationStreamDetail[];
   bundleSnapshots?: readonly BackgroundInvocationSnapshot[];
+  executionEnvironmentRecords?: readonly ExecutionEnvironmentDispatchRecord[];
+  allSessions?: readonly ClaudeSession[];
 }): SessionConversationTaskItem[] {
   const session = input.session;
   if (!session) return [];
@@ -287,6 +351,16 @@ export function buildSessionConversationTasks(input: {
       cancellable: status === "running" && Boolean(inv.invocationKey?.trim()),
       cancelMode: status === "running" && inv.invocationKey?.trim() ? "invocation" : undefined,
     });
+  }
+
+  if (input.executionEnvironmentRecords?.length && input.allSessions) {
+    for (const item of buildExecutionEnvironmentConversationTasks({
+      anchorSession: session,
+      sessions: input.allSessions,
+      dispatchRecords: input.executionEnvironmentRecords,
+    })) {
+      upsert(item);
+    }
   }
 
   for (const snap of input.bundleSnapshots ?? []) {
@@ -446,7 +520,40 @@ export function buildConversationTaskDetailMessages(
 export function buildSessionConversationTaskDetailSession(
   session: ClaudeSession,
   task: SessionConversationTaskItem,
+  sessions?: readonly ClaudeSession[],
 ): ClaudeSession {
+  if (task.source === "execution_environment") {
+    const workerId = task.sessionId?.trim() ?? "";
+    const worker =
+      sessions?.find((s) => s.id === workerId || s.claudeSessionId?.trim() === workerId) ??
+      (workerId && session.id === workerId ? session : null);
+    if (worker && isExecutionEnvironmentWorkerRepositoryName(worker.repositoryName)) {
+      const status: ClaudeSession["status"] =
+        task.status === "running" ? "running" : task.status === "failed" ? "error" : "completed";
+      const promptFallback = task.previewText?.replace(/\s+/g, " ").trim();
+      const messages =
+        worker.messages.length > 0
+          ? worker.messages
+          : promptFallback
+            ? [
+                {
+                  id: 1,
+                  role: "user" as const,
+                  content: promptFallback,
+                  parts: [{ type: "text" as const, text: promptFallback }],
+                  timestamp: (task.updatedAt || Date.now()) - 1,
+                },
+              ]
+            : worker.messages;
+      return {
+        ...worker,
+        id: `${worker.id}::exec-env::${task.key}`,
+        status,
+        messages,
+      };
+    }
+  }
+
   const toolUseId = task.toolUseId?.trim() ?? "";
   const detailMessages = toolUseId ? buildConversationTaskDetailMessages(session.messages, toolUseId) : [];
   const status: ClaudeSession["status"] =

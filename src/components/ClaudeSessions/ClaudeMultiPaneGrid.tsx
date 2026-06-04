@@ -120,6 +120,10 @@ export interface MultiPaneSharedChatProps {
     dispatchTarget?: Pick<PendingExecutionTask, "targetType" | "targetEmployeeName" | "targetWorkflowId" | "targetWorkflowName">,
     executeOptions?: ClaudeComposerExecuteBubbleOptions,
   ) => boolean | void | Promise<boolean | void>;
+  onDispatchExecutionEnvironment?: (input: {
+    prompt: string;
+    userBubblePrompt?: string;
+  }) => void | Promise<void>;
   onUpdateSessionModel: (sessionId: string, model: string) => void;
   onUpdateSessionConnectionKind: (sessionId: string, kind: ClaudeSessionConnectionKind) => void | Promise<void>;
   onUpdateRepositoryExecutionEngine?: (
@@ -248,6 +252,7 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
         onOpenBuiltinAssistant={shared.onOpenBuiltinAssistant}
         onSend={shared.onSend}
         onExecute={shared.onExecute}
+        onDispatchExecutionEnvironment={shared.onDispatchExecutionEnvironment}
         onSessionModelChange={onSessionModelChange}
         onSessionConnectionKindChange={onSessionConnectionKindChange}
         onUpdateRepositoryExecutionEngine={shared.onUpdateRepositoryExecutionEngine}
@@ -495,6 +500,7 @@ const MultiPaneExtraPaneCell = memo(
             onOpenRepositoryScheduledTasks={shared.onOpenRepositoryScheduledTasks}
             onSend={shared.onSend}
             onExecute={shared.onExecute}
+            onDispatchExecutionEnvironment={shared.onDispatchExecutionEnvironment}
             onSessionModelChange={(model) => shared.onUpdateSessionModel(sessionId, model)}
             onSessionConnectionKindChange={(kind) => void shared.onUpdateSessionConnectionKind(sessionId, kind)}
             onUpdateRepositoryExecutionEngine={shared.onUpdateRepositoryExecutionEngine}

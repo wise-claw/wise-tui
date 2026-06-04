@@ -1,5 +1,5 @@
 import { Button, Collapse, Drawer, Empty, Tag, Typography } from "antd";
-import { memo, useMemo } from "react";
+import { memo, useMemo, useRef } from "react";
 import type { ClaudeSession, SessionConversationTaskItem } from "../../types";
 import {
   buildSessionConversationTaskDetailSession,
@@ -7,7 +7,7 @@ import {
   findMergedToolUseInSession,
   sessionConversationTaskStatusLabel,
 } from "../../utils/sessionConversationTasks";
-import { ClaudeSessionMessagesColumn } from "../ClaudeSessions/ClaudeSessionMessagesColumn";
+import { ClaudeVirtualMessageList } from "../ClaudeSessions/ClaudeVirtualMessageList";
 import { SubagentStatusIndicator } from "./SubagentStatusIndicator";
 import "../ClaudeSessions/index.css";
 import "./index.css";
@@ -25,6 +25,7 @@ function taskStatusTagColor(status: SessionConversationTaskItem["status"]): stri
 function sourceLabel(source: SessionConversationTaskItem["source"]): string {
   if (source === "message_tool") return "对话工具";
   if (source === "invocation_stream") return "后台流式";
+  if (source === "execution_environment") return "执行环境派发";
   return "后台快照";
 }
 
@@ -55,6 +56,7 @@ export const SessionConversationTaskDetailDrawer = memo(function SessionConversa
   onStopSessionConversationTask?: (item: SessionConversationTaskItem) => void;
 }) {
   const width = Math.min(760, typeof window !== "undefined" ? window.innerWidth - 40 : 760);
+  const messagesScrollRef = useRef<HTMLDivElement>(null);
   const task = useMemo(() => {
     if (!target?.task) return null;
     return sessionConversationTaskItems?.find((item) => item.key === target.task.key) ?? target.task;
@@ -63,12 +65,38 @@ export const SessionConversationTaskDetailDrawer = memo(function SessionConversa
   const session = useMemo(() => {
     const sid = task?.sessionId?.trim();
     if (!sid) return null;
-    return sessions.find((row) => row.id === sid || row.claudeSessionId?.trim() === sid) ?? null;
+    const hit = sessions.find((row) => row.id === sid || row.claudeSessionId?.trim() === sid);
+    if (hit) return hit;
+    if (task?.source === "execution_environment" && task.repositoryPath?.trim()) {
+      const prompt = task.previewText?.replace(/\s+/g, " ").trim() || task.label;
+      return {
+        id: sid,
+        claudeSessionId: null,
+        repositoryPath: task.repositoryPath.trim(),
+        repositoryName: task.subtitle?.trim() || "执行环境",
+        model: "sonnet",
+        status: task.status === "running" ? "running" : task.status === "failed" ? "error" : "completed",
+        messages: prompt
+          ? [
+              {
+                id: 1,
+                role: "user",
+                content: prompt,
+                parts: [{ type: "text", text: prompt }],
+                timestamp: task.updatedAt || Date.now(),
+              },
+            ]
+          : [],
+        createdAt: task.updatedAt || Date.now(),
+        pendingPrompt: "",
+      } satisfies ClaudeSession;
+    }
+    return null;
   }, [sessions, task]);
 
   const transcriptSession = useMemo(
-    () => (session && task ? buildSessionConversationTaskDetailSession(session, task) : null),
-    [session, task],
+    () => (session && task ? buildSessionConversationTaskDetailSession(session, task, sessions) : null),
+    [session, task, sessions],
   );
 
   const toolPart = useMemo(() => {
@@ -86,7 +114,13 @@ export const SessionConversationTaskDetailDrawer = memo(function SessionConversa
 
   return (
     <Drawer
-      title={task ? `${task.label} · 会话记录` : "会话记录"}
+      title={
+        task
+          ? task.source === "execution_environment"
+            ? `${task.label} · 执行会话`
+            : `${task.label} · 会话记录`
+          : "会话记录"
+      }
       placement="right"
       size={width}
       open={target !== null}
@@ -112,21 +146,40 @@ export const SessionConversationTaskDetailDrawer = memo(function SessionConversa
       }
     >
       {!task || !session ? (
-        <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="无子代理记录" />
+        <Empty
+          image={Empty.PRESENTED_IMAGE_SIMPLE}
+          description={task?.source === "execution_environment" ? "无执行会话记录" : "无子代理记录"}
+        />
       ) : (
         <div className="app-monitor-panel__subagent-detail">
           {task.status === "running" ? (
             <div className="app-monitor-panel__subagent-detail-hint">
               <span className="app-monitor-panel__subagent-detail-hint-dot" />
-              <span>子代理正在执行，内容随对话流式更新中...</span>
+              <span>
+                {task.source === "execution_environment"
+                  ? "执行会话进行中，消息将随对话流式更新…"
+                  : "子代理正在执行，内容随对话流式更新中..."}
+              </span>
             </div>
           ) : null}
-          <div className="app-monitor-panel__subagent-detail-session">
-            {transcriptSession && transcriptSession.messages.length > 0 ? (
-              <ClaudeSessionMessagesColumn session={transcriptSession} showAllMessages />
-            ) : (
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无执行输出" />
-            )}
+          <div className="app-claude-chat app-monitor-panel__subagent-detail-session app-monitor-panel__subagent-detail-session--chat-layout">
+            <div ref={messagesScrollRef} className="app-claude-messages">
+              {transcriptSession && transcriptSession.messages.length > 0 ? (
+                <ClaudeVirtualMessageList
+                  session={transcriptSession}
+                  showListEndThinkingHint={false}
+                  scrollContainerRef={messagesScrollRef}
+                  listVariant="chat"
+                  sessionsForDispatchLookup={sessions}
+                />
+              ) : (
+                <div className="app-claude-messages-empty">
+                  <p>
+                    {task.source === "execution_environment" ? "暂无执行会话消息" : "暂无执行输出"}
+                  </p>
+                </div>
+              )}
+            </div>
           </div>
 
           <Collapse

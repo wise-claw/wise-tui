@@ -75,6 +75,19 @@ describe("resolveSessionExecutionEngine", () => {
     ).toBe("codex");
   });
 
+  test("uses execution environment worker tab engine segment", () => {
+    expect(
+      resolveSessionExecutionEngine(
+        {
+          repositoryPath: "/repo/demo",
+          repositoryName: "demo/执行环境:codex:任务 1",
+        },
+        [repo({ executionEngine: "claude" })],
+        [],
+      ),
+    ).toBe("codex");
+  });
+
   test("matches terminal employee binding with normalized numeric suffix", () => {
     expect(
       resolveSessionExecutionEngine(

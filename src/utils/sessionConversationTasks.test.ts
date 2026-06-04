@@ -409,4 +409,43 @@ describe("buildSessionConversationTasks", () => {
     expect(items[0]?.invocationKey).toBe("ik-1");
     expect(items[0]?.status).toBe("running");
   });
+
+  test("uses dispatch prompt as execution environment task label", () => {
+    const anchor = session({ id: "main-1" });
+    const worker = session({
+      id: "worker-1",
+      repositoryName: "demo/执行环境:claude:任务",
+      status: "completed",
+      messages: [{ id: 1, role: "user", content: "你好", timestamp: 1 }],
+    });
+    const items = buildSessionConversationTasks({
+      session: anchor,
+      allSessions: [anchor, worker],
+      executionEnvironmentRecords: [
+        {
+          batchId: "batch-1",
+          anchorSessionId: "main-1",
+          repositoryPath: "/repo",
+          executionEngine: "claude",
+          createdAt: 1,
+          items: [
+            {
+              key: "k1",
+              batchId: "batch-1",
+              anchorSessionId: "main-1",
+              workerSessionId: "worker-1",
+              label: "任务",
+              previewText: "你好",
+              batchIndex: 1,
+              sessionCount: 1,
+              updatedAt: 2,
+            },
+          ],
+        },
+      ],
+    });
+    expect(items).toHaveLength(1);
+    expect(items[0]?.label).toBe("你好");
+    expect(items[0]?.source).toBe("execution_environment");
+  });
 });

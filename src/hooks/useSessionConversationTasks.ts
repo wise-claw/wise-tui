@@ -35,6 +35,10 @@ import {
   subscribeRepositoryMemberInvocations,
 } from "../stores/repositoryMemberInvocationsStore";
 import type { ClaudeSession, SessionConversationTaskItem } from "../types";
+import {
+  getExecutionEnvironmentDispatchesSnapshotForAnchor,
+  subscribeExecutionEnvironmentDispatches,
+} from "../stores/executionEnvironmentDispatchStore";
 import { buildSessionConversationTasks } from "../utils/sessionConversationTasks";
 
 export function useSessionConversationTasks(
@@ -55,6 +59,11 @@ export function useSessionConversationTasks(
     subscribeRepositoryMemberInvocations,
     getRepositoryMemberInvocationsSnapshot,
     getRepositoryMemberInvocationsSnapshot,
+  );
+  const executionEnvironmentRecords = useSyncExternalStore(
+    subscribeExecutionEnvironmentDispatches,
+    () => getExecutionEnvironmentDispatchesSnapshotForAnchor(activeSessionId),
+    () => getExecutionEnvironmentDispatchesSnapshotForAnchor(activeSessionId),
   );
 
   const [bundleSnapshots, setBundleSnapshots] = useState<BackgroundInvocationSnapshot[]>([]);
@@ -95,7 +104,9 @@ export function useSessionConversationTasks(
         directBatchInvocations,
         repositoryInvocations,
         bundleSnapshots,
+        executionEnvironmentRecords,
+        allSessions: sessions,
       }),
-    [session, directBatchInvocations, repositoryInvocations, bundleSnapshots],
+    [session, directBatchInvocations, repositoryInvocations, bundleSnapshots, executionEnvironmentRecords, sessions],
   );
 }

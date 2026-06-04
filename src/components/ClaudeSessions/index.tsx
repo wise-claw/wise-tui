@@ -153,6 +153,10 @@ interface Props {
     dispatchTarget?: Pick<PendingExecutionTask, "targetType" | "targetEmployeeName" | "targetWorkflowId" | "targetWorkflowName">,
     executeOptions?: ClaudeComposerExecuteBubbleOptions,
   ) => boolean | void | Promise<boolean | void>;
+  onDispatchExecutionEnvironment?: (input: {
+    prompt: string;
+    userBubblePrompt?: string;
+  }) => void | Promise<void>;
   onSendMessage: (prompt: string) => void;
   onCancelSession: (sessionId: string, opts?: { retractLastUserTurn?: boolean }) => void;
   onCloseSession: (sessionId: string) => void;
@@ -289,6 +293,7 @@ export function ClaudeSessions({
   cursorAvailable = true,
   onOpenExecutionEnvironment,
   onExecuteSession,
+  onDispatchExecutionEnvironment,
   onSendMessage,
   onCancelSession,
   onCloseSession: _onCloseSession,
@@ -717,6 +722,7 @@ export function ClaudeSessions({
     onSwitchSession: handleSwitchToSession,
     onSend: onSendMessage,
     onExecute: onExecuteSession,
+    onDispatchExecutionEnvironment,
     onUpdateSessionModel,
     onUpdateSessionConnectionKind,
     onUpdateRepositoryExecutionEngine,
@@ -864,6 +870,7 @@ export function ClaudeSessions({
             onOpenRepositoryScheduledTasks={onOpenRepositoryScheduledTasks}
             onSend={onSendMessage}
             onExecute={onExecuteSession}
+            onDispatchExecutionEnvironment={onDispatchExecutionEnvironment}
             onSessionModelChange={(model) => onUpdateSessionModel(activeSession.id, model)}
             onSessionConnectionKindChange={(kind) =>
               void onUpdateSessionConnectionKind(activeSession.id, kind)

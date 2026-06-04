@@ -123,6 +123,7 @@ import {
   useMonitorOverview,
 } from "./hooks/useMonitorOverview";
 import { useSessionConversationTasks } from "./hooks/useSessionConversationTasks";
+import { dispatchExecutionEnvironmentFromMainSession } from "./services/executionEnvironmentDispatch";
 import { useIntervalSyncedState } from "./hooks/useIntervalSyncedState";
 import { useLeftSidebarHubQuickEntries } from "./hooks/useLeftSidebarHubQuickEntries";
 import { useMonitorPanelDefault } from "./hooks/useMonitorPanelDefault";
@@ -1154,6 +1155,29 @@ export default function App() {
   handleComposerExecuteRef.current = handleComposerExecute;
   const sendMessageToSessionRef = useRef(sendMessageToSession);
   sendMessageToSessionRef.current = sendMessageToSession;
+
+  const handleDispatchExecutionEnvironment = useCallback(
+    async (input: { prompt: string; userBubblePrompt?: string }) => {
+      const mainSessionId = activeSessionId;
+      if (!mainSessionId) return;
+      await dispatchExecutionEnvironmentFromMainSession(
+        {
+          getSessions: () => sessionsLatestRef.current,
+          codexAvailable,
+          cursorAvailable,
+          createSession,
+          executeSession: (workerTabId, prompt, opts) => executeSession(workerTabId, prompt, opts),
+          appendSystemMessage,
+        },
+        {
+          mainSessionId,
+          prompt: input.prompt,
+          userBubblePrompt: input.userBubblePrompt,
+        },
+      );
+    },
+    [activeSessionId, codexAvailable, cursorAvailable, createSession, executeSession, appendSystemMessage],
+  );
 
   useScheduledClaudeTaskRunner({
     repositoriesRef: repositoriesLatestRef,
@@ -3328,6 +3352,7 @@ export default function App() {
         cursorAvailable,
         onOpenExecutionEnvironment: handleOpenExecutionEnvironment,
         onExecuteSession: handleComposerExecute,
+        onDispatchExecutionEnvironment: handleDispatchExecutionEnvironment,
         onSendMessage: handleSendMessageWithAtMention,
         onCancelSession: cancelSession,
         onCloseSession: handleCloseSession,

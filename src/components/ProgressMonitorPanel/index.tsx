@@ -842,7 +842,7 @@ export function ProgressMonitorPanel({
   repositoryMemberItems: _repositoryMemberItems,
   teamItems,
   sessionConversationTaskItems = [],
-  showSessionConversationTasks: _showSessionConversationTasks = false,
+  showSessionConversationTasks = false,
   sessions,
   activeTarget,
   onOpenTeamDetail,
@@ -1086,6 +1086,12 @@ export function ProgressMonitorPanel({
         return;
       }
 
+      if (item.source === "execution_environment") {
+        setOmcDirectBatchDetailSnapshot(null);
+        setSessionConversationTaskDetailTarget({ task: item });
+        return;
+      }
+
       const sid = item.sessionId?.trim();
       if (!sid) return;
       const sessionHit =
@@ -1103,8 +1109,7 @@ export function ProgressMonitorPanel({
     [sessionConversationTaskItems],
   );
 
-  // 临时隐藏「子代理 / 任务」区块（即使有数据也不展示）
-  const shouldShowSessionConversationTasks = false;
+  const shouldShowSessionConversationTasks = showSessionConversationTasks;
 
   const panelHasListContent =
     shouldShowSessionConversationTasks ||
@@ -1281,7 +1286,7 @@ export function ProgressMonitorPanel({
             <div className="app-monitor-panel__section-title-wrap">
               <Typography.Text className="app-monitor-panel__section-title">
                 <span className="app-monitor-panel__section-icon"><RepositoryMiniIcon /></span>
-                子代理 / 任务
+                任务派发
               </Typography.Text>
               <Typography.Text className="app-monitor-panel__meta">
                 {runningSessionConversationTasks.length > 0
@@ -1291,7 +1296,7 @@ export function ProgressMonitorPanel({
             </div>
           </div>
           {sessionConversationTaskItems.length > 0 ? (
-            <div className="app-monitor-panel__subagent-tree" aria-label="当前对话子代理与任务">
+            <div className="app-monitor-panel__subagent-tree" aria-label="当前会话派发任务">
               {sessionConversationTaskItems.map((item) => {
                 const showStop = canStopSessionConversationTask(item, {
                   onCancelSession,

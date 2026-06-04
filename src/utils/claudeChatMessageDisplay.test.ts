@@ -66,6 +66,21 @@ describe("parseDispatchRecord", () => {
     );
   });
 
+  test("parses execution environment dispatch with engine as display target", () => {
+    const text = [
+      "任务分发记录",
+      "- 类型：执行环境",
+      "- 引擎：Claude Code",
+      "- 时间：2026/6/4 08:15:13",
+      "- 正文：你好",
+    ].join("\n");
+    const meta = parseDispatchRecord(text);
+    expect(meta?.engineName).toBe("Claude Code");
+    expect(formatDispatchRecordSentence(meta!)).toBe(
+      "Claude Code 在 2026/6/4 08:15:13 执行 你好。",
+    );
+  });
+
   test("enrichDispatchRecordMeta backfills body from worker session", () => {
     const legacy = parseDispatchRecord(
       [
