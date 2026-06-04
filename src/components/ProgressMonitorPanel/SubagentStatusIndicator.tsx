@@ -80,19 +80,34 @@ function StatusIcon({ status }: { status: SubagentStatusIndicatorStatus }) {
   return <IdleIcon />;
 }
 
+function LiteStatusDot({ status }: { status: SubagentStatusIndicatorStatus }) {
+  return (
+    <span
+      className={`app-monitor-panel__subagent-status-lite app-monitor-panel__subagent-status-lite--${status}`}
+      aria-hidden
+    />
+  );
+}
+
+export type SubagentStatusVisual = "full" | "lite";
+
 export const SubagentStatusIndicator = memo(function SubagentStatusIndicator({
   status,
   label,
   className,
+  visual = "full",
 }: {
   status: SubagentStatusIndicatorStatus;
   label?: string;
   className?: string;
+  /** 左栏紧凑列表：静态色点，避免 SVG 动画在滚动时触发合成。 */
+  visual?: SubagentStatusVisual;
 }) {
   const text = label?.trim() || statusLabel(status);
   const rootClass = [
     "app-monitor-panel__subagent-status",
     `app-monitor-panel__subagent-status--${status}`,
+    visual === "lite" ? "app-monitor-panel__subagent-status--lite" : null,
     className,
   ]
     .filter(Boolean)
@@ -100,7 +115,7 @@ export const SubagentStatusIndicator = memo(function SubagentStatusIndicator({
 
   return (
     <span className={rootClass} role="status" aria-label={text} title={text}>
-      <StatusIcon status={status} />
+      {visual === "lite" ? <LiteStatusDot status={status} /> : <StatusIcon status={status} />}
     </span>
   );
 });

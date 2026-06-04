@@ -5,7 +5,17 @@ import {
   StopOutlined,
 } from "@ant-design/icons";
 import { Collapse, Descriptions, Drawer, Empty, Popover, Tag, Typography } from "antd";
-import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import {
+  memo,
+  startTransition,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type RefObject,
+} from "react";
 import type {
   ClaudeMessage,
   ClaudeSession,
@@ -52,7 +62,7 @@ import { ClaudeSessionMessagesColumn } from "../ClaudeSessions/ClaudeSessionMess
 
 import { useAgentAssignments } from "../../hooks/useAgentAssignments";
 import { ExpandIcon } from "../LeftSidebar/SidebarIcons";
-import { SubagentStatusIndicator } from "./SubagentStatusIndicator";
+import { SubagentStatusIndicator, type SubagentStatusVisual } from "./SubagentStatusIndicator";
 import {
   historyDaysToSinceMs,
   type ExecutionEnvironmentDispatchHistoryDays,
@@ -61,7 +71,18 @@ import { ExecutionEnvironmentDispatchHistoryDaysDropdown } from "./ExecutionEnvi
 import { MonitorLazyClickPopover } from "./MonitorLazyClickPopover";
 import { canStopSessionConversationTask, filterExecutionEnvironmentDispatchTaskItems } from "../../utils/sessionConversationTasks";
 import { SessionConversationDispatchTaskRow } from "./SessionConversationDispatchTaskRow";
-import { buildEmployeeTerminalConversationStatusById } from "../../utils/employeeTerminalDispatchStatus";
+import {
+  buildEmployeeTerminalConversationStatusById,
+  type EmployeeTerminalConversationStatus,
+} from "../../utils/employeeTerminalDispatchStatus";
+import {
+  monitorSessionsOverviewFingerprint,
+  monitorSessionsTerminalStatusFingerprint,
+} from "../../hooks/useMonitorSessionsForOverview";
+import {
+  MONITOR_VIRTUALIZE_MIN_ROWS,
+  MonitorPanelVirtualRows,
+} from "./MonitorPanelVirtualRows";
 import {
   SessionConversationTaskDetailDrawer,
   type SessionConversationTaskDetailTarget,
@@ -184,7 +205,13 @@ interface Props {
   repositories?: Repository[];
   sectionCollapsed?: boolean;
   onSectionCollapsedChange?: (collapsed: boolean) => void;
+  /** 左栏运行面板外层滚动容器；项较多时合并终端+派发为虚拟列表。 */
+  compactSidebarScrollRootRef?: RefObject<HTMLDivElement | null>;
 }
+
+type MonitorCompactFlatRow =
+  | { kind: "terminal"; item: EmployeeMonitorItem }
+  | { kind: "dispatch"; item: SessionConversationTaskItem };
 
 interface TeamHistorySessionRow {
   session: ClaudeSession;
@@ -851,7 +878,133 @@ export function HistorySessionPopoverContent({
   );
 }
 
-export function ProgressMonitorPanel({
+const TerminalEmployeeMonitorRow = memo(function TerminalEmployeeMonitorRow({
+  item,
+  conversationStatus,
+  historyPopoverOpen,
+  historySearch,
+  matchedHistorySessions,
+  onActivateRow,
+  onStopEmployee,
+  onHistoryPopoverOpenChange,
+  onHistorySearchChange,
+  onSelectHistorySession,
+  onRestoreHistorySession,
+  canRestoreHistorySession,
+  onOmcRowActivate,
+  onCancelOmcInvocation,
+  statusVisual,
+}: {
+  item: EmployeeMonitorItem;
+  conversationStatus: EmployeeTerminalConversationStatus;
+  statusVisual: SubagentStatusVisual;
+  historyPopoverOpen: boolean;
+  historySearch: string;
+  matchedHistorySessions: readonly ClaudeSession[];
+  onActivateRow: (item: EmployeeMonitorItem) => void;
+  onStopEmployee?: (employeeId: string) => void;
+  onHistoryPopoverOpenChange: (employeeId: string, nextOpen: boolean) => void;
+  onHistorySearchChange: (value: string) => void;
+  onSelectHistorySession: (sessionId: string) => void;
+  onRestoreHistorySession?: (sessionId: string) => void;
+  canRestoreHistorySession: (sessionId: string) => boolean;
+  onOmcRowActivate: (inv: WorkflowInvocationStreamDetail) => void;
+  onCancelOmcInvocation?: (invocationKey: string) => void;
+}) {
+  const terminalInProgress =
+    item.status === "in_progress" || conversationStatus === "running";
+  const isOmcWorker = item.employeeId === "omc-worker";
+
+  return (
+    <div className="app-monitor-panel__item app-monitor-panel__item--terminal-row">
+      <div className="app-monitor-panel__item-row app-monitor-panel__item-row--terminal">
+        <button
+          type="button"
+          className="app-monitor-panel__item-row-main app-monitor-panel__subagent-row--clickable"
+          title={`打开 ${item.name} 最新会话记录`}
+          onClick={() => onActivateRow(item)}
+        >
+          <span className="app-monitor-panel__item-name-wrap">
+            <MonitorItemTypeTag label="终端" />
+            <span className="app-monitor-panel__item-name">{item.name}</span>
+          </span>
+        </button>
+        <span className="app-monitor-panel__item-actions">
+          <SubagentStatusIndicator status={conversationStatus} visual={statusVisual} />
+          {terminalInProgress ? (
+            <button
+              type="button"
+              className="app-monitor-panel__item-action-icon-btn app-monitor-panel__item-action-icon-btn--stop"
+              title="结束终端"
+              aria-label="结束终端"
+              onClick={(event) => {
+                event.stopPropagation();
+                onStopEmployee?.(item.employeeId);
+              }}
+            >
+              <StopOutlined />
+            </button>
+          ) : null}
+          {isOmcWorker ? (
+            <OmcDirectBatchInProgressPopover
+              open={historyPopoverOpen}
+              onOpenChange={(nextOpen) => onHistoryPopoverOpenChange(item.employeeId, nextOpen)}
+              searchValue={historySearch}
+              onSearchChange={onHistorySearchChange}
+              onRowActivate={onOmcRowActivate}
+              onCancelInvocation={onCancelOmcInvocation}
+            />
+          ) : (
+            <MonitorLazyClickPopover
+              open={historyPopoverOpen}
+              placement="bottomRight"
+              overlayClassName="app-monitor-panel__history-popover"
+              onOpenChange={(nextOpen) => onHistoryPopoverOpenChange(item.employeeId, nextOpen)}
+              content={
+                <HistorySessionPopoverContent
+                  searchValue={historySearch}
+                  onSearchChange={onHistorySearchChange}
+                  rows={matchedHistorySessions.map((session) => ({
+                    session,
+                    employeeName: item.name,
+                  }))}
+                  listTitle={`${item.name} · 历史会话`}
+                  emptyDescription={historySearch.trim() ? "未找到匹配会话" : "该终端暂无历史会话"}
+                  onSelectSession={onSelectHistorySession}
+                  onRestoreSession={
+                    onRestoreHistorySession
+                      ? (sessionId) => {
+                          void Promise.resolve(onRestoreHistorySession(sessionId));
+                        }
+                      : undefined
+                  }
+                  canRestoreSession={canRestoreHistorySession}
+                />
+              }
+              renderTrigger={({ requestOpen }) => (
+                <button
+                  type="button"
+                  className="app-monitor-panel__item-action-icon-btn"
+                  title="历史会话"
+                  aria-label="历史会话"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    requestOpen();
+                  }}
+                >
+                  <HistoryOutlined />
+                </button>
+              )}
+            />
+          )}
+          {conversationStatus === "idle" ? taskResultTag(item.latestTaskStatus) : null}
+        </span>
+      </div>
+    </div>
+  );
+});
+
+export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
   employeeItems,
   repositoryMemberItems: _repositoryMemberItems,
   teamItems,
@@ -887,8 +1040,13 @@ export function ProgressMonitorPanel({
   repositories = [],
   sectionCollapsed = false,
   onSectionCollapsedChange,
+  compactSidebarScrollRootRef,
 }: Props) {
-  const { running: agentAssignments } = useAgentAssignments({ projectId, enabled: Boolean(projectId) });
+  const isCompactSidebarPanel = compactSidebarScrollRootRef != null;
+  const { running: agentAssignments } = useAgentAssignments({
+    projectId,
+    enabled: Boolean(projectId) && !isCompactSidebarPanel,
+  });
   const setSectionCollapsed = onSectionCollapsedChange;
 
   const [employeeHistoryPopoverId, setEmployeeHistoryPopoverId] = useState<string | null>(null);
@@ -1000,13 +1158,30 @@ export function ProgressMonitorPanel({
     return map;
   }, [employeeHistorySessionsByName, teamItems]);
 
-  const sessionsForHistoryTranscript = transcriptSourceSessions ?? sessions;
+  const needsLiveTranscriptSessions =
+    _historyDrawerSessionIdProp != null ||
+    sessionConversationTaskDetailTarget != null ||
+    repositorySubagentDetailTarget != null ||
+    omcDirectBatchDetailSnapshot != null;
+  const transcriptSessionsFingerprint = useMemo(() => {
+    if (!needsLiveTranscriptSessions) return "frozen";
+    return monitorSessionsOverviewFingerprint(transcriptSourceSessions ?? sessions);
+  }, [needsLiveTranscriptSessions, sessions, transcriptSourceSessions]);
+  const sessionsForHistoryTranscript = useMemo(
+    () => transcriptSourceSessions ?? sessions,
+    [needsLiveTranscriptSessions, transcriptSessionsFingerprint, sessions, transcriptSourceSessions],
+  );
 
-  function openHistoryMessagesDrawer(sessionId: string) {
-    setEmployeeHistoryPopoverId(null);
-    setTeamHistoryPopoverId(null);
-    setHistoryMessagesSessionId(sessionId);
-  }
+  const openHistoryMessagesDrawer = useCallback(
+    (sessionId: string) => {
+      startTransition(() => {
+        setEmployeeHistoryPopoverId(null);
+        setTeamHistoryPopoverId(null);
+        setHistoryMessagesSessionId(sessionId);
+      });
+    },
+    [setHistoryMessagesSessionId],
+  );
 
   const handleOmcBatchInvocationSelect = useCallback(
     (input: { sessionId: string; repositoryPath: string; invocationKey: string }) => {
@@ -1027,6 +1202,9 @@ export function ProgressMonitorPanel({
 
   const activateEmployeeTerminalRow = useCallback(
     (item: EmployeeMonitorItem) => {
+      const openDrawer = (sessionId: string) => {
+        startTransition(() => openHistoryMessagesDrawer(sessionId));
+      };
       if (item.employeeId === "omc-worker") {
         const latestInvocation =
           omcDirectBatchInvocationsLive.length > 0
@@ -1035,7 +1213,7 @@ export function ProgressMonitorPanel({
         if (latestInvocation) {
           const subprocessSid = latestInvocation.subprocessSessionId?.trim();
           if (subprocessSid) {
-            openHistoryMessagesDrawer(subprocessSid);
+            openDrawer(subprocessSid);
             return;
           }
           handleOmcDirectBatchRowActivate(latestInvocation);
@@ -1043,7 +1221,7 @@ export function ProgressMonitorPanel({
         }
         const boundSid = item.sessionId?.trim();
         if (boundSid) {
-          openHistoryMessagesDrawer(boundSid);
+          openDrawer(boundSid);
           return;
         }
         setEmployeeHistoryPopoverId(item.employeeId);
@@ -1053,12 +1231,12 @@ export function ProgressMonitorPanel({
 
       const latestSession = pickLatestMonitorEmployeeHistorySession(employeeHistorySessionsByName, item.name);
       if (latestSession) {
-        openHistoryMessagesDrawer(latestSession.id);
+        openDrawer(latestSession.id);
         return;
       }
       const activeSid = item.sessionId?.trim();
       if (activeSid && sessions.some((session) => session.id === activeSid)) {
-        openHistoryMessagesDrawer(activeSid);
+        openDrawer(activeSid);
         return;
       }
       setEmployeeHistoryPopoverId(item.employeeId);
@@ -1158,16 +1336,145 @@ export function ProgressMonitorPanel({
     return fromDispatch?.repositoryPath?.trim() ?? "";
   }, [activeSessionId, executionEnvironmentDispatchTaskItems, sessions]);
 
+  const sessionsForTerminalStatusRef = useRef(sessions);
+  sessionsForTerminalStatusRef.current = sessions;
+  const sessionsTerminalStatusFingerprint = useMemo(
+    () => monitorSessionsTerminalStatusFingerprint(sessions),
+    [sessions],
+  );
   const employeeTerminalConversationStatusById = useMemo(
     () =>
       buildEmployeeTerminalConversationStatusById({
         employeeItems,
         repositoryPath: monitorRepositoryPath,
-        sessions,
+        sessions: sessionsForTerminalStatusRef.current,
         dispatchTasks: executionEnvironmentDispatchTaskItems,
       }),
-    [employeeItems, executionEnvironmentDispatchTaskItems, monitorRepositoryPath, sessions],
+    [
+      employeeItems,
+      executionEnvironmentDispatchTaskItems,
+      monitorRepositoryPath,
+      sessionsTerminalStatusFingerprint,
+    ],
   );
+
+  const compactListsAnchorRef = useRef<HTMLDivElement>(null);
+  const compactFlatRows = useMemo((): MonitorCompactFlatRow[] => {
+    const rows: MonitorCompactFlatRow[] = [];
+    for (const item of sortedEmployeeItems) {
+      rows.push({ kind: "terminal", item });
+    }
+    for (const item of executionEnvironmentDispatchTaskItems) {
+      rows.push({ kind: "dispatch", item });
+    }
+    return rows;
+  }, [executionEnvironmentDispatchTaskItems, sortedEmployeeItems]);
+  const useCompactVirtual =
+    compactSidebarScrollRootRef != null &&
+    compactFlatRows.length >= MONITOR_VIRTUALIZE_MIN_ROWS;
+
+  const renderDispatchTaskRow = useCallback(
+    (item: SessionConversationTaskItem) => (
+      <SessionConversationDispatchTaskRow
+        key={item.key}
+        item={item}
+        statusVisual={isCompactSidebarPanel ? "lite" : "full"}
+        showStop={canStopSessionConversationTask(item, {
+          onCancelSession,
+          onCancelOmcDirectBatchInvocation,
+          onStopSessionConversationTask,
+        })}
+        onOpenDetail={openSessionConversationTaskDetail}
+        onStop={stopSessionConversationTask}
+      />
+    ),
+    [
+      onCancelOmcDirectBatchInvocation,
+      onCancelSession,
+      onStopSessionConversationTask,
+      openSessionConversationTaskDetail,
+      stopSessionConversationTask,
+      isCompactSidebarPanel,
+    ],
+  );
+
+  const handleEmployeeHistoryPopoverOpenChange = useCallback(
+    (employeeId: string, nextOpen: boolean) => {
+      if (nextOpen) {
+        setEmployeeHistoryPopoverId(employeeId);
+        setEmployeeHistorySearch("");
+        return;
+      }
+      setEmployeeHistoryPopoverId((prev) => (prev === employeeId ? null : prev));
+      setEmployeeHistorySearch("");
+    },
+    [],
+  );
+
+  const renderEmployeeTerminalListItem = useCallback(
+    (item: EmployeeMonitorItem) => {
+      const historyPopoverOpen = employeeHistoryPopoverId === item.employeeId;
+      const isOmcWorker = item.employeeId === "omc-worker";
+      const keyword =
+        historyPopoverOpen && !isOmcWorker ? normalizeSearchKeyword(employeeHistorySearch) : "";
+      const historySessions =
+        historyPopoverOpen && !isOmcWorker
+          ? (employeeHistorySessionsByName.get(normalizeMonitorEmployeeName(item.name)) ?? [])
+          : [];
+      const matchedHistorySessions =
+        historyPopoverOpen && !isOmcWorker
+          ? historySessions.filter((session) => matchSessionByKeyword(session, keyword)).slice(0, 30)
+          : [];
+      return (
+        <TerminalEmployeeMonitorRow
+          item={item}
+          conversationStatus={
+            employeeTerminalConversationStatusById.get(item.employeeId) ?? "idle"
+          }
+          statusVisual={isCompactSidebarPanel ? "lite" : "full"}
+          historyPopoverOpen={historyPopoverOpen}
+          historySearch={historyPopoverOpen ? employeeHistorySearch : ""}
+          matchedHistorySessions={matchedHistorySessions}
+          onActivateRow={activateEmployeeTerminalRow}
+          onStopEmployee={onStopEmployee}
+          onHistoryPopoverOpenChange={handleEmployeeHistoryPopoverOpenChange}
+          onHistorySearchChange={setEmployeeHistorySearch}
+          onSelectHistorySession={openHistoryMessagesDrawer}
+          onRestoreHistorySession={onRestoreHistorySessionAsMain}
+          canRestoreHistorySession={canRestoreHistorySession}
+          onOmcRowActivate={handleOmcDirectBatchRowActivate}
+          onCancelOmcInvocation={onCancelOmcDirectBatchInvocation}
+        />
+      );
+    },
+    [
+      activateEmployeeTerminalRow,
+      canRestoreHistorySession,
+      employeeHistoryPopoverId,
+      employeeHistorySearch,
+      employeeHistorySessionsByName,
+      employeeTerminalConversationStatusById,
+      handleEmployeeHistoryPopoverOpenChange,
+      handleOmcDirectBatchRowActivate,
+      onCancelOmcDirectBatchInvocation,
+      onRestoreHistorySessionAsMain,
+      onStopEmployee,
+      isCompactSidebarPanel,
+    ],
+  );
+
+  const compactVirtualRenderRef = useRef({
+    renderTerminal: renderEmployeeTerminalListItem,
+    renderDispatch: renderDispatchTaskRow,
+  });
+  compactVirtualRenderRef.current = {
+    renderTerminal: renderEmployeeTerminalListItem,
+    renderDispatch: renderDispatchTaskRow,
+  };
+  const renderCompactVirtualRow = useCallback((row: MonitorCompactFlatRow) => {
+    const { renderTerminal, renderDispatch } = compactVirtualRenderRef.current;
+    return row.kind === "terminal" ? renderTerminal(row.item) : renderDispatch(row.item);
+  }, []);
 
   const shouldShowSessionConversationTasks = showSessionConversationTasks;
 
@@ -1270,135 +1577,32 @@ export function ProgressMonitorPanel({
         </div>
       ) : null}
 
-      {employeeItems.length > 0 ? (
+      {useCompactVirtual ? (
+        <div
+          ref={compactListsAnchorRef}
+          className="app-monitor-panel__section app-monitor-panel__section--terminals app-monitor-panel__section--compact-virtual"
+        >
+          <MonitorPanelVirtualRows
+            scrollRootRef={compactSidebarScrollRootRef!}
+            anchorRef={compactListsAnchorRef}
+            rows={compactFlatRows}
+            getRowKey={(row) =>
+              row.kind === "terminal" ? `t:${row.item.employeeId}` : `d:${row.item.key}`
+            }
+            renderRow={renderCompactVirtualRow}
+          />
+        </div>
+      ) : null}
+
+      {!useCompactVirtual && employeeItems.length > 0 ? (
         <div className="app-monitor-panel__section app-monitor-panel__section--terminals">
           <div className="app-monitor-panel__terminals-list">
-            {sortedEmployeeItems.map((item) => {
-              const conversationStatus =
-                employeeTerminalConversationStatusById.get(item.employeeId) ?? "idle";
-              const terminalInProgress =
-                item.status === "in_progress" || conversationStatus === "running";
-              const isOmcWorker = item.employeeId === "omc-worker";
-              const employeePopoverOpen = employeeHistoryPopoverId === item.employeeId;
-              const keyword =
-                employeePopoverOpen && !isOmcWorker ? normalizeSearchKeyword(employeeHistorySearch) : "";
-              const historySessions =
-                employeePopoverOpen && !isOmcWorker
-                  ? (employeeHistorySessionsByName.get(normalizeMonitorEmployeeName(item.name)) ?? [])
-                  : [];
-              const matchedEmployeeSessions =
-                employeePopoverOpen && !isOmcWorker
-                  ? historySessions.filter((session) => matchSessionByKeyword(session, keyword)).slice(0, 30)
-                  : [];
-              return (
-                <div key={item.employeeId} className="app-monitor-panel__item app-monitor-panel__item--terminal-row">
-                  <div className="app-monitor-panel__item-row app-monitor-panel__item-row--terminal">
-                    <button
-                      type="button"
-                      className="app-monitor-panel__item-row-main app-monitor-panel__subagent-row--clickable"
-                      title={`打开 ${item.name} 最新会话记录`}
-                      onClick={() => activateEmployeeTerminalRow(item)}
-                    >
-                      <span className="app-monitor-panel__item-name-wrap">
-                        <MonitorItemTypeTag label="终端" />
-                        <span className="app-monitor-panel__item-name">{item.name}</span>
-                      </span>
-                    </button>
-                    <span className="app-monitor-panel__item-actions">
-                      <SubagentStatusIndicator status={conversationStatus} />
-                      {terminalInProgress ? (
-                        <button
-                          type="button"
-                          className="app-monitor-panel__item-action-icon-btn app-monitor-panel__item-action-icon-btn--stop"
-                          title="结束终端"
-                          aria-label="结束终端"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            onStopEmployee?.(item.employeeId);
-                          }}
-                        >
-                          <StopOutlined />
-                        </button>
-                      ) : null}
-                      {isOmcWorker ? (
-                        <OmcDirectBatchInProgressPopover
-                          open={employeeHistoryPopoverId === item.employeeId}
-                          onOpenChange={(nextOpen) => {
-                            if (nextOpen) {
-                              setEmployeeHistoryPopoverId(item.employeeId);
-                              setEmployeeHistorySearch("");
-                              return;
-                            }
-                            setEmployeeHistoryPopoverId((prev) => (prev === item.employeeId ? null : prev));
-                            setEmployeeHistorySearch("");
-                          }}
-                          searchValue={employeeHistorySearch}
-                          onSearchChange={setEmployeeHistorySearch}
-                          onRowActivate={handleOmcDirectBatchRowActivate}
-                          onCancelInvocation={onCancelOmcDirectBatchInvocation}
-                        />
-                      ) : (
-                        <MonitorLazyClickPopover
-                          open={employeePopoverOpen}
-                          placement="bottomRight"
-                          overlayClassName="app-monitor-panel__history-popover"
-                          onOpenChange={(nextOpen) => {
-                            if (nextOpen) {
-                              setEmployeeHistoryPopoverId(item.employeeId);
-                              setEmployeeHistorySearch("");
-                              return;
-                            }
-                            setEmployeeHistoryPopoverId((prev) => (prev === item.employeeId ? null : prev));
-                            setEmployeeHistorySearch("");
-                          }}
-                          content={
-                            <HistorySessionPopoverContent
-                              searchValue={employeeHistorySearch}
-                              onSearchChange={setEmployeeHistorySearch}
-                              rows={matchedEmployeeSessions.map((session) => ({
-                                session,
-                                employeeName: item.name,
-                              }))}
-                              listTitle={`${item.name} · 历史会话`}
-                              emptyDescription={employeeHistorySearch.trim() ? "未找到匹配会话" : "该终端暂无历史会话"}
-                              onSelectSession={(sessionId) => openHistoryMessagesDrawer(sessionId)}
-                              onRestoreSession={
-                                onRestoreHistorySessionAsMain
-                                  ? (sessionId) => {
-                                      void Promise.resolve(onRestoreHistorySessionAsMain(sessionId));
-                                    }
-                                  : undefined
-                              }
-                              canRestoreSession={canRestoreHistorySession}
-                            />
-                          }
-                          renderTrigger={({ requestOpen }) => (
-                            <button
-                              type="button"
-                              className="app-monitor-panel__item-action-icon-btn"
-                              title="历史会话"
-                              aria-label="历史会话"
-                              onClick={(event) => {
-                                event.stopPropagation();
-                                requestOpen();
-                              }}
-                            >
-                              <HistoryOutlined />
-                            </button>
-                          )}
-                        />
-                      )}
-                      {conversationStatus === "idle" ? taskResultTag(item.latestTaskStatus) : null}
-                    </span>
-                  </div>
-                </div>
-              );
-            })}
+            {sortedEmployeeItems.map((item) => renderEmployeeTerminalListItem(item))}
           </div>
         </div>
       ) : null}
 
-      {shouldShowSessionConversationTasks ? (
+      {!useCompactVirtual && shouldShowSessionConversationTasks ? (
         <div
           className={`app-monitor-panel__section app-monitor-panel__section--session-tasks${
             executionEnvironmentDispatchTaskItems.length === 0
@@ -1408,23 +1612,17 @@ export function ProgressMonitorPanel({
         >
           {executionEnvironmentDispatchTaskItems.length > 0 ? (
             <div className="app-monitor-panel__session-tasks-list" aria-label="当前会话派发任务">
-              {executionEnvironmentDispatchTaskItems.map((item) => (
-                <SessionConversationDispatchTaskRow
-                  key={item.key}
-                  item={item}
-                  showStop={canStopSessionConversationTask(item, {
-                    onCancelSession,
-                    onCancelOmcDirectBatchInvocation,
-                    onStopSessionConversationTask,
-                  })}
-                  onOpenDetail={openSessionConversationTaskDetail}
-                  onStop={stopSessionConversationTask}
-                />
-              ))}
+              {executionEnvironmentDispatchTaskItems.map((item) => renderDispatchTaskRow(item))}
             </div>
           ) : (
             <div className="app-monitor-panel__session-tasks-empty-hint">近 {executionEnvironmentDispatchHistoryDays ?? 1} 天暂无派发记录</div>
           )}
+        </div>
+      ) : null}
+
+      {useCompactVirtual && shouldShowSessionConversationTasks && executionEnvironmentDispatchTaskItems.length === 0 ? (
+        <div className="app-monitor-panel__section app-monitor-panel__section--session-tasks app-monitor-panel__section--session-tasks-empty">
+          <div className="app-monitor-panel__session-tasks-empty-hint">近 {executionEnvironmentDispatchHistoryDays ?? 1} 天暂无派发记录</div>
         </div>
       ) : null}
 
@@ -1604,4 +1802,4 @@ export function ProgressMonitorPanel({
       {monitorDrawers}
     </div>
   );
-}
+});

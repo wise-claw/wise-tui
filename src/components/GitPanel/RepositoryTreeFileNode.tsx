@@ -2,7 +2,7 @@ import { memo } from "react";
 import { useRepositoryExplorerTreeActions } from "./RepositoryExplorerTreeActionsContext";
 import { ExplorerTreeFileIcon } from "./explorerTreeChrome";
 import { repositoryTreeFileShouldUpdate } from "./repositoryTreeNodeMemo";
-import { repositoryTreeDepthIndentPx } from "./repositoryTreeLayout";
+import { repositoryTreeFileDepthIndentPx } from "./repositoryTreeLayout";
 import { setWiseRepositoryFileDragData } from "../../utils/repositoryFileDrag";
 import type { RepositoryFileTreeNode } from "./types";
 
@@ -15,7 +15,7 @@ interface RepositoryTreeFileNodeProps {
 function RepositoryTreeFileNodeInner({ node, depth, selectedPath }: RepositoryTreeFileNodeProps) {
   const { onSelectNode, onOpenFile } = useRepositoryExplorerTreeActions();
   const isSelected = selectedPath === node.path;
-  const depthIndentPx = repositoryTreeDepthIndentPx(depth);
+  const depthIndentPx = repositoryTreeFileDepthIndentPx(depth);
 
   return (
     <div

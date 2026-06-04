@@ -2,7 +2,11 @@ import { useLayoutEffect, useRef } from "react";
 import { Input } from "antd";
 import type { InputRef } from "antd/es/input";
 import { ExplorerTreeFileIcon, ExplorerTreeFolderIcon } from "./explorerTreeChrome";
-import { repositoryTreeDepthIndentPx } from "./repositoryTreeLayout";
+import {
+  repositoryTreeDepthIndentPx,
+  repositoryTreeFileDepthIndentPx,
+  REPOSITORY_TREE_CHEVRON_COLUMN_PX,
+} from "./repositoryTreeLayout";
 
 interface ExplorerInlineCreateRowProps {
   depth: number;
@@ -32,10 +36,15 @@ export function ExplorerInlineCreateRow({
     }
   }, [kind, depth]);
 
+  const paddingLeft =
+    kind === "file"
+      ? repositoryTreeFileDepthIndentPx(depth)
+      : repositoryTreeDepthIndentPx(depth) + REPOSITORY_TREE_CHEVRON_COLUMN_PX;
+
   return (
     <div
       className="repo-tree-node repo-tree-node--inline-create"
-      style={{ paddingLeft: repositoryTreeDepthIndentPx(depth) }}
+      style={{ paddingLeft }}
       data-repo-inline-create="1"
       onClick={(e) => e.stopPropagation()}
       onMouseDown={(e) => e.stopPropagation()}

@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import type { ClaudeSession } from "../types";
-import { monitorSessionsOverviewFingerprint } from "./useMonitorSessionsForOverview";
+import {
+  monitorSessionsOverviewFingerprint,
+  monitorSessionsTerminalStatusFingerprint,
+} from "./useMonitorSessionsForOverview";
 
 function session(partial: Partial<ClaudeSession> & Pick<ClaudeSession, "id">): ClaudeSession {
   return {
@@ -39,6 +42,49 @@ describe("monitorSessionsOverviewFingerprint", () => {
     const running = session({ id: "a", status: "running" });
     expect(monitorSessionsOverviewFingerprint([idle])).not.toBe(
       monitorSessionsOverviewFingerprint([running]),
+    );
+  });
+});
+
+describe("monitorSessionsTerminalStatusFingerprint", () => {
+  test("ignores assistant content growth without new messages", () => {
+    const short = session({
+      id: "w",
+      status: "running",
+      messages: [
+        { id: "u1", role: "user", content: "go", timestamp: 1 },
+        { id: "a1", role: "assistant", content: "x".repeat(50), timestamp: 2 },
+      ],
+    });
+    const longer = session({
+      id: "w",
+      status: "running",
+      messages: [
+        { id: "u1", role: "user", content: "go", timestamp: 1 },
+        { id: "a1", role: "assistant", content: "x".repeat(500), timestamp: 2 },
+      ],
+    });
+    expect(monitorSessionsTerminalStatusFingerprint([short])).toBe(
+      monitorSessionsTerminalStatusFingerprint([longer]),
+    );
+  });
+
+  test("changes when a new message is appended", () => {
+    const one = session({
+      id: "w",
+      status: "running",
+      messages: [{ id: "u1", role: "user", content: "go", timestamp: 1 }],
+    });
+    const two = session({
+      id: "w",
+      status: "running",
+      messages: [
+        { id: "u1", role: "user", content: "go", timestamp: 1 },
+        { id: "a1", role: "assistant", content: "ok", timestamp: 2 },
+      ],
+    });
+    expect(monitorSessionsTerminalStatusFingerprint([one])).not.toBe(
+      monitorSessionsTerminalStatusFingerprint([two]),
     );
   });
 });

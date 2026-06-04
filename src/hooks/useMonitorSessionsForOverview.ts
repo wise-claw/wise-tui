@@ -1,6 +1,30 @@
 import { useEffect, useRef, useState } from "react";
 import type { ClaudeSession } from "../types";
+import { indexOfLastRenderableUserMessage } from "../utils/claudeChatMessageDisplay";
 import { MONITOR_SESSIONS_SYNC_INTERVAL_MS } from "../constants/monitorUi";
+
+/** 终端行状态推断：忽略流式正文长度，仅跟踪消息条数 / 末条角色与末轮用户索引。 */
+export function monitorSessionsTerminalStatusFingerprint(sessions: readonly ClaudeSession[]): string {
+  const parts: string[] = [`n:${sessions.length}`];
+  for (const s of sessions) {
+    const lastUserIdx = indexOfLastRenderableUserMessage(s.messages);
+    const last = s.messages[s.messages.length - 1];
+    parts.push(
+      [
+        s.id,
+        s.status,
+        s.claudeSessionId ?? "",
+        s.repositoryPath,
+        s.repositoryName ?? "",
+        String(s.messages.length),
+        String(lastUserIdx),
+        last?.id ?? "",
+        last?.role ?? "",
+      ].join("|"),
+    );
+  }
+  return parts.join("\n");
+}
 
 /** 运行面板 / useMonitorOverview 关心的会话字段；忽略流式正文逐 token 变化。 */
 export function monitorSessionsOverviewFingerprint(sessions: readonly ClaudeSession[]): string {

@@ -20,7 +20,7 @@
 
 .app-left-sidebar .app-monitor-panel__item,
 .app-left-sidebar .app-monitor-panel__item--terminal-row {
-  transition: background 0.05s ease;
+  transition: none;
 }
 
 .app-left-sidebar .app-monitor-panel__item-action-icon-btn {

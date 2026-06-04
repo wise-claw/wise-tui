@@ -1,12 +1,10 @@
-import { Suspense, lazy, memo } from "react";
+import { memo, useRef } from "react";
 import type { LeftSidebarProps } from "./types";
 import type { ClaudeSession } from "../../types";
-
-const ProgressMonitorPanelLazy = lazy(() =>
-  import("../ProgressMonitorPanel").then((module) => ({ default: module.ProgressMonitorPanel })),
-);
+import { ProgressMonitorPanel } from "../ProgressMonitorPanel";
 
 export type LeftSidebarMonitorPanelSlotProps = {
+  visible?: boolean;
   monitorPanelSectionCollapsed: boolean;
   onMonitorPanelSectionCollapsedChange: (collapsed: boolean) => void;
   monitorPanelSessions: ClaudeSession[];
@@ -42,6 +40,9 @@ export type LeftSidebarMonitorPanelSlotProps = {
   onPrepareSessionForMonitorDrawer?: LeftSidebarProps["onPrepareSessionForMonitorDrawer"];
   repositoryMainSessionBindings: LeftSidebarProps["repositoryMainSessionBindings"];
   repositories: LeftSidebarProps["repositories"];
+  /** 由 LeftSidebar useMemo 预计算，避免 memo 比较时重复扫描 sessions。 */
+  monitorSessionsFingerprint: string;
+  transcriptSessionsFingerprint: string;
 };
 
 function monitorTaskItemsFingerprint(
@@ -53,18 +54,47 @@ function monitorTaskItemsFingerprint(
     .join("\n");
 }
 
+function employeeMonitorItemsFingerprint(
+  items: LeftSidebarMonitorPanelSlotProps["employeeMonitorItems"],
+): string {
+  if (!items?.length) return "0";
+  return items
+    .map((item) => `${item.employeeId}|${item.status}|${item.name}`)
+    .join("\n");
+}
+
+function teamMonitorItemsFingerprint(
+  items: LeftSidebarMonitorPanelSlotProps["teamMonitorItems"],
+): string {
+  if (!items?.length) return "0";
+  return items
+    .map((item) => `${item.workflowId}|${item.status}|${item.workflowName}`)
+    .join("\n");
+}
+
+function repositoryMemberMonitorItemsFingerprint(
+  items: LeftSidebarMonitorPanelSlotProps["repositoryMemberMonitorItems"],
+): string {
+  if (!items?.length) return "0";
+  return items.map((item) => `${item.repositoryPath}|${item.subagents.length}`).join("\n");
+}
+
 function monitorPanelPropsEqual(
   prev: LeftSidebarMonitorPanelSlotProps,
   next: LeftSidebarMonitorPanelSlotProps,
 ): boolean {
   return (
+    prev.visible === next.visible &&
     prev.monitorPanelSectionCollapsed === next.monitorPanelSectionCollapsed &&
     prev.onMonitorPanelSectionCollapsedChange === next.onMonitorPanelSectionCollapsedChange &&
-    prev.monitorPanelSessions === next.monitorPanelSessions &&
-    prev.transcriptSourceSessions === next.transcriptSourceSessions &&
-    prev.employeeMonitorItems === next.employeeMonitorItems &&
-    prev.repositoryMemberMonitorItems === next.repositoryMemberMonitorItems &&
-    prev.teamMonitorItems === next.teamMonitorItems &&
+    prev.monitorSessionsFingerprint === next.monitorSessionsFingerprint &&
+    prev.transcriptSessionsFingerprint === next.transcriptSessionsFingerprint &&
+    employeeMonitorItemsFingerprint(prev.employeeMonitorItems) ===
+      employeeMonitorItemsFingerprint(next.employeeMonitorItems) &&
+    repositoryMemberMonitorItemsFingerprint(prev.repositoryMemberMonitorItems) ===
+      repositoryMemberMonitorItemsFingerprint(next.repositoryMemberMonitorItems) &&
+    teamMonitorItemsFingerprint(prev.teamMonitorItems) ===
+      teamMonitorItemsFingerprint(next.teamMonitorItems) &&
     prev.activeSessionId === next.activeSessionId &&
     prev.monitorActiveTarget === next.monitorActiveTarget &&
     prev.executionEnvironmentDispatchHistoryDays === next.executionEnvironmentDispatchHistoryDays &&
@@ -79,6 +109,7 @@ function monitorPanelPropsEqual(
 }
 
 export const LeftSidebarMonitorPanelSlot = memo(function LeftSidebarMonitorPanelSlot({
+  visible = true,
   monitorPanelSectionCollapsed,
   onMonitorPanelSectionCollapsedChange,
   monitorPanelSessions,
@@ -114,55 +145,67 @@ export const LeftSidebarMonitorPanelSlot = memo(function LeftSidebarMonitorPanel
   executionEnvironmentDispatchHistoryDays,
   onExecutionEnvironmentDispatchHistoryDaysChange,
   executionEnvironmentDispatchHistoryDaysSaving,
+  monitorSessionsFingerprint: _monitorSessionsFingerprint,
+  transcriptSessionsFingerprint: _transcriptSessionsFingerprint,
 }: LeftSidebarMonitorPanelSlotProps) {
+  const scrollRootRef = useRef<HTMLDivElement>(null);
+
   return (
     <div
+      ref={scrollRootRef}
       className={
         "app-left-sidebar-monitor-panel" +
-        (monitorPanelSectionCollapsed ? " app-left-sidebar-monitor-panel--section-collapsed" : "")
+        (monitorPanelSectionCollapsed ? " app-left-sidebar-monitor-panel--section-collapsed" : "") +
+        (!visible ? " app-left-sidebar-monitor-panel--hidden" : "")
       }
+      hidden={!visible ? true : undefined}
+      aria-hidden={!visible ? true : undefined}
     >
-      <Suspense fallback={null}>
-        <ProgressMonitorPanelLazy
-          sectionCollapsed={monitorPanelSectionCollapsed}
-          onSectionCollapsedChange={onMonitorPanelSectionCollapsedChange}
-          sessions={monitorPanelSessions}
-          transcriptSourceSessions={transcriptSourceSessions}
-          sessionConversationTaskItems={sessionConversationTaskItems ?? []}
-          showSessionConversationTasks={showSessionConversationTasks}
-          executionEnvironmentDispatchHistoryDays={executionEnvironmentDispatchHistoryDays}
-          onExecutionEnvironmentDispatchHistoryDaysChange={
-            onExecutionEnvironmentDispatchHistoryDaysChange
-          }
-          executionEnvironmentDispatchHistoryDaysSaving={executionEnvironmentDispatchHistoryDaysSaving}
-          employeeItems={employeeMonitorItems ?? []}
-          repositoryMemberItems={repositoryMemberMonitorItems ?? []}
-          teamItems={teamMonitorItems ?? []}
-          activeSessionId={activeSessionId}
-          activeTarget={monitorActiveTarget}
-          onOpenTeamDetail={onOpenTeamMonitorDetail}
-          onOpenEmployeeConfig={onOpenEmployeeConfig}
-          onOpenWorkflowConfig={onOpenWorkflowConfig}
-          onStopEmployee={onStopEmployeeMonitor}
-          onStopTeam={onStopTeamMonitor}
-          hideEmployeeUi={hideEmployeeUi}
-          onCancelSession={onCancelSessionFromMonitor}
-          onOpenTaskDetail={onOpenTaskDetailFromMonitor}
-          onOpenOmcBatchInvocationDetail={onOpenOmcBatchInvocationDetail}
-          onCancelOmcDirectBatchInvocation={onCancelOmcDirectBatchInvocation}
-          onStopSessionConversationTask={onStopSessionConversationTask}
-          onReloadFullDiskTranscript={onReloadFullDiskTranscript}
-          onCompactSessionHistory={onCompactSessionHistory}
-          projectId={projectId}
-          historyDrawerSessionId={historyDrawerSessionId}
-          onHistoryDrawerSessionIdChange={onHistoryDrawerSessionIdChange}
-          onRestoreHistorySessionAsMain={onRestoreHistorySessionAsMain}
-          onResumeSession={onResumeSession}
-          onPrepareSessionForMonitorDrawer={onPrepareSessionForMonitorDrawer}
-          repositoryMainBindings={repositoryMainSessionBindings}
-          repositories={repositories}
-        />
-      </Suspense>
+      <ProgressMonitorPanel
+        compactSidebarScrollRootRef={scrollRootRef}
+        sectionCollapsed={monitorPanelSectionCollapsed}
+        onSectionCollapsedChange={onMonitorPanelSectionCollapsedChange}
+        sessions={monitorPanelSessions}
+        transcriptSourceSessions={transcriptSourceSessions}
+        sessionConversationTaskItems={sessionConversationTaskItems ?? []}
+        showSessionConversationTasks={showSessionConversationTasks}
+        executionEnvironmentDispatchHistoryDays={executionEnvironmentDispatchHistoryDays}
+        onExecutionEnvironmentDispatchHistoryDaysChange={
+          onExecutionEnvironmentDispatchHistoryDaysChange
+        }
+        executionEnvironmentDispatchHistoryDaysSaving={executionEnvironmentDispatchHistoryDaysSaving}
+        employeeItems={employeeMonitorItems ?? []}
+        repositoryMemberItems={repositoryMemberMonitorItems ?? []}
+        teamItems={teamMonitorItems ?? []}
+        activeSessionId={activeSessionId}
+        activeTarget={monitorActiveTarget}
+        onOpenTeamDetail={onOpenTeamMonitorDetail}
+        onOpenEmployeeConfig={onOpenEmployeeConfig}
+        onOpenWorkflowConfig={onOpenWorkflowConfig}
+        onStopEmployee={onStopEmployeeMonitor}
+        onStopTeam={onStopTeamMonitor}
+        hideEmployeeUi={hideEmployeeUi}
+        onCancelSession={onCancelSessionFromMonitor}
+        onOpenTaskDetail={onOpenTaskDetailFromMonitor}
+        onOpenOmcBatchInvocationDetail={onOpenOmcBatchInvocationDetail}
+        onCancelOmcDirectBatchInvocation={onCancelOmcDirectBatchInvocation}
+        onStopSessionConversationTask={onStopSessionConversationTask}
+        onReloadFullDiskTranscript={onReloadFullDiskTranscript}
+        onCompactSessionHistory={onCompactSessionHistory}
+        projectId={projectId}
+        historyDrawerSessionId={historyDrawerSessionId}
+        onHistoryDrawerSessionIdChange={onHistoryDrawerSessionIdChange}
+        onRestoreHistorySessionAsMain={onRestoreHistorySessionAsMain}
+        onResumeSession={onResumeSession}
+        onPrepareSessionForMonitorDrawer={onPrepareSessionForMonitorDrawer}
+        repositoryMainBindings={repositoryMainSessionBindings}
+        repositories={repositories}
+      />
     </div>
   );
 }, monitorPanelPropsEqual);
+
+/** 左栏挂载后预加载运行面板，避免首次展开 Suspense 卡顿。 */
+export function preloadLeftSidebarMonitorPanel(): void {
+  void import("../ProgressMonitorPanel");
+}

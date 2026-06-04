@@ -2176,15 +2176,20 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 }
 
 /* ── Project List with Sessions（紧凑；项目/仓库选择态分层，无左侧竖条） ── */
+/* 列本身不滚动：仅「工作区列表」「Git/文件」「运行面板(内容溢出时)」各自滚动，避免在运行面板上滚带动整列重绘 */
 .app-left-sidebar-project-and-files {
   flex: 1;
   min-height: 0;
   display: flex;
   flex-direction: column;
   overflow-x: hidden;
-  overflow-y: auto;
+  overflow-y: hidden;
   gap: 2px;
   padding: 0;
+}
+
+.app-left-sidebar-project-and-files > .app-left-sidebar-monitor-panel {
+  flex-shrink: 0;
 }
 
 .app-left-sidebar-project-and-files > .app-repository-header {
@@ -2194,9 +2199,6 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   padding: 2px 8px;
   background: var(--ant-color-bg-container);
   border-bottom: 1px solid var(--app-workspace-glass-border, var(--ant-color-border-secondary));
-  position: sticky;
-  top: 0;
-  z-index: 10;
 }
 
 .app-left-sidebar-project-and-files > .app-repository-header .app-repository-header-title {
@@ -2483,6 +2485,28 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   min-height: 120px;
   overflow: hidden;
   border-top: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 88%, var(--ant-color-border));
+}
+
+.app-left-sidebar-bottom-tab-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-left-sidebar-bottom-tab-pane {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-left-sidebar-bottom-tab-pane--hidden {
+  display: none !important;
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .app-left-sidebar-repo-panel-header {

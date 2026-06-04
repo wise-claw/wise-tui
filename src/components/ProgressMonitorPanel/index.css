@@ -12,6 +12,14 @@
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
+  touch-action: pan-y;
+}
+
+.app-left-sidebar-monitor-panel--hidden {
+  display: none !important;
+  max-height: 0;
+  overflow: hidden;
+  pointer-events: none;
 }
 
 .app-left-sidebar-monitor-panel .app-monitor-panel {
@@ -48,6 +56,7 @@
 
 .app-left-sidebar-monitor-panel .app-monitor-panel__item-name {
   font-size: 10px;
+  line-height: 14px;
 }
 
 .app-left-sidebar-monitor-panel .app-monitor-panel__item-action-icon-btn {
@@ -55,18 +64,36 @@
   height: 16px;
 }
 
-/* 左栏终端列表：行高再收紧一档 */
+/* 左栏终端列表：紧凑行高 + 不裁字（勿用固定 height + overflow:hidden） */
 .app-left-sidebar-monitor-panel .app-monitor-panel__section--terminals .app-monitor-panel__item {
-  padding: 1px 6px;
+  padding: 2px 6px;
 }
 
 .app-left-sidebar-monitor-panel .app-monitor-panel__section--terminals .app-monitor-panel__item-row--terminal {
-  min-height: 18px;
+  min-height: 0;
+  align-items: center;
 }
 
 .app-left-sidebar-monitor-panel .app-monitor-panel__section--terminals .app-monitor-panel__item-row-main {
-  height: 16px;
-  min-height: 16px;
+  display: flex;
+  align-items: center;
+  min-height: 0;
+  height: auto;
+  overflow: visible;
+  line-height: 13px;
+}
+
+.app-left-sidebar-monitor-panel .app-monitor-panel__section--terminals .app-monitor-panel__item-name-wrap {
+  align-items: center;
+  line-height: 13px;
+}
+
+.app-left-sidebar-monitor-panel .app-monitor-panel__section--terminals .app-monitor-panel__item-name {
+  line-height: 13px;
+}
+
+.app-left-sidebar-monitor-panel .app-monitor-panel__section--terminals .app-monitor-panel__item-type-tag {
+  line-height: 13px;
 }
 
 .app-left-sidebar-monitor-panel .app-monitor-panel__section--terminals .app-monitor-panel__subagent-status {
@@ -96,7 +123,7 @@
 }
 
 .app-left-sidebar-monitor-panel .app-monitor-panel__section.app-monitor-panel__section--session-tasks {
-  padding: 2px 0;
+  padding: 0;
 }
 
 .app-left-sidebar-monitor-panel .app-monitor-panel__session-tasks-toolbar {
@@ -107,12 +134,125 @@
 
 .app-left-sidebar-monitor-panel .app-monitor-panel__session-tasks-list {
   --session-task-row-height: 20px;
+  max-height: none;
+  overflow-x: hidden;
+  overflow-y: visible;
   margin-top: 0;
 }
 
-.app-left-sidebar-monitor-panel .app-monitor-panel__session-task-row {
-  min-height: 20px;
-  padding: 0 6px;
+.app-left-sidebar-monitor-panel .app-monitor-panel__subagent-status-svg--spin,
+.app-left-sidebar-monitor-panel .app-monitor-panel__subagent-status-svg--pulse {
+  animation: none !important;
+  will-change: auto;
+}
+
+.app-monitor-panel__subagent-status--lite {
+  width: 10px;
+  height: 10px;
+}
+
+.app-monitor-panel__subagent-status-lite {
+  display: block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.app-monitor-panel__subagent-status-lite--running {
+  background: var(--ant-color-success);
+}
+
+.app-monitor-panel__subagent-status-lite--completed {
+  background: var(--ant-color-success);
+  opacity: 0.72;
+}
+
+.app-monitor-panel__subagent-status-lite--failed {
+  background: var(--ant-color-error);
+}
+
+.app-monitor-panel__subagent-status-lite--stale {
+  background: var(--ant-color-warning);
+}
+
+.app-monitor-panel__subagent-status-lite--idle {
+  background: var(--ant-color-text-quaternary);
+  opacity: 0.55;
+}
+
+.app-monitor-panel__subagent-status-lite--cancelled,
+.app-monitor-panel__subagent-status-lite--reclaimed {
+  background: var(--ant-color-text-quaternary);
+}
+
+.app-monitor-panel__virtual-list {
+  position: relative;
+  width: 100%;
+}
+
+.app-monitor-panel__virtual-list__spacer {
+  position: relative;
+  width: 100%;
+}
+
+.app-monitor-panel__virtual-list__row {
+  position: absolute;
+  left: 0;
+  right: 0;
+  overflow: hidden;
+  box-sizing: border-box;
+}
+
+/* 派发任务行：与终端相同 item-row 结构，避免 session-task-row-main 整行撑开造成中间空档 */
+.app-monitor-panel__item-row--dispatch {
+  gap: 4px;
+  justify-content: flex-start;
+}
+
+.app-monitor-panel__item-row--dispatch .app-monitor-panel__item-row-main {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.app-monitor-panel__item-row--dispatch .app-monitor-panel__item-name-wrap {
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.app-monitor-panel__item-row--dispatch .app-monitor-panel__item-actions {
+  margin-left: auto;
+}
+
+.app-left-sidebar-monitor-panel .app-monitor-panel__session-task-row.app-monitor-panel__item {
+  padding: 2px 6px;
+}
+
+.app-left-sidebar-monitor-panel .app-monitor-panel__item-row--dispatch {
+  min-height: 0;
+}
+
+.app-left-sidebar-monitor-panel .app-monitor-panel__item-row--dispatch .app-monitor-panel__item-name {
+  font-size: 10px;
+  line-height: 13px;
+}
+
+.app-left-sidebar-monitor-panel .app-monitor-panel__item-row--dispatch .app-monitor-panel__session-task-meta {
+  flex: 0 1 auto;
+  max-width: 3.25rem;
+  font-size: 8px;
+  line-height: 12px;
+  padding: 0 2px;
+}
+
+.app-left-sidebar-monitor-panel .app-monitor-panel__item-row--dispatch .app-monitor-panel__session-task-time {
+  display: none;
+}
+
+.app-left-sidebar-monitor-panel .app-monitor-panel__section--session-tasks .app-monitor-panel__subagent-status,
+.app-left-sidebar-monitor-panel .app-monitor-panel__section--session-tasks .app-monitor-panel__subagent-status-svg {
+  width: 14px;
+  height: 14px;
 }
 
 .app-left-sidebar-monitor-panel .app-monitor-panel__session-tasks-empty-hint {
@@ -1052,18 +1192,24 @@
 }
 
 .app-monitor-panel__session-task-row {
-  display: flex;
-  align-items: center;
-  gap: 4px;
+  display: block;
   min-width: 0;
   max-width: 100%;
-  min-height: 24px;
+  min-height: 16px;
   border-radius: 0;
   background: transparent;
   border: none;
   border-left: 3px solid transparent !important;
-  padding: 0 12px;
+  padding: 0;
   transition: all 0.2s ease;
+}
+
+.app-monitor-panel__session-task-row.app-monitor-panel__item {
+  padding: 5px 12px;
+}
+
+.app-monitor-panel__session-task-row > .app-monitor-panel__item-row {
+  width: 100%;
 }
 
 .app-monitor-panel__session-task-row:hover {
