@@ -18,7 +18,6 @@ function ChatMessageCopyButtonInner({ text }: Props) {
       if (!trimmed) return;
       void navigator.clipboard.writeText(trimmed).then(
         () => {
-          message.success("已复制到剪贴板");
           setCopied(true);
           if (resetTimerRef.current != null) {
             window.clearTimeout(resetTimerRef.current);

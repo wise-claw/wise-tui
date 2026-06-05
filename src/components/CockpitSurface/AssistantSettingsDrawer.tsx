@@ -205,7 +205,6 @@ export function AssistantSettingsDrawer({
           engineeringJson: buildAssistantEngineeringJson(draft.engineering),
         },
       });
-      message.success("助手设置已保存。");
     } catch (err) {
       message.error(`保存助手设置失败：${err instanceof Error ? err.message : String(err)}`);
     } finally {
@@ -231,7 +230,6 @@ export function AssistantSettingsDrawer({
         mcps: parseAssistantRuntimeBundle(runtime.mcpBundleJson),
         engineering: parseAssistantEngineeringPreferences(runtime.engineeringJson),
       });
-      message.success("已重置当前作用域设置。");
     } catch (err) {
       message.error(`重置助手设置失败：${err instanceof Error ? err.message : String(err)}`);
     } finally {

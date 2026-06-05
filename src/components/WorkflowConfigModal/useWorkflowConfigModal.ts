@@ -158,7 +158,6 @@ export function useWorkflowConfigModal({
       try {
         await onSaveGraph({ workflowId: savedTemplate.id, graph, status: "draft" });
         setGraphStatusByWorkflowId((prev) => ({ ...prev, [savedTemplate.id]: "draft" }));
-        message.success(`模板「${savedTemplate.name}」草稿已保存。`);
       } catch (error) {
         const messageText = error instanceof Error ? error.message : "未知错误";
         message.error(`模板已保存，但流程图保存失败：${messageText}`);
@@ -201,7 +200,6 @@ export function useWorkflowConfigModal({
       });
       await onSaveGraph({ workflowId: savedTemplate.id, graph, status: "published" });
       setGraphStatusByWorkflowId((prev) => ({ ...prev, [savedTemplate.id]: "published" }));
-      message.success(`模板「${savedTemplate.name}」已发布。`);
       setEditingTemplateId(savedTemplate.id);
       form.setFieldsValue({ name: savedTemplate.name, isDefault: Boolean(values.isDefault) });
     } catch (error) {

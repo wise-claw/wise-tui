@@ -1625,7 +1625,6 @@ export function usePrdTaskSplitPanelController({
       setSelectedTaskId(nextId);
       setSelectedAnchorTaskId(nextId);
       requestAnimationFrame(() => scrollToTaskCard(nextId));
-      message.success("已基于选中范围新增任务，并完成需求锚点映射。");
     } catch (err) {
       const nextError = toErrorMessage(err, "选中范围拆分失败。");
       setSplitError(nextError);
@@ -1752,7 +1751,6 @@ export function usePrdTaskSplitPanelController({
         ]),
       },
     );
-    message.success(`任务草案已生成：${nextResult.splitTasks.length} 个任务`);
   }
 
   async function handleDispatchPlannedClusters() {
@@ -1896,7 +1894,6 @@ export function usePrdTaskSplitPanelController({
         linkedRepositoryId,
         JSON.stringify({ schemaVersion: 2, prompts: map }, null, 2),
       );
-      message.success("已保存拆分执行提示词。");
       setRuntimePromptModalOpen(false);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
@@ -1936,7 +1933,6 @@ export function usePrdTaskSplitPanelController({
         linkedRepositoryId,
         JSON.stringify({ schemaVersion: 2, prompts: map }, null, 2),
       );
-      message.success("已保存拆分执行提示词。");
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       message.error(`保存失败：${msg}`);
@@ -2031,7 +2027,6 @@ export function usePrdTaskSplitPanelController({
         ...prev,
         [slot]: cleaned,
       }));
-      message.success(`${slotLabel} 提示词已完成 AI 优化。`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       message.error(`AI 优化失败：${msg}`);
@@ -2106,7 +2101,6 @@ export function usePrdTaskSplitPanelController({
         ...prev,
         [slot]: cleaned,
       }));
-      message.success(`${slotLabel} 提示词已完成 AI 优化。`);
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       message.error(`AI 优化失败：${msg}`);
@@ -2179,7 +2173,6 @@ export function usePrdTaskSplitPanelController({
       }
       setTaskAiOptimizedContentById((prev) => ({ ...prev, [task.id]: cleaned }));
       setTaskAiOptimizedReadyById((prev) => ({ ...prev, [task.id]: true }));
-      message.success("已生成优化内容，请确认后保存。");
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       message.error(`任务内容优化失败：${msg}`);
@@ -2214,7 +2207,6 @@ export function usePrdTaskSplitPanelController({
       await savePrdTaskSplitResult(out);
       setActiveResult(out);
       stripPendingStateForTask(task.id);
-      message.success("任务优化成功。");
       setTaskAiPopoverTaskId(null);
       setTaskAiPopoverMode(null);
     } catch (err) {
@@ -2294,7 +2286,6 @@ export function usePrdTaskSplitPanelController({
         return;
       }
       setTaskExecutableCheckResultById((prev) => ({ ...prev, [task.id]: cleaned }));
-      message.success("可执行检测完成。");
       setTaskAiPopoverTaskId(null);
       setTaskAiPopoverMode(null);
     } catch (err) {
@@ -2326,7 +2317,6 @@ export function usePrdTaskSplitPanelController({
         runtimePromptSlot,
       );
       updateRuntimePromptDraft(runtimePromptSlot, effective.systemBody);
-      message.success("已恢复默认提示词。");
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       message.error(`恢复默认失败：${msg}`);
@@ -2417,7 +2407,6 @@ export function usePrdTaskSplitPanelController({
   async function persistRequirementHistory(
     nextHistory: PrdRequirementHistoryItem[],
     nextActiveRequirementId: string | null,
-    showNotice = false,
   ) {
     const selected = nextActiveRequirementId
       ? nextHistory.find((item) => item.id === nextActiveRequirementId) ?? null
@@ -2434,7 +2423,6 @@ export function usePrdTaskSplitPanelController({
       currentRequirementId: nextActiveRequirementId,
       requirements: nextHistory,
     });
-    if (showNotice) message.success("需求编辑已保存");
   }
 
   function handleDeleteActiveRequirement() {
@@ -2472,9 +2460,8 @@ export function usePrdTaskSplitPanelController({
           } else {
             switchToRequirement(nextActive);
           }
-          await persistRequirementHistory(nextHistory, nextActiveId, false);
+          await persistRequirementHistory(nextHistory, nextActiveId);
           notifySplitTodoCountUpdated();
-          message.success("已删除需求");
         })();
       },
     });
@@ -2502,9 +2489,7 @@ export function usePrdTaskSplitPanelController({
       return item;
     });
     setRequirementHistory(nextHistory);
-    void persistRequirementHistory(nextHistory, activeRequirementId, false).then(() => {
-      message.success("已置顶当前需求。");
-    });
+    void persistRequirementHistory(nextHistory, activeRequirementId).then(() => {});
   }
 
   async function handleUserPersistPrdDraft() {
@@ -2528,7 +2513,7 @@ export function usePrdTaskSplitPanelController({
         : item
     ));
     setRequirementHistory(nextHistory);
-    await persistRequirementHistory(nextHistory, activeRequirementId, true);
+    await persistRequirementHistory(nextHistory, activeRequirementId);
   }
 
   async function handleImportPrdFile() {
@@ -2545,7 +2530,6 @@ export function usePrdTaskSplitPanelController({
       }
       setInputValue(content);
       resetRequirementTaskView();
-      message.success("已导入 PRD 文件。");
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       message.error(`导入 PRD 失败：${msg}`);
@@ -2561,7 +2545,6 @@ export function usePrdTaskSplitPanelController({
       }
       setInputValue(detail.prdMarkdown);
       resetRequirementTaskView();
-      message.success("已导入历史 PRD。");
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       message.error(`导入历史 PRD 失败：${msg}`);
@@ -2583,7 +2566,6 @@ export function usePrdTaskSplitPanelController({
         scope: "assistant",
         patch: { mcpBundleJson: buildAssistantRuntimeBundleJson(bundle) },
       });
-      message.success("已更新助手 MCP。");
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       message.error(`保存助手资源失败：${msg}`);
@@ -2630,7 +2612,7 @@ export function usePrdTaskSplitPanelController({
     setInputValue("");
     setOriginalInputValue(null);
     resetRequirementTaskView();
-    await persistRequirementHistory(nextHistory, id, false);
+    await persistRequirementHistory(nextHistory, id);
   }
 
   async function handleConfirmRequirementNameModal() {
@@ -2655,7 +2637,7 @@ export function usePrdTaskSplitPanelController({
         setRequirementHistory(nextHistory);
         setActiveRequirementId(id);
         setRequirementDisplayName(name);
-        await persistRequirementHistory(nextHistory, id, true);
+        await persistRequirementHistory(nextHistory, id);
       }
       setRequirementNameModalOpen(false);
     } finally {
@@ -2699,7 +2681,6 @@ export function usePrdTaskSplitPanelController({
           } else {
             appendMarkdownSnippet(`![${filename}](${imageUrl})`);
           }
-          message.success("图片已保存到 ~/.wise 并插入引用。");
           return;
         }
         appendMarkdownSnippet(`![${filename}](${result})`);
@@ -2839,7 +2820,6 @@ export function usePrdTaskSplitPanelController({
         if (selectedTaskId === taskId) {
           setSelectedTaskId(out.splitTasks[0]?.id ?? null);
         }
-        message.success("已删除任务并保存。");
       },
     });
   }
@@ -2876,7 +2856,6 @@ export function usePrdTaskSplitPanelController({
         setActiveResult(out);
         setSelectedTaskId(null);
         setTaskConfirmFilter("unconfirmed");
-        message.success("已清空所有任务并保存。");
       },
     });
   }
@@ -2899,7 +2878,6 @@ export function usePrdTaskSplitPanelController({
     if (allGaps.length > 0) {
       message.warning(`已确认并写入数据库。该任务仍有 ${allGaps.length} 条缺口，请后续补齐。`);
     } else {
-      message.success("已确认并写入数据库，任务已标记为可执行。");
     }
   }
 
@@ -2971,7 +2949,6 @@ export function usePrdTaskSplitPanelController({
       message.warning(`已一键确认并写入数据库，其中 ${blockedTaskCount} 条任务仍为不可执行。`);
       return true;
     }
-    message.success(`已一键确认并写入数据库（${nextTasks.length} 条任务）。`);
     return true;
   }
 
@@ -2998,7 +2975,6 @@ export function usePrdTaskSplitPanelController({
     }
     setActiveResult(out);
     stripPendingStateForTask(taskId);
-    message.success("任务已保存。");
   }
 
   async function handleGenerateExecutableTasks(): Promise<GenerateExecutableTasksResult | false> {
@@ -3055,7 +3031,6 @@ export function usePrdTaskSplitPanelController({
       if (result.failedCount > 0) {
         message.error(`开始执行：成功 ${result.doneCount}，失败 ${result.failedCount}。`);
       } else {
-        message.success(`已开始执行：${result.doneCount} 个任务。`);
       }
       return result;
     } catch (err) {
@@ -3178,7 +3153,6 @@ export function usePrdTaskSplitPanelController({
       return;
     }
     setActiveResult(out);
-    message.success("编排已更新。");
   }
 
   async function handleGenerateExecutableForSplitTask(taskId: string) {
@@ -3252,7 +3226,6 @@ export function usePrdTaskSplitPanelController({
     setTaskConfirmFilter("unconfirmed");
     setSelectedTaskId(nextId);
     requestAnimationFrame(() => scrollToTaskCard(nextId));
-    message.success("已新增任务。");
   }
 
   const promptActionItems: MenuProps["items"] = [

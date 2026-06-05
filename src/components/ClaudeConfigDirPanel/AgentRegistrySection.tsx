@@ -145,7 +145,6 @@ export function AgentRegistrySection() {
       setTestResult(result);
       setTestedFingerprint(result.ok ? fingerprint : null);
       if (result.ok) {
-        message.success("运行命令已探测通过");
       } else {
         message.error(result.error ?? "运行命令探测失败");
       }
@@ -170,7 +169,6 @@ export function AgentRegistrySection() {
       setModalOpen(false);
       setTestResult(null);
       setTestedFingerprint(null);
-      message.success("自定义运行入口已保存");
       await reload(true);
     } catch (e) {
       if (e instanceof Error) message.error(e.message);
@@ -185,7 +183,6 @@ export function AgentRegistrySection() {
       try {
         await deleteCustomAgent(id);
         if (!aliveRef.current) return;
-        message.success("自定义运行入口已删除");
         await reload(true);
       } catch (e) {
         message.error(e instanceof Error ? e.message : String(e));
@@ -205,7 +202,6 @@ export function AgentRegistrySection() {
         setAgents(next);
         const refreshed = next.find((entry) => entry.id === agent.id);
         if (refreshed?.available) {
-          message.success(`${agent.name} 安装成功`);
         } else {
           message.warning("安装已完成，但命令仍未探测到，请检查 PATH 后重新探测");
         }
@@ -227,7 +223,6 @@ export function AgentRegistrySection() {
         setAgents(next);
         const refreshed = next.find((entry) => entry.id === agent.id);
         if (!refreshed?.available) {
-          message.success(`${agent.name} 卸载成功`);
         } else {
           message.warning("卸载命令执行完成，但入口仍可用，请手动检查本机环境");
         }
@@ -462,9 +457,7 @@ function AgentRegistryRow({
   const handleCopy = useCallback(() => {
     navigator.clipboard
       .writeText(pathText)
-      .then(() => {
-        message.success("路径已复制到剪贴板");
-      })
+      .then(() => {})
       .catch(() => {
         message.error("复制失败");
       });

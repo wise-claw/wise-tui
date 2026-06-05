@@ -191,7 +191,6 @@ export function ExtensionsPanel() {
       setSkills(s);
       setThemes(t);
       setDecls(d);
-      message.success("已重新扫描扩展目录");
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
     } finally {
@@ -270,7 +269,7 @@ export function ExtensionsPanel() {
   const handleInstallExample = useCallback(async () => {
     setInstallingExample(true);
     try {
-      const result = await installHelloWorldExtension();
+      await installHelloWorldExtension();
       const [l, s, t, d] = await Promise.all([
         listExtensions(),
         getExtensionSkills(),
@@ -283,7 +282,6 @@ export function ExtensionsPanel() {
       setDecls(d);
       setScope("installed");
       setExpanded((prev) => new Set(prev).add("hello-world"));
-      message.success(`示例已安装到 ${result.destPath}`);
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
     } finally {

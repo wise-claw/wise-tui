@@ -682,10 +682,9 @@ function BackgroundInvocationDockInner({ session }: { session: ClaudeSession }) 
     setRestored(false);
   }
 
-  async function copyToClipboard(label: string, text: string) {
+  async function copyToClipboard(_label: string, text: string) {
     try {
       await navigator.clipboard.writeText(text);
-      void message.success(`${label} 已复制到剪贴板`);
     } catch {
       void message.error("复制失败，请手动选择文本复制");
     }

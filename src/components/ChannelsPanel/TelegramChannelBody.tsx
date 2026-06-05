@@ -75,7 +75,6 @@ export function TelegramChannelBody({ onConfiguredChange }: TelegramChannelBodyP
       await saveTelegramConfig(next);
       setLoaded(next);
       onConfiguredChange?.(true);
-      void message.success("Telegram 配置已保存");
     } catch (err) {
       void message.error(err instanceof Error ? err.message : "保存失败");
     } finally {
@@ -92,10 +91,7 @@ export function TelegramChannelBody({ onConfiguredChange }: TelegramChannelBodyP
     try {
       const result = await telegramBotTest(botToken.trim());
       setLastResult(describeResult(result));
-      if (result.ok) {
-        const username = (result.raw as { result?: { username?: string } })?.result?.username;
-        void message.success(username ? `getMe 成功：@${username}` : "getMe 成功");
-      } else {
+      if (!result.ok) {
         void message.error(describeResult(result));
       }
     } catch (err) {
@@ -129,8 +125,7 @@ export function TelegramChannelBody({ onConfiguredChange }: TelegramChannelBodyP
         parseMode,
       });
       setLastResult(describeResult(result));
-      if (result.ok) void message.success("已发送");
-      else void message.error(describeResult(result));
+      if (!result.ok) void message.error(describeResult(result));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setLastResult(msg);

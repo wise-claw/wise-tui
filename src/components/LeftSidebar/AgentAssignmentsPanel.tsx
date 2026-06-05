@@ -43,7 +43,6 @@ export function AgentAssignmentsPanel({
         targetId: injectTarget.clusterId ?? null,
         instruction: injectText.trim(),
       });
-      message.success("指令已发送");
       setInjectTarget(null);
       setInjectText("");
     } catch (err) {

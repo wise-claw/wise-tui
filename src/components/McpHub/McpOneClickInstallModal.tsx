@@ -82,7 +82,6 @@ export function McpOneClickInstallModal({ open, onClose, mcp, repositoryPath, on
     setSubmitting(true);
     try {
       await addClaudeMcpServer(payload);
-      message.success(`已成功安装 MCP「${mcp.name}」`);
       onClose();
       await onInstalled();
     } catch (e) {

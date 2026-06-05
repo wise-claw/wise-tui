@@ -384,7 +384,6 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
       setGitWorktreeRemovingPath(worktreePath);
       try {
         await gitWorktreeRemove(p, worktreePath);
-        message.success("已移除 worktree");
         await loadLinkedWorktrees();
       } catch (error) {
         const errMsg = error instanceof Error ? error.message : String(error);

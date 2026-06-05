@@ -99,7 +99,6 @@ export function useProjectSddModeModalController({
       if (workspaceBootstrapNeedsTrellisInit(bootstrap)) {
         dispatchTrellisBootstrapComplete({ projectId: project.id });
       }
-      message.success("工作区 SDD 模式已保存");
       setProject(null);
       setBootstrapPath(null);
     } catch (err) {

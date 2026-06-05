@@ -370,7 +370,6 @@ export function PromptsPanel({
     setActiveSlotId(id);
     setDraft(nextLayers[id]!);
     setAddSlotOpen(false);
-    message.success("已添加用途，编辑后请保存");
   }
 
   async function handleSave() {
@@ -383,7 +382,6 @@ export function PromptsPanel({
       } else {
         await saveRepositorySplitPromptLayers(scope.repositoryId, json);
       }
-      message.success("已保存");
       await loadScope();
     } catch (e) {
       console.error(e);
@@ -406,7 +404,6 @@ export function PromptsPanel({
           } else {
             await clearRepositorySplitPromptLayers(scope.repositoryId);
           }
-          message.success("已清除");
           await loadScope();
         } catch (e) {
           console.error(e);

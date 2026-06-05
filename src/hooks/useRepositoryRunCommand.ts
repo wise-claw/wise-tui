@@ -149,7 +149,6 @@ export function useRepositoryRunCommand({
         window.localStorage.setItem(runUrlKey, profile.defaultUrl);
         setRunPreferredUrl(profile.defaultUrl);
       }
-      message.success(`已应用运行配置（${profile.label}）`);
     },
     [detectedProfile, runKey, runUrlKey, setRunCommand, setRunPreferredUrl],
   );
@@ -192,7 +191,6 @@ export function useRepositoryRunCommand({
     }
     window.localStorage.setItem(runKey, next);
     setRunCommand(next);
-    message.success("运行指令已保存");
   }, [runCommand, runKey, setRunCommand]);
 
   const saveRunOpenUrl = useCallback(() => {
@@ -201,7 +199,6 @@ export function useRepositoryRunCommand({
     if (!next) {
       window.localStorage.removeItem(runUrlKey);
       setRunPreferredUrl("");
-      message.success("已清空指定打开地址");
       return;
     }
     const normalized = normalizeRunOpenUrl(next);
@@ -211,7 +208,6 @@ export function useRepositoryRunCommand({
     }
     window.localStorage.setItem(runUrlKey, normalized);
     setRunPreferredUrl(normalized);
-    message.success("指定打开地址已保存");
   }, [runPreferredUrl, runUrlKey, setRunPreferredUrl]);
 
   const inferDefaultRunUrl = useCallback((): string => {

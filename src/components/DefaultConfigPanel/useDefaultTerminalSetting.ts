@@ -63,8 +63,6 @@ export function useDefaultTerminalSetting() {
       try {
         await setTerminalAppPreference(id);
         setSelectedId(id);
-        const label = detected.find((item) => item.id === id)?.label ?? id;
-        message.success(`已保存：默认终端 ${label}`);
       } catch (err) {
         message.error(`保存失败：${err instanceof Error ? err.message : String(err)}`);
         throw err;

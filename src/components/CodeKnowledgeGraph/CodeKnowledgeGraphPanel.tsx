@@ -363,9 +363,6 @@ export function CodeKnowledgeGraphPanel({
         void fetchStatus();
         setSubgraphRefreshKey((k) => k + 1);
       }
-      if (ids.length >= 2) {
-        message.success("GitNexus 仓库组已同步，多仓合并子图已更新");
-      }
     });
     unsubs.push(assocOk);
 
@@ -394,12 +391,6 @@ export function CodeKnowledgeGraphPanel({
       } else if (ids.length >= 2) {
         void fetchStatus();
         setSubgraphRefreshKey((k) => k + 1);
-      }
-      const bridgeEdges = event.payload?.apiAssociation?.bridgeEdges;
-      if (typeof bridgeEdges === "number" && bridgeEdges > 0) {
-        message.success(`多仓检索完成，已关联 ${bridgeEdges} 条前后端 API 调用`);
-      } else if (ids.length >= 2) {
-        message.success("多仓检索完成");
       }
     });
     unsubs.push(projectOk);
@@ -888,7 +879,6 @@ export function CodeKnowledgeGraphPanel({
     setAssociationConfig({ mode: "custom", customRepositoryIds: [repositoryId] });
     setRepoDropdownSelection("repository");
     setSubgraphRefreshKey((k) => k + 1);
-    message.success("已退出多仓合并视图");
   }, [repositoryId]);
 
   const handleAssociationApplied = useCallback((scopeRepositoryIds: number[]) => {

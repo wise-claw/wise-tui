@@ -278,7 +278,6 @@ export function SkillsHub({ repositoryPath, onClose }: Props) {
       await addExternalSkillPath(trimmed);
       setNewPathInput("");
       await refreshExternalPaths();
-      message.success(`已记录外部路径：${trimmed}`);
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
     }
@@ -301,12 +300,7 @@ export function SkillsHub({ repositoryPath, onClose }: Props) {
       setImportBusy(skill.location);
       try {
         const fn = mode === "copy" ? importSkillCopy : importSkillSymlink;
-        const imported = await fn(skill.location);
-        message.success(
-          mode === "copy"
-            ? `已复制「${imported.name}」到 ~/.wise/skills/`
-            : `已链接「${imported.name}」到 ~/.wise/skills/`,
-        );
+        await fn(skill.location);
       } catch (e) {
         message.error(e instanceof Error ? e.message : String(e));
       } finally {
@@ -321,7 +315,6 @@ export function SkillsHub({ repositoryPath, onClose }: Props) {
       setImportBusy(skill.location);
       try {
         await deleteImportedSkill(skill.name);
-        message.success(`已从 ~/.wise/skills/ 删除「${skill.name}」`);
       } catch (e) {
         message.error(e instanceof Error ? e.message : String(e));
       } finally {
@@ -349,11 +342,6 @@ export function SkillsHub({ repositoryPath, onClose }: Props) {
           entry.skillId,
           installScope,
         );
-        message.success(
-          installScope === "global"
-            ? `已全局安装「${entry.skillId}」（~/.claude/skills/）`
-            : `已安装「${entry.skillId}」到当前仓库`,
-        );
         await loadInstalled();
       } catch (e) {
         message.error(e instanceof Error ? e.message : String(e));
@@ -375,7 +363,6 @@ export function SkillsHub({ repositoryPath, onClose }: Props) {
           entry.skillId,
           installScope,
         );
-        message.success(`已卸载「${entry.skillId}」`);
         await loadInstalled();
       } catch (e) {
         message.error(e instanceof Error ? e.message : String(e));

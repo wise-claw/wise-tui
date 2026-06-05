@@ -60,7 +60,6 @@ export const ClaudeChatSessionTraceDrawer = memo(function ClaudeChatSessionTrace
               anchor.click();
               anchor.remove();
               URL.revokeObjectURL(url);
-              message.success("会话跟踪已导出");
             }}
           >
             导出 JSON
@@ -70,7 +69,6 @@ export const ClaudeChatSessionTraceDrawer = memo(function ClaudeChatSessionTrace
             className="app-claude-session-trace-actions__btn"
             onClick={() => {
               setSessionSendTraces([]);
-              message.success("会话跟踪已清空");
             }}
           >
             清空记录

@@ -1,7 +1,6 @@
 import { message } from "antd";
 import { useCallback, useEffect, useState } from "react";
 import {
-  atMentionDefaultTargetLabel,
   DEFAULT_AT_MENTION_DEFAULT_TARGET,
   type AtMentionDefaultTarget,
 } from "../constants/atMentionDefault";
@@ -50,7 +49,6 @@ export function useAtMentionDefaultTarget() {
       try {
         await saveAtMentionDefaultTargetToStore(next);
         setTarget(next);
-        message.success(`已保存：@ 默认选中 ${atMentionDefaultTargetLabel(next)}`);
       } catch (err) {
         message.error(`保存失败：${err instanceof Error ? err.message : String(err)}`);
         throw err;

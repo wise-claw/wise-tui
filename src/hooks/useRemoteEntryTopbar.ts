@@ -83,10 +83,8 @@ export function useRemoteEntryTopbar() {
       try {
         if (next) {
           await dingtalkStreamGatewayStart();
-          void message.success("钉钉远程入口已启动");
         } else {
           await dingtalkStreamGatewayStop();
-          void message.success("钉钉远程入口已停止");
         }
         await refresh();
       } catch (err) {
@@ -111,10 +109,8 @@ export function useRemoteEntryTopbar() {
             return;
           }
           await genericWsStart(cfg);
-          void message.success("WebSocket 远程入口已启动");
         } else {
           await genericWsStop();
-          void message.success("WebSocket 远程入口已停止");
         }
         await refresh();
       } catch (err) {

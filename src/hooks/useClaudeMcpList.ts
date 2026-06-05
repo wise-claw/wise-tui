@@ -142,7 +142,6 @@ export function useClaudeMcpList({
               repositoryPath: repositoryPath ?? null,
               claudeJsonProjectKey: item.claudeJsonProjectKey,
             });
-            message.success("已删除");
             setMcpData((prev) => removeMcpItemById(prev, item.id));
           } catch (e) {
             message.error(e instanceof Error ? e.message : String(e));
@@ -166,7 +165,6 @@ export function useClaudeMcpList({
           repositoryPath: repositoryPath ?? null,
           claudeJsonProjectKey: item.claudeJsonProjectKey,
         });
-        message.success(enabled ? "已启用" : "已禁用");
       } catch (e) {
         setMcpData((prev) => patchMcpItemEnabledById(prev, item.id, !enabled));
         message.error(e instanceof Error ? e.message : String(e));

@@ -191,7 +191,6 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
         return;
       }
       editForm.setFieldValue(field, cleaned);
-      message.success(field === "stageTask" ? "执行任务已完成 AI 优化。" : "评判标准已完成 AI 优化。");
     } catch (err) {
       message.error(`AI 优化失败：${toErrorMessage(err, "未知错误")}`);
     } finally {

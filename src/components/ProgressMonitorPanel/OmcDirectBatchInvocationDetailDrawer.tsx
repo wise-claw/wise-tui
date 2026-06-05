@@ -397,7 +397,6 @@ export function OmcDirectBatchInvocationDetailDrawer({
     if (!prompt) return;
     try {
       await navigator.clipboard.writeText(prompt);
-      void message.success("已复制派发全文");
     } catch {
       void message.error("复制失败，请检查剪贴板权限");
     }

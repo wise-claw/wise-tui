@@ -598,7 +598,6 @@ export function useRepositoryFilesExplorer({
         return prev;
       });
       dispatchExpand({ type: "pruneSubtree", rootPath: relativePath });
-      message.success("已删除");
       return true;
     },
     [loadChildrenForDir, repositoryPath],
@@ -667,9 +666,7 @@ export function useRepositoryFilesExplorer({
       repositoryPath,
       relativePath: snap.path,
       onClose: close,
-      onSuccess: (name) => {
-        message.success(`已录入扩展库：${name}`);
-      },
+      onSuccess: (_name) => {},
       onError: (err) => {
         message.error(err);
       },
@@ -770,7 +767,6 @@ export function useRepositoryFilesExplorer({
       } else {
         await createRepositoryDirectory(repositoryPath, relative);
       }
-      message.success("已创建");
       setInlineCreate(null);
       const parentDir = cur.parentDir;
       setLoadedChildrenByDir((prev) => {

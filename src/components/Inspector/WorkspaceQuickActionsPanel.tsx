@@ -75,7 +75,6 @@ export function WorkspaceQuickActionsPanel({
       }
       quickActions.setItemsForScope(scope, next);
       await quickActions.flushPersist(scope, next);
-      message.success(index >= 0 ? "已更新快捷操作" : "已添加快捷操作");
     },
     [message, quickActions],
   );
@@ -96,7 +95,6 @@ export function WorkspaceQuickActionsPanel({
           const next = source.filter((row) => row.id !== item.id);
           quickActions.setItemsForScope(item.scope, next);
           await quickActions.flushPersist(item.scope, next);
-          message.success("已删除");
         },
       });
     },

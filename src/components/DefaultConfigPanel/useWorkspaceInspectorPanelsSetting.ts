@@ -35,7 +35,6 @@ export function useWorkspaceInspectorPanelsSetting() {
       try {
         await saveWorkspaceInspectorPanelsToStore({ showWorkspaceQuickActionsPanel: visible });
         setPanels((prev) => ({ ...prev, showWorkspaceQuickActionsPanel: visible }));
-        message.success(visible ? "已保存：显示快捷操作" : "已保存：隐藏快捷操作");
       } catch (err) {
         message.error(`保存失败：${err instanceof Error ? err.message : String(err)}`);
         throw err;
@@ -53,7 +52,6 @@ export function useWorkspaceInspectorPanelsSetting() {
       try {
         await saveWorkspaceInspectorPanelsToStore({ showWorkspaceMemosPanel: visible });
         setPanels((prev) => ({ ...prev, showWorkspaceMemosPanel: visible }));
-        message.success(visible ? "已保存：显示备忘录" : "已保存：隐藏备忘录");
       } catch (err) {
         message.error(`保存失败：${err instanceof Error ? err.message : String(err)}`);
         throw err;
@@ -71,7 +69,6 @@ export function useWorkspaceInspectorPanelsSetting() {
       try {
         await saveWorkspaceInspectorPanelsToStore({ showWorkspaceTodosPanel: visible });
         setPanels((prev) => ({ ...prev, showWorkspaceTodosPanel: visible }));
-        message.success(visible ? "已保存：显示待办事项" : "已保存：隐藏待办事项");
       } catch (err) {
         message.error(`保存失败：${err instanceof Error ? err.message : String(err)}`);
         throw err;

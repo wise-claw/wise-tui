@@ -70,7 +70,6 @@ import {
   buildTaskExecutionPrompt,
   getSessionPreview,
   normalizeSplitTaskListFlowStatus,
-  splitTaskListBinaryLabel,
 } from "../components/ClaudeSessions/claudeChatHelpers";
 import { getSessionUpdatedAt, groupSessionsByDay, sliceGroupedSessions, type SessionGroup } from "../components/ClaudeSessions/sessionGrouping";
 import { isToolOnlyUserMessage, userMessagePlainTextForDisplay } from "../utils/claudeChatMessageDisplay";
@@ -698,7 +697,6 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
           onOk: async () => {
             try {
               await onDeleteHistorySession(sessionId);
-              message.success("已删除该历史会话");
             } catch (err) {
               const text = err instanceof Error ? err.message : String(err ?? "");
               message.error(text || "删除历史会话失败");
@@ -1142,7 +1140,6 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
         void message.error(`任务 ${task.id} 启动失败，请检查会话状态后重试。`);
         return;
       }
-      void message.success(`任务 ${task.id} 已在主会话开始执行（仍为未完成，完成后请标记已完成）。`);
     }, [onExecute, session.id]);
 
     const handleRunTrellisTaskInMainSession = useCallback(async (task: TrellisRequirementTaskRow) => {
@@ -1151,7 +1148,6 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
         void message.error(`Trellis 任务 ${task.taskId} 启动失败，请检查会话状态后重试。`);
         return;
       }
-      void message.success(`Trellis 任务 ${task.taskId} 已发送到主会话。`);
     }, [onExecute, session.id]);
 
     const handleRunTrellisTaskByEmployee = useCallback(
@@ -1169,7 +1165,6 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
           void message.error(`Trellis 任务 ${task.taskId} 派发失败，请检查终端状态后重试。`);
           return;
         }
-        void message.success(`Trellis 任务 ${task.taskId} 已派发给员工 ${employeeName}。`);
       },
       [onExecute, session.id, trellisTaskEmployeeByKey],
     );
@@ -1188,7 +1183,6 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
         void message.error(`任务 ${task.id} 派发失败，请检查终端状态后重试。`);
         return;
       }
-      void message.success(`任务 ${task.id} 已派发给员工 ${employeeName}（仍为未完成，完成后请标记已完成）。`);
     }, [onExecute, session.id]);
 
     const handleRunTaskByTeam = useCallback(async (task: TaskItem) => {
@@ -1207,17 +1201,14 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
         void message.error(`任务 ${task.id} 派发失败：团队流程未实际启动。`);
         return;
       }
-      void message.success(`任务 ${task.id} 已派发到团队 ${workflowName}（仍为未完成，完成后请标记已完成）。`);
     }, [onExecute, session.id, taskListTeamOptions]);
 
     const handleCompleteTaskManually = useCallback(async (task: TaskItem) => {
-      const ok = await persistSplitTaskFlowStatus(task.id, "done");
-      if (ok) void message.success(`任务 ${task.id} 已手动标记为完成并已写入可执行任务表。`);
+      await persistSplitTaskFlowStatus(task.id, "done");
     }, [persistSplitTaskFlowStatus]);
 
     const handleAdjustTaskStatus = useCallback(async (task: TaskItem, status: TaskFlowStatus) => {
-      const ok = await persistSplitTaskFlowStatus(task.id, status);
-      if (ok) void message.success(`任务 ${task.id} 已保存为${splitTaskListBinaryLabel(status)}（可执行任务）`);
+      await persistSplitTaskFlowStatus(task.id, status);
     }, [persistSplitTaskFlowStatus]);
 
     const persistSplitAfterRemovingTasks = useCallback(
@@ -1247,8 +1238,7 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
 
     const handleConfirmDeleteSplitTask = useCallback(
       async (task: TaskItem) => {
-        const ok = await persistSplitAfterRemovingTasks([task.id]);
-        if (ok) void message.success(`已删除任务 ${task.id}`);
+        await persistSplitAfterRemovingTasks([task.id]);
       },
       [persistSplitAfterRemovingTasks],
     );
@@ -1318,9 +1308,8 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
 
     const handleArchiveTrellisTask = useCallback(
       async (task: TrellisRequirementTaskRow) => {
-        const { ok, fail, lastError } = await archiveTrellisTasks([task]);
-        if (ok > 0) void message.success(`已删除任务 ${task.taskId}`);
-        else if (fail > 0) {
+        const { fail, lastError } = await archiveTrellisTasks([task]);
+        if (fail > 0) {
           void message.error(lastError ? `删除 Trellis 任务失败：${lastError}` : "删除 Trellis 任务失败");
         }
       },
@@ -1341,12 +1330,11 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
         cancelText: "取消",
         onOk: async () => {
           const { ok, fail, lastError } = await archiveTrellisTasks(selectedTrellisTasks);
-          if (ok > 0 && fail === 0) void message.success(`已删除 ${ok} 条 Trellis 任务`);
-          else if (ok > 0) {
+          if (ok > 0 && fail > 0) {
             void message.warning(
               lastError ? `已删除 ${ok} 条，${fail} 条失败：${lastError}` : `已删除 ${ok} 条，${fail} 条失败`,
             );
-          } else {
+          } else if (ok === 0) {
             void message.error(lastError ? `批量删除失败：${lastError}` : "批量删除失败");
           }
         },
@@ -1369,7 +1357,6 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
           targetEmployeeName: employeeName,
         });
       }
-      void message.success(`已将 ${selectedTrellisTasks.length} 条 Trellis 任务派发给员工 ${employeeName}。`);
     }, [onExecute, selectedTrellisTasks, session.id, trellisBatchEmployeeName]);
 
     const handleDeleteAllSplitTasks = useCallback(() => {
@@ -1392,8 +1379,7 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
             okType: "danger",
             cancelText: "取消",
             onOk: async () => {
-              const ok = await persistSplitAfterRemovingTasks(ids);
-              if (ok) void message.success(`已删除全部 ${n} 条任务`);
+              await persistSplitAfterRemovingTasks(ids);
             },
           });
         },

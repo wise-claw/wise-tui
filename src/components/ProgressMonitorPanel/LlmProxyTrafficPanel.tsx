@@ -188,7 +188,6 @@ export function LlmProxyTrafficPanel({ repositoryPath, variant = "sidebar" }: Pr
       try {
         await applyClaudeLlmProxyConfig(listening, upstream, repositoryPath);
         if (listening) {
-          message.success("已开启监听；请新建 Claude 会话后流量会经代理");
         } else {
           message.info("已关闭监听");
         }

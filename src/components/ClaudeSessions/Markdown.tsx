@@ -236,7 +236,6 @@ export function Markdown({ text, streaming, showPendingHint, className }: Props)
       navigator.clipboard
         .writeText(code.textContent ?? "")
         .then(() => {
-          message.success("已复制到剪贴板");
           copyBtn.setAttribute("data-copied", "true");
           copyBtn.setAttribute("data-tooltip", "已复制");
           const existing = copyTimeoutsRef.current.get(copyBtn);

@@ -650,7 +650,6 @@ export default function App() {
           void setAppSetting(REPOSITORY_MAIN_SESSION_BINDING_STORAGE_KEY, JSON.stringify(next));
           return next;
         });
-        message.success(mainOwnerAgentName?.trim() ? "仓库已更新" : "已清除仓库");
       } catch (err) {
         message.error(err instanceof Error ? err.message : String(err));
         throw err;
@@ -1095,9 +1094,6 @@ export default function App() {
         void message.info("已请求结束后台任务");
         return;
       }
-      if (stopSessionConversationTask(item)) {
-        void message.success("已结束子代理执行");
-      }
     },
     [handleCancelOmcDirectBatchInvocation, stopSessionConversationTask],
   );
@@ -1233,9 +1229,6 @@ export default function App() {
           const text = err instanceof Error ? err.message : String(err);
           message.error(`@-mention 派发失败: ${text}`);
         });
-        const tagsText = plan.mentionedTags.map((t) => `@${t}`).join(" ");
-        const reposText = plan.matchedRepos.map((r) => r.name).join(", ");
-        message.success(`${tagsText} → ${reposText}`);
         return;
       }
       if (plan.kind === "warn_then_fallthrough") {
@@ -1904,7 +1897,6 @@ export default function App() {
         }
       }
       setInspectorHistorySessionId(null);
-      message.success("已恢复为主会话");
     },
     [reloadFullDiskTranscript, viewMode],
   );
@@ -1921,7 +1913,6 @@ export default function App() {
         if (result === "already_in_project") {
           message.info("该 worktree 目录已在当前 Workspace 中");
         } else {
-          message.success("已将 worktree 目录加入当前 Workspace");
         }
       } catch (error) {
         message.error(error instanceof Error ? error.message : String(error));
@@ -2872,8 +2863,6 @@ export default function App() {
             const status = await handleBootstrapTrellisAtPath(targetPath);
             if (status === "skipped") {
               message.info("该工作区已存在 Trellis，已跳过");
-            } else {
-              message.success("Trellis 初始化完成");
             }
             await handleUpdateProjectSddMode(project.id, "wise_trellis");
             dispatchTrellisBootstrapComplete({ projectId: project.id });
@@ -2901,8 +2890,6 @@ export default function App() {
             const status = await handleBootstrapTrellisAtPath(targetPath);
             if (status === "skipped") {
               message.info("该仓库已存在 Trellis，已跳过");
-            } else {
-              message.success("仓库 Trellis 初始化完成");
             }
             dispatchTrellisBootstrapComplete({
               projectId: owningProject?.id,
@@ -2916,25 +2903,7 @@ export default function App() {
         },
         onReconcileProject: async (projectId, mode: ReconcileProjectMode) => {
           try {
-            const r = await handleReconcileProjectWorkspace(projectId, mode);
-            const added = r.addedRepositoryPaths.length;
-            const graphs =
-              "refreshedWorkflowCount" in r && typeof r.refreshedWorkflowCount === "number"
-                ? r.refreshedWorkflowCount
-                : 0;
-            if (mode === "repos_only") {
-              message.success(
-                added > 0 ? `已同步：新登记 ${added} 个仓库（未修改流程图）` : "已同步：未发现新的 Git 仓库",
-              );
-              return;
-            }
-            message.success(
-              graphs > 0
-                ? `已同步：新登记 ${added} 个仓库，已按模板重绘 ${graphs} 个团队流程图（草稿）`
-                : added > 0
-                  ? `已同步：新登记 ${added} 个仓库（无关联工作流或无可重绘阶段）`
-                  : "已同步：未发现新的 Git 仓库",
-            );
+            await handleReconcileProjectWorkspace(projectId, mode);
           } catch (e) {
             message.error(e instanceof Error ? e.message : String(e));
           }
@@ -2974,10 +2943,7 @@ export default function App() {
           }
           const hide = message.loading({ content: "正在检查 Trellis…", duration: 0 });
           try {
-            const status = await handleBootstrapTrellisAtPath(targetPath);
-            if (status === "initialized") {
-              message.success("Trellis 初始化完成");
-            }
+            await handleBootstrapTrellisAtPath(targetPath);
             const isStandaloneTrellisProject = project.id.startsWith("repo:");
             if (!isStandaloneTrellisProject) {
               await handleUpdateProjectSddMode(project.id, "wise_trellis");
@@ -3213,7 +3179,6 @@ export default function App() {
               if (linkPid) {
                 try {
                   await addProjectPrdWorkflow(linkPid, savedTemplate.id);
-                  message.success("已关联到当前 Workspace");
                 } catch (err) {
                   message.error(`模板已保存，但关联到 Workspace 失败：${toUiErrorMessage(err)}`);
                 }
@@ -3264,7 +3229,6 @@ export default function App() {
               setMonitorDrawerTarget((prev) =>
                 prev?.type === "team" && prev.workflowId === workflowId ? null : prev,
               );
-              message.success("团队已删除");
             } catch (error) {
               const messageText = toUiErrorMessage(error);
               message.error(`删除团队失败：${messageText}`);

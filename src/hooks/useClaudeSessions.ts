@@ -45,7 +45,6 @@ import { resolveCodexResumeSessionId } from "../utils/codexSessionId";
 import { getCachedModelProfileStore } from "../stores/modelProfileStoreCache";
 import { resolveCursorResumeAgentId } from "../utils/cursorAgentId";
 import {
-  CLAUDE_CONNECTION_KIND_LABELS,
   loadDefaultClaudeConnectionKind,
   applyTabConnectionKindOverride,
   normalizeClaudeConnectionKind,
@@ -2306,7 +2305,6 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       detachClaudeInvocationsForSessionKey(sessionId);
 
       const globalDefault = defaultConnectionKindRef.current;
-      const clearingOverride = next === globalDefault && session.connectionKind !== undefined;
 
       setSessions((prev) => {
         const nextSessions = prev.map((s) =>
@@ -2315,11 +2313,6 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         sessionsRef.current = nextSessions;
         return nextSessions;
       });
-      message.success(
-        clearingOverride
-          ? `已恢复跟随全局默认：${CLAUDE_CONNECTION_KIND_LABELS[globalDefault].title}`
-          : `本标签已临时切换为：${CLAUDE_CONNECTION_KIND_LABELS[next].title}`,
-      );
     },
     [detachClaudeInvocationsForSessionKey],
   );

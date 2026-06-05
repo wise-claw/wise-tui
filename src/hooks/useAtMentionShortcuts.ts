@@ -84,13 +84,6 @@ export function useAtMentionShortcuts() {
       try {
         const next = await saveAtMentionShortcutForTarget(target, normalized);
         setShortcutByTarget(next);
-        if (normalized) {
-          message.success(
-            `已保存快捷键：${formatChordForDisplay(normalized)} → ${atMentionInsertionText(target)}`,
-          );
-        } else {
-          message.success("已清除快捷键");
-        }
       } catch (err) {
         message.error(`保存失败：${err instanceof Error ? err.message : String(err)}`);
         throw err;

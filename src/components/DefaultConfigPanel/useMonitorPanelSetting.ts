@@ -35,7 +35,6 @@ export function useMonitorPanelSetting() {
       try {
         await saveLeftSidebarMonitorPanelVisibleToStore(next);
         setVisible(next);
-        message.success(next ? "已保存：默认显示运行面板" : "已保存：默认隐藏运行面板");
       } catch (err) {
         message.error(`保存失败：${err instanceof Error ? err.message : String(err)}`);
         throw err;
@@ -53,7 +52,6 @@ export function useMonitorPanelSetting() {
       try {
         await saveMonitorPanelPlacementToStore(next);
         setPlacement(next);
-        message.success(next === "left" ? "已保存：运行面板默认在左栏" : "已保存：运行面板默认在右栏");
       } catch (err) {
         message.error(`保存失败：${err instanceof Error ? err.message : String(err)}`);
         throw err;

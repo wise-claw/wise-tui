@@ -107,10 +107,8 @@ export function ChannelsPanel() {
       try {
         if (next) {
           await dingtalkStreamGatewayStart();
-          void message.success("钉钉远程入口已启动");
         } else {
           await dingtalkStreamGatewayStop();
-          void message.success("钉钉远程入口已停止");
         }
         await refreshDingtalk();
       } catch (err) {

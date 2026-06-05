@@ -30,7 +30,6 @@ export function useRightPanelDefaultSetting() {
     try {
       await saveRightPanelDefaultCollapsed(next);
       setCollapsed(next);
-      message.success(next ? "已保存：默认收起右侧面板" : "已保存：默认展开右侧面板");
     } catch (err) {
       message.error(`保存失败：${err instanceof Error ? err.message : String(err)}`);
       throw err;

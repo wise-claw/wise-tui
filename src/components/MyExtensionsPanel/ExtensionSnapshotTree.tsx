@@ -137,7 +137,6 @@ export function ExtensionSnapshotTree({
       } else {
         await createExtensionLibrarySnapshotDirectory(libraryItemId, relativePath);
       }
-      message.success(createKind === "file" ? "已创建文件" : "已创建目录");
       setCreateOpen(false);
       await onRefresh();
       if (createKind === "file") {
@@ -174,7 +173,6 @@ export function ExtensionSnapshotTree({
         onOk: async () => {
           try {
             await deleteExtensionLibrarySnapshotEntry(libraryItemId, relativePath);
-            message.success("已删除");
             if (selectedKey === relativePath || selectedKey?.startsWith(`${relativePath}/`)) {
               onSelect("");
             }

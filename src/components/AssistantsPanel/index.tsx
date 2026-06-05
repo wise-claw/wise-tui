@@ -135,7 +135,6 @@ export function AssistantsPanel({
         model: v.model?.trim() ? v.model.trim() : null,
       };
       await saveCustomAssistant(input);
-      message.success("已保存");
       await fetchAll();
       closeDrawer();
     } catch (e) {
@@ -156,7 +155,6 @@ export function AssistantsPanel({
         onOk: async () => {
           try {
             await deleteCustomAssistant(row.customId!);
-            message.success("已删除");
             await fetchAll();
           } catch (e) {
             message.error(e instanceof Error ? e.message : String(e));

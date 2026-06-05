@@ -244,8 +244,6 @@ export function WorkflowConfigModal({
       try {
         await onSaveGraph({ workflowId: savedTemplate.id, graph, status: "draft" });
         setGraphStatusByWorkflowId((prev) => ({ ...prev, [savedTemplate.id]: "draft" }));
-        const successText = `工作流「${savedTemplate.name}」草稿已保存。`;
-        message.success(successText);
       } catch (error) {
         const messageText = error instanceof Error ? error.message : "未知错误";
         message.error(`工作流已保存，但工作流画布保存失败：${messageText}`);
@@ -290,8 +288,6 @@ export function WorkflowConfigModal({
       });
       await onSaveGraph({ workflowId: savedTemplate.id, graph, status: "published" });
       setGraphStatusByWorkflowId((prev) => ({ ...prev, [savedTemplate.id]: "published" }));
-      const successText = `工作流「${savedTemplate.name}」已发布。`;
-      message.success(successText);
       setEditingTemplateId(savedTemplate.id);
       form.setFieldsValue({ name: savedTemplate.name, isDefault: Boolean(values.isDefault) });
     } catch (error) {

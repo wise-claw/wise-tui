@@ -632,7 +632,6 @@ export function ProjectSkillsPanel({
     setCreating(true);
     try {
       await createClaudeProjectSkill(repositoryPath, name);
-      message.success("已创建技能目录与 SKILL.md");
       setCreateOpen(false);
       setNewName("");
       await load();
@@ -663,7 +662,6 @@ export function ProjectSkillsPanel({
     async (name: string) => {
       try {
         await deleteClaudeProjectSkill(repositoryPath, name);
-        message.success("已删除整个技能目录");
         if (editingName === name) {
           closeEditor();
         }
@@ -762,7 +760,6 @@ export function ProjectSkillsPanel({
       }
       await saveClaudeProjectSkillFile(repositoryPath, editingName, selectedPath, contentToSave);
       setEditBaseline(contentToSave);
-      message.success("已保存");
       await loadSkillFileList(editingName);
       await load();
     } catch (e) {
@@ -793,7 +790,6 @@ export function ProjectSkillsPanel({
     setAddFileBusy(true);
     try {
       await saveClaudeProjectSkillFile(repositoryPath, editingName, rel, "");
-      message.success("已创建文件");
       setAddFileOpen(false);
       setNewFilePath("");
       await loadSkillFileList(editingName);
@@ -812,7 +808,6 @@ export function ProjectSkillsPanel({
     if (!editingName || !selectedPath) return;
     try {
       await deleteClaudeProjectSkillFile(repositoryPath, editingName, selectedPath);
-      message.success(selectedIsDir ? "已删除目录" : "已删除文件");
       const nextFiles = await listClaudeProjectSkillFiles(repositoryPath, editingName);
       setSkillFiles(nextFiles);
       await load();
@@ -847,7 +842,6 @@ export function ProjectSkillsPanel({
     try {
       const formatted = await formatClaudeProjectSkillFile(repositoryPath, editingName, selectedPath, editContent);
       setEditContent(formatted);
-      message.success("格式化完成");
     } catch (e) {
       message.warning(e instanceof Error ? e.message : String(e));
     } finally {

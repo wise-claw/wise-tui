@@ -39,7 +39,6 @@ export function useLeftSidebarHubQuickEntriesSetting() {
       try {
         await saveLeftSidebarHubQuickEntriesToStore(next);
         setSelected(next);
-        message.success("已保存左栏快捷入口");
       } catch (err) {
         message.error(`保存失败：${err instanceof Error ? err.message : String(err)}`);
         throw err;

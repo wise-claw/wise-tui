@@ -424,7 +424,6 @@ export function SessionDataLinkDrawer({
         });
         if (!path) return;
         await writeTextFileAbsolute(path, text);
-        message.success(metadataOnly ? "已导出元数据链路包" : "已导出完整链路包");
       } catch (e) {
         message.error(`导出失败：${e instanceof Error ? e.message : String(e)}`);
       }
@@ -454,7 +453,6 @@ export function SessionDataLinkDrawer({
         headerCopyResetTimerRef.current = null;
         setHeaderCopied(false);
       }, 2000);
-      message.success("已复制当前筛选结果的链路 JSON");
     } catch {
       message.error("复制失败");
     }

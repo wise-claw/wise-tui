@@ -27,7 +27,6 @@ export function useClaudeConnectionModeSetting() {
     try {
       await saveDefaultClaudeConnectionKind(next);
       setKind(next);
-      message.success(`已保存：${CLAUDE_CONNECTION_KIND_LABELS[next].title}`);
     } catch (err) {
       message.error(`保存失败：${err instanceof Error ? err.message : String(err)}`);
       throw err;

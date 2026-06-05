@@ -174,7 +174,6 @@ export function MonitorHistorySessionTranscriptDrawer({
     setCompactInFlight(true);
     void Promise.resolve(onCompactSessionHistory(liveSession.id))
       .then(() => {
-        message.success("会话历史已压缩");
         refreshDrawerSnapshot();
       })
       .catch(() => {

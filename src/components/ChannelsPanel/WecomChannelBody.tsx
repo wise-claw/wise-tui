@@ -70,7 +70,6 @@ export function WecomChannelBody({ onConfiguredChange }: WecomChannelBodyProps) 
       await saveWecomConfig(next);
       setLoaded(next);
       onConfiguredChange?.(true);
-      void message.success("企业微信 Webhook 已保存");
     } catch (err) {
       void message.error(err instanceof Error ? err.message : "保存失败");
     } finally {
@@ -87,8 +86,7 @@ export function WecomChannelBody({ onConfiguredChange }: WecomChannelBodyProps) 
     try {
       const result = await wecomWebhookTest(webhookUrl.trim());
       setLastResult(describeResult(result));
-      if (result.ok) void message.success("联通性测试通过");
-      else void message.error(describeResult(result));
+      if (!result.ok) void message.error(describeResult(result));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setLastResult(msg);
@@ -115,8 +113,7 @@ export function WecomChannelBody({ onConfiguredChange }: WecomChannelBodyProps) 
         content: debugContent,
       });
       setLastResult(describeResult(result));
-      if (result.ok) void message.success("已发送");
-      else void message.error(describeResult(result));
+      if (!result.ok) void message.error(describeResult(result));
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       setLastResult(msg);

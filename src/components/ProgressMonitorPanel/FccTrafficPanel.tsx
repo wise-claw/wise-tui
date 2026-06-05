@@ -203,7 +203,6 @@ export function FccTrafficPanel({ active = true, variant = "sidebar" }: Props) {
     void clearFccTracesStore()
       .then(() => {
         setVisibleCount(FCC_TRACES_PAGE_SIZE);
-        message.success("已清空 FCC trace 文件");
       })
       .catch((e) => {
         message.error(typeof e === "string" ? e : "清空 trace 失败");

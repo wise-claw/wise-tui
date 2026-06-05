@@ -16,6 +16,13 @@ function resolveDispatchRowResultPreview(item: SessionConversationTaskItem): str
   return preview;
 }
 
+function resolveDispatchRowDisplayPreview(item: SessionConversationTaskItem): string {
+  if (item.status === "running") return "执行中…";
+  const resultPreview = resolveDispatchRowResultPreview(item);
+  if (resultPreview) return resultPreview;
+  return item.label.replace(/\s+/g, " ").trim();
+}
+
 export const SessionConversationDispatchTaskRow = memo(function SessionConversationDispatchTaskRow({
   item,
   showStop,
@@ -30,42 +37,40 @@ export const SessionConversationDispatchTaskRow = memo(function SessionConversat
   statusVisual?: SubagentStatusVisual;
 }) {
   const savedTime = formatExecutionEnvironmentDispatchSavedTime(item.updatedAt);
-  const resultPreview = resolveDispatchRowResultPreview(item);
-  const rowTitle = [item.label, item.subtitle, resultPreview, savedTime].filter(Boolean).join(" · ");
+  const displayPreview = resolveDispatchRowDisplayPreview(item);
+  const rowTitle = [item.label, item.subtitle, displayPreview, savedTime].filter(Boolean).join(" · ");
 
   return (
     <div className="app-monitor-panel__session-task-row app-monitor-panel__item">
       <div className="app-monitor-panel__item-row app-monitor-panel__item-row--dispatch">
+        <span className="app-monitor-panel__dispatch-row-lead">
+          <MonitorItemTypeTag label="派发" />
+          {item.subtitle ? (
+            <span
+              className="app-monitor-panel__session-task-meta app-monitor-panel__session-task-engine"
+              title={item.subtitle}
+            >
+              {item.subtitle}
+            </span>
+          ) : null}
+        </span>
         <button
           type="button"
-          className="app-monitor-panel__item-row-main"
+          className="app-monitor-panel__item-row-main app-monitor-panel__dispatch-row-body"
           title={rowTitle}
           onClick={() => onOpenDetail(item)}
         >
-          <span className="app-monitor-panel__item-name-wrap">
-            <MonitorItemTypeTag label="派发" />
-            <span className="app-monitor-panel__item-name" title={item.label}>
-              {item.label}
+          {displayPreview ? (
+            <span
+              className={`app-monitor-panel__session-task-preview${
+                item.status === "running" ? " app-monitor-panel__session-task-preview--pending" : ""
+              }`}
+              title={displayPreview}
+            >
+              {displayPreview}
             </span>
-          </span>
+          ) : null}
         </button>
-        {item.subtitle ? (
-          <span
-            className="app-monitor-panel__session-task-meta app-monitor-panel__session-task-engine"
-            title={item.subtitle}
-          >
-            {item.subtitle}
-          </span>
-        ) : null}
-        {resultPreview ? (
-          <span className="app-monitor-panel__session-task-preview" title={resultPreview}>
-            {resultPreview}
-          </span>
-        ) : item.status === "running" ? (
-          <span className="app-monitor-panel__session-task-preview app-monitor-panel__session-task-preview--pending">
-            执行中…
-          </span>
-        ) : null}
         {savedTime ? (
           <span className="app-monitor-panel__session-task-time" title={savedTime}>
             {savedTime}

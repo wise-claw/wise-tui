@@ -77,7 +77,6 @@ export function useRepositorySddModeModalController({
       if (workspaceBootstrapNeedsTrellisInit(bootstrap)) {
         dispatchTrellisBootstrapComplete({ repositoryId: repository.id });
       }
-      message.success("SDD 模式已保存");
       setRepository(null);
     } catch (err) {
       console.error(err);

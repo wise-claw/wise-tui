@@ -52,11 +52,8 @@ export function DataCleanupPanel() {
       try {
         const results = await cleanupWiseDataCategories(ids);
         const removed = results.reduce((sum, r) => sum + r.removedFiles, 0);
-        const freed = results.reduce((sum, r) => sum + r.freedBytes, 0);
         if (removed === 0) {
           message.info("所选目录已为空，无需清理");
-        } else {
-          message.success(`已清理 ${removed} 个文件，释放 ${formatBytes(freed)}`);
         }
         await refresh();
       } catch (err) {

@@ -607,7 +607,6 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
           t.relativePath === fileEditorActivePath ? { ...t, originalContent: t.content } : t,
         ),
       );
-      message.success("文件已保存");
     } catch (error) {
       console.error("Failed to save file:", error);
       message.error(`保存失败：${fileEditorActivePath}`);

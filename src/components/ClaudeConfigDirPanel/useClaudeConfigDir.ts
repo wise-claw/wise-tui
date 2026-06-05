@@ -48,7 +48,6 @@ export function useClaudeConfigDir(): UseClaudeConfigDirResult {
       const next = await setClaudeUserConfigDir(rawValue);
       if (!aliveRef.current) return null;
       setInfo(next);
-      message.success("已保存配置目录，后续 Claude Code 工具会立即按新路径解析。");
       return next;
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
@@ -64,7 +63,6 @@ export function useClaudeConfigDir(): UseClaudeConfigDirResult {
       const next = await setClaudeUserConfigDir(null);
       if (!aliveRef.current) return;
       setInfo(next);
-      message.success("已恢复为默认 ~/.claude。");
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
     } finally {

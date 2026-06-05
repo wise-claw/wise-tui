@@ -217,7 +217,6 @@ export function useRepositoryAssociateModalController({
       await setAppSettingJson(REPOSITORY_ASSOCIATE_PRESETS_STORAGE_KEY, next);
       setPresets(next);
       setAssociateSelectValue(customPresetOptionValue(candidate.id));
-      message.success("已加入常用选项");
     } catch (err) {
       console.error(err);
       message.error("保存常用配置失败");
@@ -298,7 +297,6 @@ export function useRepositoryAssociateModalController({
             ),
           );
         }
-        message.success("仓库已关联");
       } catch (err) {
         console.error(err);
         message.error(err instanceof Error ? err.message : String(err));

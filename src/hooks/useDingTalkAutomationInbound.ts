@@ -164,9 +164,7 @@ export function useDingTalkAutomationInbound({
       clearPendingAndResolveInboundJob(tabKey);
       message.destroy(uxKey);
       void sendDingTalkWiseAutomationReplyMarkdown(uid, markdown)
-        .then(() => {
-          void message.success({ content: "钉钉：处理结果已发回单聊", duration: 2.5 });
-        })
+        .then(() => {})
         .catch((err) => {
           console.error("DingTalk automation reply failed:", err);
           void message.error(err instanceof Error ? err.message : "回发钉钉失败");
@@ -226,7 +224,6 @@ export function useDingTalkAutomationInbound({
         const md = formatRepositoriesMarkdownForDingTalk(repositoriesRef.current, projectsRef.current);
         try {
           await sendDingTalkWiseAutomationReplyMarkdown(dingTalkUserId.trim(), md, "仓库列表");
-          void message.success({ content: "钉钉：已返回仓库列表", duration: 2.5 });
         } catch (err) {
           console.error("DingTalk automation list repos reply failed:", err);
           void message.error(err instanceof Error ? err.message : "回发钉钉失败");
@@ -322,7 +319,6 @@ export function useDingTalkAutomationInbound({
               : `消息已处理完成。\n\n已在仓库 **${repo.name}** 新建 Repo 执行会话并打开。`,
             "Wise",
           );
-          void message.success({ content: isSwitch ? "钉钉：已切换仓库并打开 Repo 执行会话" : "钉钉：已新建 Repo 执行会话", duration: 2.5 });
         } catch (err) {
           message.destroy(uxMessageKey);
           console.error("DingTalk automation repository command failed:", err);

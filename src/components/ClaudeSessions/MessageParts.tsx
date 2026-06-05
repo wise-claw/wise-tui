@@ -363,7 +363,7 @@ const ToolUsePartDisplay = memo(function ToolUsePartDisplay({ part }: { part: To
       "";
     if (!text) return;
     void navigator.clipboard.writeText(text).then(
-      () => message.success("已复制到剪贴板"),
+      () => undefined,
       () => message.error("复制失败"),
     );
   }

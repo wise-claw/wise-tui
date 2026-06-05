@@ -115,7 +115,6 @@ export function DingTalkEnterpriseBotPopoverBody({
       await saveDingTalkEnterpriseBotConfig(next);
       loadedRef.current = next;
       setAppSecretInput("");
-      message.success("已保存（凭证存于本机 Wise 数据库）");
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
     } finally {
@@ -133,7 +132,6 @@ export function DingTalkEnterpriseBotPopoverBody({
     setLoading(true);
     try {
       await dingtalkEnterpriseBotPing(appKey, secret);
-      message.success("已换取 access_token，凭证有效");
     } catch (e) {
       message.error(typeof e === "string" ? e : e instanceof Error ? e.message : "连接失败");
     } finally {
@@ -163,8 +161,6 @@ export function DingTalkEnterpriseBotPopoverBody({
         title: testTitle.trim() || "Wise",
         text: testText.trim() || " ",
       });
-      const hint = r.processQueryKey ? `processQueryKey: ${r.processQueryKey}` : "已提交";
-      message.success(hint);
       if (r.invalidStaffIdList?.length) {
         message.warning(`无效 userid: ${r.invalidStaffIdList.join(", ")}`);
       }
@@ -192,7 +188,6 @@ export function DingTalkEnterpriseBotPopoverBody({
         body,
         serverMsgId: sid,
       });
-      message.success("已调用 wise_notification_ingest；桌面端主窗应聚焦并出现钉钉自动化 loading");
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
     } finally {
@@ -209,7 +204,6 @@ export function DingTalkEnterpriseBotPopoverBody({
     setPushBusy(true);
     try {
       await wisePushStart(u, pushBearerToken.trim() || null);
-      message.success("已启动推送客户端（断线后内置逻辑会重试重连）");
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
     } finally {
@@ -221,7 +215,6 @@ export function DingTalkEnterpriseBotPopoverBody({
     setPushBusy(true);
     try {
       await wisePushStop();
-      message.success("已停止 WebSocket 推送");
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
     } finally {

@@ -378,7 +378,6 @@ export function LeftSidebar({
           claudeProcesses: systemResourceSessions.systemSummary.claudeProcesses,
           onCancelTabSession: onCancelSessionFromMonitor,
         });
-        message.success("已请求结束该进程");
       } catch (err: unknown) {
         message.error(err instanceof Error ? err.message : "结束失败");
       }
@@ -418,7 +417,6 @@ export function LeftSidebar({
   );
 
   const finishClaudeProcessPopoverEnd = useCallback(() => {
-    message.success("已请求结束该进程");
     systemResourceSessions.setClaudeCountPopoverOpen(false);
     systemResourceSessions.setSystemSessionDrawerId(null);
   }, [message, systemResourceSessions]);
@@ -458,7 +456,6 @@ export function LeftSidebar({
       systemResourceSessions.setSystemSessionDrawerId(null);
       systemResourceSessions.setClaudeSystemSessionSearch("");
       if (failed === 0) {
-        message.success(`已请求结束 ${uniqueIds.length} 个进程`);
       } else if (failed < uniqueIds.length) {
         message.warning(
           `已请求结束 ${uniqueIds.length - failed} 个进程，${failed} 个失败`,
@@ -1328,7 +1325,6 @@ export function LeftSidebar({
         onCancelRegistryOrphanSession={(sid) => {
           void cancelClaudeExecution(sid).then(
             () => {
-              message.success("已请求终止该进程");
               systemResourceSessions.setSystemSessionDrawerId(null);
             },
             (err: unknown) => {

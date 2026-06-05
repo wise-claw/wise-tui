@@ -343,7 +343,6 @@ export function RepositoryScheduledTasksModal({
         };
         const next = [...tasks, nextRow];
         await persistAll(next);
-        message.success("已创建");
       } else {
         const prev = tasks.find((t) => t.id === editing.id);
         if (!prev) return;
@@ -363,7 +362,6 @@ export function RepositoryScheduledTasksModal({
         };
         const next = tasks.map((t) => (t.id === merged.id ? merged : t));
         await persistAll(next);
-        message.success("已保存");
       }
       setDrawerOpen(false);
       setEditing(null);
@@ -375,7 +373,6 @@ export function RepositoryScheduledTasksModal({
   const handleDelete = async (id: string) => {
     const next = tasks.filter((t) => t.id !== id);
     await persistAll(next);
-    message.success("已删除");
     if (editing?.id === id) {
       setDrawerOpen(false);
       setEditing(null);

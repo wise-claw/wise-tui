@@ -245,7 +245,6 @@ export function ClaudeHooksConfigPanel({
         targetGroupId: editing?.groupId || null,
         targetHandlerId: editing?.handlerId || null,
       });
-      message.success("已保存触发器处理器");
       if (!keepOpen) {
         setOpen(false);
       } else {
@@ -283,7 +282,6 @@ export function ClaudeHooksConfigPanel({
       cancelText: "取消",
       onOk: async () => {
         await removeClaudeHook({ scope, eventName, groupId, handlerId, repositoryPath: repositoryPath ?? null });
-        message.success("已删除");
         await load();
       },
     });
@@ -293,7 +291,6 @@ export function ClaudeHooksConfigPanel({
     try {
       await setClaudeDisableAllHooks({ scope, disableAllHooks: next, repositoryPath: repositoryPath ?? null });
       setData((prev) => ({ ...prev, [scope]: { ...prev[scope], disableAllHooks: next } }));
-      message.success(next ? "已禁用全部触发器规则" : "已恢复触发器规则");
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
     }
@@ -302,7 +299,6 @@ export function ClaudeHooksConfigPanel({
   const onCopyEventName = useCallback(async (eventName: string) => {
     try {
       await navigator.clipboard.writeText(eventName);
-      message.success(`已复制事件名：${eventName}`);
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
     }

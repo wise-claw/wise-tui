@@ -176,7 +176,6 @@ export const SessionInsightsPanel = memo(function SessionInsightsPanel({
   const handleCopyReport = useCallback(async () => {
     try {
       await navigator.clipboard.writeText(buildReportMarkdown());
-      message.success("已复制洞察报告 Markdown");
     } catch {
       message.error("复制失败");
     }
@@ -192,7 +191,6 @@ export const SessionInsightsPanel = memo(function SessionInsightsPanel({
       });
       if (!path) return;
       await writeTextFileAbsolute(path, text);
-      message.success("已导出洞察报告");
     } catch (e) {
       message.error(`导出失败：${e instanceof Error ? e.message : String(e)}`);
     }
@@ -207,7 +205,6 @@ export const SessionInsightsPanel = memo(function SessionInsightsPanel({
     try {
       const prompt = buildSessionInsightsAiPrompt(insights, resolveLinkMetaBundle?.() ?? null);
       await onRequestAiAnalysis(prompt);
-      message.success("已发送到主会话，请查看 Claude 回复");
     } catch (e) {
       message.error(`发送失败：${e instanceof Error ? e.message : String(e)}`);
     } finally {

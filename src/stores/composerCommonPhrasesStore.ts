@@ -98,7 +98,6 @@ export async function persistComposerCommonPhrasesStore(
   try {
     const saved = await saveComposerCommonPhrasesToStore(next);
     setPhrases(saved);
-    message.success("已保存会话常用语");
     return saved;
   } catch (err) {
     if (err instanceof Error && err.message === "reserved-chord") {

@@ -186,7 +186,6 @@ function ArtifactAssistantWorkspace({
   const handleCopyBrief = async () => {
     try {
       await navigator.clipboard.writeText(executionBrief);
-      message.success("执行 Brief 已复制，可粘贴到主会话或后续 Artifact 执行面板。");
     } catch (err) {
       message.error(`复制失败：${err instanceof Error ? err.message : String(err)}`);
     }

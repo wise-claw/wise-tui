@@ -72,7 +72,6 @@ export function useProjectPrdScopeLinks({
       if (!projectId) return;
       try {
         await removeProjectPrdEmployee(projectId, employeeId);
-        message.success("已移除");
         await reloadProjectPrdScope();
       } catch (err) {
         message.error(err instanceof Error ? err.message : String(err));
@@ -87,7 +86,6 @@ export function useProjectPrdScopeLinks({
       if (!projectId) return;
       try {
         await removeProjectPrdWorkflow(projectId, workflowId);
-        message.success("已移除");
         await reloadProjectPrdScope();
       } catch (err) {
         message.error(err instanceof Error ? err.message : String(err));
@@ -110,7 +108,6 @@ export function useProjectPrdScopeLinks({
       } else {
         await addProjectPrdWorkflow(projectId, selection);
       }
-      message.success("已关联");
       setProjectPrdLinkModalOpen(false);
       setProjectPrdLinkSelection(null);
       await reloadProjectPrdScope();

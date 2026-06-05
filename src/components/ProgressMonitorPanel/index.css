@@ -214,20 +214,50 @@
   box-sizing: border-box;
 }
 
-/* 派发任务行：与终端相同 item-row 结构，避免 session-task-row-main 整行撑开造成中间空档 */
+/* 派发任务行：与终端行同构 — 左侧「派发 + 环境」，右侧预览，避免 label/环境/结果三段挤在一行 */
 .app-monitor-panel__item-row--dispatch {
   gap: 4px;
+  min-width: 0;
   justify-content: flex-start;
 }
 
-.app-monitor-panel__item-row--dispatch .app-monitor-panel__item-row-main {
-  flex: 0 1 auto;
-  min-width: 0;
+.app-monitor-panel__dispatch-row-lead {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex: 0 0 auto;
+  min-width: auto;
+  white-space: nowrap;
 }
 
-.app-monitor-panel__item-row--dispatch .app-monitor-panel__item-name-wrap {
-  flex: 0 1 auto;
+.app-monitor-panel__item-row--dispatch .app-monitor-panel__dispatch-row-body {
+  flex: 1 1 auto;
   min-width: 0;
+  overflow: hidden;
+}
+
+.app-monitor-panel__item-row--dispatch .app-monitor-panel__item-type-tag {
+  flex-shrink: 0;
+}
+
+.app-monitor-panel__item-row--dispatch .app-monitor-panel__session-task-engine {
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  max-width: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-monitor-panel__item-row--dispatch .app-monitor-panel__session-task-meta.app-monitor-panel__session-task-engine {
+  max-width: none;
+}
+
+.app-monitor-panel__item-row--dispatch .app-monitor-panel__session-task-preview {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: block;
+  width: 100%;
 }
 
 .app-monitor-panel__item-row--dispatch .app-monitor-panel__item-actions {
@@ -240,16 +270,21 @@
 
 .app-left-sidebar-monitor-panel .app-monitor-panel__item-row--dispatch {
   min-height: 0;
+  align-items: center;
 }
 
-.app-left-sidebar-monitor-panel .app-monitor-panel__item-row--dispatch .app-monitor-panel__item-name {
-  font-size: 10px;
+.app-left-sidebar-monitor-panel .app-monitor-panel__dispatch-row-lead {
+  line-height: 13px;
+}
+
+.app-left-sidebar-monitor-panel .app-monitor-panel__item-row--dispatch .app-monitor-panel__dispatch-row-body {
+  display: flex;
+  align-items: center;
+  min-height: 0;
   line-height: 13px;
 }
 
 .app-left-sidebar-monitor-panel .app-monitor-panel__item-row--dispatch .app-monitor-panel__session-task-engine {
-  flex: 0 0 auto;
-  max-width: 4.5rem;
   font-size: 8px;
   line-height: 12px;
   padding: 0 2px;
@@ -261,14 +296,6 @@
   max-width: none;
   font-size: 9px;
   line-height: 12px;
-}
-
-.app-left-sidebar-monitor-panel .app-monitor-panel__item-row--dispatch .app-monitor-panel__session-task-meta {
-  flex: 0 0 auto;
-  max-width: 4.5rem;
-  font-size: 8px;
-  line-height: 12px;
-  padding: 0 2px;
 }
 
 .app-left-sidebar-monitor-panel .app-monitor-panel__item-row--dispatch .app-monitor-panel__session-task-time {

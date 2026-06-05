@@ -126,7 +126,6 @@ export function ClaudeSessionTrajectoryDrawer({
       });
       if (!path) return;
       await writeTextFileAbsolute(path, text);
-      message.success("已导出链路包");
     } catch (e) {
       message.error(`导出失败：${e instanceof Error ? e.message : String(e)}`);
     }
@@ -142,7 +141,7 @@ export function ClaudeSessionTrajectoryDrawer({
         icon: <CopyOutlined />,
         onClick: () => {
           void navigator.clipboard.writeText(text).then(
-            () => message.success("已复制"),
+            () => undefined,
             () => message.error("复制失败"),
           );
         },

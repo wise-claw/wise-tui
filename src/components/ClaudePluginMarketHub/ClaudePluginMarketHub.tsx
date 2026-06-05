@@ -171,7 +171,6 @@ export function ClaudePluginMarketHub({ onClose }: Props) {
       try {
         await claudePluginInstall(ref, "user");
         hideLoading();
-        message.success(`已安装 ${entry.name}`);
         await loadInstalled();
       } catch (e) {
         hideLoading();
@@ -200,7 +199,6 @@ export function ClaudePluginMarketHub({ onClose }: Props) {
       try {
         await claudePluginUninstall(installRef, "user");
         hideLoading();
-        message.success(`已卸载 ${label}`);
         await loadInstalled();
       } catch (e) {
         hideLoading();

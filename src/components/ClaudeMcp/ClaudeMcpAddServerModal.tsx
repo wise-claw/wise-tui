@@ -73,7 +73,6 @@ export function ClaudeMcpAddServerModal({ open, onClose, repositoryPath, onAdded
     setSubmitting(true);
     try {
       await addClaudeMcpServer(payload);
-      message.success("已添加 MCP");
       onClose();
       await onAdded();
     } catch (e) {

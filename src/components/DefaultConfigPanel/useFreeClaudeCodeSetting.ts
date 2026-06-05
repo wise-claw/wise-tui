@@ -45,7 +45,6 @@ export function useFreeClaudeCodeSetting() {
       setBusy(true);
       try {
         await fn();
-        message.success(label);
         await refresh();
       } catch (err) {
         message.error(`${label}失败：${err instanceof Error ? err.message : String(err)}`);
@@ -92,8 +91,7 @@ export function useFreeClaudeCodeSetting() {
   const sanitizeCredentials = useCallback(async () => {
     setBusy(true);
     try {
-      const changed = await sanitizeClaudeCredentialsForFcc();
-      message.success(changed ? "已清理 ~/.claude.json 中与 FCC 冲突的认证项" : "无需清理");
+      await sanitizeClaudeCredentialsForFcc();
       await refresh();
     } catch (err) {
       message.error(`清理失败：${err instanceof Error ? err.message : String(err)}`);

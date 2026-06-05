@@ -1125,7 +1125,6 @@ export async function writeMissionToTrellis(
     if (fanoutFailedCount > 0) {
       message.error(`Trellis 任务已落盘，但 ${fanoutFailedCount} 个分组派发失败，请查看运行队列或重试。`);
     } else {
-      message.success("Trellis 任务已落盘，已启动实现子代理派发");
     }
   } catch (error) {
     api.failWrite(error instanceof Error ? error.message : String(error));

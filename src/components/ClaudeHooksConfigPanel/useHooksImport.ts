@@ -311,7 +311,6 @@ export function useHooksImport({ data, repositoryPath, load, message, modal }: U
           }
         }
       }
-      message.success(v.mode === "overwrite_event" ? "导入完成（覆盖同事件）" : "导入完成（追加模式）");
       setImportOpen(false);
       await load();
     } catch (e) {
@@ -337,7 +336,6 @@ export function useHooksImport({ data, repositoryPath, load, message, modal }: U
       ...importExecutionLog,
     ].join("\n");
     await navigator.clipboard.writeText(text);
-    message.success("已复制执行日志");
   }, [importExecutionLog, importForm, message]);
 
   const onRetryFailedImports = useCallback(async () => {
@@ -413,7 +411,6 @@ export function useHooksImport({ data, repositoryPath, load, message, modal }: U
       },
     };
     await navigator.clipboard.writeText(JSON.stringify(replayJson, null, 2));
-    message.success("已复制失败项重放 JSON");
   }, [importFailedItems, importForm, message]);
 
   const onFillFailedAsReplayJson = useCallback(() => {
@@ -446,7 +443,6 @@ export function useHooksImport({ data, repositoryPath, load, message, modal }: U
     });
     setImportReport(null);
     setImportDryRun(null);
-    message.success("已将失败项 JSON 回填到导入框");
   }, [importFailedItems, importForm, message]);
 
   return {

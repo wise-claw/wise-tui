@@ -363,19 +363,10 @@ export function MyExtensionsPanel({
       }
       setBusyId(item.id);
       try {
-        const result = await installExtensionFromLibrary(item.id, {
+        await installExtensionFromLibrary(item.id, {
           installScope: scope,
           repositoryPath: scope === "repository" ? repoPath : null,
         });
-        const installedHint =
-          item.kind === "mcp"
-            ? `已合并 MCP 配置（保留文件内其它字段）：${result.installedPath}`
-            : item.kind === "hook"
-              ? `已合并 Hooks 配置（按事件/matcher 融合，其它字段保留）：${result.installedPath}`
-              : scope === "global"
-                ? `已全局安装到 Claude Code：${result.installedPath}`
-                : `已安装到当前仓库：${result.installedPath}`;
-        message.success(installedHint);
       } catch (e) {
         message.error(e instanceof Error ? e.message : String(e));
       } finally {
@@ -397,7 +388,6 @@ export function MyExtensionsPanel({
           setRemovingId(item.id);
           try {
             await removeExtensionLibraryItem(item.id);
-            message.success("已删除");
           } catch (e) {
             message.error(e instanceof Error ? e.message : String(e));
             throw e;
@@ -416,7 +406,6 @@ export function MyExtensionsPanel({
     try {
       const updated = await updateExtensionLibraryItemName(selectedItem.id, nameDraft);
       setLibrary((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
-      message.success("名称已更新");
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
     } finally {
@@ -434,7 +423,6 @@ export function MyExtensionsPanel({
         editorDraft,
       );
       setActiveContent({ ...activeContent, content: editorDraft });
-      message.success("内容已保存");
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
     } finally {

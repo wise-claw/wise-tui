@@ -164,7 +164,6 @@ export function GenericWebSocketChannelBody({
       await saveGenericWsConfig(next);
       setLoaded(next);
       onConfiguredChange?.(true);
-      void message.success("WebSocket 配置已保存");
     } catch (err) {
       void message.error(err instanceof Error ? err.message : "保存失败");
     } finally {
@@ -186,7 +185,6 @@ export function GenericWebSocketChannelBody({
       });
       setStatus(next);
       onStatusChange?.(next);
-      void message.success("WebSocket 已启动");
     } catch (err) {
       void message.error(err instanceof Error ? err.message : "启动失败");
     } finally {
@@ -200,7 +198,6 @@ export function GenericWebSocketChannelBody({
       const next = await genericWsStop();
       setStatus(next);
       onStatusChange?.(next);
-      void message.success("WebSocket 已停止");
     } catch (err) {
       void message.error(err instanceof Error ? err.message : "停止失败");
     } finally {
@@ -219,7 +216,6 @@ export function GenericWebSocketChannelBody({
     }
     try {
       await genericWsSendText(debugContent);
-      void message.success("已发送一帧");
     } catch (err) {
       void message.error(err instanceof Error ? err.message : "发送失败");
     }

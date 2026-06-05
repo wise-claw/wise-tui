@@ -394,7 +394,6 @@ export function SubagentsPanel({
         }),
         repositoryPath: repositoryPath ?? null,
       });
-      message.success("已创建 subagent");
       setCreateOpen(false);
       setNewName("");
       setNewDescription("");
@@ -458,7 +457,6 @@ export function SubagentsPanel({
         rawContent: content,
         repositoryPath: repositoryPath ?? null,
       });
-      message.success("已保存");
       setEditRaw(content);
       setEditBaseline(content);
       await load();
@@ -476,7 +474,6 @@ export function SubagentsPanel({
         name: item.name,
         repositoryPath: repositoryPath ?? null,
       });
-      message.success("已删除");
       if (editing && editing.id === item.id) {
         setEditing(null);
       }

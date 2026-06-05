@@ -54,7 +54,6 @@ export function CursorSdkConfigModal({ open, onClose, onSaved }: CursorSdkConfig
       await setCursorApiKey(values.apiKey);
       await probeCursorAgent();
       if (!aliveRef.current) return;
-      message.success("Cursor API Key 已保存");
       await loadStatus();
       await onSaved?.();
     } catch (error) {
@@ -71,7 +70,6 @@ export function CursorSdkConfigModal({ open, onClose, onSaved }: CursorSdkConfig
       if (!aliveRef.current) return;
       setStatus(next);
       if (next.available) {
-        message.success("Cursor SDK 已就绪");
       } else {
         message.warning(describeCursorAgentStatus(next));
       }
@@ -89,7 +87,6 @@ export function CursorSdkConfigModal({ open, onClose, onSaved }: CursorSdkConfig
       await clearCursorApiKey();
       if (!aliveRef.current) return;
       form.resetFields();
-      message.success("Cursor API Key 已清除");
       await loadStatus();
       await onSaved?.();
     } catch (error) {

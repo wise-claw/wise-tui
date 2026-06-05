@@ -37,7 +37,6 @@ export function useTopbarChromeDefaultSetting() {
       try {
         await saveTopbarChromeDefaultsToStore({ showLlmProxyTopbar: visible });
         setShowLlmProxyTopbar(visible);
-        message.success(visible ? "已保存：显示 LLM 代理图标" : "已保存：隐藏 LLM 代理图标");
       } catch (err) {
         message.error(`保存失败：${err instanceof Error ? err.message : String(err)}`);
         throw err;
@@ -55,7 +54,6 @@ export function useTopbarChromeDefaultSetting() {
       try {
         await saveTopbarChromeDefaultsToStore({ showFccTopbar: visible });
         setShowFccTopbar(visible);
-        message.success(visible ? "已保存：显示 FCC 顶栏图标" : "已保存：隐藏 FCC 顶栏图标");
       } catch (err) {
         message.error(`保存失败：${err instanceof Error ? err.message : String(err)}`);
         throw err;
@@ -73,7 +71,6 @@ export function useTopbarChromeDefaultSetting() {
       try {
         await saveTopbarChromeDefaultsToStore({ showFccTrafficTopbar: visible });
         setShowFccTrafficTopbar(visible);
-        message.success(visible ? "已保存：显示 FCC 请求流量图标" : "已保存：隐藏 FCC 请求流量图标");
       } catch (err) {
         message.error(`保存失败：${err instanceof Error ? err.message : String(err)}`);
         throw err;
@@ -91,7 +88,6 @@ export function useTopbarChromeDefaultSetting() {
       try {
         await saveTopbarChromeDefaultsToStore({ showSessionDataLinkTopbar: visible });
         setShowSessionDataLinkTopbar(visible);
-        message.success(visible ? "已保存：显示全链路分析图标" : "已保存：隐藏全链路分析图标");
       } catch (err) {
         message.error(`保存失败：${err instanceof Error ? err.message : String(err)}`);
         throw err;

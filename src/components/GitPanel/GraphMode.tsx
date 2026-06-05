@@ -307,7 +307,6 @@ export function GraphMode({
     async (revision: string) => {
       try {
         await gitCheckoutRevision(repositoryPath, revision);
-        message.success("已切换版本");
         onRepositoryRefresh?.();
         setSelectedSha(null);
         refreshAfterGitMutation();
@@ -330,7 +329,6 @@ export function GraphMode({
         onOk: async () => {
           try {
             await gitCherryPick(repositoryPath, sha);
-            message.success("Cherry-pick 完成");
             refreshAfterGitMutation();
           } catch (e) {
             const errMessage = e instanceof Error ? e.message : String(e);
@@ -354,7 +352,6 @@ export function GraphMode({
         onOk: async () => {
           try {
             await gitRevert(repositoryPath, sha);
-            message.success("Revert 完成");
             refreshAfterGitMutation();
           } catch (e) {
             const errMessage = e instanceof Error ? e.message : String(e);
@@ -368,25 +365,21 @@ export function GraphMode({
   );
 
   const handleCreateBranchSuccess = useCallback(() => {
-    message.success("分支已创建并检出");
     refreshAfterGitMutation();
   }, [refreshAfterGitMutation]);
 
   const handleResetSuccess = useCallback(() => {
-    message.success("Reset 完成");
     setSelectedSha(null);
     refreshAfterGitMutation();
   }, [refreshAfterGitMutation]);
 
   const handleCreateTagSuccess = useCallback(() => {
-    message.success("标签已创建");
     refreshAfterGitMutation();
   }, [refreshAfterGitMutation]);
 
   const handleSetCompareBase = useCallback((sha: string) => {
     setCompareBaseSha(sha);
     setCompareHeadSha(null);
-    message.success(`已设 ${sha.slice(0, 7)} 为对比基准`);
   }, []);
 
   const handleCompareWithBase = useCallback((sha: string) => {
@@ -531,7 +524,6 @@ export function GraphMode({
         onOk: async () => {
           try {
             await gitDeleteTag(repositoryPath, tagName);
-            message.success(`已删除标签 ${tagName}`);
             refreshAfterGitMutation();
           } catch (e) {
             const errMessage = e instanceof Error ? e.message : String(e);
@@ -547,7 +539,6 @@ export function GraphMode({
   const copySha = useCallback(async (sha: string) => {
     try {
       await navigator.clipboard.writeText(sha);
-      message.success("已复制 SHA");
     } catch {
       message.error("复制失败");
     }

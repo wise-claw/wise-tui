@@ -56,7 +56,7 @@ function ClockIcon() {
 
 function copySessionUserQuestionText(text: string) {
   void navigator.clipboard.writeText(text).then(
-    () => message.success("已复制到剪贴板"),
+    () => undefined,
     () => message.error("复制失败"),
   );
 }

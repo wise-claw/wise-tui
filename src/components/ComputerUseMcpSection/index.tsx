@@ -83,11 +83,6 @@ export function ComputerUseMcpSection({ repositoryPath, active = true, onRefresh
         }
       }
       await onRefreshMcpList();
-      message.success(
-        alreadyMcp && status.installed
-          ? "驱动与 MCP 已就绪（无需重复注册）"
-          : "已安装/注册 cua-driver MCP；请在系统设置中授予辅助功能与屏幕录制",
-      );
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
     } finally {
@@ -103,8 +98,6 @@ export function ComputerUseMcpSection({ repositoryPath, active = true, onRefresh
       const next = await getCuaDriverStatus();
       setCuaDriverStatus(next);
       await onRefreshMcpList();
-      const ver = next.versionLine?.trim() || "已刷新";
-      message.success(`cua-driver 已更新：${ver}`);
     } catch (e) {
       const err = e instanceof Error ? e.message : String(e);
       modal.error({

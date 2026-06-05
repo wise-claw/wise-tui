@@ -93,7 +93,6 @@ export function ClaudeLspPanel({ active, listSearch, onCountChange }: Props) {
       setBusyRef(ref);
       try {
         await claudePluginInstall(ref, "user");
-        message.success(`已安装 ${entry.name}`);
         await loadInstalled();
       } catch (e) {
         message.error(e instanceof Error ? e.message : String(e));
@@ -110,7 +109,6 @@ export function ClaudeLspPanel({ active, listSearch, onCountChange }: Props) {
       setBusyRef(ref);
       try {
         await claudePluginUninstall(ref, "user");
-        message.success(`已卸载 ${entry.name}`);
         await loadInstalled();
       } catch (e) {
         message.error(e instanceof Error ? e.message : String(e));

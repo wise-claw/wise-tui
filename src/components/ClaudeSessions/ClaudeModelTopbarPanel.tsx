@@ -270,7 +270,6 @@ export function ClaudeModelTopbarPanel({
       setAddCompany("");
       setAddName("");
       setAddOfficialWebsite("");
-      message.success("已保存模型配置");
     } catch (e) {
       message.error(typeof e === "string" ? e : "新增失败");
     } finally {
@@ -362,18 +361,6 @@ export function ClaudeModelTopbarPanel({
       };
       const next = await upsertClaudeModelProfile(updatedProfile);
       setStore(next);
-      message.success(
-        resolveEffectiveModelForProfileEngine(profileEngine, next)?.trim()
-          ? `已保存全局配置，当前模型：${resolveActiveModelProfileDisplayLabel(
-              profileEngine,
-              next,
-            )}`
-          : profileEngine === "codex"
-            ? "已保存 Codex 档案"
-            : profileEngine === "opencode"
-              ? "已保存 OpenCode 档案"
-              : "已保存到数据库并写入 Claude Code 全局 settings.json",
-      );
       dispatchModelProfileStoreChanged(next, { engine: profileEngine });
       setConfigOpen(false);
       setConfigProfile(null);
@@ -394,7 +381,6 @@ export function ClaudeModelTopbarPanel({
         engine: panelEngine,
         skipComposerPickerRefresh: true,
       });
-      message.success(result.message);
     } catch (e) {
       message.error(typeof e === "string" ? e : "同步 CC Switch 配置失败");
     } finally {
@@ -410,7 +396,6 @@ export function ClaudeModelTopbarPanel({
         engine: panelEngine,
         skipComposerPickerRefresh: true,
       });
-      message.success("已删除");
     } catch (e) {
       message.error(typeof e === "string" ? e : "删除失败");
     }
@@ -441,7 +426,6 @@ export function ClaudeModelTopbarPanel({
         const next = await setClaudeModelProfileAutoFailover(enabled);
         setStore(next);
         dispatchModelProfileStoreChanged(next, { skipComposerPickerRefresh: true });
-        message.success(enabled ? "已开启限流自动切换" : "已关闭限流自动切换");
       } catch (e) {
         setStore(previous);
         message.error(typeof e === "string" ? e : "保存失败");

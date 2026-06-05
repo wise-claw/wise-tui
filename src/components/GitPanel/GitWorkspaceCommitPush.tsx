@@ -123,11 +123,6 @@ export function GitWorkspaceCommitPush({ repositoryEntries, onAfterSync }: Props
         return;
       }
 
-      message.success(
-        summary.skippedCount > 0
-          ? `已提交并推送 ${summary.committedCount} 个仓库，${summary.skippedCount} 个仓库无改动已跳过`
-          : `已提交并推送 ${summary.committedCount} 个仓库`,
-      );
       setOpen(false);
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);

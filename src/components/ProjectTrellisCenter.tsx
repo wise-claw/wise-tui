@@ -674,7 +674,6 @@ function TrellisSpecTreePanel({
       setActiveFile(saved);
       setDraft(saved.content);
       setTree(await listTrellisSpecTree(rootPath));
-      message.success("Spec 文件已保存");
       setViewMode("edit");
     } catch (err) {
       setFileError(err instanceof Error ? err.message : String(err));
@@ -716,7 +715,6 @@ function TrellisSpecTreePanel({
       setSelectedPath(relativePath);
       setIsNewSpecModalOpen(false);
       setNewSpecName("");
-      message.success(`成功创建规约: ${relativePath}`);
     } catch (err) {
       message.error(err instanceof Error ? err.message : String(err));
     } finally {
@@ -745,7 +743,6 @@ function TrellisSpecTreePanel({
     setAiOptimizing(true);
     try {
       await onRequestSpecAgentUpdate(project, activeArea);
-      message.success("已请求 Agent 补全当前规约区");
     } catch (err) {
       message.error(err instanceof Error ? err.message : String(err));
     } finally {
@@ -1528,7 +1525,6 @@ function TrellisRuntimeOverview({
     getTrellisOnboardingState({ rootPath })
       .then((next) => {
         setRefreshedOnboarding(next);
-        message.success("已刷新 Trellis 自检结果");
       })
       .catch((err) => {
         message.error(err instanceof Error ? err.message : String(err));
@@ -1545,7 +1541,6 @@ function TrellisRuntimeOverview({
 
   const handleClearLogs = () => {
     setVisibleEvents([]);
-    message.success("已清空当前视图中的事件列表");
   };
 
   const getTroubleGuide = (id: string) => {
