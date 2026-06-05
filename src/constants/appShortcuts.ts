@@ -44,7 +44,7 @@ export const APP_SHORTCUT_GROUPS: AppShortcutGroup[] = [
       },
       {
         keys: "⌘F · Ctrl+F",
-        description: "打开全局搜索（文件名模式）。",
+        description: "Wise 主窗口聚焦时打开全局搜索（文件名模式）。",
       },
       {
         keys: "⌘K · Ctrl+K",
@@ -52,7 +52,7 @@ export const APP_SHORTCUT_GROUPS: AppShortcutGroup[] = [
       },
       {
         keys: "⌘⇧F · Ctrl+Shift+F",
-        description: "打开全局搜索（文件内容模式）。",
+        description: "Wise 主窗口聚焦时打开全局搜索（文件内容模式）。",
       },
       {
         keys: "⌘⇧M · Ctrl+Shift+M",
@@ -65,7 +65,7 @@ export const APP_SHORTCUT_GROUPS: AppShortcutGroup[] = [
       {
         keys: "可配置",
         description:
-          "主会话：「默认配置 → @ 快捷键」插入 @ 提及；「会话常用语」配置正文与组合键，输入区按钮或快捷键直接发送。",
+          "主会话输入框聚焦时：「默认配置 → @ 快捷键」插入 @ 提及；「会话常用语」配置正文与组合键，按钮或快捷键直接发送。",
       },
     ],
   },

@@ -60,6 +60,7 @@ import {
 import { useComposerCommonPhrases } from "../../hooks/useComposerCommonPhrases";
 import { applyComposerCommonPhraseToSurface } from "../../utils/applyComposerCommonPhrase";
 import { chordMatchesKeyboardEvent } from "../../utils/atMentionShortcutChord";
+import { isWiseAppFocused } from "../../utils/isWiseAppFocused";
 import { ComposerCommonPhrasesManageTrigger } from "./ComposerCommonPhrasesManageTrigger";
 import { ImageThumbnails } from "./attachment-manager";
 import { QuestionDock } from "./dock/question-dock";
@@ -2297,6 +2298,7 @@ function ComposerInner({
   /** 可配置的 @ 提及插入 / 常用语发送快捷键（输入框聚焦时）。 */
   useEffect(() => {
     function onComposerShortcutKey(e: KeyboardEvent) {
+      if (!isWiseAppFocused()) return;
       if (triggerRef.current.mode) return;
       const shell = shellRef.current;
       if (!shell || !isProseMirrorFocused(shell)) return;

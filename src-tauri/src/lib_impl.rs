@@ -1,5 +1,6 @@
 use crate::{
     agent_registry, app_state_commands, assistants, cc_switch_import, cc_wf_studio_mcp_bridge,
+    in_app_shortcuts,
     cc_workflow_studio, claude_code_usage, claude_commands, codex_commands, claude_config_dir, claude_external_ingest,
     claude_llm_proxy, claude_model_profiles,
     code_knowledge_graph, cursor_agent, dock_menu, fcc_traces, free_claude_code,
@@ -79,35 +80,12 @@ pub fn run() {
                 })
                 .map_err(|e| e.to_string())?;
 
-            // ⌘F / Ctrl+F：打开全局搜索并切换到「文件名」模式（WKWebView 会吞网页 keydown）
-            #[cfg(target_os = "macos")]
-            let filename_search_mods = Modifiers::SUPER;
-            #[cfg(not(target_os = "macos"))]
-            let filename_search_mods = Modifiers::CONTROL;
-            let filename_search_shortcut = Shortcut::new(Some(filename_search_mods), Code::KeyF);
-            app.global_shortcut()
-                .on_shortcut(filename_search_shortcut, |_app, _shortcut, event| {
-                    if event.state() == ShortcutState::Pressed {
-                        let _ = wise_mascot::wise_main_window_focus(_app.clone());
-                        let _ = _app.emit("global-open-filename-search", ());
-                    }
-                })
-                .map_err(|e| e.to_string())?;
-
-            // ⌘⇧F / Ctrl+Shift+F：打开全局搜索并切换到「文件内容」模式（WKWebView 会吞网页 keydown）
-            #[cfg(target_os = "macos")]
-            let content_search_mods = Modifiers::SUPER | Modifiers::SHIFT;
-            #[cfg(not(target_os = "macos"))]
-            let content_search_mods = Modifiers::CONTROL | Modifiers::SHIFT;
-            let content_search_shortcut = Shortcut::new(Some(content_search_mods), Code::KeyF);
-            app.global_shortcut()
-                .on_shortcut(content_search_shortcut, |_app, _shortcut, event| {
-                    if event.state() == ShortcutState::Pressed {
-                        let _ = wise_mascot::wise_main_window_focus(_app.clone());
-                        let _ = _app.emit("global-open-content-search", ());
-                    }
-                })
-                .map_err(|e| e.to_string())?;
+            in_app_shortcuts::init(app.handle());
+            if let Some(main) = app.get_webview_window("main") {
+                if main.is_focused().unwrap_or(false) {
+                    let _ = in_app_shortcuts::register_search_shortcuts(app.handle());
+                }
+            }
 
             app.manage(wise_mascot::WiseToastMerge::default());
             app.manage(wise_push::WisePushControl::default());
@@ -162,18 +140,22 @@ pub fn run() {
         use tauri::menu::{Menu, MenuItem, Submenu};
         builder
             .on_window_event(|window, event| {
-                // macOS：主窗口红点关闭默认会销毁窗口，导致后续点击程序坞图标只触发
-                // `RunEvent::Reopen` 但 `get_webview_window("main")` 已为 None，没有任何窗口可显示。
-                // 与原生 macOS App 行为对齐：拦截关闭事件 → 阻止销毁 → 隐藏整个应用。
-                #[cfg(target_os = "macos")]
                 if window.label() == "main" {
+                    if let tauri::WindowEvent::Focused(focused) = event {
+                        let _ = in_app_shortcuts::set_main_window_search_shortcuts_active(
+                            window.app_handle(),
+                            *focused,
+                        );
+                    }
+                    // macOS：主窗口红点关闭默认会销毁窗口，导致后续点击程序坞图标只触发
+                    // `RunEvent::Reopen` 但 `get_webview_window("main")` 已为 None，没有任何窗口可显示。
+                    // 与原生 macOS App 行为对齐：拦截关闭事件 → 阻止销毁 → 隐藏整个应用。
+                    #[cfg(target_os = "macos")]
                     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
                         api.prevent_close();
                         let _ = window.app_handle().hide();
                     }
                 }
-                #[cfg(not(target_os = "macos"))]
-                let _ = (window, event);
             })
             .menu(|app| {
                 let menu = Menu::default(app)?;

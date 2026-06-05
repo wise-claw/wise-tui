@@ -74,6 +74,7 @@ import {
   resolveAuthorNavPane,
 } from "./components/AuthorPanel/authorPaneStorage";
 import { reloadAppWindow } from "./services/window";
+import { isWiseAppFocused } from "./utils/isWiseAppFocused";
 import { wiseMascotShow } from "./services/wiseMascot";
 import { getTaskTemplate, setTaskTemplate } from "./services/projectState";
 import { ensureCrepeToolbarTitleHintsInstalled } from "./utils/crepeToolbarTitles";
@@ -2581,6 +2582,7 @@ export default function App() {
 
   useEffect(() => {
     function handleGlobalKey(e: KeyboardEvent) {
+      if (!isWiseAppFocused()) return;
       const mod = e.metaKey || e.ctrlKey;
       // Control+`（物理 Backquote）：切换终端面板；仅用 Ctrl、不含 ⌘，与 macOS Control 一致
       if (e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey && (e.code === "Backquote" || e.key === "`")) {
@@ -2588,19 +2590,7 @@ export default function App() {
         setTerminalCollapsed((c) => !c);
         return;
       }
-      // 文件内容搜索：网页 keydown 在 macOS WKWebView 常被系统 Find 吞掉，桌面版以 Tauri global_shortcut 为准
-      if (mod && e.shiftKey && !e.altKey && e.code === "KeyF") {
-        e.preventDefault();
-        e.stopPropagation();
-        openContentSearchPalette();
-        return;
-      }
-      if (mod && !e.shiftKey && !e.altKey && e.code === "KeyF") {
-        e.preventDefault();
-        e.stopPropagation();
-        openFilenameSearchPalette();
-        return;
-      }
+      // ⌘F / Ctrl+F 与 ⌘⇧F / Ctrl+Shift+F：桌面版由主窗口聚焦时注册的 Tauri 快捷键派发事件
       if (mod && e.key === "k") {
         e.preventDefault();
         setSearchMode("filename");
@@ -2621,7 +2611,7 @@ export default function App() {
     }
     window.addEventListener("keydown", handleGlobalKey, { capture: true });
     return () => window.removeEventListener("keydown", handleGlobalKey, { capture: true });
-  }, [openContentSearchPalette, openFilenameSearchPalette]);
+  }, []);
 
   useEffect(() => {
     function handleOpenTaskSplitPanel() {
