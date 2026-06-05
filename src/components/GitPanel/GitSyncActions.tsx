@@ -1,3 +1,4 @@
+import { memo } from "react";
 import type { MouseEvent } from "react";
 import { Button, Space, Tooltip } from "antd";
 import { ArrowDownOutlined, ArrowUpOutlined, CheckOutlined, ReloadOutlined } from "@ant-design/icons";
@@ -27,7 +28,7 @@ function invokeSyncAction(
   invoke();
 }
 
-export function GitSyncActions({
+export const GitSyncActions = memo(function GitSyncActions({
   status,
   loading,
   onFetch,
@@ -39,7 +40,7 @@ export function GitSyncActions({
   const behind = status.behind ?? 0;
 
   return (
-    <Space size={0} className="git-header-sync-actions">
+    <Space size={4} className="git-header-sync-actions">
       <Tooltip title="获取远程" placement="top" mouseEnterDelay={0.45}>
         <span className="git-sync-count-btn-wrap">
           <Button
@@ -60,14 +61,13 @@ export function GitSyncActions({
             size="small"
             className={`git-sync-count-btn${loading.pull ? " git-sync-count-btn--busy" : ""}`}
             icon={loading.pull ? <ReloadOutlined spin /> : <ArrowDownOutlined />}
-            aria-label="拉取"
+            aria-label={behind > 0 ? `拉取，落后 ${behind} 个提交` : "拉取"}
             aria-busy={loading.pull}
             onMouseDown={(event) => invokeSyncAction(event, "pull", loading, onPull)}
-          >
-            {!loading.pull && behind > 0 ? (
-              <span className="sync-count sync-count--behind">{behind}</span>
-            ) : null}
-          </Button>
+          />
+          {!loading.pull && behind > 0 ? (
+            <span className="sync-count sync-count--behind">{behind}</span>
+          ) : null}
         </span>
       </Tooltip>
       <Tooltip title="推送" placement="top" mouseEnterDelay={0.45}>
@@ -77,14 +77,13 @@ export function GitSyncActions({
             size="small"
             className={`git-sync-count-btn${loading.push ? " git-sync-count-btn--busy" : ""}`}
             icon={loading.push ? <ReloadOutlined spin /> : <ArrowUpOutlined />}
-            aria-label="推送"
+            aria-label={ahead > 0 ? `推送，领先 ${ahead} 个提交` : "推送"}
             aria-busy={loading.push}
             onMouseDown={(event) => invokeSyncAction(event, "push", loading, onPush)}
-          >
-            {!loading.push && ahead > 0 ? (
-              <span className="sync-count sync-count--ahead">{ahead}</span>
-            ) : null}
-          </Button>
+          />
+          {!loading.push && ahead > 0 ? (
+            <span className="sync-count sync-count--ahead">{ahead}</span>
+          ) : null}
         </span>
       </Tooltip>
       {status.staged.length > 0 && !hideStagedCount ? (
@@ -96,12 +95,22 @@ export function GitSyncActions({
               className="git-sync-count-btn"
               icon={<CheckOutlined />}
               disabled
-            >
-              <span className="sync-count sync-count--staged">{status.staged.length}</span>
-            </Button>
+              aria-label={`待提交 ${status.staged.length} 个文件`}
+            />
+            <span className="sync-count sync-count--staged">{status.staged.length}</span>
           </span>
         </Tooltip>
       ) : null}
     </Space>
   );
-}
+}, (left, right) =>
+  left.hideStagedCount === right.hideStagedCount
+  && left.status.ahead === right.status.ahead
+  && left.status.behind === right.status.behind
+  && left.status.staged.length === right.status.staged.length
+  && left.loading.fetch === right.loading.fetch
+  && left.loading.pull === right.loading.pull
+  && left.loading.push === right.loading.push
+  && left.onFetch === right.onFetch
+  && left.onPull === right.onPull
+  && left.onPush === right.onPush);

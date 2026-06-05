@@ -478,6 +478,70 @@ export interface GitLogResponse {
   hasMore: boolean;
 }
 
+export interface GitGraphRefLabel {
+  name: string;
+  kind: "branch" | "remote" | "tag" | string;
+  isHead: boolean;
+}
+
+export interface GitGraphCommit {
+  sha: string;
+  summary: string;
+  author: string;
+  timestamp: number;
+  parentShas: string[];
+  refs: GitGraphRefLabel[];
+}
+
+export interface GitGraphResponse {
+  commits: GitGraphCommit[];
+  ahead: number;
+  behind: number;
+  upstream: string | null;
+  hasMore: boolean;
+}
+
+export interface GitCommitFileChange {
+  path: string;
+  status: string;
+  additions: number;
+  deletions: number;
+}
+
+export interface GitCommitDetailResponse {
+  sha: string;
+  summary: string;
+  body: string;
+  author: string;
+  timestamp: number;
+  parentShas: string[];
+  files: GitCommitFileChange[];
+}
+
+export interface GitCompareCommitsResponse {
+  baseSha: string;
+  headSha: string;
+  baseSummary: string;
+  headSummary: string;
+  files: GitCommitFileChange[];
+}
+
+export interface GitBlameLineEntry {
+  line: number;
+  sha: string;
+  author: string;
+  summary: string;
+  timestamp: number;
+  content: string;
+}
+
+export interface GitBlameFileResponse {
+  path: string;
+  revision: string;
+  revisionSha: string;
+  lines: GitBlameLineEntry[];
+}
+
 export interface GitBranchEntry {
   name: string;
   isRemote: boolean;

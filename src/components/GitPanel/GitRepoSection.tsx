@@ -2,8 +2,8 @@ import { memo, startTransition, useCallback, useEffect, useRef, useState, type R
 import { useInView, useInViewActive } from "../../hooks/useInView";
 import { listen } from "@tauri-apps/api/event";
 import { safeUnlistenPromise } from "../../utils/safeTauriUnlisten";
-import { Button, Empty, Spin, Tooltip, message } from "antd";
-import { DownOutlined, GlobalOutlined, RightOutlined } from "@ant-design/icons";
+import { Empty, Spin, message } from "antd";
+import { DownOutlined, RightOutlined } from "@ant-design/icons";
 import {
   gitCommit,
   gitDiscard,
@@ -23,6 +23,7 @@ import {
 import { openRepositoryRemoteInBrowser } from "../../services/openRepositoryRemote";
 import type { GitStatusResponse } from "../../types";
 import { DiffMode } from "./DiffMode";
+import { GitPanelMoreMenu } from "./GitPanelMoreMenu";
 import { GitSyncActions } from "./GitSyncActions";
 import { InitMode } from "./InitMode";
 import { runGitSyncAction, type GitSyncActionKind } from "./gitSyncActionRunner";
@@ -56,6 +57,7 @@ interface Props {
   externalInView?: boolean;
   externalSectionRef?: Ref<HTMLElement | null>;
   onOpenFile?: (path: string, options?: GitPanelOpenFileOptions) => void;
+  onOpenHistory?: () => void;
 }
 
 function formatBranchLabel(
@@ -98,6 +100,7 @@ function GitRepoSectionInner({
   externalInView,
   externalSectionRef,
   onOpenFile,
+  onOpenHistory,
 }: Props) {
   const repositoryPath = entry.path;
   const isMultiRepo = Boolean(registerRefresh);
@@ -638,17 +641,6 @@ function GitRepoSectionInner({
           onMouseDown={(event) => event.stopPropagation()}
           onClick={(event) => event.stopPropagation()}
         >
-          <Tooltip title="在浏览器中打开仓库" placement="top">
-            <Button
-              type="text"
-              size="small"
-              className="git-remote-browser-btn"
-              icon={<GlobalOutlined />}
-              aria-label="在浏览器中打开仓库"
-              loading={openingRemote}
-              onClick={handleOpenRemoteInBrowser}
-            />
-          </Tooltip>
           {(syncStatus || loading.fetch || loading.pull || loading.push) ? (
             <GitSyncActions
               status={syncStatus ?? emptyGitSyncStatus()}
@@ -659,6 +651,11 @@ function GitRepoSectionInner({
               onPush={handlePush}
             />
           ) : null}
+          <GitPanelMoreMenu
+            onOpenHistory={onOpenHistory}
+            onOpenInBrowser={handleOpenRemoteInBrowser}
+            openingBrowser={openingRemote}
+          />
         </div>
       </div>
 

@@ -1,7 +1,11 @@
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { GitHistoryDrawer } from "./GitHistoryDrawer";
+import { GitPanelMoreMenu } from "./GitPanelMoreMenu";
 import { safeUnlistenPromise } from "../../utils/safeTauriUnlisten";
 import { startGitWatcher, stopGitWatcher } from "../../services/git";
+import { openRepositoryRemoteInBrowser } from "../../services/openRepositoryRemote";
+import { message } from "antd";
 import type { GitPanelRepositoryEntry } from "../../utils/workspaceRepositoryTreeSelect";
 import {
   GIT_MULTI_REPO_LOAD_STAGGER_MS,
@@ -49,6 +53,9 @@ export function GitMultiRepoPanel({
   directoryOnly,
   lazyMount = true,
 }: Props) {
+  const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
+  const [historyRepositoryPath, setHistoryRepositoryPath] = useState("");
+  const [openingRemote, setOpeningRemote] = useState(false);
   const refreshByPathRef = useRef(new Map<string, () => void>());
   const watchedPathsRef = useRef(new Set<string>());
   const [watchedPathsVersion, setWatchedPathsVersion] = useState(0);
@@ -181,6 +188,40 @@ export function GitMultiRepoPanel({
     [],
   );
 
+  const historyRepoOptions = repositoryEntries.map((entry) => ({
+    label: entry.name,
+    value: entry.path,
+  }));
+
+  const openHistoryForRepository = useCallback((path: string) => {
+    if (!path.trim()) {
+      return;
+    }
+    setHistoryRepositoryPath(path.trim());
+    setHistoryDrawerOpen(true);
+  }, []);
+
+  const handleOpenActiveRepoInBrowser = useCallback(() => {
+    const path = activeRepositoryPath.trim() || repositoryEntries[0]?.path || "";
+    if (!path || openingRemote) {
+      return;
+    }
+    setOpeningRemote(true);
+    void openRepositoryRemoteInBrowser(path)
+      .then((result) => {
+        if (!result.ok) {
+          message.warning(result.message);
+        }
+      })
+      .catch((e) => {
+        const msg = e instanceof Error ? e.message : String(e);
+        message.error(`打开失败: ${msg}`);
+      })
+      .finally(() => {
+        setOpeningRemote(false);
+      });
+  }, [activeRepositoryPath, openingRemote, repositoryEntries]);
+
   return (
     <div className="app-git-panel app-git-panel--multi">
       <div className="git-panel-header">
@@ -208,6 +249,14 @@ export function GitMultiRepoPanel({
             repositoryEntries={repositoryEntries}
             onAfterSync={refreshAllRepositories}
           />
+          <GitPanelMoreMenu
+            historyActive={historyDrawerOpen}
+            onOpenHistory={() =>
+              openHistoryForRepository(activeRepositoryPath.trim() || repositoryEntries[0]?.path || "")
+            }
+            onOpenInBrowser={handleOpenActiveRepoInBrowser}
+            openingBrowser={openingRemote}
+          />
         </div>
       </div>
       <div ref={setScrollBodyRef} className="git-panel-multi-body">
@@ -219,6 +268,7 @@ export function GitMultiRepoPanel({
             registerRefresh,
             onWatchScopeChange: handleWatchScopeChange,
             onOpenFile,
+            onOpenHistory: () => openHistoryForRepository(entry.path),
           };
           if (lazyMount) {
             return (
@@ -234,6 +284,16 @@ export function GitMultiRepoPanel({
           );
         })}
       </div>
+      <GitHistoryDrawer
+        open={historyDrawerOpen}
+        repositoryOptions={historyRepoOptions}
+        defaultRepositoryPath={
+          historyRepositoryPath || activeRepositoryPath.trim() || repositoryEntries[0]?.path || ""
+        }
+        onClose={() => setHistoryDrawerOpen(false)}
+        onOpenFile={onOpenFile}
+        onRepositoryRefresh={refreshAllRepositories}
+      />
     </div>
   );
 }

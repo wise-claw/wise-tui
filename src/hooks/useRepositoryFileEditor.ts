@@ -33,6 +33,10 @@ export interface FileEditorTab {
   diffOriginal?: string;
   /** Git changes source; staged diffs are read-only. */
   gitDiffSection?: "staged" | "unstaged";
+  /** Historical commit diff; read-only. */
+  gitCommitSha?: string;
+  /** Compare two commits; read-only. */
+  gitCommitCompare?: { baseSha: string; headSha: string };
 }
 
 interface UseRepositoryFileEditorOptions {
@@ -334,6 +338,173 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
     [repositoryPath],
   );
 
+  const loadCommitDiffFile = useCallback(
+    async (relativePath: string, sha: string) => {
+      if (!repositoryPath) {
+        message.warning("请先选择仓库");
+        return;
+      }
+      if (!shouldOpenRepositoryFileInMonaco(relativePath)) {
+        return;
+      }
+
+      const existing = fileEditorTabsRef.current.find((t) => t.relativePath === relativePath);
+      if (
+        existing &&
+        existing.gitCommitSha === sha &&
+        !existing.loading &&
+        existing.diffOriginal !== undefined
+      ) {
+        setFileEditorActivePath(relativePath);
+        return;
+      }
+
+      const loadGeneration = ++gitDiffLoadGenerationRef.current;
+      const norm = relativePath.replace(/\\/g, "/");
+
+      setFileEditorTabs((prev) => {
+        const i = prev.findIndex((t) => t.relativePath === relativePath);
+        const slot: FileEditorTab = {
+          relativePath,
+          content: "",
+          originalContent: "",
+          loading: true,
+        };
+        if (i >= 0) {
+          const next = [...prev];
+          next[i] = slot;
+          return next;
+        }
+        return [...prev, slot];
+      });
+      setFileEditorActivePath(relativePath);
+
+      try {
+        const left = await gitShowRevision(repositoryPath, `${sha}^:${norm}`);
+        const right = await gitShowRevision(repositoryPath, `${sha}:${norm}`);
+        if (loadGeneration !== gitDiffLoadGenerationRef.current) {
+          return;
+        }
+        setFileEditorTabs((prev) =>
+          prev.map((t) =>
+            t.relativePath === relativePath
+              ? {
+                  relativePath,
+                  content: right,
+                  originalContent: right,
+                  loading: false,
+                  focusLine: null,
+                  diffOriginal: left,
+                  gitCommitSha: sha,
+                }
+              : t,
+          ),
+        );
+      } catch (error) {
+        if (loadGeneration !== gitDiffLoadGenerationRef.current) {
+          return;
+        }
+        console.error("Failed to load commit diff:", error);
+        message.error(`无法加载提交 diff：${relativePath}`);
+        setFileEditorTabs((prev) => {
+          const nextTabs = prev.filter((t) => t.relativePath !== relativePath);
+          setFileEditorActivePath((cur) => {
+            if (cur !== relativePath) {
+              return cur;
+            }
+            return nextTabs.length > 0 ? nextTabs[nextTabs.length - 1]!.relativePath : null;
+          });
+          return nextTabs;
+        });
+      }
+    },
+    [repositoryPath],
+  );
+
+  const loadCommitCompareDiffFile = useCallback(
+    async (relativePath: string, baseSha: string, headSha: string) => {
+      if (!repositoryPath) {
+        message.warning("请先选择仓库");
+        return;
+      }
+      if (!shouldOpenRepositoryFileInMonaco(relativePath)) {
+        return;
+      }
+
+      const existing = fileEditorTabsRef.current.find((t) => t.relativePath === relativePath);
+      if (
+        existing &&
+        existing.gitCommitCompare?.baseSha === baseSha &&
+        existing.gitCommitCompare?.headSha === headSha &&
+        !existing.loading &&
+        existing.diffOriginal !== undefined
+      ) {
+        setFileEditorActivePath(relativePath);
+        return;
+      }
+
+      const loadGeneration = ++gitDiffLoadGenerationRef.current;
+      const norm = relativePath.replace(/\\/g, "/");
+
+      setFileEditorTabs((prev) => {
+        const i = prev.findIndex((t) => t.relativePath === relativePath);
+        const slot: FileEditorTab = {
+          relativePath,
+          content: "",
+          originalContent: "",
+          loading: true,
+        };
+        if (i >= 0) {
+          const next = [...prev];
+          next[i] = slot;
+          return next;
+        }
+        return [...prev, slot];
+      });
+      setFileEditorActivePath(relativePath);
+
+      try {
+        const left = await gitShowRevision(repositoryPath, `${baseSha}:${norm}`);
+        const right = await gitShowRevision(repositoryPath, `${headSha}:${norm}`);
+        if (loadGeneration !== gitDiffLoadGenerationRef.current) {
+          return;
+        }
+        setFileEditorTabs((prev) =>
+          prev.map((t) =>
+            t.relativePath === relativePath
+              ? {
+                  relativePath,
+                  content: right,
+                  originalContent: right,
+                  loading: false,
+                  focusLine: null,
+                  diffOriginal: left,
+                  gitCommitCompare: { baseSha, headSha },
+                }
+              : t,
+          ),
+        );
+      } catch (error) {
+        if (loadGeneration !== gitDiffLoadGenerationRef.current) {
+          return;
+        }
+        console.error("Failed to load commit compare diff:", error);
+        message.error(`无法加载对比 diff：${relativePath}`);
+        setFileEditorTabs((prev) => {
+          const nextTabs = prev.filter((t) => t.relativePath !== relativePath);
+          setFileEditorActivePath((cur) => {
+            if (cur !== relativePath) {
+              return cur;
+            }
+            return nextTabs.length > 0 ? nextTabs[nextTabs.length - 1]!.relativePath : null;
+          });
+          return nextTabs;
+        });
+      }
+    },
+    [repositoryPath],
+  );
+
   const openRepositoryFile = useCallback(
     (relativePath: string, opts?: GitPanelOpenFileOptions) => {
       if (isRepositoryBinaryPreviewPath(relativePath)) {
@@ -344,13 +515,25 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
         void openRepositoryExternalFile(relativePath);
         return;
       }
+      if (opts?.fromCommitCompare) {
+        void loadCommitCompareDiffFile(
+          relativePath,
+          opts.fromCommitCompare.baseSha,
+          opts.fromCommitCompare.headSha,
+        );
+        return;
+      }
+      if (opts?.fromCommit) {
+        void loadCommitDiffFile(relativePath, opts.fromCommit.sha);
+        return;
+      }
       if (opts?.fromGitChanges) {
         void loadGitDiffFile(relativePath, opts.fromGitChanges);
         return;
       }
       void loadEditorFile(relativePath, { line: opts?.line ?? null });
     },
-    [loadEditorFile, loadGitDiffFile, openRepositoryBinaryPreview, openRepositoryExternalFile],
+    [loadEditorFile, loadCommitCompareDiffFile, loadCommitDiffFile, loadGitDiffFile, openRepositoryBinaryPreview, openRepositoryExternalFile],
   );
 
   const closeFileEditorPanel = useCallback(() => {

@@ -200,7 +200,7 @@ export function RepositoryFileEditorPanel({
               size="small"
               onClick={onSave}
               loading={saving}
-              disabled={!activeTab?.relativePath || activeTab.loading || activeTab.gitDiffSection === "staged" || !dirty}
+              disabled={!activeTab?.relativePath || activeTab.loading || activeTab.gitDiffSection === "staged" || Boolean(activeTab.gitCommitSha) || Boolean(activeTab.gitCommitCompare) || !dirty}
             >
               保存
             </Button>
@@ -223,7 +223,7 @@ export function RepositoryFileEditorPanel({
                 original={activeTab.diffOriginal}
                 modified={activeTab.content}
                 language={monacoLanguageFromRepositoryPath(activeTab.relativePath)}
-                readOnly={activeTab.gitDiffSection === "staged"}
+                readOnly={activeTab.gitDiffSection === "staged" || Boolean(activeTab.gitCommitSha) || Boolean(activeTab.gitCommitCompare)}
                 dark={dark}
                 onModifiedChange={(next) => onTabContentChange(activeTab.relativePath, next)}
               />

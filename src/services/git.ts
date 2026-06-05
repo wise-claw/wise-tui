@@ -7,6 +7,10 @@ import type {
   GitStatusResponse,
   GitStatusSummaryResponse,
   GitLogResponse,
+  GitGraphResponse,
+  GitCommitDetailResponse,
+  GitCompareCommitsResponse,
+  GitBlameFileResponse,
   GitBranchEntry,
   GitWorktreeEntry,
   GitWorktreeAddOmcBatchResult,
@@ -84,6 +88,87 @@ export async function gitLog(
   skip = 0,
 ): Promise<GitLogResponse> {
   return invoke<GitLogResponse>("git_log", { path, limit, skip });
+}
+
+export type GitResetMode = "soft" | "mixed" | "hard";
+
+export async function gitGraph(
+  path: string,
+  limit: number,
+  skip = 0,
+  branchFilter?: string | null,
+  searchQuery?: string | null,
+  authorFilter?: string | null,
+): Promise<GitGraphResponse> {
+  return invoke<GitGraphResponse>("git_graph", {
+    path,
+    limit,
+    skip,
+    branchFilter: branchFilter?.trim() ? branchFilter.trim() : null,
+    searchQuery: searchQuery?.trim() ? searchQuery.trim() : null,
+    authorFilter: authorFilter?.trim() ? authorFilter.trim() : null,
+  });
+}
+
+export async function gitCommitDetail(
+  path: string,
+  sha: string,
+): Promise<GitCommitDetailResponse> {
+  return invoke<GitCommitDetailResponse>("git_commit_detail", { path, sha });
+}
+
+export async function gitCompareCommits(
+  path: string,
+  baseSha: string,
+  headSha: string,
+): Promise<GitCompareCommitsResponse> {
+  return invoke<GitCompareCommitsResponse>("git_compare_commits", { path, baseSha, headSha });
+}
+
+export async function gitCreateTag(
+  path: string,
+  sha: string,
+  tagName: string,
+  message?: string | null,
+): Promise<void> {
+  return invoke<void>("git_create_tag", {
+    path,
+    sha,
+    tagName,
+    message: message?.trim() ? message.trim() : null,
+  });
+}
+
+export async function gitDeleteTag(path: string, tagName: string): Promise<void> {
+  return invoke<void>("git_delete_tag", { path, tagName });
+}
+
+export async function gitBlameFile(
+  path: string,
+  revision: string,
+  filePath: string,
+): Promise<GitBlameFileResponse> {
+  return invoke<GitBlameFileResponse>("git_blame_file", {
+    path,
+    revision,
+    filePath,
+  });
+}
+
+export async function gitCheckoutRevision(path: string, revision: string): Promise<void> {
+  return invoke<void>("git_checkout_revision", { path, revision });
+}
+
+export async function gitCherryPick(path: string, sha: string): Promise<void> {
+  return invoke<void>("git_cherry_pick", { path, sha });
+}
+
+export async function gitRevert(path: string, sha: string): Promise<void> {
+  return invoke<void>("git_revert", { path, sha });
+}
+
+export async function gitReset(path: string, revision: string, mode: GitResetMode): Promise<void> {
+  return invoke<void>("git_reset", { path, revision, mode });
 }
 
 export async function gitInit(path: string): Promise<string> {

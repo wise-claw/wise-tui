@@ -1,6 +1,6 @@
 use crate::project_workspace_paths::{canonicalize_existing_dir, validate_repository_folder_name};
 use git2::build::CheckoutBuilder;
-use git2::{BranchType, DiffOptions, Oid, Repository, Status, StatusOptions};
+use git2::{BranchType, DiffOptions, Oid, Repository, Sort, Status, StatusOptions};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::fs;
@@ -67,6 +67,86 @@ pub(crate) struct GitLogResponse {
     behind: usize,
     upstream: Option<String>,
     has_more: bool,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct GitGraphRefLabel {
+    name: String,
+    kind: String,
+    is_head: bool,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct GitGraphCommit {
+    sha: String,
+    summary: String,
+    author: String,
+    timestamp: i64,
+    parent_shas: Vec<String>,
+    refs: Vec<GitGraphRefLabel>,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct GitGraphResponse {
+    commits: Vec<GitGraphCommit>,
+    ahead: usize,
+    behind: usize,
+    upstream: Option<String>,
+    has_more: bool,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct GitCommitFileChange {
+    path: String,
+    status: String,
+    additions: usize,
+    deletions: usize,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct GitCommitDetailResponse {
+    sha: String,
+    summary: String,
+    body: String,
+    author: String,
+    timestamp: i64,
+    parent_shas: Vec<String>,
+    files: Vec<GitCommitFileChange>,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct GitCompareCommitsResponse {
+    base_sha: String,
+    head_sha: String,
+    base_summary: String,
+    head_summary: String,
+    files: Vec<GitCommitFileChange>,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct GitBlameLineEntry {
+    line: u32,
+    sha: String,
+    author: String,
+    summary: String,
+    timestamp: i64,
+    content: String,
+}
+
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct GitBlameFileResponse {
+    path: String,
+    revision: String,
+    revision_sha: String,
+    lines: Vec<GitBlameLineEntry>,
 }
 
 #[derive(Serialize, Clone)]
@@ -947,6 +1027,554 @@ pub(crate) fn git_log(path: String, limit: usize, skip: usize) -> Result<GitLogR
         upstream,
         has_more,
     })
+}
+
+fn collect_commit_ref_labels(repo: &Repository) -> HashMap<Oid, Vec<GitGraphRefLabel>> {
+    let mut map: HashMap<Oid, Vec<GitGraphRefLabel>> = HashMap::new();
+
+    for branch_type in [BranchType::Local, BranchType::Remote] {
+        let Ok(branches) = repo.branches(Some(branch_type)) else {
+            continue;
+        };
+        for item in branches.flatten() {
+            let (branch, _) = item;
+            let Ok(Some(name_raw)) = branch.name() else {
+                continue;
+            };
+            let name = name_raw.trim().to_string();
+            if name.is_empty() || name == "HEAD" {
+                continue;
+            }
+            let Some(oid) = branch.get().target() else {
+                continue;
+            };
+            let kind = if branch_type == BranchType::Remote {
+                "remote"
+            } else {
+                "branch"
+            };
+            map.entry(oid).or_default().push(GitGraphRefLabel {
+                name,
+                kind: kind.to_string(),
+                is_head: branch.is_head(),
+            });
+        }
+    }
+
+    if let Ok(names) = repo.tag_names(None) {
+        for name in names.iter().flatten() {
+            let refname = format!("refs/tags/{name}");
+            let Ok(reference) = repo.find_reference(&refname) else {
+                continue;
+            };
+            let Ok(commit) = reference.peel_to_commit() else {
+                continue;
+            };
+            map.entry(commit.id()).or_default().push(GitGraphRefLabel {
+                name: name.to_string(),
+                kind: "tag".to_string(),
+                is_head: false,
+            });
+        }
+    }
+
+    for labels in map.values_mut() {
+        labels.sort_by(|a, b| {
+            a.kind
+                .cmp(&b.kind)
+                .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+        });
+    }
+
+    map
+}
+
+fn resolve_graph_root_oid(repo: &Repository, filter: &str) -> Result<Oid, String> {
+    let candidates = [
+        filter.to_string(),
+        format!("refs/heads/{filter}"),
+        format!("refs/remotes/{filter}"),
+        format!("refs/tags/{filter}"),
+    ];
+    for candidate in candidates {
+        if let Ok(oid) = repo.refname_to_id(&candidate) {
+            return Ok(oid);
+        }
+    }
+    if let Ok(branch) = repo.find_branch(filter, BranchType::Local) {
+        if let Some(oid) = branch.get().target() {
+            return Ok(oid);
+        }
+    }
+    if let Ok(branch) = repo.find_branch(filter, BranchType::Remote) {
+        if let Some(oid) = branch.get().target() {
+            return Ok(oid);
+        }
+    }
+    Err(format!("找不到分支：{filter}"))
+}
+
+fn push_git_graph_roots(
+    revwalk: &mut git2::Revwalk,
+    repo: &Repository,
+    branch_filter: Option<&str>,
+) -> Result<(), String> {
+    if let Some(filter) = branch_filter.map(str::trim).filter(|value| !value.is_empty()) {
+        let oid = resolve_graph_root_oid(repo, filter)?;
+        revwalk.push(oid).map_err(|e| e.to_string())?;
+        return Ok(());
+    }
+
+    if let Ok(head) = repo.head() {
+        if let Some(oid) = head.target() {
+            revwalk.push(oid).map_err(|e| e.to_string())?;
+        }
+    }
+
+    for branch_type in [BranchType::Local, BranchType::Remote] {
+        let branches = repo
+            .branches(Some(branch_type))
+            .map_err(|e| e.to_string())?;
+        for item in branches {
+            let (branch, _) = item.map_err(|e| e.to_string())?;
+            if let Some(oid) = branch.get().target() {
+                let _ = revwalk.push(oid);
+            }
+        }
+    }
+
+    if let Ok(names) = repo.tag_names(None) {
+        for name in names.iter().flatten() {
+            let refname = format!("refs/tags/{name}");
+            let Ok(reference) = repo.find_reference(&refname) else {
+                continue;
+            };
+            let Ok(commit) = reference.peel_to_commit() else {
+                continue;
+            };
+            let _ = revwalk.push(commit.id());
+        }
+    }
+
+    Ok(())
+}
+
+#[tauri::command]
+pub(crate) fn git_graph(
+    path: String,
+    limit: usize,
+    skip: usize,
+    branch_filter: Option<String>,
+    search_query: Option<String>,
+    author_filter: Option<String>,
+) -> Result<GitGraphResponse, String> {
+    let repo = open_repo(&path)?;
+    let (ahead, behind, upstream) = compute_ahead_behind(&repo).unwrap_or((0, 0, None));
+
+    let limit = limit.clamp(1, 200);
+    let skip = skip.min(usize::MAX / 2);
+    let ref_labels = collect_commit_ref_labels(&repo);
+    let search = search_query
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    let author = author_filter
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+
+    let mut revwalk = repo.revwalk().map_err(|e| e.to_string())?;
+    revwalk
+        .set_sorting(Sort::TIME | Sort::TOPOLOGICAL)
+        .map_err(|e| e.to_string())?;
+    push_git_graph_roots(
+        &mut revwalk,
+        &repo,
+        branch_filter.as_deref(),
+    )?;
+
+    let mut commits = Vec::new();
+    let mut skipped = 0usize;
+    let mut has_more = false;
+
+    for oid in revwalk {
+        let oid = oid.map_err(|e| e.to_string())?;
+        let commit = repo.find_commit(oid).map_err(|e| e.to_string())?;
+        if !commit_matches_graph_filters(&commit, oid, &ref_labels, search, author) {
+            continue;
+        }
+        if skipped < skip {
+            skipped += 1;
+            continue;
+        }
+        if commits.len() >= limit {
+            has_more = true;
+            break;
+        }
+        let parent_shas = commit
+            .parent_ids()
+            .map(|parent| parent.to_string())
+            .collect::<Vec<_>>();
+        commits.push(GitGraphCommit {
+            sha: oid.to_string(),
+            summary: commit.summary().unwrap_or("").to_string(),
+            author: commit.author().name().unwrap_or("Unknown").to_string(),
+            timestamp: commit.time().seconds(),
+            parent_shas,
+            refs: ref_labels.get(&oid).cloned().unwrap_or_default(),
+        });
+    }
+
+    Ok(GitGraphResponse {
+        commits,
+        ahead,
+        behind,
+        upstream,
+        has_more,
+    })
+}
+
+fn commit_matches_graph_filters(
+    commit: &git2::Commit<'_>,
+    oid: Oid,
+    ref_labels: &HashMap<Oid, Vec<GitGraphRefLabel>>,
+    search: Option<&str>,
+    author: Option<&str>,
+) -> bool {
+    if let Some(author_name) = author {
+        if commit.author().name().unwrap_or("") != author_name {
+            return false;
+        }
+    }
+    let Some(query) = search else {
+        return true;
+    };
+    let query = query.to_lowercase();
+    let summary = commit.summary().unwrap_or("").to_lowercase();
+    let author_name = commit.author().name().unwrap_or("").to_lowercase();
+    let sha = oid.to_string().to_lowercase();
+    if summary.contains(&query) || author_name.contains(&query) || sha.contains(&query) {
+        return true;
+    }
+    ref_labels
+        .get(&oid)
+        .is_some_and(|labels| labels.iter().any(|label| label.name.to_lowercase().contains(&query)))
+}
+
+fn delta_status_label(status: git2::Delta) -> &'static str {
+    match status {
+        git2::Delta::Added => "A",
+        git2::Delta::Deleted => "D",
+        git2::Delta::Modified => "M",
+        git2::Delta::Renamed => "R",
+        git2::Delta::Copied => "C",
+        git2::Delta::Typechange => "T",
+        git2::Delta::Untracked => "A",
+        git2::Delta::Conflicted => "U",
+        _ => "?",
+    }
+}
+
+fn collect_diff_file_changes(diff: &git2::Diff<'_>) -> Result<Vec<GitCommitFileChange>, String> {
+    let stats = collect_line_stats_from_diff(diff);
+    let mut files = Vec::new();
+    diff.foreach(
+        &mut |delta, _| {
+            let path = delta
+                .new_file()
+                .path()
+                .or_else(|| delta.old_file().path())
+                .map(|value| value.to_string_lossy().to_string())
+                .unwrap_or_default();
+            if path.is_empty() {
+                return true;
+            }
+            let (additions, deletions) = stats.get(&path).copied().unwrap_or((0, 0));
+            files.push(GitCommitFileChange {
+                path,
+                status: delta_status_label(delta.status()).to_string(),
+                additions,
+                deletions,
+            });
+            true
+        },
+        None,
+        None,
+        None,
+    )
+    .map_err(|e| e.to_string())?;
+
+    files.sort_by(|left, right| left.path.cmp(&right.path));
+    Ok(files)
+}
+
+fn find_peeled_commit<'repo>(
+    repo: &'repo Repository,
+    revision: &str,
+) -> Result<git2::Commit<'repo>, String> {
+    let oid = repo
+        .revparse_single(revision.trim())
+        .map_err(|e| format!("无效的 revision: {e}"))?
+        .peel_to_commit()
+        .map_err(|e| e.to_string())?
+        .id();
+    repo.find_commit(oid).map_err(|e| e.to_string())
+}
+
+fn collect_commit_file_changes(
+    repo: &Repository,
+    commit: &git2::Commit<'_>,
+) -> Result<Vec<GitCommitFileChange>, String> {
+    let tree = commit.tree().map_err(|e| e.to_string())?;
+    let diff = if commit.parent_count() > 0 {
+        let parent = commit.parent(0).map_err(|e| e.to_string())?;
+        let parent_tree = parent.tree().map_err(|e| e.to_string())?;
+        repo.diff_tree_to_tree(Some(&parent_tree), Some(&tree), None)
+            .map_err(|e| e.to_string())?
+    } else {
+        repo.diff_tree_to_tree(None, Some(&tree), None)
+            .map_err(|e| e.to_string())?
+    };
+
+    collect_diff_file_changes(&diff)
+}
+
+#[tauri::command]
+pub(crate) fn git_commit_detail(path: String, sha: String) -> Result<GitCommitDetailResponse, String> {
+    let repo = open_repo(&path)?;
+    let commit = find_peeled_commit(&repo, &sha)?;
+    let oid = commit.id();
+    let parent_shas = commit
+        .parent_ids()
+        .map(|parent| parent.to_string())
+        .collect::<Vec<_>>();
+    let message = commit.message().unwrap_or("");
+    let summary = commit.summary().unwrap_or("").to_string();
+    let body = if summary.is_empty() {
+        message.trim().to_string()
+    } else {
+        message
+            .strip_prefix(&summary)
+            .unwrap_or("")
+            .trim_start_matches('\n')
+            .trim()
+            .to_string()
+    };
+    let author = commit.author().name().unwrap_or("Unknown").to_string();
+    let timestamp = commit.time().seconds();
+    let files = collect_commit_file_changes(&repo, &commit)?;
+
+    Ok(GitCommitDetailResponse {
+        sha: oid.to_string(),
+        summary,
+        body,
+        author,
+        timestamp,
+        parent_shas,
+        files,
+    })
+}
+
+#[tauri::command]
+pub(crate) fn git_compare_commits(
+    path: String,
+    base_sha: String,
+    head_sha: String,
+) -> Result<GitCompareCommitsResponse, String> {
+    let repo = open_repo(&path)?;
+    let base = find_peeled_commit(&repo, &base_sha)?;
+    let head = find_peeled_commit(&repo, &head_sha)?;
+    let base_tree = base.tree().map_err(|e| e.to_string())?;
+    let head_tree = head.tree().map_err(|e| e.to_string())?;
+    let diff = repo
+        .diff_tree_to_tree(Some(&base_tree), Some(&head_tree), None)
+        .map_err(|e| e.to_string())?;
+
+    Ok(GitCompareCommitsResponse {
+        base_sha: base.id().to_string(),
+        head_sha: head.id().to_string(),
+        base_summary: base.summary().unwrap_or("").to_string(),
+        head_summary: head.summary().unwrap_or("").to_string(),
+        files: collect_diff_file_changes(&diff)?,
+    })
+}
+
+#[tauri::command]
+pub(crate) fn git_create_tag(
+    path: String,
+    sha: String,
+    tag_name: String,
+    message: Option<String>,
+) -> Result<(), String> {
+    let name = tag_name.trim();
+    let sha = sha.trim();
+    if name.is_empty() {
+        return Err("标签名不能为空".to_string());
+    }
+    if sha.is_empty() {
+        return Err("commit SHA 不能为空".to_string());
+    }
+    if name.contains(' ') {
+        return Err("标签名不能包含空格".to_string());
+    }
+    let annotation = message
+        .as_deref()
+        .map(str::trim)
+        .filter(|value| !value.is_empty());
+    if let Some(text) = annotation {
+        run_git_command(
+            &path,
+            &["tag", "-a", name, "-m", text, sha],
+            "Create tag",
+        )
+    } else {
+        run_git_command(&path, &["tag", name, sha], "Create tag")
+    }
+}
+
+#[tauri::command]
+pub(crate) fn git_delete_tag(path: String, tag_name: String) -> Result<(), String> {
+    let name = tag_name.trim();
+    if name.is_empty() {
+        return Err("标签名不能为空".to_string());
+    }
+    run_git_command(&path, &["tag", "-d", name], "Delete tag")
+}
+
+const GIT_BLAME_MAX_LINES: u32 = 800;
+
+fn read_commit_file_lines(
+    repo: &Repository,
+    commit: &git2::Commit,
+    rel_path: &str,
+) -> Result<Vec<String>, String> {
+    let tree = commit.tree().map_err(|e| e.to_string())?;
+    let entry = tree
+        .get_path(std::path::Path::new(rel_path))
+        .map_err(|e| format!("文件不存在: {e}"))?;
+    if entry.kind() != Some(git2::ObjectType::Blob) {
+        return Err("路径不是文件".to_string());
+    }
+    let blob = repo.find_blob(entry.id()).map_err(|e| e.to_string())?;
+    let content = std::str::from_utf8(blob.content()).map_err(|e| e.to_string())?;
+    Ok(content.lines().map(str::to_string).collect())
+}
+
+#[tauri::command]
+pub(crate) fn git_blame_file(
+    path: String,
+    revision: String,
+    file_path: String,
+) -> Result<GitBlameFileResponse, String> {
+    let repo = open_repo(&path)?;
+    let commit = find_peeled_commit(&repo, &revision)?;
+    let revision_sha = commit.id().to_string();
+    let rel_path = file_path.trim().trim_start_matches('/');
+    if rel_path.is_empty() {
+        return Err("文件路径不能为空".to_string());
+    }
+
+    let mut opts = git2::BlameOptions::new();
+    opts.newest_commit(commit.id());
+    let blame = repo
+        .blame_file(std::path::Path::new(rel_path), Some(&mut opts))
+        .map_err(|e| format!("Blame 失败: {e}"))?;
+
+    let file_lines = read_commit_file_lines(&repo, &commit, rel_path).unwrap_or_default();
+
+    let mut lines = Vec::new();
+    for hunk in blame.iter() {
+        if lines.len() as u32 >= GIT_BLAME_MAX_LINES {
+            break;
+        }
+        let commit_id = hunk.final_commit_id();
+        let blamed = repo.find_commit(commit_id).map_err(|e| e.to_string())?;
+        let sha = commit_id.to_string();
+        let author = blamed.author().name().unwrap_or("Unknown").to_string();
+        let summary = blamed.summary().unwrap_or("").to_string();
+        let timestamp = blamed.time().seconds();
+        let start = hunk.final_start_line();
+        for offset in 0..hunk.lines_in_hunk() {
+            if lines.len() as u32 >= GIT_BLAME_MAX_LINES {
+                break;
+            }
+            let line_no = (start + offset) as u32;
+            let content = file_lines
+                .get(line_no.saturating_sub(1) as usize)
+                .cloned()
+                .unwrap_or_default();
+            lines.push(GitBlameLineEntry {
+                line: line_no,
+                sha: sha.clone(),
+                author: author.clone(),
+                summary: summary.clone(),
+                timestamp,
+                content,
+            });
+        }
+    }
+
+    Ok(GitBlameFileResponse {
+        path: rel_path.to_string(),
+        revision: revision.trim().to_string(),
+        revision_sha,
+        lines,
+    })
+}
+
+#[tauri::command]
+pub(crate) fn git_checkout_revision(path: String, revision: String) -> Result<(), String> {
+    let revision = revision.trim();
+    if revision.is_empty() {
+        return Err("revision 不能为空".to_string());
+    }
+    run_git_command(&path, &["checkout", revision], "Checkout")
+}
+
+#[tauri::command]
+pub(crate) async fn git_cherry_pick(path: String, sha: String) -> Result<(), String> {
+    run_git_blocking("Cherry-pick", move || {
+        let sha = sha.trim();
+        if sha.is_empty() {
+            return Err("commit SHA 不能为空".to_string());
+        }
+        run_git_command(&path, &["cherry-pick", sha], "Cherry-pick")
+    })
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn git_revert(path: String, sha: String) -> Result<(), String> {
+    run_git_blocking("Revert", move || {
+        let sha = sha.trim();
+        if sha.is_empty() {
+            return Err("commit SHA 不能为空".to_string());
+        }
+        run_git_command(&path, &["revert", "--no-edit", sha], "Revert")
+    })
+    .await
+}
+
+#[tauri::command]
+pub(crate) async fn git_reset(
+    path: String,
+    revision: String,
+    mode: String,
+) -> Result<(), String> {
+    run_git_blocking("Reset", move || {
+        let revision = revision.trim();
+        if revision.is_empty() {
+            return Err("revision 不能为空".to_string());
+        }
+        let flag = match mode.trim().to_ascii_lowercase().as_str() {
+            "soft" => "--soft",
+            "mixed" => "--mixed",
+            "hard" => "--hard",
+            _ => return Err("无效的 reset 模式".to_string()),
+        };
+        run_git_command(&path, &["reset", flag, revision], "Reset")
+    })
+    .await
 }
 
 #[tauri::command]

@@ -2,8 +2,7 @@ import { startTransition, useCallback, useEffect, useRef, useState, type ReactNo
 import { listen } from "@tauri-apps/api/event";
 import { safeUnlistenPromise } from "../../utils/safeTauriUnlisten";
 import { runWhenIdle } from "../../utils/deferIdle";
-import { Button, Empty, Spin, Tooltip, message } from "antd";
-import { GlobalOutlined } from "@ant-design/icons";
+import { Empty, Spin, message } from "antd";
 import {
   gitCommit,
   gitDiscard,
@@ -25,6 +24,8 @@ import { openRepositoryRemoteInBrowser } from "../../services/openRepositoryRemo
 import type { GitStatusResponse } from "../../types";
 import { runGitSyncAction, type GitSyncActionKind } from "./gitSyncActionRunner";
 import { DiffMode } from "./DiffMode";
+import { GitHistoryDrawer } from "./GitHistoryDrawer";
+import { GitPanelMoreMenu } from "./GitPanelMoreMenu";
 import { GitSyncActions } from "./GitSyncActions";
 import { InitMode } from "./InitMode";
 import { hasUnstagedFilesUnderDirectory, GIT_WATCHER_REFRESH_MS, gitStatusSnapshotEqual } from "./gitPanelUtils";
@@ -101,6 +102,7 @@ function GitSingleRepoPanel({
   onProjectSelect,
   directoryOnly,
 }: Props) {
+  const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
   const [status, setStatus] = useState<GitStatusResponse | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
   const [openingRemote, setOpeningRemote] = useState(false);
@@ -466,17 +468,6 @@ function GitSingleRepoPanel({
           )}
         </div>
         <div className="git-panel-header-right">
-          <Tooltip title="在浏览器中打开仓库" placement="top">
-            <Button
-              type="text"
-              size="small"
-              className="git-remote-browser-btn"
-              icon={<GlobalOutlined />}
-              aria-label="在浏览器中打开仓库"
-              loading={openingRemote}
-              onClick={handleOpenRemoteInBrowser}
-            />
-          </Tooltip>
           {status ? (
             <GitSyncActions
               status={status}
@@ -486,6 +477,12 @@ function GitSingleRepoPanel({
               onPush={handlePush}
             />
           ) : null}
+          <GitPanelMoreMenu
+            historyActive={historyDrawerOpen}
+            onOpenHistory={() => setHistoryDrawerOpen(true)}
+            onOpenInBrowser={handleOpenRemoteInBrowser}
+            openingBrowser={openingRemote}
+          />
         </div>
       </div>
 
@@ -521,6 +518,13 @@ function GitSingleRepoPanel({
           )
         )}
       </div>
+      <GitHistoryDrawer
+        open={historyDrawerOpen}
+        repositoryPath={repositoryPath}
+        onClose={() => setHistoryDrawerOpen(false)}
+        onOpenFile={onOpenFile}
+        onRepositoryRefresh={() => void loadStatus({ silent: true })}
+      />
     </div>
   );
 }
