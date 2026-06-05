@@ -398,8 +398,6 @@ export function buildExecutionEnvironmentConversationTasks(input: {
   const out: SessionConversationTaskItem[] = [];
   for (const batch of input.dispatchRecords) {
     if (batch.anchorSessionId !== anchorId) continue;
-    const repoPath = batch.repositoryPath || anchor.repositoryPath;
-    const engineShort = SESSION_EXECUTION_ENGINE_LABELS[batch.executionEngine].short;
     const batchItems =
       batch.items.length > 0
         ? batch.items

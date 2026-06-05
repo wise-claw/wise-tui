@@ -22,11 +22,11 @@ export function resolveExecutionEnvironmentDispatchAnchorSessionId(input: {
   const repoPath = active.repositoryPath?.trim();
   if (!repoPath) return activeId;
 
-  const mainOwner = resolveMainOwnerAgentNameForRepositoryPath(input.repositories, repoPath);
+  const mainOwner = resolveMainOwnerAgentNameForRepositoryPath([...input.repositories], repoPath);
   const mainId = resolveRepositoryMainSessionId(
     repoPath,
     input.repositoryMainSessionBindings,
-    input.sessions,
+    [...input.sessions],
     mainOwner,
   );
 

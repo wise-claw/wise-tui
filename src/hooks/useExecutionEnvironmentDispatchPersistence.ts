@@ -34,7 +34,8 @@ function mergePersistedDispatchRecordsWithLive(
 
 function anchorSessionMessagesFingerprint(session: ClaudeSession | null | undefined): string {
   if (!session) return "";
-  const last = session.messages.at(-1);
+  const last =
+    session.messages.length > 0 ? session.messages[session.messages.length - 1] : undefined;
   return `${session.messages.length}|${last?.id ?? ""}|${last?.timestamp ?? 0}`;
 }
 

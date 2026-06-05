@@ -105,7 +105,10 @@ function recordFromDispatchMeta(input: {
           previewText,
           batchIndex: index + 1,
           sessionCount: workers.length,
-          updatedAt: worker.messages.at(-1)?.timestamp ?? createdAt,
+          updatedAt:
+            (worker.messages.length > 0
+              ? worker.messages[worker.messages.length - 1]?.timestamp
+              : undefined) ?? createdAt,
         }))
       : [
           {
