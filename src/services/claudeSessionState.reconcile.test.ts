@@ -38,4 +38,42 @@ describe("reconcileSessionStatusesWithRunningRegistry", () => {
 
     expect(next[0]?.status).toBe("cancelled");
   });
+
+  test("streaming resident stays idle between turns when registry is completed", () => {
+    const sessions = [
+      session({
+        id: "session_tab_1",
+        status: "idle",
+        connectionKind: "streaming",
+        claudeSessionId: "claude_sid_1",
+      }),
+    ];
+    const runningIds = new Set<string>();
+    const knownIds = new Set(["claude_sid_1"]);
+
+    const next = reconcileSessionStatusesWithRunningRegistry(
+      sessions,
+      runningIds,
+      null,
+      knownIds,
+    );
+
+    expect(next[0]?.status).toBe("idle");
+  });
+
+  test("promotes idle to running when registry still lists claude session as running", () => {
+    const sessions = [
+      session({
+        id: "session_tab_1",
+        status: "idle",
+        connectionKind: "streaming",
+        claudeSessionId: "claude_sid_1",
+      }),
+    ];
+    const runningIds = new Set(["claude_sid_1"]);
+
+    const next = reconcileSessionStatusesWithRunningRegistry(sessions, runningIds);
+
+    expect(next[0]?.status).toBe("running");
+  });
 });

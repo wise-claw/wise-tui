@@ -193,7 +193,6 @@ import {
   CURSOR_STREAM_STALL_MS,
   TRELLIS_CONTEXT_BINDING_STORAGE_KEY,
   WORKFLOW_BINDING_STORAGE_KEY,
-  applyStreamingResidentUiStatuses,
   attachClaudeInvocationStream,
   attachClaudeSessionStreamForTurn,
   collectClaudeSessionSidecarIds,
@@ -2233,19 +2232,12 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         pruneClaudeRegistryBootstrapWarmup(registryBootstrapDeadlineByClaudeSidRef, runningIds);
         startTransition(() => {
           setSessions((prev) => {
-            const reconciled = reconcileSessionStatusesWithRunningRegistry(
+            const next = reconcileSessionStatusesWithRunningRegistry(
               prev,
               runningIds,
               registryBootstrapDeadlineByClaudeSidRef.current,
               knownIds,
             );
-            const next = includeHostSnapshot
-              ? applyStreamingResidentUiStatuses(
-                  reconciled,
-                  streamingProcessByTabRef.current,
-                  defaultConnectionKindRef.current,
-                )
-              : reconciled;
             return next === prev ? prev : next;
           });
         });
@@ -3219,16 +3211,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       );
       pruneClaudeRegistryBootstrapWarmup(registryBootstrapDeadlineByClaudeSidRef, runningIds);
       setSessions((prev) => {
-        const reconciled = reconcileSessionStatusesWithRunningRegistry(
+        const next = reconcileSessionStatusesWithRunningRegistry(
           prev,
           runningIds,
           registryBootstrapDeadlineByClaudeSidRef.current,
           knownIds,
-        );
-        const next = applyStreamingResidentUiStatuses(
-          reconciled,
-          streamingProcessByTabRef.current,
-          defaultConnectionKindRef.current,
         );
         return next === prev ? prev : next;
       });

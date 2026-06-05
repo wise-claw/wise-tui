@@ -40,23 +40,6 @@ export function hydrateStreamingProcessRegistryFromHost(
   }
 }
 
-export function applyStreamingResidentUiStatuses(
-  sessions: ClaudeSession[],
-  streamingProcessByTab: Map<string, { claudeSessionId: string | null }>,
-  defaultConnectionKind: ClaudeSessionConnectionKind,
-): ClaudeSession[] {
-  let changed = false;
-  const next = sessions.map((session) => {
-    if (session.status === "running" || session.status === "connecting") return session;
-    if (!streamingProcessByTab.has(session.id)) return session;
-    if (!sessionUsesStreamingConnection(session, defaultConnectionKind)) return session;
-    if (!session.claudeSessionId?.trim()) return session;
-    changed = true;
-    return { ...session, status: "running" as const };
-  });
-  return changed ? next : sessions;
-}
-
 /** @internal Exported for unit tests. */
 export function collectClaudeSessionSidecarIds(
   closedId: string,
