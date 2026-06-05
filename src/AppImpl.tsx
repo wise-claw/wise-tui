@@ -128,6 +128,7 @@ import { useExecutionEnvironmentDispatchHistoryDays } from "./hooks/useExecution
 import { useExecutionEnvironmentDispatchWorkerTranscriptPreload } from "./hooks/useExecutionEnvironmentDispatchWorkerTranscriptPreload";
 import { useSessionConversationTasks } from "./hooks/useSessionConversationTasks";
 import { dispatchExecutionEnvironmentFromMainSession } from "./services/executionEnvironmentDispatch";
+import { resolveExecutionEnvironmentDispatchAnchorSessionId } from "./utils/executionEnvironmentDispatchAnchor";
 import { useMonitorSessionsForOverview } from "./hooks/useMonitorSessionsForOverview";
 import { useLeftSidebarHubQuickEntries } from "./hooks/useLeftSidebarHubQuickEntries";
 import { useMonitorPanelDefault } from "./hooks/useMonitorPanelDefault";
@@ -1285,9 +1286,22 @@ export default function App() {
     [activeProjectId, activeRepositoryId, projects, repositoryMemberMonitorItems],
   );
   const executionEnvironmentDispatchHistory = useExecutionEnvironmentDispatchHistoryDays();
-  const sessionConversationTaskItems = useSessionConversationTasks(activeSessionId, sessions);
+  const sessionConversationTaskItems = useSessionConversationTasks(activeSessionId, sessions, {
+    repositoryMainSessionBindings,
+    repositories,
+  });
+  const dispatchAnchorSessionId = useMemo(
+    () =>
+      resolveExecutionEnvironmentDispatchAnchorSessionId({
+        activeSessionId,
+        sessions,
+        repositoryMainSessionBindings,
+        repositories,
+      }),
+    [activeSessionId, sessions, repositoryMainSessionBindings, repositories],
+  );
   useExecutionEnvironmentDispatchWorkerTranscriptPreload(
-    activeSessionId,
+    dispatchAnchorSessionId,
     sessions,
     reloadFullDiskTranscript,
   );

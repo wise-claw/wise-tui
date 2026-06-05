@@ -1,7 +1,26 @@
 import { useEffect, useRef, useState } from "react";
 import type { ClaudeSession } from "../types";
-import { indexOfLastRenderableUserMessage } from "../utils/claudeChatMessageDisplay";
+import { indexOfLastRenderableUserMessage, isAssistantDisplayNoiseText } from "../utils/claudeChatMessageDisplay";
+import { assistantMessageVisiblePlainText } from "../services/claudeSessionState";
 import { MONITOR_SESSIONS_SYNC_INTERVAL_MS } from "../constants/monitorUi";
+
+function settledAssistantPreviewLengthBucket(session: ClaudeSession): string {
+  if (session.status === "running" || session.status === "connecting") {
+    return "";
+  }
+  const turnStart = indexOfLastRenderableUserMessage(session.messages);
+  if (turnStart < 0) return "";
+  let lastLen = 0;
+  for (let i = turnStart + 1; i < session.messages.length; i += 1) {
+    const msg = session.messages[i]!;
+    if (msg.role !== "assistant") continue;
+    const text = assistantMessageVisiblePlainText(msg);
+    if (text.trim() && !isAssistantDisplayNoiseText(text)) {
+      lastLen = text.length;
+    }
+  }
+  return lastLen > 0 ? String(Math.floor(lastLen / 64)) : "";
+}
 
 /** 终端行状态推断：忽略流式正文长度，仅跟踪消息条数 / 末条角色与末轮用户索引。 */
 export function monitorSessionsTerminalStatusFingerprint(sessions: readonly ClaudeSession[]): string {
@@ -20,6 +39,7 @@ export function monitorSessionsTerminalStatusFingerprint(sessions: readonly Clau
         String(lastUserIdx),
         last?.id ?? "",
         last?.role ?? "",
+        settledAssistantPreviewLengthBucket(s),
       ].join("|"),
     );
   }

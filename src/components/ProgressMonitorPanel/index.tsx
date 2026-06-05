@@ -73,6 +73,7 @@ import { canStopSessionConversationTask, filterExecutionEnvironmentDispatchTaskI
 import { SessionConversationDispatchTaskRow } from "./SessionConversationDispatchTaskRow";
 import {
   buildEmployeeTerminalConversationStatusById,
+  buildEmployeeTerminalLastMessagePreviewById,
   type EmployeeTerminalConversationStatus,
 } from "../../utils/employeeTerminalDispatchStatus";
 import {
@@ -881,6 +882,7 @@ export function HistorySessionPopoverContent({
 const TerminalEmployeeMonitorRow = memo(function TerminalEmployeeMonitorRow({
   item,
   conversationStatus,
+  lastMessagePreview,
   historyPopoverOpen,
   historySearch,
   matchedHistorySessions,
@@ -897,6 +899,7 @@ const TerminalEmployeeMonitorRow = memo(function TerminalEmployeeMonitorRow({
 }: {
   item: EmployeeMonitorItem;
   conversationStatus: EmployeeTerminalConversationStatus;
+  lastMessagePreview: string;
   statusVisual: SubagentStatusVisual;
   historyPopoverOpen: boolean;
   historySearch: string;
@@ -929,6 +932,11 @@ const TerminalEmployeeMonitorRow = memo(function TerminalEmployeeMonitorRow({
             <span className="app-monitor-panel__item-name">{item.name}</span>
           </span>
         </button>
+        {lastMessagePreview ? (
+          <span className="app-monitor-panel__session-task-preview" title={lastMessagePreview}>
+            {lastMessagePreview}
+          </span>
+        ) : null}
         <span className="app-monitor-panel__item-actions">
           <SubagentStatusIndicator status={conversationStatus} visual={statusVisual} />
           {terminalInProgress ? (
@@ -1358,6 +1366,24 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
     ],
   );
 
+  const employeeTerminalLastMessagePreviewById = useMemo(
+    () =>
+      buildEmployeeTerminalLastMessagePreviewById({
+        employeeItems,
+        repositoryPath: monitorRepositoryPath,
+        sessions: sessionsForTerminalStatusRef.current,
+        dispatchTasks: executionEnvironmentDispatchTaskItems,
+        conversationStatusById: employeeTerminalConversationStatusById,
+      }),
+    [
+      employeeItems,
+      employeeTerminalConversationStatusById,
+      executionEnvironmentDispatchTaskItems,
+      monitorRepositoryPath,
+      sessionsTerminalStatusFingerprint,
+    ],
+  );
+
   const compactListsAnchorRef = useRef<HTMLDivElement>(null);
   const compactFlatRows = useMemo((): MonitorCompactFlatRow[] => {
     const rows: MonitorCompactFlatRow[] = [];
@@ -1431,6 +1457,7 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
           conversationStatus={
             employeeTerminalConversationStatusById.get(item.employeeId) ?? "idle"
           }
+          lastMessagePreview={employeeTerminalLastMessagePreviewById.get(item.employeeId) ?? ""}
           statusVisual={isCompactSidebarPanel ? "lite" : "full"}
           historyPopoverOpen={historyPopoverOpen}
           historySearch={historyPopoverOpen ? employeeHistorySearch : ""}
@@ -1454,6 +1481,7 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
       employeeHistorySearch,
       employeeHistorySessionsByName,
       employeeTerminalConversationStatusById,
+      employeeTerminalLastMessagePreviewById,
       handleEmployeeHistoryPopoverOpenChange,
       handleOmcDirectBatchRowActivate,
       onCancelOmcDirectBatchInvocation,

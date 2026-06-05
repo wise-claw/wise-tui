@@ -9,6 +9,7 @@ import {
   resolveExecutionEnvironmentTaskFromDispatchMeta,
   resolveExecutionEnvironmentTaskFromTaskItems,
   resolveExecutionEnvironmentWorkerConversationTaskStatus,
+  resolveWorkerDispatchTurnLastAssistantPreview,
 } from "./sessionConversationTasks";
 import type { SessionConversationTaskItem } from "../types";
 import { parseDispatchRecord } from "./claudeChatMessageDisplay";
@@ -539,6 +540,61 @@ describe("buildSessionConversationTasks", () => {
       ],
     });
     expect(resolveExecutionEnvironmentWorkerConversationTaskStatus(worker)).toBe("completed");
+  });
+
+  test("uses last assistant reply as execution environment preview text", () => {
+    const anchor = session({ id: "main-1" });
+    const worker = session({
+      id: "worker-1",
+      repositoryName: "demo/执行环境:claude:任务",
+      status: "completed",
+      messages: [
+        { id: 1, role: "user", content: "你好 Claude", timestamp: 1 },
+        { id: 2, role: "assistant", content: "全部完成。三个区域现在统一以 10px 左侧内边距对齐。", timestamp: 2 },
+      ],
+    });
+    const items = buildSessionConversationTasks({
+      session: anchor,
+      allSessions: [anchor, worker],
+      executionEnvironmentRecords: [
+        {
+          batchId: "batch-1",
+          anchorSessionId: "main-1",
+          repositoryPath: "/repo",
+          executionEngine: "claude" as const,
+          createdAt: 1,
+          items: [
+            {
+              key: "k1",
+              batchId: "batch-1",
+              anchorSessionId: "main-1",
+              workerSessionId: "worker-1",
+              label: "任务",
+              previewText: "你好 Claude",
+              batchIndex: 1,
+              sessionCount: 1,
+              updatedAt: 2,
+            },
+          ],
+        },
+      ],
+    });
+    expect(items[0]?.previewText).toContain("全部完成");
+    expect(items[0]?.previewText).not.toContain("你好 Claude");
+  });
+});
+
+describe("resolveWorkerDispatchTurnLastAssistantPreview", () => {
+  test("returns last meaningful assistant text after latest user turn", () => {
+    const worker = session({
+      messages: [
+        { id: 1, role: "user", content: "第一轮", timestamp: 1 },
+        { id: 2, role: "assistant", content: "旧回复", timestamp: 2 },
+        { id: 3, role: "user", content: "第二轮", timestamp: 3 },
+        { id: 4, role: "assistant", content: "最终摘要", timestamp: 4 },
+      ],
+    });
+    expect(resolveWorkerDispatchTurnLastAssistantPreview(worker)).toBe("最终摘要");
   });
 });
 

@@ -9,7 +9,10 @@ import { findTerminalWorkerTab, normalizeTerminalDispatchName } from "../service
 import {
   parseExecutionEnvironmentWorkerRepositoryName,
 } from "./executionEnvironmentDispatch";
-import { resolveExecutionEnvironmentWorkerConversationTaskStatus } from "./sessionConversationTasks";
+import {
+  resolveExecutionEnvironmentWorkerConversationTaskStatus,
+  resolveWorkerDispatchTurnLastAssistantPreview,
+} from "./sessionConversationTasks";
 
 export type EmployeeTerminalConversationStatus =
   | SessionConversationTaskItem["status"]
@@ -152,6 +155,75 @@ export function buildEmployeeTerminalConversationStatusById(input: {
         sessions: input.sessions,
         dispatchTasks: input.dispatchTasks,
         panelEmployeeNames,
+      }),
+    );
+  }
+  return map;
+}
+
+function isSettledTerminalConversationStatus(
+  status: EmployeeTerminalConversationStatus,
+): status is SessionConversationTaskItem["status"] {
+  return status === "completed" || status === "failed";
+}
+
+/** 终端行：会话执行完成后展示最后一轮助手摘要。 */
+export function resolveEmployeeTerminalLastMessagePreview(input: {
+  employeeName: string;
+  repositoryPath: string;
+  sessions: readonly ClaudeSession[];
+  dispatchTasks: readonly SessionConversationTaskItem[];
+  panelEmployeeNames: readonly string[];
+  conversationStatus: EmployeeTerminalConversationStatus;
+}): string {
+  if (!isSettledTerminalConversationStatus(input.conversationStatus)) {
+    return "";
+  }
+
+  const terminalWorker = findTerminalWorkerTab(
+    [...input.sessions],
+    input.repositoryPath,
+    input.employeeName,
+  );
+  if (terminalWorker) {
+    const preview = resolveWorkerDispatchTurnLastAssistantPreview(terminalWorker);
+    if (preview) return preview;
+  }
+
+  let best: SessionConversationTaskItem | null = null;
+  for (const task of input.dispatchTasks) {
+    if (!dispatchTaskBelongsToEmployee(task, input.employeeName, input.sessions, input.panelEmployeeNames)) {
+      continue;
+    }
+    if (task.status === "running") continue;
+    const preview = task.previewText?.trim() ?? "";
+    if (!preview || preview === task.label.trim()) continue;
+    if (!best || task.updatedAt >= best.updatedAt) {
+      best = task;
+    }
+  }
+  return best?.previewText?.trim() ?? "";
+}
+
+export function buildEmployeeTerminalLastMessagePreviewById(input: {
+  employeeItems: ReadonlyArray<{ employeeId: string; name: string }>;
+  repositoryPath: string;
+  sessions: readonly ClaudeSession[];
+  dispatchTasks: readonly SessionConversationTaskItem[];
+  conversationStatusById: ReadonlyMap<string, EmployeeTerminalConversationStatus>;
+}): Map<string, string> {
+  const panelEmployeeNames = input.employeeItems.map((item) => item.name);
+  const map = new Map<string, string>();
+  for (const item of input.employeeItems) {
+    map.set(
+      item.employeeId,
+      resolveEmployeeTerminalLastMessagePreview({
+        employeeName: item.name,
+        repositoryPath: input.repositoryPath,
+        sessions: input.sessions,
+        dispatchTasks: input.dispatchTasks,
+        panelEmployeeNames,
+        conversationStatus: input.conversationStatusById.get(item.employeeId) ?? "idle",
       }),
     );
   }

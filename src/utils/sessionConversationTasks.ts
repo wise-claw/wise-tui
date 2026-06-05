@@ -4,7 +4,7 @@ import type { ClaudeMessage, ClaudeSession, MessagePart, SessionConversationTask
 import { SESSION_EXECUTION_ENGINE_LABELS } from "../constants/sessionExecutionEngine";
 import type { ExecutionEnvironmentDispatchRecord } from "../stores/executionEnvironmentDispatchStore";
 import { sessionStatusToConversationTaskStatus } from "../stores/executionEnvironmentDispatchStore";
-import { indexOfLastRenderableUserMessage, isToolOnlyUserMessage, isAssistantDisplayNoiseText, type DispatchRecordMeta } from "./claudeChatMessageDisplay";
+import { indexOfLastRenderableUserMessage, isToolOnlyUserMessage, isAssistantDisplayNoiseText, parseDispatchRecordDisplayTimeMs, type DispatchRecordMeta } from "./claudeChatMessageDisplay";
 import { isExecutionEnvironmentWorkerRepositoryName } from "./executionEnvironmentDispatch";
 import { resolveSessionExecutionEngine, sessionHasDiskTranscript } from "./sessionExecutionEngine";
 import {
@@ -72,6 +72,13 @@ function truncate(text: string, max = 72): string {
   if (!normalized) return "";
   if (normalized.length <= max) return normalized;
   return `${normalized.slice(0, max)}…`;
+}
+
+/** 运行面板终端/派发行：助手摘要截断上限（CSS 仍会在侧栏宽度内 ellipsis）。 */
+export const MONITOR_ROW_RESULT_PREVIEW_MAX = 120;
+
+function truncateMonitorRowPreview(text: string): string {
+  return truncate(text, MONITOR_ROW_RESULT_PREVIEW_MAX);
 }
 
 function readInputString(input: ToolUsePart["input"], keys: string[]): string {
@@ -286,6 +293,25 @@ export function workerHasMeaningfulAssistantReplyAfterDispatch(worker: ClaudeSes
   return false;
 }
 
+/** 派发轮次内最后一条可展示助手正文（运行面板终端/派发行摘要）。 */
+export function resolveWorkerDispatchTurnLastAssistantPreview(
+  worker: ClaudeSession | null | undefined,
+): string {
+  if (!worker) return "";
+  const turnStart = indexOfLastRenderableUserMessage(worker.messages);
+  if (turnStart < 0) return "";
+  let lastText = "";
+  for (let i = turnStart + 1; i < worker.messages.length; i += 1) {
+    const msg = worker.messages[i]!;
+    if (msg.role !== "assistant") continue;
+    const text = assistantMessageVisiblePlainText(msg);
+    if (text.trim() && !isAssistantDisplayNoiseText(text)) {
+      lastText = text;
+    }
+  }
+  return truncateMonitorRowPreview(lastText);
+}
+
 function workerLastTurnHasTrailingActivity(worker: ClaudeSession, lastUserIdx: number): boolean {
   return lastUserIdx >= 0 && lastUserIdx < worker.messages.length - 1;
 }
@@ -372,7 +398,25 @@ export function buildExecutionEnvironmentConversationTasks(input: {
   const out: SessionConversationTaskItem[] = [];
   for (const batch of input.dispatchRecords) {
     if (batch.anchorSessionId !== anchorId) continue;
-    for (const item of batch.items) {
+    const repoPath = batch.repositoryPath || anchor.repositoryPath;
+    const engineShort = SESSION_EXECUTION_ENGINE_LABELS[batch.executionEngine].short;
+    const batchItems =
+      batch.items.length > 0
+        ? batch.items
+        : [
+            {
+              key: `exec-env:${batch.batchId}:batch`,
+              batchId: batch.batchId,
+              anchorSessionId: batch.anchorSessionId,
+              workerSessionId: `rehydrated:${batch.batchId}`,
+              label: "任务",
+              previewText: batch.previewText?.trim() || "已派发任务",
+              batchIndex: 1,
+              sessionCount: batch.sessionCount ?? 1,
+              updatedAt: batch.createdAt,
+            },
+          ];
+    for (const item of batchItems) {
       const repoPath = batch.repositoryPath || anchor.repositoryPath;
       const worker =
         findExecutionEnvironmentWorkerForTaskDetail(input.sessions, {
@@ -384,16 +428,14 @@ export function buildExecutionEnvironmentConversationTasks(input: {
       const status = worker
         ? resolveExecutionEnvironmentWorkerConversationTaskStatus(worker)
         : ("completed" as const);
-      const preview =
-        worker?.messages
-          .filter((m) => m.role === "assistant" || m.role === "user")
-          .map((m) => (typeof m.content === "string" ? m.content : ""))
-          .join(" ")
-          .trim()
-          .slice(0, 72) || item.previewText;
+      const assistantPreview = worker ? resolveWorkerDispatchTurnLastAssistantPreview(worker) : "";
       const dispatchedAt = item.updatedAt > 0 ? item.updatedAt : batch.createdAt;
       const engineShort = SESSION_EXECUTION_ENGINE_LABELS[batch.executionEngine].short;
       const promptBody = item.previewText?.replace(/\s+/g, " ").trim();
+      const preview =
+        status === "running"
+          ? "执行中…"
+          : assistantPreview || truncate(promptBody || "已完成");
       const label =
         promptBody.length > 0
           ? item.sessionCount > 1
@@ -442,25 +484,6 @@ function normalizeDispatchContentForMatch(raw: string | undefined): string {
   const trimmed = raw?.replace(/\s+/g, " ").trim();
   if (!trimmed || trimmed === "（无正文）" || trimmed === "（无）") return "";
   return trimmed;
-}
-
-function parseDispatchRecordDisplayTimeMs(time: string | undefined): number | null {
-  const trimmed = time?.trim();
-  if (!trimmed) return null;
-  const match = trimmed.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{2}):(\d{2})$/);
-  if (match) {
-    const [, y, mo, d, h, mi, s] = match;
-    return new Date(
-      Number(y),
-      Number(mo) - 1,
-      Number(d),
-      Number(h),
-      Number(mi),
-      Number(s),
-    ).getTime();
-  }
-  const parsed = Date.parse(trimmed);
-  return Number.isFinite(parsed) ? parsed : null;
 }
 
 function executionEnvironmentEngineMatchesTask(

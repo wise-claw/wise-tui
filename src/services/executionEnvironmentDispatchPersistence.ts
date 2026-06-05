@@ -23,6 +23,8 @@ type ExecutionEnvironmentDispatchRecordDto = {
   repositoryPath: string;
   executionEngine: string;
   createdAt: number;
+  previewText?: string;
+  sessionCount?: number;
   items: ExecutionEnvironmentDispatchItemDto[];
 };
 
@@ -44,13 +46,35 @@ function mapRecordDto(row: ExecutionEnvironmentDispatchRecordDto): ExecutionEnvi
   const batchId = row.batchId.trim();
   const anchorSessionId = row.anchorSessionId.trim();
   if (!batchId || !anchorSessionId) return null;
+  const previewText = row.previewText?.trim() ?? "";
+  const sessionCount = Math.max(1, row.sessionCount ?? 1);
+  const items = (row.items ?? []).map(mapItemDto).filter((item) => item.workerSessionId.length > 0);
   return {
     batchId,
     anchorSessionId,
     repositoryPath: row.repositoryPath.trim(),
     executionEngine: normalizeSessionExecutionEngine(row.executionEngine),
     createdAt: row.createdAt > 0 ? row.createdAt : Date.now(),
-    items: (row.items ?? []).map(mapItemDto).filter((item) => item.workerSessionId.length > 0),
+    previewText: previewText || undefined,
+    sessionCount,
+    items:
+      items.length > 0
+        ? items
+        : previewText
+          ? [
+              {
+                key: `exec-env:${batchId}:batch`,
+                batchId,
+                anchorSessionId,
+                workerSessionId: `rehydrated:${batchId}`,
+                label: "任务",
+                previewText,
+                batchIndex: 1,
+                sessionCount,
+                updatedAt: row.createdAt > 0 ? row.createdAt : Date.now(),
+              },
+            ]
+          : [],
   };
 }
 
@@ -109,6 +133,21 @@ export async function listExecutionEnvironmentDispatchesForAnchor(
   const rows = await invoke<ExecutionEnvironmentDispatchRecordDto[]>(
     "list_execution_environment_dispatches_for_anchor",
     { anchorSessionId: anchor, sinceMs: Math.max(0, sinceMs) },
+  );
+  return (rows ?? [])
+    .map(mapRecordDto)
+    .filter((row): row is ExecutionEnvironmentDispatchRecord => Boolean(row));
+}
+
+export async function listExecutionEnvironmentDispatchesForRepository(
+  repositoryPath: string,
+  sinceMs: number,
+): Promise<ExecutionEnvironmentDispatchRecord[]> {
+  const repo = repositoryPath.trim();
+  if (!repo) return [];
+  const rows = await invoke<ExecutionEnvironmentDispatchRecordDto[]>(
+    "list_execution_environment_dispatches_for_repository",
+    { repositoryPath: repo, sinceMs: Math.max(0, sinceMs) },
   );
   return (rows ?? [])
     .map(mapRecordDto)

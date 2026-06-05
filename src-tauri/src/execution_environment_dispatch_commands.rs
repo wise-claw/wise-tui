@@ -62,3 +62,12 @@ pub(crate) fn list_execution_environment_dispatches_for_anchor(
 ) -> Result<Vec<ExecutionEnvironmentDispatchRecordDto>, String> {
     db.list_execution_environment_dispatches_for_anchor(&anchor_session_id, since_ms)
 }
+
+#[tauri::command]
+pub(crate) fn list_execution_environment_dispatches_for_repository(
+    db: tauri::State<'_, WiseDb>,
+    repository_path: String,
+    since_ms: i64,
+) -> Result<Vec<ExecutionEnvironmentDispatchRecordDto>, String> {
+    db.list_execution_environment_dispatches_for_repository(&repository_path, since_ms)
+}

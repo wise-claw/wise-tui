@@ -8,6 +8,14 @@ function MonitorItemTypeTag({ label }: { label: string }) {
   return <span className="app-monitor-panel__item-type-tag">{label}</span>;
 }
 
+function resolveDispatchRowResultPreview(item: SessionConversationTaskItem): string {
+  if (item.status === "running") return "";
+  const preview = item.previewText.replace(/\s+/g, " ").trim();
+  if (!preview || preview === item.label.replace(/\s+/g, " ").trim()) return "";
+  if (preview === "执行中…" || preview === "已完成") return "";
+  return preview;
+}
+
 export const SessionConversationDispatchTaskRow = memo(function SessionConversationDispatchTaskRow({
   item,
   showStop,
@@ -22,7 +30,8 @@ export const SessionConversationDispatchTaskRow = memo(function SessionConversat
   statusVisual?: SubagentStatusVisual;
 }) {
   const savedTime = formatExecutionEnvironmentDispatchSavedTime(item.updatedAt);
-  const rowTitle = [item.label, item.subtitle, savedTime].filter(Boolean).join(" · ");
+  const resultPreview = resolveDispatchRowResultPreview(item);
+  const rowTitle = [item.label, item.subtitle, resultPreview, savedTime].filter(Boolean).join(" · ");
 
   return (
     <div className="app-monitor-panel__session-task-row app-monitor-panel__item">
@@ -41,8 +50,20 @@ export const SessionConversationDispatchTaskRow = memo(function SessionConversat
           </span>
         </button>
         {item.subtitle ? (
-          <span className="app-monitor-panel__session-task-meta" title={item.subtitle}>
+          <span
+            className="app-monitor-panel__session-task-meta app-monitor-panel__session-task-engine"
+            title={item.subtitle}
+          >
             {item.subtitle}
+          </span>
+        ) : null}
+        {resultPreview ? (
+          <span className="app-monitor-panel__session-task-preview" title={resultPreview}>
+            {resultPreview}
+          </span>
+        ) : item.status === "running" ? (
+          <span className="app-monitor-panel__session-task-preview app-monitor-panel__session-task-preview--pending">
+            执行中…
           </span>
         ) : null}
         {savedTime ? (

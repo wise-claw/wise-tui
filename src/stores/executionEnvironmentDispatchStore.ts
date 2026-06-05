@@ -7,6 +7,9 @@ export interface ExecutionEnvironmentDispatchRecord {
   repositoryPath: string;
   executionEngine: SessionExecutionEngine;
   createdAt: number;
+  /** 批次级摘要（items 为空时用于列表展示） */
+  previewText?: string;
+  sessionCount?: number;
   items: ExecutionEnvironmentDispatchItem[];
 }
 
@@ -167,6 +170,60 @@ export function upsertExecutionEnvironmentDispatchItem(
   publishAnchor(anchorSessionId);
 }
 
+export function mergeExecutionEnvironmentDispatchesForAnchor(
+  anchorSessionId: string,
+  records: readonly ExecutionEnvironmentDispatchRecord[],
+): void {
+  const anchor = anchorSessionId.trim();
+  if (!anchor) return;
+
+  for (const record of records) {
+    if (record.anchorSessionId.trim() !== anchor) continue;
+    const batchId = record.batchId.trim();
+    if (!batchId) continue;
+
+    const existing = recordsByBatch.get(batchId);
+    const mergedItems = mergeDispatchItems(existing?.items ?? [], record.items);
+    recordsByBatch.set(batchId, {
+      batchId,
+      anchorSessionId: anchor,
+      repositoryPath: record.repositoryPath.trim() || existing?.repositoryPath || "",
+      executionEngine: record.executionEngine,
+      createdAt: record.createdAt > 0 ? record.createdAt : (existing?.createdAt ?? Date.now()),
+      previewText: record.previewText?.trim() || existing?.previewText,
+      sessionCount: record.sessionCount ?? existing?.sessionCount,
+      items: mergedItems,
+    });
+
+    const prevIds = batchIdsByAnchor.get(anchor) ?? [];
+    if (!prevIds.includes(batchId)) {
+      batchIdsByAnchor.set(
+        anchor,
+        [batchId, ...prevIds.filter((id) => id !== batchId)].slice(0, MAX_BATCHES_PER_ANCHOR),
+      );
+    }
+  }
+
+  publishAnchor(anchor);
+}
+
+function mergeDispatchItems(
+  existing: readonly ExecutionEnvironmentDispatchItem[],
+  incoming: readonly ExecutionEnvironmentDispatchItem[],
+): ExecutionEnvironmentDispatchItem[] {
+  const byWorker = new Map<string, ExecutionEnvironmentDispatchItem>();
+  for (const item of existing) {
+    byWorker.set(item.workerSessionId, item);
+  }
+  for (const item of incoming) {
+    const prev = byWorker.get(item.workerSessionId);
+    if (!prev || item.updatedAt >= prev.updatedAt) {
+      byWorker.set(item.workerSessionId, item);
+    }
+  }
+  return [...byWorker.values()];
+}
+
 export function replaceExecutionEnvironmentDispatchesForAnchor(
   anchorSessionId: string,
   records: readonly ExecutionEnvironmentDispatchRecord[],
@@ -212,6 +269,12 @@ export function registerExecutionEnvironmentBatch(input: {
   if (existing) {
     existing.repositoryPath = input.repositoryPath.trim() || existing.repositoryPath;
     existing.executionEngine = input.executionEngine;
+    if (input.previewText?.trim()) {
+      existing.previewText = input.previewText.trim();
+    }
+    if (input.sessionCount > 0) {
+      existing.sessionCount = input.sessionCount;
+    }
     publishAnchor(anchorSessionId);
     return;
   }
@@ -221,6 +284,8 @@ export function registerExecutionEnvironmentBatch(input: {
     repositoryPath: input.repositoryPath.trim(),
     executionEngine: input.executionEngine,
     createdAt: input.createdAt ?? Date.now(),
+    previewText: input.previewText?.trim() || undefined,
+    sessionCount: input.sessionCount > 0 ? input.sessionCount : undefined,
     items: [],
   });
   const prev = batchIdsByAnchor.get(anchorSessionId) ?? [];

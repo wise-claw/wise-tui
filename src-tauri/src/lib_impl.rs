@@ -277,6 +277,7 @@ pub fn run() {
             execution_environment_dispatch_commands::upsert_execution_environment_dispatch_batch,
             execution_environment_dispatch_commands::upsert_execution_environment_dispatch_item,
             execution_environment_dispatch_commands::list_execution_environment_dispatches_for_anchor,
+            execution_environment_dispatch_commands::list_execution_environment_dispatches_for_repository,
             app_state_commands::settings_commands::get_prd_task_split_result,
             app_state_commands::settings_commands::get_prd_executable_tasks_result,
             app_state_commands::settings_commands::set_prd_task_split_result,

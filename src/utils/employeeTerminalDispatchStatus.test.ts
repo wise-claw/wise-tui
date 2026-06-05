@@ -2,7 +2,9 @@ import { describe, expect, test } from "bun:test";
 import type { ClaudeSession, SessionConversationTaskItem } from "../types";
 import {
   buildEmployeeTerminalConversationStatusById,
+  buildEmployeeTerminalLastMessagePreviewById,
   resolveEmployeeTerminalConversationStatus,
+  resolveEmployeeTerminalLastMessagePreview,
 } from "./employeeTerminalDispatchStatus";
 
 function session(overrides: Partial<ClaudeSession> & { id: string }): ClaudeSession {
@@ -127,5 +129,71 @@ describe("buildEmployeeTerminalConversationStatusById", () => {
     });
     expect(map.get("e1")).toBe("completed");
     expect(map.get("e2")).toBe("idle");
+  });
+});
+
+describe("resolveEmployeeTerminalLastMessagePreview", () => {
+  test("returns assistant summary for settled terminal worker", () => {
+    const worker = session({
+      id: "w1",
+      repositoryName: "eco-crawler/员工:终端01",
+      status: "completed",
+      messages: [
+        { id: 1, role: "user", content: "run css", timestamp: 1 },
+        { id: 2, role: "assistant", content: "全部完成。改动总结如下。", timestamp: 2 },
+      ],
+    });
+    const preview = resolveEmployeeTerminalLastMessagePreview({
+      employeeName: "终端01",
+      repositoryPath: "/repo/eco",
+      sessions: [worker],
+      dispatchTasks: [],
+      panelEmployeeNames: ["终端01"],
+      conversationStatus: "completed",
+    });
+    expect(preview).toContain("全部完成");
+  });
+
+  test("returns empty while running", () => {
+    expect(
+      resolveEmployeeTerminalLastMessagePreview({
+        employeeName: "终端01",
+        repositoryPath: "/repo/eco",
+        sessions: [],
+        dispatchTasks: [],
+        panelEmployeeNames: ["终端01"],
+        conversationStatus: "running",
+      }),
+    ).toBe("");
+  });
+});
+
+describe("buildEmployeeTerminalLastMessagePreviewById", () => {
+  test("builds per-employee preview map", () => {
+    const map = buildEmployeeTerminalLastMessagePreviewById({
+      employeeItems: [
+        { employeeId: "e1", name: "终端01" },
+        { employeeId: "e2", name: "终端02" },
+      ],
+      repositoryPath: "/repo/eco",
+      sessions: [
+        session({
+          id: "w1",
+          repositoryName: "eco-crawler/员工:终端01",
+          status: "completed",
+          messages: [
+            { id: 1, role: "user", content: "a", timestamp: 1 },
+            { id: 2, role: "assistant", content: "终端01 已完成", timestamp: 2 },
+          ],
+        }),
+      ],
+      dispatchTasks: [],
+      conversationStatusById: new Map([
+        ["e1", "completed"],
+        ["e2", "idle"],
+      ]),
+    });
+    expect(map.get("e1")).toContain("终端01 已完成");
+    expect(map.get("e2")).toBe("");
   });
 });

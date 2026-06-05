@@ -26,6 +26,8 @@ pub struct ExecutionEnvironmentDispatchRecordDto {
     pub repository_path: String,
     pub execution_engine: String,
     pub created_at: i64,
+    pub preview_text: String,
+    pub session_count: i32,
     pub items: Vec<ExecutionEnvironmentDispatchItemDto>,
 }
 
@@ -78,6 +80,15 @@ impl WiseDb {
     ) -> Result<Vec<ExecutionEnvironmentDispatchRecordDto>, String> {
         let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
         list_for_anchor(&g, anchor_session_id, since_ms)
+    }
+
+    pub fn list_execution_environment_dispatches_for_repository(
+        &self,
+        repository_path: &str,
+        since_ms: i64,
+    ) -> Result<Vec<ExecutionEnvironmentDispatchRecordDto>, String> {
+        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        list_for_repository(&g, repository_path, since_ms)
     }
 }
 
@@ -156,6 +167,36 @@ fn upsert_item(conn: &Connection, input: &UpsertExecutionEnvironmentItemInput) -
     Ok(())
 }
 
+fn map_batch_rows(
+    conn: &Connection,
+    batch_rows: impl Iterator<Item = Result<(String, String, String, String, i64, String, i64), rusqlite::Error>>,
+) -> Result<Vec<ExecutionEnvironmentDispatchRecordDto>, String> {
+    let mut out: Vec<ExecutionEnvironmentDispatchRecordDto> = Vec::new();
+    for row in batch_rows {
+        let (
+            batch_id,
+            anchor_session_id,
+            repository_path,
+            execution_engine,
+            session_count,
+            preview_text,
+            created_at_ms,
+        ) = row.map_err(|e| format!("list execution_environment_dispatch_batch row: {e}"))?;
+        let items = load_items_for_batch(conn, &batch_id)?;
+        out.push(ExecutionEnvironmentDispatchRecordDto {
+            batch_id,
+            anchor_session_id,
+            repository_path,
+            execution_engine,
+            created_at: created_at_ms,
+            preview_text,
+            session_count: session_count.max(1) as i32,
+            items,
+        });
+    }
+    Ok(out)
+}
+
 fn list_for_anchor(
     conn: &Connection,
     anchor_session_id: &str,
@@ -169,7 +210,7 @@ fn list_for_anchor(
     let mut stmt = conn
         .prepare(
             "SELECT batch_id, anchor_session_id, repository_path, execution_engine,
-                    session_count, preview_text, batch_hint, created_at_ms, updated_at_ms
+                    session_count, preview_text, created_at_ms
              FROM execution_environment_dispatch_batch
              WHERE anchor_session_id = ?1 AND created_at_ms >= ?2
              ORDER BY created_at_ms DESC",
@@ -185,37 +226,53 @@ fn list_for_anchor(
                 row.get::<_, String>(3)?,
                 row.get::<_, i64>(4)?,
                 row.get::<_, String>(5)?,
-                row.get::<_, Option<String>>(6)?,
-                row.get::<_, i64>(7)?,
-                row.get::<_, i64>(8)?,
+                row.get::<_, i64>(6)?,
             ))
         })
         .map_err(|e| format!("list execution_environment_dispatch_batch query: {e}"))?;
 
-    let mut out: Vec<ExecutionEnvironmentDispatchRecordDto> = Vec::new();
-    for row in batch_rows {
-        let (
-            batch_id,
-            anchor_session_id,
-            repository_path,
-            execution_engine,
-            _session_count,
-            _preview_text,
-            _batch_hint,
-            created_at_ms,
-            _updated_at_ms,
-        ) = row.map_err(|e| format!("list execution_environment_dispatch_batch row: {e}"))?;
-        let items = load_items_for_batch(conn, &batch_id)?;
-        out.push(ExecutionEnvironmentDispatchRecordDto {
-            batch_id,
-            anchor_session_id,
-            repository_path,
-            execution_engine,
-            created_at: created_at_ms,
-            items,
-        });
+    map_batch_rows(conn, batch_rows)
+}
+
+fn normalize_repository_path_key(path: &str) -> String {
+    path.trim().replace('\\', "/").trim_end_matches('/').to_string()
+}
+
+fn list_for_repository(
+    conn: &Connection,
+    repository_path: &str,
+    since_ms: i64,
+) -> Result<Vec<ExecutionEnvironmentDispatchRecordDto>, String> {
+    let repo = normalize_repository_path_key(repository_path);
+    if repo.is_empty() {
+        return Ok(Vec::new());
     }
-    Ok(out)
+    let since = since_ms.max(0);
+    let mut stmt = conn
+        .prepare(
+            "SELECT batch_id, anchor_session_id, repository_path, execution_engine,
+                    session_count, preview_text, created_at_ms
+             FROM execution_environment_dispatch_batch
+             WHERE trim(replace(repository_path, '\\', '/')) = ?1 AND created_at_ms >= ?2
+             ORDER BY created_at_ms DESC",
+        )
+        .map_err(|e| format!("list execution_environment_dispatch_batch by repo prepare: {e}"))?;
+
+    let batch_rows = stmt
+        .query_map(params![repo, since], |row| {
+            Ok((
+                row.get::<_, String>(0)?,
+                row.get::<_, String>(1)?,
+                row.get::<_, String>(2)?,
+                row.get::<_, String>(3)?,
+                row.get::<_, i64>(4)?,
+                row.get::<_, String>(5)?,
+                row.get::<_, i64>(6)?,
+            ))
+        })
+        .map_err(|e| format!("list execution_environment_dispatch_batch by repo query: {e}"))?;
+
+    map_batch_rows(conn, batch_rows)
 }
 
 fn load_items_for_batch(

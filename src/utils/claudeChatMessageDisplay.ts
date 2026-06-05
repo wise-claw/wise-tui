@@ -151,6 +151,25 @@ export function parseDispatchRecord(text: string): DispatchRecordMeta | null {
   return meta;
 }
 
+export function parseDispatchRecordDisplayTimeMs(time: string | undefined): number | null {
+  const trimmed = time?.trim();
+  if (!trimmed) return null;
+  const match = trimmed.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})\s+(\d{1,2}):(\d{2}):(\d{2})$/);
+  if (match) {
+    const [, y, mo, d, h, mi, s] = match;
+    return new Date(
+      Number(y),
+      Number(mo) - 1,
+      Number(d),
+      Number(h),
+      Number(mi),
+      Number(s),
+    ).getTime();
+  }
+  const parsed = Date.parse(trimmed);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
 const DISPATCH_CONTENT_PLACEHOLDER = "（无正文）";
 
 function normalizedDispatchContentForSentence(raw: string | undefined): string | undefined {

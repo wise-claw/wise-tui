@@ -74,12 +74,22 @@
   align-items: center;
 }
 
+.app-left-sidebar-monitor-panel .app-monitor-panel__section--terminals .app-monitor-panel__item-row--terminal .app-monitor-panel__session-task-preview {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: none;
+  font-size: 9px;
+  line-height: 12px;
+}
+
 .app-left-sidebar-monitor-panel .app-monitor-panel__section--terminals .app-monitor-panel__item-row-main {
   display: flex;
   align-items: center;
+  flex: 0 1 auto;
+  max-width: 34%;
   min-height: 0;
   height: auto;
-  overflow: visible;
+  overflow: hidden;
   line-height: 13px;
 }
 
@@ -237,9 +247,25 @@
   line-height: 13px;
 }
 
+.app-left-sidebar-monitor-panel .app-monitor-panel__item-row--dispatch .app-monitor-panel__session-task-engine {
+  flex: 0 0 auto;
+  max-width: 4.5rem;
+  font-size: 8px;
+  line-height: 12px;
+  padding: 0 2px;
+}
+
+.app-left-sidebar-monitor-panel .app-monitor-panel__item-row--dispatch .app-monitor-panel__session-task-preview {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: none;
+  font-size: 9px;
+  line-height: 12px;
+}
+
 .app-left-sidebar-monitor-panel .app-monitor-panel__item-row--dispatch .app-monitor-panel__session-task-meta {
-  flex: 0 1 auto;
-  max-width: 3.25rem;
+  flex: 0 0 auto;
+  max-width: 4.5rem;
   font-size: 8px;
   line-height: 12px;
   padding: 0 2px;
@@ -1257,6 +1283,26 @@
   white-space: nowrap;
   flex: 0 0 auto;
   max-width: 35%;
+}
+
+.app-monitor-panel__session-task-engine {
+  flex-shrink: 0;
+}
+
+.app-monitor-panel__session-task-preview {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 9px;
+  line-height: 12px;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-monitor-panel__session-task-preview--pending {
+  color: var(--ant-color-text-quaternary);
+  font-style: italic;
 }
 
 .app-monitor-panel__session-task-name-wrap {
