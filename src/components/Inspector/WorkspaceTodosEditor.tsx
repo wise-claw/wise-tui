@@ -67,14 +67,19 @@ function TodoRow({ item, showScopeTag, onToggle, onTitleChange, onDelete }: Todo
       />
       <div className="app-workspace-todos-panel__row-main">
         {editing ? (
-          <Input
+          <Input.TextArea
             size="small"
             className="app-workspace-todos-panel__title-input"
             value={draft}
             autoFocus
+            autoSize={{ minRows: 1, maxRows: 8 }}
             onChange={(e) => setDraft(e.target.value)}
             onBlur={commitTitle}
-            onPressEnter={commitTitle}
+            onPressEnter={(e) => {
+              if (e.shiftKey) return;
+              e.preventDefault();
+              commitTitle();
+            }}
           />
         ) : (
           <button
