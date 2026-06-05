@@ -46,6 +46,9 @@ import { CodexProfileSettingsEditor } from "./CodexProfileSettingsEditor";
 import { ModelProfileSortableList } from "./ModelProfileSortableList";
 import "./ClaudeModelTopbarTrigger.css";
 
+/** 高于模型切换 Popover/Dropdown（1200），保证编辑/新增 Modal 叠在其上 */
+const MODEL_PROFILE_MODAL_Z_INDEX = 1300;
+
 interface Props {
   store: ClaudeModelProfileStoreView | null;
   setStore: React.Dispatch<React.SetStateAction<ClaudeModelProfileStoreView | null>>;
@@ -569,6 +572,7 @@ export function ClaudeModelTopbarPanel({
         title="新增模型配置"
         open={addOpen}
         width={modalWidth()}
+        zIndex={MODEL_PROFILE_MODAL_Z_INDEX}
         classNames={
           panelEngine === "codex" ? { body: "app-claude-model-topbar-modal__body--codex" } : undefined
         }
@@ -673,6 +677,7 @@ export function ClaudeModelTopbarPanel({
         title={configProfile ? `全局配置 · ${configProfile.name}` : "全局配置"}
         open={configOpen}
         width={modalWidth()}
+        zIndex={MODEL_PROFILE_MODAL_Z_INDEX}
         classNames={
           editingCodexProfile ? { body: "app-claude-model-topbar-modal__body--codex" } : undefined
         }
