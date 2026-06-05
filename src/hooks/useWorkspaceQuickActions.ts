@@ -1,65 +1,73 @@
-import { message } from "antd";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import type {
   WorkspaceQuickActionDisplayItem,
   WorkspaceQuickActionItem,
   WorkspaceQuickActionScope,
 } from "../types/workspaceQuickActions";
 import {
-  loadProjectWorkspaceQuickActions,
-  loadRepositoryWorkspaceQuickActions,
-  saveProjectWorkspaceQuickActions,
-  saveRepositoryWorkspaceQuickActions,
-} from "../services/workspaceQuickActionsStore";
+  getWorkspaceQuickActionsRuntimeSnapshot,
+  getWorkspaceQuickActionsScopeItems,
+  isWorkspaceQuickActionsScopeLoading,
+  persistWorkspaceQuickActionsScopeItems,
+  releaseWorkspaceQuickActionsScope,
+  retainWorkspaceQuickActionsScope,
+  setWorkspaceQuickActionsScopeItems,
+  subscribeWorkspaceQuickActionsRuntime,
+} from "../stores/workspaceQuickActionsRuntimeStore";
 
 const PERSIST_DEBOUNCE_MS = 400;
-
-function persistErrorText(error: unknown): string {
-  return error instanceof Error ? error.message : "快捷操作保存失败";
-}
 
 export interface UseWorkspaceQuickActionsInput {
   projectId: string | null;
   repositoryId: number | null;
 }
 
+function buildDisplayItems(
+  projectId: string | null,
+  repositoryId: number | null,
+  projectItems: WorkspaceQuickActionItem[],
+  repositoryItems: WorkspaceQuickActionItem[],
+): WorkspaceQuickActionDisplayItem[] {
+  const displayItems: WorkspaceQuickActionDisplayItem[] = [];
+  if (projectId?.trim()) {
+    for (const item of projectItems) {
+      displayItems.push({ ...item, scope: "project" });
+    }
+  }
+  if (repositoryId != null) {
+    for (const item of repositoryItems) {
+      displayItems.push({ ...item, scope: "repository" });
+    }
+  }
+  displayItems.sort((a, b) => b.updatedAt - a.updatedAt);
+  return displayItems;
+}
+
 export function useWorkspaceQuickActions({ projectId, repositoryId }: UseWorkspaceQuickActionsInput) {
-  const [projectItems, setProjectItems] = useState<WorkspaceQuickActionItem[]>([]);
-  const [repositoryItems, setRepositoryItems] = useState<WorkspaceQuickActionItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const projectItemsRef = useRef(projectItems);
-  const repositoryItemsRef = useRef(repositoryItems);
-  const persistTimersRef = useRef<{ project: ReturnType<typeof setTimeout> | null; repository: ReturnType<typeof setTimeout> | null }>({
+  useSyncExternalStore(
+    subscribeWorkspaceQuickActionsRuntime,
+    getWorkspaceQuickActionsRuntimeSnapshot,
+    getWorkspaceQuickActionsRuntimeSnapshot,
+  );
+
+  const projectItemsRef = useRef<WorkspaceQuickActionItem[]>([]);
+  const repositoryItemsRef = useRef<WorkspaceQuickActionItem[]>([]);
+  const persistTimersRef = useRef<{
+    project: ReturnType<typeof setTimeout> | null;
+    repository: ReturnType<typeof setTimeout> | null;
+  }>({
     project: null,
     repository: null,
   });
 
-  projectItemsRef.current = projectItems;
-  repositoryItemsRef.current = repositoryItems;
-
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    try {
-      const [projectPayload, repositoryPayload] = await Promise.all([
-        projectId?.trim()
-          ? loadProjectWorkspaceQuickActions(projectId)
-          : Promise.resolve({ version: 1 as const, items: [] }),
-        repositoryId != null
-          ? loadRepositoryWorkspaceQuickActions(repositoryId)
-          : Promise.resolve({ version: 1 as const, items: [] }),
-      ]);
-      setProjectItems(projectPayload.items);
-      setRepositoryItems(repositoryPayload.items);
-    } catch (error) {
-      message.error(persistErrorText(error));
-    } finally {
-      setLoading(false);
-    }
-  }, [projectId, repositoryId]);
-
   useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    retainWorkspaceQuickActionsScope("project", projectId);
+    retainWorkspaceQuickActionsScope("repository", repositoryId);
+    return () => {
+      releaseWorkspaceQuickActionsScope("project", projectId);
+      releaseWorkspaceQuickActionsScope("repository", repositoryId);
+    };
+  }, [projectId, repositoryId]);
 
   useEffect(
     () => () => {
@@ -70,32 +78,22 @@ export function useWorkspaceQuickActions({ projectId, repositoryId }: UseWorkspa
     [],
   );
 
+  const projectItems = getWorkspaceQuickActionsScopeItems("project", projectId);
+  const repositoryItems = getWorkspaceQuickActionsScopeItems("repository", repositoryId);
+  projectItemsRef.current = projectItems;
+  repositoryItemsRef.current = repositoryItems;
+
   const flushPersist = useCallback(
     async (scope: WorkspaceQuickActionScope, items: WorkspaceQuickActionItem[]) => {
       const timers = persistTimersRef.current;
       if (scope === "project") {
         if (timers.project) clearTimeout(timers.project);
         timers.project = null;
-        const pid = projectId?.trim();
-        if (!pid) return false;
-        try {
-          await saveProjectWorkspaceQuickActions(pid, items);
-          return true;
-        } catch (error) {
-          message.error(persistErrorText(error));
-          return false;
-        }
+        return persistWorkspaceQuickActionsScopeItems("project", projectId, items);
       }
       if (timers.repository) clearTimeout(timers.repository);
       timers.repository = null;
-      if (repositoryId == null) return false;
-      try {
-        await saveRepositoryWorkspaceQuickActions(repositoryId, items);
-        return true;
-      } catch (error) {
-        message.error(persistErrorText(error));
-        return false;
-      }
+      return persistWorkspaceQuickActionsScopeItems("repository", repositoryId, items);
     },
     [projectId, repositoryId],
   );
@@ -126,29 +124,24 @@ export function useWorkspaceQuickActions({ projectId, repositoryId }: UseWorkspa
   const setItemsForScope = useCallback(
     (scope: WorkspaceQuickActionScope, items: WorkspaceQuickActionItem[]) => {
       if (scope === "project") {
-        setProjectItems(items);
+        setWorkspaceQuickActionsScopeItems("project", projectId, items);
         schedulePersist("project", items);
         return;
       }
-      setRepositoryItems(items);
+      setWorkspaceQuickActionsScopeItems("repository", repositoryId, items);
       schedulePersist("repository", items);
     },
-    [schedulePersist],
+    [projectId, repositoryId, schedulePersist],
   );
 
-  const displayItems: WorkspaceQuickActionDisplayItem[] = [];
-  if (projectId?.trim()) {
-    for (const item of projectItems) {
-      displayItems.push({ ...item, scope: "project" });
-    }
-  }
-  if (repositoryId != null) {
-    for (const item of repositoryItems) {
-      displayItems.push({ ...item, scope: "repository" });
-    }
-  }
-  displayItems.sort((a, b) => b.updatedAt - a.updatedAt);
+  const displayItems = useMemo(
+    () => buildDisplayItems(projectId, repositoryId, projectItems, repositoryItems),
+    [projectId, repositoryId, projectItems, repositoryItems],
+  );
 
+  const loading =
+    isWorkspaceQuickActionsScopeLoading("project", projectId) ||
+    isWorkspaceQuickActionsScopeLoading("repository", repositoryId);
   const hasScope = Boolean(projectId?.trim()) || repositoryId != null;
 
   return {
@@ -157,7 +150,6 @@ export function useWorkspaceQuickActions({ projectId, repositoryId }: UseWorkspa
     displayItems,
     projectItems,
     repositoryItems,
-    refresh,
     setItemsForScope,
     flushPersist,
     projectItemsRef,

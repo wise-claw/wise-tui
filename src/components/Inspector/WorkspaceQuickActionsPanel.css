@@ -154,6 +154,10 @@
   padding: 0;
 }
 
+.app-workspace-quick-actions-panel__pin-btn--active {
+  color: var(--ant-color-primary);
+}
+
 .app-workspace-quick-actions-edit-modal__target-row {
   display: flex;
   gap: 8px;

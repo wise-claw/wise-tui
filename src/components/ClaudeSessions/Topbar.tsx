@@ -3,6 +3,7 @@ import { Dropdown, message, Popover, Spin, Switch, Tooltip, type TooltipProps } 
 import { lazy, Suspense, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from "react";
 import { useWiseTopbarChromeVisibility } from "../../hooks/useWiseTopbarChromeVisibility";
 import { RemoteEntryTopbarStrip } from "../RemoteEntryTopbarStrip";
+import { WorkspaceQuickActionsTopbarStrip } from "../WorkspaceQuickActionsTopbarStrip";
 import { OpenAppMenu } from "../OpenAppMenu";
 import { FccTopbarTrigger } from "./FccTopbarTrigger";
 import { FccTrafficTopbarTrigger } from "./FccTrafficTopbarTrigger";
@@ -293,6 +294,10 @@ export function Topbar({
                 </button>
               </Tooltip>
               <RemoteEntryTopbarStrip onOpenRemoteChannels={onOpenRemoteChannels} />
+              <WorkspaceQuickActionsTopbarStrip
+                projectId={activeProject?.id ?? null}
+                repositoryId={activeRepository?.id ?? null}
+              />
             </>
           ) : null}
         </div>

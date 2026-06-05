@@ -1,0 +1,44 @@
+.app-topbar-workspace-quick-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 1;
+  min-width: 0;
+  margin-left: 2px;
+  -webkit-app-region: no-drag;
+}
+
+.app-topbar-workspace-quick-action-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 140px;
+  min-width: 0;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 11px;
+  background: var(--ant-color-fill-quaternary);
+  color: var(--ant-color-text-secondary);
+  cursor: pointer;
+  font-size: 11px;
+  line-height: 1;
+}
+
+.app-topbar-workspace-quick-action-chip:hover {
+  color: var(--ant-color-text);
+  background: var(--ant-color-fill-secondary);
+  border-color: var(--ant-color-border);
+}
+
+.app-topbar-workspace-quick-action-chip__icon {
+  display: inline-flex;
+  flex-shrink: 0;
+  font-size: 10px;
+}
+
+.app-topbar-workspace-quick-action-chip__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}

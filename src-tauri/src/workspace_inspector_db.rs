@@ -18,6 +18,8 @@ pub struct WorkspaceQuickActionItemDto {
     pub kind: String,
     pub label: String,
     pub target: String,
+    #[serde(default)]
+    pub pinned_to_topbar: bool,
     pub created_at: i64,
     pub updated_at: i64,
 }
@@ -129,6 +131,7 @@ fn normalize_quick_action_item(raw: WorkspaceQuickActionItemDto) -> Option<Works
         kind,
         label: label.to_string(),
         target: target.to_string(),
+        pinned_to_topbar: raw.pinned_to_topbar,
         created_at,
         updated_at,
     })
@@ -306,8 +309,8 @@ fn replace_quick_actions_conn(
     for item in items {
         conn.execute(
             "INSERT INTO workspace_quick_actions (
-                scope_kind, scope_id, id, kind, label, target, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+                scope_kind, scope_id, id, kind, label, target, pinned_to_topbar, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 scope_kind,
                 scope_id,
@@ -315,6 +318,7 @@ fn replace_quick_actions_conn(
                 item.kind,
                 item.label,
                 item.target,
+                if item.pinned_to_topbar { 1 } else { 0 },
                 item.created_at,
                 item.updated_at,
             ],
@@ -382,7 +386,7 @@ fn list_quick_actions_conn(
 ) -> Result<Vec<WorkspaceQuickActionItemDto>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT id, kind, label, target, created_at, updated_at
+            "SELECT id, kind, label, target, pinned_to_topbar, created_at, updated_at
              FROM workspace_quick_actions
              WHERE scope_kind = ?1 AND scope_id = ?2
              ORDER BY updated_at DESC",
@@ -390,13 +394,15 @@ fn list_quick_actions_conn(
         .map_err(|e| e.to_string())?;
     let rows = stmt
         .query_map(params![scope_kind, scope_id], |row| {
+            let pinned: i64 = row.get(4)?;
             Ok(WorkspaceQuickActionItemDto {
                 id: row.get(0)?,
                 kind: row.get(1)?,
                 label: row.get(2)?,
                 target: row.get(3)?,
-                created_at: row.get(4)?,
-                updated_at: row.get(5)?,
+                pinned_to_topbar: pinned != 0,
+                created_at: row.get(5)?,
+                updated_at: row.get(6)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -912,6 +918,8 @@ mod tests {
             .expect("schema applies");
         conn.execute_batch(include_str!("../migrations/033_workspace_todos.sql"))
             .expect("todos schema applies");
+        conn.execute_batch(include_str!("../migrations/035_workspace_quick_actions_pinned.sql"))
+            .expect("pinned schema applies");
         conn
     }
 
@@ -942,6 +950,7 @@ mod tests {
             kind: "link".to_string(),
             label: "Docs".to_string(),
             target: "https://example.com".to_string(),
+            pinned_to_topbar: false,
             created_at: 1,
             updated_at: 2,
         };

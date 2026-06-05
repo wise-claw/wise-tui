@@ -8,6 +8,8 @@ export interface WorkspaceQuickActionItem {
   label: string;
   /** 外链 URL 或本地目录绝对路径 */
   target: string;
+  /** 固定到中栏顶栏「远程」之后展示 */
+  pinnedToTopbar?: boolean;
   createdAt: number;
   updatedAt: number;
 }
@@ -20,6 +22,18 @@ export interface WorkspaceQuickActionsPayloadV1 {
 export type WorkspaceQuickActionDisplayItem = WorkspaceQuickActionItem & {
   scope: WorkspaceQuickActionScope;
 };
+
+export function resolveWorkspaceQuickActionPinnedToTopbar(
+  item: Pick<WorkspaceQuickActionItem, "pinnedToTopbar">,
+): boolean {
+  return item.pinnedToTopbar === true;
+}
+
+export function filterWorkspaceQuickActionsForTopbar(
+  items: readonly WorkspaceQuickActionDisplayItem[],
+): WorkspaceQuickActionDisplayItem[] {
+  return items.filter((item) => resolveWorkspaceQuickActionPinnedToTopbar(item));
+}
 
 export function createWorkspaceQuickActionId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {
@@ -42,7 +56,10 @@ function normalizeItem(raw: unknown): WorkspaceQuickActionItem | null {
   if (!id || !kind || !label || !target) return null;
   const createdAt = typeof row.createdAt === "number" && Number.isFinite(row.createdAt) ? row.createdAt : Date.now();
   const updatedAt = typeof row.updatedAt === "number" && Number.isFinite(row.updatedAt) ? row.updatedAt : createdAt;
-  return { id, kind, label, target, createdAt, updatedAt };
+  const pinnedToTopbar = row.pinnedToTopbar === true ? true : undefined;
+  return pinnedToTopbar
+    ? { id, kind, label, target, pinnedToTopbar, createdAt, updatedAt }
+    : { id, kind, label, target, createdAt, updatedAt };
 }
 
 export function parseWorkspaceQuickActionsPayload(raw: string | null | undefined): WorkspaceQuickActionsPayloadV1 {

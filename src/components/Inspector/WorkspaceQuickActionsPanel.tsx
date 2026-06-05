@@ -4,6 +4,8 @@ import {
   FolderOpenOutlined,
   LinkOutlined,
   PlusOutlined,
+  PushpinFilled,
+  PushpinOutlined,
 } from "@ant-design/icons";
 import { App, Button, Spin, Tag, Tooltip, Typography } from "antd";
 import { useCallback, useState } from "react";
@@ -12,6 +14,7 @@ import { openInFinder } from "../../services/repository";
 import { useWorkspaceQuickActions } from "../../hooks/useWorkspaceQuickActions";
 import {
   createWorkspaceQuickActionId,
+  resolveWorkspaceQuickActionPinnedToTopbar,
   type WorkspaceQuickActionDisplayItem,
   type WorkspaceQuickActionItem,
   type WorkspaceQuickActionScope,
@@ -98,6 +101,29 @@ export function WorkspaceQuickActionsPanel({
       });
     },
     [message, modal, quickActions],
+  );
+
+  const togglePinToTopbar = useCallback(
+    async (item: WorkspaceQuickActionDisplayItem) => {
+      const pinned = resolveWorkspaceQuickActionPinnedToTopbar(item);
+      const source =
+        item.scope === "project"
+          ? quickActions.projectItemsRef.current
+          : quickActions.repositoryItemsRef.current;
+      const now = Date.now();
+      const next = source.map((row) =>
+        row.id === item.id
+          ? {
+              ...row,
+              pinnedToTopbar: pinned ? undefined : true,
+              updatedAt: now,
+            }
+          : row,
+      );
+      quickActions.setItemsForScope(item.scope, next);
+      await quickActions.flushPersist(item.scope, next);
+    },
+    [quickActions],
   );
 
   const openItem = useCallback(
@@ -199,6 +225,37 @@ export function WorkspaceQuickActionsPanel({
                   </Tag>
                 </button>
                 <span className="app-workspace-quick-actions-panel__row-actions">
+                  <Tooltip
+                    title={
+                      resolveWorkspaceQuickActionPinnedToTopbar(item)
+                        ? "从顶栏移除"
+                        : "固定到顶栏（远程后面）"
+                    }
+                    mouseEnterDelay={0.35}
+                  >
+                    <Button
+                      type="text"
+                      size="small"
+                      icon={
+                        resolveWorkspaceQuickActionPinnedToTopbar(item) ? (
+                          <PushpinFilled />
+                        ) : (
+                          <PushpinOutlined />
+                        )
+                      }
+                      aria-label={
+                        resolveWorkspaceQuickActionPinnedToTopbar(item)
+                          ? "从顶栏移除"
+                          : "固定到顶栏"
+                      }
+                      className={
+                        resolveWorkspaceQuickActionPinnedToTopbar(item)
+                          ? "app-workspace-quick-actions-panel__pin-btn--active"
+                          : undefined
+                      }
+                      onClick={() => void togglePinToTopbar(item)}
+                    />
+                  </Tooltip>
                   <Tooltip title="编辑" mouseEnterDelay={0.35}>
                     <Button
                       type="text"
