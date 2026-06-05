@@ -57,6 +57,35 @@ export function resolveChatTopbarContext(input: {
   return { contextRepository, openPath };
 }
 
+export interface ResolveScheduledTasksRepositoryInput {
+  activeRepository: Repository | null | undefined;
+  activeProject: ProjectItem | null | undefined;
+  activeWorkspaceFocus: WorkspaceFocus;
+  repositories: ReadonlyArray<Repository>;
+  /** 侧栏角标汇总；有值时优先打开已有定时任务的成员仓。 */
+  scheduledTasksByRepoId?: Readonly<Record<number, { total: number }>>;
+}
+
+/** 定时任务叠层目标仓库：仓库焦点用当前仓，工作区焦点回退到项目成员仓。 */
+export function resolveScheduledTasksRepository(
+  input: ResolveScheduledTasksRepositoryInput,
+): Repository | null {
+  if (input.activeRepository) return input.activeRepository;
+  if (input.activeWorkspaceFocus !== "project" || !input.activeProject) return null;
+
+  const byRepoId = input.scheduledTasksByRepoId;
+  if (byRepoId) {
+    for (const repositoryId of input.activeProject.repositoryIds ?? []) {
+      const repository = input.repositories.find((item) => item.id === repositoryId) ?? null;
+      if (repository && (byRepoId[repositoryId]?.total ?? 0) > 0) {
+        return repository;
+      }
+    }
+  }
+
+  return resolveProjectComposerRepository(input.activeProject, input.repositories);
+}
+
 /** 工作区焦点下 composer/终端 用的成员仓回退（不改变侧栏仓库选中）。 */
 export function resolveProjectComposerRepository(
   project: ProjectItem | null | undefined,

@@ -8,6 +8,7 @@ import {
   resolveClaudePanelActiveSession,
   resolveClaudeWorkspaceMainSession,
   resolveProjectComposerRepository,
+  resolveScheduledTasksRepository,
 } from "./workspaceSelectionState";
 
 function repo(id: number, path = `/r/${id}`): Repository {
@@ -199,6 +200,44 @@ describe("resolveClaudePanelActiveSession", () => {
         workspaceMainSession: null,
       }),
     ).toBeUndefined();
+  });
+});
+
+describe("resolveScheduledTasksRepository", () => {
+  test("uses active repository when repository focus", () => {
+    const repositories = [repo(1), repo(2)];
+    const target = resolveScheduledTasksRepository({
+      activeRepository: repositories[1],
+      activeProject: project({ id: "eco", repositoryIds: [1, 2] }),
+      activeWorkspaceFocus: "repository",
+      repositories,
+    });
+    expect(target?.id).toBe(2);
+  });
+
+  test("falls back to project member repository on project focus", () => {
+    const repositories = [repo(10), repo(20)];
+    const eco = project({ id: "eco", repositoryIds: [10, 20] });
+    const target = resolveScheduledTasksRepository({
+      activeRepository: null,
+      activeProject: eco,
+      activeWorkspaceFocus: "project",
+      repositories,
+    });
+    expect(target?.id).toBe(10);
+  });
+
+  test("prefers repository with scheduled tasks when summary map is provided", () => {
+    const repositories = [repo(1), repo(2)];
+    const eco = project({ id: "eco", repositoryIds: [1, 2] });
+    const target = resolveScheduledTasksRepository({
+      activeRepository: null,
+      activeProject: eco,
+      activeWorkspaceFocus: "project",
+      repositories,
+      scheduledTasksByRepoId: { 2: { total: 3 } },
+    });
+    expect(target?.id).toBe(2);
   });
 });
 

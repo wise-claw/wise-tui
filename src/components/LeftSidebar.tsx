@@ -21,6 +21,7 @@ import { normalizeSessionRepositoryPath } from "../utils/sessionHistoryScope";
 import { resolveTrellisBootstrapPath } from "../utils/trellisBootstrapPath";
 import { resolveRepositoryForSession } from "../utils/repositoryMainSessionBinding";
 import { isMultiRepoProject } from "../utils/workspaceMode";
+import { resolveScheduledTasksRepository } from "../utils/workspaceSelectionState";
 import { runWhenIdle } from "../utils/deferIdle";
 import { MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX } from "../constants/mainLayoutWidths";
 import { DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION } from "../constants/workspaceBootstrapAddons";
@@ -514,18 +515,13 @@ export function LeftSidebar({
         onOpenScheduledTasksForProjectProp(project);
         return;
       }
-      let target: Repository | undefined;
-      for (const repositoryId of project.repositoryIds) {
-        const repository = repositories.find((item) => item.id === repositoryId);
-        if (repository && (scheduledTasksByRepoId[repositoryId]?.total ?? 0) > 0) {
-          target = repository;
-          break;
-        }
-      }
-      if (!target) {
-        const firstRepositoryId = project.repositoryIds[0];
-        target = repositories.find((item) => item.id === firstRepositoryId);
-      }
+      const target = resolveScheduledTasksRepository({
+        activeRepository: null,
+        activeProject: project,
+        activeWorkspaceFocus: "project",
+        repositories,
+        scheduledTasksByRepoId,
+      });
       if (target) openScheduledTasksForRepository(target);
     },
     [

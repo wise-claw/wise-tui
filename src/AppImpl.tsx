@@ -109,6 +109,7 @@ import {
   planAtMentionDispatch,
 } from "./services/atMentionDispatch";
 import { resolveProjectMainSessionAnchor } from "./utils/projectSessionAnchor";
+import { resolveScheduledTasksRepository } from "./utils/workspaceSelectionState";
 import { resolveTrellisBootstrapPath } from "./utils/trellisBootstrapPath";
 import { resolveSidebarSelectionTarget } from "./utils/sidebarSelectionTarget";
 import {
@@ -1635,6 +1636,22 @@ export default function App() {
   }, [activeSessionId, applyWorkflowTasksForSession]);
 
   const activeRepository = repositories.find((p) => p.id === activeRepositoryId);
+
+  const scheduledTasksRepository = useMemo(
+    () =>
+      resolveScheduledTasksRepository({
+        activeRepository,
+        activeProject,
+        activeWorkspaceFocus,
+        repositories,
+      }),
+    [activeRepository, activeProject, activeWorkspaceFocus, repositories],
+  );
+
+  const openActiveScheduledTasksOverlay = useCallback(() => {
+    if (!scheduledTasksRepository) return;
+    openScheduledTasksForRepository(scheduledTasksRepository);
+  }, [openScheduledTasksForRepository, scheduledTasksRepository]);
 
   useEffect(() => {
     if (!tabsHydrated || !activeRepository?.path?.trim()) return;
@@ -3355,8 +3372,8 @@ export default function App() {
         onOpenWorkflowConfig: openWorkflowConfigFromSidebar,
         onOpenBuiltinAssistant: openBuiltinAssistant,
         onOpenAssistantsHub: openAssistantsFromSidebar,
-        onOpenRepositoryScheduledTasks: activeRepository
-          ? () => openScheduledTasksForRepository(activeRepository)
+        onOpenRepositoryScheduledTasks: scheduledTasksRepository
+          ? openActiveScheduledTasksOverlay
           : undefined,
         employees,
         mentionEmployees,
