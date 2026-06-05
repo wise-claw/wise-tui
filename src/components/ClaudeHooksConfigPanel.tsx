@@ -16,6 +16,7 @@ import { HooksImportModal } from "./ClaudeHooksConfigPanel/HooksImportModal";
 import type { ClaudeHooksConfigPanelHandle, EditingTarget, HookEditFormValues, HookFlowEntry, HooksFlowTheme } from "./ClaudeHooksConfigPanel/types";
 import { getSupportedTypesByEvent, handlerSummary } from "./ClaudeHooksConfigPanel/helpers";
 import { useHooksImport } from "./ClaudeHooksConfigPanel/useHooksImport";
+import "./ClaudeCodeToolsPanel/index.css";
 
 export type { ClaudeHooksConfigPanelHandle } from "./ClaudeHooksConfigPanel/types";
 

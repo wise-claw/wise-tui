@@ -94,7 +94,21 @@ export function HookScopeSection({
           />
         </div>
       </div>
-      <div className="app-hooks-section-path">{data.sourcePath || "(未设置路径)"}</div>
+      <div className="app-hooks-section-paths">
+        {data.sourcePath.trim()
+          ? data.sourcePath
+              .split("\n")
+              .map((line) => line.trim())
+              .filter(Boolean)
+              .map((line) => (
+                <div key={line} className="app-hooks-section-path" title={line}>
+                  {line}
+                </div>
+              ))
+          : (
+            <div className="app-hooks-section-path app-hooks-section-path--empty">(未设置路径)</div>
+          )}
+      </div>
       {!hasData ? (
         <div className="app-hooks-empty">暂无触发器规则</div>
       ) : (
@@ -133,24 +147,28 @@ export function HookScopeSection({
                       {group.hooks.map((h) => (
                         <div key={h.id} className="app-hooks-handler-item">
                           <div className="app-hooks-handler-main">
-                            <span className="app-hooks-handler-summary">{handlerSummary(h)}</span>
+                            <span className="app-hooks-handler-summary" title={handlerSummary(h)}>
+                              {handlerSummary(h)}
+                            </span>
                           </div>
-                          <div className="app-hooks-handler-head">
-                            <Tag color="blue" variant="filled">
+                          <div className="app-hooks-handler-foot">
+                            <Tag color="blue" variant="filled" className="app-hooks-handler-type-tag">
                               {h.type}
                             </Tag>
                             {!readOnly ? (
-                              <Space size={2}>
+                              <Space size={2} className="app-hooks-handler-actions">
                                 <Button
                                   type="text"
                                   size="small"
                                   icon={<EditOutlined />}
+                                  aria-label="编辑处理器"
                                   onClick={() => onEdit(scope as ClaudeHookSourceScope, eventName, group.id, h.id)}
                                 />
                                 <Button
                                   type="text"
                                   size="small"
                                   icon={<CopyOutlined />}
+                                  aria-label="复制处理器"
                                   onClick={() => onClone(scope as ClaudeHookSourceScope, eventName, group.id, h.id)}
                                 />
                                 <Button
@@ -158,6 +176,7 @@ export function HookScopeSection({
                                   danger
                                   size="small"
                                   icon={<DeleteOutlined />}
+                                  aria-label="删除处理器"
                                   onClick={() => onDelete(scope as ClaudeHookSourceScope, eventName, group.id, h.id)}
                                 />
                               </Space>

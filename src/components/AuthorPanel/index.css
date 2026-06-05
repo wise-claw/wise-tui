@@ -368,6 +368,13 @@ html.app-host-macos-chrome .app-author-config-sider .author-panel__nav-drag {
   display: flex;
   flex-direction: column;
   gap: 12px;
+  min-width: 0;
+}
+
+.author-panel-hooks .app-claude-code-tools-tab {
+  padding: 0;
+  height: auto;
+  overflow: visible;
 }
 
 .author-panel-hooks-toolbar {

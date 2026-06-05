@@ -496,29 +496,54 @@ export function ClaudeChat({
       // 页面不可见时跳过布局读取，减少多屏后台标签页的强制 reflow
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       const r = el.getBoundingClientRect();
-      el.style.setProperty("--app-session-owner-anchor-left", `${r.left}px`);
-      el.style.setProperty("--app-session-owner-anchor-width", `${r.width}px`);
+      // 中栏被 park（display:none）时宽度为 0，勿写入错误锚点
+      if (r.width <= 0) return;
+      const left = `${r.left}px`;
+      const width = `${r.width}px`;
+      if (
+        el.style.getPropertyValue("--app-session-owner-anchor-left") === left &&
+        el.style.getPropertyValue("--app-session-owner-anchor-width") === width
+      ) {
+        return;
+      }
+      el.style.setProperty("--app-session-owner-anchor-left", left);
+      el.style.setProperty("--app-session-owner-anchor-width", width);
     }
-    let lastSyncAt = 0;
     function scheduleSyncSessionOwnerAnchor() {
       if (rafId != null) return;
       rafId = window.requestAnimationFrame(() => {
         rafId = null;
-        const now = Date.now();
-        if (now - lastSyncAt < 1200) return;
-        lastSyncAt = now;
         syncSessionOwnerAnchor();
       });
     }
+    function syncSessionOwnerAnchorAfterLayout() {
+      syncSessionOwnerAnchor();
+      window.requestAnimationFrame(() => {
+        syncSessionOwnerAnchor();
+        window.requestAnimationFrame(syncSessionOwnerAnchor);
+      });
+    }
 
-    syncSessionOwnerAnchor();
+    syncSessionOwnerAnchorAfterLayout();
     const ro = new ResizeObserver(() => {
       scheduleSyncSessionOwnerAnchor();
     });
     ro.observe(root);
+    const intersectionObserver = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          if (entry.isIntersecting && entry.intersectionRatio > 0) {
+            syncSessionOwnerAnchorAfterLayout();
+          }
+        }
+      },
+      { threshold: 0 },
+    );
+    intersectionObserver.observe(root);
     window.addEventListener("resize", scheduleSyncSessionOwnerAnchor);
     return () => {
       ro.disconnect();
+      intersectionObserver.disconnect();
       window.removeEventListener("resize", scheduleSyncSessionOwnerAnchor);
       if (rafId != null) {
         window.cancelAnimationFrame(rafId);
