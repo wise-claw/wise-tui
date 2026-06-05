@@ -108,6 +108,7 @@ export function CommandPalette({
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
   const inputRef = useRef<HTMLInputElement>(null);
+  const searchRequestIdRef = useRef(0);
 
   const openSearchResultInApp = useCallback(
     (item: SearchResult) => {
@@ -158,6 +159,7 @@ export function CommandPalette({
     }
 
     let cancelled = false;
+    const requestId = ++searchRequestIdRef.current;
     setLoading(true);
 
     const timer = window.setTimeout(async () => {
@@ -165,7 +167,7 @@ export function CommandPalette({
       try {
         if (searchMode === "filename") {
           const paths = await searchRepositoryFiles(repositoryPath, q);
-          if (cancelled) return;
+          if (cancelled || requestId !== searchRequestIdRef.current) return;
           setResults(
             paths.map((rel) => ({
               kind: "filename" as const,
@@ -175,15 +177,15 @@ export function CommandPalette({
           );
         } else {
           const matches = await searchRepositoryFileContents(repositoryPath, q);
-          if (cancelled) return;
+          if (cancelled || requestId !== searchRequestIdRef.current) return;
           setResults(toContentResults(matches));
         }
       } catch {
-        if (!cancelled) setResults([]);
+        if (!cancelled && requestId === searchRequestIdRef.current) setResults([]);
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled && requestId === searchRequestIdRef.current) setLoading(false);
       }
-    }, searchMode === "content" ? 120 : 50);
+    }, searchMode === "content" ? 250 : 50);
 
     return () => {
       cancelled = true;

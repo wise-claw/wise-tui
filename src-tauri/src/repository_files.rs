@@ -26,6 +26,21 @@ fn should_skip_walk_dir(name: &str) -> bool {
             | ".nuxt"
             | ".output"
             | "out"
+            | ".codegraph"
+            | "vendor"
+            | ".gradle"
+            | ".cargo"
+            | "Pods"
+            | "DerivedData"
+            | ".pnpm-store"
+            | ".yarn"
+            | ".cache"
+            | ".tox"
+            | ".mypy_cache"
+            | ".pytest_cache"
+            | ".ruff_cache"
+            | ".parcel-cache"
+            | ".sass-cache"
     )
 }
 
@@ -193,6 +208,12 @@ fn is_probably_binary_file(path: &Path) -> bool {
     buf.contains(&0)
 }
 
+fn contains_case_insensitive(haystack: &str, needle: &str) -> bool {
+    haystack
+        .to_lowercase()
+        .contains(&needle.to_lowercase())
+}
+
 fn build_content_preview(line: &str, query: &str, max_len: usize) -> String {
     let trimmed = line.trim();
     if trimmed.is_empty() {
@@ -200,17 +221,21 @@ fn build_content_preview(line: &str, query: &str, max_len: usize) -> String {
     }
     let lower = trimmed.to_lowercase();
     let q = query.to_lowercase();
-    let Some(idx) = lower.find(&q) else {
+    let Some(byte_idx) = lower.find(&q) else {
         return truncate_utf8_chars(trimmed, max_len);
     };
+    // Byte indices from `lower` may not align with `trimmed` after case folding; use char indices.
+    let match_char = lower[..byte_idx].chars().count();
+    let match_char_len = q.chars().count();
+    let chars: Vec<char> = trimmed.chars().collect();
     let context = 24usize;
-    let start = idx.saturating_sub(context);
-    let end = (idx + q.len() + context).min(trimmed.len());
-    let mut slice = trimmed[start..end].to_string();
+    let start = match_char.saturating_sub(context);
+    let end = (match_char + match_char_len + context).min(chars.len());
+    let mut slice: String = chars[start..end].iter().collect();
     if start > 0 {
         slice.insert(0, '…');
     }
-    if end < trimmed.len() {
+    if end < chars.len() {
         slice.push('…');
     }
     truncate_utf8_chars(&slice, max_len)
@@ -231,15 +256,14 @@ pub(crate) struct RepositoryFileContentMatch {
     preview: String,
 }
 
-/// Search plain-text file contents under a repository root (for global search).
-#[tauri::command]
-pub(crate) fn search_repository_file_contents(
+fn search_repository_file_contents_blocking(
     root: String,
     query: String,
 ) -> Result<Vec<RepositoryFileContentMatch>, String> {
     const MAX_RESULTS: usize = 80;
     const MAX_SCAN_ENTRIES: usize = 300_000;
-    const MAX_FILE_BYTES: u64 = 1_048_576;
+    const MAX_FILE_BYTES: u64 = 512 * 1024;
+    const MAX_LINE_BYTES: usize = 8192;
 
     let root_path = PathBuf::from(&root);
     if !root_path.is_dir() {
@@ -250,7 +274,6 @@ pub(crate) fn search_repository_file_contents(
     if q.is_empty() {
         return Ok(Vec::new());
     }
-    let q_lower = q.to_lowercase();
 
     let walker = WalkDir::new(&root_path)
         .follow_links(false)
@@ -304,7 +327,10 @@ pub(crate) fn search_repository_file_contents(
             let Ok(line) = line_result else {
                 break;
             };
-            if !line.to_lowercase().contains(&q_lower) {
+            if line.len() > MAX_LINE_BYTES {
+                continue;
+            }
+            if !contains_case_insensitive(&line, q) {
                 continue;
             }
             out.push(RepositoryFileContentMatch {
@@ -316,6 +342,17 @@ pub(crate) fn search_repository_file_contents(
     }
 
     Ok(out)
+}
+
+/// Search plain-text file contents under a repository root (for global search).
+#[tauri::command]
+pub(crate) async fn search_repository_file_contents(
+    root: String,
+    query: String,
+) -> Result<Vec<RepositoryFileContentMatch>, String> {
+    tokio::task::spawn_blocking(move || search_repository_file_contents_blocking(root, query))
+        .await
+        .map_err(|e| format!("文件内容搜索任务异常: {e}"))?
 }
 
 #[derive(Debug, Serialize, Clone)]
@@ -603,7 +640,7 @@ mod content_search_tests {
         .unwrap();
 
         let matches =
-            search_repository_file_contents(root.to_string_lossy().to_string(), "beta".into())
+            search_repository_file_contents_blocking(root.to_string_lossy().to_string(), "beta".into())
                 .expect("search");
         assert_eq!(matches.len(), 1);
         assert_eq!(matches[0].path, "src/hello.ts");
