@@ -150,12 +150,6 @@
   margin-top: 0;
 }
 
-.app-left-sidebar-monitor-panel .app-monitor-panel__subagent-status-svg--spin,
-.app-left-sidebar-monitor-panel .app-monitor-panel__subagent-status-svg--pulse {
-  animation: none !important;
-  will-change: auto;
-}
-
 .app-monitor-panel__subagent-status--lite {
   width: 10px;
   height: 10px;

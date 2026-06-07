@@ -91,6 +91,10 @@ function LiteStatusDot({ status }: { status: SubagentStatusIndicatorStatus }) {
 
 export type SubagentStatusVisual = "full" | "lite";
 
+function usesAnimatedStatusSvg(status: SubagentStatusIndicatorStatus): boolean {
+  return status === "running" || status === "stale";
+}
+
 export const SubagentStatusIndicator = memo(function SubagentStatusIndicator({
   status,
   label,
@@ -100,14 +104,15 @@ export const SubagentStatusIndicator = memo(function SubagentStatusIndicator({
   status: SubagentStatusIndicatorStatus;
   label?: string;
   className?: string;
-  /** 左栏紧凑列表：静态色点，避免 SVG 动画在滚动时触发合成。 */
+  /** 左栏紧凑列表：非运行态用静态色点；运行/疑似断连用动态 SVG。 */
   visual?: SubagentStatusVisual;
 }) {
   const text = label?.trim() || statusLabel(status);
+  const showLiteDot = visual === "lite" && !usesAnimatedStatusSvg(status);
   const rootClass = [
     "app-monitor-panel__subagent-status",
     `app-monitor-panel__subagent-status--${status}`,
-    visual === "lite" ? "app-monitor-panel__subagent-status--lite" : null,
+    showLiteDot ? "app-monitor-panel__subagent-status--lite" : null,
     className,
   ]
     .filter(Boolean)
@@ -115,7 +120,7 @@ export const SubagentStatusIndicator = memo(function SubagentStatusIndicator({
 
   return (
     <span className={rootClass} role="status" aria-label={text} title={text}>
-      {visual === "lite" ? <LiteStatusDot status={status} /> : <StatusIcon status={status} />}
+      {showLiteDot ? <LiteStatusDot status={status} /> : <StatusIcon status={status} />}
     </span>
   );
 });
