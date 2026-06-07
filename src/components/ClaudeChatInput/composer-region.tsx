@@ -766,8 +766,10 @@ function ComposerInner({
 
   const handleComposerModelChange = useCallback(
     (nextModel: string) => {
-      setModel(nextModel);
-      onSessionModelChange(nextModel);
+      const trimmed = nextModel.trim();
+      if (!trimmed) return;
+      setModel((prev) => (prev === trimmed ? prev : trimmed));
+      onSessionModelChange(trimmed);
     },
     [onSessionModelChange],
   );

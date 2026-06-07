@@ -180,6 +180,13 @@ export function ClaudeModelTopbarPanel({
       const optimistic = buildOptimisticApplyStoreView(store, profileId);
       if (optimistic) {
         setStore(optimistic);
+        const optimisticEffective =
+          resolveEffectiveModelForProfileEngine(appliedEngine, optimistic)?.trim() || null;
+        dispatchModelProfileStoreChanged(optimistic, {
+          engine: appliedEngine,
+          effectiveModel: optimisticEffective,
+          optimistic: true,
+        });
         setApplyingProfileId(profileId);
       }
       try {
@@ -192,6 +199,12 @@ export function ClaudeModelTopbarPanel({
         onApplied?.();
       } catch (e) {
         setStore(previous);
+        const rollbackEffective =
+          resolveEffectiveModelForProfileEngine(appliedEngine, previous)?.trim() || null;
+        dispatchModelProfileStoreChanged(previous, {
+          engine: appliedEngine,
+          effectiveModel: rollbackEffective,
+        });
         message.error(typeof e === "string" ? e : "切换失败");
       } finally {
         setApplyingProfileId(null);

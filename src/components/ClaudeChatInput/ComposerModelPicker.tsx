@@ -1,5 +1,5 @@
 import { Dropdown, Spin, Tooltip, type MenuProps } from "antd";
-import { Suspense, useCallback, useEffect, useMemo, useState, type MouseEvent } from "react";
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { getClaudeModelPickerOptions } from "../../services/claude";
 import { listCursorModels, type CursorModelListItem } from "../../services/cursorAgent";
 import {
@@ -15,6 +15,7 @@ import type { ClaudeModelProfile, ModelProfileEngine } from "../../types/claudeM
 import {
   normalizeModelProfileEngine,
   resolveActiveModelProfileId,
+  resolveEffectiveModelForProfileEngine,
 } from "../../types/claudeModelProfile";
 import {
   formatModelProfileDropdownPartsTitle,
@@ -162,8 +163,19 @@ export function ComposerModelPicker({
   const [panelOpen, setPanelOpen] = useState(false);
   const [panelMounted, setPanelMounted] = useState(false);
   const [cursorMenuOpen, setCursorMenuOpen] = useState(false);
+  const modelRef = useRef(model);
+  modelRef.current = model;
 
   const { store, setStore, loading: profileStoreLoading } = useModelProfileSwitcher(panelOpen);
+
+  const syncModelIfNeeded = useCallback(
+    (next: string) => {
+      const trimmed = next.trim();
+      if (!trimmed || trimmed === modelRef.current) return;
+      onModelChange(trimmed);
+    },
+    [onModelChange],
+  );
 
   const refreshClaudeModelPicker = useCallback(() => {
     if (isCursorEngine) {
@@ -191,10 +203,8 @@ export function ComposerModelPicker({
         ));
     const nextModel =
       looksLikeCursorModel && fromSession ? fromSession : CURSOR_SDK_DEFAULT_MODEL;
-    if (nextModel !== model) {
-      onModelChange(nextModel);
-    }
-  }, [isCursorEngine, session.id, session.model, cursorModels, model, onModelChange]);
+    syncModelIfNeeded(nextModel);
+  }, [isCursorEngine, session.id, session.model, cursorModels, syncModelIfNeeded]);
 
   useEffect(() => {
     void getClaudeModelProfileStore()
@@ -214,7 +224,7 @@ export function ComposerModelPicker({
       }
       const fromProfile = detail?.effectiveModel?.trim();
       if (fromProfile) {
-        onModelChange(fromProfile);
+        syncModelIfNeeded(fromProfile);
       }
       if (detail?.skipComposerPickerRefresh !== true) {
         refreshClaudeModelPicker();
@@ -222,19 +232,31 @@ export function ComposerModelPicker({
     };
     window.addEventListener(WISE_CLAUDE_USER_SETTINGS_CHANGED, onSettingsChanged);
     return () => window.removeEventListener(WISE_CLAUDE_USER_SETTINGS_CHANGED, onSettingsChanged);
-  }, [onModelChange, refreshClaudeModelPicker]);
+  }, [syncModelIfNeeded, refreshClaudeModelPicker]);
 
   const claudeSettingsModel = claudePicker?.defaultModel?.trim() || null;
 
   useEffect(() => {
     if (isCursorEngine) return;
+    const fromProfile = profileEngine
+      ? resolveEffectiveModelForProfileEngine(
+          profileEngine,
+          getCachedModelProfileStore(),
+        )?.trim()
+      : null;
     const fromSession = session.model?.trim();
     const fromCfg = claudeSettingsModel;
-    const next = fromSession || fromCfg || "sonnet";
-    if (next !== model) {
-      onModelChange(next);
-    }
-  }, [session.id, session.model, claudeSettingsModel, isCursorEngine, model, onModelChange]);
+    const next = fromProfile || fromSession || fromCfg || "sonnet";
+    syncModelIfNeeded(next);
+  }, [
+    session.id,
+    session.model,
+    claudeSettingsModel,
+    isCursorEngine,
+    profileEngine,
+    profileStoreRevision,
+    syncModelIfNeeded,
+  ]);
 
   const cursorModelOptions = useMemo(() => {
     if (!isCursorEngine) return [];

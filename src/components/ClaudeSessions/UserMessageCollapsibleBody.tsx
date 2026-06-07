@@ -12,22 +12,26 @@ export function UserMessageCollapsibleBody({ children }: Props) {
 
   useLayoutEffect(() => {
     if (expanded) {
-      setOverflows(false);
+      setOverflows((prev) => (prev ? false : prev));
       return;
     }
     const el = bodyRef.current;
     if (!el) return;
 
     const measure = () => {
-      setOverflows(el.scrollHeight > el.clientHeight + 1);
+      const nextOverflows = el.scrollHeight > el.clientHeight + 1;
+      setOverflows((prev) => (prev === nextOverflows ? prev : nextOverflows));
     };
 
-    measure();
+    const rafId = requestAnimationFrame(measure);
     const observer =
       typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
     observer?.observe(el);
-    return () => observer?.disconnect();
-  }, [expanded, children]);
+    return () => {
+      cancelAnimationFrame(rafId);
+      observer?.disconnect();
+    };
+  }, [expanded]);
 
   return (
     <div

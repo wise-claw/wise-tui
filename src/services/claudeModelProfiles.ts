@@ -20,8 +20,12 @@ export interface ClaudeUserSettingsChangedDetail {
   effectiveModel?: string | null;
   /** 完整 store 快照；监听方可直接合并，跳过 debounce refresh。 */
   storeSnapshot?: ClaudeModelProfileStoreView;
+  /** 本次变更对应的模型档案引擎。 */
+  engine?: ModelProfileEngine;
   /** 仅 SQLite 档案变更、未写全局 settings 时为 true。 */
   skipComposerPickerRefresh?: boolean;
+  /** 仅为 UI 乐观更新，全局 settings 尚未落盘。 */
+  optimistic?: boolean;
 }
 
 export function dispatchClaudeUserSettingsChanged(
@@ -42,6 +46,8 @@ export function dispatchModelProfileStoreChanged(
     effectiveModel?: string | null;
     /** 未改写 Claude/Codex/OpenCode 全局配置时设为 true。 */
     skipComposerPickerRefresh?: boolean;
+    /** 仅为 UI 乐观更新，全局 settings 尚未落盘。 */
+    optimistic?: boolean;
   },
 ): void {
   seedModelProfileStoreCache(store);
@@ -53,7 +59,9 @@ export function dispatchModelProfileStoreChanged(
   dispatchClaudeUserSettingsChanged({
     effectiveModel,
     storeSnapshot: store,
+    engine: options?.engine,
     skipComposerPickerRefresh: options?.skipComposerPickerRefresh,
+    optimistic: options?.optimistic,
   });
 }
 

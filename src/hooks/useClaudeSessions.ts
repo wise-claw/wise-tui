@@ -43,6 +43,11 @@ import { resolveCursorLocalModelId } from "../utils/cursorModel";
 import { resolveCodexContextExecutionEngine, resolveCodexExecModelId } from "../utils/codexModel";
 import { resolveCodexResumeSessionId } from "../utils/codexSessionId";
 import { getCachedModelProfileStore } from "../stores/modelProfileStoreCache";
+import {
+  WISE_CLAUDE_USER_SETTINGS_CHANGED,
+  type ClaudeUserSettingsChangedDetail,
+} from "../services/claudeModelProfiles";
+import { resolveClaudeResumePromptAfterModelSwitch } from "../utils/claudeModelProfileReconnect";
 import { resolveCursorResumeAgentId } from "../utils/cursorAgentId";
 import {
   loadDefaultClaudeConnectionKind,
@@ -294,6 +299,8 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   const claudeSessionsOptionsRef = useRef(options);
   claudeSessionsOptionsRef.current = options;
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
+  const activeSessionIdRef = useRef<string | null>(activeSessionId);
+  activeSessionIdRef.current = activeSessionId;
 
   useEffect(() => {
     const keep = new Set<string>();
@@ -2271,9 +2278,17 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   }, []);
 
   const updateSessionModel = useCallback((sessionId: string, model: string) => {
-    setSessions((prev) =>
-      prev.map((s) => (s.id === sessionId ? { ...s, model } : s)),
-    );
+    const trimmed = model.trim();
+    setSessions((prev) => {
+      let changed = false;
+      const next = prev.map((s) => {
+        if (s.id !== sessionId) return s;
+        if ((s.model?.trim() || "") === trimmed) return s;
+        changed = true;
+        return { ...s, model: trimmed };
+      });
+      return changed ? next : prev;
+    });
   }, []);
 
   const updateSessionConnectionKind = useCallback(
@@ -2626,6 +2641,114 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       activeSessionId,
     ],
   );
+
+  const reconnectClaudeSessionAfterModelSwitch = useCallback(
+    async (input: {
+      sessionId: string;
+      effectiveModel?: string | null;
+    }) => {
+      const tabId = input.sessionId.trim();
+      if (!tabId) return;
+
+      const session = sessionsRef.current.find((s) => s.id === tabId);
+      if (!session) return;
+      if (resolveSessionExecutionEngine(session) !== "claude") return;
+
+      const claudeSid =
+        session.claudeSessionId?.trim() ??
+        sessionIdMapRef.current.get(tabId)?.trim() ??
+        null;
+      if (!claudeSid) return;
+
+      const newModel = input.effectiveModel?.trim();
+      if (newModel && (session.model?.trim() || "") !== newModel) {
+        updateSessionModel(tabId, newModel);
+      }
+
+      const pendingTurnPrompt =
+        pendingTurnFailoverRef.current?.tabSessionId === tabId
+          ? pendingTurnFailoverRef.current.prompt
+          : null;
+
+      await cancelHostExecutionForTab(tabId, claudeSid).catch(() => undefined);
+      await closeStreamingSession(claudeSid).catch(() => undefined);
+      streamingProcessByTabRef.current.delete(tabId);
+      purgeStreamSidecarsForSession(tabId, session.claudeSessionId);
+      clearStreamStallTimer(tabId);
+      pendingTurnFailoverRef.current = null;
+
+      const refreshed = sessionsRef.current.find((s) => s.id === tabId) ?? session;
+      const wasActive =
+        refreshed.status === "running" || refreshed.status === "connecting";
+      const resumePrompt = resolveClaudeResumePromptAfterModelSwitch({
+        session: refreshed,
+        pendingTurnPrompt,
+      });
+
+      if (wasActive && resumePrompt) {
+        commitSessions((prev) =>
+          appendSystemMessageBySessionId(
+            prev.map((s) =>
+              s.id === tabId ? { ...s, status: "idle" as const } : s,
+            ),
+            tabId,
+            "模型已切换，正在使用新模型继续当前会话…",
+          ),
+        );
+        executeSession(tabId, resumePrompt, { replaceLastUserBubble: true });
+        return;
+      }
+
+      if (wasActive) {
+        commitSessions((prev) =>
+          appendSystemMessageBySessionId(
+            prev.map((s) =>
+              s.id === tabId ? { ...s, status: "idle" as const } : s,
+            ),
+            tabId,
+            "模型已切换。当前轮次已停止，请重新发送以使用新模型继续会话。",
+          ),
+        );
+        return;
+      }
+
+      commitSessions((prev) =>
+        appendSystemMessageBySessionId(
+          prev,
+          tabId,
+          "模型已切换，下次发送将使用新模型继续本会话。",
+        ),
+      );
+    },
+    [
+      cancelHostExecutionForTab,
+      clearStreamStallTimer,
+      commitSessions,
+      executeSession,
+      purgeStreamSidecarsForSession,
+      resolveSessionExecutionEngine,
+      updateSessionModel,
+    ],
+  );
+
+  useEffect(() => {
+    const onModelProfileApplied = (event: Event) => {
+      const detail = (event as CustomEvent<ClaudeUserSettingsChangedDetail>).detail;
+      if (!detail || detail.skipComposerPickerRefresh || detail.optimistic) return;
+      if (detail.engine !== "claude") return;
+
+      const tabId = activeSessionIdRef.current;
+      if (!tabId) return;
+
+      void reconnectClaudeSessionAfterModelSwitch({
+        sessionId: tabId,
+        effectiveModel: detail.effectiveModel,
+      });
+    };
+    window.addEventListener(WISE_CLAUDE_USER_SETTINGS_CHANGED, onModelProfileApplied);
+    return () =>
+      window.removeEventListener(WISE_CLAUDE_USER_SETTINGS_CHANGED, onModelProfileApplied);
+  }, [reconnectClaudeSessionAfterModelSwitch]);
 
   const executeTerminalSession = useCallback(
     (
