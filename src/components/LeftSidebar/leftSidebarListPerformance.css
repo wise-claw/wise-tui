@@ -1,5 +1,13 @@
 /* 左栏列表：快速划过工作区/终端/文件树时减少合成与 transition:all 开销 */
 
+.app-left-sidebar .app-repository-list,
+.app-left-sidebar-monitor-panel,
+.git-files-explorer-scroll-region,
+.app-left-sidebar .git-panel-multi-body {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
 /* 勿对运行面板列表项使用 contain：会与 Ant Typography 的 ResizeObserver 测量互相触发无限更新 */
 .app-left-sidebar .app-repository-item {
   contain: layout style;
@@ -39,4 +47,63 @@
 
 .app-left-sidebar .repo-tree-node--selected:hover {
   background: var(--ant-color-fill-tertiary);
+}
+
+/* ── 快速滑动：统一关 transition / hover 命中 / content-visibility 节流 ── */
+
+.app-left-sidebar-scroll-region--scrolling .app-repository-item,
+.app-left-sidebar-scroll-region--scrolling .repo-tree-node,
+.app-left-sidebar-scroll-region--scrolling .app-monitor-panel__item,
+.app-left-sidebar-scroll-region--scrolling .app-monitor-panel__item--terminal-row {
+  transition: none !important;
+  box-shadow: none !important;
+}
+
+.app-left-sidebar-scroll-region--scrolling .app-repository-action,
+.app-left-sidebar-scroll-region--scrolling .app-monitor-panel__item-action-icon-btn {
+  transition: none !important;
+}
+
+.app-left-sidebar-scroll-region--scrolling
+  .app-repository-item:hover:not(.app-repository-item--project-active):not(.app-repository-item--repo-active) {
+  background: transparent !important;
+}
+
+.app-left-sidebar-scroll-region--scrolling .app-repository-item:hover .app-repository-action {
+  opacity: 0;
+  pointer-events: none;
+}
+
+.app-left-sidebar-scroll-region--scrolling .repo-tree-node:hover:not(.repo-tree-node--selected) {
+  background: transparent !important;
+}
+
+.app-left-sidebar-scroll-region--scrolling .repo-tree-node,
+.app-left-sidebar-scroll-region--scrolling .repo-tree-virtual-list__row {
+  content-visibility: visible !important;
+}
+
+.app-left-sidebar-scroll-region--scrolling .app-repository-expand svg {
+  transition: none !important;
+}
+
+.app-left-sidebar-scroll-region--scrolling .app-monitor-panel__subagent-status-svg--spin,
+.app-left-sidebar-scroll-region--scrolling .app-monitor-panel__subagent-status-svg--pulse,
+.app-left-sidebar-scroll-region--scrolling .app-monitor-panel__status-spinner-svg {
+  animation-play-state: paused;
+}
+
+.app-left-sidebar-scroll-region--scrolling .git-repo-section,
+.app-left-sidebar-scroll-region--scrolling .git-file-row,
+.app-left-sidebar-scroll-region--scrolling .git-virtual-file-list__row {
+  transition: none !important;
+}
+
+.app-left-sidebar-scroll-region--scrolling .git-file-row:hover {
+  background: transparent !important;
+}
+
+/* 兼容旧 class（文件树曾单独使用） */
+.git-files-explorer-scroll-region--scrolling .repo-tree-node {
+  transition: none !important;
 }

@@ -108,3 +108,27 @@ export function pruneLoadedChildrenMap(
   }
   return next;
 }
+
+/** 懒加载目录缓存上限；保留根目录 `""`，按 Map 插入顺序淘汰最旧分支。 */
+export const MAX_LOADED_EXPLORER_DIRS = 72;
+
+export function capLoadedChildrenMap(
+  loadedByDir: ReadonlyMap<string, RepositoryExplorerEntry[]>,
+  maxDirs: number = MAX_LOADED_EXPLORER_DIRS,
+): Map<string, RepositoryExplorerEntry[]> {
+  if (loadedByDir.size <= maxDirs) {
+    return loadedByDir instanceof Map ? loadedByDir : new Map(loadedByDir);
+  }
+  const next = new Map(loadedByDir);
+  while (next.size > maxDirs) {
+    let removed = false;
+    for (const key of next.keys()) {
+      if (key === "") continue;
+      next.delete(key);
+      removed = true;
+      break;
+    }
+    if (!removed) break;
+  }
+  return next;
+}

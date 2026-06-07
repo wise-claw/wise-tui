@@ -1,11 +1,5 @@
-import {
-  memo,
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type RefObject,
-} from "react";
+import { memo, type RefObject } from "react";
+import { useVirtualListVisibleRange } from "../../hooks/useVirtualListVisibleRange";
 import { ExplorerInlineCreateRow } from "./ExplorerInlineCreateRow";
 import { RepositoryTreeDirRow } from "./RepositoryTreeDirRow";
 import { RepositoryTreeFileNode } from "./RepositoryTreeFileNode";
@@ -38,53 +32,13 @@ function RepositoryVirtualTreeListInner({
   onInlineCancel,
   rowHeight = REPOSITORY_TREE_ROW_HEIGHT_PX,
 }: RepositoryVirtualTreeListProps) {
-  const [range, setRange] = useState({ start: 0, end: 48 });
-  const rafRef = useRef(0);
-
-  const updateRange = useCallback(() => {
-    const el = scrollRootRef.current;
-    if (!el || rows.length === 0) {
-      return;
-    }
-    const height = Math.max(el.clientHeight, rowHeight);
-    const scrollTop = el.scrollTop;
-    const start = Math.max(0, Math.floor(scrollTop / rowHeight) - OVERSCAN_ROWS);
-    const visibleRows = Math.ceil(height / rowHeight) + OVERSCAN_ROWS * 2;
-    const end = Math.min(rows.length, start + visibleRows);
-    setRange((prev) => (prev.start === start && prev.end === end ? prev : { start, end }));
-  }, [rowHeight, rows.length, scrollRootRef]);
-
-  useEffect(() => {
-    updateRange();
-    const el = scrollRootRef.current;
-    if (!el) {
-      return;
-    }
-    const onScroll = () => {
-      if (rafRef.current) {
-        return;
-      }
-      rafRef.current = requestAnimationFrame(() => {
-        rafRef.current = 0;
-        updateRange();
-      });
-    };
-    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => onScroll()) : null;
-    ro?.observe(el);
-    el.addEventListener("scroll", onScroll, { passive: true });
-    return () => {
-      ro?.disconnect();
-      el.removeEventListener("scroll", onScroll);
-      if (rafRef.current) {
-        cancelAnimationFrame(rafRef.current);
-        rafRef.current = 0;
-      }
-    };
-  }, [scrollRootRef, updateRange]);
-
-  useEffect(() => {
-    updateRange();
-  }, [rows, updateRange]);
+  const range = useVirtualListVisibleRange({
+    scrollRootRef,
+    rowCount: rows.length,
+    rowHeight,
+    overscanRows: OVERSCAN_ROWS,
+    initialVisibleEnd: 48,
+  });
 
   const totalHeight = rows.length * rowHeight;
   const slice = rows.slice(range.start, range.end);

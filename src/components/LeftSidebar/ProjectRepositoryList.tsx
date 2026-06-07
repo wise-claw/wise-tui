@@ -1,6 +1,9 @@
 import type { MutableRefObject } from "react";
+import { useRef } from "react";
 import { Dropdown, Typography } from "antd";
 import { DeferredHoverTooltip } from "../shared/DeferredHoverTooltip";
+import { LEFT_SIDEBAR_SCROLLING_CLASS } from "../../constants/leftSidebarScrollPerformance";
+import { useScrollEndClass } from "../../hooks/useScrollEndClass";
 import type { ReconcileProjectMode } from "../../constants/reconcileProjectMode";
 import type { Repository, StandaloneRepo, TaskMode, Workspace } from "../../types";
 import {
@@ -186,6 +189,8 @@ export function ProjectRepositoryList({
   onSectionCollapsedChange,
 }: ProjectRepositoryListProps) {
   const setSectionCollapsed = onSectionCollapsedChange;
+  const repositoryListScrollRef = useRef<HTMLDivElement>(null);
+  useScrollEndClass(repositoryListScrollRef, LEFT_SIDEBAR_SCROLLING_CLASS);
 
   return (
     <>
@@ -233,7 +238,7 @@ export function ProjectRepositoryList({
       </div>
 
       {!sectionCollapsed ? (
-      <div className="app-repository-list">
+      <div className="app-repository-list" ref={repositoryListScrollRef}>
         {floatingRepositories.length > 0 ? (
           <div className="app-repository-floating-group" aria-label="单仓">
             {floatingRepositories.map((repository) => (

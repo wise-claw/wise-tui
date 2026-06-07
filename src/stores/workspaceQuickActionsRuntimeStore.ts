@@ -137,6 +137,9 @@ export function releaseWorkspaceQuickActionsScope(
   const entry = entries.get(key);
   if (!entry) return;
   entry.consumers = Math.max(0, entry.consumers - 1);
+  if (entry.consumers > 0) return;
+  entries.delete(key);
+  loadPromises.delete(key);
 }
 
 export function getWorkspaceQuickActionsScopeItems(

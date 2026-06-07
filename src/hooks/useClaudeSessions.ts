@@ -1151,6 +1151,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         workflowRunBySession: workflowRunBySessionRef.current,
         trellisContextIdBySession: trellisContextIdBySessionRef.current,
         streamStallHookExtendedByTab: streamStallHookExtendedByTabRef.current,
+        recentExecutePromptBySession: recentExecutePromptBySessionRef.current,
       },
       liveKeys,
     );

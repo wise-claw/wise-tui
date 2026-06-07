@@ -68,6 +68,12 @@ import {
   getProjectSddMode,
 } from "../utils/projectRepositoryRoles";
 
+const EMPTY_MONITOR_INVOCATIONS: WorkflowInvocationStreamDetail[] = [];
+
+function noopMonitorStoreSubscribe(_listener: () => void): () => void {
+  return () => {};
+}
+
 interface UseMonitorOverviewInput {
   employees: EmployeeItem[];
   repositories: Repository[];
@@ -1199,14 +1205,14 @@ export function useMonitorOverview({
   monitorOverviewActiveRef.current = monitorOverviewActive;
 
   const directBatchInvocationsSnap = useSyncExternalStore(
-    subscribeOmcDirectBatchInvocations,
-    getOmcDirectBatchInvocationsSnapshot,
-    getOmcDirectBatchInvocationsSnapshot,
+    monitorOverviewActive ? subscribeOmcDirectBatchInvocations : noopMonitorStoreSubscribe,
+    monitorOverviewActive ? getOmcDirectBatchInvocationsSnapshot : () => EMPTY_MONITOR_INVOCATIONS,
+    monitorOverviewActive ? getOmcDirectBatchInvocationsSnapshot : () => EMPTY_MONITOR_INVOCATIONS,
   );
   const repositoryMemberInvocationsSnap = useSyncExternalStore(
-    subscribeRepositoryMemberInvocations,
-    getRepositoryMemberInvocationsSnapshot,
-    getRepositoryMemberInvocationsSnapshot,
+    monitorOverviewActive ? subscribeRepositoryMemberInvocations : noopMonitorStoreSubscribe,
+    monitorOverviewActive ? getRepositoryMemberInvocationsSnapshot : () => EMPTY_MONITOR_INVOCATIONS,
+    monitorOverviewActive ? getRepositoryMemberInvocationsSnapshot : () => EMPTY_MONITOR_INVOCATIONS,
   );
   const repositoryMemberInvocationsRef = useRef(repositoryMemberInvocationsSnap);
   repositoryMemberInvocationsRef.current = repositoryMemberInvocationsSnap;
@@ -1349,12 +1355,16 @@ export function useMonitorOverview({
   }, [monitorOverviewActive, monitorDrawerOpen, refreshExternalTrellisAgentRuns, trellisRuntimeMonitorTargetKey]);
 
   useEffect(() => {
+    if (!monitorOverviewActive) {
+      return;
+    }
     let cancelled = false;
-    const isActive = () => !cancelled;
+    const isActive = () => !cancelled && monitorOverviewActiveRef.current;
     let debounceTimer: number | null = null;
     const cleanups: Array<() => void> = [];
 
     const scheduleRefresh = () => {
+      if (!monitorOverviewActiveRef.current) return;
       if (debounceTimer) window.clearTimeout(debounceTimer);
       debounceTimer = window.setTimeout(() => {
         debounceTimer = null;
@@ -1386,7 +1396,7 @@ export function useMonitorOverview({
       if (debounceTimer) window.clearTimeout(debounceTimer);
       cleanups.forEach((cleanup) => cleanup());
     };
-  }, [refreshExternalTrellisAgentRuns]);
+  }, [monitorOverviewActive, refreshExternalTrellisAgentRuns]);
 
   const hasRunningDirectBatchInvocationRows = directBatchInvocationsSnap.some(isOmcDirectBatchInvocationRunning);
   const overviewDeps = [

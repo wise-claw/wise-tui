@@ -15,6 +15,7 @@ export interface ClaudeSessionSidecarMaps {
   workflowRunBySession: Map<string, string>;
   trellisContextIdBySession: Map<string, string>;
   streamStallHookExtendedByTab: Set<string>;
+  recentExecutePromptBySession: Map<string, { prompt: string; at: number }>;
 }
 
 /** 活动标签 id + claude session_id，供 sidecar Map 对账。 */
@@ -65,6 +66,9 @@ export function pruneOrphanClaudeSessionSidecarMaps(
   }
   for (const key of [...maps.trellisContextIdBySession.keys()]) {
     if (deleteOrphanMapKey(maps.trellisContextIdBySession, key, liveKeys)) changed = true;
+  }
+  for (const key of [...maps.recentExecutePromptBySession.keys()]) {
+    if (deleteOrphanMapKey(maps.recentExecutePromptBySession, key, liveKeys)) changed = true;
   }
   for (const key of [...maps.streamingProcessByTab.keys()]) {
     if (deleteOrphanMapKey(maps.streamingProcessByTab, key, liveKeys)) changed = true;

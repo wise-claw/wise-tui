@@ -22,6 +22,7 @@ function emptyMaps(): ClaudeSessionSidecarMaps {
     workflowRunBySession: new Map(),
     trellisContextIdBySession: new Map(),
     streamStallHookExtendedByTab: new Set(),
+    recentExecutePromptBySession: new Map(),
   };
 }
 
@@ -43,10 +44,12 @@ describe("claudeSessionSidecarMaps", () => {
       detached = true;
     });
     maps.sessionIdMap.set("dead-tab", "sid-dead");
+    maps.recentExecutePromptBySession.set("dead-tab", { prompt: "hi", at: Date.now() });
 
     const liveKeys = collectLiveSessionSidecarKeys([{ id: "live-tab", claudeSessionId: "sid-live" } as ClaudeSession]);
     expect(pruneOrphanClaudeSessionSidecarMaps(maps, liveKeys)).toBe(true);
     expect(maps.assistantStreamTextByTab.has("dead-tab")).toBe(false);
+    expect(maps.recentExecutePromptBySession.has("dead-tab")).toBe(false);
     expect(maps.streamingProcessByTab.has("dead-tab")).toBe(false);
     expect(maps.streamingSessionStreamDetachByTab.has("dead-tab")).toBe(false);
     expect(maps.sessionIdMap.has("dead-tab")).toBe(false);

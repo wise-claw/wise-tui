@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import type { RepositoryExplorerEntry } from "../../services/repositoryFiles";
 import {
   buildLazyRepositoryFileTree,
+  capLoadedChildrenMap,
+  MAX_LOADED_EXPLORER_DIRS,
   patchLazyRepositoryFileTree,
   pruneLoadedChildrenMap,
 } from "./lazyExplorerTree";
@@ -76,5 +78,20 @@ describe("pruneLoadedChildrenMap", () => {
     ]);
     const next = pruneLoadedChildrenMap(prev, "a");
     expect([...next.keys()].sort()).toEqual(["", "x"]);
+  });
+});
+
+describe("capLoadedChildrenMap", () => {
+  test("evicts oldest non-root directories when over limit", () => {
+    const prev = new Map<string, RepositoryExplorerEntry[]>();
+    prev.set("", [{ path: "root.ts", isDir: false }]);
+    for (let i = 0; i < MAX_LOADED_EXPLORER_DIRS + 4; i += 1) {
+      prev.set(`dir-${i}`, [{ path: `dir-${i}/file.ts`, isDir: false }]);
+    }
+    const next = capLoadedChildrenMap(prev);
+    expect(next.size).toBe(MAX_LOADED_EXPLORER_DIRS);
+    expect(next.has("")).toBe(true);
+    expect(next.has("dir-0")).toBe(false);
+    expect(next.has(`dir-${MAX_LOADED_EXPLORER_DIRS + 3}`)).toBe(true);
   });
 });

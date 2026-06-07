@@ -1,5 +1,7 @@
 import { listen } from "@tauri-apps/api/event";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { LEFT_SIDEBAR_SCROLLING_CLASS } from "../../constants/leftSidebarScrollPerformance";
+import { useScrollEndClass } from "../../hooks/useScrollEndClass";
 import { GitHistoryDrawer } from "./GitHistoryDrawer";
 import { GitPanelMoreMenu } from "./GitPanelMoreMenu";
 import { safeUnlistenPromise } from "../../utils/safeTauriUnlisten";
@@ -63,9 +65,12 @@ export function GitMultiRepoPanel({
   const watcherRestartTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pendingRefreshPathsRef = useRef(new Set<string>());
   const [scrollRoot, setScrollRoot] = useState<HTMLElement | null>(null);
+  const scrollBodyRef = useRef<HTMLDivElement | null>(null);
   const setScrollBodyRef = useCallback((node: HTMLDivElement | null) => {
+    scrollBodyRef.current = node;
     setScrollRoot(node);
   }, []);
+  useScrollEndClass(scrollBodyRef, LEFT_SIDEBAR_SCROLLING_CLASS);
 
   useEffect(() => {
     const validPaths = new Set(repositoryEntries.map((entry) => entry.path).filter(Boolean));

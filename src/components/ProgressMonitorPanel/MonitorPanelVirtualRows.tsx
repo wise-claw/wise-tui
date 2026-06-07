@@ -7,6 +7,7 @@ import {
   type ReactNode,
   type RefObject,
 } from "react";
+import { useVirtualListVisibleRange } from "../../hooks/useVirtualListVisibleRange";
 
 export const MONITOR_COMPACT_ROW_HEIGHT_PX = 22;
 /** 左栏 compact 模式：项达到此数量即启用虚拟列表（行高固定、可滚动）。 */
@@ -31,60 +32,50 @@ function MonitorPanelVirtualRowsInner<TRow>({
   getRowKey,
   renderRow,
 }: MonitorPanelVirtualRowsProps<TRow>) {
-  const [range, setRange] = useState({ start: 0, end: 32 });
   const listOffsetRef = useRef(0);
-  const rafRef = useRef(0);
   const metricsRafRef = useRef(0);
+  const [remeasureKey, setRemeasureKey] = useState(0);
 
   const refreshMetrics = useCallback(() => {
     const scrollRoot = scrollRootRef.current;
     const anchor = anchorRef.current;
     if (!scrollRoot || !anchor) {
-      listOffsetRef.current = 0;
+      if (listOffsetRef.current !== 0) {
+        listOffsetRef.current = 0;
+        setRemeasureKey((key) => key + 1);
+      }
       return;
     }
-    listOffsetRef.current = anchor.offsetTop;
+    const nextOffset = anchor.offsetTop;
+    if (listOffsetRef.current !== nextOffset) {
+      listOffsetRef.current = nextOffset;
+      setRemeasureKey((key) => key + 1);
+    }
   }, [anchorRef, scrollRootRef]);
 
-  const updateRange = useCallback(() => {
-    const scrollRoot = scrollRootRef.current;
-    if (!scrollRoot || rows.length === 0) {
-      return;
-    }
-    const height = Math.max(scrollRoot.clientHeight, rowHeight);
-    const relativeScroll = Math.max(0, scrollRoot.scrollTop - listOffsetRef.current);
-    const start = Math.max(0, Math.floor(relativeScroll / rowHeight) - OVERSCAN_ROWS);
-    const visibleRows = Math.ceil(height / rowHeight) + OVERSCAN_ROWS * 2;
-    const end = Math.min(rows.length, start + visibleRows);
-    setRange((prev) => (prev.start === start && prev.end === end ? prev : { start, end }));
-  }, [rowHeight, rows.length, scrollRootRef]);
+  const range = useVirtualListVisibleRange({
+    scrollRootRef,
+    rowCount: rows.length,
+    rowHeight,
+    overscanRows: OVERSCAN_ROWS,
+    initialVisibleEnd: 32,
+    getScrollOffset: () => listOffsetRef.current,
+    remeasureKey,
+  });
 
   useEffect(() => {
     refreshMetrics();
-    updateRange();
     const scrollRoot = scrollRootRef.current;
-    if (!scrollRoot) {
-      return;
-    }
-
-    const scheduleRangeUpdate = () => {
-      if (rafRef.current) return;
-      rafRef.current = requestAnimationFrame(() => {
-        rafRef.current = 0;
-        updateRange();
-      });
-    };
+    if (!scrollRoot) return;
 
     const scheduleMetricsRefresh = () => {
       if (metricsRafRef.current) return;
       metricsRafRef.current = requestAnimationFrame(() => {
         metricsRafRef.current = 0;
         refreshMetrics();
-        updateRange();
       });
     };
 
-    scrollRoot.addEventListener("scroll", scheduleRangeUpdate, { passive: true });
     const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(scheduleMetricsRefresh) : null;
     ro?.observe(scrollRoot);
     const anchor = anchorRef.current;
@@ -92,18 +83,14 @@ function MonitorPanelVirtualRowsInner<TRow>({
 
     return () => {
       ro?.disconnect();
-      scrollRoot.removeEventListener("scroll", scheduleRangeUpdate);
-      if (rafRef.current) cancelAnimationFrame(rafRef.current);
       if (metricsRafRef.current) cancelAnimationFrame(metricsRafRef.current);
-      rafRef.current = 0;
       metricsRafRef.current = 0;
     };
-  }, [anchorRef, refreshMetrics, scrollRootRef, updateRange]);
+  }, [anchorRef, refreshMetrics, scrollRootRef]);
 
   useEffect(() => {
     refreshMetrics();
-    updateRange();
-  }, [rows, refreshMetrics, updateRange]);
+  }, [rows, refreshMetrics]);
 
   const totalHeight = rows.length * rowHeight;
   const slice = rows.slice(range.start, range.end);

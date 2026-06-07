@@ -105,6 +105,33 @@ function publishAnchor(anchorSessionId: string): void {
   }
 }
 
+/** 更新 anchor 批次索引并淘汰被 slice 裁掉的 record，避免 recordsByBatch / anchorSnapshotById 无界增长。 */
+function setAnchorBatchIds(anchorSessionId: string, batchIds: readonly string[]): void {
+  const anchor = anchorSessionId.trim();
+  if (!anchor) return;
+  const prevIds = batchIdsByAnchor.get(anchor) ?? [];
+  const trimmed = batchIds.slice(0, MAX_BATCHES_PER_ANCHOR);
+  const keep = new Set(trimmed);
+  for (const id of prevIds) {
+    if (keep.has(id)) continue;
+    const record = recordsByBatch.get(id);
+    if (record?.anchorSessionId.trim() === anchor) {
+      recordsByBatch.delete(id);
+    }
+  }
+  if (trimmed.length === 0) {
+    batchIdsByAnchor.delete(anchor);
+    anchorSnapshotById.delete(anchor);
+    return;
+  }
+  batchIdsByAnchor.set(anchor, trimmed);
+  for (const [snapshotAnchorId] of anchorSnapshotById) {
+    if (!batchIdsByAnchor.has(snapshotAnchorId)) {
+      anchorSnapshotById.delete(snapshotAnchorId);
+    }
+  }
+}
+
 export function subscribeExecutionEnvironmentDispatches(listener: Listener): () => void {
   listeners.add(listener);
   return () => listeners.delete(listener);
@@ -152,7 +179,7 @@ export function upsertExecutionEnvironmentDispatchItem(
     };
     recordsByBatch.set(batchId, record);
     const prev = batchIdsByAnchor.get(anchorSessionId) ?? [];
-    batchIdsByAnchor.set(anchorSessionId, [batchId, ...prev.filter((id) => id !== batchId)].slice(0, MAX_BATCHES_PER_ANCHOR));
+    setAnchorBatchIds(anchorSessionId, [batchId, ...prev.filter((id) => id !== batchId)]);
   }
 
   const key = `exec-env:${batchId}:${item.workerSessionId}`;
@@ -197,10 +224,7 @@ export function mergeExecutionEnvironmentDispatchesForAnchor(
 
     const prevIds = batchIdsByAnchor.get(anchor) ?? [];
     if (!prevIds.includes(batchId)) {
-      batchIdsByAnchor.set(
-        anchor,
-        [batchId, ...prevIds.filter((id) => id !== batchId)].slice(0, MAX_BATCHES_PER_ANCHOR),
-      );
+      setAnchorBatchIds(anchor, [batchId, ...prevIds.filter((id) => id !== batchId)]);
     }
   }
 
@@ -236,6 +260,7 @@ export function replaceExecutionEnvironmentDispatchesForAnchor(
     recordsByBatch.delete(batchId);
   }
   batchIdsByAnchor.delete(anchor);
+  anchorSnapshotById.delete(anchor);
 
   const nextIds: string[] = [];
   for (const record of records) {
@@ -249,7 +274,7 @@ export function replaceExecutionEnvironmentDispatchesForAnchor(
     });
     nextIds.push(batchId);
   }
-  batchIdsByAnchor.set(anchor, nextIds.slice(0, MAX_BATCHES_PER_ANCHOR));
+  setAnchorBatchIds(anchor, nextIds);
   publishAnchor(anchor);
 }
 
@@ -289,7 +314,7 @@ export function registerExecutionEnvironmentBatch(input: {
     items: [],
   });
   const prev = batchIdsByAnchor.get(anchorSessionId) ?? [];
-  batchIdsByAnchor.set(anchorSessionId, [batchId, ...prev.filter((id) => id !== batchId)].slice(0, MAX_BATCHES_PER_ANCHOR));
+  setAnchorBatchIds(anchorSessionId, [batchId, ...prev.filter((id) => id !== batchId)]);
   publishAnchor(anchorSessionId);
 }
 

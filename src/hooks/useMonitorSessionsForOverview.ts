@@ -2,7 +2,9 @@ import { useEffect, useRef, useState } from "react";
 import type { ClaudeSession } from "../types";
 import { indexOfLastRenderableUserMessage, isAssistantDisplayNoiseText } from "../utils/claudeChatMessageDisplay";
 import { assistantMessageVisiblePlainText } from "../services/claudeSessionState";
-import { MONITOR_SESSIONS_SYNC_INTERVAL_MS } from "../constants/monitorUi";
+import {
+  MONITOR_SESSIONS_SYNC_INTERVAL_MS,
+} from "../constants/monitorUi";
 
 function settledAssistantPreviewLengthBucket(session: ClaudeSession): string {
   if (session.status === "running" || session.status === "connecting") {
@@ -74,13 +76,17 @@ export function monitorSessionsOverviewFingerprint(sessions: readonly ClaudeSess
  * 向 useMonitorOverview 提供会话列表：始终读最新 ref，仅在监控相关指纹变化时触发重算。
  * 避免主会话流式时每 380ms 跑一遍巨型 useMemo。
  */
-export function useMonitorSessionsForOverview(sessions: ClaudeSession[]): ClaudeSession[] {
+export function useMonitorSessionsForOverview(
+  sessions: ClaudeSession[],
+  enabled = true,
+): ClaudeSession[] {
   const [synced, setSynced] = useState(sessions);
   const latestRef = useRef(sessions);
   const fingerprintRef = useRef(monitorSessionsOverviewFingerprint(sessions));
   latestRef.current = sessions;
 
   useEffect(() => {
+    if (!enabled) return;
     const commitIfChanged = () => {
       const next = latestRef.current;
       const fp = monitorSessionsOverviewFingerprint(next);
@@ -109,7 +115,7 @@ export function useMonitorSessionsForOverview(sessions: ClaudeSession[]): Claude
         document.removeEventListener("visibilitychange", onVisibilityChange);
       }
     };
-  }, []);
+  }, [enabled]);
 
   useEffect(() => {
     const next = latestRef.current;

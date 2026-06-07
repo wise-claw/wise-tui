@@ -206,6 +206,16 @@
   right: 0;
   overflow: hidden;
   box-sizing: border-box;
+  contain: layout style;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 22px;
+}
+
+/* 左栏运行面板折叠/隐藏时暂停状态动画，减少离屏 compositor 开销 */
+.app-left-sidebar-monitor-panel--section-collapsed .app-monitor-panel__subagent-status-svg--spin,
+.app-left-sidebar-monitor-panel--section-collapsed .app-monitor-panel__subagent-status-svg--pulse,
+.app-left-sidebar-monitor-panel--section-collapsed .app-monitor-panel__status-spinner-svg {
+  animation-play-state: paused;
 }
 
 /* 派发任务行：与终端行同构 — 左侧「派发 + 环境」，右侧预览，避免 label/环境/结果三段挤在一行 */

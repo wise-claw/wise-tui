@@ -86,8 +86,18 @@
 }
 
 .git-files-explorer-tree,
-.repo-tree-list {
+.repo-tree-list:not(:has(.repo-tree-virtual-list)) {
   content-visibility: auto;
+}
+
+/* 虚拟文件树已由窗口裁切，容器与逐行 CV 在快速滑动时增加布局开销 */
+.repo-tree-list:has(.repo-tree-virtual-list) {
+  content-visibility: visible;
+}
+
+.repo-tree-virtual-list .repo-tree-node {
+  content-visibility: visible;
+  contain-intrinsic-size: auto;
 }
 
 .repo-search-results {
@@ -1727,6 +1737,7 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-file
   right: 0;
   box-sizing: border-box;
   overflow: hidden;
+  contain: layout style;
 }
 
 .repo-tree-virtual-list__hint {

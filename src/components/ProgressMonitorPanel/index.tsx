@@ -1171,10 +1171,15 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
     sessionConversationTaskDetailTarget != null ||
     repositorySubagentDetailTarget != null ||
     omcDirectBatchDetailSnapshot != null;
-  const transcriptSessionsFingerprint = useMemo(() => {
-    if (!needsLiveTranscriptSessions) return "frozen";
-    return monitorSessionsOverviewFingerprint(transcriptSourceSessions ?? sessions);
-  }, [needsLiveTranscriptSessions, sessions, transcriptSourceSessions]);
+  const nextTranscriptFingerprint = needsLiveTranscriptSessions
+    ? monitorSessionsOverviewFingerprint(transcriptSourceSessions ?? sessions)
+    : "frozen";
+  const [transcriptSessionsFingerprint, setTranscriptSessionsFingerprint] = useState(
+    nextTranscriptFingerprint,
+  );
+  if (nextTranscriptFingerprint !== transcriptSessionsFingerprint) {
+    setTranscriptSessionsFingerprint(nextTranscriptFingerprint);
+  }
   const sessionsForHistoryTranscript = useMemo(
     () => transcriptSourceSessions ?? sessions,
     [needsLiveTranscriptSessions, transcriptSessionsFingerprint, sessions, transcriptSourceSessions],
@@ -1346,10 +1351,13 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
 
   const sessionsForTerminalStatusRef = useRef(sessions);
   sessionsForTerminalStatusRef.current = sessions;
-  const sessionsTerminalStatusFingerprint = useMemo(
-    () => monitorSessionsTerminalStatusFingerprint(sessions),
-    [sessions],
+  const nextTerminalStatusFingerprint = monitorSessionsTerminalStatusFingerprint(sessions);
+  const [sessionsTerminalStatusFingerprint, setSessionsTerminalStatusFingerprint] = useState(
+    nextTerminalStatusFingerprint,
   );
+  if (nextTerminalStatusFingerprint !== sessionsTerminalStatusFingerprint) {
+    setSessionsTerminalStatusFingerprint(nextTerminalStatusFingerprint);
+  }
   const employeeTerminalConversationStatusById = useMemo(
     () =>
       buildEmployeeTerminalConversationStatusById({

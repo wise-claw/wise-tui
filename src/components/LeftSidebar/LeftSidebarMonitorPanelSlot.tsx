@@ -1,6 +1,8 @@
 import { memo, useRef } from "react";
 import type { LeftSidebarProps } from "./types";
 import type { ClaudeSession } from "../../types";
+import { LEFT_SIDEBAR_SCROLLING_CLASS } from "../../constants/leftSidebarScrollPerformance";
+import { useScrollEndClass } from "../../hooks/useScrollEndClass";
 import { ProgressMonitorPanel } from "../ProgressMonitorPanel";
 
 export type LeftSidebarMonitorPanelSlotProps = {
@@ -149,6 +151,7 @@ export const LeftSidebarMonitorPanelSlot = memo(function LeftSidebarMonitorPanel
   transcriptSessionsFingerprint: _transcriptSessionsFingerprint,
 }: LeftSidebarMonitorPanelSlotProps) {
   const scrollRootRef = useRef<HTMLDivElement>(null);
+  useScrollEndClass(scrollRootRef, LEFT_SIDEBAR_SCROLLING_CLASS);
 
   return (
     <div

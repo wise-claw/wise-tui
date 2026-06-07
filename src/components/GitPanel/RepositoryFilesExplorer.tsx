@@ -1,4 +1,4 @@
-import { memo, useEffect, useMemo, useRef, type ReactNode } from "react";
+import { memo, useMemo, useRef, type ReactNode } from "react";
 import { Button, Empty, Input, Menu, Popconfirm, Spin, Tooltip } from "antd";
 import {
   ExclamationCircleOutlined,
@@ -18,6 +18,8 @@ import { RepositoryVirtualTreeList } from "./RepositoryVirtualTreeList";
 import { MIN_EXPLORER_SEARCH_QUERY_LEN } from "./fileTree";
 import type { GitPanelOpenFileOptions } from "./types";
 import { useRepositoryFilesExplorer } from "./useRepositoryFilesExplorer";
+import { useScrollEndClass } from "../../hooks/useScrollEndClass";
+import { LEFT_SIDEBAR_SCROLLING_CLASS } from "../../constants/leftSidebarScrollPerformance";
 import { formatRepositoryExplorerLoadError } from "../../utils/repositoryPathAccessibility";
 
 type WorkspaceSelectorProps = Omit<GitPanelWorkspaceSelectorProps, "activeRepositoryPath">;
@@ -76,25 +78,10 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
     explorer.searchResultRows.length === 0;
 
   const scrollRegionRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    const el = scrollRegionRef.current;
-    if (!el) return;
-    let scrollEndTimer: ReturnType<typeof setTimeout> | undefined;
-    const onScroll = () => {
-      el.classList.add("git-files-explorer-scroll-region--scrolling");
-      if (scrollEndTimer) clearTimeout(scrollEndTimer);
-      scrollEndTimer = setTimeout(() => {
-        el.classList.remove("git-files-explorer-scroll-region--scrolling");
-      }, 140);
-    };
-    el.addEventListener("scroll", onScroll, { passive: true });
-    return () => {
-      el.removeEventListener("scroll", onScroll);
-      if (scrollEndTimer) clearTimeout(scrollEndTimer);
-      el.classList.remove("git-files-explorer-scroll-region--scrolling");
-    };
-  }, [sectionCollapsed]);
+  useScrollEndClass(scrollRegionRef, [
+    LEFT_SIDEBAR_SCROLLING_CLASS,
+    "git-files-explorer-scroll-region--scrolling",
+  ]);
 
   const flatTreeRows = useMemo(
     () =>

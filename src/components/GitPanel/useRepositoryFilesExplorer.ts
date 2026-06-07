@@ -27,7 +27,7 @@ import {
   MIN_EXPLORER_SEARCH_QUERY_LEN,
   type ExplorerSearchResultRow,
 } from "./fileTree";
-import { buildLazyRepositoryFileTree, pruneLoadedChildrenMap } from "./lazyExplorerTree";
+import { buildLazyRepositoryFileTree, capLoadedChildrenMap, pruneLoadedChildrenMap } from "./lazyExplorerTree";
 import {
   shouldApplyExplorerChildLoadResult,
   shouldApplyExplorerLoadResult,
@@ -155,7 +155,7 @@ export function useRepositoryFilesExplorer({
   const commitLoadedChildrenByDir = useCallback(
     (mutate: (prev: Map<string, RepositoryExplorerEntry[]>) => Map<string, RepositoryExplorerEntry[]>) => {
       setLoadedChildrenByDir((prev) => {
-        const next = mutate(new Map(prev));
+        const next = capLoadedChildrenMap(mutate(new Map(prev)));
         loadedChildrenByDirRef.current = next;
         return next;
       });

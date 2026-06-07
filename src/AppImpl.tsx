@@ -910,8 +910,15 @@ export default function App() {
   const workflowTemplatesLatestRef = useRef(workflowTemplates);
   workflowTemplatesLatestRef.current = workflowTemplates;
 
+  const monitorPanelDefault = useMonitorPanelDefault();
+  const monitorOverviewActive =
+    (monitorPanelDefault.visible &&
+      (monitorPanelDefault.placement === "left" || monitorPanelDefault.placement === "right")) ||
+    monitorDrawerTarget != null ||
+    viewMode.view.kind === "inspect";
+
   /** 监控侧栏 / Drawer 用：指纹节流，避免流式时每帧跑巨型 useMonitorOverview */
-  const sessionsSyncedForMonitorUi = useMonitorSessionsForOverview(sessions);
+  const sessionsSyncedForMonitorUi = useMonitorSessionsForOverview(sessions, monitorOverviewActive);
 
   const monitorPanelSessionsMerged = sessionsSyncedForMonitorUi;
 
@@ -1242,12 +1249,6 @@ export default function App() {
   );
 
   const { omcInstalled } = useOmcPluginInstalled(true);
-  const monitorPanelDefault = useMonitorPanelDefault();
-  const monitorOverviewActive =
-    (monitorPanelDefault.visible &&
-      (monitorPanelDefault.placement === "left" || monitorPanelDefault.placement === "right")) ||
-    monitorDrawerTarget != null ||
-    viewMode.view.kind === "inspect";
   const {
     employeeMonitorItems,
     repositoryMemberMonitorItems,
