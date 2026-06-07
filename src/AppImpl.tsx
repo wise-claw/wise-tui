@@ -109,7 +109,7 @@ import {
   planAtMentionDispatch,
 } from "./services/atMentionDispatch";
 import { resolveProjectMainSessionAnchor } from "./utils/projectSessionAnchor";
-import { resolveScheduledTasksRepository } from "./utils/workspaceSelectionState";
+import { resolveChatTopbarContext, resolveScheduledTasksRepository } from "./utils/workspaceSelectionState";
 import { resolveTrellisBootstrapPath } from "./utils/trellisBootstrapPath";
 import { resolveSidebarSelectionTarget } from "./utils/sidebarSelectionTarget";
 import {
@@ -1645,6 +1645,16 @@ export default function App() {
 
   const activeRepository = repositories.find((p) => p.id === activeRepositoryId);
 
+  const fileEditorRootPath = useMemo(() => {
+    const path = resolveChatTopbarContext({
+      activeRepository,
+      activeProject,
+      activeWorkspaceFocus,
+      repositories,
+    }).openPath.trim();
+    return path || activeRepository?.path?.trim() || null;
+  }, [activeRepository, activeProject, activeWorkspaceFocus, repositories]);
+
   const scheduledTasksRepository = useMemo(
     () =>
       resolveScheduledTasksRepository({
@@ -1795,7 +1805,11 @@ export default function App() {
     setMainLayoutRightWidthPx,
   } = useMainLayoutModes({
     activeRepository,
+    activeProject,
+    activeWorkspaceFocus,
     activeSessionId,
+    activeSessionRepositoryPath:
+      sessions.find((item) => item.id === activeSessionId)?.repositoryPath ?? null,
     collapsed,
     createSession,
     paneCount,
@@ -2808,7 +2822,7 @@ export default function App() {
       onLeftWidthChange={setMainLayoutLeftWidthPx}
       onRightWidthChange={setMainLayoutRightWidthPx}
       onOpenRemoteChannels={() => enterAuthorPane("channels")}
-      activeRepositoryPath={activeRepository?.path}
+      activeRepositoryPath={fileEditorRootPath}
       leftSidebarProps={{
         projects,
         activeProjectId,

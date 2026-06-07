@@ -95,6 +95,7 @@ describe("wiseDefaultConfigStore", () => {
     expect(config.showWorkspaceQuickActionsPanel).toBe(true);
     expect(config.showWorkspaceMemosPanel).toBe(true);
     expect(config.showWorkspaceTodosPanel).toBe(true);
+    expect(config.fileTreeOpenInNewPane).toBe(false);
     expect(setAppSetting).toHaveBeenCalled();
     const payload = JSON.parse(String(setAppSetting.mock.calls[0]?.[1]));
     expect(payload).toMatchObject({

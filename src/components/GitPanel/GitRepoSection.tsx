@@ -146,6 +146,16 @@ function GitRepoSectionInner({
   const mountedRef = useRef(true);
   const DEBOUNCE_MS = 400;
 
+  const handleOpenRepoFile = useCallback(
+    (path: string, options?: GitPanelOpenFileOptions) => {
+      onOpenFile?.(path, {
+        ...options,
+        fileRootPath: options?.fileRootPath?.trim() || repositoryPath,
+      });
+    },
+    [onOpenFile, repositoryPath],
+  );
+
   useEffect(() => {
     mountedRef.current = true;
     setHeaderReady(false);
@@ -687,7 +697,7 @@ function GitRepoSectionInner({
                 onUnstageAll={handleUnstageAll}
                 onDiscardAll={handleDiscardAll}
                 onCommit={handleCommit}
-                onOpenFile={onOpenFile}
+                onOpenFile={handleOpenRepoFile}
               />
             )
           )}

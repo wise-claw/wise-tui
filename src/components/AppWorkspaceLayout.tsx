@@ -7,6 +7,7 @@ import {
   useContext,
   useEffect,
   useMemo,
+  useRef,
   useState,
   type CSSProperties,
   type ComponentProps,
@@ -31,6 +32,14 @@ import type { RepositoryFilePreviewModal } from "./RepositoryFilePreviewModal";
 import type { SkillsHub } from "./SkillsHub";
 import type { ScheduledTasksOverlayTarget } from "./RepositoryScheduledTasksModal";
 import { resolveWorkspaceMainSession } from "../utils/resolveWorkspaceMainSession";
+import type { PaneCount, PaneSlot } from "../constants/mainLayoutWidths";
+import {
+  loadFileTreeOpenInNewPaneFromStore,
+  WISE_FILE_TREE_OPEN_IN_NEW_PANE_CHANGED,
+} from "../services/wiseDefaultConfigStore";
+import { planFileViewerPaneIndex } from "../utils/fileViewerPanePlacement";
+import type { PaneAuxLayout } from "./ClaudeSessions/paneAuxLayout";
+import { waitLayoutFrames } from "../services/mainWindowLayout";
 import type * as PrdTaskSplitPanelModule from "./PrdTaskSplitPanel";
 import type { EmployeeItem, WorkflowGraph, WorkflowTemplateItem } from "../types";
 import { resolveCockpitHubPane, type InspectTool, type ViewMode } from "../types/viewMode";
@@ -139,6 +148,20 @@ type InspectorCockpitProps = CockpitInspectorProps;
 
 type OpenRepositoryFileHandler = (path: string, options?: GitPanelOpenFileOptions) => void;
 
+let fileViewerPaneSlotCounter = 0;
+function createFileViewerPaneSlot(): PaneSlot {
+  fileViewerPaneSlotCounter += 1;
+  return {
+    slotId: `file-viewer-${Date.now()}-${fileViewerPaneSlotCounter}`,
+    sessionId: null,
+    repositoryId: null,
+  };
+}
+
+function isPlainRepositoryFileOpen(options?: GitPanelOpenFileOptions): boolean {
+  return !options?.fromGitChanges && !options?.fromCommit && !options?.fromCommitCompare;
+}
+
 interface RepositoryFileEditorPanelContextValue {
   activePath: string | null;
   dirty: boolean;
@@ -206,24 +229,58 @@ const ConnectedLeftSidebar = memo(function ConnectedLeftSidebar({
 interface ConnectedClaudeSessionsProps {
   claudeSessionsProps: ClaudeSessionsProps;
   mainLayoutContentRef: RefObject<HTMLElement | null>;
-  panelBelowMessages: ReactNode;
+  centerAuxPanelsNode: ReactNode;
+  fileEditorTargetPaneIndex: number | null;
 }
 
 const ConnectedClaudeSessions = memo(function ConnectedClaudeSessions({
   claudeSessionsProps,
   mainLayoutContentRef,
-  panelBelowMessages,
+  centerAuxPanelsNode,
+  fileEditorTargetPaneIndex,
 }: ConnectedClaudeSessionsProps) {
   const fileEditorVisible = useContext(RepositoryFileEditorVisibilityContext);
   const memoEditorVisible = useContext(WorkspaceMemoEditorVisibilityContext);
-  const centerAuxVisible = fileEditorVisible || memoEditorVisible;
+
+  const resolvePaneAuxLayout = useCallback(
+    (paneIndex: number): PaneAuxLayout => {
+      const auxVisible = fileEditorVisible || memoEditorVisible;
+      if (!auxVisible) {
+        return { hideMessages: false, hideSessionTools: false };
+      }
+      if (memoEditorVisible) {
+        return {
+          panelBelowMessages: paneIndex === 0 ? centerAuxPanelsNode : undefined,
+          hideMessages: true,
+          hideSessionTools: true,
+        };
+      }
+      if (fileEditorTargetPaneIndex == null) {
+        return {
+          panelBelowMessages: paneIndex === 0 ? centerAuxPanelsNode : undefined,
+          hideMessages: true,
+          hideSessionTools: true,
+        };
+      }
+      const isTarget = paneIndex === fileEditorTargetPaneIndex;
+      return {
+        panelBelowMessages: isTarget ? centerAuxPanelsNode : undefined,
+        hideMessages: isTarget,
+        hideSessionTools: isTarget,
+      };
+    },
+    [centerAuxPanelsNode, fileEditorTargetPaneIndex, fileEditorVisible, memoEditorVisible],
+  );
+
+  const primaryAux = resolvePaneAuxLayout(0);
   return (
     <Layout.Content ref={mainLayoutContentRef} className="app-main-layout-content">
       <MemoClaudeSessions
         {...claudeSessionsProps}
-        hideMessages={centerAuxVisible}
-        hideSessionTools={centerAuxVisible}
-        panelBelowMessages={panelBelowMessages}
+        hideMessages={primaryAux.hideMessages}
+        hideSessionTools={primaryAux.hideSessionTools}
+        panelBelowMessages={primaryAux.panelBelowMessages}
+        resolvePaneAuxLayout={resolvePaneAuxLayout}
         hideTopbar={true}
       />
     </Layout.Content>
@@ -609,6 +666,97 @@ export function AppWorkspaceLayout({
     setFileEditorTabs,
   } = useRepositoryFileEditor({ repositoryPath: activeRepositoryPath });
 
+  const [fileTreeOpenInNewPane, setFileTreeOpenInNewPane] = useState(false);
+  const [fileEditorTargetPaneIndex, setFileEditorTargetPaneIndex] = useState<number | null>(null);
+  const prevEditorVisibleRef = useRef(false);
+
+  useEffect(() => {
+    let cancelled = false;
+    void loadFileTreeOpenInNewPaneFromStore().then((value) => {
+      if (!cancelled) setFileTreeOpenInNewPane(value);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  useEffect(() => {
+    if (typeof window === "undefined") return;
+    const onChanged = (event: Event) => {
+      const detail = (event as CustomEvent<{ openInNewPane?: boolean }>).detail;
+      if (typeof detail?.openInNewPane === "boolean") {
+        setFileTreeOpenInNewPane(detail.openInNewPane);
+      } else {
+        void loadFileTreeOpenInNewPaneFromStore().then(setFileTreeOpenInNewPane);
+      }
+    };
+    window.addEventListener(WISE_FILE_TREE_OPEN_IN_NEW_PANE_CHANGED, onChanged as EventListener);
+    return () => {
+      window.removeEventListener(WISE_FILE_TREE_OPEN_IN_NEW_PANE_CHANGED, onChanged as EventListener);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (prevEditorVisibleRef.current && !editorVisible) {
+      setFileEditorTargetPaneIndex(null);
+    }
+    prevEditorVisibleRef.current = editorVisible;
+  }, [editorVisible]);
+
+  const openRepositoryFileWithPreference = useCallback(
+    async (relativePath: string, options?: GitPanelOpenFileOptions) => {
+      const fromFileTree = options?.fromFileTree === true;
+      const plainFile = isPlainRepositoryFileOpen(options);
+      if (fromFileTree && fileTreeOpenInNewPane && plainFile) {
+        const currentPaneCount = claudeSessionsProps.paneCount ?? 1;
+        let targetPaneIndex = fileEditorTargetPaneIndex;
+        const needsNewTarget =
+          targetPaneIndex == null ||
+          !editorVisible ||
+          targetPaneIndex >= currentPaneCount;
+
+        if (needsNewTarget) {
+          const plan = planFileViewerPaneIndex({
+            paneCount: currentPaneCount as PaneCount,
+            extraPanes: claudeSessionsProps.extraPanes ?? [],
+            createSlot: createFileViewerPaneSlot,
+          });
+          targetPaneIndex = plan.targetPaneIndex;
+
+          if (plan.nextPaneCount !== currentPaneCount && claudeSessionsProps.onChangePaneCount) {
+            const expanded = await Promise.resolve(
+              claudeSessionsProps.onChangePaneCount(plan.nextPaneCount) as void | boolean,
+            );
+            if (expanded === false) {
+              setFileEditorTargetPaneIndex(null);
+              openRepositoryFile(relativePath, options);
+              return;
+            }
+            await waitLayoutFrames(1);
+          }
+        }
+
+        setFileEditorTargetPaneIndex(targetPaneIndex);
+        openRepositoryFile(relativePath, options);
+        return;
+      }
+
+      if (fromFileTree && !fileTreeOpenInNewPane) {
+        setFileEditorTargetPaneIndex(null);
+      }
+      openRepositoryFile(relativePath, options);
+    },
+    [
+      claudeSessionsProps.extraPanes,
+      claudeSessionsProps.onChangePaneCount,
+      claudeSessionsProps.paneCount,
+      editorVisible,
+      fileEditorTargetPaneIndex,
+      fileTreeOpenInNewPane,
+      openRepositoryFile,
+    ],
+  );
+
   const handleFileEditorTabContentChange = useCallback(
     (relativePath: string, content: string) => {
       setFileEditorTabs((prev) =>
@@ -632,7 +780,9 @@ export function AppWorkspaceLayout({
       },
       onTabContentChange: handleFileEditorTabContentChange,
       preview: repositoryBinaryPreview,
-      repositoryPath: activeRepositoryPath,
+      repositoryPath:
+        fileEditorTabs.find((tab) => tab.relativePath === fileEditorActivePath)?.rootPath ??
+        activeRepositoryPath,
       saving: editorSaving,
       tabs: fileEditorTabs,
     }),
@@ -674,7 +824,7 @@ export function AppWorkspaceLayout({
       repositoryId={workspaceMemosRepositoryId}
       onEnsureChatMode={onEnsureChatModeForMemo}
     >
-      <RepositoryFileEditorOpenFileContext.Provider value={openRepositoryFile}>
+      <RepositoryFileEditorOpenFileContext.Provider value={openRepositoryFileWithPreference}>
         <RepositoryFileEditorVisibilityContext.Provider value={editorVisible}>
           <RepositoryFileEditorPanelContext.Provider value={editorPanelContextValue}>
             <ConfigProvider
@@ -783,7 +933,8 @@ export function AppWorkspaceLayout({
                           <ConnectedClaudeSessions
                             claudeSessionsProps={claudeSessionsProps}
                             mainLayoutContentRef={mainLayoutContentRef}
-                            panelBelowMessages={centerAuxPanelsNode}
+                            centerAuxPanelsNode={centerAuxPanelsNode}
+                            fileEditorTargetPaneIndex={fileEditorTargetPaneIndex}
                           />
                         </Suspense>
                       </ErrorBoundary>

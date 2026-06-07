@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import DOMPurify from "dompurify";
 import { message, Modal } from "antd";
-import type { GitPanelOpenFileOptions } from "../components/GitPanel";
+import type { GitPanelOpenFileOptions } from "../components/GitPanel/types";
 import { gitShowRevision } from "../services/git";
 import {
   readProjectRelativeFile,
@@ -25,6 +25,7 @@ import { toUiErrorMessage } from "../utils/appErrorMessage";
 
 export interface FileEditorTab {
   relativePath: string;
+  rootPath: string;
   content: string;
   originalContent: string;
   loading: boolean;
@@ -41,6 +42,20 @@ export interface FileEditorTab {
 
 interface UseRepositoryFileEditorOptions {
   repositoryPath: string | null | undefined;
+}
+
+function resolveFileRootPath(
+  repositoryPath: string | null | undefined,
+  options?: GitPanelOpenFileOptions,
+): string | null {
+  const fromOptions = options?.fileRootPath?.trim() ?? "";
+  if (fromOptions) return fromOptions;
+  const fromDefault = repositoryPath?.trim() ?? "";
+  return fromDefault || null;
+}
+
+function missingFileRootMessage(): void {
+  message.warning("请先选择工作区或仓库");
 }
 
 export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEditorOptions) {
@@ -72,12 +87,13 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
   }, []);
 
   const openRepositoryBinaryPreview = useCallback(
-    async (relativePath: string) => {
-      if (!repositoryPath) {
-        message.warning("请先选择仓库");
+    async (relativePath: string, options?: GitPanelOpenFileOptions) => {
+      const rootPath = resolveFileRootPath(repositoryPath, options);
+      if (!rootPath) {
+        missingFileRootMessage();
         return;
       }
-      const absPath = joinRepositoryAbsolutePath(repositoryPath, relativePath);
+      const absPath = joinRepositoryAbsolutePath(rootPath, relativePath);
 
       if (isLegacyDocFilePath(relativePath)) {
         setRepositoryBinaryPreview((prev) => {
@@ -91,7 +107,7 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
 
       try {
         if (isImageFilePath(relativePath)) {
-          const b64 = await readProjectRelativeFileBase64(repositoryPath, relativePath);
+          const b64 = await readProjectRelativeFileBase64(rootPath, relativePath);
           const mime = mimeTypeForImagePath(relativePath);
           setRepositoryBinaryPreview((prev) => {
             if (prev?.kind === "pdf") {
@@ -102,7 +118,7 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
           return;
         }
         if (isPdfFilePath(relativePath)) {
-          const b64 = await readProjectRelativeFileBase64(repositoryPath, relativePath);
+          const b64 = await readProjectRelativeFileBase64(rootPath, relativePath);
           const buf = base64ToArrayBuffer(b64);
           const blob = new Blob([buf], { type: "application/pdf" });
           const blobUrl = URL.createObjectURL(blob);
@@ -115,7 +131,7 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
           return;
         }
         if (isDocxFilePath(relativePath)) {
-          const b64 = await readProjectRelativeFileBase64(repositoryPath, relativePath);
+          const b64 = await readProjectRelativeFileBase64(rootPath, relativePath);
           const buf = base64ToArrayBuffer(b64);
           const mammoth = await import("mammoth");
           const { value } = await mammoth.convertToHtml({ arrayBuffer: buf });
@@ -139,13 +155,14 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
   );
 
   const openRepositoryExternalFile = useCallback(
-    async (relativePath: string) => {
-      if (!repositoryPath) {
-        message.warning("请先选择仓库");
+    async (relativePath: string, options?: GitPanelOpenFileOptions) => {
+      const rootPath = resolveFileRootPath(repositoryPath, options);
+      if (!rootPath) {
+        missingFileRootMessage();
         return;
       }
       try {
-        const absPath = joinRepositoryAbsolutePath(repositoryPath, relativePath);
+        const absPath = joinRepositoryAbsolutePath(rootPath, relativePath);
         await openInFinder(absPath);
       } catch (error) {
         console.error("Open repository file externally failed:", error);
@@ -173,9 +190,10 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
   }, []);
 
   const loadEditorFile = useCallback(
-    async (relativePath: string, options?: { line?: number | null }) => {
-      if (!repositoryPath) {
-        message.warning("请先选择仓库");
+    async (relativePath: string, options?: GitPanelOpenFileOptions) => {
+      const rootPath = resolveFileRootPath(repositoryPath, options);
+      if (!rootPath) {
+        missingFileRootMessage();
         return;
       }
       if (!shouldOpenRepositoryFileInMonaco(relativePath)) {
@@ -187,7 +205,7 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
         setFileEditorTabs((prev) =>
           prev.map((tab) =>
             tab.relativePath === relativePath
-              ? { ...tab, focusLine: options?.line ?? null }
+              ? { ...tab, focusLine: options?.line ?? null, rootPath }
               : tab,
           ),
         );
@@ -199,6 +217,7 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
         const i = prev.findIndex((t) => t.relativePath === relativePath);
         const slot: FileEditorTab = {
           relativePath,
+          rootPath,
           content: "",
           originalContent: "",
           loading: true,
@@ -214,12 +233,13 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
       setFileEditorActivePath(relativePath);
 
       try {
-        const body = await readProjectRelativeFile(repositoryPath, relativePath);
+        const body = await readProjectRelativeFile(rootPath, relativePath);
         setFileEditorTabs((prev) =>
           prev.map((t) =>
             t.relativePath === relativePath
               ? {
                   relativePath,
+                  rootPath,
                   content: body,
                   originalContent: body,
                   loading: false,
@@ -231,7 +251,7 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
       } catch (error) {
         console.error("Failed to read file:", error);
         message.error(`读取文件失败：${relativePath}`);
-        const absPath = joinRepositoryAbsolutePath(repositoryPath, relativePath);
+        const absPath = joinRepositoryAbsolutePath(rootPath, relativePath);
         void openInFinder(absPath).catch(() => undefined);
         setFileEditorTabs((prev) => {
           const nextTabs = prev.filter((t) => t.relativePath !== relativePath);
@@ -249,9 +269,10 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
   );
 
   const loadGitDiffFile = useCallback(
-    async (relativePath: string, section: GitPanelOpenFileOptions["fromGitChanges"]) => {
-      if (!repositoryPath) {
-        message.warning("请先选择仓库");
+    async (relativePath: string, section: GitPanelOpenFileOptions["fromGitChanges"], options?: GitPanelOpenFileOptions) => {
+      const rootPath = resolveFileRootPath(repositoryPath, options);
+      if (!rootPath) {
+        missingFileRootMessage();
         return;
       }
       if (!shouldOpenRepositoryFileInMonaco(relativePath)) {
@@ -276,6 +297,7 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
         const i = prev.findIndex((t) => t.relativePath === relativePath);
         const slot: FileEditorTab = {
           relativePath,
+          rootPath,
           content: "",
           originalContent: "",
           loading: true,
@@ -293,11 +315,11 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
         let left = "";
         let right = "";
         if (section === "unstaged") {
-          left = await gitShowRevision(repositoryPath, `:${norm}`);
-          right = await readProjectRelativeFile(repositoryPath, relativePath);
+          left = await gitShowRevision(rootPath, `:${norm}`);
+          right = await readProjectRelativeFile(rootPath, relativePath);
         } else {
-          left = await gitShowRevision(repositoryPath, `HEAD:${norm}`);
-          right = await gitShowRevision(repositoryPath, `:${norm}`);
+          left = await gitShowRevision(rootPath, `HEAD:${norm}`);
+          right = await gitShowRevision(rootPath, `:${norm}`);
         }
         if (loadGeneration !== gitDiffLoadGenerationRef.current) {
           return;
@@ -307,6 +329,7 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
             t.relativePath === relativePath
               ? {
                   relativePath,
+                  rootPath,
                   content: right,
                   originalContent: right,
                   loading: false,
@@ -339,9 +362,10 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
   );
 
   const loadCommitDiffFile = useCallback(
-    async (relativePath: string, sha: string) => {
-      if (!repositoryPath) {
-        message.warning("请先选择仓库");
+    async (relativePath: string, sha: string, options?: GitPanelOpenFileOptions) => {
+      const rootPath = resolveFileRootPath(repositoryPath, options);
+      if (!rootPath) {
+        missingFileRootMessage();
         return;
       }
       if (!shouldOpenRepositoryFileInMonaco(relativePath)) {
@@ -366,6 +390,7 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
         const i = prev.findIndex((t) => t.relativePath === relativePath);
         const slot: FileEditorTab = {
           relativePath,
+          rootPath,
           content: "",
           originalContent: "",
           loading: true,
@@ -380,8 +405,8 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
       setFileEditorActivePath(relativePath);
 
       try {
-        const left = await gitShowRevision(repositoryPath, `${sha}^:${norm}`);
-        const right = await gitShowRevision(repositoryPath, `${sha}:${norm}`);
+        const left = await gitShowRevision(rootPath, `${sha}^:${norm}`);
+        const right = await gitShowRevision(rootPath, `${sha}:${norm}`);
         if (loadGeneration !== gitDiffLoadGenerationRef.current) {
           return;
         }
@@ -390,6 +415,7 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
             t.relativePath === relativePath
               ? {
                   relativePath,
+                  rootPath,
                   content: right,
                   originalContent: right,
                   loading: false,
@@ -422,9 +448,10 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
   );
 
   const loadCommitCompareDiffFile = useCallback(
-    async (relativePath: string, baseSha: string, headSha: string) => {
-      if (!repositoryPath) {
-        message.warning("请先选择仓库");
+    async (relativePath: string, baseSha: string, headSha: string, options?: GitPanelOpenFileOptions) => {
+      const rootPath = resolveFileRootPath(repositoryPath, options);
+      if (!rootPath) {
+        missingFileRootMessage();
         return;
       }
       if (!shouldOpenRepositoryFileInMonaco(relativePath)) {
@@ -450,6 +477,7 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
         const i = prev.findIndex((t) => t.relativePath === relativePath);
         const slot: FileEditorTab = {
           relativePath,
+          rootPath,
           content: "",
           originalContent: "",
           loading: true,
@@ -464,8 +492,8 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
       setFileEditorActivePath(relativePath);
 
       try {
-        const left = await gitShowRevision(repositoryPath, `${baseSha}:${norm}`);
-        const right = await gitShowRevision(repositoryPath, `${headSha}:${norm}`);
+        const left = await gitShowRevision(rootPath, `${baseSha}:${norm}`);
+        const right = await gitShowRevision(rootPath, `${headSha}:${norm}`);
         if (loadGeneration !== gitDiffLoadGenerationRef.current) {
           return;
         }
@@ -474,6 +502,7 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
             t.relativePath === relativePath
               ? {
                   relativePath,
+                  rootPath,
                   content: right,
                   originalContent: right,
                   loading: false,
@@ -508,11 +537,11 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
   const openRepositoryFile = useCallback(
     (relativePath: string, opts?: GitPanelOpenFileOptions) => {
       if (isRepositoryBinaryPreviewPath(relativePath)) {
-        void openRepositoryBinaryPreview(relativePath);
+        void openRepositoryBinaryPreview(relativePath, opts);
         return;
       }
       if (isRepositoryExternalDefaultAppPath(relativePath)) {
-        void openRepositoryExternalFile(relativePath);
+        void openRepositoryExternalFile(relativePath, opts);
         return;
       }
       if (opts?.fromCommitCompare) {
@@ -520,18 +549,19 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
           relativePath,
           opts.fromCommitCompare.baseSha,
           opts.fromCommitCompare.headSha,
+          opts,
         );
         return;
       }
       if (opts?.fromCommit) {
-        void loadCommitDiffFile(relativePath, opts.fromCommit.sha);
+        void loadCommitDiffFile(relativePath, opts.fromCommit.sha, opts);
         return;
       }
       if (opts?.fromGitChanges) {
-        void loadGitDiffFile(relativePath, opts.fromGitChanges);
+        void loadGitDiffFile(relativePath, opts.fromGitChanges, opts);
         return;
       }
-      void loadEditorFile(relativePath, { line: opts?.line ?? null });
+      void loadEditorFile(relativePath, opts);
     },
     [loadEditorFile, loadCommitCompareDiffFile, loadCommitDiffFile, loadGitDiffFile, openRepositoryBinaryPreview, openRepositoryExternalFile],
   );
@@ -588,11 +618,16 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
   );
 
   const saveEditor = useCallback(async () => {
-    if (!repositoryPath || !fileEditorActivePath) {
+    if (!fileEditorActivePath) {
       return;
     }
     const tab = fileEditorTabs.find((t) => t.relativePath === fileEditorActivePath);
     if (!tab || tab.loading) {
+      return;
+    }
+    const rootPath = tab.rootPath.trim();
+    if (!rootPath) {
+      missingFileRootMessage();
       return;
     }
     if (tab.gitDiffSection === "staged") {
@@ -601,7 +636,7 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
     }
     setEditorSaving(true);
     try {
-      await writeProjectRelativeFile(repositoryPath, fileEditorActivePath, tab.content);
+      await writeProjectRelativeFile(rootPath, fileEditorActivePath, tab.content);
       setFileEditorTabs((prev) =>
         prev.map((t) =>
           t.relativePath === fileEditorActivePath ? { ...t, originalContent: t.content } : t,
@@ -613,15 +648,7 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
     } finally {
       setEditorSaving(false);
     }
-  }, [repositoryPath, fileEditorActivePath, fileEditorTabs]);
-
-  useEffect(() => {
-    if (!repositoryPath) {
-      setFileEditorTabs([]);
-      setFileEditorActivePath(null);
-      setEditorSaving(false);
-    }
-  }, [repositoryPath]);
+  }, [fileEditorActivePath, fileEditorTabs]);
 
   useEffect(
     () => () => {

@@ -133,6 +133,16 @@ function GitSingleRepoPanel({
   const DEBOUNCE_MS = 400;
   const STATUS_SILENT_MIN_INTERVAL_MS = 320;
 
+  const handleOpenRepoFile = useCallback(
+    (path: string, options?: GitPanelOpenFileOptions) => {
+      onOpenFile?.(path, {
+        ...options,
+        fileRootPath: options?.fileRootPath?.trim() || repositoryPath,
+      });
+    },
+    [onOpenFile, repositoryPath],
+  );
+
   const loadStatus = useCallback(async (opts?: { silent?: boolean }) => {
     if (!repositoryPath) return;
     const silent = opts?.silent ?? false;
@@ -513,7 +523,7 @@ function GitSingleRepoPanel({
               onUnstageAll={handleUnstageAll}
               onDiscardAll={handleDiscardAll}
               onCommit={handleCommit}
-              onOpenFile={onOpenFile}
+              onOpenFile={handleOpenRepoFile}
             />
           )
         )}
@@ -522,7 +532,7 @@ function GitSingleRepoPanel({
         open={historyDrawerOpen}
         repositoryPath={repositoryPath}
         onClose={() => setHistoryDrawerOpen(false)}
-        onOpenFile={onOpenFile}
+        onOpenFile={handleOpenRepoFile}
         onRepositoryRefresh={() => void loadStatus({ silent: true })}
       />
     </div>

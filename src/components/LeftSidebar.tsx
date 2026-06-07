@@ -50,6 +50,7 @@ import { LeftSidebarHubQuickEntries } from "./LeftSidebar/LeftSidebarHubQuickEnt
 import { ProjectRepositoryList } from "./LeftSidebar/ProjectRepositoryList";
 import { SidebarWorkspaceTodoAddModal } from "./LeftSidebar/SidebarWorkspaceTodoAddModal";
 import { GitPanelWorkspaceSelector } from "./GitPanel/GitPanelWorkspaceSelector";
+import type { GitPanelOpenFileOptions } from "./GitPanel/types";
 import {
   readLeftFilesExplorerCollapsedFromStorage,
   writeLeftFilesExplorerCollapsedToStorage,
@@ -801,6 +802,22 @@ export function LeftSidebar({
   const effectiveRepoPanelPath = accessibleRepoPanelPath.trim() || repoPanelRepositoryPath.trim();
   const showRepoPanel = Boolean(effectiveRepoPanelPath);
 
+  const handleOpenExplorerFile = useCallback(
+    (relativePath: string, options?: GitPanelOpenFileOptions) => {
+      const root = effectiveRepoPanelPath.trim();
+      if (!root) {
+        message.warning("请先选择工作区或仓库");
+        return;
+      }
+      onOpenActiveRepositoryFile?.(relativePath, {
+        ...options,
+        fromFileTree: true,
+        fileRootPath: options?.fileRootPath?.trim() || root,
+      });
+    },
+    [effectiveRepoPanelPath, message, onOpenActiveRepositoryFile],
+  );
+
   const gitPanelRepositoryEntries = useMemo(
     () =>
       resolveGitPanelRepositoryEntries({
@@ -993,7 +1010,7 @@ export function LeftSidebar({
           repositoryName={repoPanelRepositoryName}
           repositoryEntries={gitPanelRepositoryEntries}
           multiRepoContextTitle={gitPanelContextTitle}
-          onOpenFile={onOpenActiveRepositoryFile}
+          onOpenFile={handleOpenExplorerFile}
           lazyMount
           {...repoPanelWorkspaceSelectorProps}
         />
@@ -1004,6 +1021,7 @@ export function LeftSidebar({
       gitPanelContextTitle,
       gitPanelRepositoryEntries,
       onOpenActiveRepositoryFile,
+      handleOpenExplorerFile,
       repoPanelRepositoryName,
       repoPanelTabSwitcher,
       repoPanelWorkspaceSelectorProps,
@@ -1019,7 +1037,7 @@ export function LeftSidebar({
         activeRepositoryName={repoPanelRepositoryName}
         search={repositoryFileTreeSearch}
         onSearchChange={setRepositoryFileTreeSearch}
-        onOpenFile={onOpenActiveRepositoryFile}
+        onOpenFile={handleOpenExplorerFile}
         sectionCollapsed={filesExplorerSectionCollapsed}
         onSectionCollapsedChange={handleFilesExplorerSectionCollapsedChange}
         workspaceSelector={repoPanelWorkspaceSelectorProps}
@@ -1030,6 +1048,7 @@ export function LeftSidebar({
       filesExplorerSectionCollapsed,
       handleFilesExplorerSectionCollapsedChange,
       onOpenActiveRepositoryFile,
+      handleOpenExplorerFile,
       repoPanelRepositoryName,
       repoPanelTabSwitcher,
       repoPanelWorkspaceSelectorProps,

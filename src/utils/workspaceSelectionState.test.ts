@@ -3,12 +3,15 @@ import type { ClaudeSession, ProjectItem, Repository } from "../types";
 import { projectMainSessionBindingKey } from "./repositoryMainSessionBinding";
 import {
   buildWorkspaceLastSelection,
+  canEnterMultiPaneLayout,
   isChatSurfaceReady,
+  resolveChatContextRepository,
   resolveChatTopbarContext,
   resolveClaudePanelActiveSession,
   resolveClaudeWorkspaceMainSession,
   resolveProjectComposerRepository,
   resolveScheduledTasksRepository,
+  WORKSPACE_SCOPED_VIRTUAL_REPOSITORY_ID,
 } from "./workspaceSelectionState";
 
 function repo(id: number, path = `/r/${id}`): Repository {
@@ -107,6 +110,67 @@ describe("resolveChatTopbarContext", () => {
     });
     expect(resolved.openPath).toBe("/eco/ai");
     expect(resolved.contextRepository?.id).toBe(2);
+  });
+});
+
+describe("canEnterMultiPaneLayout", () => {
+  const repositories = [repo(1, "/eco/web"), repo(2, "/eco/ai")];
+
+  test("project focus with workspace rootPath can enter multi-pane without active repository", () => {
+    const eco = project({ id: "eco", repositoryIds: [1, 2], rootPath: "/eco" });
+    expect(
+      canEnterMultiPaneLayout({
+        activeRepository: null,
+        activeProject: eco,
+        activeWorkspaceFocus: "project",
+        repositories,
+        sessionRepositoryPath: "/eco",
+      }),
+    ).toBe(true);
+  });
+
+  test("returns false when no workspace or repository path is available", () => {
+    expect(
+      canEnterMultiPaneLayout({
+        activeRepository: null,
+        activeProject: null,
+        activeWorkspaceFocus: "repository",
+        repositories,
+      }),
+    ).toBe(false);
+  });
+});
+
+describe("resolveChatContextRepository", () => {
+  const repositories = [repo(1, "/eco/web"), repo(2, "/eco/ai")];
+
+  test("project focus without active repository falls back to member repo", () => {
+    const eco = project({ id: "eco", repositoryIds: [1, 2], rootPath: "/eco" });
+    const resolved = resolveChatContextRepository({
+      activeRepository: null,
+      activeProject: eco,
+      activeWorkspaceFocus: "project",
+      repositories,
+      sessionRepositoryPath: "/eco",
+      sessionRepositoryName: "Project: eco",
+    });
+    expect(resolved?.id).toBe(1);
+    expect(resolved?.path).toBe("/eco/web");
+  });
+
+  test("uses virtual repository scoped to workspace path when no member repo exists", () => {
+    const eco = project({ id: "eco", repositoryIds: [], rootPath: "/eco" });
+    const resolved = resolveChatContextRepository({
+      activeRepository: null,
+      activeProject: eco,
+      activeWorkspaceFocus: "project",
+      repositories,
+      sessionRepositoryPath: "/eco",
+      sessionRepositoryName: "Project: eco",
+    });
+    expect(resolved?.id).toBe(WORKSPACE_SCOPED_VIRTUAL_REPOSITORY_ID);
+    expect(resolved?.path).toBe("/eco");
+    expect(resolved?.name).toBe("eco");
   });
 });
 

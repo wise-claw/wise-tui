@@ -14,7 +14,8 @@ export const WISE_MONACO_EDITOR_OPTIONS: editor.IStandaloneEditorConstructionOpt
   selectOnLineNumbers: false,
   selectionClipboard: false,
   scrollbar: {
-    alwaysConsumeMouseWheel: false,
+    /** 滚动事件留在编辑器内，减少 macOS 触控板滚动误触选区。 */
+    alwaysConsumeMouseWheel: true,
     useShadows: false,
   },
 };

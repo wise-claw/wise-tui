@@ -23,11 +23,12 @@ import {
 } from "../../utils/repositoryMainSessionBinding";
 import {
   isChatSurfaceReady,
+  resolveChatContextRepository,
   resolveClaudePanelActiveSession,
   resolveClaudeWorkspaceMainSession,
-  resolveProjectComposerRepository,
 } from "../../utils/workspaceSelectionState";
 import { loadSessionOwnerHints } from "../../utils/sessionOwnerHints";
+import type { ResolvePaneAuxLayout } from "./paneAuxLayout";
 import type { WorkspaceMode, WorkspaceFocus } from "../../utils/workspaceMode";
 import { type PaneCount, type PaneSlot } from "../../constants/mainLayoutWidths";
 import type { MultiPaneSharedChatProps, PaneRepoTreeNode } from "./ClaudeMultiPaneGrid";
@@ -230,6 +231,8 @@ interface Props {
   panelBelowMessages?: React.ReactNode;
   hideMessages?: boolean;
   hideSessionTools?: boolean;
+  /** 多屏时按窗格解析文件/备忘录等中栏辅助面板布局。 */
+  resolvePaneAuxLayout?: ResolvePaneAuxLayout;
   /** 按标签会话解析并发槽位，供批量直接 OMC 与主发一致占槽 */
   resolveTaskListOmcInvokeConcurrency?: (session: ClaudeSession) => {
     concurrencyScopeKey: string;
@@ -351,6 +354,7 @@ export function ClaudeSessions({
   panelBelowMessages,
   hideMessages = false,
   hideSessionTools = false,
+  resolvePaneAuxLayout,
   resolveTaskListOmcInvokeConcurrency,
   repositoryMainBindings = {},
   onAppendSystemMessage,
@@ -397,13 +401,27 @@ export function ClaudeSessions({
     return map;
   }, [incomingSessions]);
 
-  const projectComposerRepository = useMemo(
-    () => resolveProjectComposerRepository(activeProject, repositories ?? []) ?? undefined,
-    [activeProject, repositories],
-  );
-
-  const chatContextRepository: Repository | undefined =
-    activeRepository ?? projectComposerRepository;
+  const chatContextRepository: Repository | undefined = useMemo(() => {
+    const currentSession =
+      activeSessionId != null ? sessionById.get(activeSessionId) ?? null : null;
+    return (
+      resolveChatContextRepository({
+        activeRepository,
+        activeProject,
+        activeWorkspaceFocus,
+        repositories: repositories ?? [],
+        sessionRepositoryPath: currentSession?.repositoryPath,
+        sessionRepositoryName: currentSession?.repositoryName,
+      }) ?? undefined
+    );
+  }, [
+    activeProject,
+    activeRepository,
+    activeSessionId,
+    activeWorkspaceFocus,
+    repositories,
+    sessionById,
+  ]);
 
   const chatSurfaceReady = isChatSurfaceReady({
     activeRepository,
@@ -495,10 +513,10 @@ export function ClaudeSessions({
   /** 解析每个窗格对应的仓库。 */
   const resolvedPaneRepositories = useMemo(() => {
     return extraPanes.map((slot) => {
-      if (slot.repositoryId == null) return activeRepository ?? null;
-      return (repositories ?? []).find((r) => r.id === slot.repositoryId) ?? activeRepository ?? null;
+      if (slot.repositoryId == null) return chatContextRepository ?? null;
+      return (repositories ?? []).find((r) => r.id === slot.repositoryId) ?? chatContextRepository ?? null;
     });
-  }, [activeRepository, extraPanes, repositories]);
+  }, [chatContextRepository, extraPanes, repositories]);
 
   /** 窗格仓库选择器的树状数据：工作区（项目）节点 + 仓库叶子，未归属项目的仓库归入「独立仓库」组。 */
   const paneRepoTreeData = useMemo<PaneRepoTreeNode[]>(() => {
@@ -857,6 +875,7 @@ export function ClaudeSessions({
             onPaneProjectNewSession={onPaneProjectNewSession}
             onNewPaneSession={onNewPaneSession}
             panelBelowMessages={panelBelowMessages}
+            resolvePaneAuxLayout={resolvePaneAuxLayout}
           />
         ) : (
           <ClaudeSessionChatWithDockLazy

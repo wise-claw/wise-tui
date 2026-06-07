@@ -50,6 +50,10 @@ import {
   normalizeExtraPanesToPaneCount,
 } from "../utils/multiPaneSlots";
 import { resolveTrellisBootstrapPath } from "../utils/trellisBootstrapPath";
+import type { WorkspaceFocus } from "../utils/workspaceMode";
+import {
+  canEnterMultiPaneLayout,
+} from "../utils/workspaceSelectionState";
 
 /** 多屏切换 in-flight 超时：防止 Tauri resize 挂起导致后续操作永久无响应。 */
 const PANE_CHANGE_IN_FLIGHT_TIMEOUT_MS = 8000;
@@ -62,7 +66,10 @@ type CreateSession = (
 
 interface UseMainLayoutModesOptions {
   activeRepository: Repository | undefined;
+  activeProject: ProjectItem | null | undefined;
+  activeWorkspaceFocus: WorkspaceFocus;
   activeSessionId: string | null;
+  activeSessionRepositoryPath?: string | null;
   collapsed: boolean;
   createSession: CreateSession;
   paneCount: PaneCount;
@@ -97,7 +104,10 @@ function createPaneSlot(): PaneSlot {
 
 export function useMainLayoutModes({
   activeRepository,
+  activeProject,
+  activeWorkspaceFocus,
   activeSessionId,
+  activeSessionRepositoryPath,
   collapsed,
   createSession,
   paneCount,
@@ -135,6 +145,24 @@ export function useMainLayoutModes({
   const paneCountRef = useRef(paneCount);
   paneCountRef.current = paneCount;
   const mainLayoutContentRef = useRef<HTMLElement | null>(null);
+
+  const multiPaneLayoutReady = useCallback(
+    () =>
+      canEnterMultiPaneLayout({
+        activeRepository,
+        activeProject,
+        activeWorkspaceFocus,
+        repositories,
+        sessionRepositoryPath: activeSessionRepositoryPath,
+      }),
+    [
+      activeProject,
+      activeRepository,
+      activeSessionRepositoryPath,
+      activeWorkspaceFocus,
+      repositories,
+    ],
+  );
 
   const sessionsLatestRef = useRef(sessions);
   sessionsLatestRef.current = sessions;
@@ -192,8 +220,8 @@ export function useMainLayoutModes({
 
       // 从单屏进入多屏：先快照窗口尺寸
       if (currentPaneCount === 1) {
-        if (!activeRepository) {
-          message.warning("请先选择仓库");
+        if (!multiPaneLayoutReady()) {
+          message.warning("请先选择工作区或仓库");
           return false;
         }
         multiPaneAccumulatedDeltaRef.current = 0;
@@ -245,7 +273,7 @@ export function useMainLayoutModes({
         paneChangeInFlightRef.current = false;
       }
     },
-    [activeRepository, setExtraPanes, setPaneCount],
+    [multiPaneLayoutReady, setExtraPanes, setPaneCount],
   );
 
   /** 单屏下为首个额外窗格写入 session 并切到双屏（复用 handleChangePaneCount 与 in-flight 锁）。 */
@@ -518,8 +546,8 @@ export function useMainLayoutModes({
         createSlot: createPaneSlot,
       });
       if (plan.nextPaneCount !== paneCountRef.current) {
-        if (paneCountRef.current === 1 && !activeRepository && !anchorRepo) {
-          message.warning("请先选择仓库");
+        if (paneCountRef.current === 1 && !multiPaneLayoutReady()) {
+          message.warning("请先选择工作区或仓库");
           return;
         }
         const expanded = await handleChangePaneCount(plan.nextPaneCount);
@@ -544,9 +572,9 @@ export function useMainLayoutModes({
       });
     },
     [
-      activeRepository,
       handleChangePaneCount,
       handlePaneProjectNewSession,
+      multiPaneLayoutReady,
       projects,
       repositories,
       setActiveRepositoryId,

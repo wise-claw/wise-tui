@@ -1,7 +1,8 @@
 import { describe, expect, test } from "bun:test";
 
-const ACCIDENTAL_MIN_LINE_SPAN = 3;
-const ACCIDENTAL_MIN_CHAR_COUNT = 120;
+/** 与 monacoTrackpadSelectionGuard.ts 保持同步 */
+const ACCIDENTAL_MIN_LINE_SPAN = 2;
+const ACCIDENTAL_MIN_CHAR_COUNT = 80;
 
 function selectionLineSpan(startLine: number, endLine: number): number {
   return Math.abs(endLine - startLine) + 1;
@@ -19,6 +20,10 @@ function isAccidentalBlockSelectionHeuristic(
 }
 
 describe("monaco trackpad accidental selection heuristic", () => {
+  test("treats two-line span as accidental", () => {
+    expect(isAccidentalBlockSelectionHeuristic(1, 2, "ab", false)).toBe(true);
+  });
+
   test("treats multi-line span as accidental", () => {
     expect(isAccidentalBlockSelectionHeuristic(1, 4, "", false)).toBe(true);
   });
@@ -28,6 +33,8 @@ describe("monaco trackpad accidental selection heuristic", () => {
   });
 
   test("treats long single-line selection as accidental", () => {
-    expect(isAccidentalBlockSelectionHeuristic(2, 2, "x".repeat(150), false)).toBe(true);
+    expect(isAccidentalBlockSelectionHeuristic(2, 2, "x".repeat(ACCIDENTAL_MIN_CHAR_COUNT), false)).toBe(
+      true,
+    );
   });
 });

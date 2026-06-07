@@ -41,6 +41,7 @@ import { ClaudeSessionChatWithDock } from "./ClaudeSessionChatWithDock";
 import { MultiPaneOffscreenRunningPane } from "./MultiPaneOffscreenRunningPane";
 import { runPaneCreateTask } from "./paneCreateLoading";
 import type { RefreshHistorySessionsScope } from "./ClaudeChat";
+import type { PaneAuxLayout, ResolvePaneAuxLayout } from "./paneAuxLayout";
 
 const TWO_PANE_MIN_WIDTH_PX = 460;
 
@@ -206,7 +207,7 @@ interface MultiPanePrimaryPaneProps {
   shared: MultiPaneSharedChatProps;
   initialNotificationPanelCollapsed: boolean;
   onCreateNewSession: () => void;
-  panelBelowMessages?: ReactNode;
+  paneAuxLayout: PaneAuxLayout;
 }
 
 const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
@@ -217,7 +218,7 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
   shared,
   initialNotificationPanelCollapsed,
   onCreateNewSession,
-  panelBelowMessages,
+  paneAuxLayout,
 }: MultiPanePrimaryPaneProps) {
   const sessionId = session.id;
   const onSessionModelChange = useCallback(
@@ -290,9 +291,9 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
         workflowGraphsByWorkflowId={shared.workflowGraphsByWorkflowId}
         workflowGraphStatusByWorkflowId={shared.workflowGraphStatusByWorkflowId}
             onOpenTaskDetail={shared.onOpenTaskDetail}
-            panelBelowMessages={panelBelowMessages}
-            hideMessages={shared.hideMessages}
-            hideSessionTools={shared.hideSessionTools}
+            panelBelowMessages={paneAuxLayout.panelBelowMessages}
+            hideMessages={paneAuxLayout.hideMessages}
+            hideSessionTools={paneAuxLayout.hideSessionTools}
             enableSessionNotificationFeed={false}
         resolveTaskListOmcInvokeConcurrency={shared.resolveTaskListOmcInvokeConcurrency}
         repositoryMainBindings={shared.repositoryMainBindings}
@@ -320,7 +321,7 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
   prev.workflowTasks === next.workflowTasks &&
   prev.initialNotificationPanelCollapsed === next.initialNotificationPanelCollapsed &&
   prev.onCreateNewSession === next.onCreateNewSession &&
-  prev.panelBelowMessages === next.panelBelowMessages &&
+  prev.paneAuxLayout === next.paneAuxLayout &&
   prev.shared === next.shared,
 );
 
@@ -351,6 +352,7 @@ interface MultiPaneExtraPaneCellProps {
     options?: { rootPath?: string | null; projectName?: string | null },
   ) => void | Promise<void>;
   onNewPaneSession?: (slotIndex: number, repository: Repository) => void | Promise<void>;
+  paneAuxLayout: PaneAuxLayout;
 }
 
 const MultiPaneExtraPaneCell = memo(
@@ -375,6 +377,7 @@ const MultiPaneExtraPaneCell = memo(
     onPaneRepositorySelect,
     onPaneProjectNewSession,
     onNewPaneSession,
+    paneAuxLayout,
   }: MultiPaneExtraPaneCellProps) {
     const resolvedRepo = paneRepo ?? activeRepository;
     const lazyEnabled = shouldLazyMountMultiPaneExtraCells(paneCount);
@@ -420,7 +423,7 @@ const MultiPaneExtraPaneCell = memo(
 
     const deferHeavySubtree =
       lazyEnabled && mounted && Boolean(mustStayMounted) && (pinOffscreenRunningShell || !inView);
-    const hidePaneMessages = shared.hideMessages || deferHeavySubtree;
+    const hidePaneMessages = paneAuxLayout.hideMessages || deferHeavySubtree;
     const useOffscreenRunningShell =
       (pinOffscreenRunningShell ||
         (lazyEnabled && !inView && Boolean(mustStayMounted))) &&
@@ -549,8 +552,9 @@ const MultiPaneExtraPaneCell = memo(
             workflowGraphsByWorkflowId={shared.workflowGraphsByWorkflowId}
             workflowGraphStatusByWorkflowId={shared.workflowGraphStatusByWorkflowId}
             onOpenTaskDetail={shared.onOpenTaskDetail}
+            panelBelowMessages={paneAuxLayout.panelBelowMessages}
             hideMessages={hidePaneMessages}
-            hideSessionTools={shared.hideSessionTools}
+            hideSessionTools={paneAuxLayout.hideSessionTools}
             enableSessionNotificationFeed={false}
             resolveTaskListOmcInvokeConcurrency={shared.resolveTaskListOmcInvokeConcurrency}
             repositoryMainBindings={shared.repositoryMainBindings}
@@ -574,6 +578,14 @@ const MultiPaneExtraPaneCell = memo(
             messageListProfile="companion"
             companionMessageListWindow={companionMessageListWindow}
           />
+        </div>
+      );
+    }
+
+    if (paneAuxLayout.panelBelowMessages) {
+      return (
+        <div className="app-claude-sessions__pane app-claude-sessions__pane--file-only">
+          {paneAuxLayout.panelBelowMessages}
         </div>
       );
     }
@@ -736,7 +748,10 @@ const MultiPaneExtraPaneCell = memo(
     prev.pickerOpen === next.pickerOpen &&
     prev.shared === next.shared &&
     prev.paneRepoTreeData === next.paneRepoTreeData &&
-    prev.projectsById === next.projectsById,
+    prev.projectsById === next.projectsById &&
+    prev.paneAuxLayout.panelBelowMessages === next.paneAuxLayout.panelBelowMessages &&
+    prev.paneAuxLayout.hideMessages === next.paneAuxLayout.hideMessages &&
+    prev.paneAuxLayout.hideSessionTools === next.paneAuxLayout.hideSessionTools,
 );
 
 export interface ClaudeMultiPaneGridProps {
@@ -768,6 +783,7 @@ export interface ClaudeMultiPaneGridProps {
   ) => void | Promise<void>;
   onNewPaneSession?: (slotIndex: number, repository: Repository) => void | Promise<void>;
   panelBelowMessages?: ReactNode;
+  resolvePaneAuxLayout?: ResolvePaneAuxLayout;
 }
 
 export const ClaudeMultiPaneGrid = memo(function ClaudeMultiPaneGrid({
@@ -794,7 +810,22 @@ export const ClaudeMultiPaneGrid = memo(function ClaudeMultiPaneGrid({
   onPaneProjectNewSession,
   onNewPaneSession,
   panelBelowMessages,
+  resolvePaneAuxLayout,
 }: ClaudeMultiPaneGridProps) {
+  const resolveLayout = useCallback(
+    (paneIndex: number): PaneAuxLayout => {
+      if (resolvePaneAuxLayout) {
+        return resolvePaneAuxLayout(paneIndex);
+      }
+      return {
+        panelBelowMessages: paneIndex === 0 ? panelBelowMessages : undefined,
+        hideMessages: shared.hideMessages,
+        hideSessionTools: shared.hideSessionTools,
+      };
+    },
+    [panelBelowMessages, resolvePaneAuxLayout, shared.hideMessages, shared.hideSessionTools],
+  );
+  const primaryPaneAuxLayout = resolveLayout(0);
   const multiPanesRef = useRef<HTMLDivElement | null>(null);
   const [twoPaneLeftWidthPx, setTwoPaneLeftWidthPx] = useState<number | null>(null);
 
@@ -892,7 +923,7 @@ export const ClaudeMultiPaneGrid = memo(function ClaudeMultiPaneGrid({
           pendingCollapseNotificationForSessionId === activeSession.id
         }
         onCreateNewSession={onCreatePrimarySession}
-        panelBelowMessages={panelBelowMessages}
+        paneAuxLayout={primaryPaneAuxLayout}
       />
       {extraPanes.map((slot, paneIdx) => (
         <MultiPaneExtraPaneCell
@@ -920,6 +951,7 @@ export const ClaudeMultiPaneGrid = memo(function ClaudeMultiPaneGrid({
           onPaneRepositorySelect={onPaneRepositorySelect}
           onPaneProjectNewSession={onPaneProjectNewSession}
           onNewPaneSession={onNewPaneSession}
+          paneAuxLayout={resolveLayout(paneIdx + 1)}
         />
       ))}
       {paneCount === 2 ? (

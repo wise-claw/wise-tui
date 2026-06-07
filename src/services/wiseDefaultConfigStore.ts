@@ -67,6 +67,8 @@ export const WISE_COMPOSER_COMMON_PHRASES_CHANGED = "wise:composer-common-phrase
 
 export const WISE_WORKSPACE_INSPECTOR_PANELS_CHANGED = "wise:workspace-inspector-panels-changed";
 
+export const WISE_FILE_TREE_OPEN_IN_NEW_PANE_CHANGED = "wise:file-tree-open-in-new-pane-changed";
+
 export type MonitorPanelPlacement = "left" | "right";
 
 export type WorkspaceInspectorPanelsDefaults = Pick<
@@ -108,6 +110,8 @@ export interface WiseDefaultConfigV1 {
   showWorkspaceMemosPanel: boolean;
   /** 右栏待办事项卡片；默认显示。 */
   showWorkspaceTodosPanel: boolean;
+  /** 文件树点击文件时在新窗格打开，而非占用当前会话主区。 */
+  fileTreeOpenInNewPane: boolean;
 }
 
 const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
@@ -128,6 +132,7 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   showWorkspaceQuickActionsPanel: true,
   showWorkspaceMemosPanel: true,
   showWorkspaceTodosPanel: true,
+  fileTreeOpenInNewPane: false,
 };
 
 function normalizeMonitorPanelPlacement(raw: unknown): MonitorPanelPlacement | null {
@@ -225,6 +230,10 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
         parsed.showWorkspaceTodosPanel === undefined
           ? DEFAULT_CONFIG.showWorkspaceTodosPanel
           : normalizeBoolean(parsed.showWorkspaceTodosPanel, DEFAULT_CONFIG.showWorkspaceTodosPanel),
+      fileTreeOpenInNewPane:
+        parsed.fileTreeOpenInNewPane === undefined
+          ? DEFAULT_CONFIG.fileTreeOpenInNewPane
+          : normalizeBoolean(parsed.fileTreeOpenInNewPane, DEFAULT_CONFIG.fileTreeOpenInNewPane),
     };
   } catch {
     return null;
@@ -342,6 +351,7 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     showWorkspaceQuickActionsPanel: DEFAULT_CONFIG.showWorkspaceQuickActionsPanel,
     showWorkspaceMemosPanel: DEFAULT_CONFIG.showWorkspaceMemosPanel,
     showWorkspaceTodosPanel: DEFAULT_CONFIG.showWorkspaceTodosPanel,
+    fileTreeOpenInNewPane: DEFAULT_CONFIG.fileTreeOpenInNewPane,
   };
 }
 
@@ -378,6 +388,13 @@ function dispatchWorkspaceInspectorPanelsChanged(panels: WorkspaceInspectorPanel
     new CustomEvent(WISE_WORKSPACE_INSPECTOR_PANELS_CHANGED, {
       detail: { ...panels },
     }),
+  );
+}
+
+function dispatchFileTreeOpenInNewPaneChanged(openInNewPane: boolean): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(WISE_FILE_TREE_OPEN_IN_NEW_PANE_CHANGED, { detail: { openInNewPane } }),
   );
 }
 
@@ -431,6 +448,7 @@ export async function saveWiseDefaultConfig(
       | "showWorkspaceQuickActionsPanel"
       | "showWorkspaceMemosPanel"
       | "showWorkspaceTodosPanel"
+      | "fileTreeOpenInNewPane"
     >
   >,
 ): Promise<WiseDefaultConfigV1> {
@@ -472,6 +490,7 @@ export async function saveWiseDefaultConfig(
       patch.showWorkspaceQuickActionsPanel ?? current.showWorkspaceQuickActionsPanel,
     showWorkspaceMemosPanel: patch.showWorkspaceMemosPanel ?? current.showWorkspaceMemosPanel,
     showWorkspaceTodosPanel: patch.showWorkspaceTodosPanel ?? current.showWorkspaceTodosPanel,
+    fileTreeOpenInNewPane: patch.fileTreeOpenInNewPane ?? current.fileTreeOpenInNewPane,
   };
   if (patch.connectionKind !== undefined) {
     next.connectionKind = normalizeConnectionKind(patch.connectionKind) ?? current.connectionKind;
@@ -520,6 +539,9 @@ export async function saveWiseDefaultConfig(
   }
   if (patch.showWorkspaceTodosPanel !== undefined) {
     next.showWorkspaceTodosPanel = normalizeBoolean(patch.showWorkspaceTodosPanel);
+  }
+  if (patch.fileTreeOpenInNewPane !== undefined) {
+    next.fileTreeOpenInNewPane = normalizeBoolean(patch.fileTreeOpenInNewPane);
   }
   await persistConfig(next);
   await deleteLegacyAppSettings();
@@ -612,6 +634,12 @@ export async function saveWiseDefaultConfig(
         showWorkspaceTodosPanel: next.showWorkspaceTodosPanel,
       });
     }
+  }
+  if (
+    patch.fileTreeOpenInNewPane !== undefined &&
+    next.fileTreeOpenInNewPane !== current.fileTreeOpenInNewPane
+  ) {
+    dispatchFileTreeOpenInNewPaneChanged(next.fileTreeOpenInNewPane);
   }
 
   return next;
@@ -869,4 +897,12 @@ export async function saveWorkspaceInspectorPanelsToStore(
   patch: Partial<WorkspaceInspectorPanelsDefaults>,
 ): Promise<void> {
   await saveWiseDefaultConfig(patch);
+}
+
+export async function loadFileTreeOpenInNewPaneFromStore(): Promise<boolean> {
+  return (await loadWiseDefaultConfig()).fileTreeOpenInNewPane;
+}
+
+export async function saveFileTreeOpenInNewPaneToStore(openInNewPane: boolean): Promise<void> {
+  await saveWiseDefaultConfig({ fileTreeOpenInNewPane: openInNewPane });
 }

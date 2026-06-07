@@ -6,6 +6,10 @@ export type GitPanelOpenFileOptions = {
   fromCommit?: { sha: string };
   fromCommitCompare?: { baseSha: string; headSha: string };
   line?: number | null;
+  /** Absolute root for read/write; defaults to hook `repositoryPath` (active repo). */
+  fileRootPath?: string;
+  /** 来自侧栏文件树点击；配合默认配置决定是否新开一屏。 */
+  fromFileTree?: boolean;
 };
 
 export interface FileTreeNode {

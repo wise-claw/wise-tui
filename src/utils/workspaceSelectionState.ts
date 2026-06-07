@@ -57,6 +57,49 @@ export function resolveChatTopbarContext(input: {
   return { contextRepository, openPath };
 }
 
+export const WORKSPACE_SCOPED_VIRTUAL_REPOSITORY_ID = -1;
+
+/** 主聊天 / 多屏窗格用的仓库上下文：无选中仓时回退成员仓或工作区目录虚拟仓。 */
+export function resolveChatContextRepository(input: {
+  activeRepository: Repository | null | undefined;
+  activeProject: ProjectItem | null | undefined;
+  activeWorkspaceFocus: WorkspaceFocus;
+  repositories: ReadonlyArray<Repository>;
+  sessionRepositoryPath?: string | null;
+  sessionRepositoryName?: string | null;
+}): Repository | null {
+  const topbar = resolveChatTopbarContext(input);
+  if (topbar.contextRepository) return topbar.contextRepository;
+  const openPath = topbar.openPath.trim();
+  if (!openPath) return null;
+  const name =
+    input.activeProject?.name?.trim() ||
+    input.sessionRepositoryName?.trim() ||
+    openPath.split(/[/\\]/).filter(Boolean).pop() ||
+    "工作区";
+  return {
+    id: WORKSPACE_SCOPED_VIRTUAL_REPOSITORY_ID,
+    name,
+    path: openPath,
+    repositoryType: "frontend",
+    createdAt: "",
+    updatedAt: "",
+  };
+}
+
+/** 是否具备进入多屏布局的目录上下文（不要求侧栏已选中具体仓库）。 */
+export function canEnterMultiPaneLayout(input: {
+  activeRepository: Repository | null | undefined;
+  activeProject: ProjectItem | null | undefined;
+  activeWorkspaceFocus: WorkspaceFocus;
+  repositories: ReadonlyArray<Repository>;
+  sessionRepositoryPath?: string | null;
+}): boolean {
+  return Boolean(
+    resolveChatTopbarContext(input).openPath.trim(),
+  );
+}
+
 export interface ResolveScheduledTasksRepositoryInput {
   activeRepository: Repository | null | undefined;
   activeProject: ProjectItem | null | undefined;
