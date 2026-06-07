@@ -350,23 +350,41 @@
   z-index: 2;
 }
 
-/* Drag region only on left side — buttons on right must remain interactive */
-.app-chat-topbar-drag-region {
+/* Leading zone: full-width drag underlay; interactive chips stay clickable on top */
+.app-chat-topbar-leading {
+  position: relative;
   display: flex;
   align-items: center;
-  gap: 4px;
   min-width: 0;
   flex: 1 1 0;
+  align-self: stretch;
+}
+
+.app-chat-topbar-drag-underlay {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  -webkit-app-region: drag;
+  cursor: grab;
 }
 
 .app-chat-topbar-left {
+  position: relative;
+  z-index: 1;
   display: flex;
   align-items: center;
   gap: 4px;
   min-width: 0;
+  width: 100%;
+  pointer-events: none;
 }
 
-.app-chat-topbar-left--collapsed {
+.app-chat-topbar-left > * {
+  pointer-events: auto;
+}
+
+.app-chat-topbar-left--collapsed,
+.app-chat-topbar-leading--collapsed .app-chat-topbar-left {
   margin-left: 80px;
 }
 
@@ -381,10 +399,6 @@
 /* Tooltip / Popover 外包一层，用相邻间距代替 gap */
 .app-chat-topbar-right > * + * {
   margin-left: 1px;
-}
-
-.app-chat-topbar-left--collapsed {
-  margin-left: 80px;
 }
 
 .app-topbar-repository-name {

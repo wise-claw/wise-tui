@@ -26,6 +26,10 @@ export interface ClaudeUserSettingsChangedDetail {
   skipComposerPickerRefresh?: boolean;
   /** 仅为 UI 乐观更新，全局 settings 尚未落盘。 */
   optimistic?: boolean;
+  /** 用户主动切换模型档案并已写入全局配置；可重连 Claude 会话。 */
+  sessionReconnect?: boolean;
+  /** 本次切换落盘后的 active profile id（Claude 引擎）。 */
+  appliedProfileId?: string | null;
 }
 
 export function dispatchClaudeUserSettingsChanged(
@@ -48,6 +52,8 @@ export function dispatchModelProfileStoreChanged(
     skipComposerPickerRefresh?: boolean;
     /** 仅为 UI 乐观更新，全局 settings 尚未落盘。 */
     optimistic?: boolean;
+    /** 用户主动切换模型档案；监听方可重连 Claude 会话。 */
+    sessionReconnect?: boolean;
   },
 ): void {
   seedModelProfileStoreCache(store);
@@ -56,12 +62,22 @@ export function dispatchModelProfileStoreChanged(
     (options?.engine
       ? resolveEffectiveModelForProfileEngine(options.engine, store)?.trim() || null
       : pickBadgeEffectiveModel(extractEffectiveModelsFromStore(store)));
+  const appliedProfileId =
+    options?.engine === "claude"
+      ? store.activeProfileId
+      : options?.engine === "codex"
+        ? store.activeCodexProfileId
+        : options?.engine === "opencode"
+          ? store.activeOpencodeProfileId
+          : null;
   dispatchClaudeUserSettingsChanged({
     effectiveModel,
     storeSnapshot: store,
     engine: options?.engine,
     skipComposerPickerRefresh: options?.skipComposerPickerRefresh,
     optimistic: options?.optimistic,
+    sessionReconnect: options?.sessionReconnect,
+    appliedProfileId,
   });
 }
 

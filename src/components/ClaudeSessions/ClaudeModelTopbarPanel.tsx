@@ -195,7 +195,11 @@ export function ClaudeModelTopbarPanel({
         setPanelEngine(appliedEngine);
         const effective =
           resolveEffectiveModelForProfileEngine(appliedEngine, next)?.trim() || null;
-        dispatchModelProfileStoreChanged(next, { engine: appliedEngine, effectiveModel: effective });
+        dispatchModelProfileStoreChanged(next, {
+          engine: appliedEngine,
+          effectiveModel: effective,
+          sessionReconnect: appliedEngine === "claude",
+        });
         onApplied?.();
       } catch (e) {
         setStore(previous);
@@ -204,6 +208,7 @@ export function ClaudeModelTopbarPanel({
         dispatchModelProfileStoreChanged(previous, {
           engine: appliedEngine,
           effectiveModel: rollbackEffective,
+          optimistic: true,
         });
         message.error(typeof e === "string" ? e : "切换失败");
       } finally {

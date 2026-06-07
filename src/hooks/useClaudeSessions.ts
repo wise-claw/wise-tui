@@ -47,7 +47,7 @@ import {
   WISE_CLAUDE_USER_SETTINGS_CHANGED,
   type ClaudeUserSettingsChangedDetail,
 } from "../services/claudeModelProfiles";
-import { resolveClaudeResumePromptAfterModelSwitch } from "../utils/claudeModelProfileReconnect";
+import { buildClaudeModelSwitchReconnectPlan } from "../utils/claudeModelProfileReconnect";
 import { resolveCursorResumeAgentId } from "../utils/cursorAgentId";
 import {
   loadDefaultClaudeConnectionKind,
@@ -301,6 +301,9 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const activeSessionIdRef = useRef<string | null>(activeSessionId);
   activeSessionIdRef.current = activeSessionId;
+  const modelSwitchReconnectInFlightRef = useRef(false);
+  const lastModelSwitchReconnectKeyRef = useRef<string | null>(null);
+  const lastModelSwitchReconnectAtRef = useRef(0);
 
   useEffect(() => {
     const keep = new Set<string>();
@@ -2646,13 +2649,17 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     async (input: {
       sessionId: string;
       effectiveModel?: string | null;
+      appliedProfileId?: string | null;
     }) => {
+      if (modelSwitchReconnectInFlightRef.current) return;
+
       const tabId = input.sessionId.trim();
       if (!tabId) return;
 
       const session = sessionsRef.current.find((s) => s.id === tabId);
       if (!session) return;
       if (resolveSessionExecutionEngine(session) !== "claude") return;
+      if (isTerminalWorkerWiseTab(session)) return;
 
       const claudeSid =
         session.claudeSessionId?.trim() ??
@@ -2660,65 +2667,87 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         null;
       if (!claudeSid) return;
 
-      const newModel = input.effectiveModel?.trim();
-      if (newModel && (session.model?.trim() || "") !== newModel) {
-        updateSessionModel(tabId, newModel);
+      const dedupeKey = `${tabId}:${input.appliedProfileId?.trim() || ""}:${input.effectiveModel?.trim() || ""}`;
+      const now = Date.now();
+      if (
+        lastModelSwitchReconnectKeyRef.current === dedupeKey &&
+        now - lastModelSwitchReconnectAtRef.current < 2500
+      ) {
+        return;
       }
 
+      const pendingCtx = pendingTurnFailoverRef.current;
       const pendingTurnPrompt =
-        pendingTurnFailoverRef.current?.tabSessionId === tabId
-          ? pendingTurnFailoverRef.current.prompt
-          : null;
-
-      await cancelHostExecutionForTab(tabId, claudeSid).catch(() => undefined);
-      await closeStreamingSession(claudeSid).catch(() => undefined);
-      streamingProcessByTabRef.current.delete(tabId);
-      purgeStreamSidecarsForSession(tabId, session.claudeSessionId);
-      clearStreamStallTimer(tabId);
-      pendingTurnFailoverRef.current = null;
-
-      const refreshed = sessionsRef.current.find((s) => s.id === tabId) ?? session;
-      const wasActive =
-        refreshed.status === "running" || refreshed.status === "connecting";
-      const resumePrompt = resolveClaudeResumePromptAfterModelSwitch({
-        session: refreshed,
+        pendingCtx?.tabSessionId === tabId ? pendingCtx.prompt : null;
+      const hasInflightInvocation = [...claudeInvocationInflightRef.current.values()].some(
+        (meta) => meta.tabId === tabId,
+      );
+      const plan = buildClaudeModelSwitchReconnectPlan({
+        session,
+        effectiveModel: input.effectiveModel,
         pendingTurnPrompt,
+        hasStreamingProcess: streamingProcessByTabRef.current.has(tabId),
+        hasInflightInvocation,
+        isTerminalWorker: isTerminalWorkerWiseTab(session),
+        isFailoverInProgress: Boolean(
+          pendingCtx?.tabSessionId === tabId && pendingCtx.autoFailoverEnabled,
+        ),
       });
 
-      if (wasActive && resumePrompt) {
-        commitSessions((prev) =>
-          appendSystemMessageBySessionId(
-            prev.map((s) =>
-              s.id === tabId ? { ...s, status: "idle" as const } : s,
-            ),
-            tabId,
-            "模型已切换，正在使用新模型继续当前会话…",
-          ),
-        );
-        executeSession(tabId, resumePrompt, { replaceLastUserBubble: true });
+      if (!plan.shouldTeardownHost && !plan.updateModel && !plan.notifyMessage) {
         return;
       }
 
-      if (wasActive) {
-        commitSessions((prev) =>
-          appendSystemMessageBySessionId(
-            prev.map((s) =>
-              s.id === tabId ? { ...s, status: "idle" as const } : s,
-            ),
-            tabId,
-            "模型已切换。当前轮次已停止，请重新发送以使用新模型继续会话。",
-          ),
-        );
-        return;
-      }
+      modelSwitchReconnectInFlightRef.current = true;
+      lastModelSwitchReconnectKeyRef.current = dedupeKey;
+      lastModelSwitchReconnectAtRef.current = now;
 
-      commitSessions((prev) =>
-        appendSystemMessageBySessionId(
-          prev,
-          tabId,
-          "模型已切换，下次发送将使用新模型继续本会话。",
-        ),
-      );
+      try {
+        if (plan.updateModel) {
+          updateSessionModel(tabId, plan.updateModel);
+        }
+
+        if (plan.shouldTeardownHost) {
+          await cancelHostExecutionForTab(tabId, claudeSid).catch(() => undefined);
+          await closeStreamingSession(claudeSid).catch(() => undefined);
+          streamingProcessByTabRef.current.delete(tabId);
+          purgeStreamSidecarsForSession(tabId, session.claudeSessionId);
+          clearStreamStallTimer(tabId);
+          if (pendingCtx?.tabSessionId === tabId) {
+            pendingTurnFailoverRef.current = null;
+          }
+        }
+
+        const refreshed = sessionsRef.current.find((s) => s.id === tabId) ?? session;
+        const nextStatus =
+          plan.shouldAutoResume || refreshed.status === "running" || refreshed.status === "connecting"
+            ? ("idle" as const)
+            : refreshed.status;
+
+        if (plan.notifyMessage) {
+          commitSessions((prev) =>
+            appendSystemMessageBySessionId(
+              prev.map((s) => (s.id === tabId ? { ...s, status: nextStatus } : s)),
+              tabId,
+              plan.notifyMessage!,
+            ),
+          );
+        } else if (nextStatus !== refreshed.status) {
+          commitSessions((prev) =>
+            prev.map((s) => (s.id === tabId ? { ...s, status: nextStatus } : s)),
+          );
+        }
+
+        if (plan.shouldAutoResume && plan.resumePrompt) {
+          await new Promise<void>((resolve) => {
+            window.setTimeout(resolve, 0);
+          });
+          if (activeSessionIdRef.current !== tabId) return;
+          executeSession(tabId, plan.resumePrompt, { replaceLastUserBubble: true });
+        }
+      } finally {
+        modelSwitchReconnectInFlightRef.current = false;
+      }
     },
     [
       cancelHostExecutionForTab,
@@ -2732,9 +2761,16 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   );
 
   useEffect(() => {
-    const onModelProfileApplied = (event: Event) => {
-      const detail = (event as CustomEvent<ClaudeUserSettingsChangedDetail>).detail;
-      if (!detail || detail.skipComposerPickerRefresh || detail.optimistic) return;
+    let queued: ClaudeUserSettingsChangedDetail | null = null;
+    let timer: number | null = null;
+
+    const flush = () => {
+      timer = null;
+      const detail = queued;
+      queued = null;
+      if (!detail?.sessionReconnect || detail.optimistic || detail.skipComposerPickerRefresh) {
+        return;
+      }
       if (detail.engine !== "claude") return;
 
       const tabId = activeSessionIdRef.current;
@@ -2743,11 +2779,29 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       void reconnectClaudeSessionAfterModelSwitch({
         sessionId: tabId,
         effectiveModel: detail.effectiveModel,
+        appliedProfileId: detail.appliedProfileId,
       });
     };
+
+    const onModelProfileApplied = (event: Event) => {
+      const detail = (event as CustomEvent<ClaudeUserSettingsChangedDetail>).detail;
+      if (!detail?.sessionReconnect || detail.optimistic || detail.skipComposerPickerRefresh) {
+        return;
+      }
+      queued = detail;
+      if (timer != null) {
+        window.clearTimeout(timer);
+      }
+      timer = window.setTimeout(flush, 0);
+    };
+
     window.addEventListener(WISE_CLAUDE_USER_SETTINGS_CHANGED, onModelProfileApplied);
-    return () =>
+    return () => {
       window.removeEventListener(WISE_CLAUDE_USER_SETTINGS_CHANGED, onModelProfileApplied);
+      if (timer != null) {
+        window.clearTimeout(timer);
+      }
+    };
   }, [reconnectClaudeSessionAfterModelSwitch]);
 
   const executeTerminalSession = useCallback(

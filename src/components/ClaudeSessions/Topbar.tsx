@@ -258,7 +258,10 @@ export function Topbar({
 
   return (
     <div className="app-chat-topbar">
-      <div className="app-chat-topbar-drag-region" data-tauri-drag-region>
+      <div
+        className={`app-chat-topbar-leading${collapsed ? " app-chat-topbar-leading--collapsed" : ""}`}
+      >
+        <div className="app-chat-topbar-drag-underlay" data-tauri-drag-region aria-hidden />
         <div className={`app-chat-topbar-left ${collapsed ? "app-chat-topbar-left--collapsed" : ""}`}>
           {onToggleSidebar && (
             <TopbarBtn
