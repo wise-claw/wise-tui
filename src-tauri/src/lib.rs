@@ -54,6 +54,7 @@ mod openspec_bootstrap;
 mod trellis_bootstrap;
 mod trellis_bridge;
 mod trellis_runtime;
+mod composer_image_gc;
 mod wise_data_cleanup;
 mod wise_db;
 mod wise_mascot;

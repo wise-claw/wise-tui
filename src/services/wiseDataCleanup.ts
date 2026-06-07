@@ -8,6 +8,12 @@ export interface WiseDataCategoryUsage {
   fileCount: number;
   byteSize: number;
   exists: boolean;
+  /** 仍被会话引用的文件数（composer_images）。 */
+  referencedFileCount?: number;
+  /** 可安全自动回收的文件数（composer_images）。 */
+  gcEligibleFileCount?: number;
+  /** 可安全自动回收的字节数（composer_images）。 */
+  gcEligibleByteSize?: number;
 }
 
 export interface WiseDataCleanupResult {

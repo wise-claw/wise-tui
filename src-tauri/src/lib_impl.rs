@@ -8,7 +8,7 @@ use crate::{
     mission_control, mcp, my_extensions,
     openspec_bootstrap, prd_url_fetch, remote_channels, repository_files, skills, skills_sh, system_resource, task_artifact, trellis_bootstrap,
     trellis_bridge,
-    trellis_runtime, wise_data_cleanup, wise_db, wise_mascot, wise_paths, wise_push,
+    composer_image_gc, trellis_runtime, wise_data_cleanup, wise_db, wise_mascot, wise_paths, wise_push,
     workspace_commands,
     workspace_inspector_commands,
     execution_environment_dispatch_commands,
@@ -103,6 +103,7 @@ pub fn run() {
             app.manage(extension_registry);
             app.manage(agent_registry::AgentRegistry::new());
             trellis_runtime::spawn_stale_scanner(app.handle().clone());
+            composer_image_gc::spawn_composer_image_gc_scanner(app.handle().clone());
             claude_llm_proxy::bootstrap_from_db(app.handle());
 
             #[cfg(target_os = "macos")]
@@ -534,6 +535,10 @@ pub fn run() {
             wise_data_cleanup::open_wise_home_dir,
             wise_data_cleanup::list_wise_data_cleanup_categories,
             wise_data_cleanup::cleanup_wise_data_categories,
+            composer_image_gc::get_composer_image_gc_stats,
+            composer_image_gc::run_composer_image_gc_command,
+            composer_image_gc::get_composer_image_gc_config,
+            composer_image_gc::set_composer_image_gc_config,
             app_state_commands::load_session_tabs,
             app_state_commands::save_session_tabs,
             wise_mascot::wise_mascot_show,

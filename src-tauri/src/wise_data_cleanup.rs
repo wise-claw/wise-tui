@@ -1,5 +1,7 @@
 //! Enumerate and purge selected cache directories under `~/.wise/`.
 
+use crate::composer_image_gc;
+use crate::wise_db::WiseDb;
 use crate::wise_paths::wise_dir;
 use serde::Serialize;
 use std::fs;
@@ -51,6 +53,15 @@ pub struct WiseDataCategoryUsage {
     pub file_count: u64,
     pub byte_size: u64,
     pub exists: bool,
+    /// 仍被会话引用的文件数（仅 composer_images）。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub referenced_file_count: Option<u64>,
+    /// 当前可安全自动回收的文件数（仅 composer_images）。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gc_eligible_file_count: Option<u64>,
+    /// 当前可安全自动回收的字节数（仅 composer_images）。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub gc_eligible_byte_size: Option<u64>,
 }
 
 #[derive(Debug, Serialize)]
@@ -178,7 +189,9 @@ pub fn open_wise_home_dir(app: tauri::AppHandle) -> Result<(), String> {
 }
 
 #[tauri::command]
-pub fn list_wise_data_cleanup_categories() -> Result<Vec<WiseDataCategoryUsage>, String> {
+pub fn list_wise_data_cleanup_categories(
+    db: tauri::State<'_, WiseDb>,
+) -> Result<Vec<WiseDataCategoryUsage>, String> {
     let wise = wise_dir()?;
     let mut out = Vec::with_capacity(CATEGORIES.len());
     for cat in CATEGORIES {
@@ -201,6 +214,19 @@ pub fn list_wise_data_cleanup_categories() -> Result<Vec<WiseDataCategoryUsage>,
         } else {
             path
         };
+        let (referenced_file_count, gc_eligible_file_count, gc_eligible_byte_size) =
+            if cat.id == "composer_images" {
+                match composer_image_gc::composer_image_gc_stats(&db) {
+                    Ok(stats) => (
+                        Some(stats.referenced_files),
+                        Some(stats.gc_eligible_files),
+                        Some(stats.gc_eligible_bytes),
+                    ),
+                    Err(_) => (None, None, None),
+                }
+            } else {
+                (None, None, None)
+            };
         out.push(WiseDataCategoryUsage {
             id: cat.id.to_string(),
             label: cat.label.to_string(),
@@ -209,6 +235,9 @@ pub fn list_wise_data_cleanup_categories() -> Result<Vec<WiseDataCategoryUsage>,
             file_count,
             byte_size,
             exists,
+            referenced_file_count,
+            gc_eligible_file_count,
+            gc_eligible_byte_size,
         });
     }
     Ok(out)
