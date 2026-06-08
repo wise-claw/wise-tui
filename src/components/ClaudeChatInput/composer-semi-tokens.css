@@ -1,7 +1,9 @@
 /* 将 Semi AIChatInput 用到的语义 token 接到 Ant Design 全局 CSS 变量，随主题 / 暗色模式一致 */
 .app-claude-semi-chat-input-mount-placeholder {
   width: 100%;
-  min-height: calc(3em + 12px);
+  min-height: calc(
+    var(--app-semi-ai-chat-editor-min-lines, 2) * var(--app-semi-ai-chat-editor-line-px, 20px) + 12px
+  );
   box-sizing: border-box;
 }
 
@@ -19,15 +21,20 @@
   --semi-color-primary-hover: var(--ant-color-primary-hover);
   --semi-color-primary-active: var(--ant-color-primary-active);
   --semi-color-primary-light-default: var(--ant-color-primary-bg);
-  /* 与下方 `.tiptap` 行高一致，供 `.semi-aiChatInput-editor-content` 的 max-height 计算 */
+  /* 与下方 `.tiptap` 行高一致，供编辑区 min/max-height 计算 */
   --app-semi-ai-chat-editor-line-px: 20px;
+  --app-semi-ai-chat-editor-min-lines: 2;
+  --app-semi-ai-chat-editor-max-lines: 3;
   min-width: 0;
 }
 
 /* 会话输入：略小于 Semi 默认 14px，与消息区 13px 更接近 */
 .app-claude-semi-chat-input-wrap .semi-aiChatInput-editor-content .tiptap {
   font-size: 12.5px;
-  line-height: 20px;
+  line-height: var(--app-semi-ai-chat-editor-line-px);
+  min-height: calc(
+    var(--app-semi-ai-chat-editor-min-lines) * var(--app-semi-ai-chat-editor-line-px)
+  );
 }
 
 .app-claude-semi-chat-input-wrap .semi-aiChatInput-editor-content .tiptap .node-inputSlot {
@@ -44,12 +51,30 @@
   padding: 6px 8px;
   border-radius: 8px;
   background: var(--ant-color-bg-container);
-  min-height: calc(3em + 12px);
+  min-height: calc(
+    var(--app-semi-ai-chat-editor-min-lines) * var(--app-semi-ai-chat-editor-line-px) + 12px
+  );
 }
 
-/* 编辑区可视高度最多约 3 行（超出由 Semi 自带的 overflow:auto 滚动） */
+/* 编辑区至少 2 行、最多约 3 行（超出由 Semi 自带的 overflow:auto 滚动） */
 .app-claude-semi-chat-input-wrap .semi-aiChatInput-editor-content {
-  max-height: calc(3 * var(--app-semi-ai-chat-editor-line-px));
+  flex: 0 0 auto;
+  min-height: calc(
+    var(--app-semi-ai-chat-editor-min-lines) * var(--app-semi-ai-chat-editor-line-px)
+  ) !important;
+  max-height: calc(
+    var(--app-semi-ai-chat-editor-max-lines) * var(--app-semi-ai-chat-editor-line-px)
+  );
+}
+
+/* 空态占位段落也撑满两行，避免仅显示一行 placeholder */
+.app-claude-semi-chat-input-wrap
+  .semi-aiChatInput-editor-content
+  .tiptap
+  p.is-editor-empty:first-child {
+  min-height: calc(
+    var(--app-semi-ai-chat-editor-min-lines) * var(--app-semi-ai-chat-editor-line-px)
+  );
 }
 
 /* 底栏单行：收紧 Semi 默认大间距，缩小发送按钮 */

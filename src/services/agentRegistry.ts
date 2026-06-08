@@ -50,6 +50,12 @@ export async function uninstallBuiltinAgent(kind: BuiltinUninstallableKind): Pro
   return agents;
 }
 
+export async function updateBuiltinAgent(kind: BuiltinInstallableKind): Promise<DetectedAgent[]> {
+  const agents = await invoke<DetectedAgent[]>("agent_registry_update_builtin", { kind });
+  publishAgentRegistry(agents);
+  return agents;
+}
+
 function normalizeCustomAgentInput(input: CustomAgentInput): Record<string, unknown> {
   return {
     id: input.id ?? null,

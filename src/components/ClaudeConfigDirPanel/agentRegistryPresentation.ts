@@ -60,6 +60,10 @@ export function canUninstallBuiltinAgent(agent: DetectedAgent): boolean {
   return isBuiltinUninstallableAgent(agent) && agent.available;
 }
 
+export function canUpdateBuiltinAgent(agent: DetectedAgent): boolean {
+  return isBuiltinInstallableAgent(agent) && agent.available;
+}
+
 export function getBuiltinInstallCommand(kind: BuiltinInstallableKind): string {
   switch (kind) {
     case "claude":
@@ -78,6 +82,10 @@ export function getBuiltinUninstallCommand(kind: BuiltinUninstallableKind): stri
     return "清除 Cursor API Key（本地 app_settings）";
   }
   return getBuiltinInstallCommand(kind).replace("npm install -g", "npm uninstall -g");
+}
+
+export function getBuiltinUpdateCommand(kind: BuiltinInstallableKind): string {
+  return getBuiltinInstallCommand(kind);
 }
 
 export function getAgentKindLabel(kind: DetectedAgent["kind"]): string {

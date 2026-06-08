@@ -73,6 +73,7 @@ export function SessionConversationTasksPanel({
                 disabled={executionEnvironmentDispatchHistoryDaysSaving}
                 value={executionEnvironmentDispatchHistoryDays}
                 onChange={onExecutionEnvironmentDispatchHistoryDaysChange}
+                compact
               />
             </div>
           ) : null}

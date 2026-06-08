@@ -1619,7 +1619,9 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
   return (
     <div
       className={
-        "app-monitor-panel" + (sectionCollapsed ? " app-monitor-panel--section-collapsed" : "")
+        "app-monitor-panel" +
+        (sectionCollapsed ? " app-monitor-panel--section-collapsed" : "") +
+        (isCompactSidebarPanel ? " app-monitor-panel--compact-sidebar" : "")
       }
     >
       <div className="app-monitor-panel__head">
@@ -1640,6 +1642,7 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
               disabled={executionEnvironmentDispatchHistoryDaysSaving}
               value={executionEnvironmentDispatchHistoryDays}
               onChange={onExecutionEnvironmentDispatchHistoryDaysChange}
+              compact={isCompactSidebarPanel}
             />
           ) : null}
           {setSectionCollapsed ? (

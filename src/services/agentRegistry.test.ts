@@ -24,8 +24,8 @@ describe("agentRegistry service", () => {
     expect(invoke).toHaveBeenCalledWith("agent_registry_get", { id: "claude" });
   });
 
-  test("wraps install builtin command and publishes registry snapshot", async () => {
-    const { installBuiltinAgent, uninstallBuiltinAgent } = await import("./agentRegistry");
+  test("wraps install, update, and uninstall builtin commands and publishes registry snapshot", async () => {
+    const { installBuiltinAgent, updateBuiltinAgent, uninstallBuiltinAgent } = await import("./agentRegistry");
     const { getAgentRegistrySnapshot } = await import("../stores/agentRegistryStore");
     const agents = [
       {
@@ -45,6 +45,9 @@ describe("agentRegistry service", () => {
     expect(invoke).toHaveBeenCalledWith("agent_registry_install_builtin", { kind: "codex" });
     expect(result).toEqual(agents);
     expect(getAgentRegistrySnapshot().agents).toEqual(agents);
+
+    await updateBuiltinAgent("codex");
+    expect(invoke).toHaveBeenCalledWith("agent_registry_update_builtin", { kind: "codex" });
 
     await uninstallBuiltinAgent("cursor");
     expect(invoke).toHaveBeenCalledWith("agent_registry_uninstall_builtin", { kind: "cursor" });

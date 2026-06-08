@@ -951,29 +951,29 @@ pub(crate) fn delete_custom_agent(db: &Mutex<Connection>, id: &str) -> Result<()
     Ok(())
 }
 
-#[tauri::command]
-pub async fn agent_registry_install_builtin(
-    kind: String,
+fn resolve_builtin_npm_package(kind: &str, update: bool) -> Result<String, String> {
+    let normalized_kind = kind.trim().to_lowercase();
+    let spec = parse_builtin_install_kind(&normalized_kind)?;
+    Ok(if update && normalized_kind == "opencode" {
+        "opencode-ai@latest".to_string()
+    } else {
+        spec.npm_package.to_string()
+    })
+}
+
+async fn run_agent_registry_npm_global_install(
+    normalized_kind: String,
+    package: String,
     registry: tauri::State<'_, AgentRegistry>,
     db: tauri::State<'_, wise_db::WiseDb>,
 ) -> Result<Vec<DetectedAgent>, String> {
-    let normalized_kind = kind.trim().to_lowercase();
-    let spec = parse_builtin_install_kind(&normalized_kind)?;
-
-    let snapshot = registry.snapshot()?;
-    if let Some(agent) = snapshot.iter().find(|agent| agent.id() == normalized_kind) {
-        if agent.is_available() {
-            return Err(format!("{} 已就绪，无需重复安装", agent.name()));
-        }
-    }
-
     let home = dirs::home_dir().ok_or_else(|| "无法解析用户主目录".to_string())?;
     let home_s = home.to_string_lossy().to_string();
     let path_env =
         crate::claude_commands::merge_path_env(&crate::claude_commands::claude_path_search_prefixes());
-    let package = spec.npm_package.to_string();
     let command_name = builtin_command_name(&normalized_kind)
         .ok_or_else(|| format!("无法解析 {} 对应的 CLI 命令名", normalized_kind))?;
+    let package_for_error = package.clone();
 
     let install_output = tokio::task::spawn_blocking(move || {
         let npm = resolve_npm_binary(&path_env)?;
@@ -999,21 +999,62 @@ pub async fn agent_registry_install_builtin(
         let eexist_hint = if stderr.contains("EEXIST") {
             format!(
                 "\n提示：PATH 上已有同名文件占用安装位置（常见于 Homebrew Cask 残留）。\
-                 可手动执行 `rm <路径>` 删除旧链接后重试，或使用 `npm install -g {} --force`。{removed_hint}",
-                spec.npm_package
+                 可手动执行 `rm <路径>` 删除旧链接后重试，或使用 `npm install -g {package_for_error} --force`。{removed_hint}"
             )
         } else {
             removed_hint
         };
         return Err(format!(
             "安装 {} 失败（退出码 {:?}）\n{stdout}\n{stderr}{eexist_hint}",
-            spec.npm_package,
+            package_for_error,
             install_output.status.code()
         ));
     }
 
     let probe = OsProbe;
     registry.refresh_all(true, &db.0, &probe).await
+}
+
+#[tauri::command]
+pub async fn agent_registry_install_builtin(
+    kind: String,
+    registry: tauri::State<'_, AgentRegistry>,
+    db: tauri::State<'_, wise_db::WiseDb>,
+) -> Result<Vec<DetectedAgent>, String> {
+    let normalized_kind = kind.trim().to_lowercase();
+    let _spec = parse_builtin_install_kind(&normalized_kind)?;
+
+    let snapshot = registry.snapshot()?;
+    if let Some(agent) = snapshot.iter().find(|agent| agent.id() == normalized_kind) {
+        if agent.is_available() {
+            return Err(format!("{} 已就绪，无需重复安装", agent.name()));
+        }
+    }
+
+    let package = resolve_builtin_npm_package(&normalized_kind, false)?;
+    run_agent_registry_npm_global_install(normalized_kind, package, registry, db).await
+}
+
+#[tauri::command]
+pub async fn agent_registry_update_builtin(
+    kind: String,
+    registry: tauri::State<'_, AgentRegistry>,
+    db: tauri::State<'_, wise_db::WiseDb>,
+) -> Result<Vec<DetectedAgent>, String> {
+    let normalized_kind = kind.trim().to_lowercase();
+    parse_builtin_install_kind(&normalized_kind)?;
+
+    let snapshot = registry.snapshot()?;
+    let agent = snapshot
+        .iter()
+        .find(|agent| agent.id() == normalized_kind)
+        .ok_or_else(|| format!("未找到运行入口：{normalized_kind}"))?;
+    if !agent.is_available() {
+        return Err(format!("{} 尚未就绪，请先一键安装", agent.name()));
+    }
+
+    let package = resolve_builtin_npm_package(&normalized_kind, true)?;
+    run_agent_registry_npm_global_install(normalized_kind, package, registry, db).await
 }
 
 fn parse_builtin_uninstall_kind(kind: &str) -> Result<BuiltinInstallSpec, String> {

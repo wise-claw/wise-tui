@@ -22,7 +22,6 @@ mod code_knowledge_graph;
 mod cua_driver;
 mod dingtalk_enterprise_bot;
 mod dingtalk_stream_gateway;
-mod dock_menu;
 pub mod extensions;
 mod my_extensions;
 mod git_commands;

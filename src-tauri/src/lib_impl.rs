@@ -3,7 +3,7 @@ use crate::{
     in_app_shortcuts,
     cc_workflow_studio, claude_code_usage, claude_commands, codex_commands, claude_config_dir, claude_external_ingest,
     claude_llm_proxy, claude_model_profiles,
-    code_knowledge_graph, cursor_agent, dock_menu, fcc_traces, free_claude_code,
+    code_knowledge_graph, cursor_agent, fcc_traces, free_claude_code,
     cua_driver, dingtalk_enterprise_bot, dingtalk_stream_gateway, extensions, git_commands,
     main_window, mission_control, mcp, my_extensions,
     openspec_bootstrap, prd_url_fetch, remote_channels, repository_files, skills, skills_sh, system_resource, task_artifact, trellis_bootstrap,
@@ -119,17 +119,6 @@ pub fn run() {
             #[cfg(target_os = "macos")]
             if let Some(w) = app.handle().get_webview_window("mascot") {
                 let _ = w.set_always_on_top(true);
-            }
-
-            #[cfg(target_os = "macos")]
-            {
-                let handle = app.handle().clone();
-                dock_menu::setup_dock_menu_events(&handle);
-                // setup 为同步闭包；延后并切回主线程刷新 dock 菜单，避免无 Tokio runtime 的 panic。
-                std::thread::spawn(move || {
-                    std::thread::sleep(std::time::Duration::from_millis(300));
-                    dock_menu::refresh_dock_menu(&handle);
-                });
             }
 
             Ok(())
@@ -721,6 +710,7 @@ pub fn run() {
             agent_registry::agent_registry_save_custom,
             agent_registry::agent_registry_delete_custom,
             agent_registry::agent_registry_install_builtin,
+            agent_registry::agent_registry_update_builtin,
             agent_registry::agent_registry_uninstall_builtin,
             cursor_agent::cursor_agent_get_status,
             cursor_agent::cursor_agent_set_api_key,

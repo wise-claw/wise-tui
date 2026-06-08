@@ -3,6 +3,7 @@ import type { DetectedAgent } from "../../types/detectedAgent";
 import {
   canInstallBuiltinAgent,
   canUninstallBuiltinAgent,
+  canUpdateBuiltinAgent,
   deriveAgentRegistryStats,
   describeAgentRuntime,
   filterAgents,
@@ -11,6 +12,7 @@ import {
   getAgentPathLabel,
   getBuiltinInstallCommand,
   getBuiltinUninstallCommand,
+  getBuiltinUpdateCommand,
   getEmptyDescription,
 } from "./agentRegistryPresentation";
 
@@ -77,6 +79,8 @@ describe("agent registry presentation helpers", () => {
 
   test("formats labels, runtime descriptions, paths, and invalid dates", () => {
     expect(canInstallBuiltinAgent(agents[0])).toBe(false);
+    expect(canUpdateBuiltinAgent(agents[0])).toBe(true);
+    expect(canUpdateBuiltinAgent(agents[1])).toBe(false);
     expect(canInstallBuiltinAgent(agents[1])).toBe(true);
     expect(canInstallBuiltinAgent(agents[2])).toBe(false);
     expect(
@@ -92,6 +96,7 @@ describe("agent registry presentation helpers", () => {
       }),
     ).toBe(false);
     expect(getBuiltinInstallCommand("codex")).toBe("npm install -g @openai/codex");
+    expect(getBuiltinUpdateCommand("codex")).toBe("npm install -g @openai/codex");
     expect(getBuiltinUninstallCommand("codex")).toBe("npm uninstall -g @openai/codex");
     expect(getBuiltinUninstallCommand("cursor")).toBe("清除 Cursor API Key（本地 app_settings）");
     expect(getAgentKindLabel("claude")).toBe("Claude");

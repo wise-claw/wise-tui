@@ -9,6 +9,8 @@ export type ExecutionEnvironmentDispatchHistoryDaysDropdownProps = {
   onChange: (days: ExecutionEnvironmentDispatchHistoryDays) => void | Promise<void>;
   className?: string;
   dropdownClassName?: string;
+  /** 左栏窄宽：选项显示为「1天」而非「近 1 天」。 */
+  compact?: boolean;
   "aria-label"?: string;
 };
 
@@ -21,11 +23,14 @@ export function ExecutionEnvironmentDispatchHistoryDaysDropdown({
   onChange,
   className = "app-monitor-panel__session-tasks-days",
   dropdownClassName: _dropdownClassName,
+  compact = false,
   "aria-label": ariaLabel = "派发任务历史天数",
 }: ExecutionEnvironmentDispatchHistoryDaysDropdownProps) {
   return (
     <select
-      className={`${className} app-monitor-panel__session-tasks-days-trigger app-monitor-panel__session-tasks-days-select`}
+      className={`${className} app-monitor-panel__session-tasks-days-trigger app-monitor-panel__session-tasks-days-select${
+        compact ? " app-monitor-panel__session-tasks-days-select--compact" : ""
+      }`}
       value={String(value)}
       disabled={disabled}
       aria-label={ariaLabel}
@@ -37,7 +42,7 @@ export function ExecutionEnvironmentDispatchHistoryDaysDropdown({
     >
       {EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAY_OPTIONS.map((day) => (
         <option key={day} value={String(day)}>
-          近 {day} 天
+          {compact ? `${day}天` : `近 ${day} 天`}
         </option>
       ))}
     </select>

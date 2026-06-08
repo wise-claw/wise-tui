@@ -9,7 +9,7 @@ import {
   type ReactNode,
 } from "react";
 import { flushSync } from "react-dom";
-import { emit, listen } from "@tauri-apps/api/event";
+import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { safeUnlisten } from "./utils/safeTauriUnlisten";
 import { message } from "antd";
@@ -545,28 +545,7 @@ export default function App() {
     standaloneRepos,
   } = useRepositoryList();
 
-  // macOS dock menu: listen for repository switch requests from the dock context menu.
-  const switchRepoRef = useRef(setActiveRepositoryWithOwner);
-  switchRepoRef.current = setActiveRepositoryWithOwner;
   const dockQueryAppliedRef = useRef(false);
-  useEffect(() => {
-    let cancelled = false;
-    let unlisten: (() => void) | undefined;
-    void listen<number>("dock-menu-switch-repository", (ev) => {
-      if (cancelled) return;
-      const repoId = ev.payload;
-      switchRepoRef.current(repoId);
-    }).then((u) => { if (!cancelled) unlisten = u; });
-    return () => {
-      cancelled = true;
-      if (unlisten) safeUnlisten(unlisten);
-    };
-  }, []);
-
-  // macOS dock menu: refresh when repository list changes.
-  useEffect(() => {
-    void emit("dock-menu-refresh");
-  }, [repositories]);
 
   useEffect(() => {
     pruneRepositoryRunCommandRuntime(new Set(repositories.map((repo) => repo.id)));

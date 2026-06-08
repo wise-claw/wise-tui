@@ -7,6 +7,7 @@ import {
   KeyOutlined,
   PlusOutlined,
   ReloadOutlined,
+  SyncOutlined,
   SearchOutlined,
   ThunderboltOutlined,
 } from "@ant-design/icons";
@@ -19,12 +20,14 @@ import {
   refreshAgents,
   saveCustomAgent,
   testCustomAgent,
+  updateBuiltinAgent,
   uninstallBuiltinAgent,
 } from "../../services/agentRegistry";
 import { isAgentKind, type CustomAgentInput, type DetectedAgent, type ProbeResult } from "../../types/detectedAgent";
 import {
   canInstallBuiltinAgent,
   canUninstallBuiltinAgent,
+  canUpdateBuiltinAgent,
   deriveAgentRegistryStats,
   describeAgentRuntime,
   filterAgents,
@@ -33,6 +36,7 @@ import {
   getAgentPathLabel,
   getBuiltinInstallCommand,
   getBuiltinUninstallCommand,
+  getBuiltinUpdateCommand,
   isBuiltinInstallableAgent,
   isBuiltinUninstallableAgent,
   getEmptyDescription,
@@ -71,6 +75,7 @@ export function AgentRegistrySection() {
   const [testedFingerprint, setTestedFingerprint] = useState<string | null>(null);
   const [draftFingerprint, setDraftFingerprint] = useState("");
   const [installingId, setInstallingId] = useState<string | null>(null);
+  const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [uninstallingId, setUninstallingId] = useState<string | null>(null);
   const [cursorModalOpen, setCursorModalOpen] = useState(false);
   const [form] = Form.useForm<CustomAgentFormValues>();
@@ -214,6 +219,22 @@ export function AgentRegistrySection() {
     [],
   );
 
+  const handleUpdate = useCallback(
+    async (agent: DetectedAgent<BuiltinInstallableKind>) => {
+      setUpdatingId(agent.id);
+      try {
+        const next = await updateBuiltinAgent(agent.kind);
+        if (!aliveRef.current) return;
+        setAgents(next);
+      } catch (e) {
+        message.error(e instanceof Error ? e.message : String(e));
+      } finally {
+        if (aliveRef.current) setUpdatingId(null);
+      }
+    },
+    [],
+  );
+
   const handleUninstall = useCallback(
     async (agent: DetectedAgent<BuiltinUninstallableKind>) => {
       setUninstallingId(agent.id);
@@ -346,10 +367,12 @@ export function AgentRegistrySection() {
                 agent={agent}
                 busy={loading}
                 installing={installingId === agent.id}
+                updating={updatingId === agent.id}
                 uninstalling={uninstallingId === agent.id}
                 onEdit={openEditModal}
                 onDelete={(id) => void handleDelete(id)}
                 onInstall={(entry) => void handleInstall(entry)}
+                onUpdate={(entry) => void handleUpdate(entry)}
                 onUninstall={(entry) => void handleUninstall(entry)}
                 onConfigureCursor={() => setCursorModalOpen(true)}
               />
@@ -433,10 +456,12 @@ interface AgentRegistryRowProps {
   agent: DetectedAgent;
   busy: boolean;
   installing: boolean;
+  updating: boolean;
   uninstalling: boolean;
   onEdit: (agent: DetectedAgent<"custom">) => void;
   onDelete: (id: string) => void;
   onInstall: (agent: DetectedAgent<BuiltinInstallableKind>) => void;
+  onUpdate: (agent: DetectedAgent<BuiltinInstallableKind>) => void;
   onUninstall: (agent: DetectedAgent<BuiltinUninstallableKind>) => void;
   onConfigureCursor: () => void;
 }
@@ -445,10 +470,12 @@ function AgentRegistryRow({
   agent,
   busy,
   installing,
+  updating,
   uninstalling,
   onEdit,
   onDelete,
   onInstall,
+  onUpdate,
   onUninstall,
   onConfigureCursor,
 }: AgentRegistryRowProps) {
@@ -589,6 +616,21 @@ function AgentRegistryRow({
           </Space>
         ) : isBuiltinUninstallableAgent(agent) && canUninstallBuiltinAgent(agent) ? (
           <Space size={4} className="app-agent-registry-card__actions">
+            {isBuiltinInstallableAgent(agent) && canUpdateBuiltinAgent(agent) ? (
+              <Tooltip title={getBuiltinUpdateCommand(agent.kind)}>
+                <Button
+                  size="small"
+                  type="primary"
+                  ghost
+                  icon={<SyncOutlined />}
+                  loading={updating}
+                  disabled={busy || updating || uninstalling}
+                  onClick={() => onUpdate(agent)}
+                >
+                  一键更新
+                </Button>
+              </Tooltip>
+            ) : null}
             <Tooltip title={getBuiltinUninstallCommand(agent.kind)}>
               <Popconfirm
                 title={`卸载 ${agent.name}`}
@@ -598,7 +640,7 @@ function AgentRegistryRow({
                 okButtonProps={{ danger: true, loading: uninstalling }}
                 onConfirm={() => onUninstall(agent)}
               >
-                <Button size="small" danger icon={<DeleteOutlined />} disabled={busy || uninstalling}>
+                <Button size="small" danger icon={<DeleteOutlined />} disabled={busy || uninstalling || updating}>
                   一键卸载
                 </Button>
               </Popconfirm>
