@@ -12,6 +12,7 @@ import {
 import type { ClaudeSession, SessionConversationTaskItem } from "../../types";
 import type { DispatchRecordMeta } from "../../utils/claudeChatMessageDisplay";
 import type { ChatMessageListRow } from "../../utils/claudeChatMessageListRows";
+import { hasRenderableChatMessageBody } from "../../utils/claudeChatMessageDisplay";
 import { findChatMessageRowIndexByMessageId } from "../../utils/chatMessageListWindow";
 import { ChatMessageListRowContent } from "./ChatMessageListRowContent";
 import { chatMessageListRowClassName } from "./chatMessageListRowStyles";
@@ -175,6 +176,9 @@ export const ChatMessageListVirtualBody = forwardRef<ChatMessageListNavigationHa
         ) : null}
         {visibleRows.map((row, offset) => {
           const index = visibleStartIndex + offset;
+          if (row.kind === "message" && !hasRenderableChatMessageBody(row.msg)) {
+            return null;
+          }
           return (
             <div key={row.key} className={chatMessageListRowClassName(row, index)}>
               {renderRow ? (

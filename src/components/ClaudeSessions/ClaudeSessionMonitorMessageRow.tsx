@@ -6,6 +6,9 @@ import { Markdown } from "./Markdown";
 import { SystemMessageContent } from "./SystemMessageContent";
 import { formatChatMessageListTime } from "../../utils/formatChatMessageListTime";
 import {
+  hasRenderableChatMessageBody,
+  isAssistantDisplayNoiseText,
+  isBlankDisplayText,
   parseDispatchRecord,
   systemMessagePlainText,
 } from "../../utils/claudeChatMessageDisplay";
@@ -55,9 +58,12 @@ function ClaudeSessionMonitorMessageRowInner({
         <MessagePartsDisplay parts={msg.parts} streaming={streamingThisBubble} inlinePendingHint={false} />
       );
     }
+    const text = msg.content ?? "";
+    if (isBlankDisplayText(text)) return null;
+    if (msg.role === "assistant" && isAssistantDisplayNoiseText(text)) return null;
     return (
       <div className="app-message-part app-message-part--text">
-        <Markdown text={msg.content} streaming={streamingThisBubble} showPendingHint={false} />
+        <Markdown text={text} streaming={streamingThisBubble} showPendingHint={false} />
       </div>
     );
   }
@@ -68,6 +74,27 @@ function ClaudeSessionMonitorMessageRowInner({
       return <UserMessageCollapsibleBody>{body}</UserMessageCollapsibleBody>;
     }
     return body;
+  }
+
+  const visibleBody =
+    msg.role === "system"
+      ? dispatchMeta
+        ? (
+            <DispatchRecordMessage
+              dispatch={dispatchMeta}
+              sessionsForDispatchLookup={sessionsForDispatchLookup}
+              resolveExecutionEnvironmentDispatchTask={resolveExecutionEnvironmentDispatchTask}
+              onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
+              onOpenTaskDetail={onOpenTaskDetail}
+              onOpenSessionConversationTaskDetail={onOpenSessionConversationTaskDetail}
+            />
+          )
+        : systemPlainText
+          ? <SystemMessageContent text={systemPlainText} />
+          : null
+      : renderNonSystemContent();
+  if (!visibleBody || !hasRenderableChatMessageBody(msg)) {
+    return null;
   }
 
   return (
@@ -107,24 +134,7 @@ function ClaudeSessionMonitorMessageRowInner({
             </span>
           </div>
         )}
-        <div className="app-claude-message-content">
-          {msg.role === "system"
-            ? dispatchMeta
-              ? (
-                  <DispatchRecordMessage
-                    dispatch={dispatchMeta}
-                    sessionsForDispatchLookup={sessionsForDispatchLookup}
-                    resolveExecutionEnvironmentDispatchTask={resolveExecutionEnvironmentDispatchTask}
-                    onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
-                    onOpenTaskDetail={onOpenTaskDetail}
-                    onOpenSessionConversationTaskDetail={onOpenSessionConversationTaskDetail}
-                  />
-                )
-              : systemPlainText
-                ? <SystemMessageContent text={systemPlainText} />
-                : null
-            : renderNonSystemContent()}
-        </div>
+        <div className="app-claude-message-content">{visibleBody}</div>
       </div>
     </div>
   );

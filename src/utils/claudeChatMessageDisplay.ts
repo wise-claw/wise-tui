@@ -1,5 +1,5 @@
 import { buildComposerInsertFromPlainText } from "../services/claudeComposerPrompt";
-import type { ClaudeMessage, ClaudeSession, MessagePart } from "../types";
+import type { ClaudeMessage, ClaudeSession, MessagePart, ToolUsePart } from "../types";
 
 export function isToolOnlyUserMessage(msg: ClaudeMessage): boolean {
   const parts = msg.parts;
@@ -39,17 +39,36 @@ export function isAssistantDisplayNoiseText(text: string): boolean {
   return normalized.length > 0 && ASSISTANT_DISPLAY_NOISE_TEXT.has(normalized);
 }
 
+/** 去掉空白与零宽字符后是否仍无可见正文。 */
+export function isBlankDisplayText(text: string): boolean {
+  return text.replace(/[\s\u00a0\u200b\u200c\u200d\ufeff]/g, "").length === 0;
+}
+
+function toolUsePartHasVisiblePayload(part: ToolUsePart): boolean {
+  if (part.output?.trim() || part.error?.trim()) return true;
+  if (part.name.trim()) return true;
+  const input = part.input;
+  if (!input || typeof input !== "object") return false;
+  for (const value of Object.values(input as Record<string, unknown>)) {
+    if (typeof value === "string" && value.trim()) return true;
+    if (Array.isArray(value) && value.some((item) => typeof item === "string" && item.trim())) {
+      return true;
+    }
+  }
+  return false;
+}
+
 /** 单条 part 是否在消息列表中有展示价值（空白/占位句不计）。 */
 export function isRenderableMessagePart(part: MessagePart): boolean {
   switch (part.type) {
     case "text": {
-      const trimmed = part.text.trim();
-      return trimmed.length > 0 && !isAssistantDisplayNoiseText(part.text);
+      if (isBlankDisplayText(part.text)) return false;
+      return !isAssistantDisplayNoiseText(part.text);
     }
     case "reasoning":
-      return part.text.trim().length > 0;
+      return !isBlankDisplayText(part.text);
     case "tool_use":
-      return true;
+      return toolUsePartHasVisiblePayload(part);
     default:
       return false;
   }
@@ -65,8 +84,8 @@ export function hasRenderableChatMessageBody(msg: ClaudeMessage): boolean {
   if (Array.isArray(parts) && parts.length > 0) {
     return parts.some(isRenderableMessagePart);
   }
-  const content = (msg.content ?? "").trim();
-  if (!content) return false;
+  const content = msg.content ?? "";
+  if (isBlankDisplayText(content)) return false;
   if (msg.role === "assistant" && isAssistantDisplayNoiseText(content)) return false;
   return true;
 }

@@ -5,6 +5,9 @@ import { MessagePartsDisplay } from "./MessageParts";
 import { Markdown } from "./Markdown";
 import { SystemMessageContent } from "./SystemMessageContent";
 import {
+  hasRenderableChatMessageBody,
+  isAssistantDisplayNoiseText,
+  isBlankDisplayText,
   parseDispatchRecord,
   systemMessagePlainText,
 } from "../../utils/claudeChatMessageDisplay";
@@ -67,17 +70,18 @@ function ClaudeChatMessageRowInner({
     );
   }
 
-  const showSender = !mergedWithPrevious && (toolUser || (msg.role !== "user" && msg.role !== "assistant"));
-
   function renderChatBody() {
     if (msg.parts && msg.parts.length > 0) {
       return (
         <MessagePartsDisplay parts={msg.parts} streaming={streamingThisBubble} inlinePendingHint={false} />
       );
     }
+    const text = msg.content ?? "";
+    if (isBlankDisplayText(text)) return null;
+    if (msg.role === "assistant" && isAssistantDisplayNoiseText(text)) return null;
     return (
       <div className="app-message-part app-message-part--text">
-        <Markdown text={msg.content} streaming={streamingThisBubble} showPendingHint={false} />
+        <Markdown text={text} streaming={streamingThisBubble} showPendingHint={false} />
       </div>
     );
   }
@@ -88,6 +92,12 @@ function ClaudeChatMessageRowInner({
       return <UserMessageCollapsibleBody>{body}</UserMessageCollapsibleBody>;
     }
     return body;
+  }
+
+  const showSender = !mergedWithPrevious && (toolUser || (msg.role !== "user" && msg.role !== "assistant"));
+  const visibleBody = msg.role === "system" ? renderSystemBody() : renderNonSystemContent();
+  if (!visibleBody || !hasRenderableChatMessageBody(msg)) {
+    return null;
   }
 
   return (
@@ -124,9 +134,7 @@ function ClaudeChatMessageRowInner({
             floating
           />
         )}
-        <div className="app-claude-message-content">
-          {msg.role === "system" ? renderSystemBody() : renderNonSystemContent()}
-        </div>
+        <div className="app-claude-message-content">{visibleBody}</div>
       </div>
     </div>
   );

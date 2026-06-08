@@ -46,6 +46,24 @@ describe("buildChatMessageListRows", () => {
     expect(rows[1]!.kind === "message" && rows[1]!.streamingThisBubble).toBe(true);
   });
 
+  test("skips assistant rows with no visible body", () => {
+    const messages = [
+      msg({ id: 1, role: "user", content: "开始" }),
+      msg({ id: 2, role: "assistant", content: "", parts: [{ type: "text", text: "" }] }),
+      msg({
+        id: 3,
+        role: "system",
+        content: "InputValidationError: EnterPlanMode failed",
+      }),
+    ];
+    const rows = buildChatMessageListRows(messages, {
+      sessionStatus: "idle",
+      showListEndThinkingHint: false,
+    });
+    expect(rows).toHaveLength(2);
+    expect(rows.map((row) => (row.kind === "message" ? row.msg.id : row.kind))).toEqual([1, 3]);
+  });
+
   test("merges consecutive same-sender rows", () => {
     const messages = [
       msg({ id: 1, role: "user", content: "a" }),

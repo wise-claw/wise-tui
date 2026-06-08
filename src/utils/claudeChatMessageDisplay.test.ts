@@ -6,6 +6,7 @@ import {
   formatDispatchRecordSentence,
   hasRenderableChatMessageBody,
   isAssistantDisplayNoiseText,
+  isBlankDisplayText,
   isRenderableMessagePart,
   isSystemMessageDisplayNoiseText,
   parseDispatchRecord,
@@ -192,6 +193,38 @@ describe("resolveChatMessageComposerInsertPayload", () => {
   });
 });
 
+describe("isBlankDisplayText", () => {
+  test("treats whitespace and zero-width chars as blank", () => {
+    expect(isBlankDisplayText("")).toBe(true);
+    expect(isBlankDisplayText(" \n\t")).toBe(true);
+    expect(isBlankDisplayText("\u200b\u200c")).toBe(true);
+    expect(isBlankDisplayText("你好")).toBe(false);
+  });
+});
+
+describe("isRenderableMessagePart", () => {
+  test("skips empty tool_use stubs without name, input, or output", () => {
+    expect(
+      isRenderableMessagePart({
+        type: "tool_use",
+        id: "t1",
+        name: "",
+        input: {},
+        status: "running",
+      }),
+    ).toBe(false);
+    expect(
+      isRenderableMessagePart({
+        type: "tool_use",
+        id: "t2",
+        name: "Read",
+        input: { file_path: "a.ts" },
+        status: "running",
+      }),
+    ).toBe(true);
+  });
+});
+
 describe("hasRenderableChatMessageBody", () => {
   test("skips assistant rows with only noise or empty parts", () => {
     const noiseOnly: ClaudeMessage = {
@@ -222,5 +255,14 @@ describe("hasRenderableChatMessageBody", () => {
       timestamp: 0,
     };
     expect(hasRenderableChatMessageBody(unknownSystemError)).toBe(false);
+
+    const emptyAssistantShell: ClaudeMessage = {
+      id: 4,
+      role: "assistant",
+      content: "",
+      parts: [{ type: "text", text: "" }],
+      timestamp: 0,
+    };
+    expect(hasRenderableChatMessageBody(emptyAssistantShell)).toBe(false);
   });
 });
