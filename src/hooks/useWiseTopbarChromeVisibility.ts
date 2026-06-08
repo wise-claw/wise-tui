@@ -10,11 +10,13 @@ export function useWiseTopbarChromeVisibility(): {
   showFccTopbar: boolean;
   showFccTrafficTopbar: boolean;
   showSessionDataLinkTopbar: boolean;
+  showRemoteEntryTopbar: boolean;
 } {
   const [showLlmProxyTopbar, setShowLlmProxyTopbar] = useState(false);
   const [showFccTopbar, setShowFccTopbar] = useState(false);
   const [showFccTrafficTopbar, setShowFccTrafficTopbar] = useState(false);
   const [showSessionDataLinkTopbar, setShowSessionDataLinkTopbar] = useState(false);
+  const [showRemoteEntryTopbar, setShowRemoteEntryTopbar] = useState(true);
 
   const apply = useCallback(
     (next: {
@@ -22,6 +24,7 @@ export function useWiseTopbarChromeVisibility(): {
       showFccTopbar?: boolean;
       showFccTrafficTopbar?: boolean;
       showSessionDataLinkTopbar?: boolean;
+      showRemoteEntryTopbar?: boolean;
     }) => {
       if (typeof next.showLlmProxyTopbar === "boolean") {
         setShowLlmProxyTopbar(next.showLlmProxyTopbar);
@@ -34,6 +37,9 @@ export function useWiseTopbarChromeVisibility(): {
       }
       if (typeof next.showSessionDataLinkTopbar === "boolean") {
         setShowSessionDataLinkTopbar(next.showSessionDataLinkTopbar);
+      }
+      if (typeof next.showRemoteEntryTopbar === "boolean") {
+        setShowRemoteEntryTopbar(next.showRemoteEntryTopbar);
       }
     },
     [],
@@ -51,6 +57,7 @@ export function useWiseTopbarChromeVisibility(): {
           showFccTopbar?: boolean;
           showFccTrafficTopbar?: boolean;
           showSessionDataLinkTopbar?: boolean;
+          showRemoteEntryTopbar?: boolean;
         }>
       ).detail;
       if (detail) apply(detail);
@@ -62,5 +69,11 @@ export function useWiseTopbarChromeVisibility(): {
     };
   }, [apply]);
 
-  return { showLlmProxyTopbar, showFccTopbar, showFccTrafficTopbar, showSessionDataLinkTopbar };
+  return {
+    showLlmProxyTopbar,
+    showFccTopbar,
+    showFccTrafficTopbar,
+    showSessionDataLinkTopbar,
+    showRemoteEntryTopbar,
+  };
 }

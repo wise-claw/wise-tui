@@ -92,6 +92,8 @@ export interface WiseDefaultConfigV1 {
   showFccTrafficTopbar: boolean;
   /** 主会话顶栏全链路分析图标；默认隐藏。 */
   showSessionDataLinkTopbar: boolean;
+  /** 中栏顶栏远程入口（钉钉 / WebSocket 开关与配置）；默认显示。 */
+  showRemoteEntryTopbar: boolean;
   /** 左栏 AI 工作台快捷入口；默认 MCP、技能、自动化。 */
   leftSidebarHubQuickEntries: LeftSidebarHubQuickEntryId[];
   /** 运行面板（终端 / 工作流运行态）是否显示；默认显示。 */
@@ -128,6 +130,7 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   showFccTopbar: false,
   showFccTrafficTopbar: false,
   showSessionDataLinkTopbar: false,
+  showRemoteEntryTopbar: true,
   leftSidebarHubQuickEntries: [...DEFAULT_LEFT_SIDEBAR_HUB_QUICK_ENTRIES],
   showLeftSidebarMonitorPanel: true,
   monitorPanelPlacement: "left",
@@ -199,6 +202,10 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
           : normalizeBoolean(parsed.showFccTopbar),
       showFccTrafficTopbar: normalizeBoolean(parsed.showFccTrafficTopbar),
       showSessionDataLinkTopbar: normalizeBoolean(parsed.showSessionDataLinkTopbar),
+      showRemoteEntryTopbar:
+        parsed.showRemoteEntryTopbar === undefined
+          ? DEFAULT_CONFIG.showRemoteEntryTopbar
+          : normalizeBoolean(parsed.showRemoteEntryTopbar, DEFAULT_CONFIG.showRemoteEntryTopbar),
       leftSidebarHubQuickEntries: normalizeLeftSidebarHubQuickEntries(parsed.leftSidebarHubQuickEntries),
       showLeftSidebarMonitorPanel:
         parsed.showLeftSidebarMonitorPanel === undefined
@@ -313,6 +320,7 @@ function dispatchTopbarChromeDefaultChanged(
     | "showFccTopbar"
     | "showFccTrafficTopbar"
     | "showSessionDataLinkTopbar"
+    | "showRemoteEntryTopbar"
   >,
 ): void {
   if (typeof window === "undefined") return;
@@ -323,6 +331,7 @@ function dispatchTopbarChromeDefaultChanged(
         showFccTopbar: config.showFccTopbar,
         showFccTrafficTopbar: config.showFccTrafficTopbar,
         showSessionDataLinkTopbar: config.showSessionDataLinkTopbar,
+        showRemoteEntryTopbar: config.showRemoteEntryTopbar,
       },
     }),
   );
@@ -354,6 +363,7 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     showFccTopbar: DEFAULT_CONFIG.showFccTopbar,
     showFccTrafficTopbar: DEFAULT_CONFIG.showFccTrafficTopbar,
     showSessionDataLinkTopbar: DEFAULT_CONFIG.showSessionDataLinkTopbar,
+    showRemoteEntryTopbar: DEFAULT_CONFIG.showRemoteEntryTopbar,
     leftSidebarHubQuickEntries: [...DEFAULT_LEFT_SIDEBAR_HUB_QUICK_ENTRIES],
     showLeftSidebarMonitorPanel: DEFAULT_CONFIG.showLeftSidebarMonitorPanel,
     monitorPanelPlacement: DEFAULT_CONFIG.monitorPanelPlacement,
@@ -465,6 +475,7 @@ export async function saveWiseDefaultConfig(
       | "showFccTopbar"
       | "showFccTrafficTopbar"
       | "showSessionDataLinkTopbar"
+      | "showRemoteEntryTopbar"
       | "leftSidebarHubQuickEntries"
       | "showLeftSidebarMonitorPanel"
       | "monitorPanelPlacement"
@@ -492,6 +503,7 @@ export async function saveWiseDefaultConfig(
     showFccTrafficTopbar: patch.showFccTrafficTopbar ?? current.showFccTrafficTopbar,
     showSessionDataLinkTopbar:
       patch.showSessionDataLinkTopbar ?? current.showSessionDataLinkTopbar,
+    showRemoteEntryTopbar: patch.showRemoteEntryTopbar ?? current.showRemoteEntryTopbar,
     leftSidebarHubQuickEntries:
       patch.leftSidebarHubQuickEntries !== undefined
         ? normalizeLeftSidebarHubQuickEntries(patch.leftSidebarHubQuickEntries)
@@ -537,6 +549,12 @@ export async function saveWiseDefaultConfig(
   }
   if (patch.showSessionDataLinkTopbar !== undefined) {
     next.showSessionDataLinkTopbar = normalizeBoolean(patch.showSessionDataLinkTopbar);
+  }
+  if (patch.showRemoteEntryTopbar !== undefined) {
+    next.showRemoteEntryTopbar = normalizeBoolean(
+      patch.showRemoteEntryTopbar,
+      DEFAULT_CONFIG.showRemoteEntryTopbar,
+    );
   }
   if (patch.leftSidebarHubQuickEntries !== undefined) {
     next.leftSidebarHubQuickEntries = normalizeLeftSidebarHubQuickEntries(patch.leftSidebarHubQuickEntries);
@@ -599,19 +617,22 @@ export async function saveWiseDefaultConfig(
     patch.showLlmProxyTopbar !== undefined ||
     patch.showFccTopbar !== undefined ||
     patch.showFccTrafficTopbar !== undefined ||
-    patch.showSessionDataLinkTopbar !== undefined
+    patch.showSessionDataLinkTopbar !== undefined ||
+    patch.showRemoteEntryTopbar !== undefined
   ) {
     if (
       next.showLlmProxyTopbar !== current.showLlmProxyTopbar ||
       next.showFccTopbar !== current.showFccTopbar ||
       next.showFccTrafficTopbar !== current.showFccTrafficTopbar ||
-      next.showSessionDataLinkTopbar !== current.showSessionDataLinkTopbar
+      next.showSessionDataLinkTopbar !== current.showSessionDataLinkTopbar ||
+      next.showRemoteEntryTopbar !== current.showRemoteEntryTopbar
     ) {
       dispatchTopbarChromeDefaultChanged({
         showLlmProxyTopbar: next.showLlmProxyTopbar,
         showFccTopbar: next.showFccTopbar,
         showFccTrafficTopbar: next.showFccTrafficTopbar,
         showSessionDataLinkTopbar: next.showSessionDataLinkTopbar,
+        showRemoteEntryTopbar: next.showRemoteEntryTopbar,
       });
     }
   }
@@ -935,6 +956,7 @@ export async function loadTopbarChromeDefaultsFromStore(): Promise<
     | "showFccTopbar"
     | "showFccTrafficTopbar"
     | "showSessionDataLinkTopbar"
+    | "showRemoteEntryTopbar"
   >
 > {
   const config = await loadWiseDefaultConfig();
@@ -943,6 +965,7 @@ export async function loadTopbarChromeDefaultsFromStore(): Promise<
     showFccTopbar: config.showFccTopbar,
     showFccTrafficTopbar: config.showFccTrafficTopbar,
     showSessionDataLinkTopbar: config.showSessionDataLinkTopbar,
+    showRemoteEntryTopbar: config.showRemoteEntryTopbar,
   };
 }
 
@@ -954,6 +977,7 @@ export async function saveTopbarChromeDefaultsToStore(
       | "showFccTopbar"
       | "showFccTrafficTopbar"
       | "showSessionDataLinkTopbar"
+      | "showRemoteEntryTopbar"
     >
   >,
 ): Promise<void> {

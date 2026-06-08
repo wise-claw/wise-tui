@@ -95,6 +95,7 @@ describe("wiseDefaultConfigStore", () => {
     expect(config.showWorkspaceQuickActionsPanel).toBe(true);
     expect(config.showWorkspaceMemosPanel).toBe(true);
     expect(config.showWorkspaceTodosPanel).toBe(true);
+    expect(config.showRemoteEntryTopbar).toBe(true);
     expect(config.fileTreeOpenInNewPane).toBe(false);
     expect(config.gitPanelPlacement).toBe("left");
     expect(config.filesPanelPlacement).toBe("left");
@@ -279,6 +280,7 @@ describe("wiseDefaultConfigStore", () => {
     expect(config.showFccTopbar).toBe(false);
     expect(config.showFccTrafficTopbar).toBe(false);
     expect(config.showSessionDataLinkTopbar).toBe(false);
+    expect(config.showRemoteEntryTopbar).toBe(true);
   });
 
   test("save topbar chrome dispatches visibility event", async () => {

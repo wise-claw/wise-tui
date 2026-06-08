@@ -417,6 +417,29 @@ export function DefaultConfigPanel() {
           </div>
         </div>
 
+        <div className="app-default-config-row" aria-label="远程入口顶栏">
+          <div className="app-default-config-row__main">
+            <span className="app-default-config-row__title">远程入口</span>
+            <span className="app-default-config-row__hint">
+              控制中栏顶栏「远程」区（钉钉 / WebSocket 开关与配置入口）；创作台远程入口配置不受影响
+            </span>
+          </div>
+          <div className="app-default-config-row__control">
+            <DefaultConfigOptionPick<"hidden" | "visible">
+              aria-label="远程入口顶栏显示"
+              disabled={topbarChrome.loading || topbarChrome.saving}
+              value={topbarChrome.showRemoteEntryTopbar ? "visible" : "hidden"}
+              options={[
+                { label: "不显示", value: "hidden" },
+                { label: "显示", value: "visible" },
+              ]}
+              onChange={(value) => {
+                void topbarChrome.saveRemoteEntry(value === "visible");
+              }}
+            />
+          </div>
+        </div>
+
         <div className="app-default-config-row" aria-label="FCC 顶栏图标">
           <div className="app-default-config-row__main">
             <span className="app-default-config-row__title">FCC 顶栏图标</span>

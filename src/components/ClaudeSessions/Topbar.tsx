@@ -296,7 +296,9 @@ export function Topbar({
                   <span className="app-topbar-repository-trigger-label">{topbarLabel}</span>
                 </button>
               </Tooltip>
-              <RemoteEntryTopbarStrip onOpenRemoteChannels={onOpenRemoteChannels} />
+              {topbarChrome.showRemoteEntryTopbar ? (
+                <RemoteEntryTopbarStrip onOpenRemoteChannels={onOpenRemoteChannels} />
+              ) : null}
               <WorkspaceQuickActionsTopbarStrip
                 projectId={activeProject?.id ?? null}
                 repositoryId={activeRepository?.id ?? null}
