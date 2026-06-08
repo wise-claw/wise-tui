@@ -38,6 +38,7 @@ export type LeftSidebarMonitorPanelSlotProps = {
   historyDrawerSessionId?: LeftSidebarProps["historyDrawerSessionId"];
   onHistoryDrawerSessionIdChange?: LeftSidebarProps["onHistoryDrawerSessionIdChange"];
   onRestoreHistorySessionAsMain?: LeftSidebarProps["onRestoreHistorySessionAsMain"];
+  onCreateTerminalEmployeeSession?: LeftSidebarProps["onCreateTerminalEmployeeSession"];
   onResumeSession?: LeftSidebarProps["onResumeSession"];
   onPrepareSessionForMonitorDrawer?: LeftSidebarProps["onPrepareSessionForMonitorDrawer"];
   repositoryMainSessionBindings: LeftSidebarProps["repositoryMainSessionBindings"];
@@ -140,6 +141,7 @@ export const LeftSidebarMonitorPanelSlot = memo(function LeftSidebarMonitorPanel
   historyDrawerSessionId,
   onHistoryDrawerSessionIdChange,
   onRestoreHistorySessionAsMain,
+  onCreateTerminalEmployeeSession,
   onResumeSession,
   onPrepareSessionForMonitorDrawer,
   repositoryMainSessionBindings,
@@ -199,6 +201,7 @@ export const LeftSidebarMonitorPanelSlot = memo(function LeftSidebarMonitorPanel
         historyDrawerSessionId={historyDrawerSessionId}
         onHistoryDrawerSessionIdChange={onHistoryDrawerSessionIdChange}
         onRestoreHistorySessionAsMain={onRestoreHistorySessionAsMain}
+        onCreateTerminalEmployeeSession={onCreateTerminalEmployeeSession}
         onResumeSession={onResumeSession}
         onPrepareSessionForMonitorDrawer={onPrepareSessionForMonitorDrawer}
         repositoryMainBindings={repositoryMainSessionBindings}

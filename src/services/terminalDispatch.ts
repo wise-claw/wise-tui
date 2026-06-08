@@ -243,14 +243,13 @@ export type TerminalDispatchDeps = {
   onDispatched?: (workerTabId: string) => void;
 };
 
-export async function resolveOrCreateTerminalWorkerTab(
-  deps: Pick<TerminalDispatchDeps, "getSessions" | "createSession" | "closeWorkerTab">,
+function purgeDiskOnlyTerminalWorkerTabs(
+  deps: Pick<TerminalDispatchDeps, "getSessions" | "closeWorkerTab">,
   repositoryPath: string,
-  repositoryDisplayName: string,
-  terminal: EmployeeItem,
-): Promise<{ workerTabId: string; created: boolean }> {
+  terminalName: string,
+): void {
   const repo = normalizeRepositoryPathKey(repositoryPath) || repositoryPath.trim();
-  const target = normalizeTerminalDispatchName(terminal.name);
+  const target = normalizeTerminalDispatchName(terminalName);
   for (const session of deps.getSessions()) {
     if (!repositoryPathsMatch(session.repositoryPath, repo)) continue;
     const bound = extractBoundEmployeeNameFromSessionRepositoryName(session.repositoryName);
@@ -259,6 +258,15 @@ export async function resolveOrCreateTerminalWorkerTab(
       deps.closeWorkerTab?.(session.id);
     }
   }
+}
+
+export async function resolveOrCreateTerminalWorkerTab(
+  deps: Pick<TerminalDispatchDeps, "getSessions" | "createSession" | "closeWorkerTab">,
+  repositoryPath: string,
+  repositoryDisplayName: string,
+  terminal: EmployeeItem,
+): Promise<{ workerTabId: string; created: boolean }> {
+  purgeDiskOnlyTerminalWorkerTabs(deps, repositoryPath, terminal.name);
 
   const existing = findTerminalWorkerTab(deps.getSessions(), repositoryPath, terminal.name);
   if (existing) {
@@ -271,6 +279,23 @@ export async function resolveOrCreateTerminalWorkerTab(
     { skipActivate: true, connectionKind: "oneshot" },
   );
   return { workerTabId, created: true };
+}
+
+/** 运行面板终端历史：始终新建 worker 标签，不复用当前终端会话。 */
+export async function createFreshTerminalWorkerTab(
+  deps: Pick<TerminalDispatchDeps, "getSessions" | "createSession" | "closeWorkerTab">,
+  repositoryPath: string,
+  repositoryDisplayName: string,
+  terminal: EmployeeItem,
+): Promise<{ workerTabId: string }> {
+  purgeDiskOnlyTerminalWorkerTabs(deps, repositoryPath, terminal.name);
+  const base = repositoryDisplayBase(repositoryDisplayName);
+  const workerTabId = await deps.createSession(
+    repositoryPath,
+    `${base}/员工:${terminal.name}`,
+    { skipActivate: true, connectionKind: "oneshot" },
+  );
+  return { workerTabId };
 }
 
 async function waitForTerminalTurnStarted(

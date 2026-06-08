@@ -284,7 +284,9 @@ export function Topbar({
                       return;
                     }
                     void navigator.clipboard.writeText(path).then(
-                      () => {},
+                      () => {
+                        message.success("已复制绝对路径");
+                      },
                       () => {
                         message.error("复制失败");
                       },

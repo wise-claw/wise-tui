@@ -1,11 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import {
+  createFreshTerminalWorkerTab,
   findTerminalEmployeeByName,
   findTerminalMentionIndex,
   findTerminalWorkerTab,
   isDiskOnlyTerminalWorkerTab,
   isTerminalWorkerWiseTab,
   normalizeTerminalDispatchName,
+  resolveOrCreateTerminalWorkerTab,
   resolveTerminalDispatchPrompts,
   resolveTerminalMentionsInPrompt,
   stripTerminalAgentSlashPrefix,
@@ -93,5 +95,48 @@ describe("terminalDispatch", () => {
     expect(record).toContain("终端01");
     expect(record).toContain("- 正文：请检查天气接口");
     expect(record).toContain("- 分发会话：tab-1");
+  });
+
+  test("createFreshTerminalWorkerTab always creates a new worker tab", async () => {
+    const terminal = employee({ id: "e1", name: "终端01" });
+    const existing = {
+      id: "tab-existing",
+      claudeSessionId: "claude-existing",
+      repositoryName: "eco-ai/员工:终端01",
+      repositoryPath: "/repo",
+      messages: [{ id: "m1", role: "user", content: "hi", timestamp: 1 }],
+      status: "idle",
+    } as ClaudeSession;
+    const sessions = [existing];
+    let created = 0;
+    const { workerTabId: reused } = await resolveOrCreateTerminalWorkerTab(
+      {
+        getSessions: () => sessions,
+        createSession: async () => {
+          created += 1;
+          return "tab-new";
+        },
+      },
+      "/repo",
+      "eco-ai",
+      terminal,
+    );
+    expect(reused).toBe("tab-existing");
+    expect(created).toBe(0);
+
+    const { workerTabId: fresh } = await createFreshTerminalWorkerTab(
+      {
+        getSessions: () => sessions,
+        createSession: async () => {
+          created += 1;
+          return "tab-fresh";
+        },
+      },
+      "/repo",
+      "eco-ai",
+      terminal,
+    );
+    expect(fresh).toBe("tab-fresh");
+    expect(created).toBe(1);
   });
 });

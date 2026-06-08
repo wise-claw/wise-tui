@@ -2,9 +2,10 @@ import {
   CodeOutlined,
   DeploymentUnitOutlined,
   HistoryOutlined,
+  PlusCircleOutlined,
   StopOutlined,
 } from "@ant-design/icons";
-import { Collapse, Descriptions, Drawer, Empty, Popover, Tag, Typography } from "antd";
+import { Button, Collapse, Descriptions, Drawer, Empty, Popover, Tag, Tooltip, Typography } from "antd";
 import {
   memo,
   startTransition,
@@ -198,6 +199,8 @@ interface Props {
   onHistoryDrawerSessionIdChange?: (sessionId: string | null) => void;
   /** 将历史会话恢复为当前仓库主会话 */
   onRestoreHistorySessionAsMain?: (sessionId: string) => void | Promise<void>;
+  /** 运行面板终端历史弹层：为该终端新建 worker 会话 */
+  onCreateTerminalEmployeeSession?: (employeeId: string) => string | null | Promise<string | null>;
   /** 历史 / 派发抽屉底部：resume 继续当前会话 */
   onResumeSession?: import("./MonitorDrawerSessionComposer").MonitorDrawerResumeSessionFn;
   /** 派发 / 执行会话抽屉打开前：从 tabs / 磁盘回退解析 worker */
@@ -320,6 +323,9 @@ interface HistorySessionPopoverContentProps {
   searchPlaceholder?: string;
   listTitle?: string;
   memberFilterAllLabel?: string;
+  /** 终端历史弹层：搜索框右侧「新建会话」 */
+  onCreateSession?: () => void;
+  createSessionLoading?: boolean;
 }
 
 function HistorySessionPopoverListRow({
@@ -781,6 +787,8 @@ export function HistorySessionPopoverContent({
   searchPlaceholder = "搜索会话摘要或仓库名…",
   listTitle = "历史会话",
   memberFilterAllLabel = "全部成员",
+  onCreateSession,
+  createSessionLoading = false,
 }: HistorySessionPopoverContentProps) {
   const showEmployeeFilter = Boolean(onEmployeeFilterChange);
   const hasRows = rows.length > 0;
@@ -814,6 +822,22 @@ export function HistorySessionPopoverContent({
           placeholder={searchPlaceholder}
           onClick={(event) => event.stopPropagation()}
         />
+        {onCreateSession ? (
+          <Tooltip title="新建会话" mouseEnterDelay={0.35}>
+            <Button
+              type="text"
+              size="small"
+              className="app-monitor-panel__history-popover-new-session"
+              icon={<PlusCircleOutlined />}
+              loading={createSessionLoading}
+              aria-label="新建会话"
+              onClick={(event) => {
+                event.stopPropagation();
+                onCreateSession();
+              }}
+            />
+          </Tooltip>
+        ) : null}
       </div>
       <div className="app-monitor-panel__history-popover-list-head">
         <span className="app-monitor-panel__history-popover-list-title">{listTitle}</span>
@@ -893,6 +917,8 @@ const TerminalEmployeeMonitorRow = memo(function TerminalEmployeeMonitorRow({
   onSelectHistorySession,
   onRestoreHistorySession,
   canRestoreHistorySession,
+  onCreateTerminalSession,
+  createTerminalSessionLoading,
   onOmcRowActivate,
   onCancelOmcInvocation,
   statusVisual,
@@ -911,6 +937,8 @@ const TerminalEmployeeMonitorRow = memo(function TerminalEmployeeMonitorRow({
   onSelectHistorySession: (sessionId: string) => void;
   onRestoreHistorySession?: (sessionId: string) => void;
   canRestoreHistorySession: (sessionId: string) => boolean;
+  onCreateTerminalSession?: () => void;
+  createTerminalSessionLoading?: boolean;
   onOmcRowActivate: (inv: WorkflowInvocationStreamDetail) => void;
   onCancelOmcInvocation?: (invocationKey: string) => void;
 }) {
@@ -987,6 +1015,8 @@ const TerminalEmployeeMonitorRow = memo(function TerminalEmployeeMonitorRow({
                       : undefined
                   }
                   canRestoreSession={canRestoreHistorySession}
+                  onCreateSession={onCreateTerminalSession}
+                  createSessionLoading={createTerminalSessionLoading}
                 />
               }
               renderTrigger={({ requestOpen }) => (
@@ -1042,6 +1072,7 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
   historyDrawerSessionId: _historyDrawerSessionIdProp,
   onHistoryDrawerSessionIdChange,
   onRestoreHistorySessionAsMain,
+  onCreateTerminalEmployeeSession,
   onResumeSession,
   onPrepareSessionForMonitorDrawer,
   repositoryMainBindings = {},
@@ -1060,6 +1091,9 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
   const [employeeHistoryPopoverId, setEmployeeHistoryPopoverId] = useState<string | null>(null);
   const [teamHistoryPopoverId, setTeamHistoryPopoverId] = useState<string | null>(null);
   const [employeeHistorySearch, setEmployeeHistorySearch] = useState("");
+  const [creatingTerminalSessionEmployeeId, setCreatingTerminalSessionEmployeeId] = useState<string | null>(
+    null,
+  );
   const [teamHistorySearch, setTeamHistorySearch] = useState("");
   const [teamHistoryEmployeeFilter, setTeamHistoryEmployeeFilter] = useState<string>("all");
   const [, setInternalHistoryMessagesSessionId] = useState<string | null>(null);
@@ -1194,6 +1228,24 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
       });
     },
     [setHistoryMessagesSessionId],
+  );
+
+  const handleCreateTerminalEmployeeSession = useCallback(
+    (employeeId: string) => {
+      if (!onCreateTerminalEmployeeSession || creatingTerminalSessionEmployeeId) return;
+      setCreatingTerminalSessionEmployeeId(employeeId);
+      void Promise.resolve(onCreateTerminalEmployeeSession(employeeId))
+        .then((sessionId) => {
+          const nextId = sessionId?.trim();
+          if (!nextId) return;
+          setEmployeeHistorySearch("");
+          openHistoryMessagesDrawer(nextId);
+        })
+        .finally(() => {
+          setCreatingTerminalSessionEmployeeId(null);
+        });
+    },
+    [creatingTerminalSessionEmployeeId, onCreateTerminalEmployeeSession, openHistoryMessagesDrawer],
   );
 
   const handleOmcBatchInvocationSelect = useCallback(
@@ -1477,6 +1529,12 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
           onSelectHistorySession={openHistoryMessagesDrawer}
           onRestoreHistorySession={onRestoreHistorySessionAsMain}
           canRestoreHistorySession={canRestoreHistorySession}
+          onCreateTerminalSession={
+            onCreateTerminalEmployeeSession && !isOmcWorker
+              ? () => handleCreateTerminalEmployeeSession(item.employeeId)
+              : undefined
+          }
+          createTerminalSessionLoading={creatingTerminalSessionEmployeeId === item.employeeId}
           onOmcRowActivate={handleOmcDirectBatchRowActivate}
           onCancelOmcInvocation={onCancelOmcDirectBatchInvocation}
         />
@@ -1485,14 +1543,17 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
     [
       activateEmployeeTerminalRow,
       canRestoreHistorySession,
+      creatingTerminalSessionEmployeeId,
       employeeHistoryPopoverId,
       employeeHistorySearch,
       employeeHistorySessionsByName,
       employeeTerminalConversationStatusById,
       employeeTerminalLastMessagePreviewById,
+      handleCreateTerminalEmployeeSession,
       handleEmployeeHistoryPopoverOpenChange,
       handleOmcDirectBatchRowActivate,
       onCancelOmcDirectBatchInvocation,
+      onCreateTerminalEmployeeSession,
       onRestoreHistorySessionAsMain,
       onStopEmployee,
       isCompactSidebarPanel,

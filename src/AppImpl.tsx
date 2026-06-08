@@ -75,6 +75,7 @@ import {
 } from "./components/AuthorPanel/authorPaneStorage";
 import { reloadAppWindow } from "./services/window";
 import { isWiseAppFocused } from "./utils/isWiseAppFocused";
+import { openMonacoFindIfFocused } from "./utils/monacoGlobalFindRedirect";
 import { wiseMascotShow } from "./services/wiseMascot";
 import { getTaskTemplate, setTaskTemplate } from "./services/projectState";
 import { ensureCrepeToolbarTitleHintsInstalled } from "./utils/crepeToolbarTitles";
@@ -128,6 +129,7 @@ import { useExecutionEnvironmentDispatchHistoryDays } from "./hooks/useExecution
 import { useExecutionEnvironmentDispatchWorkerTranscriptPreload } from "./hooks/useExecutionEnvironmentDispatchWorkerTranscriptPreload";
 import { useSessionConversationTasks } from "./hooks/useSessionConversationTasks";
 import { dispatchExecutionEnvironmentFromMainSession } from "./services/executionEnvironmentDispatch";
+import { createFreshTerminalWorkerTab, isTerminalWorkerWiseTab } from "./services/terminalDispatch";
 import { resolveExecutionEnvironmentDispatchAnchorSessionId } from "./utils/executionEnvironmentDispatchAnchor";
 import { useMonitorSessionsForOverview } from "./hooks/useMonitorSessionsForOverview";
 import { useLeftSidebarHubQuickEntries } from "./hooks/useLeftSidebarHubQuickEntries";
@@ -1874,6 +1876,57 @@ export default function App() {
     ],
   );
 
+  const handleCreateTerminalEmployeeSession = useCallback(
+    async (employeeId: string): Promise<string | null> => {
+      const employee = employeesLatestRef.current.find((item) => item.id === employeeId);
+      if (!employee || isOmcMonitorEmployeeRecord(employee)) {
+        return null;
+      }
+
+      const monitorItem = employeeMonitorItems.find((item) => item.employeeId === employeeId);
+      let repoPath = monitorItem?.repositoryPath?.trim();
+      let repoName = monitorItem?.repositoryName?.trim();
+
+      if (!repoPath) {
+        const activeId = activeSessionIdLatestRef.current?.trim() ?? "";
+        const activeSession = sessionsLatestRef.current.find((item) => item.id === activeId);
+        if (activeSession && !isTerminalWorkerWiseTab(activeSession)) {
+          repoPath = activeSession.repositoryPath;
+          repoName = activeSession.repositoryName;
+        }
+      }
+      if (!repoPath) {
+        const repo = repositoriesLatestRef.current.find((item) => item.id === activeRepositoryId);
+        if (repo) {
+          repoPath = repo.path;
+          repoName = repositorySessionTabDisplayName(repo);
+        }
+      }
+      if (!repoPath?.trim()) {
+        message.warning("请先选择仓库或打开主会话后再新建终端会话");
+        return null;
+      }
+
+      try {
+        const { workerTabId } = await createFreshTerminalWorkerTab(
+          {
+            getSessions: () => sessionsLatestRef.current,
+            createSession,
+            closeWorkerTab: closeSession,
+          },
+          repoPath,
+          repoName ?? repoPath,
+          employee,
+        );
+        return workerTabId;
+      } catch (err) {
+        message.error(err instanceof Error ? err.message : "新建终端会话失败");
+        return null;
+      }
+    },
+    [activeRepositoryId, createSession, closeSession, employeeMonitorItems],
+  );
+
   const canRestoreHistorySessionForDrawer = useCallback(
     (sessionId: string) => {
       const session = sessionsLatestRef.current.find((item) => item.id === sessionId);
@@ -2598,6 +2651,7 @@ export default function App() {
     let unlistenFilename: (() => void) | undefined;
     let unlistenContent: (() => void) | undefined;
     void listen("global-open-filename-search", () => {
+      if (openMonacoFindIfFocused()) return;
       openFilenameSearchPalette();
     })
       .then((fn) => {
@@ -3044,6 +3098,7 @@ export default function App() {
         historyDrawerSessionId: inspectorHistorySessionId,
         onHistoryDrawerSessionIdChange: setInspectorHistorySessionId,
         onRestoreHistorySessionAsMain: handleRestoreHistorySessionAsMain,
+        onCreateTerminalEmployeeSession: handleCreateTerminalEmployeeSession,
         onResumeSession: resumeSessionFromMonitorDrawer,
         onPrepareSessionForMonitorDrawer: ensureSessionForMonitorDrawer,
         employees,
@@ -3454,6 +3509,7 @@ export default function App() {
         historyDrawerSessionId: inspectorHistorySessionId,
         onHistoryDrawerSessionIdChange: setInspectorHistorySessionId,
         onRestoreHistorySessionAsMain: handleRestoreHistorySessionAsMain,
+        onCreateTerminalEmployeeSession: handleCreateTerminalEmployeeSession,
         onResumeSession: resumeSessionFromMonitorDrawer,
         repositoryMainBindings: repositoryMainSessionBindings,
         repositories,

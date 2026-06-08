@@ -1,6 +1,7 @@
 import { lazy, Suspense, useEffect, useRef } from "react";
 import { Spin } from "antd";
 import { configureWiseMonacoTypeScript } from "../services/monacoTypeScriptEnvironment";
+import { installMonacoGlobalFindRedirect } from "../utils/monacoGlobalFindRedirect";
 import { installMonacoTrackpadSelectionGuard } from "../utils/monacoTrackpadSelectionGuard";
 import { WISE_MONACO_EDITOR_OPTIONS } from "../utils/wiseMonacoEditorOptions";
 
@@ -70,6 +71,8 @@ export function GitDiffMonacoPane({
           const guards = [
             installMonacoTrackpadSelectionGuard(diffEditor.getOriginalEditor()),
             installMonacoTrackpadSelectionGuard(diffEditor.getModifiedEditor()),
+            installMonacoGlobalFindRedirect(diffEditor.getOriginalEditor()),
+            installMonacoGlobalFindRedirect(diffEditor.getModifiedEditor()),
           ];
           trackpadGuardRef.current = {
             dispose: () => {

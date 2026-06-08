@@ -173,6 +173,7 @@ export interface LeftSidebarProps {
   historyDrawerSessionId?: string | null;
   onHistoryDrawerSessionIdChange?: (sessionId: string | null) => void;
   onRestoreHistorySessionAsMain?: (sessionId: string) => void | Promise<void>;
+  onCreateTerminalEmployeeSession?: (employeeId: string) => string | null | Promise<string | null>;
   onResumeSession?: import("../ProgressMonitorPanel/MonitorDrawerSessionComposer").MonitorDrawerResumeSessionFn;
   onPrepareSessionForMonitorDrawer?: import("../ProgressMonitorPanel/MonitorDrawerSessionComposer").MonitorDrawerPrepareSessionFn;
   activeRepositoryPath?: string;

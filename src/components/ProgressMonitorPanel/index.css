@@ -2072,6 +2072,15 @@
   border-color: var(--ant-color-primary-border);
 }
 
+.app-monitor-panel__history-popover-new-session {
+  flex-shrink: 0;
+  width: 26px;
+  min-width: 26px;
+  height: 26px;
+  padding: 0;
+  color: var(--ant-color-primary);
+}
+
 .app-monitor-panel__history-popover-member-select {
   width: 110px;
   flex-shrink: 0;

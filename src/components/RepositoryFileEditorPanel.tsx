@@ -13,6 +13,7 @@ import {
   monacoUriForRepositoryPath,
   syncMonacoRepositoryTypeScriptModels,
 } from "../services/monacoTypeScriptEnvironment";
+import { installMonacoGlobalFindRedirect } from "../utils/monacoGlobalFindRedirect";
 import { installMonacoTrackpadSelectionGuard } from "../utils/monacoTrackpadSelectionGuard";
 import { WISE_MONACO_EDITOR_OPTIONS } from "../utils/wiseMonacoEditorOptions";
 
@@ -49,7 +50,7 @@ export function RepositoryFileEditorPanel({
   const monacoRef = useRef<typeof Monaco | null>(null);
   const editorRef = useRef<MonacoEditorNamespace.IStandaloneCodeEditor | null>(null);
   const lastAppliedFocusRef = useRef<string | null>(null);
-  const trackpadGuardRef = useRef<IDisposable | null>(null);
+  const monacoMountGuardRef = useRef<IDisposable | null>(null);
   const activeTab = tabs.find((tab) => tab.relativePath === activePath) ?? null;
   const activeLanguage = monacoLanguageFromRepositoryPath(activeTab?.relativePath ?? null);
   const activeEditorPath =
@@ -79,14 +80,14 @@ export function RepositoryFileEditorPanel({
   useEffect(() => {
     lastAppliedFocusRef.current = null;
     editorRef.current = null;
-    trackpadGuardRef.current?.dispose();
-    trackpadGuardRef.current = null;
+    monacoMountGuardRef.current?.dispose();
+    monacoMountGuardRef.current = null;
   }, [activeTab?.relativePath]);
 
   useEffect(
     () => () => {
-      trackpadGuardRef.current?.dispose();
-      trackpadGuardRef.current = null;
+      monacoMountGuardRef.current?.dispose();
+      monacoMountGuardRef.current = null;
     },
     [],
   );
@@ -98,8 +99,15 @@ export function RepositoryFileEditorPanel({
       tab: FileEditorTab,
       tsSources: { relativePath: string; content: string }[],
     ) => {
-      trackpadGuardRef.current?.dispose();
-      trackpadGuardRef.current = installMonacoTrackpadSelectionGuard(editor);
+      monacoMountGuardRef.current?.dispose();
+      const trackpadGuard = installMonacoTrackpadSelectionGuard(editor);
+      const findRedirect = installMonacoGlobalFindRedirect(editor);
+      monacoMountGuardRef.current = {
+        dispose: () => {
+          trackpadGuard.dispose();
+          findRedirect.dispose();
+        },
+      };
       editorRef.current = editor;
       monacoRef.current = monaco;
       if (repositoryPath && isTypeScriptLikeRepositoryPath(tab.relativePath)) {

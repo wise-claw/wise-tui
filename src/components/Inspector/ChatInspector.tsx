@@ -58,6 +58,7 @@ export interface ChatInspectorProps {
   historyDrawerSessionId?: string | null;
   onHistoryDrawerSessionIdChange?: (sessionId: string | null) => void;
   onRestoreHistorySessionAsMain?: (sessionId: string) => void | Promise<void>;
+  onCreateTerminalEmployeeSession?: (employeeId: string) => string | null | Promise<string | null>;
   onResumeSession?: import("../ProgressMonitorPanel/MonitorDrawerSessionComposer").MonitorDrawerResumeSessionFn;
   repositoryMainBindings?: Record<string, string>;
   repositories?: Repository[];
@@ -106,6 +107,7 @@ export function ChatInspector({
   historyDrawerSessionId,
   onHistoryDrawerSessionIdChange,
   onRestoreHistorySessionAsMain,
+  onCreateTerminalEmployeeSession,
   onResumeSession,
   repositoryMainBindings,
   repositories,
@@ -163,6 +165,7 @@ export function ChatInspector({
                 historyDrawerSessionId={historyDrawerSessionId}
                 onHistoryDrawerSessionIdChange={onHistoryDrawerSessionIdChange}
                 onRestoreHistorySessionAsMain={onRestoreHistorySessionAsMain}
+                onCreateTerminalEmployeeSession={onCreateTerminalEmployeeSession}
                 onResumeSession={onResumeSession}
                 repositoryMainBindings={repositoryMainBindings}
                 repositories={repositories}
