@@ -96,6 +96,8 @@ describe("wiseDefaultConfigStore", () => {
     expect(config.showWorkspaceMemosPanel).toBe(true);
     expect(config.showWorkspaceTodosPanel).toBe(true);
     expect(config.fileTreeOpenInNewPane).toBe(false);
+    expect(config.gitPanelPlacement).toBe("left");
+    expect(config.filesPanelPlacement).toBe("left");
     expect(setAppSetting).toHaveBeenCalled();
     const payload = JSON.parse(String(setAppSetting.mock.calls[0]?.[1]));
     expect(payload).toMatchObject({

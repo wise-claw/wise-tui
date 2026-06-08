@@ -1,4 +1,13 @@
-import { Suspense, startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  Suspense,
+  startTransition,
+  useCallback,
+  useEffect,
+  useMemo,
+  useRef,
+  useState,
+  type ReactNode,
+} from "react";
 import { flushSync } from "react-dom";
 import { emit, listen } from "@tauri-apps/api/event";
 import { safeUnlisten } from "./utils/safeTauriUnlisten";
@@ -48,6 +57,7 @@ import {
   useViewMode,
 } from "./hooks/useViewMode";
 import type { AuthorPane } from "./types/viewMode";
+import { useRepoPanelPlacementDefault } from "./hooks/useRepoPanelPlacementDefault";
 import type { PaneCount, PaneSlot } from "./constants/mainLayoutWidths";
 import { useClaudeSessions, type ClaudeTurnCompletePayload } from "./hooks/useClaudeSessions";
 import { useRepositoryList } from "./hooks/useRepositoryList";
@@ -1826,6 +1836,21 @@ export default function App() {
     paneLayoutHydrated,
   });
 
+  const repoPanelPlacementDefault = useRepoPanelPlacementDefault();
+  const [repositoryRepoPanelNode, setRepositoryRepoPanelNode] = useState<ReactNode | null>(null);
+  const repoPanelUsesRightRailRef = useRef(false);
+
+  const handleRepoPanelUsesRightRailChange = useCallback(
+    (usesRightRail: boolean) => {
+      const prev = repoPanelUsesRightRailRef.current;
+      repoPanelUsesRightRailRef.current = usesRightRail;
+      if (usesRightRail && !prev && effectiveRightCollapsed) {
+        handleToggleRightPanel();
+      }
+    },
+    [effectiveRightCollapsed, handleToggleRightPanel],
+  );
+
   const handleNewPaneSessionForRepository = useCallback(
     (repository: Repository) => {
       void handleNewPaneSessionInNextSlot(repository, repository.path);
@@ -3117,6 +3142,10 @@ export default function App() {
         onLoadMoreTranscriptFromDisk: loadMoreTranscriptFromDisk,
         activeRepositoryPath: activeRepository?.path,
         activeRepositoryName: activeRepository?.name,
+        gitPanelPlacement: repoPanelPlacementDefault.gitPanelPlacement,
+        filesPanelPlacement: repoPanelPlacementDefault.filesPanelPlacement,
+        onRepositoryRepoPanelChange: setRepositoryRepoPanelNode,
+        onRepoPanelUsesRightRailChange: handleRepoPanelUsesRightRailChange,
       }}
       authorPanelProps={{
         pane: authorPane,
@@ -3513,6 +3542,7 @@ export default function App() {
         onResumeSession: resumeSessionFromMonitorDrawer,
         repositoryMainBindings: repositoryMainSessionBindings,
         repositories,
+        repositoryRepoPanel: repositoryRepoPanelNode,
       }}
       cockpitInspectorProps={{
         dark,

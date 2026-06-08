@@ -1,4 +1,5 @@
 import { Layout } from "antd";
+import type { ReactNode } from "react";
 import type {
   ClaudeSession,
   EmployeeMonitorItem,
@@ -66,6 +67,8 @@ export interface ChatInspectorProps {
   activeProjectName?: string | null;
   activeRepositoryName?: string | null;
   activeRepositoryId?: number | null;
+  /** 右栏 Git / 文件树面板（由左栏根据默认配置组装上报）。 */
+  repositoryRepoPanel?: ReactNode | null;
 }
 
 /**
@@ -112,6 +115,7 @@ export function ChatInspector({
   repositoryMainBindings,
   repositories,
   activeRepositoryId = null,
+  repositoryRepoPanel = null,
 }: ChatInspectorProps) {
   const sessionsForMonitor = monitorPanelSessions ?? [];
   const transcriptSessions = monitorTranscriptSourceSessions ?? sessionsForMonitor;
@@ -125,6 +129,11 @@ export function ChatInspector({
       theme={dark ? "dark" : "light"}
     >
       <div className="app-right-panel-inner app-chat-inspector-inner">
+        {repositoryRepoPanel ? (
+          <div className="app-chat-inspector-card app-chat-inspector-card--repo-panel" aria-label="仓库面板">
+            {repositoryRepoPanel}
+          </div>
+        ) : null}
         <WorkspaceInspectorPanelsSection
           projectId={projectId ?? null}
           repositoryId={activeRepositoryId}

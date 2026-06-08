@@ -69,6 +69,8 @@ export const WISE_WORKSPACE_INSPECTOR_PANELS_CHANGED = "wise:workspace-inspector
 
 export const WISE_FILE_TREE_OPEN_IN_NEW_PANE_CHANGED = "wise:file-tree-open-in-new-pane-changed";
 
+export const WISE_REPO_PANEL_PLACEMENT_CHANGED = "wise:repo-panel-placement-changed";
+
 export type MonitorPanelPlacement = "left" | "right";
 
 export type WorkspaceInspectorPanelsDefaults = Pick<
@@ -112,6 +114,10 @@ export interface WiseDefaultConfigV1 {
   showWorkspaceTodosPanel: boolean;
   /** 文件树点击文件时在新窗格打开，而非占用当前会话主区。 */
   fileTreeOpenInNewPane: boolean;
+  /** Git 变更面板默认栏位；默认左栏。 */
+  gitPanelPlacement: MonitorPanelPlacement;
+  /** 仓库文件树默认栏位；默认左栏（与 Git 同在左栏时 Tab 切换）。 */
+  filesPanelPlacement: MonitorPanelPlacement;
 }
 
 const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
@@ -133,6 +139,8 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   showWorkspaceMemosPanel: true,
   showWorkspaceTodosPanel: true,
   fileTreeOpenInNewPane: false,
+  gitPanelPlacement: "left",
+  filesPanelPlacement: "left",
 };
 
 function normalizeMonitorPanelPlacement(raw: unknown): MonitorPanelPlacement | null {
@@ -234,6 +242,11 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
         parsed.fileTreeOpenInNewPane === undefined
           ? DEFAULT_CONFIG.fileTreeOpenInNewPane
           : normalizeBoolean(parsed.fileTreeOpenInNewPane, DEFAULT_CONFIG.fileTreeOpenInNewPane),
+      gitPanelPlacement:
+        normalizeMonitorPanelPlacement(parsed.gitPanelPlacement) ?? DEFAULT_CONFIG.gitPanelPlacement,
+      filesPanelPlacement:
+        normalizeMonitorPanelPlacement(parsed.filesPanelPlacement) ??
+        DEFAULT_CONFIG.filesPanelPlacement,
     };
   } catch {
     return null;
@@ -352,6 +365,8 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     showWorkspaceMemosPanel: DEFAULT_CONFIG.showWorkspaceMemosPanel,
     showWorkspaceTodosPanel: DEFAULT_CONFIG.showWorkspaceTodosPanel,
     fileTreeOpenInNewPane: DEFAULT_CONFIG.fileTreeOpenInNewPane,
+    gitPanelPlacement: DEFAULT_CONFIG.gitPanelPlacement,
+    filesPanelPlacement: DEFAULT_CONFIG.filesPanelPlacement,
   };
 }
 
@@ -395,6 +410,18 @@ function dispatchFileTreeOpenInNewPaneChanged(openInNewPane: boolean): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(
     new CustomEvent(WISE_FILE_TREE_OPEN_IN_NEW_PANE_CHANGED, { detail: { openInNewPane } }),
+  );
+}
+
+function dispatchRepoPanelPlacementChanged(
+  gitPanelPlacement: MonitorPanelPlacement,
+  filesPanelPlacement: MonitorPanelPlacement,
+): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(WISE_REPO_PANEL_PLACEMENT_CHANGED, {
+      detail: { gitPanelPlacement, filesPanelPlacement },
+    }),
   );
 }
 
@@ -449,6 +476,8 @@ export async function saveWiseDefaultConfig(
       | "showWorkspaceMemosPanel"
       | "showWorkspaceTodosPanel"
       | "fileTreeOpenInNewPane"
+      | "gitPanelPlacement"
+      | "filesPanelPlacement"
     >
   >,
 ): Promise<WiseDefaultConfigV1> {
@@ -491,6 +520,8 @@ export async function saveWiseDefaultConfig(
     showWorkspaceMemosPanel: patch.showWorkspaceMemosPanel ?? current.showWorkspaceMemosPanel,
     showWorkspaceTodosPanel: patch.showWorkspaceTodosPanel ?? current.showWorkspaceTodosPanel,
     fileTreeOpenInNewPane: patch.fileTreeOpenInNewPane ?? current.fileTreeOpenInNewPane,
+    gitPanelPlacement: patch.gitPanelPlacement ?? current.gitPanelPlacement,
+    filesPanelPlacement: patch.filesPanelPlacement ?? current.filesPanelPlacement,
   };
   if (patch.connectionKind !== undefined) {
     next.connectionKind = normalizeConnectionKind(patch.connectionKind) ?? current.connectionKind;
@@ -542,6 +573,14 @@ export async function saveWiseDefaultConfig(
   }
   if (patch.fileTreeOpenInNewPane !== undefined) {
     next.fileTreeOpenInNewPane = normalizeBoolean(patch.fileTreeOpenInNewPane);
+  }
+  if (patch.gitPanelPlacement !== undefined) {
+    next.gitPanelPlacement =
+      normalizeMonitorPanelPlacement(patch.gitPanelPlacement) ?? current.gitPanelPlacement;
+  }
+  if (patch.filesPanelPlacement !== undefined) {
+    next.filesPanelPlacement =
+      normalizeMonitorPanelPlacement(patch.filesPanelPlacement) ?? current.filesPanelPlacement;
   }
   await persistConfig(next);
   await deleteLegacyAppSettings();
@@ -640,6 +679,13 @@ export async function saveWiseDefaultConfig(
     next.fileTreeOpenInNewPane !== current.fileTreeOpenInNewPane
   ) {
     dispatchFileTreeOpenInNewPaneChanged(next.fileTreeOpenInNewPane);
+  }
+  if (
+    (patch.gitPanelPlacement !== undefined || patch.filesPanelPlacement !== undefined) &&
+    (next.gitPanelPlacement !== current.gitPanelPlacement ||
+      next.filesPanelPlacement !== current.filesPanelPlacement)
+  ) {
+    dispatchRepoPanelPlacementChanged(next.gitPanelPlacement, next.filesPanelPlacement);
   }
 
   return next;
@@ -821,6 +867,36 @@ export async function loadMonitorPanelDefaultFromStore(): Promise<{
     visible: config.showLeftSidebarMonitorPanel,
     placement: config.monitorPanelPlacement,
   };
+}
+
+export async function loadRepoPanelPlacementFromStore(): Promise<{
+  gitPanelPlacement: MonitorPanelPlacement;
+  filesPanelPlacement: MonitorPanelPlacement;
+}> {
+  const config = await loadWiseDefaultConfig();
+  return {
+    gitPanelPlacement: config.gitPanelPlacement,
+    filesPanelPlacement: config.filesPanelPlacement,
+  };
+}
+
+export async function saveRepoPanelPlacementToStore(
+  patch: Partial<{
+    gitPanelPlacement: MonitorPanelPlacement;
+    filesPanelPlacement: MonitorPanelPlacement;
+  }>,
+): Promise<void> {
+  const normalized: Partial<WiseDefaultConfigV1> = {};
+  if (patch.gitPanelPlacement !== undefined) {
+    const placement = normalizeMonitorPanelPlacement(patch.gitPanelPlacement);
+    if (placement) normalized.gitPanelPlacement = placement;
+  }
+  if (patch.filesPanelPlacement !== undefined) {
+    const placement = normalizeMonitorPanelPlacement(patch.filesPanelPlacement);
+    if (placement) normalized.filesPanelPlacement = placement;
+  }
+  if (Object.keys(normalized).length === 0) return;
+  await saveWiseDefaultConfig(normalized);
 }
 
 export async function loadDefaultClaudeConnectionKindFromStore(): Promise<ClaudeSessionConnectionKind> {

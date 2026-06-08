@@ -25,6 +25,7 @@ import { useAtMentionShortcuts } from "../../hooks/useAtMentionShortcuts";
 import { KeyShortcutCapture } from "./KeyShortcutCapture";
 import type { AtMentionDefaultTarget } from "../../constants/atMentionDefault";
 import { useFileTreeOpenInNewPaneSetting } from "./useFileTreeOpenInNewPaneSetting";
+import { useRepoPanelPlacementSetting } from "./useRepoPanelPlacementSetting";
 import { useWorkspaceInspectorPanelsSetting } from "./useWorkspaceInspectorPanelsSetting";
 import { listEmployees } from "../../services/employees";
 import type { EmployeeItem } from "../../types";
@@ -48,6 +49,7 @@ export function DefaultConfigPanel() {
   const topbarChrome = useTopbarChromeDefaultSetting();
   const hubQuickEntries = useLeftSidebarHubQuickEntriesSetting();
   const monitorPanel = useMonitorPanelSetting();
+  const repoPanelPlacement = useRepoPanelPlacementSetting();
   const execEnvDispatchHistory = useExecutionEnvironmentDispatchHistoryDaysSetting();
   const atMentionDefault = useAtMentionDefaultSetting();
   const atMentionShortcuts = useAtMentionShortcuts();
@@ -181,6 +183,41 @@ export function DefaultConfigPanel() {
               ]}
               onChange={(value) => {
                 void monitorPanel.savePlacement(value);
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="app-default-config-row" aria-label="Git 与文件树栏位">
+          <div className="app-default-config-row__main">
+            <span className="app-default-config-row__title">Git 与文件树</span>
+            <span className="app-default-config-row__hint">
+              分别配置 Git 变更与仓库文件树默认展示在左栏或右栏；两项均在左栏时通过 Tab 切换
+            </span>
+          </div>
+          <div className="app-default-config-row__control app-default-config-row__control--monitor">
+            <DefaultConfigOptionPick<"left" | "right">
+              aria-label="Git 默认栏位"
+              disabled={repoPanelPlacement.loading || repoPanelPlacement.saving}
+              value={repoPanelPlacement.gitPanelPlacement}
+              options={[
+                { label: "Git·左栏", value: "left" },
+                { label: "Git·右栏", value: "right" },
+              ]}
+              onChange={(value) => {
+                void repoPanelPlacement.saveGitPlacement(value);
+              }}
+            />
+            <DefaultConfigOptionPick<"left" | "right">
+              aria-label="文件树默认栏位"
+              disabled={repoPanelPlacement.loading || repoPanelPlacement.saving}
+              value={repoPanelPlacement.filesPanelPlacement}
+              options={[
+                { label: "文件·左栏", value: "left" },
+                { label: "文件·右栏", value: "right" },
+              ]}
+              onChange={(value) => {
+                void repoPanelPlacement.saveFilesPlacement(value);
               }}
             />
           </div>

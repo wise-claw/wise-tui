@@ -858,7 +858,10 @@ export function AppWorkspaceLayout({
                     collapsed={collapsed}
                     parked={authorMode || leftSidebarParked}
                     siderWidth={mainLayoutLeftWidthPx}
-                    leftSidebarProps={leftSidebarProps}
+                    leftSidebarProps={{
+                      ...leftSidebarProps,
+                      repoPanelRightRailAvailable: chatRightRailMode,
+                    }}
                   />
                 </Suspense>
                 {authorMode && authorShellMounted ? (

@@ -19,9 +19,11 @@ import type {
 import type { ReconcileProjectMode } from "../../constants/reconcileProjectMode";
 import type { LeftSidebarHubQuickEntryId } from "../../constants/leftSidebarHubQuickEntries";
 import type { WorkspaceFocus } from "../../utils/workspaceMode";
+import type { ReactNode } from "react";
 import type { GitPanelOpenFileOptions } from "../GitPanel";
 import type { TaskCardsNavProps } from "../TaskCardsNav";
 import type { AuthorPane } from "../../types/viewMode";
+import type { MonitorPanelPlacement } from "../../services/wiseDefaultConfigStore";
 
 export interface LeftSidebarProps {
   dark: boolean;
@@ -179,5 +181,15 @@ export interface LeftSidebarProps {
   activeRepositoryPath?: string;
   activeRepositoryName?: string;
   onOpenActiveRepositoryFile?: (path: string, options?: GitPanelOpenFileOptions) => void;
+  /** Git 变更面板默认栏位。 */
+  gitPanelPlacement?: MonitorPanelPlacement;
+  /** 仓库文件树默认栏位。 */
+  filesPanelPlacement?: MonitorPanelPlacement;
+  /** Chat 模式是否存在右栏（Author / Cockpit 全屏时为 false）。 */
+  repoPanelRightRailAvailable?: boolean;
+  /** 右栏仓库面板（Git / 文件树）节点。 */
+  onRepositoryRepoPanelChange?: (node: ReactNode | null) => void;
+  /** 是否有面板配置在右栏（用于自动展开右栏）。 */
+  onRepoPanelUsesRightRailChange?: (usesRightRail: boolean) => void;
   taskCardsNavProps?: TaskCardsNavProps;
 }

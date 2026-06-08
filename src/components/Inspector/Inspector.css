@@ -189,6 +189,97 @@
   background: var(--ant-color-bg-container);
 }
 
+.app-chat-inspector-card--repo-panel {
+  flex: 1 1 240px;
+  min-height: 200px;
+  max-height: min(52vh, 520px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  padding: 0 !important;
+}
+
+.app-right-repo-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-right-repo-panel-tabs {
+  flex-shrink: 0;
+  padding: 4px 8px 2px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+}
+
+.app-right-repo-panel-tab-content {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-right-repo-panel-tab-pane {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-right-repo-panel-tab-pane--hidden {
+  display: none !important;
+}
+
+.app-right-repo-panel--split {
+  gap: 0;
+}
+
+.app-right-panel-git-explorer {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.app-right-panel-git-explorer > .app-git-panel {
+  flex: 1 1 0;
+  min-height: 0;
+  height: 100%;
+}
+
+.app-chat-inspector-card--repo-panel .app-right-panel-files-explorer {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.app-chat-inspector-card--repo-panel .app-right-panel-files-explorer-body {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.app-chat-inspector-card--repo-panel .git-files-mode:not(.git-files-mode--section-collapsed) {
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.app-chat-inspector-card--repo-panel .git-files-explorer-scroll-region {
+  flex: 1 1 0;
+  min-height: 0;
+}
+
 .app-chat-inspector-card--secondary {
   flex: 0 0 auto;
   max-height: 42%;

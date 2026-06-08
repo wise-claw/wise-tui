@@ -13,6 +13,8 @@ interface ActiveRepositoryFilesPanelProps {
   onSectionCollapsedChange: (collapsed: boolean) => void;
   headerPrefix?: ReactNode;
   workspaceSelector: Omit<GitPanelWorkspaceSelectorProps, "activeRepositoryPath">;
+  /** 右栏 Inspector 内嵌时使用独立布局 class。 */
+  variant?: "left-sidebar" | "right-rail";
 }
 
 export const ActiveRepositoryFilesPanel = memo(function ActiveRepositoryFilesPanel({
@@ -25,15 +27,24 @@ export const ActiveRepositoryFilesPanel = memo(function ActiveRepositoryFilesPan
   onSectionCollapsedChange,
   headerPrefix,
   workspaceSelector,
+  variant = "left-sidebar",
 }: ActiveRepositoryFilesPanelProps) {
+  const rootClassName =
+    variant === "right-rail"
+      ? "app-right-panel-files-explorer" +
+        (sectionCollapsed ? " app-right-panel-files-explorer--section-collapsed" : "")
+      : "app-left-sidebar-files-explorer" +
+        (sectionCollapsed ? " app-left-sidebar-files-explorer--section-collapsed" : "");
+
   return (
-    <div
-      className={
-        "app-left-sidebar-files-explorer" +
-        (sectionCollapsed ? " app-left-sidebar-files-explorer--section-collapsed" : "")
-      }
-    >
-      <div className="app-left-sidebar-files-explorer-body">
+    <div className={rootClassName}>
+      <div
+        className={
+          variant === "right-rail"
+            ? "app-right-panel-files-explorer-body"
+            : "app-left-sidebar-files-explorer-body"
+        }
+      >
         <RepositoryFilesExplorer
           headerPrefix={headerPrefix}
           repositoryPath={activeRepositoryPath}

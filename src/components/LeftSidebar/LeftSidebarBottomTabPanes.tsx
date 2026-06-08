@@ -1,8 +1,8 @@
 import { memo, type ReactNode } from "react";
-import type { LeftBottomTab } from "./sidebarStorage";
 
 export type LeftSidebarBottomTabPanesProps = {
-  activeTab: LeftBottomTab;
+  showGit: boolean;
+  showFiles: boolean;
   gitPane: ReactNode;
   filesPane: ReactNode;
   panelsReady: boolean;
@@ -12,7 +12,8 @@ export type LeftSidebarBottomTabPanesProps = {
  * Git / 文件双栏保活：切换 Tab 时仅隐藏，避免卸载 GitPanel / 文件树导致反复重建。
  */
 export const LeftSidebarBottomTabPanes = memo(function LeftSidebarBottomTabPanes({
-  activeTab,
+  showGit,
+  showFiles,
   gitPane,
   filesPane,
   panelsReady,
@@ -20,7 +21,7 @@ export const LeftSidebarBottomTabPanes = memo(function LeftSidebarBottomTabPanes
   if (!panelsReady) {
     return (
       <div className="app-left-sidebar-bottom-tab-content app-left-sidebar-bottom-tab-content--loading">
-        {activeTab === "git" ? gitPane : filesPane}
+        {showGit ? gitPane : filesPane}
       </div>
     );
   }
@@ -30,20 +31,20 @@ export const LeftSidebarBottomTabPanes = memo(function LeftSidebarBottomTabPanes
       <div
         className={
           "app-left-sidebar-bottom-tab-pane" +
-          (activeTab !== "git" ? " app-left-sidebar-bottom-tab-pane--hidden" : "")
+          (!showGit ? " app-left-sidebar-bottom-tab-pane--hidden" : "")
         }
-        hidden={activeTab !== "git" ? true : undefined}
-        aria-hidden={activeTab !== "git"}
+        hidden={!showGit ? true : undefined}
+        aria-hidden={!showGit}
       >
         {gitPane}
       </div>
       <div
         className={
           "app-left-sidebar-bottom-tab-pane" +
-          (activeTab !== "files" ? " app-left-sidebar-bottom-tab-pane--hidden" : "")
+          (!showFiles ? " app-left-sidebar-bottom-tab-pane--hidden" : "")
         }
-        hidden={activeTab !== "files" ? true : undefined}
-        aria-hidden={activeTab !== "files"}
+        hidden={!showFiles ? true : undefined}
+        aria-hidden={!showFiles}
       >
         {filesPane}
       </div>
