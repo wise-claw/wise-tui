@@ -3,7 +3,9 @@ import type { ProjectItem, Repository } from "../types";
 import {
   findOwnerProjectForRepositoryId,
   isMultiRepoProject,
+  resolveSidebarExpandedProjectId,
   resolveWorkspaceMode,
+  shouldRevealWorkspaceListOnRestore,
   shouldSidebarRepositorySelectOnlyUpdateFocus,
 } from "./workspaceMode";
 
@@ -101,5 +103,66 @@ describe("multi-repo sidebar repository select", () => {
   test("floating repo → per-repo session bind still allowed", () => {
     const projects = [project({ id: "other", repositoryIds: [99] })];
     expect(shouldSidebarRepositorySelectOnlyUpdateFocus(repo(1), projects)).toBe(false);
+  });
+});
+
+describe("resolveSidebarExpandedProjectId", () => {
+  test("expands owner project for restored repository selection", () => {
+    const projects = [
+      project({ id: "first", repositoryIds: [1] }),
+      project({ id: "second", repositoryIds: [2, 3] }),
+    ];
+    expect(
+      resolveSidebarExpandedProjectId(projects, {
+        activeProjectId: null,
+        activeRepositoryId: 3,
+        activeWorkspaceFocus: "repository",
+      }),
+    ).toBe("second");
+  });
+
+  test("falls back to first project when nothing is selected", () => {
+    const projects = [project({ id: "first", repositoryIds: [1] })];
+    expect(
+      resolveSidebarExpandedProjectId(projects, {
+        activeProjectId: null,
+        activeRepositoryId: null,
+      }),
+    ).toBe("first");
+  });
+});
+
+describe("shouldRevealWorkspaceListOnRestore", () => {
+  test("reveals when selected repo is not the first under its workspace", () => {
+    const projects = [project({ id: "eco", repositoryIds: [1, 2] })];
+    expect(
+      shouldRevealWorkspaceListOnRestore(projects, {
+        activeProjectId: null,
+        activeRepositoryId: 2,
+      }),
+    ).toBe(true);
+  });
+
+  test("reveals when selected repo belongs to a non-first workspace", () => {
+    const projects = [
+      project({ id: "first", repositoryIds: [1] }),
+      project({ id: "second", repositoryIds: [2] }),
+    ];
+    expect(
+      shouldRevealWorkspaceListOnRestore(projects, {
+        activeProjectId: null,
+        activeRepositoryId: 2,
+      }),
+    ).toBe(true);
+  });
+
+  test("skips when first workspace first repo is selected", () => {
+    const projects = [project({ id: "first", repositoryIds: [1, 2] })];
+    expect(
+      shouldRevealWorkspaceListOnRestore(projects, {
+        activeProjectId: null,
+        activeRepositoryId: 1,
+      }),
+    ).toBe(false);
   });
 });

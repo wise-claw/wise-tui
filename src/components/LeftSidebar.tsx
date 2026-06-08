@@ -20,7 +20,7 @@ import {
 import { normalizeSessionRepositoryPath } from "../utils/sessionHistoryScope";
 import { resolveTrellisBootstrapPath } from "../utils/trellisBootstrapPath";
 import { resolveRepositoryForSession } from "../utils/repositoryMainSessionBinding";
-import { isMultiRepoProject } from "../utils/workspaceMode";
+import { isMultiRepoProject, shouldRevealWorkspaceListOnRestore } from "../utils/workspaceMode";
 import { resolveScheduledTasksRepository } from "../utils/workspaceSelectionState";
 import { runWhenIdle } from "../utils/deferIdle";
 import { MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX } from "../constants/mainLayoutWidths";
@@ -343,8 +343,12 @@ export function LeftSidebar({
   const projectRepositoryState = useProjectRepositorySidebarState({
     projects,
     repositories,
+    activeProjectId,
+    activeRepositoryId,
+    activeWorkspaceFocus,
     onMoveRepositoryToProject,
   });
+  const restoreWorkspaceListVisibilityRef = useRef(false);
   const claudeProcessLabelCache = useClaudeProcessWorkspaceLabelCache();
   const systemResourceSessions = useSystemResourceSessions({
     sessions,
@@ -603,6 +607,28 @@ export function LeftSidebar({
     setWorkspaceListSectionCollapsed(next);
     writeLeftWorkspaceListCollapsedToStorage(next);
   }, []);
+
+  useEffect(() => {
+    if (restoreWorkspaceListVisibilityRef.current) return;
+    if (projects.length === 0) return;
+    const shouldReveal = shouldRevealWorkspaceListOnRestore(projects, {
+      activeProjectId,
+      activeRepositoryId,
+      activeWorkspaceFocus,
+    });
+    if (!shouldReveal) return;
+    restoreWorkspaceListVisibilityRef.current = true;
+    if (workspaceListSectionCollapsed) {
+      handleWorkspaceListSectionCollapsedChange(false);
+    }
+  }, [
+    activeProjectId,
+    activeRepositoryId,
+    activeWorkspaceFocus,
+    handleWorkspaceListSectionCollapsedChange,
+    projects,
+    workspaceListSectionCollapsed,
+  ]);
 
   const handleMonitorPanelSectionCollapsedChange = useCallback((next: boolean) => {
     setMonitorPanelSectionCollapsed(next);

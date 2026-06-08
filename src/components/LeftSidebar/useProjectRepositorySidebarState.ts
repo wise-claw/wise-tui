@@ -1,15 +1,25 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ProjectItem, Repository } from "../../types";
+import {
+  resolveSidebarExpandedProjectId,
+  type WorkspaceFocus,
+} from "../../utils/workspaceMode";
 
 interface UseProjectRepositorySidebarStateInput {
   projects: ProjectItem[];
   repositories: Repository[];
+  activeProjectId?: string | null;
+  activeRepositoryId?: number | null;
+  activeWorkspaceFocus?: WorkspaceFocus;
   onMoveRepositoryToProject?: (targetProjectId: string, repositoryId: number) => void | Promise<void>;
 }
 
 export function useProjectRepositorySidebarState({
   projects,
   repositories,
+  activeProjectId = null,
+  activeRepositoryId = null,
+  activeWorkspaceFocus = "repository",
   onMoveRepositoryToProject,
 }: UseProjectRepositorySidebarStateInput) {
   const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
@@ -52,7 +62,15 @@ export function useProjectRepositorySidebarState({
   }, []);
 
   const projectIdsKey = useMemo(() => projects.map((project) => project.id).join(","), [projects]);
-  const firstProjectId = useMemo(() => projects[0]?.id ?? null, [projects]);
+  const selectionExpandProjectId = useMemo(
+    () =>
+      resolveSidebarExpandedProjectId(projects, {
+        activeProjectId,
+        activeRepositoryId,
+        activeWorkspaceFocus,
+      }),
+    [projects, activeProjectId, activeRepositoryId, activeWorkspaceFocus],
+  );
 
   useEffect(() => {
     const valid = new Set(projectIdsKey.length > 0 ? projectIdsKey.split(",") : []);
@@ -64,14 +82,14 @@ export function useProjectRepositorySidebarState({
   }, [projectIdsKey]);
 
   useEffect(() => {
-    if (!firstProjectId) return;
+    if (!selectionExpandProjectId) return;
     setExpandedProjects((prev) => {
-      if (prev.has(firstProjectId)) return prev;
+      if (prev.has(selectionExpandProjectId)) return prev;
       const next = new Set(prev);
-      next.add(firstProjectId);
+      next.add(selectionExpandProjectId);
       return next;
     });
-  }, [firstProjectId]);
+  }, [selectionExpandProjectId]);
 
   return {
     repositoriesById,

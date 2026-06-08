@@ -38,6 +38,53 @@ export function findOwnerProjectForRepositoryId(
   return projects.find((project) => project.repositoryIds.includes(repositoryId)) ?? null;
 }
 
+export interface SidebarExpandedProjectInput {
+  activeProjectId: string | null;
+  activeRepositoryId: number | null;
+  activeWorkspaceFocus?: WorkspaceFocus;
+}
+
+/** 侧栏启动/恢复选中态时，应展开以露出当前仓库的工作区 id。 */
+export function resolveSidebarExpandedProjectId(
+  projects: ReadonlyArray<ProjectItem>,
+  input: SidebarExpandedProjectInput,
+): string | null {
+  const activeWorkspaceFocus = input.activeWorkspaceFocus ?? "repository";
+  if (activeWorkspaceFocus === "project" && input.activeProjectId) {
+    if (projects.some((project) => project.id === input.activeProjectId)) {
+      return input.activeProjectId;
+    }
+  }
+  if (input.activeRepositoryId != null) {
+    const owner = findOwnerProjectForRepositoryId(input.activeRepositoryId, projects);
+    if (owner) return owner.id;
+  }
+  if (input.activeProjectId && projects.some((project) => project.id === input.activeProjectId)) {
+    return input.activeProjectId;
+  }
+  return projects[0]?.id ?? null;
+}
+
+/**
+ * 重新打开应用时：若上次选中的不是「首个工作区下的首个仓库」，需要展开工作区列表区块。
+ */
+export function shouldRevealWorkspaceListOnRestore(
+  projects: ReadonlyArray<ProjectItem>,
+  input: SidebarExpandedProjectInput,
+): boolean {
+  const activeWorkspaceFocus = input.activeWorkspaceFocus ?? "repository";
+  if (activeWorkspaceFocus === "project" && input.activeProjectId) {
+    const projectIndex = projects.findIndex((project) => project.id === input.activeProjectId);
+    if (projectIndex > 0) return true;
+  }
+  if (input.activeRepositoryId == null) return false;
+  const owner = findOwnerProjectForRepositoryId(input.activeRepositoryId, projects);
+  if (!owner) return false;
+  const projectIndex = projects.findIndex((project) => project.id === owner.id);
+  const repoIndex = owner.repositoryIds.indexOf(input.activeRepositoryId);
+  return projectIndex > 0 || repoIndex > 0;
+}
+
 export function isMultiRepoProject(
   project: ProjectItem | null | undefined,
   projects: ReadonlyArray<ProjectItem>,
