@@ -70,20 +70,6 @@ export function ProjectNameModals({
         destroyOnHidden
       >
         <Form layout="vertical" requiredMark={false} className="app-create-workspace-form">
-          <Form.Item label="工作区名称" className="app-create-workspace-form__item">
-            <Input
-              size="small"
-              value={projectNameInput}
-              onChange={(event) => onProjectNameInputChange(event.target.value)}
-              placeholder="请输入工作区名称"
-              autoFocus
-              disabled={createSubmitLoading}
-              onPressEnter={() => {
-                if (!createSubmitLoading) void onSubmitCreate();
-              }}
-            />
-          </Form.Item>
-
           <div className="app-create-workspace-form__section">
             <Typography.Text className="app-create-workspace-form__section-label">根目录</Typography.Text>
             <div className="app-create-workspace-path">
@@ -108,6 +94,19 @@ export function ProjectNameModals({
               Workspace 工作目录；代码仓通过「关联仓库」添加。
             </Typography.Text>
           </div>
+
+          <Form.Item label="工作区名称" className="app-create-workspace-form__item">
+            <Input
+              size="small"
+              value={projectNameInput}
+              onChange={(event) => onProjectNameInputChange(event.target.value)}
+              placeholder="请输入工作区名称"
+              disabled={createSubmitLoading}
+              onPressEnter={() => {
+                if (!createSubmitLoading) void onSubmitCreate();
+              }}
+            />
+          </Form.Item>
 
           <WorkspaceBootstrapPicker
             selection={selection}

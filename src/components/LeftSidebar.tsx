@@ -1548,7 +1548,13 @@ export function LeftSidebar({
         createSubmitLoading={createProjectSubmitting}
         onPickCreateProjectRoot={async () => {
           const picked = await pickFolder();
-          if (picked) setCreateProjectRootPath(picked);
+          if (!picked) return;
+          const previousBasename = repositoryFolderBasename(createProjectRootPath);
+          const currentName = projectNameInput.trim();
+          setCreateProjectRootPath(picked);
+          if (!currentName || currentName === previousBasename) {
+            setProjectNameInput(repositoryFolderBasename(picked));
+          }
         }}
         workspaceBootstrapSelection={workspaceBootstrapSelection}
         onWorkspaceBootstrapSelectionChange={setWorkspaceBootstrapSelection}
