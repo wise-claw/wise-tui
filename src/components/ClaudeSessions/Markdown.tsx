@@ -44,25 +44,6 @@ function renderMarkdown(text: string) {
   }
 }
 
-function canUseStreamingPlainText(text: string): boolean {
-  if (!text.trim()) return true;
-  const split = splitRichMessageContent(text);
-  return split.kind === "markdown";
-}
-
-function updateStreamingPlainText(container: HTMLDivElement, value: string): void {
-  let plainEl = container.querySelector<HTMLDivElement>(":scope > .app-markdown-streaming-plain");
-  if (!plainEl) {
-    container.replaceChildren();
-    plainEl = document.createElement("div");
-    plainEl.className = "app-markdown-streaming-plain";
-    container.appendChild(plainEl);
-  }
-  if (plainEl.textContent !== value) {
-    plainEl.textContent = value;
-  }
-}
-
 function renderRichMessageInnerHtml(text: string): string {
   const split = splitRichMessageContent(text);
   if (split.kind === "markdown") {
@@ -108,7 +89,6 @@ export function Markdown({ text, streaming, showPendingHint, className }: Props)
   const renderRafRef = useRef<number | null>(null);
 
   const lastRenderedTextRef = useRef<string | null>(null);
-  const lastRenderedStreamingRef = useRef(false);
 
   const updateDOM = useCallback(() => {
     const container = containerRef.current;
@@ -117,25 +97,15 @@ export function Markdown({ text, streaming, showPendingHint, className }: Props)
       if (lastRenderedTextRef.current !== "") {
         container.replaceChildren();
         lastRenderedTextRef.current = "";
-        lastRenderedStreamingRef.current = false;
       }
       return;
     }
 
     // 内容未变时跳过完整的 marked+DOMPurify+DOM 管线
-    if (text === lastRenderedTextRef.current && Boolean(streaming) === lastRenderedStreamingRef.current) {
+    if (text === lastRenderedTextRef.current) {
       return;
     }
 
-    // 流式纯 Markdown：仅 textContent 增量更新，避免每帧 marked + DOMPurify + replaceChildren
-    if (streaming && canUseStreamingPlainText(text)) {
-      updateStreamingPlainText(container, text);
-      lastRenderedTextRef.current = text;
-      lastRenderedStreamingRef.current = true;
-      return;
-    }
-
-    lastRenderedStreamingRef.current = false;
     const html = renderRichMessageInnerHtml(text);
     const temp = document.createElement("div");
     temp.innerHTML = html;
@@ -202,7 +172,7 @@ export function Markdown({ text, streaming, showPendingHint, className }: Props)
     // 直接移动子节点而非序列化/反序列化 innerHTML，减少一次完整 DOM 克隆开销
     container.replaceChildren(...temp.childNodes);
     lastRenderedTextRef.current = text;
-  }, [text, streaming]);
+  }, [text]);
 
   useEffect(() => {
     if (renderRafRef.current != null) {
