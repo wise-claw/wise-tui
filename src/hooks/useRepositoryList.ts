@@ -32,7 +32,12 @@ import {
 import { runWorkspaceBootstrap } from "../services/workspaceBootstrap";
 import { bootstrapTrellisIfMissing, trellisTaskPyExistsAtPath } from "../services/trellisBootstrap";
 import { regenerateProjectWorkflowGraphsFromTemplates } from "../services/rebuildProjectWorkflowGraphs";
-import { deleteAppSetting, getAppSetting, setAppSetting } from "../services/appSettingsStore";
+import {
+  deleteAppSetting,
+  getAppSetting,
+  getAppSettingsBatch,
+  setAppSetting,
+} from "../services/appSettingsStore";
 import { normalizeRepositoryPathKey } from "../utils/repositoryMainSessionBinding";
 import { selectFloatingRepositories } from "../utils/floatingRepositories";
 import {
@@ -46,10 +51,16 @@ import {
   WORKSPACE_LAST_SESSION_REPO_ID_STORAGE_KEY,
   parseWorkspaceLastSelection,
   resolveStartupSelection,
+  workspaceWindowSelectionStorageKey,
 } from "../utils/startupRepoSelection";
 import { buildWorkspaceLastSelection } from "../utils/workspaceSelectionState";
 import type { ReconcileProjectMode } from "../constants/reconcileProjectMode";
 import { resolveProjectCreationSeedRepository } from "../utils/projectCreationContext";
+import {
+  getCurrentMainWorkspaceWindowLabel,
+  isMainWorkspaceWindowLabel,
+  isPrimaryMainWorkspaceWindowLabel,
+} from "../services/mainWindow";
 
 const LEGACY_APP_SETTING_KEY_PROJECTS = "wise.projects.v1";
 
@@ -81,7 +92,15 @@ export function useRepositoryList() {
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [activeWorkspaceFocus, setActiveWorkspaceFocus] = useState<WorkspaceFocus>("repository");
   const [loading, setLoading] = useState(true);
+  const isPrimaryMainWindowRef = useRef(true);
+  const mainWorkspaceWindowLabelRef = useRef<string | null>(null);
   const persistActiveProjectIdleCleanupRef = useRef<(() => void) | null>(null);
+  const selectionPersistIdleCleanupRef = useRef<(() => void) | null>(null);
+  const selectionPersistStateRef = useRef({
+    focus: "repository" as WorkspaceFocus,
+    projectId: null as string | null,
+    repositoryId: null as number | null,
+  });
 
   const schedulePersistActiveProjectId = useCallback((projectId: string | null) => {
     persistActiveProjectIdleCleanupRef.current?.();
@@ -94,6 +113,7 @@ export function useRepositoryList() {
   useEffect(
     () => () => {
       persistActiveProjectIdleCleanupRef.current?.();
+      selectionPersistIdleCleanupRef.current?.();
     },
     [],
   );
@@ -101,14 +121,29 @@ export function useRepositoryList() {
   useEffect(() => {
     void (async () => {
       try {
-        const [repositoryList, dbProjects, rawPins, rawLastSessionRepoId, rawLastSelection] =
-          await Promise.all([
+        const windowLabel = getCurrentMainWorkspaceWindowLabel();
+        mainWorkspaceWindowLabelRef.current = windowLabel;
+        const isPrimary = isPrimaryMainWorkspaceWindowLabel(windowLabel);
+        isPrimaryMainWindowRef.current = isPrimary;
+        const selectionStorageKey =
+          !isPrimary && windowLabel && isMainWorkspaceWindowLabel(windowLabel)
+            ? workspaceWindowSelectionStorageKey(windowLabel)
+            : WORKSPACE_LAST_SELECTION_STORAGE_KEY;
+        const settingsKeys = [
+          PINNED_PROJECT_IDS_STORAGE_KEY,
+          selectionStorageKey,
+          ...(isPrimary ? [WORKSPACE_LAST_SESSION_REPO_ID_STORAGE_KEY] : []),
+        ];
+        const [repositoryList, dbProjects, settingsBatch] = await Promise.all([
           loadRepositories(),
           listProjects(),
-          getAppSetting(PINNED_PROJECT_IDS_STORAGE_KEY),
-          getAppSetting(WORKSPACE_LAST_SESSION_REPO_ID_STORAGE_KEY),
-          getAppSetting(WORKSPACE_LAST_SELECTION_STORAGE_KEY),
+          getAppSettingsBatch(settingsKeys),
         ]);
+        const rawPins = settingsBatch[PINNED_PROJECT_IDS_STORAGE_KEY] ?? null;
+        const rawLastSelection = settingsBatch[selectionStorageKey] ?? null;
+        const rawLastSessionRepoId = isPrimary
+          ? settingsBatch[WORKSPACE_LAST_SESSION_REPO_ID_STORAGE_KEY] ?? null
+          : null;
         let projectList = dbProjects;
 
         if (projectList.length === 0) {
@@ -162,7 +197,7 @@ export function useRepositoryList() {
           projects: sortedProjects,
           repositories: repositoryList,
         });
-        if (startup.shouldClearLastSession) {
+        if (startup.shouldClearLastSession && isPrimaryMainWindowRef.current) {
           void deleteAppSetting(WORKSPACE_LAST_SESSION_REPO_ID_STORAGE_KEY);
         }
 
@@ -188,31 +223,55 @@ export function useRepositoryList() {
    * 持久化侧栏选中态（工作区焦点 / 仓库焦点 + id）。
    * 初次启动由 loader 直接装填，effect 跳过首次以避免覆盖 loader 的恢复结果。
    */
+  selectionPersistStateRef.current = {
+    focus: activeWorkspaceFocus,
+    projectId: activeProjectId,
+    repositoryId: activeRepositoryId,
+  };
+
   const lastSessionPersistInitialRef = useRef(true);
   useEffect(() => {
     if (loading) return;
+    const windowLabel = mainWorkspaceWindowLabelRef.current;
+    const isPrimary = isPrimaryMainWindowRef.current;
+    const isAuxMain =
+      !isPrimary && Boolean(windowLabel && isMainWorkspaceWindowLabel(windowLabel));
+    if (!isPrimary && !isAuxMain) return;
     if (lastSessionPersistInitialRef.current) {
       lastSessionPersistInitialRef.current = false;
       return;
     }
-    void setAppSetting(
-      WORKSPACE_LAST_SELECTION_STORAGE_KEY,
-      JSON.stringify(
+    selectionPersistIdleCleanupRef.current?.();
+    selectionPersistIdleCleanupRef.current = runWhenIdle(() => {
+      selectionPersistIdleCleanupRef.current = null;
+      const { focus, projectId, repositoryId } = selectionPersistStateRef.current;
+      const selectionPayload = JSON.stringify(
         buildWorkspaceLastSelection({
-          focus: activeWorkspaceFocus,
-          projectId: activeProjectId,
-          repositoryId: activeRepositoryId,
+          focus,
+          projectId,
+          repositoryId,
         }),
-      ),
-    );
-    if (activeWorkspaceFocus === "repository" && activeRepositoryId != null) {
-      void setAppSetting(
-        WORKSPACE_LAST_SESSION_REPO_ID_STORAGE_KEY,
-        String(activeRepositoryId),
       );
-    } else {
-      void deleteAppSetting(WORKSPACE_LAST_SESSION_REPO_ID_STORAGE_KEY);
-    }
+      if (isPrimary) {
+        void setAppSetting(WORKSPACE_LAST_SELECTION_STORAGE_KEY, selectionPayload);
+        if (focus === "repository" && repositoryId != null) {
+          void setAppSetting(
+            WORKSPACE_LAST_SESSION_REPO_ID_STORAGE_KEY,
+            String(repositoryId),
+          );
+        } else {
+          void deleteAppSetting(WORKSPACE_LAST_SESSION_REPO_ID_STORAGE_KEY);
+        }
+        return;
+      }
+      if (windowLabel) {
+        void setAppSetting(workspaceWindowSelectionStorageKey(windowLabel), selectionPayload);
+      }
+    }, { timeoutMs: 1200 });
+    return () => {
+      selectionPersistIdleCleanupRef.current?.();
+      selectionPersistIdleCleanupRef.current = null;
+    };
   }, [activeWorkspaceFocus, activeProjectId, activeRepositoryId, loading]);
 
   const projectRepositories = useMemo(() => {

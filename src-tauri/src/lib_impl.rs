@@ -5,7 +5,7 @@ use crate::{
     claude_llm_proxy, claude_model_profiles,
     code_knowledge_graph, cursor_agent, dock_menu, fcc_traces, free_claude_code,
     cua_driver, dingtalk_enterprise_bot, dingtalk_stream_gateway, extensions, git_commands,
-    mission_control, mcp, my_extensions,
+    main_window, mission_control, mcp, my_extensions,
     openspec_bootstrap, prd_url_fetch, remote_channels, repository_files, skills, skills_sh, system_resource, task_artifact, trellis_bootstrap,
     trellis_bridge,
     composer_image_gc, trellis_runtime, wise_data_cleanup, wise_db, wise_mascot, wise_paths, wise_push,
@@ -23,6 +23,10 @@ use tauri::{Emitter, Manager};
 const MENU_ID_OPEN_WEBVIEW_DEVTOOLS: &str = "wise/open-webview-devtools";
 #[cfg(desktop)]
 const MENU_ID_CLOSE_WEBVIEW_DEVTOOLS: &str = "wise/close-webview-devtools";
+#[cfg(desktop)]
+const MENU_ID_NEW_MAIN_WINDOW: &str = "wise/new-main-window";
+#[cfg(desktop)]
+const MENU_ID_CLOSE_MAIN_WINDOW: &str = "wise/close-main-window";
 
 // ── App Entry ──
 
@@ -81,9 +85,12 @@ pub fn run() {
                 .map_err(|e| e.to_string())?;
 
             in_app_shortcuts::init(app.handle());
-            if let Some(main) = app.get_webview_window("main") {
-                if main.is_focused().unwrap_or(false) {
+            for (label, win) in app.webview_windows() {
+                if main_window::is_main_workspace_window_label(&label)
+                    && win.is_focused().unwrap_or(false)
+                {
                     let _ = in_app_shortcuts::register_search_shortcuts(app.handle());
+                    break;
                 }
             }
 
@@ -141,20 +148,27 @@ pub fn run() {
         use tauri::menu::{Menu, MenuItem, Submenu};
         builder
             .on_window_event(|window, event| {
-                if window.label() == "main" {
+                if main_window::is_main_workspace_window_label(window.label()) {
                     if let tauri::WindowEvent::Focused(focused) = event {
                         let _ = in_app_shortcuts::set_main_window_search_shortcuts_active(
                             window.app_handle(),
                             *focused,
                         );
                     }
-                    // macOS：主窗口红点关闭默认会销毁窗口，导致后续点击程序坞图标只触发
-                    // `RunEvent::Reopen` 但 `get_webview_window("main")` 已为 None，没有任何窗口可显示。
-                    // 与原生 macOS App 行为对齐：拦截关闭事件 → 阻止销毁 → 隐藏整个应用。
+                    // macOS：主工作区窗口红点关闭 → 隐藏应用（主窗）或销毁（辅助窗）。
                     #[cfg(target_os = "macos")]
                     if let tauri::WindowEvent::CloseRequested { api, .. } = event {
-                        api.prevent_close();
-                        let _ = window.app_handle().hide();
+                        if main_window::is_primary_main_workspace_window_label(window.label()) {
+                            api.prevent_close();
+                            let _ = window.app_handle().hide();
+                        }
+                    }
+                    if let tauri::WindowEvent::Destroyed = event {
+                        let label = window.label().to_string();
+                        main_window::cleanup_aux_main_workspace_window_assets(
+                            window.app_handle(),
+                            &label,
+                        );
                     }
                 }
             })
@@ -174,18 +188,72 @@ pub fn run() {
                     true,
                     None::<&str>,
                 )?;
-                let utilities = Submenu::with_items(app, "功能", true, &[&open_console, &close_console])?;
+                let new_window = MenuItem::with_id(
+                    app,
+                    MENU_ID_NEW_MAIN_WINDOW,
+                    "新建窗口",
+                    true,
+                    Some("Shift+CmdOrCtrl+N"),
+                )?;
+                let close_window = MenuItem::with_id(
+                    app,
+                    MENU_ID_CLOSE_MAIN_WINDOW,
+                    "关闭窗口",
+                    true,
+                    Some("CmdOrCtrl+W"),
+                )?;
+                let window_menu = Submenu::with_items(
+                    app,
+                    "窗口",
+                    true,
+                    &[&new_window, &close_window],
+                )?;
+                let utilities = Submenu::with_items(
+                    app,
+                    "功能",
+                    true,
+                    &[&open_console, &close_console],
+                )?;
+                menu.append(&window_menu)?;
                 menu.append(&utilities)?;
                 Ok(menu)
             })
             .on_menu_event(|app, event| {
-                if event.id() == MENU_ID_OPEN_WEBVIEW_DEVTOOLS {
-                    if let Some(win) = app.get_webview_window("main") {
-                        win.open_devtools();
+                if event.id() == MENU_ID_NEW_MAIN_WINDOW {
+                    let _ = main_window::open_main_workspace_window(app, None);
+                } else if event.id() == MENU_ID_CLOSE_MAIN_WINDOW {
+                    let _ = main_window::close_focused_main_workspace_window(app);
+                } else if event.id() == MENU_ID_OPEN_WEBVIEW_DEVTOOLS {
+                    let mut opened = false;
+                    for (label, win) in app.webview_windows() {
+                        if main_window::is_main_workspace_window_label(&label)
+                            && win.is_focused().unwrap_or(false)
+                        {
+                            win.open_devtools();
+                            opened = true;
+                            break;
+                        }
+                    }
+                    if !opened {
+                        if let Some(win) = app.get_webview_window("main") {
+                            win.open_devtools();
+                        }
                     }
                 } else if event.id() == MENU_ID_CLOSE_WEBVIEW_DEVTOOLS {
-                    if let Some(win) = app.get_webview_window("main") {
-                        win.close_devtools();
+                    let mut closed = false;
+                    for (label, win) in app.webview_windows() {
+                        if main_window::is_main_workspace_window_label(&label)
+                            && win.is_focused().unwrap_or(false)
+                        {
+                            win.close_devtools();
+                            closed = true;
+                            break;
+                        }
+                    }
+                    if !closed {
+                        if let Some(win) = app.get_webview_window("main") {
+                            win.close_devtools();
+                        }
                     }
                 }
             })
@@ -261,6 +329,7 @@ pub fn run() {
             app_state_commands::settings_commands::set_prd_task_draft,
             app_state_commands::settings_commands::clear_prd_task_draft,
             app_state_commands::settings_commands::get_app_setting,
+            app_state_commands::settings_commands::get_app_settings_batch,
             app_state_commands::settings_commands::set_app_setting,
             app_state_commands::settings_commands::delete_app_setting,
             workspace_inspector_commands::list_project_workspace_quick_actions,
@@ -551,6 +620,8 @@ pub fn run() {
             wise_mascot::wise_notification_mark_omc_direct_batch_read_for_batch,
             wise_mascot::wise_notification_list_recent,
             wise_mascot::wise_main_window_focus,
+            main_window::wise_open_main_window,
+            main_window::wise_close_main_workspace_window,
             wise_push::wise_push_start,
             wise_push::wise_push_stop,
             dingtalk_enterprise_bot::dingtalk_enterprise_bot_ping,

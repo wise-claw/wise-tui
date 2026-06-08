@@ -1253,6 +1253,7 @@ export function LeftSidebar({
         authorDisabled={authorDisabled}
         authorTooltip={authorDisabledTooltip}
         activeRepositoryPath={activeRepositoryPath}
+        activeRepositoryId={activeRepositoryId}
         onOpenAuthor={onOpenAuthor}
       />
 

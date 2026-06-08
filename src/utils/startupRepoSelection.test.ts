@@ -3,6 +3,7 @@ import type { ProjectItem, Repository } from "../types";
 import {
   parseWorkspaceLastSelection,
   resolveStartupSelection,
+  workspaceWindowSelectionStorageKey,
 } from "./startupRepoSelection";
 
 function repo(id: number, path = `/r/${id}`): Repository {
@@ -242,5 +243,13 @@ describe("resolveStartupSelection", () => {
       workspaceFocus: "repository",
       shouldClearLastSession: true,
     });
+  });
+});
+
+describe("workspaceWindowSelectionStorageKey", () => {
+  test("scopes aux window selection by sanitized label", () => {
+    expect(workspaceWindowSelectionStorageKey("main-dock-123")).toBe(
+      "wise.workspace.windowSelection.v1:main-dock-123",
+    );
   });
 });

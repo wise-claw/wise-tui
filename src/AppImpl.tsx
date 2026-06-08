@@ -10,6 +10,7 @@ import {
 } from "react";
 import { flushSync } from "react-dom";
 import { emit, listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import { safeUnlisten } from "./utils/safeTauriUnlisten";
 import { message } from "antd";
 import type {
@@ -84,6 +85,10 @@ import {
   resolveAuthorNavPane,
 } from "./components/AuthorPanel/authorPaneStorage";
 import { reloadAppWindow } from "./services/window";
+import {
+  getCurrentMainWorkspaceWindowLabel,
+  isPrimaryMainWorkspaceWindowLabel,
+} from "./services/mainWindow";
 import { isWiseAppFocused } from "./utils/isWiseAppFocused";
 import { openMonacoFindIfFocused } from "./utils/monacoGlobalFindRedirect";
 import { wiseMascotShow } from "./services/wiseMascot";
@@ -590,6 +595,25 @@ export default function App() {
     const newUrl = `${window.location.pathname}${next ? `?${next}` : ""}${window.location.hash}`;
     window.history.replaceState(null, "", newUrl);
   }, [repositories, setActiveRepositoryWithOwner]);
+
+  const auxWindowTitleRef = useRef("");
+  useEffect(() => {
+    try {
+      const label = getCurrentMainWorkspaceWindowLabel();
+      if (!label || isPrimaryMainWorkspaceWindowLabel(label)) return;
+      const repo =
+        activeRepositoryId != null
+          ? repositories.find((item) => item.id === activeRepositoryId) ?? null
+          : null;
+      const suffix = repo?.name?.trim() || repo?.path?.split(/[/\\]/).filter(Boolean).pop();
+      const nextTitle = suffix ? `Wise — ${suffix}` : "Wise";
+      if (auxWindowTitleRef.current === nextTitle) return;
+      auxWindowTitleRef.current = nextTitle;
+      void getCurrentWindow().setTitle(nextTitle);
+    } catch {
+      /* 浏览器预览 / 非 Tauri */
+    }
+  }, [activeRepositoryId, repositories]);
 
   const handleOpenExecutionEnvironment = useCallback(() => {
     if (!activeProjectId && activeRepositoryId != null) {

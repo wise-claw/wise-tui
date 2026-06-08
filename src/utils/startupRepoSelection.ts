@@ -8,6 +8,14 @@ export const WORKSPACE_LAST_SESSION_REPO_ID_STORAGE_KEY =
 /** 侧栏工作区/仓库选中态（含焦点粒度），用于刷新后恢复。 */
 export const WORKSPACE_LAST_SELECTION_STORAGE_KEY = "wise.workspace.lastSelection.v1";
 
+const WORKSPACE_WINDOW_SELECTION_KEY_PREFIX = "wise.workspace.windowSelection.v1:";
+
+/** 辅助主窗口侧栏选中态（按窗口 label 隔离，不污染主窗全局键）。 */
+export function workspaceWindowSelectionStorageKey(windowLabel: string): string {
+  const safe = windowLabel.trim().replace(/[^a-zA-Z0-9_-]/g, "_");
+  return `${WORKSPACE_WINDOW_SELECTION_KEY_PREFIX}${safe}`;
+}
+
 export interface WorkspaceLastSelection {
   focus: WorkspaceFocus;
   projectId: string | null;

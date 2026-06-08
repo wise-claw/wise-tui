@@ -275,13 +275,7 @@ pub fn wise_notification_list_recent(
 
 #[tauri::command]
 pub fn wise_main_window_focus(app: AppHandle) -> Result<(), String> {
-    let w = app
-        .get_webview_window("main")
-        .ok_or_else(|| "main 窗口未找到".to_string())?;
-    let _ = w.unminimize();
-    w.show().map_err(|e| e.to_string())?;
-    w.set_focus().map_err(|e| e.to_string())?;
-    Ok(())
+    crate::main_window::focus_main_workspace_window(&app)
 }
 
 pub fn apply_mascot_position_from_db(app: &AppHandle, db: &WiseDb) -> Result<(), String> {

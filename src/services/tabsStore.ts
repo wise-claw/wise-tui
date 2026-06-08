@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { ClaudeSession, PersistedTabsState } from "../types";
 import { normalizeSessionRepositoryPath } from "../utils/sessionHistoryScope";
+import { getCurrentMainWorkspaceWindowLabel } from "./mainWindow";
 
 function normalizePersistedSession(raw: unknown): ClaudeSession {
   const v = raw as Record<string, unknown>;
@@ -18,7 +19,8 @@ function normalizePersistedSession(raw: unknown): ClaudeSession {
 
 export async function loadSessionTabsState(): Promise<PersistedTabsState | null> {
   try {
-    const raw = await invoke<unknown>("load_session_tabs");
+    const windowLabel = getCurrentMainWorkspaceWindowLabel();
+    const raw = await invoke<unknown>("load_session_tabs", { windowLabel });
     if (raw == null) return null;
     const o = raw as Record<string, unknown>;
     if (o.version !== 1 || !Array.isArray(o.sessions)) return null;
@@ -34,7 +36,8 @@ export async function loadSessionTabsState(): Promise<PersistedTabsState | null>
 
 export async function saveSessionTabsState(state: PersistedTabsState): Promise<void> {
   try {
-    await invoke("save_session_tabs", { state });
+    const windowLabel = getCurrentMainWorkspaceWindowLabel();
+    await invoke("save_session_tabs", { state, windowLabel });
   } catch {
     /* ignore */
   }

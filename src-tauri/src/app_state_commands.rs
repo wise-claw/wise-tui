@@ -3,7 +3,7 @@ use crate::project_workspace_paths::{
     assert_repo_dir_under_project_root, canonicalize_existing_dir,
 };
 use crate::wise_paths::{
-    wise_legacy_projects_json, wise_repositories_json, wise_tabs_json, write_file_atomic,
+    wise_legacy_projects_json, wise_repositories_json, write_file_atomic,
 };
 use crate::{git_commands, wise_db};
 use rusqlite::params;
@@ -306,8 +306,8 @@ fn save_repositories(
 }
 
 #[tauri::command]
-pub(crate) fn load_session_tabs() -> Option<serde_json::Value> {
-    let path = wise_tabs_json().ok()?;
+pub(crate) fn load_session_tabs(window_label: Option<String>) -> Option<serde_json::Value> {
+    let path = crate::wise_paths::wise_tabs_json_for_window(window_label.as_deref()).ok()?;
     if !path.exists() {
         return None;
     }
@@ -317,9 +317,19 @@ pub(crate) fn load_session_tabs() -> Option<serde_json::Value> {
 }
 
 #[tauri::command]
-pub(crate) fn save_session_tabs(state: serde_json::Value) -> Result<(), String> {
-    let path = wise_tabs_json()?;
-    let json = serde_json::to_string_pretty(&state).map_err(|e| e.to_string())?;
+pub(crate) fn save_session_tabs(
+    window_label: Option<String>,
+    state: serde_json::Value,
+) -> Result<(), String> {
+    let path = crate::wise_paths::wise_tabs_json_for_window(window_label.as_deref())?;
+    let json = serde_json::to_string(&state).map_err(|e| e.to_string())?;
+    if path.exists() {
+        if let Ok(existing) = fs::read_to_string(&path) {
+            if existing.trim() == json {
+                return Ok(());
+            }
+        }
+    }
     write_file_atomic(&path, &json)
 }
 

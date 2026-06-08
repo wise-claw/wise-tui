@@ -9,9 +9,9 @@ use std::sync::Mutex;
 use tauri::{AppHandle, Listener};
 
 use crate::app_state_commands::{StoredRepository, load_repositories};
+use crate::main_window;
 
 const MAX_DOCK_REPOS: usize = 20;
-const NEW_WINDOW_LABEL_PREFIX: &str = "main-dock";
 
 /// Refresh the macOS dock context menu.
 ///
@@ -109,10 +109,10 @@ extern "C-unwind" fn dockMenuAction(sender: &objc2::runtime::AnyObject) {
     let Some(app) = app else { return };
 
     if tag == -1 {
-        let _ = open_main_window(&app, None);
+        let _ = main_window::open_main_workspace_window(&app, None);
         return;
     }
-    let _ = open_main_window(&app, Some(tag));
+    let _ = main_window::open_main_workspace_window(&app, Some(tag));
 }
 
 /// Install the event listener that refreshes the dock menu on `dock-menu-refresh`.
@@ -123,25 +123,3 @@ pub fn setup_dock_menu_events(app: &AppHandle) {
     });
 }
 
-fn open_main_window(app: &AppHandle, repository_id: Option<i64>) -> Result<(), String> {
-    let label = format!(
-        "{NEW_WINDOW_LABEL_PREFIX}-{}",
-        std::time::SystemTime::now()
-            .duration_since(std::time::UNIX_EPOCH)
-            .map_err(|e| e.to_string())?
-            .as_millis()
-    );
-    let mut route = String::from("index.html");
-    if let Some(repo_id) = repository_id {
-        route.push_str(&format!("?dockRepoId={repo_id}"));
-    }
-    let win = tauri::WebviewWindowBuilder::new(app, label, tauri::WebviewUrl::App(route.into()))
-        .title("Wise")
-        .inner_size(1400.0, 900.0)
-        .build()
-        .map_err(|e| e.to_string())?;
-    let _ = win.unminimize();
-    let _ = win.show();
-    let _ = win.set_focus();
-    Ok(())
-}

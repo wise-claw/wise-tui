@@ -2,13 +2,16 @@ import { Tooltip } from "antd";
 import { ClaudeCodeUsageHeaderBtn } from "../ClaudeCodeUsagePopover";
 import { ClaudeCodeToolsTopbarTrigger } from "../ClaudeSessions/ClaudeCodeToolsTopbarTrigger";
 import { DefaultConfigTopbarTrigger } from "./DefaultConfigTopbarTrigger";
+import { NewMainWindowTopbarTrigger } from "./NewMainWindowTopbarTrigger";
 import { IconSettings } from "../icons/IconSettings";
 import type { AuthorPane } from "../../types/viewMode";
+import "./NewMainWindowTopbarTrigger.css";
 
 interface LeftSidebarTopbarProps {
   authorDisabled?: boolean;
   authorTooltip?: string;
   activeRepositoryPath?: string;
+  activeRepositoryId?: number | null;
   onOpenAuthor: (pane?: AuthorPane) => void;
 }
 
@@ -16,6 +19,7 @@ export function LeftSidebarTopbar({
   authorDisabled = false,
   authorTooltip = "单仓不支持工作台配置；升格为工作区后启用",
   activeRepositoryPath,
+  activeRepositoryId = null,
   onOpenAuthor,
 }: LeftSidebarTopbarProps) {
   return (
@@ -37,6 +41,7 @@ export function LeftSidebarTopbar({
             <IconSettings />
           </button>
         </Tooltip>
+        <NewMainWindowTopbarTrigger activeRepositoryId={activeRepositoryId} />
         <DefaultConfigTopbarTrigger />
         <ClaudeCodeUsageHeaderBtn repositoryPath={activeRepositoryPath} />
         <ClaudeCodeToolsTopbarTrigger

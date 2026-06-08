@@ -38,6 +38,7 @@ mod macos_terminal_detect;
 mod macos_webview_wake_recovery;
 mod in_app_shortcuts;
 mod lib_impl;
+mod main_window;
 mod mission_control;
 mod mcp;
 mod prd_materialize;

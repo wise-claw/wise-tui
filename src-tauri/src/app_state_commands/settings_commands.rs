@@ -230,6 +230,25 @@ pub(crate) fn get_app_setting(
 }
 
 #[tauri::command]
+pub(crate) fn get_app_settings_batch(
+    db: tauri::State<'_, wise_db::WiseDb>,
+    keys: Vec<String>,
+) -> Result<std::collections::HashMap<String, Option<String>>, String> {
+    let mut out = std::collections::HashMap::new();
+    for key in keys {
+        let normalized = key.trim();
+        if normalized.is_empty() {
+            continue;
+        }
+        if out.contains_key(normalized) {
+            continue;
+        }
+        out.insert(normalized.to_string(), db.get_setting(normalized)?);
+    }
+    Ok(out)
+}
+
+#[tauri::command]
 pub(crate) fn set_app_setting(
     db: tauri::State<'_, wise_db::WiseDb>,
     key: String,
