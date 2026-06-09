@@ -1,8 +1,5 @@
 import type { ReactNode } from "react";
-import { WorkspaceMemosPanel } from "./WorkspaceMemosPanel";
-import { WorkspaceQuickActionsPanel } from "./WorkspaceQuickActionsPanel";
-import { WorkspaceTodosPanel } from "./WorkspaceTodosPanel";
-import { useWorkspaceInspectorPanelsDefault } from "../../hooks/useWorkspaceInspectorPanelsDefault";
+import { WorkspaceInspectorWorkspaceCards } from "./WorkspaceInspectorWorkspaceCards";
 
 export interface WorkspaceInspectorPanelsSectionProps {
   projectId: string | null;
@@ -16,19 +13,9 @@ export function WorkspaceInspectorPanelsSection({
   repositoryId,
   children,
 }: WorkspaceInspectorPanelsSectionProps) {
-  const panels = useWorkspaceInspectorPanelsDefault();
-
   return (
     <>
-      {panels.showWorkspaceQuickActionsPanel ? (
-        <WorkspaceQuickActionsPanel projectId={projectId} repositoryId={repositoryId} />
-      ) : null}
-      {panels.showWorkspaceMemosPanel ? (
-        <WorkspaceMemosPanel projectId={projectId} repositoryId={repositoryId} />
-      ) : null}
-      {panels.showWorkspaceTodosPanel ? (
-        <WorkspaceTodosPanel projectId={projectId} repositoryId={repositoryId} />
-      ) : null}
+      <WorkspaceInspectorWorkspaceCards projectId={projectId} repositoryId={repositoryId} />
       {children}
     </>
   );

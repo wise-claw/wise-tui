@@ -1,11 +1,12 @@
-import { useMemo } from "react";
+import { useMemo, type RefObject } from "react";
 import type { ClaudeHostProcess, ClaudeSession, Repository } from "../../types";
 import { buildSidebarRunningMainSessionMaps } from "../../utils/sidebarRunningMainSessionIndicators";
 
 interface UseSidebarRunningMainSessionIndicatorsInput {
   projects: ReadonlyArray<{ id: string }>;
   repositories: Repository[];
-  sessions: ClaudeSession[];
+  sessionsRef: RefObject<readonly ClaudeSession[]>;
+  sessionsStructureKey: string;
   repositoryMainSessionBindings: Record<string, string>;
   claudeProcesses: ReadonlyArray<ClaudeHostProcess>;
   registryRunningClaudeSessionIds?: ReadonlySet<string>;
@@ -14,7 +15,8 @@ interface UseSidebarRunningMainSessionIndicatorsInput {
 export function useSidebarRunningMainSessionIndicators({
   projects,
   repositories,
-  sessions,
+  sessionsRef,
+  sessionsStructureKey,
   repositoryMainSessionBindings,
   claudeProcesses,
   registryRunningClaudeSessionIds,
@@ -24,7 +26,7 @@ export function useSidebarRunningMainSessionIndicators({
       buildSidebarRunningMainSessionMaps({
         projects,
         repositories,
-        sessions,
+        sessions: sessionsRef.current,
         bindings: repositoryMainSessionBindings,
         claudeProcesses,
         registryRunningClaudeSessionIds,
@@ -32,7 +34,8 @@ export function useSidebarRunningMainSessionIndicators({
     [
       projects,
       repositories,
-      sessions,
+      sessionsRef,
+      sessionsStructureKey,
       repositoryMainSessionBindings,
       claudeProcesses,
       registryRunningClaudeSessionIds,

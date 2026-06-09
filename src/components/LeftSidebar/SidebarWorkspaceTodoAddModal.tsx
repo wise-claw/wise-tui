@@ -31,7 +31,11 @@ export function SidebarWorkspaceTodoAddModal({ enabled = true }: { enabled?: boo
 
   const projectId = session?.projectId ?? null;
   const repositoryId = session?.repositoryId ?? null;
-  const todos = useWorkspaceTodos({ projectId, repositoryId });
+  const todos = useWorkspaceTodos({
+    projectId,
+    repositoryId,
+    enabled: enabled && session != null,
+  });
 
   const allowProjectScope = Boolean(projectId?.trim());
   const allowRepositoryScope = repositoryId != null;

@@ -1,5 +1,5 @@
 import { Button } from "antd";
-import { useMemo, useState } from "react";
+import { memo, useMemo, useState } from "react";
 import { useWorkspaceTodos } from "../../hooks/useWorkspaceTodos";
 import { InspectorCollapsibleSection } from "./InspectorCollapsibleSection";
 import { WorkspaceTodosEditor } from "./WorkspaceTodosEditor";
@@ -10,7 +10,10 @@ export interface WorkspaceTodosPanelProps {
   repositoryId: number | null;
 }
 
-export function WorkspaceTodosPanel({ projectId, repositoryId }: WorkspaceTodosPanelProps) {
+export const WorkspaceTodosPanel = memo(function WorkspaceTodosPanel({
+  projectId,
+  repositoryId,
+}: WorkspaceTodosPanelProps) {
   const todos = useWorkspaceTodos({ projectId, repositoryId });
   const [showCompleted, setShowCompleted] = useState(false);
 
@@ -52,4 +55,4 @@ export function WorkspaceTodosPanel({ projectId, repositoryId }: WorkspaceTodosP
       </div>
     </InspectorCollapsibleSection>
   );
-}
+});

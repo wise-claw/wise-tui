@@ -2,6 +2,12 @@ import { InfoCircleOutlined } from "@ant-design/icons";
 import { memo, type FocusEvent, type RefObject } from "react";
 import type { ClaudeSession, SessionConversationTaskItem } from "../../types";
 import type { DispatchRecordMeta } from "../../utils/claudeChatMessageDisplay";
+import { CHAT_MESSAGES_SCROLLING_CLASS } from "../../constants/chatScrollPerformance";
+import {
+  isClaudeChatSessionStreaming,
+  useChatMessagesPointerBusy,
+} from "../../hooks/useChatMessagesPointerBusy";
+import { useScrollEndClass } from "../../hooks/useScrollEndClass";
 import {
   ClaudeVirtualMessageList,
   type ChatMessageListNavigationHandle,
@@ -94,6 +100,12 @@ export const ClaudeChatMessagesPane = memo(function ClaudeChatMessagesPane({
   messageListProfile = "primary",
   companionMessageListWindow,
 }: ClaudeChatMessagesPaneProps) {
+  const streamingActive = isClaudeChatSessionStreaming(session.status);
+  useScrollEndClass(messagesScrollRef, CHAT_MESSAGES_SCROLLING_CLASS, 240, {
+    deferLiveSessionUpdates: true,
+  });
+  useChatMessagesPointerBusy(messagesScrollRef, streamingActive);
+
   return (
     <div
       ref={messagesScrollRef}

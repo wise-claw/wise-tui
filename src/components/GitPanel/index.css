@@ -97,7 +97,8 @@
 
 .repo-tree-virtual-list .repo-tree-node {
   content-visibility: visible;
-  contain-intrinsic-size: auto;
+  contain: layout style;
+  contain-intrinsic-size: unset;
 }
 
 .repo-search-results {
@@ -1749,6 +1750,17 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-file
 
 .git-files-explorer-scroll-region--scrolling .repo-tree-node {
   transition: none !important;
+  pointer-events: none;
+}
+
+.git-files-explorer-scroll-region--scrolling .repo-tree-node:hover:not(.repo-tree-node--selected) {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.git-files-explorer-scroll-region--scrolling .repo-tree-virtual-list__row {
+  contain: layout style paint;
+  content-visibility: visible !important;
 }
 
 .repo-tree-node {

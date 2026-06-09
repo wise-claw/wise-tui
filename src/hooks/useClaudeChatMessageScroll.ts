@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type FocusEvent } from "react";
 import type { ClaudeSession } from "../types";
+import { setClaudeChatUserPausedFollow } from "../stores/claudeChatMessageScrollBridge";
+import {
+  isClaudeScrollInteractionActive,
+  markClaudeScrollInteraction,
+} from "../stores/claudeScrollInteractionGate";
 import { shouldShowListEndThinkingHint } from "../utils/claudeChatMessageListRows";
 import type { ChatMessageListNavigationHandle } from "../components/ClaudeSessions/ClaudeVirtualMessageList";
 
@@ -115,6 +120,7 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
     pinToBottomRef.current = true;
     awaitNewMessageBeforeFollowRef.current = true;
     followFingerprintAtBlurRef.current = buildMessagesFollowFingerprint(sessionMessagesRef.current);
+    setClaudeChatUserPausedFollow(false);
   }, [buildMessagesFollowFingerprint]);
 
   const pauseAutoFollowForUserScroll = useCallback(() => {
@@ -123,6 +129,7 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
     pinToBottomRef.current = false;
     awaitNewMessageBeforeFollowRef.current = false;
     cancelScrollFollowLoop();
+    setClaudeChatUserPausedFollow(true);
   }, [cancelScrollFollowLoop]);
 
   const handleMessagesBlur = useCallback(
@@ -138,6 +145,12 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
 
   const tickScrollFollowLoop = useCallback(() => {
     scrollFollowLoopRafRef.current = null;
+    if (isClaudeScrollInteractionActive()) {
+      if (shouldAutoFollow() && isSessionStreaming()) {
+        scrollFollowLoopRafRef.current = window.requestAnimationFrame(() => tickScrollFollowLoopRef.current());
+      }
+      return;
+    }
     if (!shouldAutoFollow()) return;
     if (!canScrollForNewContent()) return;
 
@@ -195,6 +208,7 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
     pinToBottomRef.current = false;
     awaitNewMessageBeforeFollowRef.current = false;
     cancelScrollFollowLoop();
+    setClaudeChatUserPausedFollow(true);
   }, [cancelScrollFollowLoop]);
 
   const scrollMessageTargetIntoView = useCallback(
@@ -248,6 +262,7 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
     awaitNewMessageBeforeFollowRef.current = false;
     followFingerprintAtBlurRef.current = "";
     lastUserMessagePinIdRef.current = null;
+    setClaudeChatUserPausedFollow(false);
   }, [session.id, cancelScrollFollowLoop]);
 
   useEffect(() => {
@@ -260,6 +275,7 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
     pinToBottomRef.current = true;
     userPausedFollowRef.current = false;
     awaitNewMessageBeforeFollowRef.current = false;
+    setClaudeChatUserPausedFollow(false);
     cancelScrollFollowLoop();
     window.requestAnimationFrame(() => {
       window.requestAnimationFrame(() => {
@@ -290,6 +306,7 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
     const onWheel = (event: WheelEvent) => {
       if (programmaticScrollRef.current) return;
       if (Math.abs(event.deltaY) <= 2) return;
+      markClaudeScrollInteraction();
       if (composerEditorHasFocus()) return;
       sc.focus({ preventScroll: true });
       pauseAutoFollowForUserScroll();
@@ -297,6 +314,7 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
 
     const onScroll = () => {
       if (programmaticScrollRef.current) return;
+      markClaudeScrollInteraction();
       if (pinRaf !== 0) return;
       pinRaf = window.requestAnimationFrame(() => {
         pinRaf = 0;

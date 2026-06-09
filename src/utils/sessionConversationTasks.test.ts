@@ -4,12 +4,14 @@ import {
   buildSessionConversationTasks,
   buildConversationTaskDetailMessages,
   canStopSessionConversationTask,
+  executionEnvironmentWorkerSessionsFingerprint,
   filterExecutionEnvironmentDispatchTaskItems,
   markSessionToolUseStopped,
   resolveExecutionEnvironmentTaskFromDispatchMeta,
   resolveExecutionEnvironmentTaskFromTaskItems,
   resolveExecutionEnvironmentWorkerConversationTaskStatus,
   resolveWorkerDispatchTurnLastAssistantPreview,
+  sessionsReactiveStructureKey,
 } from "./sessionConversationTasks";
 import type { SessionConversationTaskItem } from "../types";
 import { parseDispatchRecord } from "./claudeChatMessageDisplay";
@@ -741,5 +743,41 @@ describe("filterExecutionEnvironmentDispatchTaskItems", () => {
     ];
     const filtered = filterExecutionEnvironmentDispatchTaskItems(items, 400);
     expect(filtered.map((row) => row.updatedAt)).toEqual([500]);
+  });
+});
+
+describe("sessionsReactiveStructureKey", () => {
+  test("ignores streaming growth on the same assistant message", () => {
+    const short = session({
+      id: "main",
+      status: "running",
+      messages: [{ id: "a1", role: "assistant", content: "x".repeat(40), timestamp: 1 }],
+    });
+    const longer = session({
+      id: "main",
+      status: "running",
+      messages: [{ id: "a1", role: "assistant", content: "x".repeat(4000), timestamp: 1 }],
+    });
+    expect(sessionsReactiveStructureKey([short])).toBe(sessionsReactiveStructureKey([longer]));
+  });
+});
+
+describe("executionEnvironmentWorkerSessionsFingerprint", () => {
+  test("ignores worker streaming content growth", () => {
+    const short = session({
+      id: "worker",
+      repositoryName: "Cursor · repo",
+      status: "running",
+      messages: [{ id: "a1", role: "assistant", content: "x".repeat(40), timestamp: 1 }],
+    });
+    const longer = session({
+      id: "worker",
+      repositoryName: "Cursor · repo",
+      status: "running",
+      messages: [{ id: "a1", role: "assistant", content: "x".repeat(4000), timestamp: 1 }],
+    });
+    expect(executionEnvironmentWorkerSessionsFingerprint([short])).toBe(
+      executionEnvironmentWorkerSessionsFingerprint([longer]),
+    );
   });
 });

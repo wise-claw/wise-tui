@@ -5,8 +5,9 @@ import { clearFccTraces, listFccTraces } from "../services/fccTraces";
 import type { FccTraceEntry } from "../types/fccTrace";
 import { mergeFccTraceEntries } from "../utils/mergeFccTraceEntries";
 import { readVisiblePollIntervalMs } from "../utils/adaptivePoll";
+import { runWhenIdle } from "../utils/deferIdle";
 
-const POLL_MS = readVisiblePollIntervalMs(8000, 20000);
+const POLL_MS = readVisiblePollIntervalMs(15000, 30000);
 
 type Listener = () => void;
 
@@ -131,7 +132,9 @@ export function startFccTracesPolling(): void {
   void refreshFccTracesStore();
   pollTimer = setInterval(() => {
     if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-    void refreshFccTracesStore();
+    runWhenIdle(() => {
+      void refreshFccTracesStore();
+    });
   }, POLL_MS);
 }
 

@@ -153,7 +153,9 @@ export const LeftSidebarMonitorPanelSlot = memo(function LeftSidebarMonitorPanel
   transcriptSessionsFingerprint: _transcriptSessionsFingerprint,
 }: LeftSidebarMonitorPanelSlotProps) {
   const scrollRootRef = useRef<HTMLDivElement>(null);
-  useScrollEndClass(scrollRootRef, LEFT_SIDEBAR_SCROLLING_CLASS);
+  useScrollEndClass(scrollRootRef, LEFT_SIDEBAR_SCROLLING_CLASS, 220, {
+    relieveSidePanelPriority: true,
+  });
 
   return (
     <div

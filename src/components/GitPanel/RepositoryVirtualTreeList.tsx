@@ -7,7 +7,8 @@ import { repositoryTreeDepthIndentPx, REPOSITORY_TREE_ROW_HEIGHT_PX } from "./re
 import type { FlatRepositoryTreeRow } from "./repositoryTreeFlatten";
 import type { ExplorerInlineCreateState } from "./types";
 
-const OVERSCAN_ROWS = 10;
+const OVERSCAN_ROWS = 5;
+const FILE_TREE_BUSY_RANGE_MIN_MS = 52;
 
 export interface RepositoryVirtualTreeListProps {
   scrollRootRef: RefObject<HTMLDivElement | null>;
@@ -38,6 +39,7 @@ function RepositoryVirtualTreeListInner({
     rowHeight,
     overscanRows: OVERSCAN_ROWS,
     initialVisibleEnd: 48,
+    busyRangeMinMs: FILE_TREE_BUSY_RANGE_MIN_MS,
   });
 
   const totalHeight = rows.length * rowHeight;

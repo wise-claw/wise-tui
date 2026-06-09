@@ -1,11 +1,12 @@
 import { message } from "antd";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   WorkspaceTodoDisplayItem,
   WorkspaceTodoItem,
   WorkspaceTodoScope,
 } from "../types/workspaceTodos";
 import { dispatchWorkspaceTodosChanged } from "../constants/workspaceTodosEvents";
+import { reconcileWorkspaceTodoDisplayItems } from "../utils/workspaceTodoDisplayItems";
 import {
   loadProjectWorkspaceTodos,
   loadRepositoryWorkspaceTodos,
@@ -22,9 +23,15 @@ function persistErrorText(error: unknown): string {
 export interface UseWorkspaceTodosInput {
   projectId: string | null;
   repositoryId: number | null;
+  /** 为 false 时不加载/持久化（编辑器已由父级注入 todos 时使用） */
+  enabled?: boolean;
 }
 
-export function useWorkspaceTodos({ projectId, repositoryId }: UseWorkspaceTodosInput) {
+export function useWorkspaceTodos({
+  projectId,
+  repositoryId,
+  enabled = true,
+}: UseWorkspaceTodosInput) {
   const [projectItems, setProjectItems] = useState<WorkspaceTodoItem[]>([]);
   const [repositoryItems, setRepositoryItems] = useState<WorkspaceTodoItem[]>([]);
   const [loading, setLoading] = useState(true);
@@ -42,6 +49,12 @@ export function useWorkspaceTodos({ projectId, repositoryId }: UseWorkspaceTodos
   const loadGenerationRef = useRef(0);
 
   const refresh = useCallback(async () => {
+    if (!enabled) {
+      setProjectItems([]);
+      setRepositoryItems([]);
+      setLoading(false);
+      return;
+    }
     const generation = loadGenerationRef.current + 1;
     loadGenerationRef.current = generation;
     setLoading(true);
@@ -62,7 +75,7 @@ export function useWorkspaceTodos({ projectId, repositoryId }: UseWorkspaceTodos
     } finally {
       if (generation === loadGenerationRef.current) setLoading(false);
     }
-  }, [projectId, repositoryId]);
+  }, [enabled, projectId, repositoryId]);
 
   useEffect(() => {
     void refresh();
@@ -71,24 +84,28 @@ export function useWorkspaceTodos({ projectId, repositoryId }: UseWorkspaceTodos
     };
   }, [refresh]);
 
+  useEffect(() => {
+    if (!enabled) return;
+    return () => {
+      const timers = persistTimersRef.current;
+      if (timers.project) clearTimeout(timers.project);
+      if (timers.repository) clearTimeout(timers.repository);
+      persistTimersRef.current = { project: null, repository: null };
+    };
+  }, [enabled]);
+
+  const displayItemsPrevRef = useRef<WorkspaceTodoDisplayItem[]>([]);
+
   const displayItems = useMemo(() => {
-    const rows: WorkspaceTodoDisplayItem[] = [];
-    if (projectId?.trim()) {
-      for (const item of projectItems) {
-        rows.push({ ...item, scope: "project" });
-      }
-    }
-    if (repositoryId != null) {
-      for (const item of repositoryItems) {
-        rows.push({ ...item, scope: "repository" });
-      }
-    }
-    rows.sort((a, b) => {
-      if (a.completed !== b.completed) return a.completed ? 1 : -1;
-      if (a.sortOrder !== b.sortOrder) return a.sortOrder - b.sortOrder;
-      return b.updatedAt - a.updatedAt;
-    });
-    return rows;
+    const next = reconcileWorkspaceTodoDisplayItems(
+      displayItemsPrevRef.current,
+      projectId,
+      repositoryId,
+      projectItems,
+      repositoryItems,
+    );
+    displayItemsPrevRef.current = next;
+    return next;
   }, [projectId, repositoryId, projectItems, repositoryItems]);
 
   const flushPersist = useCallback(
@@ -101,7 +118,6 @@ export function useWorkspaceTodos({ projectId, repositoryId }: UseWorkspaceTodos
         if (!pid) return false;
         try {
           await saveProjectWorkspaceTodos(pid, items);
-          dispatchWorkspaceTodosChanged({ projectId: pid, repositoryId: null });
           return true;
         } catch (error) {
           message.error(persistErrorText(error));
@@ -113,7 +129,6 @@ export function useWorkspaceTodos({ projectId, repositoryId }: UseWorkspaceTodos
       if (repositoryId == null) return false;
       try {
         await saveRepositoryWorkspaceTodos(repositoryId, items);
-        dispatchWorkspaceTodosChanged({ projectId: null, repositoryId });
         return true;
       } catch (error) {
         message.error(persistErrorText(error));
@@ -148,24 +163,41 @@ export function useWorkspaceTodos({ projectId, repositoryId }: UseWorkspaceTodos
 
   const setItemsForScope = useCallback(
     (scope: WorkspaceTodoScope, items: WorkspaceTodoItem[]) => {
+      if (!enabled) return;
+      const incompleteCount = items.reduce((n, item) => (item.completed ? n : n + 1), 0);
       if (scope === "project") {
-        setProjectItems(items);
+        startTransition(() => {
+          setProjectItems(items);
+        });
         schedulePersist("project", items);
+        const pid = projectId?.trim();
+        if (pid) {
+          dispatchWorkspaceTodosChanged({ projectId: pid, repositoryId: null, incompleteCount });
+        }
         return;
       }
-      setRepositoryItems(items);
+      startTransition(() => {
+        setRepositoryItems(items);
+      });
       schedulePersist("repository", items);
+      if (repositoryId != null) {
+        dispatchWorkspaceTodosChanged({ projectId: null, repositoryId, incompleteCount });
+      }
     },
-    [schedulePersist],
+    [enabled, projectId, repositoryId, schedulePersist],
   );
 
-  const hasScope = Boolean(projectId?.trim()) || repositoryId != null;
+  const hasScope =
+    enabled && (Boolean(projectId?.trim()) || repositoryId != null);
 
-  return {
-    loading,
-    hasScope,
-    displayItems,
-    setItemsForScope,
-    refresh,
-  };
+  return useMemo(
+    () => ({
+      loading,
+      hasScope,
+      displayItems,
+      setItemsForScope,
+      refresh,
+    }),
+    [loading, hasScope, displayItems, setItemsForScope, refresh],
+  );
 }

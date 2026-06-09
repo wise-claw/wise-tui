@@ -81,7 +81,7 @@ import { useRepositoryAssociateModalController } from "./LeftSidebar/useReposito
 import { useProjectSddModeModalController } from "./LeftSidebar/useProjectSddModeModalController";
 import { useRepositorySddModeModalController } from "./LeftSidebar/useRepositorySddModeModalController";
 import { useSidebarScheduledTasksMap } from "./LeftSidebar/useSidebarScheduledTasksMap";
-import { useSidebarWorkspaceTodoCounts } from "../hooks/useSidebarWorkspaceTodoCounts";
+import { useWorkspaceTodoCountsBootstrap } from "../hooks/useWorkspaceTodoCountsBootstrap";
 import { useWorkspaceInspectorPanelsDefault } from "../hooks/useWorkspaceInspectorPanelsDefault";
 import { useSidebarRequirementUnsplitMap } from "./LeftSidebar/useSidebarRequirementUnsplitMap";
 import { useSidebarExecutableTasksMap } from "./LeftSidebar/useSidebarExecutableTasksMap";
@@ -93,7 +93,8 @@ import {
   LeftSidebarMonitorPanelSlot,
   preloadLeftSidebarMonitorPanel,
 } from "./LeftSidebar/LeftSidebarMonitorPanelSlot";
-import { monitorSessionsOverviewFingerprint } from "../hooks/useMonitorSessionsForOverview";
+import { useChromePanelHoverHandlers } from "../hooks/useChromePanelHoverHandlers";
+import { useMonitorSidebarFingerprints } from "../hooks/useMonitorSessionsForOverview";
 import { notifySplitTodoCountUpdated } from "../utils/notifySplitTodoCountUpdated";
 import "./GitPanel/index.css";
 import "./LeftSidebar/leftSidebarListPerformance.css";
@@ -172,6 +173,8 @@ export function LeftSidebar({
   onStartRepositoryRunCommand,
   onStopRepositoryRunCommand,
   sessions,
+  sessionsStructureKey,
+  sessionsLiveRef,
   monitorPanelSessions,
   repositoryMainSessionBindings,
   activeSessionId,
@@ -220,6 +223,7 @@ export function LeftSidebar({
   taskCardsNavProps,
 }: LeftSidebarProps) {
   const { message, modal } = AntdApp.useApp();
+  const chromePanelHoverHandlers = useChromePanelHoverHandlers("left");
 
   const openPathInPreferredEditor = useCallback(
     (path: string | null | undefined, emptyMessage: string) => {
@@ -284,8 +288,7 @@ export function LeftSidebar({
   const [repoPanelTreeSelection, setRepoPanelTreeSelection] =
     useState<WorkspaceRepositoryTreeSelection | null>(null);
   const lastSyncedGlobalSelectionKeyRef = useRef<string | null>(null);
-  const sessionsLatestRef = useRef(sessions);
-  sessionsLatestRef.current = sessions;
+  const sessionsLatestRef = sessionsLiveRef;
   const [filesExplorerSectionCollapsed, setFilesExplorerSectionCollapsed] = useState(
     readLeftFilesExplorerCollapsedFromStorage,
   );
@@ -316,13 +319,10 @@ export function LeftSidebar({
   );
   const [bottomTabPanelsReady, setBottomTabPanelsReady] = useState(false);
   const [monitorPanelMounted, setMonitorPanelMounted] = useState(false);
-  const monitorSessionsFingerprint = useMemo(
-    () => monitorSessionsOverviewFingerprint(monitorPanelSessions ?? sessions),
-    [monitorPanelSessions, sessions],
-  );
-  const transcriptSessionsFingerprint = useMemo(
-    () => monitorSessionsOverviewFingerprint(sessions),
-    [sessions],
+  const { monitorSessionsFingerprint, transcriptSessionsFingerprint } = useMonitorSidebarFingerprints(
+    monitorPanelSessions ?? sessions,
+    sessions,
+    showLeftSidebarMonitorPanel,
   );
 
   useEffect(() => {
@@ -351,7 +351,8 @@ export function LeftSidebar({
   const restoreWorkspaceListVisibilityRef = useRef(false);
   const claudeProcessLabelCache = useClaudeProcessWorkspaceLabelCache();
   const systemResourceSessions = useSystemResourceSessions({
-    sessions,
+    sessionsRef: sessionsLiveRef,
+    sessionsStructureKey,
     onCancelSessionFromMonitor,
     onReloadFullDiskTranscript,
   });
@@ -388,7 +389,8 @@ export function LeftSidebar({
   const { runningByProjectId, runningByRepositoryId } = useSidebarRunningMainSessionIndicators({
     projects,
     repositories,
-    sessions,
+    sessionsRef: sessionsLiveRef,
+    sessionsStructureKey,
     repositoryMainSessionBindings,
     claudeProcesses: systemResourceSessions.systemSummary.claudeProcesses,
     registryRunningClaudeSessionIds: systemResourceSessions.claudeRegistryRunningIds,
@@ -401,7 +403,7 @@ export function LeftSidebar({
         message.warning("未绑定主会话");
         return;
       }
-      const session = sessions.find((item) => item.id === id);
+      const session = sessionsLiveRef.current.find((item) => item.id === id);
       if (!session) {
         message.warning("未找到绑定主会话");
         return;
@@ -419,7 +421,7 @@ export function LeftSidebar({
     [
       message,
       onCancelSessionFromMonitor,
-      sessions,
+      sessionsLiveRef,
       systemResourceSessions.systemSummary.claudeProcesses,
     ],
   );
@@ -429,12 +431,12 @@ export function LeftSidebar({
       const boundSessionId = resolveBoundMainSessionId(
         projectMainSessionBindingKey(projectId),
         repositoryMainSessionBindings,
-        sessions,
+        sessionsLiveRef.current,
         null,
       );
       void handleStopBoundMainSession(boundSessionId);
     },
-    [handleStopBoundMainSession, repositoryMainSessionBindings, sessions],
+    [handleStopBoundMainSession, repositoryMainSessionBindings, sessionsLiveRef],
   );
 
   const handleStopRepositoryMainSession = useCallback(
@@ -442,12 +444,12 @@ export function LeftSidebar({
       const boundSessionId = resolveRepositoryMainSessionId(
         repository.path,
         repositoryMainSessionBindings,
-        sessions,
+        sessionsLiveRef.current,
         resolveMainOwnerAgentNameForRepositoryPath(repositories, repository.path),
       );
       void handleStopBoundMainSession(boundSessionId);
     },
-    [handleStopBoundMainSession, repositories, repositoryMainSessionBindings, sessions],
+    [handleStopBoundMainSession, repositories, repositoryMainSessionBindings, sessionsLiveRef],
   );
 
   const finishClaudeProcessPopoverEnd = useCallback(() => {
@@ -516,8 +518,7 @@ export function LeftSidebar({
     onUpdateProjectSddMode,
   });
   const { showWorkspaceTodosPanel: workspaceTodosEnabled } = useWorkspaceInspectorPanelsDefault();
-  const { byProjectId: incompleteTodoCountByProjectId, byRepositoryId: incompleteTodoCountByRepositoryId } =
-    useSidebarWorkspaceTodoCounts(projects, floatingRepositories, workspaceTodosEnabled);
+  useWorkspaceTodoCountsBootstrap(projects, floatingRepositories, workspaceTodosEnabled);
   const { byId: scheduledTasksByRepoId } = useSidebarScheduledTasksMap(
     repositories,
   );
@@ -1248,6 +1249,8 @@ export function LeftSidebar({
       collapsed={collapsed || parked}
       className={`app-left-sidebar${parked ? " app-left-sidebar--parked" : ""}`}
       theme={dark ? "dark" : "light"}
+      onMouseEnter={chromePanelHoverHandlers.onMouseEnter}
+      onMouseLeave={chromePanelHoverHandlers.onMouseLeave}
     >
       <LeftSidebarTopbar
         authorDisabled={authorDisabled}
@@ -1395,8 +1398,6 @@ export function LeftSidebar({
           requirementUnsplitByRepoId={requirementUnsplitByRepoId}
           executableTasksByProjectId={executableTasksByProjectId}
           executableTasksByRepoId={executableTasksByRepoId}
-          incompleteTodoCountByProjectId={incompleteTodoCountByProjectId}
-          incompleteTodoCountByRepositoryId={incompleteTodoCountByRepositoryId}
           workspaceTodosEnabled={workspaceTodosEnabled}
           onOpenScheduledTasksForRepository={openScheduledTasksForRepository}
           onOpenScheduledTasksForProject={openScheduledTasksForProject}

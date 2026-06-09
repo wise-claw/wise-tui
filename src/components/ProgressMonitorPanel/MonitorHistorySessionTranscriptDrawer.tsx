@@ -2,6 +2,7 @@ import { Button, Drawer, Empty, Space, Tag, Tooltip, message } from "antd";
 import { ReloadOutlined } from "@ant-design/icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ClaudeSession } from "../../types";
+import { useClaudeSessionsLiveSnapshot } from "../../stores/claudeSessionsLiveStore";
 import { ClaudeSessionMessagesColumn } from "../ClaudeSessions/ClaudeSessionMessagesColumn";
 import {
   HistorySessionDrawerContextBar,
@@ -19,8 +20,8 @@ export interface MonitorHistorySessionTranscriptDrawerProps {
   open: boolean;
   sessionId: string | null;
   onClose: () => void;
-  /** 与监控台一致：用于解析抽屉内会话（可与节流列表分离） */
-  transcriptSourceSessions: ClaudeSession[];
+  /** @deprecated App 壳层不再随流式重渲染；组件内读 live store。 */
+  transcriptSourceSessions?: ClaudeSession[];
   onReloadFullDiskTranscript?: (sessionKey: string) => void | Promise<void>;
   onLoadMoreTranscriptFromDisk?: (sessionId: string) => void | Promise<void>;
   onCompactSessionHistory?: (sessionId: string) => void | Promise<void>;
@@ -57,7 +58,7 @@ export function MonitorHistorySessionTranscriptDrawer({
   open,
   sessionId,
   onClose,
-  transcriptSourceSessions,
+  transcriptSourceSessions: _transcriptSourceSessionsProp,
   onReloadFullDiskTranscript,
   onCompactSessionHistory,
   onCancelSession,
@@ -67,6 +68,7 @@ export function MonitorHistorySessionTranscriptDrawer({
   canRestoreSession,
   onResumeSession,
 }: MonitorHistorySessionTranscriptDrawerProps) {
+  const transcriptSourceSessions = useClaudeSessionsLiveSnapshot(open);
   const [compactInFlight, setCompactInFlight] = useState(false);
   const [drawerSessionSnapshot, setDrawerSessionSnapshot] = useState<ClaudeSession | null>(null);
   const openedSessionIdRef = useRef<string | null>(null);

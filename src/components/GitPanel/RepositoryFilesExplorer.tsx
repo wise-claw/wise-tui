@@ -81,7 +81,10 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
   useScrollEndClass(scrollRegionRef, [
     LEFT_SIDEBAR_SCROLLING_CLASS,
     "git-files-explorer-scroll-region--scrolling",
-  ]);
+  ], 280, {
+    relieveSidePanelPriority: true,
+    relieveFileTreePriority: true,
+  });
 
   const flatTreeRows = useMemo(
     () =>

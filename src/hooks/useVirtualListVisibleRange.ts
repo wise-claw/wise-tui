@@ -1,4 +1,5 @@
 import { startTransition, useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { isFileTreeScrollActive, isSidePanelPriorityReliefActive } from "../stores/chromePanelHoverStore";
 
 export type VirtualListVisibleRange = Readonly<{ start: number; end: number }>;
 
@@ -13,7 +14,11 @@ type UseVirtualListVisibleRangeOptions = {
   enabled?: boolean;
   /** 列表在 scrollRoot 内的布局变化（如 anchor 位移）时递增以重算 range。 */
   remeasureKey?: number;
+  /** 侧栏 busy 时 range 更新最小间隔（默认 36ms）。文件树可加大以减轻主线程压力。 */
+  busyRangeMinMs?: number;
 };
+
+const DEFAULT_SIDE_PANEL_BUSY_RANGE_MIN_MS = 36;
 
 /** RAF + startTransition：快速滑动时虚拟列表 range 更新不阻塞主线程绘制。 */
 export function useVirtualListVisibleRange({
@@ -25,9 +30,12 @@ export function useVirtualListVisibleRange({
   getScrollOffset,
   enabled = true,
   remeasureKey = 0,
+  busyRangeMinMs = DEFAULT_SIDE_PANEL_BUSY_RANGE_MIN_MS,
 }: UseVirtualListVisibleRangeOptions): VirtualListVisibleRange {
   const [range, setRange] = useState({ start: 0, end: initialVisibleEnd });
   const rafRef = useRef(0);
+  const trailingTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const lastRangeUpdateAtRef = useRef(0);
   const getScrollOffsetRef = useRef(getScrollOffset);
   getScrollOffsetRef.current = getScrollOffset;
 
@@ -35,6 +43,7 @@ export function useVirtualListVisibleRange({
     if (!enabled) return;
     const el = scrollRootRef.current;
     if (!el || rowCount === 0) return;
+    lastRangeUpdateAtRef.current = performance.now();
     const height = Math.max(el.clientHeight, rowHeight);
     const offset = getScrollOffsetRef.current?.() ?? 0;
     const relativeScroll = Math.max(0, el.scrollTop - offset);
@@ -52,16 +61,33 @@ export function useVirtualListVisibleRange({
     const el = scrollRootRef.current;
     if (!el) return;
 
-    const scheduleUpdate = () => {
+    const runUpdateRange = () => {
+      if (isSidePanelPriorityReliefActive()) {
+        const elapsed = performance.now() - lastRangeUpdateAtRef.current;
+        if (elapsed < busyRangeMinMs) {
+          if (trailingTimerRef.current) return;
+          trailingTimerRef.current = setTimeout(() => {
+            trailingTimerRef.current = null;
+            runUpdateRange();
+          }, busyRangeMinMs - elapsed);
+          return;
+        }
+      }
+      updateRange();
+    };
+
+    const scheduleUpdate = (fromResize = false) => {
+      if (fromResize && isFileTreeScrollActive()) return;
       if (rafRef.current) return;
       rafRef.current = requestAnimationFrame(() => {
         rafRef.current = 0;
-        updateRange();
+        runUpdateRange();
       });
     };
 
-    el.addEventListener("scroll", scheduleUpdate, { passive: true });
-    const ro = typeof ResizeObserver !== "undefined" ? new ResizeObserver(scheduleUpdate) : null;
+    el.addEventListener("scroll", () => scheduleUpdate(false), { passive: true });
+    const ro =
+      typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => scheduleUpdate(true)) : null;
     ro?.observe(el);
 
     return () => {
@@ -69,8 +95,12 @@ export function useVirtualListVisibleRange({
       el.removeEventListener("scroll", scheduleUpdate);
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       rafRef.current = 0;
+      if (trailingTimerRef.current) {
+        clearTimeout(trailingTimerRef.current);
+        trailingTimerRef.current = null;
+      }
     };
-  }, [enabled, scrollRootRef, updateRange]);
+  }, [busyRangeMinMs, enabled, scrollRootRef, updateRange]);
 
   useEffect(() => {
     if (!enabled) return;

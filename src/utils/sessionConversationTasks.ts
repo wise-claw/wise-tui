@@ -24,6 +24,33 @@ export function formatExecutionEnvironmentDispatchSavedTime(timestamp: number): 
   return `${d.getMonth() + 1}/${d.getDate()} ${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}`;
 }
 
+/**
+ * App 壳层 useMemo / effect 依赖：跟踪会话结构，忽略同一条消息内的流式正文增长。
+ */
+export function sessionsReactiveStructureKey(sessions: readonly ClaudeSession[]): string {
+  const parts: string[] = [`n:${sessions.length}`];
+  for (const session of sessions) {
+    const last = session.messages[session.messages.length - 1];
+    parts.push(
+      [
+        session.id,
+        session.status,
+        session.repositoryPath ?? "",
+        session.repositoryName ?? "",
+        String(session.messages.length),
+        last?.id ?? "",
+        last?.role ?? "",
+      ].join("|"),
+    );
+  }
+  return parts.join("\n");
+}
+
+/** 单会话 chrome（composer / 顶栏）：忽略流式正文，仅结构变化时重渲染 ClaudeChat 壳层。 */
+export function sessionChatChromeStructureKey(session: ClaudeSession): string {
+  return sessionsReactiveStructureKey([session]);
+}
+
 /** 主会话当前轮次工具任务；流式正文按长度分桶，避免每 token 重算任务列表。 */
 export function anchorSessionConversationTasksFingerprint(
   session: ClaudeSession | null | undefined,
@@ -54,13 +81,14 @@ export function executionEnvironmentWorkerSessionsFingerprint(
   for (const session of sessions) {
     if (!isExecutionEnvironmentWorkerRepositoryName(session.repositoryName)) continue;
     const last = session.messages[session.messages.length - 1];
+    const streaming = session.status === "running" || session.status === "connecting";
     chunks.push(
       [
         session.id,
         session.status,
         String(session.messages.length),
         String(last?.id ?? ""),
-        String(last?.content?.length ?? 0),
+        streaming ? "0" : String(last?.content?.length ?? 0),
       ].join("|"),
     );
   }

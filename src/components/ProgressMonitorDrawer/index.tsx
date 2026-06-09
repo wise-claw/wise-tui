@@ -1,6 +1,7 @@
 import { Button, Drawer, Empty, Space, Tag, Tooltip, Typography, message } from "antd";
 import { List } from "../ui/AppList";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
+import { useClaudeSessionsLiveSnapshot } from "../../stores/claudeSessionsLiveStore";
 import type {
   ClaudeSession,
   EmployeeItem,
@@ -588,11 +589,12 @@ export function ProgressMonitorDrawer({
   onCancelOmcDirectBatchInvocation,
   onReloadFullDiskTranscript,
   onCompactSessionHistory,
-  transcriptSourceSessions,
+  transcriptSourceSessions: _transcriptSourceSessions,
   onCancelSession,
   onOpenTaskDetail,
   onResumeSession,
 }: Props) {
+  const liveTranscriptSessions = useClaudeSessionsLiveSnapshot(open);
   const [employeeMessageLimit, setEmployeeMessageLimit] = useState(20);
   const [omcDirectBatchDetailSnapshot, setOmcDirectBatchDetailSnapshot] = useState<WorkflowInvocationStreamDetail | null>(null);
   /** 员工「历史执行会话消息」：仅预览，不替换中栏主会话。 */
@@ -857,7 +859,7 @@ export function ProgressMonitorDrawer({
     return Array.from(related.values()).sort((a, b) => sessionUpdatedAt(b) - sessionUpdatedAt(a));
   }, [employeeById, selectedTask, selectedTaskEvents, sessions]);
 
-  const sessionsForHistoryTranscript = transcriptSourceSessions ?? sessions;
+  const sessionsForHistoryTranscript = liveTranscriptSessions;
 
   const title =
     target?.type === "employee"

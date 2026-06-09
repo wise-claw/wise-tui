@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { useWorkspaceTodoIncompleteCount } from "../../hooks/useWorkspaceTodoIncompleteCount";
 import { UserOutlined } from "@ant-design/icons";
 import { App as AntdApp, Dropdown, Popover } from "antd";
 import { DeferredHoverTooltip } from "../shared/DeferredHoverTooltip";
@@ -259,13 +260,11 @@ export function SidebarExecutableTasksAction({
 }
 
 export function SidebarWorkspaceRemindersAction({
-  incompleteCount,
   variant = "repo",
   projectId,
   repositoryId,
   enabled = true,
 }: {
-  incompleteCount: number;
   variant?: "repo" | "project";
   projectId: string | null;
   repositoryId: number | null;
@@ -273,6 +272,12 @@ export function SidebarWorkspaceRemindersAction({
   enabled?: boolean;
 }) {
   const [popoverOpen, setPopoverOpen] = useState(false);
+  const incompleteCount = useWorkspaceTodoIncompleteCount(
+    variant === "project" ? "project" : "repository",
+    projectId,
+    repositoryId,
+    enabled,
+  );
 
   if (!enabled || incompleteCount <= 0) return null;
 
@@ -348,7 +353,6 @@ export function RepositoryRow({
   scheduledTasksEnabledCount = 0,
   requirementUnsplitCount = 0,
   executableTaskCount = 0,
-  incompleteTodoCount = 0,
   workspaceTodosEnabled = true,
   onOpenScheduledTasks,
   onOpenRequirements,
@@ -379,7 +383,6 @@ export function RepositoryRow({
   scheduledTasksEnabledCount?: number;
   requirementUnsplitCount?: number;
   executableTaskCount?: number;
-  incompleteTodoCount?: number;
   workspaceTodosEnabled?: boolean;
   onOpenScheduledTasks?: (repository: Repository) => void;
   onOpenRequirements?: (repository: Repository) => void;
@@ -510,7 +513,6 @@ export function RepositoryRow({
           ) : null}
           <SidebarWorkspaceRemindersAction
             enabled={workspaceTodosEnabled}
-            incompleteCount={incompleteTodoCount}
             projectId={project.id}
             repositoryId={repository.id}
           />
@@ -593,7 +595,6 @@ export function FloatingRepositoryRow({
   scheduledTasksEnabledCount = 0,
   requirementUnsplitCount = 0,
   executableTaskCount = 0,
-  incompleteTodoCount = 0,
   workspaceTodosEnabled = true,
   onOpenScheduledTasks,
   onOpenRequirements,
@@ -626,7 +627,6 @@ export function FloatingRepositoryRow({
   scheduledTasksEnabledCount?: number;
   requirementUnsplitCount?: number;
   executableTaskCount?: number;
-  incompleteTodoCount?: number;
   workspaceTodosEnabled?: boolean;
   onOpenScheduledTasks?: (repository: Repository) => void;
   onOpenRequirements?: (repository: Repository) => void;
@@ -733,7 +733,6 @@ export function FloatingRepositoryRow({
           ) : null}
           <SidebarWorkspaceRemindersAction
             enabled={workspaceTodosEnabled}
-            incompleteCount={incompleteTodoCount}
             projectId={null}
             repositoryId={repository.id}
           />
@@ -823,7 +822,6 @@ export function ProjectRepositoryRows({
   scheduledTasksByRepoId = {},
   requirementUnsplitByRepoId = {},
   executableTasksByRepoId = {},
-  incompleteTodoCountByRepositoryId = {},
   workspaceTodosEnabled = true,
   onOpenScheduledTasks,
   onOpenRepositoryRequirements,
@@ -857,7 +855,6 @@ export function ProjectRepositoryRows({
   scheduledTasksByRepoId?: Record<number, { total: number; enabled: number }>;
   requirementUnsplitByRepoId?: Record<number, number>;
   executableTasksByRepoId?: Record<number, number>;
-  incompleteTodoCountByRepositoryId?: Record<number, number>;
   workspaceTodosEnabled?: boolean;
   onOpenScheduledTasks?: (repository: Repository) => void;
   onOpenRepositoryRequirements?: (repository: Repository) => void;
@@ -921,7 +918,6 @@ export function ProjectRepositoryRows({
             scheduledTasksEnabledCount={scheduledTasksByRepoId[repository.id]?.enabled ?? 0}
             requirementUnsplitCount={requirementUnsplitByRepoId[repository.id] ?? 0}
             executableTaskCount={executableTasksByRepoId[repository.id] ?? 0}
-            incompleteTodoCount={incompleteTodoCountByRepositoryId[repository.id] ?? 0}
             workspaceTodosEnabled={workspaceTodosEnabled}
             onOpenScheduledTasks={onOpenScheduledTasks}
             onOpenRequirements={onOpenRepositoryRequirements}

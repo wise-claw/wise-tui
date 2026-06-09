@@ -2,6 +2,7 @@ import { message, Modal, Spin } from "antd";
 import {
   lazy,
   Suspense,
+  memo,
   useRef,
   useEffect,
   useLayoutEffect,
@@ -21,9 +22,11 @@ import type {
   PermissionRequest,
 } from "../../types";
 import type { ControlRequestStatus } from "../../notifications";
-import { useClaudeChatMessageScroll } from "../../hooks/useClaudeChatMessageScroll";
 import { useClaudeChatSessionFeaturePanel } from "../../hooks/useClaudeChatSessionFeaturePanel";
 import { resolveSessionOwnerInfo } from "../../hooks/claudeChatSessionFeaturePanelHelpers";
+import { ClaudeChatMessagesLiveHost } from "./ClaudeChatMessagesLiveHost";
+import { claudeChatPropsEqual } from "./claudeChatPropsEqual";
+import { getClaudeChatMessageScrollBridge } from "../../stores/claudeChatMessageScrollBridge";
 import { ClaudeSessionTrajectoryDrawer } from "./ClaudeSessionTrajectoryDrawer";
 import { ClaudeChatQuickActionsChrome } from "./ClaudeChatQuickActionsChrome";
 import { composerRegionChunk } from "./ClaudeChatComposerTray";
@@ -31,7 +34,6 @@ import { composerRegionChunk } from "./ClaudeChatComposerTray";
 const ClaudeChatComposerTrayLazy = lazy(() =>
   import("./ClaudeChatComposerTray").then((module) => ({ default: module.ClaudeChatComposerTray })),
 );
-import { ClaudeChatMessagesPane } from "./ClaudeChatMessagesPane";
 import { ClaudeChatNotificationDock } from "./ClaudeChatNotificationDock";
 import { ClaudeChatSessionOwnerBar } from "./ClaudeChatSessionOwnerBar";
 import {
@@ -61,7 +63,6 @@ import {
   writeDeferredSendNext,
 } from "../../services/pendingTaskQueueStore";
 import {
-  extractNotificationScrollKeyword,
   WISE_PENDING_NOTIFICATION_SCROLL_STORAGE_KEY,
 } from "../../utils/claudeTurnNotificationBody";
 import type { SessionOwnerHint } from "../../utils/sessionOwnerHints";
@@ -306,7 +307,7 @@ const RETURN_MAIN_SESSION_KEY = "wise:return-main-session-id";
 /** 会话内通知收件箱拉取条数（降低常驻内存） */
 const NOTIFICATION_INBOX_FETCH_LIMIT = 24;
 
-export function ClaudeChat({
+export function ClaudeChatInner({
   session,
   sessions = [],
   allSessionsForHistory,
@@ -1130,15 +1131,13 @@ export function ClaudeChat({
     deferredSendQueued,
   ]);
 
-  const {
-    messagesScrollRef,
-    messageListNavRef,
-    handleMessagesBlur,
-    pauseFollowForMessageNavigation,
-    scrollToSessionMessageId,
-    scrollMessageTargetIntoView,
-    showListEndThinkingHint,
-  } = useClaudeChatMessageScroll({ session, hideMessages: hideMessages || deferHeavySubtree });
+  const scrollToSessionMessageId = useCallback((messageId: number) => {
+    getClaudeChatMessageScrollBridge().scrollToSessionMessageId(messageId);
+  }, []);
+
+  const scrollMessageTargetIntoView = useCallback((target: Element | null) => {
+    return getClaudeChatMessageScrollBridge().scrollMessageTargetIntoView(target);
+  }, []);
 
   const [fullTranscriptLoading, setFullTranscriptLoading] = useState(false);
   const [loadMoreTranscriptLoading, setLoadMoreTranscriptLoading] = useState(false);
@@ -1662,119 +1661,6 @@ export function ClaudeChat({
     }
   }, [session.id]);
 
-  useEffect(() => {
-    let pending: { conversationId?: string; messageId?: string; body?: string; taskId?: string } | null = null;
-    try {
-      const raw = sessionStorage.getItem(WISE_PENDING_NOTIFICATION_SCROLL_STORAGE_KEY);
-      if (raw) {
-        pending = JSON.parse(raw) as {
-          conversationId?: string;
-          messageId?: string;
-          body?: string;
-          taskId?: string;
-        };
-      }
-    } catch {
-      pending = null;
-    }
-    if (!pending?.conversationId) {
-      return;
-    }
-    const matchesSession =
-      pending.conversationId === session.id || pending.conversationId === (session.claudeSessionId ?? "");
-    if (!matchesSession) {
-      return;
-    }
-
-    const scrollTimeouts: number[] = [];
-    const scheduleScroll = (fn: () => void) => {
-      scrollTimeouts.push(window.setTimeout(fn, 50));
-    };
-
-    const taskIdHint = pending.taskId?.trim();
-    if (taskIdHint) {
-      const byTask = document.querySelector(`[data-task-id="${CSS.escape(taskIdHint)}"]`);
-      if (byTask) {
-        scheduleScroll(() => {
-          scrollMessageTargetIntoView(byTask);
-          try {
-            sessionStorage.removeItem(WISE_PENDING_NOTIFICATION_SCROLL_STORAGE_KEY);
-          } catch {
-            /* ignore */
-          }
-        });
-        return () => {
-          scrollTimeouts.forEach((id) => window.clearTimeout(id));
-        };
-      }
-    }
-
-    const escapedMessageId = CSS.escape((pending.messageId ?? "").trim());
-    let target: Element | null = null;
-    if (escapedMessageId) {
-      target = document.querySelector(`[data-message-id="${escapedMessageId}"]`);
-    }
-    if (!target && pending.body?.trim()) {
-      const keyword = extractNotificationScrollKeyword(pending.body);
-      if (keyword) {
-        for (let i = session.messages.length - 1; i >= 0; i -= 1) {
-          const msg = session.messages[i];
-          const partTexts =
-            msg.parts
-              ?.filter((part): part is { type: "text"; text: string } => part.type === "text" && typeof part.text === "string")
-              .map((part) => part.text) ?? [];
-          const fullText = [msg.content, ...partTexts].join("\n");
-          if (fullText.includes(keyword)) {
-            target = document.querySelector(`[data-message-id="${CSS.escape(String(msg.id))}"]`);
-            break;
-          }
-        }
-      }
-    }
-    if (!target) {
-      return;
-    }
-    scheduleScroll(() => {
-      const rawId = (pending.messageId ?? "").trim();
-      const scrollIndex =
-        rawId !== ""
-          ? session.messages.findIndex((m) => String(m.id) === rawId)
-          : session.messages.findIndex((m) => String(m.id) === target?.getAttribute("data-message-id"));
-      const msg = scrollIndex >= 0 ? session.messages[scrollIndex] : undefined;
-      const messageIdForScroll = rawId || (msg != null ? String(msg.id) : "");
-      const row =
-        msg != null
-          ? document.querySelector(`[data-message-id="${CSS.escape(String(msg.id))}"]`)
-          : null;
-      if (scrollMessageTargetIntoView(row)) {
-        try {
-          sessionStorage.removeItem(WISE_PENDING_NOTIFICATION_SCROLL_STORAGE_KEY);
-        } catch {
-          /* ignore */
-        }
-        return;
-      }
-      if (messageIdForScroll && messageListNavRef.current?.scrollToMessageId(messageIdForScroll)) {
-        try {
-          sessionStorage.removeItem(WISE_PENDING_NOTIFICATION_SCROLL_STORAGE_KEY);
-        } catch {
-          /* ignore */
-        }
-        return;
-      }
-      scrollMessageTargetIntoView(target);
-      try {
-        sessionStorage.removeItem(WISE_PENDING_NOTIFICATION_SCROLL_STORAGE_KEY);
-      } catch {
-        /* ignore */
-      }
-    });
-    return () => {
-      scrollTimeouts.forEach((id) => window.clearTimeout(id));
-    };
-  }, [session.id, session.claudeSessionId, session.messages, scrollMessageTargetIntoView]);
-
-
   return (
     <div
       ref={chatRootRef}
@@ -1815,11 +1701,10 @@ export function ClaudeChat({
 
       {/* Messages */}
       {!hideMessages && (
-        <ClaudeChatMessagesPane
-          session={session}
-          messagesScrollRef={messagesScrollRef}
-          messageListNavRef={messageListNavRef}
-          showListEndThinkingHint={showListEndThinkingHint}
+        <ClaudeChatMessagesLiveHost
+          sessionId={session.id}
+          claudeSessionId={session.claudeSessionId}
+          hideMessagesScroll={hideMessages || deferHeavySubtree}
           loadMoreTranscriptLoading={loadMoreTranscriptLoading}
           fullTranscriptLoading={fullTranscriptLoading}
           onLoadMoreTranscriptFromDisk={onLoadMoreTranscriptFromDisk}
@@ -1829,8 +1714,6 @@ export function ClaudeChat({
           onOpenSessionConversationTaskDetail={openSessionConversationTaskDetail}
           resolveExecutionEnvironmentDispatchTask={resolveExecutionEnvironmentDispatchTask}
           sessionsForDispatchLookup={sessions}
-          onMessagesBlur={handleMessagesBlur}
-          onNavigateMessage={pauseFollowForMessageNavigation}
           onLoadMoreTranscriptStart={handleLoadMoreTranscriptStart}
           onLoadMoreTranscriptEnd={handleLoadMoreTranscriptEnd}
           onFullTranscriptStart={handleFullTranscriptStart}
@@ -1988,4 +1871,5 @@ export function ClaudeChat({
   );
 }
 
+export const ClaudeChat = memo(ClaudeChatInner, claudeChatPropsEqual);
 

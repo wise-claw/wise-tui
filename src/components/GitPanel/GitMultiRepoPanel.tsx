@@ -70,7 +70,9 @@ export function GitMultiRepoPanel({
     scrollBodyRef.current = node;
     setScrollRoot(node);
   }, []);
-  useScrollEndClass(scrollBodyRef, LEFT_SIDEBAR_SCROLLING_CLASS);
+  useScrollEndClass(scrollBodyRef, LEFT_SIDEBAR_SCROLLING_CLASS, 220, {
+    relieveSidePanelPriority: true,
+  });
 
   useEffect(() => {
     const validPaths = new Set(repositoryEntries.map((entry) => entry.path).filter(Boolean));

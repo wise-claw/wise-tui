@@ -610,6 +610,27 @@ export const MilkdownEditor = forwardRef<MilkdownEditorHandle, MilkdownEditorPro
   }, [taskAnchors, crepeReadyGeneration, scheduleMeasureAnchors]);
 
   useEffect(() => {
+    const host = hostRef.current;
+    if (!host || crepeReadyGeneration === 0) return;
+    let annotateRaf = 0;
+    const annotateToolbarIfPresent = () => {
+      if (!host.querySelector(".milkdown-toolbar")) return;
+      if (annotateRaf) return;
+      annotateRaf = requestAnimationFrame(() => {
+        annotateRaf = 0;
+        annotateCrepeToolbarButtons(host);
+      });
+    };
+    const toolbarObserver = new MutationObserver(annotateToolbarIfPresent);
+    toolbarObserver.observe(host, { childList: true, subtree: true });
+    annotateToolbarIfPresent();
+    return () => {
+      toolbarObserver.disconnect();
+      if (annotateRaf) cancelAnimationFrame(annotateRaf);
+    };
+  }, [crepeReadyGeneration, instanceKey]);
+
+  useEffect(() => {
     if (!taskAnchors?.length) {
       setAnchorLayouts([]);
       return;

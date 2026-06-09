@@ -312,6 +312,16 @@ export function shouldRenderOutputAsMarkdown(part: ToolUsePart): boolean {
   return hasMarkdownCues;
 }
 
+function toolPartRenderFingerprint(part: ToolUsePart): string {
+  if (part.status !== "running") {
+    return `${part.status}|${part.name}|${part.output?.length ?? 0}|${part.error ?? ""}`;
+  }
+  const subtitle = getToolDisplayInfo(part).subtitle;
+  const outBucket = Math.floor((part.output?.length ?? 0) / 512);
+  const subBucket = Math.floor(subtitle.length / 64);
+  return `${part.status}|${part.name}|${outBucket}|${subBucket}|${part.error ?? ""}`;
+}
+
 function messagePartContentEqual(a: MessagePart, b: MessagePart): boolean {
   if (a === b) return true;
   if (a.type !== b.type) return false;
@@ -321,8 +331,11 @@ function messagePartContentEqual(a: MessagePart, b: MessagePart): boolean {
     case "reasoning":
       return b.type === "reasoning" && a.text === b.text;
     case "tool_use":
+      if (b.type !== "tool_use") return false;
+      if (a.status === "running" || b.status === "running") {
+        return toolPartRenderFingerprint(a) === toolPartRenderFingerprint(b);
+      }
       return (
-        b.type === "tool_use" &&
         a.name === b.name &&
         a.status === b.status &&
         a.output === b.output &&
@@ -457,7 +470,8 @@ function toolPartDisplayEqual(
   prev: Readonly<{ part: ToolUsePart }>,
   next: Readonly<{ part: ToolUsePart }>,
 ): boolean {
-  return messagePartContentEqual(prev.part, next.part);
+  if (prev.part === next.part) return true;
+  return toolPartRenderFingerprint(prev.part) === toolPartRenderFingerprint(next.part);
 }
 
 // ── Message Parts ──

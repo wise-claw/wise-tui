@@ -5,6 +5,7 @@ import {
   useMemo,
   useRef,
   startTransition,
+  useSyncExternalStore,
   type SetStateAction,
 } from "react";
 import { message } from "antd";
@@ -219,6 +220,12 @@ import {
   trellisContextIdForTab,
   type ClaudeStreamRuntimeHandlers,
 } from "./useClaudeSessions.helpers";
+import {
+  publishClaudeSessions,
+  subscribeClaudeSessionsLive,
+  subscribeClaudeSessionsStructure,
+  getClaudeSessionsSnapshot,
+} from "../stores/claudeSessionsLiveStore";
 import type {
   PendingTurnFailoverContext,
   SessionExecuteOpts,
@@ -256,7 +263,16 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     [companionSessionIds.length, companionSessionIdsJoinKey],
   );
 
-  const [sessions, setSessionsRaw] = useState<ClaudeSession[]>([]);
+  const subscribeLive = options?.subscribeLive !== false;
+  const subscribeSessions = subscribeLive
+    ? subscribeClaudeSessionsLive
+    : subscribeClaudeSessionsStructure;
+
+  const sessions = useSyncExternalStore(
+    subscribeSessions,
+    getClaudeSessionsSnapshot,
+    getClaudeSessionsSnapshot,
+  );
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
   const memoryKeepSessionIdsRef = useRef<Set<string>>(new Set());
@@ -275,17 +291,16 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   }, []);
 
   const setSessions = useCallback((action: SetStateAction<ClaudeSession[]>) => {
-    setSessionsRaw((prev) => {
-      const next = typeof action === "function" ? action(prev) : action;
-      if (next === prev) return prev;
-      const capped = applySessionsMemoryCap(next, {
-        keepSessionIds: buildMemoryKeepSessionIds(next),
-        globalMessagesBudget: companionMemoryLimits.globalBudget,
-      });
-      if (capped === prev) return prev;
-      sessionsRef.current = capped;
-      return capped;
+    const prev = sessionsRef.current;
+    const next = typeof action === "function" ? action(prev) : action;
+    if (next === prev) return;
+    const capped = applySessionsMemoryCap(next, {
+      keepSessionIds: buildMemoryKeepSessionIds(next),
+      globalMessagesBudget: companionMemoryLimits.globalBudget,
     });
+    if (capped === prev) return;
+    sessionsRef.current = capped;
+    publishClaudeSessions(capped);
   }, [buildMemoryKeepSessionIds, companionMemoryLimits.globalBudget]);
   /** 流式事件可能在同一帧连发多行；须在 `setSessions` updater 内同步 ref，避免 init 后 assistant 行因 ref 过期被丢弃。 */
   const commitSessions = useCallback((updater: (prev: ClaudeSession[]) => ClaudeSession[]) => {

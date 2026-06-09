@@ -13,9 +13,19 @@
   contain: layout style;
 }
 
+.app-left-sidebar .app-repository-row {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 28px;
+}
+
 /* 文件树滚动时 avoid contain：与大量行叠加大面积重排 */
 .app-left-sidebar .repo-tree-node {
   contain: none;
+  transition: none;
+}
+
+.app-left-sidebar .repo-tree-node:hover {
+  transition: none;
 }
 
 .app-left-sidebar .app-repository-item {
@@ -52,6 +62,7 @@
 /* ── 快速滑动：统一关 transition / hover 命中 / content-visibility 节流 ── */
 
 .app-left-sidebar-scroll-region--scrolling .app-repository-item,
+.app-repository-list--scrolling .app-repository-item,
 .app-left-sidebar-scroll-region--scrolling .repo-tree-node,
 .app-left-sidebar-scroll-region--scrolling .app-monitor-panel__item,
 .app-left-sidebar-scroll-region--scrolling .app-monitor-panel__item--terminal-row {
@@ -65,21 +76,52 @@
 }
 
 .app-left-sidebar-scroll-region--scrolling
+  .app-repository-item:hover:not(.app-repository-item--project-active):not(.app-repository-item--repo-active),
+.app-repository-list--scrolling
   .app-repository-item:hover:not(.app-repository-item--project-active):not(.app-repository-item--repo-active) {
   background: transparent !important;
 }
 
-.app-left-sidebar-scroll-region--scrolling .app-repository-item:hover .app-repository-action {
+.app-left-sidebar-scroll-region--scrolling .app-repository-item:hover .app-repository-action,
+.app-repository-list--scrolling .app-repository-item:hover .app-repository-action {
   opacity: 0;
   pointer-events: none;
+}
+
+.app-left-sidebar-scroll-region--scrolling .app-repository-item,
+.app-repository-list--scrolling .app-repository-item,
+.app-left-sidebar-scroll-region--scrolling .repo-tree-node,
+.git-files-explorer-scroll-region--scrolling .repo-tree-node {
+  pointer-events: none;
+}
+
+.app-left-sidebar-scroll-region--scrolling .app-repository-row,
+.app-repository-list--scrolling .app-repository-row {
+  content-visibility: visible;
+  contain: layout style;
+}
+
+.app-left-sidebar-scroll-region--scrolling .app-repository-item:hover .app-repository-icon--folder,
+.app-repository-list--scrolling .app-repository-item:hover .app-repository-icon--folder {
+  opacity: 1 !important;
+}
+
+.app-left-sidebar-scroll-region--scrolling .app-repository-item:hover .app-repository-icon--expand,
+.app-repository-list--scrolling .app-repository-item:hover .app-repository-icon--expand {
+  opacity: 0 !important;
+}
+
+.app-left-sidebar-scroll-region--scrolling .app-repository-main-session-running-dot,
+.app-repository-list--scrolling .app-repository-main-session-running-dot {
+  animation-play-state: paused;
 }
 
 .app-left-sidebar-scroll-region--scrolling .repo-tree-node:hover:not(.repo-tree-node--selected) {
   background: transparent !important;
 }
 
-.app-left-sidebar-scroll-region--scrolling .repo-tree-node,
 .app-left-sidebar-scroll-region--scrolling .repo-tree-virtual-list__row {
+  contain: layout style paint;
   content-visibility: visible !important;
 }
 
@@ -103,7 +145,11 @@
   background: transparent !important;
 }
 
-/* 兼容旧 class（文件树曾单独使用） */
-.git-files-explorer-scroll-region--scrolling .repo-tree-node {
-  transition: none !important;
+.git-files-explorer-scroll-region--scrolling .repo-tree-node:hover:not(.repo-tree-node--selected) {
+  background: transparent !important;
+}
+
+.git-files-explorer-scroll-region--scrolling .repo-tree-virtual-list__row {
+  contain: layout style paint;
+  content-visibility: visible !important;
 }

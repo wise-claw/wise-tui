@@ -10,8 +10,13 @@ import type {
   WorkflowTemplateItem,
   SessionConversationTaskItem,
 } from "../../types";
-import { Button, Empty, Spin } from "antd";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Spin } from "antd";
+import { lazy, memo, Suspense, useEffect, useMemo } from "react";
+import {
+  getClaudeSessionsSnapshot,
+  useClaudeSessionsStructureKey,
+} from "../../stores/claudeSessionsLiveStore";
+import { ClaudeSessionsChatHost } from "./ClaudeSessionsChatHost";
 import { Topbar } from "./Topbar";
 export { Topbar, type TopbarProps } from "./Topbar";
 import { pickSessionForRepositorySidebarSelect } from "../../utils/claudeSessionSelection";
@@ -19,7 +24,6 @@ import { filterSessionsForWorkspace } from "../../utils/projectSessionPanelFilte
 import {
   resolveBoundMainSessionId,
   resolveMainOwnerAgentNameForRepositoryPath,
-  resolveRepositoryForSession,
 } from "../../utils/repositoryMainSessionBinding";
 import {
   isChatSurfaceReady,
@@ -31,88 +35,14 @@ import { loadSessionOwnerHints } from "../../utils/sessionOwnerHints";
 import type { ResolvePaneAuxLayout } from "./paneAuxLayout";
 import type { WorkspaceMode, WorkspaceFocus } from "../../utils/workspaceMode";
 import { type PaneCount, type PaneSlot } from "../../constants/mainLayoutWidths";
-import type { MultiPaneSharedChatProps, PaneRepoTreeNode } from "./ClaudeMultiPaneGrid";
-import { runPaneCreateTask } from "./paneCreateLoading";
-import { WorkspaceViewportLoading } from "../WorkspaceViewportLoading";
+import type { PaneRepoTreeNode } from "./ClaudeMultiPaneGrid";
 import "./index.css";
 
 const TerminalPanelLazy = lazy(() =>
   import("../TerminalPanel").then((module) => ({ default: module.TerminalPanel })),
 );
-const ClaudeMultiPaneGridLazy = lazy(() =>
-  import("./ClaudeMultiPaneGrid").then((module) => ({ default: module.ClaudeMultiPaneGrid })),
-);
-const ClaudeSessionChatWithDockLazy = lazy(() =>
-  import("./ClaudeSessionChatWithDock").then((module) => ({
-    default: module.ClaudeSessionChatWithDock,
-  })),
-);
 
 const claudeChatSurfaceChunk = import("./ClaudeSessionChatWithDock");
-const claudeMultiPaneChunk = import("./ClaudeMultiPaneGrid");
-
-interface SessionEmptyStateProps {
-  title: string;
-  hint: string;
-  primaryAction?: {
-    label: string;
-    onClick: () => void;
-    loading?: boolean;
-    disabled?: boolean;
-  };
-  secondaryAction?: {
-    label: string;
-    onClick: () => void;
-  };
-  /** 在操作按钮上方渲染的额外内容（如仓库选择器）。 */
-  extraContent?: React.ReactNode;
-}
-
-function SessionEmptyState({
-  title,
-  hint,
-  primaryAction,
-  secondaryAction,
-  extraContent,
-}: SessionEmptyStateProps) {
-  return (
-    <div className="app-claude-session-empty">
-      <Empty
-        className="app-claude-session-empty__content"
-        image={Empty.PRESENTED_IMAGE_SIMPLE}
-        description={
-          <span className="app-claude-session-empty__copy">
-            <span className="app-claude-session-empty__title">{title}</span>
-            <span className="app-claude-session-empty__hint">{hint}</span>
-          </span>
-        }
-      >
-        {extraContent}
-        {primaryAction || secondaryAction ? (
-          <div className="app-claude-session-empty__actions">
-            {primaryAction ? (
-              <Button
-                type="primary"
-                onClick={primaryAction.onClick}
-                loading={primaryAction.loading}
-                disabled={primaryAction.disabled}
-              >
-                {primaryAction.label}
-              </Button>
-            ) : null}
-            {secondaryAction ? (
-              <Button onClick={secondaryAction.onClick}>
-                {secondaryAction.label}
-              </Button>
-            ) : null}
-          </div>
-        ) : null}
-      </Empty>
-    </div>
-  );
-}
-
-// ── ClaudeSessions ──
 
 interface Props {
   sessions: ClaudeSession[];
@@ -280,8 +210,8 @@ interface Props {
   };
 }
 
-export function ClaudeSessions({
-  sessions: incomingSessions,
+function ClaudeSessionsShell({
+  sessions: _sessionsPropIgnored,
   activeSessionId,
   hideTopbar = false,
   activeRepository,
@@ -373,6 +303,9 @@ export function ClaudeSessions({
   onStopSessionConversationTask,
   missionContext,
 }: Props) {
+  const structureKey = useClaudeSessionsStructureKey();
+  const incomingSessions = useMemo(() => getClaudeSessionsSnapshot(), [structureKey]);
+
   const sessions = useMemo(
     () =>
       filterSessionsForWorkspace({
@@ -435,24 +368,9 @@ export function ClaudeSessions({
     void import("./ClaudeChatComposerTray");
     void import("../ClaudeChatInput/composer-region");
     if (paneCount > 1) {
-      void claudeMultiPaneChunk;
+      void import("./ClaudeMultiPaneGrid");
     }
   }, [chatSurfaceReady, paneCount]);
-
-  const workflowTasksByCreator = useMemo(() => {
-    const map = new Map<string, WorkflowTaskItem[]>();
-    for (const task of workflowTasks) {
-      const creator = task.creator?.trim();
-      if (!creator) continue;
-      const bucket = map.get(creator);
-      if (bucket) {
-        bucket.push(task);
-      } else {
-        map.set(creator, [task]);
-      }
-    }
-    return map;
-  }, [workflowTasks]);
 
   const mainSessionForDataLink = useMemo(
     () =>
@@ -501,22 +419,6 @@ export function ClaudeSessions({
       mainSessionForDataLink,
     ],
   );
-
-  /** 解析每个额外窗格对应的实际会话对象。 */
-  const resolvedPaneSessions = useMemo(() => {
-    return extraPanes.map((slot) => {
-      if (!slot.sessionId) return null;
-      return sessionById.get(slot.sessionId) ?? null;
-    });
-  }, [extraPanes, sessionById]);
-
-  /** 解析每个窗格对应的仓库。 */
-  const resolvedPaneRepositories = useMemo(() => {
-    return extraPanes.map((slot) => {
-      if (slot.repositoryId == null) return chatContextRepository ?? null;
-      return (repositories ?? []).find((r) => r.id === slot.repositoryId) ?? chatContextRepository ?? null;
-    });
-  }, [chatContextRepository, extraPanes, repositories]);
 
   /** 窗格仓库选择器的树状数据：工作区（项目）节点 + 仓库叶子，未归属项目的仓库归入「独立仓库」组。 */
   const paneRepoTreeData = useMemo<PaneRepoTreeNode[]>(() => {
@@ -576,53 +478,6 @@ export function ClaudeSessions({
     () => new Map((projects ?? []).map((project) => [project.id.trim(), project] as const)),
     [projects],
   );
-
-  const [pendingCollapseNotificationForSessionId, setPendingCollapseNotificationForSessionId] = useState<
-    string | null
-  >(null);
-  const [paneRepoPickerOpenBySlot, setPaneRepoPickerOpenBySlot] = useState<Record<number, boolean>>({});
-  const [creatingPaneSlots, setCreatingPaneSlots] = useState<Record<number, boolean>>({});
-  const activeSessionWorkflowTasks = useMemo(
-    () => (activeSession?.id ? workflowTasksByCreator.get(activeSession.id) ?? [] : []),
-    [workflowTasksByCreator, activeSession?.id],
-  );
-  /** 各额外窗格的 workflow tasks。 */
-  const paneWorkflowTasks = useMemo(() => {
-    return extraPanes.map((slot) =>
-      slot.sessionId ? workflowTasksByCreator.get(slot.sessionId) ?? [] : [],
-    );
-  }, [extraPanes, workflowTasksByCreator]);
-
-  const [creatingPrimarySession, setCreatingPrimarySession] = useState(false);
-  const creatingPrimarySessionRef = useRef(false);
-
-  const handleCreatePrimarySession = useCallback(() => {
-    if (creatingPrimarySessionRef.current) {
-      return;
-    }
-    creatingPrimarySessionRef.current = true;
-    setCreatingPrimarySession(true);
-    const finish = () => {
-      creatingPrimarySessionRef.current = false;
-      setCreatingPrimarySession(false);
-    };
-
-    if (activeWorkspaceFocus === "project" && activeProject && onNewProjectSession) {
-      void Promise.resolve(onNewProjectSession(activeProject)).finally(finish);
-      return;
-    }
-    if (!activeRepository) {
-      finish();
-      return;
-    }
-    void Promise.resolve(onNewSession(activeRepository)).finally(finish);
-  }, [
-    activeProject,
-    activeRepository,
-    activeWorkspaceFocus,
-    onNewProjectSession,
-    onNewSession,
-  ]);
 
   /** 打开仓库/项目时仅恢复已有主会话绑定，不自动新建（新建仅走「新建会话」按钮）。 */
   useEffect(() => {
@@ -687,130 +542,6 @@ export function ClaudeSessions({
     sessions,
   ]);
 
-  const handleCreatePaneSession = useCallback(
-    (slotIndex: number) => {
-      const repo = resolvedPaneRepositories[slotIndex] ?? activeRepository;
-      if (!repo || !onNewPaneSession) return;
-      if (creatingPaneSlots[slotIndex]) return;
-      setPaneRepoPickerOpenBySlot((prev) => ({ ...prev, [slotIndex]: false }));
-      runPaneCreateTask(Promise.resolve(onNewPaneSession(slotIndex, repo)), slotIndex, setCreatingPaneSlots);
-    },
-    [activeRepository, creatingPaneSlots, onNewPaneSession, resolvedPaneRepositories],
-  );
-
-  const handlePanePickerOpenChange = useCallback((paneIdx: number, open: boolean) => {
-    setPaneRepoPickerOpenBySlot((prev) => ({ ...prev, [paneIdx]: open }));
-  }, []);
-
-  const handleSwitchToSession = useCallback(
-    (sessionId: string, options?: { collapseSessionNotificationPanel?: boolean }) => {
-      if (options?.collapseSessionNotificationPanel) {
-        setPendingCollapseNotificationForSessionId(sessionId);
-      }
-      const targetSession = sessions.find((item) => item.id === sessionId);
-      if (!targetSession) {
-        onSwitchSession(sessionId);
-        return;
-      }
-      if (repositories?.length && onSelectRepository) {
-        const targetRepository = resolveRepositoryForSession({
-          session: targetSession,
-          repositories,
-          bindings: repositoryMainBindings,
-          sessions,
-          preferredRepositoryId: activeRepositoryId,
-        });
-        if (targetRepository && targetRepository.id !== activeRepositoryId) {
-          onSelectRepository(targetRepository.id);
-        }
-      }
-      onSwitchSession(sessionId);
-    },
-    [
-      sessions,
-      repositories,
-      repositoryMainBindings,
-      onSelectRepository,
-      activeRepositoryId,
-      onSwitchSession,
-    ],
-  );
-
-  // 用 ref + Object.assign 保持 shared 引用稳定且数据始终最新，
-  // 避免 sessions 高频变化时触发所有窗格 memo 比较器失效。
-  const multiPaneSharedChatRef = useRef<MultiPaneSharedChatProps>({} as MultiPaneSharedChatProps);
-  Object.assign(multiPaneSharedChatRef.current, {
-    sessions,
-    allSessionsForHistory: incomingSessions,
-    repositories,
-    activeProject,
-    onSwitchSession: handleSwitchToSession,
-    onSend: onSendMessage,
-    onExecute: onExecuteSession,
-    onDispatchExecutionEnvironment,
-    onUpdateSessionModel,
-    onUpdateSessionConnectionKind,
-    onUpdateRepositoryExecutionEngine,
-    onUpdateEmployeeExecutionEngine,
-    codexAvailable,
-    cursorAvailable,
-    onOpenExecutionEnvironment,
-    onCancelSession,
-    onRespondToQuestion,
-    onDismissQuestion,
-    onRespondToPermission,
-    onClearTodos,
-    onToggleTodo,
-    onRestoreTodosFromTranscript,
-    onRestorePendingPermissionFromTranscript,
-    onClearFollowups,
-    onClearRevertItems,
-    onSendFollowup,
-    onRestoreRevert,
-    onOpenWorkflowConfig,
-    onOpenBuiltinAssistant,
-    onOpenAssistantsHub,
-    onOpenRepositoryScheduledTasks,
-    employees,
-    mentionEmployees,
-    composerProjectRoleTagOptions,
-    composerProjectRepositoryMentionOptions,
-    composerHideEmployeesInAtMode,
-    taskPendingEmployeesByTaskId,
-    workflowTemplates,
-    workflowGraphsByWorkflowId,
-    workflowGraphStatusByWorkflowId,
-    onOpenTaskDetail,
-    hideMessages,
-    hideSessionTools,
-    resolveTaskListOmcInvokeConcurrency,
-    repositoryMainBindings,
-    onAppendSystemMessage,
-    onAppendUserMessage,
-    onNotifyOmcEmployeeDirectBatchTaskDone,
-    onPrepareFreshOmcEmployeeWorkerForDirectBatch,
-    onRefreshHistorySessions,
-    onDeleteHistorySession,
-    onOpenHistorySessionInInspector,
-    onRestoreHistorySessionAsMain,
-    omcBatchPipelineActive,
-    onAddWorktreeRepositoryToProject,
-    onReloadFullDiskTranscript,
-    onLoadMoreTranscriptFromDisk,
-    onCompactSessionHistory,
-    onStopSessionConversationTask,
-    missionContext,
-  });
-
-  useEffect(() => {
-    if (
-      pendingCollapseNotificationForSessionId !== null &&
-      activeSessionId === pendingCollapseNotificationForSessionId
-    ) {
-      setPendingCollapseNotificationForSessionId(null);
-    }
-  }, [activeSessionId, pendingCollapseNotificationForSessionId]);
-
   return (
     <div className="app-claude-sessions">
       {/* Topbar always visible */}
@@ -847,131 +578,94 @@ export function ClaudeSessions({
         />
       )}
 
-      {/* Session Tabs - 会话标签栏 */}
-      {!chatSurfaceReady ? null : activeSession ? (
-        <Suspense fallback={<WorkspaceViewportLoading />}>
-        {paneCount > 1 && chatContextRepository ? (
-          <ClaudeMultiPaneGridLazy
-            paneCount={paneCount}
-            activeSession={activeSession}
-            activeRepository={chatContextRepository}
-            extraPanes={extraPanes}
-            resolvedPaneSessions={resolvedPaneSessions}
-            resolvedPaneRepositories={resolvedPaneRepositories}
-            activeSessionWorkflowTasks={activeSessionWorkflowTasks}
-            paneWorkflowTasks={paneWorkflowTasks}
-            shared={multiPaneSharedChatRef.current}
-            projects={projects ?? []}
-            paneRepoTreeData={paneRepoTreeData}
-            projectsById={projectsById}
-            pendingCollapseNotificationForSessionId={pendingCollapseNotificationForSessionId}
-            creatingPaneSlots={creatingPaneSlots}
-            paneRepoPickerOpenBySlot={paneRepoPickerOpenBySlot}
-            onCreatePrimarySession={handleCreatePrimarySession}
-            onCreatePaneSession={handleCreatePaneSession}
-            onPickerOpenChange={handlePanePickerOpenChange}
-            setCreatingPaneSlots={setCreatingPaneSlots}
-            onPaneRepositorySelect={onPaneRepositorySelect}
-            onPaneProjectNewSession={onPaneProjectNewSession}
-            onNewPaneSession={onNewPaneSession}
-            panelBelowMessages={panelBelowMessages}
-            resolvePaneAuxLayout={resolvePaneAuxLayout}
-          />
-        ) : (
-          <ClaudeSessionChatWithDockLazy
-            key={activeSession.id}
-            session={activeSession}
-            activeSessionId={activeSession.id}
-            sessions={sessions}
-            allSessionsForHistory={incomingSessions}
-            repositories={repositories}
-            activeRepository={chatContextRepository}
-            activeProject={activeProject}
-            initialNotificationPanelCollapsed={
-              pendingCollapseNotificationForSessionId === activeSession.id
-            }
-            onSwitchSession={handleSwitchToSession}
-            onCreateNewSession={handleCreatePrimarySession}
-            creatingNewSession={creatingPrimarySession}
-            onOpenBuiltinAssistant={onOpenBuiltinAssistant}
-            onOpenAssistantsHub={onOpenAssistantsHub}
-            onOpenRepositoryScheduledTasks={onOpenRepositoryScheduledTasks}
-            onSend={onSendMessage}
-            onExecute={onExecuteSession}
-            onResumeSessionFromMonitorDrawer={onResumeSessionFromMonitorDrawer}
-            onPrepareSessionForMonitorDrawer={onPrepareSessionForMonitorDrawer}
-            onDispatchExecutionEnvironment={onDispatchExecutionEnvironment}
-            onSessionModelChange={(model) => onUpdateSessionModel(activeSession.id, model)}
-            onSessionConnectionKindChange={(kind) =>
-              void onUpdateSessionConnectionKind(activeSession.id, kind)
-            }
-            onUpdateRepositoryExecutionEngine={onUpdateRepositoryExecutionEngine}
-            onUpdateEmployeeExecutionEngine={onUpdateEmployeeExecutionEngine}
-            codexAvailable={codexAvailable}
-            cursorAvailable={cursorAvailable}
-            onOpenExecutionEnvironment={onOpenExecutionEnvironment}
-            onCancel={(opts) => onCancelSession(activeSession.id, opts)}
-            onCancelSessionById={onCancelSession}
-            respondQuestionAt={onRespondToQuestion}
-            dismissQuestionAt={onDismissQuestion}
-            onRespondToPermission={(response) => onRespondToPermission(activeSession.id, response)}
-            onClearTodos={() => onClearTodos(activeSession.id)}
-            onToggleTodo={(todoId) => onToggleTodo(activeSession.id, todoId)}
-            onRestoreTodosFromTranscript={() => onRestoreTodosFromTranscript(activeSession.id)}
-            onRestorePendingPermissionFromTranscript={() =>
-              onRestorePendingPermissionFromTranscript(activeSession.id)
-            }
-            onClearFollowups={() => onClearFollowups(activeSession.id)}
-            onClearRevertItems={() => onClearRevertItems(activeSession.id)}
-            onSendFollowup={(id) => onSendFollowup(activeSession.id, id)}
-            onRestoreRevert={(id) => onRestoreRevert(activeSession.id, id)}
-            onOpenWorkflowConfig={onOpenWorkflowConfig}
-            employees={employees}
-            mentionEmployees={mentionEmployees}
-            projectRoleTagOptions={composerProjectRoleTagOptions}
-            projectRepositoryMentionOptions={composerProjectRepositoryMentionOptions}
-            hideEmployeesInAtMode={composerHideEmployeesInAtMode}
-            workflowTasks={activeSessionWorkflowTasks}
-            taskPendingEmployeesByTaskId={taskPendingEmployeesByTaskId}
-            workflowTemplates={workflowTemplates}
-            workflowGraphsByWorkflowId={workflowGraphsByWorkflowId}
-            workflowGraphStatusByWorkflowId={workflowGraphStatusByWorkflowId}
-            onOpenTaskDetail={onOpenTaskDetail}
-            panelBelowMessages={panelBelowMessages}
-            hideMessages={hideMessages}
-            hideSessionTools={hideSessionTools}
-            resolveTaskListOmcInvokeConcurrency={resolveTaskListOmcInvokeConcurrency}
-            repositoryMainBindings={repositoryMainBindings}
-            onAppendSystemMessage={onAppendSystemMessage}
-            onAppendUserMessage={onAppendUserMessage}
-            onNotifyOmcEmployeeDirectBatchTaskDone={onNotifyOmcEmployeeDirectBatchTaskDone}
-            onPrepareFreshOmcEmployeeWorkerForDirectBatch={onPrepareFreshOmcEmployeeWorkerForDirectBatch}
-            onRefreshHistorySessions={onRefreshHistorySessions}
-            onDeleteHistorySession={onDeleteHistorySession}
-            onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
-            onStopSessionConversationTask={onStopSessionConversationTask}
-            onRestoreHistorySessionAsMain={onRestoreHistorySessionAsMain}
-            omcBatchPipelineActive={omcBatchPipelineActive}
-            onAddWorktreeRepositoryToProject={onAddWorktreeRepositoryToProject}
-            onReloadFullDiskTranscript={onReloadFullDiskTranscript}
-            onLoadMoreTranscriptFromDisk={onLoadMoreTranscriptFromDisk}
-            onCompactSessionHistory={onCompactSessionHistory}
-            missionContext={missionContext}
-          />
-        )}
-        </Suspense>
-      ) : (
-        <SessionEmptyState
-          title="暂无 Claude Code 会话"
-          hint="使用下方「新建会话」开始对话，或从「历史会话」恢复已有会话。"
-          primaryAction={{
-            label: "新建会话",
-            onClick: handleCreatePrimarySession,
-            loading: creatingPrimarySession,
-            disabled: creatingPrimarySession,
-          }}
+      {chatSurfaceReady ? (
+        <ClaudeSessionsChatHost
+          incomingSessions={incomingSessions}
+          sessions={sessions}
+          activeSession={activeSession}
+          activeSessionId={activeSessionId}
+          activeRepository={activeRepository}
+          repositories={repositories}
+          activeRepositoryId={activeRepositoryId}
+          workspaceMode={workspaceMode}
+          activeProject={activeProject}
+          projects={projects}
+          activeWorkspaceFocus={activeWorkspaceFocus}
+          onSelectRepository={onSelectRepository}
+          onUpdateSessionModel={onUpdateSessionModel}
+          onUpdateSessionConnectionKind={onUpdateSessionConnectionKind}
+          onUpdateRepositoryExecutionEngine={onUpdateRepositoryExecutionEngine}
+          onUpdateEmployeeExecutionEngine={onUpdateEmployeeExecutionEngine}
+          codexAvailable={codexAvailable}
+          cursorAvailable={cursorAvailable}
+          onOpenExecutionEnvironment={onOpenExecutionEnvironment}
+          onExecuteSession={onExecuteSession}
+          onResumeSessionFromMonitorDrawer={onResumeSessionFromMonitorDrawer}
+          onPrepareSessionForMonitorDrawer={onPrepareSessionForMonitorDrawer}
+          onDispatchExecutionEnvironment={onDispatchExecutionEnvironment}
+          onSendMessage={onSendMessage}
+          onCancelSession={onCancelSession}
+          onSwitchSession={onSwitchSession}
+          onNewSession={onNewSession}
+          onNewProjectSession={onNewProjectSession}
+          onRespondToQuestion={onRespondToQuestion}
+          onDismissQuestion={onDismissQuestion}
+          onRespondToPermission={onRespondToPermission}
+          onClearTodos={onClearTodos}
+          onToggleTodo={onToggleTodo}
+          onRestoreTodosFromTranscript={onRestoreTodosFromTranscript}
+          onRestorePendingPermissionFromTranscript={onRestorePendingPermissionFromTranscript}
+          onClearFollowups={onClearFollowups}
+          onClearRevertItems={onClearRevertItems}
+          onSendFollowup={onSendFollowup}
+          onRestoreRevert={onRestoreRevert}
+          paneCount={paneCount}
+          extraPanes={extraPanes}
+          onPaneRepositorySelect={onPaneRepositorySelect}
+          onPaneProjectNewSession={onPaneProjectNewSession}
+          onNewPaneSession={onNewPaneSession}
+          onOpenWorkflowConfig={onOpenWorkflowConfig}
+          onOpenBuiltinAssistant={onOpenBuiltinAssistant}
+          onOpenAssistantsHub={onOpenAssistantsHub}
+          onOpenRepositoryScheduledTasks={onOpenRepositoryScheduledTasks}
+          employees={employees}
+          mentionEmployees={mentionEmployees}
+          composerProjectRoleTagOptions={composerProjectRoleTagOptions}
+          composerProjectRepositoryMentionOptions={composerProjectRepositoryMentionOptions}
+          composerHideEmployeesInAtMode={composerHideEmployeesInAtMode}
+          workflowTasks={workflowTasks}
+          taskPendingEmployeesByTaskId={taskPendingEmployeesByTaskId}
+          workflowTemplates={workflowTemplates}
+          workflowGraphsByWorkflowId={workflowGraphsByWorkflowId}
+          workflowGraphStatusByWorkflowId={workflowGraphStatusByWorkflowId}
+          onOpenTaskDetail={onOpenTaskDetail}
+          panelBelowMessages={panelBelowMessages}
+          hideMessages={hideMessages}
+          hideSessionTools={hideSessionTools}
+          resolvePaneAuxLayout={resolvePaneAuxLayout}
+          resolveTaskListOmcInvokeConcurrency={resolveTaskListOmcInvokeConcurrency}
+          repositoryMainBindings={repositoryMainBindings}
+          onAppendSystemMessage={onAppendSystemMessage}
+          onAppendUserMessage={onAppendUserMessage}
+          onNotifyOmcEmployeeDirectBatchTaskDone={onNotifyOmcEmployeeDirectBatchTaskDone}
+          onPrepareFreshOmcEmployeeWorkerForDirectBatch={onPrepareFreshOmcEmployeeWorkerForDirectBatch}
+          onRefreshHistorySessions={onRefreshHistorySessions}
+          onDeleteHistorySession={onDeleteHistorySession}
+          onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
+          onRestoreHistorySessionAsMain={onRestoreHistorySessionAsMain}
+          omcBatchPipelineActive={omcBatchPipelineActive}
+          onAddWorktreeRepositoryToProject={onAddWorktreeRepositoryToProject}
+          onReloadFullDiskTranscript={onReloadFullDiskTranscript}
+          onLoadMoreTranscriptFromDisk={onLoadMoreTranscriptFromDisk}
+          onCompactSessionHistory={onCompactSessionHistory}
+          onStopSessionConversationTask={onStopSessionConversationTask}
+          missionContext={missionContext}
+          chatContextRepository={chatContextRepository}
+          paneRepoTreeData={paneRepoTreeData}
+          projectsById={projectsById}
+          mainSessionForDataLink={mainSessionForDataLink}
         />
-      )}
+      ) : null}
 
       {/* Terminal Panel：按需加载 xterm，避免进入会话页即拉取 terminal-vendor */}
       {!terminalCollapsed && chatContextRepository && onToggleTerminal && (
@@ -994,3 +688,13 @@ export function ClaudeSessions({
     </div>
   );
 }
+
+function claudeSessionsShellPropsEqual(prev: Props, next: Props): boolean {
+  for (const key of Object.keys(prev) as (keyof Props)[]) {
+    if (key === "sessions") continue;
+    if (!Object.is(prev[key], next[key])) return false;
+  }
+  return true;
+}
+
+export const ClaudeSessions = memo(ClaudeSessionsShell, claudeSessionsShellPropsEqual);

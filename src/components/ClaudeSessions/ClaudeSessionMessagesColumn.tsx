@@ -1,6 +1,12 @@
 import { useRef, type RefObject } from "react";
 import type { ClaudeSession } from "../../types";
+import { CHAT_MESSAGES_SCROLLING_CLASS } from "../../constants/chatScrollPerformance";
+import {
+  isClaudeChatSessionStreaming,
+  useChatMessagesPointerBusy,
+} from "../../hooks/useChatMessagesPointerBusy";
 import { useChatMessageListRows } from "../../hooks/useChatMessageListRows";
+import { useScrollEndClass } from "../../hooks/useScrollEndClass";
 import { ChatMessageListVirtualBody } from "./ChatMessageListVirtualBody";
 import "./index.css";
 
@@ -25,6 +31,11 @@ export function ClaudeSessionMessagesColumn({
   const internalScrollRef = useRef<HTMLDivElement>(null);
   const scrollRef = scrollContainerRef ?? internalScrollRef;
   const rows = useChatMessageListRows(session);
+  const streamingActive = isClaudeChatSessionStreaming(session.status);
+  useScrollEndClass(scrollRef, CHAT_MESSAGES_SCROLLING_CLASS, 240, {
+    deferLiveSessionUpdates: true,
+  });
+  useChatMessagesPointerBusy(scrollRef, streamingActive);
 
   return (
     <div className="app-claude-chat app-claude-session-messages-column">

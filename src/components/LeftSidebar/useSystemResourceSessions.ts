@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
 import type { ClaudeHostProcess, ClaudeSession, ClaudeSessionInfo } from "../../types";
 import { listRunningClaudeSessions } from "../../services/claude";
 import { isClaudeSessionRunningInHostOrUi } from "../../services/claudeSessionState";
@@ -18,13 +18,15 @@ import {
 } from "./systemSessions";
 
 interface UseSystemResourceSessionsInput {
-  sessions: ClaudeSession[];
+  sessionsRef: RefObject<readonly ClaudeSession[]>;
+  sessionsStructureKey: string;
   onCancelSessionFromMonitor?: (sessionId: string) => void;
   onReloadFullDiskTranscript?: (sessionKey: string) => void | Promise<void>;
 }
 
 export function useSystemResourceSessions({
-  sessions,
+  sessionsRef,
+  sessionsStructureKey,
   onCancelSessionFromMonitor,
   onReloadFullDiskTranscript,
 }: UseSystemResourceSessionsInput) {
@@ -141,15 +143,17 @@ export function useSystemResourceSessions({
   );
 
   const runningClaudeCodeSessions = useMemo(() => {
+    const sessions = sessionsRef.current;
     const picked = sessions.filter((session) => isClaudeSessionRunningInHostOrUi(session, claudeRegistryRunningIds));
     const byId = new Map<string, ClaudeSession>();
     for (const session of picked) {
       byId.set(session.id, session);
     }
     return [...byId.values()].sort((a, b) => sessionUpdatedAt(b) - sessionUpdatedAt(a));
-  }, [sessions, claudeRegistryRunningIds]);
+  }, [sessionsRef, sessionsStructureKey, claudeRegistryRunningIds]);
 
   const registryOrphanClaudeSessions = useMemo(() => {
+    const sessions = sessionsRef.current;
     const sessionClaudeIdSet = new Set(
       sessions
         .map((session) => session.claudeSessionId?.trim())
@@ -164,7 +168,7 @@ export function useSystemResourceSessions({
       out.push(buildRegistryOrphanClaudeSession(info));
     }
     return out;
-  }, [sessions, registryRunningClaude]);
+  }, [sessionsRef, sessionsStructureKey, registryRunningClaude]);
 
   const hostProcessClaudeSessions = useMemo(() => {
     const coveredSids = new Set<string>();
@@ -214,10 +218,10 @@ export function useSystemResourceSessions({
 
   const liveSystemDrawerSession = useMemo(() => {
     if (!systemSessionDrawerId) return undefined;
-    return sessions.find(
+    return sessionsRef.current.find(
       (item) => item.id === systemSessionDrawerId || item.claudeSessionId === systemSessionDrawerId,
     );
-  }, [systemSessionDrawerId, sessions]);
+  }, [systemSessionDrawerId, sessionsRef, sessionsStructureKey]);
 
   const drawerRegistryOrphanSid = useMemo(
     () => (systemSessionDrawerId ? parseRegistryOrphanClaudeSid(systemSessionDrawerId) : null),

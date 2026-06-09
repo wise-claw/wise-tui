@@ -1,6 +1,6 @@
 import type { ClaudeSession, ProjectItem, Repository } from "../../types";
 import { Dropdown, message, Popover, Spin, Switch, Tooltip, type TooltipProps } from "antd";
-import { lazy, Suspense, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from "react";
+import { lazy, Suspense, memo, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from "react";
 import { useWiseTopbarChromeVisibility } from "../../hooks/useWiseTopbarChromeVisibility";
 import { RemoteEntryTopbarStrip } from "../RemoteEntryTopbarStrip";
 import { WorkspaceQuickActionsTopbarStrip } from "../WorkspaceQuickActionsTopbarStrip";
@@ -124,7 +124,6 @@ interface TopbarBtnProps {
   onClick?: () => void;
   onContextMenu?: (event: MouseEvent<HTMLButtonElement>) => void;
   active?: boolean;
-  tooltipPlacement?: TooltipProps["placement"];
 }
 
 function TopbarBtn({
@@ -133,24 +132,18 @@ function TopbarBtn({
   onClick,
   onContextMenu,
   active,
-  tooltipPlacement = "bottom",
 }: TopbarBtnProps) {
   return (
-    <Tooltip
+    <button
+      className={`app-topbar-btn ${active ? "active" : ""}`}
+      onClick={onClick}
+      onContextMenu={onContextMenu}
+      type="button"
       title={label}
-      mouseEnterDelay={0.3}
-      placement={tooltipPlacement}
-      getPopupContainer={() => document.body}
+      aria-label={label}
     >
-      <button
-        className={`app-topbar-btn ${active ? "active" : ""}`}
-        onClick={onClick}
-        onContextMenu={onContextMenu}
-        type="button"
-      >
-        {icon}
-      </button>
-    </Tooltip>
+      {icon}
+    </button>
   );
 }
 
@@ -183,7 +176,7 @@ export interface TopbarProps {
   onOpenRemoteChannels?: () => void;
 }
 
-export function Topbar({
+export const Topbar = memo(function Topbar({
   activeProject,
   activeWorkspaceFocus = "repository",
   activeRepository,
@@ -496,7 +489,6 @@ export function Topbar({
                       }
                     : undefined
                 }
-                tooltipPlacement="bottomRight"
               />
             </span>
           </Popover>
@@ -504,4 +496,4 @@ export function Topbar({
       </div>
     </div>
   );
-}
+});

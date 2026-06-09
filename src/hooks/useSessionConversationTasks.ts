@@ -43,6 +43,7 @@ import {
   anchorSessionConversationTasksFingerprint,
   buildSessionConversationTasks,
   executionEnvironmentWorkerSessionsFingerprint,
+  sessionsReactiveStructureKey,
 } from "../utils/sessionConversationTasks";
 import { resolveExecutionEnvironmentDispatchAnchorSessionId } from "../utils/executionEnvironmentDispatchAnchor";
 import { useExecutionEnvironmentDispatchPersistence } from "./useExecutionEnvironmentDispatchPersistence";
@@ -58,15 +59,20 @@ export function useSessionConversationTasks(
   const repositoryMainSessionBindings = options?.repositoryMainSessionBindings ?? {};
   const repositories = options?.repositories ?? [];
 
+  const sessionsRef = useRef(sessions);
+  sessionsRef.current = sessions;
+
+  const sessionsStructureKey = sessionsReactiveStructureKey(sessions);
+
   const dispatchAnchorSessionId = useMemo(
     () =>
       resolveExecutionEnvironmentDispatchAnchorSessionId({
         activeSessionId,
-        sessions,
+        sessions: sessionsRef.current,
         repositoryMainSessionBindings,
         repositories,
       }),
-    [activeSessionId, sessions, repositoryMainSessionBindings, repositories],
+    [activeSessionId, repositoryMainSessionBindings, repositories, sessionsStructureKey],
   );
 
   useExecutionEnvironmentDispatchPersistence(
@@ -76,12 +82,9 @@ export function useSessionConversationTasks(
     repositories,
   );
 
-  const sessionsRef = useRef(sessions);
-  sessionsRef.current = sessions;
-
   const workerSessionsFingerprint = useMemo(
-    () => executionEnvironmentWorkerSessionsFingerprint(sessions),
-    [sessions],
+    () => executionEnvironmentWorkerSessionsFingerprint(sessionsRef.current),
+    [sessionsStructureKey],
   );
 
   const anchorSessionFingerprint = useMemo(() => {
@@ -89,7 +92,7 @@ export function useSessionConversationTasks(
       ? sessionsRef.current.find((item) => item.id === dispatchAnchorSessionId) ?? null
       : null;
     return anchorSessionConversationTasksFingerprint(session);
-  }, [dispatchAnchorSessionId, workerSessionsFingerprint]);
+  }, [dispatchAnchorSessionId, sessionsStructureKey]);
 
   const activeSessionRepositoryPath = useMemo(() => {
     if (!dispatchAnchorSessionId) return "";
@@ -97,7 +100,7 @@ export function useSessionConversationTasks(
       sessionsRef.current.find((item) => item.id === dispatchAnchorSessionId)?.repositoryPath?.trim() ??
       ""
     );
-  }, [dispatchAnchorSessionId, workerSessionsFingerprint]);
+  }, [dispatchAnchorSessionId, sessionsStructureKey]);
 
   const directBatchInvocations = useSyncExternalStore(
     subscribeOmcDirectBatchInvocations,

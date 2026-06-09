@@ -5,7 +5,7 @@ import {
   PlusCircleOutlined,
   StopOutlined,
 } from "@ant-design/icons";
-import { Button, Collapse, Descriptions, Drawer, Empty, Popover, Tag, Tooltip, Typography } from "antd";
+import { Button, Collapse, Descriptions, Drawer, Empty, Popover, Tag, Typography } from "antd";
 import {
   memo,
   startTransition,
@@ -81,6 +81,7 @@ import {
   monitorSessionsOverviewFingerprint,
   monitorSessionsTerminalStatusFingerprint,
 } from "../../hooks/useMonitorSessionsForOverview";
+import { useClaudeSessionsLiveSnapshot } from "../../stores/claudeSessionsLiveStore";
 import {
   MONITOR_VIRTUALIZE_MIN_ROWS,
   MonitorPanelVirtualRows,
@@ -823,7 +824,6 @@ export function HistorySessionPopoverContent({
           onClick={(event) => event.stopPropagation()}
         />
         {onCreateSession ? (
-          <Tooltip title="新建会话" mouseEnterDelay={0.35}>
             <Button
               type="text"
               size="small"
@@ -831,12 +831,12 @@ export function HistorySessionPopoverContent({
               icon={<PlusCircleOutlined />}
               loading={createSessionLoading}
               aria-label="新建会话"
+              title="新建会话"
               onClick={(event) => {
                 event.stopPropagation();
                 onCreateSession();
               }}
             />
-          </Tooltip>
         ) : null}
       </div>
       <div className="app-monitor-panel__history-popover-list-head">
@@ -1205,8 +1205,9 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
     sessionConversationTaskDetailTarget != null ||
     repositorySubagentDetailTarget != null ||
     omcDirectBatchDetailSnapshot != null;
+  const liveTranscriptSessions = useClaudeSessionsLiveSnapshot(needsLiveTranscriptSessions);
   const nextTranscriptFingerprint = needsLiveTranscriptSessions
-    ? monitorSessionsOverviewFingerprint(transcriptSourceSessions ?? sessions)
+    ? monitorSessionsOverviewFingerprint(liveTranscriptSessions)
     : "frozen";
   const [transcriptSessionsFingerprint, setTranscriptSessionsFingerprint] = useState(
     nextTranscriptFingerprint,
@@ -1215,8 +1216,8 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
     setTranscriptSessionsFingerprint(nextTranscriptFingerprint);
   }
   const sessionsForHistoryTranscript = useMemo(
-    () => transcriptSourceSessions ?? sessions,
-    [needsLiveTranscriptSessions, transcriptSessionsFingerprint, sessions, transcriptSourceSessions],
+    () => (needsLiveTranscriptSessions ? liveTranscriptSessions : (transcriptSourceSessions ?? sessions)),
+    [needsLiveTranscriptSessions, transcriptSessionsFingerprint, sessions, transcriptSourceSessions, liveTranscriptSessions],
   );
 
   const openHistoryMessagesDrawer = useCallback(

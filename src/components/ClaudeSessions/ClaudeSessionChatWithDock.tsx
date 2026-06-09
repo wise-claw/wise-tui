@@ -1,6 +1,7 @@
 import { memo, type ComponentProps } from "react";
 import { useDockSlice } from "../../hooks/useDockSlice";
 import { ClaudeChat } from "./ClaudeChat";
+import { claudeChatPropsEqual } from "./claudeChatPropsEqual";
 
 export type ClaudeSessionChatWithDockProps = Omit<
   ComponentProps<typeof ClaudeChat>,
@@ -36,4 +37,4 @@ export const ClaudeSessionChatWithDock = memo(function ClaudeSessionChatWithDock
       revertItems={dock.revertItems}
     />
   );
-});
+}, claudeChatPropsEqual);

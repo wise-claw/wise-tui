@@ -19,7 +19,7 @@ import type {
 import type { ReconcileProjectMode } from "../../constants/reconcileProjectMode";
 import type { LeftSidebarHubQuickEntryId } from "../../constants/leftSidebarHubQuickEntries";
 import type { WorkspaceFocus } from "../../utils/workspaceMode";
-import type { ReactNode } from "react";
+import type { ReactNode, RefObject } from "react";
 import type { GitPanelOpenFileOptions } from "../GitPanel";
 import type { TaskCardsNavProps } from "../TaskCardsNav";
 import type { AuthorPane } from "../../types/viewMode";
@@ -130,6 +130,10 @@ export interface LeftSidebarProps {
   /** 停止仓库运行指令（与顶栏「停止运行」一致） */
   onStopRepositoryRunCommand?: (repository: Repository) => void;
   sessions: ClaudeSession[];
+  /** App 壳层流式节流：`sessions` 引用每 token 变，结构指纹不变时侧栏 memo 可跳过重渲染。 */
+  sessionsStructureKey: string;
+  /** 始终指向最新 `sessions`；侧栏跳过重渲染时回调仍读此 ref。 */
+  sessionsLiveRef: RefObject<readonly ClaudeSession[]>;
   /** 运行面板列表用：指纹节流后的会话，避免流式时每 token 重算终端状态 */
   monitorPanelSessions?: ClaudeSession[];
   repositoryMainSessionBindings: Record<string, string>;

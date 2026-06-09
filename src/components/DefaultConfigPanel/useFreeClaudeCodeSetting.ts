@@ -1,9 +1,7 @@
 import { Modal, message } from "antd";
-import { useCallback, useEffect, useState } from "react";
-import { readVisiblePollIntervalMs } from "../../utils/adaptivePoll";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import {
   applyFreeClaudeCodeClaudeSettings,
-  getFreeClaudeCodeStatus,
   installFreeClaudeCode,
   openFreeClaudeCodeAdmin,
   sanitizeClaudeCredentialsForFcc,
@@ -12,33 +10,36 @@ import {
   uninstallFreeClaudeCode,
   type FreeClaudeCodeStatus,
 } from "../../services/freeClaudeCode";
+import {
+  getFccTracesStoreSnapshot,
+  refreshFccTracesStoreNow,
+  startFccTracesPolling,
+  stopFccTracesPolling,
+  subscribeFccTracesStore,
+} from "../../stores/fccTracesStore";
 
 export function useFreeClaudeCodeSetting() {
-  const [status, setStatus] = useState<FreeClaudeCodeStatus | null>(null);
-  const [loading, setLoading] = useState(true);
+  const snapshot = useSyncExternalStore(
+    subscribeFccTracesStore,
+    getFccTracesStoreSnapshot,
+    getFccTracesStoreSnapshot,
+  );
+  const status = snapshot.status;
+  const loading = snapshot.loading;
   const [busy, setBusy] = useState(false);
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    try {
-      setStatus(await getFreeClaudeCodeStatus());
-    } catch (err) {
-      message.error(`读取 Free Claude Code 状态失败：${err instanceof Error ? err.message : String(err)}`);
-    } finally {
-      setLoading(false);
-    }
+  useEffect(() => {
+    startFccTracesPolling();
+    return () => stopFccTracesPolling();
   }, []);
 
-  useEffect(() => {
-    void refresh();
-    const timer = window.setInterval(() => {
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-      void getFreeClaudeCodeStatus()
-        .then(setStatus)
-        .catch(() => undefined);
-    }, readVisiblePollIntervalMs(8000, 30000));
-    return () => window.clearInterval(timer);
-  }, [refresh]);
+  const refresh = useCallback(async () => {
+    try {
+      await refreshFccTracesStoreNow();
+    } catch (err) {
+      message.error(`读取 Free Claude Code 状态失败：${err instanceof Error ? err.message : String(err)}`);
+    }
+  }, []);
 
   const runAction = useCallback(
     async (label: string, fn: () => Promise<FreeClaudeCodeStatus | boolean | string>) => {

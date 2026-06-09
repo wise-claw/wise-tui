@@ -1,9 +1,10 @@
 import type { MutableRefObject } from "react";
-import { useRef } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { Dropdown, Typography } from "antd";
 import { DeferredHoverTooltip } from "../shared/DeferredHoverTooltip";
 import { LEFT_SIDEBAR_SCROLLING_CLASS } from "../../constants/leftSidebarScrollPerformance";
 import { useScrollEndClass } from "../../hooks/useScrollEndClass";
+import { setWorkspacePointerActive } from "../../stores/chromePanelHoverStore";
 import type { ReconcileProjectMode } from "../../constants/reconcileProjectMode";
 import type { Repository, StandaloneRepo, TaskMode, Workspace } from "../../types";
 import {
@@ -95,8 +96,6 @@ interface ProjectRepositoryListProps {
   requirementUnsplitByRepoId?: Record<number, number>;
   executableTasksByProjectId?: Record<string, number>;
   executableTasksByRepoId?: Record<number, number>;
-  incompleteTodoCountByProjectId?: Record<string, number>;
-  incompleteTodoCountByRepositoryId?: Record<number, number>;
   /** 默认配置关闭待办时隐藏侧栏菜单、徽章与 Popover。 */
   workspaceTodosEnabled?: boolean;
   onOpenScheduledTasksForRepository?: (repository: Repository) => void;
@@ -173,8 +172,6 @@ export function ProjectRepositoryList({
   requirementUnsplitByRepoId = {},
   executableTasksByProjectId = {},
   executableTasksByRepoId = {},
-  incompleteTodoCountByProjectId = {},
-  incompleteTodoCountByRepositoryId = {},
   workspaceTodosEnabled = true,
   onOpenScheduledTasksForRepository,
   onOpenScheduledTasksForProject,
@@ -190,7 +187,28 @@ export function ProjectRepositoryList({
 }: ProjectRepositoryListProps) {
   const setSectionCollapsed = onSectionCollapsedChange;
   const repositoryListScrollRef = useRef<HTMLDivElement>(null);
-  useScrollEndClass(repositoryListScrollRef, LEFT_SIDEBAR_SCROLLING_CLASS);
+  useScrollEndClass(
+    repositoryListScrollRef,
+    [LEFT_SIDEBAR_SCROLLING_CLASS, "app-repository-list--scrolling"],
+    280,
+    {
+      relieveSidePanelPriority: true,
+      relieveWorkspacePriority: true,
+    },
+  );
+
+  const onWorkspaceListPointerEnter = useCallback(() => {
+    setWorkspacePointerActive(true);
+  }, []);
+  const onWorkspaceListPointerLeave = useCallback(() => {
+    setWorkspacePointerActive(false);
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      setWorkspacePointerActive(false);
+    };
+  }, []);
 
   return (
     <>
@@ -238,7 +256,12 @@ export function ProjectRepositoryList({
       </div>
 
       {!sectionCollapsed ? (
-      <div className="app-repository-list" ref={repositoryListScrollRef}>
+      <div
+        className="app-repository-list"
+        ref={repositoryListScrollRef}
+        onMouseEnter={onWorkspaceListPointerEnter}
+        onMouseLeave={onWorkspaceListPointerLeave}
+      >
         {floatingRepositories.length > 0 ? (
           <div className="app-repository-floating-group" aria-label="单仓">
             {floatingRepositories.map((repository) => (
@@ -269,7 +292,6 @@ export function ProjectRepositoryList({
                 scheduledTasksEnabledCount={scheduledTasksByRepoId[repository.id]?.enabled ?? 0}
                 requirementUnsplitCount={requirementUnsplitByRepoId[repository.id] ?? 0}
                 executableTaskCount={executableTasksByRepoId[repository.id] ?? 0}
-                incompleteTodoCount={incompleteTodoCountByRepositoryId[repository.id] ?? 0}
                 workspaceTodosEnabled={workspaceTodosEnabled}
                 onOpenScheduledTasks={onOpenScheduledTasksForRepository}
                 onOpenRequirements={onOpenRepositoryRequirements}
@@ -343,8 +365,6 @@ export function ProjectRepositoryList({
             onOpenRepositoryRequirements={onOpenRepositoryRequirements}
             executableTasksByProjectId={executableTasksByProjectId}
             executableTasksByRepoId={executableTasksByRepoId}
-            incompleteTodoCountByProjectId={incompleteTodoCountByProjectId}
-            incompleteTodoCountByRepositoryId={incompleteTodoCountByRepositoryId}
             workspaceTodosEnabled={workspaceTodosEnabled}
             onOpenExecutableTasksForProject={onOpenExecutableTasksForProject}
             onOpenExecutableTasksForRepository={onOpenExecutableTasksForRepository}
@@ -427,8 +447,6 @@ interface ProjectRowProps {
   requirementUnsplitByRepoId?: Record<number, number>;
   executableTasksByProjectId?: Record<string, number>;
   executableTasksByRepoId?: Record<number, number>;
-  incompleteTodoCountByProjectId?: Record<string, number>;
-  incompleteTodoCountByRepositoryId?: Record<number, number>;
   /** 默认配置关闭待办时隐藏侧栏菜单、徽章与 Popover。 */
   workspaceTodosEnabled?: boolean;
   onOpenScheduledTasksForRepository?: (repository: Repository) => void;
@@ -493,8 +511,6 @@ function ProjectRow({
   requirementUnsplitByRepoId = {},
   executableTasksByProjectId = {},
   executableTasksByRepoId = {},
-  incompleteTodoCountByProjectId = {},
-  incompleteTodoCountByRepositoryId = {},
   workspaceTodosEnabled = true,
   onOpenScheduledTasksForRepository,
   onOpenScheduledTasksForProject,
@@ -525,7 +541,6 @@ function ProjectRow({
   );
   const projectRequirementUnsplitCount = requirementUnsplitByProjectId[project.id] ?? 0;
   const projectExecutableTaskCount = executableTasksByProjectId[project.id] ?? 0;
-  const projectIncompleteTodoCount = incompleteTodoCountByProjectId[project.id] ?? 0;
   const projectMoreItems = buildProjectMoreMenuItems({
     isPinned,
     trellisEnabled: projectTrellisEnabled,
@@ -658,7 +673,6 @@ function ProjectRow({
           <SidebarWorkspaceRemindersAction
             enabled={workspaceTodosEnabled}
             variant="project"
-            incompleteCount={projectIncompleteTodoCount}
             projectId={project.id}
             repositoryId={null}
           />
@@ -750,7 +764,6 @@ function ProjectRow({
             scheduledTasksByRepoId={scheduledTasksByRepoId}
             requirementUnsplitByRepoId={requirementUnsplitByRepoId}
             executableTasksByRepoId={executableTasksByRepoId}
-            incompleteTodoCountByRepositoryId={incompleteTodoCountByRepositoryId}
             workspaceTodosEnabled={workspaceTodosEnabled}
             onOpenScheduledTasks={onOpenScheduledTasksForRepository}
             onOpenRepositoryRequirements={onOpenRepositoryRequirements}

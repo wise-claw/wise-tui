@@ -12,6 +12,7 @@ import type {
 } from "../../types";
 import { MAIN_LAYOUT_RIGHT_SIDER_WIDTH_PX } from "../../constants/mainLayoutWidths";
 import { ProgressMonitorPanel } from "../ProgressMonitorPanel";
+import { useChromePanelHoverHandlers } from "../../hooks/useChromePanelHoverHandlers";
 import { WorkspaceInspectorPanelsSection } from "./WorkspaceInspectorPanelsSection";
 import "./Inspector.css";
 
@@ -119,6 +120,7 @@ export function ChatInspector({
 }: ChatInspectorProps) {
   const sessionsForMonitor = monitorPanelSessions ?? [];
   const transcriptSessions = monitorTranscriptSourceSessions ?? sessionsForMonitor;
+  const chromePanelHoverHandlers = useChromePanelHoverHandlers("right");
 
   return (
     <Sider
@@ -127,6 +129,8 @@ export function ChatInspector({
       collapsed={collapsed}
       className="app-right-panel app-chat-inspector"
       theme={dark ? "dark" : "light"}
+      onMouseEnter={chromePanelHoverHandlers.onMouseEnter}
+      onMouseLeave={chromePanelHoverHandlers.onMouseLeave}
     >
       <div className="app-right-panel-inner app-chat-inspector-inner">
         {repositoryRepoPanel ? (

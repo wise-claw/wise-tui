@@ -67,6 +67,7 @@ import {
   getEffectiveRepoSddMode,
   getProjectSddMode,
 } from "../utils/projectRepositoryRoles";
+import { sessionsReactiveStructureKey } from "../utils/sessionConversationTasks";
 
 const EMPTY_MONITOR_INVOCATIONS: WorkflowInvocationStreamDetail[] = [];
 
@@ -1203,6 +1204,9 @@ export function useMonitorOverview({
   monitorDrawerOpenRef.current = monitorDrawerOpen;
   const monitorOverviewActiveRef = useRef(monitorOverviewActive);
   monitorOverviewActiveRef.current = monitorOverviewActive;
+  const sessionsRef = useRef(sessions);
+  sessionsRef.current = sessions;
+  const sessionsStructureKey = sessionsReactiveStructureKey(sessions);
 
   const directBatchInvocationsSnap = useSyncExternalStore(
     monitorOverviewActive ? subscribeOmcDirectBatchInvocations : noopMonitorStoreSubscribe,
@@ -1404,7 +1408,7 @@ export function useMonitorOverview({
     employees,
     repositories,
     projects,
-    sessions,
+    sessionsStructureKey,
     taskPendingEmployeesByTaskId,
     workflowRuntimeSnapshotsByTaskId,
     workflowTaskEventsByTaskId,
@@ -1420,6 +1424,7 @@ export function useMonitorOverview({
   ] as const;
 
   return useMemo(() => {
+    const sessions = sessionsRef.current;
     if (!monitorOverviewActive) {
       const result = buildInactiveMonitorOverview({
         employees,

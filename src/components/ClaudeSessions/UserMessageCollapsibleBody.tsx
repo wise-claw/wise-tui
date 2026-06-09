@@ -18,17 +18,22 @@ export function UserMessageCollapsibleBody({ children }: Props) {
     const el = bodyRef.current;
     if (!el) return;
 
+    let rafId = 0;
     const measure = () => {
       const nextOverflows = el.scrollHeight > el.clientHeight + 1;
       setOverflows((prev) => (prev === nextOverflows ? prev : nextOverflows));
     };
+    const scheduleMeasure = () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(measure);
+    };
 
-    const rafId = requestAnimationFrame(measure);
+    scheduleMeasure();
     const observer =
-      typeof ResizeObserver !== "undefined" ? new ResizeObserver(measure) : null;
+      typeof ResizeObserver !== "undefined" ? new ResizeObserver(scheduleMeasure) : null;
     observer?.observe(el);
     return () => {
-      cancelAnimationFrame(rafId);
+      if (rafId) cancelAnimationFrame(rafId);
       observer?.disconnect();
     };
   }, [expanded]);

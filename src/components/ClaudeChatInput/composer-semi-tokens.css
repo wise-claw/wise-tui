@@ -2,7 +2,7 @@
 .app-claude-semi-chat-input-mount-placeholder {
   width: 100%;
   min-height: calc(
-    var(--app-semi-ai-chat-editor-min-lines, 2) * var(--app-semi-ai-chat-editor-line-px, 20px) + 12px
+    var(--app-semi-ai-chat-editor-min-lines, 1) * var(--app-semi-ai-chat-editor-line-px, 20px) + 12px
   );
   box-sizing: border-box;
 }
@@ -23,7 +23,7 @@
   --semi-color-primary-light-default: var(--ant-color-primary-bg);
   /* 与下方 `.tiptap` 行高一致，供编辑区 min/max-height 计算 */
   --app-semi-ai-chat-editor-line-px: 20px;
-  --app-semi-ai-chat-editor-min-lines: 2;
+  --app-semi-ai-chat-editor-min-lines: 1;
   --app-semi-ai-chat-editor-max-lines: 3;
   min-width: 0;
 }
@@ -56,7 +56,7 @@
   );
 }
 
-/* 编辑区至少 2 行、最多约 3 行（超出由 Semi 自带的 overflow:auto 滚动） */
+/* 编辑区至少 1 行、最多约 3 行（超出由 Semi 自带的 overflow:auto 滚动） */
 .app-claude-semi-chat-input-wrap .semi-aiChatInput-editor-content {
   flex: 0 0 auto;
   min-height: calc(
@@ -67,7 +67,7 @@
   );
 }
 
-/* 空态占位段落也撑满两行，避免仅显示一行 placeholder */
+/* 空态占位段落撑满一行，避免 placeholder 被裁切 */
 .app-claude-semi-chat-input-wrap
   .semi-aiChatInput-editor-content
   .tiptap

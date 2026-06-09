@@ -12,7 +12,7 @@ import {
   systemMessagePlainText,
 } from "../../utils/claudeChatMessageDisplay";
 import { DispatchRecordMessage } from "./DispatchRecordMessage";
-import { UserMessageCollapsibleBody } from "./UserMessageCollapsibleBody";
+import { UserMessageDisplayBody } from "./UserMessageDisplayBody";
 import { ChatMessageRowActions } from "./ChatMessageRowActions";
 import { useChatMessageCopyText } from "./useChatMessageCopyText";
 
@@ -87,11 +87,10 @@ function ClaudeChatMessageRowInner({
   }
 
   function renderNonSystemContent() {
-    const body = renderChatBody();
     if (msg.role === "user" && !toolUser) {
-      return <UserMessageCollapsibleBody>{body}</UserMessageCollapsibleBody>;
+      return <UserMessageDisplayBody msg={msg} streaming={streamingThisBubble} />;
     }
-    return body;
+    return renderChatBody();
   }
 
   const showSender = !mergedWithPrevious && (toolUser || (msg.role !== "user" && msg.role !== "assistant"));

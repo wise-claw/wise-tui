@@ -21,7 +21,7 @@ function session(partial: Partial<ClaudeSession> & Pick<ClaudeSession, "id">): C
 }
 
 describe("monitorSessionsOverviewFingerprint", () => {
-  test("ignores small streaming growth within same bucket", () => {
+  test("ignores streaming growth on running sessions", () => {
     const short = session({
       id: "a",
       status: "running",
@@ -30,7 +30,7 @@ describe("monitorSessionsOverviewFingerprint", () => {
     const longer = session({
       id: "a",
       status: "running",
-      messages: [{ id: "m1", role: "assistant", content: "x".repeat(150), timestamp: 1 }],
+      messages: [{ id: "m1", role: "assistant", content: "x".repeat(900), timestamp: 1 }],
     });
     expect(monitorSessionsOverviewFingerprint([short])).toBe(
       monitorSessionsOverviewFingerprint([longer]),
@@ -85,6 +85,75 @@ describe("monitorSessionsTerminalStatusFingerprint", () => {
     });
     expect(monitorSessionsTerminalStatusFingerprint([one])).not.toBe(
       monitorSessionsTerminalStatusFingerprint([two]),
+    );
+  });
+
+  test("changes when a running session receives a new user turn", () => {
+    const oneTurn = session({
+      id: "w",
+      status: "running",
+      messages: [
+        { id: "u1", role: "user", content: "go", timestamp: 1 },
+        { id: "a1", role: "assistant", content: "ok", timestamp: 2 },
+      ],
+    });
+    const twoTurns = session({
+      id: "w",
+      status: "running",
+      messages: [
+        { id: "u1", role: "user", content: "go", timestamp: 1 },
+        { id: "a1", role: "assistant", content: "ok", timestamp: 2 },
+        { id: "u2", role: "user", content: "again", timestamp: 3 },
+      ],
+    });
+    expect(monitorSessionsTerminalStatusFingerprint([oneTurn])).not.toBe(
+      monitorSessionsTerminalStatusFingerprint([twoTurns]),
+    );
+  });
+
+  test("changes running fingerprints when only the last user boundary changes", () => {
+    const oneTurn = session({
+      id: "w",
+      status: "running",
+      messages: [
+        { id: "u1", role: "user", content: "go", timestamp: 1 },
+        { id: "a1", role: "assistant", content: "ok", timestamp: 2 },
+        { id: "a2", role: "assistant", content: "still running", timestamp: 3 },
+      ],
+    });
+    const twoTurns = session({
+      id: "w",
+      status: "running",
+      messages: [
+        { id: "u1", role: "user", content: "go", timestamp: 1 },
+        { id: "u2", role: "user", content: "again", timestamp: 2 },
+        { id: "a2", role: "assistant", content: "still running", timestamp: 3 },
+      ],
+    });
+    expect(monitorSessionsTerminalStatusFingerprint([oneTurn])).not.toBe(
+      monitorSessionsTerminalStatusFingerprint([twoTurns]),
+    );
+  });
+
+  test("changes settled assistant preview length buckets", () => {
+    const short = session({
+      id: "w",
+      status: "completed",
+      messages: [
+        { id: "u1", role: "user", content: "go", timestamp: 1 },
+        { id: "a1", role: "assistant", content: "x".repeat(50), timestamp: 2 },
+      ],
+    });
+    const longer = session({
+      id: "w",
+      status: "completed",
+      messages: [
+        { id: "u1", role: "user", content: "go", timestamp: 1 },
+        { id: "a1", role: "assistant", content: "x".repeat(200), timestamp: 2 },
+      ],
+    });
+    expect(monitorSessionsTerminalStatusFingerprint([short])).not.toBe(
+      monitorSessionsTerminalStatusFingerprint([longer]),
     );
   });
 });

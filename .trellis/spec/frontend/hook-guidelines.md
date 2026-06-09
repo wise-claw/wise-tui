@@ -108,6 +108,27 @@ Use these patterns:
 - Avoid stale closure bugs by reading latest mutable values from refs.
 - Keep event names in `src/constants/*` when reused across modules.
 
+### Pattern: Stream Snapshot Fingerprints
+
+**Contract**: Fingerprints for high-frequency stream state should include structural fields that change UI meaning, not the full streaming body. For Claude sessions this means status, message count, last message identity/role, and user-turn boundary; assistant body length should be ignored while the session is `running` or `connecting`.
+
+```ts
+const isStreaming = session.status === "running" || session.status === "connecting";
+const fingerprintPart = [
+  session.id,
+  session.status,
+  String(session.messages.length),
+  String(indexOfLastRenderableUserMessage(session.messages)),
+  last?.id ?? "",
+  last?.role ?? "",
+  isStreaming ? "" : settledPreviewBucket,
+].join("|");
+```
+
+**Why**: Token streaming can update content many times per second. Periodic hooks that scan full message bodies or duplicate the same fingerprint timer can create global UI stutter.
+
+**Tests Required**: Cover both sides of the contract: streaming body growth does not change the fingerprint, while status, appended messages, last user boundary, and settled preview buckets do.
+
 ---
 
 ## Naming Conventions

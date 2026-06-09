@@ -1,7 +1,7 @@
 import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
-import { Button, Checkbox, Input, Segmented, Spin, Tag, Tooltip, Typography } from "antd";
+import { Button, Checkbox, Input, Segmented, Spin, Tag, Typography } from "antd";
 import type { InputRef } from "antd";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useWorkspaceTodos } from "../../hooks/useWorkspaceTodos";
 import {
   createWorkspaceTodoItem,
@@ -10,6 +10,7 @@ import {
   type WorkspaceTodoDisplayItem,
   type WorkspaceTodoScope,
 } from "../../types/workspaceTodos";
+import { scopeItemsFromDisplay } from "../../utils/workspaceTodoDisplayItems";
 import "./WorkspaceTodosPanel.css";
 
 export type WorkspaceTodosController = ReturnType<typeof useWorkspaceTodos>;
@@ -31,12 +32,28 @@ export interface WorkspaceTodosEditorProps {
 interface TodoRowProps {
   item: WorkspaceTodoDisplayItem;
   showScopeTag: boolean;
-  onToggle: () => void;
-  onTitleChange: (title: string) => void;
-  onDelete: () => void;
+  onToggle: (item: WorkspaceTodoDisplayItem) => void;
+  onTitleChange: (item: WorkspaceTodoDisplayItem, title: string) => void;
+  onDelete: (item: WorkspaceTodoDisplayItem) => void;
 }
 
-function TodoRow({ item, showScopeTag, onToggle, onTitleChange, onDelete }: TodoRowProps) {
+function todoRowPropsEqual(prev: TodoRowProps, next: TodoRowProps): boolean {
+  return (
+    prev.item === next.item &&
+    prev.showScopeTag === next.showScopeTag &&
+    prev.onToggle === next.onToggle &&
+    prev.onTitleChange === next.onTitleChange &&
+    prev.onDelete === next.onDelete
+  );
+}
+
+const TodoRow = memo(function TodoRow({
+  item,
+  showScopeTag,
+  onToggle,
+  onTitleChange,
+  onDelete,
+}: TodoRowProps) {
   const [editing, setEditing] = useState(false);
   const [draft, setDraft] = useState(item.title);
   const overdue = isWorkspaceTodoOverdue(item);
@@ -48,7 +65,7 @@ function TodoRow({ item, showScopeTag, onToggle, onTitleChange, onDelete }: Todo
   const commitTitle = () => {
     const next = draft.trim() || "无标题";
     setEditing(false);
-    if (next !== item.title) onTitleChange(next);
+    if (next !== item.title) onTitleChange(item, next);
   };
 
   const gridClass = showScopeTag
@@ -62,7 +79,7 @@ function TodoRow({ item, showScopeTag, onToggle, onTitleChange, onDelete }: Todo
       <Checkbox
         className="app-workspace-todos-panel__check"
         checked={item.completed}
-        onChange={onToggle}
+        onChange={() => onToggle(item)}
         aria-label={item.completed ? "标记为未完成" : "标记为已完成"}
       />
       <div className="app-workspace-todos-panel__row-main">
@@ -99,21 +116,151 @@ function TodoRow({ item, showScopeTag, onToggle, onTitleChange, onDelete }: Todo
           {item.scope === "project" ? "工作区" : "仓库"}
         </Tag>
       ) : null}
-      <Tooltip title="删除" placement="topRight" mouseEnterDelay={0.3}>
-        <Button
-          type="text"
-          size="small"
-          className="app-workspace-todos-panel__delete"
-          icon={<DeleteOutlined />}
-          aria-label="删除待办"
-          onClick={onDelete}
-        />
-      </Tooltip>
+      <Button
+        type="text"
+        size="small"
+        className="app-workspace-todos-panel__delete"
+        icon={<DeleteOutlined />}
+        aria-label="删除待办"
+        title="删除"
+        onClick={() => onDelete(item)}
+      />
     </li>
   );
+}, todoRowPropsEqual);
+
+interface WorkspaceTodosComposerProps {
+  disabled: boolean;
+  scopeOptions: Array<{ label: string; value: WorkspaceTodoScope }>;
+  defaultScope: WorkspaceTodoScope;
+  focusAddToken: number;
+  onAdd: (title: string, scope: WorkspaceTodoScope) => void;
 }
 
-export function WorkspaceTodosEditor({
+interface WorkspaceTodosListProps {
+  activeItems: WorkspaceTodoDisplayItem[];
+  completedItems: WorkspaceTodoDisplayItem[];
+  showCompleted: boolean;
+  showScopeTag: boolean;
+  onToggle: (item: WorkspaceTodoDisplayItem) => void;
+  onTitleChange: (item: WorkspaceTodoDisplayItem, title: string) => void;
+  onDelete: (item: WorkspaceTodoDisplayItem) => void;
+}
+
+const WorkspaceTodosList = memo(function WorkspaceTodosList({
+  activeItems,
+  completedItems,
+  showCompleted,
+  showScopeTag,
+  onToggle,
+  onTitleChange,
+  onDelete,
+}: WorkspaceTodosListProps) {
+  return (
+    <ul className="app-workspace-todos-panel__list">
+      {activeItems.length === 0 && !showCompleted ? (
+        <li className="app-workspace-todos-panel__empty-hint">
+          <Typography.Text type="secondary">暂无待办</Typography.Text>
+        </li>
+      ) : null}
+      {activeItems.map((item) => (
+        <TodoRow
+          key={`${item.scope}:${item.id}`}
+          item={item}
+          showScopeTag={showScopeTag}
+          onToggle={onToggle}
+          onTitleChange={onTitleChange}
+          onDelete={onDelete}
+        />
+      ))}
+      {showCompleted
+        ? completedItems.map((item) => (
+            <TodoRow
+              key={`${item.scope}:${item.id}`}
+              item={item}
+              showScopeTag={showScopeTag}
+              onToggle={onToggle}
+              onTitleChange={onTitleChange}
+              onDelete={onDelete}
+            />
+          ))
+        : null}
+    </ul>
+  );
+});
+
+const WorkspaceTodosComposer = memo(function WorkspaceTodosComposer({
+  disabled,
+  scopeOptions,
+  defaultScope,
+  focusAddToken,
+  onAdd,
+}: WorkspaceTodosComposerProps) {
+  const [newScope, setNewScope] = useState<WorkspaceTodoScope>(defaultScope);
+  const [draftTitle, setDraftTitle] = useState("");
+  const addInputRef = useRef<InputRef>(null);
+
+  useEffect(() => {
+    setNewScope(defaultScope);
+  }, [defaultScope]);
+
+  useEffect(() => {
+    if (!focusAddToken || disabled) return;
+    const timer = window.setTimeout(() => addInputRef.current?.focus(), 80);
+    return () => window.clearTimeout(timer);
+  }, [disabled, focusAddToken]);
+
+  const resolvedScope = scopeOptions.length > 1 ? newScope : (scopeOptions[0]?.value ?? defaultScope);
+
+  const commit = useCallback(
+    (refocus: boolean) => {
+      const title = draftTitle.trim();
+      if (!title || disabled) return;
+      onAdd(title, resolvedScope);
+      setDraftTitle("");
+      if (refocus) addInputRef.current?.focus();
+    },
+    [disabled, draftTitle, onAdd, resolvedScope],
+  );
+
+  return (
+    <div className="app-workspace-todos-panel__composer">
+      {scopeOptions.length > 1 ? (
+        <Segmented
+          size="small"
+          className="app-workspace-todos-panel__scope-pick"
+          value={newScope}
+          options={scopeOptions}
+          onChange={(value) => setNewScope(value as WorkspaceTodoScope)}
+        />
+      ) : null}
+      <Input
+        ref={addInputRef}
+        size="small"
+        className="app-workspace-todos-panel__add-input"
+        placeholder="新建待办"
+        value={draftTitle}
+        disabled={disabled}
+        onChange={(e) => setDraftTitle(e.target.value)}
+        onPressEnter={(e) => {
+          e.preventDefault();
+          commit(true);
+        }}
+      />
+      <Button
+        type="text"
+        size="small"
+        icon={<PlusOutlined />}
+        aria-label="添加待办"
+        disabled={disabled}
+        onMouseDown={(e) => e.preventDefault()}
+        onClick={() => commit(true)}
+      />
+    </div>
+  );
+});
+
+export const WorkspaceTodosEditor = memo(function WorkspaceTodosEditor({
   projectId,
   repositoryId,
   todos: todosProp,
@@ -124,14 +271,20 @@ export function WorkspaceTodosEditor({
   onShowCompletedChange,
   focusAddToken = 0,
 }: WorkspaceTodosEditorProps) {
-  const todosInternal = useWorkspaceTodos({ projectId, repositoryId });
+  const todosInternal = useWorkspaceTodos({
+    projectId,
+    repositoryId,
+    enabled: todosProp == null,
+  });
   const todos = todosProp ?? todosInternal;
-  const [newScope, setNewScope] = useState<WorkspaceTodoScope>("repository");
-  const [draftTitle, setDraftTitle] = useState("");
+  const displayItemsRef = useRef(todos.displayItems);
+  const setItemsForScopeRef = useRef(todos.setItemsForScope);
+  displayItemsRef.current = todos.displayItems;
+  setItemsForScopeRef.current = todos.setItemsForScope;
+
   const [showCompletedInternal, setShowCompletedInternal] = useState(false);
   const showCompleted = showCompletedProp ?? showCompletedInternal;
   const setShowCompleted = onShowCompletedChange ?? setShowCompletedInternal;
-  const addInputRef = useRef<InputRef>(null);
 
   const allowProjectScope = Boolean(projectId?.trim());
   const allowRepositoryScope = repositoryId != null;
@@ -139,20 +292,14 @@ export function WorkspaceTodosEditor({
   const showScopeTag =
     showScopeTagProp ?? (allowProjectScope && allowRepositoryScope);
 
-  useEffect(() => {
-    setNewScope(defaultNewScope);
-  }, [defaultNewScope, projectId, repositoryId]);
-
-  useEffect(() => {
-    if (!focusAddToken || todos.loading || !todos.hasScope) return;
-    const timer = window.setTimeout(() => addInputRef.current?.focus(), 80);
-    return () => window.clearTimeout(timer);
-  }, [focusAddToken, todos.loading, todos.hasScope]);
-
-  const newScopeOptions = [
-    allowProjectScope ? { label: "工作区", value: "project" as const } : null,
-    allowRepositoryScope ? { label: "仓库", value: "repository" as const } : null,
-  ].filter((row): row is { label: string; value: WorkspaceTodoScope } => row != null);
+  const newScopeOptions = useMemo(
+    () =>
+      [
+        allowProjectScope ? { label: "工作区", value: "project" as const } : null,
+        allowRepositoryScope ? { label: "仓库", value: "repository" as const } : null,
+      ].filter((row): row is { label: string; value: WorkspaceTodoScope } => row != null),
+    [allowProjectScope, allowRepositoryScope],
+  );
 
   const { activeItems, completedItems } = useMemo(() => {
     const active: WorkspaceTodoDisplayItem[] = [];
@@ -164,44 +311,34 @@ export function WorkspaceTodosEditor({
     return { activeItems: active, completedItems: completed };
   }, [todos.displayItems]);
 
-  const getScopeItems = (scope: WorkspaceTodoScope) =>
-    todos.displayItems.filter((row) => row.scope === scope).map(({ scope: _s, ...rest }) => rest);
-
-  const commitNewTodo = (refocus = false) => {
-    const title = draftTitle.trim();
-    if (!title) return;
-    const scope =
-      allowProjectScope && allowRepositoryScope
-        ? newScope
-        : (newScopeOptions[0]?.value ?? defaultNewScope);
+  const addTodo = useCallback((title: string, scope: WorkspaceTodoScope) => {
     const item = createWorkspaceTodoItem(title);
-    todos.setItemsForScope(scope, [...getScopeItems(scope), item]);
-    setDraftTitle("");
-    if (refocus) addInputRef.current?.focus();
-  };
+    const scopeRows = scopeItemsFromDisplay(displayItemsRef.current, scope);
+    setItemsForScopeRef.current(scope, [...scopeRows, item]);
+  }, []);
 
-  const toggleTodo = (item: WorkspaceTodoDisplayItem) => {
+  const toggleTodo = useCallback((item: WorkspaceTodoDisplayItem) => {
     const now = Date.now();
-    const scopeRows = getScopeItems(item.scope).map((row) =>
-      row.id === item.id
-        ? { ...row, completed: !row.completed, updatedAt: now }
-        : row,
+    const scopeRows = scopeItemsFromDisplay(displayItemsRef.current, item.scope).map((row) =>
+      row.id === item.id ? { ...row, completed: !row.completed, updatedAt: now } : row,
     );
-    todos.setItemsForScope(item.scope, scopeRows);
-  };
+    setItemsForScopeRef.current(item.scope, scopeRows);
+  }, []);
 
-  const updateTitle = (item: WorkspaceTodoDisplayItem, title: string) => {
+  const updateTitle = useCallback((item: WorkspaceTodoDisplayItem, title: string) => {
     const now = Date.now();
-    const scopeRows = getScopeItems(item.scope).map((row) =>
+    const scopeRows = scopeItemsFromDisplay(displayItemsRef.current, item.scope).map((row) =>
       row.id === item.id ? { ...row, title, updatedAt: now } : row,
     );
-    todos.setItemsForScope(item.scope, scopeRows);
-  };
+    setItemsForScopeRef.current(item.scope, scopeRows);
+  }, []);
 
-  const deleteTodo = (item: WorkspaceTodoDisplayItem) => {
-    const scopeRows = getScopeItems(item.scope).filter((row) => row.id !== item.id);
-    todos.setItemsForScope(item.scope, scopeRows);
-  };
+  const deleteTodo = useCallback((item: WorkspaceTodoDisplayItem) => {
+    const scopeRows = scopeItemsFromDisplay(displayItemsRef.current, item.scope).filter(
+      (row) => row.id !== item.id,
+    );
+    setItemsForScopeRef.current(item.scope, scopeRows);
+  }, []);
 
   const completedToggle =
     showCompletedToggle && completedItems.length > 0 ? (
@@ -236,66 +373,23 @@ export function WorkspaceTodosEditor({
   return (
     <>
       {completedToggle}
-      <ul className="app-workspace-todos-panel__list">
-        {activeItems.length === 0 && !showCompleted ? (
-          <li className="app-workspace-todos-panel__empty-hint">
-            <Typography.Text type="secondary">暂无待办</Typography.Text>
-          </li>
-        ) : null}
-        {activeItems.map((item) => (
-          <TodoRow
-            key={`${item.scope}:${item.id}`}
-            item={item}
-            showScopeTag={showScopeTag}
-            onToggle={() => toggleTodo(item)}
-            onTitleChange={(title) => updateTitle(item, title)}
-            onDelete={() => deleteTodo(item)}
-          />
-        ))}
-        {showCompleted
-          ? completedItems.map((item) => (
-              <TodoRow
-                key={`${item.scope}:${item.id}`}
-                item={item}
-                showScopeTag={showScopeTag}
-                onToggle={() => toggleTodo(item)}
-                onTitleChange={(title) => updateTitle(item, title)}
-                onDelete={() => deleteTodo(item)}
-              />
-            ))
-          : null}
-      </ul>
+      <WorkspaceTodosList
+        activeItems={activeItems}
+        completedItems={completedItems}
+        showCompleted={showCompleted}
+        showScopeTag={showScopeTag}
+        onToggle={toggleTodo}
+        onTitleChange={updateTitle}
+        onDelete={deleteTodo}
+      />
 
-      <div className="app-workspace-todos-panel__composer">
-        {newScopeOptions.length > 1 ? (
-          <Segmented
-            size="small"
-            className="app-workspace-todos-panel__scope-pick"
-            value={newScope}
-            options={newScopeOptions}
-            onChange={(value) => setNewScope(value as WorkspaceTodoScope)}
-          />
-        ) : null}
-        <Input
-          ref={addInputRef}
-          size="small"
-          className="app-workspace-todos-panel__add-input"
-          placeholder="新建待办"
-          value={draftTitle}
-          disabled={!todos.hasScope}
-          onChange={(e) => setDraftTitle(e.target.value)}
-          onBlur={() => commitNewTodo(false)}
-        />
-        <Button
-          type="text"
-          size="small"
-          icon={<PlusOutlined />}
-          aria-label="添加待办"
-          disabled={!todos.hasScope}
-          onMouseDown={(e) => e.preventDefault()}
-          onClick={() => commitNewTodo(true)}
-        />
-      </div>
+      <WorkspaceTodosComposer
+        disabled={!todos.hasScope}
+        scopeOptions={newScopeOptions}
+        defaultScope={defaultNewScope}
+        focusAddToken={focusAddToken}
+        onAdd={addTodo}
+      />
     </>
   );
-}
+});

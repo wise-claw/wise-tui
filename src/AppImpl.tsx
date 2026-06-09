@@ -93,7 +93,6 @@ import { isWiseAppFocused } from "./utils/isWiseAppFocused";
 import { openMonacoFindIfFocused } from "./utils/monacoGlobalFindRedirect";
 import { wiseMascotShow } from "./services/wiseMascot";
 import { getTaskTemplate, setTaskTemplate } from "./services/projectState";
-import { ensureCrepeToolbarTitleHintsInstalled } from "./utils/crepeToolbarTitles";
 import {
   WORKFLOW_UI_EVENT_OPEN_ASSISTANT,
   WORKFLOW_UI_EVENT_OPEN_REPOSITORY_FILE,
@@ -146,6 +145,7 @@ import { useSessionConversationTasks } from "./hooks/useSessionConversationTasks
 import { dispatchExecutionEnvironmentFromMainSession } from "./services/executionEnvironmentDispatch";
 import { createFreshTerminalWorkerTab, isTerminalWorkerWiseTab } from "./services/terminalDispatch";
 import { resolveExecutionEnvironmentDispatchAnchorSessionId } from "./utils/executionEnvironmentDispatchAnchor";
+import { useClaudeSessionsStructureKey } from "./stores/claudeSessionsLiveStore";
 import { useMonitorSessionsForOverview } from "./hooks/useMonitorSessionsForOverview";
 import { useLeftSidebarHubQuickEntries } from "./hooks/useLeftSidebarHubQuickEntries";
 import { useMonitorPanelDefault } from "./hooks/useMonitorPanelDefault";
@@ -858,6 +858,7 @@ export default function App() {
     resumeSessionFromMonitorDrawer,
     ensureSessionForMonitorDrawer,
   } = useClaudeSessions({
+    subscribeLive: false,
     onClaudeTurnComplete: (p) => {
       advanceTeamAfterTurnRef.current(p);
     },
@@ -873,8 +874,8 @@ export default function App() {
     onSessionTabIdMigrated: handleSessionTabIdMigrated,
   });
 
-  const sessionsLatestRef = useRef(sessions);
-  sessionsLatestRef.current = sessions;
+  const sessionsLatestRef = sessionsLiveRef;
+  const sessionsStructureKey = useClaudeSessionsStructureKey();
 
   const repositoriesLatestRef = useRef(repositories);
   repositoriesLatestRef.current = repositories;
@@ -933,7 +934,7 @@ export default function App() {
     viewMode.view.kind === "inspect";
 
   /** 监控侧栏 / Drawer 用：指纹节流，避免流式时每帧跑巨型 useMonitorOverview */
-  const sessionsSyncedForMonitorUi = useMonitorSessionsForOverview(sessions, monitorOverviewActive);
+  const sessionsSyncedForMonitorUi = useMonitorSessionsForOverview(sessionsLiveRef, monitorOverviewActive);
 
   const monitorPanelSessionsMerged = sessionsSyncedForMonitorUi;
 
@@ -1303,11 +1304,11 @@ export default function App() {
     () =>
       resolveExecutionEnvironmentDispatchAnchorSessionId({
         activeSessionId,
-        sessions,
+        sessions: sessionsLatestRef.current,
         repositoryMainSessionBindings,
         repositories,
       }),
-    [activeSessionId, sessions, repositoryMainSessionBindings, repositories],
+    [activeSessionId, repositoryMainSessionBindings, repositories, sessionsStructureKey],
   );
   useExecutionEnvironmentDispatchWorkerTranscriptPreload(
     dispatchAnchorSessionId,
@@ -1365,7 +1366,7 @@ export default function App() {
         }
         console.debug("ensureSessionBoundToActiveMission failed:", error);
       });
-  }, [activeProject?.id, activeProject?.rootPath, activeSessionId, sessions]);
+  }, [activeProject?.id, activeProject?.rootPath, activeSessionId]);
 
   const codeGraphSearchRepositoryIds = useMemo(() => {
     if (activeProject?.repositoryIds?.length) {
@@ -1560,12 +1561,12 @@ export default function App() {
 
   const openSessionRepositoryPathsKey = useMemo(() => {
     const paths = new Set<string>();
-    for (const session of sessions) {
+    for (const session of sessionsLatestRef.current) {
       const path = session.repositoryPath?.trim();
       if (path) paths.add(path);
     }
     return [...paths].sort().join("|");
-  }, [sessions]);
+  }, [sessionsStructureKey]);
 
   useEffect(() => {
     if (!tabsHydrated || !openSessionRepositoryPathsKey) return;
@@ -1617,10 +1618,6 @@ export default function App() {
       setRepositorySplitTemplate(repoTpl?.trim() || DEFAULT_REPOSITORY_SPLIT_TEMPLATE);
       setProjectSplitTemplate(projectTpl?.trim() || DEFAULT_PROJECT_SPLIT_TEMPLATE);
     })();
-  }, []);
-
-  useEffect(() => {
-    ensureCrepeToolbarTitleHintsInstalled();
   }, []);
 
   useEffect(() => {
@@ -2308,6 +2305,7 @@ export default function App() {
 
   const bindProjectMainSessionTarget = useCallback(
     (project: ProjectItem): string | null => {
+      const sessionsNow = sessionsLatestRef.current;
       const anchor = resolveProjectMainSessionAnchor(project, repositories);
       if (!anchor.path) {
         message.warning("该 Workspace 缺少根目录，请先配置 rootPath");
@@ -2317,7 +2315,7 @@ export default function App() {
       const boundId = resolveBoundMainSessionId(
         projectBindingKey,
         repositoryMainSessionBindings,
-        sessions,
+        sessionsNow,
         null,
       );
       if (boundId) {
@@ -2325,7 +2323,7 @@ export default function App() {
         return boundId;
       }
       const latestForProject = pickProjectMainSessionForSidebarSelect(
-        sessions,
+        sessionsNow,
         anchor.path,
         sessionOwnerHintsRef.current,
       );
@@ -2336,7 +2334,7 @@ export default function App() {
       }
       return null;
     },
-    [repositories, repositoryMainSessionBindings, sessions, switchSessionIfNeeded],
+    [repositories, repositoryMainSessionBindings, sessionsStructureKey, switchSessionIfNeeded],
   );
 
   /**
@@ -3069,6 +3067,8 @@ export default function App() {
         onStartRepositoryRunCommand: handleStartRepositoryRunCommand,
         onStopRepositoryRunCommand: handleStopRepositoryRunCommand,
         sessions,
+        sessionsStructureKey,
+        sessionsLiveRef: sessionsLatestRef,
         monitorPanelSessions: monitorPanelSessionsMerged,
         repositoryMainSessionBindings,
         activeSessionId,
@@ -3373,6 +3373,7 @@ export default function App() {
         repositoryPath: activeRepository?.path ?? null,
         workflowStudioAction: undefined,
       }}
+      sessionsStructureKey={sessionsStructureKey}
       claudeSessionsProps={{
         sessions,
         activeSessionId,

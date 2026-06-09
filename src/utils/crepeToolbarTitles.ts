@@ -62,28 +62,7 @@ export function annotateCrepeToolbarButtons(root: ParentNode = document): void {
   }
 }
 
-let annotateScheduled = false;
-let selectionListenerAttached = false;
-
-function scheduleAnnotateFromSelection(): void {
-  if (annotateScheduled) return;
-  annotateScheduled = true;
-  requestAnimationFrame(() => {
-    annotateScheduled = false;
-    annotateCrepeToolbarButtons();
-    requestAnimationFrame(() => {
-      annotateCrepeToolbarButtons();
-    });
-    window.setTimeout(() => {
-      annotateCrepeToolbarButtons();
-    }, 100);
-  });
-}
-
-/** 全局安装一次：选区变化 / 指针抬起后为 Crepe 气泡按钮写入文案（多实例 Milkdown 共用）。 */
+/** @deprecated 全局监听已移除；MilkdownEditor 在 toolbar DOM 变化时局部 annotate。 */
 export function ensureCrepeToolbarTitleHintsInstalled(): void {
-  if (selectionListenerAttached) return;
-  selectionListenerAttached = true;
-  document.addEventListener("selectionchange", scheduleAnnotateFromSelection, { passive: true });
-  document.addEventListener("pointerup", scheduleAnnotateFromSelection, { capture: true, passive: true });
+  /* no-op */
 }

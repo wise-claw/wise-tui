@@ -51,6 +51,7 @@ import {
 } from "../contexts/WorkspaceMemosContext";
 import { useRepositoryFileEditor } from "../hooks/useRepositoryFileEditor";
 import { ErrorBoundary } from "./ErrorBoundary";
+import { areLeftSidebarPropsEqual } from "./LeftSidebar/leftSidebarPropsEqual";
 import { WorkspaceViewportLoading } from "./WorkspaceViewportLoading";
 /** 与 AppWorkspaceLayout 求值并行预拉取首屏关键子 chunk。 */
 const leftSidebarChunk = import("./LeftSidebar");
@@ -127,7 +128,7 @@ const LazyCodeKnowledgeGraphPanel = lazy(() =>
   import("./CodeKnowledgeGraph").then((m) => ({ default: m.CodeKnowledgeGraphPanel })),
 );
 type CodeKnowledgeGraphPanelProps = ComponentProps<typeof LazyCodeKnowledgeGraphPanel>;
-const MemoLeftSidebar = memo(LazyLeftSidebar);
+const MemoLeftSidebar = memo(LazyLeftSidebar, areLeftSidebarPropsEqual);
 const MemoClaudeSessions = memo(LazyClaudeSessions);
 const MemoInspector = memo(Inspector);
 
@@ -224,13 +225,32 @@ const ConnectedLeftSidebar = memo(function ConnectedLeftSidebar({
       onOpenActiveRepositoryFile={openRepositoryFile}
     />
   );
-});
+}, (prev, next) =>
+  prev.collapsed === next.collapsed &&
+  prev.dark === next.dark &&
+  prev.parked === next.parked &&
+  prev.siderWidth === next.siderWidth &&
+  areLeftSidebarPropsEqual(prev.leftSidebarProps, next.leftSidebarProps));
 
 interface ConnectedClaudeSessionsProps {
   claudeSessionsProps: ClaudeSessionsProps;
   mainLayoutContentRef: RefObject<HTMLElement | null>;
   centerAuxPanelsNode: ReactNode;
   fileEditorTargetPaneIndex: number | null;
+}
+
+function connectedClaudeSessionsPropsEqual(
+  prev: ConnectedClaudeSessionsProps,
+  next: ConnectedClaudeSessionsProps,
+): boolean {
+  if (prev.mainLayoutContentRef !== next.mainLayoutContentRef) return false;
+  if (prev.centerAuxPanelsNode !== next.centerAuxPanelsNode) return false;
+  if (prev.fileEditorTargetPaneIndex !== next.fileEditorTargetPaneIndex) return false;
+  for (const key of Object.keys(prev.claudeSessionsProps) as (keyof ClaudeSessionsProps)[]) {
+    if (key === "sessions") continue;
+    if (!Object.is(prev.claudeSessionsProps[key], next.claudeSessionsProps[key])) return false;
+  }
+  return true;
 }
 
 const ConnectedClaudeSessions = memo(function ConnectedClaudeSessions({
@@ -285,7 +305,7 @@ const ConnectedClaudeSessions = memo(function ConnectedClaudeSessions({
       />
     </Layout.Content>
   );
-});
+}, connectedClaudeSessionsPropsEqual);
 
 const ConnectedWorkspaceMemoEditorPanel = memo(function ConnectedWorkspaceMemoEditorPanel() {
   const visible = useContext(WorkspaceMemoEditorVisibilityContext);
@@ -413,6 +433,8 @@ export interface AppWorkspaceLayoutProps {
   leftSidebarProps: LeftSidebarProps;
   authorPanelProps: AuthorPanelProps;
   claudeSessionsProps: ClaudeSessionsProps;
+  /** 流式正文节流：壳层 memo 用，避免每 token 重算顶栏等。 */
+  sessionsStructureKey: string;
   /** 顶栏「远程」区跳转创作台远程入口 */
   onOpenRemoteChannels?: () => void;
   /** 历史名 `rightPanelProps`，与 ChatInspector 的 props 一致。 */
@@ -522,6 +544,7 @@ export function AppWorkspaceLayout({
   leftSidebarProps,
   authorPanelProps,
   claudeSessionsProps,
+  sessionsStructureKey,
   onOpenRemoteChannels,
   chatInspectorProps,
   cockpitInspectorProps,
@@ -558,11 +581,13 @@ export function AppWorkspaceLayout({
   onEnsureChatModeForMemo,
 }: AppWorkspaceLayoutProps) {
   const algorithm = dark ? theme.darkAlgorithm : theme.defaultAlgorithm;
+  const claudeSessionsRef = useRef(claudeSessionsProps.sessions);
+  claudeSessionsRef.current = claudeSessionsProps.sessions;
 
   const mainSessionForDataLink = useMemo(
     () =>
       resolveWorkspaceMainSession({
-        sessions: claudeSessionsProps.sessions,
+        sessions: claudeSessionsRef.current,
         bindings: claudeSessionsProps.repositoryMainBindings ?? {},
         repositories: claudeSessionsProps.repositories ?? [],
         activeRepository: claudeSessionsProps.activeRepository,
@@ -571,13 +596,59 @@ export function AppWorkspaceLayout({
         activeSessionId: claudeSessionsProps.activeSessionId,
       }),
     [
-      claudeSessionsProps.sessions,
+      sessionsStructureKey,
       claudeSessionsProps.repositoryMainBindings,
       claudeSessionsProps.repositories,
       claudeSessionsProps.activeRepository,
       claudeSessionsProps.activeProject,
       claudeSessionsProps.activeWorkspaceFocus,
       claudeSessionsProps.activeSessionId,
+    ],
+  );
+
+  const topbarProps = useMemo(
+    () => ({
+      activeProject: claudeSessionsProps.activeProject,
+      activeWorkspaceFocus: claudeSessionsProps.activeWorkspaceFocus,
+      activeRepository: claudeSessionsProps.activeRepository,
+      repositories: claudeSessionsProps.repositories ?? [],
+      activeSessionRepositoryPath:
+        mainSessionForDataLink?.repositoryPath?.trim() ||
+        claudeSessionsProps.activeRepository?.path,
+      mainSessionForDataLink,
+      onToggleSidebar: claudeSessionsProps.onToggleSidebar,
+      onToggleRightPanel: claudeSessionsProps.onToggleRightPanel,
+      rightPanelDefaultCollapsed: claudeSessionsProps.rightPanelDefaultCollapsed,
+      onSetRightPanelDefaultCollapsed: claudeSessionsProps.onSetRightPanelDefaultCollapsed,
+      onToggleTerminal: claudeSessionsProps.onToggleTerminal,
+      onSearch: claudeSessionsProps.onSearch,
+      collapsed: claudeSessionsProps.collapsed,
+      rightCollapsed: claudeSessionsProps.rightCollapsed,
+      terminalCollapsed: claudeSessionsProps.terminalCollapsed,
+      onAutoFixRunError: claudeSessionsProps.onAutoFixRunError,
+      paneCount: claudeSessionsProps.paneCount,
+      onChangePaneCount: claudeSessionsProps.onChangePaneCount,
+      onOpenRemoteChannels,
+    }),
+    [
+      claudeSessionsProps.activeProject,
+      claudeSessionsProps.activeWorkspaceFocus,
+      claudeSessionsProps.activeRepository,
+      claudeSessionsProps.repositories,
+      claudeSessionsProps.onToggleSidebar,
+      claudeSessionsProps.onToggleRightPanel,
+      claudeSessionsProps.rightPanelDefaultCollapsed,
+      claudeSessionsProps.onSetRightPanelDefaultCollapsed,
+      claudeSessionsProps.onToggleTerminal,
+      claudeSessionsProps.onSearch,
+      claudeSessionsProps.collapsed,
+      claudeSessionsProps.rightCollapsed,
+      claudeSessionsProps.terminalCollapsed,
+      claudeSessionsProps.onAutoFixRunError,
+      claudeSessionsProps.paneCount,
+      claudeSessionsProps.onChangePaneCount,
+      mainSessionForDataLink,
+      onOpenRemoteChannels,
     ],
   );
 
@@ -829,6 +900,7 @@ export function AppWorkspaceLayout({
           <RepositoryFileEditorPanelContext.Provider value={editorPanelContextValue}>
             <ConfigProvider
             locale={zhCN}
+            tooltip={{ unique: true, destroyTooltipOnHide: true }}
             theme={{
               algorithm,
               /** 代码图谱等叠层局部 z-index 较高，避免 Message 被盖住看不见 */
@@ -894,30 +966,7 @@ export function AppWorkspaceLayout({
                   >
                     {chatRightRailMode ? (
                       <Suspense fallback={null}>
-                        <LazyTopbar
-                          activeProject={claudeSessionsProps.activeProject}
-                          activeWorkspaceFocus={claudeSessionsProps.activeWorkspaceFocus}
-                          activeRepository={claudeSessionsProps.activeRepository}
-                          repositories={claudeSessionsProps.repositories ?? []}
-                          activeSessionRepositoryPath={
-                            mainSessionForDataLink?.repositoryPath?.trim() ||
-                            claudeSessionsProps.activeRepository?.path
-                          }
-                          mainSessionForDataLink={mainSessionForDataLink}
-                          onToggleSidebar={claudeSessionsProps.onToggleSidebar}
-                          onToggleRightPanel={claudeSessionsProps.onToggleRightPanel}
-                          rightPanelDefaultCollapsed={claudeSessionsProps.rightPanelDefaultCollapsed}
-                          onSetRightPanelDefaultCollapsed={claudeSessionsProps.onSetRightPanelDefaultCollapsed}
-                          onToggleTerminal={claudeSessionsProps.onToggleTerminal}
-                          onSearch={claudeSessionsProps.onSearch}
-                          collapsed={claudeSessionsProps.collapsed}
-                          rightCollapsed={claudeSessionsProps.rightCollapsed}
-                          terminalCollapsed={claudeSessionsProps.terminalCollapsed}
-                          onAutoFixRunError={claudeSessionsProps.onAutoFixRunError}
-                          paneCount={claudeSessionsProps.paneCount}
-                          onChangePaneCount={claudeSessionsProps.onChangePaneCount}
-                          onOpenRemoteChannels={onOpenRemoteChannels}
-                        />
+                        <LazyTopbar {...topbarProps} />
                       </Suspense>
                     ) : null}
 

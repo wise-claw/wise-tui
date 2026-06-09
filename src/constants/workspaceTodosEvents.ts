@@ -17,6 +17,8 @@ export interface WorkspaceTodosOpenDetail {
 export function dispatchWorkspaceTodosChanged(detail?: {
   projectId?: string | null;
   repositoryId?: number | null;
+  /** 已知未完成条数时可直接更新角标，跳过 IPC 重载 */
+  incompleteCount?: number;
 }): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent(WISE_WORKSPACE_TODOS_CHANGED, { detail }));

@@ -1,4 +1,4 @@
-import { useEffect, useMemo } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import type { ClaudeSession, Repository } from "../types";
 import { maxExecutionEnvironmentDispatchHistorySinceMs } from "../constants/executionEnvironmentDispatch";
 import {
@@ -12,6 +12,7 @@ import {
 } from "../stores/executionEnvironmentDispatchStore";
 import { resolveExecutionEnvironmentDispatchAnchorSessionId } from "../utils/executionEnvironmentDispatchAnchor";
 import { rehydrateExecutionEnvironmentDispatchesFromAnchorSession } from "../utils/rehydrateExecutionEnvironmentDispatches";
+import { sessionsReactiveStructureKey } from "../utils/sessionConversationTasks";
 
 function mergePersistedDispatchRecordsWithLive(
   anchor: string,
@@ -46,27 +47,36 @@ export function useExecutionEnvironmentDispatchPersistence(
   repositoryMainSessionBindings: Record<string, string>,
   repositories: readonly Repository[],
 ): void {
+  const sessionsRef = useRef(sessions);
+  sessionsRef.current = sessions;
+
+  const sessionsStructureKey = sessionsReactiveStructureKey(sessions);
+
   const anchorSessionId = useMemo(
     () =>
       resolveExecutionEnvironmentDispatchAnchorSessionId({
         activeSessionId,
-        sessions,
+        sessions: sessionsRef.current,
         repositoryMainSessionBindings,
         repositories,
       }),
-    [activeSessionId, sessions, repositoryMainSessionBindings, repositories],
+    [activeSessionId, repositoryMainSessionBindings, repositories, sessionsStructureKey],
   );
 
-  const anchorSession = useMemo(
-    () =>
-      anchorSessionId
-        ? sessions.find((session) => session.id === anchorSessionId) ?? null
-        : null,
-    [anchorSessionId, sessions],
-  );
+  const anchorMessagesFingerprint = useMemo(() => {
+    const session = anchorSessionId
+      ? sessionsRef.current.find((item) => item.id === anchorSessionId) ?? null
+      : null;
+    return anchorSessionMessagesFingerprint(session);
+  }, [anchorSessionId, sessionsStructureKey]);
 
-  const anchorMessagesFingerprint = anchorSessionMessagesFingerprint(anchorSession);
-  const repositoryPath = anchorSession?.repositoryPath?.trim() ?? "";
+  const repositoryPath = useMemo(() => {
+    if (!anchorSessionId) return "";
+    return (
+      sessionsRef.current.find((item) => item.id === anchorSessionId)?.repositoryPath?.trim() ??
+      ""
+    );
+  }, [anchorSessionId, sessionsStructureKey]);
 
   useEffect(() => {
     const anchor = anchorSessionId?.trim() ?? "";
@@ -98,7 +108,10 @@ export function useExecutionEnvironmentDispatchPersistence(
   }, [anchorSessionId, repositoryPath]);
 
   useEffect(() => {
-    if (!anchorSession) return;
-    rehydrateExecutionEnvironmentDispatchesFromAnchorSession(anchorSession, sessions);
-  }, [anchorSession, anchorMessagesFingerprint, sessions]);
+    const anchor = anchorSessionId?.trim() ?? "";
+    if (!anchor) return;
+    const session = sessionsRef.current.find((item) => item.id === anchor);
+    if (!session) return;
+    rehydrateExecutionEnvironmentDispatchesFromAnchorSession(session, sessionsRef.current);
+  }, [anchorSessionId, anchorMessagesFingerprint]);
 }

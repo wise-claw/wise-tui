@@ -3599,6 +3599,72 @@
   padding-left: 30px;
 }
 
+.app-claude-messages--scrolling .app-claude-message,
+.app-claude-messages--pointer-busy .app-claude-message,
+.app-claude-messages--scrolling .app-claude-messages-virtual-row,
+.app-claude-messages--pointer-busy .app-claude-messages-virtual-row,
+.app-claude-messages--scrolling .app-message-part,
+.app-claude-messages--pointer-busy .app-message-part,
+.app-claude-messages--scrolling .app-message-part-header,
+.app-claude-messages--pointer-busy .app-message-part-header,
+.app-claude-messages--scrolling .app-claude-message-floating-actions,
+.app-claude-messages--pointer-busy .app-claude-message-floating-actions {
+  transition: none !important;
+}
+
+.app-claude-messages--scrolling .app-claude-message,
+.app-claude-messages--pointer-busy .app-claude-message,
+.app-claude-messages--scrolling .app-claude-messages-virtual-row,
+.app-claude-messages--pointer-busy .app-claude-messages-virtual-row,
+.app-claude-messages--scrolling .app-message-part,
+.app-claude-messages--pointer-busy .app-message-part {
+  pointer-events: none;
+}
+
+.app-claude-messages--scrolling .app-claude-messages-load-more,
+.app-claude-messages--pointer-busy .app-claude-messages-load-more,
+.app-claude-messages--scrolling .app-claude-messages-disk-partial,
+.app-claude-messages--pointer-busy .app-claude-messages-disk-partial {
+  pointer-events: auto;
+}
+
+.app-claude-messages--scrolling .app-claude-message-floating-actions,
+.app-claude-messages--pointer-busy .app-claude-message-floating-actions,
+.app-claude-messages--scrolling .app-tool-copy-btn,
+.app-claude-messages--pointer-busy .app-tool-copy-btn,
+.app-claude-messages--scrolling .app-markdown-copy-btn,
+.app-claude-messages--pointer-busy .app-markdown-copy-btn {
+  opacity: 0 !important;
+  pointer-events: none !important;
+}
+
+.app-claude-messages--scrolling .app-markdown-streaming-hint__pulse,
+.app-claude-messages--scrolling .app-markdown-streaming-hint__dots i,
+.app-claude-messages--pointer-busy .app-markdown-streaming-hint__pulse,
+.app-claude-messages--pointer-busy .app-markdown-streaming-hint__dots i {
+  animation-play-state: paused;
+}
+
+.app-claude-messages--scrolling .app-claude-messages .app-message-part--tool .app-message-part-header:hover:not(:disabled),
+.app-claude-messages--scrolling .app-claude-messages .app-message-part--reasoning .app-message-part-header:hover:not(:disabled),
+.app-claude-messages--pointer-busy .app-claude-messages .app-message-part--tool .app-message-part-header:hover:not(:disabled),
+.app-claude-messages--pointer-busy .app-claude-messages .app-message-part--reasoning .app-message-part-header:hover:not(:disabled),
+.app-claude-messages--scrolling .app-claude-message:hover .app-claude-message-floating-actions,
+.app-claude-messages--pointer-busy .app-claude-message:hover .app-claude-message-floating-actions,
+.app-claude-messages--scrolling .app-claude-message:hover .app-claude-message-action.ant-btn,
+.app-claude-messages--pointer-busy .app-claude-message:hover .app-claude-message-action.ant-btn,
+.app-claude-messages--scrolling .app-message-part--tool .app-message-part-content:hover .app-tool-copy-btn,
+.app-claude-messages--pointer-busy .app-message-part--tool .app-message-part-content:hover .app-tool-copy-btn {
+  background: transparent !important;
+  border-color: transparent !important;
+  opacity: 0 !important;
+}
+
+.app-claude-messages--scrolling .app-claude-message,
+.app-claude-messages--pointer-busy .app-claude-message {
+  content-visibility: visible;
+}
+
 .app-claude-message {
   display: flex;
   align-items: flex-start;
@@ -3611,6 +3677,8 @@
   border: none;
   box-shadow: none;
   position: relative;
+  content-visibility: auto;
+  contain-intrinsic-size: auto 72px;
 }
 
 /* 新发送者一组：仅留白区隔，无顶部分隔线 */
@@ -4171,6 +4239,18 @@
 .app-claude-messages .app-claude-message--assistant .app-message-part--text {
   background: transparent;
   border: none;
+}
+
+.app-claude-user-message-display {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.app-claude-user-message-attachments {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.4;
+  color: var(--ant-color-text-tertiary);
 }
 
 .app-claude-user-message-collapsible {
