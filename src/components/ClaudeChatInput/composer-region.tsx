@@ -50,6 +50,7 @@ import {
 } from "./composer-trigger-anchor";
 import { ContextItems } from "./context-items";
 import { SlashPopover } from "./slash-popover";
+import { useComposerTokenHighlight } from "./useComposerTokenHighlight";
 import { useAtMentionDefaultTarget } from "../../hooks/useAtMentionDefaultTarget";
 import { useAtMentionShortcuts } from "../../hooks/useAtMentionShortcuts";
 import { resolveComposerCommonPhraseAction } from "../../constants/composerCommonPhrase";
@@ -515,6 +516,7 @@ function ComposerInner({
       setSemiEditorReady(false);
     };
   }, []);
+  useComposerTokenHighlight(aiChatRef, semiEditorReady, session.id);
   const plainSurfaceRef = useRef<ComposerPlainSurface | null>(null);
   const lastEditorPlainRef = useRef("");
   const ignoreNextContentSyncRef = useRef(false);

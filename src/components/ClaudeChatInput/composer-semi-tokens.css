@@ -47,6 +47,16 @@
   line-height: 18px;
 }
 
+.app-composer-token-highlight--at {
+  color: var(--ant-purple-5, #9254de);
+  font-weight: 500;
+}
+
+.app-composer-token-highlight--slash {
+  color: var(--ant-cyan-6, #13c2c2);
+  font-weight: 500;
+}
+
 .app-claude-semi-chat-input-wrap .semi-aiChatInput {
   padding: 6px 8px;
   border-radius: 8px;
