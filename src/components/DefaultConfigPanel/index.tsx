@@ -417,6 +417,29 @@ export function DefaultConfigPanel() {
           </div>
         </div>
 
+        <div className="app-default-config-row" aria-label="顶栏仓库名称">
+          <div className="app-default-config-row__main">
+            <span className="app-default-config-row__title">顶栏仓库名称</span>
+            <span className="app-default-config-row__hint">
+              控制主会话顶栏左侧当前仓库 / 工作区名称；点击名称可复制绝对路径
+            </span>
+          </div>
+          <div className="app-default-config-row__control">
+            <DefaultConfigOptionPick<"hidden" | "visible">
+              aria-label="顶栏仓库名称显示"
+              disabled={topbarChrome.loading || topbarChrome.saving}
+              value={topbarChrome.showTopbarRepositoryName ? "visible" : "hidden"}
+              options={[
+                { label: "不显示", value: "hidden" },
+                { label: "显示", value: "visible" },
+              ]}
+              onChange={(value) => {
+                void topbarChrome.saveTopbarRepositoryName(value === "visible");
+              }}
+            />
+          </div>
+        </div>
+
         <div className="app-default-config-row" aria-label="远程入口顶栏">
           <div className="app-default-config-row__main">
             <span className="app-default-config-row__title">远程入口</span>

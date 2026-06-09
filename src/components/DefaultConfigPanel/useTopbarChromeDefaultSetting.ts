@@ -11,6 +11,7 @@ export function useTopbarChromeDefaultSetting() {
   const [showFccTrafficTopbar, setShowFccTrafficTopbar] = useState(false);
   const [showSessionDataLinkTopbar, setShowSessionDataLinkTopbar] = useState(false);
   const [showRemoteEntryTopbar, setShowRemoteEntryTopbar] = useState(true);
+  const [showTopbarRepositoryName, setShowTopbarRepositoryName] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -23,6 +24,7 @@ export function useTopbarChromeDefaultSetting() {
       setShowFccTrafficTopbar(loaded.showFccTrafficTopbar);
       setShowSessionDataLinkTopbar(loaded.showSessionDataLinkTopbar);
       setShowRemoteEntryTopbar(loaded.showRemoteEntryTopbar);
+      setShowTopbarRepositoryName(loaded.showTopbarRepositoryName);
     } finally {
       setLoading(false);
     }
@@ -117,12 +119,30 @@ export function useTopbarChromeDefaultSetting() {
     [showRemoteEntryTopbar],
   );
 
+  const saveTopbarRepositoryName = useCallback(
+    async (visible: boolean) => {
+      if (visible === showTopbarRepositoryName) return;
+      setSaving(true);
+      try {
+        await saveTopbarChromeDefaultsToStore({ showTopbarRepositoryName: visible });
+        setShowTopbarRepositoryName(visible);
+      } catch (err) {
+        message.error(`保存失败：${err instanceof Error ? err.message : String(err)}`);
+        throw err;
+      } finally {
+        setSaving(false);
+      }
+    },
+    [showTopbarRepositoryName],
+  );
+
   return {
     showLlmProxyTopbar,
     showFccTopbar,
     showFccTrafficTopbar,
     showSessionDataLinkTopbar,
     showRemoteEntryTopbar,
+    showTopbarRepositoryName,
     loading,
     saving,
     refresh,
@@ -131,5 +151,6 @@ export function useTopbarChromeDefaultSetting() {
     saveFccTraffic,
     saveSessionDataLink,
     saveRemoteEntry,
+    saveTopbarRepositoryName,
   };
 }

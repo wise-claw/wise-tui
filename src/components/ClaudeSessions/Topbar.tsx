@@ -267,29 +267,31 @@ export const Topbar = memo(function Topbar({
           {topbarLabel ? (
             <>
               <div className="app-topbar-divider" />
-              <HoverHint title="点击复制绝对路径">
-                <button
-                  type="button"
-                  className="app-topbar-repository-trigger"
-                  onClick={() => {
-                    const path = topbarPath;
-                    if (!path) {
-                      message.warning(topbarShowsProject ? "暂无 Workspace 路径" : "暂无仓库路径");
-                      return;
-                    }
-                    void navigator.clipboard.writeText(path).then(
-                      () => {
-                        message.success("已复制绝对路径");
-                      },
-                      () => {
-                        message.error("复制失败");
-                      },
-                    );
-                  }}
-                >
-                  <span className="app-topbar-repository-trigger-label">{topbarLabel}</span>
-                </button>
-              </HoverHint>
+              {topbarChrome.showTopbarRepositoryName ? (
+                <HoverHint title="点击复制绝对路径">
+                  <button
+                    type="button"
+                    className="app-topbar-repository-trigger"
+                    onClick={() => {
+                      const path = topbarPath;
+                      if (!path) {
+                        message.warning(topbarShowsProject ? "暂无 Workspace 路径" : "暂无仓库路径");
+                        return;
+                      }
+                      void navigator.clipboard.writeText(path).then(
+                        () => {
+                          message.success("已复制绝对路径");
+                        },
+                        () => {
+                          message.error("复制失败");
+                        },
+                      );
+                    }}
+                  >
+                    <span className="app-topbar-repository-trigger-label">{topbarLabel}</span>
+                  </button>
+                </HoverHint>
+              ) : null}
               {topbarChrome.showRemoteEntryTopbar ? (
                 <RemoteEntryTopbarStrip onOpenRemoteChannels={onOpenRemoteChannels} />
               ) : null}
