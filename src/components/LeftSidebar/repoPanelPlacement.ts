@@ -11,37 +11,25 @@ export interface RepoPanelRenderState {
   leftTabMode: boolean;
   rightTabMode: boolean;
   activeTab: LeftBottomTab;
+  /** 配置是否需要右栏（不因 Author/Cockpit 临时隐藏右栏而变化）。 */
   usesRightRail: boolean;
 }
 
-export function resolveRepoPanelPlacements(
-  gitPlacement: RepoPanelPlacement,
-  filesPlacement: RepoPanelPlacement,
-  rightRailAvailable: boolean,
-): { git: RepoPanelPlacement; files: RepoPanelPlacement; coerced: boolean } {
-  let git = gitPlacement;
-  let files = filesPlacement;
-  let coerced = false;
-  if (!rightRailAvailable) {
-    if (git === "right") {
-      git = "left";
-      coerced = true;
-    }
-    if (files === "right") {
-      files = "left";
-      coerced = true;
-    }
-  }
-  return { git, files, coerced };
+export interface DeriveRepoPanelRenderStateOptions {
+  /** Chat 模式右栏是否可用；为 false 时仅隐藏右栏内容，不回退配置。 */
+  rightRailAvailable?: boolean;
 }
 
 export function deriveRepoPanelRenderState(
   gitPlacement: RepoPanelPlacement,
   filesPlacement: RepoPanelPlacement,
   activeTab: LeftBottomTab,
+  options?: DeriveRepoPanelRenderStateOptions,
 ): RepoPanelRenderState {
+  const rightRailAvailable = options?.rightRailAvailable ?? true;
   const leftTabMode = gitPlacement === "left" && filesPlacement === "left";
   const rightTabMode = gitPlacement === "right" && filesPlacement === "right";
+  const usesRightRail = gitPlacement === "right" || filesPlacement === "right";
 
   if (leftTabMode) {
     return {
@@ -60,8 +48,8 @@ export function deriveRepoPanelRenderState(
     return {
       showGitOnLeft: false,
       showFilesOnLeft: false,
-      showGitOnRight: activeTab === "git",
-      showFilesOnRight: activeTab === "files",
+      showGitOnRight: rightRailAvailable && activeTab === "git",
+      showFilesOnRight: rightRailAvailable && activeTab === "files",
       leftTabMode: false,
       rightTabMode: true,
       activeTab,
@@ -72,11 +60,11 @@ export function deriveRepoPanelRenderState(
   return {
     showGitOnLeft: gitPlacement === "left",
     showFilesOnLeft: filesPlacement === "left",
-    showGitOnRight: gitPlacement === "right",
-    showFilesOnRight: filesPlacement === "right",
+    showGitOnRight: rightRailAvailable && gitPlacement === "right",
+    showFilesOnRight: rightRailAvailable && filesPlacement === "right",
     leftTabMode: false,
     rightTabMode: false,
     activeTab,
-    usesRightRail: true,
+    usesRightRail,
   };
 }

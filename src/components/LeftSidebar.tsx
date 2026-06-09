@@ -72,7 +72,6 @@ import { LeftSidebarBottomTabSwitcher } from "./LeftSidebar/LeftSidebarBottomTab
 import { RightRailRepoPanelPanes } from "./LeftSidebar/RightRailRepoPanelPanes";
 import {
   deriveRepoPanelRenderState,
-  resolveRepoPanelPlacements,
 } from "./LeftSidebar/repoPanelPlacement";
 import { ExpandIcon } from "./LeftSidebar/SidebarIcons";
 import { SystemResourceInline } from "./LeftSidebar/SystemResourceInline";
@@ -220,7 +219,6 @@ export function LeftSidebar({
   filesPanelPlacement = "left",
   repoPanelRightRailAvailable = true,
   onRepositoryRepoPanelChange,
-  onRepoPanelUsesRightRailChange,
   taskCardsNavProps,
 }: LeftSidebarProps) {
   const { message, modal } = AntdApp.useApp();
@@ -300,23 +298,15 @@ export function LeftSidebar({
     readLeftMonitorPanelCollapsedFromStorage,
   );
   const [leftBottomTab, setLeftBottomTab] = useState<LeftBottomTab>(readLeftBottomTabFromStorage);
-  const resolvedRepoPlacements = useMemo(
-    () =>
-      resolveRepoPanelPlacements(
-        gitPanelPlacement,
-        filesPanelPlacement,
-        repoPanelRightRailAvailable,
-      ),
-    [filesPanelPlacement, gitPanelPlacement, repoPanelRightRailAvailable],
-  );
   const repoPanelRenderState = useMemo(
     () =>
       deriveRepoPanelRenderState(
-        resolvedRepoPlacements.git,
-        resolvedRepoPlacements.files,
+        gitPanelPlacement,
+        filesPanelPlacement,
         leftBottomTab,
+        { rightRailAvailable: repoPanelRightRailAvailable },
       ),
-    [leftBottomTab, resolvedRepoPlacements.files, resolvedRepoPlacements.git],
+    [filesPanelPlacement, gitPanelPlacement, leftBottomTab, repoPanelRightRailAvailable],
   );
   const [bottomTabPanelsReady, setBottomTabPanelsReady] = useState(false);
   const [monitorPanelMounted, setMonitorPanelMounted] = useState(false);
@@ -637,18 +627,6 @@ export function LeftSidebar({
     writeLeftMonitorPanelCollapsedToStorage(next);
   }, []);
 
-  const repoPanelCoercedWarnedRef = useRef(false);
-  useEffect(() => {
-    if (!resolvedRepoPlacements.coerced) {
-      repoPanelCoercedWarnedRef.current = false;
-      return;
-    }
-    if (repoPanelCoercedWarnedRef.current) return;
-    if (gitPanelPlacement !== "right" && filesPanelPlacement !== "right") return;
-    repoPanelCoercedWarnedRef.current = true;
-    message.warning("当前布局无右栏，Git 与文件树已回退至左栏");
-  }, [filesPanelPlacement, gitPanelPlacement, message, resolvedRepoPlacements.coerced]);
-
   const handleLeftBottomTabChange = useCallback(
     (tab: LeftBottomTab) => {
       startTransition(() => {
@@ -661,10 +639,6 @@ export function LeftSidebar({
     },
     [filesExplorerSectionCollapsed, handleFilesExplorerSectionCollapsedChange],
   );
-
-  useEffect(() => {
-    onRepoPanelUsesRightRailChange?.(repoPanelRenderState.usesRightRail);
-  }, [onRepoPanelUsesRightRailChange, repoPanelRenderState.usesRightRail]);
 
   useEffect(() => {
     if (expandedFilesPanelOnMountRef.current) return;
@@ -886,7 +860,7 @@ export function LeftSidebar({
   const effectiveRepoPanelPath = accessibleRepoPanelPath.trim() || repoPanelRepositoryPath.trim();
   const showLeftRepoPanel = Boolean(
     effectiveRepoPanelPath &&
-      (resolvedRepoPlacements.git === "left" || resolvedRepoPlacements.files === "left"),
+      (gitPanelPlacement === "left" || filesPanelPlacement === "left"),
   );
   const showRepoPanel = Boolean(effectiveRepoPanelPath);
 
@@ -1205,6 +1179,9 @@ export function LeftSidebar({
 
   const rightRepositoryRepoPanel = useMemo(() => {
     if (!showRepoPanel || !repoPanelRenderState.usesRightRail) return null;
+    if (!repoPanelRenderState.showGitOnRight && !repoPanelRenderState.showFilesOnRight) {
+      return null;
+    }
     if (repoPanelRenderState.rightTabMode) {
       return (
         <div className="app-right-repo-panel">

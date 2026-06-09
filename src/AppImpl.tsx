@@ -1838,18 +1838,6 @@ export default function App() {
 
   const repoPanelPlacementDefault = useRepoPanelPlacementDefault();
   const [repositoryRepoPanelNode, setRepositoryRepoPanelNode] = useState<ReactNode | null>(null);
-  const repoPanelUsesRightRailRef = useRef(false);
-
-  const handleRepoPanelUsesRightRailChange = useCallback(
-    (usesRightRail: boolean) => {
-      const prev = repoPanelUsesRightRailRef.current;
-      repoPanelUsesRightRailRef.current = usesRightRail;
-      if (usesRightRail && !prev && effectiveRightCollapsed) {
-        handleToggleRightPanel();
-      }
-    },
-    [effectiveRightCollapsed, handleToggleRightPanel],
-  );
 
   const handleNewPaneSessionForRepository = useCallback(
     (repository: Repository) => {
@@ -3148,7 +3136,6 @@ export default function App() {
         gitPanelPlacement: repoPanelPlacementDefault.gitPanelPlacement,
         filesPanelPlacement: repoPanelPlacementDefault.filesPanelPlacement,
         onRepositoryRepoPanelChange: setRepositoryRepoPanelNode,
-        onRepoPanelUsesRightRailChange: handleRepoPanelUsesRightRailChange,
       }}
       authorPanelProps={{
         pane: authorPane,

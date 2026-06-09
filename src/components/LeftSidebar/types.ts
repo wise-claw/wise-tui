@@ -193,7 +193,5 @@ export interface LeftSidebarProps {
   repoPanelRightRailAvailable?: boolean;
   /** 右栏仓库面板（Git / 文件树）节点。 */
   onRepositoryRepoPanelChange?: (node: ReactNode | null) => void;
-  /** 是否有面板配置在右栏（用于自动展开右栏）。 */
-  onRepoPanelUsesRightRailChange?: (usesRightRail: boolean) => void;
   taskCardsNavProps?: TaskCardsNavProps;
 }

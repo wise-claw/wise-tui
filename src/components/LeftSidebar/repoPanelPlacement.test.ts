@@ -1,18 +1,7 @@
 import { describe, expect, test } from "bun:test";
-import {
-  deriveRepoPanelRenderState,
-  resolveRepoPanelPlacements,
-} from "./repoPanelPlacement";
+import { deriveRepoPanelRenderState } from "./repoPanelPlacement";
 
 describe("repoPanelPlacement", () => {
-  test("resolveRepoPanelPlacements coerces right to left when rail unavailable", () => {
-    expect(resolveRepoPanelPlacements("right", "left", false)).toEqual({
-      git: "left",
-      files: "left",
-      coerced: true,
-    });
-  });
-
   test("deriveRepoPanelRenderState uses left tab mode", () => {
     expect(deriveRepoPanelRenderState("left", "left", "git")).toMatchObject({
       showGitOnLeft: true,
@@ -40,6 +29,27 @@ describe("repoPanelPlacement", () => {
   test("deriveRepoPanelRenderState uses right tab mode", () => {
     expect(deriveRepoPanelRenderState("right", "right", "files")).toMatchObject({
       showFilesOnRight: true,
+      rightTabMode: true,
+      usesRightRail: true,
+    });
+  });
+
+  test("keeps configured usesRightRail when right rail is temporarily unavailable", () => {
+    expect(
+      deriveRepoPanelRenderState("left", "right", "git", { rightRailAvailable: false }),
+    ).toMatchObject({
+      showGitOnLeft: true,
+      showFilesOnRight: false,
+      usesRightRail: true,
+    });
+  });
+
+  test("hides right tab panes when right rail is temporarily unavailable", () => {
+    expect(
+      deriveRepoPanelRenderState("right", "right", "git", { rightRailAvailable: false }),
+    ).toMatchObject({
+      showGitOnRight: false,
+      showFilesOnRight: false,
       rightTabMode: true,
       usesRightRail: true,
     });
