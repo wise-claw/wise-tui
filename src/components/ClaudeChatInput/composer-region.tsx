@@ -516,7 +516,6 @@ function ComposerInner({
       setSemiEditorReady(false);
     };
   }, []);
-  useComposerTokenHighlight(aiChatRef, semiEditorReady, session.id);
   const plainSurfaceRef = useRef<ComposerPlainSurface | null>(null);
   const lastEditorPlainRef = useRef("");
   const ignoreNextContentSyncRef = useRef(false);
@@ -592,6 +591,8 @@ function ComposerInner({
   const { prompt, contextItems, set, reset, contextAdd, draftBucketKey } = usePrompt();
 
   const displayPlain = useMemo(() => promptToDisplayPlain(prompt), [prompt]);
+
+  useComposerTokenHighlight(aiChatRef, semiEditorReady, session.id, displayPlain);
 
   plainSurfaceRef.current = {
     anchorEl: () => shellRef.current,

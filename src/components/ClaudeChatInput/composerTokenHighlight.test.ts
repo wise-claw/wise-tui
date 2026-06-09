@@ -10,14 +10,35 @@ describe("findComposerHighlightRanges", () => {
     ]);
   });
 
+  test("does not highlight plain text after @ mention", () => {
+    expect(findComposerHighlightRanges("@Claude Code 你好")).toEqual([
+      { start: 0, end: 12, kind: "at" },
+    ]);
+  });
+
   test("highlights single-word @ mention", () => {
     expect(findComposerHighlightRanges("@terminal1 继续")).toEqual([
       { start: 0, end: 10, kind: "at" },
     ]);
   });
 
-  test("does not treat URL scheme as slash command", () => {
+  test("highlights CJK assignee as single token", () => {
+    expect(findComposerHighlightRanges("@张三 继续")).toEqual([
+      { start: 0, end: 3, kind: "at" },
+    ]);
+  });
+
+  test("does not treat URL as slash command", () => {
     expect(findComposerHighlightRanges("see https://example.com")).toEqual([]);
+    expect(findComposerHighlightRanges("http://example.com/foo")).toEqual([]);
+    expect(findComposerHighlightRanges("visit http://a.com then /add-dir")).toEqual([
+      { start: 24, end: 32, kind: "slash" },
+    ]);
+  });
+
+  test("does not treat path segments as slash command", () => {
+    expect(findComposerHighlightRanges("path/to/file")).toEqual([]);
+    expect(findComposerHighlightRanges("example.com/foo")).toEqual([]);
   });
 
   test("highlights inline slash command after text", () => {

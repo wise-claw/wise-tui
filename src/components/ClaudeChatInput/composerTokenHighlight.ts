@@ -14,8 +14,56 @@ export interface ComposerHighlightRange {
 
 const COMPOSER_TOKEN_HIGHLIGHT_KEY = new PluginKey<DecorationSet>("wise-composer-token-highlight");
 
+/** @ 指派后续英文词（如 Claude Code）；不含 CJK，避免把正文「你好」吞进提及。 */
+const AT_MENTION_CONTINUATION_WORD = /[A-Za-z0-9._-]/;
+
 function normalizeComposerPlain(plain: string): string {
   return plain.replace(/\u200B/g, "");
+}
+
+function isSlashCommandToken(token: string): boolean {
+  if (!token.startsWith("/")) return false;
+  if ((token.match(/\//g) ?? []).length !== 1) return false;
+  return true;
+}
+
+function findSlashHighlightRangesInLine(
+  line: string,
+  lineStartOffset: number,
+): ComposerHighlightRange[] {
+  const ranges: ComposerHighlightRange[] = [];
+  let pos = 0;
+  while (pos < line.length) {
+    while (pos < line.length && (line[pos] === " " || line[pos] === "\t")) pos += 1;
+    if (pos >= line.length) break;
+    const tokenStart = pos;
+    while (pos < line.length && line[pos] !== " " && line[pos] !== "\t") pos += 1;
+    const token = line.slice(tokenStart, pos);
+    if (!isSlashCommandToken(token)) continue;
+    ranges.push({
+      start: lineStartOffset + tokenStart,
+      end: lineStartOffset + pos,
+      kind: "slash",
+    });
+  }
+  return ranges;
+}
+
+function findAtHighlightRange(text: string, atIndex: number): ComposerHighlightRange | null {
+  let end = atIndex + 1;
+  while (end < text.length && /\S/u.test(text[end]!)) end += 1;
+
+  while (end < text.length && text[end] === " ") {
+    const wordStart = end + 1;
+    if (wordStart >= text.length || text[wordStart] === "/") break;
+    let wordEnd = wordStart;
+    while (wordEnd < text.length && AT_MENTION_CONTINUATION_WORD.test(text[wordEnd]!)) wordEnd += 1;
+    if (wordEnd === wordStart) break;
+    end = wordEnd;
+  }
+
+  if (end <= atIndex + 1) return null;
+  return { start: atIndex, end, kind: "at" };
 }
 
 /** 扫描纯文本中的 @ 指派与 / 指令 token（与 composer 发送语义对齐，仅做视觉高亮）。 */
@@ -24,12 +72,14 @@ export function findComposerHighlightRanges(plain: string): ComposerHighlightRan
   const ranges: ComposerHighlightRange[] = [];
   const occupied = new Array<boolean>(text.length).fill(false);
 
-  const slashRe = /(?<![:/])\/(\S+)/g;
-  for (const match of text.matchAll(slashRe)) {
-    const start = match.index ?? 0;
-    const end = start + match[0].length;
-    ranges.push({ start, end, kind: "slash" });
-    for (let i = start; i < end; i += 1) occupied[i] = true;
+  let lineStart = 0;
+  for (let i = 0; i <= text.length; i += 1) {
+    if (i < text.length && text[i] !== "\n") continue;
+    for (const range of findSlashHighlightRangesInLine(text.slice(lineStart, i), lineStart)) {
+      ranges.push(range);
+      for (let j = range.start; j < range.end; j += 1) occupied[j] = true;
+    }
+    lineStart = i + 1;
   }
 
   for (let i = 0; i < text.length; i += 1) {
@@ -37,21 +87,10 @@ export function findComposerHighlightRanges(plain: string): ComposerHighlightRan
     if (ch !== "@" && ch !== "＠") continue;
     if (occupied[i]) continue;
 
-    let end = i + 1;
-    while (end < text.length && /\S/u.test(text[end]!)) end += 1;
-
-    while (end < text.length && text[end] === " ") {
-      const wordStart = end + 1;
-      if (wordStart >= text.length || text[wordStart] === "/") break;
-      let wordEnd = wordStart;
-      while (wordEnd < text.length && /[\w.-]/u.test(text[wordEnd]!)) wordEnd += 1;
-      if (wordEnd === wordStart) break;
-      end = wordEnd;
-    }
-
-    if (end <= i + 1) continue;
-    ranges.push({ start: i, end, kind: "at" });
-    for (let j = i; j < end; j += 1) occupied[j] = true;
+    const range = findAtHighlightRange(text, i);
+    if (!range) continue;
+    ranges.push(range);
+    for (let j = range.start; j < range.end; j += 1) occupied[j] = true;
   }
 
   ranges.sort((a, b) => a.start - b.start || a.end - b.end);
@@ -61,11 +100,15 @@ export function findComposerHighlightRanges(plain: string): ComposerHighlightRan
 type PlainTextDoc = ComposerProseMirrorEditor["state"]["doc"];
 
 function decorationAttrsForKind(kind: ComposerHighlightKind): DecorationAttrs {
+  if (kind === "at") {
+    return {
+      class: "app-composer-token-highlight app-composer-token-highlight--at",
+      style: "color: var(--ant-purple-5, #9254de); font-weight: 500;",
+    };
+  }
   return {
-    class:
-      kind === "at"
-        ? "app-composer-token-highlight app-composer-token-highlight--at"
-        : "app-composer-token-highlight app-composer-token-highlight--slash",
+    class: "app-composer-token-highlight app-composer-token-highlight--slash",
+    style: "color: var(--ant-cyan-6, #13c2c2); font-weight: 500;",
   };
 }
 
@@ -116,7 +159,7 @@ type ComposerEditorWithState = {
   };
 };
 
-export function attachComposerTokenHighlightPlugin(editor: unknown): Plugin | null {
+export function ensureComposerTokenHighlightPlugin(editor: unknown): Plugin | null {
   if (!editor || typeof editor !== "object") return null;
   const typed = editor as ComposerEditorWithState;
   if (
@@ -126,15 +169,22 @@ export function attachComposerTokenHighlightPlugin(editor: unknown): Plugin | nu
   ) {
     return null;
   }
-  if (typed.state.plugins.some((plugin) => plugin.spec.key === COMPOSER_TOKEN_HIGHLIGHT_KEY)) {
-    return null;
-  }
+  const existing = typed.state.plugins.find(
+    (plugin) => plugin.spec.key === COMPOSER_TOKEN_HIGHLIGHT_KEY,
+  );
+  if (existing) return existing;
+
   const plugin = createComposerTokenHighlightPlugin();
   const nextState = typed.state.reconfigure({
     plugins: [...typed.state.plugins, plugin],
   });
   typed.view.updateState(nextState);
   return plugin;
+}
+
+/** @deprecated 使用 ensureComposerTokenHighlightPlugin */
+export function attachComposerTokenHighlightPlugin(editor: unknown): Plugin | null {
+  return ensureComposerTokenHighlightPlugin(editor);
 }
 
 export function detachComposerTokenHighlightPlugin(editor: unknown, plugin: Plugin | null): void {

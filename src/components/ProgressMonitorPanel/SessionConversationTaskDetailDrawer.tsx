@@ -322,11 +322,13 @@ function SessionConversationTaskDetailDrawerInner({
   return (
     <Drawer
       title={
-        task
-          ? task.source === "execution_environment"
-            ? `${task.label} · 执行会话`
-            : `${task.label} · 会话记录`
-          : "会话记录"
+        <span className="app-monitor-panel__history-drawer-headline">
+          {task
+            ? task.source === "execution_environment"
+              ? `${task.label} · 执行会话`
+              : `${task.label} · 会话记录`
+            : "会话记录"}
+        </span>
       }
       placement="right"
       size={width}
@@ -334,6 +336,7 @@ function SessionConversationTaskDetailDrawerInner({
       onClose={onClose}
       destroyOnHidden
       classNames={{
+        header: "app-monitor-panel__history-session-drawer-header",
         body: "app-monitor-panel__history-session-drawer-body app-monitor-panel__subagent-detail-drawer-body",
       }}
       extra={
