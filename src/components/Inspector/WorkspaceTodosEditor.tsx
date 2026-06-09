@@ -74,7 +74,7 @@ const TodoRow = memo(function TodoRow({
 
   return (
     <li
-      className={`${gridClass}${item.completed ? " app-workspace-todos-panel__row--done" : ""}${overdue ? " app-workspace-todos-panel__row--overdue" : ""}`}
+      className={`${gridClass}${editing ? " app-workspace-todos-panel__row--editing" : ""}${item.completed ? " app-workspace-todos-panel__row--done" : ""}${overdue ? " app-workspace-todos-panel__row--overdue" : ""}`}
     >
       <Checkbox
         className="app-workspace-todos-panel__check"
@@ -84,16 +84,14 @@ const TodoRow = memo(function TodoRow({
       />
       <div className="app-workspace-todos-panel__row-main">
         {editing ? (
-          <Input.TextArea
+          <Input
             size="small"
             className="app-workspace-todos-panel__title-input"
             value={draft}
             autoFocus
-            autoSize={{ minRows: 1, maxRows: 8 }}
             onChange={(e) => setDraft(e.target.value)}
             onBlur={commitTitle}
             onPressEnter={(e) => {
-              if (e.shiftKey) return;
               e.preventDefault();
               commitTitle();
             }}

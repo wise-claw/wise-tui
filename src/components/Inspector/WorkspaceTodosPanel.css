@@ -39,10 +39,9 @@
 
 .app-workspace-todos-panel__body {
   flex: 0 0 auto;
+  min-height: 0;
   max-height: min(280px, 38vh);
-  overflow-x: hidden;
-  overflow-y: auto;
-  overscroll-behavior: contain;
+  overflow: hidden;
   display: flex;
   flex-direction: column;
 }
@@ -58,8 +57,19 @@
   list-style: none;
   margin: 0;
   padding: 1px 0 0;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.app-workspace-todos-panel__list > li {
+  margin: 0;
+  flex: 0 0 auto;
 }
 
 .app-workspace-todos-panel__list-empty,
@@ -85,11 +95,15 @@
 .app-workspace-todos-panel__row {
   display: grid;
   grid-template-columns: 18px minmax(0, 1fr) auto 20px;
-  align-items: start;
+  align-items: center;
   gap: 0 4px;
-  min-height: 24px;
-  padding: 2px 4px 2px 2px;
+  min-height: 0;
+  padding: 0 4px 0 2px;
   border-radius: 4px;
+}
+
+.app-workspace-todos-panel__row--editing {
+  padding-block: 0;
 }
 
 .app-workspace-todos-panel__row:hover {
@@ -106,13 +120,19 @@
 }
 
 .app-workspace-todos-panel__check {
-  align-self: start;
-  margin-top: 2px;
-  line-height: 1;
+  align-self: center;
+  margin: 0;
+  padding: 0;
+  font-size: 11px;
+  line-height: 15px;
+  min-height: 15px;
+  display: inline-flex;
+  align-items: center;
 }
 
 .app-workspace-todos-panel__check .ant-checkbox {
   top: 0;
+  align-self: center;
 }
 
 .app-workspace-todos-panel__check .ant-checkbox-inner {
@@ -139,7 +159,7 @@
   justify-content: center;
   gap: 0;
   min-width: 0;
-  min-height: 20px;
+  min-height: 0;
 }
 
 .app-workspace-todos-panel__title-btn {
@@ -151,8 +171,8 @@
   text-align: left;
   font: inherit;
   font-size: 11px;
-  line-height: 1.45;
-  min-height: 20px;
+  line-height: 1.35;
+  min-height: 0;
   height: auto;
   color: inherit;
   cursor: text;
@@ -161,12 +181,13 @@
   word-break: break-word;
 }
 
-.app-workspace-todos-panel__title-input {
+.app-workspace-todos-panel__title-input.ant-input {
+  height: 18px;
+  min-height: 18px;
+  padding: 0 4px;
   font-size: 11px;
-  padding-block: 0;
-  min-height: 20px;
-  resize: none;
-  line-height: 1.45;
+  line-height: 18px;
+  border-radius: 4px;
 }
 
 .app-workspace-todos-panel__due {
@@ -176,23 +197,24 @@
 }
 
 .app-workspace-todos-panel__scope-tag {
-  margin: 2px 0 0;
+  margin: 0;
+  height: 16px;
   font-size: 10px;
   line-height: 14px;
   padding: 0 3px;
-  align-self: start;
+  align-self: center;
 }
 
 .app-workspace-todos-panel__delete {
   opacity: 0;
-  align-self: start;
-  margin-top: 1px;
+  align-self: center;
+  margin: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 20px !important;
-  height: 20px !important;
-  min-width: 20px !important;
+  width: 18px !important;
+  height: 18px !important;
+  min-width: 18px !important;
   padding: 0 !important;
   font-size: 11px;
 }
