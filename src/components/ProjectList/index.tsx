@@ -1,5 +1,5 @@
-import { Tooltip } from "antd";
 import type { Repository } from "../../types";
+import { HoverHint } from "../shared/HoverHint";
 import { repositoryFolderBasename } from "../../utils/repositoryType";
 import "./index.css";
 
@@ -111,7 +111,7 @@ export function RepositoryList({
               </span>
             </span>
             <span className="app-repository-name">{repositoryFolderBasename(repository)}</span>
-            <Tooltip title="打开目录" mouseEnterDelay={0.3}>
+            <HoverHint title="打开目录">
               <span
                 className="app-repository-action"
                 onClick={(e) => {
@@ -121,8 +121,8 @@ export function RepositoryList({
               >
                 <FolderIcon />
               </span>
-            </Tooltip>
-            <Tooltip title="移除" mouseEnterDelay={0.3}>
+            </HoverHint>
+            <HoverHint title="移除">
               <span
                 className="app-repository-action app-repository-action--remove"
                 onClick={(e) => {
@@ -132,8 +132,8 @@ export function RepositoryList({
               >
                 <RemoveIcon />
               </span>
-            </Tooltip>
-            <Tooltip title="新增会话" mouseEnterDelay={0.3}>
+            </HoverHint>
+            <HoverHint title="新增会话">
               <span
                 className="app-repository-action app-repository-action--plus"
                 onClick={(e) => {
@@ -143,7 +143,7 @@ export function RepositoryList({
               >
                 <PlusIcon />
               </span>
-            </Tooltip>
+            </HoverHint>
           </div>
         ))
       )}

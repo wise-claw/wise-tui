@@ -7,7 +7,8 @@ import {
   SearchOutlined,
   ToolOutlined,
 } from "@ant-design/icons";
-import { App, Alert, Button, Empty, Input, Segmented, Space, Spin, Tag, Tooltip, Typography } from "antd";
+import { App, Alert, Button, Empty, Input, Segmented, Space, Spin, Tag, Typography } from "antd";
+import { HoverHint } from "../shared/HoverHint";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { listClaudeProjectSkills, listClaudeUserSkills } from "../../services/claude";
 import {
@@ -397,7 +398,7 @@ export function SkillsHub({ repositoryPath, onClose }: Props) {
               技能市场
             </Typography.Title>
             {onClose ? (
-              <Tooltip title="关闭" mouseEnterDelay={0.35}>
+              <HoverHint title="关闭">
                 <Button
                   type="text"
                   size="small"
@@ -406,7 +407,7 @@ export function SkillsHub({ repositoryPath, onClose }: Props) {
                   aria-label="关闭"
                   onClick={onClose}
                 />
-              </Tooltip>
+              </HoverHint>
             ) : null}
           </div>
         ) : null}
@@ -449,7 +450,7 @@ export function SkillsHub({ repositoryPath, onClose }: Props) {
                 onChange={(e) => setQuery(e.target.value)}
                 className="app-skills-hub-search-input"
               />
-              <Tooltip title="同步安装状态" mouseEnterDelay={0.35}>
+              <HoverHint title="同步安装状态">
                 <Button
                   size="small"
                   icon={<ReloadOutlined />}
@@ -458,7 +459,7 @@ export function SkillsHub({ repositoryPath, onClose }: Props) {
                   aria-label="同步安装状态"
                   className="app-skills-hub-refresh-btn"
                 />
-              </Tooltip>
+              </HoverHint>
             </Space.Compact>
           ) : hubMode === "external" ? (
             <Space.Compact style={{ width: "100%" }}>
@@ -480,7 +481,7 @@ export function SkillsHub({ repositoryPath, onClose }: Props) {
               >
                 添加
               </Button>
-              <Tooltip title="刷新外部目录" mouseEnterDelay={0.35}>
+              <HoverHint title="刷新外部目录">
                 <Button
                   size="small"
                   icon={<ReloadOutlined />}
@@ -489,7 +490,7 @@ export function SkillsHub({ repositoryPath, onClose }: Props) {
                   aria-label="刷新外部目录"
                   className="app-skills-hub-refresh-btn"
                 />
-              </Tooltip>
+              </HoverHint>
             </Space.Compact>
           ) : (
             <Space.Compact style={{ width: "100%" }}>
@@ -502,7 +503,7 @@ export function SkillsHub({ repositoryPath, onClose }: Props) {
                 onChange={(e) => setQuery(e.target.value)}
                 className="app-skills-hub-search-input"
               />
-              <Tooltip title="刷新扩展技能" mouseEnterDelay={0.35}>
+              <HoverHint title="刷新扩展技能">
                 <Button
                   size="small"
                   icon={<ReloadOutlined />}
@@ -511,7 +512,7 @@ export function SkillsHub({ repositoryPath, onClose }: Props) {
                   aria-label="刷新扩展技能"
                   className="app-skills-hub-refresh-btn"
                 />
-              </Tooltip>
+              </HoverHint>
             </Space.Compact>
           )}
         </div>

@@ -1,5 +1,6 @@
 import { FolderOpenOutlined, LinkOutlined } from "@ant-design/icons";
-import { message, Tooltip } from "antd";
+import { HoverHint } from "./shared/HoverHint";
+import { message } from "antd";
 import { memo, useCallback, useMemo } from "react";
 import { useWorkspaceQuickActions } from "../hooks/useWorkspaceQuickActions";
 import { openExternalUrl } from "../services/openExternal";
@@ -43,10 +44,10 @@ export const WorkspaceQuickActionsTopbarStrip = memo(function WorkspaceQuickActi
   return (
     <span className="app-topbar-workspace-quick-actions" role="toolbar" aria-label="顶栏快捷操作">
       {pinnedItems.map((item) => (
-        <Tooltip
+        <HoverHint
           key={`${item.scope}:${item.id}`}
           title={item.target}
-          mouseEnterDelay={0.35}
+         
         >
           <button
             type="button"
@@ -58,7 +59,7 @@ export const WorkspaceQuickActionsTopbarStrip = memo(function WorkspaceQuickActi
             </span>
             <span className="app-topbar-workspace-quick-action-chip__label">{item.label}</span>
           </button>
-        </Tooltip>
+        </HoverHint>
       ))}
     </span>
   );

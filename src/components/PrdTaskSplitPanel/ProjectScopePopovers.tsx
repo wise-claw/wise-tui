@@ -1,5 +1,6 @@
 import { QuestionCircleOutlined } from "@ant-design/icons";
-import { Button, Divider, Space, Tag, Tooltip, Typography } from "antd";
+import { HoverHint } from "../shared/HoverHint";
+import { Button, Divider, Space, Tag, Typography } from "antd";
 import type { EmployeeItem, ProjectItem, Repository, WorkflowTemplateItem } from "../../types";
 import { repositoryOwnerBasenamesInScopeRelaxed } from "../../utils/projectPrdScopeDisplay";
 
@@ -134,7 +135,7 @@ export function ProjectEmployeePopoverTitle() {
   return (
     <span style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
       <span>项目员工</span>
-      <Tooltip title={tooltip} placement="bottomLeft" styles={{ root: { maxWidth: 400 } }}>
+      <HoverHint title={tooltip} placement="bottomLeft" styles={{ root: { maxWidth: 400 } }}>
         <QuestionCircleOutlined
           aria-label="项目员工说明"
           style={{ fontSize: 14, color: "var(--ant-color-icon)", cursor: "help" }}
@@ -142,7 +143,7 @@ export function ProjectEmployeePopoverTitle() {
             event.stopPropagation();
           }}
         />
-      </Tooltip>
+      </HoverHint>
     </span>
   );
 }

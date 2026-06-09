@@ -16,11 +16,11 @@ import {
   Spin,
   Switch,
   Tag,
-  Tooltip,
   TreeSelect,
   Typography,
 } from "antd";
 import { List } from "../ui/AppList";
+import { HoverHint } from "../shared/HoverHint";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ProjectItem, Repository } from "../../types";
 import {
@@ -428,7 +428,7 @@ export function PromptsPanel({
             <span>{enabledSlotCount}/{slotIdList.length} 启用</span>
           </div>
           {onClose ? (
-            <Tooltip title="关闭" mouseEnterDelay={0.35}>
+            <HoverHint title="关闭">
               <Button
                 type="text"
                 size="small"
@@ -437,7 +437,7 @@ export function PromptsPanel({
                 onClick={onClose}
                 aria-label="关闭"
               />
-            </Tooltip>
+            </HoverHint>
           ) : null}
         </div>
 

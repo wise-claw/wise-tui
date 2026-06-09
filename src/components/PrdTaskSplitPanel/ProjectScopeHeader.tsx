@@ -9,10 +9,10 @@ import {
   Popover,
   Space,
   Tag,
-  Tooltip,
   Typography,
 } from "antd";
 import { useMemo } from "react";
+import { HoverHint } from "../shared/HoverHint";
 import type { EmployeeItem, ProjectItem, Repository, WorkflowTemplateItem } from "../../types";
 import { isOmcMonitorEmployeeRecord } from "../../utils/omcMonitorEmployeeSession";
 import { listRepositoryMainOwnerDisplayGaps } from "../../utils/projectPrdScopeDisplay";
@@ -213,7 +213,7 @@ export function ProjectScopeHeader({
                     </div>
                     <span className="app-prd-task-panel__header-scope-split__divider" aria-hidden />
                     <div className="app-prd-task-panel__header-scope-split__addon-wrap">
-                      <Tooltip title="新增员工（与仓库配置一致）">
+                      <HoverHint title="新增员工（与仓库配置一致）">
                         <Button
                           size="small"
                           type="default"
@@ -223,7 +223,7 @@ export function ProjectScopeHeader({
                           className="app-prd-task-panel__requirement-op-btn app-prd-task-panel__header-scope-split__addon"
                           onClick={() => onOpenEmployeeConfigForProject?.()}
                         />
-                      </Tooltip>
+                      </HoverHint>
                     </div>
                   </div>
                   <div className="app-prd-task-panel__header-scope-split">
@@ -255,7 +255,7 @@ export function ProjectScopeHeader({
                     </div>
                     <span className="app-prd-task-panel__header-scope-split__divider" aria-hidden />
                     <div className="app-prd-task-panel__header-scope-split__addon-wrap">
-                      <Tooltip title="新增团队（与仓库配置一致）">
+                      <HoverHint title="新增团队（与仓库配置一致）">
                         <Button
                           size="small"
                           type="default"
@@ -265,7 +265,7 @@ export function ProjectScopeHeader({
                           className="app-prd-task-panel__requirement-op-btn app-prd-task-panel__header-scope-split__addon"
                           onClick={() => onOpenWorkflowConfigForProject?.()}
                         />
-                      </Tooltip>
+                      </HoverHint>
                     </div>
                   </div>
                 </Space>

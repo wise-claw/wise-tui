@@ -1,4 +1,5 @@
-import { Popover, Tooltip } from "antd";
+import { Popover } from "antd";
+import { HoverHint } from "../shared/HoverHint";
 import { useState } from "react";
 import type { ComposerCommonPhrase } from "../../constants/composerCommonPhrase";
 import { ComposerCommonPhrasesPanel } from "./ComposerCommonPhrasesPanel";
@@ -40,7 +41,7 @@ export function ComposerCommonPhrasesManageTrigger({
         </div>
       }
     >
-      <Tooltip title="管理会话常用语" placement="top" open={open ? false : undefined}>
+      <HoverHint title="管理会话常用语" placement="top" open={open ? false : undefined}>
         <button
           type="button"
           className="app-composer-common-phrases-trigger"
@@ -57,7 +58,7 @@ export function ComposerCommonPhrasesManageTrigger({
             </span>
           ) : null}
         </button>
-      </Tooltip>
+      </HoverHint>
     </Popover>
   );
 }

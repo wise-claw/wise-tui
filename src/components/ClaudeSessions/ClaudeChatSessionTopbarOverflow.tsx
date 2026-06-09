@@ -1,4 +1,5 @@
-import { Dropdown, Tooltip, type MenuProps } from "antd";
+import { Dropdown, type MenuProps } from "antd";
+import { HoverHint } from "../shared/HoverHint";
 import { memo, useCallback, useMemo, useState } from "react";
 import type { ClaudeSession } from "../../types";
 import { useWiseTopbarChromeVisibility } from "../../hooks/useWiseTopbarChromeVisibility";
@@ -95,7 +96,7 @@ export const ClaudeChatSessionTopbarOverflow = memo(function ClaudeChatSessionTo
         onOpenChange={setMenuOpen}
         classNames={{ root: "app-topbar-overflow-dropdown" }}
       >
-        <Tooltip title="更多：默认配置中隐藏的顶栏工具" mouseEnterDelay={0.3} getPopupContainer={() => document.body}>
+        <HoverHint title="更多：默认配置中隐藏的顶栏工具" open={menuOpen ? false : undefined} getPopupContainer={() => document.body}>
           <button
             type="button"
             className={`app-topbar-btn app-topbar-overflow-btn${menuOpen ? " active" : ""}`}
@@ -105,7 +106,7 @@ export const ClaudeChatSessionTopbarOverflow = memo(function ClaudeChatSessionTo
           >
             <IconMoreGrid />
           </button>
-        </Tooltip>
+        </HoverHint>
       </Dropdown>
 
       {!topbarChrome.showFccTopbar && activePanel === "fcc" ? (

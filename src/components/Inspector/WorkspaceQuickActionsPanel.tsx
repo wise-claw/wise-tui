@@ -7,7 +7,8 @@ import {
   PushpinFilled,
   PushpinOutlined,
 } from "@ant-design/icons";
-import { App, Button, Spin, Tag, Tooltip, Typography } from "antd";
+import { App, Button, Spin, Tag, Typography } from "antd";
+import { HoverHint } from "../shared/HoverHint";
 import { useCallback, useState } from "react";
 import { openExternalUrl } from "../../services/openExternal";
 import { openInFinder } from "../../services/repository";
@@ -145,7 +146,7 @@ export function WorkspaceQuickActionsPanel({
       ariaLabel="快捷操作"
       title="快捷操作"
       headActions={
-        <Tooltip title="添加链接或本地目录" mouseEnterDelay={0.35}>
+        <HoverHint title="添加链接或本地目录">
           <Button
             type="text"
             size="small"
@@ -154,7 +155,7 @@ export function WorkspaceQuickActionsPanel({
             disabled={!quickActions.hasScope}
             onClick={() => setEditState({ mode: "create" })}
           />
-        </Tooltip>
+        </HoverHint>
       }
       trailing={
         <WorkspaceQuickActionsEditModal
@@ -223,13 +224,13 @@ export function WorkspaceQuickActionsPanel({
                   </Tag>
                 </button>
                 <span className="app-workspace-quick-actions-panel__row-actions">
-                  <Tooltip
+                  <HoverHint
                     title={
                       resolveWorkspaceQuickActionPinnedToTopbar(item)
                         ? "从顶栏移除"
                         : "固定到顶栏（远程后面）"
                     }
-                    mouseEnterDelay={0.35}
+                   
                   >
                     <Button
                       type="text"
@@ -253,8 +254,8 @@ export function WorkspaceQuickActionsPanel({
                       }
                       onClick={() => void togglePinToTopbar(item)}
                     />
-                  </Tooltip>
-                  <Tooltip title="编辑" mouseEnterDelay={0.35}>
+                  </HoverHint>
+                  <HoverHint title="编辑">
                     <Button
                       type="text"
                       size="small"
@@ -264,8 +265,8 @@ export function WorkspaceQuickActionsPanel({
                         setEditState({ mode: "edit", item, scope: item.scope })
                       }
                     />
-                  </Tooltip>
-                  <Tooltip title="删除" mouseEnterDelay={0.35}>
+                  </HoverHint>
+                  <HoverHint title="删除">
                     <Button
                       type="text"
                       size="small"
@@ -274,7 +275,7 @@ export function WorkspaceQuickActionsPanel({
                       aria-label="删除"
                       onClick={() => removeItem(item)}
                     />
-                  </Tooltip>
+                  </HoverHint>
                 </span>
               </li>
             ))}

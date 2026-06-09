@@ -5,7 +5,8 @@ import {
   FolderOutlined,
   ReloadOutlined,
 } from "@ant-design/icons";
-import { Modal, Popover, Tooltip } from "antd";
+import { Modal, Popover } from "antd";
+import { HoverHint } from "../shared/HoverHint";
 import type { MouseEvent, ReactNode } from "react";
 import { useCallback, useMemo, useState } from "react";
 import { CodeGraphAssociationIcon } from "./CodeGraphAssociationIcon";
@@ -186,7 +187,7 @@ export function CodeGraphRepositoryPopover({
                       <span className="app-code-graph-repo-dropdown-active-pill">active</span>
                     ) : null}
                     {onReindexRepository ? (
-                      <Tooltip title="重新检索代码图谱">
+                      <HoverHint title="重新检索代码图谱">
                         <span
                           role="button"
                           tabIndex={0}
@@ -200,10 +201,10 @@ export function CodeGraphRepositoryPopover({
                         >
                           <ReloadOutlined />
                         </span>
-                      </Tooltip>
+                      </HoverHint>
                     ) : null}
                     {onRemoveRepository ? (
-                      <Tooltip title="从 Wise 移除">
+                      <HoverHint title="从 Wise 移除">
                         <span
                           role="button"
                           tabIndex={0}
@@ -217,7 +218,7 @@ export function CodeGraphRepositoryPopover({
                         >
                           <DeleteOutlined />
                         </span>
-                      </Tooltip>
+                      </HoverHint>
                     ) : null}
                   </span>
                 </button>
@@ -270,7 +271,7 @@ export function CodeGraphRepositoryPopover({
               <span className="app-code-graph-repo-dropdown-active-pill">active</span>
             ) : null}
             {onReindexAssociationScope && associationIds.length >= 2 ? (
-              <Tooltip title="同步 GitNexus 仓库组">
+              <HoverHint title="同步 GitNexus 仓库组">
                 <span
                   role="button"
                   tabIndex={0}
@@ -289,10 +290,10 @@ export function CodeGraphRepositoryPopover({
                 >
                   <ReloadOutlined />
                 </span>
-              </Tooltip>
+              </HoverHint>
             ) : null}
             {onDismissAssociationScope ? (
-              <Tooltip title="删除关联范围">
+              <HoverHint title="删除关联范围">
                 <span
                   role="button"
                   tabIndex={0}
@@ -311,7 +312,7 @@ export function CodeGraphRepositoryPopover({
                 >
                   <DeleteOutlined />
                 </span>
-              </Tooltip>
+              </HoverHint>
             ) : null}
           </span>
         </div>

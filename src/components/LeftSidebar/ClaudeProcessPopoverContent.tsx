@@ -1,6 +1,7 @@
 import { useState } from "react";
+import { HoverHint } from "../shared/HoverHint";
 import { CloseOutlined } from "@ant-design/icons";
-import { Button, Empty, Popconfirm, Tooltip } from "antd";
+import { Button, Empty, Popconfirm } from "antd";
 import type { ClaudeHostProcess, ClaudeSession, ProjectItem, Repository } from "../../types";
 import type { ClaudeProcessWorkspaceLabelCacheHandle } from "../../hooks/useClaudeProcessWorkspaceLabelCache";
 import {
@@ -61,7 +62,7 @@ function ClaudeProcessCard({
           <span className="app-claude-process-popover__card-head-actions">
             <span className="app-claude-process-popover__card-running" aria-label="运行中" title="运行中" />
             {onEndSession ? (
-              <Tooltip title="关闭 Claude 会话" mouseEnterDelay={0.15}>
+              <HoverHint title="关闭 Claude 会话">
                 <span
                   role="button"
                   tabIndex={0}
@@ -83,7 +84,7 @@ function ClaudeProcessCard({
                 >
                   <CloseOutlined />
                 </span>
-              </Tooltip>
+              </HoverHint>
             ) : null}
           </span>
         </div>

@@ -1,4 +1,5 @@
-import { Dropdown, Spin, Tooltip, type MenuProps } from "antd";
+import { Dropdown, Spin, type MenuProps } from "antd";
+import { HoverHint } from "../shared/HoverHint";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { getClaudeModelPickerOptions } from "../../services/claude";
 import { listCursorModels, type CursorModelListItem } from "../../services/cursorAgent";
@@ -388,14 +389,14 @@ export function ComposerModelPicker({
             open={cursorMenuOpen}
             onOpenChange={setCursorMenuOpen}
           >
-            <span
-              className="app-composer-model-picker__trigger-wrap"
-              onMouseDown={stopSemiComposerPointerBubble}
-            >
-              <Tooltip title="切换 Cursor 模型" placement="top" open={cursorMenuOpen ? false : undefined}>
+            <HoverHint title="切换 Cursor 模型" placement="top" open={cursorMenuOpen ? false : undefined}>
+              <span
+                className="app-composer-model-picker__trigger-wrap"
+                onMouseDown={stopSemiComposerPointerBubble}
+              >
                 {trigger}
-              </Tooltip>
-            </span>
+              </span>
+            </HoverHint>
           </Dropdown>
         </div>
       </div>
@@ -449,14 +450,14 @@ export function ComposerModelPicker({
           getPopupContainer={() => document.body}
           popupRender={() => modelPanelOverlay}
         >
-          <span
-            className="app-composer-model-picker__trigger-wrap"
-            onMouseDown={stopSemiComposerPointerBubble}
-          >
-            <Tooltip title="模型切换" placement="top" open={panelOpen ? false : undefined}>
+          <HoverHint title="模型切换" placement="top" open={panelOpen ? false : undefined}>
+            <span
+              className="app-composer-model-picker__trigger-wrap"
+              onMouseDown={stopSemiComposerPointerBubble}
+            >
               {trigger}
-            </Tooltip>
-          </span>
+            </span>
+          </HoverHint>
         </Dropdown>
       </div>
     </div>

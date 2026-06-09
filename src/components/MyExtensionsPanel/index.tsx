@@ -12,7 +12,8 @@ import {
   SearchOutlined,
   ToolOutlined,
 } from "@ant-design/icons";
-import { App, Button, Empty, Input, Space, Spin, Tooltip, Typography } from "antd";
+import { App, Button, Empty, Input, Space, Spin, Typography } from "antd";
+import { HoverHint } from "../shared/HoverHint";
 import { openPath } from "@tauri-apps/plugin-opener";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -529,7 +530,7 @@ export function MyExtensionsPanel({
                             className="app-my-extensions-panel__card-install-actions"
                             onClick={(e) => e.stopPropagation()}
                           >
-                            <Tooltip title="全局安装">
+                            <HoverHint title="全局安装">
                               <Button
                                 type="text"
                                 size="small"
@@ -537,8 +538,8 @@ export function MyExtensionsPanel({
                                 loading={busyId === item.id}
                                 onClick={() => void handleInstall(item, "global")}
                               />
-                            </Tooltip>
-                            <Tooltip title="安装到当前仓库">
+                            </HoverHint>
+                            <HoverHint title="安装到当前仓库">
                               <Button
                                 type="text"
                                 size="small"
@@ -547,7 +548,7 @@ export function MyExtensionsPanel({
                                 loading={busyId === item.id}
                                 onClick={() => void handleInstall(item, "repository")}
                               />
-                            </Tooltip>
+                            </HoverHint>
                           </Space>
                         }
                       />
@@ -573,15 +574,15 @@ export function MyExtensionsPanel({
                     placeholder="扩展名称"
                   />
                   <Space size={4} wrap={false} className="app-my-extensions-panel__detail-toolbar-actions">
-                    <Tooltip title="保存名称">
+                    <HoverHint title="保存名称">
                       <Button
                         size="small"
                         icon={<SaveOutlined />}
                         loading={savingName}
                         onClick={() => void handleSaveName()}
                       />
-                    </Tooltip>
-                    <Tooltip title="保存内容">
+                    </HoverHint>
+                    <HoverHint title="保存内容">
                       <Button
                         size="small"
                         type="primary"
@@ -590,8 +591,8 @@ export function MyExtensionsPanel({
                         disabled={!activeContent || editorDraft === activeContent.content}
                         onClick={() => void handleSaveContent()}
                       />
-                    </Tooltip>
-                    <Tooltip title="从扩展库删除">
+                    </HoverHint>
+                    <HoverHint title="从扩展库删除">
                       <Button
                         size="small"
                         danger
@@ -599,7 +600,7 @@ export function MyExtensionsPanel({
                         loading={removingId === selectedItem.id}
                         onClick={() => handleRemove(selectedItem)}
                       />
-                    </Tooltip>
+                    </HoverHint>
                   </Space>
                 </div>
                 <div className="app-my-extensions-panel__workspace">

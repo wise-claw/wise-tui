@@ -1,4 +1,5 @@
-import { Segmented, Tooltip, Typography } from "antd";
+import { Segmented, Typography } from "antd";
+import { HoverHint } from "../shared/HoverHint";
 import type { SddMode } from "../../types";
 import "./index.css";
 
@@ -31,9 +32,9 @@ export function SddModeSwitch({ value, autoResolved, disabled, onChange, size = 
   const items = OPTIONS.map((option) => ({
     value: option.value,
     label: (
-      <Tooltip title={option.description} placement="bottom">
+      <HoverHint title={option.description} placement="bottom">
         <span>{option.label}</span>
-      </Tooltip>
+      </HoverHint>
     ),
   }));
   const showHint = value === "auto";

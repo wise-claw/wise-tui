@@ -108,6 +108,7 @@ function repositoryTaskMenuItems(input: {
 function repositoryMainSessionRunMenuItem(input: {
   onMainSessionRun?: boolean;
   runCommandRunning?: boolean;
+  runRowPinned?: boolean;
 }): MenuItem | null {
   if (!input.onMainSessionRun) return null;
   return {
@@ -126,6 +127,11 @@ function repositoryMainSessionRunMenuItem(input: {
         label: "停止",
         disabled: !input.runCommandRunning,
       },
+      { type: "divider" },
+      {
+        key: "run-row-pin",
+        label: input.runRowPinned ? "✓ 仓库行显示运行按钮" : "仓库行显示运行按钮",
+      },
     ],
   };
 }
@@ -136,6 +142,7 @@ function repositoryConfigureMenuItems(input: {
   onConfigureSddMode?: boolean;
   onMainSessionRun?: boolean;
   runCommandRunning?: boolean;
+  runRowPinned?: boolean;
   trellisRootActionEnabled?: boolean;
   trellisReady?: boolean;
 }): MenuItem[] {
@@ -145,6 +152,7 @@ function repositoryConfigureMenuItems(input: {
     onConfigureSddMode,
     onMainSessionRun,
     runCommandRunning = false,
+    runRowPinned = false,
     trellisRootActionEnabled = false,
     trellisReady = false,
   } = input;
@@ -154,7 +162,7 @@ function repositoryConfigureMenuItems(input: {
       ? { key: "main-owner", label: mainOwnerLabel }
       : null,
     onConfigureSddMode ? { key: "sdd-mode", label: "配置 Claude 插件" } : null,
-    repositoryMainSessionRunMenuItem({ onMainSessionRun, runCommandRunning }),
+    repositoryMainSessionRunMenuItem({ onMainSessionRun, runCommandRunning, runRowPinned }),
     trellisRootActionEnabled && !trellisReady ? { key: "trellis-init", label: "启用 Wise Trellis" } : null,
   ]);
 }
@@ -251,6 +259,7 @@ export interface BuildProjectRepositoryMoreMenuItemsInput {
   /** 仓库运行指令（顶栏运行指令同款） */
   onMainSessionRun?: boolean;
   runCommandRunning?: boolean;
+  runRowPinned?: boolean;
   onNewPaneSession?: boolean;
   onOpenScheduledTasks?: boolean;
   onOpenRequirements?: boolean;
@@ -270,6 +279,7 @@ export function buildProjectRepositoryMoreMenuItems(
     onConfigureSddMode,
     onMainSessionRun,
     runCommandRunning = false,
+    runRowPinned = false,
     onNewPaneSession,
     onOpenScheduledTasks,
     onOpenRequirements,
@@ -296,6 +306,7 @@ export function buildProjectRepositoryMoreMenuItems(
           onConfigureSddMode,
           onMainSessionRun,
           runCommandRunning,
+          runRowPinned,
           trellisRootActionEnabled,
           trellisReady,
         }),
@@ -323,6 +334,7 @@ export interface BuildFloatingRepositoryMoreMenuItemsInput {
   onConfigureSddMode?: boolean;
   onMainSessionRun?: boolean;
   runCommandRunning?: boolean;
+  runRowPinned?: boolean;
   onNewPaneSession?: boolean;
   onOpenScheduledTasks?: boolean;
   onOpenRequirements?: boolean;
@@ -351,6 +363,7 @@ export function buildFloatingRepositoryMoreMenuItems(
     onOpenRepositoryInTerminal,
     onMainSessionRun,
     runCommandRunning = false,
+    runRowPinned = false,
     onAddWorkspaceTodo = true,
   } = input;
 
@@ -378,6 +391,7 @@ export function buildFloatingRepositoryMoreMenuItems(
           onConfigureSddMode,
           onMainSessionRun,
           runCommandRunning,
+          runRowPinned,
           trellisRootActionEnabled: trellisEnabled,
           trellisReady,
         }),

@@ -1,5 +1,6 @@
 import type { CSSProperties } from "react";
-import { Tag, Tooltip } from "antd";
+import { HoverHint } from "../../shared/HoverHint";
+import { Tag } from "antd";
 import type { ControlRequestStatus } from "../../../notifications";
 import { DOCK_SECONDARY_TEXT_STYLE, DOCK_SPACING, DOCK_STATUS_ROW_BASE_STYLE } from "./shared-styles";
 
@@ -39,9 +40,9 @@ export function ControlRequestStatusHint({
     return (
       <div style={{ ...DOCK_STATUS_ROW_BASE_STYLE, marginBottom }}>
         <Tag color="error" style={{ marginInlineEnd: 0, fontSize: 11 }}>发送失败</Tag>
-        <Tooltip title={content}>
+        <HoverHint title={content}>
           <span style={ERROR_TEXT_STYLE}>{content}</span>
-        </Tooltip>
+        </HoverHint>
       </div>
     );
   }

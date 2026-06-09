@@ -1,4 +1,5 @@
-import { Input, Switch, Tooltip } from "antd";
+import { Input, Switch } from "antd";
+import { HoverHint } from "../shared/HoverHint";
 import { openExternalUrl } from "../../services/openExternal";
 import type { RunCommandOutputLine, RepositoryRunStatus } from "../../hooks/useRepositoryRunCommand";
 import type { RepositoryRunProfile } from "../../utils/detectRepositoryRunProfile";
@@ -80,7 +81,7 @@ export function RunCommandPanel({
         <span className="app-run-command-popover__title">运行指令</span>
         <div className="app-run-command-popover__header-actions">
           {refreshDetectedProfiles ? (
-            <Tooltip title="重新检测 Java / Node 运行配置" mouseEnterDelay={0.3}>
+            <HoverHint title="重新检测 Java / Node 运行配置">
               <button
                 type="button"
                 className="app-run-command-popover__hint-btn"
@@ -93,9 +94,9 @@ export function RunCommandPanel({
               >
                 ↻
               </button>
-            </Tooltip>
+            </HoverHint>
           ) : null}
-          <Tooltip
+          <HoverHint
             title="日志自动识别仅限 localhost / 本机 IP；已保存指定地址时自动打开始终用该地址。优先级：指定 > 检测 > 默认"
             placement="topLeft"
           >
@@ -126,7 +127,7 @@ export function RunCommandPanel({
               />
             </svg>
           </button>
-        </Tooltip>
+        </HoverHint>
         </div>
       </header>
 
@@ -211,7 +212,7 @@ export function RunCommandPanel({
               saveRunCommand();
             }}
             suffix={
-              <Tooltip title="保存指令" mouseEnterDelay={0.3}>
+              <HoverHint title="保存指令">
                 <button
                   type="button"
                   className="app-run-command-popover__suffix-btn"
@@ -224,7 +225,7 @@ export function RunCommandPanel({
                 >
                   <SaveIcon />
                 </button>
-              </Tooltip>
+              </HoverHint>
             }
           />
         </label>
@@ -240,7 +241,7 @@ export function RunCommandPanel({
               saveRunOpenUrl();
             }}
             suffix={
-              <Tooltip title="保存地址" mouseEnterDelay={0.3}>
+              <HoverHint title="保存地址">
                 <button
                   type="button"
                   className="app-run-command-popover__suffix-btn"
@@ -253,7 +254,7 @@ export function RunCommandPanel({
                 >
                   <SaveIcon />
                 </button>
-              </Tooltip>
+              </HoverHint>
             }
           />
         </label>
@@ -336,7 +337,7 @@ export function RunCommandPanel({
           ) : (
             <>
               {canDebug ? (
-                <Tooltip title={debugHint} placement="top">
+                <HoverHint title={debugHint} placement="top">
                   <button
                     type="button"
                     className="app-run-command-popover__btn app-run-command-popover__btn--ghost app-run-command-popover__btn--footer-main"
@@ -345,7 +346,7 @@ export function RunCommandPanel({
                   >
                     调试
                   </button>
-                </Tooltip>
+                </HoverHint>
               ) : null}
               <button
                 type="button"

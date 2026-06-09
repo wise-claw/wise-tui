@@ -129,6 +129,24 @@ describe("buildProjectRepositoryMoreMenuItems", () => {
     expect(labels).not.toContain("停止运行");
   });
 
+  test("run submenu includes row pin toggle", () => {
+    const offLabels = menuLabels(
+      buildProjectRepositoryMoreMenuItems({
+        onMainSessionRun: true,
+        runRowPinned: false,
+      }),
+    );
+    expect(offLabels).toContain("仓库行显示运行按钮");
+
+    const onLabels = menuLabels(
+      buildProjectRepositoryMoreMenuItems({
+        onMainSessionRun: true,
+        runRowPinned: true,
+      }),
+    );
+    expect(onLabels).toContain("✓ 仓库行显示运行按钮");
+  });
+
   test("omits add-workspace-todo when disabled", () => {
     const labels = menuLabels(
       buildProjectRepositoryMoreMenuItems({

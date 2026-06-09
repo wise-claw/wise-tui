@@ -1,5 +1,6 @@
 import { CloseOutlined, BlockOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
-import { App, Badge, Button, Empty, Input, Segmented, Spin, Tabs, Tag, Tooltip, Typography } from "antd";
+import { HoverHint } from "../shared/HoverHint";
+import { App, Badge, Button, Empty, Input, Segmented, Spin, Tabs, Tag, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   CLAUDE_PLUGIN_CATEGORY_LABELS,
@@ -260,7 +261,7 @@ export function ClaudePluginMarketHub({ onClose }: Props) {
       );
     }
     return (
-      <Tooltip title="一键安装">
+      <HoverHint title="一键安装">
         <Button
           type="primary"
           size="small"
@@ -271,7 +272,7 @@ export function ClaudePluginMarketHub({ onClose }: Props) {
         >
           {busy ? "安装中" : "安装"}
         </Button>
-      </Tooltip>
+      </HoverHint>
     );
   };
 
@@ -364,7 +365,7 @@ export function ClaudePluginMarketHub({ onClose }: Props) {
         刷新市场
       </Button>
       {onClose ? (
-        <Tooltip title="关闭" mouseEnterDelay={0.35}>
+        <HoverHint title="关闭">
           <Button
             type="text"
             size="small"
@@ -373,7 +374,7 @@ export function ClaudePluginMarketHub({ onClose }: Props) {
             aria-label="关闭"
             onClick={onClose}
           />
-        </Tooltip>
+        </HoverHint>
       ) : null}
     </>
   );
@@ -469,7 +470,7 @@ export function ClaudePluginMarketHub({ onClose }: Props) {
             插件市场
           </Typography.Title>
           {onClose ? (
-            <Tooltip title="关闭" mouseEnterDelay={0.35}>
+            <HoverHint title="关闭">
               <Button
                 type="text"
                 size="small"
@@ -478,7 +479,7 @@ export function ClaudePluginMarketHub({ onClose }: Props) {
                 aria-label="关闭"
                 onClick={onClose}
               />
-            </Tooltip>
+            </HoverHint>
           ) : null}
         </div>
         <div className="app-mcp-hub-toolbar">{headerActions}</div>

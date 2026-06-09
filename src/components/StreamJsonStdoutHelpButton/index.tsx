@@ -1,5 +1,5 @@
-import { Tooltip } from "antd";
 import { MAX_STDOUT_LINES_FOR_STREAM_PARTS } from "../../utils/backgroundInvocationStdoutParts";
+import { HoverHint } from "../shared/HoverHint";
 import "./index.css";
 
 export const STREAM_JSON_STDOUT_DISPLAY_TOOLTIP = `与主会话相同的气泡与解析：stdout 按 Claude Code stream-json 合并为文本 / 思考 / 工具块（与「后台执行详情」一致，最近约 ${MAX_STDOUT_LINES_FOR_STREAM_PARTS} 行参与解析）；订阅追加的行会实时出现，缓冲区约 3500 行。`;
@@ -13,7 +13,7 @@ interface Props {
 
 export function StreamJsonStdoutHelpButton({ ariaLabel, tooltipTitle }: Props) {
   return (
-    <Tooltip title={tooltipTitle ?? STREAM_JSON_STDOUT_DISPLAY_TOOLTIP} placement="topLeft" overlayStyle={{ maxWidth: 440 }}>
+    <HoverHint title={tooltipTitle ?? STREAM_JSON_STDOUT_DISPLAY_TOOLTIP} placement="topLeft" overlayStyle={{ maxWidth: 440 }}>
       <button type="button" className="app-stream-json-stdout-help-btn" aria-label={ariaLabel ?? "stdout 解析与缓冲说明"}>
         <svg
           className="app-stream-json-stdout-help-icon"
@@ -35,6 +35,6 @@ export function StreamJsonStdoutHelpButton({ ariaLabel, tooltipTitle }: Props) {
           <circle cx="8" cy="12.15" r="0.55" fill="currentColor" />
         </svg>
       </button>
-    </Tooltip>
+    </HoverHint>
   );
 }

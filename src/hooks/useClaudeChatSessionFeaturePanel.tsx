@@ -1,11 +1,11 @@
 import {
   Button,
-  Tooltip,
   message,
   Modal,
   Tag,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import { HoverHint } from "../components/shared/HoverHint";
 import {
   useCallback,
   useEffect,
@@ -430,9 +430,9 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
             const text = preview?.trim() ? preview : "—";
             const tip = text === "—" ? undefined : text;
             return (
-              <Tooltip title={tip} placement="topLeft" mouseEnterDelay={0.35}>
+              <HoverHint title={tip} placement="topLeft">
                 <span className="app-task-completion-modal__ellipsis-cell">{text}</span>
-              </Tooltip>
+              </HoverHint>
             );
           },
         },
@@ -453,9 +453,9 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
           width: "24%",
           ellipsis: { showTitle: false },
           render: (id: string) => (
-            <Tooltip title={id} placement="topLeft" mouseEnterDelay={0.35}>
+            <HoverHint title={id} placement="topLeft">
               <span className="app-task-completion-modal__ellipsis-cell app-task-completion-modal__mono">{id}</span>
-            </Tooltip>
+            </HoverHint>
           ),
         },
         {

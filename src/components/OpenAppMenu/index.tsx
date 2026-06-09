@@ -1,4 +1,5 @@
-import { Button, Dropdown, Tooltip } from "antd";
+import { Button, Dropdown } from "antd";
+import { HoverHint } from "../shared/HoverHint";
 import { useEffect, useMemo, useState } from "react";
 import type { OpenAppTarget } from "../../types";
 import { canOpenAppTarget, openWorkspaceWithOpenAppTarget } from "../../services/openWorkspaceWithPreference";
@@ -129,7 +130,7 @@ export function OpenAppMenu({
 
   return (
     <div className="app-open-app-menu">
-      <Tooltip title={openLabel} mouseEnterDelay={0.3}>
+      <HoverHint title={openLabel}>
         <Button
           type="text"
           size="small"
@@ -147,7 +148,7 @@ export function OpenAppMenu({
           )}
           <span>{selectedTarget?.label ?? "Open"}</span>
         </Button>
-      </Tooltip>
+      </HoverHint>
       <Dropdown
         menu={{ items: menuItems, onClick: ({ key }) => {
           const target = resolvedTargets.find((t) => t.id === key);

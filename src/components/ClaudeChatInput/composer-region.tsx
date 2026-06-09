@@ -8,6 +8,7 @@ import {
   type MouseEvent,
 } from "react";
 import { flushSync } from "react-dom";
+import { HoverHint } from "../shared/HoverHint";
 import "@douyinfe/semi-ui/lib/es/_base/base.css";
 import { AIChatInput, ConfigProvider as SemiConfigProvider } from "@douyinfe/semi-ui";
 import semiLocaleZhCN from "@douyinfe/semi-ui/lib/es/locale/source/zh_CN";
@@ -70,7 +71,7 @@ import { TodoDock } from "./dock/todo-dock";
 import { RevertDock } from "./dock/revert-dock";
 import { addToHistory, promptLength, navigatePromptHistory, canNavigateHistoryAtCursor } from "./prompt-history";
 import { CheckOutlined } from "@ant-design/icons";
-import { Checkbox, Dropdown, Button, Empty, Input, InputNumber, Popover, Select, Spin, Switch, Tabs, Tag, Tooltip, TreeSelect } from "antd";
+import { Checkbox, Dropdown, Button, Empty, Input, InputNumber, Popover, Select, Spin, Switch, Tabs, Tag, TreeSelect } from "antd";
 import { ContextCompactProgressRing } from "./ContextCompactProgressRing";
 import { useContextBreakdown } from "../../hooks/useContextBreakdown";
 import { ComposerRuntimeSettingsTrigger } from "./ComposerRuntimeSettingsTrigger";
@@ -2587,7 +2588,7 @@ function ComposerInner({
             open={speechMenuOpen}
             onOpenChange={setSpeechMenuOpen}
           >
-            <Tooltip
+            <HoverHint
               title={
                 speechDictation.transcribing
                   ? "正在本地转写…"
@@ -2663,7 +2664,7 @@ function ComposerInner({
                   <line x1="8" y1="22" x2="16" y2="22" />
                 </svg>
               </Button>
-            </Tooltip>
+            </HoverHint>
           </Dropdown>
         ) : null}
         {dualPaneRepositoryPicker ? (
@@ -2797,7 +2798,7 @@ function ComposerInner({
         onClick={(e) => e.stopPropagation()}
       >
         {isSessionBusy ? (
-          <Tooltip title="结束当前运行" placement="top">
+          <HoverHint title="结束当前运行" placement="top">
             <Button
               type="text"
               size="small"
@@ -2807,7 +2808,7 @@ function ComposerInner({
             >
               结束
             </Button>
-          </Tooltip>
+          </HoverHint>
         ) : null}
         <ComposerCommonPhrasesManageTrigger
           phrases={composerCommonPhrases}

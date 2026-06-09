@@ -1,5 +1,6 @@
 import { memo, type ReactNode } from "react";
-import { Button, Tooltip } from "antd";
+import { HoverHint } from "../shared/HoverHint";
+import { Button } from "antd";
 
 interface Props {
   icon: ReactNode;
@@ -11,7 +12,7 @@ interface Props {
 
 function ChatMessageActionButtonInner({ icon, ariaLabel, title, onClick, className }: Props) {
   return (
-    <Tooltip title={title} mouseEnterDelay={0.35}>
+    <HoverHint title={title}>
       <Button
         type="text"
         size="small"
@@ -20,7 +21,7 @@ function ChatMessageActionButtonInner({ icon, ariaLabel, title, onClick, classNa
         aria-label={ariaLabel}
         onClick={onClick}
       />
-    </Tooltip>
+    </HoverHint>
   );
 }
 

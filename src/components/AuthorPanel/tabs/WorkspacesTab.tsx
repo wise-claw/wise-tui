@@ -1,5 +1,6 @@
 import { FolderOpenOutlined, PlusOutlined } from "@ant-design/icons";
-import { Button, Empty, Space, Tag, Tooltip } from "antd";
+import { HoverHint } from "../../shared/HoverHint";
+import { Button, Empty, Space, Tag } from "antd";
 import type { Repository, StandaloneRepo, Workspace } from "../../../types";
 import { repositoryFolderBasename } from "../../../utils/repositoryType";
 import { ProjectTrellisCenter } from "../../ProjectTrellisCenter";
@@ -86,11 +87,11 @@ export function WorkspacesTab({
       actions={
         trellisWorkspace ? null : (
           <Space size={8} wrap>
-            <Tooltip title="添加一个轻量 Claude Code 仓库入口">
+            <HoverHint title="添加一个轻量 Claude Code 仓库入口">
               <Button size="small" onClick={onAddStandaloneRepo} disabled={!onAddStandaloneRepo}>
                 添加单仓
               </Button>
-            </Tooltip>
+            </HoverHint>
             <Button size="small" type="primary" icon={<PlusOutlined />} onClick={onCreateWorkspace}>
               新建工作区
             </Button>

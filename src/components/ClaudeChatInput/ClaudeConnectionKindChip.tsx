@@ -1,4 +1,5 @@
-import { Dropdown, Menu, Tooltip, type MenuProps } from "antd";
+import { Dropdown, Menu, type MenuProps } from "antd";
+import { HoverHint } from "../shared/HoverHint";
 import { useMemo } from "react";
 import {
   CLAUDE_CONNECTION_KIND_LABELS,
@@ -145,9 +146,9 @@ export function ClaudeConnectionKindChip({
 
   if (!interactive) {
     return (
-      <Tooltip title={chipTooltip} placement="top">
+      <HoverHint title={chipTooltip} placement="top">
         {chip}
-      </Tooltip>
+      </HoverHint>
     );
   }
 
@@ -180,11 +181,11 @@ export function ClaudeConnectionKindChip({
         </div>
       )}
     >
-      <Tooltip title={chipTooltip} placement="top">
+      <HoverHint title={chipTooltip} placement="top">
         <button type="button" className="app-claude-connection-kind-chip-btn">
           {chip}
         </button>
-      </Tooltip>
+      </HoverHint>
     </Dropdown>
   );
 }

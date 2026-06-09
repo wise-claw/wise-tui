@@ -1,4 +1,5 @@
-import { Popover, Tooltip } from "antd";
+import { Popover } from "antd";
+import { HoverHint } from "../shared/HoverHint";
 import { useCallback, useState } from "react";
 import { useFreeClaudeCodeSetting } from "../DefaultConfigPanel/useFreeClaudeCodeSetting";
 import { FreeClaudeCodePanel } from "./FreeClaudeCodePanel";
@@ -74,7 +75,7 @@ export function FccTopbarTrigger({
       {triggerHidden ? (
         <span className="app-topbar-overflow-anchor" tabIndex={-1} aria-hidden />
       ) : (
-        <Tooltip title="Free Claude Code 代理" mouseEnterDelay={0.35}>
+        <HoverHint title="Free Claude Code 代理" open={open ? false : undefined}>
           <button
             type="button"
             className={"app-topbar-btn app-fcc-topbar-btn" + (open ? " active" : "")}
@@ -92,7 +93,7 @@ export function FccTopbarTrigger({
               />
             ) : null}
           </button>
-        </Tooltip>
+        </HoverHint>
       )}
     </Popover>
   );

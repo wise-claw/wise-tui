@@ -1,5 +1,6 @@
 import { CloseOutlined, PlusOutlined } from "@ant-design/icons";
-import { Button, Drawer, Form, Input, Modal, Popconfirm, Select, Space, Switch, Table, Tag, Tooltip, Typography, message } from "antd";
+import { HoverHint } from "../shared/HoverHint";
+import { Button, Drawer, Form, Input, Modal, Popconfirm, Select, Space, Switch, Table, Tag, Typography, message } from "antd";
 import { WISE_UI_EVENT_SCHEDULED_TASKS_CHANGED } from "../../constants/workflowUiEvents";
 import type { CcWorkflowListItem } from "../../services/ccWorkflowStudioFiles";
 import { listCcWorkflowStudioWorkflows } from "../../services/ccWorkflowStudioFiles";
@@ -420,9 +421,9 @@ export function RepositoryScheduledTasksModal({
       width: 88,
       ellipsis: true,
       render: (c: string) => (
-        <Tooltip title={c}>
+        <HoverHint title={c}>
           <span className="app-scheduled-tasks-modal__cron">{c}</span>
-        </Tooltip>
+        </HoverHint>
       ),
     },
     {
@@ -433,9 +434,9 @@ export function RepositoryScheduledTasksModal({
       render: (_, row) => {
         const hint = formatNextRunHint(row.cronExpression);
         return (
-          <Tooltip title={hint}>
+          <HoverHint title={hint}>
             <span className="app-scheduled-tasks-modal__mono-muted">{hint}</span>
-          </Tooltip>
+          </HoverHint>
         );
       },
     },
@@ -452,9 +453,9 @@ export function RepositoryScheduledTasksModal({
         if (kind === "workflow") {
           const wfName = ccWorkflows.find((wf) => wf.id === row.ccWorkflowId)?.name ?? row.ccWorkflowId;
           return (
-            <Tooltip title={wfName}>
+            <HoverHint title={wfName}>
               <Tag color="cyan">CC 工作流</Tag>
-            </Tooltip>
+            </HoverHint>
           );
         }
         const label = formatScheduledTaskDispatchTargetLabel({
@@ -542,7 +543,7 @@ export function RepositoryScheduledTasksModal({
             <Button type="primary" size="small" icon={<PlusOutlined />} onClick={openCreate}>
               新建
             </Button>
-            <Tooltip title="关闭" mouseEnterDelay={0.35}>
+            <HoverHint title="关闭">
               <Button
                 type="text"
                 size="small"
@@ -551,7 +552,7 @@ export function RepositoryScheduledTasksModal({
                 aria-label="关闭"
                 onClick={handleDismiss}
               />
-            </Tooltip>
+            </HoverHint>
           </Space>
         </div>
         {hint}

@@ -1,3 +1,4 @@
+import { HoverHint } from "../shared/HoverHint";
 import {
   CheckOutlined,
   ExclamationCircleOutlined,
@@ -6,7 +7,6 @@ import {
   InfoCircleOutlined,
   BranchesOutlined,
 } from "@ant-design/icons";
-import { Tooltip } from "antd";
 import type {
   RequirementAssistantStageItem,
   TrellisTargetSummary,
@@ -40,21 +40,21 @@ export function TrellisMissionStrip({ target, stages }: Props) {
             {target.title}
           </span>
           {target.subtitle.trim().length > 0 && (
-            <Tooltip title={target.subtitle}>
+            <HoverHint title={target.subtitle}>
               <InfoCircleOutlined className="app-prd-task-panel__mission-info-icon" />
-            </Tooltip>
+            </HoverHint>
           )}
         </div>
 
         {/* Right Side: Meta Capsules */}
         <div className="app-prd-task-panel__mission-meta-group">
           {target.rootPath && (
-            <Tooltip title={`工作区根路径: ${target.rootPath}`}>
+            <HoverHint title={`工作区根路径: ${target.rootPath}`}>
               <span className="app-prd-task-panel__mission-meta-pill">
                 <FolderOpenOutlined className="app-prd-task-panel__meta-icon" />
                 <span className="app-prd-task-panel__meta-val">{displayPath}</span>
               </span>
-            </Tooltip>
+            </HoverHint>
           )}
           {target.repositoryCount > 0 && (
             <span className="app-prd-task-panel__mission-meta-pill">
@@ -73,11 +73,11 @@ export function TrellisMissionStrip({ target, stages }: Props) {
               <CheckOutlined /> 可用
             </span>
           ) : (
-            <Tooltip title={target.subtitle}>
+            <HoverHint title={target.subtitle}>
               <span className="app-prd-task-panel__mission-status-badge is-error">
                 <ExclamationCircleOutlined /> 异常
               </span>
-            </Tooltip>
+            </HoverHint>
           )}
         </div>
       </div>

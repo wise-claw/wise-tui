@@ -1,4 +1,5 @@
 import { listen } from "@tauri-apps/api/event";
+import { HoverHint } from "../shared/HoverHint";
 import { safeUnlistenPromise } from "../../utils/safeTauriUnlisten";
 import {
   CloseOutlined,
@@ -7,7 +8,7 @@ import {
   PlayCircleOutlined,
   SearchOutlined,
 } from "@ant-design/icons";
-import { Alert, App, Button, Empty, Modal, Progress, Select, Space, Spin, Tag, Tooltip, Typography } from "antd";
+import { Alert, App, Button, Empty, Modal, Progress, Select, Space, Spin, Tag, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   clearCodeGraphIndex,
@@ -1341,7 +1342,7 @@ export function CodeKnowledgeGraphPanel({
             >
               清空索引
             </Button>
-            <Tooltip
+            <HoverHint
               title={
                 !repositoryId
                   ? "请先选择仓库"
@@ -1361,7 +1362,7 @@ export function CodeKnowledgeGraphPanel({
               >
                 暂停检索
               </Button>
-            </Tooltip>
+            </HoverHint>
             <Button
               type="primary"
               size="small"

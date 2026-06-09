@@ -1,4 +1,5 @@
-import { Tooltip, Typography } from "antd";
+import { Typography } from "antd";
+import { HoverHint } from "../shared/HoverHint";
 
 export function MyExtensionsUsageTooltipContent() {
   return (
@@ -32,11 +33,11 @@ export function MyExtensionsUsageTooltipContent() {
 /** 流程说明图标；hover 展示使用流程。 */
 export function MyExtensionsUsageHelpIcon({ className }: { className?: string }) {
   return (
-    <Tooltip
+    <HoverHint
       title={<MyExtensionsUsageTooltipContent />}
       placement="bottomLeft"
       classNames={{ root: "app-my-extensions-usage-tip-overlay" }}
-      mouseEnterDelay={0.25}
+     
       mouseLeaveDelay={0.15}
     >
       <span
@@ -57,6 +58,6 @@ export function MyExtensionsUsageHelpIcon({ className }: { className?: string })
           />
         </svg>
       </span>
-    </Tooltip>
+    </HoverHint>
   );
 }

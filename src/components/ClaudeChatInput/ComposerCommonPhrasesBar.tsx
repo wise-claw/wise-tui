@@ -1,4 +1,5 @@
-import { Button, Tooltip } from "antd";
+import { Button } from "antd";
+import { HoverHint } from "../shared/HoverHint";
 import { memo, useMemo } from "react";
 import {
   buildComposerCommonPhraseTooltipTitle,
@@ -28,9 +29,9 @@ const PhraseQuickLabel = memo(function PhraseQuickLabel({
     : `${verb}常用语：${phrase.title}`;
 
   return (
-    <Tooltip
+    <HoverHint
       title={tooltipTitle}
-      mouseEnterDelay={0.35}
+     
       placement="top"
       destroyOnHidden
       classNames={{ root: "app-composer-common-phrases-tooltip-overlay" }}
@@ -47,7 +48,7 @@ const PhraseQuickLabel = memo(function PhraseQuickLabel({
       >
         {phrase.title}
       </button>
-    </Tooltip>
+    </HoverHint>
   );
 });
 
@@ -70,9 +71,9 @@ const PhraseComposerChip = memo(function PhraseComposerChip({
     : `${verb}常用语：${phrase.title}`;
 
   return (
-    <Tooltip
+    <HoverHint
       title={tooltipTitle}
-      mouseEnterDelay={0.4}
+     
       placement="top"
       destroyOnHidden
       classNames={{ root: "app-composer-common-phrases-tooltip-overlay" }}
@@ -90,7 +91,7 @@ const PhraseComposerChip = memo(function PhraseComposerChip({
         <span className="app-composer-common-phrases-bar__title">{phrase.title}</span>
         {keys ? <kbd className="app-composer-common-phrases-bar__keys">{keys}</kbd> : null}
       </Button>
-    </Tooltip>
+    </HoverHint>
   );
 });
 

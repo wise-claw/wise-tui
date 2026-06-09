@@ -1,8 +1,8 @@
-import { Tooltip } from "antd";
+import { HoverHint } from "../shared/HoverHint";
 
 export function HelpIcon({ text, className }: { text: string; className?: string }) {
   return (
-    <Tooltip title={text} placement="topLeft">
+    <HoverHint title={text} placement="topLeft">
       <span className={`app-hooks-flow-help-icon ${className ?? ""}`.trim()} aria-label="查看该事件说明">
         <svg viewBox="0 0 16 16" width="12" height="12" aria-hidden="true">
           <circle cx="8" cy="8" r="7" fill="none" stroke="currentColor" strokeWidth="1.3" />
@@ -16,6 +16,6 @@ export function HelpIcon({ text, className }: { text: string; className?: string
           <circle cx="8.2" cy="11.7" r="0.8" fill="currentColor" />
         </svg>
       </span>
-    </Tooltip>
+    </HoverHint>
   );
 }

@@ -1,5 +1,5 @@
-import { Tooltip } from "antd";
 import { TERMINAL_HEADER_SHORTCUTS } from "./terminalShortcuts";
+import { HoverHint } from "../shared/HoverHint";
 import "./index.css";
 
 type TerminalHeaderShortcutsProps = {
@@ -17,11 +17,11 @@ export function TerminalHeaderShortcuts({
     <div className="terminal-header-center" role="toolbar" aria-label="终端快捷操作">
       <div className="terminal-header-shortcuts">
         {TERMINAL_HEADER_SHORTCUTS.map((item) => (
-          <Tooltip key={item.keys} title={item.title} mouseEnterDelay={0.4}>
+          <HoverHint key={item.keys} title={item.title}>
             <span className="terminal-header-shortcut">
               <kbd className="terminal-header-shortcut__keys">{item.keys}</kbd>
             </span>
-          </Tooltip>
+          </HoverHint>
         ))}
       </div>
       {showCommandHint && commandSuggestion && (

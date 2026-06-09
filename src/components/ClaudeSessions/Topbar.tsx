@@ -1,5 +1,6 @@
 import type { ClaudeSession, ProjectItem, Repository } from "../../types";
-import { Dropdown, message, Popover, Spin, Switch, Tooltip } from "antd";
+import { HoverHint } from "../shared/HoverHint";
+import { Dropdown, message, Popover, Spin, Switch } from "antd";
 import { lazy, Suspense, memo, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from "react";
 import { useWiseTopbarChromeVisibility } from "../../hooks/useWiseTopbarChromeVisibility";
 import { RemoteEntryTopbarStrip } from "../RemoteEntryTopbarStrip";
@@ -266,7 +267,7 @@ export const Topbar = memo(function Topbar({
           {topbarLabel ? (
             <>
               <div className="app-topbar-divider" />
-              <Tooltip title="点击复制绝对路径" mouseEnterDelay={0.3}>
+              <HoverHint title="点击复制绝对路径">
                 <button
                   type="button"
                   className="app-topbar-repository-trigger"
@@ -288,7 +289,7 @@ export const Topbar = memo(function Topbar({
                 >
                   <span className="app-topbar-repository-trigger-label">{topbarLabel}</span>
                 </button>
-              </Tooltip>
+              </HoverHint>
               {topbarChrome.showRemoteEntryTopbar ? (
                 <RemoteEntryTopbarStrip onOpenRemoteChannels={onOpenRemoteChannels} />
               ) : null}
@@ -343,7 +344,7 @@ export const Topbar = memo(function Topbar({
             </Suspense>
           }
         >
-          <Tooltip
+          <HoverHint
             title={
               !topbarOpenPath
                 ? "当前会话未绑定仓库路径，无法运行"
@@ -352,7 +353,7 @@ export const Topbar = memo(function Topbar({
                   ? "点击停止（右键配置指令）"
                   : "点击运行（右键配置指令）"
             }
-            mouseEnterDelay={0.3}
+            open={runPopoverOpen ? false : undefined}
           >
             <span className="app-topbar-run-trigger-wrap">
               <button
@@ -379,7 +380,7 @@ export const Topbar = memo(function Topbar({
                 )}
               </button>
             </span>
-          </Tooltip>
+          </HoverHint>
         </Popover>
         {onChangePaneCount && (
           <Dropdown

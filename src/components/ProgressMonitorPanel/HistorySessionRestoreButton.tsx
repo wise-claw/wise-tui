@@ -1,5 +1,6 @@
 import type { MouseEvent } from "react";
-import { Button, Tooltip } from "antd";
+import { HoverHint } from "../shared/HoverHint";
+import { Button } from "antd";
 
 export function HistorySessionRestoreIcon() {
   return (
@@ -42,7 +43,7 @@ export function HistorySessionRestoreButton({
   onClick,
 }: HistorySessionRestoreButtonProps) {
   return (
-    <Tooltip title="恢复为主会话" mouseEnterDelay={0.35}>
+    <HoverHint title="恢复为主会话">
       <Button
         type="text"
         size="small"
@@ -52,6 +53,6 @@ export function HistorySessionRestoreButton({
         icon={<HistorySessionRestoreIcon />}
         onClick={onClick}
       />
-    </Tooltip>
+    </HoverHint>
   );
 }

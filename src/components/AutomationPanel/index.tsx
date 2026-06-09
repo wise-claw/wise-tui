@@ -5,7 +5,8 @@ import {
   PlayCircleOutlined,
   ReloadOutlined,
 } from "@ant-design/icons";
-import { Button, Empty, Select, Tooltip } from "antd";
+import { Button, Empty, Select } from "antd";
+import { HoverHint } from "../shared/HoverHint";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { EmployeeItem, Repository, RepositoryScheduledClaudeTask, WorkflowGraph, WorkflowTemplateItem } from "../../types";
 import { readRepositoryScheduledClaudeTasks } from "../../services/repositoryScheduledClaudeTasksStore";
@@ -175,7 +176,7 @@ export function AutomationPanel({
           管理定时任务
         </Button>
         {onClose ? (
-          <Tooltip title="关闭" mouseEnterDelay={0.35}>
+          <HoverHint title="关闭">
             <Button
               type="text"
               size="small"
@@ -187,7 +188,7 @@ export function AutomationPanel({
                 onClose();
               }}
             />
-          </Tooltip>
+          </HoverHint>
         ) : null}
         </>
       }

@@ -1,5 +1,6 @@
 import { ReloadOutlined } from "@ant-design/icons";
-import { App, Button, Empty, Spin, Tag, Tooltip, Typography } from "antd";
+import { HoverHint } from "../shared/HoverHint";
+import { App, Button, Empty, Spin, Tag, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   claudePluginInstallRef,
@@ -127,7 +128,7 @@ export function ClaudeLspPanel({ active, listSearch, onCountChange }: Props) {
         <Typography.Text type="secondary" className="app-claude-lsp-panel-intro-text">
           官方 LSP：跳转、引用与诊断；安装后新会话生效。
         </Typography.Text>
-        <Tooltip title="刷新插件市场与安装状态">
+        <HoverHint title="刷新插件市场与安装状态">
           <Button
             type="text"
             size="small"
@@ -137,7 +138,7 @@ export function ClaudeLspPanel({ active, listSearch, onCountChange }: Props) {
             aria-label="刷新"
             onClick={() => void refreshMarket()}
           />
-        </Tooltip>
+        </HoverHint>
       </div>
       {loading && installed.length === 0 ? (
         <div className="app-claude-lsp-panel-loading">

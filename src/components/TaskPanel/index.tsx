@@ -1,5 +1,6 @@
 import { CloseOutlined } from "@ant-design/icons";
-import { Button, Empty, Tooltip, Typography } from "antd";
+import { HoverHint } from "../shared/HoverHint";
+import { Button, Empty, Typography } from "antd";
 import type { ProjectItem } from "../../types";
 import "./index.css";
 
@@ -20,7 +21,7 @@ export function TaskPanel({ activeProject, onClose }: Props) {
             </Typography.Text>
           ) : null}
         </div>
-        <Tooltip title="关闭" mouseEnterDelay={0.35}>
+        <HoverHint title="关闭">
           <Button
             type="text"
             size="small"
@@ -29,7 +30,7 @@ export function TaskPanel({ activeProject, onClose }: Props) {
             aria-label="关闭"
             onClick={onClose}
           />
-        </Tooltip>
+        </HoverHint>
       </header>
       <div className="app-task-panel-body">
         <Empty description="任务列表面板开发中..." image={Empty.PRESENTED_IMAGE_SIMPLE} />

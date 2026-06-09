@@ -1,4 +1,5 @@
-import { Popover, Tooltip } from "antd";
+import { Popover } from "antd";
+import { HoverHint } from "../shared/HoverHint";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import { FccTrafficPanel } from "../ProgressMonitorPanel/FccTrafficPanel";
 import {
@@ -84,7 +85,7 @@ export function FccTrafficTopbarTrigger({
       {triggerHidden ? (
         <span className="app-topbar-overflow-anchor" tabIndex={-1} aria-hidden />
       ) : (
-        <Tooltip title="FCC 请求流量" mouseEnterDelay={0.35}>
+        <HoverHint title="FCC 请求流量" open={open ? false : undefined}>
           <button
             type="button"
             className={
@@ -104,7 +105,7 @@ export function FccTrafficTopbarTrigger({
               />
             ) : null}
           </button>
-        </Tooltip>
+        </HoverHint>
       )}
     </Popover>
   );

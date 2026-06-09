@@ -1,4 +1,5 @@
-import { Button, Tooltip } from "antd";
+import { Button } from "antd";
+import { HoverHint } from "../shared/HoverHint";
 import { ArrowLeftOutlined, MessageOutlined, SettingOutlined } from "@ant-design/icons";
 import type { AssistantEntry } from "../../types/assistant";
 
@@ -62,7 +63,7 @@ export function AssistantHeader({
       </span>
       <div className="cockpit-header__chip">引擎:{assistant.engineId}</div>
       <div className="cockpit-header__spacer" data-tauri-drag-region />
-      <Tooltip title="返回主会话">
+      <HoverHint title="返回主会话">
         <Button
           size="small"
           type="text"
@@ -72,8 +73,8 @@ export function AssistantHeader({
         >
           对话
         </Button>
-      </Tooltip>
-      <Tooltip title="助手设置">
+      </HoverHint>
+      <HoverHint title="助手设置">
         <Button
           size="small"
           type="text"
@@ -81,7 +82,7 @@ export function AssistantHeader({
           onClick={onOpenSettings}
           aria-label="助手设置"
         />
-      </Tooltip>
+      </HoverHint>
     </header>
   );
 }

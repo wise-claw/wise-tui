@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { HoverHint } from "../shared/HoverHint";
 import {
   DownOutlined,
   FileAddOutlined,
@@ -7,7 +8,7 @@ import {
   SaveOutlined,
   SettingOutlined,
 } from "@ant-design/icons";
-import { Button, Dropdown, Select, Space, Tooltip, Typography } from "antd";
+import { Button, Dropdown, Select, Space, Typography } from "antd";
 import type { MenuProps } from "antd";
 import type { AssistantBundleItem } from "../../services/assistantPromptLayers";
 import type { AssistantWorkflowRef } from "../../types/assistant";
@@ -72,7 +73,7 @@ export function RequirementBoardActions({
   return (
     <div className="app-prd-task-panel__actions-row">
       <div className="app-prd-task-panel__assistant-resource-row">
-        <Tooltip title={buildWorkflowTooltip(assistantWorkflowOptions)}>
+        <HoverHint title={buildWorkflowTooltip(assistantWorkflowOptions)}>
           <div
             className="app-prd-task-panel__assistant-orchestration"
             aria-label="需求拆分助手内置任务规划"
@@ -90,7 +91,7 @@ export function RequirementBoardActions({
                 : buildWorkflowSummary(assistantWorkflowOptions)}
             </Typography.Text>
           </div>
-        </Tooltip>
+        </HoverHint>
         <Select
           mode="multiple"
           size="small"

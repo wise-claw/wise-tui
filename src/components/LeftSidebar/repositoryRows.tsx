@@ -38,6 +38,11 @@ import {
   WorkspaceRemindersIcon,
 } from "./SidebarIcons";
 import { useIsRepositoryRunCommandRunning } from "../../hooks/useIsRepositoryRunCommandRunning";
+import {
+  isRepositoryRunCommandRowPinned,
+  toggleRepositoryRunCommandRowPinned,
+} from "../../services/repositoryRunCommandRowActionPreference";
+import { useRepositoryRunCommandRowPinnedMap } from "../../hooks/useRepositoryRunCommandRowPinned";
 import { RunningMainSessionDot } from "./RunningMainSessionDot";
 import { RepositorySddStackBadge } from "./RepositorySddStackBadge";
 import { WorkspaceTodosPopoverContent } from "./WorkspaceTodosPopoverContent";
@@ -72,28 +77,87 @@ function RunCommandStopIcon() {
   );
 }
 
-/** 仓库行快捷区：运行指令执行中的停止按钮（与顶栏停止态一致）。 */
-function RepositoryRunCommandRunningAction({
+function RunCommandStartIcon() {
+  return (
+    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <polygon
+        points="6 4 19 12 6 20"
+        stroke="currentColor"
+        strokeWidth="1.8"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        fill="currentColor"
+        fillOpacity="0.12"
+      />
+    </svg>
+  );
+}
+
+/** 仓库行快捷区：运行指令启动 / 停止（运行菜单内可开启仓库行显示）。 */
+function RepositoryRunCommandRowActions({
   repositoryId,
+  pinned,
+  onStart,
   onStop,
 }: {
   repositoryId: number;
+  pinned: boolean;
+  onStart?: () => void;
   onStop?: () => void;
 }) {
   const running = useIsRepositoryRunCommandRunning(repositoryId);
-  if (!running || !onStop) return null;
+
+  if (!pinned) {
+    if (!running || !onStop) return null;
+    return (
+      <DeferredHoverTooltip title="停止运行">
+        <button
+          type="button"
+          className="app-repository-action app-repository-action--run-stop"
+          aria-label="停止运行"
+          onClick={(event) => {
+            event.stopPropagation();
+            onStop();
+          }}
+        >
+          <RunCommandStopIcon />
+        </button>
+      </DeferredHoverTooltip>
+    );
+  }
+
+  if (running) {
+    if (!onStop) return null;
+    return (
+      <DeferredHoverTooltip title="停止运行">
+        <button
+          type="button"
+          className="app-repository-action app-repository-action--run-stop"
+          aria-label="停止运行"
+          onClick={(event) => {
+            event.stopPropagation();
+            onStop();
+          }}
+        >
+          <RunCommandStopIcon />
+        </button>
+      </DeferredHoverTooltip>
+    );
+  }
+
+  if (!onStart) return null;
   return (
-    <DeferredHoverTooltip title="停止运行">
+    <DeferredHoverTooltip title="启动">
       <button
         type="button"
-        className="app-repository-action app-repository-action--run-stop"
-        aria-label="停止运行"
+        className="app-repository-action app-repository-action--run-start"
+        aria-label="启动"
         onClick={(event) => {
           event.stopPropagation();
-          onStop();
+          onStart();
         }}
       >
-        <RunCommandStopIcon />
+        <RunCommandStartIcon />
       </button>
     </DeferredHoverTooltip>
   );
@@ -393,6 +457,11 @@ export function RepositoryRow({
   onStopMainSession?: () => void;
 }) {
   const runCommandRunning = useIsRepositoryRunCommandRunning(repository.id);
+  const runCommandRowPinnedMap = useRepositoryRunCommandRowPinnedMap();
+  const pinnedRunCommandRowActions = isRepositoryRunCommandRowPinned(
+    runCommandRowPinnedMap,
+    repository.id,
+  );
   const workspaceTrellisEnabled = project.sddMode !== "project_owned" || trellisReady;
   const moreItems = buildProjectRepositoryMoreMenuItems({
     trellisEnabled: workspaceTrellisEnabled,
@@ -403,6 +472,7 @@ export function RepositoryRow({
     onConfigureSddMode: Boolean(onConfigureSddMode),
     onMainSessionRun: true,
     runCommandRunning,
+    runRowPinned: pinnedRunCommandRowActions,
     onNewPaneSession: Boolean(onNewPaneSession),
     onOpenRepositoryInTerminal: Boolean(onOpenInTerminal),
     onOpenScheduledTasks: Boolean(onOpenScheduledTasks),
@@ -483,8 +553,12 @@ export function RepositoryRow({
           className="app-repository-row-actions"
           onClick={(e) => e.stopPropagation()}
         >
-          <RepositoryRunCommandRunningAction
+          <RepositoryRunCommandRowActions
             repositoryId={repository.id}
+            pinned={pinnedRunCommandRowActions}
+            onStart={
+              onStartRepositoryRunCommand ? () => onStartRepositoryRunCommand(repository) : undefined
+            }
             onStop={
               onStopRepositoryRunCommand ? () => onStopRepositoryRunCommand(repository) : undefined
             }
@@ -542,6 +616,7 @@ export function RepositoryRow({
                 if (key === "run-configure") onConfigureRepositoryMainSessionRun?.(repository);
                 if (key === "run-start") onStartRepositoryRunCommand?.(repository);
                 if (key === "run-stop") onStopRepositoryRunCommand?.(repository);
+                if (key === "run-row-pin") void toggleRepositoryRunCommandRowPinned(repository.id);
                 if (key === "new-session") onNewPaneSession?.(repository);
                 if (key === "scheduled-tasks") onOpenScheduledTasks?.(repository);
                 if (key === "requirements" && workspaceTrellisEnabled) onOpenRequirements?.(repository);
@@ -637,6 +712,11 @@ export function FloatingRepositoryRow({
   onStopMainSession?: () => void;
 }) {
   const runCommandRunning = useIsRepositoryRunCommandRunning(repository.id);
+  const runCommandRowPinnedMap = useRepositoryRunCommandRowPinnedMap();
+  const pinnedRunCommandRowActions = isRepositoryRunCommandRowPinned(
+    runCommandRowPinnedMap,
+    repository.id,
+  );
   const hasMainOwner = Boolean(repository.mainOwnerAgentName?.trim());
   const showActiveRepository = isActiveRepository;
 
@@ -650,6 +730,7 @@ export function FloatingRepositoryRow({
     onConfigureSddMode: Boolean(onConfigureSddMode),
     onMainSessionRun: true,
     runCommandRunning,
+    runRowPinned: pinnedRunCommandRowActions,
     onNewPaneSession: Boolean(onNewPaneSession),
     onOpenRepositoryInTerminal: Boolean(onOpenInTerminal),
     onOpenScheduledTasks: Boolean(onOpenScheduledTasks),
@@ -702,8 +783,12 @@ export function FloatingRepositoryRow({
           className="app-repository-row-actions"
           onClick={(e) => e.stopPropagation()}
         >
-          <RepositoryRunCommandRunningAction
+          <RepositoryRunCommandRowActions
             repositoryId={repository.id}
+            pinned={pinnedRunCommandRowActions}
+            onStart={
+              onStartRepositoryRunCommand ? () => onStartRepositoryRunCommand(repository) : undefined
+            }
             onStop={
               onStopRepositoryRunCommand ? () => onStopRepositoryRunCommand(repository) : undefined
             }
@@ -761,6 +846,7 @@ export function FloatingRepositoryRow({
                 if (key === "run-configure") onConfigureRepositoryMainSessionRun?.(repository);
                 if (key === "run-start") onStartRepositoryRunCommand?.(repository);
                 if (key === "run-stop") onStopRepositoryRunCommand?.(repository);
+                if (key === "run-row-pin") void toggleRepositoryRunCommandRowPinned(repository.id);
                 if (key === "new-session") onNewPaneSession?.(repository);
                 if (key === "trellis-init" && trellisEnabled) void Promise.resolve(onBootstrapTrellis?.(repository));
                 if (key === "scheduled-tasks") onOpenScheduledTasks?.(repository);

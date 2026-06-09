@@ -1,4 +1,5 @@
-import { Popover, Tooltip } from "antd";
+import { Popover } from "antd";
+import { HoverHint } from "../shared/HoverHint";
 import { useCallback, useState, useSyncExternalStore } from "react";
 import { LlmProxyTrafficPanel } from "../ProgressMonitorPanel/LlmProxyTrafficPanel";
 import {
@@ -85,7 +86,7 @@ export function LlmProxyTopbarTrigger({
       {triggerHidden ? (
         <span className="app-topbar-overflow-anchor" tabIndex={-1} aria-hidden />
       ) : (
-        <Tooltip title="LLM 代理" mouseEnterDelay={0.35}>
+        <HoverHint title="LLM 代理" open={open ? false : undefined}>
           <button
             type="button"
             className={
@@ -105,7 +106,7 @@ export function LlmProxyTopbarTrigger({
               />
             ) : null}
           </button>
-        </Tooltip>
+        </HoverHint>
       )}
     </Popover>
   );

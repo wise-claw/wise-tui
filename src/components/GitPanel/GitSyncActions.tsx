@@ -1,6 +1,7 @@
 import { memo } from "react";
+import { HoverHint } from "../shared/HoverHint";
 import type { MouseEvent } from "react";
-import { Button, Space, Tooltip } from "antd";
+import { Button, Space } from "antd";
 import { ArrowDownOutlined, ArrowUpOutlined, CheckOutlined, ReloadOutlined } from "@ant-design/icons";
 import type { GitStatusResponse } from "../../types";
 
@@ -41,7 +42,7 @@ export const GitSyncActions = memo(function GitSyncActions({
 
   return (
     <Space size={4} className="git-header-sync-actions">
-      <Tooltip title="获取远程" placement="top" mouseEnterDelay={0.45}>
+      <HoverHint title="获取远程" placement="top">
         <span className="git-sync-count-btn-wrap">
           <Button
             type="text"
@@ -53,8 +54,8 @@ export const GitSyncActions = memo(function GitSyncActions({
             onMouseDown={(event) => invokeSyncAction(event, "fetch", loading, onFetch)}
           />
         </span>
-      </Tooltip>
-      <Tooltip title="拉取" placement="top" mouseEnterDelay={0.45}>
+      </HoverHint>
+      <HoverHint title="拉取" placement="top">
         <span className="git-sync-count-btn-wrap">
           <Button
             type="text"
@@ -69,8 +70,8 @@ export const GitSyncActions = memo(function GitSyncActions({
             <span className="sync-count sync-count--behind">{behind}</span>
           ) : null}
         </span>
-      </Tooltip>
-      <Tooltip title="推送" placement="top" mouseEnterDelay={0.45}>
+      </HoverHint>
+      <HoverHint title="推送" placement="top">
         <span className="git-sync-count-btn-wrap">
           <Button
             type="text"
@@ -85,9 +86,9 @@ export const GitSyncActions = memo(function GitSyncActions({
             <span className="sync-count sync-count--ahead">{ahead}</span>
           ) : null}
         </span>
-      </Tooltip>
+      </HoverHint>
       {status.staged.length > 0 && !hideStagedCount ? (
-        <Tooltip title="待提交" placement="top" mouseEnterDelay={0.45}>
+        <HoverHint title="待提交" placement="top">
           <span className="git-sync-count-btn-wrap">
             <Button
               type="text"
@@ -99,7 +100,7 @@ export const GitSyncActions = memo(function GitSyncActions({
             />
             <span className="sync-count sync-count--staged">{status.staged.length}</span>
           </span>
-        </Tooltip>
+        </HoverHint>
       ) : null}
     </Space>
   );

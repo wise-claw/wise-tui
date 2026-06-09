@@ -1,5 +1,5 @@
-import { Tooltip } from "antd";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { HoverHint } from "../shared/HoverHint";
 import type { ClaudeSession } from "../../types";
 import {
   getClaudeUsageUiStoreSnapshot,
@@ -89,7 +89,7 @@ export function SessionDataLinkTopbarTrigger({
       {triggerHidden ? (
         <span className="app-topbar-overflow-anchor" tabIndex={-1} aria-hidden />
       ) : (
-        <Tooltip title={tooltipTitle} mouseEnterDelay={0.35}>
+        <HoverHint title={tooltipTitle} open={open ? false : undefined}>
           <button
             type="button"
             className={
@@ -102,7 +102,7 @@ export function SessionDataLinkTopbarTrigger({
           >
             <IconSessionDataLink />
           </button>
-        </Tooltip>
+        </HoverHint>
       )}
       <SessionDataLinkDrawer
         open={open}

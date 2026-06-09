@@ -1,5 +1,6 @@
 import { FileTextOutlined, PlusOutlined } from "@ant-design/icons";
-import { Button, Empty, Segmented, Spin, Tag, Tooltip, Typography } from "antd";
+import { HoverHint } from "../shared/HoverHint";
+import { Button, Empty, Segmented, Spin, Tag, Typography } from "antd";
 import { useEffect, useState } from "react";
 import { useWorkspaceMemosContextOptional } from "../../contexts/WorkspaceMemosContext";
 import type { WorkspaceMemoScope } from "../../types/workspaceMemos";
@@ -86,7 +87,7 @@ function WorkspaceMemosPanelInner({ projectId, repositoryId }: WorkspaceMemosPan
               onChange={(value) => setNewScope(value as WorkspaceMemoScope)}
             />
           ) : null}
-          <Tooltip title="新建并在主区打开" mouseEnterDelay={0.35}>
+          <HoverHint title="新建并在主区打开">
             <Button
               type="text"
               size="small"
@@ -95,7 +96,7 @@ function WorkspaceMemosPanelInner({ projectId, repositoryId }: WorkspaceMemosPan
               disabled={!memos.hasScope}
               onClick={createMemo}
             />
-          </Tooltip>
+          </HoverHint>
         </div>
       }
     >

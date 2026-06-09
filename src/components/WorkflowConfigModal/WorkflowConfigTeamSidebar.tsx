@@ -1,5 +1,6 @@
 import { MenuFoldOutlined, MenuUnfoldOutlined, PlusOutlined } from "@ant-design/icons";
-import { Button, Card, Empty, Input, Popconfirm, Select, Space, Tag, Tooltip, Typography } from "antd";
+import { HoverHint } from "../shared/HoverHint";
+import { Button, Card, Empty, Input, Popconfirm, Select, Space, Tag, Typography } from "antd";
 import type { WorkflowTemplateItem } from "../../types";
 import type { WorkflowConfigModalController } from "./useWorkflowConfigModal";
 
@@ -47,7 +48,7 @@ export function WorkflowConfigTeamSidebar({
     >
       {teamListCollapsed ? (
         <div className="app-workflow-config-sidebar-collapsed">
-          <Tooltip title="展开团队列表" placement="right">
+          <HoverHint title="展开团队列表" placement="right">
             <Button
               type="text"
               size="small"
@@ -55,8 +56,8 @@ export function WorkflowConfigTeamSidebar({
               aria-label="展开团队列表"
               onClick={() => setTeamListCollapsed(false)}
             />
-          </Tooltip>
-          <Tooltip title="新建团队" placement="right">
+          </HoverHint>
+          <HoverHint title="新建团队" placement="right">
             <Button
               size="small"
               type={!editingTemplateId ? "primary" : "default"}
@@ -64,13 +65,13 @@ export function WorkflowConfigTeamSidebar({
               aria-label="新建团队"
               onClick={resetEditor}
             />
-          </Tooltip>
+          </HoverHint>
           {editingTemplate ? (
-            <Tooltip title={editingTemplate.name} placement="right">
+            <HoverHint title={editingTemplate.name} placement="right">
               <span className="app-workflow-config-sidebar-collapsed-active" aria-hidden>
                 {editingTemplate.name.slice(0, 1)}
               </span>
-            </Tooltip>
+            </HoverHint>
           ) : null}
         </div>
       ) : (
@@ -86,7 +87,7 @@ export function WorkflowConfigTeamSidebar({
               >
                 新建团队
               </Button>
-              <Tooltip title="收起团队列表">
+              <HoverHint title="收起团队列表">
                 <Button
                   type="text"
                   size="small"
@@ -94,7 +95,7 @@ export function WorkflowConfigTeamSidebar({
                   aria-label="收起团队列表"
                   onClick={() => setTeamListCollapsed(true)}
                 />
-              </Tooltip>
+              </HoverHint>
             </Space>
           </div>
           <div className="app-workflow-config-filter-row">

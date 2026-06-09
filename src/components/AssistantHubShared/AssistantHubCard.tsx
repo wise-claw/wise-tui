@@ -1,5 +1,6 @@
 import { DeleteOutlined, EditOutlined, SettingOutlined } from "@ant-design/icons";
-import { Button, Tag, Tooltip } from "antd";
+import { HoverHint } from "../shared/HoverHint";
+import { Button, Tag } from "antd";
 import type { AssistantEntry } from "../../types/assistant";
 import { resolveAssistantKind } from "../CockpitSurface/assistantKind";
 import type { AssistantEngineBindingStatus } from "../AssistantsPanel/engineBinding";
@@ -115,7 +116,7 @@ export function AssistantHubCard({
             />
           ) : null}
           {onOpenSettings ? (
-            <Tooltip title="设置" mouseEnterDelay={0.35}>
+            <HoverHint title="设置">
               <Button
                 size="small"
                 type="text"
@@ -124,7 +125,7 @@ export function AssistantHubCard({
                 aria-label={`${assistant.name} 设置`}
                 onClick={onOpenSettings}
               />
-            </Tooltip>
+            </HoverHint>
           ) : null}
           {onSelect ? (
             <Button

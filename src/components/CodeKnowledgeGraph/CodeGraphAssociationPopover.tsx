@@ -1,4 +1,5 @@
-import { Button, Checkbox, Popover, Radio, Space, Tooltip, Typography } from "antd";
+import { Button, Checkbox, Popover, Radio, Space, Typography } from "antd";
+import { HoverHint } from "../shared/HoverHint";
 import type { CheckboxChangeEvent } from "antd/es/checkbox";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { CodeGraphRepositoryMenuItem } from "./CodeGraphRepositoryPopover";
@@ -212,11 +213,11 @@ export function CodeGraphAssociationPopover({
             取消
           </Button>
           {syncDisabled ? (
-            <Tooltip title="请先完成当前仓库的代码图谱检索（「开始检索」成功）后，再同步 GitNexus 仓库组。">
+            <HoverHint title="请先完成当前仓库的代码图谱检索（「开始检索」成功）后，再同步 GitNexus 仓库组。">
               <Button type="primary" size="small" onClick={apply}>
                 确定
               </Button>
-            </Tooltip>
+            </HoverHint>
           ) : (
             <Button type="primary" size="small" onClick={apply}>
               同步仓库组

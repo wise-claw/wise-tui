@@ -1,4 +1,5 @@
-import { Button, Drawer, Empty, Space, Tag, Tooltip, message } from "antd";
+import { Button, Drawer, Empty, Space, Tag, message } from "antd";
+import { HoverHint } from "../shared/HoverHint";
 import { ReloadOutlined } from "@ant-design/icons";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ClaudeSession } from "../../types";
@@ -209,7 +210,7 @@ export function MonitorHistorySessionTranscriptDrawer({
             {snapshotFrozen ? (
               <Tag color="default">已冻结快照</Tag>
             ) : null}
-            <Tooltip title="从当前会话状态重新抓取消息列表">
+            <HoverHint title="从当前会话状态重新抓取消息列表">
               <Button
                 type="text"
                 size="small"
@@ -217,7 +218,7 @@ export function MonitorHistorySessionTranscriptDrawer({
                 aria-label="刷新消息列表"
                 onClick={refreshDrawerSnapshot}
               />
-            </Tooltip>
+            </HoverHint>
             {showRestore ? (
               <HistorySessionRestoreButton
                 onClick={() => {

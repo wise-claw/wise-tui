@@ -1,5 +1,6 @@
 import { isTauri } from "@tauri-apps/api/core";
-import { Popover, Segmented, Tooltip, Typography } from "antd";
+import { HoverHint } from "../shared/HoverHint";
+import { Popover, Segmented, Typography } from "antd";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { ClaudeUsageGranularity, ClaudeUsageSnapshotResponse } from "../../services/claudeCodeUsage";
 import { getClaudeCodeUsageSnapshot } from "../../services/claudeCodeUsage";
@@ -153,11 +154,11 @@ export function ClaudeCodeUsageHeaderBtn({ repositoryPath }: Props) {
         </div>
       }
     >
-      <Tooltip title="Claude Code 用量（本机 JSONL，对齐 ccusage）" mouseEnterDelay={0.35}>
+      <HoverHint title="Claude Code 用量（本机 JSONL，对齐 ccusage）" open={open ? false : undefined}>
         <button type="button" className="app-left-sidebar-topbar-btn" aria-label="Claude Code 用量统计">
           <IconClaudeUsage />
         </button>
-      </Tooltip>
+      </HoverHint>
     </Popover>
   );
 }

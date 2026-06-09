@@ -1,4 +1,5 @@
-import { Dropdown, Menu, Tooltip, type MenuProps } from "antd";
+import { Dropdown, Menu, type MenuProps } from "antd";
+import { HoverHint } from "../shared/HoverHint";
 import { useMemo, useState } from "react";
 import {
   SESSION_EXECUTION_ENGINE_LABELS,
@@ -235,9 +236,9 @@ export function SessionExecutionEngineChip({
 
   if (!interactive) {
     return (
-      <Tooltip title={chipTooltip} placement="top">
+      <HoverHint title={chipTooltip} placement="top">
         {chip}
-      </Tooltip>
+      </HoverHint>
     );
   }
 
@@ -276,11 +277,11 @@ export function SessionExecutionEngineChip({
         </div>
       )}
     >
-      <Tooltip title={chipTooltip} placement="top">
+      <HoverHint title={chipTooltip} placement="top" open={menuOpen ? false : undefined}>
         <button type="button" className="app-claude-connection-kind-chip-btn">
           {chip}
         </button>
-      </Tooltip>
+      </HoverHint>
     </Dropdown>
   );
 }

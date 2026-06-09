@@ -1,5 +1,5 @@
-import { Tooltip } from "antd";
 import { memo } from "react";
+import { HoverHint } from "../shared/HoverHint";
 import type { ClaudeSession } from "../../types";
 import { buildClaudeSessionHoverTitle } from "../../utils/claudeSessionIdTooltip";
 
@@ -29,7 +29,7 @@ export const ClaudeChatSessionOwnerBar = memo(function ClaudeChatSessionOwnerBar
       </span>
       {name.trim() ? <span className="app-session-owner-panel__text">{name}</span> : null}
       {session.status === "running" || session.status === "connecting" ? (
-        <Tooltip title="结束当前 Claude Code 运行（与输入区结束按钮相同）" placement="bottom" mouseEnterDelay={0.35}>
+        <HoverHint title="结束当前 Claude Code 运行（与输入区结束按钮相同）" placement="bottom">
           <button
             type="button"
             className="app-session-owner-panel__end-btn"
@@ -38,10 +38,10 @@ export const ClaudeChatSessionOwnerBar = memo(function ClaudeChatSessionOwnerBar
           >
             结束
           </button>
-        </Tooltip>
+        </HoverHint>
       ) : null}
       {effectiveReturnMainSessionId ? (
-        <Tooltip title="返回主会话" placement="bottom">
+        <HoverHint title="返回主会话" placement="bottom">
           <button
             type="button"
             className="app-session-owner-panel__return-btn"
@@ -67,7 +67,7 @@ export const ClaudeChatSessionOwnerBar = memo(function ClaudeChatSessionOwnerBar
               />
             </svg>
           </button>
-        </Tooltip>
+        </HoverHint>
       ) : null}
     </div>
   );
@@ -77,8 +77,8 @@ export const ClaudeChatSessionOwnerBar = memo(function ClaudeChatSessionOwnerBar
   }
 
   return (
-    <Tooltip title={buildClaudeSessionHoverTitle(session)} placement="top" mouseEnterDelay={0.35}>
+    <HoverHint title={buildClaudeSessionHoverTitle(session)} placement="top">
       {panel}
-    </Tooltip>
+    </HoverHint>
   );
 });

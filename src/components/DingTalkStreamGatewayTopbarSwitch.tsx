@@ -1,4 +1,5 @@
-import { message, Switch, Tooltip } from "antd";
+import { message, Switch } from "antd";
+import { HoverHint } from "./shared/HoverHint";
 import { isTauri } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
 import { readVisiblePollIntervalMs } from "../utils/adaptivePoll";
@@ -68,7 +69,7 @@ export function DingTalkStreamGatewayTopbarSwitch() {
       className={`app-topbar-gateway-strip${running ? " app-topbar-gateway-strip--on" : " app-topbar-gateway-strip--off"}`}
     >
       <span className="app-topbar-gateway-label">网关</span>
-      <Tooltip title={tooltipTitle} mouseEnterDelay={0.35}>
+      <HoverHint title={tooltipTitle}>
         <Switch
           size="small"
           checked={running}
@@ -78,7 +79,7 @@ export function DingTalkStreamGatewayTopbarSwitch() {
           className={`app-dingtalk-stream-gateway-topbar-switch${running ? " app-dingtalk-stream-gateway-topbar-switch--on" : " app-dingtalk-stream-gateway-topbar-switch--off"}`}
           aria-label="钉钉 Stream 网关"
         />
-      </Tooltip>
+      </HoverHint>
     </span>
   );
 }

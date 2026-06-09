@@ -11,7 +11,8 @@ import {
   SearchOutlined,
   ThunderboltOutlined,
 } from "@ant-design/icons";
-import { Alert, Button, Empty, Form, Input, Modal, Popconfirm, Space, Tag, Tooltip, Typography, message } from "antd";
+import { Alert, Button, Empty, Form, Input, Modal, Popconfirm, Space, Tag, Typography, message } from "antd";
+import { HoverHint } from "../shared/HoverHint";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   deleteCustomAgent,
@@ -515,12 +516,12 @@ function AgentRegistryRow({
               就绪可用
             </Tag>
           ) : (
-            <Tooltip title={agent.failureReason ?? "当前环境尚未配置就绪"}>
+            <HoverHint title={agent.failureReason ?? "当前环境尚未配置就绪"}>
               <Tag color="error" className="app-agent-registry-card__status-tag">
                 <span className="app-agent-registry-card__status-indicator app-agent-registry-card__status-indicator--error" />
                 等待就绪
               </Tag>
-            </Tooltip>
+            </HoverHint>
           )}
         </div>
       </div>
@@ -531,7 +532,7 @@ function AgentRegistryRow({
         <code className="app-agent-registry-card__path-code" title={pathText}>
           {pathText}
         </code>
-        <Tooltip title="复制路径">
+        <HoverHint title="复制路径">
           <Button
             type="text"
             size="small"
@@ -539,7 +540,7 @@ function AgentRegistryRow({
             icon={<CopyOutlined style={{ fontSize: "11px" }} />}
             onClick={handleCopy}
           />
-        </Tooltip>
+        </HoverHint>
       </div>
 
       {/* 中部 Meta 运行时介绍 */}
@@ -600,7 +601,7 @@ function AgentRegistryRow({
           </Space>
         ) : isBuiltinInstallableAgent(agent) && canInstallBuiltinAgent(agent) ? (
           <Space size={4} className="app-agent-registry-card__actions">
-            <Tooltip title={getBuiltinInstallCommand(agent.kind)}>
+            <HoverHint title={getBuiltinInstallCommand(agent.kind)}>
               <Button
                 size="small"
                 type="primary"
@@ -612,12 +613,12 @@ function AgentRegistryRow({
               >
                 一键安装
               </Button>
-            </Tooltip>
+            </HoverHint>
           </Space>
         ) : isBuiltinUninstallableAgent(agent) && canUninstallBuiltinAgent(agent) ? (
           <Space size={4} className="app-agent-registry-card__actions">
             {isBuiltinInstallableAgent(agent) && canUpdateBuiltinAgent(agent) ? (
-              <Tooltip title={getBuiltinUpdateCommand(agent.kind)}>
+              <HoverHint title={getBuiltinUpdateCommand(agent.kind)}>
                 <Button
                   size="small"
                   type="primary"
@@ -629,9 +630,9 @@ function AgentRegistryRow({
                 >
                   一键更新
                 </Button>
-              </Tooltip>
+              </HoverHint>
             ) : null}
-            <Tooltip title={getBuiltinUninstallCommand(agent.kind)}>
+            <HoverHint title={getBuiltinUninstallCommand(agent.kind)}>
               <Popconfirm
                 title={`卸载 ${agent.name}`}
                 description="将执行全局 npm 卸载命令，卸载后该入口会回到待就绪状态。"
@@ -644,7 +645,7 @@ function AgentRegistryRow({
                   一键卸载
                 </Button>
               </Popconfirm>
-            </Tooltip>
+            </HoverHint>
           </Space>
         ) : null}
       </div>

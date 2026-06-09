@@ -3,7 +3,8 @@ import {
   PlusOutlined,
   PushpinOutlined,
 } from "@ant-design/icons";
-import { Button, Select, Space, Tooltip } from "antd";
+import { Button, Select, Space } from "antd";
+import { HoverHint } from "../shared/HoverHint";
 
 interface RequirementOption {
   id: string;
@@ -74,7 +75,7 @@ export function RequirementBoardHeader({
         >
           新增
         </Button>
-        <Tooltip title="删除当前需求">
+        <HoverHint title="删除当前需求">
           <Button
             type="default"
             danger
@@ -87,7 +88,7 @@ export function RequirementBoardHeader({
           >
             删除
           </Button>
-        </Tooltip>
+        </HoverHint>
       </Space>
     </div>
   );

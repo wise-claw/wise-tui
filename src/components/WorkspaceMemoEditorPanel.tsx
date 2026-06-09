@@ -1,5 +1,6 @@
 import { CloseOutlined, DeleteOutlined } from "@ant-design/icons";
-import { App, Button, Input, Spin, Tooltip } from "antd";
+import { HoverHint } from "./shared/HoverHint";
+import { App, Button, Input, Spin } from "antd";
 import { Suspense, lazy, useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
 import {
   useWorkspaceMemosContext,
@@ -161,7 +162,7 @@ export function WorkspaceMemoEditorPanel() {
               }}
               onBlur={flushTitleSave}
             />
-            <Tooltip title="删除" mouseEnterDelay={0.35}>
+            <HoverHint title="删除">
               <Button
                 type="text"
                 size="small"
@@ -170,7 +171,7 @@ export function WorkspaceMemoEditorPanel() {
                 aria-label="删除备忘录"
                 onClick={confirmDeleteActive}
               />
-            </Tooltip>
+            </HoverHint>
           </div>
         ) : null}
       </div>

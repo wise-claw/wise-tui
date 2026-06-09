@@ -1,5 +1,6 @@
 import { FolderOpenOutlined } from "@ant-design/icons";
-import { Button, Divider, Input, Modal, Segmented, Select, Space, Tooltip, Typography } from "antd";
+import { HoverHint } from "../shared/HoverHint";
+import { Button, Divider, Input, Modal, Segmented, Select, Space, Typography } from "antd";
 import type { AddRepositoryOptions, Repository, RepositoryAssociatePreset } from "../../types";
 import type { WorkspaceBootstrapSelection } from "../../constants/workspaceBootstrapAddons";
 import type { RepositoryAcquireMode } from "../../utils/repositoryAcquire";
@@ -194,16 +195,16 @@ export function RepositoryAssociateModal({
                   <Divider className="app-add-repo-select-popup-divider" />
                   <div className="app-add-repo-field-label">角标颜色</div>
                   <div className="app-add-repo-icon-swatches">
-                    <Tooltip title="与该角色标签的默认角标色一致" mouseEnterDelay={0.25}>
+                    <HoverHint title="与该角色标签的默认角标色一致">
                       <button
                         type="button"
                         className={`app-add-repo-icon-swatch app-add-repo-icon-swatch--follow${iconColor === null ? " app-add-repo-icon-swatch--selected" : ""}`}
                         aria-label="角标颜色与角色标签默认色一致"
                         onClick={() => onIconColorChange(null)}
                       />
-                    </Tooltip>
+                    </HoverHint>
                     {REPOSITORY_ICON_COLOR_PRESETS.map((hex) => (
-                      <Tooltip key={hex} title={hex} mouseEnterDelay={0.2}>
+                      <HoverHint key={hex} title={hex}>
                         <button
                           type="button"
                           className={`app-add-repo-icon-swatch${iconColor === hex ? " app-add-repo-icon-swatch--selected" : ""}`}
@@ -211,7 +212,7 @@ export function RepositoryAssociateModal({
                           style={{ backgroundColor: hex }}
                           onClick={() => onIconColorChange(hex)}
                         />
-                      </Tooltip>
+                      </HoverHint>
                     ))}
                   </div>
                   <div className="app-add-repo-field-label app-add-repo-field-label--spaced">角标标题</div>

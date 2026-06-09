@@ -5,7 +5,8 @@ import {
   PlusOutlined,
   ReloadOutlined,
 } from "@ant-design/icons";
-import { Button, Empty, Input, Space, Tabs, Tooltip } from "antd";
+import { Button, Empty, Input, Space, Tabs } from "antd";
+import { HoverHint } from "../shared/HoverHint";
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import type { ClaudeMcpConfigPanelHandle } from "../ClaudeMcpConfigPanel";
 import type { ProjectSkillsPanelHandle } from "./ProjectSkillsPanel";
@@ -307,7 +308,7 @@ export function ClaudeCodeToolsPanel({
   if (!isPopover && sectionCollapsed) {
     return (
       <div className="app-claude-code-tools app-claude-code-tools--collapsed-single-btn">
-        <Tooltip
+        <HoverHint
           title={
             onSectionCollapsedChange
               ? "展开 Claude Code 工具（MCP、技能、Hooks、子代理）"
@@ -325,7 +326,7 @@ export function ClaudeCodeToolsPanel({
           >
             Claude Code
           </Button>
-        </Tooltip>
+        </HoverHint>
       </div>
     );
   }
@@ -339,7 +340,7 @@ export function ClaudeCodeToolsPanel({
       <div className="app-claude-code-tools-head">
         <div className="app-claude-code-tools-head-left">
           {onSectionCollapsedChange ? (
-            <Tooltip title={sectionCollapsed ? "点击展开" : "点击收起"}>
+            <HoverHint title={sectionCollapsed ? "点击展开" : "点击收起"}>
               <button
                 type="button"
                 className="app-claude-code-tools-title-trigger"
@@ -348,7 +349,7 @@ export function ClaudeCodeToolsPanel({
               >
                 <span className="app-claude-code-tools-title">Claude Code</span>
               </button>
-            </Tooltip>
+            </HoverHint>
           ) : (
             <span className="app-claude-code-tools-title">Claude Code</span>
           )}

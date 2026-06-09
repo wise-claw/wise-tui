@@ -11,7 +11,6 @@ import {
 } from "@ant-design/icons";
 import {
   Button,
-  Tooltip,
   Popover,
   Empty,
   Modal,
@@ -21,6 +20,7 @@ import {
   message,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
+import { HoverHint } from "../shared/HoverHint";
 import { memo, type Dispatch, type RefObject, type SetStateAction } from "react";
 import type { ClaudeSession } from "../../types";
 import { HistorySessionRestoreButton } from "../ProgressMonitorPanel/HistorySessionRestoreButton";
@@ -195,7 +195,7 @@ export const ClaudeChatSessionFeatureToolbar = memo(function ClaudeChatSessionFe
                           placeholder="搜索会话..."
                         />
                         {onRefreshHistorySessions ? (
-                          <Tooltip title="从磁盘重新扫描会话" mouseEnterDelay={0.35}>
+                          <HoverHint title="从磁盘重新扫描会话">
                             <Button
                               type="text"
                               size="small"
@@ -208,7 +208,7 @@ export const ClaudeChatSessionFeatureToolbar = memo(function ClaudeChatSessionFe
                               }}
                               aria-label="刷新历史会话"
                             />
-                          </Tooltip>
+                          </HoverHint>
                         ) : null}
                       </div>
                     </div>
@@ -258,7 +258,7 @@ export const ClaudeChatSessionFeatureToolbar = memo(function ClaudeChatSessionFe
                                     />
                                   ) : null}
                                   {onDeleteHistorySession ? (
-                                    <Tooltip title="删除该历史会话" mouseEnterDelay={0.35}>
+                                    <HoverHint title="删除该历史会话">
                                       <Button
                                         type="text"
                                         size="small"
@@ -270,7 +270,7 @@ export const ClaudeChatSessionFeatureToolbar = memo(function ClaudeChatSessionFe
                                           handleDeleteHistorySession(item.id, preview);
                                         }}
                                       />
-                                    </Tooltip>
+                                    </HoverHint>
                                   ) : null}
                                 </div>
                               );
@@ -282,7 +282,7 @@ export const ClaudeChatSessionFeatureToolbar = memo(function ClaudeChatSessionFe
                   </div>
                 }
               >
-                <Tooltip title="历史会话" mouseEnterDelay={0.35}>
+                <HoverHint title="历史会话" open={historyPopoverOpen ? false : undefined}>
                   <button
                     type="button"
                     className="app-claude-session-tool-btn app-claude-session-tool-btn--history"
@@ -295,7 +295,7 @@ export const ClaudeChatSessionFeatureToolbar = memo(function ClaudeChatSessionFe
                     <ClockIcon />
                     <span className="app-claude-session-tool-btn__text">历史会话</span>
                   </button>
-                </Tooltip>
+                </HoverHint>
               </Popover>
 
               <Popover
@@ -336,7 +336,7 @@ export const ClaudeChatSessionFeatureToolbar = memo(function ClaudeChatSessionFe
                             </span>
                           </button>
                           <span className="app-claude-session-user-questions-popover__item-actions">
-                            <Tooltip title="填入输入框" mouseEnterDelay={0.35}>
+                            <HoverHint title="填入输入框">
                               <Button
                                 type="text"
                                 size="small"
@@ -349,8 +349,8 @@ export const ClaudeChatSessionFeatureToolbar = memo(function ClaudeChatSessionFe
                                   setUserQuestionsPopoverOpen(false);
                                 }}
                               />
-                            </Tooltip>
-                            <Tooltip title="复制" mouseEnterDelay={0.35}>
+                            </HoverHint>
+                            <HoverHint title="复制">
                               <Button
                                 type="text"
                                 size="small"
@@ -362,7 +362,7 @@ export const ClaudeChatSessionFeatureToolbar = memo(function ClaudeChatSessionFe
                                   copySessionUserQuestionText(row.text);
                                 }}
                               />
-                            </Tooltip>
+                            </HoverHint>
                           </span>
                         </div>
                       ))
@@ -370,12 +370,12 @@ export const ClaudeChatSessionFeatureToolbar = memo(function ClaudeChatSessionFe
                   </div>
                 }
               >
-                <Tooltip title="历史消息" mouseEnterDelay={0.35}>
+                <HoverHint title="历史消息" open={userQuestionsPopoverOpen ? false : undefined}>
                   <button type="button" className="app-claude-session-tool-btn app-claude-session-tool-btn--user-questions">
                     <CommentOutlined />
                     <span className="app-claude-session-tool-btn__text">历史消息</span>
                   </button>
-                </Tooltip>
+                </HoverHint>
               </Popover>
             </div>
           </div>
@@ -387,7 +387,7 @@ export const ClaudeChatSessionFeatureToolbar = memo(function ClaudeChatSessionFe
             role="toolbar"
             aria-label={SHOW_SESSION_TASK_COMPLETION_FEATURE ? "可执行任务与完成情况" : "可执行任务与定时任务"}
           >
-            <Tooltip title="定时任务：Cron 触发 Claude Code" mouseEnterDelay={0.35}>
+            <HoverHint title="定时任务：Cron 触发 Claude Code">
               <button
                 type="button"
                 className="app-claude-session-tool-btn"
@@ -398,8 +398,8 @@ export const ClaudeChatSessionFeatureToolbar = memo(function ClaudeChatSessionFe
                 <FieldTimeOutlined />
                 <span className="app-claude-session-tool-btn__text">定时任务</span>
               </button>
-            </Tooltip>
-            <Tooltip title="可执行任务" mouseEnterDelay={0.35}>
+            </HoverHint>
+            <HoverHint title="可执行任务">
               <button
                 type="button"
                 className={[
@@ -422,9 +422,9 @@ export const ClaudeChatSessionFeatureToolbar = memo(function ClaudeChatSessionFe
                   </span>
                 ) : null}
               </button>
-            </Tooltip>
+            </HoverHint>
             {SHOW_SESSION_TASK_COMPLETION_FEATURE ? (
-              <Tooltip title="查看本仓库各标签会话的 Claude Code 执行情况" mouseEnterDelay={0.35}>
+              <HoverHint title="查看本仓库各标签会话的 Claude Code 执行情况">
                 <button
                   type="button"
                   className="app-claude-session-tool-btn"
@@ -433,7 +433,7 @@ export const ClaudeChatSessionFeatureToolbar = memo(function ClaudeChatSessionFe
                   <CheckCircleOutlined />
                   <span className="app-claude-session-tool-btn__text">完成任务</span>
                 </button>
-              </Tooltip>
+              </HoverHint>
             ) : null}
           </div>
         </div>
@@ -444,16 +444,16 @@ export const ClaudeChatSessionFeatureToolbar = memo(function ClaudeChatSessionFe
           title={(
             <span className="app-task-completion-modal__title-wrap">
               <span className="app-task-completion-modal__title-text">完成任务</span>
-              <Tooltip
+              <HoverHint
                 title={TASK_COMPLETION_MODAL_HINT}
                 placement="bottomLeft"
-                mouseEnterDelay={0.35}
+               
                 styles={{ container: { maxWidth: 420 } }}
               >
                 <button type="button" className="app-task-completion-modal__title-help" aria-label="说明">
                   <QuestionCircleOutlined />
                 </button>
-              </Tooltip>
+              </HoverHint>
             </span>
           )}
           open={taskCompletionModalOpen}
@@ -510,7 +510,7 @@ export const ClaudeChatSessionFeatureToolbar = memo(function ClaudeChatSessionFe
                 className="app-task-completion-modal__search"
               />
               {onRefreshHistorySessions ? (
-                <Tooltip title="从磁盘重新扫描会话并刷新列表" mouseEnterDelay={0.35}>
+                <HoverHint title="从磁盘重新扫描会话并刷新列表">
                   <Button
                     type="default"
                     size="small"
@@ -523,7 +523,7 @@ export const ClaudeChatSessionFeatureToolbar = memo(function ClaudeChatSessionFe
                   >
                     刷新
                   </Button>
-                </Tooltip>
+                </HoverHint>
               ) : null}
             </div>
           </div>

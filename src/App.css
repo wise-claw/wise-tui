@@ -606,7 +606,7 @@ body {
   max-width: 100%;
 }
 
-/* ── Ant Design：全局缩小 Tooltip（含 Popconfirm 等）── */
+/* ── Ant Design：全局缩小 Tooltip（含 Popconfirm 等；仅复杂 HoverHint 回退时使用）── */
 .ant-tooltip-container {
   font-size: 11px !important;
   line-height: 1.4 !important;
@@ -3205,20 +3205,27 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 
 .app-repository-action--run-stop {
   color: var(--ant-color-primary);
-  background: color-mix(in srgb, var(--ant-color-primary) 12%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ant-color-primary) 28%, transparent);
 }
 
+.app-repository-action--run-start {
+  color: var(--ant-color-success);
+}
+
+.app-repository-action--run-start svg,
 .app-repository-action--run-stop svg {
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
   display: block;
 }
 
-.app-repository-action--run-stop:hover {
+.app-repository-action--run-start:hover:not(:disabled) {
+  color: var(--ant-color-success);
+  background: color-mix(in srgb, var(--ant-color-success-bg) 90%, transparent);
+}
+
+.app-repository-action--run-stop:hover:not(:disabled) {
   color: var(--ant-color-error);
   background: color-mix(in srgb, var(--ant-color-error-bg) 90%, transparent);
-  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ant-color-error-border) 50%, transparent);
 }
 
 .app-repository-item--repo .app-repository-name-block .app-repository-main-session-running-dot,

@@ -1,4 +1,5 @@
-import { Popover, Spin, Tooltip } from "antd";
+import { Popover, Spin } from "antd";
+import { HoverHint } from "../shared/HoverHint";
 import { Suspense, useCallback, useMemo, useState } from "react";
 import { useModelProfileSwitcher } from "../../hooks/useClaudeModelProfileStore";
 import { pickBadgeEffectiveModel } from "../../types/claudeModelProfile";
@@ -95,7 +96,7 @@ export function ClaudeModelTopbarTrigger({ variant = "chat" }: Props) {
       }
     >
       {isSidebar ? (
-        <Tooltip title="模型切换（Claude / Codex / OpenCode）" mouseEnterDelay={0.35}>
+        <HoverHint title="模型切换（Claude / Codex / OpenCode）" open={open ? false : undefined}>
           <button
             type="button"
             className={btnClass}
@@ -105,9 +106,9 @@ export function ClaudeModelTopbarTrigger({ variant = "chat" }: Props) {
             <IconClaudeModel />
             {showBadge ? <span className="app-claude-model-topbar-btn__badge" aria-hidden /> : null}
           </button>
-        </Tooltip>
+        </HoverHint>
       ) : (
-        <Tooltip title="模型切换（Claude / Codex / OpenCode）" mouseEnterDelay={0.35}>
+        <HoverHint title="模型切换（Claude / Codex / OpenCode）" open={open ? false : undefined}>
           <button
             type="button"
             className={btnClass}
@@ -117,7 +118,7 @@ export function ClaudeModelTopbarTrigger({ variant = "chat" }: Props) {
             <IconClaudeModel />
             {showBadge ? <span className="app-claude-model-topbar-btn__badge" aria-hidden /> : null}
           </button>
-        </Tooltip>
+        </HoverHint>
       )}
     </Popover>
   );

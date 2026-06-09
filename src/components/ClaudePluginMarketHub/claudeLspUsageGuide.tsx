@@ -1,4 +1,5 @@
-import { Tooltip, Typography } from "antd";
+import { Typography } from "antd";
+import { HoverHint } from "../shared/HoverHint";
 import { openClaudeLspPluginsDoc } from "../../services/claudeLspUsageGuide";
 
 export function ClaudeLspUsageTooltipContent() {
@@ -36,11 +37,11 @@ interface ClaudeLspHelpIconProps {
 /** 问号图标；hover 展示 Claude Code LSP 使用说明。 */
 export function ClaudeLspHelpIcon({ className }: ClaudeLspHelpIconProps) {
   return (
-    <Tooltip
+    <HoverHint
       title={<ClaudeLspUsageTooltipContent />}
       placement="bottom"
       overlayClassName="app-claude-lsp-usage-tip-overlay"
-      mouseEnterDelay={0.25}
+     
       mouseLeaveDelay={0.2}
       styles={{
         root: { pointerEvents: "none" },
@@ -66,6 +67,6 @@ export function ClaudeLspHelpIcon({ className }: ClaudeLspHelpIconProps) {
           <circle cx="8.2" cy="11.7" r="0.8" fill="currentColor" />
         </svg>
       </span>
-    </Tooltip>
+    </HoverHint>
   );
 }

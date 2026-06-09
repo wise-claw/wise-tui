@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
-import { Button, Tooltip } from "antd";
+import { HoverHint } from "../shared/HoverHint";
+import { Button } from "antd";
 import {
   ZoomInOutlined,
   ZoomOutOutlined,
@@ -72,14 +73,14 @@ export function RepositoryImagePreview({ src, alt }: Props) {
   return (
     <div className="app-repository-image-preview-root">
       <div className="app-repository-image-preview-toolbar">
-        <Tooltip title="缩小">
+        <HoverHint title="缩小">
           <Button type="text" size="small" icon={<ZoomOutOutlined />} onClick={zoomOut} aria-label="缩小" />
-        </Tooltip>
+        </HoverHint>
         <span className="app-repository-image-preview-scale">{scalePct}%</span>
-        <Tooltip title="放大">
+        <HoverHint title="放大">
           <Button type="text" size="small" icon={<ZoomInOutlined />} onClick={zoomIn} aria-label="放大" />
-        </Tooltip>
-        <Tooltip title="逆时针旋转 90°">
+        </HoverHint>
+        <HoverHint title="逆时针旋转 90°">
           <Button
             type="text"
             size="small"
@@ -87,8 +88,8 @@ export function RepositoryImagePreview({ src, alt }: Props) {
             onClick={rotateLeft}
             aria-label="逆时针旋转"
           />
-        </Tooltip>
-        <Tooltip title="顺时针旋转 90°">
+        </HoverHint>
+        <HoverHint title="顺时针旋转 90°">
           <Button
             type="text"
             size="small"
@@ -96,10 +97,10 @@ export function RepositoryImagePreview({ src, alt }: Props) {
             onClick={rotateRight}
             aria-label="顺时针旋转"
           />
-        </Tooltip>
-        <Tooltip title="重置缩放与旋转">
+        </HoverHint>
+        <HoverHint title="重置缩放与旋转">
           <Button type="text" size="small" icon={<UndoOutlined />} onClick={resetView} aria-label="重置视图" />
-        </Tooltip>
+        </HoverHint>
       </div>
       <div
         className="app-repository-image-preview-stage"

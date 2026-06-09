@@ -1,5 +1,6 @@
 import { memo, useMemo, useRef, type ReactNode } from "react";
-import { Button, Empty, Input, Menu, Popconfirm, Spin, Tooltip } from "antd";
+import { HoverHint } from "../shared/HoverHint";
+import { Button, Empty, Input, Menu, Popconfirm, Spin } from "antd";
 import {
   ExclamationCircleOutlined,
   FileAddOutlined,
@@ -210,7 +211,7 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
   const toolbarInSearchRow = Boolean(showSearchField && onSearchChange);
   const explorerToolbarActions = (
     <span className="git-files-explorer-actions">
-      <Tooltip title="新建文件">
+      <HoverHint title="新建文件">
         <Button
           type="text"
           size="small"
@@ -218,8 +219,8 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
           onClick={explorer.handleToolbarNewFile}
           aria-label="新建文件"
         />
-      </Tooltip>
-      <Tooltip title="新建文件夹">
+      </HoverHint>
+      <HoverHint title="新建文件夹">
         <Button
           type="text"
           size="small"
@@ -227,8 +228,8 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
           onClick={explorer.handleToolbarNewFolder}
           aria-label="新建文件夹"
         />
-      </Tooltip>
-      <Tooltip title="刷新">
+      </HoverHint>
+      <HoverHint title="刷新">
         <Button
           type="text"
           size="small"
@@ -236,8 +237,8 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
           onClick={explorer.handleRefresh}
           aria-label="刷新"
         />
-      </Tooltip>
-      <Tooltip title="全部收起">
+      </HoverHint>
+      <HoverHint title="全部收起">
         <Button
           type="text"
           size="small"
@@ -245,15 +246,15 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
           onClick={explorer.handleCollapseAll}
           aria-label="全部收起"
         />
-      </Tooltip>
+      </HoverHint>
     </span>
   );
 
   const sectionCollapseButton =
     setSectionCollapsed != null ? (
-      <Tooltip
+      <HoverHint
         title={sectionCollapsed ? "展开文件树" : "收起文件树"}
-        mouseEnterDelay={0.35}
+       
       >
         <button
           type="button"
@@ -264,7 +265,7 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
         >
           <ExpandIcon expanded={!sectionCollapsed} />
         </button>
-      </Tooltip>
+      </HoverHint>
     ) : null;
 
   return (

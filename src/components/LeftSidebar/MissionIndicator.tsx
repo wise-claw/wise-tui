@@ -1,4 +1,5 @@
-import { Tag, Tooltip } from "antd";
+import { Tag } from "antd";
+import { HoverHint } from "../shared/HoverHint";
 import {
   RocketOutlined,
   CheckCircleOutlined,
@@ -64,7 +65,7 @@ export function MissionIndicator({ projectId }: MissionIndicatorProps) {
 
   return (
     <div className="mission-indicator">
-      <Tooltip
+      <HoverHint
         title={
           <div style={{ fontSize: 11 }}>
             {health.checks.map((c, i) => (
@@ -77,7 +78,7 @@ export function MissionIndicator({ projectId }: MissionIndicatorProps) {
           {okCount}/{health.checks.length} 就绪
           {failCount > 0 ? ` · ${failCount} 失败` : ""}
         </Tag>
-      </Tooltip>
+      </HoverHint>
     </div>
   );
 }

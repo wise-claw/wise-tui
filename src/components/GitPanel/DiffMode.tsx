@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
-import { Button, Input, message, Popconfirm, Space, Tooltip, Typography } from "antd";
+import { HoverHint } from "../shared/HoverHint";
+import { Button, Input, message, Popconfirm, Space, Typography } from "antd";
 import {
   ApartmentOutlined,
   CheckOutlined,
@@ -322,7 +323,7 @@ function DiffModeInner({
             </Text>
             <Space size={4} className="git-section-header-actions-space">
               {useTreeView && (
-                <Tooltip title={treeAllExpanded ? "收起目录树" : "展开目录树"} placement="top">
+                <HoverHint title={treeAllExpanded ? "收起目录树" : "展开目录树"} placement="top">
                   <Button
                     type="text"
                     size="small"
@@ -330,9 +331,9 @@ function DiffModeInner({
                     icon={treeAllExpanded ? <VerticalAlignBottomOutlined /> : <VerticalAlignTopOutlined />}
                     onClick={handleToggleTree}
                   />
-                </Tooltip>
+                </HoverHint>
               )}
-              <Tooltip title={stagedCollapsed ? "展开已暂存" : "收起已暂存"} placement="top">
+              <HoverHint title={stagedCollapsed ? "展开已暂存" : "收起已暂存"} placement="top">
                 <Button
                   type="text"
                   size="small"
@@ -342,8 +343,8 @@ function DiffModeInner({
                   aria-expanded={!stagedCollapsed}
                   aria-label={stagedCollapsed ? "展开已暂存" : "收起已暂存"}
                 />
-              </Tooltip>
-              <Tooltip title="全部取消暂存" placement="topRight">
+              </HoverHint>
+              <HoverHint title="全部取消暂存" placement="topRight">
                 <Button
                   type="text"
                   size="small"
@@ -352,7 +353,7 @@ function DiffModeInner({
                   onClick={onUnstageAll}
                   disabled={loading.unstageAll || loading.stageAll}
                 />
-              </Tooltip>
+              </HoverHint>
             </Space>
           </div>
           {!stagedCollapsed ? (
@@ -380,7 +381,7 @@ function DiffModeInner({
             </Text>
             <Space size={4} className="git-section-header-actions-space">
               {unstagedViewMode === "tree" && (
-                <Tooltip title={treeAllExpanded ? "收起目录树" : "展开目录树"} placement="top">
+                <HoverHint title={treeAllExpanded ? "收起目录树" : "展开目录树"} placement="top">
                   <Button
                     type="text"
                     size="small"
@@ -388,9 +389,9 @@ function DiffModeInner({
                     icon={treeAllExpanded ? <VerticalAlignBottomOutlined /> : <VerticalAlignTopOutlined />}
                     onClick={handleToggleTree}
                   />
-                </Tooltip>
+                </HoverHint>
               )}
-              <Tooltip title="全部暂存" placement="top">
+              <HoverHint title="全部暂存" placement="top">
                 <Button
                   type="text"
                   size="small"
@@ -399,7 +400,7 @@ function DiffModeInner({
                   onClick={onStageAll}
                   disabled={loading.stageAll || loading.unstageAll || loading.discardAll}
                 />
-              </Tooltip>
+              </HoverHint>
               <Popconfirm
                 classNames={{ root: "app-git-discard-popconfirm" }}
                 title="确认放弃全部更改？"
@@ -414,7 +415,7 @@ function DiffModeInner({
                 disabled={loading.stageAll || loading.unstageAll || loading.discardAll}
                 onConfirm={onDiscardAll}
               >
-                <Tooltip title="放弃全部更改" placement="topRight">
+                <HoverHint title="放弃全部更改" placement="topRight">
                   <Button
                     type="text"
                     size="small"
@@ -422,7 +423,7 @@ function DiffModeInner({
                     icon={<RevertIcon />}
                     disabled={loading.stageAll || loading.unstageAll || loading.discardAll}
                   />
-                </Tooltip>
+                </HoverHint>
               </Popconfirm>
             </Space>
           </div>

@@ -7,7 +7,8 @@ import {
   ReloadOutlined,
   SearchOutlined,
 } from "@ant-design/icons";
-import { Badge, Button, Empty, Input, Spin, Switch, Tabs, Tag, Tooltip, Typography } from "antd";
+import { Badge, Button, Empty, Input, Spin, Switch, Tabs, Tag, Typography } from "antd";
+import { HoverHint } from "../shared/HoverHint";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { useClaudeMcpList } from "../../hooks/useClaudeMcpList";
 import { computerUseMcpLikelyRegistered, getCuaDriverStatus, type CuaDriverStatus } from "../../services/cuaDriver";
@@ -159,7 +160,7 @@ export function McpHub({ repositoryPath, onClose }: Props) {
               MCP 工具市场
             </Typography.Title>
             {onClose ? (
-              <Tooltip title="关闭" mouseEnterDelay={0.35}>
+              <HoverHint title="关闭">
                 <Button
                   type="text"
                   size="small"
@@ -168,7 +169,7 @@ export function McpHub({ repositoryPath, onClose }: Props) {
                   aria-label="关闭"
                   onClick={onClose}
                 />
-              </Tooltip>
+              </HoverHint>
             ) : null}
           </div>
         </header>
@@ -532,7 +533,7 @@ export function McpHub({ repositoryPath, onClose }: Props) {
             MCP 工具市场
           </Typography.Title>
           {onClose ? (
-            <Tooltip title="关闭" mouseEnterDelay={0.35}>
+            <HoverHint title="关闭">
               <Button
                 type="text"
                 size="small"
@@ -541,7 +542,7 @@ export function McpHub({ repositoryPath, onClose }: Props) {
                 aria-label="关闭"
                 onClick={onClose}
               />
-            </Tooltip>
+            </HoverHint>
           ) : null}
         </div>
         <div className="app-mcp-hub-toolbar">{headerActions}</div>

@@ -1,5 +1,5 @@
-import { Tooltip } from "antd";
 import { ClaudeCodeUsageHeaderBtn } from "../ClaudeCodeUsagePopover";
+import { HoverHint } from "../shared/HoverHint";
 import { ClaudeCodeToolsTopbarTrigger } from "../ClaudeSessions/ClaudeCodeToolsTopbarTrigger";
 import { DefaultConfigTopbarTrigger } from "./DefaultConfigTopbarTrigger";
 import { NewMainWindowTopbarTrigger } from "./NewMainWindowTopbarTrigger";
@@ -30,7 +30,7 @@ export function LeftSidebarTopbar({
         </span>
       </div>
       <div className="app-left-sidebar-topbar-actions">
-        <Tooltip title={authorDisabled ? authorTooltip : "工作台配置"} mouseEnterDelay={0.35}>
+        <HoverHint title={authorDisabled ? authorTooltip : "工作台配置"}>
           <button
             type="button"
             className="app-left-sidebar-topbar-btn"
@@ -40,7 +40,7 @@ export function LeftSidebarTopbar({
           >
             <IconSettings />
           </button>
-        </Tooltip>
+        </HoverHint>
         <NewMainWindowTopbarTrigger activeRepositoryId={activeRepositoryId} />
         <DefaultConfigTopbarTrigger />
         <ClaudeCodeUsageHeaderBtn repositoryPath={activeRepositoryPath} />

@@ -1,4 +1,5 @@
-import { Popover, Tooltip } from "antd";
+import { Popover } from "antd";
+import { HoverHint } from "../shared/HoverHint";
 import { lazy, Suspense, useCallback, useEffect, useState } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { safeUnlisten } from "../../utils/safeTauriUnlisten";
@@ -57,7 +58,7 @@ export function DefaultConfigTopbarTrigger() {
         </Suspense>
       }
     >
-      <Tooltip title="默认配置（⌥S）" mouseEnterDelay={0.35}>
+      <HoverHint title="默认配置（⌥S）" open={open ? false : undefined}>
         <button
           type="button"
           className={
@@ -69,7 +70,7 @@ export function DefaultConfigTopbarTrigger() {
         >
           <IconDefaultConfig />
         </button>
-      </Tooltip>
+      </HoverHint>
     </Popover>
   );
 }

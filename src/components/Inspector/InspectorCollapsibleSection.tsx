@@ -1,4 +1,5 @@
-import { Tooltip, Typography } from "antd";
+import { Typography } from "antd";
+import { HoverHint } from "../shared/HoverHint";
 import type { ReactNode } from "react";
 import { ExpandIcon } from "../LeftSidebar/SidebarIcons";
 import { useInspectorSectionCollapsed } from "./useInspectorSectionCollapsed";
@@ -47,9 +48,9 @@ export function InspectorCollapsibleSection({
         </Typography.Text>
         <div className="app-inspector-collapsible-section__head-actions">
           {headActions}
-          <Tooltip
+          <HoverHint
             title={collapsed ? `展开${title}` : `收起${title}`}
-            mouseEnterDelay={0.35}
+           
           >
             <button
               type="button"
@@ -60,7 +61,7 @@ export function InspectorCollapsibleSection({
             >
               <ExpandIcon expanded={!collapsed} />
             </button>
-          </Tooltip>
+          </HoverHint>
         </div>
       </header>
       {!collapsed ? children : null}

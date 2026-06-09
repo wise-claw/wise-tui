@@ -1,4 +1,5 @@
-import { message, Tooltip } from "antd";
+import { message } from "antd";
+import { HoverHint } from "../shared/HoverHint";
 import { openMainWorkspaceWindow } from "../../services/mainWindow";
 
 function IconNewWindow() {
@@ -40,7 +41,7 @@ interface Props {
 
 export function NewMainWindowTopbarTrigger({ activeRepositoryId }: Props) {
   return (
-    <Tooltip title="新建窗口 (⇧⌘N)" mouseEnterDelay={0.35}>
+    <HoverHint title="新建窗口 (⇧⌘N)">
       <button
         type="button"
         className="app-left-sidebar-topbar-btn app-new-main-window-topbar-btn"
@@ -53,6 +54,6 @@ export function NewMainWindowTopbarTrigger({ activeRepositoryId }: Props) {
       >
         <IconNewWindow />
       </button>
-    </Tooltip>
+    </HoverHint>
   );
 }

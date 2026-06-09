@@ -1,5 +1,6 @@
 import { CheckOutlined, DeleteOutlined, DownOutlined, UpOutlined } from "@ant-design/icons";
-import { Button, Popover, Tooltip } from "antd";
+import { HoverHint } from "../shared/HoverHint";
+import { Button, Popover } from "antd";
 import { Suspense, lazy } from "react";
 import type { ReactNode } from "react";
 import type { TaskApiSpec, TaskExecutionStatus, TaskItem } from "../../types";
@@ -224,7 +225,7 @@ export function TaskCard({
             </Button>
           </Popover>
           <div className="app-prd-task-panel__task-execution-actions">
-            <Tooltip
+            <HoverHint
               title={
                 isExecutable
                   ? "生成当前任务并开始执行"
@@ -248,7 +249,7 @@ export function TaskCard({
                   开始执行
                 </Button>
               </span>
-            </Tooltip>
+            </HoverHint>
             <Popover
               trigger="click"
               placement="leftTop"

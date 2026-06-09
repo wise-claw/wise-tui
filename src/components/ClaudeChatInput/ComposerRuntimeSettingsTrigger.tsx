@@ -1,4 +1,5 @@
-import { Dropdown, Tooltip, type MenuProps } from "antd";
+import { Dropdown, type MenuProps } from "antd";
+import { HoverHint } from "../shared/HoverHint";
 import { useMemo, useState } from "react";
 import {
   CLAUDE_CONNECTION_KIND_LABELS,
@@ -204,7 +205,7 @@ export function ComposerRuntimeSettingsTrigger({
         </div>
       )}
     >
-      <Tooltip title={tooltip} placement="top" open={menuOpen ? false : undefined}>
+      <HoverHint title={tooltip} placement="top" open={menuOpen ? false : undefined}>
         <button
           type="button"
           className={`app-composer-runtime-settings-btn${
@@ -220,7 +221,7 @@ export function ComposerRuntimeSettingsTrigger({
             <span className="app-composer-runtime-settings-btn__engine-label">{engineLabel}</span>
           ) : null}
         </button>
-      </Tooltip>
+      </HoverHint>
     </Dropdown>
   );
 }

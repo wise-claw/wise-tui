@@ -1,4 +1,5 @@
-import { App as AntdApp, Layout, Spin, Tooltip } from "antd";
+import { App as AntdApp, Layout, Spin } from "antd";
+import { HoverHint } from "./shared/HoverHint";
 import {
   lazy,
   Suspense,
@@ -1470,7 +1471,7 @@ export function LeftSidebar({
                     activeRepositoryPath={effectiveRepoPanelPath}
                   />
                 </div>
-                <Tooltip title="展开工作区列表" mouseEnterDelay={0.35}>
+                <HoverHint title="展开工作区列表">
                   <button
                     type="button"
                     className="app-left-sidebar-repo-panel-header__expand-icon"
@@ -1479,7 +1480,7 @@ export function LeftSidebar({
                   >
                     <ExpandIcon expanded={false} />
                   </button>
-                </Tooltip>
+                </HoverHint>
               </div>
             ) : null}
             <LeftSidebarBottomTabPanes

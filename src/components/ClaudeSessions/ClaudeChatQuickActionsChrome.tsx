@@ -1,5 +1,6 @@
 import { CloudUploadOutlined } from "@ant-design/icons";
-import { Button, Empty, Modal, Popover, Popconfirm, Spin, Tooltip, message } from "antd";
+import { HoverHint } from "../shared/HoverHint";
+import { Button, Empty, Modal, Popover, Popconfirm, Spin, message } from "antd";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { WORKFLOW_UI_EVENT_REPO_WORKTREES_MAY_HAVE_CHANGED } from "../../constants/workflowUiEvents";
 import type { RepoWorktreesMayHaveChangedDetail } from "../../constants/workflowUiEvents";
@@ -521,13 +522,13 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
                       </div>
                     </div>
                     <div className="app-gitworktree-popover__item-actions">
-                      <Tooltip title="在系统文件管理器中打开此目录">
+                      <HoverHint title="在系统文件管理器中打开此目录">
                         <Button type="link" size="small" onClick={() => handleOpenWorktreeInFinder(w.path)}>
                           打开目录
                         </Button>
-                      </Tooltip>
+                      </HoverHint>
                       {onAddWorktreeRepositoryToProject ? (
-                        <Tooltip title="加入左侧当前项目，便于在仓库列表中切换">
+                        <HoverHint title="加入左侧当前项目，便于在仓库列表中切换">
                           <Button
                             type="link"
                             size="small"
@@ -541,7 +542,7 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
                           >
                             加入项目
                           </Button>
-                        </Tooltip>
+                        </HoverHint>
                       ) : null}
                       <Popconfirm
                         title="撤回此 worktree？"

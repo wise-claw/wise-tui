@@ -1,5 +1,6 @@
 import { CloseOutlined, QuestionCircleOutlined } from "@ant-design/icons";
-import { Button, Spin, Tooltip, Typography } from "antd";
+import { HoverHint } from "../shared/HoverHint";
+import { Button, Spin, Typography } from "antd";
 import {
   FREE_CLAUDE_CODE_QUICK_START_URL,
   FREE_CLAUDE_CODE_REPO_URL,
@@ -51,7 +52,7 @@ export function FreeClaudeCodePanel({ fcc, onClose }: Props) {
         <div className="app-fcc-topbar-panel__title-row">
           <span className="app-fcc-topbar-panel__title-group">
             <span className="app-fcc-topbar-panel__title">Free Claude Code</span>
-            <Tooltip
+            <HoverHint
               title={
                 <>
                   本机 Anthropic 兼容代理（
@@ -69,7 +70,7 @@ export function FreeClaudeCodePanel({ fcc, onClose }: Props) {
               >
                 <QuestionCircleOutlined />
               </button>
-            </Tooltip>
+            </HoverHint>
           </span>
           <span className="app-fcc-topbar-panel__head-actions">
             <Button
@@ -110,7 +111,7 @@ export function FreeClaudeCodePanel({ fcc, onClose }: Props) {
           <li key={row.id} className="app-fcc-topbar-panel__dep">
             <span className="app-fcc-topbar-panel__dep-label">
               {row.label}
-              <Tooltip title={row.help}>
+              <HoverHint title={row.help}>
                 <button
                   type="button"
                   className="app-fcc-topbar-panel__help app-fcc-topbar-panel__help--inline"
@@ -118,7 +119,7 @@ export function FreeClaudeCodePanel({ fcc, onClose }: Props) {
                 >
                   <QuestionCircleOutlined />
                 </button>
-              </Tooltip>
+              </HoverHint>
             </span>
             <ReadyTag ready={row.ready} />
           </li>
@@ -126,7 +127,7 @@ export function FreeClaudeCodePanel({ fcc, onClose }: Props) {
       </ul>
 
       <div className="app-fcc-topbar-panel__actions">
-        <Tooltip
+        <HoverHint
           title={
             installed && running
               ? "代理运行中无法重装，请先停止"
@@ -146,8 +147,8 @@ export function FreeClaudeCodePanel({ fcc, onClose }: Props) {
               {installed ? "重新安装" : "一键安装"}
             </Button>
           </span>
-        </Tooltip>
-        <Tooltip title={uninstallBlockedReason}>
+        </HoverHint>
+        <HoverHint title={uninstallBlockedReason}>
           <span className="app-fcc-topbar-panel__action-wrap">
             <Button
               size="small"
@@ -159,7 +160,7 @@ export function FreeClaudeCodePanel({ fcc, onClose }: Props) {
               一键卸载
             </Button>
           </span>
-        </Tooltip>
+        </HoverHint>
         <Button
           type={installed ? "primary" : "default"}
           size="small"

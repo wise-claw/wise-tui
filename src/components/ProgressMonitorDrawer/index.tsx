@@ -1,4 +1,5 @@
-import { Button, Drawer, Empty, Space, Tag, Tooltip, Typography, message } from "antd";
+import { Button, Drawer, Empty, Space, Tag, Typography, message } from "antd";
+import { HoverHint } from "../shared/HoverHint";
 import { List } from "../ui/AppList";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
 import { useClaudeSessionsLiveSnapshot } from "../../stores/claudeSessionsLiveStore";
@@ -103,7 +104,7 @@ const OmcWorkerDrawerInvocationList = memo(function OmcWorkerDrawerInvocationLis
             actions={
               onCancelInvocation && isOmcDirectBatchInvocationRunning(inv)
                 ? [
-                    <Tooltip title="结束该 Claude Code 子进程" key="stop" mouseEnterDelay={0.35}>
+                    <HoverHint title="结束该 Claude Code 子进程" key="stop">
                       <Button
                         type="link"
                         size="small"
@@ -115,7 +116,7 @@ const OmcWorkerDrawerInvocationList = memo(function OmcWorkerDrawerInvocationLis
                       >
                         结束
                       </Button>
-                    </Tooltip>,
+                    </HoverHint>,
                   ]
                 : []
             }

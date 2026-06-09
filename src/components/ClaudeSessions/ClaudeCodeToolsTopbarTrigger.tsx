@@ -1,4 +1,5 @@
-import { Popover, Tooltip } from "antd";
+import { Popover } from "antd";
+import { HoverHint } from "../shared/HoverHint";
 import { Suspense, lazy, useCallback, useState } from "react";
 import type { AuthorPane } from "../../types/viewMode";
 import { IconClaudeCodeMascot } from "../icons/IconClaudeCodeMascot";
@@ -55,7 +56,7 @@ export function ClaudeCodeToolsTopbarTrigger({
       }
     >
       {isSidebar ? (
-        <Tooltip title="Claude Code（MCP、技能、Hooks、子代理）" mouseEnterDelay={0.35}>
+        <HoverHint title="Claude Code（MCP、技能、Hooks、子代理）" open={open ? false : undefined}>
           <button
             type="button"
             className={
@@ -67,9 +68,9 @@ export function ClaudeCodeToolsTopbarTrigger({
           >
             <IconClaudeCodeMascot />
           </button>
-        </Tooltip>
+        </HoverHint>
       ) : (
-        <Tooltip title="Claude Code（MCP、技能、Hooks、子代理）" mouseEnterDelay={0.35}>
+        <HoverHint title="Claude Code（MCP、技能、Hooks、子代理）" open={open ? false : undefined}>
           <button
             type="button"
             className={
@@ -80,7 +81,7 @@ export function ClaudeCodeToolsTopbarTrigger({
           >
             <IconClaudeCodeMascot />
           </button>
-        </Tooltip>
+        </HoverHint>
       )}
     </Popover>
   );

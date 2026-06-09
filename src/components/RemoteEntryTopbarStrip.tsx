@@ -1,5 +1,6 @@
 import { GatewayOutlined } from "@ant-design/icons";
-import { Switch, Tooltip } from "antd";
+import { HoverHint } from "./shared/HoverHint";
+import { Switch } from "antd";
 import { isTauri } from "@tauri-apps/api/core";
 import { useRemoteEntryTopbar } from "../hooks/useRemoteEntryTopbar";
 import {
@@ -52,9 +53,9 @@ export function RemoteEntryTopbarStrip({ onOpenRemoteChannels }: RemoteEntryTopb
     <span
       className={`app-topbar-remote-strip${anyRunning ? " app-topbar-remote-strip--on" : " app-topbar-remote-strip--off"}`}
     >
-      <Tooltip title={summaryTitle} mouseEnterDelay={0.35}>
+      <HoverHint title={summaryTitle}>
         <span className="app-topbar-remote-label">远程</span>
-      </Tooltip>
+      </HoverHint>
 
       {startableEntries.map(({ id, state }) => {
         const meta = REMOTE_ENTRY_STARTABLE_META[id];
@@ -76,7 +77,7 @@ export function RemoteEntryTopbarStrip({ onOpenRemoteChannels }: RemoteEntryTopb
       })}
 
       {onOpenRemoteChannels ? (
-        <Tooltip title={configTitle} mouseEnterDelay={0.35}>
+        <HoverHint title={configTitle}>
           <button
             type="button"
             className="app-topbar-remote-config-btn"
@@ -85,7 +86,7 @@ export function RemoteEntryTopbarStrip({ onOpenRemoteChannels }: RemoteEntryTopb
           >
             <GatewayOutlined />
           </button>
-        </Tooltip>
+        </HoverHint>
       ) : null}
     </span>
   );
@@ -119,7 +120,7 @@ function RemoteEntryTopbarSwitch({
   return (
     <span className={`app-topbar-remote-entry app-topbar-remote-entry--${id}`}>
       <span className="app-topbar-remote-entry-label">{shortLabel}</span>
-      <Tooltip title={tooltip} mouseEnterDelay={0.35}>
+      <HoverHint title={tooltip}>
         <Switch
           size="small"
           checked={running}
@@ -132,7 +133,7 @@ function RemoteEntryTopbarSwitch({
           }
           aria-label={`${fullLabel}开关`}
         />
-      </Tooltip>
+      </HoverHint>
     </span>
   );
 }
