@@ -8,6 +8,7 @@ import { workspaceTodosAnchorKey } from "../../utils/workspaceTodosAnchorKey";
 import type { Repository, StandaloneRepo, TaskMode, Workspace } from "../../types";
 import { repositoryFolderBasename } from "../../utils/repositoryType";
 import type { WorkspaceFocus } from "../../utils/workspaceMode";
+import { parseOpenAppConfigureMenuKey } from "../../utils/openAppScope";
 import { reorderRepositoryIdsForDrop } from "./repositoryReorder";
 
 export interface RepositoryReorderUi {
@@ -406,6 +407,7 @@ export function RepositoryRow({
   onOpenInTerminal,
   onOpenRepositoryInBrowser,
   onOpenRepositoryInEditor,
+  onConfigureRepositoryOpenApp,
   onOpenRepositoryMainOwner,
   onConfigureSddMode,
   onConfigureRepositoryMainSessionRun,
@@ -436,6 +438,7 @@ export function RepositoryRow({
   onOpenInTerminal?: (repository: Repository) => void;
   onOpenRepositoryInBrowser: (repository: Repository) => void;
   onOpenRepositoryInEditor: (repository: Repository) => void;
+  onConfigureRepositoryOpenApp?: (repository: Repository, openAppId: string | null) => void;
   onOpenRepositoryMainOwner?: (repository: Repository) => void;
   onConfigureSddMode?: (repository: Repository) => void;
   onConfigureRepositoryMainSessionRun?: (repository: Repository) => void;
@@ -478,6 +481,7 @@ export function RepositoryRow({
     onOpenScheduledTasks: Boolean(onOpenScheduledTasks),
     onOpenRequirements: Boolean(onOpenRequirements),
     onOpenExecutableTasks: Boolean(onOpenExecutableTasks),
+    repositoryOpenAppId: repository.openAppId,
   });
 
   const dropRowClass =
@@ -621,6 +625,10 @@ export function RepositoryRow({
                 if (key === "scheduled-tasks") onOpenScheduledTasks?.(repository);
                 if (key === "requirements" && workspaceTrellisEnabled) onOpenRequirements?.(repository);
                 if (key === "executable-tasks" && workspaceTrellisEnabled) onOpenExecutableTasks?.(repository);
+                if (typeof key === "string") {
+                  const openAppId = parseOpenAppConfigureMenuKey(key);
+                  if (openAppId !== undefined) onConfigureRepositoryOpenApp?.(repository, openAppId);
+                }
               },
             }}
             trigger={["click"]}
@@ -656,6 +664,7 @@ export function FloatingRepositoryRow({
   onOpenInTerminal,
   onOpenRepositoryInBrowser,
   onOpenRepositoryInEditor,
+  onConfigureRepositoryOpenApp,
   onOpenRepositoryMainOwner,
   onConfigureSddMode,
   onConfigureRepositoryMainSessionRun,
@@ -688,6 +697,7 @@ export function FloatingRepositoryRow({
   onOpenInTerminal?: (repository: Repository) => void;
   onOpenRepositoryInBrowser: (repository: Repository) => void;
   onOpenRepositoryInEditor: (repository: Repository) => void;
+  onConfigureRepositoryOpenApp?: (repository: Repository, openAppId: string | null) => void;
   onOpenRepositoryMainOwner?: (repository: Repository) => void;
   onConfigureSddMode?: (repository: Repository) => void;
   onConfigureRepositoryMainSessionRun?: (repository: Repository) => void;
@@ -738,6 +748,7 @@ export function FloatingRepositoryRow({
     onOpenExecutableTasks: Boolean(onOpenExecutableTasks),
     onPromoteToNewProject: Boolean(onPromoteToNewProject),
     onJoinExistingProject: Boolean(onJoinExistingProject),
+    repositoryOpenAppId: repository.openAppId,
   });
 
   return (
@@ -858,6 +869,10 @@ export function FloatingRepositoryRow({
                   onJoinExistingProject?.(repository, projectId);
                 }
                 if (key === "remove") onRemove(repository);
+                if (typeof key === "string") {
+                  const openAppId = parseOpenAppConfigureMenuKey(key);
+                  if (openAppId !== undefined) onConfigureRepositoryOpenApp?.(repository, openAppId);
+                }
               },
             }}
             trigger={["click"]}
@@ -895,6 +910,7 @@ export function ProjectRepositoryRows({
   onOpenInTerminal,
   onOpenRepositoryInBrowser,
   openRepositoryInPreferredEditor,
+  onConfigureRepositoryOpenApp,
   onOpenRepositoryMainOwner,
   onReorderRepositoriesInProject,
   onMoveRepositoryToProject,
@@ -928,6 +944,7 @@ export function ProjectRepositoryRows({
   onOpenInTerminal?: (repository: Repository) => void;
   onOpenRepositoryInBrowser: (repository: Repository) => void;
   openRepositoryInPreferredEditor: (repository: Repository) => void;
+  onConfigureRepositoryOpenApp?: (repository: Repository, openAppId: string | null) => void;
   onOpenRepositoryMainOwner?: (repository: Repository) => void;
   onReorderRepositoriesInProject?: (projectId: string, repositoryIds: number[]) => void | Promise<void>;
   onMoveRepositoryToProject?: (targetProjectId: string, repositoryId: number) => void | Promise<void>;
@@ -993,6 +1010,7 @@ export function ProjectRepositoryRows({
             onOpenInTerminal={onOpenInTerminal}
             onOpenRepositoryInBrowser={onOpenRepositoryInBrowser}
             onOpenRepositoryInEditor={openRepositoryInPreferredEditor}
+            onConfigureRepositoryOpenApp={onConfigureRepositoryOpenApp}
             onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}
             onConfigureSddMode={onConfigureSddMode}
             onConfigureRepositoryMainSessionRun={onConfigureRepositoryMainSessionRun}

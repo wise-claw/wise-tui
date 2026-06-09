@@ -51,6 +51,9 @@ pub(crate) struct StoredRepository {
     updated_at: String,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     sdd_mode: Option<String>,
+    /// 覆盖全局「打开方式」的 IDE/终端 id；为空则跟随顶栏全局默认。
+    #[serde(default, skip_serializing_if = "Option::is_none", alias = "open_app_id")]
+    open_app_id: Option<String>,
 }
 
 fn default_repository_type() -> String {
@@ -66,6 +69,28 @@ fn normalize_execution_engine(raw: Option<String>) -> String {
         Some("codex") => "codex".to_string(),
         Some("cursor") => "cursor".to_string(),
         _ => "claude".to_string(),
+    }
+}
+
+fn normalize_open_app_id(raw: Option<String>) -> Result<Option<String>, String> {
+    match raw {
+        None => Ok(None),
+        Some(value) => {
+            let trimmed = value.trim();
+            if trimmed.is_empty() {
+                return Ok(None);
+            }
+            if trimmed.len() > 32 {
+                return Err("WF_INVALID_INPUT: openAppId exceeds 32 chars".into());
+            }
+            if !trimmed
+                .chars()
+                .all(|c| c.is_ascii_lowercase() || c.is_ascii_digit() || c == '-')
+            {
+                return Err("WF_INVALID_INPUT: openAppId contains invalid characters".into());
+            }
+            Ok(Some(trimmed.to_string()))
+        }
     }
 }
 
@@ -103,6 +128,9 @@ pub(crate) struct StoredProject {
     /// 项目级主会话 Agent（路径 Y 消费）。为空则未配置。
     #[serde(skip_serializing_if = "Option::is_none")]
     main_agent: Option<String>,
+    /// 覆盖全局「打开方式」的 IDE/终端 id；为空则跟随顶栏全局默认。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    open_app_id: Option<String>,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -407,6 +435,7 @@ pub(crate) fn create_repository_from_path(
         created_at: now.to_string(),
         updated_at: now.to_string(),
         sdd_mode: None,
+        open_app_id: None,
     };
 
     let mut repositories = load_repositories(&app);
@@ -533,6 +562,30 @@ pub(crate) fn update_repository_sdd_mode(
 }
 
 #[tauri::command]
+pub(crate) fn update_repository_open_app_id(
+    app: tauri::AppHandle,
+    id: i64,
+    open_app_id: Option<String>,
+) -> Result<StoredRepository, String> {
+    let normalized = normalize_open_app_id(open_app_id)?;
+    let mut repositories = load_repositories(&app);
+    let idx = repositories
+        .iter()
+        .position(|p| p.id == id)
+        .ok_or_else(|| "仓库未找到".to_string())?;
+    repositories[idx].open_app_id = normalized;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_millis() as i64;
+    repositories[idx].updated_at = now.to_string();
+    save_repositories(&app, &repositories)?;
+    let mut out = repositories[idx].clone();
+    out.branch = git_commands::get_git_branch(&out.path);
+    Ok(out)
+}
+
+#[tauri::command]
 pub(crate) fn update_repository_role_tags(
     app: tauri::AppHandle,
     id: i64,
@@ -604,6 +657,7 @@ fn map_project_row(row: wise_db::WiseProjectRow) -> StoredProject {
         root_path: row.root_path,
         sdd_mode: row.sdd_mode,
         main_agent: row.main_agent,
+        open_app_id: row.open_app_id,
     }
 }
 
@@ -828,6 +882,26 @@ pub(crate) fn update_project_main_agent(
 }
 
 #[tauri::command]
+pub(crate) fn update_project_open_app_id(
+    db: tauri::State<'_, wise_db::WiseDb>,
+    project_id: String,
+    open_app_id: Option<String>,
+) -> Result<StoredProject, String> {
+    let normalized = normalize_open_app_id(open_app_id)?;
+    let now_ms = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_millis() as i64;
+    db.update_project_open_app_id(&project_id, normalized.as_deref(), now_ms)?;
+    let rows = db.list_projects()?;
+    let row = rows
+        .into_iter()
+        .find(|item| item.id == project_id)
+        .ok_or_else(|| "项目未找到".to_string())?;
+    Ok(map_project_row(row))
+}
+
+#[tauri::command]
 pub(crate) fn delete_project(
     app: tauri::AppHandle,
     db: tauri::State<'_, wise_db::WiseDb>,
@@ -974,6 +1048,7 @@ pub(crate) fn reconcile_project_workspace(
             created_at: now.to_string(),
             updated_at: now.to_string(),
             sdd_mode: None,
+            open_app_id: None,
         };
         repositories.push(new_repo);
         save_repositories(&app, &repositories)?;

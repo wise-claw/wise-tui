@@ -149,6 +149,8 @@ export function LeftSidebar({
   onDetachRepositoryFromProject,
   onUpdateRepositorySddMode,
   onUpdateProjectSddMode,
+  onUpdateRepositoryOpenAppId,
+  onUpdateProjectOpenAppId,
   onNewPaneSessionForRepository,
   onNewPaneSessionForProject,
   onReorderRepositoriesInProject,
@@ -225,13 +227,17 @@ export function LeftSidebar({
   const chromePanelHoverHandlers = useChromePanelHoverHandlers("left");
 
   const openPathInPreferredEditor = useCallback(
-    (path: string | null | undefined, emptyMessage: string) => {
+    (
+      path: string | null | undefined,
+      emptyMessage: string,
+      scopeOpenAppId?: string | null,
+    ) => {
       const trimmed = path?.trim() ?? "";
       if (!trimmed) {
         message.warning(emptyMessage);
         return;
       }
-      void openWorkspaceWithStoredPreference(trimmed).catch((err: unknown) => {
+      void openWorkspaceWithStoredPreference(trimmed, undefined, scopeOpenAppId).catch((err: unknown) => {
         const code = err instanceof Error ? err.message : "";
         if (code === OPEN_WORKSPACE_ERROR.NOT_CONFIGURED) {
           message.warning("未配置可用的编辑器或命令，请在中栏顶部「打开方式」中选择");
@@ -250,7 +256,7 @@ export function LeftSidebar({
 
   const openRepositoryInPreferredEditor = useCallback(
     (repository: Repository) => {
-      openPathInPreferredEditor(repository.path, "仓库路径为空");
+      openPathInPreferredEditor(repository.path, "仓库路径为空", repository.openAppId);
     },
     [openPathInPreferredEditor],
   );
@@ -266,10 +272,34 @@ export function LeftSidebar({
       openPathInPreferredEditor(
         path,
         "无法解析工作区目录，请先配置工作区根目录或关联仓库",
+        project.openAppId,
       );
     },
     [openPathInPreferredEditor, projects, repositories],
   );
+
+  const handleConfigureRepositoryOpenApp = useCallback(
+    (repository: Repository, openAppId: string | null) => {
+      if (!onUpdateRepositoryOpenAppId) return;
+      void Promise.resolve(onUpdateRepositoryOpenAppId(repository.id, openAppId)).catch(
+        (err: unknown) => {
+          message.error(err instanceof Error ? err.message : "打开方式配置失败");
+        },
+      );
+    },
+    [message, onUpdateRepositoryOpenAppId],
+  );
+
+  const handleConfigureProjectOpenApp = useCallback(
+    (project: ProjectItem, openAppId: string | null) => {
+      if (!onUpdateProjectOpenAppId) return;
+      void Promise.resolve(onUpdateProjectOpenAppId(project.id, openAppId)).catch((err: unknown) => {
+        message.error(err instanceof Error ? err.message : "打开方式配置失败");
+      });
+    },
+    [message, onUpdateProjectOpenAppId],
+  );
+
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
   const [createProjectRootPath, setCreateProjectRootPath] = useState("");
   const [createProjectSubmitting, setCreateProjectSubmitting] = useState(false);
@@ -1339,6 +1369,12 @@ export function LeftSidebar({
           onStopRepositoryRunCommand={onStopRepositoryRunCommand}
           onConfigureRepositorySddMode={onUpdateRepositorySddMode ? repositorySddModeModal.open : undefined}
           onConfigureProjectSddMode={onUpdateProjectSddMode ? projectSddModeModal.open : undefined}
+          onConfigureRepositoryOpenApp={
+            onUpdateRepositoryOpenAppId ? handleConfigureRepositoryOpenApp : undefined
+          }
+          onConfigureProjectOpenApp={
+            onUpdateProjectOpenAppId ? handleConfigureProjectOpenApp : undefined
+          }
           onNewPaneSessionForRepository={onNewPaneSessionForRepository}
           onNewPaneSessionForProject={onNewPaneSessionForProject}
           onPromoteFloatingRepository={

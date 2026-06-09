@@ -13,6 +13,7 @@ import {
   type SidebarScheduledTasksSummary,
 } from "./useSidebarScheduledTasksMap";
 import { resolveWorkspaceMode, type WorkspaceFocus } from "../../utils/workspaceMode";
+import { parseOpenAppConfigureMenuKey } from "../../utils/openAppScope";
 import { buildProjectMoreMenuItems } from "./sidebarMoreMenuItems";
 import { openWorkspaceTodosFromSidebarMenu } from "../../utils/openWorkspaceTodosFromSidebar";
 import { workspaceTodosAnchorKey } from "../../utils/workspaceTodosAnchorKey";
@@ -77,6 +78,8 @@ interface ProjectRepositoryListProps {
   onStopRepositoryRunCommand?: (repository: Repository) => void;
   onConfigureRepositorySddMode?: (repository: Repository) => void;
   onConfigureProjectSddMode?: (project: Workspace) => void;
+  onConfigureRepositoryOpenApp?: (repository: Repository, openAppId: string | null) => void;
+  onConfigureProjectOpenApp?: (project: Workspace, openAppId: string | null) => void;
   onNewPaneSessionForRepository?: (repository: Repository) => void;
   onNewPaneSessionForProject?: (project: Workspace) => void;
   onPromoteFloatingRepository?: (repository: StandaloneRepo) => void;
@@ -153,6 +156,8 @@ export function ProjectRepositoryList({
   onStopRepositoryRunCommand,
   onConfigureRepositorySddMode,
   onConfigureProjectSddMode,
+  onConfigureRepositoryOpenApp,
+  onConfigureProjectOpenApp,
   onNewPaneSessionForRepository,
   onNewPaneSessionForProject,
   onPromoteFloatingRepository,
@@ -276,6 +281,7 @@ export function ProjectRepositoryList({
                 onOpenInTerminal={onOpenInTerminal}
                 onOpenRepositoryInBrowser={onOpenRepositoryInBrowser}
                 onOpenRepositoryInEditor={openRepositoryInPreferredEditor}
+                onConfigureRepositoryOpenApp={onConfigureRepositoryOpenApp}
                 onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}
                 onConfigureRepositoryMainSessionRun={onConfigureRepositoryMainSessionRun}
                 onStartRepositoryRunCommand={onStartRepositoryRunCommand}
@@ -346,6 +352,8 @@ export function ProjectRepositoryList({
             onConfigureRepositoryMainSessionRun={onConfigureRepositoryMainSessionRun}
             onConfigureRepositorySddMode={onConfigureRepositorySddMode}
             onConfigureProjectSddMode={onConfigureProjectSddMode}
+            onConfigureRepositoryOpenApp={onConfigureRepositoryOpenApp}
+            onConfigureProjectOpenApp={onConfigureProjectOpenApp}
             onNewPaneSessionForRepository={onNewPaneSessionForRepository}
             onNewPaneSessionForProject={onNewPaneSessionForProject}
             onDetachRepositoryFromProject={onDetachRepositoryFromProject}
@@ -431,6 +439,8 @@ interface ProjectRowProps {
   onStopRepositoryRunCommand?: (repository: Repository) => void;
   onConfigureRepositorySddMode?: (repository: Repository) => void;
   onConfigureProjectSddMode?: (project: Workspace) => void;
+  onConfigureRepositoryOpenApp?: (repository: Repository, openAppId: string | null) => void;
+  onConfigureProjectOpenApp?: (project: Workspace, openAppId: string | null) => void;
   onNewPaneSessionForRepository?: (repository: Repository) => void;
   onNewPaneSessionForProject?: (project: Workspace) => void;
   onDetachRepositoryFromProject: (projectId: string, repositoryId: number) => void;
@@ -495,6 +505,8 @@ function ProjectRow({
   onStopRepositoryRunCommand,
   onConfigureRepositorySddMode,
   onConfigureProjectSddMode,
+  onConfigureRepositoryOpenApp,
+  onConfigureProjectOpenApp,
   onNewPaneSessionForRepository,
   onNewPaneSessionForProject,
   onDetachRepositoryFromProject,
@@ -555,6 +567,7 @@ function ProjectRow({
     onOpenExecutableTasksForProject: Boolean(onOpenExecutableTasksForProject),
     onReconcileProject: Boolean(onReconcileProject),
     onAddWorkspaceTodo: workspaceTodosEnabled,
+    projectOpenAppId: project.openAppId,
   });
 
   return (
@@ -710,6 +723,10 @@ function ProjectRow({
                   void Promise.resolve(onReconcileProject?.(project.id, "repos_and_graphs"));
                 }
                 if (key === "delete") onDeleteProject(project);
+                if (typeof key === "string") {
+                  const openAppId = parseOpenAppConfigureMenuKey(key);
+                  if (openAppId !== undefined) onConfigureProjectOpenApp?.(project, openAppId);
+                }
               },
             }}
             trigger={["click"]}
@@ -746,6 +763,7 @@ function ProjectRow({
             onOpenInTerminal={onOpenInTerminal}
             onOpenRepositoryInBrowser={onOpenRepositoryInBrowser}
             openRepositoryInPreferredEditor={openRepositoryInPreferredEditor}
+            onConfigureRepositoryOpenApp={onConfigureRepositoryOpenApp}
             onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}
             onReorderRepositoriesInProject={onReorderRepositoriesInProject}
             onMoveRepositoryToProject={onMoveRepositoryToProjectWithExpand}

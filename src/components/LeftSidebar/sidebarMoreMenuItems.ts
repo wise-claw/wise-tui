@@ -1,7 +1,9 @@
 import type { MenuProps } from "antd";
 import type { Workspace } from "../../types";
-import { DEFAULT_OPEN_APP_ID, DEFAULT_OPEN_APP_TARGETS } from "../OpenAppMenu/constants";
-import { getOpenAppPreferenceSync } from "../../services/openAppPreference";
+import {
+  buildOpenAppConfigureMenuChildren,
+  repositoryEditorOpenMenuLabel,
+} from "../../utils/openAppScope";
 import {
   repositoryTerminalOpenMenuLabel,
   showRepositoryTerminalOpenMenuItem,
@@ -11,12 +13,6 @@ type MenuItem = NonNullable<MenuProps["items"]>[number];
 
 /** 产品暂时隐藏仓库右键「配置 Owner」入口；恢复时改为 true。 */
 const REPOSITORY_MAIN_OWNER_MENU_ENABLED = false;
-
-export function repositoryEditorOpenMenuLabel(): string {
-  const id = getOpenAppPreferenceSync().trim() || DEFAULT_OPEN_APP_ID;
-  const target = DEFAULT_OPEN_APP_TARGETS.find((item) => item.id === id) ?? DEFAULT_OPEN_APP_TARGETS[0];
-  return target ? `在 ${target.label} 中打开` : "编辑器打开";
-}
 
 function compactItems(items: Array<MenuItem | false | null | undefined>): MenuItem[] {
   return items.filter((item): item is MenuItem => Boolean(item));
@@ -60,6 +56,7 @@ function repositoryOpenMenuItems(input: {
   onOpenInTerminal?: boolean;
   includeBrowser?: boolean;
   onNewPaneSession?: boolean;
+  scopeOpenAppId?: string | null;
 }): MenuItem[] {
   const {
     directoryKey = "finder",
@@ -68,16 +65,26 @@ function repositoryOpenMenuItems(input: {
     onOpenInTerminal = false,
     includeBrowser = false,
     onNewPaneSession = false,
+    scopeOpenAppId,
   } = input;
   const showTerminalOpen = onOpenInTerminal && showRepositoryTerminalOpenMenuItem();
 
   return compactItems([
     onOpenDirectory ? { key: directoryKey, label: "打开目录" } : null,
-    onOpenInEditor ? { key: "editor", label: repositoryEditorOpenMenuLabel() } : null,
+    onOpenInEditor ? { key: "editor", label: repositoryEditorOpenMenuLabel(scopeOpenAppId) } : null,
     showTerminalOpen ? { key: "open-terminal", label: repositoryTerminalOpenMenuLabel() } : null,
     includeBrowser ? { key: "browser", label: "打开 Git 仓库" } : null,
     onNewPaneSession ? { key: "new-session", label: "新开会话" } : null,
   ]);
+}
+
+function openAppConfigureMenuItem(scopeOpenAppId?: string | null): MenuItem {
+  return {
+    key: "open-app-submenu",
+    label: "配置打开方式",
+    popupClassName: "app-sidebar-more-menu-submenu",
+    children: buildOpenAppConfigureMenuChildren(scopeOpenAppId),
+  };
 }
 
 function repositoryTaskMenuItems(input: {
@@ -140,6 +147,8 @@ function repositoryConfigureMenuItems(input: {
   onOpenRepositoryMainOwner?: boolean;
   mainOwnerLabel?: string;
   onConfigureSddMode?: boolean;
+  onConfigureOpenApp?: boolean;
+  scopeOpenAppId?: string | null;
   onMainSessionRun?: boolean;
   runCommandRunning?: boolean;
   runRowPinned?: boolean;
@@ -150,6 +159,8 @@ function repositoryConfigureMenuItems(input: {
     onOpenRepositoryMainOwner,
     mainOwnerLabel = "配置 Owner",
     onConfigureSddMode,
+    onConfigureOpenApp = true,
+    scopeOpenAppId,
     onMainSessionRun,
     runCommandRunning = false,
     runRowPinned = false,
@@ -161,6 +172,7 @@ function repositoryConfigureMenuItems(input: {
     REPOSITORY_MAIN_OWNER_MENU_ENABLED && onOpenRepositoryMainOwner
       ? { key: "main-owner", label: mainOwnerLabel }
       : null,
+    onConfigureOpenApp ? openAppConfigureMenuItem(scopeOpenAppId) : null,
     onConfigureSddMode ? { key: "sdd-mode", label: "配置 Claude 插件" } : null,
     repositoryMainSessionRunMenuItem({ onMainSessionRun, runCommandRunning, runRowPinned }),
     trellisRootActionEnabled && !trellisReady ? { key: "trellis-init", label: "启用 Wise Trellis" } : null,
@@ -181,6 +193,7 @@ export interface BuildProjectMoreMenuItemsInput {
   onReconcileProject?: boolean;
   onOpenProjectInEditor?: boolean;
   onOpenProjectInTerminal?: boolean;
+  projectOpenAppId?: string | null;
 }
 
 /** Workspace 行「更多」菜单，按功能分组。 */
@@ -199,6 +212,7 @@ export function buildProjectMoreMenuItems(input: BuildProjectMoreMenuItemsInput)
     onOpenProjectInEditor,
     onOpenProjectInTerminal,
     onAddWorkspaceTodo = true,
+    projectOpenAppId,
   } = input;
 
   return sidebarMenuWithSectionsAndDanger(
@@ -214,12 +228,14 @@ export function buildProjectMoreMenuItems(input: BuildProjectMoreMenuItemsInput)
           onOpenDirectory: Boolean(onOpenProjectDirectory),
           onOpenInEditor: Boolean(onOpenProjectInEditor),
           onOpenInTerminal: Boolean(onOpenProjectInTerminal),
+          scopeOpenAppId: projectOpenAppId,
         }),
       ),
       onNewPaneSession
         ? sidebarMenuSection([{ key: "new-session", label: "新开会话" }])
         : null,
       sidebarMenuSection([
+        openAppConfigureMenuItem(projectOpenAppId),
         onConfigureSddMode ? { key: "sdd-mode", label: "配置 Claude 插件" } : null,
         onReconcileProject
           ? {
@@ -265,6 +281,7 @@ export interface BuildProjectRepositoryMoreMenuItemsInput {
   onOpenRequirements?: boolean;
   onOpenExecutableTasks?: boolean;
   onOpenRepositoryInTerminal?: boolean;
+  repositoryOpenAppId?: string | null;
 }
 
 /** 项目内仓库行「更多」菜单，按功能分组。 */
@@ -286,12 +303,14 @@ export function buildProjectRepositoryMoreMenuItems(
     onOpenExecutableTasks,
     onOpenRepositoryInTerminal,
     onAddWorkspaceTodo = true,
+    repositoryOpenAppId,
   } = input;
 
   const openItems = repositoryOpenMenuItems({
     onOpenInTerminal: Boolean(onOpenRepositoryInTerminal),
     includeBrowser: true,
     onNewPaneSession: Boolean(onNewPaneSession),
+    scopeOpenAppId: repositoryOpenAppId,
   });
   const sessionItems = openItems.filter((item) => item != null && item.key === "new-session");
   const accessItems = openItems.filter((item) => item != null && item.key !== "new-session");
@@ -304,6 +323,7 @@ export function buildProjectRepositoryMoreMenuItems(
         repositoryConfigureMenuItems({
           onOpenRepositoryMainOwner,
           onConfigureSddMode,
+          scopeOpenAppId: repositoryOpenAppId,
           onMainSessionRun,
           runCommandRunning,
           runRowPinned,
@@ -342,6 +362,7 @@ export interface BuildFloatingRepositoryMoreMenuItemsInput {
   onPromoteToNewProject?: boolean;
   onJoinExistingProject?: boolean;
   onOpenRepositoryInTerminal?: boolean;
+  repositoryOpenAppId?: string | null;
 }
 
 /** 游离仓库行「更多」菜单，按功能分组。 */
@@ -365,12 +386,14 @@ export function buildFloatingRepositoryMoreMenuItems(
     runCommandRunning = false,
     runRowPinned = false,
     onAddWorkspaceTodo = true,
+    repositoryOpenAppId,
   } = input;
 
   const openItems = repositoryOpenMenuItems({
     onOpenInTerminal: Boolean(onOpenRepositoryInTerminal),
     includeBrowser: true,
     onNewPaneSession: Boolean(onNewPaneSession),
+    scopeOpenAppId: repositoryOpenAppId,
   });
   const sessionItems = openItems.filter((item) => item != null && item.key === "new-session");
   const accessItems = openItems.filter((item) => item != null && item.key !== "new-session");
@@ -389,6 +412,7 @@ export function buildFloatingRepositoryMoreMenuItems(
           onOpenRepositoryMainOwner,
           mainOwnerLabel: "主 Owner 智能体…",
           onConfigureSddMode,
+          scopeOpenAppId: repositoryOpenAppId,
           onMainSessionRun,
           runCommandRunning,
           runRowPinned,

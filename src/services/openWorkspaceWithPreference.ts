@@ -1,7 +1,7 @@
 import type { OpenAppTarget } from "../types";
-import { DEFAULT_OPEN_APP_ID, DEFAULT_OPEN_APP_TARGETS } from "../components/OpenAppMenu/constants";
+import { DEFAULT_OPEN_APP_TARGETS } from "../components/OpenAppMenu/constants";
 import { joinRepositoryAbsolutePath } from "../utils/repositoryPreviewBinary";
-import { getOpenAppPreferenceSync } from "./openAppPreference";
+import { resolveOpenAppTargetById } from "../utils/openAppScope";
 import { openInFinder, openWorkspaceIn } from "./repository";
 
 export const OPEN_WORKSPACE_ERROR = {
@@ -33,9 +33,15 @@ function resolveTargetList(openTargets?: readonly OpenAppTarget[]): readonly Ope
 export function resolveStoredOpenAppTarget(
   openTargets?: readonly OpenAppTarget[],
 ): OpenAppTarget | null {
-  const list = resolveTargetList(openTargets);
-  const id = getOpenAppPreferenceSync().trim() || DEFAULT_OPEN_APP_ID;
-  return list.find((item) => item.id === id) ?? list[0] ?? null;
+  return resolveOpenAppTargetById(null, resolveTargetList(openTargets));
+}
+
+/** 解析作用域覆盖或全局默认的「打开方式」目标。 */
+export function resolveScopedOpenAppTarget(
+  scopeOpenAppId?: string | null,
+  openTargets?: readonly OpenAppTarget[],
+): OpenAppTarget | null {
+  return resolveOpenAppTargetById(scopeOpenAppId, resolveTargetList(openTargets));
 }
 
 /** 使用指定目标打开工作区目录（与中栏主按钮 / 下拉选择后的行为一致） */
@@ -73,8 +79,9 @@ export async function openWorkspaceWithOpenAppTarget(
 export async function openWorkspaceWithStoredPreference(
   workspacePath: string,
   openTargets?: readonly OpenAppTarget[],
+  scopeOpenAppId?: string | null,
 ): Promise<void> {
-  const t = resolveStoredOpenAppTarget(openTargets);
+  const t = resolveScopedOpenAppTarget(scopeOpenAppId, openTargets);
   if (!t) {
     throw new Error(OPEN_WORKSPACE_ERROR.NO_TARGET);
   }

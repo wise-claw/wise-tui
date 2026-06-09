@@ -15,14 +15,16 @@ import {
 } from "../../utils/workspaceRepositoryTreeSelect";
 import type { WorkspaceFocus } from "../../utils/workspaceMode";
 import { getDefaultTerminalActionIcon, getKnownOpenAppIcon } from "../OpenAppMenu/openAppIcons";
-import { DEFAULT_OPEN_APP_ID } from "../OpenAppMenu/constants";
-import { getOpenAppPreferenceSync } from "../../services/openAppPreference";
 import {
   OPEN_WORKSPACE_ERROR,
   openWorkspaceWithStoredPreference,
 } from "../../services/openWorkspaceWithPreference";
 import { tryOpenWorkspaceInDefaultTerminal } from "../../services/openWorkspaceWithTerminalPreference";
-import { repositoryEditorOpenMenuLabel } from "../LeftSidebar/sidebarMoreMenuItems";
+import {
+  repositoryEditorOpenMenuLabel,
+  resolveEffectiveOpenAppId,
+  resolveOpenAppTargetById,
+} from "../../utils/openAppScope";
 import {
   repositoryTerminalOpenMenuLabel,
   showRepositoryTerminalOpenMenuItem,
@@ -46,9 +48,7 @@ export interface GitPanelWorkspaceSelectorProps {
 interface TreeOpenActionsOptions {
   projects: ProjectItem[];
   repositories: Repository[];
-  editorIconSrc: string;
-  editorActionLabel: string;
-  onOpenEditorPath: (path: string) => void;
+  onOpenEditorPath: (path: string, scopeOpenAppId?: string | null) => void;
   showTerminalOpen: boolean;
   terminalIconSrc: string;
   terminalActionLabel: string;
@@ -61,6 +61,18 @@ function buildTreeDataWithOpenActions(
 ): DataNode[] {
   return nodes.map((node) => {
     const openPath = resolveTreeNodeOpenPath(node, options.projects, options.repositories);
+    const scopeOpenAppId =
+      node.nodeType === "repo" && node.repositoryId != null
+        ? options.repositories.find((repo) => repo.id === node.repositoryId)?.openAppId
+        : node.nodeType === "project" && node.projectId
+          ? options.projects.find((project) => project.id === node.projectId)?.openAppId
+          : undefined;
+    const effectiveOpenAppId = resolveEffectiveOpenAppId(scopeOpenAppId);
+    const editorTarget = resolveOpenAppTargetById(scopeOpenAppId);
+    const editorActionLabel = editorTarget
+      ? `在 ${editorTarget.label} 中打开`
+      : repositoryEditorOpenMenuLabel(scopeOpenAppId);
+    const editorIconSrc = getKnownOpenAppIcon(effectiveOpenAppId) ?? "";
     const title: ReactNode = (
       <div className="git-panel-workspace-selector__tree-row">
         <span className="git-panel-workspace-selector__tree-label">{node.title}</span>
@@ -69,17 +81,17 @@ function buildTreeDataWithOpenActions(
             <button
               type="button"
               className="git-panel-workspace-selector__tree-open"
-              title={`${options.editorActionLabel}：${node.title}`}
-              aria-label={`${options.editorActionLabel}：${node.title}`}
+              title={`${editorActionLabel}：${node.title}`}
+              aria-label={`${editorActionLabel}：${node.title}`}
               onClick={(event) => {
                 event.preventDefault();
                 event.stopPropagation();
-                options.onOpenEditorPath(openPath);
+                options.onOpenEditorPath(openPath, scopeOpenAppId);
               }}
             >
               <img
                 className="git-panel-workspace-selector__tree-open-icon"
-                src={options.editorIconSrc}
+                src={editorIconSrc}
                 alt=""
                 aria-hidden
               />
@@ -134,16 +146,13 @@ export function GitPanelWorkspaceSelector({
   const { message } = App.useApp();
   const [pickerOpen, setPickerOpen] = useState(false);
 
-  const openAppId = getOpenAppPreferenceSync().trim() || DEFAULT_OPEN_APP_ID;
-  const editorIconSrc = getKnownOpenAppIcon(openAppId) ?? "";
-  const editorActionLabel = repositoryEditorOpenMenuLabel();
   const terminalIconSrc = getDefaultTerminalActionIcon();
   const terminalActionLabel = repositoryTerminalOpenMenuLabel();
   const showTerminalOpen = showRepositoryTerminalOpenMenuItem();
 
   const handleOpenEditorPath = useCallback(
-    (path: string) => {
-      void openWorkspaceWithStoredPreference(path).catch((err: unknown) => {
+    (path: string, scopeOpenAppId?: string | null) => {
+      void openWorkspaceWithStoredPreference(path, undefined, scopeOpenAppId).catch((err: unknown) => {
         const code = err instanceof Error ? err.message : "";
         if (code === OPEN_WORKSPACE_ERROR.NOT_CONFIGURED) {
           message.warning("未配置可用的编辑器或命令，请在中栏顶部「打开方式」中选择");
@@ -181,8 +190,6 @@ export function GitPanelWorkspaceSelector({
       buildTreeDataWithOpenActions(treeNodes, {
         projects,
         repositories,
-        editorIconSrc,
-        editorActionLabel,
         onOpenEditorPath: handleOpenEditorPath,
         showTerminalOpen,
         terminalIconSrc,
@@ -193,8 +200,6 @@ export function GitPanelWorkspaceSelector({
       treeNodes,
       projects,
       repositories,
-      editorIconSrc,
-      editorActionLabel,
       handleOpenEditorPath,
       showTerminalOpen,
       terminalIconSrc,

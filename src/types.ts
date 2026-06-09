@@ -24,6 +24,8 @@ export interface Repository {
   mainOwnerAgentName?: string | null;
   /** 主会话执行引擎：`claude`（默认）或 `codex`。 */
   executionEngine?: SessionExecutionEngine;
+  /** 覆盖全局「打开方式」的 IDE/终端 id；空则跟随顶栏全局默认。 */
+  openAppId?: string | null;
   branch?: string;
   createdAt: string;
   updatedAt: string;
@@ -78,6 +80,8 @@ export interface ProjectItem {
   sddMode?: ProjectSddMode;
   /** 主会话 Agent；为路径 Y 主会话派发预留。 */
   mainAgent?: string | null;
+  /** 覆盖全局「打开方式」的 IDE/终端 id；空则跟随顶栏全局默认。 */
+  openAppId?: string | null;
   /** 侧栏圆角标自定义文字。 */
   iconDisplayName?: string | null;
   iconColor?: string | null;

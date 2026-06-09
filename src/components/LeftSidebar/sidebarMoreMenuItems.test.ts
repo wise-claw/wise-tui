@@ -39,6 +39,18 @@ describe("buildProjectMoreMenuItems", () => {
       }),
     );
     expect(labels.some((label) => label.startsWith("在 ") && label.endsWith(" 中打开"))).toBe(true);
+    expect(labels).toContain("配置打开方式");
+  });
+
+  test("project editor label reflects scoped open app", () => {
+    const labels = menuLabels(
+      buildProjectMoreMenuItems({
+        isPinned: false,
+        onOpenProjectInEditor: true,
+        projectOpenAppId: "intellij",
+      }),
+    );
+    expect(labels).toContain("在 IntelliJ IDEA 中打开");
   });
 
   test("separates workspace sections with dividers instead of group titles", () => {
@@ -91,6 +103,16 @@ describe("buildProjectRepositoryMoreMenuItems", () => {
     expect(dividerCount(items)).toBeGreaterThan(0);
     expect(labels).toContain("移出工作区");
     expect(labels).toContain("添加待办事项");
+  });
+
+  test("repository editor label reflects scoped open app", () => {
+    const labels = menuLabels(
+      buildProjectRepositoryMoreMenuItems({
+        repositoryOpenAppId: "cursor",
+      }),
+    );
+    expect(labels).toContain("在 Cursor 中打开");
+    expect(labels).toContain("配置打开方式");
   });
 
   test("includes run control even when chat quick action is hidden in multi-repo workspace", () => {

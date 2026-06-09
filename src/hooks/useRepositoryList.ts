@@ -11,6 +11,10 @@ import {
   updateRepositorySddMode,
 } from "../services/repository";
 import { updateRepositoryExecutionEngine } from "../services/repositoryExecutionEngine";
+import {
+  updateProjectOpenAppId,
+  updateRepositoryOpenAppId,
+} from "../services/openAppScopePreference";
 import type { SessionExecutionEngine } from "../types";
 import {
   addRepositoryToProject,
@@ -631,6 +635,22 @@ export function useRepositoryList() {
     [],
   );
 
+  const handleUpdateRepositoryOpenAppId = useCallback(
+    async (repositoryId: number, openAppId: string | null) => {
+      const updated = await updateRepositoryOpenAppId(repositoryId, openAppId);
+      setRepositories((prev) => prev.map((r) => (r.id === repositoryId ? updated : r)));
+    },
+    [],
+  );
+
+  const handleUpdateProjectOpenAppId = useCallback(
+    async (projectId: string, openAppId: string | null) => {
+      const updated = await updateProjectOpenAppId(projectId, openAppId);
+      setProjects((prev) => prev.map((p) => (p.id === projectId ? updated : p)));
+    },
+    [],
+  );
+
   const handleMoveRepositoryToProject = useCallback(
     async (targetProjectId: string, repositoryId: number) => {
       const owningIds = projects.filter((p) => p.repositoryIds.includes(repositoryId)).map((p) => p.id);
@@ -724,6 +744,8 @@ export function useRepositoryList() {
     handleBootstrapTrellisAtPath,
     handleUpdateRepositoryMainOwnerAgent,
     handleUpdateRepositoryExecutionEngine,
+    handleUpdateRepositoryOpenAppId,
+    handleUpdateProjectOpenAppId,
     togglePinProject,
   };
 }

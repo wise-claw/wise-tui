@@ -539,6 +539,8 @@ export default function App() {
     handleBootstrapTrellisAtPath,
     handleUpdateRepositoryMainOwnerAgent,
     handleUpdateRepositoryExecutionEngine,
+    handleUpdateRepositoryOpenAppId,
+    handleUpdateProjectOpenAppId,
     pinnedProjectIds,
     togglePinProject,
     floatingRepositories,
@@ -2999,6 +3001,8 @@ export default function App() {
         onUpdateProjectSddMode: async (projectId, sddMode) => {
           await handleUpdateProjectSddMode(projectId, sddMode);
         },
+        onUpdateRepositoryOpenAppId: handleUpdateRepositoryOpenAppId,
+        onUpdateProjectOpenAppId: handleUpdateProjectOpenAppId,
         onNewPaneSessionForRepository: handleNewPaneSessionForRepository,
         onNewPaneSessionForProject: handleNewPaneSessionForProject,
         onReorderRepositoriesInProject: handleReorderRepositoriesInProject,

@@ -52,6 +52,7 @@ const MIGRATION_031: &str = include_str!("../migrations/031_workspace_inspector.
 const MIGRATION_033: &str = include_str!("../migrations/033_workspace_todos.sql");
 const MIGRATION_034: &str = include_str!("../migrations/034_execution_environment_dispatch.sql");
 const MIGRATION_035: &str = include_str!("../migrations/035_workspace_quick_actions_pinned.sql");
+const MIGRATION_036: &str = include_str!("../migrations/036_project_open_app_id.sql");
 const PLATFORM_SPLIT_PROMPT_SEED_JSON: &str =
     include_str!("../migrations/005_platform_split_prompt_seed.json");
 
@@ -206,6 +207,10 @@ const MIGRATIONS: &[Migration] = &[
         name: "035_workspace_quick_actions_pinned",
         action: MigrationAction::Sql(MIGRATION_035),
     },
+    Migration {
+        name: "036_project_open_app_id",
+        action: MigrationAction::Sql(MIGRATION_036),
+    },
 ];
 
 #[derive(Debug, Clone, Serialize)]
@@ -221,6 +226,7 @@ pub struct WiseProjectRow {
     pub root_path: String,
     pub sdd_mode: String,
     pub main_agent: Option<String>,
+    pub open_app_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -518,7 +524,7 @@ impl WiseDb {
         let mut stmt = g
             .prepare(
                 "SELECT id, name, created_at, updated_at, icon_display_name, icon_color,
-                        root_path, sdd_mode, main_agent
+                        root_path, sdd_mode, main_agent, open_app_id
                  FROM projects
                  ORDER BY updated_at DESC",
             )
@@ -535,6 +541,7 @@ impl WiseDb {
                     row.get::<_, String>(6)?,
                     row.get::<_, String>(7)?,
                     row.get::<_, Option<String>>(8)?,
+                    row.get::<_, Option<String>>(9)?,
                 ))
             })
             .map_err(|e| e.to_string())?;
@@ -551,6 +558,7 @@ impl WiseDb {
                 root_path,
                 sdd_mode,
                 main_agent,
+                open_app_id,
             ) = r.map_err(|e| e.to_string())?;
             let mut links_stmt = g
                 .prepare(
@@ -578,6 +586,7 @@ impl WiseDb {
                 root_path,
                 sdd_mode,
                 main_agent,
+                open_app_id,
             });
         }
         Ok(out)
@@ -1200,6 +1209,25 @@ impl WiseDb {
             .execute(
                 "UPDATE projects SET main_agent = ?1, updated_at = ?2 WHERE id = ?3",
                 params![main_agent, now_ms, id],
+            )
+            .map_err(|e| e.to_string())?;
+        if n == 0 {
+            return Err("项目未找到".to_string());
+        }
+        Ok(())
+    }
+
+    pub fn update_project_open_app_id(
+        &self,
+        id: &str,
+        open_app_id: Option<&str>,
+        now_ms: i64,
+    ) -> Result<(), String> {
+        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let n = g
+            .execute(
+                "UPDATE projects SET open_app_id = ?1, updated_at = ?2 WHERE id = ?3",
+                params![open_app_id, now_ms, id],
             )
             .map_err(|e| e.to_string())?;
         if n == 0 {

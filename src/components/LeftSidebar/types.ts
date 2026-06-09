@@ -97,6 +97,8 @@ export interface LeftSidebarProps {
   onDetachRepositoryFromProject: (projectId: string, repositoryId: number) => void;
   onUpdateRepositorySddMode?: (repositoryId: number, sddMode: SddMode) => void | Promise<void>;
   onUpdateProjectSddMode?: (projectId: string, sddMode: ProjectSddMode) => void | Promise<void>;
+  onUpdateRepositoryOpenAppId?: (repositoryId: number, openAppId: string | null) => void | Promise<void>;
+  onUpdateProjectOpenAppId?: (projectId: string, openAppId: string | null) => void | Promise<void>;
   onNewPaneSessionForRepository?: (repository: Repository) => void;
   onNewPaneSessionForProject?: (project: ProjectItem) => void;
   onReorderRepositoriesInProject?: (projectId: string, repositoryIds: number[]) => void | Promise<void>;
