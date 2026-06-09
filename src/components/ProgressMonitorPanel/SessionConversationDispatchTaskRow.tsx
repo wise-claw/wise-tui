@@ -43,23 +43,23 @@ export const SessionConversationDispatchTaskRow = memo(function SessionConversat
   return (
     <div className="app-monitor-panel__session-task-row app-monitor-panel__item">
       <div className="app-monitor-panel__item-row app-monitor-panel__item-row--dispatch">
-        <span className="app-monitor-panel__dispatch-row-lead">
-          <MonitorItemTypeTag label="派发" />
-          {item.subtitle ? (
-            <span
-              className="app-monitor-panel__session-task-meta app-monitor-panel__session-task-engine"
-              title={item.subtitle}
-            >
-              {item.subtitle}
-            </span>
-          ) : null}
-        </span>
         <button
           type="button"
-          className="app-monitor-panel__item-row-main app-monitor-panel__dispatch-row-body"
+          className="app-monitor-panel__item-row-hit app-monitor-panel__item-row-hit--dispatch"
           title={rowTitle}
           onClick={() => onOpenDetail(item)}
         >
+          <span className="app-monitor-panel__dispatch-row-lead">
+            <MonitorItemTypeTag label="派发" />
+            {item.subtitle ? (
+              <span
+                className="app-monitor-panel__session-task-meta app-monitor-panel__session-task-engine"
+                title={item.subtitle}
+              >
+                {item.subtitle}
+              </span>
+            ) : null}
+          </span>
           {displayPreview ? (
             <span
               className={`app-monitor-panel__session-task-preview${
@@ -70,12 +70,12 @@ export const SessionConversationDispatchTaskRow = memo(function SessionConversat
               {displayPreview}
             </span>
           ) : null}
+          {savedTime ? (
+            <span className="app-monitor-panel__session-task-time" title={savedTime}>
+              {savedTime}
+            </span>
+          ) : null}
         </button>
-        {savedTime ? (
-          <span className="app-monitor-panel__session-task-time" title={savedTime}>
-            {savedTime}
-          </span>
-        ) : null}
         <span className="app-monitor-panel__item-actions app-monitor-panel__session-task-actions">
           {showStop ? (
             <button

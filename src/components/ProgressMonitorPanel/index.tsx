@@ -8,7 +8,6 @@ import {
 import { Button, Collapse, Descriptions, Drawer, Empty, Popover, Tag, Typography } from "antd";
 import {
   memo,
-  startTransition,
   useCallback,
   useEffect,
   useMemo,
@@ -951,7 +950,7 @@ const TerminalEmployeeMonitorRow = memo(function TerminalEmployeeMonitorRow({
       <div className="app-monitor-panel__item-row app-monitor-panel__item-row--terminal">
         <button
           type="button"
-          className="app-monitor-panel__item-row-main app-monitor-panel__subagent-row--clickable"
+          className="app-monitor-panel__item-row-hit app-monitor-panel__item-row-hit--terminal"
           title={`打开 ${item.name} 最新会话记录`}
           onClick={() => onActivateRow(item)}
         >
@@ -959,12 +958,12 @@ const TerminalEmployeeMonitorRow = memo(function TerminalEmployeeMonitorRow({
             <MonitorItemTypeTag label="终端" />
             <span className="app-monitor-panel__item-name">{item.name}</span>
           </span>
+          {lastMessagePreview ? (
+            <span className="app-monitor-panel__session-task-preview" title={lastMessagePreview}>
+              {lastMessagePreview}
+            </span>
+          ) : null}
         </button>
-        {lastMessagePreview ? (
-          <span className="app-monitor-panel__session-task-preview" title={lastMessagePreview}>
-            {lastMessagePreview}
-          </span>
-        ) : null}
         <span className="app-monitor-panel__item-actions">
           <SubagentStatusIndicator status={conversationStatus} visual={statusVisual} />
           {terminalInProgress ? (
@@ -1222,11 +1221,9 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
 
   const openHistoryMessagesDrawer = useCallback(
     (sessionId: string) => {
-      startTransition(() => {
-        setEmployeeHistoryPopoverId(null);
-        setTeamHistoryPopoverId(null);
-        setHistoryMessagesSessionId(sessionId);
-      });
+      setEmployeeHistoryPopoverId(null);
+      setTeamHistoryPopoverId(null);
+      setHistoryMessagesSessionId(sessionId);
     },
     [setHistoryMessagesSessionId],
   );
@@ -1269,7 +1266,7 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
   const activateEmployeeTerminalRow = useCallback(
     (item: EmployeeMonitorItem) => {
       const openDrawer = (sessionId: string) => {
-        startTransition(() => openHistoryMessagesDrawer(sessionId));
+        openHistoryMessagesDrawer(sessionId);
       };
       if (item.employeeId === "omc-worker") {
         const latestInvocation =

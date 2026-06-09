@@ -82,6 +82,23 @@
   line-height: 12px;
 }
 
+.app-left-sidebar-monitor-panel .app-monitor-panel__section--terminals .app-monitor-panel__item-row-hit--terminal {
+  display: flex;
+  align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: none;
+  min-height: 0;
+  height: auto;
+  overflow: hidden;
+  line-height: 13px;
+}
+
+.app-left-sidebar-monitor-panel .app-monitor-panel__section--terminals .app-monitor-panel__item-row-hit--terminal .app-monitor-panel__item-name-wrap {
+  flex: 0 1 auto;
+  max-width: 42%;
+}
+
 .app-left-sidebar-monitor-panel .app-monitor-panel__section--terminals .app-monitor-panel__item-row-main {
   display: flex;
   align-items: center;
@@ -315,6 +332,13 @@
 }
 
 .app-left-sidebar-monitor-panel .app-monitor-panel__dispatch-row-lead {
+  line-height: 13px;
+}
+
+.app-left-sidebar-monitor-panel .app-monitor-panel__item-row--dispatch .app-monitor-panel__item-row-hit--dispatch {
+  display: flex;
+  align-items: center;
+  min-height: 0;
   line-height: 13px;
 }
 
@@ -799,8 +823,57 @@
   cursor: pointer;
 }
 
+.app-monitor-panel__item-row-hit {
+  flex: 1 1 auto;
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  color: inherit;
+  font: inherit;
+  overflow: hidden;
+}
+
+.app-monitor-panel__item-row-hit--terminal {
+  justify-content: flex-start;
+}
+
+.app-monitor-panel__item-row-hit--dispatch {
+  justify-content: flex-start;
+  min-height: 0;
+}
+
+.app-monitor-panel__item-row-hit:focus-visible {
+  outline: 2px solid var(--ant-color-primary-border);
+  outline-offset: 1px;
+  border-radius: 2px;
+}
+
+.app-monitor-panel__item-row--dispatch .app-monitor-panel__item-row-hit--dispatch .app-monitor-panel__dispatch-row-lead {
+  flex: 0 0 auto;
+}
+
+.app-monitor-panel__item-row--dispatch .app-monitor-panel__item-row-hit--dispatch .app-monitor-panel__session-task-preview {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.app-monitor-panel__item-row--dispatch .app-monitor-panel__item-row-hit--dispatch .app-monitor-panel__session-task-time {
+  flex: 0 0 auto;
+}
+
+.app-monitor-panel__item--terminal-row:hover,
+.app-monitor-panel__item-row-hit:hover {
+  background: var(--ant-color-fill-secondary);
+}
+
 .app-monitor-panel__item--terminal-row:hover {
-  background: var(--ant-color-fill-secondary) !important;
   border-color: transparent !important;
 }
 
