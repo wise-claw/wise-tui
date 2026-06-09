@@ -149,9 +149,7 @@ function mergePassthroughThroughWrappers(
     return mergePassthroughOntoChild(child, passthrough, mergedRef, title);
   }
 
-  const visibleChildren = Children.toArray(childProps.children).filter(
-    (node) => node != null && node !== false,
-  );
+  const visibleChildren = Children.toArray(childProps.children);
   if (visibleChildren.length !== 1 || !isValidElement(visibleChildren[0])) {
     return mergePassthroughOntoChild(child, passthrough, mergedRef, title);
   }
