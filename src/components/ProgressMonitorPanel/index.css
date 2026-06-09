@@ -4,15 +4,44 @@
   margin-top: 0;
 }
 
-/* 左栏运行面板：内容超出时在面板内滚动 */
+/* 左栏运行面板：标题栏固定，仅列表内容区按合计可见行数滚动 */
 .app-left-sidebar-monitor-panel {
+  --monitor-panel-row-height: 22px;
+  --monitor-panel-head-height: 24px;
+  --monitor-panel-max-visible-rows: 8;
   flex: 0 0 auto;
-  max-height: 210px;
+  max-height: calc(
+    var(--monitor-panel-head-height) + var(--monitor-panel-row-height) * var(--monitor-panel-max-visible-rows)
+  );
   min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.app-left-sidebar-monitor-panel .app-monitor-panel {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.app-left-sidebar-monitor-panel .app-monitor-panel__head {
+  flex-shrink: 0;
+  position: static;
+  top: auto;
+}
+
+.app-left-sidebar-monitor-panel .app-monitor-panel__compact-sidebar-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  max-height: calc(var(--monitor-panel-row-height) * var(--monitor-panel-max-visible-rows));
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
   touch-action: pan-y;
+  -webkit-overflow-scrolling: touch;
 }
 
 .app-left-sidebar-monitor-panel--hidden {
@@ -22,9 +51,6 @@
   pointer-events: none;
 }
 
-.app-left-sidebar-monitor-panel .app-monitor-panel {
-  max-height: none;
-}
 
 .app-left-sidebar-monitor-panel--section-collapsed {
   flex: 0 0 auto;
@@ -196,7 +222,10 @@
   margin-bottom: 0;
 }
 
-.app-left-sidebar-monitor-panel .app-monitor-panel__session-tasks-list {
+.app-left-sidebar-monitor-panel .app-monitor-panel__session-tasks-list,
+.app-left-sidebar-monitor-panel .app-monitor-panel__terminals-list,
+.app-left-sidebar-monitor-panel .app-monitor-panel__workflows-list,
+.app-left-sidebar-monitor-panel .app-monitor-panel__unified-list {
   --session-task-row-height: 20px;
   max-height: none;
   overflow-x: hidden;

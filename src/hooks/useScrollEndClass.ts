@@ -15,6 +15,8 @@ export type UseScrollEndClassOptions = {
   relieveFileTreePriority?: boolean;
   /** 工作区列表滚动：在侧栏让路基础上额外加强节流。 */
   relieveWorkspacePriority?: boolean;
+  /** 滚动根节点挂载条件变化时（如折叠展开）重新绑定监听。 */
+  rebindKey?: unknown;
 };
 
 /** 滚动时在根节点上挂 class，滚动结束 debounce 后移除（用于关闭 transition / 暂停动画）。 */
@@ -28,6 +30,7 @@ export function useScrollEndClass(
   const relieveSide = options?.relieveSidePanelPriority ?? false;
   const relieveFileTree = options?.relieveFileTreePriority ?? false;
   const relieveWorkspace = options?.relieveWorkspacePriority ?? false;
+  const rebindKey = options?.rebindKey;
   const classNamesKey =
     typeof scrollingClassName === "string" ? scrollingClassName : scrollingClassName.join("\n");
   useEffect(() => {
@@ -76,5 +79,15 @@ export function useScrollEndClass(
         el.classList.remove(className);
       }
     };
-  }, [classNamesKey, debounceMs, deferLive, relieveFileTree, relieveSide, relieveWorkspace, scrollRootRef, scrollingClassName]);
+  }, [
+    classNamesKey,
+    debounceMs,
+    deferLive,
+    rebindKey,
+    relieveFileTree,
+    relieveSide,
+    relieveWorkspace,
+    scrollRootRef,
+    scrollingClassName,
+  ]);
 }

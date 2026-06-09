@@ -24,6 +24,10 @@ import {
   normalizeComposerCommonPhrases,
   type ComposerCommonPhrase,
 } from "../constants/composerCommonPhrase";
+import {
+  MONITOR_PANEL_VISIBLE_ROWS_DEFAULT,
+  normalizeMonitorPanelVisibleRows,
+} from "../constants/monitorPanelLayout";
 import { normalizeChord } from "../utils/atMentionShortcutChord";
 import { RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK, RIGHT_PANEL_DEFAULT_COLLAPSED_KEY } from "../utils/rightPanelStorage";
 import { deleteAppSetting, getAppSetting, setAppSetting, setAppSettingJson } from "./appSettingsStore";
@@ -55,6 +59,8 @@ export const WISE_LEFT_SIDEBAR_HUB_QUICK_ENTRIES_CHANGED = "wise:left-sidebar-hu
 export const WISE_LEFT_SIDEBAR_MONITOR_PANEL_CHANGED = "wise:left-sidebar-monitor-panel-changed";
 
 export const WISE_MONITOR_PANEL_PLACEMENT_CHANGED = "wise:monitor-panel-placement-changed";
+
+export const WISE_MONITOR_PANEL_VISIBLE_ROWS_CHANGED = "wise:monitor-panel-visible-rows-changed";
 
 export const WISE_EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAYS_CHANGED =
   "wise:execution-environment-dispatch-history-days-changed";
@@ -102,6 +108,8 @@ export interface WiseDefaultConfigV1 {
   showLeftSidebarMonitorPanel: boolean;
   /** 运行面板默认栏位；默认左栏。 */
   monitorPanelPlacement: MonitorPanelPlacement;
+  /** 左栏运行面板内容区默认可见行数（终端 + 派发 + 工作流合计）。 */
+  monitorPanelVisibleRows: number;
   /** 左栏「任务派发」默认查询近 N 天历史；默认 1 天。 */
   executionEnvironmentDispatchHistoryDays: ExecutionEnvironmentDispatchHistoryDays;
   /** 主会话 @ 空查询打开时默认高亮的执行环境或终端。 */
@@ -137,6 +145,7 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   leftSidebarHubQuickEntries: [...DEFAULT_LEFT_SIDEBAR_HUB_QUICK_ENTRIES],
   showLeftSidebarMonitorPanel: true,
   monitorPanelPlacement: "left",
+  monitorPanelVisibleRows: MONITOR_PANEL_VISIBLE_ROWS_DEFAULT,
   executionEnvironmentDispatchHistoryDays: DEFAULT_EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAYS,
   atMentionDefaultTarget: DEFAULT_AT_MENTION_DEFAULT_TARGET,
   atMentionShortcutByTarget: {},
@@ -221,6 +230,10 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
       monitorPanelPlacement:
         normalizeMonitorPanelPlacement(parsed.monitorPanelPlacement) ??
         DEFAULT_CONFIG.monitorPanelPlacement,
+      monitorPanelVisibleRows:
+        parsed.monitorPanelVisibleRows === undefined
+          ? DEFAULT_CONFIG.monitorPanelVisibleRows
+          : normalizeMonitorPanelVisibleRows(parsed.monitorPanelVisibleRows),
       executionEnvironmentDispatchHistoryDays:
         parsed.executionEnvironmentDispatchHistoryDays === undefined
           ? DEFAULT_CONFIG.executionEnvironmentDispatchHistoryDays
@@ -377,6 +390,7 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     leftSidebarHubQuickEntries: [...DEFAULT_LEFT_SIDEBAR_HUB_QUICK_ENTRIES],
     showLeftSidebarMonitorPanel: DEFAULT_CONFIG.showLeftSidebarMonitorPanel,
     monitorPanelPlacement: DEFAULT_CONFIG.monitorPanelPlacement,
+    monitorPanelVisibleRows: DEFAULT_CONFIG.monitorPanelVisibleRows,
     executionEnvironmentDispatchHistoryDays: DEFAULT_CONFIG.executionEnvironmentDispatchHistoryDays,
     atMentionDefaultTarget: DEFAULT_CONFIG.atMentionDefaultTarget,
     atMentionShortcutByTarget: DEFAULT_CONFIG.atMentionShortcutByTarget,
@@ -413,6 +427,15 @@ function dispatchMonitorPanelPlacementChanged(placement: MonitorPanelPlacement):
   window.dispatchEvent(
     new CustomEvent(WISE_MONITOR_PANEL_PLACEMENT_CHANGED, {
       detail: { monitorPanelPlacement: placement },
+    }),
+  );
+}
+
+function dispatchMonitorPanelVisibleRowsChanged(visibleRows: number): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(WISE_MONITOR_PANEL_VISIBLE_ROWS_CHANGED, {
+      detail: { monitorPanelVisibleRows: visibleRows },
     }),
   );
 }
@@ -490,6 +513,7 @@ export async function saveWiseDefaultConfig(
       | "leftSidebarHubQuickEntries"
       | "showLeftSidebarMonitorPanel"
       | "monitorPanelPlacement"
+      | "monitorPanelVisibleRows"
       | "executionEnvironmentDispatchHistoryDays"
       | "atMentionDefaultTarget"
       | "atMentionShortcutByTarget"
@@ -523,6 +547,7 @@ export async function saveWiseDefaultConfig(
     showLeftSidebarMonitorPanel:
       patch.showLeftSidebarMonitorPanel ?? current.showLeftSidebarMonitorPanel,
     monitorPanelPlacement: patch.monitorPanelPlacement ?? current.monitorPanelPlacement,
+    monitorPanelVisibleRows: patch.monitorPanelVisibleRows ?? current.monitorPanelVisibleRows,
     executionEnvironmentDispatchHistoryDays:
       patch.executionEnvironmentDispatchHistoryDays !== undefined
         ? normalizeExecutionEnvironmentDispatchHistoryDays(patch.executionEnvironmentDispatchHistoryDays)
@@ -583,6 +608,9 @@ export async function saveWiseDefaultConfig(
   if (patch.monitorPanelPlacement !== undefined) {
     next.monitorPanelPlacement =
       normalizeMonitorPanelPlacement(patch.monitorPanelPlacement) ?? current.monitorPanelPlacement;
+  }
+  if (patch.monitorPanelVisibleRows !== undefined) {
+    next.monitorPanelVisibleRows = normalizeMonitorPanelVisibleRows(patch.monitorPanelVisibleRows);
   }
   if (patch.executionEnvironmentDispatchHistoryDays !== undefined) {
     next.executionEnvironmentDispatchHistoryDays = normalizeExecutionEnvironmentDispatchHistoryDays(
@@ -674,6 +702,12 @@ export async function saveWiseDefaultConfig(
     next.monitorPanelPlacement !== current.monitorPanelPlacement
   ) {
     dispatchMonitorPanelPlacementChanged(next.monitorPanelPlacement);
+  }
+  if (
+    patch.monitorPanelVisibleRows !== undefined &&
+    next.monitorPanelVisibleRows !== current.monitorPanelVisibleRows
+  ) {
+    dispatchMonitorPanelVisibleRowsChanged(next.monitorPanelVisibleRows);
   }
   if (
     patch.executionEnvironmentDispatchHistoryDays !== undefined &&
@@ -900,14 +934,25 @@ export async function saveMonitorPanelPlacementToStore(
   await saveWiseDefaultConfig({ monitorPanelPlacement: normalized });
 }
 
+export async function loadMonitorPanelVisibleRowsFromStore(): Promise<number> {
+  return (await loadWiseDefaultConfig()).monitorPanelVisibleRows;
+}
+
+export async function saveMonitorPanelVisibleRowsToStore(visibleRows: number): Promise<void> {
+  const normalized = normalizeMonitorPanelVisibleRows(visibleRows);
+  await saveWiseDefaultConfig({ monitorPanelVisibleRows: normalized });
+}
+
 export async function loadMonitorPanelDefaultFromStore(): Promise<{
   visible: boolean;
   placement: MonitorPanelPlacement;
+  visibleRows: number;
 }> {
   const config = await loadWiseDefaultConfig();
   return {
     visible: config.showLeftSidebarMonitorPanel,
     placement: config.monitorPanelPlacement,
+    visibleRows: config.monitorPanelVisibleRows,
   };
 }
 

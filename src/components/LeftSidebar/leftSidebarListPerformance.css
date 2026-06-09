@@ -1,7 +1,7 @@
 /* 左栏列表：快速划过工作区/终端/文件树时减少合成与 transition:all 开销 */
 
 .app-left-sidebar .app-repository-list,
-.app-left-sidebar-monitor-panel,
+.app-left-sidebar-monitor-panel .app-monitor-panel__compact-sidebar-body,
 .git-files-explorer-scroll-region,
 .app-left-sidebar .git-panel-multi-body {
   overscroll-behavior: contain;

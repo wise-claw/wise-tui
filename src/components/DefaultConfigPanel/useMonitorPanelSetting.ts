@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState } from "react";
 import {
   loadMonitorPanelDefaultFromStore,
   saveMonitorPanelPlacementToStore,
+  saveMonitorPanelVisibleRowsToStore,
   saveLeftSidebarMonitorPanelVisibleToStore,
   type MonitorPanelPlacement,
 } from "../../services/wiseDefaultConfigStore";
@@ -10,6 +11,7 @@ import {
 export function useMonitorPanelSetting() {
   const [visible, setVisible] = useState(true);
   const [placement, setPlacement] = useState<MonitorPanelPlacement>("left");
+  const [visibleRows, setVisibleRows] = useState(8);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
@@ -19,6 +21,7 @@ export function useMonitorPanelSetting() {
       const loaded = await loadMonitorPanelDefaultFromStore();
       setVisible(loaded.visible);
       setPlacement(loaded.placement);
+      setVisibleRows(loaded.visibleRows);
     } finally {
       setLoading(false);
     }
@@ -62,5 +65,32 @@ export function useMonitorPanelSetting() {
     [placement],
   );
 
-  return { visible, placement, loading, saving, refresh, saveVisible, savePlacement };
+  const saveVisibleRows = useCallback(
+    async (next: number) => {
+      if (next === visibleRows) return;
+      setSaving(true);
+      try {
+        await saveMonitorPanelVisibleRowsToStore(next);
+        setVisibleRows(next);
+      } catch (err) {
+        message.error(`保存失败：${err instanceof Error ? err.message : String(err)}`);
+        throw err;
+      } finally {
+        setSaving(false);
+      }
+    },
+    [visibleRows],
+  );
+
+  return {
+    visible,
+    placement,
+    visibleRows,
+    loading,
+    saving,
+    refresh,
+    saveVisible,
+    savePlacement,
+    saveVisibleRows,
+  };
 }

@@ -1,7 +1,12 @@
-import { memo, useRef } from "react";
+import { memo, useRef, type CSSProperties } from "react";
 import type { LeftSidebarProps } from "./types";
 import type { ClaudeSession } from "../../types";
+import {
+  MONITOR_PANEL_HEAD_HEIGHT_PX,
+  MONITOR_PANEL_ROW_HEIGHT_PX,
+} from "../../constants/monitorPanelLayout";
 import { LEFT_SIDEBAR_SCROLLING_CLASS } from "../../constants/leftSidebarScrollPerformance";
+import { useMonitorPanelVisibleRows } from "../../hooks/useMonitorPanelVisibleRows";
 import { useScrollEndClass } from "../../hooks/useScrollEndClass";
 import { ProgressMonitorPanel } from "../ProgressMonitorPanel";
 
@@ -153,23 +158,32 @@ export const LeftSidebarMonitorPanelSlot = memo(function LeftSidebarMonitorPanel
   transcriptSessionsFingerprint: _transcriptSessionsFingerprint,
 }: LeftSidebarMonitorPanelSlotProps) {
   const scrollRootRef = useRef<HTMLDivElement>(null);
+  const monitorPanelVisibleRows = useMonitorPanelVisibleRows();
   useScrollEndClass(scrollRootRef, LEFT_SIDEBAR_SCROLLING_CLASS, 220, {
     relieveSidePanelPriority: true,
+    rebindKey: monitorPanelSectionCollapsed,
   });
 
   return (
     <div
-      ref={scrollRootRef}
       className={
         "app-left-sidebar-monitor-panel" +
         (monitorPanelSectionCollapsed ? " app-left-sidebar-monitor-panel--section-collapsed" : "") +
         (!visible ? " app-left-sidebar-monitor-panel--hidden" : "")
+      }
+      style={
+        {
+          "--monitor-panel-row-height": `${MONITOR_PANEL_ROW_HEIGHT_PX}px`,
+          "--monitor-panel-head-height": `${MONITOR_PANEL_HEAD_HEIGHT_PX}px`,
+          "--monitor-panel-max-visible-rows": monitorPanelVisibleRows,
+        } as CSSProperties
       }
       hidden={!visible ? true : undefined}
       aria-hidden={!visible ? true : undefined}
     >
       <ProgressMonitorPanel
         compactSidebarScrollRootRef={scrollRootRef}
+        monitorPanelVisibleRows={monitorPanelVisibleRows}
         sectionCollapsed={monitorPanelSectionCollapsed}
         onSectionCollapsedChange={onMonitorPanelSectionCollapsedChange}
         sessions={monitorPanelSessions}

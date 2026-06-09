@@ -9,6 +9,7 @@ import {
   SESSION_EXECUTION_ENGINE_LABELS,
   SESSION_EXECUTION_ENGINES,
 } from "../../constants/sessionExecutionEngine";
+import { MONITOR_PANEL_VISIBLE_ROWS_OPTIONS } from "../../constants/monitorPanelLayout";
 import { LEFT_SIDEBAR_HUB_QUICK_ENTRY_LABELS } from "../../constants/leftSidebarHubQuickEntries";
 import type { LeftSidebarHubQuickEntryId } from "../../constants/leftSidebarHubQuickEntries";
 import { useClaudeConnectionModeSetting } from "../ClaudeConfigDirPanel/useClaudeConnectionModeSetting";
@@ -153,38 +154,61 @@ export function DefaultConfigPanel() {
           </div>
         </div>
 
-        <div className="app-default-config-row" aria-label="运行面板">
+        <div className="app-default-config-row app-default-config-row--monitor-panel" aria-label="运行面板">
           <div className="app-default-config-row__main">
             <span className="app-default-config-row__title">运行面板</span>
             <span className="app-default-config-row__hint">
-              控制终端、工作流与并发运行态区域是否显示，以及默认展示在左栏或右栏
+              终端、派发与工作流在左栏合并列表展示；按合计可见行数限制高度，超出后整体滚动
             </span>
           </div>
-          <div className="app-default-config-row__control app-default-config-row__control--monitor">
-            <DefaultConfigOptionPick<"visible" | "hidden">
-              aria-label="运行面板默认显示"
-              disabled={monitorPanel.loading || monitorPanel.saving}
-              value={monitorPanel.visible ? "visible" : "hidden"}
-              options={[
-                { label: "显示", value: "visible" },
-                { label: "隐藏", value: "hidden" },
-              ]}
-              onChange={(value) => {
-                void monitorPanel.saveVisible(value === "visible");
-              }}
-            />
-            <DefaultConfigOptionPick<"left" | "right">
-              aria-label="运行面板默认栏位"
-              disabled={monitorPanel.loading || monitorPanel.saving || !monitorPanel.visible}
-              value={monitorPanel.placement}
-              options={[
-                { label: "左栏", value: "left" },
-                { label: "右栏", value: "right" },
-              ]}
-              onChange={(value) => {
-                void monitorPanel.savePlacement(value);
-              }}
-            />
+          <div className="app-default-config-monitor-panel__controls">
+            <div className="app-default-config-monitor-panel__field">
+              <span className="app-default-config-monitor-panel__field-label">显示</span>
+              <DefaultConfigOptionPick<"visible" | "hidden">
+                aria-label="运行面板默认显示"
+                disabled={monitorPanel.loading || monitorPanel.saving}
+                value={monitorPanel.visible ? "visible" : "hidden"}
+                options={[
+                  { label: "显示", value: "visible" },
+                  { label: "隐藏", value: "hidden" },
+                ]}
+                onChange={(value) => {
+                  void monitorPanel.saveVisible(value === "visible");
+                }}
+              />
+            </div>
+            <div className="app-default-config-monitor-panel__field">
+              <span className="app-default-config-monitor-panel__field-label">栏位</span>
+              <DefaultConfigOptionPick<"left" | "right">
+                aria-label="运行面板默认栏位"
+                disabled={monitorPanel.loading || monitorPanel.saving || !monitorPanel.visible}
+                value={monitorPanel.placement}
+                options={[
+                  { label: "左栏", value: "left" },
+                  { label: "右栏", value: "right" },
+                ]}
+                onChange={(value) => {
+                  void monitorPanel.savePlacement(value);
+                }}
+              />
+            </div>
+            <div className="app-default-config-monitor-panel__field app-default-config-monitor-panel__field--rows">
+              <span className="app-default-config-monitor-panel__field-label">可见行数</span>
+              <Select
+                size="small"
+                className="app-default-config-monitor-panel__rows-select"
+                aria-label="运行面板可见行数"
+                disabled={monitorPanel.loading || monitorPanel.saving || !monitorPanel.visible}
+                value={monitorPanel.visibleRows}
+                options={MONITOR_PANEL_VISIBLE_ROWS_OPTIONS.map((rows) => ({
+                  value: rows,
+                  label: `${rows} 行`,
+                }))}
+                onChange={(value) => {
+                  void monitorPanel.saveVisibleRows(value);
+                }}
+              />
+            </div>
           </div>
         </div>
 

@@ -14,6 +14,7 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
+  type ReactNode,
   type RefObject,
 } from "react";
 import type {
@@ -109,6 +110,25 @@ function RepositoryMiniIcon() {
 
 function MonitorItemTypeTag({ label }: { label: string }) {
   return <span className="app-monitor-panel__item-type-tag">{label}</span>;
+}
+
+function MonitorPanelCompactScrollBody({
+  enabled,
+  scrollRef,
+  children,
+}: {
+  enabled: boolean;
+  scrollRef?: RefObject<HTMLDivElement | null>;
+  children: ReactNode;
+}) {
+  if (enabled && scrollRef) {
+    return (
+      <div ref={scrollRef} className="app-monitor-panel__compact-sidebar-body">
+        {children}
+      </div>
+    );
+  }
+  return <>{children}</>;
 }
 
 function MonitorPanelHeadConfigActions({
@@ -209,13 +229,16 @@ interface Props {
   repositories?: Repository[];
   sectionCollapsed?: boolean;
   onSectionCollapsedChange?: (collapsed: boolean) => void;
-  /** 左栏运行面板外层滚动容器；项较多时合并终端+派发为虚拟列表。 */
+  /** 左栏运行面板内容区滚动容器；终端 + 派发 + 工作流合并列表，超出配置行数后整体滚动。 */
   compactSidebarScrollRootRef?: RefObject<HTMLDivElement | null>;
+  /** 左栏内容区可见行数（由默认配置注入，高度由外层 CSS 变量控制）。 */
+  monitorPanelVisibleRows?: number;
 }
 
 type MonitorCompactFlatRow =
   | { kind: "terminal"; item: EmployeeMonitorItem }
-  | { kind: "dispatch"; item: SessionConversationTaskItem };
+  | { kind: "dispatch"; item: SessionConversationTaskItem }
+  | { kind: "workflow"; item: TeamMonitorItem };
 
 interface TeamHistorySessionRow {
   session: ClaudeSession;
@@ -1079,6 +1102,7 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
   sectionCollapsed = false,
   onSectionCollapsedChange,
   compactSidebarScrollRootRef,
+  monitorPanelVisibleRows: _monitorPanelVisibleRows,
 }: Props) {
   const isCompactSidebarPanel = compactSidebarScrollRootRef != null;
   const { running: agentAssignments } = useAgentAssignments({
@@ -1444,6 +1468,7 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
 
   const compactListsAnchorRef = useRef<HTMLDivElement>(null);
   const compactFlatRows = useMemo((): MonitorCompactFlatRow[] => {
+    if (!isCompactSidebarPanel) return [];
     const rows: MonitorCompactFlatRow[] = [];
     for (const item of sortedEmployeeItems) {
       rows.push({ kind: "terminal", item });
@@ -1451,11 +1476,15 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
     for (const item of executionEnvironmentDispatchTaskItems) {
       rows.push({ kind: "dispatch", item });
     }
+    for (const item of teamItems) {
+      rows.push({ kind: "workflow", item });
+    }
     return rows;
-  }, [executionEnvironmentDispatchTaskItems, sortedEmployeeItems]);
+  }, [executionEnvironmentDispatchTaskItems, isCompactSidebarPanel, sortedEmployeeItems, teamItems]);
   const useCompactVirtual =
-    compactSidebarScrollRootRef != null &&
-    compactFlatRows.length >= MONITOR_VIRTUALIZE_MIN_ROWS;
+    isCompactSidebarPanel && compactFlatRows.length >= MONITOR_VIRTUALIZE_MIN_ROWS;
+  const useCompactUnifiedList =
+    isCompactSidebarPanel && compactFlatRows.length > 0 && !useCompactVirtual;
 
   const renderDispatchTaskRow = useCallback(
     (item: SessionConversationTaskItem) => (
@@ -1558,17 +1587,149 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
     ],
   );
 
+  const renderWorkflowListItem = useCallback(
+    (item: TeamMonitorItem) => {
+      const teamPopoverOpen = teamHistoryPopoverId === item.workflowId;
+      const keyword = teamPopoverOpen ? normalizeSearchKeyword(teamHistorySearch) : "";
+      const matchedTeamSessions = teamPopoverOpen
+        ? (teamHistorySessionsByWorkflowId.get(item.workflowId) ?? [])
+            .filter((row) => {
+              if (teamHistoryEmployeeFilter !== "all" && row.employeeName !== teamHistoryEmployeeFilter) {
+                return false;
+              }
+              return matchSessionByKeyword(row.session, keyword, row.employeeName);
+            })
+            .slice(0, 30)
+        : [];
+      return (
+        <div
+          key={item.workflowId}
+          className={`app-monitor-panel__item ${activeTarget?.type === "team" && activeTarget.workflowId === item.workflowId ? "app-monitor-panel__item--active" : ""}`}
+          onClick={() => onOpenTeamDetail?.(item.workflowId)}
+        >
+          <div className="app-monitor-panel__item-row">
+            <span className="app-monitor-panel__item-name-wrap">
+              <MonitorItemTypeTag label="工作流" />
+              <span
+                className="app-monitor-panel__item-name"
+                title={memberTooltipTitle(item.memberNames) || item.workflowName}
+              >
+                {item.workflowName}
+              </span>
+              {statusText(item.status)}
+            </span>
+            <span className="app-monitor-panel__item-actions">
+              {item.status === "in_progress" ? (
+                <button
+                  type="button"
+                  className="app-monitor-panel__item-action-icon-btn app-monitor-panel__item-action-icon-btn--stop"
+                  title="结束工作流"
+                  aria-label="结束工作流"
+                  onClick={(event) => {
+                    event.stopPropagation();
+                    onStopTeam?.(item.workflowId);
+                  }}
+                >
+                  <StopOutlined />
+                </button>
+              ) : null}
+              <MonitorLazyClickPopover
+                open={teamPopoverOpen}
+                placement="bottomRight"
+                overlayClassName="app-monitor-panel__history-popover"
+                onOpenChange={(nextOpen) => {
+                  if (nextOpen) {
+                    setTeamHistoryPopoverId(item.workflowId);
+                    setTeamHistorySearch("");
+                    setTeamHistoryEmployeeFilter("all");
+                    return;
+                  }
+                  setTeamHistoryPopoverId((prev) => (prev === item.workflowId ? null : prev));
+                  setTeamHistorySearch("");
+                  setTeamHistoryEmployeeFilter("all");
+                }}
+                content={
+                  <HistorySessionPopoverContent
+                    searchValue={teamHistorySearch}
+                    onSearchChange={setTeamHistorySearch}
+                    employeeFilterValue={teamHistoryEmployeeFilter}
+                    onEmployeeFilterChange={setTeamHistoryEmployeeFilter}
+                    employeeOptions={item.memberNames ?? []}
+                    rows={matchedTeamSessions}
+                    listTitle={`${item.workflowName} · 历史会话`}
+                    memberFilterAllLabel="全部终端"
+                    emptyDescription={
+                      teamHistorySearch.trim() || teamHistoryEmployeeFilter !== "all"
+                        ? "未找到匹配会话"
+                        : "该工作流暂无历史会话"
+                    }
+                    onSelectSession={(sessionId) => openHistoryMessagesDrawer(sessionId)}
+                    onRestoreSession={
+                      onRestoreHistorySessionAsMain
+                        ? (sessionId) => {
+                            void Promise.resolve(onRestoreHistorySessionAsMain(sessionId));
+                          }
+                        : undefined
+                    }
+                    canRestoreSession={canRestoreHistorySession}
+                  />
+                }
+                renderTrigger={({ requestOpen }) => (
+                  <button
+                    type="button"
+                    className="app-monitor-panel__item-action-icon-btn"
+                    title="历史会话"
+                    aria-label="历史会话"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      requestOpen();
+                    }}
+                  >
+                    <HistoryOutlined />
+                  </button>
+                )}
+              />
+              {taskResultTag(item.latestTaskStatus)}
+            </span>
+          </div>
+          <div className="app-monitor-panel__item-meta-grid">
+            <span className="app-monitor-panel__item-sub">{item.progressText}</span>
+            {item.omcProgressText ? (
+              <span className="app-monitor-panel__item-sub">{item.omcProgressText}</span>
+            ) : null}
+          </div>
+        </div>
+      );
+    },
+    [
+      activeTarget,
+      canRestoreHistorySession,
+      onOpenTeamDetail,
+      onRestoreHistorySessionAsMain,
+      onStopTeam,
+      openHistoryMessagesDrawer,
+      teamHistoryEmployeeFilter,
+      teamHistoryPopoverId,
+      teamHistorySearch,
+      teamHistorySessionsByWorkflowId,
+    ],
+  );
+
   const compactVirtualRenderRef = useRef({
     renderTerminal: renderEmployeeTerminalListItem,
     renderDispatch: renderDispatchTaskRow,
+    renderWorkflow: renderWorkflowListItem,
   });
   compactVirtualRenderRef.current = {
     renderTerminal: renderEmployeeTerminalListItem,
     renderDispatch: renderDispatchTaskRow,
+    renderWorkflow: renderWorkflowListItem,
   };
   const renderCompactVirtualRow = useCallback((row: MonitorCompactFlatRow) => {
-    const { renderTerminal, renderDispatch } = compactVirtualRenderRef.current;
-    return row.kind === "terminal" ? renderTerminal(row.item) : renderDispatch(row.item);
+    const { renderTerminal, renderDispatch, renderWorkflow } = compactVirtualRenderRef.current;
+    if (row.kind === "terminal") return renderTerminal(row.item);
+    if (row.kind === "dispatch") return renderDispatch(row.item);
+    return renderWorkflow(row.item);
   }, []);
 
   const shouldShowSessionConversationTasks = showSessionConversationTasks;
@@ -1659,7 +1820,10 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
       </div>
 
       {!sectionCollapsed ? (
-      <>
+      <MonitorPanelCompactScrollBody
+        enabled={isCompactSidebarPanel}
+        scrollRef={compactSidebarScrollRootRef}
+      >
       {!panelHasListContent ? (
         <div className="app-monitor-panel__empty app-monitor-panel__empty--with-action">
           <span>暂无终端</span>
@@ -1678,21 +1842,43 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
       {useCompactVirtual ? (
         <div
           ref={compactListsAnchorRef}
-          className="app-monitor-panel__section app-monitor-panel__section--terminals app-monitor-panel__section--compact-virtual"
+          className="app-monitor-panel__section app-monitor-panel__section--unified app-monitor-panel__section--compact-virtual"
         >
           <MonitorPanelVirtualRows
             scrollRootRef={compactSidebarScrollRootRef!}
             anchorRef={compactListsAnchorRef}
             rows={compactFlatRows}
-            getRowKey={(row) =>
-              row.kind === "terminal" ? `t:${row.item.employeeId}` : `d:${row.item.key}`
-            }
+            getRowKey={(row) => {
+              if (row.kind === "terminal") return `t:${row.item.employeeId}`;
+              if (row.kind === "dispatch") return `d:${row.item.key}`;
+              return `w:${row.item.workflowId}`;
+            }}
             renderRow={renderCompactVirtualRow}
           />
+          {shouldShowSessionConversationTasks && executionEnvironmentDispatchTaskItems.length === 0 ? (
+            <div className="app-monitor-panel__session-tasks-empty-hint">
+              近 {executionEnvironmentDispatchHistoryDays ?? 1} 天暂无派发记录
+            </div>
+          ) : null}
         </div>
       ) : null}
 
-      {!useCompactVirtual && employeeItems.length > 0 ? (
+      {useCompactUnifiedList ? (
+        <div className="app-monitor-panel__section app-monitor-panel__section--unified">
+          <div className="app-monitor-panel__unified-list" aria-label="运行面板列表">
+            {sortedEmployeeItems.map((item) => renderEmployeeTerminalListItem(item))}
+            {executionEnvironmentDispatchTaskItems.map((item) => renderDispatchTaskRow(item))}
+            {teamItems.map((item) => renderWorkflowListItem(item))}
+          </div>
+          {shouldShowSessionConversationTasks && executionEnvironmentDispatchTaskItems.length === 0 ? (
+            <div className="app-monitor-panel__session-tasks-empty-hint">
+              近 {executionEnvironmentDispatchHistoryDays ?? 1} 天暂无派发记录
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+
+      {!isCompactSidebarPanel && employeeItems.length > 0 ? (
         <div className="app-monitor-panel__section app-monitor-panel__section--terminals">
           <div className="app-monitor-panel__terminals-list">
             {sortedEmployeeItems.map((item) => renderEmployeeTerminalListItem(item))}
@@ -1700,7 +1886,7 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
         </div>
       ) : null}
 
-      {!useCompactVirtual && shouldShowSessionConversationTasks ? (
+      {!isCompactSidebarPanel && shouldShowSessionConversationTasks ? (
         <div
           className={`app-monitor-panel__section app-monitor-panel__section--session-tasks${
             executionEnvironmentDispatchTaskItems.length === 0
@@ -1715,12 +1901,6 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
           ) : (
             <div className="app-monitor-panel__session-tasks-empty-hint">近 {executionEnvironmentDispatchHistoryDays ?? 1} 天暂无派发记录</div>
           )}
-        </div>
-      ) : null}
-
-      {useCompactVirtual && shouldShowSessionConversationTasks && executionEnvironmentDispatchTaskItems.length === 0 ? (
-        <div className="app-monitor-panel__section app-monitor-panel__section--session-tasks app-monitor-panel__section--session-tasks-empty">
-          <div className="app-monitor-panel__session-tasks-empty-hint">近 {executionEnvironmentDispatchHistoryDays ?? 1} 天暂无派发记录</div>
         </div>
       ) : null}
 
@@ -1775,126 +1955,14 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
         </div>
       ) : null}
 
-      {teamItems.length > 0 ? (
+      {!isCompactSidebarPanel && teamItems.length > 0 ? (
         <div className="app-monitor-panel__section app-monitor-panel__section--workflows">
           <div className="app-monitor-panel__workflows-list">
-            {teamItems.map((item) => {
-              const teamPopoverOpen = teamHistoryPopoverId === item.workflowId;
-              const keyword = teamPopoverOpen ? normalizeSearchKeyword(teamHistorySearch) : "";
-              const matchedTeamSessions = teamPopoverOpen
-                ? (teamHistorySessionsByWorkflowId.get(item.workflowId) ?? [])
-                    .filter((row) => {
-                      if (teamHistoryEmployeeFilter !== "all" && row.employeeName !== teamHistoryEmployeeFilter) {
-                        return false;
-                      }
-                      return matchSessionByKeyword(row.session, keyword, row.employeeName);
-                    })
-                    .slice(0, 30)
-                : [];
-              return (
-                <div
-                  key={item.workflowId}
-                  className={`app-monitor-panel__item ${activeTarget?.type === "team" && activeTarget.workflowId === item.workflowId ? "app-monitor-panel__item--active" : ""}`}
-                  onClick={() => onOpenTeamDetail?.(item.workflowId)}
-                >
-                  <div className="app-monitor-panel__item-row">
-                    <span className="app-monitor-panel__item-name-wrap">
-                      <MonitorItemTypeTag label="工作流" />
-                      <span
-                        className="app-monitor-panel__item-name"
-                        title={memberTooltipTitle(item.memberNames) || item.workflowName}
-                      >
-                        {item.workflowName}
-                      </span>
-                      {statusText(item.status)}
-                    </span>
-                    <span className="app-monitor-panel__item-actions">
-                      {item.status === "in_progress" ? (
-                        <button
-                          type="button"
-                          className="app-monitor-panel__item-action-icon-btn app-monitor-panel__item-action-icon-btn--stop"
-                          title="结束工作流"
-                          aria-label="结束工作流"
-                          onClick={(event) => {
-                            event.stopPropagation();
-                            onStopTeam?.(item.workflowId);
-                          }}
-                        >
-                          <StopOutlined />
-                        </button>
-                      ) : null}
-                      <MonitorLazyClickPopover
-                        open={teamPopoverOpen}
-                        placement="bottomRight"
-                        overlayClassName="app-monitor-panel__history-popover"
-                        onOpenChange={(nextOpen) => {
-                          if (nextOpen) {
-                            setTeamHistoryPopoverId(item.workflowId);
-                            setTeamHistorySearch("");
-                            setTeamHistoryEmployeeFilter("all");
-                            return;
-                          }
-                          setTeamHistoryPopoverId((prev) => (prev === item.workflowId ? null : prev));
-                          setTeamHistorySearch("");
-                          setTeamHistoryEmployeeFilter("all");
-                        }}
-                        content={
-                          <HistorySessionPopoverContent
-                            searchValue={teamHistorySearch}
-                            onSearchChange={setTeamHistorySearch}
-                            employeeFilterValue={teamHistoryEmployeeFilter}
-                            onEmployeeFilterChange={setTeamHistoryEmployeeFilter}
-                            employeeOptions={item.memberNames ?? []}
-                            rows={matchedTeamSessions}
-                            listTitle={`${item.workflowName} · 历史会话`}
-                            memberFilterAllLabel="全部终端"
-                            emptyDescription={
-                              teamHistorySearch.trim() || teamHistoryEmployeeFilter !== "all"
-                                ? "未找到匹配会话"
-                                : "该工作流暂无历史会话"
-                            }
-                            onSelectSession={(sessionId) => openHistoryMessagesDrawer(sessionId)}
-                            onRestoreSession={
-                              onRestoreHistorySessionAsMain
-                                ? (sessionId) => {
-                                    void Promise.resolve(onRestoreHistorySessionAsMain(sessionId));
-                                  }
-                                : undefined
-                            }
-                            canRestoreSession={canRestoreHistorySession}
-                          />
-                        }
-                        renderTrigger={({ requestOpen }) => (
-                          <button
-                            type="button"
-                            className="app-monitor-panel__item-action-icon-btn"
-                            title="历史会话"
-                            aria-label="历史会话"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              requestOpen();
-                            }}
-                          >
-                            <HistoryOutlined />
-                          </button>
-                        )}
-                      />
-                      {taskResultTag(item.latestTaskStatus)}
-                    </span>
-                  </div>
-                  <div className="app-monitor-panel__item-meta-grid">
-                    <span className="app-monitor-panel__item-sub">{item.progressText}</span>
-                    {item.omcProgressText ? (
-                      <span className="app-monitor-panel__item-sub">{item.omcProgressText}</span>
-                    ) : null}
-                  </div>
-                </div>
-              );
-            })}
+            {teamItems.map((item) => renderWorkflowListItem(item))}
           </div>
         </div>
       ) : null}
-      </>
+      </MonitorPanelCompactScrollBody>
       ) : null}
 
       {monitorDrawers}
