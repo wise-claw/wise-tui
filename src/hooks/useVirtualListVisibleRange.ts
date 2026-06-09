@@ -85,14 +85,15 @@ export function useVirtualListVisibleRange({
       });
     };
 
-    el.addEventListener("scroll", () => scheduleUpdate(false), { passive: true });
+    const onScroll = () => scheduleUpdate(false);
+    el.addEventListener("scroll", onScroll, { passive: true });
     const ro =
       typeof ResizeObserver !== "undefined" ? new ResizeObserver(() => scheduleUpdate(true)) : null;
     ro?.observe(el);
 
     return () => {
       ro?.disconnect();
-      el.removeEventListener("scroll", scheduleUpdate);
+      el.removeEventListener("scroll", onScroll);
       if (rafRef.current) cancelAnimationFrame(rafRef.current);
       rafRef.current = 0;
       if (trailingTimerRef.current) {

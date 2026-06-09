@@ -1,5 +1,5 @@
 import type { ClaudeSession, ProjectItem, Repository } from "../../types";
-import { Dropdown, message, Popover, Spin, Switch, Tooltip, type TooltipProps } from "antd";
+import { Dropdown, message, Popover, Spin, Switch, Tooltip } from "antd";
 import { lazy, Suspense, memo, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from "react";
 import { useWiseTopbarChromeVisibility } from "../../hooks/useWiseTopbarChromeVisibility";
 import { RemoteEntryTopbarStrip } from "../RemoteEntryTopbarStrip";

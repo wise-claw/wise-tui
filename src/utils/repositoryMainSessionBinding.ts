@@ -104,7 +104,7 @@ export function resolveMainOwnerAgentNameForRepositoryPath(
 /** 绑定值可能是 Wise 标签 `id`，也可能是迁移后的 Claude `claudeSessionId`。 */
 export function resolveSessionFromBindingValue(
   bound: string,
-  sessions: ClaudeSession[],
+  sessions: readonly ClaudeSession[],
 ): ClaudeSession | null {
   const v = bound.trim();
   if (!v) {
@@ -118,7 +118,7 @@ export function resolveSessionFromBindingValue(
 export function resolveBoundMainSessionId(
   repositoryPath: string,
   bindings: Record<string, string>,
-  sessions: ClaudeSession[],
+  sessions: readonly ClaudeSession[],
   mainOwnerAgentName?: string | null,
 ): string | null {
   const key = normalizeRepositoryPathKey(repositoryPath);
@@ -139,7 +139,7 @@ export function resolveBoundMainSessionId(
 export function isSessionBoundAsRepositoryMain(
   session: ClaudeSession,
   bindings: Record<string, string>,
-  sessions: ClaudeSession[],
+  sessions: readonly ClaudeSession[],
   repositories: Repository[],
 ): boolean {
   const path = session.repositoryPath?.trim();
@@ -155,7 +155,7 @@ export function resolveRepositoryByClaudeSessionId(params: {
   claudeSessionId: string;
   repositories: Repository[];
   bindings: Record<string, string>;
-  sessions: ClaudeSession[];
+  sessions: readonly ClaudeSession[];
 }): Repository | null {
   const sid = params.claudeSessionId.trim();
   if (!sid) {
@@ -201,7 +201,7 @@ export function resolveRepositoryByClaudeSessionId(params: {
 export function resolveRepositoryMainSessionId(
   repositoryPath: string,
   bindings: Record<string, string>,
-  sessions: ClaudeSession[],
+  sessions: readonly ClaudeSession[],
   mainOwnerAgentName?: string | null,
 ): string | null {
   const direct = resolveBoundMainSessionId(repositoryPath, bindings, sessions, mainOwnerAgentName);
@@ -239,7 +239,7 @@ export function resolveRepositoryForSession(params: {
   session: ClaudeSession;
   repositories: Repository[];
   bindings: Record<string, string>;
-  sessions: ClaudeSession[];
+  sessions: readonly ClaudeSession[];
   preferredRepositoryId?: number | null;
 }): Repository | null {
   const { session, repositories, bindings, sessions, preferredRepositoryId } = params;
@@ -272,7 +272,7 @@ export function sessionMatchesRepository(params: {
   session: ClaudeSession;
   repository: Repository;
   bindings: Record<string, string>;
-  sessions: ClaudeSession[];
+  sessions: readonly ClaudeSession[];
 }): boolean {
   const { session, repository, bindings, sessions } = params;
   const resolved = resolveRepositoryForSession({

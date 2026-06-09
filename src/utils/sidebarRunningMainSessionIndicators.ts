@@ -29,7 +29,7 @@ function isMainSessionConsideredRunning(
 
 function isBoundMainSessionRunning(
   sessionId: string | null,
-  sessions: ClaudeSession[],
+  sessions: readonly ClaudeSession[],
   claudeProcesses: ReadonlyArray<Pick<ClaudeHostProcess, "sessionId" | "pid" | "projectPath">>,
   registryRunningClaudeSessionIds: ReadonlySet<string>,
 ): boolean {
@@ -51,7 +51,7 @@ function isAlternateRepositoryMainSessionRunning(
   repositoryPathKey: string,
   mainOwnerAgentName: string | null,
   boundSessionId: string,
-  sessions: ClaudeSession[],
+  sessions: readonly ClaudeSession[],
   claudeProcesses: ReadonlyArray<Pick<ClaudeHostProcess, "sessionId" | "pid" | "projectPath">>,
   registryRunningClaudeSessionIds: ReadonlySet<string>,
 ): boolean {
@@ -72,7 +72,7 @@ function isAlternateRepositoryMainSessionRunning(
 export function buildSidebarRunningMainSessionMaps(params: {
   projects: ReadonlyArray<{ id: string }>;
   repositories: Repository[];
-  sessions: ClaudeSession[];
+  sessions: readonly ClaudeSession[];
   bindings: Record<string, string>;
   claudeProcesses: ReadonlyArray<Pick<ClaudeHostProcess, "sessionId" | "pid" | "projectPath">>;
   registryRunningClaudeSessionIds?: ReadonlySet<string>;

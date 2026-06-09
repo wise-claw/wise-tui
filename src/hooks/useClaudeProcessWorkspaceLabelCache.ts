@@ -27,7 +27,7 @@ export interface ClaudeProcessWorkspaceLabelCacheHandle {
     projects: ReadonlyArray<ProjectItem>;
     repositories: Repository[];
     bindings: Record<string, string>;
-    sessions: ClaudeSession[];
+    sessions: readonly ClaudeSession[];
     claudeProcesses: ReadonlyArray<ClaudeHostProcess>;
   }) => void;
 }
@@ -98,7 +98,7 @@ export function useClaudeProcessWorkspaceLabelCache(): ClaudeProcessWorkspaceLab
       projects: ReadonlyArray<ProjectItem>;
       repositories: Repository[];
       bindings: Record<string, string>;
-      sessions: ClaudeSession[];
+      sessions: readonly ClaudeSession[];
       claudeProcesses: ReadonlyArray<ClaudeHostProcess>;
     }) => {
       const dirty = syncClaudeProcessLabelCacheFromRuntime(stateRef.current, params);

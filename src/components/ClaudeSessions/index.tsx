@@ -582,7 +582,7 @@ function ClaudeSessionsShell({
         <ClaudeSessionsChatHost
           incomingSessions={incomingSessions}
           sessions={sessions}
-          activeSession={activeSession}
+          activeSession={activeSession ?? null}
           activeSessionId={activeSessionId}
           activeRepository={activeRepository}
           repositories={repositories}

@@ -51,7 +51,10 @@ import {
 } from "../contexts/WorkspaceMemosContext";
 import { useRepositoryFileEditor } from "../hooks/useRepositoryFileEditor";
 import { ErrorBoundary } from "./ErrorBoundary";
-import { areLeftSidebarPropsEqual } from "./LeftSidebar/leftSidebarPropsEqual";
+import {
+  areLeftSidebarContentPropsEqual,
+  areLeftSidebarPropsEqual,
+} from "./LeftSidebar/leftSidebarPropsEqual";
 import { WorkspaceViewportLoading } from "./WorkspaceViewportLoading";
 /** 与 AppWorkspaceLayout 求值并行预拉取首屏关键子 chunk。 */
 const leftSidebarChunk = import("./LeftSidebar");
@@ -230,7 +233,7 @@ const ConnectedLeftSidebar = memo(function ConnectedLeftSidebar({
   prev.dark === next.dark &&
   prev.parked === next.parked &&
   prev.siderWidth === next.siderWidth &&
-  areLeftSidebarPropsEqual(prev.leftSidebarProps, next.leftSidebarProps));
+  areLeftSidebarContentPropsEqual(prev.leftSidebarProps, next.leftSidebarProps));
 
 interface ConnectedClaudeSessionsProps {
   claudeSessionsProps: ClaudeSessionsProps;
@@ -900,7 +903,7 @@ export function AppWorkspaceLayout({
           <RepositoryFileEditorPanelContext.Provider value={editorPanelContextValue}>
             <ConfigProvider
             locale={zhCN}
-            tooltip={{ unique: true, destroyTooltipOnHide: true }}
+            tooltip={{ unique: true }}
             theme={{
               algorithm,
               /** 代码图谱等叠层局部 z-index 较高，避免 Message 被盖住看不见 */

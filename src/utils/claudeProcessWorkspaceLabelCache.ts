@@ -271,7 +271,7 @@ export function syncClaudeProcessLabelCacheFromRuntime(
     projects: ReadonlyArray<ProjectItem>;
     repositories: Repository[];
     bindings: Record<string, string>;
-    sessions: ClaudeSession[];
+    sessions: readonly ClaudeSession[];
     claudeProcesses: ReadonlyArray<ClaudeHostProcess>;
   },
 ): boolean {

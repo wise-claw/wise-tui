@@ -1,6 +1,11 @@
 import type { LeftSidebarProps } from "./types";
 import { monitorSessionsOverviewFingerprint } from "../../hooks/useMonitorSessionsForOverview";
 
+export type LeftSidebarContentProps = Omit<
+  LeftSidebarProps,
+  "dark" | "collapsed" | "siderWidth" | "parked" | "onOpenActiveRepositoryFile"
+>;
+
 function monitorTaskItemsFingerprint(
   items: LeftSidebarProps["sessionConversationTaskItems"],
 ): string {
@@ -28,10 +33,10 @@ function teamMonitorItemsFingerprint(
     .join("\n");
 }
 
-/** 侧栏 memo：流式正文增长时 `sessions` 引用会变，但结构指纹不变则跳过重渲染。 */
-export function areLeftSidebarPropsEqual(
-  prev: LeftSidebarProps,
-  next: LeftSidebarProps,
+/** 侧栏内容 props memo：不含 `dark` / `collapsed` 等壳层字段。 */
+export function areLeftSidebarContentPropsEqual(
+  prev: LeftSidebarContentProps,
+  next: LeftSidebarContentProps,
 ): boolean {
   if (prev === next) return true;
   if (prev.sessionsStructureKey !== next.sessionsStructureKey) return false;
@@ -89,4 +94,16 @@ export function areLeftSidebarPropsEqual(
   if (prev.activeRepositoryName !== next.activeRepositoryName) return false;
   if (prev.repoPanelRightRailAvailable !== next.repoPanelRightRailAvailable) return false;
   return true;
+}
+
+/** 侧栏 memo：流式正文增长时 `sessions` 引用会变，但结构指纹不变则跳过重渲染。 */
+export function areLeftSidebarPropsEqual(
+  prev: LeftSidebarProps,
+  next: LeftSidebarProps,
+): boolean {
+  if (prev.dark !== next.dark) return false;
+  if (prev.collapsed !== next.collapsed) return false;
+  if (prev.parked !== next.parked) return false;
+  if (prev.siderWidth !== next.siderWidth) return false;
+  return areLeftSidebarContentPropsEqual(prev, next);
 }

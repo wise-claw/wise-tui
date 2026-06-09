@@ -62,7 +62,7 @@ function enrichSessionForWorkspaceLabels(
     projects: ReadonlyArray<ProjectItem>;
     repositories: Repository[];
     bindings: Record<string, string>;
-    sessions: ClaudeSession[];
+    sessions: readonly ClaudeSession[];
     claudeSessionId?: string | null;
   },
 ): ClaudeSession {
@@ -100,7 +100,7 @@ export function resolveClaudeProcessWorkspaceLabels(params: {
   projects: ReadonlyArray<ProjectItem>;
   repositories: Repository[];
   bindings: Record<string, string>;
-  sessions: ClaudeSession[];
+  sessions: readonly ClaudeSession[];
   /** 系统扫描行可传入已解析的 Claude 会话 ID，用于反查 Wise 绑定。 */
   claudeSessionId?: string | null;
 }): ClaudeProcessWorkspaceLabels {
