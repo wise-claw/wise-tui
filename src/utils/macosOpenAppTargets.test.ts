@@ -12,6 +12,7 @@ describe("macosOpenAppTargets", () => {
     expect(targets.map((item) => item.id)).toEqual([
       "vscode",
       "cursor",
+      "codefuse",
       "finder",
       "intellij",
       "terminal",

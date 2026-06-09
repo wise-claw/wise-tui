@@ -44,23 +44,35 @@
 /* ── Dropdown ── */
 
 .app-open-app-dropdown .ant-dropdown-menu {
-  padding: 4px;
-  border-radius: 10px;
+  padding: 2px;
+  border-radius: 8px;
   box-shadow: var(--ant-box-shadow-secondary);
-  min-width: 160px;
+  min-width: 148px;
+}
+
+.app-open-app-dropdown .ant-dropdown-menu-item {
+  min-height: 24px;
+  padding-block: 2px !important;
+  padding-inline: 8px !important;
+  line-height: 1.25;
+}
+
+.app-open-app-dropdown .ant-dropdown-menu-item .ant-dropdown-menu-title-content {
+  min-height: 0;
 }
 
 .app-open-app-option {
   display: flex;
   align-items: center;
-  gap: 8px;
-  font-size: 13px;
-  padding: 2px 0;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.25;
+  padding: 0;
 }
 
 .app-open-app-option-icon {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   border-radius: 3px;
   flex-shrink: 0;
 }
