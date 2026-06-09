@@ -5,6 +5,7 @@ import type { ClaudeSession } from "../../types";
 import { useWiseTopbarChromeVisibility } from "../../hooks/useWiseTopbarChromeVisibility";
 import { FccTopbarTrigger } from "./FccTopbarTrigger";
 import { FccTrafficTopbarTrigger } from "./FccTrafficTopbarTrigger";
+import { OpencodeGoProxyTopbarTrigger } from "./OpencodeGoProxyTopbarTrigger";
 import { LlmProxyTopbarTrigger } from "./LlmProxyTopbarTrigger";
 import { SessionDataLinkTopbarTrigger } from "./SessionDataLinkTopbarTrigger";
 import { topbarOverflowMenuIcon, type SessionTopbarOverflowPanel } from "./topbarOverflowMenuIcons";
@@ -45,6 +46,9 @@ export const ClaudeChatSessionTopbarOverflow = memo(function ClaudeChatSessionTo
     }
     if (!topbarChrome.showFccTrafficTopbar) {
       items.push({ key: "fccTraffic", label: "FCC 请求流量" });
+    }
+    if (!topbarChrome.showOpencodeProxyTopbar) {
+      items.push({ key: "opencodeProxy", label: "OpenCode 代理" });
     }
     if (!topbarChrome.showLlmProxyTopbar) {
       items.push({ key: "llmProxy", label: "LLM 代理" });
@@ -121,6 +125,13 @@ export const ClaudeChatSessionTopbarOverflow = memo(function ClaudeChatSessionTo
           triggerHidden
           open
           onOpenChange={(open) => handlePanelOpenChange("fccTraffic", open)}
+        />
+      ) : null}
+      {!topbarChrome.showOpencodeProxyTopbar && activePanel === "opencodeProxy" ? (
+        <OpencodeGoProxyTopbarTrigger
+          triggerHidden
+          open
+          onOpenChange={(open) => handlePanelOpenChange("opencodeProxy", open)}
         />
       ) : null}
       {!topbarChrome.showLlmProxyTopbar && activePanel === "llmProxy" ? (

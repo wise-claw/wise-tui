@@ -16,6 +16,7 @@ mod cc_switch_import;
 mod claude_model_profiles;
 mod codex_config_dir;
 mod opencode_config_dir;
+mod opencode_go_proxy;
 mod fcc_traces;
 mod free_claude_code;
 mod code_knowledge_graph;

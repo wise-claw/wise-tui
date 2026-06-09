@@ -1,5 +1,6 @@
 import type { ClaudeLlmProxyRecord } from "../services/claudeLlmProxy";
 import type { FccTraceEntry } from "../types/fccTrace";
+import type { OpencodeGoProxyTraceEntry } from "../types/opencodeGoProxyTrace";
 import type { SessionLinkRecord } from "../types/sessionLink";
 import { resolveProxyFirstByteMs, resolveProxyTtftMs } from "./llmProxyTtft";
 import type { SessionLinkTurnMetric } from "./sessionLinkFilters";
@@ -47,6 +48,7 @@ export interface SessionInsightsDataCoverage {
   hasInferredHttp: boolean;
   llmProxyEnabled: boolean;
   fccTraceCount: number;
+  opencodeGoProxyTraceCount: number;
   hasTtftData: boolean;
 }
 
@@ -87,6 +89,7 @@ export interface ComputeSessionInsightsInput {
   turnMetrics: readonly SessionLinkTurnMetric[];
   llmProxyRecords?: readonly ClaudeLlmProxyRecord[];
   fccTraces?: readonly FccTraceEntry[];
+  opencodeGoProxyTraces?: readonly OpencodeGoProxyTraceEntry[];
   /** 已预过滤的 JSONL usage 行；省略时不再扫描全量 JSONL。 */
   jsonlUsageLines?: readonly string[] | null;
   llmProxyListening?: boolean;
@@ -494,6 +497,7 @@ export function formatCacheHitRate(rate: number | null | undefined): string {
 export function computeSessionInsights(input: ComputeSessionInsightsInput): SessionInsightsResult {
   const llmProxyRecords = input.llmProxyRecords ?? [];
   const fccTraces = input.fccTraces ?? [];
+  const opencodeGoTraces = input.opencodeGoProxyTraces ?? [];
   const jsonlUsageLines = input.jsonlUsageLines ?? [];
 
   const resolveTurn = (ts: number) => inferTurnIndexForTimestamp(input.turnMetrics, ts);
@@ -564,6 +568,19 @@ export function computeSessionInsights(input: ComputeSessionInsightsInput): Sess
 
   for (const trace of fccTraces) {
     if (trace.durationMs == null || trace.durationMs <= 0) continue;
+    const turn = resolveTurn(trace.timestampMs);
+    addHttpLatency(turn, trace.durationMs);
+    const usage = parseUsageFromHttpBody(trace.responsePreview ?? "");
+    if (usage) {
+      hasHttpUsage = true;
+      sessionTokens = mergeTokenUsage(sessionTokens, usage);
+      const prev = turnTokens.get(turn) ?? { ...EMPTY_TOKENS };
+      turnTokens.set(turn, mergeTokenUsage(prev, usage));
+    }
+  }
+
+  for (const trace of opencodeGoTraces) {
+    if (trace.durationMs <= 0) continue;
     const turn = resolveTurn(trace.timestampMs);
     addHttpLatency(turn, trace.durationMs);
     const usage = parseUsageFromHttpBody(trace.responsePreview ?? "");
@@ -652,6 +669,7 @@ export function computeSessionInsights(input: ComputeSessionInsightsInput): Sess
       hasInferredHttp: httpInferredCount > 0,
       llmProxyEnabled: Boolean(input.llmProxyListening),
       fccTraceCount: fccTraces.length,
+      opencodeGoProxyTraceCount: opencodeGoTraces.length,
       hasTtftData: ttftLatencies.length > 0,
     },
   };

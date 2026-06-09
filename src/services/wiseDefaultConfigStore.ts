@@ -96,6 +96,8 @@ export interface WiseDefaultConfigV1 {
   showFccTopbar: boolean;
   /** 主会话顶栏 FCC 请求流量图标；默认隐藏。 */
   showFccTrafficTopbar: boolean;
+  /** 主会话顶栏 OpenCode 代理图标；默认隐藏。 */
+  showOpencodeProxyTopbar: boolean;
   /** 主会话顶栏全链路分析图标；默认隐藏。 */
   showSessionDataLinkTopbar: boolean;
   /** 中栏顶栏远程入口（钉钉 / WebSocket 开关与配置）；默认显示。 */
@@ -139,6 +141,7 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   showLlmProxyTopbar: false,
   showFccTopbar: false,
   showFccTrafficTopbar: false,
+  showOpencodeProxyTopbar: true,
   showSessionDataLinkTopbar: false,
   showRemoteEntryTopbar: true,
   showTopbarRepositoryName: false,
@@ -213,6 +216,10 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
           ? DEFAULT_CONFIG.showFccTopbar
           : normalizeBoolean(parsed.showFccTopbar),
       showFccTrafficTopbar: normalizeBoolean(parsed.showFccTrafficTopbar),
+      showOpencodeProxyTopbar:
+        parsed.showOpencodeProxyTopbar === undefined
+          ? DEFAULT_CONFIG.showOpencodeProxyTopbar
+          : normalizeBoolean(parsed.showOpencodeProxyTopbar),
       showSessionDataLinkTopbar: normalizeBoolean(parsed.showSessionDataLinkTopbar),
       showRemoteEntryTopbar:
         parsed.showRemoteEntryTopbar === undefined
@@ -339,6 +346,7 @@ function dispatchTopbarChromeDefaultChanged(
     | "showLlmProxyTopbar"
     | "showFccTopbar"
     | "showFccTrafficTopbar"
+    | "showOpencodeProxyTopbar"
     | "showSessionDataLinkTopbar"
     | "showRemoteEntryTopbar"
     | "showTopbarRepositoryName"
@@ -351,6 +359,7 @@ function dispatchTopbarChromeDefaultChanged(
         showLlmProxyTopbar: config.showLlmProxyTopbar,
         showFccTopbar: config.showFccTopbar,
         showFccTrafficTopbar: config.showFccTrafficTopbar,
+        showOpencodeProxyTopbar: config.showOpencodeProxyTopbar,
         showSessionDataLinkTopbar: config.showSessionDataLinkTopbar,
         showRemoteEntryTopbar: config.showRemoteEntryTopbar,
         showTopbarRepositoryName: config.showTopbarRepositoryName,
@@ -384,6 +393,7 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     showLlmProxyTopbar: DEFAULT_CONFIG.showLlmProxyTopbar,
     showFccTopbar: DEFAULT_CONFIG.showFccTopbar,
     showFccTrafficTopbar: DEFAULT_CONFIG.showFccTrafficTopbar,
+    showOpencodeProxyTopbar: DEFAULT_CONFIG.showOpencodeProxyTopbar,
     showSessionDataLinkTopbar: DEFAULT_CONFIG.showSessionDataLinkTopbar,
     showRemoteEntryTopbar: DEFAULT_CONFIG.showRemoteEntryTopbar,
     showTopbarRepositoryName: DEFAULT_CONFIG.showTopbarRepositoryName,
@@ -507,6 +517,7 @@ export async function saveWiseDefaultConfig(
       | "showLlmProxyTopbar"
       | "showFccTopbar"
       | "showFccTrafficTopbar"
+      | "showOpencodeProxyTopbar"
       | "showSessionDataLinkTopbar"
       | "showRemoteEntryTopbar"
       | "showTopbarRepositoryName"
@@ -536,6 +547,7 @@ export async function saveWiseDefaultConfig(
     showLlmProxyTopbar: patch.showLlmProxyTopbar ?? current.showLlmProxyTopbar,
     showFccTopbar: patch.showFccTopbar ?? current.showFccTopbar,
     showFccTrafficTopbar: patch.showFccTrafficTopbar ?? current.showFccTrafficTopbar,
+    showOpencodeProxyTopbar: patch.showOpencodeProxyTopbar ?? current.showOpencodeProxyTopbar,
     showSessionDataLinkTopbar:
       patch.showSessionDataLinkTopbar ?? current.showSessionDataLinkTopbar,
     showRemoteEntryTopbar: patch.showRemoteEntryTopbar ?? current.showRemoteEntryTopbar,
@@ -583,6 +595,9 @@ export async function saveWiseDefaultConfig(
   }
   if (patch.showFccTrafficTopbar !== undefined) {
     next.showFccTrafficTopbar = normalizeBoolean(patch.showFccTrafficTopbar);
+  }
+  if (patch.showOpencodeProxyTopbar !== undefined) {
+    next.showOpencodeProxyTopbar = normalizeBoolean(patch.showOpencodeProxyTopbar);
   }
   if (patch.showSessionDataLinkTopbar !== undefined) {
     next.showSessionDataLinkTopbar = normalizeBoolean(patch.showSessionDataLinkTopbar);
@@ -663,6 +678,7 @@ export async function saveWiseDefaultConfig(
     patch.showLlmProxyTopbar !== undefined ||
     patch.showFccTopbar !== undefined ||
     patch.showFccTrafficTopbar !== undefined ||
+    patch.showOpencodeProxyTopbar !== undefined ||
     patch.showSessionDataLinkTopbar !== undefined ||
     patch.showRemoteEntryTopbar !== undefined ||
     patch.showTopbarRepositoryName !== undefined
@@ -671,6 +687,7 @@ export async function saveWiseDefaultConfig(
       next.showLlmProxyTopbar !== current.showLlmProxyTopbar ||
       next.showFccTopbar !== current.showFccTopbar ||
       next.showFccTrafficTopbar !== current.showFccTrafficTopbar ||
+      next.showOpencodeProxyTopbar !== current.showOpencodeProxyTopbar ||
       next.showSessionDataLinkTopbar !== current.showSessionDataLinkTopbar ||
       next.showRemoteEntryTopbar !== current.showRemoteEntryTopbar ||
       next.showTopbarRepositoryName !== current.showTopbarRepositoryName
@@ -679,6 +696,7 @@ export async function saveWiseDefaultConfig(
         showLlmProxyTopbar: next.showLlmProxyTopbar,
         showFccTopbar: next.showFccTopbar,
         showFccTrafficTopbar: next.showFccTrafficTopbar,
+        showOpencodeProxyTopbar: next.showOpencodeProxyTopbar,
         showSessionDataLinkTopbar: next.showSessionDataLinkTopbar,
         showRemoteEntryTopbar: next.showRemoteEntryTopbar,
         showTopbarRepositoryName: next.showTopbarRepositoryName,
@@ -1021,6 +1039,7 @@ export async function loadTopbarChromeDefaultsFromStore(): Promise<
     | "showLlmProxyTopbar"
     | "showFccTopbar"
     | "showFccTrafficTopbar"
+    | "showOpencodeProxyTopbar"
     | "showSessionDataLinkTopbar"
     | "showRemoteEntryTopbar"
     | "showTopbarRepositoryName"
@@ -1031,6 +1050,7 @@ export async function loadTopbarChromeDefaultsFromStore(): Promise<
     showLlmProxyTopbar: config.showLlmProxyTopbar,
     showFccTopbar: config.showFccTopbar,
     showFccTrafficTopbar: config.showFccTrafficTopbar,
+    showOpencodeProxyTopbar: config.showOpencodeProxyTopbar,
     showSessionDataLinkTopbar: config.showSessionDataLinkTopbar,
     showRemoteEntryTopbar: config.showRemoteEntryTopbar,
     showTopbarRepositoryName: config.showTopbarRepositoryName,
@@ -1044,6 +1064,7 @@ export async function saveTopbarChromeDefaultsToStore(
       | "showLlmProxyTopbar"
       | "showFccTopbar"
       | "showFccTrafficTopbar"
+      | "showOpencodeProxyTopbar"
       | "showSessionDataLinkTopbar"
       | "showRemoteEntryTopbar"
       | "showTopbarRepositoryName"

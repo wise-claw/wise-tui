@@ -9,6 +9,7 @@
 
 use serde::Serialize;
 use std::collections::HashMap;
+use std::fs;
 use std::path::{Path, PathBuf};
 use std::sync::RwLock;
 use uuid::Uuid;
@@ -147,6 +148,33 @@ pub(crate) fn is_local_fcc_proxy_base_url(url: &str) -> bool {
         || t.starts_with("http://[::1]:")
 }
 
+/// OpenCode / FCC 本地代理要求 Claude 侧使用 Claude 模型名，由代理路由到上游。
+const LOCAL_PROXY_CLAUDE_MODEL_ENV: &[(&str, &str)] = &[
+    ("ANTHROPIC_MODEL", "claude-sonnet-4-8"),
+    ("ANTHROPIC_REASONING_MODEL", "claude-sonnet-4-8"),
+    ("ANTHROPIC_SMALL_FAST_MODEL", "claude-haiku-4-8"),
+    ("ANTHROPIC_DEFAULT_HAIKU_MODEL", "claude-haiku-4-8"),
+    ("ANTHROPIC_DEFAULT_OPUS_MODEL", "claude-opus-4-8"),
+    ("ANTHROPIC_DEFAULT_SONNET_MODEL", "claude-sonnet-4-8"),
+    ("CLAUDE_CODE_SUBAGENT_MODEL", "claude-sonnet-4-8"),
+];
+
+/// 将 CC Switch 等写入的第三方模型 ID 对齐为 Claude 模型名，避免本地代理收到无法路由的请求。
+pub(crate) fn normalize_claude_models_for_local_proxy(env: &mut HashMap<String, String>) {
+    for (key, value) in LOCAL_PROXY_CLAUDE_MODEL_ENV {
+        env.insert((*key).to_string(), (*value).to_string());
+    }
+}
+
+/// 写入用户 `settings.json` 的 `env` 块（与 spawn 侧模型名策略一致）。
+pub(crate) fn apply_local_proxy_claude_model_env(
+    env_obj: &mut serde_json::Map<String, serde_json::Value>,
+) {
+    for (key, value) in LOCAL_PROXY_CLAUDE_MODEL_ENV {
+        env_obj.insert(key.to_string(), serde_json::Value::String(value.to_string()));
+    }
+}
+
 /// 仅合并用户 + 项目 `settings.json`（**不**读 `~/.claude.json` 的 `env`，避免百炼 key 污染 spawn）。
 pub(crate) fn merged_claude_spawn_env(project_path: Option<&str>) -> HashMap<String, String> {
     let mut out = read_claude_json_env_block(&user_claude_dir().join("settings.json"));
@@ -221,6 +249,12 @@ pub(crate) fn build_claude_spawn_env(
     let mut merged = merged_claude_spawn_env(project_path);
     if let Some(url) = anthropic_base_url_override.map(str::trim).filter(|s| !s.is_empty()) {
         merged.insert("ANTHROPIC_BASE_URL".to_string(), url.to_string());
+        // Wise 内置本地代理（OpenCode / FCC）：与 oc-go-cc 一致使用占位 token。
+        if is_local_fcc_proxy_base_url(url) {
+            merged.insert("ANTHROPIC_AUTH_TOKEN".to_string(), "unused".to_string());
+            merged.remove("ANTHROPIC_API_KEY");
+            normalize_claude_models_for_local_proxy(&mut merged);
+        }
     }
     if merged
         .get("ANTHROPIC_AUTH_TOKEN")
@@ -320,6 +354,18 @@ pub(crate) fn get_claude_user_config_dir(
     Ok(build_info(raw_value))
 }
 
+/// 返回用户级 Claude `settings.json` 路径（默认 `~/.claude/settings.json`）；若文件不存在则创建空对象。
+#[tauri::command]
+pub(crate) fn get_claude_user_settings_json_path() -> Result<String, String> {
+    let dir = user_claude_dir();
+    fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
+    let path = dir.join("settings.json");
+    if !path.exists() {
+        fs::write(&path, "{}\n").map_err(|e| e.to_string())?;
+    }
+    Ok(path.to_string_lossy().to_string())
+}
+
 #[tauri::command]
 pub(crate) fn set_claude_user_config_dir(
     db: tauri::State<'_, WiseDb>,
@@ -387,6 +433,26 @@ mod tests {
         assert!(!env.contains_key("ANTHROPIC_API_KEY"));
         assert!(!env.contains_key("ANTHROPIC_BASE_URL"));
         update_cache(None);
+    }
+
+    #[test]
+    fn normalize_claude_models_replaces_third_party_model_ids() {
+        let mut env = HashMap::from([
+            (
+                "ANTHROPIC_MODEL".to_string(),
+                "doubao-seed-2.0-code".to_string(),
+            ),
+            (
+                "ANTHROPIC_DEFAULT_SONNET_MODEL".to_string(),
+                "doubao-seed-2.0-code".to_string(),
+            ),
+        ]);
+        normalize_claude_models_for_local_proxy(&mut env);
+        assert_eq!(env.get("ANTHROPIC_MODEL").map(String::as_str), Some("claude-sonnet-4-8"));
+        assert_eq!(
+            env.get("ANTHROPIC_DEFAULT_SONNET_MODEL").map(String::as_str),
+            Some("claude-sonnet-4-8")
+        );
     }
 
     #[test]

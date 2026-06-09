@@ -163,6 +163,11 @@ export const SessionInsightsPanel = memo(function SessionInsightsPanel({
   if (overview.dataCoverage.fccTraceCount > 0) {
     coverageHints.push(`FCC trace ${overview.dataCoverage.fccTraceCount} 条`);
   }
+  if (overview.dataCoverage.opencodeGoProxyTraceCount > 0) {
+    coverageHints.push(
+      `OpenCode trace ${overview.dataCoverage.opencodeGoProxyTraceCount} 条`,
+    );
+  }
 
   const buildReportMarkdown = useCallback(
     () =>

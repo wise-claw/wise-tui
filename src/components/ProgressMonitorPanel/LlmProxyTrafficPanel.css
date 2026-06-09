@@ -778,3 +778,14 @@
   line-height: 1.45;
   color: var(--ant-color-text-secondary);
 }
+
+.app-llm-proxy-record__detail-meta {
+  font-size: 11px;
+  color: var(--ant-color-text-secondary);
+  margin-bottom: 6px;
+  word-break: break-all;
+}
+
+.app-llm-proxy-record__detail-meta--error {
+  color: var(--ant-color-error);
+}

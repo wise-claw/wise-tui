@@ -9,6 +9,7 @@ export function useTopbarChromeDefaultSetting() {
   const [showLlmProxyTopbar, setShowLlmProxyTopbar] = useState(false);
   const [showFccTopbar, setShowFccTopbar] = useState(false);
   const [showFccTrafficTopbar, setShowFccTrafficTopbar] = useState(false);
+  const [showOpencodeProxyTopbar, setShowOpencodeProxyTopbar] = useState(false);
   const [showSessionDataLinkTopbar, setShowSessionDataLinkTopbar] = useState(false);
   const [showRemoteEntryTopbar, setShowRemoteEntryTopbar] = useState(true);
   const [showTopbarRepositoryName, setShowTopbarRepositoryName] = useState(false);
@@ -22,6 +23,7 @@ export function useTopbarChromeDefaultSetting() {
       setShowLlmProxyTopbar(loaded.showLlmProxyTopbar);
       setShowFccTopbar(loaded.showFccTopbar);
       setShowFccTrafficTopbar(loaded.showFccTrafficTopbar);
+      setShowOpencodeProxyTopbar(loaded.showOpencodeProxyTopbar);
       setShowSessionDataLinkTopbar(loaded.showSessionDataLinkTopbar);
       setShowRemoteEntryTopbar(loaded.showRemoteEntryTopbar);
       setShowTopbarRepositoryName(loaded.showTopbarRepositoryName);
@@ -85,6 +87,23 @@ export function useTopbarChromeDefaultSetting() {
     [showFccTrafficTopbar],
   );
 
+  const saveOpencodeProxy = useCallback(
+    async (visible: boolean) => {
+      if (visible === showOpencodeProxyTopbar) return;
+      setSaving(true);
+      try {
+        await saveTopbarChromeDefaultsToStore({ showOpencodeProxyTopbar: visible });
+        setShowOpencodeProxyTopbar(visible);
+      } catch (err) {
+        message.error(`保存失败：${err instanceof Error ? err.message : String(err)}`);
+        throw err;
+      } finally {
+        setSaving(false);
+      }
+    },
+    [showOpencodeProxyTopbar],
+  );
+
   const saveSessionDataLink = useCallback(
     async (visible: boolean) => {
       if (visible === showSessionDataLinkTopbar) return;
@@ -140,6 +159,7 @@ export function useTopbarChromeDefaultSetting() {
     showLlmProxyTopbar,
     showFccTopbar,
     showFccTrafficTopbar,
+    showOpencodeProxyTopbar,
     showSessionDataLinkTopbar,
     showRemoteEntryTopbar,
     showTopbarRepositoryName,
@@ -149,6 +169,7 @@ export function useTopbarChromeDefaultSetting() {
     saveLlmProxy,
     saveFcc,
     saveFccTraffic,
+    saveOpencodeProxy,
     saveSessionDataLink,
     saveRemoteEntry,
     saveTopbarRepositoryName,

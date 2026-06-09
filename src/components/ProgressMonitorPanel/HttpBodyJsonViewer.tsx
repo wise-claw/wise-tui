@@ -19,7 +19,7 @@ export function isHttpBodyTruncatedPreview(raw: string | null | undefined): bool
 
 export interface HttpBodyJsonViewerProps {
   title: string;
-  rawContent: string;
+  rawContent: string | null | undefined;
   isTruncated?: boolean;
   defaultExpanded?: boolean;
   emptyHint?: string;
@@ -45,8 +45,12 @@ export function HttpBodyJsonViewer({
     },
     [],
   );
-  const prettyJson = useMemo(() => formatHttpBodyJsonForDisplay(rawContent), [rawContent]);
-  const formatted = prettyJson !== rawContent.trim() && prettyJson.trim().length > 0;
+  const prettyJson = useMemo(
+    () => formatHttpBodyJsonForDisplay(rawContent ?? ""),
+    [rawContent],
+  );
+  const rawTrimmed = (rawContent ?? "").trim();
+  const formatted = prettyJson !== rawTrimmed && prettyJson.trim().length > 0;
   const hasBody = prettyJson.trim().length > 0;
   const showTruncatedBadge = isTruncated ?? isHttpBodyTruncatedPreview(rawContent);
 

@@ -77,8 +77,8 @@
 
 .app-claude-code-tools-head-left {
   display: inline-flex;
-  align-items: baseline;
-  gap: 6px;
+  align-items: center;
+  gap: 2px;
   min-width: 0;
 }
 
@@ -203,6 +203,23 @@
   line-height: 1.2;
   letter-spacing: 0.2px;
   white-space: nowrap;
+}
+
+.app-claude-code-tools-global-config-btn.ant-btn.ant-btn-sm {
+  width: 20px;
+  height: 20px;
+  min-width: 20px;
+  padding: 0;
+  color: var(--ant-color-text-secondary);
+  flex-shrink: 0;
+}
+
+.app-claude-code-tools-global-config-btn.ant-btn.ant-btn-sm:hover {
+  color: var(--ant-color-primary);
+}
+
+.app-claude-code-tools-global-config-btn.ant-btn.ant-btn-sm .anticon {
+  font-size: 12px;
 }
 
 .app-claude-code-tools-sub {

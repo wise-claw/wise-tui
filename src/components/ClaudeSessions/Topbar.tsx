@@ -7,6 +7,7 @@ import { RemoteEntryTopbarStrip } from "../RemoteEntryTopbarStrip";
 import { WorkspaceQuickActionsTopbarStrip } from "../WorkspaceQuickActionsTopbarStrip";
 import { OpenAppMenu } from "../OpenAppMenu";
 import { FccTopbarTrigger } from "./FccTopbarTrigger";
+import { OpencodeGoProxyTopbarTrigger } from "./OpencodeGoProxyTopbarTrigger";
 import { FccTrafficTopbarTrigger } from "./FccTrafficTopbarTrigger";
 import { LlmProxyTopbarTrigger } from "./LlmProxyTopbarTrigger";
 import { SessionDataLinkTopbarTrigger } from "./SessionDataLinkTopbarTrigger";
@@ -314,6 +315,9 @@ export const Topbar = memo(function Topbar({
         {topbarToolsReady && topbarChrome.showFccTopbar ? <FccTopbarTrigger /> : null}
         {topbarToolsReady && topbarChrome.showFccTrafficTopbar ? (
           <FccTrafficTopbarTrigger />
+        ) : null}
+        {topbarToolsReady && topbarChrome.showOpencodeProxyTopbar ? (
+          <OpencodeGoProxyTopbarTrigger />
         ) : null}
         {topbarToolsReady && topbarChrome.showLlmProxyTopbar ? (
           <LlmProxyTopbarTrigger repositoryPath={topbarOpenPath} />

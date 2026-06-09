@@ -39,12 +39,19 @@ function extractToolUseId(ev: SequenceEvent): string | undefined {
 }
 
 function sequenceEventToRecord(ev: SequenceEvent, turnIndex: number): SessionLinkRecord {
+  const isOpencodeObservedHttp =
+    ev.kind === "api_request" &&
+    Boolean(ev.flags.observedHttp) &&
+    ev.id.startsWith("opencode-go-api-");
   const isFccObservedHttp =
     ev.kind === "api_request" && Boolean(ev.flags.observedHttp) && ev.id.startsWith("fcc-api-");
   const isLlmObservedHttp =
     ev.kind === "api_request" && Boolean(ev.flags.observedHttp) && ev.id.startsWith("llm-api-");
-  const isObservedHttp = isFccObservedHttp || isLlmObservedHttp;
+  const isObservedHttp = isOpencodeObservedHttp || isFccObservedHttp || isLlmObservedHttp;
   const isInferredHttp = ev.kind === "api_request" && !isObservedHttp;
+  const opencodeTraceId = isOpencodeObservedHttp
+    ? ev.id.replace(/^opencode-go-api-/, "")
+    : undefined;
   const fccTraceId = isFccObservedHttp ? ev.id.replace(/^fcc-api-/, "") : undefined;
   const llmProxyId = isLlmObservedHttp ? ev.id.replace(/^llm-api-/, "") : undefined;
   const summary =
@@ -60,18 +67,21 @@ function sequenceEventToRecord(ev: SequenceEvent, turnIndex: number): SessionLin
     summary,
     detail: ev.detail,
     observed: !isInferredHttp,
-    source: isFccObservedHttp
-      ? "fcc_trace"
-      : isLlmObservedHttp
-        ? "llm_proxy"
-        : isInferredHttp
-          ? "inferred"
-          : sourceForEvent(ev),
+    source: isOpencodeObservedHttp
+      ? "opencode_go_proxy"
+      : isFccObservedHttp
+        ? "fcc_trace"
+        : isLlmObservedHttp
+          ? "llm_proxy"
+          : isInferredHttp
+            ? "inferred"
+            : sourceForEvent(ev),
     messageId: ev.messageId,
     toolUseId: extractToolUseId(ev),
-    httpTraceId: fccTraceId ?? llmProxyId,
+    httpTraceId: opencodeTraceId ?? fccTraceId ?? llmProxyId,
     refs: {
       sequenceEventId: ev.id,
+      opencodeGoProxyTraceId: opencodeTraceId,
       fccTraceId,
       llmProxyRecordId: llmProxyId,
     },

@@ -1,9 +1,12 @@
 import type { ClaudeMessage, MessagePart, TextPart, ToolUsePart } from "../types";
 import type { ClaudeLlmProxyRecord } from "../services/claudeLlmProxy";
 import type { FccTraceEntry } from "../types/fccTrace";
+import type { OpencodeGoProxyTraceEntry } from "../types/opencodeGoProxyTrace";
 import {
   enrichSequenceEventsWithObservedHttp,
   INFERRED_HTTP_DETAIL_PLACEHOLDER,
+  opencodeGoProxyTraceHttpDetail,
+  opencodeGoProxyTraceHttpSubtitle,
 } from "./sequenceEventHttpEnrichment";
 import { unwrapClaudeStreamLineRoot } from "../notifications/streamIngest";
 import { isToolOnlyUserMessage, userMessagePlainTextForDisplay } from "./claudeChatMessageDisplay";
@@ -499,6 +502,30 @@ export function mergeSequenceEventsByTime(a: readonly SequenceEvent[], b: readon
   return annotateSequenceEvents(merged);
 }
 
+/** 将 OpenCode Go 代理 HTTP trace 转为模型泳道「接口」事件（`observedHttp`）。 */
+export function buildSequenceEventsFromOpencodeGoProxyTraces(
+  entries: readonly OpencodeGoProxyTraceEntry[],
+): SequenceEvent[] {
+  const events: SequenceEvent[] = [];
+  let order = 1_500_000;
+  for (const entry of entries) {
+    order += 1;
+    events.push({
+      id: `opencode-go-api-${entry.id}`,
+      order,
+      timestamp: entry.timestampMs,
+      kind: "api_request",
+      fromLane: "claude_code",
+      toLane: "model",
+      label: "REQUEST",
+      subtitle: opencodeGoProxyTraceHttpSubtitle(entry),
+      detail: opencodeGoProxyTraceHttpDetail(entry) || undefined,
+      flags: { key: true, observedHttp: true },
+    });
+  }
+  return events;
+}
+
 /** 将 FCC HTTP trace 转为模型泳道「接口」事件（`observedHttp`）。 */
 export function buildSequenceEventsFromFccTraces(entries: readonly FccTraceEntry[]): SequenceEvent[] {
   const events: SequenceEvent[] = [];
@@ -558,6 +585,7 @@ export function suppressInferredApiRequestsWhenObserved(events: readonly Sequenc
 }
 
 export interface BuildTrajectorySequenceOptions {
+  opencodeGoProxyTraces?: readonly OpencodeGoProxyTraceEntry[];
   fccTraces?: readonly FccTraceEntry[];
   llmProxyRecords?: readonly ClaudeLlmProxyRecord[];
 }
@@ -622,14 +650,22 @@ export function buildTrajectorySequenceModel(
   } else {
     events = annotateSequenceEvents(events);
   }
+  const opencode = options?.opencodeGoProxyTraces ?? [];
   const fcc = options?.fccTraces ?? [];
   const llm = options?.llmProxyRecords ?? [];
-  if (fcc.length > 0 || llm.length > 0) {
+  if (opencode.length > 0 || fcc.length > 0 || llm.length > 0) {
     const enriched = enrichSequenceEventsWithObservedHttp(events, {
+      opencodeGoProxyTraces: opencode.length > 0 ? opencode : undefined,
       fccTraces: fcc.length > 0 ? fcc : undefined,
       llmProxyRecords: llm.length > 0 ? llm : undefined,
     });
     events = enriched.events;
+    if (enriched.unusedOpencodeGoProxyTraces.length > 0) {
+      events = mergeSequenceEventsByTime(
+        events,
+        buildSequenceEventsFromOpencodeGoProxyTraces(enriched.unusedOpencodeGoProxyTraces),
+      );
+    }
     if (enriched.unusedFccTraces.length > 0) {
       events = mergeSequenceEventsByTime(events, buildSequenceEventsFromFccTraces(enriched.unusedFccTraces));
     }

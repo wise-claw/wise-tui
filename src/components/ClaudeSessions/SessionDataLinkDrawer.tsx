@@ -30,6 +30,7 @@ import type { ClaudeSession } from "../../types";
 import type { SessionLinkRecord } from "../../types/sessionLink";
 import { loadClaudeSessionJsonl } from "../../services/claudeDisk";
 import { useFccSessionTraces } from "../../hooks/useFccSessionTraces";
+import { useOpencodeGoSessionTraces } from "../../hooks/useOpencodeGoSessionTraces";
 import { writeTextFileAbsolute } from "../../services/sessionLink";
 import {
   getClaudeLlmProxyStoreSnapshot,
@@ -294,11 +295,19 @@ export function SessionDataLinkDrawer({
     };
   }, [open, canLoadDisk, repositoryPath, claudeSessionId, session?.diskTranscriptPartial, messages.length]);
 
-  const fccSinceMs = session?.createdAt ? session.createdAt - 60_000 : undefined;
+  const traceSinceMs = session?.createdAt ? session.createdAt - 60_000 : undefined;
   const { fccAligned, traces: fccTraces, loading: fccLoading } = useFccSessionTraces({
     open,
     sessionHint: claudeSessionId || undefined,
-    sinceMs: fccSinceMs,
+    sinceMs: traceSinceMs,
+  });
+  const {
+    proxyAligned: opencodeAligned,
+    traces: opencodeGoTraces,
+    loading: opencodeLoading,
+  } = useOpencodeGoSessionTraces({
+    open,
+    sinceMs: traceSinceMs,
   });
 
   const llmProxyRecords = useMemo(
@@ -313,8 +322,17 @@ export function SessionDataLinkDrawer({
         jsonlLines: jsonlLines ?? undefined,
         llmProxyRecords,
         fccTraces: fccAligned ? fccTraces : undefined,
+        opencodeGoProxyTraces: opencodeAligned ? opencodeGoTraces : undefined,
       }),
-    [messages, jsonlLines, llmProxyRecords, fccAligned, fccTraces],
+    [
+      messages,
+      jsonlLines,
+      llmProxyRecords,
+      fccAligned,
+      fccTraces,
+      opencodeAligned,
+      opencodeGoTraces,
+    ],
   );
 
   const linkRecords = linkPipeline.records;
@@ -342,6 +360,7 @@ export function SessionDataLinkDrawer({
       turnMetrics,
       llmProxyRecords,
       fccTraces: fccAligned ? fccTraces : undefined,
+      opencodeGoProxyTraces: opencodeAligned ? opencodeGoTraces : undefined,
       jsonlUsageLines,
       llmProxyListening: proxySnap.status?.listening ?? false,
     });
@@ -352,6 +371,8 @@ export function SessionDataLinkDrawer({
     llmProxyRecords,
     fccAligned,
     fccTraces,
+    opencodeAligned,
+    opencodeGoTraces,
     jsonlUsageLines,
     proxySnap.status?.listening,
   ]);
@@ -364,13 +385,23 @@ export function SessionDataLinkDrawer({
         jsonlLines: jsonlLines ?? undefined,
         llmProxyRecords,
         fccTraces: fccAligned ? fccTraces : undefined,
+        opencodeGoProxyTraces: opencodeAligned ? opencodeGoTraces : undefined,
         wiseTabSessionId: session.id,
         claudeSessionId: session.claudeSessionId,
         repositoryPath: session.repositoryPath,
         records,
       });
     },
-    [session, messages, jsonlLines, llmProxyRecords, fccAligned, fccTraces],
+    [
+      session,
+      messages,
+      jsonlLines,
+      llmProxyRecords,
+      fccAligned,
+      fccTraces,
+      opencodeAligned,
+      opencodeGoTraces,
+    ],
   );
 
   const exportBundle = useMemo(
@@ -531,10 +562,18 @@ export function SessionDataLinkDrawer({
 
   const showFccHint =
     fccAligned &&
+    !opencodeAligned &&
     stats.httpInferred > 0 &&
     stats.httpObserved === 0 &&
     fccTraces.length === 0 &&
     !fccLoading;
+
+  const showOpencodeHint =
+    opencodeAligned &&
+    stats.httpInferred > 0 &&
+    stats.httpObserved === 0 &&
+    opencodeGoTraces.length === 0 &&
+    !opencodeLoading;
 
   return (
     <Drawer
@@ -643,6 +682,18 @@ export function SessionDataLinkDrawer({
                   </div>
                 </>
               ) : null}
+              {opencodeAligned && (opencodeGoTraces.length > 0 || opencodeLoading) ? (
+                <>
+                  <div className="app-session-data-link__stat-divider" />
+                  <div className="app-session-data-link__stat-item">
+                    <ApiOutlined className="stat-icon stat-icon--proxy" />
+                    <span className="stat-label">OpenCode</span>
+                    <span className="stat-num">
+                      {opencodeLoading ? "..." : opencodeGoTraces.length}
+                    </span>
+                  </div>
+                </>
+              ) : null}
               {fccAligned && (fccTraces.length > 0 || fccLoading) ? (
                 <>
                   <div className="app-session-data-link__stat-divider" />
@@ -666,6 +717,15 @@ export function SessionDataLinkDrawer({
               </div>
             </div>
 
+            {showOpencodeHint ? (
+              <Alert
+                className="app-session-data-link__alert"
+                type="info"
+                showIcon
+                message="OpenCode Go 代理：HTTP 未观测"
+                description="确认代理已运行且本会话期间有模型请求；可在顶栏 OpenCode 面板「流量」Tab 查看实时 trace。"
+              />
+            ) : null}
             {showFccHint ? (
               <Alert
                 className="app-session-data-link__alert"

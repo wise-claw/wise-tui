@@ -88,7 +88,8 @@ function tryPrettyNdjsonLines(lines: readonly string[]): string | null {
 /**
  * 将 HTTP 请求/响应预览格式化为缩进 JSON；支持截断后缀与 NDJSON。
  */
-export function formatHttpBodyJsonForDisplay(raw: string): string {
+export function formatHttpBodyJsonForDisplay(raw: string | null | undefined): string {
+  if (raw == null) return "";
   const trimmed = raw.trim();
   if (!trimmed) return raw;
 

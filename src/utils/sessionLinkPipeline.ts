@@ -1,6 +1,7 @@
 import type { ClaudeMessage } from "../types";
 import type { ClaudeLlmProxyRecord } from "../services/claudeLlmProxy";
 import type { FccTraceEntry } from "../types/fccTrace";
+import type { OpencodeGoProxyTraceEntry } from "../types/opencodeGoProxyTrace";
 import type { SessionLinkRecord } from "../types/sessionLink";
 import type { SequenceEvent } from "./claudeSessionTrajectorySequence";
 import { buildSessionLinkRecords } from "./buildSessionLinkRecords";
@@ -53,6 +54,7 @@ export interface BuildSessionLinkRecordsInput {
   jsonlLines?: readonly string[] | null;
   llmProxyRecords?: readonly ClaudeLlmProxyRecord[];
   fccTraces?: readonly FccTraceEntry[];
+  opencodeGoProxyTraces?: readonly OpencodeGoProxyTraceEntry[];
 }
 
 /** 由已构建的序列事件生成链路记录（避免重复跑 trajectory 模型）。 */
@@ -81,7 +83,9 @@ export function buildSessionLinkRecordsFromEvents(
 export function buildSessionLinkRecordsFromSources(input: BuildSessionLinkRecordsInput): SessionLinkRecord[] {
   const fcc = input.fccTraces ?? [];
   const llm = input.llmProxyRecords ?? [];
+  const opencode = input.opencodeGoProxyTraces ?? [];
   const events = buildTrajectorySequenceModel(input.messages, input.jsonlLines ?? undefined, {
+    opencodeGoProxyTraces: opencode.length > 0 ? opencode : undefined,
     fccTraces: fcc.length > 0 ? fcc : undefined,
     llmProxyRecords: llm.length > 0 ? llm : undefined,
   });
@@ -95,7 +99,9 @@ export function buildSessionLinkPipeline(input: BuildSessionLinkRecordsInput): {
 } {
   const fcc = input.fccTraces ?? [];
   const llm = input.llmProxyRecords ?? [];
+  const opencode = input.opencodeGoProxyTraces ?? [];
   const events = buildTrajectorySequenceModel(input.messages, input.jsonlLines ?? undefined, {
+    opencodeGoProxyTraces: opencode.length > 0 ? opencode : undefined,
     fccTraces: fcc.length > 0 ? fcc : undefined,
     llmProxyRecords: llm.length > 0 ? llm : undefined,
   });

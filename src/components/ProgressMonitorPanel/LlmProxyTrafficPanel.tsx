@@ -1,4 +1,4 @@
-import { Button, Collapse, Input, Switch, message } from "antd";
+import { Alert, Button, Collapse, Input, Switch, message } from "antd";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import {
   DeleteOutlined,
@@ -15,6 +15,11 @@ import {
   refreshClaudeLlmProxyStatus,
   subscribeClaudeLlmProxyStore,
 } from "../../stores/claudeLlmProxyStore";
+import { getOpencodeGoProxyStatus } from "../../services/opencodeGoProxy";
+import {
+  anthropicProxyConflictMessage,
+  resolveAnthropicProxyConflict,
+} from "../../utils/anthropicProxyConflict";
 import { filterLlmProxyRecordsForDisplay } from "../../utils/llmProxyTrafficDisplay";
 import { resolveProxyTtftMs } from "../../utils/llmProxyTtft";
 import { HttpBodyJsonViewer } from "./HttpBodyJsonViewer";
@@ -168,9 +173,13 @@ export function LlmProxyTrafficPanel({ repositoryPath, variant = "sidebar" }: Pr
   const st = snapshot.status;
   const [upstreamDraft, setUpstreamDraft] = useState("");
   const [saving, setSaving] = useState(false);
+  const [opencodeGoRunning, setOpencodeGoRunning] = useState(false);
 
   useEffect(() => {
     void refreshClaudeLlmProxyStatus(repositoryPath);
+    void getOpencodeGoProxyStatus()
+      .then((ocgo) => setOpencodeGoRunning(Boolean(ocgo.enabled && ocgo.running)))
+      .catch(() => setOpencodeGoRunning(false));
   }, [repositoryPath]);
 
   useEffect(() => {
@@ -187,8 +196,9 @@ export function LlmProxyTrafficPanel({ repositoryPath, variant = "sidebar" }: Pr
       setSaving(true);
       try {
         await applyClaudeLlmProxyConfig(listening, upstream, repositoryPath);
-        if (listening) {
-        } else {
+        const ocgo = await getOpencodeGoProxyStatus().catch(() => null);
+        setOpencodeGoRunning(Boolean(ocgo?.enabled && ocgo?.running));
+        if (!listening) {
           message.info("已关闭监听");
         }
       } catch (e) {
@@ -200,11 +210,32 @@ export function LlmProxyTrafficPanel({ repositoryPath, variant = "sidebar" }: Pr
     [repositoryPath],
   );
 
+  const proxyConflict = useMemo(
+    () =>
+      resolveAnthropicProxyConflict(
+        opencodeGoRunning ? { enabled: true, running: true } : { enabled: false, running: false },
+        st,
+      ),
+    [opencodeGoRunning, st],
+  );
+  const proxyConflictMessage = anthropicProxyConflictMessage(proxyConflict);
+
   const handleListeningChange = useCallback(
     (checked: boolean) => {
+      if (checked && opencodeGoRunning) {
+        const msg = anthropicProxyConflictMessage(
+          resolveAnthropicProxyConflict(
+            { enabled: true, running: true },
+            { listening: true, running: true },
+          ),
+        );
+        if (msg) {
+          message.warning(msg);
+        }
+      }
       void persistConfig(checked, upstreamDraft);
     },
-    [persistConfig, upstreamDraft],
+    [persistConfig, upstreamDraft, opencodeGoRunning],
   );
 
   const handleUpstreamBlur = useCallback(() => {
@@ -284,6 +315,24 @@ export function LlmProxyTrafficPanel({ repositoryPath, variant = "sidebar" }: Pr
             清空
           </Button>
         </div>
+
+        {proxyConflictMessage ? (
+          <Alert
+            type="warning"
+            showIcon
+            message="OpenCode 代理优先"
+            description={proxyConflictMessage}
+            style={{ marginBottom: 8 }}
+          />
+        ) : opencodeGoRunning ? (
+          <Alert
+            type="info"
+            showIcon
+            message="OpenCode 代理已运行"
+            description="开启 LLM 监听后，Claude 子进程仍优先走 OpenCode 代理，Anthropic 请求不会记录在本面板。"
+            style={{ marginBottom: 8 }}
+          />
+        ) : null}
 
         <div className="app-llm-proxy-panel__toolbar-body">
           <div className="app-llm-proxy-panel__config-row app-llm-proxy-panel__config-row--switch">

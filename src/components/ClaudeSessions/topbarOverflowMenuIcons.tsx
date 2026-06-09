@@ -1,7 +1,12 @@
 import type { ReactNode } from "react";
 import { IconSessionDataLink } from "./SessionDataLinkTopbarTrigger";
 
-export type SessionTopbarOverflowPanel = "fcc" | "fccTraffic" | "llmProxy" | "sessionDataLink";
+export type SessionTopbarOverflowPanel =
+  | "fcc"
+  | "fccTraffic"
+  | "opencodeProxy"
+  | "llmProxy"
+  | "sessionDataLink";
 
 function TopbarMenuIconSvg({ children }: { children: ReactNode }) {
   return (
@@ -44,6 +49,15 @@ function IconFccTrafficMenu() {
   );
 }
 
+function IconOpencodeProxyMenu() {
+  return (
+    <TopbarMenuIconSvg>
+      <circle cx="12" cy="12" r="7" stroke="currentColor" strokeWidth="1.75" />
+      <path d="M9 12h6M12 9v6" stroke="currentColor" strokeWidth="1.75" strokeLinecap="round" />
+    </TopbarMenuIconSvg>
+  );
+}
+
 function IconLlmProxyMenu() {
   return (
     <TopbarMenuIconSvg>
@@ -66,6 +80,7 @@ function IconSessionDataLinkMenu() {
 const OVERFLOW_MENU_ICONS: Record<SessionTopbarOverflowPanel, ReactNode> = {
   fcc: <IconFccProxyMenu />,
   fccTraffic: <IconFccTrafficMenu />,
+  opencodeProxy: <IconOpencodeProxyMenu />,
   llmProxy: <IconLlmProxyMenu />,
   sessionDataLink: <IconSessionDataLinkMenu />,
 };

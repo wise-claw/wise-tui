@@ -4,8 +4,9 @@ import {
   MenuUnfoldOutlined,
   PlusOutlined,
   ReloadOutlined,
+  SettingOutlined,
 } from "@ant-design/icons";
-import { Button, Empty, Input, Space, Tabs } from "antd";
+import { Button, Empty, Input, Space, Tabs, message } from "antd";
 import { HoverHint } from "../shared/HoverHint";
 import { Suspense, lazy, useCallback, useEffect, useRef, useState } from "react";
 import type { ClaudeMcpConfigPanelHandle } from "../ClaudeMcpConfigPanel";
@@ -13,6 +14,8 @@ import type { ProjectSkillsPanelHandle } from "./ProjectSkillsPanel";
 import type { ClaudeHooksConfigPanelHandle } from "../ClaudeHooksConfigPanel";
 import type { SubagentsPanelHandle } from "./SubagentsPanel";
 import { openExternalUrl } from "../../services/openExternal";
+import { openClaudeUserSettingsJsonInIde } from "../../services/claudeConfigDir";
+import { OPEN_WORKSPACE_ERROR } from "../../services/openWorkspaceWithPreference";
 import {
   getClaudeHooksStatus,
   getClaudeMcpStatus,
@@ -305,6 +308,20 @@ export function ClaudeCodeToolsPanel({
     });
   }, []);
 
+  const handleOpenGlobalConfig = useCallback(() => {
+    void openClaudeUserSettingsJsonInIde().catch((err: unknown) => {
+      const code = err instanceof Error ? err.message : "";
+      if (code === OPEN_WORKSPACE_ERROR.NOT_CONFIGURED) {
+        message.warning("未配置可用的编辑器或命令，请在中栏顶部「打开方式」中选择");
+      } else if (code === OPEN_WORKSPACE_ERROR.NO_TARGET) {
+        message.warning("未找到可用的打开方式");
+      } else {
+        message.error(typeof err === "string" ? err : "打开全局配置失败");
+        console.error(err);
+      }
+    });
+  }, []);
+
   if (!isPopover && sectionCollapsed) {
     return (
       <div className="app-claude-code-tools app-claude-code-tools--collapsed-single-btn">
@@ -353,6 +370,16 @@ export function ClaudeCodeToolsPanel({
           ) : (
             <span className="app-claude-code-tools-title">Claude Code</span>
           )}
+          <HoverHint title="在默认 IDE 中打开全局配置（~/.claude/settings.json）">
+            <Button
+              type="text"
+              size="small"
+              className="app-claude-code-tools-global-config-btn"
+              icon={<SettingOutlined />}
+              aria-label="打开全局配置"
+              onClick={handleOpenGlobalConfig}
+            />
+          </HoverHint>
         </div>
         <div className="app-claude-code-tools-head-right">
           <Space size={0} className="app-claude-code-tools-tab-switch">

@@ -135,6 +135,7 @@ export function buildSessionInsightsMarkdownReport(
   lines.push(`- HTTP 已观测：${cov.hasObservedHttp ? "是" : "否"}`);
   lines.push(`- LLM 代理：${cov.llmProxyEnabled ? "已开启" : "未开启"}`);
   lines.push(`- FCC trace：${cov.fccTraceCount} 条`);
+  lines.push(`- OpenCode Go trace：${cov.opencodeGoProxyTraceCount} 条`);
   lines.push(`- TTFT 明细：${cov.hasTtftData ? "是（LLM 代理）" : "否"}`);
   lines.push("");
 

@@ -1,0 +1,206 @@
+.app-default-config-ocgo {
+  margin: 12px 0 16px;
+  padding: 12px 14px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 8px;
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-default-config-ocgo__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 4px;
+}
+
+.app-default-config-ocgo__title-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.app-default-config-ocgo__title {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ant-color-text);
+}
+
+.app-default-config-ocgo__help {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: none;
+  background: transparent;
+  color: var(--ant-color-text-tertiary);
+  cursor: pointer;
+  font-size: 14px;
+}
+
+.app-default-config-ocgo__help:hover {
+  color: var(--ant-color-text-secondary);
+}
+
+.app-default-config-ocgo__badge {
+  font-size: 12px;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: var(--ant-color-fill-secondary);
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-default-config-ocgo__badge--on {
+  background: var(--ant-color-success-bg);
+  color: var(--ant-color-success);
+}
+
+.app-default-config-ocgo__hint {
+  margin: 0 0 8px;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-default-config-ocgo__form {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.app-default-config-ocgo--embedded .app-default-config-ocgo__form {
+  gap: 5px;
+  margin-bottom: 6px;
+}
+
+.app-default-config-ocgo__row {
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.app-default-config-ocgo__row--route {
+  grid-template-columns: minmax(0, 0.88fr) minmax(0, 1.15fr) 72px;
+}
+
+.app-default-config-ocgo__field {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.app-default-config-ocgo__inline-action {
+  margin-inline-start: 2px;
+  padding-inline: 0;
+  height: auto;
+  line-height: 1.2;
+  font-size: 12px;
+}
+
+.app-default-config-ocgo__label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ant-color-text-secondary);
+  line-height: 1.3;
+}
+
+.app-default-config-ocgo__label-link {
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.app-default-config-ocgo__fallback-select {
+  width: 100%;
+}
+
+.app-default-config-ocgo__fallback-select .ant-select-selector {
+  min-height: 26px;
+  padding-top: 0;
+  padding-bottom: 0;
+}
+
+.app-default-config-ocgo__json {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 11px;
+  line-height: 1.35;
+  resize: vertical;
+  min-height: 44px;
+}
+
+.app-default-config-ocgo__more.ant-collapse {
+  margin: 0;
+}
+
+.app-default-config-ocgo__more .ant-collapse-header {
+  padding: 2px 0 !important;
+  min-height: 0;
+  font-size: 11px;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-default-config-ocgo__more .ant-collapse-content-box {
+  padding: 4px 0 0 !important;
+}
+
+.app-default-config-ocgo__advanced {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+}
+
+.app-default-config-ocgo__debug-inline {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-default-config-ocgo__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.app-default-config-ocgo__actions--embedded {
+  padding-top: 8px;
+  border-top: 1px solid var(--ant-color-border-secondary);
+}
+
+.app-default-config-ocgo__model-autocomplete {
+  width: 100%;
+}
+
+.app-default-config-ocgo__conflict {
+  margin-bottom: 6px;
+}
+
+.app-default-config-ocgo--embedded .app-default-config-ocgo__conflict .ant-alert {
+  padding: 4px 8px;
+}
+
+.app-default-config-ocgo--embedded .app-default-config-ocgo__conflict .ant-alert-message {
+  font-size: 12px;
+  margin-bottom: 0;
+}
+
+.app-default-config-ocgo--embedded .app-default-config-ocgo__conflict .ant-alert-description {
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+@media (max-width: 520px) {
+  .app-default-config-ocgo__row--route {
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .app-default-config-ocgo__field--port {
+    grid-column: 1 / -1;
+    max-width: 120px;
+  }
+}

@@ -1607,7 +1607,8 @@ async fn spawn_claude_process(
     }
 
     let mut cmd = cmd;
-    let base_url_override = crate::claude_llm_proxy::claude_spawn_anthropic_base_url_override();
+    let base_url_override = crate::opencode_go_proxy::claude_spawn_anthropic_base_url_override()
+        .or_else(crate::claude_llm_proxy::claude_spawn_anthropic_base_url_override);
     crate::claude_config_dir::configure_claude_child_process(
         &mut cmd,
         &project_path,

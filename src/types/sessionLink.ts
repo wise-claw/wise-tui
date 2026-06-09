@@ -8,7 +8,13 @@ export type SessionLinkLayer =
   | "http"
   | "fcc_upstream";
 
-export type SessionLinkObservedSource = "memory" | "jsonl" | "inferred" | "llm_proxy" | "fcc_trace";
+export type SessionLinkObservedSource =
+  | "memory"
+  | "jsonl"
+  | "inferred"
+  | "llm_proxy"
+  | "fcc_trace"
+  | "opencode_go_proxy";
 
 export interface SessionLinkRecord {
   id: string;
@@ -28,6 +34,7 @@ export interface SessionLinkRecord {
     jsonlLineNo?: number;
     llmProxyRecordId?: string;
     fccTraceId?: string;
+    opencodeGoProxyTraceId?: string;
   };
 }
 
@@ -44,6 +51,7 @@ export interface SessionLinkExportBundle {
     jsonlTailLines: number;
     llmProxyRecordCount: number;
     fccTraceCount: number;
+    opencodeGoProxyTraceCount: number;
     inferredHttpCount: number;
     observedHttpCount: number;
   };

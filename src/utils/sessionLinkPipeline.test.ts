@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ClaudeMessage } from "../types";
 import type { FccTraceEntry } from "../types/fccTrace";
+import type { OpencodeGoProxyTraceEntry } from "../types/opencodeGoProxyTrace";
 import { buildSequenceEventsFromMessages } from "./claudeSessionTrajectorySequence";
 import { buildSessionLinkRecords } from "./buildSessionLinkRecords";
 import {
@@ -123,5 +124,38 @@ describe("sessionLinkPipeline", () => {
     const merged = buildSessionLinkRecordsFromSources({ messages, fccTraces: fcc });
     expect(merged.some((r) => r.kind === "api_request")).toBe(false);
     expect(merged.some((r) => r.source === "fcc_trace")).toBe(true);
+  });
+
+  test("merges opencode go proxy trace into records", () => {
+    const messages: ClaudeMessage[] = [
+      {
+        id: 1,
+        role: "user",
+        content: "hi",
+        timestamp: 1000,
+        parts: [{ type: "text", text: "hi" }],
+      },
+    ];
+    const opencode: OpencodeGoProxyTraceEntry[] = [
+      {
+        id: "og1",
+        timestampMs: 1500,
+        method: "POST",
+        path: "/v1/messages",
+        claudeModel: "claude-sonnet-4",
+        upstreamModel: "glm-4.7",
+        upstreamUrl: "https://opencode.ai/zen/go/v1",
+        statusCode: 200,
+        durationMs: 800,
+        isStreaming: false,
+        requestPreview: "{}",
+        responsePreview: "{}",
+      },
+    ];
+    const records = buildSessionLinkRecordsFromSources({
+      messages,
+      opencodeGoProxyTraces: opencode,
+    });
+    expect(records.some((r) => r.source === "opencode_go_proxy" && r.observed)).toBe(true);
   });
 });

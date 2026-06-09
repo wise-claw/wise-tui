@@ -3,7 +3,7 @@ use crate::{
     in_app_shortcuts,
     cc_workflow_studio, claude_code_usage, claude_commands, codex_commands, claude_config_dir, claude_external_ingest,
     claude_llm_proxy, claude_model_profiles,
-    code_knowledge_graph, cursor_agent, fcc_traces, free_claude_code,
+    code_knowledge_graph, cursor_agent, fcc_traces, free_claude_code, opencode_go_proxy,
     cua_driver, dingtalk_enterprise_bot, dingtalk_stream_gateway, extensions, git_commands,
     main_window, mission_control, mcp, my_extensions,
     openspec_bootstrap, prd_url_fetch, remote_channels, repository_files, skills, skills_sh, system_resource, task_artifact, trellis_bootstrap,
@@ -112,6 +112,7 @@ pub fn run() {
             trellis_runtime::spawn_stale_scanner(app.handle().clone());
             composer_image_gc::spawn_composer_image_gc_scanner(app.handle().clone());
             claude_llm_proxy::bootstrap_from_db(app.handle());
+            opencode_go_proxy::bootstrap_from_db(app.handle());
 
             #[cfg(target_os = "macos")]
             crate::macos_webview_wake_recovery::register_macos_webview_wake_recovery(app.handle());
@@ -485,6 +486,7 @@ pub fn run() {
             claude_commands::get_claude_config_model,
             claude_commands::get_claude_model_picker_options,
             claude_config_dir::get_claude_user_config_dir,
+            claude_config_dir::get_claude_user_settings_json_path,
             claude_config_dir::set_claude_user_config_dir,
             claude_config_dir::sanitize_claude_credentials_for_fcc,
             free_claude_code::get_free_claude_code_status,
@@ -494,6 +496,15 @@ pub fn run() {
             free_claude_code::uninstall_free_claude_code,
             free_claude_code::open_free_claude_code_admin,
             free_claude_code::apply_free_claude_code_claude_settings,
+            opencode_go_proxy::get_opencode_go_proxy_status,
+            opencode_go_proxy::save_opencode_go_proxy_prefs,
+            opencode_go_proxy::switch_opencode_go_proxy_model,
+            opencode_go_proxy::set_opencode_go_proxy_config,
+            opencode_go_proxy::apply_opencode_go_proxy_claude_settings,
+            opencode_go_proxy::list_opencode_go_proxy_models,
+            opencode_go_proxy::validate_opencode_go_proxy_config,
+            opencode_go_proxy::list_opencode_go_proxy_traces,
+            opencode_go_proxy::clear_opencode_go_proxy_traces,
             fcc_traces::list_fcc_traces,
             fcc_traces::clear_fcc_traces,
             claude_model_profiles::get_claude_model_profile_store,

@@ -36,6 +36,7 @@ function sampleInsights(): SessionInsightsResult {
         hasInferredHttp: true,
         llmProxyEnabled: true,
         fccTraceCount: 0,
+        opencodeGoProxyTraceCount: 0,
         hasTtftData: true,
       },
     },

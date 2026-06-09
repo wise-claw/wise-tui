@@ -1,6 +1,7 @@
 import type { ClaudeMessage } from "../types";
 import type { ClaudeLlmProxyRecord } from "../services/claudeLlmProxy";
 import type { FccTraceEntry } from "../types/fccTrace";
+import type { OpencodeGoProxyTraceEntry } from "../types/opencodeGoProxyTrace";
 import type { SessionLinkExportBundle, SessionLinkRecord } from "../types/sessionLink";
 import { countSessionLinkStats } from "./buildSessionLinkRecords";
 import { buildSessionLinkRecordsFromSources } from "./sessionLinkPipeline";
@@ -10,6 +11,7 @@ export function buildSessionLinkExportBundle(params: {
   jsonlLines?: readonly string[] | null;
   llmProxyRecords?: readonly ClaudeLlmProxyRecord[];
   fccTraces?: readonly FccTraceEntry[];
+  opencodeGoProxyTraces?: readonly OpencodeGoProxyTraceEntry[];
   wiseTabSessionId?: string;
   claudeSessionId?: string | null;
   repositoryPath?: string;
@@ -23,9 +25,13 @@ export function buildSessionLinkExportBundle(params: {
       jsonlLines: params.jsonlLines,
       llmProxyRecords: params.llmProxyRecords,
       fccTraces: params.fccTraces,
+      opencodeGoProxyTraces: params.opencodeGoProxyTraces,
     });
   const stats = countSessionLinkStats(records);
   const fccTraceCount = records.filter((r) => r.source === "fcc_trace").length;
+  const opencodeGoProxyTraceCount = records.filter(
+    (r) => r.source === "opencode_go_proxy",
+  ).length;
   return {
     exportedAt: new Date().toISOString(),
     session: {
@@ -39,6 +45,7 @@ export function buildSessionLinkExportBundle(params: {
       jsonlTailLines: params.jsonlLines?.length ?? 0,
       llmProxyRecordCount: params.llmProxyRecords?.length ?? 0,
       fccTraceCount,
+      opencodeGoProxyTraceCount,
       inferredHttpCount: stats.httpInferred,
       observedHttpCount: stats.httpObserved,
     },

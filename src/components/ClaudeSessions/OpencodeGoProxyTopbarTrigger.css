@@ -1,0 +1,40 @@
+.app-ocgo-topbar-btn {
+  position: relative;
+}
+
+.app-ocgo-topbar-btn__badge {
+  position: absolute;
+  top: 4px;
+  right: 4px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: var(--ant-color-warning);
+  box-shadow: 0 0 0 1px var(--ant-color-bg-container);
+}
+
+.app-ocgo-topbar-btn__badge--live {
+  background: var(--ant-color-success);
+}
+
+.app-ocgo-topbar-btn__badge--warn {
+  background: var(--ant-color-warning);
+}
+
+.app-ocgo-topbar-popover {
+  max-width: min(94vw, 520px);
+}
+
+.app-ocgo-topbar-popover .ant-popover-inner {
+  padding: 0 !important;
+  overflow: hidden;
+  width: min(94vw, 520px) !important;
+  max-width: min(94vw, 520px) !important;
+  box-sizing: border-box;
+}
+
+.app-ocgo-topbar-popover .ant-popover-inner-content {
+  padding: 0 !important;
+  max-width: 100%;
+  overflow: hidden;
+}
