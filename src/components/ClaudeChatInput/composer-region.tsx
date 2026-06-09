@@ -51,6 +51,7 @@ import {
 import { ContextItems } from "./context-items";
 import { SlashPopover } from "./slash-popover";
 import { useComposerTokenHighlight } from "./useComposerTokenHighlight";
+import { ensureComposerTokenHighlightPlugin } from "./composerTokenHighlight";
 import { useAtMentionDefaultTarget } from "../../hooks/useAtMentionDefaultTarget";
 import { useAtMentionShortcuts } from "../../hooks/useAtMentionShortcuts";
 import { resolveComposerCommonPhraseAction } from "../../constants/composerCommonPhrase";
@@ -381,6 +382,7 @@ function scheduleSafeAiChatSetContent(
       return false;
     }
     onAfterSet?.();
+    ensureComposerTokenHighlightPlugin(ed);
     return true;
   };
   if (attempt()) return;
@@ -617,6 +619,7 @@ function ComposerInner({
     setPlainAndCursor: (plain: string, c: number) => {
       ignoreNextContentSyncRef.current = true;
       cursorRef.current = c;
+      lastEditorPlainRef.current = plain;
       set(singleTextPrompt(plain), c);
       scheduleSafeAiChatSetContent(() => aiChatRef.current, plain, () => {
         repairTiptapTrailingSpaceIfNeeded(aiChatRef.current, plain);
@@ -747,6 +750,9 @@ function ComposerInner({
         repairTiptapTrailingSpaceIfNeeded(aiChatRef.current, plain);
       });
     }
+    queueMicrotask(() => {
+      ensureComposerTokenHighlightPlugin(aiChatRef.current?.getEditor?.());
+    });
   }, [set]);
 
   useEffect(() => {

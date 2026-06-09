@@ -2,7 +2,6 @@ import { Plugin, PluginKey } from "@tiptap/pm/state";
 import type { Node } from "@tiptap/pm/model";
 import { Decoration, DecorationSet, type DecorationAttrs } from "@tiptap/pm/view";
 import type { ComposerProseMirrorEditor } from "./composer-trigger-anchor";
-import { plainOffsetToProseMirrorPos } from "./composer-trigger-anchor";
 
 export type ComposerHighlightKind = "at" | "slash";
 
@@ -17,8 +16,11 @@ const COMPOSER_TOKEN_HIGHLIGHT_KEY = new PluginKey<DecorationSet>("wise-composer
 /** @ 指派后续英文词（如 Claude Code）；不含 CJK，避免把正文「你好」吞进提及。 */
 const AT_MENTION_CONTINUATION_WORD = /[A-Za-z0-9._-]/;
 
+/** Semi 与 Wise 编辑器中的零宽字符，不参与 @ / 指令高亮 plain 映射。 */
+const COMPOSER_ZERO_WIDTH_CHARS = /[\u200B\uFEFF]/g;
+
 function normalizeComposerPlain(plain: string): string {
-  return plain.replace(/\u200B/g, "");
+  return plain.replace(COMPOSER_ZERO_WIDTH_CHARS, "");
 }
 
 function isSlashCommandToken(token: string): boolean {
@@ -99,6 +101,20 @@ export function findComposerHighlightRanges(plain: string): ComposerHighlightRan
 
 type PlainTextDoc = ComposerProseMirrorEditor["state"]["doc"];
 
+function highlightPlainOffsetToDocPos(doc: PlainTextDoc, plainOffset: number): number {
+  const target = Math.max(0, Math.floor(plainOffset));
+  const size = doc.content.size;
+  let lo = 0;
+  let hi = size;
+  while (lo < hi) {
+    const mid = Math.ceil((lo + hi) / 2);
+    const normalizedLen = normalizeComposerPlain(doc.textBetween(0, mid, "\n")).length;
+    if (normalizedLen > target) hi = mid - 1;
+    else lo = mid;
+  }
+  return lo;
+}
+
 function decorationAttrsForKind(kind: ComposerHighlightKind): DecorationAttrs {
   if (kind === "at") {
     return {
@@ -113,20 +129,23 @@ function decorationAttrsForKind(kind: ComposerHighlightKind): DecorationAttrs {
 }
 
 export function buildComposerTokenDecorationSet(doc: PlainTextDoc): DecorationSet {
-  const plain = normalizeComposerPlain(doc.textBetween(0, doc.content.size, "\n"));
+  const plain = docToHighlightPlain(doc);
   if (!plain) return DecorationSet.empty;
 
-  const editorLike = { state: { doc } } as ComposerProseMirrorEditor;
   const decos: Decoration[] = [];
 
   for (const range of findComposerHighlightRanges(plain)) {
-    const from = plainOffsetToProseMirrorPos(editorLike, range.start);
-    const to = plainOffsetToProseMirrorPos(editorLike, range.end);
+    const from = highlightPlainOffsetToDocPos(doc, range.start);
+    const to = highlightPlainOffsetToDocPos(doc, range.end);
     if (to <= from) continue;
     decos.push(Decoration.inline(from, to, decorationAttrsForKind(range.kind)));
   }
 
   return decos.length > 0 ? DecorationSet.create(doc as Node, decos) : DecorationSet.empty;
+}
+
+export function docToHighlightPlain(doc: PlainTextDoc): string {
+  return normalizeComposerPlain(doc.textBetween(0, doc.content.size, "\n"));
 }
 
 export function createComposerTokenHighlightPlugin(): Plugin {

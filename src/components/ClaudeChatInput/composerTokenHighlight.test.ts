@@ -46,4 +46,10 @@ describe("findComposerHighlightRanges", () => {
       { start: 4, end: 12, kind: "slash" },
     ]);
   });
+
+  test("ignores zero-width chars around mention", () => {
+    expect(findComposerHighlightRanges("\uFEFF@Claude Code \uFEFF你好")).toEqual([
+      { start: 0, end: 12, kind: "at" },
+    ]);
+  });
 });
