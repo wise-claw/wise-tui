@@ -21,6 +21,7 @@ export interface OpencodeGoProxyStatus {
   modelOverrides: Record<string, OpencodeGoModelOverride>;
   hasApiKey: boolean;
   claudeSettingsAligned: boolean;
+  codexSettingsAligned: boolean;
   traceCount: number;
   debug: boolean;
 }
@@ -73,9 +74,20 @@ export async function setOpencodeGoProxyConfig(
   return invoke<OpencodeGoProxyStatus>("set_opencode_go_proxy_config", { input });
 }
 
+export async function applyOpencodeGoProxyClientSettings(): Promise<boolean> {
+  return invoke<boolean>("apply_opencode_go_proxy_client_settings");
+}
+
 export async function applyOpencodeGoProxyClaudeSettings(): Promise<boolean> {
   return invoke<boolean>("apply_opencode_go_proxy_claude_settings");
 }
+
+export async function applyOpencodeGoProxyCodexSettings(): Promise<boolean> {
+  return invoke<boolean>("apply_opencode_go_proxy_codex_settings");
+}
+
+/** Codex config.toml 中注册的 Wise 内置代理 provider ID。 */
+export const OPENCODE_GO_CODEX_PROVIDER_ID = "wise-opencode";
 
 export interface ListOpencodeGoProxyModelsInput {
   provider?: string;

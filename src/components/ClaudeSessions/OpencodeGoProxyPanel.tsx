@@ -27,6 +27,7 @@ export function OpencodeGoProxyPanel({ proxy, onClose }: Props) {
   const localUrl =
     running && st?.proxyBaseUrl ? st.proxyBaseUrl : `http://127.0.0.1:${port}`;
   const claudeLabel = !running ? "Claude —" : st?.claudeSettingsAligned ? "Claude 已对齐" : "Claude 未对齐";
+  const codexLabel = !running ? "Codex —" : st?.codexSettingsAligned ? "Codex 已对齐" : "Codex 未对齐";
 
   return (
     <div className="app-ocgo-topbar-panel" aria-label="OpenCode 代理">
@@ -83,6 +84,18 @@ export function OpencodeGoProxyPanel({ proxy, onClose }: Props) {
               }
             >
               {claudeLabel}
+            </span>
+            <span
+              className={
+                "app-ocgo-topbar-panel__chip" +
+                (st && !st.codexSettingsAligned && running
+                  ? " app-ocgo-topbar-panel__chip--warn"
+                  : running && st?.codexSettingsAligned
+                    ? " app-ocgo-topbar-panel__chip--on"
+                    : "")
+              }
+            >
+              {codexLabel}
             </span>
           </div>
           <span

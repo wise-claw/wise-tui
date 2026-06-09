@@ -1,9 +1,14 @@
 //! Wise 内置 OpenCode Go / Zen 代理：Anthropic Messages API → OpenCode（参考 oc-go-cc）。
+//! Codex CLI 桥接：`/v1/chat/completions` 与 `/v1/responses`（参考 ocgo）。
 
 mod circuit;
+mod codex_bridge;
+mod codex_convert;
 mod models;
 mod router;
 mod routing;
+mod stream_anthropic_responses;
+mod stream_codex;
 mod tokens;
 mod traces;
 mod usage;
@@ -33,6 +38,12 @@ use tokio::sync::oneshot;
 const CONFIG_SETTINGS_KEY: &str = "opencode_go_proxy_config";
 const DEFAULT_PORT: u16 = 9876;
 const DEFAULT_MODEL: &str = "kimi-k2.6";
+/// Codex `config.toml` 中注册的 Wise 内置代理 provider ID。
+pub const CODEX_PROVIDER_ID: &str = "wise-opencode";
+/// Codex 档案名（`profiles.<name>`）。
+pub const CODEX_PROFILE_ID: &str = "wise-opencode-go";
+/// Codex 侧占位 API Key，真实 Key 由内置代理注入上游。
+pub const CODEX_PLACEHOLDER_API_KEY: &str = "wise-ocgo";
 
 static SERVER_STATE: OnceLock<Mutex<Option<Arc<ServerInner>>>> = OnceLock::new();
 static SHUTDOWN_TX: OnceLock<Mutex<Option<oneshot::Sender<()>>>> = OnceLock::new();
@@ -128,18 +139,19 @@ pub struct OpencodeGoProxyStatus {
     pub model_overrides: HashMap<String, ModelOverride>,
     pub has_api_key: bool,
     pub claude_settings_aligned: bool,
+    pub codex_settings_aligned: bool,
     pub trace_count: usize,
     pub debug: bool,
 }
 
-struct ServerInner {
+pub(crate) struct ServerInner {
     port: u16,
     config: RwLock<OpencodeGoProxyConfig>,
     client: reqwest::Client,
 }
 
 #[derive(Clone)]
-struct AppState {
+pub(crate) struct AppState {
     inner: Arc<ServerInner>,
 }
 
@@ -166,6 +178,196 @@ fn load_persisted(db: &crate::wise_db::WiseDb) -> OpencodeGoProxyConfig {
 fn save_persisted(db: &crate::wise_db::WiseDb, cfg: &OpencodeGoProxyConfig) -> Result<(), String> {
     let raw = serde_json::to_string(cfg).map_err(|e| e.to_string())?;
     db.set_setting(CONFIG_SETTINGS_KEY, &raw)
+}
+
+fn codex_base_url_matches(actual: &str, port: u16) -> bool {
+    let expected = format!("{}/v1", proxy_base_url(port).trim_end_matches('/'));
+    let a = actual.trim().trim_matches('"').trim_end_matches('/');
+    a == expected || a == format!("{expected}/")
+}
+
+fn parse_toml_kv_line(trimmed: &str, key: &str) -> Option<String> {
+    if trimmed.is_empty() || trimmed.starts_with('#') {
+        return None;
+    }
+    let rest = trimmed
+        .strip_prefix(key)
+        .and_then(|s| s.trim_start().strip_prefix('='))
+        .map(str::trim)?;
+    let unquoted = rest.trim_matches('"').trim_matches('\'').trim();
+    if unquoted.is_empty() {
+        None
+    } else {
+        Some(unquoted.to_string())
+    }
+}
+
+fn read_toml_section_value(config: &str, section: &str, key: &str) -> Option<String> {
+    if section.is_empty() {
+        for line in config.lines() {
+            let trimmed = line.trim();
+            if trimmed.starts_with('[') && trimmed.ends_with(']') {
+                break;
+            }
+            if let Some(v) = parse_toml_kv_line(trimmed, key) {
+                return Some(v);
+            }
+        }
+        return None;
+    }
+    let header = format!("[{section}]");
+    let mut in_section = false;
+    for line in config.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+            in_section = trimmed == header;
+            continue;
+        }
+        if !in_section {
+            continue;
+        }
+        if let Some(v) = parse_toml_kv_line(trimmed, key) {
+            return Some(v);
+        }
+    }
+    None
+}
+
+fn codex_bridge_present_in_config(config: &str) -> bool {
+    config.contains(&format!("[model_providers.{CODEX_PROVIDER_ID}]"))
+}
+
+fn codex_auth_aligned() -> bool {
+    let envelope = crate::codex_config_dir::read_codex_profile_envelope();
+    envelope
+        .auth
+        .get("OPENAI_API_KEY")
+        .and_then(|v| v.as_str())
+        .map(|s| s.trim() == CODEX_PLACEHOLDER_API_KEY)
+        .unwrap_or(false)
+}
+
+fn codex_legacy_wise_profile_present(config: &str) -> bool {
+    config.contains(&format!("profile = \"{CODEX_PROFILE_ID}\""))
+        || config.contains(&format!("[profiles.{CODEX_PROFILE_ID}]"))
+}
+
+fn codex_settings_aligned(port: u16, default_model: &str) -> bool {
+    let config_path = crate::codex_config_dir::user_codex_dir().join("config.toml");
+    let text = std::fs::read_to_string(&config_path).unwrap_or_default();
+    if !codex_bridge_present_in_config(&text) || codex_legacy_wise_profile_present(&text) {
+        return false;
+    }
+    let provider_section = format!("model_providers.{CODEX_PROVIDER_ID}");
+    let base_url = read_toml_section_value(&text, &provider_section, "base_url")
+        .unwrap_or_default();
+    let wire_api = read_toml_section_value(&text, &provider_section, "wire_api")
+        .unwrap_or_default();
+    let no_ws = read_toml_section_value(&text, &provider_section, "supports_websockets")
+        .map(|v| v == "false")
+        .unwrap_or(false);
+    let top_profile = read_toml_section_value(&text, "", "profile").unwrap_or_default();
+    if !top_profile.is_empty() {
+        return false;
+    }
+    let model_provider =
+        read_toml_section_value(&text, "", "model_provider").unwrap_or_default();
+    let model = read_toml_section_value(&text, "", "model").unwrap_or_default();
+
+    codex_base_url_matches(&base_url, port)
+        && wire_api == "responses"
+        && no_ws
+        && model_provider == CODEX_PROVIDER_ID
+        && model == default_model
+        && codex_auth_aligned()
+}
+
+fn remove_toml_section(config: &str, section: &str) -> String {
+    let header = format!("[{section}]");
+    let mut out = Vec::new();
+    let mut skipping = false;
+    for line in config.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+            skipping = trimmed == header;
+            if skipping {
+                continue;
+            }
+        }
+        if !skipping {
+            out.push(line);
+        }
+    }
+    let mut result = out.join("\n");
+    if config.ends_with('\n') && !result.is_empty() && !result.ends_with('\n') {
+        result.push('\n');
+    }
+    result
+}
+
+fn remove_top_level_profile_line(config: &str, profile_id: &str) -> String {
+    let needle = format!("profile = \"{profile_id}\"");
+    config
+        .lines()
+        .filter(|line| line.trim() != needle)
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+fn line_assigns_toml_key(line: &str, key: &str) -> bool {
+    let trimmed = line.trim();
+    trimmed.starts_with(&format!("{key} =")) || trimmed.starts_with(&format!("{key}="))
+}
+
+/// 删除全文件中的 `model_provider = ...`（仅 Wise 桥接使用）。
+fn remove_global_toml_key(config: &str, key: &str) -> String {
+    config
+        .lines()
+        .filter(|line| !line_assigns_toml_key(line, key))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
+/// 删除非 `[profiles.*]` 段内的 `model = ...`，保留用户其它供应商档案。
+fn remove_model_assignment_except_profiles(config: &str) -> String {
+    let mut out = Vec::new();
+    let mut in_profiles = false;
+    for line in config.lines() {
+        let trimmed = line.trim();
+        if trimmed.starts_with('[') && trimmed.ends_with(']') {
+            in_profiles = trimmed.starts_with("[profiles.");
+            out.push(line);
+            continue;
+        }
+        if line_assigns_toml_key(line, "model") && !in_profiles {
+            continue;
+        }
+        out.push(line);
+    }
+    let mut result = out.join("\n");
+    if config.ends_with('\n') && !result.is_empty() && !result.ends_with('\n') {
+        result.push('\n');
+    }
+    result
+}
+
+fn merge_codex_bridge_into_config(existing: &str, port: u16, default_model: &str) -> String {
+    let mut stripped = remove_toml_section(existing, &format!("model_providers.{CODEX_PROVIDER_ID}"));
+    stripped = remove_toml_section(&stripped, &format!("profiles.{CODEX_PROFILE_ID}"));
+    stripped = remove_top_level_profile_line(&stripped, CODEX_PROFILE_ID);
+    stripped = remove_global_toml_key(&stripped, "model_provider");
+    stripped = remove_model_assignment_except_profiles(&stripped);
+    let bridge = build_codex_bridge_config_toml(port, default_model);
+    let rest = stripped.trim();
+    let mut out = bridge;
+    if !rest.is_empty() {
+        out.push_str("\n\n");
+        out.push_str(rest);
+    }
+    if !out.ends_with('\n') {
+        out.push('\n');
+    }
+    out
 }
 
 fn claude_settings_aligned(port: u16) -> bool {
@@ -214,6 +416,7 @@ async fn build_status(cfg: &OpencodeGoProxyConfig) -> OpencodeGoProxyStatus {
         model_overrides: cfg.model_overrides.clone(),
         has_api_key: !cfg.api_key.trim().is_empty(),
         claude_settings_aligned: claude_settings_aligned(port),
+        codex_settings_aligned: codex_settings_aligned(port, &cfg.effective_model()),
         trace_count: traces::trace_store().len(),
         debug: cfg.debug,
     }
@@ -261,6 +464,12 @@ async fn start_server(cfg: OpencodeGoProxyConfig) -> Result<Arc<ServerInner>, St
         .route("/health", get(health_handler))
         .route("/v1/messages", post(messages_handler))
         .route("/v1/messages/count_tokens", post(count_tokens_handler))
+        .route(
+            "/v1/chat/completions",
+            post(codex_bridge::chat_completions_handler),
+        )
+        .route("/v1/responses", post(codex_bridge::responses_handler))
+        .route("/v1/models", get(codex_bridge::models_handler))
         .with_state(app_state);
 
     let (shutdown_tx, shutdown_rx) = oneshot::channel::<()>();
@@ -286,7 +495,7 @@ async fn start_server(cfg: OpencodeGoProxyConfig) -> Result<Arc<ServerInner>, St
 }
 
 /// 对齐 oc-go-cc：Anthropic 直通端点同时发送 Bearer 与 x-api-key。
-fn attach_opencode_upstream_auth(
+pub(crate) fn attach_opencode_upstream_auth(
     builder: reqwest::RequestBuilder,
     api_key: &str,
     endpoint: routing::EndpointKind,
@@ -300,7 +509,7 @@ fn attach_opencode_upstream_auth(
     }
 }
 
-fn upstream_auth_error_message(status: u16, body: &str) -> String {
+pub(crate) fn upstream_auth_error_message(status: u16, body: &str) -> String {
     if status == 401 {
         return format!(
             "OpenCode 上游认证失败，请检查代理配置中的 API Key 是否有效：{body}"
@@ -375,6 +584,7 @@ async fn messages_handler(
     for upstream_model in chain {
         let resolved = routing::resolve_upstream(provider, &upstream_model, &config.upstream_url);
         let trace = traces::TraceCapture::begin(
+            "/v1/messages",
             original_model.clone(),
             upstream_model.clone(),
             resolved.url.clone(),
@@ -732,13 +942,20 @@ pub(crate) fn bootstrap_from_db(app: &AppHandle) {
     if cfg.enabled && !cfg.api_key.trim().is_empty() {
         let cfg_clone = cfg.clone();
         tauri::async_runtime::spawn(async move {
+            let model = cfg_clone.effective_model();
             match start_server(cfg_clone).await {
                 Ok(inner) => {
                     let port = inner.port;
-                    if !claude_settings_aligned(port) {
-                        let _ = tokio::task::spawn_blocking(move || apply_claude_settings_sync(port))
-                            .await;
-                    }
+                    let _ = tokio::task::spawn_blocking(move || {
+                        if !claude_settings_aligned(port) {
+                            let _ = apply_claude_settings_sync(port);
+                        }
+                        if !codex_settings_aligned(port, &model) {
+                            let _ = apply_codex_settings_sync(port, &model);
+                        }
+                        Ok::<(), String>(())
+                    })
+                    .await;
                 }
                 Err(e) => eprintln!("[opencode_go_proxy] bootstrap start failed: {e}"),
             }
@@ -880,6 +1097,20 @@ pub async fn switch_opencode_go_proxy_model(
     cfg.default_model = trimmed.to_string();
     apply_runtime_config(&db, cfg)?;
     let cfg = load_persisted_into_cell(&db);
+    if server_cell()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .is_some()
+    {
+        let config_text =
+            crate::codex_config_dir::read_codex_profile_envelope().config;
+        if codex_bridge_present_in_config(&config_text) {
+            let port = resolve_active_port(&cfg);
+            let model = cfg.effective_model();
+            let _ = tokio::task::spawn_blocking(move || apply_codex_settings_sync(port, &model))
+                .await;
+        }
+    }
     Ok(build_status(&cfg).await)
 }
 
@@ -1055,9 +1286,14 @@ pub async fn set_opencode_go_proxy_config(
     if cfg.enabled {
         start_server(cfg.clone()).await?;
         let port = resolve_active_port(&cfg);
-        tokio::task::spawn_blocking(move || apply_claude_settings_sync(port))
-            .await
-            .map_err(|e| e.to_string())??;
+        let model = cfg.effective_model();
+        tokio::task::spawn_blocking(move || {
+            apply_claude_settings_sync(port)?;
+            apply_codex_settings_sync(port, &model)?;
+            Ok::<(), String>(())
+        })
+        .await
+        .map_err(|e| e.to_string())??;
     } else {
         stop_server();
     }
@@ -1070,6 +1306,26 @@ pub async fn set_opencode_go_proxy_config(
     Ok(build_status(&cfg).await)
 }
 
+/// 一次性同步 Claude settings.json 与 Codex config.toml。
+#[tauri::command]
+pub async fn apply_opencode_go_proxy_client_settings(
+    db: tauri::State<'_, crate::wise_db::WiseDb>,
+) -> Result<bool, String> {
+    let cfg = load_persisted(&db);
+    if !cfg.enabled {
+        return Err("OpenCode Go 代理未启用".into());
+    }
+    let port = resolve_active_port(&cfg);
+    let model = cfg.effective_model();
+    tokio::task::spawn_blocking(move || {
+        apply_claude_settings_sync(port)?;
+        apply_codex_settings_sync(port, &model)?;
+        Ok::<bool, String>(true)
+    })
+    .await
+    .map_err(|e| e.to_string())?
+}
+
 #[tauri::command]
 pub async fn apply_opencode_go_proxy_claude_settings(
     db: tauri::State<'_, crate::wise_db::WiseDb>,
@@ -1080,6 +1336,21 @@ pub async fn apply_opencode_go_proxy_claude_settings(
     }
     let port = resolve_active_port(&cfg);
     tokio::task::spawn_blocking(move || apply_claude_settings_sync(port))
+        .await
+        .map_err(|e| e.to_string())?
+}
+
+#[tauri::command]
+pub async fn apply_opencode_go_proxy_codex_settings(
+    db: tauri::State<'_, crate::wise_db::WiseDb>,
+) -> Result<bool, String> {
+    let cfg = load_persisted(&db);
+    if !cfg.enabled {
+        return Err("OpenCode Go 代理未启用".into());
+    }
+    let port = resolve_active_port(&cfg);
+    let model = cfg.effective_model();
+    tokio::task::spawn_blocking(move || apply_codex_settings_sync(port, &model))
         .await
         .map_err(|e| e.to_string())?
 }
@@ -1097,6 +1368,92 @@ fn resolve_active_port(cfg: &OpencodeGoProxyConfig) -> u16 {
     } else {
         cfg.port
     }
+}
+
+fn proxy_running_with_key(cfg: &OpencodeGoProxyConfig) -> bool {
+    cfg.enabled
+        && !cfg.api_key.trim().is_empty()
+        && server_cell()
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .is_some()
+}
+
+/// Codex `exec` 前：若内置代理运行中，覆盖 `~/.codex` 桥接配置并返回应使用的上游模型 ID。
+pub(crate) fn apply_codex_bridge_for_spawn(db: &crate::wise_db::WiseDb) -> Result<Option<String>, String> {
+    let cfg = load_persisted(db);
+    if !proxy_running_with_key(&cfg) {
+        return Ok(None);
+    }
+    let port = resolve_active_port(&cfg);
+    let model = cfg.effective_model();
+    apply_codex_settings_sync(port, &model)?;
+    Ok(Some(model))
+}
+
+/// Codex 子进程环境：指向本地桥接（占位 Key，真实 Key 由代理注入上游）。
+pub(crate) fn codex_spawn_env_overrides(db: &crate::wise_db::WiseDb) -> Option<(String, String)> {
+    let cfg = load_persisted(db);
+    if !proxy_running_with_key(&cfg) {
+        return None;
+    }
+    let port = resolve_active_port(&cfg);
+    let base = format!("{}/v1", proxy_base_url(port).trim_end_matches('/'));
+    Some((CODEX_PLACEHOLDER_API_KEY.to_string(), base))
+}
+
+fn build_codex_bridge_config_toml(port: u16, default_model: &str) -> String {
+    let base_url = format!("{}/v1", proxy_base_url(port).trim_end_matches('/'));
+    format!(
+        r#"model_provider = "{CODEX_PROVIDER_ID}"
+model = "{default_model}"
+
+[model_providers.{CODEX_PROVIDER_ID}]
+name = "Wise OpenCode"
+base_url = "{base_url}"
+env_key = "OPENAI_API_KEY"
+wire_api = "responses"
+supports_websockets = false
+requires_openai_auth = false
+"#
+    )
+}
+
+fn patch_codex_auth_for_bridge(
+    auth: &serde_json::Map<String, Value>,
+) -> serde_json::Map<String, Value> {
+    use serde_json::json;
+
+    let mut out = auth.clone();
+    let existing = out
+        .get("OPENAI_API_KEY")
+        .and_then(|v| v.as_str())
+        .unwrap_or("")
+        .trim();
+    if existing.is_empty() || existing == CODEX_PLACEHOLDER_API_KEY {
+        out.insert(
+            "OPENAI_API_KEY".to_string(),
+            json!(CODEX_PLACEHOLDER_API_KEY),
+        );
+    }
+    if !out.contains_key("auth_mode") {
+        out.insert("auth_mode".to_string(), json!("apikey"));
+    }
+    out
+}
+
+fn apply_codex_settings_sync(port: u16, default_model: &str) -> Result<bool, String> {
+    let current = crate::codex_config_dir::read_codex_profile_envelope();
+    let config = merge_codex_bridge_into_config(&current.config, port, default_model);
+    // 弃用 v2 profile 文件，避免 `--profile` 与根级 `model_provider` 双轨不一致。
+    let stale_profile = crate::codex_config_dir::codex_profile_v2_path(CODEX_PROFILE_ID);
+    if stale_profile.is_file() {
+        let _ = std::fs::remove_file(&stale_profile);
+    }
+    let auth = patch_codex_auth_for_bridge(&current.auth);
+    let envelope = crate::codex_config_dir::CodexProfileEnvelope { auth, config };
+    crate::codex_config_dir::apply_codex_profile_envelope(&envelope)?;
+    Ok(true)
 }
 
 fn apply_claude_settings_sync(port: u16) -> Result<bool, String> {
@@ -1142,4 +1499,86 @@ fn apply_claude_settings_sync(port: u16) -> Result<bool, String> {
     let serialized = serde_json::to_string_pretty(&root).map_err(|e| e.to_string())?;
     crate::wise_paths::write_file_atomic(&settings_path, &serialized)?;
     Ok(true)
+}
+
+#[cfg(test)]
+mod codex_bridge_config_tests {
+    use super::*;
+
+    #[test]
+    fn merge_preserves_unrelated_codex_sections() {
+        let existing = r#"model = "gpt-5.4"
+model_reasoning_effort = "medium"
+
+[profiles.other]
+model = "gpt-5.4"
+"#;
+        let merged = merge_codex_bridge_into_config(existing, 9876, "kimi-k2.6");
+        assert!(merged.contains("model_reasoning_effort"));
+        assert!(merged.contains("[profiles.other]"));
+        assert!(merged.contains("[model_providers.wise-opencode]"));
+        assert!(!merged.contains("profile = \"wise-opencode-go\""));
+        assert!(!merged.contains("[profiles.wise-opencode-go]"));
+        assert!(merged.contains("model_provider = \"wise-opencode\""));
+        assert!(merged.contains("model = \"kimi-k2.6\""));
+        assert!(merged.contains("http://127.0.0.1:9876/v1"));
+        assert!(merged.contains("supports_websockets = false"));
+    }
+
+    #[test]
+    fn merge_dedupes_model_keys_under_projects_section() {
+        let existing = r#"
+[projects."/repo"]
+trust_level = "trusted"
+model_provider = "wise-opencode"
+model = "old-model"
+
+model_provider = "wise-opencode"
+model = "old-model"
+
+[model_providers.wise-opencode]
+base_url = "http://127.0.0.1:1111/v1"
+"#;
+        let merged = merge_codex_bridge_into_config(existing, 9876, "kimi-k2.6");
+        assert_eq!(
+            merged.matches("model_provider = ").count(),
+            1,
+            "expected single model_provider, got:\n{merged}"
+        );
+        assert_eq!(merged.matches("model = ").count(), 1);
+        assert!(!merged.contains("1111"));
+        assert!(merged.starts_with("model_provider = \"wise-opencode\""));
+    }
+
+    #[test]
+    fn merge_replaces_stale_wise_sections() {
+        let existing = r#"[model_providers.wise-opencode]
+base_url = "http://127.0.0.1:1111/v1"
+
+[profiles.wise-opencode-go]
+model = "old-model"
+"#;
+        let merged = merge_codex_bridge_into_config(existing, 9876, "kimi-k2.6");
+        assert!(!merged.contains("1111"));
+        assert!(!merged.contains("[profiles.wise-opencode-go]"));
+        assert!(merged.contains("model = \"kimi-k2.6\""));
+        assert!(merged.contains("127.0.0.1:9876"));
+    }
+
+    #[test]
+    fn reads_bridge_model_from_top_level() {
+        let config = r#"model_provider = "wise-opencode"
+model = "qwen3.7-plus"
+"#;
+        assert_eq!(
+            read_toml_section_value(config, "", "model").as_deref(),
+            Some("qwen3.7-plus")
+        );
+    }
+
+    #[test]
+    fn codex_base_url_normalizes_trailing_slash() {
+        assert!(codex_base_url_matches("http://127.0.0.1:9876/v1/", 9876));
+        assert!(codex_base_url_matches("http://127.0.0.1:9876/v1", 9876));
+    }
 }

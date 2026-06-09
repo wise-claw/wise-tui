@@ -156,7 +156,7 @@ export function OpencodeGoProxySection({ embedded = false, proxy: proxyProp }: P
           <Typography.Link href={OPENCODE_GO_SIGNUP_URL} target="_blank" rel="noreferrer">
             OpenCode
           </Typography.Link>{" "}
-          获取 API Key 后启动并同步 Claude 设置。
+          获取 API Key 后启动；将自动同步 Claude settings 与 Codex config（亦可手动点同步）。
           {st?.proxyBaseUrl ? ` 本地：${st.proxyBaseUrl}` : null}
         </p>
       ) : null}
@@ -328,9 +328,23 @@ export function OpencodeGoProxySection({ embedded = false, proxy: proxyProp }: P
         <Button
           size={controlSize}
           disabled={disabled || !running}
+          onClick={() => void proxy.applyClientSettings()}
+        >
+          同步全部
+        </Button>
+        <Button
+          size={controlSize}
+          disabled={disabled || !running}
           onClick={() => void proxy.applyClaudeSettings()}
         >
-          同步 Claude
+          仅 Claude
+        </Button>
+        <Button
+          size={controlSize}
+          disabled={disabled || !running}
+          onClick={() => void proxy.applyCodexSettings()}
+        >
+          仅 Codex
         </Button>
         <Button
           size={controlSize}

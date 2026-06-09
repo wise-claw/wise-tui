@@ -273,7 +273,12 @@ pub(crate) async fn execute_codex_code(
     codex_resume_session_id: Option<String>,
     force_new_session: Option<bool>,
 ) -> Result<(), String> {
-    ensure_active_codex_profile_applied(&db)?;
+    let proxy_model = crate::opencode_go_proxy::apply_codex_bridge_for_spawn(&db)?;
+    let use_wise_bridge = proxy_model.is_some();
+    if !use_wise_bridge {
+        ensure_active_codex_profile_applied(&db)?;
+    }
+    let exec_model = proxy_model.or_else(|| normalize_codex_model(model.as_deref()));
 
     let registry = app.state::<ClaudeSessionRegistry>();
     let process_state = app.state::<ClaudeProcessState>();
@@ -292,7 +297,7 @@ pub(crate) async fn execute_codex_code(
     configure_codex_exec_command(
         &mut cmd,
         prompt.trim(),
-        model.as_deref(),
+        exec_model.as_deref(),
         resume_id.as_deref(),
         force_new,
     );
@@ -304,6 +309,10 @@ pub(crate) async fn execute_codex_code(
         "PATH",
         crate::claude_commands::merge_path_env(&crate::claude_commands::claude_path_search_prefixes()),
     );
+    if let Some((api_key, base_url)) = crate::opencode_go_proxy::codex_spawn_env_overrides(&db) {
+        cmd.env("OPENAI_API_KEY", api_key);
+        cmd.env("OPENAI_BASE_URL", base_url);
+    }
 
     if let Some(ctx) = trellis_context_id.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
         cmd.env("TRELLIS_CONTEXT_ID", ctx);
@@ -338,7 +347,8 @@ pub(crate) async fn execute_codex_code(
             .insert(session_id.clone(), wait_child.clone());
     }
 
-    let model_label = normalize_codex_model(model.as_deref()).unwrap_or_else(|| "codex".to_string());
+    let model_label =
+        exec_model.as_deref().unwrap_or("codex").to_string();
     emit_codex_stdout_line(
         &app,
         &session_id,
@@ -375,6 +385,9 @@ pub(crate) async fn execute_codex_code(
 
     let stderr_lines = Arc::new(TokioMutex::new(Vec::<String>::new()));
     let stderr_lines_reader = stderr_lines.clone();
+    let app_stderr = app.clone();
+    let session_id_stderr = session_id.clone();
+    let invocation_key_stderr = invocation_key.clone();
     tokio::spawn(async move {
         let reader = BufReader::new(stderr);
         let mut lines = reader.lines();
@@ -382,7 +395,22 @@ pub(crate) async fn execute_codex_code(
             if line.trim().is_empty() {
                 continue;
             }
-            stderr_lines_reader.lock().await.push(line);
+            stderr_lines_reader.lock().await.push(line.clone());
+            let lower = line.to_lowercase();
+            if lower.contains("error")
+                || lower.contains("unauthorized")
+                || lower.contains("failed")
+                || lower.contains("legacy")
+                || lower.contains("not found")
+                || lower.contains("401")
+            {
+                emit_codex_stdout_line(
+                    &app_stderr,
+                    &session_id_stderr,
+                    &codex_assistant_stream_line(&format!("Codex: {}", line.trim())),
+                    invocation_key_stderr.as_deref(),
+                );
+            }
         }
     });
 

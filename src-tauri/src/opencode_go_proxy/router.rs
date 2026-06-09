@@ -109,6 +109,25 @@ pub fn resolve_upstream_model(
     default_model.to_string()
 }
 
+/// Codex OpenAI 协议：不做 Claude 场景启发式，仅覆盖表 → 显式 model → 默认模型。
+pub fn resolve_codex_upstream_model(
+    requested: &str,
+    default_model: &str,
+    overrides: &HashMap<String, ModelOverride>,
+) -> String {
+    if let Some(ov) = lookup_model_override(requested, overrides) {
+        let id = ov.model_id.trim();
+        if !id.is_empty() {
+            return id.to_string();
+        }
+    }
+    let r = requested.trim();
+    if !r.is_empty() {
+        return r.to_string();
+    }
+    default_model.to_string()
+}
+
 fn is_background_request(requested_lower: &str, body: &Value) -> bool {
     if requested_lower.contains("background") || requested_lower.contains("subagent") {
         return true;
@@ -206,6 +225,36 @@ mod tests {
                 &HashMap::new(),
             ),
             "glm-5"
+        );
+    }
+
+    #[test]
+    fn codex_resolve_uses_explicit_model_without_claude_heuristics() {
+        let body = json!({
+            "messages": [{ "role": "user", "content": "x" }],
+            "metadata": { "user_id": "background" }
+        });
+        assert_eq!(
+            resolve_codex_upstream_model("claude-sonnet-4-8", "kimi-k2.6", &HashMap::new()),
+            "claude-sonnet-4-8"
+        );
+        assert_eq!(
+            resolve_upstream_model(
+                "claude-sonnet-4-8",
+                "kimi-k2.6",
+                Provider::OpenCodeGo,
+                &body,
+                &HashMap::new(),
+            ),
+            "qwen3.5-plus"
+        );
+    }
+
+    #[test]
+    fn codex_resolve_empty_to_default() {
+        assert_eq!(
+            resolve_codex_upstream_model("", "kimi-k2.6", &HashMap::new()),
+            "kimi-k2.6"
         );
     }
 

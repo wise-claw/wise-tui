@@ -44,8 +44,13 @@ function RecordSummary({ record }: { record: OpencodeGoProxyTraceEntry }) {
         </span>
       </div>
       <div className="app-llm-proxy-record__summary-right">
+        {record.claudeModel && record.claudeModel !== record.upstreamModel ? (
+          <span className="app-llm-proxy-record__stream-badge" title="客户端模型">
+            {record.claudeModel}
+          </span>
+        ) : null}
         <span className="app-llm-proxy-record__stream-badge" title="上游模型">
-          {record.upstreamModel}
+          → {record.upstreamModel}
         </span>
         <div className="app-llm-proxy-record__metrics">
           <span className="app-llm-proxy-record__metric-item" title="耗时">

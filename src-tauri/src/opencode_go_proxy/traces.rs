@@ -127,6 +127,7 @@ fn truncate_preview(text: &str) -> String {
 
 struct TraceMeta {
     started: Instant,
+    path: String,
     claude_model: String,
     upstream_model: String,
     upstream_url: String,
@@ -146,6 +147,7 @@ pub struct TraceCapture(Arc<TraceCaptureInner>);
 
 impl TraceCapture {
     pub fn begin(
+        path: &str,
         claude_model: String,
         upstream_model: String,
         upstream_url: String,
@@ -155,6 +157,7 @@ impl TraceCapture {
         Self(Arc::new(TraceCaptureInner {
             meta: TraceMeta {
                 started: Instant::now(),
+                path: path.to_string(),
                 claude_model,
                 upstream_model,
                 upstream_url,
@@ -218,7 +221,7 @@ impl TraceCapture {
             id: Uuid::new_v4().to_string(),
             timestamp_ms: now_ms(),
             method: "POST".to_string(),
-            path: "/v1/messages".to_string(),
+            path: meta.path.clone(),
             claude_model: meta.claude_model.clone(),
             upstream_model: meta.upstream_model.clone(),
             upstream_url: meta.upstream_url.clone(),

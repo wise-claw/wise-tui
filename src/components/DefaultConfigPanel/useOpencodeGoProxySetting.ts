@@ -6,7 +6,9 @@ import {
   type FreeClaudeCodeStatus,
 } from "../../services/freeClaudeCode";
 import {
+  applyOpencodeGoProxyClientSettings,
   applyOpencodeGoProxyClaudeSettings,
+  applyOpencodeGoProxyCodexSettings,
   getOpencodeGoProxyStatus,
   listOpencodeGoProxyModels,
   OPENCODE_GO_PROXY_DEFAULT_PORT,
@@ -539,7 +541,7 @@ export function useOpencodeGoProxySetting() {
 
   const saveAndStart = useCallback(
     () =>
-      runAction("已启动 OpenCode Go 代理", async () => {
+      runAction("已启动 OpenCode Go 代理（已同步 Claude / Codex）", async () => {
         const [llm, fcc] = await Promise.all([
           getClaudeLlmProxyStatus(),
           getFreeClaudeCodeStatus(),
@@ -611,8 +613,19 @@ export function useOpencodeGoProxySetting() {
     [runAction],
   );
 
+  const applyClientSettings = useCallback(
+    () =>
+      runAction("已同步 Claude settings 与 Codex config", applyOpencodeGoProxyClientSettings),
+    [runAction],
+  );
+
   const applyClaudeSettings = useCallback(
     () => runAction("已同步 Claude settings.json", applyOpencodeGoProxyClaudeSettings),
+    [runAction],
+  );
+
+  const applyCodexSettings = useCallback(
+    () => runAction("已同步 Codex config.toml", applyOpencodeGoProxyCodexSettings),
     [runAction],
   );
 
@@ -653,6 +666,8 @@ export function useOpencodeGoProxySetting() {
     saveConfig,
     saveAndStart,
     stop,
+    applyClientSettings,
     applyClaudeSettings,
+    applyCodexSettings,
   };
 }
