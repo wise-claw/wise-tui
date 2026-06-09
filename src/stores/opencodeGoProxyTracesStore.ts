@@ -4,9 +4,11 @@ import {
   listOpencodeGoProxyTraces,
 } from "../services/opencodeGoProxyTraces";
 import type { OpencodeGoProxyTraceEntry } from "../types/opencodeGoProxyTrace";
-import { readVisiblePollIntervalMs } from "../utils/adaptivePoll";
+import { startAdaptiveInterval } from "../utils/adaptivePoll";
+import { runWhenIdle } from "../utils/deferIdle";
 
-const POLL_MS = readVisiblePollIntervalMs(5000, 10000);
+const VISIBLE_POLL_MS = 5000;
+const HIDDEN_POLL_MS = 10_000;
 
 type Listener = () => void;
 
@@ -21,7 +23,7 @@ let running = false;
 let loading = false;
 let snapshot: OpencodeGoProxyTracesStoreSnapshot = { traces, running, loading };
 
-let pollTimer: ReturnType<typeof setInterval> | null = null;
+let disposePoll: (() => void) | null = null;
 let pollConsumers = 0;
 let refreshInFlight = false;
 const listeners = new Set<Listener>();
@@ -93,20 +95,24 @@ export function getOpencodeGoProxyTracesStoreSnapshot(): OpencodeGoProxyTracesSt
 
 export function startOpencodeGoProxyTracesPolling(): void {
   pollConsumers += 1;
-  if (pollConsumers === 1) {
-    void refreshStore();
-    pollTimer = setInterval(() => {
-      void refreshStore();
-    }, POLL_MS);
-  }
+  if (disposePoll) return;
+  void refreshStore();
+  disposePoll = startAdaptiveInterval(
+    () => {
+      runWhenIdle(() => {
+        void refreshStore();
+      });
+    },
+    VISIBLE_POLL_MS,
+    HIDDEN_POLL_MS,
+  );
 }
 
 export function stopOpencodeGoProxyTracesPolling(): void {
   pollConsumers = Math.max(0, pollConsumers - 1);
-  if (pollConsumers === 0 && pollTimer) {
-    clearInterval(pollTimer);
-    pollTimer = null;
-  }
+  if (pollConsumers > 0 || !disposePoll) return;
+  disposePoll();
+  disposePoll = null;
 }
 
 export async function refreshOpencodeGoProxyTracesStoreNow(): Promise<void> {

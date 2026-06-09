@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { memo, useState } from "react";
 import { useWorkspaceTodoIncompleteCount } from "../../hooks/useWorkspaceTodoIncompleteCount";
 import { UserOutlined } from "@ant-design/icons";
 import { App as AntdApp, Dropdown, Popover } from "antd";
@@ -40,10 +40,9 @@ import {
 } from "./SidebarIcons";
 import { useIsRepositoryRunCommandRunning } from "../../hooks/useIsRepositoryRunCommandRunning";
 import {
-  isRepositoryRunCommandRowPinned,
   toggleRepositoryRunCommandRowPinned,
+  type RepositoryRunCommandRowPinnedMap,
 } from "../../services/repositoryRunCommandRowActionPreference";
-import { useRepositoryRunCommandRowPinnedMap } from "../../hooks/useRepositoryRunCommandRowPinned";
 import { RunningMainSessionDot } from "./RunningMainSessionDot";
 import { RepositorySddStackBadge } from "./RepositorySddStackBadge";
 import { WorkspaceTodosPopoverContent } from "./WorkspaceTodosPopoverContent";
@@ -164,7 +163,11 @@ function RepositoryRunCommandRowActions({
   );
 }
 
-export function RepositoryConversationAction({ onOpen }: { onOpen: () => void }) {
+export const RepositoryConversationAction = memo(function RepositoryConversationAction({
+  onOpen,
+}: {
+  onOpen: () => void;
+}) {
   return (
     <DeferredHoverTooltip title="打开仓库对话">
       <button
@@ -180,9 +183,9 @@ export function RepositoryConversationAction({ onOpen }: { onOpen: () => void })
       </button>
     </DeferredHoverTooltip>
   );
-}
+});
 
-export function RepositoryTrellisAction({
+export const RepositoryTrellisAction = memo(function RepositoryTrellisAction({
   onOpen,
   variant = "repo",
 }: {
@@ -204,9 +207,9 @@ export function RepositoryTrellisAction({
       </button>
     </DeferredHoverTooltip>
   );
-}
+});
 
-export function SidebarScheduledTasksAction({
+export const SidebarScheduledTasksAction = memo(function SidebarScheduledTasksAction({
   totalCount,
   enabledCount,
   onOpen,
@@ -249,9 +252,9 @@ export function SidebarScheduledTasksAction({
       </button>
     </DeferredHoverTooltip>
   );
-}
+});
 
-export function SidebarRequirementAction({
+export const SidebarRequirementAction = memo(function SidebarRequirementAction({
   unsplitCount,
   onOpen,
   variant = "repo",
@@ -287,9 +290,9 @@ export function SidebarRequirementAction({
       </button>
     </DeferredHoverTooltip>
   );
-}
+});
 
-export function SidebarExecutableTasksAction({
+export const SidebarExecutableTasksAction = memo(function SidebarExecutableTasksAction({
   executableCount,
   onOpen,
   variant = "repo",
@@ -322,7 +325,7 @@ export function SidebarExecutableTasksAction({
       </button>
     </DeferredHoverTooltip>
   );
-}
+});
 
 export function SidebarWorkspaceRemindersAction({
   variant = "repo",
@@ -396,7 +399,41 @@ export function SidebarWorkspaceRemindersAction({
   );
 }
 
-export function RepositoryRow({
+function repositoryRowPropsEqual(
+  prev: Parameters<typeof RepositoryRowInner>[0],
+  next: Parameters<typeof RepositoryRowInner>[0],
+): boolean {
+  if (prev.repository.id !== next.repository.id) return false;
+  if (prev.repository !== next.repository) {
+    const a = prev.repository;
+    const b = next.repository;
+    if (
+      a.path !== b.path ||
+      a.name !== b.name ||
+      a.mainOwnerAgentName !== b.mainOwnerAgentName ||
+      a.openAppId !== b.openAppId ||
+      a.sddMode !== b.sddMode
+    ) {
+      return false;
+    }
+  }
+  if (prev.project.id !== next.project.id) return false;
+  if (prev.project.sddMode !== next.project.sddMode) return false;
+  if (prev.isActiveRepository !== next.isActiveRepository) return false;
+  if (prev.trellisReady !== next.trellisReady) return false;
+  if (prev.scheduledTasksTotalCount !== next.scheduledTasksTotalCount) return false;
+  if (prev.scheduledTasksEnabledCount !== next.scheduledTasksEnabledCount) return false;
+  if (prev.requirementUnsplitCount !== next.requirementUnsplitCount) return false;
+  if (prev.executableTaskCount !== next.executableTaskCount) return false;
+  if (prev.workspaceTodosEnabled !== next.workspaceTodosEnabled) return false;
+  if (prev.hideChatAction !== next.hideChatAction) return false;
+  if (prev.mainSessionRunning !== next.mainSessionRunning) return false;
+  if (prev.pinnedRunCommandRowActions !== next.pinnedRunCommandRowActions) return false;
+  if (prev.repositoryReorder !== next.repositoryReorder) return false;
+  return true;
+}
+
+function RepositoryRowInner({
   project,
   repository,
   isActiveRepository,
@@ -427,6 +464,7 @@ export function RepositoryRow({
   onStopRepositoryRunCommand,
   mainSessionRunning = false,
   onStopMainSession,
+  pinnedRunCommandRowActions = false,
 }: {
   project: Workspace;
   repository: Repository;
@@ -458,13 +496,9 @@ export function RepositoryRow({
   onStopRepositoryRunCommand?: (repository: Repository) => void;
   mainSessionRunning?: boolean;
   onStopMainSession?: () => void;
+  pinnedRunCommandRowActions?: boolean;
 }) {
   const runCommandRunning = useIsRepositoryRunCommandRunning(repository.id);
-  const runCommandRowPinnedMap = useRepositoryRunCommandRowPinnedMap();
-  const pinnedRunCommandRowActions = isRepositoryRunCommandRowPinned(
-    runCommandRowPinnedMap,
-    repository.id,
-  );
   const workspaceTrellisEnabled = project.sddMode !== "project_owned" || trellisReady;
   const moreItems = buildProjectRepositoryMoreMenuItems({
     trellisEnabled: workspaceTrellisEnabled,
@@ -654,7 +688,40 @@ export function RepositoryRow({
   );
 }
 
-export function FloatingRepositoryRow({
+export const RepositoryRow = memo(RepositoryRowInner, repositoryRowPropsEqual);
+
+function floatingRepositoryRowPropsEqual(
+  prev: Parameters<typeof FloatingRepositoryRowInner>[0],
+  next: Parameters<typeof FloatingRepositoryRowInner>[0],
+): boolean {
+  if (prev.repository.id !== next.repository.id) return false;
+  if (prev.repository !== next.repository) {
+    const a = prev.repository;
+    const b = next.repository;
+    if (
+      a.path !== b.path ||
+      a.name !== b.name ||
+      a.mainOwnerAgentName !== b.mainOwnerAgentName ||
+      a.openAppId !== b.openAppId ||
+      a.sddMode !== b.sddMode
+    ) {
+      return false;
+    }
+  }
+  if (prev.isActiveRepository !== next.isActiveRepository) return false;
+  if (prev.joinableProjects !== next.joinableProjects) return false;
+  if (prev.trellisReady !== next.trellisReady) return false;
+  if (prev.scheduledTasksTotalCount !== next.scheduledTasksTotalCount) return false;
+  if (prev.scheduledTasksEnabledCount !== next.scheduledTasksEnabledCount) return false;
+  if (prev.requirementUnsplitCount !== next.requirementUnsplitCount) return false;
+  if (prev.executableTaskCount !== next.executableTaskCount) return false;
+  if (prev.workspaceTodosEnabled !== next.workspaceTodosEnabled) return false;
+  if (prev.mainSessionRunning !== next.mainSessionRunning) return false;
+  if (prev.pinnedRunCommandRowActions !== next.pinnedRunCommandRowActions) return false;
+  return true;
+}
+
+function FloatingRepositoryRowInner({
   repository,
   isActiveRepository,
   joinableProjects,
@@ -687,6 +754,7 @@ export function FloatingRepositoryRow({
   onStopRepositoryRunCommand,
   mainSessionRunning = false,
   onStopMainSession,
+  pinnedRunCommandRowActions = false,
 }: {
   repository: StandaloneRepo;
   isActiveRepository: boolean;
@@ -720,13 +788,9 @@ export function FloatingRepositoryRow({
   onStopRepositoryRunCommand?: (repository: Repository) => void;
   mainSessionRunning?: boolean;
   onStopMainSession?: () => void;
+  pinnedRunCommandRowActions?: boolean;
 }) {
   const runCommandRunning = useIsRepositoryRunCommandRunning(repository.id);
-  const runCommandRowPinnedMap = useRepositoryRunCommandRowPinnedMap();
-  const pinnedRunCommandRowActions = isRepositoryRunCommandRowPinned(
-    runCommandRowPinnedMap,
-    repository.id,
-  );
   const hasMainOwner = Boolean(repository.mainOwnerAgentName?.trim());
   const showActiveRepository = isActiveRepository;
 
@@ -898,6 +962,8 @@ export function FloatingRepositoryRow({
   );
 }
 
+export const FloatingRepositoryRow = memo(FloatingRepositoryRowInner, floatingRepositoryRowPropsEqual);
+
 export function ProjectRepositoryRows({
   project,
   projectRepos,
@@ -932,6 +998,7 @@ export function ProjectRepositoryRows({
   onStopRepositoryRunCommand,
   runningMainSessionByRepositoryId = {},
   onStopRepositoryMainSession,
+  runCommandRowPinnedMap = {},
 }: {
   project: Workspace;
   projectRepos: Repository[];
@@ -966,6 +1033,7 @@ export function ProjectRepositoryRows({
   onStopRepositoryRunCommand?: (repository: Repository) => void;
   runningMainSessionByRepositoryId?: Record<number, boolean>;
   onStopRepositoryMainSession?: (repository: Repository) => void;
+  runCommandRowPinnedMap?: RepositoryRunCommandRowPinnedMap;
 }) {
   const { message } = AntdApp.useApp();
   const [dropHint, setDropHint] = useState<{ anchorRepositoryId: number; placement: "before" | "after" } | null>(
@@ -1034,6 +1102,7 @@ export function ProjectRepositoryRows({
                 ? () => onStopRepositoryMainSession(repository)
                 : undefined
             }
+            pinnedRunCommandRowActions={runCommandRowPinnedMap[repository.id] === true}
           />
         );
       })}

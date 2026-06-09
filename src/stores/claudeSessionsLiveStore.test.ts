@@ -57,4 +57,31 @@ describe("claudeSessionsLiveStore", () => {
     expect(aRevision).toBe(1);
     unsub();
   });
+
+  test("defers live flush while document is hidden", async () => {
+    if (typeof document === "undefined") return;
+    const originalDescriptor = Object.getOwnPropertyDescriptor(document, "visibilityState");
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      get: () => "hidden",
+    });
+    let liveRevision = 0;
+    const unsub = subscribeClaudeSessionLive("hidden-a", () => {
+      liveRevision += 1;
+    });
+    publishClaudeSessions([stubSession("hidden-a", 1)]);
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(liveRevision).toBe(0);
+    Object.defineProperty(document, "visibilityState", {
+      configurable: true,
+      get: () => "visible",
+    });
+    document.dispatchEvent(new Event("visibilitychange"));
+    await new Promise((resolve) => setTimeout(resolve, 250));
+    expect(liveRevision).toBe(1);
+    unsub();
+    if (originalDescriptor) {
+      Object.defineProperty(document, "visibilityState", originalDescriptor);
+    }
+  });
 });

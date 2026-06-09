@@ -1,7 +1,8 @@
 import { Plugin, PluginKey } from "@tiptap/pm/state";
-import type { Node } from "@tiptap/pm/model";
+import type { MarkType, Node, Schema } from "@tiptap/pm/model";
 import { Decoration, DecorationSet, type DecorationAttrs } from "@tiptap/pm/view";
 import type { ComposerProseMirrorEditor } from "./composer-trigger-anchor";
+import { normalizeComposerEditorPlain } from "./composer-plain-utils";
 
 export type ComposerHighlightKind = "at" | "slash";
 
@@ -12,15 +13,14 @@ export interface ComposerHighlightRange {
 }
 
 const COMPOSER_TOKEN_HIGHLIGHT_KEY = new PluginKey<DecorationSet>("wise-composer-token-highlight");
+export const COMPOSER_HIGHLIGHT_SYNC_META = "wise-composer-highlight-sync";
+const COMPOSER_HIGHLIGHT_MARK_SYNC_KEY = new PluginKey("wise-composer-highlight-mark-sync");
 
 /** @ 指派后续英文词（如 Claude Code）；不含 CJK，避免把正文「你好」吞进提及。 */
 const AT_MENTION_CONTINUATION_WORD = /[A-Za-z0-9._-]/;
 
-/** Semi 与 Wise 编辑器中的零宽字符，不参与 @ / 指令高亮 plain 映射。 */
-const COMPOSER_ZERO_WIDTH_CHARS = /[\u200B\uFEFF]/g;
-
 function normalizeComposerPlain(plain: string): string {
-  return plain.replace(COMPOSER_ZERO_WIDTH_CHARS, "");
+  return normalizeComposerEditorPlain(plain);
 }
 
 function isSlashCommandToken(token: string): boolean {
@@ -148,21 +148,59 @@ export function docToHighlightPlain(doc: PlainTextDoc): string {
   return normalizeComposerPlain(doc.textBetween(0, doc.content.size, "\n"));
 }
 
+function readHighlightMarkTypes(schema: Schema): {
+  at: MarkType | null;
+  slash: MarkType | null;
+} {
+  return {
+    at: schema.marks.wiseComposerAtHighlight ?? null,
+    slash: schema.marks.wiseComposerSlashHighlight ?? null,
+  };
+}
+
+/** 在 doc 变更后把 @ / 指令范围写成 ProseMirror mark（DOM 内真实 span，输入后续字不会丢）。 */
+export function createComposerHighlightMarkSyncPlugin(): Plugin {
+  return new Plugin({
+    key: COMPOSER_HIGHLIGHT_MARK_SYNC_KEY,
+    appendTransaction(transactions, _oldState, newState) {
+      if (!transactions.some((tr) => tr.docChanged)) return null;
+      if (transactions.some((tr) => tr.getMeta(COMPOSER_HIGHLIGHT_SYNC_META))) return null;
+
+      const { doc, schema } = newState;
+      const { at: atType, slash: slashType } = readHighlightMarkTypes(schema);
+      if (!atType || !slashType) return null;
+
+      const plain = docToHighlightPlain(doc);
+      const desired = findComposerHighlightRanges(plain);
+
+      let tr = newState.tr;
+      tr.removeMark(0, doc.content.size, atType);
+      tr.removeMark(0, doc.content.size, slashType);
+
+      for (const range of desired) {
+        const from = highlightPlainOffsetToDocPos(doc, range.start);
+        const to = highlightPlainOffsetToDocPos(doc, range.end);
+        if (to <= from) continue;
+        tr.addMark(from, to, range.kind === "at" ? atType.create() : slashType.create());
+      }
+
+      if (!tr.steps.length) return null;
+
+      tr.setMeta(COMPOSER_HIGHLIGHT_SYNC_META, true);
+      tr.setMeta("addToHistory", false);
+      return tr;
+    },
+  });
+}
+
+/** @deprecated Decoration 路径在 Semi 输入下不可靠；保留供测试。 */
 export function createComposerTokenHighlightPlugin(): Plugin {
   return new Plugin({
     key: COMPOSER_TOKEN_HIGHLIGHT_KEY,
-    state: {
-      init: (_, { doc }) => buildComposerTokenDecorationSet(doc),
-      apply(tr, set) {
-        if (tr.docChanged) {
-          return buildComposerTokenDecorationSet(tr.doc);
-        }
-        return set;
-      },
-    },
     props: {
+      /** 每次绘制直接从 doc 计算，避免 plugin state 与 Semi appendTransaction 不同步导致 span 消失。 */
       decorations(state) {
-        return COMPOSER_TOKEN_HIGHLIGHT_KEY.getState(state) ?? DecorationSet.empty;
+        return buildComposerTokenDecorationSet(state.doc);
       },
     },
   });
@@ -172,11 +210,27 @@ type ComposerEditorWithState = {
   state: {
     plugins: readonly Plugin[];
     reconfigure: (config: { plugins: readonly Plugin[] }) => unknown;
+    tr: unknown;
   };
   view: {
     updateState: (state: unknown) => void;
+    dispatch: (tr: unknown) => void;
   };
 };
+
+/** 强制 ProseMirror 重绘装饰（勿 reconfigure，以免破坏 Tiptap 扩展链）。 */
+export function refreshComposerTokenHighlights(editor: unknown): void {
+  if (!editor || typeof editor !== "object") return;
+  const typed = editor as {
+    view?: { dispatch: (tr: unknown) => void; state: { tr: unknown } };
+  };
+  if (!typed.view?.dispatch || !typed.view.state?.tr) return;
+  try {
+    typed.view.dispatch(typed.view.state.tr);
+  } catch {
+    /* ignore dispatch errors */
+  }
+}
 
 export function ensureComposerTokenHighlightPlugin(editor: unknown): Plugin | null {
   if (!editor || typeof editor !== "object") return null;

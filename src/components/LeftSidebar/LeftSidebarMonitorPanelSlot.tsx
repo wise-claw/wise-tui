@@ -9,6 +9,7 @@ import { LEFT_SIDEBAR_SCROLLING_CLASS } from "../../constants/leftSidebarScrollP
 import { useMonitorPanelVisibleRows } from "../../hooks/useMonitorPanelVisibleRows";
 import { useScrollEndClass } from "../../hooks/useScrollEndClass";
 import { ProgressMonitorPanel } from "../ProgressMonitorPanel";
+import { prefetchModule } from "../../utils/prefetchModule";
 
 export type LeftSidebarMonitorPanelSlotProps = {
   visible?: boolean;
@@ -229,5 +230,5 @@ export const LeftSidebarMonitorPanelSlot = memo(function LeftSidebarMonitorPanel
 
 /** 左栏挂载后预加载运行面板，避免首次展开 Suspense 卡顿。 */
 export function preloadLeftSidebarMonitorPanel(): void {
-  void import("../ProgressMonitorPanel");
+  prefetchModule(() => import("../ProgressMonitorPanel"), "ProgressMonitorPanel");
 }

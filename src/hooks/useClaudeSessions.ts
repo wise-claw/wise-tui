@@ -79,7 +79,7 @@ import {
   PERSIST_SESSION_MESSAGES_MAX,
 } from "../constants/claudeMessageListWindow";
 import { runWhenIdle } from "../utils/deferIdle";
-import { readVisiblePollIntervalMs } from "../utils/adaptivePoll";
+import { readVisiblePollIntervalMs, startAdaptiveInterval } from "../utils/adaptivePoll";
 import { wiseNotificationIngest } from "../services/wiseMascot";
 import {
   buildQuestionFallbackUserPrompt,
@@ -2178,7 +2178,9 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   useEffect(() => {
     if (!tabsHydrated) return;
     let cancelIdle: (() => void) | null = null;
-    const timer = window.setInterval(() => {
+    let timer: number | null = null;
+
+    const runMemoryCapPass = () => {
       const hidden = typeof document !== "undefined" && document.visibilityState !== "visible";
       if (cancelIdle) cancelIdle();
       cancelIdle = runWhenIdle(() => {
@@ -2200,10 +2202,33 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           return capped === prev ? prev : capped;
         });
       }, { timeoutMs: hidden ? 1200 : 4000 });
-    }, readVisiblePollIntervalMs(45_000, 60_000));
+    };
+
+    const scheduleTimer = () => {
+      if (timer != null) window.clearInterval(timer);
+      timer = window.setInterval(
+        runMemoryCapPass,
+        readVisiblePollIntervalMs(45_000, 90_000),
+      );
+    };
+
+    scheduleTimer();
+    const onVisibilityChange = () => {
+      scheduleTimer();
+      if (typeof document !== "undefined" && document.visibilityState === "visible") {
+        runMemoryCapPass();
+      }
+    };
+    if (typeof document !== "undefined") {
+      document.addEventListener("visibilitychange", onVisibilityChange);
+    }
+
     return () => {
-      window.clearInterval(timer);
+      if (timer != null) window.clearInterval(timer);
       if (cancelIdle) cancelIdle();
+      if (typeof document !== "undefined") {
+        document.removeEventListener("visibilitychange", onVisibilityChange);
+      }
     };
   }, [buildMemoryKeepSessionIds, companionMemoryLimits.globalBudget, pruneLiveSessionSidecars, setSessions, tabsHydrated]);
 
@@ -2218,8 +2243,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       if (timer != null) window.clearInterval(timer);
       timer = window.setInterval(() => {
         if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-        void tick();
-      }, readVisiblePollIntervalMs(15_000, 30_000));
+        if (cancelIdle) cancelIdle();
+        cancelIdle = runWhenIdle(() => {
+          void tick();
+        }, { timeoutMs: 1800 });
+      }, readVisiblePollIntervalMs(15_000, 45_000));
     };
 
     const tick = async () => {
@@ -2284,15 +2312,22 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       if (document.visibilityState === "visible") {
         runTick();
         scheduleTimer();
+      } else {
+        scheduleTimer();
       }
     };
+    const onWindowResize = () => {
+      scheduleTimer();
+    };
     document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("resize", onWindowResize);
 
     return () => {
       cancelled = true;
       if (timer != null) window.clearInterval(timer);
       if (cancelIdle) cancelIdle();
       document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("resize", onWindowResize);
     };
   }, []);
 
@@ -3712,11 +3747,14 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   );
 
   useEffect(() => {
-    const timer = window.setInterval(() => {
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-      notificationHub.expireStaleRequests(CONTROL_REQUEST_EXPIRE_MS);
-    }, readVisiblePollIntervalMs(60_000, 180_000));
-    return () => window.clearInterval(timer);
+    const dispose = startAdaptiveInterval(
+      () => {
+        notificationHub.expireStaleRequests(CONTROL_REQUEST_EXPIRE_MS);
+      },
+      60_000,
+      180_000,
+    );
+    return dispose;
   }, []);
 
   useEffect(() => {

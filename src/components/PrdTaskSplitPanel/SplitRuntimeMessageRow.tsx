@@ -1,6 +1,6 @@
 import { CopyOutlined } from "@ant-design/icons";
 import { Button } from "antd";
-import { useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { LinkifiedPre } from "../ClaudeSessions/LinkifiedPre";
 import type { SplitRetryPhase, SplitRuntimeLogItem } from "./types";
 
@@ -10,7 +10,7 @@ interface Props {
   onRetryStage: (phase: SplitRetryPhase) => void;
 }
 
-export function SplitRuntimeMessageRow({ log, retryingPhase, onRetryStage }: Props) {
+function SplitRuntimeMessageRowInner({ log, retryingPhase, onRetryStage }: Props) {
   const [copied, setCopied] = useState(false);
   const copyResetTimerRef = useRef<number | null>(null);
 
@@ -136,6 +136,21 @@ export function SplitRuntimeMessageRow({ log, retryingPhase, onRetryStage }: Pro
     </div>
   );
 }
+
+export const SplitRuntimeMessageRow = memo(SplitRuntimeMessageRowInner, (prev, next) => {
+  if (prev.log !== next.log) {
+    if (
+      prev.log.id !== next.log.id ||
+      prev.log.at !== next.log.at ||
+      prev.log.status !== next.log.status ||
+      prev.log.text !== next.log.text ||
+      prev.log.title !== next.log.title
+    ) {
+      return false;
+    }
+  }
+  return prev.retryingPhase === next.retryingPhase && prev.onRetryStage === next.onRetryStage;
+});
 
 function runtimeStatusLabel(status: SplitRuntimeLogItem["status"]): string {
   switch (status) {

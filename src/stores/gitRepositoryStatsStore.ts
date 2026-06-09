@@ -1,5 +1,5 @@
 import { gitStatusSummary } from "../services/git";
-import { readVisiblePollIntervalMs } from "../utils/adaptivePoll";
+import { startAdaptiveInterval } from "../utils/adaptivePoll";
 
 const VISIBLE_POLL_INTERVAL_MS = 10000;
 const HIDDEN_POLL_INTERVAL_MS = 30000;
@@ -17,7 +17,7 @@ type Listener = () => void;
 
 const entriesByPath = new Map<string, PathEntry>();
 const listenersByPath = new Map<string, Set<Listener>>();
-let pollTimer: ReturnType<typeof setInterval> | null = null;
+let disposePoll: (() => void) | null = null;
 let pollConsumerPaths = 0;
 
 function normalizePath(path: string): string {
@@ -66,44 +66,21 @@ function refreshAllPaths(): void {
   }
 }
 
-function pollIntervalMs(): number {
-  return readVisiblePollIntervalMs(VISIBLE_POLL_INTERVAL_MS, HIDDEN_POLL_INTERVAL_MS);
-}
-
-function restartPollTimer(): void {
-  if (pollTimer) {
-    clearInterval(pollTimer);
-    pollTimer = null;
-  }
-  if (pollConsumerPaths <= 0) return;
-  pollTimer = setInterval(refreshAllPaths, pollIntervalMs());
-}
-
 function ensurePollLoop(): void {
-  if (pollTimer || pollConsumerPaths <= 0) return;
+  if (disposePoll || pollConsumerPaths <= 0) return;
   void refreshAllPaths();
-  restartPollTimer();
-  if (typeof document !== "undefined") {
-    document.addEventListener("visibilitychange", onVisibilityChange);
-  }
+  disposePoll = startAdaptiveInterval(
+    refreshAllPaths,
+    VISIBLE_POLL_INTERVAL_MS,
+    HIDDEN_POLL_INTERVAL_MS,
+  );
 }
 
 function stopPollLoopIfIdle(): void {
   if (pollConsumerPaths > 0) return;
-  if (pollTimer) {
-    clearInterval(pollTimer);
-    pollTimer = null;
-  }
-  if (typeof document !== "undefined") {
-    document.removeEventListener("visibilitychange", onVisibilityChange);
-  }
-}
-
-function onVisibilityChange(): void {
-  if (pollConsumerPaths <= 0) return;
-  restartPollTimer();
-  if (typeof document !== "undefined" && document.visibilityState === "visible") {
-    refreshAllPaths();
+  if (disposePoll) {
+    disposePoll();
+    disposePoll = null;
   }
 }
 
@@ -172,12 +149,9 @@ export function getGitRepositoryStatsGeneration(path: string): number {
 
 /** @internal test helper */
 export function resetGitRepositoryStatsStoreForTests(): void {
-  if (pollTimer) {
-    clearInterval(pollTimer);
-    pollTimer = null;
-  }
-  if (typeof document !== "undefined") {
-    document.removeEventListener("visibilitychange", onVisibilityChange);
+  if (disposePoll) {
+    disposePoll();
+    disposePoll = null;
   }
   entriesByPath.clear();
   listenersByPath.clear();

@@ -14,9 +14,16 @@ export function contentsToPlain(contents: Content[]): string {
   return out;
 }
 
+/** Semi/Tiptap 零宽字符；读写 plain 时统一剥离，避免与 React 状态不一致触发 setContent 回写。 */
+export function normalizeComposerEditorPlain(plain: string): string {
+  return plain.replace(/[\u200B\uFEFF]/g, "");
+}
+
 /** 将 composer Prompt 转为与 Tiptap 对齐的纯文本（不 trimEnd，避免多行/行尾换行与编辑器不一致）。 */
 export function promptToDisplayPlain(prompt: Prompt): string {
-  return serializePromptPartsToClaudeString(prompt, { trimEnd: false });
+  return normalizeComposerEditorPlain(
+    serializePromptPartsToClaudeString(prompt, { trimEnd: false }),
+  );
 }
 
 export function singleTextPrompt(plain: string): Prompt {

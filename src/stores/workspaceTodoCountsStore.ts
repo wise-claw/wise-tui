@@ -18,7 +18,9 @@ interface WorkspaceTodosChangedDetail {
 }
 
 let snapshot: WorkspaceTodoCountsSnapshot = { byProjectId: {}, byRepositoryId: {} };
-const listeners = new Set<() => void>();
+const globalListeners = new Set<() => void>();
+const projectListenersById = new Map<string, Set<() => void>>();
+const repositoryListenersById = new Map<number, Set<() => void>>();
 
 let loadGeneration = 0;
 let hasLoaded = false;
@@ -29,14 +31,69 @@ let scopeFloatingRepositories: Repository[] = [];
 let scopeEnabled = true;
 let eventListenerAttached = false;
 
-function emit(): void {
-  for (const listener of listeners) {
+function notifyListener(listener: () => void): void {
+  try {
     listener();
+  } catch {
+    /* ignore subscriber errors */
   }
 }
 
-function emitInTransition(): void {
-  startTransition(emit);
+function notifyProjectScope(projectId: string): void {
+  const listeners = projectListenersById.get(projectId);
+  if (listeners) {
+    for (const listener of listeners) {
+      notifyListener(listener);
+    }
+  }
+}
+
+function notifyRepositoryScope(repositoryId: number): void {
+  const listeners = repositoryListenersById.get(repositoryId);
+  if (listeners) {
+    for (const listener of listeners) {
+      notifyListener(listener);
+    }
+  }
+}
+
+function emitSnapshotDiff(
+  prev: WorkspaceTodoCountsSnapshot,
+  next: WorkspaceTodoCountsSnapshot,
+): void {
+  const projectIds = new Set([
+    ...Object.keys(prev.byProjectId),
+    ...Object.keys(next.byProjectId),
+  ]);
+  for (const projectId of projectIds) {
+    if ((prev.byProjectId[projectId] ?? 0) !== (next.byProjectId[projectId] ?? 0)) {
+      notifyProjectScope(projectId);
+    }
+  }
+
+  const repositoryIds = new Set([
+    ...Object.keys(prev.byRepositoryId).map(Number),
+    ...Object.keys(next.byRepositoryId).map(Number),
+  ]);
+  for (const repositoryId of repositoryIds) {
+    if (!Number.isFinite(repositoryId)) continue;
+    if ((prev.byRepositoryId[repositoryId] ?? 0) !== (next.byRepositoryId[repositoryId] ?? 0)) {
+      notifyRepositoryScope(repositoryId);
+    }
+  }
+}
+
+function emitGlobalListeners(): void {
+  for (const listener of globalListeners) {
+    notifyListener(listener);
+  }
+}
+
+function emitInTransition(prev: WorkspaceTodoCountsSnapshot, next: WorkspaceTodoCountsSnapshot): void {
+  startTransition(() => {
+    emitSnapshotDiff(prev, next);
+    emitGlobalListeners();
+  });
 }
 
 function countIncomplete(items: { completed: boolean }[]): number {
@@ -102,14 +159,15 @@ function applyRepositoryCount(
 }
 
 function commitSnapshot(next: WorkspaceTodoCountsSnapshot): void {
+  const prev = snapshot;
   if (
-    stringNumberRecordEqual(snapshot.byProjectId, next.byProjectId) &&
-    idNumberRecordEqual(snapshot.byRepositoryId, next.byRepositoryId)
+    stringNumberRecordEqual(prev.byProjectId, next.byProjectId) &&
+    idNumberRecordEqual(prev.byRepositoryId, next.byRepositoryId)
   ) {
     return;
   }
   snapshot = next;
-  emitInTransition();
+  emitInTransition(prev, next);
 }
 
 function applyChangedDetail(detail: WorkspaceTodosChangedDetail): void {
@@ -294,8 +352,42 @@ function ensureEventListener(): void {
 
 export function subscribeWorkspaceTodoCounts(listener: () => void): () => void {
   ensureEventListener();
-  listeners.add(listener);
-  return () => listeners.delete(listener);
+  globalListeners.add(listener);
+  return () => globalListeners.delete(listener);
+}
+
+export function subscribeWorkspaceTodoCountsForScope(
+  scope: "project" | "repository",
+  projectId: string | null,
+  repositoryId: number | null,
+  listener: () => void,
+): () => void {
+  ensureEventListener();
+  if (scope === "project") {
+    const id = projectId?.trim();
+    if (!id) return () => {};
+    let set = projectListenersById.get(id);
+    if (!set) {
+      set = new Set();
+      projectListenersById.set(id, set);
+    }
+    set.add(listener);
+    return () => {
+      set!.delete(listener);
+      if (set!.size === 0) projectListenersById.delete(id);
+    };
+  }
+  if (repositoryId == null || !Number.isFinite(repositoryId)) return () => {};
+  let set = repositoryListenersById.get(repositoryId);
+  if (!set) {
+    set = new Set();
+    repositoryListenersById.set(repositoryId, set);
+  }
+  set.add(listener);
+  return () => {
+    set!.delete(listener);
+    if (set!.size === 0) repositoryListenersById.delete(repositoryId);
+  };
 }
 
 export function getWorkspaceTodoCountsSnapshot(): WorkspaceTodoCountsSnapshot {
@@ -315,6 +407,13 @@ export function getWorkspaceTodoIncompleteCount(
     return snapshot.byRepositoryId[repositoryId] ?? 0;
   }
   return 0;
+}
+
+/** @internal test helper */
+export function commitWorkspaceTodoCountsSnapshotForTests(
+  next: WorkspaceTodoCountsSnapshot,
+): void {
+  commitSnapshot(next);
 }
 
 export function buildWorkspaceTodoCountsScopeKey(

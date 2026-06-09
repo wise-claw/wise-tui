@@ -295,7 +295,7 @@ export function AssistantSettingsDrawer({
       title={assistant ? `${assistant.name} 设置` : "助手设置"}
       open={open}
       onClose={onClose}
-      width={520}
+      size={520}
       className="assistant-settings-drawer"
       extra={
         <div className="assistant-settings-drawer__actions">

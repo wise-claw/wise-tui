@@ -4,10 +4,11 @@ import { getFreeClaudeCodeStatus } from "../services/freeClaudeCode";
 import { clearFccTraces, listFccTraces } from "../services/fccTraces";
 import type { FccTraceEntry } from "../types/fccTrace";
 import { mergeFccTraceEntries } from "../utils/mergeFccTraceEntries";
-import { readVisiblePollIntervalMs } from "../utils/adaptivePoll";
+import { startAdaptiveInterval } from "../utils/adaptivePoll";
 import { runWhenIdle } from "../utils/deferIdle";
 
-const POLL_MS = readVisiblePollIntervalMs(15000, 30000);
+const VISIBLE_POLL_MS = 15_000;
+const HIDDEN_POLL_MS = 30_000;
 
 type Listener = () => void;
 
@@ -32,7 +33,7 @@ let snapshot: FccTracesStoreSnapshot = {
   hasMore,
 };
 
-let pollTimer: ReturnType<typeof setInterval> | null = null;
+let disposePoll: (() => void) | null = null;
 let pollConsumers = 0;
 let refreshInFlight = false;
 const listeners = new Set<Listener>();
@@ -128,21 +129,24 @@ export function getFccTracesStoreSnapshot(): FccTracesStoreSnapshot {
 
 export function startFccTracesPolling(): void {
   pollConsumers += 1;
-  if (pollTimer) return;
+  if (disposePoll) return;
   void refreshFccTracesStore();
-  pollTimer = setInterval(() => {
-    if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-    runWhenIdle(() => {
-      void refreshFccTracesStore();
-    });
-  }, POLL_MS);
+  disposePoll = startAdaptiveInterval(
+    () => {
+      runWhenIdle(() => {
+        void refreshFccTracesStore();
+      });
+    },
+    VISIBLE_POLL_MS,
+    HIDDEN_POLL_MS,
+  );
 }
 
 export function stopFccTracesPolling(): void {
   pollConsumers = Math.max(0, pollConsumers - 1);
-  if (pollConsumers > 0 || !pollTimer) return;
-  clearInterval(pollTimer);
-  pollTimer = null;
+  if (pollConsumers > 0 || !disposePoll) return;
+  disposePoll();
+  disposePoll = null;
 }
 
 export async function refreshFccTracesStoreNow(): Promise<void> {

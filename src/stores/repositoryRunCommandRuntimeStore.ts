@@ -46,7 +46,8 @@ const DEFAULT_REPO_STATE: RepoRuntimeState = {
 
 const repoStateById = new Map<number, RepoRuntimeState>();
 const repoInternalsById = new Map<number, RepoRuntimeInternals>();
-const listeners = new Set<() => void>();
+const globalListeners = new Set<() => void>();
+const repoListenersById = new Map<number, Set<() => void>>();
 
 const EMPTY_RUNNING_BY_REPOSITORY_ID: Record<number, boolean> = {};
 let runningByRepositoryIdSnapshot: Record<number, boolean> = EMPTY_RUNNING_BY_REPOSITORY_ID;
@@ -82,13 +83,48 @@ function refreshRunningByRepositoryIdSnapshot(): void {
   runningByRepositoryIdSnapshot = next;
 }
 
-function publish(): void {
+function notifyRepositoryRunCommandRuntime(repositoryId: number): void {
+  const prevRunningKey = runningByRepositoryIdCacheKey;
   refreshRunningByRepositoryIdSnapshot();
-  for (const listener of listeners) {
+  const runningChanged = prevRunningKey !== runningByRepositoryIdCacheKey;
+
+  const repoListeners = repoListenersById.get(repositoryId);
+  if (repoListeners) {
+    for (const listener of repoListeners) {
+      try {
+        listener();
+      } catch {
+        /* ignore subscriber errors */
+      }
+    }
+  }
+  if (runningChanged) {
+    for (const listener of globalListeners) {
+      try {
+        listener();
+      } catch {
+        /* ignore subscriber errors */
+      }
+    }
+  }
+}
+
+function notifyAllRepositoryRunCommandRuntimeListeners(): void {
+  refreshRunningByRepositoryIdSnapshot();
+  for (const listener of globalListeners) {
     try {
       listener();
     } catch {
       /* ignore subscriber errors */
+    }
+  }
+  for (const repoListeners of repoListenersById.values()) {
+    for (const listener of repoListeners) {
+      try {
+        listener();
+      } catch {
+        /* ignore subscriber errors */
+      }
     }
   }
 }
@@ -109,13 +145,13 @@ function patchRepoState(repositoryId: number, patch: Partial<RepoRuntimeState>):
     hiddenPublishPending = true;
     return;
   }
-  publish();
+  notifyRepositoryRunCommandRuntime(repositoryId);
 }
 
 function flushHiddenPublishIfNeeded(): void {
   if (!hiddenPublishPending) return;
   hiddenPublishPending = false;
-  publish();
+  notifyAllRepositoryRunCommandRuntimeListeners();
 }
 
 function ensureVisibilityFlushListener(): void {
@@ -294,8 +330,29 @@ function ensureTerminalListeners(): void {
 }
 
 export function subscribeRepositoryRunCommandRuntime(listener: () => void): () => void {
-  listeners.add(listener);
-  return () => listeners.delete(listener);
+  globalListeners.add(listener);
+  return () => globalListeners.delete(listener);
+}
+
+export function subscribeRepositoryRunCommandRuntimeForRepository(
+  repositoryId: number,
+  listener: () => void,
+): () => void {
+  let set = repoListenersById.get(repositoryId);
+  if (!set) {
+    set = new Set();
+    repoListenersById.set(repositoryId, set);
+  }
+  set.add(listener);
+  return () => {
+    set!.delete(listener);
+    if (set!.size === 0) repoListenersById.delete(repositoryId);
+  };
+}
+
+/** @internal */
+export function notifyRepositoryRunCommandRuntimeForTests(repositoryId: number): void {
+  notifyRepositoryRunCommandRuntime(repositoryId);
 }
 
 export function getRepositoryRunCommandRuntimeSnapshot(): Map<number, RepoRuntimeState> {
@@ -342,7 +399,7 @@ export function pruneRepositoryRunCommandRuntime(liveRepositoryIds: ReadonlySet<
       changed = true;
     }
   }
-  if (changed) publish();
+  if (changed) notifyAllRepositoryRunCommandRuntimeListeners();
 }
 
 export function setRepositoryRunCommandAutoFixHandler(

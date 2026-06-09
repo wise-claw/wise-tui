@@ -36,6 +36,7 @@ import type { ResolvePaneAuxLayout } from "./paneAuxLayout";
 import type { WorkspaceMode, WorkspaceFocus } from "../../utils/workspaceMode";
 import { type PaneCount, type PaneSlot } from "../../constants/mainLayoutWidths";
 import type { PaneRepoTreeNode } from "./ClaudeMultiPaneGrid";
+import { prefetchModule } from "../../utils/prefetchModule";
 import "./index.css";
 
 const TerminalPanelLazy = lazy(() =>
@@ -364,11 +365,11 @@ function ClaudeSessionsShell({
 
   useEffect(() => {
     if (!chatSurfaceReady) return;
-    void claudeChatSurfaceChunk;
-    void import("./ClaudeChatComposerTray");
-    void import("../ClaudeChatInput/composer-region");
+    prefetchModule(() => claudeChatSurfaceChunk, "ClaudeSessionChatWithDock");
+    prefetchModule(() => import("./ClaudeChatComposerTray"), "ClaudeChatComposerTray");
+    prefetchModule(() => import("../ClaudeChatInput/composer-region"), "composer-region");
     if (paneCount > 1) {
-      void import("./ClaudeMultiPaneGrid");
+      prefetchModule(() => import("./ClaudeMultiPaneGrid"), "ClaudeMultiPaneGrid");
     }
   }, [chatSurfaceReady, paneCount]);
 

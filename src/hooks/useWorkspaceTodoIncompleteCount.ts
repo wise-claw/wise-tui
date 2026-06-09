@@ -1,7 +1,7 @@
-import { useSyncExternalStore } from "react";
+import { useCallback, useSyncExternalStore } from "react";
 import {
   getWorkspaceTodoIncompleteCount,
-  subscribeWorkspaceTodoCounts,
+  subscribeWorkspaceTodoCountsForScope,
 } from "../stores/workspaceTodoCountsStore";
 
 export function useWorkspaceTodoIncompleteCount(
@@ -10,9 +10,18 @@ export function useWorkspaceTodoIncompleteCount(
   repositoryId: number | null,
   enabled = true,
 ): number {
-  return useSyncExternalStore(
-    subscribeWorkspaceTodoCounts,
-    () => (enabled ? getWorkspaceTodoIncompleteCount(scope, projectId, repositoryId) : 0),
-    () => 0,
+  const subscribe = useCallback(
+    (listener: () => void) => {
+      if (!enabled) return () => {};
+      return subscribeWorkspaceTodoCountsForScope(scope, projectId, repositoryId, listener);
+    },
+    [enabled, projectId, repositoryId, scope],
   );
+
+  const getSnapshot = useCallback(
+    () => (enabled ? getWorkspaceTodoIncompleteCount(scope, projectId, repositoryId) : 0),
+    [enabled, projectId, repositoryId, scope],
+  );
+
+  return useSyncExternalStore(subscribe, getSnapshot, () => 0);
 }

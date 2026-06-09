@@ -1,9 +1,11 @@
 import type { MutableRefObject } from "react";
-import { useCallback, useEffect, useRef } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef } from "react";
 import { Dropdown, Typography } from "antd";
 import { DeferredHoverTooltip } from "../shared/DeferredHoverTooltip";
 import { LEFT_SIDEBAR_SCROLLING_CLASS } from "../../constants/leftSidebarScrollPerformance";
 import { useScrollEndClass } from "../../hooks/useScrollEndClass";
+import { useRepositoryRunCommandRowPinnedMap } from "../../hooks/useRepositoryRunCommandRowPinned";
+import type { RepositoryRunCommandRowPinnedMap } from "../../services/repositoryRunCommandRowActionPreference";
 import { setWorkspacePointerActive } from "../../stores/chromePanelHoverStore";
 import type { ReconcileProjectMode } from "../../constants/reconcileProjectMode";
 import type { Repository, StandaloneRepo, TaskMode, Workspace } from "../../types";
@@ -33,6 +35,9 @@ import {
   SidebarWorkspaceRemindersAction,
 } from "./repositoryRows";
 import { RunningMainSessionDot } from "./RunningMainSessionDot";
+import { projectRowPropsEqual } from "./projectRowPropsEqual";
+
+const EMPTY_PROJECT_REPOS: Repository[] = [];
 
 interface ProjectRepositoryListProps {
   projects: Workspace[];
@@ -202,6 +207,21 @@ export function ProjectRepositoryList({
     },
   );
 
+  const runCommandRowPinnedMap = useRepositoryRunCommandRowPinnedMap();
+
+  const projectReposByProjectId = useMemo(() => {
+    const map = new Map<string, Repository[]>();
+    for (const project of projects) {
+      map.set(
+        project.id,
+        project.repositoryIds
+          .map((id) => repositoriesById.get(id))
+          .filter((item): item is Repository => Boolean(item)),
+      );
+    }
+    return map;
+  }, [projects, repositoriesById]);
+
   const onWorkspaceListPointerEnter = useCallback(() => {
     setWorkspacePointerActive(true);
   }, []);
@@ -308,17 +328,16 @@ export function ProjectRepositoryList({
                     ? () => onStopRepositoryMainSession(repository)
                     : undefined
                 }
+                pinnedRunCommandRowActions={runCommandRowPinnedMap[repository.id] === true}
               />
             ))}
           </div>
         ) : null}
         {projects.map((project) => (
-          <ProjectRow
+          <MemoProjectRow
             key={project.id}
             project={project}
-            projectRepos={project.repositoryIds
-              .map((id) => repositoriesById.get(id))
-              .filter((item): item is Repository => Boolean(item))}
+            projectRepos={projectReposByProjectId.get(project.id) ?? EMPTY_PROJECT_REPOS}
             isActiveProject={project.id === activeProjectId && activeWorkspaceFocus === "project"}
             activeRepositoryId={activeRepositoryId}
             activeWorkspaceFocus={activeWorkspaceFocus}
@@ -382,6 +401,7 @@ export function ProjectRepositoryList({
             onStopProjectMainSession={onStopProjectMainSession}
             runningMainSessionByRepositoryId={runningMainSessionByRepositoryId}
             onStopRepositoryMainSession={onStopRepositoryMainSession}
+            runCommandRowPinnedMap={runCommandRowPinnedMap}
           />
         ))}
         {projects.length === 0 && floatingRepositories.length === 0 && (
@@ -467,6 +487,7 @@ interface ProjectRowProps {
   onStopProjectMainSession?: (projectId: string) => void;
   runningMainSessionByRepositoryId?: Record<number, boolean>;
   onStopRepositoryMainSession?: (repository: Repository) => void;
+  runCommandRowPinnedMap?: RepositoryRunCommandRowPinnedMap;
 }
 
 function ProjectRow({
@@ -533,6 +554,7 @@ function ProjectRow({
   onStopProjectMainSession,
   runningMainSessionByRepositoryId = {},
   onStopRepositoryMainSession,
+  runCommandRowPinnedMap = {},
 }: ProjectRowProps) {
   const projectTrellisReady = projectTrellisReadyById[project.id] === true;
   const projectTrellisEnabled = project.sddMode !== "project_owned" || projectTrellisReady;
@@ -790,9 +812,12 @@ function ProjectRow({
             onStopRepositoryRunCommand={onStopRepositoryRunCommand}
             runningMainSessionByRepositoryId={runningMainSessionByRepositoryId}
             onStopRepositoryMainSession={onStopRepositoryMainSession}
+            runCommandRowPinnedMap={runCommandRowPinnedMap}
           />
         </div>
       ) : null}
     </div>
   );
 }
+
+const MemoProjectRow = memo(ProjectRow, projectRowPropsEqual);

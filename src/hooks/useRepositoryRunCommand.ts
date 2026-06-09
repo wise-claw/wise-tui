@@ -11,7 +11,7 @@ import {
   getRepositoryRunCommandState,
   startRepositoryRunCommand,
   stopRepositoryRunCommand,
-  subscribeRepositoryRunCommandRuntime,
+  subscribeRepositoryRunCommandRuntimeForRepository,
   syncRepositoryRunCommandFormState,
   toggleRepositoryRunCommand,
 } from "../stores/repositoryRunCommandRuntimeStore";
@@ -68,8 +68,11 @@ export function useRepositoryRunCommand({
   const { runKey, runUrlKey, runAutoOpenKey } = repositoryRunCommandStorageKeys(trimmedCwd);
 
   const subscribeRuntime = useCallback(
-    (listener: () => void) => subscribeRepositoryRunCommandRuntime(listener),
-    [],
+    (listener: () => void) => {
+      if (repositoryId == null) return () => {};
+      return subscribeRepositoryRunCommandRuntimeForRepository(repositoryId, listener);
+    },
+    [repositoryId],
   );
 
   const getRuntimeSlice = useCallback(() => {

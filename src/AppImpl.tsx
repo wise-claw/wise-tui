@@ -2867,6 +2867,18 @@ export default function App() {
     repositories.length === 0 &&
     viewMode.view.kind === "chat";
 
+  const onConsumeRepositoryFileOpenRequest = useCallback(() => {
+    setRepositoryFileOpenRequest(null);
+  }, []);
+
+  const onEnsureChatModeForMemo = useCallback(() => {
+    viewMode.enter({ kind: "chat" });
+  }, [viewMode]);
+
+  const onOpenRemoteChannels = useCallback(() => {
+    enterAuthorPane("channels");
+  }, [enterAuthorPane]);
+
   return (
     <>
     <Suspense
@@ -2885,13 +2897,13 @@ export default function App() {
       mainLayoutLeftWidthPx={mainLayoutLeftWidthPx}
       mainLayoutRightWidthPx={mainLayoutRightWidthPx}
       repositoryFileOpenRequest={repositoryFileOpenRequest}
-      onConsumeRepositoryFileOpenRequest={() => setRepositoryFileOpenRequest(null)}
+      onConsumeRepositoryFileOpenRequest={onConsumeRepositoryFileOpenRequest}
       workspaceMemosProjectId={activeProjectId}
       workspaceMemosRepositoryId={activeRepositoryId}
-      onEnsureChatModeForMemo={() => viewMode.enter({ kind: "chat" })}
+      onEnsureChatModeForMemo={onEnsureChatModeForMemo}
       onLeftWidthChange={setMainLayoutLeftWidthPx}
       onRightWidthChange={setMainLayoutRightWidthPx}
-      onOpenRemoteChannels={() => enterAuthorPane("channels")}
+      onOpenRemoteChannels={onOpenRemoteChannels}
       activeRepositoryPath={fileEditorRootPath}
       leftSidebarProps={{
         projects,

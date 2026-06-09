@@ -1540,6 +1540,7 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
           : [];
       return (
         <TerminalEmployeeMonitorRow
+          key={item.employeeId}
           item={item}
           conversationStatus={
             employeeTerminalConversationStatusById.get(item.employeeId) ?? "idle"

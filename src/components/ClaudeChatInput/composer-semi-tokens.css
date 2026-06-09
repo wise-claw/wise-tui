@@ -51,7 +51,7 @@
   .semi-aiChatInput-editor-content
   .tiptap
   .app-composer-token-highlight--at {
-  color: var(--ant-purple-5, #9254de);
+  color: var(--ant-purple-5, #9254de) !important;
   font-weight: 500;
 }
 

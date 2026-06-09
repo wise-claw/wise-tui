@@ -52,4 +52,10 @@ describe("findComposerHighlightRanges", () => {
       { start: 0, end: 12, kind: "at" },
     ]);
   });
+
+  test("does not extend @ mention into trailing CJK body text", () => {
+    expect(findComposerHighlightRanges("@Claude Code你好")).toEqual([
+      { start: 0, end: 12, kind: "at" },
+    ]);
+  });
 });

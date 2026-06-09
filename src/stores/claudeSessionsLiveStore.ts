@@ -22,6 +22,9 @@ const pendingSessionLiveIds = new Set<string>();
 
 /** live 订阅合并上限：侧栏 hover 时略降优先级，为 hit-test 让路。 */
 function liveFlushMinIntervalMs(): number {
+  if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+    return 900;
+  }
   if (isFileTreeScrollActive()) return 200;
   if (isWorkspacePriorityReliefActive()) return 195;
   if (isSidePanelPriorityReliefActive()) return 180;
@@ -31,6 +34,18 @@ function liveFlushMinIntervalMs(): number {
 let liveFlushRaf: number | null = null;
 let liveFlushTimer: ReturnType<typeof setTimeout> | null = null;
 let lastLiveFlushAt = 0;
+let deferFlushWhileHidden = false;
+let visibilityFlushHookAttached = false;
+
+function attachVisibilityFlushHook(): void {
+  if (visibilityFlushHookAttached || typeof document === "undefined") return;
+  visibilityFlushHookAttached = true;
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState !== "visible" || !deferFlushWhileHidden) return;
+    deferFlushWhileHidden = false;
+    scheduleLiveListenerFlush();
+  });
+}
 
 function queueSessionLiveNotification(sessionId: string): void {
   pendingSessionLiveIds.add(sessionId);
@@ -69,6 +84,12 @@ function scheduleLiveListenerFlush(): void {
   }
 
   const runFlush = () => {
+    if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+      deferFlushWhileHidden = true;
+      attachVisibilityFlushHook();
+      return;
+    }
+    deferFlushWhileHidden = false;
     if (isClaudeScrollInteractionActive()) {
       scheduleAfterScrollInteractionIdle(flushLiveListeners);
       return;

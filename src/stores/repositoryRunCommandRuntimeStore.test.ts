@@ -1,7 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import {
   getRepositoryRunCommandState,
+  notifyRepositoryRunCommandRuntimeForTests,
   pruneRepositoryRunCommandRuntime,
+  subscribeRepositoryRunCommandRuntimeForRepository,
 } from "./repositoryRunCommandRuntimeStore";
 
 describe("repositoryRunCommandRuntimeStore", () => {
@@ -16,5 +18,27 @@ describe("repositoryRunCommandRuntimeStore", () => {
     pruneRepositoryRunCommandRuntime(new Set());
     const after = getRepositoryRunCommandState(repoId);
     expect(after.status).toBe("idle");
+  });
+
+  test("per-repository subscription ignores updates for other repositories", () => {
+    let repoARevision = 0;
+    let repoBRevision = 0;
+    const unsubA = subscribeRepositoryRunCommandRuntimeForRepository(1, () => {
+      repoARevision += 1;
+    });
+    const unsubB = subscribeRepositoryRunCommandRuntimeForRepository(2, () => {
+      repoBRevision += 1;
+    });
+
+    notifyRepositoryRunCommandRuntimeForTests(1);
+    expect(repoARevision).toBe(1);
+    expect(repoBRevision).toBe(0);
+
+    notifyRepositoryRunCommandRuntimeForTests(2);
+    expect(repoARevision).toBe(1);
+    expect(repoBRevision).toBe(1);
+
+    unsubA();
+    unsubB();
   });
 });

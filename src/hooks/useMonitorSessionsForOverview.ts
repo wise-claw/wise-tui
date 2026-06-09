@@ -4,7 +4,53 @@ import { indexOfLastRenderableUserMessage, isAssistantDisplayNoiseText } from ".
 import { assistantMessageVisiblePlainText } from "../services/claudeSessionState";
 import { MONITOR_SESSIONS_SYNC_INTERVAL_MS } from "../constants/monitorUi";
 import { runWhenIdle } from "../utils/deferIdle";
+import { readVisiblePollIntervalMs } from "../utils/adaptivePoll";
 import { subscribeClaudeSessionsStructure } from "../stores/claudeSessionsLiveStore";
+
+const MONITOR_FINGERPRINT_HIDDEN_INTERVAL_MS = MONITOR_SESSIONS_SYNC_INTERVAL_MS * 3;
+
+function attachMonitorFingerprintPolling(
+  commitIfChanged: () => void,
+): () => void {
+  let cancelIdle: (() => void) | null = null;
+  let timer: number | null = null;
+
+  const runCommit = () => {
+    if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+    if (cancelIdle) cancelIdle();
+    cancelIdle = runWhenIdle(commitIfChanged, { timeoutMs: 1500 });
+  };
+
+  const scheduleTimer = () => {
+    if (timer != null) window.clearInterval(timer);
+    timer = window.setInterval(
+      runCommit,
+      readVisiblePollIntervalMs(
+        MONITOR_SESSIONS_SYNC_INTERVAL_MS,
+        MONITOR_FINGERPRINT_HIDDEN_INTERVAL_MS,
+      ),
+    );
+  };
+
+  scheduleTimer();
+  const onVisibilityChange = () => {
+    scheduleTimer();
+    if (typeof document !== "undefined" && document.visibilityState === "visible") {
+      commitIfChanged();
+    }
+  };
+  if (typeof document !== "undefined") {
+    document.addEventListener("visibilitychange", onVisibilityChange);
+  }
+
+  return () => {
+    if (timer != null) window.clearInterval(timer);
+    if (cancelIdle) cancelIdle();
+    if (typeof document !== "undefined") {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    }
+  };
+}
 
 function settledAssistantPreviewLengthBucket(session: ClaudeSession): string {
   if (session.status === "running" || session.status === "connecting") {
@@ -96,16 +142,7 @@ export function useMonitorSessionsFingerprint(
   useEffect(() => {
     if (!enabled) return;
     commitIfChanged();
-    let cancelIdle: (() => void) | null = null;
-    const id = window.setInterval(() => {
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-      if (cancelIdle) cancelIdle();
-      cancelIdle = runWhenIdle(commitIfChanged, { timeoutMs: 1500 });
-    }, MONITOR_SESSIONS_SYNC_INTERVAL_MS);
-    return () => {
-      window.clearInterval(id);
-      if (cancelIdle) cancelIdle();
-    };
+    return attachMonitorFingerprintPolling(commitIfChanged);
   }, [commitIfChanged, enabled]);
 
   useEffect(() => {
@@ -156,16 +193,7 @@ export function useMonitorSidebarFingerprints(
   useEffect(() => {
     if (!enabled) return;
     commitIfChanged();
-    let cancelIdle: (() => void) | null = null;
-    const id = window.setInterval(() => {
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-      if (cancelIdle) cancelIdle();
-      cancelIdle = runWhenIdle(commitIfChanged, { timeoutMs: 1500 });
-    }, MONITOR_SESSIONS_SYNC_INTERVAL_MS);
-    return () => {
-      window.clearInterval(id);
-      if (cancelIdle) cancelIdle();
-    };
+    return attachMonitorFingerprintPolling(commitIfChanged);
   }, [commitIfChanged, enabled]);
 
   useEffect(() => {
@@ -230,21 +258,7 @@ export function useMonitorSessionsForOverview(
     };
 
     commitIfChanged();
-    let cancelIdle: (() => void) | null = null;
-    const id = window.setInterval(() => {
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-      if (cancelIdle) cancelIdle();
-      cancelIdle = runWhenIdle(commitIfChanged, { timeoutMs: 1500 });
-    }, MONITOR_SESSIONS_SYNC_INTERVAL_MS);
-
-    const onVisibilityChange = () => {
-      if (typeof document !== "undefined" && document.visibilityState === "visible") {
-        commitIfChanged();
-      }
-    };
-    if (typeof document !== "undefined") {
-      document.addEventListener("visibilitychange", onVisibilityChange);
-    }
+    const disposePolling = attachMonitorFingerprintPolling(commitIfChanged);
 
     const usesLiveRef = typeof sessions === "object" && sessions !== null && "current" in sessions;
     const unsubscribeStructure = usesLiveRef
@@ -252,14 +266,10 @@ export function useMonitorSessionsForOverview(
       : undefined;
 
     return () => {
-      window.clearInterval(id);
-      if (cancelIdle) cancelIdle();
+      disposePolling();
       if (liveCommitRaf !== null) {
         window.cancelAnimationFrame(liveCommitRaf);
         liveCommitRaf = null;
-      }
-      if (typeof document !== "undefined") {
-        document.removeEventListener("visibilitychange", onVisibilityChange);
       }
       unsubscribeStructure?.();
     };

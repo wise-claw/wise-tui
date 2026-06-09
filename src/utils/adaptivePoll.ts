@@ -20,6 +20,48 @@ export function readVisiblePollIntervalMs(visibleMs: number, hiddenMs: number): 
   return scalePollIntervalMs(base);
 }
 
+/**
+ * 创建随 visibility / DevTools 调整间隔的轮询；隐藏时跳过 tick。
+ * 返回 dispose：清 interval 并移除 visibility 监听。
+ */
+export function startAdaptiveInterval(
+  onTick: () => void,
+  visibleMs: number,
+  hiddenMs: number,
+): () => void {
+  let timer: ReturnType<typeof setInterval> | null = null;
+
+  const tick = () => {
+    if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+    onTick();
+  };
+
+  const restart = () => {
+    if (timer) clearInterval(timer);
+    timer = setInterval(tick, readVisiblePollIntervalMs(visibleMs, hiddenMs));
+  };
+
+  const onVisibilityChange = () => {
+    restart();
+    if (typeof document !== "undefined" && document.visibilityState === "visible") {
+      tick();
+    }
+  };
+
+  restart();
+  if (typeof document !== "undefined") {
+    document.addEventListener("visibilitychange", onVisibilityChange);
+  }
+
+  return () => {
+    if (timer) clearInterval(timer);
+    timer = null;
+    if (typeof document !== "undefined") {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+    }
+  };
+}
+
 /** 两个 string set 是否相同（顺序无关）。 */
 export function stringSetEqual(left: ReadonlySet<string>, right: ReadonlySet<string>): boolean {
   if (left.size !== right.size) return false;

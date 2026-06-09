@@ -2,14 +2,17 @@ import { useCallback, useSyncExternalStore } from "react";
 import {
   getRepositoryRunCommandState,
   isRepositoryRunCommandActive,
-  subscribeRepositoryRunCommandRuntime,
+  subscribeRepositoryRunCommandRuntimeForRepository,
 } from "../stores/repositoryRunCommandRuntimeStore";
 
 /** 订阅指定仓库的运行指令是否在跑（与顶栏运行按钮同源 store）。 */
 export function useIsRepositoryRunCommandRunning(repositoryId: number | undefined): boolean {
   const subscribe = useCallback(
-    (listener: () => void) => subscribeRepositoryRunCommandRuntime(listener),
-    [],
+    (listener: () => void) => {
+      if (repositoryId == null) return () => {};
+      return subscribeRepositoryRunCommandRuntimeForRepository(repositoryId, listener);
+    },
+    [repositoryId],
   );
 
   const getSnapshot = useCallback(() => {
@@ -23,8 +26,11 @@ export function useIsRepositoryRunCommandRunning(repositoryId: number | undefine
 /** 订阅指定仓库的运行指令 UI 状态切片（弹窗/顶栏 Popover 用）。 */
 export function useRepositoryRunCommandRuntimeSlice(repositoryId: number | undefined) {
   const subscribe = useCallback(
-    (listener: () => void) => subscribeRepositoryRunCommandRuntime(listener),
-    [],
+    (listener: () => void) => {
+      if (repositoryId == null) return () => {};
+      return subscribeRepositoryRunCommandRuntimeForRepository(repositoryId, listener);
+    },
+    [repositoryId],
   );
 
   const getSnapshot = useCallback(() => {

@@ -38,6 +38,7 @@ import {
   detectAtSlashTrigger,
   ensureSpaceAfterAtInsert,
   promptToDisplayPlain,
+  normalizeComposerEditorPlain,
   reportAtSlashTriggerFromPlain,
   singleTextPrompt,
   insertPlainAt,
@@ -50,8 +51,8 @@ import {
 } from "./composer-trigger-anchor";
 import { ContextItems } from "./context-items";
 import { SlashPopover } from "./slash-popover";
-import { useComposerTokenHighlight } from "./useComposerTokenHighlight";
-import { ensureComposerTokenHighlightPlugin } from "./composerTokenHighlight";
+import { composerTokenHighlightExtension } from "./composerTokenHighlightExtension";
+import { shouldSkipStaleComposerSetContent } from "./composerSetContentGuard";
 import { useAtMentionDefaultTarget } from "../../hooks/useAtMentionDefaultTarget";
 import { useAtMentionShortcuts } from "../../hooks/useAtMentionShortcuts";
 import { resolveComposerCommonPhraseAction } from "../../constants/composerCommonPhrase";
@@ -363,6 +364,23 @@ function refocusComposerAndInsertSpace(aiChat: InstanceType<typeof AIChatInput> 
 
 const SAFE_AI_CHAT_SET_CONTENT_MAX_FRAMES = 48;
 
+const SEMI_COMPOSER_TOKEN_HIGHLIGHT_EXTENSIONS = [composerTokenHighlightExtension];
+
+type ScheduleSafeAiChatSetContentOptions = {
+  isEditorFocused?: () => boolean;
+};
+
+function readSemiEditorPlain(
+  ed: { getText?: (opts?: { blockSeparator?: string }) => string } | null | undefined,
+): string {
+  if (!ed?.getText) return "";
+  try {
+    return normalizeComposerEditorPlain(ed.getText({ blockSeparator: "\n" }) ?? "");
+  } catch {
+    return "";
+  }
+}
+
 /**
  * Semi `AIChatInput` 的 ref `setContent` 在 Tiptap 未挂载时会抛错：`adapter.setContent` 直接访问 `this.editor.commands`，
  * 未对 `this.editor` 做空判断（与 `focusEditor` 不同）。在 editor 就绪前用 rAF 重试，避免首帧 / 嵌入条切换时崩溃。
@@ -371,18 +389,29 @@ function scheduleSafeAiChatSetContent(
   resolveAiChat: () => InstanceType<typeof AIChatInput> | null,
   content: string,
   onAfterSet?: () => void,
+  options?: ScheduleSafeAiChatSetContentOptions,
 ): void {
   const attempt = (): boolean => {
     const ai = resolveAiChat();
     const ed = ai?.getEditor?.();
     if (!ai || !ed) return false;
+    const editorPlain = readSemiEditorPlain(ed);
+    if (
+      shouldSkipStaleComposerSetContent(
+        editorPlain,
+        content,
+        options?.isEditorFocused?.() ?? false,
+      )
+    ) {
+      onAfterSet?.();
+      return true;
+    }
     try {
       ai.setContent(content);
     } catch {
       return false;
     }
     onAfterSet?.();
-    ensureComposerTokenHighlightPlugin(ed);
     return true;
   };
   if (attempt()) return;
@@ -594,7 +623,22 @@ function ComposerInner({
 
   const displayPlain = useMemo(() => promptToDisplayPlain(prompt), [prompt]);
 
-  useComposerTokenHighlight(aiChatRef, semiEditorReady, session.id, displayPlain);
+  const scheduleComposerSetContent = useCallback(
+    (plain: string, onAfterSet?: () => void) => {
+      const normalized = normalizeComposerEditorPlain(plain);
+      scheduleSafeAiChatSetContent(
+        () => aiChatRef.current,
+        normalized,
+        () => {
+          const actual = readSemiEditorPlain(aiChatRef.current?.getEditor?.());
+          if (actual) lastEditorPlainRef.current = actual;
+          onAfterSet?.();
+        },
+        { isEditorFocused: () => isProseMirrorFocused(shellRef.current) },
+      );
+    },
+    [],
+  );
 
   plainSurfaceRef.current = {
     anchorEl: () => shellRef.current,
@@ -617,13 +661,15 @@ function ComposerInner({
       return cursorRef.current;
     },
     setPlainAndCursor: (plain: string, c: number) => {
+      const normalized = normalizeComposerEditorPlain(plain);
       ignoreNextContentSyncRef.current = true;
       cursorRef.current = c;
-      lastEditorPlainRef.current = plain;
-      set(singleTextPrompt(plain), c);
-      scheduleSafeAiChatSetContent(() => aiChatRef.current, plain, () => {
-        repairTiptapTrailingSpaceIfNeeded(aiChatRef.current, plain);
-        lastEditorPlainRef.current = plain;
+      lastEditorPlainRef.current = normalized;
+      set(singleTextPrompt(normalized), c);
+      scheduleComposerSetContent(normalized, () => {
+        repairTiptapTrailingSpaceIfNeeded(aiChatRef.current, normalized);
+        const actual = readSemiEditorPlain(aiChatRef.current?.getEditor?.());
+        if (actual) lastEditorPlainRef.current = actual;
         focusComposerAtPlainOffset(aiChatRef.current, c);
       });
     },
@@ -700,33 +746,39 @@ function ComposerInner({
 
   useEffect(() => {
     if (!semiEditorReady) return;
+    // 聚焦时编辑器为唯一来源，禁止 React plain 回写 setContent
+    if (isProseMirrorFocused(shellRef.current)) return;
     if (lastEditorPlainRef.current === displayPlain) return;
     lastEditorPlainRef.current = displayPlain;
     ignoreNextContentSyncRef.current = true;
     skipContentSyncRemainingRef.current = 3;
-    scheduleSafeAiChatSetContent(() => aiChatRef.current, displayPlain, () => {
+    scheduleComposerSetContent(displayPlain, () => {
       repairTiptapTrailingSpaceIfNeeded(aiChatRef.current, displayPlain);
     });
-  }, [displayPlain, semiEditorReady]);
+  }, [displayPlain, semiEditorReady, scheduleComposerSetContent]);
 
   const applySemiContentChange = useCallback((contents: Content[]) => {
     if (!semiEditorReadyRef.current) return;
+    const ed = aiChatRef.current?.getEditor?.();
+    let plain = normalizeComposerEditorPlain(contentsToPlain(contents));
+    if (ed) {
+      try {
+        plain = readSemiEditorPlain(ed) || plain;
+      } catch {
+        /* keep contentsToPlain */
+      }
+    }
     if (skipContentSyncRemainingRef.current > 0) {
-      skipContentSyncRemainingRef.current -= 1;
-      return;
+      if (plain !== lastEditorPlainRef.current) {
+        skipContentSyncRemainingRef.current = 0;
+      } else {
+        skipContentSyncRemainingRef.current -= 1;
+        return;
+      }
     }
     if (ignoreNextContentSyncRef.current) {
       ignoreNextContentSyncRef.current = false;
       return;
-    }
-    const ed = aiChatRef.current?.getEditor?.();
-    let plain = contentsToPlain(contents);
-    if (ed) {
-      try {
-        plain = ed.getText?.({ blockSeparator: "\n" }) ?? plain;
-      } catch {
-        /* keep contentsToPlain */
-      }
     }
     let c = plain.length;
     if (ed) {
@@ -750,9 +802,6 @@ function ComposerInner({
         repairTiptapTrailingSpaceIfNeeded(aiChatRef.current, plain);
       });
     }
-    queueMicrotask(() => {
-      ensureComposerTokenHighlightPlugin(aiChatRef.current?.getEditor?.());
-    });
   }, [set]);
 
   useEffect(() => {
@@ -1413,7 +1462,7 @@ function ComposerInner({
           }
         }
         queueMicrotask(() => {
-          scheduleSafeAiChatSetContent(() => aiChatRef.current, display, () => {
+          scheduleComposerSetContent(display, () => {
             repairTiptapTrailingSpaceIfNeeded(aiChatRef.current, display);
             aiChatRef.current?.focusEditor?.("end");
             composerEscapeRootRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
@@ -1421,7 +1470,7 @@ function ComposerInner({
         });
       })();
     },
-    [set, setImages, contextAdd, rollbackSpeechTranscriptBaselineOnSendFailure],
+    [set, setImages, contextAdd, rollbackSpeechTranscriptBaselineOnSendFailure, scheduleComposerSetContent],
   );
 
   useEffect(() => {
@@ -1447,7 +1496,7 @@ function ComposerInner({
         lastEditorPlainRef.current = composerMain;
         cursorRef.current = composerMain.length;
         set(entryPrompt, composerMain.length);
-        scheduleSafeAiChatSetContent(() => aiChatRef.current, composerMain, () => {
+        scheduleComposerSetContent(composerMain, () => {
           repairTiptapTrailingSpaceIfNeeded(aiChatRef.current, composerMain);
           aiChatRef.current?.focusEditor?.("end");
           composerEscapeRootRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
@@ -1458,7 +1507,7 @@ function ComposerInner({
     return () => {
       window.removeEventListener(WORKFLOW_UI_EVENT_APPLY_STARTER_PROMPT, handleApplyStarterPrompt as EventListener);
     };
-  }, [session.id, set, restoreComposerSurface]);
+  }, [session.id, set, restoreComposerSurface, scheduleComposerSetContent]);
 
   const lastUserMessageAttachmentPaths = useCallback((): string[] => {
     const messages = sessionRef.current.messages;
@@ -1673,7 +1722,7 @@ function ComposerInner({
           reset();
           setImages([]);
         });
-        scheduleSafeAiChatSetContent(() => aiChatRef.current, "");
+        scheduleComposerSetContent("");
         queueMicrotask(() => aiChatRef.current?.focusEditor?.("end"));
         void clearPromptContextSessionKey(draftBucketKey);
       };
@@ -3042,6 +3091,7 @@ function ComposerInner({
               {semiEditorReady ? (
                 <AIChatInput
                   ref={aiChatRef}
+                  extensions={SEMI_COMPOSER_TOKEN_HIGHLIGHT_EXTENSIONS}
                   placeholder="@ 终端/工作流/文件，/ 命令，Enter 发送，Shift+Enter 换行，↑/Esc 恢复上条（含图片）"
                   keepSkillAfterSend={false}
                   showUploadButton={false}

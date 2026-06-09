@@ -13,6 +13,7 @@ import {
   type PointerEvent,
 } from "react";
 import { runWhenIdle } from "../../utils/deferIdle";
+import { prefetchModule } from "../../utils/prefetchModule";
 import type {
   ClaudeComposerExecuteBubbleOptions,
   ClaudeSession,
@@ -453,8 +454,8 @@ export function ClaudeChatInner({
     if (deferHeavySubtree) return;
     const cancel = runWhenIdle(
       () => {
-        void import("./ClaudeChatComposerTray");
-        void composerRegionChunk;
+        prefetchModule(() => import("./ClaudeChatComposerTray"), "ClaudeChatComposerTray");
+        prefetchModule(() => composerRegionChunk, "composer-region");
       },
       { timeoutMs: 900 },
     );

@@ -53,7 +53,7 @@ export function GitHistoryDrawer({
     <Drawer
       title="提交历史"
       placement="right"
-      width={600}
+      size={600}
       open={open}
       destroyOnHidden
       className="git-history-drawer"
