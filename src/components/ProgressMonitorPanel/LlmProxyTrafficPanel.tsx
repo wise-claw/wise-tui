@@ -15,7 +15,10 @@ import {
   refreshClaudeLlmProxyStatus,
   subscribeClaudeLlmProxyStore,
 } from "../../stores/claudeLlmProxyStore";
-import { getOpencodeGoProxyStatus } from "../../services/opencodeGoProxy";
+import {
+  getOpencodeGoProxyStatus,
+  type OpencodeGoProxyStatus,
+} from "../../services/opencodeGoProxy";
 import {
   anthropicProxyConflictMessage,
   resolveAnthropicProxyConflict,
@@ -173,13 +176,22 @@ export function LlmProxyTrafficPanel({ repositoryPath, variant = "sidebar" }: Pr
   const st = snapshot.status;
   const [upstreamDraft, setUpstreamDraft] = useState("");
   const [saving, setSaving] = useState(false);
-  const [opencodeGoRunning, setOpencodeGoRunning] = useState(false);
+  const [opencodeGo, setOpencodeGo] = useState<
+    Pick<OpencodeGoProxyStatus, "enabled" | "running" | "claudeSettingsAligned"> | null
+  >(null);
+  const opencodeGoRunning = Boolean(opencodeGo?.enabled && opencodeGo?.running);
 
   useEffect(() => {
     void refreshClaudeLlmProxyStatus(repositoryPath);
     void getOpencodeGoProxyStatus()
-      .then((ocgo) => setOpencodeGoRunning(Boolean(ocgo.enabled && ocgo.running)))
-      .catch(() => setOpencodeGoRunning(false));
+      .then((ocgo) =>
+        setOpencodeGo({
+          enabled: ocgo.enabled,
+          running: ocgo.running,
+          claudeSettingsAligned: ocgo.claudeSettingsAligned,
+        }),
+      )
+      .catch(() => setOpencodeGo(null));
   }, [repositoryPath]);
 
   useEffect(() => {
@@ -197,7 +209,15 @@ export function LlmProxyTrafficPanel({ repositoryPath, variant = "sidebar" }: Pr
       try {
         await applyClaudeLlmProxyConfig(listening, upstream, repositoryPath);
         const ocgo = await getOpencodeGoProxyStatus().catch(() => null);
-        setOpencodeGoRunning(Boolean(ocgo?.enabled && ocgo?.running));
+        setOpencodeGo(
+          ocgo
+            ? {
+                enabled: ocgo.enabled,
+                running: ocgo.running,
+                claudeSettingsAligned: ocgo.claudeSettingsAligned,
+              }
+            : null,
+        );
         if (!listening) {
           message.info("已关闭监听");
         }
@@ -213,10 +233,10 @@ export function LlmProxyTrafficPanel({ repositoryPath, variant = "sidebar" }: Pr
   const proxyConflict = useMemo(
     () =>
       resolveAnthropicProxyConflict(
-        opencodeGoRunning ? { enabled: true, running: true } : { enabled: false, running: false },
+        opencodeGo ?? { enabled: false, running: false, claudeSettingsAligned: false },
         st,
       ),
-    [opencodeGoRunning, st],
+    [opencodeGo, st],
   );
   const proxyConflictMessage = anthropicProxyConflictMessage(proxyConflict);
 
@@ -225,7 +245,7 @@ export function LlmProxyTrafficPanel({ repositoryPath, variant = "sidebar" }: Pr
       if (checked && opencodeGoRunning) {
         const msg = anthropicProxyConflictMessage(
           resolveAnthropicProxyConflict(
-            { enabled: true, running: true },
+            opencodeGo ?? { enabled: true, running: true, claudeSettingsAligned: false },
             { listening: true, running: true },
           ),
         );
@@ -235,7 +255,7 @@ export function LlmProxyTrafficPanel({ repositoryPath, variant = "sidebar" }: Pr
       }
       void persistConfig(checked, upstreamDraft);
     },
-    [persistConfig, upstreamDraft, opencodeGoRunning],
+    [persistConfig, upstreamDraft, opencodeGo, opencodeGoRunning],
   );
 
   const handleUpstreamBlur = useCallback(() => {
