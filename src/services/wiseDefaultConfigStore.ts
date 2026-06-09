@@ -141,7 +141,7 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   showLlmProxyTopbar: false,
   showFccTopbar: false,
   showFccTrafficTopbar: false,
-  showOpencodeProxyTopbar: true,
+  showOpencodeProxyTopbar: false,
   showSessionDataLinkTopbar: false,
   showRemoteEntryTopbar: true,
   showTopbarRepositoryName: false,

@@ -26,7 +26,6 @@ import { useAtMentionShortcuts } from "../../hooks/useAtMentionShortcuts";
 import { KeyShortcutCapture } from "./KeyShortcutCapture";
 import type { AtMentionDefaultTarget } from "../../constants/atMentionDefault";
 import { useFileTreeOpenInNewPaneSetting } from "./useFileTreeOpenInNewPaneSetting";
-import { OpencodeGoProxySection } from "./OpencodeGoProxySection";
 import { useRepoPanelPlacementSetting } from "./useRepoPanelPlacementSetting";
 import { useWorkspaceInspectorPanelsSetting } from "./useWorkspaceInspectorPanelsSetting";
 import { listEmployees } from "../../services/employees";
@@ -39,7 +38,7 @@ const DEFAULT_CONFIG_NOTES = [
   "文件树打开方式控制点击侧栏文件树时是在当前会话主区还是新开一屏打开编辑器。",
   "默认终端（macOS）写入 wise.ui.default-terminal.v1，用于在资源管理器、Git 面板等位置「在外部终端打开」目录。",
   "Free Claude Code 的安装、启停与 Claude 对齐请在主会话顶栏 FCC 图标弹窗中操作；此处仅控制图标是否显示。",
-  "OpenCode 代理为 Wise 内置能力（Go / Zen，参考 oc-go-cc）；可在默认配置或顶栏图标中启停，无需安装外部 oc-go-cc。",
+  "OpenCode 代理为 Wise 内置能力（Go / Zen）；启停与配置请在顶栏图标或「更多」菜单中打开，此处仅控制图标是否显示。",
   "长驻模式使用 --input-format stream-json，与终端 CLI 共享 MCP / Skills / Hooks。",
   "OMC 直连批量、PRD 拆分等编排仍使用独立 -p 子进程，不受会话默认影响。",
   "LLM 流量监听默认隐藏；开启后上游建议填 FCC 地址以便旁路抓包，勿把百炼 sk- key 写入 Claude env。",
@@ -132,8 +131,6 @@ export function DefaultConfigPanel() {
             />
           </div>
         </div>
-
-        <OpencodeGoProxySection />
 
         <div className="app-default-config-row" aria-label="右侧面板">
           <div className="app-default-config-row__main">
@@ -518,7 +515,7 @@ export function DefaultConfigPanel() {
           <div className="app-default-config-row__main">
             <span className="app-default-config-row__title">OpenCode 代理图标</span>
             <span className="app-default-config-row__hint">
-              控制主会话顶栏 OpenCode Go / Zen 内置代理入口；默认显示
+              控制主会话顶栏 OpenCode Go / Zen 内置代理入口；默认不显示
             </span>
           </div>
           <div className="app-default-config-row__control">
