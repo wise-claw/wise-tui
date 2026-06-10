@@ -35,7 +35,8 @@ fn auth_status_label(status: SFSpeechRecognizerAuthorizationStatus) -> &'static 
     }
 }
 
-#[cfg(target_os = "macos")]
+/// dev 构建会把合并后的 Info.plist 嵌入 `__TEXT,__info_plist`（见 `build.rs` / `tauri_build_context!`）。
+#[cfg(all(target_os = "macos", dev))]
 fn embedded_info_plist_is_tcc_parseable() -> bool {
     let embedded = tauri::embed_plist::get_info_plist();
     let xml = embedded.split(|&b| b == 0).next().unwrap_or(embedded);
@@ -45,6 +46,12 @@ fn embedded_info_plist_is_tcc_parseable() -> bool {
     }
     xml.contains("<key>NSSpeechRecognitionUsageDescription</key>")
         && xml.contains("<key>NSMicrophoneUsageDescription</key>")
+}
+
+/// release / bundle 通过 `.app/Contents/Info.plist` 携带隐私说明，不嵌入 `__EMBED_INFO_PLIST`。
+#[cfg(all(target_os = "macos", not(dev)))]
+fn embedded_info_plist_is_tcc_parseable() -> bool {
+    true
 }
 
 #[cfg(target_os = "macos")]
