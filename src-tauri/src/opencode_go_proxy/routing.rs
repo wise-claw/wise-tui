@@ -22,7 +22,6 @@ pub enum EndpointKind {
 pub struct ResolvedUpstream {
     pub url: String,
     pub endpoint: EndpointKind,
-    pub auth_bearer: bool,
 }
 
 const GO_CHAT: &str = "https://opencode.ai/zen/go/v1/chat/completions";
@@ -98,39 +97,25 @@ pub fn resolve_upstream(
         } else {
             EndpointKind::ChatCompletions
         };
-        return ResolvedUpstream {
-            url,
-            endpoint,
-            auth_bearer: endpoint != EndpointKind::AnthropicPassthrough,
-        };
+        return ResolvedUpstream { url, endpoint };
     }
 
     let endpoint = classify_endpoint(provider, model_id);
-    let (url, auth_bearer) = match (provider, endpoint) {
-        (_, EndpointKind::AnthropicPassthrough) => {
-            let url = match provider {
-                Provider::OpenCodeZen => ZEN_ANTHROPIC,
-                Provider::OpenCodeGo => GO_ANTHROPIC,
-            };
-            (url.to_string(), false)
+    let url = match (provider, endpoint) {
+        (_, EndpointKind::AnthropicPassthrough) => match provider {
+            Provider::OpenCodeZen => ZEN_ANTHROPIC,
+            Provider::OpenCodeGo => GO_ANTHROPIC,
         }
-        (Provider::OpenCodeZen, EndpointKind::Responses) => {
-            (ZEN_RESPONSES.to_string(), true)
-        }
+        .to_string(),
+        (Provider::OpenCodeZen, EndpointKind::Responses) => ZEN_RESPONSES.to_string(),
         (Provider::OpenCodeZen, EndpointKind::Gemini) => {
-            (format!("{ZEN_GEMINI_BASE}/{model_id}"), true)
+            format!("{ZEN_GEMINI_BASE}/{model_id}")
         }
-        (Provider::OpenCodeZen, EndpointKind::ChatCompletions) => {
-            (ZEN_CHAT.to_string(), true)
-        }
-        (Provider::OpenCodeGo, _) => (GO_CHAT.to_string(), true),
+        (Provider::OpenCodeZen, EndpointKind::ChatCompletions) => ZEN_CHAT.to_string(),
+        (Provider::OpenCodeGo, _) => GO_CHAT.to_string(),
     };
 
-    ResolvedUpstream {
-        url,
-        endpoint,
-        auth_bearer,
-    }
+    ResolvedUpstream { url, endpoint }
 }
 
 pub fn default_chat_upstream(provider: Provider) -> &'static str {
@@ -148,7 +133,6 @@ mod tests {
     fn routes_minimax_to_anthropic_on_go() {
         let r = resolve_upstream(Provider::OpenCodeGo, "minimax-m2.5", "");
         assert_eq!(r.endpoint, EndpointKind::AnthropicPassthrough);
-        assert!(!r.auth_bearer);
     }
 
     #[test]

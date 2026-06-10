@@ -106,14 +106,16 @@ pub fn preview_text(text: &str) -> String {
     truncate_preview(text)
 }
 
-pub fn append_capture(buffer: &Mutex<String>, chunk: &[u8]) {
+fn append_preview(buffer: &Mutex<String>, text: &str) {
+    if text.is_empty() {
+        return;
+    }
     let Ok(mut guard) = buffer.lock() else {
         return;
     };
-    guard.push_str(&String::from_utf8_lossy(chunk));
+    guard.push_str(text);
     if guard.len() > MAX_PREVIEW {
-        let keep = MAX_PREVIEW;
-        guard.truncate(keep);
+        guard.truncate(MAX_PREVIEW);
         guard.push('…');
     }
 }
@@ -170,17 +172,7 @@ impl TraceCapture {
     }
 
     pub fn push_sse_text(&self, text: &str) {
-        if text.is_empty() {
-            return;
-        }
-        let Ok(mut guard) = self.0.response_buffer.lock() else {
-            return;
-        };
-        guard.push_str(text);
-        if guard.len() > MAX_PREVIEW {
-            guard.truncate(MAX_PREVIEW);
-            guard.push('…');
-        }
+        append_preview(&self.0.response_buffer, text);
     }
 
     pub fn finish_error(&self, status_code: Option<u16>, message: impl Into<String>) {

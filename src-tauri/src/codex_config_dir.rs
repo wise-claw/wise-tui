@@ -18,18 +18,6 @@ pub fn codex_profile_v2_path(profile_name: &str) -> PathBuf {
     user_codex_dir().join(format!("{profile_name}.config.toml"))
 }
 
-pub fn write_codex_profile_v2_layer(profile_name: &str, content: &str) -> Result<(), String> {
-    let path = codex_profile_v2_path(profile_name);
-    if let Some(parent) = path.parent() {
-        std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
-    }
-    let mut out = content.trim_end().to_string();
-    if !out.is_empty() && !out.ends_with('\n') {
-        out.push('\n');
-    }
-    crate::wise_paths::write_file_atomic(&path, &out)
-}
-
 fn read_text_file(path: &Path) -> Option<String> {
     let text = std::fs::read_to_string(path).ok()?;
     if text.trim().is_empty() {
