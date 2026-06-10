@@ -20,6 +20,7 @@ function record(partial: Partial<ClaudeLlmProxyRecord>): ClaudeLlmProxyRecord {
     requestBytes: 100,
     responseBytes: 50,
     durationMs: 1200,
+    rttMs: 350,
     ttftMs: 400,
     isStreaming: true,
     requestTruncated: false,
@@ -50,6 +51,7 @@ describe("llmProxyRecordMeta", () => {
     expect(summary.totalInputTokens).toBe(200);
     expect(summary.totalOutputTokens).toBe(40);
     expect(summary.avgDurationMs).toBe(1000);
+    expect(summary.avgRttMs).toBe(350);
     expect(summary.avgTtftMs).toBe(400);
   });
 

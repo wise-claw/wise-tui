@@ -1,6 +1,6 @@
 import type { ClaudeLlmProxyRecord } from "../services/claudeLlmProxy";
 import { parseUsageFromHttpBody, type TokenUsageBreakdown } from "./sessionInsights";
-import { resolveProxyTtftMs } from "./llmProxyTtft";
+import { resolveProxyTtftMs, resolveProxyFirstByteMs, resolveProxyRttMs } from "./llmProxyTtft";
 
 export type LlmProxyFilterKind = "all" | "messages" | "errors";
 
@@ -12,6 +12,8 @@ export interface LlmProxyRecordsSummary {
   totalInputTokens: number;
   totalOutputTokens: number;
   avgDurationMs: number | null;
+  avgRttMs: number | null;
+  avgTtfbMs: number | null;
   avgTtftMs: number | null;
   totalRequestBytes: number;
   totalResponseBytes: number;
@@ -58,6 +60,10 @@ export function summarizeLlmProxyRecords(
   let totalResponseBytes = 0;
   let durationSum = 0;
   let durationN = 0;
+  let rttSum = 0;
+  let rttN = 0;
+  let ttfbSum = 0;
+  let ttfbN = 0;
   let ttftSum = 0;
   let ttftN = 0;
 
@@ -70,6 +76,16 @@ export function summarizeLlmProxyRecords(
     if (rec.durationMs > 0) {
       durationSum += rec.durationMs;
       durationN += 1;
+    }
+    const rtt = resolveProxyRttMs(rec);
+    if (rtt != null && rtt > 0) {
+      rttSum += rtt;
+      rttN += 1;
+    }
+    const ttfb = resolveProxyFirstByteMs(rec);
+    if (ttfb != null && ttfb > 0) {
+      ttfbSum += ttfb;
+      ttfbN += 1;
     }
     const ttft = resolveProxyTtftMs(rec);
     if (rec.isStreaming && ttft != null && ttft > 0) {
@@ -91,6 +107,8 @@ export function summarizeLlmProxyRecords(
     totalInputTokens,
     totalOutputTokens,
     avgDurationMs: durationN > 0 ? Math.round(durationSum / durationN) : null,
+    avgRttMs: rttN > 0 ? Math.round(rttSum / rttN) : null,
+    avgTtfbMs: ttfbN > 0 ? Math.round(ttfbSum / ttfbN) : null,
     avgTtftMs: ttftN > 0 ? Math.round(ttftSum / ttftN) : null,
     totalRequestBytes,
     totalResponseBytes,

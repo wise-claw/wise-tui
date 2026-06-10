@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ClaudeLlmProxyRecord } from "../services/claudeLlmProxy";
-import { resolveProxyTtftMs, resolveProxyFirstByteMs, ssePreviewHasFirstToken } from "./llmProxyTtft";
+import { resolveProxyTtftMs, resolveProxyFirstByteMs, resolveProxyRttMs, ssePreviewHasFirstToken } from "./llmProxyTtft";
 
 describe("llmProxyTtft", () => {
     test("ssePreviewHasFirstToken detects anthropic delta", () => {
@@ -13,6 +13,11 @@ describe("llmProxyTtft", () => {
     const sample =
       'event: content_block_start\ndata: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}';
     expect(ssePreviewHasFirstToken(sample)).toBe(true);
+  });
+
+  test("resolveProxyRttMs reads rttMs", () => {
+    expect(resolveProxyRttMs({ rttMs: 320 } as ClaudeLlmProxyRecord)).toBe(320);
+    expect(resolveProxyRttMs({} as ClaudeLlmProxyRecord)).toBe(null);
   });
 
   test("resolveProxyFirstByteMs reads firstByteMs", () => {

@@ -79,7 +79,10 @@ pub struct ClaudeLlmProxyRecord {
     pub request_bytes: u64,
     pub response_bytes: u64,
     pub duration_ms: u64,
-    /// 上游首字节到达代理的延迟（毫秒）；流式与非流式均可观测。
+    /// 上游 RTT：发出请求至收到 HTTP 响应头（毫秒）。
+    #[serde(default)]
+    pub rtt_ms: Option<u64>,
+    /// 上游响应 body 首字节到达代理（毫秒）。
     #[serde(default)]
     pub first_byte_ms: Option<u64>,
     /// 流式 SSE 中首个模型输出 token（text/thinking delta）到达延迟（毫秒）。
@@ -588,6 +591,7 @@ async fn handle_proxy_connection(
     let resp = match req.send().await {
         Ok(r) => r,
         Err(e) => {
+            let rtt_ms = Some(started.elapsed().as_millis() as u64);
             if !skip_record {
             let record = ClaudeLlmProxyRecord {
                 id: Uuid::new_v4().to_string(),
@@ -601,6 +605,7 @@ async fn handle_proxy_connection(
                 request_bytes,
                 response_bytes: 0,
                 duration_ms: started.elapsed().as_millis() as u64,
+                rtt_ms,
                 first_byte_ms: None,
                 ttft_ms: None,
                 is_streaming: is_streaming_req,
@@ -621,6 +626,8 @@ async fn handle_proxy_connection(
             return;
         }
     };
+
+    let rtt_ms = Some(started.elapsed().as_millis() as u64);
 
     let upstream_label = inner
         .upstream
@@ -713,6 +720,7 @@ async fn handle_proxy_connection(
             request_bytes,
             response_bytes: total_response_bytes,
             duration_ms: started.elapsed().as_millis() as u64,
+            rtt_ms,
             first_byte_ms,
             ttft_ms,
             is_streaming: is_streaming_resp,

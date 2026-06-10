@@ -30,7 +30,7 @@ import {
   formatHttpTraceTimestampCompact,
   formatHttpTraceTimestampFull,
 } from "../../utils/formatHttpTraceTimestamp";
-import { resolveProxyTtftMs, resolveProxyFirstByteMs } from "../../utils/llmProxyTtft";
+import { resolveProxyTtftMs, resolveProxyFirstByteMs, resolveProxyRttMs } from "../../utils/llmProxyTtft";
 import {
   exportLlmProxyRecordsJson,
   filterLlmProxyRecordsByPanelQuery,
@@ -53,6 +53,7 @@ function RecordSummary({ record }: { record: ClaudeLlmProxyRecord }) {
   const isSuccess = record.statusCode != null && record.statusCode >= 200 && record.statusCode < 300;
   const isError = record.statusCode != null && record.statusCode >= 400;
   const ttftMs = resolveProxyTtftMs(record);
+  const rttMs = resolveProxyRttMs(record);
   const ttfbMs = resolveProxyFirstByteMs(record);
   const ttftLikelyMisread =
     record.isStreaming &&
@@ -162,10 +163,20 @@ function RecordSummary({ record }: { record: ClaudeLlmProxyRecord }) {
             <span>{record.durationMs}ms</span>
           </span>
 
-          {ttfbMs != null && ttfbMs > 0 ? (
+          {rttMs != null && rttMs > 0 ? (
             <span
               className="app-llm-proxy-record__metric-item"
-              title={`首字节 TTFB：上游开始返回 body（含连接与首包）`}
+              title="RTT：发出上游请求至收到 HTTP 响应头（含连接、TLS、上传与排队）"
+            >
+              <span className="app-llm-proxy-record__ttft-label">RTT</span>
+              <span>{rttMs}ms</span>
+            </span>
+          ) : null}
+
+          {ttfbMs != null && ttfbMs > 0 && ttfbMs !== rttMs ? (
+            <span
+              className="app-llm-proxy-record__metric-item"
+              title="TTFB：上游响应 body 首字节到达（响应头之后的首包）"
             >
               <span className="app-llm-proxy-record__ttft-label">TTFB</span>
               <span>{ttfbMs}ms</span>
@@ -523,6 +534,18 @@ export function LlmProxyTrafficPanel({ repositoryPath, variant = "sidebar" }: Pr
             {summary.avgDurationMs != null ? (
               <span className="app-llm-proxy-panel__stat" title="可见记录的平均总耗时">
                 均耗时 {summary.avgDurationMs}ms
+              </span>
+            ) : null}
+            {summary.avgRttMs != null ? (
+              <span className="app-llm-proxy-panel__stat" title="平均 RTT（至响应头）">
+                均 RTT {summary.avgRttMs}ms
+              </span>
+            ) : null}
+            {summary.avgTtfbMs != null &&
+            summary.avgRttMs != null &&
+            summary.avgTtfbMs !== summary.avgRttMs ? (
+              <span className="app-llm-proxy-panel__stat" title="平均 TTFB（body 首字节）">
+                均 TTFB {summary.avgTtfbMs}ms
               </span>
             ) : null}
             {summary.avgTtftMs != null ? (

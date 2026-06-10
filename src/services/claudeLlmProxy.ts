@@ -16,7 +16,9 @@ export interface ClaudeLlmProxyRecord {
   requestBytes: number;
   responseBytes: number;
   durationMs: number;
-  /** 上游首字节到达代理（毫秒） */
+  /** 上游 RTT：至 HTTP 响应头返回（毫秒） */
+  rttMs?: number | null;
+  /** 上游响应 body 首字节（毫秒） */
   firstByteMs?: number | null;
   /** 流式首个 text/thinking token（毫秒） */
   ttftMs?: number | null;

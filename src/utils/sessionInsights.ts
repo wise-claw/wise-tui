@@ -2,7 +2,7 @@ import type { ClaudeLlmProxyRecord } from "../services/claudeLlmProxy";
 import type { FccTraceEntry } from "../types/fccTrace";
 import type { OpencodeGoProxyTraceEntry } from "../types/opencodeGoProxyTrace";
 import type { SessionLinkRecord } from "../types/sessionLink";
-import { resolveProxyFirstByteMs, resolveProxyTtftMs } from "./llmProxyTtft";
+import { resolveProxyFirstByteMs, resolveProxyRttMs, resolveProxyTtftMs } from "./llmProxyTtft";
 import type { SessionLinkTurnMetric } from "./sessionLinkFilters";
 
 export interface TokenUsageBreakdown {
@@ -554,7 +554,10 @@ export function computeSessionInsights(input: ComputeSessionInsightsInput): Sess
       ttftByTurn.set(turn, list);
     }
     const fb = resolveProxyFirstByteMs(rec);
-    if (fb != null) {
+    const rtt = resolveProxyRttMs(rec);
+    if (rtt != null) {
+      firstByteLatencies.push(rtt);
+    } else if (fb != null) {
       firstByteLatencies.push(fb);
     }
     const usage = parseUsageFromHttpBody(rec.responseBodyPreview);

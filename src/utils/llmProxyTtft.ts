@@ -9,6 +9,13 @@ export function resolveProxyTtftMs(record: ClaudeLlmProxyRecord): number | null 
   return null;
 }
 
+export function resolveProxyRttMs(record: ClaudeLlmProxyRecord): number | null {
+  if (record.rttMs != null && record.rttMs > 0) {
+    return record.rttMs;
+  }
+  return null;
+}
+
 export function resolveProxyFirstByteMs(record: ClaudeLlmProxyRecord): number | null {
   if (record.firstByteMs != null && record.firstByteMs > 0) {
     return record.firstByteMs;

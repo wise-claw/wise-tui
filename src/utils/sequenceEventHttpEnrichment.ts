@@ -85,9 +85,15 @@ export function fccTraceHttpSubtitle(entry: FccTraceEntry): string {
 
 export function llmProxyHttpDetail(rec: ClaudeLlmProxyRecord): string {
   const path = rec.path?.trim() || "/";
+  const timingParts = [
+    rec.rttMs != null && rec.rttMs > 0 ? `rtt ${rec.rttMs}ms` : "",
+    rec.firstByteMs != null && rec.firstByteMs > 0 ? `ttfb ${rec.firstByteMs}ms` : "",
+    rec.ttftMs != null && rec.ttftMs > 0 ? `ttft ${rec.ttftMs}ms` : "",
+    rec.durationMs != null ? `total ${rec.durationMs}ms` : "",
+  ].filter(Boolean);
   return [
     `${rec.method} ${path}${rec.statusCode != null ? ` · ${rec.statusCode}` : ""}${
-      rec.durationMs != null ? ` · ${rec.durationMs}ms` : ""
+      timingParts.length > 0 ? ` · ${timingParts.join(" · ")}` : ""
     }`,
     rec.upstreamUrl?.trim() ? `upstream: ${rec.upstreamUrl}` : `upstream: ${rec.upstream}`,
     rec.requestBodyPreview?.trim() ? `request:\n${rec.requestBodyPreview}` : "",
