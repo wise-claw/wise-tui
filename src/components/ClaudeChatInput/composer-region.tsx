@@ -39,7 +39,6 @@ import {
   ensureSpaceAfterAtInsert,
   promptToDisplayPlain,
   normalizeComposerEditorPlain,
-  reportAtSlashTriggerFromPlain,
   singleTextPrompt,
   insertPlainAt,
 } from "./composer-plain-utils";
@@ -51,8 +50,10 @@ import {
 } from "./composer-trigger-anchor";
 import { ContextItems } from "./context-items";
 import { SlashPopover } from "./slash-popover";
-import { composerTokenHighlightExtension } from "./composerTokenHighlightExtension";
+import { composerTokenHighlightExtensions } from "./composerTokenHighlightExtension";
+import { syncComposerHighlightMarksOnEditor } from "./composerTokenHighlight";
 import { shouldSkipStaleComposerSetContent } from "./composerSetContentGuard";
+import { debounce } from "../../utils/debounce";
 import { useAtMentionDefaultTarget } from "../../hooks/useAtMentionDefaultTarget";
 import { useAtMentionShortcuts } from "../../hooks/useAtMentionShortcuts";
 import { resolveComposerCommonPhraseAction } from "../../constants/composerCommonPhrase";
@@ -363,8 +364,9 @@ function refocusComposerAndInsertSpace(aiChat: InstanceType<typeof AIChatInput> 
 }
 
 const SAFE_AI_CHAT_SET_CONTENT_MAX_FRAMES = 48;
+const COMPOSER_PROMPT_SYNC_DEBOUNCE_MS = 100;
 
-const SEMI_COMPOSER_TOKEN_HIGHLIGHT_EXTENSIONS = [composerTokenHighlightExtension];
+const SEMI_COMPOSER_TOKEN_HIGHLIGHT_EXTENSIONS = composerTokenHighlightExtensions;
 
 type ScheduleSafeAiChatSetContentOptions = {
   isEditorFocused?: () => boolean;
@@ -403,6 +405,7 @@ function scheduleSafeAiChatSetContent(
         options?.isEditorFocused?.() ?? false,
       )
     ) {
+      syncComposerHighlightMarksOnEditor(ed);
       onAfterSet?.();
       return true;
     }
@@ -411,6 +414,7 @@ function scheduleSafeAiChatSetContent(
     } catch {
       return false;
     }
+    syncComposerHighlightMarksOnEditor(ed);
     onAfterSet?.();
     return true;
   };
@@ -566,6 +570,8 @@ function ComposerInner({
   } = useComposerCommonPhrases();
   const [trigger, setTrigger] = useState<TriggerInfo>({ mode: null, query: "", rect: null });
   const [images, setImages] = useState<ImageAttachmentPart[]>([]);
+  const imagesRef = useRef(images);
+  imagesRef.current = images;
   const [dragOverNativeFiles, setDragOverNativeFiles] = useState(false);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const isCursorEngine = sessionExecutionEngine === "cursor";
@@ -622,6 +628,35 @@ function ComposerInner({
   const { prompt, contextItems, set, reset, contextAdd, draftBucketKey } = usePrompt();
 
   const displayPlain = useMemo(() => promptToDisplayPlain(prompt), [prompt]);
+  const contextItemsRef = useRef(contextItems);
+  contextItemsRef.current = contextItems;
+  const canSendComposerRef = useRef(false);
+  const [canSendComposer, setCanSendComposer] = useState(false);
+  const debouncedPromptSyncRef = useRef(
+    debounce((plain: string, cursorPos: number) => {
+      set(singleTextPrompt(plain), cursorPos);
+    }, COMPOSER_PROMPT_SYNC_DEBOUNCE_MS),
+  );
+
+  useEffect(() => {
+    debouncedPromptSyncRef.current.cancel();
+    debouncedPromptSyncRef.current = debounce((plain: string, cursorPos: number) => {
+      set(singleTextPrompt(plain), cursorPos);
+    }, COMPOSER_PROMPT_SYNC_DEBOUNCE_MS);
+    return () => {
+      debouncedPromptSyncRef.current.flush();
+    };
+  }, [set]);
+
+  const syncCanSendComposer = useCallback((plain: string) => {
+    const active =
+      plain.trim().length > 0 ||
+      imagesRef.current.length > 0 ||
+      contextItemsRef.current.length > 0;
+    if (active === canSendComposerRef.current) return;
+    canSendComposerRef.current = active;
+    setCanSendComposer(active);
+  }, []);
 
   const scheduleComposerSetContent = useCallback(
     (plain: string, onAfterSet?: () => void) => {
@@ -643,11 +678,17 @@ function ComposerInner({
   plainSurfaceRef.current = {
     anchorEl: () => shellRef.current,
     resolveTriggerAnchorRect: () => {
-      const plain = promptToDisplayPlain(prompt);
+      const plain = plainSurfaceRef.current?.getPlain() ?? promptToDisplayPlain(prompt);
       const cursor = plainSurfaceRef.current?.getCursor() ?? cursorRef.current;
       return resolveAtSlashTriggerAnchorRect(aiChatRef.current, shellRef.current, plain, cursor);
     },
-    getPlain: () => promptToDisplayPlain(prompt),
+    getPlain: () => {
+      const live = lastEditorPlainRef.current;
+      if (live) return live;
+      const fromEditor = readSemiEditorPlain(aiChatRef.current?.getEditor?.());
+      if (fromEditor) return fromEditor;
+      return promptToDisplayPlain(prompt);
+    },
     getCursor: () => {
       const ed = aiChatRef.current?.getEditor?.();
       if (ed) {
@@ -665,6 +706,7 @@ function ComposerInner({
       ignoreNextContentSyncRef.current = true;
       cursorRef.current = c;
       lastEditorPlainRef.current = normalized;
+      debouncedPromptSyncRef.current.cancel();
       set(singleTextPrompt(normalized), c);
       scheduleComposerSetContent(normalized, () => {
         repairTiptapTrailingSpaceIfNeeded(aiChatRef.current, normalized);
@@ -745,6 +787,16 @@ function ComposerInner({
   }, [session.id]);
 
   useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell) return;
+    const flushPromptSync = () => {
+      debouncedPromptSyncRef.current.flush();
+    };
+    shell.addEventListener("focusout", flushPromptSync);
+    return () => shell.removeEventListener("focusout", flushPromptSync);
+  }, [session.id]);
+
+  useEffect(() => {
     if (!semiEditorReady) return;
     // 聚焦时编辑器为唯一来源，禁止 React plain 回写 setContent
     if (isProseMirrorFocused(shellRef.current)) return;
@@ -790,19 +842,27 @@ function ComposerInner({
     }
     cursorRef.current = c;
     lastEditorPlainRef.current = plain;
-    set(singleTextPrompt(plain), c);
-    reportAtSlashTriggerFromPlain(
-      plain,
-      c,
-      setTrigger,
-      resolveAtSlashTriggerAnchorRect(aiChatRef.current, shellRef.current, plain, c),
-    );
+    syncCanSendComposer(plain);
+    debouncedPromptSyncRef.current(plain, c);
+    const detected = detectAtSlashTrigger(plain, c);
+    setTrigger((prev) => {
+      if (!detected) {
+        if (prev.mode === null && prev.query === "") return prev;
+        return { mode: null, query: "", rect: null };
+      }
+      if (prev.mode === detected.mode && prev.query === detected.query) return prev;
+      return {
+        mode: detected.mode,
+        query: detected.query,
+        rect: resolveAtSlashTriggerAnchorRect(aiChatRef.current, shellRef.current, plain, c),
+      };
+    });
     if (plain.endsWith(" ")) {
       queueMicrotask(() => {
         repairTiptapTrailingSpaceIfNeeded(aiChatRef.current, plain);
       });
     }
-  }, [set]);
+  }, [syncCanSendComposer]);
 
   useEffect(() => {
     const onSettingsChanged = () => {
@@ -1415,14 +1475,11 @@ function ComposerInner({
       fullLine,
     };
   }, [session]);
-  const logicalPlain = useMemo(
-    () => promptToLogicalPlainString(prompt).replace(/\u200B/g, ""),
-    [prompt],
-  );
-  const hasComposerPayload = useMemo(
-    () => logicalPlain.trim().length > 0 || images.length > 0 || contextItems.length > 0,
-    [logicalPlain, images.length, contextItems.length],
-  );
+  const hasComposerPayload = canSendComposer;
+
+  useEffect(() => {
+    syncCanSendComposer(lastEditorPlainRef.current || displayPlain);
+  }, [displayPlain, images.length, contextItems.length, syncCanSendComposer]);
 
   const sessionRef = useRef(session);
   sessionRef.current = session;
@@ -1534,8 +1591,6 @@ function ComposerInner({
   historyIndexRef.current = historyIndex;
   const promptRef = useRef(prompt);
   promptRef.current = prompt;
-  const imagesRef = useRef(images);
-  imagesRef.current = images;
 
   const tryPromptHistoryNavigationRef = useRef<(direction: "up" | "down") => boolean>(() => false);
   tryPromptHistoryNavigationRef.current = (direction: "up" | "down"): boolean => {
@@ -1686,8 +1741,12 @@ function ComposerInner({
       composerSendInFlightRef.current = true;
       try {
       clearSpeechIdleAutoSendTimer();
-      const promptSnap: Prompt =
-        plainFromEditor !== undefined ? singleTextPrompt(plainFromEditor) : prompt.map((part) => ({ ...part }));
+      debouncedPromptSyncRef.current.flush();
+      const effectivePlain =
+        plainFromEditor !== undefined
+          ? plainFromEditor
+          : lastEditorPlainRef.current || promptToDisplayPlain(prompt);
+      const promptSnap: Prompt = singleTextPrompt(effectivePlain);
       const logicalSnap = normalizeComposerPlainMain(
         promptToLogicalPlainString(promptSnap),
         images.length > 0,
@@ -1708,6 +1767,9 @@ function ComposerInner({
 
       /** 先清空输入区，再 await 构建 outbound（图片落盘等），避免主线程长时间被占导致「点了没反应」 */
       const clearComposerSurfaceSync = (sentPlain?: string) => {
+        debouncedPromptSyncRef.current.cancel();
+        canSendComposerRef.current = false;
+        setCanSendComposer(false);
         setTrigger({ mode: null, query: "", rect: null });
         ignoreNextContentSyncRef.current = true;
         lastEditorPlainRef.current = "";
@@ -3103,7 +3165,7 @@ function ComposerInner({
                   clearContentOnGenerating={false}
                   generating={false}
                   onStopGenerate={() => _onCancel()}
-                  canSend={hasComposerPayload}
+                  canSend={canSendComposer}
                   onMessageSend={(msg) => {
                     const plain = contentsToPlain((msg.inputContents ?? []) as Content[]);
                     void handleSendRef.current(plain);

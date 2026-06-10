@@ -4,6 +4,7 @@ import { EditorState } from "@tiptap/pm/state";
 import {
   createComposerHighlightMarkSyncPlugin,
   docToHighlightPlain,
+  syncComposerHighlightMarksOnEditor,
 } from "./composerTokenHighlight";
 
 const schema = new Schema({
@@ -65,13 +66,38 @@ describe("composer highlight mark sync", () => {
       doc: docFromPlain("@终端01"),
       plugins: [createComposerHighlightMarkSyncPlugin()],
     });
-    state = applyWithHighlightSync(state, state.tr);
+    const bootstrapTr = state.tr.insertText(" ", state.doc.content.size - 1);
+    state = applyWithHighlightSync(state, bootstrapTr);
     expect(docHasAtHighlightMark(state)).toBe(true);
 
     const insertPos = state.doc.content.size - 1;
-    state = applyWithHighlightSync(state, state.tr.insertText(" 你好", insertPos));
+    state = applyWithHighlightSync(state, state.tr.insertText("你好", insertPos));
 
     expect(docToHighlightPlain(state.doc)).toBe("@终端01 你好");
+    expect(docHasAtHighlightMark(state)).toBe(true);
+  });
+
+  test("syncComposerHighlightMarksOnEditor repairs marks after plain setContent", () => {
+    let state = EditorState.create({
+      doc: docFromPlain("@终端01 你好"),
+      plugins: [createComposerHighlightMarkSyncPlugin()],
+    });
+    expect(docHasAtHighlightMark(state)).toBe(false);
+
+    const editor = {
+      get state() {
+        return state;
+      },
+      view: {
+        get state() {
+          return state;
+        },
+        dispatch(tr: ReturnType<EditorState["tr"]["setMeta"]>) {
+          state = state.apply(tr);
+        },
+      },
+    };
+    syncComposerHighlightMarksOnEditor(editor);
     expect(docHasAtHighlightMark(state)).toBe(true);
   });
 });

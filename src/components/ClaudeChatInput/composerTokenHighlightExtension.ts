@@ -1,5 +1,8 @@
 import { Mark, Extension } from "@tiptap/core";
-import { createComposerHighlightMarkSyncPlugin } from "./composerTokenHighlight";
+import {
+  createComposerHighlightMarkSyncPlugin,
+  syncComposerHighlightMarksOnEditor,
+} from "./composerTokenHighlight";
 
 export const composerAtHighlightMark = Mark.create({
   name: "wiseComposerAtHighlight",
@@ -41,13 +44,26 @@ export const composerSlashHighlightMark = Mark.create({
   },
 });
 
-/** Semi AIChatInput 扩展：用 document mark 持久 @ / 指令高亮（Decoration 在 Semi 输入链上会被冲掉）。 */
-export const composerTokenHighlightExtension = Extension.create({
-  name: "wiseComposerTokenHighlight",
-  addExtensions() {
-    return [composerAtHighlightMark, composerSlashHighlightMark];
-  },
+/** 仅挂载 mark-sync 插件；Mark 定义需与 Semi 内置扩展并列注册，避免 addExtensions 未进 schema。 */
+export const composerTokenHighlightSyncExtension = Extension.create({
+  name: "wiseComposerTokenHighlightSync",
+  priority: 1000,
   addProseMirrorPlugins() {
     return [createComposerHighlightMarkSyncPlugin()];
   },
+  onCreate() {
+    queueMicrotask(() => {
+      syncComposerHighlightMarksOnEditor(this.editor);
+    });
+  },
 });
+
+/** Semi AIChatInput 扩展 bundle：Mark + 高优先级 sync 插件。 */
+export const composerTokenHighlightExtensions = [
+  composerAtHighlightMark,
+  composerSlashHighlightMark,
+  composerTokenHighlightSyncExtension,
+];
+
+/** @deprecated 使用 `composerTokenHighlightExtensions` */
+export const composerTokenHighlightExtension = composerTokenHighlightSyncExtension;

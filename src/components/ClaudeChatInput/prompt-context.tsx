@@ -2,6 +2,9 @@ import { createContext, useContext, useState, useCallback, useMemo, useEffect, u
 import type { Prompt, ContextItem } from "../../types";
 import { DEFAULT_PROMPT, isPromptEqual, promptLength } from "./prompt-history";
 import { deleteAppSetting, getAppSetting, setAppSetting } from "../../services/appSettingsStore";
+import { debounce } from "../../utils/debounce";
+
+const PROMPT_DRAFT_SAVE_DEBOUNCE_MS = 400;
 
 // ── Store ──
 
@@ -39,6 +42,12 @@ function normalizeStore(store: PromptStore): PromptStore {
 
 function saveStore(sessionId: string, store: PromptStore) {
   void setAppSetting(STORAGE_PREFIX + sessionId, JSON.stringify(normalizeStore(store)));
+}
+
+function createDebouncedSaveStore(bucketKey: string) {
+  return debounce((store: PromptStore) => {
+    saveStore(bucketKey, store);
+  }, PROMPT_DRAFT_SAVE_DEBOUNCE_MS);
 }
 
 export async function clearPromptContextSessionKey(sessionId: string): Promise<void> {
@@ -97,6 +106,15 @@ export function PromptProvider({ children, sessionId, draftBucketKey: draftBucke
   const [store, setStoreRaw] = useState<PromptStore>(() => emptyStore());
   /** 发送 reset 等本地变更后递增，避免异步 hydration 读盘较慢时在 reset 之后仍用旧草稿覆盖 store。 */
   const mutationEpochRef = useRef(0);
+  const debouncedSaveRef = useRef(createDebouncedSaveStore(bucketKey));
+
+  useEffect(() => {
+    debouncedSaveRef.current.cancel();
+    debouncedSaveRef.current = createDebouncedSaveStore(bucketKey);
+    return () => {
+      debouncedSaveRef.current.flush();
+    };
+  }, [bucketKey]);
 
   useEffect(() => {
     let cancelled = false;
@@ -143,7 +161,7 @@ export function PromptProvider({ children, sessionId, draftBucketKey: draftBucke
   const setStore = useCallback((updater: (prev: PromptStore) => PromptStore) => {
     setStoreRaw((prev) => {
       const next = updater(prev);
-      saveStore(bucketKey, next);
+      debouncedSaveRef.current(next);
       return next;
     });
   }, [bucketKey]);
@@ -158,13 +176,18 @@ export function PromptProvider({ children, sessionId, draftBucketKey: draftBucke
 
   const reset = useCallback(() => {
     mutationEpochRef.current += 1;
-    setStore((prev) => ({
-      ...prev,
-      prompt: [...DEFAULT_PROMPT],
-      cursor: 0,
-      contextItems: [],
-    }));
-  }, [setStore]);
+    setStoreRaw((prev) => {
+      const next = {
+        ...prev,
+        prompt: [...DEFAULT_PROMPT],
+        cursor: 0,
+        contextItems: [],
+      };
+      debouncedSaveRef.current.cancel();
+      saveStore(bucketKey, next);
+      return next;
+    });
+  }, [bucketKey]);
 
   const setCursor = useCallback((pos: number) => {
     setStore((prev) => ({ ...prev, cursor: pos }));

@@ -1,4 +1,5 @@
 import { Plugin, PluginKey } from "@tiptap/pm/state";
+import type { EditorState } from "@tiptap/pm/state";
 import type { MarkType, Node, Schema } from "@tiptap/pm/model";
 import { Decoration, DecorationSet, type DecorationAttrs } from "@tiptap/pm/view";
 import type { ComposerProseMirrorEditor } from "./composer-trigger-anchor";
@@ -158,37 +159,153 @@ function readHighlightMarkTypes(schema: Schema): {
   };
 }
 
+function docHasAnyHighlightMark(
+  doc: Node,
+  atType: MarkType,
+  slashType: MarkType,
+): boolean {
+  let found = false;
+  doc.descendants((node) => {
+    if (!node.isText) return;
+    if (node.marks.some((mark) => mark.type === atType || mark.type === slashType)) {
+      found = true;
+      return false;
+    }
+    return undefined;
+  });
+  return found;
+}
+
+function rangeHasExpectedMark(
+  doc: Node,
+  range: ComposerHighlightRange,
+  atType: MarkType,
+  slashType: MarkType,
+): boolean {
+  const expected = range.kind === "at" ? atType : slashType;
+  const from = highlightPlainOffsetToDocPos(doc, range.start);
+  const to = highlightPlainOffsetToDocPos(doc, range.end);
+  if (to <= from) return false;
+
+  let ok = true;
+  doc.nodesBetween(from, to, (node) => {
+    if (!node.isText) return;
+    if (!node.marks.some((mark) => mark.type === expected)) {
+      ok = false;
+      return false;
+    }
+    return undefined;
+  });
+  return ok;
+}
+
+function composerHighlightMarksInSync(
+  doc: Node,
+  schema: Schema,
+): boolean {
+  const { at: atType, slash: slashType } = readHighlightMarkTypes(schema);
+  if (!atType || !slashType) return true;
+
+  const plain = docToHighlightPlain(doc);
+  if (!plain.includes("@") && !plain.includes("＠") && !plain.includes("/")) {
+    return !docHasAnyHighlightMark(doc, atType, slashType);
+  }
+
+  const desired = findComposerHighlightRanges(plain);
+  if (desired.length === 0) {
+    return !docHasAnyHighlightMark(doc, atType, slashType);
+  }
+
+  return desired.every((range) => rangeHasExpectedMark(doc, range, atType, slashType));
+}
+
+function buildComposerHighlightMarkSyncTransaction(
+  state: EditorState,
+): import("@tiptap/pm/state").Transaction | null {
+  const { doc, schema } = state;
+  const { at: atType, slash: slashType } = readHighlightMarkTypes(schema);
+  if (!atType || !slashType) return null;
+  if (composerHighlightMarksInSync(doc, schema)) return null;
+
+  const plain = docToHighlightPlain(doc);
+  const desired = findComposerHighlightRanges(plain);
+
+  const markOps: Array<{ from: number; to: number; mark: ReturnType<MarkType["create"]> }> = [];
+  for (const range of desired) {
+    const from = highlightPlainOffsetToDocPos(doc, range.start);
+    const to = highlightPlainOffsetToDocPos(doc, range.end);
+    if (to <= from) continue;
+    markOps.push({
+      from,
+      to,
+      mark: range.kind === "at" ? atType.create() : slashType.create(),
+    });
+  }
+
+  if (markOps.length === 0) {
+    if (desired.length === 0 && docHasAnyHighlightMark(doc, atType, slashType)) {
+      let tr = state.tr;
+      tr.removeMark(0, doc.content.size, atType);
+      tr.removeMark(0, doc.content.size, slashType);
+      if (!tr.steps.length) return null;
+      tr.setMeta(COMPOSER_HIGHLIGHT_SYNC_META, true);
+      tr.setMeta("addToHistory", false);
+      return tr;
+    }
+    return null;
+  }
+
+  let tr = state.tr;
+  tr.removeMark(0, doc.content.size, atType);
+  tr.removeMark(0, doc.content.size, slashType);
+
+  for (const op of markOps) {
+    tr.addMark(op.from, op.to, op.mark);
+  }
+
+  if (!tr.steps.length) return null;
+
+  tr.setMeta(COMPOSER_HIGHLIGHT_SYNC_META, true);
+  tr.setMeta("addToHistory", false);
+  return tr;
+}
+
+/** 主动把 @ / 指令 mark 写回编辑器（setContent 跳过后、Semi 零宽字符整理后仍需调用）。 */
+export function syncComposerHighlightMarksOnEditor(editor: unknown): void {
+  if (!editor || typeof editor !== "object") return;
+  const typed = editor as {
+    state?: ComposerProseMirrorEditor["state"];
+    view?: {
+      dispatch: (tr: import("@tiptap/pm/state").Transaction) => void;
+      state?: ComposerProseMirrorEditor["state"];
+    };
+    dispatch?: (tr: import("@tiptap/pm/state").Transaction) => void;
+  };
+
+  const state = (typed.view?.state ?? typed.state) as EditorState | undefined;
+  const dispatch = typed.view?.dispatch ?? typed.dispatch;
+  if (!state || !dispatch) return;
+
+  const tr = buildComposerHighlightMarkSyncTransaction(state);
+  if (!tr) return;
+  dispatch(tr);
+}
+
 /** 在 doc 变更后把 @ / 指令范围写成 ProseMirror mark（DOM 内真实 span，输入后续字不会丢）。 */
 export function createComposerHighlightMarkSyncPlugin(): Plugin {
   return new Plugin({
     key: COMPOSER_HIGHLIGHT_MARK_SYNC_KEY,
     appendTransaction(transactions, _oldState, newState) {
-      if (!transactions.some((tr) => tr.docChanged)) return null;
       if (transactions.some((tr) => tr.getMeta(COMPOSER_HIGHLIGHT_SYNC_META))) return null;
 
-      const { doc, schema } = newState;
-      const { at: atType, slash: slashType } = readHighlightMarkTypes(schema);
-      if (!atType || !slashType) return null;
+      const docChanged = transactions.some((tr) => tr.docChanged);
+      const { at: atType, slash: slashType } = readHighlightMarkTypes(newState.schema);
+      const marksMissing =
+        Boolean(atType && slashType) && !composerHighlightMarksInSync(newState.doc, newState.schema);
 
-      const plain = docToHighlightPlain(doc);
-      const desired = findComposerHighlightRanges(plain);
+      if (!docChanged && !marksMissing) return null;
 
-      let tr = newState.tr;
-      tr.removeMark(0, doc.content.size, atType);
-      tr.removeMark(0, doc.content.size, slashType);
-
-      for (const range of desired) {
-        const from = highlightPlainOffsetToDocPos(doc, range.start);
-        const to = highlightPlainOffsetToDocPos(doc, range.end);
-        if (to <= from) continue;
-        tr.addMark(from, to, range.kind === "at" ? atType.create() : slashType.create());
-      }
-
-      if (!tr.steps.length) return null;
-
-      tr.setMeta(COMPOSER_HIGHLIGHT_SYNC_META, true);
-      tr.setMeta("addToHistory", false);
-      return tr;
+      return buildComposerHighlightMarkSyncTransaction(newState);
     },
   });
 }
