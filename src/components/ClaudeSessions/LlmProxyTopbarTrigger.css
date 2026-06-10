@@ -26,13 +26,20 @@
 .app-llm-proxy-topbar-popover .ant-popover-inner {
   padding: 0 !important;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
   width: min(94vw, 560px) !important;
   max-width: min(94vw, 560px) !important;
+  max-height: min(82vh, 680px);
   box-sizing: border-box;
 }
 
 .app-llm-proxy-topbar-popover .ant-popover-inner-content {
   padding: 0 !important;
   max-width: 100%;
+  min-height: 0;
+  flex: 1 1 auto;
   overflow: hidden;
+  display: flex;
+  flex-direction: column;
 }

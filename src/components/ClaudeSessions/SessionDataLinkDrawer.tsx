@@ -311,8 +311,12 @@ export function SessionDataLinkDrawer({
   });
 
   const llmProxyRecords = useMemo(
-    () => filterLlmProxyRecordsForDisplay(proxySnap.records),
-    [proxySnap.records],
+    () =>
+      filterLlmProxyRecordsForDisplay(proxySnap.records, {
+        hideStreamJsonWhenProxyActive:
+          proxySnap.status?.listening === true && proxySnap.status?.running === true,
+      }),
+    [proxySnap.records, proxySnap.status?.listening, proxySnap.status?.running],
   );
 
   const linkPipeline = useMemo(

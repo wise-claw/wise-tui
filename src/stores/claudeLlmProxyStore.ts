@@ -87,6 +87,8 @@ async function ensureInitialized(): Promise<void> {
       const nextRecordsUnlisten = await subscribeClaudeLlmProxyRecords(upsertRecord);
       const nextClaudeOutputUnlisten = await listen<string>("claude-output", (ev) => {
         if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+        // HTTP 代理已在监听时由 Rust 侧抓包；stdout 兜底会与 /v1/messages 重复。
+        if (status?.listening && status?.running) return;
         const line = typeof ev.payload === "string" ? ev.payload : String(ev.payload ?? "");
         const rec = tryIngestStreamJsonLineForLlmProxy(line);
         if (rec) upsertRecord(rec);

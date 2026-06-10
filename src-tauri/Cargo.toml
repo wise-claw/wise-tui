@@ -54,7 +54,7 @@ keyboard-types = "0.7.0"
 rusqlite = { version = "0.32", features = ["bundled"] }
 tokio-tungstenite = { version = "0.24", features = ["rustls-tls-webpki-roots"] }
 futures-util = { version = "0.3", default-features = false, features = ["sink", "std", "async-await"] }
-reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "multipart", "stream"] }
+reqwest = { version = "0.12", default-features = false, features = ["rustls-tls", "json", "multipart", "stream", "gzip", "brotli", "deflate"] }
 axum = { version = "0.8", features = ["json"] }
 tower = "0.5"
 urlencoding = "2.1"
@@ -70,6 +70,7 @@ tiktoken-rs = "0.12.0"
 sherpa-onnx = "1.13.2"
 tar = "0.4"
 bzip2 = "0.4"
+flate2 = "1"
 
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = "0.6"

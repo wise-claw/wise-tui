@@ -1,11 +1,13 @@
-import { Alert, Button, Collapse, Input, Switch, message } from "antd";
+import { Alert, Button, Collapse, Input, Segmented, Switch, message } from "antd";
 import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import {
   DeleteOutlined,
   ThunderboltOutlined,
   FieldTimeOutlined,
-  SwapOutlined,
   GlobalOutlined,
+  ArrowUpOutlined,
+  ArrowDownOutlined,
+  ExportOutlined,
 } from "@ant-design/icons";
 import type { ClaudeLlmProxyRecord } from "../../services/claudeLlmProxy";
 import {
@@ -24,7 +26,20 @@ import {
   resolveAnthropicProxyConflict,
 } from "../../utils/anthropicProxyConflict";
 import { filterLlmProxyRecordsForDisplay } from "../../utils/llmProxyTrafficDisplay";
-import { resolveProxyTtftMs } from "../../utils/llmProxyTtft";
+import {
+  formatHttpTraceTimestampCompact,
+  formatHttpTraceTimestampFull,
+} from "../../utils/formatHttpTraceTimestamp";
+import { resolveProxyTtftMs, resolveProxyFirstByteMs } from "../../utils/llmProxyTtft";
+import {
+  exportLlmProxyRecordsJson,
+  filterLlmProxyRecordsByPanelQuery,
+  formatTokenCountShort,
+  parseModelFromLlmProxyRequest,
+  parseUsageFromLlmProxyRecord,
+  summarizeLlmProxyRecords,
+  type LlmProxyFilterKind,
+} from "../../utils/llmProxyRecordMeta";
 import { HttpBodyJsonViewer } from "./HttpBodyJsonViewer";
 import "./LlmProxyTrafficPanel.css";
 
@@ -34,23 +49,17 @@ function formatBytes(n: number): string {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function formatTime(ts: number): string {
-  try {
-    return new Date(ts).toLocaleTimeString(undefined, {
-      hour: "2-digit",
-      minute: "2-digit",
-      second: "2-digit",
-      hour12: false,
-    });
-  } catch {
-    return "—";
-  }
-}
-
 function RecordSummary({ record }: { record: ClaudeLlmProxyRecord }) {
   const isSuccess = record.statusCode != null && record.statusCode >= 200 && record.statusCode < 300;
   const isError = record.statusCode != null && record.statusCode >= 400;
   const ttftMs = resolveProxyTtftMs(record);
+  const ttfbMs = resolveProxyFirstByteMs(record);
+  const ttftLikelyMisread =
+    record.isStreaming &&
+    ttftMs != null &&
+    ttftMs > 0 &&
+    record.durationMs > 0 &&
+    ttftMs >= record.durationMs * 0.9;
 
   const methodColors: Record<string, { bg: string; text: string; border: string }> = {
     POST: {
@@ -82,13 +91,18 @@ function RecordSummary({ record }: { record: ClaudeLlmProxyRecord }) {
   };
 
   const mStyle = methodColors[record.method.toUpperCase()] || defaultColor;
+  const model = parseModelFromLlmProxyRequest(record.requestBodyPreview);
+  const usage = parseUsageFromLlmProxyRecord(record);
 
   return (
     <div className="app-llm-proxy-record__summary" onClick={(e) => e.stopPropagation()}>
       <div className="app-llm-proxy-record__summary-left">
-        <span className="app-llm-proxy-record__time" title="请求发生时间">
+        <span
+          className="app-llm-proxy-record__time"
+          title={formatHttpTraceTimestampFull(record.timestampMs)}
+        >
           <FieldTimeOutlined style={{ marginRight: 3, opacity: 0.7 }} />
-          {formatTime(record.timestampMs)}
+          {formatHttpTraceTimestampCompact(record.timestampMs)}
         </span>
 
         <span
@@ -108,6 +122,20 @@ function RecordSummary({ record }: { record: ClaudeLlmProxyRecord }) {
       </div>
 
       <div className="app-llm-proxy-record__summary-right">
+        {model ? (
+          <span className="app-llm-proxy-record__stream-badge" title={`模型: ${model}`}>
+            {model.length > 18 ? `${model.slice(0, 16)}…` : model}
+          </span>
+        ) : null}
+        {usage ? (
+          <span
+            className="app-llm-proxy-record__metric-item app-llm-proxy-record__token-badge"
+            title={`Token 用量 — 输入 ${usage.inputTokens}（含缓存读 ${usage.cacheReadTokens}）/ 输出 ${usage.outputTokens}`}
+          >
+            <span>↑{formatTokenCountShort(usage.inputTokens + usage.cacheReadTokens + usage.cacheCreationTokens)}</span>
+            <span>↓{formatTokenCountShort(usage.outputTokens)}</span>
+          </span>
+        ) : null}
         {record.isStreaming ? (
           <span className="app-llm-proxy-record__stream-badge">流式</span>
         ) : null}
@@ -115,21 +143,43 @@ function RecordSummary({ record }: { record: ClaudeLlmProxyRecord }) {
         <div className="app-llm-proxy-record__metrics">
           <span
             className="app-llm-proxy-record__metric-item"
-            title={`传输大小: 输入 ${formatBytes(record.requestBytes)} / 输出 ${formatBytes(record.responseBytes)}`}
+            title={`请求体: ${formatBytes(record.requestBytes)}`}
           >
-            <SwapOutlined style={{ fontSize: 9, opacity: 0.6 }} />
-            <span>{formatBytes(record.responseBytes || record.requestBytes)}</span>
+            <ArrowUpOutlined style={{ fontSize: 9, opacity: 0.65 }} />
+            <span>{formatBytes(record.requestBytes)}</span>
           </span>
 
-          <span className="app-llm-proxy-record__metric-item" title={`响应延迟: ${record.durationMs}ms`}>
+          <span
+            className="app-llm-proxy-record__metric-item"
+            title={`响应体: ${formatBytes(record.responseBytes)}`}
+          >
+            <ArrowDownOutlined style={{ fontSize: 9, opacity: 0.65 }} />
+            <span>{formatBytes(record.responseBytes)}</span>
+          </span>
+
+          <span className="app-llm-proxy-record__metric-item" title={`总耗时：请求体就绪后至响应结束（含上游处理${record.isStreaming ? "与整段流式输出" : ""}）`}>
             <ThunderboltOutlined style={{ fontSize: 9, color: "#eab308", opacity: 0.9 }} />
             <span>{record.durationMs}ms</span>
           </span>
 
-          {ttftMs != null ? (
+          {ttfbMs != null && ttfbMs > 0 ? (
             <span
               className="app-llm-proxy-record__metric-item"
-              title={`首 Token (TTFT): ${ttftMs}ms`}
+              title={`首字节 TTFB：上游开始返回 body（含连接与首包）`}
+            >
+              <span className="app-llm-proxy-record__ttft-label">TTFB</span>
+              <span>{ttfbMs}ms</span>
+            </span>
+          ) : null}
+
+          {record.isStreaming && ttftMs != null ? (
+            <span
+              className="app-llm-proxy-record__metric-item"
+              title={
+                ttftLikelyMisread
+                  ? `首 Token TTFT: ${ttftMs}ms（接近总耗时，可能含长思考/上游缓冲，或事件格式未早期识别；请看 TTFB 区分网络与生成）`
+                  : `首 Token TTFT: ${ttftMs}ms`
+              }
             >
               <span className="app-llm-proxy-record__ttft-label">TTFT</span>
               <span>{ttftMs}ms</span>
@@ -176,6 +226,8 @@ export function LlmProxyTrafficPanel({ repositoryPath, variant = "sidebar" }: Pr
   const st = snapshot.status;
   const [upstreamDraft, setUpstreamDraft] = useState("");
   const [saving, setSaving] = useState(false);
+  const [filterKind, setFilterKind] = useState<LlmProxyFilterKind>("all");
+  const [searchQuery, setSearchQuery] = useState("");
   const [opencodeGo, setOpencodeGo] = useState<
     Pick<OpencodeGoProxyStatus, "enabled" | "running" | "claudeSettingsAligned"> | null
   >(null);
@@ -265,14 +317,34 @@ export function LlmProxyTrafficPanel({ repositoryPath, variant = "sidebar" }: Pr
     void persistConfig(true, upstreamDraft);
   }, [persistConfig, st, upstreamDraft]);
 
-  const displayRecords = useMemo(
-    () => filterLlmProxyRecordsForDisplay(snapshot.records),
-    [snapshot.records],
+  const baseRecords = useMemo(
+    () =>
+      filterLlmProxyRecordsForDisplay(snapshot.records, {
+        hideStreamJsonWhenProxyActive:
+          snapshot.status?.listening === true && snapshot.status?.running === true,
+      }),
+    [snapshot.records, snapshot.status?.listening, snapshot.status?.running],
   );
+
+  const visibleRecords = useMemo(
+    () => filterLlmProxyRecordsByPanelQuery(baseRecords, { query: searchQuery, kind: filterKind }),
+    [baseRecords, searchQuery, filterKind],
+  );
+
+  const summary = useMemo(() => summarizeLlmProxyRecords(visibleRecords), [visibleRecords]);
+
+  const handleExport = useCallback(() => {
+    if (visibleRecords.length === 0) return;
+    const json = exportLlmProxyRecordsJson(visibleRecords);
+    void navigator.clipboard.writeText(json).then(
+      () => message.success(`已复制 ${visibleRecords.length} 条记录 JSON`),
+      () => message.error("复制失败"),
+    );
+  }, [visibleRecords]);
 
   const items = useMemo(
     () =>
-      displayRecords.map((record) => ({
+      visibleRecords.map((record) => ({
         key: record.id,
         label: <RecordSummary record={record} />,
         children: (
@@ -280,6 +352,7 @@ export function LlmProxyTrafficPanel({ repositoryPath, variant = "sidebar" }: Pr
             <HttpBodyJsonViewer
               title="请求主体 (Request Body)"
               rawContent={record.requestBodyPreview}
+              byteCount={record.requestBytes}
               isTruncated={record.requestTruncated}
               defaultExpanded
               emptyHint={
@@ -291,6 +364,7 @@ export function LlmProxyTrafficPanel({ repositoryPath, variant = "sidebar" }: Pr
             <HttpBodyJsonViewer
               title="响应主体 (Response Body)"
               rawContent={record.responseBodyPreview}
+              byteCount={record.responseBytes}
               isTruncated={record.responseTruncated}
               defaultExpanded={false}
               emptyHint={
@@ -310,7 +384,7 @@ export function LlmProxyTrafficPanel({ repositoryPath, variant = "sidebar" }: Pr
           </div>
         ),
       })),
-    [displayRecords],
+    [visibleRecords],
   );
 
   return (
@@ -323,17 +397,29 @@ export function LlmProxyTrafficPanel({ repositoryPath, variant = "sidebar" }: Pr
       <div className="app-llm-proxy-panel__toolbar">
         <div className="app-llm-proxy-panel__toolbar-head">
           <span className="app-llm-proxy-panel__title">LLM 代理</span>
-          <Button
-            size="small"
-            type="text"
-            danger
-            icon={<DeleteOutlined />}
-            onClick={handleClear}
-            disabled={displayRecords.length === 0}
-            className="app-llm-proxy-panel__clear-btn"
-          >
-            清空
-          </Button>
+          <div className="app-llm-proxy-panel__toolbar-actions">
+            <Button
+              size="small"
+              type="text"
+              icon={<ExportOutlined />}
+              onClick={handleExport}
+              disabled={visibleRecords.length === 0}
+              className="app-llm-proxy-panel__export-btn"
+            >
+              导出
+            </Button>
+            <Button
+              size="small"
+              type="text"
+              danger
+              icon={<DeleteOutlined />}
+              onClick={handleClear}
+              disabled={baseRecords.length === 0}
+              className="app-llm-proxy-panel__clear-btn"
+            >
+              清空
+            </Button>
+          </div>
         </div>
 
         {proxyConflictMessage ? (
@@ -414,14 +500,79 @@ export function LlmProxyTrafficPanel({ repositoryPath, variant = "sidebar" }: Pr
             </p>
           ) : null}
         </div>
+
+        {baseRecords.length > 0 ? (
+          <div className="app-llm-proxy-panel__stats">
+            <span className="app-llm-proxy-panel__stat" title="当前列表请求数">
+              {summary.total} 条
+            </span>
+            <span className="app-llm-proxy-panel__stat" title="Messages API 请求">
+              {summary.messagesCount} Messages
+            </span>
+            {summary.errorCount > 0 ? (
+              <span className="app-llm-proxy-panel__stat app-llm-proxy-panel__stat--error">
+                {summary.errorCount} 失败
+              </span>
+            ) : null}
+            {summary.totalInputTokens + summary.totalOutputTokens > 0 ? (
+              <span className="app-llm-proxy-panel__stat" title="从响应 usage 汇总（可见记录）">
+                Token ↑{formatTokenCountShort(summary.totalInputTokens)} ↓
+                {formatTokenCountShort(summary.totalOutputTokens)}
+              </span>
+            ) : null}
+            {summary.avgDurationMs != null ? (
+              <span className="app-llm-proxy-panel__stat" title="可见记录的平均总耗时">
+                均耗时 {summary.avgDurationMs}ms
+              </span>
+            ) : null}
+            {summary.avgTtftMs != null ? (
+              <span className="app-llm-proxy-panel__stat" title="仅统计流式 Messages 的首 Token 延迟">
+                流式均 TTFT {summary.avgTtftMs}ms
+              </span>
+            ) : null}
+          </div>
+        ) : null}
+
+        {baseRecords.length > 0 ? (
+          <div className="app-llm-proxy-panel__filters">
+            <Input
+              size="small"
+              allowClear
+              placeholder="搜索路径 / 模型 / 状态码"
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="app-llm-proxy-panel__search-input"
+            />
+            <Segmented
+              size="small"
+              value={filterKind}
+              onChange={(v) => setFilterKind(v as LlmProxyFilterKind)}
+              options={[
+                { label: "全部", value: "all" },
+                { label: "Messages", value: "messages" },
+                { label: "错误", value: "errors" },
+              ]}
+              className="app-llm-proxy-panel__filter-segmented"
+            />
+          </div>
+        ) : null}
       </div>
 
       {items.length > 0 ? (
-        <Collapse
-          size="small"
-          className="app-llm-proxy-panel__list"
-          items={items}
-        />
+        <div className="app-llm-proxy-panel__list-host">
+          <Collapse
+            size="small"
+            className="app-llm-proxy-panel__list"
+            items={items}
+          />
+        </div>
+      ) : baseRecords.length > 0 && visibleRecords.length === 0 ? (
+        <div className="app-llm-proxy-panel__empty-container app-llm-proxy-panel__empty-container--filter">
+          <span className="app-llm-proxy-panel__empty-title">无匹配记录</span>
+          <span className="app-llm-proxy-panel__empty-subtitle">
+            调整筛选或搜索条件；当前共 {baseRecords.length} 条已捕获记录。
+          </span>
+        </div>
       ) : (
         <div className="app-llm-proxy-panel__empty-container">
           <div className="app-llm-proxy-empty-radar">

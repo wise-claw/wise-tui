@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ClaudeLlmProxyRecord } from "../services/claudeLlmProxy";
-import { filterLlmProxyRecordsForDisplay, isLlmProxyNoiseRecord } from "./llmProxyTrafficDisplay";
+import { filterLlmProxyRecordsForDisplay, isLlmProxyNoiseRecord, isStreamJsonFallbackRecord } from "./llmProxyTrafficDisplay";
 
 function record(partial: Partial<ClaudeLlmProxyRecord>): ClaudeLlmProxyRecord {
   return {
@@ -38,5 +38,41 @@ describe("filterLlmProxyRecordsForDisplay", () => {
       record({ id: "api", method: "POST", path: "/v1/messages?beta=true" }),
     ];
     expect(filterLlmProxyRecordsForDisplay(rows).map((r) => r.id)).toEqual(["api"]);
+  });
+
+  test("hides stream-json fallback when proxy active", () => {
+    const rows = [
+      record({ id: "http", method: "POST", path: "/v1/messages?beta=true" }),
+      record({
+        id: "fallback",
+        path: "/stream-json/result",
+        upstream: "stream-json（stdout 兜底）",
+      }),
+    ];
+    expect(
+      filterLlmProxyRecordsForDisplay(rows, { hideStreamJsonWhenProxyActive: true }).map(
+        (r) => r.id,
+      ),
+    ).toEqual(["http"]);
+  });
+
+  test("dedupes identical stream-json fallback rows", () => {
+    const body = '{"type":"result","result":"ok"}';
+    const rows = [
+      record({
+        id: "a",
+        path: "/stream-json/result",
+        upstream: "stream-json（stdout 兜底）",
+        responseBodyPreview: body,
+      }),
+      record({
+        id: "b",
+        path: "/stream-json/result",
+        upstream: "stream-json（stdout 兜底）",
+        responseBodyPreview: body,
+      }),
+    ];
+    expect(filterLlmProxyRecordsForDisplay(rows).map((r) => r.id)).toEqual(["a"]);
+    expect(isStreamJsonFallbackRecord(rows[0]!)).toBe(true);
   });
 });

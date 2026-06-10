@@ -303,12 +303,31 @@ fn build_upstream_url(upstream: &str, path: &str) -> Result<String, String> {
     Ok(format!("{base}{path}"))
 }
 
+fn looks_like_gzip(raw: &[u8]) -> bool {
+    raw.len() >= 2 && raw[0] == 0x1f && raw[1] == 0x8b
+}
+
+/// 预览文本：优先 UTF-8；若仍为 gzip 魔数则尝试解压（reqwest 未解压时的兜底）。
+fn decode_preview_bytes(raw: &[u8]) -> Vec<u8> {
+    if !looks_like_gzip(raw) {
+        return raw.to_vec();
+    }
+    use std::io::Read;
+    let mut dec = flate2::read::GzDecoder::new(raw);
+    let mut out = Vec::new();
+    if dec.read_to_end(&mut out).is_ok() && !out.is_empty() {
+        return out;
+    }
+    raw.to_vec()
+}
+
 fn preview_body(raw: &[u8], truncated: &mut bool) -> String {
-    if raw.len() > MAX_BODY_CAPTURE {
+    let decoded = decode_preview_bytes(raw);
+    if decoded.len() > MAX_BODY_CAPTURE {
         *truncated = true;
-        String::from_utf8_lossy(&raw[..MAX_BODY_CAPTURE]).into_owned()
+        String::from_utf8_lossy(&decoded[..MAX_BODY_CAPTURE]).into_owned()
     } else {
-        String::from_utf8_lossy(raw).into_owned()
+        String::from_utf8_lossy(&decoded).into_owned()
     }
 }
 
@@ -483,6 +502,24 @@ fn sse_capture_has_first_token(capture: &[u8]) -> bool {
     if s.contains(r#""delta":{"content""#) || s.contains(r#""delta": {"content""#) {
         return true;
     }
+    // 兼容网关：thinking 块 type 命名差异
+    if s.contains(r#""type":"thinking""#) || s.contains(r#""type": "thinking""#) {
+        return true;
+    }
+    // message_delta 携带可见 text
+    if s.contains("message_delta") && s.contains("\"text\"") {
+        return true;
+    }
+    // text 内容块开始（早于首个 text_delta）
+    if s.contains("content_block_start")
+        && (s.contains(r#""type":"text""#) || s.contains(r#""type": "text""#))
+    {
+        return true;
+    }
+    // 部分国产模型 reasoning 字段
+    if s.contains("reasoning_content") || s.contains("reasoning_delta") {
+        return true;
+    }
     false
 }
 
@@ -496,7 +533,6 @@ async fn handle_proxy_connection(
         Ok(0) | Err(_) => return,
         Ok(n) => n,
     };
-    let started = Instant::now();
     let (headers, body) = match read_http_message(&mut socket, &buf[..n]).await {
         Ok(v) => v,
         Err(e) => {
@@ -507,6 +543,9 @@ async fn handle_proxy_connection(
             return;
         }
     };
+
+    // 计时从请求体读完后开始，不含本地 socket 收包；duration = 上游往返 + 整段流式传输。
+    let started = Instant::now();
 
     let first_line = headers.lines().next().unwrap_or_default();
     let Some((method, path)) = parse_request_line(first_line) else {
@@ -633,12 +672,8 @@ async fn handle_proxy_connection(
             resp_truncated = true;
         }
         if ttft_ms.is_none() {
-            if is_streaming_resp {
-                if sse_capture_has_first_token(&capture) {
-                    ttft_ms = Some(started.elapsed().as_millis() as u64);
-                }
-            } else if !capture.is_empty() {
-                ttft_ms = first_byte_ms;
+            if is_streaming_resp && sse_capture_has_first_token(&capture) {
+                ttft_ms = Some(started.elapsed().as_millis() as u64);
             }
         }
         total_response_bytes += chunk.len() as u64;
@@ -716,6 +751,29 @@ mod tests {
             &Method::POST,
             "https://api.anthropic.com/v1/messages"
         ));
+    }
+
+    #[test]
+    fn preview_body_decodes_gzip_payload() {
+        use flate2::write::GzEncoder;
+        use flate2::Compression;
+        use std::io::Write;
+
+        let mut enc = GzEncoder::new(Vec::new(), Compression::default());
+        enc.write_all(br#"{"type":"message","content":[]}"#)
+            .unwrap();
+        let gz = enc.finish().unwrap();
+
+        let mut truncated = false;
+        let preview = preview_body(&gz, &mut truncated);
+        assert!(preview.contains("message"));
+        assert!(!preview.contains('\u{FFFD}'));
+    }
+    #[test]
+    fn sse_capture_detects_content_block_start_text() {
+        let sample = br#"event: content_block_start
+data: {"type":"content_block_start","index":0,"content_block":{"type":"text","text":""}}"#;
+        assert!(sse_capture_has_first_token(sample));
     }
 
     #[test]

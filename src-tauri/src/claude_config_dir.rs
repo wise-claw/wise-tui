@@ -242,15 +242,20 @@ fn scrub_inherited_anthropic_env(cmd: &mut tokio::process::Command) {
 }
 
 /// Wise 子进程应使用的 `env`；存在 `ANTHROPIC_AUTH_TOKEN` 时剔除百炼 `ANTHROPIC_API_KEY`（FCC 要求）。
+///
+/// `llm_traffic_capture` 为 true 时表示 `anthropic_base_url_override` 指向 Wise LLM 流量监听代理：
+/// 仅改写 `ANTHROPIC_BASE_URL`，保留 Claude 原有 API Key / Auth Token 供代理透传到上游。
 pub(crate) fn build_claude_spawn_env(
     project_path: Option<&str>,
     anthropic_base_url_override: Option<&str>,
+    llm_traffic_capture: bool,
 ) -> HashMap<String, String> {
     let mut merged = merged_claude_spawn_env(project_path);
     if let Some(url) = anthropic_base_url_override.map(str::trim).filter(|s| !s.is_empty()) {
         merged.insert("ANTHROPIC_BASE_URL".to_string(), url.to_string());
         // Wise 内置本地代理（OpenCode / FCC）：与 oc-go-cc 一致使用占位 token。
-        if is_local_fcc_proxy_base_url(url) {
+        // LLM 流量监听代理是透明转发，不能替换认证信息。
+        if is_local_fcc_proxy_base_url(url) && !llm_traffic_capture {
             merged.insert("ANTHROPIC_AUTH_TOKEN".to_string(), "unused".to_string());
             merged.remove("ANTHROPIC_API_KEY");
             normalize_claude_models_for_local_proxy(&mut merged);
@@ -263,10 +268,11 @@ pub(crate) fn build_claude_spawn_env(
     {
         merged.remove("ANTHROPIC_API_KEY");
     }
-    if merged
-        .get("ANTHROPIC_BASE_URL")
-        .map(|s| is_local_fcc_proxy_base_url(s))
-        .unwrap_or(false)
+    if !llm_traffic_capture
+        && merged
+            .get("ANTHROPIC_BASE_URL")
+            .map(|s| is_local_fcc_proxy_base_url(s))
+            .unwrap_or(false)
     {
         merged
             .entry("CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY".to_string())
@@ -298,10 +304,15 @@ pub(crate) fn configure_claude_child_process(
     cmd: &mut tokio::process::Command,
     project_path: &str,
     anthropic_base_url_override: Option<&str>,
+    llm_traffic_capture: bool,
 ) {
     let _ = sanitize_claude_root_json_for_fcc_proxy();
 
-    let merged = build_claude_spawn_env(Some(project_path), anthropic_base_url_override);
+    let merged = build_claude_spawn_env(
+        Some(project_path),
+        anthropic_base_url_override,
+        llm_traffic_capture,
+    );
     let strip_api_key = merged
         .get("ANTHROPIC_AUTH_TOKEN")
         .map(|s| !s.trim().is_empty())
@@ -472,13 +483,57 @@ mod tests {
         )
         .unwrap();
 
-        let built = build_claude_spawn_env(None, None);
+        let built = build_claude_spawn_env(None, None, false);
         assert_eq!(
             built.get("ANTHROPIC_AUTH_TOKEN").map(String::as_str),
             Some("fcc-token")
         );
         assert!(!built.contains_key("ANTHROPIC_API_KEY"));
         update_cache(None);
+    }
+
+    #[test]
+    fn build_spawn_env_llm_traffic_capture_preserves_api_key() {
+        let dir = tempfile::tempdir().unwrap();
+        update_cache(Some(dir.path().join("wise-claude-llm-proxy")));
+        let wise_claude = user_claude_dir();
+        std::fs::create_dir_all(&wise_claude).unwrap();
+        std::fs::write(
+            wise_claude.join("settings.json"),
+            r#"{"env":{"ANTHROPIC_API_KEY":"sk-real-key","ANTHROPIC_BASE_URL":"https://api.anthropic.com"}}"#,
+        )
+        .unwrap();
+
+        let built = build_claude_spawn_env(
+            None,
+            Some("http://127.0.0.1:54321"),
+            true,
+        );
+        assert_eq!(
+            built.get("ANTHROPIC_BASE_URL").map(String::as_str),
+            Some("http://127.0.0.1:54321")
+        );
+        assert_eq!(
+            built.get("ANTHROPIC_API_KEY").map(String::as_str),
+            Some("sk-real-key")
+        );
+        assert!(!built.contains_key("ANTHROPIC_AUTH_TOKEN"));
+        assert!(!built.contains_key("CLAUDE_CODE_ENABLE_GATEWAY_MODEL_DISCOVERY"));
+        update_cache(None);
+    }
+
+    #[test]
+    fn build_spawn_env_local_auth_proxy_uses_placeholder_token() {
+        let built = build_claude_spawn_env(
+            None,
+            Some("http://127.0.0.1:8082"),
+            false,
+        );
+        assert_eq!(
+            built.get("ANTHROPIC_AUTH_TOKEN").map(String::as_str),
+            Some("unused")
+        );
+        assert!(!built.contains_key("ANTHROPIC_API_KEY"));
     }
 
     #[test]

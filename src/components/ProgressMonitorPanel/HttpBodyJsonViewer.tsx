@@ -20,6 +20,8 @@ export function isHttpBodyTruncatedPreview(raw: string | null | undefined): bool
 export interface HttpBodyJsonViewerProps {
   title: string;
   rawContent: string | null | undefined;
+  /** 实际传输字节数（优先于预览字符串长度） */
+  byteCount?: number;
   isTruncated?: boolean;
   defaultExpanded?: boolean;
   emptyHint?: string;
@@ -29,6 +31,7 @@ export interface HttpBodyJsonViewerProps {
 export function HttpBodyJsonViewer({
   title,
   rawContent,
+  byteCount,
   isTruncated,
   defaultExpanded = true,
   emptyHint,
@@ -53,6 +56,7 @@ export function HttpBodyJsonViewer({
   const formatted = prettyJson !== rawTrimmed && prettyJson.trim().length > 0;
   const hasBody = prettyJson.trim().length > 0;
   const showTruncatedBadge = isTruncated ?? isHttpBodyTruncatedPreview(rawContent);
+  const displayBytes = byteCount != null && byteCount > 0 ? byteCount : prettyJson.length;
 
   const handleCopy = useCallback(
     (e: React.MouseEvent) => {
@@ -116,9 +120,11 @@ export function HttpBodyJsonViewer({
             </span>
           ) : formatted ? (
             <span className="app-llm-proxy-json-viewer__badge">JSON</span>
+          ) : rawTrimmed.startsWith("event:") || rawTrimmed.includes("data: {") ? (
+            <span className="app-llm-proxy-json-viewer__badge">SSE</span>
           ) : null}
-          {!expanded && hasBody ? (
-            <span className="app-llm-proxy-json-viewer__size-hint">{formatBytes(prettyJson.length)}</span>
+          {hasBody && displayBytes > 0 ? (
+            <span className="app-llm-proxy-json-viewer__size-hint">{formatBytes(displayBytes)}</span>
           ) : null}
         </div>
         <Button
