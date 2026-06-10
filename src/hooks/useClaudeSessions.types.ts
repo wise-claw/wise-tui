@@ -1,7 +1,6 @@
 import type { MutableRefObject } from "react";
 import type {
   ClaudeComposerExecuteBubbleOptions,
-  ClaudeMessage,
   ClaudeSession,
   SessionConversationTaskItem,
   SessionExecutionEngine,

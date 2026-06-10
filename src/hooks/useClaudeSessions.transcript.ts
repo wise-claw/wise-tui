@@ -14,23 +14,12 @@ import {
   sessionHasDiskTranscript,
 } from "../utils/sessionExecutionEngine";
 import { assistantMessageVisiblePlainText } from "../services/claudeSessionState";
-import { userMessagePlainTextForDisplay } from "../utils/claudeChatMessageDisplay";
+import { userMessagePlainTextForDisplay, systemMessagePlainText } from "../utils/claudeChatMessageDisplay";
 
 type SetSessions = (updater: (prev: ClaudeSession[]) => ClaudeSession[]) => void;
 
 function resolveDiskTranscriptKey(session: ClaudeSession, engine: SessionExecutionEngine): string {
   return resolveDiskTranscriptSessionKey(session, engine);
-}
-
-function messageTextContent(message: ClaudeMessage): string {
-  if (typeof message.content === "string") return message.content;
-  if (Array.isArray(message.content)) {
-    return message.content
-      .filter((part): part is { type: "text"; text: string } => part?.type === "text")
-      .map((part) => part.text)
-      .join("");
-  }
-  return "";
 }
 
 function cloneDiskAssistantMessage(message: ClaudeMessage): ClaudeMessage {
@@ -252,7 +241,7 @@ export async function reloadFullDiskTranscriptByKey(params: {
               (message) =>
                 !(
                   message.role === "system" &&
-                  messageTextContent(message).includes(CLAUDE_NO_VISIBLE_REPLY_FAILURE_HINT)
+                  systemMessagePlainText(message).includes(CLAUDE_NO_VISIBLE_REPLY_FAILURE_HINT)
                 ),
             )
           : nextMessages;

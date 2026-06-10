@@ -103,6 +103,7 @@ export function buildMainSessionContextSeedMessages(
   const baseTs = Date.now();
   return [
     {
+      id: baseTs,
       role: "system",
       content: `${MAIN_SESSION_CONTEXT_MARKER}以下为派发前主会话中的对话：`,
       timestamp: baseTs,
