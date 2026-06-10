@@ -221,6 +221,11 @@ interface Props {
   onRestoreHistorySessionAsMain?: (sessionId: string) => void | Promise<void>;
   /** 运行面板终端历史弹层：为该终端新建 worker 会话 */
   onCreateTerminalEmployeeSession?: (employeeId: string) => string | null | Promise<string | null>;
+  /** 打开终端历史列表前刷新仓库磁盘会话索引 */
+  onRefreshHistorySessions?: (scope: {
+    repositoryPath: string;
+    repositoryName: string;
+  }) => void | Promise<void>;
   /** 历史 / 派发抽屉底部：resume 继续当前会话 */
   onResumeSession?: import("./MonitorDrawerSessionComposer").MonitorDrawerResumeSessionFn;
   /** 派发 / 执行会话抽屉打开前：从 tabs / 磁盘回退解析 worker */
@@ -421,9 +426,10 @@ const OmcDirectBatchPopoverContent = memo(function OmcDirectBatchPopoverContentI
           onClick={(event) => event.stopPropagation()}
         />
       </div>
-      {hasRows ? (
-        <div className="app-monitor-panel__history-popover-list">
-          {filtered.map((inv) => {
+      <div className="app-monitor-panel__history-popover-scroll">
+        {hasRows ? (
+          <div className="app-monitor-panel__history-popover-list">
+            {filtered.map((inv) => {
             const phaseLabel =
               inv.phase === "progress"
                 ? "输出中"
@@ -482,6 +488,7 @@ const OmcDirectBatchPopoverContent = memo(function OmcDirectBatchPopoverContentI
           />
         </div>
       )}
+      </div>
     </div>
   );
 });
@@ -865,62 +872,64 @@ export function HistorySessionPopoverContent({
         <span className="app-monitor-panel__history-popover-list-title">{listTitle}</span>
         <span className="app-monitor-panel__history-popover-list-count">{hasRows ? `${rows.length} 条` : "无记录"}</span>
       </div>
-      {hasRows ? (
-        <div className="app-monitor-panel__history-popover-list">
-          {rows.map((row) => (
-            <div key={row.session.id} className="app-monitor-panel__history-popover-omc-row">
-              <button
-                type="button"
-                className="app-monitor-panel__history-popover-item app-monitor-panel__history-popover-item--grow"
-                onMouseDown={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                }}
-                onClick={(event) => {
-                  event.stopPropagation();
-                  onSelectSession?.(row.session.id);
-                }}
-              >
-                <HistorySessionPopoverListRow row={row} showTerminalLabel={showTerminalLabelInRows} />
-              </button>
-              {onRestoreSession ? (
-                <HistorySessionRestoreButton
-                  className="app-monitor-panel__history-popover-restore"
-                  disabled={canRestoreSession ? !canRestoreSession(row.session.id) : false}
+      <div className="app-monitor-panel__history-popover-scroll">
+        {hasRows ? (
+          <div className="app-monitor-panel__history-popover-list">
+            {rows.map((row) => (
+              <div key={row.session.id} className="app-monitor-panel__history-popover-omc-row">
+                <button
+                  type="button"
+                  className="app-monitor-panel__history-popover-item app-monitor-panel__history-popover-item--grow"
+                  onMouseDown={(event) => {
+                    event.preventDefault();
+                    event.stopPropagation();
+                  }}
                   onClick={(event) => {
                     event.stopPropagation();
-                    onRestoreSession(row.session.id);
+                    onSelectSession?.(row.session.id);
                   }}
-                />
-              ) : null}
-              {onEndSession ? (
-                <span className="app-monitor-panel__history-popover-omc-stop-wrap">
-                  <button
-                    type="button"
-                    className="app-monitor-panel__history-popover-omc-stop"
-                    title="结束该 Claude 进程"
-                    onPointerDown={(event) => event.stopPropagation()}
-                    onMouseDown={(event) => event.stopPropagation()}
+                >
+                  <HistorySessionPopoverListRow row={row} showTerminalLabel={showTerminalLabelInRows} />
+                </button>
+                {onRestoreSession ? (
+                  <HistorySessionRestoreButton
+                    className="app-monitor-panel__history-popover-restore"
+                    disabled={canRestoreSession ? !canRestoreSession(row.session.id) : false}
                     onClick={(event) => {
                       event.stopPropagation();
-                      onEndSession(row.session.id);
+                      onRestoreSession(row.session.id);
                     }}
-                  >
-                    结束
-                  </button>
-                </span>
-              ) : null}
-            </div>
-          ))}
-        </div>
-      ) : (
-        <div className="app-monitor-panel__history-popover-empty">
-          <Empty
-            image={Empty.PRESENTED_IMAGE_SIMPLE}
-            description={emptyDescription}
-          />
-        </div>
-      )}
+                  />
+                ) : null}
+                {onEndSession ? (
+                  <span className="app-monitor-panel__history-popover-omc-stop-wrap">
+                    <button
+                      type="button"
+                      className="app-monitor-panel__history-popover-omc-stop"
+                      title="结束该 Claude 进程"
+                      onPointerDown={(event) => event.stopPropagation()}
+                      onMouseDown={(event) => event.stopPropagation()}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onEndSession(row.session.id);
+                      }}
+                    >
+                      结束
+                    </button>
+                  </span>
+                ) : null}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="app-monitor-panel__history-popover-empty">
+            <Empty
+              image={Empty.PRESENTED_IMAGE_SIMPLE}
+              description={emptyDescription}
+            />
+          </div>
+        )}
+      </div>
     </div>
   );
 }
@@ -1095,6 +1104,7 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
   onHistoryDrawerSessionIdChange,
   onRestoreHistorySessionAsMain,
   onCreateTerminalEmployeeSession,
+  onRefreshHistorySessions,
   onResumeSession,
   onPrepareSessionForMonitorDrawer,
   repositoryMainBindings = {},
@@ -1257,17 +1267,11 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
       if (!onCreateTerminalEmployeeSession || creatingTerminalSessionEmployeeId) return;
       setCreatingTerminalSessionEmployeeId(employeeId);
       void Promise.resolve(onCreateTerminalEmployeeSession(employeeId))
-        .then((sessionId) => {
-          const nextId = sessionId?.trim();
-          if (!nextId) return;
-          setEmployeeHistorySearch("");
-          openHistoryMessagesDrawer(nextId);
-        })
         .finally(() => {
           setCreatingTerminalSessionEmployeeId(null);
         });
     },
-    [creatingTerminalSessionEmployeeId, onCreateTerminalEmployeeSession, openHistoryMessagesDrawer],
+    [creatingTerminalSessionEmployeeId, onCreateTerminalEmployeeSession],
   );
 
   const handleOmcBatchInvocationSelect = useCallback(
@@ -1516,12 +1520,22 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
       if (nextOpen) {
         setEmployeeHistoryPopoverId(employeeId);
         setEmployeeHistorySearch("");
+        const active = activeSessionId
+          ? sessions.find((item) => item.id === activeSessionId)
+          : undefined;
+        const repoPath = active?.repositoryPath?.trim();
+        if (repoPath && onRefreshHistorySessions) {
+          void onRefreshHistorySessions({
+            repositoryPath: repoPath,
+            repositoryName: active?.repositoryName?.trim() || repoPath,
+          });
+        }
         return;
       }
       setEmployeeHistoryPopoverId((prev) => (prev === employeeId ? null : prev));
       setEmployeeHistorySearch("");
     },
-    [],
+    [activeSessionId, onRefreshHistorySessions, sessions],
   );
 
   const renderEmployeeTerminalListItem = useCallback(

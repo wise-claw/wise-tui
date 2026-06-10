@@ -34,6 +34,9 @@ function shouldIncludeMonitorHistorySession(session: ClaudeSession): boolean {
   if (claudeId && session.id !== claudeId) {
     return true;
   }
+  if (session.diskPreview?.trim()) {
+    return true;
+  }
   return false;
 }
 

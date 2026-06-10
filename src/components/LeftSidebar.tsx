@@ -198,6 +198,7 @@ export function LeftSidebar({
   onCancelSessionFromMonitor,
   onOpenTaskDetailFromMonitor,
   onReloadFullDiskTranscript,
+  onRefreshHistorySessions,
   projectId,
   employeeMonitorItems = [],
   repositoryMemberMonitorItems = [],
@@ -1503,6 +1504,7 @@ export function LeftSidebar({
             onCancelOmcDirectBatchInvocation={onCancelOmcDirectBatchInvocation}
             onStopSessionConversationTask={onStopSessionConversationTask}
             onReloadFullDiskTranscript={onReloadFullDiskTranscript}
+            onRefreshHistorySessions={onRefreshHistorySessions}
             onCompactSessionHistory={onCompactSessionHistory}
             projectId={projectId}
             historyDrawerSessionId={historyDrawerSessionId}

@@ -1827,6 +1827,31 @@ async fn spawn_claude_process(
                 active_invocation_key.as_deref(),
                 active_suppress_shared,
             );
+
+            // Oneshot：在 stdout 行已转发后再发 result complete，避免前端先收到 success=false 而助手正文尚未入库。
+            if connection_mode_stdout == ClaudeConnectionMode::Oneshot && !streaming_turn_complete_sent {
+                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&line) {
+                    if let Some(turn_ok) = streaming_turn_success_from_result(&json) {
+                        let line_sid = extract_claude_session_id_from_stream_json(&json);
+                        let sid_for_turn = real_session_id
+                            .as_deref()
+                            .or(line_sid.as_deref())
+                            .unwrap_or("unknown");
+                        let turn_verdict = extract_structured_verdict_candidate(&json);
+                        if emit_streaming_turn_complete_events(
+                            &app_clone,
+                            &registry_clone,
+                            sid_for_turn,
+                            turn_ok,
+                            turn_verdict,
+                            active_invocation_key.as_deref(),
+                            active_suppress_shared,
+                        ) {
+                            streaming_turn_complete_sent = true;
+                        }
+                    }
+                }
+            }
         }
 
         let child_still_running_after_stdout = {
@@ -1910,12 +1935,8 @@ async fn spawn_claude_process(
             let mut slot = wait_child_mutex_clone.lock().await;
             match slot.as_mut() {
                 Some(c) if c.id() == Some(spawned_pid_stdout) => (c.wait().await.ok(), false),
-                // 槽位已是别的子进程或已清空：本 reader 属于被顶替的旧 spawn，不得发 complete（否则同一 Claude session_id
-                // 会立刻收到失败完成事件，前端表现为「第二次刷的一下就结束了」），也不得 remove stdin 误伤新进程。
-                _ => (
-                    None,
-                    connection_mode_stdout == ClaudeConnectionMode::Persistent,
-                ),
+                // 槽位已是别的子进程或已清空：本 reader 属于被顶替/已取消的旧 spawn，不得发 complete。
+                _ => (None, true),
             }
         };
         if skip_completion_for_superseded_reader {
@@ -1923,11 +1944,19 @@ async fn spawn_claude_process(
             release_claude_spawn_slot(&slots_mtx_clone, acquired_scope_clone.clone()).await;
             return;
         }
+        let Some(status) = exit_status else {
+            pending_stdin_by_spawn_clone.lock().await.remove(&spawn_id);
+            release_claude_spawn_slot(&slots_mtx_clone, acquired_scope_clone.clone()).await;
+            return;
+        };
 
         let sid = real_session_id.as_deref().unwrap_or("unknown");
 
         // 长驻 streaming：单轮 result 已发过 turn complete；子进程已退出则清理 stdin / registry。
-        if connection_mode_stdout == ClaudeConnectionMode::Streaming && streaming_turn_complete_sent {
+        if (connection_mode_stdout == ClaudeConnectionMode::Streaming
+            || connection_mode_stdout == ClaudeConnectionMode::Oneshot)
+            && streaming_turn_complete_sent
+        {
             if real_session_id.is_some() {
                 registry_clone.remove(sid);
             }
@@ -1953,7 +1982,7 @@ async fn spawn_claude_process(
             return;
         }
 
-        let success = exit_status.map(|s| s.success()).unwrap_or(false);
+        let success = status.success();
         let complete_payload = ClaudeCompletePayload {
             session_id: sid.to_string(),
             success,

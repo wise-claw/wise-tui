@@ -137,7 +137,13 @@ function enforceGlobalMessagesBudget(
   return {
     sessions: sessions.map((session) =>
       dropIds.has(session.id)
-        ? { ...session, messages: [], diskTranscriptPartial: false }
+        ? {
+            ...session,
+            messages: [],
+            diskTranscriptPartial:
+              Boolean(session.claudeSessionId?.trim()) ||
+              Boolean(session.diskTranscriptPartial),
+          }
         : session,
     ),
     changed: true,

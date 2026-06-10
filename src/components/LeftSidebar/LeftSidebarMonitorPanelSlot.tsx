@@ -39,6 +39,7 @@ export type LeftSidebarMonitorPanelSlotProps = {
   onCancelOmcDirectBatchInvocation?: LeftSidebarProps["onCancelOmcDirectBatchInvocation"];
   onStopSessionConversationTask?: LeftSidebarProps["onStopSessionConversationTask"];
   onReloadFullDiskTranscript?: LeftSidebarProps["onReloadFullDiskTranscript"];
+  onRefreshHistorySessions?: LeftSidebarProps["onRefreshHistorySessions"];
   onCompactSessionHistory?: LeftSidebarProps["onCompactSessionHistory"];
   projectId?: LeftSidebarProps["projectId"];
   historyDrawerSessionId?: LeftSidebarProps["historyDrawerSessionId"];
@@ -142,6 +143,7 @@ export const LeftSidebarMonitorPanelSlot = memo(function LeftSidebarMonitorPanel
   onCancelOmcDirectBatchInvocation,
   onStopSessionConversationTask,
   onReloadFullDiskTranscript,
+  onRefreshHistorySessions,
   onCompactSessionHistory,
   projectId,
   historyDrawerSessionId,
@@ -213,6 +215,7 @@ export const LeftSidebarMonitorPanelSlot = memo(function LeftSidebarMonitorPanel
         onCancelOmcDirectBatchInvocation={onCancelOmcDirectBatchInvocation}
         onStopSessionConversationTask={onStopSessionConversationTask}
         onReloadFullDiskTranscript={onReloadFullDiskTranscript}
+        onRefreshHistorySessions={onRefreshHistorySessions}
         onCompactSessionHistory={onCompactSessionHistory}
         projectId={projectId}
         historyDrawerSessionId={historyDrawerSessionId}

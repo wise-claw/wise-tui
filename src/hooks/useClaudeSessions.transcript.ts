@@ -6,16 +6,202 @@ import {
 } from "../constants/claudeMessageListWindow";
 import { sessionMessagesFromJsonlLines } from "../utils/sessionMessagesMemory";
 import { isTerminalWorkerWiseTab, sanitizeTerminalWorkerTranscriptMessages } from "../services/terminalDispatch";
+import type { ClaudeMessage } from "../types";
+import { CLAUDE_NO_VISIBLE_REPLY_FAILURE_HINT } from "../utils/claudeTurnCompleteGate";
 import type { SessionExecutionEngine } from "../types";
 import {
   resolveDiskTranscriptSessionKey,
   sessionHasDiskTranscript,
 } from "../utils/sessionExecutionEngine";
+import { assistantMessageVisiblePlainText } from "../services/claudeSessionState";
+import { userMessagePlainTextForDisplay } from "../utils/claudeChatMessageDisplay";
 
 type SetSessions = (updater: (prev: ClaudeSession[]) => ClaudeSession[]) => void;
 
 function resolveDiskTranscriptKey(session: ClaudeSession, engine: SessionExecutionEngine): string {
   return resolveDiskTranscriptSessionKey(session, engine);
+}
+
+function messageTextContent(message: ClaudeMessage): string {
+  if (typeof message.content === "string") return message.content;
+  if (Array.isArray(message.content)) {
+    return message.content
+      .filter((part): part is { type: "text"; text: string } => part?.type === "text")
+      .map((part) => part.text)
+      .join("");
+  }
+  return "";
+}
+
+function cloneDiskAssistantMessage(message: ClaudeMessage): ClaudeMessage {
+  return {
+    ...message,
+    id: Date.now(),
+    timestamp: Date.now(),
+    parts: message.parts?.map((part) => ({ ...part })),
+  };
+}
+
+function currentTurnAssistantMessage(messages: readonly ClaudeMessage[]): ClaudeMessage | null {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const msg = messages[i]!;
+    if (msg.role === "system") continue;
+    if (msg.role === "assistant") return msg;
+    if (msg.role === "user") return null;
+  }
+  return null;
+}
+
+/** 当前回合助手是否已有可见输出（正文 / 思考 / 工具块），不仅限于 text part。 */
+export function latestTurnHasVisibleAssistantContent(messages: readonly ClaudeMessage[]): boolean {
+  const msg = currentTurnAssistantMessage(messages);
+  if (!msg) return false;
+  if (assistantMessageVisiblePlainText(msg).trim().length > 0) return true;
+  const parts = msg.parts ?? [];
+  return parts.some((part) => part.type === "reasoning" || part.type === "tool_use");
+}
+
+export function latestTurnHasCompletedToolUse(messages: readonly ClaudeMessage[]): boolean {
+  const msg = currentTurnAssistantMessage(messages);
+  if (!msg) return false;
+  return (msg.parts ?? []).some(
+    (part) =>
+      part.type === "tool_use" &&
+      (part.status === "completed" ||
+        part.status === "error" ||
+        Boolean(part.output?.trim()) ||
+        Boolean(part.error?.trim())),
+  );
+}
+
+/**
+ * Oneshot 在 `type:result` 时就会发 complete，但 stdout 可能仍有助手增量。
+ * 尚无正文、仅有思考块时先不收尾，避免 UI 冻在「思考过程」且拆掉 invocation 监听。
+ */
+export function shouldDeferOneshotTurnComplete(
+  messages: readonly ClaudeMessage[],
+  payloadSuccess: boolean,
+): boolean {
+  if (!latestTurnHasVisibleAssistantContent(messages)) {
+    return false;
+  }
+  const msg = currentTurnAssistantMessage(messages);
+  if (!msg || assistantMessageVisiblePlainText(msg).trim().length > 0) {
+    return false;
+  }
+  if (!payloadSuccess) {
+    return true;
+  }
+  return !latestTurnHasCompletedToolUse(messages);
+}
+
+/** 终端 worker 当前回合（自最后一条 user 起）是否已有可见助手回复。 */
+export function latestTerminalTurnHasAssistant(messages: readonly ClaudeMessage[]): boolean {
+  return latestTurnHasVisibleAssistantContent(messages);
+}
+
+function lastNonSystemMessage(messages: readonly ClaudeMessage[]): ClaudeMessage | null {
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    const msg = messages[i]!;
+    if (msg.role !== "system") return msg;
+  }
+  return null;
+}
+
+/** running 会话内存 transcript 领先磁盘时（刚发送的用户气泡尚未落盘），禁止 disk reload 覆盖。 */
+export function shouldPreserveMemoryTranscriptOverDisk(
+  session: ClaudeSession,
+  diskMessages: readonly ClaudeMessage[],
+): boolean {
+  if (isTerminalWorkerWiseTab(session)) return false;
+  if (session.status !== "running" && session.status !== "connecting") return false;
+  if (session.messages.length === 0) return false;
+  if (session.messages.length > diskMessages.length) return true;
+  const memoryLast = lastNonSystemMessage(session.messages);
+  const diskLast = lastNonSystemMessage(diskMessages);
+  if (memoryLast?.role === "user" && diskLast?.role !== "user") return true;
+  if (
+    memoryLast?.role === "user" &&
+    diskLast?.role === "user" &&
+    userMessagePlainTextForDisplay(memoryLast).trim() !==
+      userMessagePlainTextForDisplay(diskLast).trim()
+  ) {
+    return true;
+  }
+  return false;
+}
+
+function lastDiskAssistantMessage(disk: readonly ClaudeMessage[]): ClaudeMessage | null {
+  for (let i = disk.length - 1; i >= 0; i -= 1) {
+    const msg = disk[i]!;
+    if (msg.role !== "assistant") continue;
+    if (assistantMessageVisiblePlainText(msg).trim().length === 0) continue;
+    return msg;
+  }
+  return null;
+}
+
+/**
+ * 终端 worker 保留 Wise 标签内多轮内存历史；单轮 Claude jsonl 只用于补齐当前回合缺失的助手气泡。
+ * 返回 null 表示不应改写内存 messages。
+ */
+export function resolveTerminalWorkerMessagesAfterDiskLoad(
+  session: ClaudeSession,
+  diskMessages: ClaudeMessage[],
+): ClaudeMessage[] | null {
+  const disk = sanitizeTerminalWorkerTranscriptMessages(diskMessages);
+  if (disk.length === 0) return null;
+
+  const diskAssistant = lastDiskAssistantMessage(disk);
+  const memory = session.messages;
+  if (memory.length === 0) {
+    return diskAssistant ? disk : null;
+  }
+  if (!diskAssistant) return null;
+
+  // 内存当前回合已有助手输出时，磁盘 jsonl 只含单轮切片，禁止整段覆盖。
+  if (latestTerminalTurnHasAssistant(memory)) {
+    return null;
+  }
+
+  const lastMemory = memory[memory.length - 1];
+  if (lastMemory?.role === "user") {
+    return [...memory, cloneDiskAssistantMessage(diskAssistant)];
+  }
+
+  const lastUserIdx = (() => {
+    for (let i = memory.length - 1; i >= 0; i -= 1) {
+      if (memory[i]?.role === "user") return i;
+    }
+    return -1;
+  })();
+  if (lastUserIdx >= 0) {
+    const memoryUserText = userMessagePlainTextForDisplay(memory[lastUserIdx]!).trim();
+    const diskUser = disk.find((msg) => msg.role === "user");
+    const diskUserText = diskUser ? userMessagePlainTextForDisplay(diskUser).trim() : "";
+    if (memoryUserText && diskUserText && memoryUserText === diskUserText) {
+      return [...memory, cloneDiskAssistantMessage(diskAssistant)];
+    }
+  }
+
+  return null;
+}
+
+export function terminalDiskTranscriptRecoveredStatus(
+  previousStatus: ClaudeSession["status"],
+  hasAssistant: boolean,
+  isTerminalWorker: boolean,
+): ClaudeSession["status"] {
+  if (!isTerminalWorker || !hasAssistant) return previousStatus;
+  if (
+    previousStatus === "cancelled" ||
+    previousStatus === "error" ||
+    previousStatus === "running" ||
+    previousStatus === "connecting"
+  ) {
+    return "completed";
+  }
+  return previousStatus;
 }
 
 export async function reloadFullDiskTranscriptByKey(params: {
@@ -47,20 +233,37 @@ export async function reloadFullDiskTranscriptByKey(params: {
     unlimitedMessageCount: true,
   });
   if (messages.length === 0) return;
-  const nextMessages = isTerminalWorkerWiseTab(session)
+  const isTerminalWorker = isTerminalWorkerWiseTab(session);
+  const sanitizedDisk = isTerminalWorker
     ? sanitizeTerminalWorkerTranscriptMessages(messages)
     : messages;
+  const mergedTerminalMessages = isTerminalWorker
+    ? resolveTerminalWorkerMessagesAfterDiskLoad(session, sanitizedDisk)
+    : null;
+  const nextMessages = isTerminalWorker ? mergedTerminalMessages : sanitizedDisk;
+  if (!nextMessages || nextMessages.length === 0) return;
+  const hasAssistant = nextMessages.some((message) => message.role === "assistant");
   params.setSessions((prev) =>
-    prev.map((row) =>
-      row.id === tabId
-        ? {
-            ...row,
-            messages: nextMessages,
-            diskTranscriptPartial,
-            transcriptMemoryUnlimited: true,
-          }
-        : row,
-    ),
+    prev.map((row) => {
+      if (row.id !== tabId) return row;
+      const recoveredMessages =
+        isTerminalWorker && hasAssistant
+          ? nextMessages.filter(
+              (message) =>
+                !(
+                  message.role === "system" &&
+                  messageTextContent(message).includes(CLAUDE_NO_VISIBLE_REPLY_FAILURE_HINT)
+                ),
+            )
+          : nextMessages;
+      return {
+        ...row,
+        messages: recoveredMessages,
+        diskTranscriptPartial,
+        transcriptMemoryUnlimited: true,
+        status: terminalDiskTranscriptRecoveredStatus(row.status, hasAssistant, isTerminalWorker),
+      };
+    }),
   );
 }
 
@@ -85,9 +288,14 @@ export async function applyDiskTranscriptTail(params: {
     tailRequestLines: params.tailLines,
   });
   if (messages.length === 0) return;
-  const nextMessages = isTerminalWorkerWiseTab(params.session)
+  const isTerminalWorker = isTerminalWorkerWiseTab(params.session);
+  const sanitizedDisk = isTerminalWorker
     ? sanitizeTerminalWorkerTranscriptMessages(messages)
     : messages;
+  const nextMessages = isTerminalWorker
+    ? resolveTerminalWorkerMessagesAfterDiskLoad(params.session, sanitizedDisk)
+    : sanitizedDisk;
+  if (!nextMessages) return;
   params.diskTailLinesBySession.set(params.session.id, params.tailLines);
   params.setSessions((prev) =>
     prev.map((row) =>

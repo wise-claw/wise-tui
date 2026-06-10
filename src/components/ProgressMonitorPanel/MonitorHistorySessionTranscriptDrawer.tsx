@@ -16,6 +16,8 @@ import {
   MonitorDrawerSessionComposer,
   type MonitorDrawerResumeSessionFn,
 } from "./MonitorDrawerSessionComposer";
+import { latestTerminalTurnHasAssistant } from "../../hooks/useClaudeSessions.transcript";
+import { isTerminalWorkerWiseTab } from "../../services/terminalDispatch";
 
 export interface MonitorHistorySessionTranscriptDrawerProps {
   open: boolean;
@@ -74,6 +76,7 @@ export function MonitorHistorySessionTranscriptDrawer({
   const [drawerSessionSnapshot, setDrawerSessionSnapshot] = useState<ClaudeSession | null>(null);
   const openedSessionIdRef = useRef<string | null>(null);
   const diskReloadAttemptedRef = useRef<string | null>(null);
+  const diskReloadRetryTimersRef = useRef<number[]>([]);
 
   const drawerWidth = useMemo(
     () => Math.min(560, typeof window !== "undefined" ? window.innerWidth - 24 : 560),
@@ -84,6 +87,18 @@ export function MonitorHistorySessionTranscriptDrawer({
     () => resolveLiveSession(sessionId, transcriptSourceSessions),
     [sessionId, transcriptSourceSessions],
   );
+
+  const syncDrawerSnapshotFromLive = useCallback((session: ClaudeSession) => {
+    setDrawerSessionSnapshot((prev) => {
+      const next = cloneSessionForDrawerSnapshot(session);
+      if (!prev || prev.id !== next.id) return next;
+      const prevHasAssistant = latestTerminalTurnHasAssistant(prev.messages);
+      const nextHasAssistant = latestTerminalTurnHasAssistant(next.messages);
+      if (prevHasAssistant && !nextHasAssistant) return prev;
+      if (prev.messages.length > next.messages.length && prevHasAssistant) return prev;
+      return next;
+    });
+  }, []);
 
   useEffect(() => {
     if (!open || !sessionId) {
@@ -103,29 +118,64 @@ export function MonitorHistorySessionTranscriptDrawer({
 
   useEffect(() => {
     if (!open || !sessionId || !liveSession) return;
-    if (liveSession.status !== "running" && liveSession.status !== "connecting") {
-      setDrawerSessionSnapshot(null);
-      return;
-    }
-    setDrawerSessionSnapshot((prev) => {
-      if (prev?.id === liveSession.id) return prev;
-      return cloneSessionForDrawerSnapshot(liveSession);
-    });
-  }, [open, sessionId, liveSession?.id, liveSession?.status]);
+    syncDrawerSnapshotFromLive(liveSession);
+  }, [open, sessionId, liveSession, syncDrawerSnapshotFromLive]);
 
   const peekTranscriptTargetId = liveSession?.id ?? null;
   const peekTranscriptStatus = liveSession?.status;
   const peekTranscriptClaudeId = liveSession?.claudeSessionId?.trim() ?? "";
   const peekNeedsFullTranscript = !liveSession?.transcriptMemoryUnlimited;
 
+  const missingTerminalAssistant =
+    liveSession != null &&
+    isTerminalWorkerWiseTab(liveSession) &&
+    (liveSession.status === "completed" || liveSession.status === "running") &&
+    !latestTerminalTurnHasAssistant(liveSession.messages);
+
+  const memoryHasTerminalAssistant =
+    liveSession != null &&
+    isTerminalWorkerWiseTab(liveSession) &&
+    latestTerminalTurnHasAssistant(liveSession.messages);
+
   useEffect(() => {
     if (!open || !sessionId || !onReloadFullDiskTranscript || !peekTranscriptTargetId) return;
-    if (diskReloadAttemptedRef.current === sessionId) return;
     if (!peekNeedsFullTranscript) return;
-    if (peekTranscriptStatus === "running" || peekTranscriptStatus === "connecting") return;
     if (!peekTranscriptClaudeId) return;
-    diskReloadAttemptedRef.current = sessionId;
-    void onReloadFullDiskTranscript(peekTranscriptTargetId);
+    // 内存已有助手回复时，终端 jsonl 仅为单轮切片，reload 可能覆盖多轮历史。
+    if (memoryHasTerminalAssistant) return;
+    if (peekTranscriptStatus === "running" || peekTranscriptStatus === "connecting") {
+      if (!missingTerminalAssistant) return;
+    }
+    const reloadKey = `${sessionId}:${peekTranscriptClaudeId}:${liveSession?.messages.length ?? 0}`;
+    if (diskReloadAttemptedRef.current === reloadKey) return;
+    diskReloadAttemptedRef.current = reloadKey;
+
+    const runReload = () => {
+      void onReloadFullDiskTranscript(peekTranscriptTargetId);
+    };
+    runReload();
+
+    for (const timerId of diskReloadRetryTimersRef.current) {
+      window.clearTimeout(timerId);
+    }
+    diskReloadRetryTimersRef.current = [];
+    if (missingTerminalAssistant) {
+      for (const delay of [800, 2000, 4000]) {
+        diskReloadRetryTimersRef.current.push(
+          window.setTimeout(() => {
+            diskReloadAttemptedRef.current = null;
+            runReload();
+          }, delay),
+        );
+      }
+    }
+
+    return () => {
+      for (const timerId of diskReloadRetryTimersRef.current) {
+        window.clearTimeout(timerId);
+      }
+      diskReloadRetryTimersRef.current = [];
+    };
   }, [
     open,
     sessionId,
@@ -134,7 +184,36 @@ export function MonitorHistorySessionTranscriptDrawer({
     peekNeedsFullTranscript,
     peekTranscriptStatus,
     peekTranscriptClaudeId,
+    missingTerminalAssistant,
+    memoryHasTerminalAssistant,
+    liveSession?.messages.length,
   ]);
+
+  const displaySession = useMemo(() => {
+    if (liveSession) {
+      if (!drawerSessionSnapshot || drawerSessionSnapshot.id !== liveSession.id) {
+        return liveSession;
+      }
+      const liveHasAssistant = latestTerminalTurnHasAssistant(liveSession.messages);
+      const snapshotHasAssistant = latestTerminalTurnHasAssistant(drawerSessionSnapshot.messages);
+      if (!liveHasAssistant && snapshotHasAssistant) return drawerSessionSnapshot;
+      if (
+        liveSession.messages.length < drawerSessionSnapshot.messages.length &&
+        snapshotHasAssistant
+      ) {
+        return drawerSessionSnapshot;
+      }
+      return liveSession;
+    }
+    return drawerSessionSnapshot;
+  }, [liveSession, drawerSessionSnapshot]);
+  const snapshotFrozen = Boolean(
+    liveSession != null &&
+      drawerSessionSnapshot != null &&
+      displaySession === drawerSessionSnapshot &&
+      !latestTerminalTurnHasAssistant(liveSession.messages) &&
+      latestTerminalTurnHasAssistant(drawerSessionSnapshot.messages),
+  );
 
   const refreshDrawerSnapshot = useCallback(() => {
     if (!sessionId) return;
@@ -143,19 +222,18 @@ export function MonitorHistorySessionTranscriptDrawer({
       message.warning("未找到该会话");
       return;
     }
-    if (onReloadFullDiskTranscript && found.claudeSessionId?.trim()) {
+    if (
+      onReloadFullDiskTranscript &&
+      found.claudeSessionId?.trim() &&
+      !(isTerminalWorkerWiseTab(found) && latestTerminalTurnHasAssistant(found.messages))
+    ) {
       diskReloadAttemptedRef.current = null;
       void onReloadFullDiskTranscript(found.id);
       return;
     }
-    setDrawerSessionSnapshot(cloneSessionForDrawerSnapshot(found));
-  }, [sessionId, transcriptSourceSessions, onReloadFullDiskTranscript]);
+    syncDrawerSnapshotFromLive(found);
+  }, [sessionId, transcriptSourceSessions, onReloadFullDiskTranscript, syncDrawerSnapshotFromLive]);
 
-  const liveStatus = liveSession?.status;
-  const snapshotFrozen =
-    liveStatus === "running" || liveStatus === "connecting";
-  const displaySession =
-    snapshotFrozen && drawerSessionSnapshot ? drawerSessionSnapshot : liveSession;
   const canStopLiveSession =
     Boolean(onCancelSession) &&
     liveSession != null &&

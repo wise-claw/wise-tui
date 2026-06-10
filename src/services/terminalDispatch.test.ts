@@ -1,4 +1,4 @@
-import { describe, expect, test } from "bun:test";
+import { afterEach, describe, expect, test } from "bun:test";
 import {
   createFreshTerminalWorkerTab,
   findTerminalEmployeeByName,
@@ -7,9 +7,11 @@ import {
   isDiskOnlyTerminalWorkerTab,
   isTerminalWorkerWiseTab,
   normalizeTerminalDispatchName,
+  resetTerminalDefaultWorkerTabsForTests,
   resolveOrCreateTerminalWorkerTab,
   resolveTerminalDispatchPrompts,
   resolveTerminalMentionsInPrompt,
+  setTerminalDefaultWorkerTab,
   stripTerminalAgentSlashPrefix,
   formatTerminalDispatchRecord,
 } from "./terminalDispatch";
@@ -25,6 +27,10 @@ function employee(partial: Partial<EmployeeItem> & Pick<EmployeeItem, "id" | "na
 }
 
 describe("terminalDispatch", () => {
+  afterEach(() => {
+    resetTerminalDefaultWorkerTabsForTests();
+  });
+
   test("normalizeTerminalDispatchName collapses numeric suffix", () => {
     expect(normalizeTerminalDispatchName("终端01")).toBe("终端1");
     expect(normalizeTerminalDispatchName("终端1")).toBe("终端1");
@@ -97,7 +103,51 @@ describe("terminalDispatch", () => {
     expect(record).toContain("- 分发会话：tab-1");
   });
 
-  test("createFreshTerminalWorkerTab always creates a new worker tab", async () => {
+  test("findTerminalWorkerTab prefers newest fresh idle tab over older session", () => {
+    const older = {
+      id: "tab-old",
+      claudeSessionId: "claude-old",
+      repositoryName: "eco-ai/员工:终端01",
+      repositoryPath: "/repo",
+      messages: [{ id: "m1", role: "user", content: "hi", timestamp: 5_000 }],
+      status: "completed",
+      createdAt: 1,
+    } as ClaudeSession;
+    const fresh = {
+      id: "tab-fresh",
+      claudeSessionId: null,
+      repositoryName: "eco-ai/员工:终端01",
+      repositoryPath: "/repo",
+      messages: [],
+      status: "idle",
+      createdAt: 9_000,
+    } as ClaudeSession;
+    expect(findTerminalWorkerTab([older, fresh], "/repo", "终端01")?.id).toBe("tab-fresh");
+  });
+
+  test("findTerminalWorkerTab falls back to most recently updated session", () => {
+    const older = {
+      id: "tab-old",
+      claudeSessionId: "claude-old",
+      repositoryName: "eco-ai/员工:终端01",
+      repositoryPath: "/repo",
+      messages: [{ id: "m1", role: "user", content: "hi", timestamp: 1_000 }],
+      status: "completed",
+      createdAt: 1,
+    } as ClaudeSession;
+    const newer = {
+      id: "tab-new",
+      claudeSessionId: "claude-new",
+      repositoryName: "eco-ai/员工:终端01",
+      repositoryPath: "/repo",
+      messages: [{ id: "m2", role: "user", content: "new", timestamp: 9_000 }],
+      status: "completed",
+      createdAt: 2,
+    } as ClaudeSession;
+    expect(findTerminalWorkerTab([older, newer], "/repo", "终端01")?.id).toBe("tab-new");
+  });
+
+  test("resolveOrCreateTerminalWorkerTab reuses existing worker tab", async () => {
     const terminal = employee({ id: "e1", name: "终端01" });
     const existing = {
       id: "tab-existing",
@@ -123,13 +173,47 @@ describe("terminalDispatch", () => {
     );
     expect(reused).toBe("tab-existing");
     expect(created).toBe(0);
+  });
 
+  test("createFreshTerminalWorkerTab closes only empty idle siblings and keeps completed history", async () => {
+    const terminal = employee({ id: "e1", name: "终端01" });
+    const completed = {
+      id: "tab-completed",
+      claudeSessionId: "claude-completed",
+      repositoryName: "eco-ai/员工:终端01",
+      repositoryPath: "/repo",
+      messages: [{ id: "m1", role: "user", content: "hi", timestamp: 1 }],
+      status: "completed",
+    } as ClaudeSession;
+    const emptyIdle = {
+      id: "tab-empty",
+      claudeSessionId: null,
+      repositoryName: "eco-ai/员工:终端01",
+      repositoryPath: "/repo",
+      messages: [],
+      status: "idle",
+      createdAt: 100,
+    } as ClaudeSession;
+    const running = {
+      id: "tab-running",
+      claudeSessionId: "claude-running",
+      repositoryName: "eco-ai/员工:终端01",
+      repositoryPath: "/repo",
+      messages: [],
+      status: "running",
+    } as ClaudeSession;
+    const sessions = [completed, emptyIdle, running];
+    const closed: string[] = [];
+    let created = 0;
     const { workerTabId: fresh } = await createFreshTerminalWorkerTab(
       {
         getSessions: () => sessions,
         createSession: async () => {
           created += 1;
           return "tab-fresh";
+        },
+        closeWorkerTab: (tabId) => {
+          closed.push(tabId);
         },
       },
       "/repo",
@@ -138,5 +222,59 @@ describe("terminalDispatch", () => {
     );
     expect(fresh).toBe("tab-fresh");
     expect(created).toBe(1);
+    expect(closed).toEqual(["tab-empty"]);
+    expect(closed).not.toContain("tab-completed");
+    expect(closed).not.toContain("tab-running");
+  });
+
+  test("findTerminalWorkerTab prefers pinned default over running sibling", () => {
+    const running = {
+      id: "tab-running",
+      claudeSessionId: "claude-running",
+      repositoryName: "eco-ai/员工:终端01",
+      repositoryPath: "/repo",
+      messages: [{ id: "m1", role: "user", content: "hi", timestamp: 9_999 }],
+      status: "running",
+      createdAt: 1,
+    } as ClaudeSession;
+    const freshDefault = {
+      id: "tab-default",
+      claudeSessionId: null,
+      repositoryName: "eco-ai/员工:终端01",
+      repositoryPath: "/repo",
+      messages: [{ id: "m2", role: "user", content: "seed", timestamp: 1 }],
+      status: "idle",
+      createdAt: 10_000,
+    } as ClaudeSession;
+    setTerminalDefaultWorkerTab("/repo", "终端01", "tab-default");
+    expect(findTerminalWorkerTab([running, freshDefault], "/repo", "终端01")?.id).toBe(
+      "tab-default",
+    );
+  });
+
+  test("createFreshTerminalWorkerTab registers default worker for @ dispatch", async () => {
+    const terminal = employee({ id: "e1", name: "终端01" });
+    const running = {
+      id: "tab-running",
+      claudeSessionId: "claude-running",
+      repositoryName: "eco-ai/员工:终端01",
+      repositoryPath: "/repo",
+      messages: [{ id: "m1", role: "user", content: "hi", timestamp: 1 }],
+      status: "running",
+    } as ClaudeSession;
+    const sessions = [running];
+    const { workerTabId } = await createFreshTerminalWorkerTab(
+      {
+        getSessions: () => sessions,
+        createSession: async () => "tab-fresh",
+      },
+      "/repo",
+      "eco-ai",
+      terminal,
+    );
+    expect(workerTabId).toBe("tab-fresh");
+    expect(findTerminalWorkerTab([running, { ...running, id: "tab-fresh", status: "idle", messages: [] } as ClaudeSession], "/repo", "终端01")?.id).toBe(
+      "tab-fresh",
+    );
   });
 });

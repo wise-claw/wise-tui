@@ -1934,6 +1934,7 @@ export default function App() {
           repoName ?? repoPath,
           employee,
         );
+        message.success("新建会话成功");
         return workerTabId;
       } catch (err) {
         message.error(err instanceof Error ? err.message : "新建终端会话失败");
@@ -3170,6 +3171,7 @@ export default function App() {
           setMonitorDrawerTarget({ type: "task", taskId });
         },
         onReloadFullDiskTranscript: reloadFullDiskTranscript,
+        onRefreshHistorySessions: handleRefreshHistorySessions,
         onLoadMoreTranscriptFromDisk: loadMoreTranscriptFromDisk,
         activeRepositoryPath: activeRepository?.path,
         activeRepositoryName: activeRepository?.name,

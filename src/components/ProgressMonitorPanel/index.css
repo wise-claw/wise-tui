@@ -2043,13 +2043,29 @@
 .app-monitor-panel__history-popover .ant-popover-inner {
   padding: 0;
   max-width: min(480px, calc(100vw - 32px));
+  overflow: hidden;
 }
 
 .app-monitor-panel__history-popover-content {
+  --app-monitor-history-popover-visible-rows: 2;
+  --app-monitor-history-popover-row-height: 94px;
+  display: flex;
+  flex-direction: column;
   width: min(320px, calc(100vw - 48px));
-  max-height: min(52vh, 360px);
-  overflow-y: auto;
+  overflow: hidden;
   background: var(--ant-color-bg-elevated);
+}
+
+.app-monitor-panel__history-popover-scroll {
+  flex: 0 0 auto;
+  max-height: calc(
+    var(--app-monitor-history-popover-row-height) * var(--app-monitor-history-popover-visible-rows) + 8px
+  );
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
 }
 
 /* 历史会话抽屉：顶栏仅一行标题 + 右侧操作 */
@@ -2187,9 +2203,7 @@
 }
 
 .app-monitor-panel__history-popover-search-wrap {
-  position: sticky;
-  top: 0;
-  z-index: 1;
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -2242,6 +2256,7 @@
 }
 
 .app-monitor-panel__history-popover-list-head {
+  flex-shrink: 0;
   display: flex;
   align-items: center;
   justify-content: space-between;

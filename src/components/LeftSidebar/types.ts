@@ -158,6 +158,10 @@ export interface LeftSidebarProps {
   onCancelSessionFromMonitor?: (sessionId: string) => void;
   onOpenTaskDetailFromMonitor?: (taskId: string) => void;
   onReloadFullDiskTranscript?: (sessionKey: string) => void | Promise<void>;
+  onRefreshHistorySessions?: (scope: {
+    repositoryPath: string;
+    repositoryName: string;
+  }) => void | Promise<void>;
   /** 磁盘 transcript 分页：按需加载更早的 jsonl 片段 */
   onLoadMoreTranscriptFromDisk?: (sessionId: string) => void | Promise<void>;
   projectId?: string | null;

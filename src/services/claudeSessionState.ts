@@ -1,5 +1,7 @@
 import type { ClaudeMessage, ClaudeSession } from "../types";
 import { isToolOnlyUserMessage, userMessagePlainTextForDisplay } from "../utils/claudeChatMessageDisplay";
+import { CLAUDE_NO_VISIBLE_REPLY_FAILURE_HINT } from "../utils/claudeTurnCompleteGate";
+import { isMainSessionContextSeedMessage } from "./terminalDispatchContext";
 
 /** 单条助手气泡：取 `parts` 中**最后一条** `type === "text"` 的可见内容；若无则退回 `content`。 */
 export function assistantMessageVisiblePlainText(msg: ClaudeMessage): string {
@@ -115,6 +117,35 @@ function createUserTextMessage(text: string) {
   };
 }
 
+function createAssistantTextMessage(text: string) {
+  const trimmed = text.trim();
+  return {
+    id: Date.now(),
+    role: "assistant" as const,
+    content: trimmed,
+    parts: [{ type: "text" as const, text: trimmed }],
+    timestamp: Date.now(),
+  };
+}
+
+/** complete 前流式缓冲已有正文但 messages 未落盘时，补一条助手气泡避免 UI 闪一下后变空。 */
+export function appendAssistantPreviewTextMessage(
+  sessions: ClaudeSession[],
+  targetId: string,
+  previewText: string,
+): ClaudeSession[] {
+  const trimmed = previewText.trim();
+  if (!trimmed) return sessions;
+  return sessions.map((session) => {
+    if (!sessionMatchesCrossTabTargetId(sessions, session, targetId)) return session;
+    if (extractLatestAssistantPlainText(session).trim().length > 0) return session;
+    return {
+      ...session,
+      messages: [...session.messages, createAssistantTextMessage(trimmed)],
+    };
+  });
+}
+
 /**
  * 当 `targetId` 已是某标签的 `session.id` 时，只按 id 匹配；否则再允许 `claudeSessionId` 匹配。
  * 避免：主会话迁移前的 tab id 被误记在员工子标签的 `claudeSessionId` 上时，向锚点追加派发气泡会写入两条会话。
@@ -138,7 +169,7 @@ export function setSessionRunningWithUserPrompt(
   const trimmed = prompt.trim();
   if (!trimmed) return sessions;
   return sessions.map((session) => {
-    if (session.id !== sessionId) return session;
+    if (!sessionMatchesCrossTabTargetId(sessions, session, sessionId)) return session;
     const last = session.messages[session.messages.length - 1];
     if (last?.role === "user" && !isToolOnlyUserMessage(last)) {
       if (userMessagePlainTextForDisplay(last).trim() === trimmed) {
@@ -154,19 +185,35 @@ export function setSessionRunningWithUserPrompt(
 }
 
 /** 终端派发等强制新回合：单次提交里清空旧 `claudeSessionId` 并写入用户气泡，避免分两次 setState 竞态。 */
+function isNoVisibleReplySystemMessage(message: ClaudeMessage): boolean {
+  if (message.role !== "system") return false;
+  const text = typeof message.content === "string" ? message.content : "";
+  return text.includes(CLAUDE_NO_VISIBLE_REPLY_FAILURE_HINT);
+}
+
 export function beginSessionTurnWithUserPrompt(
   sessions: ClaudeSession[],
   sessionId: string,
   prompt: string,
-  opts?: { forceFreshClaudeSession?: boolean },
+  opts?: {
+    forceFreshClaudeSession?: boolean;
+    prependMessages?: ClaudeMessage[];
+  },
 ): ClaudeSession[] {
   return sessions.map((session) => {
     if (session.id !== sessionId) return session;
+    const priorMessages = opts?.forceFreshClaudeSession
+      ? session.messages.filter(
+          (message) =>
+            !isNoVisibleReplySystemMessage(message) && !isMainSessionContextSeedMessage(message),
+        )
+      : session.messages;
+    const prepend = opts?.prependMessages ?? [];
     return {
       ...session,
       status: "running",
       claudeSessionId: opts?.forceFreshClaudeSession ? null : session.claudeSessionId,
-      messages: [...session.messages, createUserTextMessage(prompt)],
+      messages: [...priorMessages, ...prepend, createUserTextMessage(prompt)],
     };
   });
 }
@@ -428,13 +475,19 @@ export function finalizeSessionAfterComplete(params: {
     const noReplyFailureMessage = isUserCancelled
       ? "消息已撤销"
       : "Claude 未成功完成本轮请求（未产出可见回复）。请检查 Hook 配置与 Claude CLI 权限。";
-    const messages =
-      !success && noAssistantReply
-        ? [
-            ...session.messages,
-            createSystemTextMessage(noReplyFailureMessage),
-          ]
-        : session.messages;
+    const shouldAppendNoReplyFailure =
+      !success &&
+      noAssistantReply &&
+      !session.messages.some(
+        (message) =>
+          message.role === "system" &&
+          (typeof message.content === "string" ? message.content : "").includes(
+            CLAUDE_NO_VISIBLE_REPLY_FAILURE_HINT,
+          ),
+      );
+    const messages = shouldAppendNoReplyFailure
+      ? [...session.messages, createSystemTextMessage(noReplyFailureMessage)]
+      : session.messages;
     const nextStatus = success
       ? streamingResident
         ? ("idle" as const)

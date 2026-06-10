@@ -61,7 +61,7 @@ export interface WorkspaceBootstrapSelection {
 }
 
 export const DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION: WorkspaceBootstrapSelection = {
-  trellis: true,
+  trellis: false,
   trellisInit: false,
   omc: false,
   superpowers: false,

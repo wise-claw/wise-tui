@@ -13,11 +13,22 @@ import {
   shouldClearCodexResumeSessionFromStreamLine,
 } from "./claudeStreamParser";
 import {
+  appendAssistantPreviewTextMessage,
   appendSystemMessageBySessionOrClaudeId,
   extractLatestAssistantPlainText,
   finalizeSessionAfterComplete,
 } from "./claudeSessionState";
 import { isTerminalWorkerWiseTab } from "./terminalDispatch";
+import {
+  latestTerminalTurnHasAssistant,
+  latestTurnHasVisibleAssistantContent,
+  shouldDeferOneshotTurnComplete,
+} from "../hooks/useClaudeSessions.transcript";
+import {
+  isStaleClaudeCompleteForSession,
+  resolveExpectedTurnNonceForTab,
+  shouldApplyClaudeTurnComplete,
+} from "../utils/claudeTurnCompleteGate";
 import { preservesWorkerWiseTabId } from "../utils/sessionExecuteResolve";
 
 type SetSessions = (updater: (prev: ClaudeSession[]) => ClaudeSession[]) => void;
@@ -160,29 +171,43 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
   const pendingStreamSessionUpdaters: SessionListUpdater[] = [];
   let streamSessionFlushRaf: number | null = null;
 
-  function flushPendingStreamSessionUpdatesSync(): void {
+  function applyPendingStreamSessionUpdates(
+    prev: ClaudeSession[],
+    updaters: SessionListUpdater[],
+  ): ClaudeSession[] {
+    let next = prev;
+    for (const updater of updaters) {
+      next = updater(next);
+    }
+    return next;
+  }
+
+  function flushPendingStreamSessionUpdates(opts?: { immediate?: boolean }): void {
     if (streamSessionFlushRaf !== null) {
       window.cancelAnimationFrame(streamSessionFlushRaf);
       streamSessionFlushRaf = null;
     }
     if (pendingStreamSessionUpdaters.length === 0) return;
     const updaters = pendingStreamSessionUpdaters.splice(0);
+    const run = (prev: ClaudeSession[]) => applyPendingStreamSessionUpdates(prev, updaters);
+    if (opts?.immediate) {
+      setSessions(run);
+      return;
+    }
     startTransition(() => {
-      setSessions((prev) => {
-        let next = prev;
-        for (const updater of updaters) {
-          next = updater(next);
-        }
-        return next;
-      });
+      setSessions(run);
     });
+  }
+
+  function flushPendingStreamSessionUpdatesSync(): void {
+    flushPendingStreamSessionUpdates({ immediate: true });
   }
 
   function schedulePendingStreamSessionFlush(): void {
     if (streamSessionFlushRaf !== null) return;
     streamSessionFlushRaf = window.requestAnimationFrame(() => {
       streamSessionFlushRaf = null;
-      flushPendingStreamSessionUpdatesSync();
+      flushPendingStreamSessionUpdates();
     });
   }
 
@@ -472,19 +497,17 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     payload: unknown,
     turnNonce: number,
     opts?: { uiOnly?: boolean },
-  ) {
+  ): boolean {
     const session = sessionsRef.current.find((s) => s.id === tid || s.claudeSessionId === tid);
-    if (session) {
-      const uiBusy = session.status === "running" || session.status === "connecting";
-      const awaitingThisTurn = turnNonceStillExpectedForTab(tid, turnNonce);
-      // 注册表轮询可能先于 `claude-complete` 把 oneshot 标成 idle；仍须消费本轮完成并补盘 jsonl。
-      if (!uiBusy && !awaitingThisTurn) {
-        clearAssistBufferKeysForTab(session, tid);
-        return;
-      }
+    if (isStaleClaudeCompleteForSession(session, payload)) {
+      return false;
+    }
+    const awaitingThisTurn = turnNonceStillExpectedForTab(tid, turnNonce);
+    if (!shouldApplyClaudeTurnComplete(awaitingThisTurn)) {
+      return false;
     }
     const streamingResident = sessionUsesStreamingConnection(session);
-    const success = resolveSuccessFromCompletePayload(payload);
+    const payloadSuccess = resolveSuccessFromCompletePayload(payload);
     const buf = assistantStreamTextByTabRef.current;
     const chunks = [
       (buf.get(tid) ?? "").trim(),
@@ -492,35 +515,76 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
       session?.claudeSessionId?.trim() ? (buf.get(session.claudeSessionId.trim()) ?? "").trim() : "",
     ];
     const fromRef = chunks.reduce((best, cur) => (cur.length > best.length ? cur : best), "");
-    const fromMessages = extractLatestAssistantPlainText(session);
-    // 流式缓冲与 messages 偶发不同步时，用会话内最后一条助手消息兜底，避免验收解析拿不到正文。
-    const previewRaw = (fromRef.length > 0 ? fromRef : fromMessages).trim();
-    const noAssistantReply = previewRaw.length === 0;
-    clearAssistBufferKeysForTab(session, tid);
+    const fromMessages = extractLatestAssistantPlainText(session).trim();
     const structuredVerdict = extractStructuredVerdictFromCompletePayload(payload);
+    flushPendingStreamSessionUpdatesSync();
+    const sessionAfterFlush =
+      sessionsRef.current.find((s) => s.id === tid || s.claudeSessionId === tid) ?? session;
+    const fromAfterFlush = extractLatestAssistantPlainText(sessionAfterFlush).trim();
+    // 流式缓冲与 messages 偶发不同步时，取最长正文兜底，避免验收解析拿不到回复。
+    const previewRaw = [fromRef, fromMessages, fromAfterFlush].reduce(
+      (best, cur) => (cur.length > best.length ? cur : best),
+      "",
+    );
+    const noAssistantReply = previewRaw.length === 0;
+    const flushedMessages = sessionAfterFlush?.messages ?? [];
+    const hasVisibleTextReply = fromAfterFlush.length > 0;
+    const hasStreamProgress = latestTurnHasVisibleAssistantContent(flushedMessages);
+    const isTerminal = session != null && isTerminalWorkerWiseTab(session);
+    const terminalEmptySuccess =
+      isTerminal && payloadSuccess && !hasVisibleTextReply && !hasStreamProgress;
+    if (
+      !streamingResident &&
+      shouldDeferOneshotTurnComplete(flushedMessages, payloadSuccess)
+    ) {
+      return false;
+    }
+    clearAssistBufferKeysForTab(session, tid);
+    // 仅 text 正文可抵消迟到 cancel；思考块 / 工具块不算「已完成」。
+    const uiSuccess = payloadSuccess || hasVisibleTextReply;
+    if (terminalEmptySuccess) {
+      const shouldTryDiskReload = reloadTranscriptFromDisk != null;
+      if (shouldTryDiskReload) {
+        for (const delay of [400, 1200, 2800]) {
+          window.setTimeout(() => {
+            const live = sessionsRef.current.find((s) => s.id === tid || s.claudeSessionId === tid);
+            if (live && latestTerminalTurnHasAssistant(live.messages)) return;
+            reloadTranscriptForTab(tid);
+          }, delay);
+        }
+      }
+      return false;
+    }
     if (!opts?.uiOnly) {
-      notifyCompletion({ tid, success, nonce: turnNonce, previewRaw, structuredVerdict });
+      notifyCompletion({ tid, success: uiSuccess, nonce: turnNonce, previewRaw, structuredVerdict });
       if (isDocumentHidden()) {
         pushDeferred(deferredCompletes, { tid, payload, turnNonce });
-        return;
+        return true;
       }
     }
-    flushPendingStreamSessionUpdatesSync();
-    setSessions((prev) =>
-      finalizeSessionAfterComplete({
-        sessions: prev.map((s) => {
-          if (s.id !== tid && s.claudeSessionId !== tid) return s;
-          const boundCursorAgentId = extractCursorAgentIdFromCompletePayload(payload);
-          if (!boundCursorAgentId) return s;
-          return { ...s, claudeSessionId: boundCursorAgentId };
-        }),
+    setSessions((prev) => {
+      let sessions = prev.map((s) => {
+        if (s.id !== tid && s.claudeSessionId !== tid) return s;
+        const boundCursorAgentId = extractCursorAgentIdFromCompletePayload(payload);
+        if (!boundCursorAgentId) return s;
+        return { ...s, claudeSessionId: boundCursorAgentId };
+      });
+      if (uiSuccess && previewRaw) {
+        sessions = appendAssistantPreviewTextMessage(sessions, tid, previewRaw);
+      }
+      const effectiveNoAssistantReply =
+        extractLatestAssistantPlainText(
+          sessions.find((s) => s.id === tid || s.claudeSessionId === tid),
+        ).trim().length === 0;
+      return finalizeSessionAfterComplete({
+        sessions,
         targetId: tid,
-        success,
-        noAssistantReply,
+        success: uiSuccess,
+        noAssistantReply: effectiveNoAssistantReply,
         streamingResident,
-      }),
-    );
-    if (success && session) {
+      });
+    });
+    if (uiSuccess && session) {
       finalizeTodosAfterSuccessfulTurn(session.id, session.messages);
     }
     // 多员工/多会话并行时：仅当「当前仍指向本会话」时才清空，避免误清其它仍在流式中的标签
@@ -533,30 +597,62 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
       streamingTargetIdRef.current = null;
     }
 
-    if (reloadTranscriptFromDisk && success) {
+    const shouldTryDiskReload =
+      reloadTranscriptFromDisk &&
+      (uiSuccess ||
+        (noAssistantReply && session != null && isTerminalWorkerWiseTab(session)));
+    if (shouldTryDiskReload) {
+      const latestTurnHasAssistant =
+        sessionAfterFlush != null &&
+        latestTurnHasVisibleAssistantContent(sessionAfterFlush.messages);
       const skipDiskReload =
+        uiSuccess &&
         session != null &&
+        latestTurnHasAssistant &&
         session.messages.length > 0 &&
         (streamingResident || Boolean(session.diskTranscriptPartial));
       if (!skipDiskReload) {
-        window.setTimeout(() => {
-          reloadTranscriptForTab(tid);
-        }, 120);
+        const isTerminal = session != null && isTerminalWorkerWiseTab(session);
+        const delays =
+          isTerminal && !latestTurnHasAssistant ? [400, 1200, 2800] : [120];
+        for (const delay of delays) {
+          window.setTimeout(() => {
+            const live = sessionsRef.current.find((s) => s.id === tid || s.claudeSessionId === tid);
+            if (
+              live &&
+              latestTurnHasVisibleAssistantContent(live.messages) &&
+              (isTerminal || live.status === "running" || live.status === "connecting")
+            ) {
+              return;
+            }
+            reloadTranscriptForTab(tid);
+          }, delay);
+        }
       }
     }
+    return true;
   }
 
   function handleComplete(payload: unknown) {
     const refTid = streamingTargetIdRef.current;
     if (!refTid) return;
-    const mapped = sessionIdMapRef.current.get(refTid) ?? refTid;
     const mapRef = expectedTurnNonceByTabIdRef?.current;
-    const nonceForTurn =
-      (mapRef?.get(refTid) ?? mapRef?.get(mapped) ?? undefined) ?? lastUserSendNonceRef.current;
+    const nonceForTurn = resolveExpectedTurnNonceForTab({
+      tabId: refTid,
+      sessionIdMap: sessionIdMapRef.current,
+      nonceByTabId: mapRef ?? new Map(),
+      sessions: sessionsRef.current,
+      boundNonce: lastUserSendNonceRef.current,
+    });
+    if (nonceForTurn === undefined) return;
     handleCompleteForSendTab(refTid, payload, nonceForTurn);
   }
 
-  function handleCompleteForSendTab(stableTabId: string, payload: unknown, turnNonce: number) {
+  function handleCompleteForSendTab(
+    stableTabId: string,
+    payload: unknown,
+    turnNonce: number,
+  ): boolean {
     const mapped = sessionIdMapRef.current.get(stableTabId) ?? stableTabId;
     let tid = resolveTabIdFromCompletePayload(payload, sessionsRef.current, mapped);
     if (!tid) tid = resolveTabIdFromCompletePayload(payload, sessionsRef.current, stableTabId);
@@ -564,8 +660,8 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
       const session = sessionsRef.current.find((s) => s.id === mapped || s.claudeSessionId === mapped);
       tid = session?.id ?? null;
     }
-    if (!tid) return;
-    applySessionComplete(tid, payload, turnNonce);
+    if (!tid) return false;
+    return applySessionComplete(tid, payload, turnNonce);
   }
 
   function handleError(payload: unknown) {

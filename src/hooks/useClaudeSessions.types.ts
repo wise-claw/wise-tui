@@ -1,6 +1,7 @@
 import type { MutableRefObject } from "react";
 import type {
   ClaudeComposerExecuteBubbleOptions,
+  ClaudeMessage,
   ClaudeSession,
   SessionConversationTaskItem,
   SessionExecutionEngine,
@@ -106,7 +107,9 @@ export interface UseClaudeSessionsReturn {
   executeTerminalSession: (
     sessionId: string,
     outboundPrompt: string,
-    opts?: { userBubblePrompt?: string },
+    opts?: {
+      userBubblePrompt?: string;
+    },
   ) => boolean;
   /** 监控 Drawer 底部：恢复 worker 标签并 resume 执行（含磁盘 / tabs 回退） */
   resumeSessionFromMonitorDrawer: (input: {

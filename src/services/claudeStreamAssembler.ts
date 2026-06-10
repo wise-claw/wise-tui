@@ -1,6 +1,4 @@
 import type { ClaudeMessage, ClaudeSession, MessagePart } from "../types";
-import { isToolOnlyUserMessage, userMessagePlainTextForDisplay } from "../utils/claudeChatMessageDisplay";
-
 type ToolUsePart = Extract<MessagePart, { type: "tool_use" }>;
 
 /** 单轮助手消息中 text+reasoning 合计上限，避免流式拼接撑爆主线程内存 */
@@ -215,16 +213,6 @@ export function applyToolResultPartsToSession(session: ClaudeSession, parts: Mes
 export function appendAssistantStreamParts(session: ClaudeSession, parts: MessagePart[]): ClaudeSession {
   if (parts.length === 0) return session;
   const lastMsg = session.messages[session.messages.length - 1];
-  if (lastMsg?.role === "user" && !isToolOnlyUserMessage(lastMsg)) {
-    const textParts = parts.filter((p): p is Extract<MessagePart, { type: "text" }> => p.type === "text");
-    if (textParts.length > 0 && parts.length === textParts.length) {
-      const incoming = textParts.map((p) => p.text).join("").trim();
-      const lastText = userMessagePlainTextForDisplay(lastMsg).trim();
-      if (incoming.length > 0 && (incoming === lastText || lastText.includes(incoming))) {
-        return session;
-      }
-    }
-  }
   let nextMessages: ClaudeSession["messages"];
   if (lastMsg?.role === "assistant") {
     const mergedParts = mergeAssistantParts(lastMsg.parts, parts);

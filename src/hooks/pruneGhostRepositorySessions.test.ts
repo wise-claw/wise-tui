@@ -68,4 +68,17 @@ describe("pruneGhostRepositorySessions", () => {
     const next = pruneGhostRepositorySessions([running], REPO, []);
     expect(next).toHaveLength(1);
   });
+
+  test("keeps terminal worker tab even when disk entry is missing and messages were recycled", () => {
+    const worker = session({
+      id: "wise-tab-terminal-02",
+      claudeSessionId: "0123456789abcdef0123456789abcdef",
+      repositoryName: "wise/员工:终端02",
+      messages: [],
+      status: "completed",
+    });
+    const next = pruneGhostRepositorySessions([worker], REPO, []);
+    expect(next).toHaveLength(1);
+    expect(next[0]?.id).toBe("wise-tab-terminal-02");
+  });
 });

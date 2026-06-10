@@ -197,19 +197,110 @@ export function isDiskOnlyTerminalWorkerTab(session: ClaudeSession): boolean {
   return Boolean(cid && session.id === cid);
 }
 
-export function findTerminalWorkerTab(
-  sessions: ClaudeSession[],
+function terminalWorkerSessionSortKey(session: ClaudeSession): number {
+  const last = session.messages[session.messages.length - 1]?.timestamp;
+  return typeof last === "number" ? last : session.createdAt;
+}
+
+function terminalWorkerScopeKey(repositoryPath: string, terminalName: string): string {
+  const repo = normalizeRepositoryPathKey(repositoryPath) || repositoryPath.trim();
+  return `${repo}\x1f${normalizeTerminalDispatchName(terminalName)}`;
+}
+
+/** 运行面板「新建会话」后，@终端 派发优先命中此 worker，直至再次新建或标签关闭。 */
+const terminalDefaultWorkerTabByScope = new Map<string, string>();
+
+export function setTerminalDefaultWorkerTab(
+  repositoryPath: string,
+  terminalName: string,
+  workerTabId: string,
+): void {
+  const id = workerTabId.trim();
+  const key = terminalWorkerScopeKey(repositoryPath, terminalName);
+  if (!id) {
+    terminalDefaultWorkerTabByScope.delete(key);
+    return;
+  }
+  terminalDefaultWorkerTabByScope.set(key, id);
+}
+
+export function clearTerminalDefaultWorkerTabIfMatch(workerTabId: string): void {
+  const id = workerTabId.trim();
+  if (!id) return;
+  for (const [key, pinned] of terminalDefaultWorkerTabByScope) {
+    if (pinned === id) {
+      terminalDefaultWorkerTabByScope.delete(key);
+    }
+  }
+}
+
+/** @internal */
+export function resetTerminalDefaultWorkerTabsForTests(): void {
+  terminalDefaultWorkerTabByScope.clear();
+}
+
+function resolvePinnedTerminalWorkerTab(
+  matches: ClaudeSession[],
   repositoryPath: string,
   terminalName: string,
 ): ClaudeSession | undefined {
+  const pinnedId = terminalDefaultWorkerTabByScope.get(
+    terminalWorkerScopeKey(repositoryPath, terminalName),
+  );
+  if (!pinnedId) return undefined;
+  const hit = matches.find((session) => session.id === pinnedId);
+  if (!hit) {
+    terminalDefaultWorkerTabByScope.delete(terminalWorkerScopeKey(repositoryPath, terminalName));
+    return undefined;
+  }
+  return hit;
+}
+
+/** 运行面板「新建会话」产出的空标签：优先于旧会话复用。 */
+function isFreshIdleTerminalWorkerTab(session: ClaudeSession): boolean {
+  return (
+    session.status === "idle" &&
+    session.messages.length === 0 &&
+    !session.claudeSessionId?.trim()
+  );
+}
+
+/** 同仓库同终端名下的全部 worker 标签（不含磁盘空壳）。 */
+export function listTerminalWorkerTabsForEmployee(
+  sessions: ClaudeSession[],
+  repositoryPath: string,
+  terminalName: string,
+): ClaudeSession[] {
   const repo = normalizeRepositoryPathKey(repositoryPath) || repositoryPath.trim();
   const target = normalizeTerminalDispatchName(terminalName);
-  return sessions.find((session) => {
+  return sessions.filter((session) => {
     if (!repositoryPathsMatch(session.repositoryPath, repo)) return false;
     const bound = extractBoundEmployeeNameFromSessionRepositoryName(session.repositoryName);
     if (!bound || normalizeTerminalDispatchName(bound) !== target) return false;
     return !isDiskOnlyTerminalWorkerTab(session);
   });
+}
+
+export function findTerminalWorkerTab(
+  sessions: ClaudeSession[],
+  repositoryPath: string,
+  terminalName: string,
+): ClaudeSession | undefined {
+  const matches = listTerminalWorkerTabsForEmployee(sessions, repositoryPath, terminalName);
+  if (matches.length === 0) return undefined;
+
+  const pinned = resolvePinnedTerminalWorkerTab(matches, repositoryPath, terminalName);
+  if (pinned) return pinned;
+
+  if (matches.length === 1) return matches[0];
+
+  const freshIdle = matches.filter(isFreshIdleTerminalWorkerTab);
+  if (freshIdle.length > 0) {
+    return freshIdle.sort((left, right) => right.createdAt - left.createdAt)[0];
+  }
+  return matches.sort(
+    (left, right) => terminalWorkerSessionSortKey(right) - terminalWorkerSessionSortKey(left),
+  )[0];
 }
 
 function repositoryDisplayBase(repositoryName: string): string {
@@ -232,7 +323,9 @@ export type TerminalDispatchDeps = {
   executeTerminalSession: (
     workerTabId: string,
     outboundPrompt: string,
-    opts?: { userBubblePrompt?: string },
+    opts?: {
+      userBubblePrompt?: string;
+    },
   ) => boolean;
   appendSystemMessage: (sessionId: string, text: string) => void;
   /** 关闭磁盘空壳标签，避免同一终端堆积多个无效 tab。 */
@@ -281,7 +374,7 @@ export async function resolveOrCreateTerminalWorkerTab(
   return { workerTabId, created: true };
 }
 
-/** 运行面板终端历史：始终新建 worker 标签，不复用当前终端会话。 */
+/** 运行面板「新建会话」：清理同终端下的空 idle 占位标签，再创建新的默认 worker（保留已有历史）。 */
 export async function createFreshTerminalWorkerTab(
   deps: Pick<TerminalDispatchDeps, "getSessions" | "createSession" | "closeWorkerTab">,
   repositoryPath: string,
@@ -289,12 +382,25 @@ export async function createFreshTerminalWorkerTab(
   terminal: EmployeeItem,
 ): Promise<{ workerTabId: string }> {
   purgeDiskOnlyTerminalWorkerTabs(deps, repositoryPath, terminal.name);
+  const siblings = listTerminalWorkerTabsForEmployee(
+    deps.getSessions(),
+    repositoryPath,
+    terminal.name,
+  );
+  for (const tab of siblings) {
+    if (tab.status === "running" || tab.status === "connecting") continue;
+    // 仅回收未使用的空标签；已完成/有 transcript 的历史会话必须保留。
+    if (isFreshIdleTerminalWorkerTab(tab)) {
+      deps.closeWorkerTab?.(tab.id);
+    }
+  }
   const base = repositoryDisplayBase(repositoryDisplayName);
   const workerTabId = await deps.createSession(
     repositoryPath,
     `${base}/员工:${terminal.name}`,
     { skipActivate: true, connectionKind: "oneshot" },
   );
+  setTerminalDefaultWorkerTab(repositoryPath, terminal.name, workerTabId);
   return { workerTabId };
 }
 
@@ -420,7 +526,7 @@ export async function dispatchTerminalFromMainSession(
     });
   }
 
-  const spawnOk = deps.executeTerminalSession(workerTabId, outboundPrompt, {
+  const spawnOk = deps.executeTerminalSession(workerTabId, outboundPrompt.trim(), {
     userBubblePrompt,
   });
   if (!spawnOk) {

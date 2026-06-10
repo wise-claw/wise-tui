@@ -96,6 +96,25 @@ export function purgeClaudeSessionStreamSidecarRefs(
   return sidecarIds;
 }
 
+/** oneshot invocation 在 `type:result` complete 后子进程仍可能继续写 stdout，须保持监听至下一轮发送。 */
+export function shouldKeepClaudeInvocationStreamAfterTurnComplete(input: {
+  tabId: string;
+  sessions: readonly ClaudeSession[];
+  streamingProcessByTab: ReadonlyMap<string, unknown>;
+  claudeInvocationInflight: ReadonlyMap<string, { tabId: string }>;
+  defaultConnectionKind: ClaudeSessionConnectionKind;
+}): boolean {
+  const session = input.sessions.find((s) => s.id === input.tabId);
+  if (
+    input.streamingProcessByTab.has(input.tabId) &&
+    session &&
+    sessionUsesStreamingConnection(session, input.defaultConnectionKind)
+  ) {
+    return true;
+  }
+  return [...input.claudeInvocationInflight.values()].some((meta) => meta.tabId === input.tabId);
+}
+
 export async function attachClaudeInvocationStream(
   inv: string,
   stableTabId: string,
@@ -127,8 +146,8 @@ export async function attachClaudeInvocationStream(
     }),
     attach(`claude-complete:invocation:${inv}`, (payload) => {
       const nonce = resolveTurnNonce?.(stableTabId, turnNonce) ?? turnNonce;
-      rt.handleCompleteForSendTab(stableTabId, payload, nonce);
-      if (!shouldKeepListeningAfterTurnComplete?.(stableTabId)) {
+      const applied = rt.handleCompleteForSendTab(stableTabId, payload, nonce);
+      if (applied && !shouldKeepListeningAfterTurnComplete?.(stableTabId)) {
         cleanup();
       }
     }),
@@ -140,8 +159,8 @@ export async function attachClaudeInvocationStream(
     }),
     attach(`claude-complete:${stableTabId}`, (payload) => {
       const nonce = resolveTurnNonce?.(stableTabId, turnNonce) ?? turnNonce;
-      rt.handleCompleteForSendTab(stableTabId, payload, nonce);
-      if (!shouldKeepListeningAfterTurnComplete?.(stableTabId)) {
+      const applied = rt.handleCompleteForSendTab(stableTabId, payload, nonce);
+      if (applied && !shouldKeepListeningAfterTurnComplete?.(stableTabId)) {
         cleanup();
       }
     }),
@@ -190,8 +209,8 @@ export async function attachClaudeSessionStreamForTurn(
     }),
     listen(`claude-complete:${sid}`, (e) => {
       const nonce = resolveTurnNonce?.(stableTabId, turnNonce) ?? turnNonce;
-      rt.handleCompleteForSendTab(stableTabId, e.payload, nonce);
-      if (!shouldKeepListeningAfterTurnComplete?.(stableTabId)) {
+      const applied = rt.handleCompleteForSendTab(stableTabId, e.payload, nonce);
+      if (applied && !shouldKeepListeningAfterTurnComplete?.(stableTabId)) {
         cleanup();
       }
     }),
@@ -379,6 +398,7 @@ export function pruneGhostRepositorySessions(
   const diskIds = new Set(disk.map((d) => d.sessionId));
   return sessions.filter((s) => {
     if (!repositoryPathsMatch(s.repositoryPath, repositoryPath)) return true;
+    if (isTerminalWorkerWiseTab(s)) return true;
     if (s.status === "running" || s.status === "connecting") return true;
     const claudeId = s.claudeSessionId?.trim();
     if (!claudeId) return true;
