@@ -6,7 +6,7 @@ describe("normalizeComposerSpeechPreferences", () => {
     expect(normalizeComposerSpeechPreferences(null)).toEqual({
       sendMode: "manual",
       autoSendEndingText: "发送",
-      silenceAutoSendIdleMs: 1500,
+      silenceAutoSendIdleMs: 1000,
       speechToRequirementEnabled: false,
       speechPolishEnabled: true,
       speechEngineMode: "auto",
@@ -25,7 +25,7 @@ describe("normalizeComposerSpeechPreferences", () => {
     ).toEqual({
       sendMode: "silenceAutoSend",
       autoSendEndingText: "发送",
-      silenceAutoSendIdleMs: 1500,
+      silenceAutoSendIdleMs: 1000,
       speechToRequirementEnabled: false,
       speechPolishEnabled: true,
       speechEngineMode: "auto",
@@ -45,7 +45,7 @@ describe("normalizeComposerSpeechPreferences", () => {
     ).toEqual({
       sendMode: "silenceAutoSend",
       autoSendEndingText: "提交",
-      silenceAutoSendIdleMs: 1500,
+      silenceAutoSendIdleMs: 1000,
       speechToRequirementEnabled: false,
       speechPolishEnabled: true,
       speechEngineMode: "auto",
@@ -76,7 +76,7 @@ describe("normalizeComposerSpeechPreferences", () => {
       normalizeComposerSpeechPreferences({
         silenceAutoSendIdleMs: 50,
       }),
-    ).toMatchObject({ silenceAutoSendIdleMs: 500 });
+    ).toMatchObject({ silenceAutoSendIdleMs: 400 });
     expect(
       normalizeComposerSpeechPreferences({
         silenceAutoSendIdleMs: 99_999,
@@ -103,7 +103,7 @@ describe("normalizeComposerSpeechPreferences", () => {
     ).toEqual({
       sendMode: "manual",
       autoSendEndingText: "发送",
-      silenceAutoSendIdleMs: 1500,
+      silenceAutoSendIdleMs: 1000,
       speechToRequirementEnabled: false,
       speechPolishEnabled: true,
       speechEngineMode: "auto",

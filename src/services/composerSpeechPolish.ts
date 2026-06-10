@@ -17,6 +17,9 @@ export async function polishComposerSpeechTranscript(
   const local = applyLocalSpeechPolishFallback(raw);
   const cwd = projectPath.trim();
   if (!cwd) return local;
+  if (!/(?:嗯|啊|呃|额|诶|那个|就是|然后|就是说|怎么说呢|这样的话)/u.test(raw) && raw.length <= 24) {
+    return local;
+  }
 
   try {
     const out = await invoke<string>("run_claude_quick", {

@@ -7,8 +7,8 @@ import {
 describe("composerSpeechSilenceIdle", () => {
   test("normalizeSilenceAutoSendIdleMs clamps and steps", () => {
     expect(normalizeSilenceAutoSendIdleMs(1234)).toBe(1200);
-    expect(normalizeSilenceAutoSendIdleMs(undefined)).toBe(1500);
-    expect(normalizeSilenceAutoSendIdleMs(50)).toBe(500);
+    expect(normalizeSilenceAutoSendIdleMs(undefined)).toBe(1000);
+    expect(normalizeSilenceAutoSendIdleMs(50)).toBe(400);
   });
 
   test("formatSilenceAutoSendIdleSeconds", () => {

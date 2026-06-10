@@ -59,7 +59,7 @@ export interface UseComposerSpeechDictationOptions {
   onError?: (message: string) => void;
 }
 
-const PCM_FLUSH_MS = 120;
+const PCM_FLUSH_MS = 80;
 
 export function useComposerSpeechDictation({
   enabled = true,
@@ -96,6 +96,20 @@ export function useComposerSpeechDictation({
   onSessionEndRef.current = onSessionEnd;
   onErrorRef.current = onError;
   retainSessionWhenDisabledRef.current = retainSessionWhenDisabled;
+
+  const lastForwardedTranscriptRef = useRef({ text: "", isFinal: false });
+
+  const forwardTranscriptUpdate = useCallback(
+    (update: ComposerSpeechTranscriptUpdate) => {
+      const prev = lastForwardedTranscriptRef.current;
+      if (prev.text === update.text && prev.isFinal === update.isFinal) {
+        return;
+      }
+      lastForwardedTranscriptRef.current = { text: update.text, isFinal: update.isFinal };
+      onUpdateRef.current(update);
+    },
+    [],
+  );
 
   const webSupported = useMemo(() => isSpeechRecognitionSupported(), []);
 
@@ -216,7 +230,7 @@ export function useComposerSpeechDictation({
     recognition.onstart = () => setListening(true);
     recognition.onresult = (event) => {
       const { text, isFinal } = collectLiveSpeechTranscript(event);
-      if (text) onUpdateRef.current({ text, isFinal });
+      if (text) forwardTranscriptUpdate({ text, isFinal });
     };
     recognition.onerror = (event) => {
       const msg = speechRecognitionErrorMessage(event.error);
@@ -257,7 +271,7 @@ export function useComposerSpeechDictation({
       setListening(false);
       onErrorRef.current?.("无法启动语音听写，请稍后重试。");
     }
-  }, [enabled, lang]);
+  }, [enabled, lang, forwardTranscriptUpdate]);
 
   const isStreamingCaptureActive = useCallback(
     () =>
@@ -370,6 +384,7 @@ export function useComposerSpeechDictation({
 
     stop();
     wantListeningRef.current = true;
+    lastForwardedTranscriptRef.current = { text: "", isFinal: false };
 
     if (engine === "sensevoice") {
       await startStreamingCapture();
@@ -419,7 +434,7 @@ export function useComposerSpeechDictation({
         return;
       }
       if (transcript) {
-        onUpdateRef.current({ text: transcript, isFinal });
+        forwardTranscriptUpdate({ text: transcript, isFinal });
       }
       if (!isFinal) return;
       if (!finishingStreamRef.current) return;

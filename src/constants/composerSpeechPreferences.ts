@@ -38,7 +38,7 @@ export type SenseVoiceLanguagePreference = "auto" | "zh" | "en" | "yue" | "ja" |
 export const DEFAULT_COMPOSER_SPEECH_PREFERENCES: ComposerSpeechPreferencesV1 = {
   sendMode: "manual",
   autoSendEndingText: "发送",
-  silenceAutoSendIdleMs: 1500,
+  silenceAutoSendIdleMs: 1000,
   speechToRequirementEnabled: false,
   speechPolishEnabled: true,
   speechEngineMode: "auto",
@@ -49,7 +49,7 @@ export const DEFAULT_COMPOSER_SPEECH_PREFERENCES: ComposerSpeechPreferencesV1 = 
 };
 
 /** 停顿自动发送默认可调范围（毫秒）。 */
-export const COMPOSER_SPEECH_SILENCE_AUTO_SEND_IDLE_MS_MIN = 500;
+export const COMPOSER_SPEECH_SILENCE_AUTO_SEND_IDLE_MS_MIN = 400;
 export const COMPOSER_SPEECH_SILENCE_AUTO_SEND_IDLE_MS_MAX = 10_000;
 export const COMPOSER_SPEECH_SILENCE_AUTO_SEND_IDLE_MS_STEP = 100;
 

@@ -81,9 +81,8 @@ import { ComposerVoiceSettingsPanel } from "./ComposerVoiceSettingsPanel";
 import { ComposerRuntimeSettingsTrigger } from "./ComposerRuntimeSettingsTrigger";
 import { ComposerModelPicker } from "./ComposerModelPicker";
 import { useDefaultClaudeConnectionKind } from "../../hooks/useDefaultClaudeConnectionKind";
-import { useComposerSpeechDictation } from "../../hooks/useComposerSpeechDictation";
+import { useComposerSpeechPipeline } from "../../hooks/useComposerSpeechPipeline";
 import { useComposerSpeechPreferences } from "../../hooks/useComposerSpeechPreferences";
-import { polishComposerSpeechTranscript } from "../../services/composerSpeechPolish";
 import {
   downloadComposerSherpaModels,
   cancelComposerSherpaDownloadModels,
@@ -93,54 +92,12 @@ import {
   type ComposerSherpaSpeechCapabilities,
 } from "../../services/composerSherpaSpeech";
 import {
-  type ComposerSpeechSendMode,
   type ComposerSpeechPreferencesV1,
 } from "../../constants/composerSpeechPreferences";
 import type { ComposerSpeechEngine } from "../../constants/composerSpeech";
 import { formatSilenceAutoSendIdleSeconds } from "../../utils/composerSpeechSilenceIdle";
 import { readVisiblePollIntervalMs } from "../../utils/adaptivePoll";
-import { splitUtteranceAtAutoSendEnding } from "../../utils/composerSpeechAutoSendEnding";
-import {
-  buildComposerSpeechVoiceCommands,
-  type ComposerSpeechVoiceCommandAction,
-  splitUtteranceAtVoiceCommand,
-} from "../../utils/composerSpeechVoiceCommands";
-import {
-  commitComposerSpeechTranscriptBaselineForSend,
-  createComposerSpeechStreamAnchor,
-  pickLongerSpeechBaseline,
-  resolveComposerSpeechDisplayText,
-  resolveComposerSpeechTranscriptDelta,
-  stripComposerSpeechDeltaOverlap,
-  stripSpeechCompareNoise,
-} from "../../utils/composerSpeechStreaming";
 import { logClaudeDrop } from "./drop-debug";
-
-function composerSpeechEngineHint(engine: ComposerSpeechEngine | null): string {
-  if (engine === "sensevoice") return "SenseVoice 本地听写";
-  return "Web Speech 听写";
-}
-
-function composerSpeechStopHint(engine: ComposerSpeechEngine | null): string {
-  if (engine === "web") return "停止语音听写";
-  return "点击停止录音并转写";
-}
-
-function composerSpeechVoiceCommandsHint(
-  prefs: Pick<
-    ComposerSpeechPreferencesV1,
-    | "voiceCommandsEnabled"
-    | "autoSendEndingText"
-    | "voiceCommandClearText"
-    | "voiceCommandCancelText"
-  >,
-): string | null {
-  if (!prefs.voiceCommandsEnabled) return null;
-  const send = prefs.autoSendEndingText || "发送";
-  const clear = prefs.voiceCommandClearText || "清除";
-  const cancel = prefs.voiceCommandCancelText || "取消";
-  return `口播「${send}」发送；「${clear}」清空输入；「${cancel}」结束执行`;
-}
 import {
   buildClaudeComposerSendPayload,
   normalizeComposerPlainMain,
@@ -188,6 +145,32 @@ import {
   type ApplyStarterPromptDetail,
 } from "../../constants/workflowUiEvents";
 import type { GitBranchEntry } from "../../types";
+
+function composerSpeechEngineHint(engine: ComposerSpeechEngine | null): string {
+  if (engine === "sensevoice") return "SenseVoice 本地听写";
+  return "Web Speech 听写";
+}
+
+function composerSpeechStopHint(engine: ComposerSpeechEngine | null): string {
+  if (engine === "web") return "停止语音听写";
+  return "点击停止录音并转写";
+}
+
+function composerSpeechVoiceCommandsHint(
+  prefs: Pick<
+    ComposerSpeechPreferencesV1,
+    | "voiceCommandsEnabled"
+    | "autoSendEndingText"
+    | "voiceCommandClearText"
+    | "voiceCommandCancelText"
+  >,
+): string | null {
+  if (!prefs.voiceCommandsEnabled) return null;
+  const send = prefs.autoSendEndingText || "发送";
+  const clear = prefs.voiceCommandClearText || "清除";
+  const cancel = prefs.voiceCommandCancelText || "取消";
+  return `口播「${send}」发送；「${clear}」清空输入；「${cancel}」结束执行`;
+}
 
 /** 双栏右侧主会话：输入框底栏在截屏按钮旁选择目标仓库 */
 export interface DualPaneComposerRepositoryPickerProps {
@@ -938,35 +921,51 @@ function ComposerInner({
   isSessionBusyRef.current = isSessionBusy;
   const onCancelRef = useRef(_onCancel);
   onCancelRef.current = _onCancel;
-
-  const speechStreamAnchorRef = useRef<ReturnType<typeof createComposerSpeechStreamAnchor> | null>(
-    null,
-  );
-  /** 引擎 cumulative 转写 baseline：每次发送后推进，避免连续听写重复带上已发内容。 */
-  const speechEngineTranscriptBaselineRef = useRef("");
-  const speechEngineTranscriptBaselineRollbackRef = useRef<string | null>(null);
-  const speechBaselinePreparedForSendRef = useRef(false);
-  const lastRawSpeechTranscriptRef = useRef("");
-  const speechLastSentPlainRef = useRef("");
-  const speechIdleAutoSendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const scheduleSpeechIdleAutoSendRef = useRef<() => void>(() => undefined);
-  const triggerSpeechAutoSendRef = useRef<() => void>(() => undefined);
-  const speechPolishSeqRef = useRef(0);
-  const [speechPolishing, setSpeechPolishing] = useState(false);
-  const speechPolishProjectPath =
-    gitRepositoryPath?.trim() || session.repositoryPath?.trim() || "";
-  const suffixAutoSendFiredRef = useRef(false);
-  const [speechKeepAliveDuringBusy, setSpeechKeepAliveDuringBusy] = useState(false);
-  const speechKeepAliveDuringBusyRef = useRef(false);
-  speechKeepAliveDuringBusyRef.current = speechKeepAliveDuringBusy;
-
-  const isAutoSendSpeechMode = useCallback(
-    (mode: ComposerSpeechSendMode) =>
-      mode === "silenceAutoSend" || mode === "endingWordAutoSend",
-    [],
-  );
+  const handleSendRef = useRef<(plain?: string) => void | Promise<void>>(() => undefined);
 
   const { prefs: speechPrefs, update: updateSpeechPrefs } = useComposerSpeechPreferences();
+  const speechPolishProjectPath =
+    gitRepositoryPath?.trim() || session.repositoryPath?.trim() || "";
+
+  const clearComposerInputForSpeech = useCallback(() => {
+    debouncedPromptSyncRef.current.cancel();
+    lastEditorPlainRef.current = "";
+    cursorRef.current = 0;
+    ignoreNextContentSyncRef.current = true;
+    canSendComposerRef.current = false;
+    setCanSendComposer(false);
+    setTrigger({ mode: null, query: "", rect: null });
+    postSendEscUndoRef.current = null;
+    flushSync(() => {
+      reset();
+      setImages([]);
+    });
+    scheduleComposerSetContent("");
+    void clearPromptContextSessionKey(draftBucketKey);
+  }, [draftBucketKey, reset, scheduleComposerSetContent, setImages]);
+
+  const {
+    speechDictation,
+    speechPolishing,
+    speechKeepAliveDuringBusy,
+    finalizeTranscriptBaselineAfterSend,
+    rollbackTranscriptBaselineOnSendFailure,
+    onComposerInputClearedForSend,
+    resetStreamAnchor,
+    clearSpeechIdleAutoSendTimer,
+  } = useComposerSpeechPipeline({
+    sessionId: session.id,
+    isSessionBusy,
+    speechPrefs,
+    speechPolishProjectPath,
+    surfaceRef: plainSurfaceRef,
+    clearComposerInput: clearComposerInputForSpeech,
+    onAutoSend: (plain) => {
+      void handleSendRef.current(plain);
+    },
+    onCancelSession: () => onCancelRef.current(),
+  });
+
   const [sherpaSpeechCaps, setSherpaSpeechCaps] = useState<ComposerSherpaSpeechCapabilities | null>(
     null,
   );
@@ -1014,8 +1013,6 @@ function ComposerInner({
       unlisten?.();
     };
   }, []);
-  const speechPrefsRef = useRef(speechPrefs);
-  speechPrefsRef.current = speechPrefs;
   const [speechMenuOpen, setSpeechMenuOpen] = useState(false);
   const [draftAutoSendEndingText, setDraftAutoSendEndingText] = useState(
     speechPrefs.autoSendEndingText,
@@ -1047,348 +1044,6 @@ function ComposerInner({
     speechPrefs.voiceCommandClearText,
     speechPrefs.silenceAutoSendIdleMs,
   ]);
-
-  const clearSpeechIdleAutoSendTimer = useCallback(() => {
-    if (speechIdleAutoSendTimerRef.current != null) {
-      clearTimeout(speechIdleAutoSendTimerRef.current);
-      speechIdleAutoSendTimerRef.current = null;
-    }
-  }, []);
-
-  useEffect(() => () => clearSpeechIdleAutoSendTimer(), [clearSpeechIdleAutoSendTimer]);
-
-  const applySpeechUtteranceToComposer = useCallback(
-    (spokenText: string, shouldAutoSend: boolean) => {
-      const surface = plainSurfaceRef.current;
-      if (!surface) return;
-
-      const { plain, cursor } = resolveComposerSpeechDisplayText(spokenText);
-      const lastSent = speechLastSentPlainRef.current;
-      const sentCmp = stripSpeechCompareNoise(lastSent);
-      const plainCmp = stripSpeechCompareNoise(plain);
-      if (plain) {
-        if (sentCmp && plainCmp === sentCmp && !shouldAutoSend) {
-          return;
-        }
-        speechStreamAnchorRef.current = createComposerSpeechStreamAnchor("", 0);
-        surface.setPlainAndCursor(plain, cursor);
-        if (lastSent && sentCmp && !plainCmp.startsWith(sentCmp)) {
-          speechLastSentPlainRef.current = "";
-        }
-      } else if (!shouldAutoSend) {
-        return;
-      }
-
-      if (plain && speechPrefsRef.current.sendMode === "silenceAutoSend") {
-        scheduleSpeechIdleAutoSendRef.current();
-      }
-
-      if (shouldAutoSend && !suffixAutoSendFiredRef.current) {
-        suffixAutoSendFiredRef.current = true;
-        clearSpeechIdleAutoSendTimer();
-        queueMicrotask(() => triggerSpeechAutoSendRef.current());
-      }
-    },
-    [clearSpeechIdleAutoSendTimer],
-  );
-
-  const executeVoiceClearComposer = useCallback(() => {
-    speechPolishSeqRef.current += 1;
-    setSpeechPolishing(false);
-    clearSpeechIdleAutoSendTimer();
-    debouncedPromptSyncRef.current.cancel();
-    lastEditorPlainRef.current = "";
-    cursorRef.current = 0;
-    speechStreamAnchorRef.current = createComposerSpeechStreamAnchor("", 0);
-    speechLastSentPlainRef.current = "";
-    suffixAutoSendFiredRef.current = false;
-    const lastRaw = lastRawSpeechTranscriptRef.current.trim();
-    if (lastRaw) {
-      speechEngineTranscriptBaselineRef.current = pickLongerSpeechBaseline(
-        speechEngineTranscriptBaselineRef.current,
-        lastRaw,
-      );
-    }
-    ignoreNextContentSyncRef.current = true;
-    canSendComposerRef.current = false;
-    setCanSendComposer(false);
-    setTrigger({ mode: null, query: "", rect: null });
-    postSendEscUndoRef.current = null;
-    flushSync(() => {
-      reset();
-      setImages([]);
-    });
-    scheduleComposerSetContent("");
-    void clearPromptContextSessionKey(draftBucketKey);
-  }, [
-    clearSpeechIdleAutoSendTimer,
-    draftBucketKey,
-    reset,
-    scheduleComposerSetContent,
-    setImages,
-  ]);
-
-  const executeVoiceCancelTask = useCallback(() => {
-    clearSpeechIdleAutoSendTimer();
-    onCancelRef.current();
-  }, [clearSpeechIdleAutoSendTimer]);
-
-  const resolveSpeechVoiceCommand = useCallback(
-    (
-      delta: string,
-      rawTranscriptFallback?: string,
-    ): {
-      spokenText: string;
-      shouldAutoSend: boolean;
-      voiceAction: ComposerSpeechVoiceCommandAction | null;
-    } => {
-      const prefs = speechPrefsRef.current;
-      const resolve = (utterance: string) => {
-        if (prefs.voiceCommandsEnabled) {
-          const commands = buildComposerSpeechVoiceCommands(prefs);
-          const split = splitUtteranceAtVoiceCommand(utterance, commands);
-          return {
-            spokenText: split.utterance,
-            shouldAutoSend: split.action === "send",
-            voiceAction: split.action,
-          };
-        }
-        if (prefs.sendMode === "endingWordAutoSend") {
-          const split = splitUtteranceAtAutoSendEnding(utterance, prefs.autoSendEndingText);
-          return {
-            spokenText: split.utterance,
-            shouldAutoSend: split.shouldAutoSend,
-            voiceAction: null,
-          };
-        }
-        return { spokenText: utterance, shouldAutoSend: false, voiceAction: null };
-      };
-
-      const primary = resolve(delta);
-      if (primary.voiceAction || !rawTranscriptFallback?.trim()) {
-        return primary;
-      }
-
-      const fallback = resolve(rawTranscriptFallback);
-      if (
-        fallback.voiceAction === "clear" ||
-        fallback.voiceAction === "cancel" ||
-        (fallback.voiceAction === "send" && fallback.shouldAutoSend)
-      ) {
-        return fallback;
-      }
-      return primary;
-    },
-    [],
-  );
-
-  const handleSpeechTranscriptUpdate = useCallback(
-    ({ text, isFinal }: { text: string; isFinal: boolean }) => {
-      lastRawSpeechTranscriptRef.current = text;
-      const delta = resolveComposerSpeechTranscriptDelta({
-        engine: speechDictationRef.current.engine,
-        baseline: speechEngineTranscriptBaselineRef.current,
-        rawTranscript: text,
-        lastSentPlain: speechLastSentPlainRef.current,
-      });
-
-      const { spokenText, shouldAutoSend, voiceAction } = resolveSpeechVoiceCommand(
-        delta,
-        isFinal ? text : undefined,
-      );
-
-      if (voiceAction === "clear") {
-        executeVoiceClearComposer();
-        return;
-      }
-      if (voiceAction === "cancel") {
-        executeVoiceCancelTask();
-        return;
-      }
-
-      if (!spokenText.trim() && !shouldAutoSend) {
-        return;
-      }
-
-      const polishEnabled = speechPrefsRef.current.speechPolishEnabled;
-      if (polishEnabled && !isFinal) {
-        return;
-      }
-
-      if (!polishEnabled) {
-        applySpeechUtteranceToComposer(spokenText, shouldAutoSend);
-        return;
-      }
-
-      const seq = ++speechPolishSeqRef.current;
-      setSpeechPolishing(true);
-      void polishComposerSpeechTranscript(speechPolishProjectPath, spokenText)
-        .then((polished) => {
-          if (seq !== speechPolishSeqRef.current) return;
-          applySpeechUtteranceToComposer(polished, shouldAutoSend);
-        })
-        .finally(() => {
-          if (seq === speechPolishSeqRef.current) {
-            setSpeechPolishing(false);
-          }
-        });
-    },
-    [
-      applySpeechUtteranceToComposer,
-      executeVoiceCancelTask,
-      executeVoiceClearComposer,
-      resolveSpeechVoiceCommand,
-      speechPolishProjectPath,
-    ],
-  );
-
-  const handleSpeechSessionEnd = useCallback(() => {
-    speechStreamAnchorRef.current = null;
-    speechEngineTranscriptBaselineRef.current = "";
-    speechEngineTranscriptBaselineRollbackRef.current = null;
-    speechBaselinePreparedForSendRef.current = false;
-    lastRawSpeechTranscriptRef.current = "";
-    speechLastSentPlainRef.current = "";
-  }, []);
-
-  const speechDictation = useComposerSpeechDictation({
-    enabled: !isSessionBusy || speechKeepAliveDuringBusy,
-    retainSessionWhenDisabled: () =>
-      speechKeepAliveDuringBusyRef.current &&
-      isAutoSendSpeechMode(speechPrefsRef.current.sendMode),
-    speechEngineMode: speechPrefs.speechEngineMode,
-    senseVoiceLang: speechPrefs.senseVoiceLang,
-    onTranscriptUpdate: handleSpeechTranscriptUpdate,
-    onSessionEnd: handleSpeechSessionEnd,
-    onError: () => {},
-  });
-
-  const speechDictationRef = useRef(speechDictation);
-  speechDictationRef.current = speechDictation;
-
-  const prepareSpeechTranscriptBaselineForSend = useCallback((sentPlain?: string) => {
-    const lastRaw = lastRawSpeechTranscriptRef.current.trim();
-    const sent = sentPlain?.trim() ?? "";
-    if (!lastRaw && !sent) {
-      return;
-    }
-    const tracking =
-      speechDictationRef.current.listening ||
-      speechDictationRef.current.transcribing ||
-      speechKeepAliveDuringBusyRef.current;
-    if (!tracking) {
-      return;
-    }
-    speechEngineTranscriptBaselineRollbackRef.current = speechEngineTranscriptBaselineRef.current;
-    speechEngineTranscriptBaselineRef.current = commitComposerSpeechTranscriptBaselineForSend(
-      speechEngineTranscriptBaselineRef.current,
-      lastRaw,
-      sent,
-    );
-    if (sent) {
-      speechLastSentPlainRef.current = sent;
-    }
-    speechBaselinePreparedForSendRef.current = true;
-  }, []);
-
-  const triggerComposerSpeechAutoSend = useCallback(() => {
-    const surface = plainSurfaceRef.current;
-    if (!surface) return;
-    const rawPlain = surface.getPlain().trim();
-    if (!rawPlain) return;
-    const stripped = stripComposerSpeechDeltaOverlap(
-      rawPlain,
-      speechLastSentPlainRef.current,
-    );
-    const plain = resolveComposerSpeechDisplayText(stripped).plain;
-    if (!plain) return;
-    if (plain !== rawPlain) {
-      speechStreamAnchorRef.current = createComposerSpeechStreamAnchor("", 0);
-      surface.setPlainAndCursor(plain, plain.length);
-    }
-    prepareSpeechTranscriptBaselineForSend(plain);
-    // 停顿/结束词自动发送：保持录音，仅用户点击停止才结束听写，便于连续多轮触发。
-    speechStreamAnchorRef.current = createComposerSpeechStreamAnchor("", 0);
-    suffixAutoSendFiredRef.current = false;
-    void handleSendRef.current(plain);
-  }, [prepareSpeechTranscriptBaselineForSend]);
-
-  triggerSpeechAutoSendRef.current = triggerComposerSpeechAutoSend;
-
-  const finalizeSpeechTranscriptBaselineAfterSend = useCallback(() => {
-    speechEngineTranscriptBaselineRollbackRef.current = null;
-  }, []);
-
-  const rollbackSpeechTranscriptBaselineOnSendFailure = useCallback(() => {
-    if (speechEngineTranscriptBaselineRollbackRef.current == null) {
-      return;
-    }
-    speechEngineTranscriptBaselineRef.current = speechEngineTranscriptBaselineRollbackRef.current;
-    speechEngineTranscriptBaselineRollbackRef.current = null;
-    speechBaselinePreparedForSendRef.current = false;
-    speechLastSentPlainRef.current = "";
-  }, []);
-
-  const scheduleSpeechIdleAutoSend = useCallback(() => {
-    if (speechPrefsRef.current.sendMode !== "silenceAutoSend") return;
-    clearSpeechIdleAutoSendTimer();
-    speechIdleAutoSendTimerRef.current = setTimeout(() => {
-      speechIdleAutoSendTimerRef.current = null;
-      if (speechPrefsRef.current.sendMode !== "silenceAutoSend") return;
-      triggerComposerSpeechAutoSend();
-    }, speechPrefsRef.current.silenceAutoSendIdleMs);
-  }, [clearSpeechIdleAutoSendTimer, triggerComposerSpeechAutoSend]);
-
-  scheduleSpeechIdleAutoSendRef.current = scheduleSpeechIdleAutoSend;
-
-  useEffect(() => {
-    if (speechPrefs.sendMode === "manual") {
-      clearSpeechIdleAutoSendTimer();
-    }
-  }, [clearSpeechIdleAutoSendTimer, speechPrefs.sendMode]);
-
-  const speechListeningPrevRef = useRef(false);
-  useEffect(() => {
-    if (speechDictation.listening && !speechListeningPrevRef.current) {
-      speechStreamAnchorRef.current = null;
-      speechEngineTranscriptBaselineRef.current = "";
-      speechEngineTranscriptBaselineRollbackRef.current = null;
-      speechBaselinePreparedForSendRef.current = false;
-      lastRawSpeechTranscriptRef.current = "";
-      speechLastSentPlainRef.current = "";
-      suffixAutoSendFiredRef.current = false;
-      clearSpeechIdleAutoSendTimer();
-      if (isAutoSendSpeechMode(speechPrefsRef.current.sendMode)) {
-        setSpeechKeepAliveDuringBusy(true);
-      }
-    }
-    if (
-      !speechDictation.listening &&
-      !speechDictation.transcribing &&
-      speechListeningPrevRef.current
-    ) {
-      setSpeechKeepAliveDuringBusy(false);
-    }
-    speechListeningPrevRef.current = speechDictation.listening;
-  }, [
-    clearSpeechIdleAutoSendTimer,
-    isAutoSendSpeechMode,
-    speechDictation.listening,
-    speechDictation.transcribing,
-  ]);
-
-  useEffect(() => {
-    speechStreamAnchorRef.current = null;
-    speechEngineTranscriptBaselineRef.current = "";
-    speechEngineTranscriptBaselineRollbackRef.current = null;
-    speechBaselinePreparedForSendRef.current = false;
-    lastRawSpeechTranscriptRef.current = "";
-    speechLastSentPlainRef.current = "";
-    speechDictation.stop();
-    suffixAutoSendFiredRef.current = false;
-    setSpeechKeepAliveDuringBusy(false);
-    clearSpeechIdleAutoSendTimer();
-  }, [session.id, speechDictation.stop, clearSpeechIdleAutoSendTimer]);
 
   const handleDownloadSherpaModels = useCallback(() => {
     sherpaDownloadBlockedRef.current = false;
@@ -1610,14 +1265,14 @@ function ComposerInner({
           opts?.fallbackPathsFromText,
         );
         if (opts?.rollbackSpeechBaseline) {
-          rollbackSpeechTranscriptBaselineOnSendFailure();
+          rollbackTranscriptBaselineOnSendFailure();
         }
         const display = promptToDisplayPlain(entryPrompt);
         ignoreNextContentSyncRef.current = true;
         skipContentSyncRemainingRef.current = 3;
         lastEditorPlainRef.current = display;
         cursorRef.current = promptLength(entryPrompt);
-        speechStreamAnchorRef.current = null;
+        resetStreamAnchor();
         flushSync(() => {
           set(entryPrompt, promptLength(entryPrompt));
           setImages(dedupeComposerImages(hydrated));
@@ -1636,7 +1291,7 @@ function ComposerInner({
         });
       })();
     },
-    [set, setImages, contextAdd, rollbackSpeechTranscriptBaselineOnSendFailure, scheduleComposerSetContent],
+    [set, setImages, contextAdd, rollbackTranscriptBaselineOnSendFailure, resetStreamAnchor, scheduleComposerSetContent],
   );
 
   useEffect(() => {
@@ -1876,8 +1531,7 @@ function ComposerInner({
 
       /** 先清空输入区，再 await 构建 outbound（图片落盘等），避免主线程长时间被占导致「点了没反应」 */
       const clearComposerSurfaceSync = (sentPlain?: string) => {
-        speechPolishSeqRef.current += 1;
-        setSpeechPolishing(false);
+        onComposerInputClearedForSend(sentPlain);
         debouncedPromptSyncRef.current.cancel();
         canSendComposerRef.current = false;
         setCanSendComposer(false);
@@ -1885,12 +1539,6 @@ function ComposerInner({
         ignoreNextContentSyncRef.current = true;
         lastEditorPlainRef.current = "";
         cursorRef.current = 0;
-        if (!speechBaselinePreparedForSendRef.current) {
-          prepareSpeechTranscriptBaselineForSend(sentPlain);
-        }
-        speechBaselinePreparedForSendRef.current = false;
-        speechStreamAnchorRef.current = createComposerSpeechStreamAnchor("", 0);
-        suffixAutoSendFiredRef.current = false;
         flushSync(() => {
           reset();
           setImages([]);
@@ -1958,7 +1606,7 @@ function ComposerInner({
           });
           recordMissionMessage(logicalSnap);
           postSendEscUndoRef.current = rollbackDraft;
-          finalizeSpeechTranscriptBaselineAfterSend();
+          finalizeTranscriptBaselineAfterSend();
           void onDispatchExecutionEnvironment({
             prompt: logicalSnap,
             userBubblePrompt,
@@ -2003,7 +1651,7 @@ function ComposerInner({
           });
           recordMissionMessage(logicalSnap);
           postSendEscUndoRef.current = rollbackDraft;
-          finalizeSpeechTranscriptBaselineAfterSend();
+          finalizeTranscriptBaselineAfterSend();
           onExecute(
             session.id,
             dispatchPromptText,
@@ -2044,7 +1692,7 @@ function ComposerInner({
         });
         recordMissionMessage(logicalSnap);
         postSendEscUndoRef.current = rollbackDraft;
-        finalizeSpeechTranscriptBaselineAfterSend();
+        finalizeTranscriptBaselineAfterSend();
         return;
       }
 
@@ -2123,7 +1771,7 @@ function ComposerInner({
         recordMissionMessage(logicalSnap);
         lastSentDraftRef.current = null;
         postSendEscUndoRef.current = rollbackDraft;
-        finalizeSpeechTranscriptBaselineAfterSend();
+        finalizeTranscriptBaselineAfterSend();
         void onDispatchExecutionEnvironment({
           prompt: logicalSnap,
           userBubblePrompt,
@@ -2225,7 +1873,7 @@ function ComposerInner({
           recordMissionMessage(logicalSnap);
           lastSentDraftRef.current = null;
           postSendEscUndoRef.current = rollbackDraft;
-          finalizeSpeechTranscriptBaselineAfterSend();
+          finalizeTranscriptBaselineAfterSend();
           return;
         }
       }
@@ -2243,7 +1891,7 @@ function ComposerInner({
       recordMissionMessage(logicalSnap);
       lastSentDraftRef.current = null;
       postSendEscUndoRef.current = rollbackDraft;
-      finalizeSpeechTranscriptBaselineAfterSend();
+      finalizeTranscriptBaselineAfterSend();
       onExecute(session.id, dispatchPromptText, consumePending, dispatchTargetForExecute, executeOptions);
       } finally {
         composerSendInFlightRef.current = false;
@@ -2274,12 +1922,11 @@ function ComposerInner({
       draftBucketKey,
       recordMissionMessage,
       clearSpeechIdleAutoSendTimer,
-      prepareSpeechTranscriptBaselineForSend,
-      finalizeSpeechTranscriptBaselineAfterSend,
+      onComposerInputClearedForSend,
+      finalizeTranscriptBaselineAfterSend,
     ],
   );
 
-  const handleSendRef = useRef(handleSend);
   handleSendRef.current = handleSend;
 
   const handleKeyDown = useCallback(
