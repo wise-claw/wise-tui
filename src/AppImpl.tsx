@@ -117,6 +117,7 @@ import { cancelClaudeInvocation, listClaudeSubagents } from "./services/claude";
 import {
   releaseClaudeHostProcessesForProjectScope,
   releaseClaudeHostProcessesForRepositoryScope,
+  type ReleaseWiseTabSessionContext,
 } from "./services/releaseClaudeHostProcessesForWorkspaceScope";
 import {
   dispatchAtMentionPromptToRepos,
@@ -2152,7 +2153,7 @@ export default function App() {
     const releaseOpts = {
       sessions: sessionsLatestRef.current,
       excludeSessionId: params.newSessionId,
-      releaseWiseTabSession: (sessionId, ctx) =>
+      releaseWiseTabSession: (sessionId: string, ctx?: ReleaseWiseTabSessionContext) =>
         releaseSessionHostProcessRef.current(sessionId, ctx),
       onCancelTabSession: (sessionId: string) => cancelSession(sessionId),
     };
@@ -2190,7 +2191,7 @@ export default function App() {
   }
 
   /** 手动「新建会话」：始终创建新标签并绑定为仓库主会话。 */
-  async function handleManualNewRepositorySession(repository: Repository): Promise<string> {
+  async function handleManualNewRepositorySession(repository: Repository): Promise<void> {
     startTransition(() => {
       viewMode.enter({ kind: "chat" });
       setActiveRepositoryWithOwner(repository.id);
@@ -2205,11 +2206,10 @@ export default function App() {
       newSessionId: id,
       priorActiveId,
     });
-    return id;
   }
 
   /** 手动为 Workspace 新建项目主会话标签。 */
-  async function handleManualNewProjectSession(project: ProjectItem): Promise<string | null> {
+  async function handleManualNewProjectSession(project: ProjectItem): Promise<void> {
     const byId = new Map(repositories.map((repo) => [repo.id, repo]));
     const repos = project.repositoryIds
       .map((id) => byId.get(id))
@@ -2217,7 +2217,7 @@ export default function App() {
     const anchor = resolveProjectMainSessionAnchor(project, repositories);
     if (!anchor.path) {
       message.warning("该 Workspace 缺少根目录，请先配置 rootPath");
-      return null;
+      return;
     }
     const isStandaloneTrellisProject = project.id.startsWith("repo:");
     startTransition(() => {
@@ -2244,7 +2244,6 @@ export default function App() {
       newSessionId: id,
       priorActiveId,
     });
-    return id;
   }
 
   const handleSidebarRepositorySelect = useCallback(

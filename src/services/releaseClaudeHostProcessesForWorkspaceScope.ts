@@ -201,7 +201,7 @@ export async function releaseClaudeHostProcessesForRepositoryScope(params: {
   repositoryPath: string;
   sessions: ClaudeSession[];
   excludeSessionId?: string | null;
-  releaseWiseTabSession?: (sessionId: string) => Promise<void>;
+  releaseWiseTabSession?: ReleaseClaudeHostProcessesForWorkspaceScopeParams["releaseWiseTabSession"];
   onCancelTabSession?: (sessionId: string) => void;
 }): Promise<ReadonlySet<string>> {
   const excludeSessionIds = params.excludeSessionId?.trim()
@@ -221,7 +221,7 @@ export async function releaseClaudeHostProcessesForProjectScope(params: {
   repositories: Repository[];
   sessions: ClaudeSession[];
   excludeSessionId?: string | null;
-  releaseWiseTabSession?: (sessionId: string) => Promise<void>;
+  releaseWiseTabSession?: ReleaseClaudeHostProcessesForWorkspaceScopeParams["releaseWiseTabSession"];
   onCancelTabSession?: (sessionId: string) => void;
 }): Promise<ReadonlySet<string>> {
   const excludeSessionIds = params.excludeSessionId?.trim()
