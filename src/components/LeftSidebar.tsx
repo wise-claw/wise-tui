@@ -53,6 +53,7 @@ import { LeftSidebarTopbar } from "./LeftSidebar/LeftSidebarTopbar";
 import { LeftSidebarHubQuickEntries } from "./LeftSidebar/LeftSidebarHubQuickEntries";
 import { ProjectRepositoryList } from "./LeftSidebar/ProjectRepositoryList";
 import { SidebarWorkspaceTodoAddModal } from "./LeftSidebar/SidebarWorkspaceTodoAddModal";
+import { SidebarGlobalWorkspaceTodoAddModal } from "./LeftSidebar/SidebarGlobalWorkspaceTodoAddModal";
 import { GitPanelWorkspaceSelector } from "./GitPanel/GitPanelWorkspaceSelector";
 import type { GitPanelOpenFileOptions } from "./GitPanel/types";
 import {
@@ -304,6 +305,7 @@ export function LeftSidebar({
   );
 
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
+  const [globalWorkspaceTodoAddOpen, setGlobalWorkspaceTodoAddOpen] = useState(false);
   const [createProjectRootPath, setCreateProjectRootPath] = useState("");
   const [createProjectSubmitting, setCreateProjectSubmitting] = useState(false);
   const [workspaceBootstrapSelection, setWorkspaceBootstrapSelection] = useState(
@@ -1330,6 +1332,16 @@ export function LeftSidebar({
         }
       >
         <SidebarWorkspaceTodoAddModal enabled={workspaceTodosEnabled} />
+        <SidebarGlobalWorkspaceTodoAddModal
+          enabled={workspaceTodosEnabled}
+          open={globalWorkspaceTodoAddOpen}
+          onClose={() => setGlobalWorkspaceTodoAddOpen(false)}
+          projects={projects}
+          repositoriesById={projectRepositoryState.repositoriesById}
+          floatingRepositories={floatingRepositories}
+          activeProjectId={activeProjectId}
+          activeRepositoryId={activeRepositoryId}
+        />
         <ProjectRepositoryList
           projects={projects}
           repositoriesById={projectRepositoryState.repositoriesById}
@@ -1443,6 +1455,9 @@ export function LeftSidebar({
           executableTasksByProjectId={executableTasksByProjectId}
           executableTasksByRepoId={executableTasksByRepoId}
           workspaceTodosEnabled={workspaceTodosEnabled}
+          onOpenGlobalWorkspaceTodoAdd={
+            workspaceTodosEnabled ? () => setGlobalWorkspaceTodoAddOpen(true) : undefined
+          }
           onOpenScheduledTasksForRepository={openScheduledTasksForRepository}
           onOpenScheduledTasksForProject={openScheduledTasksForProject}
           onOpenExecutableTasksForProject={openExecutableTasksForProject}

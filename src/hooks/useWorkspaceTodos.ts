@@ -5,7 +5,7 @@ import type {
   WorkspaceTodoItem,
   WorkspaceTodoScope,
 } from "../types/workspaceTodos";
-import { dispatchWorkspaceTodosChanged } from "../constants/workspaceTodosEvents";
+import { dispatchWorkspaceTodosChanged, WISE_WORKSPACE_TODOS_CHANGED } from "../constants/workspaceTodosEvents";
 import { reconcileWorkspaceTodoDisplayItems } from "../utils/workspaceTodoDisplayItems";
 import {
   loadProjectWorkspaceTodos,
@@ -18,6 +18,17 @@ const PERSIST_DEBOUNCE_MS = 480;
 
 function persistErrorText(error: unknown): string {
   return error instanceof Error ? error.message : "待办事项保存失败";
+}
+
+export function shouldRefreshWorkspaceTodosOnChanged(
+  detail: { projectId?: string | null; repositoryId?: number | null } | undefined,
+  projectId: string | null,
+  repositoryId: number | null,
+): boolean {
+  if (!detail) return false;
+  const pid = projectId?.trim() ?? null;
+  if (detail.projectId != null && detail.projectId === pid) return true;
+  return detail.repositoryId != null && repositoryId != null && detail.repositoryId === repositoryId;
 }
 
 export interface UseWorkspaceTodosInput {
@@ -42,11 +53,16 @@ export function useWorkspaceTodos({
     project: ReturnType<typeof setTimeout> | null;
     repository: ReturnType<typeof setTimeout> | null;
   }>({ project: null, repository: null });
+  const pendingPersistItemsRef = useRef<{
+    project: WorkspaceTodoItem[] | null;
+    repository: WorkspaceTodoItem[] | null;
+  }>({ project: null, repository: null });
 
   projectItemsRef.current = projectItems;
   repositoryItemsRef.current = repositoryItems;
 
   const loadGenerationRef = useRef(0);
+  const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const refresh = useCallback(async () => {
     if (!enabled) {
@@ -85,14 +101,23 @@ export function useWorkspaceTodos({
   }, [refresh]);
 
   useEffect(() => {
-    if (!enabled) return;
-    return () => {
-      const timers = persistTimersRef.current;
-      if (timers.project) clearTimeout(timers.project);
-      if (timers.repository) clearTimeout(timers.repository);
-      persistTimersRef.current = { project: null, repository: null };
+    if (!enabled || typeof window === "undefined") return;
+    const onChanged = (event: Event) => {
+      const detail = (event as CustomEvent<{ projectId?: string | null; repositoryId?: number | null }>).detail;
+      if (!shouldRefreshWorkspaceTodosOnChanged(detail, projectId, repositoryId)) return;
+      if (refreshDebounceRef.current) clearTimeout(refreshDebounceRef.current);
+      refreshDebounceRef.current = setTimeout(() => {
+        refreshDebounceRef.current = null;
+        void refresh();
+      }, 200);
     };
-  }, [enabled]);
+    window.addEventListener(WISE_WORKSPACE_TODOS_CHANGED, onChanged);
+    return () => {
+      if (refreshDebounceRef.current) clearTimeout(refreshDebounceRef.current);
+      refreshDebounceRef.current = null;
+      window.removeEventListener(WISE_WORKSPACE_TODOS_CHANGED, onChanged);
+    };
+  }, [enabled, projectId, repositoryId, refresh]);
 
   const displayItemsPrevRef = useRef<WorkspaceTodoDisplayItem[]>([]);
 
@@ -108,12 +133,17 @@ export function useWorkspaceTodos({
     return next;
   }, [projectId, repositoryId, projectItems, repositoryItems]);
 
+  const clearPendingPersist = useCallback((scope: WorkspaceTodoScope) => {
+    pendingPersistItemsRef.current[scope] = null;
+  }, []);
+
   const flushPersist = useCallback(
     async (scope: WorkspaceTodoScope, items: WorkspaceTodoItem[]) => {
       const timers = persistTimersRef.current;
       if (scope === "project") {
         if (timers.project) clearTimeout(timers.project);
         timers.project = null;
+        clearPendingPersist("project");
         const pid = projectId?.trim();
         if (!pid) return false;
         try {
@@ -126,6 +156,7 @@ export function useWorkspaceTodos({
       }
       if (timers.repository) clearTimeout(timers.repository);
       timers.repository = null;
+      clearPendingPersist("repository");
       if (repositoryId == null) return false;
       try {
         await saveRepositoryWorkspaceTodos(repositoryId, items);
@@ -135,12 +166,13 @@ export function useWorkspaceTodos({
         return false;
       }
     },
-    [projectId, repositoryId],
+    [clearPendingPersist, projectId, repositoryId],
   );
 
   const schedulePersist = useCallback(
     (scope: WorkspaceTodoScope, items: WorkspaceTodoItem[]) => {
       const timers = persistTimersRef.current;
+      pendingPersistItemsRef.current[scope] = items;
       const run = () => {
         void flushPersist(scope, items);
       };
@@ -160,6 +192,28 @@ export function useWorkspaceTodos({
     },
     [flushPersist],
   );
+
+  useEffect(() => {
+    if (!enabled) return;
+    return () => {
+      const timers = persistTimersRef.current;
+      const pending = pendingPersistItemsRef.current;
+      if (timers.project) {
+        clearTimeout(timers.project);
+        timers.project = null;
+        if (pending.project) {
+          void flushPersist("project", pending.project);
+        }
+      }
+      if (timers.repository) {
+        clearTimeout(timers.repository);
+        timers.repository = null;
+        if (pending.repository) {
+          void flushPersist("repository", pending.repository);
+        }
+      }
+    };
+  }, [enabled, flushPersist]);
 
   const setItemsForScope = useCallback(
     (scope: WorkspaceTodoScope, items: WorkspaceTodoItem[]) => {

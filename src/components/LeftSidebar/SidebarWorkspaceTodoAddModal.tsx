@@ -1,15 +1,11 @@
-import { Input, Modal, Segmented, Typography } from "antd";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { Input, message, Modal, Segmented, Typography } from "antd";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   WISE_WORKSPACE_TODOS_OPEN,
   type WorkspaceTodosOpenDetail,
 } from "../../constants/workspaceTodosEvents";
-import { useWorkspaceTodos } from "../../hooks/useWorkspaceTodos";
-import {
-  createWorkspaceTodoItem,
-  type WorkspaceTodoItem,
-  type WorkspaceTodoScope,
-} from "../../types/workspaceTodos";
+import { appendWorkspaceTodoItem } from "../../services/workspaceTodosStore";
+import type { WorkspaceTodoScope } from "../../types/workspaceTodos";
 
 function modalTitle(projectId: string | null, repositoryId: number | null): string {
   if (repositoryId != null && projectId?.trim()) return "添加待办事项";
@@ -28,18 +24,15 @@ export function SidebarWorkspaceTodoAddModal({ enabled = true }: { enabled?: boo
   const [draftTitle, setDraftTitle] = useState("");
   const [newScope, setNewScope] = useState<WorkspaceTodoScope>("repository");
   const [submitting, setSubmitting] = useState(false);
+  const submittingRef = useRef(false);
 
   const projectId = session?.projectId ?? null;
   const repositoryId = session?.repositoryId ?? null;
-  const todos = useWorkspaceTodos({
-    projectId,
-    repositoryId,
-    enabled: enabled && session != null,
-  });
 
   const allowProjectScope = Boolean(projectId?.trim());
   const allowRepositoryScope = repositoryId != null;
   const defaultNewScope: WorkspaceTodoScope = allowRepositoryScope ? "repository" : "project";
+  const hasScope = allowProjectScope || allowRepositoryScope;
 
   const scopeOptions = useMemo(
     () =>
@@ -62,6 +55,7 @@ export function SidebarWorkspaceTodoAddModal({ enabled = true }: { enabled?: boo
   const close = useCallback(() => {
     setSession(null);
     setDraftTitle("");
+    submittingRef.current = false;
     setSubmitting(false);
   }, []);
 
@@ -80,35 +74,43 @@ export function SidebarWorkspaceTodoAddModal({ enabled = true }: { enabled?: boo
     if (!pendingOpen) return;
     setSession(pendingOpen);
     setDraftTitle("");
+    submittingRef.current = false;
     setSubmitting(false);
     setPendingOpen(null);
   }, [pendingOpen]);
 
-  const getScopeItems = useCallback(
-    (scope: WorkspaceTodoScope): WorkspaceTodoItem[] => {
-      if (scope === "project") {
-        return todos.displayItems.filter((row) => row.scope === "project").map(({ scope: _s, ...rest }) => rest);
-      }
-      return todos.displayItems.filter((row) => row.scope === "repository").map(({ scope: _s, ...rest }) => rest);
-    },
-    [todos.displayItems],
-  );
-
   const commit = useCallback(async () => {
     const title = draftTitle.trim();
-    if (!title || !todos.hasScope || submitting) return;
+    if (!title || !hasScope || submittingRef.current) return;
+    submittingRef.current = true;
     setSubmitting(true);
+    close();
     try {
-      const item = createWorkspaceTodoItem(title);
-      todos.setItemsForScope(resolvedScope, [...getScopeItems(resolvedScope), item]);
-      close();
+      if (resolvedScope === "project") {
+        await appendWorkspaceTodoItem({
+          scope: "project",
+          projectId,
+          title,
+        });
+      } else {
+        await appendWorkspaceTodoItem({
+          scope: "repository",
+          repositoryId,
+          title,
+        });
+      }
+      message.success("待办已添加");
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "待办事项保存失败");
     } finally {
+      submittingRef.current = false;
       setSubmitting(false);
     }
-  }, [close, draftTitle, getScopeItems, resolvedScope, submitting, todos]);
+  }, [close, draftTitle, hasScope, projectId, repositoryId, resolvedScope]);
 
-  const open = enabled && session != null && todos.hasScope;
+  const open = enabled && session != null && hasScope;
   const title = session ? modalTitle(projectId, repositoryId) : "添加待办事项";
+  const canSubmit = Boolean(draftTitle.trim() && hasScope);
 
   if (!enabled) return null;
 
@@ -121,44 +123,43 @@ export function SidebarWorkspaceTodoAddModal({ enabled = true }: { enabled?: boo
       okText="添加"
       cancelText="取消"
       confirmLoading={submitting}
-      okButtonProps={{ disabled: !draftTitle.trim() || todos.loading }}
+      okButtonProps={{ disabled: !canSubmit || submitting }}
       destroyOnHidden
       width={400}
       className="app-sidebar-workspace-todo-add-modal"
     >
-      {todos.loading ? (
-        <Typography.Text type="secondary">加载中…</Typography.Text>
-      ) : (
-        <>
-          {scopeOptions.length > 1 ? (
-            <div className="app-sidebar-workspace-todo-add-modal__scope">
-              <Segmented
-                size="small"
-                block
-                value={resolvedScope}
-                options={scopeOptions}
-                onChange={(value) => setNewScope(value as WorkspaceTodoScope)}
-              />
-              <Typography.Text type="secondary" className="app-sidebar-workspace-todo-add-modal__scope-hint">
-                {scopeHint(resolvedScope)}
-              </Typography.Text>
-            </div>
-          ) : (
-            <Typography.Paragraph type="secondary" className="app-sidebar-workspace-todo-add-modal__intro">
+      <>
+        {scopeOptions.length > 1 ? (
+          <div className="app-sidebar-workspace-todo-add-modal__scope">
+            <Segmented
+              size="small"
+              block
+              value={resolvedScope}
+              options={scopeOptions}
+              onChange={(value) => setNewScope(value as WorkspaceTodoScope)}
+            />
+            <Typography.Text type="secondary" className="app-sidebar-workspace-todo-add-modal__scope-hint">
               {scopeHint(resolvedScope)}
-            </Typography.Paragraph>
-          )}
-          <Input
-            placeholder="输入待办标题"
-            value={draftTitle}
-            maxLength={200}
-            showCount
-            autoFocus
-            onChange={(e) => setDraftTitle(e.target.value)}
-            onPressEnter={() => void commit()}
-          />
-        </>
-      )}
+            </Typography.Text>
+          </div>
+        ) : (
+          <Typography.Paragraph type="secondary" className="app-sidebar-workspace-todo-add-modal__intro">
+            {scopeHint(resolvedScope)}
+          </Typography.Paragraph>
+        )}
+        <Input
+          placeholder="输入待办标题"
+          value={draftTitle}
+          maxLength={200}
+          showCount
+          autoFocus
+          onChange={(e) => setDraftTitle(e.target.value)}
+          onPressEnter={(event) => {
+            event.preventDefault();
+            void commit();
+          }}
+        />
+      </>
     </Modal>
   );
 }

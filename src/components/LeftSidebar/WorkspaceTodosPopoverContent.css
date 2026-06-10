@@ -19,7 +19,11 @@
 }
 
 .app-workspace-todos-popover .app-workspace-todos-panel__row {
-  grid-template-columns: 18px minmax(0, 1fr) 20px;
+  grid-template-columns: 18px minmax(0, 1fr) auto;
+}
+
+.app-workspace-todos-popover .app-workspace-todos-panel__row:not(.app-workspace-todos-panel__row--no-scope) {
+  grid-template-columns: 18px minmax(0, 1fr) auto auto;
 }
 
 .app-workspace-todos-popover .app-workspace-todos-panel__list-empty,

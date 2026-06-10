@@ -838,6 +838,42 @@ body {
   font-size: 12px;
 }
 
+.app-sidebar-global-workspace-todo-add-modal__field + .app-sidebar-global-workspace-todo-add-modal__field {
+  margin-top: 12px;
+}
+
+.app-sidebar-global-workspace-todo-add-modal__label {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 12px;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-sidebar-global-workspace-todo-add-modal__hint {
+  display: block;
+  margin-top: 6px;
+  font-size: 12px;
+}
+
+.app-sidebar-global-workspace-todo-add-modal__tree {
+  max-height: min(280px, 42vh);
+  overflow: auto;
+  padding: 4px 6px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 6px;
+  background: var(--ant-color-bg-container);
+}
+
+.app-sidebar-global-workspace-todo-add-modal__tree .ant-tree-treenode {
+  align-items: center;
+}
+
+.app-sidebar-global-workspace-todo-add-modal__tree .ant-tree-node-content-wrapper {
+  min-height: 24px;
+  line-height: 24px;
+  font-size: 12px;
+}
+
 /* ── 左栏顶：快捷键说明 Popover ── */
 
 .app-shortcuts-popover__intro {
@@ -3779,12 +3815,21 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 }
 
 /* 侧栏「更多」：项目行与仓库行共用（略低于 Ant 默认 32px，但比极简模式更易读、易点） */
+.app-sidebar-more-menu-dropdown,
+.app-sidebar-more-menu-scroll-shell {
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+}
+
 .app-sidebar-more-menu-dropdown .ant-dropdown-menu.app-sidebar-more-menu-inner {
   padding: 4px 12px;
   border-radius: 8px;
   box-shadow: var(--ant-box-shadow-secondary);
   min-width: 0;
-  overflow: visible;
+  max-height: min(70vh, 520px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .app-sidebar-more-menu-dropdown .app-sidebar-more-menu-inner .ant-dropdown-menu-item {
@@ -3871,6 +3916,10 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   border-radius: 8px;
   min-width: 0;
   font-size: 12px;
+  max-height: min(60vh, 400px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
 }
 
 .app-sidebar-more-menu-submenu .ant-dropdown-menu-item {

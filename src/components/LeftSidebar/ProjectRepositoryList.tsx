@@ -1,6 +1,6 @@
 import type { MutableRefObject } from "react";
 import { memo, useCallback, useEffect, useMemo, useRef } from "react";
-import { Dropdown, Typography } from "antd";
+import { Typography } from "antd";
 import { DeferredHoverTooltip } from "../shared/DeferredHoverTooltip";
 import { LEFT_SIDEBAR_SCROLLING_CLASS } from "../../constants/leftSidebarScrollPerformance";
 import { useScrollEndClass } from "../../hooks/useScrollEndClass";
@@ -17,6 +17,7 @@ import {
 import { resolveWorkspaceMode, type WorkspaceFocus } from "../../utils/workspaceMode";
 import { parseOpenAppConfigureMenuKey } from "../../utils/openAppScope";
 import { buildProjectMoreMenuItems } from "./sidebarMoreMenuItems";
+import { SidebarMoreMenuDropdown } from "./SidebarMoreMenuDropdown";
 import { openWorkspaceTodosFromSidebarMenu } from "../../utils/openWorkspaceTodosFromSidebar";
 import { workspaceTodosAnchorKey } from "../../utils/workspaceTodosAnchorKey";
 import {
@@ -24,6 +25,7 @@ import {
   MoreIcon,
   PlusIcon,
   ProjectIcon,
+  WorkspaceRemindersIcon,
 } from "./SidebarIcons";
 import {
   FloatingRepositoryRow,
@@ -106,6 +108,8 @@ interface ProjectRepositoryListProps {
   executableTasksByRepoId?: Record<number, number>;
   /** 默认配置关闭待办时隐藏侧栏菜单、徽章与 Popover。 */
   workspaceTodosEnabled?: boolean;
+  /** 工作区标题栏：打开全局添加待办弹窗。 */
+  onOpenGlobalWorkspaceTodoAdd?: () => void;
   onOpenScheduledTasksForRepository?: (repository: Repository) => void;
   onOpenScheduledTasksForProject?: (project: Workspace) => void;
   onOpenExecutableTasksForProject?: (project: Workspace) => void;
@@ -183,6 +187,7 @@ export function ProjectRepositoryList({
   executableTasksByProjectId = {},
   executableTasksByRepoId = {},
   workspaceTodosEnabled = true,
+  onOpenGlobalWorkspaceTodoAdd,
   onOpenScheduledTasksForRepository,
   onOpenScheduledTasksForProject,
   onOpenRepositoryRequirements,
@@ -242,6 +247,17 @@ export function ProjectRepositoryList({
           工作区
         </Typography.Text>
         <div className="app-repository-header-actions">
+          {workspaceTodosEnabled && onOpenGlobalWorkspaceTodoAdd ? (
+            <DeferredHoverTooltip title="添加待办事项">
+              <button
+                className="app-repository-header-btn"
+                aria-label="添加待办事项"
+                onClick={onOpenGlobalWorkspaceTodoAdd}
+              >
+                <WorkspaceRemindersIcon />
+              </button>
+            </DeferredHoverTooltip>
+          ) : null}
           {onAddFloatingRepositoryClick ? (
             <DeferredHoverTooltip title="添加单仓（不绑定工作区）">
               <button
@@ -711,45 +727,41 @@ function ProjectRow({
             projectId={project.id}
             repositoryId={null}
           />
-          <Dropdown
-            rootClassName="app-sidebar-more-menu-dropdown"
-            menu={{
-              className: "app-sidebar-more-menu-inner",
-              items: projectMoreItems,
-              onClick: ({ key, domEvent }) => {
-                domEvent?.preventDefault();
-                domEvent?.stopPropagation();
-                if (key === "add-workspace-todo") {
-                  if (!workspaceTodosEnabled) return;
-                  onProjectSelect(project.id);
-                  openWorkspaceTodosFromSidebarMenu({
-                    projectId: project.id,
-                    repositoryId: null,
-                  });
-                  return;
-                }
-                if (key === "pin") onTogglePinProject(project.id);
-                if (key === "rename") onRenameProject(project);
-                if (key === "open-directory") onOpenProjectInFinder?.(project);
-                if (key === "editor") openProjectInPreferredEditor?.(project);
-                if (key === "add-repository") onAddRepositoryToProject?.(project.id);
-                if (key === "sdd-mode") onConfigureProjectSddMode?.(project);
-                if (key === "new-session") onNewPaneSessionForProject?.(project);
-                if (key === "open-terminal") onOpenProjectInTerminal?.(project);
-                if (key === "scheduled-tasks") onOpenScheduledTasksForProject?.(project);
-                if (key === "requirements" && projectTrellisEnabled) openWorkspaceRequirements();
-                if (key === "executable-tasks" && projectTrellisEnabled) onOpenExecutableTasksForProject?.(project);
-                if (key === "trellis-init") void Promise.resolve(onBootstrapTrellisForProject?.(project));
-                if (key === "reconcile-repos") void Promise.resolve(onReconcileProject?.(project.id, "repos_only"));
-                if (key === "reconcile-repos-graphs") {
-                  void Promise.resolve(onReconcileProject?.(project.id, "repos_and_graphs"));
-                }
-                if (key === "delete") onDeleteProject(project);
-                if (typeof key === "string") {
-                  const openAppId = parseOpenAppConfigureMenuKey(key);
-                  if (openAppId !== undefined) onConfigureProjectOpenApp?.(project, openAppId);
-                }
-              },
+          <SidebarMoreMenuDropdown
+            items={projectMoreItems}
+            onMenuClick={({ key, domEvent }) => {
+              domEvent?.preventDefault();
+              domEvent?.stopPropagation();
+              if (key === "add-workspace-todo") {
+                if (!workspaceTodosEnabled) return;
+                onProjectSelect(project.id);
+                openWorkspaceTodosFromSidebarMenu({
+                  projectId: project.id,
+                  repositoryId: null,
+                });
+                return;
+              }
+              if (key === "pin") onTogglePinProject(project.id);
+              if (key === "rename") onRenameProject(project);
+              if (key === "open-directory") onOpenProjectInFinder?.(project);
+              if (key === "editor") openProjectInPreferredEditor?.(project);
+              if (key === "add-repository") onAddRepositoryToProject?.(project.id);
+              if (key === "sdd-mode") onConfigureProjectSddMode?.(project);
+              if (key === "new-session") onNewPaneSessionForProject?.(project);
+              if (key === "open-terminal") onOpenProjectInTerminal?.(project);
+              if (key === "scheduled-tasks") onOpenScheduledTasksForProject?.(project);
+              if (key === "requirements" && projectTrellisEnabled) openWorkspaceRequirements();
+              if (key === "executable-tasks" && projectTrellisEnabled) onOpenExecutableTasksForProject?.(project);
+              if (key === "trellis-init") void Promise.resolve(onBootstrapTrellisForProject?.(project));
+              if (key === "reconcile-repos") void Promise.resolve(onReconcileProject?.(project.id, "repos_only"));
+              if (key === "reconcile-repos-graphs") {
+                void Promise.resolve(onReconcileProject?.(project.id, "repos_and_graphs"));
+              }
+              if (key === "delete") onDeleteProject(project);
+              if (typeof key === "string") {
+                const openAppId = parseOpenAppConfigureMenuKey(key);
+                if (openAppId !== undefined) onConfigureProjectOpenApp?.(project, openAppId);
+              }
             }}
             trigger={["click"]}
             placement="bottomRight"
@@ -767,7 +779,7 @@ function ProjectRow({
             >
               <MoreIcon />
             </button>
-          </Dropdown>
+          </SidebarMoreMenuDropdown>
         </div>
       </div>
 

@@ -31,4 +31,4 @@ dist-ssr
 *.sw?
 .ace-tool/
 .gitnexus
-.codegraph
+.codegraph/

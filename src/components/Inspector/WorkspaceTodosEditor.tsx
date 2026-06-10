@@ -1,4 +1,4 @@
-import { DeleteOutlined, PlusOutlined } from "@ant-design/icons";
+import { DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
 import { Button, Checkbox, Input, Segmented, Spin, Tag, Typography } from "antd";
 import type { InputRef } from "antd";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -97,13 +97,7 @@ const TodoRow = memo(function TodoRow({
             }}
           />
         ) : (
-          <button
-            type="button"
-            className="app-workspace-todos-panel__title-btn"
-            onClick={() => setEditing(true)}
-          >
-            {item.title}
-          </button>
+          <span className="app-workspace-todos-panel__title-text">{item.title}</span>
         )}
         {item.dueAt != null ? (
           <span className="app-workspace-todos-panel__due">{formatWorkspaceTodoDueLabel(item.dueAt)}</span>
@@ -114,15 +108,28 @@ const TodoRow = memo(function TodoRow({
           {item.scope === "project" ? "工作区" : "仓库"}
         </Tag>
       ) : null}
-      <Button
-        type="text"
-        size="small"
-        className="app-workspace-todos-panel__delete"
-        icon={<DeleteOutlined />}
-        aria-label="删除待办"
-        title="删除"
-        onClick={() => onDelete(item)}
-      />
+      <div className="app-workspace-todos-panel__row-actions">
+        {!editing ? (
+          <Button
+            type="text"
+            size="small"
+            className="app-workspace-todos-panel__edit"
+            icon={<EditOutlined />}
+            aria-label="编辑待办"
+            title="编辑"
+            onClick={() => setEditing(true)}
+          />
+        ) : null}
+        <Button
+          type="text"
+          size="small"
+          className="app-workspace-todos-panel__delete"
+          icon={<DeleteOutlined />}
+          aria-label="删除待办"
+          title="删除"
+          onClick={() => onDelete(item)}
+        />
+      </div>
     </li>
   );
 }, todoRowPropsEqual);

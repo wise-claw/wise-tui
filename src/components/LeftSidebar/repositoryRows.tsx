@@ -1,7 +1,7 @@
 import { memo, useState } from "react";
 import { useWorkspaceTodoIncompleteCount } from "../../hooks/useWorkspaceTodoIncompleteCount";
 import { UserOutlined } from "@ant-design/icons";
-import { App as AntdApp, Dropdown, Popover } from "antd";
+import { App as AntdApp, Popover } from "antd";
 import { DeferredHoverTooltip } from "../shared/DeferredHoverTooltip";
 import { openWorkspaceTodosFromSidebarMenu } from "../../utils/openWorkspaceTodosFromSidebar";
 import { workspaceTodosAnchorKey } from "../../utils/workspaceTodosAnchorKey";
@@ -27,6 +27,7 @@ import {
   buildFloatingRepositoryMoreMenuItems,
   buildProjectRepositoryMoreMenuItems,
 } from "./sidebarMoreMenuItems";
+import { SidebarMoreMenuDropdown } from "./SidebarMoreMenuDropdown";
 import {
   ChatIcon,
   ExecutableTasksIcon,
@@ -629,41 +630,37 @@ function RepositoryRowInner({
             repositoryId={repository.id}
           />
           <RepositorySddStackBadge repository={repository} />
-          <Dropdown
-            rootClassName="app-sidebar-more-menu-dropdown"
-            menu={{
-              className: "app-sidebar-more-menu-inner",
-              items: moreItems,
-              onClick: ({ key }) => {
-                if (key === "add-workspace-todo") {
-                  if (!workspaceTodosEnabled) return;
-                  onRepositorySelect(repository.id);
-                  openWorkspaceTodosFromSidebarMenu({
-                    projectId: project.id,
-                    repositoryId: repository.id,
-                  });
-                  return;
-                }
-                if (key === "finder") onOpenInFinder(repository);
-                if (key === "editor") onOpenRepositoryInEditor(repository);
-                if (key === "open-terminal") onOpenInTerminal?.(repository);
-                if (key === "browser") onOpenRepositoryInBrowser(repository);
-                if (key === "main-owner") onOpenRepositoryMainOwner?.(repository);
-                if (key === "detach") onDetachFromProject(project.id, repository.id);
-                if (key === "sdd-mode") onConfigureSddMode?.(repository);
-                if (key === "run-configure") onConfigureRepositoryMainSessionRun?.(repository);
-                if (key === "run-start") onStartRepositoryRunCommand?.(repository);
-                if (key === "run-stop") onStopRepositoryRunCommand?.(repository);
-                if (key === "run-row-pin") void toggleRepositoryRunCommandRowPinned(repository.id);
-                if (key === "new-session") onNewPaneSession?.(repository);
-                if (key === "scheduled-tasks") onOpenScheduledTasks?.(repository);
-                if (key === "requirements" && workspaceTrellisEnabled) onOpenRequirements?.(repository);
-                if (key === "executable-tasks" && workspaceTrellisEnabled) onOpenExecutableTasks?.(repository);
-                if (typeof key === "string") {
-                  const openAppId = parseOpenAppConfigureMenuKey(key);
-                  if (openAppId !== undefined) onConfigureRepositoryOpenApp?.(repository, openAppId);
-                }
-              },
+          <SidebarMoreMenuDropdown
+            items={moreItems}
+            onMenuClick={({ key }) => {
+              if (key === "add-workspace-todo") {
+                if (!workspaceTodosEnabled) return;
+                onRepositorySelect(repository.id);
+                openWorkspaceTodosFromSidebarMenu({
+                  projectId: project.id,
+                  repositoryId: repository.id,
+                });
+                return;
+              }
+              if (key === "finder") onOpenInFinder(repository);
+              if (key === "editor") onOpenRepositoryInEditor(repository);
+              if (key === "open-terminal") onOpenInTerminal?.(repository);
+              if (key === "browser") onOpenRepositoryInBrowser(repository);
+              if (key === "main-owner") onOpenRepositoryMainOwner?.(repository);
+              if (key === "detach") onDetachFromProject(project.id, repository.id);
+              if (key === "sdd-mode") onConfigureSddMode?.(repository);
+              if (key === "run-configure") onConfigureRepositoryMainSessionRun?.(repository);
+              if (key === "run-start") onStartRepositoryRunCommand?.(repository);
+              if (key === "run-stop") onStopRepositoryRunCommand?.(repository);
+              if (key === "run-row-pin") void toggleRepositoryRunCommandRowPinned(repository.id);
+              if (key === "new-session") onNewPaneSession?.(repository);
+              if (key === "scheduled-tasks") onOpenScheduledTasks?.(repository);
+              if (key === "requirements" && workspaceTrellisEnabled) onOpenRequirements?.(repository);
+              if (key === "executable-tasks" && workspaceTrellisEnabled) onOpenExecutableTasks?.(repository);
+              if (typeof key === "string") {
+                const openAppId = parseOpenAppConfigureMenuKey(key);
+                if (openAppId !== undefined) onConfigureRepositoryOpenApp?.(repository, openAppId);
+              }
             }}
             trigger={["click"]}
             placement="bottomRight"
@@ -681,7 +678,7 @@ function RepositoryRowInner({
             >
               <MoreIcon />
             </button>
-          </Dropdown>
+          </SidebarMoreMenuDropdown>
         </div>
       </div>
     </div>
@@ -897,47 +894,43 @@ function FloatingRepositoryRowInner({
             repositoryId={repository.id}
           />
           <RepositorySddStackBadge repository={repository} />
-          <Dropdown
-            rootClassName="app-sidebar-more-menu-dropdown"
-            menu={{
-              className: "app-sidebar-more-menu-inner",
-              items: moreItems,
-              onClick: ({ key }) => {
-                if (key === "add-workspace-todo") {
-                  if (!workspaceTodosEnabled) return;
-                  onRepositorySelect(repository.id);
-                  openWorkspaceTodosFromSidebarMenu({
-                    projectId: null,
-                    repositoryId: repository.id,
-                  });
-                  return;
-                }
-                if (key === "finder") onOpenInFinder(repository);
-                if (key === "editor") onOpenRepositoryInEditor(repository);
-                if (key === "open-terminal") onOpenInTerminal?.(repository);
-                if (key === "browser") onOpenRepositoryInBrowser(repository);
-                if (key === "main-owner") onOpenRepositoryMainOwner?.(repository);
-                if (key === "sdd-mode") onConfigureSddMode?.(repository);
-                if (key === "run-configure") onConfigureRepositoryMainSessionRun?.(repository);
-                if (key === "run-start") onStartRepositoryRunCommand?.(repository);
-                if (key === "run-stop") onStopRepositoryRunCommand?.(repository);
-                if (key === "run-row-pin") void toggleRepositoryRunCommandRowPinned(repository.id);
-                if (key === "new-session") onNewPaneSession?.(repository);
-                if (key === "trellis-init" && trellisEnabled) void Promise.resolve(onBootstrapTrellis?.(repository));
-                if (key === "scheduled-tasks") onOpenScheduledTasks?.(repository);
-                if (key === "requirements" && trellisEnabled) onOpenRequirements?.(repository);
-                if (key === "executable-tasks" && trellisEnabled) onOpenExecutableTasks?.(repository);
-                if (key === "promote") onPromoteToNewProject?.(repository);
-                if (typeof key === "string" && key.startsWith("join-")) {
-                  const projectId = key.slice("join-".length);
-                  onJoinExistingProject?.(repository, projectId);
-                }
-                if (key === "remove") onRemove(repository);
-                if (typeof key === "string") {
-                  const openAppId = parseOpenAppConfigureMenuKey(key);
-                  if (openAppId !== undefined) onConfigureRepositoryOpenApp?.(repository, openAppId);
-                }
-              },
+          <SidebarMoreMenuDropdown
+            items={moreItems}
+            onMenuClick={({ key }) => {
+              if (key === "add-workspace-todo") {
+                if (!workspaceTodosEnabled) return;
+                onRepositorySelect(repository.id);
+                openWorkspaceTodosFromSidebarMenu({
+                  projectId: null,
+                  repositoryId: repository.id,
+                });
+                return;
+              }
+              if (key === "finder") onOpenInFinder(repository);
+              if (key === "editor") onOpenRepositoryInEditor(repository);
+              if (key === "open-terminal") onOpenInTerminal?.(repository);
+              if (key === "browser") onOpenRepositoryInBrowser(repository);
+              if (key === "main-owner") onOpenRepositoryMainOwner?.(repository);
+              if (key === "sdd-mode") onConfigureSddMode?.(repository);
+              if (key === "run-configure") onConfigureRepositoryMainSessionRun?.(repository);
+              if (key === "run-start") onStartRepositoryRunCommand?.(repository);
+              if (key === "run-stop") onStopRepositoryRunCommand?.(repository);
+              if (key === "run-row-pin") void toggleRepositoryRunCommandRowPinned(repository.id);
+              if (key === "new-session") onNewPaneSession?.(repository);
+              if (key === "trellis-init" && trellisEnabled) void Promise.resolve(onBootstrapTrellis?.(repository));
+              if (key === "scheduled-tasks") onOpenScheduledTasks?.(repository);
+              if (key === "requirements" && trellisEnabled) onOpenRequirements?.(repository);
+              if (key === "executable-tasks" && trellisEnabled) onOpenExecutableTasks?.(repository);
+              if (key === "promote") onPromoteToNewProject?.(repository);
+              if (typeof key === "string" && key.startsWith("join-")) {
+                const projectId = key.slice("join-".length);
+                onJoinExistingProject?.(repository, projectId);
+              }
+              if (key === "remove") onRemove(repository);
+              if (typeof key === "string") {
+                const openAppId = parseOpenAppConfigureMenuKey(key);
+                if (openAppId !== undefined) onConfigureRepositoryOpenApp?.(repository, openAppId);
+              }
             }}
             trigger={["click"]}
             placement="bottomRight"
@@ -955,7 +948,7 @@ function FloatingRepositoryRowInner({
             >
               <MoreIcon />
             </button>
-          </Dropdown>
+          </SidebarMoreMenuDropdown>
         </div>
       </div>
     </div>
