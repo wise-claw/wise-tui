@@ -11,6 +11,9 @@ export function shouldSkipStaleComposerSetContent(
   const editor = normalizeComposerEditorPlain(editorPlain);
   const target = normalizeComposerEditorPlain(targetPlain);
 
+  // 发送后清空等显式 setContent("") 必须生效，不能因 editor 仍聚焦而被误判为 stale。
+  if (!target.length) return false;
+
   if (editor === target) return true;
 
   const targetStem = target.trimEnd();

@@ -20,6 +20,16 @@ describe("shouldSkipStaleComposerSetContent", () => {
     ).toBe(false);
   });
 
+  test("never skips programmatic clear while editor is focused", () => {
+    expect(
+      shouldSkipStaleComposerSetContent(
+        "开多窗后，可以保持启动opencode代理的窗口走代理",
+        "",
+        true,
+      ),
+    ).toBe(false);
+  });
+
   test("treats zero-width chars as equivalent when deciding stale setContent", () => {
     expect(
       shouldSkipStaleComposerSetContent(
