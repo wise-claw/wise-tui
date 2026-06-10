@@ -938,6 +938,10 @@ export interface ClaudeHookUpsertPayload {
 /** One skill folder under `{project}/.claude/skills/{name}/`，或来自 `~/.claude/plugins/cache` 下插件包。 */
 export interface ClaudeProjectSkill {
   name: string;
+  /** `skill` = 仓库 `.claude/skills/{name}/`；`command` = 仓库 `.claude/commands/` 下 Markdown 命令文件。 */
+  entryKind?: "skill" | "command" | null;
+  /** `entryKind === "command"` 时：相对 `.claude/commands/` 的路径（含 `.md`）。 */
+  commandRelPath?: string | null;
   hasSkillMd: boolean;
   /** 来自 `SKILL.md` YAML frontmatter 的 `description`（无则回退为正文首段预览）；列表由后端枚举时解析。 */
   description: string | null;

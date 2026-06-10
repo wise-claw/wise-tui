@@ -354,12 +354,11 @@ fn list_claude_command_skills_under_dir(commands_dir: &Path) -> Result<Vec<Claud
                 .ok()
                 .and_then(|text| skill_preview_from_markdown(&text));
             let is_symlink = crate::skills::source::is_symlink(&path);
-            let skill_root = path
-                .parent()
-                .map(skill_dir_root_path)
-                .or_else(|| Some(skill_dir_root_path(&path)));
+            let command_rel_path = rel.to_string_lossy().replace('\\', "/");
             out.push(ClaudeProjectSkill {
                 name,
+                entry_kind: Some("command".to_string()),
+                command_rel_path: Some(command_rel_path),
                 has_skill_md: false,
                 description,
                 file_count: 1,
@@ -368,7 +367,7 @@ fn list_claude_command_skills_under_dir(commands_dir: &Path) -> Result<Vec<Claud
                 source: Some(crate::skills::source::SkillSource::Custom),
                 is_symlink,
                 skill_scope: Some("project".to_string()),
-                skill_root_path: skill_root,
+                skill_root_path: Some(skill_dir_root_path(&path)),
             });
         }
         Ok(())
@@ -383,6 +382,12 @@ fn list_claude_command_skills_under_dir(commands_dir: &Path) -> Result<Vec<Claud
 #[serde(rename_all = "camelCase")]
 pub(crate) struct ClaudeProjectSkill {
     name: String,
+    /// `skill` = 仓库 `.claude/skills/{name}/`；`command` = 仓库 `.claude/commands/` 下 Markdown 命令文件。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    entry_kind: Option<String>,
+    /// `entry_kind == command` 时：相对 `.claude/commands/` 的路径（含 `.md`）。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    command_rel_path: Option<String>,
     has_skill_md: bool,
     description: Option<String>,
     file_count: usize,
@@ -437,6 +442,8 @@ fn list_claude_skills_under_dir(
         let is_symlink = crate::skills::source::is_symlink(&path);
         out.push(ClaudeProjectSkill {
             name,
+            entry_kind: Some("skill".to_string()),
+            command_rel_path: None,
             has_skill_md,
             description,
             file_count,

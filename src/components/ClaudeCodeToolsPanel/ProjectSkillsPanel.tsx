@@ -41,6 +41,10 @@ import {
 import { openWorkspaceIn } from "../../services/repository";
 import { DEFAULT_OPEN_APP_ID, DEFAULT_OPEN_APP_TARGETS } from "../OpenAppMenu/constants";
 import { getOpenAppPreferenceSync, hydrateOpenAppPreference } from "../../services/openAppPreference";
+import {
+  isClaudeProjectCommand,
+  resolveClaudeProjectSkillDisplayPath,
+} from "../../utils/claudeProjectSkillPath";
 import { isOmcPluginCacheSkill } from "../../utils/omcPluginDetect";
 import { installMonacoTrackpadSelectionGuard } from "../../utils/monacoTrackpadSelectionGuard";
 import { WISE_MONACO_EDITOR_OPTIONS } from "../../utils/wiseMonacoEditorOptions";
@@ -136,10 +140,12 @@ function skillMatchesListSearch(
     pluginCacheSkillDirectoryAbsPath(skill) ?? "",
     skill.pluginCacheRoot ?? "",
     skill.skillRootPath ?? "",
+    skill.commandRelPath ?? "",
+    skill.entryKind ?? "",
   ];
   const repo = repositoryPath?.trim();
   if (repo) {
-    parts.push(joinRepositoryPath(repo, `.claude/skills/${skill.name}`));
+    parts.push(resolveClaudeProjectSkillDisplayPath(skill, repo));
   }
   return parts.join("\n").toLowerCase().includes(needle);
 }
@@ -183,69 +189,81 @@ export interface ProjectSkillsPanelHandle {
 interface ProjectSkillCardProps {
   skill: ClaudeProjectSkill;
   repositoryPath: string;
-  onEdit: (name: string) => void | Promise<void>;
-  onOpenFolder: (name: string) => void | Promise<void>;
-  onDelete: (name: string) => void | Promise<void>;
+  onEdit: (skill: ClaudeProjectSkill) => void | Promise<void>;
+  onOpen: (skill: ClaudeProjectSkill) => void | Promise<void>;
+  onDelete: (skill: ClaudeProjectSkill) => void | Promise<void>;
 }
 
 const ProjectSkillCard = memo(function ProjectSkillCard({
   skill,
   repositoryPath,
   onEdit,
-  onOpenFolder,
+  onOpen,
   onDelete,
 }: ProjectSkillCardProps) {
+  const isCommand = isClaudeProjectCommand(skill);
   const absPath = useMemo(
-    () => joinRepositoryPath(repositoryPath, `.claude/skills/${skill.name}`),
-    [repositoryPath, skill.name],
+    () => resolveClaudeProjectSkillDisplayPath(skill, repositoryPath),
+    [repositoryPath, skill],
   );
   return (
     <div className="app-repository-skills-card">
       <div className="app-repository-skills-card-head">
-        <span className="app-repository-skills-name">{skill.name}</span>
+        <span className="app-repository-skills-name">
+          {skill.name}
+          {isCommand ? (
+            <Tag color="purple" style={{ marginLeft: 6 }}>
+              命令
+            </Tag>
+          ) : null}
+        </span>
         <div className="app-repository-skills-card-meta">
           <span className="app-repository-skills-filecount">{skill.fileCount ?? 0} 个文件</span>
           <div className="app-repository-skills-card-actions">
-            <Button
-              type="text"
-              size="small"
-              className="app-repository-skills-card-icon-btn"
-              icon={<EditOutlined />}
-              title="编辑"
-              aria-label="编辑"
-              onClick={() => {
-                void onEdit(skill.name);
-              }}
-            />
+            {!isCommand ? (
+              <Button
+                type="text"
+                size="small"
+                className="app-repository-skills-card-icon-btn"
+                icon={<EditOutlined />}
+                title="编辑"
+                aria-label="编辑"
+                onClick={() => {
+                  void onEdit(skill);
+                }}
+              />
+            ) : null}
             <Button
               type="text"
               size="small"
               className="app-repository-skills-card-icon-btn"
               icon={<FolderOpenOutlined />}
-              title="打开目录"
-              aria-label="打开目录"
-              onClick={() => void onOpenFolder(skill.name)}
+              title={isCommand ? "打开文件" : "打开目录"}
+              aria-label={isCommand ? "打开文件" : "打开目录"}
+              onClick={() => void onOpen(skill)}
             />
-            <Popconfirm
-              title={`删除技能「${skill.name}」？`}
-              description="将删除该技能整个目录（含模板、脚本、示例等所有文件），且不可恢复。"
-              okText="删除"
-              okType="danger"
-              cancelText="取消"
-              onConfirm={() => {
-                void onDelete(skill.name);
-              }}
-            >
-              <Button
-                type="text"
-                size="small"
-                danger
-                className="app-repository-skills-card-icon-btn"
-                icon={<DeleteOutlined />}
-                title="删除"
-                aria-label="删除"
-              />
-            </Popconfirm>
+            {!isCommand ? (
+              <Popconfirm
+                title={`删除技能「${skill.name}」？`}
+                description="将删除该技能整个目录（含模板、脚本、示例等所有文件），且不可恢复。"
+                okText="删除"
+                okType="danger"
+                cancelText="取消"
+                onConfirm={() => {
+                  void onDelete(skill);
+                }}
+              >
+                <Button
+                  type="text"
+                  size="small"
+                  danger
+                  className="app-repository-skills-card-icon-btn"
+                  icon={<DeleteOutlined />}
+                  title="删除"
+                  aria-label="删除"
+                />
+              </Popconfirm>
+            ) : null}
           </div>
         </div>
       </div>
@@ -601,13 +619,13 @@ export function ProjectSkillsPanel({
     }
   }, []);
 
-  const openSkillFolder = useCallback(
-    async (name: string) => {
+  const openSkillLocation = useCallback(
+    async (skill: ClaudeProjectSkill) => {
       if (!scopePathAvailable) {
         message.warning("请先选择工作区或仓库");
         return;
       }
-      const p = joinRepositoryPath(repositoryPath, `.claude/skills/${name}`);
+      const p = resolveClaudeProjectSkillDisplayPath(skill, repositoryPath);
       const target = resolvePreferredEditorTarget();
       if (!target) {
         message.warning("未找到可用编辑器，请先在「打开方式」中配置");
@@ -620,7 +638,7 @@ export function ProjectSkillsPanel({
           await openWorkspaceIn(p, { appName: target.appName, args: target.args });
         }
       } catch {
-        message.warning("该技能目录不存在");
+        message.warning(isClaudeProjectCommand(skill) ? "该命令文件不存在" : "该技能目录不存在");
       }
     },
     [scopePathAvailable, repositoryPath],
@@ -688,14 +706,18 @@ export function ProjectSkillsPanel({
   }, []);
 
   const handleDelete = useCallback(
-    async (name: string) => {
+    async (skill: ClaudeProjectSkill) => {
+      if (isClaudeProjectCommand(skill)) {
+        message.warning("命令文件请在 .claude/commands/ 中手动管理");
+        return;
+      }
       if (!scopePathAvailable) {
         message.warning("请先选择工作区或仓库");
         return;
       }
       try {
-        await deleteClaudeProjectSkill(repositoryPath, name);
-        if (editingName === name) {
+        await deleteClaudeProjectSkill(repositoryPath, skill.name);
+        if (editingName === skill.name) {
           closeEditor();
         }
         await load();
@@ -721,7 +743,12 @@ export function ProjectSkillsPanel({
   }, [closeEditor, selectedIsDir, selectedPath]);
 
   const openEditor = useCallback(
-    async (name: string) => {
+    async (skill: ClaudeProjectSkill) => {
+      if (isClaudeProjectCommand(skill)) {
+        message.info("命令文件请使用「打开文件」在外部编辑器中修改");
+        return;
+      }
+      const name = skill.name;
       setEditingName(name);
       setSelectedPath(null);
       setSelectedIsDir(false);
@@ -912,7 +939,7 @@ export function ProjectSkillsPanel({
                 skill={skill}
                 repositoryPath={repositoryPath!}
                 onEdit={openEditor}
-                onOpenFolder={openSkillFolder}
+                onOpen={openSkillLocation}
                 onDelete={handleDelete}
               />
             ))}
