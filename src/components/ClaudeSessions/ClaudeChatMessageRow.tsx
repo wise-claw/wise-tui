@@ -4,6 +4,7 @@ import type { DispatchRecordMeta } from "../../utils/claudeChatMessageDisplay";
 import { MessagePartsDisplay } from "./MessageParts";
 import { Markdown } from "./Markdown";
 import { SystemMessageContent } from "./SystemMessageContent";
+import { assistantOrphanMarkdownText } from "../../utils/assistantOrphanMarkdown";
 import {
   hasRenderableChatMessageBody,
   isAssistantDisplayNoiseText,
@@ -71,9 +72,17 @@ function ClaudeChatMessageRowInner({
   }
 
   function renderChatBody() {
+    const orphanMarkdown = msg.role === "assistant" ? assistantOrphanMarkdownText(msg) : "";
     if (msg.parts && msg.parts.length > 0) {
       return (
-        <MessagePartsDisplay parts={msg.parts} streaming={streamingThisBubble} inlinePendingHint={false} />
+        <>
+          <MessagePartsDisplay parts={msg.parts} streaming={streamingThisBubble} inlinePendingHint={false} />
+          {orphanMarkdown ? (
+            <div className="app-message-part app-message-part--text app-message-part--completion-summary">
+              <Markdown text={orphanMarkdown} streaming={false} showPendingHint={false} />
+            </div>
+          ) : null}
+        </>
       );
     }
     const text = msg.content ?? "";

@@ -1,7 +1,9 @@
-import { CopyOutlined, ReloadOutlined } from "@ant-design/icons";
-import { App, Button, Input, Space, Typography } from "antd";
+import { ReloadOutlined } from "@ant-design/icons";
+import { Button, Input, Space, Typography } from "antd";
 import { isTauri } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
+import { CopyFeedbackIcon } from "../shared/CopyFeedbackIcon";
+import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import {
   describeCursorAgentStatus,
   probeCursorAgent,
@@ -36,7 +38,6 @@ export function CursorSdkDiagnosticPanel({
   autoProbeOnMount = true,
   showStandaloneHint = false,
 }: CursorSdkDiagnosticPanelProps) {
-  const { message: antMessage } = App.useApp();
   const [repositoryPath, setRepositoryPath] = useState(
     () => initialRepositoryPath?.trim() ?? "",
   );
@@ -151,15 +152,12 @@ export function CursorSdkDiagnosticPanel({
     };
   }, []);
 
-  const copyOutput = useCallback(async () => {
+  const { copied, copy } = useCopyToClipboard();
+
+  const copyOutput = useCallback(() => {
     if (!output) return;
-    try {
-      await navigator.clipboard.writeText(output);
-      antMessage.success("已复制到剪贴板");
-    } catch {
-      antMessage.error("复制失败");
-    }
-  }, [antMessage, output]);
+    void copy(output);
+  }, [copy, output]);
 
   return (
     <div className="wise-cursor-sdk-diagnostic-panel">
@@ -189,8 +187,8 @@ export function CursorSdkDiagnosticPanel({
         <Button onClick={() => void runAgentWriteProbe()} loading={busy}>
           Agent 写盘自检（约 1 分钟）
         </Button>
-        <Button icon={<CopyOutlined />} onClick={() => void copyOutput()} disabled={!output}>
-          复制结果
+        <Button icon={<CopyFeedbackIcon copied={copied} />} onClick={copyOutput} disabled={!output}>
+          {copied ? "已复制" : "复制结果"}
         </Button>
       </Space>
       <pre

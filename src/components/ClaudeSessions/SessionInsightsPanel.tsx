@@ -1,11 +1,12 @@
 import { Button, Progress, Space, Tag, Typography, message } from "antd";
 import type { ReactNode } from "react";
 import { memo, useCallback, useState } from "react";
+import { CopyFeedbackIcon } from "../shared/CopyFeedbackIcon";
+import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { save } from "@tauri-apps/plugin-dialog";
 import {
   BulbOutlined,
   ClockCircleOutlined,
-  CopyOutlined,
   DownloadOutlined,
   DollarOutlined,
   RobotOutlined,
@@ -178,13 +179,7 @@ export const SessionInsightsPanel = memo(function SessionInsightsPanel({
     [insights, sessionLabel, claudeSessionId],
   );
 
-  const handleCopyReport = useCallback(async () => {
-    try {
-      await navigator.clipboard.writeText(buildReportMarkdown());
-    } catch {
-      message.error("复制失败");
-    }
-  }, [buildReportMarkdown]);
+  const { copied, copy } = useCopyToClipboard();
 
   const handleExportReport = useCallback(async () => {
     const text = buildReportMarkdown();
@@ -221,8 +216,12 @@ export const SessionInsightsPanel = memo(function SessionInsightsPanel({
     <div className="app-session-insights">
       <div className="app-session-insights__actions">
         <Space size={4} wrap>
-          <Button size="small" icon={<CopyOutlined />} onClick={() => void handleCopyReport()}>
-            复制
+          <Button
+            size="small"
+            icon={<CopyFeedbackIcon copied={copied} />}
+            onClick={() => void copy(buildReportMarkdown())}
+          >
+            {copied ? "已复制" : "复制"}
           </Button>
           <Button size="small" icon={<DownloadOutlined />} onClick={() => void handleExportReport()}>
             导出

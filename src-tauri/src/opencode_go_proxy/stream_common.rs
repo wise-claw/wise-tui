@@ -23,6 +23,9 @@ pub struct AnthropicStreamState {
     pub responses_fc_args_sent: HashMap<String, usize>,
     /// Gemini `functionCall.args` 已发送的 JSON 前缀长度
     pub gemini_fc_args_sent: usize,
+    /// OpenAI 路径：累积 content / reasoning，供第三方模型工具调用修复
+    pub openai_text_buffer: String,
+    pub openai_reasoning_buffer: String,
 }
 
 pub fn has_tool_blocks(state: &AnthropicStreamState) -> bool {
@@ -70,7 +73,7 @@ pub fn ensure_message_start(
     })]
 }
 
-fn close_active_text_or_thinking(state: &mut AnthropicStreamState) -> Vec<Value> {
+pub(crate) fn close_active_text_or_thinking(state: &mut AnthropicStreamState) -> Vec<Value> {
     if !state.content_started && !state.reasoning_started {
         return Vec::new();
     }

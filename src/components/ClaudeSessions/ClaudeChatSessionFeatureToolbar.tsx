@@ -1,7 +1,6 @@
 import {
   CheckCircleOutlined,
   CommentOutlined,
-  CopyOutlined,
   DeleteOutlined,
   EditOutlined,
   FieldTimeOutlined,
@@ -21,6 +20,8 @@ import {
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { HoverHint } from "../shared/HoverHint";
+import { CopyFeedbackIcon } from "../shared/CopyFeedbackIcon";
+import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { memo, type Dispatch, type RefObject, type SetStateAction } from "react";
 import type { ClaudeSession } from "../../types";
 import { HistorySessionRestoreButton } from "../ProgressMonitorPanel/HistorySessionRestoreButton";
@@ -54,10 +55,23 @@ function ClockIcon() {
   );
 }
 
-function copySessionUserQuestionText(text: string) {
-  void navigator.clipboard.writeText(text).then(
-    () => undefined,
-    () => message.error("复制失败"),
+function SessionUserQuestionCopyButton({ text }: { text: string }) {
+  const { copied, copy } = useCopyToClipboard();
+
+  return (
+    <HoverHint title={copied ? "已复制" : "复制"}>
+      <Button
+        type="text"
+        size="small"
+        className="app-claude-message-action app-claude-session-user-questions-popover__item-action"
+        icon={<CopyFeedbackIcon copied={copied} />}
+        aria-label="复制消息内容"
+        onClick={(event) => {
+          event.stopPropagation();
+          void copy(text);
+        }}
+      />
+    </HoverHint>
   );
 }
 
@@ -350,19 +364,7 @@ export const ClaudeChatSessionFeatureToolbar = memo(function ClaudeChatSessionFe
                                 }}
                               />
                             </HoverHint>
-                            <HoverHint title="复制">
-                              <Button
-                                type="text"
-                                size="small"
-                                className="app-claude-message-action app-claude-session-user-questions-popover__item-action"
-                                icon={<CopyOutlined />}
-                                aria-label="复制消息内容"
-                                onClick={(event) => {
-                                  event.stopPropagation();
-                                  copySessionUserQuestionText(row.text);
-                                }}
-                              />
-                            </HoverHint>
+                            <SessionUserQuestionCopyButton text={row.text} />
                           </span>
                         </div>
                       ))

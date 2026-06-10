@@ -121,8 +121,20 @@
 }
 
 .app-left-sidebar-monitor-panel .app-monitor-panel__section--terminals .app-monitor-panel__item-row-hit--terminal .app-monitor-panel__item-name-wrap {
-  flex: 0 1 auto;
-  max-width: 42%;
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  max-width: none;
+  min-width: 0;
+}
+
+.app-left-sidebar-monitor-panel .app-monitor-panel__section--terminals .app-monitor-panel__item-row-hit--terminal .app-monitor-panel__item-name {
+  flex-shrink: 0;
+  min-width: auto;
+}
+
+.app-left-sidebar-monitor-panel .app-monitor-panel__section--terminals .app-monitor-panel__item-row--terminal .app-monitor-panel__item-actions {
+  flex: 0 0 auto;
+  flex-shrink: 0;
 }
 
 .app-left-sidebar-monitor-panel .app-monitor-panel__section--terminals .app-monitor-panel__item-row-main {
@@ -343,12 +355,15 @@
 .app-monitor-panel__item-row--dispatch .app-monitor-panel__session-task-preview {
   flex: 1 1 auto;
   min-width: 0;
-  display: block;
-  width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .app-monitor-panel__item-row--dispatch .app-monitor-panel__item-actions {
   margin-left: auto;
+  flex: 0 0 auto;
+  flex-shrink: 0;
 }
 
 .app-left-sidebar-monitor-panel .app-monitor-panel__session-task-row.app-monitor-panel__item {
@@ -362,13 +377,29 @@
 
 .app-left-sidebar-monitor-panel .app-monitor-panel__dispatch-row-lead {
   line-height: 13px;
+  flex: 0 0 auto;
+  flex-shrink: 0;
 }
 
 .app-left-sidebar-monitor-panel .app-monitor-panel__item-row--dispatch .app-monitor-panel__item-row-hit--dispatch {
   display: flex;
   align-items: center;
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  gap: 6px;
   min-height: 0;
   line-height: 13px;
+}
+
+.app-left-sidebar-monitor-panel .app-monitor-panel__item-row--dispatch .app-monitor-panel__session-task-engine {
+  flex-shrink: 0;
+  min-width: auto;
+}
+
+.app-left-sidebar-monitor-panel .app-monitor-panel__item-row--dispatch .app-monitor-panel__item-actions {
+  flex: 0 0 auto;
+  flex-shrink: 0;
 }
 
 .app-left-sidebar-monitor-panel .app-monitor-panel__item-row--dispatch .app-monitor-panel__dispatch-row-body {
@@ -871,6 +902,23 @@
 
 .app-monitor-panel__item-row-hit--terminal {
   justify-content: flex-start;
+  gap: 6px;
+}
+
+.app-monitor-panel__item-row--terminal .app-monitor-panel__item-row-hit--terminal .app-monitor-panel__item-name-wrap {
+  flex: 0 0 auto;
+  flex-shrink: 0;
+  min-width: 0;
+}
+
+.app-monitor-panel__item-row--terminal .app-monitor-panel__item-name {
+  flex-shrink: 0;
+  min-width: auto;
+}
+
+.app-monitor-panel__item-row--terminal .app-monitor-panel__item-actions {
+  flex: 0 0 auto;
+  flex-shrink: 0;
 }
 
 .app-monitor-panel__item-row-hit--dispatch {
@@ -886,6 +934,7 @@
 
 .app-monitor-panel__item-row--dispatch .app-monitor-panel__item-row-hit--dispatch .app-monitor-panel__dispatch-row-lead {
   flex: 0 0 auto;
+  flex-shrink: 0;
 }
 
 .app-monitor-panel__item-row--dispatch .app-monitor-panel__item-row-hit--dispatch .app-monitor-panel__session-task-preview {
@@ -978,6 +1027,16 @@
 .app-monitor-panel__item-action-icon-btn--stop:hover {
   color: var(--ant-color-error) !important;
   background: color-mix(in srgb, var(--ant-color-error) 10%, transparent) !important;
+}
+
+.app-monitor-panel__item-action-icon-btn--new-session:hover:not(:disabled) {
+  color: var(--ant-color-primary) !important;
+}
+
+.app-monitor-panel__item-action-icon-btn--loading,
+.app-monitor-panel__item-action-icon-btn:disabled {
+  cursor: wait;
+  opacity: 0.55;
 }
 
 .app-monitor-panel__item-action-btn {

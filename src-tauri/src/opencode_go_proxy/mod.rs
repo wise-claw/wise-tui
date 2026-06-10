@@ -15,6 +15,8 @@ mod usage;
 mod stream_alt;
 mod stream_common;
 mod stream_openai;
+mod stream_passthrough_repair;
+mod tool_call_extract;
 mod transform;
 mod transform_alt;
 
@@ -638,6 +640,12 @@ async fn dispatch_upstream(
     headers: &HeaderMap,
     trace: &traces::TraceCapture,
 ) -> Result<Response, Response> {
+    let mut working_body = body.clone();
+    if routing::is_third_party_upstream_model(upstream_model) {
+        transform::sanitize_third_party_anthropic_request(&mut working_body);
+    }
+    let body = &working_body;
+
     let resolved = routing::resolve_upstream(provider, upstream_model, &config.upstream_url);
 
     let is_stream = body.get("stream").and_then(|v| v.as_bool()).unwrap_or(false);
@@ -862,16 +870,33 @@ async fn forward_anthropic_passthrough(
             .into_response();
     }
 
+    let repair_passthrough = routing::is_third_party_upstream_model(upstream_model);
+
     if is_stream {
         let trace_capture = trace.clone();
+        let repair_state = std::sync::Arc::new(std::sync::Mutex::new(
+            stream_passthrough_repair::PassthroughRepairState::default(),
+        ));
+        let repair_state_chunk = repair_state.clone();
         let stream = upstream_resp.bytes_stream().map(move |chunk| {
-            if let Ok(ref bytes) = chunk {
-                if let Some(ref t) = trace_capture {
-                    let text = String::from_utf8_lossy(bytes);
-                    t.push_sse_text(&text);
+            let formatted = match chunk {
+                Ok(bytes) => {
+                    let text = String::from_utf8_lossy(&bytes);
+                    if repair_passthrough {
+                        let Ok(mut st) = repair_state_chunk.lock() else {
+                            return Ok(bytes);
+                        };
+                        stream_passthrough_repair::repair_passthrough_sse_chunk(&text, &mut st)
+                    } else {
+                        text.into_owned()
+                    }
                 }
+                Err(e) => return Err(std::io::Error::other(e)),
+            };
+            if let Some(ref t) = trace_capture {
+                t.push_sse_text(&formatted);
             }
-            chunk.map_err(std::io::Error::other)
+            Ok::<_, std::io::Error>(axum::body::Bytes::from(formatted))
         });
         let stream = stream.chain(futures_util::stream::once(async move {
             if let Some(t) = trace {
@@ -895,16 +920,27 @@ async fn forward_anthropic_passthrough(
     }
 
     let bytes = upstream_resp.bytes().await.unwrap_or_default();
+    let body_bytes = if repair_passthrough {
+        match serde_json::from_slice::<Value>(&bytes) {
+            Ok(json) => {
+                let fixed = stream_passthrough_repair::repair_passthrough_message_json(&json);
+                serde_json::to_vec(&fixed).unwrap_or_else(|_| bytes.to_vec())
+            }
+            Err(_) => bytes.to_vec(),
+        }
+    } else {
+        bytes.to_vec()
+    };
     if let Some(t) = &trace {
         t.finish_success(
             status.as_u16(),
-            traces::preview_text(&String::from_utf8_lossy(&bytes)),
+            traces::preview_text(&String::from_utf8_lossy(&body_bytes)),
         );
     }
     Response::builder()
         .status(StatusCode::OK)
         .header(header::CONTENT_TYPE, "application/json")
-        .body(Body::from(bytes))
+        .body(Body::from(body_bytes))
         .unwrap_or_else(|_| {
             (
                 StatusCode::INTERNAL_SERVER_ERROR,
@@ -1490,6 +1526,7 @@ fn apply_claude_settings_sync(port: u16) -> Result<bool, String> {
     );
     env_obj.remove("ANTHROPIC_API_KEY");
     crate::claude_config_dir::apply_local_proxy_claude_model_env(env_obj);
+    crate::claude_config_dir::apply_local_proxy_claude_tool_compat_json_env(env_obj);
     if let Some(model) = root_obj.get_mut("model") {
         *model = json!("claude-sonnet-4-8");
     } else {

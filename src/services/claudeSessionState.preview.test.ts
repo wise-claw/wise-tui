@@ -55,6 +55,43 @@ describe("appendAssistantPreviewTextMessage", () => {
     expect(next[0]?.messages.filter((item) => item.role === "assistant")).toHaveLength(1);
     expect(next[0]?.messages[1]?.content).toBe("已有回复");
   });
+
+  test("appends completion summary as text part on last tool-only assistant bubble", () => {
+    const base = session([
+      { role: "user", content: "做任务", timestamp: 1 },
+      {
+        role: "assistant",
+        content: "",
+        timestamp: 2,
+        parts: [{ type: "tool_use", id: "t1", name: "Edit", input: {}, status: "completed" }],
+      },
+    ]);
+    const summary = "已完成！\n\n## 改动总结";
+    const next = appendAssistantPreviewTextMessage([base], "tab-1", summary);
+    expect(next[0]?.messages).toHaveLength(2);
+    const last = next[0]?.messages[1];
+    expect(last?.role).toBe("assistant");
+    expect(last?.parts.some((p) => p.type === "text" && p.text === summary)).toBe(true);
+  });
+
+  test("still appends post-tool summary when intro text exists before tools", () => {
+    const base = session([
+      { role: "user", content: "做任务", timestamp: 1 },
+      {
+        role: "assistant",
+        content: "先说明一下",
+        timestamp: 2,
+        parts: [
+          { type: "text", text: "先说明一下" },
+          { type: "tool_use", id: "t1", name: "bash", input: {}, status: "completed" },
+        ],
+      },
+    ]);
+    const summary = "零错误。全部改动已就绪，以下是总结：\n\n## ✅ 完成";
+    const next = appendAssistantPreviewTextMessage([base], "tab-1", summary);
+    const last = next[0]?.messages[1];
+    expect(last?.parts.some((p) => p.type === "text" && p.text === summary)).toBe(true);
+  });
 });
 
 describe("setSessionRunningWithUserPrompt", () => {

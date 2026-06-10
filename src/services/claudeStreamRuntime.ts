@@ -5,12 +5,18 @@ import {
   appendAssistantStreamParts,
   applyToolResultPartsToSession,
   capAssistantStreamBufferText,
+  partitionStreamMessageParts,
 } from "./claudeStreamAssembler";
 import {
   extractCodexResumeSessionIdFromStreamLine,
   extractCursorAgentIdFromCompletePayload,
   extractCursorAgentIdFromStreamLine,
+  extractResultErrorMessageFromStreamLine,
+  formatClaudeResultErrorForSessionUi,
+  isClaudeHarnessInjectedStreamText,
+  isClaudeToolCallParseFailureText,
   shouldClearCodexResumeSessionFromStreamLine,
+  stripClaudeHarnessInjectedStreamText,
 } from "./claudeStreamParser";
 import {
   appendAssistantPreviewTextMessage,
@@ -26,6 +32,7 @@ import {
   shouldDeferOneshotTurnComplete,
   shouldForceFinalizeDeferredOneshotComplete,
 } from "../hooks/useClaudeSessions.transcript";
+import { isExplicitClaudeCompleteFailure } from "../utils/resolveClaudeCompleteSuccess";
 import {
   isStaleClaudeCompleteForSession,
   resolveExpectedTurnNonceForTab,
@@ -250,17 +257,13 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
           }
         }
         if (dedupedParts.length > 0 && !isInit) {
-          const hasToolResults = dedupedParts.some(
-            (part) =>
-              part.type === "tool_use" &&
-              (part.status === "completed" ||
-                part.status === "error" ||
-                Boolean(part.output?.trim()) ||
-                Boolean(part.error?.trim())),
-          );
-          updated = hasToolResults
-            ? applyToolResultPartsToSession(updated, dedupedParts)
-            : appendAssistantStreamParts(updated, dedupedParts);
+          const { toolResults, streamParts } = partitionStreamMessageParts(dedupedParts);
+          if (toolResults.length > 0) {
+            updated = applyToolResultPartsToSession(updated, toolResults);
+          }
+          if (streamParts.length > 0) {
+            updated = appendAssistantStreamParts(updated, streamParts);
+          }
           ingestTodosFromSessionMessages(tid, updated.messages);
         }
         return updated;
@@ -352,6 +355,13 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
       if (systemErrMsg) {
         pushDeferred(deferredSystemErrors, { tid, msg: systemErrMsg });
       }
+      const resultErrMsg = extractResultErrorMessageFromStreamLine(line);
+      if (resultErrMsg) {
+        pushDeferred(deferredSystemErrors, {
+          tid,
+          msg: formatClaudeResultErrorForSessionUi(resultErrMsg),
+        });
+      }
       return;
     }
 
@@ -370,6 +380,15 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
         pushDeferred(deferredSystemErrors, { tid, msg: systemErrMsg });
       } else {
         setSessions((prev) => appendSystemMessageBySessionOrClaudeId(prev, tid, systemErrMsg));
+      }
+    }
+    const resultErrMsg = extractResultErrorMessageFromStreamLine(line);
+    if (resultErrMsg) {
+      const formatted = formatClaudeResultErrorForSessionUi(resultErrMsg);
+      if (isDocumentHidden()) {
+        pushDeferred(deferredSystemErrors, { tid, msg: formatted });
+      } else {
+        setSessions((prev) => appendSystemMessageBySessionOrClaudeId(prev, tid, formatted));
       }
     }
     if (shouldClearCodexResumeSessionFromStreamLine(line)) {
@@ -404,7 +423,14 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
       onClaudeSessionIdAssigned?.(tid, cursorAgentId);
     }
     const { parts, isInit, sessionId: realSessionId } = extractPartsFromStreamLine(line);
-    const dedupedParts = parts.filter((part) => {
+    const sanitizedParts: MessagePart[] = parts.flatMap((part): MessagePart[] => {
+      if (part.type !== "text") return [part];
+      const cleaned = stripClaudeHarnessInjectedStreamText(part.text);
+      if (!cleaned || isClaudeHarnessInjectedStreamText(cleaned)) return [];
+      if (cleaned === part.text) return [part];
+      return [{ type: "text", text: cleaned }];
+    });
+    const dedupedParts = sanitizedParts.filter((part) => {
       if (part.type !== "text") return true;
       const normalized = part.text.trim();
       if (normalized.length < 12) return true;
@@ -623,7 +649,13 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     clearPendingOneshotComplete(tid);
     clearAssistBufferKeysForTab(session, tid);
     // 仅 text 正文可抵消迟到 cancel；思考块 / 工具块不算「已完成」。
-    const uiSuccess = payloadSuccess || hasVisibleTextReply;
+    // CLI 已明确 success=false（如工具调用解析失败）时，局部思考/工具进度不算成功回合。
+    const uiSuccess = isExplicitClaudeCompleteFailure(payload)
+      ? false
+      : payloadSuccess ||
+        (hasVisibleTextReply &&
+          !isClaudeToolCallParseFailureText(previewRaw) &&
+          !isClaudeToolCallParseFailureText(fromAfterFlush));
     if (terminalEmptySuccess) {
       const shouldTryDiskReload = reloadTranscriptFromDisk != null;
       if (shouldTryDiskReload) {

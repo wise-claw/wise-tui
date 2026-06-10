@@ -100,6 +100,34 @@
   background: var(--ant-color-bg-container);
 }
 
+.app-llm-proxy-panel__conflict-alert.ant-alert {
+  margin: 0 10px 4px;
+  padding: 3px 8px;
+  align-items: flex-start;
+}
+
+.app-llm-proxy-panel__conflict-alert .ant-alert-icon {
+  margin-inline-end: 6px;
+  font-size: 12px;
+  margin-top: 1px;
+}
+
+.app-llm-proxy-panel__conflict-alert .ant-alert-message {
+  margin-bottom: 0 !important;
+  font-size: 10.5px;
+  line-height: 1.35;
+  white-space: pre-line;
+}
+
+.app-llm-proxy-panel__conflict-alert-title {
+  font-weight: 600;
+  margin-right: 2px;
+}
+
+.app-llm-proxy-panel__conflict-alert-title::after {
+  content: "：";
+}
+
 .app-llm-proxy-panel__toolbar-actions {
   display: flex;
   align-items: center;

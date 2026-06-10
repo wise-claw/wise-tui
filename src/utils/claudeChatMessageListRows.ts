@@ -5,6 +5,7 @@ import {
   indexOfPreviousRenderableMessage,
   isToolOnlyUserMessage,
 } from "./claudeChatMessageDisplay";
+import { sessionHadRecentClaudeTurnFailureNotice } from "./claudeSessionTurnFailure";
 
 export type ChatMessageListMessageRow = {
   kind: "message";
@@ -28,8 +29,11 @@ export function shouldShowListEndThinkingHint(
   status: ClaudeSession["status"],
 ): boolean {
   if (messages.length === 0) return false;
+  if (status !== "running" && status !== "connecting") return false;
+  // 长驻子进程仍 alive 但本轮已失败落盘时，勿再展示「正在思考」。
+  if (sessionHadRecentClaudeTurnFailureNotice(messages)) return false;
   const last = messages[messages.length - 1]!;
-  return status === "running" && (last.role === "user" || last.role === "assistant");
+  return last.role === "user" || last.role === "assistant";
 }
 
 export interface ChatMessageListRowsBuildOptions {

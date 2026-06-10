@@ -1,5 +1,5 @@
 import type { ClaudeSession } from "../types";
-import { isDiskOnlyTerminalWorkerTab } from "../services/terminalDispatch";
+import { isDiskOnlyTerminalWorkerTab, findTerminalWorkerTab } from "../services/terminalDispatch";
 import { normalizeEmployeeBindingName } from "./employeeBindingName";
 import { isOmcBatchHistoryStubSessionId } from "./omcEmployeeBatchHistory";
 
@@ -79,6 +79,25 @@ export function pickLatestMonitorEmployeeHistorySession(
   employeeDisplayName: string,
 ): ClaudeSession | undefined {
   return sessionsByName.get(normalizeMonitorEmployeeName(employeeDisplayName))?.[0];
+}
+
+/**
+ * 运行面板点击终端行打开 transcript 抽屉时优先打开的会话：
+ * 1. 同终端 pin 的默认 worker（「新增会话」后为空标签）；
+ * 2. 否则回退到最近一条可展示历史会话。
+ */
+export function pickMonitorTerminalDrawerSession(
+  sessions: readonly ClaudeSession[],
+  repositoryPath: string,
+  employeeDisplayName: string,
+  sessionsByName: Map<string, ClaudeSession[]>,
+): ClaudeSession | undefined {
+  const repo = repositoryPath.trim();
+  if (repo) {
+    const worker = findTerminalWorkerTab([...sessions], repo, employeeDisplayName);
+    if (worker) return worker;
+  }
+  return pickLatestMonitorEmployeeHistorySession(sessionsByName, employeeDisplayName);
 }
 
 /**

@@ -1,15 +1,7 @@
-import { useEffect, useRef, useCallback, useSyncExternalStore } from "react";
+import { useEffect, useMemo, useRef } from "react";
 import { message } from "antd";
 import { marked } from "marked";
 import DOMPurify from "dompurify";
-import { getClaudeChatUserPausedFollow } from "../../stores/claudeChatMessageScrollBridge";
-import { isClaudeScrollInteractionActive } from "../../stores/claudeScrollInteractionGate";
-import {
-  isFileTreeScrollActive,
-  isSidePanelPriorityReliefActive,
-  isWorkspacePriorityReliefActive,
-  subscribeChromePanelHover,
-} from "../../stores/chromePanelHoverStore";
 import { attachExternalLinkDelegation } from "../../services/openExternal";
 import { isValidHttpUrl, normalizeAutolinkUrl } from "../../utils/autolinkUrl";
 import {
@@ -68,6 +60,71 @@ function renderRichMessageInnerHtml(text: string): string {
   return `${mdHtml}${embed}`;
 }
 
+/** 同步构建 Markdown HTML，避免 ref + useEffect 时序导致正文未写入 DOM。 */
+export function buildMarkdownDisplayHtml(text: string): string {
+  if (!text.trim()) return "";
+  const html = renderRichMessageInnerHtml(text);
+  const temp = document.createElement("div");
+  temp.innerHTML = html;
+
+  temp.querySelectorAll("pre").forEach((pre) => {
+    const wrapper = document.createElement("div");
+    wrapper.className = "app-markdown-code";
+    const copyBtn = document.createElement("button");
+    copyBtn.className = "app-markdown-copy-btn";
+    copyBtn.setAttribute("aria-label", "复制");
+    copyBtn.setAttribute("data-tooltip", "复制");
+    copyBtn.innerHTML = `<span class="copy-icon">${COPY_ICON}</span><span class="check-icon">${CHECK_ICON}</span>`;
+    const parent = pre.parentElement;
+    if (parent) {
+      parent.replaceChild(wrapper, pre);
+      wrapper.appendChild(pre);
+      wrapper.appendChild(copyBtn);
+    }
+  });
+
+  temp.querySelectorAll(":not(pre) > code").forEach((code) => {
+    const raw = code.textContent?.trim() ?? "";
+    const href = normalizeAutolinkUrl(raw);
+    if (href && /^https?:\/\//i.test(href) && isValidHttpUrl(href)) {
+      try {
+        const url = new URL(href);
+        const link = document.createElement("a");
+        link.href = url.toString();
+        link.className = "app-markdown-link";
+        link.target = "_blank";
+        link.rel = "noopener noreferrer";
+        code.textContent = href;
+        code.parentNode?.replaceChild(link, code);
+        link.appendChild(code);
+      } catch { /* ignore */ }
+    }
+  });
+
+  temp.querySelectorAll("a[href]").forEach((anchor) => {
+    const rawHref = anchor.getAttribute("href") ?? "";
+    if (/^https?:\/\//i.test(rawHref)) {
+      const href = normalizeAutolinkUrl(rawHref);
+      if (isValidHttpUrl(href)) {
+        anchor.setAttribute("href", href);
+        const anchorText = anchor.textContent ?? "";
+        if (anchorText === rawHref || anchorText === tryDecodeUriForDisplay(rawHref)) {
+          anchor.textContent = href;
+        } else if (anchorText.startsWith(rawHref)) {
+          anchor.textContent = href + anchorText.slice(rawHref.length);
+        }
+      }
+    }
+    anchor.classList.add("app-markdown-link");
+    if (!anchor.getAttribute("target")) {
+      anchor.setAttribute("target", "_blank");
+      anchor.setAttribute("rel", "noopener noreferrer");
+    }
+  });
+
+  return temp.innerHTML;
+}
+
 export function StreamingReplyHint() {
   return (
     <div className="app-markdown-streaming-hint" role="status" aria-live="polite" aria-label="正在生成回复">
@@ -94,178 +151,7 @@ export function Markdown({ text, streaming, showPendingHint, className }: Props)
   const showHint = showPendingHint ?? Boolean(streaming);
   const containerRef = useRef<HTMLDivElement>(null);
   const copyTimeoutsRef = useRef<Map<HTMLButtonElement, ReturnType<typeof setTimeout>>>(new Map());
-  const renderRafRef = useRef<number | null>(null);
-
-  const lastRenderedTextRef = useRef<string | null>(null);
-  const streamingRenderTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const lastStreamingRenderAtRef = useRef(0);
-  const sidePanelPriorityRelief = useSyncExternalStore(
-    subscribeChromePanelHover,
-    isSidePanelPriorityReliefActive,
-    () => false,
-  );
-  const fileTreeScrolling = useSyncExternalStore(
-    subscribeChromePanelHover,
-    isFileTreeScrollActive,
-    () => false,
-  );
-  const workspacePriorityRelief = useSyncExternalStore(
-    subscribeChromePanelHover,
-    isWorkspacePriorityReliefActive,
-    () => false,
-  );
-
-  const updateDOM = useCallback(() => {
-    const container = containerRef.current;
-    if (!container) return;
-    if (!text) {
-      if (lastRenderedTextRef.current !== "") {
-        container.replaceChildren();
-        lastRenderedTextRef.current = "";
-      }
-      return;
-    }
-
-    // 内容未变时跳过完整的 marked+DOMPurify+DOM 管线
-    if (text === lastRenderedTextRef.current) {
-      return;
-    }
-
-    const html = renderRichMessageInnerHtml(text);
-    const temp = document.createElement("div");
-    temp.innerHTML = html;
-
-    // Wrap code blocks
-    const pres = temp.querySelectorAll("pre");
-    pres.forEach((pre) => {
-      const wrapper = document.createElement("div");
-      wrapper.className = "app-markdown-code";
-      const copyBtn = document.createElement("button");
-      copyBtn.className = "app-markdown-copy-btn";
-      copyBtn.setAttribute("aria-label", "复制");
-      copyBtn.setAttribute("data-tooltip", "复制");
-      copyBtn.innerHTML = `<span class="copy-icon">${COPY_ICON}</span><span class="check-icon">${CHECK_ICON}</span>`;
-      const parent = pre.parentElement;
-      if (parent) {
-        parent.replaceChild(wrapper, pre);
-        wrapper.appendChild(pre);
-        wrapper.appendChild(copyBtn);
-      }
-    });
-
-    // Convert URL-like inline code to links
-    const inlineCodes = temp.querySelectorAll(":not(pre) > code");
-    inlineCodes.forEach((code) => {
-      const raw = code.textContent?.trim() ?? "";
-      const href = normalizeAutolinkUrl(raw);
-      if (href && /^https?:\/\//i.test(href) && isValidHttpUrl(href)) {
-        try {
-          const url = new URL(href);
-          const link = document.createElement("a");
-          link.href = url.toString();
-          link.className = "app-markdown-link";
-          link.target = "_blank";
-          link.rel = "noopener noreferrer";
-          code.textContent = href;
-          code.parentNode?.replaceChild(link, code);
-          link.appendChild(code);
-        } catch { /* ignore */ }
-      }
-    });
-
-    temp.querySelectorAll("a[href]").forEach((anchor) => {
-      const rawHref = anchor.getAttribute("href") ?? "";
-      if (/^https?:\/\//i.test(rawHref)) {
-        const href = normalizeAutolinkUrl(rawHref);
-        if (isValidHttpUrl(href)) {
-          anchor.setAttribute("href", href);
-          const text = anchor.textContent ?? "";
-          if (text === rawHref || text === tryDecodeUriForDisplay(rawHref)) {
-            anchor.textContent = href;
-          } else if (text.startsWith(rawHref)) {
-            anchor.textContent = href + text.slice(rawHref.length);
-          }
-        }
-      }
-      anchor.classList.add("app-markdown-link");
-      if (!anchor.getAttribute("target")) {
-        anchor.setAttribute("target", "_blank");
-        anchor.setAttribute("rel", "noopener noreferrer");
-      }
-    });
-
-    // 直接移动子节点而非序列化/反序列化 innerHTML，减少一次完整 DOM 克隆开销
-    container.replaceChildren(...temp.childNodes);
-    lastRenderedTextRef.current = text;
-  }, [text]);
-
-  useEffect(() => {
-    if (renderRafRef.current != null) {
-      window.cancelAnimationFrame(renderRafRef.current);
-      renderRafRef.current = null;
-    }
-    if (streamingRenderTimerRef.current != null) {
-      clearTimeout(streamingRenderTimerRef.current);
-      streamingRenderTimerRef.current = null;
-    }
-
-    const runUpdate = () => {
-      renderRafRef.current = window.requestAnimationFrame(() => {
-        renderRafRef.current = null;
-        lastStreamingRenderAtRef.current = performance.now();
-        updateDOM();
-      });
-    };
-
-    if (!streaming) {
-      runUpdate();
-      return () => {
-        if (renderRafRef.current != null) {
-          window.cancelAnimationFrame(renderRafRef.current);
-          renderRafRef.current = null;
-        }
-      };
-    }
-
-    if (isClaudeScrollInteractionActive()) {
-      return () => {
-        if (streamingRenderTimerRef.current != null) {
-          clearTimeout(streamingRenderTimerRef.current);
-          streamingRenderTimerRef.current = null;
-        }
-      };
-    }
-
-    const minIntervalMs = getClaudeChatUserPausedFollow()
-      ? 280
-      : fileTreeScrolling
-        ? 520
-        : workspacePriorityRelief
-          ? 480
-          : sidePanelPriorityRelief
-            ? 420
-            : 160;
-    const elapsed = performance.now() - lastStreamingRenderAtRef.current;
-    if (elapsed >= minIntervalMs) {
-      runUpdate();
-    } else {
-      streamingRenderTimerRef.current = setTimeout(() => {
-        streamingRenderTimerRef.current = null;
-        runUpdate();
-      }, minIntervalMs - elapsed);
-    }
-
-    return () => {
-      if (renderRafRef.current != null) {
-        window.cancelAnimationFrame(renderRafRef.current);
-        renderRafRef.current = null;
-      }
-      if (streamingRenderTimerRef.current != null) {
-        clearTimeout(streamingRenderTimerRef.current);
-        streamingRenderTimerRef.current = null;
-      }
-    };
-  }, [fileTreeScrolling, streaming, text, updateDOM, sidePanelPriorityRelief, workspacePriorityRelief]);
+  const displayHtml = useMemo(() => buildMarkdownDisplayHtml(text), [text]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -304,7 +190,7 @@ export function Markdown({ text, streaming, showPendingHint, className }: Props)
       container.removeEventListener("click", handleCopyClick);
       if (linkUnsub) linkUnsub();
     };
-  }, []);
+  }, [displayHtml]);
 
   useEffect(() => {
     return () => {
@@ -313,12 +199,15 @@ export function Markdown({ text, streaming, showPendingHint, className }: Props)
     };
   }, []);
 
-
   const isContinuation = text.includes("This session is being continued from a previous conversation");
 
   return (
     <div className={`app-markdown-host${showHint ? " app-markdown-host--streaming" : ""}${isContinuation ? " app-markdown-host--continuation" : ""}`}>
-      <div ref={containerRef} className={`app-markdown ${className ?? ""}`} />
+      <div
+        ref={containerRef}
+        className={`app-markdown ${className ?? ""}`}
+        {...(displayHtml ? { dangerouslySetInnerHTML: { __html: displayHtml } } : {})}
+      />
       {showHint && <StreamingReplyHint />}
     </div>
   );

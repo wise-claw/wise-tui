@@ -1,5 +1,9 @@
-import { buildComposerInsertFromPlainText } from "../services/claudeComposerPrompt";
 import type { ClaudeMessage, ClaudeSession, MessagePart, ToolUsePart } from "../types";
+import {
+  isClaudeHarnessInjectedStreamText,
+  stripClaudeHarnessInjectedStreamText,
+} from "../services/claudeStreamParser";
+import { buildComposerInsertFromPlainText } from "../services/claudeComposerPrompt";
 
 export function isToolOnlyUserMessage(msg: ClaudeMessage): boolean {
   const parts = msg.parts;
@@ -63,7 +67,10 @@ export function isRenderableMessagePart(part: MessagePart): boolean {
   switch (part.type) {
     case "text": {
       if (isBlankDisplayText(part.text)) return false;
-      return !isAssistantDisplayNoiseText(part.text);
+      if (isAssistantDisplayNoiseText(part.text)) return false;
+      const stripped = stripClaudeHarnessInjectedStreamText(part.text);
+      if (!stripped || isClaudeHarnessInjectedStreamText(stripped)) return false;
+      return true;
     }
     case "reasoning":
       return !isBlankDisplayText(part.text);

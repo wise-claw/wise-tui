@@ -10,13 +10,15 @@ use serde_json::{json, Value};
 use uuid::Uuid;
 
 use super::stream_common::{
-    ensure_message_start, finalize_stream, finish_stream, format_sse_events, map_finish_reason,
+    ensure_message_start, finalize_stream, finish_stream, format_sse_events, has_tool_blocks,
+    map_finish_reason,
     new_stream_state, text_delta, thinking_delta, tool_call_delta, usage_only_delta,
     SharedStreamState,
 };
 use super::traces::TraceCapture;
 use super::transform;
 use super::usage::{self, openai_usage_to_anthropic};
+use super::tool_call_extract::{extract_first_tool_call_from_text, new_tool_use_id, ExtractedToolCall};
 
 pub async fn stream_openai_to_anthropic(
     upstream: ReqwestResponse,
@@ -109,10 +111,12 @@ pub fn process_openai_chunk(
     let delta = choice.get("delta").unwrap_or(&Value::Null);
 
     if let Some(thinking) = delta.get("reasoning_content").and_then(|v| v.as_str()) {
+        state.openai_reasoning_buffer.push_str(thinking);
         events.extend(thinking_delta(&mut state, thinking));
     }
 
     if let Some(content) = delta.get("content").and_then(|v| v.as_str()) {
+        state.openai_text_buffer.push_str(content);
         events.extend(text_delta(&mut state, content));
     }
 
@@ -124,6 +128,20 @@ pub fn process_openai_chunk(
 
     if let Some(finish) = choice.get("finish_reason").and_then(|v| v.as_str()) {
         if !finish.is_empty() {
+            let mapped = map_finish_reason(finish);
+            let mut stop = mapped;
+            if stop == "tool_use" && !has_tool_blocks(&state) {
+                let combined = format!(
+                    "{}{}",
+                    state.openai_reasoning_buffer, state.openai_text_buffer
+                );
+                if let Some(call) = extract_first_tool_call_from_text(&combined) {
+                    events.extend(emit_synthetic_tool_use(&mut state, &call));
+                }
+                if !has_tool_blocks(&state) {
+                    stop = "end_turn";
+                }
+            }
             let anthropic_usage = chunk
                 .get("usage")
                 .map(openai_usage_to_anthropic)
@@ -141,7 +159,7 @@ pub fn process_openai_chunk(
             } else {
                 events.extend(finish_stream(
                     &mut state,
-                    map_finish_reason(finish),
+                    stop,
                     anthropic_usage,
                 ));
             }
@@ -152,6 +170,40 @@ pub fn process_openai_chunk(
         }
     }
 
+    events
+}
+
+fn emit_synthetic_tool_use(state: &mut super::stream_common::AnthropicStreamState, call: &ExtractedToolCall) -> Vec<Value> {
+    use super::stream_common::{close_active_text_or_thinking, has_tool_blocks};
+    let mut events = Vec::new();
+    if has_tool_blocks(state) {
+        return events;
+    }
+    events.extend(close_active_text_or_thinking(state));
+    state.content_index += 1;
+    let block_idx = state.content_index;
+    let tool_id = new_tool_use_id();
+    let args = serde_json::to_string(&call.input).unwrap_or_else(|_| "{}".to_string());
+    events.push(json!({
+        "type": "content_block_start",
+        "index": block_idx,
+        "content_block": {
+            "type": "tool_use",
+            "id": tool_id,
+            "name": call.name,
+            "input": {}
+        }
+    }));
+    events.push(json!({
+        "type": "content_block_delta",
+        "index": block_idx,
+        "delta": { "type": "input_json_delta", "partial_json": args }
+    }));
+    events.push(json!({
+        "type": "content_block_stop",
+        "index": block_idx
+    }));
+    state.started_tool_calls.insert(0, block_idx);
     events
 }
 

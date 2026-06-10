@@ -2,6 +2,8 @@
 
 use serde_json::{json, Map, Value};
 
+use super::stream_passthrough_repair;
+
 /// 将 Anthropic `/v1/messages` 请求体转为 OpenAI Chat Completions 请求。
 pub fn anthropic_to_openai(anthropic: &Value, upstream_model: &str) -> Result<Value, String> {
     let obj = anthropic
@@ -89,7 +91,7 @@ pub fn openai_to_anthropic(openai: &Value, original_model: &str) -> Result<Value
         .and_then(|v| v.as_str())
         .unwrap_or("msg_wise_proxy");
 
-    Ok(json!({
+    Ok(stream_passthrough_repair::repair_passthrough_message_json(&json!({
         "id": id,
         "type": "message",
         "role": "assistant",
@@ -98,7 +100,7 @@ pub fn openai_to_anthropic(openai: &Value, original_model: &str) -> Result<Value
         "stop_reason": map_finish_reason(finish),
         "stop_sequence": null,
         "usage": usage
-    }))
+    })))
 }
 
 pub fn anthropic_error(status: u16, message: &str) -> Value {
@@ -403,6 +405,86 @@ fn message_to_content_blocks(message: &Value) -> Vec<Value> {
     blocks
 }
 
+/// Qwen / MiniMax 等第三方 Anthropic 兼容上游：去掉 thinking / tool_reference，降低工具解析失败率。
+pub fn sanitize_third_party_anthropic_request(body: &mut Value) {
+    let Some(obj) = body.as_object_mut() else {
+        return;
+    };
+    if let Some(system) = obj.get_mut("system") {
+        strip_thinking_from_system(system);
+    }
+    if let Some(messages) = obj.get_mut("messages").and_then(|m| m.as_array_mut()) {
+        for msg in messages.iter_mut() {
+            sanitize_third_party_message(msg);
+        }
+    }
+    obj.remove("thinking");
+    if let Some(tools) = obj.get_mut("tools").and_then(|t| t.as_array_mut()) {
+        tools.retain(|tool| {
+            tool.get("type").and_then(|ty| ty.as_str()) != Some("tool_reference")
+        });
+    }
+}
+
+fn sanitize_third_party_message(msg: &mut Value) {
+    strip_thinking_from_message(msg);
+    if let Some(blocks) = msg.get_mut("content").and_then(|c| c.as_array_mut()) {
+        sanitize_content_blocks(blocks);
+    }
+}
+
+fn sanitize_content_blocks(blocks: &mut Vec<Value>) {
+    blocks.retain(|block| block.get("type").and_then(|t| t.as_str()) != Some("tool_reference"));
+    for block in blocks.iter_mut() {
+        let ty = block.get("type").and_then(|t| t.as_str()).unwrap_or("");
+        if ty == "tool_result" {
+            sanitize_tool_result_block(block);
+        }
+    }
+}
+
+fn sanitize_tool_result_block(block: &mut Value) {
+    let Some(content) = block.get_mut("content") else {
+        return;
+    };
+    if let Some(arr) = content.as_array_mut() {
+        arr.retain(|part| part.get("type").and_then(|t| t.as_str()) != Some("tool_reference"));
+        if arr.is_empty() {
+            block.as_object_mut().map(|o| {
+                o.insert("content".to_string(), json!("Tool result unavailable."));
+            });
+        }
+        return;
+    }
+    if content.as_str().is_some_and(|s| s.trim().is_empty()) {
+        block.as_object_mut().map(|o| {
+            o.insert("content".to_string(), json!("Tool result unavailable."));
+        });
+    }
+}
+
+fn strip_thinking_from_system(system: &mut Value) {
+    if let Some(arr) = system.as_array_mut() {
+        arr.retain(|block| block.get("type").and_then(|t| t.as_str()) != Some("thinking"));
+        if arr.is_empty() {
+            *system = json!("");
+        }
+    }
+}
+
+fn strip_thinking_from_message(msg: &mut Value) {
+    let Some(content) = msg.get_mut("content") else {
+        return;
+    };
+    let Some(blocks) = content.as_array_mut() else {
+        return;
+    };
+    blocks.retain(|block| block.get("type").and_then(|t| t.as_str()) != Some("thinking"));
+    if blocks.is_empty() {
+        *content = json!("");
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -432,6 +514,42 @@ mod tests {
         let out = openai_to_anthropic(&resp, "claude-sonnet-4").unwrap();
         assert_eq!(out["stop_reason"], "end_turn");
         assert_eq!(out["content"][0]["text"], "hello");
+    }
+
+    #[test]
+    fn sanitize_third_party_request_strips_thinking_blocks() {
+        let mut body = json!({
+            "messages": [{
+                "role": "assistant",
+                "content": [
+                    { "type": "thinking", "thinking": "plan" },
+                    { "type": "text", "text": "hi" }
+                ]
+            }]
+        });
+        sanitize_third_party_anthropic_request(&mut body);
+        let blocks = body["messages"][0]["content"].as_array().unwrap();
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(blocks[0]["type"], "text");
+    }
+
+    #[test]
+    fn sanitize_third_party_request_strips_tool_reference() {
+        let mut body = json!({
+            "messages": [{
+                "role": "user",
+                "content": [
+                    { "type": "tool_reference", "tool_name": "mcp__x__y" },
+                    { "type": "text", "text": "hi" }
+                ]
+            }],
+            "tools": [{ "type": "tool_reference", "tool_name": "mcp__x__y" }]
+        });
+        sanitize_third_party_anthropic_request(&mut body);
+        let blocks = body["messages"][0]["content"].as_array().unwrap();
+        assert_eq!(blocks.len(), 1);
+        assert_eq!(blocks[0]["type"], "text");
+        assert!(body["tools"].as_array().unwrap().is_empty());
     }
 
 }

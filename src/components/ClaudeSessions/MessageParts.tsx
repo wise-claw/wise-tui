@@ -1,7 +1,8 @@
 import { memo, useMemo, useState } from "react";
-import { message } from "antd";
+import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import type { MessagePart, TextPart, ToolUsePart, ReasoningPart } from "../../types";
 import { isRenderableMessagePart } from "../../utils/claudeChatMessageDisplay";
+import { looksLikeStructuredMarkdownSummary, cliToolOutputForExpandedBody } from "../../utils/assistantOrphanMarkdown";
 import { isSkillToolPart, skillToolDisplayName } from "../../utils/skillToolPart";
 import { LinkifiedPre } from "./LinkifiedPre";
 import { Markdown, StreamingReplyHint, usePacedText } from "./Markdown";
@@ -35,6 +36,14 @@ function CopyIcon() {
   );
 }
 
+function CheckIcon() {
+  return (
+    <svg width="14" height="14" viewBox="0 0 20 20" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
+      <path d="M5 10.5 8 13.5 15 6.5" />
+    </svg>
+  );
+}
+
 // ── Text Part ──
 
 const TextPartDisplay = memo(function TextPartDisplay({
@@ -47,9 +56,12 @@ const TextPartDisplay = memo(function TextPartDisplay({
   showPendingHint: boolean;
 }) {
   const text = usePacedText(part.text, streaming);
+  const isCompletionSummary = looksLikeStructuredMarkdownSummary(text);
 
   return (
-    <div className="app-message-part app-message-part--text">
+    <div
+      className={`app-message-part app-message-part--text${isCompletionSummary ? " app-message-part--completion-summary" : ""}`}
+    >
       <Markdown text={text} streaming={streaming} showPendingHint={showPendingHint} />
     </div>
   );
@@ -272,9 +284,20 @@ function getToolMetaTags(part: ToolUsePart): string[] {
 export function shouldRenderOutputAsMarkdown(part: ToolUsePart): boolean {
   if (isSkillToolPart(part)) return true;
 
+  const text = part.output || "";
+  if (looksLikeStructuredMarkdownSummary(text)) return true;
+
   const name = part.name.trim().toLowerCase();
   // If the name is empty or it is a generic "工具结果" or a subagent/task tool
-  if (!name || name === "task" || name === "subagent" || name === "agent") {
+  if (
+    !name ||
+    name === "task" ||
+    name === "subagent" ||
+    name === "agent" ||
+    name === "taskcreate" ||
+    name === "taskupdate" ||
+    name === "todowrite"
+  ) {
     return true;
   }
 
@@ -299,7 +322,6 @@ export function shouldRenderOutputAsMarkdown(part: ToolUsePart): boolean {
     return false;
   }
 
-  const text = part.output || "";
   if (!text.trim()) return false;
 
   // Use robust regex with multiline flag 'm' to detect markdown structures
@@ -312,6 +334,23 @@ export function shouldRenderOutputAsMarkdown(part: ToolUsePart): boolean {
   return hasMarkdownCues;
 }
 
+function toolFailureTextsDuplicate(error: string, output: string): boolean {
+  const e = error.trim();
+  const o = output.trim();
+  if (!e || !o) return false;
+  return e === o;
+}
+
+function shouldShowToolOutputBody(part: ToolUsePart): boolean {
+  const outputText = part.output?.trim() ?? "";
+  const errorText = part.error?.trim() ?? "";
+  if (!outputText) return false;
+  if (errorText && toolFailureTextsDuplicate(errorText, outputText)) return false;
+  return true;
+}
+
+export { shouldShowToolOutputBody, toolFailureTextsDuplicate };
+
 function toolPartRenderFingerprint(part: ToolUsePart): string {
   if (part.status !== "running") {
     return `${part.status}|${part.name}|${part.output?.length ?? 0}|${part.error ?? ""}`;
@@ -320,6 +359,24 @@ function toolPartRenderFingerprint(part: ToolUsePart): string {
   const outBucket = Math.floor((part.output?.length ?? 0) / 512);
   const subBucket = Math.floor(subtitle.length / 64);
   return `${part.status}|${part.name}|${outBucket}|${subBucket}|${part.error ?? ""}`;
+}
+
+function ToolUseOutputBody({ part, streaming }: { part: ToolUsePart; streaming: boolean }) {
+  const lower = part.name.trim().toLowerCase();
+  const isCliTool = lower === "bash" || lower === "exec" || lower === "run_command";
+  const cliOnlyOutput = isCliTool ? cliToolOutputForExpandedBody(part) : (part.output?.trim() ?? "");
+  const output = part.output?.trim() ?? "";
+  if (!output) return null;
+
+  if (isCliTool) {
+    if (!cliOnlyOutput) return null;
+    return <LinkifiedPre text={cliOnlyOutput} streaming={streaming} className="app-tool-output" />;
+  }
+
+  if (shouldRenderOutputAsMarkdown(part)) {
+    return <Markdown text={output} streaming={streaming} className="app-tool-output-markdown" />;
+  }
+  return <LinkifiedPre text={output} streaming={streaming} className="app-tool-output" />;
 }
 
 function messagePartContentEqual(a: MessagePart, b: MessagePart): boolean {
@@ -367,18 +424,16 @@ const ToolUsePartDisplay = memo(function ToolUsePartDisplay({ part }: { part: To
         ? input.task_id.trim()
         : "";
   const outputStreaming = part.status === "running";
+  const { copied, copy } = useCopyToClipboard();
+  const copyText =
+    (part.output?.trim() ? part.output : part.error?.trim()) ||
+    (isBashOrExec ? info.subtitle : "") ||
+    "";
+  const canCopy = Boolean(copyText.trim());
 
   function handleCopy(e: React.MouseEvent<HTMLButtonElement>) {
     e.stopPropagation();
-    const text =
-      (part.output?.trim() ? part.output : part.error?.trim()) ||
-      (isBashOrExec ? info.subtitle : "") ||
-      "";
-    if (!text) return;
-    void navigator.clipboard.writeText(text).then(
-      () => undefined,
-      () => message.error("复制失败"),
-    );
+    void copy(copyText);
   }
 
   function handleLinkTask(e: React.MouseEvent<HTMLButtonElement>) {
@@ -440,6 +495,17 @@ const ToolUsePartDisplay = memo(function ToolUsePartDisplay({ part }: { part: To
             关联任务
           </button>
         ) : null}
+        {canCopy ? (
+          <button
+            type="button"
+            className={`app-tool-copy-btn app-tool-copy-btn--head${copied ? " is-copied" : ""}`}
+            onClick={handleCopy}
+            title={copied ? "已复制" : "复制"}
+            aria-label={copied ? "已复制" : "复制"}
+          >
+            {copied ? <CheckIcon /> : <CopyIcon />}
+          </button>
+        ) : null}
       </div>
       {expanded && hasExpandableBody ? (
         <div className="app-message-part-content">
@@ -450,16 +516,9 @@ const ToolUsePartDisplay = memo(function ToolUsePartDisplay({ part }: { part: To
             </div>
           ) : null}
           {part.error?.trim() ? <pre className="app-tool-error">{part.error.trim()}</pre> : null}
-          {part.output?.trim() ? (
-            shouldRenderOutputAsMarkdown(part) ? (
-              <Markdown text={part.output} streaming={outputStreaming} className="app-tool-output-markdown" />
-            ) : (
-              <LinkifiedPre text={part.output} streaming={outputStreaming} className="app-tool-output" />
-            )
+          {shouldShowToolOutputBody(part) ? (
+            <ToolUseOutputBody part={part} streaming={outputStreaming} />
           ) : null}
-          <button type="button" className="app-tool-copy-btn" onClick={handleCopy} title="复制">
-            <CopyIcon />
-          </button>
         </div>
       ) : null}
     </div>

@@ -56,6 +56,25 @@ describe("mergeRepositoryDiskSessions", () => {
     expect(merged?.claudeSessionId).toBe(claudeId);
   });
 
+  test("keeps terminal worker tabs after disk refresh even when messages were recycled", () => {
+    const worker: ClaudeSession = {
+      id: "wise-tab-terminal-02",
+      claudeSessionId: "cf69232b-0000-4000-8000-000000000099",
+      repositoryPath: REPO,
+      repositoryName: "eco-ai-web/员工:终端02",
+      model: "sonnet",
+      status: "completed",
+      messages: [],
+      createdAt: 1,
+      pendingPrompt: "",
+    };
+    const disk = Array.from({ length: 30 }, (_, index) =>
+      diskSession(`disk-only-${index.toString().padStart(2, "0")}`),
+    );
+    const next = mergeRepositoryDiskSessions([worker], REPO, "eco-ai-web", disk, "sonnet");
+    expect(next.some((session) => session.id === "wise-tab-terminal-02")).toBe(true);
+  });
+
   test("still migrates main session tab id to Claude session id", () => {
     const main: ClaudeSession = {
       id: "wise-tab-main",

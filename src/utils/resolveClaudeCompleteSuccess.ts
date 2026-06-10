@@ -12,3 +12,12 @@ export function resolveClaudeCompleteSuccess(payload: unknown): boolean {
   }
   return false;
 }
+
+/** Rust 已明确 `success: false`（含 CLI result `is_error`）；勿用局部助手正文抵消失败。 */
+export function isExplicitClaudeCompleteFailure(payload: unknown): boolean {
+  if (typeof payload === "boolean") return payload === false;
+  if (payload !== null && typeof payload === "object" && !Array.isArray(payload)) {
+    return (payload as Record<string, unknown>).success === false;
+  }
+  return false;
+}

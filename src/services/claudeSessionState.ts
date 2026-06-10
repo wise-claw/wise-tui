@@ -1,5 +1,7 @@
 import type { ClaudeMessage, ClaudeSession } from "../types";
+import { assistantMessagePostToolTextParts } from "../utils/assistantOrphanMarkdown";
 import { isToolOnlyUserMessage, userMessagePlainTextForDisplay } from "../utils/claudeChatMessageDisplay";
+import { sessionHadRecentClaudeTurnFailureNotice } from "../utils/claudeSessionTurnFailure";
 import { CLAUDE_NO_VISIBLE_REPLY_FAILURE_HINT } from "../utils/claudeTurnCompleteGate";
 import { isMainSessionContextSeedMessage } from "./terminalDispatchContext";
 
@@ -138,10 +140,45 @@ export function appendAssistantPreviewTextMessage(
   if (!trimmed) return sessions;
   return sessions.map((session) => {
     if (!sessionMatchesCrossTabTargetId(sessions, session, targetId)) return session;
-    if (extractLatestAssistantPlainText(session).trim().length > 0) return session;
+    const messages = [...session.messages];
+    const last = messages[messages.length - 1];
+    if (last?.role !== "assistant") {
+      return {
+        ...session,
+        messages: [...messages, createAssistantTextMessage(trimmed)],
+      };
+    }
+    const parts = last.parts ?? [];
+    const hasTools = parts.some((p) => p.type === "tool_use");
+    if (!hasTools && assistantMessageVisiblePlainText(last).trim().length > 0) {
+      return session;
+    }
+    const existingPostTool = assistantMessagePostToolTextParts(parts).trim();
+    if (existingPostTool.length >= trimmed.length) return session;
+    if (hasTools) {
+      const nextParts = [...parts];
+      if (existingPostTool.length > 0) {
+        for (let i = nextParts.length - 1; i >= 0; i -= 1) {
+          const p = nextParts[i];
+          if (p?.type === "text" && p.text.trim() === existingPostTool) {
+            nextParts[i] = { ...p, text: trimmed };
+            break;
+          }
+        }
+      } else {
+        nextParts.push({ type: "text", text: trimmed });
+      }
+      messages[messages.length - 1] = {
+        ...last,
+        content: trimmed,
+        parts: nextParts,
+        timestamp: Date.now(),
+      };
+      return { ...session, messages };
+    }
     return {
       ...session,
-      messages: [...session.messages, createAssistantTextMessage(trimmed)],
+      messages: [...messages, createAssistantTextMessage(trimmed)],
     };
   });
 }
@@ -452,6 +489,7 @@ export function reconcileSessionStatusesWithRunningRegistry(
     }
     if (inRunningRegistry && !uiBusy) {
       if (s.status === "error" || s.status === "cancelled") return s;
+      if (s.status === "idle" && sessionHadRecentClaudeTurnFailureNotice(s.messages)) return s;
       changed = true;
       return { ...s, status: "running" as const };
     }
@@ -492,7 +530,9 @@ export function finalizeSessionAfterComplete(params: {
       ? streamingResident
         ? ("idle" as const)
         : ("completed" as const)
-      : ("cancelled" as const);
+      : streamingResident
+        ? ("idle" as const)
+        : ("cancelled" as const);
     return {
       ...session,
       status: nextStatus,

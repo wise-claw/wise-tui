@@ -2,8 +2,12 @@ import { describe, expect, test } from "bun:test";
 import {
   buildMonitorEmployeeHistorySessionsByName,
   pickLatestMonitorEmployeeHistorySession,
+  pickMonitorTerminalDrawerSession,
 } from "./omcEmployeeMonitorHistory";
+import { setTerminalDefaultWorkerTab, resetTerminalDefaultWorkerTabsForTests } from "../services/terminalDispatch";
 import type { ClaudeSession } from "../types";
+
+const REPO = "/repo/eco-ai-web";
 
 function workerSession(partial: Partial<ClaudeSession> & Pick<ClaudeSession, "id">): ClaudeSession {
   return {
@@ -65,5 +69,33 @@ describe("buildMonitorEmployeeHistorySessionsByName", () => {
     ];
     const map = buildMonitorEmployeeHistorySessionsByName(sessions);
     expect(pickLatestMonitorEmployeeHistorySession(map, "终端01")?.id).toBe("newer");
+  });
+});
+
+describe("pickMonitorTerminalDrawerSession", () => {
+  test("prefers pinned default worker tab after 新增会话 over latest history session", () => {
+    resetTerminalDefaultWorkerTabsForTests();
+    const history = workerSession({
+      id: "wise-tab-history",
+      repositoryName: "eco-ai-web/员工:终端02",
+      claudeSessionId: "0123456789abcdef0123456789abcdef",
+      messages: [{ role: "assistant", content: "old reply", timestamp: 500 }],
+      status: "completed",
+      createdAt: 10,
+    });
+    const fresh = workerSession({
+      id: "wise-tab-fresh",
+      repositoryPath: REPO,
+      repositoryName: "eco-ai-web/员工:终端02",
+      createdAt: 900,
+    });
+    setTerminalDefaultWorkerTab(REPO, "终端02", "wise-tab-fresh");
+    const map = buildMonitorEmployeeHistorySessionsByName([history, fresh]);
+    expect(pickLatestMonitorEmployeeHistorySession(map, "终端02")?.id).toBe("wise-tab-history");
+
+    const picked = pickMonitorTerminalDrawerSession([history, fresh], REPO, "终端02", map);
+    expect(picked?.id).toBe("wise-tab-fresh");
+    expect(picked?.messages.length).toBe(0);
+    resetTerminalDefaultWorkerTabsForTests();
   });
 });

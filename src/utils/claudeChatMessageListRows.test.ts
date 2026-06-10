@@ -28,6 +28,19 @@ describe("shouldShowListEndThinkingHint", () => {
       shouldShowListEndThinkingHint([msg({ id: 1, role: "user", content: "hi" })], "idle"),
     ).toBe(false);
   });
+
+  test("hides when running but turn already failed with system notice", () => {
+    expect(
+      shouldShowListEndThinkingHint(
+        [
+          msg({ id: 1, role: "user", content: "hi" }),
+          msg({ id: 2, role: "assistant", content: "partial" }),
+          msg({ id: 3, role: "system", content: "Claude 轮次失败: tool parse failed" }),
+        ],
+        "running",
+      ),
+    ).toBe(false);
+  });
 });
 
 describe("buildChatMessageListRows", () => {

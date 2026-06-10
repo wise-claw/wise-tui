@@ -1,3 +1,5 @@
+import { extractResultErrorMessageFromStreamLine } from "../services/claudeStreamParser";
+
 function safeJsonParse(line: string): unknown {
   try {
     return JSON.parse(line);
@@ -116,16 +118,11 @@ function extractStreamSystemErrorPreview(line: string): string | null {
 }
 
 function extractResultLineErrorMessage(line: string): string | null {
+  const primary = extractResultErrorMessageFromStreamLine(line);
+  if (primary) return primary;
   try {
     const p = JSON.parse(line) as Record<string, unknown>;
     if (p.type !== "result") return null;
-    if (p.is_error === true) {
-      const r = typeof p.result === "string" ? p.result.trim() : "";
-      if (r) return r;
-      const errs = p.errors;
-      if (typeof errs === "string" && errs.trim()) return errs.trim();
-      return "Claude Code 返回错误结果";
-    }
     const sub = typeof p.subtype === "string" ? p.subtype : "";
     if (sub.includes("error")) {
       const r = typeof p.result === "string" ? p.result.trim() : "";

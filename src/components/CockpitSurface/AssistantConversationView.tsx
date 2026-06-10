@@ -1,6 +1,8 @@
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { App as AntdApp, Button, Empty, Input, Spin, Tag, Typography } from "antd";
-import { CopyOutlined, SettingOutlined } from "@ant-design/icons";
+import { CopyFeedbackIcon } from "../shared/CopyFeedbackIcon";
+import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
+import { SettingOutlined } from "@ant-design/icons";
 import type { ComponentProps } from "react";
 import {
   WORKFLOW_UI_EVENT_RUN_ASSISTANT_BRIEF,
@@ -183,13 +185,7 @@ function ArtifactAssistantWorkspace({
     [activeProjectName, assistant, enabledMcps, enabledSkills, engineering, request, skillInstructions],
   );
 
-  const handleCopyBrief = async () => {
-    try {
-      await navigator.clipboard.writeText(executionBrief);
-    } catch (err) {
-      message.error(`复制失败：${err instanceof Error ? err.message : String(err)}`);
-    }
-  };
+  const { copied, copy } = useCopyToClipboard();
 
   const handleRunBrief = () => {
     if (!request.trim()) {
@@ -274,8 +270,8 @@ function ArtifactAssistantWorkspace({
             </Typography.Text>
           </div>
           <div className="assistant-artifact-workspace__brief-actions">
-            <Button icon={<CopyOutlined />} onClick={() => void handleCopyBrief()}>
-              复制 Brief
+            <Button icon={<CopyFeedbackIcon copied={copied} />} onClick={() => void copy(executionBrief)}>
+              {copied ? "已复制" : "复制 Brief"}
             </Button>
             <Button type="primary" onClick={handleRunBrief}>
               派发到 Claude

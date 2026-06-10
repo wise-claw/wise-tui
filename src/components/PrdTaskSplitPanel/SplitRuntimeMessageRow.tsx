@@ -1,6 +1,6 @@
-import { CopyOutlined } from "@ant-design/icons";
 import { Button } from "antd";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { CopyFeedbackIcon } from "../shared/CopyFeedbackIcon";
 import { LinkifiedPre } from "../ClaudeSessions/LinkifiedPre";
 import type { SplitRetryPhase, SplitRuntimeLogItem } from "./types";
 
@@ -97,7 +97,7 @@ function SplitRuntimeMessageRowInner({ log, retryingPhase, onRetryStage }: Props
             aria-label="复制该条对话"
             title={copied ? "已复制" : "复制"}
           >
-            <CopyOutlined />
+            <CopyFeedbackIcon copied={copied} />
           </button>
           {canRetry ? (
             <Button

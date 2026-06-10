@@ -2,6 +2,7 @@ import {
   CodeOutlined,
   DeploymentUnitOutlined,
   HistoryOutlined,
+  LoadingOutlined,
   PlusCircleOutlined,
   StopOutlined,
 } from "@ant-design/icons";
@@ -28,7 +29,7 @@ import type {
   SessionConversationTaskItem,
   TeamMonitorItem,
 } from "../../types";
-import { isSessionBoundAsRepositoryMain } from "../../utils/repositoryMainSessionBinding";
+import { isSessionBoundAsRepositoryMain, repositoryPathsMatch } from "../../utils/repositoryMainSessionBinding";
 import type { WorkflowInvocationStreamDetail } from "../../constants/workflowUiEvents";
 import {
   formatOmcDirectBatchInvocationErrorPreviewLineForList,
@@ -44,7 +45,7 @@ import {
   buildMonitorEmployeeHistorySessionsByName,
   monitorEmployeeHistoryStructureFingerprint,
   normalizeMonitorEmployeeName,
-  pickLatestMonitorEmployeeHistorySession,
+  pickMonitorTerminalDrawerSession,
 } from "../../utils/omcEmployeeMonitorHistory";
 import {
   pickSubagentTranscriptSession,
@@ -1012,6 +1013,23 @@ const TerminalEmployeeMonitorRow = memo(function TerminalEmployeeMonitorRow({
               <StopOutlined />
             </button>
           ) : null}
+          {!isOmcWorker && onCreateTerminalSession ? (
+            <button
+              type="button"
+              className={`app-monitor-panel__item-action-icon-btn app-monitor-panel__item-action-icon-btn--new-session${createTerminalSessionLoading ? " app-monitor-panel__item-action-icon-btn--loading" : ""}`}
+              title={createTerminalSessionLoading ? "创建中..." : "新增会话"}
+              aria-label="新增会话"
+              aria-busy={createTerminalSessionLoading}
+              disabled={createTerminalSessionLoading}
+              onClick={(event) => {
+                event.stopPropagation();
+                if (createTerminalSessionLoading) return;
+                onCreateTerminalSession();
+              }}
+            >
+              {createTerminalSessionLoading ? <LoadingOutlined /> : <PlusCircleOutlined />}
+            </button>
+          ) : null}
           {isOmcWorker ? (
             <OmcDirectBatchInProgressPopover
               open={historyPopoverOpen}
@@ -1291,51 +1309,6 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
     setOmcDirectBatchDetailSnapshot(inv);
   }, []);
 
-  const activateEmployeeTerminalRow = useCallback(
-    (item: EmployeeMonitorItem) => {
-      const openDrawer = (sessionId: string) => {
-        openHistoryMessagesDrawer(sessionId);
-      };
-      if (item.employeeId === "omc-worker") {
-        const latestInvocation =
-          omcDirectBatchInvocationsLive.length > 0
-            ? omcDirectBatchInvocationsLive[omcDirectBatchInvocationsLive.length - 1]
-            : undefined;
-        if (latestInvocation) {
-          const subprocessSid = latestInvocation.subprocessSessionId?.trim();
-          if (subprocessSid) {
-            openDrawer(subprocessSid);
-            return;
-          }
-          handleOmcDirectBatchRowActivate(latestInvocation);
-          return;
-        }
-        const boundSid = item.sessionId?.trim();
-        if (boundSid) {
-          openDrawer(boundSid);
-          return;
-        }
-        setEmployeeHistoryPopoverId(item.employeeId);
-        setEmployeeHistorySearch("");
-        return;
-      }
-
-      const latestSession = pickLatestMonitorEmployeeHistorySession(employeeHistorySessionsByName, item.name);
-      if (latestSession) {
-        openDrawer(latestSession.id);
-        return;
-      }
-      const activeSid = item.sessionId?.trim();
-      if (activeSid && sessions.some((session) => session.id === activeSid)) {
-        openDrawer(activeSid);
-        return;
-      }
-      setEmployeeHistoryPopoverId(item.employeeId);
-      setEmployeeHistorySearch("");
-    },
-    [employeeHistorySessionsByName, handleOmcDirectBatchRowActivate, omcDirectBatchInvocationsLive, sessions],
-  );
-
   const stopSessionConversationTask = useCallback(
     (item: SessionConversationTaskItem) => {
       if (
@@ -1426,6 +1399,67 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
     const fromDispatch = executionEnvironmentDispatchTaskItems.find((item) => item.repositoryPath?.trim());
     return fromDispatch?.repositoryPath?.trim() ?? "";
   }, [activeSessionId, executionEnvironmentDispatchTaskItems, sessions]);
+
+  const activateEmployeeTerminalRow = useCallback(
+    (item: EmployeeMonitorItem) => {
+      const openDrawer = (sessionId: string) => {
+        openHistoryMessagesDrawer(sessionId);
+      };
+      if (item.employeeId === "omc-worker") {
+        const latestInvocation =
+          omcDirectBatchInvocationsLive.length > 0
+            ? omcDirectBatchInvocationsLive[omcDirectBatchInvocationsLive.length - 1]
+            : undefined;
+        if (latestInvocation) {
+          const subprocessSid = latestInvocation.subprocessSessionId?.trim();
+          if (subprocessSid) {
+            openDrawer(subprocessSid);
+            return;
+          }
+          handleOmcDirectBatchRowActivate(latestInvocation);
+          return;
+        }
+        const boundSid = item.sessionId?.trim();
+        if (boundSid) {
+          openDrawer(boundSid);
+          return;
+        }
+        setEmployeeHistoryPopoverId(item.employeeId);
+        setEmployeeHistorySearch("");
+        return;
+      }
+
+      const repoPath =
+        item.repositoryPath?.trim() ||
+        monitorRepositoryPath ||
+        "";
+      const drawerSession = pickMonitorTerminalDrawerSession(
+        sessions,
+        repoPath,
+        item.name,
+        employeeHistorySessionsByName,
+      );
+      if (drawerSession) {
+        openDrawer(drawerSession.id);
+        return;
+      }
+      const activeSid = item.sessionId?.trim();
+      if (activeSid && sessions.some((session) => session.id === activeSid)) {
+        openDrawer(activeSid);
+        return;
+      }
+      setEmployeeHistoryPopoverId(item.employeeId);
+      setEmployeeHistorySearch("");
+    },
+    [
+      employeeHistorySessionsByName,
+      handleOmcDirectBatchRowActivate,
+      monitorRepositoryPath,
+      omcDirectBatchInvocationsLive,
+      openHistoryMessagesDrawer,
+      sessions,
+    ],
+  );
 
   const sessionsForTerminalStatusRef = useRef(sessions);
   sessionsForTerminalStatusRef.current = sessions;
@@ -1520,14 +1554,22 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
       if (nextOpen) {
         setEmployeeHistoryPopoverId(employeeId);
         setEmployeeHistorySearch("");
-        const active = activeSessionId
-          ? sessions.find((item) => item.id === activeSessionId)
-          : undefined;
-        const repoPath = active?.repositoryPath?.trim();
+        const employeeItem = employeeItems.find((item) => item.employeeId === employeeId);
+        const repoPath =
+          employeeItem?.repositoryPath?.trim() ||
+          monitorRepositoryPath ||
+          "";
         if (repoPath && onRefreshHistorySessions) {
+          const repoName =
+            employeeItem?.repositoryName?.trim() ||
+            repositories.find((repo) => repositoryPathsMatch(repo.path, repoPath))?.name ||
+            sessions
+              .find((session) => repositoryPathsMatch(session.repositoryPath, repoPath))
+              ?.repositoryName?.trim() ||
+            repoPath;
           void onRefreshHistorySessions({
             repositoryPath: repoPath,
-            repositoryName: active?.repositoryName?.trim() || repoPath,
+            repositoryName: repoName,
           });
         }
         return;
@@ -1535,7 +1577,7 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
       setEmployeeHistoryPopoverId((prev) => (prev === employeeId ? null : prev));
       setEmployeeHistorySearch("");
     },
-    [activeSessionId, onRefreshHistorySessions, sessions],
+    [employeeItems, monitorRepositoryPath, onRefreshHistorySessions, repositories, sessions],
   );
 
   const renderEmployeeTerminalListItem = useCallback(

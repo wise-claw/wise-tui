@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ToolUsePart } from "../../types";
-import { shouldRenderOutputAsMarkdown, getToolDisplayInfo } from "./MessageParts";
+import { shouldRenderOutputAsMarkdown, getToolDisplayInfo, shouldShowToolOutputBody } from "./MessageParts";
 
 describe("shouldRenderOutputAsMarkdown", () => {
   const buildPart = (name: string, output: string): ToolUsePart => ({
@@ -30,6 +30,19 @@ describe("shouldRenderOutputAsMarkdown", () => {
     expect(shouldRenderOutputAsMarkdown(buildPart("list_dir", "## Heading\n- List"))).toBe(false);
   });
 
+  test("renders completion summary markdown even for edit tool output", () => {
+    const summary = "已完成！以下是改动总结：\n\n---\n\n## 大屏视频播放功能 — 改动总结\n| 文件 | 变更 |";
+    expect(shouldRenderOutputAsMarkdown(buildPart("edit", summary))).toBe(true);
+    expect(shouldRenderOutputAsMarkdown(buildPart("TaskUpdate", summary))).toBe(true);
+  });
+
+  test("renders bash completion summary markdown instead of monospace pre", () => {
+    const summary =
+      "零错误。全部改动已就绪，以下是总结：\n\n---\n\n## ✅ 大屏视频播放功能 — 完成\n| 文件 | 变更 |";
+    expect(shouldRenderOutputAsMarkdown(buildPart("bash", summary))).toBe(true);
+    expect(shouldRenderOutputAsMarkdown(buildPart("exec", summary))).toBe(true);
+  });
+
   test("detects headings and bullet lists correctly as markdown", () => {
     expect(shouldRenderOutputAsMarkdown(buildPart("search_web", "## Search Results\nHere is what I found"))).toBe(true);
     expect(shouldRenderOutputAsMarkdown(buildPart("custom_workflow", "Here is a list:\n- item 1\n- item 2"))).toBe(true);
@@ -57,6 +70,34 @@ describe("shouldRenderOutputAsMarkdown", () => {
       status: "completed",
     };
     expect(shouldRenderOutputAsMarkdown(part)).toBe(true);
+  });
+});
+
+describe("shouldShowToolOutputBody", () => {
+  test("hides output when it duplicates tool error text", () => {
+    const part: ToolUsePart = {
+      id: "t1",
+      type: "tool_use",
+      name: "",
+      input: {},
+      status: "error",
+      error: "File does not exist.",
+      output: "File does not exist.",
+    };
+    expect(shouldShowToolOutputBody(part)).toBe(false);
+  });
+
+  test("shows output when error text differs", () => {
+    const part: ToolUsePart = {
+      id: "t1",
+      type: "tool_use",
+      name: "bash",
+      input: {},
+      status: "error",
+      error: "Command failed",
+      output: "stderr details",
+    };
+    expect(shouldShowToolOutputBody(part)).toBe(true);
   });
 });
 

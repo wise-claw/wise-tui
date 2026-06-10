@@ -440,17 +440,25 @@ export function LlmProxyTrafficPanel({ repositoryPath, variant = "sidebar" }: Pr
           <Alert
             type="warning"
             showIcon
-            message="OpenCode 代理优先"
-            description={proxyConflictMessage}
-            style={{ marginBottom: 8 }}
+            className="app-llm-proxy-panel__conflict-alert"
+            message={
+              <>
+                <span className="app-llm-proxy-panel__conflict-alert-title">OpenCode 代理优先</span>
+                {proxyConflictMessage}
+              </>
+            }
           />
         ) : opencodeGoRunning ? (
           <Alert
             type="info"
             showIcon
-            message="OpenCode 代理已运行"
-            description="开启 LLM 监听后，Claude 子进程仍优先走 OpenCode 代理，Anthropic 请求不会记录在本面板。"
-            style={{ marginBottom: 8 }}
+            className="app-llm-proxy-panel__conflict-alert"
+            message={
+              <>
+                <span className="app-llm-proxy-panel__conflict-alert-title">OpenCode 代理已运行</span>
+                开启 LLM 监听后，Claude 子进程仍优先走 OpenCode 代理，Anthropic 请求不会记录在本面板。
+              </>
+            }
           />
         ) : null}
 

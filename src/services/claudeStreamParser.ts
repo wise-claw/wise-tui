@@ -22,7 +22,7 @@ function toolResultPartsFromContentBlocks(blocks: unknown): MessagePart[] {
           .map((c: unknown) => ((c as { text?: unknown }).text as string) ?? "")
           .join("")
       : b.content;
-    const output =
+    const rawOutput =
       typeof content === "string" ? content : content != null ? JSON.stringify(content) : "";
     const isError = b.is_error === true;
     parts.push({
@@ -30,9 +30,9 @@ function toolResultPartsFromContentBlocks(blocks: unknown): MessagePart[] {
       id: toolUseId,
       name: typeof b.name === "string" ? b.name : "",
       input: {},
-      output,
+      output: isError ? "" : rawOutput,
       status: isError ? "error" : "completed",
-      error: isError ? (typeof output === "string" ? output : undefined) : undefined,
+      error: isError ? rawOutput : undefined,
     } satisfies ToolUsePart);
   }
   return parts;
@@ -145,6 +145,10 @@ export function extractPartsFromStreamLine(line: string): { parts: MessagePart[]
 
     // Some Claude Code versions emit final text on a `result` event.
     if (json.type === "result") {
+      if (json.is_error === true) {
+        // 模型/CLI 侧工具调用解析失败；勿写入助手气泡（见 extractResultErrorMessageFromStreamLine）。
+        return { parts: [], isInit: false, sessionId: null };
+      }
       const resultText =
         typeof json.result === "string"
           ? json.result
@@ -182,13 +186,20 @@ export function extractPartsFromStreamLine(line: string): { parts: MessagePart[]
     if (json.type === "assistant" && json.message?.content) {
       const blocks = json.message.content;
       if (typeof blocks === "string" && blocks.trim()) {
-        return { parts: [{ type: "text", text: blocks }], isInit: false, sessionId: null };
+        const cleaned = stripClaudeHarnessInjectedStreamText(blocks);
+        if (cleaned && !isClaudeHarnessInjectedStreamText(cleaned)) {
+          return { parts: [{ type: "text", text: cleaned }], isInit: false, sessionId: null };
+        }
+        return { parts: [], isInit: false, sessionId: null };
       }
       if (Array.isArray(blocks)) {
         const parts: MessagePart[] = [];
         for (const b of blocks) {
           if (b.type === "text" && b.text) {
-            parts.push({ type: "text", text: b.text });
+            const cleaned = stripClaudeHarnessInjectedStreamText(String(b.text));
+            if (cleaned && !isClaudeHarnessInjectedStreamText(cleaned)) {
+              parts.push({ type: "text", text: cleaned });
+            }
           } else if (b.type === "tool_use") {
             parts.push({
               type: "tool_use",
@@ -207,7 +218,7 @@ export function extractPartsFromStreamLine(line: string): { parts: MessagePart[]
       }
     }
 
-    // User message echo (Claude Code 子代理 tool_result 通常在 user 行，而非 assistant)
+    // User 行仅合并 tool_result；CLI 注入的 retry 用户文案勿写入助手气泡。
     if (json.type === "user" && json.message?.content) {
       const blocks = json.message.content;
       if (Array.isArray(blocks)) {
@@ -215,14 +226,6 @@ export function extractPartsFromStreamLine(line: string): { parts: MessagePart[]
         if (toolResults.length > 0) {
           return { parts: toolResults, isInit: false, sessionId: null };
         }
-        const textParts = blocks
-          .filter((b: unknown) => {
-            if (!b || typeof b !== "object") return false;
-            return (b as { type?: unknown }).type === "text";
-          })
-          .map((b: unknown) => ((b as { text?: unknown }).text as string) ?? "")
-          .join("");
-        if (textParts) return { parts: [{ type: "text", text: textParts }], isInit: false, sessionId: null };
       }
     }
 
@@ -230,6 +233,58 @@ export function extractPartsFromStreamLine(line: string): { parts: MessagePart[]
   } catch {
     return { parts: [], isInit: false, sessionId: null };
   }
+}
+
+/** Claude Code `type:result` + `is_error:true` 轮次失败摘要（含工具调用无法解析）。 */
+export function extractResultErrorMessageFromStreamLine(line: string): string | null {
+  try {
+    const p = JSON.parse(line) as Record<string, unknown>;
+    if (p.type !== "result" || p.is_error !== true) return null;
+    const r = typeof p.result === "string" ? p.result.trim() : "";
+    if (r) return r;
+    const errs = p.errors;
+    if (typeof errs === "string" && errs.trim()) return errs.trim();
+    return "Claude Code 返回错误结果";
+  } catch {
+    return null;
+  }
+}
+
+/** 已知 CLI 工具调用解析失败文案；勿当作「有可见助手回复」抵消 complete.success=false。 */
+export function isClaudeToolCallParseFailureText(text: string): boolean {
+  const normalized = text.trim();
+  if (!normalized) return false;
+  return (
+    /tool call could not be parsed/i.test(normalized) ||
+    /tool call was malformed/i.test(normalized)
+  );
+}
+
+/** 将 CLI result 错误转为会话系统消息（已知工具解析失败用中文说明）。 */
+export function formatClaudeResultErrorForSessionUi(raw: string): string {
+  const trimmed = raw.trim();
+  if (!trimmed) return "Claude 轮次失败：未知错误";
+  if (isClaudeToolCallParseFailureText(trimmed)) {
+    return "Claude 轮次失败：模型工具调用无法解析（CLI 已自动重试仍失败）。OpenCode 代理已尝试从正文提取工具调用；请重启代理并新开标签，或换 Kimi/GLM。";
+  }
+  return `Claude 轮次失败: ${trimmed}`;
+}
+
+/** Claude Code 注入的重试/纠错文案（常出现在 user 行或混进 assistant text）。 */
+export function isClaudeHarnessInjectedStreamText(text: string): boolean {
+  const normalized = text.trim();
+  if (!normalized) return false;
+  if (isClaudeToolCallParseFailureText(normalized)) return true;
+  return /^Your tool call was malformed and could not be parsed/i.test(normalized);
+}
+
+/** 从流式 text 块中剥离 CLI 注入文案，避免与模型正文拼成乱句。 */
+export function stripClaudeHarnessInjectedStreamText(text: string): string {
+  return text
+    .replace(/Your tool call was malformed and could not be parsed\.?\s*(Please retry\.?)?/gi, "")
+    .replace(/The model's tool call could not be parsed[^.\n]*(?:\([^)]*\))?\.?/gi, "")
+    .replace(/\s{2,}/g, " ")
+    .trim();
 }
 
 /** Claude stream-json 中占位/无信息量的 system error 文案，不应写入会话 UI。 */

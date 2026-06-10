@@ -169,7 +169,7 @@ function buildAssistantMessage(parts: MessagePart[]): ClaudeMessage {
   };
 }
 
-function isToolResultUpdatePart(part: MessagePart): part is ToolUsePart {
+export function isToolResultUpdatePart(part: MessagePart): part is ToolUsePart {
   if (part.type !== "tool_use") return false;
   return (
     part.status === "completed" ||
@@ -177,6 +177,22 @@ function isToolResultUpdatePart(part: MessagePart): part is ToolUsePart {
     Boolean(part.output?.trim()) ||
     Boolean(part.error?.trim())
   );
+}
+
+export function partitionStreamMessageParts(parts: MessagePart[]): {
+  toolResults: ToolUsePart[];
+  streamParts: MessagePart[];
+} {
+  const toolResults: ToolUsePart[] = [];
+  const streamParts: MessagePart[] = [];
+  for (const part of parts) {
+    if (isToolResultUpdatePart(part)) {
+      toolResults.push(part);
+    } else {
+      streamParts.push(part);
+    }
+  }
+  return { toolResults, streamParts };
 }
 
 /** 将 stream-json 中的 tool_result 合并进历史 assistant 消息里对应的 tool_use（按 id）。 */

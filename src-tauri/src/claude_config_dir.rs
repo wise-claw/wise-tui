@@ -175,6 +175,33 @@ pub(crate) fn apply_local_proxy_claude_model_env(
     }
 }
 
+/// Claude Code 2.1+ 默认 ToolSearch 会发 `tool_reference`；Qwen 等上游 Anthropic 兼容层不支持，导致工具调用 400。
+/// 扩展思考 + 交错 thinking 在 Qwen 上易触发 stop_reason=tool_use 却无 tool_use 块，导致 CLI 解析失败。
+const LOCAL_PROXY_CLAUDE_TOOL_COMPAT_ENV: &[(&str, &str)] = &[
+    ("ENABLE_TOOL_SEARCH", "false"),
+    ("ENABLE_EXPERIMENTAL_MCP_CLI", "false"),
+    ("CLAUDE_CODE_ENABLE_FINE_GRAINED_TOOL_STREAMING", "0"),
+    ("CLAUDE_CODE_DISABLE_THINKING", "1"),
+    ("DISABLE_INTERLEAVED_THINKING", "1"),
+    ("MAX_THINKING_TOKENS", "0"),
+    ("CLAUDE_CODE_EFFORT_LEVEL", "medium"),
+];
+
+pub(crate) fn apply_local_proxy_claude_tool_compat_env(env: &mut HashMap<String, String>) {
+    for (key, value) in LOCAL_PROXY_CLAUDE_TOOL_COMPAT_ENV {
+        env.insert((*key).to_string(), (*value).to_string());
+    }
+}
+
+/// 写入用户 `settings.json` 的 `env` 块（与 spawn 侧工具兼容策略一致）。
+pub(crate) fn apply_local_proxy_claude_tool_compat_json_env(
+    env_obj: &mut serde_json::Map<String, serde_json::Value>,
+) {
+    for (key, value) in LOCAL_PROXY_CLAUDE_TOOL_COMPAT_ENV {
+        env_obj.insert(key.to_string(), serde_json::Value::String(value.to_string()));
+    }
+}
+
 /// 仅合并用户 + 项目 `settings.json`（**不**读 `~/.claude.json` 的 `env`，避免百炼 key 污染 spawn）。
 pub(crate) fn merged_claude_spawn_env(project_path: Option<&str>) -> HashMap<String, String> {
     let mut out = read_claude_json_env_block(&user_claude_dir().join("settings.json"));
@@ -259,6 +286,7 @@ pub(crate) fn build_claude_spawn_env(
             merged.insert("ANTHROPIC_AUTH_TOKEN".to_string(), "unused".to_string());
             merged.remove("ANTHROPIC_API_KEY");
             normalize_claude_models_for_local_proxy(&mut merged);
+            apply_local_proxy_claude_tool_compat_env(&mut merged);
         }
     }
     if merged
@@ -280,6 +308,7 @@ pub(crate) fn build_claude_spawn_env(
         merged
             .entry("CLAUDE_CODE_AUTO_COMPACT_WINDOW".to_string())
             .or_insert_with(|| "190000".to_string());
+        apply_local_proxy_claude_tool_compat_env(&mut merged);
     }
     merged
 }
@@ -534,6 +563,16 @@ mod tests {
             Some("unused")
         );
         assert!(!built.contains_key("ANTHROPIC_API_KEY"));
+        assert_eq!(
+            built.get("ENABLE_TOOL_SEARCH").map(String::as_str),
+            Some("false")
+        );
+        assert_eq!(
+            built
+                .get("CLAUDE_CODE_ENABLE_FINE_GRAINED_TOOL_STREAMING")
+                .map(String::as_str),
+            Some("0")
+        );
     }
 
     #[test]

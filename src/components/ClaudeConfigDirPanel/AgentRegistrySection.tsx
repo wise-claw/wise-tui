@@ -1,7 +1,6 @@
 import {
   CloseCircleOutlined,
   CloudDownloadOutlined,
-  CopyOutlined,
   DeleteOutlined,
   EditOutlined,
   KeyOutlined,
@@ -13,6 +12,8 @@ import {
 } from "@ant-design/icons";
 import { Alert, Button, Empty, Form, Input, Modal, Popconfirm, Space, Tag, Typography, message } from "antd";
 import { HoverHint } from "../shared/HoverHint";
+import { CopyFeedbackIcon } from "../shared/CopyFeedbackIcon";
+import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   deleteCustomAgent,
@@ -482,14 +483,11 @@ function AgentRegistryRow({
 }: AgentRegistryRowProps) {
   const pathText = getAgentPathLabel(agent);
 
+  const { copied, copy } = useCopyToClipboard();
+
   const handleCopy = useCallback(() => {
-    navigator.clipboard
-      .writeText(pathText)
-      .then(() => {})
-      .catch(() => {
-        message.error("复制失败");
-      });
-  }, [pathText]);
+    void copy(pathText);
+  }, [copy, pathText]);
 
   const brandClass = `app-agent-registry-card--${agent.kind}`;
 
@@ -532,12 +530,12 @@ function AgentRegistryRow({
         <code className="app-agent-registry-card__path-code" title={pathText}>
           {pathText}
         </code>
-        <HoverHint title="复制路径">
+        <HoverHint title={copied ? "已复制" : "复制路径"}>
           <Button
             type="text"
             size="small"
             className="app-agent-registry-card__copy-btn"
-            icon={<CopyOutlined style={{ fontSize: "11px" }} />}
+            icon={<CopyFeedbackIcon copied={copied} style={{ fontSize: "11px" }} />}
             onClick={handleCopy}
           />
         </HoverHint>

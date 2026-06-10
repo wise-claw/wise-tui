@@ -981,7 +981,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  padding: 6px 12px;
+  padding: 0 12px;
 }
 
 .git-section--collapsed .git-section-header {

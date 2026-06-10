@@ -2,29 +2,40 @@ import { describe, expect, test } from "bun:test";
 import type { ClaudeSession } from "../types";
 import { pruneRepoDiskIndexSessions } from "./useClaudeSessions";
 
-const REPO = "/work/repo";
+const REPO = "/Users/dev/eco-ai-web";
 
-function diskStub(id: string, at: number): ClaudeSession {
+function session(partial: Partial<ClaudeSession> & Pick<ClaudeSession, "id">): ClaudeSession {
   return {
-    id,
-    claudeSessionId: id,
-    repositoryPath: REPO,
-    repositoryName: "repo",
-    model: "sonnet",
-    status: "completed",
-    messages: [],
-    createdAt: at,
-    pendingPrompt: "",
-    diskPreview: "preview",
+    claudeSessionId: partial.claudeSessionId ?? null,
+    repositoryPath: partial.repositoryPath ?? REPO,
+    repositoryName: partial.repositoryName ?? "eco-ai-web",
+    model: partial.model ?? "sonnet",
+    status: partial.status ?? "completed",
+    messages: partial.messages ?? [],
+    createdAt: partial.createdAt ?? Date.now(),
+    pendingPrompt: partial.pendingPrompt ?? "",
+    ...partial,
   };
 }
 
 describe("pruneRepoDiskIndexSessions", () => {
-  test("drops oldest disk-only index rows beyond limit", () => {
-    const sessions = Array.from({ length: 60 }, (_, i) => diskStub(`s-${i}`, i));
-    const next = pruneRepoDiskIndexSessions(sessions, REPO, 48);
-    expect(next.length).toBe(48);
-    expect(next.some((s) => s.id === "s-0")).toBe(false);
-    expect(next.some((s) => s.id === "s-59")).toBe(true);
+  test("does not prune terminal worker wise tab with recycled messages", () => {
+    const worker = session({
+      id: "wise-tab-terminal-02",
+      claudeSessionId: "0123456789abcdef0123456789abcdef",
+      repositoryName: "eco-ai-web/员工:终端02",
+      messages: [],
+      createdAt: 1,
+    });
+    const diskOnlyRows = Array.from({ length: 30 }, (_, index) =>
+      session({
+        id: `disk-${index}`,
+        claudeSessionId: `disk-${index}`,
+        createdAt: 100 + index,
+      }),
+    );
+
+    const next = pruneRepoDiskIndexSessions([worker, ...diskOnlyRows], REPO, 24);
+    expect(next.some((row) => row.id === "wise-tab-terminal-02")).toBe(true);
   });
 });

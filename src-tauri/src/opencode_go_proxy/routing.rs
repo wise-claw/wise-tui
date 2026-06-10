@@ -53,6 +53,24 @@ pub fn is_anthropic_native_model(model_id: &str) -> bool {
     }
 }
 
+/// OpenCode Go 上游的非 Claude 模型（需请求/响应工具兼容处理）。
+pub fn is_third_party_upstream_model(model_id: &str) -> bool {
+    if is_anthropic_native_model(model_id) {
+        return true;
+    }
+    let m = model_id.trim().to_ascii_lowercase();
+    if m.is_empty() || m.contains("claude") || m.contains("gpt-") || m.starts_with("gemini") {
+        return false;
+    }
+    m.starts_with("kimi")
+        || m.starts_with("glm")
+        || m.starts_with("deepseek")
+        || m.starts_with("doubao")
+        || m.starts_with("minimax")
+        || m.starts_with("moonshot")
+        || m.contains("bailian")
+}
+
 fn is_gemini_model(model_id: &str) -> bool {
     matches!(
         model_id,
@@ -145,5 +163,13 @@ mod tests {
     fn routes_kimi_to_chat_on_go() {
         let r = resolve_upstream(Provider::OpenCodeGo, "kimi-k2.6", "");
         assert_eq!(r.endpoint, EndpointKind::ChatCompletions);
+    }
+
+    #[test]
+    fn detects_third_party_upstream_models() {
+        assert!(is_third_party_upstream_model("qwen3.7-plus"));
+        assert!(is_third_party_upstream_model("kimi-k2.6"));
+        assert!(!is_third_party_upstream_model("gpt-5.4"));
+        assert!(!is_third_party_upstream_model("claude-sonnet-4-8"));
     }
 }

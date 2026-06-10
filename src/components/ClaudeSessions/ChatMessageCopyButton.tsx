@@ -1,6 +1,6 @@
-import { CopyOutlined } from "@ant-design/icons";
-import { memo, useCallback, useRef, useState } from "react";
-import { message } from "antd";
+import { memo, useCallback } from "react";
+import { CopyFeedbackIcon } from "../shared/CopyFeedbackIcon";
+import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { ChatMessageActionButton } from "./ChatMessageActionButton";
 
 interface Props {
@@ -8,29 +8,14 @@ interface Props {
 }
 
 function ChatMessageCopyButtonInner({ text }: Props) {
-  const resetTimerRef = useRef<number | null>(null);
-  const [copied, setCopied] = useState(false);
+  const { copied, copy } = useCopyToClipboard();
 
   const handleCopy = useCallback(
     (event: React.MouseEvent<HTMLButtonElement>) => {
       event.stopPropagation();
-      const trimmed = text.trim();
-      if (!trimmed) return;
-      void navigator.clipboard.writeText(trimmed).then(
-        () => {
-          setCopied(true);
-          if (resetTimerRef.current != null) {
-            window.clearTimeout(resetTimerRef.current);
-          }
-          resetTimerRef.current = window.setTimeout(() => {
-            setCopied(false);
-            resetTimerRef.current = null;
-          }, 1500);
-        },
-        () => message.error("复制失败"),
-      );
+      void copy(text);
     },
-    [text],
+    [copy, text],
   );
 
   if (!text.trim()) return null;
@@ -38,7 +23,7 @@ function ChatMessageCopyButtonInner({ text }: Props) {
   return (
     <ChatMessageActionButton
       className={copied ? "app-claude-message-action--copied" : undefined}
-      icon={<CopyOutlined />}
+      icon={<CopyFeedbackIcon copied={copied} />}
       ariaLabel="复制消息"
       title={copied ? "已复制" : "复制"}
       onClick={handleCopy}

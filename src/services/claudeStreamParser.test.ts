@@ -5,9 +5,14 @@ import {
   extractCursorAgentIdFromCompletePayload,
   extractCursorAgentIdFromStreamLine,
   extractPartsFromStreamLine,
+  extractResultErrorMessageFromStreamLine,
   extractSystemErrorMessageFromStreamLine,
+  formatClaudeResultErrorForSessionUi,
+  isClaudeHarnessInjectedStreamText,
+  isClaudeToolCallParseFailureText,
   parseStreamLineSessionId,
   shouldClearCodexResumeSessionFromStreamLine,
+  stripClaudeHarnessInjectedStreamText,
 } from "./claudeStreamParser";
 
 describe("extractPartsFromStreamLine", () => {
@@ -96,6 +101,55 @@ describe("extractPartsFromStreamLine", () => {
       .toEqual([{ type: "text", text: "chunk" }]);
   });
 
+  test("formats tool parse failure for session UI in Chinese", () => {
+    expect(
+      formatClaudeResultErrorForSessionUi(
+        "The model's tool call could not be parsed (retry also failed)",
+      ),
+    ).toContain("模型工具调用无法解析");
+  });
+
+  test("does not treat result is_error as assistant text", () => {
+    const line = JSON.stringify({
+      type: "result",
+      is_error: true,
+      result: "The model's tool call could not be parsed (retry also failed)",
+    });
+    expect(extractPartsFromStreamLine(line)).toEqual({
+      parts: [],
+      isInit: false,
+      sessionId: null,
+    });
+    expect(extractResultErrorMessageFromStreamLine(line)).toBe(
+      "The model's tool call could not be parsed (retry also failed)",
+    );
+    expect(isClaudeToolCallParseFailureText("The model's tool call could not be parsed (retry also failed)")).toBe(true);
+  });
+
+  test("strips CLI harness retry text from assistant stream and ignores user echo", () => {
+    const harness = "Your tool call was malformed and could not be parsed. Please retry.";
+    expect(isClaudeHarnessInjectedStreamText(harness)).toBe(true);
+    expect(stripClaudeHarnessInjectedStreamText(`它的结构。 ${harness}`)).toBe("它的结构。");
+    expect(
+      extractPartsFromStreamLine(
+        JSON.stringify({
+          type: "user",
+          message: { role: "user", content: [{ type: "text", text: harness }] },
+        }),
+      ).parts,
+    ).toEqual([]);
+    expect(
+      extractPartsFromStreamLine(
+        JSON.stringify({
+          type: "assistant",
+          message: {
+            content: [{ type: "text", text: `让我 ${harness} check files` }],
+          },
+        }),
+      ).parts,
+    ).toEqual([{ type: "text", text: "让我 check files" }]);
+  });
+
   test("parses content_block_delta text_delta and thinking_delta", () => {
     expect(
       extractPartsFromStreamLine(
@@ -147,6 +201,34 @@ describe("extractPartsFromStreamLine", () => {
       id: "toolu_sub_1",
       status: "completed",
       output: "子代理已完成",
+    });
+  });
+
+  test("stores tool_result is_error only on error field (not duplicated in output)", () => {
+    const result = extractPartsFromStreamLine(
+      JSON.stringify({
+        type: "user",
+        message: {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_fail_1",
+              is_error: true,
+              content: [{ type: "text", text: "File does not exist." }],
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(result.parts).toHaveLength(1);
+    expect(result.parts[0]).toMatchObject({
+      type: "tool_use",
+      id: "toolu_fail_1",
+      status: "error",
+      output: "",
+      error: "File does not exist.",
     });
   });
 });

@@ -425,11 +425,14 @@ export function pruneRepoDiskIndexSessions(
       rest.push(session);
       continue;
     }
+    const cid = session.claudeSessionId?.trim();
+    const isWiseBoundTab = Boolean(cid && session.id !== cid);
     const isDiskIndexOnly =
+      !isWiseBoundTab &&
       session.messages.length === 0 &&
       session.status !== "running" &&
       session.status !== "connecting" &&
-      Boolean(session.claudeSessionId?.trim() || session.diskPreview?.trim());
+      Boolean(cid || session.diskPreview?.trim());
     if (isDiskIndexOnly) {
       indexed.push(session);
     } else {
