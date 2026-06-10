@@ -48,7 +48,6 @@ import {
 } from "./utils/pruneWorkflowTaskAuxMaps";
 import { useAgentRegistryCodexAvailable } from "./hooks/useAgentRegistryCodexAvailable";
 import { useAgentRegistryCursorAvailable } from "./hooks/useAgentRegistryCursorAvailable";
-import { useCcWorkflowStudioWorkspace } from "./hooks/useCcWorkflowStudioWorkspace";
 import {
   authorView,
   cockpitView,
@@ -263,7 +262,7 @@ export default function App() {
    * 顶层 View 状态机（参见 .trellis/spec/guides/agent-harness-architecture.md §3）。
    *
    * 取代历史上的 6 个互斥布尔（promptsMode / mcpHubMode / skillsHubMode /
-   * missionControlMode / codeKnowledgeGraphMode / ccWfStudioMode）。
+   * missionControlMode / codeKnowledgeGraphMode）。
    * P0 通过 `viewMode.legacy.*` 提供过渡期兼容；P1 后 AppWorkspaceLayout 自身
    * 从 `viewMode` 派生这些布尔，AppImpl 不再依赖 legacy 别名。
    */
@@ -1202,7 +1201,6 @@ export default function App() {
     employeesRef: employeesLatestRef,
     workflowTemplatesRef: workflowTemplatesLatestRef,
     executeRef: handleComposerExecuteRef,
-    sendMessageRef: sendMessageToSessionRef,
   });
 
   beforeSpawnClaudeRef.current = (session) =>
@@ -1694,18 +1692,6 @@ export default function App() {
     }, { timeoutMs: 800 });
     return cancelIdle;
   }, [activeRepository, refreshDiskSessionsForRepository, tabsHydrated]);
-
-  const {
-    ccWfStudioSessionPath,
-    onCloseCcWorkflowStudio,
-  } = useCcWorkflowStudioWorkspace({
-    sendMessageToSession,
-    switchSession,
-    sessionsLatestRef,
-    activeSessionIdLatestRef,
-    viewMode,
-    activeRepositoryPath: activeRepository?.path,
-  });
 
   const workflowModalRepositoryPath = useMemo(() => {
     const fromProject = workflowConfigPrdProjectId?.trim();
@@ -2888,8 +2874,6 @@ export default function App() {
       dark={dark}
       collapsed={collapsed}
       viewMode={viewMode.view}
-      ccWfStudioSessionPath={ccWfStudioSessionPath}
-      onCloseCcWorkflowStudio={onCloseCcWorkflowStudio}
       onCloseTrellisInspector={viewMode.back}
       onCloseCockpitAutomationHub={viewMode.back}
       effectiveRightCollapsed={effectiveRightCollapsed}

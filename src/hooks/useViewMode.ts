@@ -149,13 +149,12 @@ export interface UseViewModeApi {
   isAuthor: boolean;
   isInspect: boolean;
 
-  /** 6 个互斥布尔兼容别名。仅供过渡期 layout / sidebar nav 直接读，不要在新代码里依赖。 */
+  /** 5 个互斥布尔兼容别名。仅供过渡期 layout / sidebar nav 直接读，不要在新代码里依赖。 */
   legacy: {
     mcpHubMode: boolean;
     skillsHubMode: boolean;
     missionControlMode: boolean;
     codeKnowledgeGraphMode: boolean;
-    ccWfStudioMode: boolean;
   };
 }
 
@@ -193,7 +192,6 @@ export function useViewMode(initial: ViewMode = DEFAULT_VIEW_MODE): UseViewModeA
         (view.kind === "inspect" && view.tool.kind === "skills-hub"),
       missionControlMode: view.kind === "cockpit",
       codeKnowledgeGraphMode: view.kind === "inspect" && view.tool.kind === "code-graph",
-      ccWfStudioMode: view.kind === "inspect" && view.tool.kind === "workflow-studio",
     }),
     [view],
   );

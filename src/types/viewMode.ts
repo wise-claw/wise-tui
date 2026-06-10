@@ -2,9 +2,8 @@
  * 顶层 View 模式（按宪法 §3）
  *
  * 这是一个 discriminated union，表达"用户当前处于哪个全屏视图 / 叠层"。
- * 取代 AppImpl 中曾经的 6 个互斥布尔（`promptsMode` / `mcpHubMode` /
- * `skillsHubMode` / `missionControlMode` / `codeKnowledgeGraphMode` /
- * `ccWfStudioMode`）。
+ * 取代 AppImpl 中曾经的 5 个互斥布尔（`promptsMode` / `mcpHubMode` /
+ * `skillsHubMode` / `missionControlMode` / `codeKnowledgeGraphMode`）。
  *
  * P0 阶段：仅替换状态结构，不改任何视觉行为。各 kind 的渲染规则与
  * 重构前完全一致：
@@ -76,7 +75,6 @@ export const WORKSPACE_SCOPED_AUTHOR_PANES: ReadonlySet<AuthorPane> = new Set([
  */
 export type InspectTool =
   | InspectCodeGraph
-  | InspectWorkflowStudio
   | InspectMcpHub
   | InspectSkillsHub
   | InspectRuntimeEvents
@@ -101,10 +99,6 @@ export interface InspectCodeGraph {
   lockToEntryRepository: boolean;
   /** 侧栏 Workspace 入口为 true：默认多仓关联合并视图(候选 ≥ 2 时)。 */
   defaultProjectMultiRepo: boolean;
-}
-
-export interface InspectWorkflowStudio {
-  kind: "workflow-studio";
 }
 
 /** Trellis 运行证据透镜:onboarding / agent ownership / runtime events feed。 */

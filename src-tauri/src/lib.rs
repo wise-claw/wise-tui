@@ -1,8 +1,6 @@
 mod app_state_commands;
 mod agent_registry;
 mod assistants;
-mod cc_wf_studio_mcp_bridge;
-mod cc_workflow_studio;
 mod claude_code_usage;
 mod claude_commands;
 mod codex_commands;

@@ -1,7 +1,7 @@
 use crate::{
-    agent_registry, app_state_commands, assistants, cc_switch_import, cc_wf_studio_mcp_bridge,
+    agent_registry, app_state_commands, assistants, cc_switch_import,
     in_app_shortcuts,
-    cc_workflow_studio, claude_code_usage, claude_commands, codex_commands, claude_config_dir, claude_external_ingest,
+    claude_code_usage, claude_commands, codex_commands, claude_config_dir, claude_external_ingest,
     claude_llm_proxy, claude_model_profiles,
     code_knowledge_graph, cursor_agent, fcc_traces, free_claude_code, opencode_go_proxy,
     cua_driver, dingtalk_enterprise_bot, dingtalk_stream_gateway, extensions, git_commands,
@@ -38,7 +38,6 @@ pub fn run() {
         .plugin(tauri_plugin_fs::init())
         .plugin(tauri_plugin_global_shortcut::Builder::new().build())
         .setup(|app| {
-            cc_wf_studio_mcp_bridge::kill_stale_cc_wf_studio_mcp_listeners(6282);
             use keyboard_types::{Code, Modifiers};
             use tauri_plugin_global_shortcut::{GlobalShortcutExt, Shortcut, ShortcutState};
             let screenshot_shortcut = Shortcut::new(None, Code::F3);
@@ -665,17 +664,6 @@ pub fn run() {
             code_knowledge_graph::extract_code_graph_synthetic_routes,
             code_knowledge_graph::get_code_graph_multi_subgraph,
             code_knowledge_graph::search_code_graph_nodes,
-            cc_workflow_studio::list_cc_workflow_studio_workflows,
-            cc_workflow_studio::read_cc_workflow_studio_workflow,
-            cc_workflow_studio::write_cc_workflow_studio_workflow,
-            cc_workflow_studio::read_cc_workflow_studio_import_file,
-            cc_workflow_studio::write_cc_wf_studio_ai_editing_skill,
-            cc_wf_studio_mcp_bridge::cc_wf_studio_mcp_bridge_status,
-            cc_wf_studio_mcp_bridge::cc_wf_studio_mcp_bridge_resolve,
-            cc_wf_studio_mcp_bridge::cc_wf_studio_mcp_set_review_before_apply,
-            cc_wf_studio_mcp_bridge::start_cc_wf_studio_mcp_bridge,
-            cc_wf_studio_mcp_bridge::ensure_cc_workflow_studio_project_mcp,
-            cc_wf_studio_mcp_bridge::stop_cc_wf_studio_mcp_bridge,
             extensions::commands::extensions_list,
             extensions::commands::extensions_get_skills,
             extensions::commands::extensions_get_themes,

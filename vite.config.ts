@@ -7,7 +7,7 @@ const root = fileURLToPath(new URL(".", import.meta.url));
 
 /** 仅按需打开的功能块，不应出现在 index 入口的 modulepreload 里。 */
 const DEFERRED_MODULE_PRELOAD_CHUNK =
-  /(?:^|\/)assets\/(?:cc-wf-mermaid|cc-wf-reactflow|cc-wf-radix|WiseCcWorkflowStudioPanel|composer-region|milkdown-vendor|codemirror-vendor|monaco-vendor|terminal-vendor|graph-vendor|AuthorPanel|x6-vendor|driver-vendor)/;
+  /(?:^|\/)assets\/(?:composer-region|milkdown-vendor|codemirror-vendor|monaco-vendor|terminal-vendor|graph-vendor|AuthorPanel|x6-vendor|driver-vendor)/;
 
 const host = process.env.TAURI_DEV_HOST;
 
@@ -17,40 +17,9 @@ export default defineConfig(async () => ({
   resolve: {
     /** 避免多份 React 进入不同 chunk，引发 `useLayoutEffect` of undefined。 */
     dedupe: ["react", "react-dom"],
-    alias: {
-      /** CC Workflow Studio（vendor）与上游一致的 `@shared/*` 解析。 */
-      "@shared": resolve(root, "src/features/cc-wf-studio/vendor/shared"),
-      /** 与 vendor 解耦的纯类型与导出生成（slash / mermaid）。 */
-      "@cc-workflow-studio-core": resolve(root, "src/cc-workflow-studio-core"),
-      /** Radix Portal 挂到工作流壳，修正内嵌时 Popper/Dialog 锚点相对整窗偏移。 */
-      "@radix-ui/react-portal": resolve(root, "src/features/cc-wf-studio/shims/wiseRadixPortal.tsx"),
-      /** Radix DismissableLayer 默认对 body 设 pointer-events:none，会锁死整个 Wise；改为仅锁 shell-main。 */
-      "@radix-ui/react-dismissable-layer": resolve(
-        root,
-        "src/features/cc-wf-studio/shims/wiseRadixDismissableLayer.tsx",
-      ),
-    },
   },
-  /** 勿预打包 Radix：避免把未走 alias 的 `@radix-ui/react-portal` 打进依赖块，导致蒙层仍挂 body。 */
   optimizeDeps: {
-    exclude: [
-      "@radix-ui/react-portal",
-      "@radix-ui/react-dismissable-layer",
-      "@radix-ui/react-dialog",
-      "@radix-ui/react-dropdown-menu",
-      "@radix-ui/react-popover",
-      "@radix-ui/react-select",
-      "@radix-ui/react-tooltip",
-      "@radix-ui/react-switch",
-      "@radix-ui/react-toggle-group",
-      "@radix-ui/react-collapsible",
-    ],
     include: [
-      "reactflow",
-      "mermaid",
-      "zustand",
-      "zundo",
-      "lucide-react",
       "driver.js",
     ],
   },
@@ -116,15 +85,6 @@ export default defineConfig(async () => ({
           }
           if (id.includes("@antv/x6")) {
             return "x6-vendor";
-          }
-          if (id.includes("reactflow") || id.includes("/@reactflow/")) {
-            return "cc-wf-reactflow";
-          }
-          if (id.includes("mermaid")) {
-            return "cc-wf-mermaid";
-          }
-          if (id.includes("@radix-ui/")) {
-            return "cc-wf-radix";
           }
           if (id.includes("@xterm/") || id.includes("/xterm/")) {
             return "terminal-vendor";

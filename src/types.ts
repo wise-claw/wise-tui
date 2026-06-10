@@ -678,13 +678,14 @@ export interface RepositoryScheduledClaudeTask {
   /** Cron：`分 时 日 月 周`（5 段），与 `cron-parser` 一致。 */
   cronExpression: string;
   /**
-   * 执行方式：`claude` 提示词、`script` 仓库内 Shell、`workflow` CC Workflow Studio Slash。
+   * 执行方式：`claude` 提示词、`script` 仓库内 Shell。
+   * 旧值 `workflow`（CC Workflow Studio）已下线，读取时按 `claude` 处理。
    * @default "claude"
    */
   executionKind?: RepositoryScheduledTaskExecutionKind;
   /** Milkdown / 脚本正文：`claude` 为 Markdown 提示；`script` 为 zsh -c 执行的命令或脚本 */
   contentMarkdown: string;
-  /** `workflow` 模式：CC Workflow Studio 工作流 id（列表项 `CcWorkflowListItem.id`） */
+  /** @deprecated 旧 CC Workflow Studio 工作流 id，仅兼容历史数据 */
   ccWorkflowId?: string | null;
   /** 为 null 或空字符串时在仓库绑定主会话执行；否则按员工名分发到员工子标签。与 `workflowId` 互斥。 */
   employeeId: string | null;

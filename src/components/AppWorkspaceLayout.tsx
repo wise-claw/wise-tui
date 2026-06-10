@@ -124,9 +124,6 @@ const WorkflowGraphInspector = lazy(() =>
 const SpecTimelineInspector = lazy(() =>
   import("./Inspectors").then((m) => ({ default: m.SpecTimelineInspector })),
 );
-const WiseCcWorkflowStudioPanel = lazy(() =>
-  import("../features/cc-wf-studio/WiseCcWorkflowStudioPanel").then((m) => ({ default: m.WiseCcWorkflowStudioPanel })),
-);
 const LazyCodeKnowledgeGraphPanel = lazy(() =>
   import("./CodeKnowledgeGraph").then((m) => ({ default: m.CodeKnowledgeGraphPanel })),
 );
@@ -423,8 +420,6 @@ export interface AppWorkspaceLayoutProps {
   collapsed: boolean;
   /** 顶层 ViewMode；Inspector / 主屏分发 / 旧布尔判定都按它派发。 */
   viewMode: ViewMode;
-  ccWfStudioSessionPath: string | null;
-  onCloseCcWorkflowStudio: () => void;
   /** Stage 5 / E7：四个 Trellis Inspector 透镜统一通过 viewMode.back() 关闭。 */
   onCloseTrellisInspector: () => void;
   /** Cockpit 定时自动化 Hub 关闭（返回上一 ViewMode）。 */
@@ -536,8 +531,6 @@ export function AppWorkspaceLayout({
   dark,
   collapsed,
   viewMode,
-  ccWfStudioSessionPath,
-  onCloseCcWorkflowStudio,
   onCloseTrellisInspector,
   onCloseCockpitAutomationHub,
   effectiveRightCollapsed,
@@ -672,8 +665,6 @@ export function AppWorkspaceLayout({
     (viewMode.kind === "inspect" && viewMode.tool.kind === "skills-hub");
   const codeKnowledgeGraphMode =
     viewMode.kind === "inspect" && viewMode.tool.kind === "code-graph";
-  const ccWfStudioMode =
-    viewMode.kind === "inspect" && viewMode.tool.kind === "workflow-studio";
   const trellisInspectorTool =
     viewMode.kind === "inspect" && isTrellisInspectorTool(viewMode.tool)
       ? viewMode.tool
@@ -1086,17 +1077,6 @@ export function AppWorkspaceLayout({
                       <Suspense fallback={null}>
                         <ErrorBoundary type="local" fallbackTitle="Trellis 运行时透镜出错">
                           <TrellisInspectorOverlay tool={trellisInspectorTool} onClose={onCloseTrellisInspector} />
-                        </ErrorBoundary>
-                      </Suspense>
-                    ) : null}
-                    {ccWfStudioSessionPath ? (
-                      <Suspense fallback={null}>
-                        <ErrorBoundary type="local" fallbackTitle="CC Workflow 工作流编辑器出错">
-                          <WiseCcWorkflowStudioPanel
-                            repositoryPath={ccWfStudioSessionPath}
-                            overlayVisible={ccWfStudioMode}
-                            onClose={onCloseCcWorkflowStudio}
-                          />
                         </ErrorBoundary>
                       </Suspense>
                     ) : null}

@@ -86,13 +86,6 @@ const RECOMMENDED_SKILLS: SkillsShSkillEntry[] = [
     source: "official",
   },
   {
-    id: "source-command-cc-workflow-ai-editor",
-    skillId: "cc-workflow-ai-editor",
-    name: "AI 工作流设计器",
-    installs: 15800,
-    source: "official",
-  },
-  {
     id: "trellis-brainstorm",
     skillId: "trellis-brainstorm",
     name: "需求脑暴专家",

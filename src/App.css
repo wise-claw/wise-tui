@@ -414,38 +414,10 @@ body {
   justify-content: center;
 }
 
-/* CC Workflow Studio：同上，且建立包含块，使内层 Radix/Antd fixed 蒙层相对本区而非整窗（勿盖左侧栏） */
-.wise-cc-wf-studio-overlay {
-  position: absolute;
-  inset: 0;
-  z-index: 50;
-  display: flex;
-  flex-direction: column;
-  min-width: 0;
-  min-height: 0;
-  overflow: hidden;
-  background: var(--ant-color-bg-layout);
-  box-shadow: inset 1px 0 0 var(--ant-color-border-secondary);
-  transform: translateZ(0);
-}
-
-/* 关闭叠层后保留 Webview/MCP 桥：移出视口，避免卸载导致 get_current_workflow 断连 */
-.wise-cc-wf-studio-background-host {
-  position: fixed;
-  left: -10000px;
-  top: 0;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  pointer-events: none;
-  opacity: 0;
-}
-
 .app-mcp-hub-overlay > .app-mcp-hub-root,
 .app-skills-hub-overlay > .app-skills-hub-root,
 .app-scheduled-tasks-overlay > .app-scheduled-tasks-hub-root,
-.app-code-graph-overlay > .app-code-graph-panel,
-.wise-cc-wf-studio-overlay > .wise-cc-wf-studio-overlay-body {
+.app-code-graph-overlay > .app-code-graph-panel {
   flex: 1 1 0%;
   min-height: 0;
   min-width: 0;
@@ -453,73 +425,6 @@ body {
   display: flex;
   flex-direction: column;
   position: relative;
-}
-
-/* 工作流工作室：填满主区+右栏叠层（勿用 100vh/100vw，否则会按视口溢出裁切） */
-.wise-cc-wf-studio-root {
-  flex: 1 1 0%;
-  min-height: 0;
-  min-width: 0;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-.wise-cc-wf-studio-root > .wise-cc-wf-studio-loading {
-  flex: 1 1 0%;
-  min-height: 0;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 24px;
-  text-align: center;
-  color: var(--ant-color-text-secondary);
-}
-
-.wise-cc-wf-studio-shell-wrap {
-  position: relative;
-  flex: 1 1 0%;
-  min-height: 0;
-  min-width: 0;
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-}
-
-/* Radix Portal 挂载点：铺满 shell，不拦截指针（由子层恢复） */
-.wise-cc-wf-studio-radix-portal-host {
-  position: absolute;
-  inset: 0;
-  pointer-events: none;
-  z-index: 10050;
-}
-
-/* Portal 根节点须恢复 pointer-events，否则 Radix Dialog 打开即 focus-outside dismiss */
-.wise-cc-wf-studio-radix-portal-host > * {
-  pointer-events: auto;
-}
-
-.wise-cc-wf-studio-shell-main {
-  flex: 1 1 0%;
-  min-height: 0;
-  min-width: 0;
-  display: flex;
-  flex-direction: column;
-  /* vendor `App` / WorkflowEditor 的直接父级：暗底与模拟 VS Code 变量一致，不修改工作流内部节点样式 */
-  background-color: var(--vscode-editor-background, #1f1f1f);
-}
-
-.wise-cc-wf-studio-overlay-toolbar {
-  flex-shrink: 0;
-  display: flex;
-  justify-content: flex-end;
-  align-items: center;
-  padding: 4px 8px;
-  border-bottom: 1px solid var(--ant-color-border-secondary);
-  background: var(--ant-color-bg-container);
 }
 
 /* 需求拆分（PRD）：叠在中栏+右栏之上，不盖左侧栏 */

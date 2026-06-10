@@ -2,13 +2,11 @@ import { useEffect, useRef, type MutableRefObject } from "react";
 import { CronExpressionParser } from "cron-parser";
 import type { ClaudeSession, EmployeeItem, PendingExecutionTask, Repository, WorkflowTemplateItem } from "../types";
 import { buildClaudeOutgoingPrompt } from "../services/claudeComposerPrompt";
-import { listCcWorkflowStudioWorkflows } from "../services/ccWorkflowStudioFiles";
 import { patchRepositoryScheduledClaudeTask, readRepositoryScheduledClaudeTasks } from "../services/repositoryScheduledClaudeTasksStore";
 import { runShellCommand } from "../services/terminal";
 import { resolveBoundMainSessionId, resolveMainOwnerAgentNameForRepositoryPath } from "../utils/repositoryMainSessionBinding";
 import { isOmcMonitorEmployeeRecord } from "../utils/omcMonitorEmployeeSession";
 import {
-  ccWorkflowSlashCommand,
   resolveScheduledTaskExecutionKind,
 } from "../utils/scheduledTaskExecution";
 import { readVisiblePollIntervalMs } from "../utils/adaptivePoll";
@@ -29,7 +27,6 @@ interface Params {
       dispatchTarget?: Pick<PendingExecutionTask, "targetType" | "targetEmployeeName" | "targetWorkflowId" | "targetWorkflowName">,
     ) => Promise<boolean>
   >;
-  sendMessageRef: MutableRefObject<(sessionId: string, prompt: string) => void | Promise<void>>;
 }
 
 function truncateMessage(text: string, max = 240): string {
@@ -39,7 +36,7 @@ function truncateMessage(text: string, max = 240): string {
 }
 
 /**
- * 按侧栏仓库列表轮询：到达 cron 下一档时执行仓库定时任务（Claude 提示词 / Shell 脚本 / CC 工作流）。
+ * 按侧栏仓库列表轮询：到达 cron 下一档时执行仓库定时任务（Claude 提示词 / Shell 脚本）。
  */
 export function useScheduledClaudeTaskRunner({
   repositoriesRef,
@@ -48,7 +45,6 @@ export function useScheduledClaudeTaskRunner({
   employeesRef,
   workflowTemplatesRef,
   executeRef,
-  sendMessageRef,
 }: Params): void {
   const inFlightRef = useRef(false);
 
@@ -64,7 +60,6 @@ export function useScheduledClaudeTaskRunner({
         const employees = employeesRef.current;
         const workflowTemplates = workflowTemplatesRef.current;
         const execute = executeRef.current;
-        const sendMessage = sendMessageRef.current;
         const now = Date.now();
 
         for (const repo of repos) {
@@ -147,70 +142,6 @@ export function useScheduledClaudeTaskRunner({
 
             if (!mainId || !mainSess || mainSess.repositoryPath.trim() !== repoPath) continue;
             if (mainSessionBusy) continue;
-
-            if (executionKind === "workflow") {
-              const ccWorkflowId = task.ccWorkflowId?.trim() ?? "";
-              if (!ccWorkflowId) {
-                await patchRepositoryScheduledClaudeTask(repoPath, task.id, {
-                  lastScheduledSlotAt: nextFireMs,
-                  lastExecutedAt: now,
-                  lastExecuteOk: false,
-                  lastExecuteMessage: "未配置工作流，已跳过",
-                });
-                continue;
-              }
-              let workflows: Awaited<ReturnType<typeof listCcWorkflowStudioWorkflows>>;
-              try {
-                workflows = await listCcWorkflowStudioWorkflows(repoPath);
-              } catch (e) {
-                const msg = e instanceof Error ? e.message : String(e);
-                await patchRepositoryScheduledClaudeTask(repoPath, task.id, {
-                  lastScheduledSlotAt: nextFireMs,
-                  lastExecutedAt: now,
-                  lastExecuteOk: false,
-                  lastExecuteMessage: `读取工作流列表失败：${msg}`,
-                });
-                continue;
-              }
-              const wf = workflows.find((item) => item.id === ccWorkflowId);
-              if (!wf) {
-                await patchRepositoryScheduledClaudeTask(repoPath, task.id, {
-                  lastScheduledSlotAt: nextFireMs,
-                  lastExecutedAt: now,
-                  lastExecuteOk: false,
-                  lastExecuteMessage: "所选 CC 工作流不存在或不可用，已跳过",
-                });
-                continue;
-              }
-              const slash = ccWorkflowSlashCommand(wf.name);
-              if (!slash) {
-                await patchRepositoryScheduledClaudeTask(repoPath, task.id, {
-                  lastScheduledSlotAt: nextFireMs,
-                  lastExecutedAt: now,
-                  lastExecuteOk: false,
-                  lastExecuteMessage: "工作流名称为空，已跳过",
-                });
-                continue;
-              }
-              try {
-                await sendMessage(mainId, slash);
-                await patchRepositoryScheduledClaudeTask(repoPath, task.id, {
-                  lastScheduledSlotAt: nextFireMs,
-                  lastExecutedAt: now,
-                  lastExecuteOk: true,
-                  lastExecuteMessage: `已发送 ${slash}`,
-                });
-              } catch (e) {
-                const msg = e instanceof Error ? e.message : String(e);
-                await patchRepositoryScheduledClaudeTask(repoPath, task.id, {
-                  lastScheduledSlotAt: nextFireMs,
-                  lastExecutedAt: now,
-                  lastExecuteOk: false,
-                  lastExecuteMessage: `工作流执行失败：${msg}`,
-                });
-              }
-              continue;
-            }
 
             const md = task.contentMarkdown.trim();
             if (!md) {
@@ -325,5 +256,5 @@ export function useScheduledClaudeTaskRunner({
         document.removeEventListener("visibilitychange", onVisibilityChange);
       }
     };
-  }, [bindingsRef, employeesRef, executeRef, repositoriesRef, sendMessageRef, sessionsRef, workflowTemplatesRef]);
+  }, [bindingsRef, employeesRef, executeRef, repositoriesRef, sessionsRef, workflowTemplatesRef]);
 }

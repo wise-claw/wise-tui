@@ -80,7 +80,6 @@ describe("useViewMode", () => {
       inspectView(codeGraphInspectTool()),
       inspectView(mcpHubInspectTool()),
       inspectView(skillsHubInspectTool()),
-      inspectView({ kind: "workflow-studio" }),
     ];
     for (const mode of allModes) {
       act(() => {

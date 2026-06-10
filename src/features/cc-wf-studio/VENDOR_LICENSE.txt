@@ -1,2 +1,0 @@
-CC Workflow Studio (breaking-brake/cc-wf-studio) vendored UI and shared types under src/features/cc-wf-studio/vendor/.
-License: AGPL-3.0-or-later. Source: https://github.com/breaking-brake/cc-wf-studio
