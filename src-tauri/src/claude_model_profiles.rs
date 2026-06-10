@@ -19,6 +19,7 @@ use crate::opencode_config_dir::{
     read_opencode_user_settings_pretty, user_opencode_config_path, validate_opencode_settings_json,
 };
 use crate::wise_db::WiseDb;
+use tauri::AppHandle;
 
 const STORE_SETTINGS_KEY: &str = "claude_model_profiles_v1";
 
@@ -546,6 +547,13 @@ pub(crate) fn ensure_active_codex_profile_applied(db: &WiseDb) -> Result<(), Str
     apply_profile_to_disk(profile)
 }
 
+fn sync_llm_proxy_upstream_for_claude_profile(app: &AppHandle, db: &WiseDb, profile: &ClaudeModelProfile) {
+    if profile_engine(profile) != "claude" {
+        return;
+    }
+    crate::claude_llm_proxy::sync_upstream_on_claude_model_change(app, db, None);
+}
+
 fn apply_profile_to_disk(profile: &ClaudeModelProfile) -> Result<(), String> {
     if profile_engine(profile) == "codex" {
         let envelope = parse_codex_profile_envelope(&profile.settings_json)?;
@@ -645,6 +653,7 @@ pub(crate) fn get_claude_model_profile_store(
 
 #[tauri::command]
 pub(crate) fn upsert_claude_model_profile(
+    app: AppHandle,
     db: tauri::State<'_, WiseDb>,
     profile: ClaudeModelProfile,
 ) -> Result<ClaudeModelProfileStoreView, String> {
@@ -709,6 +718,7 @@ pub(crate) fn upsert_claude_model_profile(
         .ok_or_else(|| "档案保存后未找到".to_string())?
         .clone();
     apply_profile_to_disk(&saved)?;
+    sync_llm_proxy_upstream_for_claude_profile(&app, &db, &saved);
 
     if profile_engine(&saved) == "codex" {
         store.active_codex_profile_id = Some(id.clone());
@@ -877,6 +887,7 @@ pub(crate) fn reorder_claude_model_profiles(
 
 #[tauri::command]
 pub(crate) fn failover_to_next_model_profile(
+    app: AppHandle,
     db: tauri::State<'_, WiseDb>,
     engine: String,
     exclude_profile_ids: Option<Vec<String>>,
@@ -896,6 +907,7 @@ pub(crate) fn failover_to_next_model_profile(
     let profile = pick_next_failover_profile(&store, engine_norm, &exclude_all)
         .ok_or_else(|| "没有可切换的备用模型档案".to_string())?;
     apply_profile_to_disk(&profile)?;
+    sync_llm_proxy_upstream_for_claude_profile(&app, &db, &profile);
     let mut next = store;
     if profile_engine(&profile) == "codex" {
         next.active_codex_profile_id = Some(profile.id.clone());
@@ -934,6 +946,7 @@ pub(crate) fn failover_to_next_model_profile(
 
 #[tauri::command]
 pub(crate) fn apply_claude_model_profile(
+    app: AppHandle,
     db: tauri::State<'_, WiseDb>,
     profile_id: String,
 ) -> Result<ClaudeModelProfileStoreView, String> {
@@ -946,6 +959,7 @@ pub(crate) fn apply_claude_model_profile(
         .ok_or_else(|| format!("未找到模型档案: {id}"))?
         .clone();
     apply_profile_to_disk(&profile)?;
+    sync_llm_proxy_upstream_for_claude_profile(&app, &db, &profile);
     let mut next = store;
     if profile_engine(&profile) == "codex" {
         next.active_codex_profile_id = Some(id.to_string());

@@ -119,8 +119,14 @@ export default defineConfig(async () => ({
         }
       : undefined,
     watch: {
-      // 3. tell Vite to ignore watching `src-tauri`
-      ignored: ["**/src-tauri/**"],
+      // 3. 忽略 Rust 构建与高 churn 本地索引，避免 dev 时 HMR 风暴拖慢 WebView
+      ignored: [
+        "**/src-tauri/**",
+        "**/.codegraph/**",
+        "**/.git/**",
+        "**/.history/**",
+        "**/.trellis/workspace/**",
+      ],
     },
   },
 }));

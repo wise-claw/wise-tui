@@ -35,6 +35,7 @@ import { writeTextFileAbsolute } from "../../services/sessionLink";
 import {
   getClaudeLlmProxyStoreSnapshot,
   refreshClaudeLlmProxyStatus,
+  retainClaudeLlmProxyStdoutIngest,
   subscribeClaudeLlmProxyStore,
 } from "../../stores/claudeLlmProxyStore";
 import {
@@ -255,10 +256,15 @@ export function SessionDataLinkDrawer({
 
   useEffect(() => {
     if (!open) return;
+    const releaseStdoutIngest = retainClaudeLlmProxyStdoutIngest();
     void refreshClaudeLlmProxyStatus(repositoryPath || undefined);
-    return subscribeClaudeLlmProxyStore(() => {
+    const unsubscribe = subscribeClaudeLlmProxyStore(() => {
       setProxySnap(getClaudeLlmProxyStoreSnapshot());
     });
+    return () => {
+      unsubscribe();
+      releaseStdoutIngest();
+    };
   }, [open, repositoryPath]);
 
   useEffect(() => {

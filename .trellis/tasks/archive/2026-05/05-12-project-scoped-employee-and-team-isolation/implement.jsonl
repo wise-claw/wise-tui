@@ -1,4 +1,0 @@
-{"file": ".trellis/spec/frontend/index.md", "reason": "前端编码规范总览"}
-{"file": ".trellis/spec/frontend/component-guidelines.md", "reason": "组件开发规范"}
-{"file": ".trellis/spec/tauri/index.md", "reason": "Tauri 开发规范"}
-{"file": ".trellis/spec/tauri/ipc-guidelines.md", "reason": "IPC 命令调用规范"}

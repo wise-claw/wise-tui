@@ -10,6 +10,7 @@ import {
   type ClaudeLlmProxyStatus,
 } from "../services/claudeLlmProxy";
 import { safeUnlisten } from "../utils/safeTauriUnlisten";
+import { WISE_CLAUDE_USER_SETTINGS_CHANGED } from "../services/claudeModelProfiles";
 import { tryIngestStreamJsonLineForLlmProxy } from "../utils/streamJsonLlmProxyIngest";
 
 const MAX_RECORDS = 80;
@@ -30,7 +31,10 @@ let initialized = false;
 let initPromise: Promise<void> | null = null;
 let recordsUnlisten: UnlistenFn | null = null;
 let claudeOutputUnlisten: UnlistenFn | null = null;
+let claudeOutputIngestPromise: Promise<void> | null = null;
+let settingsChangedHandler: ((e: Event) => void) | null = null;
 const listeners = new Set<Listener>();
+let stdoutIngestConsumers = 0;
 
 function statusFieldsEqual(
   a: ClaudeLlmProxyStatus | null,
@@ -60,6 +64,42 @@ function publish(): void {
   }
 }
 
+function handleClaudeOutputLine(line: string): void {
+  if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
+  // HTTP 代理已在监听时由 Rust 侧抓包；stdout 兜底会与 /v1/messages 重复。
+  if (status?.listening && status?.running) return;
+  const rec = tryIngestStreamJsonLineForLlmProxy(line);
+  if (rec) upsertRecord(rec);
+}
+
+async function ensureClaudeOutputIngestAttached(): Promise<void> {
+  if (claudeOutputUnlisten) return;
+  if (claudeOutputIngestPromise) return claudeOutputIngestPromise;
+  claudeOutputIngestPromise = (async () => {
+    try {
+      const next = await listen<string>("claude-output", (ev) => {
+        const line = typeof ev.payload === "string" ? ev.payload : String(ev.payload ?? "");
+        handleClaudeOutputLine(line);
+      });
+      if (stdoutIngestConsumers <= 0) {
+        safeUnlisten(next);
+        return;
+      }
+      claudeOutputUnlisten = next;
+    } catch {
+      /* 非 Tauri 环境 */
+    } finally {
+      claudeOutputIngestPromise = null;
+    }
+  })();
+  return claudeOutputIngestPromise;
+}
+
+function detachClaudeOutputIngest(): void {
+  safeUnlisten(claudeOutputUnlisten);
+  claudeOutputUnlisten = null;
+}
+
 function upsertRecord(record: ClaudeLlmProxyRecord) {
   const idx = records.findIndex((r) => r.id === record.id);
   if (idx >= 0) {
@@ -85,22 +125,21 @@ async function ensureInitialized(): Promise<void> {
       records = loaded.slice(0, MAX_RECORDS);
       status = st;
       const nextRecordsUnlisten = await subscribeClaudeLlmProxyRecords(upsertRecord);
-      const nextClaudeOutputUnlisten = await listen<string>("claude-output", (ev) => {
-        if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-        // HTTP 代理已在监听时由 Rust 侧抓包；stdout 兜底会与 /v1/messages 重复。
-        if (status?.listening && status?.running) return;
-        const line = typeof ev.payload === "string" ? ev.payload : String(ev.payload ?? "");
-        const rec = tryIngestStreamJsonLineForLlmProxy(line);
-        if (rec) upsertRecord(rec);
-      });
-      if (listeners.size === 0) {
+      if (listeners.size === 0 && stdoutIngestConsumers <= 0) {
         safeUnlisten(nextRecordsUnlisten);
-        safeUnlisten(nextClaudeOutputUnlisten);
         initPromise = null;
         return;
       }
       recordsUnlisten = nextRecordsUnlisten;
-      claudeOutputUnlisten = nextClaudeOutputUnlisten;
+      if (stdoutIngestConsumers > 0) {
+        await ensureClaudeOutputIngestAttached();
+      }
+      settingsChangedHandler = (e: Event) => {
+        const detail = (e as CustomEvent<{ optimistic?: boolean }>).detail;
+        if (detail?.optimistic) return;
+        void refreshClaudeLlmProxyStatus();
+      };
+      window.addEventListener(WISE_CLAUDE_USER_SETTINGS_CHANGED, settingsChangedHandler);
       initialized = true;
       publish();
     } catch {
@@ -111,16 +150,36 @@ async function ensureInitialized(): Promise<void> {
 }
 
 function teardownRuntimeIfIdle(): void {
-  if (listeners.size > 0) return;
+  if (listeners.size > 0 || stdoutIngestConsumers > 0) return;
   safeUnlisten(recordsUnlisten);
-  safeUnlisten(claudeOutputUnlisten);
+  detachClaudeOutputIngest();
   recordsUnlisten = null;
-  claudeOutputUnlisten = null;
+  if (settingsChangedHandler) {
+    window.removeEventListener(WISE_CLAUDE_USER_SETTINGS_CHANGED, settingsChangedHandler);
+    settingsChangedHandler = null;
+  }
   initialized = false;
   initPromise = null;
   records = [];
   status = null;
   snapshot = { records, status };
+}
+
+/** 仅在 LLM 代理面板打开时需要 stdout 兜底抓包；避免顶栏徽章订阅拖慢全局 claude-output。 */
+export function retainClaudeLlmProxyStdoutIngest(): () => void {
+  stdoutIngestConsumers += 1;
+  void ensureInitialized().then(() => {
+    if (stdoutIngestConsumers > 0) {
+      void ensureClaudeOutputIngestAttached();
+    }
+  });
+  return () => {
+    stdoutIngestConsumers = Math.max(0, stdoutIngestConsumers - 1);
+    if (stdoutIngestConsumers <= 0) {
+      detachClaudeOutputIngest();
+      teardownRuntimeIfIdle();
+    }
+  };
 }
 
 export function subscribeClaudeLlmProxyStore(listener: Listener): () => void {

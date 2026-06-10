@@ -1,5 +1,0 @@
-{"file":".trellis/spec/frontend/index.md","reason":"Frontend quality gate and no-dev-server rule for this UI/service change."}
-{"file":".trellis/spec/frontend/component-guidelines.md","reason":"TargetPicker and wizard stage UI changes must follow component, composition, Ant Design, and accessibility rules."}
-{"file":".trellis/spec/frontend/state-management.md","reason":"Wizard target switching resets state and should keep target state scoped to the wizard."}
-{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Parallel ownership, tests, and strict frontend quality requirements for this dirty multi-agent workspace."}
-{"file":".trellis/spec/guides/index.md","reason":"Shared thinking guide index read before implementation."}

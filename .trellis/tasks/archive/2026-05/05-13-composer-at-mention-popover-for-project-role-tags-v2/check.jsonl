@@ -1,4 +1,0 @@
-{"file":".trellis/spec/frontend/index.md","reason":"Frontend layer spec index for verification."}
-{"file":".trellis/spec/frontend/quality-guidelines.md","reason":"Verify §3 contract — roleTag popover does not re-introduce employee UI in wise_trellis projects."}
-{"file":".trellis/spec/frontend/type-safety.md","reason":"SlashOption discriminated union remains exhaustive; new variant fully typed."}
-{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"AppImpl → composer → popover data flow is single-direction."}

@@ -1,5 +1,0 @@
-{"file": ".trellis/spec/tauri/index.md", "reason": "Verify Tauri backend rules"}
-{"file": ".trellis/spec/tauri/ipc-guidelines.md", "reason": "Verify IPC wrappers and DTO contracts"}
-{"file": ".trellis/spec/tauri/security-and-filesystem.md", "reason": "Verify filesystem boundary checks"}
-{"file": ".trellis/spec/tauri/persistence-and-migrations.md", "reason": "Verify migration correctness"}
-{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Verify cross-layer consistency"}

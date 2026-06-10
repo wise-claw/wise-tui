@@ -19,6 +19,7 @@ import type { WorkspaceMode, WorkspaceFocus } from "../../utils/workspaceMode";
 import { type PaneCount, type PaneSlot } from "../../constants/mainLayoutWidths";
 import type { MultiPaneSharedChatProps, PaneRepoTreeNode } from "./ClaudeMultiPaneGrid";
 import { runPaneCreateTask } from "./paneCreateLoading";
+import { prefetchNewSessionSurface } from "./prefetchNewSessionSurface";
 import { WorkspaceViewportLoading } from "../WorkspaceViewportLoading";
 import type { ResolvePaneAuxLayout } from "./paneAuxLayout";
 
@@ -348,6 +349,7 @@ export function ClaudeSessionsChatHost({
     if (creatingPrimarySessionRef.current) {
       return;
     }
+    prefetchNewSessionSurface();
     creatingPrimarySessionRef.current = true;
     setCreatingPrimarySession(true);
     const finish = () => {

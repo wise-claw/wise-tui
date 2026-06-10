@@ -15,6 +15,7 @@ import {
   clearClaudeLlmProxyStore,
   getClaudeLlmProxyStoreSnapshot,
   refreshClaudeLlmProxyStatus,
+  retainClaudeLlmProxyStdoutIngest,
   subscribeClaudeLlmProxyStore,
 } from "../../stores/claudeLlmProxyStore";
 import {
@@ -243,6 +244,8 @@ export function LlmProxyTrafficPanel({ repositoryPath, variant = "sidebar" }: Pr
     Pick<OpencodeGoProxyStatus, "enabled" | "running" | "claudeSettingsAligned"> | null
   >(null);
   const opencodeGoRunning = Boolean(opencodeGo?.enabled && opencodeGo?.running);
+
+  useEffect(() => retainClaudeLlmProxyStdoutIngest(), []);
 
   useEffect(() => {
     void refreshClaudeLlmProxyStatus(repositoryPath);
@@ -505,11 +508,11 @@ export function LlmProxyTrafficPanel({ repositoryPath, variant = "sidebar" }: Pr
               onPressEnter={handleUpstreamBlur}
             />
           </div>
-          {st?.listening ? (
-            <p className="app-llm-proxy-panel__config-hint">
-              修改上游或开关监听后，需新建 Claude 会话才会走代理。
-            </p>
-          ) : null}
+          <p className="app-llm-proxy-panel__config-hint">
+            {st?.listening
+              ? "修改上游或开关监听后，需新建 Claude 会话才会走代理。切换 Claude 模型档案会自动同步上游（本地 FCC/OpenCode 地址除外）。"
+              : "切换 Claude 模型档案会自动同步上游地址（本地 FCC/OpenCode 旁路地址除外）。"}
+          </p>
         </div>
 
         {baseRecords.length > 0 ? (

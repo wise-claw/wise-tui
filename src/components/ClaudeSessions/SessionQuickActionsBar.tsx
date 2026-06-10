@@ -24,6 +24,7 @@ import {
 import { isSessionQuickBuiltinAssistantId } from "../../constants/sessionQuickBuiltinAssistants";
 import { useSessionQuickActionsLayout } from "../../hooks/useSessionQuickActionsLayout";
 import { SessionQuickActionsCustomizeModal } from "./SessionQuickActionsCustomizeModal";
+import { prefetchNewSessionSurface } from "./prefetchNewSessionSurface";
 
 export interface SessionQuickActionsBarProps {
   onCreateNewSession?: () => void;
@@ -97,9 +98,12 @@ export const SessionQuickActionsBar = memo(function SessionQuickActionsBar({
           className={`app-session-quick-pill${creatingNewSession ? " app-session-quick-pill--loading" : ""}`}
           disabled={creatingNewSession}
           aria-busy={creatingNewSession}
+          onMouseEnter={prefetchNewSessionSurface}
+          onFocus={prefetchNewSessionSurface}
           onMouseDown={(event) => event.preventDefault()}
           onClick={() => {
             if (creatingNewSession) return;
+            prefetchNewSessionSurface();
             onCreateNewSession?.();
           }}
         >

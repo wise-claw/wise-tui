@@ -1,6 +1,9 @@
 /** WebView DevTools 停靠时 outer/inner 差值通常会明显变大（Safari/WKWebView）。 */
 const DEVTOOLS_CHROME_PX = 120;
 
+/** Vite dev / 未压缩 bundle 下主线程更忙，非关键轮询略放慢。 */
+const DEV_POLL_MULTIPLIER = import.meta.env.DEV ? 1.5 : 1;
+
 /** DevTools 打开时主线程与 IPC 成本显著上升，用于放慢非关键轮询。 */
 export function isWebViewDevToolsLikelyOpen(): boolean {
   if (typeof window === "undefined") return false;
@@ -11,7 +14,11 @@ export function isWebViewDevToolsLikelyOpen(): boolean {
 
 export function scalePollIntervalMs(baseMs: number, devtoolsMultiplier = 2.5): number {
   if (baseMs <= 0) return baseMs;
-  return isWebViewDevToolsLikelyOpen() ? Math.round(baseMs * devtoolsMultiplier) : baseMs;
+  let scaled = Math.round(baseMs * DEV_POLL_MULTIPLIER);
+  if (isWebViewDevToolsLikelyOpen()) {
+    scaled = Math.round(scaled * devtoolsMultiplier);
+  }
+  return scaled;
 }
 
 export function readVisiblePollIntervalMs(visibleMs: number, hiddenMs: number): number {

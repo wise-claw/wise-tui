@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { readVisiblePollIntervalMs, startAdaptiveInterval, stringSetEqual } from "./adaptivePoll";
+import {
+  readVisiblePollIntervalMs,
+  scalePollIntervalMs,
+  startAdaptiveInterval,
+  stringSetEqual,
+} from "./adaptivePoll";
 
 describe("adaptivePoll", () => {
   test("stringSetEqual compares set membership", () => {
@@ -16,7 +21,7 @@ describe("adaptivePoll", () => {
       get: () => "hidden",
     });
     try {
-      expect(readVisiblePollIntervalMs(1000, 5000)).toBe(5000);
+      expect(readVisiblePollIntervalMs(1000, 5000)).toBe(scalePollIntervalMs(5000));
     } finally {
       if (originalDescriptor) {
         Object.defineProperty(document, "visibilityState", originalDescriptor);

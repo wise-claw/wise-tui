@@ -1,6 +1,0 @@
-{"file": ".trellis/spec/tauri/index.md", "reason": "Tauri backend command, DTO, persistence, and path rules"}
-{"file": ".trellis/spec/tauri/ipc-guidelines.md", "reason": "Command registration, service wrapper, event, and DTO conventions"}
-{"file": ".trellis/spec/tauri/security-and-filesystem.md", "reason": "Project path validation and snapshot filesystem boundaries"}
-{"file": ".trellis/spec/tauri/persistence-and-migrations.md", "reason": "SQLite migration and durable history requirements"}
-{"file": ".trellis/spec/guides/index.md", "reason": "Shared thinking guides"}
-{"file": ".trellis/spec/guides/cross-layer-thinking-guide.md", "reason": "Backend-to-service contract spans Rust, SQLite, and TypeScript"}

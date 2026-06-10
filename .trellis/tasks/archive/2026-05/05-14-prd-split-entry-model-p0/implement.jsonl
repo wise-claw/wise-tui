@@ -1,9 +1,0 @@
-{"file":"src/components/PrdSplitWizard/Host.tsx","reason":"Carries repositoryId in the open event and passes initialRepositoryId into the wizard modal."}
-{"file":"src/components/PrdSplitWizard/PrdSplitWizardModal.tsx","reason":"Adds project/repository target picker, repository target initialization, and target-kind reset semantics."}
-{"file":"src/components/PrdSplitWizard/targetModel.ts","reason":"Pure target projection for project and repository modes; keeps synthesized repository target testable."}
-{"file":"src/components/PrdSplitWizard/targetModel.test.ts","reason":"Unit coverage for repository synthetic ProjectRef/context and project target repository projection."}
-{"file":"src/components/PrdSplitWizard/stages/ClusterPlanStage.tsx","reason":"Single-repository mode copy and disables manual extra cluster creation."}
-{"file":"src/components/PrdSplitWizard/stages/SplitsStage.tsx","reason":"Single-repository dispatch copy and visible global dispatch errors for backend Trellis root rejection."}
-{"file":"src/components/PrdSplitWizard/stages/ReviewStage.tsx","reason":"Single-repository review/write copy so the flow no longer reads as multi-cluster only."}
-{"file":"src/services/prdSplit/clusterPlanner.ts","reason":"Existing planClusters single-repository branch proves R5 is supported by the planning core."}
-{"file":"src/types.ts","reason":"Existing TaskSplitContext already supports repository mode and required repository fields."}

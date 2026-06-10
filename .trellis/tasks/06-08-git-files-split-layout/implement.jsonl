@@ -1,6 +1,0 @@
-{"type":"spec","path":".trellis/spec/frontend/index.md","reason":"React 侧栏状态、组件拆分与样式约定"}
-{"type":"spec","path":".trellis/spec/guides/agent-harness-architecture.md","reason":"Inspector 右栏语义与 Chat 模式边界"}
-{"type":"file","path":"src/components/LeftSidebar.tsx","reason":"当前 Git/文件 Tab 与 repo panel 状态真源"}
-{"type":"file","path":"src/components/LeftSidebar/sidebarStorage.ts","reason":"bottomTab 持久化，将扩展为 visibility"}
-{"type":"file","path":"src/components/Inspector/ChatInspector.tsx","reason":"右栏插槽目标"}
-{"type":"file","path":"src/components/DefaultConfigPanel/useMonitorPanelSetting.ts","reason":"左/右栏分栏配置先例"}

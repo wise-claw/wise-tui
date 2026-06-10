@@ -169,5 +169,8 @@ export interface UseClaudeSessionsReturn {
    * 结束指定标签对应的本机长驻/逐轮子进程（不关标签、不删绑定）。
    * 用于仓库/项目主会话换绑前释放旧进程，保证同一绑定仅一个长驻子进程。
    */
-  releaseSessionHostProcess: (sessionId: string) => Promise<void>;
+  releaseSessionHostProcess: (
+    sessionId: string,
+    opts?: { claudeProcesses?: import("../types").ClaudeHostProcess[] },
+  ) => Promise<void>;
 }

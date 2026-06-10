@@ -1,4 +1,14 @@
-import type { ClaudeHostProcess, ClaudeSession, ClaudeSessionInfo, ProjectItem, Repository } from "../types";
+import type {
+  ClaudeHostProcess,
+  ClaudeSession,
+  ClaudeSessionInfo,
+  ProjectItem,
+  Repository,
+} from "../types";
+
+export interface ReleaseWiseTabSessionContext {
+  claudeProcesses: ClaudeHostProcess[];
+}
 import { endClaudeProcessRow } from "../components/LeftSidebar/endClaudeProcessRow";
 import {
   buildHostClaudeProcessSession,
@@ -22,7 +32,10 @@ export interface ReleaseClaudeHostProcessesForWorkspaceScopeParams {
   /** 新建会话 id：不参与清理 */
   excludeSessionIds?: ReadonlySet<string>;
   /** Wise 标签会话：完整释放（streaming / 状态 / 本机进程） */
-  releaseWiseTabSession?: (sessionId: string) => Promise<void>;
+  releaseWiseTabSession?: (
+    sessionId: string,
+    ctx?: ReleaseWiseTabSessionContext,
+  ) => Promise<void>;
   /** 进程弹窗 Wise 行兜底 */
   onCancelTabSession?: (sessionId: string) => void;
 }
@@ -85,10 +98,11 @@ function collectScopedRunningWiseTabs(
 /** 新建主会话前：结束同仓库 / 项目工作区范围内仍存活的本机 Claude 进程。 */
 export async function releaseClaudeHostProcessesForWorkspaceScope(
   params: ReleaseClaudeHostProcessesForWorkspaceScopeParams,
-): Promise<void> {
+): Promise<ReadonlySet<string>> {
   const { scopePathKeys, releaseWiseTabSession, onCancelTabSession } = params;
+  const releasedWiseTabIds = new Set<string>();
   if (scopePathKeys.size === 0) {
-    return;
+    return releasedWiseTabIds;
   }
 
   const { claudeProcesses, registryRunning } = await loadClaudeRuntimeSnapshot();
@@ -104,19 +118,22 @@ export async function releaseClaudeHostProcessesForWorkspaceScope(
     registryRunningIds,
   });
 
-  for (const tab of scopedTabs) {
-    const sid = tab.claudeSessionId?.trim() ?? "";
-    if (releaseWiseTabSession) {
-      await releaseWiseTabSession(tab.id).catch(() => undefined);
-    } else if (onCancelTabSession) {
-      onCancelTabSession(tab.id);
-    } else if (sid) {
-      await cancelClaudeExecution(sid).catch(() => undefined);
-    }
-    if (sid) {
-      cancelledClaudeSessionIds.add(sid);
-    }
-  }
+  await Promise.all(
+    scopedTabs.map(async (tab) => {
+      const sid = tab.claudeSessionId?.trim() ?? "";
+      releasedWiseTabIds.add(tab.id);
+      if (releaseWiseTabSession) {
+        await releaseWiseTabSession(tab.id, { claudeProcesses }).catch(() => undefined);
+      } else if (onCancelTabSession) {
+        onCancelTabSession(tab.id);
+      } else if (sid) {
+        await cancelClaudeExecution(sid).catch(() => undefined);
+      }
+      if (sid) {
+        cancelledClaudeSessionIds.add(sid);
+      }
+    }),
+  );
 
   const sessionClaudeIdSet = new Set(
     params.sessions
@@ -124,6 +141,7 @@ export async function releaseClaudeHostProcessesForWorkspaceScope(
       .filter((id): id is string => Boolean(id && id.length > 0)),
   );
 
+  const orphanEndTasks: Promise<void>[] = [];
   for (const proc of claudeProcesses) {
     if (!Number.isFinite(proc.pid) || proc.pid <= 0 || handledHostPids.has(proc.pid)) {
       continue;
@@ -140,11 +158,13 @@ export async function releaseClaudeHostProcessesForWorkspaceScope(
       handledHostPids.add(proc.pid);
       continue;
     }
-    await endClaudeProcessRow({
-      rowSessionId: rowSession.id,
-      rowSession,
-      onCancelTabSession,
-    }).catch(() => undefined);
+    orphanEndTasks.push(
+      endClaudeProcessRow({
+        rowSessionId: rowSession.id,
+        rowSession,
+        onCancelTabSession,
+      }).catch(() => undefined),
+    );
     handledHostPids.add(proc.pid);
     if (sid) {
       cancelledClaudeSessionIds.add(sid);
@@ -163,13 +183,18 @@ export async function releaseClaudeHostProcessesForWorkspaceScope(
     if (isExcludedSession(rowSession.id, params.excludeSessionIds)) {
       continue;
     }
-    await endClaudeProcessRow({
-      rowSessionId: rowSession.id,
-      rowSession,
-      onCancelTabSession,
-    }).catch(() => undefined);
+    orphanEndTasks.push(
+      endClaudeProcessRow({
+        rowSessionId: rowSession.id,
+        rowSession,
+        onCancelTabSession,
+      }).catch(() => undefined),
+    );
     cancelledClaudeSessionIds.add(sid);
   }
+
+  await Promise.all(orphanEndTasks);
+  return releasedWiseTabIds;
 }
 
 export async function releaseClaudeHostProcessesForRepositoryScope(params: {
@@ -178,11 +203,11 @@ export async function releaseClaudeHostProcessesForRepositoryScope(params: {
   excludeSessionId?: string | null;
   releaseWiseTabSession?: (sessionId: string) => Promise<void>;
   onCancelTabSession?: (sessionId: string) => void;
-}): Promise<void> {
+}): Promise<ReadonlySet<string>> {
   const excludeSessionIds = params.excludeSessionId?.trim()
     ? new Set([params.excludeSessionId.trim()])
     : undefined;
-  await releaseClaudeHostProcessesForWorkspaceScope({
+  return releaseClaudeHostProcessesForWorkspaceScope({
     scopePathKeys: collectRepositoryScopePathKeys(params.repositoryPath),
     sessions: params.sessions,
     excludeSessionIds,
@@ -198,11 +223,11 @@ export async function releaseClaudeHostProcessesForProjectScope(params: {
   excludeSessionId?: string | null;
   releaseWiseTabSession?: (sessionId: string) => Promise<void>;
   onCancelTabSession?: (sessionId: string) => void;
-}): Promise<void> {
+}): Promise<ReadonlySet<string>> {
   const excludeSessionIds = params.excludeSessionId?.trim()
     ? new Set([params.excludeSessionId.trim()])
     : undefined;
-  await releaseClaudeHostProcessesForWorkspaceScope({
+  return releaseClaudeHostProcessesForWorkspaceScope({
     scopePathKeys: collectProjectScopePathKeys(params.project, params.repositories),
     sessions: params.sessions,
     excludeSessionIds,

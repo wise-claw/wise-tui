@@ -17,6 +17,23 @@ function unwrapStreamRoot(j: Record<string, unknown>): Record<string, unknown> {
 export function tryIngestStreamJsonLineForLlmProxy(line: string): ClaudeLlmProxyRecord | null {
   const t = line.trim();
   if (!t.startsWith("{")) return null;
+  // 流式高频 delta 帧占 stdout 绝大多数；避免 JSON.parse 拖慢主线程（dev 模式尤甚）。
+  if (
+    t.includes('"content_block_delta"') ||
+    t.includes('"message_delta"') ||
+    t.includes('"content_block_start"') ||
+    t.includes('"content_block_stop"') ||
+    t.includes('"ping"')
+  ) {
+    return null;
+  }
+  if (
+    !t.includes('"assistant"') &&
+    !t.includes('"user"') &&
+    !t.includes('"result"')
+  ) {
+    return null;
+  }
   try {
     const parsed = JSON.parse(t) as Record<string, unknown>;
     const root = unwrapStreamRoot(parsed);

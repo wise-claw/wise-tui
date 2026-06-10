@@ -65,7 +65,10 @@ describe("releaseClaudeHostProcessesForRepositoryScope", () => {
       releaseWiseTabSession,
     });
 
-    expect(releaseWiseTabSession).toHaveBeenCalledWith("tab-old");
+    expect(releaseWiseTabSession).toHaveBeenCalledWith(
+      "tab-old",
+      expect.objectContaining({ claudeProcesses: expect.any(Array) }),
+    );
     expect(endClaudeProcessRow).not.toHaveBeenCalled();
   });
 

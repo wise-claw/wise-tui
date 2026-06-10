@@ -1,5 +1,0 @@
-{"file":".trellis/spec/frontend/index.md","reason":"Frontend execution checklist and quality gate for React/Tauri UI changes."}
-{"file":".trellis/spec/frontend/component-guidelines.md","reason":"Layout host and connected wrappers must follow component composition and performance conventions."}
-{"file":".trellis/spec/frontend/hook-guidelines.md","reason":"useRepositoryFileEditor remains a hook-owned orchestration unit with async file IO and cleanup."}
-{"file":".trellis/spec/frontend/state-management.md","reason":"This task changes state ownership boundaries between app-shell and feature-local state."}
-{"file":".trellis/spec/guides/cross-layer-thinking-guide.md","reason":"The refactor spans app shell, layout composition, and feature hooks; data-flow boundaries must remain coherent."}

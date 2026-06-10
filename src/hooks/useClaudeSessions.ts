@@ -2407,21 +2407,23 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         ...(opts?.connectionKind ? { connectionKind: opts.connectionKind } : {}),
       };
 
-      // 先写入 state/ref，避免 await 读配置阻塞 UI（侧栏切仓库时中间栏会晚出现）。
-      setSessions((prev) => {
-        if (prev.some((s) => s.id === id)) {
-          sessionsRef.current = prev;
-          return prev;
+      // ref 同步写入，保证 bind/切会话逻辑立即可见；React state 走 transition 降低点击卡顿。
+      if (!sessionsRef.current.some((s) => s.id === id)) {
+        sessionsRef.current = [...sessionsRef.current, newSession];
+      }
+      startTransition(() => {
+        setSessions((prev) => {
+          if (prev.some((s) => s.id === id)) {
+            return prev;
+          }
+          return [...prev, newSession];
+        });
+        if (!opts?.skipActivate) {
+          setActiveSessionId(id);
         }
-        const next = [...prev, newSession];
-        sessionsRef.current = next;
-        return next;
       });
       trellisContextIdBySessionRef.current.set(id, trellisContextIdForTab(id));
       persistTrellisContextBindings(trellisContextIdBySessionRef.current);
-      if (!opts?.skipActivate) {
-        setActiveSessionId(id);
-      }
 
       void (async () => {
         try {
@@ -3167,7 +3169,10 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   );
 
   const releaseSessionHostProcess = useCallback(
-    async (sessionId: string) => {
+    async (
+      sessionId: string,
+      opts?: { claudeProcesses?: import("../types").ClaudeHostProcess[] },
+    ) => {
       const session = sessionsRef.current.find((s) => s.id === sessionId);
       if (!session) {
         return;
@@ -3178,7 +3183,19 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       detachClaudeInvocationsForSessionKey(sessionId);
       streamingProcessByTabRef.current.delete(sessionId);
 
-      const snapshot = await getSystemResourceSnapshot().catch(() => null);
+      const claudeSidEarly =
+        session.claudeSessionId?.trim() ?? sessionIdMapRef.current.get(sessionId)?.trim() ?? null;
+      const needsHostIpc =
+        session.status === "running" ||
+        session.status === "connecting" ||
+        Boolean(claudeSidEarly?.trim());
+      if (!needsHostIpc) {
+        return;
+      }
+
+      const snapshot = opts?.claudeProcesses
+        ? { claudeProcesses: opts.claudeProcesses }
+        : await getSystemResourceSnapshot().catch(() => null);
       try {
         await stopClaudeMainSession({
           session,

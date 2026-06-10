@@ -191,6 +191,73 @@ fn effective_upstream(persisted: &ClaudeLlmProxyPersisted, project_path: Option<
     normalize_upstream_base(&resolve_upstream_base(project_path))
 }
 
+/// 本地 FCC / OpenCode 等旁路抓包地址：切换模型档案时不改写用户显式配置的上游。
+fn should_sync_llm_proxy_upstream_on_model_change(persisted_upstream: &str) -> bool {
+    let current = normalize_upstream_base(persisted_upstream);
+    if current.is_empty() {
+        return true;
+    }
+    !crate::claude_config_dir::is_local_fcc_proxy_base_url(&current)
+}
+
+/// Claude 模型档案切换后，将 LLM 代理上游对齐到新的 `ANTHROPIC_BASE_URL`（监听中则重启代理）。
+pub(crate) fn sync_upstream_on_claude_model_change(
+    app: &AppHandle,
+    db: &crate::wise_db::WiseDb,
+    project_path: Option<&str>,
+) {
+    let persisted = persisted_config_cell()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .clone();
+    if !should_sync_llm_proxy_upstream_on_model_change(&persisted.upstream) {
+        return;
+    }
+
+    let new_upstream = normalize_upstream_base(&resolve_upstream_base(project_path));
+    if new_upstream.is_empty() {
+        return;
+    }
+
+    let current = normalize_upstream_base(&persisted.upstream);
+    let running_upstream = proxy_cell()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_ref()
+        .map(|inner| {
+            inner
+                .upstream
+                .lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .clone()
+        });
+    let running_stale = running_upstream
+        .as_ref()
+        .map(|u| normalize_upstream_base(u) != new_upstream)
+        .unwrap_or(false);
+
+    if current == new_upstream && !running_stale {
+        return;
+    }
+
+    let updated = ClaudeLlmProxyPersisted {
+        listening: persisted.listening,
+        upstream: new_upstream.clone(),
+    };
+    *persisted_config_cell()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner()) = updated.clone();
+    if let Err(e) = save_persisted_to_db(db, &updated) {
+        eprintln!("claude llm proxy upstream sync save failed: {e}");
+    }
+
+    if updated.listening {
+        if let Err(e) = start_proxy_listener(app, new_upstream) {
+            eprintln!("claude llm proxy upstream sync restart failed: {e}");
+        }
+    }
+}
+
 fn load_persisted_from_db(db: &crate::wise_db::WiseDb) -> ClaudeLlmProxyPersisted {
     let Ok(Some(raw)) = db.get_setting(CONFIG_SETTINGS_KEY) else {
         return ClaudeLlmProxyPersisted::default();
@@ -474,18 +541,67 @@ async fn read_http_message(
     Ok((headers, all[body_start..end].to_vec()))
 }
 
-fn http_response_prefix(status: u16, headers: &HeaderMap, body_len: usize) -> Vec<u8> {
-    let mut out = format!("HTTP/1.1 {status} OK\r\nConnection: close\r\n");
+fn http_reason_phrase(status: u16) -> &'static str {
+    match status {
+        200 => "OK",
+        201 => "Created",
+        204 => "No Content",
+        400 => "Bad Request",
+        401 => "Unauthorized",
+        403 => "Forbidden",
+        404 => "Not Found",
+        408 => "Request Timeout",
+        413 => "Payload Too Large",
+        429 => "Too Many Requests",
+        500 => "Internal Server Error",
+        502 => "Bad Gateway",
+        503 => "Service Unavailable",
+        504 => "Gateway Timeout",
+        n if (200..300).contains(&n) => "OK",
+        n if (400..500).contains(&n) => "Client Error",
+        n if (500..600).contains(&n) => "Server Error",
+        _ => "Unknown",
+    }
+}
+
+fn should_skip_proxy_response_header(name: &HeaderName) -> bool {
+    let n = name.as_str();
+    name == HOST
+        || name == CONTENT_LENGTH
+        || n.eq_ignore_ascii_case("transfer-encoding")
+        || n.eq_ignore_ascii_case("connection")
+        || n.eq_ignore_ascii_case("keep-alive")
+        || n.eq_ignore_ascii_case("proxy-connection")
+}
+
+/// 手写 HTTP/1.1 响应头；`content_length` 为 `None` 时表示流式/未知长度（不写 Content-Length）。
+fn write_http_response_head(
+    status: u16,
+    headers: &HeaderMap,
+    content_length: Option<usize>,
+) -> String {
+    let mut out = format!(
+        "HTTP/1.1 {} {}\r\nConnection: close\r\n",
+        status,
+        http_reason_phrase(status)
+    );
     for (k, v) in headers.iter() {
-        if k == HOST || k == CONTENT_LENGTH {
+        if should_skip_proxy_response_header(k) {
             continue;
         }
         if let Ok(s) = v.to_str() {
             out.push_str(&format!("{k}: {s}\r\n"));
         }
     }
-    out.push_str(&format!("Content-Length: {body_len}\r\n\r\n"));
-    out.into_bytes()
+    if let Some(len) = content_length {
+        out.push_str(&format!("Content-Length: {len}\r\n"));
+    }
+    out.push_str("\r\n");
+    out
+}
+
+fn http_response_prefix(status: u16, headers: &HeaderMap, body_len: usize) -> Vec<u8> {
+    write_http_response_head(status, headers, Some(body_len)).into_bytes()
 }
 
 fn sse_capture_has_first_token(capture: &[u8]) -> bool {
@@ -686,22 +802,21 @@ async fn handle_proxy_connection(
         total_response_bytes += chunk.len() as u64;
 
         if !status_line_written {
-            // 流式：先写头，再逐块写 body（不预知 Content-Length）
-            let mut prefix = format!("HTTP/1.1 {status} OK\r\nConnection: close\r\n");
-            for (k, v) in resp_headers.iter() {
-                if k == HOST || k == CONTENT_LENGTH {
-                    continue;
-                }
-                if let Ok(s) = v.to_str() {
-                    prefix.push_str(&format!("{k}: {s}\r\n"));
-                }
-            }
-            prefix.push_str("\r\n");
+            // 流式：先写头，再逐块写 body（reqwest 已解码 chunked，勿转发 Transfer-Encoding）
+            let prefix = write_http_response_head(status, &resp_headers, None);
             let _ = socket.write_all(prefix.as_bytes()).await;
             status_line_written = true;
         }
         if let Err(_) = socket.write_all(&chunk).await {
             break;
+        }
+    }
+
+    if !status_line_written {
+        let head = write_http_response_head(status, &resp_headers, Some(capture.len()));
+        let _ = socket.write_all(head.as_bytes()).await;
+        if !capture.is_empty() {
+            let _ = socket.write_all(&capture).await;
         }
     }
 
@@ -758,6 +873,32 @@ mod tests {
         assert!(!is_proxy_noise_request(
             &Method::POST,
             "https://api.anthropic.com/v1/messages"
+        ));
+    }
+
+    #[test]
+    fn http_response_head_uses_valid_status_line_for_errors() {
+        let head = write_http_response_head(401, &HeaderMap::new(), Some(12));
+        assert!(head.starts_with("HTTP/1.1 401 Unauthorized\r\n"));
+        assert!(head.contains("Content-Length: 12\r\n"));
+        assert!(!head.contains("401 OK"));
+
+        let stream_head = write_http_response_head(200, &HeaderMap::new(), None);
+        assert!(stream_head.starts_with("HTTP/1.1 200 OK\r\n"));
+        assert!(!stream_head.contains("Content-Length:"));
+    }
+
+    #[test]
+    fn sync_upstream_on_model_change_skips_local_proxy() {
+        assert!(should_sync_llm_proxy_upstream_on_model_change(""));
+        assert!(should_sync_llm_proxy_upstream_on_model_change(
+            "https://ark.cn-beijing.volces.com/api/coding"
+        ));
+        assert!(!should_sync_llm_proxy_upstream_on_model_change(
+            "http://127.0.0.1:8082"
+        ));
+        assert!(!should_sync_llm_proxy_upstream_on_model_change(
+            "http://localhost:8082"
         ));
     }
 

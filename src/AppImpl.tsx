@@ -888,14 +888,18 @@ export default function App() {
   releaseSessionHostProcessRef.current = releaseSessionHostProcess;
 
   const bindRepositoryMainSession = useCallback(
-    async (repositoryPath: string, sessionId: string) => {
+    async (
+      repositoryPath: string,
+      sessionId: string,
+      opts?: { deferHostRelease?: boolean },
+    ) => {
       const key = normalizeRepositoryPathForMatch(repositoryPath);
       const nextId = sessionId.trim();
       if (!nextId) {
         return;
       }
       const prevRaw = repositoryMainBindingsLatestRef.current[key]?.trim();
-      if (prevRaw && prevRaw !== nextId) {
+      if (prevRaw && prevRaw !== nextId && !opts?.deferHostRelease) {
         const mainOwner = isProjectMainSessionBindingKey(key)
           ? null
           : resolveMainOwnerAgentNameForRepositoryPath(repositoriesLatestRef.current, key);
@@ -909,7 +913,9 @@ export default function App() {
           (prevTabId ? sessionsLatestRef.current.find((s) => s.id === prevTabId) : null) ??
           resolveSessionFromBindingValue(prevRaw, sessionsLatestRef.current);
         if (prevSession && prevSession.id !== nextId) {
-          void releaseSessionHostProcessRef.current(prevSession.id);
+          window.setTimeout(() => {
+            void releaseSessionHostProcessRef.current(prevSession.id);
+          }, 0);
         }
       }
       setRepositoryMainSessionBindings((prev) => {
@@ -2110,10 +2116,14 @@ export default function App() {
   async function releasePriorActiveSessionHostBeforeNewMain(
     priorActiveId: string | null | undefined,
     newSessionId: string,
+    alreadyReleasedTabIds?: ReadonlySet<string>,
   ): Promise<void> {
     const priorId = priorActiveId?.trim();
     const nextId = newSessionId.trim();
     if (!priorId || priorId === nextId) {
+      return;
+    }
+    if (alreadyReleasedTabIds?.has(priorId)) {
       return;
     }
     const prior = sessionsLatestRef.current.find((s) => s.id === priorId);
@@ -2142,34 +2152,54 @@ export default function App() {
     const releaseOpts = {
       sessions: sessionsLatestRef.current,
       excludeSessionId: params.newSessionId,
-      releaseWiseTabSession: (sessionId: string) => releaseSessionHostProcessRef.current(sessionId),
+      releaseWiseTabSession: (sessionId, ctx) =>
+        releaseSessionHostProcessRef.current(sessionId, ctx),
       onCancelTabSession: (sessionId: string) => cancelSession(sessionId),
     };
-    if (params.kind === "repository") {
-      await releaseClaudeHostProcessesForRepositoryScope({
-        repositoryPath: params.repositoryPath,
-        ...releaseOpts,
+    const releasedTabIds =
+      params.kind === "repository"
+        ? await releaseClaudeHostProcessesForRepositoryScope({
+            repositoryPath: params.repositoryPath,
+            ...releaseOpts,
+          })
+        : await releaseClaudeHostProcessesForProjectScope({
+            project: params.project,
+            repositories: repositoriesLatestRef.current,
+            ...releaseOpts,
+          });
+    await releasePriorActiveSessionHostBeforeNewMain(
+      params.priorActiveId,
+      params.newSessionId,
+      releasedTabIds,
+    );
+  }
+
+  function scheduleReleaseScopedClaudeHostsBeforeNewMain(
+    params: Parameters<typeof releaseScopedClaudeHostsBeforeNewMain>[0],
+  ): void {
+    const run = () => {
+      void releaseScopedClaudeHostsBeforeNewMain(params);
+    };
+    if (typeof requestAnimationFrame === "function") {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(run);
       });
-    } else {
-      await releaseClaudeHostProcessesForProjectScope({
-        project: params.project,
-        repositories: repositoriesLatestRef.current,
-        ...releaseOpts,
-      });
+      return;
     }
-    await releasePriorActiveSessionHostBeforeNewMain(params.priorActiveId, params.newSessionId);
+    window.setTimeout(run, 0);
   }
 
   /** 手动「新建会话」：始终创建新标签并绑定为仓库主会话。 */
   async function handleManualNewRepositorySession(repository: Repository): Promise<string> {
-    viewMode.enter({ kind: "chat" });
+    startTransition(() => {
+      viewMode.enter({ kind: "chat" });
+      setActiveRepositoryWithOwner(repository.id);
+    });
     const target = resolveSidebarSelectionTarget({ repository });
     const priorActiveId = activeSessionIdLatestRef.current;
-    setActiveRepositoryWithOwner(repository.id);
     const id = await createSession(target.path, target.displayName);
-    switchSession(id);
-    await bindRepositoryMainSession(target.path, id);
-    void releaseScopedClaudeHostsBeforeNewMain({
+    void bindRepositoryMainSession(target.path, id, { deferHostRelease: true });
+    scheduleReleaseScopedClaudeHostsBeforeNewMain({
       kind: "repository",
       repositoryPath: target.path,
       newSessionId: id,
@@ -2189,23 +2219,26 @@ export default function App() {
       message.warning("该 Workspace 缺少根目录，请先配置 rootPath");
       return null;
     }
-    viewMode.enter({ kind: "chat" });
     const isStandaloneTrellisProject = project.id.startsWith("repo:");
-    if (repos[0]) {
-      if (isStandaloneTrellisProject) {
-        setActiveRepositoryWithOwner(repos[0].id);
-      } else {
+    startTransition(() => {
+      viewMode.enter({ kind: "chat" });
+      if (repos[0]) {
+        if (isStandaloneTrellisProject) {
+          setActiveRepositoryWithOwner(repos[0].id);
+        } else {
+          setActiveProjectId(project.id);
+          setActiveRepositoryId(repos[0].id);
+        }
+      } else if (!isStandaloneTrellisProject) {
         setActiveProjectId(project.id);
-        setActiveRepositoryId(repos[0].id);
       }
-    } else if (!isStandaloneTrellisProject) {
-      setActiveProjectId(project.id);
-    }
+    });
     const priorActiveId = activeSessionIdLatestRef.current;
     const id = await createSession(anchor.path, anchor.displayName);
-    switchSession(id);
-    await bindRepositoryMainSession(projectMainSessionBindingKey(project.id), id);
-    void releaseScopedClaudeHostsBeforeNewMain({
+    void bindRepositoryMainSession(projectMainSessionBindingKey(project.id), id, {
+      deferHostRelease: true,
+    });
+    scheduleReleaseScopedClaudeHostsBeforeNewMain({
       kind: "project",
       project,
       newSessionId: id,
@@ -3400,12 +3433,8 @@ export default function App() {
         onCancelSession: cancelSession,
         onCloseSession: handleCloseSession,
         onSwitchSession: jumpToSessionWithRepository,
-        onNewSession: (repository) => {
-          void handleManualNewRepositorySession(repository);
-        },
-        onNewProjectSession: (project) => {
-          void handleManualNewProjectSession(project);
-        },
+        onNewSession: handleManualNewRepositorySession,
+        onNewProjectSession: handleManualNewProjectSession,
         repositoryMainBindings: repositoryMainSessionBindings,
         onAppendSystemMessage: appendSystemMessage,
         onAppendUserMessage: appendUserMessage,
