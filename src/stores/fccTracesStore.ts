@@ -7,7 +7,7 @@ import { mergeFccTraceEntries } from "../utils/mergeFccTraceEntries";
 import { startAdaptiveInterval } from "../utils/adaptivePoll";
 import { runWhenIdle } from "../utils/deferIdle";
 
-const VISIBLE_POLL_MS = 15_000;
+const VISIBLE_POLL_MS = 5_000;
 const HIDDEN_POLL_MS = 30_000;
 
 type Listener = () => void;
@@ -41,7 +41,15 @@ const listeners = new Set<Listener>();
 function tracesEqual(a: readonly FccTraceEntry[], b: readonly FccTraceEntry[]): boolean {
   if (a.length !== b.length) return false;
   for (let i = 0; i < a.length; i += 1) {
-    if (a[i]?.id !== b[i]?.id || a[i]?.timestampMs !== b[i]?.timestampMs) {
+    const left = a[i];
+    const right = b[i];
+    if (
+      left?.id !== right?.id ||
+      left?.timestampMs !== right?.timestampMs ||
+      left?.statusCode !== right?.statusCode ||
+      left?.durationMs !== right?.durationMs ||
+      left?.responsePreview !== right?.responsePreview
+    ) {
       return false;
     }
   }

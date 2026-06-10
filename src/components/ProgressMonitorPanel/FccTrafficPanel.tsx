@@ -97,7 +97,7 @@ function RecordSummary({ record }: { record: FccTraceEntry }) {
             className="app-llm-proxy-record__metric-item"
             title={`传输大小: 请求 ${formatBytes(requestBytes)} / 响应 ${formatBytes(responseBytes)}`}
           >
-            <span>{formatBytes(responseBytes || requestBytes)}</span>
+            <span>{formatBytes(requestBytes || responseBytes)}</span>
           </span>
 
           {record.durationMs != null ? (
@@ -124,9 +124,12 @@ function RecordSummary({ record }: { record: FccTraceEntry }) {
               {record.statusCode}
             </span>
           ) : (
-            <span className="app-llm-proxy-record__status-badge app-llm-proxy-record__status-badge--error">
+            <span
+              className="app-llm-proxy-record__status-badge app-llm-proxy-record__status-badge--pending"
+              title="请求已发出，等待上游流式响应完成"
+            >
               <span className="app-llm-proxy-record__status-dot" />
-              失败
+              进行中
             </span>
           )}
         </div>

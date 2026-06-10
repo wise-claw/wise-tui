@@ -422,6 +422,12 @@
   border-color: rgba(239, 68, 68, 0.2);
 }
 
+.app-llm-proxy-record__status-badge--pending {
+  background-color: rgba(234, 179, 8, 0.08);
+  color: #ca8a04;
+  border-color: rgba(234, 179, 8, 0.25);
+}
+
 .app-llm-proxy-record__status-dot {
   width: 4px;
   height: 4px;
