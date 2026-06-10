@@ -123,7 +123,7 @@ import {
   planAtMentionDispatch,
 } from "./services/atMentionDispatch";
 import { resolveProjectMainSessionAnchor } from "./utils/projectSessionAnchor";
-import { resolveChatTopbarContext, resolveScheduledTasksRepository } from "./utils/workspaceSelectionState";
+import { resolveChatTopbarContext, resolveProjectExplorerOpenPath, resolveScheduledTasksRepository } from "./utils/workspaceSelectionState";
 import { resolveTrellisBootstrapPath } from "./utils/trellisBootstrapPath";
 import { resolveSidebarSelectionTarget } from "./utils/sidebarSelectionTarget";
 import {
@@ -1665,6 +1665,14 @@ export default function App() {
       repositories,
     }).openPath.trim();
     return path || activeRepository?.path?.trim() || null;
+  }, [activeRepository, activeProject, activeWorkspaceFocus, repositories]);
+
+  const authorPanelRepositoryPath = useMemo(() => {
+    if (activeWorkspaceFocus === "project" && activeProject) {
+      const projectPath = resolveProjectExplorerOpenPath(activeProject, repositories);
+      if (projectPath) return projectPath;
+    }
+    return activeRepository?.path ?? null;
   }, [activeRepository, activeProject, activeWorkspaceFocus, repositories]);
 
   const scheduledTasksRepository = useMemo(
@@ -3328,10 +3336,10 @@ export default function App() {
           initialWorkflowId: workflowConfigInitialWorkflowId,
         },
         mcpHubProps: {
-          repositoryPath: activeRepository?.path ?? null,
+          repositoryPath: authorPanelRepositoryPath,
         },
         skillsHubProps: {
-          repositoryPath: activeRepository?.path ?? null,
+          repositoryPath: authorPanelRepositoryPath,
         },
         assistantsPanelProps: {
           activeProjectId: activeProjectId ?? null,
@@ -3590,11 +3598,11 @@ export default function App() {
         },
       }}
       mcpHubProps={{
-        repositoryPath: activeRepository?.path ?? null,
+        repositoryPath: authorPanelRepositoryPath,
         onClose: () => viewMode.back(),
       }}
       skillsHubProps={{
-        repositoryPath: activeRepository?.path ?? null,
+        repositoryPath: authorPanelRepositoryPath,
         onClose: () => viewMode.back(),
       }}
       codeKnowledgeGraphProps={{

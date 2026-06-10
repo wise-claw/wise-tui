@@ -13,6 +13,8 @@ interface GitSyncActionsProps {
   onPush: () => void;
   /** 多仓区块头部等窄区域：隐藏「待提交」角标（左侧已有变更数）。 */
   hideStagedCount?: boolean;
+  /** 多仓行内：仅图标、无 ahead/behind 数字，计数写入 HoverHint。 */
+  compact?: boolean;
 }
 
 function invokeSyncAction(
@@ -36,12 +38,15 @@ export const GitSyncActions = memo(function GitSyncActions({
   onPull,
   onPush,
   hideStagedCount = false,
+  compact = false,
 }: GitSyncActionsProps) {
   const ahead = status.ahead ?? 0;
   const behind = status.behind ?? 0;
+  const pullTitle = behind > 0 ? `拉取 · 落后 ${behind}` : "拉取";
+  const pushTitle = ahead > 0 ? `推送 · 领先 ${ahead}` : "推送";
 
   return (
-    <Space size={4} className="git-header-sync-actions">
+    <Space size={compact ? 0 : 4} className="git-header-sync-actions">
       <HoverHint title="获取远程" placement="top">
         <span className="git-sync-count-btn-wrap">
           <Button
@@ -55,7 +60,7 @@ export const GitSyncActions = memo(function GitSyncActions({
           />
         </span>
       </HoverHint>
-      <HoverHint title="拉取" placement="top">
+      <HoverHint title={compact ? pullTitle : "拉取"} placement="top">
         <span className="git-sync-count-btn-wrap">
           <Button
             type="text"
@@ -66,12 +71,12 @@ export const GitSyncActions = memo(function GitSyncActions({
             aria-busy={loading.pull}
             onMouseDown={(event) => invokeSyncAction(event, "pull", loading, onPull)}
           />
-          {!loading.pull && behind > 0 ? (
+          {!compact && !loading.pull && behind > 0 ? (
             <span className="sync-count sync-count--behind">{behind}</span>
           ) : null}
         </span>
       </HoverHint>
-      <HoverHint title="推送" placement="top">
+      <HoverHint title={compact ? pushTitle : "推送"} placement="top">
         <span className="git-sync-count-btn-wrap">
           <Button
             type="text"
@@ -82,7 +87,7 @@ export const GitSyncActions = memo(function GitSyncActions({
             aria-busy={loading.push}
             onMouseDown={(event) => invokeSyncAction(event, "push", loading, onPush)}
           />
-          {!loading.push && ahead > 0 ? (
+          {!compact && !loading.push && ahead > 0 ? (
             <span className="sync-count sync-count--ahead">{ahead}</span>
           ) : null}
         </span>
@@ -106,6 +111,7 @@ export const GitSyncActions = memo(function GitSyncActions({
   );
 }, (left, right) =>
   left.hideStagedCount === right.hideStagedCount
+  && left.compact === right.compact
   && left.status.ahead === right.status.ahead
   && left.status.behind === right.status.behind
   && left.status.staged.length === right.status.staged.length

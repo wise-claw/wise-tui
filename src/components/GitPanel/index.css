@@ -34,6 +34,40 @@
   padding: 0;
 }
 
+.app-git-panel--multi .git-workspace-sync-btn.ant-btn-sm {
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  max-width: 18px;
+  padding: 0;
+}
+
+.app-git-panel--multi .git-workspace-sync-btn.ant-btn-sm .anticon {
+  font-size: 11px;
+}
+
+.app-git-panel--multi .git-panel-header-right .git-workspace-sync-btn.ant-btn-sm {
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  max-width: 18px;
+}
+
+.app-git-panel--multi .git-panel-header-right .git-workspace-sync-btn.ant-btn-sm .anticon {
+  font-size: 11px;
+}
+
+.app-git-panel--multi .git-panel-header-right .git-panel-more-btn.ant-btn-sm {
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  max-width: 18px;
+}
+
+.app-git-panel--multi .git-panel-header-right .git-panel-more-btn.ant-btn-sm .anticon {
+  font-size: 11px;
+}
+
 .git-workspace-sync-popover .ant-popover-inner {
   padding: 0;
 }
@@ -194,6 +228,7 @@
   gap: 6px;
   flex: 1 1 0;
   min-width: 0;
+  overflow: hidden;
   border: none;
   background: transparent;
   padding: 4px 6px;
@@ -222,9 +257,14 @@
 }
 
 .git-repo-section__branch {
-  flex: 0 0 auto;
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: 42%;
   font-size: 11px;
   color: var(--ant-color-text-secondary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .git-repo-section__change-count {
@@ -236,8 +276,9 @@
 .git-repo-section__actions {
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 0;
   flex: 0 0 auto;
+  flex-shrink: 0;
 }
 
 .git-sync-count-btn-wrap {
@@ -248,35 +289,90 @@
   line-height: 0;
 }
 
-.app-git-panel--multi .git-repo-section__actions .git-sync-count-btn.ant-btn-sm {
-  width: 24px;
-  height: 24px;
-  min-width: 24px;
-  max-width: 24px;
+.app-git-panel--multi .git-repo-section__header {
+  display: flex;
+  align-items: center;
+  min-height: 24px;
+  padding: 1px 0;
+  gap: 0;
+}
+
+.app-git-panel--multi .git-repo-section__toggle {
+  flex: 1 1 0;
+  min-width: 0;
+  gap: 3px;
+  padding: 1px 0 1px 2px;
+}
+
+.app-git-panel--multi .git-repo-section__chevron {
+  width: 10px;
+  font-size: 9px;
+}
+
+.app-git-panel--multi .git-repo-section__name {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: 11px;
+}
+
+.app-git-panel--multi .git-repo-section__branch {
+  flex: 0 0 auto;
+  margin-left: auto;
+  max-width: 5.5em;
+  font-size: 10px;
+}
+
+.app-git-panel--multi .git-repo-section__change-count {
+  flex: 0 0 auto;
+  font-size: 10px;
+}
+
+/* 多仓行内 / 顶栏右侧：统一 18px 图标按钮 */
+.app-git-panel--multi .git-repo-section__actions .ant-btn.ant-btn-sm,
+.app-git-panel--multi .git-panel-header-right .ant-btn.ant-btn-sm {
+  width: 18px;
+  height: 18px;
+  min-width: 18px;
+  max-width: 18px;
   padding: 0;
   gap: 0;
   flex-shrink: 0;
 }
 
-.app-git-panel--multi .git-repo-section__actions .git-sync-count-btn.ant-btn-sm .anticon {
-  font-size: 11px;
+.app-git-panel--multi .git-repo-section__actions .ant-btn.ant-btn-sm .anticon,
+.app-git-panel--multi .git-panel-header-right .ant-btn.ant-btn-sm .anticon {
+  font-size: 9px;
 }
 
-.app-git-panel--multi .git-repo-section__actions .git-sync-count-btn.ant-btn-sm .ant-btn-icon {
+.app-git-panel--multi .git-repo-section__actions .ant-btn.ant-btn-sm .ant-btn-icon,
+.app-git-panel--multi .git-panel-header-right .ant-btn.ant-btn-sm .ant-btn-icon {
   margin-inline-end: 0;
 }
 
-.app-git-panel--multi .git-repo-section__actions .git-header-sync-actions.ant-space {
-  column-gap: 4px !important;
-  gap: 4px !important;
+.app-git-panel--multi .git-repo-section__actions .git-panel-more-btn.ant-btn-sm .anticon,
+.app-git-panel--multi .git-panel-header-right .git-panel-more-btn.ant-btn-sm .anticon {
+  font-size: 11px;
+}
+
+.app-git-panel--multi .git-repo-section__actions .git-header-sync-actions.ant-space,
+.app-git-panel--multi .git-panel-header-right .git-header-sync-actions.ant-space {
+  column-gap: 0 !important;
+  gap: 0 !important;
+}
+
+.app-git-panel--multi .git-repo-section__actions .git-header-sync-actions .ant-space-item,
+.app-git-panel--multi .git-panel-header-right .git-header-sync-actions .ant-space-item {
+  margin: 0;
+  padding: 0;
+}
+
+.app-git-panel--multi .git-repo-section__actions .git-sync-count-btn-wrap {
+  gap: 0;
+  line-height: 0;
 }
 
 .app-git-panel--multi .git-repo-section__actions .git-sync-count-btn-wrap .sync-count {
-  margin-left: 0;
-  font-size: 10px;
-  padding: 0;
-  min-width: 0;
-  flex-shrink: 0;
+  display: none;
 }
 
 .git-repo-section__body {
@@ -2177,8 +2273,7 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-file
 
 /* ── Graph Mode ── */
 .git-panel-more-btn.ant-btn-sm,
-.git-panel-header .git-panel-more-btn.ant-btn-sm,
-.app-git-panel--multi .git-repo-section__actions .git-panel-more-btn.ant-btn-sm {
+.git-panel-header .git-panel-more-btn.ant-btn-sm {
   width: 22px;
   height: 22px;
   min-width: 22px;
@@ -2186,6 +2281,11 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-file
   padding: 0;
   margin-left: 2px;
   color: var(--ant-color-text-secondary);
+}
+
+.app-git-panel--multi .git-repo-section__actions .git-panel-more-btn.ant-btn-sm,
+.app-git-panel--multi .git-panel-header-right .git-panel-more-btn.ant-btn-sm {
+  margin-left: 0;
 }
 
 .git-panel-more-btn.ant-btn-sm .anticon {

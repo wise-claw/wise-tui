@@ -240,3 +240,5 @@ export function resolveClaudeWorkspaceMainSession(
     activeSessionId: input.activeSessionId,
   });
 }
+
+export { resolveProjectExplorerOpenPath } from "./workspaceRepositoryTreeSelect";

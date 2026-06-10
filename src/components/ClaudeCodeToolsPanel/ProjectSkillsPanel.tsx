@@ -163,7 +163,7 @@ function isValidSkillRelFilePath(p: string): boolean {
 // ── Panel ──
 
 interface Props {
-  repositoryPath: string;
+  repositoryPath?: string;
   /** When false, skips loading (hidden tab). */
   active: boolean;
   /** 未安装 OMC 时不展示插件缓存中的 OMC 技能目录。 */

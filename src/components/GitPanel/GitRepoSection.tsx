@@ -656,6 +656,7 @@ function GitRepoSectionInner({
               status={syncStatus ?? emptyGitSyncStatus()}
               loading={loading}
               hideStagedCount
+              compact
               onFetch={handleFetch}
               onPull={handlePull}
               onPush={handlePush}
