@@ -106,6 +106,17 @@ pub fn preview_text(text: &str) -> String {
     truncate_preview(text)
 }
 
+fn char_boundary_at_or_before(text: &str, max_bytes: usize) -> usize {
+    if text.len() <= max_bytes {
+        return text.len();
+    }
+    let mut end = max_bytes;
+    while end > 0 && !text.is_char_boundary(end) {
+        end -= 1;
+    }
+    end
+}
+
 fn append_preview(buffer: &Mutex<String>, text: &str) {
     if text.is_empty() {
         return;
@@ -115,7 +126,8 @@ fn append_preview(buffer: &Mutex<String>, text: &str) {
     };
     guard.push_str(text);
     if guard.len() > MAX_PREVIEW {
-        guard.truncate(MAX_PREVIEW);
+        let end = char_boundary_at_or_before(&guard, MAX_PREVIEW);
+        guard.truncate(end);
         guard.push('…');
     }
 }
@@ -124,7 +136,8 @@ fn truncate_preview(text: &str) -> String {
     if text.len() <= MAX_PREVIEW {
         return text.to_string();
     }
-    format!("{}…", &text[..MAX_PREVIEW])
+    let end = char_boundary_at_or_before(text, MAX_PREVIEW);
+    format!("{}…", &text[..end])
 }
 
 struct TraceMeta {
@@ -224,5 +237,35 @@ impl TraceCapture {
             response_preview,
             error_message,
         });
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use serde_json::json;
+
+    #[test]
+    fn truncate_preview_respects_utf8_char_boundaries() {
+        let cjk = "中".repeat(MAX_PREVIEW);
+        let preview = truncate_preview(&cjk);
+        assert!(preview.ends_with('…'));
+        assert!(preview.is_char_boundary(preview.len() - '…'.len_utf8()));
+    }
+
+    #[test]
+    fn preview_json_does_not_panic_on_large_cjk_payload() {
+        let value = json!({ "text": "中".repeat(MAX_PREVIEW + 16) });
+        let preview = preview_json(&value);
+        assert!(preview.ends_with('…'));
+    }
+
+    #[test]
+    fn append_preview_does_not_panic_when_exceeding_limit() {
+        let buffer = Mutex::new(String::new());
+        append_preview(&buffer, &"中".repeat(MAX_PREVIEW + 8));
+        let guard = buffer.lock().expect("lock");
+        assert!(guard.ends_with('…'));
+        assert!(guard.len() <= MAX_PREVIEW + '…'.len_utf8());
     }
 }
