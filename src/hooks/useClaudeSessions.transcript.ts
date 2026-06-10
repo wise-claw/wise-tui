@@ -63,6 +63,31 @@ export function latestTurnHasCompletedToolUse(messages: readonly ClaudeMessage[]
   );
 }
 
+/** 当前回合是否存在尚未落盘的 tool_use（仍在执行或等待 result）。 */
+export function latestTurnHasInFlightToolUse(messages: readonly ClaudeMessage[]): boolean {
+  const msg = currentTurnAssistantMessage(messages);
+  if (!msg) return false;
+  return (msg.parts ?? []).some((part) => {
+    if (part.type !== "tool_use") return false;
+    if (part.status === "completed" || part.status === "error") return false;
+    if (part.output?.trim() || part.error?.trim()) return false;
+    return true;
+  });
+}
+
+/** oneshot 推迟 complete 后，若长时间无新 stdout，仍须强制收尾以释放 running 状态。 */
+export const ONESHOT_DEFERRED_COMPLETE_FORCE_MS = 20_000;
+/** oneshot 推迟 complete 后，按 stdout 静默时长递增重试收尾。 */
+export const ONESHOT_DEFERRED_COMPLETE_RETRY_DELAYS_MS = [80, 400, 1200, 4000, 12_000] as const;
+
+export function shouldForceFinalizeDeferredOneshotComplete(
+  messages: readonly ClaudeMessage[],
+  deferredForMs: number,
+): boolean {
+  if (deferredForMs < ONESHOT_DEFERRED_COMPLETE_FORCE_MS) return false;
+  return latestTurnHasVisibleAssistantContent(messages);
+}
+
 /**
  * Oneshot 在 `type:result` 时就会发 complete，但 stdout 可能仍有助手增量。
  * 尚无正文、仅有思考块时先不收尾，避免 UI 冻在「思考过程」且拆掉 invocation 监听。
@@ -77,6 +102,9 @@ export function shouldDeferOneshotTurnComplete(
   const msg = currentTurnAssistantMessage(messages);
   if (!msg || assistantMessageVisiblePlainText(msg).trim().length > 0) {
     return false;
+  }
+  if (latestTurnHasInFlightToolUse(messages)) {
+    return true;
   }
   if (!payloadSuccess) {
     return true;

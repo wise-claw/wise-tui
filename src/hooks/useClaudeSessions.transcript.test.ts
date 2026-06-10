@@ -1,12 +1,16 @@
 import { describe, expect, test } from "bun:test";
 import type { ClaudeSession } from "../types";
 import {
+  latestTurnHasInFlightToolUse,
   latestTurnHasVisibleAssistantContent,
+  ONESHOT_DEFERRED_COMPLETE_FORCE_MS,
   reloadFullDiskTranscriptByKey,
   resolveTerminalWorkerMessagesAfterDiskLoad,
   shouldDeferOneshotTurnComplete,
+  shouldForceFinalizeDeferredOneshotComplete,
   shouldPreserveMemoryTranscriptOverDisk,
 } from "./useClaudeSessions.transcript";
+import { sessionHasVisibleStreamProgress } from "./useClaudeSessions.helpers";
 
 function terminalWorker(overrides: Partial<ClaudeSession> = {}): ClaudeSession {
   return {
@@ -90,7 +94,74 @@ describe("shouldPreserveMemoryTranscriptOverDisk", () => {
   });
 });
 
+describe("latestTurnHasInFlightToolUse", () => {
+  test("detects tool_use without completed output", () => {
+    expect(
+      latestTurnHasInFlightToolUse([
+        { role: "user", content: "查", timestamp: 1 },
+        {
+          role: "assistant",
+          content: "",
+          timestamp: 2,
+          parts: [{ type: "tool_use", id: "t1", name: "grep", input: {}, status: "running" }],
+        },
+      ]),
+    ).toBe(true);
+  });
+});
+
+describe("shouldForceFinalizeDeferredOneshotComplete", () => {
+  test("forces finalize after max defer window when reasoning exists", () => {
+    expect(
+      shouldForceFinalizeDeferredOneshotComplete(
+        [
+          { role: "user", content: "查", timestamp: 1 },
+          {
+            role: "assistant",
+            content: "",
+            timestamp: 2,
+            parts: [{ type: "reasoning", text: "思考中" }],
+          },
+        ],
+        ONESHOT_DEFERRED_COMPLETE_FORCE_MS,
+      ),
+    ).toBe(true);
+  });
+});
+
+describe("sessionHasVisibleStreamProgress", () => {
+  test("running session only checks current turn, not prior assistant bubbles", () => {
+    const session = terminalWorker({
+      repositoryName: "demo",
+      status: "running",
+      messages: [
+        { role: "user", content: "第一轮", timestamp: 1 },
+        { role: "assistant", content: "旧回复", timestamp: 2 },
+        { role: "user", content: "第二轮", timestamp: 3 },
+      ],
+    });
+    expect(sessionHasVisibleStreamProgress(session)).toBe(false);
+  });
+});
+
 describe("shouldDeferOneshotTurnComplete", () => {
+  test("defers while tool_use is still in flight", () => {
+    expect(
+      shouldDeferOneshotTurnComplete(
+        [
+          { role: "user", content: "查", timestamp: 1 },
+          {
+            role: "assistant",
+            content: "",
+            timestamp: 2,
+            parts: [{ type: "tool_use", id: "t1", name: "read", input: {} }],
+          },
+        ],
+        true,
+      ),
+    ).toBe(true);
+  });
+
   test("defers success complete when only reasoning is visible", () => {
     expect(
       shouldDeferOneshotTurnComplete(

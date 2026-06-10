@@ -22,7 +22,9 @@ import { isTerminalWorkerWiseTab } from "./terminalDispatch";
 import {
   latestTerminalTurnHasAssistant,
   latestTurnHasVisibleAssistantContent,
+  ONESHOT_DEFERRED_COMPLETE_RETRY_DELAYS_MS,
   shouldDeferOneshotTurnComplete,
+  shouldForceFinalizeDeferredOneshotComplete,
 } from "../hooks/useClaudeSessions.transcript";
 import {
   isStaleClaudeCompleteForSession,
@@ -165,6 +167,11 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
   const deferredSystemErrors: Array<{ tid: string; msg: string }> = [];
   const deferredStderrErrors: Array<{ tid: string; msg: string }> = [];
   const deferredCompletes: Array<{ tid: string; payload: unknown; turnNonce: number }> = [];
+  const pendingOneshotCompletes = new Map<
+    string,
+    { payload: unknown; turnNonce: number; payloadSuccess: boolean; storedAt: number }
+  >();
+  const pendingOneshotWatchdogTimers = new Map<string, number[]>();
   const DEFERRED_MAX = 256;
 
   type SessionListUpdater = (prev: ClaudeSession[]) => ClaudeSession[];
@@ -439,6 +446,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
       enqueueStreamSessionUpdate(
         buildStreamSessionUpdater(tid, dedupedParts, false, null, opts),
       );
+      scheduleTryFinalizePendingOneshotComplete(tid);
     }
 
     if (isInit && realSessionId) {
@@ -478,6 +486,77 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     }
   }
 
+  function clearPendingOneshotComplete(tid: string): void {
+    pendingOneshotCompletes.delete(tid);
+    const timers = pendingOneshotWatchdogTimers.get(tid);
+    if (timers) {
+      for (const timer of timers) {
+        window.clearTimeout(timer);
+      }
+      pendingOneshotWatchdogTimers.delete(tid);
+    }
+  }
+
+  function storePendingOneshotComplete(
+    tid: string,
+    payload: unknown,
+    turnNonce: number,
+    payloadSuccess: boolean,
+  ): void {
+    pendingOneshotCompletes.set(tid, {
+      payload,
+      turnNonce,
+      payloadSuccess,
+      storedAt: Date.now(),
+    });
+    const existing = pendingOneshotWatchdogTimers.get(tid);
+    if (existing) {
+      for (const timer of existing) {
+        window.clearTimeout(timer);
+      }
+    }
+    const timers = ONESHOT_DEFERRED_COMPLETE_RETRY_DELAYS_MS.map((delay) =>
+      window.setTimeout(() => {
+        tryFinalizePendingOneshotComplete(tid);
+      }, delay),
+    );
+    pendingOneshotWatchdogTimers.set(tid, timers);
+  }
+
+  function tryFinalizePendingOneshotComplete(tid: string, opts?: { force?: boolean }): void {
+    const pending = pendingOneshotCompletes.get(tid);
+    if (!pending) return;
+    if (!turnNonceStillExpectedForTab(tid, pending.turnNonce)) {
+      clearPendingOneshotComplete(tid);
+      return;
+    }
+    const session = sessionsRef.current.find((s) => s.id === tid || s.claudeSessionId === tid);
+    if (sessionUsesStreamingConnection(session)) {
+      clearPendingOneshotComplete(tid);
+      return;
+    }
+    flushPendingStreamSessionUpdatesSync();
+    const live =
+      sessionsRef.current.find((s) => s.id === tid || s.claudeSessionId === tid) ?? session;
+    const messages = live?.messages ?? [];
+    const deferredForMs = Date.now() - pending.storedAt;
+    const shouldFinalize =
+      opts?.force === true ||
+      !shouldDeferOneshotTurnComplete(messages, pending.payloadSuccess) ||
+      shouldForceFinalizeDeferredOneshotComplete(messages, deferredForMs);
+    if (!shouldFinalize) return;
+    clearPendingOneshotComplete(tid);
+    applySessionComplete(tid, pending.payload, pending.turnNonce, { force: true });
+  }
+
+  function scheduleTryFinalizePendingOneshotComplete(tid: string): void {
+    if (!pendingOneshotCompletes.has(tid)) return;
+    window.queueMicrotask(() => {
+      flushPendingStreamSessionUpdatesSync();
+      tryFinalizePendingOneshotComplete(tid);
+    });
+  }
+
   function turnNonceStillExpectedForTab(tabId: string, turnNonce: number): boolean {
     const map = expectedTurnNonceByTabIdRef?.current;
     if (!map) return false;
@@ -496,7 +575,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     tid: string,
     payload: unknown,
     turnNonce: number,
-    opts?: { uiOnly?: boolean },
+    opts?: { uiOnly?: boolean; force?: boolean },
   ): boolean {
     const session = sessionsRef.current.find((s) => s.id === tid || s.claudeSessionId === tid);
     if (isStaleClaudeCompleteForSession(session, payload)) {
@@ -535,10 +614,13 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
       isTerminal && payloadSuccess && !hasVisibleTextReply && !hasStreamProgress;
     if (
       !streamingResident &&
+      !opts?.force &&
       shouldDeferOneshotTurnComplete(flushedMessages, payloadSuccess)
     ) {
+      storePendingOneshotComplete(tid, payload, turnNonce, payloadSuccess);
       return false;
     }
+    clearPendingOneshotComplete(tid);
     clearAssistBufferKeysForTab(session, tid);
     // 仅 text 正文可抵消迟到 cancel；思考块 / 工具块不算「已完成」。
     const uiSuccess = payloadSuccess || hasVisibleTextReply;
@@ -693,6 +775,9 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     deferredSystemErrors.length = 0;
     deferredStderrErrors.length = 0;
     deferredCompletes.length = 0;
+    for (const tid of [...pendingOneshotCompletes.keys()]) {
+      clearPendingOneshotComplete(tid);
+    }
   }
 
   return {

@@ -86,6 +86,41 @@ export function resolveTerminalMentionsInPrompt(
     .map((entry) => entry.employee);
 }
 
+/** 从派发正文中移除所有 @终端 提及，保留可执行任务说明。 */
+export function stripTerminalMentionsFromPrompt(
+  prompt: string,
+  employees: EmployeeItem[],
+): string {
+  let text = prompt;
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const employee of employees) {
+      if (isOmcMonitorEmployeeRecord(employee)) continue;
+      const idx = findTerminalMentionIndex(text, employee.name);
+      if (idx < 0) continue;
+      const prefix = text[idx] === "＠" ? "＠" : "@";
+      const name = employee.name.trim();
+      text = `${text.slice(0, idx)}${text.slice(idx + prefix.length + name.length)}`;
+      changed = true;
+    }
+    text = text.replace(/\s{2,}/g, " ").trim();
+  }
+  return text;
+}
+
+function dedupeTerminalEmployees(employees: EmployeeItem[]): EmployeeItem[] {
+  const seen = new Set<string>();
+  const out: EmployeeItem[] = [];
+  for (const employee of employees) {
+    const key = employee.id.trim();
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    out.push(employee);
+  }
+  return out;
+}
+
 /** 去掉终端派发历史误注入的 `/${agent}` 前缀；保留用户真实 slash 指令（如 `/add-dir`）。 */
 export function stripTerminalAgentSlashPrefix(
   prompt: string,
@@ -120,8 +155,13 @@ export function buildTerminalUserBubblePrompt(
 export function resolveTerminalDispatchPrompts(
   prompt: string,
   agentType: string | null | undefined,
+  opts?: { stripMentionEmployees?: EmployeeItem[] },
 ): { outboundPrompt: string; userBubblePrompt: string } {
-  const cleaned = stripTerminalAgentSlashPrefix(prompt, agentType);
+  const withoutMentions =
+    opts?.stripMentionEmployees && opts.stripMentionEmployees.length > 0
+      ? stripTerminalMentionsFromPrompt(prompt, opts.stripMentionEmployees)
+      : prompt;
+  const cleaned = stripTerminalAgentSlashPrefix(withoutMentions, agentType);
   return {
     outboundPrompt: cleaned,
     userBubblePrompt: cleaned,
@@ -407,29 +447,95 @@ export async function createFreshTerminalWorkerTab(
 async function waitForTerminalTurnStarted(
   getSessions: () => ClaudeSession[],
   workerTabId: string,
-  maxFrames = 40,
+  maxWaitMs = 3200,
 ): Promise<boolean> {
   const key = workerTabId.trim();
   if (!key) return false;
-  for (let i = 0; i < maxFrames; i += 1) {
+  const deadline = Date.now() + maxWaitMs;
+  while (Date.now() < deadline) {
     const worker = getSessions().find((item) => item.id === key);
-    if (
-      worker &&
-      worker.messages.some((item) => item.role === "user") &&
-      (worker.status === "running" || worker.status === "connecting")
-    ) {
+    if (terminalWorkerTurnLooksStarted(worker)) {
       return true;
     }
     await new Promise<void>((resolve) => {
-      requestAnimationFrame(() => resolve());
+      window.setTimeout(() => resolve(), 40);
     });
   }
   const worker = getSessions().find((item) => item.id === key);
-  return Boolean(
-    worker &&
-      worker.messages.some((item) => item.role === "user") &&
-      (worker.status === "running" || worker.status === "connecting"),
+  return terminalWorkerTurnLooksStarted(worker);
+}
+
+function terminalWorkerTurnLooksStarted(worker: ClaudeSession | undefined): boolean {
+  if (!worker) return false;
+  const hasUser = worker.messages.some((item) => item.role === "user");
+  if (!hasUser) return false;
+  return worker.status === "running" || worker.status === "connecting";
+}
+
+async function dispatchTerminalWorkerTurn(
+  deps: TerminalDispatchDeps,
+  mainSession: ClaudeSession,
+  terminal: EmployeeItem,
+  taskPrompt: string,
+  mainSessionId: string,
+): Promise<"failed" | "ok"> {
+  const { outboundPrompt, userBubblePrompt } = resolveTerminalDispatchPrompts(
+    taskPrompt,
+    terminal.agentType,
   );
+  if (!userBubblePrompt.trim()) {
+    const warningText = `终端「${terminal.name}」未收到可执行内容，请补充任务说明后重试。`;
+    message.warning(warningText);
+    deps.appendSystemMessage(mainSessionId, warningText);
+    return "failed";
+  }
+
+  const { workerTabId, created } = await resolveOrCreateTerminalWorkerTab(
+    deps,
+    mainSession.repositoryPath,
+    mainSession.repositoryName,
+    terminal,
+  );
+
+  if (created) {
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => resolve());
+      });
+    });
+  }
+
+  const spawnOk = deps.executeTerminalSession(workerTabId, outboundPrompt.trim(), {
+    userBubblePrompt,
+  });
+  if (!spawnOk) {
+    const engineTitle = terminalExecutionEngineTitle(terminal);
+    const failureText = `任务分发失败：终端「${terminal.name}」未能启动 ${engineTitle}（请检查并发上限、CLI 安装或网络）。`;
+    message.warning(failureText);
+    deps.appendSystemMessage(mainSessionId, failureText);
+    return "failed";
+  }
+
+  const started = await waitForTerminalTurnStarted(deps.getSessions, workerTabId);
+  if (!started) {
+    const failureText = `任务分发失败：终端「${terminal.name}」未进入执行态（请勿点击仅有 UUID 的空历史会话，请重试派发）。`;
+    message.warning(failureText);
+    deps.appendSystemMessage(mainSessionId, failureText);
+    return "failed";
+  }
+
+  deps.appendSystemMessage(
+    mainSessionId,
+    formatTerminalDispatchRecord(
+      terminal.name,
+      workerTabId,
+      userBubblePrompt,
+      terminal.executionEngine,
+    ),
+  );
+  mirrorTerminalToControlDock(deps, workerTabId, mainSessionId);
+  deps.onDispatched?.(workerTabId);
+  return "ok";
 }
 
 function mirrorTerminalToControlDock(
@@ -486,75 +592,47 @@ export async function dispatchTerminalFromMainSession(
 
   const explicitName = input.explicitTerminalName?.trim();
   const mentioned = resolveTerminalMentionsInPrompt(input.prompt, deps.employees);
-  const terminal =
-    (explicitName ? findTerminalEmployeeByName(deps.employees, explicitName) : undefined) ??
-    mentioned[0];
+  const explicitTerminal = explicitName
+    ? findTerminalEmployeeByName(deps.employees, explicitName)
+    : undefined;
 
-  if (!terminal) {
-    if (explicitName) {
-      const warningText = `未找到终端「${explicitName}」，请检查终端名称后重试。`;
-      message.warning(warningText);
-      deps.appendSystemMessage(input.mainSessionId, warningText);
-      return "failed";
-    }
-    return "not_terminal";
-  }
-
-  const { outboundPrompt, userBubblePrompt } = resolveTerminalDispatchPrompts(
-    input.prompt,
-    terminal.agentType,
-  );
-  if (!userBubblePrompt.trim()) {
-    const warningText = `终端「${terminal.name}」未收到可执行内容，请补充任务说明后重试。`;
+  if (explicitName && !explicitTerminal) {
+    const warningText = `未找到终端「${explicitName}」，请检查终端名称后重试。`;
     message.warning(warningText);
     deps.appendSystemMessage(input.mainSessionId, warningText);
     return "failed";
   }
 
-  const { workerTabId, created } = await resolveOrCreateTerminalWorkerTab(
-    deps,
-    mainSession.repositoryPath,
-    mainSession.repositoryName,
-    terminal,
-  );
-
-  if (created) {
-    await new Promise<void>((resolve) => {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(() => resolve());
-      });
-    });
+  const terminals = explicitTerminal
+    ? [explicitTerminal]
+    : dedupeTerminalEmployees(mentioned);
+  if (terminals.length === 0) {
+    return explicitName ? "failed" : "not_terminal";
   }
 
-  const spawnOk = deps.executeTerminalSession(workerTabId, outboundPrompt.trim(), {
-    userBubblePrompt,
-  });
-  if (!spawnOk) {
-    const engineTitle = terminalExecutionEngineTitle(terminal);
-    const failureText = `任务分发失败：终端「${terminal.name}」未能启动 ${engineTitle}（请检查并发上限、CLI 安装或网络）。`;
-    message.warning(failureText);
-    deps.appendSystemMessage(input.mainSessionId, failureText);
-    return "failed";
+  const taskPrompt =
+    mentioned.length > 0
+      ? stripTerminalMentionsFromPrompt(input.prompt, deps.employees)
+      : input.prompt;
+
+  let okCount = 0;
+  let failCount = 0;
+  for (const terminal of terminals) {
+    const result = await dispatchTerminalWorkerTurn(
+      deps,
+      mainSession,
+      terminal,
+      taskPrompt,
+      input.mainSessionId,
+    );
+    if (result === "ok") {
+      okCount += 1;
+    } else {
+      failCount += 1;
+    }
   }
 
-  const started = await waitForTerminalTurnStarted(deps.getSessions, workerTabId);
-  if (!started) {
-    const failureText = `任务分发失败：终端「${terminal.name}」未进入执行态（请勿点击仅有 UUID 的空历史会话，请重试派发）。`;
-    message.warning(failureText);
-    deps.appendSystemMessage(input.mainSessionId, failureText);
-    return "failed";
-  }
-
-  deps.appendSystemMessage(
-    input.mainSessionId,
-    formatTerminalDispatchRecord(
-      terminal.name,
-      workerTabId,
-      userBubblePrompt,
-      terminal.executionEngine,
-    ),
-  );
-  mirrorTerminalToControlDock(deps, workerTabId, input.mainSessionId);
-  deps.onDispatched?.(workerTabId);
-  return "ok";
+  if (okCount > 0) return "ok";
+  if (failCount > 0) return "failed";
+  return "not_terminal";
 }

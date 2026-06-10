@@ -9,6 +9,7 @@ import { setAppSetting } from "../services/appSettingsStore";
 import { isTerminalWorkerWiseTab } from "../services/terminalDispatch";
 import { preservesWorkerWiseTabId } from "../utils/sessionExecuteResolve";
 import { isExecutionEnvironmentWorkerRepositoryName } from "../utils/executionEnvironmentDispatch";
+import { latestTurnHasVisibleAssistantContent } from "./useClaudeSessions.transcript";
 import { createClaudeStreamRuntime } from "../services/claudeStreamRuntime";
 import { getSessionUpdatedAt } from "../components/ClaudeSessions/sessionGrouping";
 import { isClaudeSessionRunningByHostProcesses } from "../utils/claudeHostRunningSessionIds";
@@ -247,6 +248,9 @@ export const CURSOR_STREAM_STALL_MS = 120_000;
 export const CLAUDE_STREAM_STALL_HOOK_EXTEND_MS = 75_000;
 
 export function sessionHasVisibleStreamProgress(session: ClaudeSession): boolean {
+  if (session.status === "running" || session.status === "connecting") {
+    return latestTurnHasVisibleAssistantContent(session.messages);
+  }
   return session.messages.some((m) => {
     if (m.role === "assistant") {
       return m.content.trim().length > 0 || (m.parts?.length ?? 0) > 0;

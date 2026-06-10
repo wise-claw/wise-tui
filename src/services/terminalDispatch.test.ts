@@ -13,6 +13,7 @@ import {
   resolveTerminalMentionsInPrompt,
   setTerminalDefaultWorkerTab,
   stripTerminalAgentSlashPrefix,
+  stripTerminalMentionsFromPrompt,
   formatTerminalDispatchRecord,
 } from "./terminalDispatch";
 import type { ClaudeSession, EmployeeItem } from "../types";
@@ -84,6 +85,27 @@ describe("terminalDispatch", () => {
     expect(stripTerminalAgentSlashPrefix("/add-dir 你好", null)).toBe("/add-dir 你好");
     const { outboundPrompt } = resolveTerminalDispatchPrompts("/add-dir 你好", "executor");
     expect(outboundPrompt).toBe("/add-dir 你好");
+  });
+
+  test("resolveTerminalDispatchPrompts strips @mention from outbound", () => {
+    const employees = [employee({ id: "e1", name: "终端01" })];
+    const { outboundPrompt, userBubblePrompt } = resolveTerminalDispatchPrompts(
+      "@终端01 你好",
+      "executor",
+      { stripMentionEmployees: employees },
+    );
+    expect(outboundPrompt).toBe("你好");
+    expect(userBubblePrompt).toBe("你好");
+  });
+
+  test("stripTerminalMentionsFromPrompt removes multiple terminal mentions", () => {
+    const employees = [
+      employee({ id: "a", name: "终端A" }),
+      employee({ id: "b", name: "终端B" }),
+    ];
+    expect(stripTerminalMentionsFromPrompt("@终端A @终端B 请检查接口", employees)).toBe(
+      "请检查接口",
+    );
   });
 
   test("resolveTerminalMentionsInPrompt picks earliest mention", () => {
