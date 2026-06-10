@@ -6,7 +6,10 @@ import {
 import { resolveWorkspaceMainSession } from "./resolveWorkspaceMainSession";
 import type { WorkspaceFocus } from "./workspaceMode";
 import type { WorkspaceLastSelection } from "./startupRepoSelection";
-import { resolveProjectExplorerOpenPath } from "./workspaceRepositoryTreeSelect";
+import {
+  resolveProjectDirectoryOpenPath,
+  resolveProjectExplorerOpenPath,
+} from "./workspaceRepositoryTreeSelect";
 
 export interface BuildWorkspaceLastSelectionInput {
   focus: WorkspaceFocus;
@@ -242,3 +245,16 @@ export function resolveClaudeWorkspaceMainSession(
 }
 
 export { resolveProjectExplorerOpenPath } from "./workspaceRepositoryTreeSelect";
+
+/** Claude 项目级技能锚点：工作区焦点用 rootPath/公共父路径；仓库焦点用当前成员仓路径。 */
+export function resolveClaudeProjectSkillsScopePath(input: {
+  activeWorkspaceFocus: WorkspaceFocus;
+  activeProject: ProjectItem | null | undefined;
+  activeRepository: Repository | null | undefined;
+  repositories: ReadonlyArray<Repository>;
+}): string {
+  if (input.activeWorkspaceFocus === "project" && input.activeProject) {
+    return resolveProjectDirectoryOpenPath(input.activeProject, input.repositories).trim();
+  }
+  return input.activeRepository?.path?.trim() ?? "";
+}

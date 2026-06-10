@@ -468,24 +468,20 @@ export function ClaudeCodeToolsPanel({
             label: "技能",
             children: (
               <div className="app-claude-code-tools-scroll">
-                {repositoryPath ? (
-                  loadedTabs.has("skill") ? (
-                    <Suspense fallback={<Empty description="加载中..." image={Empty.PRESENTED_IMAGE_SIMPLE} />}>
-                      <ProjectSkillsPanel
-                        repositoryPath={repositoryPath}
-                        active={panelActive && tab === "skill"}
-                        omcInstalled={omcInstalled ?? false}
-                        listSearch={listSearch}
-                        onCountChange={handleSkillsCountChange}
-                        onBindActions={(actions) => {
-                          skillsPanelRef.current = actions;
-                        }}
-                      />
-                    </Suspense>
-                  ) : null
-                ) : (
-                  <Empty description="请选择仓库" image={Empty.PRESENTED_IMAGE_SIMPLE} />
-                )}
+                {loadedTabs.has("skill") ? (
+                  <Suspense fallback={<Empty description="加载中..." image={Empty.PRESENTED_IMAGE_SIMPLE} />}>
+                    <ProjectSkillsPanel
+                      repositoryPath={repositoryPath}
+                      active={panelActive && tab === "skill"}
+                      omcInstalled={omcInstalled ?? false}
+                      listSearch={listSearch}
+                      onCountChange={handleSkillsCountChange}
+                      onBindActions={(actions) => {
+                        skillsPanelRef.current = actions;
+                      }}
+                    />
+                  </Suspense>
+                ) : null}
               </div>
             ),
           },

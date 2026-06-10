@@ -372,6 +372,8 @@ const SkillFileRow = memo(function SkillFileRow({ entry, selectedPath, selectedI
   );
 });
 
+const hasScopePath = (p: string | undefined): p is string => !!p?.trim();
+
 export function ProjectSkillsPanel({
   repositoryPath,
   active,
@@ -380,6 +382,7 @@ export function ProjectSkillsPanel({
   onBindActions,
   onCountChange,
 }: Props) {
+  const scopePathAvailable = hasScopePath(repositoryPath);
   const [skills, setSkills] = useState<ClaudeProjectSkill[]>([]);
   const [cacheSkills, setCacheSkills] = useState<ClaudeProjectSkill[]>([]);
   const [loading, setLoading] = useState(false);
@@ -414,7 +417,7 @@ export function ProjectSkillsPanel({
     setLoading(true);
     try {
       const [list, userList, cacheList] = await Promise.all([
-        repositoryPath ? listClaudeProjectSkills(repositoryPath) : Promise.resolve([]),
+        scopePathAvailable ? listClaudeProjectSkills(repositoryPath) : Promise.resolve([]),
         listClaudeUserSkills(),
         listClaudePluginCacheSkills(),
       ]);
@@ -425,7 +428,7 @@ export function ProjectSkillsPanel({
     } finally {
       setLoading(false);
     }
-  }, [repositoryPath]);
+  }, [scopePathAvailable, repositoryPath]);
 
   useEffect(() => {
     void hydrateOpenAppPreference();
@@ -437,16 +440,24 @@ export function ProjectSkillsPanel({
         void load();
       },
       openCreateModal: () => {
+        if (!scopePathAvailable) {
+          message.warning("请先选择工作区或仓库，或为工作区配置根目录");
+          return;
+        }
         setCreateOpen(true);
       },
       openSkillsRoot: () => {
+        if (!scopePathAvailable) {
+          message.warning("请先选择工作区或仓库，或为工作区配置根目录");
+          return;
+        }
         void openSkillsRoot();
       },
     });
     return () => {
       onBindActions?.(null);
     };
-  }, [load, onBindActions]);
+  }, [load, onBindActions, scopePathAvailable]);
 
   useEffect(() => {
     if (!active) return;
@@ -486,6 +497,7 @@ export function ProjectSkillsPanel({
 
   const loadSkillFileList = useCallback(
     async (skillName: string): Promise<ClaudeProjectSkillFileEntry[]> => {
+      if (!scopePathAvailable) return [];
       setFilesLoading(true);
       try {
         const files = await listClaudeProjectSkillFiles(repositoryPath, skillName);
@@ -499,11 +511,12 @@ export function ProjectSkillsPanel({
         setFilesLoading(false);
       }
     },
-    [repositoryPath],
+    [scopePathAvailable, repositoryPath],
   );
 
   const loadFileContent = useCallback(
     async (skillName: string, relPath: string) => {
+      if (!scopePathAvailable) return;
       setEditLoading(true);
       setReadError(null);
       try {
@@ -519,14 +532,18 @@ export function ProjectSkillsPanel({
         setEditLoading(false);
       }
     },
-    [repositoryPath],
+    [scopePathAvailable, repositoryPath],
   );
 
   async function openSkillsRoot() {
+    if (!scopePathAvailable) {
+      message.warning("请先选择工作区或仓库，或为工作区配置根目录");
+      return;
+    }
     const p = joinRepositoryPath(repositoryPath, ".claude/skills");
     const target = resolvePreferredEditorTarget();
     if (!target) {
-      message.warning("未找到可用编辑器，请先在“打开方式”中配置");
+      message.warning("未找到可用编辑器，请先在「打开方式」中配置");
       return;
     }
     try {
@@ -586,10 +603,14 @@ export function ProjectSkillsPanel({
 
   const openSkillFolder = useCallback(
     async (name: string) => {
+      if (!scopePathAvailable) {
+        message.warning("请先选择工作区或仓库");
+        return;
+      }
       const p = joinRepositoryPath(repositoryPath, `.claude/skills/${name}`);
       const target = resolvePreferredEditorTarget();
       if (!target) {
-        message.warning("未找到可用编辑器，请先在“打开方式”中配置");
+        message.warning("未找到可用编辑器，请先在「打开方式」中配置");
         return;
       }
       try {
@@ -602,10 +623,14 @@ export function ProjectSkillsPanel({
         message.warning("该技能目录不存在");
       }
     },
-    [repositoryPath],
+    [scopePathAvailable, repositoryPath],
   );
 
   async function openSkillRelInEditor(skillName: string, relPath: string) {
+    if (!scopePathAvailable) {
+      message.warning("请先选择工作区或仓库");
+      return;
+    }
     const p = joinRepositoryPath(repositoryPath, `.claude/skills/${skillName}/${relPath}`);
     const target = resolvePreferredEditorTarget();
     if (!target) {
@@ -627,6 +652,10 @@ export function ProjectSkillsPanel({
     const name = newName.trim();
     if (!isValidSkillName(name)) {
       message.warning("名称须以字母或数字开头，仅含字母、数字、下划线、连字符，最长 128 字符");
+      return;
+    }
+    if (!scopePathAvailable) {
+      message.warning("请先选择工作区或仓库");
       return;
     }
     setCreating(true);
@@ -660,6 +689,10 @@ export function ProjectSkillsPanel({
 
   const handleDelete = useCallback(
     async (name: string) => {
+      if (!scopePathAvailable) {
+        message.warning("请先选择工作区或仓库");
+        return;
+      }
       try {
         await deleteClaudeProjectSkill(repositoryPath, name);
         if (editingName === name) {
@@ -670,7 +703,7 @@ export function ProjectSkillsPanel({
         message.error(e instanceof Error ? e.message : String(e));
       }
     },
-    [repositoryPath, editingName, closeEditor, load],
+    [scopePathAvailable, repositoryPath, editingName, closeEditor, load],
   );
 
   const requestCloseEditor = useCallback(() => {
@@ -746,7 +779,7 @@ export function ProjectSkillsPanel({
   );
 
   async function handleSaveCurrentFile() {
-    if (!editingName || !selectedPath || selectedIsDir) return;
+    if (!scopePathAvailable || !editingName || !selectedPath || selectedIsDir) return;
     setEditSaving(true);
     try {
       let contentToSave = editContent;
@@ -776,7 +809,7 @@ export function ProjectSkillsPanel({
   }
 
   async function handleAddFile() {
-    if (!editingName) return;
+    if (!scopePathAvailable || !editingName) return;
     const rel = newFilePath.trim().replace(/\\/g, "/");
     if (!isValidSkillRelFilePath(rel)) {
       message.warning("请输入相对路径，如 examples/sample.md，勿使用 .. 或以 / 结尾");
@@ -805,7 +838,7 @@ export function ProjectSkillsPanel({
   }
 
   async function handleDeleteCurrentEntry() {
-    if (!editingName || !selectedPath) return;
+    if (!scopePathAvailable || !editingName || !selectedPath) return;
     try {
       await deleteClaudeProjectSkillFile(repositoryPath, editingName, selectedPath);
       const nextFiles = await listClaudeProjectSkillFiles(repositoryPath, editingName);
@@ -837,7 +870,7 @@ export function ProjectSkillsPanel({
   }
 
   async function handleFormatCurrentFile() {
-    if (!editingName || !selectedPath || selectedIsDir) return;
+    if (!scopePathAvailable || !editingName || !selectedPath || selectedIsDir) return;
     setEditFormatting(true);
     try {
       const formatted = await formatClaudeProjectSkillFile(repositoryPath, editingName, selectedPath, editContent);
@@ -861,7 +894,14 @@ export function ProjectSkillsPanel({
             <Spin size="small" />
           </div>
         ) : skills.length === 0 && cacheSkills.length === 0 ? (
-          <Empty description="暂无技能，点击「新建」添加" image={Empty.PRESENTED_IMAGE_SIMPLE} />
+          <Empty
+            description={
+              scopePathAvailable
+                ? "暂无技能，点击「新建」添加"
+                : "暂无用户级或插件缓存技能；选择工作区/仓库或配置工作区根目录后可管理项目级技能"
+            }
+            image={Empty.PRESENTED_IMAGE_SIMPLE}
+          />
         ) : !hasFilteredSkills ? (
           <Empty description="没有符合筛选的技能" image={Empty.PRESENTED_IMAGE_SIMPLE} />
         ) : (
@@ -870,7 +910,7 @@ export function ProjectSkillsPanel({
               <ProjectSkillCard
                 key={`project:${skill.name}`}
                 skill={skill}
-                repositoryPath={repositoryPath}
+                repositoryPath={repositoryPath!}
                 onEdit={openEditor}
                 onOpenFolder={openSkillFolder}
                 onDelete={handleDelete}

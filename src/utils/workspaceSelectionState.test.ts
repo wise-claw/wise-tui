@@ -7,6 +7,7 @@ import {
   isChatSurfaceReady,
   resolveChatContextRepository,
   resolveChatTopbarContext,
+  resolveClaudeProjectSkillsScopePath,
   resolveClaudePanelActiveSession,
   resolveClaudeWorkspaceMainSession,
   resolveProjectComposerRepository,
@@ -81,6 +82,34 @@ describe("resolveProjectComposerRepository", () => {
     const repositories = [repo(1), repo(2), repo(3)];
     const eco = project({ id: "eco", repositoryIds: [2, 1, 3] });
     expect(resolveProjectComposerRepository(eco, repositories)?.id).toBe(2);
+  });
+});
+
+describe("resolveClaudeProjectSkillsScopePath", () => {
+  const repositories = [repo(1, "/eco/eco-ai-web"), repo(2, "/eco/eco-ai")];
+
+  test("project focus uses workspace anchor instead of member repo", () => {
+    const eco = project({ id: "eco", repositoryIds: [1, 2], rootPath: "/eco" });
+    expect(
+      resolveClaudeProjectSkillsScopePath({
+        activeWorkspaceFocus: "project",
+        activeProject: eco,
+        activeRepository: null,
+        repositories,
+      }),
+    ).toBe("/eco");
+  });
+
+  test("repository focus uses active repository path", () => {
+    const eco = project({ id: "eco", repositoryIds: [1, 2], rootPath: "/eco" });
+    expect(
+      resolveClaudeProjectSkillsScopePath({
+        activeWorkspaceFocus: "repository",
+        activeProject: eco,
+        activeRepository: repositories[1],
+        repositories,
+      }),
+    ).toBe("/eco/eco-ai");
   });
 });
 

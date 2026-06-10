@@ -254,6 +254,27 @@
   padding: 2px 8px 6px;
 }
 
+/* 仅外层 scroll 容器滚动，避免技能/子代理列表出现双滚动条 */
+.app-claude-code-tools-scroll .app-repository-skills {
+  height: auto;
+  min-height: 0;
+}
+
+.app-claude-code-tools-scroll .app-repository-skills-table-wrap {
+  flex: none;
+  overflow: visible;
+}
+
+.app-claude-code-tools-scroll .app-subagents-panel {
+  height: auto;
+  min-height: 0;
+}
+
+.app-claude-code-tools-scroll .app-subagents-list-wrap {
+  flex: none;
+  overflow: visible;
+}
+
 /* MCP 列表在右栏内再压一档 */
 .app-claude-code-tools-scroll .app-mcp-groups {
   gap: 6px;

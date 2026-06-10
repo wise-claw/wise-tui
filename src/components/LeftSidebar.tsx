@@ -22,7 +22,10 @@ import { normalizeSessionRepositoryPath } from "../utils/sessionHistoryScope";
 import { resolveTrellisBootstrapPath } from "../utils/trellisBootstrapPath";
 import { resolveRepositoryForSession } from "../utils/repositoryMainSessionBinding";
 import { isMultiRepoProject, shouldRevealWorkspaceListOnRestore } from "../utils/workspaceMode";
-import { resolveScheduledTasksRepository } from "../utils/workspaceSelectionState";
+import {
+  resolveClaudeProjectSkillsScopePath,
+  resolveScheduledTasksRepository,
+} from "../utils/workspaceSelectionState";
 import { runWhenIdle } from "../utils/deferIdle";
 import { MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX } from "../constants/mainLayoutWidths";
 import { DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION } from "../constants/workspaceBootstrapAddons";
@@ -888,6 +891,33 @@ export function LeftSidebar({
   ]);
 
   const effectiveRepoPanelPath = accessibleRepoPanelPath.trim() || repoPanelRepositoryPath.trim();
+
+  const claudeToolsScopePath = useMemo(() => {
+    const project = activeProjectId
+      ? (projects.find((item) => item.id === activeProjectId) ?? null)
+      : null;
+    const repository =
+      activeRepositoryId != null
+        ? (repositories.find((item) => item.id === activeRepositoryId) ?? null)
+        : null;
+    const skillsAnchor = resolveClaudeProjectSkillsScopePath({
+      activeWorkspaceFocus,
+      activeProject: project,
+      activeRepository: repository,
+      repositories,
+    });
+    if (skillsAnchor) return skillsAnchor;
+    return effectiveRepoPanelPath.trim() || activeRepositoryPath?.trim() || "";
+  }, [
+    activeProjectId,
+    activeRepositoryId,
+    activeWorkspaceFocus,
+    projects,
+    repositories,
+    effectiveRepoPanelPath,
+    activeRepositoryPath,
+  ]);
+
   const showLeftRepoPanel = Boolean(
     effectiveRepoPanelPath &&
       (gitPanelPlacement === "left" || filesPanelPlacement === "left"),
@@ -1263,7 +1293,7 @@ export function LeftSidebar({
       <LeftSidebarTopbar
         authorDisabled={authorDisabled}
         authorTooltip={authorDisabledTooltip}
-        activeRepositoryPath={activeRepositoryPath}
+        activeRepositoryPath={claudeToolsScopePath || activeRepositoryPath}
         activeRepositoryId={activeRepositoryId}
         onOpenAuthor={onOpenAuthor}
       />
