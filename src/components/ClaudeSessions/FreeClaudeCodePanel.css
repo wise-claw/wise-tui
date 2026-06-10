@@ -145,6 +145,19 @@
   background: var(--ant-color-fill-tertiary);
 }
 
+.app-fcc-topbar-panel__install-progress {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-bottom: 8px;
+}
+
+.app-fcc-topbar-panel__install-message {
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--ant-color-text-secondary);
+}
+
 .app-fcc-topbar-panel__actions {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));

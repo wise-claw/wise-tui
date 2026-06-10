@@ -74,10 +74,10 @@ import { FollowupDock } from "./dock/followup-dock";
 import { TodoDock } from "./dock/todo-dock";
 import { RevertDock } from "./dock/revert-dock";
 import { addToHistory, promptLength, navigatePromptHistory, canNavigateHistoryAtCursor } from "./prompt-history";
-import { CheckOutlined } from "@ant-design/icons";
-import { Checkbox, Dropdown, Button, Empty, Input, InputNumber, Popover, Select, Spin, Switch, Tabs, Tag, TreeSelect } from "antd";
+import { Checkbox, Button, Empty, Input, message, Popover, Select, Spin, Tabs, Tag, TreeSelect } from "antd";
 import { ContextCompactProgressRing } from "./ContextCompactProgressRing";
 import { useContextBreakdown } from "../../hooks/useContextBreakdown";
+import { ComposerVoiceSettingsPanel } from "./ComposerVoiceSettingsPanel";
 import { ComposerRuntimeSettingsTrigger } from "./ComposerRuntimeSettingsTrigger";
 import { ComposerModelPicker } from "./ComposerModelPicker";
 import { useDefaultClaudeConnectionKind } from "../../hooks/useDefaultClaudeConnectionKind";
@@ -85,23 +85,62 @@ import { useComposerSpeechDictation } from "../../hooks/useComposerSpeechDictati
 import { useComposerSpeechPreferences } from "../../hooks/useComposerSpeechPreferences";
 import { polishComposerSpeechTranscript } from "../../services/composerSpeechPolish";
 import {
-  COMPOSER_SPEECH_SILENCE_AUTO_SEND_IDLE_MS_MAX,
-  COMPOSER_SPEECH_SILENCE_AUTO_SEND_IDLE_MS_MIN,
+  downloadComposerSherpaModels,
+  cancelComposerSherpaDownloadModels,
+  getComposerSherpaSpeechCapabilities,
+  isComposerSherpaSpeechPlatform,
+  listenComposerSherpaModelsStatus,
+  type ComposerSherpaSpeechCapabilities,
+} from "../../services/composerSherpaSpeech";
+import {
   type ComposerSpeechSendMode,
+  type ComposerSpeechPreferencesV1,
 } from "../../constants/composerSpeechPreferences";
+import type { ComposerSpeechEngine } from "../../constants/composerSpeech";
 import { formatSilenceAutoSendIdleSeconds } from "../../utils/composerSpeechSilenceIdle";
 import { readVisiblePollIntervalMs } from "../../utils/adaptivePoll";
 import { splitUtteranceAtAutoSendEnding } from "../../utils/composerSpeechAutoSendEnding";
 import {
+  buildComposerSpeechVoiceCommands,
+  type ComposerSpeechVoiceCommandAction,
+  splitUtteranceAtVoiceCommand,
+} from "../../utils/composerSpeechVoiceCommands";
+import {
   commitComposerSpeechTranscriptBaselineForSend,
   createComposerSpeechStreamAnchor,
-  extractComposerSpeechTranscriptDelta,
+  pickLongerSpeechBaseline,
   resolveComposerSpeechDisplayText,
+  resolveComposerSpeechTranscriptDelta,
   stripComposerSpeechDeltaOverlap,
   stripSpeechCompareNoise,
 } from "../../utils/composerSpeechStreaming";
-import type { MenuProps } from "antd";
 import { logClaudeDrop } from "./drop-debug";
+
+function composerSpeechEngineHint(engine: ComposerSpeechEngine | null): string {
+  if (engine === "sensevoice") return "SenseVoice 本地听写";
+  return "Web Speech 听写";
+}
+
+function composerSpeechStopHint(engine: ComposerSpeechEngine | null): string {
+  if (engine === "web") return "停止语音听写";
+  return "点击停止录音并转写";
+}
+
+function composerSpeechVoiceCommandsHint(
+  prefs: Pick<
+    ComposerSpeechPreferencesV1,
+    | "voiceCommandsEnabled"
+    | "autoSendEndingText"
+    | "voiceCommandClearText"
+    | "voiceCommandCancelText"
+  >,
+): string | null {
+  if (!prefs.voiceCommandsEnabled) return null;
+  const send = prefs.autoSendEndingText || "发送";
+  const clear = prefs.voiceCommandClearText || "清除";
+  const cancel = prefs.voiceCommandCancelText || "取消";
+  return `口播「${send}」发送；「${clear}」清空输入；「${cancel}」结束执行`;
+}
 import {
   buildClaudeComposerSendPayload,
   normalizeComposerPlainMain,
@@ -897,6 +936,8 @@ function ComposerInner({
   const isSessionBusy = session.status === "running" || session.status === "connecting";
   const isSessionBusyRef = useRef(isSessionBusy);
   isSessionBusyRef.current = isSessionBusy;
+  const onCancelRef = useRef(_onCancel);
+  onCancelRef.current = _onCancel;
 
   const speechStreamAnchorRef = useRef<ReturnType<typeof createComposerSpeechStreamAnchor> | null>(
     null,
@@ -926,11 +967,64 @@ function ComposerInner({
   );
 
   const { prefs: speechPrefs, update: updateSpeechPrefs } = useComposerSpeechPreferences();
+  const [sherpaSpeechCaps, setSherpaSpeechCaps] = useState<ComposerSherpaSpeechCapabilities | null>(
+    null,
+  );
+  const [sherpaModelsDownloading, setSherpaModelsDownloading] = useState(false);
+  const [sherpaDownloadProgress, setSherpaDownloadProgress] = useState<number | null>(null);
+  const [sherpaDownloadError, setSherpaDownloadError] = useState<string | null>(null);
+  const sherpaAutoDownloadAttemptedRef = useRef(false);
+  const sherpaDownloadBlockedRef = useRef(false);
+
+  useEffect(() => {
+    if (!isComposerSherpaSpeechPlatform()) return;
+    void getComposerSherpaSpeechCapabilities().then(setSherpaSpeechCaps);
+    let unlisten: (() => void) | undefined;
+    void listenComposerSherpaModelsStatus((payload) => {
+      if (payload.phase === "downloading") {
+        setSherpaModelsDownloading(true);
+        setSherpaDownloadError(null);
+        if (typeof payload.progressPercent === "number") {
+          setSherpaDownloadProgress(payload.progressPercent);
+        }
+        return;
+      }
+      setSherpaModelsDownloading(false);
+      setSherpaDownloadProgress(null);
+      if (payload.phase === "ready") {
+        setSherpaDownloadError(null);
+        sherpaDownloadBlockedRef.current = false;
+        message.success({ content: payload.message || "SenseVoice 模型已就绪", key: "composer-sherpa-download" });
+        void getComposerSherpaSpeechCapabilities({ forceRefresh: true }).then(setSherpaSpeechCaps);
+        return;
+      }
+      if (payload.phase === "cancelled") {
+        setSherpaDownloadError(null);
+        sherpaDownloadBlockedRef.current = true;
+        return;
+      }
+      if (payload.phase === "error") {
+        sherpaDownloadBlockedRef.current = true;
+        setSherpaDownloadError(payload.message || "SenseVoice 模型下载失败");
+      }
+    }).then((fn) => {
+      unlisten = fn;
+    });
+    return () => {
+      unlisten?.();
+    };
+  }, []);
   const speechPrefsRef = useRef(speechPrefs);
   speechPrefsRef.current = speechPrefs;
   const [speechMenuOpen, setSpeechMenuOpen] = useState(false);
   const [draftAutoSendEndingText, setDraftAutoSendEndingText] = useState(
     speechPrefs.autoSendEndingText,
+  );
+  const [draftVoiceCommandClearText, setDraftVoiceCommandClearText] = useState(
+    speechPrefs.voiceCommandClearText,
+  );
+  const [draftVoiceCommandCancelText, setDraftVoiceCommandCancelText] = useState(
+    speechPrefs.voiceCommandCancelText,
   );
   const [draftSilenceIdleSeconds, setDraftSilenceIdleSeconds] = useState(
     speechPrefs.silenceAutoSendIdleMs / 1000,
@@ -942,11 +1036,15 @@ function ComposerInner({
   useEffect(() => {
     if (speechMenuOpen) {
       setDraftAutoSendEndingText(speechPrefs.autoSendEndingText);
+      setDraftVoiceCommandClearText(speechPrefs.voiceCommandClearText);
+      setDraftVoiceCommandCancelText(speechPrefs.voiceCommandCancelText);
       setDraftSilenceIdleSeconds(speechPrefs.silenceAutoSendIdleMs / 1000);
     }
   }, [
     speechMenuOpen,
     speechPrefs.autoSendEndingText,
+    speechPrefs.voiceCommandCancelText,
+    speechPrefs.voiceCommandClearText,
     speechPrefs.silenceAutoSendIdleMs,
   ]);
 
@@ -965,16 +1063,17 @@ function ComposerInner({
       if (!surface) return;
 
       const { plain, cursor } = resolveComposerSpeechDisplayText(spokenText);
+      const lastSent = speechLastSentPlainRef.current;
+      const sentCmp = stripSpeechCompareNoise(lastSent);
+      const plainCmp = stripSpeechCompareNoise(plain);
       if (plain) {
+        if (sentCmp && plainCmp === sentCmp && !shouldAutoSend) {
+          return;
+        }
         speechStreamAnchorRef.current = createComposerSpeechStreamAnchor("", 0);
         surface.setPlainAndCursor(plain, cursor);
-        const lastSent = speechLastSentPlainRef.current;
-        if (lastSent) {
-          const sentCmp = stripSpeechCompareNoise(lastSent);
-          const plainCmp = stripSpeechCompareNoise(plain);
-          if (sentCmp && !plainCmp.startsWith(sentCmp)) {
-            speechLastSentPlainRef.current = "";
-          }
+        if (lastSent && sentCmp && !plainCmp.startsWith(sentCmp)) {
+          speechLastSentPlainRef.current = "";
         }
       } else if (!shouldAutoSend) {
         return;
@@ -993,22 +1092,119 @@ function ComposerInner({
     [clearSpeechIdleAutoSendTimer],
   );
 
+  const executeVoiceClearComposer = useCallback(() => {
+    speechPolishSeqRef.current += 1;
+    setSpeechPolishing(false);
+    clearSpeechIdleAutoSendTimer();
+    debouncedPromptSyncRef.current.cancel();
+    lastEditorPlainRef.current = "";
+    cursorRef.current = 0;
+    speechStreamAnchorRef.current = createComposerSpeechStreamAnchor("", 0);
+    speechLastSentPlainRef.current = "";
+    suffixAutoSendFiredRef.current = false;
+    const lastRaw = lastRawSpeechTranscriptRef.current.trim();
+    if (lastRaw) {
+      speechEngineTranscriptBaselineRef.current = pickLongerSpeechBaseline(
+        speechEngineTranscriptBaselineRef.current,
+        lastRaw,
+      );
+    }
+    ignoreNextContentSyncRef.current = true;
+    canSendComposerRef.current = false;
+    setCanSendComposer(false);
+    setTrigger({ mode: null, query: "", rect: null });
+    postSendEscUndoRef.current = null;
+    flushSync(() => {
+      reset();
+      setImages([]);
+    });
+    scheduleComposerSetContent("");
+    void clearPromptContextSessionKey(draftBucketKey);
+  }, [
+    clearSpeechIdleAutoSendTimer,
+    draftBucketKey,
+    reset,
+    scheduleComposerSetContent,
+    setImages,
+  ]);
+
+  const executeVoiceCancelTask = useCallback(() => {
+    clearSpeechIdleAutoSendTimer();
+    onCancelRef.current();
+  }, [clearSpeechIdleAutoSendTimer]);
+
+  const resolveSpeechVoiceCommand = useCallback(
+    (
+      delta: string,
+      rawTranscriptFallback?: string,
+    ): {
+      spokenText: string;
+      shouldAutoSend: boolean;
+      voiceAction: ComposerSpeechVoiceCommandAction | null;
+    } => {
+      const prefs = speechPrefsRef.current;
+      const resolve = (utterance: string) => {
+        if (prefs.voiceCommandsEnabled) {
+          const commands = buildComposerSpeechVoiceCommands(prefs);
+          const split = splitUtteranceAtVoiceCommand(utterance, commands);
+          return {
+            spokenText: split.utterance,
+            shouldAutoSend: split.action === "send",
+            voiceAction: split.action,
+          };
+        }
+        if (prefs.sendMode === "endingWordAutoSend") {
+          const split = splitUtteranceAtAutoSendEnding(utterance, prefs.autoSendEndingText);
+          return {
+            spokenText: split.utterance,
+            shouldAutoSend: split.shouldAutoSend,
+            voiceAction: null,
+          };
+        }
+        return { spokenText: utterance, shouldAutoSend: false, voiceAction: null };
+      };
+
+      const primary = resolve(delta);
+      if (primary.voiceAction || !rawTranscriptFallback?.trim()) {
+        return primary;
+      }
+
+      const fallback = resolve(rawTranscriptFallback);
+      if (
+        fallback.voiceAction === "clear" ||
+        fallback.voiceAction === "cancel" ||
+        (fallback.voiceAction === "send" && fallback.shouldAutoSend)
+      ) {
+        return fallback;
+      }
+      return primary;
+    },
+    [],
+  );
+
   const handleSpeechTranscriptUpdate = useCallback(
     ({ text, isFinal }: { text: string; isFinal: boolean }) => {
       lastRawSpeechTranscriptRef.current = text;
-      let delta = extractComposerSpeechTranscriptDelta(
-        speechEngineTranscriptBaselineRef.current,
-        text,
-      );
-      delta = stripComposerSpeechDeltaOverlap(delta, speechLastSentPlainRef.current);
+      const delta = resolveComposerSpeechTranscriptDelta({
+        engine: speechDictationRef.current.engine,
+        baseline: speechEngineTranscriptBaselineRef.current,
+        rawTranscript: text,
+        lastSentPlain: speechLastSentPlainRef.current,
+      });
 
-      const isEndingWordMode = speechPrefsRef.current.sendMode === "endingWordAutoSend";
-      const { utterance: spokenText, shouldAutoSend } = isEndingWordMode
-        ? splitUtteranceAtAutoSendEnding(
-            delta,
-            speechPrefsRef.current.autoSendEndingText,
-          )
-        : { utterance: delta, shouldAutoSend: false };
+      const { spokenText, shouldAutoSend, voiceAction } = resolveSpeechVoiceCommand(
+        delta,
+        isFinal ? text : undefined,
+      );
+
+      if (voiceAction === "clear") {
+        executeVoiceClearComposer();
+        return;
+      }
+      if (voiceAction === "cancel") {
+        executeVoiceCancelTask();
+        return;
+      }
 
       if (!spokenText.trim() && !shouldAutoSend) {
         return;
@@ -1037,7 +1233,13 @@ function ComposerInner({
           }
         });
     },
-    [applySpeechUtteranceToComposer, speechPolishProjectPath],
+    [
+      applySpeechUtteranceToComposer,
+      executeVoiceCancelTask,
+      executeVoiceClearComposer,
+      resolveSpeechVoiceCommand,
+      speechPolishProjectPath,
+    ],
   );
 
   const handleSpeechSessionEnd = useCallback(() => {
@@ -1054,6 +1256,8 @@ function ComposerInner({
     retainSessionWhenDisabled: () =>
       speechKeepAliveDuringBusyRef.current &&
       isAutoSendSpeechMode(speechPrefsRef.current.sendMode),
+    speechEngineMode: speechPrefs.speechEngineMode,
+    senseVoiceLang: speechPrefs.senseVoiceLang,
     onTranscriptUpdate: handleSpeechTranscriptUpdate,
     onSessionEnd: handleSpeechSessionEnd,
     onError: () => {},
@@ -1186,175 +1390,80 @@ function ComposerInner({
     clearSpeechIdleAutoSendTimer();
   }, [session.id, speechDictation.stop, clearSpeechIdleAutoSendTimer]);
 
-  const voiceContextMenuItems: MenuProps["items"] = useMemo(
-    () => [
-      {
-        key: "mode-manual",
-        label: (
-          <span className="app-claude-composer-voice-menu-row">
-            {speechPrefs.sendMode === "manual" ? (
-              <CheckOutlined className="app-claude-composer-voice-menu-check" />
-            ) : (
-              <span className="app-claude-composer-voice-menu-check app-claude-composer-voice-menu-check--placeholder" />
-            )}
-            手动发送（整理后录入）
-          </span>
-        ),
-        onClick: () => void updateSpeechPrefs({ sendMode: "manual" }),
-      },
-      {
-        key: "mode-silence-auto",
-        label: (
-          <span className="app-claude-composer-voice-menu-row">
-            {speechPrefs.sendMode === "silenceAutoSend" ? (
-              <CheckOutlined className="app-claude-composer-voice-menu-check" />
-            ) : (
-              <span className="app-claude-composer-voice-menu-check app-claude-composer-voice-menu-check--placeholder" />
-            )}
-            停顿 {silenceIdleSecondsLabel} 秒无新语音自动发送
-          </span>
-        ),
-        onClick: () => void updateSpeechPrefs({ sendMode: "silenceAutoSend" }),
-      },
-      {
-        key: "mode-ending-auto",
-        label: (
-          <span className="app-claude-composer-voice-menu-row">
-            {speechPrefs.sendMode === "endingWordAutoSend" ? (
-              <CheckOutlined className="app-claude-composer-voice-menu-check" />
-            ) : (
-              <span className="app-claude-composer-voice-menu-check app-claude-composer-voice-menu-check--placeholder" />
-            )}
-            自动发送结束词（口播触发）
-          </span>
-        ),
-        onClick: () => void updateSpeechPrefs({ sendMode: "endingWordAutoSend" }),
-      },
-      { type: "divider" as const },
-      {
-        key: "speech-to-requirement",
-        label: (
-          <div
-            className="app-claude-composer-voice-menu-row app-claude-composer-voice-menu-row--switch"
-            onClick={(ev) => ev.stopPropagation()}
-          >
-            <span className="app-claude-composer-voice-menu-row-label">录音转需求</span>
-            <Switch
-              size="small"
-              checked={speechPrefs.speechToRequirementEnabled}
-              onChange={(checked) => void updateSpeechPrefs({ speechToRequirementEnabled: checked })}
-            />
-          </div>
-        ),
-      },
-      {
-        key: "speech-polish",
-        label: (
-          <div
-            className="app-claude-composer-voice-menu-row app-claude-composer-voice-menu-row--switch"
-            onClick={(ev) => ev.stopPropagation()}
-          >
-            <span className="app-claude-composer-voice-menu-row-label">转写整理为清晰表达</span>
-            <Switch
-              size="small"
-              checked={speechPrefs.speechPolishEnabled}
-              onChange={(checked) => void updateSpeechPrefs({ speechPolishEnabled: checked })}
-            />
-          </div>
-        ),
-      },
-      { type: "divider" as const },
-      {
-        key: "silence-idle-ms",
-        label: (
-          <div
-            className="app-claude-composer-voice-menu-label"
-            onClick={(ev) => ev.stopPropagation()}
-          >
-            <div className="app-claude-composer-voice-menu-label-title">
-              停顿自动发送时长{" "}
-              <span className="app-claude-composer-voice-menu-label-subtitle">(秒)</span>
-            </div>
-            <div className="app-claude-composer-voice-menu-inline-row">
-              <InputNumber
-                size="small"
-                min={COMPOSER_SPEECH_SILENCE_AUTO_SEND_IDLE_MS_MIN / 1000}
-                max={COMPOSER_SPEECH_SILENCE_AUTO_SEND_IDLE_MS_MAX / 1000}
-                step={0.1}
-                value={draftSilenceIdleSeconds}
-                onChange={(value) => {
-                  if (typeof value === "number" && Number.isFinite(value)) {
-                    setDraftSilenceIdleSeconds(value);
-                  }
-                }}
-                className="app-claude-composer-voice-menu-input"
-              />
-              <Button
-                type="primary"
-                size="small"
-                className="app-claude-composer-voice-menu-save-btn"
-                onClick={() =>
-                  void updateSpeechPrefs({
-                    silenceAutoSendIdleMs: Math.round(draftSilenceIdleSeconds * 1000),
-                  })
-                }
-              >
-                保存
-              </Button>
-            </div>
-          </div>
-        ),
-      },
-      {
-        key: "auto-send-ending",
-        label: (
-          <div
-            className="app-claude-composer-voice-menu-label"
-            onClick={(ev) => ev.stopPropagation()}
-          >
-            <div className="app-claude-composer-voice-menu-label-title">
-              结束词设置 <span className="app-claude-composer-voice-menu-label-subtitle">(口播该词自动发送且不写入)</span>
-            </div>
-            <div className="app-claude-composer-voice-menu-inline-row">
-              <Input
-                size="small"
-                maxLength={16}
-                value={draftAutoSendEndingText}
-                onChange={(ev) => setDraftAutoSendEndingText(ev.target.value)}
-                onPressEnter={() =>
-                  void updateSpeechPrefs({ autoSendEndingText: draftAutoSendEndingText })
-                }
-                placeholder="发送"
-                className="app-claude-composer-voice-menu-input"
-              />
-              <Button
-                type="primary"
-                size="small"
-                className="app-claude-composer-voice-menu-save-btn"
-                onClick={() =>
-                  void updateSpeechPrefs({ autoSendEndingText: draftAutoSendEndingText })
-                }
-              >
-                保存
-              </Button>
-            </div>
-          </div>
-        ),
-      },
-    ],
+  const handleDownloadSherpaModels = useCallback(() => {
+    sherpaDownloadBlockedRef.current = false;
+    sherpaAutoDownloadAttemptedRef.current = true;
+    setSherpaDownloadError(null);
+    setSherpaModelsDownloading(true);
+    setSherpaDownloadProgress(0);
+    void downloadComposerSherpaModels().catch((e) => {
+      setSherpaModelsDownloading(false);
+      setSherpaDownloadProgress(null);
+      sherpaDownloadBlockedRef.current = true;
+      setSherpaDownloadError(e instanceof Error ? e.message : String(e));
+    });
+  }, []);
+
+  const handleCancelSherpaDownload = useCallback(() => {
+    void cancelComposerSherpaDownloadModels();
+  }, []);
+
+  useEffect(() => {
+    if (!isComposerSherpaSpeechPlatform()) return;
+    if (speechPrefs.speechEngineMode !== "sensevoice") return;
+    if (sherpaSpeechCaps?.modelsInstalled) return;
+    if (sherpaModelsDownloading || sherpaSpeechCaps?.downloading) return;
+    if (sherpaAutoDownloadAttemptedRef.current) return;
+    if (sherpaDownloadBlockedRef.current) return;
+    sherpaAutoDownloadAttemptedRef.current = true;
+    handleDownloadSherpaModels();
+  }, [
+    handleDownloadSherpaModels,
+    sherpaModelsDownloading,
+    sherpaSpeechCaps?.downloading,
+    sherpaSpeechCaps?.modelsInstalled,
+    speechPrefs.speechEngineMode,
+  ]);
+
+  const voiceSettingsPanel = useMemo(
+    () => (
+      <ComposerVoiceSettingsPanel
+        speechPrefs={speechPrefs}
+        updateSpeechPrefs={updateSpeechPrefs}
+        draftSilenceIdleSeconds={draftSilenceIdleSeconds}
+        setDraftSilenceIdleSeconds={setDraftSilenceIdleSeconds}
+        draftAutoSendEndingText={draftAutoSendEndingText}
+        setDraftAutoSendEndingText={setDraftAutoSendEndingText}
+        draftVoiceCommandClearText={draftVoiceCommandClearText}
+        setDraftVoiceCommandClearText={setDraftVoiceCommandClearText}
+        draftVoiceCommandCancelText={draftVoiceCommandCancelText}
+        setDraftVoiceCommandCancelText={setDraftVoiceCommandCancelText}
+        activeEngine={speechDictation.engine}
+        sherpaSpeechCaps={sherpaSpeechCaps}
+        sherpaModelsDownloading={sherpaModelsDownloading}
+        sherpaDownloadProgress={sherpaDownloadProgress}
+        sherpaDownloadError={sherpaDownloadError}
+        onDownloadSherpaModels={handleDownloadSherpaModels}
+        onCancelSherpaDownload={handleCancelSherpaDownload}
+      />
+    ),
     [
       draftAutoSendEndingText,
       draftSilenceIdleSeconds,
-      silenceIdleSecondsLabel,
-      speechPrefs.sendMode,
-      speechPrefs.speechPolishEnabled,
-      speechPrefs.speechToRequirementEnabled,
+      draftVoiceCommandCancelText,
+      draftVoiceCommandClearText,
+      handleCancelSherpaDownload,
+      handleDownloadSherpaModels,
+      sherpaDownloadError,
+      sherpaDownloadProgress,
+      sherpaModelsDownloading,
+      sherpaSpeechCaps,
+      speechDictation.engine,
+      speechPrefs,
       updateSpeechPrefs,
     ],
   );
 
-  const onCancelRef = useRef(_onCancel);
-  onCancelRef.current = _onCancel;
   const loadActiveBranch = useCallback(async () => {
     if (!gitRepositoryPath) {
       setActiveBranch("-");
@@ -1767,6 +1876,8 @@ function ComposerInner({
 
       /** 先清空输入区，再 await 构建 outbound（图片落盘等），避免主线程长时间被占导致「点了没反应」 */
       const clearComposerSurfaceSync = (sentPlain?: string) => {
+        speechPolishSeqRef.current += 1;
+        setSpeechPolishing(false);
         debouncedPromptSyncRef.current.cancel();
         canSendComposerRef.current = false;
         setCanSendComposer(false);
@@ -2701,34 +2812,55 @@ function ComposerInner({
           </svg>
         </Button>
         {speechDictation.supported ? (
-          <Dropdown
-            menu={{ items: voiceContextMenuItems }}
-            trigger={["contextMenu"]}
+          <Popover
+            content={voiceSettingsPanel}
+            trigger="contextMenu"
             placement="topLeft"
             open={speechMenuOpen}
             onOpenChange={setSpeechMenuOpen}
+            arrow={false}
+            overlayClassName="app-composer-voice-panel-popover"
           >
+            <span className="app-claude-composer-voice-trigger-wrap">
             <HoverHint
               title={
                 speechDictation.transcribing
-                  ? "正在本地转写…"
+                  ? speechDictation.engine === "sensevoice"
+                    ? "正在 SenseVoice 转写…"
+                    : "正在本地转写…"
                   : speechPolishing
                     ? "正在整理转写…"
                     : speechDictation.listening
                     ? speechPrefs.sendMode === "silenceAutoSend"
-                      ? `停顿 ${silenceIdleSecondsLabel} 秒无新语音将自动发送；录音持续至点击停止`
+                      ? `停顿 ${silenceIdleSecondsLabel} 秒无新语音将自动发送；录音持续至点击停止${
+                          composerSpeechVoiceCommandsHint(speechPrefs)
+                            ? `；${composerSpeechVoiceCommandsHint(speechPrefs)}`
+                            : ""
+                        }`
                       : speechPrefs.sendMode === "endingWordAutoSend"
-                        ? `口播「${speechPrefs.autoSendEndingText}」将自动发送；录音持续至点击停止`
-                        : speechDictation.engine === "local"
-                          ? "点击停止录音并转写"
-                          : "点击停止语音听写"
+                        ? `口播「${speechPrefs.autoSendEndingText}」将自动发送；录音持续至点击停止${
+                            composerSpeechVoiceCommandsHint(speechPrefs)
+                              ? `；${composerSpeechVoiceCommandsHint(speechPrefs)}`
+                              : ""
+                          }`
+                        : composerSpeechVoiceCommandsHint(speechPrefs)
+                          ? `${composerSpeechStopHint(speechDictation.engine)}；${composerSpeechVoiceCommandsHint(speechPrefs)}`
+                          : composerSpeechStopHint(speechDictation.engine)
                     : speechPrefs.sendMode === "silenceAutoSend"
-                      ? `点击开始听写，停顿 ${silenceIdleSecondsLabel} 秒自动发送；需点击停止结束录音`
+                      ? `点击开始听写，停顿 ${silenceIdleSecondsLabel} 秒自动发送；需点击停止结束录音${
+                          composerSpeechVoiceCommandsHint(speechPrefs)
+                            ? `；${composerSpeechVoiceCommandsHint(speechPrefs)}`
+                            : ""
+                        }`
                       : speechPrefs.sendMode === "endingWordAutoSend"
-                        ? `点击开始听写，口播「${speechPrefs.autoSendEndingText}」自动发送；需点击停止结束录音`
-                        : speechDictation.engine === "local"
-                          ? "本地语音听写（手动发送）；右键配置"
-                          : "语音听写（手动发送）；右键配置"
+                        ? `点击开始听写，口播「${speechPrefs.autoSendEndingText}」自动发送；需点击停止结束录音${
+                            composerSpeechVoiceCommandsHint(speechPrefs)
+                              ? `；${composerSpeechVoiceCommandsHint(speechPrefs)}`
+                              : ""
+                          }`
+                        : composerSpeechVoiceCommandsHint(speechPrefs)
+                          ? `${composerSpeechEngineHint(speechDictation.engine)}；${composerSpeechVoiceCommandsHint(speechPrefs)}；右键配置`
+                          : `${composerSpeechEngineHint(speechDictation.engine)}（手动发送）；右键配置`
               }
               placement="top"
             >
@@ -2753,12 +2885,8 @@ function ComposerInner({
                     : speechPolishing
                       ? "正在整理转写"
                       : speechDictation.listening
-                      ? speechDictation.engine === "local"
-                        ? "结束录音并转写"
-                        : "停止语音听写"
-                      : speechDictation.engine === "local"
-                        ? "开始本地语音转文字"
-                        : "开始语音听写"
+                      ? composerSpeechStopHint(speechDictation.engine)
+                      : `开始${composerSpeechEngineHint(speechDictation.engine)}`
                 }
                 onClick={() => speechDictation.toggle()}
                 style={{
@@ -2785,7 +2913,8 @@ function ComposerInner({
                 </svg>
               </Button>
             </HoverHint>
-          </Dropdown>
+            </span>
+          </Popover>
         ) : null}
         {dualPaneRepositoryPicker ? (
           <TreeSelect
@@ -2906,7 +3035,7 @@ function ComposerInner({
     speechPolishing,
     speechPrefs.autoSendEndingText,
     speechPrefs.sendMode,
-    voiceContextMenuItems,
+    voiceSettingsPanel,
   ]);
 
   /** 与 Semi 底栏同一行：结束（占用中）+ 模型选择 + 发送（Semi 在 generating 时会拦截发送，故用独立结束 + generating=false） */

@@ -36,7 +36,23 @@ fn auth_status_label(status: SFSpeechRecognizerAuthorizationStatus) -> &'static 
 }
 
 #[cfg(target_os = "macos")]
+fn embedded_info_plist_is_tcc_parseable() -> bool {
+    let embedded = tauri::embed_plist::get_info_plist();
+    let xml = embedded.split(|&b| b == 0).next().unwrap_or(embedded);
+    let xml = std::str::from_utf8(xml).unwrap_or("").trim();
+    if !xml.ends_with("</plist>") {
+        return false;
+    }
+    xml.contains("<key>NSSpeechRecognitionUsageDescription</key>")
+        && xml.contains("<key>NSMicrophoneUsageDescription</key>")
+}
+
+#[cfg(target_os = "macos")]
 fn speech_recognition_usage_description_present() -> bool {
+    if !embedded_info_plist_is_tcc_parseable() {
+        return false;
+    }
+
     let bundle = NSBundle::mainBundle();
     let Some(info) = bundle.infoDictionary() else {
         return false;
@@ -65,9 +81,9 @@ pub(crate) fn ensure_speech_authorization() -> Result<SFSpeechRecognizerAuthoriz
 
     if !speech_recognition_usage_description_present() {
         return Err(
-            "当前运行的 Wise 可执行文件未嵌入语音识别隐私说明（NSSpeechRecognitionUsageDescription）。\
-             请停止 tauri dev 后执行：cd src-tauri && cargo clean -p wise && cd .. && bun run tauri:dev。\
-             仅重编 lib 不会刷新 __info_plist，必须重新链接 wise 二进制。"
+            "当前运行的 Wise 可执行文件未嵌入可解析的语音识别隐私说明（NSSpeechRecognitionUsageDescription）。\
+             请完全退出 Wise 后执行：cd src-tauri && cargo build -p wise && cd .. && bun run tauri:dev。\
+             仅重编 tauri_app_lib 不会刷新 __info_plist，必须重新链接 wise 可执行文件。"
                 .to_string(),
         );
     }

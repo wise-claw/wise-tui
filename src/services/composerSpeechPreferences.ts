@@ -5,6 +5,8 @@ import {
   type ComposerSpeechSendMode,
 } from "../constants/composerSpeechPreferences";
 import { normalizeComposerSpeechAutoSendEndingText } from "../utils/composerSpeechAutoSendEnding";
+import { normalizeComposerSpeechEnginePreference } from "../utils/composerSpeechEngine";
+import { normalizeSenseVoiceLanguagePreference } from "../utils/senseVoiceLang";
 import { normalizeSilenceAutoSendIdleMs } from "../utils/composerSpeechSilenceIdle";
 import { getAppSettingJson, setAppSettingJson } from "./appSettingsStore";
 
@@ -32,6 +34,14 @@ export function normalizeComposerSpeechPreferences(
     typeof o.autoSendEndingText === "string"
       ? normalizeComposerSpeechAutoSendEndingText(o.autoSendEndingText)
       : "";
+  const voiceCommandClearText =
+    typeof o.voiceCommandClearText === "string"
+      ? normalizeComposerSpeechAutoSendEndingText(o.voiceCommandClearText)
+      : "";
+  const voiceCommandCancelText =
+    typeof o.voiceCommandCancelText === "string"
+      ? normalizeComposerSpeechAutoSendEndingText(o.voiceCommandCancelText)
+      : "";
   return {
     sendMode: coerceSendMode(o.sendMode),
     autoSendEndingText:
@@ -39,6 +49,13 @@ export function normalizeComposerSpeechPreferences(
     silenceAutoSendIdleMs: normalizeSilenceAutoSendIdleMs(o.silenceAutoSendIdleMs),
     speechToRequirementEnabled: o.speechToRequirementEnabled === true,
     speechPolishEnabled: o.speechPolishEnabled !== false,
+    speechEngineMode: normalizeComposerSpeechEnginePreference(o.speechEngineMode),
+    senseVoiceLang: normalizeSenseVoiceLanguagePreference(o.senseVoiceLang),
+    voiceCommandsEnabled: o.voiceCommandsEnabled !== false,
+    voiceCommandClearText:
+      voiceCommandClearText || DEFAULT_COMPOSER_SPEECH_PREFERENCES.voiceCommandClearText,
+    voiceCommandCancelText:
+      voiceCommandCancelText || DEFAULT_COMPOSER_SPEECH_PREFERENCES.voiceCommandCancelText,
   };
 }
 

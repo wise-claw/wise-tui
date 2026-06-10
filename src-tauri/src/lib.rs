@@ -56,6 +56,8 @@ mod trellis_bootstrap;
 mod trellis_bridge;
 mod trellis_runtime;
 mod composer_image_gc;
+mod composer_speech;
+mod sherpa_sensevoice;
 mod wise_data_cleanup;
 mod wise_db;
 mod wise_mascot;

@@ -9,6 +9,7 @@ import {
   pickLongerSpeechBaseline,
   reconcileComposerSpeechStreamAnchor,
   resolveComposerSpeechDisplayText,
+  resolveComposerSpeechTranscriptDelta,
   stripComposerSpeechDeltaOverlap,
 } from "./composerSpeechStreaming";
 
@@ -127,5 +128,38 @@ describe("composerSpeechStreaming", () => {
     );
     const delta = extractComposerSpeechTranscriptDelta(baseline, "载一首歌，我要出发了，我出发了");
     expect(resolveComposerSpeechDisplayText(delta).plain).toBe("我出发了");
+  });
+
+  test("resolveComposerSpeechTranscriptDelta uses raw text for sensevoice without baseline", () => {
+    expect(
+      resolveComposerSpeechTranscriptDelta({
+        engine: "sensevoice",
+        baseline: "",
+        rawTranscript: "  你好世界  ",
+        lastSentPlain: "",
+      }),
+    ).toBe("你好世界");
+  });
+
+  test("resolveComposerSpeechTranscriptDelta strips lastSentPlain for sensevoice", () => {
+    expect(
+      resolveComposerSpeechTranscriptDelta({
+        engine: "sensevoice",
+        baseline: "",
+        rawTranscript: "今天干什么",
+        lastSentPlain: "今天干什么",
+      }),
+    ).toBe("");
+  });
+
+  test("resolveComposerSpeechTranscriptDelta keeps overlap stripping for web", () => {
+    expect(
+      resolveComposerSpeechTranscriptDelta({
+        engine: "web",
+        baseline: "",
+        rawTranscript: "已发送内容新的句子",
+        lastSentPlain: "已发送内容",
+      }),
+    ).toBe("新的句子");
   });
 });

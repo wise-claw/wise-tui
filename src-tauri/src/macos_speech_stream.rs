@@ -17,17 +17,7 @@ use tauri::{AppHandle, Emitter, Manager, State};
 
 use crate::macos_speech::{ensure_speech_authorization, locale_for_bcp47, run_on_main_thread};
 
-pub const COMPOSER_SPEECH_TRANSCRIPT_EVENT: &str = "composer-speech-transcript";
-
-#[derive(Clone, serde::Serialize)]
-#[serde(rename_all = "camelCase")]
-pub struct ComposerSpeechTranscriptPayload {
-    pub session_id: String,
-    pub transcript: String,
-    pub is_final: bool,
-    #[serde(skip_serializing_if = "Option::is_none")]
-    pub error: Option<String>,
-}
+pub use crate::composer_speech::{ComposerSpeechTranscriptPayload, COMPOSER_SPEECH_TRANSCRIPT_EVENT};
 
 #[derive(serde::Serialize)]
 #[serde(rename_all = "camelCase")]

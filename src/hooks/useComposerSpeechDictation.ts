@@ -4,15 +4,17 @@ import {
   openComposerMicrophonePrivacySettings,
 } from "../services/composerMicrophone";
 import {
-  appendComposerStreamingSpeechPcm,
-  cancelComposerStreamingSpeech,
-  finishComposerStreamingSpeech,
-  isComposerLocalSpeechPlatform,
-  isComposerLocalSpeechPreferred,
   listenComposerSpeechTranscript,
-  openComposerSpeechRecognitionPrivacySettings,
-  startComposerStreamingSpeech,
 } from "../services/composerLocalSpeech";
+import {
+  appendComposerSherpaStreamingSpeechPcm,
+  cancelComposerSherpaStreamingSpeech,
+  finishComposerSherpaStreamingSpeech,
+  isComposerSherpaSpeechPreferred,
+  listenComposerSherpaModelsStatus,
+  resetComposerSherpaSpeechCacheForTests,
+  startComposerSherpaStreamingSpeech,
+} from "../services/composerSherpaSpeech";
 import {
   ComposerAudioRecorder,
   float32ToBase64,
@@ -26,8 +28,13 @@ import {
   speechRecognitionErrorMessage,
   type SpeechRecognitionLike,
 } from "../utils/composerSpeechRecognition";
+import { isTauri } from "@tauri-apps/api/core";
+import type { ComposerSpeechEngine } from "../constants/composerSpeech";
+import type { ComposerSpeechEnginePreference, SenseVoiceLanguagePreference } from "../constants/composerSpeechPreferences";
+import { resolveComposerSpeechEngine } from "../utils/composerSpeechEngine";
+import { senseVoiceLangToInvokeArg } from "../utils/senseVoiceLang";
 
-export type ComposerSpeechEngine = "local" | "web";
+export type { ComposerSpeechEngine };
 
 export interface ComposerSpeechTranscriptUpdate {
   text: string;
@@ -39,11 +46,15 @@ export interface UseComposerSpeechDictationOptions {
   enabled?: boolean;
   /** enabled 变为 false 时若返回 true，则不自动 stop（连续听写 + 自动发送场景）。 */
   retainSessionWhenDisabled?: () => boolean;
-  /** BCP-47 语言，默认 zh-CN。 */
+  /** BCP-47 语言，默认 zh-CN（Web Speech）。 */
   lang?: string;
+  /** 听写引擎策略，默认 auto。 */
+  speechEngineMode?: ComposerSpeechEnginePreference;
+  /** SenseVoice 识别语言（仅 Sherpa 引擎生效）。 */
+  senseVoiceLang?: SenseVoiceLanguagePreference;
   /** 流式 partial 或 final 更新（边说边出字）。 */
   onTranscriptUpdate: (update: ComposerSpeechTranscriptUpdate) => void;
-  /** 整段听写结束（本地模式在 final 后；Web 模式在 stop 时可选触发）。 */
+  /** 整段听写结束。 */
   onSessionEnd?: () => void;
   onError?: (message: string) => void;
 }
@@ -54,6 +65,8 @@ export function useComposerSpeechDictation({
   enabled = true,
   retainSessionWhenDisabled,
   lang = "zh-CN",
+  speechEngineMode = "auto",
+  senseVoiceLang = "auto",
   onTranscriptUpdate,
   onSessionEnd,
   onError,
@@ -86,21 +99,41 @@ export function useComposerSpeechDictation({
 
   const webSupported = useMemo(() => isSpeechRecognitionSupported(), []);
 
+  const resolveEngine = useCallback(async (): Promise<ComposerSpeechEngine | null> => {
+    const sherpaReady = await isComposerSherpaSpeechPreferred();
+    return resolveComposerSpeechEngine({
+      preference: speechEngineMode,
+      sherpaReady,
+      webSupported,
+    });
+  }, [speechEngineMode, webSupported]);
+
   useEffect(() => {
     let cancelled = false;
     void (async () => {
-      const local = await isComposerLocalSpeechPreferred(lang);
+      const next = await resolveEngine();
       if (cancelled) return;
-      if (local) {
-        setEngine("local");
-        return;
-      }
-      setEngine(webSupported ? "web" : null);
+      setEngine(next);
     })();
     return () => {
       cancelled = true;
     };
-  }, [lang, webSupported]);
+  }, [resolveEngine]);
+
+  useEffect(() => {
+    if (!isTauri()) return;
+    let unlisten: (() => void) | undefined;
+    void listenComposerSherpaModelsStatus((payload) => {
+      if (payload.phase !== "ready" || !payload.modelsInstalled) return;
+      resetComposerSherpaSpeechCacheForTests();
+      void resolveEngine().then((next) => setEngine(next));
+    }).then((fn) => {
+      unlisten = fn;
+    });
+    return () => {
+      unlisten?.();
+    };
+  }, [resolveEngine]);
 
   const supported = engine != null;
 
@@ -123,7 +156,7 @@ export function useComposerSpeechDictation({
       captureRate > 0 && targetRate > 0 && captureRate !== targetRate
         ? resampleFloat32Linear(merged, captureRate, targetRate)
         : merged;
-    void appendComposerStreamingSpeechPcm(sessionId, float32ToBase64(pcm)).catch((e) => {
+    void appendComposerSherpaStreamingSpeechPcm(sessionId, float32ToBase64(pcm)).catch((e) => {
       const msg = e instanceof Error ? e.message : String(e);
       onErrorRef.current?.(msg || "推送音频失败");
     });
@@ -151,14 +184,14 @@ export function useComposerSpeechDictation({
     }
   }, []);
 
-  const cancelLocalStream = useCallback(() => {
+  const cancelStreamingCapture = useCallback(() => {
     clearPcmFlushTimer();
     pcmPendingRef.current = [];
     finishingStreamRef.current = false;
     const sessionId = streamSessionIdRef.current;
     streamSessionIdRef.current = null;
     if (sessionId) {
-      void cancelComposerStreamingSpeech(sessionId).catch(() => undefined);
+      void cancelComposerSherpaStreamingSpeech(sessionId).catch(() => undefined);
     }
     recorderRef.current?.stopStreaming();
     recorderRef.current = null;
@@ -169,8 +202,8 @@ export function useComposerSpeechDictation({
     setListening(false);
     setTranscribing(false);
     stopWebRecognition();
-    cancelLocalStream();
-  }, [cancelLocalStream, stopWebRecognition]);
+    cancelStreamingCapture();
+  }, [cancelStreamingCapture, stopWebRecognition]);
 
   const beginWebRecognition = useCallback(() => {
     const Ctor = getSpeechRecognitionCtor();
@@ -226,7 +259,7 @@ export function useComposerSpeechDictation({
     }
   }, [enabled, lang]);
 
-  const isLocalCaptureActive = useCallback(
+  const isStreamingCaptureActive = useCallback(
     () =>
       wantListeningRef.current ||
       listeningRef.current ||
@@ -235,8 +268,7 @@ export function useComposerSpeechDictation({
     [],
   );
 
-  const finishLocalStream = useCallback(async () => {
-    // 立即停止录音 UI，避免用户以为仍在采集而重复点击。
+  const finishStreamingCapture = useCallback(async () => {
     setListening(false);
 
     clearPcmFlushTimer();
@@ -246,7 +278,7 @@ export function useComposerSpeechDictation({
 
     const sessionId = streamSessionIdRef.current;
     if (!sessionId) {
-      cancelLocalStream();
+      cancelStreamingCapture();
       return;
     }
 
@@ -257,7 +289,7 @@ export function useComposerSpeechDictation({
     setTranscribing(true);
     finishingStreamRef.current = true;
     try {
-      await finishComposerStreamingSpeech(sessionId);
+      await finishComposerSherpaStreamingSpeech(sessionId);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       onErrorRef.current?.(msg || "结束语音转写失败");
@@ -267,18 +299,20 @@ export function useComposerSpeechDictation({
       setListening(false);
       onSessionEndRef.current?.();
     }
-  }, [cancelLocalStream, clearPcmFlushTimer, flushPcmPending]);
+  }, [cancelStreamingCapture, clearPcmFlushTimer, flushPcmPending]);
 
-  const startLocalStream = useCallback(async () => {
+  const startStreamingCapture = useCallback(async () => {
     if (!wantListeningRef.current) return;
 
     const recorder = new ComposerAudioRecorder();
     recorderRef.current = recorder;
     try {
-      const { sessionId, sampleRate } = await startComposerStreamingSpeech(lang);
+      const { sessionId, sampleRate } = await startComposerSherpaStreamingSpeech(
+        senseVoiceLangToInvokeArg(senseVoiceLang),
+      );
       if (!wantListeningRef.current) {
-        void cancelComposerStreamingSpeech(sessionId).catch(() => undefined);
-        cancelLocalStream();
+        void cancelComposerSherpaStreamingSpeech(sessionId).catch(() => undefined);
+        cancelStreamingCapture();
         return;
       }
 
@@ -301,9 +335,9 @@ export function useComposerSpeechDictation({
           return;
         }
         if (streamSessionIdRef.current) {
-          void finishLocalStream();
+          void finishStreamingCapture();
         } else {
-          cancelLocalStream();
+          cancelStreamingCapture();
         }
         return;
       }
@@ -311,16 +345,13 @@ export function useComposerSpeechDictation({
       captureSampleRateRef.current = recorder.getSampleRate();
       setListening(true);
     } catch (e) {
-      cancelLocalStream();
+      cancelStreamingCapture();
       const msg = e instanceof Error ? e.message : String(e);
-      onErrorRef.current?.(msg || "无法开始本地语音转写");
-      if (msg.includes("语音识别权限")) {
-        void openComposerSpeechRecognitionPrivacySettings();
-      }
+      onErrorRef.current?.(msg || "无法开始 SenseVoice 听写");
       wantListeningRef.current = false;
       setListening(false);
     }
-  }, [cancelLocalStream, finishLocalStream, lang, schedulePcmFlush]);
+  }, [cancelStreamingCapture, finishStreamingCapture, schedulePcmFlush, senseVoiceLang]);
 
   const start = useCallback(async () => {
     if (!enabled || !supported || !engine) return;
@@ -340,21 +371,21 @@ export function useComposerSpeechDictation({
     stop();
     wantListeningRef.current = true;
 
-    if (engine === "local") {
-      await startLocalStream();
+    if (engine === "sensevoice") {
+      await startStreamingCapture();
       return;
     }
 
     beginWebRecognition();
-  }, [beginWebRecognition, enabled, engine, startLocalStream, stop, supported]);
+  }, [beginWebRecognition, enabled, engine, startStreamingCapture, stop, supported]);
 
   const toggle = useCallback(() => {
     if (transcribingRef.current) return;
 
-    if (engine === "local") {
-      if (isLocalCaptureActive()) {
+    if (engine === "sensevoice") {
+      if (isStreamingCaptureActive()) {
         wantListeningRef.current = false;
-        void finishLocalStream();
+        void finishStreamingCapture();
         return;
       }
       void start();
@@ -367,11 +398,11 @@ export function useComposerSpeechDictation({
       return;
     }
     void start();
-  }, [engine, finishLocalStream, isLocalCaptureActive, start, stop]);
+  }, [engine, finishStreamingCapture, isStreamingCaptureActive, start, stop]);
 
-  /** macOS 本地转写事件：挂载即订阅，避免 engine 判定完成前首次听写丢事件。 */
+  /** 流式转写事件：Tauri 内挂载即订阅，避免 engine 判定完成前首次听写丢事件。 */
   useEffect(() => {
-    if (!isComposerLocalSpeechPlatform()) return;
+    if (!isTauri()) return;
     let unlisten: (() => void) | undefined;
     void listenComposerSpeechTranscript(({ sessionId, transcript, isFinal, error }) => {
       if (sessionId !== streamSessionIdRef.current) return;
@@ -391,7 +422,6 @@ export function useComposerSpeechDictation({
         onUpdateRef.current({ text: transcript, isFinal });
       }
       if (!isFinal) return;
-      // 句段 final 不结束会话；仅用户点击停止（finish）后的 final 才收尾。
       if (!finishingStreamRef.current) return;
       finishingStreamRef.current = false;
       streamSessionIdRef.current = null;

@@ -1,4 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
+import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+
+/** Tauri 事件：Free Claude Code 安装进度。 */
+export const FREE_CLAUDE_CODE_INSTALL_STATUS_EVENT = "free-claude-code-install-status" as const;
+
+export interface FreeClaudeCodeInstallStatusPayload {
+  phase: "installing" | "ready" | "error";
+  message: string;
+  progressPercent?: number;
+}
 
 /** jiaolong1021/free-claude-code 集成状态。 */
 export interface FreeClaudeCodeStatus {
@@ -54,4 +64,12 @@ export async function applyFreeClaudeCodeClaudeSettings(): Promise<boolean> {
 
 export async function sanitizeClaudeCredentialsForFcc(): Promise<boolean> {
   return invoke<boolean>("sanitize_claude_credentials_for_fcc");
+}
+
+export async function listenFreeClaudeCodeInstallStatus(
+  handler: (payload: FreeClaudeCodeInstallStatusPayload) => void,
+): Promise<UnlistenFn> {
+  return listen<FreeClaudeCodeInstallStatusPayload>(FREE_CLAUDE_CODE_INSTALL_STATUS_EVENT, (event) => {
+    handler(event.payload);
+  });
 }

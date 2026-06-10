@@ -130,8 +130,7 @@ pub fn run() {
         .manage(claude_commands::ClaudeSessionRegistry::new());
     #[cfg(target_os = "macos")]
     let builder = builder.manage(crate::macos_speech_stream::MacosStreamingSpeechState::default());
-    #[cfg(not(target_os = "macos"))]
-    let builder = builder;
+    let builder = builder.manage(crate::sherpa_sensevoice::SherpaSenseVoiceState::default());
 
     #[cfg(desktop)]
     let builder = {
@@ -545,6 +544,13 @@ pub fn run() {
             crate::macos_speech_stream::macos_streaming_speech_finish,
             #[cfg(target_os = "macos")]
             crate::macos_speech_stream::macos_streaming_speech_cancel,
+            crate::sherpa_sensevoice::composer_sherpa_speech_capabilities,
+            crate::sherpa_sensevoice::composer_sherpa_download_models,
+            crate::sherpa_sensevoice::composer_sherpa_cancel_download_models,
+            crate::sherpa_sensevoice::composer_sherpa_speech_start,
+            crate::sherpa_sensevoice::composer_sherpa_speech_append_pcm,
+            crate::sherpa_sensevoice::composer_sherpa_speech_finish,
+            crate::sherpa_sensevoice::composer_sherpa_speech_cancel,
             skills_sh::skills_sh_search,
             skills_sh::skills_cli_add_from_registry,
             skills_sh::skills_cli_remove_from_registry,
@@ -743,7 +749,7 @@ pub fn run() {
             mcp::commands::mcp_test_connection,
             mcp::commands::mcp_supported_transports,
         ])
-        .build(tauri::generate_context!())
+        .build(tauri::tauri_build_context!())
         .expect("error while building tauri application")
         .run(|app_handle, event| {
             // macOS：点击程序坞图标时 NSApplication 触发 Reopen。

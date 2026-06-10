@@ -7,6 +7,9 @@ export type ComposerSpeechSendMode = "manual" | "silenceAutoSend" | "endingWordA
 /** @deprecated 旧偏好键，读取时映射为 `silenceAutoSend`。 */
 export type ComposerSpeechSendModeLegacy = "holdAutoSend";
 
+/** 用户可选的听写引擎策略。 */
+export type ComposerSpeechEnginePreference = "auto" | "sensevoice" | "web";
+
 export interface ComposerSpeechPreferencesV1 {
   sendMode: ComposerSpeechSendMode;
   /** 口播该结束词时自动发送；不写入发给 Claude 的正文。 */
@@ -17,7 +20,20 @@ export interface ComposerSpeechPreferencesV1 {
   speechToRequirementEnabled: boolean;
   /** 将 ASR 转写整理为清晰表达后再写入输入框（默认开启）。 */
   speechPolishEnabled: boolean;
+  /** 听写引擎策略：auto=SenseVoice 优先；sensevoice/web=显式指定（不可用时降级）。 */
+  speechEngineMode: ComposerSpeechEnginePreference;
+  /** SenseVoice 识别语言（仅 Sherpa 引擎生效）。 */
+  senseVoiceLang: SenseVoiceLanguagePreference;
+  /** 听写过程中识别口播命令（发送 / 清除 / 取消任务等）。 */
+  voiceCommandsEnabled: boolean;
+  /** 口播「清除」类命令：清空会话输入框内容（不写入正文）。 */
+  voiceCommandClearText: string;
+  /** 口播「取消」类命令：结束当前会话执行（等同底栏「结束」）。 */
+  voiceCommandCancelText: string;
 }
+
+/** SenseVoice 支持的语言偏好。 */
+export type SenseVoiceLanguagePreference = "auto" | "zh" | "en" | "yue" | "ja" | "ko";
 
 export const DEFAULT_COMPOSER_SPEECH_PREFERENCES: ComposerSpeechPreferencesV1 = {
   sendMode: "manual",
@@ -25,6 +41,11 @@ export const DEFAULT_COMPOSER_SPEECH_PREFERENCES: ComposerSpeechPreferencesV1 = 
   silenceAutoSendIdleMs: 1500,
   speechToRequirementEnabled: false,
   speechPolishEnabled: true,
+  speechEngineMode: "auto",
+  senseVoiceLang: "auto",
+  voiceCommandsEnabled: true,
+  voiceCommandClearText: "清除",
+  voiceCommandCancelText: "取消",
 };
 
 /** 停顿自动发送默认可调范围（毫秒）。 */

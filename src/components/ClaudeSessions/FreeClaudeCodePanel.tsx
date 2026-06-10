@@ -1,6 +1,6 @@
 import { CloseOutlined, QuestionCircleOutlined } from "@ant-design/icons";
 import { HoverHint } from "../shared/HoverHint";
-import { Button, Spin, Typography } from "antd";
+import { Button, Progress, Spin, Typography } from "antd";
 import {
   FREE_CLAUDE_CODE_QUICK_START_URL,
   FREE_CLAUDE_CODE_REPO_URL,
@@ -125,6 +125,20 @@ export function FreeClaudeCodePanel({ fcc, onClose }: Props) {
           </li>
         ))}
       </ul>
+
+      {fcc.installing ? (
+        <div className="app-fcc-topbar-panel__install-progress">
+          <Progress
+            size="small"
+            percent={fcc.installProgress ?? undefined}
+            status="active"
+            showInfo={fcc.installProgress != null}
+          />
+          <span className="app-fcc-topbar-panel__install-message">
+            {fcc.installMessage ?? "正在安装 free-claude-code…"}
+          </span>
+        </div>
+      ) : null}
 
       <div className="app-fcc-topbar-panel__actions">
         <HoverHint

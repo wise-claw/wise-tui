@@ -3,6 +3,7 @@ import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
 import {
   applyFreeClaudeCodeClaudeSettings,
   installFreeClaudeCode,
+  listenFreeClaudeCodeInstallStatus,
   openFreeClaudeCodeAdmin,
   sanitizeClaudeCredentialsForFcc,
   startFreeClaudeCodeServer,
@@ -27,10 +28,35 @@ export function useFreeClaudeCodeSetting() {
   const status = snapshot.status;
   const loading = snapshot.loading;
   const [busy, setBusy] = useState(false);
+  const [installing, setInstalling] = useState(false);
+  const [installProgress, setInstallProgress] = useState<number | null>(null);
+  const [installMessage, setInstallMessage] = useState<string | null>(null);
 
   useEffect(() => {
     startFccTracesPolling();
     return () => stopFccTracesPolling();
+  }, []);
+
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    void listenFreeClaudeCodeInstallStatus((payload) => {
+      if (payload.phase === "installing") {
+        setInstalling(true);
+        setInstallMessage(payload.message);
+        if (typeof payload.progressPercent === "number") {
+          setInstallProgress(payload.progressPercent);
+        }
+        return;
+      }
+      setInstalling(false);
+      setInstallProgress(null);
+      setInstallMessage(null);
+    }).then((fn) => {
+      unlisten = fn;
+    });
+    return () => {
+      unlisten?.();
+    };
   }, []);
 
   const refresh = useCallback(async () => {
@@ -67,10 +93,25 @@ export function useFreeClaudeCodeSetting() {
     [runAction],
   );
 
-  const install = useCallback(
-    () => runAction("安装完成", installFreeClaudeCode),
-    [runAction],
-  );
+  const install = useCallback(async () => {
+    setInstalling(true);
+    setInstallProgress(0);
+    setInstallMessage("正在安装 free-claude-code…");
+    setBusy(true);
+    try {
+      await installFreeClaudeCode();
+      await refresh();
+      message.success("安装完成");
+    } catch (err) {
+      message.error(`安装失败：${err instanceof Error ? err.message : String(err)}`);
+      throw err;
+    } finally {
+      setBusy(false);
+      setInstalling(false);
+      setInstallProgress(null);
+      setInstallMessage(null);
+    }
+  }, [refresh]);
 
   const uninstall = useCallback(() => {
     Modal.confirm({
@@ -118,6 +159,9 @@ export function useFreeClaudeCodeSetting() {
     status,
     loading,
     busy,
+    installing,
+    installProgress,
+    installMessage,
     refresh,
     startServer,
     stopServer,

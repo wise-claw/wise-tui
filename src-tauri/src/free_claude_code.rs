@@ -3,10 +3,12 @@
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
-use std::sync::{Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock};
 use std::time::Duration;
 
 use serde::Serialize;
+use tauri::{AppHandle, Emitter};
+use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::net::TcpStream;
 use tokio::process::Child;
 
@@ -19,6 +21,83 @@ pub const FCC_REPO_GIT_URL: &str = "git+https://github.com/jiaolong1021/free-cla
 
 /// `uv tool install` / `uv tool uninstall` 使用的工具名（见 `uv tool list`）。
 pub const FCC_UV_TOOL_NAME: &str = "free-claude-code";
+
+const FREE_CLAUDE_CODE_INSTALL_STATUS_EVENT: &str = "free-claude-code-install-status";
+
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct FreeClaudeCodeInstallStatusPayload {
+    pub phase: String,
+    pub message: String,
+    pub progress_percent: Option<u8>,
+}
+
+#[derive(Default)]
+struct FccInstallProgress {
+    resolved_packages: Option<u32>,
+    download_count: u32,
+    install_line_count: u32,
+}
+
+fn emit_install_status(
+    app: &AppHandle,
+    phase: &str,
+    message: impl Into<String>,
+    progress_percent: Option<u8>,
+) {
+    let _ = app.emit(
+        FREE_CLAUDE_CODE_INSTALL_STATUS_EVENT,
+        FreeClaudeCodeInstallStatusPayload {
+            phase: phase.to_string(),
+            message: message.into(),
+            progress_percent,
+        },
+    );
+}
+
+fn progress_from_uv_line(line: &str, state: &mut FccInstallProgress) -> Option<(String, u8)> {
+    let line = line.trim();
+    if line.is_empty() {
+        return None;
+    }
+    if line.starts_with("Updating ") || line.contains("Fetching source") {
+        return Some(("正在从 GitHub 获取源码…".to_string(), 12));
+    }
+    if let Some(rest) = line.strip_prefix("Resolved ") {
+        if let Some(count) = rest.split_whitespace().next().and_then(|s| s.parse().ok()) {
+            state.resolved_packages = Some(count);
+            return Some(("正在解析依赖…".to_string(), 28));
+        }
+    }
+    if let Some(name) = line.strip_prefix("Downloading ") {
+        state.download_count += 1;
+        let total = state
+            .resolved_packages
+            .unwrap_or(20)
+            .max(state.download_count);
+        let pct = 30 + ((state.download_count.saturating_mul(50)) / total).min(50) as u8;
+        return Some((format!("正在下载 {name}"), pct));
+    }
+    if line.starts_with("Built ") {
+        return Some(("正在构建依赖…".to_string(), 82));
+    }
+    if line.starts_with("Installed ") && line.contains("packages") {
+        return Some(("正在安装依赖包…".to_string(), 88));
+    }
+    if line.starts_with("+ ") {
+        state.install_line_count += 1;
+        let total = state
+            .resolved_packages
+            .unwrap_or(10)
+            .max(state.install_line_count);
+        let pct = 88 + ((state.install_line_count.saturating_mul(9)) / total).min(9) as u8;
+        return Some(("正在写入依赖包…".to_string(), pct));
+    }
+    if line.starts_with("Installed ") && line.contains("executables") {
+        return Some(("安装完成".to_string(), 100));
+    }
+    None
+}
 
 static MANAGED_SERVER_CHILD: OnceLock<Mutex<Option<Child>>> = OnceLock::new();
 
@@ -381,32 +460,105 @@ fn run_uv_tool_subcommand(home_s: &str, path_env: &str, sub_args: &[&str]) -> Re
         .map_err(|e| format!("执行 uv tool {} 失败: {e}", sub_args.first().copied().unwrap_or("")))
 }
 
+async fn consume_uv_install_stream<R>(
+    app: AppHandle,
+    reader: R,
+    progress_state: Arc<Mutex<FccInstallProgress>>,
+    mut output: String,
+) -> String
+where
+    R: tokio::io::AsyncRead + Unpin,
+{
+    let mut lines = BufReader::new(reader).lines();
+    while let Ok(Some(line)) = lines.next_line().await {
+        output.push_str(&line);
+        output.push('\n');
+        if let Some((message, pct)) = progress_state
+            .lock()
+            .ok()
+            .and_then(|mut state| progress_from_uv_line(&line, &mut state))
+        {
+            emit_install_status(&app, "installing", message, Some(pct));
+        }
+    }
+    output
+}
+
+async fn run_uv_tool_install_with_progress(
+    app: &AppHandle,
+    home_s: &str,
+    path_env: &str,
+    spec: &str,
+) -> Result<String, String> {
+    emit_install_status(app, "installing", "正在安装 free-claude-code…", Some(0));
+
+    let uv_bin = which_uv_binary().ok_or_else(|| {
+        "未找到 uv。请先安装：https://astral.sh/uv ，或执行 curl -LsSf https://astral.sh/uv/install.sh | sh"
+            .to_string()
+    })?;
+
+    let mut child = tokio::process::Command::new(&uv_bin)
+        .arg("tool")
+        .arg("install")
+        .arg("--force")
+        .arg(spec)
+        .env("HOME", home_s)
+        .env("PATH", path_env)
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("启动 uv tool install 失败: {e}"))?;
+
+    let stdout = child.stdout.take().ok_or_else(|| "无法读取 uv 标准输出".to_string())?;
+    let stderr = child.stderr.take().ok_or_else(|| "无法读取 uv 标准错误".to_string())?;
+    let progress_state = Arc::new(Mutex::new(FccInstallProgress::default()));
+
+    let app_stdout = app.clone();
+    let app_stderr = app.clone();
+    let progress_stdout = Arc::clone(&progress_state);
+    let progress_stderr = Arc::clone(&progress_state);
+
+    let stdout_task = tokio::spawn(async move {
+        consume_uv_install_stream(app_stdout, stdout, progress_stdout, String::new()).await
+    });
+    let stderr_task = tokio::spawn(async move {
+        consume_uv_install_stream(app_stderr, stderr, progress_stderr, String::new()).await
+    });
+
+    let stdout_text = stdout_task
+        .await
+        .map_err(|e| format!("读取 uv 输出被中断: {e}"))?;
+    let stderr_text = stderr_task
+        .await
+        .map_err(|e| format!("读取 uv 错误输出被中断: {e}"))?;
+
+    let status = child
+        .wait()
+        .await
+        .map_err(|e| format!("等待 uv tool install 失败: {e}"))?;
+
+    let combined = format!("{stdout_text}\n{stderr_text}").trim().to_string();
+    if !status.success() {
+        let err = format!(
+            "安装 free-claude-code 失败（退出码 {:?}）\n{combined}",
+            status.code()
+        );
+        emit_install_status(app, "error", err.clone(), None);
+        return Err(err);
+    }
+
+    emit_install_status(app, "ready", "free-claude-code 安装完成", Some(100));
+    Ok(combined)
+}
+
 #[tauri::command]
-pub async fn install_free_claude_code() -> Result<String, String> {
+pub async fn install_free_claude_code(app: AppHandle) -> Result<String, String> {
     let home = dirs::home_dir().ok_or_else(|| "无法解析用户主目录".to_string())?;
     let home_s = home.to_string_lossy().to_string();
     let path_env = default_path_for_subprocess();
     let spec = FCC_REPO_GIT_URL.to_string();
 
-    let out = tokio::task::spawn_blocking(move || {
-        run_uv_tool_subcommand(
-            &home_s,
-            &path_env,
-            &["install", "--force", spec.as_str()],
-        )
-    })
-    .await
-    .map_err(|e| format!("安装任务被中断: {e}"))??;
-
-    let stdout = String::from_utf8_lossy(&out.stdout).to_string();
-    let stderr = String::from_utf8_lossy(&out.stderr).to_string();
-    if !out.status.success() {
-        return Err(format!(
-            "安装 free-claude-code 失败（退出码 {:?}）\n{stdout}\n{stderr}",
-            out.status.code()
-        ));
-    }
-    Ok(format!("{stdout}\n{stderr}").trim().to_string())
+    run_uv_tool_install_with_progress(&app, &home_s, &path_env, &spec).await
 }
 
 #[tauri::command]
@@ -588,5 +740,28 @@ mod tests {
             "python -m free_claude_code.server"
         ));
         assert!(!command_looks_like_fcc_server("node /tmp/other-proxy.js"));
+    }
+
+    #[test]
+    fn progress_from_uv_line_tracks_download_and_install() {
+        let mut state = FccInstallProgress::default();
+        let (msg, pct) = progress_from_uv_line("Resolved 70 packages in 10ms", &mut state).unwrap();
+        assert_eq!(msg, "正在解析依赖…");
+        assert_eq!(pct, 28);
+        assert_eq!(state.resolved_packages, Some(70));
+
+        let (msg, pct) =
+            progress_from_uv_line("Downloading pydantic (2.1MiB)", &mut state).unwrap();
+        assert!(msg.starts_with("正在下载 "));
+        assert!(pct >= 30 && pct <= 80);
+
+        let (msg, pct) = progress_from_uv_line("+ pydantic==2.13.4", &mut state).unwrap();
+        assert_eq!(msg, "正在写入依赖包…");
+        assert!(pct >= 88);
+
+        let (msg, pct) =
+            progress_from_uv_line("Installed 4 executables: fcc-server", &mut state).unwrap();
+        assert_eq!(msg, "安装完成");
+        assert_eq!(pct, 100);
     }
 }

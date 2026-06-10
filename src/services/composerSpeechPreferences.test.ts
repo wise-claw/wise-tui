@@ -9,6 +9,11 @@ describe("normalizeComposerSpeechPreferences", () => {
       silenceAutoSendIdleMs: 1500,
       speechToRequirementEnabled: false,
       speechPolishEnabled: true,
+      speechEngineMode: "auto",
+      senseVoiceLang: "auto",
+      voiceCommandsEnabled: true,
+      voiceCommandClearText: "清除",
+      voiceCommandCancelText: "取消",
     });
   });
 
@@ -23,6 +28,11 @@ describe("normalizeComposerSpeechPreferences", () => {
       silenceAutoSendIdleMs: 1500,
       speechToRequirementEnabled: false,
       speechPolishEnabled: true,
+      speechEngineMode: "auto",
+      senseVoiceLang: "auto",
+      voiceCommandsEnabled: true,
+      voiceCommandClearText: "清除",
+      voiceCommandCancelText: "取消",
     });
   });
 
@@ -38,6 +48,11 @@ describe("normalizeComposerSpeechPreferences", () => {
       silenceAutoSendIdleMs: 1500,
       speechToRequirementEnabled: false,
       speechPolishEnabled: true,
+      speechEngineMode: "auto",
+      senseVoiceLang: "auto",
+      voiceCommandsEnabled: true,
+      voiceCommandClearText: "清除",
+      voiceCommandCancelText: "取消",
     });
   });
 
@@ -91,6 +106,33 @@ describe("normalizeComposerSpeechPreferences", () => {
       silenceAutoSendIdleMs: 1500,
       speechToRequirementEnabled: false,
       speechPolishEnabled: true,
+      speechEngineMode: "auto",
+      senseVoiceLang: "auto",
+      voiceCommandsEnabled: true,
+      voiceCommandClearText: "清除",
+      voiceCommandCancelText: "取消",
     });
+  });
+
+  test("normalizes voice command preferences", () => {
+    expect(
+      normalizeComposerSpeechPreferences({
+        voiceCommandsEnabled: false,
+        voiceCommandClearText: "  清空  ",
+        voiceCommandCancelText: "  停止  ",
+      }),
+    ).toMatchObject({
+      voiceCommandsEnabled: false,
+      voiceCommandClearText: "清空",
+      voiceCommandCancelText: "停止",
+    });
+  });
+
+  test("normalizes speechEngineMode", () => {
+    expect(
+      normalizeComposerSpeechPreferences({
+        speechEngineMode: "sensevoice",
+      }),
+    ).toMatchObject({ speechEngineMode: "sensevoice" });
   });
 });

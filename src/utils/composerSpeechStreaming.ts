@@ -142,7 +142,7 @@ export function commitComposerSpeechTranscriptBaselineForSend(
 
 /**
  * 从引擎 cumulative 转写中提取相对 baseline 的新增片段。
- * macOS / Web 连续听写会话会返回自会话开始以来的全文，发送后须以 baseline 截断避免重复。
+ * Web 连续听写返回自会话开始以来的全文；SenseVoice 在连续发送场景同样需要 baseline。
  */
 export function extractComposerSpeechTranscriptDelta(
   baseline: string,
@@ -244,6 +244,26 @@ export function stripComposerSpeechDeltaOverlap(
   }
 
   return chunk;
+}
+
+/** 按引擎解析应写入输入框的听写增量；已发送片段统一剥离，避免发送后回填。 */
+export function resolveComposerSpeechTranscriptDelta(input: {
+  engine: "sensevoice" | "local" | "web" | null;
+  baseline: string;
+  rawTranscript: string;
+  lastSentPlain: string;
+}): string {
+  const { engine, baseline, rawTranscript, lastSentPlain } = input;
+  let delta: string;
+  if (engine === "sensevoice") {
+    const base = baseline.trim();
+    delta = !base
+      ? rawTranscript.trim()
+      : extractComposerSpeechTranscriptDelta(base, rawTranscript);
+  } else {
+    delta = extractComposerSpeechTranscriptDelta(baseline, rawTranscript);
+  }
+  return stripComposerSpeechDeltaOverlap(delta, lastSentPlain);
 }
 
 /** 连续听写：输入框仅展示相对 baseline 的 delta（整段替换，不在 anchor 上叠加）。 */
