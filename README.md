@@ -164,6 +164,22 @@ Wise 提供两种入口，可按场景选择：
 - 大型改动前请在 `.trellis/tasks/` 创建或选择 Trellis 任务
 - 推荐 IDE：VS Code + Tauri 插件 + rust-analyzer
 
+## 开发者致谢
+
+感谢以下开发者为 Wise 的设计、实现与持续演进付出的努力（按提交贡献排序）：
+
+- **申蛟隆** — 项目发起与核心开发
+- **srarlight**
+- **xuning312**
+- **kanye**
+- **chenye0076**
+- **[shacoOne](https://github.com/shacoOne)**
+- **jiaolong**
+
+完整贡献者列表见 [GitHub Contributors](https://github.com/wise-claw/wise/graphs/contributors)。也感谢所有提交 Issue、PR 与使用反馈的社区成员。
+
+Wise 同样受益于 [Tauri](https://tauri.app)、[React](https://react.dev)、[Ant Design](https://ant.design)、[Claude Code](https://code.claude.com) 以及 Trellis 工作流生态等开源与工具链项目。
+
 ## 许可证
 
 本项目采用 [Apache License 2.0](LICENSE) 开源。

@@ -164,6 +164,22 @@ Application data lives under `~/.wise/`:
 - For large changes, create or select a Trellis task under `.trellis/tasks/`
 - Recommended IDE: VS Code with Tauri extension and rust-analyzer
 
+## Acknowledgements
+
+Thanks to the developers who designed, built, and evolved Wise (ordered by commit count):
+
+- **申蛟隆 (Shen Jiaolong)** — project founder and core development
+- **srarlight**
+- **xuning312**
+- **kanye**
+- **chenye0076**
+- **[shacoOne](https://github.com/shacoOne)**
+- **jiaolong**
+
+See the full list on [GitHub Contributors](https://github.com/wise-claw/wise/graphs/contributors). We also thank everyone who filed issues, opened PRs, and shared feedback.
+
+Wise also builds on the open ecosystem around [Tauri](https://tauri.app), [React](https://react.dev), [Ant Design](https://ant.design), [Claude Code](https://code.claude.com), and Trellis-style agent workflows.
+
 ## License
 
 This project is licensed under the [Apache License 2.0](LICENSE).
