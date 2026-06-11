@@ -358,6 +358,7 @@ fn merge_codex_bridge_into_config(existing: &str, port: u16, default_model: &str
     stripped = remove_toml_section(&stripped, &format!("profiles.{CODEX_PROFILE_ID}"));
     stripped = remove_top_level_profile_line(&stripped, CODEX_PROFILE_ID);
     stripped = remove_global_toml_key(&stripped, "model_provider");
+    stripped = remove_global_toml_key(&stripped, "profile");
     stripped = remove_model_assignment_except_profiles(&stripped);
     let bridge = build_codex_bridge_config_toml(port, default_model);
     let rest = stripped.trim();
@@ -401,7 +402,7 @@ async fn build_status(cfg: &OpencodeGoProxyConfig) -> OpencodeGoProxyStatus {
         cfg.port
     };
     OpencodeGoProxyStatus {
-        enabled: cfg.enabled,
+        enabled: cfg.enabled || running,
         running,
         port,
         proxy_base_url: if running {
@@ -1429,14 +1430,24 @@ pub async fn set_opencode_go_proxy_config(
     Ok(build_status(&cfg).await)
 }
 
+fn proxy_server_running() -> bool {
+    server_cell()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .is_some()
+}
+
 /// 一次性同步 Claude settings.json 与 Codex config.toml。
 #[tauri::command]
 pub async fn apply_opencode_go_proxy_client_settings(
     db: tauri::State<'_, crate::wise_db::WiseDb>,
 ) -> Result<bool, String> {
     let cfg = load_persisted(&db);
-    if !cfg.enabled {
-        return Err("OpenCode Go 代理未启用".into());
+    if !proxy_server_running() {
+        if !cfg.enabled {
+            return Err("OpenCode Go 代理未启用".into());
+        }
+        return Ok(false);
     }
     let port = resolve_active_port(&cfg);
     let model = cfg.effective_model();
@@ -1451,8 +1462,11 @@ pub async fn apply_opencode_go_proxy_claude_settings(
     db: tauri::State<'_, crate::wise_db::WiseDb>,
 ) -> Result<bool, String> {
     let cfg = load_persisted(&db);
-    if !cfg.enabled {
-        return Err("OpenCode Go 代理未启用".into());
+    if !proxy_server_running() {
+        if !cfg.enabled {
+            return Err("OpenCode Go 代理未启用".into());
+        }
+        return Ok(false);
     }
     let port = resolve_active_port(&cfg);
     tokio::task::spawn_blocking(move || apply_claude_settings_sync(port))
@@ -1465,8 +1479,11 @@ pub async fn apply_opencode_go_proxy_codex_settings(
     db: tauri::State<'_, crate::wise_db::WiseDb>,
 ) -> Result<bool, String> {
     let cfg = load_persisted(&db);
-    if !cfg.enabled {
-        return Err("OpenCode Go 代理未启用".into());
+    if !proxy_server_running() {
+        if !cfg.enabled {
+            return Err("OpenCode Go 代理未启用".into());
+        }
+        return Ok(false);
     }
     let port = resolve_active_port(&cfg);
     let model = cfg.effective_model();
@@ -1664,6 +1681,13 @@ fn apply_claude_settings_sync(port: u16) -> Result<bool, String> {
     let root_obj = root
         .as_object_mut()
         .ok_or_else(|| "settings.json 根节点必须是对象".to_string())?;
+    if !root_obj
+        .get("env")
+        .map(|value| value.is_object())
+        .unwrap_or(true)
+    {
+        root_obj.insert("env".to_string(), json!({}));
+    }
     let env_obj = root_obj
         .entry("env")
         .or_insert_with(|| json!({}))
@@ -1759,6 +1783,21 @@ model = "old-model"
         assert!(!merged.contains("[profiles.wise-opencode-go]"));
         assert!(merged.contains("model = \"kimi-k2.6\""));
         assert!(merged.contains("127.0.0.1:9876"));
+    }
+
+    #[test]
+    fn merge_strips_top_level_codex_profile_for_bridge() {
+        let existing = r#"profile = "default"
+model = "gpt-5.4"
+
+[profiles.default]
+model = "gpt-5.4"
+"#;
+        let merged = merge_codex_bridge_into_config(existing, 9876, "kimi-k2.6");
+        assert!(!merged.contains("profile = \"default\""));
+        assert!(merged.contains("[profiles.default]"));
+        assert!(merged.contains("model_provider = \"wise-opencode\""));
+        assert!(merged.contains("model = \"kimi-k2.6\""));
     }
 
     #[test]

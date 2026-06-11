@@ -212,8 +212,15 @@ export function useOpencodeGoProxySetting() {
       ) {
         return st;
       }
-      await applyOpencodeGoProxyClientSettings();
-      return getOpencodeGoProxyStatus();
+      try {
+        await applyOpencodeGoProxyClientSettings();
+        return getOpencodeGoProxyStatus();
+      } catch (err) {
+        message.warning(
+          `客户端配置自动同步失败：${err instanceof Error ? err.message : String(err)}`,
+        );
+        return st;
+      }
     },
     [],
   );
