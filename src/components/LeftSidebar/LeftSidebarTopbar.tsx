@@ -4,6 +4,7 @@ import { ClaudeCodeToolsTopbarTrigger } from "../ClaudeSessions/ClaudeCodeToolsT
 import { DefaultConfigTopbarTrigger } from "./DefaultConfigTopbarTrigger";
 import { NewMainWindowTopbarTrigger } from "./NewMainWindowTopbarTrigger";
 import { IconSettings } from "../icons/IconSettings";
+import { IconFileTreeExplorer } from "../WorkspaceFileTreeRail/IconFileTreeExplorer";
 import type { AuthorPane } from "../../types/viewMode";
 import "./NewMainWindowTopbarTrigger.css";
 
@@ -12,6 +13,8 @@ interface LeftSidebarTopbarProps {
   authorTooltip?: string;
   activeRepositoryPath?: string;
   activeRepositoryId?: number | null;
+  fileTreeRailOpen?: boolean;
+  onToggleFileTreeRail?: () => void;
   onOpenAuthor: (pane?: AuthorPane) => void;
 }
 
@@ -20,6 +23,8 @@ export function LeftSidebarTopbar({
   authorTooltip = "单仓不支持工作台配置；升格为工作区后启用",
   activeRepositoryPath,
   activeRepositoryId = null,
+  fileTreeRailOpen = false,
+  onToggleFileTreeRail,
   onOpenAuthor,
 }: LeftSidebarTopbarProps) {
   return (
@@ -49,6 +54,21 @@ export function LeftSidebarTopbar({
           repositoryPath={activeRepositoryPath}
           onOpenAuthorConfig={authorDisabled ? undefined : onOpenAuthor}
         />
+        {onToggleFileTreeRail ? (
+          <HoverHint title={fileTreeRailOpen ? "关闭文件树" : "打开文件树"}>
+            <button
+              type="button"
+              className={`app-left-sidebar-topbar-btn${
+                fileTreeRailOpen ? " app-left-sidebar-topbar-btn--active" : ""
+              }`}
+              aria-label={fileTreeRailOpen ? "关闭文件树" : "打开文件树"}
+              aria-pressed={fileTreeRailOpen}
+              onClick={onToggleFileTreeRail}
+            >
+              <IconFileTreeExplorer />
+            </button>
+          </HoverHint>
+        ) : null}
       </div>
     </div>
   );

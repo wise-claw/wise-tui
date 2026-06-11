@@ -196,6 +196,7 @@ body {
 }
 
 .app-main-layout.ant-layout > .ant-layout-sider,
+.app-main-layout.ant-layout > .app-workspace-file-tree-rail,
 .app-main-layout.ant-layout > .app-workspace-main,
 .app-main-layout.ant-layout > .app-main-layout-resize-handle {
   position: relative;

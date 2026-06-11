@@ -41,6 +41,8 @@ export interface RepositoryFilesExplorerProps {
   headerPrefix?: ReactNode;
   /** 与 Git 面板一致的工作区 / 仓库选择器 */
   workspaceSelector?: WorkspaceSelectorProps;
+  /** 外层栏已展示仓库切换器时，隐藏文件树内标题栏 */
+  hideContextHeader?: boolean;
 }
 
 export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
@@ -55,6 +57,7 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
   onSearchChange,
   headerPrefix,
   workspaceSelector,
+  hideContextHeader = false,
 }: RepositoryFilesExplorerProps) {
   const trimmedRepositoryPath = repositoryPath.trim();
   const explorer = useRepositoryFilesExplorer({
@@ -271,9 +274,12 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
   return (
     <div
       className={
-        "git-files-mode" + (sectionCollapsed ? " git-files-mode--section-collapsed" : "")
+        "git-files-mode" +
+        (sectionCollapsed ? " git-files-mode--section-collapsed" : "") +
+        (hideContextHeader ? " git-files-mode--context-header-hidden" : "")
       }
     >
+      {!hideContextHeader ? (
       <div className="git-files-explorer-bar">
         {headerPrefix ? <div className="git-files-explorer-bar-prefix">{headerPrefix}</div> : null}
         {workspaceSelector ? (
@@ -294,6 +300,7 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
         {sectionCollapseButton}
         {!sectionCollapsed && !toolbarInSearchRow ? explorerToolbarActions : null}
       </div>
+      ) : null}
       {!sectionCollapsed && toolbarInSearchRow ? (
         <div className="git-files-explorer-search">
           <Input

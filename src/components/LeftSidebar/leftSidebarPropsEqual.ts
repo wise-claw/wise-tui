@@ -93,6 +93,7 @@ export function areLeftSidebarContentPropsEqual(
   if (prev.activeRepositoryPath !== next.activeRepositoryPath) return false;
   if (prev.activeRepositoryName !== next.activeRepositoryName) return false;
   if (prev.repoPanelRightRailAvailable !== next.repoPanelRightRailAvailable) return false;
+  if (prev.fileTreeRailOpen !== next.fileTreeRailOpen) return false;
   return true;
 }
 

@@ -226,6 +226,9 @@ export function LeftSidebar({
   filesPanelPlacement = "left",
   repoPanelRightRailAvailable = true,
   onRepositoryRepoPanelChange,
+  fileTreeRailOpen = false,
+  onToggleFileTreeRail,
+  onWorkspaceFileTreeRailContextChange,
   taskCardsNavProps,
 }: LeftSidebarProps) {
   const { message, modal } = AntdApp.useApp();
@@ -1283,6 +1286,31 @@ export function LeftSidebar({
     };
   }, [onRepositoryRepoPanelChange, rightRepositoryRepoPanel]);
 
+  useEffect(() => {
+    if (!onWorkspaceFileTreeRailContextChange) return;
+    if (projects.length === 0 && repositories.length === 0) {
+      onWorkspaceFileTreeRailContextChange(null);
+      return;
+    }
+    onWorkspaceFileTreeRailContextChange({
+      repositoryPath: effectiveRepoPanelPath,
+      repositoryName: repoPanelRepositoryName,
+      workspaceSelector: repoPanelWorkspaceSelectorProps,
+      onOpenFile: handleOpenExplorerFile,
+    });
+    return () => {
+      onWorkspaceFileTreeRailContextChange(null);
+    };
+  }, [
+    effectiveRepoPanelPath,
+    handleOpenExplorerFile,
+    onWorkspaceFileTreeRailContextChange,
+    projects.length,
+    repoPanelRepositoryName,
+    repoPanelWorkspaceSelectorProps,
+    repositories.length,
+  ]);
+
   return (
     <Layout.Sider
       width={siderWidth}
@@ -1298,6 +1326,8 @@ export function LeftSidebar({
         authorTooltip={authorDisabledTooltip}
         activeRepositoryPath={claudeToolsScopePath || activeRepositoryPath}
         activeRepositoryId={activeRepositoryId}
+        fileTreeRailOpen={fileTreeRailOpen}
+        onToggleFileTreeRail={onToggleFileTreeRail}
         onOpenAuthor={onOpenAuthor}
       />
 

@@ -50,11 +50,14 @@ import {
   WorkspaceMemosProvider,
 } from "../contexts/WorkspaceMemosContext";
 import { useRepositoryFileEditor } from "../hooks/useRepositoryFileEditor";
+import { useWorkspaceFileTreeRail } from "../hooks/useWorkspaceFileTreeRail";
 import { ErrorBoundary } from "./ErrorBoundary";
 import {
   areLeftSidebarContentPropsEqual,
   areLeftSidebarPropsEqual,
 } from "./LeftSidebar/leftSidebarPropsEqual";
+import { WorkspaceFileTreeRail } from "./WorkspaceFileTreeRail";
+import type { WorkspaceFileTreeRailContext } from "./WorkspaceFileTreeRail/types";
 import { WorkspaceViewportLoading } from "./WorkspaceViewportLoading";
 /** 与 AppWorkspaceLayout 求值并行预拉取首屏关键子 chunk。 */
 const leftSidebarChunk = import("./LeftSidebar");
@@ -231,6 +234,20 @@ const ConnectedLeftSidebar = memo(function ConnectedLeftSidebar({
   prev.parked === next.parked &&
   prev.siderWidth === next.siderWidth &&
   areLeftSidebarContentPropsEqual(prev.leftSidebarProps, next.leftSidebarProps));
+
+interface ConnectedWorkspaceFileTreeRailProps {
+  widthPx: number;
+  context: WorkspaceFileTreeRailContext;
+  onClose: () => void;
+}
+
+const ConnectedWorkspaceFileTreeRail = memo(function ConnectedWorkspaceFileTreeRail({
+  widthPx,
+  context,
+  onClose,
+}: ConnectedWorkspaceFileTreeRailProps) {
+  return <WorkspaceFileTreeRail widthPx={widthPx} {...context} onClose={onClose} />;
+});
 
 interface ConnectedClaudeSessionsProps {
   claudeSessionsProps: ClaudeSessionsProps;
@@ -604,6 +621,41 @@ export function AppWorkspaceLayout({
     ],
   );
 
+  /**
+   * 旧布尔派生：本组件保留按 ViewMode 内部派生的旧布尔语义（与 P0 阶段
+   * `viewMode.legacy.*` 完全等价），用于驱动主屏分支与叠层渲染。AppImpl 不再
+   * 单独传 6 个布尔——这些纯粹是 ViewMode 上的语义投影。
+   */
+  const authorMode = viewMode.kind === "author";
+  const missionControlMode = viewMode.kind === "cockpit";
+  const cockpitHubPane =
+    viewMode.kind === "cockpit" ? resolveCockpitHubPane(viewMode) : null;
+  const mcpHubMode =
+    (viewMode.kind === "author" && viewMode.pane === "mcp") ||
+    (viewMode.kind === "inspect" && viewMode.tool.kind === "mcp-hub");
+  const skillsHubMode =
+    (viewMode.kind === "author" && viewMode.pane === "skills") ||
+    (viewMode.kind === "inspect" && viewMode.tool.kind === "skills-hub");
+  const codeKnowledgeGraphMode =
+    viewMode.kind === "inspect" && viewMode.tool.kind === "code-graph";
+  const trellisInspectorTool =
+    viewMode.kind === "inspect" && isTrellisInspectorTool(viewMode.tool)
+      ? viewMode.tool
+      : null;
+  const chatRightRailMode = !authorMode && !missionControlMode;
+  const leftSidebarParked = cockpitPrdSplitFullscreen;
+  const {
+    fileTreeRailOpen,
+    toggleFileTreeRail,
+    setFileTreeRailOpen,
+    fileTreeRailWidthPx,
+    setFileTreeRailWidthPx,
+  } = useWorkspaceFileTreeRail();
+  const showWorkspaceFileTreeRail =
+    chatRightRailMode && fileTreeRailOpen && !workspaceWelcomeFullscreen && !leftSidebarParked;
+  const [workspaceFileTreeRailContext, setWorkspaceFileTreeRailContext] =
+    useState<WorkspaceFileTreeRailContext | null>(null);
+
   const topbarProps = useMemo(
     () => ({
       activeProject: claudeSessionsProps.activeProject,
@@ -616,6 +668,8 @@ export function AppWorkspaceLayout({
       mainSessionForDataLink,
       onToggleSidebar: claudeSessionsProps.onToggleSidebar,
       onToggleRightPanel: claudeSessionsProps.onToggleRightPanel,
+      fileTreeRailOpen,
+      onToggleFileTreeRail: chatRightRailMode ? toggleFileTreeRail : undefined,
       rightPanelDefaultCollapsed: claudeSessionsProps.rightPanelDefaultCollapsed,
       onSetRightPanelDefaultCollapsed: claudeSessionsProps.onSetRightPanelDefaultCollapsed,
       onToggleTerminal: claudeSessionsProps.onToggleTerminal,
@@ -645,34 +699,14 @@ export function AppWorkspaceLayout({
       claudeSessionsProps.onAutoFixRunError,
       claudeSessionsProps.paneCount,
       claudeSessionsProps.onChangePaneCount,
+      fileTreeRailOpen,
+      chatRightRailMode,
+      toggleFileTreeRail,
       mainSessionForDataLink,
       onOpenRemoteChannels,
     ],
   );
 
-  /**
-   * 旧布尔派生：本组件保留按 ViewMode 内部派生的旧布尔语义（与 P0 阶段
-   * `viewMode.legacy.*` 完全等价），用于驱动主屏分支与叠层渲染。AppImpl 不再
-   * 单独传 6 个布尔——这些纯粹是 ViewMode 上的语义投影。
-   */
-  const authorMode = viewMode.kind === "author";
-  const missionControlMode = viewMode.kind === "cockpit";
-  const cockpitHubPane =
-    viewMode.kind === "cockpit" ? resolveCockpitHubPane(viewMode) : null;
-  const mcpHubMode =
-    (viewMode.kind === "author" && viewMode.pane === "mcp") ||
-    (viewMode.kind === "inspect" && viewMode.tool.kind === "mcp-hub");
-  const skillsHubMode =
-    (viewMode.kind === "author" && viewMode.pane === "skills") ||
-    (viewMode.kind === "inspect" && viewMode.tool.kind === "skills-hub");
-  const codeKnowledgeGraphMode =
-    viewMode.kind === "inspect" && viewMode.tool.kind === "code-graph";
-  const trellisInspectorTool =
-    viewMode.kind === "inspect" && isTrellisInspectorTool(viewMode.tool)
-      ? viewMode.tool
-      : null;
-  const chatRightRailMode = !authorMode && !missionControlMode;
-  const leftSidebarParked = cockpitPrdSplitFullscreen;
   const [authorShellMounted, setAuthorShellMounted] = useState(authorMode);
   const [cockpitShellMounted, setCockpitShellMounted] = useState(missionControlMode);
   const showCockpitShell = missionControlMode || cockpitShellMounted;
@@ -929,6 +963,11 @@ export function AppWorkspaceLayout({
                     leftSidebarProps={{
                       ...leftSidebarProps,
                       repoPanelRightRailAvailable: chatRightRailMode,
+                      fileTreeRailOpen,
+                      onToggleFileTreeRail: chatRightRailMode ? toggleFileTreeRail : undefined,
+                      onWorkspaceFileTreeRailContextChange: chatRightRailMode
+                        ? setWorkspaceFileTreeRailContext
+                        : undefined,
                     }}
                   />
                 </Suspense>
@@ -952,6 +991,21 @@ export function AppWorkspaceLayout({
                     startWidthPx={mainLayoutLeftWidthPx}
                     onWidthChange={onLeftWidthChange}
                   />
+                ) : null}
+
+                {showWorkspaceFileTreeRail && workspaceFileTreeRailContext ? (
+                  <>
+                    <ConnectedWorkspaceFileTreeRail
+                      widthPx={fileTreeRailWidthPx}
+                      context={workspaceFileTreeRailContext}
+                      onClose={() => setFileTreeRailOpen(false)}
+                    />
+                    <MainLayoutResizeHandle
+                      variant="left"
+                      startWidthPx={fileTreeRailWidthPx}
+                      onWidthChange={setFileTreeRailWidthPx}
+                    />
+                  </>
                 ) : null}
 
                 <div className="app-workspace-main">

@@ -24,6 +24,7 @@ import type { GitPanelOpenFileOptions } from "../GitPanel";
 import type { TaskCardsNavProps } from "../TaskCardsNav";
 import type { AuthorPane } from "../../types/viewMode";
 import type { MonitorPanelPlacement } from "../../services/wiseDefaultConfigStore";
+import type { WorkspaceFileTreeRailContext } from "../WorkspaceFileTreeRail/types";
 
 export interface LeftSidebarProps {
   dark: boolean;
@@ -199,5 +200,8 @@ export interface LeftSidebarProps {
   repoPanelRightRailAvailable?: boolean;
   /** 右栏仓库面板（Git / 文件树）节点。 */
   onRepositoryRepoPanelChange?: (node: ReactNode | null) => void;
+  fileTreeRailOpen?: boolean;
+  onToggleFileTreeRail?: () => void;
+  onWorkspaceFileTreeRailContextChange?: (context: WorkspaceFileTreeRailContext | null) => void;
   taskCardsNavProps?: TaskCardsNavProps;
 }

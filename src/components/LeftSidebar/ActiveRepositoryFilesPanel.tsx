@@ -10,11 +10,11 @@ interface ActiveRepositoryFilesPanelProps {
   onSearchChange: (value: string) => void;
   onOpenFile?: (path: string, options?: GitPanelOpenFileOptions) => void;
   sectionCollapsed: boolean;
-  onSectionCollapsedChange: (collapsed: boolean) => void;
+  onSectionCollapsedChange?: (collapsed: boolean) => void;
   headerPrefix?: ReactNode;
-  workspaceSelector: Omit<GitPanelWorkspaceSelectorProps, "activeRepositoryPath">;
+  workspaceSelector?: Omit<GitPanelWorkspaceSelectorProps, "activeRepositoryPath">;
   /** 右栏 Inspector 内嵌时使用独立布局 class。 */
-  variant?: "left-sidebar" | "right-rail";
+  variant?: "left-sidebar" | "right-rail" | "workspace-rail";
 }
 
 export const ActiveRepositoryFilesPanel = memo(function ActiveRepositoryFilesPanel({
@@ -30,19 +30,23 @@ export const ActiveRepositoryFilesPanel = memo(function ActiveRepositoryFilesPan
   variant = "left-sidebar",
 }: ActiveRepositoryFilesPanelProps) {
   const rootClassName =
-    variant === "right-rail"
-      ? "app-right-panel-files-explorer" +
-        (sectionCollapsed ? " app-right-panel-files-explorer--section-collapsed" : "")
-      : "app-left-sidebar-files-explorer" +
-        (sectionCollapsed ? " app-left-sidebar-files-explorer--section-collapsed" : "");
+    variant === "workspace-rail"
+      ? "app-workspace-file-tree-rail-panel"
+      : variant === "right-rail"
+        ? "app-right-panel-files-explorer" +
+          (sectionCollapsed ? " app-right-panel-files-explorer--section-collapsed" : "")
+        : "app-left-sidebar-files-explorer" +
+          (sectionCollapsed ? " app-left-sidebar-files-explorer--section-collapsed" : "");
 
   return (
     <div className={rootClassName}>
       <div
         className={
-          variant === "right-rail"
-            ? "app-right-panel-files-explorer-body"
-            : "app-left-sidebar-files-explorer-body"
+          variant === "workspace-rail"
+            ? "app-workspace-file-tree-rail-panel-body"
+            : variant === "right-rail"
+              ? "app-right-panel-files-explorer-body"
+              : "app-left-sidebar-files-explorer-body"
         }
       >
         <RepositoryFilesExplorer
@@ -54,12 +58,15 @@ export const ActiveRepositoryFilesPanel = memo(function ActiveRepositoryFilesPan
             "资源管理器"
           }
           search={search}
-          showSearchField={!sectionCollapsed}
+          showSearchField={variant === "workspace-rail" ? true : !sectionCollapsed}
           onSearchChange={onSearchChange}
           onOpenFile={onOpenFile}
           onClearExplorerSearch={() => onSearchChange("")}
           sectionCollapsed={sectionCollapsed}
-          onSectionCollapsedChange={onSectionCollapsedChange}
+          onSectionCollapsedChange={
+            variant === "workspace-rail" ? undefined : onSectionCollapsedChange
+          }
+          hideContextHeader={variant === "workspace-rail"}
           workspaceSelector={workspaceSelector}
         />
       </div>

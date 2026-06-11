@@ -1486,6 +1486,14 @@
   stroke: currentColor;
 }
 
+.git-files-mode--context-header-hidden .git-files-explorer-bar {
+  display: none;
+}
+
+.git-files-mode--context-header-hidden .git-files-explorer-search {
+  border-top: none;
+}
+
 .git-files-explorer-search {
   flex-shrink: 0;
   display: flex;
