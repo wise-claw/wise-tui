@@ -530,7 +530,6 @@ export default function App() {
     handleUpdateProjectSddMode,
     handleDeleteProject,
     handleAddRepositoryToProject,
-    handleAddRepositoryPathToProject,
     handleAddFloatingRepository,
     handlePromoteFloatingRepositoryToProject,
     handleDetachRepositoryFromProject,

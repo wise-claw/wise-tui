@@ -1824,13 +1824,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
             data.activeSessionId && normalizedWithModels.some((x) => x.id === data.activeSessionId)
               ? data.activeSessionId
               : normalizedWithModels[0]!.id;
-          const hydrateKeep = new Set<string>([active]);
-          for (const s of normalizedWithModels) {
-            if (s.status === "running" || s.status === "connecting") {
-              hydrateKeep.add(s.id);
-            }
-          }
-          memoryKeepSessionIdsRef.current = hydrateKeep;
+          memoryKeepSessionIdsRef.current = new Set<string>([active]);
           setSessions(normalizedWithModels);
           for (const s of sessionsRef.current) {
             if (s.claudeSessionId?.trim() && s.messages.length > 0) {
