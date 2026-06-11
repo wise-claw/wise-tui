@@ -6671,27 +6671,29 @@ button.app-message-part-header:disabled:hover {
 }
 
 .app-session-owner-panel {
-  position: fixed;
-  top: 38px;
-  left: calc(
-    var(--app-session-owner-anchor-left, 0px) + var(--app-session-owner-anchor-width, 100vw) * 0.5
-  );
+  position: absolute;
+  top: 0;
+  left: 50%;
   transform: translateX(-50%);
   z-index: 12;
   box-sizing: border-box;
-  max-width: min(90vw, calc(var(--app-session-owner-anchor-width, 100vw) - 32px));
+  width: max-content;
+  max-width: calc(100% - 24px);
   margin: 0;
   padding: 4px 12px;
   border-radius: 10px;
   display: flex;
   align-items: center;
   gap: 8px;
+  flex-wrap: nowrap;
   pointer-events: auto;
 }
 
 .app-session-owner-panel__tag {
   display: inline-flex;
   align-items: center;
+  flex-shrink: 0;
+  white-space: nowrap;
   border-radius: 999px;
   padding: 1px 8px;
   font-size: 12px;
