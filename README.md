@@ -68,6 +68,30 @@ bun run tauri:build
 
 构建产物位于 `src-tauri/target/release/bundle/`。macOS 分发需 Developer ID 签名与公证；Windows 建议代码签名以减少 SmartScreen 警告。
 
+### macOS DMG 分发说明
+
+从 GitHub Release、网盘或聊天工具下载的 DMG，拷贝到其他 Mac 上安装时，**有可能提示「已损坏」「无法打开」或「来自身份不明的开发者」**——多数情况下并非安装包真的损坏，而是 macOS **Gatekeeper** 对未签名/未公证应用附加了隔离（quarantine）校验。
+
+**终端用户可尝试：**
+
+1. 将 `Wise.app` 拖入「应用程序」后，打开 **系统设置 → 隐私与安全性**，在底部点击 **仍要打开**。
+2. 若仍提示损坏，在终端对应用或 DMG 挂载后的 `.app` 移除隔离属性后重试：
+
+```bash
+xattr -cr /Applications/Wise.app
+```
+
+> 仅在你信任安装包来源时使用上述命令。
+
+**维护者打包部署提醒（发布前自检）：**
+
+- [ ] 使用 **Apple Developer ID Application** 证书对 `.app` 签名（`codesign --verify --deep --strict` 通过）。
+- [ ] 提交 **notarytool** 公证，并对 DMG 执行 `xcrun stapler staple`。
+- [ ] 在**未参与构建的干净 Mac** 上实测：下载 → 挂载 DMG → 拖入应用程序 → 首次打开，确认无「已损坏」拦截。
+- [ ] Release 资产优先提供经公证的 DMG；本地 `bun run tauri:build` 产物仅供自用或内部分发，勿当作已适配公网用户的最终包。
+
+未签名/未公证的 DMG 在他人机器上出现「已损坏」属预期行为，**正式发布前务必完成签名与公证**。
+
 ## 使用指南
 
 Wise 提供两种入口，可按场景选择：

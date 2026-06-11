@@ -68,6 +68,30 @@ bun run tauri:build
 
 Bundles are emitted under `src-tauri/target/release/bundle/`. macOS distribution outside the App Store requires Developer ID signing and notarization; Windows builds benefit from code signing to reduce SmartScreen warnings.
 
+### macOS DMG distribution notes
+
+When users download a DMG from GitHub Releases, cloud storage, or chat apps and install it on **another Mac**, they may see **“is damaged and can’t be opened”**, **“can’t be opened”**, or **“from an unidentified developer”**. In most cases the bundle is not actually corrupt — macOS **Gatekeeper** is blocking an unsigned or unnotarized app and applying **quarantine** checks.
+
+**End users can try:**
+
+1. After dragging `Wise.app` into **Applications**, open **System Settings → Privacy & Security** and click **Open Anyway** at the bottom.
+2. If the damaged warning persists, remove the quarantine attribute on the installed app (or the `.app` on the mounted DMG) and retry:
+
+```bash
+xattr -cr /Applications/Wise.app
+```
+
+> Only run this if you trust the source of the installer.
+
+**Maintainer release checklist (before shipping):**
+
+- [ ] Sign `.app` with an **Apple Developer ID Application** certificate (`codesign --verify --deep --strict` passes).
+- [ ] Submit for **notarytool** notarization and `xcrun stapler staple` the DMG.
+- [ ] Smoke-test on a **clean Mac that did not build the app**: download → mount DMG → drag to Applications → first launch — confirm no “damaged” block.
+- [ ] Ship notarized DMGs in Releases; local `bun run tauri:build` output is for personal or internal use only, not as the public release artifact.
+
+Unsigned or unnotarized DMGs showing “damaged” on other machines is **expected** — **always sign and notarize before a public release**.
+
 ## Usage Guide
 
 Wise offers two entry points:
