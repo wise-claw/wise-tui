@@ -465,6 +465,11 @@ export function useRepositoryList() {
     let repository =
       repositories.find((item) => normalizeRepositoryPathKey(item.path) === folderPathKey) ?? null;
     if (!repository) {
+      const freshList = await loadRepositories();
+      repository =
+        freshList.find((item) => normalizeRepositoryPathKey(item.path) === folderPathKey) ?? null;
+    }
+    if (!repository) {
       if (options?.bootstrap) {
         await runWorkspaceBootstrap(folderPath, options.bootstrap);
       }
@@ -497,14 +502,29 @@ export function useRepositoryList() {
         if (!resolved.ok) return;
         folderPath = resolved.path;
       }
-      let repository = repositories.find((item) => item.path === folderPath) ?? null;
+      const folderPathKey = normalizeRepositoryPathKey(folderPath);
+      let repository =
+        repositories.find((item) => normalizeRepositoryPathKey(item.path) === folderPathKey) ?? null;
+      if (!repository) {
+        const freshList = await loadRepositories();
+        repository =
+          freshList.find((item) => normalizeRepositoryPathKey(item.path) === folderPathKey) ?? null;
+      }
       if (!repository) {
         if (options?.bootstrap) {
           await runWorkspaceBootstrap(folderPath, options.bootstrap);
         }
         repository = await createRepositoryFromPathWithType(folderPath, repositoryType, options);
-        setRepositories((prev) => [...prev, repository as Repository]);
       }
+      setRepositories((prev) => {
+        const key = normalizeRepositoryPathKey(repository!.path);
+        if (prev.some((item) => normalizeRepositoryPathKey(item.path) === key)) {
+          return prev.map((item) =>
+            normalizeRepositoryPathKey(item.path) === key ? (repository as Repository) : item,
+          );
+        }
+        return [...prev, repository as Repository];
+      });
       setActiveProjectId(null);
       setActiveRepositoryId(repository.id);
       setActiveWorkspaceFocus("repository");
@@ -552,6 +572,11 @@ export function useRepositoryList() {
       const pathKey = normalizeRepositoryPathKey(trimmed);
       let repository =
         repositories.find((item) => normalizeRepositoryPathKey(item.path) === pathKey) ?? null;
+      if (!repository) {
+        const freshList = await loadRepositories();
+        repository =
+          freshList.find((item) => normalizeRepositoryPathKey(item.path) === pathKey) ?? null;
+      }
       if (!repository) {
         repository = await createRepositoryFromPathWithType(trimmed, repositoryType);
       }

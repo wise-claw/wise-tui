@@ -102,30 +102,41 @@ export function RepositoryAssociateModal({
           />
         </div>
 
-        {acquireMode !== "pick_existing" ? (
-          <div className="app-add-repo-acquire-panel">
-            <div className="app-add-repo-field-label">父目录</div>
-            <div className="app-add-repo-parent-path">
-              <Button
-                type="default"
-                size="small"
-                icon={<FolderOpenOutlined />}
-                onClick={() => void onPickParentPath()}
-              >
-                选择
-              </Button>
-              <Input
-                size="small"
-                value={parentPath}
-                placeholder="工作区根目录或任意父路径"
-                onChange={(event) => onParentPathChange(event.target.value)}
-              />
-            </div>
-            <Typography.Text type="secondary" className="app-add-repo-acquire-hint">
-              {parentPath.trim() ? parentPathLabel : "请选择或填写父目录，仓库将创建在其下"}
-            </Typography.Text>
+        <div className="app-add-repo-acquire-panel">
+          <div className="app-add-repo-field-label">
+            {acquireMode === "pick_existing" ? "仓库目录" : "父目录"}
+          </div>
+          <div className="app-add-repo-parent-path">
+            <Button
+              type="default"
+              size="small"
+              icon={<FolderOpenOutlined />}
+              onClick={() => void onPickParentPath()}
+            >
+              选择
+            </Button>
+            <Input
+              size="small"
+              value={parentPath}
+              placeholder={
+                acquireMode === "pick_existing"
+                  ? "例如 /Users/you/projects/my-app"
+                  : "工作区根目录或任意父路径"
+              }
+              onChange={(event) => onParentPathChange(event.target.value)}
+            />
+          </div>
+          <Typography.Text type="secondary" className="app-add-repo-acquire-hint">
+            {acquireMode === "pick_existing"
+              ? parentPath.trim()
+                ? parentPathLabel
+                : "可填写或选择已有仓库目录（支持 - 等特殊字符）；留空则在确定后弹出选择器"
+              : parentPath.trim()
+                ? parentPathLabel
+                : "请选择或填写父目录，仓库将创建在其下"}
+          </Typography.Text>
 
-            {acquireMode === "git_clone" ? (
+          {acquireMode === "git_clone" ? (
               <>
                 <div className="app-add-repo-field-label app-add-repo-field-label--spaced">Git 仓库地址</div>
                 <Input
@@ -144,7 +155,7 @@ export function RepositoryAssociateModal({
                   allowClear
                 />
               </>
-            ) : (
+            ) : acquireMode === "create_empty" ? (
               <>
                 <div className="app-add-repo-field-label app-add-repo-field-label--spaced">仓库文件夹名</div>
                 <Input
@@ -158,9 +169,8 @@ export function RepositoryAssociateModal({
                   将在父目录下创建文件夹并执行 git init
                 </Typography.Text>
               </>
-            )}
-          </div>
-        ) : null}
+            ) : null}
+        </div>
 
         <div>
           <div className="app-add-repo-field-label">角标与自定义角色标签</div>

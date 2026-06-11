@@ -33,6 +33,7 @@ const REPO_ACQUIRE_LOADING_KEY = "wise-repo-acquire";
 function acquireLoadingLabel(mode: RepositoryAcquireMode): string {
   if (mode === "git_clone") return "正在克隆仓库…";
   if (mode === "create_empty") return "正在创建空仓库…";
+  if (mode === "pick_existing") return "正在选择仓库目录…";
   return "正在处理…";
 }
 
@@ -225,7 +226,11 @@ export function useRepositoryAssociateModalController({
 
   const buildAcquireParams = useCallback((): RepositoryAcquireParams => {
     if (acquireMode === "pick_existing") {
-      return { mode: "pick_existing" };
+      const existingPath = parentPath.trim();
+      return {
+        mode: "pick_existing",
+        existingPath: existingPath.length > 0 ? existingPath : undefined,
+      };
     }
     if (acquireMode === "create_empty") {
       return {
@@ -305,29 +310,6 @@ export function useRepositoryAssociateModalController({
       }
     };
 
-    if (acquire.mode === "pick_existing") {
-      close();
-      void (async () => {
-        if (capturedFloating) {
-          if (!onAddFloatingRepository) {
-            message.warning("当前环境未启用「添加单仓」入口");
-            return;
-          }
-          await Promise.resolve(onAddFloatingRepository(repositoryType, options, acquire));
-          return;
-        }
-        if (!capturedProjectId) return;
-        if (!onAddRepositoryToProject) {
-          message.warning("当前环境未启用「加入工作区」");
-          return;
-        }
-        await Promise.resolve(
-          onAddRepositoryToProject(capturedProjectId, repositoryType, options, acquire),
-        );
-      })();
-      return;
-    }
-
     close();
     const hideAcquire = message.loading({
       content: acquireLoadingLabel(acquire.mode),
@@ -373,7 +355,9 @@ export function useRepositoryAssociateModalController({
 
   const submitOkText =
     acquireMode === "pick_existing"
-      ? "继续选择仓库目录"
+      ? parentPath.trim()
+        ? "关联"
+        : "继续选择仓库目录"
       : acquireMode === "create_empty"
         ? "创建并关联"
         : "克隆并关联";

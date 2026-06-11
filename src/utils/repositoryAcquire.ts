@@ -3,6 +3,8 @@ export type RepositoryAcquireMode = "pick_existing" | "create_empty" | "git_clon
 
 export interface RepositoryAcquireParams {
   mode: RepositoryAcquireMode;
+  /** `pick_existing`：用户填写的已有仓库绝对路径；有值时跳过目录选择器。 */
+  existingPath?: string;
   /** `create_empty` / `git_clone`：父目录绝对路径。 */
   parentPath?: string;
   /** `create_empty` / `git_clone`：在父目录下创建的文件夹名。 */

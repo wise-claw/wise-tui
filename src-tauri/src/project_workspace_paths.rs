@@ -81,6 +81,19 @@ mod tests {
     }
 
     #[test]
+    fn validate_folder_name_allows_hyphen_and_dots() {
+        assert_eq!(
+            validate_repository_folder_name("my-app").unwrap(),
+            "my-app"
+        );
+        assert_eq!(
+            validate_repository_folder_name("foo_bar.v2").unwrap(),
+            "foo_bar.v2"
+        );
+        assert!(validate_repository_folder_name("a/b").is_err());
+    }
+
+    #[test]
     fn sibling_path_fails() {
         let base = std::env::temp_dir().join(format!(
             "wise_project_root_test2_{}",

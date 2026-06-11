@@ -8,6 +8,7 @@ use crate::wise_paths::{
 use crate::{git_commands, wise_db};
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
+use std::collections::HashSet;
 use std::fs;
 use std::path::PathBuf;
 use tauri::Manager;
@@ -262,6 +263,21 @@ fn migrate_repository_storage(app: &tauri::AppHandle) -> Result<(), String> {
 
 // ── Repository Helpers ──
 
+/// 分配不与 `existing` 冲突的仓库 id（同一毫秒内批量 reconcile 时避免覆盖）。
+fn allocate_repository_id(existing: &[StoredRepository]) -> i64 {
+    let mut id = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_or(1, |d| d.as_millis() as i64);
+    if id <= 0 {
+        id = 1;
+    }
+    let used: HashSet<i64> = existing.iter().map(|repo| repo.id).collect();
+    while used.contains(&id) {
+        id += 1;
+    }
+    id
+}
+
 fn repository_folder_label_from_path(folder_path: &str) -> String {
     std::path::Path::new(folder_path)
         .file_name()
@@ -404,10 +420,10 @@ pub(crate) fn create_repository_from_path(
     for p in &existing {
         if let Ok(ep) = canonicalize_existing_dir(&p.path) {
             if ep == candidate {
-                return Err("此路径的仓库已存在".into());
+                return Ok(p.clone());
             }
         } else if p.path == folder_path {
-            return Err("此路径的仓库已存在".into());
+            return Ok(p.clone());
         }
     }
 
@@ -415,6 +431,7 @@ pub(crate) fn create_repository_from_path(
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|e| e.to_string())?
         .as_millis() as i64;
+    let repository_id = allocate_repository_id(&existing);
 
     let normalized_repository_type = match repository_type.as_str() {
         "frontend" | "backend" | "document" => repository_type,
@@ -422,7 +439,7 @@ pub(crate) fn create_repository_from_path(
     };
 
     let repository = StoredRepository {
-        id: now,
+        id: repository_id,
         name: folder_label,
         path: folder_path.clone(),
         role_tags: vec![normalized_repository_type.clone()],
@@ -1042,8 +1059,9 @@ pub(crate) fn reconcile_project_workspace(
             .map_err(|e| e.to_string())?
             .as_millis() as i64;
         let folder_label = repository_folder_label_from_path(&repo_path_str);
+        let repository_id = allocate_repository_id(&repositories);
         let new_repo = StoredRepository {
-            id: now,
+            id: repository_id,
             name: folder_label,
             path: repo_path_str.clone(),
             role_tags: vec!["frontend".to_string()],
@@ -1060,8 +1078,8 @@ pub(crate) fn reconcile_project_workspace(
         };
         repositories.push(new_repo);
         save_repositories(&app, &repositories)?;
-        db.add_repository_to_project(&project_id, now, now_ms)?;
-        current_member_ids.insert(now);
+        db.add_repository_to_project(&project_id, repository_id, now_ms)?;
+        current_member_ids.insert(repository_id);
         added_paths.push(repo_path_str);
     }
 
@@ -2276,4 +2294,39 @@ fn unix_now_ms() -> i64 {
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_millis() as i64)
         .unwrap_or(0)
+}
+
+#[cfg(test)]
+mod repository_id_tests {
+    use super::*;
+
+    fn sample_repo(id: i64, path: &str) -> StoredRepository {
+        StoredRepository {
+            id,
+            name: path.to_string(),
+            path: path.to_string(),
+            role_tags: vec!["frontend".to_string()],
+            repository_type: "frontend".to_string(),
+            icon_color: None,
+            icon_display_name: None,
+            main_owner_agent_name: None,
+            execution_engine: default_execution_engine(),
+            branch: None,
+            created_at: "1".to_string(),
+            updated_at: "1".to_string(),
+            sdd_mode: None,
+            open_app_id: None,
+        }
+    }
+
+    #[test]
+    fn allocate_repository_id_skips_used_ids() {
+        let seed = unix_now_ms();
+        let next = allocate_repository_id(&[sample_repo(seed, "/tmp/a")]);
+        assert_eq!(next, seed + 1);
+
+        let next2 = allocate_repository_id(&[sample_repo(seed, "/tmp/a"), sample_repo(seed + 1, "/tmp/b")]);
+        assert_eq!(next2, seed + 2);
+        assert!(!vec![seed, seed + 1].contains(&next2));
+    }
 }

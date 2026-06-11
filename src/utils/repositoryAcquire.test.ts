@@ -20,6 +20,13 @@ describe("isValidRepositoryFolderName", () => {
     expect(isValidRepositoryFolderName("a/b")).toBe(false);
     expect(isValidRepositoryFolderName("ok-name")).toBe(true);
   });
+
+  test("allows common special characters in folder names", () => {
+    expect(isValidRepositoryFolderName("my-app")).toBe(true);
+    expect(isValidRepositoryFolderName("foo_bar.v2")).toBe(true);
+    expect(isValidRepositoryFolderName("项目-前端")).toBe(true);
+    expect(isValidRepositoryFolderName("repo name")).toBe(true);
+  });
 });
 
 describe("validateRepositoryAcquireParams", () => {

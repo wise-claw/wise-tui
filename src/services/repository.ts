@@ -48,6 +48,14 @@ export async function resolveRepositoryAcquirePath(
   const mode: RepositoryAcquireMode = params.mode;
 
   if (mode === "pick_existing") {
+    const preset = params.existingPath?.trim() ?? "";
+    if (preset) {
+      const accessible = await pathIsAccessibleDirectory(preset);
+      if (!accessible) {
+        return { ok: false, cancelled: false, error: "所选路径不存在或不是目录" };
+      }
+      return { ok: true, path: preset };
+    }
     const path = await pickFolder();
     if (!path) return { ok: false, cancelled: true };
     return { ok: true, path };
