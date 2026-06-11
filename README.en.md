@@ -142,4 +142,4 @@ Application data lives under `~/.wise/`:
 
 ## License
 
-See the LICENSE file in this repository, if present.
+This project is licensed under the [Apache License 2.0](LICENSE).

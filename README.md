@@ -142,4 +142,4 @@ Wise 提供两种入口，可按场景选择：
 
 ## 许可证
 
-请参阅仓库中的 LICENSE 文件（如有）。
+本项目采用 [Apache License 2.0](LICENSE) 开源。
