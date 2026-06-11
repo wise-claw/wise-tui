@@ -14,53 +14,90 @@ pub struct PassthroughRepairState {
     pub tool_json_by_index: HashMap<i32, String>,
     pub next_synthetic_index: i32,
     pub message_started: bool,
+    /// 跨 HTTP chunk 累积未完成的 SSE 行。
+    pending_line_buffer: String,
+    pending_event_type: String,
+    pending_data_lines: Vec<String>,
 }
 
 pub fn repair_passthrough_sse_chunk(chunk: &str, state: &mut PassthroughRepairState) -> String {
+    state.pending_line_buffer.push_str(chunk);
     let mut out = String::new();
-    let mut event_type = String::new();
-    let mut data_lines: Vec<String> = Vec::new();
+    while let Some(newline) = state.pending_line_buffer.find('\n') {
+        let line = state.pending_line_buffer[..newline]
+            .trim_end_matches('\r')
+            .to_string();
+        state.pending_line_buffer.drain(..=newline);
+        process_repair_sse_line(&line, state, &mut out);
+    }
+    out
+}
 
-    for line in chunk.lines() {
+/// 流结束时刷出仍留在行缓冲中的尾部（若有）。
+pub fn repair_passthrough_sse_finalize(state: &mut PassthroughRepairState) -> String {
+    let mut out = String::new();
+    let tail = state.pending_line_buffer.trim_end_matches('\r').to_string();
+    state.pending_line_buffer.clear();
+    if !tail.is_empty() {
+        process_repair_sse_line(&tail, state, &mut out);
+    }
+    flush_pending_sse_event(state, &mut out);
+    out
+}
+
+fn flush_pending_sse_event(state: &mut PassthroughRepairState, out: &mut String) {
+    if state.pending_data_lines.is_empty() {
+        return;
+    }
+    let event_type = std::mem::take(&mut state.pending_event_type);
+    let data_lines = std::mem::take(&mut state.pending_data_lines);
+    out.push_str(&flush_sse_event(&event_type, &data_lines, state));
+}
+
+fn process_repair_sse_line(line: &str, state: &mut PassthroughRepairState, out: &mut String) {
+    if line.is_empty() {
+        flush_pending_sse_event(state, out);
+        return;
+    }
+    if let Some(ev) = line.strip_prefix("event:") {
+        flush_pending_sse_event(state, out);
+        state.pending_event_type = ev.trim().to_string();
+        return;
+    }
+    if let Some(data) = line.strip_prefix("data:") {
+        state
+            .pending_data_lines
+            .push(data.trim_start().to_string());
+        return;
+    }
+    flush_pending_sse_event(state, out);
+    out.push_str(line);
+    out.push('\n');
+}
+
+/// 对一帧完整 SSE（含 `event`/`data` 与结尾空行）做 passthrough 修复。
+pub fn repair_passthrough_sse_frame(frame: &str, state: &mut PassthroughRepairState) -> Option<String> {
+    let mut event_type = String::new();
+    let mut data_lines = Vec::new();
+    for line in frame.lines() {
         let line = line.trim_end_matches('\r');
         if line.is_empty() {
-            if !data_lines.is_empty() {
-                out.push_str(&flush_sse_event(&event_type, &data_lines, state));
-                out.push('\n');
-                event_type.clear();
-                data_lines.clear();
-            }
-            out.push('\n');
             continue;
         }
         if let Some(ev) = line.strip_prefix("event:") {
-            if !data_lines.is_empty() {
-                out.push_str(&flush_sse_event(&event_type, &data_lines, state));
-                out.push('\n');
-                data_lines.clear();
-            }
             event_type = ev.trim().to_string();
-            continue;
-        }
-        if let Some(data) = line.strip_prefix("data:") {
+        } else if let Some(data) = line.strip_prefix("data:") {
             data_lines.push(data.trim_start().to_string());
-            continue;
         }
-        if !data_lines.is_empty() {
-            out.push_str(&flush_sse_event(&event_type, &data_lines, state));
-            out.push('\n');
-            event_type.clear();
-            data_lines.clear();
-        }
-        out.push_str(line);
-        out.push('\n');
     }
-
-    if !data_lines.is_empty() {
-        out.push_str(&flush_sse_event(&event_type, &data_lines, state));
-        out.push('\n');
+    if data_lines.is_empty() {
+        return None;
     }
-    out
+    let payload = data_lines.join("\n");
+    if serde_json::from_str::<Value>(&payload).is_err() {
+        return None;
+    }
+    Some(flush_sse_event(&event_type, &data_lines, state))
 }
 
 fn flush_sse_event(event_type: &str, data_lines: &[String], state: &mut PassthroughRepairState) -> String {
@@ -113,6 +150,14 @@ fn repair_passthrough_sse_data(data: &str, state: &mut PassthroughRepairState) -
             }
         }
         "content_block_delta" => {
+            if parsed
+                .get("delta")
+                .and_then(|d| d.get("type"))
+                .and_then(|t| t.as_str())
+                == Some("signature_delta")
+            {
+                return (String::new(), data.to_string());
+            }
             if let Some(idx) = parsed.get("index").and_then(|i| i.as_i64()) {
                 let idx = idx as i32;
                 if let Some(delta) = parsed.get("delta") {
@@ -429,6 +474,26 @@ data: {"type":"message_delta","delta":{"stop_reason":"tool_use","stop_sequence":
         assert_eq!(fixed["stop_reason"], "tool_use");
         let blocks = fixed["content"].as_array().unwrap();
         assert!(blocks.iter().any(|b| b["type"] == "tool_use" && b["name"] == "Read"));
+    }
+
+    #[test]
+    fn reassembles_signature_delta_split_across_chunks() {
+        use super::super::stream_common::SseFrameBuffer;
+
+        let mut state = PassthroughRepairState::default();
+        let mut buf = SseFrameBuffer::default();
+        let part1 = r#"event: content_block_delta
+data: {"type":"content_block_delta","index":0,"delta":{"type":"signa"#;
+        let part2 = r#"ture_delta","signature":"abc123"}}
+
+"#;
+        assert!(buf.extend(part1.as_bytes()).is_empty());
+        let frames = buf.extend(part2.as_bytes());
+        assert_eq!(frames.len(), 1);
+        let repaired = repair_passthrough_sse_frame(&frames[0], &mut state).unwrap();
+        assert!(repaired.contains(r#""type":"signature_delta""#));
+        assert!(repaired.contains(r#""signature":"abc123""#));
+        assert!(repaired.starts_with("event: content_block_delta\n"));
     }
 
     #[test]

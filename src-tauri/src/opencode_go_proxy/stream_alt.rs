@@ -8,12 +8,14 @@ use reqwest::Response as ReqwestResponse;
 use serde_json::{json, Value};
 use uuid::Uuid;
 
+use std::sync::{Arc, Mutex};
+
 use super::stream_common::{
-    ensure_message_start, finalize_stream, finish_stream, format_sse_events,
+    ensure_message_start, finalize_stream, finish_stream, format_sse_events_parts,
     gemini_function_call_delta, has_tool_blocks, new_stream_state,
     responses_function_call_args_delta, responses_function_call_args_done,
     responses_function_call_item_added, text_delta,
-    SharedStreamState,
+    SharedStreamState, SseDataLineBuffer,
 };
 use super::traces::TraceCapture;
 use super::transform;
@@ -28,33 +30,66 @@ pub async fn stream_responses_to_anthropic(
     let model = original_model.to_string();
     let state = new_stream_state();
     let state_finalize = state.clone();
+    let line_buffer = Arc::new(Mutex::new(SseDataLineBuffer::default()));
+    let line_buffer_finalize = line_buffer.clone();
     let trace_map = trace.clone();
     let trace_finalize = trace;
+    let msg_id_stream = msg_id.clone();
+    let model_stream = model.clone();
 
     let stream = upstream
         .bytes_stream()
-        .map(move |chunk_result| {
-            let formatted = process_sse_bytes(
+        .flat_map(move |chunk_result| {
+            let parts = process_sse_bytes(
                 chunk_result,
-                &msg_id,
-                &model,
+                &msg_id_stream,
+                &model_stream,
                 &state,
+                &line_buffer,
                 process_responses_chunk,
             );
             if let Some(ref t) = trace_map {
-                t.push_sse_text(&formatted);
+                t.push_sse_text(&parts.join(""));
             }
-            Ok::<_, std::convert::Infallible>(formatted)
+            futures_util::stream::iter(
+                parts
+                    .into_iter()
+                    .map(|s| Ok::<_, std::convert::Infallible>(s)),
+            )
         })
-        .chain(futures_util::stream::once(async move {
-            let mut st = state_finalize.lock().unwrap_or_else(|e| e.into_inner());
-            let tail = format_sse_events(&finalize_stream(&mut st));
-            if let Some(t) = trace_finalize {
-                t.push_sse_text(&tail);
-                t.finalize_stream(200);
-            }
-            Ok(tail)
-        }));
+        .chain(
+            futures_util::stream::once(async move {
+                let mut st = state_finalize.lock().unwrap_or_else(|e| e.into_inner());
+                let mut tail_events = Vec::new();
+                if let Some(line) = line_buffer_finalize
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .drain_remaining()
+                {
+                    tail_events.extend(process_sse_line(
+                        &line,
+                        &msg_id,
+                        &model,
+                        &state_finalize,
+                        process_responses_chunk,
+                    ));
+                }
+                tail_events.extend(finalize_stream(&mut st));
+                let tail_parts = format_sse_events_parts(&tail_events);
+                if let Some(t) = trace_finalize {
+                    t.push_sse_text(&tail_parts.join(""));
+                    t.finalize_stream(200);
+                }
+                tail_parts
+            })
+            .flat_map(|parts| {
+                futures_util::stream::iter(
+                    parts
+                        .into_iter()
+                        .map(|s| Ok::<_, std::convert::Infallible>(s)),
+                )
+            }),
+        );
 
     sse_response(Body::from_stream(stream))
 }
@@ -68,48 +103,82 @@ pub async fn stream_gemini_to_anthropic(
     let model = original_model.to_string();
     let state = new_stream_state();
     let state_finalize = state.clone();
+    let line_buffer = Arc::new(Mutex::new(SseDataLineBuffer::default()));
+    let line_buffer_finalize = line_buffer.clone();
     let trace_map = trace.clone();
     let trace_finalize = trace;
+    let msg_id_stream = msg_id.clone();
+    let model_stream = model.clone();
 
     let stream = upstream
         .bytes_stream()
-        .map(move |chunk_result| {
-            let formatted = process_sse_bytes(
+        .flat_map(move |chunk_result| {
+            let parts = process_sse_bytes(
                 chunk_result,
-                &msg_id,
-                &model,
+                &msg_id_stream,
+                &model_stream,
                 &state,
+                &line_buffer,
                 process_gemini_chunk,
             );
             if let Some(ref t) = trace_map {
-                t.push_sse_text(&formatted);
+                t.push_sse_text(&parts.join(""));
             }
-            Ok::<_, std::convert::Infallible>(formatted)
+            futures_util::stream::iter(
+                parts
+                    .into_iter()
+                    .map(|s| Ok::<_, std::convert::Infallible>(s)),
+            )
         })
-        .chain(futures_util::stream::once(async move {
-            let mut st = state_finalize.lock().unwrap_or_else(|e| e.into_inner());
-            let tail = format_sse_events(&finalize_stream(&mut st));
-            if let Some(t) = trace_finalize {
-                t.push_sse_text(&tail);
-                t.finalize_stream(200);
-            }
-            Ok(tail)
-        }));
+        .chain(
+            futures_util::stream::once(async move {
+                let mut st = state_finalize.lock().unwrap_or_else(|e| e.into_inner());
+                let mut tail_events = Vec::new();
+                if let Some(line) = line_buffer_finalize
+                    .lock()
+                    .unwrap_or_else(|e| e.into_inner())
+                    .drain_remaining()
+                {
+                    tail_events.extend(process_sse_line(
+                        &line,
+                        &msg_id,
+                        &model,
+                        &state_finalize,
+                        process_gemini_chunk,
+                    ));
+                }
+                tail_events.extend(finalize_stream(&mut st));
+                let tail_parts = format_sse_events_parts(&tail_events);
+                if let Some(t) = trace_finalize {
+                    t.push_sse_text(&tail_parts.join(""));
+                    t.finalize_stream(200);
+                }
+                tail_parts
+            })
+            .flat_map(|parts| {
+                futures_util::stream::iter(
+                    parts
+                        .into_iter()
+                        .map(|s| Ok::<_, std::convert::Infallible>(s)),
+                )
+            }),
+        );
 
     sse_response(Body::from_stream(stream))
 }
 
-fn process_sse_bytes<T: AsRef<[u8]>>(
-    chunk_result: Result<T, reqwest::Error>,
+fn process_sse_bytes(
+    chunk_result: Result<impl AsRef<[u8]>, reqwest::Error>,
     msg_id: &str,
     model: &str,
     state: &SharedStreamState,
+    line_buffer: &Arc<Mutex<SseDataLineBuffer>>,
     processor: fn(&Value, &str, &str, &SharedStreamState) -> Vec<Value>,
-) -> String {
+) -> Vec<String> {
     let chunk = match chunk_result {
         Ok(c) => c,
         Err(e) => {
-            return format_sse_events(&[json!({
+            return format_sse_events_parts(&[json!({
                 "type": "error",
                 "error": { "type": "api_error", "message": format!("流读取失败: {e}") }
             })]);
@@ -117,22 +186,35 @@ fn process_sse_bytes<T: AsRef<[u8]>>(
     };
 
     let mut events = Vec::new();
-    let text = String::from_utf8_lossy(chunk.as_ref());
-    for line in text.lines() {
-        let line = line.trim();
-        if !line.starts_with("data:") {
-            continue;
-        }
-        let data = line.trim_start_matches("data:").trim();
-        if data.is_empty() || data == "[DONE]" {
-            continue;
-        }
-        let Ok(parsed) = serde_json::from_str::<Value>(data) else {
-            continue;
-        };
-        events.extend(processor(&parsed, msg_id, model, state));
+    let lines = line_buffer
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .extend(chunk.as_ref());
+    for line in lines {
+        events.extend(process_sse_line(line.as_str(), msg_id, model, state, processor));
     }
-    format_sse_events(&events)
+    format_sse_events_parts(&events)
+}
+
+fn process_sse_line(
+    line: &str,
+    msg_id: &str,
+    model: &str,
+    state: &SharedStreamState,
+    processor: fn(&Value, &str, &str, &SharedStreamState) -> Vec<Value>,
+) -> Vec<Value> {
+    let line = line.trim();
+    if !line.starts_with("data:") {
+        return Vec::new();
+    }
+    let data = line.trim_start_matches("data:").trim();
+    if data.is_empty() || data == "[DONE]" {
+        return Vec::new();
+    }
+    let Ok(parsed) = serde_json::from_str::<Value>(data) else {
+        return Vec::new();
+    };
+    processor(&parsed, msg_id, model, state)
 }
 
 pub(crate) fn process_responses_chunk(

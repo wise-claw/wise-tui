@@ -34,19 +34,117 @@ pub fn has_tool_blocks(state: &AnthropicStreamState) -> bool {
 
 const GEMINI_FC_INDEX: i32 = 0;
 
-pub fn format_sse_events(events: &[Value]) -> String {
-    let mut out = String::new();
-    for ev in events {
-        let ty = ev.get("type").and_then(|t| t.as_str()).unwrap_or("message");
-        if let Ok(s) = serde_json::to_string(ev) {
-            out.push_str("event: ");
-            out.push_str(ty);
-            out.push_str("\ndata: ");
-            out.push_str(&s);
-            out.push_str("\n\n");
+/// 跨 HTTP chunk 累积 SSE 行，避免 `data:` JSON 在 chunk 边界被截断后静默丢弃。
+#[derive(Debug, Default)]
+pub struct SseDataLineBuffer {
+    pending: String,
+}
+
+impl SseDataLineBuffer {
+    pub fn extend(&mut self, bytes: &[u8]) -> Vec<String> {
+        self.pending.push_str(&String::from_utf8_lossy(bytes));
+        let mut lines = Vec::new();
+        while let Some(newline) = self.pending.find('\n') {
+            let line = self.pending[..newline].trim_end_matches('\r').to_string();
+            self.pending.drain(..=newline);
+            lines.push(line);
+        }
+        lines
+    }
+
+    pub fn drain_remaining(&mut self) -> Option<String> {
+        let line = self.pending.trim_end_matches('\r').trim().to_string();
+        self.pending.clear();
+        if line.is_empty() {
+            None
+        } else {
+            Some(line)
         }
     }
-    out
+}
+
+pub fn format_sse_event(ev: &Value) -> Option<String> {
+    let ty = ev.get("type").and_then(|t| t.as_str()).unwrap_or("message");
+    let s = serde_json::to_string(ev).ok()?;
+    Some(format!("event: {ty}\ndata: {s}\n\n"))
+}
+
+pub fn format_sse_events(events: &[Value]) -> String {
+    format_sse_events_parts(events).join("")
+}
+
+/// Split concatenated SSE text into complete frames (each ends with `\n\n`).
+pub fn split_complete_sse_frames(text: &str) -> Vec<String> {
+    if text.is_empty() {
+        return Vec::new();
+    }
+    text.split("\n\n")
+        .filter(|s| !s.trim().is_empty())
+        .map(|s| format!("{s}\n\n"))
+        .collect()
+}
+
+/// 每个 Anthropic SSE 事件单独成块，避免 HTTP chunk 在 JSON 中间切断导致 Claude 解析失败。
+pub fn format_sse_events_parts(events: &[Value]) -> Vec<String> {
+    events.iter().filter_map(format_sse_event).collect()
+}
+
+/// 跨 HTTP chunk 累积 SSE 行，凑齐 `event/data + 空行` 后再输出完整帧。
+#[derive(Debug, Default)]
+pub struct SseFrameBuffer {
+    line_buffer: SseDataLineBuffer,
+    current_lines: Vec<String>,
+}
+
+impl SseFrameBuffer {
+    pub fn extend(&mut self, bytes: &[u8]) -> Vec<String> {
+        let mut frames = Vec::new();
+        for line in self.line_buffer.extend(bytes) {
+            if line.is_empty() {
+                if let Some(frame) = self.try_finish_frame() {
+                    frames.push(frame);
+                } else {
+                    self.current_lines.clear();
+                }
+            } else {
+                self.current_lines.push(line);
+            }
+        }
+        frames
+    }
+
+    pub fn drain_remaining(&mut self) -> Vec<String> {
+        if let Some(line) = self.line_buffer.drain_remaining() {
+            self.current_lines.push(line);
+        }
+        self.try_finish_frame().into_iter().collect()
+    }
+
+    fn try_finish_frame(&mut self) -> Option<String> {
+        if self.current_lines.is_empty() {
+            return None;
+        }
+        let data = self.collect_data_payload();
+        if data.is_empty() || serde_json::from_str::<Value>(&data).is_err() {
+            return None;
+        }
+        Some(self.finish_frame())
+    }
+
+    fn collect_data_payload(&self) -> String {
+        self.current_lines
+            .iter()
+            .filter_map(|line| line.strip_prefix("data:").map(|d| d.trim_start()))
+            .collect::<Vec<_>>()
+            .join("\n")
+    }
+
+    fn finish_frame(&mut self) -> String {
+        let mut frame = self.current_lines.join("\n");
+        frame.push_str("\n\n");
+        self.current_lines.clear();
+        frame
+    }
 }
 
 pub fn ensure_message_start(
@@ -548,5 +646,51 @@ mod tests {
                 .and_then(|t| t.as_str())
                 == Some("input_json_delta")
         }));
+    }
+
+    #[test]
+    fn split_complete_sse_frames_splits_on_blank_line() {
+        let raw = "event: content_block_delta\ndata: {\"type\":\"content_block_delta\"}\n\nevent: message_stop\ndata: {\"type\":\"message_stop\"}\n\n";
+        let frames = split_complete_sse_frames(raw);
+        assert_eq!(frames.len(), 2);
+        assert!(frames[0].starts_with("event: content_block_delta\n"));
+        assert!(frames[0].ends_with("\n\n"));
+    }
+
+    #[test]
+    fn sse_frame_buffer_reassembles_split_data_prefix() {
+        let mut buf = SseFrameBuffer::default();
+        assert!(buf.extend(b"event: content_block_delta\n").is_empty());
+        assert!(buf.extend(b"da").is_empty());
+        let frames = buf.extend(b"ta: {\"type\":\"x\"}\n\n");
+        assert_eq!(frames.len(), 1);
+        assert!(frames[0].contains("data: {\"type\":\"x\"}"));
+    }
+
+    #[test]
+    fn sse_frame_buffer_does_not_emit_incomplete_json_at_eof() {
+        let mut buf = SseFrameBuffer::default();
+        assert!(buf.extend(b"event: content_block_delta\n").is_empty());
+        assert!(buf
+            .extend(b"data: {\"delta\":{\"type\":\"signa")
+            .is_empty());
+        assert!(buf.drain_remaining().is_empty());
+    }
+
+    #[test]
+    fn sse_frame_buffer_does_not_emit_event_only_frame() {
+        let mut buf = SseFrameBuffer::default();
+        assert!(buf.extend(b"event: content_block_delta\n\n").is_empty());
+    }
+
+    #[test]
+    fn format_sse_events_parts_emit_one_frame_each() {
+        let parts = format_sse_events_parts(&[
+            json!({"type":"message_start","message":{"id":"m1"}}),
+            json!({"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"hi"}}),
+        ]);
+        assert_eq!(parts.len(), 2);
+        assert!(parts[0].starts_with("event: message_start\n"));
+        assert!(parts[1].contains("thinking_delta"));
     }
 }

@@ -204,13 +204,28 @@ export function useOpencodeGoProxySetting() {
     [apiKeyDraft, providerDraft, status?.hasApiKey],
   );
 
+  const reconcileClientAlignment = useCallback(
+    async (st: OpencodeGoProxyStatus): Promise<OpencodeGoProxyStatus> => {
+      if (
+        !st.running ||
+        (st.claudeSettingsAligned && st.codexSettingsAligned)
+      ) {
+        return st;
+      }
+      await applyOpencodeGoProxyClientSettings();
+      return getOpencodeGoProxyStatus();
+    },
+    [],
+  );
+
   const refresh = useCallback(async () => {
     try {
-      const [st, llm, fcc] = await Promise.all([
+      const [stRaw, llm, fcc] = await Promise.all([
         getOpencodeGoProxyStatus(),
         getClaudeLlmProxyStatus(),
         getFreeClaudeCodeStatus(),
       ]);
+      const st = await reconcileClientAlignment(stRaw);
       setStatus(st);
       setLlmProxyStatus(llm);
       setFccStatus(fcc);
@@ -228,7 +243,7 @@ export function useOpencodeGoProxySetting() {
     } finally {
       setLoading(false);
     }
-  }, [applyDraftFromStatus, fetchRemoteModels]);
+  }, [applyDraftFromStatus, fetchRemoteModels, reconcileClientAlignment]);
 
   useEffect(() => {
     void refresh();
@@ -520,7 +535,8 @@ export function useOpencodeGoProxySetting() {
       }
       setBusy(true);
       try {
-        const st = await switchOpencodeGoProxyModel(trimmed);
+        let st = await switchOpencodeGoProxyModel(trimmed);
+        st = await reconcileClientAlignment(st);
         setStatus(st);
         applyDraftFromStatus(st);
         message.success(`已切换上游模型：${trimmed}`);
@@ -532,7 +548,7 @@ export function useOpencodeGoProxySetting() {
         setBusy(false);
       }
     },
-    [status, applyDraftFromStatus],
+    [status, applyDraftFromStatus, reconcileClientAlignment],
   );
 
   const commitDefaultModelIfRunning = useCallback(() => {
@@ -571,7 +587,7 @@ export function useOpencodeGoProxySetting() {
           setApiKeyDraft("");
         }
         void fetchRemoteModels(providerDraft, apiKeyDraft.trim() || undefined);
-        return result;
+        return reconcileClientAlignment(result);
       }),
     [
       apiKeyDraft,
@@ -585,6 +601,7 @@ export function useOpencodeGoProxySetting() {
       runAction,
       status,
       fetchRemoteModels,
+      reconcileClientAlignment,
     ],
   );
 

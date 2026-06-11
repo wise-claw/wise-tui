@@ -196,6 +196,22 @@ pub fn apply_opencode_profile_to_disk(profile: &Value, model_id: &str) -> Result
     write_opencode_config_json(&merged)
 }
 
+/// 将 OpenCode 全局 `model` 与代理/档案选择对齐；已一致时跳过写盘。
+pub fn mirror_opencode_global_model(model_id: &str) -> Result<bool, String> {
+    let mid = model_id.trim();
+    if mid.is_empty() {
+        return Ok(false);
+    }
+    let existing = effective_opencode_model_from_disk().unwrap_or_default();
+    if existing == mid {
+        return Ok(false);
+    }
+    let mut current = read_opencode_config_json();
+    sync_opencode_model_selection(&mut current, mid)?;
+    write_opencode_config_json(&current)?;
+    Ok(true)
+}
+
 pub fn opencode_config_json_to_pretty(value: &Value) -> Result<String, String> {
     serde_json::to_string_pretty(value).map_err(|e| e.to_string())
 }

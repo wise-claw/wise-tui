@@ -77,10 +77,32 @@ export function OpencodeGoProxyPanel({ proxy, onClose }: Props) {
               className={
                 "app-ocgo-topbar-panel__chip" +
                 (st && !st.claudeSettingsAligned && running
-                  ? " app-ocgo-topbar-panel__chip--warn"
+                  ? " app-ocgo-topbar-panel__chip--warn app-ocgo-topbar-panel__chip--action"
                   : running && st?.claudeSettingsAligned
                     ? " app-ocgo-topbar-panel__chip--on"
                     : "")
+              }
+              role={running && st && !st.claudeSettingsAligned ? "button" : undefined}
+              tabIndex={running && st && !st.claudeSettingsAligned ? 0 : undefined}
+              title={
+                running && st && !st.claudeSettingsAligned
+                  ? "点击同步 Claude settings.json"
+                  : undefined
+              }
+              onClick={
+                running && st && !st.claudeSettingsAligned
+                  ? () => void proxy.applyClaudeSettings()
+                  : undefined
+              }
+              onKeyDown={
+                running && st && !st.claudeSettingsAligned
+                  ? (event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        void proxy.applyClaudeSettings();
+                      }
+                    }
+                  : undefined
               }
             >
               {claudeLabel}
@@ -89,10 +111,32 @@ export function OpencodeGoProxyPanel({ proxy, onClose }: Props) {
               className={
                 "app-ocgo-topbar-panel__chip" +
                 (st && !st.codexSettingsAligned && running
-                  ? " app-ocgo-topbar-panel__chip--warn"
+                  ? " app-ocgo-topbar-panel__chip--warn app-ocgo-topbar-panel__chip--action"
                   : running && st?.codexSettingsAligned
                     ? " app-ocgo-topbar-panel__chip--on"
                     : "")
+              }
+              role={running && st && !st.codexSettingsAligned ? "button" : undefined}
+              tabIndex={running && st && !st.codexSettingsAligned ? 0 : undefined}
+              title={
+                running && st && !st.codexSettingsAligned
+                  ? "点击同步 Codex config.toml"
+                  : undefined
+              }
+              onClick={
+                running && st && !st.codexSettingsAligned
+                  ? () => void proxy.applyCodexSettings()
+                  : undefined
+              }
+              onKeyDown={
+                running && st && !st.codexSettingsAligned
+                  ? (event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        void proxy.applyCodexSettings();
+                      }
+                    }
+                  : undefined
               }
             >
               {codexLabel}

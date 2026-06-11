@@ -924,6 +924,11 @@ pub(crate) fn failover_to_next_model_profile(
     }
     save_store(&db, &next)?;
     let store_view = store_view_after_disk_write(&next);
+    if profile_engine(&profile) == "opencode" {
+        if let Ok(model_id) = resolve_profile_model_id(&profile) {
+            crate::opencode_go_proxy::sync_opencode_proxy_clients_after_model_change(&db, &model_id)?;
+        }
+    }
     let trimmed_model_id = profile.model_id.trim();
     let model_id = if !trimmed_model_id.is_empty() {
         trimmed_model_id.to_string()
@@ -960,6 +965,11 @@ pub(crate) fn apply_claude_model_profile(
         .clone();
     apply_profile_to_disk(&profile)?;
     sync_llm_proxy_upstream_for_claude_profile(&app, &db, &profile);
+    if profile_engine(&profile) == "opencode" {
+        if let Ok(model_id) = resolve_profile_model_id(&profile) {
+            crate::opencode_go_proxy::sync_opencode_proxy_clients_after_model_change(&db, &model_id)?;
+        }
+    }
     let mut next = store;
     if profile_engine(&profile) == "codex" {
         next.active_codex_profile_id = Some(id.to_string());

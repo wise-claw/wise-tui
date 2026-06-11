@@ -878,31 +878,94 @@ async fn forward_anthropic_passthrough(
             stream_passthrough_repair::PassthroughRepairState::default(),
         ));
         let repair_state_chunk = repair_state.clone();
-        let stream = upstream_resp.bytes_stream().map(move |chunk| {
-            let formatted = match chunk {
+        let frame_buffer = std::sync::Arc::new(std::sync::Mutex::new(
+            stream_common::SseFrameBuffer::default(),
+        ));
+        let frame_buffer_chunk = frame_buffer.clone();
+        let frame_buffer_finalize = frame_buffer.clone();
+        let stream = upstream_resp.bytes_stream().flat_map(move |chunk| {
+            let parts: Vec<String> = match chunk {
                 Ok(bytes) => {
-                    let text = String::from_utf8_lossy(&bytes);
+                    let Ok(mut fb) = frame_buffer_chunk.lock() else {
+                        return futures_util::stream::empty::<
+                            Result<axum::body::Bytes, std::io::Error>,
+                        >()
+                        .boxed();
+                    };
+                    let frames = fb.extend(&bytes);
+                    drop(fb);
                     if repair_passthrough {
                         let Ok(mut st) = repair_state_chunk.lock() else {
-                            return Ok(bytes);
+                            return futures_util::stream::empty::<
+                                Result<axum::body::Bytes, std::io::Error>,
+                            >()
+                            .boxed();
                         };
-                        stream_passthrough_repair::repair_passthrough_sse_chunk(&text, &mut st)
+                        frames
+                            .into_iter()
+                            .filter_map(|frame| {
+                                stream_passthrough_repair::repair_passthrough_sse_frame(
+                                    &frame, &mut st,
+                                )
+                            })
+                            .collect()
                     } else {
-                        text.into_owned()
+                        frames
                     }
                 }
-                Err(e) => return Err(std::io::Error::other(e)),
+                Err(e) => {
+                    return futures_util::stream::once(async move {
+                        Err::<axum::body::Bytes, std::io::Error>(std::io::Error::other(e))
+                    })
+                    .boxed();
+                }
             };
             if let Some(ref t) = trace_capture {
-                t.push_sse_text(&formatted);
+                t.push_sse_text(&parts.join(""));
             }
-            Ok::<_, std::io::Error>(axum::body::Bytes::from(formatted))
+            futures_util::stream::iter(
+                parts
+                    .into_iter()
+                    .map(|s| Ok(axum::body::Bytes::from(s))),
+            )
+            .boxed()
         });
         let stream = stream.chain(futures_util::stream::once(async move {
+            let tail_parts: Vec<String> = {
+                let Ok(mut fb) = frame_buffer_finalize.lock() else {
+                    return Ok::<_, std::io::Error>(Vec::new());
+                };
+                let mut frames = fb.drain_remaining();
+                if repair_passthrough {
+                    let Ok(mut st) = repair_state.lock() else {
+                        return Ok(Vec::new());
+                    };
+                    frames = frames
+                        .into_iter()
+                        .filter_map(|frame| {
+                            stream_passthrough_repair::repair_passthrough_sse_frame(&frame, &mut st)
+                        })
+                        .collect();
+                }
+                frames
+            };
             if let Some(t) = trace {
+                if !tail_parts.is_empty() {
+                    t.push_sse_text(&tail_parts.join(""));
+                }
                 t.finalize_stream(status.as_u16());
             }
-            Ok::<_, std::io::Error>(axum::body::Bytes::new())
+            Ok(tail_parts)
+        }).flat_map(|result| {
+            match result {
+                Ok(parts) => futures_util::stream::iter(
+                    parts
+                        .into_iter()
+                        .map(|s| Ok(axum::body::Bytes::from(s))),
+                )
+                .boxed(),
+                Err(e) => futures_util::stream::once(async move { Err(e) }).boxed(),
+            }
         }));
         let body = Body::from_stream(stream);
         return Response::builder()
@@ -1138,14 +1201,16 @@ pub async fn switch_opencode_go_proxy_model(
         .unwrap_or_else(|e| e.into_inner())
         .is_some()
     {
-        let config_text =
-            crate::codex_config_dir::read_codex_profile_envelope().config;
-        if codex_bridge_present_in_config(&config_text) {
-            let port = resolve_active_port(&cfg);
-            let model = cfg.effective_model();
-            let _ = tokio::task::spawn_blocking(move || apply_codex_settings_sync(port, &model))
-                .await;
-        }
+        let port = resolve_active_port(&cfg);
+        let model = cfg.effective_model();
+        let provider = routing::provider_label(cfg.effective_provider()).to_string();
+        tokio::task::spawn_blocking(move || {
+            sync_opencode_proxy_client_settings(port, &model)?;
+            mirror_proxy_model_to_opencode_json(&provider, &model)?;
+            Ok::<(), String>(())
+        })
+            .await
+            .map_err(|e| e.to_string())??;
     }
     Ok(build_status(&cfg).await)
 }
@@ -1156,10 +1221,31 @@ pub async fn save_opencode_go_proxy_prefs(
     db: tauri::State<'_, crate::wise_db::WiseDb>,
     input: OpencodeGoProxyPrefsInput,
 ) -> Result<OpencodeGoProxyStatus, String> {
-    let mut cfg = load_persisted(&db);
+    let prev_cfg = load_persisted(&db);
+    let mut cfg = prev_cfg.clone();
     apply_prefs_patch(&mut cfg, &input);
     apply_runtime_config(&db, cfg)?;
     let cfg = load_persisted_into_cell(&db);
+    if server_cell()
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .is_some()
+    {
+        let port_changed = prev_cfg.port != cfg.port;
+        let model_changed = prev_cfg.effective_model() != cfg.effective_model();
+        if port_changed || model_changed {
+            let port = resolve_active_port(&cfg);
+            let model = cfg.effective_model();
+            let provider = routing::provider_label(cfg.effective_provider()).to_string();
+            tokio::task::spawn_blocking(move || {
+                sync_opencode_proxy_client_settings(port, &model)?;
+                mirror_proxy_model_to_opencode_json(&provider, &model)?;
+                Ok::<(), String>(())
+            })
+            .await
+            .map_err(|e| e.to_string())??;
+        }
+    }
     Ok(build_status(&cfg).await)
 }
 
@@ -1323,9 +1409,10 @@ pub async fn set_opencode_go_proxy_config(
         start_server(cfg.clone()).await?;
         let port = resolve_active_port(&cfg);
         let model = cfg.effective_model();
+        let provider = routing::provider_label(cfg.effective_provider()).to_string();
         tokio::task::spawn_blocking(move || {
-            apply_claude_settings_sync(port)?;
-            apply_codex_settings_sync(port, &model)?;
+            sync_opencode_proxy_client_settings(port, &model)?;
+            mirror_proxy_model_to_opencode_json(&provider, &model)?;
             Ok::<(), String>(())
         })
         .await
@@ -1353,13 +1440,10 @@ pub async fn apply_opencode_go_proxy_client_settings(
     }
     let port = resolve_active_port(&cfg);
     let model = cfg.effective_model();
-    tokio::task::spawn_blocking(move || {
-        apply_claude_settings_sync(port)?;
-        apply_codex_settings_sync(port, &model)?;
-        Ok::<bool, String>(true)
-    })
-    .await
-    .map_err(|e| e.to_string())?
+    tokio::task::spawn_blocking(move || sync_opencode_proxy_client_settings(port, &model))
+        .await
+        .map_err(|e| e.to_string())?
+        .map(|(claude, codex)| claude || codex)
 }
 
 #[tauri::command]
@@ -1413,6 +1497,75 @@ fn proxy_running_with_key(cfg: &OpencodeGoProxyConfig) -> bool {
             .lock()
             .unwrap_or_else(|e| e.into_inner())
             .is_some()
+}
+
+/// `provider/model` 或裸模型 ID → 代理上游模型 ID。
+pub(crate) fn proxy_upstream_model_from_opencode_model(model: &str) -> String {
+    let trimmed = model.trim();
+    if trimmed.is_empty() {
+        return String::new();
+    }
+    trimmed
+        .rsplit_once('/')
+        .map(|(_, id)| id.trim())
+        .filter(|id| !id.is_empty())
+        .unwrap_or(trimmed)
+        .to_string()
+}
+
+fn opencode_model_selection_for_proxy(cfg: &OpencodeGoProxyConfig, upstream: &str) -> String {
+    format!(
+        "{}/{}",
+        routing::provider_label(cfg.effective_provider()),
+        upstream.trim()
+    )
+}
+
+fn mirror_proxy_model_to_opencode_json(provider: &str, upstream_model: &str) -> Result<bool, String> {
+    let selection = format!("{}/{}", provider.trim(), upstream_model.trim());
+    crate::opencode_config_dir::mirror_opencode_global_model(&selection)
+}
+
+fn sync_opencode_proxy_client_settings(
+    port: u16,
+    default_model: &str,
+) -> Result<(bool, bool), String> {
+    let claude_changed = apply_claude_settings_sync(port)?;
+    let codex_changed = apply_codex_settings_sync(port, default_model)?;
+    Ok((claude_changed, codex_changed))
+}
+
+/// OpenCode 全局 model 变更后：热更新代理默认模型，并在代理运行中时同步 Claude/Codex 与 opencode.json。
+pub(crate) fn sync_opencode_proxy_clients_after_model_change(
+    db: &crate::wise_db::WiseDb,
+    opencode_model: &str,
+) -> Result<(), String> {
+    let upstream = proxy_upstream_model_from_opencode_model(opencode_model);
+    if upstream.is_empty() {
+        return Ok(());
+    }
+    let mut cfg = load_persisted(db);
+    if !cfg.enabled || cfg.api_key.trim().is_empty() {
+        return Ok(());
+    }
+    if cfg.effective_model() != upstream {
+        cfg.default_model = upstream.clone();
+        apply_runtime_config(db, cfg)?;
+    }
+    let cfg = load_persisted(db);
+    if !proxy_running_with_key(&cfg) {
+        return Ok(());
+    }
+    let port = resolve_active_port(&cfg);
+    let model = cfg.effective_model();
+    sync_opencode_proxy_client_settings(port, &model)?;
+    let mirror_selection = if opencode_model.contains('/') {
+        opencode_model.trim().to_string()
+    } else {
+        opencode_model_selection_for_proxy(&cfg, &model)
+    };
+    crate::opencode_config_dir::mirror_opencode_global_model(&mirror_selection)?;
+    Ok(())
 }
 
 /// Codex `exec` 前：若内置代理运行中，覆盖 `~/.codex` 桥接配置并返回应使用的上游模型 ID。
@@ -1479,6 +1632,9 @@ fn patch_codex_auth_for_bridge(
 }
 
 fn apply_codex_settings_sync(port: u16, default_model: &str) -> Result<bool, String> {
+    if codex_settings_aligned(port, default_model) {
+        return Ok(false);
+    }
     let current = crate::codex_config_dir::read_codex_profile_envelope();
     let config = merge_codex_bridge_into_config(&current.config, port, default_model);
     // 弃用 v2 profile 文件，避免 `--profile` 与根级 `model_provider` 双轨不一致。
@@ -1493,6 +1649,9 @@ fn apply_codex_settings_sync(port: u16, default_model: &str) -> Result<bool, Str
 }
 
 fn apply_claude_settings_sync(port: u16) -> Result<bool, String> {
+    if claude_settings_aligned(port) {
+        return Ok(false);
+    }
 
     let settings_path = crate::claude_config_dir::user_claude_dir().join("settings.json");
     let mut root: Value = if settings_path.is_file() {
@@ -1617,5 +1776,17 @@ model = "qwen3.7-plus"
     fn codex_base_url_normalizes_trailing_slash() {
         assert!(codex_base_url_matches("http://127.0.0.1:9876/v1/", 9876));
         assert!(codex_base_url_matches("http://127.0.0.1:9876/v1", 9876));
+    }
+
+    #[test]
+    fn extracts_upstream_model_from_provider_slash_model() {
+        assert_eq!(
+            proxy_upstream_model_from_opencode_model("opencode-go/kimi-k2.6"),
+            "kimi-k2.6"
+        );
+        assert_eq!(
+            proxy_upstream_model_from_opencode_model("kimi-k2.6"),
+            "kimi-k2.6"
+        );
     }
 }

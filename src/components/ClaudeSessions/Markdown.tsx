@@ -8,8 +8,11 @@ import {
   sanitizeRichMessageHtml,
   splitRichMessageContent,
 } from "../../utils/richMessageHtml";
+import { normalizeMarkdownForDisplay } from "../../utils/markdownDisplayNormalize";
 
 // ── Markdown Renderer ──
+
+marked.use({ gfm: true, breaks: true });
 
 const COPY_ICON = '<svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><path d="M6.25 6.25V2.92h10.83v10.83h-3.33M13.75 6.25v10.83H2.92V6.25h10.83z"/></svg>';
 const CHECK_ICON = '<svg width="16" height="16" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="square"><path d="M5 12l3.38 2.79L15 5.83"/></svg>';
@@ -33,7 +36,8 @@ function escapeHtml(text: string) {
 
 function renderMarkdown(text: string) {
   try {
-    const html = marked.parse(text, { breaks: true, gfm: true });
+    const normalized = normalizeMarkdownForDisplay(text);
+    const html = marked.parse(normalized, { breaks: true, gfm: true });
     if (typeof html !== "string") return "";
     return DOMPurify.sanitize(html, {
       USE_PROFILES: { html: true, mathMl: true },
