@@ -29,6 +29,8 @@ import {
 } from "./SidebarIcons";
 import {
   FloatingRepositoryRow,
+  OpenInEditorAction,
+  OpenInTerminalAction,
   ProjectRepositoryRows,
   RepositoryTrellisAction,
   SidebarExecutableTasksAction,
@@ -720,6 +722,12 @@ function ProjectRow({
               executableCount={projectExecutableTaskCount}
               onOpen={() => onOpenExecutableTasksForProject(project)}
             />
+          ) : null}
+          {openProjectInPreferredEditor ? (
+            <OpenInEditorAction onOpen={() => openProjectInPreferredEditor(project)} />
+          ) : null}
+          {onOpenProjectInTerminal ? (
+            <OpenInTerminalAction onOpen={() => onOpenProjectInTerminal(project)} />
           ) : null}
           <SidebarWorkspaceRemindersAction
             enabled={workspaceTodosEnabled}

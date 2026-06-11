@@ -32,6 +32,8 @@ import {
   ChatIcon,
   ExecutableTasksIcon,
   MoreIcon,
+  OpenInEditorIcon,
+  OpenInTerminalIcon,
   RepositoryTypeIcon,
   RepoDragHandleIcon,
   ScheduledTasksIcon,
@@ -323,6 +325,54 @@ export const SidebarExecutableTasksAction = memo(function SidebarExecutableTasks
             {badgeLabel}
           </span>
         </span>
+      </button>
+    </DeferredHoverTooltip>
+  );
+});
+
+export const OpenInEditorAction = memo(function OpenInEditorAction({
+  onOpen,
+  label = "在编辑器中打开",
+}: {
+  onOpen: () => void;
+  label?: string;
+}) {
+  return (
+    <DeferredHoverTooltip title={label}>
+      <button
+        type="button"
+        className="app-repository-action app-repository-action--task app-repository-action--primary app-repository-action--editor"
+        aria-label={label}
+        onClick={(e) => {
+          e.stopPropagation();
+          onOpen();
+        }}
+      >
+        <OpenInEditorIcon />
+      </button>
+    </DeferredHoverTooltip>
+  );
+});
+
+export const OpenInTerminalAction = memo(function OpenInTerminalAction({
+  onOpen,
+  label = "在终端中打开",
+}: {
+  onOpen: () => void;
+  label?: string;
+}) {
+  return (
+    <DeferredHoverTooltip title={label}>
+      <button
+        type="button"
+        className="app-repository-action app-repository-action--task app-repository-action--primary app-repository-action--terminal"
+        aria-label={label}
+        onClick={(e) => {
+          e.stopPropagation();
+          onOpen();
+        }}
+      >
+        <OpenInTerminalIcon />
       </button>
     </DeferredHoverTooltip>
   );
@@ -624,6 +674,8 @@ function RepositoryRowInner({
               onOpen={() => onOpenExecutableTasks(repository)}
             />
           ) : null}
+          <OpenInEditorAction onOpen={() => onOpenRepositoryInEditor(repository)} />
+          {onOpenInTerminal ? <OpenInTerminalAction onOpen={() => onOpenInTerminal(repository)} /> : null}
           <SidebarWorkspaceRemindersAction
             enabled={workspaceTodosEnabled}
             projectId={project.id}
@@ -888,6 +940,8 @@ function FloatingRepositoryRowInner({
               onOpen={() => onOpenExecutableTasks(repository)}
             />
           ) : null}
+          <OpenInEditorAction onOpen={() => onOpenRepositoryInEditor(repository)} />
+          {onOpenInTerminal ? <OpenInTerminalAction onOpen={() => onOpenInTerminal(repository)} /> : null}
           <SidebarWorkspaceRemindersAction
             enabled={workspaceTodosEnabled}
             projectId={null}
