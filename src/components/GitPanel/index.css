@@ -514,7 +514,7 @@
 /* ── Loading Bar ── */
 .git-panel-loading-bar {
   position: relative;
-  height: 3px;
+  height: 0;
   width: 100%;
   flex-shrink: 0;
   overflow: hidden;

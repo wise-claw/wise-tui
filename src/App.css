@@ -2125,7 +2125,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   flex-direction: column;
   overflow-x: hidden;
   overflow-y: hidden;
-  gap: 2px;
+  gap: 0;
   padding: 0;
 }
 
