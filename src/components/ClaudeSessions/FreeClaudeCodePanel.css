@@ -99,6 +99,52 @@
   margin-right: 6px;
 }
 
+.app-fcc-topbar-panel__status-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 6px;
+  margin-bottom: 6px;
+  padding: 4px 6px;
+  border-radius: 4px;
+  background: var(--ant-color-fill-quaternary);
+  border: 1px solid var(--ant-color-border-secondary);
+}
+
+.app-fcc-topbar-panel__chip {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  padding: 1px 7px;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--ant-color-text-secondary);
+  background: var(--ant-color-bg-container);
+  border: 1px solid var(--ant-color-border-secondary);
+  white-space: nowrap;
+}
+
+.app-fcc-topbar-panel__chip--on {
+  color: var(--ant-color-success);
+  border-color: var(--ant-color-success-border);
+  background: var(--ant-color-success-bg);
+}
+
+.app-fcc-topbar-panel__chip--warn {
+  color: var(--ant-color-warning);
+  border-color: var(--ant-color-warning-border);
+  background: var(--ant-color-warning-bg);
+}
+
+.app-fcc-topbar-panel__chip--action {
+  cursor: pointer;
+}
+
+.app-fcc-topbar-panel__chip--action:hover {
+  filter: brightness(0.97);
+}
+
 .app-fcc-topbar-panel__deps {
   list-style: none;
   margin: 0 0 8px;
@@ -160,7 +206,7 @@
 
 .app-fcc-topbar-panel__actions {
   display: grid;
-  grid-template-columns: repeat(5, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 4px;
   width: 100%;
   margin-bottom: 6px;
@@ -181,8 +227,15 @@
 .app-fcc-topbar-panel__action-btn {
   width: 100%;
   min-width: 0;
+  height: auto !important;
+  min-height: 24px;
+  padding-block: 2px !important;
   padding-inline: 4px !important;
   font-size: 12px !important;
+  line-height: 1.25 !important;
+  white-space: normal;
+  word-break: keep-all;
+  overflow: hidden;
 }
 
 .app-fcc-topbar-panel__action-btn--close {

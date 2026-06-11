@@ -6,7 +6,10 @@ export function buildFccSummaryMessage(st: FreeClaudeCodeStatus): string {
     if (!st.managedByWise) {
       return "代理服务运行中（非 Wise 启动）。点击「停止」将尝试结束本机 fcc-server 进程。";
     }
-    return "代理服务运行中，可在 Admin UI 配置 Provider Key。";
+    if (!st.claudeSettingsAligned) {
+      return "代理已运行，但 Claude Code 尚未指向 FCC。请按引导同步 settings.json。";
+    }
+    return "代理服务运行中，Claude 配置已对齐；可在 Admin UI 配置 Provider Key。";
   }
   if (st.installed) {
     return "已安装 fcc-server，点击「启动」运行代理服务。";
@@ -17,7 +20,12 @@ export function buildFccSummaryMessage(st: FreeClaudeCodeStatus): string {
   return "请先安装 uv（https://astral.sh/uv），再使用「一键安装」。";
 }
 
-export type FccDependencyRowId = "uv" | "fcc-server" | "claude-cli" | "proxy";
+export type FccDependencyRowId =
+  | "uv"
+  | "fcc-server"
+  | "claude-cli"
+  | "proxy"
+  | "claude-settings";
 
 export interface FccDependencyRow {
   id: FccDependencyRowId;
@@ -52,6 +60,12 @@ export function buildFccDependencyRows(st: FreeClaudeCodeStatus): FccDependencyR
       label: "代理服务",
       help: "fcc-server 监听端口并已接受连接。",
       ready: st.serverRunning,
+    },
+    {
+      id: "claude-settings",
+      label: "Claude 配置",
+      help: "Claude Code settings.json 中的 ANTHROPIC_BASE_URL 已指向本机 FCC 代理。",
+      ready: st.serverRunning && st.claudeSettingsAligned,
     },
   ];
 }

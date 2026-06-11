@@ -38,9 +38,11 @@ export function FreeClaudeCodePanel({ fcc, onClose }: Props) {
   const disabled = fcc.loading || fcc.busy;
   const running = st?.serverRunning ?? false;
   const installed = st?.installed ?? false;
+  const claudeAligned = st?.claudeSettingsAligned ?? false;
   const canInstall = !disabled && (!installed || !running);
   const canUninstall = !disabled && installed && !running;
   const uninstallBlockedReason = installed && running ? "请先点击「停止」后再卸载" : undefined;
+  const claudeLabel = !running ? "Claude —" : claudeAligned ? "Claude 已对齐" : "Claude 未对齐";
 
   const summary = st != null ? buildFccSummaryMessage(st) : "无法读取状态";
   const rows = st ? buildFccDependencyRows(st) : [];
@@ -105,6 +107,39 @@ export function FreeClaudeCodePanel({ fcc, onClose }: Props) {
           )}
         </Typography.Paragraph>
       </header>
+
+      {running ? (
+        <div className="app-fcc-topbar-panel__status-bar" aria-label="Claude 配置状态">
+          <span
+            className={
+              "app-fcc-topbar-panel__chip" +
+              (claudeAligned
+                ? " app-fcc-topbar-panel__chip--on"
+                : " app-fcc-topbar-panel__chip--warn app-fcc-topbar-panel__chip--action")
+            }
+            role={!claudeAligned ? "button" : undefined}
+            tabIndex={!claudeAligned ? 0 : undefined}
+            title={!claudeAligned ? "点击同步 Claude settings.json" : undefined}
+            onClick={
+              !claudeAligned && !disabled
+                ? () => void fcc.applyClaudeSettings()
+                : undefined
+            }
+            onKeyDown={
+              !claudeAligned && !disabled
+                ? (event) => {
+                    if (event.key === "Enter" || event.key === " ") {
+                      event.preventDefault();
+                      void fcc.applyClaudeSettings();
+                    }
+                  }
+                : undefined
+            }
+          >
+            {claudeLabel}
+          </span>
+        </div>
+      ) : null}
 
       <ul className="app-fcc-topbar-panel__deps" aria-label="依赖状态">
         {rows.map((row) => (
@@ -193,6 +228,14 @@ export function FreeClaudeCodePanel({ fcc, onClose }: Props) {
           onClick={() => void fcc.openAdmin()}
         >
           Admin UI
+        </Button>
+        <Button
+          size="small"
+          className="app-fcc-topbar-panel__action-btn"
+          disabled={disabled || !running || claudeAligned}
+          onClick={() => void fcc.applyClaudeSettings()}
+        >
+          同步 Claude 设置
         </Button>
         <Button
           size="small"

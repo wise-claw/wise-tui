@@ -1,5 +1,10 @@
 import { Modal, message } from "antd";
 import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { getClaudeLlmProxyStatus } from "../../services/claudeLlmProxy";
+import {
+  showFccClaudeSettingsGuideModal,
+  tryReconcileFccClaudeSettings,
+} from "../../services/freeClaudeCodeClaudeAlignment";
 import {
   applyFreeClaudeCodeClaudeSettings,
   installFreeClaudeCode,
@@ -11,6 +16,11 @@ import {
   uninstallFreeClaudeCode,
   type FreeClaudeCodeStatus,
 } from "../../services/freeClaudeCode";
+import { getOpencodeGoProxyStatus } from "../../services/opencodeGoProxy";
+import {
+  anthropicProxyConflictMessage,
+  resolveAnthropicProxyConflict,
+} from "../../utils/anthropicProxyConflict";
 import {
   getFccTracesStoreSnapshot,
   refreshFccTracesStoreNow,
@@ -59,13 +69,33 @@ export function useFreeClaudeCodeSetting() {
     };
   }, []);
 
+  const reconcileClaudeSettings = useCallback(
+    async (st: FreeClaudeCodeStatus | null): Promise<FreeClaudeCodeStatus | null> => {
+      if (!st?.serverRunning || st.claudeSettingsAligned) {
+        return st;
+      }
+      const result = await tryReconcileFccClaudeSettings(st);
+      if (result.applied) {
+        message.success("已自动同步 Claude settings.json");
+        return result.status;
+      }
+      return st;
+    },
+    [],
+  );
+
   const refresh = useCallback(async () => {
     try {
       await refreshFccTracesStoreNow();
+      const current = getFccTracesStoreSnapshot().status;
+      const reconciled = await reconcileClaudeSettings(current);
+      if (reconciled && reconciled !== current) {
+        await refreshFccTracesStoreNow();
+      }
     } catch (err) {
       message.error(`读取 Free Claude Code 状态失败：${err instanceof Error ? err.message : String(err)}`);
     }
-  }, []);
+  }, [reconcileClaudeSettings]);
 
   const runAction = useCallback(
     async (label: string, fn: () => Promise<FreeClaudeCodeStatus | boolean | string>) => {
@@ -83,10 +113,41 @@ export function useFreeClaudeCodeSetting() {
     [refresh],
   );
 
-  const startServer = useCallback(
-    () => runAction("已启动 FCC 代理", startFreeClaudeCodeServer),
-    [runAction],
-  );
+  const startServer = useCallback(async () => {
+    setBusy(true);
+    try {
+      const started = await startFreeClaudeCodeServer();
+      const [ocgo, llm] = await Promise.all([
+        getOpencodeGoProxyStatus(),
+        getClaudeLlmProxyStatus(),
+      ]);
+      const conflictMessage = anthropicProxyConflictMessage(
+        resolveAnthropicProxyConflict(ocgo, llm, started),
+      );
+      if (conflictMessage) {
+        message.warning(conflictMessage);
+      }
+
+      const alignment = await tryReconcileFccClaudeSettings(started);
+      await refreshFccTracesStoreNow();
+
+      if (alignment.applied) {
+        message.success("已启动 FCC 代理并同步 Claude settings.json");
+      } else if (alignment.needsGuide) {
+        message.success("已启动 FCC 代理");
+        showFccClaudeSettingsGuideModal(alignment.status);
+      } else if (started.claudeSettingsAligned) {
+        message.success("已启动 FCC 代理，Claude 配置已对齐");
+      } else {
+        message.success("已启动 FCC 代理");
+      }
+    } catch (err) {
+      message.error(`启动 FCC 代理失败：${err instanceof Error ? err.message : String(err)}`);
+      throw err;
+    } finally {
+      setBusy(false);
+    }
+  }, []);
 
   const stopServer = useCallback(
     () => runAction("已停止 FCC 代理服务", stopFreeClaudeCodeServer),
@@ -125,10 +186,31 @@ export function useFreeClaudeCodeSetting() {
     });
   }, [runAction]);
 
-  const applyClaudeSettings = useCallback(
-    () => runAction("已同步 Claude settings.json", applyFreeClaudeCodeClaudeSettings),
-    [runAction],
-  );
+  const applyClaudeSettings = useCallback(async () => {
+    setBusy(true);
+    try {
+      await applyFreeClaudeCodeClaudeSettings();
+      await sanitizeClaudeCredentialsForFcc();
+      await refreshFccTracesStoreNow();
+      const current = getFccTracesStoreSnapshot().status;
+      if (current?.claudeSettingsAligned) {
+        message.success("已同步 Claude settings.json");
+        return;
+      }
+      if (current) {
+        showFccClaudeSettingsGuideModal(current);
+      }
+    } catch (err) {
+      message.error(`同步 Claude 设置失败：${err instanceof Error ? err.message : String(err)}`);
+      const current = getFccTracesStoreSnapshot().status;
+      if (current) {
+        showFccClaudeSettingsGuideModal(current);
+      }
+      throw err;
+    } finally {
+      setBusy(false);
+    }
+  }, []);
 
   const sanitizeCredentials = useCallback(async () => {
     setBusy(true);

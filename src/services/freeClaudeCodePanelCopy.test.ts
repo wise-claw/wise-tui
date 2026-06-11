@@ -30,9 +30,40 @@ describe("buildFccSummaryMessage", () => {
   test("proxy running under Wise", () => {
     expect(
       buildFccSummaryMessage(
-        baseStatus({ installed: true, serverRunning: true, managedByWise: true }),
+        baseStatus({
+          installed: true,
+          serverRunning: true,
+          managedByWise: true,
+          claudeSettingsAligned: true,
+        }),
       ),
     ).toContain("Admin UI");
+  });
+
+  test("proxy running but claude settings not aligned", () => {
+    expect(
+      buildFccSummaryMessage(
+        baseStatus({
+          installed: true,
+          serverRunning: true,
+          managedByWise: true,
+          claudeSettingsAligned: false,
+        }),
+      ),
+    ).toContain("尚未指向 FCC");
+  });
+
+  test("proxy running with claude settings aligned", () => {
+    expect(
+      buildFccSummaryMessage(
+        baseStatus({
+          installed: true,
+          serverRunning: true,
+          managedByWise: true,
+          claudeSettingsAligned: true,
+        }),
+      ),
+    ).toContain("已对齐");
   });
 
   test("proxy running externally", () => {
@@ -51,5 +82,16 @@ describe("buildFccDependencyRows", () => {
     );
     expect(rows.find((r) => r.id === "uv")?.ready).toBe(true);
     expect(rows.find((r) => r.id === "proxy")?.ready).toBe(false);
+    expect(rows.find((r) => r.id === "claude-settings")?.ready).toBe(false);
+  });
+
+  test("claude settings ready only when proxy running and aligned", () => {
+    const rows = buildFccDependencyRows(
+      baseStatus({
+        serverRunning: true,
+        claudeSettingsAligned: true,
+      }),
+    );
+    expect(rows.find((r) => r.id === "claude-settings")?.ready).toBe(true);
   });
 });
