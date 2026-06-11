@@ -1096,3 +1096,15 @@ export async function loadFileTreeOpenInNewPaneFromStore(): Promise<boolean> {
 export async function saveFileTreeOpenInNewPaneToStore(openInNewPane: boolean): Promise<void> {
   await saveWiseDefaultConfig({ fileTreeOpenInNewPane: openInNewPane });
 }
+
+let lastRegisteredAtMentionShortcutsJson = "";
+
+export async function registerAtMentionGlobalShortcuts(
+  bindings: Record<string, string>,
+): Promise<void> {
+  const serialized = JSON.stringify(bindings);
+  if (serialized === lastRegisteredAtMentionShortcutsJson) return;
+  lastRegisteredAtMentionShortcutsJson = serialized;
+  const { invoke } = await import("@tauri-apps/api/core");
+  await invoke("cmd_register_at_mention_shortcuts", { bindings });
+}

@@ -93,6 +93,12 @@ import {
 import { isWiseAppFocused } from "./utils/isWiseAppFocused";
 import { openMonacoFindIfFocused } from "./utils/monacoGlobalFindRedirect";
 import { wiseMascotShow } from "./services/wiseMascot";
+import { initGlobalAtMentionShortcutRouting } from "./services/globalScreenshotHotkey";
+import {
+  loadAtMentionShortcutByTargetFromStore,
+  registerAtMentionGlobalShortcuts,
+  WISE_AT_MENTION_SHORTCUTS_CHANGED,
+} from "./services/wiseDefaultConfigStore";
 import { getTaskTemplate, setTaskTemplate } from "./services/projectState";
 import {
   WORKFLOW_UI_EVENT_OPEN_ASSISTANT,
@@ -2723,6 +2729,24 @@ export default function App() {
       void safeUnlisten(unlistenContent);
     };
   }, [openFilenameSearchPalette, openContentSearchPalette]);
+
+  useEffect(() => {
+    initGlobalAtMentionShortcutRouting();
+    let cancelled = false;
+    void loadAtMentionShortcutByTargetFromStore().then((bindings) => {
+      if (!cancelled) void registerAtMentionGlobalShortcuts(bindings).catch(() => {});
+    });
+    const onAtMentionShortcutsChanged = (event: Event) => {
+      const detail = (event as CustomEvent<{ atMentionShortcutByTarget: Record<string, string> }>).detail;
+      if (!detail?.atMentionShortcutByTarget) return;
+      void registerAtMentionGlobalShortcuts(detail.atMentionShortcutByTarget).catch(() => {});
+    };
+    window.addEventListener(WISE_AT_MENTION_SHORTCUTS_CHANGED, onAtMentionShortcutsChanged);
+    return () => {
+      cancelled = true;
+      window.removeEventListener(WISE_AT_MENTION_SHORTCUTS_CHANGED, onAtMentionShortcutsChanged);
+    };
+  }, []);
 
   useEffect(() => {
     function handleGlobalKey(e: KeyboardEvent) {

@@ -49,7 +49,8 @@ export function useAtMentionShortcuts() {
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      setShortcutByTarget(await loadAtMentionShortcutByTargetFromStore());
+      const next = await loadAtMentionShortcutByTargetFromStore();
+      setShortcutByTarget(next);
     } finally {
       setLoading(false);
     }

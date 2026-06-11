@@ -131,6 +131,7 @@ import { isOmcMonitorDispatchMentionName } from "../../utils/omcMonitorEmployeeS
 import { captureScreenshot, screenshotResultToImagePart } from "../../services/screenshot";
 import {
   noteComposerScreenshotFocus,
+  registerGlobalAtMentionShortcutRecipient,
   registerGlobalFocusComposerRecipient,
   registerGlobalScreenshotRecipient,
 } from "../../services/globalScreenshotHotkey";
@@ -2201,19 +2202,10 @@ function ComposerInner({
       }
 
       const atBindings = atMentionShortcutBindingsRef.current;
-      if (atBindings.length === 0) return;
-      const surface = plainSurfaceRef.current;
-      if (!surface) return;
       for (const binding of atBindings) {
         if (!chordMatchesKeyboardEvent(binding.chord, e)) continue;
         e.preventDefault();
         e.stopPropagation();
-        const plain = surface.getPlain();
-        const cursor = surface.getCursor();
-        let next = insertPlainAt(plain, cursor, binding.insertionText);
-        next = ensureSpaceAfterAtInsert(next.plain, next.cursor);
-        surface.setPlainAndCursor(next.plain, next.cursor);
-        surface.focus();
         return;
       }
     }
@@ -2251,6 +2243,23 @@ function ComposerInner({
       );
     };
   }, [applyComposerCommonPhrase, session.id]);
+
+  useEffect(() => {
+    return registerGlobalAtMentionShortcutRecipient(session.id, (targetKey) => {
+      const binding = atMentionShortcutBindingsRef.current.find((b) => b.targetKey === targetKey);
+      if (!binding) return;
+      const surface = plainSurfaceRef.current;
+      if (!surface) return;
+      let next = insertPlainAt(surface.getPlain(), surface.getCursor(), binding.insertionText);
+      next = ensureSpaceAfterAtInsert(next.plain, next.cursor);
+      surface.setPlainAndCursor(next.plain, next.cursor);
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          surface.focus();
+        });
+      });
+    });
+  }, [session.id]);
 
   const handleScreenshot = useCallback(async () => {
     const result = await captureScreenshot();

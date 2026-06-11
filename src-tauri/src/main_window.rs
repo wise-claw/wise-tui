@@ -66,8 +66,8 @@ fn focus_window(win: &tauri::WebviewWindow) -> Result<(), String> {
     win.set_focus().map_err(|e| e.to_string())
 }
 
-/// 聚焦最近使用的主工作区窗口；优先已聚焦窗口，其次 `main`，再其它辅助窗。
-pub fn focus_main_workspace_window(app: &AppHandle) -> Result<(), String> {
+/// 解析应接收全局快捷键/前台操作的主工作区窗口。
+pub fn resolve_main_workspace_window_for_focus(app: &AppHandle) -> Option<tauri::WebviewWindow> {
     let mut focused: Option<tauri::WebviewWindow> = None;
     let mut primary: Option<tauri::WebviewWindow> = None;
     let mut any_aux: Option<tauri::WebviewWindow> = None;
@@ -87,10 +87,13 @@ pub fn focus_main_workspace_window(app: &AppHandle) -> Result<(), String> {
         }
     }
 
-    if let Some(win) = focused.or(primary).or(any_aux) {
-        return focus_window(&win);
-    }
-    Err("未找到 Wise 主窗口".to_string())
+    focused.or(primary).or(any_aux)
+}
+
+/// 聚焦最近使用的主工作区窗口；优先已聚焦窗口，其次 `main`，再其它辅助窗。
+pub fn focus_main_workspace_window(app: &AppHandle) -> Result<(), String> {
+    let win = resolve_main_workspace_window_for_focus(app).ok_or_else(|| "未找到 Wise 主窗口".to_string())?;
+    focus_window(&win)
 }
 
 pub fn open_main_workspace_window(

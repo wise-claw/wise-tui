@@ -34,6 +34,7 @@ mod macos_speech_stream;
 mod macos_terminal_detect;
 #[cfg(target_os = "macos")]
 mod macos_webview_wake_recovery;
+mod at_mention_shortcuts;
 mod in_app_shortcuts;
 mod lib_impl;
 mod main_window;

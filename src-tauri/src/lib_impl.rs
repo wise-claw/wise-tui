@@ -1,5 +1,5 @@
 use crate::{
-    agent_registry, app_state_commands, assistants, cc_switch_import,
+    agent_registry, app_state_commands, assistants, at_mention_shortcuts, cc_switch_import,
     in_app_shortcuts,
     claude_code_usage, claude_commands, codex_commands, claude_config_dir, claude_external_ingest,
     claude_llm_proxy, claude_model_profiles,
@@ -83,6 +83,7 @@ pub fn run() {
                 })
                 .map_err(|e| e.to_string())?;
 
+            at_mention_shortcuts::init(app.handle());
             in_app_shortcuts::init(app.handle());
             for (label, win) in app.webview_windows() {
                 if main_window::is_main_workspace_window_label(&label)
@@ -738,6 +739,7 @@ pub fn run() {
             mcp::commands::mcp_delete_server,
             mcp::commands::mcp_test_connection,
             mcp::commands::mcp_supported_transports,
+            at_mention_shortcuts::cmd_register_at_mention_shortcuts,
         ])
         .build(tauri::tauri_build_context!())
         .expect("error while building tauri application")

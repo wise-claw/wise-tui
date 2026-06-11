@@ -19,3 +19,17 @@ export function dispatchApplyComposerCommonPhrase(
     }),
   );
 }
+
+export const WISE_GLOBAL_AT_MENTION_SHORTCUT = "wise:global-at-mention-shortcut";
+
+export interface GlobalAtMentionShortcutDetail {
+  targetKey: string;
+}
+
+export function dispatchGlobalAtMentionShortcut(targetKey: string): void {
+  window.dispatchEvent(
+    new CustomEvent<GlobalAtMentionShortcutDetail>(WISE_GLOBAL_AT_MENTION_SHORTCUT, {
+      detail: { targetKey },
+    }),
+  );
+}
