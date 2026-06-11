@@ -2239,31 +2239,82 @@
   padding: 0 4px;
 }
 
-.app-claude-plugins-add-modal-hint.ant-typography {
-  display: block;
-  margin-bottom: 8px;
-  font-size: 12px;
+.app-claude-plugins-add-modal .ant-modal-body {
+  padding-top: 12px;
 }
 
-.app-claude-plugins-add-modal-scope {
+.app-claude-plugins-add-modal-toolbar {
   display: flex;
   align-items: center;
-  gap: 8px;
-  margin-bottom: 8px;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 6px;
+  flex-wrap: wrap;
 }
 
-.app-claude-plugins-add-modal-scope-label.ant-typography {
-  font-size: 12px;
+.app-claude-plugins-add-modal-mode.ant-segmented {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.app-claude-plugins-add-modal-scope.ant-radio-group {
   flex-shrink: 0;
 }
 
+.app-claude-plugins-add-modal-source {
+  margin-bottom: 6px;
+}
+
+.app-claude-plugins-add-modal-source-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.app-claude-plugins-add-modal-source-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.app-claude-plugins-add-modal-icon-btn.ant-btn {
+  flex-shrink: 0;
+  width: 24px;
+  min-width: 24px;
+  padding-inline: 0;
+}
+
+.app-claude-plugins-add-modal-market-tag.ant-tag {
+  flex-shrink: 1;
+  max-width: 96px;
+  margin: 0;
+  padding: 0 4px;
+  font-size: 10px;
+  line-height: 18px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .app-claude-plugins-add-modal-search {
-  margin-bottom: 10px;
+  margin-bottom: 6px;
 }
 
 .app-claude-plugins-add-modal-list {
-  max-height: 52vh;
+  max-height: 48vh;
   overflow: auto;
+}
+
+.app-claude-plugins-add-modal-list .ant-empty {
+  margin-block: 12px;
+}
+
+.app-claude-plugins-add-modal-list .ant-empty-image {
+  height: 32px;
+  margin-bottom: 4px;
+}
+
+.app-claude-plugins-add-modal-list .ant-empty-description {
+  font-size: 12px;
 }
 
 .app-claude-lsp-panel-more {

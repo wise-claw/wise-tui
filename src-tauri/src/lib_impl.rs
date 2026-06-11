@@ -556,6 +556,7 @@ pub fn run() {
             claude_commands::plugin_market::claude_plugin_market_bootstrap,
             claude_commands::plugin_market::claude_plugin_list_installed,
             claude_commands::plugin_market::claude_plugin_install,
+            claude_commands::plugin_market::claude_plugin_scan_marketplace_source,
             claude_commands::plugin_market::claude_plugin_uninstall,
             claude_commands::mcp::set_claude_mcp_server_enabled,
             claude_commands::mcp::materialize_claude_spawn_mcp_config,
