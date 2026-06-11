@@ -168,7 +168,11 @@ export const ClaudeChatMessagesPane = memo(function ClaudeChatMessagesPane({
       ) : null}
       {session.messages.length === 0 ? (
         <div className="app-claude-messages-empty">
-          <p>发送消息开始与 Claude Code 对话</p>
+          <p>
+            {session.diskTranscriptPartial
+              ? "正在加载对话历史…"
+              : "发送消息开始与 Claude Code 对话"}
+          </p>
         </div>
       ) : (
         <ClaudeVirtualMessageList

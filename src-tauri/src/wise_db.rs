@@ -53,6 +53,8 @@ const MIGRATION_033: &str = include_str!("../migrations/033_workspace_todos.sql"
 const MIGRATION_034: &str = include_str!("../migrations/034_execution_environment_dispatch.sql");
 const MIGRATION_035: &str = include_str!("../migrations/035_workspace_quick_actions_pinned.sql");
 const MIGRATION_036: &str = include_str!("../migrations/036_project_open_app_id.sql");
+const MIGRATION_037: &str = include_str!("../migrations/037_assistant_custom_entry.sql");
+const MIGRATION_038: &str = include_str!("../migrations/038_assistant_hidden.sql");
 const PLATFORM_SPLIT_PROMPT_SEED_JSON: &str =
     include_str!("../migrations/005_platform_split_prompt_seed.json");
 
@@ -210,6 +212,14 @@ const MIGRATIONS: &[Migration] = &[
     Migration {
         name: "036_project_open_app_id",
         action: MigrationAction::Sql(MIGRATION_036),
+    },
+    Migration {
+        name: "037_assistant_custom_entry",
+        action: MigrationAction::Sql(MIGRATION_037),
+    },
+    Migration {
+        name: "038_assistant_hidden",
+        action: MigrationAction::Sql(MIGRATION_038),
     },
 ];
 

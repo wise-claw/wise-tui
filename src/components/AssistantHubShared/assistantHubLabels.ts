@@ -21,8 +21,6 @@ export function cardSourceLabel(source: AssistantEntry["source"], kind: Assistan
     case "office-deck":
     case "skill-artifact":
       return "Wise 内置 Skill";
-    case "engineering":
-      return "Wise 研发助手";
     case "general":
       return "Wise 内置";
   }

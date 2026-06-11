@@ -1,5 +1,5 @@
 import { PlusOutlined, ReloadOutlined, UserOutlined } from "@ant-design/icons";
-import { App, Button, Drawer, Form, Input, Modal, Select } from "antd";
+import { App, Button, Drawer, Form, Input, Modal, Select, Typography } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { AssistantHubBody } from "../AssistantHubShared/AssistantHubBody";
 import type { AssistantHubFilter } from "../AssistantHubShared/groupAssistants";
@@ -7,43 +7,70 @@ import { AssistantSettingsDrawer } from "../CockpitSurface/AssistantSettingsDraw
 import { resolveAssistantKind } from "../CockpitSurface/assistantKind";
 import { listAgents } from "../../services/agentRegistry";
 import {
-  deleteCustomAssistant,
+  deleteAssistant,
   listAssistants,
   saveCustomAssistant,
 } from "../../services/assistants";
 import type { DetectedAgent } from "../../types/detectedAgent";
-import type { AssistantEntry, CustomAssistantInput } from "../../types/assistant";
+import type { AssistantEntry, AssistantEntryKind, CustomAssistantInput } from "../../types/assistant";
+import type { WorkflowTemplateItem } from "../../types";
+import {
+  ASSISTANT_ENTRY_KIND_OPTIONS,
+  isAssistantConversationEntry,
+  resolveAssistantEntryKind,
+} from "../../utils/assistantTemplateEntry";
 import {
   AuthorPanelHubTab,
   AuthorPanelHubTabs,
   AuthorPanelPageShell,
 } from "../AuthorPanel/AuthorPanelPageShell";
 import {
+  buildAssistantRuntimeBundleJson,
+  parseAssistantRuntimeBundle,
+  resolveAssistantRuntime,
+  saveAssistantRuntimeOverrides,
+  type AssistantRuntimeBundle,
+} from "../../services/assistantPromptLayers";
+import {
   buildAgentEngineIndex,
   resolveAssistantEngineBinding,
 } from "./engineBinding";
+import { AssistantTemplateBundleFields } from "./AssistantTemplateBundleFields";
 import "../CockpitSurface/index.css";
 import "./AssistantsPanel.css";
+
+const EMPTY_RUNTIME_BUNDLE: AssistantRuntimeBundle = { disabled: [], custom: [] };
 
 interface FormValues {
   id?: string;
   name: string;
   description?: string;
+  entryKind: AssistantEntryKind;
   engineId: string;
   systemPrompt?: string;
   model?: string;
+  entryUrl?: string;
+  entryWorkflowId?: string;
+  entryScript?: string;
 }
 
 export interface AssistantsPanelProps {
   activeProjectId?: string | null;
   activeProjectName?: string | null;
-  /** 在 Cockpit 中打开该助手（与助手 Hub「打开」一致） */
+  activeRepositoryPath?: string | null;
+  workflowTemplates?: WorkflowTemplateItem[];
+  /** 激活助手模板（对话 / 链接 / 工作流 / 脚本） */
+  onActivateAssistant?: (assistant: AssistantEntry) => void | Promise<void>;
+  /** @deprecated 使用 onActivateAssistant */
   onOpenAssistant?: (assistantId: string) => void;
 }
 
 export function AssistantsPanel({
   activeProjectId = null,
   activeProjectName = null,
+  activeRepositoryPath = null,
+  workflowTemplates = [],
+  onActivateAssistant,
   onOpenAssistant,
 }: AssistantsPanelProps = {}) {
   const { message } = App.useApp();
@@ -55,10 +82,23 @@ export function AssistantsPanel({
   const [settingsAssistantId, setSettingsAssistantId] = useState<string | null>(null);
   const [form] = Form.useForm<FormValues>();
   const [saving, setSaving] = useState(false);
+  const [skillBundle, setSkillBundle] = useState<AssistantRuntimeBundle>(EMPTY_RUNTIME_BUNDLE);
+  const [mcpBundle, setMcpBundle] = useState<AssistantRuntimeBundle>(EMPTY_RUNTIME_BUNDLE);
+  const [bundleLoading, setBundleLoading] = useState(false);
+  const watchedEntryKind = Form.useWatch("entryKind", form) ?? "conversation";
 
   const settingsAssistant = useMemo(
     () => list.find((a) => a.id === settingsAssistantId) ?? null,
     [list, settingsAssistantId],
+  );
+
+  const workflowOptions = useMemo(
+    () =>
+      workflowTemplates.map((workflow) => ({
+        value: workflow.id,
+        label: workflow.name.trim() || workflow.id,
+      })),
+    [workflowTemplates],
   );
 
   const fetchAll = useCallback(async () => {
@@ -90,15 +130,36 @@ export function AssistantsPanel({
 
   const agentEngineIndex = useMemo(() => buildAgentEngineIndex(agents), [agents]);
 
+  const loadTemplateBundles = useCallback(async (assistantId: string) => {
+    setBundleLoading(true);
+    try {
+      const runtime = await resolveAssistantRuntime({ assistantId });
+      setSkillBundle(parseAssistantRuntimeBundle(runtime.skillBundleJson));
+      setMcpBundle(parseAssistantRuntimeBundle(runtime.mcpBundleJson));
+    } catch (e) {
+      setSkillBundle(EMPTY_RUNTIME_BUNDLE);
+      setMcpBundle(EMPTY_RUNTIME_BUNDLE);
+      message.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBundleLoading(false);
+    }
+  }, [message]);
+
   const openCreate = useCallback(() => {
     setEditor({ open: true });
+    setSkillBundle(EMPTY_RUNTIME_BUNDLE);
+    setMcpBundle(EMPTY_RUNTIME_BUNDLE);
     form.setFieldsValue({
       id: undefined,
       name: "",
       description: "",
+      entryKind: "conversation",
       engineId: "claude",
       systemPrompt: "",
       model: undefined,
+      entryUrl: "",
+      entryWorkflowId: undefined,
+      entryScript: "",
     });
   }, [form]);
 
@@ -106,16 +167,21 @@ export function AssistantsPanel({
     (row: AssistantEntry) => {
       if (row.source !== "custom" || !row.customId) return;
       setEditor({ open: true, row });
+      void loadTemplateBundles(row.id);
       form.setFieldsValue({
         id: row.customId,
         name: row.name,
         description: row.description,
+        entryKind: resolveAssistantEntryKind(row),
         engineId: row.engineId,
         systemPrompt: row.systemPrompt ?? "",
         model: row.model ?? undefined,
+        entryUrl: row.entryUrl ?? "",
+        entryWorkflowId: row.entryWorkflowId ?? undefined,
+        entryScript: row.entryScript ?? "",
       });
     },
-    [form],
+    [form, loadTemplateBundles],
   );
 
   const closeDrawer = useCallback(() => {
@@ -125,16 +191,31 @@ export function AssistantsPanel({
   const handleSave = useCallback(async () => {
     try {
       const v = await form.validateFields();
+      const entryKind = v.entryKind ?? "conversation";
       setSaving(true);
       const input: CustomAssistantInput = {
         id: v.id,
         name: v.name.trim(),
         description: (v.description ?? "").trim(),
-        engineId: v.engineId.trim(),
+        engineId: entryKind === "conversation" ? v.engineId.trim() : "claude",
         systemPrompt: (v.systemPrompt ?? "").trim(),
         model: v.model?.trim() ? v.model.trim() : null,
+        entryKind,
+        entryUrl: (v.entryUrl ?? "").trim(),
+        entryWorkflowId: v.entryWorkflowId?.trim() ? v.entryWorkflowId.trim() : null,
+        entryScript: (v.entryScript ?? "").trim(),
       };
-      await saveCustomAssistant(input);
+      const saved = await saveCustomAssistant(input);
+      if (entryKind === "conversation") {
+        await saveAssistantRuntimeOverrides({
+          assistantId: saved.id,
+          scope: "assistant",
+          patch: {
+            skillBundleJson: buildAssistantRuntimeBundleJson(skillBundle),
+            mcpBundleJson: buildAssistantRuntimeBundleJson(mcpBundle),
+          },
+        });
+      }
       await fetchAll();
       closeDrawer();
     } catch (e) {
@@ -142,19 +223,25 @@ export function AssistantsPanel({
     } finally {
       setSaving(false);
     }
-  }, [form, message, fetchAll, closeDrawer]);
+  }, [form, message, fetchAll, closeDrawer, skillBundle, mcpBundle]);
 
   const handleDelete = useCallback(
     (row: AssistantEntry) => {
-      if (row.source !== "custom" || !row.customId) return;
+      const deleteHint =
+        row.source === "custom"
+          ? "将永久删除该自定义模板及其助手级覆盖配置。"
+          : row.source === "builtin"
+            ? "将从助手列表与快捷操作中移除该内置模板。"
+            : "将从助手列表与快捷操作中移除该扩展模板。";
       Modal.confirm({
         title: `删除助手「${row.name}」？`,
+        content: deleteHint,
         okText: "删除",
         okButtonProps: { danger: true },
         cancelText: "取消",
         onOk: async () => {
           try {
-            await deleteCustomAssistant(row.customId!);
+            await deleteAssistant(row.id);
             await fetchAll();
           } catch (e) {
             message.error(e instanceof Error ? e.message : String(e));
@@ -164,6 +251,19 @@ export function AssistantsPanel({
       });
     },
     [message, fetchAll],
+  );
+
+  const handleActivate = useCallback(
+    (assistant: AssistantEntry) => {
+      if (onActivateAssistant) {
+        void onActivateAssistant(assistant);
+        return;
+      }
+      if (onOpenAssistant) {
+        onOpenAssistant(assistant.id);
+      }
+    },
+    [onActivateAssistant, onOpenAssistant],
   );
 
   const engineOptions = useMemo(() => {
@@ -245,27 +345,33 @@ export function AssistantsPanel({
                 : "此类别暂无助手"
           }
           resolveEngineStatus={(assistant) =>
-            resolveAssistantEngineBinding(assistant, agentEngineIndex)
+            isAssistantConversationEntry(assistant)
+              ? resolveAssistantEngineBinding(assistant, agentEngineIndex)
+              : undefined
           }
           renderCardActions={(assistant) => {
+            const entryKind = resolveAssistantEntryKind(assistant);
             const needsProject =
-              resolveAssistantKind(assistant) === "trellis-orchestration" && !activeProjectId;
-            const actions = {
-              disabled: needsProject,
-              disabledHint: needsProject ? "请先在左栏选择工作区后再打开编排助手" : undefined,
-              onSelect: onOpenAssistant
-                ? () => onOpenAssistant(assistant.id)
-                : undefined,
+              entryKind === "conversation" &&
+              resolveAssistantKind(assistant) === "trellis-orchestration" &&
+              !activeProjectId;
+            const needsRepository =
+              (entryKind === "run_workflow" || entryKind === "run_script") &&
+              !activeRepositoryPath?.trim();
+            const disabled = needsProject || needsRepository;
+            const disabledHint = needsProject
+              ? "请先在左栏选择工作区后再打开编排助手"
+              : needsRepository
+                ? "请先在左栏选择仓库后再执行"
+                : undefined;
+            return {
+              disabled,
+              disabledHint,
+              onSelect: onActivateAssistant || onOpenAssistant ? () => handleActivate(assistant) : undefined,
               onOpenSettings: () => setSettingsAssistantId(assistant.id),
+              onEdit: assistant.source === "custom" ? () => openEdit(assistant) : undefined,
+              onDelete: () => handleDelete(assistant),
             };
-            if (assistant.source === "custom") {
-              return {
-                ...actions,
-                onEdit: () => openEdit(assistant),
-                onDelete: () => handleDelete(assistant),
-              };
-            }
-            return actions;
           }}
         />
       </AuthorPanelPageShell>
@@ -306,23 +412,104 @@ export function AssistantsPanel({
             <Input placeholder="一句话说明这个助手适合做什么" />
           </Form.Item>
           <Form.Item
-            name="engineId"
-            label="运行环境"
-            rules={[{ required: true, message: "需要选择运行环境" }]}
-            help="当前主运行环境是 Claude Code；其它入口作为未来连接器预留，使用前会提示。"
+            name="entryKind"
+            label="入口类型"
+            rules={[{ required: true, message: "需要选择入口类型" }]}
           >
-            <Select options={engineOptions} placeholder="优先选择 Claude Code" />
+            <Select
+              options={ASSISTANT_ENTRY_KIND_OPTIONS.map((item) => ({
+                value: item.value,
+                label: item.label,
+              }))}
+            />
           </Form.Item>
-          <Form.Item name="model" label="模型（可选）">
-            <Input placeholder="例如 claude-sonnet-4-6" />
-          </Form.Item>
-          <Form.Item
-            name="systemPrompt"
-            label="系统提示词"
-            help="开始对话时注入的系统消息，可使用 Markdown。"
-          >
-            <Input.TextArea rows={8} placeholder="你是一个负责代码审查的工程助手…" />
-          </Form.Item>
+          {watchedEntryKind === "conversation" ? (
+            <>
+              <Form.Item
+                name="engineId"
+                label="运行环境"
+                rules={[{ required: true, message: "需要选择运行环境" }]}
+                help="当前主运行环境是 Claude Code；其它入口作为未来连接器预留，使用前会提示。"
+              >
+                <Select options={engineOptions} placeholder="优先选择 Claude Code" />
+              </Form.Item>
+              <Form.Item name="model" label="模型（可选）">
+                <Input placeholder="例如 claude-sonnet-4-6" />
+              </Form.Item>
+              <Form.Item
+                name="systemPrompt"
+                label="系统提示词"
+                help="开始对话时注入的系统消息，可使用 Markdown。"
+              >
+                <Input.TextArea rows={8} placeholder="你是一个负责代码审查的工程助手…" />
+              </Form.Item>
+              {bundleLoading ? (
+                <div className="assistant-template-bundle-fields">
+                  <Typography.Text type="secondary">读取 Skill / MCP 配置…</Typography.Text>
+                </div>
+              ) : (
+                <AssistantTemplateBundleFields
+                  skillBundle={skillBundle}
+                  mcpBundle={mcpBundle}
+                  onSkillBundleChange={setSkillBundle}
+                  onMcpBundleChange={setMcpBundle}
+                />
+              )}
+            </>
+          ) : null}
+          {watchedEntryKind === "open_link" ? (
+            <Form.Item
+              name="entryUrl"
+              label="链接地址"
+              rules={[
+                { required: true, message: "需要填写链接地址" },
+                {
+                  validator: async (_, value: string | undefined) => {
+                    const trimmed = (value ?? "").trim();
+                    if (!trimmed) return;
+                    if (!/^https?:\/\//i.test(trimmed)) {
+                      throw new Error("链接需以 http:// 或 https:// 开头");
+                    }
+                  },
+                },
+              ]}
+            >
+              <Input placeholder="https://example.com/docs" />
+            </Form.Item>
+          ) : null}
+          {watchedEntryKind === "run_workflow" ? (
+            <>
+              <Form.Item
+                name="entryWorkflowId"
+                label="团队工作流"
+                rules={[{ required: true, message: "需要选择工作流" }]}
+              >
+                <Select
+                  options={workflowOptions}
+                  placeholder={workflowOptions.length > 0 ? "选择要执行的工作流" : "请先在「工作流」中创建工作流"}
+                  showSearch
+                  optionFilterProp="label"
+                />
+              </Form.Item>
+              <Form.Item
+                name="systemPrompt"
+                label="执行提示词（可选）"
+                help="分发到工作流时发送的 Markdown 提示；留空则使用默认文案。"
+              >
+                <Input.TextArea rows={6} placeholder="请按该工作流完成本轮任务…" />
+              </Form.Item>
+            </>
+          ) : null}
+          {watchedEntryKind === "run_script" ? (
+            <Form.Item
+              name="entryScript"
+              label="脚本内容"
+              rules={[{ required: true, message: "需要填写脚本内容" }]}
+              help="在仓库根目录通过 zsh -c 执行；执行前请先在左栏选择目标仓库。"
+            >
+              <Input.TextArea rows={8} placeholder={"bun test\n# 或多行 Shell 脚本"} />
+            </Form.Item>
+          ) : null}
         </Form>
       </Drawer>
     </>

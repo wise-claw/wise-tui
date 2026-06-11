@@ -2,6 +2,11 @@ import { DeleteOutlined, EditOutlined, SettingOutlined } from "@ant-design/icons
 import { HoverHint } from "../shared/HoverHint";
 import { Button, Tag } from "antd";
 import type { AssistantEntry } from "../../types/assistant";
+import {
+  assistantEntryActionLabel,
+  assistantEntryKindLabel,
+  resolveAssistantEntryKind,
+} from "../../utils/assistantTemplateEntry";
 import { resolveAssistantKind } from "../CockpitSurface/assistantKind";
 import type { AssistantEngineBindingStatus } from "../AssistantsPanel/engineBinding";
 import { cardSourceLabel } from "./assistantHubLabels";
@@ -18,6 +23,7 @@ export interface AssistantHubCardProps {
   onOpenSettings?: () => void;
   onEdit?: () => void;
   onDelete?: () => void;
+  actionLabel?: string;
 }
 
 export function AssistantHubCard({
@@ -30,12 +36,15 @@ export function AssistantHubCard({
   onOpenSettings,
   onEdit,
   onDelete,
+  actionLabel,
 }: AssistantHubCardProps) {
   const workflows = assistant.defaultWorkflows ?? [];
   const skills = assistant.defaultSkills ?? [];
   const mcps = assistant.defaultMcps ?? [];
   const assistantKind = resolveAssistantKind(assistant);
+  const entryKind = resolveAssistantEntryKind(assistant);
   const isCustom = assistant.source === "custom";
+  const primaryActionLabel = actionLabel ?? assistantEntryActionLabel(entryKind);
 
   const cardClass = [
     "cockpit-hub__card",
@@ -67,8 +76,11 @@ export function AssistantHubCard({
       {assistant.description ? (
         <p className="cockpit-hub__card-desc">{assistant.description}</p>
       ) : null}
-      {workflows.length > 0 || skills.length > 0 || mcps.length > 0 ? (
+      {entryKind !== "conversation" || workflows.length > 0 || skills.length > 0 || mcps.length > 0 ? (
         <div className="cockpit-hub__card-capabilities" aria-label={`${assistant.name} 默认能力`}>
+          {entryKind !== "conversation" ? (
+            <Tag color="gold">{assistantEntryKindLabel(entryKind)}</Tag>
+          ) : null}
           {workflows.slice(0, 4).map((workflow) => (
             <Tag key={workflow.id} color="blue">
               内置编排 · {workflow.label}
@@ -104,7 +116,7 @@ export function AssistantHubCard({
               onClick={onEdit}
             />
           ) : null}
-          {mode === "manage" && isCustom && onDelete ? (
+          {mode === "manage" && onDelete ? (
             <Button
               size="small"
               type="text"
@@ -136,7 +148,7 @@ export function AssistantHubCard({
               title={disabled ? disabledHint : undefined}
               onClick={onSelect}
             >
-              打开
+              {primaryActionLabel}
             </Button>
           ) : null}
         </div>

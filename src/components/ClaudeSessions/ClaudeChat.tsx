@@ -28,7 +28,6 @@ import { resolveSessionOwnerInfo } from "../../hooks/claudeChatSessionFeaturePan
 import { ClaudeChatMessagesLiveHost } from "./ClaudeChatMessagesLiveHost";
 import { claudeChatPropsEqual } from "./claudeChatPropsEqual";
 import { getClaudeChatMessageScrollBridge } from "../../stores/claudeChatMessageScrollBridge";
-import { ClaudeSessionTrajectoryDrawer } from "./ClaudeSessionTrajectoryDrawer";
 import { ClaudeChatQuickActionsChrome } from "./ClaudeChatQuickActionsChrome";
 import { composerRegionChunk } from "./ClaudeChatComposerTray";
 
@@ -163,6 +162,8 @@ interface Props {
   creatingNewSession?: boolean;
   /** 从快捷条「更多」直达指定内置助手对话页 */
   onOpenBuiltinAssistant?: (assistantId: string) => void;
+  /** 按助手模板完整激活（对话 / 链接 / 工作流 / 脚本） */
+  onActivateAssistant?: (assistant: import("../../types/assistant").AssistantEntry) => void | Promise<void>;
   /** 从快捷条「更多」进入 Author 域「助手模板」 */
   onOpenAssistantsHub?: () => void;
   onOpenRepositoryScheduledTasks?: () => void;
@@ -279,8 +280,6 @@ interface Props {
   onRestoreHistorySessionAsMain?: (sessionId: string) => void | Promise<void>;
   /** App 侧 `omcBatchRuntime.active`：批量 OMC 调度中（含任务间隙），用于员工空闲判定 */
   omcBatchPipelineActive?: boolean;
-  /** 工作树列表：将路径加入当前侧栏项目（由 App 注入） */
-  onAddWorktreeRepositoryToProject?: (worktreePath: string) => void | Promise<void>;
   /** 从磁盘读取完整 jsonl 覆盖当前标签消息（`diskTranscriptPartial` 时） */
   onReloadFullDiskTranscript?: (sessionId: string) => void | Promise<void>;
   /** 渐进加载更早 jsonl 尾部（未达上限前不读全文件） */
@@ -319,6 +318,7 @@ export function ClaudeChatInner({
   onCreateNewSession,
   creatingNewSession = false,
   onOpenBuiltinAssistant,
+  onActivateAssistant,
   onOpenAssistantsHub,
   onOpenRepositoryScheduledTasks,
   onSend: _onSend,
@@ -384,7 +384,6 @@ export function ClaudeChatInner({
   onStopSessionConversationTask,
   onRestoreHistorySessionAsMain,
   omcBatchPipelineActive = false,
-  onAddWorktreeRepositoryToProject,
   onReloadFullDiskTranscript,
   onLoadMoreTranscriptFromDisk,
   onCompactSessionHistory: _onCompactSessionHistory,
@@ -1153,7 +1152,6 @@ export function ClaudeChatInner({
   const [notificationBubbleEnterIds, setNotificationBubbleEnterIds] = useState<Set<string>>(() => new Set());
   const [notificationBadgePulse, setNotificationBadgePulse] = useState(false);
   const [notificationTitleCountPulse, setNotificationTitleCountPulse] = useState(false);
-  const [workTrajectoryDrawerOpen, setWorkTrajectoryDrawerOpen] = useState(false);
   const prevSessionUnreadCountRef = useRef(0);
   const [returnMainSessionId, setReturnMainSessionId] = useState<string | null>(null);
   const [sessionOwnerHints, setSessionOwnerHints] = useState<Record<string, SessionOwnerHint>>(() => loadSessionOwnerHints());
@@ -1164,10 +1162,6 @@ export function ClaudeChatInner({
   /** 每实例固定（主栏 true / 多屏副窗 false）；用 ref 保持 effect deps 长度稳定，避免 HMR 改 deps 时报错。 */
   const enableSessionNotificationFeedRef = useRef(enableSessionNotificationFeed);
   enableSessionNotificationFeedRef.current = enableSessionNotificationFeed;
-
-  const handleOpenWorkTrajectory = useCallback(() => {
-    setWorkTrajectoryDrawerOpen(true);
-  }, []);
 
   const handleLoadMoreTranscriptStart = useCallback(() => {
     setLoadMoreTranscriptLoading(true);
@@ -1673,17 +1667,6 @@ export function ClaudeChatInner({
         <ClaudeChatSessionFeaturePanel {...featurePanelProps} />
       ) : null}
 
-      {!deferHeavySubtree ? (
-        <ClaudeSessionTrajectoryDrawer
-          open={workTrajectoryDrawerOpen}
-          onClose={() => setWorkTrajectoryDrawerOpen(false)}
-          messages={session.messages}
-          wiseTabSessionId={session.id}
-          repositoryPath={session.repositoryPath}
-          claudeSessionId={session.claudeSessionId}
-          diskTranscriptPartial={session.diskTranscriptPartial}
-        />
-      ) : null}
 
       {!hideMessages ? (
         <ClaudeChatSessionOwnerBar
@@ -1768,14 +1751,12 @@ export function ClaudeChatInner({
           <ClaudeChatQuickActionsChrome
             sessionId={session.id}
             gitRepositoryPath={gitRepositoryPath}
-            sessionRepositoryPath={session.repositoryPath ?? ""}
             onCreateNewSession={onCreateNewSession}
             creatingNewSession={creatingNewSession}
             onOpenBuiltinAssistant={onOpenBuiltinAssistant}
+            onActivateAssistant={onActivateAssistant}
             onOpenAssistantsHub={onOpenAssistantsHub}
-            onOpenWorkTrajectory={handleOpenWorkTrajectory}
             onSend={_onSend}
-            onAddWorktreeRepositoryToProject={onAddWorktreeRepositoryToProject}
           />
         ) : null}
         {!deferHeavySubtree ? (

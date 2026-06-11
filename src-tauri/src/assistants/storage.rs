@@ -15,6 +15,10 @@ pub struct CustomAssistantRow {
     pub engine_id: String,
     pub system_prompt: String,
     pub model: Option<String>,
+    pub entry_kind: String,
+    pub entry_url: String,
+    pub entry_workflow_id: Option<String>,
+    pub entry_script: String,
     pub created_at: String,
     pub updated_at: String,
 }
@@ -34,12 +38,25 @@ pub struct CustomAssistantInput {
     pub system_prompt: String,
     #[serde(default)]
     pub model: Option<String>,
+    #[serde(default = "default_entry_kind")]
+    pub entry_kind: String,
+    #[serde(default)]
+    pub entry_url: String,
+    #[serde(default)]
+    pub entry_workflow_id: Option<String>,
+    #[serde(default)]
+    pub entry_script: String,
+}
+
+fn default_entry_kind() -> String {
+    "conversation".to_string()
 }
 
 pub fn list(conn: &Connection) -> Result<Vec<CustomAssistantRow>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT id, name, description, avatar_color, engine_id, system_prompt, model, created_at, updated_at
+            "SELECT id, name, description, avatar_color, engine_id, system_prompt, model,
+                    entry_kind, entry_url, entry_workflow_id, entry_script, created_at, updated_at
              FROM assistant_custom ORDER BY created_at",
         )
         .map_err(|e| e.to_string())?;
@@ -55,7 +72,8 @@ pub fn list(conn: &Connection) -> Result<Vec<CustomAssistantRow>, String> {
 
 pub fn get_by_id(conn: &Connection, id: &str) -> Result<Option<CustomAssistantRow>, String> {
     conn.query_row(
-        "SELECT id, name, description, avatar_color, engine_id, system_prompt, model, created_at, updated_at
+        "SELECT id, name, description, avatar_color, engine_id, system_prompt, model,
+                entry_kind, entry_url, entry_workflow_id, entry_script, created_at, updated_at
          FROM assistant_custom WHERE id = ?1",
         params![id],
         row_to_assistant,
@@ -64,13 +82,47 @@ pub fn get_by_id(conn: &Connection, id: &str) -> Result<Option<CustomAssistantRo
     .map_err(|e| e.to_string())
 }
 
+fn normalize_entry_kind(raw: &str) -> Result<&'static str, String> {
+    match raw.trim() {
+        "conversation" | "" => Ok("conversation"),
+        "open_link" => Ok("open_link"),
+        "run_workflow" => Ok("run_workflow"),
+        "run_script" => Ok("run_script"),
+        other => Err(format!("unsupported entryKind: {other}")),
+    }
+}
+
 pub fn upsert(conn: &Connection, input: &CustomAssistantInput) -> Result<CustomAssistantRow, String> {
     if input.name.trim().is_empty() {
         return Err("name must not be empty".to_string());
     }
-    if input.engine_id.trim().is_empty() {
+    let entry_kind = normalize_entry_kind(&input.entry_kind)?;
+    if input.engine_id.trim().is_empty() && entry_kind == "conversation" {
         return Err("engineId must not be empty".to_string());
     }
+    if entry_kind == "open_link" {
+        let url = input.entry_url.trim();
+        if url.is_empty() {
+            return Err("entryUrl must not be empty for open_link".to_string());
+        }
+        if !(url.starts_with("http://") || url.starts_with("https://")) {
+            return Err("entryUrl must start with http:// or https://".to_string());
+        }
+    }
+    if entry_kind == "run_workflow" {
+        let workflow_id = input.entry_workflow_id.as_deref().unwrap_or("").trim();
+        if workflow_id.is_empty() {
+            return Err("entryWorkflowId must not be empty for run_workflow".to_string());
+        }
+    }
+    if entry_kind == "run_script" && input.entry_script.trim().is_empty() {
+        return Err("entryScript must not be empty for run_script".to_string());
+    }
+    let engine_id = if input.engine_id.trim().is_empty() {
+        "claude".to_string()
+    } else {
+        input.engine_id.trim().to_string()
+    };
     let now = Utc::now().to_rfc3339();
     let (id, created_at) = match input.id.as_deref() {
         Some(existing_id) => match get_by_id(conn, existing_id)? {
@@ -80,8 +132,9 @@ pub fn upsert(conn: &Connection, input: &CustomAssistantInput) -> Result<CustomA
         None => (Uuid::new_v4().to_string(), now.clone()),
     };
     conn.execute(
-        "INSERT INTO assistant_custom (id, name, description, avatar_color, engine_id, system_prompt, model, created_at, updated_at)
-         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)
+        "INSERT INTO assistant_custom (id, name, description, avatar_color, engine_id, system_prompt, model,
+                                       entry_kind, entry_url, entry_workflow_id, entry_script, created_at, updated_at)
+         VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10, ?11, ?12, ?13)
          ON CONFLICT(id) DO UPDATE SET
            name = excluded.name,
            description = excluded.description,
@@ -89,15 +142,23 @@ pub fn upsert(conn: &Connection, input: &CustomAssistantInput) -> Result<CustomA
            engine_id = excluded.engine_id,
            system_prompt = excluded.system_prompt,
            model = excluded.model,
+           entry_kind = excluded.entry_kind,
+           entry_url = excluded.entry_url,
+           entry_workflow_id = excluded.entry_workflow_id,
+           entry_script = excluded.entry_script,
            updated_at = excluded.updated_at",
         params![
             id,
             input.name,
             input.description,
             input.avatar_color,
-            input.engine_id,
+            engine_id,
             input.system_prompt,
             input.model,
+            entry_kind,
+            input.entry_url,
+            input.entry_workflow_id,
+            input.entry_script,
             created_at,
             now,
         ],
@@ -125,8 +186,12 @@ fn row_to_assistant(row: &rusqlite::Row<'_>) -> rusqlite::Result<CustomAssistant
         engine_id: row.get(4)?,
         system_prompt: row.get(5)?,
         model: row.get(6)?,
-        created_at: row.get(7)?,
-        updated_at: row.get(8)?,
+        entry_kind: row.get(7)?,
+        entry_url: row.get(8)?,
+        entry_workflow_id: row.get(9)?,
+        entry_script: row.get(10)?,
+        created_at: row.get(11)?,
+        updated_at: row.get(12)?,
     })
 }
 
@@ -137,6 +202,8 @@ mod tests {
     fn open_in_memory() -> Connection {
         let conn = Connection::open_in_memory().unwrap();
         conn.execute_batch(include_str!("../../migrations/026_assistant_custom.sql"))
+            .unwrap();
+        conn.execute_batch(include_str!("../../migrations/037_assistant_custom_entry.sql"))
             .unwrap();
         conn
     }
@@ -150,6 +217,10 @@ mod tests {
             engine_id: engine.to_string(),
             system_prompt: "You are helpful.".to_string(),
             model: None,
+            entry_kind: "conversation".to_string(),
+            entry_url: String::new(),
+            entry_workflow_id: None,
+            entry_script: String::new(),
         }
     }
 
@@ -196,5 +267,17 @@ mod tests {
     fn delete_unknown_errors() {
         let conn = open_in_memory();
         assert!(delete(&conn, "nope").is_err());
+    }
+
+    #[test]
+    fn upsert_open_link_requires_url() {
+        let conn = open_in_memory();
+        let mut link = input("link", "");
+        link.entry_kind = "open_link".to_string();
+        assert!(upsert(&conn, &link).is_err());
+        link.entry_url = "https://example.com".to_string();
+        let row = upsert(&conn, &link).unwrap();
+        assert_eq!(row.entry_kind, "open_link");
+        assert_eq!(row.entry_url, "https://example.com");
     }
 }

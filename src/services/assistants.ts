@@ -9,8 +9,13 @@ export async function saveCustomAssistant(input: CustomAssistantInput): Promise<
   return invoke<AssistantEntry>("assistants_save_custom", { args: { input } });
 }
 
+export async function deleteAssistant(id: string): Promise<void> {
+  await invoke<void>("assistants_delete", { args: { id } });
+}
+
+/** @deprecated 使用 deleteAssistant */
 export async function deleteCustomAssistant(customId: string): Promise<void> {
-  await invoke<void>("assistants_delete_custom", { args: { customId } });
+  await deleteAssistant(`custom:${customId}`);
 }
 
 export async function getAssistantSystemPrompt(id: string): Promise<string> {

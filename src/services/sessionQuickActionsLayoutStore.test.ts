@@ -65,13 +65,13 @@ describe("sessionQuickActionsLayoutStore", () => {
       if (key === SESSION_QUICK_ACTIONS_LAYOUT_STORAGE_KEY) {
         return JSON.stringify({
           version: 1,
-          items: [{ id: "work-trajectory", visible: true, zone: "primary" }],
+          items: [{ id: "compact-context", visible: true, zone: "primary" }],
         });
       }
       return null;
     });
     const layout = await loadSessionQuickActionsLayout();
-    expect(layout.items[0]?.id).toBe("work-trajectory");
+    expect(layout.items[0]?.id).toBe("compact-context");
   });
 
   test("save writes normalized layout to app_settings", async () => {
@@ -87,11 +87,11 @@ describe("sessionQuickActionsLayoutStore", () => {
       SESSION_QUICK_ACTIONS_LAYOUT_STORAGE_KEY,
       JSON.stringify({
         version: 1,
-        items: [{ id: "builtin:word-doc", visible: true, zone: "primary" }],
+        items: [{ id: "compact-context", visible: true, zone: "primary" }],
       }),
     );
     const layout = await loadSessionQuickActionsLayout();
-    expect(layout.items.some((item) => item.id === "builtin:word-doc")).toBe(true);
+    expect(layout.items.some((item) => item.id === "compact-context")).toBe(true);
     expect(setAppSettingJson).toHaveBeenCalled();
     expect(storage!.getItem(SESSION_QUICK_ACTIONS_LAYOUT_STORAGE_KEY)).toBeNull();
     expect(storage!.getItem(SESSION_QUICK_ACTIONS_LAYOUT_STORAGE_KEY_V1)).toBeNull();

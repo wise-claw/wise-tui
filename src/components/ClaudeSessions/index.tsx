@@ -135,6 +135,8 @@ interface Props {
   onOpenWorkflowConfig?: () => void;
   /** 从会话快捷条「更多」直达指定内置助手对话页 */
   onOpenBuiltinAssistant?: (assistantId: string) => void;
+  /** 按助手模板完整激活（对话 / 链接 / 工作流 / 脚本） */
+  onActivateAssistant?: (assistant: import("../../types/assistant").AssistantEntry) => void | Promise<void>;
   /** 从会话快捷条「更多」进入 Author 域「助手模板」 */
   onOpenAssistantsHub?: () => void;
   /** 打开当前仓库定时任务叠层（主区+右栏，与技能市场同构） */
@@ -195,8 +197,6 @@ interface Props {
   onRestoreHistorySessionAsMain?: (sessionId: string) => void | Promise<void>;
   /** 直连批量 OMC 进行中（`omcBatchRuntime.active`），供各标签内「OMC员工」空闲判定与监控一致 */
   omcBatchPipelineActive?: boolean;
-  /** 工作树弹窗：将 worktree 目录加入当前侧栏项目 */
-  onAddWorktreeRepositoryToProject?: (worktreePath: string) => void | Promise<void>;
   /** 从磁盘加载完整 jsonl 覆盖指定标签消息（尾部懒加载后补齐） */
   onReloadFullDiskTranscript?: (sessionId: string) => void | Promise<void>;
   /** 渐进加载更早 jsonl 尾部 */
@@ -268,6 +268,7 @@ function ClaudeSessionsShell({
   onAutoFixRunError: onAutoFixRunErrorFromProps,
   onOpenWorkflowConfig,
   onOpenBuiltinAssistant,
+  onActivateAssistant,
   onOpenAssistantsHub,
   onOpenRepositoryScheduledTasks,
   employees = [],
@@ -296,7 +297,6 @@ function ClaudeSessionsShell({
   onOpenHistorySessionInInspector,
   onRestoreHistorySessionAsMain,
   omcBatchPipelineActive = false,
-  onAddWorktreeRepositoryToProject,
   onReloadFullDiskTranscript,
   onLoadMoreTranscriptFromDisk,
   onCompactSessionHistory,
@@ -624,6 +624,7 @@ function ClaudeSessionsShell({
           onNewPaneSession={onNewPaneSession}
           onOpenWorkflowConfig={onOpenWorkflowConfig}
           onOpenBuiltinAssistant={onOpenBuiltinAssistant}
+          onActivateAssistant={onActivateAssistant}
           onOpenAssistantsHub={onOpenAssistantsHub}
           onOpenRepositoryScheduledTasks={onOpenRepositoryScheduledTasks}
           employees={employees}
@@ -652,7 +653,6 @@ function ClaudeSessionsShell({
           onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
           onRestoreHistorySessionAsMain={onRestoreHistorySessionAsMain}
           omcBatchPipelineActive={omcBatchPipelineActive}
-          onAddWorktreeRepositoryToProject={onAddWorktreeRepositoryToProject}
           onReloadFullDiskTranscript={onReloadFullDiskTranscript}
           onLoadMoreTranscriptFromDisk={onLoadMoreTranscriptFromDisk}
           onCompactSessionHistory={onCompactSessionHistory}

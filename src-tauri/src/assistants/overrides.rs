@@ -217,6 +217,15 @@ pub fn save(
     Ok(row)
 }
 
+pub fn delete_all_for_assistant(conn: &Connection, assistant_id: &str) -> Result<(), String> {
+    conn.execute(
+        "DELETE FROM assistant_overrides WHERE assistant_id = ?1",
+        params![assistant_id],
+    )
+    .map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 pub fn reset(
     conn: &Connection,
     assistant_id: &str,

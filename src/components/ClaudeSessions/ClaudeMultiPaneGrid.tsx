@@ -153,6 +153,7 @@ export interface MultiPaneSharedChatProps {
   onRestoreRevert: (sessionId: string, itemId: string) => void | Promise<void>;
   onOpenWorkflowConfig?: () => void;
   onOpenBuiltinAssistant?: (assistantId: string) => void;
+  onActivateAssistant?: (assistant: import("../../types/assistant").AssistantEntry) => void | Promise<void>;
   onOpenAssistantsHub?: () => void;
   onOpenRepositoryScheduledTasks?: () => void;
   employees: EmployeeItem[];
@@ -188,7 +189,6 @@ export interface MultiPaneSharedChatProps {
   onOpenHistorySessionInInspector?: (sessionId: string) => void;
   onRestoreHistorySessionAsMain?: (sessionId: string) => void | Promise<void>;
   omcBatchPipelineActive: boolean;
-  onAddWorktreeRepositoryToProject?: (worktreePath: string) => void | Promise<void>;
   onReloadFullDiskTranscript?: (sessionId: string) => void | Promise<void>;
   onLoadMoreTranscriptFromDisk?: (sessionId: string) => void | Promise<void>;
   onCompactSessionHistory?: (sessionId: string) => void | Promise<void>;
@@ -253,6 +253,7 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
         onSwitchSession={shared.onSwitchSession}
         onCreateNewSession={onCreateNewSession}
         onOpenBuiltinAssistant={shared.onOpenBuiltinAssistant}
+        onActivateAssistant={shared.onActivateAssistant}
         onOpenAssistantsHub={shared.onOpenAssistantsHub}
         onSend={shared.onSend}
         onExecute={shared.onExecute}
@@ -307,7 +308,6 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
         onStopSessionConversationTask={shared.onStopSessionConversationTask}
         onRestoreHistorySessionAsMain={shared.onRestoreHistorySessionAsMain}
         omcBatchPipelineActive={shared.omcBatchPipelineActive}
-        onAddWorktreeRepositoryToProject={shared.onAddWorktreeRepositoryToProject}
         onReloadFullDiskTranscript={shared.onReloadFullDiskTranscript}
         onLoadMoreTranscriptFromDisk={shared.onLoadMoreTranscriptFromDisk}
         onCompactSessionHistory={shared.onCompactSessionHistory}
@@ -513,6 +513,7 @@ const MultiPaneExtraPaneCell = memo(
             onSwitchSession={shared.onSwitchSession}
             onCreateNewSession={() => onCreatePaneSession(paneIdx)}
             onOpenBuiltinAssistant={shared.onOpenBuiltinAssistant}
+            onActivateAssistant={shared.onActivateAssistant}
             onOpenAssistantsHub={shared.onOpenAssistantsHub}
             onOpenRepositoryScheduledTasks={shared.onOpenRepositoryScheduledTasks}
             onSend={shared.onSend}
@@ -568,7 +569,6 @@ const MultiPaneExtraPaneCell = memo(
             onStopSessionConversationTask={shared.onStopSessionConversationTask}
             onRestoreHistorySessionAsMain={shared.onRestoreHistorySessionAsMain}
             omcBatchPipelineActive={shared.omcBatchPipelineActive}
-            onAddWorktreeRepositoryToProject={shared.onAddWorktreeRepositoryToProject}
             onReloadFullDiskTranscript={shared.onReloadFullDiskTranscript}
             onLoadMoreTranscriptFromDisk={shared.onLoadMoreTranscriptFromDisk}
             onCompactSessionHistory={shared.onCompactSessionHistory}

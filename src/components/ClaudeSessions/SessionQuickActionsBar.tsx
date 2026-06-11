@@ -1,28 +1,27 @@
 import {
+  ApartmentOutlined,
   AppstoreOutlined,
-  AuditOutlined,
-  BookOutlined,
+  CodeOutlined,
   CommentOutlined,
-  ExperimentOutlined,
-  FileExcelOutlined,
   FileTextOutlined,
-  FileWordOutlined,
-  FundProjectionScreenOutlined,
-  RocketOutlined,
+  LinkOutlined,
   SettingOutlined,
-  UnorderedListOutlined,
   UserOutlined,
 } from "@ant-design/icons";
 import { Dropdown, type MenuProps } from "antd";
 import { memo, useMemo, useState, type ReactNode } from "react";
 import {
   partitionSessionQuickActions,
-  SESSION_QUICK_ACTION_META,
   type SessionQuickActionId,
   type SessionQuickActionsAvailability,
 } from "../../constants/sessionQuickActionsLayout";
-import { isSessionQuickBuiltinAssistantId } from "../../constants/sessionQuickBuiltinAssistants";
 import { useSessionQuickActionsLayout } from "../../hooks/useSessionQuickActionsLayout";
+import type { AssistantEntry } from "../../types/assistant";
+import { resolveAssistantEntryKind } from "../../utils/assistantTemplateEntry";
+import {
+  isAssistantTemplateQuickActionId,
+  resolveSessionQuickActionMeta,
+} from "../../utils/sessionQuickAssistantCatalog";
 import { SessionQuickActionsCustomizeModal } from "./SessionQuickActionsCustomizeModal";
 import { prefetchNewSessionSurface } from "./prefetchNewSessionSurface";
 
@@ -31,9 +30,8 @@ export interface SessionQuickActionsBarProps {
   /** 新建主会话进行中：禁用按钮并显示加载态，避免重复点击 */
   creatingNewSession?: boolean;
   onOpenBuiltinAssistant?: (assistantId: string) => void;
-  onOpenWorkTrajectory: () => void;
-  onOpenWorktreeMenu?: () => void;
-  showWorktreeInMore?: boolean;
+  /** 按助手模板完整激活（对话 / 链接 / 工作流 / 脚本） */
+  onActivateAssistant?: (assistant: AssistantEntry) => void | Promise<void>;
   /** 进入 Author 域「助手模板」管理页 */
   onOpenAssistantsHub?: () => void;
   /** 推送按钮（含 Popover 等交互，由父组件组装） */
@@ -42,54 +40,64 @@ export interface SessionQuickActionsBarProps {
   commonPhrasesSlot?: ReactNode;
 }
 
-const ACTION_MENU_ICONS: Partial<Record<SessionQuickActionId, ReactNode>> = {
+const BUILTIN_ACTION_MENU_ICONS: Partial<Record<SessionQuickActionId, ReactNode>> = {
   "new-session": <CommentOutlined />,
   "builtin:prd-split": <FileTextOutlined />,
-  "builtin:word-doc": <FileWordOutlined />,
-  "builtin:ppt-deck": <FundProjectionScreenOutlined />,
-  "builtin:excel-data": <FileExcelOutlined />,
-  "builtin:code-review": <AuditOutlined />,
-  "builtin:tech-docs": <BookOutlined />,
-  "builtin:test-gen": <ExperimentOutlined />,
-  "builtin:release-notes": <RocketOutlined />,
-  "work-trajectory": <UnorderedListOutlined />,
-  "work-tree": <AppstoreOutlined />,
 };
 
-function isBuiltinAssistantQuickAction(id: SessionQuickActionId): boolean {
-  return isSessionQuickBuiltinAssistantId(id);
+function actionMenuIcon(id: SessionQuickActionId, assistant?: AssistantEntry): ReactNode {
+  if (assistant) {
+    switch (resolveAssistantEntryKind(assistant)) {
+      case "open_link":
+        return <LinkOutlined />;
+      case "run_workflow":
+        return <ApartmentOutlined />;
+      case "run_script":
+        return <CodeOutlined />;
+      default:
+        break;
+    }
+  }
+  return BUILTIN_ACTION_MENU_ICONS[id] ?? <UserOutlined />;
 }
 
 export const SessionQuickActionsBar = memo(function SessionQuickActionsBar({
   onCreateNewSession,
   creatingNewSession = false,
   onOpenBuiltinAssistant,
-  onOpenWorkTrajectory,
-  onOpenWorktreeMenu,
-  showWorktreeInMore = false,
+  onActivateAssistant,
   onOpenAssistantsHub,
   pushControl,
   commonPhrasesSlot = null,
 }: SessionQuickActionsBarProps) {
-  const { layout, setLayout, resetLayout, persistLayout } = useSessionQuickActionsLayout();
+  const { layout, setLayout, resetLayout, persistLayout, catalog, assistantsById } =
+    useSessionQuickActionsLayout();
   const [customizeOpen, setCustomizeOpen] = useState(false);
 
   const availability: SessionQuickActionsAvailability = useMemo(
     () => ({
       canNewSession: Boolean(onCreateNewSession),
-      canWorkTree: showWorktreeInMore && Boolean(onOpenWorktreeMenu),
       canCompactContext: false,
     }),
-    [onCreateNewSession, onOpenWorktreeMenu, showWorktreeInMore],
+    [onCreateNewSession],
   );
 
   const { primary, overflow } = useMemo(
-    () => partitionSessionQuickActions(layout, availability),
-    [layout, availability],
+    () => partitionSessionQuickActions(layout, availability, catalog),
+    [layout, availability, catalog],
   );
 
+  const activateAssistantById = (assistantId: string) => {
+    const assistant = assistantsById.get(assistantId);
+    if (assistant && onActivateAssistant) {
+      void onActivateAssistant(assistant);
+      return;
+    }
+    onOpenBuiltinAssistant?.(assistantId);
+  };
+
   const renderPill = (id: SessionQuickActionId): ReactNode => {
-    const meta = SESSION_QUICK_ACTION_META[id];
+    const meta = resolveSessionQuickActionMeta(id, catalog);
     if (id === "new-session") {
       return (
         <button
@@ -123,40 +131,20 @@ export const SessionQuickActionsBar = memo(function SessionQuickActionsBar({
         </div>
       );
     }
-    if (isBuiltinAssistantQuickAction(id)) {
+    if (isAssistantTemplateQuickActionId(id)) {
       const iconTone = id === "builtin:prd-split" ? "orange" : "neutral";
       return (
         <button
           key={id}
           type="button"
           className="app-session-quick-pill"
-          onClick={() => onOpenBuiltinAssistant?.(id)}
+          onClick={() => activateAssistantById(id)}
         >
           <span
             className={`app-session-quick-pill__icon app-session-quick-pill__icon--${iconTone}`}
             aria-hidden
           >
-            {ACTION_MENU_ICONS[id] ?? <CommentOutlined />}
-          </span>
-          <span className="app-session-quick-pill__label">{meta.pillLabel}</span>
-        </button>
-      );
-    }
-    if (id === "work-trajectory") {
-      return (
-        <button key={id} type="button" className="app-session-quick-pill" onClick={onOpenWorkTrajectory}>
-          <span className="app-session-quick-pill__icon app-session-quick-pill__icon--neutral" aria-hidden>
-            <UnorderedListOutlined />
-          </span>
-          <span className="app-session-quick-pill__label">{meta.pillLabel}</span>
-        </button>
-      );
-    }
-    if (id === "work-tree") {
-      return (
-        <button key={id} type="button" className="app-session-quick-pill" onClick={() => onOpenWorktreeMenu?.()}>
-          <span className="app-session-quick-pill__icon app-session-quick-pill__icon--neutral" aria-hidden>
-            <AppstoreOutlined />
+            {actionMenuIcon(id, assistantsById.get(id))}
           </span>
           <span className="app-session-quick-pill__label">{meta.pillLabel}</span>
         </button>
@@ -167,36 +155,20 @@ export const SessionQuickActionsBar = memo(function SessionQuickActionsBar({
 
   const overflowMenuItems: MenuProps["items"] = useMemo(() => {
     const items: MenuProps["items"] = overflow.map((id) => {
-      const meta = SESSION_QUICK_ACTION_META[id];
-      if (isBuiltinAssistantQuickAction(id)) {
+      const meta = resolveSessionQuickActionMeta(id, catalog);
+      if (isAssistantTemplateQuickActionId(id)) {
         return {
           key: id,
           label: meta.label,
-          icon: ACTION_MENU_ICONS[id] ?? <CommentOutlined />,
-          onClick: () => onOpenBuiltinAssistant?.(id),
-        };
-      }
-      if (id === "work-trajectory") {
-        return {
-          key: id,
-          label: meta.label,
-          icon: ACTION_MENU_ICONS[id],
-          onClick: onOpenWorkTrajectory,
-        };
-      }
-      if (id === "work-tree") {
-        return {
-          key: id,
-          label: meta.label,
-          icon: ACTION_MENU_ICONS[id],
-          onClick: () => onOpenWorktreeMenu?.(),
+          icon: actionMenuIcon(id, assistantsById.get(id)),
+          onClick: () => activateAssistantById(id),
         };
       }
       if (id === "new-session") {
         return {
           key: id,
           label: creatingNewSession ? "创建中..." : meta.label,
-          icon: ACTION_MENU_ICONS[id],
+          icon: actionMenuIcon(id),
           disabled: creatingNewSession,
           onClick: () => {
             if (creatingNewSession) return;
@@ -225,7 +197,7 @@ export const SessionQuickActionsBar = memo(function SessionQuickActionsBar({
     if (onOpenAssistantsHub) {
       items.push({
         key: "__assistants-hub",
-        label: "助手模板",
+        label: "管理助手模板",
         icon: <UserOutlined />,
         onClick: onOpenAssistantsHub,
       });
@@ -233,11 +205,12 @@ export const SessionQuickActionsBar = memo(function SessionQuickActionsBar({
     return items;
   }, [
     overflow,
+    catalog,
     creatingNewSession,
     onCreateNewSession,
     onOpenBuiltinAssistant,
-    onOpenWorkTrajectory,
-    onOpenWorktreeMenu,
+    onActivateAssistant,
+    assistantsById,
     onOpenAssistantsHub,
   ]);
 
@@ -281,9 +254,11 @@ export const SessionQuickActionsBar = memo(function SessionQuickActionsBar({
           });
         }}
         layout={layout}
+        catalog={catalog}
         onLayoutChange={setLayout}
         onReset={resetLayout}
         availability={availability}
+        onOpenAssistantsHub={onOpenAssistantsHub}
       />
     </>
   );

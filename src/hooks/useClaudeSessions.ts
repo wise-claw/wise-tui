@@ -306,6 +306,12 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       globalMessagesBudget: companionMemoryLimits.globalBudget,
     });
     if (capped === prev) return;
+    for (const row of capped) {
+      const prevRow = prev.find((x) => x.id === row.id);
+      if (prevRow && prevRow.messages.length > 0 && row.messages.length === 0) {
+        diskLoadDoneRef.current.delete(row.id);
+      }
+    }
     sessionsRef.current = capped;
     publishClaudeSessions(capped);
   }, [buildMemoryKeepSessionIds, companionMemoryLimits.globalBudget]);
@@ -1810,9 +1816,6 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
               trellisContextIdBySessionRef.current.set(s.claudeSessionId.trim(), contextId);
               trellisContextChanged = true;
             }
-            if (s.claudeSessionId && s.messages.length > 0) {
-              diskLoadDoneRef.current.add(s.id);
-            }
           }
           if (trellisContextChanged) {
             persistTrellisContextBindings(trellisContextIdBySessionRef.current);
@@ -1821,7 +1824,19 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
             data.activeSessionId && normalizedWithModels.some((x) => x.id === data.activeSessionId)
               ? data.activeSessionId
               : normalizedWithModels[0]!.id;
+          const hydrateKeep = new Set<string>([active]);
+          for (const s of normalizedWithModels) {
+            if (s.status === "running" || s.status === "connecting") {
+              hydrateKeep.add(s.id);
+            }
+          }
+          memoryKeepSessionIdsRef.current = hydrateKeep;
           setSessions(normalizedWithModels);
+          for (const s of sessionsRef.current) {
+            if (s.claudeSessionId?.trim() && s.messages.length > 0) {
+              diskLoadDoneRef.current.add(s.id);
+            }
+          }
           setActiveSessionId(active);
         }
       } finally {
@@ -2134,6 +2149,9 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     const hasDisk = sessionHasDiskTranscript(s, engine);
     if (!hasDisk) return;
     if (s.status === "running" || s.status === "connecting") return;
+    if (s.messages.length === 0) {
+      diskLoadDoneRef.current.delete(s.id);
+    }
     if (diskLoadDoneRef.current.has(s.id)) return;
     diskLoadDoneRef.current.add(s.id);
     const loadKey = s.id;
@@ -2145,7 +2163,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       void reloadFullDiskTranscript(snapshot.id).catch(() => {
         diskLoadDoneRef.current.delete(loadKey);
       });
-    }, { timeoutMs: 900 });
+    }, { timeoutMs: 0 });
 
     return () => {
       cancelled = true;

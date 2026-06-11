@@ -695,6 +695,7 @@ pub fn run() {
             assistants::commands::assistants_list,
             assistants::commands::assistants_save_custom,
             assistants::commands::assistants_delete_custom,
+            assistants::commands::assistants_delete,
             assistants::commands::assistants_get_system_prompt,
             assistants::commands::assistants_get_overrides,
             assistants::commands::assistants_list_overrides,

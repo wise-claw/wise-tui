@@ -78,6 +78,8 @@ import {
 import { useMacTerminalDetectionBootstrap } from "./hooks/useMacTerminalDetectionBootstrap";
 import type { ScheduledTasksOverlayTarget } from "./components/RepositoryScheduledTasksModal";
 import { DEFAULT_PRD_SPLIT_ASSISTANT_ID } from "./services/assistantPromptLayers";
+import { activateAssistantTemplate } from "./services/assistantTemplateActivation";
+import type { AssistantEntry } from "./types/assistant";
 import {
   readAuthorPaneFromSettings,
   readAuthorPaneFromStorage,
@@ -1468,6 +1470,35 @@ export default function App() {
     setAssistantOpenRequestKey((value) => value + 1);
     enterCockpit();
   }, [enterCockpit]);
+  const activateAssistant = useCallback(
+    async (assistant: AssistantEntry) => {
+      const repositoryPath =
+        activeRepositoryId != null
+          ? repositories.find((item) => item.id === activeRepositoryId)?.path ?? null
+          : null;
+      await activateAssistantTemplate({
+        assistant,
+        repositoryPath,
+        workflowTemplates,
+        repositories,
+        sessions,
+        repositoryMainBindings: repositoryMainSessionBindings,
+        executeSession: handleComposerExecute,
+        openConversation: openBuiltinAssistant,
+        message,
+      });
+    },
+    [
+      activeRepositoryId,
+      handleComposerExecute,
+      message,
+      openBuiltinAssistant,
+      repositories,
+      repositoryMainSessionBindings,
+      sessions,
+      workflowTemplates,
+    ],
+  );
   const exitCockpit = useCallback(() => {
     flushSync(() => {
       setPrdSplitUiDismissed(true);
@@ -1984,26 +2015,6 @@ export default function App() {
       setInspectorHistorySessionId(null);
     },
     [reloadFullDiskTranscript, viewMode],
-  );
-
-  const handleAddWorktreeRepositoryToProject = useCallback(
-    async (worktreePath: string) => {
-      if (!activeProjectId) {
-        message.warning("请先在侧栏选择或创建一个 Workspace");
-        return;
-      }
-      const repositoryType = activeRepository?.repositoryType ?? "frontend";
-      try {
-        const result = await handleAddRepositoryPathToProject(activeProjectId, worktreePath, repositoryType);
-        if (result === "already_in_project") {
-          message.info("该 worktree 目录已在当前 Workspace 中");
-        } else {
-        }
-      } catch (error) {
-        message.error(error instanceof Error ? error.message : String(error));
-      }
-    },
-    [activeProjectId, activeRepository, handleAddRepositoryPathToProject],
   );
 
   const resolveTaskListOmcInvokeConcurrency = useCallback(
@@ -3378,7 +3389,12 @@ export default function App() {
         assistantsPanelProps: {
           activeProjectId: activeProjectId ?? null,
           activeProjectName: activeProject?.name ?? null,
-          onOpenAssistant: openBuiltinAssistant,
+          activeRepositoryPath:
+            activeRepositoryId != null
+              ? repositories.find((item) => item.id === activeRepositoryId)?.path ?? null
+              : null,
+          workflowTemplates,
+          onActivateAssistant: activateAssistant,
         },
         automationPanelProps: {
           repositories,
@@ -3410,7 +3426,6 @@ export default function App() {
         onLoadMoreTranscriptFromDisk: loadMoreTranscriptFromDisk,
         onCompactSessionHistory: compactSessionHistory,
         omcBatchPipelineActive: Boolean(omcBatchRuntime?.active),
-        onAddWorktreeRepositoryToProject: handleAddWorktreeRepositoryToProject,
         activeRepository,
         repositories,
         activeRepositoryId,
@@ -3477,6 +3492,7 @@ export default function App() {
         terminalCollapsed,
         onOpenWorkflowConfig: openWorkflowConfigFromSidebar,
         onOpenBuiltinAssistant: openBuiltinAssistant,
+        onActivateAssistant: activateAssistant,
         onOpenAssistantsHub: openAssistantsFromSidebar,
         onOpenRepositoryScheduledTasks: scheduledTasksRepository
           ? openActiveScheduledTasksOverlay
@@ -3611,6 +3627,7 @@ export default function App() {
         setCockpitActiveAssistantId(assistantId);
         if (assistantId) setCockpitResumeAssistantId(assistantId);
       }}
+      onClearCockpitInitialAssistant={() => setCockpitSurfaceInitialAssistantId(null)}
       commandPaletteProps={{
         open: searchOpen,
         onClose: () => setSearchOpen(false),

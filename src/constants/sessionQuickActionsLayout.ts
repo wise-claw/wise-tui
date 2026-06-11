@@ -2,18 +2,22 @@ import {
   SESSION_QUICK_BUILTIN_ASSISTANTS,
   type SessionQuickBuiltinAssistantId,
 } from "./sessionQuickBuiltinAssistants";
+import {
+  defaultQuickActionItemForId,
+  type SessionQuickActionCatalog,
+} from "../utils/sessionQuickAssistantCatalog";
 
 export const SESSION_QUICK_ACTIONS_LAYOUT_STORAGE_KEY = "wise.session.quickActionsLayout.v2";
 /** @deprecated 读取后迁移到 v2 */
 export const SESSION_QUICK_ACTIONS_LAYOUT_STORAGE_KEY_V1 = "wise.session.quickActionsLayout.v1";
 
-export type SessionQuickActionId =
+export type SystemSessionQuickActionId =
   | "new-session"
   | "push"
-  | "compact-context"
-  | SessionQuickBuiltinAssistantId
-  | "work-trajectory"
-  | "work-tree";
+  | "compact-context";
+
+/** 系统动作 + 内置助手 id + 动态助手模板 id（custom:/ext-） */
+export type SessionQuickActionId = SystemSessionQuickActionId | SessionQuickBuiltinAssistantId | string;
 
 export type SessionQuickActionZone = "primary" | "overflow";
 
@@ -58,8 +62,6 @@ export const SESSION_QUICK_ACTION_META: Record<SessionQuickActionId, SessionQuic
   push: { id: "push", label: "推送", pillLabel: "推送" },
   "compact-context": { id: "compact-context", label: "压缩上下文", pillLabel: "压缩上下文" },
   ...BUILTIN_QUICK_ACTION_META,
-  "work-trajectory": { id: "work-trajectory", label: "工作轨迹", pillLabel: "工作轨迹" },
-  "work-tree": { id: "work-tree", label: "工作树", pillLabel: "工作树" },
 };
 
 /** 配置面板与合并时的稳定目录顺序 */
@@ -68,8 +70,6 @@ export const SESSION_QUICK_ACTION_CATALOG_ORDER: SessionQuickActionId[] = [
   "push",
   "compact-context",
   ...SESSION_QUICK_BUILTIN_ASSISTANTS.map((row) => row.id),
-  "work-trajectory",
-  "work-tree",
 ];
 
 export const DEFAULT_SESSION_QUICK_ACTIONS_LAYOUT: SessionQuickActionsLayoutV1 = {
@@ -79,20 +79,12 @@ export const DEFAULT_SESSION_QUICK_ACTIONS_LAYOUT: SessionQuickActionsLayoutV1 =
     { id: "builtin:prd-split", visible: true, zone: "primary" },
     { id: "push", visible: true, zone: "primary" },
     { id: "compact-context", visible: false, zone: "overflow" },
-    { id: "builtin:word-doc", visible: true, zone: "overflow" },
-    { id: "builtin:ppt-deck", visible: true, zone: "overflow" },
-    { id: "builtin:excel-data", visible: true, zone: "overflow" },
-    { id: "builtin:code-review", visible: true, zone: "overflow" },
-    { id: "builtin:tech-docs", visible: true, zone: "overflow" },
-    { id: "builtin:test-gen", visible: true, zone: "overflow" },
-    { id: "builtin:release-notes", visible: true, zone: "overflow" },
-    { id: "work-trajectory", visible: true, zone: "overflow" },
-    { id: "work-tree", visible: true, zone: "overflow" },
   ],
 };
 
 function isSessionQuickActionId(value: unknown): value is SessionQuickActionId {
-  return typeof value === "string" && value in SESSION_QUICK_ACTION_META;
+  if (typeof value !== "string") return false;
+  return value in SESSION_QUICK_ACTION_META || value.startsWith("custom:") || value.startsWith("ext-");
 }
 
 /** 旧版「需求」与「需求拆分助手」合并为 builtin:prd-split */
@@ -127,16 +119,26 @@ export function ensurePrdSplitQuickActionPrimary(
   });
 }
 
+function isKnownQuickActionId(
+  id: SessionQuickActionId,
+  catalog?: SessionQuickActionCatalog | null,
+): boolean {
+  if (catalog) return catalog.order.includes(id) || catalog.meta[id] != null;
+  return isSessionQuickActionId(id) || id in SESSION_QUICK_ACTION_META;
+}
+
 /** 与目录合并：保留用户顺序，补齐缺失项，剔除未知 id */
 export function mergeSessionQuickActionsLayout(
   input: SessionQuickActionsLayoutV1 | null | undefined,
+  catalog?: SessionQuickActionCatalog | null,
 ): SessionQuickActionsLayoutV1 {
+  const catalogOrder = catalog?.order ?? SESSION_QUICK_ACTION_CATALOG_ORDER;
   const source = input?.version === 1 && Array.isArray(input.items) ? input.items : [];
   const byId = new Map<SessionQuickActionId, SessionQuickActionLayoutItem>();
 
   for (const raw of source) {
-    const id = normalizeSessionQuickActionId(raw?.id);
-    if (!raw || !id) continue;
+    const id = normalizeSessionQuickActionId(raw?.id) ?? (typeof raw?.id === "string" ? raw.id : null);
+    if (!raw || !id || !isKnownQuickActionId(id, catalog)) continue;
     const next: SessionQuickActionLayoutItem = {
       id,
       visible: raw.visible !== false,
@@ -149,14 +151,17 @@ export function mergeSessionQuickActionsLayout(
 
   const orderedKnown: SessionQuickActionLayoutItem[] = [];
   for (const item of source) {
-    const id = normalizeSessionQuickActionId(item?.id);
-    if (!item || !id || orderedKnown.some((x) => x.id === id)) continue;
+    const id = normalizeSessionQuickActionId(item?.id) ?? (typeof item?.id === "string" ? item.id : null);
+    if (!item || !id || !isKnownQuickActionId(id, catalog) || orderedKnown.some((x) => x.id === id)) {
+      continue;
+    }
     orderedKnown.push(byId.get(id)!);
   }
 
-  for (const id of SESSION_QUICK_ACTION_CATALOG_ORDER) {
+  for (const id of catalogOrder) {
     if (!orderedKnown.some((item) => item.id === id)) {
-      orderedKnown.push(byId.get(id) ?? defaultById.get(id) ?? { id, visible: true, zone: "overflow" });
+      const defaults = defaultById.get(id) ?? defaultQuickActionItemForId(id);
+      orderedKnown.push(byId.get(id) ?? { id, ...defaults });
     }
   }
 
@@ -180,7 +185,6 @@ export function parseSessionQuickActionsLayout(raw: string | null | undefined): 
 
 export interface SessionQuickActionsAvailability {
   canNewSession: boolean;
-  canWorkTree: boolean;
   canCompactContext: boolean;
 }
 
@@ -189,7 +193,6 @@ export function isSessionQuickActionAvailable(
   availability: SessionQuickActionsAvailability,
 ): boolean {
   if (id === "new-session") return availability.canNewSession;
-  if (id === "work-tree") return availability.canWorkTree;
   /** 已迁至输入框底栏（分支后），快捷条不再展示 */
   if (id === "compact-context") return false;
   return true;
@@ -198,8 +201,9 @@ export function isSessionQuickActionAvailable(
 export function partitionSessionQuickActions(
   layout: SessionQuickActionsLayoutV1,
   availability: SessionQuickActionsAvailability,
+  catalog?: SessionQuickActionCatalog | null,
 ): { primary: SessionQuickActionId[]; overflow: SessionQuickActionId[] } {
-  const normalized = mergeSessionQuickActionsLayout(layout);
+  const normalized = mergeSessionQuickActionsLayout(layout, catalog);
   const primary: SessionQuickActionId[] = [];
   const overflow: SessionQuickActionId[] = [];
 
@@ -217,8 +221,9 @@ export function moveLayoutItem(
   layout: SessionQuickActionsLayoutV1,
   id: SessionQuickActionId,
   direction: "up" | "down",
+  catalog?: SessionQuickActionCatalog | null,
 ): SessionQuickActionsLayoutV1 {
-  const normalized = mergeSessionQuickActionsLayout(layout);
+  const normalized = mergeSessionQuickActionsLayout(layout, catalog);
   const index = normalized.items.findIndex((item) => item.id === id);
   if (index < 0) return normalized;
   const target = direction === "up" ? index - 1 : index + 1;
@@ -233,8 +238,9 @@ export function updateLayoutItem(
   layout: SessionQuickActionsLayoutV1,
   id: SessionQuickActionId,
   patch: Partial<Pick<SessionQuickActionLayoutItem, "visible" | "zone">>,
+  catalog?: SessionQuickActionCatalog | null,
 ): SessionQuickActionsLayoutV1 {
-  const normalized = mergeSessionQuickActionsLayout(layout);
+  const normalized = mergeSessionQuickActionsLayout(layout, catalog);
   return {
     version: 1,
     items: normalized.items.map((item) => (item.id === id ? { ...item, ...patch } : item)),

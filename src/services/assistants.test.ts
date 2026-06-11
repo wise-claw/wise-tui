@@ -11,6 +11,7 @@ mock.module("@tauri-apps/api/core", () => ({
 }));
 
 import {
+  deleteAssistant,
   deleteCustomAssistant,
   getAssistantSystemPrompt,
   listAssistants,
@@ -44,11 +45,19 @@ describe("assistants service", () => {
     });
   });
 
-  test("deleteCustomAssistant wraps customId", async () => {
+  test("deleteAssistant wraps id", async () => {
+    invokeMock.mockResolvedValueOnce(undefined);
+    await deleteAssistant("builtin:prd-split");
+    expect(invokeMock).toHaveBeenCalledWith("assistants_delete", {
+      args: { id: "builtin:prd-split" },
+    });
+  });
+
+  test("deleteCustomAssistant delegates to deleteAssistant", async () => {
     invokeMock.mockResolvedValueOnce(undefined);
     await deleteCustomAssistant("abc");
-    expect(invokeMock).toHaveBeenCalledWith("assistants_delete_custom", {
-      args: { customId: "abc" },
+    expect(invokeMock).toHaveBeenCalledWith("assistants_delete", {
+      args: { id: "custom:abc" },
     });
   });
 

@@ -1,9 +1,11 @@
 //! Tauri commands for assistants (builtin + custom + extension + overrides).
 
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
 use tauri::State;
 
 use super::builtins::{self, BuiltinAssistantBundle};
+use super::hidden;
 use super::overrides::{self, AssistantOverridesPatch, AssistantOverridesRow, ResetSection};
 use super::runtime_resolver::{self, ResolveScopes, ResolvedRuntime};
 use super::source::AssistantSource;
@@ -33,7 +35,7 @@ pub struct AssistantEntry {
     pub extension_id: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub system_prompt_path: Option<String>,
-    /// Builtins are not removable;UI hides delete control when this is `true`.
+    /// True for Wise-shipped builtin templates (origin metadata only).
     #[serde(default)]
     pub built_in: bool,
     /// Tools the assistant can call(only populated for builtin).
@@ -45,8 +47,20 @@ pub struct AssistantEntry {
     pub default_skills: Vec<AssistantBundleRef>,
     #[serde(skip_serializing_if = "Vec::is_empty", default)]
     pub default_mcps: Vec<AssistantBundleRef>,
+    #[serde(skip_serializing_if = "is_default_entry_kind")]
+    pub entry_kind: String,
+    #[serde(skip_serializing_if = "String::is_empty", default)]
+    pub entry_url: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub entry_workflow_id: Option<String>,
+    #[serde(skip_serializing_if = "String::is_empty", default)]
+    pub entry_script: String,
     pub created_at: String,
     pub updated_at: String,
+}
+
+fn is_default_entry_kind(kind: &str) -> bool {
+    kind == "conversation"
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -112,9 +126,63 @@ fn builtin_to_entry(bundle: &BuiltinAssistantBundle) -> AssistantEntry {
                 source_path: None,
             })
             .collect(),
+        entry_kind: "conversation".to_string(),
+        entry_url: String::new(),
+        entry_workflow_id: None,
+        entry_script: String::new(),
         created_at: BUILTIN_EPOCH.to_string(),
         updated_at: BUILTIN_EPOCH.to_string(),
     }
+}
+
+fn bundle_json_to_refs(json: &str) -> Vec<AssistantBundleRef> {
+    let Ok(value) = serde_json::from_str::<Value>(json) else {
+        return Vec::new();
+    };
+    let disabled: Vec<String> = value
+        .get("disabled")
+        .and_then(|v| v.as_array())
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| item.as_str().map(|s| s.to_string()))
+                .collect()
+        })
+        .unwrap_or_default();
+    let disabled_set: std::collections::HashSet<&str> =
+        disabled.iter().map(|s| s.as_str()).collect();
+    value
+        .get("custom")
+        .and_then(|v| v.as_array())
+        .map(|items| {
+            items
+                .iter()
+                .filter_map(|item| {
+                    let id = item.get("id")?.as_str()?.trim();
+                    if id.is_empty() || disabled_set.contains(id) {
+                        return None;
+                    }
+                    let label = item
+                        .get("label")
+                        .and_then(|v| v.as_str())
+                        .unwrap_or(id)
+                        .trim()
+                        .to_string();
+                    let source_path = item
+                        .get("sourcePath")
+                        .and_then(|v| v.as_str())
+                        .map(|s| s.trim())
+                        .filter(|s| !s.is_empty())
+                        .map(|s| s.to_string());
+                    Some(AssistantBundleRef {
+                        id: id.to_string(),
+                        label,
+                        source_path,
+                    })
+                })
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 fn custom_to_entry(row: CustomAssistantRow) -> AssistantEntry {
@@ -135,6 +203,10 @@ fn custom_to_entry(row: CustomAssistantRow) -> AssistantEntry {
         tools: Vec::new(),
         default_skills: Vec::new(),
         default_mcps: Vec::new(),
+        entry_kind: row.entry_kind,
+        entry_url: row.entry_url,
+        entry_workflow_id: row.entry_workflow_id,
+        entry_script: row.entry_script,
         created_at: row.created_at,
         updated_at: row.updated_at,
     }
@@ -145,20 +217,35 @@ pub fn assistants_list(
     db: State<'_, WiseDb>,
     extensions: State<'_, ExtensionRegistry>,
 ) -> Result<Vec<AssistantEntry>, String> {
+    let conn = db.0.lock().map_err(|e| format!("db lock poisoned: {e}"))?;
+    let hidden_ids = hidden::list_hidden_ids(&conn)?;
+
     let mut out = Vec::new();
     for bundle in builtins::list() {
-        out.push(builtin_to_entry(bundle));
+        let entry = builtin_to_entry(bundle);
+        if hidden_ids.contains(&entry.id) {
+            continue;
+        }
+        out.push(entry);
     }
 
-    {
-        let conn = db.0.lock().map_err(|e| format!("db lock poisoned: {e}"))?;
-        let custom = storage::list(&conn)?;
-        for c in custom {
-            out.push(custom_to_entry(c));
+    let custom = storage::list(&conn)?;
+    for c in custom {
+        let mut entry = custom_to_entry(c);
+        if hidden_ids.contains(&entry.id) {
+            continue;
         }
+        if let Some(overrides) = overrides::get(&conn, &entry.id, "assistant")? {
+            entry.default_skills = bundle_json_to_refs(&overrides.skill_bundle_json);
+            entry.default_mcps = bundle_json_to_refs(&overrides.mcp_bundle_json);
+        }
+        out.push(entry);
     }
 
     for ext_a in extensions.assistants() {
+        if hidden_ids.contains(&ext_a.id) {
+            continue;
+        }
         out.push(AssistantEntry {
             id: ext_a.id.clone(),
             source: AssistantSource::Extension,
@@ -176,6 +263,10 @@ pub fn assistants_list(
             default_workflows: Vec::new(),
             default_skills: Vec::new(),
             default_mcps: Vec::new(),
+            entry_kind: "conversation".to_string(),
+            entry_url: String::new(),
+            entry_workflow_id: None,
+            entry_script: String::new(),
             // Extension assistants don't carry timestamps; keep the
             // builtin epoch for stable ordering.
             created_at: BUILTIN_EPOCH.to_string(),
@@ -213,8 +304,54 @@ pub fn assistants_delete_custom(
     db: State<'_, WiseDb>,
     args: DeleteCustomArgs,
 ) -> Result<(), String> {
+    assistants_delete_impl(&db, &format!("custom:{}", args.custom_id.trim()))
+}
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct DeleteAssistantArgs {
+    pub id: String,
+}
+
+#[tauri::command]
+pub fn assistants_delete(db: State<'_, WiseDb>, args: DeleteAssistantArgs) -> Result<(), String> {
+    assistants_delete_impl(&db, args.id.trim())
+}
+
+fn assistants_delete_impl(db: &WiseDb, raw_id: &str) -> Result<(), String> {
+    let id = raw_id.trim();
+    if id.is_empty() {
+        return Err("assistant id must not be empty".into());
+    }
+
     let conn = db.0.lock().map_err(|e| format!("db lock poisoned: {e}"))?;
-    storage::delete(&conn, &args.custom_id)
+
+    if let Some(custom_id) = id.strip_prefix("custom:") {
+        if custom_id.trim().is_empty() {
+            return Err("custom assistant id must not be empty".into());
+        }
+        storage::delete(&conn, custom_id)?;
+        overrides::delete_all_for_assistant(&conn, id)?;
+        let _ = hidden::hide(&conn, id);
+        return Ok(());
+    }
+
+    if id.starts_with("builtin:") {
+        if builtins::find(id).is_none() {
+            return Err(format!("unknown builtin assistant id {id}"));
+        }
+        hidden::hide(&conn, id)?;
+        overrides::delete_all_for_assistant(&conn, id)?;
+        return Ok(());
+    }
+
+    if id.starts_with("ext-") {
+        hidden::hide(&conn, id)?;
+        overrides::delete_all_for_assistant(&conn, id)?;
+        return Ok(());
+    }
+
+    Err(format!("unknown assistant id {id}"))
 }
 
 #[derive(Debug, Deserialize)]

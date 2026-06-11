@@ -1,41 +1,49 @@
 import { ArrowDownOutlined, ArrowUpOutlined } from "@ant-design/icons";
 import { Button, Modal, Segmented, Switch, Tag } from "antd";
 import {
+  isSessionQuickActionAvailable,
   moveLayoutItem,
-  SESSION_QUICK_ACTION_META,
   updateLayoutItem,
   type SessionQuickActionId,
   type SessionQuickActionLayoutItem,
   type SessionQuickActionsAvailability,
   type SessionQuickActionsLayoutV1,
-  isSessionQuickActionAvailable,
 } from "../../constants/sessionQuickActionsLayout";
+import {
+  isAssistantTemplateQuickActionId,
+  resolveSessionQuickActionMeta,
+  type SessionQuickActionCatalog,
+} from "../../utils/sessionQuickAssistantCatalog";
 
 export interface SessionQuickActionsCustomizeModalProps {
   open: boolean;
   onClose: () => void;
   layout: SessionQuickActionsLayoutV1;
+  catalog: SessionQuickActionCatalog;
   onLayoutChange: (next: SessionQuickActionsLayoutV1) => void;
   onReset: () => void;
   availability: SessionQuickActionsAvailability;
+  onOpenAssistantsHub?: () => void;
 }
 
 export function SessionQuickActionsCustomizeModal({
   open,
   onClose,
   layout,
+  catalog,
   onLayoutChange,
   onReset,
   availability,
+  onOpenAssistantsHub,
 }: SessionQuickActionsCustomizeModalProps) {
   const items = layout.items;
 
   const patchItem = (id: SessionQuickActionId, patch: Partial<Pick<SessionQuickActionLayoutItem, "visible" | "zone">>) => {
-    onLayoutChange(updateLayoutItem(layout, id, patch));
+    onLayoutChange(updateLayoutItem(layout, id, patch, catalog));
   };
 
   const moveItem = (id: SessionQuickActionId, direction: "up" | "down") => {
-    onLayoutChange(moveLayoutItem(layout, id, direction));
+    onLayoutChange(moveLayoutItem(layout, id, direction, catalog));
   };
 
   return (
@@ -46,31 +54,51 @@ export function SessionQuickActionsCustomizeModal({
       onOk={onClose}
       okText="完成"
       cancelButtonProps={{ style: { display: "none" } }}
-      width={400}
+      width={440}
       destroyOnHidden
       className="app-session-quick-customize-modal"
       footer={
         <div className="app-session-quick-customize-modal__footer">
-          <Button type="link" onClick={onReset}>
-            恢复默认
-          </Button>
-          <Button type="primary" onClick={onClose}>
-            完成
-          </Button>
+          {onOpenAssistantsHub ? (
+            <Button type="link" onClick={onOpenAssistantsHub}>
+              管理助手模板
+            </Button>
+          ) : (
+            <span />
+          )}
+          <div className="app-session-quick-customize-modal__footer-actions">
+            <Button type="link" onClick={onReset}>
+              恢复默认
+            </Button>
+            <Button type="primary" onClick={onClose}>
+              完成
+            </Button>
+          </div>
         </div>
       }
     >
       <p className="app-session-quick-customize-modal__hint">
-        开关显示 · 外显/更多 · ↑↓ 排序；不可用项可预配。调整会自动写入本地数据库（~/.wise/wise.db）。
+        开关显示 · 外显/更多 · ↑↓ 排序。列表包含全部助手模板（内置 / 自定义 / 扩展），调整会自动写入本地数据库。
       </p>
       <ul className="app-session-quick-customize-modal__list">
         {items.map((item, index) => {
-          const meta = SESSION_QUICK_ACTION_META[item.id];
+          const meta = resolveSessionQuickActionMeta(item.id, catalog);
           const available = isSessionQuickActionAvailable(item.id, availability);
+          const isAssistant = isAssistantTemplateQuickActionId(item.id);
           return (
             <li key={item.id} className="app-session-quick-customize-modal__row">
               <span className="app-session-quick-customize-modal__label" title={meta.label}>
                 {meta.label}
+                {isAssistant && item.id.startsWith("custom:") ? (
+                  <Tag className="app-session-quick-customize-modal__tag" bordered={false}>
+                    自定义
+                  </Tag>
+                ) : null}
+                {isAssistant && item.id.startsWith("ext-") ? (
+                  <Tag className="app-session-quick-customize-modal__tag" bordered={false}>
+                    扩展
+                  </Tag>
+                ) : null}
                 {!available ? (
                   <Tag className="app-session-quick-customize-modal__tag" bordered={false}>
                     不可用

@@ -11,7 +11,7 @@ export interface AssistantHubBodyProps {
   loading: boolean;
   mode: AssistantHubCardMode;
   emptyDescription?: string;
-  resolveEngineStatus?: (assistant: AssistantEntry) => AssistantEngineBindingStatus;
+  resolveEngineStatus?: (assistant: AssistantEntry) => AssistantEngineBindingStatus | undefined;
   renderCardActions?: (assistant: AssistantEntry) => {
     disabled?: boolean;
     disabledHint?: string;

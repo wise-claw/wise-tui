@@ -464,6 +464,7 @@ export interface AppWorkspaceLayoutProps {
   scheduledTasksOverlayWorkflowTemplates?: WorkflowTemplateItem[];
   scheduledTasksOverlayWorkflowGraphsByWorkflowId?: Record<string, WorkflowGraph>;
   onCockpitActiveAssistantIdChange?: (assistantId: string | null) => void;
+  onClearCockpitInitialAssistant?: () => void;
   commandPaletteProps: ComponentProps<typeof CommandPalette>;
   mcpHubProps: ComponentProps<typeof McpHub>;
   skillsHubProps: ComponentProps<typeof SkillsHub>;
@@ -561,6 +562,7 @@ export function AppWorkspaceLayout({
   scheduledTasksOverlayWorkflowTemplates = [],
   scheduledTasksOverlayWorkflowGraphsByWorkflowId = {},
   onCockpitActiveAssistantIdChange,
+  onClearCockpitInitialAssistant,
   commandPaletteProps,
   mcpHubProps,
   skillsHubProps,
@@ -1120,6 +1122,7 @@ export function AppWorkspaceLayout({
                                 openRequestKey={cockpitSurfaceOpenRequestKey}
                                 prdTaskSplitPanelProps={prdTaskSplitPanelProps}
                                 onActiveAssistantIdChange={onCockpitActiveAssistantIdChange}
+                                onClearInitialAssistant={onClearCockpitInitialAssistant}
                               />
                             </Suspense>
                           )}

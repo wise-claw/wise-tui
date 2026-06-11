@@ -326,7 +326,6 @@ export function AssistantSettingsDrawer({
               <div className="assistant-settings-drawer__tags">
                 <Tag>{sourceLabel(assistant.source)}</Tag>
                 <Tag>{assistant.engineId}</Tag>
-                {assistant.builtIn ? <Tag color="blue">内置不可删除</Tag> : null}
               </div>
             </div>
           </div>

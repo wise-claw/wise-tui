@@ -19,14 +19,13 @@ describe("buildAssistantHubSections", () => {
   test("groups builtin assistants into hub sections", () => {
     const list: AssistantEntry[] = [
       row({ id: "builtin:prd-split", source: "builtin", name: "需求拆分", defaultWorkflows: [{ id: "w", label: "W" }] }),
-      row({ id: "builtin:code-review", source: "builtin", name: "代码审查" }),
       row({ id: "custom:x", source: "custom", name: "自定义", customId: "x" }),
     ];
 
     const sections = buildAssistantHubSections(list, "all");
-    expect(sections.map((s) => s.title)).toEqual(["研发编排", "研发助手", "自建与扩展"]);
+    expect(sections.map((s) => s.title)).toEqual(["研发编排", "自建与扩展"]);
     expect(sections[0]?.assistants[0]?.id).toBe("builtin:prd-split");
-    expect(sections[2]?.assistants[0]?.id).toBe("custom:x");
+    expect(sections[1]?.assistants[0]?.id).toBe("custom:x");
   });
 
   test("custom filter uses a single section", () => {

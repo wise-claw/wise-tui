@@ -1,30 +1,12 @@
 import { CloudUploadOutlined } from "@ant-design/icons";
-import { HoverHint } from "../shared/HoverHint";
-import { Button, Empty, Modal, Popover, Popconfirm, Spin, message } from "antd";
+import { Popover, Spin, message } from "antd";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { WORKFLOW_UI_EVENT_REPO_WORKTREES_MAY_HAVE_CHANGED } from "../../constants/workflowUiEvents";
-import type { RepoWorktreesMayHaveChangedDetail } from "../../constants/workflowUiEvents";
 import { useGitRepositoryStats } from "../../hooks/useGitRepositoryStats";
 import { executeClaudeCodeAndWait, getClaudeConfigModel } from "../../services/claude";
-import {
-  gitCommit,
-  gitPull,
-  gitPush,
-  gitStageAll,
-  gitStatus,
-  gitWorktreeList,
-  gitWorktreeRemove,
-} from "../../services/git";
-import { openInFinder } from "../../services/repository";
+import { gitCommit, gitPull, gitPush, gitStageAll, gitStatus } from "../../services/git";
 import { refreshGitRepositoryStats } from "../../stores/gitRepositoryStatsStore";
-import type { GitWorktreeEntry } from "../../types";
 import { extractClaudeInvocationFinalText } from "../../utils/claudeInvocationText";
-import {
-  buildAiCommitSummary,
-  formatWorktreeBranchLabel,
-  formatWorktreePathRelative,
-  sessionRepoPathKey,
-} from "./claudeChatHelpers";
+import { buildAiCommitSummary } from "./claudeChatHelpers";
 import { filterComposerCommonPhrasesForQuickBar } from "../../constants/composerCommonPhrase";
 import { dispatchApplyComposerCommonPhrase } from "../../constants/composerCommonPhraseEvents";
 import { useComposerCommonPhrases } from "../../hooks/useComposerCommonPhrases";
@@ -34,14 +16,12 @@ import { SessionQuickActionsBar } from "./SessionQuickActionsBar";
 export interface ClaudeChatQuickActionsChromeProps {
   sessionId: string;
   gitRepositoryPath: string;
-  sessionRepositoryPath: string;
   onCreateNewSession?: () => void;
   creatingNewSession?: boolean;
   onOpenBuiltinAssistant?: (assistantId: string) => void;
+  onActivateAssistant?: (assistant: import("../../types/assistant").AssistantEntry) => void | Promise<void>;
   onOpenAssistantsHub?: () => void;
-  onOpenWorkTrajectory: () => void;
   onSend?: (prompt: string) => void;
-  onAddWorktreeRepositoryToProject?: (worktreePath: string) => void | Promise<void>;
   /** 与输入区一致：会话忙且无法入队时禁用「直接发送」类常用语 */
   composerSessionBusyWithoutEnqueue?: boolean;
 }
@@ -49,14 +29,12 @@ export interface ClaudeChatQuickActionsChromeProps {
 export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActionsChrome({
   sessionId,
   gitRepositoryPath,
-  sessionRepositoryPath,
   onCreateNewSession,
   creatingNewSession = false,
   onOpenBuiltinAssistant,
+  onActivateAssistant,
   onOpenAssistantsHub,
-  onOpenWorkTrajectory,
   onSend,
-  onAddWorktreeRepositoryToProject,
   composerSessionBusyWithoutEnqueue = false,
 }: ClaudeChatQuickActionsChromeProps) {
   const { phrases: composerCommonPhrases } = useComposerCommonPhrases();
@@ -94,14 +72,7 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
   const pushSummaryLoadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pushSummaryLoadSeqRef = useRef(0);
   const pushAutoFixTimerRef = useRef<number | null>(null);
-  const gitWorktreeLoadSeqRef = useRef(0);
   const pushSubmitInFlightRef = useRef(false);
-
-  const [gitWorktreePopoverOpen, setGitWorktreePopoverOpen] = useState(false);
-  const [linkedWorktrees, setLinkedWorktrees] = useState<GitWorktreeEntry[]>([]);
-  const [gitWorktreeLoading, setGitWorktreeLoading] = useState(false);
-  const [gitWorktreeRemovingPath, setGitWorktreeRemovingPath] = useState<string | null>(null);
-  const [gitWorktreeAddingToProjectPath, setGitWorktreeAddingToProjectPath] = useState<string | null>(null);
 
   useEffect(() => {
     prevGitStatsForPulseRef.current = { additions: 0, deletions: 0 };
@@ -110,9 +81,7 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
     setPushSummaryDraft("");
     setPushSummaryLoading(false);
     setPushSummaryPhase("");
-    setGitWorktreePopoverOpen(false);
     pushSummaryLoadSeqRef.current += 1;
-    gitWorktreeLoadSeqRef.current += 1;
     if (pushAutoFixTimerRef.current != null) {
       window.clearTimeout(pushAutoFixTimerRef.current);
       pushAutoFixTimerRef.current = null;
@@ -326,98 +295,6 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
     }
   }, [gitRepositoryPath, onSend, pushSummaryDraft]);
 
-  const loadLinkedWorktrees = useCallback(async () => {
-    const p = gitRepositoryPath;
-    if (!p) {
-      setLinkedWorktrees([]);
-      return;
-    }
-    const seq = ++gitWorktreeLoadSeqRef.current;
-    setGitWorktreeLoading(true);
-    try {
-      const list = await gitWorktreeList(p);
-      if (seq !== gitWorktreeLoadSeqRef.current) return;
-      const extras = list.filter((w) => !w.isPrimary);
-      const seen = new Set<string>();
-      const deduped: GitWorktreeEntry[] = [];
-      for (const w of extras) {
-        const key = sessionRepoPathKey(w.path);
-        if (seen.has(key)) continue;
-        seen.add(key);
-        deduped.push(w);
-      }
-      setLinkedWorktrees(deduped);
-    } finally {
-      if (seq === gitWorktreeLoadSeqRef.current) {
-        setGitWorktreeLoading(false);
-      }
-    }
-  }, [gitRepositoryPath]);
-
-  useEffect(() => {
-    void loadLinkedWorktrees();
-  }, [loadLinkedWorktrees]);
-
-  useEffect(() => {
-    const onRepoWorktreesMayHaveChanged = (ev: Event): void => {
-      const detail = (ev as CustomEvent<RepoWorktreesMayHaveChangedDetail>).detail;
-      const anchor = gitRepositoryPath;
-      const changed = detail?.repositoryPath?.trim();
-      if (!anchor || !changed) return;
-      if (sessionRepoPathKey(anchor) !== sessionRepoPathKey(changed)) return;
-      void loadLinkedWorktrees();
-    };
-    window.addEventListener(WORKFLOW_UI_EVENT_REPO_WORKTREES_MAY_HAVE_CHANGED, onRepoWorktreesMayHaveChanged);
-    return () => {
-      window.removeEventListener(WORKFLOW_UI_EVENT_REPO_WORKTREES_MAY_HAVE_CHANGED, onRepoWorktreesMayHaveChanged);
-    };
-  }, [gitRepositoryPath, loadLinkedWorktrees]);
-
-  const handleOpenWorktreeMenu = useCallback(() => {
-    setGitWorktreePopoverOpen(true);
-    void loadLinkedWorktrees();
-  }, [loadLinkedWorktrees]);
-
-  const handleGitWorktreeRemove = useCallback(
-    async (worktreePath: string) => {
-      const p = gitRepositoryPath;
-      if (!p) return;
-      setGitWorktreeRemovingPath(worktreePath);
-      try {
-        await gitWorktreeRemove(p, worktreePath);
-        await loadLinkedWorktrees();
-      } catch (error) {
-        const errMsg = error instanceof Error ? error.message : String(error);
-        message.error(errMsg);
-      } finally {
-        setGitWorktreeRemovingPath(null);
-      }
-    },
-    [gitRepositoryPath, loadLinkedWorktrees],
-  );
-
-  const handleOpenWorktreeInFinder = useCallback((worktreePath: string) => {
-    void openInFinder(worktreePath).catch((err) => {
-      console.error("openInFinder:", err);
-      message.error(err instanceof Error ? err.message : String(err));
-    });
-  }, []);
-
-  const handleAddWorktreeToProject = useCallback(
-    async (worktreePath: string) => {
-      if (!onAddWorktreeRepositoryToProject) return;
-      setGitWorktreeAddingToProjectPath(worktreePath);
-      try {
-        await onAddWorktreeRepositoryToProject(worktreePath);
-      } catch (err) {
-        message.error(err instanceof Error ? err.message : String(err));
-      } finally {
-        setGitWorktreeAddingToProjectPath(null);
-      }
-    },
-    [onAddWorktreeRepositoryToProject],
-  );
-
   const pushControl = (
     <Popover
       trigger="click"
@@ -480,100 +357,14 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
   );
 
   return (
-    <>
-      <SessionQuickActionsBar
-        onCreateNewSession={onCreateNewSession}
-        creatingNewSession={creatingNewSession}
-        onOpenBuiltinAssistant={onOpenBuiltinAssistant}
-        onOpenAssistantsHub={onOpenAssistantsHub}
-        onOpenWorkTrajectory={onOpenWorkTrajectory}
-        showWorktreeInMore={Boolean(sessionRepositoryPath)}
-        onOpenWorktreeMenu={handleOpenWorktreeMenu}
-        pushControl={pushControl}
-        commonPhrasesSlot={commonPhrasesSlot}
-      />
-
-      {sessionRepositoryPath ? (
-        <Modal
-          title="本仓库额外 worktree"
-          open={gitWorktreePopoverOpen}
-          onCancel={() => setGitWorktreePopoverOpen(false)}
-          footer={null}
-          width={520}
-          destroyOnHidden
-          className="app-gitworktree-modal"
-        >
-          <div className="app-gitworktree-popover__content">
-            {gitWorktreeLoading ? (
-              <div className="app-gitworktree-popover__loading">
-                <Spin size="small" />
-                <span>加载中...</span>
-              </div>
-            ) : linkedWorktrees.length === 0 ? (
-              <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无额外 worktree" />
-            ) : (
-              <ul className="app-gitworktree-popover__list">
-                {linkedWorktrees.map((w) => (
-                  <li key={w.path} className="app-gitworktree-popover__item">
-                    <div className="app-gitworktree-popover__item-main">
-                      <div className="app-gitworktree-popover__branch">{formatWorktreeBranchLabel(w.branch)}</div>
-                      <div className="app-gitworktree-popover__path" title={w.path}>
-                        {formatWorktreePathRelative(sessionRepositoryPath, w.path)}
-                      </div>
-                    </div>
-                    <div className="app-gitworktree-popover__item-actions">
-                      <HoverHint title="在系统文件管理器中打开此目录">
-                        <Button type="link" size="small" onClick={() => handleOpenWorktreeInFinder(w.path)}>
-                          打开目录
-                        </Button>
-                      </HoverHint>
-                      {onAddWorktreeRepositoryToProject ? (
-                        <HoverHint title="加入左侧当前项目，便于在仓库列表中切换">
-                          <Button
-                            type="link"
-                            size="small"
-                            loading={gitWorktreeAddingToProjectPath === w.path}
-                            disabled={
-                              (gitWorktreeAddingToProjectPath !== null &&
-                                gitWorktreeAddingToProjectPath !== w.path) ||
-                              (gitWorktreeRemovingPath !== null && gitWorktreeRemovingPath !== w.path)
-                            }
-                            onClick={() => void handleAddWorktreeToProject(w.path)}
-                          >
-                            加入项目
-                          </Button>
-                        </HoverHint>
-                      ) : null}
-                      <Popconfirm
-                        title="撤回此 worktree？"
-                        description="将执行 git worktree remove --force，并删除该 worktree 对应的工作区目录。"
-                        okText="确定"
-                        cancelText="取消"
-                        styles={{ container: { width: "min(92vw, 300px)", maxWidth: "min(92vw, 300px)" } }}
-                        onConfirm={() => void handleGitWorktreeRemove(w.path)}
-                      >
-                        <Button
-                          type="link"
-                          size="small"
-                          danger
-                          loading={gitWorktreeRemovingPath === w.path}
-                          disabled={
-                            (gitWorktreeRemovingPath !== null && gitWorktreeRemovingPath !== w.path) ||
-                            (gitWorktreeAddingToProjectPath !== null &&
-                              gitWorktreeAddingToProjectPath !== w.path)
-                          }
-                        >
-                          撤销
-                        </Button>
-                      </Popconfirm>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        </Modal>
-      ) : null}
-    </>
+    <SessionQuickActionsBar
+      onCreateNewSession={onCreateNewSession}
+      creatingNewSession={creatingNewSession}
+      onOpenBuiltinAssistant={onOpenBuiltinAssistant}
+      onActivateAssistant={onActivateAssistant}
+      onOpenAssistantsHub={onOpenAssistantsHub}
+      pushControl={pushControl}
+      commonPhrasesSlot={commonPhrasesSlot}
+    />
   );
 });

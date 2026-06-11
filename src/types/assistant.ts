@@ -1,5 +1,8 @@
 export type AssistantSource = "builtin" | "custom" | "extension";
 
+/** 自定义助手模板的入口类型；内置/扩展助手固定为 conversation。 */
+export type AssistantEntryKind = "conversation" | "open_link" | "run_workflow" | "run_script";
+
 export interface AssistantEntry {
   id: string;
   source: AssistantSource;
@@ -21,6 +24,14 @@ export interface AssistantEntry {
   defaultWorkflows?: AssistantWorkflowRef[];
   defaultSkills?: AssistantBundleRef[];
   defaultMcps?: AssistantBundleRef[];
+  /** 仅 custom 助手：入口类型，缺省为 conversation。 */
+  entryKind?: AssistantEntryKind;
+  /** entryKind === open_link */
+  entryUrl?: string | null;
+  /** entryKind === run_workflow */
+  entryWorkflowId?: string | null;
+  /** entryKind === run_script */
+  entryScript?: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -47,4 +58,8 @@ export interface CustomAssistantInput {
   engineId: string;
   systemPrompt?: string;
   model?: string | null;
+  entryKind?: AssistantEntryKind;
+  entryUrl?: string;
+  entryWorkflowId?: string | null;
+  entryScript?: string;
 }

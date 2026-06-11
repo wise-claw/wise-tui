@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listAssistants } from "../../services/assistants";
 import type { AssistantEntry } from "../../types/assistant";
 import { DEFAULT_PRD_SPLIT_ASSISTANT_ID } from "../../services/assistantPromptLayers";
@@ -45,6 +45,8 @@ export interface CockpitSurfaceProps {
   resumeAssistantId?: string | null;
   /** 透传给现有 PRD 拆分面板,作为需求助手主工作台。 */
   prdTaskSplitPanelProps: AssistantConversationPrdTaskSplitPanelProps;
+  /** Hub 内手动切换助手或返回 Hub 时清除宿主侧残留的 initialAssistantId。 */
+  onClearInitialAssistant?: () => void;
 }
 
 /**
@@ -60,12 +62,15 @@ export function CockpitSurface({
   resumeAssistantId = null,
   prdTaskSplitPanelProps,
   onActiveAssistantIdChange,
+  onClearInitialAssistant,
 }: CockpitSurfaceProps) {
   const [subMode, setSubMode] = useState<CockpitSubMode>(() =>
     cockpitSubModeFromEntry(hasInitialTarget, initialAssistantId),
   );
   const [assistants, setAssistants] = useState<AssistantEntry[] | null>(null);
   const [settingsAssistantId, setSettingsAssistantId] = useState<string | null>(null);
+  const resumeAssistantIdRef = useRef(resumeAssistantId);
+  resumeAssistantIdRef.current = resumeAssistantId;
 
   // 拉一次助手列表用于 Header 渲染;失败不致命(Header 退化为简标题)。
   useEffect(() => {
@@ -82,11 +87,16 @@ export function CockpitSurface({
     };
   }, []);
 
-  // 显式入口变更(项目 FAB / 仓库 FAB / 左栏助手)时切换子态。
+  // 仅在外部显式打开信号递增时切换子态；勿随 resumeAssistantId 变化覆盖 Hub 内手动选择。
   useEffect(() => {
     if (openRequestKey <= 0) return;
-    setSubMode(cockpitSubModeFromEntry(hasInitialTarget, initialAssistantId ?? resumeAssistantId));
-  }, [hasInitialTarget, initialAssistantId, openRequestKey, resumeAssistantId]);
+    setSubMode(
+      cockpitSubModeFromEntry(
+        hasInitialTarget,
+        initialAssistantId ?? resumeAssistantIdRef.current,
+      ),
+    );
+  }, [hasInitialTarget, initialAssistantId, openRequestKey]);
 
   const activeAssistant = useMemo(() => {
     if (subMode.kind !== "conversation") return null;
@@ -97,13 +107,18 @@ export function CockpitSurface({
     return assistants?.find((a) => a.id === settingsAssistantId) ?? null;
   }, [assistants, settingsAssistantId]);
 
-  const handleSelectAssistant = useCallback((assistantId: string) => {
-    setSubMode({ kind: "conversation", assistantId });
-  }, []);
+  const handleSelectAssistant = useCallback(
+    (assistantId: string) => {
+      onClearInitialAssistant?.();
+      setSubMode({ kind: "conversation", assistantId });
+    },
+    [onClearInitialAssistant],
+  );
 
   const handleBackToHub = useCallback(() => {
+    onClearInitialAssistant?.();
     setSubMode({ kind: "hub" });
-  }, []);
+  }, [onClearInitialAssistant]);
 
   const handleOpenSettings = useCallback((assistantId: string) => {
     setSettingsAssistantId(assistantId);

@@ -60,6 +60,7 @@ mock.module("../../services/assistants", () => ({
     },
   ]),
   saveCustomAssistant: mock(async () => ({})),
+  deleteAssistant: mock(async () => undefined),
   deleteCustomAssistant: mock(async () => undefined),
 }));
 
@@ -76,6 +77,5 @@ describe("AssistantsPanel", () => {
     expect(html).toContain("新增模板");
     expect(html).toContain("扩展贡献");
     expect(html).toContain("app-assistants-hub-body");
-    expect(html).toContain("按助手 Hub 分组");
   });
 });

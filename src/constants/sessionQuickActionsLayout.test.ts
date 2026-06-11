@@ -14,26 +14,25 @@ describe("sessionQuickActionsLayout", () => {
     const merged = mergeSessionQuickActionsLayout({
       version: 1,
       items: [
-        { id: "work-trajectory", visible: true, zone: "primary" },
+        { id: "compact-context", visible: true, zone: "primary" },
         { id: "push", visible: false, zone: "primary" },
       ],
     });
-    expect(merged.items[0]?.id).toBe("work-trajectory");
+    expect(merged.items[0]?.id).toBe("compact-context");
     expect(merged.items.some((item) => item.id === "new-session")).toBe(true);
   });
 
   test("partition respects visibility zone and availability", () => {
-    const layout = updateLayoutItem(DEFAULT_SESSION_QUICK_ACTIONS_LAYOUT, "builtin:word-doc", {
-      zone: "primary",
+    const layout = updateLayoutItem(DEFAULT_SESSION_QUICK_ACTIONS_LAYOUT, "push", {
+      zone: "overflow",
     });
     const { primary, overflow } = partitionSessionQuickActions(layout, {
       canNewSession: false,
-      canWorkTree: false,
       canCompactContext: true,
     });
-    expect(primary).toContain("builtin:word-doc");
+    expect(overflow).toContain("push");
     expect(primary).not.toContain("new-session");
-    expect(overflow).toContain("work-trajectory");
+    expect(primary).not.toContain("push");
   });
 
   test("moveLayoutItem swaps neighbors", () => {
@@ -65,7 +64,6 @@ describe("sessionQuickActionsLayout", () => {
     const promoted = ensurePrdSplitQuickActionPrimary(layout);
     const { primary } = partitionSessionQuickActions(promoted, {
       canNewSession: true,
-      canWorkTree: false,
       canCompactContext: false,
     });
     expect(primary).toContain("builtin:prd-split");
@@ -74,7 +72,6 @@ describe("sessionQuickActionsLayout", () => {
   test("default layout shows 需求 on primary bar", () => {
     const { primary, overflow } = partitionSessionQuickActions(DEFAULT_SESSION_QUICK_ACTIONS_LAYOUT, {
       canNewSession: true,
-      canWorkTree: false,
       canCompactContext: true,
     });
     expect(primary).toContain("builtin:prd-split");

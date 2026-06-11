@@ -6442,6 +6442,13 @@ button.app-message-part-header:disabled:hover {
   width: 100%;
 }
 
+.app-session-quick-customize-modal__footer-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
+}
+
 .app-session-quick-pill-slot {
   flex-shrink: 0;
   display: inline-flex;

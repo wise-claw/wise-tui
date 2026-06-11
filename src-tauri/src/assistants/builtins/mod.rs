@@ -4,15 +4,8 @@
 //! layers / 默认 Trellis workflow / 默认 skills / 默认 MCPs / 工具表均编译期内嵌。
 //! 用户的覆盖通过 `assistant_overrides` 表追加。
 
-pub mod code_review;
-pub mod excel_data;
 pub mod layers;
-pub mod ppt_deck;
 pub mod prd_split;
-pub mod release_notes;
-pub mod tech_docs;
-pub mod test_gen;
-pub mod word_doc;
 
 use serde::Serialize;
 
@@ -78,16 +71,7 @@ pub struct BuiltinAssistantBundle {
 }
 
 const fn registry() -> &'static [&'static BuiltinAssistantBundle] {
-    &[
-        &prd_split::BUNDLE,
-        &word_doc::BUNDLE,
-        &ppt_deck::BUNDLE,
-        &excel_data::BUNDLE,
-        &code_review::BUNDLE,
-        &tech_docs::BUNDLE,
-        &test_gen::BUNDLE,
-        &release_notes::BUNDLE,
-    ]
+    &[&prd_split::BUNDLE]
 }
 
 pub fn list() -> &'static [&'static BuiltinAssistantBundle] {
@@ -108,13 +92,6 @@ mod tests {
     #[test]
     fn registry_contains_prd_split() {
         assert!(find("builtin:prd-split").is_some());
-        assert!(find("builtin:word-doc").is_some());
-        assert!(find("builtin:ppt-deck").is_some());
-        assert!(find("builtin:excel-data").is_some());
-        assert!(find("builtin:code-review").is_some());
-        assert!(find("builtin:tech-docs").is_some());
-        assert!(find("builtin:test-gen").is_some());
-        assert!(find("builtin:release-notes").is_some());
         assert!(find("builtin:nonexistent").is_none());
     }
 
@@ -131,41 +108,5 @@ mod tests {
             b.default_prompt_layers.prd_task_split.template_id,
             "prdTaskSplit"
         );
-    }
-
-    #[test]
-    fn office_assistant_bundles_are_skill_backed() {
-        let word = find("builtin:word-doc").unwrap();
-        assert_eq!(word.name, "Word 文档助手");
-        assert!(word.default_workflows.is_empty());
-        assert_eq!(word.default_skills.len(), 1);
-        assert_eq!(word.default_skills[0].id, "officecli-docx");
-        assert!(word.default_skills[0]
-            .source_path
-            .contains("officecli-docx"));
-
-        let ppt = find("builtin:ppt-deck").unwrap();
-        assert_eq!(ppt.name, "PPT 演示助手");
-        assert!(ppt.default_workflows.is_empty());
-        assert_eq!(ppt.default_skills.len(), 1);
-        assert_eq!(ppt.default_skills[0].id, "officecli-pptx");
-        assert!(ppt.default_skills[0].source_path.contains("officecli-pptx"));
-    }
-
-    #[test]
-    fn engineering_assistant_bundles_are_prompt_only() {
-        for id in [
-            "builtin:excel-data",
-            "builtin:code-review",
-            "builtin:tech-docs",
-            "builtin:test-gen",
-            "builtin:release-notes",
-        ] {
-            let b = find(id).unwrap();
-            assert_eq!(b.engine_id, "claude");
-            assert!(!b.system_prompt.trim().is_empty());
-            assert!(b.default_workflows.is_empty());
-            assert!(b.default_skills.is_empty());
-        }
     }
 }

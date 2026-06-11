@@ -7,6 +7,7 @@
 
 pub mod builtins;
 pub mod commands;
+pub mod hidden;
 pub mod overrides;
 pub mod runtime_resolver;
 pub mod source;

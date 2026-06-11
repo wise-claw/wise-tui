@@ -148,6 +148,7 @@ export interface ClaudeSessionsChatHostProps {
   onNewPaneSession?: (paneIndex: number, repository: Repository) => void | Promise<void>;
   onOpenWorkflowConfig?: () => void;
   onOpenBuiltinAssistant?: (assistantId: string) => void;
+  onActivateAssistant?: (assistant: import("../../types/assistant").AssistantEntry) => void | Promise<void>;
   onOpenAssistantsHub?: () => void;
   onOpenRepositoryScheduledTasks?: () => void;
   employees?: EmployeeItem[];
@@ -188,7 +189,6 @@ export interface ClaudeSessionsChatHostProps {
   onOpenHistorySessionInInspector?: (sessionId: string) => void;
   onRestoreHistorySessionAsMain?: (sessionId: string) => void;
   omcBatchPipelineActive?: boolean;
-  onAddWorktreeRepositoryToProject?: (worktreePath: string) => void | Promise<void>;
   onReloadFullDiskTranscript?: (sessionId: string) => void | Promise<void>;
   onLoadMoreTranscriptFromDisk?: (sessionId: string) => void | Promise<void>;
   onCompactSessionHistory?: (sessionId: string) => void | Promise<void>;
@@ -251,6 +251,7 @@ export function ClaudeSessionsChatHost({
   onNewPaneSession,
   onOpenWorkflowConfig,
   onOpenBuiltinAssistant,
+  onActivateAssistant,
   onOpenAssistantsHub,
   onOpenRepositoryScheduledTasks,
   employees = [],
@@ -279,7 +280,6 @@ export function ClaudeSessionsChatHost({
   onOpenHistorySessionInInspector,
   onRestoreHistorySessionAsMain,
   omcBatchPipelineActive = false,
-  onAddWorktreeRepositoryToProject,
   onReloadFullDiskTranscript,
   onLoadMoreTranscriptFromDisk,
   onCompactSessionHistory,
@@ -454,6 +454,7 @@ export function ClaudeSessionsChatHost({
     onRestoreRevert,
     onOpenWorkflowConfig,
     onOpenBuiltinAssistant,
+    onActivateAssistant,
     onOpenAssistantsHub,
     onOpenRepositoryScheduledTasks,
     employees,
@@ -479,7 +480,6 @@ export function ClaudeSessionsChatHost({
     onOpenHistorySessionInInspector,
     onRestoreHistorySessionAsMain,
     omcBatchPipelineActive,
-    onAddWorktreeRepositoryToProject,
     onReloadFullDiskTranscript,
     onLoadMoreTranscriptFromDisk,
     onCompactSessionHistory,
@@ -557,6 +557,7 @@ export function ClaudeSessionsChatHost({
           onCreateNewSession={handleCreatePrimarySession}
           creatingNewSession={creatingPrimarySession}
           onOpenBuiltinAssistant={onOpenBuiltinAssistant}
+          onActivateAssistant={onActivateAssistant}
           onOpenAssistantsHub={onOpenAssistantsHub}
           onOpenRepositoryScheduledTasks={onOpenRepositoryScheduledTasks}
           onSend={onSendMessage}
@@ -615,7 +616,6 @@ export function ClaudeSessionsChatHost({
           onStopSessionConversationTask={onStopSessionConversationTask}
           onRestoreHistorySessionAsMain={onRestoreHistorySessionAsMain}
           omcBatchPipelineActive={omcBatchPipelineActive}
-          onAddWorktreeRepositoryToProject={onAddWorktreeRepositoryToProject}
           onReloadFullDiskTranscript={onReloadFullDiskTranscript}
           onLoadMoreTranscriptFromDisk={onLoadMoreTranscriptFromDisk}
           onCompactSessionHistory={onCompactSessionHistory}

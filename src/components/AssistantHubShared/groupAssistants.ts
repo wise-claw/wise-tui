@@ -46,24 +46,11 @@ export function buildAssistantHubSections(
     sections.push({ key: "trellis", title: "研发编排", assistants: trellis });
   }
 
-  const engineering = builtinAssistants.filter(
-    (a) => resolveAssistantKind(a) === "engineering",
+  const otherBuiltin = builtinAssistants.filter(
+    (a) => resolveAssistantKind(a) !== "trellis-orchestration",
   );
-  if (engineering.length > 0) {
-    sections.push({ key: "engineering", title: "研发助手", assistants: engineering });
-  }
-
-  const skill = builtinAssistants.filter((a) => {
-    const kind = resolveAssistantKind(a);
-    return kind === "office-doc" || kind === "office-deck" || kind === "skill-artifact";
-  });
-  if (skill.length > 0) {
-    sections.push({ key: "skill", title: "内置 Skill 产物", assistants: skill });
-  }
-
-  const general = builtinAssistants.filter((a) => resolveAssistantKind(a) === "general");
-  if (general.length > 0) {
-    sections.push({ key: "general", title: "其他内置", assistants: general });
+  if (otherBuiltin.length > 0) {
+    sections.push({ key: "general", title: "其他内置", assistants: otherBuiltin });
   }
 
   if (otherAssistants.length > 0) {
