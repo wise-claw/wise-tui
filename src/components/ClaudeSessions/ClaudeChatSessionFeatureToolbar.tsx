@@ -16,7 +16,6 @@ import {
   Table,
   Input,
   Select,
-  message,
 } from "antd";
 import type { ColumnsType } from "antd/es/table";
 import { HoverHint } from "../shared/HoverHint";
