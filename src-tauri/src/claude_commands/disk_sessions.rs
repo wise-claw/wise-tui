@@ -203,9 +203,15 @@ pub(crate) fn list_claude_disk_sessions(
     }
 
     let mut out: Vec<ClaudeDiskSessionItem> = Vec::new();
-    let entries = fs::read_dir(&dir).map_err(|e| format!("read_dir: {}", e))?;
+    let entries = match fs::read_dir(&dir) {
+        Ok(entries) => entries,
+        Err(_) => return Ok(Vec::new()),
+    };
     for entry in entries {
-        let entry = entry.map_err(|e| e.to_string())?;
+        let entry = match entry {
+            Ok(entry) => entry,
+            Err(_) => continue,
+        };
         let path = entry.path();
         if path.extension().and_then(|e| e.to_str()) != Some("jsonl") {
             continue;

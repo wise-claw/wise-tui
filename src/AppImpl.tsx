@@ -192,6 +192,7 @@ import {
   resolveMainOwnerAgentNameForRepositoryPath,
   resolveSessionFromBindingValue,
   isProjectMainSessionBindingKey,
+  isProjectRootSessionDisplayName,
 } from "./utils/repositoryMainSessionBinding";
 import { loadSessionOwnerHints, WISE_SESSION_OWNER_HINTS_CHANGED_EVENT } from "./utils/sessionOwnerHints";
 import type { WorkflowGraphRuntimeState } from "./services/workflowGraphRuntime";
@@ -1650,6 +1651,14 @@ export default function App() {
     for (let index = 0; index < paths.length; index += 1) {
       const path = paths[index]!;
       const repo = repositories.find((item) => repositoryPathsMatch(item.path, path));
+      const keepPath =
+        Boolean(repo) ||
+        sessionsLatestRef.current.some(
+          (session) =>
+            repositoryPathsMatch(session.repositoryPath, path) &&
+            isProjectRootSessionDisplayName(session.repositoryName ?? ""),
+        );
+      if (!keepPath) continue;
       const name = repo?.name?.trim() || repositoryFolderBasename(path);
       cleanups.push(
         runWhenIdle(

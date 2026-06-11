@@ -1,5 +1,6 @@
 import type { ClaudeDiskSessionItem, ClaudeSession } from "../types";
 import { listClaudeDiskSessions } from "../services/claudeDisk";
+import { pathIsAccessibleDirectoryCached } from "./pathAccessibilityCache";
 import {
   normalizeRepositoryPathKey,
   repositoryPathsMatch,
@@ -67,6 +68,7 @@ export function collectRepositoryPathListingCandidates(
 
 /**
  * 按候选路径扫描 ~/.claude/projects，合并结果（兼容路径写法差异导致的编码目录不一致）。
+ * 尽力而为：单条候选失败或路径不可访问时跳过，不向上抛错。
  */
 export async function listClaudeDiskSessionsForRepositoryScope(
   repositoryPath: string,
@@ -75,9 +77,9 @@ export async function listClaudeDiskSessionsForRepositoryScope(
   const candidates = collectRepositoryPathListingCandidates(repositoryPath, existingSessions);
   const primary = normalizeSessionRepositoryPath(repositoryPath);
   const merged = new Map<string, ClaudeDiskSessionItem>();
-  let lastError: unknown;
 
   for (const candidate of candidates) {
+    if (!(await pathIsAccessibleDirectoryCached(candidate))) continue;
     try {
       const chunk = await listClaudeDiskSessions(candidate);
       for (const item of chunk) {
@@ -86,13 +88,9 @@ export async function listClaudeDiskSessionsForRepositoryScope(
           merged.set(item.sessionId, item);
         }
       }
-    } catch (error) {
-      lastError = error;
+    } catch {
+      /* 磁盘索引为后台补全，单条候选失败不影响主流程 */
     }
-  }
-
-  if (merged.size === 0 && lastError && candidates.length <= 1) {
-    throw lastError;
   }
 
   const disk = [...merged.values()].sort((a, b) => b.updatedAtMs - a.updatedAtMs);

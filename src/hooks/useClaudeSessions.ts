@@ -14,7 +14,6 @@ import { safeUnlisten } from "../utils/safeTauriUnlisten";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type {
   ClaudeComposerExecuteBubbleOptions,
-  ClaudeDiskSessionItem,
   ClaudeSession,
   QuestionRequest,
   SessionConversationTaskItem,
@@ -2097,17 +2096,10 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     const trimmedPath = repositoryPath.trim();
     if (!trimmedPath) return;
     if (!(await pathIsAccessibleDirectoryCached(trimmedPath))) return;
-    let disk: ClaudeDiskSessionItem[];
-    let mergePath = normalizeSessionRepositoryPath(trimmedPath);
-    try {
-      const listed = await listClaudeDiskSessionsForRepositoryScope(trimmedPath, sessionsRef.current);
-      disk = listed.disk;
-      mergePath = listed.listingPath;
-    } catch (error) {
-      const msg = error instanceof Error ? error.message : String(error);
-      message.warning(`读取 Claude 历史会话失败：${msg}`);
-      return;
-    }
+    const { disk, listingPath: mergePath } = await listClaudeDiskSessionsForRepositoryScope(
+      trimmedPath,
+      sessionsRef.current,
+    );
     // 先合并磁盘标签，避免再等 getClaudeConfigModel 才 setSessions（多仓库并发刷新时易卡顿）。
     setSessions((prev) => {
       const next = mergeRepositoryDiskSessions(prev, mergePath, repositoryName, disk, "sonnet");

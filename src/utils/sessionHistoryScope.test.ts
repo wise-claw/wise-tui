@@ -77,4 +77,11 @@ describe("sessionHistoryScope", () => {
     expect(candidates).toContain("/work/repo/");
     expect(candidates).not.toContain("/work/other");
   });
+
+  it("listClaudeDiskSessionsForRepositoryScope resolves without throwing for missing paths", async () => {
+    const { listClaudeDiskSessionsForRepositoryScope: listScope } = await import("./sessionHistoryScope");
+    const result = await listScope("/tmp/wise-nonexistent-session-history-path", []);
+    expect(Array.isArray(result.disk)).toBe(true);
+    expect(result.listingPath).toBe("/tmp/wise-nonexistent-session-history-path");
+  });
 });
