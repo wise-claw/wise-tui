@@ -370,11 +370,8 @@ export function useRepositoryList() {
     if (nextPins.length !== pinnedProjectIds.length) {
       void setAppSetting(PINNED_PROJECT_IDS_STORAGE_KEY, JSON.stringify(nextPins));
     }
-    const nextProjects = sortProjectsByPinOrder(
-      projects.filter((project) => project.id !== projectId),
-      nextPins,
-    );
-    const repositoryList = await loadRepositories();
+    const [repositoryList, dbProjects] = await Promise.all([loadRepositories(), listProjects()]);
+    const nextProjects = sortProjectsByPinOrder(dbProjects, nextPins);
     const validIds = new Set(repositoryList.map((r) => r.id));
     const nextActive = activeProjectId === projectId ? (nextProjects[0]?.id ?? null) : activeProjectId;
     const nextActiveProj = nextActive ? (nextProjects.find((project) => project.id === nextActive) ?? null) : null;

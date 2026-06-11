@@ -1386,7 +1386,15 @@ export function LeftSidebar({
               okText: "删除",
               okType: "danger",
               cancelText: "取消",
-              onOk: () => onDeleteProject(project.id),
+              onOk: async () => {
+                try {
+                  await onDeleteProject(project.id);
+                } catch (err: unknown) {
+                  const detail = err instanceof Error ? err.message : String(err);
+                  message.error(`删除工作区失败：${detail}`);
+                  throw err;
+                }
+              },
             });
           }}
           onOpenPromptsProject={onOpenPromptsProject}

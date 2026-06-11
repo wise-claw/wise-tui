@@ -51,7 +51,7 @@ export function CockpitOnboarding({
           <AppstoreAddOutlined className="cockpit-onboarding-card-icon" aria-hidden />
           <Title level={4}>创建工作区</Title>
           <Paragraph type="secondary">
-            将多个仓库组成一个项目级工作区，支持 Mission 拆解 / Trellis 规范 / 多 Agent 协作。
+            将多个仓库组成一个项目级工作区，支持 Mission 拆解 / Wise 规范 / 多 Agent 协作。
           </Paragraph>
           <Button type="primary" icon={<AppstoreAddOutlined />}>
             新建工作区

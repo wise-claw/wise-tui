@@ -640,8 +640,16 @@ fn remove_repository_global_impl(
     id: i64,
 ) -> Result<(), String> {
     db.purge_repository_database_refs(id)?;
-    remove_repository(app.clone(), id)?;
-    db.remove_repository_from_all_projects(id)?;
+    match remove_repository(app.clone(), id) {
+        Ok(()) => {
+            db.remove_repository_from_all_projects(id)?;
+        }
+        Err(err) if err == "仓库未找到" => {
+            // 全局列表已缺失时仍清理 SQLite 侧残留关联（常见于仅工作区链接、无仓库展示）
+            db.remove_repository_from_all_projects(id)?;
+        }
+        Err(err) => return Err(err),
+    }
     Ok(())
 }
 
