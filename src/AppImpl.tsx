@@ -886,6 +886,37 @@ export default function App() {
   const sessionsLatestRef = sessionsLiveRef;
   const sessionsStructureKey = useClaudeSessionsStructureKey();
 
+  const closeSessionsForRepositoryPath = useCallback(
+    (repositoryPath: string) => {
+      const related = sessionsLatestRef.current.filter((session) =>
+        repositoryPathsMatch(session.repositoryPath, repositoryPath),
+      );
+      for (const session of related) {
+        closeSession(session.id);
+      }
+    },
+    [closeSession],
+  );
+
+  const handleRemoveRepositoryWithSessionCleanup = useCallback(
+    async (repository: Repository) => {
+      closeSessionsForRepositoryPath(repository.path);
+      await handleRemoveRepository(repository);
+    },
+    [closeSessionsForRepositoryPath, handleRemoveRepository],
+  );
+
+  const handleDetachRepositoryFromProjectWithSessionCleanup = useCallback(
+    async (projectId: string, repositoryId: number) => {
+      const repository = repositories.find((item) => item.id === repositoryId);
+      if (repository) {
+        closeSessionsForRepositoryPath(repository.path);
+      }
+      await handleDetachRepositoryFromProject(projectId, repositoryId);
+    },
+    [closeSessionsForRepositoryPath, handleDetachRepositoryFromProject, repositories],
+  );
+
   const repositoriesLatestRef = useRef(repositories);
   repositoriesLatestRef.current = repositories;
 
@@ -3066,8 +3097,8 @@ export default function App() {
         },
         onPromoteFloatingRepositoryToProject: handlePromoteFloatingRepositoryToProject,
         floatingRepositories,
-        onRemoveRepository: handleRemoveRepository,
-        onDetachRepositoryFromProject: handleDetachRepositoryFromProject,
+        onRemoveRepository: handleRemoveRepositoryWithSessionCleanup,
+        onDetachRepositoryFromProject: handleDetachRepositoryFromProjectWithSessionCleanup,
         onUpdateRepositorySddMode: handleUpdateRepositorySddMode,
         onUpdateProjectSddMode: async (projectId, sddMode) => {
           await handleUpdateProjectSddMode(projectId, sddMode);
@@ -3692,7 +3723,7 @@ export default function App() {
         },
         onRemoveRepository: async (repoId) => {
           const repo = repositories.find((r) => r.id === repoId);
-          if (repo) await handleRemoveRepository(repo);
+          if (repo) await handleRemoveRepositoryWithSessionCleanup(repo);
         },
         onOpenAddRepository: () => void handleAddFloatingRepository("frontend"),
         suppressIdleAutoReindex: codeGraphSuppressIdleAutoReindex,

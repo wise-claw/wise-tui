@@ -1,3 +1,4 @@
+use crate::project_workspace_paths::expand_tilde_in_path;
 use serde::Serialize;
 use std::collections::VecDeque;
 use std::fs;
@@ -8,10 +9,19 @@ fn claude_projects_root() -> Result<PathBuf, String> {
     Ok(crate::claude_config_dir::user_claude_dir().join("projects"))
 }
 
+/// Resolve the path string Claude Code uses when encoding `~/.claude/projects/<dir>/`.
+///
+/// Prefer `canonicalize` for existing directories (symlinks, relative segments). When the
+/// directory is missing — e.g. a tab still references a removed repository — fall back to
+/// tilde-expanded absolute form so listing returns empty instead of surfacing os error 2.
+fn resolve_path_for_claude_project_encoding(project_path: &Path) -> PathBuf {
+    let expanded = expand_tilde_in_path(project_path.to_string_lossy().trim());
+    fs::canonicalize(&expanded).unwrap_or(expanded)
+}
+
 /// Encodes an absolute project path into Claude Code's directory name under `~/.claude/projects/`.
 pub(crate) fn encoded_claude_project_dir(project_path: &Path) -> Result<String, String> {
-    let canon = fs::canonicalize(project_path)
-        .map_err(|e| format!("cannot canonicalize project path: {}", e))?;
+    let canon = resolve_path_for_claude_project_encoding(project_path);
     let s = canon.to_string_lossy().to_string();
     let normalized = if cfg!(windows) {
         let mut t = s.replace('\\', "/");
@@ -312,4 +322,36 @@ pub(crate) fn delete_claude_disk_session(
     };
     fs::remove_file(&path_canon).map_err(|e| format!("remove session jsonl: {}", e))?;
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use std::fs;
+    use std::time::{SystemTime, UNIX_EPOCH};
+
+    fn temp_dir(prefix: &str) -> PathBuf {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .unwrap()
+            .as_nanos();
+        std::env::temp_dir().join(format!("{prefix}_{nanos}"))
+    }
+
+    #[test]
+    fn encoded_claude_project_dir_existing_path() {
+        let dir = temp_dir("wise_claude_encode_existing");
+        fs::create_dir_all(&dir).unwrap();
+        let encoded = encoded_claude_project_dir(&dir).unwrap();
+        assert!(encoded.starts_with('-'));
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn encoded_claude_project_dir_missing_path_does_not_error() {
+        let missing = temp_dir("wise_claude_encode_missing");
+        let _ = fs::remove_dir_all(&missing);
+        let encoded = encoded_claude_project_dir(&missing).unwrap();
+        assert!(encoded.starts_with('-'));
+    }
 }

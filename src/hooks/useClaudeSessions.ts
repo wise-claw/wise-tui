@@ -69,6 +69,7 @@ import {
   pruneInvocationSnapshotMemory,
 } from "../services/backgroundInvocationSnapshot";
 import { normalizeRepositoryPathKey, repositoryPathsMatch } from "../utils/repositoryMainSessionBinding";
+import { pathIsAccessibleDirectoryCached } from "../utils/pathAccessibilityCache";
 import {
   listClaudeDiskSessionsForRepositoryScope,
   normalizeSessionRepositoryPath,
@@ -2095,6 +2096,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   const refreshDiskSessionsForRepository = useCallback(async (repositoryPath: string, repositoryName: string) => {
     const trimmedPath = repositoryPath.trim();
     if (!trimmedPath) return;
+    if (!(await pathIsAccessibleDirectoryCached(trimmedPath))) return;
     let disk: ClaudeDiskSessionItem[];
     let mergePath = normalizeSessionRepositoryPath(trimmedPath);
     try {
