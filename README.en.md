@@ -82,7 +82,7 @@ Wise offers two entry points:
 Group multiple local repositories into a project workspace with Mission, Trellis conventions, and multi-agent collaboration.
 
 <p align="center">
-  <img src="imgs/新增工作区.gif" alt="Add workspace" width="720" />
+  <img src="imgs/add-workspace.gif" alt="Add workspace" width="720" />
 </p>
 
 ### 2. Configure models
@@ -90,7 +90,7 @@ Group multiple local repositories into a project workspace with Mission, Trellis
 Set Claude models and API credentials in the settings center for sessions and agent dispatch.
 
 <p align="center">
-  <img src="imgs/模型配置.gif" alt="Model configuration" width="720" />
+  <img src="imgs/model-config.gif" alt="Model configuration" width="720" />
 </p>
 
 ### 3. Add execution environments
@@ -98,7 +98,7 @@ Set Claude models and API credentials in the settings center for sessions and ag
 Bind execution environments (local Claude Code, remote channels, etc.) to workspaces or repos so agents run in the right context.
 
 <p align="center">
-  <img src="imgs/执行环境添加.gif" alt="Add execution environment" width="720" />
+  <img src="imgs/add-execution-env.gif" alt="Add execution environment" width="720" />
 </p>
 
 ### 4. Run tasks
@@ -106,7 +106,7 @@ Bind execution environments (local Claude Code, remote channels, etc.) to worksp
 Launch Claude sessions, PRD splits, or workflow stages from the cockpit and watch multi-agent execution with full traceability.
 
 <p align="center">
-  <img src="imgs/运行.gif" alt="Run tasks" width="720" />
+  <img src="imgs/run-tasks.gif" alt="Run tasks" width="720" />
 </p>
 
 > Tip: If you already have local directories, pick either entry on the welcome screen — or use the sidebar **+** button anytime to add or link repositories.

@@ -82,7 +82,7 @@ Wise 提供两种入口，可按场景选择：
 将多个本地仓库组成项目级工作区，启用 Mission、Trellis 规范与多 Agent 协作。
 
 <p align="center">
-  <img src="imgs/新增工作区.gif" alt="新增工作区" width="720" />
+  <img src="imgs/add-workspace.gif" alt="新增工作区" width="720" />
 </p>
 
 ### 2. 配置模型
@@ -90,7 +90,7 @@ Wise 提供两种入口，可按场景选择：
 在设置中心配置 Claude 模型与 API，为会话与 Agent 派发指定推理后端。
 
 <p align="center">
-  <img src="imgs/模型配置.gif" alt="模型配置" width="720" />
+  <img src="imgs/model-config.gif" alt="模型配置" width="720" />
 </p>
 
 ### 3. 添加执行环境
@@ -98,7 +98,7 @@ Wise 提供两种入口，可按场景选择：
 为工作区或仓库绑定执行环境（本地 Claude Code、远程 Channel 等），让 Agent 在正确的上下文中运行。
 
 <p align="center">
-  <img src="imgs/执行环境添加.gif" alt="添加执行环境" width="720" />
+  <img src="imgs/add-execution-env.gif" alt="添加执行环境" width="720" />
 </p>
 
 ### 4. 运行任务
@@ -106,7 +106,7 @@ Wise 提供两种入口，可按场景选择：
 在驾驶舱中启动 Claude 会话、PRD 拆分或工作流阶段，观察多 Agent 并发执行与任务溯源。
 
 <p align="center">
-  <img src="imgs/运行.gif" alt="运行任务" width="720" />
+  <img src="imgs/run-tasks.gif" alt="运行任务" width="720" />
 </p>
 
 > 提示：已有本地目录时，从欢迎页任选入口即可；之后也可通过左侧侧栏「+」随时新建或关联仓库。
