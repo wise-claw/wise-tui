@@ -29,15 +29,15 @@
 .app-composer-common-phrases-quick-label {
   flex-shrink: 0;
   margin: 0;
-  padding: 2px 4px;
+  padding: 2px 3px;
   border: none;
   border-radius: 0;
   background: transparent;
-  color: var(--ant-color-text);
+  color: var(--ant-color-text-secondary);
   font-family: inherit;
   font-size: 11.5px;
   font-weight: 500;
-  line-height: 1.15;
+  line-height: 1.2;
   cursor: pointer;
   white-space: nowrap;
   touch-action: manipulation;

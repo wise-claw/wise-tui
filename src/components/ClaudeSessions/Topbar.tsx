@@ -250,6 +250,14 @@ export const Topbar = memo(function Topbar({
   const topbarPath = topbarShowsProject
     ? (activeProject.rootPath?.trim() || activeRepository?.path?.trim() || "")
     : (activeRepository?.path?.trim() || "");
+  const showRepoTitle = Boolean(topbarLabel) && topbarChrome.showTopbarRepositoryName;
+  const topbarLeftClassName = [
+    "app-chat-topbar-left",
+    collapsed ? "app-chat-topbar-left--collapsed" : "",
+    showRepoTitle ? "" : "app-chat-topbar-left--no-repo-title",
+  ]
+    .filter(Boolean)
+    .join(" ");
 
   return (
     <div className="app-chat-topbar">
@@ -257,18 +265,18 @@ export const Topbar = memo(function Topbar({
         className={`app-chat-topbar-leading${collapsed ? " app-chat-topbar-leading--collapsed" : ""}`}
       >
         <div className="app-chat-topbar-drag-underlay" data-tauri-drag-region aria-hidden />
-        <div className={`app-chat-topbar-left ${collapsed ? "app-chat-topbar-left--collapsed" : ""}`}>
-          {onToggleSidebar && (
-            <TopbarBtn
-              icon={<IconCollapseSidebar collapsed={collapsed ?? false} />}
-              label={collapsed ? "展开侧边栏" : "收起侧边栏"}
-              onClick={onToggleSidebar}
-            />
-          )}
-          {topbarLabel ? (
-            <>
-              <div className="app-topbar-divider" />
-              {topbarChrome.showTopbarRepositoryName ? (
+        <div className={topbarLeftClassName}>
+          <div className="app-chat-topbar-leading-cluster">
+            {onToggleSidebar ? (
+              <TopbarBtn
+                icon={<IconCollapseSidebar collapsed={collapsed ?? false} />}
+                label={collapsed ? "展开侧边栏" : "收起侧边栏"}
+                onClick={onToggleSidebar}
+              />
+            ) : null}
+            {showRepoTitle ? (
+              <>
+                <div className="app-topbar-divider" />
                 <HoverHint title="点击复制绝对路径">
                   <button
                     type="button"
@@ -292,16 +300,16 @@ export const Topbar = memo(function Topbar({
                     <span className="app-topbar-repository-trigger-label">{topbarLabel}</span>
                   </button>
                 </HoverHint>
-              ) : null}
-              {topbarChrome.showRemoteEntryTopbar ? (
-                <RemoteEntryTopbarStrip onOpenRemoteChannels={onOpenRemoteChannels} />
-              ) : null}
-              <WorkspaceQuickActionsTopbarStrip
-                projectId={activeProject?.id ?? null}
-                repositoryId={activeRepository?.id ?? null}
-              />
-            </>
-          ) : null}
+              </>
+            ) : null}
+            {topbarLabel && topbarChrome.showRemoteEntryTopbar ? (
+              <RemoteEntryTopbarStrip onOpenRemoteChannels={onOpenRemoteChannels} />
+            ) : null}
+            <WorkspaceQuickActionsTopbarStrip
+              projectId={activeProject?.id ?? null}
+              repositoryId={activeRepository?.id ?? null}
+            />
+          </div>
         </div>
       </div>
       <div className="app-chat-topbar-right">
