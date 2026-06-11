@@ -2135,6 +2135,137 @@
   border-radius: 4px;
 }
 
+/* ── Plugins panel ── */
+
+.app-claude-code-tools-close-btn.ant-btn {
+  flex-shrink: 0;
+  width: 22px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0;
+  margin-left: 2px;
+}
+
+.app-claude-plugins-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 0 2px 6px;
+  min-height: 0;
+}
+
+.app-claude-plugins-panel-loading {
+  display: flex;
+  justify-content: center;
+  padding: 16px;
+}
+
+.app-claude-plugins-panel-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.app-claude-plugins-panel-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border: 1px solid var(--ant-color-border-secondary);
+  background: var(--ant-color-bg-container);
+}
+
+.app-claude-plugins-panel-item-main {
+  min-width: 0;
+  flex: 1;
+}
+
+.app-claude-plugins-panel-item-title-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.app-claude-plugins-panel-item-title {
+  font-size: 12px;
+  font-weight: 600;
+  min-width: 0;
+}
+
+.app-claude-plugins-panel-item-scope-tag.ant-tag {
+  margin: 0;
+  font-size: 10px;
+  line-height: 16px;
+  padding: 0 4px;
+  flex-shrink: 0;
+}
+
+.app-claude-plugins-panel-item-ref {
+  font-size: 10px;
+  font-family: var(--font-mono, monospace);
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-claude-plugins-panel-item-desc {
+  margin: 2px 0 0;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-claude-plugins-panel-item-actions {
+  display: flex;
+  flex-shrink: 0;
+  align-items: center;
+  gap: 4px;
+}
+
+.app-claude-plugins-panel-item-actions .app-claude-plugins-panel-item-btn.ant-btn-sm {
+  font-size: 11px;
+  height: 22px;
+  padding: 0 8px;
+}
+
+.app-claude-plugins-panel-item-actions .app-claude-plugins-panel-item-tag.ant-tag {
+  margin: 0;
+  font-size: 10px;
+  line-height: 18px;
+  padding: 0 4px;
+}
+
+.app-claude-plugins-add-modal-hint.ant-typography {
+  display: block;
+  margin-bottom: 8px;
+  font-size: 12px;
+}
+
+.app-claude-plugins-add-modal-scope {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.app-claude-plugins-add-modal-scope-label.ant-typography {
+  font-size: 12px;
+  flex-shrink: 0;
+}
+
+.app-claude-plugins-add-modal-search {
+  margin-bottom: 10px;
+}
+
+.app-claude-plugins-add-modal-list {
+  max-height: 52vh;
+  overflow: auto;
+}
+
 .app-claude-lsp-panel-more {
   font-size: 10px;
   line-height: 1.25;

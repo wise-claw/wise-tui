@@ -22,9 +22,14 @@ export async function claudePluginMarketBootstrap(): Promise<ClaudePluginMarketB
   }
 }
 
-export async function claudePluginListInstalled(): Promise<ClaudePluginInstalledEntry[]> {
+export async function claudePluginListInstalled(
+  repositoryPath?: string | null,
+): Promise<ClaudePluginInstalledEntry[]> {
   try {
-    return await invoke<ClaudePluginInstalledEntry[]>("claude_plugin_list_installed");
+    const trimmed = repositoryPath?.trim();
+    return await invoke<ClaudePluginInstalledEntry[]>("claude_plugin_list_installed", {
+      repositoryPath: trimmed || null,
+    });
   } catch (e) {
     throw new Error(e instanceof Error ? e.message : String(e));
   }
@@ -33,9 +38,15 @@ export async function claudePluginListInstalled(): Promise<ClaudePluginInstalled
 export async function claudePluginInstall(
   installRef: string,
   scope: ClaudePluginInstallScope = "user",
+  repositoryPath?: string | null,
 ): Promise<string> {
   try {
-    return await invoke<string>("claude_plugin_install", { installRef, scope });
+    const trimmed = repositoryPath?.trim();
+    return await invoke<string>("claude_plugin_install", {
+      installRef,
+      scope,
+      repositoryPath: trimmed || null,
+    });
   } catch (e) {
     throw new Error(e instanceof Error ? e.message : String(e));
   }
@@ -44,9 +55,15 @@ export async function claudePluginInstall(
 export async function claudePluginUninstall(
   installRef: string,
   scope: ClaudePluginInstallScope = "user",
+  repositoryPath?: string | null,
 ): Promise<string> {
   try {
-    return await invoke<string>("claude_plugin_uninstall", { installRef, scope });
+    const trimmed = repositoryPath?.trim();
+    return await invoke<string>("claude_plugin_uninstall", {
+      installRef,
+      scope,
+      repositoryPath: trimmed || null,
+    });
   } catch (e) {
     throw new Error(e instanceof Error ? e.message : String(e));
   }

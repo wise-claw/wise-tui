@@ -1,4 +1,5 @@
 import {
+  CloseOutlined,
   DeploymentUnitOutlined,
   FolderOpenOutlined,
   MenuUnfoldOutlined,
@@ -13,6 +14,7 @@ import type { ClaudeMcpConfigPanelHandle } from "../ClaudeMcpConfigPanel";
 import type { ProjectSkillsPanelHandle } from "./ProjectSkillsPanel";
 import type { ClaudeHooksConfigPanelHandle } from "../ClaudeHooksConfigPanel";
 import type { SubagentsPanelHandle } from "./SubagentsPanel";
+import type { ClaudePluginsPanelHandle } from "./ClaudePluginsPanel";
 import { openExternalUrl } from "../../services/openExternal";
 import { openClaudeUserSettingsJsonInIde } from "../../services/claudeConfigDir";
 import { OPEN_WORKSPACE_ERROR } from "../../services/openWorkspaceWithPreference";
@@ -25,6 +27,7 @@ import {
   listClaudeSubagents,
   listClaudeUserSkills,
 } from "../../services/claude";
+import { claudePluginListInstalled } from "../../services/claudePluginMarket";
 import { useOmcPluginInstalled } from "../../hooks/useOmcPluginInstalled";
 import {
   countHooksInScope,
@@ -46,6 +49,9 @@ const ClaudeHooksConfigPanel = lazy(() =>
   import("../ClaudeHooksConfigPanel").then((module) => ({ default: module.ClaudeHooksConfigPanel })),
 );
 const SubagentsPanel = lazy(() => import("./SubagentsPanel").then((module) => ({ default: module.SubagentsPanel })));
+const ClaudePluginsPanel = lazy(() =>
+  import("./ClaudePluginsPanel").then((module) => ({ default: module.ClaudePluginsPanel })),
+);
 
 // ── Main ──
 
@@ -60,6 +66,8 @@ interface Props {
   surfaceActive?: boolean;
   /** 跳转到工作台配置中与本 Tab 对应的页面 */
   onOpenAuthorConfig?: (pane: AuthorPane) => void;
+  /** 弹层模式下的关闭回调 */
+  onClose?: () => void;
 }
 
 export function ClaudeCodeToolsPanel({
@@ -69,6 +77,7 @@ export function ClaudeCodeToolsPanel({
   variant = "inspector",
   surfaceActive = true,
   onOpenAuthorConfig,
+  onClose,
 }: Props) {
   const isPopover = variant === "popover";
   const panelActive = surfaceActive;
@@ -80,11 +89,13 @@ export function ClaudeCodeToolsPanel({
     skill: 0,
     hooks: 0,
     subagents: 0,
+    plugins: 0,
   });
   const mcpPanelRef = useRef<ClaudeMcpConfigPanelHandle>(null);
   const skillsPanelRef = useRef<ProjectSkillsPanelHandle>(null);
   const hooksPanelRef = useRef<ClaudeHooksConfigPanelHandle>(null);
   const subagentsPanelRef = useRef<SubagentsPanelHandle>(null);
+  const pluginsPanelRef = useRef<ClaudePluginsPanelHandle>(null);
   const { omcInstalled } = useOmcPluginInstalled(true);
 
   const handleSubagentsCountChange = useCallback((count: number) => {
@@ -103,11 +114,15 @@ export function ClaudeCodeToolsPanel({
     setTabCounts((prev) => (prev.hooks === count ? prev : { ...prev, hooks: count }));
   }, []);
 
+  const handlePluginsCountChange = useCallback((count: number) => {
+    setTabCounts((prev) => (prev.plugins === count ? prev : { ...prev, plugins: count }));
+  }, []);
+
   useEffect(() => {
     if (!panelActive) return;
     let cancelled = false;
     async function preloadTabCounts() {
-      const [omcRes, mcpRes, hooksRes, subagentsRes, skillsRes, userSkillsRes, cacheSkillsRes] =
+      const [omcRes, mcpRes, hooksRes, subagentsRes, skillsRes, userSkillsRes, cacheSkillsRes, pluginsRes] =
         await Promise.allSettled([
         isOmcPluginInstalled(),
         getClaudeMcpStatus(repositoryPath ?? null),
@@ -116,6 +131,7 @@ export function ClaudeCodeToolsPanel({
         repositoryPath ? listClaudeProjectSkills(repositoryPath) : Promise.resolve([]),
         listClaudeUserSkills(),
         listClaudePluginCacheSkills(),
+        claudePluginListInstalled(repositoryPath),
       ]);
       if (cancelled) return;
       const showOmc = omcRes.status === "fulfilled" && omcRes.value;
@@ -156,6 +172,9 @@ export function ClaudeCodeToolsPanel({
           const nCache = showOmc ? cacheList.length : cacheList.filter((s) => !isOmcPluginCacheSkill(s)).length;
           next.skill = projectList.length + userOnly.length + nCache;
         }
+        if (pluginsRes.status === "fulfilled") {
+          next.plugins = pluginsRes.value.length;
+        }
         return next;
       });
     }
@@ -173,6 +192,7 @@ export function ClaudeCodeToolsPanel({
     { key: "skill", label: withCountLabel("技能", tabCounts.skill) },
     { key: "hooks", label: withCountLabel("Hooks", tabCounts.hooks) },
     { key: "subagents", label: withCountLabel("子代理", tabCounts.subagents) },
+    { key: "plugins", label: withCountLabel("插件", tabCounts.plugins) },
   ] as const;
   const actions =
     tab === "subagents" ? (
@@ -288,6 +308,27 @@ export function ClaudeCodeToolsPanel({
           Hooks 流程
         </Button>
       </Space>
+    ) : tab === "plugins" ? (
+      <Space size={4}>
+        <Button
+          type="text"
+          size="small"
+          className="app-tab-extra-mcp-btn"
+          icon={<ReloadOutlined />}
+          onClick={() => void pluginsPanelRef.current?.refresh()}
+        >
+          刷新
+        </Button>
+        <Button
+          type="text"
+          size="small"
+          className="app-tab-extra-mcp-btn"
+          icon={<PlusOutlined />}
+          onClick={() => pluginsPanelRef.current?.openAddModal()}
+        >
+          添加
+        </Button>
+      </Space>
     ) : null;
   const guideUrl =
     tab === "subagents"
@@ -296,7 +337,9 @@ export function ClaudeCodeToolsPanel({
       ? "https://code.claude.com/docs/zh-CN/skills"
       : tab === "hooks"
         ? "https://code.claude.com/docs/zh-CN/hooks"
-        : "https://code.claude.com/docs/zh-CN/mcp";
+        : tab === "plugins"
+          ? "https://code.claude.com/docs/zh-CN/plugins"
+          : "https://code.claude.com/docs/zh-CN/mcp";
   const activateTab = useCallback((nextTab: string) => {
     setTab(nextTab);
     setListSearch("");
@@ -395,6 +438,18 @@ export function ClaudeCodeToolsPanel({
               </Button>
             ))}
           </Space>
+          {isPopover && onClose ? (
+            <HoverHint title="关闭">
+              <Button
+                type="text"
+                size="small"
+                className="app-claude-code-tools-close-btn"
+                icon={<CloseOutlined />}
+                aria-label="关闭"
+                onClick={onClose}
+              />
+            </HoverHint>
+          ) : null}
         </div>
       </div>
 
@@ -524,6 +579,27 @@ export function ClaudeCodeToolsPanel({
                   />
                 </Suspense>
               ) : null
+            ),
+          },
+          {
+            key: "plugins",
+            label: "插件",
+            children: (
+              <div className="app-claude-code-tools-scroll">
+                {loadedTabs.has("plugins") ? (
+                  <Suspense fallback={<Empty description="加载中..." image={Empty.PRESENTED_IMAGE_SIMPLE} />}>
+                    <ClaudePluginsPanel
+                      repositoryPath={repositoryPath}
+                      active={panelActive && tab === "plugins"}
+                      listSearch={listSearch}
+                      onCountChange={handlePluginsCountChange}
+                      onBindActions={(actions) => {
+                        pluginsPanelRef.current = actions;
+                      }}
+                    />
+                  </Suspense>
+                ) : null}
+              </div>
             ),
           },
         ]}

@@ -51,12 +51,13 @@ export function ClaudeCodeToolsTopbarTrigger({
             variant="popover"
             surfaceActive={open}
             onOpenAuthorConfig={onOpenAuthorConfig ? handleOpenAuthorConfig : undefined}
+            onClose={() => setOpen(false)}
           />
         </Suspense>
       }
     >
       {isSidebar ? (
-        <HoverHint title="Claude Code（MCP、技能、Hooks、子代理）" open={open ? false : undefined}>
+        <HoverHint title="Claude Code（MCP、技能、Hooks、子代理、插件）" open={open ? false : undefined}>
           <button
             type="button"
             className={
@@ -70,7 +71,7 @@ export function ClaudeCodeToolsTopbarTrigger({
           </button>
         </HoverHint>
       ) : (
-        <HoverHint title="Claude Code（MCP、技能、Hooks、子代理）" open={open ? false : undefined}>
+        <HoverHint title="Claude Code（MCP、技能、Hooks、子代理、插件）" open={open ? false : undefined}>
           <button
             type="button"
             className={
