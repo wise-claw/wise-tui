@@ -47,6 +47,40 @@
   line-height: 18px;
 }
 
+.app-claude-semi-chat-input-wrap .semi-aiChatInput-editor-content .tiptap .wise-composer-code-selection-ref {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: min(100%, 280px);
+  padding: 1px 8px 1px 6px;
+  margin: 0 2px;
+  border-radius: 6px;
+  border: 1px solid var(--ant-color-primary-border, #91caff);
+  background: var(--ant-color-primary-bg, #e6f4ff);
+  color: var(--ant-color-primary, #1677ff);
+  font-size: 12px;
+  font-weight: 500;
+  line-height: 18px;
+  vertical-align: baseline;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  user-select: none;
+  cursor: default;
+}
+
+.app-claude-semi-chat-input-wrap .semi-aiChatInput-editor-content .tiptap .wise-composer-code-selection-ref::before {
+  content: "◧";
+  flex-shrink: 0;
+  font-size: 11px;
+  opacity: 0.85;
+}
+
+.app-claude-semi-chat-input-wrap .semi-aiChatInput-editor-content .tiptap .wise-composer-code-selection-ref:hover {
+  border-color: var(--ant-color-primary, #1677ff);
+  background: color-mix(in srgb, var(--ant-color-primary-bg, #e6f4ff) 70%, #fff);
+}
+
 .app-claude-semi-chat-input-wrap
   .semi-aiChatInput-editor-content
   .tiptap

@@ -25,11 +25,13 @@ import {
 } from "../utils/monacoLargeFile";
 import { scheduleMonacoLargeFileContentInjection } from "../utils/monacoLargeFileContentInjection";
 import { runWhenIdle } from "../utils/deferIdle";
+import { MonacoSelectionChatToolbar } from "./MonacoSelectionChatToolbar";
 
 const MonacoEditor = lazy(() => import("@monaco-editor/react"));
 
 interface Props {
   activePath: string | null;
+  activeSessionId: string | null;
   dark: boolean;
   dirty: boolean;
   repositoryPath: string | null | undefined;
@@ -44,6 +46,7 @@ interface Props {
 
 export function RepositoryFileEditorPanel({
   activePath,
+  activeSessionId,
   dark,
   dirty,
   repositoryPath,
@@ -82,6 +85,10 @@ export function RepositoryFileEditorPanel({
   const activeLargeFile = activeOptionsBucket !== "small";
   const activeHugeFile = activeOptionsBucket === "huge";
   const [monacoSurfaceReady, setMonacoSurfaceReady] = useState(true);
+  const [monacoEditorSurface, setMonacoEditorSurface] = useState<{
+    editor: MonacoEditorNamespace.IStandaloneCodeEditor;
+    monaco: typeof Monaco;
+  } | null>(null);
   const contentInjectionCancelRef = useRef<(() => void) | null>(null);
 
   useEffect(() => {
@@ -137,6 +144,7 @@ export function RepositoryFileEditorPanel({
   useEffect(() => {
     lastAppliedFocusRef.current = null;
     editorRef.current = null;
+    setMonacoEditorSurface(null);
     monacoMountGuardRef.current?.dispose();
     monacoMountGuardRef.current = null;
   }, [activeTab?.relativePath]);
@@ -167,6 +175,7 @@ export function RepositoryFileEditorPanel({
       };
       editorRef.current = editor;
       monacoRef.current = monaco;
+      setMonacoEditorSurface({ editor, monaco });
       const reveal = () => {
         revealEditorLineFocus(editor, tab, lastAppliedFocusRef);
       };
@@ -293,6 +302,15 @@ export function RepositoryFileEditorPanel({
           </div>
         ) : (
           <div className="app-file-editor-monaco-wrap">
+            {activeTab.diffOriginal !== undefined ? null : (
+              <MonacoSelectionChatToolbar
+                editor={monacoEditorSurface?.editor ?? null}
+                monaco={monacoEditorSurface?.monaco ?? null}
+                relativePath={activeTab.relativePath}
+                language={activeLanguage}
+                sessionId={activeSessionId}
+              />
+            )}
             {activeTab.diffOriginal !== undefined ? (
               <GitDiffMonacoPane
                 relativePath={activeTab.relativePath}
@@ -301,6 +319,7 @@ export function RepositoryFileEditorPanel({
                 language={monacoLanguageFromRepositoryPath(activeTab.relativePath)}
                 readOnly={activeTab.gitDiffSection === "staged" || Boolean(activeTab.gitCommitSha) || Boolean(activeTab.gitCommitCompare)}
                 dark={dark}
+                activeSessionId={activeSessionId}
                 onModifiedChange={(next) => onTabContentChange(activeTab.relativePath, next)}
               />
             ) : (

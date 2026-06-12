@@ -1,5 +1,7 @@
-import { lazy, Suspense, useEffect, useRef, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import { Spin } from "antd";
+import type * as Monaco from "monaco-editor";
+import type { editor as MonacoEditorNamespace } from "monaco-editor";
 import { configureWiseMonacoTypeScript } from "../services/monacoTypeScriptEnvironment";
 import { installMonacoGlobalFindRedirect } from "../utils/monacoGlobalFindRedirect";
 import { installMonacoTrackpadSelectionGuard } from "../utils/monacoTrackpadSelectionGuard";
@@ -9,6 +11,7 @@ import {
   shouldDeferMonacoEditorMount,
 } from "../utils/monacoLargeFile";
 import { runWhenIdle } from "../utils/deferIdle";
+import { MonacoSelectionChatToolbar } from "./MonacoSelectionChatToolbar";
 
 const DiffEditor = lazy(() =>
   import("@monaco-editor/react").then((m) => ({ default: m.DiffEditor })),
@@ -21,6 +24,7 @@ interface Props {
   language: string;
   readOnly: boolean;
   dark: boolean;
+  activeSessionId?: string | null;
   onModifiedChange: (value: string) => void;
 }
 
@@ -31,12 +35,22 @@ export function GitDiffMonacoPane({
   language,
   readOnly,
   dark,
+  activeSessionId = null,
   onModifiedChange,
 }: Props) {
   const modifiedListenerRef = useRef<{ dispose: () => void } | null>(null);
   const trackpadGuardRef = useRef<{ dispose: () => void } | null>(null);
   const onModifiedChangeRef = useRef(onModifiedChange);
   onModifiedChangeRef.current = onModifiedChange;
+  const [monacoApi, setMonacoApi] = useState<typeof Monaco | null>(null);
+  const [diffEditors, setDiffEditors] = useState<{
+    original: MonacoEditorNamespace.IStandaloneCodeEditor;
+    modified: MonacoEditorNamespace.IStandaloneCodeEditor;
+  } | null>(null);
+  const diffEditorList = useMemo(
+    () => (diffEditors ? [diffEditors.original, diffEditors.modified] : []),
+    [diffEditors],
+  );
 
   const diffContentLength = maxMonacoContentLength(original, modified);
   const diffEditorOptions = resolveWiseMonacoEditorOptionsFromLength(diffContentLength);
@@ -53,15 +67,15 @@ export function GitDiffMonacoPane({
     return runWhenIdle(() => setSurfaceReady(true), { timeoutMs: 48 });
   }, [diffContentLength, relativePath]);
 
-  useEffect(
-    () => () => {
+  useEffect(() => {
+    setDiffEditors(null);
+    return () => {
       modifiedListenerRef.current?.dispose();
       modifiedListenerRef.current = null;
       trackpadGuardRef.current?.dispose();
       trackpadGuardRef.current = null;
-    },
-    [relativePath],
-  );
+    };
+  }, [relativePath]);
 
   return (
     <Suspense
@@ -76,49 +90,61 @@ export function GitDiffMonacoPane({
           <Spin size="small" tip="准备 diff 编辑器…" />
         </div>
       ) : (
-      <DiffEditor
-        key={readOnly ? "wise-git-diff-ro" : "wise-git-diff-rw"}
-        height="100%"
-        className="app-file-editor-monaco app-file-editor-monaco--diff"
-        theme={dark ? "vs-dark" : "vs"}
-        original={original}
-        modified={modified}
-        language={language}
-        originalModelPath={`wise-diff-left:${relativePath}`}
-        modifiedModelPath={`wise-diff-right:${relativePath}`}
-        beforeMount={(monaco) => {
-          configureWiseMonacoTypeScript(monaco);
-        }}
-        onMount={(diffEditor) => {
-          modifiedListenerRef.current?.dispose();
-          modifiedListenerRef.current = null;
-          trackpadGuardRef.current?.dispose();
-          const guards = [
-            installMonacoTrackpadSelectionGuard(diffEditor.getOriginalEditor()),
-            installMonacoTrackpadSelectionGuard(diffEditor.getModifiedEditor()),
-            installMonacoGlobalFindRedirect(diffEditor.getOriginalEditor()),
-            installMonacoGlobalFindRedirect(diffEditor.getModifiedEditor()),
-          ];
-          trackpadGuardRef.current = {
-            dispose: () => {
-              for (const guard of guards) {
-                guard.dispose();
+        <>
+          <MonacoSelectionChatToolbar
+            editors={diffEditorList}
+            monaco={monacoApi}
+            relativePath={relativePath}
+            language={language}
+            sessionId={activeSessionId}
+          />
+          <DiffEditor
+            key={readOnly ? "wise-git-diff-ro" : "wise-git-diff-rw"}
+            height="100%"
+            className="app-file-editor-monaco app-file-editor-monaco--diff"
+            theme={dark ? "vs-dark" : "vs"}
+            original={original}
+            modified={modified}
+            language={language}
+            originalModelPath={`wise-diff-left:${relativePath}`}
+            modifiedModelPath={`wise-diff-right:${relativePath}`}
+            beforeMount={(monaco) => {
+              setMonacoApi(monaco);
+              configureWiseMonacoTypeScript(monaco);
+            }}
+            onMount={(diffEditor) => {
+              modifiedListenerRef.current?.dispose();
+              modifiedListenerRef.current = null;
+              trackpadGuardRef.current?.dispose();
+              const originalEditor = diffEditor.getOriginalEditor();
+              const modifiedEditor = diffEditor.getModifiedEditor();
+              setDiffEditors({ original: originalEditor, modified: modifiedEditor });
+              const guards = [
+                installMonacoTrackpadSelectionGuard(originalEditor),
+                installMonacoTrackpadSelectionGuard(modifiedEditor),
+                installMonacoGlobalFindRedirect(originalEditor),
+                installMonacoGlobalFindRedirect(modifiedEditor),
+              ];
+              trackpadGuardRef.current = {
+                dispose: () => {
+                  for (const guard of guards) {
+                    guard.dispose();
+                  }
+                },
+              };
+              if (!readOnly) {
+                modifiedListenerRef.current = modifiedEditor.onDidChangeModelContent(() => {
+                  onModifiedChangeRef.current(modifiedEditor.getValue());
+                });
               }
-            },
-          };
-          if (!readOnly) {
-            const mod = diffEditor.getModifiedEditor();
-            modifiedListenerRef.current = mod.onDidChangeModelContent(() => {
-              onModifiedChangeRef.current(mod.getValue());
-            });
-          }
-        }}
-        options={{
-          ...diffEditorOptions,
-          readOnly,
-          renderSideBySide: true,
-        }}
-      />
+            }}
+            options={{
+              ...diffEditorOptions,
+              readOnly,
+              renderSideBySide: true,
+            }}
+          />
+        </>
       )}
     </Suspense>
   );

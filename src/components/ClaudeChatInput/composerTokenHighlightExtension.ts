@@ -1,4 +1,5 @@
 import { Mark, Extension } from "@tiptap/core";
+import { composerCodeSelectionRefExtension } from "./composerCodeSelectionRefExtension";
 import {
   createComposerHighlightMarkSyncPlugin,
   syncComposerHighlightMarksOnEditor,
@@ -58,10 +59,11 @@ export const composerTokenHighlightSyncExtension = Extension.create({
   },
 });
 
-/** Semi AIChatInput 扩展 bundle：Mark + 高优先级 sync 插件。 */
+/** Semi AIChatInput 扩展 bundle：Mark + 高优先级 sync 插件 + Monaco 代码选区 pill。 */
 export const composerTokenHighlightExtensions = [
   composerAtHighlightMark,
   composerSlashHighlightMark,
+  composerCodeSelectionRefExtension,
   composerTokenHighlightSyncExtension,
 ];
 

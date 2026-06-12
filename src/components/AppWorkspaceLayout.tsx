@@ -168,6 +168,7 @@ function isPlainRepositoryFileOpen(options?: GitPanelOpenFileOptions): boolean {
 
 interface RepositoryFileEditorPanelContextValue {
   activePath: string | null;
+  activeSessionId: string | null;
   dirty: boolean;
   editorVisible: boolean;
   onActivePathChange: (path: string) => void;
@@ -393,6 +394,7 @@ const ConnectedRepositoryFileEditorPanel = memo(function ConnectedRepositoryFile
 }) {
   const {
     activePath,
+    activeSessionId,
     dirty,
     editorVisible,
     onActivePathChange,
@@ -411,6 +413,7 @@ const ConnectedRepositoryFileEditorPanel = memo(function ConnectedRepositoryFile
     <Suspense fallback={<PanelLoadingFallback />}>
       <LazyRepositoryFileEditorPanel
         activePath={activePath}
+        activeSessionId={activeSessionId}
         dark={dark}
         dirty={dirty}
         repositoryPath={repositoryPath}
@@ -858,6 +861,7 @@ export function AppWorkspaceLayout({
   const editorPanelContextValue = useMemo<RepositoryFileEditorPanelContextValue>(
     () => ({
       activePath: fileEditorActivePath,
+      activeSessionId: claudeSessionsProps.activeSessionId,
       dirty: editorDirty,
       editorVisible,
       onActivePathChange: setFileEditorActivePath,
@@ -877,6 +881,7 @@ export function AppWorkspaceLayout({
     }),
     [
       activeRepositoryPath,
+      claudeSessionsProps.activeSessionId,
       closeFileEditorPanel,
       closeFileEditorTab,
       closeRepositoryBinaryPreview,

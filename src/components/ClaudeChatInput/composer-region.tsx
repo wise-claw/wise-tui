@@ -143,8 +143,13 @@ import type { QuestionDockTabSpec } from "../../hooks/useQuestionDockTabs";
 import { buildClaudeSessionHoverTitle } from "../../utils/claudeSessionIdTooltip";
 import {
   WORKFLOW_UI_EVENT_APPLY_STARTER_PROMPT,
+  WORKFLOW_UI_EVENT_APPEND_MONACO_SELECTION_TO_COMPOSER,
+  type ApplyMonacoSelectionToComposerDetail,
   type ApplyStarterPromptDetail,
 } from "../../constants/workflowUiEvents";
+import { extractComposerCodeSelectionRefs } from "./extractComposerCodeSelectionRefs";
+import { scheduleInsertComposerCodeSelectionRef } from "./scheduleInsertComposerCodeSelectionRef";
+import { expandComposerCodeSelectionRefs } from "../../utils/expandComposerCodeSelectionRefs";
 import type { GitBranchEntry } from "../../types";
 
 function composerSpeechEngineHint(engine: ComposerSpeechEngine | null): string {
@@ -672,10 +677,12 @@ function ComposerInner({
   }, [set]);
 
   const syncCanSendComposer = useCallback((plain: string) => {
+    const codeSelectionRefs = extractComposerCodeSelectionRefs(aiChatRef.current?.getEditor?.());
     const active =
       plain.trim().length > 0 ||
       imagesRef.current.length > 0 ||
-      contextItemsRef.current.length > 0;
+      contextItemsRef.current.length > 0 ||
+      codeSelectionRefs.length > 0;
     if (active === canSendComposerRef.current) return;
     canSendComposerRef.current = active;
     setCanSendComposer(active);
@@ -1310,6 +1317,13 @@ function ComposerInner({
             )
           : rawMain;
       if (!composerMain && attachmentPaths.length === 0) return;
+      if (custom.detail?.insertMode === "append" && attachmentPaths.length === 0) {
+        const currentPlain = plainSurfaceRef.current?.getPlain().trim() ?? "";
+        const nextPlain = currentPlain ? `${currentPlain}\n\n${composerMain}` : composerMain;
+        plainSurfaceRef.current?.setPlainAndCursor(nextPlain, nextPlain.length);
+        composerEscapeRootRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        return;
+      }
       const entryPrompt = singleTextPrompt(composerMain);
       if (attachmentPaths.length > 0) {
         restoreComposerSurface(entryPrompt, [], { fallbackPathsFromText: attachmentPaths });
@@ -1330,6 +1344,52 @@ function ComposerInner({
       window.removeEventListener(WORKFLOW_UI_EVENT_APPLY_STARTER_PROMPT, handleApplyStarterPrompt as EventListener);
     };
   }, [session.id, set, restoreComposerSurface, scheduleComposerSetContent]);
+
+  useEffect(() => {
+    function handleAppendMonacoSelection(event: Event) {
+      const custom = event as CustomEvent<ApplyMonacoSelectionToComposerDetail>;
+      const targetSessionId = custom.detail?.sessionId?.trim();
+      if (!targetSessionId || targetSessionId !== session.id) return;
+      const relativePath = custom.detail?.relativePath?.trim() ?? "";
+      const selectedText = custom.detail?.selectedText ?? "";
+      if (!relativePath || !selectedText.trim()) return;
+
+      const attrs = {
+        path: relativePath,
+        selectedText,
+        language: custom.detail?.language?.trim() ?? "",
+        startLine: custom.detail?.startLine ?? 1,
+        endLine: custom.detail?.endLine ?? custom.detail?.startLine ?? 1,
+        startChar: custom.detail?.startChar ?? 1,
+        endChar: custom.detail?.endChar ?? 1,
+      };
+      scheduleInsertComposerCodeSelectionRef(aiChatRef.current, attrs, (result) => {
+        if (result === "unavailable") {
+          message.warning("输入区未就绪，请稍后再试");
+          return;
+        }
+        if (result === "duplicate") {
+          message.info("该代码选区已在输入框中");
+          return;
+        }
+        syncCanSendComposer(lastEditorPlainRef.current || promptToDisplayPlain(prompt));
+        queueMicrotask(() => {
+          aiChatRef.current?.focusEditor?.("end");
+          composerEscapeRootRef.current?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+        });
+      });
+    }
+    window.addEventListener(
+      WORKFLOW_UI_EVENT_APPEND_MONACO_SELECTION_TO_COMPOSER,
+      handleAppendMonacoSelection as EventListener,
+    );
+    return () => {
+      window.removeEventListener(
+        WORKFLOW_UI_EVENT_APPEND_MONACO_SELECTION_TO_COMPOSER,
+        handleAppendMonacoSelection as EventListener,
+      );
+    };
+  }, [prompt, session.id, syncCanSendComposer]);
 
   const lastUserMessageAttachmentPaths = useCallback((): string[] => {
     const messages = sessionRef.current.messages;
@@ -1511,7 +1571,9 @@ function ComposerInner({
         plainFromEditor !== undefined
           ? plainFromEditor
           : lastEditorPlainRef.current || promptToDisplayPlain(prompt);
-      const promptSnap: Prompt = singleTextPrompt(effectivePlain);
+      const codeSelectionRefs = extractComposerCodeSelectionRefs(aiChatRef.current?.getEditor?.());
+      const expandedPlain = expandComposerCodeSelectionRefs(effectivePlain, codeSelectionRefs);
+      const promptSnap: Prompt = singleTextPrompt(expandedPlain);
       const logicalSnap = normalizeComposerPlainMain(
         promptToLogicalPlainString(promptSnap),
         images.length > 0,
@@ -1519,7 +1581,10 @@ function ComposerInner({
       const contextSnap = contextItems.map((c) => ({ ...c }));
       const imagesSnap = dedupeComposerImages(images.map((img) => ({ ...img })));
       const hasSnapPayload =
-        logicalSnap.trim().length > 0 || imagesSnap.length > 0 || contextSnap.length > 0;
+        logicalSnap.trim().length > 0 ||
+        imagesSnap.length > 0 ||
+        contextSnap.length > 0 ||
+        codeSelectionRefs.length > 0;
       if (!hasSnapPayload) return;
 
       const historyPrompt =

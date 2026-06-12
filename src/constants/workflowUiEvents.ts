@@ -5,6 +5,8 @@ export const WISE_UI_EVENT_SCHEDULED_TASKS_CHANGED = "wise:scheduled-tasks-chang
 
 export const WORKFLOW_UI_EVENT_APPLY_STARTER_PROMPT = "wise:apply-starter-prompt";
 
+export type ApplyStarterPromptInsertMode = "replace" | "append";
+
 export interface ApplyStarterPromptDetail {
   sessionId: string;
   /** 完整纯文本（兼容旧调用方；与 `composerMain` 相同时可只传此项） */
@@ -13,6 +15,8 @@ export interface ApplyStarterPromptDetail {
   composerMain?: string;
   /** `~/.wise/composer-images/` 下已落盘绝对路径，与消息气泡 `附图：@` 一致 */
   attachmentPaths?: string[];
+  /** 默认 `replace`；`append` 时在现有草稿末尾追加 */
+  insertMode?: ApplyStarterPromptInsertMode;
 }
 
 /** 将文本（及可选附图路径）写入指定会话 composer 并聚焦输入框（由 `ComposerRegion` 监听）。 */
@@ -29,8 +33,48 @@ export function applyStarterPromptToComposer(detail: ApplyStarterPromptDetail): 
         prompt,
         composerMain: composerMain || prompt.trim(),
         attachmentPaths,
+        insertMode: detail.insertMode,
       },
     }),
+  );
+}
+
+export const WORKFLOW_UI_EVENT_APPEND_MONACO_SELECTION_TO_COMPOSER =
+  "wise:append-monaco-selection-to-composer";
+
+export interface ApplyMonacoSelectionToComposerDetail {
+  sessionId: string;
+  relativePath: string;
+  language?: string | null;
+  selectedText: string;
+  startLine: number;
+  endLine: number;
+  startChar?: number;
+  endChar?: number;
+}
+
+/** 将 Monaco 选区以折叠 pill 形式插入指定会话 composer 并聚焦输入框。 */
+export function applyMonacoSelectionToComposer(detail: ApplyMonacoSelectionToComposerDetail): void {
+  const sessionId = detail.sessionId.trim();
+  const relativePath = detail.relativePath.trim();
+  const selectedText = detail.selectedText ?? "";
+  if (!sessionId || !relativePath || !selectedText.trim()) return;
+  window.dispatchEvent(
+    new CustomEvent<ApplyMonacoSelectionToComposerDetail>(
+      WORKFLOW_UI_EVENT_APPEND_MONACO_SELECTION_TO_COMPOSER,
+      {
+        detail: {
+          sessionId,
+          relativePath,
+          language: detail.language,
+          selectedText,
+          startLine: detail.startLine,
+          endLine: detail.endLine,
+          startChar: detail.startChar,
+          endChar: detail.endChar,
+        },
+      },
+    ),
   );
 }
 
