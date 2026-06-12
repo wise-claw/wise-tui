@@ -238,16 +238,25 @@ const ConnectedLeftSidebar = memo(function ConnectedLeftSidebar({
 
 interface ConnectedWorkspaceFileTreeRailProps {
   widthPx: number;
+  macTitlebarInset: boolean;
   context: WorkspaceFileTreeRailContext;
   onClose: () => void;
 }
 
 const ConnectedWorkspaceFileTreeRail = memo(function ConnectedWorkspaceFileTreeRail({
   widthPx,
+  macTitlebarInset,
   context,
   onClose,
 }: ConnectedWorkspaceFileTreeRailProps) {
-  return <WorkspaceFileTreeRail widthPx={widthPx} {...context} onClose={onClose} />;
+  return (
+    <WorkspaceFileTreeRail
+      widthPx={widthPx}
+      macTitlebarInset={macTitlebarInset}
+      {...context}
+      onClose={onClose}
+    />
+  );
 });
 
 interface ConnectedClaudeSessionsProps {
@@ -958,6 +967,9 @@ export function AppWorkspaceLayout({
                       repoPanelRightRailAvailable: chatRightRailMode,
                       fileTreeRailOpen,
                       onToggleFileTreeRail: chatRightRailMode ? toggleFileTreeRail : undefined,
+                      onOpenFileTreeRail: chatRightRailMode
+                        ? () => setFileTreeRailOpen(true)
+                        : undefined,
                       onWorkspaceFileTreeRailContextChange: chatRightRailMode
                         ? setWorkspaceFileTreeRailContext
                         : undefined,
@@ -990,6 +1002,7 @@ export function AppWorkspaceLayout({
                   <>
                     <ConnectedWorkspaceFileTreeRail
                       widthPx={fileTreeRailWidthPx}
+                      macTitlebarInset={collapsed}
                       context={workspaceFileTreeRailContext}
                       onClose={() => setFileTreeRailOpen(false)}
                     />

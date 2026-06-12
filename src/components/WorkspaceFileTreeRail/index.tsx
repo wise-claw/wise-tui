@@ -8,11 +8,14 @@ import "./index.css";
 
 export interface WorkspaceFileTreeRailProps extends WorkspaceFileTreeRailContext {
   widthPx: number;
+  /** 左栏收起时文件树贴窗口左缘，需为 macOS 交通灯预留标题栏内边距。 */
+  macTitlebarInset?: boolean;
   onClose: () => void;
 }
 
 export const WorkspaceFileTreeRail = memo(function WorkspaceFileTreeRail({
   widthPx,
+  macTitlebarInset = false,
   repositoryPath = "",
   repositoryName,
   workspaceSelector,
@@ -35,7 +38,10 @@ export const WorkspaceFileTreeRail = memo(function WorkspaceFileTreeRail({
 
   return (
     <aside
-      className="app-workspace-file-tree-rail"
+      className={
+        "app-workspace-file-tree-rail" +
+        (macTitlebarInset ? " app-workspace-file-tree-rail--mac-titlebar-inset" : "")
+      }
       style={{ width: widthPx, flexBasis: widthPx, maxWidth: widthPx }}
       aria-label="文件树"
     >

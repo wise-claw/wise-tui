@@ -202,6 +202,8 @@ export interface LeftSidebarProps {
   onRepositoryRepoPanelChange?: (node: ReactNode | null) => void;
   fileTreeRailOpen?: boolean;
   onToggleFileTreeRail?: () => void;
+  /** 打开文件树栏（与下拉内「文件树 + 切换会话」快捷按钮联动）。 */
+  onOpenFileTreeRail?: () => void;
   onWorkspaceFileTreeRailContextChange?: (context: WorkspaceFileTreeRailContext | null) => void;
   taskCardsNavProps?: TaskCardsNavProps;
 }

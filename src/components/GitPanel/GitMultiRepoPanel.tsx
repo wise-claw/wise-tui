@@ -8,7 +8,7 @@ import { safeUnlistenPromise } from "../../utils/safeTauriUnlisten";
 import { startGitWatcher, stopGitWatcher } from "../../services/git";
 import { openRepositoryRemoteInBrowser } from "../../services/openRepositoryRemote";
 import { message } from "antd";
-import type { GitPanelRepositoryEntry } from "../../utils/workspaceRepositoryTreeSelect";
+import type { GitPanelRepositoryEntry, WorkspaceRepositoryTreeSelection } from "../../utils/workspaceRepositoryTreeSelect";
 import {
   GIT_MULTI_REPO_LOAD_STAGGER_MS,
   GIT_MULTI_REPO_WATCHER_REFRESH_MS,
@@ -36,6 +36,8 @@ interface Props {
   onRepositorySelect?: (repositoryId: number) => void;
   onProjectSelect?: (projectId: string) => void;
   directoryOnly?: boolean;
+  treeSelection?: WorkspaceRepositoryTreeSelection | null;
+  onOpenFileTreeSession?: (target: WorkspaceRepositoryTreeSelection) => void;
   lazyMount?: boolean;
 }
 
@@ -53,6 +55,8 @@ export function GitMultiRepoPanel({
   onRepositorySelect,
   onProjectSelect,
   directoryOnly,
+  treeSelection = null,
+  onOpenFileTreeSession,
   lazyMount = true,
 }: Props) {
   const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
@@ -245,6 +249,8 @@ export function GitMultiRepoPanel({
               onRepositorySelect={onRepositorySelect}
               onProjectSelect={onProjectSelect}
               directoryOnly={directoryOnly}
+              treeSelection={treeSelection}
+              onOpenFileTreeSession={onOpenFileTreeSession}
             />
           ) : (
             <span className="git-panel-title">{contextTitle}</span>

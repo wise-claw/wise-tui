@@ -13,6 +13,7 @@ import {
   type WorkspaceRepositoryTreeNode,
   type WorkspaceRepositoryTreeSelection,
 } from "../../utils/workspaceRepositoryTreeSelect";
+import { IconFileTreeExplorer } from "../WorkspaceFileTreeRail/IconFileTreeExplorer";
 import type { WorkspaceFocus } from "../../utils/workspaceMode";
 import { getDefaultTerminalActionIcon, getKnownOpenAppIcon } from "../OpenAppMenu/openAppIcons";
 import {
@@ -43,16 +44,31 @@ export interface GitPanelWorkspaceSelectorProps {
   directoryOnly?: boolean;
   /** 左栏 Git/文件面板当前树选择（优先于 active* 推导）。 */
   treeSelection?: WorkspaceRepositoryTreeSelection | null;
+  /** 打开文件树栏并切换全局工作区 / 仓库会话（下拉行内快捷按钮）。 */
+  onOpenFileTreeSession?: (target: WorkspaceRepositoryTreeSelection) => void;
 }
 
 interface TreeOpenActionsOptions {
   projects: ProjectItem[];
   repositories: Repository[];
   onOpenEditorPath: (path: string, scopeOpenAppId?: string | null) => void;
+  onOpenFileTreeSession?: (target: WorkspaceRepositoryTreeSelection) => void;
   showTerminalOpen: boolean;
   terminalIconSrc: string;
   terminalActionLabel: string;
   onOpenTerminalPath: (path: string) => void;
+}
+
+function resolveTreeNodeFileTreeSessionTarget(
+  node: WorkspaceRepositoryTreeNode,
+): WorkspaceRepositoryTreeSelection | null {
+  if (node.nodeType === "repo" && node.repositoryId != null) {
+    return { kind: "repository", repositoryId: node.repositoryId };
+  }
+  if (node.nodeType === "project" && node.projectId) {
+    return { kind: "project", projectId: node.projectId };
+  }
+  return null;
 }
 
 function buildTreeDataWithOpenActions(
@@ -73,30 +89,55 @@ function buildTreeDataWithOpenActions(
       ? `在 ${editorTarget.label} 中打开`
       : repositoryEditorOpenMenuLabel(scopeOpenAppId);
     const editorIconSrc = getKnownOpenAppIcon(effectiveOpenAppId) ?? "";
+    const fileTreeSessionTarget = resolveTreeNodeFileTreeSessionTarget(node);
+    const showFileTreeSessionAction =
+      fileTreeSessionTarget != null && options.onOpenFileTreeSession != null;
     const title: ReactNode = (
       <div className="git-panel-workspace-selector__tree-row">
         <span className="git-panel-workspace-selector__tree-label">{node.title}</span>
-        {openPath ? (
+        {showFileTreeSessionAction || openPath ? (
           <div className="git-panel-workspace-selector__tree-actions">
-            <button
-              type="button"
-              className="git-panel-workspace-selector__tree-open"
-              title={`${editorActionLabel}：${node.title}`}
-              aria-label={`${editorActionLabel}：${node.title}`}
-              onClick={(event) => {
-                event.preventDefault();
-                event.stopPropagation();
-                options.onOpenEditorPath(openPath, scopeOpenAppId);
-              }}
-            >
-              <img
-                className="git-panel-workspace-selector__tree-open-icon"
-                src={editorIconSrc}
-                alt=""
-                aria-hidden
-              />
-            </button>
-            {options.showTerminalOpen ? (
+            {showFileTreeSessionAction ? (
+              <button
+                type="button"
+                className="git-panel-workspace-selector__tree-open git-panel-workspace-selector__tree-open--file-tree"
+                title={`打开文件树并切换会话：${node.title}`}
+                aria-label={`打开文件树并切换会话：${node.title}`}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  options.onOpenFileTreeSession?.(fileTreeSessionTarget);
+                }}
+              >
+                <span
+                  className="git-panel-workspace-selector__tree-open-icon git-panel-workspace-selector__tree-open-icon--svg"
+                  aria-hidden
+                >
+                  <IconFileTreeExplorer />
+                </span>
+              </button>
+            ) : null}
+            {openPath ? (
+              <button
+                type="button"
+                className="git-panel-workspace-selector__tree-open"
+                title={`${editorActionLabel}：${node.title}`}
+                aria-label={`${editorActionLabel}：${node.title}`}
+                onClick={(event) => {
+                  event.preventDefault();
+                  event.stopPropagation();
+                  options.onOpenEditorPath(openPath, scopeOpenAppId);
+                }}
+              >
+                <img
+                  className="git-panel-workspace-selector__tree-open-icon"
+                  src={editorIconSrc}
+                  alt=""
+                  aria-hidden
+                />
+              </button>
+            ) : null}
+            {openPath && options.showTerminalOpen ? (
               <button
                 type="button"
                 className="git-panel-workspace-selector__tree-open git-panel-workspace-selector__tree-open--terminal"
@@ -142,6 +183,7 @@ export function GitPanelWorkspaceSelector({
   onProjectSelect,
   directoryOnly = false,
   treeSelection = null,
+  onOpenFileTreeSession,
 }: GitPanelWorkspaceSelectorProps) {
   const { message } = App.useApp();
   const [pickerOpen, setPickerOpen] = useState(false);
@@ -180,6 +222,14 @@ export function GitPanelWorkspaceSelector({
     [message],
   );
 
+  const handleOpenFileTreeSession = useCallback(
+    (target: WorkspaceRepositoryTreeSelection) => {
+      onOpenFileTreeSession?.(target);
+      setPickerOpen(false);
+    },
+    [onOpenFileTreeSession],
+  );
+
   const treeNodes = useMemo(
     () => buildWorkspaceRepositoryTreeData(projects, repositories),
     [projects, repositories],
@@ -191,6 +241,7 @@ export function GitPanelWorkspaceSelector({
         projects,
         repositories,
         onOpenEditorPath: handleOpenEditorPath,
+        onOpenFileTreeSession: onOpenFileTreeSession ? handleOpenFileTreeSession : undefined,
         showTerminalOpen,
         terminalIconSrc,
         terminalActionLabel,
@@ -201,6 +252,8 @@ export function GitPanelWorkspaceSelector({
       projects,
       repositories,
       handleOpenEditorPath,
+      onOpenFileTreeSession,
+      handleOpenFileTreeSession,
       showTerminalOpen,
       terminalIconSrc,
       terminalActionLabel,

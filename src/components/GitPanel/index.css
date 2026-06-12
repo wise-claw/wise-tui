@@ -683,6 +683,23 @@
   border-radius: 3px;
 }
 
+.git-panel-workspace-selector__tree-open-icon--svg {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--ant-color-text-secondary);
+}
+
+.git-panel-workspace-selector__tree-open-icon--svg svg {
+  width: 14px;
+  height: 14px;
+  display: block;
+}
+
+.git-panel-workspace-selector__tree-open--file-tree:hover .git-panel-workspace-selector__tree-open-icon--svg {
+  color: var(--ant-color-text);
+}
+
 .git-panel-workspace-selector__tree .ant-tree-node-content-wrapper {
   flex: 1;
   min-width: 0;

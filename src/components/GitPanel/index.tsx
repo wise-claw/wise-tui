@@ -30,7 +30,7 @@ import { GitSyncActions } from "./GitSyncActions";
 import { InitMode } from "./InitMode";
 import { hasUnstagedFilesUnderDirectory, GIT_WATCHER_REFRESH_MS, gitStatusSnapshotEqual } from "./gitPanelUtils";
 import { GitMultiRepoPanel } from "./GitMultiRepoPanel";
-import type { GitPanelRepositoryEntry } from "../../utils/workspaceRepositoryTreeSelect";
+import type { GitPanelRepositoryEntry, WorkspaceRepositoryTreeSelection } from "../../utils/workspaceRepositoryTreeSelect";
 import { GitPanelWorkspaceSelector } from "./GitPanelWorkspaceSelector";
 import type { ProjectItem, Repository } from "../../types";
 import type { WorkspaceFocus } from "../../utils/workspaceMode";
@@ -59,6 +59,8 @@ interface Props {
   onProjectSelect?: (projectId: string) => void;
   /** 仅切换 Git 面板目录，不联动全局工作区。 */
   directoryOnly?: boolean;
+  treeSelection?: WorkspaceRepositoryTreeSelection | null;
+  onOpenFileTreeSession?: (target: WorkspaceRepositoryTreeSelection) => void;
   /** 多仓 Git 面板是否 lazy 挂载各仓库区块（侧栏需配合 scrollRoot，见 GitMultiRepoPanel）。 */
   lazyMount?: boolean;
 }
@@ -80,6 +82,8 @@ export function GitPanel(props: Props) {
         onRepositorySelect={props.onRepositorySelect}
         onProjectSelect={props.onProjectSelect}
         directoryOnly={props.directoryOnly}
+        treeSelection={props.treeSelection}
+        onOpenFileTreeSession={props.onOpenFileTreeSession}
         lazyMount={props.lazyMount}
       />
     );
@@ -101,6 +105,8 @@ function GitSingleRepoPanel({
   onRepositorySelect,
   onProjectSelect,
   directoryOnly,
+  treeSelection = null,
+  onOpenFileTreeSession,
 }: Props) {
   const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
   const [status, setStatus] = useState<GitStatusResponse | null>(null);
@@ -472,6 +478,8 @@ function GitSingleRepoPanel({
               onRepositorySelect={onRepositorySelect}
               onProjectSelect={onProjectSelect}
               directoryOnly={directoryOnly}
+              treeSelection={treeSelection}
+              onOpenFileTreeSession={onOpenFileTreeSession}
             />
           ) : (
             <span className="git-panel-title">GIT</span>

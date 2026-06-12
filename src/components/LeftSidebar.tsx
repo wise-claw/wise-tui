@@ -228,6 +228,7 @@ export function LeftSidebar({
   onRepositoryRepoPanelChange,
   fileTreeRailOpen = false,
   onToggleFileTreeRail,
+  onOpenFileTreeRail,
   onWorkspaceFileTreeRailContextChange,
   taskCardsNavProps,
 }: LeftSidebarProps) {
@@ -976,41 +977,6 @@ export function LeftSidebar({
     return "变更";
   }, [repoPanelTreeSelection, repoPanelTreeView?.label, projects]);
 
-  const repoPanelWorkspaceSelectorProps = useMemo(
-    () => ({
-      projects,
-      repositories,
-      directoryOnly: true as const,
-      treeSelection: repoPanelTreeSelection,
-      activeProjectId: repoPanelTreeView?.activeProjectId ?? activeProjectId,
-      activeRepositoryId: repoPanelTreeView?.activeRepositoryId ?? activeRepositoryId,
-      activeWorkspaceFocus: repoPanelTreeView?.activeWorkspaceFocus ?? activeWorkspaceFocus,
-      onRepositorySelect: (repositoryId: number) => {
-        startTransition(() => {
-          setRepoPanelTreeSelection({ kind: "repository", repositoryId });
-        });
-      },
-      onProjectSelect: (projectId: string) => {
-        startTransition(() => {
-          setRepoPanelTreeSelection({ kind: "project", projectId });
-        });
-      },
-    }),
-    [
-      projects,
-      repositories,
-      repoPanelTreeSelection,
-      repoPanelTreeView,
-      activeProjectId,
-      activeRepositoryId,
-      activeWorkspaceFocus,
-    ],
-  );
-
-  useEffect(() => {
-    setRepositoryFileTreeSearch("");
-  }, [effectiveRepoPanelPath]);
-
   /**
    * 侧栏工作区/仓库点击需要立即驱动左下 Git/文件树目录同步，
    * 不能仅依赖全局 active* 变化（同 key 点击时不会触发）。
@@ -1039,6 +1005,60 @@ export function LeftSidebar({
     },
     [onRepositorySelect],
   );
+
+  const handleOpenFileTreeSession = useCallback(
+    (target: WorkspaceRepositoryTreeSelection) => {
+      if (target.kind === "project") {
+        handleProjectSelectAndSyncRepoPanel(target.projectId);
+      } else {
+        handleRepositorySelectAndSyncRepoPanel(target.repositoryId);
+      }
+      onOpenFileTreeRail?.();
+    },
+    [
+      handleProjectSelectAndSyncRepoPanel,
+      handleRepositorySelectAndSyncRepoPanel,
+      onOpenFileTreeRail,
+    ],
+  );
+
+  const repoPanelWorkspaceSelectorProps = useMemo(
+    () => ({
+      projects,
+      repositories,
+      directoryOnly: true as const,
+      treeSelection: repoPanelTreeSelection,
+      activeProjectId: repoPanelTreeView?.activeProjectId ?? activeProjectId,
+      activeRepositoryId: repoPanelTreeView?.activeRepositoryId ?? activeRepositoryId,
+      activeWorkspaceFocus: repoPanelTreeView?.activeWorkspaceFocus ?? activeWorkspaceFocus,
+      onRepositorySelect: (repositoryId: number) => {
+        startTransition(() => {
+          setRepoPanelTreeSelection({ kind: "repository", repositoryId });
+        });
+      },
+      onProjectSelect: (projectId: string) => {
+        startTransition(() => {
+          setRepoPanelTreeSelection({ kind: "project", projectId });
+        });
+      },
+      onOpenFileTreeSession: onOpenFileTreeRail ? handleOpenFileTreeSession : undefined,
+    }),
+    [
+      projects,
+      repositories,
+      repoPanelTreeSelection,
+      repoPanelTreeView,
+      activeProjectId,
+      activeRepositoryId,
+      activeWorkspaceFocus,
+      onOpenFileTreeRail,
+      handleOpenFileTreeSession,
+    ],
+  );
+
+  useEffect(() => {
+    setRepositoryFileTreeSearch("");
+  }, [effectiveRepoPanelPath]);
 
   const lastHandledWorkspaceCreateRequestRef = useRef(0);
   const lastHandledStandaloneRepoAddRequestRef = useRef(0);
