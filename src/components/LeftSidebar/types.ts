@@ -45,6 +45,8 @@ export interface LeftSidebarProps {
   leftSidebarHubQuickEntryIds?: readonly LeftSidebarHubQuickEntryId[];
   /** 是否显示左栏运行面板；默认 true，由 `wise.defaultConfig.v1` 控制。 */
   showLeftSidebarMonitorPanel?: boolean;
+  /** 是否显示左栏工作区与仓库树；默认 true，由 `wise.defaultConfig.v1` 控制。 */
+  showLeftSidebarWorkspaceList?: boolean;
   mcpHubActive?: boolean;
   onOpenMcpHub?: () => void;
   skillsHubActive?: boolean;

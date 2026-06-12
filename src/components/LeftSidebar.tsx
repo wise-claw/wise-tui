@@ -124,6 +124,7 @@ export function LeftSidebar({
   onOpenAuthor,
   leftSidebarHubQuickEntryIds = [],
   showLeftSidebarMonitorPanel = true,
+  showLeftSidebarWorkspaceList = true,
   mcpHubActive = false,
   onOpenMcpHub,
   skillsHubActive = false,
@@ -641,6 +642,7 @@ export function LeftSidebar({
   }, []);
 
   useEffect(() => {
+    if (!showLeftSidebarWorkspaceList) return;
     if (restoreWorkspaceListVisibilityRef.current) return;
     if (projects.length === 0) return;
     const shouldReveal = shouldRevealWorkspaceListOnRestore(projects, {
@@ -660,6 +662,7 @@ export function LeftSidebar({
     handleWorkspaceListSectionCollapsedChange,
     projects,
     workspaceListSectionCollapsed,
+    showLeftSidebarWorkspaceList,
   ]);
 
   const handleMonitorPanelSectionCollapsedChange = useCallback((next: boolean) => {
@@ -930,6 +933,8 @@ export function LeftSidebar({
       (gitPanelPlacement === "left" || filesPanelPlacement === "left"),
   );
   const showRepoPanel = Boolean(effectiveRepoPanelPath);
+  const workspaceListEffectivelyCollapsed =
+    !showLeftSidebarWorkspaceList || workspaceListSectionCollapsed;
 
   const handleOpenExplorerFile = useCallback(
     (relativePath: string, options?: GitPanelOpenFileOptions) => {
@@ -1156,7 +1161,7 @@ export function LeftSidebar({
       >
         <GitPanelLazy
           headerPrefix={
-            workspaceListSectionCollapsed ? undefined : leftTabSwitcherPrefix ?? undefined
+            workspaceListEffectivelyCollapsed ? undefined : leftTabSwitcherPrefix ?? undefined
           }
           repositoryPath={effectiveRepoPanelPath}
           repositoryName={repoPanelRepositoryName}
@@ -1176,7 +1181,7 @@ export function LeftSidebar({
       leftTabSwitcherPrefix,
       repoPanelRepositoryName,
       repoPanelWorkspaceSelectorProps,
-      workspaceListSectionCollapsed,
+      workspaceListEffectivelyCollapsed,
     ],
   );
 
@@ -1376,7 +1381,7 @@ export function LeftSidebar({
           showRepoPanel && filesExplorerSectionCollapsed ? "true" : undefined
         }
         data-workspace-list-section-collapsed={
-          showRepoPanel && workspaceListSectionCollapsed ? "true" : undefined
+          showRepoPanel && workspaceListEffectivelyCollapsed ? "true" : undefined
         }
         data-monitor-panel-section-collapsed={
           showLeftSidebarMonitorPanel && monitorPanelSectionCollapsed ? "true" : undefined
@@ -1393,6 +1398,7 @@ export function LeftSidebar({
           activeProjectId={activeProjectId}
           activeRepositoryId={activeRepositoryId}
         />
+        {showLeftSidebarWorkspaceList ? (
         <ProjectRepositoryList
           projects={projects}
           repositoriesById={projectRepositoryState.repositoriesById}
@@ -1530,6 +1536,7 @@ export function LeftSidebar({
             showRepoPanel ? handleWorkspaceListSectionCollapsedChange : undefined
           }
         />
+        ) : null}
 
         {monitorPanelMounted ? (
           <LeftSidebarMonitorPanelSlot
@@ -1580,7 +1587,7 @@ export function LeftSidebar({
 
         {showLeftRepoPanel ? (
           <div className="app-left-sidebar-bottom-tabs">
-            {repoPanelRenderState.showGitOnLeft && workspaceListSectionCollapsed ? (
+            {repoPanelRenderState.showGitOnLeft && workspaceListEffectivelyCollapsed ? (
               <div className="app-left-sidebar-repo-panel-header">
                 {repoPanelRenderState.leftTabMode ? repoPanelTabSwitcher : null}
                 <div className="app-left-sidebar-repo-panel-header__selector">
@@ -1589,6 +1596,7 @@ export function LeftSidebar({
                     activeRepositoryPath={effectiveRepoPanelPath}
                   />
                 </div>
+                {showLeftSidebarWorkspaceList ? (
                 <HoverHint title="展开工作区列表">
                   <button
                     type="button"
@@ -1599,6 +1607,7 @@ export function LeftSidebar({
                     <ExpandIcon expanded={false} />
                   </button>
                 </HoverHint>
+                ) : null}
               </div>
             ) : null}
             <LeftSidebarBottomTabPanes

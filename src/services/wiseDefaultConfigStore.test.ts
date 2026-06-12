@@ -20,6 +20,7 @@ import {
   WISE_DEFAULT_CONFIG_KEY,
   WISE_DEFAULT_CONFIG_ONESHOT_TO_STREAMING_MIGRATION_KEY,
   WISE_LEFT_SIDEBAR_MONITOR_PANEL_CHANGED,
+  WISE_LEFT_SIDEBAR_WORKSPACE_LIST_CHANGED,
   WISE_MONITOR_PANEL_PLACEMENT_CHANGED,
   WISE_RIGHT_PANEL_DEFAULT_CHANGED,
   WISE_TOPBAR_CHROME_DEFAULT_CHANGED,
@@ -91,6 +92,7 @@ describe("wiseDefaultConfigStore", () => {
     expect(config.showLlmProxyTopbar).toBe(false);
     expect(config.leftSidebarHubQuickEntries).toEqual(["mcp", "skills", "automation"]);
     expect(config.showLeftSidebarMonitorPanel).toBe(true);
+    expect(config.showLeftSidebarWorkspaceList).toBe(true);
     expect(config.monitorPanelPlacement).toBe("left");
     expect(config.showWorkspaceQuickActionsPanel).toBe(true);
     expect(config.showWorkspaceMemosPanel).toBe(true);
@@ -240,6 +242,29 @@ describe("wiseDefaultConfigStore", () => {
       if (typeof visible === "boolean") seen.push(visible);
     });
     await saveWiseDefaultConfig({ showLeftSidebarMonitorPanel: false });
+    expect(seen).toEqual([false]);
+  });
+
+  test("save workspace list visibility dispatches event", async () => {
+    getAppSetting.mockImplementation(async (key: string) => {
+      if (key === WISE_DEFAULT_CONFIG_ONESHOT_TO_STREAMING_MIGRATION_KEY) return "1";
+      if (key === WISE_DEFAULT_CONFIG_KEY) {
+        return JSON.stringify({
+          version: 1,
+          connectionKind: "streaming",
+          rightPanelDefaultCollapsed: false,
+          showLeftSidebarWorkspaceList: true,
+        });
+      }
+      return null;
+    });
+    const seen: boolean[] = [];
+    window.addEventListener(WISE_LEFT_SIDEBAR_WORKSPACE_LIST_CHANGED, (e: Event) => {
+      const visible = (e as CustomEvent<{ showLeftSidebarWorkspaceList?: boolean }>).detail
+        ?.showLeftSidebarWorkspaceList;
+      if (typeof visible === "boolean") seen.push(visible);
+    });
+    await saveWiseDefaultConfig({ showLeftSidebarWorkspaceList: false });
     expect(seen).toEqual([false]);
   });
 

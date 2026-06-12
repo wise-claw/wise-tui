@@ -16,6 +16,7 @@ import { useClaudeConnectionModeSetting } from "../ClaudeConfigDirPanel/useClaud
 import { DefaultConfigOptionPick } from "./DefaultConfigOptionPick";
 import { useLeftSidebarHubQuickEntriesSetting } from "./useLeftSidebarHubQuickEntriesSetting";
 import { useMonitorPanelSetting } from "./useMonitorPanelSetting";
+import { useLeftSidebarWorkspaceListSetting } from "./useLeftSidebarWorkspaceListSetting";
 import { useExecutionEnvironmentDispatchHistoryDaysSetting } from "./useExecutionEnvironmentDispatchHistoryDaysSetting";
 import { EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAY_OPTIONS } from "../../constants/executionEnvironmentDispatch";
 import { useRightPanelDefaultSetting } from "./useRightPanelDefaultSetting";
@@ -51,6 +52,7 @@ export function DefaultConfigPanel() {
   const topbarChrome = useTopbarChromeDefaultSetting();
   const hubQuickEntries = useLeftSidebarHubQuickEntriesSetting();
   const monitorPanel = useMonitorPanelSetting();
+  const leftSidebarWorkspaceList = useLeftSidebarWorkspaceListSetting();
   const repoPanelPlacement = useRepoPanelPlacementSetting();
   const execEnvDispatchHistory = useExecutionEnvironmentDispatchHistoryDaysSetting();
   const atMentionDefault = useAtMentionDefaultSetting();
@@ -150,6 +152,29 @@ export function DefaultConfigPanel() {
               ]}
               onChange={(value) => {
                 void rightPanel.save(value === "collapsed");
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="app-default-config-row" aria-label="工作区">
+          <div className="app-default-config-row__main">
+            <span className="app-default-config-row__title">工作区</span>
+            <span className="app-default-config-row__hint">
+              控制左栏工作区与仓库树；隐藏后仍可通过 Git / 文件树目录选择器切换上下文
+            </span>
+          </div>
+          <div className="app-default-config-row__control">
+            <DefaultConfigOptionPick<"hidden" | "visible">
+              aria-label="左栏工作区默认显示"
+              disabled={leftSidebarWorkspaceList.loading || leftSidebarWorkspaceList.saving}
+              value={leftSidebarWorkspaceList.visible ? "visible" : "hidden"}
+              options={[
+                { label: "显示", value: "visible" },
+                { label: "隐藏", value: "hidden" },
+              ]}
+              onChange={(value) => {
+                void leftSidebarWorkspaceList.saveVisible(value === "visible");
               }}
             />
           </div>

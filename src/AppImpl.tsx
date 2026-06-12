@@ -157,6 +157,7 @@ import { useClaudeSessionsStructureKey } from "./stores/claudeSessionsLiveStore"
 import { useMonitorSessionsForOverview } from "./hooks/useMonitorSessionsForOverview";
 import { useLeftSidebarHubQuickEntries } from "./hooks/useLeftSidebarHubQuickEntries";
 import { useMonitorPanelDefault } from "./hooks/useMonitorPanelDefault";
+import { useLeftSidebarWorkspaceListDefault } from "./hooks/useLeftSidebarWorkspaceListDefault";
 import { useScheduledClaudeTaskRunner } from "./hooks/useScheduledClaudeTaskRunner";
 import { invalidateWorkflowRunCacheForRepository } from "./hooks/useWorkflowRun";
 import { deleteAppSetting, getAppSetting, setAppSetting } from "./services/appSettingsStore";
@@ -1493,6 +1494,7 @@ export default function App() {
     enterAuthorPane("claude-plugins");
   }, [activeProjectId, activeRepositoryId, enterAuthorPane]);
   const leftSidebarHubQuickEntries = useLeftSidebarHubQuickEntries();
+  const showLeftSidebarWorkspaceList = useLeftSidebarWorkspaceListDefault();
   const showMonitorOnLeft =
     monitorPanelDefault.visible && monitorPanelDefault.placement === "left";
   const showMonitorOnRight =
@@ -3021,6 +3023,7 @@ export default function App() {
         },
         leftSidebarHubQuickEntryIds: leftSidebarHubQuickEntries.enabledEntryIds,
         showLeftSidebarMonitorPanel: showMonitorOnLeft,
+        showLeftSidebarWorkspaceList,
         mcpHubActive:
           viewMode.view.kind === "inspect" && viewMode.view.tool.kind === "mcp-hub",
         onOpenMcpHub: openMcpHubFromSidebar,

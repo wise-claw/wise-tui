@@ -58,6 +58,8 @@ export const WISE_LEFT_SIDEBAR_HUB_QUICK_ENTRIES_CHANGED = "wise:left-sidebar-hu
 
 export const WISE_LEFT_SIDEBAR_MONITOR_PANEL_CHANGED = "wise:left-sidebar-monitor-panel-changed";
 
+export const WISE_LEFT_SIDEBAR_WORKSPACE_LIST_CHANGED = "wise:left-sidebar-workspace-list-changed";
+
 export const WISE_MONITOR_PANEL_PLACEMENT_CHANGED = "wise:monitor-panel-placement-changed";
 
 export const WISE_MONITOR_PANEL_VISIBLE_ROWS_CHANGED = "wise:monitor-panel-visible-rows-changed";
@@ -108,6 +110,8 @@ export interface WiseDefaultConfigV1 {
   leftSidebarHubQuickEntries: LeftSidebarHubQuickEntryId[];
   /** 运行面板（终端 / 工作流运行态）是否显示；默认显示。 */
   showLeftSidebarMonitorPanel: boolean;
+  /** 左栏工作区与仓库树是否显示；默认显示。 */
+  showLeftSidebarWorkspaceList: boolean;
   /** 运行面板默认栏位；默认左栏。 */
   monitorPanelPlacement: MonitorPanelPlacement;
   /** 左栏运行面板内容区默认可见行数（终端 + 派发 + 工作流合计）。 */
@@ -147,6 +151,7 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   showTopbarRepositoryName: false,
   leftSidebarHubQuickEntries: [...DEFAULT_LEFT_SIDEBAR_HUB_QUICK_ENTRIES],
   showLeftSidebarMonitorPanel: true,
+  showLeftSidebarWorkspaceList: true,
   monitorPanelPlacement: "left",
   monitorPanelVisibleRows: MONITOR_PANEL_VISIBLE_ROWS_DEFAULT,
   executionEnvironmentDispatchHistoryDays: DEFAULT_EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAYS,
@@ -234,6 +239,13 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
         parsed.showLeftSidebarMonitorPanel === undefined
           ? DEFAULT_CONFIG.showLeftSidebarMonitorPanel
           : normalizeBoolean(parsed.showLeftSidebarMonitorPanel, DEFAULT_CONFIG.showLeftSidebarMonitorPanel),
+      showLeftSidebarWorkspaceList:
+        parsed.showLeftSidebarWorkspaceList === undefined
+          ? DEFAULT_CONFIG.showLeftSidebarWorkspaceList
+          : normalizeBoolean(
+              parsed.showLeftSidebarWorkspaceList,
+              DEFAULT_CONFIG.showLeftSidebarWorkspaceList,
+            ),
       monitorPanelPlacement:
         normalizeMonitorPanelPlacement(parsed.monitorPanelPlacement) ??
         DEFAULT_CONFIG.monitorPanelPlacement,
@@ -399,6 +411,7 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     showTopbarRepositoryName: DEFAULT_CONFIG.showTopbarRepositoryName,
     leftSidebarHubQuickEntries: [...DEFAULT_LEFT_SIDEBAR_HUB_QUICK_ENTRIES],
     showLeftSidebarMonitorPanel: DEFAULT_CONFIG.showLeftSidebarMonitorPanel,
+    showLeftSidebarWorkspaceList: DEFAULT_CONFIG.showLeftSidebarWorkspaceList,
     monitorPanelPlacement: DEFAULT_CONFIG.monitorPanelPlacement,
     monitorPanelVisibleRows: DEFAULT_CONFIG.monitorPanelVisibleRows,
     executionEnvironmentDispatchHistoryDays: DEFAULT_CONFIG.executionEnvironmentDispatchHistoryDays,
@@ -428,6 +441,15 @@ function dispatchLeftSidebarMonitorPanelChanged(visible: boolean): void {
   window.dispatchEvent(
     new CustomEvent(WISE_LEFT_SIDEBAR_MONITOR_PANEL_CHANGED, {
       detail: { showLeftSidebarMonitorPanel: visible },
+    }),
+  );
+}
+
+function dispatchLeftSidebarWorkspaceListChanged(visible: boolean): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(WISE_LEFT_SIDEBAR_WORKSPACE_LIST_CHANGED, {
+      detail: { showLeftSidebarWorkspaceList: visible },
     }),
   );
 }
@@ -523,6 +545,7 @@ export async function saveWiseDefaultConfig(
       | "showTopbarRepositoryName"
       | "leftSidebarHubQuickEntries"
       | "showLeftSidebarMonitorPanel"
+      | "showLeftSidebarWorkspaceList"
       | "monitorPanelPlacement"
       | "monitorPanelVisibleRows"
       | "executionEnvironmentDispatchHistoryDays"
@@ -558,6 +581,8 @@ export async function saveWiseDefaultConfig(
         : current.leftSidebarHubQuickEntries,
     showLeftSidebarMonitorPanel:
       patch.showLeftSidebarMonitorPanel ?? current.showLeftSidebarMonitorPanel,
+    showLeftSidebarWorkspaceList:
+      patch.showLeftSidebarWorkspaceList ?? current.showLeftSidebarWorkspaceList,
     monitorPanelPlacement: patch.monitorPanelPlacement ?? current.monitorPanelPlacement,
     monitorPanelVisibleRows: patch.monitorPanelVisibleRows ?? current.monitorPanelVisibleRows,
     executionEnvironmentDispatchHistoryDays:
@@ -619,6 +644,9 @@ export async function saveWiseDefaultConfig(
   }
   if (patch.showLeftSidebarMonitorPanel !== undefined) {
     next.showLeftSidebarMonitorPanel = normalizeBoolean(patch.showLeftSidebarMonitorPanel);
+  }
+  if (patch.showLeftSidebarWorkspaceList !== undefined) {
+    next.showLeftSidebarWorkspaceList = normalizeBoolean(patch.showLeftSidebarWorkspaceList);
   }
   if (patch.monitorPanelPlacement !== undefined) {
     next.monitorPanelPlacement =
@@ -714,6 +742,12 @@ export async function saveWiseDefaultConfig(
     next.showLeftSidebarMonitorPanel !== current.showLeftSidebarMonitorPanel
   ) {
     dispatchLeftSidebarMonitorPanelChanged(next.showLeftSidebarMonitorPanel);
+  }
+  if (
+    patch.showLeftSidebarWorkspaceList !== undefined &&
+    next.showLeftSidebarWorkspaceList !== current.showLeftSidebarWorkspaceList
+  ) {
+    dispatchLeftSidebarWorkspaceListChanged(next.showLeftSidebarWorkspaceList);
   }
   if (
     patch.monitorPanelPlacement !== undefined &&
@@ -938,6 +972,14 @@ export async function loadLeftSidebarMonitorPanelVisibleFromStore(): Promise<boo
 
 export async function saveLeftSidebarMonitorPanelVisibleToStore(visible: boolean): Promise<void> {
   await saveWiseDefaultConfig({ showLeftSidebarMonitorPanel: visible });
+}
+
+export async function loadLeftSidebarWorkspaceListVisibleFromStore(): Promise<boolean> {
+  return (await loadWiseDefaultConfig()).showLeftSidebarWorkspaceList;
+}
+
+export async function saveLeftSidebarWorkspaceListVisibleToStore(visible: boolean): Promise<void> {
+  await saveWiseDefaultConfig({ showLeftSidebarWorkspaceList: visible });
 }
 
 export async function loadMonitorPanelPlacementFromStore(): Promise<MonitorPanelPlacement> {

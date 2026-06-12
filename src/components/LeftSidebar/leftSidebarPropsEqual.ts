@@ -63,6 +63,7 @@ export function areLeftSidebarContentPropsEqual(
   if (prev.activeRepositoryId !== next.activeRepositoryId) return false;
   if (prev.activeWorkspaceFocus !== next.activeWorkspaceFocus) return false;
   if (prev.showLeftSidebarMonitorPanel !== next.showLeftSidebarMonitorPanel) return false;
+  if (prev.showLeftSidebarWorkspaceList !== next.showLeftSidebarWorkspaceList) return false;
   if (prev.historyDrawerSessionId !== next.historyDrawerSessionId) return false;
   if (prev.monitorActiveTarget !== next.monitorActiveTarget) return false;
   if (
