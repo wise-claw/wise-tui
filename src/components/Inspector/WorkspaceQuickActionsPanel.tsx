@@ -75,7 +75,8 @@ export function WorkspaceQuickActionsPanel({
         });
       }
       quickActions.setItemsForScope(scope, next);
-      await quickActions.flushPersist(scope, next);
+      const ok = await quickActions.flushPersist(scope, next);
+      if (!ok) message.error("快捷操作保存失败");
     },
     [message, quickActions],
   );
@@ -95,7 +96,8 @@ export function WorkspaceQuickActionsPanel({
               : quickActions.repositoryItemsRef.current;
           const next = source.filter((row) => row.id !== item.id);
           quickActions.setItemsForScope(item.scope, next);
-          await quickActions.flushPersist(item.scope, next);
+          const ok = await quickActions.flushPersist(item.scope, next);
+          if (!ok) message.error("快捷操作保存失败");
         },
       });
     },
@@ -120,15 +122,19 @@ export function WorkspaceQuickActionsPanel({
           : row,
       );
       quickActions.setItemsForScope(item.scope, next);
-      await quickActions.flushPersist(item.scope, next);
+      const ok = await quickActions.flushPersist(item.scope, next);
+      if (!ok) message.error("快捷操作保存失败");
     },
-    [quickActions],
+    [message, quickActions],
   );
 
   const openItem = useCallback(
     (item: WorkspaceQuickActionDisplayItem) => {
       if (item.kind === "link") {
-        void openExternalUrl(item.target);
+        void openExternalUrl(item.target).catch((err: unknown) => {
+          console.error(err);
+          message.error("无法打开链接");
+        });
         return;
       }
       void openInFinder(item.target).catch((err: unknown) => {
@@ -175,7 +181,11 @@ export function WorkspaceQuickActionsPanel({
                   : quickActions.repositoryItemsRef.current;
               const without = oldSource.filter((row) => row.id !== editState.item.id);
               quickActions.setItemsForScope(editState.scope, without);
-              await quickActions.flushPersist(editState.scope, without);
+              const removedOk = await quickActions.flushPersist(editState.scope, without);
+              if (!removedOk) {
+                message.error("快捷操作保存失败");
+                return;
+              }
             }
             const existingId = editState?.mode === "edit" ? editState.item.id : undefined;
             await upsertItem(input.scope, input, existingId);

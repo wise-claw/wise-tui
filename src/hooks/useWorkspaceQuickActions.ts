@@ -5,21 +5,32 @@ import type {
   WorkspaceQuickActionScope,
 } from "../types/workspaceQuickActions";
 import {
+  flushWorkspaceQuickActionsPersist,
   getWorkspaceQuickActionsRuntimeSnapshot,
   getWorkspaceQuickActionsScopeItems,
   isWorkspaceQuickActionsScopeLoading,
-  persistWorkspaceQuickActionsScopeItems,
   releaseWorkspaceQuickActionsScope,
   retainWorkspaceQuickActionsScope,
-  setWorkspaceQuickActionsScopeItems,
+  scheduleWorkspaceQuickActionsPersist,
   subscribeWorkspaceQuickActionsRuntime,
 } from "../stores/workspaceQuickActionsRuntimeStore";
-
-const PERSIST_DEBOUNCE_MS = 400;
 
 export interface UseWorkspaceQuickActionsInput {
   projectId: string | null;
   repositoryId: number | null;
+}
+
+function resolveWorkspaceQuickActionScopeId(
+  scope: WorkspaceQuickActionScope,
+  projectId: string | null,
+  repositoryId: number | null,
+): string | null {
+  if (scope === "project") {
+    const id = projectId?.trim() ?? "";
+    return id || null;
+  }
+  if (repositoryId == null || !Number.isFinite(repositoryId)) return null;
+  return String(repositoryId);
 }
 
 function buildDisplayItems(
@@ -52,13 +63,6 @@ export function useWorkspaceQuickActions({ projectId, repositoryId }: UseWorkspa
 
   const projectItemsRef = useRef<WorkspaceQuickActionItem[]>([]);
   const repositoryItemsRef = useRef<WorkspaceQuickActionItem[]>([]);
-  const persistTimersRef = useRef<{
-    project: ReturnType<typeof setTimeout> | null;
-    repository: ReturnType<typeof setTimeout> | null;
-  }>({
-    project: null,
-    repository: null,
-  });
 
   useEffect(() => {
     retainWorkspaceQuickActionsScope("project", projectId);
@@ -69,15 +73,6 @@ export function useWorkspaceQuickActions({ projectId, repositoryId }: UseWorkspa
     };
   }, [projectId, repositoryId]);
 
-  useEffect(
-    () => () => {
-      const timers = persistTimersRef.current;
-      if (timers.project) clearTimeout(timers.project);
-      if (timers.repository) clearTimeout(timers.repository);
-    },
-    [],
-  );
-
   const projectItems = getWorkspaceQuickActionsScopeItems("project", projectId);
   const repositoryItems = getWorkspaceQuickActionsScopeItems("repository", repositoryId);
   projectItemsRef.current = projectItems;
@@ -85,53 +80,20 @@ export function useWorkspaceQuickActions({ projectId, repositoryId }: UseWorkspa
 
   const flushPersist = useCallback(
     async (scope: WorkspaceQuickActionScope, items: WorkspaceQuickActionItem[]) => {
-      const timers = persistTimersRef.current;
-      if (scope === "project") {
-        if (timers.project) clearTimeout(timers.project);
-        timers.project = null;
-        return persistWorkspaceQuickActionsScopeItems("project", projectId, items);
-      }
-      if (timers.repository) clearTimeout(timers.repository);
-      timers.repository = null;
-      return persistWorkspaceQuickActionsScopeItems("repository", repositoryId, items);
+      const scopeId = resolveWorkspaceQuickActionScopeId(scope, projectId, repositoryId);
+      if (!scopeId) return false;
+      return flushWorkspaceQuickActionsPersist(scope, scopeId, items);
     },
     [projectId, repositoryId],
   );
 
-  const schedulePersist = useCallback(
-    (scope: WorkspaceQuickActionScope, items: WorkspaceQuickActionItem[]) => {
-      const timers = persistTimersRef.current;
-      const run = () => {
-        void flushPersist(scope, items);
-      };
-      if (scope === "project") {
-        if (timers.project) clearTimeout(timers.project);
-        timers.project = setTimeout(() => {
-          timers.project = null;
-          run();
-        }, PERSIST_DEBOUNCE_MS);
-        return;
-      }
-      if (timers.repository) clearTimeout(timers.repository);
-      timers.repository = setTimeout(() => {
-        timers.repository = null;
-        run();
-      }, PERSIST_DEBOUNCE_MS);
-    },
-    [flushPersist],
-  );
-
   const setItemsForScope = useCallback(
     (scope: WorkspaceQuickActionScope, items: WorkspaceQuickActionItem[]) => {
-      if (scope === "project") {
-        setWorkspaceQuickActionsScopeItems("project", projectId, items);
-        schedulePersist("project", items);
-        return;
-      }
-      setWorkspaceQuickActionsScopeItems("repository", repositoryId, items);
-      schedulePersist("repository", items);
+      const scopeId = resolveWorkspaceQuickActionScopeId(scope, projectId, repositoryId);
+      if (!scopeId) return;
+      scheduleWorkspaceQuickActionsPersist(scope, scopeId, items);
     },
-    [projectId, repositoryId, schedulePersist],
+    [projectId, repositoryId],
   );
 
   const displayItems = useMemo(

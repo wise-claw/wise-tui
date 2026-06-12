@@ -2072,6 +2072,7 @@
   box-shadow: none;
   background: transparent;
   border-radius: var(--ant-border-radius);
+  color: var(--ant-color-text);
 }
 
 .app-claude-session-tool-group--compact .app-claude-session-tool-btn:not(:first-child) {

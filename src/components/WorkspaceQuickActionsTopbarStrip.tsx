@@ -28,7 +28,10 @@ export const WorkspaceQuickActionsTopbarStrip = memo(function WorkspaceQuickActi
 
   const openItem = useCallback((item: WorkspaceQuickActionDisplayItem) => {
     if (item.kind === "link") {
-      void openExternalUrl(item.target);
+      void openExternalUrl(item.target).catch((err: unknown) => {
+        console.error(err);
+        message.error("无法打开链接");
+      });
       return;
     }
     void openInFinder(item.target).catch((err: unknown) => {

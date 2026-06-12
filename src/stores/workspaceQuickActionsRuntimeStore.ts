@@ -22,8 +22,17 @@ interface ScopeEntry {
 
 const entries = new Map<ScopeKey, ScopeEntry>();
 const loadPromises = new Map<ScopeKey, Promise<WorkspaceQuickActionItem[]>>();
+const loadGenerations = new Map<ScopeKey, number>();
+const persistGenerations = new Map<ScopeKey, number>();
+const persistTimers = new Map<ScopeKey, ReturnType<typeof setTimeout>>();
+const pendingPersist = new Map<
+  ScopeKey,
+  { scope: WorkspaceQuickActionScope; scopeId: string; items: WorkspaceQuickActionItem[] }
+>();
 const listeners = new Set<Listener>();
 let generation = 0;
+
+const PERSIST_DEBOUNCE_MS = 400;
 
 function persistErrorText(error: unknown): string {
   return error instanceof Error ? error.message : "快捷操作保存失败";
@@ -74,6 +83,9 @@ async function loadScopeItems(scope: WorkspaceQuickActionScope, scopeId: string)
   const inFlight = loadPromises.get(key);
   if (inFlight) return inFlight;
 
+  const loadGeneration = (loadGenerations.get(key) ?? 0) + 1;
+  loadGenerations.set(key, loadGeneration);
+
   entry.loading = true;
   bump();
 
@@ -83,16 +95,26 @@ async function loadScopeItems(scope: WorkspaceQuickActionScope, scopeId: string)
         scope === "project"
           ? await loadProjectWorkspaceQuickActions(scopeId)
           : await loadRepositoryWorkspaceQuickActions(Number(scopeId));
+      if (loadGenerations.get(key) !== loadGeneration) {
+        return entry.items;
+      }
+      if (entries.get(key) !== entry) {
+        return entry.items;
+      }
       entry.items = payload.items;
       entry.loaded = true;
       return entry.items;
     } catch (error) {
-      message.error(persistErrorText(error));
-      entry.items = [];
-      entry.loaded = true;
+      if (loadGenerations.get(key) === loadGeneration && entries.get(key) === entry) {
+        message.error(persistErrorText(error));
+        entry.items = [];
+        entry.loaded = true;
+      }
       return entry.items;
     } finally {
-      entry.loading = false;
+      if (loadGenerations.get(key) === loadGeneration && entries.get(key) === entry) {
+        entry.loading = false;
+      }
       loadPromises.delete(key);
       bump();
     }
@@ -138,6 +160,8 @@ export function releaseWorkspaceQuickActionsScope(
   if (!entry) return;
   entry.consumers = Math.max(0, entry.consumers - 1);
   if (entry.consumers > 0) return;
+  void flushWorkspaceQuickActionsPersist(scope, scopeId);
+  loadGenerations.set(key, (loadGenerations.get(key) ?? 0) + 1);
   entries.delete(key);
   loadPromises.delete(key);
 }
@@ -170,6 +194,7 @@ export function setWorkspaceQuickActionsScopeItems(
   if (!scopeId) return;
   const key = scopeKey(scope, scopeId);
   const entry = getOrCreateEntry(key);
+  loadGenerations.set(key, (loadGenerations.get(key) ?? 0) + 1);
   entry.items = items;
   entry.loaded = true;
   entry.loading = false;
@@ -183,6 +208,9 @@ export async function persistWorkspaceQuickActionsScopeItems(
 ): Promise<boolean> {
   const scopeId = normalizeScopeId(scope, rawScopeId);
   if (!scopeId) return false;
+  const key = scopeKey(scope, scopeId);
+  const persistGeneration = (persistGenerations.get(key) ?? 0) + 1;
+  persistGenerations.set(key, persistGeneration);
   setWorkspaceQuickActionsScopeItems(scope, scopeId, items);
   try {
     if (scope === "project") {
@@ -190,9 +218,59 @@ export async function persistWorkspaceQuickActionsScopeItems(
     } else {
       await saveRepositoryWorkspaceQuickActions(Number(scopeId), items);
     }
+    if (persistGenerations.get(key) !== persistGeneration) {
+      return false;
+    }
     return true;
   } catch (error) {
-    message.error(persistErrorText(error));
+    if (persistGenerations.get(key) === persistGeneration) {
+      message.error(persistErrorText(error));
+    }
     return false;
   }
+}
+
+export function scheduleWorkspaceQuickActionsPersist(
+  scope: WorkspaceQuickActionScope,
+  scopeId: string,
+  items: WorkspaceQuickActionItem[],
+): void {
+  const key = scopeKey(scope, scopeId);
+  setWorkspaceQuickActionsScopeItems(scope, scopeId, items);
+  pendingPersist.set(key, { scope, scopeId, items });
+
+  const existingTimer = persistTimers.get(key);
+  if (existingTimer) clearTimeout(existingTimer);
+
+  persistTimers.set(
+    key,
+    setTimeout(() => {
+      persistTimers.delete(key);
+      const pending = pendingPersist.get(key);
+      if (!pending) return;
+      pendingPersist.delete(key);
+      void persistWorkspaceQuickActionsScopeItems(pending.scope, pending.scopeId, pending.items);
+    }, PERSIST_DEBOUNCE_MS),
+  );
+}
+
+export function flushWorkspaceQuickActionsPersist(
+  scope: WorkspaceQuickActionScope,
+  scopeId: string,
+  items?: WorkspaceQuickActionItem[],
+): Promise<boolean> {
+  const key = scopeKey(scope, scopeId);
+  const existingTimer = persistTimers.get(key);
+  if (existingTimer) {
+    clearTimeout(existingTimer);
+    persistTimers.delete(key);
+  }
+  const pending = pendingPersist.get(key);
+  pendingPersist.delete(key);
+  const payload = items ?? pending?.items;
+  if (!payload) return Promise.resolve(true);
+  if (items) {
+    setWorkspaceQuickActionsScopeItems(scope, scopeId, items);
+  }
+  return persistWorkspaceQuickActionsScopeItems(scope, scopeId, payload);
 }
