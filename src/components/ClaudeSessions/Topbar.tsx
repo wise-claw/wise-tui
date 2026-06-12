@@ -19,7 +19,6 @@ import { resolveChatTopbarContext } from "../../utils/workspaceSelectionState";
 import { RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK } from "../../utils/rightPanelStorage";
 import type { WorkspaceFocus } from "../../utils/workspaceMode";
 import { PANE_COUNT_OPTIONS, isPaneCount, type PaneCount } from "../../constants/mainLayoutWidths";
-import { IconFileTreeExplorer } from "../WorkspaceFileTreeRail/IconFileTreeExplorer";
 
 const RunCommandPanelLazy = lazy(() =>
   import("../RunCommand").then((module) => ({ default: module.RunCommandPanel })),
@@ -164,8 +163,6 @@ export interface TopbarProps {
   onSessionInsightsAiAnalysis?: (prompt: string) => void | Promise<void>;
   onToggleSidebar?: () => void;
   onToggleRightPanel?: () => void;
-  fileTreeRailOpen?: boolean;
-  onToggleFileTreeRail?: () => void;
   rightPanelDefaultCollapsed?: boolean;
   onSetRightPanelDefaultCollapsed?: (collapsed: boolean) => void;
   onToggleTerminal?: () => void;
@@ -191,8 +188,6 @@ export const Topbar = memo(function Topbar({
   onSessionInsightsAiAnalysis,
   onToggleSidebar,
   onToggleRightPanel,
-  fileTreeRailOpen = false,
-  onToggleFileTreeRail,
   rightPanelDefaultCollapsed = RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK,
   onSetRightPanelDefaultCollapsed,
   onToggleTerminal,
@@ -277,14 +272,6 @@ export const Topbar = memo(function Topbar({
                 icon={<IconCollapseSidebar collapsed={collapsed ?? false} />}
                 label={collapsed ? "展开侧边栏" : "收起侧边栏"}
                 onClick={onToggleSidebar}
-              />
-            ) : null}
-            {onToggleFileTreeRail ? (
-              <TopbarBtn
-                icon={<IconFileTreeExplorer />}
-                label={fileTreeRailOpen ? "关闭文件树" : "打开文件树"}
-                active={fileTreeRailOpen}
-                onClick={onToggleFileTreeRail}
               />
             ) : null}
             {showRepoTitle ? (

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, startTransition, type MouseEvent } from "react";
 import DOMPurify from "dompurify";
 import { message, Modal } from "antd";
 import type { GitPanelOpenFileOptions } from "../components/GitPanel/types";
@@ -22,6 +22,10 @@ import {
   type RepositoryBinaryPreviewState,
 } from "../utils/repositoryFilePreview";
 import { toUiErrorMessage } from "../utils/appErrorMessage";
+import {
+  isMonacoLargeFileContent,
+  MONACO_LARGE_FILE_CHANGE_DEBOUNCE_MS,
+} from "../utils/monacoLargeFile";
 
 export interface FileEditorTab {
   relativePath: string;
@@ -62,18 +66,127 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
   const [fileEditorTabs, setFileEditorTabs] = useState<FileEditorTab[]>([]);
   const [fileEditorActivePath, setFileEditorActivePath] = useState<string | null>(null);
   const [editorSaving, setEditorSaving] = useState(false);
+  const [contentSyncVersion, setContentSyncVersion] = useState(0);
   const fileEditorTabsRef = useRef<FileEditorTab[]>([]);
   fileEditorTabsRef.current = fileEditorTabs;
   const gitDiffLoadGenerationRef = useRef(0);
+  const pendingTabContentRef = useRef<Map<string, string>>(new Map());
+  const tabContentDebounceRef = useRef<Map<string, number>>(new Map());
+
+  const flushPendingTabContent = useCallback((relativePath?: string) => {
+    const paths = relativePath
+      ? [relativePath]
+      : Array.from(pendingTabContentRef.current.keys());
+    if (paths.length === 0) return;
+    setFileEditorTabs((prev) => {
+      let changed = false;
+      const next = prev.map((tab) => {
+        if (!paths.includes(tab.relativePath)) return tab;
+        const timer = tabContentDebounceRef.current.get(tab.relativePath);
+        if (timer != null) {
+          window.clearTimeout(timer);
+          tabContentDebounceRef.current.delete(tab.relativePath);
+        }
+        const pending = pendingTabContentRef.current.get(tab.relativePath);
+        if (pending == null) return tab;
+        pendingTabContentRef.current.delete(tab.relativePath);
+        if (tab.content === pending) return tab;
+        changed = true;
+        return { ...tab, content: pending };
+      });
+      return changed ? next : prev;
+    });
+  }, []);
+
+  const updateFileEditorTabContent = useCallback(
+    (relativePath: string, content: string) => {
+      if (!isMonacoLargeFileContent(content)) {
+        pendingTabContentRef.current.delete(relativePath);
+        const timer = tabContentDebounceRef.current.get(relativePath);
+        if (timer != null) {
+          window.clearTimeout(timer);
+          tabContentDebounceRef.current.delete(relativePath);
+        }
+        setFileEditorTabs((prev) =>
+          prev.map((tab) => (tab.relativePath === relativePath ? { ...tab, content } : tab)),
+        );
+        return;
+      }
+
+      pendingTabContentRef.current.set(relativePath, content);
+      setContentSyncVersion((version) => version + 1);
+      const existingTimer = tabContentDebounceRef.current.get(relativePath);
+      if (existingTimer != null) {
+        window.clearTimeout(existingTimer);
+      }
+      tabContentDebounceRef.current.set(
+        relativePath,
+        window.setTimeout(() => {
+          tabContentDebounceRef.current.delete(relativePath);
+          const pending = pendingTabContentRef.current.get(relativePath);
+          if (pending == null) return;
+          pendingTabContentRef.current.delete(relativePath);
+          setFileEditorTabs((prev) =>
+            prev.map((tab) =>
+              tab.relativePath === relativePath ? { ...tab, content: pending } : tab,
+            ),
+          );
+        }, MONACO_LARGE_FILE_CHANGE_DEBOUNCE_MS),
+      );
+    },
+    [],
+  );
+
+  useEffect(
+    () => () => {
+      for (const timer of tabContentDebounceRef.current.values()) {
+        window.clearTimeout(timer);
+      }
+      tabContentDebounceRef.current.clear();
+      pendingTabContentRef.current.clear();
+    },
+    [],
+  );
+
+  const applyLoadedEditorContent = useCallback(
+    (relativePath: string, rootPath: string, body: string, focusLine?: number | null) => {
+      const apply = () => {
+        setFileEditorTabs((prev) =>
+          prev.map((t) =>
+            t.relativePath === relativePath
+              ? {
+                  relativePath,
+                  rootPath,
+                  content: body,
+                  originalContent: body,
+                  loading: false,
+                  focusLine: focusLine ?? t.focusLine ?? null,
+                }
+              : t,
+          ),
+        );
+      };
+      if (isMonacoLargeFileContent(body)) {
+        startTransition(apply);
+      } else {
+        apply();
+      }
+    },
+    [],
+  );
 
   const editorVisible = fileEditorTabs.length > 0;
   const activeFileEditorTab = useMemo(
     () => fileEditorTabs.find((t) => t.relativePath === fileEditorActivePath) ?? null,
     [fileEditorTabs, fileEditorActivePath],
   );
-  const editorDirty = Boolean(
-    activeFileEditorTab && activeFileEditorTab.content !== activeFileEditorTab.originalContent,
-  );
+  const editorDirty = useMemo(() => {
+    if (!activeFileEditorTab) return false;
+    const effectiveContent =
+      pendingTabContentRef.current.get(activeFileEditorTab.relativePath) ??
+      activeFileEditorTab.content;
+    return effectiveContent !== activeFileEditorTab.originalContent;
+  }, [activeFileEditorTab, contentSyncVersion]);
 
   const [repositoryBinaryPreview, setRepositoryBinaryPreview] = useState<RepositoryBinaryPreviewState | null>(null);
 
@@ -234,20 +347,7 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
 
       try {
         const body = await readProjectRelativeFile(rootPath, relativePath);
-        setFileEditorTabs((prev) =>
-          prev.map((t) =>
-            t.relativePath === relativePath
-              ? {
-                  relativePath,
-                  rootPath,
-                  content: body,
-                  originalContent: body,
-                  loading: false,
-                  focusLine: options?.line ?? t.focusLine ?? null,
-                }
-              : t,
-          ),
-        );
+        applyLoadedEditorContent(relativePath, rootPath, body, options?.line ?? null);
       } catch (error) {
         console.error("Failed to read file:", error);
         message.error(`读取文件失败：${relativePath}`);
@@ -265,7 +365,7 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
         });
       }
     },
-    [repositoryPath],
+    [applyLoadedEditorContent, repositoryPath],
   );
 
   const loadGitDiffFile = useCallback(
@@ -567,7 +667,10 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
   );
 
   const closeFileEditorPanel = useCallback(() => {
-    const dirtyCount = fileEditorTabs.filter((t) => t.content !== t.originalContent).length;
+    const dirtyCount = fileEditorTabsRef.current.filter((t) => {
+      const effectiveContent = pendingTabContentRef.current.get(t.relativePath) ?? t.content;
+      return effectiveContent !== t.originalContent;
+    }).length;
     const clearAll = () => {
       setFileEditorTabs([]);
       setFileEditorActivePath(null);
@@ -594,11 +697,12 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
   const closeFileEditorTab = useCallback(
     (relativePath: string, e?: MouseEvent) => {
       e?.stopPropagation();
-      const tab = fileEditorTabs.find((t) => t.relativePath === relativePath);
+      const tab = fileEditorTabsRef.current.find((t) => t.relativePath === relativePath);
       if (!tab) {
         return;
       }
-      if (tab.content !== tab.originalContent) {
+      const effectiveContent = pendingTabContentRef.current.get(relativePath) ?? tab.content;
+      if (effectiveContent !== tab.originalContent) {
         Modal.confirm({
           title: "关闭文件标签？",
           content: `「${relativePath}」有未保存修改，关闭后将丢失。`,
@@ -607,24 +711,27 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
           cancelText: "取消",
           centered: true,
           onOk: () => {
+            flushPendingTabContent(relativePath);
             removeFileEditorTab(relativePath);
           },
         });
         return;
       }
+      flushPendingTabContent(relativePath);
       removeFileEditorTab(relativePath);
     },
-    [fileEditorTabs, removeFileEditorTab],
+    [flushPendingTabContent, removeFileEditorTab],
   );
 
   const saveEditor = useCallback(async () => {
     if (!fileEditorActivePath) {
       return;
     }
-    const tab = fileEditorTabs.find((t) => t.relativePath === fileEditorActivePath);
+    const tab = fileEditorTabsRef.current.find((t) => t.relativePath === fileEditorActivePath);
     if (!tab || tab.loading) {
       return;
     }
+    const content = pendingTabContentRef.current.get(fileEditorActivePath) ?? tab.content;
     const rootPath = tab.rootPath.trim();
     if (!rootPath) {
       missingFileRootMessage();
@@ -636,10 +743,18 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
     }
     setEditorSaving(true);
     try {
-      await writeProjectRelativeFile(rootPath, fileEditorActivePath, tab.content);
+      await writeProjectRelativeFile(rootPath, fileEditorActivePath, content);
+      pendingTabContentRef.current.delete(fileEditorActivePath);
+      const timer = tabContentDebounceRef.current.get(fileEditorActivePath);
+      if (timer != null) {
+        window.clearTimeout(timer);
+        tabContentDebounceRef.current.delete(fileEditorActivePath);
+      }
       setFileEditorTabs((prev) =>
         prev.map((t) =>
-          t.relativePath === fileEditorActivePath ? { ...t, originalContent: t.content } : t,
+          t.relativePath === fileEditorActivePath
+            ? { ...t, content, originalContent: content }
+            : t,
         ),
       );
     } catch (error) {
@@ -648,7 +763,7 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
     } finally {
       setEditorSaving(false);
     }
-  }, [fileEditorActivePath, fileEditorTabs]);
+  }, [fileEditorActivePath, flushPendingTabContent]);
 
   useEffect(
     () => () => {
@@ -676,5 +791,6 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
     saveEditor,
     setFileEditorActivePath,
     setFileEditorTabs,
+    updateFileEditorTabContent,
   };
 }

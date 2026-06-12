@@ -41,6 +41,11 @@ function shouldCollapseSelection(
   return isAccidentalBlockSelection(editor, selection);
 }
 
+function hasNonEmptySelection(editor: editor.IStandaloneCodeEditor): boolean {
+  const selection = editor.getSelection();
+  return Boolean(selection && !selection.isEmpty());
+}
+
 /**
  * macOS 触控板惯性滚动时，Monaco 常在未按住鼠标键的情况下拉出大块选区。
  * 在滚轮 / scroll / 无按键移动时收起意外选区，保留正常拖拽选择。
@@ -49,6 +54,8 @@ export function installMonacoTrackpadSelectionGuard(
   editor: editor.IStandaloneCodeEditor,
 ): IDisposable {
   let primaryButtonDown = false;
+  /** 用户通过按住主键拖拽形成的选区；松键后移动鼠标不应被误杀。 */
+  let userOwnedSelection = false;
   let lastScrollAt = 0;
   const disposables: IDisposable[] = [];
 
@@ -59,7 +66,7 @@ export function installMonacoTrackpadSelectionGuard(
   const isDuringScroll = () => Date.now() - lastScrollAt < WHEEL_SELECTION_GUARD_MS;
 
   const maybeCollapseAccidentalSelection = (duringScroll: boolean) => {
-    if (primaryButtonDown) return;
+    if (primaryButtonDown || userOwnedSelection) return;
     const selection = editor.getSelection();
     if (!selection || !shouldCollapseSelection(editor, selection, { duringScroll })) return;
     collapseSelectionToAnchor(editor);
@@ -68,16 +75,39 @@ export function installMonacoTrackpadSelectionGuard(
   disposables.push(
     editor.onMouseDown((e) => {
       primaryButtonDown = e.event.leftButton;
+      if (primaryButtonDown) {
+        userOwnedSelection = false;
+      }
     }),
     editor.onMouseUp(() => {
+      const wasSelecting = primaryButtonDown;
       primaryButtonDown = false;
+      if (wasSelecting) {
+        userOwnedSelection = hasNonEmptySelection(editor);
+      }
     }),
     editor.onMouseMove(() => {
-      if (primaryButtonDown) return;
-      maybeCollapseAccidentalSelection(isDuringScroll());
+      if (primaryButtonDown || userOwnedSelection) return;
+      if (isDuringScroll()) {
+        maybeCollapseAccidentalSelection(true);
+        return;
+      }
+      // 部分触控板手势不会触发 wheel，但仍会拉出大块选区。
+      const selection = editor.getSelection();
+      if (selection && isAccidentalBlockSelection(editor, selection)) {
+        collapseSelectionToAnchor(editor);
+      }
     }),
-    editor.onDidChangeCursorSelection(() => {
-      if (primaryButtonDown) return;
+    editor.onDidChangeCursorSelection((e) => {
+      if (primaryButtonDown) {
+        userOwnedSelection = hasNonEmptySelection(editor);
+        return;
+      }
+      if (e.source === "mouse" || e.source === "keyboard") {
+        userOwnedSelection = hasNonEmptySelection(editor);
+        return;
+      }
+      if (userOwnedSelection) return;
       if (!isDuringScroll()) return;
       maybeCollapseAccidentalSelection(true);
     }),

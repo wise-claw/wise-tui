@@ -1,4 +1,4 @@
-import { lazy, Suspense, useEffect, useMemo, useRef, useCallback, type MouseEvent } from "react";
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import type { IDisposable } from "monaco-editor";
 import { CloseOutlined } from "@ant-design/icons";
 import { Button, Spin } from "antd";
@@ -15,7 +15,16 @@ import {
 } from "../services/monacoTypeScriptEnvironment";
 import { installMonacoGlobalFindRedirect } from "../utils/monacoGlobalFindRedirect";
 import { installMonacoTrackpadSelectionGuard } from "../utils/monacoTrackpadSelectionGuard";
-import { WISE_MONACO_EDITOR_OPTIONS } from "../utils/wiseMonacoEditorOptions";
+import {
+  isMonacoLargeFileContent,
+  monacoEditorOptionsBucket,
+  resolveWiseMonacoEditorOptionsFromLength,
+  shouldDeferMonacoEditorMount,
+  shouldInjectMonacoContentAfterMount,
+  shouldSyncMonacoTypeScriptDependencies,
+} from "../utils/monacoLargeFile";
+import { scheduleMonacoLargeFileContentInjection } from "../utils/monacoLargeFileContentInjection";
+import { runWhenIdle } from "../utils/deferIdle";
 
 const MonacoEditor = lazy(() => import("@monaco-editor/react"));
 
@@ -64,17 +73,65 @@ export function RepositoryFileEditorPanel({
         : [],
     [activeTab],
   );
+  const activeContentLength = activeTab?.content.length ?? 0;
+  const activeOptionsBucket = monacoEditorOptionsBucket(activeContentLength);
+  const activeEditorOptions = useMemo(
+    () => resolveWiseMonacoEditorOptionsFromLength(activeContentLength),
+    [activeOptionsBucket],
+  );
+  const activeLargeFile = activeOptionsBucket !== "small";
+  const activeHugeFile = activeOptionsBucket === "huge";
+  const [monacoSurfaceReady, setMonacoSurfaceReady] = useState(true);
+  const contentInjectionCancelRef = useRef<(() => void) | null>(null);
+
+  useEffect(() => {
+    contentInjectionCancelRef.current?.();
+    contentInjectionCancelRef.current = null;
+  }, [activeTab?.relativePath]);
+
+  useEffect(() => {
+    if (!activeTab || activeTab.loading || activeTab.diffOriginal !== undefined) {
+      setMonacoSurfaceReady(true);
+      return;
+    }
+    if (!shouldDeferMonacoEditorMount(activeContentLength)) {
+      setMonacoSurfaceReady(true);
+      return;
+    }
+    setMonacoSurfaceReady(false);
+    return runWhenIdle(() => setMonacoSurfaceReady(true), {
+      timeoutMs: activeHugeFile ? 96 : 24,
+    });
+  }, [
+    activeContentLength,
+    activeHugeFile,
+    activeTab?.diffOriginal,
+    activeTab?.loading,
+    activeTab?.relativePath,
+  ]);
 
   useEffect(() => {
     const monaco = monacoRef.current;
-    if (!monaco || !repositoryPath || !activeTab || !isTypeScriptLikeRepositoryPath(activeTab.relativePath)) {
+    if (
+      !monaco ||
+      !repositoryPath ||
+      !activeTab ||
+      !isTypeScriptLikeRepositoryPath(activeTab.relativePath) ||
+      !shouldSyncMonacoTypeScriptDependencies(activeTab.content)
+    ) {
       return;
     }
-    void syncMonacoRepositoryTypeScriptModels({
-      monaco,
-      repositoryPath,
-      sourceFiles: activeTypeScriptSources,
-    });
+    const cancel = runWhenIdle(
+      () => {
+        void syncMonacoRepositoryTypeScriptModels({
+          monaco,
+          repositoryPath,
+          sourceFiles: activeTypeScriptSources,
+        });
+      },
+      { timeoutMs: isMonacoLargeFileContent(activeTab.content) ? 4000 : 1200 },
+    );
+    return cancel;
   }, [activeTab, activeTypeScriptSources, repositoryPath]);
 
   useEffect(() => {
@@ -97,7 +154,7 @@ export function RepositoryFileEditorPanel({
       editor: MonacoEditorNamespace.IStandaloneCodeEditor,
       monaco: typeof Monaco,
       tab: FileEditorTab,
-      tsSources: { relativePath: string; content: string }[],
+      _tsSources: { relativePath: string; content: string }[],
     ) => {
       monacoMountGuardRef.current?.dispose();
       const trackpadGuard = installMonacoTrackpadSelectionGuard(editor);
@@ -110,18 +167,25 @@ export function RepositoryFileEditorPanel({
       };
       editorRef.current = editor;
       monacoRef.current = monaco;
-      if (repositoryPath && isTypeScriptLikeRepositoryPath(tab.relativePath)) {
-        void syncMonacoRepositoryTypeScriptModels({
-          monaco,
-          repositoryPath,
-          sourceFiles: tsSources,
-        });
-      }
-      window.requestAnimationFrame(() => {
+      const reveal = () => {
         revealEditorLineFocus(editor, tab, lastAppliedFocusRef);
-      });
+      };
+      if (shouldInjectMonacoContentAfterMount(tab.content.length)) {
+        contentInjectionCancelRef.current?.();
+        contentInjectionCancelRef.current = scheduleMonacoLargeFileContentInjection(
+          editor,
+          tab.content,
+          reveal,
+        );
+        return;
+      }
+      if (isMonacoLargeFileContent(tab.content)) {
+        runWhenIdle(reveal, { timeoutMs: 400 });
+      } else {
+        window.requestAnimationFrame(reveal);
+      }
     },
-    [repositoryPath],
+    [],
   );
 
   useEffect(() => {
@@ -223,6 +287,10 @@ export function RepositoryFileEditorPanel({
           <div className="app-file-editor-loading">
             <Spin size="small" />
           </div>
+        ) : !monacoSurfaceReady ? (
+          <div className="app-file-editor-loading">
+            <Spin size="small" tip="准备编辑器…" />
+          </div>
         ) : (
           <div className="app-file-editor-monaco-wrap">
             {activeTab.diffOriginal !== undefined ? (
@@ -250,7 +318,11 @@ export function RepositoryFileEditorPanel({
                   path={activeEditorPath}
                   defaultLanguage={activeLanguage}
                   language={activeLanguage}
-                  value={activeTab.content}
+                  {...(activeHugeFile
+                    ? { defaultValue: "" }
+                    : activeLargeFile
+                      ? { defaultValue: activeTab.content }
+                      : { value: activeTab.content })}
                   beforeMount={(monaco) => {
                     configureWiseMonacoTypeScript(monaco);
                   }}
@@ -259,7 +331,12 @@ export function RepositoryFileEditorPanel({
                   }}
                   onChange={(value) => onTabContentChange(activeTab.relativePath, value ?? "")}
                   theme={dark ? "vs-dark" : "vs"}
-                  options={WISE_MONACO_EDITOR_OPTIONS}
+                  options={activeEditorOptions}
+                  loading={
+                    <div className="app-file-editor-loading">
+                      <Spin size="small" />
+                    </div>
+                  }
                 />
               </Suspense>
             )}

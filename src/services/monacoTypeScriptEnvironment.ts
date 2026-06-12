@@ -1,5 +1,6 @@
 import type * as Monaco from "monaco-editor";
 import { readProjectRelativeFile } from "./materializePrdSnapshot";
+import { shouldSkipMonacoTypeScriptModelSync } from "../utils/monacoLargeFile";
 
 type MonacoApi = typeof Monaco;
 type MonacoCompilerOptionsValue =
@@ -177,6 +178,12 @@ export async function syncMonacoRepositoryTypeScriptModels({
   if (repositorySignatures.get(repositoryPath) === syncSignature) {
     return;
   }
+
+  if (normalizedSources.some((source) => shouldSkipMonacoTypeScriptModelSync(source.content.length))) {
+    repositorySignatures.set(repositoryPath, syncSignature);
+    return;
+  }
+
   repositorySignatures.set(repositoryPath, syncSignature);
 
   for (const source of normalizedSources) {

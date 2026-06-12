@@ -1,9 +1,14 @@
-import { lazy, Suspense, useEffect, useRef } from "react";
+import { lazy, Suspense, useEffect, useRef, useState } from "react";
 import { Spin } from "antd";
 import { configureWiseMonacoTypeScript } from "../services/monacoTypeScriptEnvironment";
 import { installMonacoGlobalFindRedirect } from "../utils/monacoGlobalFindRedirect";
 import { installMonacoTrackpadSelectionGuard } from "../utils/monacoTrackpadSelectionGuard";
-import { WISE_MONACO_EDITOR_OPTIONS } from "../utils/wiseMonacoEditorOptions";
+import {
+  maxMonacoContentLength,
+  resolveWiseMonacoEditorOptionsFromLength,
+  shouldDeferMonacoEditorMount,
+} from "../utils/monacoLargeFile";
+import { runWhenIdle } from "../utils/deferIdle";
 
 const DiffEditor = lazy(() =>
   import("@monaco-editor/react").then((m) => ({ default: m.DiffEditor })),
@@ -33,6 +38,21 @@ export function GitDiffMonacoPane({
   const onModifiedChangeRef = useRef(onModifiedChange);
   onModifiedChangeRef.current = onModifiedChange;
 
+  const diffContentLength = maxMonacoContentLength(original, modified);
+  const diffEditorOptions = resolveWiseMonacoEditorOptionsFromLength(diffContentLength);
+  const [surfaceReady, setSurfaceReady] = useState(
+    () => !shouldDeferMonacoEditorMount(diffContentLength),
+  );
+
+  useEffect(() => {
+    if (!shouldDeferMonacoEditorMount(diffContentLength)) {
+      setSurfaceReady(true);
+      return;
+    }
+    setSurfaceReady(false);
+    return runWhenIdle(() => setSurfaceReady(true), { timeoutMs: 48 });
+  }, [diffContentLength, relativePath]);
+
   useEffect(
     () => () => {
       modifiedListenerRef.current?.dispose();
@@ -51,6 +71,11 @@ export function GitDiffMonacoPane({
         </div>
       }
     >
+      {!surfaceReady ? (
+        <div className="app-file-editor-loading">
+          <Spin size="small" tip="准备 diff 编辑器…" />
+        </div>
+      ) : (
       <DiffEditor
         key={readOnly ? "wise-git-diff-ro" : "wise-git-diff-rw"}
         height="100%"
@@ -89,11 +114,12 @@ export function GitDiffMonacoPane({
           }
         }}
         options={{
-          ...WISE_MONACO_EDITOR_OPTIONS,
+          ...diffEditorOptions,
           readOnly,
           renderSideBySide: true,
         }}
       />
+      )}
     </Suspense>
   );
 }

@@ -11,7 +11,7 @@ export const WISE_MONACO_EDITOR_OPTIONS: editor.IStandaloneEditorConstructionOpt
   tabSize: 2,
   scrollBeyondLastLine: false,
   dragAndDrop: false,
-  selectOnLineNumbers: false,
+  selectOnLineNumbers: true,
   selectionClipboard: false,
   scrollbar: {
     /** 滚动事件留在编辑器内，减少 macOS 触控板滚动误触选区。 */

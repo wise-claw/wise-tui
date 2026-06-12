@@ -668,8 +668,6 @@ export function AppWorkspaceLayout({
       mainSessionForDataLink,
       onToggleSidebar: claudeSessionsProps.onToggleSidebar,
       onToggleRightPanel: claudeSessionsProps.onToggleRightPanel,
-      fileTreeRailOpen,
-      onToggleFileTreeRail: chatRightRailMode ? toggleFileTreeRail : undefined,
       rightPanelDefaultCollapsed: claudeSessionsProps.rightPanelDefaultCollapsed,
       onSetRightPanelDefaultCollapsed: claudeSessionsProps.onSetRightPanelDefaultCollapsed,
       onToggleTerminal: claudeSessionsProps.onToggleTerminal,
@@ -699,9 +697,6 @@ export function AppWorkspaceLayout({
       claudeSessionsProps.onAutoFixRunError,
       claudeSessionsProps.paneCount,
       claudeSessionsProps.onChangePaneCount,
-      fileTreeRailOpen,
-      chatRightRailMode,
-      toggleFileTreeRail,
       mainSessionForDataLink,
       onOpenRemoteChannels,
     ],
@@ -764,7 +759,7 @@ export function AppWorkspaceLayout({
     repositoryBinaryPreview,
     saveEditor,
     setFileEditorActivePath,
-    setFileEditorTabs,
+    updateFileEditorTabContent,
   } = useRepositoryFileEditor({ repositoryPath: activeRepositoryPath });
 
   const [fileTreeOpenInNewPane, setFileTreeOpenInNewPane] = useState(false);
@@ -858,14 +853,7 @@ export function AppWorkspaceLayout({
     ],
   );
 
-  const handleFileEditorTabContentChange = useCallback(
-    (relativePath: string, content: string) => {
-      setFileEditorTabs((prev) =>
-        prev.map((tab) => (tab.relativePath === relativePath ? { ...tab, content } : tab)),
-      );
-    },
-    [setFileEditorTabs],
-  );
+  const handleFileEditorTabContentChange = updateFileEditorTabContent;
 
   const editorPanelContextValue = useMemo<RepositoryFileEditorPanelContextValue>(
     () => ({

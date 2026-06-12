@@ -2939,7 +2939,7 @@ function ComposerInner({
                 <AIChatInput
                   ref={aiChatRef}
                   extensions={SEMI_COMPOSER_TOKEN_HIGHLIGHT_EXTENSIONS}
-                  placeholder="@ 终端/工作流/文件，/ 命令，Enter 发送，Shift+Enter 换行，↑/Esc 恢复上条（含图片）"
+                  placeholder="@ 终端/工作流/文件，/ 命令，Enter 发送，Shift+Enter 换行，↑/Esc 恢复上条"
                   keepSkillAfterSend={false}
                   showUploadButton={false}
                   showUploadFile={false}
