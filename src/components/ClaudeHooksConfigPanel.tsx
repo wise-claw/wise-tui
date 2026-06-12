@@ -7,6 +7,11 @@ import type {
   ClaudeHooksStatusResponse,
 } from "../types";
 import { getClaudeHooksStatus, removeClaudeHook, setClaudeDisableAllHooks, upsertClaudeHook } from "../services/claude";
+import { listRepositoryExplorerChildren } from "../services/repositoryFiles";
+import {
+  OPEN_WORKSPACE_ERROR,
+  openRepositoryEntryInPreferredEditor,
+} from "../services/openWorkspaceWithPreference";
 import { getAppSetting, setAppSetting } from "../services/appSettingsStore";
 import { EMPTY_DATA, HOOKS_FLOW_THEME_STORAGE_KEY, LEGACY_APP_SETTING_KEY_HOOKS_FLOW_THEME, SUPPORTED_HOOK_EVENTS } from "./ClaudeHooksConfigPanel/constants";
 import { HookScopeSection } from "./ClaudeHooksConfigPanel/HookScopeSection";
@@ -14,7 +19,7 @@ import { HookEditModal } from "./ClaudeHooksConfigPanel/HookEditModal";
 import { HooksFlowModal } from "./ClaudeHooksConfigPanel/HooksFlowModal";
 import { HooksImportModal } from "./ClaudeHooksConfigPanel/HooksImportModal";
 import type { ClaudeHooksConfigPanelHandle, EditingTarget, HookEditFormValues, HookFlowEntry, HooksFlowTheme } from "./ClaudeHooksConfigPanel/types";
-import { getSupportedTypesByEvent, handlerSummary } from "./ClaudeHooksConfigPanel/helpers";
+import { getSupportedTypesByEvent, handlerSummary, resolveHookHandlerTargetPath } from "./ClaudeHooksConfigPanel/helpers";
 import { useHooksImport } from "./ClaudeHooksConfigPanel/useHooksImport";
 import "./ClaudeCodeToolsPanel/index.css";
 
@@ -172,37 +177,51 @@ export function ClaudeHooksConfigPanel({
     setOpen(true);
   }, [data, form]);
 
-  const openClone = useCallback((scope: ClaudeHookSourceScope, eventName: string, groupId: string, handlerId: string) => {
-    const scopeData = data[scope];
-    const group = (scopeData.hooks[eventName] ?? []).find((g) => g.id === groupId);
-    const handler = group?.hooks.find((h) => h.id === handlerId);
-    if (!handler) return;
-    form.setFieldsValue({
-      scope,
-      eventName,
-      matcher: group?.matcher ?? "",
-      type: handler.type,
-      if: handler.if ?? "",
-      timeout: handler.timeout ?? 30,
-      statusMessage: handler.statusMessage ?? "",
-      shell: (handler.shell as "bash" | "powershell" | null) ?? undefined,
-      async: handler.async ?? false,
-      asyncRewake: handler.asyncRewake ?? false,
-      command: handler.command ?? "",
-      url: handler.url ?? "",
-      headersText: handler.headers
-        ? Object.entries(handler.headers)
-          .map(([k, val]) => `${k}: ${val}`)
-          .join("\n")
-        : "",
-      allowedEnvVarsText: handler.allowedEnvVars?.join("\n") ?? "",
-      prompt: handler.prompt ?? "",
-      model: handler.model ?? "",
-    });
-    // 克隆视为新增：不绑定目标 handlerId，保存后会新建一条
-    setEditing({ scope, eventName, groupId, handlerId: "" });
-    setOpen(true);
-  }, [data, form]);
+  const openHookTarget = useCallback(
+    async (handler: ClaudeHookHandler, matcher?: string | null) => {
+      const repo = repositoryPath?.trim() ?? "";
+      const relativePath = resolveHookHandlerTargetPath(handler, matcher);
+      if (!repo) {
+        message.warning("请先选择仓库");
+        return;
+      }
+      if (!relativePath) {
+        message.warning("无法解析该处理器对应的文件路径");
+        return;
+      }
+      const normalizedPath = relativePath.replace(/\/+$/, "");
+      let isDirectory = normalizedPath.endsWith("/");
+      if (!isDirectory) {
+        try {
+          const parent = normalizedPath.includes("/")
+            ? normalizedPath.slice(0, normalizedPath.lastIndexOf("/"))
+            : "";
+          const baseName = normalizedPath.split("/").pop() ?? normalizedPath;
+          const entries = await listRepositoryExplorerChildren(repo, parent);
+          const hit = entries.find(
+            (entry) =>
+              entry.path === normalizedPath ||
+              entry.path.endsWith(`/${baseName}`) ||
+              entry.path.split("/").pop() === baseName,
+          );
+          isDirectory = hit?.isDir ?? false;
+        } catch {
+          isDirectory = false;
+        }
+      }
+      try {
+        await openRepositoryEntryInPreferredEditor(repo, normalizedPath, { isDirectory });
+      } catch (error) {
+        const code = error instanceof Error ? error.message : String(error);
+        if (code === OPEN_WORKSPACE_ERROR.NO_TARGET || code === OPEN_WORKSPACE_ERROR.NOT_CONFIGURED) {
+          message.warning("未找到可用编辑器，请先在「打开方式」中配置");
+          return;
+        }
+        message.warning(isDirectory ? "该目录不存在或无法打开" : "该文件不存在或无法打开");
+      }
+    },
+    [message, repositoryPath],
+  );
 
   const onSubmit = useCallback(async (keepOpen: boolean = false) => {
     const v = await form.validateFields();
@@ -449,7 +468,7 @@ export function ClaudeHooksConfigPanel({
             onDelete={onDelete}
             onToggleDisableAll={onToggleDisableAll}
             sectionRef={userSectionRef}
-            onClone={openClone}
+            onOpenTarget={openHookTarget}
             keyword={listSearch}
           />
           <HookScopeSection
@@ -461,7 +480,7 @@ export function ClaudeHooksConfigPanel({
             onDelete={onDelete}
             onToggleDisableAll={onToggleDisableAll}
             sectionRef={projectSectionRef}
-            onClone={openClone}
+            onOpenTarget={openHookTarget}
             keyword={listSearch}
           />
           <HookScopeSection
@@ -473,7 +492,7 @@ export function ClaudeHooksConfigPanel({
             onDelete={onDelete}
             onToggleDisableAll={onToggleDisableAll}
             sectionRef={localSectionRef}
-            onClone={openClone}
+            onOpenTarget={openHookTarget}
             keyword={listSearch}
           />
           {omcInstalled ? (
@@ -485,7 +504,7 @@ export function ClaudeHooksConfigPanel({
               onEdit={openEdit}
               onDelete={onDelete}
               onToggleDisableAll={onToggleDisableAll}
-              onClone={openClone}
+              onOpenTarget={openHookTarget}
               keyword={listSearch}
               sectionRef={omcSectionRef}
               readOnly

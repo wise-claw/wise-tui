@@ -45,6 +45,7 @@ import type { EmployeeItem, WorkflowGraph, WorkflowTemplateItem } from "../types
 import { resolveCockpitHubPane, type InspectTool, type ViewMode } from "../types/viewMode";
 import { AUTHOR_CONFIG_NAV_SIDER_WIDTH_PX } from "../constants/mainLayoutWidths";
 import type { OpenRepositoryFileDetail } from "../constants/workflowUiEvents";
+import { writePendingExplorerReveal } from "../utils/pendingExplorerReveal";
 import {
   WorkspaceMemoEditorVisibilityContext,
   WorkspaceMemosProvider,
@@ -914,9 +915,24 @@ export function AppWorkspaceLayout({
     const targetPath = request?.repositoryPath?.trim() ?? "";
     if (!request || !targetPath || !repositoryPath) return;
     if (repositoryPath !== targetPath) return;
-    openRepositoryFile(request.relativePath, { line: request.line ?? null });
+    if (request.isDirectory) {
+      setFileTreeRailOpen(true);
+      writePendingExplorerReveal({
+        repositoryPath: targetPath,
+        relativePath: request.relativePath,
+        isDirectory: true,
+      });
+    } else {
+      openRepositoryFile(request.relativePath, { line: request.line ?? null, fromFileTree: true });
+    }
     onConsumeRepositoryFileOpenRequest();
-  }, [activeRepositoryPath, onConsumeRepositoryFileOpenRequest, openRepositoryFile, repositoryFileOpenRequest]);
+  }, [
+    activeRepositoryPath,
+    onConsumeRepositoryFileOpenRequest,
+    openRepositoryFile,
+    repositoryFileOpenRequest,
+    setFileTreeRailOpen,
+  ]);
 
   return (
     <WorkspaceMemosProvider

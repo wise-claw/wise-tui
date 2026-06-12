@@ -73,6 +73,10 @@ function isDomWrapper(type: unknown): type is "span" | "div" {
   return type === "span" || type === "div";
 }
 
+function isSvgElement(type: unknown): boolean {
+  return typeof type === "string" && type.toLowerCase() === "svg";
+}
+
 function wrapperHasTriggerHandlers(props: Record<string, unknown>): boolean {
   return TRIGGER_HANDLER_KEYS.some((key) => typeof props[key] === "function");
 }
@@ -155,6 +159,9 @@ function mergePassthroughThroughWrappers(
   }
 
   const inner = visibleChildren[0] as ReactElement;
+  if (isSvgElement(inner.type)) {
+    return mergePassthroughOntoChild(child, passthrough, mergedRef, title);
+  }
   const mergedInner = mergePassthroughThroughWrappers(inner, passthrough, mergedRef, title);
   return cloneElement(child, {}, mergedInner);
 }

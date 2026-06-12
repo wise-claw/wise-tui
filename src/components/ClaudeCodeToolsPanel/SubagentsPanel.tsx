@@ -315,7 +315,17 @@ export function SubagentsPanel({
   async function openAgentsRoot() {
     try {
       if (repositoryPath) {
-        await openInPreferredEditor(`${repositoryPath.replace(/\/$/, "")}/.claude/agents`);
+        const target = resolvePreferredEditorTarget();
+        if (!target) {
+          message.warning("未找到可用编辑器，请先在“打开方式”中配置");
+          return;
+        }
+        const locateOptions = { graphIdeFolderRelative: ".claude/agents" };
+        if (target.kind === "command") {
+          await openWorkspaceIn(repositoryPath, { command: target.command, args: target.args, ...locateOptions });
+        } else {
+          await openWorkspaceIn(repositoryPath, { appName: target.appName, args: target.args, ...locateOptions });
+        }
       } else {
         const userAgentsDir = await getClaudeUserAgentsDir();
         await openInPreferredEditor(userAgentsDir);
@@ -325,18 +335,33 @@ export function SubagentsPanel({
     }
   }
 
-  async function openScopeDir(scope: ClaudeSubagentScope, item?: ClaudeSubagentItem) {
-    if (scope === "project") {
+  async function openSubagentLocation(item: ClaudeSubagentItem) {
+    if (item.scope === "project") {
       if (!repositoryPath) {
         message.warning("请先选择仓库");
         return;
       }
-      await openInPreferredEditor(`${repositoryPath.replace(/\/$/, "")}/.claude/agents`);
+      const target = resolvePreferredEditorTarget();
+      if (!target) {
+        message.warning("未找到可用编辑器，请先在“打开方式”中配置");
+        return;
+      }
+      const filename = item.sourcePath.split(/[\\/]/).pop()?.trim() || `${item.name}.md`;
+      const locateOptions = { ideGotoRelative: `.claude/agents/${filename}`, gotoLine: 1, gotoColumn: 1 };
+      try {
+        if (target.kind === "command") {
+          await openWorkspaceIn(repositoryPath, { command: target.command, args: target.args, ...locateOptions });
+        } else {
+          await openWorkspaceIn(repositoryPath, { appName: target.appName, args: target.args, ...locateOptions });
+        }
+      } catch {
+        message.warning("该子代理文件不存在");
+      }
       return;
     }
-    if (scope === "plugin") {
-      const source = item?.sourcePath ?? list.find((x) => x.scope === "plugin")?.sourcePath;
-      const agentsDir = source?.replace(/\/[^/]+$/, "");
+    if (item.scope === "plugin") {
+      const source = item.sourcePath;
+      const agentsDir = source?.replace(/[\\/][^\\/]+$/, "");
       if (!agentsDir) {
         message.warning("未找到插件子代理目录");
         return;
@@ -349,10 +374,9 @@ export function SubagentsPanel({
       return;
     }
     try {
-      const userAgentsDir = await getClaudeUserAgentsDir();
-      await openInPreferredEditor(userAgentsDir);
+      await openInPreferredEditor(item.sourcePath);
     } catch {
-      message.warning("无法打开用户级目录");
+      message.warning("无法打开用户级子代理文件");
     }
   }
 
@@ -558,9 +582,9 @@ export function SubagentsPanel({
                     type="text"
                     className="app-subagents-action-btn"
                     icon={<FolderOpenOutlined />}
-                    onClick={() => void openScopeDir(item.scope, item)}
+                    onClick={() => void openSubagentLocation(item)}
                   >
-                    打开目录
+                    {item.scope === "project" ? "打开文件" : "打开目录"}
                   </Button>
                   {item.scope !== "plugin" ? (
                     <Popconfirm

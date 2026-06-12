@@ -625,17 +625,27 @@ export function ProjectSkillsPanel({
         message.warning("请先选择工作区或仓库");
         return;
       }
-      const p = resolveClaudeProjectSkillDisplayPath(skill, repositoryPath);
       const target = resolvePreferredEditorTarget();
       if (!target) {
         message.warning("未找到可用编辑器，请先在「打开方式」中配置");
         return;
       }
+      const commandRel = skill.commandRelPath?.trim();
+      const relative = isClaudeProjectCommand(skill)
+        ? commandRel ? `.claude/commands/${commandRel}` : null
+        : `.claude/skills/${skill.name}`;
+      if (!relative) {
+        message.warning("未记录命令文件路径");
+        return;
+      }
       try {
+        const locateOptions = isClaudeProjectCommand(skill)
+          ? { ideGotoRelative: relative, gotoLine: 1, gotoColumn: 1 }
+          : { graphIdeFolderRelative: relative };
         if (target.kind === "command") {
-          await openWorkspaceIn(p, { command: target.command, args: target.args });
+          await openWorkspaceIn(repositoryPath, { command: target.command, args: target.args, ...locateOptions });
         } else {
-          await openWorkspaceIn(p, { appName: target.appName, args: target.args });
+          await openWorkspaceIn(repositoryPath, { appName: target.appName, args: target.args, ...locateOptions });
         }
       } catch {
         message.warning(isClaudeProjectCommand(skill) ? "该命令文件不存在" : "该技能目录不存在");
@@ -644,22 +654,25 @@ export function ProjectSkillsPanel({
     [scopePathAvailable, repositoryPath],
   );
 
-  async function openSkillRelInEditor(skillName: string, relPath: string) {
+  async function openSkillRelInEditor(skillName: string, relPath: string, isDir: boolean) {
     if (!scopePathAvailable) {
       message.warning("请先选择工作区或仓库");
       return;
     }
-    const p = joinRepositoryPath(repositoryPath, `.claude/skills/${skillName}/${relPath}`);
+    const relative = `.claude/skills/${skillName}/${relPath}`;
     const target = resolvePreferredEditorTarget();
     if (!target) {
       message.warning("未找到可用编辑器，请先在“打开方式”中配置");
       return;
     }
     try {
+      const locateOptions = isDir
+        ? { graphIdeFolderRelative: relative }
+        : { ideGotoRelative: relative, gotoLine: 1, gotoColumn: 1 };
       if (target.kind === "command") {
-        await openWorkspaceIn(p, { command: target.command, args: target.args });
+        await openWorkspaceIn(repositoryPath, { command: target.command, args: target.args, ...locateOptions });
       } else {
-        await openWorkspaceIn(p, { appName: target.appName, args: target.args });
+        await openWorkspaceIn(repositoryPath, { appName: target.appName, args: target.args, ...locateOptions });
       }
     } catch {
       message.warning("无法在编辑器中打开该路径");
@@ -1154,7 +1167,7 @@ export function ProjectSkillsPanel({
                 <Button
                   size="small"
                   icon={<FolderOpenOutlined />}
-                  onClick={() => editingName && void openSkillRelInEditor(editingName, selectedPath)}
+                  onClick={() => editingName && void openSkillRelInEditor(editingName, selectedPath, true)}
                 >
                   在编辑器中打开此目录
                 </Button>
@@ -1166,7 +1179,7 @@ export function ProjectSkillsPanel({
                   size="small"
                   style={{ marginTop: 10 }}
                   icon={<FolderOpenOutlined />}
-                  onClick={() => editingName && selectedPath && void openSkillRelInEditor(editingName, selectedPath)}
+                  onClick={() => editingName && selectedPath && void openSkillRelInEditor(editingName, selectedPath, false)}
                 >
                   在编辑器中打开此文件
                 </Button>

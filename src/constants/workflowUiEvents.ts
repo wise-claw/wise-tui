@@ -142,6 +142,14 @@ export interface OpenRepositoryFileDetail {
   repositoryPath?: string | null;
   relativePath: string;
   line?: number | null;
+  /** 为 true 时仅打开文件树并定位目录，不打开编辑器。 */
+  isDirectory?: boolean;
+}
+
+export function dispatchOpenRepositoryFile(detail: OpenRepositoryFileDetail): void {
+  window.dispatchEvent(
+    new CustomEvent(WORKFLOW_UI_EVENT_OPEN_REPOSITORY_FILE, { detail }),
+  );
 }
 
 export interface RunAssistantBriefDetail {

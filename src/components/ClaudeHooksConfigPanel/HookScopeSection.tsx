@@ -1,9 +1,9 @@
-import { CopyOutlined, DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
+import { DeleteOutlined, EditOutlined, FileOutlined, PlusOutlined } from "@ant-design/icons";
 import { Button, Space, Switch, Tag } from "antd";
 import type { RefObject } from "react";
-import type { ClaudeHookSourceScope, ClaudeHookScopeData } from "../../types";
+import type { ClaudeHookHandler, ClaudeHookSourceScope, ClaudeHookScopeData } from "../../types";
 import { EVENT_HELP_TEXT } from "./constants";
-import { handlerSummary } from "./helpers";
+import { handlerSummary, resolveHookHandlerTargetPath } from "./helpers";
 import { HelpIcon } from "./HelpIcon";
 
 export interface HookScopeSectionProps {
@@ -15,7 +15,7 @@ export interface HookScopeSectionProps {
   onDelete: (scope: ClaudeHookSourceScope, eventName: string, groupId: string, handlerId: string) => void;
   onToggleDisableAll: (scope: ClaudeHookSourceScope, next: boolean) => void;
   sectionRef?: RefObject<HTMLElement | null>;
-  onClone: (scope: ClaudeHookSourceScope, eventName: string, groupId: string, handlerId: string) => void;
+  onOpenTarget: (handler: ClaudeHookHandler, matcher?: string | null) => void;
   keyword: string;
   readOnly?: boolean;
 }
@@ -29,7 +29,7 @@ export function HookScopeSection({
   onDelete,
   onToggleDisableAll,
   sectionRef,
-  onClone,
+  onOpenTarget,
   keyword,
   readOnly = false,
 }: HookScopeSectionProps) {
@@ -144,7 +144,9 @@ export function HookScopeSection({
                       ) : null}
                     </div>
                     <div className="app-hooks-handler-list">
-                      {group.hooks.map((h) => (
+                      {group.hooks.map((h) => {
+                        const targetPath = resolveHookHandlerTargetPath(h, group.matcher);
+                        return (
                         <div key={h.id} className="app-hooks-handler-item">
                           <div className="app-hooks-handler-main">
                             <span className="app-hooks-handler-summary" title={handlerSummary(h)}>
@@ -161,29 +163,46 @@ export function HookScopeSection({
                                   type="text"
                                   size="small"
                                   icon={<EditOutlined />}
+                                  title="编辑"
                                   aria-label="编辑处理器"
                                   onClick={() => onEdit(scope as ClaudeHookSourceScope, eventName, group.id, h.id)}
                                 />
-                                <Button
-                                  type="text"
-                                  size="small"
-                                  icon={<CopyOutlined />}
-                                  aria-label="复制处理器"
-                                  onClick={() => onClone(scope as ClaudeHookSourceScope, eventName, group.id, h.id)}
-                                />
+                                {targetPath ? (
+                                  <Button
+                                    type="text"
+                                    size="small"
+                                    icon={<FileOutlined />}
+                                    title="在外部 IDE 打开"
+                                    aria-label="在外部 IDE 打开"
+                                    onClick={() => onOpenTarget(h, group.matcher)}
+                                  />
+                                ) : null}
                                 <Button
                                   type="text"
                                   danger
                                   size="small"
                                   icon={<DeleteOutlined />}
+                                  title="删除"
                                   aria-label="删除处理器"
                                   onClick={() => onDelete(scope as ClaudeHookSourceScope, eventName, group.id, h.id)}
+                                />
+                              </Space>
+                            ) : targetPath ? (
+                              <Space size={2} className="app-hooks-handler-actions">
+                                <Button
+                                  type="text"
+                                  size="small"
+                                  icon={<FileOutlined />}
+                                  title="在外部 IDE 打开"
+                                  aria-label="在外部 IDE 打开"
+                                  onClick={() => onOpenTarget(h, group.matcher)}
                                 />
                               </Space>
                             ) : null}
                           </div>
                         </div>
-                      ))}
+                        );
+                      })}
                     </div>
                   </div>
                 ))}

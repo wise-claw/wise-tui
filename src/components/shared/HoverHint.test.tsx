@@ -35,6 +35,19 @@ describe("HoverHint", () => {
     expect(html).toContain("ant-dropdown-open");
   });
 
+  test("keeps native title on span wrapper instead of drilling into svg child", () => {
+    const html = renderToStaticMarkup(
+      <HoverHint title="帮助说明">
+        <span className="help-wrap">
+          <svg viewBox="0 0 16 16" aria-hidden="true" />
+        </span>
+      </HoverHint>,
+    );
+    expect(html).toContain('class="help-wrap"');
+    expect(html).toContain('title="帮助说明"');
+    expect(html).not.toMatch(/<svg[^>]*title=/);
+  });
+
   test("deep-merges overlay props through passive span wrapper onto button", () => {
     const html = renderToStaticMarkup(
       <HoverHint title="拉取" className="ant-dropdown-trigger">

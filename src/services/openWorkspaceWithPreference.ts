@@ -1,7 +1,8 @@
 import type { OpenAppTarget } from "../types";
-import { DEFAULT_OPEN_APP_TARGETS } from "../components/OpenAppMenu/constants";
+import { DEFAULT_OPEN_APP_ID, DEFAULT_OPEN_APP_TARGETS } from "../components/OpenAppMenu/constants";
 import { joinRepositoryAbsolutePath } from "../utils/repositoryPreviewBinary";
 import { resolveOpenAppTargetById } from "../utils/openAppScope";
+import { getOpenAppPreferenceSync } from "./openAppPreference";
 import { openInFinder, openWorkspaceIn } from "./repository";
 
 export const OPEN_WORKSPACE_ERROR = {
@@ -88,6 +89,19 @@ export async function openWorkspaceWithStoredPreference(
   await openWorkspaceWithOpenAppTarget(workspacePath, t);
 }
 
+/** 与 Claude Code 工具面板一致：优先用户选择的非 Finder 打开方式。 */
+export function resolvePreferredEditorOpenAppTarget(
+  openTargets?: readonly OpenAppTarget[],
+): OpenAppTarget | null {
+  const targets = resolveTargetList(openTargets);
+  const selectedId = getOpenAppPreferenceSync().trim() || DEFAULT_OPEN_APP_ID;
+  const selected = targets.find((t) => t.id === selectedId);
+  if (selected && selected.kind !== "finder") {
+    return selected;
+  }
+  return targets.find((t) => t.kind !== "finder") ?? null;
+}
+
 /** 使用当前「打开方式」偏好打开仓库：工作区为仓库根，IDE 内定位到相对路径文件（与顶栏 OpenAppMenu 偏好一致） */
 export async function openRepositoryFileWithStoredPreference(
   repositoryPath: string,
@@ -147,5 +161,65 @@ export async function openRepositoryFileWithStoredPreference(
     appName,
     args: target.args ?? [],
     ...ideOpen,
+  });
+}
+
+/** 在外部 IDE 中打开仓库内文件或定位到目录（与技能/子代理面板行为一致）。 */
+export async function openRepositoryEntryInPreferredEditor(
+  repositoryPath: string,
+  relativePath: string,
+  options?: {
+    isDirectory?: boolean;
+    line?: number | null;
+    column?: number | null;
+    openTargets?: readonly OpenAppTarget[];
+  },
+): Promise<void> {
+  const root = repositoryPath.trim();
+  const rel = relativePath.trim().replace(/\/+$/, "");
+  if (!root || !rel) {
+    throw new Error(OPEN_WORKSPACE_ERROR.EMPTY_PATH);
+  }
+  const target = resolvePreferredEditorOpenAppTarget(options?.openTargets);
+  if (!target) {
+    throw new Error(OPEN_WORKSPACE_ERROR.NO_TARGET);
+  }
+
+  const isDirectory = options?.isDirectory ?? false;
+  const locateOptions = isDirectory
+    ? { graphIdeFolderRelative: rel }
+    : {
+        ideGotoRelative: rel,
+        gotoLine:
+          options?.line != null && Number.isFinite(options.line) && options.line > 0
+            ? Math.floor(options.line)
+            : 1,
+        gotoColumn:
+          options?.column != null && Number.isFinite(options.column) && options.column > 0
+            ? Math.floor(options.column)
+            : 1,
+      };
+
+  if (target.kind === "command") {
+    const cmd = resolveCommand(target);
+    if (!cmd) {
+      throw new Error(OPEN_WORKSPACE_ERROR.NOT_CONFIGURED);
+    }
+    await openWorkspaceIn(root, {
+      command: cmd,
+      args: target.args ?? [],
+      ...locateOptions,
+    });
+    return;
+  }
+
+  const appName = resolveAppName(target);
+  if (!appName) {
+    throw new Error(OPEN_WORKSPACE_ERROR.NOT_CONFIGURED);
+  }
+  await openWorkspaceIn(root, {
+    appName,
+    args: target.args ?? [],
+    ...locateOptions,
   });
 }

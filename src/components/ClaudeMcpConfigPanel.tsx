@@ -1,8 +1,11 @@
-import { DeleteOutlined, FolderOpenOutlined, PlusOutlined, ReloadOutlined } from "@ant-design/icons";
-import { Button, Empty, Space, Spin, Switch } from "antd";
-import { forwardRef, useCallback, useImperativeHandle, useMemo, useState } from "react";
+import { DeleteOutlined, FileOutlined, FolderOpenOutlined, PlusOutlined, ReloadOutlined } from "@ant-design/icons";
+import { App, Button, Empty, Space, Spin, Switch } from "antd";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useState } from "react";
 import type { ClaudeMcpItem, ClaudeMcpStatusResponse } from "../types";
 import { useClaudeMcpList } from "../hooks/useClaudeMcpList";
+import { openWorkspaceIn } from "../services/repository";
+import { DEFAULT_OPEN_APP_ID, DEFAULT_OPEN_APP_TARGETS } from "./OpenAppMenu/constants";
+import { getOpenAppPreferenceSync, hydrateOpenAppPreference } from "../services/openAppPreference";
 import { ClaudeMcpAddServerModal } from "./ClaudeMcp/ClaudeMcpAddServerModal";
 import "./ClaudeMcpLayout.css";
 
@@ -14,6 +17,13 @@ const SCOPE_LABELS: Record<string, { label: string; color: string; bg: string }>
   legacyUserSettings: { label: "兼容全局", color: "#64748b", bg: "rgba(100, 116, 139, 0.08)" },
   legacyProjectSettings: { label: "兼容仓库", color: "#64748b", bg: "rgba(100, 116, 139, 0.08)" },
 };
+
+function resolvePreferredEditorTarget() {
+  const selectedId = getOpenAppPreferenceSync() || DEFAULT_OPEN_APP_ID;
+  const selected = DEFAULT_OPEN_APP_TARGETS.find((t) => t.id === selectedId);
+  if (selected && selected.kind !== "finder") return selected;
+  return DEFAULT_OPEN_APP_TARGETS.find((t) => t.kind !== "finder") ?? null;
+}
 
 export type ClaudeMcpConfigPanelHandle = {
   openAddModal: () => void;
@@ -33,6 +43,7 @@ export const ClaudeMcpConfigPanel = forwardRef<ClaudeMcpConfigPanelHandle, Props
   { repositoryPath, active = true, omcInstalled = false, hideToolbar = false, listSearch = "", onCountChange },
   ref,
 ) {
+  const { message } = App.useApp();
   const [addOpen, setAddOpen] = useState(false);
   const [sourcesExpanded, setSourcesExpanded] = useState(false);
 
@@ -61,6 +72,61 @@ export const ClaudeMcpConfigPanel = forwardRef<ClaudeMcpConfigPanelHandle, Props
   }, []);
 
   useImperativeHandle(ref, () => ({ openAddModal, refreshMcp }), [openAddModal, refreshMcp]);
+
+  useEffect(() => {
+    void hydrateOpenAppPreference();
+  }, []);
+
+  const openMcpConfigFile = useCallback(
+    async (item: ClaudeMcpItem) => {
+      const sourcePath = item.sourcePath.trim();
+      if (!sourcePath) {
+        message.warning("未记录 MCP 配置文件路径");
+        return;
+      }
+      const target = resolvePreferredEditorTarget();
+      if (!target) {
+        message.warning("未找到可用编辑器，请先在「打开方式」中配置");
+        return;
+      }
+      const repo = repositoryPath?.trim();
+      const sourceNormalized = sourcePath.replace(/\\/g, "/");
+      const repoNormalized = repo?.replace(/\\/g, "/").replace(/\/+$/, "");
+      const relative = repoNormalized && sourceNormalized.startsWith(`${repoNormalized}/`)
+        ? sourceNormalized.slice(repoNormalized.length + 1)
+        : null;
+      try {
+        if (relative && repo) {
+          if (target.kind === "command") {
+            await openWorkspaceIn(repo, {
+              command: target.command,
+              args: target.args,
+              ideGotoRelative: relative,
+              gotoLine: 1,
+              gotoColumn: 1,
+            });
+          } else {
+            await openWorkspaceIn(repo, {
+              appName: target.appName,
+              args: target.args,
+              ideGotoRelative: relative,
+              gotoLine: 1,
+              gotoColumn: 1,
+            });
+          }
+          return;
+        }
+        if (target.kind === "command") {
+          await openWorkspaceIn(sourcePath, { command: target.command, args: target.args, gotoLine: 1, gotoColumn: 1 });
+        } else {
+          await openWorkspaceIn(sourcePath, { appName: target.appName, args: target.args, gotoLine: 1, gotoColumn: 1 });
+        }
+      } catch (e) {
+        message.warning(e instanceof Error ? e.message : "无法在编辑器中打开该配置文件");
+      }
+    },
+    [message, repositoryPath],
+  );
 
   const allItems = useMemo(() => {
     const list: Array<
@@ -204,6 +270,15 @@ export const ClaudeMcpConfigPanel = forwardRef<ClaudeMcpConfigPanelHandle, Props
                     </div>
 
                     <div className="app-mcp-card-actions">
+                      <Button
+                        type="text"
+                        size="small"
+                        icon={<FileOutlined />}
+                        className="app-mcp-card-action-btn"
+                        title="打开配置文件"
+                        aria-label="打开配置文件"
+                        onClick={() => void openMcpConfigFile(item)}
+                      />
                       {!readOnly && (
                         <Button
                           type="text"

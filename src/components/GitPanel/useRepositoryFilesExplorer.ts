@@ -23,6 +23,7 @@ import {
 import { openInFinder, openWorkspaceIn } from "../../services/repository";
 import { joinRepositoryAbsolutePath } from "../../utils/repositoryPreviewBinary";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
+import { consumePendingExplorerReveal } from "../../utils/pendingExplorerReveal";
 import {
   MIN_EXPLORER_SEARCH_QUERY_LEN,
   type ExplorerSearchResultRow,
@@ -614,6 +615,38 @@ export function useRepositoryFilesExplorer({
     },
     [loadDirWithAncestors],
   );
+
+  const revealExplorerPath = useCallback(
+    async (relativePath: string, isDir: boolean) => {
+      const normalized = relativePath.replace(/^[/\\]+/, "").trim();
+      if (!normalized) {
+        return;
+      }
+      if (isDir) {
+        expandAncestorsForDir(normalized);
+        await loadDirWithAncestors(normalized, { userInitiated: true });
+      } else {
+        const parent = normalized.includes("/")
+          ? normalized.slice(0, normalized.lastIndexOf("/"))
+          : "";
+        expandAncestorsForDir(parent);
+        await loadDirWithAncestors(parent, { userInitiated: true });
+      }
+      setSelected({ path: normalized, isDir });
+    },
+    [expandAncestorsForDir, loadDirWithAncestors],
+  );
+
+  useEffect(() => {
+    if (!repositoryPath.trim() || !hasRootLoaded) {
+      return;
+    }
+    const pending = consumePendingExplorerReveal(repositoryPath);
+    if (!pending) {
+      return;
+    }
+    void revealExplorerPath(pending.relativePath, pending.isDirectory);
+  }, [hasRootLoaded, repositoryPath, revealExplorerPath]);
 
   const openInlineCreate = useCallback(
     (type: "file" | "folder", parentDir: string) => {

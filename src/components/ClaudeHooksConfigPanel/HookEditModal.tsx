@@ -72,7 +72,7 @@ export function HookEditModal({
           </Col>
           <Col span={24}>
             <div className="app-hooks-type-hint">
-              支持类型：{selectedEventName ? getSupportedTypesText(selectedEventName) : "command / http / prompt / agent"}
+              支持类型：{selectedEventName ? getSupportedTypesText(selectedEventName) : "command / http / mcp_tool / prompt / agent"}
             </div>
           </Col>
           <Col span={12}>
