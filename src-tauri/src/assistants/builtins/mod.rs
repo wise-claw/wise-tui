@@ -4,7 +4,6 @@
 //! layers / 默认 Trellis workflow / 默认 skills / 默认 MCPs / 工具表均编译期内嵌。
 //! 用户的覆盖通过 `assistant_overrides` 表追加。
 
-pub mod layers;
 pub mod prd_split;
 
 use serde::Serialize;

@@ -137,7 +137,7 @@ fn parse_code(s: &str) -> Result<Code, String> {
     }
     // Named codes
     match upper.as_str() {
-        "BACKQUOTE" | "BACKQUOTE" => Ok(Code::Backquote),
+        "BACKQUOTE" => Ok(Code::Backquote),
         "MINUS" => Ok(Code::Minus),
         "EQUAL" => Ok(Code::Equal),
         "BRACKETLEFT" => Ok(Code::BracketLeft),

@@ -14,12 +14,16 @@ pub struct PassthroughRepairState {
     pub tool_json_by_index: HashMap<i32, String>,
     pub next_synthetic_index: i32,
     pub message_started: bool,
-    /// 跨 HTTP chunk 累积未完成的 SSE 行。
+    /// 跨 HTTP chunk 累积未完成的 SSE 行（仅 chunk 修复单测使用）。
+    #[cfg(test)]
     pending_line_buffer: String,
+    #[cfg(test)]
     pending_event_type: String,
+    #[cfg(test)]
     pending_data_lines: Vec<String>,
 }
 
+#[cfg(test)]
 pub fn repair_passthrough_sse_chunk(chunk: &str, state: &mut PassthroughRepairState) -> String {
     state.pending_line_buffer.push_str(chunk);
     let mut out = String::new();
@@ -34,6 +38,7 @@ pub fn repair_passthrough_sse_chunk(chunk: &str, state: &mut PassthroughRepairSt
 }
 
 /// 流结束时刷出仍留在行缓冲中的尾部（若有）。
+#[cfg(test)]
 pub fn repair_passthrough_sse_finalize(state: &mut PassthroughRepairState) -> String {
     let mut out = String::new();
     let tail = state.pending_line_buffer.trim_end_matches('\r').to_string();
@@ -45,6 +50,7 @@ pub fn repair_passthrough_sse_finalize(state: &mut PassthroughRepairState) -> St
     out
 }
 
+#[cfg(test)]
 fn flush_pending_sse_event(state: &mut PassthroughRepairState, out: &mut String) {
     if state.pending_data_lines.is_empty() {
         return;
@@ -54,6 +60,7 @@ fn flush_pending_sse_event(state: &mut PassthroughRepairState, out: &mut String)
     out.push_str(&flush_sse_event(&event_type, &data_lines, state));
 }
 
+#[cfg(test)]
 fn process_repair_sse_line(line: &str, state: &mut PassthroughRepairState, out: &mut String) {
     if line.is_empty() {
         flush_pending_sse_event(state, out);

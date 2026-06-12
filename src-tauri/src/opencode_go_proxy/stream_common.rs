@@ -69,11 +69,8 @@ pub fn format_sse_event(ev: &Value) -> Option<String> {
     Some(format!("event: {ty}\ndata: {s}\n\n"))
 }
 
-pub fn format_sse_events(events: &[Value]) -> String {
-    format_sse_events_parts(events).join("")
-}
-
 /// Split concatenated SSE text into complete frames (each ends with `\n\n`).
+#[cfg(test)]
 pub fn split_complete_sse_frames(text: &str) -> Vec<String> {
     if text.is_empty() {
         return Vec::new();
