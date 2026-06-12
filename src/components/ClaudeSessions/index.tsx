@@ -11,7 +11,7 @@ import type {
   SessionConversationTaskItem,
 } from "../../types";
 import { Spin } from "antd";
-import { lazy, memo, Suspense, useEffect, useMemo } from "react";
+import { lazy, memo, Suspense, useEffect, useMemo, useRef } from "react";
 import {
   getClaudeSessionsSnapshot,
   useClaudeSessionsStructureKey,
@@ -97,6 +97,10 @@ interface Props {
   onSwitchSession: (sessionId: string) => void;
   onNewSession: (repository: Repository) => void | Promise<void>;
   onNewProjectSession?: (project: ProjectItem) => void | Promise<void>;
+  /** 打开仓库时恢复或自动新建主会话（非手动「新建会话」）。 */
+  onEnsureRepositorySession?: (repository: Repository) => void | Promise<void>;
+  /** 打开工作区时恢复或自动新建项目主会话（非手动「新建会话」）。 */
+  onEnsureProjectSession?: (project: ProjectItem) => void | Promise<void>;
   onRespondToQuestion: (sessionId: string, answers: string[], customAnswer?: string) => void;
   onDismissQuestion: (sessionId: string) => void;
   onRespondToPermission: (sessionId: string, response: "allow_once" | "allow_always" | "deny") => void;
@@ -239,6 +243,8 @@ function ClaudeSessionsShell({
   onSwitchSession,
   onNewSession,
   onNewProjectSession,
+  onEnsureRepositorySession,
+  onEnsureProjectSession,
   onRespondToQuestion,
   onDismissQuestion,
   onRespondToPermission,
@@ -477,7 +483,9 @@ function ClaudeSessionsShell({
     [projects],
   );
 
-  /** 打开仓库/项目时仅恢复已有主会话绑定，不自动新建（新建仅走「新建会话」按钮）。 */
+  const autoEnsureInFlightRef = useRef(false);
+
+  /** 打开仓库/项目时恢复已有主会话；无可用会话时自动新建。 */
   useEffect(() => {
     if (activeSession) {
       return;
@@ -485,11 +493,23 @@ function ClaudeSessionsShell({
 
     let cancelled = false;
     queueMicrotask(() => {
-      if (cancelled) return;
+      if (cancelled || autoEnsureInFlightRef.current) return;
+
+      const finishAutoEnsure = () => {
+        autoEnsureInFlightRef.current = false;
+      };
+      const beginAutoEnsure = () => {
+        autoEnsureInFlightRef.current = true;
+      };
 
       if (activeWorkspaceFocus === "project" && activeProject) {
         if (mainSessionForDataLink) {
           onSwitchSession(mainSessionForDataLink.id);
+          return;
+        }
+        if (onEnsureProjectSession) {
+          beginAutoEnsure();
+          void Promise.resolve(onEnsureProjectSession(activeProject)).finally(finishAutoEnsure);
         }
         return;
       }
@@ -521,6 +541,12 @@ function ClaudeSessionsShell({
       );
       if (picked) {
         onSwitchSession(picked.id);
+        return;
+      }
+
+      if (onEnsureRepositorySession) {
+        beginAutoEnsure();
+        void Promise.resolve(onEnsureRepositorySession(activeRepository)).finally(finishAutoEnsure);
       }
     });
 
@@ -534,6 +560,8 @@ function ClaudeSessionsShell({
     activeWorkspaceFocus,
     incomingSessions,
     mainSessionForDataLink,
+    onEnsureProjectSession,
+    onEnsureRepositorySession,
     onSwitchSession,
     repositories,
     repositoryMainBindings,

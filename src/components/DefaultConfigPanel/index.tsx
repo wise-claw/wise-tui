@@ -34,17 +34,6 @@ import type { EmployeeItem } from "../../types";
 import { isOmcMonitorEmployeeRecord } from "../../utils/omcMonitorEmployeeSession";
 import "./index.css";
 
-const DEFAULT_CONFIG_NOTES = [
-  "设置写入 SQLite app_settings（wise.defaultConfig.v1），保存后立即作用于主会话顶栏、右栏工作区卡片、运行面板栏位与左栏快捷入口。",
-  "文件树打开方式控制点击侧栏文件树时是在当前会话主区还是新开一屏打开编辑器。",
-  "默认终端（macOS）写入 wise.ui.default-terminal.v1，用于在资源管理器、Git 面板等位置「在外部终端打开」目录。",
-  "Free Claude Code 的安装、启停与 Claude 对齐请在主会话顶栏 FCC 图标弹窗中操作；此处仅控制图标是否显示。",
-  "OpenCode 代理为 Wise 内置能力（Go / Zen）；启停与配置请在顶栏图标或「更多」菜单中打开，此处仅控制图标是否显示。",
-  "长驻模式使用 --input-format stream-json，与终端 CLI 共享 MCP / Skills / Hooks。",
-  "OMC 直连批量、PRD 拆分等编排仍使用独立 -p 子进程，不受会话默认影响。",
-  "LLM 流量监听默认隐藏；开启后上游建议填 FCC 地址以便旁路抓包，勿把百炼 sk- key 写入 Claude env。",
-] as const;
-
 /** 工作台配置 / 运行设置 / 默认配置：全局会话与布局默认值。 */
 export function DefaultConfigPanel() {
   const connection = useClaudeConnectionModeSetting();
@@ -114,9 +103,7 @@ export function DefaultConfigPanel() {
         <div className="app-default-config-row" aria-label="会话处理方式">
           <div className="app-default-config-row__main">
             <span className="app-default-config-row__title">会话处理方式</span>
-            <span className="app-default-config-row__hint">
-              全局默认长驻会话；新建标签沿用此项，已打开且单独设置过的标签不变
-            </span>
+            <span className="app-default-config-row__hint">新建标签默认；已单独设置过的标签不变</span>
           </div>
           <div className="app-default-config-row__control">
             <DefaultConfigOptionPick<ClaudeSessionConnectionKind>
@@ -137,9 +124,7 @@ export function DefaultConfigPanel() {
         <div className="app-default-config-row" aria-label="右侧面板">
           <div className="app-default-config-row__main">
             <span className="app-default-config-row__title">右侧面板</span>
-            <span className="app-default-config-row__hint">
-              启动时右栏展开/收起；顶栏按钮右键可改同一默认
-            </span>
+            <span className="app-default-config-row__hint">启动时展开或收起；顶栏按钮右键可改</span>
           </div>
           <div className="app-default-config-row__control">
             <DefaultConfigOptionPick<"expanded" | "collapsed">
@@ -160,9 +145,7 @@ export function DefaultConfigPanel() {
         <div className="app-default-config-row" aria-label="工作区">
           <div className="app-default-config-row__main">
             <span className="app-default-config-row__title">工作区</span>
-            <span className="app-default-config-row__hint">
-              控制左栏工作区与仓库树；隐藏后仍可通过 Git / 文件树目录选择器切换上下文
-            </span>
+            <span className="app-default-config-row__hint">左栏工作区与仓库树；隐藏后仍可用目录选择器切换</span>
           </div>
           <div className="app-default-config-row__control">
             <DefaultConfigOptionPick<"hidden" | "visible">
@@ -180,14 +163,14 @@ export function DefaultConfigPanel() {
           </div>
         </div>
 
-        <div className="app-default-config-row app-default-config-row--monitor-panel" aria-label="运行面板">
+        <div className="app-default-config-row" aria-label="运行面板">
           <div className="app-default-config-row__main">
             <span className="app-default-config-row__title">运行面板</span>
             <span className="app-default-config-row__hint">
-              终端、派发与工作流在左栏合并列表展示；按合计可见行数限制高度，超出后整体滚动
+              终端、派发与工作流合并列表；按可见行数限制高度
             </span>
           </div>
-          <div className="app-default-config-monitor-panel__controls">
+          <div className="app-default-config-row__control app-default-config-row__control--monitor">
             <div className="app-default-config-monitor-panel__field">
               <span className="app-default-config-monitor-panel__field-label">显示</span>
               <DefaultConfigOptionPick<"visible" | "hidden">
@@ -241,9 +224,7 @@ export function DefaultConfigPanel() {
         <div className="app-default-config-row" aria-label="Git 与文件树栏位">
           <div className="app-default-config-row__main">
             <span className="app-default-config-row__title">Git 与文件树</span>
-            <span className="app-default-config-row__hint">
-              分别配置 Git 变更与仓库文件树默认展示在左栏或右栏；两项均在左栏时通过 Tab 切换
-            </span>
+            <span className="app-default-config-row__hint">Git 与文件树默认栏位；同在左栏时 Tab 切换</span>
           </div>
           <div className="app-default-config-row__control app-default-config-row__control--monitor">
             <DefaultConfigOptionPick<"left" | "right">
@@ -276,9 +257,7 @@ export function DefaultConfigPanel() {
         <div className="app-default-config-row" aria-label="文件树打开方式">
           <div className="app-default-config-row__main">
             <span className="app-default-config-row__title">文件树打开方式</span>
-            <span className="app-default-config-row__hint">
-              点击侧栏文件树中的文件时，在当前会话主区打开或自动新开一屏专用于文件编辑
-            </span>
+            <span className="app-default-config-row__hint">侧栏文件在当前会话打开或新开一屏</span>
           </div>
           <div className="app-default-config-row__control">
             <DefaultConfigOptionPick<"current" | "new-pane">
@@ -299,9 +278,7 @@ export function DefaultConfigPanel() {
         <div className="app-default-config-row" aria-label="@ 默认选中">
           <div className="app-default-config-row__main">
             <span className="app-default-config-row__title">@ 默认选中</span>
-            <span className="app-default-config-row__hint">
-              主会话输入 @ 打开补全且未输入筛选时，默认高亮的执行环境或终端（与列表键盘焦点一致）
-            </span>
+            <span className="app-default-config-row__hint">@ 补全无筛选时的默认高亮项</span>
           </div>
           <div className="app-default-config-row__control">
             <Select
@@ -326,9 +303,7 @@ export function DefaultConfigPanel() {
         >
           <div className="app-default-config-row__main">
             <span className="app-default-config-row__title">@ 快捷键</span>
-            <span className="app-default-config-row__hint">
-              主会话输入框聚焦时按下组合键，自动插入对应 @ 提及（须含 Mod/Alt/Shift 修饰键；Esc 取消录制）
-            </span>
+            <span className="app-default-config-row__hint">聚焦输入框时按键插入 @ 提及（Esc 取消录制）</span>
           </div>
           <div className="app-default-config-row__control app-default-config-row__control--shortcut-list">
             <ul className="app-default-config-at-mention-shortcuts">
@@ -354,9 +329,7 @@ export function DefaultConfigPanel() {
         <div className="app-default-config-row" aria-label="派发任务历史">
           <div className="app-default-config-row__main">
             <span className="app-default-config-row__title">派发任务历史</span>
-            <span className="app-default-config-row__hint">
-              左栏「派发任务」默认查询近 N 天的执行环境派发记录；可在列表头临时切换
-            </span>
+            <span className="app-default-config-row__hint">左栏派发任务默认查询天数；列表头可临时切换</span>
           </div>
           <div className="app-default-config-row__control">
             <Select
@@ -378,9 +351,7 @@ export function DefaultConfigPanel() {
         <div className="app-default-config-row" aria-label="快捷操作">
           <div className="app-default-config-row__main">
             <span className="app-default-config-row__title">快捷操作</span>
-            <span className="app-default-config-row__hint">
-              控制 Chat / Cockpit 右栏工作区快捷操作卡片；侧栏与数据仍可通过菜单访问
-            </span>
+            <span className="app-default-config-row__hint">右栏快捷操作卡片；侧栏菜单仍可访问</span>
           </div>
           <div className="app-default-config-row__control">
             <DefaultConfigOptionPick<"hidden" | "visible">
@@ -401,9 +372,7 @@ export function DefaultConfigPanel() {
         <div className="app-default-config-row" aria-label="备忘录">
           <div className="app-default-config-row__main">
             <span className="app-default-config-row__title">备忘录</span>
-            <span className="app-default-config-row__hint">
-              控制右栏备忘录列表卡片；编辑页与侧栏入口不受此项影响
-            </span>
+            <span className="app-default-config-row__hint">右栏备忘录卡片；编辑页入口不受影响</span>
           </div>
           <div className="app-default-config-row__control">
             <DefaultConfigOptionPick<"hidden" | "visible">
@@ -424,9 +393,7 @@ export function DefaultConfigPanel() {
         <div className="app-default-config-row" aria-label="待办事项">
           <div className="app-default-config-row__main">
             <span className="app-default-config-row__title">待办事项</span>
-            <span className="app-default-config-row__hint">
-              控制右栏待办卡片，以及左栏工作区「添加待办事项」菜单与未完成徽章
-            </span>
+            <span className="app-default-config-row__hint">右栏待办与左栏待办菜单、徽章</span>
           </div>
           <div className="app-default-config-row__control">
             <DefaultConfigOptionPick<"hidden" | "visible">
@@ -447,9 +414,7 @@ export function DefaultConfigPanel() {
         <div className="app-default-config-row app-default-config-row--hub-quick" aria-label="左栏快捷入口">
           <div className="app-default-config-row__main">
             <span className="app-default-config-row__title">左栏快捷入口</span>
-            <span className="app-default-config-row__hint">
-              勾选后显示在左侧栏顶部；MCP / 技能 / 自动化进入 Cockpit，助手 / 插件市场进入工作台配置
-            </span>
+            <span className="app-default-config-row__hint">显示在左栏顶部；入口分别进入 Cockpit / 工作台配置</span>
           </div>
           <div className="app-default-config-row__control app-default-config-row__control--hub-quick">
             <Checkbox.Group
@@ -689,18 +654,6 @@ export function DefaultConfigPanel() {
           </div>
         ) : null}
       </section>
-
-      <aside className="app-default-config-panel__notes" aria-label="默认配置说明">
-        <div className="app-default-config-panel__notes-title">说明</div>
-        <ul className="app-default-config-panel__notes-list">
-          {DEFAULT_CONFIG_NOTES.map((line) => (
-            <li key={line}>{line}</li>
-          ))}
-        </ul>
-        <Typography.Text type="secondary" className="app-default-config-panel__notes-foot">
-          未单独配置时，新建主会话标签默认使用长驻会话。
-        </Typography.Text>
-      </aside>
     </div>
   );
 }

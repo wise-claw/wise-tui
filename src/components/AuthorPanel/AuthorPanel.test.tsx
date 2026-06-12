@@ -438,9 +438,6 @@ describe("AuthorPanel", () => {
     expect(html).toContain("左栏快捷入口");
     expect(html).toContain("长驻会话");
     expect(html).toContain("逐轮处理");
-    expect(html).toContain("说明");
-    expect(html).toContain("设置写入 SQLite app_settings");
-    expect(html).toContain("wise.defaultConfig.v1");
   });
 
   test("cursor-sdk-diagnostic pane renders embedded diagnostic panel", () => {

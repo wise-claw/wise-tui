@@ -4,16 +4,16 @@
 }
 
 .app-default-config-topbar-popover {
-  width: min(92vw, 720px);
-  max-width: min(92vw, 720px);
+  width: min(92vw, 640px);
+  max-width: min(92vw, 640px);
 }
 
 .app-default-config-topbar-popover .ant-popover-container,
 .app-default-config-topbar-popover .ant-popover-inner {
   padding: 0 !important;
   overflow: hidden;
-  width: min(92vw, 720px) !important;
-  max-width: min(92vw, 720px) !important;
+  width: min(92vw, 640px) !important;
+  max-width: min(92vw, 640px) !important;
   box-sizing: border-box;
 }
 
@@ -27,14 +27,10 @@
 }
 
 .app-default-config-topbar-popover-body {
-  max-height: min(72vh, 640px);
+  max-height: min(78vh, 680px);
   overflow: auto;
-  padding: 10px 12px 12px;
+  padding: 6px 8px 8px;
   box-sizing: border-box;
-}
-
-.app-default-config-topbar-popover-body .app-default-config-panel {
-  grid-template-columns: 1fr;
 }
 
 .app-default-config-topbar-popover-loading {

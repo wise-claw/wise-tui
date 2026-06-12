@@ -138,7 +138,6 @@ import { resolveSidebarSelectionTarget } from "./utils/sidebarSelectionTarget";
 import {
   findOwnerProjectForRepositoryId,
   isMultiRepoProject,
-  shouldSidebarRepositorySelectOnlyUpdateFocus,
 } from "./utils/workspaceMode";
 import { employeeInProjectScope, shouldHideEmployeeUi } from "./utils/projectRepositoryRoles";
 import { buildProjectRoleTagOptions, buildProjectRepositoryMentionOptions } from "./utils/projectRoleTagOptions";
@@ -2150,26 +2149,105 @@ export default function App() {
     return sessionId;
   }
 
-  /** 打开/恢复仓库主会话：先读绑定，再挑同路径最近会话；不自动新建。 */
+  const ensureSessionInFlightRef = useRef<string | null>(null);
+
+  async function createAndBindRepositoryMainSession(
+    repository: Repository,
+    priorActiveId: string | null | undefined,
+  ): Promise<string> {
+    const target = resolveSidebarSelectionTarget({ repository });
+    const id = await createSession(target.path, target.displayName);
+    void bindRepositoryMainSession(target.path, id, { deferHostRelease: true });
+    scheduleReleaseScopedClaudeHostsBeforeNewMain({
+      kind: "repository",
+      repositoryPath: target.path,
+      newSessionId: id,
+      priorActiveId,
+    });
+    return id;
+  }
+
+  async function createAndBindProjectMainSession(
+    project: ProjectItem,
+    priorActiveId: string | null | undefined,
+  ): Promise<string | null> {
+    const anchor = resolveProjectMainSessionAnchor(project, repositories);
+    if (!anchor.path) {
+      message.warning("该 Workspace 缺少根目录，请先配置 rootPath");
+      return null;
+    }
+    const id = await createSession(anchor.path, anchor.displayName);
+    void bindRepositoryMainSession(projectMainSessionBindingKey(project.id), id, {
+      deferHostRelease: true,
+    });
+    scheduleReleaseScopedClaudeHostsBeforeNewMain({
+      kind: "project",
+      project,
+      newSessionId: id,
+      priorActiveId,
+    });
+    return id;
+  }
+
+  /** 打开/恢复仓库主会话：先读绑定，再挑同路径最近会话；无可用会话时自动新建。 */
+  async function ensureRepositoryMainSession(repository: Repository): Promise<string | null> {
+    const target = resolveSidebarSelectionTarget({ repository });
+    const flightKey = `repo:${target.path}`;
+    if (ensureSessionInFlightRef.current === flightKey) {
+      return null;
+    }
+    const existing = bindRepositoryMainSessionTarget(repository);
+    if (existing) {
+      return existing;
+    }
+    ensureSessionInFlightRef.current = flightKey;
+    try {
+      return await createAndBindRepositoryMainSession(
+        repository,
+        activeSessionIdLatestRef.current,
+      );
+    } finally {
+      if (ensureSessionInFlightRef.current === flightKey) {
+        ensureSessionInFlightRef.current = null;
+      }
+    }
+  }
+
+  async function ensureProjectMainSession(project: ProjectItem): Promise<string | null> {
+    const anchor = resolveProjectMainSessionAnchor(project, repositories);
+    const flightKey = `project:${project.id}:${anchor.path ?? ""}`;
+    if (!anchor.path) {
+      message.warning("该 Workspace 缺少根目录，请先配置 rootPath");
+      return null;
+    }
+    if (ensureSessionInFlightRef.current === flightKey) {
+      return null;
+    }
+    const existing = bindProjectMainSessionTarget(project);
+    if (existing) {
+      return existing;
+    }
+    ensureSessionInFlightRef.current = flightKey;
+    try {
+      return await createAndBindProjectMainSession(project, activeSessionIdLatestRef.current);
+    } finally {
+      if (ensureSessionInFlightRef.current === flightKey) {
+        ensureSessionInFlightRef.current = null;
+      }
+    }
+  }
+
   async function openRepositoryMainSession(
     repository: Repository,
     options?: { enterChat?: boolean },
   ): Promise<string | null> {
     setActiveRepositoryWithOwner(repository.id);
-    if (shouldSidebarRepositorySelectOnlyUpdateFocus(repository, projects)) {
-      if (options?.enterChat ?? true) {
-        startTransition(() => {
-          viewMode.enter({ kind: "chat" });
-        });
-      }
-      return null;
-    }
     if (options?.enterChat ?? true) {
       startTransition(() => {
         viewMode.enter({ kind: "chat" });
       });
     }
-    return bindRepositoryMainSessionTarget(repository);
+    return ensureRepositoryMainSession(repository);
   }
 
   /** 新建主会话前结束仍占着本机 Claude 的上一活动标签（含其它仓库，避免「数量」累加）。 */
@@ -2255,16 +2333,7 @@ export default function App() {
       viewMode.enter({ kind: "chat" });
       setActiveRepositoryWithOwner(repository.id);
     });
-    const target = resolveSidebarSelectionTarget({ repository });
-    const priorActiveId = activeSessionIdLatestRef.current;
-    const id = await createSession(target.path, target.displayName);
-    void bindRepositoryMainSession(target.path, id, { deferHostRelease: true });
-    scheduleReleaseScopedClaudeHostsBeforeNewMain({
-      kind: "repository",
-      repositoryPath: target.path,
-      newSessionId: id,
-      priorActiveId,
-    });
+    await createAndBindRepositoryMainSession(repository, activeSessionIdLatestRef.current);
   }
 
   /** 手动为 Workspace 新建项目主会话标签。 */
@@ -2292,17 +2361,7 @@ export default function App() {
         setActiveProjectId(project.id);
       }
     });
-    const priorActiveId = activeSessionIdLatestRef.current;
-    const id = await createSession(anchor.path, anchor.displayName);
-    void bindRepositoryMainSession(projectMainSessionBindingKey(project.id), id, {
-      deferHostRelease: true,
-    });
-    scheduleReleaseScopedClaudeHostsBeforeNewMain({
-      kind: "project",
-      project,
-      newSessionId: id,
-      priorActiveId,
-    });
+    await createAndBindProjectMainSession(project, activeSessionIdLatestRef.current);
   }
 
   const handleSidebarRepositorySelect = useCallback(
@@ -2361,17 +2420,12 @@ export default function App() {
       if (sidebarSelectionEpochRef.current !== selectionEpoch) {
         return;
       }
-      if (shouldSidebarRepositorySelectOnlyUpdateFocus(repository, projects)) {
-        switchRepositoryDisplaySession(repository);
-        return;
-      }
-      bindRepositoryMainSessionTarget(repository);
+      void ensureRepositoryMainSession(repository);
     },
     [
       activeRepositoryId,
       activeWorkspaceFocus,
       handleSidebarRepositorySelect,
-      projects,
       repositories,
       setActiveRepositoryWithOwner,
       viewMode,
@@ -2425,7 +2479,7 @@ export default function App() {
       const startupProject = projects.find((p) => p.id === activeProjectId) ?? null;
       if (!startupProject) return;
       startupFirstProjectRepoSessionAppliedRef.current = true;
-      bindProjectMainSessionTarget(startupProject);
+      void ensureProjectMainSession(startupProject);
       if (!viewMode.isChat) {
         viewMode.enter({ kind: "chat" });
       }
@@ -2441,9 +2495,9 @@ export default function App() {
       : null;
     if (startupRepo && isMultiRepoProject(ownerProject, projects) && ownerProject) {
       setActiveRepositoryWithOwner(startupRepo.id);
-      bindProjectMainSessionTarget(ownerProject);
-    } else {
-      handleSidebarRepositorySelect(activeRepositoryId);
+      void ensureProjectMainSession(ownerProject);
+    } else if (startupRepo) {
+      void ensureRepositoryMainSession(startupRepo);
     }
     // P1: Standalone Repo 启动时自动进 chat（宪法 §6：Standalone Repo 不进 cockpit）
     if (!ownerProject) {
@@ -2453,8 +2507,6 @@ export default function App() {
     activeProjectId,
     activeRepositoryId,
     activeWorkspaceFocus,
-    bindProjectMainSessionTarget,
-    handleSidebarRepositorySelect,
     projects,
     repositories,
     repositoryListLoading,
@@ -2498,12 +2550,11 @@ export default function App() {
       if (sidebarSelectionEpochRef.current !== selectionEpoch) {
         return;
       }
-      bindProjectMainSessionTarget(project);
+      void ensureProjectMainSession(project);
     },
     [
       activeProjectId,
       activeWorkspaceFocus,
-      bindProjectMainSessionTarget,
       projects,
       setActiveProjectId,
       viewMode,
@@ -2634,7 +2685,7 @@ export default function App() {
       viewMode.enter({ kind: "chat" });
     });
 
-    return bindProjectMainSessionTarget(project);
+    return ensureProjectMainSession(project);
   }
 
   async function handleRequestSpecAgentUpdate(project: ProjectItem, area: string) {
@@ -3517,6 +3568,12 @@ export default function App() {
         onSwitchSession: jumpToSessionWithRepository,
         onNewSession: handleManualNewRepositorySession,
         onNewProjectSession: handleManualNewProjectSession,
+        onEnsureRepositorySession: (repository) => {
+          void ensureRepositoryMainSession(repository);
+        },
+        onEnsureProjectSession: (project) => {
+          void ensureProjectMainSession(project);
+        },
         repositoryMainBindings: repositoryMainSessionBindings,
         onAppendSystemMessage: appendSystemMessage,
         onAppendUserMessage: appendUserMessage,
