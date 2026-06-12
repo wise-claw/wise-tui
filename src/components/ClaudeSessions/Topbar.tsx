@@ -168,6 +168,8 @@ export interface TopbarProps {
   onToggleTerminal?: () => void;
   onSearch?: () => void;
   collapsed?: boolean;
+  /** 文件树侧栏展开时，顶栏已不在窗口左缘，无需再为交通灯预留左边距。 */
+  fileTreeRailOpen?: boolean;
   rightCollapsed?: boolean;
   terminalCollapsed?: boolean;
   onAutoFixRunError?: (prompt: string) => void | Promise<void>;
@@ -193,6 +195,7 @@ export const Topbar = memo(function Topbar({
   onToggleTerminal,
   onSearch,
   collapsed,
+  fileTreeRailOpen = false,
   rightCollapsed,
   terminalCollapsed,
   onAutoFixRunError,
@@ -254,6 +257,7 @@ export const Topbar = memo(function Topbar({
   const topbarLeftClassName = [
     "app-chat-topbar-left",
     collapsed ? "app-chat-topbar-left--collapsed" : "",
+    collapsed && fileTreeRailOpen ? "app-chat-topbar-left--file-tree-rail" : "",
     showRepoTitle ? "" : "app-chat-topbar-left--no-repo-title",
   ]
     .filter(Boolean)

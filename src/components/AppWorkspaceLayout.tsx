@@ -295,25 +295,20 @@ const ConnectedClaudeSessions = memo(function ConnectedClaudeSessions({
       if (!auxVisible) {
         return { hideMessages: false, hideSessionTools: false };
       }
-      if (memoEditorVisible) {
+      if (fileEditorTargetPaneIndex != null) {
+        const isTarget = paneIndex === fileEditorTargetPaneIndex;
         return {
-          panelBelowMessages: paneIndex === 0 ? centerAuxPanelsNode : undefined,
-          hideMessages: true,
-          hideSessionTools: true,
+          panelBelowMessages: isTarget ? centerAuxPanelsNode : undefined,
+          hideMessages: isTarget,
+          hideSessionTools: isTarget,
         };
       }
-      if (fileEditorTargetPaneIndex == null) {
-        return {
-          panelBelowMessages: paneIndex === 0 ? centerAuxPanelsNode : undefined,
-          hideMessages: true,
-          hideSessionTools: true,
-        };
-      }
-      const isTarget = paneIndex === fileEditorTargetPaneIndex;
+      // 文件/备忘录默认落在主窗格；其它多屏窗格须保留消息列表，避免输入区被顶到列顶。
+      const isPrimaryAuxPane = paneIndex === 0;
       return {
-        panelBelowMessages: isTarget ? centerAuxPanelsNode : undefined,
-        hideMessages: isTarget,
-        hideSessionTools: isTarget,
+        panelBelowMessages: isPrimaryAuxPane ? centerAuxPanelsNode : undefined,
+        hideMessages: isPrimaryAuxPane,
+        hideSessionTools: isPrimaryAuxPane,
       };
     },
     [centerAuxPanelsNode, fileEditorTargetPaneIndex, fileEditorVisible, memoEditorVisible],
@@ -685,6 +680,7 @@ export function AppWorkspaceLayout({
       onToggleTerminal: claudeSessionsProps.onToggleTerminal,
       onSearch: claudeSessionsProps.onSearch,
       collapsed: claudeSessionsProps.collapsed,
+      fileTreeRailOpen: showWorkspaceFileTreeRail,
       rightCollapsed: claudeSessionsProps.rightCollapsed,
       terminalCollapsed: claudeSessionsProps.terminalCollapsed,
       onAutoFixRunError: claudeSessionsProps.onAutoFixRunError,
@@ -704,6 +700,7 @@ export function AppWorkspaceLayout({
       claudeSessionsProps.onToggleTerminal,
       claudeSessionsProps.onSearch,
       claudeSessionsProps.collapsed,
+      showWorkspaceFileTreeRail,
       claudeSessionsProps.rightCollapsed,
       claudeSessionsProps.terminalCollapsed,
       claudeSessionsProps.onAutoFixRunError,

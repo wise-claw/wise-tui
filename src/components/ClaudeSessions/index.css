@@ -401,6 +401,12 @@
   margin-left: 48px;
 }
 
+/* 文件树贴左缘时已承担交通灯避让，主内容顶栏无需重复留白 */
+.app-chat-topbar-left--collapsed.app-chat-topbar-left--file-tree-rail,
+.app-chat-topbar-leading--collapsed .app-chat-topbar-left--file-tree-rail {
+  margin-left: 0;
+}
+
 .app-chat-topbar-right {
   display: flex;
   align-items: center;
@@ -1660,6 +1666,7 @@
 /* 消息区与底部（快捷条 + 输入）的分界 */
 .app-claude-chat-bottom {
   flex-shrink: 0;
+  margin-top: auto;
   display: flex;
   flex-direction: column;
   min-width: 0;
