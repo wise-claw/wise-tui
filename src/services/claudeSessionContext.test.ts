@@ -3,17 +3,22 @@ import type { ClaudeSession } from "../types";
 import {
   CLAUDE_COMPACT_SLASH_PROMPT,
   CONTEXT_AUTO_COMPACT_BEFORE_SEND_PERCENT,
+  CONTEXT_AUTO_COMPACT_HEAVY_SKILL_PERCENT,
+  CONTEXT_SATURATED_TAIL_MIN_PERCENT,
   DEFAULT_MAX_CONTEXT_TOKENS,
   estimateContextPercent,
   estimateSessionTokens,
   estimateTokensFromJsonlLines,
+  formatContextStatusHint,
   getContextPercentTone,
   isCompactSlashPrompt,
+  isHeavyContextSlashPrompt,
   looksLikeContextOverflowError,
   planAutoCompactBeforeSend,
   resolveSessionContextMetricsForSend,
   shouldLoadDiskForContextEstimate,
 } from "./claudeSessionContext";
+import { CLAUDE_DISK_JSONL_TAIL_LINES_RELOAD } from "../constants/claudeMessageListWindow";
 
 function session(messages: ClaudeSession["messages"], claudeSessionId: string | null = "abc"): ClaudeSession {
   return {
@@ -104,6 +109,40 @@ describe("claudeSessionContext", () => {
       message: { role: "user", content: "hello from disk" },
     });
     expect(estimateTokensFromJsonlLines([line])).toBeGreaterThan(0);
+  });
+
+  test("isHeavyContextSlashPrompt detects large skill commands", () => {
+    expect(isHeavyContextSlashPrompt("/claude-api")).toBe(true);
+    expect(isHeavyContextSlashPrompt("  /deep-research topic  ")).toBe(true);
+    expect(isHeavyContextSlashPrompt("/compact")).toBe(false);
+    expect(isHeavyContextSlashPrompt("hello")).toBe(false);
+  });
+
+  test("planAutoCompactBeforeSend lowers threshold for heavy skill commands", () => {
+    const tab = session([], "sid-1");
+    const metrics = {
+      estimatedTokens: Math.round(DEFAULT_MAX_CONTEXT_TOKENS * 0.75),
+      ctxPercent: 75,
+    };
+    expect(planAutoCompactBeforeSend(tab, "hello", metrics).needed).toBe(false);
+    expect(planAutoCompactBeforeSend(tab, "/claude-api", metrics).needed).toBe(true);
+    expect(metrics.ctxPercent).toBeGreaterThanOrEqual(CONTEXT_AUTO_COMPACT_HEAVY_SKILL_PERCENT);
+  });
+
+  test("formatContextStatusHint mentions heavy skill pre-compact", () => {
+    const metrics = {
+      estimatedTokens: Math.round(DEFAULT_MAX_CONTEXT_TOKENS * 0.8),
+      ctxPercent: 80,
+    };
+    expect(formatContextStatusHint(metrics, "/claude-api")).toContain("大块 Skill");
+  });
+
+  test("resolveSessionContextMetricsForSend bumps estimate when jsonl tail saturated", async () => {
+    const lines = Array.from({ length: CLAUDE_DISK_JSONL_TAIL_LINES_RELOAD }, () =>
+      JSON.stringify({ type: "user", message: { role: "user", content: "a" } }),
+    );
+    const metrics = await resolveSessionContextMetricsForSend(session([], "sid-1"), async () => lines);
+    expect(metrics.ctxPercent).toBeGreaterThanOrEqual(CONTEXT_SATURATED_TAIL_MIN_PERCENT);
   });
 
   test("estimateSessionTokens counts tool output", () => {

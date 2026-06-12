@@ -116,6 +116,8 @@ import {
   resolveCompanionDiskLoadStaggerMs,
 } from "../utils/multiPanePerformance";
 import { resolveClaudeCompleteSuccess } from "../utils/resolveClaudeCompleteSuccess";
+import { extractRecentTurnFailureError } from "../utils/claudeSessionTurnFailure";
+import { createClaudeTurnCompleteWaiter } from "../utils/claudeTurnCompleteWaiter";
 import { notificationBodyPrefixInRepositoryContext } from "../utils/sessionRepositoryDisplay";
 import {
   buildClaudeTurnCompleteNotificationBody,
@@ -156,6 +158,7 @@ import { publishRunningClaudeSessionIds } from "../stores/claudeRunningSessionsR
 import { getSystemResourceSnapshot } from "../services/systemResource";
 import {
   buildAutoCompactSystemMessage,
+  buildContextOverflowFailureHint,
   buildContextOverflowRetrySystemMessage,
   CLAUDE_COMPACT_SLASH_PROMPT,
   isCompactSlashPrompt,
@@ -349,8 +352,15 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     new Map(),
   );
   const pendingTurnFailoverRef = useRef<PendingTurnFailoverContext | null>(null);
+  const turnCompleteWaiterRef = useRef(createClaudeTurnCompleteWaiter());
+  const contextOverflowCompactRetriedNonceRef = useRef<Map<string, number>>(new Map());
+  /** `/compact` 中间回合成功时勿清空 pendingTurnFailoverRef（用户正文尚未重发）。 */
+  const compactTurnInFlightRef = useRef<{ tabId: string; nonce: number } | null>(null);
   const attemptTurnFailoverAndRetryRef = useRef<
     (ctx: PendingTurnFailoverContext, errorPreview: string) => Promise<boolean>
+  >(async () => false);
+  const attemptContextOverflowCompactAndRetryRef = useRef<
+    (ctx: PendingTurnFailoverContext) => Promise<boolean>
   >(async () => false);
   /** Which session tab receives stdout until `claude-complete` / `claude-error`. */
   const streamingTargetIdRef = useRef<string | null>(null);
@@ -1223,6 +1233,15 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   }, [buildMemoryKeepSessionIds, companionMemoryLimits.globalBudget, setSessions]);
 
   const purgeStreamSidecarsForSession = useCallback((sessionId: string, claudeSessionId?: string | null) => {
+    turnCompleteWaiterRef.current.clear(sessionId);
+    contextOverflowCompactRetriedNonceRef.current.delete(sessionId);
+    if (claudeSessionId?.trim()) {
+      turnCompleteWaiterRef.current.clear(claudeSessionId.trim());
+      contextOverflowCompactRetriedNonceRef.current.delete(claudeSessionId.trim());
+    }
+    if (compactTurnInFlightRef.current?.tabId === sessionId) {
+      compactTurnInFlightRef.current = null;
+    }
     return purgeClaudeSessionStreamSidecarRefs(
       sessionId,
       {
@@ -1237,6 +1256,41 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       claudeSessionId,
     );
   }, []);
+
+  const appendContextOverflowFailureHint = useCallback(
+    (tabSessionId: string) => {
+      commitSessions((prev) =>
+        appendSystemMessageBySessionId(
+          prev.map((s) => (s.id === tabSessionId ? { ...s, status: "error" as const } : s)),
+          tabSessionId,
+          buildContextOverflowFailureHint(),
+        ),
+      );
+    },
+    [commitSessions],
+  );
+
+  const runCompactTurnAndWait = useCallback(
+    async (params: {
+      tabSessionId: string;
+      turnNonce: number;
+      runOnce: (outbound: string) => Promise<void>;
+      reloadAfterCompact?: () => Promise<void>;
+      systemMessage?: string;
+    }) => {
+      const { tabSessionId, turnNonce, runOnce, reloadAfterCompact, systemMessage } = params;
+      if (systemMessage) {
+        commitSessions((prev) => appendSystemMessageBySessionId(prev, tabSessionId, systemMessage));
+      }
+      compactTurnInFlightRef.current = { tabId: tabSessionId, nonce: turnNonce };
+      await runOnce(CLAUDE_COMPACT_SLASH_PROMPT);
+      await turnCompleteWaiterRef.current.wait(tabSessionId, turnNonce);
+      if (reloadAfterCompact) {
+        await reloadAfterCompact();
+      }
+    },
+    [commitSessions],
+  );
 
   const flushBlockingDesktopIfHidden = useCallback(() => {
     if (typeof document === "undefined") return;
@@ -1465,6 +1519,95 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     attemptTurnFailoverAndRetryRef.current = attemptTurnFailoverAndRetry;
   }, [attemptTurnFailoverAndRetry]);
 
+  const attemptContextOverflowCompactAndRetry = useCallback(
+    async (ctx: PendingTurnFailoverContext): Promise<boolean> => {
+      const tabId = ctx.tabSessionId;
+      const nonce = ctx.turnNonce;
+      if (contextOverflowCompactRetriedNonceRef.current.get(tabId) === nonce) {
+        pendingTurnFailoverRef.current = null;
+        return false;
+      }
+      const claudeSid = ctx.forceNewClaudeConversation ? null : ctx.resumeClaudeSid?.trim();
+      if (!claudeSid) {
+        pendingTurnFailoverRef.current = null;
+        return false;
+      }
+
+      contextOverflowCompactRetriedNonceRef.current.set(tabId, nonce);
+      const waiter = turnCompleteWaiterRef.current;
+
+      commitSessions((prev) =>
+        appendSystemMessageBySessionId(
+          prev.map((s) =>
+            s.id === tabId ? { ...s, status: "running" as const } : s,
+          ),
+          tabId,
+          buildContextOverflowRetrySystemMessage(),
+        ),
+      );
+      scheduleStreamStallTimer(tabId);
+      streamingTargetIdRef.current = tabId;
+
+      const invokeTurn = async (outbound: string, compactIntermediate = false) => {
+        if (compactIntermediate) {
+          compactTurnInFlightRef.current = { tabId, nonce };
+        }
+        await invokeClaudeTurn({
+          tabSessionId: tabId,
+          turnNonce: nonce,
+          invokeConc: ctx.invokeConc,
+          repositoryPath: ctx.repositoryPath,
+          prompt: outbound,
+          modelArg: ctx.modelArg,
+          resumeClaudeSid: claudeSid,
+          cursorAttachments: ctx.cursorAttachments,
+          codexContextExecutionEngine: ctx.codexContextExecutionEngine,
+          forceNewClaudeConversation: ctx.forceNewClaudeConversation,
+        });
+        return waiter.wait(tabId, nonce);
+      };
+
+      const reloadCompactTranscript = async () => {
+        const rp = ctx.repositoryPath.trim();
+        if (!rp) return;
+        await reloadTranscriptFromDisk({ tabId, repositoryPath: rp, claudeSessionId: claudeSid });
+      };
+
+      try {
+        const compactResult = await invokeTurn(CLAUDE_COMPACT_SLASH_PROMPT, true);
+        await reloadCompactTranscript();
+        if (!compactResult.success) {
+          pendingTurnFailoverRef.current = null;
+          appendContextOverflowFailureHint(tabId);
+          return false;
+        }
+        const retryResult = await invokeTurn(ctx.prompt);
+        if (!retryResult.success) {
+          pendingTurnFailoverRef.current = null;
+          appendContextOverflowFailureHint(tabId);
+          return false;
+        }
+        pendingTurnFailoverRef.current = null;
+        return true;
+      } catch {
+        pendingTurnFailoverRef.current = null;
+        appendContextOverflowFailureHint(tabId);
+        return false;
+      }
+    },
+    [
+      appendContextOverflowFailureHint,
+      commitSessions,
+      invokeClaudeTurn,
+      reloadTranscriptFromDisk,
+      scheduleStreamStallTimer,
+    ],
+  );
+
+  useEffect(() => {
+    attemptContextOverflowCompactAndRetryRef.current = attemptContextOverflowCompactAndRetry;
+  }, [attemptContextOverflowCompactAndRetry]);
+
   const runClaudeTurnWithContextGuard = useCallback(
     async (params: {
       tabSessionId: string;
@@ -1577,16 +1720,35 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         });
       };
 
+      const turnNonce = invokeRest.turnNonce;
+      const waitTurnComplete = () => turnCompleteWaiterRef.current.wait(tabSessionId, turnNonce);
+
       const metrics = await resolveSessionContextMetricsForSend(session, loadClaudeSessionJsonl);
       const pre = planAutoCompactBeforeSend(session, prompt, metrics);
       if (pre.needed) {
-        appendSys(buildAutoCompactSystemMessage(pre));
-        await runOnce(CLAUDE_COMPACT_SLASH_PROMPT);
-        await reloadAfterCompact();
+        await runCompactTurnAndWait({
+          tabSessionId,
+          turnNonce,
+          runOnce,
+          reloadAfterCompact,
+          systemMessage: buildAutoCompactSystemMessage(pre),
+        });
       }
 
       try {
         await runOnce(prompt);
+        const turnResult = await waitTurnComplete();
+        if (
+          !turnResult.success &&
+          looksLikeContextOverflowError(
+            extractRecentTurnFailureError(
+              sessionsRef.current.find((s) => s.id === tabSessionId)?.messages ?? [],
+            ),
+          ) &&
+          contextOverflowCompactRetriedNonceRef.current.get(tabSessionId) === turnNonce
+        ) {
+          appendContextOverflowFailureHint(tabSessionId);
+        }
       } catch (err) {
         const errText = err instanceof Error ? err.message : String(err);
         const ctx = pendingTurnFailoverRef.current;
@@ -1604,13 +1766,28 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           looksLikeContextOverflowError(errText) &&
           Boolean(resolveClaudeSid());
         if (!canRetry) throw err;
-        appendSys(buildContextOverflowRetrySystemMessage());
-        await runOnce(CLAUDE_COMPACT_SLASH_PROMPT);
-        await reloadAfterCompact();
+        await runCompactTurnAndWait({
+          tabSessionId,
+          turnNonce,
+          runOnce,
+          reloadAfterCompact,
+          systemMessage: buildContextOverflowRetrySystemMessage(),
+        });
         await runOnce(prompt);
+        const retryResult = await waitTurnComplete();
+        if (!retryResult.success) {
+          appendContextOverflowFailureHint(tabSessionId);
+        }
       }
     },
-    [invokeClaudeTurn, reloadTranscriptFromDisk, runCodexOneshotWithInvocation, runCursorOneshotWithInvocation],
+    [
+      appendContextOverflowFailureHint,
+      invokeClaudeTurn,
+      reloadTranscriptFromDisk,
+      runCodexOneshotWithInvocation,
+      runCursorOneshotWithInvocation,
+      runCompactTurnAndWait,
+    ],
   );
 
   const reloadFullDiskTranscript = useCallback(
@@ -1901,14 +2078,57 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       },
       migrateSessionKey: (from, to) => notificationHub.migrateSessionKey(from, to),
       notifyCompletion: ({ tid, success, nonce, previewRaw, structuredVerdict }) => {
-        clearStreamStallTimer(tid);
         const session = sessionsRef.current.find((s) => s.id === tid || s.claudeSessionId === tid);
         const tabSessionId = session?.id ?? tid;
+        turnCompleteWaiterRef.current.resolve(tabSessionId, nonce, success);
+        clearStreamStallTimer(tid);
         const ctx = pendingTurnFailoverRef.current;
         if (ctx && ctx.tabSessionId === tabSessionId && ctx.turnNonce === nonce) {
           if (success) {
-            pendingTurnFailoverRef.current = null;
-          } else if (isRetryableModelApiError(previewRaw) && ctx.autoFailoverEnabled) {
+            const compactFlight = compactTurnInFlightRef.current;
+            if (compactFlight?.tabId === tabSessionId && compactFlight.nonce === nonce) {
+              compactTurnInFlightRef.current = null;
+            } else {
+              pendingTurnFailoverRef.current = null;
+            }
+          } else {
+            const failureHint = [
+              previewRaw,
+              extractRecentTurnFailureError(session?.messages ?? []),
+            ]
+              .filter(Boolean)
+              .join(" ");
+            if (looksLikeContextOverflowError(failureHint)) {
+              const alreadyRetried =
+                contextOverflowCompactRetriedNonceRef.current.get(tabSessionId) === nonce;
+              if (alreadyRetried) {
+                pendingTurnFailoverRef.current = null;
+                appendContextOverflowFailureHint(tabSessionId);
+                return;
+              }
+              void (async () => {
+                try {
+                  const retried = await attemptContextOverflowCompactAndRetryRef.current(ctx);
+                  if (!retried) {
+                    appendContextOverflowFailureHint(tabSessionId);
+                  }
+                } catch (err) {
+                  pendingTurnFailoverRef.current = null;
+                  commitSessions((prev) =>
+                    appendSystemMessageBySessionId(
+                      prev.map((s) =>
+                        s.id === tabSessionId ? { ...s, status: "error" as const } : s,
+                      ),
+                      tabSessionId,
+                      `发送失败: ${err instanceof Error ? err.message : String(err)}`,
+                    ),
+                  );
+                }
+              })();
+              return;
+            }
+          }
+          if (!success && isRetryableModelApiError(previewRaw) && ctx.autoFailoverEnabled) {
             void (async () => {
               try {
                 await attemptTurnFailoverAndRetryRef.current(ctx, previewRaw);
@@ -1926,7 +2146,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
               }
             })();
             return;
-          } else {
+          } else if (!success) {
             pendingTurnFailoverRef.current = null;
           }
         }

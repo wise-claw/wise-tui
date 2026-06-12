@@ -1232,7 +1232,8 @@ function ComposerInner({
   const bottomStatus = useMemo(() => {
     const sessionDuration = formatSessionDuration(session.createdAt);
     const metrics = getSessionContextMetrics(session);
-    const ctxHint = formatContextStatusHint(metrics);
+    const outgoing = prompt.trim();
+    const ctxHint = formatContextStatusHint(metrics, outgoing || undefined);
     const statusText = mapSessionStatus(session.status);
     const ctxSegment = ctxHint
       ? `ctx:${metrics.ctxPercent}% (~${metrics.estimatedTokens.toLocaleString("zh-CN")} tokens, ${ctxHint})`
@@ -1246,7 +1247,7 @@ function ComposerInner({
       statusText,
       fullLine,
     };
-  }, [session]);
+  }, [prompt, session]);
   const hasComposerPayload = canSendComposer;
 
   useEffect(() => {

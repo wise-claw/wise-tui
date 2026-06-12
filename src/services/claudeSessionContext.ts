@@ -11,6 +11,26 @@ export const CONTEXT_WARN_PERCENT = 75;
 /** 发送用户消息前主动 `/compact` 的阈值 */
 export const CONTEXT_AUTO_COMPACT_BEFORE_SEND_PERCENT = 88;
 
+/** 大块 Skill / 工作流斜杠命令：单轮注入上下文多，提前压缩 */
+export const CONTEXT_AUTO_COMPACT_HEAVY_SKILL_PERCENT = 72;
+
+/** 内存估算偏高时主动读磁盘 jsonl 尾部以对齐 resume 历史 */
+export const CONTEXT_DISK_ESTIMATE_LOAD_PERCENT = 70;
+
+/** jsonl 尾部采样已满时保守抬高估算（真实 transcript 通常更长） */
+export const CONTEXT_SATURATED_TAIL_MIN_PERCENT = 92;
+
+/** 一次性注入大量参考文档的 Claude Code 内置斜杠命令 */
+export const HEAVY_CONTEXT_SLASH_COMMAND_LABELS: ReadonlySet<string> = new Set([
+  "batch",
+  "claude-api",
+  "code-review",
+  "debug",
+  "deep-research",
+  "insights",
+  "init",
+]);
+
 /** Claude Code 内置 `/compact` 命令（压缩磁盘 transcript 历史） */
 export const CLAUDE_COMPACT_SLASH_PROMPT = "/compact";
 
@@ -94,7 +114,7 @@ export function shouldLoadDiskForContextEstimate(session: ClaudeSession): boolea
   if (!claudeSid || !session.repositoryPath?.trim()) return false;
   if (session.messages.length === 0) return true;
   if (session.diskTranscriptPartial) return true;
-  return getSessionContextMetrics(session).ctxPercent >= CONTEXT_AUTO_COMPACT_BEFORE_SEND_PERCENT;
+  return getSessionContextMetrics(session).ctxPercent >= CONTEXT_DISK_ESTIMATE_LOAD_PERCENT;
 }
 
 export async function resolveSessionContextMetricsForSend(
@@ -114,7 +134,10 @@ export async function resolveSessionContextMetricsForSend(
     let diskTokens = estimateTokensFromJsonlLines(tailLines);
     const tailSaturated = tailLines.length >= CLAUDE_DISK_JSONL_TAIL_LINES_RELOAD;
     if (tailSaturated) {
-      diskTokens = Math.max(diskTokens, estimateTokensFromJsonlLines(tailLines));
+      const saturatedFloor = Math.round(
+        (DEFAULT_MAX_CONTEXT_TOKENS * CONTEXT_SATURATED_TAIL_MIN_PERCENT) / 100,
+      );
+      diskTokens = Math.max(diskTokens, saturatedFloor);
     }
     const estimatedTokens = Math.max(memory.estimatedTokens, diskTokens);
     return {
@@ -146,6 +169,27 @@ export function getSessionContextMetrics(session: ClaudeSession): SessionContext
 export function isCompactSlashPrompt(prompt: string): boolean {
   const trimmed = prompt.trim().toLowerCase();
   return trimmed === "/compact" || trimmed.startsWith("/compact ");
+}
+
+/** 从用户输入提取首个斜杠命令 label（不含 `/`）。 */
+export function extractSlashCommandLabel(prompt: string): string | null {
+  const trimmed = prompt.trim();
+  if (!trimmed.startsWith("/")) return null;
+  const label = trimmed.slice(1).trim().split(/\s+/)[0]?.toLowerCase();
+  return label || null;
+}
+
+/** 会一次性加载大块 Skill / 工作流上下文的斜杠命令。 */
+export function isHeavyContextSlashPrompt(prompt: string): boolean {
+  const label = extractSlashCommandLabel(prompt);
+  return label != null && HEAVY_CONTEXT_SLASH_COMMAND_LABELS.has(label);
+}
+
+export function resolveAutoCompactThresholdPercent(outgoingPrompt: string): number {
+  if (isHeavyContextSlashPrompt(outgoingPrompt)) {
+    return CONTEXT_AUTO_COMPACT_HEAVY_SKILL_PERCENT;
+  }
+  return CONTEXT_AUTO_COMPACT_BEFORE_SEND_PERCENT;
 }
 
 /** 识别 Claude API / CLI 常见的上下文溢出报错文案。 */
@@ -181,14 +225,24 @@ export function planAutoCompactBeforeSend(
   if (!claudeSid) {
     return { ...metrics, needed: false };
   }
+  const threshold = resolveAutoCompactThresholdPercent(outgoingPrompt);
   return {
     ...metrics,
-    needed: metrics.ctxPercent >= CONTEXT_AUTO_COMPACT_BEFORE_SEND_PERCENT,
+    needed: metrics.ctxPercent >= threshold,
   };
 }
 
-export function formatContextStatusHint(metrics: SessionContextMetrics): string {
-  if (metrics.ctxPercent >= CONTEXT_AUTO_COMPACT_BEFORE_SEND_PERCENT) {
+export function formatContextStatusHint(
+  metrics: SessionContextMetrics,
+  outgoingPrompt?: string,
+): string {
+  const threshold = outgoingPrompt
+    ? resolveAutoCompactThresholdPercent(outgoingPrompt)
+    : CONTEXT_AUTO_COMPACT_BEFORE_SEND_PERCENT;
+  if (metrics.ctxPercent >= threshold) {
+    if (outgoingPrompt && isHeavyContextSlashPrompt(outgoingPrompt)) {
+      return "大块 Skill 发送前将自动压缩历史";
+    }
     return "发送前将自动压缩历史";
   }
   if (metrics.ctxPercent >= CONTEXT_WARN_PERCENT) {
@@ -206,4 +260,11 @@ export function buildAutoCompactSystemMessage(metrics: SessionContextMetrics): s
 
 export function buildContextOverflowRetrySystemMessage(): string {
   return "检测到上下文溢出，正在压缩历史后重试发送…";
+}
+
+export function buildContextOverflowFailureHint(): string {
+  return (
+    "上下文仍超出模型限制。请发送 /compact 并附带聚焦说明，或 /clear 开新会话；" +
+    "大块 Skill（如 /claude-api、/deep-research）建议在压缩后或新会话中使用。"
+  );
 }
