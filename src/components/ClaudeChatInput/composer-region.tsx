@@ -1232,7 +1232,7 @@ function ComposerInner({
   const bottomStatus = useMemo(() => {
     const sessionDuration = formatSessionDuration(session.createdAt);
     const metrics = getSessionContextMetrics(session);
-    const outgoing = prompt.trim();
+    const outgoing = displayPlain.trim();
     const ctxHint = formatContextStatusHint(metrics, outgoing || undefined);
     const statusText = mapSessionStatus(session.status);
     const ctxSegment = ctxHint
@@ -1247,7 +1247,7 @@ function ComposerInner({
       statusText,
       fullLine,
     };
-  }, [prompt, session]);
+  }, [displayPlain, session]);
   const hasComposerPayload = canSendComposer;
 
   useEffect(() => {

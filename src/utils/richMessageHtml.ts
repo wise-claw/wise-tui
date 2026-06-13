@@ -31,8 +31,16 @@ export function messageContainsHtmlDocument(text: string): boolean {
 }
 
 export function sanitizeRichMessageHtml(html: string): string {
-  return DOMPurify.sanitize(html, {
-    USE_PROFILES: { html: true, mathMl: true },
-    FORBID_TAGS: ["style", "script"],
-  });
+  if (!html.trim()) return "";
+  try {
+    if (typeof DOMPurify?.sanitize === "function") {
+      return DOMPurify.sanitize(html, {
+        USE_PROFILES: { html: true, mathMl: true },
+        FORBID_TAGS: ["style", "script"],
+      });
+    }
+  } catch {
+    /* fall through */
+  }
+  return html;
 }
