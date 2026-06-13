@@ -1829,9 +1829,9 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   );
 
   const reloadFullDiskTranscript = useCallback(
-    async (sessionKey: string): Promise<boolean> => {
+    async (sessionKey: string): Promise<void> => {
       try {
-        return await reloadFullDiskTranscriptByKey({
+        await reloadFullDiskTranscriptByKey({
           sessionKey,
           sessions: sessionsRef.current,
           setSessions,
@@ -1840,16 +1840,16 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           loadSessionTranscriptLines,
         });
       } catch {
-        return false;
+        /* ignore */
       }
     },
     [loadSessionTranscriptLines, resolveSessionExecutionEngine, setSessions],
   );
 
   const applyDiskTranscriptTail = useCallback(
-    async (session: ClaudeSession, tailLines: number): Promise<boolean> => {
+    async (session: ClaudeSession, tailLines: number): Promise<void> => {
       try {
-        return await applyDiskTranscriptTailHelper({
+        await applyDiskTranscriptTailHelper({
           session,
           tailLines,
           setSessions,
@@ -1858,7 +1858,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           loadSessionTranscriptLines,
         });
       } catch {
-        return false;
+        /* ignore */
       }
     },
     [loadSessionTranscriptLines, resolveSessionExecutionEngine, setSessions],
@@ -1873,14 +1873,30 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       const tabId = fresh.id;
       setSessionTranscriptHydrating(tabId, true);
       try {
-        const lazyOk = await applyDiskTranscriptTail(fresh, tailLines);
+        const lazyOk = await applyDiskTranscriptTailHelper({
+          session: fresh,
+          tailLines,
+          setSessions,
+          diskTailLinesBySession: diskTailLinesBySessionRef.current,
+          resolveSessionExecutionEngine,
+          loadSessionTranscriptLines,
+        });
         if (lazyOk) return true;
-        return await reloadFullDiskTranscript(tabId);
+        return await reloadFullDiskTranscriptByKey({
+          sessionKey: tabId,
+          sessions: sessionsRef.current,
+          setSessions,
+          diskTailLinesBySession: diskTailLinesBySessionRef.current,
+          resolveSessionExecutionEngine,
+          loadSessionTranscriptLines,
+        });
+      } catch {
+        return false;
       } finally {
         setSessionTranscriptHydrating(tabId, false);
       }
     },
-    [applyDiskTranscriptTail, reloadFullDiskTranscript],
+    [loadSessionTranscriptLines, resolveSessionExecutionEngine, setSessions],
   );
 
   const requestDiskTranscriptHydration = useCallback(

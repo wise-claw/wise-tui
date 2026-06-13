@@ -6,12 +6,8 @@ export interface DiskTranscriptScrollLoadOptions {
   sessionId: string;
   diskTranscriptPartial: boolean;
   scrollContainerRef: RefObject<HTMLDivElement | null>;
-  loadMoreTranscriptLoading: boolean;
   fullTranscriptLoading: boolean;
-  onLoadMoreTranscriptFromDisk?: (sessionId: string) => void | Promise<void>;
-  onReloadFullDiskTranscript?: (sessionId: string) => void | Promise<void>;
-  onLoadMoreTranscriptStart: () => void;
-  onLoadMoreTranscriptEnd: () => void;
+  onReloadFullDiskTranscript?: (sessionId: string) => void | Promise<void> | Promise<boolean>;
   onFullTranscriptStart: () => void;
   onFullTranscriptEnd: () => void;
 }
@@ -26,7 +22,7 @@ export function shouldTriggerDiskTranscriptScrollLoad(input: {
   return input.scrollTop <= (input.thresholdPx ?? CHAT_MESSAGE_LIST_SCROLL_LOAD_PX);
 }
 
-/** 滚到列表顶部时自动从磁盘加载更早/完整 jsonl（与尾部窗口 scroll 加载对齐）。 */
+/** 滚到列表顶部时自动从磁盘加载完整 jsonl（与尾部窗口 scroll 加载对齐）。 */
 export function useDiskTranscriptScrollLoad(options: DiskTranscriptScrollLoadOptions): void {
   const loadLockedRef = useRef(false);
   const optionsRef = useRef(options);
@@ -37,66 +33,24 @@ export function useDiskTranscriptScrollLoad(options: DiskTranscriptScrollLoadOpt
   }, [options.sessionId]);
 
   useEffect(() => {
-    const {
-      diskTranscriptPartial,
-      scrollContainerRef,
-      onLoadMoreTranscriptFromDisk,
-      onReloadFullDiskTranscript,
-    } = options;
-    if (!diskTranscriptPartial) return;
-    if (!onLoadMoreTranscriptFromDisk && !onReloadFullDiskTranscript) return;
+    const { diskTranscriptPartial, scrollContainerRef, onReloadFullDiskTranscript } = options;
+    if (!diskTranscriptPartial || !onReloadFullDiskTranscript) return;
     const sc = scrollContainerRef.current;
     if (!sc) return;
 
     let raf = 0;
 
-    const maybeChainLoadAtTop = () => {
-      window.requestAnimationFrame(() => {
-        const latest = optionsRef.current;
-        const container = latest.scrollContainerRef.current;
-        if (!container || !latest.diskTranscriptPartial) return;
-        if (
-          !shouldTriggerDiskTranscriptScrollLoad({
-            scrollTop: container.scrollTop,
-            diskTranscriptPartial: latest.diskTranscriptPartial,
-            isLoading:
-              latest.loadMoreTranscriptLoading ||
-              latest.fullTranscriptLoading ||
-              loadLockedRef.current,
-          })
-        ) {
-          return;
-        }
-        triggerLoad();
-      });
-    };
-
     const triggerLoad = () => {
       const opts = optionsRef.current;
-      if (!opts.diskTranscriptPartial) return;
-      if (opts.loadMoreTranscriptLoading || opts.fullTranscriptLoading || loadLockedRef.current) {
-        return;
-      }
+      if (!opts.diskTranscriptPartial || !opts.onReloadFullDiskTranscript) return;
+      if (opts.fullTranscriptLoading || loadLockedRef.current) return;
 
-      if (opts.onLoadMoreTranscriptFromDisk) {
-        loadLockedRef.current = true;
-        opts.onLoadMoreTranscriptStart();
-        void Promise.resolve(opts.onLoadMoreTranscriptFromDisk(opts.sessionId)).finally(() => {
-          opts.onLoadMoreTranscriptEnd();
-          loadLockedRef.current = false;
-          maybeChainLoadAtTop();
-        });
-        return;
-      }
-
-      if (opts.onReloadFullDiskTranscript) {
-        loadLockedRef.current = true;
-        opts.onFullTranscriptStart();
-        void Promise.resolve(opts.onReloadFullDiskTranscript(opts.sessionId)).finally(() => {
-          opts.onFullTranscriptEnd();
-          loadLockedRef.current = false;
-        });
-      }
+      loadLockedRef.current = true;
+      opts.onFullTranscriptStart();
+      void Promise.resolve(opts.onReloadFullDiskTranscript(opts.sessionId)).finally(() => {
+        opts.onFullTranscriptEnd();
+        loadLockedRef.current = false;
+      });
     };
 
     const onScroll = () => {
@@ -108,10 +62,7 @@ export function useDiskTranscriptScrollLoad(options: DiskTranscriptScrollLoadOpt
           !shouldTriggerDiskTranscriptScrollLoad({
             scrollTop: sc.scrollTop,
             diskTranscriptPartial: latest.diskTranscriptPartial,
-            isLoading:
-              latest.loadMoreTranscriptLoading ||
-              latest.fullTranscriptLoading ||
-              loadLockedRef.current,
+            isLoading: latest.fullTranscriptLoading || loadLockedRef.current,
           })
         ) {
           return;
@@ -130,7 +81,6 @@ export function useDiskTranscriptScrollLoad(options: DiskTranscriptScrollLoadOpt
     options.diskTranscriptPartial,
     options.sessionId,
     options.scrollContainerRef,
-    options.onLoadMoreTranscriptFromDisk,
     options.onReloadFullDiskTranscript,
   ]);
 }
