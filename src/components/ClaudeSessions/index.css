@@ -5360,6 +5360,247 @@ button.app-message-part-header:disabled:hover {
   display: block;
 }
 
+/* ── Markdown Mermaid Diagram ── */
+
+.app-markdown-mermaid {
+  position: relative;
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  min-height: 120px;
+  margin: 10px 0;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 12px;
+  background: var(--ant-color-bg-container);
+  overflow: hidden;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+}
+
+.app-markdown-mermaid__status {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 120px;
+  padding: 16px;
+  font-size: 12px;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-markdown-mermaid__toolbar {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 4px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--ant-color-bg-container) 88%, transparent);
+  border: 1px solid var(--ant-color-border-secondary);
+  backdrop-filter: blur(6px);
+}
+
+.app-markdown-mermaid__zoom-controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  padding-right: 4px;
+  border-right: 1px solid var(--ant-color-border-secondary);
+  margin-right: 2px;
+}
+
+.app-markdown-mermaid__btn--label {
+  width: auto;
+  min-width: 44px;
+  padding: 0 6px;
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.app-markdown-mermaid__btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: none;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ant-color-text-secondary);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.app-markdown-mermaid__btn:hover {
+  color: var(--ant-color-text);
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-markdown-mermaid__btn[data-copied="true"] {
+  color: var(--ant-color-success);
+}
+
+.app-markdown-mermaid__viewport {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  padding: 14px 12px 16px;
+  overflow: auto;
+}
+
+.app-markdown-mermaid--rendered .app-markdown-mermaid__viewport {
+  max-height: min(70vh, 720px);
+}
+
+.app-markdown-mermaid__viewport--interactive {
+  cursor: grab;
+  touch-action: none;
+  overscroll-behavior: contain;
+}
+
+.app-markdown-mermaid__viewport--interactive.app-markdown-mermaid__viewport--dragging {
+  cursor: grabbing;
+  user-select: none;
+}
+
+.app-markdown-mermaid__canvas {
+  display: block;
+  min-width: 0;
+  flex-shrink: 0;
+}
+
+.app-markdown-mermaid__canvas--zoomable svg {
+  display: block;
+  width: 100%;
+  height: 100%;
+  max-width: none;
+}
+
+.app-markdown-mermaid__hint {
+  position: absolute;
+  left: 12px;
+  bottom: 8px;
+  z-index: 1;
+  font-size: 11px;
+  color: var(--ant-color-text-quaternary);
+  pointer-events: none;
+}
+
+.app-markdown-mermaid__source {
+  margin: 0;
+  padding: 8px 10px;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 12px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  overflow-x: auto;
+  color: var(--ant-color-text);
+  background: var(--ant-color-fill-quaternary);
+  border-radius: 6px;
+}
+
+.app-markdown-mermaid__error {
+  margin: 0;
+  padding: 12px 14px;
+  font-size: 12px;
+  color: var(--ant-color-warning);
+}
+
+.app-markdown-mermaid__error-detail {
+  margin: 0 0 10px;
+  padding: 0 14px;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--ant-color-text-tertiary);
+  word-break: break-word;
+}
+
+.app-markdown-mermaid--rendered .app-markdown-mermaid__source,
+.app-markdown-mermaid--rendered .app-markdown-mermaid__status {
+  display: none;
+}
+
+.app-markdown-mermaid--error {
+  padding: 0;
+}
+
+.app-markdown-mermaid-lightbox {
+  position: fixed;
+  inset: 0;
+  z-index: 1200;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 24px;
+  background: rgba(0, 0, 0, 0.45);
+}
+
+.app-markdown-mermaid-lightbox__panel {
+  box-sizing: border-box;
+  width: min(1200px, 96vw);
+  max-height: 92vh;
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 14px;
+  background: var(--ant-color-bg-container);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.18);
+  overflow: hidden;
+}
+
+.app-markdown-mermaid-lightbox__toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 50%, var(--ant-color-bg-container));
+}
+
+.app-markdown-mermaid-lightbox__title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ant-color-text);
+}
+
+.app-markdown-mermaid-lightbox__actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.app-markdown-mermaid-lightbox__actions .app-markdown-mermaid__zoom-controls {
+  border-right: 1px solid var(--ant-color-border-secondary);
+  padding-right: 6px;
+  margin-right: 2px;
+}
+
+.app-markdown-mermaid-lightbox__viewport {
+  flex: 1 1 auto;
+  min-height: 0;
+  padding: 16px;
+  overflow: auto;
+}
+
+.app-markdown-mermaid-lightbox__viewport.app-markdown-mermaid__viewport--interactive {
+  cursor: grab;
+}
+
+.app-markdown-code--mermaid-pending::after {
+  content: "流程图生成中…";
+  position: absolute;
+  left: 10px;
+  bottom: 6px;
+  font-size: 11px;
+  color: var(--ant-color-text-tertiary);
+  pointer-events: none;
+}
+
 /* ── Input Area ── */
 
 .app-claude-input-area {

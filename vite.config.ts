@@ -7,7 +7,7 @@ const root = fileURLToPath(new URL(".", import.meta.url));
 
 /** 仅按需打开的功能块，不应出现在 index 入口的 modulepreload 里。 */
 const DEFERRED_MODULE_PRELOAD_CHUNK =
-  /(?:^|\/)assets\/(?:composer-region|milkdown-vendor|codemirror-vendor|monaco-vendor|terminal-vendor|graph-vendor|AuthorPanel|x6-vendor|driver-vendor)/;
+  /(?:^|\/)assets\/(?:composer-region|milkdown-vendor|codemirror-vendor|monaco-vendor|terminal-vendor|graph-vendor|mermaid-vendor|AuthorPanel|x6-vendor|driver-vendor)/;
 
 const host = process.env.TAURI_DEV_HOST;
 
@@ -82,6 +82,9 @@ export default defineConfig(async () => ({
           }
           if (id.includes("katex")) {
             return "katex-vendor";
+          }
+          if (id.includes("node_modules/mermaid") || id.includes("/mermaid/")) {
+            return "mermaid-vendor";
           }
           if (id.includes("@antv/x6")) {
             return "x6-vendor";

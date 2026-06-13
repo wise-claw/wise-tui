@@ -3,6 +3,10 @@ import DOMPurify from "dompurify";
 import { isValidHttpUrl, normalizeAutolinkUrl } from "./autolinkUrl";
 import { normalizeMarkdownForDisplay } from "./markdownDisplayNormalize";
 import {
+  shouldRenderFencedBlockAsMermaid,
+  wrapMermaidBlocksInMarkdown,
+} from "./mermaidBlock";
+import {
   sanitizeRichMessageHtml,
   splitRichMessageContent,
 } from "./richMessageHtml";
@@ -186,7 +190,8 @@ export function parseMarkdownSourceToHtml(text: string, opts?: { streaming?: boo
   if (!source.trim()) return "";
   const stabilized = opts?.streaming ? stabilizeStreamingMarkdown(source) : source;
   const unwrapped = unwrapProseFencedMarkdownSource(stabilized);
-  const normalized = normalizeMarkdownForDisplay(unwrapped);
+  const wrappedMermaid = wrapMermaidBlocksInMarkdown(unwrapped);
+  const normalized = normalizeMarkdownForDisplay(wrappedMermaid);
   return parseMarkedHtml(normalized, source);
 }
 
@@ -240,11 +245,30 @@ function writeDisplayHtmlCache(key: string, html: string): void {
 }
 
 /** 在已有 HTML 字符串上注入复制按钮、外链规范化等聊天展示增强。 */
+function createMermaidPlaceholder(doc: Document, source: string): HTMLDivElement {
+  const diagram = doc.createElement("div");
+  diagram.className = "app-markdown-mermaid";
+  diagram.setAttribute("role", "figure");
+  diagram.setAttribute("aria-label", "流程图");
+  const status = doc.createElement("div");
+  status.className = "app-markdown-mermaid__status";
+  status.setAttribute("role", "status");
+  status.textContent = "正在渲染流程图…";
+  const sourceEl = doc.createElement("pre");
+  sourceEl.className = "app-markdown-mermaid__source";
+  sourceEl.textContent = source;
+  sourceEl.hidden = true;
+  diagram.appendChild(status);
+  diagram.appendChild(sourceEl);
+  return diagram;
+}
+
 export function enhanceMarkdownHtmlString(
   html: string,
   doc: Document,
   enhancer: MarkdownHtmlEnhancer = DEFAULT_ENHANCER,
   depth = 0,
+  opts?: { streaming?: boolean },
 ): string {
   if (!html.trim()) return "";
   const temp = doc.createElement("div");
@@ -255,11 +279,34 @@ export function enhanceMarkdownHtmlString(
     const raw = code?.textContent ?? pre.textContent ?? "";
     const lang = extractCodeBlockLanguage(code);
 
+    if (shouldRenderFencedBlockAsMermaid(raw, lang)) {
+      if (opts?.streaming) {
+        const wrapper = doc.createElement("div");
+        wrapper.className = "app-markdown-code app-markdown-code--mermaid-pending";
+        const copyBtn = doc.createElement("button");
+        copyBtn.className = "app-markdown-copy-btn";
+        copyBtn.setAttribute("aria-label", "复制");
+        copyBtn.setAttribute("data-tooltip", "复制");
+        copyBtn.innerHTML = `<span class="copy-icon">${enhancer.copyIconHtml}</span><span class="check-icon">${enhancer.checkIconHtml}</span>`;
+        const parent = pre.parentElement;
+        if (parent) {
+          parent.replaceChild(wrapper, pre);
+          wrapper.appendChild(pre);
+          wrapper.appendChild(copyBtn);
+        }
+        return;
+      }
+
+      const diagram = createMermaidPlaceholder(doc, raw);
+      pre.parentElement?.replaceChild(diagram, pre);
+      return;
+    }
+
     if (shouldRenderFencedBlockAsMarkdown(raw, lang)) {
       const innerParsed = parseMarkdownSourceToHtml(raw);
       const innerEnhanced =
         depth < ENHANCE_RECURSE_MAX_DEPTH
-          ? enhanceMarkdownHtmlString(innerParsed, doc, enhancer, depth + 1)
+          ? enhanceMarkdownHtmlString(innerParsed, doc, enhancer, depth + 1, opts)
           : innerParsed;
       const prose = doc.createElement("div");
       prose.className = "app-markdown-prose-from-fence";
@@ -344,7 +391,9 @@ export function buildMarkdownDisplayHtml(
   }
 
   const inner = renderRichMessageSourceToHtml(source, { streaming: opts?.streaming });
-  const enhanced = enhanceMarkdownHtmlString(inner, document, opts?.enhancer);
+  const enhanced = enhanceMarkdownHtmlString(inner, document, opts?.enhancer, 0, {
+    streaming: opts?.streaming,
+  });
   if (cacheKey && enhanced) {
     writeDisplayHtmlCache(cacheKey, enhanced);
   }

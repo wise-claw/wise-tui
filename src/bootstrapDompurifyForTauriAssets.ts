@@ -16,6 +16,9 @@ export function bootstrapDompurifyForTauriAssets(): void {
   if (typeof window === "undefined" || window.__wiseDompurifyTauriAssetPatch) {
     return;
   }
+  if (typeof DOMPurify?.sanitize !== "function") {
+    return;
+  }
   window.__wiseDompurifyTauriAssetPatch = true;
 
   const original = DOMPurify.sanitize.bind(DOMPurify) as typeof DOMPurify.sanitize;

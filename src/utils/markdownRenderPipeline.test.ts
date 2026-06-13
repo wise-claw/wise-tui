@@ -148,4 +148,11 @@ describe("buildMarkdownDisplayHtml", () => {
     const cached = buildMarkdownDisplayHtml(partial, { streaming: false });
     expect(cached).toContain("<h2>");
   });
+
+  test("wraps bare flowchart source into mermaid fence before parse", () => {
+    const source = "flowchart TB\n  subgraph ENTRY\n    CLI[CLI]\n  end";
+    const html = parseMarkdownSourceToHtml(source);
+    expect(html).toContain("language-mermaid");
+    expect(html).toContain("subgraph ENTRY");
+  });
 });

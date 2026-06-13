@@ -6,6 +6,8 @@ import {
   coerceMarkdownSourceText,
   syncMarkdownHtmlToContainer,
 } from "../../utils/markdownRenderPipeline";
+import { renderMermaidInContainer } from "../../utils/mermaidRender";
+import { attachMermaidViewerInteractions } from "../../utils/mermaidViewerUi";
 
 export { buildMarkdownDisplayHtml, clearMarkdownDisplayHtmlCache } from "../../utils/markdownRenderPipeline";
 
@@ -43,7 +45,17 @@ export function Markdown({ text, streaming, showPendingHint, className }: Props)
     const container = containerRef.current;
     if (!container) return;
     syncMarkdownHtmlToContainer(container, displayHtml);
-  }, [displayHtml]);
+    if (isStreaming) return;
+
+    let cancelled = false;
+    void renderMermaidInContainer(container).finally(() => {
+      if (cancelled) return;
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [displayHtml, isStreaming]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -77,10 +89,12 @@ export function Markdown({ text, streaming, showPendingHint, className }: Props)
 
     container.addEventListener("click", handleCopyClick);
     const linkUnsub = attachExternalLinkDelegation(container);
+    const mermaidUnsub = attachMermaidViewerInteractions(container);
 
     return () => {
       container.removeEventListener("click", handleCopyClick);
       if (linkUnsub) linkUnsub();
+      mermaidUnsub();
     };
   }, [displayHtml]);
 
