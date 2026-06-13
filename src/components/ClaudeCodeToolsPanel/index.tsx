@@ -92,6 +92,7 @@ export function ClaudeCodeToolsPanel({
   const hooksPanelRef = useRef<ClaudeHooksConfigPanelHandle>(null);
   const subagentsPanelRef = useRef<SubagentsPanelHandle>(null);
   const pluginsPanelRef = useRef<ClaudePluginsPanelHandle>(null);
+  const [pluginsRefreshing, setPluginsRefreshing] = useState(false);
 
   const handleSubagentsCountChange = useCallback((count: number) => {
     setTabCounts((prev) => (prev.subagents === count ? prev : { ...prev, subagents: count }));
@@ -112,6 +113,28 @@ export function ClaudeCodeToolsPanel({
   const handlePluginsCountChange = useCallback((count: number) => {
     setTabCounts((prev) => (prev.plugins === count ? prev : { ...prev, plugins: count }));
   }, []);
+
+  const handlePluginsRefresh = useCallback(async () => {
+    if (pluginsRefreshing) return;
+    if (pluginsPanelRef.current) {
+      setPluginsRefreshing(true);
+      try {
+        await pluginsPanelRef.current.refresh();
+      } finally {
+        setPluginsRefreshing(false);
+      }
+      return;
+    }
+    setPluginsRefreshing(true);
+    try {
+      const rows = await claudePluginListInstalled(repositoryPath);
+      handlePluginsCountChange(rows.length);
+    } catch (e) {
+      message.error(e instanceof Error ? e.message : String(e));
+    } finally {
+      setPluginsRefreshing(false);
+    }
+  }, [handlePluginsCountChange, pluginsRefreshing, repositoryPath]);
 
   useEffect(() => {
     if (!panelActive) return;
@@ -298,7 +321,8 @@ export function ClaudeCodeToolsPanel({
           size="small"
           className="app-tab-extra-mcp-btn"
           icon={<ReloadOutlined />}
-          onClick={() => void pluginsPanelRef.current?.refresh()}
+          loading={pluginsRefreshing}
+          onClick={() => void handlePluginsRefresh()}
         >
           刷新
         </Button>
@@ -568,13 +592,11 @@ export function ClaudeCodeToolsPanel({
                 {loadedTabs.has("plugins") ? (
                   <Suspense fallback={<Empty description="加载中..." image={Empty.PRESENTED_IMAGE_SIMPLE} />}>
                     <ClaudePluginsPanel
+                      ref={pluginsPanelRef}
                       repositoryPath={repositoryPath}
                       active={panelActive && tab === "plugins"}
                       listSearch={listSearch}
                       onCountChange={handlePluginsCountChange}
-                      onBindActions={(actions) => {
-                        pluginsPanelRef.current = actions;
-                      }}
                     />
                   </Suspense>
                 ) : null}

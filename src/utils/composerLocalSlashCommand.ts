@@ -4,12 +4,24 @@ import {
   claudePluginInstallRef,
 } from "../constants/claudePluginMarketCatalog";
 
-export type ComposerPluginSlashAction = "install" | "uninstall" | "list" | "enable" | "disable";
+export type ComposerPluginSlashAction =
+  | "install"
+  | "uninstall"
+  | "list"
+  | "enable"
+  | "disable"
+  | "marketplace_add"
+  | "marketplace_update"
+  | "cli";
 
 export interface ComposerPluginSlashCommand {
   action: ComposerPluginSlashAction;
   installRef?: string;
   scope: ClaudePluginInstallScope;
+  /** marketplace add 的市场源（GitHub repo 或 URL） */
+  marketplaceSource?: string;
+  /** action === "cli" 时：`plugin` 之后的子命令参数 */
+  cliArgs?: string[];
 }
 
 export type ComposerLocalSlashKind =
@@ -126,34 +138,47 @@ export function parseComposerPluginSlashCommand(text: string): ComposerPluginSla
 
   const tokens = rest.split(/\s+/).filter(Boolean);
   const verb = tokens[0]?.toLowerCase() ?? "";
+
+  if (verb === "marketplace") {
+    const sub = tokens[1]?.toLowerCase() ?? "";
+    if (sub === "add") {
+      const source = tokens.slice(2).join(" ").trim();
+      if (!source) return null;
+      return { action: "marketplace_add", scope: "user", marketplaceSource: source };
+    }
+    if (sub === "update") {
+      return { action: "marketplace_update", scope: "user" };
+    }
+    return { action: "cli", scope: "user", cliArgs: tokens };
+  }
+
   const action = PLUGIN_VERB_ALIASES[verb];
-  if (!action || action === "list") {
-    return null;
+  if (action && action !== "list") {
+    let scope: ClaudePluginInstallScope = "user";
+    let installRef = "";
+    for (let i = 1; i < tokens.length; i += 1) {
+      const token = tokens[i];
+      if (token === "--scope") {
+        const next = tokens[i + 1];
+        const parsed = parseScopeToken(next);
+        if (!parsed) return null;
+        scope = parsed;
+        i += 1;
+        continue;
+      }
+      if (!installRef) {
+        installRef = token;
+      }
+    }
+    if (!installRef) return null;
+    return {
+      action,
+      installRef,
+      scope,
+    };
   }
 
-  let scope: ClaudePluginInstallScope = "user";
-  let installRef = "";
-  for (let i = 1; i < tokens.length; i += 1) {
-    const token = tokens[i];
-    if (token === "--scope") {
-      const next = tokens[i + 1];
-      const parsed = parseScopeToken(next);
-      if (!parsed) return null;
-      scope = parsed;
-      i += 1;
-      continue;
-    }
-    if (!installRef) {
-      installRef = token;
-    }
-  }
-
-  if (!installRef) return null;
-  return {
-    action,
-    installRef,
-    scope,
-  };
+  return { action: "cli", scope: "user", cliArgs: tokens };
 }
 
 /** 将 `oh-my-claudecode` 等简写解析为 `plugin@marketplace`。 */
@@ -212,7 +237,7 @@ export function parseComposerLocalSlashCommand(text: string): ComposerLocalSlash
     if (plugin) {
       return { kind: "plugin", raw: trimmed, plugin };
     }
-    return redirectCommand(trimmed, COMPOSER_PLUGIN_SUBCOMMAND_HELP);
+    return null;
   }
 
   if (COMPACT_SLASH_RE.test(trimmed)) {
@@ -288,6 +313,8 @@ export function parseComposerLocalSlashCommand(text: string): ComposerLocalSlash
 export const COMPOSER_LOCAL_SLASH_HELP = [
   "Wise 会话内可由本地处理的斜杠命令：",
   "• /plugin install|uninstall|enable|disable|list <插件> [--scope user|project|local]",
+  "• /plugin marketplace add <源> — 添加插件市场（直接执行并显示 CLI 输出）",
+  "• /plugin marketplace update — 刷新市场缓存",
   "• /compact [聚焦说明] — 压缩会话历史",
   "• /clear、/reset、/new — 新建空白会话标签",
   "• /context、/context all — 上下文占用（Wise 估算）",

@@ -55,6 +55,24 @@ describe("executeComposerLocalSlashCommand", () => {
       },
       { sessionId: "s1", repositoryPath: "/repo" },
     );
+    expect(result).toContain("## 已安装插件");
+    expect(result).toContain("oh-my-claudecode@omc");
+  });
+
+  test("runs marketplace add via cli and appends installed list", async () => {
+    const result = await executeComposerLocalSlashCommand(
+      {
+        kind: "plugin",
+        raw: "/plugin marketplace add Yeachan-Heo/oh-my-claudecode",
+        plugin: {
+          action: "marketplace_add",
+          scope: "user",
+          marketplaceSource: "Yeachan-Heo/oh-my-claudecode",
+        },
+      },
+      { sessionId: "s1", repositoryPath: "/repo" },
+    );
+    expect(result).toContain("## ✅ 插件市场已添加");
     expect(result).toContain("oh-my-claudecode@omc");
   });
 

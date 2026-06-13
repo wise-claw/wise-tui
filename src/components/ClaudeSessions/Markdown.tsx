@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
 import { attachExternalLinkDelegation } from "../../services/openExternal";
+import { attachWiseLinkDelegation } from "../../services/wiseUiNavigation";
 import { useMarkdownDisplaySource } from "../../hooks/useMarkdownDisplaySource";
 import { coerceMarkdownSourceText } from "../../utils/markdownRenderPipeline";
 import { renderMermaidInContainer } from "../../utils/mermaidRender";
@@ -55,10 +56,12 @@ export function Markdown({ text, streaming, showPendingHint, className }: Props)
     if (!container) return;
 
     const linkUnsub = attachExternalLinkDelegation(container);
+    const wiseLinkUnsub = attachWiseLinkDelegation(container);
     const mermaidUnsub = attachMermaidViewerInteractions(container);
 
     return () => {
       if (linkUnsub) linkUnsub();
+      wiseLinkUnsub();
       mermaidUnsub();
     };
   }, [displaySource]);

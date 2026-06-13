@@ -1,6 +1,6 @@
 import { FolderOpenOutlined } from "@ant-design/icons";
 import { App, Button, Empty, Input, Modal, Radio, Segmented, Spin, Tag } from "antd";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { forwardRef, useCallback, useEffect, useImperativeHandle, useMemo, useRef, useState } from "react";
 import {
   CLAUDE_PLUGIN_MARKET_CATALOG,
   claudePluginInstallRef,
@@ -34,7 +34,6 @@ interface Props {
   active: boolean;
   listSearch?: string;
   onCountChange?: (count: number) => void;
-  onBindActions?: (actions: ClaudePluginsPanelHandle | null) => void;
 }
 
 type ClaudePluginAddMode = "catalog" | "directory" | "remote" | "command";
@@ -43,16 +42,14 @@ function catalogEntryForInstalled(row: ClaudePluginInstalledEntry): ClaudePlugin
   return CLAUDE_PLUGIN_MARKET_CATALOG.find((entry) => claudePluginInstallRef(entry) === row.id) ?? null;
 }
 
-export function ClaudePluginsPanel({
-  repositoryPath,
-  active,
-  listSearch = "",
-  onCountChange,
-  onBindActions,
-}: Props) {
+export const ClaudePluginsPanel = forwardRef<ClaudePluginsPanelHandle, Props>(function ClaudePluginsPanel(
+  { repositoryPath, active, listSearch = "", onCountChange },
+  ref,
+) {
   const { message } = App.useApp();
   const [installed, setInstalled] = useState<ClaudePluginInstalledEntry[]>([]);
   const [loading, setLoading] = useState(false);
+  const [refreshing, setRefreshing] = useState(false);
   const [bootstrapping, setBootstrapping] = useState(false);
   const [busyKey, setBusyKey] = useState<string | null>(null);
   const [addOpen, setAddOpen] = useState(false);
@@ -66,6 +63,8 @@ export function ClaudePluginsPanel({
   const [installCommandBusy, setInstallCommandBusy] = useState(false);
   const [installScope, setInstallScope] = useState<ClaudePluginInstallScope>("user");
   const installLockRef = useRef(false);
+  const bootstrapOnceRef = useRef(false);
+  const refreshLockRef = useRef(false);
   const hasRepository = Boolean(repositoryPath?.trim());
 
   const installedKeys = useMemo(() => {
@@ -76,35 +75,34 @@ export function ClaudePluginsPanel({
     return keys;
   }, [installed]);
 
-  const loadInstalled = useCallback(async () => {
-    setLoading(true);
+  const loadInstalled = useCallback(async (opts?: { silent?: boolean }): Promise<ClaudePluginInstalledEntry[]> => {
+    if (!opts?.silent) setLoading(true);
     try {
       const rows = await claudePluginListInstalled(repositoryPath);
       setInstalled(rows);
       onCountChange?.(rows.length);
+      return rows;
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
       setInstalled([]);
       onCountChange?.(0);
+      return [];
     } finally {
-      setLoading(false);
+      if (!opts?.silent) setLoading(false);
     }
   }, [message, onCountChange, repositoryPath]);
 
   const refresh = useCallback(async () => {
-    setBootstrapping(true);
+    if (refreshLockRef.current) return;
+    refreshLockRef.current = true;
+    setRefreshing(true);
     try {
-      const boot = await claudePluginMarketBootstrap();
-      if (!boot.ok) {
-        message.warning("部分插件市场未能自动添加，可稍后重试刷新");
-      }
-    } catch (e) {
-      message.error(e instanceof Error ? e.message : String(e));
+      await loadInstalled({ silent: true });
     } finally {
-      setBootstrapping(false);
+      refreshLockRef.current = false;
+      setRefreshing(false);
     }
-    await loadInstalled();
-  }, [loadInstalled, message]);
+  }, [loadInstalled]);
 
   const openAddModal = useCallback(() => {
     setAddMode("catalog");
@@ -117,15 +115,32 @@ export function ClaudePluginsPanel({
     setAddOpen(true);
   }, [hasRepository]);
 
-  useEffect(() => {
-    onBindActions?.({ refresh, openAddModal });
-    return () => onBindActions?.(null);
-  }, [onBindActions, openAddModal, refresh]);
+  useImperativeHandle(ref, () => ({ refresh, openAddModal }), [openAddModal, refresh]);
 
   useEffect(() => {
     if (!active) return;
-    void loadInstalled();
-  }, [active, loadInstalled]);
+    let cancelled = false;
+    void (async () => {
+      if (!bootstrapOnceRef.current) {
+        bootstrapOnceRef.current = true;
+        try {
+          const boot = await claudePluginMarketBootstrap();
+          if (cancelled) return;
+          if (!boot.ok) {
+            message.warning("部分插件市场未能自动添加，可稍后重试刷新");
+          }
+        } catch {
+          /* 首次打开失败不阻断列表读取 */
+        }
+      }
+      if (!cancelled) {
+        await loadInstalled();
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [active, loadInstalled, message]);
 
   const filteredInstalled = useMemo(() => {
     const q = listSearch.trim().toLowerCase();
@@ -304,7 +319,12 @@ export function ClaudePluginsPanel({
 
   return (
     <>
-      <div className="app-claude-plugins-panel">
+      <div className={`app-claude-plugins-panel${refreshing ? " app-claude-plugins-panel--refreshing" : ""}`}>
+        {refreshing ? (
+          <div className="app-claude-plugins-panel-loading" aria-hidden>
+            <Spin size="small" />
+          </div>
+        ) : null}
         {loading && installed.length === 0 ? (
           <div className="app-claude-plugins-panel-loading">
             <Spin size="small" />
@@ -565,4 +585,4 @@ export function ClaudePluginsPanel({
       </Modal>
     </>
   );
-}
+});

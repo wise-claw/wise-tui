@@ -85,6 +85,8 @@ import {
   readAuthorPaneFromStorage,
   resolveAuthorNavPane,
 } from "./components/AuthorPanel/authorPaneStorage";
+import { WISE_UI_EVENT_NAVIGATE, type WiseUiNavigationDetail } from "./constants/wiseUiNavigationEvents";
+import { requestClaudePluginHubTab } from "./stores/claudePluginHubNavStore";
 import { reloadAppWindow } from "./services/window";
 import {
   getCurrentMainWorkspaceWindowLabel,
@@ -555,6 +557,26 @@ export default function App() {
     floatingRepositories,
     standaloneRepos,
   } = useRepositoryList();
+
+  useEffect(() => {
+    const onNavigate = (event: Event) => {
+      const detail = (event as CustomEvent<WiseUiNavigationDetail>).detail;
+      if (!detail || detail.kind !== "author") return;
+      if (!activeProjectId && activeRepositoryId != null) {
+        message.warning("Standalone Repo 不支持 Author 配置；升格为 Workspace 后启用");
+        return;
+      }
+      if (detail.pane === "claude-plugins") {
+        const tab = detail.query?.tab;
+        if (tab === "installed" || tab === "catalog") {
+          requestClaudePluginHubTab(tab);
+        }
+      }
+      enterAuthorPane(detail.pane);
+    };
+    window.addEventListener(WISE_UI_EVENT_NAVIGATE, onNavigate);
+    return () => window.removeEventListener(WISE_UI_EVENT_NAVIGATE, onNavigate);
+  }, [activeProjectId, activeRepositoryId, enterAuthorPane]);
 
   const dockQueryAppliedRef = useRef(false);
 

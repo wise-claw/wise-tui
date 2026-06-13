@@ -2147,11 +2147,29 @@
 }
 
 .app-claude-plugins-panel {
+  position: relative;
   display: flex;
   flex-direction: column;
   gap: 4px;
   padding: 0 2px 6px;
-  min-height: 0;
+  min-height: 48px;
+}
+
+.app-claude-plugins-panel--refreshing::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: color-mix(in srgb, var(--ant-color-bg-container) 55%, transparent);
+  pointer-events: none;
+}
+
+.app-claude-plugins-panel--refreshing .app-claude-plugins-panel-loading {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
 }
 
 .app-claude-plugins-panel-loading {

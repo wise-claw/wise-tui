@@ -25,6 +25,12 @@ import {
 import type { ClaudeHookScopeData, ClaudeMcpItem, ClaudeSession } from "../types";
 import { formatClaudeModelLabel } from "../utils/claudeModel";
 import {
+  formatInstalledPluginsMarkdown,
+  formatPluginCliPassthrough,
+  formatPluginMarketplaceAddResult,
+  formatPluginMutateResult,
+} from "../utils/formatComposerPluginOutput";
+import {
   COMPOSER_LOCAL_SLASH_HELP,
   parseComposerLocalSlashCommand,
   resolveComposerPluginInstallRef,
@@ -43,18 +49,12 @@ export interface ComposerLocalSlashDeps {
   createNewSession?: () => void | Promise<void>;
 }
 
-function formatInstalledPlugins(
-  rows: Awaited<ReturnType<typeof claudePluginListInstalled>>,
-): string {
-  if (rows.length === 0) {
-    return "当前未安装任何 Claude Code 插件。";
+async function loadInstalledPlugins(repositoryPath: string | null | undefined) {
+  try {
+    return await claudePluginListInstalled(repositoryPath);
+  } catch {
+    return [];
   }
-  const lines = rows.map((row) => {
-    const version = row.version?.trim() ? ` v${row.version.trim()}` : "";
-    const status = row.enabled ? "已启用" : "已禁用";
-    return `• ${row.id}${version}（${row.scope} · ${status}）`;
-  });
-  return ["已安装插件：", ...lines].join("\n");
 }
 
 async function executePluginCommand(
@@ -63,23 +63,75 @@ async function executePluginCommand(
 ): Promise<string> {
   if (command.action === "list") {
     const rows = await claudePluginListInstalled(repositoryPath);
-    return formatInstalledPlugins(rows);
+    return ["## 已安装插件", "", formatInstalledPluginsMarkdown(rows)].join("\n");
+  }
+
+  if (command.action === "marketplace_add") {
+    const source = command.marketplaceSource?.trim();
+    if (!source) throw new Error("请提供市场源，例如 /plugin marketplace add owner/repo");
+    const out = await runClaudeCliCommand(
+      ["plugin", "marketplace", "add", source],
+      repositoryPath,
+      { timeoutMs: 600_000 },
+    );
+    const installed = await loadInstalledPlugins(repositoryPath);
+    return formatPluginMarketplaceAddResult({
+      source,
+      cliOutput: out.trim() || `Successfully added marketplace from ${source}`,
+      installed,
+    });
+  }
+
+  if (command.action === "marketplace_update") {
+    const out = await runClaudeCliCommand(
+      ["plugin", "marketplace", "update"],
+      repositoryPath,
+      { timeoutMs: 600_000 },
+    );
+    const installed = await loadInstalledPlugins(repositoryPath);
+    return formatPluginMutateResult({
+      action: "update",
+      cliOutput: out.trim() || "Successfully refreshed plugin marketplaces.",
+      installed,
+    });
+  }
+
+  if (command.action === "cli") {
+    const args = command.cliArgs ?? [];
+    if (args.length === 0) {
+      throw new Error("请提供 /plugin 子命令");
+    }
+    const out = await runClaudeCliCommand(["plugin", ...args], repositoryPath, { timeoutMs: 600_000 });
+    return formatPluginCliPassthrough(out.trim(), args);
   }
 
   const installRef = resolveComposerPluginInstallRef(command.installRef ?? "");
   const scope = command.scope;
 
   if (command.action === "install") {
-    const boot = await claudePluginMarketBootstrap();
-    await claudePluginInstall(installRef, scope, repositoryPath);
-    const bootHint = boot.log.trim();
-    const base = `已安装插件 ${installRef}（范围：${scope}）。新开 Claude 会话后生效。`;
-    return bootHint ? `${base}\n\n${bootHint}` : base;
+    await claudePluginMarketBootstrap();
+    const out = await claudePluginInstall(installRef, scope, repositoryPath);
+    const installed = await loadInstalledPlugins(repositoryPath);
+    return formatPluginMutateResult({
+      action: "install",
+      installRef,
+      scope,
+      cliOutput: out.trim() || `Successfully installed ${installRef}`,
+      installed,
+      extraNote: "新开 Claude 会话后生效。",
+    });
   }
 
   if (command.action === "uninstall") {
-    await claudePluginUninstall(installRef, scope, repositoryPath);
-    return `已卸载插件 ${installRef}（范围：${scope}）。`;
+    const out = await claudePluginUninstall(installRef, scope, repositoryPath);
+    const installed = await loadInstalledPlugins(repositoryPath);
+    return formatPluginMutateResult({
+      action: "uninstall",
+      installRef,
+      scope,
+      cliOutput: out.trim() || `Successfully uninstalled ${installRef}`,
+      installed,
+    });
   }
 
   const cliVerb = command.action === "enable" ? "enable" : "disable";
@@ -88,8 +140,14 @@ async function executePluginCommand(
     repositoryPath,
     { timeoutMs: 120_000 },
   );
-  const verbLabel = command.action === "enable" ? "启用" : "禁用";
-  return out.trim() || `已${verbLabel}插件 ${installRef}（范围：${scope}）。`;
+  const installed = await loadInstalledPlugins(repositoryPath);
+  return formatPluginMutateResult({
+    action: command.action,
+    installRef,
+    scope,
+    cliOutput: out.trim() || `Successfully ${cliVerb}d ${installRef}`,
+    installed,
+  });
 }
 
 function mcpScopeLabel(scope: ClaudeMcpItem["scope"]): string {
@@ -299,6 +357,13 @@ function pendingLabelFor(command: ComposerLocalSlashCommand): string {
       if (plugin.action === "uninstall") return `正在卸载插件 ${plugin.installRef ?? ""}…`;
       if (plugin.action === "enable") return `正在启用插件 ${plugin.installRef ?? ""}…`;
       if (plugin.action === "disable") return `正在禁用插件 ${plugin.installRef ?? ""}…`;
+      if (plugin.action === "marketplace_add") {
+        return `正在添加插件市场…`;
+      }
+      if (plugin.action === "marketplace_update") return "正在刷新插件市场…";
+      if (plugin.action === "cli") {
+        return `正在执行 claude plugin ${plugin.cliArgs?.join(" ") ?? ""}…`;
+      }
       return "正在读取已安装插件…";
     }
     case "compact":

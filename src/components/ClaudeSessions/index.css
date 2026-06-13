@@ -3986,8 +3986,84 @@
 .app-system-message-md.app-markdown {
   font-size: 12px;
   line-height: 1.55;
-  padding: 4px 8px;
+  padding: 8px 12px;
   color: var(--ant-color-text-secondary);
+}
+
+.app-system-message-md.app-markdown h2 {
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--ant-color-text);
+  margin: 0 0 8px;
+}
+
+.app-system-message-md.app-markdown h3 {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--ant-color-text);
+  margin: 12px 0 6px;
+}
+
+.app-system-message-md.app-markdown ul {
+  margin: 4px 0 8px;
+  padding-left: 1.2em;
+}
+
+.app-system-message-md.app-markdown li {
+  margin: 2px 0;
+}
+
+.app-system-message-md.app-markdown hr {
+  border: none;
+  border-top: 1px solid var(--ant-color-border-secondary);
+  margin: 10px 0;
+}
+
+.app-system-message-md.app-markdown blockquote {
+  margin: 8px 0 0;
+  padding: 6px 10px;
+  border-left: 3px solid var(--ant-color-primary);
+  background: var(--ant-color-fill-tertiary);
+  color: var(--ant-color-text);
+}
+
+.app-system-message-md.app-markdown a {
+  color: var(--ant-color-link);
+  text-decoration: none;
+}
+
+.app-system-message-md.app-markdown a:hover {
+  color: var(--ant-color-link-hover);
+  text-decoration: underline;
+}
+
+.app-system-message-md.app-markdown h4 {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ant-color-text-tertiary);
+  margin: 10px 0 6px;
+  text-transform: none;
+  letter-spacing: 0.02em;
+}
+
+.app-system-message-md.app-markdown ol {
+  margin: 0 0 4px;
+  padding-left: 1.35em;
+}
+
+.app-system-message-md.app-markdown ol li {
+  margin: 4px 0;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-system-message-md.app-markdown ol li strong {
+  color: var(--ant-color-text);
+  font-weight: 600;
+}
+
+.app-system-message-md.app-markdown code {
+  font-size: 11px;
+  word-break: break-all;
 }
 
 .app-system-message-body--log {
@@ -5155,7 +5231,7 @@ button.app-message-part-header:disabled:hover {
 .app-markdown ul,
 .app-markdown ol {
   margin: 0 0 6px;
-  padding-left: 16px;
+  padding-left: 20px;
 }
 
 .app-markdown li {

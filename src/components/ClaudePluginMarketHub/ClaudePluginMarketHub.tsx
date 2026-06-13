@@ -1,7 +1,7 @@
 import { CloseOutlined, BlockOutlined, ReloadOutlined, SearchOutlined } from "@ant-design/icons";
 import { HoverHint } from "../shared/HoverHint";
 import { App, Badge, Button, Empty, Input, Segmented, Spin, Tabs, Tag, Typography } from "antd";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
   CLAUDE_PLUGIN_CATEGORY_LABELS,
   CLAUDE_PLUGIN_MARKET_CATALOG,
@@ -19,6 +19,11 @@ import {
 } from "../../services/claudePluginMarket";
 import { AuthorPanelPageShell } from "../AuthorPanel/AuthorPanelPageShell";
 import { ClaudeLspHelpIcon } from "./claudeLspUsageGuide";
+import {
+  consumeClaudePluginHubTab,
+  getClaudePluginHubNavSnapshot,
+  subscribeClaudePluginHubNav,
+} from "../../stores/claudePluginHubNavStore";
 import "./ClaudePluginMarketHub.css";
 
 interface Props {
@@ -42,6 +47,17 @@ export function ClaudePluginMarketHub({ onClose }: Props) {
   const installLockRef = useRef(false);
   const [installLocked, setInstallLocked] = useState(false);
   const [bootstrapHint, setBootstrapHint] = useState<string | null>(null);
+  const requestedHubTab = useSyncExternalStore(
+    subscribeClaudePluginHubNav,
+    getClaudePluginHubNavSnapshot,
+    getClaudePluginHubNavSnapshot,
+  );
+
+  useEffect(() => {
+    if (!requestedHubTab) return;
+    setActiveTab(requestedHubTab);
+    consumeClaudePluginHubTab();
+  }, [requestedHubTab]);
 
   const setBusy = useCallback((ref: string, busy: boolean) => {
     setBusyRefs((prev) => {

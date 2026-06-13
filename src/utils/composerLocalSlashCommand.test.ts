@@ -31,6 +31,40 @@ describe("parseComposerPluginSlashCommand", () => {
     });
   });
 
+  test("parses marketplace add and update", () => {
+    expect(parseComposerPluginSlashCommand("/plugin marketplace add Yeachan-Heo/oh-my-claudecode")).toEqual({
+      action: "marketplace_add",
+      scope: "user",
+      marketplaceSource: "Yeachan-Heo/oh-my-claudecode",
+    });
+    expect(
+      parseComposerPluginSlashCommand(
+        "/plugin marketplace add https://github.com/Yeachan-Heo/oh-my-claudecode",
+      ),
+    ).toEqual({
+      action: "marketplace_add",
+      scope: "user",
+      marketplaceSource: "https://github.com/Yeachan-Heo/oh-my-claudecode",
+    });
+    expect(parseComposerPluginSlashCommand("/plugin marketplace update")).toEqual({
+      action: "marketplace_update",
+      scope: "user",
+    });
+  });
+
+  test("falls back to generic cli passthrough", () => {
+    expect(parseComposerPluginSlashCommand("/plugin marketplace list")).toEqual({
+      action: "cli",
+      scope: "user",
+      cliArgs: ["marketplace", "list"],
+    });
+    expect(parseComposerPluginSlashCommand("/plugin search foo")).toEqual({
+      action: "cli",
+      scope: "user",
+      cliArgs: ["search", "foo"],
+    });
+  });
+
   test("parses uninstall and enable/disable", () => {
     expect(parseComposerPluginSlashCommand("/plugin uninstall oh-my-claudecode@omc")).toEqual({
       action: "uninstall",
@@ -60,10 +94,11 @@ describe("parseComposerLocalSlashCommand", () => {
     expect(parseComposerLocalSlashCommand("/plugin install oh-my-claudecode")?.kind).toBe("plugin");
   });
 
-  test("redirects unsupported plugin subcommands", () => {
+  test("parses marketplace add as local plugin command", () => {
     const cmd = parseComposerLocalSlashCommand("/plugin marketplace add foo");
-    expect(cmd?.kind).toBe("redirect");
-    expect(cmd?.redirectMessage).toContain("install");
+    expect(cmd?.kind).toBe("plugin");
+    expect(cmd?.plugin?.action).toBe("marketplace_add");
+    expect(cmd?.plugin?.marketplaceSource).toBe("foo");
   });
 
   test("parses compact context and clear", () => {
