@@ -681,7 +681,7 @@ function RepositoryRowInner({
             projectId={project.id}
             repositoryId={repository.id}
           />
-          <RepositorySddStackBadge repository={repository} />
+          <RepositorySddStackBadge repository={repository} trellisReady={trellisReady} />
           <SidebarMoreMenuDropdown
             items={moreItems}
             onMenuClick={({ key }) => {
@@ -947,7 +947,7 @@ function FloatingRepositoryRowInner({
             projectId={null}
             repositoryId={repository.id}
           />
-          <RepositorySddStackBadge repository={repository} />
+          <RepositorySddStackBadge repository={repository} trellisReady={trellisReady} />
           <SidebarMoreMenuDropdown
             items={moreItems}
             onMenuClick={({ key }) => {

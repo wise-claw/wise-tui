@@ -3124,8 +3124,18 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   width: 18px;
   height: 18px;
   line-height: 0;
-  color: var(--ant-color-text-quaternary);
-  pointer-events: none;
+  border-radius: 4px;
+  cursor: default;
+}
+
+.app-left-sidebar .app-repository-row-actions .app-repository-sdd-icon--wise {
+  color: var(--ant-color-primary);
+  background: color-mix(in srgb, var(--ant-color-primary-bg) 72%, transparent);
+}
+
+.app-left-sidebar .app-repository-row-actions .app-repository-sdd-icon--owned {
+  color: var(--ant-color-success);
+  background: color-mix(in srgb, var(--ant-color-success-bg) 72%, transparent);
 }
 
 .app-left-sidebar .app-repository-row-actions .app-repository-sdd-icon svg {
@@ -3299,13 +3309,13 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 }
 
 .app-left-sidebar .app-repository-item--project .app-repository-action--project-quick.app-repository-action--trellis {
-  color: var(--ant-color-text-tertiary);
-  background: transparent;
+  color: var(--ant-color-primary);
+  background: color-mix(in srgb, var(--ant-color-primary-bg) 72%, transparent);
 }
 
 .app-left-sidebar .app-repository-item--project .app-repository-action--project-quick.app-repository-action--trellis:hover {
-  color: var(--ant-color-text);
-  background: var(--ant-color-fill-content);
+  color: var(--ant-color-primary);
+  background: var(--ant-color-primary-bg);
 }
 
 /* 当前项目：VS Code扁平高亮与左侧边条 */
@@ -3626,13 +3636,13 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   width: 18px;
   min-width: 18px;
   max-width: 18px;
-  color: var(--ant-color-text-tertiary);
-  background: transparent;
+  color: var(--ant-color-primary);
+  background: color-mix(in srgb, var(--ant-color-primary-bg) 72%, transparent);
 }
 
 .app-repository-action--trellis:hover {
-  color: var(--ant-color-text);
-  background: var(--ant-color-fill-content);
+  color: var(--ant-color-primary);
+  background: var(--ant-color-primary-bg);
 }
 
 .app-repository-action--code-graph {

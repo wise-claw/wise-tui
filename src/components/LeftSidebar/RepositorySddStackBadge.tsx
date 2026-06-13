@@ -1,14 +1,28 @@
 import type { Repository } from "../../types";
-import { repositorySddStackBadgeMeta } from "../../utils/repositorySddStackBadge";
+import { resolveRepositorySddStackBadgeMeta } from "../../utils/repositorySddStackBadge";
+import { DeferredHoverTooltip } from "../shared/DeferredHoverTooltip";
 import { TrellisIcon } from "./SidebarIcons";
 
-export function RepositorySddStackBadge({ repository }: { repository: Pick<Repository, "sddMode"> }) {
-  const meta = repositorySddStackBadgeMeta(repository.sddMode);
+export function RepositorySddStackBadge({
+  repository,
+  trellisReady = false,
+}: {
+  repository: Pick<Repository, "sddMode">;
+  trellisReady?: boolean;
+}) {
+  const meta = resolveRepositorySddStackBadgeMeta(repository.sddMode, trellisReady);
   if (!meta) return null;
 
   return (
-    <span className="app-repository-sdd-icon" title={meta.title} aria-label={meta.title}>
-      <TrellisIcon />
-    </span>
+    <DeferredHoverTooltip title={meta.title}>
+      <span
+        className={`app-repository-sdd-icon app-repository-sdd-icon--${meta.variant}`}
+        title={meta.title}
+        aria-label={meta.title}
+        role="img"
+      >
+        <TrellisIcon />
+      </span>
+    </DeferredHoverTooltip>
   );
 }

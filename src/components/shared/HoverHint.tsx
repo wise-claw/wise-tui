@@ -77,6 +77,10 @@ function isSvgElement(type: unknown): boolean {
   return typeof type === "string" && type.toLowerCase() === "svg";
 }
 
+function isOpaqueReactComponent(type: unknown): boolean {
+  return typeof type === "function" || (typeof type === "object" && type !== null);
+}
+
 function wrapperHasTriggerHandlers(props: Record<string, unknown>): boolean {
   return TRIGGER_HANDLER_KEYS.some((key) => typeof props[key] === "function");
 }
@@ -159,7 +163,7 @@ function mergePassthroughThroughWrappers(
   }
 
   const inner = visibleChildren[0] as ReactElement;
-  if (isSvgElement(inner.type)) {
+  if (isSvgElement(inner.type) || isOpaqueReactComponent(inner.type)) {
     return mergePassthroughOntoChild(child, passthrough, mergedRef, title);
   }
   const mergedInner = mergePassthroughThroughWrappers(inner, passthrough, mergedRef, title);

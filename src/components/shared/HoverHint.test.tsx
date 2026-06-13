@@ -48,6 +48,22 @@ describe("HoverHint", () => {
     expect(html).not.toMatch(/<svg[^>]*title=/);
   });
 
+  test("keeps native title on span wrapper for opaque icon components", () => {
+    function IconStub() {
+      return <svg viewBox="0 0 16 16" aria-hidden="true" />;
+    }
+    const html = renderToStaticMarkup(
+      <HoverHint title="Trellis 已初始化">
+        <span className="app-repository-sdd-icon">
+          <IconStub />
+        </span>
+      </HoverHint>,
+    );
+    expect(html).toContain('class="app-repository-sdd-icon"');
+    expect(html).toContain('title="Trellis 已初始化"');
+    expect(html).not.toMatch(/<svg[^>]*title=/);
+  });
+
   test("deep-merges overlay props through passive span wrapper onto button", () => {
     const html = renderToStaticMarkup(
       <HoverHint title="拉取" className="ant-dropdown-trigger">

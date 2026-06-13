@@ -26,3 +26,25 @@ export function repositorySddStackBadgeMeta(
       return null;
   }
 }
+
+/** 侧栏仓库行：Trellis 已初始化时返回展示文案；优先使用显式 SDD 模式描述。 */
+export function resolveRepositorySddStackBadgeMeta(
+  sddMode: SddMode | undefined,
+  trellisReady: boolean,
+): RepositorySddStackBadgeMeta | null {
+  if (!trellisReady) return null;
+  return (
+    repositorySddStackBadgeMeta(sddMode) ?? {
+      title: "Trellis 已初始化",
+      variant: "wise",
+    }
+  );
+}
+
+/** 侧栏仓库行：Trellis 已初始化时才展示图标。 */
+export function shouldShowRepositorySddStackBadge(
+  sddMode: SddMode | undefined,
+  trellisReady: boolean,
+): boolean {
+  return resolveRepositorySddStackBadgeMeta(sddMode, trellisReady) !== null;
+}
