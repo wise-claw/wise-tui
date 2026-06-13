@@ -1,4 +1,4 @@
-use super::shared::{canonicalize_existing_project_dir, resolve_omc_plugin_root};
+use super::shared::canonicalize_existing_project_dir;
 use crate::subagents_parser::{parse_subagent_markdown, validate_claude_subagent_name};
 use serde::Serialize;
 use std::collections::{HashMap, HashSet};
@@ -60,109 +60,6 @@ fn project_claude_agents_dir(project_path: &str) -> Result<PathBuf, String> {
 
 fn user_claude_agents_dir() -> Result<PathBuf, String> {
     Ok(crate::claude_config_dir::user_claude_dir().join("agents"))
-}
-
-fn parse_skill_frontmatter_name_desc(raw: &str) -> Option<(String, String)> {
-    let normalized = raw.replace("\r\n", "\n");
-    let lines: Vec<&str> = normalized.lines().collect();
-    if lines.is_empty() || lines[0].trim() != "---" {
-        return None;
-    }
-    let mut end_idx: Option<usize> = None;
-    for (i, line) in lines.iter().enumerate().skip(1) {
-        if line.trim() == "---" {
-            end_idx = Some(i);
-            break;
-        }
-    }
-    let e = end_idx?;
-    let mut name: Option<String> = None;
-    let mut description: Option<String> = None;
-    for line in lines[1..e].iter() {
-        let t = line.trim();
-        if t.is_empty() || t.starts_with('#') {
-            continue;
-        }
-        let Some((k, v)) = t.split_once(':') else {
-            continue;
-        };
-        let key = k.trim();
-        let val = v.trim().trim_matches('"').trim_matches('\'').to_string();
-        match key {
-            "name" if !val.is_empty() => name = Some(val),
-            "description" if !val.is_empty() => description = Some(val),
-            _ => {}
-        }
-    }
-    let n = name?;
-    let d = description.unwrap_or_else(|| "OMC 协作模式".to_string());
-    Some((n, d))
-}
-
-fn list_omc_collaboration_mode_items(omc_root: &Path) -> Vec<ClaudeSubagentItem> {
-    let mode_names: HashSet<&str> = [
-        "team",
-        "omc-teams",
-        "ultrawork",
-        "ultraqa",
-        "autopilot",
-        "ralph",
-        "ralplan",
-    ]
-    .into_iter()
-    .collect();
-    let skills_dir = omc_root.join("skills");
-    if !skills_dir.is_dir() {
-        return Vec::new();
-    }
-    let Ok(entries) = fs::read_dir(skills_dir) else {
-        return Vec::new();
-    };
-    let mut out = Vec::new();
-    for entry in entries.flatten() {
-        let skill_dir = entry.path();
-        if !skill_dir.is_dir() {
-            continue;
-        }
-        let Some(skill_name) = skill_dir.file_name().and_then(|x| x.to_str()) else {
-            continue;
-        };
-        if !mode_names.contains(skill_name) {
-            continue;
-        }
-        let skill_md = skill_dir.join("SKILL.md");
-        if !skill_md.is_file() {
-            continue;
-        }
-        let Ok(raw) = fs::read_to_string(&skill_md) else {
-            continue;
-        };
-        let Some((name, description)) = parse_skill_frontmatter_name_desc(&raw) else {
-            continue;
-        };
-        let updated_at_ms = fs::metadata(&skill_md)
-            .ok()
-            .and_then(|m| m.modified().ok())
-            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-            .map(|d| d.as_millis() as u64);
-        out.push(ClaudeSubagentItem {
-            id: format!("plugin-mode:{}", name),
-            scope: "plugin".to_string(),
-            source_path: skill_md.to_string_lossy().to_string(),
-            name,
-            description,
-            model: None,
-            tools: Vec::new(),
-            disallowed_tools: Vec::new(),
-            permission_mode: None,
-            memory: None,
-            is_collaboration_mode: true,
-            is_active: true,
-            overridden_by_id: None,
-            updated_at_ms,
-        });
-    }
-    out
 }
 
 fn list_subagent_files_from_dir(scope: &str, dir: &Path) -> Vec<(String, PathBuf)> {
@@ -243,12 +140,6 @@ pub(crate) fn list_claude_subagents(
         "user",
         &user_claude_agents_dir()?,
     ));
-    if let Some(omc_root) = resolve_omc_plugin_root() {
-        candidates.extend(list_subagent_files_from_dir(
-            "plugin",
-            &omc_root.join("agents"),
-        ));
-    }
     if let Some(project_root) = canonicalize_existing_project_dir(project_path.as_deref()) {
         let project_agents_dir = project_root.join(".claude").join("agents");
         candidates.extend(list_subagent_files_from_dir("project", &project_agents_dir));
@@ -328,15 +219,6 @@ pub(crate) fn list_claude_subagents(
             .cmp(&b.name.to_lowercase())
             .then(a.scope.cmp(&b.scope))
     });
-    if let Some(omc_root) = resolve_omc_plugin_root() {
-        out.extend(list_omc_collaboration_mode_items(&omc_root));
-        out.sort_by(|a, b| {
-            a.name
-                .to_lowercase()
-                .cmp(&b.name.to_lowercase())
-                .then(a.scope.cmp(&b.scope))
-        });
-    }
     Ok(out)
 }
 

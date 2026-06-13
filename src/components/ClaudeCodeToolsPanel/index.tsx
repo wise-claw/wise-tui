@@ -21,18 +21,14 @@ import { OPEN_WORKSPACE_ERROR } from "../../services/openWorkspaceWithPreference
 import {
   getClaudeHooksStatus,
   getClaudeMcpStatus,
-  isOmcPluginInstalled,
-  listClaudePluginCacheSkills,
   listClaudeProjectSkills,
   listClaudeSubagents,
   listClaudeUserSkills,
 } from "../../services/claude";
 import { claudePluginListInstalled } from "../../services/claudePluginMarket";
-import { useOmcPluginInstalled } from "../../hooks/useOmcPluginInstalled";
 import {
   countHooksInScope,
   filterOmcFromMcpStatus,
-  isOmcPluginCacheSkill,
   isOmcSubagentItem,
 } from "../../utils/omcPluginDetect";
 import { claudeCodeToolsTabToAuthorPane } from "../../utils/claudeCodeToolsAuthorPane";
@@ -96,7 +92,6 @@ export function ClaudeCodeToolsPanel({
   const hooksPanelRef = useRef<ClaudeHooksConfigPanelHandle>(null);
   const subagentsPanelRef = useRef<SubagentsPanelHandle>(null);
   const pluginsPanelRef = useRef<ClaudePluginsPanelHandle>(null);
-  const { omcInstalled } = useOmcPluginInstalled(true);
 
   const handleSubagentsCountChange = useCallback((count: number) => {
     setTabCounts((prev) => (prev.subagents === count ? prev : { ...prev, subagents: count }));
@@ -122,23 +117,20 @@ export function ClaudeCodeToolsPanel({
     if (!panelActive) return;
     let cancelled = false;
     async function preloadTabCounts() {
-      const [omcRes, mcpRes, hooksRes, subagentsRes, skillsRes, userSkillsRes, cacheSkillsRes, pluginsRes] =
+      const [mcpRes, hooksRes, subagentsRes, skillsRes, userSkillsRes, pluginsRes] =
         await Promise.allSettled([
-        isOmcPluginInstalled(),
         getClaudeMcpStatus(repositoryPath ?? null),
         getClaudeHooksStatus(repositoryPath ?? null),
         listClaudeSubagents(repositoryPath ?? null),
         repositoryPath ? listClaudeProjectSkills(repositoryPath) : Promise.resolve([]),
         listClaudeUserSkills(),
-        listClaudePluginCacheSkills(),
         claudePluginListInstalled(repositoryPath),
       ]);
       if (cancelled) return;
-      const showOmc = omcRes.status === "fulfilled" && omcRes.value;
       setTabCounts((prev) => {
         const next = { ...prev };
         if (mcpRes.status === "fulfilled") {
-          const mcp = showOmc ? mcpRes.value : filterOmcFromMcpStatus(mcpRes.value);
+          const mcp = filterOmcFromMcpStatus(mcpRes.value);
           next.mcp =
             mcp.user.length +
             mcp.local.length +
@@ -151,26 +143,17 @@ export function ClaudeCodeToolsPanel({
           next.hooks =
             countHooksInScope(hooksRes.value.user.hooks) +
             countHooksInScope(hooksRes.value.project.hooks) +
-            countHooksInScope(hooksRes.value.local.hooks) +
-            (showOmc ? countHooksInScope(hooksRes.value.omc.hooks) : 0);
+            countHooksInScope(hooksRes.value.local.hooks);
         }
         if (subagentsRes.status === "fulfilled") {
-          next.subagents = showOmc
-            ? subagentsRes.value.length
-            : subagentsRes.value.filter((item) => !isOmcSubagentItem(item)).length;
+          next.subagents = subagentsRes.value.filter((item) => !isOmcSubagentItem(item)).length;
         }
-        if (
-          skillsRes.status === "fulfilled" ||
-          userSkillsRes.status === "fulfilled" ||
-          cacheSkillsRes.status === "fulfilled"
-        ) {
+        if (skillsRes.status === "fulfilled" || userSkillsRes.status === "fulfilled") {
           const projectList = skillsRes.status === "fulfilled" ? skillsRes.value : [];
           const userList = userSkillsRes.status === "fulfilled" ? userSkillsRes.value : [];
           const seen = new Set(projectList.map((s) => s.name.toLowerCase()));
           const userOnly = userList.filter((s) => !seen.has(s.name.toLowerCase()));
-          const cacheList = cacheSkillsRes.status === "fulfilled" ? cacheSkillsRes.value : [];
-          const nCache = showOmc ? cacheList.length : cacheList.filter((s) => !isOmcPluginCacheSkill(s)).length;
-          next.skill = projectList.length + userOnly.length + nCache;
+          next.skill = projectList.length + userOnly.length;
         }
         if (pluginsRes.status === "fulfilled") {
           next.plugins = pluginsRes.value.length;
@@ -182,7 +165,7 @@ export function ClaudeCodeToolsPanel({
     return () => {
       cancelled = true;
     };
-  }, [repositoryPath, omcInstalled, panelActive]);
+  }, [repositoryPath, panelActive]);
 
   function withCountLabel(label: string, count: number): string {
     return `${label}·${count}`;
@@ -506,7 +489,6 @@ export function ClaudeCodeToolsPanel({
                     <SubagentsPanel
                       repositoryPath={repositoryPath}
                       active={panelActive && tab === "subagents"}
-                      omcInstalled={omcInstalled ?? false}
                       listSearch={listSearch}
                       onCountChange={handleSubagentsCountChange}
                       onBindActions={(actions) => {
@@ -528,7 +510,6 @@ export function ClaudeCodeToolsPanel({
                     <ProjectSkillsPanel
                       repositoryPath={repositoryPath}
                       active={panelActive && tab === "skill"}
-                      omcInstalled={omcInstalled ?? false}
                       listSearch={listSearch}
                       onCountChange={handleSkillsCountChange}
                       onBindActions={(actions) => {
@@ -551,7 +532,6 @@ export function ClaudeCodeToolsPanel({
                       ref={mcpPanelRef}
                       repositoryPath={repositoryPath}
                       active={panelActive && tab === "mcp"}
-                      omcInstalled={omcInstalled ?? false}
                       hideToolbar
                       listSearch={listSearch}
                       onCountChange={handleMcpCountChange}
@@ -570,7 +550,6 @@ export function ClaudeCodeToolsPanel({
                   <ClaudeHooksConfigPanel
                     repositoryPath={repositoryPath}
                     active={panelActive && tab === "hooks"}
-                    omcInstalled={omcInstalled ?? false}
                     listSearch={listSearch}
                     onCountChange={handleHooksCountChange}
                     onBindActions={(actions) => {

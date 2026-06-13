@@ -38,8 +38,6 @@ import { isOmcSubagentItem } from "../../utils/omcPluginDetect";
 interface Props {
   repositoryPath?: string;
   active: boolean;
-  /** 与 Rust `resolve_omc_plugin_root` 一致：未安装时不展示 OMC 子代理/协作模式。 */
-  omcInstalled?: boolean;
   /** 与右栏工具条搜索联动，仅影响列表展示。 */
   listSearch?: string;
   onBindActions?: (actions: SubagentsPanelHandle | null) => void;
@@ -91,7 +89,6 @@ const BUILTIN_SUBAGENT_TOOL_OPTIONS = [
 export function SubagentsPanel({
   repositoryPath,
   active,
-  omcInstalled = false,
   listSearch = "",
   onBindActions,
   onCountChange,
@@ -159,14 +156,14 @@ export function SubagentsPanel({
     }
   }, [repositoryPath]);
   const visibleSorted = useMemo(() => {
-    const visible = omcInstalled ? list : list.filter((item) => !isOmcSubagentItem(item));
+    const visible = list.filter((item) => !isOmcSubagentItem(item));
     return [...visible].sort((a, b) => {
       if (a.isCollaborationMode !== b.isCollaborationMode) {
         return a.isCollaborationMode ? -1 : 1;
       }
       return a.name.localeCompare(b.name);
     });
-  }, [omcInstalled, list]);
+  }, [list]);
 
   const displayList = useMemo(() => {
     if (!listSearch.trim()) return visibleSorted;

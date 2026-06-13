@@ -484,7 +484,7 @@ pub(crate) fn list_claude_user_skills() -> Result<Vec<ClaudeProjectSkill>, Strin
     list_claude_skills_under_dir(&skills_dir, Some("user"))
 }
 
-/// Wise 不从 `~/.claude/plugins/**` 枚举插件包内 skills/；请使用 `list_claude_user_skills` / `list_claude_project_skills`。
+/// Wise 不从 `~/.claude/plugins/cache/**` 枚举插件包内 skills/；请使用 `list_claude_user_skills` / `list_claude_project_skills`。
 #[tauri::command]
 pub(crate) fn list_claude_plugin_cache_skills() -> Result<Vec<ClaudeProjectSkill>, String> {
     Ok(Vec::new())

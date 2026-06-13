@@ -951,8 +951,11 @@ pub(crate) fn get_claude_hooks_status(
     let local_path_file = project_root
         .as_ref()
         .map(|p| p.join(".claude").join("settings.local.json"));
-    let omc_hooks_file =
-        resolve_omc_plugin_root().map(|root| root.join("hooks").join("hooks.json"));
+    let empty_omc_scope = ClaudeHookScopeData {
+        source_path: String::new(),
+        disable_all_hooks: false,
+        hooks: HashMap::new(),
+    };
 
     let project = project_root.as_ref().map(|root| {
         let settings = root.join(".claude").join("settings.json");
@@ -971,9 +974,7 @@ pub(crate) fn get_claude_hooks_status(
         local: build_hook_scope_data(
             &local_path_file.unwrap_or_else(|| PathBuf::from("<请选择项目后可查看 local hooks>")),
         ),
-        omc: build_hook_scope_data(
-            &omc_hooks_file.unwrap_or_else(|| PathBuf::from("<未发现 OMC 插件 hooks.json>")),
-        ),
+        omc: empty_omc_scope,
     })
 }
 

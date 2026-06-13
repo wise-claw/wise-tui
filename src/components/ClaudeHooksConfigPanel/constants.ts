@@ -14,9 +14,7 @@ export const EMPTY_DATA: ClaudeHooksStatusResponse = {
 };
 
 export const HOOKS_FLOW_THEME_STORAGE_KEY = "wise.ui.hooks.flow-theme.v1";
-export const HIDE_OMC_HOOKS_STORAGE_KEY = "wise.ui.hooks.hide-omc.v1";
 export const LEGACY_APP_SETTING_KEY_HOOKS_FLOW_THEME = "wise-hooks-flow-theme";
-export const LEGACY_APP_SETTING_KEY_HIDE_OMC_HOOKS = "wise-hide-omc-hooks";
 
 export const SUPPORTED_HOOK_EVENTS = [
   "SessionStart",

@@ -7,7 +7,7 @@ import { handlerSummary, resolveHookHandlerTargetPath } from "./helpers";
 import { HelpIcon } from "./HelpIcon";
 
 export interface HookScopeSectionProps {
-  scope: ClaudeHookSourceScope | "omc";
+  scope: ClaudeHookSourceScope;
   title: string;
   data: ClaudeHookScopeData;
   onCreate: (scope: ClaudeHookSourceScope, eventName: string, groupId: string) => void;

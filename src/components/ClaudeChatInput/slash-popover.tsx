@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Spin } from "antd";
-import { listClaudePluginCacheSkills, listClaudeProjectSkills } from "../../services/claude";
+import { listClaudeProjectSkills } from "../../services/claude";
 import { searchRepositoryFiles } from "../../services/repositoryFiles";
 import type { ClaudeProjectSkill } from "../../types";
 import type { RepositoryMentionOption } from "../../utils/projectRoleTagOptions";
@@ -136,11 +136,8 @@ function skillIsInvocableAsSlashCommand(skill: ClaudeProjectSkill): boolean {
   return (skill.fileCount ?? 0) > 0;
 }
 
-/** 项目技能优先于插件缓存同名项；与内置 / 指令去重（按 label 不区分大小写） */
-function buildSkillSlashOptionsFromLists(
-  project: ClaudeProjectSkill[],
-  cache: ClaudeProjectSkill[],
-): SlashOption[] {
+/** 项目技能；与内置 / 指令去重（按 label 不区分大小写） */
+function buildSkillSlashOptionsFromList(project: ClaudeProjectSkill[]): SlashOption[] {
   const reserved = new Set(BUILTIN_COMMANDS.map((c) => c.label.trim().toLowerCase()));
   const byKey = new Map<string, SlashOption>();
 
@@ -161,9 +158,6 @@ function buildSkillSlashOptionsFromLists(
 
   for (const s of project) {
     push(s, "项目技能");
-  }
-  for (const s of cache) {
-    push(s, "插件缓存技能");
   }
 
   return Array.from(byKey.values()).sort((a, b) =>
@@ -253,12 +247,9 @@ export function SlashPopover({
     let cancelled = false;
     void (async () => {
       try {
-        const [proj, cache] = await Promise.all([
-          listClaudeProjectSkills(repositoryPath.trim()),
-          listClaudePluginCacheSkills(),
-        ]);
+        const proj = await listClaudeProjectSkills(repositoryPath.trim());
         if (cancelled) return;
-        setSkillSlashOptions(buildSkillSlashOptionsFromLists(proj, cache));
+        setSkillSlashOptions(buildSkillSlashOptionsFromList(proj));
       } catch {
         if (!cancelled) setSkillSlashOptions([]);
       }

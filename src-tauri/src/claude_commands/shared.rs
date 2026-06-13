@@ -17,17 +17,17 @@ pub(crate) fn resolve_omc_plugin_root() -> Option<PathBuf> {
     if !base.is_dir() {
         return None;
     }
-    let preferred = base.join("4.13.2");
-    if preferred.is_dir() {
-        return Some(preferred);
-    }
     let mut versions: Vec<PathBuf> = fs::read_dir(&base)
         .ok()?
         .flatten()
         .map(|e| e.path())
         .filter(|p| p.is_dir())
         .collect();
-    versions.sort();
+    versions.sort_by(|a, b| {
+        let av = a.file_name().and_then(|s| s.to_str()).unwrap_or("");
+        let bv = b.file_name().and_then(|s| s.to_str()).unwrap_or("");
+        av.cmp(bv)
+    });
     versions.pop()
 }
 

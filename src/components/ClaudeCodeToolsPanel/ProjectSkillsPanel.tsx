@@ -32,7 +32,6 @@ import {
   deleteClaudeProjectSkillFile,
   getClaudeProjectSkillFile,
   listClaudeProjectSkillFiles,
-  listClaudePluginCacheSkills,
   listClaudeProjectSkills,
   listClaudeUserSkills,
   saveClaudeProjectSkillFile,
@@ -45,7 +44,6 @@ import {
   isClaudeProjectCommand,
   resolveClaudeProjectSkillDisplayPath,
 } from "../../utils/claudeProjectSkillPath";
-import { isOmcPluginCacheSkill } from "../../utils/omcPluginDetect";
 import { installMonacoTrackpadSelectionGuard } from "../../utils/monacoTrackpadSelectionGuard";
 import { WISE_MONACO_EDITOR_OPTIONS } from "../../utils/wiseMonacoEditorOptions";
 
@@ -110,14 +108,6 @@ function isUserScopeSkill(skill: ClaudeProjectSkill): boolean {
   return skill.skillScope === "user";
 }
 
-function pluginCacheSkillDirectoryAbsPath(skill: ClaudeProjectSkill): string | null {
-  const root = skill.pluginCacheRoot?.trim();
-  if (!root) return null;
-  const base = root.replace(/[/\\]$/, "");
-  const sep = base.includes("\\") ? "\\" : "/";
-  return `${base}${sep}skills${sep}${skill.name}`;
-}
-
 function resolvePreferredEditorTarget() {
   const selectedId = getOpenAppPreferenceSync() || DEFAULT_OPEN_APP_ID;
   const selected = DEFAULT_OPEN_APP_TARGETS.find((t) => t.id === selectedId);
@@ -136,9 +126,6 @@ function skillMatchesListSearch(
   const parts = [
     skill.name,
     skill.description ?? "",
-    skill.pluginCacheRelPath ?? "",
-    pluginCacheSkillDirectoryAbsPath(skill) ?? "",
-    skill.pluginCacheRoot ?? "",
     skill.skillRootPath ?? "",
     skill.commandRelPath ?? "",
     skill.entryKind ?? "",
@@ -172,8 +159,6 @@ interface Props {
   repositoryPath?: string;
   /** When false, skips loading (hidden tab). */
   active: boolean;
-  /** 未安装 OMC 时不展示插件缓存中的 OMC 技能目录。 */
-  omcInstalled?: boolean;
   /** 与右栏工具条搜索联动，仅影响列表展示。 */
   listSearch?: string;
   onBindActions?: (actions: ProjectSkillsPanelHandle | null) => void;
@@ -275,11 +260,6 @@ const ProjectSkillCard = memo(function ProjectSkillCard({
   );
 });
 
-interface CacheSkillCardProps {
-  skill: ClaudeProjectSkill;
-  onOpenPluginFolder: (skill: ClaudeProjectSkill) => void | Promise<void>;
-}
-
 interface UserSkillCardProps {
   skill: ClaudeProjectSkill;
   onOpenFolder: (skill: ClaudeProjectSkill) => void | Promise<void>;
@@ -308,45 +288,6 @@ const UserSkillCard = memo(function UserSkillCard({ skill, onOpenFolder }: UserS
               aria-label="打开目录"
               onClick={() => {
                 void onOpenFolder(skill);
-              }}
-            />
-          </div>
-        </div>
-      </div>
-      <div className="app-repository-skills-desc">
-        <div className="app-repository-skills-card-desc-main">{skill.description?.trim() || "—"}</div>
-        <Typography.Text className="app-repository-skills-card-path-line">{pathLine}</Typography.Text>
-      </div>
-    </div>
-  );
-});
-
-const CacheSkillCard = memo(function CacheSkillCard({ skill, onOpenPluginFolder }: CacheSkillCardProps) {
-  const pathLine = useMemo(
-    () => pluginCacheSkillDirectoryAbsPath(skill) ?? skill.pluginCacheRelPath ?? "",
-    [skill],
-  );
-  return (
-    <div className="app-repository-skills-card">
-      <div className="app-repository-skills-card-head">
-        <span className="app-repository-skills-name">
-          {skill.name}
-          <Tag color="gold" style={{ marginLeft: 6 }}>
-            插件缓存
-          </Tag>
-        </span>
-        <div className="app-repository-skills-card-meta">
-          <span className="app-repository-skills-filecount">{skill.fileCount ?? 0} 个文件</span>
-          <div className="app-repository-skills-card-actions">
-            <Button
-              type="text"
-              size="small"
-              className="app-repository-skills-card-icon-btn"
-              icon={<FolderOpenOutlined />}
-              title="在编辑器中打开该技能目录"
-              aria-label="打开目录"
-              onClick={() => {
-                void onOpenPluginFolder(skill);
               }}
             />
           </div>
@@ -395,14 +336,12 @@ const hasScopePath = (p: string | undefined): p is string => !!p?.trim();
 export function ProjectSkillsPanel({
   repositoryPath,
   active,
-  omcInstalled = false,
   listSearch = "",
   onBindActions,
   onCountChange,
 }: Props) {
   const scopePathAvailable = hasScopePath(repositoryPath);
   const [skills, setSkills] = useState<ClaudeProjectSkill[]>([]);
-  const [cacheSkills, setCacheSkills] = useState<ClaudeProjectSkill[]>([]);
   const [loading, setLoading] = useState(false);
   const [createOpen, setCreateOpen] = useState(false);
   const [newName, setNewName] = useState("");
@@ -434,13 +373,11 @@ export function ProjectSkillsPanel({
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [list, userList, cacheList] = await Promise.all([
+      const [list, userList] = await Promise.all([
         scopePathAvailable ? listClaudeProjectSkills(repositoryPath) : Promise.resolve([]),
         listClaudeUserSkills(),
-        listClaudePluginCacheSkills(),
       ]);
       setSkills(mergeProjectAndUserSkills(list, userList));
-      setCacheSkills(cacheList);
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
     } finally {
@@ -482,14 +419,9 @@ export function ProjectSkillsPanel({
     void load();
   }, [active, repositoryPath, load]);
 
-  const visibleCacheSkillsBase = useMemo(
-    () => (omcInstalled ? cacheSkills : cacheSkills.filter((s) => !isOmcPluginCacheSkill(s))),
-    [cacheSkills, omcInstalled],
-  );
-
   useEffect(() => {
-    onCountChange?.(skills.length + visibleCacheSkillsBase.length);
-  }, [onCountChange, skills.length, visibleCacheSkillsBase.length]);
+    onCountChange?.(skills.length);
+  }, [onCountChange, skills.length]);
 
   const listSearchNeedle = useMemo(() => listSearch.trim().toLowerCase(), [listSearch]);
 
@@ -505,13 +437,8 @@ export function ProjectSkillsPanel({
     return base.filter((s) => skillMatchesListSearch(s, listSearchNeedle, repositoryPath));
   }, [skills, listSearchNeedle, repositoryPath]);
 
-  const visibleCacheSkills = useMemo(() => {
-    if (!listSearchNeedle) return visibleCacheSkillsBase;
-    return visibleCacheSkillsBase.filter((s) => skillMatchesListSearch(s, listSearchNeedle));
-  }, [visibleCacheSkillsBase, listSearchNeedle]);
-
   const hasFilteredSkills =
-    visibleProjectSkills.length > 0 || visibleUserSkills.length > 0 || visibleCacheSkills.length > 0;
+    visibleProjectSkills.length > 0 || visibleUserSkills.length > 0;
 
   const loadSkillFileList = useCallback(
     async (skillName: string): Promise<ClaudeProjectSkillFileEntry[]> => {
@@ -579,28 +506,6 @@ export function ProjectSkillsPanel({
     const p = skill.skillRootPath?.trim();
     if (!p) {
       message.warning("未记录技能目录路径");
-      return;
-    }
-    const target = resolvePreferredEditorTarget();
-    if (!target) {
-      message.warning("未找到可用编辑器，请先在“打开方式”中配置");
-      return;
-    }
-    try {
-      if (target.kind === "command") {
-        await openWorkspaceIn(p, { command: target.command, args: target.args });
-      } else {
-        await openWorkspaceIn(p, { appName: target.appName, args: target.args });
-      }
-    } catch {
-      message.warning("无法在编辑器中打开该路径");
-    }
-  }, []);
-
-  const openPluginCacheSkillFolder = useCallback(async (skill: ClaudeProjectSkill) => {
-    const p = pluginCacheSkillDirectoryAbsPath(skill);
-    if (!p) {
-      message.warning("未记录插件根路径");
       return;
     }
     const target = resolvePreferredEditorTarget();
@@ -929,16 +834,16 @@ export function ProjectSkillsPanel({
   return (
     <div className="app-repository-skills">
       <div className="app-repository-skills-table-wrap">
-        {loading && skills.length === 0 && cacheSkills.length === 0 ? (
+        {loading && skills.length === 0 ? (
           <div className="app-repository-skills-loading">
             <Spin size="small" />
           </div>
-        ) : skills.length === 0 && cacheSkills.length === 0 ? (
+        ) : skills.length === 0 ? (
           <Empty
             description={
               scopePathAvailable
                 ? "暂无技能，点击「新建」添加"
-                : "暂无用户级或插件缓存技能；选择工作区/仓库或配置工作区根目录后可管理项目级技能"
+                : "暂无用户级技能；选择工作区/仓库或配置工作区根目录后可管理项目级技能"
             }
             image={Empty.PRESENTED_IMAGE_SIMPLE}
           />
@@ -961,13 +866,6 @@ export function ProjectSkillsPanel({
                 key={`user:${skill.name}`}
                 skill={skill}
                 onOpenFolder={openUserSkillFolder}
-              />
-            ))}
-            {visibleCacheSkills.map((skill) => (
-              <CacheSkillCard
-                key={`cache:${skill.pluginCacheRelPath ?? ""}:${skill.name}`}
-                skill={skill}
-                onOpenPluginFolder={openPluginCacheSkillFolder}
               />
             ))}
           </div>
