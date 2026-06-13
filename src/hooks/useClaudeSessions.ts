@@ -127,6 +127,7 @@ import {
 import { getWorkflowFacade } from "../services/workflow";
 import {
   appendSystemMessageBySessionId,
+  applyClaudeExecuteFailureNotice,
   appendUserMessageBySessionOrClaudeId,
   reconcileSessionStatusesWithRunningRegistry,
   retractLastClaudeTurnFromSession,
@@ -2245,12 +2246,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
                 } catch (err) {
                   pendingTurnFailoverRef.current = null;
                   commitSessions((prev) =>
-                    appendSystemMessageBySessionId(
-                      prev.map((s) =>
-                        s.id === tabSessionId ? { ...s, status: "error" as const } : s,
-                      ),
+                    applyClaudeExecuteFailureNotice(
+                      prev,
                       tabSessionId,
-                      `发送失败: ${err instanceof Error ? err.message : String(err)}`,
+                      err,
+                      { hasClaudeSessionId: true },
                     ),
                   );
                 }
@@ -2265,12 +2265,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
               } catch (err) {
                 pendingTurnFailoverRef.current = null;
                 commitSessions((prev) =>
-                  appendSystemMessageBySessionId(
-                    prev.map((s) =>
-                      s.id === tabSessionId ? { ...s, status: "error" as const } : s,
-                    ),
+                  applyClaudeExecuteFailureNotice(
+                    prev,
                     tabSessionId,
-                    `发送失败: ${err instanceof Error ? err.message : String(err)}`,
+                    err,
+                    { hasClaudeSessionId: true },
                   ),
                 );
               }
@@ -2979,6 +2978,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         : opts?.cursorAttachments && opts.cursorAttachments.length > 0
           ? buildCursorUserBubblePrompt(prompt, opts.cursorAttachments)
           : prompt;
+      const defaultInstructionApplied = opts?.defaultInstructionApplied?.trim() || undefined;
       const spawnSession =
         sessionsRef.current.find((s) => s.id === tabSessionId) ?? liveSession;
       const checker = claudeSessionsOptionsRef.current?.beforeSpawnClaudeRef?.current;
@@ -2999,20 +2999,37 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
             tabSessionId,
             opts.replaceUserBubbleAtIndex,
             bubblePrompt,
+            defaultInstructionApplied,
           );
         }
         if (opts?.replaceLastUserBubble) {
-          return setSessionRunningReplacingLastUserBubble(prev, tabSessionId, bubblePrompt);
+          return setSessionRunningReplacingLastUserBubble(
+            prev,
+            tabSessionId,
+            bubblePrompt,
+            defaultInstructionApplied,
+          );
         }
         if (opts?.replaceFirstUserBubble) {
-          return setSessionRunningReplacingFirstUserBubble(prev, tabSessionId, bubblePrompt);
+          return setSessionRunningReplacingFirstUserBubble(
+            prev,
+            tabSessionId,
+            bubblePrompt,
+            defaultInstructionApplied,
+          );
         }
         if (forceFreshClaudeSession) {
           return beginSessionTurnWithUserPrompt(prev, tabSessionId, bubblePrompt, {
             forceFreshClaudeSession: true,
+            defaultInstructionApplied,
           });
         }
-        return setSessionRunningWithUserPrompt(prev, tabSessionId, bubblePrompt);
+        return setSessionRunningWithUserPrompt(
+          prev,
+          tabSessionId,
+          bubblePrompt,
+          defaultInstructionApplied,
+        );
       });
       // 首轮已启动但尚未收到 stream-json 的 session_id 时，避免再 spawn 第二个进程。
       // 用户气泡须在上面的 commit 中先落盘，否则 bootstrap 等待会直接 return 导致「发送了但不见」。
@@ -3155,11 +3172,9 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
             registryBootstrapDeadlineByClaudeSidRef.current.delete(claudeSid.trim());
           }
           commitSessions((prev) =>
-            appendSystemMessageBySessionId(
-              prev.map((s) => (s.id === tabSessionId ? { ...s, status: "error" as const } : s)),
-              tabSessionId,
-              claudeSid ? `发送失败: ${err}` : `启动失败: ${err}`,
-            ),
+            applyClaudeExecuteFailureNotice(prev, tabSessionId, err, {
+              hasClaudeSessionId: Boolean(claudeSid),
+            }),
           );
         }
       })();
@@ -3362,11 +3377,13 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       outboundPrompt: string,
       bubbleOpts?: {
         userBubblePrompt?: string;
+        defaultInstructionApplied?: string;
       },
     ): boolean =>
       executeSession(sessionId, outboundPrompt, {
         terminalFreshTurn: true,
         userBubblePrompt: bubbleOpts?.userBubblePrompt,
+        defaultInstructionApplied: bubbleOpts?.defaultInstructionApplied,
       }),
     [executeSession],
   );
@@ -3619,11 +3636,9 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
             registryBootstrapDeadlineByClaudeSidRef.current.delete(claudeSessionId.trim());
           }
           setSessions((prev) =>
-            appendSystemMessageBySessionId(
-              prev.map((s) => (s.id === sessionId ? { ...s, status: "error" as const } : s)),
-              sessionId,
-              claudeSessionId ? `发送失败: ${err}` : `启动失败: ${err}`,
-            ),
+            applyClaudeExecuteFailureNotice(prev, sessionId, err, {
+              hasClaudeSessionId: Boolean(claudeSessionId),
+            }),
           );
           throw err;
         }

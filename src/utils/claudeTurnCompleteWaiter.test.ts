@@ -1,5 +1,10 @@
 import { describe, expect, test } from "bun:test";
-import { createClaudeTurnCompleteWaiter } from "./claudeTurnCompleteWaiter";
+import {
+  CLAUDE_TURN_WAIT_CANCELLED_MESSAGE,
+  CLAUDE_TURN_WAIT_TIMEOUT_MESSAGE,
+  createClaudeTurnCompleteWaiter,
+  isClaudeTurnWaitControlError,
+} from "./claudeTurnCompleteWaiter";
 
 describe("createClaudeTurnCompleteWaiter", () => {
   test("resolves wait when matching tab and nonce complete", async () => {
@@ -21,6 +26,12 @@ describe("createClaudeTurnCompleteWaiter", () => {
     const waiter = createClaudeTurnCompleteWaiter();
     const promise = waiter.wait("tab-1", 1);
     waiter.clear("tab-1");
-    await expect(promise).rejects.toThrow("Claude 回合等待已取消");
+    await expect(promise).rejects.toThrow(CLAUDE_TURN_WAIT_CANCELLED_MESSAGE);
+  });
+
+  test("isClaudeTurnWaitControlError recognizes internal wait errors", () => {
+    expect(isClaudeTurnWaitControlError(new Error(CLAUDE_TURN_WAIT_TIMEOUT_MESSAGE))).toBe(true);
+    expect(isClaudeTurnWaitControlError(new Error(CLAUDE_TURN_WAIT_CANCELLED_MESSAGE))).toBe(true);
+    expect(isClaudeTurnWaitControlError(new Error("API rate limit"))).toBe(false);
   });
 });

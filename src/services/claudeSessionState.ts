@@ -3,6 +3,7 @@ import { assistantMessagePostToolTextParts } from "../utils/assistantOrphanMarkd
 import { isToolOnlyUserMessage, systemMessagePlainText, userMessagePlainTextForDisplay } from "../utils/claudeChatMessageDisplay";
 import { sessionHadRecentClaudeTurnFailureNotice } from "../utils/claudeSessionTurnFailure";
 import { CLAUDE_NO_VISIBLE_REPLY_FAILURE_HINT } from "../utils/claudeTurnCompleteGate";
+import { isClaudeTurnWaitControlError } from "../utils/claudeTurnCompleteWaiter";
 import { isMainSessionContextSeedMessage } from "./terminalDispatchContext";
 
 /** 单条助手气泡：取 `parts` 中**最后一条** `type === "text"` 的可见内容；若无则退回 `content`。 */
@@ -109,13 +110,16 @@ function createSystemTextMessage(text: string) {
   };
 }
 
-function createUserTextMessage(text: string) {
+function createUserTextMessage(text: string, defaultInstructionApplied?: string) {
   return {
     id: Date.now(),
     role: "user" as const,
     content: text,
     parts: [{ type: "text" as const, text }],
     timestamp: Date.now(),
+    ...(defaultInstructionApplied?.trim()
+      ? { defaultInstructionApplied: defaultInstructionApplied.trim() }
+      : {}),
   };
 }
 
@@ -202,21 +206,31 @@ export function setSessionRunningWithUserPrompt(
   sessions: ClaudeSession[],
   sessionId: string,
   prompt: string,
+  defaultInstructionApplied?: string,
 ): ClaudeSession[] {
   const trimmed = prompt.trim();
   if (!trimmed) return sessions;
+  const applied = defaultInstructionApplied?.trim() || undefined;
   return sessions.map((session) => {
     if (!sessionMatchesCrossTabTargetId(sessions, session, sessionId)) return session;
     const last = session.messages[session.messages.length - 1];
     if (last?.role === "user" && !isToolOnlyUserMessage(last)) {
       if (userMessagePlainTextForDisplay(last).trim() === trimmed) {
-        return { ...session, status: "running" as const };
+        return applied
+          ? {
+              ...session,
+              status: "running" as const,
+              messages: session.messages.map((message, index, all) =>
+                index === all.length - 1 ? { ...message, defaultInstructionApplied: applied } : message,
+              ),
+            }
+          : { ...session, status: "running" as const };
       }
     }
     return {
       ...session,
       status: "running",
-      messages: [...session.messages, createUserTextMessage(trimmed)],
+      messages: [...session.messages, createUserTextMessage(trimmed, applied)],
     };
   });
 }
@@ -235,8 +249,10 @@ export function beginSessionTurnWithUserPrompt(
   opts?: {
     forceFreshClaudeSession?: boolean;
     prependMessages?: ClaudeMessage[];
+    defaultInstructionApplied?: string;
   },
 ): ClaudeSession[] {
+  const applied = opts?.defaultInstructionApplied?.trim() || undefined;
   return sessions.map((session) => {
     if (session.id !== sessionId) return session;
     const priorMessages = opts?.forceFreshClaudeSession
@@ -250,7 +266,7 @@ export function beginSessionTurnWithUserPrompt(
       ...session,
       status: "running",
       claudeSessionId: opts?.forceFreshClaudeSession ? null : session.claudeSessionId,
-      messages: [...priorMessages, ...prepend, createUserTextMessage(prompt)],
+      messages: [...priorMessages, ...prepend, createUserTextMessage(prompt, applied)],
     };
   });
 }
@@ -259,30 +275,40 @@ export function beginSessionTurnWithUserPrompt(
  * 与 `setSessionRunningWithUserPrompt` 相同地把会话标为 running 并准备新一轮 invoke，
  * 但若已有「首条可展示用户消息」（非纯 tool_use），则改写其正文而非再追加一条，供顶部 sticky 编辑后重发。
  */
+function patchUserBubbleMessage(
+  prev: ClaudeMessage,
+  prompt: string,
+  defaultInstructionApplied?: string,
+): ClaudeMessage {
+  const applied = defaultInstructionApplied?.trim() || undefined;
+  return {
+    ...prev,
+    content: prompt,
+    parts: [{ type: "text" as const, text: prompt }],
+    timestamp: Date.now(),
+    defaultInstructionApplied: applied,
+  };
+}
+
 export function setSessionRunningReplacingFirstUserBubble(
   sessions: ClaudeSession[],
   sessionId: string,
   prompt: string,
+  defaultInstructionApplied?: string,
 ): ClaudeSession[] {
+  const applied = defaultInstructionApplied?.trim() || undefined;
   return sessions.map((session) => {
     if (session.id !== sessionId) return session;
     const messages = [...session.messages];
     const idx = messages.findIndex((m) => m.role === "user" && !isToolOnlyUserMessage(m));
-    const textPart = { type: "text" as const, text: prompt };
     if (idx < 0) {
       return {
         ...session,
         status: "running",
-        messages: [...messages, createUserTextMessage(prompt)],
+        messages: [...messages, createUserTextMessage(prompt, applied)],
       };
     }
-    const prev = messages[idx]!;
-    messages[idx] = {
-      ...prev,
-      content: prompt,
-      parts: [textPart],
-      timestamp: Date.now(),
-    };
+    messages[idx] = patchUserBubbleMessage(messages[idx]!, prompt, applied);
     return { ...session, status: "running", messages };
   });
 }
@@ -292,7 +318,9 @@ export function setSessionRunningReplacingLastUserBubble(
   sessions: ClaudeSession[],
   sessionId: string,
   prompt: string,
+  defaultInstructionApplied?: string,
 ): ClaudeSession[] {
+  const applied = defaultInstructionApplied?.trim() || undefined;
   return sessions.map((session) => {
     if (session.id !== sessionId) return session;
     const messages = [...session.messages];
@@ -304,21 +332,14 @@ export function setSessionRunningReplacingLastUserBubble(
         break;
       }
     }
-    const textPart = { type: "text" as const, text: prompt };
     if (idx < 0) {
       return {
         ...session,
         status: "running",
-        messages: [...messages, createUserTextMessage(prompt)],
+        messages: [...messages, createUserTextMessage(prompt, applied)],
       };
     }
-    const prev = messages[idx]!;
-    messages[idx] = {
-      ...prev,
-      content: prompt,
-      parts: [textPart],
-      timestamp: Date.now(),
-    };
+    messages[idx] = patchUserBubbleMessage(messages[idx]!, prompt, applied);
     return { ...session, status: "running", messages };
   });
 }
@@ -329,26 +350,22 @@ export function setSessionRunningReplacingUserBubbleAtIndex(
   sessionId: string,
   messageIndex: number,
   prompt: string,
+  defaultInstructionApplied?: string,
 ): ClaudeSession[] {
+  const applied = defaultInstructionApplied?.trim() || undefined;
   return sessions.map((session) => {
     if (session.id !== sessionId) return session;
     const messages = [...session.messages];
     const idx = Math.floor(messageIndex);
     const prev = idx >= 0 && idx < messages.length ? messages[idx] : undefined;
-    const textPart = { type: "text" as const, text: prompt };
     if (!prev || prev.role !== "user" || isToolOnlyUserMessage(prev)) {
       return {
         ...session,
         status: "running",
-        messages: [...messages, createUserTextMessage(prompt)],
+        messages: [...messages, createUserTextMessage(prompt, applied)],
       };
     }
-    messages[idx] = {
-      ...prev,
-      content: prompt,
-      parts: [textPart],
-      timestamp: Date.now(),
-    };
+    messages[idx] = patchUserBubbleMessage(prev, prompt, applied);
     return { ...session, status: "running", messages };
   });
 }
@@ -397,6 +414,32 @@ export function appendSystemMessageBySessionId(
       messages: [...session.messages, createSystemTextMessage(text)],
     };
   });
+}
+
+/** 回合执行失败时写入会话；内部 turn waiter 超时/取消不入库（自动派发场景避免刷屏）。 */
+export function applyClaudeExecuteFailureNotice(
+  sessions: ClaudeSession[],
+  sessionId: string,
+  err: unknown,
+  opts: { hasClaudeSessionId: boolean },
+): ClaudeSession[] {
+  if (isClaudeTurnWaitControlError(err)) {
+    return sessions.map((session) => {
+      if (session.id !== sessionId) return session;
+      if (session.status === "running" || session.status === "connecting") {
+        return { ...session, status: "idle" as const };
+      }
+      return session;
+    });
+  }
+  const text = opts.hasClaudeSessionId ? `发送失败: ${err}` : `启动失败: ${err}`;
+  return appendSystemMessageBySessionId(
+    sessions.map((session) =>
+      session.id === sessionId ? { ...session, status: "error" as const } : session,
+    ),
+    sessionId,
+    text,
+  );
 }
 
 export function appendSystemMessageBySessionOrClaudeId(

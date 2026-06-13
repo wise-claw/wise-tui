@@ -29,6 +29,17 @@ describe("extractImportantUserInputForDisplay", () => {
     expect(out.hasStrippedContext).toBe(true);
   });
 
+  test("extracts command-args from oh-my-claudecode autopilot envelope", () => {
+    const full = [
+      "<command-message>oh-my-claudecode:autopilot</command-message>",
+      "<command-name>/oh-my-claudecode:autopilot</command-name>",
+      "<command-args>你好</command-args>",
+    ].join(" ");
+    const out = extractImportantUserInputForDisplay(full);
+    expect(out.compactText).toBe("你好");
+    expect(out.hasStrippedContext).toBe(true);
+  });
+
   test("removes 附图 suffix and records attachment paths", () => {
     const path = "/Users/sjl/.wise/composer-images/wise/demo.png";
     const full = `你好\n\n附图：@${path}`;

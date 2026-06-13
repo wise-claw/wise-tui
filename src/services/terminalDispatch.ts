@@ -1,5 +1,11 @@
 import { message } from "antd";
 import type { ClaudeMessage, ClaudeSession, EmployeeItem, Repository } from "../types";
+import { loadComposerDefaultInstructionFromStore } from "./wiseDefaultConfigStore";
+import {
+  resolveTerminalTaskPromptWithDefaults,
+  resolveTerminalDefaultInstructionApplied,
+} from "../utils/resolveTerminalTaskPrompt";
+import { loadDefaultInstructionResolveContext } from "../utils/resolveComposerDefaultInstructionOutbound";
 import {
   SESSION_EXECUTION_ENGINE_LABELS,
   normalizeSessionExecutionEngine,
@@ -365,6 +371,7 @@ export type TerminalDispatchDeps = {
     outboundPrompt: string,
     opts?: {
       userBubblePrompt?: string;
+      defaultInstructionApplied?: string;
     },
   ) => boolean;
   appendSystemMessage: (sessionId: string, text: string) => void;
@@ -478,9 +485,23 @@ async function dispatchTerminalWorkerTurn(
   terminal: EmployeeItem,
   taskPrompt: string,
   mainSessionId: string,
+  sessionDefaultInstruction: string,
 ): Promise<"failed" | "ok"> {
-  const { outboundPrompt, userBubblePrompt } = resolveTerminalDispatchPrompts(
+  const resolveContext = await loadDefaultInstructionResolveContext(mainSession.repositoryPath);
+  const effectiveTaskPrompt = resolveTerminalTaskPromptWithDefaults(
     taskPrompt,
+    terminal,
+    sessionDefaultInstruction,
+    resolveContext,
+  );
+  const defaultInstructionApplied = resolveTerminalDefaultInstructionApplied(
+    taskPrompt,
+    terminal,
+    sessionDefaultInstruction,
+    resolveContext,
+  );
+  const { outboundPrompt, userBubblePrompt } = resolveTerminalDispatchPrompts(
+    effectiveTaskPrompt,
     terminal.agentType,
   );
   if (!userBubblePrompt.trim()) {
@@ -507,6 +528,7 @@ async function dispatchTerminalWorkerTurn(
 
   const spawnOk = deps.executeTerminalSession(workerTabId, outboundPrompt.trim(), {
     userBubblePrompt,
+    ...(defaultInstructionApplied ? { defaultInstructionApplied } : {}),
   });
   if (!spawnOk) {
     const engineTitle = terminalExecutionEngineTitle(terminal);
@@ -615,6 +637,13 @@ export async function dispatchTerminalFromMainSession(
       ? stripTerminalMentionsFromPrompt(input.prompt, deps.employees)
       : input.prompt;
 
+  let sessionDefaultInstruction = "";
+  try {
+    sessionDefaultInstruction = await loadComposerDefaultInstructionFromStore();
+  } catch {
+    /* 读取失败时不阻塞派发 */
+  }
+
   let okCount = 0;
   let failCount = 0;
   for (const terminal of terminals) {
@@ -624,6 +653,7 @@ export async function dispatchTerminalFromMainSession(
       terminal,
       taskPrompt,
       input.mainSessionId,
+      sessionDefaultInstruction,
     );
     if (result === "ok") {
       okCount += 1;

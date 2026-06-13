@@ -59,6 +59,24 @@ function extractUserQueryBlock(text: string): string | null {
   return inner || null;
 }
 
+/** Claude Code 斜杠命令展开块中的用户正文（如 `/autopilot` 后的「你好」）。 */
+export function extractCommandArgsBlock(text: string): string | null {
+  const match = text.match(/<command-args>([\s\S]*?)<\/command-args>/i);
+  const inner = match?.[1]?.trim();
+  return inner || null;
+}
+
+/** Claude Code 斜杠命令展开块中的命令名（如 `/oh-my-claudecode:autopilot`）。 */
+export function extractCommandNameBlock(text: string): string | null {
+  const match = text.match(/<command-name>([\s\S]*?)<\/command-name>/i);
+  const inner = match?.[1]?.trim();
+  return inner || null;
+}
+
+export function hasClaudeCommandExpansionBlocks(text: string): boolean {
+  return /<command-(?:name|message|args)(?:\s|>)/i.test(text);
+}
+
 function extractJsonlAttachmentPaths(text: string): string[] {
   if (!text.includes("[附图")) return [];
   const paths: string[] = [];
@@ -109,13 +127,15 @@ export function extractImportantUserInputForDisplay(fullText: string): Important
   ].filter((path, index, all) => all.indexOf(path) === index);
 
   const fromUserQuery = extractUserQueryBlock(trimmed);
-  let candidate =
-    fromUserQuery ??
-    stripXmlLikeBlocks(trimmed, STRIPPED_XML_BLOCK_TAGS).replace(/^\[Image\]\s*/i, "").trim();
+  const fromCommandArgs = extractCommandArgsBlock(trimmed);
+  const stripped = stripXmlLikeBlocks(trimmed, STRIPPED_XML_BLOCK_TAGS)
+    .replace(/^\[Image\]\s*/i, "")
+    .trim();
+  const candidate = fromUserQuery ?? fromCommandArgs ?? stripped;
 
   const { composerMain } = buildComposerInsertFromPlainText(candidate);
   let compactText = composerMain.replace(JSONL_INLINE_ATTACHMENT_RE, "").replace(/\n{3,}/g, "\n\n").trim();
-  if (!compactText) {
+  if (!compactText && !hasClaudeCommandExpansionBlocks(trimmed)) {
     compactText = trimmed;
   }
 
@@ -126,4 +146,9 @@ export function extractImportantUserInputForDisplay(fullText: string): Important
     (attachmentPaths.length > 0 && !compactText.includes("附图"));
 
   return rememberDisplayCache(fullText, { compactText, attachmentPaths, hasStrippedContext });
+}
+
+/** jsonl / 磁盘 transcript 入库：把 Claude 斜杠命令展开块还原为用户可见正文。 */
+export function normalizeClaudeUserMessageForDisplay(fullText: string): string {
+  return extractImportantUserInputForDisplay(fullText).compactText;
 }

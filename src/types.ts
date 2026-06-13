@@ -104,6 +104,8 @@ export interface EmployeeItem {
   projectIds: string[];
   /** 成员会话执行引擎；缺省为 Claude Code。 */
   executionEngine?: SessionExecutionEngine;
+  /** 派发至该终端时自动前缀的默认指令（如 /autopilot）。 */
+  defaultInstruction?: string;
 }
 
 export interface EmployeeTaskCountItem {
@@ -713,6 +715,8 @@ export interface ClaudeComposerExecuteBubbleOptions {
   replaceUserBubbleAtIndex?: number;
   /** 写入会话用户气泡的正文；省略则与发给 Claude 的 `prompt` 相同（终端派发用于隐藏 `/${agent}` 前缀）。 */
   userBubblePrompt?: string;
+  /** 气泡旁展示：发送时自动前缀的默认斜杠指令。 */
+  defaultInstructionApplied?: string;
   /** Cursor SDK 附图（已落盘绝对路径）；仅 executionEngine=cursor 时使用。 */
   cursorAttachments?: Array<{ path: string; mimeType?: string }>;
 }
@@ -781,6 +785,8 @@ export interface ClaudeMessage {
   content: string;
   parts: MessagePart[];
   timestamp: number;
+  /** 发送时自动前缀的默认斜杠指令（仅 UI 展示，如 `/autopilot`）。 */
+  defaultInstructionApplied?: string;
 }
 
 export type MessagePart = TextPart | ToolUsePart | ReasoningPart;

@@ -30,6 +30,7 @@ export interface SlashCatalogSnapshot {
   installedPluginCommands: SlashCatalogPluginCommand[];
   installPluginCommands: SlashCatalogPluginCommand[];
   projectSkills: ClaudeProjectSkill[];
+  pluginCacheSkills: ClaudeProjectSkill[];
   fetchedAt: number;
 }
 
@@ -77,6 +78,7 @@ async function fetchSlashCatalog(repositoryPath: string | null): Promise<SlashCa
     installedPluginCommands: buildComposerPluginInstalledSlashCommands(installedRows),
     installPluginCommands: buildComposerPluginInstallSlashCommands(installedRows),
     projectSkills,
+    pluginCacheSkills: cacheSkills,
     fetchedAt: Date.now(),
   };
 }

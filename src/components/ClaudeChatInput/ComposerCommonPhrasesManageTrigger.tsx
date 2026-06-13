@@ -10,11 +10,21 @@ export function ComposerCommonPhrasesManageTrigger({
   loading,
   saving,
   onPersist,
+  defaultInstruction,
+  defaultInstructionLoading,
+  defaultInstructionSaving,
+  onDefaultInstructionSave,
+  repositoryPath,
 }: {
   phrases: readonly ComposerCommonPhrase[];
   loading: boolean;
   saving: boolean;
   onPersist: (next: ComposerCommonPhrase[]) => Promise<void>;
+  defaultInstruction: string;
+  defaultInstructionLoading: boolean;
+  defaultInstructionSaving: boolean;
+  onDefaultInstructionSave: (text: string) => Promise<void>;
+  repositoryPath?: string | null;
 }) {
   const [open, setOpen] = useState(false);
 
@@ -37,6 +47,11 @@ export function ComposerCommonPhrasesManageTrigger({
             loading={loading}
             saving={saving}
             onPersist={onPersist}
+            defaultInstruction={defaultInstruction}
+            defaultInstructionLoading={defaultInstructionLoading}
+            defaultInstructionSaving={defaultInstructionSaving}
+            onDefaultInstructionSave={onDefaultInstructionSave}
+            repositoryPath={repositoryPath}
           />
         </div>
       }

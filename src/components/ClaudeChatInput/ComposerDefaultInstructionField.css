@@ -1,0 +1,24 @@
+.app-composer-default-instruction-field {
+  width: 100%;
+}
+
+.app-composer-default-instruction-field .ant-select-selector {
+  min-height: 32px !important;
+}
+
+.app-composer-default-instruction-field__popup {
+  max-width: min(320px, 72vw);
+}
+
+.app-composer-default-instruction-field__popup .ant-select-item-option-content {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+/* combobox 选中后只保留输入框正文，避免 selection-item 与 input 叠字 */
+.app-composer-default-instruction-field.ant-select .ant-select-selection-item {
+  display: none !important;
+}

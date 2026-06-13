@@ -466,6 +466,9 @@ export function useWorkflowTeamAutomation({
         if (executeOptions?.userBubblePrompt?.trim() && sameTab) {
           opts = { ...opts, userBubblePrompt: executeOptions.userBubblePrompt };
         }
+        if (executeOptions?.defaultInstructionApplied?.trim() && sameTab) {
+          opts = { ...opts, defaultInstructionApplied: executeOptions.defaultInstructionApplied };
+        }
         if (executeOptions?.cursorAttachments && executeOptions.cursorAttachments.length > 0) {
           opts = { ...opts, cursorAttachments: executeOptions.cursorAttachments };
         }

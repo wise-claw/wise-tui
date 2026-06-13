@@ -63,6 +63,32 @@ describe("claudeComposerPrompt dedupe", () => {
     expect(payload.imageDiskPaths).toEqual(["/tmp/wise/composer-images/demo.png"]);
   });
 
+  test("buildClaudeComposerSendPayload applies defaultInstructionPrefix to outbound only", async () => {
+    const payload = await buildClaudeComposerSendPayload({
+      prompt: [{ type: "text", text: "你好", start: 0, end: 0 }],
+      contextItems: [],
+      images: [],
+      repositoryPath: "/repo",
+      userBubbleMain: "你好",
+      defaultInstructionPrefix: "/autopilot",
+    });
+    expect(payload.userBubblePrompt).toBe("你好");
+    expect(payload.outbound).toBe("/autopilot 你好");
+  });
+
+  test("buildClaudeComposerSendPayload inserts defaultInstruction after @mention in outbound", async () => {
+    const payload = await buildClaudeComposerSendPayload({
+      prompt: [{ type: "text", text: "@终端1 你好", start: 0, end: 0 }],
+      contextItems: [],
+      images: [],
+      repositoryPath: "/repo",
+      userBubbleMain: "@终端1 你好",
+      defaultInstructionPrefix: "/autopilot",
+    });
+    expect(payload.userBubblePrompt).toBe("@终端1 你好");
+    expect(payload.outbound).toBe("@终端1 /autopilot 你好");
+  });
+
   test("buildComposerInsertFromPlainText strips 附图 suffix for editor main", () => {
     const path = "/tmp/wise/composer-images/a.png";
     const { composerMain, attachmentPaths } = buildComposerInsertFromPlainText(

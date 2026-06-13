@@ -8,6 +8,7 @@ import {
 } from "../../constants/sessionExecutionEngine";
 import { collectTeamMemberEmployeeIds } from "../../utils/collectTeamMemberEmployeeIds";
 import { repositoryFolderBasename } from "../../utils/repositoryType";
+import { ComposerDefaultInstructionField } from "../ClaudeChatInput/ComposerDefaultInstructionField";
 import {
   isEmployeeRepositoryOwnerInScopeRelaxed,
   listRepositoryMainOwnerDisplayGaps,
@@ -48,6 +49,26 @@ function getInitials(name: string) {
   return trimmed.slice(0, 2);
 }
 
+function EmployeeDefaultInstructionInput({
+  value,
+  onChange,
+  repositoryPath,
+}: {
+  value?: string;
+  onChange?: (value: string) => void;
+  repositoryPath?: string | null;
+}) {
+  return (
+    <ComposerDefaultInstructionField
+      value={value ?? ""}
+      repositoryPath={repositoryPath}
+      placeholder="选择或输入 /autopilot"
+      onChange={(next) => onChange?.(next)}
+      onCommit={(next) => onChange?.(next)}
+    />
+  );
+}
+
 interface Props {
   open: boolean;
   inline?: boolean;
@@ -85,6 +106,7 @@ interface Props {
     repositoryIds: number[];
     projectIds?: string[];
     executionEngine?: SessionExecutionEngine;
+    defaultInstruction?: string;
     /** 创建后把该仓 `mainOwnerAgentName` 设为角色的 `agentType` */
     ownerRepositoryId?: number | null;
   }) => Promise<void>;
@@ -96,6 +118,7 @@ interface Props {
     repositoryIds: number[];
     projectIds?: string[];
     executionEngine?: SessionExecutionEngine;
+    defaultInstruction?: string;
   }) => Promise<void>;
   onDelete: (employeeId: string) => Promise<void>;
 }
@@ -108,8 +131,6 @@ export function EmployeeConfigModal({
   workflowTemplates,
   workflowGraphsByWorkflowId = {},
   repositories,
-  projects,
-  agentTypeOptions,
   defaultRepositoryIds = [],
   hideEmployeesAssociatedOnlyWithDefaultRepositories = false,
   alwaysShowEmployeeIds = [],
@@ -123,6 +144,8 @@ export function EmployeeConfigModal({
 }: Props) {
   const { message } = App.useApp();
   const [form] = Form.useForm();
+  const ownerRepositoryId = Form.useWatch("ownerRepositoryId", form);
+  const watchedRepositoryIds = Form.useWatch("repositoryIds", form);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [formModalOpen, setFormModalOpen] = useState(false);
   const autoOpenedCreateRef = useRef(false);
@@ -131,12 +154,21 @@ export function EmployeeConfigModal({
     () => employees.find((item) => item.id === editingId) ?? null,
     [employees, editingId],
   );
-  const selectableAgentTypeOptions = useMemo(() => {
-    const fromEmployees = employees.map((item) => item.agentType);
-    const merged = Array.from(new Set([...agentTypeOptions, ...fromEmployees]));
-    return merged.map((value) => ({ value, label: value }));
-  }, [agentTypeOptions, employees]);
-  const hideRepositorySelector = defaultRepositoryIds.length > 0;
+  const defaultInstructionRepositoryPath = useMemo(() => {
+    const ids =
+      (Array.isArray(watchedRepositoryIds) ? watchedRepositoryIds : undefined) ??
+      editingEmployee?.repositoryIds ??
+      defaultRepositoryIds;
+    const repositoryId = ownerRepositoryId ?? ids?.[0] ?? defaultRepositoryIds[0];
+    if (repositoryId == null) return null;
+    return repositories.find((repository) => repository.id === repositoryId)?.path ?? null;
+  }, [
+    ownerRepositoryId,
+    watchedRepositoryIds,
+    editingEmployee?.repositoryIds,
+    defaultRepositoryIds,
+    repositories,
+  ]);
   const creatingEmployee = editingEmployee == null;
   /** Workspace 需求面板或侧栏仓库：展示 Owner 列与「仓库」表单项 */
   const projectOwnerPickMode =
@@ -204,41 +236,50 @@ export function EmployeeConfigModal({
     [employees],
   );
 
-  function resetCreateFormValues() {
-    form.setFieldsValue({
+  const employeeFormInitialValues = useMemo(() => {
+    if (editingEmployee) {
+      return {
+        name: editingEmployee.name,
+        executionEngine: editingEmployee.executionEngine ?? "claude",
+        defaultInstruction: editingEmployee.defaultInstruction ?? "",
+        ownerRepositoryId: undefined,
+      };
+    }
+    return {
       name: initialCreateEmployeeName?.trim() ?? "",
       agentType: "executor",
-      executionEngine: "claude",
-      repositoryIds: defaultRepositoryIds,
-      projectIds: singleProjectScopeId ? [singleProjectScopeId] : undefined,
+      executionEngine: "claude" as SessionExecutionEngine,
+      defaultInstruction: "",
+      repositoryIds: [...defaultRepositoryIds],
+      projectIds: singleProjectScopeId ? [singleProjectScopeId] : [],
       ownerRepositoryId: singleOwnerRepositoryId ?? undefined,
-    });
-  }
+    };
+  }, [
+    editingEmployee,
+    initialCreateEmployeeName,
+    defaultRepositoryIds,
+    singleProjectScopeId,
+    singleOwnerRepositoryId,
+  ]);
 
   function openCreateFormModal() {
     setEditingId(null);
-    resetCreateFormValues();
     setFormModalOpen(true);
   }
 
   function openEditFormModal(employee: EmployeeItem) {
     setEditingId(employee.id);
-    form.setFieldsValue({
-      name: employee.name,
-      agentType: employee.agentType,
-      executionEngine: employee.executionEngine ?? "claude",
-      repositoryIds: employee.repositoryIds,
-      projectIds: employee.projectIds,
-      ownerRepositoryId: undefined,
-    });
     setFormModalOpen(true);
   }
+
+  useEffect(() => {
+    if (!formModalOpen) return;
+    form.setFieldsValue(employeeFormInitialValues);
+  }, [form, formModalOpen, employeeFormInitialValues]);
 
   function closeFormModal() {
     setFormModalOpen(false);
     setEditingId(null);
-    form.resetFields();
-    resetCreateFormValues();
   }
 
   useEffect(() => {
@@ -267,24 +308,23 @@ export function EmployeeConfigModal({
 
   async function handleSubmit() {
     try {
-      const values = await form.validateFields(
-        editingEmployee ? ["name", "agentType", "executionEngine"] : ["name", "executionEngine"],
-      );
+      const values = await form.validateFields(["name", "executionEngine", "defaultInstruction"]);
       const executionEngine = (values.executionEngine as SessionExecutionEngine | undefined) ?? "claude";
+      const defaultInstruction =
+        typeof values.defaultInstruction === "string" ? values.defaultInstruction.trim() : "";
       const agentType = editingEmployee
-        ? (values.agentType as string)
+        ? editingEmployee.agentType
         : defaultCreateAgentType;
       if (editingEmployee) {
-        const nextRepositoryIds =
-          hideRepositorySelector ? editingEmployee.repositoryIds : (values.repositoryIds ?? defaultRepositoryIds);
         await onUpdate({
           employeeId: editingEmployee.id,
           name: values.name,
           agentType,
           enabled: editingEmployee.enabled,
-          repositoryIds: nextRepositoryIds,
-          projectIds: values.projectIds ?? editingEmployee.projectIds,
+          repositoryIds: editingEmployee.repositoryIds,
+          projectIds: editingEmployee.projectIds,
           executionEngine,
+          defaultInstruction,
         });
         closeFormModal();
         return;
@@ -304,6 +344,7 @@ export function EmployeeConfigModal({
           repositoryIds: [ownerRid],
           ownerRepositoryId: ownerRid,
           executionEngine,
+          defaultInstruction,
         });
         closeFormModal();
         return;
@@ -319,6 +360,7 @@ export function EmployeeConfigModal({
         repositoryIds: mergedRepositoryIds,
         projectIds: creatingEmployee ? [] : (values.projectIds ?? []),
         executionEngine,
+        defaultInstruction,
       });
       closeFormModal();
     } catch (error) {
@@ -338,6 +380,7 @@ export function EmployeeConfigModal({
       repositoryIds: row.repositoryIds,
       projectIds: row.projectIds,
       executionEngine: row.executionEngine ?? "claude",
+      defaultInstruction: row.defaultInstruction,
     });
   }
 
@@ -350,66 +393,23 @@ export function EmployeeConfigModal({
       okText={editingEmployee ? "保存" : "新增终端"}
       cancelText="取消"
       confirmLoading={loading}
-      width={400}
+      width={480}
       destroyOnHidden
       wrapClassName="app-employee-config-form-modal"
       mask={{ closable: false }}
     >
       <Form
+        key={editingEmployee?.id ?? "create"}
         form={form}
         layout="vertical"
         size="small"
         colon={false}
-        initialValues={{
-          name: "",
-          agentType: "executor",
-          repositoryIds: defaultRepositoryIds,
-          ownerRepositoryId: undefined,
-        }}
+        initialValues={employeeFormInitialValues}
         className="app-employee-config-form--modal"
       >
-        {projects && projects.length > 0 && !repositoryOwnerScopeOnly && !singleProjectScopeId && !creatingEmployee ? (
-          <Form.Item name="projectIds" label="所属工作区">
-            <Select
-              mode="multiple"
-              allowClear
-              placeholder="选择所属工作区"
-              maxTagCount="responsive"
-              options={projects.map((p) => ({
-                value: p.id,
-                label: p.name,
-              }))}
-            />
-          </Form.Item>
-        ) : null}
-        {(!hideRepositorySelector || repositoryOwnerScopeOnly) && !creatingEmployee ? (
-          <Form.Item name="repositoryIds" label="关联仓库">
-            <Select
-              mode="multiple"
-              allowClear={!repositoryOwnerScopeOnly}
-              placeholder="选择关联仓库"
-              maxTagCount="responsive"
-              disabled={repositoryOwnerScopeOnly}
-              options={repositories.map((repository) => ({
-                value: repository.id,
-                label: repositoryFolderBasename(repository),
-              }))}
-            />
-          </Form.Item>
-        ) : null}
         <Form.Item name="name" label="终端名称" rules={[{ required: true, message: "请输入终端名称" }]}>
           <Input placeholder="终端名称" allowClear />
         </Form.Item>
-        {editingEmployee ? (
-          <Form.Item name="agentType" label="智能体" rules={[{ required: true, message: "请选择智能体" }]}>
-            <Select
-              showSearch
-              placeholder="选择智能体"
-              options={selectableAgentTypeOptions}
-              optionFilterProp="label"
-            />
-          </Form.Item>
-        ) : null}
         <Form.Item
           name="executionEngine"
           label="执行引擎"
@@ -422,6 +422,13 @@ export function EmployeeConfigModal({
               label: SESSION_EXECUTION_ENGINE_LABELS[key].title,
             }))}
           />
+        </Form.Item>
+        <Form.Item
+          name="defaultInstruction"
+          label="默认指令"
+          tooltip="派发至该终端时，自动在正文前添加默认指令（如 /autopilot）"
+        >
+          <EmployeeDefaultInstructionInput repositoryPath={defaultInstructionRepositoryPath} />
         </Form.Item>
         {projectOwnerPickMode && !editingEmployee && !singleOwnerRepositoryId ? (
           <Form.Item

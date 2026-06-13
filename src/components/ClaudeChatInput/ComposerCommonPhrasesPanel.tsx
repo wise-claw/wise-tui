@@ -1,5 +1,5 @@
 import { Button, message, Popconfirm, Switch } from "antd";
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import {
   COMPOSER_COMMON_PHRASE_ACTION_LABELS,
   createComposerCommonPhraseId,
@@ -10,6 +10,7 @@ import {
 } from "../../constants/composerCommonPhrase";
 import { formatChordForDisplay } from "../../utils/atMentionShortcutChord";
 import { ComposerCommonPhraseEditModal } from "./ComposerCommonPhraseEditModal";
+import { ComposerDefaultInstructionField } from "./ComposerDefaultInstructionField";
 import "./ComposerCommonPhrasesPanel.css";
 
 function buildNormalizedPhrase(draft: ComposerCommonPhrase): ComposerCommonPhrase | null {
@@ -40,13 +41,38 @@ export function ComposerCommonPhrasesPanel({
   loading,
   saving,
   onPersist,
+  defaultInstruction,
+  defaultInstructionLoading,
+  defaultInstructionSaving,
+  onDefaultInstructionSave,
+  repositoryPath,
 }: {
   phrases: readonly ComposerCommonPhrase[];
   loading: boolean;
   saving: boolean;
   onPersist: (next: ComposerCommonPhrase[]) => Promise<void>;
+  defaultInstruction: string;
+  defaultInstructionLoading: boolean;
+  defaultInstructionSaving: boolean;
+  onDefaultInstructionSave: (text: string) => Promise<void>;
+  repositoryPath?: string | null;
 }) {
   const busy = loading || saving;
+  const defaultBusy = defaultInstructionLoading || defaultInstructionSaving;
+  const [defaultDraft, setDefaultDraft] = useState(defaultInstruction);
+
+  useEffect(() => {
+    setDefaultDraft(defaultInstruction);
+  }, [defaultInstruction]);
+
+  const saveDefaultInstruction = useCallback(
+    async (next?: string) => {
+      const candidate = (next ?? defaultDraft).trim();
+      if (candidate === defaultInstruction.trim()) return;
+      await onDefaultInstructionSave(candidate);
+    },
+    [defaultDraft, defaultInstruction, onDefaultInstructionSave],
+  );
   const [editOpen, setEditOpen] = useState(false);
   const [editMode, setEditMode] = useState<"create" | "edit">("create");
   const [editDraft, setEditDraft] = useState<ComposerCommonPhrase | null>(null);
@@ -139,6 +165,23 @@ export function ComposerCommonPhrasesPanel({
 
   return (
     <div className="app-composer-common-phrases-panel">
+      <section className="app-composer-common-phrases-panel__default" aria-label="主会话默认指令">
+        <div className="app-composer-common-phrases-panel__default-head">
+          <span className="app-composer-common-phrases-panel__default-title">默认指令</span>
+          <span className="app-composer-common-phrases-panel__default-hint">
+            发送时自动前缀，可从列表选择
+          </span>
+        </div>
+        <ComposerDefaultInstructionField
+          value={defaultDraft}
+          disabled={defaultBusy}
+          loading={defaultBusy}
+          repositoryPath={repositoryPath}
+          placeholder="选择或输入 /autopilot"
+          onChange={setDefaultDraft}
+          onCommit={saveDefaultInstruction}
+        />
+      </section>
       <p className="app-composer-common-phrases-panel__hint">点击编辑；快捷栏 chip 按「触发方式」发送或填入</p>
       {phrases.length === 0 ? (
         <p className="app-composer-common-phrases-panel__empty">暂无常用语，点击下方新增。</p>

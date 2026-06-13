@@ -55,6 +55,7 @@ const MIGRATION_035: &str = include_str!("../migrations/035_workspace_quick_acti
 const MIGRATION_036: &str = include_str!("../migrations/036_project_open_app_id.sql");
 const MIGRATION_037: &str = include_str!("../migrations/037_assistant_custom_entry.sql");
 const MIGRATION_038: &str = include_str!("../migrations/038_assistant_hidden.sql");
+const MIGRATION_040: &str = include_str!("../migrations/040_employee_default_instruction.sql");
 const PLATFORM_SPLIT_PROMPT_SEED_JSON: &str =
     include_str!("../migrations/005_platform_split_prompt_seed.json");
 
@@ -225,6 +226,10 @@ const MIGRATIONS: &[Migration] = &[
         name: "039_workspace_quick_actions_pinned_repair",
         action: MigrationAction::Seed(crate::workspace_inspector_db::ensure_workspace_quick_actions_pinned_column),
     },
+    Migration {
+        name: "040_employee_default_instruction",
+        action: MigrationAction::Sql(MIGRATION_040),
+    },
 ];
 
 #[derive(Debug, Clone, Serialize)]
@@ -256,6 +261,7 @@ pub struct WiseEmployeeRow {
     pub repository_ids: Vec<i64>,
     pub project_ids: Vec<String>,
     pub execution_engine: String,
+    pub default_instruction: String,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -610,7 +616,7 @@ impl WiseDb {
         let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
         let mut stmt = g
             .prepare(
-                "SELECT id, name, agent_type, enabled, created_at, updated_at, display_order, execution_engine
+                "SELECT id, name, agent_type, enabled, created_at, updated_at, display_order, execution_engine, default_instruction
                  FROM employees
                  ORDER BY display_order ASC, created_at ASC",
             )
@@ -628,6 +634,7 @@ impl WiseDb {
                     repository_ids: Vec::new(),
                     project_ids: Vec::new(),
                     execution_engine: row.get(7)?,
+                    default_instruction: row.get(8)?,
                 })
             })
             .map_err(|e| e.to_string())?;
@@ -682,12 +689,13 @@ impl WiseDb {
         now_ms: i64,
         repository_ids: &[i64],
         execution_engine: &str,
+        default_instruction: &str,
     ) -> Result<(), String> {
         let mut g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
         let tx = g.transaction().map_err(|e| e.to_string())?;
         tx.execute(
-            "INSERT INTO employees (id, name, agent_type, enabled, created_at, updated_at, display_order, execution_engine)
-             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8)",
+            "INSERT INTO employees (id, name, agent_type, enabled, created_at, updated_at, display_order, execution_engine, default_instruction)
+             VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
             params![
                 id,
                 name,
@@ -696,7 +704,8 @@ impl WiseDb {
                 now_ms,
                 now_ms,
                 now_ms,
-                execution_engine
+                execution_engine,
+                default_instruction
             ],
         )
         .map_err(|e| e.to_string())?;
@@ -721,15 +730,24 @@ impl WiseDb {
         now_ms: i64,
         repository_ids: &[i64],
         execution_engine: &str,
+        default_instruction: &str,
     ) -> Result<(), String> {
         let mut g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
         let tx = g.transaction().map_err(|e| e.to_string())?;
         let n = tx
             .execute(
                 "UPDATE employees
-                 SET name = ?1, agent_type = ?2, enabled = ?3, updated_at = ?4, execution_engine = ?5
-                 WHERE id = ?6",
-                params![name, agent_type, if enabled { 1 } else { 0 }, now_ms, execution_engine, id],
+                 SET name = ?1, agent_type = ?2, enabled = ?3, updated_at = ?4, execution_engine = ?5, default_instruction = ?6
+                 WHERE id = ?7",
+                params![
+                    name,
+                    agent_type,
+                    if enabled { 1 } else { 0 },
+                    now_ms,
+                    execution_engine,
+                    default_instruction,
+                    id
+                ],
             )
             .map_err(|e| e.to_string())?;
         if n == 0 {

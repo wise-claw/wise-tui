@@ -13,9 +13,15 @@ import {
 } from "../constants/sessionExecutionEngine";
 import {
   buildExecutionEnvironmentWorkerRepositoryName,
+  buildExecutionEnvironmentWorkerUserBubble,
   isExecutionEnvironmentEngineAvailable,
   parseExecutionEnvironmentDispatch,
 } from "../utils/executionEnvironmentDispatch";
+import { applyComposerDefaultInstruction } from "../utils/composerDefaultInstruction";
+import {
+  loadDefaultInstructionResolveContext,
+  resolveComposerDefaultInstructionOutbound,
+} from "../utils/resolveComposerDefaultInstructionOutbound";
 
 export type ExecutionEnvironmentDispatchDeps = {
   getSessions: () => ClaudeSession[];
@@ -29,7 +35,7 @@ export type ExecutionEnvironmentDispatchDeps = {
   executeSession: (
     workerTabId: string,
     prompt: string,
-    opts?: { userBubblePrompt?: string },
+    opts?: { userBubblePrompt?: string; defaultInstructionApplied?: string },
   ) => boolean;
   appendSystemMessage: (sessionId: string, text: string) => void;
 };
@@ -58,6 +64,7 @@ export async function dispatchExecutionEnvironmentFromMainSession(
     mainSessionId: string;
     prompt: string;
     userBubblePrompt?: string;
+    defaultInstructionApplied?: string;
   },
 ): Promise<boolean> {
   const mainSession = deps.getSessions().find((item) => item.id === input.mainSessionId);
@@ -88,10 +95,18 @@ export async function dispatchExecutionEnvironmentFromMainSession(
   const batchId = newBatchId();
   const batchCreatedAt = Date.now();
   const displayBase = repositoryDisplayBase(mainSession.repositoryName);
-  const bubble =
-    input.userBubblePrompt?.trim() ||
-    input.prompt.trim();
-  const preview = plan.cleanedPrompt.slice(0, 72);
+  const bubble = buildExecutionEnvironmentWorkerUserBubble(
+    input.userBubblePrompt?.trim() || input.prompt.trim(),
+  );
+  const defaultInstructionApplied = input.defaultInstructionApplied?.trim() || "";
+  const resolveContext = await loadDefaultInstructionResolveContext(mainSession.repositoryPath);
+  const resolvedDefaultInstruction = defaultInstructionApplied
+    ? resolveComposerDefaultInstructionOutbound(defaultInstructionApplied, resolveContext)
+    : "";
+  const workerPrompt = resolvedDefaultInstruction
+    ? applyComposerDefaultInstruction(plan.cleanedPrompt, resolvedDefaultInstruction, resolveContext)
+    : plan.cleanedPrompt;
+  const preview = workerPrompt.slice(0, 72);
 
   registerExecutionEnvironmentBatch({
     batchId,
@@ -168,8 +183,9 @@ export async function dispatchExecutionEnvironmentFromMainSession(
       /* 持久化失败不阻断派发 */
     });
 
-    const spawnOk = deps.executeSession(workerTabId, plan.cleanedPrompt, {
+    const spawnOk = deps.executeSession(workerTabId, workerPrompt, {
       userBubblePrompt: bubble,
+      ...(resolvedDefaultInstruction ? { defaultInstructionApplied: resolvedDefaultInstruction } : {}),
     });
     if (spawnOk === false) {
       blocked += 1;

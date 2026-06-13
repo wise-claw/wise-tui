@@ -73,6 +73,8 @@ export const WISE_AT_MENTION_SHORTCUTS_CHANGED = "wise:at-mention-shortcuts-chan
 
 export const WISE_COMPOSER_COMMON_PHRASES_CHANGED = "wise:composer-common-phrases-changed";
 
+export const WISE_COMPOSER_DEFAULT_INSTRUCTION_CHANGED = "wise:composer-default-instruction-changed";
+
 export const WISE_WORKSPACE_INSPECTOR_PANELS_CHANGED = "wise:workspace-inspector-panels-changed";
 
 export const WISE_FILE_TREE_OPEN_IN_NEW_PANE_CHANGED = "wise:file-tree-open-in-new-pane-changed";
@@ -124,6 +126,8 @@ export interface WiseDefaultConfigV1 {
   atMentionShortcutByTarget: Record<string, string>;
   /** 主会话常用语：快捷键发送或点击按钮发送。 */
   composerCommonPhrases: ComposerCommonPhrase[];
+  /** 主会话发送时自动前缀的斜杠指令（如 /autopilot）。 */
+  composerDefaultInstruction: string;
   /** 右栏工作区快捷操作卡片；默认显示。 */
   showWorkspaceQuickActionsPanel: boolean;
   /** 右栏备忘录卡片；默认显示。 */
@@ -158,6 +162,7 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   atMentionDefaultTarget: DEFAULT_AT_MENTION_DEFAULT_TARGET,
   atMentionShortcutByTarget: {},
   composerCommonPhrases: [],
+  composerDefaultInstruction: "",
   showWorkspaceQuickActionsPanel: true,
   showWorkspaceMemosPanel: true,
   showWorkspaceTodosPanel: true,
@@ -269,6 +274,10 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
         parsed.composerCommonPhrases === undefined
           ? DEFAULT_CONFIG.composerCommonPhrases
           : normalizeComposerCommonPhrases(parsed.composerCommonPhrases),
+      composerDefaultInstruction:
+        typeof parsed.composerDefaultInstruction === "string"
+          ? parsed.composerDefaultInstruction.trim()
+          : DEFAULT_CONFIG.composerDefaultInstruction,
       showWorkspaceQuickActionsPanel:
         parsed.showWorkspaceQuickActionsPanel === undefined
           ? DEFAULT_CONFIG.showWorkspaceQuickActionsPanel
@@ -418,6 +427,7 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     atMentionDefaultTarget: DEFAULT_CONFIG.atMentionDefaultTarget,
     atMentionShortcutByTarget: DEFAULT_CONFIG.atMentionShortcutByTarget,
     composerCommonPhrases: DEFAULT_CONFIG.composerCommonPhrases,
+    composerDefaultInstruction: DEFAULT_CONFIG.composerDefaultInstruction,
     showWorkspaceQuickActionsPanel: DEFAULT_CONFIG.showWorkspaceQuickActionsPanel,
     showWorkspaceMemosPanel: DEFAULT_CONFIG.showWorkspaceMemosPanel,
     showWorkspaceTodosPanel: DEFAULT_CONFIG.showWorkspaceTodosPanel,
@@ -552,6 +562,7 @@ export async function saveWiseDefaultConfig(
       | "atMentionDefaultTarget"
       | "atMentionShortcutByTarget"
       | "composerCommonPhrases"
+      | "composerDefaultInstruction"
       | "showWorkspaceQuickActionsPanel"
       | "showWorkspaceMemosPanel"
       | "showWorkspaceTodosPanel"
@@ -601,6 +612,10 @@ export async function saveWiseDefaultConfig(
       patch.composerCommonPhrases !== undefined
         ? normalizeComposerCommonPhrases(patch.composerCommonPhrases)
         : current.composerCommonPhrases,
+    composerDefaultInstruction:
+      patch.composerDefaultInstruction !== undefined
+        ? patch.composerDefaultInstruction.trim()
+        : current.composerDefaultInstruction,
     showWorkspaceQuickActionsPanel:
       patch.showWorkspaceQuickActionsPanel ?? current.showWorkspaceQuickActionsPanel,
     showWorkspaceMemosPanel: patch.showWorkspaceMemosPanel ?? current.showWorkspaceMemosPanel,
@@ -935,6 +950,23 @@ export async function saveComposerCommonPhrasesToStore(
     composerCommonPhrases: normalized,
     atMentionShortcutByTarget,
   });
+  return normalized;
+}
+
+export async function loadComposerDefaultInstructionFromStore(): Promise<string> {
+  return (await loadWiseDefaultConfig()).composerDefaultInstruction;
+}
+
+export async function saveComposerDefaultInstructionToStore(text: string): Promise<string> {
+  const normalized = text.trim();
+  await saveWiseDefaultConfig({ composerDefaultInstruction: normalized });
+  if (typeof window !== "undefined") {
+    window.dispatchEvent(
+      new CustomEvent(WISE_COMPOSER_DEFAULT_INSTRUCTION_CHANGED, {
+        detail: { composerDefaultInstruction: normalized },
+      }),
+    );
+  }
   return normalized;
 }
 

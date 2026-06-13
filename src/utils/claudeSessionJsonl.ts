@@ -1,4 +1,5 @@
 import type { ClaudeMessage, MessagePart, TextPart, ToolUsePart } from "../types";
+import { normalizeClaudeUserMessageForDisplay, extractCommandNameBlock } from "./userMessageImportantInput";
 
 function parseTimestamp(v: unknown): number {
   if (typeof v === "number" && Number.isFinite(v)) return v;
@@ -132,14 +133,17 @@ export function parseClaudeSessionJsonlLines(lines: string[]): ClaudeMessage[] {
           .join("");
         if (!text.trim()) continue;
         if (text.includes("<local-command-caveat>")) continue;
-        if (text.trimStart().startsWith("<command-name>")) continue;
+        const displayText = normalizeClaudeUserMessageForDisplay(text);
+        if (!displayText.trim()) continue;
+        const defaultInstructionApplied = extractCommandNameBlock(text) ?? undefined;
         idCounter += 1;
         messages.push({
           id: idCounter,
           role: "user",
-          content: text,
-          parts: [{ type: "text", text }],
+          content: displayText,
+          parts: [{ type: "text", text: displayText }],
           timestamp: parseTimestamp(row.timestamp),
+          ...(defaultInstructionApplied ? { defaultInstructionApplied } : {}),
         });
         continue;
       }
@@ -148,14 +152,17 @@ export function parseClaudeSessionJsonlLines(lines: string[]): ClaudeMessage[] {
       const text = rawContent;
       if (!text.trim()) continue;
       if (text.includes("<local-command-caveat>")) continue;
-      if (text.trimStart().startsWith("<command-name>")) continue;
+      const displayText = normalizeClaudeUserMessageForDisplay(text);
+      if (!displayText.trim()) continue;
+      const defaultInstructionApplied = extractCommandNameBlock(text) ?? undefined;
       idCounter += 1;
       messages.push({
         id: idCounter,
         role: "user",
-        content: text,
-        parts: [{ type: "text", text }],
+        content: displayText,
+        parts: [{ type: "text", text: displayText }],
         timestamp: parseTimestamp(row.timestamp),
+        ...(defaultInstructionApplied ? { defaultInstructionApplied } : {}),
       });
     } else if (rowType === "assistant") {
       const msg = row.message as Record<string, unknown> | undefined;

@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   buildExecutionEnvironmentWorkerRepositoryName,
+  buildExecutionEnvironmentWorkerUserBubble,
   hasExecutionEnvironmentMention,
   listExecutionEnvironmentEngineMentionOptions,
   parseExecutionEnvironmentDispatch,
@@ -24,6 +25,13 @@ describe("parseExecutionEnvironmentDispatch", () => {
     const plan = parseExecutionEnvironmentDispatch("@Claude Code 写单元测试");
     expect(plan?.executionEngine).toBe("claude");
     expect(plan?.cleanedPrompt).toBe("写单元测试");
+  });
+
+  test("buildExecutionEnvironmentWorkerUserBubble strips @mention for worker display", () => {
+    expect(buildExecutionEnvironmentWorkerUserBubble("@Claude Code 你好")).toBe("你好");
+    expect(
+      buildExecutionEnvironmentWorkerUserBubble("@Claude Code /oh-my-claudecode:autopilot 你好"),
+    ).toBe("/oh-my-claudecode:autopilot 你好");
   });
 
   test("parses @Codex CLI mention", () => {

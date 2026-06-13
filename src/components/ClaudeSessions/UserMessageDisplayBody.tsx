@@ -28,12 +28,25 @@ export const UserMessageDisplayBody = memo(function UserMessageDisplayBody({ msg
   const display = useMemo(() => extractImportantUserInputForDisplay(fullText), [fullText]);
   const [showFullInput, setShowFullInput] = useState(false);
   const visibleText = showFullInput ? fullText : display.compactText;
+  const defaultInstructionApplied = msg.defaultInstructionApplied?.trim() || "";
 
   return (
     <div className="app-claude-user-message-display">
       <UserMessageCollapsibleBody>
         <div className="app-message-part app-message-part--text">
-          <Markdown text={visibleText} streaming={streaming} showPendingHint={false} />
+          {defaultInstructionApplied && !showFullInput ? (
+            <div className="app-claude-user-message-inline-row">
+              <span
+                className="app-claude-user-message-default-instruction"
+                title={`已自动前缀：${defaultInstructionApplied}`}
+              >
+                {defaultInstructionApplied}
+              </span>
+              <Markdown text={visibleText} streaming={streaming} showPendingHint={false} />
+            </div>
+          ) : (
+            <Markdown text={visibleText} streaming={streaming} showPendingHint={false} />
+          )}
           {!showFullInput && display.attachmentPaths.length > 0 ? (
             <div
               className="app-claude-user-message-attachments"

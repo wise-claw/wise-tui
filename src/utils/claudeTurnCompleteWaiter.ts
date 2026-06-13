@@ -17,6 +17,17 @@ export interface ClaudeTurnCompleteWaiter {
 
 const DEFAULT_TURN_COMPLETE_WAIT_MS = 15 * 60 * 1000;
 
+export const CLAUDE_TURN_WAIT_TIMEOUT_MESSAGE = "Claude 回合等待超时";
+export const CLAUDE_TURN_WAIT_CANCELLED_MESSAGE = "Claude 回合等待已取消";
+
+export function isClaudeTurnWaitControlError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return (
+    message === CLAUDE_TURN_WAIT_TIMEOUT_MESSAGE ||
+    message === CLAUDE_TURN_WAIT_CANCELLED_MESSAGE
+  );
+}
+
 export function createClaudeTurnCompleteWaiter(): ClaudeTurnCompleteWaiter {
   const pendingByTab = new Map<string, PendingWaiter[]>();
 
@@ -36,7 +47,7 @@ export function createClaudeTurnCompleteWaiter(): ClaudeTurnCompleteWaiter {
       return new Promise<TurnCompleteWaitResult>((resolve, reject) => {
         const timer = globalThis.setTimeout(() => {
           removeWaiter(tabId, waiter);
-          reject(new Error("Claude 回合等待超时"));
+          reject(new Error(CLAUDE_TURN_WAIT_TIMEOUT_MESSAGE));
         }, timeoutMs);
         const waiter: PendingWaiter = {
           nonce,
@@ -64,7 +75,7 @@ export function createClaudeTurnCompleteWaiter(): ClaudeTurnCompleteWaiter {
       if (!list) return;
       for (const waiter of list) {
         globalThis.clearTimeout(waiter.timer);
-        waiter.reject(new Error("Claude 回合等待已取消"));
+        waiter.reject(new Error(CLAUDE_TURN_WAIT_CANCELLED_MESSAGE));
       }
       pendingByTab.delete(tabId);
     },

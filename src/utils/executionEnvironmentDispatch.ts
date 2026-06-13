@@ -7,6 +7,8 @@ import {
   SESSION_EXECUTION_ENGINE_LABELS,
   type SessionExecutionEngine,
 } from "../constants/sessionExecutionEngine";
+import { extractComposerAttachmentPathsFromText } from "../services/readComposerImage";
+import type { ClaudeMessage } from "../types";
 
 const MENTION_PREFIXES = ["@", "＠"] as const;
 
@@ -279,4 +281,42 @@ export function buildExecutionEnvironmentWorkerRepositoryName(
   const base = repositoryDisplayBase.trim() || "仓库";
   const safeLabel = label.trim() || "任务";
   return `${base}${EXECUTION_ENVIRONMENT_REPO_MARKER}${engine}:${safeLabel}`;
+}
+
+/** 执行环境 worker 气泡：去掉 @Claude Code 等指派前缀，保留用户正文与附图。 */
+export function buildExecutionEnvironmentWorkerUserBubble(bubbleText: string): string {
+  const trimmed = bubbleText.trim();
+  if (!trimmed) return trimmed;
+  const plan = parseExecutionEnvironmentDispatch(trimmed);
+  if (!plan?.cleanedPrompt.trim()) return trimmed;
+
+  const attachmentPaths = extractComposerAttachmentPathsFromText(trimmed);
+  if (attachmentPaths.length === 0) return plan.cleanedPrompt;
+  const tail = attachmentPaths.map((path) => `@${path}`).join(" ");
+  return `${plan.cleanedPrompt}\n\n附图：${tail}`.trim();
+}
+
+/** drawer / 历史：执行环境 worker 用户消息不展示 @ 指派对象。 */
+export function sanitizeExecutionEnvironmentWorkerUserMessages(
+  messages: readonly ClaudeMessage[],
+): ClaudeMessage[] {
+  return messages.map((message) => {
+    if (message.role !== "user") return message;
+    const text =
+      message.parts
+        ?.filter((part): part is { type: "text"; text: string } => part.type === "text")
+        .map((part) => part.text)
+        .join("\n") ||
+      message.content ||
+      "";
+    const trimmed = text.trim();
+    if (!trimmed) return message;
+    const cleaned = buildExecutionEnvironmentWorkerUserBubble(trimmed);
+    if (cleaned === trimmed) return message;
+    return {
+      ...message,
+      content: cleaned,
+      parts: [{ type: "text", text: cleaned }],
+    };
+  });
 }

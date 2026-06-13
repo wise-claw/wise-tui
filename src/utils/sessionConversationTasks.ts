@@ -5,7 +5,7 @@ import { SESSION_EXECUTION_ENGINE_LABELS } from "../constants/sessionExecutionEn
 import type { ExecutionEnvironmentDispatchRecord } from "../stores/executionEnvironmentDispatchStore";
 import { sessionStatusToConversationTaskStatus } from "../stores/executionEnvironmentDispatchStore";
 import { indexOfLastRenderableUserMessage, isToolOnlyUserMessage, isAssistantDisplayNoiseText, parseDispatchRecordDisplayTimeMs, type DispatchRecordMeta } from "./claudeChatMessageDisplay";
-import { isExecutionEnvironmentWorkerRepositoryName } from "./executionEnvironmentDispatch";
+import { isExecutionEnvironmentWorkerRepositoryName, sanitizeExecutionEnvironmentWorkerUserMessages } from "./executionEnvironmentDispatch";
 import { resolveSessionExecutionEngine, sessionHasDiskTranscript } from "./sessionExecutionEngine";
 import {
   findExecutionEnvironmentWorkerForTaskDetail,
@@ -937,7 +937,7 @@ export function buildSessionConversationTaskDetailSession(
       const status: ClaudeSession["status"] =
         task.status === "running" ? "running" : task.status === "failed" ? "error" : "completed";
       const promptFallback = task.previewText?.replace(/\s+/g, " ").trim();
-      const messages =
+      const messages = sanitizeExecutionEnvironmentWorkerUserMessages(
         worker.messages.length > 0
           ? worker.messages
           : promptFallback
@@ -950,7 +950,8 @@ export function buildSessionConversationTaskDetailSession(
                   timestamp: (task.updatedAt || Date.now()) - 1,
                 },
               ]
-            : worker.messages;
+            : worker.messages,
+      );
       return {
         ...worker,
         id: `${worker.id}::exec-env::${task.key}`,

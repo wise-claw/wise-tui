@@ -147,6 +147,7 @@ pub(crate) struct EmployeeItem {
     repository_ids: Vec<i64>,
     project_ids: Vec<String>,
   execution_engine: String,
+  default_instruction: String,
 }
 
 #[derive(Serialize, Deserialize, Clone)]
@@ -1282,6 +1283,7 @@ pub(crate) fn list_employees(
             repository_ids: row.repository_ids,
             project_ids: row.project_ids,
             execution_engine: normalize_execution_engine(Some(row.execution_engine)),
+            default_instruction: row.default_instruction,
         })
         .collect())
 }
@@ -1295,6 +1297,7 @@ pub(crate) fn create_employee(
     repository_ids: Option<Vec<i64>>,
     project_ids: Option<Vec<String>>,
     execution_engine: Option<String>,
+    default_instruction: Option<String>,
 ) -> Result<EmployeeItem, String> {
     let now_ms = unix_now_ms();
     let normalized_name = name.trim();
@@ -1309,6 +1312,7 @@ pub(crate) fn create_employee(
     let repository_ids = repository_ids.unwrap_or_default();
     let project_ids = project_ids.unwrap_or_default();
     let execution_engine = normalize_execution_engine(execution_engine);
+    let default_instruction = default_instruction.unwrap_or_default().trim().to_string();
     db.create_employee(
         &id,
         normalized_name,
@@ -1317,6 +1321,7 @@ pub(crate) fn create_employee(
         now_ms,
         &repository_ids,
         &execution_engine,
+        &default_instruction,
     )?;
     for pid in &project_ids {
         let _ = db.add_project_prd_employee(pid, &id, now_ms);
@@ -1337,6 +1342,7 @@ pub(crate) fn create_employee(
         repository_ids: created.repository_ids,
         project_ids: created.project_ids,
         execution_engine: normalize_execution_engine(Some(created.execution_engine)),
+        default_instruction: created.default_instruction,
     })
 }
 
@@ -1350,6 +1356,7 @@ pub(crate) fn update_employee(
     repository_ids: Option<Vec<i64>>,
     project_ids: Option<Vec<String>>,
     execution_engine: Option<String>,
+    default_instruction: Option<String>,
 ) -> Result<EmployeeItem, String> {
     let now_ms = unix_now_ms();
     let normalized_name = name.trim();
@@ -1363,6 +1370,7 @@ pub(crate) fn update_employee(
     let repository_ids = repository_ids.unwrap_or_default();
     let new_project_ids = project_ids.unwrap_or_default();
     let execution_engine = normalize_execution_engine(execution_engine);
+    let default_instruction = default_instruction.unwrap_or_default().trim().to_string();
     db.update_employee(
         &employee_id,
         normalized_name,
@@ -1371,6 +1379,7 @@ pub(crate) fn update_employee(
         now_ms,
         &repository_ids,
         &execution_engine,
+        &default_instruction,
     )?;
 
     let updated = db
@@ -1404,6 +1413,7 @@ pub(crate) fn update_employee(
         repository_ids: updated.repository_ids,
         project_ids: updated.project_ids,
         execution_engine: normalize_execution_engine(Some(updated.execution_engine)),
+        default_instruction: updated.default_instruction,
     })
 }
 

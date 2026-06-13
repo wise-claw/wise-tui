@@ -12,6 +12,7 @@ export async function createEmployee(input: {
   repositoryIds?: number[];
   projectIds?: string[];
   executionEngine?: import("../types").SessionExecutionEngine;
+  defaultInstruction?: string;
 }): Promise<EmployeeItem> {
   return invoke<EmployeeItem>("create_employee", {
     name: input.name,
@@ -20,6 +21,7 @@ export async function createEmployee(input: {
     repositoryIds: input.repositoryIds ?? [],
     projectIds: input.projectIds ?? [],
     executionEngine: input.executionEngine ?? "claude",
+    defaultInstruction: input.defaultInstruction ?? "",
   });
 }
 
@@ -31,6 +33,7 @@ export async function updateEmployee(input: {
   repositoryIds?: number[];
   projectIds?: string[];
   executionEngine?: import("../types").SessionExecutionEngine;
+  defaultInstruction?: string;
 }): Promise<EmployeeItem> {
   return invoke<EmployeeItem>("update_employee", input);
 }

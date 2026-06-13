@@ -63,6 +63,7 @@ import {
   type ApplyComposerCommonPhraseDetail,
 } from "../../constants/composerCommonPhraseEvents";
 import { useComposerCommonPhrases } from "../../hooks/useComposerCommonPhrases";
+import { useComposerDefaultInstruction } from "../../hooks/useComposerDefaultInstruction";
 import { applyComposerCommonPhraseToSurface } from "../../utils/applyComposerCommonPhrase";
 import { chordMatchesKeyboardEvent } from "../../utils/atMentionShortcutChord";
 import { isWiseAppFocused } from "../../utils/isWiseAppFocused";
@@ -116,6 +117,8 @@ import {
   parseComposerLocalSlashCommand,
 } from "../../services/composerLocalSlashCommand";
 import { isComposerLocalSlashEligible } from "../../utils/composerLocalSlashCommand";
+import { resolveAppliedComposerDefaultInstruction } from "../../utils/composerDefaultInstruction";
+import { loadDefaultInstructionResolveContext } from "../../utils/resolveComposerDefaultInstructionOutbound";
 import {
   contextPercentToneClassName,
   formatContextStatusHint,
@@ -246,6 +249,7 @@ interface ComposerInnerProps {
   onDispatchExecutionEnvironment?: (input: {
     prompt: string;
     userBubblePrompt?: string;
+    defaultInstructionApplied?: string;
   }) => void | Promise<void>;
   onEnqueueAsPendingTask?: (payload: {
     promptText: string;
@@ -614,6 +618,12 @@ function ComposerInner({
     saving: composerCommonPhrasesSaving,
     persist: persistComposerCommonPhrases,
   } = useComposerCommonPhrases();
+  const {
+    text: composerDefaultInstruction,
+    loading: composerDefaultInstructionLoading,
+    saving: composerDefaultInstructionSaving,
+    save: saveComposerDefaultInstruction,
+  } = useComposerDefaultInstruction();
   const [trigger, setTrigger] = useState<TriggerInfo>({ mode: null, query: "", rect: null });
   const [images, setImages] = useState<ImageAttachmentPart[]>([]);
   const imagesRef = useRef(images);
@@ -1606,6 +1616,27 @@ function ComposerInner({
         codeSelectionRefs.length > 0;
       if (!hasSnapPayload) return;
 
+      const instructionResolveContext = await loadDefaultInstructionResolveContext(
+        session.repositoryPath,
+      );
+      const appliedDefaultInstruction = resolveAppliedComposerDefaultInstruction(
+        logicalSnap,
+        composerDefaultInstruction,
+        instructionResolveContext,
+      );
+      const buildBubbleExecuteOptions = (
+        bubble?: string,
+        cursorAttachments?: ClaudeComposerExecuteBubbleOptions["cursorAttachments"],
+      ): ClaudeComposerExecuteBubbleOptions | undefined => {
+        const options: ClaudeComposerExecuteBubbleOptions = {};
+        if (bubble?.trim()) options.userBubblePrompt = bubble;
+        if (appliedDefaultInstruction) {
+          options.defaultInstructionApplied = appliedDefaultInstruction;
+        }
+        if (cursorAttachments?.length) options.cursorAttachments = cursorAttachments;
+        return Object.keys(options).length > 0 ? options : undefined;
+      };
+
       const historyPrompt =
         imagesSnap.length > 0 ? singleTextPrompt(logicalSnap) : promptSnap;
       const rollbackDraft: LastSentComposerDraft = {
@@ -1691,6 +1722,7 @@ function ComposerInner({
             images: imagesSnap,
             repositoryPath: session.repositoryPath,
             userBubbleMain: logicalSnap,
+            defaultInstructionPrefix: composerDefaultInstruction,
           });
           outbound = payload.outbound;
           userBubblePrompt = payload.userBubblePrompt;
@@ -1733,6 +1765,7 @@ function ComposerInner({
           void onDispatchExecutionEnvironment({
             prompt: logicalSnap,
             userBubblePrompt,
+            ...(appliedDefaultInstruction ? { defaultInstructionApplied: appliedDefaultInstruction } : {}),
           });
           return;
         }
@@ -1785,14 +1818,14 @@ function ComposerInner({
               targetWorkflowId: target.targetWorkflowId,
               targetWorkflowName: target.targetWorkflowName,
             },
-            { userBubblePrompt },
+            buildBubbleExecuteOptions(userBubblePrompt),
           );
           return;
         }
 
         const consumePending = onEnqueueAsPendingTask({
           promptText: dispatchPromptText,
-          executeBubbleOptions: { userBubblePrompt },
+          executeBubbleOptions: buildBubbleExecuteOptions(userBubblePrompt),
           ...target,
         });
         sendFlowNodes.push({
@@ -1851,6 +1884,7 @@ function ComposerInner({
             images: imagesSnap,
             repositoryPath: session.repositoryPath,
             userBubbleMain: logicalSnap,
+            defaultInstructionPrefix: composerDefaultInstruction,
           });
           outbound = payload.outbound;
           userBubblePrompt = payload.userBubblePrompt;
@@ -1898,6 +1932,7 @@ function ComposerInner({
         void onDispatchExecutionEnvironment({
           prompt: logicalSnap,
           userBubblePrompt,
+          ...(appliedDefaultInstruction ? { defaultInstructionApplied: appliedDefaultInstruction } : {}),
         });
         return;
       }
@@ -1944,12 +1979,10 @@ function ComposerInner({
           teamMentions,
         ) || outbound;
 
-      let executeOptions: ClaudeComposerExecuteBubbleOptions | undefined;
-      if (cursorSendPayload?.cursorAttachments.length) {
-        executeOptions = { cursorAttachments: cursorSendPayload.cursorAttachments };
-      } else if (userBubblePrompt) {
-        executeOptions = { userBubblePrompt };
-      }
+      let executeOptions = buildBubbleExecuteOptions(
+        userBubblePrompt,
+        cursorSendPayload?.cursorAttachments,
+      );
 
       // @终端 / @团队 立即派发，不与其他执行体共用 FIFO（避免主会话排队阻塞终端/工作流）。
       const bypassPendingQueueForIndependentExecutor =
@@ -2051,6 +2084,7 @@ function ComposerInner({
       onAppendUserMessage,
       onCompactSessionHistory,
       onCreateNewSession,
+      composerDefaultInstruction,
     ],
   );
 
@@ -2846,6 +2880,11 @@ function ComposerInner({
           loading={composerCommonPhrasesLoading}
           saving={composerCommonPhrasesSaving}
           onPersist={persistComposerCommonPhrases}
+          defaultInstruction={composerDefaultInstruction}
+          defaultInstructionLoading={composerDefaultInstructionLoading}
+          defaultInstructionSaving={composerDefaultInstructionSaving}
+          onDefaultInstructionSave={saveComposerDefaultInstruction}
+          repositoryPath={session.repositoryPath}
         />
         <ComposerRuntimeSettingsTrigger
           engine={sessionExecutionEngine}
@@ -2887,6 +2926,10 @@ function ComposerInner({
       composerCommonPhrasesLoading,
       composerCommonPhrasesSaving,
       persistComposerCommonPhrases,
+      composerDefaultInstruction,
+      composerDefaultInstructionLoading,
+      composerDefaultInstructionSaving,
+      saveComposerDefaultInstruction,
     ],
   );
 
@@ -3162,6 +3205,7 @@ export interface ComposerRegionProps {
   onDispatchExecutionEnvironment?: (input: {
     prompt: string;
     userBubblePrompt?: string;
+    defaultInstructionApplied?: string;
   }) => void | Promise<void>;
   onEnqueueAsPendingTask?: (payload: {
     promptText: string;

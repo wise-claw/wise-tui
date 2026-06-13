@@ -4321,6 +4321,42 @@
   max-width: 100%;
 }
 
+.app-claude-user-message-inline-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  column-gap: 6px;
+  row-gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.app-claude-user-message-inline-row .app-markdown-host {
+  width: auto;
+  max-width: 100%;
+  flex: 0 1 auto;
+  min-width: 0;
+}
+
+.app-claude-user-message-inline-row .app-markdown p:only-child {
+  display: inline;
+  margin: 0;
+}
+
+.app-claude-user-message-default-instruction {
+  display: inline-block;
+  margin: 0;
+  padding: 0 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  line-height: 18px;
+  font-weight: 500;
+  vertical-align: baseline;
+  color: var(--ant-color-primary, #1677ff);
+  background: color-mix(in srgb, var(--ant-color-primary-bg, #e6f4ff) 85%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ant-color-primary-border, #91caff) 70%, transparent);
+}
+
 .app-claude-user-message-attachments {
   margin-top: 4px;
   font-size: 11px;

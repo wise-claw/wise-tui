@@ -1254,7 +1254,11 @@ export default function App() {
   sendMessageToSessionRef.current = sendMessageToSession;
 
   const handleDispatchExecutionEnvironment = useCallback(
-    async (input: { prompt: string; userBubblePrompt?: string }) => {
+    async (input: {
+      prompt: string;
+      userBubblePrompt?: string;
+      defaultInstructionApplied?: string;
+    }) => {
       const mainSessionId = activeSessionId;
       if (!mainSessionId) return;
       await dispatchExecutionEnvironmentFromMainSession(
@@ -1270,6 +1274,7 @@ export default function App() {
           mainSessionId,
           prompt: input.prompt,
           userBubblePrompt: input.userBubblePrompt,
+          defaultInstructionApplied: input.defaultInstructionApplied,
         },
       );
     },
@@ -3395,6 +3400,7 @@ export default function App() {
                 repositoryIds: input.repositoryIds,
                 projectIds: linkPid ? [linkPid] : [],
                 executionEngine: input.executionEngine,
+                defaultInstruction: input.defaultInstruction,
               });
               if (linkPid) {
                 setEmployeeConfigPrdVisibleEmployeeIds((prev) =>
