@@ -1,0 +1,11 @@
+{
+  "active": true,
+  "started_at": "2026-06-13T13:24:40.376Z",
+  "original_prompt": "/oh-my-claudecode:autopilot 终端输入字体颜色为白色，导致看不清，调整下。\n\n附图：@/Users/sjl/.wise/composer-images/wise/fb35cdb5-2b2e-446b-b631-12d1c43df49d-image.png",
+  "session_id": "13f9351a-ecb6-4e79-ae5c-88604792e051",
+  "project_path": "/Users/sjl/Documents/github/wise",
+  "reinforcement_count": 0,
+  "awaiting_confirmation": true,
+  "awaiting_confirmation_set_at": "2026-06-13T13:24:40.376Z",
+  "last_checked_at": "2026-06-13T13:24:40.376Z"
+}

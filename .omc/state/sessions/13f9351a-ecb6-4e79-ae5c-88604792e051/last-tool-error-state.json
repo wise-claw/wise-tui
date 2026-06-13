@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"rm -f src/hooks/terminalInput.ts src/hooks/terminalInput.test.ts src/hooks/terminalKeyEncode.ts src/hooks/terminalKeyEncode.test.ts src/hooks/terminalModes.ts src/hooks/terminalModes.test....",
+  "error": "Exit code 1\n(eval):1: no matches found: src/hooks/terminal*",
+  "timestamp": "2026-06-13T13:14:13.020Z",
+  "retry_count": 1
+}

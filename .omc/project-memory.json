@@ -43,7 +43,7 @@
   },
   "build": {
     "buildCommand": "npm run build",
-    "testCommand": "npm test",
+    "testCommand": "bun test 2>&1 | tail -5",
     "lintCommand": null,
     "devCommand": "npm run dev",
     "scripts": {

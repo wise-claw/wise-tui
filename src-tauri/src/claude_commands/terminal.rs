@@ -5,6 +5,41 @@ use tauri::Emitter;
 
 use super::{claude_path_search_prefixes, merge_path_env};
 
+/// Split PTY byte stream on UTF-8 boundaries so xterm never receives torn multibyte
+/// sequences (which corrupt alternate-screen TUIs like Claude Code).
+fn drain_valid_utf8_chunks(carry: &mut Vec<u8>) -> Vec<String> {
+    let mut chunks = Vec::new();
+    loop {
+        if carry.is_empty() {
+            break;
+        }
+        match std::str::from_utf8(carry.as_slice()) {
+            Ok(text) => {
+                chunks.push(text.to_string());
+                carry.clear();
+                break;
+            }
+            Err(error) => {
+                let valid_up_to = error.valid_up_to();
+                if valid_up_to > 0 {
+                    if let Ok(text) = std::str::from_utf8(&carry[..valid_up_to]) {
+                        chunks.push(text.to_string());
+                    }
+                    carry.drain(0..valid_up_to);
+                    continue;
+                }
+                if let Some(invalid_len) = error.error_len() {
+                    let skip = invalid_len.min(carry.len());
+                    carry.drain(0..skip);
+                    continue;
+                }
+                break;
+            }
+        }
+    }
+    chunks
+}
+
 /// PTY shells spawned from the GUI often inherit a weak or missing `TERM` and trigger
 /// zsh `PROMPT_SP` (inverted `%` on its own line) when themes — especially p10k instant
 /// prompt — write startup output without a trailing newline.
@@ -94,22 +129,36 @@ impl TerminalManager {
 
         std::thread::spawn(move || {
             let mut buf = [0u8; 4096];
+            let mut carry = Vec::new();
             loop {
                 match reader.read(&mut buf) {
                     Ok(0) => break,
                     Ok(n) => {
-                        let text = String::from_utf8_lossy(&buf[..n]).to_string();
-                        let _ = app_clone.emit(
-                            "terminal-output",
-                            serde_json::json!({
-                                "workspaceId": workspace_clone,
-                                "terminalId": terminal_clone,
-                                "data": text,
-                            }),
-                        );
+                        carry.extend_from_slice(&buf[..n]);
+                        for text in drain_valid_utf8_chunks(&mut carry) {
+                            let _ = app_clone.emit(
+                                "terminal-output",
+                                serde_json::json!({
+                                    "workspaceId": workspace_clone,
+                                    "terminalId": terminal_clone,
+                                    "data": text,
+                                }),
+                            );
+                        }
                     }
                     Err(_) => break,
                 }
+            }
+            if !carry.is_empty() {
+                let text = String::from_utf8_lossy(&carry).to_string();
+                let _ = app_clone.emit(
+                    "terminal-output",
+                    serde_json::json!({
+                        "workspaceId": workspace_clone,
+                        "terminalId": terminal_clone,
+                        "data": text,
+                    }),
+                );
             }
             let _ = app_clone.emit(
                 "terminal-exit",
@@ -231,4 +280,29 @@ pub(crate) fn terminal_close(
         .lock()
         .map_err(|e| e.to_string())?
         .close(&workspace_id, &terminal_id)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::drain_valid_utf8_chunks;
+
+    #[test]
+    fn drain_valid_utf8_chunks_waits_for_complete_multibyte() {
+        let mut carry = vec![0xE4, 0xB8];
+        assert!(drain_valid_utf8_chunks(&mut carry).is_empty());
+        assert_eq!(carry, vec![0xE4, 0xB8]);
+
+        carry.push(0xAD);
+        let chunks = drain_valid_utf8_chunks(&mut carry);
+        assert_eq!(chunks, vec!["中".to_string()]);
+        assert!(carry.is_empty());
+    }
+
+    #[test]
+    fn drain_valid_utf8_chunks_emits_ascii_prefix_before_partial_tail() {
+        let mut carry = b"abc\xe4\xb8".to_vec();
+        let chunks = drain_valid_utf8_chunks(&mut carry);
+        assert_eq!(chunks, vec!["abc".to_string()]);
+        assert_eq!(carry, vec![0xE4, 0xB8]);
+    }
 }

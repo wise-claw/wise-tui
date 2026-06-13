@@ -1,5 +1,5 @@
 // @refresh reset
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useTerminalTabs } from "../../hooks/useTerminalTabs";
 import { useTerminalSession } from "../../hooks/useTerminalSession";
 import type { Repository } from "../../types";
@@ -57,18 +57,28 @@ export function TerminalPanel({
     [closeAllTerminals, onClose],
   );
 
-  const activeRepository: Repository | null =
-    terminals.length > 0 && activeTerminalId
-      ? {
-          id: 0,
-          name: repositoryName,
-          path: _repositoryPath,
-          repositoryType: "frontend",
-          branch,
-          createdAt: "",
-          updatedAt: "",
-        }
-      : null;
+  // 用 useMemo 让 activeRepository 在 path/name/branch 不变时保持引用稳定，
+  // 避免 useTerminalSession 的 effect 在每次渲染都重新建立 PTY 会话。
+  const activeRepository = useMemo<Repository | null>(() => {
+    if (terminals.length === 0 || !activeTerminalId) {
+      return null;
+    }
+    return {
+      id: 0,
+      name: repositoryName,
+      path: _repositoryPath,
+      repositoryType: "frontend",
+      branch,
+      createdAt: "",
+      updatedAt: "",
+    };
+  }, [
+    terminals.length,
+    activeTerminalId,
+    repositoryName,
+    _repositoryPath,
+    branch,
+  ]);
 
   const terminalState = useTerminalSession({
     activeRepository,
@@ -82,8 +92,6 @@ export function TerminalPanel({
     ensureTerminal();
   }, [ensureTerminal]);
 
-  // --- Following refs buildSecondaryNodes: Dock wraps Panel ---
-
   const terminalPanelNode = (
     <TerminalPanelSurface
       containerRef={terminalState.containerRef}
@@ -96,9 +104,6 @@ export function TerminalPanel({
     <TerminalDock
       isOpen={true}
       activeTerminalId={activeTerminalId}
-      status={terminalState.status}
-      commandSuggestion={terminalState.commandSuggestion}
-      commandSuggestionSuffix={terminalState.commandSuggestionSuffix}
       onCloseTerminal={handleCloseTerminal}
       terminalNode={terminalPanelNode}
     />
