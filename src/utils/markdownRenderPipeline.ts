@@ -187,7 +187,7 @@ export function parseMarkdownSourceToHtml(text: string, opts?: { streaming?: boo
   const stabilized = opts?.streaming ? stabilizeStreamingMarkdown(source) : source;
   const unwrapped = unwrapProseFencedMarkdownSource(stabilized);
   const wrappedMermaid = wrapMermaidBlocksInMarkdown(unwrapped);
-  const normalized = normalizeMarkdownForDisplay(wrappedMermaid);
+  const normalized = normalizeMarkdownForDisplay(wrappedMermaid, { streaming: opts?.streaming });
   return parseMarkedHtml(normalized, source);
 }
 

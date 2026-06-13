@@ -1152,7 +1152,7 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
         } catch (err) {
           console.error("prepareFreshOmcEmployeeWorkerForDirectBatch failed:", err);
           omcBatchInFlightRef.current = false;
-          void message.error("准备 OMC 员工新会话失败，已取消本次批量执行。");
+          void message.error("清理 OMC 旧终端标签失败，已取消本次批量执行。");
           return;
         }
         /** 分帧：避免「巨型 Drawer 卸载 + 批任务全局事件」挤在同一帧拖死主线程 */

@@ -988,7 +988,7 @@ const TerminalEmployeeMonitorRow = memo(function TerminalEmployeeMonitorRow({
           onClick={() => onActivateRow(item)}
         >
           <span className="app-monitor-panel__item-name-wrap">
-            <MonitorItemTypeTag label="终端" />
+            <MonitorItemTypeTag label={isOmcWorker ? "OMC" : "终端"} />
             <span className="app-monitor-panel__item-name">{item.name}</span>
           </span>
           {lastMessagePreview ? (

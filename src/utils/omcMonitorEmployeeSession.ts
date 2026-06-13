@@ -26,7 +26,7 @@ export function resolveConfiguredOmcEmployee(employees: readonly EmployeeItem[])
 
 /**
  * 旧版直连批量/监控员工标签使用 `…/员工:OMC`（短后缀），与当前默认展示名 `…/员工:OMC员工` 不一致；
- * 关闭旧标签与 `prepareFreshOmcEmployeeWorkerForDirectBatch` 时必须识别该后缀，否则会沿用旧 Wise 标签与 Claude 会话。
+ * 关闭旧版 OMC 专用终端标签；`prepareFreshOmcEmployeeWorkerForDirectBatch` 启动批量前会清理同仓库下的历史 worker 标签。
  */
 const LEGACY_OMC_EMPLOYEE_REPOSITORY_BOUND_SHORT = "OMC";
 

@@ -64,7 +64,6 @@ import { extractLatestAssistantPlainText, mergeAssistantPlainTextPreferLonger } 
 import {
   extractRepositoryBoundEmployeeName,
   omcWorkerRepositoryBoundNameMatchers,
-  resolveConfiguredOmcEmployee,
 } from "../utils/omcMonitorEmployeeSession";
 import { normalizeRepositoryPathKey as normalizeRepositoryPathForMatch } from "../utils/repositoryMainSessionBinding";
 import type { WorkflowVerdictMode } from "../constants/workflowVerdictMode";
@@ -285,48 +284,16 @@ export function useWorkflowTeamAutomation({
           }
         });
       }
-      const employee = resolveConfiguredOmcEmployee(employeesRef.current);
-      if (!employee) return;
-      const disp = input.repositoryDisplayName.trim() || rp;
-      await resolveOrCreateTerminalWorkerTab(terminalDispatchDeps.current, rp, disp, employee);
     },
     [closeSession],
   );
 
+  /** @deprecated OMC 不再使用专用终端标签；主会话系统行已承载批量完成提示。 */
   const notifyOmcEmployeeDirectBatchTaskDone = useCallback(
-    (input: { repositoryPath: string; repositoryDisplayName: string; employeeMessage: string }) => {
-      void (async () => {
-        const rp = input.repositoryPath.trim();
-        const text = input.employeeMessage.trim();
-        if (!rp || !text) return;
-        const disp = input.repositoryDisplayName.trim() || rp;
-        const employee = resolveConfiguredOmcEmployee(employeesRef.current);
-        let targetSessionId: string | null = null;
-        const pathKey = normalizeRepositoryPathForMatch(rp);
-        const omcBoundNames = omcWorkerRepositoryBoundNameMatchers(employeesRef.current);
-        if (employee) {
-          const { workerTabId } = await resolveOrCreateTerminalWorkerTab(
-            terminalDispatchDeps.current,
-            rp,
-            disp,
-            employee,
-          );
-          targetSessionId = workerTabId;
-        } else {
-          for (const s of sessionsRef.current) {
-            if (normalizeRepositoryPathForMatch(s.repositoryPath ?? "") !== pathKey) continue;
-            const bound = extractRepositoryBoundEmployeeName(s.repositoryName);
-            if (bound !== null && omcBoundNames.has(bound)) {
-              targetSessionId = s.id;
-              break;
-            }
-          }
-        }
-        if (!targetSessionId) return;
-        appendSystemMessage(targetSessionId, text);
-      })();
+    (_input: { repositoryPath: string; repositoryDisplayName: string; employeeMessage: string }) => {
+      /* no-op */
     },
-    [appendSystemMessage],
+    [],
   );
 
   const persistRuntimeSnapshotExecutor = useCallback(

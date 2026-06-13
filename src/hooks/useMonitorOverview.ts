@@ -1130,16 +1130,6 @@ function buildInactiveMonitorOverview(input: {
     teamEmployeeIds,
     showOmcEmployee,
   });
-  if (showOmcEmployee) {
-    employeeMonitorItems.push({
-      employeeId: "omc-worker",
-      name: OMC_MONITOR_EMPLOYEE_NAME,
-      agentType: "omc",
-      status: "idle",
-      previewText: "暂无运行中的 OMC 任务",
-      updatedAt: 0,
-    });
-  }
   const sortedEmployeeMonitorItems = sortEmployeeMonitorItems(employeeMonitorItems);
   const employeesInProgress = sortedEmployeeMonitorItems.filter((item) => item.status === "in_progress").length;
   return {
@@ -1612,7 +1602,7 @@ export function useMonitorOverview({
         updatedAt: latest.updatedAt,
       };
     })();
-    if (showOmcEmployee) {
+    if (showOmcEmployee && hasOmcActivity) {
       employeeMonitorItems.push(omcMonitorItem);
     }
 

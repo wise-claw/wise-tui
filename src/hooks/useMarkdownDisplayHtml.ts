@@ -4,8 +4,16 @@ import {
   coerceMarkdownSourceText,
   stabilizeStreamingMarkdown,
 } from "../utils/markdownRenderPipeline";
+import { containsStreamingHtmlMarkup } from "../utils/markdownDisplayNormalize";
+import { findHtmlDocumentStartIndex } from "../utils/richMessageHtml";
 
 const STREAMING_MIN_REBUILD_MS = 96;
+
+/** HTML 文档/片段在流式阶段需更频繁重建，避免壳层标签闪现。 */
+function shouldBypassStreamingRebuildThrottle(text: string): boolean {
+  if (findHtmlDocumentStartIndex(text) !== null) return true;
+  return containsStreamingHtmlMarkup(text);
+}
 
 /**
  * 构建聊天 Markdown 展示 HTML。
@@ -26,8 +34,14 @@ export function useMarkdownDisplayHtml(text: string, streaming: boolean): string
     html: "",
     at: 0,
   });
+  const wasStreamingRef = useRef(streaming);
 
   return useMemo(() => {
+    if (wasStreamingRef.current && !streaming) {
+      lastBuiltRef.current = { text: "", html: "", at: 0 };
+    }
+    wasStreamingRef.current = streaming;
+
     if (!stabilizedText.trim()) {
       lastBuiltRef.current = { text: "", html: "", at: performance.now() };
       return "";
@@ -46,6 +60,7 @@ export function useMarkdownDisplayHtml(text: string, streaming: boolean): string
       && stabilizedText.startsWith(prev.text)
       && prev.html
       && now - prev.at < STREAMING_MIN_REBUILD_MS
+      && !shouldBypassStreamingRebuildThrottle(stabilizedText)
     ) {
       return prev.html;
     }

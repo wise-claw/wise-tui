@@ -164,4 +164,20 @@ describe("buildMarkdownDisplayHtml", () => {
     expect(html).toContain("language-mermaid");
     expect(html).toContain("subgraph ENTRY");
   });
+
+  test("streaming partial codex html document renders markdown not raw html shell", () => {
+    const chunks = [
+      "说明如下：\n\n<!DOCTYPE html><html><head><meta",
+      '说明如下：\n\n<!DOCTYPE html><html><head><meta charset="utf-8"></head><body><h1>Report</h1>',
+      '<!DOCTYPE html><html><body><h1>Report',
+    ];
+    for (const chunk of chunks) {
+      const html = buildMarkdownDisplayHtml(chunk, { streaming: true });
+      expect(html).not.toContain("app-markdown-html-embed");
+      expect(html).not.toContain("<head");
+      expect(html).not.toContain("<meta");
+    }
+    expect(buildMarkdownDisplayHtml(chunks[1]!, { streaming: true })).toMatch(/<h1[^>]*>Report/);
+    expect(buildMarkdownDisplayHtml(chunks[2]!, { streaming: true })).toMatch(/<h1[^>]*>Report/);
+  });
 });
