@@ -729,6 +729,17 @@ fn list_installed_sync(repository_path: Option<&str>) -> Result<Vec<ClaudePlugin
     Ok(merge_installed_entries(registry_rows, cli_rows))
 }
 
+/// 返回当前上下文下已启用插件的 `plugin@marketplace` 标识列表。
+pub(crate) fn list_enabled_installed_plugin_ids(
+    repository_path: Option<&str>,
+) -> Result<Vec<String>, String> {
+    Ok(list_installed_sync(repository_path)?
+        .into_iter()
+        .filter(|row| row.enabled)
+        .map(|row| row.id)
+        .collect())
+}
+
 fn ensure_marketplaces_sync(home: &Path) -> ClaudePluginMarketBootstrapResult {
     let mut log = String::new();
     let mut ok = true;

@@ -160,7 +160,8 @@ export function releaseWorkspaceQuickActionsScope(
   if (!entry) return;
   entry.consumers = Math.max(0, entry.consumers - 1);
   if (entry.consumers > 0) return;
-  void flushWorkspaceQuickActionsPersist(scope, scopeId);
+  const snapshot = [...entry.items];
+  void flushWorkspaceQuickActionsPersist(scope, scopeId, snapshot);
   loadGenerations.set(key, (loadGenerations.get(key) ?? 0) + 1);
   entries.delete(key);
   loadPromises.delete(key);
@@ -201,6 +202,24 @@ export function setWorkspaceQuickActionsScopeItems(
   bump();
 }
 
+async function reloadWorkspaceQuickActionsScope(
+  scope: WorkspaceQuickActionScope,
+  scopeId: string,
+): Promise<void> {
+  const key = scopeKey(scope, scopeId);
+  if (!entries.has(key)) return;
+  try {
+    const payload =
+      scope === "project"
+        ? await loadProjectWorkspaceQuickActions(scopeId)
+        : await loadRepositoryWorkspaceQuickActions(Number(scopeId));
+    if (!entries.has(key)) return;
+    setWorkspaceQuickActionsScopeItems(scope, scopeId, payload.items);
+  } catch {
+    /* 回滚失败时保持当前内存态，避免二次报错 */
+  }
+}
+
 export async function persistWorkspaceQuickActionsScopeItems(
   scope: WorkspaceQuickActionScope,
   rawScopeId: string | number | null | undefined,
@@ -218,13 +237,11 @@ export async function persistWorkspaceQuickActionsScopeItems(
     } else {
       await saveRepositoryWorkspaceQuickActions(Number(scopeId), items);
     }
-    if (persistGenerations.get(key) !== persistGeneration) {
-      return false;
-    }
     return true;
   } catch (error) {
     if (persistGenerations.get(key) === persistGeneration) {
       message.error(persistErrorText(error));
+      await reloadWorkspaceQuickActionsScope(scope, scopeId);
     }
     return false;
   }
@@ -267,10 +284,8 @@ export function flushWorkspaceQuickActionsPersist(
   }
   const pending = pendingPersist.get(key);
   pendingPersist.delete(key);
-  const payload = items ?? pending?.items;
-  if (!payload) return Promise.resolve(true);
-  if (items) {
-    setWorkspaceQuickActionsScopeItems(scope, scopeId, items);
-  }
+  const payload = items !== undefined ? items : pending?.items;
+  if (payload === undefined) return Promise.resolve(true);
+  setWorkspaceQuickActionsScopeItems(scope, scopeId, payload);
   return persistWorkspaceQuickActionsScopeItems(scope, scopeId, payload);
 }

@@ -641,6 +641,32 @@ pub fn seed_migrate_workspace_inspector_from_app_settings(conn: &Connection) -> 
     Ok(())
 }
 
+/// 修复旧库未成功执行 035 迁移时缺少 `pinned_to_topbar` 列的问题。
+pub fn ensure_workspace_quick_actions_pinned_column(conn: &Connection) -> Result<(), String> {
+    let mut stmt = conn
+        .prepare("PRAGMA table_info(workspace_quick_actions)")
+        .map_err(|e| e.to_string())?;
+    let mut has_column = false;
+    let rows = stmt
+        .query_map([], |row| row.get::<_, String>(1))
+        .map_err(|e| e.to_string())?;
+    for name in rows {
+        if name.map_err(|e| e.to_string())? == "pinned_to_topbar" {
+            has_column = true;
+            break;
+        }
+    }
+    if has_column {
+        return Ok(());
+    }
+    conn.execute_batch(
+        "ALTER TABLE workspace_quick_actions
+           ADD COLUMN pinned_to_topbar INTEGER NOT NULL DEFAULT 0
+           CHECK (pinned_to_topbar IN (0, 1));",
+    )
+    .map_err(|e| e.to_string())
+}
+
 impl WiseDb {
     pub fn list_project_workspace_quick_actions(
         &self,

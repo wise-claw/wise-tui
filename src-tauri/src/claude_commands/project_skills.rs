@@ -484,10 +484,121 @@ pub(crate) fn list_claude_user_skills() -> Result<Vec<ClaudeProjectSkill>, Strin
     list_claude_skills_under_dir(&skills_dir, Some("user"))
 }
 
-/// Wise 不从 `~/.claude/plugins/cache/**` 枚举插件包内 skills/；请使用 `list_claude_user_skills` / `list_claude_project_skills`。
+fn install_ref_from_cache_rel(rel: &str) -> Option<String> {
+    let parts: Vec<&str> = rel
+        .trim()
+        .trim_matches('/')
+        .split('/')
+        .filter(|part| !part.is_empty())
+        .collect();
+    if parts.len() < 2 {
+        return None;
+    }
+    Some(format!("{}@{}", parts[1], parts[0]))
+}
+
+fn annotate_plugin_slash_entry(
+    mut skill: ClaudeProjectSkill,
+    cache_rel: &str,
+    plugin_root: &Path,
+    install_ref: &str,
+) -> ClaudeProjectSkill {
+    skill.plugin_cache_rel_path = Some(cache_rel.to_string());
+    skill.plugin_cache_root = Some(skill_dir_root_path(plugin_root));
+    skill.source = Some(crate::skills::source::SkillSource::Builtin);
+    skill.skill_scope = Some("plugin".to_string());
+    let prefix = format!("({install_ref}) ");
+    match skill.description.as_mut() {
+        Some(desc) if !desc.contains(install_ref) => {
+            desc.insert_str(0, &prefix);
+        }
+        None => {
+            skill.description = Some(format!("{prefix}插件命令"));
+        }
+        _ => {}
+    }
+    skill
+}
+
+fn list_plugin_slash_entries_from_root(
+    plugin_root: &Path,
+    cache_rel: &str,
+    install_ref: &str,
+) -> Result<Vec<ClaudeProjectSkill>, String> {
+    let mut out = Vec::new();
+    let skills_dir = plugin_root.join("skills");
+    let commands_dir = plugin_root.join("commands");
+
+    if skills_dir.is_dir() {
+        for row in list_claude_skills_under_dir(&skills_dir, Some("plugin"))? {
+            out.push(annotate_plugin_slash_entry(row, cache_rel, plugin_root, install_ref));
+        }
+    }
+    for row in list_claude_command_skills_under_dir(&commands_dir)? {
+        out.push(annotate_plugin_slash_entry(row, cache_rel, plugin_root, install_ref));
+    }
+    Ok(out)
+}
+
+pub(crate) fn list_claude_plugin_cache_skills_sync(
+    repository_path: Option<&str>,
+) -> Result<Vec<ClaudeProjectSkill>, String> {
+    let enabled_ids: HashSet<String> = super::plugin_market::list_enabled_installed_plugin_ids(
+        repository_path,
+    )?
+    .into_iter()
+    .map(|id| id.to_lowercase())
+    .collect();
+    if enabled_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let roots = super::mcp::discover_plugin_roots_under_claude_cache_for_skills_and_agents();
+    let mut out = Vec::new();
+    let mut seen_names: HashSet<String> = HashSet::new();
+
+    for (cache_rel, plugin_root) in roots {
+        let Some(install_ref) = install_ref_from_cache_rel(&cache_rel) else {
+            continue;
+        };
+        if !enabled_ids.contains(&install_ref.to_lowercase()) {
+            continue;
+        }
+        for row in list_plugin_slash_entries_from_root(&plugin_root, &cache_rel, &install_ref)? {
+            let key = row.name.to_lowercase();
+            if seen_names.insert(key) {
+                out.push(row);
+            }
+        }
+    }
+
+    out.sort_by(|a, b| a.name.to_lowercase().cmp(&b.name.to_lowercase()));
+    Ok(out)
+}
+
+/// 枚举已启用插件在 `~/.claude/plugins/cache/**` 中注册的 skills / commands 斜杠命令。
 #[tauri::command]
-pub(crate) fn list_claude_plugin_cache_skills() -> Result<Vec<ClaudeProjectSkill>, String> {
-    Ok(Vec::new())
+pub(crate) fn list_claude_plugin_cache_skills(
+    repository_path: Option<String>,
+) -> Result<Vec<ClaudeProjectSkill>, String> {
+    list_claude_plugin_cache_skills_sync(repository_path.as_deref())
+}
+
+#[cfg(test)]
+mod plugin_cache_skill_tests {
+    use super::install_ref_from_cache_rel;
+
+    #[test]
+    fn install_ref_from_cache_rel_parses_marketplace_and_plugin() {
+        assert_eq!(
+            install_ref_from_cache_rel("omc/oh-my-claudecode/4.14.6").as_deref(),
+            Some("oh-my-claudecode@omc")
+        );
+        assert_eq!(
+            install_ref_from_cache_rel("claude-code-plugins/code-review").as_deref(),
+            Some("code-review@claude-code-plugins")
+        );
+    }
 }
 
 #[tauri::command]

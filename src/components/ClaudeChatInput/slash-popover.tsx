@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Spin } from "antd";
-import { listClaudeProjectSkills } from "../../services/claude";
+import { isOmcPluginInstalled, listClaudePluginCacheSkills, listClaudeProjectSkills } from "../../services/claude";
+import { claudePluginListInstalled } from "../../services/claudePluginMarket";
 import { searchRepositoryFiles } from "../../services/repositoryFiles";
 import type { ClaudeProjectSkill } from "../../types";
 import type { RepositoryMentionOption } from "../../utils/projectRoleTagOptions";
@@ -17,6 +18,17 @@ import { resolveAtMentionSelectedIndex } from "../../utils/atMentionDefaultSelec
 import type { TriggerInfo } from "./slash-trigger";
 import { CLAUDE_BUILTIN_SLASH_COMMANDS } from "../../constants/claudeCodeSlashCommands";
 import {
+  buildComposerPluginInstallSlashCommands,
+  buildComposerPluginInstalledSlashCommands,
+  COMPOSER_PLUGIN_SLASH_SUBCOMMANDS,
+} from "../../constants/composerPluginSlashCommands";
+import {
+  shouldShowComposerPluginInstalledTemplates,
+  shouldShowComposerPluginInstallTemplates,
+  slashCommandMatchesQuery,
+} from "../../utils/slashCommandMatch";
+import { buildInstalledPluginSlashOptionsFromSkills } from "../../utils/installedPluginSlashCommands";
+import {
   ensureSpaceAfterAtInsert,
   insertPlainAt,
   removeAtTriggerFromPlain,
@@ -32,7 +44,7 @@ export interface SlashOption {
   path?: string;
   name?: string;
   workflowId?: string;
-  group?: "omc" | "claude" | "skill";
+  group?: "omc" | "claude" | "skill" | "plugin" | "plugin-cmd";
   executionEngine?: SessionExecutionEngine;
   executionEngineAvailable?: boolean;
 }
@@ -106,11 +118,43 @@ const OMC_COMMANDS: SlashOption[] = [
   { type: "command", group: "omc", label: "update-config", description: "更新 OMC/Claude 配置" },
 ];
 
-function buildSlashCommandOptions(): SlashOption[] {
+const PLUGIN_SUBCOMMANDS: SlashOption[] = COMPOSER_PLUGIN_SLASH_SUBCOMMANDS.map((cmd) => ({
+  type: "command" as const,
+  group: "plugin" as const,
+  label: cmd.label,
+  description: cmd.description,
+}));
+
+function mapPluginSlashEntries(
+  entries: ReadonlyArray<{ label: string; description: string }>,
+): SlashOption[] {
+  return entries.map((cmd) => ({
+    type: "command" as const,
+    group: "plugin" as const,
+    label: cmd.label,
+    description: cmd.description,
+  }));
+}
+
+function buildPluginSlashOptions(
+  query: string,
+  installedPluginCommands: SlashOption[],
+  installCommands: SlashOption[],
+): SlashOption[] {
+  const subcommands = PLUGIN_SUBCOMMANDS.filter((cmd) => slashCommandMatchesQuery(cmd.label, query));
+  const installed = shouldShowComposerPluginInstalledTemplates(query)
+    ? installedPluginCommands.filter((cmd) => slashCommandMatchesQuery(cmd.label, query))
+    : [];
+  const installs = shouldShowComposerPluginInstallTemplates(query)
+    ? installCommands.filter((cmd) => slashCommandMatchesQuery(cmd.label, query))
+    : [];
+  return [...subcommands, ...installed, ...installs];
+}
+
+function mergeSlashCommandOptions(items: SlashOption[]): SlashOption[] {
   const seen = new Set<string>();
-  const merged = [...CLAUDE_BUILTIN_COMMANDS, ...OMC_COMMANDS];
   const result: SlashOption[] = [];
-  for (const item of merged) {
+  for (const item of items) {
     const key = item.label.trim().toLowerCase();
     if (!key || seen.has(key)) continue;
     seen.add(key);
@@ -119,7 +163,19 @@ function buildSlashCommandOptions(): SlashOption[] {
   return result;
 }
 
-const BUILTIN_COMMANDS = buildSlashCommandOptions();
+function buildRuntimeBuiltinCommands(
+  omcInstalled: boolean,
+  detectedPluginLabels: ReadonlySet<string>,
+): SlashOption[] {
+  const omc = omcInstalled
+    ? OMC_COMMANDS.filter((cmd) => !detectedPluginLabels.has(cmd.label.trim().toLowerCase()))
+    : [];
+  return mergeSlashCommandOptions([...CLAUDE_BUILTIN_COMMANDS, ...omc]);
+}
+
+const CLAUDE_RESERVED_LABELS = new Set(
+  CLAUDE_BUILTIN_COMMANDS.map((cmd) => cmd.label.trim().toLowerCase()),
+);
 
 /** 与 `replaceSlashCommandLine` 中单 token 一致，避免插入非法 `/…` 片段 */
 const SLASH_SKILL_NAME_RE = /^[a-zA-Z0-9][-a-zA-Z0-9_.]*$/;
@@ -136,16 +192,18 @@ function skillIsInvocableAsSlashCommand(skill: ClaudeProjectSkill): boolean {
   return (skill.fileCount ?? 0) > 0;
 }
 
-/** 项目技能；与内置 / 指令去重（按 label 不区分大小写） */
-function buildSkillSlashOptionsFromList(project: ClaudeProjectSkill[]): SlashOption[] {
-  const reserved = new Set(BUILTIN_COMMANDS.map((c) => c.label.trim().toLowerCase()));
+/** 项目技能；与 Claude 内置 / 指令去重（按 label 不区分大小写） */
+function buildSkillSlashOptionsFromList(
+  project: ClaudeProjectSkill[],
+  reservedLabels: ReadonlySet<string>,
+): SlashOption[] {
   const byKey = new Map<string, SlashOption>();
 
   const push = (skill: ClaudeProjectSkill, defaultDescription: string) => {
     if (!skillIsInvocableAsSlashCommand(skill)) return;
     const label = skill.name.trim();
     const k = label.toLowerCase();
-    if (reserved.has(k)) return;
+    if (reservedLabels.has(k)) return;
     if (byKey.has(k)) return;
     const desc = skill.description?.trim();
     byKey.set(k, {
@@ -235,9 +293,103 @@ export function SlashPopover({
   const [fileResults, setFileResults] = useState<SlashOption[]>([]);
   const [fileLoading, setFileLoading] = useState(false);
   const [skillSlashOptions, setSkillSlashOptions] = useState<SlashOption[]>([]);
+  const [detectedPluginSlashOptions, setDetectedPluginSlashOptions] = useState<SlashOption[]>([]);
+  const [installedPluginSlashOptions, setInstalledPluginSlashOptions] = useState<SlashOption[]>([]);
+  const [installPluginSlashOptions, setInstallPluginSlashOptions] = useState<SlashOption[]>([]);
+  const [omcInstalled, setOmcInstalled] = useState(false);
 
   const mode = trigger.mode;
   const query = trigger.query;
+
+  const detectedPluginLabelSet = useMemo(
+    () => new Set(detectedPluginSlashOptions.map((row) => row.label.trim().toLowerCase())),
+    [detectedPluginSlashOptions],
+  );
+
+  const reservedSkillLabels = useMemo(() => {
+    const reserved = new Set(CLAUDE_RESERVED_LABELS);
+    for (const label of detectedPluginLabelSet) reserved.add(label);
+    if (omcInstalled) {
+      for (const cmd of OMC_COMMANDS) {
+        if (!detectedPluginLabelSet.has(cmd.label.trim().toLowerCase())) {
+          reserved.add(cmd.label.trim().toLowerCase());
+        }
+      }
+    }
+    return reserved;
+  }, [detectedPluginLabelSet, omcInstalled]);
+
+  useEffect(() => {
+    if (mode !== "slash") return;
+    let cancelled = false;
+    void isOmcPluginInstalled()
+      .then((installed) => {
+        if (!cancelled) setOmcInstalled(installed);
+      })
+      .catch(() => {
+        if (!cancelled) setOmcInstalled(false);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, [mode]);
+
+  useEffect(() => {
+    if (mode !== "slash") {
+      setDetectedPluginSlashOptions([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const rows = await listClaudePluginCacheSkills(repositoryPath?.trim() || null);
+        if (cancelled) return;
+        const detected = buildInstalledPluginSlashOptionsFromSkills(rows, CLAUDE_RESERVED_LABELS).map(
+          (cmd) => ({
+            type: "command" as const,
+            group: "plugin-cmd" as const,
+            label: cmd.label,
+            description: cmd.description,
+          }),
+        );
+        setDetectedPluginSlashOptions(detected);
+      } catch {
+        if (!cancelled) setDetectedPluginSlashOptions([]);
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, repositoryPath]);
+
+  useEffect(() => {
+    if (mode !== "slash") {
+      setInstalledPluginSlashOptions([]);
+      setInstallPluginSlashOptions([]);
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      try {
+        const rows = await claudePluginListInstalled(repositoryPath?.trim() || null);
+        if (cancelled) return;
+        setInstalledPluginSlashOptions(
+          mapPluginSlashEntries(buildComposerPluginInstalledSlashCommands(rows)),
+        );
+        setInstallPluginSlashOptions(
+          mapPluginSlashEntries(buildComposerPluginInstallSlashCommands(rows)),
+        );
+      } catch {
+        if (!cancelled) {
+          setInstalledPluginSlashOptions([]);
+          setInstallPluginSlashOptions([]);
+        }
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [mode, repositoryPath]);
 
   useEffect(() => {
     if (mode !== "slash" || !repositoryPath?.trim()) {
@@ -249,7 +401,7 @@ export function SlashPopover({
       try {
         const proj = await listClaudeProjectSkills(repositoryPath.trim());
         if (cancelled) return;
-        setSkillSlashOptions(buildSkillSlashOptionsFromList(proj));
+        setSkillSlashOptions(buildSkillSlashOptionsFromList(proj, reservedSkillLabels));
       } catch {
         if (!cancelled) setSkillSlashOptions([]);
       }
@@ -257,7 +409,7 @@ export function SlashPopover({
     return () => {
       cancelled = true;
     };
-  }, [mode, repositoryPath]);
+  }, [mode, repositoryPath, reservedSkillLabels]);
 
   useEffect(() => {
     if (mode !== "at" || !repositoryPath) {
@@ -313,6 +465,18 @@ export function SlashPopover({
     () => skillSlashOptions.map((s) => s.label).join("\n"),
     [skillSlashOptions],
   );
+  const detectedPluginSlashOptionsKey = useMemo(
+    () => detectedPluginSlashOptions.map((s) => s.label).join("\n"),
+    [detectedPluginSlashOptions],
+  );
+  const installPluginSlashOptionsKey = useMemo(
+    () => installPluginSlashOptions.map((s) => s.label).join("\n"),
+    [installPluginSlashOptions],
+  );
+  const installedPluginSlashOptionsKey = useMemo(
+    () => installedPluginSlashOptions.map((s) => s.label).join("\n"),
+    [installedPluginSlashOptions],
+  );
   const atMentionDefaultTargetKey = encodeAtMentionDefaultSelectValue(atMentionDefaultTarget);
 
   const options = useMemo(
@@ -324,6 +488,11 @@ export function SlashPopover({
         employeeOptions,
         teamOptions,
         skillSlashOptions,
+        detectedPluginSlashOptions,
+        installedPluginSlashOptions,
+        installPluginSlashOptions,
+        omcInstalled,
+        detectedPluginLabelSet,
         hideEmployeesInAtMode,
         codexAvailable,
         cursorAvailable,
@@ -339,6 +508,14 @@ export function SlashPopover({
       teamOptionsKey,
       skillSlashOptions,
       skillSlashOptionsKey,
+      detectedPluginSlashOptions,
+      detectedPluginSlashOptionsKey,
+      installedPluginSlashOptions,
+      installedPluginSlashOptionsKey,
+      installPluginSlashOptions,
+      installPluginSlashOptionsKey,
+      omcInstalled,
+      detectedPluginLabelSet,
       hideEmployeesInAtMode,
       codexAvailable,
       cursorAvailable,
@@ -514,6 +691,15 @@ export function SlashPopover({
               i > 0 &&
               options[i - 1]?.type === "command" &&
               options[i - 1]?.group === "omc";
+            const showPluginCmdTitle =
+              opt.type === "command" &&
+              opt.group === "plugin-cmd" &&
+              (i === 0 || options[i - 1]?.group !== "plugin-cmd");
+            const showPluginTitle =
+              opt.type === "command" &&
+              opt.group === "plugin" &&
+              (i === 0 ||
+                (options[i - 1]?.group !== "plugin" && options[i - 1]?.group !== "plugin-cmd"));
             const showSkillTitle =
               opt.type === "command" &&
               opt.group === "skill" &&
@@ -522,6 +708,12 @@ export function SlashPopover({
               <div key={`${opt.type}-${opt.group ?? ""}-${opt.label}-${opt.path ?? ""}-${opt.workflowId ?? ""}`}>
                 {showClaudeTitle ? (
                   <div className="app-claude-slash-popover-group-title">Claude 内置</div>
+                ) : null}
+                {showPluginCmdTitle ? (
+                  <div className="app-claude-slash-popover-group-title">已安装插件命令</div>
+                ) : null}
+                {showPluginTitle ? (
+                  <div className="app-claude-slash-popover-group-title">插件</div>
                 ) : null}
                 {showSkillTitle ? (
                   <div className="app-claude-slash-popover-group-title">Skills 技能</div>
@@ -832,6 +1024,11 @@ function getFilteredOptions(
   employeeOptions: Array<{ id: string; name: string }>,
   teamOptions: Array<{ id: string; name: string }>,
   skillSlashOptions: SlashOption[],
+  detectedPluginSlashOptions: SlashOption[],
+  installedPluginSlashOptions: SlashOption[],
+  installPluginSlashOptions: SlashOption[],
+  omcInstalled: boolean,
+  detectedPluginLabels: ReadonlySet<string>,
   hideEmployeesInAtMode = false,
   codexAvailable = true,
   cursorAvailable = true,
@@ -839,17 +1036,26 @@ function getFilteredOptions(
   if (!mode) return [];
 
   if (mode === "slash") {
-    const q = query.trim().toLowerCase();
-    const builtinsFiltered = !q
-      ? BUILTIN_COMMANDS
-      : BUILTIN_COMMANDS.filter((c) => c.label.toLowerCase().includes(q));
-    const skillsFiltered = !q
+    const runtimeBuiltins = buildRuntimeBuiltinCommands(omcInstalled, detectedPluginLabels);
+    const builtinsFiltered = !query.trim()
+      ? runtimeBuiltins
+      : runtimeBuiltins.filter((c) => slashCommandMatchesQuery(c.label, query));
+    const detectedFiltered = !query.trim()
+      ? detectedPluginSlashOptions
+      : detectedPluginSlashOptions.filter((c) => slashCommandMatchesQuery(c.label, query));
+    const pluginFiltered = buildPluginSlashOptions(
+      query,
+      installedPluginSlashOptions,
+      installPluginSlashOptions,
+    );
+    const skillsFiltered = !query.trim()
       ? skillSlashOptions
       : skillSlashOptions.filter(
           (c) =>
-            c.label.toLowerCase().includes(q) || (c.description ?? "").toLowerCase().includes(q),
+            slashCommandMatchesQuery(c.label, query) ||
+            slashCommandMatchesQuery(c.description ?? "", query),
         );
-    return [...builtinsFiltered, ...skillsFiltered];
+    return [...builtinsFiltered, ...detectedFiltered, ...pluginFiltered, ...skillsFiltered];
   }
 
   const teams: SlashOption[] = teamOptions.map((team) => ({

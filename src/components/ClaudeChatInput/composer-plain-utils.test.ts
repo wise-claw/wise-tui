@@ -84,6 +84,16 @@ describe("detectAtSlashTrigger", () => {
       query: "aut",
       triggerStart: 3,
     });
+    expect(detectAtSlashTrigger("/plugin install", 15)).toEqual({
+      mode: "slash",
+      query: "plugin install",
+      triggerStart: 0,
+    });
+    expect(detectAtSlashTrigger("/plugin ins", 12)).toEqual({
+      mode: "slash",
+      query: "plugin ins",
+      triggerStart: 0,
+    });
   });
 });
 
@@ -92,6 +102,15 @@ describe("replaceSlashCommandLine", () => {
     expect(replaceSlashCommandLine("sds/aut", 7, "autopilot")).toEqual({
       plain: "sds/autopilot ",
       cursor: 14,
+    });
+  });
+
+  test("replaces multi-word plugin slash token", () => {
+    expect(
+      replaceSlashCommandLine("/plugin ins", 12, "plugin install oh-my-claudecode@omc"),
+    ).toEqual({
+      plain: "/plugin install oh-my-claudecode@omc ",
+      cursor: 37,
     });
   });
 });

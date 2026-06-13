@@ -52,8 +52,7 @@ export function WorkspaceQuickActionsPanel({
       existingId?: string,
     ) => {
       const now = Date.now();
-      const source =
-        scope === "project" ? quickActions.projectItemsRef.current : quickActions.repositoryItemsRef.current;
+      const source = quickActions.readScopeItems(scope);
       const next = [...source];
       const index = existingId ? next.findIndex((row) => row.id === existingId) : -1;
       if (index >= 0) {
@@ -74,11 +73,10 @@ export function WorkspaceQuickActionsPanel({
           updatedAt: now,
         });
       }
-      quickActions.setItemsForScope(scope, next);
       const ok = await quickActions.flushPersist(scope, next);
-      if (!ok) message.error("快捷操作保存失败");
+      if (!ok) throw new Error("快捷操作保存失败");
     },
-    [message, quickActions],
+    [quickActions],
   );
 
   const removeItem = useCallback(
@@ -90,27 +88,23 @@ export function WorkspaceQuickActionsPanel({
         okType: "danger",
         cancelText: "取消",
         onOk: async () => {
-          const source =
-            item.scope === "project"
-              ? quickActions.projectItemsRef.current
-              : quickActions.repositoryItemsRef.current;
+          const source = quickActions.readScopeItems(item.scope);
           const next = source.filter((row) => row.id !== item.id);
-          quickActions.setItemsForScope(item.scope, next);
+          if (next.length === source.length) {
+            throw new Error("未找到要删除的快捷操作");
+          }
           const ok = await quickActions.flushPersist(item.scope, next);
-          if (!ok) message.error("快捷操作保存失败");
+          if (!ok) throw new Error("快捷操作删除失败");
         },
       });
     },
-    [message, modal, quickActions],
+    [modal, quickActions],
   );
 
   const togglePinToTopbar = useCallback(
     async (item: WorkspaceQuickActionDisplayItem) => {
       const pinned = resolveWorkspaceQuickActionPinnedToTopbar(item);
-      const source =
-        item.scope === "project"
-          ? quickActions.projectItemsRef.current
-          : quickActions.repositoryItemsRef.current;
+      const source = quickActions.readScopeItems(item.scope);
       const now = Date.now();
       const next = source.map((row) =>
         row.id === item.id
@@ -121,11 +115,10 @@ export function WorkspaceQuickActionsPanel({
             }
           : row,
       );
-      quickActions.setItemsForScope(item.scope, next);
       const ok = await quickActions.flushPersist(item.scope, next);
-      if (!ok) message.error("快捷操作保存失败");
+      if (!ok) throw new Error("快捷操作保存失败");
     },
-    [message, quickActions],
+    [quickActions],
   );
 
   const openItem = useCallback(
@@ -175,17 +168,10 @@ export function WorkspaceQuickActionsPanel({
           onClose={() => setEditState(null)}
           onSubmit={async (input) => {
             if (editState?.mode === "edit" && editState.scope !== input.scope) {
-              const oldSource =
-                editState.scope === "project"
-                  ? quickActions.projectItemsRef.current
-                  : quickActions.repositoryItemsRef.current;
+              const oldSource = quickActions.readScopeItems(editState.scope);
               const without = oldSource.filter((row) => row.id !== editState.item.id);
-              quickActions.setItemsForScope(editState.scope, without);
               const removedOk = await quickActions.flushPersist(editState.scope, without);
-              if (!removedOk) {
-                message.error("快捷操作保存失败");
-                return;
-              }
+              if (!removedOk) throw new Error("快捷操作保存失败");
             }
             const existingId = editState?.mode === "edit" ? editState.item.id : undefined;
             await upsertItem(input.scope, input, existingId);

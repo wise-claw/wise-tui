@@ -1070,6 +1070,11 @@ mod plugin_mcp_enumeration {
 }
 
 
+pub(crate) fn discover_plugin_roots_under_claude_cache_for_skills_and_agents(
+) -> Vec<(String, PathBuf)> {
+    plugin_mcp_enumeration::discover_plugin_roots_under_claude_cache_for_skills_and_agents()
+}
+
 /// Wise 不从 `~/.claude/plugins/**`（含 cache、marketplaces、installed_plugins.json）读取插件 MCP。
 fn collect_installed_plugin_mcp_items(_home: &Path) -> Vec<ClaudeMcpItem> {
     Vec::new()

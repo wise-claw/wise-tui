@@ -31,18 +31,23 @@ export function singleTextPrompt(plain: string): Prompt {
   return [{ type: "text", text: t, start: 0, end: t.length }];
 }
 
-/** 行内 `/` 触发：允许「sds/」这类前缀，但排除 URL/path 里的 `://` 与 `//`。 */
-function matchInlineSlashTrigger(currentLine: string): RegExpMatchArray | null {
-  const lastBreak = Math.max(currentLine.lastIndexOf(" "), currentLine.lastIndexOf("\t"));
-  const token = lastBreak >= 0 ? currentLine.slice(lastBreak + 1) : currentLine;
-  if ((token.match(/\//g) ?? []).length !== 1) return null;
+interface SlashTriggerMatch {
+  query: string;
+  slashIndexOnLine: number;
+}
 
-  const match = token.match(/\/(\S*)$/);
-  if (!match) return null;
+/** 行内 `/` 触发：当前行仅一个 `/`（排除 URL/path），query 可含空格以支持 `/plugin install`。 */
+function matchInlineSlashTrigger(currentLine: string): SlashTriggerMatch | null {
+  if ((currentLine.match(/\//g) ?? []).length !== 1) return null;
 
-  const slashIndex = currentLine.length - match[0].length;
-  if (slashIndex > 0 && currentLine[slashIndex - 1] === ":") return null;
-  return match;
+  const slashIndexOnLine = currentLine.indexOf("/");
+  if (slashIndexOnLine < 0) return null;
+  if (slashIndexOnLine > 0 && currentLine[slashIndexOnLine - 1] === ":") return null;
+
+  return {
+    query: currentLine.slice(slashIndexOnLine + 1),
+    slashIndexOnLine,
+  };
 }
 
 /** 行内 `@` 触发：光标前当前行以 `@query` 结尾即可（不要求行首）。 */
@@ -71,14 +76,10 @@ export function detectAtSlashTrigger(
 
   const slashMatch = matchInlineSlashTrigger(currentLine);
   if (slashMatch) {
-    const lastBreak = Math.max(currentLine.lastIndexOf(" "), currentLine.lastIndexOf("\t"));
-    const tokenStartOnLine = lastBreak >= 0 ? lastBreak + 1 : 0;
-    const token = currentLine.slice(tokenStartOnLine);
-    const slashIndexOnLine = tokenStartOnLine + token.length - slashMatch[0].length;
     return {
       mode: "slash",
-      query: slashMatch[1] ?? "",
-      triggerStart: lineStart + slashIndexOnLine,
+      query: slashMatch.query,
+      triggerStart: lineStart + slashMatch.slashIndexOnLine,
     };
   }
 
@@ -162,11 +163,7 @@ export function replaceSlashCommandLine(
   const m = matchInlineSlashTrigger(lineText);
   if (!m) return { plain, cursor: Math.min(cursor, plain.length) };
 
-  const lastBreak = Math.max(lineText.lastIndexOf(" "), lineText.lastIndexOf("\t"));
-  const tokenStartOnLine = lastBreak >= 0 ? lastBreak + 1 : 0;
-  const token = lineText.slice(tokenStartOnLine);
-  const slashIndexOnLine = tokenStartOnLine + token.length - m[0].length;
-  const slashStart = lineStart + slashIndexOnLine;
+  const slashStart = lineStart + m.slashIndexOnLine;
   const insertion = `/${commandLabel} `;
   const next = plain.slice(0, slashStart) + insertion + plain.slice(before.length);
   return { plain: next, cursor: slashStart + insertion.length };

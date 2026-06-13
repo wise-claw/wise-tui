@@ -11,6 +11,7 @@ mock.module("antd", () => ({
 }));
 
 const {
+  flushWorkspaceQuickActionsPersist,
   getWorkspaceQuickActionsRuntimeSnapshot,
   getWorkspaceQuickActionsScopeItems,
   persistWorkspaceQuickActionsScopeItems,
@@ -182,7 +183,8 @@ describe("workspaceQuickActionsRuntimeStore", () => {
     const firstPersist = persistWorkspaceQuickActionsScopeItems("project", "proj-persist", olderItems);
     const secondPersist = persistWorkspaceQuickActionsScopeItems("project", "proj-persist", newerItems);
 
-    const [, secondOk] = await Promise.all([firstPersist, secondPersist]);
+    const [firstOk, secondOk] = await Promise.all([firstPersist, secondPersist]);
+    expect(firstOk).toBe(true);
     expect(secondOk).toBe(true);
     expect(getWorkspaceQuickActionsScopeItems("project", "proj-persist")[0]?.id).toBe("new");
 
@@ -261,5 +263,70 @@ describe("workspaceQuickActionsRuntimeStore", () => {
       ([command]) => command === "save_project_workspace_quick_actions",
     );
     expect(saveCalls).toHaveLength(1);
+  });
+
+  test("flush persists empty list when deleting the last quick action", async () => {
+    invoke.mockImplementation(async (command: string, args?: { items?: unknown[] }) => {
+      if (command === "save_project_workspace_quick_actions") {
+        return { version: 2, items: args?.items ?? [] };
+      }
+      return {
+        version: 1,
+        items: [
+          {
+            id: "only",
+            kind: "link",
+            label: "Only",
+            target: "https://only.example",
+            createdAt: 1,
+            updatedAt: 1,
+          },
+        ],
+      };
+    });
+
+    retainWorkspaceQuickActionsScope("project", "proj-delete");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const ok = await flushWorkspaceQuickActionsPersist("project", "proj-delete", []);
+    expect(ok).toBe(true);
+    expect(getWorkspaceQuickActionsScopeItems("project", "proj-delete")).toEqual([]);
+
+    const saveCalls = invoke.mock.calls.filter(
+      ([command]) => command === "save_project_workspace_quick_actions",
+    );
+    expect(saveCalls).toHaveLength(1);
+    expect((saveCalls[0]?.[1] as { items: unknown[] }).items).toEqual([]);
+
+    releaseWorkspaceQuickActionsScope("project", "proj-delete");
+  });
+
+  test("release flushes in-memory snapshot instead of stale pending data", async () => {
+    invoke.mockImplementation(async () => ({ version: 1, items: [] }));
+
+    retainWorkspaceQuickActionsScope("project", "proj-release-snapshot");
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    scheduleWorkspaceQuickActionsPersist("project", "proj-release-snapshot", [
+      {
+        id: "stale-pending",
+        kind: "link",
+        label: "Stale",
+        target: "https://stale.example",
+        createdAt: 1,
+        updatedAt: 1,
+      },
+    ]);
+
+    setWorkspaceQuickActionsScopeItems("project", "proj-release-snapshot", []);
+
+    releaseWorkspaceQuickActionsScope("project", "proj-release-snapshot");
+    await new Promise((resolve) => setTimeout(resolve, 450));
+
+    const saveCalls = invoke.mock.calls.filter(
+      ([command]) => command === "save_project_workspace_quick_actions",
+    );
+    expect(saveCalls).toHaveLength(1);
+    expect((saveCalls[0]?.[1] as { items: unknown[] }).items).toEqual([]);
   });
 });

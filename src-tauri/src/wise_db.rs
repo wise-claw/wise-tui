@@ -221,6 +221,10 @@ const MIGRATIONS: &[Migration] = &[
         name: "038_assistant_hidden",
         action: MigrationAction::Sql(MIGRATION_038),
     },
+    Migration {
+        name: "039_workspace_quick_actions_pinned_repair",
+        action: MigrationAction::Seed(crate::workspace_inspector_db::ensure_workspace_quick_actions_pinned_column),
+    },
 ];
 
 #[derive(Debug, Clone, Serialize)]

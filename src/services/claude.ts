@@ -742,9 +742,14 @@ export async function listClaudeUserSkills(): Promise<ClaudeProjectSkill[]> {
   return invoke<ClaudeProjectSkill[]>("list_claude_user_skills");
 }
 
-/** 保留 IPC；Wise 不从 ~/.claude/plugins/cache 枚举插件技能（恒返回空列表）。 */
-export async function listClaudePluginCacheSkills(): Promise<ClaudeProjectSkill[]> {
-  return invoke<ClaudeProjectSkill[]>("list_claude_plugin_cache_skills");
+/** 枚举已启用插件在 `~/.claude/plugins/cache/**` 中注册的 skills / commands 斜杠命令。 */
+export async function listClaudePluginCacheSkills(
+  repositoryPath?: string | null,
+): Promise<ClaudeProjectSkill[]> {
+  const trimmed = repositoryPath?.trim();
+  return invoke<ClaudeProjectSkill[]>("list_claude_plugin_cache_skills", {
+    repositoryPath: trimmed || null,
+  });
 }
 
 export async function createClaudeProjectSkill(

@@ -87,6 +87,16 @@ export function useWorkspaceQuickActions({ projectId, repositoryId }: UseWorkspa
     [projectId, repositoryId],
   );
 
+  const readScopeItems = useCallback(
+    (scope: WorkspaceQuickActionScope): WorkspaceQuickActionItem[] => {
+      return getWorkspaceQuickActionsScopeItems(
+        scope,
+        scope === "project" ? projectId : repositoryId,
+      );
+    },
+    [projectId, repositoryId],
+  );
+
   const setItemsForScope = useCallback(
     (scope: WorkspaceQuickActionScope, items: WorkspaceQuickActionItem[]) => {
       const scopeId = resolveWorkspaceQuickActionScopeId(scope, projectId, repositoryId);
@@ -114,6 +124,7 @@ export function useWorkspaceQuickActions({ projectId, repositoryId }: UseWorkspa
     repositoryItems,
     setItemsForScope,
     flushPersist,
+    readScopeItems,
     projectItemsRef,
     repositoryItemsRef,
   };
