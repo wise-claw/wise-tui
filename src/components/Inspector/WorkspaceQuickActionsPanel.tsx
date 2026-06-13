@@ -9,7 +9,7 @@ import {
 } from "@ant-design/icons";
 import { App, Button, Spin, Tag, Typography } from "antd";
 import { HoverHint } from "../shared/HoverHint";
-import { useCallback, useState } from "react";
+import { useCallback, useState, type MouseEvent } from "react";
 import { openExternalUrl } from "../../services/openExternal";
 import { openInFinder } from "../../services/repository";
 import { useWorkspaceQuickActions } from "../../hooks/useWorkspaceQuickActions";
@@ -45,6 +45,11 @@ export function WorkspaceQuickActionsPanel({
   const allowRepositoryScope = repositoryId != null;
   const defaultScope: WorkspaceQuickActionScope = allowRepositoryScope ? "repository" : "project";
 
+  const stopRowActionEvent = useCallback((event: MouseEvent<HTMLElement>) => {
+    event.preventDefault();
+    event.stopPropagation();
+  }, []);
+
   const upsertItem = useCallback(
     async (
       scope: WorkspaceQuickActionScope,
@@ -52,7 +57,12 @@ export function WorkspaceQuickActionsPanel({
       existingId?: string,
     ) => {
       const now = Date.now();
-      const source = quickActions.readScopeItems(scope);
+      let source = quickActions.readScopeItems(scope);
+      if (existingId && !source.some((row) => row.id === existingId)) {
+        source = quickActions.displayItems
+          .filter((row) => row.scope === scope)
+          .map(({ scope: _scope, ...row }) => row);
+      }
       const next = [...source];
       const index = existingId ? next.findIndex((row) => row.id === existingId) : -1;
       if (index >= 0) {
@@ -74,9 +84,12 @@ export function WorkspaceQuickActionsPanel({
         });
       }
       const ok = await quickActions.flushPersist(scope, next);
-      if (!ok) throw new Error("快捷操作保存失败");
+      if (!ok) {
+        message.error("快捷操作保存失败");
+        throw new Error("快捷操作保存失败");
+      }
     },
-    [quickActions],
+    [message, quickActions],
   );
 
   const removeItem = useCallback(
@@ -89,16 +102,26 @@ export function WorkspaceQuickActionsPanel({
         cancelText: "取消",
         onOk: async () => {
           const source = quickActions.readScopeItems(item.scope);
-          const next = source.filter((row) => row.id !== item.id);
+          let next = source.filter((row) => row.id !== item.id);
           if (next.length === source.length) {
-            throw new Error("未找到要删除的快捷操作");
+            const fallbackSource = quickActions.displayItems
+              .filter((row) => row.scope === item.scope)
+              .map(({ scope: _scope, ...row }) => row);
+            next = fallbackSource.filter((row) => row.id !== item.id);
+            if (next.length === fallbackSource.length) {
+              message.error("未找到要删除的快捷操作");
+              throw new Error("未找到要删除的快捷操作");
+            }
           }
           const ok = await quickActions.flushPersist(item.scope, next);
-          if (!ok) throw new Error("快捷操作删除失败");
+          if (!ok) {
+            message.error("快捷操作删除失败");
+            throw new Error("快捷操作删除失败");
+          }
         },
       });
     },
-    [modal, quickActions],
+    [message, modal, quickActions],
   );
 
   const togglePinToTopbar = useCallback(
@@ -116,9 +139,12 @@ export function WorkspaceQuickActionsPanel({
           : row,
       );
       const ok = await quickActions.flushPersist(item.scope, next);
-      if (!ok) throw new Error("快捷操作保存失败");
+      if (!ok) {
+        message.error("快捷操作保存失败");
+        throw new Error("快捷操作保存失败");
+      }
     },
-    [quickActions],
+    [message, quickActions],
   );
 
   const openItem = useCallback(
@@ -248,7 +274,10 @@ export function WorkspaceQuickActionsPanel({
                           ? "app-workspace-quick-actions-panel__pin-btn--active"
                           : undefined
                       }
-                      onClick={() => void togglePinToTopbar(item)}
+                      onClick={(event) => {
+                        stopRowActionEvent(event);
+                        void togglePinToTopbar(item);
+                      }}
                     />
                   </HoverHint>
                   <HoverHint title="编辑">
@@ -257,9 +286,10 @@ export function WorkspaceQuickActionsPanel({
                       size="small"
                       icon={<EditOutlined />}
                       aria-label="编辑"
-                      onClick={() =>
-                        setEditState({ mode: "edit", item, scope: item.scope })
-                      }
+                      onClick={(event) => {
+                        stopRowActionEvent(event);
+                        setEditState({ mode: "edit", item, scope: item.scope });
+                      }}
                     />
                   </HoverHint>
                   <HoverHint title="删除">
@@ -269,7 +299,10 @@ export function WorkspaceQuickActionsPanel({
                       danger
                       icon={<DeleteOutlined />}
                       aria-label="删除"
-                      onClick={() => removeItem(item)}
+                      onClick={(event) => {
+                        stopRowActionEvent(event);
+                        removeItem(item);
+                      }}
                     />
                   </HoverHint>
                 </span>

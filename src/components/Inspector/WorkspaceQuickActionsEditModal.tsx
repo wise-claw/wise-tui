@@ -97,6 +97,9 @@ export function WorkspaceQuickActionsEditModal({
         scope: effectiveScope,
       });
       onClose();
+    } catch (error) {
+      const msg = error instanceof Error ? error.message : "快捷操作保存失败";
+      message.error(msg);
     } finally {
       setSubmitting(false);
     }
@@ -107,7 +110,7 @@ export function WorkspaceQuickActionsEditModal({
       title={mode === "create" ? "添加快捷操作" : "编辑快捷操作"}
       open={open}
       onCancel={onClose}
-      onOk={() => void handleOk()}
+      onOk={() => handleOk()}
       okText={mode === "create" ? "添加" : "保存"}
       confirmLoading={submitting}
       destroyOnHidden

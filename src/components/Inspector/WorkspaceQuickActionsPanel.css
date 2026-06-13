@@ -146,6 +146,9 @@
   align-items: center;
   flex-shrink: 0;
   padding-right: 2px;
+  position: relative;
+  z-index: 1;
+  background: var(--ant-color-bg-container);
 }
 
 .app-workspace-quick-actions-panel__row-actions .ant-btn {

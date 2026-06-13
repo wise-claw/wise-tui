@@ -1,3 +1,4 @@
+import { message } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import type {
   WorkspaceQuickActionDisplayItem,
@@ -29,8 +30,10 @@ function resolveWorkspaceQuickActionScopeId(
     const id = projectId?.trim() ?? "";
     return id || null;
   }
-  if (repositoryId == null || !Number.isFinite(repositoryId)) return null;
-  return String(repositoryId);
+  if (repositoryId != null && Number.isFinite(repositoryId) && repositoryId > 0) {
+    return String(repositoryId);
+  }
+  return null;
 }
 
 function buildDisplayItems(
@@ -81,7 +84,10 @@ export function useWorkspaceQuickActions({ projectId, repositoryId }: UseWorkspa
   const flushPersist = useCallback(
     async (scope: WorkspaceQuickActionScope, items: WorkspaceQuickActionItem[]) => {
       const scopeId = resolveWorkspaceQuickActionScopeId(scope, projectId, repositoryId);
-      if (!scopeId) return false;
+      if (!scopeId) {
+        message.error(scope === "project" ? "请先选择工作区" : "请先选择仓库");
+        return false;
+      }
       return flushWorkspaceQuickActionsPersist(scope, scopeId, items);
     },
     [projectId, repositoryId],

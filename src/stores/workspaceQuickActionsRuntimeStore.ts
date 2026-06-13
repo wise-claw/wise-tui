@@ -47,8 +47,16 @@ function normalizeScopeId(scope: WorkspaceQuickActionScope, rawId: string | numb
     const id = typeof rawId === "string" ? rawId.trim() : "";
     return id || null;
   }
-  if (typeof rawId !== "number" || !Number.isFinite(rawId)) return null;
-  return String(rawId);
+  if (typeof rawId === "number" && Number.isFinite(rawId) && rawId > 0) {
+    return String(rawId);
+  }
+  if (typeof rawId === "string") {
+    const trimmed = rawId.trim();
+    if (trimmed && Number.isFinite(Number(trimmed)) && Number(trimmed) > 0) {
+      return trimmed;
+    }
+  }
+  return null;
 }
 
 function bump(): void {
