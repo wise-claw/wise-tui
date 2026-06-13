@@ -1,5 +1,5 @@
 import { marked } from "marked";
-import DOMPurify from "dompurify";
+import DOMPurify, { type Config } from "dompurify";
 import { isValidHttpUrl, normalizeAutolinkUrl } from "./autolinkUrl";
 import { normalizeMarkdownForDisplay } from "./markdownDisplayNormalize";
 import {
@@ -14,10 +14,10 @@ import {
 marked.use({ gfm: true, breaks: true });
 
 const MARKED_OPTIONS = { async: false as const, breaks: true, gfm: true };
-const DOMPURIFY_OPTIONS = {
+const DOMPURIFY_OPTIONS: Config = {
   USE_PROFILES: { html: true, mathMl: true },
   FORBID_TAGS: ["style", "script"],
-} as const;
+};
 
 const DISPLAY_HTML_CACHE_MAX = 128;
 const displayHtmlCache = new Map<string, string>();
@@ -172,11 +172,11 @@ function sanitizeMarkdownHtml(html: string): string {
 function parseMarkedHtml(normalized: string, fallbackSource: string): string {
   try {
     const parsed = marked.parse(normalized, MARKED_OPTIONS);
-    if (typeof parsed === "string" && parsed.trim()) {
-      return sanitizeMarkdownHtml(parsed);
-    }
-    if (parsed && typeof (parsed as Promise<string>).then === "function") {
+    if (typeof parsed !== "string") {
       return escapeHtmlPlain(fallbackSource).replace(/\n/g, "<br>");
+    }
+    if (parsed.trim()) {
+      return sanitizeMarkdownHtml(parsed);
     }
   } catch {
     /* fall through */

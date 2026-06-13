@@ -58,7 +58,10 @@ export function mergeFloat32Chunks(chunks: Float32Array[]): Float32Array {
 }
 
 export function float32ToBase64(samples: Float32Array): string {
-  const bytes = samples.buffer.slice(samples.byteOffset, samples.byteOffset + samples.byteLength);
+  const bytes = samples.buffer.slice(
+    samples.byteOffset,
+    samples.byteOffset + samples.byteLength,
+  ) as ArrayBuffer;
   return arrayBufferToBase64(bytes);
 }
 

@@ -1652,10 +1652,6 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         await reloadTranscriptFromDisk({ tabId: tabSessionId, repositoryPath: rp, claudeSessionId: cc });
       };
 
-      const appendSys = (text: string) => {
-        setSessions((prev) => appendSystemMessageBySessionId(prev, tabSessionId, text));
-      };
-
       const resolver = claudeSessionsOptionsRef.current?.resolveExecutionEngineRef?.current;
       if (resolver?.(session) === "codex") {
         const contextExecutionEngine =
@@ -2965,6 +2961,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         resumeClaudeSid: claudeSid,
         forceNewClaudeConversation: forceFreshClaudeSession,
         cursorAttachments: opts?.cursorAttachments,
+        codexContextExecutionEngine,
         engine: resolveSessionExecutionEngine(spawnSession),
         autoFailoverEnabled: isCachedModelProfileAutoFailoverEnabled(),
         triedProfileIds: [],
@@ -3441,6 +3438,13 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       const modelArg =
         session.model.trim().length > 0 ? session.model : undefined;
 
+      const codexContextExecutionEngine = resolveCodexContextExecutionEngine({
+        tabSessionId: sessionId,
+        activeSessionId,
+        sessions: sessionsRef.current,
+        resolveEngine: resolveSessionExecutionEngine,
+      });
+
       pendingTurnFailoverRef.current = {
         tabSessionId: sessionId,
         turnNonce,
@@ -3449,6 +3453,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         prompt,
         modelArg,
         resumeClaudeSid: claudeSessionId,
+        codexContextExecutionEngine,
         engine: resolveSessionExecutionEngine(session),
         autoFailoverEnabled: isCachedModelProfileAutoFailoverEnabled(),
         triedProfileIds: [],

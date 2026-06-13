@@ -22,6 +22,7 @@ export type PendingTurnFailoverContext = {
   resumeClaudeSid: string | null;
   forceNewClaudeConversation?: boolean;
   cursorAttachments?: CursorSdkAttachment[];
+  codexContextExecutionEngine?: SessionExecutionEngine;
   engine: SessionExecutionEngine;
   autoFailoverEnabled: boolean;
   triedProfileIds: string[];
