@@ -166,7 +166,7 @@ async function formatSkillsList(repositoryPath: string): Promise<string> {
     lines.push("", "【项目级 .claude/skills】");
     for (const skill of projectSkills) {
       const desc = skill.description?.trim();
-      const kind = skill.kind === "command" ? "命令" : "技能";
+      const kind = skill.entryKind === "command" ? "命令" : "技能";
       lines.push(`• ${skill.name}（${kind}）${desc ? ` — ${desc}` : ""}`);
     }
   }
