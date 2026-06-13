@@ -22,6 +22,7 @@ import {
   claudePluginMarketBootstrap,
   claudePluginUninstall,
 } from "./claudePluginMarket";
+import { invalidateSlashCatalogCache } from "./slashCatalogCache";
 import type { ClaudeHookScopeData, ClaudeMcpItem, ClaudeSession } from "../types";
 import { formatClaudeModelLabel } from "../utils/claudeModel";
 import {
@@ -112,6 +113,7 @@ async function executePluginCommand(
     await claudePluginMarketBootstrap();
     const out = await claudePluginInstall(installRef, scope, repositoryPath);
     const installed = await loadInstalledPlugins(repositoryPath);
+    invalidateSlashCatalogCache();
     return formatPluginMutateResult({
       action: "install",
       installRef,
@@ -125,6 +127,7 @@ async function executePluginCommand(
   if (command.action === "uninstall") {
     const out = await claudePluginUninstall(installRef, scope, repositoryPath);
     const installed = await loadInstalledPlugins(repositoryPath);
+    invalidateSlashCatalogCache();
     return formatPluginMutateResult({
       action: "uninstall",
       installRef,
@@ -141,6 +144,7 @@ async function executePluginCommand(
     { timeoutMs: 120_000 },
   );
   const installed = await loadInstalledPlugins(repositoryPath);
+  invalidateSlashCatalogCache();
   return formatPluginMutateResult({
     action: command.action,
     installRef,
@@ -476,6 +480,7 @@ export async function executeComposerLocalSlashCommand(
 
     case "reload_plugins": {
       await claudePluginMarketBootstrap();
+      invalidateSlashCatalogCache();
       return "已刷新插件市场缓存。请新开 Claude 会话以加载最新插件。";
     }
 

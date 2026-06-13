@@ -1,9 +1,7 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import { Spin } from "antd";
-import { isOmcPluginInstalled, listClaudePluginCacheSkills, listClaudeProjectSkills } from "../../services/claude";
-import { claudePluginListInstalled } from "../../services/claudePluginMarket";
 import { searchRepositoryFiles } from "../../services/repositoryFiles";
-import type { ClaudeProjectSkill } from "../../types";
+import { loadSlashCatalog } from "../../services/slashCatalogCache";
 import type { RepositoryMentionOption } from "../../utils/projectRoleTagOptions";
 import type { SessionExecutionEngine } from "../../constants/sessionExecutionEngine";
 import type { AtMentionDefaultTarget } from "../../constants/atMentionDefault";
@@ -13,21 +11,17 @@ import {
   encodeAtMentionDefaultSelectValue,
   isSlashOptionAtMentionDefault,
 } from "../../constants/atMentionDefault";
-import { listExecutionEnvironmentEngineMentionOptions } from "../../utils/executionEnvironmentDispatch";
 import { resolveAtMentionSelectedIndex } from "../../utils/atMentionDefaultSelection";
 import type { TriggerInfo } from "./slash-trigger";
 import { CLAUDE_BUILTIN_SLASH_COMMANDS } from "../../constants/claudeCodeSlashCommands";
 import {
-  buildComposerPluginInstallSlashCommands,
-  buildComposerPluginInstalledSlashCommands,
-  COMPOSER_PLUGIN_SLASH_SUBCOMMANDS,
-} from "../../constants/composerPluginSlashCommands";
-import {
-  shouldShowComposerPluginInstalledTemplates,
-  shouldShowComposerPluginInstallTemplates,
-  slashCommandMatchesQuery,
-} from "../../utils/slashCommandMatch";
-import { buildInstalledPluginSlashOptionsFromSkills } from "../../utils/installedPluginSlashCommands";
+  buildSlashOptionSections,
+  getFilteredAtOptions,
+  getFilteredSlashOptions,
+  mapSlashCatalogToOptions,
+  OMC_COMMANDS,
+  type SlashOption,
+} from "../../utils/slashPopoverOptions";
 import {
   ensureSpaceAfterAtInsert,
   insertPlainAt,
@@ -37,17 +31,7 @@ import {
 import { computeSlashPopoverPlacement } from "./composer-trigger-anchor";
 import { ExplorerTreeFileIcon } from "../GitPanel/explorerTreeChrome";
 
-export interface SlashOption {
-  type: "agent" | "team" | "file" | "command" | "execution_engine";
-  label: string;
-  description?: string;
-  path?: string;
-  name?: string;
-  workflowId?: string;
-  group?: "omc" | "claude" | "skill" | "plugin" | "plugin-cmd";
-  executionEngine?: SessionExecutionEngine;
-  executionEngineAvailable?: boolean;
-}
+export type { SlashOption };
 
 /** 与 Semi AIChatInput 搭配：用纯文本 + 光标操作 @ / 补全，不再依赖 contentEditable DOM。 */
 export interface ComposerPlainSurface {
@@ -82,146 +66,16 @@ interface SlashPopoverProps {
   onAtMentionDefaultTargetChange?: (target: AtMentionDefaultTarget) => void | Promise<void>;
 }
 
-const CLAUDE_BUILTIN_COMMANDS: SlashOption[] = CLAUDE_BUILTIN_SLASH_COMMANDS.map((cmd) => ({
-  type: "command",
-  group: "claude",
-  label: cmd.label,
-  description: cmd.description,
-}));
-
-const OMC_COMMANDS: SlashOption[] = [
-  { type: "command", group: "omc", label: "ask", description: "OMC 多模型咨询路由" },
-  { type: "command", group: "omc", label: "autopilot", description: "OMC 自动执行闭环" },
-  { type: "command", group: "omc", label: "autoresearch", description: "OMC 持续研究迭代" },
-  { type: "command", group: "omc", label: "cancel", description: "取消当前 OMC 模式" },
-  { type: "command", group: "omc", label: "ccg", description: "Claude/Codex/Gemini 编排" },
-  { type: "command", group: "omc", label: "debug", description: "OMC 会话诊断" },
-  { type: "command", group: "omc", label: "deep-dive", description: "链路深挖与访谈" },
-  { type: "command", group: "omc", label: "deep-interview", description: "需求深访谈" },
-  { type: "command", group: "omc", label: "deepinit", description: "深度初始化项目上下文" },
-  { type: "command", group: "omc", label: "doctor", description: "OMC 安装/状态自检" },
-  { type: "command", group: "omc", label: "hud", description: "配置 HUD 展示" },
-  { type: "command", group: "omc", label: "mcp-setup", description: "配置 MCP 服务" },
-  { type: "command", group: "omc", label: "plan", description: "OMC 规划模式" },
-  { type: "command", group: "omc", label: "ralph", description: "自循环执行直到完成" },
-  { type: "command", group: "omc", label: "ralplan", description: "Ralph 共识规划入口" },
-  { type: "command", group: "omc", label: "release", description: "发布流程助手" },
-  { type: "command", group: "omc", label: "remember", description: "沉淀可复用知识" },
-  { type: "command", group: "omc", label: "team", description: "多 Agent 协作执行" },
-  { type: "command", group: "omc", label: "trace", description: "证据驱动追踪分析" },
-  { type: "command", group: "omc", label: "ultraqa", description: "高强度 QA 循环" },
-  { type: "command", group: "omc", label: "ultrawork", description: "高吞吐并行执行" },
-  { type: "command", group: "omc", label: "verify", description: "结果核验与验收" },
-  { type: "command", group: "omc", label: "review", description: "代码审查工作流" },
-  { type: "command", group: "omc", label: "security-review", description: "安全审查工作流" },
-  { type: "command", group: "omc", label: "simplify", description: "代码简化与整洁" },
-  { type: "command", group: "omc", label: "update-config", description: "更新 OMC/Claude 配置" },
-];
-
-const PLUGIN_SUBCOMMANDS: SlashOption[] = COMPOSER_PLUGIN_SLASH_SUBCOMMANDS.map((cmd) => ({
-  type: "command" as const,
-  group: "plugin" as const,
-  label: cmd.label,
-  description: cmd.description,
-}));
-
-function mapPluginSlashEntries(
-  entries: ReadonlyArray<{ label: string; description: string }>,
-): SlashOption[] {
-  return entries.map((cmd) => ({
-    type: "command" as const,
-    group: "plugin" as const,
-    label: cmd.label,
-    description: cmd.description,
-  }));
-}
-
-function buildPluginSlashOptions(
-  query: string,
-  installedPluginCommands: SlashOption[],
-  installCommands: SlashOption[],
-): SlashOption[] {
-  const subcommands = PLUGIN_SUBCOMMANDS.filter((cmd) => slashCommandMatchesQuery(cmd.label, query));
-  const installed = shouldShowComposerPluginInstalledTemplates(query)
-    ? installedPluginCommands.filter((cmd) => slashCommandMatchesQuery(cmd.label, query))
-    : [];
-  const installs = shouldShowComposerPluginInstallTemplates(query)
-    ? installCommands.filter((cmd) => slashCommandMatchesQuery(cmd.label, query))
-    : [];
-  return [...subcommands, ...installed, ...installs];
-}
-
-function mergeSlashCommandOptions(items: SlashOption[]): SlashOption[] {
-  const seen = new Set<string>();
-  const result: SlashOption[] = [];
-  for (const item of items) {
-    const key = item.label.trim().toLowerCase();
-    if (!key || seen.has(key)) continue;
-    seen.add(key);
-    result.push(item);
-  }
-  return result;
-}
-
-function buildRuntimeBuiltinCommands(
-  omcInstalled: boolean,
-  detectedPluginLabels: ReadonlySet<string>,
-): SlashOption[] {
-  const omc = omcInstalled
-    ? OMC_COMMANDS.filter((cmd) => !detectedPluginLabels.has(cmd.label.trim().toLowerCase()))
-    : [];
-  return mergeSlashCommandOptions([...CLAUDE_BUILTIN_COMMANDS, ...omc]);
-}
-
 const CLAUDE_RESERVED_LABELS = new Set(
-  CLAUDE_BUILTIN_COMMANDS.map((cmd) => cmd.label.trim().toLowerCase()),
+  CLAUDE_BUILTIN_SLASH_COMMANDS.map((cmd) => cmd.label.trim().toLowerCase()),
 );
 
-/** 与 `replaceSlashCommandLine` 中单 token 一致，避免插入非法 `/…` 片段 */
-const SLASH_SKILL_NAME_RE = /^[a-zA-Z0-9][-a-zA-Z0-9_.]*$/;
-
-function isSlashableSkillName(name: string): boolean {
-  const t = name.trim();
-  return t.length > 0 && t.length <= 96 && SLASH_SKILL_NAME_RE.test(t);
-}
-
-/** 具备 SKILL.md 或已有文件时，更可能作为 Claude Code 可执行 skill 命令 */
-function skillIsInvocableAsSlashCommand(skill: ClaudeProjectSkill): boolean {
-  if (!isSlashableSkillName(skill.name)) return false;
-  if (skill.hasSkillMd) return true;
-  return (skill.fileCount ?? 0) > 0;
-}
-
-/** 项目技能；与 Claude 内置 / 指令去重（按 label 不区分大小写） */
-function buildSkillSlashOptionsFromList(
-  project: ClaudeProjectSkill[],
-  reservedLabels: ReadonlySet<string>,
-): SlashOption[] {
-  const byKey = new Map<string, SlashOption>();
-
-  const push = (skill: ClaudeProjectSkill, defaultDescription: string) => {
-    if (!skillIsInvocableAsSlashCommand(skill)) return;
-    const label = skill.name.trim();
-    const k = label.toLowerCase();
-    if (reservedLabels.has(k)) return;
-    if (byKey.has(k)) return;
-    const desc = skill.description?.trim();
-    byKey.set(k, {
-      type: "command",
-      group: "skill",
-      label,
-      description: desc && desc.length > 0 ? desc : defaultDescription,
-    });
-  };
-
-  for (const s of project) {
-    push(s, "项目技能");
-  }
-
-  return Array.from(byKey.values()).sort((a, b) =>
-    a.label.localeCompare(b.label, undefined, { sensitivity: "base" }),
-  );
-}
+const EMPTY_SLASH_OPTIONS = {
+  detectedPluginSlashOptions: [] as SlashOption[],
+  installedPluginSlashOptions: [] as SlashOption[],
+  installPluginSlashOptions: [] as SlashOption[],
+  skillSlashOptions: [] as SlashOption[],
+};
 
 function MentionKindEmployeeIcon() {
   return (
@@ -292,124 +146,72 @@ export function SlashPopover({
   const [selectedIndex, setSelectedIndex] = useState(0);
   const [fileResults, setFileResults] = useState<SlashOption[]>([]);
   const [fileLoading, setFileLoading] = useState(false);
-  const [skillSlashOptions, setSkillSlashOptions] = useState<SlashOption[]>([]);
-  const [detectedPluginSlashOptions, setDetectedPluginSlashOptions] = useState<SlashOption[]>([]);
-  const [installedPluginSlashOptions, setInstalledPluginSlashOptions] = useState<SlashOption[]>([]);
-  const [installPluginSlashOptions, setInstallPluginSlashOptions] = useState<SlashOption[]>([]);
+  const [slashCatalogOptions, setSlashCatalogOptions] = useState(EMPTY_SLASH_OPTIONS);
   const [omcInstalled, setOmcInstalled] = useState(false);
+  const [slashCatalogLoading, setSlashCatalogLoading] = useState(false);
 
   const mode = trigger.mode;
   const query = trigger.query;
 
   const detectedPluginLabelSet = useMemo(
-    () => new Set(detectedPluginSlashOptions.map((row) => row.label.trim().toLowerCase())),
-    [detectedPluginSlashOptions],
+    () =>
+      new Set(slashCatalogOptions.detectedPluginSlashOptions.map((row) => row.label.trim().toLowerCase())),
+    [slashCatalogOptions.detectedPluginSlashOptions],
   );
 
-  const reservedSkillLabels = useMemo(() => {
-    const reserved = new Set(CLAUDE_RESERVED_LABELS);
-    for (const label of detectedPluginLabelSet) reserved.add(label);
-    if (omcInstalled) {
-      for (const cmd of OMC_COMMANDS) {
-        if (!detectedPluginLabelSet.has(cmd.label.trim().toLowerCase())) {
-          reserved.add(cmd.label.trim().toLowerCase());
+  useEffect(() => {
+    if (mode !== "slash") {
+      setSlashCatalogOptions(EMPTY_SLASH_OPTIONS);
+      setOmcInstalled(false);
+      setSlashCatalogLoading(false);
+      return;
+    }
+
+    let cancelled = false;
+    setSlashCatalogLoading(true);
+
+    void (async () => {
+      try {
+        const snapshot = await loadSlashCatalog(repositoryPath?.trim() || null);
+        if (cancelled) return;
+
+        const detectedLabels = new Set(
+          snapshot.detectedPluginCommands.map((row) => row.label.trim().toLowerCase()),
+        );
+        const reserved = new Set(CLAUDE_RESERVED_LABELS);
+        for (const label of detectedLabels) reserved.add(label);
+        if (snapshot.omcInstalled) {
+          for (const cmd of OMC_COMMANDS) {
+            if (!detectedLabels.has(cmd.label.trim().toLowerCase())) {
+              reserved.add(cmd.label.trim().toLowerCase());
+            }
+          }
         }
-      }
-    }
-    return reserved;
-  }, [detectedPluginLabelSet, omcInstalled]);
 
-  useEffect(() => {
-    if (mode !== "slash") return;
-    let cancelled = false;
-    void isOmcPluginInstalled()
-      .then((installed) => {
-        if (!cancelled) setOmcInstalled(installed);
-      })
-      .catch(() => {
-        if (!cancelled) setOmcInstalled(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [mode]);
-
-  useEffect(() => {
-    if (mode !== "slash") {
-      setDetectedPluginSlashOptions([]);
-      return;
-    }
-    let cancelled = false;
-    void (async () => {
-      try {
-        const rows = await listClaudePluginCacheSkills(repositoryPath?.trim() || null);
-        if (cancelled) return;
-        const detected = buildInstalledPluginSlashOptionsFromSkills(rows, CLAUDE_RESERVED_LABELS).map(
-          (cmd) => ({
-            type: "command" as const,
-            group: "plugin-cmd" as const,
-            label: cmd.label,
-            description: cmd.description,
+        setOmcInstalled(snapshot.omcInstalled);
+        setSlashCatalogOptions(
+          mapSlashCatalogToOptions({
+            detectedPluginCommands: snapshot.detectedPluginCommands,
+            installedPluginCommands: snapshot.installedPluginCommands,
+            installPluginCommands: snapshot.installPluginCommands,
+            projectSkills: snapshot.projectSkills,
+            reservedSkillLabels: reserved,
           }),
-        );
-        setDetectedPluginSlashOptions(detected);
-      } catch {
-        if (!cancelled) setDetectedPluginSlashOptions([]);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [mode, repositoryPath]);
-
-  useEffect(() => {
-    if (mode !== "slash") {
-      setInstalledPluginSlashOptions([]);
-      setInstallPluginSlashOptions([]);
-      return;
-    }
-    let cancelled = false;
-    void (async () => {
-      try {
-        const rows = await claudePluginListInstalled(repositoryPath?.trim() || null);
-        if (cancelled) return;
-        setInstalledPluginSlashOptions(
-          mapPluginSlashEntries(buildComposerPluginInstalledSlashCommands(rows)),
-        );
-        setInstallPluginSlashOptions(
-          mapPluginSlashEntries(buildComposerPluginInstallSlashCommands(rows)),
         );
       } catch {
         if (!cancelled) {
-          setInstalledPluginSlashOptions([]);
-          setInstallPluginSlashOptions([]);
+          setOmcInstalled(false);
+          setSlashCatalogOptions(EMPTY_SLASH_OPTIONS);
         }
+      } finally {
+        if (!cancelled) setSlashCatalogLoading(false);
       }
     })();
+
     return () => {
       cancelled = true;
     };
   }, [mode, repositoryPath]);
-
-  useEffect(() => {
-    if (mode !== "slash" || !repositoryPath?.trim()) {
-      setSkillSlashOptions([]);
-      return;
-    }
-    let cancelled = false;
-    void (async () => {
-      try {
-        const proj = await listClaudeProjectSkills(repositoryPath.trim());
-        if (cancelled) return;
-        setSkillSlashOptions(buildSkillSlashOptionsFromList(proj, reservedSkillLabels));
-      } catch {
-        if (!cancelled) setSkillSlashOptions([]);
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, [mode, repositoryPath, reservedSkillLabels]);
 
   useEffect(() => {
     if (mode !== "at" || !repositoryPath) {
@@ -461,66 +263,75 @@ export function SlashPopover({
     () => fileResults.map((f) => `${f.path ?? ""}:${f.label}`).join("\n"),
     [fileResults],
   );
-  const skillSlashOptionsKey = useMemo(
-    () => skillSlashOptions.map((s) => s.label).join("\n"),
-    [skillSlashOptions],
-  );
-  const detectedPluginSlashOptionsKey = useMemo(
-    () => detectedPluginSlashOptions.map((s) => s.label).join("\n"),
-    [detectedPluginSlashOptions],
-  );
-  const installPluginSlashOptionsKey = useMemo(
-    () => installPluginSlashOptions.map((s) => s.label).join("\n"),
-    [installPluginSlashOptions],
-  );
-  const installedPluginSlashOptionsKey = useMemo(
-    () => installedPluginSlashOptions.map((s) => s.label).join("\n"),
-    [installedPluginSlashOptions],
+  const slashCatalogOptionsKey = useMemo(
+    () =>
+      [
+        slashCatalogOptions.detectedPluginSlashOptions.map((s) => s.label).join("\n"),
+        slashCatalogOptions.installedPluginSlashOptions.map((s) => s.label).join("\n"),
+        slashCatalogOptions.installPluginSlashOptions.map((s) => s.label).join("\n"),
+        slashCatalogOptions.skillSlashOptions.map((s) => s.label).join("\n"),
+      ].join("|"),
+    [slashCatalogOptions],
   );
   const atMentionDefaultTargetKey = encodeAtMentionDefaultSelectValue(atMentionDefaultTarget);
 
-  const options = useMemo(
-    () =>
-      getFilteredOptions(
-        mode,
-        query,
-        fileResults,
-        employeeOptions,
-        teamOptions,
-        skillSlashOptions,
-        detectedPluginSlashOptions,
-        installedPluginSlashOptions,
-        installPluginSlashOptions,
-        omcInstalled,
-        detectedPluginLabelSet,
-        hideEmployeesInAtMode,
-        codexAvailable,
-        cursorAvailable,
-      ),
-    [
-      mode,
+  const slashFiltered = useMemo(() => {
+    if (mode !== "slash") {
+      return { options: [] as SlashOption[], truncated: false };
+    }
+    return getFilteredSlashOptions(
       query,
-      fileResults,
-      fileResultsKey,
-      employeeOptions,
-      employeeOptionsKey,
-      teamOptions,
-      teamOptionsKey,
-      skillSlashOptions,
-      skillSlashOptionsKey,
-      detectedPluginSlashOptions,
-      detectedPluginSlashOptionsKey,
-      installedPluginSlashOptions,
-      installedPluginSlashOptionsKey,
-      installPluginSlashOptions,
-      installPluginSlashOptionsKey,
+      slashCatalogOptions.detectedPluginSlashOptions,
+      slashCatalogOptions.installedPluginSlashOptions,
+      slashCatalogOptions.installPluginSlashOptions,
+      slashCatalogOptions.skillSlashOptions,
       omcInstalled,
       detectedPluginLabelSet,
+    );
+  }, [
+    mode,
+    query,
+    slashCatalogOptions,
+    slashCatalogOptionsKey,
+    omcInstalled,
+    detectedPluginLabelSet,
+  ]);
+
+  const options = useMemo(() => {
+    if (mode === "slash") {
+      return slashFiltered.options;
+    }
+    return getFilteredAtOptions(
+      query,
+      fileResults,
+      employeeOptions,
+      teamOptions,
       hideEmployeesInAtMode,
       codexAvailable,
       cursorAvailable,
-    ],
+    );
+  }, [
+    mode,
+    query,
+    slashFiltered,
+    fileResults,
+    fileResultsKey,
+    employeeOptions,
+    employeeOptionsKey,
+    teamOptions,
+    teamOptionsKey,
+    hideEmployeesInAtMode,
+    codexAvailable,
+    cursorAvailable,
+  ]);
+
+  const slashOptionsTruncated = mode === "slash" && slashFiltered.truncated;
+
+  const slashSections = useMemo(
+    () => (mode === "slash" ? buildSlashOptionSections(options) : []),
+    [mode, options],
   );
+
   const optionsFingerprint = useMemo(() => slashOptionsFingerprint(options), [options]);
 
   const targetSelectedIndex = useMemo(() => {
@@ -655,15 +466,25 @@ export function SlashPopover({
       </div>
     );
   }
-  if (options.length === 0) return null;
 
-  const groupedCommandOptions =
-    mode === "slash"
-      ? {
-          omc: options.filter((opt) => opt.type === "command" && opt.group === "omc"),
-          claude: options.filter((opt) => opt.type === "command" && opt.group === "claude"),
-        }
-      : null;
+  if (mode === "slash" && slashCatalogLoading && options.length === 0) {
+    return (
+      <div
+        className="app-claude-slash-popover"
+        style={{
+          ...popoverBaseStyle,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: "12px",
+        }}
+      >
+        <Spin size="small" />
+      </div>
+    );
+  }
+
+  if (options.length === 0) return null;
 
   return (
     <div
@@ -681,54 +502,30 @@ export function SlashPopover({
     >
       {mode === "slash" ? (
         <>
-          {groupedCommandOptions?.omc.length ? (
-            <div className="app-claude-slash-popover-group-title">oh-my-claudecode</div>
-          ) : null}
-          {options.map((opt, i) => {
-            const showClaudeTitle =
-              opt.type === "command" &&
-              opt.group === "claude" &&
-              i > 0 &&
-              options[i - 1]?.type === "command" &&
-              options[i - 1]?.group === "omc";
-            const showPluginCmdTitle =
-              opt.type === "command" &&
-              opt.group === "plugin-cmd" &&
-              (i === 0 || options[i - 1]?.group !== "plugin-cmd");
-            const showPluginTitle =
-              opt.type === "command" &&
-              opt.group === "plugin" &&
-              (i === 0 ||
-                (options[i - 1]?.group !== "plugin" && options[i - 1]?.group !== "plugin-cmd"));
-            const showSkillTitle =
-              opt.type === "command" &&
-              opt.group === "skill" &&
-              (i === 0 || options[i - 1]?.group !== "skill");
-            return (
-              <div key={`${opt.type}-${opt.group ?? ""}-${opt.label}-${opt.path ?? ""}-${opt.workflowId ?? ""}`}>
-                {showClaudeTitle ? (
-                  <div className="app-claude-slash-popover-group-title">Claude 内置</div>
-                ) : null}
-                {showPluginCmdTitle ? (
-                  <div className="app-claude-slash-popover-group-title">已安装插件命令</div>
-                ) : null}
-                {showPluginTitle ? (
-                  <div className="app-claude-slash-popover-group-title">插件</div>
-                ) : null}
-                {showSkillTitle ? (
-                  <div className="app-claude-slash-popover-group-title">Skills 技能</div>
-                ) : null}
+          {slashSections.map((section) => (
+            <div key={section.group}>
+              <div className="app-claude-slash-popover-group-title">{section.title}</div>
+              {section.items.map(({ option, flatIndex }) => (
                 <div
-                  className={`app-claude-slash-popover-item ${i === selectedIndex ? "app-claude-slash-popover-item--active" : ""}`}
-                  onClick={() => handleSelect(opt)}
-                  onMouseEnter={() => setSelectedIndex(i)}
+                  key={`${option.type}-${option.group ?? ""}-${option.label}-${option.path ?? ""}-${option.workflowId ?? ""}`}
+                  className={`app-claude-slash-popover-item ${flatIndex === selectedIndex ? "app-claude-slash-popover-item--active" : ""}`}
+                  onClick={() => handleSelect(option)}
+                  onMouseEnter={() => setSelectedIndex(flatIndex)}
                   style={{ gap: 0, padding: "3px 4px" }}
                 >
-                  {renderOptionContent(opt)}
+                  {renderOptionContent(option)}
                 </div>
-              </div>
-            );
-          })}
+              ))}
+            </div>
+          ))}
+          {slashOptionsTruncated ? (
+            <div
+              className="app-claude-slash-popover-group-title"
+              style={{ color: "var(--ant-color-text-tertiary)", fontWeight: 400 }}
+            >
+              继续输入以筛选更多命令…
+            </div>
+          ) : null}
         </>
       ) : (
         options.map((opt, i) => {
@@ -816,7 +613,6 @@ function renderOptionContent(opt: SlashOption, isAtMentionDefault = false) {
           {opt.type === "execution_engine" ? (
             <ExecutionEngineMentionIcon engine={opt.executionEngine ?? "claude"} />
           ) : opt.type === "agent" ? (
-            // Robot SVG icon
             <svg
               className="app-claude-slash-popover__kind-svg"
               width="16"
@@ -838,7 +634,6 @@ function renderOptionContent(opt: SlashOption, isAtMentionDefault = false) {
               <path d="M14.5 4l1.5 3" />
             </svg>
           ) : opt.type === "team" ? (
-            // Team (People) SVG icon
             <svg
               className="app-claude-slash-popover__kind-svg"
               width="16"
@@ -857,7 +652,6 @@ function renderOptionContent(opt: SlashOption, isAtMentionDefault = false) {
               <path d="M16.5 17c0-1.5-1.27-2.73-3-3" />
             </svg>
           ) : (
-            // Lightning bolt SVG fallback
             <svg
               className="app-claude-slash-popover__kind-svg"
               width="16"
@@ -1015,91 +809,4 @@ function ExecutionEngineMentionIcon({ engine }: { engine: SessionExecutionEngine
       <path d="M12 12L4 7.5" />
     </svg>
   );
-}
-
-function getFilteredOptions(
-  mode: "at" | "slash" | null,
-  query: string,
-  fileResults: SlashOption[],
-  employeeOptions: Array<{ id: string; name: string }>,
-  teamOptions: Array<{ id: string; name: string }>,
-  skillSlashOptions: SlashOption[],
-  detectedPluginSlashOptions: SlashOption[],
-  installedPluginSlashOptions: SlashOption[],
-  installPluginSlashOptions: SlashOption[],
-  omcInstalled: boolean,
-  detectedPluginLabels: ReadonlySet<string>,
-  hideEmployeesInAtMode = false,
-  codexAvailable = true,
-  cursorAvailable = true,
-): SlashOption[] {
-  if (!mode) return [];
-
-  if (mode === "slash") {
-    const runtimeBuiltins = buildRuntimeBuiltinCommands(omcInstalled, detectedPluginLabels);
-    const builtinsFiltered = !query.trim()
-      ? runtimeBuiltins
-      : runtimeBuiltins.filter((c) => slashCommandMatchesQuery(c.label, query));
-    const detectedFiltered = !query.trim()
-      ? detectedPluginSlashOptions
-      : detectedPluginSlashOptions.filter((c) => slashCommandMatchesQuery(c.label, query));
-    const pluginFiltered = buildPluginSlashOptions(
-      query,
-      installedPluginSlashOptions,
-      installPluginSlashOptions,
-    );
-    const skillsFiltered = !query.trim()
-      ? skillSlashOptions
-      : skillSlashOptions.filter(
-          (c) =>
-            slashCommandMatchesQuery(c.label, query) ||
-            slashCommandMatchesQuery(c.description ?? "", query),
-        );
-    return [...builtinsFiltered, ...detectedFiltered, ...pluginFiltered, ...skillsFiltered];
-  }
-
-  const teams: SlashOption[] = teamOptions.map((team) => ({
-    type: "team" as const,
-    label: team.name,
-    name: team.name,
-    workflowId: team.id,
-  }));
-
-  const executionEngines: SlashOption[] = listExecutionEnvironmentEngineMentionOptions({
-    codexAvailable,
-    cursorAvailable,
-  }).map((row) => ({
-    type: "execution_engine" as const,
-    label: row.title,
-    name: row.mentionName,
-    description: row.description,
-    executionEngine: row.engine,
-    executionEngineAvailable: row.available,
-  }));
-
-  const agents: SlashOption[] = hideEmployeesInAtMode
-    ? []
-    : employeeOptions.map((employee) => ({
-        type: "agent" as const,
-        label: employee.name,
-        name: employee.name,
-      }));
-
-  const q = query.toLowerCase();
-  const filtered = [
-    ...executionEngines.filter(
-      (row) =>
-        !q ||
-        row.label.toLowerCase().includes(q) ||
-        (row.name ?? "").toLowerCase().includes(q) ||
-        (row.description ?? "").toLowerCase().includes(q) ||
-        "执行环境".includes(q) ||
-        "派发".includes(q),
-    ),
-    ...agents.filter((a) => !q || a.label.toLowerCase().includes(q)),
-    ...teams.filter((t) => !q || t.label.toLowerCase().includes(q)),
-    ...fileResults.filter((f) => !q || f.label.toLowerCase().includes(q) || (f.description ?? "").toLowerCase().includes(q)),
-  ];
-
-  return filtered.slice(0, 20);
 }

@@ -6,6 +6,7 @@ import {
   MAX_LOADED_EXPLORER_DIRS,
   patchLazyRepositoryFileTree,
   pruneLoadedChildrenMap,
+  pruneStaleExplorerDirFromMap,
 } from "./lazyExplorerTree";
 
 describe("buildLazyRepositoryFileTree", () => {
@@ -65,6 +66,25 @@ describe("patchLazyRepositoryFileTree", () => {
     expect(commands?.children?.map((n) => n.path)).toEqual([
       ".cursor/commands/trellis-continue.md",
     ]);
+  });
+});
+
+describe("pruneStaleExplorerDirFromMap", () => {
+  test("removes stale directory from parent listing and descendant cache keys", () => {
+    const prev = new Map<string, RepositoryExplorerEntry[]>([
+      [
+        "",
+        [
+          { path: ".omc", isDir: true },
+          { path: "src", isDir: true },
+        ],
+      ],
+      [".omc", [{ path: ".omc/state", isDir: true }]],
+      [".omc/state", [{ path: ".omc/state/hud-state.json", isDir: false }]],
+    ]);
+    const next = pruneStaleExplorerDirFromMap(prev, ".omc");
+    expect(next.get("")?.map((entry) => entry.path)).toEqual(["src"]);
+    expect([...next.keys()].sort()).toEqual([""]);
   });
 });
 

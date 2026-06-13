@@ -1,5 +1,5 @@
 import type { RepositoryExplorerEntry } from "../../services/repositoryFiles";
-import { explorerDirKey } from "./repositoryExplorerDirKey";
+import { explorerDirKey, explorerParentDir } from "./repositoryExplorerDirKey";
 import type { RepositoryFileTreeNode } from "./types";
 
 function entryBaseName(path: string): string {
@@ -94,6 +94,30 @@ export function patchLazyRepositoryFileTree(
     return buildLazyRepositoryFileTree(loadedByDir);
   }
   return patchNodesAtPath(prevRoot, normalized, loadedByDir);
+}
+
+/** Drop a directory that no longer exists on disk from the lazy-load map and its parent listing. */
+export function pruneStaleExplorerDirFromMap(
+  loadedByDir: ReadonlyMap<string, RepositoryExplorerEntry[]>,
+  staleDir: string,
+): Map<string, RepositoryExplorerEntry[]> {
+  const normalized = explorerDirKey(staleDir);
+  const next = new Map(loadedByDir);
+  next.delete(normalized);
+  for (const key of [...next.keys()]) {
+    if (key.startsWith(`${normalized}/`)) {
+      next.delete(key);
+    }
+  }
+  const parentKey = explorerDirKey(explorerParentDir(normalized));
+  const parentChildren = next.get(parentKey);
+  if (parentChildren) {
+    next.set(
+      parentKey,
+      parentChildren.filter((entry) => explorerDirKey(entry.path) !== normalized),
+    );
+  }
+  return next;
 }
 
 export function pruneLoadedChildrenMap(

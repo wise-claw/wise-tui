@@ -30,7 +30,10 @@ export function indexOfLastRenderableUserMessage(messages: readonly ClaudeMessag
 const ASSISTANT_DISPLAY_NOISE_TEXT = new Set(["no response requested.", "no response requested"]);
 
 /** 会话 UI 中应跳过的系统占位/噪声文案（含历史已写入的消息）。 */
-const SYSTEM_MESSAGE_DISPLAY_NOISE = [/^Claude 系统错误:\s*unknown\s*$/i];
+const SYSTEM_MESSAGE_DISPLAY_NOISE = [
+  /^Claude 系统错误:\s*unknown\s*$/i,
+  /^Claude Hook 启动中/,
+];
 
 export function isSystemMessageDisplayNoiseText(text: string): boolean {
   const normalized = text.trim();

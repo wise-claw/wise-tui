@@ -42,8 +42,16 @@ describe("isSystemMessageDisplayNoiseText", () => {
     expect(isSystemMessageDisplayNoiseText("  Claude 系统错误: unknown  ")).toBe(true);
   });
 
-  test("ignores meaningful system messages", () => {
-    expect(isSystemMessageDisplayNoiseText("Claude Hook 启动中")).toBe(false);
+  test("treats hook startup progress as display noise", () => {
+    expect(isSystemMessageDisplayNoiseText("Claude Hook 启动中")).toBe(true);
+    expect(
+      isSystemMessageDisplayNoiseText(
+        "Claude Hook 启动中: SessionStart:startup（完成后会继续生成回复）",
+      ),
+    ).toBe(true);
+  });
+
+  test("keeps meaningful system messages visible", () => {
     expect(isSystemMessageDisplayNoiseText("Claude 系统错误: rate limit exceeded")).toBe(false);
   });
 });

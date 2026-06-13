@@ -1,6 +1,6 @@
 import type { ClaudeMessage, ClaudeSession } from "../types";
 import { assistantMessagePostToolTextParts } from "../utils/assistantOrphanMarkdown";
-import { isToolOnlyUserMessage, userMessagePlainTextForDisplay } from "../utils/claudeChatMessageDisplay";
+import { isToolOnlyUserMessage, systemMessagePlainText, userMessagePlainTextForDisplay } from "../utils/claudeChatMessageDisplay";
 import { sessionHadRecentClaudeTurnFailureNotice } from "../utils/claudeSessionTurnFailure";
 import { CLAUDE_NO_VISIBLE_REPLY_FAILURE_HINT } from "../utils/claudeTurnCompleteGate";
 import { isMainSessionContextSeedMessage } from "./terminalDispatchContext";
@@ -404,8 +404,18 @@ export function appendSystemMessageBySessionOrClaudeId(
   targetId: string,
   text: string,
 ): ClaudeSession[] {
+  const trimmed = text.trim();
+  if (!trimmed) return sessions;
   return sessions.map((session) => {
     if (!sessionMatchesCrossTabTargetId(sessions, session, targetId)) return session;
+    const last = session.messages[session.messages.length - 1];
+    if (
+      last?.role === "system" &&
+      (last.content.trim() === trimmed ||
+        systemMessagePlainText(last).trim() === trimmed)
+    ) {
+      return session;
+    }
     return {
       ...session,
       messages: [...session.messages, createSystemTextMessage(text)],

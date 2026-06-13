@@ -265,6 +265,14 @@ describe("stream session id helpers", () => {
 });
 
 describe("extractSystemErrorMessageFromStreamLine", () => {
+  test("ignores hook_started progress events", () => {
+    expect(
+      extractSystemErrorMessageFromStreamLine(
+        JSON.stringify({ type: "system", subtype: "hook_started", hook_name: "SessionStart:startup" }),
+      ),
+    ).toBeNull();
+  });
+
   test("formats hook response errors", () => {
     const message = extractSystemErrorMessageFromStreamLine(JSON.stringify({
       type: "system",

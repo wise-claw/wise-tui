@@ -293,6 +293,17 @@ function isIgnorableClaudeStreamSystemErrorDetail(detail: string): boolean {
   return normalized === "unknown" || normalized === "undefined";
 }
 
+export function isHookStartedStreamLine(line: string): boolean {
+  try {
+    const json = JSON.parse(line) as Record<string, unknown>;
+    const type = typeof json.type === "string" ? json.type : "";
+    const subtype = typeof json.subtype === "string" ? json.subtype : "";
+    return type === "system" && subtype === "hook_started";
+  } catch {
+    return false;
+  }
+}
+
 export function extractSystemErrorMessageFromStreamLine(line: string): string | null {
   try {
     const json = JSON.parse(line) as Record<string, unknown>;
@@ -301,11 +312,7 @@ export function extractSystemErrorMessageFromStreamLine(line: string): string | 
     if (type !== "system") return null;
 
     if (subtype === "hook_started") {
-      const hookName = typeof json.hook_name === "string" ? json.hook_name.trim() : "";
-      if (hookName) {
-        return `Claude Hook 启动中: ${hookName}（完成后会继续生成回复）`;
-      }
-      return "Claude Hook 启动中（完成后会继续生成回复）";
+      return null;
     }
 
     if (subtype === "hook_response") {

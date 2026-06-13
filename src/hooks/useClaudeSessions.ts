@@ -391,6 +391,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   const streamStallTimerByTabRef = useRef<Map<string, number>>(new Map());
   /** 已对「Hook 进行中」放过一次 45s 宽限的标签 */
   const streamStallHookExtendedByTabRef = useRef<Set<string>>(new Set());
+  const recentHookActivityByTabRef = useRef<Map<string, number>>(new Map());
   /** 与本轮用户发送绑定，用于 `serverMsgId` 去重（单调递增，避免多会话同时发送撞号）。 */
   const lastUserSendNonceRef = useRef(0);
   /** 按标签会话 id 累积流式助手可见文本（完成时写入通知库），支持多会话并行。 */
@@ -453,7 +454,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         const engine: SessionExecutionEngine =
           engineResolver?.(session) ?? "claude";
         if (
-          sessionHasHookSystemActivity(session) &&
+          sessionHasHookSystemActivity(session, recentHookActivityByTabRef.current) &&
           !streamStallHookExtendedByTabRef.current.has(key)
         ) {
           streamStallHookExtendedByTabRef.current.add(key);
@@ -2395,6 +2396,12 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       reloadTranscriptFromDisk,
       expectedTurnNonceByTabIdRef,
       onStreamActivity: (tabId) => scheduleStreamStallTimer(tabId),
+      onHookStreamActivity: (tabId) => {
+        const key = tabId.trim();
+        if (!key) return;
+        recentHookActivityByTabRef.current.set(key, Date.now());
+        scheduleStreamStallTimer(key);
+      },
     });
 
     void (async () => {

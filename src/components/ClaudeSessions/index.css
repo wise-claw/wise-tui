@@ -3986,7 +3986,6 @@
 .app-system-message-md.app-markdown {
   font-size: 12px;
   line-height: 1.55;
-  padding: 8px 12px;
   color: var(--ant-color-text-secondary);
 }
 

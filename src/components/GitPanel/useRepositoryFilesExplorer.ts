@@ -28,7 +28,7 @@ import {
   MIN_EXPLORER_SEARCH_QUERY_LEN,
   type ExplorerSearchResultRow,
 } from "./fileTree";
-import { buildLazyRepositoryFileTree, capLoadedChildrenMap, pruneLoadedChildrenMap } from "./lazyExplorerTree";
+import { buildLazyRepositoryFileTree, capLoadedChildrenMap, pruneLoadedChildrenMap, pruneStaleExplorerDirFromMap } from "./lazyExplorerTree";
 import {
   shouldApplyExplorerChildLoadResult,
   shouldApplyExplorerLoadResult,
@@ -93,6 +93,19 @@ function searchPathsToRows(paths: string[]): ExplorerSearchResultRow[] {
     const parentPath = slash >= 0 ? path.slice(0, slash) : "";
     return { path, isDir: false, name, parentPath, score: 0 };
   });
+}
+
+function isExplorerDirectoryMissingError(message: string): boolean {
+  return message === "目录不存在" || message.includes("目录不存在");
+}
+
+function explorerDirDisplayName(dirPath: string): string {
+  const key = explorerDirKey(dirPath);
+  if (!key) {
+    return "根目录";
+  }
+  const slash = key.lastIndexOf("/");
+  return slash >= 0 ? key.slice(slash + 1) : key;
 }
 
 interface UseRepositoryFilesExplorerInput {
@@ -208,7 +221,7 @@ export function useRepositoryFilesExplorer({
   }, [repositoryPath, searchQuery]);
 
   const loadChildrenForDirInner = useCallback(
-    async (dirPath: string, options?: { force?: boolean }) => {
+    async (dirPath: string, options?: ExplorerChildrenLoadOptions) => {
       const normalizedDir = explorerDirKey(dirPath);
       const requestPath = repositoryPathRef.current.trim();
       if (!requestPath) {
@@ -273,7 +286,25 @@ export function useRepositoryFilesExplorer({
         if (isRootDir) {
           setLoadError(msg);
           commitLoadedChildrenByDir(() => new Map());
-        } else {
+        } else if (isExplorerDirectoryMissingError(msg)) {
+          let updatedRootChildren: RepositoryExplorerEntry[] | undefined;
+          commitLoadedChildrenByDir((prev) => {
+            const next = pruneStaleExplorerDirFromMap(prev, normalizedDir);
+            if (!explorerParentDir(normalizedDir)) {
+              updatedRootChildren = next.get("") ?? [];
+            }
+            return next;
+          });
+          if (updatedRootChildren) {
+            setCachedRepositoryExplorerRootChildren(requestPath, updatedRootChildren);
+          }
+          dispatchExpand({ type: "pruneSubtree", rootPath: normalizedDir });
+          if (options?.userInitiated) {
+            message.warning(
+              `文件夹「${explorerDirDisplayName(normalizedDir)}」已不存在，已从列表移除`,
+            );
+          }
+        } else if (options?.userInitiated) {
           message.error(`读取目录失败：${msg}`);
         }
       } finally {
@@ -401,9 +432,6 @@ export function useRepositoryFilesExplorer({
 
     void (async () => {
       try {
-        if (cachedRoot) {
-          return;
-        }
         const children = normalizeExplorerEntries(await listRepositoryExplorerChildren(path, ""));
         if (
           !shouldApplyExplorerLoadResult({
@@ -417,16 +445,24 @@ export function useRepositoryFilesExplorer({
           return;
         }
         setCachedRepositoryExplorerRootChildren(path, children);
-        const initial = new Map([["", children]]);
-        loadedChildrenByDirRef.current = initial;
-        setLoadedChildrenByDir(initial);
-        setChildrenMapRevision((revision) => revision + 1);
+        if (cachedRoot) {
+          commitLoadedChildrenByDir((prev) => {
+            const next = new Map(prev);
+            next.set("", children);
+            return next;
+          });
+        } else {
+          const initial = new Map([["", children]]);
+          loadedChildrenByDirRef.current = initial;
+          setLoadedChildrenByDir(initial);
+          setChildrenMapRevision((revision) => revision + 1);
+          dispatchExpand({ type: "replace", dirs: restoredExpanded });
+        }
         setLoadedRepositoryPath(path);
-        dispatchExpand({ type: "replace", dirs: restoredExpanded });
         setLoadError(null);
       } catch (error) {
         if (
-          shouldApplyExplorerLoadResult({
+          !shouldApplyExplorerLoadResult({
             requestGeneration: generation,
             currentGeneration: explorerScanGenerationRef.current,
             requestRepositoryPath: path,
@@ -434,6 +470,9 @@ export function useRepositoryFilesExplorer({
             cancelled,
           })
         ) {
+          return;
+        }
+        if (!cachedRoot) {
           const msg = error instanceof Error ? error.message : String(error);
           setLoadError(msg);
           setLoadedChildrenByDir(new Map());
@@ -441,6 +480,7 @@ export function useRepositoryFilesExplorer({
         }
       } finally {
         if (
+          !cachedRoot &&
           shouldApplyExplorerLoadResult({
             requestGeneration: generation,
             currentGeneration: explorerScanGenerationRef.current,

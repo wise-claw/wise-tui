@@ -16,6 +16,8 @@ mock.module("./claude", () => ({
     legacyProjectSettings: [],
     pluginMcp: [],
   })),
+  isOmcPluginInstalled: mock(async () => false),
+  listClaudePluginCacheSkills: mock(async () => []),
   listClaudeProjectSkills: mock(async () => []),
   listClaudeSubagents: mock(async () => []),
   listClaudeUserSkills: mock(async () => []),

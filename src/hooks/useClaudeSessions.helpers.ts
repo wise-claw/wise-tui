@@ -263,10 +263,21 @@ export function sessionHasVisibleStreamProgress(session: ClaudeSession): boolean
   });
 }
 
-export function sessionHasHookSystemActivity(session: ClaudeSession): boolean {
-  return session.messages.some(
+export function sessionHasHookSystemActivity(
+  session: ClaudeSession,
+  recentHookAtByTabId?: ReadonlyMap<string, number>,
+): boolean {
+  const fromMessages = session.messages.some(
     (m) => m.role === "system" && /Hook|hook|启动中/.test(m.content),
   );
+  if (fromMessages) return true;
+  if (!recentHookAtByTabId || recentHookAtByTabId.size === 0) return false;
+  const now = Date.now();
+  const keys = [session.id, session.claudeSessionId ?? ""].filter(Boolean);
+  return keys.some((key) => {
+    const at = recentHookAtByTabId.get(key);
+    return at != null && now - at < CLAUDE_STREAM_STALL_HOOK_EXTEND_MS + CLAUDE_STREAM_STALL_MS;
+  });
 }
 
 export function persistWorkflowBindings(map: Map<string, string>): void {

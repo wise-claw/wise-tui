@@ -15,6 +15,7 @@ import {
   formatClaudeResultErrorForSessionUi,
   isClaudeHarnessInjectedStreamText,
   isClaudeToolCallParseFailureText,
+  isHookStartedStreamLine,
   shouldClearCodexResumeSessionFromStreamLine,
   stripClaudeHarnessInjectedStreamText,
 } from "./claudeStreamParser";
@@ -89,6 +90,8 @@ interface RuntimeDeps {
   expectedTurnNonceByTabIdRef?: MutableRefObject<Map<string, number>>;
   /** 任意 stdout 行到达时重置「无可见输出」看门狗（Hook 阶段可能尚无助手正文）。 */
   onStreamActivity?: (tabId: string) => void;
+  /** Claude Hook 启动事件（不写入会话气泡，仅用于延长 stall 看门狗）。 */
+  onHookStreamActivity?: (tabId: string) => void;
   /**
    * 一轮流式结束后用磁盘 `*.jsonl` 覆盖内存消息，与 Claude Code 原生会话对齐。
    * 流式路径会把多行 delta 压成少量气泡并带去重，仅靠内存会与 jsonl 条数不一致。
@@ -168,6 +171,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     reloadTranscriptFromDisk,
     expectedTurnNonceByTabIdRef,
     onStreamActivity,
+    onHookStreamActivity,
   } = deps;
 
   const deferredStreamTabIds = new Set<string>();
@@ -274,6 +278,12 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     arr.push(item);
   }
 
+  function pushDeferredSystemError(tid: string, msg: string): void {
+    const last = deferredSystemErrors[deferredSystemErrors.length - 1];
+    if (last?.tid === tid && last?.msg === msg) return;
+    pushDeferred(deferredSystemErrors, { tid, msg });
+  }
+
   function looksLikeClaudeUuid(s: string): boolean {
     return /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(s.trim());
   }
@@ -353,14 +363,14 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
       deferredStreamTabIds.add(tid);
       const systemErrMsg = extractSystemErrorMessageFromStreamLine(line);
       if (systemErrMsg) {
-        pushDeferred(deferredSystemErrors, { tid, msg: systemErrMsg });
+        pushDeferredSystemError(tid, systemErrMsg);
       }
       const resultErrMsg = extractResultErrorMessageFromStreamLine(line);
       if (resultErrMsg) {
-        pushDeferred(deferredSystemErrors, {
+        pushDeferredSystemError(
           tid,
-          msg: formatClaudeResultErrorForSessionUi(resultErrMsg),
-        });
+          formatClaudeResultErrorForSessionUi(resultErrMsg),
+        );
       }
       return;
     }
@@ -374,10 +384,13 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     if (!hidden || streamLineNeedsHubWhileHidden(line)) {
       ingestClaudeStreamLineForHub(tid, line);
     }
+    if (isHookStartedStreamLine(line)) {
+      onHookStreamActivity?.(tid);
+    }
     const systemErrMsg = extractSystemErrorMessageFromStreamLine(line);
     if (systemErrMsg) {
       if (isDocumentHidden()) {
-        pushDeferred(deferredSystemErrors, { tid, msg: systemErrMsg });
+        pushDeferredSystemError(tid, systemErrMsg);
       } else {
         setSessions((prev) => appendSystemMessageBySessionOrClaudeId(prev, tid, systemErrMsg));
       }
