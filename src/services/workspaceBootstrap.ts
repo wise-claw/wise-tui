@@ -4,7 +4,7 @@ import {
   workspaceBootstrapNeedsTrellisInit,
   type WorkspaceBootstrapSelection,
 } from "../constants/workspaceBootstrapAddons";
-import { claudePluginInstall, claudePluginMarketBootstrap } from "./claudePluginMarket";
+import { claudePluginInstall } from "./claudePluginMarket";
 import { bootstrapTrellisIfMissing } from "./trellisBootstrap";
 
 export type { WorkspaceBootstrapSelection };
@@ -34,7 +34,6 @@ export async function runWorkspaceBootstrap(
 
   if (selection.omc) {
     try {
-      await claudePluginMarketBootstrap();
       await claudePluginInstall(WORKSPACE_BOOTSTRAP_OMC_INSTALL_REF, "user");
     } catch (err: unknown) {
       throw new Error(`oh-my-claudecode 安装失败：${errorMessage(err)}`);

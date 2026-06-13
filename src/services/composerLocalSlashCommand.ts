@@ -110,7 +110,6 @@ async function executePluginCommand(
   const scope = command.scope;
 
   if (command.action === "install") {
-    await claudePluginMarketBootstrap();
     const out = await claudePluginInstall(installRef, scope, repositoryPath);
     const installed = await loadInstalledPlugins(repositoryPath);
     invalidateSlashCatalogCache();

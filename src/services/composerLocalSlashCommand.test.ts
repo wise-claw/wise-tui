@@ -78,6 +78,27 @@ describe("executeComposerLocalSlashCommand", () => {
     expect(result).toContain("oh-my-claudecode@omc");
   });
 
+  test("installs plugin without full marketplace bootstrap", async () => {
+    const market = await import("./claudePluginMarket");
+    const bootstrap = market.claudePluginMarketBootstrap as ReturnType<typeof mock>;
+    const install = market.claudePluginInstall as ReturnType<typeof mock>;
+    bootstrap.mockClear();
+    install.mockClear();
+
+    const result = await executeComposerLocalSlashCommand(
+      {
+        kind: "plugin",
+        raw: "/plugin install oh-my-claudecode@omc",
+        plugin: { action: "install", installRef: "oh-my-claudecode@omc", scope: "user" },
+      },
+      { sessionId: "s1", repositoryPath: "/repo" },
+    );
+
+    expect(bootstrap).not.toHaveBeenCalled();
+    expect(install).toHaveBeenCalledWith("oh-my-claudecode@omc", "user", "/repo");
+    expect(result).toContain("## ✅ 插件安装完成");
+  });
+
   test("formats session status", async () => {
     const result = await executeComposerLocalSlashCommand(
       { kind: "status", raw: "/status" },

@@ -24,6 +24,18 @@ const BOOTSTRAP_MARKETPLACES: &[&str] = &[
     "mindfold-ai/Trellis",
 ];
 
+/// Wise 目录中 marketplace id → `claude plugin marketplace add` 源。
+const MARKETPLACE_ADD_SOURCES: &[(&str, &str)] = &[
+    ("claude-code-plugins", "anthropics/claude-code"),
+    ("superpowers-marketplace", "obra/superpowers-marketplace"),
+    ("claude-plugins-official", "anthropics/claude-plugins-official"),
+    ("claude-plugins-community", "anthropics/claude-plugins-community"),
+    ("omc", "Yeachan-Heo/oh-my-claudecode"),
+    ("gsd-plugin", "jnuyens/gsd-plugin"),
+    ("mindfold-trellis", "mindfold-ai/Trellis"),
+    ("wise-guide", "mindfold-ai/Trellis"),
+];
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ClaudePluginInstalledEntry {
@@ -740,6 +752,49 @@ pub(crate) fn list_enabled_installed_plugin_ids(
         .collect())
 }
 
+fn marketplace_id_from_install_ref(install_ref: &str) -> Result<String, String> {
+    validate_install_ref(install_ref)?;
+    let marketplace = install_ref
+        .trim()
+        .split_once('@')
+        .map(|(_, market)| market.trim().to_string())
+        .ok_or_else(|| "插件标识格式应为 plugin@marketplace".to_string())?;
+    Ok(marketplace)
+}
+
+fn marketplace_add_source(marketplace_id: &str) -> Option<&'static str> {
+    MARKETPLACE_ADD_SOURCES
+        .iter()
+        .find_map(|(id, source)| (*id == marketplace_id).then_some(*source))
+}
+
+fn ensure_marketplace_for_install(
+    home: &Path,
+    cwd: &Path,
+    install_ref: &str,
+) -> Result<(), String> {
+    let marketplace_id = marketplace_id_from_install_ref(install_ref)?;
+    let existing = list_marketplace_names(home, cwd)?;
+    if existing.contains(&marketplace_id) {
+        return Ok(());
+    }
+    let Some(source) = marketplace_add_source(&marketplace_id) else {
+        return Ok(());
+    };
+    match run_claude_plugin_cli_in(home, cwd, &["plugin", "marketplace", "add", source]) {
+        Ok(_) => Ok(()),
+        Err(e)
+            if e.contains("already")
+                || e.contains("Already")
+                || e.contains("已在")
+                || e.contains("exists") =>
+        {
+            Ok(())
+        }
+        Err(e) => Err(e),
+    }
+}
+
 fn ensure_marketplaces_sync(home: &Path) -> ClaudePluginMarketBootstrapResult {
     let mut log = String::new();
     let mut ok = true;
@@ -818,6 +873,7 @@ pub async fn claude_plugin_install(
     let cwd = cwd_for_scope(&home, project_root.as_deref(), &scope_value);
     let install_ref_value = install_ref.trim().to_string();
     spawn_blocking_result("安装插件任务失败", move || {
+        ensure_marketplace_for_install(&home, &cwd, install_ref_value.as_str())?;
         run_claude_plugin_cli_in(
             &home,
             &cwd,

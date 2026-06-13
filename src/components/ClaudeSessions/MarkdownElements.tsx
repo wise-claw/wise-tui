@@ -200,5 +200,10 @@ export function createMarkdownComponents(opts: {
         {children}
       </code>
     ),
+    table: ({ children, ...props }) => (
+      <div className="app-markdown-table-wrap">
+        <table {...props}>{children}</table>
+      </div>
+    ),
   };
 }
