@@ -123,6 +123,7 @@ export const ClaudePluginsPanel = forwardRef<ClaudePluginsPanelHandle, Props>(fu
     void (async () => {
       if (!bootstrapOnceRef.current) {
         bootstrapOnceRef.current = true;
+        setBootstrapping(true);
         try {
           const boot = await claudePluginMarketBootstrap();
           if (cancelled) return;
@@ -131,6 +132,8 @@ export const ClaudePluginsPanel = forwardRef<ClaudePluginsPanelHandle, Props>(fu
           }
         } catch {
           /* 首次打开失败不阻断列表读取 */
+        } finally {
+          if (!cancelled) setBootstrapping(false);
         }
       }
       if (!cancelled) {

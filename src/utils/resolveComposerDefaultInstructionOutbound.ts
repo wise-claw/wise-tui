@@ -4,7 +4,6 @@ import type { ClaudeProjectSkill } from "../types";
 import { normalizeComposerDefaultInstruction } from "./composerDefaultInstruction";
 import {
   isInvocablePluginSlashSkill,
-  pluginInstallRefFromCacheRel,
 } from "./installedPluginSlashCommands";
 import { OMC_COMMANDS } from "./slashPopoverOptions";
 

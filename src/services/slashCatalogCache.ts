@@ -69,7 +69,7 @@ async function fetchSlashCatalog(repositoryPath: string | null): Promise<SlashCa
     CLAUDE_RESERVED_LABELS,
   ).map((cmd) => ({
     label: cmd.label,
-    description: cmd.description,
+    description: cmd.description ?? "",
   }));
 
   return {

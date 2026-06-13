@@ -316,7 +316,6 @@ export function buildSlashOptionSections(options: SlashOption[]): Array<{
     items: Array<{ option: SlashOption; flatIndex: number }>;
   }> = [];
 
-  let flatIndex = 0;
   for (const group of ["omc", "claude", "plugin-cmd", "plugin", "skill"] as const) {
     const items = options
       .map((option, index) => ({ option, index }))
@@ -324,7 +323,6 @@ export function buildSlashOptionSections(options: SlashOption[]): Array<{
       .map(({ option, index }) => ({ option, flatIndex: index }));
 
     if (items.length === 0) continue;
-    flatIndex = items[items.length - 1]!.flatIndex + 1;
     sections.push({
       group,
       title: SLASH_GROUP_TITLES[group],
