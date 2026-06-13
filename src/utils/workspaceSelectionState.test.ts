@@ -12,6 +12,7 @@ import {
   resolveClaudeWorkspaceMainSession,
   resolveProjectComposerRepository,
   resolveScheduledTasksRepository,
+  shouldKeepProjectFocusWhenSwitchingSession,
   WORKSPACE_SCOPED_VIRTUAL_REPOSITORY_ID,
 } from "./workspaceSelectionState";
 
@@ -249,6 +250,22 @@ describe("resolveClaudePanelActiveSession", () => {
     expect(resolved?.id).toBe("s-proj");
   });
 
+  test("project focus prefers active workspace session without Project: prefix", () => {
+    const workspaceSession = session("s-workspace", "/eco", "Trellis");
+    const resolved = resolveClaudePanelActiveSession({
+      sessions: [workspaceSession],
+      allSessions: [workspaceSession, repoMain],
+      activeSessionId: "s-workspace",
+      activeWorkspaceFocus: "project",
+      activeProject: eco,
+      activeRepository: null,
+      repositories,
+      repositoryMainBindings: {},
+      workspaceMainSession: projectMain,
+    });
+    expect(resolved?.id).toBe("s-workspace");
+  });
+
   test("project focus prefers active Project: tab", () => {
     const resolved = resolveClaudePanelActiveSession({
       sessions: [projectMain, repoMain],
@@ -349,5 +366,54 @@ describe("resolveClaudeWorkspaceMainSession", () => {
       activeSessionId: "s-proj",
     });
     expect(resolved?.id).toBe("s-proj");
+  });
+});
+
+describe("shouldKeepProjectFocusWhenSwitchingSession", () => {
+  const repositories = [repo(1, "/work/ai-research/trellis"), repo(2, "/work/ai-research/hermes")];
+  const aiResearch = project({
+    id: "ai-research",
+    name: "ai-research",
+    repositoryIds: [1, 2],
+    rootPath: "/work/ai-research",
+  });
+
+  test("project focus + workspace-root session keeps project focus", () => {
+    const workspaceSession = session("s-workspace", "/work/ai-research", "Trellis");
+    expect(
+      shouldKeepProjectFocusWhenSwitchingSession({
+        session: workspaceSession,
+        activeWorkspaceFocus: "project",
+        activeProject: aiResearch,
+        repositories,
+        workspaceMode: "multi_repo",
+      }),
+    ).toBe(true);
+  });
+
+  test("project focus + member-repo session does not keep project focus", () => {
+    const memberSession = session("s-member", "/work/ai-research/hermes", "hermes-agent");
+    expect(
+      shouldKeepProjectFocusWhenSwitchingSession({
+        session: memberSession,
+        activeWorkspaceFocus: "project",
+        activeProject: aiResearch,
+        repositories,
+        workspaceMode: "multi_repo",
+      }),
+    ).toBe(false);
+  });
+
+  test("repository focus never keeps project focus", () => {
+    const workspaceSession = session("s-workspace", "/work/ai-research", "Project: ai-research");
+    expect(
+      shouldKeepProjectFocusWhenSwitchingSession({
+        session: workspaceSession,
+        activeWorkspaceFocus: "repository",
+        activeProject: aiResearch,
+        repositories,
+        workspaceMode: "multi_repo",
+      }),
+    ).toBe(false);
   });
 });

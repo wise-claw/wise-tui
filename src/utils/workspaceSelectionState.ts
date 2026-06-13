@@ -1,10 +1,8 @@
 import type { ClaudeSession, ProjectItem, Repository } from "../types";
-import {
-  isProjectRootSessionDisplayName,
-  resolveRepositoryForSession,
-} from "./repositoryMainSessionBinding";
+import { sessionMatchesProjectWorkspaceFocus } from "./projectSessionPanelFilter";
+import { resolveRepositoryForSession } from "./repositoryMainSessionBinding";
 import { resolveWorkspaceMainSession } from "./resolveWorkspaceMainSession";
-import type { WorkspaceFocus } from "./workspaceMode";
+import type { WorkspaceFocus, WorkspaceMode } from "./workspaceMode";
 import type { WorkspaceLastSelection } from "./startupRepoSelection";
 import {
   resolveProjectDirectoryOpenPath,
@@ -168,6 +166,18 @@ export interface ResolveClaudePanelActiveSessionInput {
   repositories: ReadonlyArray<Repository>;
   repositoryMainBindings: Record<string, string>;
   workspaceMainSession: ClaudeSession | null;
+  workspaceMode?: WorkspaceMode;
+}
+
+function findSessionByTabOrClaudeId(
+  sessions: ReadonlyArray<ClaudeSession>,
+  sessionKey: string,
+): ClaudeSession | null {
+  const trimmed = sessionKey.trim();
+  if (!trimmed) return null;
+  return (
+    sessions.find((session) => session.id === trimmed || session.claudeSessionId === trimmed) ?? null
+  );
 }
 
 /**
@@ -187,15 +197,22 @@ export function resolveClaudePanelActiveSession(
     repositories,
     repositoryMainBindings,
     workspaceMainSession,
+    workspaceMode = "multi_repo",
   } = input;
 
   if (activeWorkspaceFocus === "project" && activeProject) {
     if (activeSessionId) {
       const current =
-        sessions.find((session) => session.id === activeSessionId) ??
-        allSessions.find((session) => session.id === activeSessionId) ??
-        null;
-      if (current && isProjectRootSessionDisplayName(current.repositoryName ?? "")) {
+        findSessionByTabOrClaudeId(sessions, activeSessionId) ??
+        findSessionByTabOrClaudeId(allSessions, activeSessionId);
+      if (
+        current &&
+        sessionMatchesProjectWorkspaceFocus(current, {
+          workspaceMode,
+          project: activeProject,
+          repositories,
+        })
+      ) {
         return current;
       }
     }
@@ -206,8 +223,12 @@ export function resolveClaudePanelActiveSession(
     return undefined;
   }
 
+  const activeKey = activeSessionId?.trim() ?? "";
   return sessions.find((session) => {
-    if (session.id !== activeSessionId) return false;
+    if (activeKey && session.id !== activeKey && session.claudeSessionId !== activeKey) {
+      return false;
+    }
+    if (!activeKey) return false;
     return (
       resolveRepositoryForSession({
         session,
@@ -228,6 +249,7 @@ export interface ResolveClaudeWorkspaceMainSessionInput {
   activeProject: ProjectItem | null | undefined;
   activeWorkspaceFocus: WorkspaceFocus;
   activeSessionId: string | null | undefined;
+  workspaceMode?: WorkspaceMode;
 }
 
 export function resolveClaudeWorkspaceMainSession(
@@ -241,7 +263,31 @@ export function resolveClaudeWorkspaceMainSession(
     activeProject: input.activeProject ?? null,
     activeWorkspaceFocus: input.activeWorkspaceFocus,
     activeSessionId: input.activeSessionId,
+    workspaceMode: input.workspaceMode,
   });
+}
+
+export interface ShouldKeepProjectFocusWhenSwitchingSessionInput {
+  session: ClaudeSession;
+  activeWorkspaceFocus: WorkspaceFocus;
+  activeProject: ProjectItem | null | undefined;
+  repositories: ReadonlyArray<Repository>;
+  workspaceMode?: WorkspaceMode;
+}
+
+/** 工作区焦点下切换到工作区主会话时，不应把侧栏焦点打回成员仓库。 */
+export function shouldKeepProjectFocusWhenSwitchingSession(
+  input: ShouldKeepProjectFocusWhenSwitchingSessionInput,
+): boolean {
+  return (
+    input.activeWorkspaceFocus === "project" &&
+    input.activeProject != null &&
+    sessionMatchesProjectWorkspaceFocus(input.session, {
+      workspaceMode: input.workspaceMode ?? "multi_repo",
+      project: input.activeProject,
+      repositories: input.repositories,
+    })
+  );
 }
 
 export { resolveProjectExplorerOpenPath } from "./workspaceRepositoryTreeSelect";

@@ -1,5 +1,5 @@
 import { InfoCircleOutlined } from "@ant-design/icons";
-import { memo, type FocusEvent, type RefObject } from "react";
+import { memo, type FocusEvent, type RefObject, useSyncExternalStore } from "react";
 import type { ClaudeSession, SessionConversationTaskItem } from "../../types";
 import type { DispatchRecordMeta } from "../../utils/claudeChatMessageDisplay";
 import { CHAT_MESSAGES_SCROLLING_CLASS } from "../../constants/chatScrollPerformance";
@@ -8,6 +8,11 @@ import {
   useChatMessagesPointerBusy,
 } from "../../hooks/useChatMessagesPointerBusy";
 import { useScrollEndClass } from "../../hooks/useScrollEndClass";
+import { useDiskTranscriptScrollLoad } from "../../hooks/useDiskTranscriptScrollLoad";
+import {
+  isSessionTranscriptHydrating,
+  subscribeSessionTranscriptHydrating,
+} from "../../stores/claudeTranscriptHydrationStore";
 import {
   ClaudeVirtualMessageList,
   type ChatMessageListNavigationHandle,
@@ -101,10 +106,29 @@ export const ClaudeChatMessagesPane = memo(function ClaudeChatMessagesPane({
   companionMessageListWindow,
 }: ClaudeChatMessagesPaneProps) {
   const streamingActive = isClaudeChatSessionStreaming(session.status);
+  const transcriptHydrating = useSyncExternalStore(
+    subscribeSessionTranscriptHydrating,
+    () => isSessionTranscriptHydrating(session.id),
+    () => false,
+  );
   useScrollEndClass(messagesScrollRef, CHAT_MESSAGES_SCROLLING_CLASS, 240, {
     deferLiveSessionUpdates: true,
   });
   useChatMessagesPointerBusy(messagesScrollRef, streamingActive);
+
+  useDiskTranscriptScrollLoad({
+    sessionId: session.id,
+    diskTranscriptPartial: Boolean(session.diskTranscriptPartial),
+    scrollContainerRef: messagesScrollRef,
+    loadMoreTranscriptLoading,
+    fullTranscriptLoading,
+    onLoadMoreTranscriptFromDisk,
+    onReloadFullDiskTranscript,
+    onLoadMoreTranscriptStart,
+    onLoadMoreTranscriptEnd,
+    onFullTranscriptStart,
+    onFullTranscriptEnd,
+  });
 
   return (
     <div
@@ -169,7 +193,7 @@ export const ClaudeChatMessagesPane = memo(function ClaudeChatMessagesPane({
       {session.messages.length === 0 ? (
         <div className="app-claude-messages-empty">
           <p>
-            {session.diskTranscriptPartial
+            {transcriptHydrating
               ? "正在加载对话历史…"
               : "发送消息开始与 Claude Code 对话"}
           </p>

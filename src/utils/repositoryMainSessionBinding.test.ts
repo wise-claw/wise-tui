@@ -68,6 +68,21 @@ describe("projectMainSessionBindingKey", () => {
       resolveBoundMainSessionId(projectMainSessionBindingKey("hr"), bindings, [projectSession], null),
     ).toBe("s1");
   });
+
+  it("resolves project binding even when repositoryName lost Project: prefix after disk refresh", () => {
+    const projectSession = session("/work/ai-research", "Trellis");
+    const bindings = {
+      [projectMainSessionBindingKey("ai-research")]: "s1",
+    };
+    expect(
+      resolveBoundMainSessionId(
+        projectMainSessionBindingKey("ai-research"),
+        bindings,
+        [projectSession],
+        null,
+      ),
+    ).toBe("s1");
+  });
 });
 
 describe("project-rooted main session matching", () => {

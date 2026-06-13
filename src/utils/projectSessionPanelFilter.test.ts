@@ -68,6 +68,34 @@ describe("filterSessionsForWorkspace", () => {
     expect(filtered.map((s) => s.id)).toEqual(["s-main"]);
   });
 
+  test("project focus includes anchor-path session without Project: prefix", () => {
+    const r1 = repo({ id: 1, path: "/work/ai-research/trellis" });
+    const r2 = repo({ id: 2, path: "/work/ai-research/wise" });
+    const p = project({
+      id: "p1",
+      name: "ai-research",
+      repositoryIds: [1, 2],
+      rootPath: "/work/ai-research",
+    });
+    const sessions = [
+      session({
+        id: "s-workspace",
+        repositoryPath: "/work/ai-research",
+        repositoryName: "Trellis",
+      }),
+      session({ id: "s-trellis", repositoryPath: "/work/ai-research/trellis", repositoryName: "Trellis" }),
+      session({ id: "s-wise", repositoryPath: "/work/ai-research/wise", repositoryName: "wise" }),
+    ];
+    const filtered = filterSessionsForWorkspace({
+      sessions,
+      workspaceMode: "multi_repo",
+      project: p,
+      repositories: [r1, r2],
+      activeWorkspaceFocus: "project",
+    });
+    expect(filtered.map((s) => s.id)).toEqual(["s-workspace"]);
+  });
+
   test("multi_repo + repository focus → keep repo sessions and exclude Project:", () => {
     const r1 = repo({ id: 1, path: "/parent/a" });
     const r2 = repo({ id: 2, path: "/parent/b" });

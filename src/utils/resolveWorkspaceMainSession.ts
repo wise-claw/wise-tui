@@ -4,8 +4,8 @@ import {
   pickProjectMainSessionForSidebarSelect,
   pickSessionForRepositorySidebarSelect,
 } from "./claudeSessionSelection";
+import { filterSessionsForWorkspace } from "./projectSessionPanelFilter";
 import {
-  isProjectRootSessionDisplayName,
   normalizeRepositoryPathKey,
   projectMainSessionBindingKey,
   resolveBoundMainSessionId,
@@ -14,7 +14,7 @@ import {
   resolveRepositoryMainSessionId,
 } from "./repositoryMainSessionBinding";
 import { loadSessionOwnerHints } from "./sessionOwnerHints";
-import type { WorkspaceFocus } from "./workspaceMode";
+import type { WorkspaceFocus, WorkspaceMode } from "./workspaceMode";
 
 export interface ResolveWorkspaceMainSessionInput {
   sessions: readonly ClaudeSession[];
@@ -23,22 +23,69 @@ export interface ResolveWorkspaceMainSessionInput {
   activeRepository?: Repository | null;
   activeProject?: ProjectItem | null;
   activeWorkspaceFocus?: WorkspaceFocus;
+  workspaceMode?: WorkspaceMode;
   /** 当前活动标签；绑定/侧栏 pick 未命中时，若归属本仓库/项目则作为主会话 */
   activeSessionId?: string | null;
+}
+
+function findSessionByTabOrClaudeId(
+  list: readonly ClaudeSession[],
+  sessionKey: string | null | undefined,
+): ClaudeSession | null {
+  const trimmed = sessionKey?.trim();
+  if (!trimmed) return null;
+  return list.find((session) => session.id === trimmed || session.claudeSessionId === trimmed) ?? null;
+}
+
+function pickBestProjectWorkspaceSession(
+  list: ClaudeSession[],
+  project: ProjectItem,
+  repositories: readonly Repository[],
+  workspaceMode: WorkspaceMode,
+): ClaudeSession | null {
+  const candidates = filterSessionsForWorkspace({
+    sessions: list,
+    workspaceMode,
+    project,
+    repositories,
+    activeWorkspaceFocus: "project",
+  });
+  if (candidates.length === 0) return null;
+  let best: ClaudeSession | null = null;
+  let bestScore = -Infinity;
+  for (const session of candidates) {
+    const messageScore = session.messages.length > 0 ? 1_000_000 : 0;
+    const previewScore = session.diskPreview?.trim() ? 1_000 : 0;
+    const ts = session.messages[session.messages.length - 1]?.timestamp ?? session.createdAt;
+    const score = messageScore + previewScore + ts;
+    if (score > bestScore) {
+      bestScore = score;
+      best = session;
+    }
+  }
+  return best;
 }
 
 function fallbackActiveSessionForProject(
   list: ClaudeSession[],
   activeSessionId: string | null | undefined,
+  project: ProjectItem,
+  repositories: readonly Repository[],
+  workspaceMode: WorkspaceMode,
 ): ClaudeSession | null {
-  if (!activeSessionId?.trim()) {
-    return null;
-  }
-  const active = list.find((session) => session.id === activeSessionId);
+  const active = findSessionByTabOrClaudeId(list, activeSessionId);
   if (!active) {
     return null;
   }
-  if (isProjectRootSessionDisplayName(active.repositoryName ?? "")) {
+  if (
+    filterSessionsForWorkspace({
+      sessions: [active],
+      workspaceMode,
+      project,
+      repositories,
+      activeWorkspaceFocus: "project",
+    }).length > 0
+  ) {
     return active;
   }
   return null;
@@ -52,7 +99,7 @@ function fallbackActiveSessionForRepository(
   if (!activeSessionId?.trim() || !activeRepository) {
     return null;
   }
-  const active = list.find((s) => s.id === activeSessionId);
+  const active = list.find((s) => s.id === activeSessionId || s.claudeSessionId === activeSessionId);
   if (!active) {
     return null;
   }
@@ -84,6 +131,7 @@ export function resolveWorkspaceMainSession(input: ResolveWorkspaceMainSessionIn
     activeRepository,
     activeProject,
     activeWorkspaceFocus = "repository",
+    workspaceMode = "multi_repo",
   } = input;
   const list = [...sessions];
   if (list.length === 0) {
@@ -103,14 +151,20 @@ export function resolveWorkspaceMainSession(input: ResolveWorkspaceMainSessionIn
     const anchor = resolveProjectMainSessionAnchor(activeProject, repositories);
     const anchorPath = normalizeRepositoryPathKey(anchor.path);
     const picked =
+      pickBestProjectWorkspaceSession(list, activeProject, repositories, workspaceMode) ??
       pickProjectMainSessionForSidebarSelect(list, anchorPath, loadSessionOwnerHints()) ??
       pickSessionForRepositorySidebarSelect(list, anchorPath, loadSessionOwnerHints(), undefined);
     if (picked) {
       return picked;
     }
     return (
-      fallbackActiveSessionForProject(list, input.activeSessionId) ??
-      fallbackActiveSessionForRepository(list, input)
+      fallbackActiveSessionForProject(
+        list,
+        input.activeSessionId,
+        activeProject,
+        repositories,
+        workspaceMode,
+      ) ?? fallbackActiveSessionForRepository(list, input)
     );
   }
 

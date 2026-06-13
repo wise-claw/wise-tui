@@ -6,10 +6,6 @@ import {
   shouldRenderFencedBlockAsMermaid,
   wrapMermaidBlocksInMarkdown,
 } from "./mermaidBlock";
-import {
-  sanitizeRichMessageHtml,
-  splitRichMessageContent,
-} from "./richMessageHtml";
 
 marked.use({ gfm: true, breaks: true });
 
@@ -195,21 +191,9 @@ export function parseMarkdownSourceToHtml(text: string, opts?: { streaming?: boo
   return parseMarkedHtml(normalized, source);
 }
 
+/** @deprecated 会话消息统一走 Markdown 解析；保留别名便于测试与外部引用。 */
 export function renderRichMessageSourceToHtml(text: string, opts?: { streaming?: boolean }): string {
-  const source = coerceMarkdownSourceText(text);
-  if (!source.trim()) return "";
-
-  const split = splitRichMessageContent(source);
-  if (split.kind === "markdown") {
-    return parseMarkdownSourceToHtml(split.markdown, opts);
-  }
-  if (split.kind === "html") {
-    return `<div class="app-markdown-html-embed">${sanitizeRichMessageHtml(split.html)}</div>`;
-  }
-  const mdHtml = split.markdown ? parseMarkdownSourceToHtml(split.markdown, opts) : "";
-  const docHtml = sanitizeRichMessageHtml(split.html);
-  const embed = docHtml ? `<div class="app-markdown-html-embed">${docHtml}</div>` : "";
-  return `${mdHtml}${embed}`;
+  return parseMarkdownSourceToHtml(text, opts);
 }
 
 export type MarkdownHtmlEnhancer = {
@@ -381,7 +365,7 @@ export function buildMarkdownDisplayHtml(
   const source = coerceMarkdownSourceText(text);
   if (!source.trim()) return "";
   if (typeof document === "undefined") {
-    return renderRichMessageSourceToHtml(source, { streaming: opts?.streaming });
+    return parseMarkdownSourceToHtml(source, { streaming: opts?.streaming });
   }
 
   const cacheKey = opts?.streaming ? "" : source;
@@ -390,7 +374,7 @@ export function buildMarkdownDisplayHtml(
     if (cached !== undefined) return cached;
   }
 
-  const inner = renderRichMessageSourceToHtml(source, { streaming: opts?.streaming });
+  const inner = parseMarkdownSourceToHtml(source, { streaming: opts?.streaming });
   const enhanced = enhanceMarkdownHtmlString(inner, document, opts?.enhancer, 0, {
     streaming: opts?.streaming,
   });

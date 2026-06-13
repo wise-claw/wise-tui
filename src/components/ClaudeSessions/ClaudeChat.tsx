@@ -289,6 +289,9 @@ interface Props {
   /** 双栏右侧主会话：输入框底栏仓库选择（由父级仅在右侧注入） */
   dualPaneRepositoryPicker?: DualPaneComposerRepositoryPickerProps;
   activeProject?: ProjectItem | null;
+  activeWorkspaceFocus?: import("../../utils/workspaceMode").WorkspaceFocus;
+  activeRepositoryId?: number | null;
+  workspaceMode?: import("../../utils/workspaceMode").WorkspaceMode;
   missionContext?: {
     projectId?: string | null;
     rootPath?: string | null;
@@ -390,6 +393,9 @@ export function ClaudeChatInner({
   dualPaneRepositoryPicker,
   missionContext,
   activeProject,
+  activeWorkspaceFocus = "repository",
+  activeRepositoryId = null,
+  workspaceMode = "single_repo",
   activeSessionId = null,
   deferHeavySubtree = false,
   messageListProfile = "primary",
@@ -1251,6 +1257,9 @@ export function ClaudeChatInner({
     repositories,
     activeRepository,
     activeProject,
+    activeWorkspaceFocus,
+    activeRepositoryId,
+    workspaceMode,
     sessionOwnerHints,
     mentionEmployees,
     workflowTasks,

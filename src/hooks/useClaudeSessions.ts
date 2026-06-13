@@ -75,6 +75,7 @@ import {
 } from "../utils/sessionHistoryScope";
 import { loadSessionTabsState, saveSessionTabsState } from "../services/tabsStore";
 import {
+  CLAUDE_DISK_JSONL_TAIL_LINES_LAZY,
   CLAUDE_DISK_JSONL_TAIL_LINES_RELOAD,
   IN_MEMORY_SESSION_MESSAGES_MAX,
   PERSIST_SESSION_MESSAGES_MAX,
@@ -216,6 +217,7 @@ import {
   isClaudeConversationMissingError,
   markClaudeRegistryBootstrapWarmup,
   mergeRepositoryDiskSessions,
+  collectDiskMergeTabIdMigrations,
   modelsForRepositoryPaths,
   persistTrellisContextBindings,
   persistWorkflowBindings,
@@ -235,7 +237,9 @@ import {
   subscribeClaudeSessionsLive,
   subscribeClaudeSessionsStructure,
   getClaudeSessionsSnapshot,
+  getClaudeSessionsStructureKey,
 } from "../stores/claudeSessionsLiveStore";
+import { setSessionTranscriptHydrating } from "../stores/claudeTranscriptHydrationStore";
 import type {
   PendingTurnFailoverContext,
   SessionExecuteOpts,
@@ -282,6 +286,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     subscribeSessions,
     getClaudeSessionsSnapshot,
     getClaudeSessionsSnapshot,
+  );
+  const sessionsStructureKey = useSyncExternalStore(
+    subscribeClaudeSessionsStructure,
+    getClaudeSessionsStructureKey,
+    getClaudeSessionsStructureKey,
   );
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
@@ -393,6 +402,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   /** Claude `session_id` → 在此之前不因「宿主 registry 暂无该 sid」将 running 降级为 idle */
   const registryBootstrapDeadlineByClaudeSidRef = useRef<Map<string, number>>(new Map());
   const diskLoadDoneRef = useRef<Set<string>>(new Set());
+  const diskHydrateInFlightRef = useRef<Set<string>>(new Set());
   const diskTailLinesBySessionRef = useRef(new Map<string, number>());
   const claudeConfigModelByRepoPathRef = useRef<Map<string, string | null>>(new Map());
   const pruneLiveSessionSidecarsRef = useRef<(liveSessions: readonly ClaudeSession[]) => boolean>(() => false);
@@ -555,6 +565,38 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       }
     }
   }, []);
+
+  const applySessionTabIdMigration = useCallback(
+    (fromTabId: string, toClaudeSessionId: string) => {
+      const from = fromTabId.trim();
+      const to = toClaudeSessionId.trim();
+      if (!from || !to || from === to) return;
+      markClaudeRegistryBootstrapWarmup(registryBootstrapDeadlineByClaudeSidRef, to);
+      const nonceMap = expectedTurnNonceByTabIdRef.current;
+      const pendingNonce = nonceMap.get(from);
+      if (pendingNonce !== undefined) {
+        nonceMap.delete(from);
+        nonceMap.set(to, pendingNonce);
+      }
+      const trellisContextId =
+        trellisContextIdBySessionRef.current.get(from) ?? trellisContextIdForTab(from);
+      trellisContextIdBySessionRef.current.set(from, trellisContextId);
+      trellisContextIdBySessionRef.current.set(to, trellisContextId);
+      persistTrellisContextBindings(trellisContextIdBySessionRef.current);
+      migrateClaudeInvocationTabId(from, to);
+      const streamingEntry = streamingProcessByTabRef.current.get(from);
+      if (streamingEntry) {
+        streamingProcessByTabRef.current.set(from, {
+          claudeSessionId: to,
+        });
+      }
+      if (activeSessionIdRef.current === from) {
+        setActiveSessionId(to);
+      }
+      onSessionTabIdMigratedRef.current?.(from, to);
+    },
+    [migrateClaudeInvocationTabId],
+  );
 
   const resolveTrellisContextId = useCallback((tabSessionId: string, claudeSessionId?: string | null): string => {
     const existing =
@@ -1787,9 +1829,9 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   );
 
   const reloadFullDiskTranscript = useCallback(
-    async (sessionKey: string) => {
+    async (sessionKey: string): Promise<boolean> => {
       try {
-        await reloadFullDiskTranscriptByKey({
+        return await reloadFullDiskTranscriptByKey({
           sessionKey,
           sessions: sessionsRef.current,
           setSessions,
@@ -1798,24 +1840,104 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           loadSessionTranscriptLines,
         });
       } catch {
-        /* ignore */
+        return false;
       }
     },
     [loadSessionTranscriptLines, resolveSessionExecutionEngine, setSessions],
   );
 
   const applyDiskTranscriptTail = useCallback(
-    async (session: ClaudeSession, tailLines: number) => {
-      await applyDiskTranscriptTailHelper({
-        session,
-        tailLines,
-        setSessions,
-        diskTailLinesBySession: diskTailLinesBySessionRef.current,
-        resolveSessionExecutionEngine,
-        loadSessionTranscriptLines,
-      });
+    async (session: ClaudeSession, tailLines: number): Promise<boolean> => {
+      try {
+        return await applyDiskTranscriptTailHelper({
+          session,
+          tailLines,
+          setSessions,
+          diskTailLinesBySession: diskTailLinesBySessionRef.current,
+          resolveSessionExecutionEngine,
+          loadSessionTranscriptLines,
+        });
+      } catch {
+        return false;
+      }
     },
     [loadSessionTranscriptLines, resolveSessionExecutionEngine, setSessions],
+  );
+
+  const hydrateSessionTranscriptFromDisk = useCallback(
+    async (
+      session: ClaudeSession,
+      tailLines: number = CLAUDE_DISK_JSONL_TAIL_LINES_LAZY,
+    ): Promise<boolean> => {
+      const fresh = sessionsRef.current.find((row) => row.id === session.id) ?? session;
+      const tabId = fresh.id;
+      setSessionTranscriptHydrating(tabId, true);
+      try {
+        const lazyOk = await applyDiskTranscriptTail(fresh, tailLines);
+        if (lazyOk) return true;
+        return await reloadFullDiskTranscript(tabId);
+      } finally {
+        setSessionTranscriptHydrating(tabId, false);
+      }
+    },
+    [applyDiskTranscriptTail, reloadFullDiskTranscript],
+  );
+
+  const requestDiskTranscriptHydration = useCallback(
+    (sessionKey: string, tailLines: number = CLAUDE_DISK_JSONL_TAIL_LINES_LAZY) => {
+      const raw = sessionKey.trim();
+      if (!raw) return;
+      const session = sessionsRef.current.find((x) => x.id === raw || x.claudeSessionId === raw);
+      if (!session) return;
+      if (session.messages.length > 0) return;
+      if (session.status === "running" || session.status === "connecting") return;
+      const engine = resolveSessionExecutionEngine(session);
+      const shouldHydrate =
+        sessionHasDiskTranscript(session, engine) ||
+        Boolean(session.claudeSessionId?.trim()) ||
+        Boolean(session.diskTranscriptPartial);
+      if (!shouldHydrate) return;
+      const loadKey = session.id;
+      if (diskHydrateInFlightRef.current.has(loadKey)) return;
+      diskHydrateInFlightRef.current.add(loadKey);
+
+      const release = () => {
+        diskHydrateInFlightRef.current.delete(loadKey);
+      };
+
+      const attempt = (allowRetry: boolean) => {
+        const fresh = sessionsRef.current.find((x) => x.id === loadKey);
+        if (!fresh || fresh.messages.length > 0) {
+          release();
+          return;
+        }
+        void hydrateSessionTranscriptFromDisk(fresh, tailLines)
+          .then((ok) => {
+            const latest = sessionsRef.current.find((x) => x.id === loadKey);
+            if (ok || (latest?.messages.length ?? 0) > 0) {
+              release();
+              return;
+            }
+            if (!allowRetry) {
+              release();
+              return;
+            }
+            window.setTimeout(() => {
+              attempt(false);
+            }, 1500);
+          })
+          .catch(() => {
+            if (allowRetry) {
+              window.setTimeout(() => attempt(false), 1500);
+            } else {
+              release();
+            }
+          });
+      };
+
+      attempt(true);
+    },
+    [hydrateSessionTranscriptFromDisk, resolveSessionExecutionEngine],
   );
 
   const loadMoreTranscriptFromDisk = useCallback(
@@ -1999,11 +2121,6 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
               : normalizedWithModels[0]!.id;
           memoryKeepSessionIdsRef.current = new Set<string>([active]);
           setSessions(normalizedWithModels);
-          for (const s of sessionsRef.current) {
-            if (s.claudeSessionId?.trim() && s.messages.length > 0) {
-              diskLoadDoneRef.current.add(s.id);
-            }
-          }
           setActiveSessionId(active);
         }
       } finally {
@@ -2257,26 +2374,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         }
       },
       onSessionTabIdMigrated: (fromTabId, toClaudeSessionId) => {
-        markClaudeRegistryBootstrapWarmup(registryBootstrapDeadlineByClaudeSidRef, toClaudeSessionId);
-        const nonceMap = expectedTurnNonceByTabIdRef.current;
-        const pendingNonce = nonceMap.get(fromTabId);
-        if (pendingNonce !== undefined) {
-          nonceMap.delete(fromTabId);
-          nonceMap.set(toClaudeSessionId, pendingNonce);
-        }
-        const trellisContextId =
-          trellisContextIdBySessionRef.current.get(fromTabId) ?? trellisContextIdForTab(fromTabId);
-        trellisContextIdBySessionRef.current.set(fromTabId, trellisContextId);
-        trellisContextIdBySessionRef.current.set(toClaudeSessionId, trellisContextId);
-        persistTrellisContextBindings(trellisContextIdBySessionRef.current);
-        migrateClaudeInvocationTabId(fromTabId, toClaudeSessionId);
-        const streamingEntry = streamingProcessByTabRef.current.get(fromTabId);
-        if (streamingEntry) {
-          streamingProcessByTabRef.current.set(fromTabId, {
-            claudeSessionId: toClaudeSessionId,
-          });
-        }
-        onSessionTabIdMigratedRef.current?.(fromTabId, toClaudeSessionId);
+        applySessionTabIdMigration(fromTabId, toClaudeSessionId);
       },
       reloadTranscriptFromDisk,
       expectedTurnNonceByTabIdRef,
@@ -2316,12 +2414,33 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       trimmedPath,
       sessionsRef.current,
     );
-    // 先合并磁盘标签，避免再等 getClaudeConfigModel 才 setSessions（多仓库并发刷新时易卡顿）。
-    setSessions((prev) => {
-      const next = mergeRepositoryDiskSessions(prev, mergePath, repositoryName, disk, "sonnet");
+    const prev = sessionsRef.current;
+    const next = mergeRepositoryDiskSessions(prev, mergePath, repositoryName, disk, "sonnet");
+    const migrations = collectDiskMergeTabIdMigrations(prev, next, mergePath);
+    if (next !== prev) {
+      for (const migration of migrations) {
+        memoryKeepSessionIdsRef.current.add(migration.toClaudeSessionId);
+        memoryKeepSessionIdsRef.current.delete(migration.fromTabId);
+        if (activeSessionIdRef.current === migration.fromTabId) {
+          activeSessionIdRef.current = migration.toClaudeSessionId;
+        }
+      }
+      for (const row of next) {
+        if (!repositoryPathsMatch(row.repositoryPath, mergePath)) continue;
+        if (row.messages.length > 0 || row.id === activeSessionIdRef.current) {
+          memoryKeepSessionIdsRef.current.add(row.id);
+        }
+      }
       sessionsRef.current = next;
-      return next;
-    });
+      setSessions(next);
+      for (const migration of migrations) {
+        applySessionTabIdMigration(migration.fromTabId, migration.toClaudeSessionId);
+      }
+      const activeKey = activeSessionIdRef.current?.trim();
+      if (activeKey) {
+        requestDiskTranscriptHydration(activeKey);
+      }
+    }
 
     void (async () => {
       const resolved = await getCachedClaudeConfigModel(mergePath);
@@ -2343,38 +2462,34 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         return next;
       });
     })();
-  }, [getCachedClaudeConfigModel]);
+  }, [applySessionTabIdMigration, getCachedClaudeConfigModel, requestDiskTranscriptHydration, setSessions]);
 
   useEffect(() => {
     if (!activeSessionId) return;
-    const s = sessionsRef.current.find((x) => x.id === activeSessionId);
-    if (!s || s.messages.length > 0) return;
-    const engine = resolveSessionExecutionEngine(s);
-    const hasDisk = sessionHasDiskTranscript(s, engine);
-    if (!hasDisk) return;
-    if (s.status === "running" || s.status === "connecting") return;
-    if (s.messages.length === 0) {
-      diskLoadDoneRef.current.delete(s.id);
-    }
-    if (diskLoadDoneRef.current.has(s.id)) return;
-    diskLoadDoneRef.current.add(s.id);
-    const loadKey = s.id;
-    const snapshot = s;
-
     let cancelled = false;
     const cancelIdle = runWhenIdle(() => {
       if (cancelled) return;
-      void reloadFullDiskTranscript(snapshot.id).catch(() => {
-        diskLoadDoneRef.current.delete(loadKey);
-      });
+      requestDiskTranscriptHydration(activeSessionId);
     }, { timeoutMs: 0 });
 
     return () => {
       cancelled = true;
       cancelIdle();
-      diskLoadDoneRef.current.delete(loadKey);
     };
-  }, [activeSessionId, reloadFullDiskTranscript, resolveSessionExecutionEngine]);
+  }, [activeSessionId, sessionsStructureKey, requestDiskTranscriptHydration]);
+
+  /** 窗口重新可见时，为仍为空且未成功补全的当前标签重试磁盘加载。 */
+  useEffect(() => {
+    if (typeof document === "undefined") return;
+    const retryIfStuck = () => {
+      if (document.visibilityState !== "visible") return;
+      const sid = activeSessionIdRef.current;
+      if (!sid) return;
+      requestDiskTranscriptHydration(sid);
+    };
+    document.addEventListener("visibilitychange", retryIfStuck);
+    return () => document.removeEventListener("visibilitychange", retryIfStuck);
+  }, [requestDiskTranscriptHydration]);
 
   /** tabs 恢复或内存回收后：为仍有磁盘 id 但 messages 为空的标签补全 transcript。 */
   useEffect(() => {
@@ -2388,17 +2503,14 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         return sessionHasDiskTranscript(session, resolveSessionExecutionEngine(session));
       });
       for (const session of candidates.slice(0, 16)) {
-        diskLoadDoneRef.current.delete(session.id);
-        void reloadFullDiskTranscript(session.id).catch(() => {
-          /* 落盘略晚时不阻断 */
-        });
+        requestDiskTranscriptHydration(session.id);
       }
     }, { timeoutMs: 1400 });
     return () => {
       cancelled = true;
       cancelIdle();
     };
-  }, [tabsHydrated, reloadFullDiskTranscript, resolveSessionExecutionEngine]);
+  }, [tabsHydrated, sessionsStructureKey, requestDiskTranscriptHydration, resolveSessionExecutionEngine]);
 
   useEffect(() => {
     if (companionSessionIds.length === 0) return;
@@ -2416,16 +2528,10 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         const hasDisk = sessionHasDiskTranscript(s, engine);
         if (!hasDisk) return;
         if (s.status === "running" || s.status === "connecting") return;
-        if (diskLoadDoneRef.current.has(s.id)) return;
-        diskLoadDoneRef.current.add(s.id);
-        const loadKey = s.id;
-        const snapshot = s;
         idleCleanups.push(
           runWhenIdle(() => {
             if (cancelled) return;
-            void applyDiskTranscriptTail(snapshot, companionDiskTailLines).catch(() => {
-              diskLoadDoneRef.current.delete(loadKey);
-            });
+            requestDiskTranscriptHydration(cid, companionDiskTailLines);
           }, { timeoutMs: 3000 }),
         );
       }, resolveCompanionDiskLoadStaggerMs(index));
@@ -2437,7 +2543,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       for (const timer of timers) clearTimeout(timer);
       for (const cleanup of idleCleanups) cleanup();
     };
-  }, [companionSessionIdsJoinKey, applyDiskTranscriptTail, companionSessionIds, resolveSessionExecutionEngine]);
+  }, [companionSessionIdsJoinKey, requestDiskTranscriptHydration, companionSessionIds, resolveSessionExecutionEngine]);
 
   /** 非活动/非多屏伴生标签：丢弃正文，仅保留元数据；切回时再从磁盘懒加载（running 与无磁盘 id 的纯本地草稿保留） */
   useEffect(() => {

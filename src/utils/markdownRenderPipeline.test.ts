@@ -77,11 +77,20 @@ describe("parseMarkdownSourceToHtml", () => {
 });
 
 describe("renderRichMessageSourceToHtml", () => {
-  test("wraps html document fragments in embed container", () => {
+  test("renders html document as markdown instead of html embed", () => {
     const htmlDoc = "<!doctype html><html><body><p>Hello</p></body></html>";
     const html = renderRichMessageSourceToHtml(htmlDoc);
-    expect(html).toContain("app-markdown-html-embed");
+    expect(html).not.toContain("app-markdown-html-embed");
     expect(html).toContain("Hello");
+  });
+
+  test("renders mixed markdown preamble and html document as markdown", () => {
+    const text = "说明文字\n<!DOCTYPE html><html><body><h1>Hi</h1></body></html>";
+    const html = renderRichMessageSourceToHtml(text);
+    expect(html).not.toContain("app-markdown-html-embed");
+    expect(html).toContain("说明文字");
+    expect(html).toContain("Hi");
+    expect(html).toMatch(/<h1[^>]*>/);
   });
 
   test("renders glm-style html fragments as markdown", () => {

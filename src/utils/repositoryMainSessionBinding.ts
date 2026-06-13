@@ -127,7 +127,10 @@ export function resolveBoundMainSessionId(
   const s = resolveSessionFromBindingValue(bound, sessions);
   if (!s) return null;
   if (isProjectMainSessionBindingKey(key)) {
-    return isProjectRootSessionDisplayName(s.repositoryName ?? "") ? s.id : null;
+    if (extractBoundEmployeeNameFromDisplay(s.repositoryName ?? "")) {
+      return null;
+    }
+    return s.id;
   }
   if (isRepositoryMainSessionTab(s, key, mainOwnerAgentName)) {
     return s.id;

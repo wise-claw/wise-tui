@@ -114,6 +114,9 @@ export interface MultiPaneSharedChatProps {
   allSessionsForHistory: ClaudeSession[];
   repositories?: Repository[];
   activeProject?: ProjectItem | null;
+  activeWorkspaceFocus?: import("../../utils/workspaceMode").WorkspaceFocus;
+  activeRepositoryId?: number | null;
+  workspaceMode?: import("../../utils/workspaceMode").WorkspaceMode;
   onSwitchSession: (sessionId: string, options?: { collapseSessionNotificationPanel?: boolean }) => void;
   onSend: (prompt: string) => void;
   onExecute: (
@@ -249,6 +252,9 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
         repositories={shared.repositories}
         activeRepository={activeRepository}
         activeProject={shared.activeProject}
+        activeWorkspaceFocus={shared.activeWorkspaceFocus}
+        activeRepositoryId={shared.activeRepositoryId}
+        workspaceMode={shared.workspaceMode}
         initialNotificationPanelCollapsed={initialNotificationPanelCollapsed}
         onSwitchSession={shared.onSwitchSession}
         onCreateNewSession={onCreateNewSession}
@@ -509,6 +515,9 @@ const MultiPaneExtraPaneCell = memo(
             repositories={shared.repositories}
             activeRepository={resolvedRepo}
             activeProject={shared.activeProject}
+            activeWorkspaceFocus={shared.activeWorkspaceFocus}
+            activeRepositoryId={shared.activeRepositoryId}
+            workspaceMode={shared.workspaceMode}
             initialNotificationPanelCollapsed={initialNotificationPanelCollapsed}
             onSwitchSession={shared.onSwitchSession}
             onCreateNewSession={() => onCreatePaneSession(paneIdx)}

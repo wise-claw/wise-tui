@@ -63,8 +63,10 @@ import {
 } from "../utils/repositoryMainSessionBinding";
 import {
   dedupeClaudeSessionsByIdentity,
-  listSessionsForRepositoryPath,
+  listSessionsForHistoryScope,
+  resolveHistoryDiskScopePath,
 } from "../utils/sessionHistoryScope";
+import { resolveProjectMainSessionAnchor } from "../utils/projectSessionAnchor";
 import { getAppSetting, setAppSetting } from "../services/appSettingsStore";
 import {
   buildTaskExecutionPrompt,
@@ -91,6 +93,7 @@ import type {
   WorkflowTaskItem,
   WorkflowTemplateItem,
 } from "../types";
+import type { WorkspaceFocus, WorkspaceMode } from "../utils/workspaceMode";
 import {
   buildTrellisTaskExecutionPrompt,
   EMPTY_STRING_LIST,
@@ -114,6 +117,9 @@ export interface UseClaudeChatSessionFeaturePanelInput {
   repositories: Repository[];
   activeRepository?: Repository | null;
   activeProject?: ProjectItem | null;
+  activeWorkspaceFocus?: WorkspaceFocus;
+  activeRepositoryId?: number | null;
+  workspaceMode?: WorkspaceMode;
   sessionOwnerHints: Record<string, SessionOwnerHint>;
   mentionEmployees: EmployeeItem[];
   workflowTasks: WorkflowTaskItem[];
@@ -178,6 +184,9 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
     repositories,
     activeRepository,
     activeProject,
+    activeWorkspaceFocus = "repository",
+    activeRepositoryId = null,
+    workspaceMode = "single_repo",
     sessionOwnerHints,
     mentionEmployees,
     workflowTasks,
@@ -562,16 +571,41 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
     }, [taskCompletionModalOpen, completionDisplayedRows.length, completionFilteredRows.length]);
     const historySessionSource = allSessionsForHistory ?? sessions;
     const historyListActive = historyPopoverOpen || historySessionsRefreshing;
+    const historyScopeInput = useMemo(
+      () => ({
+        repositoryScopePath,
+        activeProject,
+        activeWorkspaceFocus,
+        activeRepositoryId: activeRepositoryId ?? sessionRepository?.id ?? null,
+        repositories: repositories ?? [],
+        workspaceMode,
+        repositoryMainBindings,
+      }),
+      [
+        repositoryScopePath,
+        activeProject,
+        activeWorkspaceFocus,
+        activeRepositoryId,
+        sessionRepository?.id,
+        repositories,
+        workspaceMode,
+        repositoryMainBindings,
+      ],
+    );
+    const historyDiskScopePath = useMemo(
+      () => resolveHistoryDiskScopePath(historyScopeInput),
+      [historyScopeInput],
+    );
     const repositoryHistorySessions = useMemo(
       () => {
         if (!historyListActive) {
           return [] as ClaudeSession[];
         }
-        return dedupeClaudeSessionsByIdentity(listSessionsForRepositoryPath(historySessionSource, repositoryScopePath)).sort(
-          (a, b) => getSessionUpdatedAt(b) - getSessionUpdatedAt(a),
-        );
+        return dedupeClaudeSessionsByIdentity(
+          listSessionsForHistoryScope(historySessionSource, historyScopeInput),
+        ).sort((a, b) => getSessionUpdatedAt(b) - getSessionUpdatedAt(a));
       },
-      [historyListActive, historySessionSource, repositoryScopePath],
+      [historyListActive, historySessionSource, historyScopeInput],
     );
     const repositoryHistorySessionsForDisplay = useMemo(
       () => {
@@ -636,14 +670,19 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
     const historyRefreshInFlightRef = useRef(false);
     const handleHistorySessionsRefresh = useCallback(() => {
       if (!onRefreshHistorySessions || historyRefreshInFlightRef.current) return;
-      const scopePath = repositoryScopePath.trim();
+      const scopePath = historyDiskScopePath.trim();
       if (!scopePath) return;
       historyRefreshInFlightRef.current = true;
       setHistorySessionsRefreshing(true);
       void Promise.resolve(
         onRefreshHistorySessions({
           repositoryPath: scopePath,
-          repositoryName: sessionRepository?.name?.trim() || session.repositoryName.trim() || scopePath,
+          repositoryName:
+            activeWorkspaceFocus === "project" && activeProject
+              ? resolveProjectMainSessionAnchor(activeProject, repositories ?? []).displayName.trim() ||
+                session.repositoryName.trim() ||
+                scopePath
+              : sessionRepository?.name?.trim() || session.repositoryName.trim() || scopePath,
         }),
       )
         .catch(() => {
@@ -653,7 +692,15 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
           historyRefreshInFlightRef.current = false;
           setHistorySessionsRefreshing(false);
         });
-    }, [onRefreshHistorySessions, repositoryScopePath, session.repositoryName, sessionRepository?.name]);
+    }, [
+      historyDiskScopePath,
+      onRefreshHistorySessions,
+      activeWorkspaceFocus,
+      activeProject,
+      repositories,
+      session.repositoryName,
+      sessionRepository?.name,
+    ]);
 
     /**
      * 历史会话弹窗内删除一条会话：先 `Modal.confirm` 二次确认，再调 hook 的 `deleteSession`。

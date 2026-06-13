@@ -5,6 +5,7 @@ import {
   latestTurnHasVisibleAssistantContent,
   ONESHOT_DEFERRED_COMPLETE_FORCE_MS,
   reloadFullDiskTranscriptByKey,
+  resolveDiskTranscriptKeyCandidates,
   resolveTerminalWorkerMessagesAfterDiskLoad,
   shouldDeferOneshotTurnComplete,
   shouldForceFinalizeDeferredOneshotComplete,
@@ -359,5 +360,25 @@ describe("reloadFullDiskTranscriptByKey terminal recovery", () => {
           item.content.includes("未产出可见回复"),
       ),
     ).toBe(false);
+  });
+});
+
+describe("resolveDiskTranscriptKeyCandidates", () => {
+  test("includes claude session id and tab id for claude engine", () => {
+    expect(
+      resolveDiskTranscriptKeyCandidates(
+        { id: "wise-tab-1", claudeSessionId: "claude-sid-1" },
+        "claude",
+      ),
+    ).toEqual(["claude-sid-1", "wise-tab-1"]);
+  });
+
+  test("uses tab id for cursor engine", () => {
+    expect(
+      resolveDiskTranscriptKeyCandidates(
+        { id: "wise-tab-1", claudeSessionId: "claude-sid-1" },
+        "cursor",
+      ),
+    ).toEqual(["wise-tab-1", "claude-sid-1"]);
   });
 });

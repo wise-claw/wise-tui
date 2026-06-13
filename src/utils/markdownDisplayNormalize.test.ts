@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  htmlDocumentToMarkdown,
   llmHtmlFragmentToMarkdown,
   looksLikeLlmHtmlFragment,
   normalizeMarkdownForDisplay,
@@ -69,6 +70,14 @@ describe("llmHtmlFragmentToMarkdown", () => {
     const md = llmHtmlFragmentToMarkdown(html);
     expect(md).toContain("| 指标 | 数量 |");
     expect(md).toContain("| 总源文件 | 2262 |");
+  });
+
+  test("htmlDocumentToMarkdown extracts body and converts headings", () => {
+    const doc = "<!DOCTYPE html><html><body><h1>Title</h1><p>Body text</p></body></html>";
+    const md = htmlDocumentToMarkdown(doc);
+    expect(md).toContain("# Title");
+    expect(md).toContain("Body text");
+    expect(md).not.toContain("<h1>");
   });
 });
 

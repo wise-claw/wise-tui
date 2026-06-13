@@ -132,12 +132,13 @@ import {
   planAtMentionDispatch,
 } from "./services/atMentionDispatch";
 import { resolveProjectMainSessionAnchor } from "./utils/projectSessionAnchor";
-import { resolveChatTopbarContext, resolveProjectExplorerOpenPath, resolveScheduledTasksRepository } from "./utils/workspaceSelectionState";
+import { resolveChatTopbarContext, resolveProjectExplorerOpenPath, resolveScheduledTasksRepository, shouldKeepProjectFocusWhenSwitchingSession } from "./utils/workspaceSelectionState";
 import { resolveTrellisBootstrapPath } from "./utils/trellisBootstrapPath";
 import { resolveSidebarSelectionTarget } from "./utils/sidebarSelectionTarget";
 import {
   findOwnerProjectForRepositoryId,
   isMultiRepoProject,
+  resolveWorkspaceMode,
 } from "./utils/workspaceMode";
 import { employeeInProjectScope, shouldHideEmployeeUi } from "./utils/projectRepositoryRoles";
 import { buildProjectRoleTagOptions, buildProjectRepositoryMentionOptions } from "./utils/projectRoleTagOptions";
@@ -1102,13 +1103,26 @@ export default function App() {
         sessions: sessionsLatestRef.current,
         preferredRepositoryId: activeRepositoryId,
       });
-      if (repo) {
+      const activeProjectForJump = activeProjectId
+        ? projects.find((item) => item.id === activeProjectId) ?? null
+        : null;
+      const keepProjectFocus = shouldKeepProjectFocusWhenSwitchingSession({
+        session: target,
+        activeWorkspaceFocus,
+        activeProject: activeProjectForJump,
+        repositories,
+        workspaceMode: resolveWorkspaceMode({ activeProjectId, projects }),
+      });
+      if (repo && !keepProjectFocus) {
         setActiveRepositoryWithOwner(repo.id);
       }
       switchSession(canonicalId);
     },
     [
+      activeProjectId,
       activeRepositoryId,
+      activeWorkspaceFocus,
+      projects,
       repositories,
       repositoryMainSessionBindings,
       setActiveRepositoryWithOwner,

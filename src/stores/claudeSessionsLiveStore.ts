@@ -161,7 +161,12 @@ export function subscribeClaudeSessionLive(sessionId: string, onStoreChange: () 
 }
 
 export function getClaudeSessionSnapshot(sessionId: string): ClaudeSession | null {
-  return sessionsSnapshot.find((session) => session.id === sessionId) ?? null;
+  const trimmed = sessionId.trim();
+  if (!trimmed) return null;
+  return (
+    sessionsSnapshot.find((session) => session.id === trimmed || session.claudeSessionId === trimmed) ??
+    null
+  );
 }
 
 export function subscribeClaudeSessionsLive(onStoreChange: () => void): () => void {

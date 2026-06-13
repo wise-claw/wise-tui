@@ -75,7 +75,7 @@ describe("mergeRepositoryDiskSessions", () => {
     expect(next.some((session) => session.id === "wise-tab-terminal-02")).toBe(true);
   });
 
-  test("still migrates main session tab id to Claude session id", () => {
+  test("still migrates empty main session tab id to Claude session id", () => {
     const main: ClaudeSession = {
       id: "wise-tab-main",
       claudeSessionId: null,
@@ -91,5 +91,24 @@ describe("mergeRepositoryDiskSessions", () => {
     const next = mergeRepositoryDiskSessions([main], REPO, "eco-ai-web", disk, "sonnet");
     const merged = next.find((s) => s.claudeSessionId === "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
     expect(merged?.id).toBe("aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee");
+  });
+
+  test("preserves Wise tab id for main session that already has messages", () => {
+    const claudeId = "aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee";
+    const main: ClaudeSession = {
+      id: "wise-tab-main",
+      claudeSessionId: claudeId,
+      repositoryPath: REPO,
+      repositoryName: "Project: eco",
+      model: "sonnet",
+      status: "idle",
+      messages: [{ id: 1, role: "user", content: "hello", parts: [{ type: "text", text: "hello" }], timestamp: 1 }],
+      createdAt: 1,
+      pendingPrompt: "",
+    };
+    const disk = [diskSession(claudeId)];
+    const next = mergeRepositoryDiskSessions([main], REPO, "eco-ai-web", disk, "sonnet");
+    expect(next.find((session) => session.id === "wise-tab-main")).toBeDefined();
+    expect(next.find((session) => session.id === "wise-tab-main")?.messages.length).toBe(1);
   });
 });

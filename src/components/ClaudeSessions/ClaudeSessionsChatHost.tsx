@@ -16,6 +16,7 @@ import {
   resolveRepositoryForSession,
 } from "../../utils/repositoryMainSessionBinding";
 import type { WorkspaceMode, WorkspaceFocus } from "../../utils/workspaceMode";
+import { shouldKeepProjectFocusWhenSwitchingSession } from "../../utils/workspaceSelectionState";
 import { type PaneCount, type PaneSlot } from "../../constants/mainLayoutWidths";
 import type { MultiPaneSharedChatProps, PaneRepoTreeNode } from "./ClaudeMultiPaneGrid";
 import { runPaneCreateTask } from "./paneCreateLoading";
@@ -212,7 +213,7 @@ export function ClaudeSessionsChatHost({
   activeRepository,
   repositories,
   activeRepositoryId,
-  workspaceMode: _workspaceMode = "single_repo",
+  workspaceMode = "single_repo",
   activeProject = null,
   projects = [],
   activeWorkspaceFocus = "repository",
@@ -407,7 +408,18 @@ export function ClaudeSessionsChatHost({
           sessions,
           preferredRepositoryId: activeRepositoryId,
         });
-        if (targetRepository && targetRepository.id !== activeRepositoryId) {
+        const keepProjectFocus = shouldKeepProjectFocusWhenSwitchingSession({
+          session: targetSession,
+          activeWorkspaceFocus,
+          activeProject,
+          repositories,
+          workspaceMode,
+        });
+        if (
+          targetRepository &&
+          targetRepository.id !== activeRepositoryId &&
+          !keepProjectFocus
+        ) {
           onSelectRepository(targetRepository.id);
         }
       }
@@ -419,6 +431,9 @@ export function ClaudeSessionsChatHost({
       repositoryMainBindings,
       onSelectRepository,
       activeRepositoryId,
+      activeWorkspaceFocus,
+      activeProject,
+      workspaceMode,
       onSwitchSession,
     ],
   );
@@ -429,6 +444,9 @@ export function ClaudeSessionsChatHost({
     allSessionsForHistory: incomingSessions,
     repositories,
     activeProject,
+    activeWorkspaceFocus,
+    activeRepositoryId,
+    workspaceMode,
     onSwitchSession: handleSwitchToSession,
     onSend: onSendMessage,
     onExecute: onExecuteSession,
@@ -550,6 +568,9 @@ export function ClaudeSessionsChatHost({
           repositories={repositories}
           activeRepository={chatContextRepository}
           activeProject={activeProject}
+          activeWorkspaceFocus={activeWorkspaceFocus}
+          activeRepositoryId={activeRepositoryId}
+          workspaceMode={workspaceMode}
           initialNotificationPanelCollapsed={
             pendingCollapseNotificationForSessionId === activeSession.id
           }

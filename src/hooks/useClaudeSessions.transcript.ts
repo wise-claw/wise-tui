@@ -18,8 +18,45 @@ import { userMessagePlainTextForDisplay, systemMessagePlainText } from "../utils
 
 type SetSessions = (updater: (prev: ClaudeSession[]) => ClaudeSession[]) => void;
 
-function resolveDiskTranscriptKey(session: ClaudeSession, engine: SessionExecutionEngine): string {
-  return resolveDiskTranscriptSessionKey(session, engine);
+/** 主会话 claudeSessionId 与 Wise tab id 不一致时，依次尝试多个磁盘 key。 */
+export function resolveDiskTranscriptKeyCandidates(
+  session: { id: string; claudeSessionId?: string | null },
+  engine: SessionExecutionEngine,
+): string[] {
+  const out: string[] = [];
+  const push = (key: string | undefined | null) => {
+    const trimmed = key?.trim();
+    if (trimmed && !out.includes(trimmed)) out.push(trimmed);
+  };
+  push(resolveDiskTranscriptSessionKey(session, engine));
+  push(session.claudeSessionId);
+  push(session.id);
+  return out;
+}
+
+async function loadSessionTranscriptLinesWithKeyFallback(
+  session: ClaudeSession,
+  engine: SessionExecutionEngine,
+  tailLines: number | null,
+  loadSessionTranscriptLines: (
+    session: ClaudeSession,
+    sessionId: string,
+    tailLines: number | null,
+  ) => Promise<string[]>,
+): Promise<{ lines: string[]; diskKey: string }> {
+  const candidates = resolveDiskTranscriptKeyCandidates(session, engine);
+  if (candidates.length === 0) return { lines: [], diskKey: "" };
+  let lastLines: string[] = [];
+  let lastKey = candidates[0]!;
+  for (const diskKey of candidates) {
+    lastKey = diskKey;
+    const lines = await loadSessionTranscriptLines(session, diskKey, tailLines);
+    lastLines = lines;
+    if (lines.length > 0) {
+      return { lines, diskKey };
+    }
+  }
+  return { lines: lastLines, diskKey: lastKey };
 }
 
 function cloneDiskAssistantMessage(message: ClaudeMessage): ClaudeMessage {
@@ -232,24 +269,29 @@ export async function reloadFullDiskTranscriptByKey(params: {
     sessionId: string,
     tailLines: number | null,
   ) => Promise<string[]>;
-}): Promise<void> {
+}): Promise<boolean> {
   const raw = params.sessionKey.trim();
-  if (!raw) return;
+  if (!raw) return false;
   const session = params.sessions.find((x) => x.id === raw || x.claudeSessionId === raw);
-  if (!session) return;
+  if (!session) return false;
   const tabId = session.id;
   const repositoryPath = session.repositoryPath?.trim();
   const engine = params.resolveSessionExecutionEngine(session);
-  const diskKey = resolveDiskTranscriptKey(session, engine);
-  if (!repositoryPath || !diskKey) return;
-  const lines = await params.loadSessionTranscriptLines(session, diskKey, null);
+  if (!repositoryPath) return false;
+  const { lines, diskKey } = await loadSessionTranscriptLinesWithKeyFallback(
+    session,
+    engine,
+    null,
+    params.loadSessionTranscriptLines,
+  );
+  if (!diskKey) return false;
   params.diskTailLinesBySession.set(tabId, lines.length);
   const { messages, diskTranscriptPartial } = sessionMessagesFromJsonlLines(lines, {
     tailRequestLines: Math.max(lines.length, 1),
     fullTranscript: true,
     unlimitedMessageCount: true,
   });
-  if (messages.length === 0) return;
+  if (messages.length === 0) return false;
   const isTerminalWorker = isTerminalWorkerWiseTab(session);
   const sanitizedDisk = isTerminalWorker
     ? sanitizeTerminalWorkerTranscriptMessages(messages)
@@ -258,7 +300,7 @@ export async function reloadFullDiskTranscriptByKey(params: {
     ? resolveTerminalWorkerMessagesAfterDiskLoad(session, sanitizedDisk)
     : null;
   const nextMessages = isTerminalWorker ? mergedTerminalMessages : sanitizedDisk;
-  if (!nextMessages || nextMessages.length === 0) return;
+  if (!nextMessages || nextMessages.length === 0) return false;
   const hasAssistant = nextMessages.some((message) => message.role === "assistant");
   params.setSessions((prev) =>
     prev.map((row) => {
@@ -282,6 +324,7 @@ export async function reloadFullDiskTranscriptByKey(params: {
       };
     }),
   );
+  return true;
 }
 
 export async function applyDiskTranscriptTail(params: {
@@ -295,16 +338,21 @@ export async function applyDiskTranscriptTail(params: {
     sessionId: string,
     tailLines: number | null,
   ) => Promise<string[]>;
-}): Promise<void> {
+}): Promise<boolean> {
   const repositoryPath = params.session.repositoryPath?.trim();
   const engine = params.resolveSessionExecutionEngine(params.session);
-  const diskKey = resolveDiskTranscriptKey(params.session, engine);
-  if (!repositoryPath || !diskKey) return;
-  const lines = await params.loadSessionTranscriptLines(params.session, diskKey, params.tailLines);
+  if (!repositoryPath) return false;
+  const { lines, diskKey } = await loadSessionTranscriptLinesWithKeyFallback(
+    params.session,
+    engine,
+    params.tailLines,
+    params.loadSessionTranscriptLines,
+  );
+  if (!diskKey) return false;
   const { messages, diskTranscriptPartial } = sessionMessagesFromJsonlLines(lines, {
     tailRequestLines: params.tailLines,
   });
-  if (messages.length === 0) return;
+  if (messages.length === 0) return false;
   const isTerminalWorker = isTerminalWorkerWiseTab(params.session);
   const sanitizedDisk = isTerminalWorker
     ? sanitizeTerminalWorkerTranscriptMessages(messages)
@@ -312,7 +360,7 @@ export async function applyDiskTranscriptTail(params: {
   const nextMessages = isTerminalWorker
     ? resolveTerminalWorkerMessagesAfterDiskLoad(params.session, sanitizedDisk)
     : sanitizedDisk;
-  if (!nextMessages) return;
+  if (!nextMessages || nextMessages.length === 0) return false;
   params.diskTailLinesBySession.set(params.session.id, params.tailLines);
   params.setSessions((prev) =>
     prev.map((row) =>
@@ -326,6 +374,7 @@ export async function applyDiskTranscriptTail(params: {
         : row,
     ),
   );
+  return true;
 }
 
 export async function loadMoreTranscriptByKey(params: {

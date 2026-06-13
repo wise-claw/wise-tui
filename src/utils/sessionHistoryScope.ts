@@ -1,9 +1,14 @@
-import type { ClaudeDiskSessionItem, ClaudeSession } from "../types";
+import type { ClaudeDiskSessionItem, ClaudeSession, ProjectItem, Repository } from "../types";
 import { listClaudeDiskSessions } from "../services/claudeDisk";
 import { pathIsAccessibleDirectoryCached } from "./pathAccessibilityCache";
+import { filterSessionsForWorkspace } from "./projectSessionPanelFilter";
+import { resolveProjectMainSessionAnchor } from "./projectSessionAnchor";
+import type { WorkspaceFocus, WorkspaceMode } from "./workspaceMode";
 import {
   normalizeRepositoryPathKey,
+  projectMainSessionBindingKey,
   repositoryPathsMatch,
+  resolveBoundMainSessionId,
   sessionMatchesRepositoryScope,
 } from "./repositoryMainSessionBinding";
 
@@ -40,6 +45,59 @@ export function listSessionsForRepositoryPath(
   repositoryPath: string,
 ): ClaudeSession[] {
   return sessions.filter((session) => sessionMatchesRepositoryScope(session, repositoryPath));
+}
+
+export interface HistorySessionScopeInput {
+  repositoryScopePath: string;
+  activeProject?: ProjectItem | null;
+  activeWorkspaceFocus?: WorkspaceFocus;
+  activeRepositoryId?: number | null;
+  repositories?: ReadonlyArray<Repository>;
+  workspaceMode?: WorkspaceMode;
+  repositoryMainBindings?: Record<string, string>;
+}
+
+/** 历史会话弹层：工作区焦点只列 Project 主会话；仓库焦点只列该仓会话（不含 Project 主会话）。 */
+export function listSessionsForHistoryScope(
+  sessions: ReadonlyArray<ClaudeSession>,
+  input: HistorySessionScopeInput,
+): ClaudeSession[] {
+  if (input.activeProject) {
+    const filtered = filterSessionsForWorkspace({
+      sessions: [...sessions],
+      workspaceMode: input.workspaceMode ?? "multi_repo",
+      project: input.activeProject,
+      repositories: input.repositories ?? [],
+      activeWorkspaceFocus: input.activeWorkspaceFocus ?? "repository",
+      activeRepositoryId: input.activeRepositoryId ?? null,
+    });
+    if (input.activeWorkspaceFocus !== "project") {
+      return filtered;
+    }
+    const boundId = resolveBoundMainSessionId(
+      projectMainSessionBindingKey(input.activeProject.id),
+      input.repositoryMainBindings ?? {},
+      [...sessions],
+      null,
+    );
+    if (!boundId || filtered.some((session) => session.id === boundId)) {
+      return filtered;
+    }
+    const bound = sessions.find((session) => session.id === boundId);
+    return bound ? [...filtered, bound] : filtered;
+  }
+  return listSessionsForRepositoryPath(sessions, input.repositoryScopePath);
+}
+
+/** 磁盘扫描路径：工作区焦点扫项目 anchor，仓库焦点扫当前 scope。 */
+export function resolveHistoryDiskScopePath(input: HistorySessionScopeInput): string {
+  if (input.activeProject && input.activeWorkspaceFocus === "project") {
+    const anchorPath = resolveProjectMainSessionAnchor(input.activeProject, input.repositories ?? []).path.trim();
+    if (anchorPath) {
+      return normalizeSessionRepositoryPath(anchorPath);
+    }
+  }
+  return normalizeSessionRepositoryPath(input.repositoryScopePath);
 }
 
 export function collectRepositoryPathListingCandidates(

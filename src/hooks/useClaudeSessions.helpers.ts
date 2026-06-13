@@ -13,7 +13,7 @@ import { latestTurnHasVisibleAssistantContent } from "./useClaudeSessions.transc
 import { createClaudeStreamRuntime } from "../services/claudeStreamRuntime";
 import { getSessionUpdatedAt } from "../components/ClaudeSessions/sessionGrouping";
 import { isClaudeSessionRunningByHostProcesses } from "../utils/claudeHostRunningSessionIds";
-import { normalizeRepositoryPathKey, repositoryPathsMatch } from "../utils/repositoryMainSessionBinding";
+import { isProjectRootSessionDisplayName, normalizeRepositoryPathKey, repositoryPathsMatch } from "../utils/repositoryMainSessionBinding";
 import { safeUnlisten } from "../utils/safeTauriUnlisten";
 
 export type ClaudeStreamRuntimeHandlers = ReturnType<typeof createClaudeStreamRuntime>;
@@ -366,6 +366,7 @@ function sessionMatchesDiskId(s: ClaudeSession, diskSessionId: string): boolean 
 }
 
 function shouldPreserveRepositoryDisplayName(previous: string): boolean {
+  if (isProjectRootSessionDisplayName(previous)) return true;
   if (isExecutionEnvironmentWorkerRepositoryName(previous)) return true;
   const marker = "员工:";
   const idx = previous.lastIndexOf(marker);
@@ -464,7 +465,12 @@ export function mergeRepositoryDiskSessions(
     const s = copy[i];
     const item = disk.find((d) => sessionMatchesDiskId(s, d.sessionId));
     if (item) {
-      const preserveWiseTabId = isTerminalWorkerWiseTab(s) || preservesWorkerWiseTabId(s);
+      const preserveWiseTabId =
+        isTerminalWorkerWiseTab(s) ||
+        preservesWorkerWiseTabId(s) ||
+        s.messages.length > 0 ||
+        s.status === "running" ||
+        s.status === "connecting";
       copy[i] = {
         ...s,
         id: preserveWiseTabId ? s.id : item.sessionId,
@@ -514,4 +520,31 @@ export function mergeRepositoryDiskSessions(
     [...copy.slice(0, lastIdx + 1), ...newRows, ...copy.slice(lastIdx + 1)],
     canonicalPath,
   );
+}
+
+/** 磁盘索引合并后 Wise tab id → Claude session id 的迁移对（仅同仓库 scope 内）。 */
+export function collectDiskMergeTabIdMigrations(
+  prev: ReadonlyArray<ClaudeSession>,
+  next: ReadonlyArray<ClaudeSession>,
+  repositoryPath: string,
+): Array<{ fromTabId: string; toClaudeSessionId: string }> {
+  const migrations: Array<{ fromTabId: string; toClaudeSessionId: string }> = [];
+  const seen = new Set<string>();
+  for (const before of prev) {
+    if (!repositoryPathsMatch(before.repositoryPath, repositoryPath)) continue;
+    const beforeClaudeId = before.claudeSessionId?.trim() || before.id;
+    const after =
+      next.find((row) => row.id === before.id) ??
+      next.find(
+        (row) =>
+          repositoryPathsMatch(row.repositoryPath, repositoryPath) &&
+          (row.claudeSessionId === beforeClaudeId || row.id === beforeClaudeId),
+      );
+    if (!after || after.id === before.id) continue;
+    const key = `${before.id}→${after.id}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    migrations.push({ fromTabId: before.id, toClaudeSessionId: after.id });
+  }
+  return migrations;
 }

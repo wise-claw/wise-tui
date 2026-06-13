@@ -9,6 +9,8 @@ const PIPE_TABLE_ROW_RE = /^\s*\|.+\|\s*$/;
 /** GFM 表格分隔行。 */
 const PIPE_TABLE_SEPARATOR_RE = /^\s*\|[\s:|\-]+\|\s*$/;
 
+import { findHtmlDocumentStartIndex } from "./richMessageHtml";
+
 /** GLM 等模型常返回的 HTML 片段（非完整 HTML 文档）。 */
 const LLM_HTML_FRAGMENT_RE =
   /<\/?(?:p|h[1-6]|ol|ul|li|table|thead|tbody|tr|td|th|div|span|br|strong|em|b|i|blockquote|pre|code)\b/i;
@@ -159,8 +161,33 @@ function ensureBlankLineBeforePipeTables(text: string): string {
   });
 }
 
-/** 渲染前统一规范化助手 Markdown（HTML 片段、表格、全角符号等）。 */
+function extractHtmlBodyContent(html: string): string {
+  const bodyMatch = /<body[^>]*>([\s\S]*?)<\/body>/i.exec(html);
+  if (bodyMatch?.[1]) return bodyMatch[1].trim();
+  return html
+    .replace(/<!doctype[^>]*>/gi, "")
+    .replace(/<\/?html[^>]*>/gi, "")
+    .replace(/<head[\s\S]*?<\/head>/gi, "")
+    .trim();
+}
+
+/** 完整 HTML 文档（Codex 等）转为 Markdown 文本，供 marked 解析。 */
+export function htmlDocumentToMarkdown(text: string): string {
+  const trimmed = text.trim();
+  if (!/<!doctype\s+html\b|<html[\s>/]/i.test(trimmed)) return text;
+  return llmHtmlFragmentToMarkdown(extractHtmlBodyContent(trimmed));
+}
+
+/** 渲染前统一规范化助手 Markdown（HTML 文档/片段、表格、全角符号等）。 */
 export function normalizeMarkdownForDisplay(text: string): string {
-  const markdown = llmHtmlFragmentToMarkdown(text);
+  const docIdx = findHtmlDocumentStartIndex(text);
+  let source = text;
+  if (docIdx !== null) {
+    const preamble = text.slice(0, docIdx).trimEnd();
+    const htmlDoc = text.slice(docIdx).trim();
+    const htmlAsMd = htmlDocumentToMarkdown(htmlDoc);
+    source = preamble ? `${preamble}\n\n${htmlAsMd}` : htmlAsMd;
+  }
+  const markdown = llmHtmlFragmentToMarkdown(source);
   return normalizePipeTables(ensureBlankLineBeforePipeTables(markdown));
 }

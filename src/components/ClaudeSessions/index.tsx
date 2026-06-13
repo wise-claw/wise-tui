@@ -20,7 +20,7 @@ import { ClaudeSessionsChatHost } from "./ClaudeSessionsChatHost";
 import { Topbar } from "./Topbar";
 export { Topbar, type TopbarProps } from "./Topbar";
 import { pickSessionForRepositorySidebarSelect } from "../../utils/claudeSessionSelection";
-import { filterSessionsForWorkspace } from "../../utils/projectSessionPanelFilter";
+import { filterSessionsForWorkspace, sessionMatchesProjectWorkspaceFocus } from "../../utils/projectSessionPanelFilter";
 import {
   resolveBoundMainSessionId,
   resolveMainOwnerAgentNameForRepositoryPath,
@@ -386,6 +386,7 @@ function ClaudeSessionsShell({
         activeProject,
         activeWorkspaceFocus,
         activeSessionId,
+        workspaceMode,
       }),
     [
       incomingSessions,
@@ -395,6 +396,7 @@ function ClaudeSessionsShell({
       activeProject,
       activeWorkspaceFocus,
       activeSessionId,
+      workspaceMode,
     ],
   );
 
@@ -410,6 +412,7 @@ function ClaudeSessionsShell({
         repositories: repositories ?? [],
         repositoryMainBindings,
         workspaceMainSession: mainSessionForDataLink,
+        workspaceMode,
       }),
     [
       sessions,
@@ -421,6 +424,7 @@ function ClaudeSessionsShell({
       repositories,
       repositoryMainBindings,
       mainSessionForDataLink,
+      workspaceMode,
     ],
   );
 
@@ -484,6 +488,41 @@ function ClaudeSessionsShell({
   );
 
   const autoEnsureInFlightRef = useRef(false);
+
+  /** 工作区焦点：展示的主会话与 activeSessionId 对齐，确保 live 订阅与磁盘 hydrate 命中同一条。 */
+  useEffect(() => {
+    if (activeWorkspaceFocus !== "project" || !activeProject || !mainSessionForDataLink) {
+      return;
+    }
+    if (activeSessionId === mainSessionForDataLink.id) {
+      return;
+    }
+    const current = activeSessionId
+      ? incomingSessions.find(
+          (session) => session.id === activeSessionId || session.claudeSessionId === activeSessionId,
+        ) ?? null
+      : null;
+    if (
+      current &&
+      sessionMatchesProjectWorkspaceFocus(current, {
+        workspaceMode,
+        project: activeProject,
+        repositories: repositories ?? [],
+      })
+    ) {
+      return;
+    }
+    onSwitchSession(mainSessionForDataLink.id);
+  }, [
+    activeProject,
+    activeSessionId,
+    activeWorkspaceFocus,
+    incomingSessions,
+    mainSessionForDataLink,
+    onSwitchSession,
+    repositories,
+    workspaceMode,
+  ]);
 
   /** 打开仓库/项目时恢复已有主会话；无可用会话时自动新建。 */
   useEffect(() => {

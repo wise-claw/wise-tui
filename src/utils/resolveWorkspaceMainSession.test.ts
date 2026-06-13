@@ -87,4 +87,20 @@ describe("resolveWorkspaceMainSession", () => {
     });
     expect(resolved?.id).toBe("s-proj");
   });
+
+  test("project focus resolves bound session without Project: prefix", () => {
+    const projectMain = session("s-proj", "/work", "Trellis", {
+      messages: [{ id: 1, role: "user", content: "hi", parts: [{ type: "text", text: "hi" }], timestamp: 1 }],
+    });
+    const bindings = { [projectMainSessionBindingKey("p1")]: projectMain.id };
+    const resolved = resolveWorkspaceMainSession({
+      sessions: [projectMain],
+      bindings,
+      repositories,
+      activeRepository: repositories[0],
+      activeProject: { id: "p1", name: "HR", repositoryIds: [1], createdAt: 0, updatedAt: 0, rootPath: "/work" },
+      activeWorkspaceFocus: "project",
+    });
+    expect(resolved?.id).toBe("s-proj");
+  });
 });
