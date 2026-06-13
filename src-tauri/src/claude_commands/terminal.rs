@@ -1,9 +1,16 @@
 use portable_pty::{ChildKiller, CommandBuilder, NativePtySystem, PtySize, PtySystem};
 use std::collections::HashMap;
 use std::io::{Read, Write};
-use tauri::Emitter;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
+use tauri::{Emitter, Manager};
 
 use super::{claude_path_search_prefixes, merge_path_env};
+
+/// PTY reader 线程上限：触发 emit 的字节阈值（保留每次 emit 较小，防止单条 IPC payload 巨大）。
+const TERMINAL_EMIT_FLUSH_BYTES: usize = 16 * 1024;
+/// PTY reader 线程上限：触发 emit 的时间阈值（避免低速输出时延迟过高）。
+const TERMINAL_EMIT_FLUSH_INTERVAL: Duration = Duration::from_millis(16);
 
 /// Split PTY byte stream on UTF-8 boundaries so xterm never receives torn multibyte
 /// sequences (which corrupt alternate-screen TUIs like Claude Code).
@@ -125,41 +132,57 @@ impl TerminalManager {
 
         let workspace_clone = workspace_id.clone();
         let terminal_clone = terminal_id.clone();
+        let session_key = key.clone();
         let app_clone = app.clone();
 
         std::thread::spawn(move || {
             let mut buf = [0u8; 4096];
+            // carry：尚未拼成完整 UTF-8 的尾巴；pending：已经拼好但还没 emit 的合批文本。
             let mut carry = Vec::new();
+            let mut pending = String::new();
+            let mut last_flush = Instant::now();
+
+            // 把 pending 一次性 emit 出去（仅当非空才 emit，避免空消息浪费 IPC）。
+            let flush_pending = |pending: &mut String, last_flush: &mut Instant| {
+                if pending.is_empty() {
+                    return;
+                }
+                let _ = app_clone.emit(
+                    "terminal-output",
+                    serde_json::json!({
+                        "workspaceId": workspace_clone,
+                        "terminalId": terminal_clone,
+                        "data": pending.as_str(),
+                    }),
+                );
+                pending.clear();
+                *last_flush = Instant::now();
+            };
+
             loop {
                 match reader.read(&mut buf) {
                     Ok(0) => break,
                     Ok(n) => {
                         carry.extend_from_slice(&buf[..n]);
                         for text in drain_valid_utf8_chunks(&mut carry) {
-                            let _ = app_clone.emit(
-                                "terminal-output",
-                                serde_json::json!({
-                                    "workspaceId": workspace_clone,
-                                    "terminalId": terminal_clone,
-                                    "data": text,
-                                }),
-                            );
+                            pending.push_str(&text);
+                        }
+                        // 大块或长间隔时才 emit；高速流式输出会自然堆到 16 KiB 触发，节流明显。
+                        if pending.len() >= TERMINAL_EMIT_FLUSH_BYTES
+                            || last_flush.elapsed() >= TERMINAL_EMIT_FLUSH_INTERVAL
+                        {
+                            flush_pending(&mut pending, &mut last_flush);
                         }
                     }
                     Err(_) => break,
                 }
             }
+            // 退出前把 carry 里残留的不完整字节按 lossy 转成文本拼到 pending 末尾再 emit。
             if !carry.is_empty() {
-                let text = String::from_utf8_lossy(&carry).to_string();
-                let _ = app_clone.emit(
-                    "terminal-output",
-                    serde_json::json!({
-                        "workspaceId": workspace_clone,
-                        "terminalId": terminal_clone,
-                        "data": text,
-                    }),
-                );
+                pending.push_str(&String::from_utf8_lossy(&carry));
             }
+            flush_pending(&mut pending, &mut last_flush);
+
             let _ = app_clone.emit(
                 "terminal-exit",
                 serde_json::json!({
@@ -168,6 +191,17 @@ impl TerminalManager {
                     "exitCode": 0,
                 }),
             );
+
+            // PTY 已经 EOF/Err，主动从 manager 移除会话，释放 PtyMaster/writer/killer 持有的内核 fd 与缓冲；
+            // 否则若前端没卸载/没显式 close，旧 session 会一直留在 HashMap 里慢性泄漏。
+            if let Some(manager) = app_clone.try_state::<Mutex<TerminalManager>>() {
+                if let Ok(mut guard) = manager.lock() {
+                    if let Some(mut session) = guard.sessions.remove(&session_key) {
+                        // EOF 后再 kill 一次是幂等的，确保子进程被回收（防止 reader 看到 EOF 但 child 已 detach 残留）。
+                        let _ = session.killer.kill();
+                    }
+                }
+            }
         });
 
         self.sessions

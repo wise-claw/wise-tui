@@ -1,0 +1,12 @@
+{
+  "active": false,
+  "current_phase": "completed",
+  "completed_at": "2026-06-13T14:42:00.000Z",
+  "completion_summary": "Removed 「发到终端」 feature: deleted ComposerSendTargetToggle.tsx, composerSendTargetStore.ts, terminalForwardStore.ts, terminalClaudeAutostartStore.ts, terminalForward.ts; cleaned consumer code in ClaudeChat.tsx, ClaudeChatQuickActionsChrome.tsx, useTerminalSession.ts. tsc passes.",
+  "_meta": {
+    "mode": "autopilot",
+    "sessionId": "97f4b4b7-256d-4fbe-856d-cebd51a0f223",
+    "updatedAt": "2026-06-13T14:41:54.227Z",
+    "updatedBy": "state_write_tool"
+  }
+}

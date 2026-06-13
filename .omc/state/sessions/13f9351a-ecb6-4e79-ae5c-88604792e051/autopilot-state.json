@@ -1,11 +1,15 @@
 {
-  "active": true,
-  "started_at": "2026-06-13T13:24:40.376Z",
-  "original_prompt": "/oh-my-claudecode:autopilot 终端输入字体颜色为白色，导致看不清，调整下。\n\n附图：@/Users/sjl/.wise/composer-images/wise/fb35cdb5-2b2e-446b-b631-12d1c43df49d-image.png",
+  "active": false,
+  "current_phase": "completed",
+  "completed_at": "2026-06-13T14:35:00.000Z",
+  "original_prompt": "/oh-my-claudecode:autopilot 点击左侧工作区、仓库只打开当前绑定的会话消息列表，如图1。当点击按钮发送内容后就直接在后台xterm通过auto mode模式启动一个claude code。让会话输入框能够直接跟开启的claude code对话。",
   "session_id": "13f9351a-ecb6-4e79-ae5c-88604792e051",
   "project_path": "/Users/sjl/Documents/github/wise",
-  "reinforcement_count": 0,
-  "awaiting_confirmation": true,
-  "awaiting_confirmation_set_at": "2026-06-13T13:24:40.376Z",
-  "last_checked_at": "2026-06-13T13:24:40.376Z"
+  "completion_summary": "Task 1 (xterm memory leak): scrollback=1000 + 16KB/16ms emit batching + EOF self-remove. Task 2 Phase A: terminalClaudeAutostartStore + ensureClaudeStartedInTerminal in forwardComposerToTerminal. Phase B (single-session view) deferred per user choice (additive, not replacing).",
+  "_meta": {
+    "mode": "autopilot",
+    "sessionId": "13f9351a-ecb6-4e79-ae5c-88604792e051",
+    "updatedAt": "2026-06-13T14:33:39.414Z",
+    "updatedBy": "state_write_tool"
+  }
 }

@@ -38,6 +38,8 @@ export interface SessionQuickActionsBarProps {
   pushControl: ReactNode;
   /** 常用语 chip，展示在快捷条主行（推送与「更多」之间） */
   commonPhrasesSlot?: ReactNode;
+  /** 主行尾部的额外 slot（位于常用语之后、「更多」按钮之前） */
+  extraTrailingSlot?: ReactNode;
 }
 
 const BUILTIN_ACTION_MENU_ICONS: Partial<Record<SessionQuickActionId, ReactNode>> = {
@@ -69,6 +71,7 @@ export const SessionQuickActionsBar = memo(function SessionQuickActionsBar({
   onOpenAssistantsHub,
   pushControl,
   commonPhrasesSlot = null,
+  extraTrailingSlot = null,
 }: SessionQuickActionsBarProps) {
   const { layout, setLayout, resetLayout, persistLayout, catalog, assistantsById } =
     useSessionQuickActionsLayout();
@@ -221,6 +224,7 @@ export const SessionQuickActionsBar = memo(function SessionQuickActionsBar({
           <div className="app-session-quick-actions__primary">
             {primary.map((id) => renderPill(id))}
             {commonPhrasesSlot}
+            {extraTrailingSlot}
           </div>
 
           <div className="app-session-quick-actions__more">

@@ -700,7 +700,7 @@ export function ClaudeChatInner({
       }
       onExecute(sessionId, prompt, dispatchTarget, executeOptions);
     },
-    [dispatchPendingTask, onExecute, removeTask],
+    [dispatchPendingTask, onExecute, removeTask, session.repositoryPath],
   );
 
   const isMainIdle = session.status !== "running" && session.status !== "connecting";

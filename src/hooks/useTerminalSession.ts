@@ -118,6 +118,10 @@ export function useTerminalSession({
     const terminal = new Terminal({
       cursorBlink: true,
       convertEol: true,
+      // Claude Code 等 alt-screen TUI 在长会话里会把每次重绘都塞进 scrollback，
+      // 默认 1000 行 + 200 列 + 每 cell 28-40B 内部对象，长时间下来很容易把 webview 内存推到 GB 级。
+      // 这里显式限制 scrollback，把单个 Terminal 实例的 normal-screen buffer 上限钉死在 ~1000 行。
+      scrollback: 1000,
       fontFamily: 'Menlo, Monaco, "Courier New", monospace',
       fontSize: 13,
       theme: {
