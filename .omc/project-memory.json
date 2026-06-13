@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1778580437320,
+  "lastScanned": 1781329781019,
   "projectRoot": "/Users/sjl/Documents/github/wise",
   "techStack": {
     "languages": [
@@ -42,12 +42,12 @@
     "runtime": null
   },
   "build": {
-    "buildCommand": "python3 ./.trellis/scripts/add_session.py --title \"Pass-2 PrdTaskSplitPanel decomposition: 14 milestones\" --commit \"cf56efc,9a051b7,8330852,9294147,52a2217,967fc41,34ee6ab,12306f0,b5206fe,debf344,18065e0,d55b9f5,cab16c8,5266366,7f2d7c0\" --summary \"Behavior-preserving decomposition of PrdTaskSplitPanel/index.tsx across 14 milestones. Extracted 22 new modules (leaves, modals, section components, pure helpers, hooks-friendly panel parts). Added 22 unit tests (anchor reconciler, taskToMarkdown, parseTaskMarkdownDraft, estimateDaysFromSize, sameApiSpec). index.tsx 4706 -> 3488 (-1218 lines, -25.9%). 95/95 tests pass, 0 new tsc errors. PRD strict <=500 line target deferred to follow-up pass-3 task (custom-hook surgery). Also created 4 placeholder follow-up tasks (pass-3, AppImpl split, LeftSidebar split, project-wide architecture review).\"",
-    "testCommand": "bun test 2>&1 | tail -5 && wc -l src/components/PrdTaskSplitPanel/index.tsx",
+    "buildCommand": "npm run build",
+    "testCommand": "npm test",
     "lintCommand": null,
     "devCommand": "npm run dev",
     "scripts": {
-      "postinstall": "bun run scripts/patch-crepe-slash-menu.mjs",
+      "postinstall": "bun run scripts/patch-crepe-slash-menu.mjs && bun run scripts/patch-antd-modal-confirm-mask-closable.mjs && bun run scripts/patch-antd-scroll-into-view-if-needed.mjs",
       "dev": "vite",
       "build": "tsc && vite build",
       "test": "bun test",
@@ -63,12 +63,13 @@
     "namingStyle": null,
     "importStyle": null,
     "testPattern": null,
-    "fileOrganization": "type-based"
+    "fileOrganization": "feature-based"
   },
   "structure": {
     "isMonorepo": false,
     "workspaces": [],
     "mainDirectories": [
+      "examples",
       "public",
       "scripts",
       "src"
@@ -80,54 +81,71 @@
   },
   "customNotes": [],
   "directoryMap": {
+    "apps": {
+      "path": "apps",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1781329781011,
+      "keyFiles": []
+    },
     "design": {
       "path": "design",
       "purpose": null,
-      "fileCount": 1,
-      "lastAccessed": 1778580437313,
-      "keyFiles": []
+      "fileCount": 2,
+      "lastAccessed": 1781329781011,
+      "keyFiles": [
+        "product-ux-engineering-audit-2026-05-14.md"
+      ]
     },
     "dist": {
       "path": "dist",
       "purpose": "Distribution/build output",
-      "fileCount": 4,
-      "lastAccessed": 1778580437313,
+      "fileCount": 5,
+      "lastAccessed": 1781329781014,
       "keyFiles": [
+        "demo.html",
         "index.html",
         "mascot.html",
         "tauri.svg",
         "vite.svg"
       ]
     },
+    "examples": {
+      "path": "examples",
+      "purpose": "Example code",
+      "fileCount": 0,
+      "lastAccessed": 1781329781014,
+      "keyFiles": []
+    },
     "extras": {
       "path": "extras",
       "purpose": null,
       "fileCount": 1,
-      "lastAccessed": 1778580437316,
+      "lastAccessed": 1781329781015,
       "keyFiles": [
         "check-prd-split-evolution.mjs"
       ]
     },
-    "orchestrator-service": {
-      "path": "orchestrator-service",
+    "imgs": {
+      "path": "imgs",
       "purpose": null,
-      "fileCount": 1,
-      "lastAccessed": 1778580437317,
-      "keyFiles": []
-    },
-    "picture": {
-      "path": "picture",
-      "purpose": null,
-      "fileCount": 0,
-      "lastAccessed": 1778580437317,
-      "keyFiles": []
+      "fileCount": 6,
+      "lastAccessed": 1781329781015,
+      "keyFiles": [
+        "add-execution-env.gif",
+        "add-workspace.gif",
+        "home.png",
+        "icon.png",
+        "model-config.gif"
+      ]
     },
     "public": {
       "path": "public",
       "purpose": "Public files",
-      "fileCount": 2,
-      "lastAccessed": 1778580437317,
+      "fileCount": 3,
+      "lastAccessed": 1781329781015,
       "keyFiles": [
+        "demo.html",
         "tauri.svg",
         "vite.svg"
       ]
@@ -135,19 +153,21 @@
     "scripts": {
       "path": "scripts",
       "purpose": "Build/utility scripts",
-      "fileCount": 3,
-      "lastAccessed": 1778580437317,
+      "fileCount": 22,
+      "lastAccessed": 1781329781015,
       "keyFiles": [
-        "emit-platform-split-prompt-seed.ts",
-        "generate-dmg-background.py",
-        "patch-crepe-slash-menu.mjs"
+        "build-claude-settings-schema-zh.mjs",
+        "cursor-sdk-bridge.stderr.test.ts",
+        "cursor-sdk-bridge.ts",
+        "cursorSdkAgentWriteProbe.ts",
+        "cursorSdkExecutePreamble.ts"
       ]
     },
     "src": {
       "path": "src",
       "purpose": "Source code",
       "fileCount": 10,
-      "lastAccessed": 1778580437317,
+      "lastAccessed": 1781329781016,
       "keyFiles": [
         "App.css",
         "App.tsx",
@@ -159,53 +179,48 @@
     "src-tauri": {
       "path": "src-tauri",
       "purpose": null,
-      "fileCount": 7,
-      "lastAccessed": 1778580437317,
+      "fileCount": 8,
+      "lastAccessed": 1781329781016,
       "keyFiles": [
         "Cargo.lock",
         "Cargo.toml",
+        "Entitlements.plist",
         "Info.plist",
-        "build.rs",
-        "tauri.conf.json"
+        "build.rs"
       ]
     },
     "tools": {
       "path": "tools",
       "purpose": null,
       "fileCount": 1,
-      "lastAccessed": 1778580437317,
+      "lastAccessed": 1781329781016,
       "keyFiles": []
     },
     "dist/assets": {
       "path": "dist/assets",
       "purpose": "Static assets",
-      "fileCount": 100,
-      "lastAccessed": 1778580437318,
+      "fileCount": 299,
+      "lastAccessed": 1781329781017,
       "keyFiles": [
-        "ClaudeHooksConfigPanel-Dk61-uMF.js",
-        "ClaudeMcpConfigPanel-DIWQQWM-.js",
-        "KaTeX_AMS-Regular-BQhdFMY1.woff2"
+        "ActiveRepositoryFilesPanel-BS1O6lCY.js",
+        "ApartmentOutlined-DQ1j36nh.js",
+        "ApiOutlined-Ft9xP_iG.js"
       ]
     },
-    "orchestrator-service/scripts": {
-      "path": "orchestrator-service/scripts",
-      "purpose": "Build/utility scripts",
-      "fileCount": 0,
-      "lastAccessed": 1778580437318,
-      "keyFiles": []
-    },
-    "orchestrator-service/src": {
-      "path": "orchestrator-service/src",
-      "purpose": "Source code",
+    "dist/public": {
+      "path": "dist/public",
+      "purpose": "Public files",
       "fileCount": 1,
-      "lastAccessed": 1778580437318,
-      "keyFiles": []
+      "lastAccessed": 1781329781017,
+      "keyFiles": [
+        "demo.html"
+      ]
     },
     "src/assets": {
       "path": "src/assets",
       "purpose": "Static assets",
       "fileCount": 1,
-      "lastAccessed": 1778580437318,
+      "lastAccessed": 1781329781017,
       "keyFiles": [
         "react.svg"
       ]
@@ -213,28 +228,12 @@
     "src/components": {
       "path": "src/components",
       "purpose": "UI components",
-      "fileCount": 14,
-      "lastAccessed": 1778580437319,
+      "fileCount": 28,
+      "lastAccessed": 1781329781018,
       "keyFiles": [
+        "AppWorkspaceLayout.lazy.ts",
         "AppWorkspaceLayout.tsx",
-        "ClaudeHooksConfigPanel.tsx",
-        "ClaudeMcpConfigPanel.tsx"
-      ]
-    },
-    "src/data": {
-      "path": "src/data",
-      "purpose": "Data files",
-      "fileCount": 0,
-      "lastAccessed": 1778580437319,
-      "keyFiles": []
-    },
-    "src-tauri/examples": {
-      "path": "src-tauri/examples",
-      "purpose": "Example code",
-      "fileCount": 1,
-      "lastAccessed": 1778580437319,
-      "keyFiles": [
-        "test_reset_default.rs"
+        "AppWorkspaceLayoutShell.tsx"
       ]
     }
   },

@@ -1758,6 +1758,10 @@ export function ClaudeChatInner({
               hideEmployeesInAtMode={hideEmployeesInAtMode}
               onEnqueueAsPendingTask={(payload) => addTask(payload)}
               onTrackSendFlow={appendSessionSendTrace}
+              onAppendSystemMessage={onAppendSystemMessage}
+              onAppendUserMessage={onAppendUserMessage}
+              onCompactSessionHistory={_onCompactSessionHistory}
+              onCreateNewSession={onCreateNewSession}
               dualPaneRepositoryPicker={dualPaneRepositoryPicker}
               missionContext={missionContext}
             />

@@ -947,3 +947,16 @@ export async function setClaudeDisableAllHooks(input: {
     projectPath: input.repositoryPath ?? null,
   });
 }
+
+/** 运行 `claude <args…>` 子命令（如 `doctor`），非交互式。 */
+export async function runClaudeCliCommand(
+  args: string[],
+  repositoryPath?: string | null,
+  options?: { timeoutMs?: number | null },
+): Promise<string> {
+  return invoke<string>("run_claude_cli_command", {
+    args,
+    repositoryPath: repositoryPath?.trim() || null,
+    timeoutMs: options?.timeoutMs ?? null,
+  });
+}

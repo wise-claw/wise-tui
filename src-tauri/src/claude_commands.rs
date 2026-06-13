@@ -9,6 +9,7 @@ use tauri::Emitter;
 use tauri::Manager;
 
 pub(crate) mod attachments;
+pub(crate) mod claude_cli;
 pub(crate) mod disk_sessions;
 pub(crate) mod hooks_discovery;
 pub(crate) mod mcp;

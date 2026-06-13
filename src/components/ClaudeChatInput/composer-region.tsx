@@ -111,6 +111,12 @@ import {
 import { userMessagePlainTextForDisplay } from "../../utils/claudeChatMessageDisplay";
 import { buildCursorComposerSendPayload } from "../../services/cursorComposerPrompt";
 import {
+  executeComposerLocalSlashCommand,
+  composerLocalSlashPendingMessage,
+  parseComposerLocalSlashCommand,
+} from "../../services/composerLocalSlashCommand";
+import { isComposerLocalSlashEligible } from "../../utils/composerLocalSlashCommand";
+import {
   contextPercentToneClassName,
   formatContextStatusHint,
   getContextPercentTone,
@@ -273,6 +279,14 @@ interface ComposerInnerProps {
     projectId?: string | null;
     rootPath?: string | null;
   };
+  /** 本地 `/plugin` 命令结果写入会话系统消息 */
+  onAppendSystemMessage?: (sessionId: string, text: string) => void;
+  /** 本地斜杠命令保留用户输入气泡 */
+  onAppendUserMessage?: (sessionId: string, text: string) => void;
+  /** 本地斜杠：/compact */
+  onCompactSessionHistory?: (sessionId: string, prompt?: string) => void | Promise<void>;
+  /** 本地斜杠：/clear /reset /new */
+  onCreateNewSession?: () => void | Promise<void>;
 }
 
 interface LastSentComposerDraft {
@@ -561,6 +575,10 @@ function ComposerInner({
   pendingExecutionTaskCount = 0,
   dualPaneRepositoryPicker,
   missionContext,
+  onAppendSystemMessage,
+  onAppendUserMessage,
+  onCompactSessionHistory,
+  onCreateNewSession,
 }: ComposerInnerProps) {
   const { breakdown, loading: contextBreakdownLoading, ensureBreakdown } =
     useContextBreakdown(session);
@@ -1615,6 +1633,44 @@ function ComposerInner({
         void clearPromptContextSessionKey(draftBucketKey);
       };
 
+      const localSlashCommand = parseComposerLocalSlashCommand(logicalSnap);
+      if (
+        localSlashCommand &&
+        isComposerLocalSlashEligible({
+          text: logicalSnap,
+          imageCount: imagesSnap.length,
+          contextCount: contextSnap.length,
+          codeSelectionRefCount: codeSelectionRefs.length,
+        })
+      ) {
+        const userText = logicalSnap.trim();
+        clearComposerSurfaceSync(userText);
+        onAppendUserMessage?.(session.id, userText);
+        const pendingLabel = composerLocalSlashPendingMessage(localSlashCommand);
+        if (pendingLabel) {
+          onAppendSystemMessage?.(session.id, pendingLabel);
+        }
+        void executeComposerLocalSlashCommand(localSlashCommand, {
+          sessionId: session.id,
+          repositoryPath: session.repositoryPath,
+          repositoryName: session.repositoryName,
+          session,
+          compactSessionHistory: onCompactSessionHistory,
+          createNewSession: onCreateNewSession,
+        })
+          .then((result) => {
+            if (result?.trim()) {
+              onAppendSystemMessage?.(session.id, result);
+            }
+          })
+          .catch((err: unknown) => {
+            const errText = err instanceof Error ? err.message : String(err);
+            onAppendSystemMessage?.(session.id, `斜杠命令失败：${errText}`);
+            message.error(errText);
+          });
+        return;
+      }
+
       if (isSessionBusy) {
         if (!onEnqueueAsPendingTask) {
           return;
@@ -1991,6 +2047,10 @@ function ComposerInner({
       clearSpeechIdleAutoSendTimer,
       onComposerInputClearedForSend,
       finalizeTranscriptBaselineAfterSend,
+      onAppendSystemMessage,
+      onAppendUserMessage,
+      onCompactSessionHistory,
+      onCreateNewSession,
     ],
   );
 
@@ -3135,6 +3195,14 @@ export interface ComposerRegionProps {
     projectId?: string | null;
     rootPath?: string | null;
   };
+  /** 本地 `/plugin` 命令结果写入会话系统消息 */
+  onAppendSystemMessage?: (sessionId: string, text: string) => void;
+  /** 本地斜杠命令保留用户输入气泡 */
+  onAppendUserMessage?: (sessionId: string, text: string) => void;
+  /** 本地斜杠：/compact */
+  onCompactSessionHistory?: (sessionId: string, prompt?: string) => void | Promise<void>;
+  /** 本地斜杠：/clear /reset /new */
+  onCreateNewSession?: () => void | Promise<void>;
 }
 
 export function ComposerRegion({ session, draftBucketKey, ...rest }: ComposerRegionProps) {

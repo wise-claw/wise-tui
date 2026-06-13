@@ -1,0 +1,166 @@
+{
+  "version": "1.0.0",
+  "lastScanned": 1781330011497,
+  "projectRoot": "/Users/sjl/Documents/github/wise/src-tauri",
+  "techStack": {
+    "languages": [
+      {
+        "name": "Rust",
+        "version": null,
+        "confidence": "high",
+        "markers": [
+          "Cargo.toml"
+        ]
+      }
+    ],
+    "frameworks": [
+      {
+        "name": "axum",
+        "version": null,
+        "category": "backend"
+      }
+    ],
+    "packageManager": "cargo",
+    "runtime": null
+  },
+  "build": {
+    "buildCommand": "cargo build",
+    "testCommand": "cargo test",
+    "lintCommand": "cargo clippy",
+    "devCommand": "cargo run",
+    "scripts": {}
+  },
+  "conventions": {
+    "namingStyle": null,
+    "importStyle": null,
+    "testPattern": null,
+    "fileOrganization": null
+  },
+  "structure": {
+    "isMonorepo": false,
+    "workspaces": [],
+    "mainDirectories": [
+      "examples",
+      "src",
+      "tests"
+    ],
+    "gitBranches": {
+      "defaultBranch": "main",
+      "branchingStrategy": null
+    }
+  },
+  "customNotes": [],
+  "directoryMap": {
+    "capabilities": {
+      "path": "capabilities",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1781330011493,
+      "keyFiles": [
+        "default.json"
+      ]
+    },
+    "dmg": {
+      "path": "dmg",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1781330011494,
+      "keyFiles": [
+        "dmg-background.png"
+      ]
+    },
+    "examples": {
+      "path": "examples",
+      "purpose": "Example code",
+      "fileCount": 1,
+      "lastAccessed": 1781330011494,
+      "keyFiles": [
+        "test_reset_default.rs"
+      ]
+    },
+    "gen": {
+      "path": "gen",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1781330011494,
+      "keyFiles": []
+    },
+    "icons": {
+      "path": "icons",
+      "purpose": null,
+      "fileCount": 18,
+      "lastAccessed": 1781330011495,
+      "keyFiles": [
+        "128x128.png",
+        "128x128@2x.png",
+        "32x32.png",
+        "64x64.png",
+        "Square107x107Logo.png"
+      ]
+    },
+    "migrations": {
+      "path": "migrations",
+      "purpose": "Database migrations",
+      "fileCount": 38,
+      "lastAccessed": 1781330011495,
+      "keyFiles": [
+        "001_init.sql",
+        "002_mascot_prefs_toast.sql",
+        "003_projects_and_settings.sql",
+        "004_prd_task_split_results.sql",
+        "005_platform_split_prompt_seed.json"
+      ]
+    },
+    "resources": {
+      "path": "resources",
+      "purpose": null,
+      "fileCount": 0,
+      "lastAccessed": 1781330011495,
+      "keyFiles": []
+    },
+    "src": {
+      "path": "src",
+      "purpose": "Source code",
+      "fileCount": 61,
+      "lastAccessed": 1781330011495,
+      "keyFiles": [
+        "agent_registry.rs",
+        "app_state_commands.rs",
+        "at_mention_shortcuts.rs",
+        "cc_switch_import.rs",
+        "claude_code_usage.rs"
+      ]
+    },
+    "target": {
+      "path": "target",
+      "purpose": null,
+      "fileCount": 2,
+      "lastAccessed": 1781330011495,
+      "keyFiles": [
+        "CACHEDIR.TAG"
+      ]
+    },
+    "tests": {
+      "path": "tests",
+      "purpose": "Test files",
+      "fileCount": 1,
+      "lastAccessed": 1781330011495,
+      "keyFiles": [
+        "extensions_e2e.rs"
+      ]
+    },
+    "gen/schemas": {
+      "path": "gen/schemas",
+      "purpose": "Schema definitions",
+      "fileCount": 4,
+      "lastAccessed": 1781330011496,
+      "keyFiles": [
+        "acl-manifests.json",
+        "capabilities.json",
+        "desktop-schema.json"
+      ]
+    }
+  },
+  "hotPaths": [],
+  "userDirectives": []
+}

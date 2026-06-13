@@ -3626,7 +3626,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   );
 
   const compactSessionHistory = useCallback(
-    async (sessionId: string) => {
+    async (sessionId: string, prompt?: string) => {
       const session = sessionsRef.current.find((s) => s.id === sessionId);
       if (!session) return;
       const claudeSessionId =
@@ -3639,6 +3639,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         message.warning("会话运行中，请结束当前轮次后再压缩上下文。");
         return;
       }
+      const compactPrompt = prompt?.trim() || CLAUDE_COMPACT_SLASH_PROMPT;
       streamingTargetIdRef.current = sessionId;
       streamTurnSeqRef.current += 1;
       lastUserSendNonceRef.current = streamTurnSeqRef.current;
@@ -3649,7 +3650,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         setSessionRunningWithUserPrompt(
           appendSystemMessageBySessionId(prev, sessionId, "正在执行 /compact 压缩会话历史…"),
           sessionId,
-          CLAUDE_COMPACT_SLASH_PROMPT,
+          compactPrompt,
         ),
       );
       const invokeConc =
@@ -3661,7 +3662,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           turnNonce,
           invokeConc,
           repositoryPath: session.repositoryPath,
-          prompt: CLAUDE_COMPACT_SLASH_PROMPT,
+          prompt: compactPrompt,
           modelArg,
           resumeClaudeSid: claudeSessionId,
         });
