@@ -47,6 +47,18 @@ function shouldIgnoreTerminalError(error: unknown) {
   );
 }
 
+/** 与后端 TERMINAL_DIM_MIN/MAX 保持一致：clamp 维度防止 0 或异常巨大值进入 IPC。 */
+const TERMINAL_DIM_MIN = 1;
+const TERMINAL_DIM_MAX = 1024;
+
+/** 调整频率限制，防止拖拽分隔条时高频 resize 把后端压垮。 */
+const TERMINAL_RESIZE_DEBOUNCE_MS = 32;
+
+const clampTerminalDim = (n: number) => {
+  if (!Number.isFinite(n)) return TERMINAL_DIM_MIN;
+  return Math.max(TERMINAL_DIM_MIN, Math.min(TERMINAL_DIM_MAX, Math.floor(n)));
+};
+
 export function useTerminalSession({
   activeRepository,
   activeTerminalId,
@@ -143,6 +155,8 @@ export function useTerminalSession({
       void writeTerminalSession(workspaceId, terminalId, data).catch((error) => {
         if (!shouldIgnoreTerminalError(error)) {
           console.warn("write terminal session failed", error);
+          setStatus((prev) => (prev === "ready" ? "error" : prev));
+          setMessage(error instanceof Error ? error.message : "终端写入失败");
         }
       });
     });
@@ -155,6 +169,14 @@ export function useTerminalSession({
 
     const exitUnsubscribe = subscribeTerminalExit((event) => {
       if (event.workspaceId === workspaceId && event.terminalId === terminalId) {
+        // 退出原因有值时一律提示一下，便于在终端面板上看见 PTY 何时崩了。
+        if (event.reason) {
+          try {
+            terminal.write(`\r\n\x1b[31m[终端已断开] ${event.reason}\x1b[0m\r\n`);
+          } catch {
+            // 忽略写入失败：xterm 可能已被 dispose
+          }
+        }
         onSessionExitRef.current?.(repositoryId, terminalId);
       }
     });
@@ -171,8 +193,8 @@ export function useTerminalSession({
       } catch {
         // 容器尚未可见时忽略，下面再用合理默认值兜底
       }
-      const cols = Math.max(terminal.cols || 80, 1);
-      const rows = Math.max(terminal.rows || 24, 1);
+      const cols = clampTerminalDim(terminal.cols || 80);
+      const rows = clampTerminalDim(terminal.rows || 24);
       void openTerminalSession(workspaceId, terminalId, cols, rows, cwd)
         .then(() => {
           if (cancelled) return;
@@ -181,8 +203,8 @@ export function useTerminalSession({
           // 真正可见后再 fit 一次并通知后端，确保尺寸正确。
           try {
             fitAddon.fit();
-            const finalCols = Math.max(terminal.cols, 1);
-            const finalRows = Math.max(terminal.rows, 1);
+            const finalCols = clampTerminalDim(terminal.cols);
+            const finalRows = clampTerminalDim(terminal.rows);
             void resizeTerminalSession(
               workspaceId,
               terminalId,
@@ -208,34 +230,45 @@ export function useTerminalSession({
     };
 
     // 跨两个 RAF 等浏览器布局稳定后再 fit。
+    const fitAndOpenRafRef: { current: number | null } = { current: null };
+    const resizeDebounceTimerRef: { current: number | null } = { current: null };
     const raf1 = requestAnimationFrame(() => {
       const raf2 = requestAnimationFrame(fitAndOpen);
       // 把第二个 raf 句柄挂到外层变量上以便清理
-      (fitAndOpenRafRef as { current: number | null }).current = raf2;
+      fitAndOpenRafRef.current = raf2;
     });
-    const fitAndOpenRafRef: { current: number | null } = { current: null };
 
     const resizeObserver = new ResizeObserver(() => {
       const fit = fitAddonRef.current;
       const term = terminalRef.current;
       if (!fit || !term) return;
-      try {
-        fit.fit();
-        const nextCols = Math.max(term.cols, 1);
-        const nextRows = Math.max(term.rows, 1);
-        void resizeTerminalSession(
-          workspaceId,
-          terminalId,
-          nextCols,
-          nextRows,
-        ).catch((error) => {
-          if (!shouldIgnoreTerminalError(error)) {
-            console.warn("resize terminal session failed", error);
-          }
-        });
-      } catch {
-        // 忽略 fit 失败
+      // 拖拽分隔条 / 全屏切换会以 60Hz 触发回调；先在前端合并一次再走 IPC。
+      if (resizeDebounceTimerRef.current !== null) {
+        window.clearTimeout(resizeDebounceTimerRef.current);
       }
+      resizeDebounceTimerRef.current = window.setTimeout(() => {
+        resizeDebounceTimerRef.current = null;
+        const fit2 = fitAddonRef.current;
+        const term2 = terminalRef.current;
+        if (!fit2 || !term2) return;
+        try {
+          fit2.fit();
+          const nextCols = clampTerminalDim(term2.cols);
+          const nextRows = clampTerminalDim(term2.rows);
+          void resizeTerminalSession(
+            workspaceId,
+            terminalId,
+            nextCols,
+            nextRows,
+          ).catch((error) => {
+            if (!shouldIgnoreTerminalError(error)) {
+              console.warn("resize terminal session failed", error);
+            }
+          });
+        } catch {
+          // 忽略 fit 失败
+        }
+      }, TERMINAL_RESIZE_DEBOUNCE_MS);
     });
     resizeObserver.observe(container);
 
@@ -244,6 +277,10 @@ export function useTerminalSession({
       cancelAnimationFrame(raf1);
       if (fitAndOpenRafRef.current !== null) {
         cancelAnimationFrame(fitAndOpenRafRef.current);
+      }
+      if (resizeDebounceTimerRef.current !== null) {
+        window.clearTimeout(resizeDebounceTimerRef.current);
+        resizeDebounceTimerRef.current = null;
       }
       resizeObserver.disconnect();
       dataDisposable.dispose();

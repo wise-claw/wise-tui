@@ -78,6 +78,8 @@ export type TerminalExitEvent = {
   workspaceId: string;
   terminalId: string;
   exitCode: number;
+  /** 后端 reader 线程异常退出时填上错误描述；正常 EOF 时为 null/undefined。 */
+  reason?: string | null;
 };
 
 const terminalOutputHub = createEventHub<TerminalOutputEvent>("terminal-output");

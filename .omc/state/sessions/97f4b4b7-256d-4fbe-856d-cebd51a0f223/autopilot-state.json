@@ -1,12 +1,12 @@
 {
   "active": false,
   "current_phase": "completed",
-  "completed_at": "2026-06-13T14:42:00.000Z",
-  "completion_summary": "Removed 「发到终端」 feature: deleted ComposerSendTargetToggle.tsx, composerSendTargetStore.ts, terminalForwardStore.ts, terminalClaudeAutostartStore.ts, terminalForward.ts; cleaned consumer code in ClaudeChat.tsx, ClaudeChatQuickActionsChrome.tsx, useTerminalSession.ts. tsc passes.",
+  "completed_at": "2026-06-13T14:55:00.000Z",
+  "summary": "Terminal stability enhancements implemented: bounded pending buffer (1MB cap), resilient PTY reader (retries on EINTR/WouldBlock), exit reason propagation, write retry with backoff, dimension clamping (1-1024) backend+frontend, resize debouncing (32ms). Tests: 4/4 cargo terminal tests pass; tsc --noEmit exit=0.",
   "_meta": {
     "mode": "autopilot",
     "sessionId": "97f4b4b7-256d-4fbe-856d-cebd51a0f223",
-    "updatedAt": "2026-06-13T14:41:54.227Z",
+    "updatedAt": "2026-06-13T14:49:59.035Z",
     "updatedBy": "state_write_tool"
   }
 }
