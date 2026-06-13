@@ -1,7 +1,7 @@
 import { marked } from "marked";
 import DOMPurify, { type Config } from "dompurify";
 import { isValidHttpUrl, normalizeAutolinkUrl } from "./autolinkUrl";
-import { normalizeMarkdownForDisplay } from "./markdownDisplayNormalize";
+import { normalizeMarkdownForDisplay, normalizeMarkdownLineBreaks } from "./markdownDisplayNormalize";
 import {
   shouldRenderFencedBlockAsMermaid,
   wrapMermaidBlocksInMarkdown,
@@ -19,13 +19,28 @@ const DISPLAY_HTML_CACHE_MAX = 128;
 const displayHtmlCache = new Map<string, string>();
 
 export function coerceMarkdownSourceText(input: unknown): string {
-  if (typeof input === "string") return input;
   if (input == null) return "";
-  try {
-    return String(input);
-  } catch {
-    return "";
+  let text = "";
+  if (typeof input === "string") {
+    text = input;
+  } else {
+    try {
+      text = String(input);
+    } catch {
+      return "";
+    }
   }
+  return normalizeMarkdownLineBreaks(text);
+}
+
+/** 聊天展示前规范化 Markdown 源码（不转 HTML）。 */
+export function prepareMarkdownForDisplay(text: string, opts?: { streaming?: boolean }): string {
+  const source = coerceMarkdownSourceText(text);
+  if (!source.trim()) return "";
+  const stabilized = opts?.streaming ? stabilizeStreamingMarkdown(source) : source;
+  const unwrapped = unwrapProseFencedMarkdownSource(stabilized);
+  const wrappedMermaid = wrapMermaidBlocksInMarkdown(unwrapped);
+  return normalizeMarkdownForDisplay(wrappedMermaid, { streaming: opts?.streaming });
 }
 
 function escapeHtmlPlain(text: string): string {

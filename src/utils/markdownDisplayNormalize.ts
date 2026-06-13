@@ -1,3 +1,12 @@
+/** Claude / Codex 流式文本偶发 Unicode 行分隔符，解析器无法识别为换行。 */
+export function normalizeMarkdownLineBreaks(text: string): string {
+  return text
+    .replace(/\r\n?/g, "\n")
+    .replace(/\u2028/g, "\n")
+    .replace(/\u2029/g, "\n\n")
+    .replace(/\u0085/g, "\n");
+}
+
 /** 全角竖线 → ASCII，便于 GFM 表格解析。 */
 function normalizePipeChars(text: string): string {
   return text.replace(/\uFF5C/g, "|");
@@ -50,6 +59,113 @@ function stripInlineHtml(text: string): string {
   return decodeBasicHtmlEntities(text.replace(/<[^>]+>/g, "").trim());
 }
 
+const NUMBERED_STEP_RE = /^\d+\.\s/;
+
+function htmlHeadingToMarkdown(level: number, rawBody: string): string {
+  const text = stripInlineHtml(rawBody);
+  if (!text) return "";
+  if (NUMBERED_STEP_RE.test(text)) return `\n${text}\n`;
+  const depth = Math.min(6, Math.max(1, level));
+  const mdLevel = Math.min(depth, 3);
+  return `\n\n${"#".repeat(mdLevel)} ${text}\n\n`;
+}
+
+/** 误将 `# 2. xxx`（HTML h1 步骤）当标题时，还原为有序列表行。 */
+export function demoteNumberedMarkdownHeadings(text: string): string {
+  return text.replace(/^#\s+(\d+\.\s)/gm, "$1");
+}
+
+const BARE_SHELL_LINE_RE =
+  /^(?:claude\s+(?:mcp|code)?|npm\s+|bun\s+|pnpm\s+|yarn\s+|npx\s+|git\s+|curl\s+|sudo\s+)/i;
+
+/** 独立行的 shell 命令自动包进 bash 围栏（模型常省略 ```）。跳过已在围栏内的行。 */
+export function wrapBareShellCommandLines(text: string): string {
+  const lines = text.split("\n");
+  const out: string[] = [];
+  let inFence = false;
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i]!;
+    const trimmed = line.trim();
+
+    if (trimmed.startsWith("```")) {
+      inFence = !inFence;
+      out.push(line);
+      i += 1;
+      continue;
+    }
+
+    if (inFence) {
+      out.push(line);
+      i += 1;
+      continue;
+    }
+
+    if (!trimmed || !BARE_SHELL_LINE_RE.test(trimmed)) {
+      out.push(line);
+      i += 1;
+      continue;
+    }
+
+    const block: string[] = [trimmed];
+    i += 1;
+    while (i < lines.length) {
+      const next = lines[i]!.trim();
+      if (!next || next.startsWith("```")) break;
+      if (!BARE_SHELL_LINE_RE.test(next) && !/^(?:claude\s+|npx\s+-y\s+)/i.test(next)) break;
+      block.push(next);
+      i += 1;
+    }
+    out.push("```bash", ...block, "```");
+  }
+
+  return out.join("\n");
+}
+
+/** 行内混入的 `## 标题` / `` ```bash `` 前补空行。 */
+function breakInlineMarkdownHeadings(text: string): string {
+  return text.replace(/([^\n#])(#{1,6}\s)/g, "$1\n\n$2");
+}
+
+function breakInlineCodeFences(text: string): string {
+  let s = text.replace(/([^\n`])(```[a-z]*)/gi, "$1\n\n$2");
+  s = s.replace(/(```)\s+([^\n`])/g, "$1\n\n$2");
+  return s;
+}
+
+const PIPE_ROW_ON_LINE_RE = /\|[^|\n]*(?:\|[^|\n]*)+\|/;
+
+function breakPrefixBeforeInlinePipeTable(line: string): string {
+  const firstPipe = line.indexOf("|");
+  if (firstPipe <= 0) return line;
+  const prefix = line.slice(0, firstPipe).trimEnd();
+  const tablePart = line.slice(firstPipe).trim();
+  if (!prefix || !PIPE_ROW_ON_LINE_RE.test(tablePart)) return line;
+  return `${prefix}\n\n${tablePart}`;
+}
+
+function splitInlinePipeRowsOnLine(line: string): string {
+  if (!line.includes("|")) return line;
+  const withRowBreaks = /\|\s+\|/.test(line) ? line.replace(/\|\s+\|/g, "|\n|") : line;
+  return breakPrefixBeforeInlinePipeTable(withRowBreaks);
+}
+
+/** 表格行尾粘连 `## 标题` 时拆开。 */
+function splitTrailingContentAfterTableRow(line: string): string {
+  return line.replace(/(\|(?:[^|\n]|\|[-:\s|]+)*\|)\s*(#{1,6}\s)/g, "$1\n\n$2");
+}
+
+/** Claude 助手消息：拆行内标题、表格、代码围栏后再解析。 */
+export function normalizeInlineMarkdownStructures(text: string): string {
+  let s = breakInlineMarkdownHeadings(text);
+  s = breakInlineCodeFences(s);
+  return s
+    .split("\n")
+    .map((line) => splitTrailingContentAfterTableRow(splitInlinePipeRowsOnLine(line)))
+    .join("\n");
+}
+
 export function looksLikeLlmHtmlFragment(text: string): boolean {
   const trimmed = text.trim();
   if (!LLM_HTML_FRAGMENT_RE.test(trimmed)) return false;
@@ -71,9 +187,8 @@ function shouldConvertHtmlFragment(text: string, opts?: MarkdownDisplayNormalize
 function convertPartialStreamingHtmlTags(text: string): string {
   return text
     .replace(/<h([1-6])[^>]*>([^<]*)$/gi, (_, level: string, body: string) => {
-      const depth = Math.min(6, Math.max(1, Number(level)));
       const title = stripInlineHtml(body);
-      return title ? `\n\n${"#".repeat(depth)} ${title}\n\n` : "";
+      return title ? htmlHeadingToMarkdown(Number(level), title) : "";
     })
     .replace(/<p[^>]*>([^<]*)$/gi, (_, body: string) => {
       const content = stripInlineHtml(body);
@@ -140,10 +255,17 @@ export function llmHtmlFragmentToMarkdown(
   }
 
   s = s
-    .replace(/<h([1-6])[^>]*>([\s\S]*?)<\/h\1>/gi, (_, level: string, body: string) => {
-      const depth = Math.min(6, Math.max(1, Number(level)));
-      return `\n\n${"#".repeat(depth)} ${stripInlineHtml(body)}\n\n`;
+    .replace(/<pre[^>]*><code[^>]*>([\s\S]*?)<\/code>\s*<\/pre>/gi, (_full, code: string) => {
+      const body = stripInlineHtml(code);
+      return body ? `\n\n\`\`\`bash\n${body}\n\`\`\`\n\n` : "";
     })
+    .replace(/<pre[^>]*>([\s\S]*?)<\/pre>/gi, (_full, code: string) => {
+      const body = stripInlineHtml(code);
+      return body ? `\n\n\`\`\`\n${body}\n\`\`\`\n\n` : "";
+    })
+    .replace(/<h([1-6])[^>]*>([\s\S]*?)<\/h\1>/gi, (_full, level: string, body: string) =>
+      htmlHeadingToMarkdown(Number(level), body),
+    )
     .replace(/<a[^>]*href=["']([^"']+)["'][^>]*>([\s\S]*?)<\/a>/gi, (_, href: string, label: string) => {
       const linkText = stripInlineHtml(label) || href;
       return `[${linkText}](${href})`;
@@ -161,6 +283,124 @@ export function llmHtmlFragmentToMarkdown(
     .replace(/[ \t]+\n/g, "\n")
     .replace(/\n{3,}/g, "\n\n")
     .trim();
+}
+
+function splitPipeRowCells(row: string): string[] {
+  const trimmed = row.trim();
+  if (!trimmed.startsWith("|") || !trimmed.endsWith("|")) return [];
+  return trimmed
+    .slice(1, -1)
+    .split("|")
+    .map((cell) => cell.trim());
+}
+
+function buildPipeRow(cells: string[]): string {
+  return `| ${cells.join(" | ")} |`;
+}
+
+/** 数据行列数多于表头时，将溢出列合并进最后一列，避免 remark-gfm 丢弃内容。 */
+export function alignPipeTableDataRowsToHeader(text: string): string {
+  const lines = text.split("\n");
+  const out: string[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i]!;
+    if (!PIPE_TABLE_ROW_RE.test(line.trim())) {
+      out.push(line);
+      i += 1;
+      continue;
+    }
+
+    const block: string[] = [];
+    while (i < lines.length) {
+      const current = lines[i]!.trim();
+      if (!current) {
+        let j = i + 1;
+        while (j < lines.length && !lines[j]!.trim()) j += 1;
+        if (j < lines.length && PIPE_TABLE_ROW_RE.test(lines[j]!.trim())) {
+          i = j;
+          continue;
+        }
+        break;
+      }
+      if (PIPE_TABLE_ROW_RE.test(current)) {
+        block.push(current);
+        i += 1;
+        continue;
+      }
+      break;
+    }
+
+    const sepIdx = block.findIndex((row) => PIPE_TABLE_SEPARATOR_RE.test(row));
+    const headerRow = sepIdx > 0 ? block[0] : sepIdx === -1 && block.length >= 2 ? block[0] : "";
+    const headerCols = headerRow && !PIPE_TABLE_SEPARATOR_RE.test(headerRow) ? countPipeColumns(headerRow) : 0;
+
+    if (headerCols >= 2) {
+      out.push(
+        ...block.map((row, idx) => {
+          if (PIPE_TABLE_SEPARATOR_RE.test(row)) return row;
+          if (idx === 0 && sepIdx === 1) return row;
+          const cells = splitPipeRowCells(row);
+          if (cells.length <= headerCols) return row;
+          const kept = cells.slice(0, headerCols - 1);
+          const merged = cells.slice(headerCols - 1).join(", ");
+          return buildPipeRow([...kept, merged]);
+        }),
+      );
+      continue;
+    }
+
+    out.push(...block);
+  }
+
+  return out.join("\n");
+}
+
+/** 表格分隔行 `|---|------|` 规范为 `| --- | --- |`（remark-gfm 要求空格）。 */
+export function normalizeTableSeparatorRows(text: string): string {
+  const lines = normalizePipeChars(text).split("\n");
+  const out: string[] = [];
+
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]!;
+    const trimmed = line.trim();
+    if (!PIPE_TABLE_SEPARATOR_RE.test(trimmed)) {
+      out.push(line);
+      continue;
+    }
+    const needsSpaces = /^\|[\s:|\-]+\|$/.test(trimmed) && !/\|\s+[-:]{3,}\s+\|/.test(trimmed);
+    if (!needsSpaces) {
+      out.push(line);
+      continue;
+    }
+
+    let cols = 0;
+    for (let j = i - 1; j >= 0; j--) {
+      const prev = lines[j]!.trim();
+      if (!prev) continue;
+      if (PIPE_TABLE_SEPARATOR_RE.test(prev)) continue;
+      if (PIPE_TABLE_ROW_RE.test(prev)) {
+        cols = countPipeColumns(prev);
+        break;
+      }
+      break;
+    }
+    if (cols < 2) {
+      cols = trimmed.split("|").filter((cell) => cell.trim().length > 0).length;
+    }
+    out.push(cols >= 2 ? buildSeparatorRow(cols) : line);
+  }
+
+  return out.join("\n");
+}
+
+/** 删除仅含单个 `|` 的孤立行，避免破坏后续 GFM 表格块。 */
+export function removeOrphanPipeLines(text: string): string {
+  return text
+    .split("\n")
+    .filter((line) => !/^\s*\|\s*$/.test(line))
+    .join("\n");
 }
 
 /**
@@ -217,12 +457,17 @@ export function normalizePipeTables(text: string): string {
   return out.join("\n");
 }
 
-/** 确保 GFM 表格块前有空行，避免被 marked 吸进列表项。 */
+/** 确保 GFM 表格块前有空行，避免被解析器吸进段落或列表项。 */
 function ensureBlankLineBeforePipeTables(text: string): string {
-  return text.replace(/(^|\n)([^\n|][^\n]*)\n(\|[^\n]+\|)/g, (match, prefix, before, row) => {
-    if (before.trim().startsWith("|")) return match;
-    return `${prefix}${before}\n\n${row}`;
-  });
+  return text
+    .replace(/(^|\n)([^\n|][^\n]*)\n(\|[^\n]+\|)/g, (match, prefix, before, row) => {
+      if (before.trim().startsWith("|")) return match;
+      return `${prefix}${before}\n\n${row}`;
+    })
+    .replace(/(^|\n)([^\n|][^\n]*)(\|[^|\n]+\|)/g, (match, prefix, before, row) => {
+      if (before.trim().endsWith("|")) return match;
+      return `${prefix}${before}\n\n${row}`;
+    });
 }
 
 function extractHtmlBodyContent(html: string, opts?: MarkdownDisplayNormalizeOptions): string {
@@ -290,5 +535,13 @@ export function normalizeMarkdownForDisplay(
   if (opts?.streaming && /<[a-z!/]/i.test(markdown)) {
     markdown = stripUnconvertedHtmlMarkup(markdown);
   }
-  return normalizePipeTables(ensureBlankLineBeforePipeTables(markdown));
+  markdown = normalizeMarkdownLineBreaks(markdown);
+  markdown = normalizeInlineMarkdownStructures(markdown);
+  markdown = demoteNumberedMarkdownHeadings(markdown);
+  markdown = wrapBareShellCommandLines(markdown);
+  markdown = ensureBlankLineBeforePipeTables(markdown);
+  markdown = removeOrphanPipeLines(markdown);
+  markdown = normalizeTableSeparatorRows(markdown);
+  markdown = alignPipeTableDataRowsToHeader(markdown);
+  return normalizePipeTables(markdown);
 }

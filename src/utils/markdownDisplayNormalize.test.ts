@@ -5,10 +5,82 @@ import {
   llmHtmlFragmentToMarkdown,
   looksLikeLlmHtmlFragment,
   normalizeMarkdownForDisplay,
+  normalizeInlineMarkdownStructures,
   normalizePipeTables,
+  normalizeTableSeparatorRows,
+  removeOrphanPipeLines,
 } from "./markdownDisplayNormalize";
+import { prepareMarkdownForDisplay } from "./markdownRenderPipeline";
+
+const MCP_EXA_ASSISTANT_SNIPPET = `我检查一下当前可用的 MCP 工具:确认了 — **当前会话只接入了 \`codegraph\` 一个 MCP server,没有 Exa**。 ## 我之前的回答有误,纠正如下 我列出 \`mcp__exa__*\` 是**错误的** — 那是我的工具列表里看到的"agent 类型可能可用的工具",并不代表当前会话真的连了 Exa MCP。实际本会话**只有这些联网工具可用**: | 工具 | 状态 |
+|------|------|
+| **WebSearch** | ✅ 可用(内置,美国地区) |
+| **WebFetch** | ✅ 可用(内置,15min 缓存) |
+| **mcp__exa__web_search_exa** | ❌ 未连接 |
+| **mcp__exa__get_code_context_exa** | ❌ 未连接 | ## 如果想接入 Exa Exa 是付费 MCP server,接入步骤大致是: \`\`\`bash
+1. 申请 API key: https://exa.ai/
+2. 配置 MCP server:
+claude mcp add exa --env EXA_API_KEY=xxx -- npx -y exa-mcp-server
+# 3. 验证
+claude mcp list
+\`\`\` 接入后会出现 \`mcp__exa__web_search_exa\` 等工具。 ## 现状下能做什么 只用 **WebSearch + WebFetch** 也能完成绝大多数研究任务,只是:
+- 不如 Exa 适合学术/代码语义搜索
+- 仅限美国地区结果
+- WebFetch 不能访问需登录的页面 需要我用 WebSearch + WebFetch 帮你做点什么调研吗?`;
+
+describe("normalizeInlineMarkdownStructures", () => {
+  test("prepares Claude MCP exa assistant blob for GFM parsing", () => {
+    const out = prepareMarkdownForDisplay(MCP_EXA_ASSISTANT_SNIPPET);
+    expect(out).not.toContain("。 ##");
+    expect(out).not.toContain("| ❌ 未连接 | ##");
+    expect(out).toContain("| 工具 | 状态 |");
+    expect(out).toContain("```bash");
+    expect(out).toContain("claude mcp add exa");
+    expect(out).toContain("## 现状下能做什么");
+    expect(out).toContain("## 如果想接入 Exa");
+  });
+});
 
 describe("normalizePipeTables", () => {
+  test("removes orphan pipe-only lines before table blocks", () => {
+    const input = ["**目录**:", "", "|", "", "| 章节 | 核心内容 |"].join("\n");
+    expect(removeOrphanPipeLines(input)).not.toMatch(/^\|\s*$/m);
+  });
+
+  test("normalizes compact separator rows for remark-gfm", () => {
+    const input = [
+      "| 章节 | 核心内容 |",
+      "|---|------|---------|",
+      "| 一 | 四框架 |",
+    ].join("\n");
+    const out = normalizeTableSeparatorRows(input);
+    expect(out).toContain("| --- | --- |");
+    expect(out).not.toContain("|---|------|---------|");
+    expect(out).not.toContain("| --- | --- | --- |");
+  });
+
+  test("prepares Phoenix delivery summary table for GFM parsing", () => {
+    const input = [
+      "设计文档已完成并通过完整性验证。",
+      "",
+      "#### 📄 Phoenix 整合方案交付总结",
+      "",
+      "**完整目录结构**(13 个章节):",
+      "",
+      "|",
+      "",
+      "| 章节 | 核心内容 |",
+      "|---|------|---------|",
+      "| 一 | 四框架核心特色对比 | 能力矩阵 × 4 框架 |",
+      "| 二 | 第一性原理分析 | 5 公理 |",
+    ].join("\n");
+    const out = prepareMarkdownForDisplay(input);
+    expect(out).not.toMatch(/^\|\s*$/m);
+    expect(out).toContain("| --- | --- |");
+    expect(out).toContain("| 章节 | 核心内容 |");
+    expect(out).toContain("| 一 | 四框架核心特色对比, 能力矩阵 × 4 框架 |");
+  });
+
   test("inserts separator when GLM-style table omits it", () => {
     const input = [
       "| 总源文件 | 2262 个 |",

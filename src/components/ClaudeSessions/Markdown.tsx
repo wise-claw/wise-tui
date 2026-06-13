@@ -1,15 +1,12 @@
 import { useEffect, useLayoutEffect, useRef } from "react";
-import { message } from "antd";
 import { attachExternalLinkDelegation } from "../../services/openExternal";
-import { useMarkdownDisplayHtml } from "../../hooks/useMarkdownDisplayHtml";
-import {
-  coerceMarkdownSourceText,
-  syncMarkdownHtmlToContainer,
-} from "../../utils/markdownRenderPipeline";
+import { useMarkdownDisplaySource } from "../../hooks/useMarkdownDisplaySource";
+import { coerceMarkdownSourceText } from "../../utils/markdownRenderPipeline";
 import { renderMermaidInContainer } from "../../utils/mermaidRender";
 import { attachMermaidViewerInteractions } from "../../utils/mermaidViewerUi";
+import { MarkdownBody } from "./MarkdownElements";
 
-export { buildMarkdownDisplayHtml, clearMarkdownDisplayHtmlCache } from "../../utils/markdownRenderPipeline";
+export { buildMarkdownDisplayHtml, clearMarkdownDisplayHtmlCache, prepareMarkdownForDisplay } from "../../utils/markdownRenderPipeline";
 
 export function StreamingReplyHint() {
   return (
@@ -28,7 +25,6 @@ export function StreamingReplyHint() {
 interface Props {
   text: string;
   streaming?: boolean;
-  /** 是否展示底部「正在思考」提示；默认与 streaming 相同 */
   showPendingHint?: boolean;
   className?: string;
 }
@@ -38,14 +34,11 @@ export function Markdown({ text, streaming, showPendingHint, className }: Props)
   const isStreaming = Boolean(streaming);
   const showHint = showPendingHint ?? isStreaming;
   const containerRef = useRef<HTMLDivElement>(null);
-  const copyTimeoutsRef = useRef<Map<HTMLButtonElement, ReturnType<typeof setTimeout>>>(new Map());
-  const displayHtml = useMarkdownDisplayHtml(safeText, isStreaming);
+  const displaySource = useMarkdownDisplaySource(safeText, isStreaming);
 
   useLayoutEffect(() => {
     const container = containerRef.current;
-    if (!container) return;
-    syncMarkdownHtmlToContainer(container, displayHtml);
-    if (isStreaming) return;
+    if (!container || isStreaming || !displaySource) return;
 
     let cancelled = false;
     void renderMermaidInContainer(container).finally(() => {
@@ -55,55 +48,20 @@ export function Markdown({ text, streaming, showPendingHint, className }: Props)
     return () => {
       cancelled = true;
     };
-  }, [displayHtml, isStreaming]);
+  }, [displaySource, isStreaming]);
 
   useEffect(() => {
     const container = containerRef.current;
     if (!container) return;
 
-    const handleCopyClick = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      const copyBtn = target.closest(".app-markdown-copy-btn") as HTMLButtonElement | null;
-      if (!copyBtn || !container.contains(copyBtn)) return;
-
-      const wrapper = copyBtn.closest(".app-markdown-code");
-      const code = wrapper?.querySelector("code");
-      if (!code) return;
-
-      navigator.clipboard
-        .writeText(code.textContent ?? "")
-        .then(() => {
-          copyBtn.setAttribute("data-copied", "true");
-          copyBtn.setAttribute("data-tooltip", "已复制");
-          const existing = copyTimeoutsRef.current.get(copyBtn);
-          if (existing) clearTimeout(existing);
-          const t = setTimeout(() => {
-            copyBtn.removeAttribute("data-copied");
-            copyBtn.setAttribute("data-tooltip", "复制");
-            copyTimeoutsRef.current.delete(copyBtn);
-          }, 2000);
-          copyTimeoutsRef.current.set(copyBtn, t);
-        })
-        .catch(() => message.error("复制失败"));
-    };
-
-    container.addEventListener("click", handleCopyClick);
     const linkUnsub = attachExternalLinkDelegation(container);
     const mermaidUnsub = attachMermaidViewerInteractions(container);
 
     return () => {
-      container.removeEventListener("click", handleCopyClick);
       if (linkUnsub) linkUnsub();
       mermaidUnsub();
     };
-  }, [displayHtml]);
-
-  useEffect(() => {
-    return () => {
-      copyTimeoutsRef.current.forEach((t) => clearTimeout(t));
-      copyTimeoutsRef.current.clear();
-    };
-  }, []);
+  }, [displaySource]);
 
   const isContinuation = safeText.includes("This session is being continued from a previous conversation");
 
@@ -111,11 +69,9 @@ export function Markdown({ text, streaming, showPendingHint, className }: Props)
     <div
       className={`app-markdown-host${showHint ? " app-markdown-host--streaming" : ""}${isContinuation ? " app-markdown-host--continuation" : ""}`}
     >
-      <div
-        ref={containerRef}
-        className={`app-markdown ${className ?? ""}`}
-        suppressHydrationWarning
-      />
+      <div ref={containerRef} className={`app-markdown ${className ?? ""}`} suppressHydrationWarning>
+        {displaySource ? <MarkdownBody source={displaySource} streaming={isStreaming} /> : null}
+      </div>
       {showHint && <StreamingReplyHint />}
     </div>
   );
