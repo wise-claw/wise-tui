@@ -129,6 +129,6 @@ describe("getToolDisplayInfo fallback", () => {
     };
     const info = getToolDisplayInfo(part);
     expect(info.label).toBe("工具结果");
-    expect(info.subtitle).toBe("调用 ID t1");
+    expect(info.subtitle).toBe("Done");
   });
 });

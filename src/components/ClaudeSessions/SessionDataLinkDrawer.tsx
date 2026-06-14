@@ -252,7 +252,8 @@ export function SessionDataLinkDrawer({
   const [headerCopied, setHeaderCopied] = useState(false);
   const headerCopyResetTimerRef = useRef<number | null>(null);
   const [turnDiagramTurn, setTurnDiagramTurn] = useState<number | null>(null);
-  const [activeTurnKeys, setActiveTurnKeys] = useState<string[]>([]);
+  /** null = 默认展开最后一轮；[] = 用户已收起全部；非空 = 用户所选轮次 */
+  const [activeTurnKeys, setActiveTurnKeys] = useState<string[] | null>(null);
   const [turnRange, setTurnRange] = useState<TurnRange | null>(null);
   const [proxySnap, setProxySnap] = useState(getClaudeLlmProxyStoreSnapshot);
 
@@ -281,7 +282,7 @@ export function SessionDataLinkDrawer({
     }
     setViewMode("list");
     setFilterPreset("all");
-    setActiveTurnKeys([]);
+    setActiveTurnKeys(null);
     setTurnRange(null);
   }, [open, initialViewMode]);
 
@@ -633,8 +634,8 @@ export function SessionDataLinkDrawer({
       });
   }, [filteredRecords, turnMetrics, openTurnDiagram]);
 
-  const defaultActiveTurnKeys = useMemo(() => {
-    if (activeTurnKeys.length > 0) return activeTurnKeys;
+  const resolvedActiveTurnKeys = useMemo(() => {
+    if (activeTurnKeys !== null) return activeTurnKeys;
     if (collapseItems.length === 0) return [];
     return [collapseItems[collapseItems.length - 1]!.key];
   }, [activeTurnKeys, collapseItems]);
@@ -867,7 +868,7 @@ export function SessionDataLinkDrawer({
                     size="small"
                     className="app-session-data-link__collapse"
                     items={collapseItems}
-                    activeKey={defaultActiveTurnKeys}
+                    activeKey={resolvedActiveTurnKeys}
                     onChange={(keys) => setActiveTurnKeys(Array.isArray(keys) ? keys.map(String) : [String(keys)])}
                   />
                 )

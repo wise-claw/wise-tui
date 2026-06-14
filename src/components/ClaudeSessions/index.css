@@ -2009,7 +2009,7 @@
   min-width: 0;
   margin: 0;
   font-size: 12px;
-  line-height: 1.25;
+  line-height: 1.2;
   color: var(--ant-color-text);
   white-space: nowrap;
   overflow: hidden;
@@ -2420,7 +2420,7 @@
   flex: 1;
   min-width: 0;
   font-size: 12px;
-  line-height: 1.25;
+  line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -3555,7 +3555,7 @@
   border: 1px solid var(--ant-color-primary-border);
   background: var(--ant-color-primary-bg);
   font-size: 11px;
-  line-height: 1.25;
+  line-height: 1.2;
   color: var(--ant-color-text-secondary);
   overflow: hidden;
 }
@@ -3588,7 +3588,7 @@
   background: transparent;
   font: inherit;
   font-size: 11px;
-  line-height: 1.25;
+  line-height: 1.2;
   color: var(--ant-color-primary);
   cursor: pointer;
   white-space: nowrap;
@@ -3710,7 +3710,7 @@
 
 /* 与上一条同发送者：不再重复头像与时间，仅保留内容以纵向成组 */
 .app-claude-message--merged {
-  margin-top: 3px; /* Clean gap between consecutive messages from same sender */
+  margin-top: 2px;
 }
 
 .app-claude-message--merged .app-claude-message-avatar {
@@ -3733,23 +3733,23 @@
 }
 
 .app-claude-message--user .app-claude-message-avatar {
-  background: var(--ant-color-primary);
+  background: color-mix(in srgb, var(--ant-color-primary) 82%, var(--ant-color-fill-tertiary));
   color: #fff;
 }
 
 .app-claude-message--tool-user .app-claude-message-avatar {
-  background: var(--ant-color-info);
-  color: #fff;
+  background: color-mix(in srgb, var(--ant-color-info) 55%, var(--ant-color-fill-tertiary));
+  color: var(--ant-color-text);
 }
 
 .app-claude-message--assistant .app-claude-message-avatar {
-  background: var(--ant-color-success);
-  color: #fff;
+  background: color-mix(in srgb, var(--ant-color-success) 30%, var(--ant-color-fill-tertiary));
+  color: color-mix(in srgb, var(--ant-color-success) 75%, var(--ant-color-text));
 }
 
 .app-claude-message--system .app-claude-message-avatar {
-  background: var(--ant-color-warning);
-  color: #fff;
+  background: color-mix(in srgb, var(--ant-color-warning) 35%, var(--ant-color-fill-tertiary));
+  color: color-mix(in srgb, var(--ant-color-warning) 80%, var(--ant-color-text));
 }
 
 .app-claude-message-body {
@@ -4305,7 +4305,26 @@
 }
 
 .app-claude-messages .app-message-part + .app-message-part {
-  margin-top: 2px; /* Extremely snug spacing between different layout modules */
+  margin-top: 3px;
+}
+
+.app-claude-messages .app-message-part--text + .app-message-parts__tool-group,
+.app-claude-messages .app-message-parts__tool-group + .app-message-part--text,
+.app-claude-messages .app-message-part--reasoning + .app-message-parts__tool-group,
+.app-claude-messages .app-message-parts__tool-group + .app-message-part--reasoning {
+  margin-top: 6px;
+}
+
+.app-claude-messages .app-message-part--completion-summary {
+  margin-top: 6px;
+  padding-top: 5px;
+  border-top: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 55%, transparent);
+}
+
+.app-claude-messages .app-message-part--text {
+  font-size: 13.5px;
+  line-height: 1.55;
+  color: var(--ant-color-text);
 }
 
 .app-message-part {
@@ -4391,15 +4410,15 @@
 }
 
 .app-claude-user-message-collapsible__body {
-  max-height: min(36vh, 260px);
+  max-height: min(18vh, 120px);
   overflow: hidden;
   word-break: break-word;
 }
 
 .app-claude-user-message-collapsible:not(.app-claude-user-message-collapsible--expanded)
   .app-claude-user-message-collapsible__body {
-  -webkit-mask-image: linear-gradient(to bottom, #000 72%, transparent 100%);
-  mask-image: linear-gradient(to bottom, #000 72%, transparent 100%);
+  -webkit-mask-image: linear-gradient(to bottom, #000 62%, transparent 100%);
+  mask-image: linear-gradient(to bottom, #000 62%, transparent 100%);
 }
 
 .app-claude-user-message-collapsible--expanded .app-claude-user-message-collapsible__body {
@@ -4442,9 +4461,9 @@
   width: 100%;
   max-width: 100%;
   gap: 4px;
-  padding: 2px 8px;
+  padding: 2px 7px;
   border-radius: 4px;
-  background: var(--ant-color-fill-quaternary);
+  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 35%, transparent);
   border: 1px solid transparent;
   color: var(--ant-color-text-quaternary);
   font-size: 11px;
@@ -4483,9 +4502,23 @@
   display: flex;
   flex-direction: column;
   flex-wrap: nowrap;
-  gap: 4px;
+  gap: 0;
   margin: 0;
   width: 100%;
+  padding: 2px 4px 3px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 62%, transparent);
+  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 38%, transparent);
+  box-sizing: border-box;
+}
+
+.app-message-parts__tool-group-label {
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.2;
+  letter-spacing: 0.02em;
+  color: var(--ant-color-text-quaternary);
+  padding: 0 2px 2px;
 }
 
 .app-message-parts__tool-group .app-message-part--tool {
@@ -4495,20 +4528,57 @@
   margin: 0 !important;
   max-width: 100%;
   box-sizing: border-box;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+}
+
+.app-message-parts__tool-group .app-message-part--tool + .app-message-part--tool {
+  border-top: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 50%, transparent);
 }
 
 .app-message-parts__tool-group .app-message-part--tool.app-message-part--expanded {
   flex: 0 0 auto;
   width: 100%;
+  margin: 1px 0;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 32%, var(--ant-color-bg-container));
 }
 
+.app-message-parts__tool-group .app-message-part-tool-head {
+  gap: 2px;
+}
 
 .app-message-parts__tool-group .app-message-part-header__main {
   flex-direction: row;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
   flex: 1 1 auto;
   min-width: 0;
+}
+
+.app-message-parts__tool-group .app-message-part-title {
+  white-space: nowrap;
+  flex-shrink: 0;
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1.2;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-message-parts__tool-group .app-message-part-title::after {
+  content: "·";
+  margin: 0 4px 0 2px;
+  color: var(--ant-color-text-quaternary);
+  font-weight: 400;
+}
+
+.app-message-parts__tool-group .app-message-part--tool-result .app-message-part-title {
+  color: var(--ant-color-text);
 }
 
 .app-message-parts__tool-group .app-message-part-subtitle {
@@ -4518,37 +4588,122 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  font-family: inherit;
+  font-size: 11px;
+  line-height: 1.3;
+  color: var(--ant-color-text-tertiary);
 }
 
-.app-message-parts__tool-group .app-message-part-title {
-  white-space: nowrap;
-  flex-shrink: 0;
+.app-message-parts__tool-group .app-message-part--tool-result .app-message-part-subtitle {
+  color: var(--ant-color-text-secondary);
 }
 
-.app-message-parts__tool-group .app-message-part-title::after {
-  content: ":";
-  margin-left: 1px;
+.app-message-parts__tool-group .app-message-part--tool[data-tool-name="bash"] .app-message-part-subtitle,
+.app-message-parts__tool-group .app-message-part--tool[data-tool-name="exec"] .app-message-part-subtitle,
+.app-message-parts__tool-group .app-message-part--tool[data-tool-name="read"] .app-message-part-subtitle,
+.app-message-parts__tool-group .app-message-part--tool[data-tool-name="edit"] .app-message-part-subtitle,
+.app-message-parts__tool-group .app-message-part--tool[data-tool-name="write"] .app-message-part-subtitle {
+  font-family: "SF Mono", "Fira Code", Consolas, monospace;
+  font-size: 10.5px;
+}
+
+.app-message-parts__tool-group .app-message-part-header__tags {
+  gap: 3px;
+  margin-top: 0;
+}
+
+.app-message-parts__tool-group .app-message-part-tag {
+  padding: 0 5px;
+  font-size: 10px;
+  line-height: 15px;
+  background: var(--ant-color-fill-quaternary);
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-message-parts__tool-group .app-message-part-link-task-btn {
+  font-size: 9px;
+  line-height: 13px;
+  padding: 0 5px;
+  border-color: color-mix(in srgb, var(--ant-color-border-secondary) 70%, transparent);
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-message-parts__tool-group .app-message-part-link-task-btn:hover {
+  color: var(--ant-color-text-secondary);
+  border-color: var(--ant-color-border);
+}
+
+.app-message-parts__tool-group .app-tool-status-dot {
+  width: 6px;
+  height: 6px;
+}
+
+.app-message-parts__tool-group .app-tool-status-dot--completed {
+  box-shadow: none;
+}
+
+.app-message-parts__tool-group .app-tool-status-dot--error {
+  box-shadow: none;
+}
+
+.app-claude-messages .app-message-parts__tool-group .app-message-part--tool-error.app-message-part--expanded {
+  background: color-mix(in srgb, var(--ant-color-error-bg) 22%, var(--ant-color-bg-container));
 }
 
 .app-claude-messages .app-message-part--tool {
-  border: 1px solid var(--ant-color-border-secondary);
-  border-radius: 8px;
+  border: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 70%, transparent);
+  border-radius: 6px;
   overflow: hidden;
   background: var(--ant-color-bg-container);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+  box-shadow: none;
   margin: 0;
+}
+
+/* 工具链内：覆盖单条工具外框，仅保留外层容器 */
+.app-claude-messages .app-message-parts__tool-group .app-message-part--tool {
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  box-shadow: none;
+  overflow: visible;
+}
+
+.app-claude-messages .app-message-parts__tool-group .app-message-part--tool .app-message-part-header {
+  padding: 1px 3px;
+  gap: 4px;
+  min-height: 20px;
+  background: transparent;
+  border: none;
+}
+
+.app-claude-messages .app-message-parts__tool-group .app-message-part--tool .app-message-part-content {
+  padding: 4px 6px;
+}
+
+.app-claude-messages .app-message-part--tool-error {
+  border-color: color-mix(in srgb, var(--ant-color-error-border) 45%, var(--ant-color-border-secondary));
 }
 
 .app-claude-messages .app-message-part--tool .app-message-part-header {
   border: none;
   border-radius: 0;
   border-bottom: none;
-  background: linear-gradient(135deg, color-mix(in srgb, var(--ant-color-fill-quaternary) 70%, var(--ant-color-bg-container)), var(--ant-color-bg-container));
-  padding: 2px 6px;
+  background: transparent;
+  padding: 3px 5px;
 }
 
 .app-claude-messages .app-message-part--tool.app-message-part--expanded .app-message-part-header {
-  border-bottom: 1px solid var(--ant-color-border-secondary);
+  border-bottom: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 55%, transparent);
+  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 45%, transparent);
+}
+
+.app-claude-messages .app-message-part--tool .app-message-part-header:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 55%, transparent);
+}
+
+.app-claude-messages .app-message-part--tool .app-message-part-content {
+  padding: 6px 8px;
+  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 22%, transparent);
 }
 
 .app-message-part--expanded .app-message-part-subtitle {
@@ -4559,19 +4714,19 @@
 }
 
 .app-tool-expanded-input {
-  margin-bottom: 6px;
-  background: var(--ant-color-fill-quaternary);
-  border: 1px solid var(--ant-color-border-secondary);
-  border-radius: 6px;
-  padding: 6px 8px;
+  margin-bottom: 4px;
+  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 50%, transparent);
+  border: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 55%, transparent);
+  border-radius: 4px;
+  padding: 4px 6px;
 }
 
 .app-tool-expanded-input-label {
   display: block;
   font-size: 11px;
   font-weight: 600;
-  color: var(--ant-color-text-secondary);
-  margin-bottom: 3px;
+  color: var(--ant-color-text-tertiary);
+  margin-bottom: 2px;
 }
 
 .app-tool-expanded-input-code {
@@ -4581,7 +4736,7 @@
   border: none;
   font-family: var(--ant-font-family-code, Menlo, Monaco, "Courier New", monospace);
   font-size: 12px;
-  line-height: 1.4;
+  line-height: 1.35;
   color: var(--ant-color-text);
   white-space: pre-wrap;
   word-break: break-all;
@@ -4589,15 +4744,6 @@
 
 .app-claude-messages .app-message-part--tool button.app-message-part-header:disabled {
   opacity: 0.55;
-}
-
-.app-claude-messages .app-message-part--tool .app-message-part-header:hover:not(:disabled) {
-  background: var(--ant-color-fill-secondary);
-  border: none;
-}
-
-.app-claude-messages .app-message-part--tool .app-message-part-content {
-  padding: 10px 12px;
 }
 
 .app-message-part--text p {
@@ -4911,10 +5057,10 @@ button.app-message-part-header:disabled:hover {
 .app-tool-error {
   margin: 0;
   padding: 6px 10px;
-  border-radius: 8px;
-  border: 1px solid var(--ant-color-error-border);
-  background: color-mix(in srgb, var(--ant-color-error-bg) 40%, var(--ant-color-bg-container));
-  color: var(--ant-color-error-text);
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, var(--ant-color-error-border) 42%, var(--ant-color-border-secondary));
+  background: color-mix(in srgb, var(--ant-color-error-bg) 20%, var(--ant-color-bg-container));
+  color: var(--ant-color-text);
   font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
   font-size: 12px;
   line-height: 1.45;
@@ -4972,19 +5118,19 @@ button.app-message-part-header:disabled:hover {
 }
 
 .app-tool-status-dot--completed {
-  background: var(--ant-color-success);
-  box-shadow: 0 0 6px color-mix(in srgb, var(--ant-color-success) 40%, transparent);
+  background: color-mix(in srgb, var(--ant-color-success) 78%, var(--ant-color-text-tertiary));
+  box-shadow: none;
 }
 
 .app-tool-status-dot--error {
-  background: var(--ant-color-error);
-  box-shadow: 0 0 6px color-mix(in srgb, var(--ant-color-error) 40%, transparent);
+  background: color-mix(in srgb, var(--ant-color-error) 75%, var(--ant-color-text-tertiary));
+  box-shadow: none;
 }
 
 .app-tool-output {
-  background: var(--ant-color-fill-quaternary) !important;
-  border: 1px solid var(--ant-color-border-secondary) !important;
-  border-radius: 8px;
+  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 42%, transparent) !important;
+  border: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 52%, transparent) !important;
+  border-radius: 4px;
   padding: 6px 10px;
   font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
   font-size: 12px;
@@ -5019,10 +5165,10 @@ button.app-message-part-header:disabled:hover {
 }
 
 .app-tool-output-markdown {
-  background: var(--ant-color-fill-quaternary) !important;
-  border: 1px solid var(--ant-color-border-secondary) !important;
-  border-radius: 8px;
-  padding: 8px 12px;
+  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 42%, transparent) !important;
+  border: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 52%, transparent) !important;
+  border-radius: 4px;
+  padding: 6px 10px;
   max-height: 240px;
   overflow-y: auto;
   margin: 0;
@@ -8205,7 +8351,7 @@ button.app-message-part-header:disabled:hover {
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  line-height: 1.25;
+  line-height: 1.2;
   max-width: 260px;
   text-align: left;
 }

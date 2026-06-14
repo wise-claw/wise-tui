@@ -14,14 +14,11 @@ export function repositoryExplorerEntriesEqual(
   return true;
 }
 
-/** 超过此数量时 Git 面板改用虚拟列表，并默认收起/列表视图。 */
-export const GIT_PANEL_LARGE_CHANGE_COUNT = 200;
-
-/** 超过此数量时 Git 变更列表启用虚拟滚动（多仓展开场景）。 */
+/** 超过此数量时 Git 变更列表启用虚拟滚动（列表视图）。 */
 export const GIT_PANEL_VIRTUAL_LIST_THRESHOLD = 48;
 
-/** 超过此数量时 Git 面板默认使用列表视图而非目录树。 */
-export const GIT_PANEL_LIST_VIEW_THRESHOLD = 48;
+/** 文档/测试用参考：超大变更集仍可走列表虚拟滚动，树状视图默认仅渲染已展开目录。 */
+export const GIT_PANEL_LARGE_CHANGE_COUNT = 200;
 
 /** 文件 watcher 触发 git status 刷新的防抖间隔（ms）。 */
 export const GIT_WATCHER_REFRESH_MS = 450;

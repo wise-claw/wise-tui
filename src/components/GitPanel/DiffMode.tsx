@@ -17,7 +17,7 @@ import { buildFileTree } from "./fileTree";
 import { FileRow } from "./FileRow";
 import { FileTreeView } from "./FileTreeView";
 import { GitFileListSection } from "./GitFileListSection";
-import { buildCommitDraftFromStatus, GIT_PANEL_LARGE_CHANGE_COUNT, GIT_PANEL_LIST_VIEW_THRESHOLD } from "./gitPanelUtils";
+import { buildCommitDraftFromStatus } from "./gitPanelUtils";
 import { RevertIcon } from "./RevertIcon";
 import type { FileTreeNode, GitPanelOpenFileOptions, UnstagedViewMode } from "./types";
 
@@ -67,9 +67,6 @@ function DiffModeInner({
   const hasUnstaged = status.unstaged.length > 0;
   const hasChanges = hasStaged || hasUnstaged;
   hasChangesRef.current = hasChanges;
-  const changeCount = status.staged.length + status.unstaged.length;
-  const isLargeChangeSet = changeCount > GIT_PANEL_LARGE_CHANGE_COUNT;
-  const preferListView = changeCount > GIT_PANEL_LIST_VIEW_THRESHOLD;
   const canCommit = commitMsg.trim().length > 0 && hasChanges && !loading.commit;
 
   useEffect(() => {
@@ -77,16 +74,6 @@ function DiffModeInner({
       commitSubmitLockRef.current = false;
     }
   }, [loading.commit]);
-
-  useEffect(() => {
-    if (!preferListView && !isLargeChangeSet) {
-      return;
-    }
-    setUnstagedViewMode("list");
-    if (isLargeChangeSet && status.staged.length > 80) {
-      setStagedCollapsed(true);
-    }
-  }, [preferListView, isLargeChangeSet, status.staged.length]);
 
   const renderStagedRow = useCallback(
     (file: GitFileStatus) => (
@@ -108,7 +95,7 @@ function DiffModeInner({
     [onDiscard, onOpenFile, onStage],
   );
 
-  const useTreeView = unstagedViewMode === "tree" && !preferListView;
+  const useTreeView = unstagedViewMode === "tree";
 
   const treeDirPaths = useMemo(() => {
     if (!useTreeView) return [];
@@ -293,7 +280,7 @@ function DiffModeInner({
               -{status.deletions}
             </Text>
           </Space>
-          {hasChanges && !preferListView && (
+          {hasChanges && (
             <span className="git-view-toggle">
               <Button
                 type={unstagedViewMode === "tree" ? "primary" : "text"}
@@ -301,6 +288,7 @@ function DiffModeInner({
                 icon={<ApartmentOutlined />}
                 onClick={() => setUnstagedViewMode("tree")}
                 style={{ width: 24, height: 20, padding: 0, fontSize: 11 }}
+                aria-label="树状视图"
               />
               <Button
                 type={unstagedViewMode === "list" ? "primary" : "text"}
@@ -308,6 +296,7 @@ function DiffModeInner({
                 icon={<UnorderedListOutlined />}
                 onClick={() => setUnstagedViewMode("list")}
                 style={{ width: 24, height: 20, padding: 0, fontSize: 11 }}
+                aria-label="列表视图"
               />
             </span>
           )}
@@ -380,7 +369,7 @@ function DiffModeInner({
               更改 ({status.unstaged.length})
             </Text>
             <Space size={4} className="git-section-header-actions-space">
-              {unstagedViewMode === "tree" && (
+              {useTreeView && (
                 <HoverHint title={treeAllExpanded ? "收起目录树" : "展开目录树"} placement="top">
                   <Button
                     type="text"

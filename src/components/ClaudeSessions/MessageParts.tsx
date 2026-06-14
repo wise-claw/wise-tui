@@ -160,13 +160,22 @@ function pickInputString(input: Record<string, unknown>, keys: string[], maxLen 
   return "";
 }
 
+function truncateToolPreview(text: string, maxLen = 72): string {
+  const normalized = text.replace(/\s+/g, " ").trim();
+  if (!normalized) return "";
+  return normalized.length > maxLen ? `${normalized.slice(0, maxLen)}…` : normalized;
+}
+
 export function getToolDisplayInfo(part: ToolUsePart): { label: string; subtitle: string } {
   const input = part.input as Record<string, unknown>;
   const n = part.name.trim();
   if (!n && (part.output?.trim() || part.error?.trim())) {
+    const err = part.error?.trim() ?? "";
+    const out = part.output?.trim() ?? "";
+    const preview = err ? truncateToolPreview(err, 80) : truncateToolPreview(out, 80);
     return {
       label: "工具结果",
-      subtitle: part.id ? `调用 ID ${part.id}` : "",
+      subtitle: preview || (part.id ? `…${part.id.slice(-10)}` : ""),
     };
   }
   const lower = n.toLowerCase();
@@ -406,6 +415,8 @@ function messagePartContentEqual(a: MessagePart, b: MessagePart): boolean {
 const ToolUsePartDisplay = memo(function ToolUsePartDisplay({ part }: { part: ToolUsePart }) {
   const isSkill = isSkillToolPart(part);
   const info = useMemo(() => getToolDisplayInfo(part), [part]);
+  const isToolResult = !part.name.trim() && Boolean(part.output?.trim() || part.error?.trim());
+  const isErrorState = part.status === "error" || Boolean(part.error?.trim());
   const isBashOrExec = part.name.toLowerCase() === "bash" || part.name.toLowerCase() === "exec";
   const hasExpandableBody = Boolean(
     part.output?.trim() ||
@@ -455,8 +466,9 @@ const ToolUsePartDisplay = memo(function ToolUsePartDisplay({ part }: { part: To
 
   return (
     <div
-      className={`app-message-part app-message-part--tool${isSkill ? " app-message-part--skill" : ""}${expanded ? " app-message-part--expanded" : ""}`}
+      className={`app-message-part app-message-part--tool${isSkill ? " app-message-part--skill" : ""}${isToolResult ? " app-message-part--tool-result" : ""}${isErrorState ? " app-message-part--tool-error" : ""}${expanded ? " app-message-part--expanded" : ""}`}
       data-task-id={taskId || undefined}
+      data-tool-name={part.name.trim().toLowerCase() || "result"}
     >
       <div className="app-message-part-tool-head">
         <button
@@ -586,8 +598,17 @@ export const MessagePartsDisplay = memo(function MessagePartsDisplay({
     <div className="app-message-parts">
       {groups.map((group, groupIdx) => {
         if (group.type === "tool_group") {
+          const multiTools = group.parts.length > 1;
           return (
-            <div key={`tool-group-${groupIdx}`} className="app-message-parts__tool-group">
+            <div
+              key={`tool-group-${groupIdx}`}
+              className={`app-message-parts__tool-group${multiTools ? " app-message-parts__tool-group--multi" : ""}`}
+            >
+              {multiTools ? (
+                <div className="app-message-parts__tool-group-label" aria-hidden>
+                  工具链 · {group.parts.length}
+                </div>
+              ) : null}
               {group.parts.map(({ part, originalIndex }) => {
                 const key = `${part.type}-${originalIndex}`;
                 return <ToolUsePartDisplay key={key} part={part} />;
