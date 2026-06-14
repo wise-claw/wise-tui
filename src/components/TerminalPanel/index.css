@@ -59,6 +59,67 @@
   line-height: 1.2;
 }
 
+.terminal-header-action {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+  height: 20px;
+  margin: 0;
+  padding: 0 6px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ant-color-text-secondary);
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.terminal-header-action:hover:not(:disabled) {
+  color: var(--ant-color-text);
+  border-color: var(--ant-color-border);
+  background: var(--ant-color-fill-quaternary);
+}
+
+.terminal-header-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.terminal-header-action-label {
+  line-height: 1;
+}
+
+.terminal-header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.terminal-header-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  width: 20px;
+  height: 20px;
+  margin: 0;
+  border: none;
+  background: transparent;
+  color: var(--ant-color-text-tertiary);
+  font-size: 12px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+
+.terminal-header-icon-btn:hover {
+  color: var(--ant-color-text);
+}
+
 .terminal-header-close {
   display: inline-flex;
   align-items: center;

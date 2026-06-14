@@ -43,7 +43,7 @@
   },
   "build": {
     "buildCommand": "bunx tsc --noEmit 2>&1 | tail -30; echo \"EXIT=$?\"",
-    "testCommand": "cd /Users/sjl/Documents/github/wise/src-tauri && PATH=\"$HOME/.cargo/bin:$PATH\" rtk proxy cargo test --lib migration_registry_preserves_ordered_names 2>&1 | grep -E \"^\\s*(left|right|---|note|test|failures|--- |001_|FAILED|passed)\" | tail -15",
+    "testCommand": "rtk grep -nE \"group: \\\"omc\\\"|omc:\" src/utils/slashPopoverOptions.ts | head -5; echo \"---\"; bun test src/utils/slashPopoverOptions.test.ts src/utils/defaultInstructionSelectOptions.test.ts 2>&1 | tail -8",
     "lintCommand": null,
     "devCommand": "npm run dev",
     "scripts": {

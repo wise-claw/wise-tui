@@ -1,18 +1,26 @@
 // @refresh reset
+import { App } from "antd";
 import { useCallback, useEffect, useMemo, useRef } from "react";
 import { useTerminalTabs } from "../../hooks/useTerminalTabs";
 import { useTerminalSession } from "../../hooks/useTerminalSession";
 import type { Repository } from "../../types";
+import { writeTerminalSession } from "../../services/terminal";
+import { buildClaudeAutoModeTerminalInput } from "../../utils/terminalClaudeAutoMode";
 import { TerminalDock } from "./TerminalDock";
 import { TerminalPanel as TerminalPanelSurface } from "./TerminalPanel";
 import "./index.css";
+
+const TERMINAL_WORKSPACE_ID = "0";
 
 interface Props {
   repositoryPath: string;
   repositoryName: string;
   branch: string | undefined;
   dirty: boolean;
+  onCollapse: () => void;
   onClose: () => void;
+  fullscreen?: boolean;
+  onToggleFullscreen?: () => void;
 }
 
 export function TerminalPanel({
@@ -20,8 +28,12 @@ export function TerminalPanel({
   repositoryName,
   branch,
   dirty: _dirty,
+  onCollapse,
   onClose,
+  fullscreen = false,
+  onToggleFullscreen,
 }: Props) {
+  const { message } = App.useApp();
   const {
     terminals,
     activeTerminalId,
@@ -57,8 +69,10 @@ export function TerminalPanel({
     [closeAllTerminals, onClose],
   );
 
-  // 用 useMemo 让 activeRepository 在 path/name/branch 不变时保持引用稳定，
-  // 避免 useTerminalSession 的 effect 在每次渲染都重新建立 PTY 会话。
+  const handleCollapseTerminal = useCallback(() => {
+    onCollapse();
+  }, [onCollapse]);
+
   const activeRepository = useMemo<Repository | null>(() => {
     if (terminals.length === 0 || !activeTerminalId) {
       return null;
@@ -92,6 +106,27 @@ export function TerminalPanel({
     ensureTerminal();
   }, [ensureTerminal]);
 
+  const launchClaudeAutoMode = useCallback(async () => {
+    const terminalId = activeTerminalId ?? ensureTerminal();
+    if (!terminalId) {
+      message.warning("终端尚未就绪");
+      return;
+    }
+    if (terminalState.status !== "ready") {
+      message.warning("请等待终端连接完成后再启动 Claude");
+      return;
+    }
+    try {
+      await writeTerminalSession(
+        TERMINAL_WORKSPACE_ID,
+        terminalId,
+        buildClaudeAutoModeTerminalInput(),
+      );
+    } catch (error) {
+      message.error(error instanceof Error ? error.message : "无法在终端中启动 Claude");
+    }
+  }, [activeTerminalId, ensureTerminal, message, terminalState.status]);
+
   const terminalPanelNode = (
     <TerminalPanelSurface
       containerRef={terminalState.containerRef}
@@ -105,7 +140,12 @@ export function TerminalPanel({
       isOpen={true}
       activeTerminalId={activeTerminalId}
       onCloseTerminal={handleCloseTerminal}
+      onCollapse={handleCollapseTerminal}
       terminalNode={terminalPanelNode}
+      fullscreen={fullscreen}
+      onToggleFullscreen={onToggleFullscreen}
+      onLaunchClaudeAutoMode={() => void launchClaudeAutoMode()}
+      claudeAutoModeDisabled={terminalState.status !== "ready"}
     />
   );
 }

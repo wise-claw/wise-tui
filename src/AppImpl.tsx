@@ -310,6 +310,27 @@ export default function App() {
   const [dark, _setDark] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
   const [terminalCollapsed, setTerminalCollapsed] = useState(true);
+  const [terminalPanelMounted, setTerminalPanelMounted] = useState(false);
+
+  const handleToggleTerminal = useCallback(() => {
+    if (!terminalPanelMounted) {
+      setTerminalPanelMounted(true);
+      setTerminalCollapsed(false);
+      return;
+    }
+    setTerminalCollapsed((collapsed) => !collapsed);
+  }, [terminalPanelMounted]);
+
+  const handleCloseTerminalPanel = useCallback(() => {
+    setTerminalPanelMounted(false);
+    setTerminalCollapsed(true);
+  }, []);
+
+  const handleCollapseTerminal = useCallback(() => {
+    if (terminalPanelMounted) {
+      setTerminalCollapsed(true);
+    }
+  }, [terminalPanelMounted]);
   /** 中栏多屏模式屏数：1=单屏（关闭），2/4/6/8=多屏。 */
   const [paneCount, setPaneCount] = useState<PaneCount>(1);
   /** 多屏模式下额外窗格槽位（Pane 0 始终是 activeSession）。 */
@@ -2889,7 +2910,7 @@ export default function App() {
       // Control+`（物理 Backquote）：切换终端面板；仅用 Ctrl、不含 ⌘，与 macOS Control 一致
       if (e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey && (e.code === "Backquote" || e.key === "`")) {
         e.preventDefault();
-        setTerminalCollapsed((c) => !c);
+        handleToggleTerminal();
         return;
       }
       // ⌘F / Ctrl+F 与 ⌘⇧F / Ctrl+Shift+F：桌面版由主窗口聚焦时注册的 Tauri 快捷键派发事件
@@ -2913,7 +2934,7 @@ export default function App() {
     }
     window.addEventListener("keydown", handleGlobalKey, { capture: true });
     return () => window.removeEventListener("keydown", handleGlobalKey, { capture: true });
-  }, []);
+  }, [handleToggleTerminal]);
 
   useEffect(() => {
     function handleOpenTaskSplitPanel() {
@@ -3650,11 +3671,14 @@ export default function App() {
         onToggleRightPanel: handleToggleRightPanel,
         rightPanelDefaultCollapsed,
         onSetRightPanelDefaultCollapsed: handleSetRightPanelDefaultCollapsed,
-        onToggleTerminal: () => setTerminalCollapsed((c) => !c),
+        onToggleTerminal: handleToggleTerminal,
+        onCollapseTerminal: handleCollapseTerminal,
+        onCloseTerminalPanel: handleCloseTerminalPanel,
         onSearch: openFilenameSearchPalette,
         collapsed,
         rightCollapsed: effectiveRightCollapsed,
         terminalCollapsed,
+        terminalPanelMounted,
         onOpenWorkflowConfig: openWorkflowConfigFromSidebar,
         onOpenBuiltinAssistant: openBuiltinAssistant,
         onActivateAssistant: activateAssistant,

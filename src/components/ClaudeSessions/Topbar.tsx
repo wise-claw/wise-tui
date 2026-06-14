@@ -172,6 +172,7 @@ export interface TopbarProps {
   fileTreeRailOpen?: boolean;
   rightCollapsed?: boolean;
   terminalCollapsed?: boolean;
+  terminalPanelMounted?: boolean;
   onAutoFixRunError?: (prompt: string) => void | Promise<void>;
   /** 多屏模式屏数 */
   paneCount?: PaneCount;
@@ -198,6 +199,7 @@ export const Topbar = memo(function Topbar({
   fileTreeRailOpen = false,
   rightCollapsed,
   terminalCollapsed,
+  terminalPanelMounted = false,
   onAutoFixRunError,
   paneCount = 1,
   onChangePaneCount,
@@ -430,7 +432,12 @@ export const Topbar = memo(function Topbar({
           </Dropdown>
         )}
         {onToggleTerminal && (
-          <TopbarBtn icon={<IconTerminal />} label="终端" active={!terminalCollapsed} onClick={onToggleTerminal} />
+          <TopbarBtn
+            icon={<IconTerminal />}
+            label="终端"
+            active={terminalPanelMounted && !terminalCollapsed}
+            onClick={onToggleTerminal}
+          />
         )}
         <div className="app-topbar-divider" />
         {topbarToolsReady ? (

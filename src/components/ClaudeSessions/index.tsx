@@ -11,7 +11,7 @@ import type {
   SessionConversationTaskItem,
 } from "../../types";
 import { Spin } from "antd";
-import { lazy, memo, Suspense, useEffect, useMemo, useRef } from "react";
+import { lazy, memo, Suspense, useEffect, useMemo, useRef, useState } from "react";
 import {
   getClaudeSessionsSnapshot,
   useClaudeSessionsStructureKey,
@@ -132,10 +132,13 @@ interface Props {
   rightPanelDefaultCollapsed?: boolean;
   onSetRightPanelDefaultCollapsed?: (collapsed: boolean) => void;
   onToggleTerminal?: () => void;
+  onCollapseTerminal?: () => void;
+  onCloseTerminalPanel?: () => void;
   onSearch?: () => void;
   collapsed?: boolean;
   rightCollapsed?: boolean;
   terminalCollapsed?: boolean;
+  terminalPanelMounted?: boolean;
   onOpenWorkflowConfig?: () => void;
   /** 从会话快捷条「更多」直达指定内置助手对话页 */
   onOpenBuiltinAssistant?: (assistantId: string) => void;
@@ -267,10 +270,13 @@ function ClaudeSessionsShell({
   rightPanelDefaultCollapsed,
   onSetRightPanelDefaultCollapsed,
   onToggleTerminal,
+  onCollapseTerminal,
+  onCloseTerminalPanel,
   onSearch,
   collapsed,
   rightCollapsed,
   terminalCollapsed,
+  terminalPanelMounted = false,
   onAutoFixRunError: onAutoFixRunErrorFromProps,
   onOpenWorkflowConfig,
   onOpenBuiltinAssistant,
@@ -310,7 +316,14 @@ function ClaudeSessionsShell({
   missionContext,
 }: Props) {
   const structureKey = useClaudeSessionsStructureKey();
+  const [terminalFullscreen, setTerminalFullscreen] = useState(false);
   const incomingSessions = useMemo(() => getClaudeSessionsSnapshot(), [structureKey]);
+
+  useEffect(() => {
+    if (terminalCollapsed) {
+      setTerminalFullscreen(false);
+    }
+  }, [terminalCollapsed]);
 
   const sessions = useMemo(
     () =>
@@ -608,7 +621,14 @@ function ClaudeSessionsShell({
   ]);
 
   return (
-    <div className="app-claude-sessions">
+    <div
+      className={
+        terminalFullscreen
+          ? "app-claude-sessions app-claude-sessions--terminal-fullscreen"
+          : "app-claude-sessions"
+      }
+    >
+      <div className="app-claude-sessions__conversation-column">
       {/* Topbar always visible */}
       {!hideTopbar && (
         <Topbar
@@ -637,6 +657,7 @@ function ClaudeSessionsShell({
           collapsed={collapsed}
           rightCollapsed={rightCollapsed}
           terminalCollapsed={terminalCollapsed}
+          terminalPanelMounted={terminalPanelMounted}
           onAutoFixRunError={(prompt) => onAutoFixRunErrorFromProps?.(prompt)}
           paneCount={paneCount}
           onChangePaneCount={onChangePaneCount}
@@ -731,24 +752,37 @@ function ClaudeSessionsShell({
           mainSessionForDataLink={mainSessionForDataLink}
         />
       ) : null}
+      </div>
 
-      {/* Terminal Panel：按需加载 xterm，避免进入会话页即拉取 terminal-vendor */}
-      {!terminalCollapsed && chatContextRepository && onToggleTerminal && (
-        <Suspense
-          fallback={
-            <div className="app-claude-sessions-terminal-lazy-fallback" role="status" aria-label="终端加载中">
-              <Spin size="small" />
-            </div>
+      {/* Terminal Panel：按需加载 xterm；收起时仅隐藏 UI，保持 PTY 会话 */}
+      {terminalPanelMounted && chatContextRepository && onToggleTerminal && (
+        <div
+          className={
+            terminalCollapsed
+              ? "app-claude-sessions-terminal-host app-claude-sessions-terminal-host--collapsed"
+              : "app-claude-sessions-terminal-host"
           }
+          aria-hidden={terminalCollapsed}
         >
-          <TerminalPanelLazy
-            repositoryPath={chatContextRepository.path}
-            repositoryName={chatContextRepository.name}
-            branch={chatContextRepository.branch}
-            dirty={false}
-            onClose={onToggleTerminal}
-          />
-        </Suspense>
+          <Suspense
+            fallback={
+              <div className="app-claude-sessions-terminal-lazy-fallback" role="status" aria-label="终端加载中">
+                <Spin size="small" />
+              </div>
+            }
+          >
+            <TerminalPanelLazy
+              repositoryPath={chatContextRepository.path}
+              repositoryName={chatContextRepository.name}
+              branch={chatContextRepository.branch}
+              dirty={false}
+              onCollapse={onCollapseTerminal ?? onToggleTerminal}
+              onClose={onCloseTerminalPanel ?? onToggleTerminal}
+              fullscreen={terminalFullscreen}
+              onToggleFullscreen={() => setTerminalFullscreen((value) => !value)}
+            />
+          </Suspense>
+        </div>
       )}
     </div>
   );

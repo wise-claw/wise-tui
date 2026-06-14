@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"git checkout stash@{0} -- src/utils/slashPopoverOptions.ts src/utils/slashPopoverOptions.test.ts src/utils/defaultInstructionSelectOptions.ts .omc/autopilot/spec.md 2>&1; echo \\\"---\\\"; rtk...",
+  "error": "Exit code 1\n---\n0",
+  "timestamp": "2026-06-14T00:30:11.289Z",
+  "retry_count": 1
+}

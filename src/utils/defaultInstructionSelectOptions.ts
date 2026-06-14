@@ -6,6 +6,7 @@ import {
   resolveComposerDefaultInstructionOutbound,
 } from "./resolveComposerDefaultInstructionOutbound";
 import {
+  OMC_COMMANDS,
   SLASH_GROUP_TITLES,
   buildRuntimeBuiltinCommands,
   mapSlashCatalogToOptions,
@@ -26,6 +27,8 @@ export interface DefaultInstructionSelectOptionGroup {
 const CLAUDE_RESERVED_LABELS = new Set(
   CLAUDE_BUILTIN_SLASH_COMMANDS.map((cmd) => cmd.label.trim().toLowerCase()),
 );
+
+const OMC_VIRTUAL_GROUP_TITLE = "oh-my-claudecode";
 
 const GROUP_ORDER = [
   "oh-my-claudecode",
@@ -94,7 +97,12 @@ export function buildDefaultInstructionSelectOptionGroups(
     snapshot.detectedPluginCommands.map((cmd) => cmd.label.trim().toLowerCase()),
   );
   const runtimeBuiltins = buildRuntimeBuiltinCommands(snapshot.omcInstalled, detectedLabels);
+  const omcCommands: SlashOption[] = snapshot.omcInstalled
+    ? OMC_COMMANDS.filter((cmd) => !detectedLabels.has(cmd.label.trim().toLowerCase()))
+    : [];
+  const omcLabelSet = new Set(omcCommands.map((cmd) => cmd.label.trim().toLowerCase()));
   const allCommands = mergeDefaultInstructionCommands([
+    ...omcCommands,
     ...runtimeBuiltins,
     ...catalogOptions.detectedPluginSlashOptions,
     ...catalogOptions.skillSlashOptions,
@@ -102,8 +110,11 @@ export function buildDefaultInstructionSelectOptionGroups(
 
   const grouped = new Map<string, DefaultInstructionSelectOption[]>();
   for (const cmd of allCommands) {
+    const isOmc = omcLabelSet.has(cmd.label.trim().toLowerCase());
     const groupKey = cmd.group ?? "claude";
-    const title = SLASH_GROUP_TITLES[groupKey] ?? groupKey;
+    const title = isOmc
+      ? OMC_VIRTUAL_GROUP_TITLE
+      : (SLASH_GROUP_TITLES[groupKey] ?? groupKey);
     const option = toSelectOption(cmd, snapshot);
     const list = grouped.get(title) ?? [];
     if (list.some((item) => item.value.toLowerCase() === option.value.toLowerCase())) continue;

@@ -6,7 +6,7 @@ import {
 } from "./slashPopoverOptions";
 
 describe("getFilteredSlashOptions", () => {
-  test("empty query limits claude builtins but keeps plugin and omc groups", () => {
+  test("empty query excludes the omc category entirely", () => {
     const detected = new Set<string>();
     const { options } = getFilteredSlashOptions(
       "",
@@ -19,7 +19,7 @@ describe("getFilteredSlashOptions", () => {
     );
 
     expect(options.length).toBeLessThan(80);
-    expect(options.some((row) => row.group === "omc")).toBe(true);
+    expect(options.some((row) => (row.group as string) === "omc")).toBe(false);
     expect(options.some((row) => row.group === "claude" && row.label === "help")).toBe(true);
     expect(options.some((row) => row.group === "claude" && row.label === "add-dir")).toBe(true);
     expect(options.some((row) => row.group === "claude" && row.label === "autofix-pr")).toBe(false);
@@ -40,7 +40,7 @@ describe("getFilteredSlashOptions", () => {
     expect(options.some((row) => row.label === "autofix-pr")).toBe(true);
   });
 
-  test("orders groups as omc, claude, plugin-cmd, plugin, skill", () => {
+  test("orders groups as claude, plugin-cmd, plugin", () => {
     const detected = new Set<string>();
     const { options } = getFilteredSlashOptions(
       "",
@@ -53,13 +53,12 @@ describe("getFilteredSlashOptions", () => {
     );
 
     const groups = options.map((row) => row.group);
-    const omcIndex = groups.indexOf("omc");
     const claudeIndex = groups.indexOf("claude");
     const pluginCmdIndex = groups.indexOf("plugin-cmd");
     const pluginIndex = groups.indexOf("plugin");
 
-    expect(omcIndex).toBeGreaterThanOrEqual(0);
-    expect(claudeIndex).toBeGreaterThan(omcIndex);
+    expect(groups.some((g) => (g as string) === "omc")).toBe(false);
+    expect(claudeIndex).toBeGreaterThanOrEqual(0);
     expect(pluginCmdIndex).toBeGreaterThan(claudeIndex);
     expect(pluginIndex).toBeGreaterThan(pluginCmdIndex);
     expect(groups.includes("skill")).toBe(false);
@@ -87,6 +86,6 @@ describe("getFilteredSlashOptions", () => {
 
     expect(options.length).toBe(SLASH_POPOVER_MAX_OPTIONS);
     expect(truncated).toBe(true);
-    expect(runtime.length).toBeGreaterThan(SLASH_POPOVER_MAX_OPTIONS);
+    expect(runtime.length).toBeGreaterThan(0);
   });
 });

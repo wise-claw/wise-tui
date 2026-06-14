@@ -19,7 +19,7 @@ export interface SlashOption {
   path?: string;
   name?: string;
   workflowId?: string;
-  group?: "omc" | "claude" | "skill" | "plugin" | "plugin-cmd";
+  group?: "claude" | "skill" | "plugin" | "plugin-cmd";
   executionEngine?: SessionExecutionEngine;
   executionEngineAvailable?: boolean;
 }
@@ -57,32 +57,32 @@ const CLAUDE_BUILTIN_COMMANDS: SlashOption[] = CLAUDE_BUILTIN_SLASH_COMMANDS.map
 }));
 
 export const OMC_COMMANDS: SlashOption[] = [
-  { type: "command", group: "omc", label: "ask", description: "OMC 多模型咨询路由" },
-  { type: "command", group: "omc", label: "autopilot", description: "OMC 自动执行闭环" },
-  { type: "command", group: "omc", label: "autoresearch", description: "OMC 持续研究迭代" },
-  { type: "command", group: "omc", label: "cancel", description: "取消当前 OMC 模式" },
-  { type: "command", group: "omc", label: "ccg", description: "Claude/Codex/Gemini 编排" },
-  { type: "command", group: "omc", label: "debug", description: "OMC 会话诊断" },
-  { type: "command", group: "omc", label: "deep-dive", description: "链路深挖与访谈" },
-  { type: "command", group: "omc", label: "deep-interview", description: "需求深访谈" },
-  { type: "command", group: "omc", label: "deepinit", description: "深度初始化项目上下文" },
-  { type: "command", group: "omc", label: "doctor", description: "OMC 安装/状态自检" },
-  { type: "command", group: "omc", label: "hud", description: "配置 HUD 展示" },
-  { type: "command", group: "omc", label: "mcp-setup", description: "配置 MCP 服务" },
-  { type: "command", group: "omc", label: "plan", description: "OMC 规划模式" },
-  { type: "command", group: "omc", label: "ralph", description: "自循环执行直到完成" },
-  { type: "command", group: "omc", label: "ralplan", description: "Ralph 共识规划入口" },
-  { type: "command", group: "omc", label: "release", description: "发布流程助手" },
-  { type: "command", group: "omc", label: "remember", description: "沉淀可复用知识" },
-  { type: "command", group: "omc", label: "team", description: "多 Agent 协作执行" },
-  { type: "command", group: "omc", label: "trace", description: "证据驱动追踪分析" },
-  { type: "command", group: "omc", label: "ultraqa", description: "高强度 QA 循环" },
-  { type: "command", group: "omc", label: "ultrawork", description: "高吞吐并行执行" },
-  { type: "command", group: "omc", label: "verify", description: "结果核验与验收" },
-  { type: "command", group: "omc", label: "review", description: "代码审查工作流" },
-  { type: "command", group: "omc", label: "security-review", description: "安全审查工作流" },
-  { type: "command", group: "omc", label: "simplify", description: "代码简化与整洁" },
-  { type: "command", group: "omc", label: "update-config", description: "更新 OMC/Claude 配置" },
+  { type: "command", label: "ask", description: "OMC 多模型咨询路由" },
+  { type: "command", label: "autopilot", description: "OMC 自动执行闭环" },
+  { type: "command", label: "autoresearch", description: "OMC 持续研究迭代" },
+  { type: "command", label: "cancel", description: "取消当前 OMC 模式" },
+  { type: "command", label: "ccg", description: "Claude/Codex/Gemini 编排" },
+  { type: "command", label: "debug", description: "OMC 会话诊断" },
+  { type: "command", label: "deep-dive", description: "链路深挖与访谈" },
+  { type: "command", label: "deep-interview", description: "需求深访谈" },
+  { type: "command", label: "deepinit", description: "深度初始化项目上下文" },
+  { type: "command", label: "doctor", description: "OMC 安装/状态自检" },
+  { type: "command", label: "hud", description: "配置 HUD 展示" },
+  { type: "command", label: "mcp-setup", description: "配置 MCP 服务" },
+  { type: "command", label: "plan", description: "OMC 规划模式" },
+  { type: "command", label: "ralph", description: "自循环执行直到完成" },
+  { type: "command", label: "ralplan", description: "Ralph 共识规划入口" },
+  { type: "command", label: "release", description: "发布流程助手" },
+  { type: "command", label: "remember", description: "沉淀可复用知识" },
+  { type: "command", label: "team", description: "多 Agent 协作执行" },
+  { type: "command", label: "trace", description: "证据驱动追踪分析" },
+  { type: "command", label: "ultraqa", description: "高强度 QA 循环" },
+  { type: "command", label: "ultrawork", description: "高吞吐并行执行" },
+  { type: "command", label: "verify", description: "结果核验与验收" },
+  { type: "command", label: "review", description: "代码审查工作流" },
+  { type: "command", label: "security-review", description: "安全审查工作流" },
+  { type: "command", label: "simplify", description: "代码简化与整洁" },
+  { type: "command", label: "update-config", description: "更新 OMC/Claude 配置" },
 ];
 
 const PLUGIN_SUBCOMMANDS: SlashOption[] = COMPOSER_PLUGIN_SLASH_SUBCOMMANDS.map((cmd) => ({
@@ -116,10 +116,7 @@ export function buildRuntimeBuiltinCommands(
   if (runtimeBuiltinCache?.key === key) {
     return runtimeBuiltinCache.value;
   }
-  const omc = omcInstalled
-    ? OMC_COMMANDS.filter((cmd) => !detectedPluginLabels.has(cmd.label.trim().toLowerCase()))
-    : [];
-  const value = mergeSlashCommandOptions([...CLAUDE_BUILTIN_COMMANDS, ...omc]);
+  const value = mergeSlashCommandOptions([...CLAUDE_BUILTIN_COMMANDS]);
   runtimeBuiltinCache = { key, value };
   return value;
 }
@@ -204,16 +201,13 @@ function buildPluginSlashOptions(
 }
 
 function splitRuntimeBuiltins(runtimeBuiltins: SlashOption[]): {
-  omc: SlashOption[];
   claude: SlashOption[];
 } {
-  const omc: SlashOption[] = [];
   const claude: SlashOption[] = [];
   for (const row of runtimeBuiltins) {
-    if (row.group === "omc") omc.push(row);
-    else if (row.group === "claude") claude.push(row);
+    if (row.group === "claude") claude.push(row);
   }
-  return { omc, claude };
+  return { claude };
 }
 
 function filterSlashCommandRows(rows: SlashOption[], query: string): SlashOption[] {
@@ -247,11 +241,10 @@ export function getFilteredSlashOptions(
   detectedPluginLabels: ReadonlySet<string>,
 ): SlashFilteredResult {
   const runtimeBuiltins = buildRuntimeBuiltinCommands(omcInstalled, detectedPluginLabels);
-  const { omc, claude } = splitRuntimeBuiltins(runtimeBuiltins);
+  const { claude } = splitRuntimeBuiltins(runtimeBuiltins);
   const trimmedQuery = query.trim();
   const hasQuery = trimmedQuery.length > 0;
 
-  const omcFiltered = filterSlashCommandRows(omc, query);
   const claudeFiltered = hasQuery
     ? filterSlashCommandRows(claude, query)
     : claude.filter((row) => SLASH_EMPTY_QUERY_CLAUDE_HINTS.has(row.label.trim().toLowerCase()));
@@ -264,7 +257,6 @@ export function getFilteredSlashOptions(
   const skillsFiltered = filterSkillRows(skillSlashOptions, query);
 
   const merged = [
-    ...omcFiltered,
     ...claudeFiltered,
     ...detectedFiltered,
     ...pluginFiltered,
@@ -298,7 +290,6 @@ export function mapSlashCatalogToOptions(input: {
 }
 
 export const SLASH_GROUP_TITLES: Record<NonNullable<SlashOption["group"]>, string> = {
-  omc: "oh-my-claudecode",
   claude: "Claude 内置",
   "plugin-cmd": "已安装插件命令",
   plugin: "插件",
@@ -316,7 +307,7 @@ export function buildSlashOptionSections(options: SlashOption[]): Array<{
     items: Array<{ option: SlashOption; flatIndex: number }>;
   }> = [];
 
-  for (const group of ["omc", "claude", "plugin-cmd", "plugin", "skill"] as const) {
+  for (const group of ["claude", "plugin-cmd", "plugin", "skill"] as const) {
     const items = options
       .map((option, index) => ({ option, index }))
       .filter(({ option }) => option.type === "command" && option.group === group)
