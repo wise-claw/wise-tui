@@ -1,0 +1,11 @@
+{
+  "active": true,
+  "started_at": "2026-06-14T02:31:33.376Z",
+  "original_prompt": "/oh-my-claudecode:autopilot 全链路分析中的序列图、洞察可根据轮次进行过滤选择\n\n附图：@/Users/sjl/.wise/composer-images/wise/83a8c669-9f63-49e9-bf99-63ad6fefd124-image.png",
+  "session_id": "2357761d-9df0-4cbb-bc09-ebb24f0e4c95",
+  "project_path": "/Users/sjl/Documents/github/wise",
+  "reinforcement_count": 0,
+  "awaiting_confirmation": true,
+  "awaiting_confirmation_set_at": "2026-06-14T02:31:33.376Z",
+  "last_checked_at": "2026-06-14T02:31:33.376Z"
+}

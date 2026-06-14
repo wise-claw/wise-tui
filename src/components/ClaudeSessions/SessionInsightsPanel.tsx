@@ -24,8 +24,10 @@ import {
 } from "../../utils/sessionInsights";
 import { ClaudeUsageTrendSection } from "./ClaudeUsageTrendSection";
 import {
+  buildSessionInsightsAiOptimizationPrompt,
   buildSessionInsightsAiPrompt,
   buildSessionInsightsMarkdownReport,
+  buildSessionInsightsProblemsCopyText,
 } from "../../utils/sessionInsightsReport";
 
 const { Text } = Typography;
@@ -139,6 +141,7 @@ export const SessionInsightsPanel = memo(function SessionInsightsPanel({
   onRequestAiAnalysis,
 }: Props) {
   const [aiSending, setAiSending] = useState(false);
+  const [aiOptimizeSending, setAiOptimizeSending] = useState(false);
   const { overview, slowestTurns, toolHotspots, recommendations } = insights;
   const tokens = overview.tokens;
   const tokenTotal =
@@ -180,6 +183,16 @@ export const SessionInsightsPanel = memo(function SessionInsightsPanel({
   );
 
   const { copied, copy } = useCopyToClipboard();
+  const { copied: problemsCopied, copy: copyProblems } = useCopyToClipboard();
+
+  const buildProblemsCopyText = useCallback(
+    () =>
+      buildSessionInsightsProblemsCopyText(insights, {
+        repositoryName: sessionLabel,
+        claudeSessionId,
+      }),
+    [insights, sessionLabel, claudeSessionId],
+  );
 
   const handleExportReport = useCallback(async () => {
     const text = buildReportMarkdown();
@@ -211,6 +224,29 @@ export const SessionInsightsPanel = memo(function SessionInsightsPanel({
       setAiSending(false);
     }
   }, [insights, resolveLinkMetaBundle, onRequestAiAnalysis]);
+
+  const handleAiOptimization = useCallback(async () => {
+    if (!onRequestAiAnalysis) {
+      message.warning("当前无法向主会话发送分析请求");
+      return;
+    }
+    if (recommendations.length === 0) {
+      message.info("当前未检测到需要优化的问题");
+      return;
+    }
+    setAiOptimizeSending(true);
+    try {
+      const prompt = buildSessionInsightsAiOptimizationPrompt(insights, {
+        repositoryName: sessionLabel,
+        claudeSessionId,
+      });
+      await onRequestAiAnalysis(prompt);
+    } catch (e) {
+      message.error(`发送失败：${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setAiOptimizeSending(false);
+    }
+  }, [insights, recommendations.length, sessionLabel, claudeSessionId, onRequestAiAnalysis]);
 
   return (
     <div className="app-session-insights">
@@ -389,11 +425,49 @@ export const SessionInsightsPanel = memo(function SessionInsightsPanel({
       <ClaudeUsageTrendSection repositoryPath={repositoryPath} />
 
       <section className="app-session-insights__section">
-        <Text className="app-session-insights__section-title">优化建议</Text>
+        <div className="app-session-insights__section-head">
+          <Text className="app-session-insights__section-title">
+            优化建议
+            {recommendations.length > 0 ? (
+              <Text type="secondary" className="app-session-insights__section-count">
+                {" "}
+                · {recommendations.length} 项
+              </Text>
+            ) : null}
+          </Text>
+          <Space size={4} wrap className="app-session-insights__section-actions">
+            <Button
+              size="small"
+              icon={<CopyFeedbackIcon copied={problemsCopied} />}
+              disabled={recommendations.length === 0}
+              onClick={() => void copyProblems(buildProblemsCopyText())}
+            >
+              {problemsCopied ? "已复制" : "复制问题"}
+            </Button>
+            {onRequestAiAnalysis ? (
+              <Button
+                size="small"
+                type="primary"
+                icon={<RobotOutlined />}
+                loading={aiOptimizeSending}
+                disabled={recommendations.length === 0}
+                onClick={() => void handleAiOptimization()}
+              >
+                AI 优化
+              </Button>
+            ) : null}
+          </Space>
+        </div>
         <div className="app-session-insights__rec-list">
-          {recommendations.map((r) => (
-            <RecommendationItem key={r.id} item={r} onJumpTurn={onJumpTurn} />
-          ))}
+          {recommendations.length === 0 ? (
+            <Text type="secondary" className="app-session-insights__rec-empty">
+              当前未检测到需要优化的问题
+            </Text>
+          ) : (
+            recommendations.map((r) => (
+              <RecommendationItem key={r.id} item={r} onJumpTurn={onJumpTurn} />
+            ))
+          )}
         </div>
       </section>
     </div>

@@ -20,6 +20,56 @@ const SEVERITY_LABEL: Record<SessionInsightRecommendation["severity"], string> =
   info: "提示",
 };
 
+function formatRecommendationLines(
+  r: SessionInsightRecommendation,
+  index: number,
+): string[] {
+  const lines: string[] = [];
+  lines.push(
+    `### ${index}. [${SEVERITY_LABEL[r.severity]} · ${CATEGORY_LABEL[r.category]}] ${r.title}`,
+  );
+  lines.push("");
+  lines.push(`**描述**：${r.description}`);
+  if (r.evidence) lines.push(`**依据**：${r.evidence}`);
+  if (r.turnIndex != null) lines.push(`**关联轮次**：${r.turnIndex}`);
+  lines.push("");
+  return lines;
+}
+
+function buildSessionContextLines(
+  insights: SessionInsightsResult,
+  meta?: {
+    repositoryName?: string;
+    claudeSessionId?: string | null;
+  },
+): string[] {
+  const { overview } = insights;
+  const tokens = overview.tokens;
+  const total = tokenTotal(tokens);
+  const lines: string[] = ["## 会话概况", ""];
+  if (meta?.repositoryName) lines.push(`- **仓库**：${meta.repositoryName}`);
+  if (meta?.claudeSessionId) lines.push(`- **Claude Session**：\`${meta.claudeSessionId}\``);
+  lines.push(
+    `- **轮次 / 耗时**：${overview.turnCount} 轮 · 总 ${formatDurationMs(overview.totalDurationMs)} · 均 ${formatDurationMs(overview.avgTurnDurationMs)}/轮`,
+  );
+  lines.push(`- **工具调用**：${overview.toolCallCount}`);
+  lines.push(
+    `- **HTTP 观测/推断**：${overview.httpObservedCount} / ${overview.httpInferredCount}`,
+  );
+  if (overview.p95HttpLatencyMs != null) {
+    lines.push(`- **HTTP P95**：${formatDurationMs(overview.p95HttpLatencyMs)}`);
+  }
+  if (overview.p95TtftMs != null) {
+    lines.push(`- **TTFT P95**：${formatDurationMs(overview.p95TtftMs)}`);
+  }
+  if (total > 0) {
+    lines.push(`- **Token 合计**：${formatTokenCount(total)}`);
+    lines.push(`- **Cache 命中率**：${formatCacheHitRate(overview.cacheHitRate)}`);
+  }
+  lines.push("");
+  return lines;
+}
+
 function tokenTotal(
   t: SessionInsightsResult["overview"]["tokens"],
 ): number {
@@ -116,16 +166,9 @@ export function buildSessionInsightsMarkdownReport(
 
   lines.push("## 优化建议");
   lines.push("");
-  for (const r of recommendations) {
-    lines.push(
-      `### [${SEVERITY_LABEL[r.severity]} · ${CATEGORY_LABEL[r.category]}] ${r.title}`,
-    );
-    lines.push("");
-    lines.push(r.description);
-    if (r.evidence) lines.push("");
-    if (r.evidence) lines.push(`> 依据：${r.evidence}`);
-    lines.push("");
-  }
+  recommendations.forEach((r, i) => {
+    lines.push(...formatRecommendationLines(r, i + 1));
+  });
 
   const cov = overview.dataCoverage;
   lines.push("## 数据覆盖");
@@ -140,6 +183,74 @@ export function buildSessionInsightsMarkdownReport(
   lines.push("");
 
   return lines.join("\n");
+}
+
+/** 将会话洞察中检测到的全部问题格式化为可复制文本（供外部 AI 优化）。 */
+export function buildSessionInsightsProblemsCopyText(
+  insights: SessionInsightsResult,
+  meta?: {
+    repositoryName?: string;
+    claudeSessionId?: string | null;
+  },
+): string {
+  const { recommendations } = insights;
+  const lines: string[] = [
+    "# Claude Code 会话优化问题清单",
+    "",
+    ...buildSessionContextLines(insights, meta),
+    `## 检测到的问题（共 ${recommendations.length} 项）`,
+    "",
+  ];
+
+  if (recommendations.length === 0) {
+    lines.push("当前规则引擎未检测到需要优化的问题。");
+    lines.push("");
+  } else {
+    recommendations.forEach((r, i) => {
+      lines.push(...formatRecommendationLines(r, i + 1));
+    });
+  }
+
+  lines.push("---");
+  lines.push("");
+  lines.push(
+    "请针对以上每条问题给出可执行的优化建议，包括：根因分析、具体做法、预期收益（速度/Token/成本）与验证方式。",
+  );
+
+  return lines.join("\n");
+}
+
+/** 供主会话 Claude 针对检测问题生成优化方案的 prompt。 */
+export function buildSessionInsightsAiOptimizationPrompt(
+  insights: SessionInsightsResult,
+  meta?: {
+    repositoryName?: string;
+    claudeSessionId?: string | null;
+  },
+): string {
+  const problems = buildSessionInsightsProblemsCopyText(insights, meta);
+  const parts: string[] = [
+    "你是 Claude Code 使用效率与成本优化顾问。以下是从 **会话全链路分析 · 洞察** 中规则引擎检测到的 **全部问题**。",
+    "",
+    "请针对每条问题给出深度、可执行的优化方案。",
+    "",
+    "输出要求（Markdown，中文）：",
+    "1. **问题清单摘要**（按严重程度 P0/P1/P2 排序）",
+    "2. **逐条优化方案**（每条含：根因分析、具体步骤、预期收益、注意事项）",
+    "3. **综合优化路径**（可并行 vs 需串行、短期 vs 长期）",
+    "4. **验证与度量**（如何确认优化生效，建议观测指标）",
+    "",
+    "约束：",
+    "- 仅基于提供的数据推断，缺失数据处标注「未观测」",
+    "- 建议必须可执行，避免空泛",
+    "- 不要调用工具或读取仓库文件",
+    "",
+    "---",
+    "",
+    problems,
+  ];
+
+  return parts.join("\n");
 }
 
 /** 供主会话 Claude 深度解读的 prompt（结构化摘要 + 可选链路元数据）。 */

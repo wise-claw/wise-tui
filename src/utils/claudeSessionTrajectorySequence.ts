@@ -700,3 +700,23 @@ export function filterSequenceEventsForTurn(
   const counter = { value: 0 };
   return events.filter((ev) => sequenceEventTurnIndex(ev, counter) === turnIndex);
 }
+
+/**
+ * 提取一段连续轮次区间的序列图事件，闭区间 [fromTurn, toTurn]。
+ * - `fromTurn` / `toTurn` 必须 >= 1；当 `toTurn < fromTurn` 或 `toTurn < 1` 时返回空。
+ * - 单轮等价于 `filterSequenceEventsForTurn(events, n)`，可用 `(n, n)` 调用。
+ */
+export function filterSequenceEventsForTurnRange(
+  events: readonly SequenceEvent[],
+  fromTurn: number,
+  toTurn: number,
+): SequenceEvent[] {
+  if (!Number.isFinite(fromTurn) || !Number.isFinite(toTurn)) return [];
+  if (toTurn < 1 || fromTurn < 1) return [];
+  if (toTurn < fromTurn) return [];
+  const counter = { value: 0 };
+  return events.filter((ev) => {
+    const idx = sequenceEventTurnIndex(ev, counter);
+    return idx >= fromTurn && idx <= toTurn;
+  });
+}

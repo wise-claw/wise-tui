@@ -5,6 +5,7 @@ import {
   buildSequenceEventsFromMessages,
   buildTrajectorySequenceModel,
   filterSequenceEventsForTurn,
+  filterSequenceEventsForTurnRange,
   mergeSequenceEventsByTime,
   parseTrajectoryJsonlSupplemental,
   suppressInferredApiRequestsWhenObserved,
@@ -230,6 +231,51 @@ describe("claudeSessionTrajectorySequence", () => {
     expect(turn1.some((e) => e.subtitle === "c")).toBe(false);
     expect(turn2.some((e) => e.kind === "user_input" && e.subtitle === "c")).toBe(true);
     expect(turn2.some((e) => e.kind === "assistant_text")).toBe(true);
+  });
+
+  it("filterSequenceEventsForTurnRange selects an inclusive range of turns", () => {
+    const messages: ClaudeMessage[] = [
+      { id: 1, role: "user", content: "a", parts: [{ type: "text", text: "a" }], timestamp: 1000 },
+      {
+        id: 2,
+        role: "assistant",
+        content: "b",
+        parts: [{ type: "text", text: "b" }],
+        timestamp: 2000,
+      },
+      { id: 3, role: "user", content: "c", parts: [{ type: "text", text: "c" }], timestamp: 3000 },
+      {
+        id: 4,
+        role: "assistant",
+        content: "d",
+        parts: [{ type: "text", text: "d" }],
+        timestamp: 4000,
+      },
+      { id: 5, role: "user", content: "e", parts: [{ type: "text", text: "e" }], timestamp: 5000 },
+      {
+        id: 6,
+        role: "assistant",
+        content: "f",
+        parts: [{ type: "text", text: "f" }],
+        timestamp: 6000,
+      },
+    ];
+    const events = buildSequenceEventsFromMessages(messages);
+    const all = filterSequenceEventsForTurnRange(events, 1, 3);
+    expect(all.length).toBe(events.length);
+
+    const firstTwo = filterSequenceEventsForTurnRange(events, 1, 2);
+    expect(firstTwo.some((e) => e.kind === "user_input" && e.subtitle === "a")).toBe(true);
+    expect(firstTwo.some((e) => e.kind === "user_input" && e.subtitle === "c")).toBe(true);
+    expect(firstTwo.some((e) => e.kind === "user_input" && e.subtitle === "e")).toBe(false);
+
+    const lastOnly = filterSequenceEventsForTurnRange(events, 3, 3);
+    expect(lastOnly.length).toBeGreaterThan(0);
+    expect(lastOnly.every((e) => e.subtitle !== "a" && e.subtitle !== "c")).toBe(true);
+
+    expect(filterSequenceEventsForTurnRange(events, 2, 1).length).toBe(0);
+    expect(filterSequenceEventsForTurnRange(events, 0, 0).length).toBe(0);
+    expect(filterSequenceEventsForTurnRange(events, 99, 100).length).toBe(0);
   });
 
   it("merges messages with supplemental", () => {
