@@ -1719,6 +1719,9 @@ function ComposerInner({
       };
 
       if (isSessionBusy) {
+        const enqueueAsPendingTask = onEnqueueAsPendingTask;
+        if (!enqueueAsPendingTask) return;
+
         const sendFlowNodes: Array<{ label: string; timestamp: number; detail?: string }> = [];
         sendFlowNodes.push({
           label: "执行中入队",
@@ -1836,7 +1839,7 @@ function ComposerInner({
           return;
         }
 
-        const consumePending = onEnqueueAsPendingTask({
+        const consumePending = enqueueAsPendingTask({
           promptText: dispatchPromptText,
           executeBubbleOptions: buildBubbleExecuteOptions(userBubblePrompt),
           ...target,

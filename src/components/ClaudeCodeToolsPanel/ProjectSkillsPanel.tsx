@@ -110,7 +110,7 @@ function isUserScopeSkill(skill: ClaudeProjectSkill): boolean {
 }
 
 function isPluginCacheSkill(skill: ClaudeProjectSkill): boolean {
-  return skill.skillScope === "plugin" || Boolean(skill.pluginCacheRelPath?.trim());
+  return Boolean(skill.pluginCacheRelPath?.trim());
 }
 
 function resolvePreferredEditorTarget() {
