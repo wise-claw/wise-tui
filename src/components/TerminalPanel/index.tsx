@@ -1,7 +1,7 @@
 // @refresh reset
 import { App } from "antd";
-import { useCallback, useEffect, useMemo, useRef } from "react";
-import { useTerminalTabs } from "../../hooks/useTerminalTabs";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useTerminalContext } from "../../hooks/useTerminalContext";
 import { useTerminalSession } from "../../hooks/useTerminalSession";
 import type { Repository } from "../../types";
 import { writeTerminalSession } from "../../services/terminal";
@@ -17,6 +17,7 @@ interface Props {
   repositoryName: string;
   branch: string | undefined;
   dirty: boolean;
+  collapsed?: boolean;
   onCollapse: () => void;
   onClose: () => void;
   fullscreen?: boolean;
@@ -28,6 +29,7 @@ export function TerminalPanel({
   repositoryName,
   branch,
   dirty: _dirty,
+  collapsed = false,
   onCollapse,
   onClose,
   fullscreen = false,
@@ -40,7 +42,12 @@ export function TerminalPanel({
     closeTerminal,
     closeAllTerminals,
     ensureTerminal,
-  } = useTerminalTabs();
+    createTerminal,
+    setActiveTerminal,
+    rememberSurfaceSnapshot,
+    getSurfaceSnapshot,
+  } = useTerminalContext({ workspaceId: TERMINAL_WORKSPACE_ID });
+  const [focusRequestVersion, setFocusRequestVersion] = useState(0);
   const closeTriggeredByButtonRef = useRef(false);
   const soleTerminalIdRef = useRef<string | null>(null);
   soleTerminalIdRef.current =
@@ -60,14 +67,23 @@ export function TerminalPanel({
     [closeTerminal, onClose],
   );
 
-  const handleCloseTerminal = useCallback(
-    (_terminalId: string) => {
+  const handleCloseTerminalTab = useCallback(
+    (terminalId: string) => {
       closeTriggeredByButtonRef.current = true;
-      closeAllTerminals();
-      onClose();
+      closeTerminal(terminalId);
+      if (terminals.length <= 1) {
+        onClose();
+      }
+      closeTriggeredByButtonRef.current = false;
     },
-    [closeAllTerminals, onClose],
+    [closeTerminal, onClose, terminals.length],
   );
+
+  const handleClosePanel = useCallback(() => {
+    closeTriggeredByButtonRef.current = true;
+    closeAllTerminals();
+    onClose();
+  }, [closeAllTerminals, onClose]);
 
   const handleCollapseTerminal = useCallback(() => {
     onCollapse();
@@ -97,10 +113,26 @@ export function TerminalPanel({
   const terminalState = useTerminalSession({
     activeRepository,
     activeTerminalId,
-    isVisible: true,
-    focusRequestVersion: 0,
+    isVisible: !collapsed,
+    focusRequestVersion,
+    closeOnUnmount: false,
+    surfaceSnapshot: getSurfaceSnapshot(activeTerminalId),
+    onSurfaceSnapshot: (snapshot) => {
+      if (!activeTerminalId) return;
+      rememberSurfaceSnapshot(activeTerminalId, snapshot);
+    },
     onSessionExit: handleSessionExit,
   });
+
+  useEffect(() => {
+    setFocusRequestVersion((value) => value + 1);
+  }, [activeTerminalId]);
+
+  useEffect(() => {
+    if (!collapsed) {
+      setFocusRequestVersion((value) => value + 1);
+    }
+  }, [collapsed]);
 
   useEffect(() => {
     ensureTerminal();
@@ -138,8 +170,15 @@ export function TerminalPanel({
   return (
     <TerminalDock
       isOpen={true}
+      terminals={terminals}
       activeTerminalId={activeTerminalId}
-      onCloseTerminal={handleCloseTerminal}
+      onSelectTerminal={setActiveTerminal}
+      onCreateTerminal={() => {
+        createTerminal("user");
+        setFocusRequestVersion((value) => value + 1);
+      }}
+      onCloseTerminal={handleCloseTerminalTab}
+      onClosePanel={handleClosePanel}
       onCollapse={handleCollapseTerminal}
       terminalNode={terminalPanelNode}
       fullscreen={fullscreen}

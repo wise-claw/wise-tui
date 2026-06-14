@@ -1,8 +1,10 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { TerminalSessionSource } from "../types/terminal";
 
 export type TerminalTab = {
   id: string;
   title: string;
+  source: TerminalSessionSource;
 };
 
 type TerminalTabRecord = TerminalTab & {
@@ -46,19 +48,57 @@ export function useTerminalTabs({
 }: UseTerminalTabsOptions = {}) {
   const [tabs, setTabs] = useState<TerminalTabRecord[]>([]);
   const [activeTerminalId, setActiveTerminalId] = useState<string | null>(null);
+  const ensureInFlightIdRef = useRef<string | null>(null);
 
-  const createTerminal = useCallback(() => {
+  useEffect(() => {
+    if (activeTerminalId) {
+      ensureInFlightIdRef.current = null;
+    }
+  }, [activeTerminalId]);
+
+  const createTerminal = useCallback((source: TerminalSessionSource = "user") => {
     const id = createTerminalId();
     setTabs((prev) => {
       const nextTabs = renumberAutoNamedTabs([
         ...prev,
-        { id, title: "", autoNamed: true },
+        { id, title: "", autoNamed: true, source },
       ]);
       return nextTabs;
     });
     setActiveTerminalId(id);
     return id;
   }, []);
+
+  const registerTerminal = useCallback(
+    (input: { id: string; title?: string; source?: TerminalSessionSource }) => {
+      setTabs((prev) => {
+        if (prev.some((tab) => tab.id === input.id)) {
+          return prev;
+        }
+        const source = input.source ?? "user";
+        const title =
+          input.title?.trim() ||
+          (source === "agent" ? "Agent 终端" : "");
+        return renumberAutoNamedTabs([
+          ...prev,
+          {
+            id: input.id,
+            title,
+            source,
+            autoNamed: !input.title?.trim(),
+          },
+        ]);
+      });
+    },
+    [],
+  );
+
+  const getTerminalSource = useCallback(
+    (terminalId: string): TerminalSessionSource => {
+      return tabs.find((tab) => tab.id === terminalId)?.source ?? "user";
+    },
+    [tabs],
+  );
 
   const closeTerminal = useCallback(
     (terminalId: string) => {
@@ -92,11 +132,32 @@ export function useTerminalTabs({
     if (activeTerminalId) {
       return activeTerminalId;
     }
-    return createTerminal();
-  }, [activeTerminalId, createTerminal]);
+    if (ensureInFlightIdRef.current) {
+      return ensureInFlightIdRef.current;
+    }
+
+    const id = createTerminalId();
+    ensureInFlightIdRef.current = id;
+
+    setTabs((prev) => {
+      if (prev.length > 0) {
+        const existingId = prev[prev.length - 1]!.id;
+        ensureInFlightIdRef.current = existingId;
+        return prev;
+      }
+      return renumberAutoNamedTabs([
+        ...prev,
+        { id, title: "", autoNamed: true, source: "user" },
+      ]);
+    });
+
+    setActiveTerminalId((prev) => prev ?? ensureInFlightIdRef.current);
+
+    return ensureInFlightIdRef.current;
+  }, [activeTerminalId]);
 
   const terminals = useMemo(
-    () => tabs.map(({ id, title }) => ({ id, title })),
+    () => tabs.map(({ id, title, source }) => ({ id, title, source })),
     [tabs],
   );
 
@@ -104,6 +165,8 @@ export function useTerminalTabs({
     terminals,
     activeTerminalId,
     createTerminal,
+    registerTerminal,
+    getTerminalSource,
     closeTerminal,
     closeAllTerminals,
     setActiveTerminal,

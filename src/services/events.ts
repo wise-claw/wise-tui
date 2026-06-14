@@ -82,8 +82,21 @@ export type TerminalExitEvent = {
   reason?: string | null;
 };
 
+export type TerminalCreatedEvent = {
+  workspaceId: string;
+  terminalId: string;
+  title: string;
+  source: "user" | "agent";
+  cwd: string;
+  cols: number;
+  rows: number;
+  cursor: number;
+};
+
 const terminalOutputHub = createEventHub<TerminalOutputEvent>("terminal-output");
 const terminalExitHub = createEventHub<TerminalExitEvent>("terminal-exit");
+const terminalCreatedHub =
+  createEventHub<TerminalCreatedEvent>("terminal-created");
 
 export function subscribeTerminalOutput(
   onEvent: (event: TerminalOutputEvent) => void,
@@ -97,4 +110,11 @@ export function subscribeTerminalExit(
   options?: EventHubOptions,
 ): () => void {
   return terminalExitHub.subscribe(onEvent, options);
+}
+
+export function subscribeTerminalCreated(
+  onEvent: (event: TerminalCreatedEvent) => void,
+  options?: EventHubOptions,
+): () => void {
+  return terminalCreatedHub.subscribe(onEvent, options);
 }

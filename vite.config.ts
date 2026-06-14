@@ -13,6 +13,7 @@ const host = process.env.TAURI_DEV_HOST;
 
 // https://vite.dev/config/
 export default defineConfig(async () => ({
+  assetsInclude: ["**/*.wasm"],
   plugins: [react()],
   resolve: {
     /** 避免多份 React 进入不同 chunk，引发 `useLayoutEffect` of undefined。 */
@@ -89,7 +90,7 @@ export default defineConfig(async () => ({
           if (id.includes("@antv/x6")) {
             return "x6-vendor";
           }
-          if (id.includes("@xterm/") || id.includes("/xterm/")) {
+          if (id.includes("ghostty-web") || id.includes("/ghostty-web/")) {
             return "terminal-vendor";
           }
           if (

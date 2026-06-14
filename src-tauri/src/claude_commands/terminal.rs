@@ -1,4 +1,5 @@
-use portable_pty::{ChildKiller, CommandBuilder, NativePtySystem, PtySize, PtySystem};
+use portable_pty::{Child, ChildKiller, CommandBuilder, NativePtySystem, PtySize, PtySystem};
+use serde::Serialize;
 use std::collections::HashMap;
 use std::io::{ErrorKind, Read, Write};
 use std::sync::Mutex;
@@ -13,14 +14,39 @@ const TERMINAL_EMIT_FLUSH_BYTES: usize = 16 * 1024;
 const TERMINAL_EMIT_FLUSH_INTERVAL: Duration = Duration::from_millis(16);
 /// pending 文本硬上限：防止前端阻塞时 reader 端无限增长 (~1 MiB 已经远超单帧渲染需要)。
 const TERMINAL_PENDING_HARD_CAP: usize = 1024 * 1024;
+/// 会话输出环形缓冲上限（借鉴 OpenCode Pty buffer，用于 attach 重放）。
+const TERMINAL_BUFFER_MAX: usize = 1024 * 1024;
+/// 缓冲裁剪块大小。
+const TERMINAL_BUFFER_TRIM_CHUNK: usize = 64 * 1024;
 /// PTY 行/列合法范围：防止 0 或异常大值传入 OS。
 const TERMINAL_DIM_MIN: u16 = 1;
 const TERMINAL_DIM_MAX: u16 = 1024;
 /// 写入端遇到 Interrupted/WouldBlock 时的最大重试次数。
 const TERMINAL_WRITE_RETRIES: u32 = 5;
 
-/// Split PTY byte stream on UTF-8 boundaries so xterm never receives torn multibyte
-/// sequences (which corrupt alternate-screen TUIs like Claude Code).
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TerminalSessionInfo {
+    pub workspace_id: String,
+    pub terminal_id: String,
+    pub title: String,
+    pub source: String,
+    pub status: String,
+    pub cwd: String,
+    pub cols: u16,
+    pub rows: u16,
+    pub cursor: usize,
+}
+
+#[derive(Serialize)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct TerminalAttachResponse {
+    pub cursor: usize,
+    pub replay: String,
+}
+
+/// Split PTY byte stream on UTF-8 boundaries so the web terminal never receives torn
+/// multibyte sequences (which corrupt alternate-screen TUIs like Claude Code).
 fn drain_valid_utf8_chunks(carry: &mut Vec<u8>) -> Vec<String> {
     let mut chunks = Vec::new();
     loop {
@@ -60,15 +86,84 @@ fn drain_valid_utf8_chunks(carry: &mut Vec<u8>) -> Vec<String> {
 fn apply_embedded_terminal_shell_env(cmd: &mut CommandBuilder) {
     cmd.env("TERM", "xterm-256color");
     cmd.env("COLORTERM", "truecolor");
+    cmd.env("TERM_PROGRAM", "Wise");
     cmd.env("WISE_TERMINAL", "1");
     cmd.env("POWERLEVEL9K_INSTANT_PROMPT", "off");
     cmd.env("PROMPT_EOL_MARK", "");
 }
 
+fn normalize_terminal_source(source: Option<String>) -> String {
+    match source.as_deref() {
+        Some("agent") => "agent".to_string(),
+        _ => "user".to_string(),
+    }
+}
+
+fn session_key(workspace_id: &str, terminal_id: &str) -> String {
+    format!("{}:{}", workspace_id, terminal_id)
+}
+
+fn replay_output(
+    output_buffer: &str,
+    buffer_start_cursor: usize,
+    stream_cursor: usize,
+    client_cursor: usize,
+) -> TerminalAttachResponse {
+    if client_cursor >= stream_cursor {
+        return TerminalAttachResponse {
+            cursor: stream_cursor,
+            replay: String::new(),
+        };
+    }
+    let offset = if client_cursor < buffer_start_cursor {
+        0
+    } else {
+        client_cursor - buffer_start_cursor
+    };
+    let replay = if offset >= output_buffer.len() {
+        String::new()
+    } else {
+        output_buffer[offset..].to_string()
+    };
+    TerminalAttachResponse {
+        cursor: stream_cursor,
+        replay,
+    }
+}
+
 struct TerminalSession {
+    info: TerminalSessionInfo,
     master: Box<dyn portable_pty::MasterPty + Send>,
     writer: Box<dyn Write + Send>,
     killer: Box<dyn ChildKiller + Send + Sync>,
+    output_buffer: String,
+    buffer_start_cursor: usize,
+}
+
+impl TerminalSession {
+    fn append_output(&mut self, text: &str) {
+        if text.is_empty() {
+            return;
+        }
+        self.info.cursor += text.len();
+        self.output_buffer.push_str(text);
+        while self.output_buffer.len() > TERMINAL_BUFFER_MAX {
+            let trim = (self.output_buffer.len() - TERMINAL_BUFFER_MAX)
+                .min(TERMINAL_BUFFER_TRIM_CHUNK)
+                .max(1);
+            self.output_buffer.drain(0..trim);
+            self.buffer_start_cursor += trim;
+        }
+    }
+
+    fn replay_from(&self, client_cursor: usize) -> TerminalAttachResponse {
+        replay_output(
+            &self.output_buffer,
+            self.buffer_start_cursor,
+            self.info.cursor,
+            client_cursor,
+        )
+    }
 }
 
 pub(crate) struct TerminalManager {
@@ -84,6 +179,12 @@ impl TerminalManager {
         }
     }
 
+    fn append_output_for_key(&mut self, key: &str, text: &str) {
+        if let Some(session) = self.sessions.get_mut(key) {
+            session.append_output(text);
+        }
+    }
+
     fn open(
         &mut self,
         workspace_id: String,
@@ -91,16 +192,27 @@ impl TerminalManager {
         cols: u16,
         rows: u16,
         cwd: String,
+        title: Option<String>,
+        source: Option<String>,
         app: &tauri::AppHandle,
     ) -> Result<(), String> {
-        let key = format!("{}:{}", workspace_id, terminal_id);
+        let key = session_key(&workspace_id, &terminal_id);
         if self.sessions.contains_key(&key) {
-            return Err(format!("Terminal session already exists: {}", key));
+            return Ok(());
         }
 
-        // clamp 维度，避免前端早期布局给出 0/异常值导致 openpty 失败或 shell 启动后立即被信号终止。
         let safe_cols = cols.clamp(TERMINAL_DIM_MIN, TERMINAL_DIM_MAX);
         let safe_rows = rows.clamp(TERMINAL_DIM_MIN, TERMINAL_DIM_MAX);
+        let source = normalize_terminal_source(source);
+        let title = title
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| {
+                if source == "agent" {
+                    "Agent 终端".to_string()
+                } else {
+                    "终端".to_string()
+                }
+            });
 
         let pair = self
             .pty_system
@@ -120,8 +232,7 @@ impl TerminalManager {
             apply_embedded_terminal_shell_env(&mut zsh);
             zsh
         };
-        cmd.cwd(cwd);
-        // GUI 进程继承的 PATH 通常不含 Homebrew / nvm / bun 等，与 `create_claude_command` 一致为 PTY shell 补全 PATH。
+        cmd.cwd(&cwd);
         let path_merged = merge_path_env(&claude_path_search_prefixes());
         cmd.env("PATH", path_merged);
 
@@ -147,25 +258,29 @@ impl TerminalManager {
         let app_clone = app.clone();
 
         std::thread::spawn(move || {
+            let mut child = child;
             let mut buf = [0u8; 4096];
-            // carry：尚未拼成完整 UTF-8 的尾巴；pending：已经拼好但还没 emit 的合批文本。
             let mut carry = Vec::new();
             let mut pending = String::new();
             let mut last_flush = Instant::now();
-            // reader 退出时的原因——成功 EOF 时为 None；fatal IO 错误时填上错误描述，前端用以区分崩溃。
             let mut exit_reason: Option<String> = None;
 
-            // 把 pending 一次性 emit 出去（仅当非空才 emit，避免空消息浪费 IPC）。
             let flush_pending = |pending: &mut String, last_flush: &mut Instant| {
                 if pending.is_empty() {
                     return;
+                }
+                let chunk = pending.as_str();
+                if let Some(manager) = app_clone.try_state::<Mutex<TerminalManager>>() {
+                    if let Ok(mut guard) = manager.lock() {
+                        guard.append_output_for_key(&session_key, chunk);
+                    }
                 }
                 let _ = app_clone.emit(
                     "terminal-output",
                     serde_json::json!({
                         "workspaceId": workspace_clone,
                         "terminalId": terminal_clone,
-                        "data": pending.as_str(),
+                        "data": chunk,
                     }),
                 );
                 pending.clear();
@@ -180,7 +295,6 @@ impl TerminalManager {
                         for text in drain_valid_utf8_chunks(&mut carry) {
                             pending.push_str(&text);
                         }
-                        // 大块或长间隔时才 emit；高速流式输出会自然堆到 16 KiB 触发，节流明显。
                         if pending.len() >= TERMINAL_EMIT_FLUSH_BYTES
                             || last_flush.elapsed() >= TERMINAL_EMIT_FLUSH_INTERVAL
                             || pending.len() >= TERMINAL_PENDING_HARD_CAP
@@ -188,60 +302,139 @@ impl TerminalManager {
                             flush_pending(&mut pending, &mut last_flush);
                         }
                     }
-                    Err(err) => {
-                        // EINTR / 临时不可用都不应当让 PTY reader 意外终止；只在真正的 IO 错误时退出。
-                        match err.kind() {
-                            ErrorKind::Interrupted | ErrorKind::WouldBlock => continue,
-                            _ => {
-                                exit_reason = Some(err.to_string());
-                                break;
-                            }
+                    Err(err) => match err.kind() {
+                        ErrorKind::Interrupted | ErrorKind::WouldBlock => continue,
+                        _ => {
+                            exit_reason = Some(err.to_string());
+                            break;
                         }
-                    }
+                    },
                 }
             }
-            // 退出前把 carry 里残留的不完整字节按 lossy 转成文本拼到 pending 末尾再 emit。
             if !carry.is_empty() {
                 pending.push_str(&String::from_utf8_lossy(&carry));
             }
             flush_pending(&mut pending, &mut last_flush);
+
+            let exit_code = child
+                .wait()
+                .ok()
+                .map(|status| status.exit_code())
+                .unwrap_or(0);
 
             let _ = app_clone.emit(
                 "terminal-exit",
                 serde_json::json!({
                     "workspaceId": workspace_clone,
                     "terminalId": terminal_clone,
-                    "exitCode": 0,
+                    "exitCode": exit_code,
                     "reason": exit_reason,
                 }),
             );
 
-            // PTY 已经 EOF/Err，主动从 manager 移除会话，释放 PtyMaster/writer/killer 持有的内核 fd 与缓冲；
-            // 否则若前端没卸载/没显式 close，旧 session 会一直留在 HashMap 里慢性泄漏。
             if let Some(manager) = app_clone.try_state::<Mutex<TerminalManager>>() {
                 if let Ok(mut guard) = manager.lock() {
                     if let Some(mut session) = guard.sessions.remove(&session_key) {
-                        // EOF 后再 kill 一次是幂等的，确保子进程被回收（防止 reader 看到 EOF 但 child 已 detach 残留）。
+                        session.info.status = "exited".to_string();
                         let _ = session.killer.kill();
                     }
                 }
             }
         });
 
-        self.sessions
-            .insert(key, TerminalSession { master, writer, killer });
+        let info = TerminalSessionInfo {
+            workspace_id: workspace_id.clone(),
+            terminal_id: terminal_id.clone(),
+            title: title.clone(),
+            source: source.clone(),
+            status: "running".to_string(),
+            cwd: cwd.clone(),
+            cols: safe_cols,
+            rows: safe_rows,
+            cursor: 0,
+        };
+
+        let _ = app.emit(
+            "terminal-created",
+            serde_json::json!({
+                "workspaceId": workspace_id,
+                "terminalId": terminal_id,
+                "title": title,
+                "source": source,
+                "cwd": cwd,
+                "cols": safe_cols,
+                "rows": safe_rows,
+                "cursor": 0,
+            }),
+        );
+
+        self.sessions.insert(
+            key,
+            TerminalSession {
+                info,
+                master,
+                writer,
+                killer,
+                output_buffer: String::new(),
+                buffer_start_cursor: 0,
+            },
+        );
 
         Ok(())
     }
 
-    fn write(&mut self, workspace_id: &str, terminal_id: &str, data: &str) -> Result<(), String> {
-        let key = format!("{}:{}", workspace_id, terminal_id);
+    fn attach(
+        &self,
+        workspace_id: &str,
+        terminal_id: &str,
+        cursor: usize,
+    ) -> Result<TerminalAttachResponse, String> {
+        let key = session_key(workspace_id, terminal_id);
+        let session = self
+            .sessions
+            .get(&key)
+            .ok_or_else(|| format!("Terminal session not found: {}", key))?;
+        Ok(session.replay_from(cursor))
+    }
+
+    fn list(&self, workspace_id: &str) -> Vec<TerminalSessionInfo> {
+        self.sessions
+            .values()
+            .filter(|session| session.info.workspace_id == workspace_id)
+            .map(|session| session.info.clone())
+            .collect()
+    }
+
+    fn get(&self, workspace_id: &str, terminal_id: &str) -> Option<TerminalSessionInfo> {
+        let key = session_key(workspace_id, terminal_id);
+        self.sessions.get(&key).map(|session| session.info.clone())
+    }
+
+    fn update_title(
+        &mut self,
+        workspace_id: &str,
+        terminal_id: &str,
+        title: String,
+    ) -> Result<(), String> {
+        let key = session_key(workspace_id, terminal_id);
         let session = self
             .sessions
             .get_mut(&key)
             .ok_or_else(|| format!("Terminal session not found: {}", key))?;
+        session.info.title = title;
+        Ok(())
+    }
+
+    fn write(&mut self, workspace_id: &str, terminal_id: &str, data: &str) -> Result<(), String> {
+        let key = session_key(workspace_id, terminal_id);
+        let session = self
+            .sessions
+            .get_mut(&key)
+            .ok_or_else(|| format!("Terminal session not found: {}", key))?;
+        if session.info.status == "exited" {
+            return Err(format!("Terminal session exited: {}", key));
+        }
         let bytes = data.as_bytes();
-        // 写入端遇到 EINTR/WouldBlock 时重试若干次，避免输入丢失或被前端报为致命错误。
         let mut attempt: u32 = 0;
         loop {
             match session.writer.write_all(bytes) {
@@ -259,7 +452,6 @@ impl TerminalManager {
                 }
             }
         }
-        // flush 失败通常意味着对端 (slave) 已经关闭，向上抛错让前端清理状态。
         session
             .writer
             .flush()
@@ -273,14 +465,18 @@ impl TerminalManager {
         cols: u16,
         rows: u16,
     ) -> Result<(), String> {
-        let key = format!("{}:{}", workspace_id, terminal_id);
+        let key = session_key(workspace_id, terminal_id);
         let session = self
             .sessions
-            .get(&key)
+            .get_mut(&key)
             .ok_or_else(|| format!("Terminal session not found: {}", key))?;
-        // clamp 到合理区间，前端 ResizeObserver 在容器折叠瞬间可能给出 0/异常巨大值。
+        if session.info.status == "exited" {
+            return Err(format!("Terminal session exited: {}", key));
+        }
         let safe_cols = cols.clamp(TERMINAL_DIM_MIN, TERMINAL_DIM_MAX);
         let safe_rows = rows.clamp(TERMINAL_DIM_MIN, TERMINAL_DIM_MAX);
+        session.info.cols = safe_cols;
+        session.info.rows = safe_rows;
         session
             .master
             .resize(PtySize {
@@ -293,11 +489,12 @@ impl TerminalManager {
     }
 
     fn close(&mut self, workspace_id: &str, terminal_id: &str) -> Result<(), String> {
-        let key = format!("{}:{}", workspace_id, terminal_id);
+        let key = session_key(workspace_id, terminal_id);
         let mut session = self
             .sessions
             .remove(&key)
             .ok_or_else(|| format!("Terminal session not found: {}", key))?;
+        session.info.status = "exited".to_string();
         let _ = session.killer.kill();
         Ok(())
     }
@@ -312,6 +509,8 @@ pub(crate) fn terminal_open(
     cols: u16,
     rows: u16,
     cwd: String,
+    title: Option<String>,
+    source: Option<String>,
 ) -> Result<(), String> {
     manager.lock().map_err(|e| e.to_string())?.open(
         workspace_id,
@@ -319,8 +518,59 @@ pub(crate) fn terminal_open(
         cols,
         rows,
         cwd,
+        title,
+        source,
         &app,
     )
+}
+
+#[tauri::command]
+pub(crate) fn terminal_attach(
+    manager: tauri::State<std::sync::Mutex<TerminalManager>>,
+    workspace_id: String,
+    terminal_id: String,
+    cursor: usize,
+) -> Result<TerminalAttachResponse, String> {
+    manager
+        .lock()
+        .map_err(|e| e.to_string())?
+        .attach(&workspace_id, &terminal_id, cursor)
+}
+
+#[tauri::command]
+pub(crate) fn terminal_list(
+    manager: tauri::State<std::sync::Mutex<TerminalManager>>,
+    workspace_id: String,
+) -> Result<Vec<TerminalSessionInfo>, String> {
+    Ok(manager
+        .lock()
+        .map_err(|e| e.to_string())?
+        .list(&workspace_id))
+}
+
+#[tauri::command]
+pub(crate) fn terminal_get(
+    manager: tauri::State<std::sync::Mutex<TerminalManager>>,
+    workspace_id: String,
+    terminal_id: String,
+) -> Result<Option<TerminalSessionInfo>, String> {
+    Ok(manager
+        .lock()
+        .map_err(|e| e.to_string())?
+        .get(&workspace_id, &terminal_id))
+}
+
+#[tauri::command]
+pub(crate) fn terminal_update_title(
+    manager: tauri::State<std::sync::Mutex<TerminalManager>>,
+    workspace_id: String,
+    terminal_id: String,
+    title: String,
+) -> Result<(), String> {
+    manager
+        .lock()
+        .map_err(|e| e.to_string())?
+        .update_title(&workspace_id, &terminal_id, title)
 }
 
 #[tauri::command]
@@ -364,7 +614,8 @@ pub(crate) fn terminal_close(
 
 #[cfg(test)]
 mod tests {
-    use super::{drain_valid_utf8_chunks, TERMINAL_DIM_MAX, TERMINAL_DIM_MIN};
+    use super::*;
+    use std::io::{Read, Write};
 
     #[test]
     fn drain_valid_utf8_chunks_waits_for_complete_multibyte() {
@@ -388,7 +639,6 @@ mod tests {
 
     #[test]
     fn drain_valid_utf8_chunks_skips_invalid_lead_byte() {
-        // 完整不可恢复的非法字节（独立的 0xC0），按 error_len 跳过，避免 reader 死循环。
         let mut carry = b"\xc0a".to_vec();
         let chunks = drain_valid_utf8_chunks(&mut carry);
         assert_eq!(chunks, vec!["a".to_string()]);
@@ -400,12 +650,113 @@ mod tests {
         assert!(TERMINAL_DIM_MIN >= 1);
         assert!(TERMINAL_DIM_MAX >= 80);
         assert!(TERMINAL_DIM_MAX <= 4096);
-        // clamp 行为：常见 80x24 不被改动，0 与超大值都被收束。
         assert_eq!(80u16.clamp(TERMINAL_DIM_MIN, TERMINAL_DIM_MAX), 80);
         assert_eq!(0u16.clamp(TERMINAL_DIM_MIN, TERMINAL_DIM_MAX), TERMINAL_DIM_MIN);
         assert_eq!(
             u16::MAX.clamp(TERMINAL_DIM_MIN, TERMINAL_DIM_MAX),
             TERMINAL_DIM_MAX
         );
+    }
+
+    #[test]
+    fn replay_from_returns_suffix_after_client_cursor() {
+        let attach = replay_output("abcdef", 0, 6, 2);
+        assert_eq!(attach.cursor, 6);
+        assert_eq!(attach.replay, "cdef");
+    }
+
+    #[test]
+    fn replay_from_honors_buffer_start_cursor() {
+        let attach = replay_output("cdef", 2, 6, 1);
+        assert_eq!(attach.replay, "cdef");
+    }
+
+    #[test]
+    fn append_output_trims_buffer_when_exceeding_cap() {
+        let mut session = TerminalSession {
+            info: TerminalSessionInfo {
+                workspace_id: "0".to_string(),
+                terminal_id: "t1".to_string(),
+                title: "终端".to_string(),
+                source: "user".to_string(),
+                status: "running".to_string(),
+                cwd: "/tmp".to_string(),
+                cols: 80,
+                rows: 24,
+                cursor: 0,
+            },
+            master: panic_master_placeholder(),
+            writer: panic_writer_placeholder(),
+            killer: panic_killer_placeholder(),
+            output_buffer: String::new(),
+            buffer_start_cursor: 0,
+        };
+        let chunk = "a".repeat(TERMINAL_BUFFER_TRIM_CHUNK);
+        for _ in 0..20 {
+            session.append_output(&chunk);
+        }
+        assert!(session.output_buffer.len() <= TERMINAL_BUFFER_MAX);
+        assert!(session.buffer_start_cursor > 0);
+        assert_eq!(session.info.cursor, chunk.len() * 20);
+    }
+
+    fn panic_master_placeholder() -> Box<dyn portable_pty::MasterPty + Send> {
+        struct Unreachable;
+        impl portable_pty::MasterPty for Unreachable {
+            fn resize(&self, _size: portable_pty::PtySize) -> anyhow::Result<()> {
+                Ok(())
+            }
+            fn get_size(&self) -> anyhow::Result<portable_pty::PtySize> {
+                Ok(portable_pty::PtySize {
+                    rows: 24,
+                    cols: 80,
+                    pixel_width: 0,
+                    pixel_height: 0,
+                })
+            }
+            fn take_writer(&self) -> anyhow::Result<Box<dyn Write + Send>> {
+                Err(anyhow::anyhow!("test"))
+            }
+            fn try_clone_reader(&self) -> anyhow::Result<Box<dyn Read + Send>> {
+                Err(anyhow::anyhow!("test"))
+            }
+            fn process_group_leader(&self) -> Option<i32> {
+                None
+            }
+            fn as_raw_fd(&self) -> Option<i32> {
+                None
+            }
+            fn tty_name(&self) -> Option<std::path::PathBuf> {
+                None
+            }
+        }
+        Box::new(Unreachable)
+    }
+
+    fn panic_writer_placeholder() -> Box<dyn Write + Send> {
+        struct Unreachable;
+        impl Write for Unreachable {
+            fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+                Ok(buf.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+        Box::new(Unreachable)
+    }
+
+    fn panic_killer_placeholder() -> Box<dyn ChildKiller + Send + Sync> {
+        #[derive(Debug)]
+        struct Unreachable;
+        impl ChildKiller for Unreachable {
+            fn kill(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+            fn clone_killer(&self) -> Box<dyn ChildKiller + Send + Sync> {
+                Box::new(Unreachable)
+            }
+        }
+        Box::new(Unreachable)
     }
 }

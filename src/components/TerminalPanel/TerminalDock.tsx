@@ -2,16 +2,22 @@ import {
   FullscreenExitOutlined,
   FullscreenOutlined,
   MinusOutlined,
+  PlusOutlined,
   ThunderboltOutlined,
 } from "@ant-design/icons";
 import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
+import type { TerminalContextTab } from "../../hooks/useTerminalContext";
 import { HoverHint } from "../shared/HoverHint";
 import "./index.css";
 
 type TerminalDockProps = {
   isOpen: boolean;
+  terminals: TerminalContextTab[];
   activeTerminalId: string | null;
+  onSelectTerminal: (terminalId: string) => void;
+  onCreateTerminal: () => void;
   onCloseTerminal: (terminalId: string) => void;
+  onClosePanel?: () => void;
   onCollapse?: () => void;
   onResizeStart?: (event: ReactMouseEvent) => void;
   terminalNode: ReactNode;
@@ -21,10 +27,19 @@ type TerminalDockProps = {
   claudeAutoModeDisabled?: boolean;
 };
 
+function terminalTabLabel(tab: TerminalContextTab): string {
+  if (tab.title.trim()) return tab.title;
+  return tab.source === "agent" ? "Agent" : "终端";
+}
+
 export function TerminalDock({
   isOpen,
+  terminals,
   activeTerminalId,
+  onSelectTerminal,
+  onCreateTerminal,
   onCloseTerminal,
+  onClosePanel,
   onCollapse,
   onResizeStart,
   terminalNode,
@@ -52,7 +67,48 @@ export function TerminalDock({
       ) : null}
       <div className="terminal-header">
         <div className="terminal-header-left">
-          <span className="terminal-header-title">终端</span>
+          <div className="terminal-tab-strip" role="tablist" aria-label="终端标签">
+            {terminals.map((tab) => {
+              const active = tab.id === activeTerminalId;
+              return (
+                <button
+                  key={tab.id}
+                  type="button"
+                  role="tab"
+                  aria-selected={active}
+                  className={`terminal-tab${active ? " terminal-tab--active" : ""}${
+                    tab.source === "agent" ? " terminal-tab--agent" : ""
+                  }`}
+                  onClick={() => onSelectTerminal(tab.id)}
+                >
+                  <span className="terminal-tab__label">{terminalTabLabel(tab)}</span>
+                  {terminals.length > 1 ? (
+                    <span
+                      className="terminal-tab__close"
+                      role="button"
+                      aria-label={`关闭 ${terminalTabLabel(tab)}`}
+                      onClick={(event) => {
+                        event.stopPropagation();
+                        onCloseTerminal(tab.id);
+                      }}
+                    >
+                      ×
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
+            <HoverHint title="新建终端">
+              <button
+                type="button"
+                className="terminal-tab terminal-tab--add"
+                aria-label="新建终端"
+                onClick={onCreateTerminal}
+              >
+                <PlusOutlined />
+              </button>
+            </HoverHint>
+          </div>
           {onLaunchClaudeAutoMode ? (
             <HoverHint title="在终端中以 Auto 权限模式启动 Claude Code">
               <button
@@ -93,11 +149,15 @@ export function TerminalDock({
               </button>
             </HoverHint>
           ) : null}
-          <HoverHint title="关闭终端（结束会话）">
+          <HoverHint title="关闭全部终端（结束会话）">
             <button
               className="terminal-header-icon-btn terminal-header-close"
               type="button"
               onClick={() => {
+                if (onClosePanel) {
+                  onClosePanel();
+                  return;
+                }
                 const id = activeTerminalId;
                 if (id) onCloseTerminal(id);
               }}

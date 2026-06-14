@@ -1,20 +1,34 @@
 // @refresh reset
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
-import { Terminal } from "@xterm/xterm";
-import { FitAddon } from "@xterm/addon-fit";
-import "@xterm/xterm/css/xterm.css";
+import type { FitAddon, Terminal } from "ghostty-web";
 import type { Repository } from "../types";
+import type { TerminalSurfaceSnapshot } from "../types/terminal";
 import {
   subscribeTerminalExit,
   subscribeTerminalOutput,
 } from "../services/events";
 import {
+  attachTerminalSession,
   closeTerminalSession,
   openTerminalSession,
   resizeTerminalSession,
   writeTerminalSession,
 } from "../services/terminal";
+import { loadGhosttyModule } from "../utils/ghosttyLoader";
+import {
+  resetTerminalKeyboardProtocol,
+  sanitizeTerminalPtyOutput,
+} from "../utils/terminalSanitize";
+import {
+  configureGhosttyInputSurface,
+  observeTerminalTheme,
+  readTerminalThemeFromContainer,
+  reconcileTerminalCanvasFit,
+  registerTerminalLinkProviders,
+} from "../utils/terminalTheme";
+import { terminalWriter } from "../utils/terminalWriter";
+import { shouldIgnoreTerminalError } from "../utils/terminalErrors";
 
 export type TerminalStatus = "idle" | "connecting" | "ready" | "error";
 
@@ -30,21 +44,11 @@ interface UseTerminalSessionOptions {
   activeTerminalId: string | null;
   isVisible: boolean;
   focusRequestVersion: number;
+  surfaceSnapshot?: TerminalSurfaceSnapshot | null;
+  onSurfaceSnapshot?: (snapshot: TerminalSurfaceSnapshot) => void;
+  /** 卸载 UI 时是否结束后端 PTY；tab 切换时应为 false。 */
+  closeOnUnmount?: boolean;
   onSessionExit?: (repositoryId: number, terminalId: string) => void;
-}
-
-function shouldIgnoreTerminalError(error: unknown) {
-  const message = error instanceof Error ? error.message : String(error);
-  const lower = message.toLowerCase();
-  return (
-    lower.includes("terminal session not found") ||
-    lower.includes("broken pipe") ||
-    lower.includes("input/output error") ||
-    lower.includes("os error 5") ||
-    lower.includes("eio") ||
-    lower.includes("not connected") ||
-    lower.includes("closed")
-  );
 }
 
 /** 与后端 TERMINAL_DIM_MIN/MAX 保持一致：clamp 维度防止 0 或异常巨大值进入 IPC。 */
@@ -52,7 +56,10 @@ const TERMINAL_DIM_MIN = 1;
 const TERMINAL_DIM_MAX = 1024;
 
 /** 调整频率限制，防止拖拽分隔条时高频 resize 把后端压垮。 */
-const TERMINAL_RESIZE_DEBOUNCE_MS = 32;
+const TERMINAL_RESIZE_DEBOUNCE_MS = 100;
+
+/** 与 OpenCode Desktop 对齐的 scrollback 上限。 */
+const TERMINAL_SCROLLBACK = 10_000;
 
 const clampTerminalDim = (n: number) => {
   if (!Number.isFinite(n)) return TERMINAL_DIM_MIN;
@@ -63,7 +70,10 @@ export function useTerminalSession({
   activeRepository,
   activeTerminalId,
   isVisible,
-  focusRequestVersion: _focusRequestVersion,
+  focusRequestVersion,
+  surfaceSnapshot,
+  onSurfaceSnapshot,
+  closeOnUnmount = false,
   onSessionExit,
 }: UseTerminalSessionOptions): TerminalSessionState {
   const containerRef = useRef<HTMLDivElement | null>(null);
@@ -72,12 +82,15 @@ export function useTerminalSession({
   const [status, setStatus] = useState<TerminalStatus>("idle");
   const [message, setMessage] = useState("");
 
-  // 用 ref 保留最新的 onSessionExit，避免父组件每次渲染都重建回调时触发
-  // useEffect 重新挂载导致 PTY 会话不停销毁/重建。
   const onSessionExitRef = useRef(onSessionExit);
   useEffect(() => {
     onSessionExitRef.current = onSessionExit;
   }, [onSessionExit]);
+
+  const onSurfaceSnapshotRef = useRef(onSurfaceSnapshot);
+  useEffect(() => {
+    onSurfaceSnapshotRef.current = onSurfaceSnapshot;
+  }, [onSurfaceSnapshot]);
 
   const cleanupTerminalSession = useCallback(
     (repositoryId: number, terminalId: string) => {
@@ -92,17 +105,39 @@ export function useTerminalSession({
     [],
   );
 
-  // 仅依赖原始值（id/path）以保证 effect 不会因为 activeRepository 引用变化反复执行。
   const repositoryId = activeRepository?.id ?? null;
   const cwd = activeRepository?.path ?? null;
+  const initialCursorRef = useRef(surfaceSnapshot?.cursor ?? 0);
+  const initialScrollYRef = useRef(surfaceSnapshot?.scrollY);
+  const initialSizeRef = useRef(
+    surfaceSnapshot?.cols && surfaceSnapshot?.rows
+      ? { cols: surfaceSnapshot.cols, rows: surfaceSnapshot.rows }
+      : undefined,
+  );
 
   useEffect(() => {
-    if (
-      repositoryId === null ||
-      !activeTerminalId ||
-      !cwd ||
-      !isVisible
-    ) {
+    initialCursorRef.current = surfaceSnapshot?.cursor ?? 0;
+    initialScrollYRef.current = surfaceSnapshot?.scrollY;
+    initialSizeRef.current =
+      surfaceSnapshot?.cols && surfaceSnapshot?.rows
+        ? { cols: surfaceSnapshot.cols, rows: surfaceSnapshot.rows }
+        : undefined;
+  }, [activeTerminalId, surfaceSnapshot]);
+
+  useEffect(() => {
+    if (focusRequestVersion <= 0) return;
+    const term = terminalRef.current;
+    if (!term) return;
+    try {
+      term.focus();
+      term.textarea?.focus();
+    } catch {
+      // ignore
+    }
+  }, [focusRequestVersion]);
+
+  useEffect(() => {
+    if (repositoryId === null || !activeTerminalId || !cwd || !isVisible) {
       return;
     }
     const container = containerRef.current;
@@ -112,188 +147,364 @@ export function useTerminalSession({
 
     const terminalId = activeTerminalId;
     const workspaceId = repositoryId.toString();
+    const startCursor = initialCursorRef.current;
 
-    // 从容器上读取 Ant Design 解析后的颜色变量，让终端主题随浅/深色模式自动切换。
-    const styles = getComputedStyle(container);
-    const readColor = (name: string, fallback: string) => {
-      const v = styles.getPropertyValue(name).trim();
-      return v.length > 0 ? v : fallback;
-    };
-    const themeForeground = readColor("--terminal-foreground", "#1f1f1f");
-    const themeBackground = readColor("--terminal-background", "#ffffff");
-    const themeCursor = readColor("--terminal-cursor", themeForeground);
-    const themeSelection = readColor(
-      "--terminal-selection",
-      "rgba(100, 200, 255, 0.25)",
-    );
-
-    const terminal = new Terminal({
-      cursorBlink: true,
-      convertEol: true,
-      // Claude Code 等 alt-screen TUI 在长会话里会把每次重绘都塞进 scrollback，
-      // 默认 1000 行 + 200 列 + 每 cell 28-40B 内部对象，长时间下来很容易把 webview 内存推到 GB 级。
-      // 这里显式限制 scrollback，把单个 Terminal 实例的 normal-screen buffer 上限钉死在 ~1000 行。
-      scrollback: 1000,
-      fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-      fontSize: 13,
-      theme: {
-        foreground: themeForeground,
-        background: themeBackground,
-        cursor: themeCursor,
-        cursorAccent: themeBackground,
-        selectionBackground: themeSelection,
-      },
-    });
-    const fitAddon = new FitAddon();
-    terminal.loadAddon(fitAddon);
-    terminal.open(container);
-
-    terminalRef.current = terminal;
-    fitAddonRef.current = fitAddon;
-
-    const dataDisposable = terminal.onData((data) => {
-      void writeTerminalSession(workspaceId, terminalId, data).catch((error) => {
-        if (!shouldIgnoreTerminalError(error)) {
-          console.warn("write terminal session failed", error);
-          setStatus((prev) => (prev === "ready" ? "error" : prev));
-          setMessage(error instanceof Error ? error.message : "终端写入失败");
-        }
-      });
-    });
-
-    const outputUnsubscribe = subscribeTerminalOutput((event) => {
-      if (event.workspaceId === workspaceId && event.terminalId === terminalId) {
-        terminal.write(event.data);
-      }
-    });
-
-    const exitUnsubscribe = subscribeTerminalExit((event) => {
-      if (event.workspaceId === workspaceId && event.terminalId === terminalId) {
-        // 退出原因有值时一律提示一下，便于在终端面板上看见 PTY 何时崩了。
-        if (event.reason) {
-          try {
-            terminal.write(`\r\n\x1b[31m[终端已断开] ${event.reason}\x1b[0m\r\n`);
-          } catch {
-            // 忽略写入失败：xterm 可能已被 dispose
-          }
-        }
-        onSessionExitRef.current?.(repositoryId, terminalId);
-      }
-    });
-
-    setStatus("connecting");
-    setMessage("正在连接终端…");
+    const theme = readTerminalThemeFromContainer(container);
 
     let cancelled = false;
-    // 等容器布局稳定再 fit + 打开 PTY，避免容器尺寸为 0 时拿到错误的列/行。
-    const fitAndOpen = () => {
-      if (cancelled) return;
-      try {
-        fitAddon.fit();
-      } catch {
-        // 容器尚未可见时忽略，下面再用合理默认值兜底
-      }
-      const cols = clampTerminalDim(terminal.cols || 80);
-      const rows = clampTerminalDim(terminal.rows || 24);
-      void openTerminalSession(workspaceId, terminalId, cols, rows, cwd)
-        .then(() => {
-          if (cancelled) return;
-          setStatus("ready");
-          setMessage("");
-          // 真正可见后再 fit 一次并通知后端，确保尺寸正确。
-          try {
-            fitAddon.fit();
-            const finalCols = clampTerminalDim(terminal.cols);
-            const finalRows = clampTerminalDim(terminal.rows);
-            void resizeTerminalSession(
-              workspaceId,
-              terminalId,
-              finalCols,
-              finalRows,
-            ).catch((error) => {
-              if (!shouldIgnoreTerminalError(error)) {
-                console.warn("resize terminal session failed", error);
-              }
-            });
-          } catch {
-            // ignore
-          }
-        })
-        .catch((error) => {
-          if (cancelled) return;
-          if (!shouldIgnoreTerminalError(error)) {
-            console.warn("open terminal session failed", error);
-          }
-          setStatus("error");
-          setMessage(error instanceof Error ? error.message : "终端启动失败");
-        });
-    };
+    let outputWriter: ReturnType<typeof terminalWriter> | undefined;
+    let streamCursor = startCursor;
+    let sessionEnded = false;
 
-    // 跨两个 RAF 等浏览器布局稳定后再 fit。
     const fitAndOpenRafRef: { current: number | null } = { current: null };
     const resizeDebounceTimerRef: { current: number | null } = { current: null };
-    const raf1 = requestAnimationFrame(() => {
-      const raf2 = requestAnimationFrame(fitAndOpen);
-      // 把第二个 raf 句柄挂到外层变量上以便清理
-      fitAndOpenRafRef.current = raf2;
-    });
+    const visibleRefitTimerRef: { current: number | null } = { current: null };
 
-    const resizeObserver = new ResizeObserver(() => {
-      const fit = fitAddonRef.current;
-      const term = terminalRef.current;
-      if (!fit || !term) return;
-      // 拖拽分隔条 / 全屏切换会以 60Hz 触发回调；先在前端合并一次再走 IPC。
-      if (resizeDebounceTimerRef.current !== null) {
-        window.clearTimeout(resizeDebounceTimerRef.current);
+    const persistSurfaceSnapshot = (term: Terminal) => {
+      onSurfaceSnapshotRef.current?.({
+        cols: term.cols,
+        rows: term.rows,
+        scrollY: term.getViewportY(),
+        cursor: streamCursor,
+      });
+    };
+
+    const bootstrap = async () => {
+      setStatus("connecting");
+      setMessage("正在连接终端…");
+
+      const ghosttyModule = await loadGhosttyModule();
+      if (cancelled) return () => undefined;
+
+      const terminal = new ghosttyModule.Terminal({
+        cursorBlink: false,
+        convertEol: false,
+        scrollback: TERMINAL_SCROLLBACK,
+        fontFamily: 'Menlo, Monaco, "Courier New", monospace',
+        fontSize: 13,
+        ghostty: ghosttyModule.ghostty,
+        theme,
+        cols: initialSizeRef.current?.cols,
+        rows: initialSizeRef.current?.rows,
+      });
+      const fitAddon = new ghosttyModule.FitAddon();
+      terminal.loadAddon(fitAddon);
+      terminal.open(container);
+      const unregisterInputSurface = configureGhosttyInputSurface(terminal);
+      if (cancelled) {
+        terminal.dispose();
+        return () => undefined;
       }
-      resizeDebounceTimerRef.current = window.setTimeout(() => {
-        resizeDebounceTimerRef.current = null;
-        const fit2 = fitAddonRef.current;
-        const term2 = terminalRef.current;
-        if (!fit2 || !term2) return;
+
+      terminalRef.current = terminal;
+      fitAddonRef.current = fitAddon;
+
+      outputWriter = terminalWriter((data, done) => {
         try {
-          fit2.fit();
-          const nextCols = clampTerminalDim(term2.cols);
-          const nextRows = clampTerminalDim(term2.rows);
+          terminal.write(data, done);
+        } catch {
+          done?.();
+        }
+      });
+      resetTerminalKeyboardProtocol(outputWriter);
+
+      const enableCursorBlink = () => {
+        try {
+          terminal.options.cursorBlink = true;
+        } catch {
+          // ignore
+        }
+      };
+
+      const fitTerminalToContainer = () => {
+        fitAddon.fit();
+        reconcileTerminalCanvasFit(terminal, container);
+      };
+
+      const finalizeSessionReady = () => {
+        if (cancelled) return;
+        setStatus("ready");
+        setMessage("");
+        try {
+          fitTerminalToContainer();
+          const finalCols = clampTerminalDim(terminal.cols);
+          const finalRows = clampTerminalDim(terminal.rows);
           void resizeTerminalSession(
             workspaceId,
             terminalId,
-            nextCols,
-            nextRows,
+            finalCols,
+            finalRows,
           ).catch((error) => {
             if (!shouldIgnoreTerminalError(error)) {
               console.warn("resize terminal session failed", error);
             }
           });
+          if (initialScrollYRef.current !== undefined) {
+            terminal.scrollToLine(initialScrollYRef.current);
+          }
+          enableCursorBlink();
+          if (outputWriter) {
+            resetTerminalKeyboardProtocol(outputWriter);
+          }
+          terminal.focus();
+          persistSurfaceSnapshot(terminal);
         } catch {
-          // 忽略 fit 失败
+          // ignore finalize errors
         }
-      }, TERMINAL_RESIZE_DEBOUNCE_MS);
+      };
+
+      const unregisterLinks = registerTerminalLinkProviders(terminal);
+      const unsubscribeTheme = observeTerminalTheme(container, () => {
+        try {
+          terminal.options.theme = readTerminalThemeFromContainer(container);
+        } catch {
+          // ignore runtime theme update errors
+        }
+      });
+
+      const dataDisposable = terminal.onData((data) => {
+        if (sessionEnded) return;
+        void writeTerminalSession(workspaceId, terminalId, data).catch((error) => {
+          if (shouldIgnoreTerminalError(error)) {
+            sessionEnded = true;
+            return;
+          }
+          console.warn("write terminal session failed", error);
+          setStatus((prev) => (prev === "ready" ? "error" : prev));
+          setMessage(error instanceof Error ? error.message : "终端写入失败");
+        });
+      });
+
+      const outputUnsubscribe = subscribeTerminalOutput((event) => {
+        if (event.workspaceId === workspaceId && event.terminalId === terminalId) {
+          const sanitized = sanitizeTerminalPtyOutput(event.data);
+          if (!sanitized) return;
+          outputWriter?.push(sanitized);
+          streamCursor += event.data.length;
+          outputWriter?.flush();
+        }
+      });
+
+      const exitUnsubscribe = subscribeTerminalExit((event) => {
+        if (event.workspaceId === workspaceId && event.terminalId === terminalId) {
+          sessionEnded = true;
+          outputWriter?.clear();
+          if (event.reason) {
+            try {
+              terminal.write(
+                `\r\n\x1b[31m[终端已断开] ${event.reason}\x1b[0m\r\n`,
+              );
+            } catch {
+              // 忽略写入失败：终端可能已被 dispose
+            }
+          }
+          onSessionExitRef.current?.(repositoryId, terminalId);
+        }
+      });
+
+      const scheduleVisibleRefit = () => {
+        if (visibleRefitTimerRef.current !== null) {
+          window.clearTimeout(visibleRefitTimerRef.current);
+        }
+        visibleRefitTimerRef.current = window.setTimeout(() => {
+          visibleRefitTimerRef.current = null;
+          if (cancelled || sessionEnded) return;
+          try {
+            fitTerminalToContainer();
+            const term = terminalRef.current;
+            if (!term) return;
+            const nextCols = clampTerminalDim(term.cols);
+            const nextRows = clampTerminalDim(term.rows);
+            void resizeTerminalSession(
+              workspaceId,
+              terminalId,
+              nextCols,
+              nextRows,
+            ).catch(() => undefined);
+            if (outputWriter) {
+              resetTerminalKeyboardProtocol(outputWriter);
+            }
+            persistSurfaceSnapshot(term);
+          } catch {
+            // ignore
+          }
+        }, 80);
+      };
+
+      const fitAndOpen = async () => {
+        if (cancelled) return;
+        try {
+          fitTerminalToContainer();
+        } catch {
+          // 容器尚未可见时忽略
+        }
+        const cols = clampTerminalDim(terminal.cols || 80);
+        const rows = clampTerminalDim(terminal.rows || 24);
+
+        let needsOpen = false;
+        try {
+          const attach = await attachTerminalSession(
+            workspaceId,
+            terminalId,
+            startCursor,
+          );
+          if (cancelled) return;
+          streamCursor = attach.cursor;
+          if (attach.replay) {
+            const replay = sanitizeTerminalPtyOutput(attach.replay);
+            if (replay) {
+              await new Promise<void>((resolve) => {
+                outputWriter?.push(replay);
+                outputWriter?.flush(resolve);
+              });
+            }
+          }
+        } catch (error) {
+          const message = error instanceof Error ? error.message : String(error);
+          if (message.toLowerCase().includes("terminal session not found")) {
+            needsOpen = true;
+          } else if (!shouldIgnoreTerminalError(error)) {
+            if (cancelled) return;
+            setStatus("error");
+            setMessage(message || "终端连接失败");
+            return;
+          } else {
+            needsOpen = true;
+          }
+        }
+
+        if (!needsOpen) {
+          if (cancelled) return;
+          finalizeSessionReady();
+          return;
+        }
+
+        void openTerminalSession(workspaceId, terminalId, cols, rows, cwd, {
+          source: "user",
+        })
+          .then(() => {
+            if (cancelled) return;
+            finalizeSessionReady();
+          })
+          .catch((error) => {
+            if (cancelled) return;
+            if (!shouldIgnoreTerminalError(error)) {
+              console.warn("open terminal session failed", error);
+            }
+            setStatus("error");
+            setMessage(error instanceof Error ? error.message : "终端启动失败");
+          });
+      };
+
+      if (typeof document !== "undefined" && document.fonts) {
+        await document.fonts.ready;
+      }
+      if (cancelled) return;
+
+      try {
+        (
+          terminal.renderer as { remeasureFont?: () => void } | undefined
+        )?.remeasureFont?.();
+        fitTerminalToContainer();
+      } catch {
+        // ignore font remeasure errors
+      }
+
+      const raf1 = requestAnimationFrame(() => {
+        const raf2 = requestAnimationFrame(() => {
+          void fitAndOpen();
+        });
+        fitAndOpenRafRef.current = raf2;
+      });
+      fitAndOpenRafRef.current = raf1;
+
+      fitAddon.observeResize();
+      const resizeObserver = new ResizeObserver(() => {
+        const fit = fitAddonRef.current;
+        const term = terminalRef.current;
+        if (!fit || !term) return;
+        if (resizeDebounceTimerRef.current !== null) {
+          window.clearTimeout(resizeDebounceTimerRef.current);
+        }
+        resizeDebounceTimerRef.current = window.setTimeout(() => {
+          resizeDebounceTimerRef.current = null;
+          const fit2 = fitAddonRef.current;
+          const term2 = terminalRef.current;
+          if (!fit2 || !term2) return;
+          try {
+            fit2.fit();
+            reconcileTerminalCanvasFit(term2, container);
+            const nextCols = clampTerminalDim(term2.cols);
+            const nextRows = clampTerminalDim(term2.rows);
+            void resizeTerminalSession(
+              workspaceId,
+              terminalId,
+              nextCols,
+              nextRows,
+            ).catch((error) => {
+              if (!shouldIgnoreTerminalError(error)) {
+                console.warn("resize terminal session failed", error);
+              }
+            });
+            persistSurfaceSnapshot(term2);
+          } catch {
+            // ignore fit 失败
+          }
+        }, TERMINAL_RESIZE_DEBOUNCE_MS);
+      });
+      resizeObserver.observe(container);
+
+      const handleVisibilityChange = () => {
+        if (document.visibilityState === "visible") {
+          scheduleVisibleRefit();
+        }
+      };
+      document.addEventListener("visibilitychange", handleVisibilityChange);
+
+      return () => {
+        document.removeEventListener("visibilitychange", handleVisibilityChange);
+        cancelled = true;
+        cancelAnimationFrame(raf1);
+        if (fitAndOpenRafRef.current !== null) {
+          cancelAnimationFrame(fitAndOpenRafRef.current);
+        }
+        if (resizeDebounceTimerRef.current !== null) {
+          window.clearTimeout(resizeDebounceTimerRef.current);
+          resizeDebounceTimerRef.current = null;
+        }
+        if (visibleRefitTimerRef.current !== null) {
+          window.clearTimeout(visibleRefitTimerRef.current);
+          visibleRefitTimerRef.current = null;
+        }
+        resizeObserver.disconnect();
+        unregisterLinks();
+        unregisterInputSurface();
+        unsubscribeTheme();
+        dataDisposable.dispose();
+        outputUnsubscribe();
+        exitUnsubscribe();
+        try {
+          persistSurfaceSnapshot(terminal);
+          terminal.dispose();
+        } catch {
+          // ignore dispose 错误
+        }
+        terminalRef.current = null;
+        fitAddonRef.current = null;
+        if (closeOnUnmount) {
+          cleanupTerminalSession(repositoryId, terminalId);
+        }
+      };
+    };
+
+    let cleanup: (() => void) | undefined;
+    void bootstrap().then((dispose) => {
+      cleanup = dispose;
     });
-    resizeObserver.observe(container);
 
     return () => {
       cancelled = true;
-      cancelAnimationFrame(raf1);
-      if (fitAndOpenRafRef.current !== null) {
-        cancelAnimationFrame(fitAndOpenRafRef.current);
-      }
-      if (resizeDebounceTimerRef.current !== null) {
-        window.clearTimeout(resizeDebounceTimerRef.current);
-        resizeDebounceTimerRef.current = null;
-      }
-      resizeObserver.disconnect();
-      dataDisposable.dispose();
-      outputUnsubscribe();
-      exitUnsubscribe();
-      try {
-        terminal.dispose();
-      } catch {
-        // 忽略 dispose 错误
-      }
-      terminalRef.current = null;
-      fitAddonRef.current = null;
-      cleanupTerminalSession(repositoryId, terminalId);
+      cleanup?.();
     };
   }, [
     repositoryId,
@@ -301,6 +512,7 @@ export function useTerminalSession({
     activeTerminalId,
     isVisible,
     cleanupTerminalSession,
+    closeOnUnmount,
   ]);
 
   return {

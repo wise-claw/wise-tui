@@ -754,7 +754,7 @@ function ClaudeSessionsShell({
       ) : null}
       </div>
 
-      {/* Terminal Panel：按需加载 xterm；收起时仅隐藏 UI，保持 PTY 会话 */}
+      {/* Terminal Panel：按需加载 ghostty-web；收起时仅隐藏 UI，保持 PTY 会话 */}
       {terminalPanelMounted && chatContextRepository && onToggleTerminal && (
         <div
           className={
@@ -776,6 +776,7 @@ function ClaudeSessionsShell({
               repositoryName={chatContextRepository.name}
               branch={chatContextRepository.branch}
               dirty={false}
+              collapsed={terminalCollapsed}
               onCollapse={onCollapseTerminal ?? onToggleTerminal}
               onClose={onCloseTerminalPanel ?? onToggleTerminal}
               fullscreen={terminalFullscreen}

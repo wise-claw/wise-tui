@@ -1,4 +1,9 @@
 import { invoke } from "@tauri-apps/api/core";
+import type {
+  TerminalAttachResponse,
+  TerminalSessionInfo,
+  TerminalSessionSource,
+} from "../types/terminal";
 
 export interface ShellCommandResponse {
   stdout: string;
@@ -21,8 +26,56 @@ export async function openTerminalSession(
   cols: number,
   rows: number,
   cwd: string,
+  options?: {
+    title?: string;
+    source?: TerminalSessionSource;
+  },
 ): Promise<void> {
-  return invoke("terminal_open", { workspaceId, terminalId, cols, rows, cwd });
+  return invoke("terminal_open", {
+    workspaceId,
+    terminalId,
+    cols,
+    rows,
+    cwd,
+    title: options?.title,
+    source: options?.source ?? "user",
+  });
+}
+
+export async function attachTerminalSession(
+  workspaceId: string,
+  terminalId: string,
+  cursor: number,
+): Promise<TerminalAttachResponse> {
+  return invoke<TerminalAttachResponse>("terminal_attach", {
+    workspaceId,
+    terminalId,
+    cursor,
+  });
+}
+
+export async function listTerminalSessions(
+  workspaceId: string,
+): Promise<TerminalSessionInfo[]> {
+  return invoke<TerminalSessionInfo[]>("terminal_list", { workspaceId });
+}
+
+export async function getTerminalSession(
+  workspaceId: string,
+  terminalId: string,
+): Promise<TerminalSessionInfo | null> {
+  return invoke<TerminalSessionInfo | null>("terminal_get", {
+    workspaceId,
+    terminalId,
+  });
+}
+
+export async function updateTerminalSessionTitle(
+  workspaceId: string,
+  terminalId: string,
+  title: string,
+): Promise<void> {
+  return invoke("terminal_update_title", { workspaceId, terminalId, title });
 }
 
 export async function writeTerminalSession(
@@ -40,6 +93,20 @@ export async function resizeTerminalSession(
   rows: number,
 ): Promise<void> {
   return invoke("terminal_resize", { workspaceId, terminalId, cols, rows });
+}
+
+export async function openAgentTerminalSession(
+  workspaceId: string,
+  terminalId: string,
+  cols: number,
+  rows: number,
+  cwd: string,
+  title?: string,
+): Promise<void> {
+  return openTerminalSession(workspaceId, terminalId, cols, rows, cwd, {
+    title: title ?? "Agent 终端",
+    source: "agent",
+  });
 }
 
 export async function closeTerminalSession(

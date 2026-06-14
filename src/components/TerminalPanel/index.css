@@ -50,9 +50,74 @@
 .terminal-header-left {
   display: flex;
   align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
+  gap: 8px;
+  flex: 1;
   min-width: 0;
+}
+
+.terminal-tab-strip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+  overflow-x: auto;
+  scrollbar-width: thin;
+}
+
+.terminal-tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: 160px;
+  height: 22px;
+  padding: 0 8px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  background: transparent;
+  color: var(--ant-color-text-secondary);
+  font-size: 11px;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.terminal-tab--active {
+  color: var(--ant-color-text);
+  border-color: var(--ant-color-border-secondary);
+  background: var(--ant-color-fill-quaternary);
+}
+
+.terminal-tab--agent {
+  color: var(--ant-color-primary);
+}
+
+.terminal-tab--add {
+  width: 22px;
+  padding: 0;
+  justify-content: center;
+}
+
+.terminal-tab__label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-tab__close {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 1;
+  opacity: 0.7;
+}
+
+.terminal-tab__close:hover {
+  opacity: 1;
+  background: var(--ant-color-fill-secondary);
 }
 
 .terminal-header-title {
@@ -166,31 +231,45 @@
 .terminal-surface {
   flex: 1;
   min-height: 0;
-  height: 100%;
   border-radius: 0;
   overflow: hidden;
   background: var(--terminal-background);
   border-top: 1px solid rgba(255, 255, 255, 0.08);
   box-sizing: border-box;
   cursor: text;
-  padding: 8px 12px;
+  padding: 0 0 0 6px;
+  caret-color: transparent;
+  /* ghostty 在容器上设了 contenteditable；必须禁用浏览器原生选区，否则会与 canvas 高亮错位。 */
+  user-select: none;
+  -webkit-user-select: none;
 }
 
-.terminal-surface .xterm,
-.terminal-surface .xterm-screen,
-.terminal-surface .xterm-viewport {
+.terminal-surface::selection,
+.terminal-surface *::selection {
+  background: transparent;
+}
+
+/* contenteditable 占位 <br> 会把 canvas 顶出一块空白 */
+.terminal-surface > br {
+  display: none !important;
+}
+
+/* ghostty-web 自行设置 canvas 像素尺寸；勿用 100% 拉伸，否则末行会被裁切。 */
+.terminal-surface canvas {
+  display: block;
   background: var(--terminal-background) !important;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
-.terminal-surface .xterm {
-  height: 100%;
-  width: 100%;
-  box-sizing: border-box;
-}
-
-.terminal-surface .xterm-viewport {
-  height: 100% !important;
-  overflow-x: auto;
+/* ghostty-web 用 1×1 textarea（左上角）承接键盘输入；必须完全隐藏插入符。 */
+.terminal-surface textarea {
+  caret-color: transparent !important;
+  color: transparent !important;
+  background: transparent !important;
+  border: none !important;
+  outline: none !important;
+  opacity: 0 !important;
 }
 
 .terminal-overlay {
