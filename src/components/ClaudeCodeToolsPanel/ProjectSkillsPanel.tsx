@@ -32,6 +32,7 @@ import {
   deleteClaudeProjectSkillFile,
   getClaudeProjectSkillFile,
   listClaudeProjectSkillFiles,
+  listClaudePluginCacheSkills,
   listClaudeProjectSkills,
   listClaudeUserSkills,
   saveClaudeProjectSkillFile,
@@ -106,6 +107,10 @@ function mergeProjectAndUserSkills(
 
 function isUserScopeSkill(skill: ClaudeProjectSkill): boolean {
   return skill.skillScope === "user";
+}
+
+function isPluginCacheSkill(skill: ClaudeProjectSkill): boolean {
+  return skill.skillScope === "plugin" || Boolean(skill.pluginCacheRelPath?.trim());
 }
 
 function resolvePreferredEditorTarget() {
@@ -301,6 +306,53 @@ const UserSkillCard = memo(function UserSkillCard({ skill, onOpenFolder }: UserS
   );
 });
 
+interface PluginSkillCardProps {
+  skill: ClaudeProjectSkill;
+  onOpenFolder: (skill: ClaudeProjectSkill) => void | Promise<void>;
+}
+
+const PluginSkillCard = memo(function PluginSkillCard({ skill, onOpenFolder }: PluginSkillCardProps) {
+  const pathLine = skill.pluginCacheRoot?.trim() || skill.pluginCacheRelPath?.trim() || skill.name;
+  const isCommand = isClaudeProjectCommand(skill);
+  return (
+    <div className="app-repository-skills-card">
+      <div className="app-repository-skills-card-head">
+        <span className="app-repository-skills-name">
+          {skill.name}
+          {isCommand ? (
+            <Tag color="purple" style={{ marginLeft: 6 }}>
+              命令
+            </Tag>
+          ) : null}
+          <Tag color="green" style={{ marginLeft: 6 }}>
+            插件
+          </Tag>
+        </span>
+        <div className="app-repository-skills-card-meta">
+          <span className="app-repository-skills-filecount">{skill.fileCount ?? 0} 个文件</span>
+          <div className="app-repository-skills-card-actions">
+            <Button
+              type="text"
+              size="small"
+              className="app-repository-skills-card-icon-btn"
+              icon={<FolderOpenOutlined />}
+              title="在编辑器中打开插件包内路径"
+              aria-label="打开目录"
+              onClick={() => {
+                void onOpenFolder(skill);
+              }}
+            />
+          </div>
+        </div>
+      </div>
+      <div className="app-repository-skills-desc">
+        <div className="app-repository-skills-card-desc-main">{skill.description?.trim() || "—"}</div>
+        <Typography.Text className="app-repository-skills-card-path-line">{pathLine}</Typography.Text>
+      </div>
+    </div>
+  );
+});
+
 interface SkillFileRowProps {
   entry: ClaudeProjectSkillFileEntry;
   selectedPath: string | null;
@@ -373,11 +425,15 @@ export function ProjectSkillsPanel({
   const load = useCallback(async () => {
     setLoading(true);
     try {
-      const [list, userList] = await Promise.all([
+      const [list, userList, pluginList] = await Promise.all([
         scopePathAvailable ? listClaudeProjectSkills(repositoryPath) : Promise.resolve([]),
         listClaudeUserSkills(),
+        listClaudePluginCacheSkills(repositoryPath).catch(() => []),
       ]);
-      setSkills(mergeProjectAndUserSkills(list, userList));
+      const merged = mergeProjectAndUserSkills(list, userList);
+      const seen = new Set(merged.map((s) => s.name.toLowerCase()));
+      const pluginOnly = pluginList.filter((s) => !seen.has(s.name.toLowerCase()));
+      setSkills([...merged, ...pluginOnly]);
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
     } finally {
@@ -426,7 +482,7 @@ export function ProjectSkillsPanel({
   const listSearchNeedle = useMemo(() => listSearch.trim().toLowerCase(), [listSearch]);
 
   const visibleProjectSkills = useMemo(() => {
-    const base = skills.filter((s) => !isUserScopeSkill(s));
+    const base = skills.filter((s) => !isUserScopeSkill(s) && !isPluginCacheSkill(s));
     if (!listSearchNeedle) return base;
     return base.filter((s) => skillMatchesListSearch(s, listSearchNeedle, repositoryPath));
   }, [skills, listSearchNeedle, repositoryPath]);
@@ -437,8 +493,14 @@ export function ProjectSkillsPanel({
     return base.filter((s) => skillMatchesListSearch(s, listSearchNeedle, repositoryPath));
   }, [skills, listSearchNeedle, repositoryPath]);
 
+  const visiblePluginSkills = useMemo(() => {
+    const base = skills.filter((s) => isPluginCacheSkill(s));
+    if (!listSearchNeedle) return base;
+    return base.filter((s) => skillMatchesListSearch(s, listSearchNeedle, repositoryPath));
+  }, [skills, listSearchNeedle, repositoryPath]);
+
   const hasFilteredSkills =
-    visibleProjectSkills.length > 0 || visibleUserSkills.length > 0;
+    visibleProjectSkills.length > 0 || visibleUserSkills.length > 0 || visiblePluginSkills.length > 0;
 
   const loadSkillFileList = useCallback(
     async (skillName: string): Promise<ClaudeProjectSkillFileEntry[]> => {
@@ -518,6 +580,31 @@ export function ProjectSkillsPanel({
         await openWorkspaceIn(p, { command: target.command, args: target.args });
       } else {
         await openWorkspaceIn(p, { appName: target.appName, args: target.args });
+      }
+    } catch {
+      message.warning("无法在编辑器中打开该路径");
+    }
+  }, []);
+
+  const openPluginSkillFolder = useCallback(async (skill: ClaudeProjectSkill) => {
+    const root = skill.pluginCacheRoot?.trim();
+    if (!root) {
+      message.warning("未记录插件包路径");
+      return;
+    }
+    const target = resolvePreferredEditorTarget();
+    if (!target) {
+      message.warning("未找到可用编辑器，请先在“打开方式”中配置");
+      return;
+    }
+    const openPath = isClaudeProjectCommand(skill)
+      ? `${root.replace(/\/$/, "")}/commands/${skill.commandRelPath ?? `${skill.name}.md`}`
+      : `${root.replace(/\/$/, "")}/skills/${skill.name}`;
+    try {
+      if (target.kind === "command") {
+        await openWorkspaceIn(openPath, { command: target.command, args: target.args });
+      } else {
+        await openWorkspaceIn(openPath, { appName: target.appName, args: target.args });
       }
     } catch {
       message.warning("无法在编辑器中打开该路径");
@@ -866,6 +953,13 @@ export function ProjectSkillsPanel({
                 key={`user:${skill.name}`}
                 skill={skill}
                 onOpenFolder={openUserSkillFolder}
+              />
+            ))}
+            {visiblePluginSkills.map((skill) => (
+              <PluginSkillCard
+                key={`plugin:${skill.pluginCacheRelPath ?? ""}:${skill.name}`}
+                skill={skill}
+                onOpenFolder={openPluginSkillFolder}
               />
             ))}
           </div>

@@ -929,6 +929,8 @@ export interface ClaudeHooksStatusResponse {
   project: ClaudeHookScopeData;
   local: ClaudeHookScopeData;
   omc: ClaudeHookScopeData;
+  /** 已启用 Claude Code 插件包内声明的 hooks（仅展示，不可写）。来自 `~/.claude/plugins/cache/**`。 */
+  plugins?: ClaudeHookScopeData[];
 }
 
 export interface ClaudeHookUpsertPayload {

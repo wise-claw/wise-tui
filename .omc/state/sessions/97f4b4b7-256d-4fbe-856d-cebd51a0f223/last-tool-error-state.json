@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"which cargo 2>/dev/null; ls -la $HOME/.cargo/bin/cargo 2>/dev/null; ls -la /usr/local/bin/cargo 2>/dev/null; ls -la /opt/homebrew/bin/cargo 2>/dev/null\",\"description\":\"Locate cargo binary\"...",
+  "error": "Exit code 1\ncargo not found\nlrwxr-xr-x@ 1 sjl  staff  6 Oct 30  2025 /Users/sjl/.cargo/bin/cargo -> rustup",
+  "timestamp": "2026-06-13T15:26:46.879Z",
+  "retry_count": 1
+}

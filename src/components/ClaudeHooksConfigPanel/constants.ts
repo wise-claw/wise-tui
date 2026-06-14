@@ -11,6 +11,7 @@ export const EMPTY_DATA: ClaudeHooksStatusResponse = {
   project: EMPTY_SCOPE_DATA,
   local: EMPTY_SCOPE_DATA,
   omc: EMPTY_SCOPE_DATA,
+  plugins: [],
 };
 
 export const HOOKS_FLOW_THEME_STORAGE_KEY = "wise.ui.hooks.flow-theme.v1";

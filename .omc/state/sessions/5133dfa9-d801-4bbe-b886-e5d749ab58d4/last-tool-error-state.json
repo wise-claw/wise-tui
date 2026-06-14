@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"rtk grep -nE \\\"^#\\\\[cfg\\\\(test\\\\)\\\\]|^mod tests\\\" /Users/sjl/Documents/github/wise/src-tauri/src/claude_commands/mcp.rs\",\"description\":\"Find test mod in mcp.rs\"}",
+  "error": "Exit code 1",
+  "timestamp": "2026-06-13T15:43:18.622Z",
+  "retry_count": 2
+}

@@ -35,7 +35,7 @@ pub(crate) struct ClaudeMcpStatusResponse {
     project_shared: Vec<ClaudeMcpItem>,
     legacy_user_settings: Vec<ClaudeMcpItem>,
     legacy_project_settings: Vec<ClaudeMcpItem>,
-    /// 插件 MCP：Wise 不从 `~/.claude/plugins/**` 枚举；保留字段以兼容前端分组（恒为空）。
+    /// 插件 MCP：来自 `installed_plugins.json`（`installPath`）、`~/.claude/settings.json` 与 `plugins/cache/**`，仅展示。
     plugin_mcp: Vec<ClaudeMcpItem>,
 }
 
@@ -256,7 +256,7 @@ fn build_mcp_items_from_settings_mcp_block(
     build_mcp_items_from_map(map, scope, source_path, claude_json_project_key)
 }
 
-fn claude_plugin_data_dir_from_ref(plugin_ref: &str) -> PathBuf {
+pub(super) fn claude_plugin_data_dir_from_ref(plugin_ref: &str) -> PathBuf {
     let id: String = plugin_ref
         .chars()
         .map(|c| match c {
@@ -270,7 +270,7 @@ fn claude_plugin_data_dir_from_ref(plugin_ref: &str) -> PathBuf {
         .join(id)
 }
 
-fn expand_plugin_vars_in_json_value(v: &mut serde_json::Value, root: &Path, data_dir: &str) {
+pub(super) fn expand_plugin_vars_in_json_value(v: &mut serde_json::Value, root: &Path, data_dir: &str) {
     match v {
         serde_json::Value::String(s) => {
             let new_s = s
@@ -292,8 +292,7 @@ fn expand_plugin_vars_in_json_value(v: &mut serde_json::Value, root: &Path, data
     }
 }
 
-/// Plugin MCP discovery from `~/.claude/plugins/**` — retained while runtime collection is stubbed.
-#[allow(dead_code)]
+/// Plugin MCP discovery from `~/.claude/plugins/**`：枚举 cache 已启用插件包 + settings.json 顶层 `<slug>@<marketplace>` 开关，仅展示不可写。
 mod plugin_mcp_enumeration {
     use super::*;
 
@@ -304,7 +303,7 @@ mod plugin_mcp_enumeration {
     }
 
     /// 将 `plugin.json` 的 `mcpServers` 字段（字符串路径 / 数组 / 内联对象）解析为若干 `(来源文件路径, 服务器表)`。
-    fn collect_mcp_maps_from_plugin_mcp_spec(
+    pub(super) fn collect_mcp_maps_from_plugin_mcp_spec(
         plugin_root: &Path,
         spec: &serde_json::Value,
         hint_source: &str,
@@ -351,7 +350,7 @@ mod plugin_mcp_enumeration {
     }
 
     /// 将已解析的 MCP 服务器表写入 `out`（展开 `${CLAUDE_PLUGIN_ROOT}` / `${CLAUDE_PLUGIN_DATA}`）。
-    fn append_mcp_declaration_maps(
+    pub(super) fn append_mcp_declaration_maps(
         plugin_ref: &str,
         plugin_root: &Path,
         maps: Vec<(String, serde_json::Map<String, serde_json::Value>)>,
@@ -393,7 +392,7 @@ mod plugin_mcp_enumeration {
     }
 
     /// 从单个插件根目录（cache 安装副本等）解析 MCP 条目并追加到 `out`。
-    fn push_mcp_declarations_from_plugin_dir(
+    pub(super) fn push_mcp_declarations_from_plugin_dir(
         plugin_ref: &str,
         plugin_root: &Path,
         out: &mut Vec<ClaudeMcpItem>,
@@ -428,7 +427,7 @@ mod plugin_mcp_enumeration {
     }
 
     /// 解析 `installed_plugins.json` 中的 `installPath` / `install_path`（支持 `~`、相对路径、`$HOME/`、环境变量）。
-    fn resolve_claude_plugin_install_path(home: &Path, raw: &str) -> Option<PathBuf> {
+    pub(super) fn resolve_claude_plugin_install_path(home: &Path, raw: &str) -> Option<PathBuf> {
         let t = raw.trim();
         if t.is_empty() {
             return None;
@@ -455,7 +454,7 @@ mod plugin_mcp_enumeration {
         }
     }
 
-    fn dedupe_plugin_mcp_items(items: Vec<ClaudeMcpItem>) -> Vec<ClaudeMcpItem> {
+    pub(super) fn dedupe_plugin_mcp_items(items: Vec<ClaudeMcpItem>) -> Vec<ClaudeMcpItem> {
         let mut seen: HashSet<(String, String)> = HashSet::new();
         let mut out: Vec<ClaudeMcpItem> = Vec::new();
         for it in items {
@@ -1014,7 +1013,7 @@ mod plugin_mcp_enumeration {
 
     /// 从用户级 settings.json（默认 `~/.claude/settings.json`，自定义目录时同步切换）读取 `plugin@marketplace` 启用项并解析对应插件包内的 MCP（与 `installed_plugins.json` / 目录扫描互补）。
     /// Claude Code 常把开关写在根级，或写在 `enabledPlugins` 对象内，两者都扫描。
-    fn collect_mcp_from_claude_settings_marketplace_plugin_toggles(
+    pub(super) fn collect_mcp_from_claude_settings_marketplace_plugin_toggles(
         home: &Path,
         seen_roots: &mut HashSet<String>,
         out: &mut Vec<ClaudeMcpItem>,
@@ -1075,9 +1074,124 @@ pub(crate) fn discover_plugin_roots_under_claude_cache_for_skills_and_agents(
     plugin_mcp_enumeration::discover_plugin_roots_under_claude_cache_for_skills_and_agents()
 }
 
-/// Wise 不从 `~/.claude/plugins/**`（含 cache、marketplaces、installed_plugins.json）读取插件 MCP。
-fn collect_installed_plugin_mcp_items(_home: &Path) -> Vec<ClaudeMcpItem> {
-    Vec::new()
+pub(crate) fn resolve_claude_plugin_install_path(home: &Path, raw: &str) -> Option<PathBuf> {
+    plugin_mcp_enumeration::resolve_claude_plugin_install_path(home, raw)
+}
+
+/// 插件 MCP：来自 `installed_plugins.json` 的 `installPath`、`~/.claude/settings.json` 启用项、
+/// `plugins/cache/**` 回退扫描，仅展示不可写。
+fn collect_installed_plugin_mcp_items(home: &Path) -> Vec<ClaudeMcpItem> {
+    use plugin_mcp_enumeration::{
+        append_mcp_declaration_maps, collect_mcp_from_claude_settings_marketplace_plugin_toggles,
+        collect_mcp_maps_from_plugin_mcp_spec, dedupe_plugin_mcp_items,
+        push_mcp_declarations_from_plugin_dir, resolve_claude_plugin_install_path,
+    };
+
+    let enabled_ids: HashSet<String> =
+        match super::plugin_market::list_enabled_installed_plugin_ids(None) {
+            Ok(ids) => ids.into_iter().map(|id| id.to_lowercase()).collect(),
+            Err(_) => HashSet::new(),
+        };
+    if enabled_ids.is_empty() {
+        return Vec::new();
+    }
+
+    let mut out: Vec<ClaudeMcpItem> = Vec::new();
+    let mut seen_roots: HashSet<String> = HashSet::new();
+
+    let installed_path = crate::claude_config_dir::user_claude_dir()
+        .join("plugins")
+        .join("installed_plugins.json");
+    let installed_hint_base = installed_path.to_string_lossy().to_string();
+    if let Some(root_val) = read_json_file(&installed_path) {
+        if let Some(plugins_obj) = root_val.get("plugins").and_then(|x| x.as_object()) {
+            for (plugin_ref, entries_val) in plugins_obj {
+                let plugin_ref = plugin_ref.trim();
+                if plugin_ref.is_empty() || !enabled_ids.contains(&plugin_ref.to_lowercase()) {
+                    continue;
+                }
+                let entry_rows: Vec<&serde_json::Value> = if let Some(arr) = entries_val.as_array()
+                {
+                    arr.iter().collect()
+                } else if entries_val.is_object() {
+                    vec![entries_val]
+                } else {
+                    continue;
+                };
+                for ent in entry_rows {
+                    let install_raw = ent
+                        .get("installPath")
+                        .and_then(|x| x.as_str())
+                        .or_else(|| ent.get("install_path").and_then(|x| x.as_str()));
+                    let Some(install_raw) = install_raw.map(str::trim).filter(|s| !s.is_empty())
+                    else {
+                        continue;
+                    };
+                    let Some(plugin_root) = resolve_claude_plugin_install_path(home, install_raw)
+                    else {
+                        continue;
+                    };
+                    let canon_key = plugin_root.to_string_lossy().to_string();
+                    if !seen_roots.insert(canon_key) {
+                        continue;
+                    }
+                    push_mcp_declarations_from_plugin_dir(plugin_ref, &plugin_root, &mut out);
+                    if let Some(spec) = ent
+                        .get("mcpServers")
+                        .or_else(|| ent.get("mcp_servers"))
+                        .filter(|s| !s.is_null())
+                    {
+                        let hint = format!("{} [{}]", installed_hint_base, plugin_ref);
+                        let mut inline_maps: Vec<(
+                            String,
+                            serde_json::Map<String, serde_json::Value>,
+                        )> = Vec::new();
+                        collect_mcp_maps_from_plugin_mcp_spec(
+                            &plugin_root,
+                            spec,
+                            &hint,
+                            &mut inline_maps,
+                        );
+                        append_mcp_declaration_maps(
+                            plugin_ref,
+                            &plugin_root,
+                            inline_maps,
+                            &mut out,
+                        );
+                    }
+                }
+            }
+        }
+    }
+
+    collect_mcp_from_claude_settings_marketplace_plugin_toggles(home, &mut seen_roots, &mut out);
+
+    for (cache_rel, plugin_root) in
+        plugin_mcp_enumeration::discover_plugin_roots_under_claude_cache()
+    {
+        let Some(install_ref) = super::project_skills::install_ref_from_cache_rel(&cache_rel)
+        else {
+            continue;
+        };
+        if !enabled_ids.contains(&install_ref.to_lowercase()) {
+            continue;
+        }
+        let canon_key = plugin_root.to_string_lossy().to_string();
+        if !seen_roots.insert(canon_key) {
+            continue;
+        }
+        push_mcp_declarations_from_plugin_dir(&install_ref, &plugin_root, &mut out);
+    }
+
+    let mut deduped = dedupe_plugin_mcp_items(out);
+    deduped.sort_by(|a, b| {
+        a.plugin_ref
+            .clone()
+            .unwrap_or_default()
+            .cmp(&b.plugin_ref.clone().unwrap_or_default())
+            .then_with(|| a.name.to_lowercase().cmp(&b.name.to_lowercase()))
+    });
+    deduped
 }
 
 /// Parses combined stdout/stderr of `claude mcp list` (e.g. `name: cmd - ✓ Connected`).
@@ -1794,4 +1908,108 @@ pub(crate) async fn materialize_claude_spawn_mcp_config(
     })
     .await
     .map_err(|e| format!("materialize_claude_spawn_mcp_config: {}", e))?
+}
+
+#[cfg(test)]
+mod plugin_mcp_tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn push_mcp_declarations_reads_plugin_root_dotmcp() {
+        let dir = tempdir().expect("tempdir");
+        let plugin_root = dir.path().join("foo").join("1.0.0");
+        std::fs::create_dir_all(&plugin_root).expect("mkdir plugin_root");
+        let mcp_json = r#"{
+  "mcpServers": {
+    "demo": {
+      "command": "${CLAUDE_PLUGIN_ROOT}/bin/server",
+      "args": ["--flag"]
+    }
+  }
+}"#;
+        std::fs::write(plugin_root.join(".mcp.json"), mcp_json).expect("write .mcp.json");
+
+        let mut out: Vec<ClaudeMcpItem> = Vec::new();
+        plugin_mcp_enumeration::push_mcp_declarations_from_plugin_dir(
+            "foo@bar",
+            &plugin_root,
+            &mut out,
+        );
+        assert!(
+            out.iter().any(|item| item.name == "demo"
+                && item.scope == "plugin"
+                && item.plugin_ref.as_deref() == Some("foo@bar")),
+            "expected plugin-scoped demo entry, got {:?}",
+            out.iter()
+                .map(|x| (x.scope.clone(), x.name.clone(), x.plugin_ref.clone()))
+                .collect::<Vec<_>>()
+        );
+        let demo = out.iter().find(|x| x.name == "demo").expect("demo entry");
+        assert!(
+            demo.command.contains(&plugin_root.to_string_lossy().to_string()),
+            "expected ${{CLAUDE_PLUGIN_ROOT}} to be expanded; got command: {}",
+            demo.command
+        );
+        assert!(
+            !demo.command.contains("${CLAUDE_PLUGIN_ROOT}"),
+            "placeholder should be gone: {}",
+            demo.command
+        );
+    }
+
+    #[test]
+    fn push_mcp_declarations_reads_plugin_manifest_inline() {
+        let dir = tempdir().expect("tempdir");
+        let plugin_root = dir.path().join("baz").join("2.0.0");
+        let manifest_dir = plugin_root.join(".claude-plugin");
+        std::fs::create_dir_all(&manifest_dir).expect("mkdir .claude-plugin");
+        let manifest = r#"{
+  "name": "baz",
+  "mcpServers": {
+    "alpha": { "command": "alpha-bin" }
+  }
+}"#;
+        std::fs::write(manifest_dir.join("plugin.json"), manifest).expect("write plugin.json");
+
+        let mut out: Vec<ClaudeMcpItem> = Vec::new();
+        plugin_mcp_enumeration::push_mcp_declarations_from_plugin_dir(
+            "baz@market",
+            &plugin_root,
+            &mut out,
+        );
+        assert!(
+            out.iter().any(|x| x.name == "alpha" && x.scope == "plugin"
+                && x.plugin_ref.as_deref() == Some("baz@market")),
+            "expected alpha entry from manifest, got {:?}",
+            out.iter()
+                .map(|x| (x.scope.clone(), x.name.clone()))
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn dedupe_plugin_mcp_items_drops_duplicate_name_command() {
+        let mk = |name: &str, cmd: &str| ClaudeMcpItem {
+            id: format!("plugin::test@x::{name}"),
+            name: name.to_string(),
+            command: cmd.to_string(),
+            status: "declared".into(),
+            enabled: true,
+            tools: Vec::new(),
+            scope: "plugin".into(),
+            source_path: String::new(),
+            claude_json_project_key: None,
+            plugin_ref: Some("test@x".into()),
+            runtime_status: None,
+        };
+        let items = vec![
+            mk("a", "cmd-1"),
+            mk("a", "cmd-1"),
+            mk("a", "cmd-2"),
+            mk("b", "cmd-1"),
+        ];
+        let deduped = plugin_mcp_enumeration::dedupe_plugin_mcp_items(items);
+        assert_eq!(deduped.len(), 3);
+    }
 }

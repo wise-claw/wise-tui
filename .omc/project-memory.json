@@ -42,8 +42,8 @@
     "runtime": null
   },
   "build": {
-    "buildCommand": "bunx tsc --noEmit; echo \"exit=$?\"",
-    "testCommand": "cd /Users/sjl/Documents/github/wise/src-tauri && $HOME/.cargo/bin/cargo test --lib claude_commands::terminal 2>&1 | tail -40",
+    "buildCommand": "bunx tsc --noEmit 2>&1 | tail -30; echo \"EXIT=$?\"",
+    "testCommand": "cd /Users/sjl/Documents/github/wise/src-tauri && PATH=\"$HOME/.cargo/bin:$PATH\" rtk proxy cargo test --lib migration_registry_preserves_ordered_names 2>&1 | grep -E \"^\\s*(left|right|---|note|test|failures|--- |001_|FAILED|passed)\" | tail -15",
     "lintCommand": null,
     "devCommand": "npm run dev",
     "scripts": {
@@ -257,6 +257,12 @@
       "type": "file"
     },
     {
+      "path": "src/types.ts",
+      "accessCount": 24,
+      "lastAccessed": 1781365056061,
+      "type": "file"
+    },
+    {
       "path": "src/components/AppWorkspaceLayout.tsx",
       "accessCount": 23,
       "lastAccessed": 1778630105765,
@@ -266,12 +272,6 @@
       "path": "src/components/LeftSidebar.tsx",
       "accessCount": 20,
       "lastAccessed": 1778630183552,
-      "type": "file"
-    },
-    {
-      "path": "src/types.ts",
-      "accessCount": 18,
-      "lastAccessed": 1778629787263,
       "type": "file"
     },
     {

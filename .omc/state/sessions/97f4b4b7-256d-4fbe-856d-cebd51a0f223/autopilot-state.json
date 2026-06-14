@@ -1,12 +1,14 @@
 {
   "active": false,
-  "current_phase": "completed",
-  "completed_at": "2026-06-13T14:55:00.000Z",
-  "summary": "Terminal stability enhancements implemented: bounded pending buffer (1MB cap), resilient PTY reader (retries on EINTR/WouldBlock), exit reason propagation, write retry with backoff, dimension clamping (1-1024) backend+frontend, resize debouncing (32ms). Tests: 4/4 cargo terminal tests pass; tsc --noEmit exit=0.",
+  "completed_at": "2026-06-13T15:24:00.000Z",
+  "original_prompt": "/oh-my-claudecode:autopilot 继续",
+  "session_id": "97f4b4b7-256d-4fbe-856d-cebd51a0f223",
+  "project_path": "/Users/sjl/Documents/github/wise",
+  "completion_summary": "Auto-approve feature: 3-state global+per-repo switch, settings UI, composer badge, decision util with hardening (Update removed, multiselect partial-validity guard), live mode hook with seq-guard, useClaudeSessions auto-respond hook with TOCTOU re-check + dev-only logs + in-place GC. tsc EXIT=0, 64/64 tests pass.",
   "_meta": {
     "mode": "autopilot",
     "sessionId": "97f4b4b7-256d-4fbe-856d-cebd51a0f223",
-    "updatedAt": "2026-06-13T14:49:59.035Z",
+    "updatedAt": "2026-06-13T15:35:31.841Z",
     "updatedBy": "state_write_tool"
   }
 }

@@ -158,6 +158,7 @@ import {
 } from "../../constants/workflowUiEvents";
 import { extractComposerCodeSelectionRefs } from "./extractComposerCodeSelectionRefs";
 import { scheduleInsertComposerCodeSelectionRef } from "./scheduleInsertComposerCodeSelectionRef";
+import { AutoApproveBadge } from "./AutoApproveBadge";
 import { expandComposerCodeSelectionRefs } from "../../utils/expandComposerCodeSelectionRefs";
 import type { GitBranchEntry } from "../../types";
 
@@ -3145,6 +3146,7 @@ function ComposerInner({
             <span className={bottomStatus.ctxToneClass}>{bottomStatus.ctxSegment}</span> | status:
             {bottomStatus.statusText}
           </span>
+          <AutoApproveBadge repositoryPath={session.repositoryPath ?? null} />
         </div>
       </div>
 

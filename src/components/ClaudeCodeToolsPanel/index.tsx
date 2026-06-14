@@ -21,16 +21,13 @@ import { OPEN_WORKSPACE_ERROR } from "../../services/openWorkspaceWithPreference
 import {
   getClaudeHooksStatus,
   getClaudeMcpStatus,
+  listClaudePluginCacheSkills,
   listClaudeProjectSkills,
   listClaudeSubagents,
   listClaudeUserSkills,
 } from "../../services/claude";
 import { claudePluginListInstalled } from "../../services/claudePluginMarket";
-import {
-  countHooksInScope,
-  filterOmcFromMcpStatus,
-  isOmcSubagentItem,
-} from "../../utils/omcPluginDetect";
+import { countHooksInScope } from "../../utils/omcPluginDetect";
 import { claudeCodeToolsTabToAuthorPane } from "../../utils/claudeCodeToolsAuthorPane";
 import type { AuthorPane } from "../../types/viewMode";
 import "./index.css";
@@ -140,20 +137,21 @@ export function ClaudeCodeToolsPanel({
     if (!panelActive) return;
     let cancelled = false;
     async function preloadTabCounts() {
-      const [mcpRes, hooksRes, subagentsRes, skillsRes, userSkillsRes, pluginsRes] =
+      const [mcpRes, hooksRes, subagentsRes, skillsRes, userSkillsRes, pluginSkillsRes, pluginsRes] =
         await Promise.allSettled([
         getClaudeMcpStatus(repositoryPath ?? null),
         getClaudeHooksStatus(repositoryPath ?? null),
         listClaudeSubagents(repositoryPath ?? null),
         repositoryPath ? listClaudeProjectSkills(repositoryPath) : Promise.resolve([]),
         listClaudeUserSkills(),
+        listClaudePluginCacheSkills(repositoryPath),
         claudePluginListInstalled(repositoryPath),
       ]);
       if (cancelled) return;
       setTabCounts((prev) => {
         const next = { ...prev };
         if (mcpRes.status === "fulfilled") {
-          const mcp = filterOmcFromMcpStatus(mcpRes.value);
+          const mcp = mcpRes.value;
           next.mcp =
             mcp.user.length +
             mcp.local.length +
@@ -166,17 +164,25 @@ export function ClaudeCodeToolsPanel({
           next.hooks =
             countHooksInScope(hooksRes.value.user.hooks) +
             countHooksInScope(hooksRes.value.project.hooks) +
-            countHooksInScope(hooksRes.value.local.hooks);
+            countHooksInScope(hooksRes.value.local.hooks) +
+            countHooksInScope(hooksRes.value.omc.hooks) +
+            (hooksRes.value.plugins ?? []).reduce(
+              (sum, scope) => sum + countHooksInScope(scope.hooks),
+              0,
+            );
         }
         if (subagentsRes.status === "fulfilled") {
-          next.subagents = subagentsRes.value.filter((item) => !isOmcSubagentItem(item)).length;
+          next.subagents = subagentsRes.value.length;
         }
-        if (skillsRes.status === "fulfilled" || userSkillsRes.status === "fulfilled") {
+        if (skillsRes.status === "fulfilled" || userSkillsRes.status === "fulfilled" || pluginSkillsRes.status === "fulfilled") {
           const projectList = skillsRes.status === "fulfilled" ? skillsRes.value : [];
           const userList = userSkillsRes.status === "fulfilled" ? userSkillsRes.value : [];
+          const pluginList = pluginSkillsRes.status === "fulfilled" ? pluginSkillsRes.value : [];
           const seen = new Set(projectList.map((s) => s.name.toLowerCase()));
           const userOnly = userList.filter((s) => !seen.has(s.name.toLowerCase()));
-          next.skill = projectList.length + userOnly.length;
+          for (const s of userOnly) seen.add(s.name.toLowerCase());
+          const pluginOnly = pluginList.filter((s) => !seen.has(s.name.toLowerCase()));
+          next.skill = projectList.length + userOnly.length + pluginOnly.length;
         }
         if (pluginsRes.status === "fulfilled") {
           next.plugins = pluginsRes.value.length;

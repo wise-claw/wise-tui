@@ -1,0 +1,76 @@
+.auto-approve-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+  padding: 4px 4px 24px;
+}
+
+.auto-approve-panel--loading {
+  align-items: center;
+  justify-content: center;
+  min-height: 240px;
+}
+
+.auto-approve-panel__section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.auto-approve-panel__section-head {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.auto-approve-panel__mode-group .ant-radio-wrapper {
+  align-items: flex-start;
+  margin-right: 0;
+}
+
+.auto-approve-panel__mode-label {
+  font-weight: 500;
+  margin-right: 8px;
+}
+
+.auto-approve-panel__mode-hint {
+  display: block;
+  font-size: 12px;
+  margin-top: 2px;
+  line-height: 1.5;
+}
+
+.auto-approve-panel__repo-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  border-top: 1px solid var(--ant-color-border-secondary, rgba(0, 0, 0, 0.06));
+}
+
+.auto-approve-panel__repo-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 4px;
+  border-bottom: 1px solid var(--ant-color-border-secondary, rgba(0, 0, 0, 0.06));
+}
+
+.auto-approve-panel__repo-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.auto-approve-panel__repo-path {
+  font-size: 12px;
+  font-family: var(--font-family-mono, monospace);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}

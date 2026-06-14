@@ -99,6 +99,11 @@ export const MCP_SECTIONS: {
     title: "兼容 · 仓库 settings",
     hint: ".claude/settings.json（旧式 MCP 块）",
   },
+  {
+    key: "pluginMcp",
+    title: "已安装插件",
+    hint: "~/.claude/plugins/installed_plugins.json · plugins/cache（只读展示）",
+  },
 ];
 
 export type McpFlatRow = { item: ClaudeMcpItem; sectionTitle: string; sectionKey: keyof ClaudeMcpStatusResponse };

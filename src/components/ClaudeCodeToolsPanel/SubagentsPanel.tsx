@@ -33,7 +33,6 @@ import {
 } from "../../utils/subagentFrontmatter";
 import { DEFAULT_OPEN_APP_ID, DEFAULT_OPEN_APP_TARGETS } from "../OpenAppMenu/constants";
 import { getOpenAppPreferenceSync, hydrateOpenAppPreference } from "../../services/openAppPreference";
-import { isOmcSubagentItem } from "../../utils/omcPluginDetect";
 
 interface Props {
   repositoryPath?: string;
@@ -156,8 +155,7 @@ export function SubagentsPanel({
     }
   }, [repositoryPath]);
   const visibleSorted = useMemo(() => {
-    const visible = list.filter((item) => !isOmcSubagentItem(item));
-    return [...visible].sort((a, b) => {
+    return [...list].sort((a, b) => {
       if (a.isCollaborationMode !== b.isCollaborationMode) {
         return a.isCollaborationMode ? -1 : 1;
       }

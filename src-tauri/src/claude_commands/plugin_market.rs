@@ -752,6 +752,103 @@ pub(crate) fn list_enabled_installed_plugin_ids(
         .collect())
 }
 
+/// 枚举已启用插件的安装根目录：优先 `installed_plugins.json` 的 `installPath`，
+/// 再回退扫描 `plugins/cache/**`（与 MCP / skills / hooks / 子代理探测共用）。
+/// 返回 `(plugin@marketplace, cache 相对路径, 插件包根)`。
+pub(crate) fn enumerate_enabled_plugin_install_roots(
+    repository_path: Option<&str>,
+) -> Result<Vec<(String, String, PathBuf)>, String> {
+    let home = home_dir()?;
+    let enabled_ids: HashSet<String> = list_enabled_installed_plugin_ids(repository_path)?
+        .into_iter()
+        .map(|id| id.to_lowercase())
+        .collect();
+    if enabled_ids.is_empty() {
+        return Ok(Vec::new());
+    }
+
+    let cache_dir = crate::claude_config_dir::user_claude_dir().join("plugins").join("cache");
+    let cache_canon = fs::canonicalize(&cache_dir).unwrap_or(cache_dir);
+
+    let mut out: Vec<(String, String, PathBuf)> = Vec::new();
+    let mut seen_roots: HashSet<String> = HashSet::new();
+
+    let cache_rel_for_root = |plugin_root: &Path| -> String {
+        let root_canon = fs::canonicalize(plugin_root).unwrap_or_else(|_| plugin_root.to_path_buf());
+        if let Ok(rel) = root_canon.strip_prefix(&cache_canon) {
+            rel.to_string_lossy()
+                .replace('\\', "/")
+                .trim_matches('/')
+                .to_string()
+        } else {
+            root_canon.to_string_lossy().replace('\\', "/")
+        }
+    };
+
+    let installed_path = crate::claude_config_dir::user_claude_dir()
+        .join("plugins")
+        .join("installed_plugins.json");
+    if let Some(root_val) = read_json_file(&installed_path) {
+        if let Some(plugins_obj) = root_val.get("plugins").and_then(|x| x.as_object()) {
+            for (plugin_ref, entries_val) in plugins_obj {
+                let plugin_ref = plugin_ref.trim();
+                if plugin_ref.is_empty() || !enabled_ids.contains(&plugin_ref.to_lowercase()) {
+                    continue;
+                }
+                let entry_rows: Vec<&serde_json::Value> = if let Some(arr) = entries_val.as_array()
+                {
+                    arr.iter().collect()
+                } else if entries_val.is_object() {
+                    vec![entries_val]
+                } else {
+                    continue;
+                };
+                for ent in entry_rows {
+                    let install_raw = ent
+                        .get("installPath")
+                        .and_then(|x| x.as_str())
+                        .or_else(|| ent.get("install_path").and_then(|x| x.as_str()));
+                    let Some(install_raw) = install_raw.map(str::trim).filter(|s| !s.is_empty())
+                    else {
+                        continue;
+                    };
+                    let Some(plugin_root) =
+                        super::mcp::resolve_claude_plugin_install_path(&home, install_raw)
+                    else {
+                        continue;
+                    };
+                    let canon_key = plugin_root.to_string_lossy().to_string();
+                    if seen_roots.insert(canon_key) {
+                        out.push((
+                            plugin_ref.to_string(),
+                            cache_rel_for_root(&plugin_root),
+                            plugin_root,
+                        ));
+                    }
+                }
+            }
+        }
+    }
+
+    for (cache_rel, plugin_root) in
+        super::mcp::discover_plugin_roots_under_claude_cache_for_skills_and_agents()
+    {
+        let Some(install_ref) = super::project_skills::install_ref_from_cache_rel(&cache_rel) else {
+            continue;
+        };
+        if !enabled_ids.contains(&install_ref.to_lowercase()) {
+            continue;
+        }
+        let canon_key = plugin_root.to_string_lossy().to_string();
+        if seen_roots.insert(canon_key) {
+            out.push((install_ref, cache_rel, plugin_root));
+        }
+    }
+
+    out.sort_by(|a, b| a.0.cmp(&b.0));
+    Ok(out)
+}
+
 fn marketplace_id_from_install_ref(install_ref: &str) -> Result<String, String> {
     validate_install_ref(install_ref)?;
     let marketplace = install_ref
@@ -899,6 +996,191 @@ pub async fn claude_plugin_scan_marketplace_source(
         scan_marketplace_source_sync(source.as_str(), scope.as_str(), repository_path.as_deref())
     })
     .await
+}
+
+#[cfg(test)]
+mod registry_tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn parses_installed_plugins_v2_user_scope() {
+        let _guard = crate::claude_config_dir::user_claude_dir_test_lock();
+        let home = tempdir().expect("home tempdir");
+        let claude_dir = home.path().join(".claude");
+        let plugins_root = claude_dir.join("plugins");
+        std::fs::create_dir_all(&plugins_root).expect("mkdir");
+        std::fs::write(
+            plugins_root.join("installed_plugins.json"),
+            r#"{
+  "version": 2,
+  "plugins": {
+    "oh-my-claudecode@omc": [
+      {
+        "scope": "user",
+        "installPath": "/Users/test/.claude/plugins/cache/omc/oh-my-claudecode/4.14.6",
+        "version": "4.14.6"
+      }
+    ]
+  }
+}"#,
+        )
+        .expect("write installed_plugins");
+
+        crate::claude_config_dir::set_user_claude_dir_for_tests(Some(claude_dir.clone()));
+        let entries = read_installed_plugins_registry(None).expect("ok");
+        crate::claude_config_dir::set_user_claude_dir_for_tests(None);
+
+        assert_eq!(entries.len(), 1, "expected one entry, got {entries:?}");
+        let e = &entries[0];
+        assert_eq!(e.id, "oh-my-claudecode@omc");
+        assert_eq!(e.scope, "user");
+        assert_eq!(e.version.as_deref(), Some("4.14.6"));
+        assert!(e.enabled, "v2 entry without explicit disabled should be enabled");
+    }
+
+    #[test]
+    fn list_enabled_returns_v2_user_plugin_when_cli_unavailable() {
+        let _guard = crate::claude_config_dir::user_claude_dir_test_lock();
+        let home = tempdir().expect("home tempdir");
+        let claude_dir = home.path().join(".claude");
+        let plugins_root = claude_dir.join("plugins");
+        std::fs::create_dir_all(&plugins_root).expect("mkdir");
+        std::fs::write(
+            plugins_root.join("installed_plugins.json"),
+            r#"{
+  "version": 2,
+  "plugins": {
+    "oh-my-claudecode@omc": [
+      { "scope": "user", "version": "4.14.6" }
+    ]
+  }
+}"#,
+        )
+        .expect("write");
+
+        crate::claude_config_dir::set_user_claude_dir_for_tests(Some(claude_dir.clone()));
+        let registry_rows = read_installed_plugins_registry(None).expect("ok");
+        let merged = merge_installed_entries(registry_rows, Vec::new());
+        crate::claude_config_dir::set_user_claude_dir_for_tests(None);
+
+        let enabled: Vec<_> = merged.into_iter().filter(|r| r.enabled).map(|r| r.id).collect();
+        assert!(
+            enabled.iter().any(|id| id == "oh-my-claudecode@omc"),
+            "expected oh-my-claudecode@omc to be enabled, got {enabled:?}"
+        );
+    }
+
+    /// 端到端：模拟用户的 ~/.claude 布局，验证 list_enabled_installed_plugin_ids
+    /// 在仅有 v2 installed_plugins.json + 真实包目录、CLI 不可用时仍返回插件。
+    #[test]
+    fn end_to_end_user_layout_lists_omc_plugin() {
+        let _guard = crate::claude_config_dir::user_claude_dir_test_lock();
+        let home = tempdir().expect("home tempdir");
+        let claude_dir = home.path().join(".claude");
+        let plugin_root = claude_dir
+            .join("plugins")
+            .join("cache")
+            .join("omc")
+            .join("oh-my-claudecode")
+            .join("4.14.6");
+
+        std::fs::create_dir_all(plugin_root.join(".claude-plugin")).expect("mkdir manifest");
+        std::fs::write(
+            plugin_root.join(".claude-plugin").join("plugin.json"),
+            r#"{"name":"oh-my-claudecode","version":"4.14.6"}"#,
+        )
+        .expect("write plugin.json");
+        std::fs::write(plugin_root.join(".mcp.json"), r#"{"mcpServers":{}}"#)
+            .expect("write .mcp.json");
+        std::fs::create_dir_all(plugin_root.join("agents")).expect("mkdir agents");
+        std::fs::write(
+            plugin_root.join("agents").join("executor.md"),
+            "---\nname: executor\ndescription: e2e test agent\n---\n\nbody",
+        )
+        .expect("write agent");
+        std::fs::create_dir_all(plugin_root.join("skills").join("autopilot"))
+            .expect("mkdir skill");
+        std::fs::write(
+            plugin_root.join("skills").join("autopilot").join("SKILL.md"),
+            "---\nname: autopilot\ndescription: e2e test skill\n---\n\nbody",
+        )
+        .expect("write skill");
+
+        let plugins_root = claude_dir.join("plugins");
+        std::fs::write(
+            plugins_root.join("installed_plugins.json"),
+            r#"{
+  "version": 2,
+  "plugins": {
+    "oh-my-claudecode@omc": [
+      {
+        "scope": "user",
+        "installPath": "/Users/sjl/.claude/plugins/cache/omc/oh-my-claudecode/4.14.6",
+        "version": "4.14.6"
+      }
+    ]
+  }
+}"#,
+        )
+        .expect("write installed_plugins");
+
+        crate::claude_config_dir::set_user_claude_dir_for_tests(Some(claude_dir.clone()));
+        let enabled = list_enabled_installed_plugin_ids(None).expect("list_enabled");
+        crate::claude_config_dir::set_user_claude_dir_for_tests(None);
+
+        assert!(
+            enabled.iter().any(|id| id == "oh-my-claudecode@omc"),
+            "expected oh-my-claudecode@omc in enabled list, got {enabled:?}"
+        );
+    }
+
+    #[test]
+    fn enumerate_enabled_roots_prefers_installed_plugins_install_path() {
+        let _guard = crate::claude_config_dir::user_claude_dir_test_lock();
+        let home = tempdir().expect("home tempdir");
+        let claude_dir = home.path().join(".claude");
+        let plugins_root = claude_dir.join("plugins");
+        let plugin_root = plugins_root
+            .join("cache")
+            .join("wisetest")
+            .join("wise-install-path-plugin")
+            .join("1.2.3");
+        fs::create_dir_all(plugin_root.join("skills").join("demo-skill")).expect("mkdir skill");
+        fs::write(
+            plugin_root.join("skills").join("demo-skill").join("SKILL.md"),
+            "---\nname: demo-skill\ndescription: from installPath\n---\n",
+        )
+        .expect("write skill");
+
+        fs::write(
+            plugins_root.join("installed_plugins.json"),
+            format!(
+                r#"{{
+  "version": 2,
+  "plugins": {{
+    "wise-install-path-plugin@wisetest": [
+      {{
+        "scope": "user",
+        "installPath": "{}",
+        "version": "1.2.3"
+      }}
+    ]
+  }}
+}}"#,
+                plugin_root.display()
+            ),
+        )
+        .expect("write installed_plugins");
+
+        crate::claude_config_dir::set_user_claude_dir_for_tests(Some(claude_dir));
+        let roots = enumerate_enabled_plugin_install_roots(None).expect("ok");
+        crate::claude_config_dir::set_user_claude_dir_for_tests(None);
+
+        assert_eq!(roots.len(), 1, "expected one root, got {roots:?}");
+        assert_eq!(roots[0].0, "wise-install-path-plugin@wisetest");
+        assert!(roots[0].2.ends_with("1.2.3"));
+    }
 }
 
 #[tauri::command]

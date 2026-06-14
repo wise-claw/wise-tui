@@ -6,6 +6,22 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
+/// 收集 `~/.claude/plugins/cache/**` 下被启用插件包内的 `agents/` 目录中的子代理候选。
+fn collect_enabled_plugin_subagent_candidates(
+    project_path: Option<&str>,
+) -> Vec<(String, PathBuf)> {
+    let roots = super::plugin_market::enumerate_enabled_plugin_install_roots(project_path)
+        .unwrap_or_default();
+    let mut out: Vec<(String, PathBuf)> = Vec::new();
+    for (_install_ref, _cache_rel, plugin_root) in roots {
+        out.extend(list_subagent_files_from_dir(
+            "plugin",
+            &plugin_root.join("agents"),
+        ));
+    }
+    out
+}
+
 // ── Claude Code subagents (.claude/agents/*.md, ~/.claude/agents/*.md) ──
 
 #[derive(Serialize, Clone)]
@@ -144,6 +160,9 @@ pub(crate) fn list_claude_subagents(
         let project_agents_dir = project_root.join(".claude").join("agents");
         candidates.extend(list_subagent_files_from_dir("project", &project_agents_dir));
     }
+    candidates.extend(collect_enabled_plugin_subagent_candidates(
+        project_path.as_deref(),
+    ));
 
     let mut seen_agent_paths: HashSet<String> = HashSet::new();
     candidates.retain(|(_, p)| {
@@ -367,4 +386,97 @@ pub(crate) fn delete_claude_subagent(
         return Err("subagent 文件不存在".to_string());
     }
     fs::remove_file(path).map_err(|e| e.to_string())
+}
+
+#[cfg(test)]
+mod plugin_subagent_tests {
+    use super::*;
+    use tempfile::tempdir;
+
+    #[test]
+    fn lists_subagents_from_enabled_plugin_cache() {
+        let _guard = crate::claude_config_dir::user_claude_dir_test_lock();
+
+        let home = tempdir().expect("home tempdir");
+        let claude_dir = home.path().join(".claude");
+        let plugins_root = claude_dir.join("plugins");
+        // 用唯一的 marketplace + slug，避免与真实 ~/.claude/plugins/cache 中已安装的插件 id 冲突。
+        let agent_dir = plugins_root
+            .join("cache")
+            .join("wisetest")
+            .join("wise-test-plugin")
+            .join("0.0.1")
+            .join("agents");
+        fs::create_dir_all(&agent_dir).expect("mkdir agents");
+        fs::write(
+            agent_dir.join("widget-helper.md"),
+            "---\nname: widget-helper\ndescription: helper from plugin\nmodel: inherit\n---\n\nbody\n",
+        )
+        .expect("write agent md");
+
+        let installed = plugins_root.join("installed_plugins.json");
+        fs::write(
+            &installed,
+            r#"{"plugins":{"wise-test-plugin@wisetest":[{"scope":"user","version":"0.0.1"}]}}"#,
+        )
+        .expect("write installed_plugins");
+
+        crate::claude_config_dir::set_user_claude_dir_for_tests(Some(claude_dir.clone()));
+        let result = list_claude_subagents(None);
+        crate::claude_config_dir::set_user_claude_dir_for_tests(None);
+
+        let items = result.expect("list_claude_subagents");
+        let plugin_items: Vec<_> = items
+            .iter()
+            .filter(|x| x.scope == "plugin" && x.name == "widget-helper")
+            .collect();
+        assert!(
+            !plugin_items.is_empty(),
+            "expected widget-helper plugin subagent, got {:?}",
+            items
+                .iter()
+                .filter(|x| x.scope == "plugin")
+                .map(|x| (&x.scope, &x.name))
+                .collect::<Vec<_>>()
+        );
+    }
+
+    #[test]
+    fn skips_subagents_from_disabled_plugin_cache() {
+        let _guard = crate::claude_config_dir::user_claude_dir_test_lock();
+
+        let home = tempdir().expect("home tempdir");
+        let claude_dir = home.path().join(".claude");
+        // 唯一名 + 不写 installed_plugins.json，且真实 $HOME 不会有此 marketplace/slug
+        let agent_dir = claude_dir
+            .join("plugins")
+            .join("cache")
+            .join("wisetest-disabled")
+            .join("wise-disabled-plugin")
+            .join("0.0.1")
+            .join("agents");
+        fs::create_dir_all(&agent_dir).expect("mkdir agents");
+        fs::write(
+            agent_dir.join("ghost.md"),
+            "---\nname: ghost\ndescription: should not appear\n---\n\nbody\n",
+        )
+        .expect("write agent md");
+
+        crate::claude_config_dir::set_user_claude_dir_for_tests(Some(claude_dir.clone()));
+        let result = list_claude_subagents(None);
+        crate::claude_config_dir::set_user_claude_dir_for_tests(None);
+
+        let items = result.expect("list_claude_subagents");
+        assert!(
+            !items
+                .iter()
+                .any(|x| x.scope == "plugin" && x.name == "ghost"),
+            "should not surface disabled plugin subagent: {:?}",
+            items
+                .iter()
+                .filter(|x| x.scope == "plugin")
+                .map(|x| (&x.scope, &x.name))
+                .collect::<Vec<_>>()
+        );
+    }
 }

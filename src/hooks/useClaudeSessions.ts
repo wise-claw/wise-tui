@@ -125,6 +125,11 @@ import {
   shouldIngestWiseNotificationForClaudeTurnComplete,
 } from "../utils/claudeTurnNotificationBody";
 import { getWorkflowFacade } from "../services/workflow";
+import { resolveEffectiveAutoApproveMode } from "../services/autoApproveSettings";
+import {
+  decidePermissionAutoApprove,
+  decideQuestionAutoApprove,
+} from "../utils/autoApproveDecide";
 import {
   appendSystemMessageBySessionId,
   applyClaudeExecuteFailureNotice,
@@ -4312,6 +4317,132 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     },
     [sendMessageToSession],
   );
+
+  // Wise 自动批准：订阅 hub，命中规则时直接调既有 respondToPermission / respondToQuestion，
+  // 让 PermissionDock / QuestionDock 完全不弹（off 模式不动，保留人工兜底）。
+  // 用 ref 持有「已自动处理过」的 requestId 集合，防止 hub 多次广播 / dock 重渲染导致重复触发。
+  const autoApproveHandledRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    const handled = autoApproveHandledRef.current;
+    let disposed = false;
+    const debug = import.meta.env?.DEV === true;
+
+    const tryHandle = () => {
+      if (disposed) return;
+      const sessions = sessionsRef.current;
+      if (!sessions || sessions.length === 0) return;
+
+      for (const session of sessions) {
+        const sid = session.id;
+        const slice = notificationHub.getDockSlice(sid);
+        const repoPath = session.repositoryPath ?? null;
+
+        const pr = slice.permissionRequest;
+        if (pr && !handled.has(pr.id)) {
+          const life = notificationHub.getRequestLifecycle(pr.id);
+          if (!life || life.status === "pending") {
+            handled.add(pr.id);
+            void (async () => {
+              try {
+                const mode = await resolveEffectiveAutoApproveMode(repoPath);
+                const decision = decidePermissionAutoApprove(mode, {
+                  tool: pr.tool,
+                  controlSubtype: pr.controlSubtype,
+                });
+                if (decision === "allow_once") {
+                  // TOCTOU 二次确认：用户可能在 await 期间把模式拨回 off。
+                  const recheck = await resolveEffectiveAutoApproveMode(repoPath);
+                  const recheckDecision = decidePermissionAutoApprove(recheck, {
+                    tool: pr.tool,
+                    controlSubtype: pr.controlSubtype,
+                  });
+                  if (recheckDecision !== "allow_once") {
+                    handled.delete(pr.id);
+                    return;
+                  }
+                  if (debug) {
+                    console.info(
+                      `[wise:auto-approve] permission ${pr.tool} → allow_once (mode=${recheck})`,
+                    );
+                  }
+                  await respondToPermission(sid, "allow_once");
+                } else {
+                  // 未命中：撤掉 dedup 记录，让用户手动应答后下一次仍可被新的 requestId 走流程。
+                  handled.delete(pr.id);
+                }
+              } catch (err) {
+                handled.delete(pr.id);
+                console.warn("[wise:auto-approve] permission decide failed", err);
+              }
+            })();
+          }
+        }
+
+        const qr = slice.questionRequest;
+        if (qr && !handled.has(qr.id)) {
+          const life = notificationHub.getRequestLifecycle(qr.id);
+          if (!life || life.status === "pending") {
+            handled.add(qr.id);
+            void (async () => {
+              try {
+                const mode = await resolveEffectiveAutoApproveMode(repoPath);
+                const decision = decideQuestionAutoApprove(mode, {
+                  options: qr.options,
+                  multiSelect: qr.multiSelect,
+                });
+                if (decision) {
+                  // TOCTOU 二次确认（同 permission 分支）。
+                  const recheck = await resolveEffectiveAutoApproveMode(repoPath);
+                  const recheckDecision = decideQuestionAutoApprove(recheck, {
+                    options: qr.options,
+                    multiSelect: qr.multiSelect,
+                  });
+                  if (!recheckDecision) {
+                    handled.delete(qr.id);
+                    return;
+                  }
+                  if (debug) {
+                    console.info(
+                      `[wise:auto-approve] question → answers=[${recheckDecision.answers.join(
+                        ",",
+                      )}] (mode=${recheck})`,
+                    );
+                  }
+                  await respondToQuestion(
+                    sid,
+                    recheckDecision.answers,
+                    recheckDecision.customAnswer,
+                  );
+                } else {
+                  handled.delete(qr.id);
+                }
+              } catch (err) {
+                handled.delete(qr.id);
+                console.warn("[wise:auto-approve] question decide failed", err);
+              }
+            })();
+          }
+        }
+      }
+
+      // GC：handled 体积上限，超过则原地丢弃前半（防长跑会话累积，
+      // 同时保留 ref 引用稳定性，避免老闭包持有过期 Set）。
+      if (handled.size > 256) {
+        const arr = Array.from(handled);
+        const keep = new Set(arr.slice(arr.length - 128));
+        handled.clear();
+        for (const id of keep) handled.add(id);
+      }
+    };
+
+    // 首次挂载尝试一次（处理已经在 hub 里的 pending request）。
+    tryHandle();
+    const unsubscribe = notificationHub.subscribe(tryHandle);
+    return () => {
+      disposed = true;
+      unsubscribe();
+    };
+  }, [respondToPermission, respondToQuestion]);
 
   useEffect(() => {
     const dispose = startAdaptiveInterval(

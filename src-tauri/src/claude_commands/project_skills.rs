@@ -484,7 +484,7 @@ pub(crate) fn list_claude_user_skills() -> Result<Vec<ClaudeProjectSkill>, Strin
     list_claude_skills_under_dir(&skills_dir, Some("user"))
 }
 
-fn install_ref_from_cache_rel(rel: &str) -> Option<String> {
+pub(super) fn install_ref_from_cache_rel(rel: &str) -> Option<String> {
     let parts: Vec<&str> = rel
         .trim()
         .trim_matches('/')
@@ -543,27 +543,11 @@ fn list_plugin_slash_entries_from_root(
 pub(crate) fn list_claude_plugin_cache_skills_sync(
     repository_path: Option<&str>,
 ) -> Result<Vec<ClaudeProjectSkill>, String> {
-    let enabled_ids: HashSet<String> = super::plugin_market::list_enabled_installed_plugin_ids(
-        repository_path,
-    )?
-    .into_iter()
-    .map(|id| id.to_lowercase())
-    .collect();
-    if enabled_ids.is_empty() {
-        return Ok(Vec::new());
-    }
-
-    let roots = super::mcp::discover_plugin_roots_under_claude_cache_for_skills_and_agents();
+    let roots = super::plugin_market::enumerate_enabled_plugin_install_roots(repository_path)?;
     let mut out = Vec::new();
     let mut seen_names: HashSet<String> = HashSet::new();
 
-    for (cache_rel, plugin_root) in roots {
-        let Some(install_ref) = install_ref_from_cache_rel(&cache_rel) else {
-            continue;
-        };
-        if !enabled_ids.contains(&install_ref.to_lowercase()) {
-            continue;
-        }
+    for (install_ref, cache_rel, plugin_root) in roots {
         for row in list_plugin_slash_entries_from_root(&plugin_root, &cache_rel, &install_ref)? {
             let key = row.name.to_lowercase();
             if seen_names.insert(key) {

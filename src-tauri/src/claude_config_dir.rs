@@ -78,6 +78,23 @@ fn update_cache(path: Option<PathBuf>) {
     }
 }
 
+#[cfg(test)]
+pub(crate) fn set_user_claude_dir_for_tests(path: Option<PathBuf>) {
+    update_cache(path);
+}
+
+/// 测试专用：序列化所有访问 `USER_CLAUDE_DIR_CACHE` 的测试，避免不同 mod 的测试并行运行时
+/// 互相覆盖缓存导致随机失败。任何调用 `update_cache` / `set_user_claude_dir_for_tests`
+/// 的测试都应在持有这把锁的前提下进行。
+#[cfg(test)]
+pub(crate) fn user_claude_dir_test_lock() -> std::sync::MutexGuard<'static, ()> {
+    static LOCK: std::sync::Mutex<()> = std::sync::Mutex::new(());
+    match LOCK.lock() {
+        Ok(g) => g,
+        Err(poison) => poison.into_inner(),
+    }
+}
+
 /// 启动时调用：从 SQLite 回填缓存。读不到 / 解析失败 → 缓存留空，后续走默认。
 pub(crate) fn init_from_db(db: &WiseDb) {
     let raw = match db.get_setting(CLAUDE_USER_CONFIG_DIR_SETTING_KEY) {
@@ -453,6 +470,7 @@ mod tests {
 
     #[test]
     fn sanitize_root_json_removes_conflicting_env_for_fcc() {
+        let _guard = user_claude_dir_test_lock();
         let dir = tempfile::tempdir().unwrap();
         update_cache(Some(dir.path().join("wise-claude-sanitize")));
         let wise_claude = user_claude_dir();
@@ -497,6 +515,7 @@ mod tests {
 
     #[test]
     fn build_spawn_env_strips_api_key_when_auth_token_present() {
+        let _guard = user_claude_dir_test_lock();
         let dir = tempfile::tempdir().unwrap();
         update_cache(Some(dir.path().join("wise-claude-test2")));
         let wise_claude = user_claude_dir();
@@ -523,6 +542,7 @@ mod tests {
 
     #[test]
     fn build_spawn_env_llm_traffic_capture_preserves_api_key() {
+        let _guard = user_claude_dir_test_lock();
         let dir = tempfile::tempdir().unwrap();
         update_cache(Some(dir.path().join("wise-claude-llm-proxy")));
         let wise_claude = user_claude_dir();
@@ -577,6 +597,7 @@ mod tests {
 
     #[test]
     fn root_json_follows_directory_name() {
+        let _guard = user_claude_dir_test_lock();
         if dirs::home_dir().is_none() {
             return;
         }

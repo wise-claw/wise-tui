@@ -320,6 +320,73 @@ fn registered_hook_signatures(scope: &ClaudeHookScopeData) -> HashSet<String> {
     out
 }
 
+/// 解析 Claude Code 插件包根中的 hooks 声明：优先 `hooks/hooks.json`，回退 `.claude-plugin/plugin.json`
+/// 顶层 `hooks` / `hooksJsonPath` 字段。展开 `${CLAUDE_PLUGIN_ROOT}` / `${CLAUDE_PLUGIN_DATA}`。
+pub(crate) fn build_hook_scope_data_from_plugin_root(
+    plugin_root: &Path,
+    install_ref: &str,
+) -> Option<ClaudeHookScopeData> {
+    let id_prefix = format!("plugin:{install_ref}:");
+    let data_dir = super::mcp::claude_plugin_data_dir_from_ref(install_ref);
+    let data_dir_str = data_dir.to_string_lossy().to_string();
+
+    // 1) plugin_root/hooks/hooks.json
+    let direct = plugin_root.join("hooks").join("hooks.json");
+    if direct.is_file() {
+        if let Some(mut v) = read_json_file(&direct) {
+            super::mcp::expand_plugin_vars_in_json_value(&mut v, plugin_root, &data_dir_str);
+            let (disable_all_hooks, hooks) = parse_hooks_from_settings_value(&v, &id_prefix);
+            return Some(ClaudeHookScopeData {
+                source_path: direct.to_string_lossy().to_string(),
+                disable_all_hooks,
+                hooks,
+            });
+        }
+    }
+
+    // 2) plugin.json 顶层 hooks / hooksJsonPath
+    let manifest = plugin_root.join(".claude-plugin").join("plugin.json");
+    if let Some(mv) = read_json_file(&manifest) {
+        if let Some(rel) = mv
+            .get("hooksJsonPath")
+            .or_else(|| mv.get("hooks_json_path"))
+            .and_then(|x| x.as_str())
+        {
+            let rel = rel.trim().trim_start_matches("./");
+            let path = plugin_root.join(rel);
+            if path.is_file() {
+                if let Some(mut v) = read_json_file(&path) {
+                    super::mcp::expand_plugin_vars_in_json_value(
+                        &mut v,
+                        plugin_root,
+                        &data_dir_str,
+                    );
+                    let (disable_all_hooks, hooks) =
+                        parse_hooks_from_settings_value(&v, &id_prefix);
+                    return Some(ClaudeHookScopeData {
+                        source_path: path.to_string_lossy().to_string(),
+                        disable_all_hooks,
+                        hooks,
+                    });
+                }
+            }
+        }
+        if let Some(_inline) = mv.get("hooks").and_then(|x| x.as_object()) {
+            let mut v = serde_json::json!({ "hooks": mv.get("hooks").cloned().unwrap_or_default() });
+            super::mcp::expand_plugin_vars_in_json_value(&mut v, plugin_root, &data_dir_str);
+            let (disable_all_hooks, hooks) = parse_hooks_from_settings_value(&v, &id_prefix);
+            if !hooks.is_empty() {
+                return Some(ClaudeHookScopeData {
+                    source_path: manifest.to_string_lossy().to_string(),
+                    disable_all_hooks,
+                    hooks,
+                });
+            }
+        }
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -388,5 +455,55 @@ mod tests {
                 .flat_map(|g| g.hooks.iter())
                 .any(|h| h.command.as_deref() == Some("echo from-hooks-json"))
         );
+    }
+
+    #[test]
+    fn discovers_plugin_hooks_with_claude_plugin_root_expansion() {
+        let dir = tempdir().expect("tempdir");
+        let plugin_root = dir.path().join("plugins").join("foo").join("1.0.0");
+        let hooks_dir = plugin_root.join("hooks");
+        fs::create_dir_all(&hooks_dir).expect("mkdir hooks");
+        let hooks_json = r#"{
+  "hooks": {
+    "UserPromptSubmit": [
+      {
+        "matcher": "*",
+        "hooks": [
+          { "type": "command", "command": "python3 ${CLAUDE_PLUGIN_ROOT}/hooks/x.py" }
+        ]
+      }
+    ]
+  }
+}"#;
+        fs::write(hooks_dir.join("hooks.json"), hooks_json).expect("write hooks.json");
+
+        let scope = build_hook_scope_data_from_plugin_root(&plugin_root, "foo@bar")
+            .expect("scope data should be built");
+        let groups = scope
+            .hooks
+            .get("UserPromptSubmit")
+            .expect("UserPromptSubmit group");
+        let cmd = groups
+            .iter()
+            .flat_map(|g| g.hooks.iter())
+            .find_map(|h| h.command.clone())
+            .expect("command");
+        assert!(
+            cmd.contains(&plugin_root.to_string_lossy().to_string()),
+            "expected ${{CLAUDE_PLUGIN_ROOT}} to be expanded to plugin_root, got {cmd}"
+        );
+        assert!(
+            !cmd.contains("${CLAUDE_PLUGIN_ROOT}"),
+            "placeholder should be gone, got {cmd}"
+        );
+        assert!(scope.source_path.ends_with("hooks.json"));
+    }
+
+    #[test]
+    fn missing_plugin_hooks_returns_none() {
+        let dir = tempdir().expect("tempdir");
+        let plugin_root = dir.path().join("nope").join("0.0.0");
+        fs::create_dir_all(&plugin_root).expect("mkdir");
+        assert!(build_hook_scope_data_from_plugin_root(&plugin_root, "nope@x").is_none());
     }
 }

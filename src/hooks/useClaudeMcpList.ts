@@ -15,7 +15,6 @@ import {
   patchMcpItemEnabledById,
   removeMcpItemById,
 } from "../components/ClaudeMcp/claudeMcpListModel";
-import { filterOmcFromMcpStatus } from "../utils/omcPluginDetect";
 
 interface Options {
   repositoryPath?: string | null;
@@ -98,10 +97,7 @@ export function useClaudeMcpList({
     void fetchMcpFromHost("initial");
   }, [active, normalizedProjectKey, mcpCacheKey, fetchMcpFromHost]);
 
-  const visibleMcpData = useMemo(
-    () => filterOmcFromMcpStatus(mcpData),
-    [mcpData],
-  );
+  const visibleMcpData = mcpData;
 
   const mcpHasData = useMemo(() => MCP_SECTIONS.some(({ key }) => visibleMcpData[key].length > 0), [visibleMcpData]);
   const filteredMcpData = useMemo(() => filterMcpDataBySearch(visibleMcpData, listSearch), [visibleMcpData, listSearch]);
