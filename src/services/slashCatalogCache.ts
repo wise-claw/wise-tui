@@ -40,7 +40,7 @@ interface CacheEntry {
 }
 
 let cacheEntry: CacheEntry | null = null;
-let inflight: Promise<SlashCatalogSnapshot> | null = null;
+const inflightByKey = new Map<string, Promise<SlashCatalogSnapshot>>();
 
 function cacheKey(repositoryPath: string | null): string {
   return repositoryPath?.trim() || "__global__";
@@ -52,7 +52,12 @@ function isFresh(entry: CacheEntry, key: string): boolean {
 
 export function invalidateSlashCatalogCache(): void {
   cacheEntry = null;
-  inflight = null;
+  inflightByKey.clear();
+}
+
+function staleSnapshotForKey(key: string): SlashCatalogSnapshot | null {
+  if (cacheEntry?.key !== key) return null;
+  return cacheEntry.snapshot;
 }
 
 async function fetchSlashCatalog(repositoryPath: string | null): Promise<SlashCatalogSnapshot> {
@@ -92,21 +97,24 @@ export async function loadSlashCatalog(
     return cacheEntry.snapshot;
   }
 
-  if (!options?.force && inflight) {
-    return inflight;
+  const existingInflight = inflightByKey.get(key);
+  if (!options?.force && existingInflight) {
+    return existingInflight;
   }
 
   const pending = fetchSlashCatalog(repositoryPath ?? null)
     .then((snapshot) => {
       cacheEntry = { key, snapshot };
-      inflight = null;
+      inflightByKey.delete(key);
       return snapshot;
     })
     .catch((error) => {
-      inflight = null;
+      inflightByKey.delete(key);
+      const stale = staleSnapshotForKey(key);
+      if (stale) return stale;
       throw error;
     });
 
-  inflight = pending;
+  inflightByKey.set(key, pending);
   return pending;
 }

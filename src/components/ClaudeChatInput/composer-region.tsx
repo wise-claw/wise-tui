@@ -119,6 +119,8 @@ import {
 import { isComposerLocalSlashEligible } from "../../utils/composerLocalSlashCommand";
 import { resolveAppliedComposerDefaultInstruction } from "../../utils/composerDefaultInstruction";
 import { loadDefaultInstructionResolveContext } from "../../utils/resolveComposerDefaultInstructionOutbound";
+import type { DefaultInstructionResolveContext } from "../../utils/resolveComposerDefaultInstructionOutbound";
+import { loadSlashCatalog } from "../../services/slashCatalogCache";
 import {
   contextPercentToneClassName,
   formatContextStatusHint,
@@ -625,6 +627,9 @@ function ComposerInner({
     saving: composerDefaultInstructionSaving,
     save: saveComposerDefaultInstruction,
   } = useComposerDefaultInstruction();
+  useEffect(() => {
+    void loadSlashCatalog(session.repositoryPath?.trim() || null);
+  }, [session.repositoryPath, composerDefaultInstruction]);
   const [trigger, setTrigger] = useState<TriggerInfo>({ mode: null, query: "", rect: null });
   const [images, setImages] = useState<ImageAttachmentPart[]>([]);
   const imagesRef = useRef(images);
@@ -1617,27 +1622,6 @@ function ComposerInner({
         codeSelectionRefs.length > 0;
       if (!hasSnapPayload) return;
 
-      const instructionResolveContext = await loadDefaultInstructionResolveContext(
-        session.repositoryPath,
-      );
-      const appliedDefaultInstruction = resolveAppliedComposerDefaultInstruction(
-        logicalSnap,
-        composerDefaultInstruction,
-        instructionResolveContext,
-      );
-      const buildBubbleExecuteOptions = (
-        bubble?: string,
-        cursorAttachments?: ClaudeComposerExecuteBubbleOptions["cursorAttachments"],
-      ): ClaudeComposerExecuteBubbleOptions | undefined => {
-        const options: ClaudeComposerExecuteBubbleOptions = {};
-        if (bubble?.trim()) options.userBubblePrompt = bubble;
-        if (appliedDefaultInstruction) {
-          options.defaultInstructionApplied = appliedDefaultInstruction;
-        }
-        if (cursorAttachments?.length) options.cursorAttachments = cursorAttachments;
-        return Object.keys(options).length > 0 ? options : undefined;
-      };
-
       const historyPrompt =
         imagesSnap.length > 0 ? singleTextPrompt(logicalSnap) : promptSnap;
       const rollbackDraft: LastSentComposerDraft = {
@@ -1703,17 +1687,44 @@ function ComposerInner({
         return;
       }
 
-      if (isSessionBusy) {
-        if (!onEnqueueAsPendingTask) {
-          return;
+      if (isSessionBusy && !onEnqueueAsPendingTask) {
+        return;
+      }
+
+      clearComposerSurfaceSync(logicalSnap.trim());
+
+      let instructionResolveContext: DefaultInstructionResolveContext | undefined;
+      let appliedDefaultInstruction = "";
+      if (composerDefaultInstruction.trim()) {
+        instructionResolveContext = await loadDefaultInstructionResolveContext(
+          session.repositoryPath,
+        );
+        appliedDefaultInstruction = resolveAppliedComposerDefaultInstruction(
+          logicalSnap,
+          composerDefaultInstruction,
+          instructionResolveContext,
+        );
+      }
+      const buildBubbleExecuteOptions = (
+        bubble?: string,
+        cursorAttachments?: ClaudeComposerExecuteBubbleOptions["cursorAttachments"],
+      ): ClaudeComposerExecuteBubbleOptions | undefined => {
+        const options: ClaudeComposerExecuteBubbleOptions = {};
+        if (bubble?.trim()) options.userBubblePrompt = bubble;
+        if (appliedDefaultInstruction) {
+          options.defaultInstructionApplied = appliedDefaultInstruction;
         }
+        if (cursorAttachments?.length) options.cursorAttachments = cursorAttachments;
+        return Object.keys(options).length > 0 ? options : undefined;
+      };
+
+      if (isSessionBusy) {
         const sendFlowNodes: Array<{ label: string; timestamp: number; detail?: string }> = [];
         sendFlowNodes.push({
           label: "执行中入队",
           timestamp: Date.now(),
           detail: "会话占用中，本则消息仅加入待执行队列。",
         });
-        clearComposerSurfaceSync(logicalSnap.trim());
         let outbound: string;
         let userBubblePrompt: string;
         try {
@@ -1724,6 +1735,7 @@ function ComposerInner({
             repositoryPath: session.repositoryPath,
             userBubbleMain: logicalSnap,
             defaultInstructionPrefix: composerDefaultInstruction,
+            defaultInstructionResolveContext: instructionResolveContext,
           });
           outbound = payload.outbound;
           userBubblePrompt = payload.userBubblePrompt;
@@ -1859,7 +1871,6 @@ function ComposerInner({
         timestamp: Date.now(),
         detail: "用户点击发送按钮或按下 Enter 触发发送。",
       });
-      clearComposerSurfaceSync(logicalSnap.trim());
 
       let outbound: string;
       let userBubblePrompt: string | undefined;
@@ -1886,6 +1897,7 @@ function ComposerInner({
             repositoryPath: session.repositoryPath,
             userBubbleMain: logicalSnap,
             defaultInstructionPrefix: composerDefaultInstruction,
+            defaultInstructionResolveContext: instructionResolveContext,
           });
           outbound = payload.outbound;
           userBubblePrompt = payload.userBubblePrompt;
@@ -1896,9 +1908,7 @@ function ComposerInner({
         }
         lastSentDraftRef.current = rollbackDraft;
       } catch {
-        const draft = lastSentDraftRef.current;
-        lastSentDraftRef.current = null;
-        if (draft) restoreComposerDraft(draft);
+        restoreComposerDraft(rollbackDraft);
         return;
       }
       sendFlowNodes.push({
@@ -1907,9 +1917,7 @@ function ComposerInner({
         detail: outbound.trim() || "(空)",
       });
       if (!outbound.trim()) {
-        const draft = lastSentDraftRef.current;
-        lastSentDraftRef.current = null;
-        if (draft) restoreComposerDraft(draft);
+        restoreComposerDraft(rollbackDraft);
         return;
       }
 

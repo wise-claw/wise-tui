@@ -54,11 +54,21 @@ export function defaultInstructionResolveContextFromCatalog(
   };
 }
 
+const EMPTY_DEFAULT_INSTRUCTION_RESOLVE_CONTEXT: DefaultInstructionResolveContext = {
+  omcInstalled: false,
+  pluginCacheSkills: [],
+  projectSkills: [],
+};
+
 export async function loadDefaultInstructionResolveContext(
   repositoryPath?: string | null,
 ): Promise<DefaultInstructionResolveContext> {
-  const snapshot = await loadSlashCatalog(repositoryPath?.trim() || null);
-  return defaultInstructionResolveContextFromCatalog(snapshot);
+  try {
+    const snapshot = await loadSlashCatalog(repositoryPath?.trim() || null);
+    return defaultInstructionResolveContextFromCatalog(snapshot);
+  } catch {
+    return EMPTY_DEFAULT_INSTRUCTION_RESOLVE_CONTEXT;
+  }
 }
 
 function resolveFromPluginSkills(

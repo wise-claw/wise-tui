@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   buildPluginSlashCommandPath,
+  loadDefaultInstructionResolveContext,
   OMC_PLUGIN_SLASH_NAMESPACE,
   resolveComposerDefaultInstructionOutbound,
 } from "./resolveComposerDefaultInstructionOutbound";
@@ -46,5 +47,12 @@ describe("resolveComposerDefaultInstructionOutbound", () => {
     expect(buildPluginSlashCommandPath(OMC_PLUGIN_SLASH_NAMESPACE, "ultrawork")).toBe(
       "/oh-my-claudecode:ultrawork",
     );
+  });
+
+  test("loadDefaultInstructionResolveContext resolves without throwing", async () => {
+    const ctx = await loadDefaultInstructionResolveContext(null);
+    expect(Array.isArray(ctx.pluginCacheSkills)).toBe(true);
+    expect(Array.isArray(ctx.projectSkills)).toBe(true);
+    expect(typeof ctx.omcInstalled).toBe("boolean");
   });
 });

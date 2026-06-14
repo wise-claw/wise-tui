@@ -4,7 +4,10 @@ import {
   serializePromptPartsToClaudeString,
 } from "../utils/serializeClaudePrompt";
 import { applyComposerDefaultInstruction } from "../utils/composerDefaultInstruction";
-import { loadDefaultInstructionResolveContext } from "../utils/resolveComposerDefaultInstructionOutbound";
+import {
+  loadDefaultInstructionResolveContext,
+  type DefaultInstructionResolveContext,
+} from "../utils/resolveComposerDefaultInstructionOutbound";
 import { extractComposerAttachmentPathsFromText } from "./readComposerImage";
 import { saveComposerImage } from "./saveComposerImage";
 
@@ -17,6 +20,8 @@ export interface BuildClaudeOutgoingPromptOptions {
   userBubbleMain?: string;
   /** 发往 CLI 时自动前缀（如 `/autopilot`）；不影响 userBubbleMain。 */
   defaultInstructionPrefix?: string;
+  /** 已预热的默认指令解析上下文，避免发送路径重复 IPC。 */
+  defaultInstructionResolveContext?: DefaultInstructionResolveContext;
 }
 
 /** 发送/入历史前规范化编辑器纯文本：折叠重复块并去掉已有附图尾缀。 */
@@ -123,7 +128,9 @@ export async function buildClaudeComposerSendPayload(
     main = stripComposerAttachedImageSuffix(main);
   }
   if (opts.defaultInstructionPrefix?.trim()) {
-    const resolveContext = await loadDefaultInstructionResolveContext(opts.repositoryPath);
+    const resolveContext =
+      opts.defaultInstructionResolveContext ??
+      (await loadDefaultInstructionResolveContext(opts.repositoryPath));
     main = applyComposerDefaultInstruction(main, opts.defaultInstructionPrefix, resolveContext);
   }
 
