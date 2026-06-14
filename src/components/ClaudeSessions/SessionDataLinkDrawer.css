@@ -650,10 +650,57 @@
 
 .app-session-insights__section-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 6px;
   margin-bottom: 4px;
+}
+
+.app-session-insights__section-head-main {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.app-session-insights__section--optimize {
+  padding-top: 2px;
+  border-top: 1px solid var(--ant-color-border-secondary);
+}
+
+.app-session-insights__severity-tags {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.app-session-insights__severity-tag {
+  margin: 0 !important;
+  font-size: 9px !important;
+  line-height: 16px !important;
+  padding-inline: 5px !important;
+}
+
+.app-session-insights__severity-tag--critical {
+  color: #ef4444 !important;
+  background: rgba(239, 68, 68, 0.08) !important;
+}
+
+.app-session-insights__severity-tag--warning {
+  color: #f59e0b !important;
+  background: rgba(245, 158, 11, 0.08) !important;
+}
+
+.app-session-insights__severity-tag--info {
+  color: #3b82f6 !important;
+  background: rgba(59, 130, 246, 0.08) !important;
+}
+
+.app-session-insights__optimize-hint {
+  display: block;
+  margin-bottom: 6px;
+  font-size: 10px !important;
+  line-height: 1.4 !important;
 }
 
 .app-session-insights__section-head .app-session-insights__section-title {
@@ -851,6 +898,8 @@
   display: flex;
   gap: 6px;
   padding: 6px 8px;
+  align-items: flex-start;
+}
   border-radius: 6px;
   border: 1px solid var(--ant-color-border-secondary);
   background: var(--ant-color-bg-container);
@@ -917,5 +966,43 @@
   margin-top: 2px;
   font-family: ui-monospace, SFMono-Regular, Monaco, Consolas, monospace;
   font-size: 9px !important;
+}
+
+.app-session-insights__rec-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  flex-shrink: 0;
+  margin-top: 1px;
+}
+
+.app-session-insights__rec-action {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ant-color-text-tertiary);
+  cursor: pointer;
+  font-size: 11px;
+  padding: 0;
+}
+
+.app-session-insights__rec-action:hover:not(:disabled) {
+  color: var(--ant-color-text);
+  background: var(--ant-color-fill-tertiary);
+}
+
+.app-session-insights__rec-action--ai:hover:not(:disabled) {
+  color: var(--ant-color-primary);
+  background: var(--ant-color-primary-bg);
+}
+
+.app-session-insights__rec-action:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
 }
 

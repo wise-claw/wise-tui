@@ -41,8 +41,12 @@ import {
 import {
   SESSION_LINK_FILTER_OPTIONS,
   aggregateSessionLinkRecords,
+  deriveTimestampRangeFromTurnMetrics,
   filterSessionLinkRecords,
+  filterSessionLinkRecordsByTurnRange,
+  filterTurnMetricsByTurnRange,
   type SessionLinkFilterPreset,
+  type TurnRange,
 } from "../../utils/sessionLinkFilters";
 import {
   formatHttpBodyJsonForDisplay,
@@ -58,11 +62,13 @@ import {
 import {
   computeSessionInsights,
   filterJsonlLinesForUsageScan,
+  parseJsonlUsageRow,
 } from "../../utils/sessionInsights";
 import type { SessionDataLinkOpenView } from "../../stores/claudeUsageUiStore";
 import { SessionInsightsPanel } from "./SessionInsightsPanel";
 import {
   filterSequenceEventsForTurn,
+  filterSequenceEventsForTurnRange,
 } from "../../utils/claudeSessionTrajectorySequence";
 import { ClaudeSessionSequenceDiagram } from "./ClaudeSessionSequenceDiagram";
 import "./SessionDataLinkDrawer.css";
@@ -247,6 +253,7 @@ export function SessionDataLinkDrawer({
   const headerCopyResetTimerRef = useRef<number | null>(null);
   const [turnDiagramTurn, setTurnDiagramTurn] = useState<number | null>(null);
   const [activeTurnKeys, setActiveTurnKeys] = useState<string[]>([]);
+  const [turnRange, setTurnRange] = useState<TurnRange | null>(null);
   const [proxySnap, setProxySnap] = useState(getClaudeLlmProxyStoreSnapshot);
 
   const messages = session?.messages ?? [];
@@ -275,6 +282,7 @@ export function SessionDataLinkDrawer({
     setViewMode("list");
     setFilterPreset("all");
     setActiveTurnKeys([]);
+    setTurnRange(null);
   }, [open, initialViewMode]);
 
   useEffect(() => {
@@ -363,27 +371,95 @@ export function SessionDataLinkDrawer({
     [linkRecords, filterPreset],
   );
 
+  // ── 轮次区间过滤（仅作用于 diagram / insights 视图） ──────────────────────────
+  const diagramEvents = useMemo(
+    () =>
+      turnRange == null
+        ? events
+        : filterSequenceEventsForTurnRange(events, turnRange.fromTurn, turnRange.toTurn),
+    [events, turnRange],
+  );
+
+  const insightsLinkRecords = useMemo(
+    () => filterSessionLinkRecordsByTurnRange(linkRecords, turnRange),
+    [linkRecords, turnRange],
+  );
+
+  const insightsTurnMetrics = useMemo(
+    () => filterTurnMetricsByTurnRange(turnMetrics, turnRange),
+    [turnMetrics, turnRange],
+  );
+
+  const insightsTimestampRange = useMemo(
+    () => deriveTimestampRangeFromTurnMetrics(turnMetrics, turnRange),
+    [turnMetrics, turnRange],
+  );
+
+  const filterByTimestampRange = useCallback(
+    <T extends { timestampMs: number }>(rows: readonly T[] | undefined): readonly T[] | undefined => {
+      if (!rows) return rows;
+      if (!insightsTimestampRange) return rows;
+      const { startMs, endMs } = insightsTimestampRange;
+      return rows.filter((r) => r.timestampMs >= startMs && r.timestampMs <= endMs);
+    },
+    [insightsTimestampRange],
+  );
+
+  const insightsLlmProxyRecords = useMemo(
+    () => filterByTimestampRange(llmProxyRecords) ?? llmProxyRecords,
+    [llmProxyRecords, filterByTimestampRange],
+  );
+
+  const insightsFccTraces = useMemo(() => {
+    if (!fccAligned) return undefined;
+    if (!insightsTimestampRange) return fccTraces;
+    return fccTraces.filter(
+      (t) =>
+        t.timestampMs >= insightsTimestampRange.startMs &&
+        t.timestampMs <= insightsTimestampRange.endMs,
+    );
+  }, [fccAligned, fccTraces, insightsTimestampRange]);
+
+  const insightsOpencodeGoTraces = useMemo(() => {
+    if (!opencodeAligned) return undefined;
+    if (!insightsTimestampRange) return opencodeGoTraces;
+    return opencodeGoTraces.filter(
+      (t) =>
+        t.timestampMs >= insightsTimestampRange.startMs &&
+        t.timestampMs <= insightsTimestampRange.endMs,
+    );
+  }, [opencodeAligned, opencodeGoTraces, insightsTimestampRange]);
+
+  const insightsJsonlUsageLines = useMemo(() => {
+    if (!insightsTimestampRange) return jsonlUsageLines;
+    const { startMs, endMs } = insightsTimestampRange;
+    return jsonlUsageLines.filter((line) => {
+      const parsed = parseJsonlUsageRow(line);
+      const ts = parsed?.timestampMs;
+      if (ts == null) return false;
+      return ts >= startMs && ts <= endMs;
+    });
+  }, [jsonlUsageLines, insightsTimestampRange]);
+
   const sessionInsights = useMemo(() => {
     if (viewMode !== "insights") return null;
     return computeSessionInsights({
-      linkRecords,
-      turnMetrics,
-      llmProxyRecords,
-      fccTraces: fccAligned ? fccTraces : undefined,
-      opencodeGoProxyTraces: opencodeAligned ? opencodeGoTraces : undefined,
-      jsonlUsageLines,
+      linkRecords: insightsLinkRecords,
+      turnMetrics: insightsTurnMetrics,
+      llmProxyRecords: insightsLlmProxyRecords,
+      fccTraces: insightsFccTraces,
+      opencodeGoProxyTraces: insightsOpencodeGoTraces,
+      jsonlUsageLines: insightsJsonlUsageLines,
       llmProxyListening: proxySnap.status?.listening ?? false,
     });
   }, [
     viewMode,
-    linkRecords,
-    turnMetrics,
-    llmProxyRecords,
-    fccAligned,
-    fccTraces,
-    opencodeAligned,
-    opencodeGoTraces,
-    jsonlUsageLines,
+    insightsLinkRecords,
+    insightsTurnMetrics,
+    insightsLlmProxyRecords,
+    insightsFccTraces,
+    insightsOpencodeGoTraces,
+    insightsJsonlUsageLines,
     proxySnap.status?.listening,
   ]);
 
@@ -442,6 +518,7 @@ export function SessionDataLinkDrawer({
     setViewMode("list");
     setFilterPreset("all");
     setActiveTurnKeys([String(turn)]);
+    setTurnRange(null);
   }, []);
 
   const openTurnDiagram = useCallback((turn: number, e: React.MouseEvent) => {
@@ -658,7 +735,13 @@ export function SessionDataLinkDrawer({
                     options={SESSION_LINK_FILTER_OPTIONS}
                     aria-label="链路过滤"
                   />
-                ) : null}
+                ) : (
+                  <TurnRangeFilter
+                    turnMetrics={turnMetrics}
+                    value={turnRange}
+                    onChange={setTurnRange}
+                  />
+                )}
               </div>
 
               <div className="app-session-data-link__stats-bar">
@@ -790,8 +873,13 @@ export function SessionDataLinkDrawer({
                 )
               ) : events.length === 0 ? (
                 <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="暂无序列事件" />
+              ) : diagramEvents.length === 0 ? (
+                <Empty
+                  image={Empty.PRESENTED_IMAGE_SIMPLE}
+                  description="所选轮次无序列事件"
+                />
               ) : (
-                <ClaudeSessionSequenceDiagram events={events} markInferredHttp />
+                <ClaudeSessionSequenceDiagram events={diagramEvents} markInferredHttp />
               )}
             </div>
           </>
@@ -819,5 +907,140 @@ export function SessionDataLinkDrawer({
         )}
       </Modal>
     </Drawer>
+  );
+}
+
+interface TurnRangeFilterProps {
+  turnMetrics: readonly { turnIndex: number }[];
+  value: TurnRange | null;
+  onChange: (next: TurnRange | null) => void;
+}
+
+const TURN_RANGE_CUSTOM_VALUE = "__range";
+const TURN_RANGE_ALL_VALUE = "__all";
+
+function TurnRangeFilter({ turnMetrics, value, onChange }: TurnRangeFilterProps) {
+  const totalTurns = turnMetrics.length;
+  const sortedTurns = useMemo(
+    () => [...turnMetrics].map((m) => m.turnIndex).sort((a, b) => a - b),
+    [turnMetrics],
+  );
+  const minTurn = sortedTurns[0] ?? 1;
+  const maxTurn = sortedTurns[sortedTurns.length - 1] ?? minTurn;
+
+  const customMode = value != null && value.fromTurn !== value.toTurn;
+
+  const presetValue = value == null
+    ? TURN_RANGE_ALL_VALUE
+    : customMode
+      ? TURN_RANGE_CUSTOM_VALUE
+      : `:${value.fromTurn}`;
+
+  const presetOptions = useMemo(() => {
+    const opts: { label: string; value: string }[] = [
+      { label: `全部（${totalTurns} 轮）`, value: TURN_RANGE_ALL_VALUE },
+    ];
+    for (const turn of sortedTurns) {
+      opts.push({ label: `第 ${turn} 轮`, value: `:${turn}` });
+    }
+    opts.push({ label: "自定义区间…", value: TURN_RANGE_CUSTOM_VALUE });
+    return opts;
+  }, [sortedTurns, totalTurns]);
+
+  const turnOptions = useMemo(
+    () => sortedTurns.map((t) => ({ label: `第 ${t} 轮`, value: t })),
+    [sortedTurns],
+  );
+
+  const handlePresetChange = useCallback(
+    (raw: string) => {
+      if (raw === TURN_RANGE_ALL_VALUE) {
+        onChange(null);
+        return;
+      }
+      if (raw === TURN_RANGE_CUSTOM_VALUE) {
+        // 进入自定义模式：默认覆盖最小到最大
+        if (sortedTurns.length === 0) {
+          onChange(null);
+          return;
+        }
+        if (sortedTurns.length === 1) {
+          onChange({ fromTurn: minTurn, toTurn: maxTurn });
+          return;
+        }
+        // 默认 [min, max] 表示「全部，但用户可调」
+        onChange({ fromTurn: minTurn, toTurn: maxTurn });
+        return;
+      }
+      const turn = Number(raw.slice(1));
+      if (!Number.isFinite(turn) || turn < 1) {
+        onChange(null);
+        return;
+      }
+      onChange({ fromTurn: turn, toTurn: turn });
+    },
+    [onChange, sortedTurns.length, minTurn, maxTurn],
+  );
+
+  const handleFromChange = useCallback(
+    (next: number) => {
+      const current = value ?? { fromTurn: minTurn, toTurn: maxTurn };
+      const from = next;
+      const to = Math.max(from, current.toTurn);
+      onChange({ fromTurn: from, toTurn: to });
+    },
+    [onChange, value, minTurn, maxTurn],
+  );
+
+  const handleToChange = useCallback(
+    (next: number) => {
+      const current = value ?? { fromTurn: minTurn, toTurn: maxTurn };
+      const to = next;
+      const from = Math.min(current.fromTurn, to);
+      onChange({ fromTurn: from, toTurn: to });
+    },
+    [onChange, value, minTurn, maxTurn],
+  );
+
+  if (totalTurns === 0) {
+    return null;
+  }
+
+  return (
+    <Space size={4} wrap>
+      <Select
+        size="small"
+        className="app-session-data-link__filter"
+        style={{ minWidth: 140 }}
+        value={presetValue}
+        onChange={handlePresetChange}
+        options={presetOptions}
+        aria-label="轮次过滤"
+      />
+      {customMode ? (
+        <>
+          <Select
+            size="small"
+            style={{ minWidth: 96 }}
+            value={value?.fromTurn ?? minTurn}
+            onChange={handleFromChange}
+            options={turnOptions}
+            aria-label="起始轮次"
+          />
+          <span style={{ color: "var(--ant-color-text-tertiary, rgba(0,0,0,0.45))" }}>~</span>
+          <Select
+            size="small"
+            style={{ minWidth: 96 }}
+            value={value?.toTurn ?? maxTurn}
+            onChange={handleToChange}
+            options={turnOptions}
+            aria-label="结束轮次"
+          />
+          <Button size="small" type="text" onClick={() => onChange(null)}>
+            清除
+          </Button>
+        </>
+      ) : null}
+    </Space>
   );
 }

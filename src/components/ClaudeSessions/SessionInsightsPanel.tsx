@@ -1,13 +1,16 @@
-import { Button, Progress, Space, Tag, Typography, message } from "antd";
+import { Button, Dropdown, Progress, Space, Tag, Typography, message } from "antd";
+import type { MenuProps } from "antd";
 import type { ReactNode } from "react";
-import { memo, useCallback, useState } from "react";
+import { memo, useCallback, useMemo, useState } from "react";
 import { CopyFeedbackIcon } from "../shared/CopyFeedbackIcon";
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { save } from "@tauri-apps/plugin-dialog";
 import {
   BulbOutlined,
   ClockCircleOutlined,
+  CopyOutlined,
   DownloadOutlined,
+  DownOutlined,
   DollarOutlined,
   RobotOutlined,
   ThunderboltOutlined,
@@ -24,8 +27,11 @@ import {
 } from "../../utils/sessionInsights";
 import { ClaudeUsageTrendSection } from "./ClaudeUsageTrendSection";
 import {
+  buildSessionInsightRecommendationAiPrompt,
+  buildSessionInsightRecommendationCopyText,
   buildSessionInsightsAiOptimizationPrompt,
   buildSessionInsightsAiPrompt,
+  buildSessionInsightsExternalAiOptimizationPrompt,
   buildSessionInsightsMarkdownReport,
   buildSessionInsightsProblemsCopyText,
 } from "../../utils/sessionInsightsReport";
@@ -34,11 +40,11 @@ const { Text } = Typography;
 
 const SEVERITY_CONFIG: Record<
   SessionInsightSeverity,
-  { color: string; icon: ReactNode }
+  { color: string; icon: ReactNode; label: string }
 > = {
-  critical: { color: "#ef4444", icon: <WarningOutlined /> },
-  warning: { color: "#f59e0b", icon: <WarningOutlined /> },
-  info: { color: "#3b82f6", icon: <BulbOutlined /> },
+  critical: { color: "#ef4444", icon: <WarningOutlined />, label: "严重" },
+  warning: { color: "#f59e0b", icon: <WarningOutlined />, label: "警告" },
+  info: { color: "#3b82f6", icon: <BulbOutlined />, label: "提示" },
 };
 
 const CATEGORY_LABEL: Record<SessionInsightRecommendation["category"], string> = {
@@ -90,9 +96,15 @@ function KpiCard({
 function RecommendationItem({
   item,
   onJumpTurn,
+  onCopy,
+  onAiOptimize,
+  aiLoading,
 }: {
   item: SessionInsightRecommendation;
   onJumpTurn?: (turn: number) => void;
+  onCopy?: () => void;
+  onAiOptimize?: () => void;
+  aiLoading?: boolean;
 }) {
   const cfg = SEVERITY_CONFIG[item.severity];
   return (
@@ -127,6 +139,33 @@ function RecommendationItem({
           </Text>
         ) : null}
       </div>
+      {onCopy || onAiOptimize ? (
+        <div className="app-session-insights__rec-actions">
+          {onCopy ? (
+            <button
+              type="button"
+              className="app-session-insights__rec-action"
+              title="复制此问题"
+              aria-label="复制此问题"
+              onClick={onCopy}
+            >
+              <CopyOutlined />
+            </button>
+          ) : null}
+          {onAiOptimize ? (
+            <button
+              type="button"
+              className="app-session-insights__rec-action app-session-insights__rec-action--ai"
+              title="AI 优化此问题"
+              aria-label="AI 优化此问题"
+              disabled={aiLoading}
+              onClick={onAiOptimize}
+            >
+              <RobotOutlined spin={aiLoading} />
+            </button>
+          ) : null}
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -142,6 +181,7 @@ export const SessionInsightsPanel = memo(function SessionInsightsPanel({
 }: Props) {
   const [aiSending, setAiSending] = useState(false);
   const [aiOptimizeSending, setAiOptimizeSending] = useState(false);
+  const [singleAiTargetId, setSingleAiTargetId] = useState<string | null>(null);
   const { overview, slowestTurns, toolHotspots, recommendations } = insights;
   const tokens = overview.tokens;
   const tokenTotal =
@@ -149,6 +189,20 @@ export const SessionInsightsPanel = memo(function SessionInsightsPanel({
     tokens.outputTokens +
     tokens.cacheCreationTokens +
     tokens.cacheReadTokens;
+
+  const reportMeta = useMemo(
+    () => ({
+      repositoryName: sessionLabel,
+      claudeSessionId,
+    }),
+    [sessionLabel, claudeSessionId],
+  );
+
+  const severityCounts = useMemo(() => {
+    const counts = { critical: 0, warning: 0, info: 0 };
+    for (const r of recommendations) counts[r.severity] += 1;
+    return counts;
+  }, [recommendations]);
 
   const tokenSegments = [
     { label: "输入", value: tokens.inputTokens, color: "#6366f1" },
@@ -174,24 +228,40 @@ export const SessionInsightsPanel = memo(function SessionInsightsPanel({
   }
 
   const buildReportMarkdown = useCallback(
-    () =>
-      buildSessionInsightsMarkdownReport(insights, {
-        repositoryName: sessionLabel,
-        claudeSessionId,
-      }),
-    [insights, sessionLabel, claudeSessionId],
+    () => buildSessionInsightsMarkdownReport(insights, reportMeta),
+    [insights, reportMeta],
   );
 
   const { copied, copy } = useCopyToClipboard();
   const { copied: problemsCopied, copy: copyProblems } = useCopyToClipboard();
+  const { copied: promptCopied, copy: copyPrompt } = useCopyToClipboard();
 
   const buildProblemsCopyText = useCallback(
-    () =>
-      buildSessionInsightsProblemsCopyText(insights, {
-        repositoryName: sessionLabel,
-        claudeSessionId,
-      }),
-    [insights, sessionLabel, claudeSessionId],
+    () => buildSessionInsightsProblemsCopyText(insights, reportMeta),
+    [insights, reportMeta],
+  );
+
+  const buildExternalPrompt = useCallback(
+    () => buildSessionInsightsExternalAiOptimizationPrompt(insights, reportMeta),
+    [insights, reportMeta],
+  );
+
+  const sendAiPrompt = useCallback(
+    async (prompt: string, successMessage: string) => {
+      if (!onRequestAiAnalysis) {
+        message.warning("当前无法向主会话发送分析请求");
+        return false;
+      }
+      try {
+        await onRequestAiAnalysis(prompt);
+        message.success(successMessage);
+        return true;
+      } catch (e) {
+        message.error(`发送失败：${e instanceof Error ? e.message : String(e)}`);
+        return false;
+      }
+    },
+    [onRequestAiAnalysis],
   );
 
   const handleExportReport = useCallback(async () => {
@@ -204,49 +274,92 @@ export const SessionInsightsPanel = memo(function SessionInsightsPanel({
       });
       if (!path) return;
       await writeTextFileAbsolute(path, text);
+      message.success("洞察报告已导出");
     } catch (e) {
       message.error(`导出失败：${e instanceof Error ? e.message : String(e)}`);
     }
   }, [buildReportMarkdown, claudeSessionId]);
 
   const handleAiAnalysis = useCallback(async () => {
-    if (!onRequestAiAnalysis) {
-      message.warning("当前无法向主会话发送分析请求");
-      return;
-    }
     setAiSending(true);
     try {
       const prompt = buildSessionInsightsAiPrompt(insights, resolveLinkMetaBundle?.() ?? null);
-      await onRequestAiAnalysis(prompt);
-    } catch (e) {
-      message.error(`发送失败：${e instanceof Error ? e.message : String(e)}`);
+      await sendAiPrompt(prompt, "已发送 AI 解读请求到主会话");
     } finally {
       setAiSending(false);
     }
-  }, [insights, resolveLinkMetaBundle, onRequestAiAnalysis]);
+  }, [insights, resolveLinkMetaBundle, sendAiPrompt]);
 
   const handleAiOptimization = useCallback(async () => {
-    if (!onRequestAiAnalysis) {
-      message.warning("当前无法向主会话发送分析请求");
-      return;
-    }
     if (recommendations.length === 0) {
       message.info("当前未检测到需要优化的问题");
       return;
     }
     setAiOptimizeSending(true);
     try {
-      const prompt = buildSessionInsightsAiOptimizationPrompt(insights, {
-        repositoryName: sessionLabel,
-        claudeSessionId,
-      });
-      await onRequestAiAnalysis(prompt);
-    } catch (e) {
-      message.error(`发送失败：${e instanceof Error ? e.message : String(e)}`);
+      const prompt = buildSessionInsightsAiOptimizationPrompt(insights, reportMeta);
+      await sendAiPrompt(prompt, "已发送 AI 优化请求到主会话");
     } finally {
       setAiOptimizeSending(false);
     }
-  }, [insights, recommendations.length, sessionLabel, claudeSessionId, onRequestAiAnalysis]);
+  }, [insights, recommendations.length, reportMeta, sendAiPrompt]);
+
+  const handleSingleAiOptimization = useCallback(
+    async (recommendation: SessionInsightRecommendation) => {
+      setSingleAiTargetId(recommendation.id);
+      try {
+        const prompt = buildSessionInsightRecommendationAiPrompt(
+          recommendation,
+          insights,
+          reportMeta,
+        );
+        await sendAiPrompt(prompt, `已发送「${recommendation.title}」的 AI 优化请求`);
+      } finally {
+        setSingleAiTargetId(null);
+      }
+    },
+    [insights, reportMeta, sendAiPrompt],
+  );
+
+  const handleCopySingleRecommendation = useCallback(
+    async (recommendation: SessionInsightRecommendation) => {
+      const text = buildSessionInsightRecommendationCopyText(recommendation, insights, reportMeta);
+      const ok = await copy(text);
+      if (ok) message.success("已复制此问题");
+    },
+    [copy, insights, reportMeta],
+  );
+
+  const copyMenuItems = useMemo((): MenuProps["items"] => {
+    const disabled = recommendations.length === 0;
+    return [
+      {
+        key: "problems",
+        label: "复制问题清单",
+        disabled,
+      },
+      {
+        key: "prompt",
+        label: "复制完整 Prompt",
+        disabled,
+      },
+    ];
+  }, [recommendations.length]);
+
+  const handleCopyMenuClick = useCallback(
+    async ({ key }: { key: string }) => {
+      if (key === "problems") {
+        const ok = await copyProblems(buildProblemsCopyText());
+        if (ok) message.success("已复制问题清单");
+        return;
+      }
+      if (key === "prompt") {
+        const ok = await copyPrompt(buildExternalPrompt());
+        if (ok) message.success("已复制完整 Prompt，可粘贴到外部 AI");
+      }
+    },
+    [buildExternalPrompt, buildProblemsCopyText, copyProblems, copyPrompt],
+  );
 
   return (
     <div className="app-session-insights">
@@ -257,21 +370,32 @@ export const SessionInsightsPanel = memo(function SessionInsightsPanel({
             icon={<CopyFeedbackIcon copied={copied} />}
             onClick={() => void copy(buildReportMarkdown())}
           >
-            {copied ? "已复制" : "复制"}
+            {copied ? "已复制" : "复制报告"}
           </Button>
           <Button size="small" icon={<DownloadOutlined />} onClick={() => void handleExportReport()}>
             导出
           </Button>
           {onRequestAiAnalysis ? (
-            <Button
-              size="small"
-              type="primary"
-              icon={<RobotOutlined />}
-              loading={aiSending}
-              onClick={() => void handleAiAnalysis()}
-            >
-              AI 解读
-            </Button>
+            <>
+              <Button
+                size="small"
+                icon={<RobotOutlined />}
+                loading={aiSending}
+                onClick={() => void handleAiAnalysis()}
+              >
+                AI 解读
+              </Button>
+              <Button
+                size="small"
+                type="primary"
+                icon={<ThunderboltOutlined />}
+                loading={aiOptimizeSending}
+                disabled={recommendations.length === 0}
+                onClick={() => void handleAiOptimization()}
+              >
+                AI 优化
+              </Button>
+            </>
           ) : null}
         </Space>
       </div>
@@ -424,26 +548,47 @@ export const SessionInsightsPanel = memo(function SessionInsightsPanel({
 
       <ClaudeUsageTrendSection repositoryPath={repositoryPath} />
 
-      <section className="app-session-insights__section">
+      <section className="app-session-insights__section app-session-insights__section--optimize">
         <div className="app-session-insights__section-head">
-          <Text className="app-session-insights__section-title">
-            优化建议
+          <div className="app-session-insights__section-head-main">
+            <Text className="app-session-insights__section-title">
+              优化建议
+              {recommendations.length > 0 ? (
+                <Text type="secondary" className="app-session-insights__section-count">
+                  {" "}
+                  · {recommendations.length} 项
+                </Text>
+              ) : null}
+            </Text>
             {recommendations.length > 0 ? (
-              <Text type="secondary" className="app-session-insights__section-count">
-                {" "}
-                · {recommendations.length} 项
-              </Text>
+              <div className="app-session-insights__severity-tags">
+                {(["critical", "warning", "info"] as const).map((severity) =>
+                  severityCounts[severity] > 0 ? (
+                    <Tag
+                      key={severity}
+                      bordered={false}
+                      className={`app-session-insights__severity-tag app-session-insights__severity-tag--${severity}`}
+                    >
+                      {SEVERITY_CONFIG[severity].label} {severityCounts[severity]}
+                    </Tag>
+                  ) : null,
+                )}
+              </div>
             ) : null}
-          </Text>
+          </div>
           <Space size={4} wrap className="app-session-insights__section-actions">
-            <Button
-              size="small"
-              icon={<CopyFeedbackIcon copied={problemsCopied} />}
+            <Dropdown
+              menu={{ items: copyMenuItems, onClick: (info) => void handleCopyMenuClick(info) }}
               disabled={recommendations.length === 0}
-              onClick={() => void copyProblems(buildProblemsCopyText())}
+              trigger={["click"]}
             >
-              {problemsCopied ? "已复制" : "复制问题"}
-            </Button>
+              <Button
+                size="small"
+                icon={<CopyFeedbackIcon copied={problemsCopied || promptCopied} />}
+              >
+                复制 <DownOutlined style={{ fontSize: 9, marginInlineStart: 2 }} />
+              </Button>
+            </Dropdown>
             {onRequestAiAnalysis ? (
               <Button
                 size="small"
@@ -458,6 +603,11 @@ export const SessionInsightsPanel = memo(function SessionInsightsPanel({
             ) : null}
           </Space>
         </div>
+        {recommendations.length > 0 ? (
+          <Text type="secondary" className="app-session-insights__optimize-hint">
+            可将问题复制到外部 AI，或在 Wise 主会话中一键生成优化方案；每条建议也可单独操作。
+          </Text>
+        ) : null}
         <div className="app-session-insights__rec-list">
           {recommendations.length === 0 ? (
             <Text type="secondary" className="app-session-insights__rec-empty">
@@ -465,7 +615,18 @@ export const SessionInsightsPanel = memo(function SessionInsightsPanel({
             </Text>
           ) : (
             recommendations.map((r) => (
-              <RecommendationItem key={r.id} item={r} onJumpTurn={onJumpTurn} />
+              <RecommendationItem
+                key={r.id}
+                item={r}
+                onJumpTurn={onJumpTurn}
+                onCopy={() => void handleCopySingleRecommendation(r)}
+                onAiOptimize={
+                  onRequestAiAnalysis
+                    ? () => void handleSingleAiOptimization(r)
+                    : undefined
+                }
+                aiLoading={singleAiTargetId === r.id}
+              />
             ))
           )}
         </div>

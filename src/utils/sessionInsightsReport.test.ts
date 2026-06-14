@@ -1,8 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import type { SessionInsightsResult } from "./sessionInsights";
 import {
+  buildSessionInsightRecommendationAiPrompt,
+  buildSessionInsightRecommendationCopyText,
   buildSessionInsightsAiOptimizationPrompt,
   buildSessionInsightsAiPrompt,
+  buildSessionInsightsExternalAiOptimizationPrompt,
   buildSessionInsightsMarkdownReport,
   buildSessionInsightsProblemsCopyText,
 } from "./sessionInsightsReport";
@@ -110,6 +113,8 @@ describe("buildSessionInsightsProblemsCopyText", () => {
     expect(text).toContain("轮次 2 耗时异常");
     expect(text).toContain("**描述**");
     expect(text).toContain("wise");
+    expect(text).toContain("辅助证据");
+    expect(text).toContain("Read");
     expect(text).toContain("请针对以上每条问题给出可执行的优化建议");
   });
 
@@ -120,6 +125,35 @@ describe("buildSessionInsightsProblemsCopyText", () => {
     });
     expect(empty).toContain("共 0 项");
     expect(empty).toContain("未检测到需要优化的问题");
+  });
+});
+
+describe("buildSessionInsightRecommendationCopyText", () => {
+  test("formats single recommendation", () => {
+    const rec = sampleInsights().recommendations[0]!;
+    const text = buildSessionInsightRecommendationCopyText(rec, sampleInsights(), {
+      repositoryName: "wise",
+    });
+    expect(text).toContain("# Claude Code 会话优化问题");
+    expect(text).toContain("轮次 2 耗时异常");
+    expect(text).toContain("wise");
+  });
+});
+
+describe("buildSessionInsightRecommendationAiPrompt", () => {
+  test("wraps single recommendation", () => {
+    const rec = sampleInsights().recommendations[0]!;
+    const prompt = buildSessionInsightRecommendationAiPrompt(rec, sampleInsights());
+    expect(prompt).toContain("单条问题");
+    expect(prompt).toContain("轮次 2 耗时异常");
+  });
+});
+
+describe("buildSessionInsightsExternalAiOptimizationPrompt", () => {
+  test("matches internal optimization prompt", () => {
+    const external = buildSessionInsightsExternalAiOptimizationPrompt(sampleInsights());
+    const internal = buildSessionInsightsAiOptimizationPrompt(sampleInsights());
+    expect(external).toBe(internal);
   });
 });
 

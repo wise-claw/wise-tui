@@ -674,6 +674,12 @@ export function AppWorkspaceLayout({
         mainSessionForDataLink?.repositoryPath?.trim() ||
         claudeSessionsProps.activeRepository?.path,
       mainSessionForDataLink,
+      onSessionInsightsAiAnalysis: mainSessionForDataLink
+        ? async (prompt: string) => {
+            claudeSessionsProps.onSwitchSession(mainSessionForDataLink.id);
+            await claudeSessionsProps.onExecuteSession(mainSessionForDataLink.id, prompt);
+          }
+        : undefined,
       onToggleSidebar: claudeSessionsProps.onToggleSidebar,
       onToggleRightPanel: claudeSessionsProps.onToggleRightPanel,
       rightPanelDefaultCollapsed: claudeSessionsProps.rightPanelDefaultCollapsed,
@@ -710,6 +716,8 @@ export function AppWorkspaceLayout({
       claudeSessionsProps.paneCount,
       claudeSessionsProps.onChangePaneCount,
       mainSessionForDataLink,
+      claudeSessionsProps.onSwitchSession,
+      claudeSessionsProps.onExecuteSession,
       onOpenRemoteChannels,
     ],
   );

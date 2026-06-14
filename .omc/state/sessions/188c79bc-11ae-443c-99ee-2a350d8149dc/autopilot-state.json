@@ -1,11 +1,12 @@
 {
-  "active": true,
-  "started_at": "2026-06-14T01:19:29.391Z",
-  "original_prompt": "/oh-my-claudecode:autopilot 你好",
-  "session_id": "188c79bc-11ae-443c-99ee-2a350d8149dc",
-  "project_path": "/Users/sjl/Documents/github/wise",
-  "reinforcement_count": 0,
-  "awaiting_confirmation": true,
-  "awaiting_confirmation_set_at": "2026-06-14T01:19:29.391Z",
-  "last_checked_at": "2026-06-14T01:19:29.391Z"
+  "active": false,
+  "completed_at": "2026-06-14T02:50:00Z",
+  "phase": "cleanup",
+  "result": "success",
+  "_meta": {
+    "mode": "autopilot",
+    "sessionId": "188c79bc-11ae-443c-99ee-2a350d8149dc",
+    "updatedAt": "2026-06-14T02:46:48.076Z",
+    "updatedBy": "state_write_tool"
+  }
 }

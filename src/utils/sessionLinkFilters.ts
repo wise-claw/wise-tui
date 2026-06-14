@@ -159,3 +159,62 @@ export function computeSessionLinkTurnMetrics(
       };
     });
 }
+
+/** 闭区间 [fromTurn, toTurn] 的轮次范围。 */
+export interface TurnRange {
+  fromTurn: number;
+  toTurn: number;
+}
+
+function isValidTurnRange(range: TurnRange | null | undefined): range is TurnRange {
+  if (!range) return false;
+  if (!Number.isFinite(range.fromTurn) || !Number.isFinite(range.toTurn)) return false;
+  if (range.fromTurn < 1 || range.toTurn < 1) return false;
+  if (range.toTurn < range.fromTurn) return false;
+  return true;
+}
+
+/** 按轮次区间过滤 SessionLinkRecord；range == null 表示不过滤。 */
+export function filterSessionLinkRecordsByTurnRange(
+  records: readonly SessionLinkRecord[],
+  range: TurnRange | null | undefined,
+): SessionLinkRecord[] {
+  if (range == null) return [...records];
+  if (!isValidTurnRange(range)) return [];
+  const { fromTurn, toTurn } = range;
+  return records.filter((r) => r.turnIndex >= fromTurn && r.turnIndex <= toTurn);
+}
+
+/** 按轮次区间过滤 SessionLinkTurnMetric；range == null 表示不过滤。 */
+export function filterTurnMetricsByTurnRange(
+  metrics: readonly SessionLinkTurnMetric[],
+  range: TurnRange | null | undefined,
+): SessionLinkTurnMetric[] {
+  if (range == null) return [...metrics];
+  if (!isValidTurnRange(range)) return [];
+  const { fromTurn, toTurn } = range;
+  return metrics.filter((m) => m.turnIndex >= fromTurn && m.turnIndex <= toTurn);
+}
+
+/**
+ * 从 turnMetrics 推导给定区间的时间戳闭区间（startMs / endMs）。
+ * - range == null：返回 null（调用方按未过滤处理）。
+ * - 区间在 metrics 中无任何命中：返回 null。
+ */
+export function deriveTimestampRangeFromTurnMetrics(
+  metrics: readonly SessionLinkTurnMetric[],
+  range: TurnRange | null | undefined,
+): { startMs: number; endMs: number } | null {
+  if (range == null) return null;
+  if (!isValidTurnRange(range)) return null;
+  const matched = filterTurnMetricsByTurnRange(metrics, range);
+  if (matched.length === 0) return null;
+  let startMs = Number.POSITIVE_INFINITY;
+  let endMs = Number.NEGATIVE_INFINITY;
+  for (const m of matched) {
+    if (m.startMs < startMs) startMs = m.startMs;
+    if (m.endMs > endMs) endMs = m.endMs;
+  }
+  if (!Number.isFinite(startMs) || !Number.isFinite(endMs)) return null;
+  return { startMs, endMs };
+}
