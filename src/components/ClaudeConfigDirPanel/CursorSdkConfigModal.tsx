@@ -1,5 +1,5 @@
 import { KeyOutlined, LinkOutlined, ReloadOutlined } from "@ant-design/icons";
-import { Alert, Button, Form, Input, Modal, Space, Typography, message } from "antd";
+import { Alert, Button, Collapse, Form, Input, Modal, Typography, message } from "antd";
 import { useCallback, useEffect, useRef, useState } from "react";
 import {
   clearCursorApiKey,
@@ -96,54 +96,104 @@ export function CursorSdkConfigModal({ open, onClose, onSaved }: CursorSdkConfig
     }
   }, [form, loadStatus, onSaved]);
 
+  const statusLines: Array<{ label: string; ok: boolean }> = status
+    ? [
+        { label: "Bun", ok: status.bunAvailable },
+        { label: "Bridge 脚本", ok: status.bridgeAvailable },
+        { label: "@cursor/sdk", ok: status.sdkAvailable },
+        ...(status.sdkPackageInstalled != null
+          ? [{ label: "SDK 依赖目录", ok: status.sdkPackageInstalled }]
+          : []),
+        { label: "API Key", ok: status.apiKeyConfigured },
+        ...(status.apiKeyValid != null ? [{ label: "Key 校验", ok: status.apiKeyValid }] : []),
+        ...(status.filesystemAccessOk != null
+          ? [{ label: "子进程文件读写", ok: status.filesystemAccessOk }]
+          : []),
+        ...(status.repositoryReadOk != null
+          ? [{ label: "目标仓库可读", ok: status.repositoryReadOk }]
+          : []),
+        ...(status.repositoryWriteOk != null
+          ? [{ label: "目标仓库可写", ok: status.repositoryWriteOk }]
+          : []),
+        ...(status.toolsAvailable != null
+          ? [{ label: "本地读盘/搜索工具", ok: status.toolsAvailable }]
+          : []),
+      ]
+    : [];
+
   return (
     <Modal
       title="配置 Cursor SDK"
       open={open}
       onCancel={onClose}
       destroyOnHidden
+      width={460}
+      styles={{ body: { paddingTop: 12, paddingBottom: 12 } }}
       footer={[
-        <Button key="cancel" onClick={onClose}>
+        <Button key="cancel" size="small" onClick={onClose}>
           关闭
         </Button>,
         status?.apiKeyConfigured ? (
-          <Button key="clear" danger loading={saving} onClick={() => void handleClear()}>
+          <Button key="clear" size="small" danger loading={saving} onClick={() => void handleClear()}>
             清除 Key
           </Button>
         ) : null,
-        <Button key="probe" loading={probing} onClick={() => void handleProbe()}>
+        <Button key="probe" size="small" loading={probing} onClick={() => void handleProbe()}>
           重新探测
         </Button>,
-        <Button key="save" type="primary" loading={saving} onClick={() => void handleSave()}>
+        <Button key="save" size="small" type="primary" loading={saving} onClick={() => void handleSave()}>
           保存 Key
         </Button>,
       ]}
     >
-      <Typography.Paragraph type="secondary" style={{ marginBottom: 12 }}>
-        Cursor SDK 通过 Bun sidecar 运行 Local Agent；默认<strong>不</strong>加载目标仓库的
-        project 设置层，以免仓库内沙箱/钩子禁用写盘。安装包需本机存在已执行{" "}
-        <Typography.Text code>bun install</Typography.Text> 的 Wise 目录（或{" "}
-        <Typography.Text code>WISE_CURSOR_SDK_ROOT</Typography.Text>
-        ）。若 Agent 仍报无法写文件，请用{" "}
-        <Typography.Link href="/demo.html">/demo.html</Typography.Link>
-        {" "}检查仓库落盘（不依赖 Agent 自述）。macOS 请为 Wise 开启「完全磁盘访问权限」。请在
-        {" "}
+      <Typography.Text type="secondary" style={{ display: "block", marginBottom: 8, fontSize: 12, lineHeight: 1.45 }}>
+        通过 Bun sidecar 运行 Local Agent。请在{" "}
         <Typography.Link
           href="https://cursor.com/cn/dashboard/api?section=user-keys#user-api-keys"
           target="_blank"
           rel="noreferrer"
+          style={{ fontSize: 12 }}
         >
-          Cursor Dashboard → API Keys
-          <LinkOutlined style={{ marginInlineStart: 4 }} />
+          Dashboard → API Keys
+          <LinkOutlined style={{ marginInlineStart: 2, fontSize: 11 }} />
         </Typography.Link>
         {" "}
-        创建 User API Key，并保存在本机 Wise 数据库中（不会写入前端 localStorage）。
-      </Typography.Paragraph>
+        创建 User API Key，保存在 Wise 数据库（非 localStorage）。
+      </Typography.Text>
 
-      <Form form={form} layout="vertical">
+      <Collapse
+        size="small"
+        bordered={false}
+        style={{ marginBottom: 8 }}
+        items={[
+          {
+            key: "help",
+            label: <span style={{ fontSize: 12 }}>环境与排查说明</span>,
+            children: (
+              <Typography.Paragraph
+                type="secondary"
+                style={{ marginBottom: 0, fontSize: 12, lineHeight: 1.45 }}
+              >
+                默认<strong>不</strong>加载目标仓库 project 设置层，以免沙箱/钩子禁用写盘。需本机已执行{" "}
+                <Typography.Text code>bun install</Typography.Text> 的 Wise 目录（或{" "}
+                <Typography.Text code>WISE_CURSOR_SDK_ROOT</Typography.Text>
+                ）。macOS 请为 Wise 开启「完全磁盘访问权限」。写盘异常请用{" "}
+                <Typography.Link href="/demo.html" style={{ fontSize: 12 }}>
+                  /demo.html
+                </Typography.Link>
+                {" "}
+                诊断（不依赖 Agent 自述）。
+              </Typography.Paragraph>
+            ),
+          },
+        ]}
+      />
+
+      <Form form={form} layout="vertical" size="small" style={{ marginBottom: 8 }}>
         <Form.Item
           name="apiKey"
           label="Cursor API Key"
+          style={{ marginBottom: 0 }}
           rules={[{ required: true, message: "请输入 Cursor API Key" }]}
         >
           <Input.Password
@@ -158,45 +208,41 @@ export function CursorSdkConfigModal({ open, onClose, onSaved }: CursorSdkConfig
         <Alert
           type={status.available ? "success" : status.apiKeyConfigured ? "warning" : "info"}
           showIcon
-          title={status.available ? "Cursor SDK 已就绪" : "Cursor SDK 待配置"}
+          style={{ marginTop: 8, padding: "6px 10px" }}
+          title={
+            <span style={{ fontSize: 13 }}>
+              {status.available ? "Cursor SDK 已就绪" : "Cursor SDK 待配置"}
+            </span>
+          }
           description={
-            <Space direction="vertical" size={4} style={{ width: "100%" }}>
-              <StatusLine label="Bun" ok={status.bunAvailable} />
-              <StatusLine label="Bridge 脚本" ok={status.bridgeAvailable} />
-              <StatusLine label="@cursor/sdk" ok={status.sdkAvailable} />
-              {status.sdkPackageInstalled != null ? (
-                <StatusLine label="SDK 依赖目录" ok={status.sdkPackageInstalled} />
-              ) : null}
-              <StatusLine label="API Key" ok={status.apiKeyConfigured} />
-              {status.apiKeyValid != null ? (
-                <StatusLine label="Key 校验" ok={status.apiKeyValid} />
-              ) : null}
-              {status.filesystemAccessOk != null ? (
-                <StatusLine label="子进程文件读写" ok={status.filesystemAccessOk} />
-              ) : null}
-              {status.repositoryReadOk != null ? (
-                <StatusLine label="目标仓库可读" ok={status.repositoryReadOk} />
-              ) : null}
-              {status.repositoryWriteOk != null ? (
-                <StatusLine label="目标仓库可写" ok={status.repositoryWriteOk} />
-              ) : null}
-              {status.toolsAvailable != null ? (
-                <StatusLine label="本地读盘/搜索工具" ok={status.toolsAvailable} />
-              ) : null}
-              <Typography.Link href="/demo.html">
-                打开 Cursor SDK 诊断页（/demo.html）
-              </Typography.Link>
+            <div style={{ width: "100%" }}>
+              <div
+                style={{
+                  display: "grid",
+                  gridTemplateColumns: "1fr 1fr",
+                  gap: "2px 10px",
+                }}
+              >
+                {statusLines.map((line) => (
+                  <StatusLine key={line.label} label={line.label} ok={line.ok} />
+                ))}
+              </div>
               {!status.available && status.failureReason ? (
-                <Typography.Text type="secondary">{status.failureReason}</Typography.Text>
+                <Typography.Text
+                  type="secondary"
+                  style={{ display: "block", marginTop: 4, fontSize: 12, lineHeight: 1.4 }}
+                >
+                  {status.failureReason}
+                </Typography.Text>
               ) : null}
-            </Space>
+            </div>
           }
         />
       ) : null}
 
       {loadingStatus ? (
-        <Typography.Text type="secondary">
-          <ReloadOutlined spin style={{ marginInlineEnd: 6 }} />
+        <Typography.Text type="secondary" style={{ display: "block", marginTop: 8, fontSize: 12 }}>
+          <ReloadOutlined spin style={{ marginInlineEnd: 4 }} />
           正在读取 Cursor SDK 状态…
         </Typography.Text>
       ) : null}
@@ -206,7 +252,7 @@ export function CursorSdkConfigModal({ open, onClose, onSaved }: CursorSdkConfig
 
 function StatusLine({ label, ok }: { label: string; ok: boolean }) {
   return (
-    <Typography.Text type={ok ? "success" : "secondary"}>
+    <Typography.Text type={ok ? "success" : "secondary"} style={{ fontSize: 12, lineHeight: 1.4 }}>
       {ok ? "✓" : "○"} {label}
     </Typography.Text>
   );

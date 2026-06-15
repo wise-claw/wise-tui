@@ -2,7 +2,6 @@
 //!
 //! 固定使用官方默认 `~/.claude`。仓库内的 `<project>/.claude/...` 不受影响。
 
-use serde::Serialize;
 use std::collections::HashMap;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -11,27 +10,11 @@ use uuid::Uuid;
 
 use crate::wise_db::WiseDb;
 
-/// `app_settings` 中保存原始字符串（保留 `~` 展开前形态，便于回显与跨用户携带）。
+/// 历史 `app_settings` 键；启动时删除，避免旧版自定义目录残留。
 pub(crate) const CLAUDE_USER_CONFIG_DIR_SETTING_KEY: &str = "claude_user_config_dir";
 
 /// 全局缓存：写命令更新 / 启动 init 时写入；读命令尽量从这里出。
 static USER_CLAUDE_DIR_CACHE: RwLock<Option<PathBuf>> = RwLock::new(None);
-
-/// `~` / `~/foo` 展开到 `$HOME`；非 `~` 路径原样返回 `PathBuf`。
-pub(crate) fn expand_tilde(raw: &str) -> Option<PathBuf> {
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        return None;
-    }
-    if trimmed == "~" {
-        return dirs::home_dir();
-    }
-    if let Some(rest) = trimmed.strip_prefix("~/") {
-        let home = dirs::home_dir()?;
-        return Some(home.join(rest));
-    }
-    Some(PathBuf::from(trimmed))
-}
 
 /// 官方默认目录：`$HOME/.claude`。无 HOME 时退化到当前目录下的 `.claude`（保持调用侧不 panic）。
 pub(crate) fn default_user_claude_dir() -> PathBuf {
@@ -94,35 +77,6 @@ pub(crate) fn user_claude_dir_test_lock() -> std::sync::MutexGuard<'static, ()> 
 pub(crate) fn init_from_db(db: &WiseDb) {
     let _ = db.delete_setting(CLAUDE_USER_CONFIG_DIR_SETTING_KEY);
     update_cache(None);
-}
-
-#[derive(Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct ClaudeUserConfigDirInfo {
-    /// 原始字符串（含 `~` 前缀），用户未设置时为 `None`。
-    raw_value: Option<String>,
-    /// 解析后绝对路径。
-    resolved_path: String,
-    /// 当前是否使用默认 `~/.claude`。
-    is_default: bool,
-    /// 默认解析后的路径（展示给用户做对比）。
-    default_resolved_path: String,
-    /// 解析后路径是否存在（用于 UI 警告）。
-    exists: bool,
-}
-
-fn build_info(raw_value: Option<String>) -> ClaudeUserConfigDirInfo {
-    let resolved = user_claude_dir();
-    let default_path = default_user_claude_dir();
-    let is_default = resolved == default_path;
-    let exists = resolved.is_dir();
-    ClaudeUserConfigDirInfo {
-        raw_value,
-        resolved_path: resolved.to_string_lossy().to_string(),
-        is_default,
-        default_resolved_path: default_path.to_string_lossy().to_string(),
-        exists,
-    }
 }
 
 /// 从 Claude `settings.json` / `~/.claude.json` 的 `env` 块读取键值（忽略空值）。
@@ -393,21 +347,6 @@ pub(crate) fn get_claude_user_settings_json_path() -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-
-    #[test]
-    fn expand_tilde_handles_basic_cases() {
-        assert!(expand_tilde("").is_none());
-        assert!(expand_tilde("   ").is_none());
-        let plain = expand_tilde("/tmp/foo").unwrap();
-        assert_eq!(plain, PathBuf::from("/tmp/foo"));
-        if let Some(home) = dirs::home_dir() {
-            assert_eq!(expand_tilde("~").unwrap(), home);
-            assert_eq!(
-                expand_tilde("~/.codefuse/engine/cc").unwrap(),
-                home.join(".codefuse/engine/cc")
-            );
-        }
-    }
 
     #[test]
     fn sanitize_root_json_removes_conflicting_env_for_fcc() {

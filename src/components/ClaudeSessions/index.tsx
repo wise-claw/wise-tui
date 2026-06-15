@@ -78,6 +78,8 @@ interface Props {
   ) => void | Promise<void>;
   codexAvailable?: boolean;
   cursorAvailable?: boolean;
+  geminiAvailable?: boolean;
+  opencodeAvailable?: boolean;
   onOpenExecutionEnvironment?: () => void;
   onExecuteSession: (
     sessionId: string,
@@ -235,6 +237,8 @@ function ClaudeSessionsShell({
   onUpdateEmployeeExecutionEngine,
   codexAvailable = true,
   cursorAvailable = true,
+  geminiAvailable = false,
+  opencodeAvailable = false,
   onOpenExecutionEnvironment,
   onExecuteSession,
   onResumeSessionFromMonitorDrawer,
@@ -684,6 +688,8 @@ function ClaudeSessionsShell({
           onUpdateEmployeeExecutionEngine={onUpdateEmployeeExecutionEngine}
           codexAvailable={codexAvailable}
           cursorAvailable={cursorAvailable}
+          geminiAvailable={geminiAvailable}
+          opencodeAvailable={opencodeAvailable}
           onOpenExecutionEnvironment={onOpenExecutionEnvironment}
           onExecuteSession={onExecuteSession}
           onResumeSessionFromMonitorDrawer={onResumeSessionFromMonitorDrawer}

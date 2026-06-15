@@ -3,6 +3,7 @@ import type { ClaudeSession } from "../types";
 import {
   appendAssistantPreviewTextMessage,
   beginSessionTurnWithUserPrompt,
+  resolveNoReplyFailureMessage,
   setSessionRunningWithUserPrompt,
 } from "./claudeSessionState";
 
@@ -19,6 +20,13 @@ function session(messages: ClaudeSession["messages"]): ClaudeSession {
     pendingPrompt: "",
   };
 }
+
+describe("resolveNoReplyFailureMessage", () => {
+  test("uses cursor-specific hint for cursor engine", () => {
+    expect(resolveNoReplyFailureMessage("cursor", false)).toContain("Cursor SDK");
+    expect(resolveNoReplyFailureMessage("claude", false)).toContain("Hook");
+  });
+});
 
 describe("appendAssistantPreviewTextMessage", () => {
   test("appends assistant bubble when only user message exists", () => {

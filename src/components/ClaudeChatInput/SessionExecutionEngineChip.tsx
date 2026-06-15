@@ -2,6 +2,7 @@ import { Dropdown, Menu, type MenuProps } from "antd";
 import { HoverHint } from "../shared/HoverHint";
 import { useMemo, useState } from "react";
 import {
+  isSessionExecutionEngine,
   SESSION_EXECUTION_ENGINE_LABELS,
   SESSION_EXECUTION_ENGINES,
   type SessionExecutionEngine,
@@ -12,6 +13,8 @@ interface PickerSectionProps {
   engine: SessionExecutionEngine;
   codexAvailable?: boolean;
   cursorAvailable?: boolean;
+  geminiAvailable?: boolean;
+  opencodeAvailable?: boolean;
   onEngineChange?: (engine: SessionExecutionEngine) => void;
   onOpenExecutionEnvironment?: () => void;
 }
@@ -25,16 +28,20 @@ function isEngineAvailable(
   key: SessionExecutionEngine,
   codexAvailable: boolean,
   cursorAvailable: boolean,
+  geminiAvailable: boolean,
+  opencodeAvailable: boolean,
 ): boolean {
   if (key === "codex") return codexAvailable;
   if (key === "cursor") return cursorAvailable;
+  if (key === "gemini") return geminiAvailable;
+  if (key === "opencode") return opencodeAvailable;
   return true;
 }
 
-function unavailableDescription(
-  key: SessionExecutionEngine,
-): string {
+function unavailableDescription(key: SessionExecutionEngine): string {
   if (key === "codex") return "未检测到 Codex CLI，点击右侧探测";
+  if (key === "gemini") return "未检测到 Gemini CLI，点击右侧探测";
+  if (key === "opencode") return "未检测到 OpenCode，点击右侧探测";
   return SESSION_EXECUTION_ENGINE_LABELS[key].description;
 }
 
@@ -51,16 +58,26 @@ export function buildSessionExecutionEngineMenuItems({
   engine,
   codexAvailable = true,
   cursorAvailable = true,
+  geminiAvailable = false,
+  opencodeAvailable = false,
   onOpenExecutionEnvironment,
   onProbeClick,
 }: PickerSectionProps & { onProbeClick?: () => void }): MenuProps["items"] {
   return visibleExecutionEngines(cursorAvailable).map((key) => {
     const itemMeta = SESSION_EXECUTION_ENGINE_LABELS[key];
-    const itemDisabled = !isEngineAvailable(key, codexAvailable, cursorAvailable);
+    const itemDisabled = !isEngineAvailable(
+      key,
+      codexAvailable,
+      cursorAvailable,
+      geminiAvailable,
+      opencodeAvailable,
+    );
     const isSelected = engine === key;
 
     const probeAction =
-      itemDisabled && onOpenExecutionEnvironment && key === "codex" ? (
+      itemDisabled &&
+      onOpenExecutionEnvironment &&
+      (key === "codex" || key === "gemini" || key === "opencode") ? (
         <button
           type="button"
           className="app-claude-connection-kind-menu-item__probe"
@@ -118,6 +135,9 @@ export function buildSessionExecutionEngineMenuItems({
               {key === "cursor" && !itemDisabled ? (
                 <span className="app-claude-connection-kind-menu-item__badge app-claude-connection-kind-menu-item__badge--cursor">SDK</span>
               ) : null}
+              {(key === "gemini" || key === "opencode") && !itemDisabled ? (
+                <span className="app-claude-connection-kind-menu-item__badge app-claude-connection-kind-menu-item__badge--codex">本地</span>
+              ) : null}
             </div>
             <span className="app-claude-connection-kind-menu-item__desc">
               {itemDisabled ? unavailableDescription(key) : itemMeta.description}
@@ -141,6 +161,8 @@ export function SessionExecutionEnginePickerSection({
   engine,
   codexAvailable = true,
   cursorAvailable = true,
+  geminiAvailable = false,
+  opencodeAvailable = false,
   onEngineChange,
   onOpenExecutionEnvironment,
 }: PickerSectionProps) {
@@ -150,9 +172,11 @@ export function SessionExecutionEnginePickerSection({
         engine,
         codexAvailable,
         cursorAvailable,
+        geminiAvailable,
+        opencodeAvailable,
         onOpenExecutionEnvironment,
       }),
-    [codexAvailable, cursorAvailable, engine, onOpenExecutionEnvironment],
+    [codexAvailable, cursorAvailable, geminiAvailable, opencodeAvailable, engine, onOpenExecutionEnvironment],
   );
 
   return (
@@ -164,8 +188,8 @@ export function SessionExecutionEnginePickerSection({
         selectable
         selectedKeys={[engine]}
         onClick={({ key }) => {
-          if (key === "codex" || key === "claude" || key === "cursor") {
-            if (key !== engine) onEngineChange?.(key);
+          if (typeof key === "string" && isSessionExecutionEngine(key) && key !== engine) {
+            onEngineChange?.(key);
           }
         }}
       />
@@ -177,6 +201,8 @@ export function SessionExecutionEngineChip({
   engine,
   codexAvailable = true,
   cursorAvailable = true,
+  geminiAvailable = false,
+  opencodeAvailable = false,
   onEngineChange,
   onOpenExecutionEnvironment,
   disabled = false,
@@ -185,7 +211,13 @@ export function SessionExecutionEngineChip({
   const [menuOpen, setMenuOpen] = useState(false);
   const meta = SESSION_EXECUTION_ENGINE_LABELS[engine];
   const interactive = Boolean(onEngineChange) && !disabled;
-  const engineReady = isEngineAvailable(engine, codexAvailable, cursorAvailable);
+  const engineReady = isEngineAvailable(
+    engine,
+    codexAvailable,
+    cursorAvailable,
+    geminiAvailable,
+    opencodeAvailable,
+  );
 
   const menuItems = useMemo(
     () =>
@@ -193,18 +225,23 @@ export function SessionExecutionEngineChip({
         engine,
         codexAvailable,
         cursorAvailable,
+        geminiAvailable,
+        opencodeAvailable,
         onOpenExecutionEnvironment,
         onProbeClick: () => setMenuOpen(false),
       }),
-    [codexAvailable, cursorAvailable, engine, onOpenExecutionEnvironment],
+    [codexAvailable, cursorAvailable, geminiAvailable, opencodeAvailable, engine, onOpenExecutionEnvironment],
   );
 
-  const chipTooltip =
-    !engineReady
-      ? engine === "cursor"
-        ? "Cursor SDK 未就绪；请在配置中心配置 API Key"
-        : "未检测到 Codex CLI；可在下拉菜单中点击「探测」"
-      : `执行引擎：${meta.title}；点击切换`;
+  const chipTooltip = !engineReady
+    ? engine === "cursor"
+      ? "Cursor SDK 未就绪；请在配置中心配置 API Key"
+      : engine === "gemini"
+        ? "未检测到 Gemini CLI；可在下拉菜单中点击「探测」"
+        : engine === "opencode"
+          ? "未检测到 OpenCode；可在下拉菜单中点击「探测」"
+          : "未检测到 Codex CLI；可在下拉菜单中点击「探测」"
+    : `执行引擎：${meta.title}；点击切换`;
 
   const chip = (
     <span
@@ -250,8 +287,8 @@ export function SessionExecutionEngineChip({
         selectable: true,
         selectedKeys: [engine],
         onClick: ({ key }) => {
-          if (key === "codex" || key === "claude" || key === "cursor") {
-            if (key !== engine) onEngineChange?.(key);
+          if (typeof key === "string" && isSessionExecutionEngine(key) && key !== engine) {
+            onEngineChange?.(key);
           }
           setMenuOpen(false);
         },

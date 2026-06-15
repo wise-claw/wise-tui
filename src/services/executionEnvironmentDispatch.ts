@@ -27,6 +27,8 @@ export type ExecutionEnvironmentDispatchDeps = {
   getSessions: () => ClaudeSession[];
   codexAvailable?: boolean;
   cursorAvailable?: boolean;
+  geminiAvailable?: boolean;
+  opencodeAvailable?: boolean;
   createSession: (
     repositoryPath: string,
     repositoryName: string,
@@ -39,6 +41,15 @@ export type ExecutionEnvironmentDispatchDeps = {
   ) => boolean;
   appendSystemMessage: (sessionId: string, text: string) => void;
 };
+
+function resolveEngineAvailability(deps: ExecutionEnvironmentDispatchDeps) {
+  return {
+    codexAvailable: deps.codexAvailable ?? true,
+    cursorAvailable: deps.cursorAvailable ?? true,
+    geminiAvailable: deps.geminiAvailable ?? false,
+    opencodeAvailable: deps.opencodeAvailable ?? false,
+  };
+}
 
 function repositoryDisplayBase(repositoryName: string): string {
   const marker = "/执行环境:";
@@ -78,13 +89,7 @@ export async function dispatchExecutionEnvironmentFromMainSession(
     return false;
   }
 
-  if (
-    !isExecutionEnvironmentEngineAvailable(
-      plan.executionEngine,
-      deps.codexAvailable ?? true,
-      deps.cursorAvailable ?? true,
-    )
-  ) {
+  if (!isExecutionEnvironmentEngineAvailable(plan.executionEngine, resolveEngineAvailability(deps))) {
     const engineTitle = SESSION_EXECUTION_ENGINE_LABELS[plan.executionEngine].title;
     const warningText = `${engineTitle} 未就绪，无法派发；请先在配置中心探测或切换其他执行引擎。`;
     message.warning(warningText);

@@ -5,6 +5,7 @@ import {
 } from "../constants/executionEnvironmentDispatch";
 import {
   SESSION_EXECUTION_ENGINE_LABELS,
+  SESSION_EXECUTION_ENGINES,
   type SessionExecutionEngine,
 } from "../constants/sessionExecutionEngine";
 import { extractComposerAttachmentPathsFromText } from "../services/readComposerImage";
@@ -121,33 +122,46 @@ function findMentionIndex(text: string, mentionName: string): number {
 
 export function isExecutionEnvironmentEngineAvailable(
   engine: SessionExecutionEngine,
-  codexAvailable: boolean,
-  cursorAvailable: boolean,
+  availability: {
+    codexAvailable: boolean;
+    cursorAvailable: boolean;
+    geminiAvailable: boolean;
+    opencodeAvailable: boolean;
+  },
 ): boolean {
-  if (engine === "codex") return codexAvailable;
-  if (engine === "cursor") return cursorAvailable;
+  if (engine === "codex") return availability.codexAvailable;
+  if (engine === "cursor") return availability.cursorAvailable;
+  if (engine === "gemini") return availability.geminiAvailable;
+  if (engine === "opencode") return availability.opencodeAvailable;
   return true;
 }
 
 export function listExecutionEnvironmentEngineMentionOptions(input: {
   codexAvailable: boolean;
   cursorAvailable: boolean;
+  geminiAvailable?: boolean;
+  opencodeAvailable?: boolean;
 }): ExecutionEnvironmentEngineMentionOption[] {
-  const engines: SessionExecutionEngine[] = ["claude", "codex", "cursor"];
-  return engines
-    .filter((engine) =>
-      isExecutionEnvironmentEngineAvailable(engine, input.codexAvailable, input.cursorAvailable),
-    )
-    .map((engine) => {
-      const meta = SESSION_EXECUTION_ENGINE_LABELS[engine];
-      return {
-        engine,
-        mentionName: EXECUTION_ENVIRONMENT_ENGINE_MENTION_NAMES[engine],
-        title: meta.title,
-        description: meta.description,
-        available: true,
-      };
-    });
+  const geminiAvailable = input.geminiAvailable ?? false;
+  const opencodeAvailable = input.opencodeAvailable ?? false;
+  const availability = {
+    codexAvailable: input.codexAvailable,
+    cursorAvailable: input.cursorAvailable,
+    geminiAvailable,
+    opencodeAvailable,
+  };
+  return SESSION_EXECUTION_ENGINES.filter((engine) =>
+    isExecutionEnvironmentEngineAvailable(engine, availability),
+  ).map((engine) => {
+    const meta = SESSION_EXECUTION_ENGINE_LABELS[engine];
+    return {
+      engine,
+      mentionName: EXECUTION_ENVIRONMENT_ENGINE_MENTION_NAMES[engine],
+      title: meta.title,
+      description: meta.description,
+      available: true,
+    };
+  });
 }
 
 export function findExecutionEnvironmentMentionIndex(text: string): number {
@@ -166,7 +180,7 @@ function resolveMentionAtIndex(
   text: string,
   index: number,
 ): { mentionName: string; engine: SessionExecutionEngine } | null {
-  for (const engine of ["claude", "codex", "cursor"] as const) {
+  for (const engine of SESSION_EXECUTION_ENGINES) {
     const mentionName = EXECUTION_ENVIRONMENT_ENGINE_MENTION_NAMES[engine];
     for (const prefix of MENTION_PREFIXES) {
       if (text.startsWith(`${prefix}${mentionName}`, index)) {

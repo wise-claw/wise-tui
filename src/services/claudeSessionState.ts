@@ -1,4 +1,4 @@
-import type { ClaudeMessage, ClaudeSession } from "../types";
+import type { ClaudeMessage, ClaudeSession, SessionExecutionEngine } from "../types";
 import { assistantMessagePostToolTextParts } from "../utils/assistantOrphanMarkdown";
 import { isToolOnlyUserMessage, systemMessagePlainText, userMessagePlainTextForDisplay } from "../utils/claudeChatMessageDisplay";
 import { sessionHadRecentClaudeTurnFailureNotice } from "../utils/claudeSessionTurnFailure";
@@ -551,6 +551,21 @@ export function reconcileSessionStatusesWithRunningRegistry(
   return changed ? next : sessions;
 }
 
+/** 按执行引擎返回「无可见回复」时的系统提示（避免 Cursor 回合误用 Claude Hook 文案）。 */
+export function resolveNoReplyFailureMessage(
+  executionEngine: SessionExecutionEngine | undefined,
+  cancelled: boolean,
+): string {
+  if (cancelled) return "消息已撤销";
+  if (executionEngine === "cursor") {
+    return "Cursor SDK 本轮未产出可见回复。请检查 API Key、网络与模型（推荐 Auto 或 composer-2.5），或在 /demo.html 运行诊断。";
+  }
+  if (executionEngine === "codex") {
+    return "Codex 本轮未产出可见回复。请检查 API Key 与 Codex CLI 配置。";
+  }
+  return "Claude 未成功完成本轮请求（未产出可见回复）。请检查 Hook 配置与 Claude CLI 权限。";
+}
+
 export function finalizeSessionAfterComplete(params: {
   sessions: ClaudeSession[];
   targetId: string;
@@ -558,14 +573,20 @@ export function finalizeSessionAfterComplete(params: {
   noAssistantReply: boolean;
   /** 长驻 streaming：单轮结束后置 idle，子进程仍存活，便于继续发下一条。 */
   streamingResident?: boolean;
+  executionEngine?: SessionExecutionEngine;
 }): ClaudeSession[] {
-  const { sessions, targetId, success, noAssistantReply, streamingResident = false } = params;
+  const {
+    sessions,
+    targetId,
+    success,
+    noAssistantReply,
+    streamingResident = false,
+    executionEngine,
+  } = params;
   return sessions.map((session) => {
     if (!sessionMatchesCrossTabTargetId(sessions, session, targetId)) return session;
     const isUserCancelled = session.status === "cancelled";
-    const noReplyFailureMessage = isUserCancelled
-      ? "消息已撤销"
-      : "Claude 未成功完成本轮请求（未产出可见回复）。请检查 Hook 配置与 Claude CLI 权限。";
+    const noReplyFailureMessage = resolveNoReplyFailureMessage(executionEngine, isUserCancelled);
     const shouldAppendNoReplyFailure =
       !success &&
       noAssistantReply &&

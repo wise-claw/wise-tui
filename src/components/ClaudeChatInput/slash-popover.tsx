@@ -60,6 +60,8 @@ interface SlashPopoverProps {
   hideEmployeesInAtMode?: boolean;
   codexAvailable?: boolean;
   cursorAvailable?: boolean;
+  geminiAvailable?: boolean;
+  opencodeAvailable?: boolean;
   /** @ 空查询打开时默认高亮项（配置中心可改）。 */
   atMentionDefaultTarget?: AtMentionDefaultTarget;
   /** 在菜单内将执行环境 / 终端设为 @ 默认。 */
@@ -140,6 +142,8 @@ export function SlashPopover({
   hideEmployeesInAtMode = false,
   codexAvailable = true,
   cursorAvailable = true,
+  geminiAvailable = false,
+  opencodeAvailable = false,
   atMentionDefaultTarget = DEFAULT_AT_MENTION_DEFAULT_TARGET,
   onAtMentionDefaultTargetChange,
 }: SlashPopoverProps) {
@@ -309,6 +313,8 @@ export function SlashPopover({
       hideEmployeesInAtMode,
       codexAvailable,
       cursorAvailable,
+      geminiAvailable,
+      opencodeAvailable,
     );
   }, [
     mode,
@@ -323,6 +329,8 @@ export function SlashPopover({
     hideEmployeesInAtMode,
     codexAvailable,
     cursorAvailable,
+    geminiAvailable,
+    opencodeAvailable,
   ]);
 
   const slashOptionsTruncated = mode === "slash" && slashFiltered.truncated;

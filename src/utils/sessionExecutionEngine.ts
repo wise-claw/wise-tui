@@ -1,4 +1,8 @@
-import { normalizeSessionExecutionEngine, type SessionExecutionEngine } from "../constants/sessionExecutionEngine";
+import {
+  normalizeSessionExecutionEngine,
+  SESSION_EXECUTION_ENGINE_LABELS,
+  type SessionExecutionEngine,
+} from "../constants/sessionExecutionEngine";
 import type { EmployeeItem, Repository } from "../types";
 import { normalizeEmployeeBindingName } from "./employeeBindingName";
 import { parseExecutionEnvironmentWorkerRepositoryName } from "./executionEnvironmentDispatch";
@@ -141,4 +145,9 @@ export function sessionHasDiskTranscript(
   engine: SessionExecutionEngine,
 ): boolean {
   return Boolean(resolveDiskTranscriptSessionKey(session, engine));
+}
+
+/** 主会话消息区空状态：与 Composer 执行引擎选择一致。 */
+export function buildSessionEmptyChatPrompt(engine: SessionExecutionEngine): string {
+  return `发送消息开始与 ${SESSION_EXECUTION_ENGINE_LABELS[engine].title} 对话`;
 }

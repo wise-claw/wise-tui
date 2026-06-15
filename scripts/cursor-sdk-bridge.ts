@@ -351,8 +351,10 @@ async function handleExecute(params: Record<string, unknown> | undefined): Promi
           model: { id: modelId },
           ...(mcpServers ? { mcpServers } : {}),
         });
+        let streamedAssistant = false;
         for await (const event of run.stream()) {
           if (event.type === "assistant") {
+            streamedAssistant = true;
             emitClaudeStreamLines(event);
             continue;
           }
@@ -365,6 +367,23 @@ async function handleExecute(params: Record<string, unknown> | undefined): Promi
         }
 
         const result = await run.wait();
+        const finalText =
+          typeof result.result === "string" ? result.result.trim() : "";
+        if (result.status === "error") {
+          emitStream({
+            type: "error",
+            message: finalText || "Cursor SDK 执行失败",
+          });
+        } else if (!streamedAssistant && finalText) {
+          emitClaudeStreamLines({
+            type: "assistant",
+            message: {
+              role: "assistant",
+              content: [{ type: "text", text: finalText }],
+            },
+          });
+        }
+
         const success = result.status !== "error";
         emitStream({
           type: "complete",

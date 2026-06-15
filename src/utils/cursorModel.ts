@@ -1,16 +1,64 @@
 import { CURSOR_SDK_DEFAULT_MODEL } from "../constants/cursorSdk";
 
 const LOCAL_MODEL_ALIAS_TO_ID: Record<string, string> = {
-  auto: "default",
-  default: "default",
+  auto: "composer-2.5",
+  default: "composer-2.5",
 };
 
+/** Cursor Local SDK 常见模型 id 前缀（与 `Cursor.models.list()` 返回集一致）。 */
+const CURSOR_SDK_MODEL_PREFIXES = [
+  "composer-",
+  "claude-",
+  "gpt-",
+  "gemini-",
+  "grok-",
+  "kimi-",
+] as const;
+
+/**
+ * 第三方 Claude 代理模型（火山 glm、百炼 qwen 等）——不能传给 Cursor SDK。
+ * 注意：`kimi-k2.5` 等 Cursor 自有模型不在此列。
+ */
+const NON_CURSOR_SDK_PROVIDER_RE =
+  /^(glm|qwen|deepseek|bailian|doubao|minimax|moonshot)([-_.]|$)/i;
+
+export interface CursorSdkModelRef {
+  id: string;
+  aliases?: string[];
+}
+
+/** 判断模型 id 是否可作为 Cursor Local SDK 的 `model.id`。 */
+export function isCursorSdkModelId(
+  raw: string | null | undefined,
+  knownModels?: readonly CursorSdkModelRef[],
+): boolean {
+  const trimmed = raw?.trim() ?? "";
+  if (!trimmed) return false;
+  const normalized = trimmed.toLowerCase();
+  if (normalized === "auto" || normalized === "default") return true;
+
+  if (knownModels && knownModels.length > 0) {
+    return knownModels.some(
+      (item) =>
+        item.id === trimmed || (item.aliases ?? []).some((alias) => alias === trimmed),
+    );
+  }
+
+  if (NON_CURSOR_SDK_PROVIDER_RE.test(trimmed)) return false;
+  return CURSOR_SDK_MODEL_PREFIXES.some((prefix) => normalized.startsWith(prefix));
+}
+
 /** 将 Composer / session.model 解析为 Cursor Local Agent 可用的 model id。 */
-export function resolveCursorLocalModelId(raw: string | null | undefined): string {
+export function resolveCursorLocalModelId(
+  raw: string | null | undefined,
+  knownModels?: readonly CursorSdkModelRef[],
+): string {
   const trimmed = raw?.trim() ?? "";
   if (!trimmed) return CURSOR_SDK_DEFAULT_MODEL;
   const normalized = trimmed.toLowerCase();
-  return LOCAL_MODEL_ALIAS_TO_ID[normalized] ?? trimmed;
+  if (LOCAL_MODEL_ALIAS_TO_ID[normalized]) return LOCAL_MODEL_ALIAS_TO_ID[normalized];
+  if (!isCursorSdkModelId(trimmed, knownModels)) return CURSOR_SDK_DEFAULT_MODEL;
+  return trimmed;
 }
 
 /** Cursor 模型展示名（优先 displayName，否则格式化 id）。 */

@@ -1,7 +1,7 @@
 import type { MouseEvent as ReactMouseEvent } from "react";
 
 /** 主会话 / 成员会话执行引擎。 */
-export type SessionExecutionEngine = "claude" | "codex" | "cursor";
+export type { SessionExecutionEngine } from "./constants/sessionExecutionEngine";
 
 /** Wise 侧栏中保存的工作区（磁盘上的 Git/代码目录）。 */
 export interface Repository {

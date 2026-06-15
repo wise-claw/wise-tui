@@ -332,6 +332,8 @@ export function getFilteredAtOptions(
   hideEmployeesInAtMode = false,
   codexAvailable = true,
   cursorAvailable = true,
+  geminiAvailable = false,
+  opencodeAvailable = false,
 ): SlashOption[] {
   const teams: SlashOption[] = teamOptions.map((team) => ({
     type: "team" as const,
@@ -343,6 +345,8 @@ export function getFilteredAtOptions(
   const executionEngines: SlashOption[] = listExecutionEnvironmentEngineMentionOptions({
     codexAvailable,
     cursorAvailable,
+    geminiAvailable,
+    opencodeAvailable,
   }).map((row) => ({
     type: "execution_engine" as const,
     label: row.title,

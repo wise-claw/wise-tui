@@ -25,6 +25,8 @@ use uuid::Uuid;
 
 pub const CURSOR_API_KEY_SETTING: &str = "cursor_sdk.api_key";
 const BRIDGE_TIMEOUT: Duration = Duration::from_secs(600);
+/// Local Agent 单轮 execute 最长等待；超时后杀子进程并向前端发 complete。
+const CURSOR_EXECUTE_TIMEOUT: Duration = Duration::from_secs(150);
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -1113,7 +1115,22 @@ pub(crate) async fn execute_cursor_code(
         let exit_status = {
             let mut slot = wait_child.lock().await;
             match slot.as_mut() {
-                Some(child) => child.wait().await.ok(),
+                Some(child) => match timeout(CURSOR_EXECUTE_TIMEOUT, child.wait()).await {
+                    Ok(status) => status.ok(),
+                    Err(_) => {
+                        let _ = child.kill().await;
+                        emit_cursor_stdout_line(
+                            &app_wait,
+                            &session_id_wait,
+                            &cursor_assistant_stream_line(
+                                "[cursor-sdk] 执行超时（超过 2.5 分钟无结果）。请点「结束」后重试，并检查 API Key、网络与模型选择（推荐 Auto 或 composer-2.5）。",
+                            ),
+                            invocation_key_wait.as_deref(),
+                        );
+                        stream_success_wait.store(false, Ordering::SeqCst);
+                        None
+                    }
+                },
                 None => None,
             }
         };

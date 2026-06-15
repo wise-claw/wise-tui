@@ -40,6 +40,18 @@ describe("parseExecutionEnvironmentDispatch", () => {
     expect(plan?.cleanedPrompt).toBe("重构接口层");
   });
 
+  test("parses @Gemini CLI mention", () => {
+    const plan = parseExecutionEnvironmentDispatch("@Gemini CLI 生成测试用例");
+    expect(plan?.executionEngine).toBe("gemini");
+    expect(plan?.cleanedPrompt).toBe("生成测试用例");
+  });
+
+  test("parses @OpenCode mention", () => {
+    const plan = parseExecutionEnvironmentDispatch("@OpenCode 重构模块");
+    expect(plan?.executionEngine).toBe("opencode");
+    expect(plan?.cleanedPrompt).toBe("重构模块");
+  });
+
   test("parses numeric batch session count", () => {
     const plan = parseExecutionEnvironmentDispatch("@Claude Code 起5个会话来执行这批接口测试");
     expect(plan?.sessionCount).toBe(5);
@@ -91,12 +103,13 @@ describe("listExecutionEnvironmentEngineMentionOptions", () => {
     expect(rows).toHaveLength(2);
   });
 
-  test("omits cursor when not ready", () => {
+  test("includes gemini and opencode when available", () => {
     const rows = listExecutionEnvironmentEngineMentionOptions({
       codexAvailable: true,
       cursorAvailable: false,
+      geminiAvailable: true,
+      opencodeAvailable: true,
     });
-    expect(rows.find((r) => r.engine === "cursor")).toBeUndefined();
-    expect(rows.map((r) => r.engine)).toEqual(["claude", "codex"]);
+    expect(rows.map((r) => r.engine)).toEqual(["claude", "codex", "gemini", "opencode"]);
   });
 });

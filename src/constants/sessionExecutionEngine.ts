@@ -1,4 +1,4 @@
-export type SessionExecutionEngine = "claude" | "codex" | "cursor";
+export type SessionExecutionEngine = "claude" | "codex" | "cursor" | "gemini" | "opencode";
 
 export const SESSION_EXECUTION_ENGINE_LABELS: Record<
   SessionExecutionEngine,
@@ -19,9 +19,25 @@ export const SESSION_EXECUTION_ENGINE_LABELS: Record<
     short: "Cursor",
     description: "Cursor SDK Local Agent（可编程引擎）",
   },
+  gemini: {
+    title: "Gemini CLI",
+    short: "Gemini",
+    description: "Google Gemini CLI（gemini）",
+  },
+  opencode: {
+    title: "OpenCode",
+    short: "OpenCode",
+    description: "OpenCode CLI（opencode）",
+  },
 };
 
-export const SESSION_EXECUTION_ENGINES = ["claude", "codex", "cursor"] as const satisfies readonly SessionExecutionEngine[];
+export const SESSION_EXECUTION_ENGINES = [
+  "claude",
+  "codex",
+  "cursor",
+  "gemini",
+  "opencode",
+] as const satisfies readonly SessionExecutionEngine[];
 
 export function normalizeSessionExecutionEngine(
   raw: string | null | undefined,
@@ -29,9 +45,17 @@ export function normalizeSessionExecutionEngine(
   const normalized = raw?.trim().toLowerCase();
   if (normalized === "codex") return "codex";
   if (normalized === "cursor") return "cursor";
+  if (normalized === "gemini") return "gemini";
+  if (normalized === "opencode") return "opencode";
   return "claude";
 }
 
 export function isSessionExecutionEngine(value: string): value is SessionExecutionEngine {
-  return value === "claude" || value === "codex" || value === "cursor";
+  return (
+    value === "claude" ||
+    value === "codex" ||
+    value === "cursor" ||
+    value === "gemini" ||
+    value === "opencode"
+  );
 }

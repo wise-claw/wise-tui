@@ -10,7 +10,7 @@ describe("composer runtime settings menu items", () => {
     });
     const connectionItems = buildConnectionKindMenuItems("streaming", "streaming");
 
-    expect(engineItems).toHaveLength(3);
+    expect(engineItems).toHaveLength(5);
     expect(connectionItems).toHaveLength(2);
     expect(engineItems?.[0]?.key).toBe("claude");
     expect(connectionItems?.[1]?.key).toBe("streaming");
@@ -22,7 +22,7 @@ describe("composer runtime settings menu items", () => {
       codexAvailable: true,
       cursorAvailable: false,
     });
-    expect(engineItems).toHaveLength(2);
-    expect(engineItems?.map((item) => item?.key)).toEqual(["claude", "codex"]);
+    expect(engineItems).toHaveLength(4);
+    expect(engineItems?.map((item) => item?.key)).toEqual(["claude", "codex", "gemini", "opencode"]);
   });
 });

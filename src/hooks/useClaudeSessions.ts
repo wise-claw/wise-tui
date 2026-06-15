@@ -19,6 +19,7 @@ import type {
   SessionConversationTaskItem,
   SessionExecutionEngine,
 } from "../types";
+import { SESSION_EXECUTION_ENGINE_LABELS } from "../constants/sessionExecutionEngine";
 import {
   executeClaudeCode,
   resumeClaudeCode,
@@ -936,6 +937,8 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         }
       }
       notificationHub.invalidateControlRequestsForSession(tabSessionId, "已发起新一轮对话");
+      streamingTargetIdRef.current = tabSessionId;
+      scheduleStreamStallTimer(tabSessionId);
       commitSessions((prev) =>
         appendSystemMessageBySessionId(prev, tabSessionId, "Cursor SDK 执行中…"),
       );
@@ -981,7 +984,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         throw e;
       }
     },
-    [commitSessions, keepInvocationStreamAfterTurnComplete, resolveSpawnExtrasForTab, resolveTrellisContextId],
+    [commitSessions, keepInvocationStreamAfterTurnComplete, resolveSpawnExtrasForTab, resolveTrellisContextId, scheduleStreamStallTimer],
   );
 
   const runClaudeStreamingWithInvocation = useCallback(
@@ -2355,6 +2358,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       resolveTabIdForClaudeStream: resolveTabIdForStream,
       resolveTabIdFromCompletePayload: resolveCompleteTabIdForStream,
       resolveSuccessFromCompletePayload: resolveClaudeCompleteSuccess,
+      resolveSessionExecutionEngine,
       extractSystemErrorMessageFromStreamLine,
       extractPartsFromStreamLine,
       onClaudeSessionIdAssigned: (tabId, claudeSessionId) => {
@@ -2993,6 +2997,17 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           claudeSessionsOptionsRef.current?.onClaudeSpawnBlocked?.(gate.message);
           return false;
         }
+      }
+      if (executionEngine === "gemini" || executionEngine === "opencode") {
+        const engineTitle = SESSION_EXECUTION_ENGINE_LABELS[executionEngine].title;
+        commitSessions((prev) =>
+          appendSystemMessageBySessionId(
+            prev,
+            tabSessionId,
+            `[系统] ${engineTitle} 主会话派发即将支持，请暂时切换 Claude Code、Codex CLI 或 Cursor SDK。`,
+          ),
+        );
+        return false;
       }
       commitSessions((prev) => {
         if (

@@ -32,6 +32,7 @@ import {
 import {
   buildCursorModelPickerOptions,
   formatCursorModelLabel,
+  isCursorSdkModelId,
 } from "../../utils/cursorModel";
 import {
   normalizeSessionExecutionEngine,
@@ -193,17 +194,10 @@ export function ComposerModelPicker({
   useEffect(() => {
     if (!isCursorEngine) return;
     const fromSession = session.model?.trim();
-    const looksLikeCursorModel =
-      Boolean(fromSession) &&
-      (fromSession === CURSOR_SDK_DEFAULT_MODEL ||
-        fromSession.startsWith("composer-") ||
-        fromSession.startsWith("claude-") ||
-        fromSession.startsWith("gpt-") ||
-        cursorModels?.some(
-          (item) => item.id === fromSession || (item.aliases ?? []).includes(fromSession),
-        ));
     const nextModel =
-      looksLikeCursorModel && fromSession ? fromSession : CURSOR_SDK_DEFAULT_MODEL;
+      fromSession && isCursorSdkModelId(fromSession, cursorModels ?? undefined)
+        ? fromSession
+        : CURSOR_SDK_DEFAULT_MODEL;
     syncModelIfNeeded(nextModel);
   }, [isCursorEngine, session.id, session.model, cursorModels, syncModelIfNeeded]);
 
@@ -223,9 +217,11 @@ export function ComposerModelPicker({
         seedModelProfileStoreCache(detail.storeSnapshot);
         setProfileStoreRevision((n) => n + 1);
       }
-      const fromProfile = detail?.effectiveModel?.trim();
-      if (fromProfile) {
-        syncModelIfNeeded(fromProfile);
+      if (!isCursorEngine) {
+        const fromProfile = detail?.effectiveModel?.trim();
+        if (fromProfile) {
+          syncModelIfNeeded(fromProfile);
+        }
       }
       if (detail?.skipComposerPickerRefresh !== true) {
         refreshClaudeModelPicker();
@@ -233,7 +229,7 @@ export function ComposerModelPicker({
     };
     window.addEventListener(WISE_CLAUDE_USER_SETTINGS_CHANGED, onSettingsChanged);
     return () => window.removeEventListener(WISE_CLAUDE_USER_SETTINGS_CHANGED, onSettingsChanged);
-  }, [syncModelIfNeeded, refreshClaudeModelPicker]);
+  }, [isCursorEngine, syncModelIfNeeded, refreshClaudeModelPicker]);
 
   const claudeSettingsModel = claudePicker?.defaultModel?.trim() || null;
 
@@ -277,8 +273,14 @@ export function ComposerModelPicker({
       push(CURSOR_SDK_DEFAULT_MODEL);
       push("composer-2.5");
     }
-    if (session.model?.trim()) push(session.model.trim());
-    if (model.trim()) push(model.trim());
+    const sessionModel = session.model?.trim();
+    if (sessionModel && isCursorSdkModelId(sessionModel, cursorModels ?? undefined)) {
+      push(sessionModel);
+    }
+    const currentModel = model.trim();
+    if (currentModel && isCursorSdkModelId(currentModel, cursorModels ?? undefined)) {
+      push(currentModel);
+    }
     if (opts.length === 0) push(CURSOR_SDK_DEFAULT_MODEL);
     return opts;
   }, [isCursorEngine, cursorModels, session.model, model]);

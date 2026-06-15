@@ -1,6 +1,6 @@
 import { startTransition, type MutableRefObject } from "react";
 import { sessionUsesStreamingConnection } from "../constants/claudeConnection";
-import type { ClaudeSession, MessagePart } from "../types";
+import type { ClaudeSession, MessagePart, SessionExecutionEngine } from "../types";
 import {
   appendAssistantStreamParts,
   applyToolResultPartsToSession,
@@ -88,6 +88,8 @@ interface RuntimeDeps {
   onClaudeSessionIdAssigned?: (tabId: string, claudeSessionId: string) => void;
   /** 与 `executeSession` 写入的轮次 nonce 对齐；全局 `claude-complete` 用于通知去重，避免误用「当前最新」nonce */
   expectedTurnNonceByTabIdRef?: MutableRefObject<Map<string, number>>;
+  /** Cursor / Codex 等执行引擎，用于无回复时的提示文案与磁盘 transcript 恢复。 */
+  resolveSessionExecutionEngine?: (session: ClaudeSession) => SessionExecutionEngine;
   /** 任意 stdout 行到达时重置「无可见输出」看门狗（Hook 阶段可能尚无助手正文）。 */
   onStreamActivity?: (tabId: string) => void;
   /** Claude Hook 启动事件（不写入会话气泡，仅用于延长 stall 看门狗）。 */
@@ -170,6 +172,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     onClaudeSessionIdAssigned,
     reloadTranscriptFromDisk,
     expectedTurnNonceByTabIdRef,
+    resolveSessionExecutionEngine,
     onStreamActivity,
     onHookStreamActivity,
   } = deps;
@@ -617,6 +620,9 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     opts?: { uiOnly?: boolean; force?: boolean },
   ): boolean {
     const session = sessionsRef.current.find((s) => s.id === tid || s.claudeSessionId === tid);
+    const executionEngine = session
+      ? (resolveSessionExecutionEngine?.(session) ?? "claude")
+      : "claude";
     if (isStaleClaudeCompleteForSession(session, payload)) {
       return false;
     }
@@ -709,6 +715,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
         success: uiSuccess,
         noAssistantReply: effectiveNoAssistantReply,
         streamingResident,
+        executionEngine,
       });
     });
     if (uiSuccess && session) {
@@ -727,7 +734,9 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     const shouldTryDiskReload =
       reloadTranscriptFromDisk &&
       (uiSuccess ||
-        (noAssistantReply && session != null && isTerminalWorkerWiseTab(session)));
+        (noAssistantReply &&
+          session != null &&
+          (isTerminalWorkerWiseTab(session) || executionEngine === "cursor")));
     if (shouldTryDiskReload) {
       const latestTurnHasAssistant =
         sessionAfterFlush != null &&

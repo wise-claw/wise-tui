@@ -121,6 +121,7 @@
 /* 外层 overlay：保留 Ant 定位，去掉默认浅色阴影避免与容器叠层冲突 */
 .app-composer-model-picker-dropdown-overlay.ant-dropdown {
   z-index: 1100;
+  overflow: visible;
 }
 
 .app-composer-model-picker-dropdown-overlay .ant-dropdown-menu {
@@ -129,13 +130,20 @@
   box-shadow: none;
 }
 
+/* Ant Design 6 默认给 vertical menu 加 overflow；外层容器已负责滚动，避免双滚动条 */
+.app-composer-model-picker-dropdown-overlay .ant-dropdown-menu-vertical {
+  max-height: none !important;
+  overflow: visible !important;
+}
+
 .app-composer-model-picker-dropdown-container {
-  width: max-content;
+  width: auto;
   min-width: 148px;
-  max-width: min(90vw, 420px);
+  max-width: min(90vw, 280px);
   max-height: min(280px, 42vh);
-  overflow-x: auto;
+  overflow-x: hidden;
   overflow-y: auto;
+  overscroll-behavior: contain;
   background: var(--app-workspace-glass-bg, var(--ant-color-bg-elevated)) !important;
   -webkit-backdrop-filter: var(--app-workspace-glass-blur, blur(16px));
   backdrop-filter: var(--app-workspace-glass-blur, blur(16px));
@@ -148,9 +156,11 @@
 }
 
 .app-composer-model-picker-dropdown-container .ant-dropdown-menu {
-  width: max-content;
-  min-width: 100%;
-  max-width: none;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  max-height: none !important;
+  overflow: visible !important;
   padding: 2px !important;
   background: transparent !important;
   border: none !important;
@@ -161,8 +171,8 @@
   min-height: 22px !important;
   height: auto !important;
   width: 100%;
-  min-width: max-content;
-  max-width: none !important;
+  min-width: 0;
+  max-width: 100% !important;
   padding-block: 2px !important;
   padding-inline: 7px 8px !important;
   margin: 0 !important;
@@ -188,11 +198,11 @@
 
 .app-composer-model-picker-dropdown-container .ant-dropdown-menu-title-content {
   flex: 1 1 auto;
-  min-width: max-content;
-  overflow: visible;
-  text-overflow: clip;
+  min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
-  max-width: none;
 }
 
 /* 公司 + 模型名 分层 */
@@ -207,8 +217,12 @@
 }
 
 .app-composer-model-picker-menu-label--solo {
-  display: inline-block;
+  display: block;
   min-width: 0;
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   font-size: 11px;
   font-weight: 500;
   color: var(--ant-color-text);

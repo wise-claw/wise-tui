@@ -12,6 +12,8 @@ export const EXECUTION_ENVIRONMENT_ENGINE_MENTION_NAMES: Record<SessionExecution
   claude: SESSION_EXECUTION_ENGINE_LABELS.claude.title,
   codex: SESSION_EXECUTION_ENGINE_LABELS.codex.title,
   cursor: SESSION_EXECUTION_ENGINE_LABELS.cursor.title,
+  gemini: SESSION_EXECUTION_ENGINE_LABELS.gemini.title,
+  opencode: SESSION_EXECUTION_ENGINE_LABELS.opencode.title,
 };
 
 /** 左栏「任务派发」历史查询可选天数。 */

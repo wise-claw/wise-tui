@@ -226,6 +226,8 @@ interface ComposerInnerProps {
   sessionExecutionEngine?: SessionExecutionEngine;
   codexAvailable?: boolean;
   cursorAvailable?: boolean;
+  geminiAvailable?: boolean;
+  opencodeAvailable?: boolean;
   onSessionExecutionEngineChange?: (engine: SessionExecutionEngine) => void;
   onOpenExecutionEnvironment?: () => void;
   /** `retractLastUserTurn`：Esc 撤回刚发时从 transcript 去掉本轮 user/assistant 并杀进程 */
@@ -551,6 +553,8 @@ function ComposerInner({
   sessionExecutionEngine = "claude",
   codexAvailable = true,
   cursorAvailable = true,
+  geminiAvailable = false,
+  opencodeAvailable = false,
   onSessionExecutionEngineChange,
   onOpenExecutionEnvironment,
   onCancel: _onCancel,
@@ -2936,6 +2940,8 @@ function ComposerInner({
           engine={sessionExecutionEngine}
           codexAvailable={codexAvailable}
           cursorAvailable={cursorAvailable}
+          geminiAvailable={geminiAvailable}
+          opencodeAvailable={opencodeAvailable}
           disabled={isSessionBusy}
           onEngineChange={onSessionExecutionEngineChange}
           onOpenExecutionEnvironment={onOpenExecutionEnvironment}
@@ -2962,6 +2968,8 @@ function ComposerInner({
       sessionExecutionEngine,
       codexAvailable,
       cursorAvailable,
+      geminiAvailable,
+      opencodeAvailable,
       onSessionExecutionEngineChange,
       onOpenExecutionEnvironment,
       handleComposerModelChange,
@@ -3147,6 +3155,8 @@ function ComposerInner({
                 hideEmployeesInAtMode={hideEmployeesInAtMode}
                 codexAvailable={codexAvailable}
                 cursorAvailable={cursorAvailable}
+                geminiAvailable={geminiAvailable}
+                opencodeAvailable={opencodeAvailable}
                 atMentionDefaultTarget={atMentionDefaultTarget}
                 onAtMentionDefaultTargetChange={(next) => void saveAtMentionDefaultTarget(next)}
               />
@@ -3222,6 +3232,8 @@ export interface ComposerRegionProps {
   sessionExecutionEngine?: SessionExecutionEngine;
   codexAvailable?: boolean;
   cursorAvailable?: boolean;
+  geminiAvailable?: boolean;
+  opencodeAvailable?: boolean;
   onSessionExecutionEngineChange?: (engine: SessionExecutionEngine) => void;
   onOpenExecutionEnvironment?: () => void;
   /** `retractLastUserTurn`：Esc 撤回刚发时从 transcript 去掉本轮 user/assistant 并杀进程 */

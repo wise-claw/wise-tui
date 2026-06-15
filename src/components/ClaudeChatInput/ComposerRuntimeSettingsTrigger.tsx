@@ -22,6 +22,8 @@ interface Props {
   engine: SessionExecutionEngine;
   codexAvailable?: boolean;
   cursorAvailable?: boolean;
+  geminiAvailable?: boolean;
+  opencodeAvailable?: boolean;
   onEngineChange?: (engine: SessionExecutionEngine) => void;
   onOpenExecutionEnvironment?: () => void;
   connectionKind?: ClaudeSessionConnectionKind | null;
@@ -68,6 +70,8 @@ export function ComposerRuntimeSettingsTrigger({
   engine: engineProp,
   codexAvailable = true,
   cursorAvailable = true,
+  geminiAvailable = false,
+  opencodeAvailable = false,
   onEngineChange,
   onOpenExecutionEnvironment,
   connectionKind,
@@ -78,12 +82,19 @@ export function ComposerRuntimeSettingsTrigger({
   const [menuOpen, setMenuOpen] = useState(false);
   const engine = normalizeSessionExecutionEngine(engineProp);
 
-  const showEngine = (codexAvailable || cursorAvailable) && Boolean(onEngineChange);
+  const showEngine =
+    (codexAvailable || cursorAvailable || geminiAvailable || opencodeAvailable) &&
+    Boolean(onEngineChange);
   const showConnection = engine === "claude" && Boolean(onConnectionKindChange);
 
   const resolvedConnectionKind = resolveSessionConnectionKind(connectionKind, defaultConnectionKind);
   const hasConnectionOverride = isTabConnectionKindOverride(connectionKind);
-  const hasActiveOverride = engine === "codex" || engine === "cursor" || hasConnectionOverride;
+  const hasActiveOverride =
+    engine === "codex" ||
+    engine === "cursor" ||
+    engine === "gemini" ||
+    engine === "opencode" ||
+    hasConnectionOverride;
 
   const tooltip = useMemo(() => {
     const parts: string[] = [];
@@ -104,6 +115,8 @@ export function ComposerRuntimeSettingsTrigger({
         engine,
         codexAvailable,
         cursorAvailable,
+        geminiAvailable,
+        opencodeAvailable,
         onOpenExecutionEnvironment,
         onProbeClick: () => setMenuOpen(false),
       });
@@ -133,6 +146,8 @@ export function ComposerRuntimeSettingsTrigger({
   }, [
     codexAvailable,
     cursorAvailable,
+    geminiAvailable,
+    opencodeAvailable,
     defaultConnectionKind,
     engine,
     onOpenExecutionEnvironment,

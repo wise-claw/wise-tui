@@ -107,6 +107,8 @@ export interface ClaudeSessionsChatHostProps {
   ) => void | Promise<void>;
   codexAvailable?: boolean;
   cursorAvailable?: boolean;
+  geminiAvailable?: boolean;
+  opencodeAvailable?: boolean;
   onOpenExecutionEnvironment?: () => void;
   onExecuteSession: (
     sessionId: string,
@@ -224,6 +226,8 @@ export function ClaudeSessionsChatHost({
   onUpdateEmployeeExecutionEngine,
   codexAvailable = true,
   cursorAvailable = true,
+  geminiAvailable = false,
+  opencodeAvailable = false,
   onOpenExecutionEnvironment,
   onExecuteSession,
   onResumeSessionFromMonitorDrawer,
@@ -457,6 +461,8 @@ export function ClaudeSessionsChatHost({
     onUpdateEmployeeExecutionEngine,
     codexAvailable,
     cursorAvailable,
+    geminiAvailable,
+    opencodeAvailable,
     onOpenExecutionEnvironment,
     onCancelSession,
     onRespondToQuestion,
@@ -594,6 +600,8 @@ export function ClaudeSessionsChatHost({
           onUpdateEmployeeExecutionEngine={onUpdateEmployeeExecutionEngine}
           codexAvailable={codexAvailable}
           cursorAvailable={cursorAvailable}
+          geminiAvailable={geminiAvailable}
+          opencodeAvailable={opencodeAvailable}
           onOpenExecutionEnvironment={onOpenExecutionEnvironment}
           onCancel={(opts) => onCancelSession(activeSession.id, opts)}
           onCancelSessionById={onCancelSession}

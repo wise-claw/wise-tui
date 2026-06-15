@@ -48,6 +48,8 @@ import {
 } from "./utils/pruneWorkflowTaskAuxMaps";
 import { useAgentRegistryCodexAvailable } from "./hooks/useAgentRegistryCodexAvailable";
 import { useAgentRegistryCursorAvailable } from "./hooks/useAgentRegistryCursorAvailable";
+import { useAgentRegistryGeminiAvailable } from "./hooks/useAgentRegistryGeminiAvailable";
+import { useAgentRegistryOpencodeAvailable } from "./hooks/useAgentRegistryOpencodeAvailable";
 import {
   authorView,
   cockpitView,
@@ -786,6 +788,8 @@ export default function App() {
 
   const codexAvailable = useAgentRegistryCodexAvailable();
   const cursorAvailable = useAgentRegistryCursorAvailable();
+  const geminiAvailable = useAgentRegistryGeminiAvailable();
+  const opencodeAvailable = useAgentRegistryOpencodeAvailable();
 
   const activeRepositoryIdLatestRef = useRef(activeRepositoryId);
   activeRepositoryIdLatestRef.current = activeRepositoryId;
@@ -1287,6 +1291,8 @@ export default function App() {
           getSessions: () => sessionsLatestRef.current,
           codexAvailable,
           cursorAvailable,
+          geminiAvailable,
+          opencodeAvailable,
           createSession,
           executeSession: (workerTabId, prompt, opts) => executeSession(workerTabId, prompt, opts),
           appendSystemMessage,
@@ -1299,7 +1305,7 @@ export default function App() {
         },
       );
     },
-    [activeSessionId, codexAvailable, cursorAvailable, createSession, executeSession, appendSystemMessage],
+    [activeSessionId, codexAvailable, cursorAvailable, geminiAvailable, opencodeAvailable, createSession, executeSession, appendSystemMessage],
   );
 
   useScheduledClaudeTaskRunner({
@@ -3620,6 +3626,8 @@ export default function App() {
         onUpdateEmployeeExecutionEngine: handleUpdateEmployeeExecutionEngine,
         codexAvailable,
         cursorAvailable,
+        geminiAvailable,
+        opencodeAvailable,
         onOpenExecutionEnvironment: handleOpenExecutionEnvironment,
         onExecuteSession: handleComposerExecute,
         onResumeSessionFromMonitorDrawer: resumeSessionFromMonitorDrawer,

@@ -1,5 +1,7 @@
 import { memo, type FocusEvent, type RefObject, useSyncExternalStore } from "react";
+import type { SessionExecutionEngine } from "../../constants/sessionExecutionEngine";
 import type { ClaudeSession, SessionConversationTaskItem } from "../../types";
+import { buildSessionEmptyChatPrompt } from "../../utils/sessionExecutionEngine";
 import type { DispatchRecordMeta } from "../../utils/claudeChatMessageDisplay";
 import { CHAT_MESSAGES_SCROLLING_CLASS } from "../../constants/chatScrollPerformance";
 import {
@@ -39,6 +41,7 @@ export interface ClaudeChatMessagesPaneProps {
   onFullTranscriptEnd: () => void;
   messageListProfile?: "primary" | "companion";
   companionMessageListWindow?: { initialVisible: number; loadStep: number };
+  sessionExecutionEngine?: SessionExecutionEngine;
 }
 
 function chatMessagesPanePropsEqual(
@@ -53,6 +56,7 @@ function chatMessagesPanePropsEqual(
   if (prev.fullTranscriptLoading !== next.fullTranscriptLoading) return false;
   if (prev.messageListProfile !== next.messageListProfile) return false;
   if (prev.companionMessageListWindow !== next.companionMessageListWindow) return false;
+  if (prev.sessionExecutionEngine !== next.sessionExecutionEngine) return false;
   if (prev.messagesScrollRef !== next.messagesScrollRef) return false;
   if (prev.messageListNavRef !== next.messageListNavRef) return false;
   if (prev.sessionsForDispatchLookup !== next.sessionsForDispatchLookup) return false;
@@ -99,6 +103,7 @@ export const ClaudeChatMessagesPane = memo(function ClaudeChatMessagesPane({
   onFullTranscriptEnd,
   messageListProfile = "primary",
   companionMessageListWindow,
+  sessionExecutionEngine = "claude",
 }: ClaudeChatMessagesPaneProps) {
   const streamingActive = isClaudeChatSessionStreaming(session.status);
   const transcriptHydrating = useSyncExternalStore(
@@ -142,7 +147,7 @@ export const ClaudeChatMessagesPane = memo(function ClaudeChatMessagesPane({
           <p>
             {transcriptHydrating
               ? "正在加载对话历史…"
-              : "发送消息开始与 Claude Code 对话"}
+              : buildSessionEmptyChatPrompt(sessionExecutionEngine)}
           </p>
         </div>
       ) : (

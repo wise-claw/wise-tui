@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { EmployeeItem, Repository } from "../types";
 import {
+  buildSessionEmptyChatPrompt,
   resolveEngineForSession,
   resolveSessionExecutionEngine,
   resolveExecutionRepositoryPath,
@@ -167,5 +168,15 @@ describe("disk transcript session keys", () => {
     expect(
       sessionHasDiskTranscript({ id: "tab-1", claudeSessionId: null }, "claude"),
     ).toBe(false);
+  });
+});
+
+describe("buildSessionEmptyChatPrompt", () => {
+  test("uses execution engine title in empty chat prompt", () => {
+    expect(buildSessionEmptyChatPrompt("claude")).toBe("发送消息开始与 Claude Code 对话");
+    expect(buildSessionEmptyChatPrompt("cursor")).toBe("发送消息开始与 Cursor SDK 对话");
+    expect(buildSessionEmptyChatPrompt("codex")).toBe("发送消息开始与 Codex CLI 对话");
+    expect(buildSessionEmptyChatPrompt("gemini")).toBe("发送消息开始与 Gemini CLI 对话");
+    expect(buildSessionEmptyChatPrompt("opencode")).toBe("发送消息开始与 OpenCode 对话");
   });
 });
