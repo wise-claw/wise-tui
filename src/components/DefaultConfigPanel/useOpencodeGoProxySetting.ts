@@ -154,6 +154,7 @@ export function useOpencodeGoProxySetting() {
   const [remoteModels, setRemoteModels] = useState<string[]>([]);
   const [remoteModelsLoading, setRemoteModelsLoading] = useState(false);
   const hydratedRef = useRef(false);
+  const reconcileInFlightRef = useRef(false);
 
   const applyDraftFromStatus = useCallback(
     (st: OpencodeGoProxyStatus, options?: { clearApiKeyDraft?: boolean }) => {
@@ -212,14 +213,18 @@ export function useOpencodeGoProxySetting() {
       ) {
         return st;
       }
+      if (reconcileInFlightRef.current) {
+        return st;
+      }
+      reconcileInFlightRef.current = true;
       try {
         await applyOpencodeGoProxyClientSettings();
-        return getOpencodeGoProxyStatus();
-      } catch (err) {
-        message.warning(
-          `客户端配置自动同步失败：${err instanceof Error ? err.message : String(err)}`,
-        );
+        return await getOpencodeGoProxyStatus();
+      } catch {
+        // 自动对齐失败时静默跳过，避免重复弹窗；用户可手动点「同步全部」。
         return st;
+      } finally {
+        reconcileInFlightRef.current = false;
       }
     },
     [],

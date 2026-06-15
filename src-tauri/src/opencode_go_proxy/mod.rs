@@ -50,6 +50,13 @@ pub const CODEX_PLACEHOLDER_API_KEY: &str = "wise-ocgo";
 static SERVER_STATE: OnceLock<Mutex<Option<Arc<ServerInner>>>> = OnceLock::new();
 static SHUTDOWN_TX: OnceLock<Mutex<Option<oneshot::Sender<()>>>> = OnceLock::new();
 static PERSISTED: OnceLock<Mutex<OpencodeGoProxyConfig>> = OnceLock::new();
+static CLIENT_SETTINGS_SYNC: Mutex<()> = Mutex::new(());
+
+fn client_settings_sync_lock() -> Result<std::sync::MutexGuard<'static, ()>, String> {
+    CLIENT_SETTINGS_SYNC
+        .lock()
+        .map_err(|e| format!("客户端配置同步锁异常: {e}"))
+}
 
 fn server_cell() -> &'static Mutex<Option<Arc<ServerInner>>> {
     SERVER_STATE.get_or_init(|| Mutex::new(None))
@@ -239,16 +246,6 @@ fn codex_bridge_present_in_config(config: &str) -> bool {
     config.contains(&format!("[model_providers.{CODEX_PROVIDER_ID}]"))
 }
 
-fn codex_auth_aligned() -> bool {
-    let envelope = crate::codex_config_dir::read_codex_profile_envelope();
-    envelope
-        .auth
-        .get("OPENAI_API_KEY")
-        .and_then(|v| v.as_str())
-        .map(|s| s.trim() == CODEX_PLACEHOLDER_API_KEY)
-        .unwrap_or(false)
-}
-
 fn codex_legacy_wise_profile_present(config: &str) -> bool {
     config.contains(&format!("profile = \"{CODEX_PROFILE_ID}\""))
         || config.contains(&format!("[profiles.{CODEX_PROFILE_ID}]"))
@@ -281,7 +278,6 @@ fn codex_settings_aligned(port: u16, default_model: &str) -> bool {
         && no_ws
         && model_provider == CODEX_PROVIDER_ID
         && model == default_model
-        && codex_auth_aligned()
 }
 
 fn remove_toml_section(config: &str, section: &str) -> String {
@@ -1547,8 +1543,9 @@ fn sync_opencode_proxy_client_settings(
     port: u16,
     default_model: &str,
 ) -> Result<(bool, bool), String> {
-    let claude_changed = apply_claude_settings_sync(port)?;
-    let codex_changed = apply_codex_settings_sync(port, default_model)?;
+    let _guard = client_settings_sync_lock()?;
+    let claude_changed = apply_claude_settings_sync_inner(port)?;
+    let codex_changed = apply_codex_settings_sync_inner(port, default_model)?;
     Ok((claude_changed, codex_changed))
 }
 
@@ -1649,6 +1646,11 @@ fn patch_codex_auth_for_bridge(
 }
 
 fn apply_codex_settings_sync(port: u16, default_model: &str) -> Result<bool, String> {
+    let _guard = client_settings_sync_lock()?;
+    apply_codex_settings_sync_inner(port, default_model)
+}
+
+fn apply_codex_settings_sync_inner(port: u16, default_model: &str) -> Result<bool, String> {
     if codex_settings_aligned(port, default_model) {
         return Ok(false);
     }
@@ -1666,6 +1668,11 @@ fn apply_codex_settings_sync(port: u16, default_model: &str) -> Result<bool, Str
 }
 
 fn apply_claude_settings_sync(port: u16) -> Result<bool, String> {
+    let _guard = client_settings_sync_lock()?;
+    apply_claude_settings_sync_inner(port)
+}
+
+fn apply_claude_settings_sync_inner(port: u16) -> Result<bool, String> {
     if claude_settings_aligned(port) {
         return Ok(false);
     }

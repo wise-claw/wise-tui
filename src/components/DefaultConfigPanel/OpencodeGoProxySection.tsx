@@ -41,10 +41,13 @@ function hasAdvancedDraft(
   );
 }
 
-/** 默认配置 / 顶栏：Wise 内置 OpenCode Go / Zen 代理。 */
-export function OpencodeGoProxySection({ embedded = false, proxy: proxyProp }: Props = {}) {
-  const internal = useOpencodeGoProxySetting();
-  const proxy = proxyProp ?? internal;
+function OpencodeGoProxySectionInner({
+  embedded = false,
+  proxy,
+}: {
+  embedded?: boolean;
+  proxy: OpencodeGoProxySettingController;
+}) {
   const st = proxy.status;
   const disabled = proxy.loading || proxy.busy;
   const running = st?.running === true;
@@ -361,4 +364,17 @@ export function OpencodeGoProxySection({ embedded = false, proxy: proxyProp }: P
       </div>
     </div>
   );
+}
+
+function OpencodeGoProxySectionWithHook({ embedded = false }: { embedded?: boolean }) {
+  const proxy = useOpencodeGoProxySetting();
+  return <OpencodeGoProxySectionInner embedded={embedded} proxy={proxy} />;
+}
+
+/** 默认配置 / 顶栏：Wise 内置 OpenCode Go / Zen 代理。 */
+export function OpencodeGoProxySection({ embedded = false, proxy: proxyProp }: Props = {}) {
+  if (proxyProp) {
+    return <OpencodeGoProxySectionInner embedded={embedded} proxy={proxyProp} />;
+  }
+  return <OpencodeGoProxySectionWithHook embedded={embedded} />;
 }
