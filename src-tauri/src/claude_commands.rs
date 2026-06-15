@@ -968,7 +968,6 @@ pub(crate) fn get_claude_hooks_status(
 
     // 启用插件包的 hooks（仅展示）：来自 installed_plugins.json installPath + cache 回退。
     let mut plugins: Vec<ClaudeHookScopeData> = Vec::new();
-    let mut omc_scope: ClaudeHookScopeData = empty_omc_scope;
     if let Ok(roots) =
         crate::claude_commands::plugin_market::enumerate_enabled_plugin_install_roots(
             project_path.as_deref(),
@@ -981,9 +980,6 @@ pub(crate) fn get_claude_hooks_status(
                     &install_ref,
                 )
             {
-                if install_ref.to_lowercase() == "oh-my-claudecode@omc" {
-                    omc_scope = scope_data.clone();
-                }
                 plugins.push(scope_data);
             }
         }
@@ -1001,7 +997,7 @@ pub(crate) fn get_claude_hooks_status(
         local: build_hook_scope_data(
             &local_path_file.unwrap_or_else(|| PathBuf::from("<请选择项目后可查看 local hooks>")),
         ),
-        omc: omc_scope,
+        omc: empty_omc_scope,
         plugins,
     })
 }

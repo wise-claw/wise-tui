@@ -97,6 +97,7 @@ import {
   LeftSidebarMonitorPanelSlot,
   preloadLeftSidebarMonitorPanel,
 } from "./LeftSidebar/LeftSidebarMonitorPanelSlot";
+import { prefetchClaudeCodeToolsSurface } from "./ClaudeSessions/prefetchClaudeCodeToolsSurface";
 import { useChromePanelHoverHandlers } from "../hooks/useChromePanelHoverHandlers";
 import { useMonitorSidebarFingerprints } from "../hooks/useMonitorSessionsForOverview";
 import { notifySplitTodoCountUpdated } from "../utils/notifySplitTodoCountUpdated";
@@ -369,7 +370,13 @@ export function LeftSidebar({
   useEffect(() => {
     void gitPanelChunk;
     const cancel = runWhenIdle(() => setBottomTabPanelsReady(true), { timeoutMs: 400 });
-    return cancel;
+    const cancelClaudeCodeToolsPrefetch = runWhenIdle(() => prefetchClaudeCodeToolsSurface(), {
+      timeoutMs: 2000,
+    });
+    return () => {
+      cancel();
+      cancelClaudeCodeToolsPrefetch();
+    };
   }, []);
   const expandedFilesPanelOnMountRef = useRef(false);
   const projectRepositoryState = useProjectRepositorySidebarState({

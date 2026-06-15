@@ -21,6 +21,7 @@ import { HooksImportModal } from "./ClaudeHooksConfigPanel/HooksImportModal";
 import type { ClaudeHooksConfigPanelHandle, EditingTarget, HookEditFormValues, HookFlowEntry, HooksFlowTheme } from "./ClaudeHooksConfigPanel/types";
 import { getSupportedTypesByEvent, handlerSummary, resolveHookHandlerTargetPath } from "./ClaudeHooksConfigPanel/helpers";
 import { useHooksImport } from "./ClaudeHooksConfigPanel/useHooksImport";
+import { filterOmcFromHooksStatus } from "../utils/omcPluginDetect";
 import "./ClaudeCodeToolsPanel/index.css";
 
 export type { ClaudeHooksConfigPanelHandle } from "./ClaudeHooksConfigPanel/types";
@@ -75,7 +76,7 @@ export function ClaudeHooksConfigPanel({
     setLoading(true);
     try {
       const res = await getClaudeHooksStatus(repositoryPath ?? null);
-      setData(res);
+      setData(filterOmcFromHooksStatus(res));
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
     } finally {
@@ -328,8 +329,8 @@ export function ClaudeHooksConfigPanel({
   }, []);
 
   const visibleScopes = useMemo(
-    () => [data.user, data.project, data.local, data.omc, ...(data.plugins ?? [])],
-    [data.local, data.omc, data.plugins, data.project, data.user],
+    () => [data.user, data.project, data.local, ...(data.plugins ?? [])],
+    [data.local, data.plugins, data.project, data.user],
   );
   const hasAnyData = visibleScopes.some((scope) => Object.keys(scope.hooks).length > 0);
   const projectScopeUnavailable = Boolean(repositoryPath) && data.project.sourcePath.startsWith("<请选择项目");
@@ -346,14 +347,6 @@ export function ClaudeHooksConfigPanel({
       ),
     [data.plugins],
   );
-  const omcHookCount = useMemo(
-    () =>
-      Object.values(data.omc.hooks).reduce(
-        (sum, groups) => sum + groups.reduce((gSum, g) => gSum + g.hooks.length, 0),
-        0,
-      ),
-    [data.omc.hooks],
-  );
   const filterStats = useMemo(() => {
     const count = (scopeData: ClaudeHookScopeData) =>
       Object.values(scopeData.hooks).reduce(
@@ -364,20 +357,19 @@ export function ClaudeHooksConfigPanel({
       user: count(data.user),
       project: count(data.project),
       local: count(data.local),
-      omc: omcHookCount,
       plugin: pluginHookCount,
     };
-  }, [data.local, data.project, data.user, omcHookCount, pluginHookCount]);
+  }, [data.local, data.project, data.user, pluginHookCount]);
   const hooksCount = useMemo(
-    () => filterStats.user + filterStats.project + filterStats.local + filterStats.omc + filterStats.plugin,
-    [filterStats.local, filterStats.omc, filterStats.plugin, filterStats.project, filterStats.user],
+    () => filterStats.user + filterStats.project + filterStats.local + filterStats.plugin,
+    [filterStats.local, filterStats.plugin, filterStats.project, filterStats.user],
   );
   useEffect(() => {
     onCountChange?.(hooksCount);
   }, [hooksCount, onCountChange]);
   const eventHookCountMap = useMemo(() => {
     const map: Record<string, number> = {};
-    const allScopes = [data.user, data.project, data.local, data.omc, ...(data.plugins ?? [])];
+    const allScopes = [data.user, data.project, data.local, ...(data.plugins ?? [])];
     for (const scopeData of allScopes) {
       for (const [eventName, groups] of Object.entries(scopeData.hooks)) {
         const count = groups.reduce((sum, group) => sum + group.hooks.length, 0);
@@ -385,14 +377,13 @@ export function ClaudeHooksConfigPanel({
       }
     }
     return map;
-  }, [data.local, data.omc, data.plugins, data.project, data.user]);
+  }, [data.local, data.plugins, data.project, data.user]);
   const flowEventEntriesMap = useMemo(() => {
     const map: Record<string, HookFlowEntry[]> = {};
     const allScopes: Array<{ scope: ClaudeHookSourceScope; scopeData: ClaudeHookScopeData }> = [
       { scope: "user", scopeData: data.user },
       { scope: "project", scopeData: data.project },
       { scope: "local", scopeData: data.local },
-      { scope: "user", scopeData: data.omc },
       ...(data.plugins ?? []).map((scopeData) => ({ scope: "user" as const, scopeData })),
     ];
     for (const { scope, scopeData } of allScopes) {
@@ -415,7 +406,7 @@ export function ClaudeHooksConfigPanel({
       }
     }
     return map;
-  }, [data.local, data.omc, data.plugins, data.project, data.user]);
+  }, [data.local, data.plugins, data.project, data.user]);
 
   useEffect(() => {
     const handleOpenFlow = () => setFlowOpen(true);
@@ -466,9 +457,6 @@ export function ClaudeHooksConfigPanel({
         {filterStats.plugin > 0 ? (
           <Tag variant="filled">plugin: {filterStats.plugin}</Tag>
         ) : null}
-        {filterStats.omc > 0 ? (
-          <Tag variant="filled">omc: {filterStats.omc}</Tag>
-        ) : null}
       </div>
       {loading ? (
         <div className="app-hooks-loading"><Spin size="small" /></div>
@@ -512,20 +500,6 @@ export function ClaudeHooksConfigPanel({
             onOpenTarget={openHookTarget}
             keyword={listSearch}
           />
-          {Object.keys(data.omc.hooks).length > 0 ? (
-            <HookScopeSection
-              scope="user"
-              title="OMC 插件 Hooks（只读）"
-              data={data.omc}
-              onCreate={openCreate}
-              onEdit={openEdit}
-              onDelete={onDelete}
-              onToggleDisableAll={onToggleDisableAll}
-              onOpenTarget={openHookTarget}
-              keyword={listSearch}
-              readOnly
-            />
-          ) : null}
           {(data.plugins ?? []).map((pluginScope, index) => (
             <HookScopeSection
               key={pluginScope.sourcePath || `plugin-${index}`}

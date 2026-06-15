@@ -27,8 +27,9 @@ import {
   listClaudeUserSkills,
 } from "../../services/claude";
 import { claudePluginListInstalled } from "../../services/claudePluginMarket";
-import { countHooksInScope } from "../../utils/omcPluginDetect";
+import { countHooksInScope, filterOmcFromHooksStatus, mergeClaudeSkillsForPanel } from "../../utils/omcPluginDetect";
 import { claudeCodeToolsTabToAuthorPane } from "../../utils/claudeCodeToolsAuthorPane";
+import { runWhenIdle } from "../../utils/deferIdle";
 import type { AuthorPane } from "../../types/viewMode";
 import "./index.css";
 
@@ -136,6 +137,11 @@ export function ClaudeCodeToolsPanel({
   useEffect(() => {
     if (!panelActive) return;
     let cancelled = false;
+    const cancelIdle = runWhenIdle(() => {
+      if (cancelled) return;
+      void preloadTabCounts();
+    }, { timeoutMs: 1200 });
+
     async function preloadTabCounts() {
       const [mcpRes, hooksRes, subagentsRes, skillsRes, userSkillsRes, pluginSkillsRes, pluginsRes] =
         await Promise.allSettled([
@@ -161,12 +167,12 @@ export function ClaudeCodeToolsPanel({
             mcp.pluginMcp.length;
         }
         if (hooksRes.status === "fulfilled") {
+          const hooks = filterOmcFromHooksStatus(hooksRes.value);
           next.hooks =
-            countHooksInScope(hooksRes.value.user.hooks) +
-            countHooksInScope(hooksRes.value.project.hooks) +
-            countHooksInScope(hooksRes.value.local.hooks) +
-            countHooksInScope(hooksRes.value.omc.hooks) +
-            (hooksRes.value.plugins ?? []).reduce(
+            countHooksInScope(hooks.user.hooks) +
+            countHooksInScope(hooks.project.hooks) +
+            countHooksInScope(hooks.local.hooks) +
+            (hooks.plugins ?? []).reduce(
               (sum, scope) => sum + countHooksInScope(scope.hooks),
               0,
             );
@@ -178,11 +184,7 @@ export function ClaudeCodeToolsPanel({
           const projectList = skillsRes.status === "fulfilled" ? skillsRes.value : [];
           const userList = userSkillsRes.status === "fulfilled" ? userSkillsRes.value : [];
           const pluginList = pluginSkillsRes.status === "fulfilled" ? pluginSkillsRes.value : [];
-          const seen = new Set(projectList.map((s) => s.name.toLowerCase()));
-          const userOnly = userList.filter((s) => !seen.has(s.name.toLowerCase()));
-          for (const s of userOnly) seen.add(s.name.toLowerCase());
-          const pluginOnly = pluginList.filter((s) => !seen.has(s.name.toLowerCase()));
-          next.skill = projectList.length + userOnly.length + pluginOnly.length;
+          next.skill = mergeClaudeSkillsForPanel(projectList, userList, pluginList).length;
         }
         if (pluginsRes.status === "fulfilled") {
           next.plugins = pluginsRes.value.length;
@@ -190,9 +192,9 @@ export function ClaudeCodeToolsPanel({
         return next;
       });
     }
-    void preloadTabCounts();
     return () => {
       cancelled = true;
+      cancelIdle();
     };
   }, [repositoryPath, panelActive]);
 

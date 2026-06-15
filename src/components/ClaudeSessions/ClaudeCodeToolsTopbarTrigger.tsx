@@ -1,8 +1,10 @@
 import { Popover } from "antd";
 import { HoverHint } from "../shared/HoverHint";
-import { Suspense, lazy, useCallback, useState } from "react";
+import { Suspense, lazy, useCallback, useEffect, useState } from "react";
 import type { AuthorPane } from "../../types/viewMode";
+import { runWhenIdle } from "../../utils/deferIdle";
 import { IconClaudeCodeMascot } from "../icons/IconClaudeCodeMascot";
+import { prefetchClaudeCodeToolsSurface } from "./prefetchClaudeCodeToolsSurface";
 import "./ClaudeCodeToolsTopbarTrigger.css";
 
 const ClaudeCodeToolsPanel = lazy(() =>
@@ -25,7 +27,19 @@ export function ClaudeCodeToolsTopbarTrigger({
   const isSidebar = variant === "sidebar";
 
   const handleOpenChange = useCallback((next: boolean) => {
+    if (next) {
+      prefetchClaudeCodeToolsSurface();
+    }
     setOpen(next);
+  }, []);
+
+  useEffect(() => {
+    const cancel = runWhenIdle(() => prefetchClaudeCodeToolsSurface(), { timeoutMs: 1500 });
+    return cancel;
+  }, []);
+
+  const handlePrefetch = useCallback(() => {
+    prefetchClaudeCodeToolsSurface();
   }, []);
 
   const handleOpenAuthorConfig = useCallback(
@@ -66,6 +80,8 @@ export function ClaudeCodeToolsTopbarTrigger({
             }
             aria-label="Claude Code 工具"
             aria-expanded={open}
+            onMouseEnter={handlePrefetch}
+            onFocus={handlePrefetch}
           >
             <IconClaudeCodeMascot />
           </button>
@@ -79,6 +95,8 @@ export function ClaudeCodeToolsTopbarTrigger({
             }
             aria-label="Claude Code 工具"
             aria-expanded={open}
+            onMouseEnter={handlePrefetch}
+            onFocus={handlePrefetch}
           >
             <IconClaudeCodeMascot />
           </button>

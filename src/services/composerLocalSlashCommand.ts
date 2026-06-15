@@ -270,7 +270,9 @@ async function formatHooksList(repositoryPath: string): Promise<string> {
     ...summarizeHookScope("用户级", status.user),
     ...summarizeHookScope("项目级", status.project),
     ...summarizeHookScope("本地", status.local),
-    ...summarizeHookScope("OMC", status.omc),
+    ...(status.plugins ?? []).flatMap((scope, index) =>
+      summarizeHookScope(`插件${(status.plugins?.length ?? 0) > 1 ? ` ${index + 1}` : ""}`, scope),
+    ),
   );
   if (lines.length === 1) {
     lines.push("（未配置 Hook）");

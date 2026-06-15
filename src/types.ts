@@ -946,6 +946,7 @@ export interface ClaudeHooksStatusResponse {
   user: ClaudeHookScopeData;
   project: ClaudeHookScopeData;
   local: ClaudeHookScopeData;
+  /** @deprecated OMC 插件 hooks 已并入 `plugins`；保留字段仅为 IPC 兼容，恒为空。 */
   omc: ClaudeHookScopeData;
   /** 已启用 Claude Code 插件包内声明的 hooks（仅展示，不可写）。来自 `~/.claude/plugins/cache/**`。 */
   plugins?: ClaudeHookScopeData[];

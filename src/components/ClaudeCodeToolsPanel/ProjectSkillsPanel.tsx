@@ -45,6 +45,7 @@ import {
   isClaudeProjectCommand,
   resolveClaudeProjectSkillDisplayPath,
 } from "../../utils/claudeProjectSkillPath";
+import { mergeClaudeSkillsForPanel } from "../../utils/omcPluginDetect";
 import { installMonacoTrackpadSelectionGuard } from "../../utils/monacoTrackpadSelectionGuard";
 import { WISE_MONACO_EDITOR_OPTIONS } from "../../utils/wiseMonacoEditorOptions";
 
@@ -96,15 +97,6 @@ function monacoLanguageFromPath(path: string | null): string {
 }
 
 /** `~/.claude/plugins/cache/.../包根` 下某技能的目录绝对路径（与打开目录一致）。 */
-function mergeProjectAndUserSkills(
-  project: ClaudeProjectSkill[],
-  user: ClaudeProjectSkill[],
-): ClaudeProjectSkill[] {
-  const seen = new Set(project.map((s) => s.name.toLowerCase()));
-  const userOnly = user.filter((s) => !seen.has(s.name.toLowerCase()));
-  return [...project, ...userOnly];
-}
-
 function isUserScopeSkill(skill: ClaudeProjectSkill): boolean {
   return skill.skillScope === "user";
 }
@@ -430,10 +422,8 @@ export function ProjectSkillsPanel({
         listClaudeUserSkills(),
         listClaudePluginCacheSkills(repositoryPath).catch(() => []),
       ]);
-      const merged = mergeProjectAndUserSkills(list, userList);
-      const seen = new Set(merged.map((s) => s.name.toLowerCase()));
-      const pluginOnly = pluginList.filter((s) => !seen.has(s.name.toLowerCase()));
-      setSkills([...merged, ...pluginOnly]);
+      const merged = mergeClaudeSkillsForPanel(list, userList, pluginList);
+      setSkills(merged);
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
     } finally {
