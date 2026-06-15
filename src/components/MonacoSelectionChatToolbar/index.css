@@ -4,14 +4,14 @@
   animation: monaco-selection-chat-toolbar-in 140ms ease-out;
   display: inline-flex;
   align-items: center;
-  gap: 2px;
-  padding: 3px;
-  border-radius: 10px;
+  gap: 1px;
+  padding: 2px;
+  border-radius: 7px;
   border: 1px solid var(--ant-color-border, #d9d9d9);
   background-color: var(--ant-color-bg-container, #ffffff);
   box-shadow:
-    0 8px 24px rgba(15, 23, 42, 0.16),
-    0 2px 8px rgba(15, 23, 42, 0.08);
+    0 4px 14px rgba(15, 23, 42, 0.12),
+    0 1px 4px rgba(15, 23, 42, 0.06);
   pointer-events: auto;
   user-select: none;
   isolation: isolate;
@@ -20,17 +20,21 @@
 .monaco-selection-chat-toolbar__action {
   display: inline-flex;
   align-items: center;
-  gap: 6px;
-  padding: 5px 12px;
+  gap: 4px;
+  padding: 2px 7px;
   border: none;
-  border-radius: 8px;
+  border-radius: 5px;
   background-color: var(--ant-color-bg-container, #ffffff);
   color: var(--ant-color-text, rgba(0, 0, 0, 0.88));
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 500;
-  line-height: 1.4;
+  line-height: 1.25;
   cursor: pointer;
   white-space: nowrap;
+}
+
+.monaco-selection-chat-toolbar__action .anticon {
+  font-size: 11px;
 }
 
 .monaco-selection-chat-toolbar__action:hover:not(:disabled) {
@@ -44,7 +48,7 @@
 
 .monaco-selection-chat-toolbar__shortcut {
   color: var(--ant-color-text-tertiary, rgba(0, 0, 0, 0.45));
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 400;
 }
 
