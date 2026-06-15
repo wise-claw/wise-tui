@@ -524,7 +524,7 @@ export function EmployeeConfigModal({
               key: "executionEngine",
               render: (_, row) => {
                 if (isRepoOwnerGapRow(row)) return "—";
-                const engine = row.executionEngine ?? "claude";
+                const engine: SessionExecutionEngine = row.executionEngine ?? "claude";
                 return SESSION_EXECUTION_ENGINE_LABELS[engine].short;
               },
             },
