@@ -3,6 +3,17 @@ import { RepositoryFilesExplorer } from "../GitPanel/RepositoryFilesExplorer";
 import type { GitPanelOpenFileOptions } from "../GitPanel/types";
 import type { GitPanelWorkspaceSelectorProps } from "../GitPanel/GitPanelWorkspaceSelector";
 
+import type { ExplorerRevealTarget } from "../../utils/explorerRevealTarget";
+
+const EXPLORER_REVEAL_TARGET_BY_VARIANT: Record<
+  NonNullable<ActiveRepositoryFilesPanelProps["variant"]>,
+  ExplorerRevealTarget
+> = {
+  "left-sidebar": "left-sidebar",
+  "right-rail": "right-rail",
+  "workspace-rail": "workspace-rail",
+};
+
 interface ActiveRepositoryFilesPanelProps {
   activeRepositoryPath: string;
   activeRepositoryName?: string;
@@ -68,6 +79,7 @@ export const ActiveRepositoryFilesPanel = memo(function ActiveRepositoryFilesPan
           }
           hideContextHeader={variant === "workspace-rail"}
           workspaceSelector={workspaceSelector}
+          explorerRevealTarget={EXPLORER_REVEAL_TARGET_BY_VARIANT[variant]}
         />
       </div>
     </div>

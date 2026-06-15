@@ -27,6 +27,10 @@ import {
   resolveScheduledTasksRepository,
 } from "../utils/workspaceSelectionState";
 import { runWhenIdle } from "../utils/deferIdle";
+import {
+  WISE_EXPLORER_FOCUS_REQUESTED,
+  type ExplorerFocusRequestedDetail,
+} from "../constants/explorerUiEvents";
 import { MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX } from "../constants/mainLayoutWidths";
 import { DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION } from "../constants/workspaceBootstrapAddons";
 import { cancelClaudeExecution } from "../services/claude";
@@ -703,6 +707,29 @@ export function LeftSidebar({
     filesExplorerSectionCollapsed,
     handleFilesExplorerSectionCollapsedChange,
   ]);
+
+  useEffect(() => {
+    if (typeof window === "undefined") {
+      return;
+    }
+    const onFocusRequested = (event: Event) => {
+      const target = (event as CustomEvent<ExplorerFocusRequestedDetail>).detail?.target;
+      if (target !== "left-sidebar" && target !== "right-rail") {
+        return;
+      }
+      startTransition(() => {
+        setLeftBottomTab("files");
+        writeLeftBottomTabToStorage("files");
+        if (filesExplorerSectionCollapsed) {
+          handleFilesExplorerSectionCollapsedChange(false);
+        }
+      });
+    };
+    window.addEventListener(WISE_EXPLORER_FOCUS_REQUESTED, onFocusRequested);
+    return () => {
+      window.removeEventListener(WISE_EXPLORER_FOCUS_REQUESTED, onFocusRequested);
+    };
+  }, [filesExplorerSectionCollapsed, handleFilesExplorerSectionCollapsedChange]);
 
   const repoPanelTabSwitcher = useMemo(
     () => (

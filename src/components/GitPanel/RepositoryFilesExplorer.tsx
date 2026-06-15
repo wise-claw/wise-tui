@@ -1,4 +1,4 @@
-import { memo, useMemo, useRef, type ReactNode } from "react";
+import { memo, useEffect, useMemo, useRef, type ReactNode } from "react";
 import { HoverHint } from "../shared/HoverHint";
 import { Button, Empty, Input, Menu, Popconfirm, Spin } from "antd";
 import {
@@ -15,6 +15,7 @@ import { ExplorerInlineCreateRow } from "./ExplorerInlineCreateRow";
 import { ExplorerSearchResultList } from "./ExplorerSearchResultList";
 import { RepositoryExplorerTreeActionsProvider } from "./RepositoryExplorerTreeActionsContext";
 import { flattenRepositoryTreeRows } from "./repositoryTreeFlatten";
+import { REPOSITORY_TREE_ROW_HEIGHT_PX } from "./repositoryTreeLayout";
 import { RepositoryVirtualTreeList } from "./RepositoryVirtualTreeList";
 import { MIN_EXPLORER_SEARCH_QUERY_LEN } from "./fileTree";
 import type { GitPanelOpenFileOptions } from "./types";
@@ -22,6 +23,7 @@ import { useRepositoryFilesExplorer } from "./useRepositoryFilesExplorer";
 import { useScrollEndClass } from "../../hooks/useScrollEndClass";
 import { LEFT_SIDEBAR_SCROLLING_CLASS } from "../../constants/leftSidebarScrollPerformance";
 import { formatRepositoryExplorerLoadError } from "../../utils/repositoryPathAccessibility";
+import type { ExplorerRevealTarget } from "../../utils/explorerRevealTarget";
 
 type WorkspaceSelectorProps = Omit<GitPanelWorkspaceSelectorProps, "activeRepositoryPath">;
 
@@ -43,6 +45,8 @@ export interface RepositoryFilesExplorerProps {
   workspaceSelector?: WorkspaceSelectorProps;
   /** 外层栏已展示仓库切换器时，隐藏文件树内标题栏 */
   hideContextHeader?: boolean;
+  /** 多实例文件树并存时，用于搜索/外链打开后只定位到对应实例。 */
+  explorerRevealTarget?: ExplorerRevealTarget;
 }
 
 export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
@@ -58,12 +62,14 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
   headerPrefix,
   workspaceSelector,
   hideContextHeader = false,
+  explorerRevealTarget,
 }: RepositoryFilesExplorerProps) {
   const trimmedRepositoryPath = repositoryPath.trim();
   const explorer = useRepositoryFilesExplorer({
     repositoryPath: trimmedRepositoryPath,
     search,
     onClearExplorerSearch,
+    explorerRevealTarget,
   });
   const trimmedSearch = search.trim();
   const searchActive = trimmedSearch.length > 0;
@@ -125,6 +131,33 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
       onOpenFile,
     ],
   );
+
+  useEffect(() => {
+    const selectedPath = explorer.selected?.path?.trim();
+    if (!selectedPath || searchActive) {
+      return;
+    }
+    const index = flatTreeRows.findIndex((row) => {
+      if (row.kind === "file" || row.kind === "dir") {
+        return row.node.path === selectedPath;
+      }
+      return false;
+    });
+    if (index < 0) {
+      return;
+    }
+    const el = scrollRegionRef.current;
+    if (!el) {
+      return;
+    }
+    const rowTop = index * REPOSITORY_TREE_ROW_HEIGHT_PX;
+    const rowBottom = rowTop + REPOSITORY_TREE_ROW_HEIGHT_PX;
+    if (rowTop < el.scrollTop) {
+      el.scrollTop = rowTop;
+    } else if (rowBottom > el.scrollTop + el.clientHeight) {
+      el.scrollTop = rowBottom - el.clientHeight;
+    }
+  }, [explorer.selected?.path, flatTreeRows, searchActive]);
 
   if (!trimmedRepositoryPath) {
     return (

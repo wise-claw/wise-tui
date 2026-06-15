@@ -1,4 +1,4 @@
-import type { Terminal } from "ghostty-web";
+import type { FitAddon, Terminal } from "ghostty-web";
 import { UrlRegexProvider } from "ghostty-web";
 import { openExternalUrl } from "../services/openExternal";
 
@@ -94,14 +94,87 @@ export function reconcileTerminalCanvasFit(
   }
 }
 
+/** 终端 canvas 至少需要的布局尺寸，避免 1px 容器导致 fit 失败。 */
+const MIN_TERMINAL_LAYOUT_PX = 32;
+
+/** 空白屏恢复：多阶段延迟（ms），逐级重试 remeasure + fit。 */
+export const TERMINAL_BLANK_RECOVERY_DELAYS_MS = [80, 200, 420, 800] as const;
+
+function terminalLayoutReady(container: HTMLElement): boolean {
+  return (
+    container.clientWidth >= MIN_TERMINAL_LAYOUT_PX &&
+    container.clientHeight >= MIN_TERMINAL_LAYOUT_PX
+  );
+}
+
+/** 判断终端 buffer 是否尚无可见字符（仅有光标）。 */
+export function terminalBufferLooksEmpty(terminal: Terminal): boolean {
+  try {
+    const buffer = terminal.buffer.active;
+    const lines = Math.min(buffer.length, terminal.rows);
+    for (let y = 0; y < lines; y += 1) {
+      const line = buffer.getLine(y);
+      if (!line) continue;
+      for (let x = 0; x < line.length; x += 1) {
+        const cell = line.getCell(x);
+        const chars = cell?.getChars?.() ?? "";
+        if (chars.trim().length > 0) {
+          return false;
+        }
+      }
+    }
+  } catch {
+    return false;
+  }
+  return true;
+}
+
+/** surface 尺寸异常或 buffer 为空时视为空白屏。 */
+export function terminalNeedsBlankRecovery(
+  container: HTMLElement,
+  terminal: Terminal,
+): boolean {
+  return (
+    terminalSurfaceLooksBlank(container, terminal) ||
+    terminalBufferLooksEmpty(terminal)
+  );
+}
+
+/** 判断终端 surface 是否尚未正确渲染（无 canvas 或尺寸异常）。 */
+export function terminalSurfaceLooksBlank(
+  container: HTMLElement,
+  terminal: Terminal,
+): boolean {
+  const canvas = container.querySelector("canvas");
+  if (!(canvas instanceof HTMLCanvasElement)) return true;
+  const rect = canvas.getBoundingClientRect();
+  if (rect.width < MIN_TERMINAL_LAYOUT_PX || rect.height < MIN_TERMINAL_LAYOUT_PX) {
+    return true;
+  }
+  return terminal.cols < 2 || terminal.rows < 2;
+}
+
+/** remeasure 字体后 fit，用于空白屏恢复与面板重新可见时。 */
+export function forceTerminalRemeasureAndFit(
+  terminal: Terminal,
+  fitAddon: FitAddon,
+  container: HTMLElement,
+): void {
+  (
+    terminal.renderer as { remeasureFont?: () => void } | undefined
+  )?.remeasureFont?.();
+  fitAddon.fit();
+  reconcileTerminalCanvasFit(terminal, container);
+}
+
 /**
- * 等待终端容器完成布局（宽高 > 0），避免 ghostty 在 0 尺寸下 fit 导致空白屏。
+ * 等待终端容器完成布局，避免 ghostty 在过小尺寸下 fit 导致空白屏。
  */
 export function waitForTerminalContainerLayout(
   container: HTMLElement,
-  timeoutMs = 4000,
+  timeoutMs = 5000,
 ): Promise<void> {
-  if (container.clientWidth > 0 && container.clientHeight > 0) {
+  if (terminalLayoutReady(container)) {
     return Promise.resolve();
   }
 
@@ -117,14 +190,14 @@ export function waitForTerminalContainerLayout(
     };
 
     const observer = new ResizeObserver(() => {
-      if (container.clientWidth > 0 && container.clientHeight > 0) {
+      if (terminalLayoutReady(container)) {
         finish();
       }
     });
     observer.observe(container);
 
     const poll = () => {
-      if (container.clientWidth > 0 && container.clientHeight > 0) {
+      if (terminalLayoutReady(container)) {
         finish();
         return;
       }
@@ -192,14 +265,14 @@ function buildAnsiPalette(isDark: boolean) {
     magenta: "#8b3d9e",
     cyan: "#0b7285",
     white: "#f0f0f0",
-    brightBlack: "#4a4a4a",
+    brightBlack: "#333333",
     brightRed: "#e03131",
     brightGreen: "#2f9e44",
     brightYellow: "#e67700",
     brightBlue: "#1971c2",
     brightMagenta: "#9c36b5",
     brightCyan: "#0c8599",
-    brightWhite: "#141414",
+    brightWhite: "#0a0a0a",
   };
 }
 
@@ -247,7 +320,7 @@ export function readTerminalThemeFromContainer(container: HTMLElement) {
   const background = readColor("--terminal-background", "#ffffff");
   const luminance = parseCssColorLuminance(background);
   const isDark = luminance !== null ? luminance < 0.45 : false;
-  const foreground = isDark ? "#f2f2f2" : "#141414";
+  const foreground = isDark ? "#f5f5f5" : "#0a0a0a";
   const cursor = foreground;
   const selectionBackground = readColor(
     "--terminal-selection",

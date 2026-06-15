@@ -23,7 +23,16 @@ import {
 import { openInFinder, openWorkspaceIn } from "../../services/repository";
 import { joinRepositoryAbsolutePath } from "../../utils/repositoryPreviewBinary";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
-import { consumePendingExplorerReveal } from "../../utils/pendingExplorerReveal";
+import {
+  clearPendingExplorerReveal,
+  consumePendingExplorerReveal,
+  WISE_EXPLORER_REVEAL_REQUESTED,
+  type PendingExplorerReveal,
+} from "../../utils/pendingExplorerReveal";
+import {
+  explorerRevealMatchesTarget,
+  type ExplorerRevealTarget,
+} from "../../utils/explorerRevealTarget";
 import {
   MIN_EXPLORER_SEARCH_QUERY_LEN,
   type ExplorerSearchResultRow,
@@ -112,6 +121,7 @@ interface UseRepositoryFilesExplorerInput {
   repositoryPath: string;
   search: string;
   onClearExplorerSearch?: () => void;
+  explorerRevealTarget?: ExplorerRevealTarget;
 }
 
 /**
@@ -126,6 +136,7 @@ export function useRepositoryFilesExplorer({
   repositoryPath,
   search,
   onClearExplorerSearch,
+  explorerRevealTarget,
 }: UseRepositoryFilesExplorerInput) {
   const [loading, setLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
@@ -678,15 +689,42 @@ export function useRepositoryFilesExplorer({
   );
 
   useEffect(() => {
-    if (!repositoryPath.trim() || !hasRootLoaded) {
+    if (!repositoryPath.trim() || !hasRootLoaded || !explorerRevealTarget) {
       return;
     }
-    const pending = consumePendingExplorerReveal(repositoryPath);
+    const pending = consumePendingExplorerReveal(repositoryPath, explorerRevealTarget);
     if (!pending) {
       return;
     }
     void revealExplorerPath(pending.relativePath, pending.isDirectory);
-  }, [hasRootLoaded, repositoryPath, revealExplorerPath]);
+  }, [explorerRevealTarget, hasRootLoaded, repositoryPath, revealExplorerPath]);
+
+  useEffect(() => {
+    if (typeof window === "undefined" || !explorerRevealTarget) {
+      return;
+    }
+    const onRevealRequested = (event: Event) => {
+      const detail = (event as CustomEvent<PendingExplorerReveal>).detail;
+      if (!detail) {
+        return;
+      }
+      if (detail.repositoryPath.trim() !== repositoryPath.trim()) {
+        return;
+      }
+      if (!explorerRevealMatchesTarget(detail, explorerRevealTarget)) {
+        return;
+      }
+      if (!hasRootLoaded) {
+        return;
+      }
+      clearPendingExplorerReveal();
+      void revealExplorerPath(detail.relativePath, detail.isDirectory);
+    };
+    window.addEventListener(WISE_EXPLORER_REVEAL_REQUESTED, onRevealRequested);
+    return () => {
+      window.removeEventListener(WISE_EXPLORER_REVEAL_REQUESTED, onRevealRequested);
+    };
+  }, [explorerRevealTarget, hasRootLoaded, repositoryPath, revealExplorerPath]);
 
   const openInlineCreate = useCallback(
     (type: "file" | "folder", parentDir: string) => {

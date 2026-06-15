@@ -7,7 +7,6 @@
   -webkit-app-region: no-drag;
   --terminal-background: var(--ant-color-bg-container);
   --terminal-selection: rgba(24, 144, 255, 0.22);
-  --terminal-selection: rgba(100, 200, 255, 0.25);
 }
 
 .terminal-panel--fullscreen {
@@ -265,6 +264,8 @@
   background: var(--terminal-background) !important;
   user-select: none;
   -webkit-user-select: none;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 /* ghostty-web 用 1×1 textarea（左上角）承接键盘输入；必须完全隐藏插入符。 */
