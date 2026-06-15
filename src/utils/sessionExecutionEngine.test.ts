@@ -3,8 +3,11 @@ import type { EmployeeItem, Repository } from "../types";
 import {
   buildSessionEmptyChatPrompt,
   resolveEngineForSession,
+  resolveEngineForSessionSpawn,
   resolveSessionExecutionEngine,
   resolveExecutionRepositoryPath,
+  resolveRepositoryPathForSessionSpawn,
+  resolveSessionPaneContextRepository,
   resolveDiskTranscriptSessionKey,
   sessionHasDiskTranscript,
   usesWiseTabIdForDiskTranscript,
@@ -111,6 +114,102 @@ describe("resolveSessionExecutionEngine", () => {
         repo({ id: 2, name: "eco-ai", path: "/work/eco/eco-ai", executionEngine: "codex" }),
       ),
     ).toBe("codex");
+  });
+
+  test("spawn resolver uses session repo even when another repo would be sidebar-active", () => {
+    const claudeRepo = repo({ id: 1, name: "frontend", path: "/repo/frontend", executionEngine: "claude" });
+    const codexRepo = repo({ id: 2, name: "backend", path: "/repo/backend", executionEngine: "codex" });
+    expect(
+      resolveEngineForSessionSpawn(
+        { id: "s-backend", repositoryPath: "/repo/backend", repositoryName: "backend" },
+        [claudeRepo, codexRepo],
+        [],
+      ),
+    ).toBe("codex");
+    expect(
+      resolveEngineForSessionSpawn(
+        { id: "s-frontend", repositoryPath: "/repo/frontend", repositoryName: "frontend" },
+        [claudeRepo, codexRepo],
+        [],
+      ),
+    ).toBe("claude");
+    expect(
+      resolveRepositoryPathForSessionSpawn(
+        { id: "s-backend", repositoryPath: "/repo/backend", repositoryName: "backend" },
+        [claudeRepo, codexRepo],
+        [],
+      ),
+    ).toBe("/repo/backend");
+  });
+
+  test("spawn resolver honors extra pane repositoryId for project-root session", () => {
+    const claudeRepo = repo({
+      id: 1,
+      name: "eco-ai-web",
+      path: "/work/eco/eco-ai-web",
+      executionEngine: "claude",
+    });
+    const codexRepo = repo({
+      id: 2,
+      name: "eco-ai",
+      path: "/work/eco/eco-ai",
+      executionEngine: "codex",
+    });
+    const projectSession = {
+      id: "pane-extra-1",
+      repositoryPath: "/work/eco",
+      repositoryName: "Project: eco",
+    };
+    const paneContext = {
+      activeSessionId: "primary-1",
+      chatContextRepository: claudeRepo,
+      extraPanes: [{ sessionId: "pane-extra-1", repositoryId: 2 }],
+    };
+    expect(
+      resolveEngineForSessionSpawn(projectSession, [claudeRepo, codexRepo], [], paneContext),
+    ).toBe("codex");
+    expect(
+      resolveRepositoryPathForSessionSpawn(projectSession, [claudeRepo, codexRepo], [], paneContext),
+    ).toBe("/work/eco/eco-ai");
+  });
+
+  test("spawn resolver honors primary pane chatContext for project-root session", () => {
+    const codexRepo = repo({
+      id: 2,
+      name: "eco-ai",
+      path: "/work/eco/eco-ai",
+      executionEngine: "codex",
+    });
+    const projectSession = {
+      id: "primary-1",
+      repositoryPath: "/work/eco",
+      repositoryName: "Project: eco",
+    };
+    const paneContext = {
+      activeSessionId: "primary-1",
+      chatContextRepository: codexRepo,
+      extraPanes: [{ sessionId: "pane-extra-1", repositoryId: 1 }],
+    };
+    expect(
+      resolveEngineForSessionSpawn(projectSession, [codexRepo], [], paneContext),
+    ).toBe("codex");
+  });
+
+  test("resolveSessionPaneContextRepository prefers extra slot over primary chat context", () => {
+    const claudeRepo = repo({ id: 1, executionEngine: "claude" });
+    const codexRepo = repo({ id: 2, path: "/repo/codex", executionEngine: "codex" });
+    expect(
+      resolveSessionPaneContextRepository(
+        { id: "extra", repositoryPath: "/work/eco", repositoryName: "Project: eco" },
+        [claudeRepo, codexRepo],
+        [],
+        {
+          activeSessionId: "primary",
+          chatContextRepository: claudeRepo,
+          extraPanes: [{ sessionId: "extra", repositoryId: 2 }],
+        },
+      ),
+    ).toEqual(codexRepo);
   });
 
   test("resolveEngineForSession matches composer when project session uses sidebar repo", () => {

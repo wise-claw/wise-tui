@@ -17,6 +17,7 @@ import {
 import { buildConnectionKindMenuItems } from "./ClaudeConnectionKindChip";
 import { ExecutionEnvironmentDropdownHeader } from "./ExecutionEnvironmentDropdownHeader";
 import { buildSessionExecutionEngineMenuItems } from "./SessionExecutionEngineChip";
+import { useComposerActiveProxyRoute } from "../../hooks/useComposerActiveProxyRoute";
 
 interface Props {
   engine: SessionExecutionEngine;
@@ -81,6 +82,7 @@ export function ComposerRuntimeSettingsTrigger({
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
   const engine = normalizeSessionExecutionEngine(engineProp);
+  const activeProxyRoute = useComposerActiveProxyRoute(engine);
 
   const showEngine =
     (codexAvailable || cursorAvailable || geminiAvailable || opencodeAvailable) &&
@@ -101,11 +103,18 @@ export function ComposerRuntimeSettingsTrigger({
     if (showEngine) {
       parts.push(`执行引擎：${SESSION_EXECUTION_ENGINE_LABELS[engine].title}`);
     }
+    if (activeProxyRoute) {
+      parts.push(`路由：${activeProxyRoute.label}`);
+      parts.push(activeProxyRoute.detail);
+      if (activeProxyRoute.attentionMessage) {
+        parts.push(activeProxyRoute.attentionMessage);
+      }
+    }
     if (showConnection) {
       parts.push(`连接方式：${CLAUDE_CONNECTION_KIND_LABELS[resolvedConnectionKind].title}`);
     }
     return parts.length > 0 ? `${parts.join(" · ")}；点击配置` : "运行时配置";
-  }, [engine, resolvedConnectionKind, showConnection, showEngine]);
+  }, [activeProxyRoute, engine, resolvedConnectionKind, showConnection, showEngine]);
 
   const menuItems = useMemo((): MenuProps["items"] => {
     const items: MenuProps["items"] = [];
@@ -225,7 +234,9 @@ export function ComposerRuntimeSettingsTrigger({
           type="button"
           className={`app-composer-runtime-settings-btn${
             hasActiveOverride ? " app-composer-runtime-settings-btn--active" : ""
-          }${engineLabel ? " app-composer-runtime-settings-btn--with-engine" : ""}`}
+          }${engineLabel ? " app-composer-runtime-settings-btn--with-engine" : ""}${
+            activeProxyRoute ? " app-composer-runtime-settings-btn--proxy-route" : ""
+          }${activeProxyRoute?.needsAttention ? " app-composer-runtime-settings-btn--proxy-warn" : ""}`}
           aria-label={tooltip}
           aria-haspopup="menu"
           aria-expanded={menuOpen}
@@ -234,6 +245,11 @@ export function ComposerRuntimeSettingsTrigger({
           <RuntimeSettingsIcon />
           {engineLabel ? (
             <span className="app-composer-runtime-settings-btn__engine-label">{engineLabel}</span>
+          ) : null}
+          {activeProxyRoute ? (
+            <span className="app-composer-runtime-settings-btn__proxy-badge" aria-hidden>
+              代理
+            </span>
           ) : null}
         </button>
       </HoverHint>

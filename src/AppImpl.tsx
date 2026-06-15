@@ -36,9 +36,11 @@ import {
 import { runWhenIdle } from "./utils/deferIdle";
 import { isSessionBoundAsRepositoryMain } from "./utils/repositoryMainSessionBinding";
 import {
-  resolveEngineForSession,
-  resolveRepositoryPathForSessionExecution,
+  resolveEngineForSessionSpawn,
+  resolveRepositoryPathForSessionSpawn,
+  type SessionPaneSpawnContext,
 } from "./utils/sessionExecutionEngine";
+import { resolveChatContextRepository } from "./utils/workspaceSelectionState";
 import {
   capWorkflowTaskEvents,
   collectLiveWorkflowTaskIds,
@@ -791,38 +793,6 @@ export default function App() {
   const geminiAvailable = useAgentRegistryGeminiAvailable();
   const opencodeAvailable = useAgentRegistryOpencodeAvailable();
 
-  const activeRepositoryIdLatestRef = useRef(activeRepositoryId);
-  activeRepositoryIdLatestRef.current = activeRepositoryId;
-
-  useEffect(() => {
-    resolveExecutionEngineRef.current = (session) => {
-      const repos = repositoriesLatestRef.current;
-      const activeRepo =
-        activeRepositoryIdLatestRef.current != null
-          ? repos.find((item) => item.id === activeRepositoryIdLatestRef.current) ?? null
-          : null;
-      return resolveEngineForSession(
-        session,
-        repos,
-        employeesLatestRef.current,
-        activeRepo,
-      );
-    };
-    resolveExecutionRepositoryPathRef.current = (session) => {
-      const repos = repositoriesLatestRef.current;
-      const activeRepo =
-        activeRepositoryIdLatestRef.current != null
-          ? repos.find((item) => item.id === activeRepositoryIdLatestRef.current) ?? null
-          : null;
-      return resolveRepositoryPathForSessionExecution(
-        session,
-        repos,
-        employeesLatestRef.current,
-        activeRepo,
-      );
-    };
-  });
-
   const handleUpdateEmployeeExecutionEngine = useCallback(
     async (employeeId: string, engine: import("./types").SessionExecutionEngine) => {
       const row = employees.find((e) => e.id === employeeId);
@@ -1119,6 +1089,65 @@ export default function App() {
   );
   const activeSessionIdLatestRef = useRef(activeSessionId);
   activeSessionIdLatestRef.current = activeSessionId;
+
+  const extraPanesLatestRef = useRef(extraPanes);
+  extraPanesLatestRef.current = extraPanes;
+  const activeRepositoryIdLatestRef = useRef(activeRepositoryId);
+  activeRepositoryIdLatestRef.current = activeRepositoryId;
+  const activeProjectIdLatestRef = useRef(activeProjectId);
+  activeProjectIdLatestRef.current = activeProjectId;
+  const activeWorkspaceFocusLatestRef = useRef(activeWorkspaceFocus);
+  activeWorkspaceFocusLatestRef.current = activeWorkspaceFocus;
+  const projectsLatestRef = useRef(projects);
+  projectsLatestRef.current = projects;
+
+  useEffect(() => {
+    const buildSessionPaneSpawnContext = (): SessionPaneSpawnContext => {
+      const activeId = activeSessionIdLatestRef.current?.trim() ?? "";
+      const activeSession = activeId
+        ? sessionsLatestRef.current.find((item) => item.id === activeId) ?? null
+        : null;
+      const activeRepository =
+        activeRepositoryIdLatestRef.current != null
+          ? repositoriesLatestRef.current.find((item) => item.id === activeRepositoryIdLatestRef.current) ??
+            null
+          : null;
+      const activeProject =
+        activeProjectIdLatestRef.current != null
+          ? projectsLatestRef.current.find((item) => item.id === activeProjectIdLatestRef.current) ?? null
+          : null;
+      const chatContextRepository = activeSession
+        ? resolveChatContextRepository({
+            activeRepository,
+            activeProject,
+            activeWorkspaceFocus: activeWorkspaceFocusLatestRef.current,
+            repositories: repositoriesLatestRef.current,
+            sessionRepositoryPath: activeSession.repositoryPath,
+            sessionRepositoryName: activeSession.repositoryName,
+          })
+        : null;
+      return {
+        activeSessionId: activeId || null,
+        chatContextRepository,
+        extraPanes: extraPanesLatestRef.current,
+      };
+    };
+
+    resolveExecutionEngineRef.current = (session) =>
+      resolveEngineForSessionSpawn(
+        session,
+        repositoriesLatestRef.current,
+        employeesLatestRef.current,
+        buildSessionPaneSpawnContext(),
+      );
+    resolveExecutionRepositoryPathRef.current = (session) =>
+      resolveRepositoryPathForSessionSpawn(
+        session,
+        repositoriesLatestRef.current,
+        employeesLatestRef.current,
+        buildSessionPaneSpawnContext(),
+      );
+  });
 
   /** 与 ClaudeSessions 内 handleSwitchToSession 对齐：先同步项目+仓库再切会话，否则 activeSession 会因 path 不一致为空。 */
   const jumpToSessionWithRepository = useCallback(

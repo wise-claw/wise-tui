@@ -36,9 +36,10 @@ import {
 } from "../../utils/cursorModel";
 import {
   normalizeSessionExecutionEngine,
+  SESSION_EXECUTION_ENGINE_LABELS,
   type SessionExecutionEngine,
 } from "../../constants/sessionExecutionEngine";
-import { useComposerActiveProxyLabel } from "../../hooks/useComposerActiveProxyLabel";
+import { useComposerActiveProxyRoute } from "../../hooks/useComposerActiveProxyRoute";
 import { ClaudeModelTopbarPanelLazy } from "../ClaudeSessions/ClaudeModelTopbarPanel.lazy";
 import "../ClaudeSessions/ClaudeModelTopbarTrigger.css";
 import "./ComposerModelPicker.css";
@@ -90,26 +91,39 @@ function ModelPickerTriggerButton({
   modelBarTitle,
   expanded,
   disabled,
+  proxyRoute,
 }: {
   modelBarParts: { company: string; modelName: string };
   modelBarTitle: string;
   expanded: boolean;
   disabled?: boolean;
+  proxyRoute?: { needsAttention: boolean } | null;
 }) {
   return (
     <button
       type="button"
       className={
         "app-composer-model-picker__select" +
-        (expanded ? " app-composer-model-picker__select--open" : "")
+        (expanded ? " app-composer-model-picker__select--open" : "") +
+        (proxyRoute ? " app-composer-model-picker__select--proxy" : "") +
+        (proxyRoute?.needsAttention ? " app-composer-model-picker__select--proxy-warn" : "")
       }
       aria-haspopup="dialog"
-      aria-label={`当前模型：${modelBarTitle}`}
+      aria-label={proxyRoute ? `当前路由：${modelBarTitle}` : `当前模型：${modelBarTitle}`}
       aria-expanded={expanded}
       disabled={disabled}
       onMouseDown={stopSemiComposerPointerBubble}
     >
       <ModelPickerIcon />
+      {proxyRoute ? (
+        <span
+          className={
+            "app-composer-model-picker__proxy-dot" +
+            (proxyRoute.needsAttention ? " app-composer-model-picker__proxy-dot--warn" : "")
+          }
+          aria-hidden
+        />
+      ) : null}
       <ComposerModelPickerBarLabel
         company={modelBarParts.company}
         modelName={modelBarParts.modelName}
@@ -168,11 +182,6 @@ export function ComposerModelPicker({
   const [cursorMenuOpen, setCursorMenuOpen] = useState(false);
   const modelRef = useRef(model);
   modelRef.current = model;
-
-  const activeProxyLabel = useComposerActiveProxyLabel(
-    sessionExecutionEngine,
-    session.repositoryPath,
-  );
 
   const { store, setStore, loading: profileStoreLoading } = useModelProfileSwitcher(panelOpen);
 
@@ -320,9 +329,20 @@ export function ComposerModelPicker({
     return model;
   }, [cursorModelOptions, model, profileEngine, profileStoreRevision, isCursorEngine]);
 
+  const modelDisplayTitle = formatModelProfileDropdownPartsTitle(
+    splitFlatModelDropdownLabel(modelDisplayLabel),
+  );
+
+  const activeProxyRoute = useComposerActiveProxyRoute(sessionExecutionEngine, {
+    modelLabel: modelDisplayTitle,
+  });
+
   const modelBarParts = useMemo(() => {
-    if (activeProxyLabel) {
-      return { company: "", modelName: activeProxyLabel };
+    if (activeProxyRoute) {
+      return {
+        company: SESSION_EXECUTION_ENGINE_LABELS[sessionExecutionEngine].short,
+        modelName: activeProxyRoute.label,
+      };
     }
     const profileStore = getCachedModelProfileStore();
     if (profileEngine && profileStore) {
@@ -347,13 +367,9 @@ export function ComposerModelPicker({
       if (fromModelId) return splitFlatModelDropdownLabel(fromModelId);
     }
     return splitFlatModelDropdownLabel(modelDisplayLabel);
-  }, [activeProxyLabel, modelDisplayLabel, model, profileEngine, profileStoreRevision]);
+  }, [activeProxyRoute, modelDisplayLabel, model, profileEngine, profileStoreRevision, sessionExecutionEngine]);
 
-  const modelBarTitle = activeProxyLabel
-    ? `${activeProxyLabel} · 模型：${formatModelProfileDropdownPartsTitle(
-        splitFlatModelDropdownLabel(modelDisplayLabel),
-      )}`
-    : formatModelProfileDropdownPartsTitle(modelBarParts);
+  const modelBarTitle = activeProxyRoute?.tooltip ?? modelDisplayTitle;
 
   const handlePanelOpenChange = useCallback((next: boolean) => {
     setPanelOpen(next);
@@ -380,6 +396,7 @@ export function ComposerModelPicker({
       modelBarTitle={modelBarTitle}
       expanded={isCursorEngine ? cursorMenuOpen : panelOpen}
       disabled={disabled}
+      proxyRoute={activeProxyRoute}
     />
   );
 
@@ -466,7 +483,7 @@ export function ComposerModelPicker({
           popupRender={() => modelPanelOverlay}
         >
           <HoverHint
-            title={activeProxyLabel ? `${activeProxyLabel} · 点击切换模型` : "模型切换"}
+            title={activeProxyRoute?.tooltip ?? "模型切换"}
             placement="top"
             open={panelOpen ? false : undefined}
           >

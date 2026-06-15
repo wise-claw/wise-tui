@@ -45,6 +45,41 @@
   opacity: 0.45;
 }
 
+.app-composer-model-picker__select--proxy {
+  color: color-mix(in srgb, var(--ant-color-primary) 82%, var(--ant-color-text-secondary));
+}
+
+.app-composer-model-picker__select--proxy-warn {
+  color: var(--ant-color-warning);
+}
+
+.app-composer-model-picker__select--proxy:hover:not(:disabled) {
+  color: color-mix(in srgb, var(--ant-color-primary) 92%, var(--ant-color-text));
+}
+
+.app-composer-model-picker__select--proxy .app-composer-model-picker-bar-label__company {
+  color: color-mix(in srgb, var(--ant-color-primary) 70%, var(--ant-color-text-tertiary));
+}
+
+.app-composer-model-picker__select--proxy .app-composer-model-picker-bar-label__model {
+  color: color-mix(in srgb, var(--ant-color-primary) 88%, var(--ant-color-text));
+  font-weight: 600;
+}
+
+.app-composer-model-picker__proxy-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 999px;
+  flex-shrink: 0;
+  background: var(--ant-color-success);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ant-color-success) 35%, transparent);
+}
+
+.app-composer-model-picker__proxy-dot--warn {
+  background: var(--ant-color-warning);
+  box-shadow: 0 0 0 1px color-mix(in srgb, var(--ant-color-warning) 35%, transparent);
+}
+
 .app-composer-model-picker__select--open .app-composer-model-picker__chevron {
   opacity: 1;
 }

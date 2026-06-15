@@ -872,6 +872,30 @@
   color: var(--ant-color-primary);
 }
 
+.app-composer-runtime-settings-btn--proxy-route {
+  max-width: 196px;
+}
+
+.app-composer-runtime-settings-btn--proxy-route.app-composer-runtime-settings-btn--with-engine {
+  padding-right: 2px;
+}
+
+.app-composer-runtime-settings-btn__proxy-badge {
+  flex-shrink: 0;
+  padding: 0 4px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 600;
+  line-height: 14px;
+  color: color-mix(in srgb, var(--ant-color-primary) 88%, var(--ant-color-text));
+  background: color-mix(in srgb, var(--ant-color-primary-bg) 88%, transparent);
+}
+
+.app-composer-runtime-settings-btn--proxy-warn .app-composer-runtime-settings-btn__proxy-badge {
+  color: var(--ant-color-warning);
+  background: color-mix(in srgb, var(--ant-color-warning-bg) 88%, transparent);
+}
+
 .app-composer-runtime-settings-btn:disabled {
   opacity: 0.45;
   cursor: not-allowed;
