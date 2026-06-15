@@ -41,13 +41,29 @@ import {
   serializeCodexProfileEnvelope,
   validateCodexProfileDraft,
 } from "../../utils/codexProfileEnvelope";
+import {
+  extractClaudeQuickConfig,
+  extractCodexQuickConfig,
+  tryMergeClaudeQuickConfig,
+  tryMergeCodexQuickConfig,
+  type ModelProfileQuickConfig,
+} from "../../utils/modelProfileQuickConfig";
 import { ClaudeSettingsJsonEditor } from "./ClaudeSettingsJsonEditor";
 import { CodexProfileSettingsEditor } from "./CodexProfileSettingsEditor";
+import {
+  EMPTY_MODEL_PROFILE_QUICK_CONFIG,
+  ModelProfileQuickConfigFields,
+} from "./ModelProfileQuickConfigFields";
 import { ModelProfileSortableList } from "./ModelProfileSortableList";
 import "./ClaudeModelTopbarTrigger.css";
 
 /** 高于模型切换 Popover/Dropdown（1200），保证编辑/新增 Modal 叠在其上 */
 const MODEL_PROFILE_MODAL_Z_INDEX = 1300;
+const MODEL_PROFILE_JSON_EDITOR_HEIGHT = 220;
+const MODEL_PROFILE_MODAL_PROPS = {
+  centered: false as const,
+  rootClassName: "app-claude-model-topbar-modal-root",
+};
 
 interface Props {
   store: ClaudeModelProfileStoreView | null;
@@ -137,6 +153,90 @@ export function ClaudeModelTopbarPanel({
   const [applyingProfileId, setApplyingProfileId] = useState<string | null>(null);
   const [reordering, setReordering] = useState(false);
   const [autoFailoverSaving, setAutoFailoverSaving] = useState(false);
+
+  const addQuickConfigSource = useMemo((): ModelProfileQuickConfig => {
+    if (panelEngine === "codex") {
+      return extractCodexQuickConfig(addCodexAuthJson, addCodexConfigToml);
+    }
+    if (panelEngine === "claude") {
+      return extractClaudeQuickConfig(addSettingsJson);
+    }
+    return EMPTY_MODEL_PROFILE_QUICK_CONFIG;
+  }, [addCodexAuthJson, addCodexConfigToml, addSettingsJson, panelEngine]);
+
+  const configQuickConfigSource = useMemo((): ModelProfileQuickConfig => {
+    if (!configProfile) return EMPTY_MODEL_PROFILE_QUICK_CONFIG;
+    const engine = normalizeModelProfileEngine(configProfile.engine);
+    if (engine === "codex") {
+      return extractCodexQuickConfig(configCodexAuthJson, configCodexConfigToml);
+    }
+    if (engine === "claude") {
+      return extractClaudeQuickConfig(settingsDraft);
+    }
+    return EMPTY_MODEL_PROFILE_QUICK_CONFIG;
+  }, [configCodexAuthJson, configCodexConfigToml, configProfile, settingsDraft]);
+
+  const applyAddQuickConfig = useCallback(
+    (patch: ModelProfileQuickConfig): boolean => {
+      const model = patch.model.trim();
+      if (panelEngine === "codex") {
+        const merged = tryMergeCodexQuickConfig(addCodexAuthJson, addCodexConfigToml, patch);
+        if (!merged.ok) {
+          message.warning(merged.error);
+          return false;
+        }
+        setAddCodexAuthJson(merged.value.authJson);
+        setAddCodexConfigToml(merged.value.configToml);
+      } else if (panelEngine === "claude") {
+        const merged = tryMergeClaudeQuickConfig(addSettingsJson, patch);
+        if (!merged.ok) {
+          message.warning(merged.error);
+          return false;
+        }
+        setAddSettingsJson(merged.value);
+      } else {
+        return false;
+      }
+      if (model && !addName.trim()) {
+        setAddName(model);
+      }
+      message.success("快捷配置已写入", 1.2);
+      return true;
+    },
+    [addCodexAuthJson, addCodexConfigToml, addName, addSettingsJson, panelEngine],
+  );
+
+  const applyConfigQuickConfig = useCallback(
+    (patch: ModelProfileQuickConfig): boolean => {
+      if (!configProfile) return false;
+      const model = patch.model.trim();
+      const engine = normalizeModelProfileEngine(configProfile.engine);
+      if (engine === "codex") {
+        const merged = tryMergeCodexQuickConfig(configCodexAuthJson, configCodexConfigToml, patch);
+        if (!merged.ok) {
+          message.warning(merged.error);
+          return false;
+        }
+        setConfigCodexAuthJson(merged.value.authJson);
+        setConfigCodexConfigToml(merged.value.configToml);
+      } else if (engine === "claude") {
+        const merged = tryMergeClaudeQuickConfig(settingsDraft, patch);
+        if (!merged.ok) {
+          message.warning(merged.error);
+          return false;
+        }
+        setSettingsDraft(merged.value);
+      } else {
+        return false;
+      }
+      if (model && !configName.trim()) {
+        setConfigName(model);
+      }
+      message.success("快捷配置已写入", 1.2);
+      return true;
+    },
+    [configCodexAuthJson, configCodexConfigToml, configName, configProfile, settingsDraft],
+  );
 
   const loadGlobalSettingsIntoAdd = useCallback(async () => {
     setAddLoadingJson(true);
@@ -575,9 +675,8 @@ export function ClaudeModelTopbarPanel({
         open={addOpen}
         width={modalWidth()}
         zIndex={MODEL_PROFILE_MODAL_Z_INDEX}
-        classNames={
-          panelEngine === "codex" ? { body: "app-claude-model-topbar-modal__body--codex" } : undefined
-        }
+        className="app-claude-model-topbar-modal"
+        {...MODEL_PROFILE_MODAL_PROPS}
         onCancel={() => setAddOpen(false)}
         onOk={() => void handleAdd()}
         okText="保存"
@@ -585,40 +684,49 @@ export function ClaudeModelTopbarPanel({
         confirmLoading={addSaving}
         destroyOnHidden
       >
-        <div className="app-claude-model-topbar-panel__form">
-          <div className="app-claude-model-topbar-panel__form-row">
+        <div className="app-claude-model-topbar-panel__form app-claude-model-topbar-panel__form--modal">
+          <div className="app-claude-model-topbar-panel__form-row app-claude-model-topbar-panel__form-row--meta">
             <div className="app-claude-model-topbar-panel__form-field">
               <label className="app-claude-model-topbar-panel__label">公司</label>
               <Input
+                size="small"
                 value={addCompany}
                 onChange={(e) =>
                   setAddCompany(normalizeModelProfileLabelInput(e.target.value))
                 }
-                placeholder="例如：百炼 / Bailian-v2.0"
+                placeholder="百炼"
                 maxLength={80}
               />
             </div>
             <div className="app-claude-model-topbar-panel__form-field">
               <label className="app-claude-model-topbar-panel__label">名称</label>
               <Input
+                size="small"
                 value={addName}
                 onChange={(e) => setAddName(normalizeModelProfileLabelInput(e.target.value))}
-                placeholder="例如：Qwen-3.6 / glm-5.1"
+                placeholder="glm-5.1"
                 maxLength={80}
               />
             </div>
+            <div className="app-claude-model-topbar-panel__form-field">
+              <label className="app-claude-model-topbar-panel__label">官网</label>
+              <Input
+                size="small"
+                value={addOfficialWebsite}
+                onChange={(e) =>
+                  setAddOfficialWebsite(normalizeModelProfileOfficialWebsiteInput(e.target.value))
+                }
+                placeholder="可选"
+                maxLength={512}
+              />
+            </div>
           </div>
-          <div className="app-claude-model-topbar-panel__form-field">
-            <label className="app-claude-model-topbar-panel__label">官网地址</label>
-            <Input
-              value={addOfficialWebsite}
-              onChange={(e) =>
-                setAddOfficialWebsite(normalizeModelProfileOfficialWebsiteInput(e.target.value))
-              }
-              placeholder="例如：https://dashscope.aliyun.com（可选）"
-              maxLength={512}
+          {panelEngine === "claude" || panelEngine === "codex" ? (
+            <ModelProfileQuickConfigFields
+              sourceValue={addQuickConfigSource}
+              onApply={applyAddQuickConfig}
             />
-          </div>
+          ) : null}
           <div className="app-claude-model-topbar-panel__json-head">
             <div className="app-claude-model-topbar-panel__json-head-text">
               <label className="app-claude-model-topbar-panel__label">
@@ -660,6 +768,7 @@ export function ClaudeModelTopbarPanel({
           </div>
           {panelEngine === "codex" ? (
             <CodexProfileSettingsEditor
+              compact
               authJson={addCodexAuthJson}
               configToml={addCodexConfigToml}
               onAuthJsonChange={setAddCodexAuthJson}
@@ -669,7 +778,7 @@ export function ClaudeModelTopbarPanel({
             <ClaudeSettingsJsonEditor
               value={addSettingsJson}
               onChange={setAddSettingsJson}
-              height={360}
+              height={MODEL_PROFILE_JSON_EDITOR_HEIGHT}
             />
           )}
         </div>
@@ -680,9 +789,8 @@ export function ClaudeModelTopbarPanel({
         open={configOpen}
         width={modalWidth()}
         zIndex={MODEL_PROFILE_MODAL_Z_INDEX}
-        classNames={
-          editingCodexProfile ? { body: "app-claude-model-topbar-modal__body--codex" } : undefined
-        }
+        className="app-claude-model-topbar-modal"
+        {...MODEL_PROFILE_MODAL_PROPS}
         onCancel={() => {
           setConfigOpen(false);
           setConfigProfile(null);
@@ -693,44 +801,55 @@ export function ClaudeModelTopbarPanel({
         confirmLoading={savingConfig}
         destroyOnHidden
       >
-        <div className="app-claude-model-topbar-panel__form">
-          <div className="app-claude-model-topbar-panel__form-row">
+        <div className="app-claude-model-topbar-panel__form app-claude-model-topbar-panel__form--modal">
+          <div className="app-claude-model-topbar-panel__form-row app-claude-model-topbar-panel__form-row--meta">
             <div className="app-claude-model-topbar-panel__form-field">
               <label className="app-claude-model-topbar-panel__label">公司</label>
               <Input
+                size="small"
                 value={configCompany}
                 onChange={(e) =>
                   setConfigCompany(normalizeModelProfileLabelInput(e.target.value))
                 }
-                placeholder="例如：百炼 / Bailian-v2.0"
+                placeholder="百炼"
                 maxLength={80}
               />
             </div>
             <div className="app-claude-model-topbar-panel__form-field">
               <label className="app-claude-model-topbar-panel__label">名称</label>
               <Input
+                size="small"
                 value={configName}
                 onChange={(e) =>
                   setConfigName(normalizeModelProfileLabelInput(e.target.value))
                 }
-                placeholder="例如：Qwen-3.6 / glm-5.1"
+                placeholder="glm-5.1"
                 maxLength={80}
               />
             </div>
+            <div className="app-claude-model-topbar-panel__form-field">
+              <label className="app-claude-model-topbar-panel__label">官网</label>
+              <Input
+                size="small"
+                value={configOfficialWebsite}
+                onChange={(e) =>
+                  setConfigOfficialWebsite(
+                    normalizeModelProfileOfficialWebsiteInput(e.target.value),
+                  )
+                }
+                placeholder="可选"
+                maxLength={512}
+              />
+            </div>
           </div>
-          <div className="app-claude-model-topbar-panel__form-field">
-            <label className="app-claude-model-topbar-panel__label">官网地址</label>
-            <Input
-              value={configOfficialWebsite}
-              onChange={(e) =>
-                setConfigOfficialWebsite(
-                  normalizeModelProfileOfficialWebsiteInput(e.target.value),
-                )
-              }
-              placeholder="例如：https://dashscope.aliyun.com（可选）"
-              maxLength={512}
+          {configProfile &&
+          (normalizeModelProfileEngine(configProfile.engine) === "claude" ||
+            normalizeModelProfileEngine(configProfile.engine) === "codex") ? (
+            <ModelProfileQuickConfigFields
+              sourceValue={configQuickConfigSource}
+              onApply={applyConfigQuickConfig}
             />
-          </div>
+          ) : null}
           <div className="app-claude-model-topbar-panel__json-head">
             <div className="app-claude-model-topbar-panel__json-head-text">
               <label className="app-claude-model-topbar-panel__label">
@@ -759,6 +878,7 @@ export function ClaudeModelTopbarPanel({
           </div>
           {editingCodexProfile ? (
             <CodexProfileSettingsEditor
+              compact
               authJson={configCodexAuthJson}
               configToml={configCodexConfigToml}
               onAuthJsonChange={setConfigCodexAuthJson}
@@ -768,7 +888,7 @@ export function ClaudeModelTopbarPanel({
             <ClaudeSettingsJsonEditor
               value={settingsDraft}
               onChange={setSettingsDraft}
-              height={360}
+              height={MODEL_PROFILE_JSON_EDITOR_HEIGHT}
             />
           )}
         </div>

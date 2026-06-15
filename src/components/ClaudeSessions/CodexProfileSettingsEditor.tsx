@@ -65,6 +65,7 @@ interface Props {
   configToml: string;
   onAuthJsonChange: (value: string) => void;
   onConfigTomlChange: (value: string) => void;
+  compact?: boolean;
 }
 
 export function CodexProfileSettingsEditor({
@@ -72,35 +73,48 @@ export function CodexProfileSettingsEditor({
   configToml,
   onAuthJsonChange,
   onConfigTomlChange,
+  compact = false,
 }: Props) {
   const id = useId().replace(/:/g, "");
+  const authHeight = compact ? 72 : 112;
+  const configHeight = compact ? 128 : 200;
 
   return (
-    <div className="app-codex-profile-settings-editor">
+    <div
+      className={
+        compact
+          ? "app-codex-profile-settings-editor app-codex-profile-settings-editor--compact"
+          : "app-codex-profile-settings-editor"
+      }
+    >
       <section className="app-codex-profile-settings-editor__section">
         <div className="app-codex-profile-settings-editor__section-head">
           <label className="app-claude-model-topbar-panel__label">auth.json</label>
-          <span className="app-codex-profile-settings-editor__section-hint">API Key 与认证方式</span>
+          {!compact ? (
+            <span className="app-codex-profile-settings-editor__section-hint">API Key 与认证方式</span>
+          ) : null}
         </div>
         <MonacoTextEditor
           path={`wise-codex-auth-${id}.json`}
           language="json"
           value={authJson}
           onChange={onAuthJsonChange}
-          height={112}
+          height={authHeight}
         />
       </section>
       <section className="app-codex-profile-settings-editor__section">
         <div className="app-codex-profile-settings-editor__section-head">
           <label className="app-claude-model-topbar-panel__label">config.toml</label>
-          <span className="app-codex-profile-settings-editor__section-hint">模型、MCP 与项目信任等</span>
+          {!compact ? (
+            <span className="app-codex-profile-settings-editor__section-hint">模型、MCP 与项目信任等</span>
+          ) : null}
         </div>
         <MonacoTextEditor
           path={`wise-codex-config-${id}.toml`}
           language="toml"
           value={configToml}
           onChange={onConfigTomlChange}
-          height={200}
+          height={configHeight}
         />
       </section>
     </div>
