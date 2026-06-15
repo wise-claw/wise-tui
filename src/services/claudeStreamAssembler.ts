@@ -1,4 +1,5 @@
 import type { ClaudeMessage, ClaudeSession, MessagePart } from "../types";
+import { isToolOnlyUserMessage } from "../utils/claudeChatMessageDisplay";
 type ToolUsePart = Extract<MessagePart, { type: "tool_use" }>;
 
 /** 单轮助手消息中 text+reasoning 合计上限，避免流式拼接撑爆主线程内存 */
@@ -195,35 +196,98 @@ export function partitionStreamMessageParts(parts: MessagePart[]): {
   return { toolResults, streamParts };
 }
 
+function mergeToolUseWithUpdate(part: ToolUsePart, update: ToolUsePart): ToolUsePart {
+  return {
+    ...part,
+    ...update,
+    name: part.name.trim() ? part.name : update.name,
+    input: Object.keys(part.input ?? {}).length > 0 ? part.input : update.input,
+  };
+}
+
+function assistantMessageWithMergedToolParts(
+  message: ClaudeMessage,
+  updates: readonly ToolUsePart[],
+  matchedIds: Set<string>,
+): ClaudeMessage | null {
+  if (message.role !== "assistant") return null;
+  let touched = false;
+  const nextParts = message.parts.map((part) => {
+    if (part.type !== "tool_use") return part;
+    const update = updates.find((u) => u.id === part.id);
+    if (!update) return part;
+    touched = true;
+    matchedIds.add(part.id);
+    return mergeToolUseWithUpdate(part, update);
+  });
+  if (!touched) return null;
+  const textContent = nextParts
+    .filter((p): p is Extract<MessagePart, { type: "text" }> => p.type === "text")
+    .map((p) => p.text)
+    .join("");
+  return { ...message, parts: nextParts, content: textContent };
+}
+
+/** 将 tool_result 更新合并进已有 assistant 消息里对应的 tool_use（按 id）。 */
+export function applyToolResultPartsToMessages(
+  messages: readonly ClaudeMessage[],
+  updates: readonly ToolUsePart[],
+): { messages: ClaudeMessage[]; matchedIds: ReadonlySet<string> } {
+  if (updates.length === 0) {
+    return { messages: [...messages], matchedIds: new Set<string>() };
+  }
+  const matchedIds = new Set<string>();
+  let changed = false;
+  const nextMessages = messages.map((message) => {
+    const merged = assistantMessageWithMergedToolParts(message, updates, matchedIds);
+    if (!merged) return message;
+    changed = true;
+    return merged;
+  });
+  return { messages: changed ? nextMessages : [...messages], matchedIds };
+}
+
+/**
+ * JSONL 回放：将紧随 assistant tool_use 的纯 tool_result 用户行 fold 进对应 tool_use，
+ * 与流式 `applyToolResultPartsToSession` 行为对齐。
+ */
+export function foldToolResultUserMessagesIntoAssistant(messages: readonly ClaudeMessage[]): ClaudeMessage[] {
+  let result: ClaudeMessage[] = [];
+  for (const msg of messages) {
+    if (!isToolOnlyUserMessage(msg)) {
+      result.push(msg);
+      continue;
+    }
+    const updates = msg.parts.filter(
+      (part): part is ToolUsePart => part.type === "tool_use" && isToolResultUpdatePart(part),
+    );
+    if (updates.length === 0) {
+      result.push(msg);
+      continue;
+    }
+    const applied = applyToolResultPartsToMessages(result, updates);
+    result = applied.messages;
+    const orphans = updates.filter((update) => !applied.matchedIds.has(update.id));
+    if (orphans.length === 0) continue;
+    result.push({
+      ...msg,
+      parts: orphans,
+      content: orphans
+        .map((part) => part.output?.trim() || part.error?.trim() || "")
+        .filter(Boolean)
+        .join("\n\n"),
+    });
+  }
+  return result;
+}
+
 /** 将 stream-json 中的 tool_result 合并进历史 assistant 消息里对应的 tool_use（按 id）。 */
 export function applyToolResultPartsToSession(session: ClaudeSession, parts: MessagePart[]): ClaudeSession {
   const updates = parts.filter(isToolResultUpdatePart);
   if (updates.length === 0) return session;
-  let changed = false;
-  const messages = session.messages.map((message) => {
-    if (message.role !== "assistant") return message;
-    let touched = false;
-    const nextParts = message.parts.map((part) => {
-      if (part.type !== "tool_use") return part;
-      const update = updates.find((u) => u.id === part.id);
-      if (!update) return part;
-      touched = true;
-      return {
-        ...part,
-        ...update,
-        name: part.name.trim() ? part.name : update.name,
-        input: Object.keys(part.input ?? {}).length > 0 ? part.input : update.input,
-      };
-    });
-    if (!touched) return message;
-    changed = true;
-    const textContent = nextParts
-      .filter((p): p is Extract<MessagePart, { type: "text" }> => p.type === "text")
-      .map((p) => p.text)
-      .join("");
-    return { ...message, parts: nextParts, content: textContent };
-  });
-  return changed ? { ...session, messages } : session;
+  const { messages, matchedIds } = applyToolResultPartsToMessages(session.messages, updates);
+  if (matchedIds.size === 0) return session;
+  return { ...session, messages };
 }
 
 export function appendAssistantStreamParts(session: ClaudeSession, parts: MessagePart[]): ClaudeSession {

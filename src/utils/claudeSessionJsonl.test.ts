@@ -93,3 +93,117 @@ describe("parseClaudeSessionJsonlLines — Write tool diagnostic preservation", 
     expect(parseClaudeSessionJsonlLines(["", "  ", "not-json"])).toEqual([]);
   });
 });
+
+describe("parseClaudeSessionJsonlLines — tool_result fold into assistant tool_use", () => {
+  test("folds TaskUpdate tool_result into preceding assistant tool_use and drops user row", () => {
+    const assistantLine = JSON.stringify({
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "toolu_task_3",
+            name: "TaskUpdate",
+            input: { taskId: "3", status: "in_progress" },
+          },
+        ],
+      },
+      timestamp: 1,
+    });
+    const userLine = JSON.stringify({
+      type: "user",
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "toolu_task_3",
+            content: "Updated task #3 status",
+          },
+        ],
+      },
+      timestamp: 2,
+    });
+
+    const messages = parseClaudeSessionJsonlLines([assistantLine, userLine]);
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.role).toBe("assistant");
+    const part = messages[0]?.parts[0];
+    expect(part).toMatchObject({
+      type: "tool_use",
+      id: "toolu_task_3",
+      name: "TaskUpdate",
+      output: "Updated task #3 status",
+      status: "completed",
+    });
+  });
+
+  test("folds Bash tool_result and preserves command in input", () => {
+    const assistantLine = JSON.stringify({
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [
+          {
+            type: "tool_use",
+            id: "toolu_bash_1",
+            name: "Bash",
+            input: { command: "git status" },
+          },
+        ],
+      },
+      timestamp: 1,
+    });
+    const userLine = JSON.stringify({
+      type: "user",
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "toolu_bash_1",
+            content: "On branch main",
+          },
+        ],
+      },
+      timestamp: 2,
+    });
+
+    const messages = parseClaudeSessionJsonlLines([assistantLine, userLine]);
+    expect(messages).toHaveLength(1);
+    const part = messages[0]?.parts[0];
+    expect(part).toMatchObject({
+      type: "tool_use",
+      name: "Bash",
+      input: { command: "git status" },
+      output: "On branch main",
+    });
+  });
+
+  test("keeps orphan tool_result user row when no matching tool_use id", () => {
+    const userLine = JSON.stringify({
+      type: "user",
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "toolu_orphan",
+            content: "orphan output",
+          },
+        ],
+      },
+      timestamp: 1,
+    });
+
+    const messages = parseClaudeSessionJsonlLines([userLine]);
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.role).toBe("user");
+    expect(messages[0]?.parts[0]).toMatchObject({
+      type: "tool_use",
+      id: "toolu_orphan",
+      output: "orphan output",
+    });
+  });
+});

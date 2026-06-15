@@ -90,6 +90,52 @@ describe("buildChatMessageListRows", () => {
     expect(rows[0]!.kind === "message" && rows[0]!.mergedWithPrevious).toBe(false);
     expect(rows[1]!.kind === "message" && rows[1]!.mergedWithPrevious).toBe(true);
   });
+
+  test("folds absorbed tool_result user rows before building list rows", () => {
+    const messages = [
+      msg({
+        id: 1,
+        role: "assistant",
+        content: "",
+        parts: [
+          {
+            type: "tool_use",
+            id: "toolu_task_3",
+            name: "TaskUpdate",
+            input: { taskId: "3" },
+            status: "completed",
+          },
+        ],
+      }),
+      msg({
+        id: 2,
+        role: "user",
+        content: "Updated task #3 status",
+        parts: [
+          {
+            type: "tool_use",
+            id: "toolu_task_3",
+            name: "",
+            input: {},
+            output: "Updated task #3 status",
+            status: "completed",
+          },
+        ],
+      }),
+    ];
+    const rows = buildChatMessageListRows(messages, {
+      sessionStatus: "idle",
+      showListEndThinkingHint: false,
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.kind === "message" && rows[0]!.msg.role).toBe("assistant");
+    const part = rows[0]!.kind === "message" ? rows[0]!.msg.parts[0] : null;
+    expect(part).toMatchObject({
+      type: "tool_use",
+      name: "TaskUpdate",
+      output: "Updated task #3 status",
+    });
+  });
 });
 
 describe("tryPatchChatMessageListRowsTail", () => {

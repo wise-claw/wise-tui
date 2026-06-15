@@ -379,7 +379,11 @@ function ToolUseOutputBody({ part, streaming }: { part: ToolUsePart; streaming: 
 
   if (isCliTool) {
     if (!cliOnlyOutput) return null;
-    return <LinkifiedPre text={cliOnlyOutput} streaming={streaming} className="app-tool-output" />;
+    return (
+      <div className="app-tool-output-wrap app-tool-output-wrap--cli">
+        <LinkifiedPre text={cliOnlyOutput} streaming={streaming} className="app-tool-output app-tool-output--cli" />
+      </div>
+    );
   }
 
   if (shouldRenderOutputAsMarkdown(part)) {
@@ -412,6 +416,25 @@ function messagePartContentEqual(a: MessagePart, b: MessagePart): boolean {
   }
 }
 
+function shouldAutoExpandToolOutput(part: ToolUsePart): boolean {
+  if (part.status === "running") return false;
+  const text = part.output?.trim() ?? "";
+  if (!text || text.length > 280) return false;
+  const name = part.name.trim().toLowerCase();
+  return (
+    name === "edit" ||
+    name === "edit_file" ||
+    name === "write" ||
+    name === "write_file" ||
+    name === "read" ||
+    name === "read_file" ||
+    name === "view_file" ||
+    name === "taskupdate" ||
+    name === "tasklist" ||
+    name === "taskcreate"
+  );
+}
+
 const ToolUsePartDisplay = memo(function ToolUsePartDisplay({ part }: { part: ToolUsePart }) {
   const isSkill = isSkillToolPart(part);
   const info = useMemo(() => getToolDisplayInfo(part), [part]);
@@ -424,7 +447,11 @@ const ToolUsePartDisplay = memo(function ToolUsePartDisplay({ part }: { part: To
       (isBashOrExec && info.subtitle?.trim())
   );
   const [expanded, setExpanded] = useState(
-    isSkill ? false : part.status === "error" || Boolean(part.error?.trim()),
+    isSkill
+      ? false
+      : part.status === "error" ||
+          Boolean(part.error?.trim()) ||
+          shouldAutoExpandToolOutput(part),
   );
   const tags = useMemo(() => getToolMetaTags(part), [part]);
   const input = part.input as Record<string, unknown>;

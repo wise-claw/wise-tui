@@ -1,4 +1,5 @@
 import type { ClaudeMessage, ClaudeSession } from "../types";
+import { foldToolResultUserMessagesIntoAssistant } from "../services/claudeStreamAssembler";
 import {
   getMessageSenderGroupKey,
   hasRenderableChatMessageBody,
@@ -78,10 +79,11 @@ export function buildChatMessageListRows(
   messages: readonly ClaudeMessage[],
   options: ChatMessageListRowsBuildOptions,
 ): ChatMessageListRow[] {
+  const foldedMessages = foldToolResultUserMessagesIntoAssistant(messages);
   const rows: ChatMessageListRow[] = [];
 
-  for (let originalIndex = 0; originalIndex < messages.length; originalIndex += 1) {
-    const row = buildSingleChatMessageListRow(messages, originalIndex, options);
+  for (let originalIndex = 0; originalIndex < foldedMessages.length; originalIndex += 1) {
+    const row = buildSingleChatMessageListRow(foldedMessages, originalIndex, options);
     if (row) rows.push(row);
   }
 
@@ -111,22 +113,23 @@ export function tryPatchChatMessageListRowsTail(
     return [...prevRows];
   }
 
-  const lastMessageIndex = nextMessages.length - 1;
+  const nextFolded = foldToolResultUserMessagesIntoAssistant(nextMessages);
+  const lastMessageIndex = nextFolded.length - 1;
   const prefixRows: ChatMessageListMessageRow[] = [];
   for (const row of prevRows) {
     if (row.kind !== "message") continue;
     if (row.originalIndex === lastMessageIndex) continue;
-    if (row.msg !== nextMessages[row.originalIndex]) return null;
+    if (row.msg !== nextFolded[row.originalIndex]) return null;
     prefixRows.push(row);
   }
 
   let renderableBeforeLast = 0;
   for (let i = 0; i < lastMessageIndex; i += 1) {
-    if (hasRenderableChatMessageBody(nextMessages[i]!)) renderableBeforeLast += 1;
+    if (hasRenderableChatMessageBody(nextFolded[i]!)) renderableBeforeLast += 1;
   }
   if (prefixRows.length !== renderableBeforeLast) return null;
 
-  const lastRow = buildSingleChatMessageListRow(nextMessages, lastMessageIndex, options);
+  const lastRow = buildSingleChatMessageListRow(nextFolded, lastMessageIndex, options);
   const nextRows: ChatMessageListRow[] = lastRow ? [...prefixRows, lastRow] : [...prefixRows];
   if (options.showListEndThinkingHint) {
     nextRows.push({ kind: "thinking-hint", key: "thinking-hint" });

@@ -1,4 +1,5 @@
 import type { ClaudeMessage, MessagePart, TextPart, ToolUseDiagnostics, ToolUsePart } from "../types";
+import { foldToolResultUserMessagesIntoAssistant } from "../services/claudeStreamAssembler";
 import { normalizeClaudeUserMessageForDisplay, extractCommandNameBlock } from "./userMessageImportantInput";
 
 function parseTimestamp(v: unknown): number {
@@ -219,5 +220,5 @@ export function parseClaudeSessionJsonlLines(lines: string[]): ClaudeMessage[] {
     }
   }
 
-  return messages;
+  return foldToolResultUserMessagesIntoAssistant(messages);
 }

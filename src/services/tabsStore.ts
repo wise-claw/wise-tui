@@ -1,5 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
 import type { ClaudeSession, PersistedTabsState } from "../types";
+import { foldToolResultUserMessagesIntoAssistant } from "./claudeStreamAssembler";
 import { normalizeSessionRepositoryPath } from "../utils/sessionHistoryScope";
 import { getCurrentMainWorkspaceWindowLabel } from "./mainWindow";
 
@@ -14,7 +15,11 @@ function normalizePersistedSession(raw: unknown): ClaudeSession {
   if (v.connectionKind === "streaming" || v.connectionKind === "oneshot") {
     out.connectionKind = v.connectionKind;
   }
-  return out as unknown as ClaudeSession;
+  const session = out as unknown as ClaudeSession;
+  if (Array.isArray(session.messages) && session.messages.length > 0) {
+    return { ...session, messages: foldToolResultUserMessagesIntoAssistant(session.messages) };
+  }
+  return session;
 }
 
 export async function loadSessionTabsState(): Promise<PersistedTabsState | null> {

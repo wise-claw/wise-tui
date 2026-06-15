@@ -4678,6 +4678,7 @@
 
 .app-claude-messages .app-message-parts__tool-group .app-message-part--tool .app-message-part-content {
   padding: 4px 6px;
+  min-width: 0;
 }
 
 .app-claude-messages .app-message-part--tool-error {
@@ -4704,6 +4705,7 @@
 .app-claude-messages .app-message-part--tool .app-message-part-content {
   padding: 6px 8px;
   background: color-mix(in srgb, var(--ant-color-fill-quaternary) 22%, transparent);
+  min-width: 0;
 }
 
 .app-message-part--expanded .app-message-part-subtitle {
@@ -5052,6 +5054,7 @@ button.app-message-part-header:disabled:hover {
   flex-direction: column;
   gap: 4px;
   padding: 5px 8px;
+  min-width: 0;
 }
 
 .app-tool-error {
@@ -5127,6 +5130,38 @@ button.app-message-part-header:disabled:hover {
   box-shadow: none;
 }
 
+.app-tool-output-wrap {
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.app-tool-output-wrap--cli {
+  max-height: 180px;
+  overflow: auto;
+  border: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 52%, transparent);
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 42%, transparent);
+}
+
+.app-tool-output-wrap--cli::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.app-tool-output-wrap--cli::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.app-tool-output-wrap--cli::-webkit-scrollbar-thumb {
+  background: var(--ant-color-border-secondary);
+  border-radius: 4px;
+}
+
+.app-tool-output-wrap--cli::-webkit-scrollbar-thumb:hover {
+  background: var(--ant-color-border);
+}
+
 .app-tool-output {
   background: color-mix(in srgb, var(--ant-color-fill-quaternary) 42%, transparent) !important;
   border: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 52%, transparent) !important;
@@ -5135,12 +5170,28 @@ button.app-message-part-header:disabled:hover {
   font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
   font-size: 12px;
   line-height: 1.45;
-  overflow-x: auto;
-  white-space: pre;
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
+  overflow-x: hidden;
   color: var(--ant-color-text) !important;
   max-height: 180px;
   overflow-y: auto;
   margin: 0;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+}
+
+.app-tool-output--cli {
+  background: transparent !important;
+  border: none !important;
+  border-radius: 0;
+  max-height: none;
+  overflow: visible;
+  white-space: pre;
+  word-break: normal;
+  overflow-wrap: normal;
 }
 
 .app-tool-output::-webkit-scrollbar {
@@ -5170,11 +5221,23 @@ button.app-message-part-header:disabled:hover {
   border-radius: 4px;
   padding: 6px 10px;
   max-height: 240px;
+  overflow-x: hidden;
   overflow-y: auto;
   margin: 0;
   box-sizing: border-box;
+  min-width: 0;
+  max-width: 100%;
+  word-break: break-word;
+  overflow-wrap: anywhere;
   font-size: 13px !important;
   line-height: 1.55 !important;
+}
+
+.app-tool-output-markdown .app-markdown-host pre,
+.app-tool-output-markdown .app-markdown-host code {
+  white-space: pre-wrap;
+  word-break: break-word;
+  overflow-wrap: anywhere;
 }
 
 .app-tool-output-markdown::-webkit-scrollbar {
