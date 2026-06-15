@@ -1,4 +1,4 @@
-import type { ClaudeMessage, MessagePart, TextPart, ToolUsePart } from "../types";
+import type { ClaudeMessage, MessagePart, TextPart, ToolUseDiagnostics, ToolUsePart } from "../types";
 import { normalizeClaudeUserMessageForDisplay, extractCommandNameBlock } from "./userMessageImportantInput";
 
 function parseTimestamp(v: unknown): number {
@@ -8,6 +8,25 @@ function parseTimestamp(v: unknown): number {
     return Number.isNaN(d) ? Date.now() : d;
   }
   return Date.now();
+}
+
+function isWriteToolName(name: unknown): name is string {
+  return typeof name === "string" && name.trim().toLowerCase() === "write";
+}
+
+/** Same predicate as the live stream parser; reused so JSONL reloads keep the diagnostic. */
+function describeWriteInputDefect(input: unknown): {
+  suspected: boolean;
+  rawInput?: Record<string, unknown>;
+} {
+  if (input === null || input === undefined) return { suspected: true };
+  if (typeof input !== "object" || Array.isArray(input)) return { suspected: false };
+  const obj = input as Record<string, unknown>;
+  if (Object.keys(obj).length === 0) return { suspected: true, rawInput: obj };
+  if (obj.file_path === undefined || obj.file_path === null || obj.file_path === "") {
+    return { suspected: true, rawInput: obj };
+  }
+  return { suspected: false };
 }
 
 function blocksToParts(content: unknown, textMax = 12_000): MessagePart[] {
@@ -24,15 +43,31 @@ function blocksToParts(content: unknown, textMax = 12_000): MessagePart[] {
       const text = block.thinking.length > textMax ? block.thinking.slice(-textMax) : block.thinking;
       parts.push({ type: "reasoning", text });
     } else if (t === "tool_use") {
+      const name = typeof block.name === "string" ? block.name : "unknown";
+      const input =
+        typeof block.input === "object" && block.input !== null && !Array.isArray(block.input)
+          ? (block.input as Record<string, unknown>)
+          : {};
+      let diagnostics: ToolUseDiagnostics | undefined;
+      if (isWriteToolName(name)) {
+        const defect = describeWriteInputDefect(input);
+        if (defect.suspected) {
+          diagnostics = {
+            writeMissingFilePath: {
+              suspected: true,
+              confirmed: false,
+              ...(defect.rawInput ? { rawInput: defect.rawInput } : {}),
+            },
+          };
+        }
+      }
       parts.push({
         type: "tool_use",
         id: typeof block.id === "string" ? block.id : `tool_${parts.length}`,
-        name: typeof block.name === "string" ? block.name : "unknown",
-        input:
-          typeof block.input === "object" && block.input !== null && !Array.isArray(block.input)
-            ? (block.input as Record<string, unknown>)
-            : {},
+        name,
+        input,
         status: "completed",
+        ...(diagnostics ? { diagnostics } : {}),
       });
     }
   }

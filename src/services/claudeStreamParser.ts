@@ -1,5 +1,68 @@
-import type { MessagePart, ToolUsePart } from "../types";
+import type { MessagePart, ToolUsePart, ToolUseDiagnostics } from "../types";
 import { unwrapClaudeStreamLineRoot } from "../notifications/streamIngest";
+
+/** Built-in `Write` tool name is matched case-insensitively. */
+function isWriteToolName(name: unknown): name is string {
+  return typeof name === "string" && name.trim().toLowerCase() === "write";
+}
+
+/**
+ * Inspect a tool_use `input` and decide whether it looks like the
+ * "model produced a `Write` call but forgot `file_path`" defect.
+ * Returns `suspected: true` when `input` is empty / missing object / has
+ * no `file_path` key. We deliberately keep scope tight: only `Write`,
+ * only the `file_path` field.
+ */
+export function describeWriteInputDefect(input: unknown): {
+  suspected: boolean;
+  rawInput?: Record<string, unknown>;
+} {
+  if (input === null || input === undefined) {
+    return { suspected: true };
+  }
+  if (typeof input !== "object" || Array.isArray(input)) {
+    return { suspected: false };
+  }
+  const obj = input as Record<string, unknown>;
+  const keys = Object.keys(obj);
+  if (keys.length === 0) {
+    return { suspected: true, rawInput: obj };
+  }
+  if (obj.file_path === undefined || obj.file_path === null || obj.file_path === "") {
+    return { suspected: true, rawInput: obj };
+  }
+  return { suspected: false };
+}
+
+/**
+ * Recognize Claude Code's `<tool_use_error>InputValidationError: Write failed ...
+ * file_path is missing</tool_use_error>` shape inside a `tool_result` content
+ * text. Returns the diagnostic kind (or `null` for unrelated errors) plus
+ * the raw text so the caller can keep it on the part.
+ */
+export function isClaudeToolInputValidationErrorText(
+  text: string,
+): { kind: "write-missing-file_path"; raw: string } | null {
+  const normalized = text.trim();
+  if (!normalized) return null;
+  if (!/^<tool_use_error>[\s\S]*<\/tool_use_error>$/i.test(normalized)) return null;
+  if (!/InputValidationError/i.test(normalized)) return null;
+  if (/Write failed/i.test(normalized) && /file_path[`\s]+is\s+missing/i.test(normalized)) {
+    return { kind: "write-missing-file_path", raw: normalized };
+  }
+  return null;
+}
+
+/** Extract plain text from a `tool_result` content payload (string | array | undefined). */
+function toolResultContentText(content: unknown): string {
+  if (typeof content === "string") return content;
+  if (!Array.isArray(content)) return "";
+  return content
+    .filter((c): c is Record<string, unknown> => typeof c === "object" && c !== null)
+    .filter((c) => (c as { type?: unknown }).type === "text")
+    .map((c) => (typeof c.text === "string" ? c.text : ""))
+    .join("");
+}
 
 function toolResultPartsFromContentBlocks(blocks: unknown): MessagePart[] {
   if (!Array.isArray(blocks)) return [];
@@ -25,6 +88,18 @@ function toolResultPartsFromContentBlocks(blocks: unknown): MessagePart[] {
     const rawOutput =
       typeof content === "string" ? content : content != null ? JSON.stringify(content) : "";
     const isError = b.is_error === true;
+    const diagnostics: ToolUseDiagnostics | undefined = (() => {
+      if (!isError) return undefined;
+      const contentText = toolResultContentText(b.content);
+      const match = isClaudeToolInputValidationErrorText(contentText);
+      if (!match) return undefined;
+      return {
+        writeMissingFilePath: {
+          suspected: true,
+          confirmed: true,
+        },
+      };
+    })();
     parts.push({
       type: "tool_use",
       id: toolUseId,
@@ -33,6 +108,7 @@ function toolResultPartsFromContentBlocks(blocks: unknown): MessagePart[] {
       output: isError ? "" : rawOutput,
       status: isError ? "error" : "completed",
       error: isError ? rawOutput : undefined,
+      ...(diagnostics ? { diagnostics } : {}),
     } satisfies ToolUsePart);
   }
   return parts;
@@ -201,13 +277,31 @@ export function extractPartsFromStreamLine(line: string): { parts: MessagePart[]
               parts.push({ type: "text", text: cleaned });
             }
           } else if (b.type === "tool_use") {
+            const name = typeof b.name === "string" ? b.name : "unknown";
+            const input = (typeof b.input === "object" && b.input !== null && !Array.isArray(b.input))
+              ? (b.input as Record<string, unknown>)
+              : {};
+            let diagnostics: ToolUseDiagnostics | undefined;
+            if (isWriteToolName(name)) {
+              const defect = describeWriteInputDefect(input);
+              if (defect.suspected) {
+                diagnostics = {
+                  writeMissingFilePath: {
+                    suspected: true,
+                    confirmed: false,
+                    ...(defect.rawInput ? { rawInput: defect.rawInput } : {}),
+                  },
+                };
+              }
+            }
             parts.push({
               type: "tool_use",
               id: b.id || `tool_${Date.now()}`,
-              name: b.name || "unknown",
-              input: b.input || {},
+              name,
+              input,
               status: "running",
-            });
+              ...(diagnostics ? { diagnostics } : {}),
+            } satisfies ToolUsePart);
           } else if (b.type === "thinking" && b.thinking) {
             parts.push({ type: "reasoning", text: b.thinking });
           } else {
@@ -266,6 +360,10 @@ export function formatClaudeResultErrorForSessionUi(raw: string): string {
   if (!trimmed) return "Claude 轮次失败：未知错误";
   if (isClaudeToolCallParseFailureText(trimmed)) {
     return "Claude 轮次失败：模型工具调用无法解析（CLI 已自动重试仍失败）。OpenCode 代理已尝试从正文提取工具调用；请重启代理并新开标签，或换 Kimi/GLM。";
+  }
+  const validation = isClaudeToolInputValidationErrorText(trimmed);
+  if (validation?.kind === "write-missing-file_path") {
+    return "Claude 工具调用未通过 schema 校验：Write 工具缺少 file_path 字段（模型产物截断或上游 schema 被改写）。建议：直接重新发送该消息；如反复出现，检查 ~/.claude/settings.json 中是否注入了改写 Write 工具的 MCP server / 插件 / --append-system-prompt。";
   }
   return `Claude 轮次失败: ${trimmed}`;
 }

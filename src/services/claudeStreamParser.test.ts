@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  describeWriteInputDefect,
   extractCodexResumeSessionIdFromStreamLine,
   extractInitSessionIdFromInvocationStdoutLines,
   extractCursorAgentIdFromCompletePayload,
@@ -10,6 +11,7 @@ import {
   formatClaudeResultErrorForSessionUi,
   isClaudeHarnessInjectedStreamText,
   isClaudeToolCallParseFailureText,
+  isClaudeToolInputValidationErrorText,
   parseStreamLineSessionId,
   shouldClearCodexResumeSessionFromStreamLine,
   stripClaudeHarnessInjectedStreamText,
@@ -308,5 +310,119 @@ describe("extractSystemErrorMessageFromStreamLine", () => {
         JSON.stringify({ type: "system", message: "rate limit exceeded" }),
       ),
     ).toBe("Claude 系统错误: rate limit exceeded");
+  });
+});
+
+describe("Write tool input validation diagnostics", () => {
+  const validationErrorText =
+    "<tool_use_error>InputValidationError: Write failed due to the following issue: The required parameter `file_path` is missing</tool_use_error>";
+
+  test("describeWriteInputDefect flags missing/empty file_path but not other tools", () => {
+    expect(describeWriteInputDefect(undefined).suspected).toBe(true);
+    expect(describeWriteInputDefect(null).suspected).toBe(true);
+    expect(describeWriteInputDefect({}).suspected).toBe(true);
+    expect(describeWriteInputDefect({ content: "x" }).suspected).toBe(true);
+    expect(describeWriteInputDefect({ file_path: "" }).suspected).toBe(true);
+    expect(describeWriteInputDefect({ file_path: "/tmp/a.ts" }).suspected).toBe(false);
+    expect(describeWriteInputDefect("not-an-object").suspected).toBe(false);
+    expect(describeWriteInputDefect(["array"]).suspected).toBe(false);
+  });
+
+  test("isClaudeToolInputValidationErrorText recognizes the Write/file_path pattern", () => {
+    expect(isClaudeToolInputValidationErrorText(validationErrorText)).toEqual({
+      kind: "write-missing-file_path",
+      raw: validationErrorText,
+    });
+    expect(
+      isClaudeToolInputValidationErrorText(
+        "<tool_use_error>InputValidationError: Bash failed ... some other field missing</tool_use_error>",
+      ),
+    ).toBeNull();
+    expect(isClaudeToolInputValidationErrorText("")).toBeNull();
+    expect(isClaudeToolInputValidationErrorText("plain text")).toBeNull();
+  });
+
+  test("assistant Write tool_use without file_path attaches suspected diagnostic", () => {
+    const result = extractPartsFromStreamLine(
+      JSON.stringify({
+        type: "assistant",
+        message: {
+          content: [
+            { type: "tool_use", id: "toolu_write_1", name: "Write", input: {} },
+          ],
+        },
+      }),
+    );
+
+    expect(result.parts).toHaveLength(1);
+    expect(result.parts[0]).toMatchObject({
+      type: "tool_use",
+      id: "toolu_write_1",
+      name: "Write",
+      status: "running",
+      diagnostics: { writeMissingFilePath: { suspected: true, confirmed: false } },
+    });
+  });
+
+  test("assistant Write tool_use with file_path does not attach diagnostic", () => {
+    const result = extractPartsFromStreamLine(
+      JSON.stringify({
+        type: "assistant",
+        message: {
+          content: [
+            {
+              type: "tool_use",
+              id: "toolu_write_2",
+              name: "Write",
+              input: { file_path: "/tmp/x.ts", content: "console.log(1)" },
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(result.parts).toHaveLength(1);
+    expect(result.parts[0]).toMatchObject({ type: "tool_use", name: "Write" });
+    expect((result.parts[0] as { diagnostics?: unknown }).diagnostics).toBeUndefined();
+  });
+
+  test("user tool_result with InputValidationError attaches confirmed diagnostic", () => {
+    const result = extractPartsFromStreamLine(
+      JSON.stringify({
+        type: "user",
+        message: {
+          role: "user",
+          content: [
+            {
+              type: "tool_result",
+              tool_use_id: "toolu_write_1",
+              is_error: true,
+              content: [{ type: "text", text: validationErrorText }],
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(result.parts).toHaveLength(1);
+    expect(result.parts[0]).toMatchObject({
+      type: "tool_use",
+      id: "toolu_write_1",
+      status: "error",
+      diagnostics: {
+        writeMissingFilePath: { suspected: true, confirmed: true },
+      },
+    });
+  });
+
+  test("formatClaudeResultErrorForSessionUi renders Chinese hint for Write/file_path validation error", () => {
+    const out = formatClaudeResultErrorForSessionUi(validationErrorText);
+    expect(out).toContain("Write 工具缺少 file_path");
+    expect(out).toContain("~/.claude/settings.json");
+  });
+
+  test("formatClaudeResultErrorForSessionUi still falls through to generic wrap for unrelated errors", () => {
+    const out = formatClaudeResultErrorForSessionUi("Some other failure");
+    expect(out).toBe("Claude 轮次失败: Some other failure");
   });
 });

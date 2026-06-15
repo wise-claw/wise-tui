@@ -796,6 +796,23 @@ export interface TextPart {
   text: string;
 }
 
+export interface ToolUseDiagnostics {
+  /**
+   * Claude Code's built-in `Write` tool received a `tool_use` block whose
+   * `input` lacked the required `file_path` field (the model output was
+   * empty or truncated). The error surfaces as
+   * `<tool_use_error>InputValidationError: Write failed ... file_path is missing</tool_use_error>`.
+   */
+  writeMissingFilePath?: {
+    /** `tool_use` block had empty input / no `file_path`. */
+    suspected: boolean;
+    /** The matching `tool_result` echoed the schema-validation error. */
+    confirmed: boolean;
+    /** Raw `input` object as it arrived from the model (may be `{}`). */
+    rawInput?: Record<string, unknown>;
+  };
+}
+
 export interface ToolUsePart {
   type: "tool_use";
   id: string;
@@ -804,6 +821,7 @@ export interface ToolUsePart {
   output?: string;
   error?: string;
   status: "pending" | "running" | "completed" | "error";
+  diagnostics?: ToolUseDiagnostics;
 }
 
 export interface ReasoningPart {
