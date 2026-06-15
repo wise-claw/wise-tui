@@ -158,18 +158,9 @@ export function resolveComposerActiveProxyRoute(
 /** @deprecated 使用 resolveComposerActiveProxyRoute */
 export function resolveComposerActiveProxyLabel(
   engine: SessionExecutionEngine,
-  opencodeGo:
-    | Pick<
-        OpencodeGoProxyStatus,
-        "enabled" | "running" | "claudeSettingsAligned" | "codexSettingsAligned"
-      >
-    | null
-    | undefined,
-  llmProxy: Pick<ClaudeLlmProxyStatus, "listening" | "running"> | null | undefined,
-  fcc:
-    | Pick<FreeClaudeCodeStatus, "serverRunning" | "claudeSettingsAligned">
-    | null
-    | undefined,
+  opencodeGo: Parameters<typeof resolveComposerActiveProxyRoute>[1],
+  llmProxy: Parameters<typeof resolveComposerActiveProxyRoute>[2],
+  fcc: Parameters<typeof resolveComposerActiveProxyRoute>[3],
 ): string | null {
   return resolveComposerActiveProxyRoute(engine, opencodeGo, llmProxy, fcc)?.label ?? null;
 }

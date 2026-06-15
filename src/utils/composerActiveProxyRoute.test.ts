@@ -102,8 +102,16 @@ describe("resolveComposerActiveProxyRoute", () => {
     expect(
       resolveComposerActiveProxyLabel(
         "claude",
-        { enabled: true, running: true, claudeSettingsAligned: true, codexSettingsAligned: true },
-        { listening: true, running: true },
+        {
+          enabled: true,
+          running: true,
+          claudeSettingsAligned: true,
+          codexSettingsAligned: true,
+          proxyBaseUrl: "http://127.0.0.1:9876",
+          port: 9876,
+          defaultModel: "qwen3.7-plus",
+        },
+        { listening: true, running: true, localProxyUrl: "http://127.0.0.1:8765", port: 8765, upstream: "" },
         null,
       ),
     ).toBe(COMPOSER_PROXY_LABELS.opencodeGo);
