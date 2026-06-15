@@ -102,7 +102,6 @@ export const AUTHOR_TAB_GROUPS: Array<{ title: string; items: AuthorTabDefinitio
       },
       { key: "automation", label: "定时自动化", description: "Cron、Mission 和会话续跑", icon: <FieldTimeOutlined /> },
       { key: "channels", label: "远程入口", description: "钉钉、飞书、企微和 Telegram", icon: <GatewayOutlined /> },
-      { key: "claude-config", label: "引擎环境", description: "配置目录与 agents", icon: <FolderOpenOutlined /> },
       { key: "shortcuts", label: "快捷键", description: "桌面操作和窗口控制", icon: <IconKeyboardShortcuts /> },
       { key: "sandbox", label: "Claude 沙箱", description: "权限、隔离和运行说明", icon: <IconClaudeSandboxHelp /> },
     ],

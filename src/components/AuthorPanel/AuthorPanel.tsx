@@ -12,7 +12,6 @@ import { AssistantsPanel } from "../AssistantsPanel";
 import { AutomationPanel } from "../AutomationPanel";
 import { ChannelsPanel } from "../ChannelsPanel";
 import { ClaudeHooksConfigPanel, type ClaudeHooksConfigPanelHandle } from "../ClaudeHooksConfigPanel";
-import { ClaudeConfigDirPanel } from "../ClaudeConfigDirPanel";
 import { AutoApprovePanel } from "../AutoApprovePanel";
 import { DataCleanupPanel } from "../DataCleanupPanel";
 import { DefaultConfigPanel } from "../DefaultConfigPanel";
@@ -191,8 +190,6 @@ export function AuthorPanel({
         return <DataCleanupPanel />;
       case "auto-approve":
         return <AutoApprovePanel />;
-      case "claude-config":
-        return <ClaudeConfigDirPanel />;
       case "my-extensions":
         return (
           <MyExtensionsPanel

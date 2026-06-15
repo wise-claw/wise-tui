@@ -94,6 +94,115 @@ export function reconcileTerminalCanvasFit(
   }
 }
 
+/**
+ * 等待终端容器完成布局（宽高 > 0），避免 ghostty 在 0 尺寸下 fit 导致空白屏。
+ */
+export function waitForTerminalContainerLayout(
+  container: HTMLElement,
+  timeoutMs = 4000,
+): Promise<void> {
+  if (container.clientWidth > 0 && container.clientHeight > 0) {
+    return Promise.resolve();
+  }
+
+  return new Promise((resolve) => {
+    const deadline = Date.now() + timeoutMs;
+    let settled = false;
+
+    const finish = () => {
+      if (settled) return;
+      settled = true;
+      observer.disconnect();
+      resolve();
+    };
+
+    const observer = new ResizeObserver(() => {
+      if (container.clientWidth > 0 && container.clientHeight > 0) {
+        finish();
+      }
+    });
+    observer.observe(container);
+
+    const poll = () => {
+      if (container.clientWidth > 0 && container.clientHeight > 0) {
+        finish();
+        return;
+      }
+      if (Date.now() >= deadline) {
+        finish();
+        return;
+      }
+      requestAnimationFrame(poll);
+    };
+    requestAnimationFrame(poll);
+  });
+}
+
+function parseCssColorLuminance(color: string): number | null {
+  const trimmed = color.trim();
+  const rgbMatch = trimmed.match(
+    /^rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/i,
+  );
+  if (rgbMatch) {
+    const [r, g, b] = rgbMatch.slice(1, 4).map(Number);
+    return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+  }
+  const hex = trimmed.match(/^#([0-9a-f]{3}|[0-9a-f]{6})$/i);
+  if (!hex) return null;
+  let raw = hex[1];
+  if (raw.length === 3) {
+    raw = raw
+      .split("")
+      .map((ch) => ch + ch)
+      .join("");
+  }
+  const r = Number.parseInt(raw.slice(0, 2), 16);
+  const g = Number.parseInt(raw.slice(2, 4), 16);
+  const b = Number.parseInt(raw.slice(4, 6), 16);
+  return (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255;
+}
+
+function buildAnsiPalette(isDark: boolean) {
+  if (isDark) {
+    return {
+      black: "#1e1e1e",
+      red: "#f14c4c",
+      green: "#23d18b",
+      yellow: "#f5f543",
+      blue: "#3b8eea",
+      magenta: "#d670d6",
+      cyan: "#29b8db",
+      white: "#e4e4e4",
+      brightBlack: "#9d9d9d",
+      brightRed: "#ff6b6b",
+      brightGreen: "#69ff94",
+      brightYellow: "#ffff6b",
+      brightBlue: "#6cb6ff",
+      brightMagenta: "#f0a0f0",
+      brightCyan: "#6bdfff",
+      brightWhite: "#ffffff",
+    };
+  }
+  return {
+    black: "#1a1a1a",
+    red: "#c42b2b",
+    green: "#0f7a3f",
+    yellow: "#8a6d00",
+    blue: "#1f5fbf",
+    magenta: "#8b3d9e",
+    cyan: "#0b7285",
+    white: "#f0f0f0",
+    brightBlack: "#4a4a4a",
+    brightRed: "#e03131",
+    brightGreen: "#2f9e44",
+    brightYellow: "#e67700",
+    brightBlue: "#1971c2",
+    brightMagenta: "#9c36b5",
+    brightCyan: "#0c8599",
+    brightWhite: "#141414",
+  };
+}
+
 /** 注册 URL 链接识别，Shift/Cmd+点击时打开外部浏览器。 */
 export function registerTerminalLinkProviders(terminal: Terminal): () => void {
   const provider = new UrlRegexProvider(terminal);
@@ -135,12 +244,14 @@ export function readTerminalThemeFromContainer(container: HTMLElement) {
     const value = styles.getPropertyValue(name).trim();
     return value.length > 0 ? value : fallback;
   };
-  const foreground = readColor("--terminal-foreground", "#1f1f1f");
   const background = readColor("--terminal-background", "#ffffff");
-  const cursor = readColor("--terminal-cursor", foreground);
+  const luminance = parseCssColorLuminance(background);
+  const isDark = luminance !== null ? luminance < 0.45 : false;
+  const foreground = isDark ? "#f2f2f2" : "#141414";
+  const cursor = foreground;
   const selectionBackground = readColor(
     "--terminal-selection",
-    "rgba(100, 200, 255, 0.25)",
+    isDark ? "rgba(100, 160, 255, 0.35)" : "rgba(24, 144, 255, 0.22)",
   );
   return {
     foreground,
@@ -148,6 +259,7 @@ export function readTerminalThemeFromContainer(container: HTMLElement) {
     cursor,
     cursorAccent: background,
     selectionBackground,
+    ...buildAnsiPalette(isDark),
   };
 }
 

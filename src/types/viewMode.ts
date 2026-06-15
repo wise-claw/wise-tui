@@ -41,7 +41,6 @@ export type AuthorPane =
   | "skills"
   | "claude-plugins"
   | "hooks"
-  | "claude-config"
   | "extensions"
   | "my-extensions"
   | "assistants"

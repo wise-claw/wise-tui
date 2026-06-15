@@ -26,6 +26,7 @@ import {
   readTerminalThemeFromContainer,
   reconcileTerminalCanvasFit,
   registerTerminalLinkProviders,
+  waitForTerminalContainerLayout,
 } from "../utils/terminalTheme";
 import { terminalWriter } from "../utils/terminalWriter";
 import { shouldIgnoreTerminalError } from "../utils/terminalErrors";
@@ -140,25 +141,34 @@ export function useTerminalSession({
     if (repositoryId === null || !activeTerminalId || !cwd || !isVisible) {
       return;
     }
-    const container = containerRef.current;
-    if (!container) {
-      return;
-    }
-
-    const terminalId = activeTerminalId;
-    const workspaceId = repositoryId.toString();
-    const startCursor = initialCursorRef.current;
-
-    const theme = readTerminalThemeFromContainer(container);
 
     let cancelled = false;
-    let outputWriter: ReturnType<typeof terminalWriter> | undefined;
-    let streamCursor = startCursor;
-    let sessionEnded = false;
+    let cleanup: (() => void) | undefined;
+    let containerWaitRaf: number | null = null;
+
+    const startSession = () => {
+      const container = containerRef.current;
+      if (!container) {
+        containerWaitRaf = requestAnimationFrame(() => {
+          if (!cancelled) startSession();
+        });
+        return;
+      }
+
+      const terminalId = activeTerminalId;
+      const workspaceId = repositoryId.toString();
+      const startCursor = initialCursorRef.current;
+
+      const theme = readTerminalThemeFromContainer(container);
+
+      let outputWriter: ReturnType<typeof terminalWriter> | undefined;
+      let streamCursor = startCursor;
+      let sessionEnded = false;
 
     const fitAndOpenRafRef: { current: number | null } = { current: null };
     const resizeDebounceTimerRef: { current: number | null } = { current: null };
     const visibleRefitTimerRef: { current: number | null } = { current: null };
+    const blankRecoveryTimerRef: { current: number | null } = { current: null };
 
     const persistSurfaceSnapshot = (term: Terminal) => {
       onSurfaceSnapshotRef.current?.({
@@ -172,6 +182,9 @@ export function useTerminalSession({
     const bootstrap = async () => {
       setStatus("connecting");
       setMessage("正在连接终端…");
+
+      await waitForTerminalContainerLayout(container);
+      if (cancelled) return () => undefined;
 
       const ghosttyModule = await loadGhosttyModule();
       if (cancelled) return () => undefined;
@@ -221,6 +234,36 @@ export function useTerminalSession({
         reconcileTerminalCanvasFit(terminal, container);
       };
 
+      const scheduleBlankRecoveryRefit = () => {
+        if (blankRecoveryTimerRef.current !== null) {
+          window.clearTimeout(blankRecoveryTimerRef.current);
+        }
+        blankRecoveryTimerRef.current = window.setTimeout(() => {
+          blankRecoveryTimerRef.current = null;
+          if (cancelled || sessionEnded) return;
+          const canvas = container.querySelector("canvas");
+          const canvasHeight = canvas?.getBoundingClientRect().height ?? 0;
+          if (
+            container.clientHeight > 0 &&
+            (canvasHeight <= 0 || terminal.rows < 2 || terminal.cols < 2)
+          ) {
+            try {
+              fitTerminalToContainer();
+              const nextCols = clampTerminalDim(terminal.cols);
+              const nextRows = clampTerminalDim(terminal.rows);
+              void resizeTerminalSession(
+                workspaceId,
+                terminalId,
+                nextCols,
+                nextRows,
+              ).catch(() => undefined);
+            } catch {
+              // ignore recovery errors
+            }
+          }
+        }, 120);
+      };
+
       const finalizeSessionReady = () => {
         if (cancelled) return;
         setStatus("ready");
@@ -248,6 +291,7 @@ export function useTerminalSession({
           }
           terminal.focus();
           persistSurfaceSnapshot(terminal);
+          scheduleBlankRecoveryRefit();
         } catch {
           // ignore finalize errors
         }
@@ -332,6 +376,8 @@ export function useTerminalSession({
       };
 
       const fitAndOpen = async () => {
+        if (cancelled) return;
+        await waitForTerminalContainerLayout(container);
         if (cancelled) return;
         try {
           fitTerminalToContainer();
@@ -461,7 +507,18 @@ export function useTerminalSession({
       };
       document.addEventListener("visibilitychange", handleVisibilityChange);
 
+      const intersectionObserver =
+        typeof IntersectionObserver !== "undefined"
+          ? new IntersectionObserver((entries) => {
+              if (entries.some((entry) => entry.isIntersecting)) {
+                scheduleVisibleRefit();
+              }
+            })
+          : null;
+      intersectionObserver?.observe(container);
+
       return () => {
+        intersectionObserver?.disconnect();
         document.removeEventListener("visibilitychange", handleVisibilityChange);
         cancelled = true;
         cancelAnimationFrame(raf1);
@@ -475,6 +532,10 @@ export function useTerminalSession({
         if (visibleRefitTimerRef.current !== null) {
           window.clearTimeout(visibleRefitTimerRef.current);
           visibleRefitTimerRef.current = null;
+        }
+        if (blankRecoveryTimerRef.current !== null) {
+          window.clearTimeout(blankRecoveryTimerRef.current);
+          blankRecoveryTimerRef.current = null;
         }
         resizeObserver.disconnect();
         unregisterLinks();
@@ -497,13 +558,18 @@ export function useTerminalSession({
       };
     };
 
-    let cleanup: (() => void) | undefined;
-    void bootstrap().then((dispose) => {
-      cleanup = dispose;
-    });
+      void bootstrap().then((dispose) => {
+        cleanup = dispose;
+      });
+    };
+
+    startSession();
 
     return () => {
       cancelled = true;
+      if (containerWaitRaf !== null) {
+        cancelAnimationFrame(containerWaitRaf);
+      }
       cleanup?.();
     };
   }, [

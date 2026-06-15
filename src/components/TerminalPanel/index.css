@@ -6,8 +6,7 @@
   height: var(--terminal-panel-height, 220px);
   -webkit-app-region: no-drag;
   --terminal-background: var(--ant-color-bg-container);
-  --terminal-foreground: var(--ant-color-text);
-  --terminal-cursor: var(--ant-color-text);
+  --terminal-selection: rgba(24, 144, 255, 0.22);
   --terminal-selection: rgba(100, 200, 255, 0.25);
 }
 

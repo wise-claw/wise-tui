@@ -1,11 +1,6 @@
 //! 解析「用户级 Claude Code 配置目录」的全局位置。
 //!
-//! 默认沿用官方 `~/.claude`。用户可在「应用设置」中改为 `~/.codefuse/engine/cc`
-//! 等同源工具的目录，或自定义任意绝对/`~`-展开路径。值保存在 `app_settings` 表，
-//! 启动时从数据库回填全局缓存，写入命令同时刷新缓存，使后续 IPC 立即生效。
-//!
-//! 仅影响「用户级」路径（`~/.claude/...`、`~/.claude.json`），不改变
-//! 仓库内的 `<project>/.claude/...`（项目级配置始终保持官方布局）。
+//! 固定使用官方默认 `~/.claude`。仓库内的 `<project>/.claude/...` 不受影响。
 
 use serde::Serialize;
 use std::collections::HashMap;
@@ -95,14 +90,10 @@ pub(crate) fn user_claude_dir_test_lock() -> std::sync::MutexGuard<'static, ()> 
     }
 }
 
-/// 启动时调用：从 SQLite 回填缓存。读不到 / 解析失败 → 缓存留空，后续走默认。
+/// 启动时调用：清除历史自定义目录设置，始终回退官方 `~/.claude`。
 pub(crate) fn init_from_db(db: &WiseDb) {
-    let raw = match db.get_setting(CLAUDE_USER_CONFIG_DIR_SETTING_KEY) {
-        Ok(v) => v,
-        Err(_) => None,
-    };
-    let resolved = raw.as_deref().and_then(expand_tilde);
-    update_cache(resolved);
+    let _ = db.delete_setting(CLAUDE_USER_CONFIG_DIR_SETTING_KEY);
+    update_cache(None);
 }
 
 #[derive(Serialize, Clone)]
@@ -387,31 +378,7 @@ pub(crate) fn sanitize_claude_credentials_for_fcc() -> Result<bool, String> {
     sanitize_claude_root_json_for_fcc_proxy()
 }
 
-fn validate_user_dir_candidate(raw: &str) -> Result<PathBuf, String> {
-    let trimmed = raw.trim();
-    if trimmed.is_empty() {
-        return Err("路径不能为空".to_string());
-    }
-    let resolved = expand_tilde(trimmed).ok_or_else(|| "无法解析该路径".to_string())?;
-    if !resolved.is_absolute() {
-        return Err("请使用绝对路径或以 ~ 开头的路径".to_string());
-    }
-    // 允许目录暂不存在（用户可能先配置后初始化），仅在存在时检查其确为目录。
-    if Path::new(&resolved).exists() && !resolved.is_dir() {
-        return Err("该路径已存在但不是目录".to_string());
-    }
-    Ok(resolved)
-}
-
-#[tauri::command]
-pub(crate) fn get_claude_user_config_dir(
-    db: tauri::State<'_, WiseDb>,
-) -> Result<ClaudeUserConfigDirInfo, String> {
-    let raw_value = db.get_setting(CLAUDE_USER_CONFIG_DIR_SETTING_KEY)?;
-    Ok(build_info(raw_value))
-}
-
-/// 返回用户级 Claude `settings.json` 路径（默认 `~/.claude/settings.json`）；若文件不存在则创建空对象。
+/// 返回用户级 Claude `settings.json` 路径（`~/.claude/settings.json`）；若文件不存在则创建空对象。
 #[tauri::command]
 pub(crate) fn get_claude_user_settings_json_path() -> Result<String, String> {
     let dir = user_claude_dir();
@@ -421,32 +388,6 @@ pub(crate) fn get_claude_user_settings_json_path() -> Result<String, String> {
         fs::write(&path, "{}\n").map_err(|e| e.to_string())?;
     }
     Ok(path.to_string_lossy().to_string())
-}
-
-#[tauri::command]
-pub(crate) fn set_claude_user_config_dir(
-    db: tauri::State<'_, WiseDb>,
-    value: Option<String>,
-) -> Result<ClaudeUserConfigDirInfo, String> {
-    let trimmed = value
-        .as_deref()
-        .map(str::trim)
-        .map(str::to_string)
-        .filter(|s| !s.is_empty());
-
-    match trimmed {
-        Some(raw) => {
-            let resolved = validate_user_dir_candidate(&raw)?;
-            db.set_setting(CLAUDE_USER_CONFIG_DIR_SETTING_KEY, &raw)?;
-            update_cache(Some(resolved));
-            Ok(build_info(Some(raw)))
-        }
-        None => {
-            db.delete_setting(CLAUDE_USER_CONFIG_DIR_SETTING_KEY)?;
-            update_cache(None);
-            Ok(build_info(None))
-        }
-    }
 }
 
 #[cfg(test)]
