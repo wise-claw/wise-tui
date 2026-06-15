@@ -20,6 +20,8 @@ export const MAC_BASE_OPEN_APP_TARGETS: OpenAppTarget[] = [
   { id: "codefuse", label: "CodeFuse", kind: "app", appName: "CodeFuse IDE", args: [] },
   { id: "finder", label: fileManagerName(), kind: "finder", args: [] },
   { id: "intellij", label: "IntelliJ IDEA", kind: "app", appName: "IntelliJ IDEA", args: [] },
+  { id: "qoder", label: "Qoder", kind: "app", appName: "Qoder", args: [] },
+  { id: "trae", label: "Trae", kind: "app", appName: "Trae", args: [] },
 ];
 
 export const DEFAULT_OPEN_APP_TARGETS: OpenAppTarget[] = isMacPlatform()
@@ -32,4 +34,6 @@ export const DEFAULT_OPEN_APP_TARGETS: OpenAppTarget[] = isMacPlatform()
       { id: "terminal", label: "Terminal", kind: "command", command: "gnome-terminal", args: [] },
       { id: "ghostty", label: "Ghostty", kind: "command", command: "ghostty", args: [] },
       { id: "intellij", label: "IntelliJ IDEA", kind: "command", command: "idea", args: [] },
+      { id: "qoder", label: "Qoder", kind: "command", command: "qoder", args: [] },
+      { id: "trae", label: "Trae", kind: "command", command: "trae", args: [] },
     ];

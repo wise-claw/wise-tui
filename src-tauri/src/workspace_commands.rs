@@ -222,7 +222,10 @@ fn is_vscode_family_cli(cmd: &str) -> bool {
         .trim_end_matches(".cmd")
         .trim_end_matches(".AppImage")
         .to_ascii_lowercase();
-    matches!(base.as_str(), "code" | "cursor" | "codium")
+    matches!(
+        base.as_str(),
+        "code" | "cursor" | "codium" | "qoder" | "trae"
+    )
 }
 
 fn app_name_to_vscode_cli(app_name: &str) -> Option<&'static str> {
@@ -235,6 +238,12 @@ fn app_name_to_vscode_cli(app_name: &str) -> Option<&'static str> {
     }
     if lower.contains("codium") || lower.contains("vscodium") {
         return Some("codium");
+    }
+    if lower.contains("qoder") {
+        return Some("qoder");
+    }
+    if lower.contains("trae") {
+        return Some("trae");
     }
     None
 }

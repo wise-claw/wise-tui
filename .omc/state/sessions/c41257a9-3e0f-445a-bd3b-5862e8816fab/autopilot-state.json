@@ -1,0 +1,11 @@
+{
+  "active": true,
+  "started_at": "2026-06-15T03:36:27.678Z",
+  "original_prompt": "/oh-my-claudecode:autopilot 会话消息列表的工具链功能还原下。\n\n附图：@/Users/sjl/.wise/composer-images/wise/bb19ead5-fced-4fdc-8e42-08489d1ccc3b-image.png",
+  "session_id": "c41257a9-3e0f-445a-bd3b-5862e8816fab",
+  "project_path": "/Users/sjl/Documents/github/wise",
+  "reinforcement_count": 0,
+  "awaiting_confirmation": true,
+  "awaiting_confirmation_set_at": "2026-06-15T03:36:27.678Z",
+  "last_checked_at": "2026-06-15T03:36:27.678Z"
+}

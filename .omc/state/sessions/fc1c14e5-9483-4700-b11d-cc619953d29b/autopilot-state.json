@@ -1,0 +1,11 @@
+{
+  "active": true,
+  "started_at": "2026-06-15T03:35:16.876Z",
+  "original_prompt": "/oh-my-claudecode:autopilot 检查下为啥在wise中使用的claude code会出现<tool_use_error>InputValidationError: Write failed due to the following issue:\nThe required parameter `file_path` is missing</tool_use_error>",
+  "session_id": "fc1c14e5-9483-4700-b11d-cc619953d29b",
+  "project_path": "/Users/sjl/Documents/github/wise",
+  "reinforcement_count": 0,
+  "awaiting_confirmation": true,
+  "awaiting_confirmation_set_at": "2026-06-15T03:35:16.876Z",
+  "last_checked_at": "2026-06-15T03:35:16.876Z"
+}

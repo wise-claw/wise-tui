@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1781329781019,
+  "lastScanned": 1781493979222,
   "projectRoot": "/Users/sjl/Documents/github/wise",
   "techStack": {
     "languages": [
@@ -42,12 +42,12 @@
     "runtime": null
   },
   "build": {
-    "buildCommand": "bunx tsc --noEmit 2>&1; echo \"TSC_EXIT=$?\"",
-    "testCommand": "bun test src/utils/sessionLinkFilters.test.ts src/utils/claudeSessionTrajectorySequence.test.ts src/utils/sessionInsights.test.ts 2>&1 | tail -10",
+    "buildCommand": "bunx tsc --noEmit 2>&1 | tail -40",
+    "testCommand": "rtk git stash && bun test 2>&1 | tail -8; rtk git stash pop 2>&1 | tail -3",
     "lintCommand": null,
     "devCommand": "npm run dev",
     "scripts": {
-      "postinstall": "bun run scripts/patch-crepe-slash-menu.mjs && bun run scripts/patch-antd-modal-confirm-mask-closable.mjs && bun run scripts/patch-antd-scroll-into-view-if-needed.mjs",
+      "postinstall": "bun run scripts/patch-crepe-slash-menu.mjs && bun run scripts/patch-antd-modal-confirm-mask-closable.mjs && bun run scripts/patch-antd-scroll-into-view-if-needed.mjs && bun run scripts/patch-ghostty-ghost-cursor.mjs && bun run scripts/patch-ghostty-selection-scale.mjs && bun run scripts/patch-ghostty-keyboard-protocol.mjs",
       "dev": "vite",
       "build": "tsc && vite build",
       "test": "bun test",
@@ -63,7 +63,7 @@
     "namingStyle": null,
     "importStyle": null,
     "testPattern": null,
-    "fileOrganization": "feature-based"
+    "fileOrganization": "type-based"
   },
   "structure": {
     "isMonorepo": false,
@@ -85,14 +85,14 @@
       "path": "apps",
       "purpose": null,
       "fileCount": 0,
-      "lastAccessed": 1781329781011,
+      "lastAccessed": 1781493979213,
       "keyFiles": []
     },
     "design": {
       "path": "design",
       "purpose": null,
       "fileCount": 2,
-      "lastAccessed": 1781329781011,
+      "lastAccessed": 1781493979213,
       "keyFiles": [
         "product-ux-engineering-audit-2026-05-14.md"
       ]
@@ -101,7 +101,7 @@
       "path": "dist",
       "purpose": "Distribution/build output",
       "fileCount": 5,
-      "lastAccessed": 1781329781014,
+      "lastAccessed": 1781493979214,
       "keyFiles": [
         "demo.html",
         "index.html",
@@ -114,14 +114,14 @@
       "path": "examples",
       "purpose": "Example code",
       "fileCount": 0,
-      "lastAccessed": 1781329781014,
+      "lastAccessed": 1781493979215,
       "keyFiles": []
     },
     "extras": {
       "path": "extras",
       "purpose": null,
       "fileCount": 1,
-      "lastAccessed": 1781329781015,
+      "lastAccessed": 1781493979215,
       "keyFiles": [
         "check-prd-split-evolution.mjs"
       ]
@@ -130,7 +130,7 @@
       "path": "imgs",
       "purpose": null,
       "fileCount": 6,
-      "lastAccessed": 1781329781015,
+      "lastAccessed": 1781493979215,
       "keyFiles": [
         "add-execution-env.gif",
         "add-workspace.gif",
@@ -143,7 +143,7 @@
       "path": "public",
       "purpose": "Public files",
       "fileCount": 3,
-      "lastAccessed": 1781329781015,
+      "lastAccessed": 1781493979215,
       "keyFiles": [
         "demo.html",
         "tauri.svg",
@@ -153,8 +153,8 @@
     "scripts": {
       "path": "scripts",
       "purpose": "Build/utility scripts",
-      "fileCount": 22,
-      "lastAccessed": 1781329781015,
+      "fileCount": 25,
+      "lastAccessed": 1781493979215,
       "keyFiles": [
         "build-claude-settings-schema-zh.mjs",
         "cursor-sdk-bridge.stderr.test.ts",
@@ -167,7 +167,7 @@
       "path": "src",
       "purpose": "Source code",
       "fileCount": 10,
-      "lastAccessed": 1781329781016,
+      "lastAccessed": 1781493979215,
       "keyFiles": [
         "App.css",
         "App.tsx",
@@ -180,7 +180,7 @@
       "path": "src-tauri",
       "purpose": null,
       "fileCount": 8,
-      "lastAccessed": 1781329781016,
+      "lastAccessed": 1781493979215,
       "keyFiles": [
         "Cargo.lock",
         "Cargo.toml",
@@ -193,25 +193,25 @@
       "path": "tools",
       "purpose": null,
       "fileCount": 1,
-      "lastAccessed": 1781329781016,
+      "lastAccessed": 1781493979215,
       "keyFiles": []
     },
     "dist/assets": {
       "path": "dist/assets",
       "purpose": "Static assets",
-      "fileCount": 299,
-      "lastAccessed": 1781329781017,
+      "fileCount": 298,
+      "lastAccessed": 1781493979216,
       "keyFiles": [
-        "ActiveRepositoryFilesPanel-BS1O6lCY.js",
-        "ApartmentOutlined-DQ1j36nh.js",
-        "ApiOutlined-Ft9xP_iG.js"
+        "ActiveRepositoryFilesPanel-B8nOq7I8.js",
+        "ApartmentOutlined-BuS9hFPo.js",
+        "ApiOutlined-DT7KD3qY.js"
       ]
     },
     "dist/public": {
       "path": "dist/public",
       "purpose": "Public files",
       "fileCount": 1,
-      "lastAccessed": 1781329781017,
+      "lastAccessed": 1781493979216,
       "keyFiles": [
         "demo.html"
       ]
@@ -220,7 +220,7 @@
       "path": "src/assets",
       "purpose": "Static assets",
       "fileCount": 1,
-      "lastAccessed": 1781329781017,
+      "lastAccessed": 1781493979216,
       "keyFiles": [
         "react.svg"
       ]
@@ -229,11 +229,22 @@
       "path": "src/components",
       "purpose": "UI components",
       "fileCount": 28,
-      "lastAccessed": 1781329781018,
+      "lastAccessed": 1781493979216,
       "keyFiles": [
         "AppWorkspaceLayout.lazy.ts",
         "AppWorkspaceLayout.tsx",
         "AppWorkspaceLayoutShell.tsx"
+      ]
+    },
+    "src/data": {
+      "path": "src/data",
+      "purpose": "Data files",
+      "fileCount": 5,
+      "lastAccessed": 1781493979217,
+      "keyFiles": [
+        "claude-code-settings.schema.en.json",
+        "claude-code-settings.schema.json",
+        "claude-env-vars-doc-zh-CN.md"
       ]
     }
   },
@@ -258,8 +269,8 @@
     },
     {
       "path": "src/types.ts",
-      "accessCount": 24,
-      "lastAccessed": 1781365056061,
+      "accessCount": 25,
+      "lastAccessed": 1781494053007,
       "type": "file"
     },
     {

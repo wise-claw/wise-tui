@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"rtk ls -la .omc/autopilot/ 2>/dev/null && echo \\\"---\\\" && rtk ls -la .omc/plans/ 2>/dev/null && echo \\\"---\\\" && rtk ls -la .omc/specs/ 2>/dev/null\",\"description\":\"Check existing autopilot ...",
+  "error": "Exit code 1\nspec.md  4.8K\n---\nautopilot-impl.md  2.3K\n---",
+  "timestamp": "2026-06-15T03:35:31.839Z",
+  "retry_count": 1
+}
