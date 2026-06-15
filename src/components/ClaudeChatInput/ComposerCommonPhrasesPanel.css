@@ -1,40 +1,49 @@
 .app-composer-common-phrases-panel {
-  width: min(320px, 72vw);
+  width: min(300px, 72vw);
   display: flex;
   flex-direction: column;
-  gap: 6px;
+  gap: 4px;
 }
 
 .app-composer-common-phrases-panel__default {
   display: flex;
   flex-direction: column;
-  gap: 6px;
-  padding-bottom: 4px;
+  gap: 4px;
+  padding-bottom: 2px;
   border-bottom: 1px solid var(--ant-color-border-secondary);
 }
 
 .app-composer-common-phrases-panel__default-head {
   display: flex;
-  align-items: baseline;
-  justify-content: space-between;
-  gap: 8px;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 1px;
 }
 
 .app-composer-common-phrases-panel__default-title {
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--ant-color-text);
+  white-space: nowrap;
+  line-height: 1.2;
 }
 
 .app-composer-common-phrases-panel__default-hint {
   font-size: 10px;
+  line-height: 1.25;
   color: var(--ant-color-text-quaternary);
+}
+
+.app-composer-common-phrases-panel__default .app-composer-default-instruction-field .ant-select-selector {
+  min-height: 28px !important;
+  padding-block: 0 !important;
+  font-size: 12px !important;
 }
 
 .app-composer-common-phrases-panel__hint {
   margin: 0;
   font-size: 10px;
-  line-height: 1.35;
+  line-height: 1.25;
   color: var(--ant-color-text-quaternary);
 }
 

@@ -1,0 +1,11 @@
+{
+  "active": true,
+  "started_at": "2026-06-15T07:06:26.841Z",
+  "original_prompt": "/oh-my-claudecode:ultrawork 你好",
+  "session_id": "f369c9d9-d4fa-4c59-b8b6-3a632a4a0692",
+  "project_path": "/Users/sjl/Documents/github/wise",
+  "reinforcement_count": 0,
+  "awaiting_confirmation": true,
+  "awaiting_confirmation_set_at": "2026-06-15T07:06:26.841Z",
+  "last_checked_at": "2026-06-15T07:06:26.841Z"
+}

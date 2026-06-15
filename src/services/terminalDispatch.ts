@@ -500,10 +500,11 @@ async function dispatchTerminalWorkerTurn(
     sessionDefaultInstruction,
     resolveContext,
   );
-  const { outboundPrompt, userBubblePrompt } = resolveTerminalDispatchPrompts(
+  const { outboundPrompt } = resolveTerminalDispatchPrompts(
     effectiveTaskPrompt,
     terminal.agentType,
   );
+  const { userBubblePrompt } = resolveTerminalDispatchPrompts(taskPrompt, terminal.agentType);
   if (!userBubblePrompt.trim()) {
     const warningText = `终端「${terminal.name}」未收到可执行内容，请补充任务说明后重试。`;
     message.warning(warningText);

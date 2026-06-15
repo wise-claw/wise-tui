@@ -1,10 +1,10 @@
 import type { EmployeeItem } from "../types";
+import { applyComposerDefaultInstruction } from "./composerDefaultInstruction";
 import type { DefaultInstructionResolveContext } from "./resolveComposerDefaultInstructionOutbound";
 import {
-  resolveAppliedComposerDefaultInstruction,
-  applyComposerDefaultInstruction,
-} from "./composerDefaultInstruction";
-import { resolveComposerDefaultInstructionOutbound } from "./resolveComposerDefaultInstructionOutbound";
+  pickDefaultInstructionByPriority,
+  resolveEffectiveDefaultInstructionApplied,
+} from "./resolveEffectiveDefaultInstruction";
 
 /** @终端 派发：为正文自动前缀终端 / 主会话默认指令。 */
 export function resolveTerminalTaskPromptWithDefaults(
@@ -14,9 +14,10 @@ export function resolveTerminalTaskPromptWithDefaults(
   resolveContext?: DefaultInstructionResolveContext,
 ): string {
   const cleaned = taskPrompt.trim();
-  const terminalDefault = terminal.defaultInstruction?.trim();
-  const sessionDefault = sessionDefaultInstruction?.trim();
-  const prefix = terminalDefault || sessionDefault || "";
+  const prefix = pickDefaultInstructionByPriority(
+    sessionDefaultInstruction,
+    terminal.defaultInstruction,
+  );
   if (!prefix) return cleaned;
   return applyComposerDefaultInstruction(cleaned, prefix, resolveContext);
 }
@@ -28,15 +29,13 @@ export function resolveTerminalDefaultInstructionApplied(
   sessionDefaultInstruction?: string | null,
   resolveContext?: DefaultInstructionResolveContext,
 ): string {
-  const terminalDefault = terminal.defaultInstruction?.trim();
-  const sessionDefault = sessionDefaultInstruction?.trim();
-  const prefix = terminalDefault || sessionDefault || "";
-  if (!prefix) return "";
-  const applied = resolveAppliedComposerDefaultInstruction(
+  return resolveEffectiveDefaultInstructionApplied(
     taskPrompt.trim(),
-    prefix,
+    {
+      globalDefault: sessionDefaultInstruction,
+      terminalDefault: terminal.defaultInstruction,
+      dispatchTargetType: "employee",
+    },
     resolveContext,
   );
-  if (applied) return applied;
-  return resolveComposerDefaultInstructionOutbound(prefix, resolveContext);
 }

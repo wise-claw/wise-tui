@@ -169,7 +169,7 @@ export function ComposerCommonPhrasesPanel({
         <div className="app-composer-common-phrases-panel__default-head">
           <span className="app-composer-common-phrases-panel__default-title">默认指令</span>
           <span className="app-composer-common-phrases-panel__default-hint">
-            发送时自动前缀，可从列表选择
+            自动前缀；已有 / 命令不追加；@终端优先终端默认
           </span>
         </div>
         <ComposerDefaultInstructionField
@@ -182,7 +182,7 @@ export function ComposerCommonPhrasesPanel({
           onCommit={saveDefaultInstruction}
         />
       </section>
-      <p className="app-composer-common-phrases-panel__hint">点击编辑；快捷栏 chip 按「触发方式」发送或填入</p>
+      <p className="app-composer-common-phrases-panel__hint">点击编辑；快捷栏按触发方式发送或填入</p>
       {phrases.length === 0 ? (
         <p className="app-composer-common-phrases-panel__empty">暂无常用语，点击下方新增。</p>
       ) : (

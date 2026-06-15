@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { EmployeeItem } from "../types";
-import { resolveTerminalTaskPromptWithDefaults } from "./resolveTerminalTaskPrompt";
+import { resolveTerminalTaskPromptWithDefaults, resolveTerminalDefaultInstructionApplied } from "./resolveTerminalTaskPrompt";
 
 const terminal = (overrides: Partial<EmployeeItem> = {}): EmployeeItem =>
   ({
@@ -49,7 +49,33 @@ describe("resolveTerminalTaskPromptWithDefaults", () => {
     );
   });
 
-  test("returns empty when no defaults configured", () => {
-    expect(resolveTerminalTaskPromptWithDefaults("", terminal(), "")).toBe("");
+  test("terminal default wins over session default", () => {
+    expect(
+      resolveTerminalTaskPromptWithDefaults(
+        "你好",
+        terminal({ defaultInstruction: "/terminal-cmd" }),
+        "/global-cmd",
+      ),
+    ).toBe("/terminal-cmd 你好");
+  });
+
+  test("skips defaults when user already typed a slash command", () => {
+    expect(
+      resolveTerminalTaskPromptWithDefaults(
+        "/compact",
+        terminal({ defaultInstruction: "/autopilot" }),
+        "/autopilot",
+      ),
+    ).toBe("/compact");
+  });
+
+  test("resolveTerminalDefaultInstructionApplied returns empty when slash command present", () => {
+    expect(
+      resolveTerminalDefaultInstructionApplied(
+        "/compact",
+        terminal({ defaultInstruction: "/autopilot" }),
+        "/autopilot",
+      ),
+    ).toBe("");
   });
 });

@@ -88,6 +88,13 @@ export function splitLeadingAtMentionPrefix(text: string): { mentionPrefix: stri
   };
 }
 
+/** 正文（@ 对象之后）是否以斜杠命令开头，视为用户已直接指定命令。 */
+export function plainBodyHasExplicitSlashCommand(body: string): boolean {
+  const trimmed = body.trim();
+  if (!trimmed) return false;
+  return trimmed.startsWith("/");
+}
+
 function segmentContainsInstruction(segment: string, candidates: readonly string[]): boolean {
   const seen = new Set<string>();
   for (const candidate of candidates) {
@@ -119,7 +126,7 @@ export function shouldApplyComposerDefaultInstruction(
   const aliases = defaultInstructionAliasValues(instruction, resolveContext);
 
   if (segmentContainsInstruction(target, aliases)) return false;
-  if (target && target.startsWith("/")) return false;
+  if (plainBodyHasExplicitSlashCommand(target)) return false;
   return true;
 }
 
@@ -160,3 +167,34 @@ export function resolveAppliedComposerDefaultInstruction(
   if (!shouldApplyComposerDefaultInstruction(plain.trim(), instruction, resolveContext)) return "";
   return outbound;
 }
+
+/** 展示用户气泡时，若已单独渲染 defaultInstructionApplied，则从正文去掉重复前缀。 */
+export function stripAppliedDefaultInstructionFromDisplayText(
+  text: string,
+  appliedInstruction: string,
+): string {
+  const trimmed = text.trim();
+  const applied = appliedInstruction.trim();
+  if (!trimmed || !applied) return text;
+
+  const candidates = new Set<string>([applied]);
+  const namespaced = applied.match(/^\/([^:]+):(.+)$/u);
+  if (namespaced?.[2]) {
+    candidates.add(`/${namespaced[2]}`);
+  }
+
+  for (const candidate of candidates) {
+    const candidateLower = candidate.toLowerCase();
+    const trimmedLower = trimmed.toLowerCase();
+    if (trimmedLower === candidateLower) return "";
+    if (trimmedLower.startsWith(`${candidateLower} `)) {
+      return trimmed.slice(candidate.length).trimStart();
+    }
+    if (trimmedLower.startsWith(`${candidateLower}\n`)) {
+      return trimmed.slice(candidate.length).trimStart();
+    }
+  }
+  return text;
+}
+
+export type ComposerSendDispatchTargetType = "main" | "employee" | "team";

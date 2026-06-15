@@ -3,8 +3,10 @@ import {
   applyComposerDefaultInstruction,
   formatComposerDefaultInstructionChip,
   normalizeComposerDefaultInstruction,
+  plainBodyHasExplicitSlashCommand,
   resolveAppliedComposerDefaultInstruction,
   shouldApplyComposerDefaultInstruction,
+  stripAppliedDefaultInstructionFromDisplayText,
 } from "./composerDefaultInstruction";
 
 describe("composerDefaultInstruction", () => {
@@ -81,5 +83,25 @@ describe("composerDefaultInstruction", () => {
   test("resolveAppliedComposerDefaultInstruction returns normalized instruction when applicable", () => {
     expect(resolveAppliedComposerDefaultInstruction("你好", "/autopilot")).toBe("/autopilot");
     expect(resolveAppliedComposerDefaultInstruction("/compact", "/autopilot")).toBe("");
+  });
+
+  test("plainBodyHasExplicitSlashCommand mirrors slash skip behavior", () => {
+    expect(plainBodyHasExplicitSlashCommand("/compact")).toBe(true);
+    expect(shouldApplyComposerDefaultInstruction("/compact", "/autopilot")).toBe(false);
+  });
+
+  test("stripAppliedDefaultInstructionFromDisplayText removes duplicated command prefix", () => {
+    expect(
+      stripAppliedDefaultInstructionFromDisplayText(
+        "/oh-my-claudecode:ultrawork 你好",
+        "/oh-my-claudecode:ultrawork",
+      ),
+    ).toBe("你好");
+    expect(
+      stripAppliedDefaultInstructionFromDisplayText("/ultrawork 你好", "/oh-my-claudecode:ultrawork"),
+    ).toBe("你好");
+    expect(stripAppliedDefaultInstructionFromDisplayText("你好", "/oh-my-claudecode:ultrawork")).toBe(
+      "你好",
+    );
   });
 });

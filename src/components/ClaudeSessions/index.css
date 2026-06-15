@@ -4384,17 +4384,23 @@
 }
 
 .app-claude-user-message-default-instruction {
-  display: inline-block;
+  display: inline;
   margin: 0;
-  padding: 0 6px;
-  border-radius: 4px;
-  font-size: 11px;
-  line-height: 18px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: none;
+  font-size: inherit;
+  line-height: inherit;
   font-weight: 500;
-  vertical-align: baseline;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
   color: var(--ant-color-primary, #1677ff);
-  background: color-mix(in srgb, var(--ant-color-primary-bg, #e6f4ff) 85%, transparent);
-  border: 1px solid color-mix(in srgb, var(--ant-color-primary-border, #91caff) 70%, transparent);
+}
+
+.app-claude-user-message-default-instruction::after {
+  content: " ";
+  white-space: pre;
 }
 
 .app-claude-user-message-attachments {

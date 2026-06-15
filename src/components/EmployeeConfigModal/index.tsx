@@ -426,7 +426,7 @@ export function EmployeeConfigModal({
         <Form.Item
           name="defaultInstruction"
           label="默认指令"
-          tooltip="派发至该终端时，自动在正文前添加默认指令（如 /autopilot）"
+          tooltip="派发至该终端时自动前缀；优先于全局默认指令；正文已含 / 命令时不追加"
         >
           <EmployeeDefaultInstructionInput repositoryPath={defaultInstructionRepositoryPath} />
         </Form.Item>

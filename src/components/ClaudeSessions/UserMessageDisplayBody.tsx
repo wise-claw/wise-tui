@@ -1,6 +1,7 @@
 import { memo, useMemo, useState } from "react";
 import type { ClaudeMessage } from "../../types";
 import { userMessagePlainTextForDisplay } from "../../utils/claudeChatMessageDisplay";
+import { stripAppliedDefaultInstructionFromDisplayText } from "../../utils/composerDefaultInstruction";
 import { extractImportantUserInputForDisplay } from "../../utils/userMessageImportantInput";
 import { Markdown } from "./Markdown";
 import { UserMessageCollapsibleBody } from "./UserMessageCollapsibleBody";
@@ -29,6 +30,10 @@ export const UserMessageDisplayBody = memo(function UserMessageDisplayBody({ msg
   const [showFullInput, setShowFullInput] = useState(false);
   const visibleText = showFullInput ? fullText : display.compactText;
   const defaultInstructionApplied = msg.defaultInstructionApplied?.trim() || "";
+  const bodyText =
+    defaultInstructionApplied && !showFullInput
+      ? stripAppliedDefaultInstructionFromDisplayText(visibleText, defaultInstructionApplied)
+      : visibleText;
 
   return (
     <div className="app-claude-user-message-display">
@@ -42,7 +47,9 @@ export const UserMessageDisplayBody = memo(function UserMessageDisplayBody({ msg
               >
                 {defaultInstructionApplied}
               </span>
-              <Markdown text={visibleText} streaming={streaming} showPendingHint={false} />
+              {bodyText ? (
+                <Markdown text={bodyText} streaming={streaming} showPendingHint={false} />
+              ) : null}
             </div>
           ) : (
             <Markdown text={visibleText} streaming={streaming} showPendingHint={false} />

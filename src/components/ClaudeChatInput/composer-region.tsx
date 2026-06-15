@@ -117,7 +117,11 @@ import {
   parseComposerLocalSlashCommand,
 } from "../../services/composerLocalSlashCommand";
 import { isComposerLocalSlashEligible } from "../../utils/composerLocalSlashCommand";
-import { resolveAppliedComposerDefaultInstruction } from "../../utils/composerDefaultInstruction";
+import {
+  resolveComposerSendDefaultInstructionApplied,
+  resolveComposerSendDefaultInstructionPrefix,
+  resolveTerminalDefaultInstructionForEmployee,
+} from "../../utils/resolveEffectiveDefaultInstruction";
 import { loadDefaultInstructionResolveContext } from "../../utils/resolveComposerDefaultInstructionOutbound";
 import type { DefaultInstructionResolveContext } from "../../utils/resolveComposerDefaultInstructionOutbound";
 import { loadSlashCatalog } from "../../services/slashCatalogCache";
@@ -1693,16 +1697,46 @@ function ComposerInner({
 
       clearComposerSurfaceSync(logicalSnap.trim());
 
+      const inferredDispatchTarget = inferPendingQueueTargetFromPrompt(
+        promptSnap,
+        modelDisplayLabel,
+        employeesForDispatchRoute,
+      );
+      const fallbackDispatchTarget = resolveTextMentionTarget(
+        logicalSnap,
+        employeeMentions,
+        teamMentions,
+      );
+      const resolvedDispatchTargetForDefaults =
+        inferredDispatchTarget.targetType === "main" && fallbackDispatchTarget
+          ? { ...inferredDispatchTarget, ...fallbackDispatchTarget }
+          : inferredDispatchTarget;
+      const terminalDefaultForSend =
+        resolvedDispatchTargetForDefaults.targetType === "employee"
+          ? resolveTerminalDefaultInstructionForEmployee(
+              employeesForDispatchRoute,
+              resolvedDispatchTargetForDefaults.targetEmployeeName,
+            )
+          : "";
+      const defaultInstructionPrefixForSend = resolveComposerSendDefaultInstructionPrefix(
+        logicalSnap,
+        composerDefaultInstruction,
+        resolvedDispatchTargetForDefaults.targetType,
+        terminalDefaultForSend,
+      );
+
       let instructionResolveContext: DefaultInstructionResolveContext | undefined;
       let appliedDefaultInstruction = "";
-      if (composerDefaultInstruction.trim()) {
+      if (defaultInstructionPrefixForSend.trim()) {
         instructionResolveContext = await loadDefaultInstructionResolveContext(
           session.repositoryPath,
         );
-        appliedDefaultInstruction = resolveAppliedComposerDefaultInstruction(
+        appliedDefaultInstruction = resolveComposerSendDefaultInstructionApplied(
           logicalSnap,
           composerDefaultInstruction,
+          resolvedDispatchTargetForDefaults.targetType,
           instructionResolveContext,
+          terminalDefaultForSend,
         );
       }
       const buildBubbleExecuteOptions = (
@@ -1737,7 +1771,7 @@ function ComposerInner({
             images: imagesSnap,
             repositoryPath: session.repositoryPath,
             userBubbleMain: logicalSnap,
-            defaultInstructionPrefix: composerDefaultInstruction,
+            defaultInstructionPrefix: defaultInstructionPrefixForSend,
             defaultInstructionResolveContext: instructionResolveContext,
           });
           outbound = payload.outbound;
@@ -1899,7 +1933,7 @@ function ComposerInner({
             images: imagesSnap,
             repositoryPath: session.repositoryPath,
             userBubbleMain: logicalSnap,
-            defaultInstructionPrefix: composerDefaultInstruction,
+            defaultInstructionPrefix: defaultInstructionPrefixForSend,
             defaultInstructionResolveContext: instructionResolveContext,
           });
           outbound = payload.outbound;
