@@ -38,6 +38,7 @@ import {
   normalizeSessionExecutionEngine,
   type SessionExecutionEngine,
 } from "../../constants/sessionExecutionEngine";
+import { useComposerActiveProxyLabel } from "../../hooks/useComposerActiveProxyLabel";
 import { ClaudeModelTopbarPanelLazy } from "../ClaudeSessions/ClaudeModelTopbarPanel.lazy";
 import "../ClaudeSessions/ClaudeModelTopbarTrigger.css";
 import "./ComposerModelPicker.css";
@@ -167,6 +168,11 @@ export function ComposerModelPicker({
   const [cursorMenuOpen, setCursorMenuOpen] = useState(false);
   const modelRef = useRef(model);
   modelRef.current = model;
+
+  const activeProxyLabel = useComposerActiveProxyLabel(
+    sessionExecutionEngine,
+    session.repositoryPath,
+  );
 
   const { store, setStore, loading: profileStoreLoading } = useModelProfileSwitcher(panelOpen);
 
@@ -315,6 +321,9 @@ export function ComposerModelPicker({
   }, [cursorModelOptions, model, profileEngine, profileStoreRevision, isCursorEngine]);
 
   const modelBarParts = useMemo(() => {
+    if (activeProxyLabel) {
+      return { company: "", modelName: activeProxyLabel };
+    }
     const profileStore = getCachedModelProfileStore();
     if (profileEngine && profileStore) {
       const activeId = resolveActiveModelProfileId(profileEngine, profileStore);
@@ -338,9 +347,13 @@ export function ComposerModelPicker({
       if (fromModelId) return splitFlatModelDropdownLabel(fromModelId);
     }
     return splitFlatModelDropdownLabel(modelDisplayLabel);
-  }, [modelDisplayLabel, model, profileEngine, profileStoreRevision]);
+  }, [activeProxyLabel, modelDisplayLabel, model, profileEngine, profileStoreRevision]);
 
-  const modelBarTitle = formatModelProfileDropdownPartsTitle(modelBarParts);
+  const modelBarTitle = activeProxyLabel
+    ? `${activeProxyLabel} · 模型：${formatModelProfileDropdownPartsTitle(
+        splitFlatModelDropdownLabel(modelDisplayLabel),
+      )}`
+    : formatModelProfileDropdownPartsTitle(modelBarParts);
 
   const handlePanelOpenChange = useCallback((next: boolean) => {
     setPanelOpen(next);
@@ -452,7 +465,11 @@ export function ComposerModelPicker({
           getPopupContainer={() => document.body}
           popupRender={() => modelPanelOverlay}
         >
-          <HoverHint title="模型切换" placement="top" open={panelOpen ? false : undefined}>
+          <HoverHint
+            title={activeProxyLabel ? `${activeProxyLabel} · 点击切换模型` : "模型切换"}
+            placement="top"
+            open={panelOpen ? false : undefined}
+          >
             <span
               className="app-composer-model-picker__trigger-wrap"
               onMouseDown={stopSemiComposerPointerBubble}
