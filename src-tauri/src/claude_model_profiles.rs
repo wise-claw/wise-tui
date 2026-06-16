@@ -374,6 +374,19 @@ const CC_SWITCH_MODEL_ENV_KEYS: &[&str] = &[
     "ANTHROPIC_DEFAULT_SONNET_MODEL",
 ];
 
+/// 切换档案时允许 profile 覆盖的 `env` 键白名单：模型系列 + 上游地址 / 鉴权。
+/// 白名单外的 env 键（用户自定的 `MY_TOKEN` 等）必须保留，否则会冲掉用户的安装配置。
+const ANTHROPIC_OVERLAY_KEYS: &[&str] = &[
+    "ANTHROPIC_BASE_URL",
+    "ANTHROPIC_AUTH_TOKEN",
+    "ANTHROPIC_MODEL",
+    "ANTHROPIC_REASONING_MODEL",
+    "ANTHROPIC_SMALL_FAST_MODEL",
+    "ANTHROPIC_DEFAULT_HAIKU_MODEL",
+    "ANTHROPIC_DEFAULT_OPUS_MODEL",
+    "ANTHROPIC_DEFAULT_SONNET_MODEL",
+];
+
 /// 将解析后的 settings 中的模型选择对齐到单一 model id（写入 env 与顶层 `model`）。
 fn sync_claude_code_model_selection(root: &mut serde_json::Value, model_id: &str) -> Result<(), String> {
     let mid = model_id.trim();
@@ -436,12 +449,47 @@ fn push_available_model(root: &mut serde_json::Value, model_id: &str) {
     }
 }
 
-fn apply_profile_settings_to_value(_root: serde_json::Value, profile: &ClaudeModelProfile) -> Result<serde_json::Value, String> {
-    let mut parsed: serde_json::Value =
-        serde_json::from_str(profile.settings_json.trim()).map_err(|e| format!("档案 settingsJson 无效: {e}"))?;
+/// 将档案的 `settings.json` 与磁盘当前内容合并：
+/// - 顶层用户字段（`mcpServers` / `hooks` / `enabledPlugins` / `extraKnownMarketplaces` /
+///   `pluginConfigs` / `permissions` / `installedPlugins` / `enabledMcpjsonServers` 等）保留 current；
+/// - `env` 仅按 `ANTHROPIC_OVERLAY_KEYS` 白名单覆盖，profile 中其他 env 键被丢弃以防误注入；
+/// - `model` / `availableModels` 由 `sync_claude_code_model_selection` 写入。
+fn merge_profile_settings_into_current(
+    current: serde_json::Value,
+    profile: &ClaudeModelProfile,
+) -> Result<serde_json::Value, String> {
+    let parsed: serde_json::Value = serde_json::from_str(profile.settings_json.trim())
+        .map_err(|e| format!("档案 settingsJson 无效: {e}"))?;
     if !parsed.is_object() {
         return Err("档案 settingsJson 顶层必须是对象".to_string());
     }
+
+    // 以磁盘当前内容为底；current 不是对象（损坏/旧格式）时回退到空对象。
+    let mut out = if current.is_object() {
+        current
+    } else {
+        serde_json::json!({})
+    };
+    let out_obj = out
+        .as_object_mut()
+        .ok_or_else(|| "settings 根节点不是对象".to_string())?;
+
+    // 合并 env：仅按白名单 key 覆盖；profile 中非白名单 env 键（垃圾/试错配置）丢弃。
+    if let Some(profile_env) = parsed.get("env").and_then(|e| e.as_object()) {
+        if !profile_env.is_empty() {
+            let env = out_obj
+                .entry("env".to_string())
+                .or_insert_with(|| serde_json::json!({}))
+                .as_object_mut()
+                .ok_or_else(|| "settings.env 不是对象".to_string())?;
+            for key in ANTHROPIC_OVERLAY_KEYS {
+                if let Some(v) = profile_env.get(*key) {
+                    env.insert((*key).to_string(), v.clone());
+                }
+            }
+        }
+    }
+
     let model_id = read_effective_model(&parsed)
         .filter(|s| !s.is_empty())
         .or_else(|| {
@@ -453,8 +501,8 @@ fn apply_profile_settings_to_value(_root: serde_json::Value, profile: &ClaudeMod
             }
         })
         .ok_or_else(|| "档案中未找到模型 ID（请检查 env.ANTHROPIC_MODEL 等）".to_string())?;
-    sync_claude_code_model_selection(&mut parsed, &model_id)?;
-    Ok(parsed)
+    sync_claude_code_model_selection(&mut out, &model_id)?;
+    Ok(out)
 }
 
 fn warm_claude_settings_disk_cache(value: &serde_json::Value, path: &Path) {
@@ -578,7 +626,7 @@ fn apply_profile_to_disk(profile: &ClaudeModelProfile) -> Result<(), String> {
 
     let path = user_claude_dir().join("settings.json");
     let current = read_json_file(&path).unwrap_or_else(|| serde_json::json!({}));
-    let merged = apply_profile_settings_to_value(current, profile)?;
+    let merged = merge_profile_settings_into_current(current, profile)?;
     write_user_settings_json(&merged)
 }
 
@@ -1157,7 +1205,7 @@ mod tests {
             created_at_ms: 0,
             updated_at_ms: 0,
         };
-        let out = apply_profile_settings_to_value(serde_json::json!({}), &profile).expect("merge");
+        let out = merge_profile_settings_into_current(serde_json::json!({}), &profile).expect("merge");
         assert_eq!(out["env"]["ANTHROPIC_MODEL"].as_str(), Some("kimi-k2"));
         assert_eq!(
             out["env"]["ANTHROPIC_DEFAULT_SONNET_MODEL"].as_str(),
@@ -1280,10 +1328,176 @@ mod tests {
             created_at_ms: 0,
             updated_at_ms: 0,
         };
-        let out = apply_profile_settings_to_value(serde_json::json!({}), &profile).expect("merge");
+        let out = merge_profile_settings_into_current(serde_json::json!({}), &profile).expect("merge");
         assert_eq!(
             out["env"]["ANTHROPIC_MODEL"].as_str(),
             Some("qwen3.6-plus")
         );
+    }
+
+    fn profile_with_settings_json(settings_json: &str) -> ClaudeModelProfile {
+        ClaudeModelProfile {
+            id: "p1".into(),
+            company: "Vendor".into(),
+            name: "Test".into(),
+            official_website_url: String::new(),
+            model_id: String::new(),
+            settings_json: settings_json.into(),
+            engine: default_profile_engine(),
+            created_at_ms: 0,
+            updated_at_ms: 0,
+        }
+    }
+
+    #[test]
+    fn merge_preserves_user_mcp_servers_and_hooks() {
+        let current = serde_json::json!({
+            "mcpServers": {
+                "github": { "type": "stdio", "command": "mcp-github" }
+            },
+            "mcp_servers": {
+                "legacy": { "type": "http", "url": "http://legacy" }
+            },
+            "hooks": {
+                "PreToolUse": [{ "matcher": "Bash", "hooks": [{ "type": "command", "command": "echo" }] }]
+            },
+            "permissions": { "allow": ["Read"] }
+        });
+        let profile = profile_with_settings_json(
+            r#"{
+              "env": {
+                "ANTHROPIC_BASE_URL": "http://127.0.0.1:8082",
+                "ANTHROPIC_MODEL": "kimi-k2"
+              }
+            }"#,
+        );
+        let out = merge_profile_settings_into_current(current, &profile).expect("merge");
+        assert!(out["mcpServers"]["github"].is_object());
+        assert!(out["mcp_servers"]["legacy"].is_object());
+        assert!(out["hooks"]["PreToolUse"].is_array());
+        assert_eq!(out["permissions"]["allow"][0].as_str(), Some("Read"));
+        assert_eq!(out["env"]["ANTHROPIC_MODEL"].as_str(), Some("kimi-k2"));
+        assert_eq!(
+            out["env"]["ANTHROPIC_BASE_URL"].as_str(),
+            Some("http://127.0.0.1:8082")
+        );
+    }
+
+    #[test]
+    fn merge_preserves_user_defined_env_keys() {
+        let current = serde_json::json!({
+            "env": {
+                "MY_TOKEN": "secret",
+                "CUSTOM_ENDPOINT": "http://internal",
+                "ANTHROPIC_MODEL": "old-model"
+            }
+        });
+        let profile = profile_with_settings_json(
+            r#"{
+              "env": {
+                "ANTHROPIC_BASE_URL": "https://api.example.com",
+                "ANTHROPIC_AUTH_TOKEN": "tok-abc",
+                "ANTHROPIC_MODEL": "new-model"
+              }
+            }"#,
+        );
+        let out = merge_profile_settings_into_current(current, &profile).expect("merge");
+        // 用户自定 env 键必须保留
+        assert_eq!(out["env"]["MY_TOKEN"].as_str(), Some("secret"));
+        assert_eq!(out["env"]["CUSTOM_ENDPOINT"].as_str(), Some("http://internal"));
+        // 白名单 env 键由 profile 覆盖
+        assert_eq!(out["env"]["ANTHROPIC_MODEL"].as_str(), Some("new-model"));
+        assert_eq!(out["env"]["ANTHROPIC_BASE_URL"].as_str(), Some("https://api.example.com"));
+        assert_eq!(out["env"]["ANTHROPIC_AUTH_TOKEN"].as_str(), Some("tok-abc"));
+    }
+
+    #[test]
+    fn merge_preserves_enabled_plugins_and_marketplaces() {
+        let current = serde_json::json!({
+            "enabledPlugins": { "code-review@local": true, "translator@local": true },
+            "extraKnownMarketplaces": {
+                "local": { "source": { "source": "directory", "path": "/p" } }
+            },
+            "pluginConfigs": { "code-review@local": { "maxLen": 5 } }
+        });
+        let profile = profile_with_settings_json(
+            r#"{
+              "env": { "ANTHROPIC_MODEL": "kimi-k2" }
+            }"#,
+        );
+        let out = merge_profile_settings_into_current(current, &profile).expect("merge");
+        assert_eq!(
+            out["enabledPlugins"]["code-review@local"].as_bool(),
+            Some(true)
+        );
+        assert_eq!(
+            out["enabledPlugins"]["translator@local"].as_bool(),
+            Some(true)
+        );
+        assert!(out["extraKnownMarketplaces"]["local"].is_object());
+        assert_eq!(
+            out["pluginConfigs"]["code-review@local"]["maxLen"].as_i64(),
+            Some(5)
+        );
+        assert_eq!(out["env"]["ANTHROPIC_MODEL"].as_str(), Some("kimi-k2"));
+    }
+
+    #[test]
+    fn merge_drops_non_whitelist_env_keys_from_profile() {
+        let current = serde_json::json!({
+            "env": { "MY_TOKEN": "keep-me" }
+        });
+        let profile = profile_with_settings_json(
+            r#"{
+              "env": {
+                "ANTHROPIC_MODEL": "kimi-k2",
+                "DEBUG": "yes",
+                "INJECTED_KEY": "evil"
+              }
+            }"#,
+        );
+        let out = merge_profile_settings_into_current(current, &profile).expect("merge");
+        // 白名单键写入
+        assert_eq!(out["env"]["ANTHROPIC_MODEL"].as_str(), Some("kimi-k2"));
+        // 用户自定键保留
+        assert_eq!(out["env"]["MY_TOKEN"].as_str(), Some("keep-me"));
+        // profile 中的非白名单键不写入（防止档案作者误注入垃圾 env）
+        assert!(out["env"].get("DEBUG").is_none());
+        assert!(out["env"].get("INJECTED_KEY").is_none());
+    }
+
+    #[test]
+    fn merge_syncs_all_anthropic_model_aliases_from_profile() {
+        let current = serde_json::json!({});
+        let profile = profile_with_settings_json(
+            r#"{
+              "env": {
+                "ANTHROPIC_DEFAULT_SONNET_MODEL": "kimi-k2"
+              }
+            }"#,
+        );
+        let out = merge_profile_settings_into_current(current, &profile).expect("merge");
+        // sync_claude_code_model_selection 应把所有 ANTHROPIC_*_MODEL 键统一到 kimi-k2
+        assert_eq!(out["env"]["ANTHROPIC_MODEL"].as_str(), Some("kimi-k2"));
+        assert_eq!(
+            out["env"]["ANTHROPIC_DEFAULT_SONNET_MODEL"].as_str(),
+            Some("kimi-k2")
+        );
+        assert_eq!(
+            out["env"]["ANTHROPIC_DEFAULT_OPUS_MODEL"].as_str(),
+            Some("kimi-k2")
+        );
+        assert_eq!(out["model"].as_str(), Some("kimi-k2"));
+    }
+
+    #[test]
+    fn merge_handles_non_object_current_as_empty() {
+        // current 损坏为数组/字符串时，回退到空对象；不应 panic。
+        let profile = profile_with_settings_json(
+            r#"{"env":{"ANTHROPIC_MODEL":"kimi-k2"}}"#,
+        );
+        let out = merge_profile_settings_into_current(serde_json::json!(["not", "an", "object"]), &profile)
+            .expect("merge");
+        assert_eq!(out["env"]["ANTHROPIC_MODEL"].as_str(), Some("kimi-k2"));
     }
 }

@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1781493979222,
+  "lastScanned": 1781612149187,
   "projectRoot": "/Users/sjl/Documents/github/wise",
   "techStack": {
     "languages": [
@@ -42,8 +42,8 @@
     "runtime": null
   },
   "build": {
-    "buildCommand": "bunx tsc --noEmit 2>&1 | tail -40",
-    "testCommand": "rtk git stash && bun test 2>&1 | tail -8; rtk git stash pop 2>&1 | tail -3",
+    "buildCommand": "npm run build",
+    "testCommand": "npm test",
     "lintCommand": null,
     "devCommand": "npm run dev",
     "scripts": {
@@ -85,14 +85,14 @@
       "path": "apps",
       "purpose": null,
       "fileCount": 0,
-      "lastAccessed": 1781493979213,
+      "lastAccessed": 1781612149177,
       "keyFiles": []
     },
     "design": {
       "path": "design",
       "purpose": null,
       "fileCount": 2,
-      "lastAccessed": 1781493979213,
+      "lastAccessed": 1781612149178,
       "keyFiles": [
         "product-ux-engineering-audit-2026-05-14.md"
       ]
@@ -101,7 +101,7 @@
       "path": "dist",
       "purpose": "Distribution/build output",
       "fileCount": 5,
-      "lastAccessed": 1781493979214,
+      "lastAccessed": 1781612149179,
       "keyFiles": [
         "demo.html",
         "index.html",
@@ -114,14 +114,14 @@
       "path": "examples",
       "purpose": "Example code",
       "fileCount": 0,
-      "lastAccessed": 1781493979215,
+      "lastAccessed": 1781612149179,
       "keyFiles": []
     },
     "extras": {
       "path": "extras",
       "purpose": null,
       "fileCount": 1,
-      "lastAccessed": 1781493979215,
+      "lastAccessed": 1781612149179,
       "keyFiles": [
         "check-prd-split-evolution.mjs"
       ]
@@ -130,7 +130,7 @@
       "path": "imgs",
       "purpose": null,
       "fileCount": 6,
-      "lastAccessed": 1781493979215,
+      "lastAccessed": 1781612149179,
       "keyFiles": [
         "add-execution-env.gif",
         "add-workspace.gif",
@@ -143,7 +143,7 @@
       "path": "public",
       "purpose": "Public files",
       "fileCount": 3,
-      "lastAccessed": 1781493979215,
+      "lastAccessed": 1781612149179,
       "keyFiles": [
         "demo.html",
         "tauri.svg",
@@ -154,7 +154,7 @@
       "path": "scripts",
       "purpose": "Build/utility scripts",
       "fileCount": 25,
-      "lastAccessed": 1781493979215,
+      "lastAccessed": 1781612149180,
       "keyFiles": [
         "build-claude-settings-schema-zh.mjs",
         "cursor-sdk-bridge.stderr.test.ts",
@@ -167,7 +167,7 @@
       "path": "src",
       "purpose": "Source code",
       "fileCount": 10,
-      "lastAccessed": 1781493979215,
+      "lastAccessed": 1781612149180,
       "keyFiles": [
         "App.css",
         "App.tsx",
@@ -180,7 +180,7 @@
       "path": "src-tauri",
       "purpose": null,
       "fileCount": 8,
-      "lastAccessed": 1781493979215,
+      "lastAccessed": 1781612149180,
       "keyFiles": [
         "Cargo.lock",
         "Cargo.toml",
@@ -193,16 +193,16 @@
       "path": "tools",
       "purpose": null,
       "fileCount": 1,
-      "lastAccessed": 1781493979215,
+      "lastAccessed": 1781612149180,
       "keyFiles": []
     },
     "dist/assets": {
       "path": "dist/assets",
       "purpose": "Static assets",
-      "fileCount": 298,
-      "lastAccessed": 1781493979216,
+      "fileCount": 301,
+      "lastAccessed": 1781612149181,
       "keyFiles": [
-        "ActiveRepositoryFilesPanel-B8nOq7I8.js",
+        "ActiveRepositoryFilesPanel-CBo3t63I.js",
         "ApartmentOutlined-BuS9hFPo.js",
         "ApiOutlined-DT7KD3qY.js"
       ]
@@ -211,7 +211,7 @@
       "path": "dist/public",
       "purpose": "Public files",
       "fileCount": 1,
-      "lastAccessed": 1781493979216,
+      "lastAccessed": 1781612149182,
       "keyFiles": [
         "demo.html"
       ]
@@ -220,7 +220,7 @@
       "path": "src/assets",
       "purpose": "Static assets",
       "fileCount": 1,
-      "lastAccessed": 1781493979216,
+      "lastAccessed": 1781612149182,
       "keyFiles": [
         "react.svg"
       ]
@@ -229,7 +229,7 @@
       "path": "src/components",
       "purpose": "UI components",
       "fileCount": 28,
-      "lastAccessed": 1781493979216,
+      "lastAccessed": 1781612149182,
       "keyFiles": [
         "AppWorkspaceLayout.lazy.ts",
         "AppWorkspaceLayout.tsx",
@@ -240,7 +240,7 @@
       "path": "src/data",
       "purpose": "Data files",
       "fileCount": 5,
-      "lastAccessed": 1781493979217,
+      "lastAccessed": 1781612149182,
       "keyFiles": [
         "claude-code-settings.schema.en.json",
         "claude-code-settings.schema.json",

@@ -153,26 +153,6 @@ fn auth_maps_equal(a: &Map<String, Value>, b: &Map<String, Value>) -> bool {
     a == b
 }
 
-/// 档案 config 是否仅含 model 行（忽略注释与空行）。
-fn is_model_only_codex_config(config: &str) -> bool {
-    let mut has_model = false;
-    for line in config.lines() {
-        let trimmed = line.trim();
-        if trimmed.is_empty() || trimmed.starts_with('#') {
-            continue;
-        }
-        if trimmed.starts_with("model") && trimmed.contains('=') {
-            if has_model {
-                return false;
-            }
-            has_model = true;
-        } else {
-            return false;
-        }
-    }
-    has_model
-}
-
 /// 在现有 `config.toml` 中替换或插入 `model = "..."` 行，保留其余配置。
 pub fn patch_codex_config_model(config: &str, new_model: &str) -> String {
     let model = new_model.trim();
@@ -199,28 +179,42 @@ pub fn patch_codex_config_model(config: &str, new_model: &str) -> String {
     out
 }
 
+/// 仅按 envelope 中存在的 key 覆盖 current.auth；其他键（用户自定）保留。
+fn merge_auth_maps(current: &Map<String, Value>, overlay: &Map<String, Value>) -> Map<String, Value> {
+    let mut out = current.clone();
+    for (k, v) in overlay {
+        out.insert(k.clone(), v.clone());
+    }
+    out
+}
+
 fn apply_codex_profile_envelope_inner(envelope: &CodexProfileEnvelope) -> Result<(), String> {
     let current = read_codex_profile_envelope();
-    if auth_maps_equal(&current.auth, &envelope.auth)
-        && is_model_only_codex_config(&envelope.config)
-        && !current.config.trim().is_empty()
-    {
-        if let Some(new_model) = read_effective_codex_model(&envelope.config) {
-            let patched = patch_codex_config_model(&current.config, &new_model);
-            if patched != current.config {
-                write_config_toml(&patched)?;
-                let merged = CodexProfileEnvelope {
-                    auth: current.auth,
-                    config: patched,
-                };
-                return warm_codex_disk_cache(&merged);
-            }
-            return warm_codex_disk_cache(&current);
+    // 首次安装（当前 config.toml 为空）：直接写入 envelope，没有用户数据可冲。
+    if current.config.trim().is_empty() {
+        write_auth_json(&envelope.auth)?;
+        write_config_toml(&envelope.config)?;
+        return warm_codex_disk_cache(envelope);
+    }
+
+    // 非首次：保守地只 patch model 行（保留其他用户配置）+ 合并 auth.json（保留自定 key）。
+    let mut next_config = current.config.clone();
+    if let Some(new_model) = read_effective_codex_model(&envelope.config) {
+        let patched = patch_codex_config_model(&current.config, &new_model);
+        if patched != current.config {
+            write_config_toml(&patched)?;
+            next_config = patched;
         }
     }
-    write_auth_json(&envelope.auth)?;
-    write_config_toml(&envelope.config)?;
-    warm_codex_disk_cache(envelope)
+    let merged_auth = merge_auth_maps(&current.auth, &envelope.auth);
+    if !auth_maps_equal(&current.auth, &merged_auth) {
+        write_auth_json(&merged_auth)?;
+    }
+    let merged = CodexProfileEnvelope {
+        auth: merged_auth,
+        config: next_config,
+    };
+    warm_codex_disk_cache(&merged)
 }
 
 pub fn apply_codex_profile_envelope(envelope: &CodexProfileEnvelope) -> Result<(), String> {
@@ -330,8 +324,74 @@ model_reasoning_effort = "medium"
     }
 
     #[test]
-    fn is_model_only_codex_config_detects_minimal_profile() {
-        assert!(is_model_only_codex_config("model = \"gpt-5.4\"\n"));
-        assert!(!is_model_only_codex_config("model = \"a\"\nother = 1\n"));
+    fn merge_auth_maps_preserves_user_keys() {
+        let current: Map<String, Value> = serde_json::from_value(serde_json::json!({
+            "OPENAI_API_KEY": "old-key",
+            "MY_TOKEN": "keep-me",
+            "OPENAI_ORG_ID": "org-1"
+        }))
+        .expect("parse current");
+        let overlay: Map<String, Value> = serde_json::from_value(serde_json::json!({
+            "OPENAI_API_KEY": "new-key"
+        }))
+        .expect("parse overlay");
+        let merged = merge_auth_maps(&current, &overlay);
+        // overlay 提供的 key 被覆盖
+        assert_eq!(merged["OPENAI_API_KEY"].as_str(), Some("new-key"));
+        // current 自定的 key 必须保留
+        assert_eq!(merged["MY_TOKEN"].as_str(), Some("keep-me"));
+        assert_eq!(merged["OPENAI_ORG_ID"].as_str(), Some("org-1"));
+    }
+
+    #[test]
+    fn patch_codex_config_model_preserves_unknown_sections() {
+        // 用户的 config.toml 含非 model 行（自定义 section / 注释），patch 必须只动 model 行。
+        let current = r#"# user comment
+model = "gpt-5"
+
+[custom_section]
+foo = "bar"
+nested = { a = 1 }
+"#;
+        let patched = patch_codex_config_model(current, "gpt-5.4");
+        assert!(patched.contains("model = \"gpt-5.4\""));
+        assert!(!patched.contains("model = \"gpt-5\""));
+        // 自定义 section / 注释必须原样保留
+        assert!(patched.contains("# user comment"));
+        assert!(patched.contains("[custom_section]"));
+        assert!(patched.contains("foo = \"bar\""));
+        assert!(patched.contains("nested = { a = 1 }"));
+    }
+
+    #[test]
+    fn apply_envelope_preserves_user_config_and_extra_auth_keys() {
+        // 模拟当前 config.toml / auth.json 含用户内容；验证 patch + merge 路径不丢用户数据。
+        let envelope = CodexProfileEnvelope {
+            auth: serde_json::from_value(serde_json::json!({
+                "OPENAI_API_KEY": "new"
+            }))
+            .expect("envelope auth"),
+            config: r#"model = "gpt-5.4""#.to_string(),
+        };
+        let current_config = r#"# user section
+model = "gpt-5"
+[custom]
+foo = "bar"
+"#;
+        let current_auth: Map<String, Value> = serde_json::from_value(serde_json::json!({
+            "OPENAI_API_KEY": "old",
+            "MY_TOKEN": "secret"
+        }))
+        .expect("current auth");
+
+        // 等价于 `apply_codex_profile_envelope_inner` 非首次路径上的两次合并操作。
+        let patched = patch_codex_config_model(current_config, "gpt-5.4");
+        assert!(patched.contains("[custom]"));
+        assert!(patched.contains("foo = \"bar\""));
+        assert!(patched.contains("model = \"gpt-5.4\""));
+
+        let merged_auth = merge_auth_maps(&current_auth, &envelope.auth);
+        assert_eq!(merged_auth["OPENAI_API_KEY"].as_str(), Some("new"));
+        assert_eq!(merged_auth["MY_TOKEN"].as_str(), Some("secret"));
     }
 }
