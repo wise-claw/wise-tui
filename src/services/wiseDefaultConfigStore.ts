@@ -28,6 +28,7 @@ import {
   MONITOR_PANEL_VISIBLE_ROWS_DEFAULT,
   normalizeMonitorPanelVisibleRows,
 } from "../constants/monitorPanelLayout";
+import { normalizeFeedbackLoopMaxCycles } from "../utils/sessionFeedbackLoop";
 import { normalizeChord } from "../utils/atMentionShortcutChord";
 import { RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK, RIGHT_PANEL_DEFAULT_COLLAPSED_KEY } from "../utils/rightPanelStorage";
 import { deleteAppSetting, getAppSetting, setAppSetting, setAppSettingJson } from "./appSettingsStore";
@@ -80,6 +81,17 @@ export const WISE_WORKSPACE_INSPECTOR_PANELS_CHANGED = "wise:workspace-inspector
 export const WISE_FILE_TREE_OPEN_IN_NEW_PANE_CHANGED = "wise:file-tree-open-in-new-pane-changed";
 
 export const WISE_REPO_PANEL_PLACEMENT_CHANGED = "wise:repo-panel-placement-changed";
+
+export const WISE_SESSION_FEEDBACK_LOOP_CHANGED = "wise:session-feedback-loop-changed";
+
+export interface SessionFeedbackLoopSettings {
+  enabled: boolean;
+  maxCycles: number;
+  autoStart: boolean;
+  earlyStopConvergence: boolean;
+  autoSaveHabitsToComposer: boolean;
+  injectHabitsToSystemPrompt: boolean;
+}
 
 export type MonitorPanelPlacement = "left" | "right";
 
@@ -140,6 +152,18 @@ export interface WiseDefaultConfigV1 {
   gitPanelPlacement: MonitorPanelPlacement;
   /** 仓库文件树默认栏位；默认左栏（与 Git 同在左栏时 Tab 切换）。 */
   filesPanelPlacement: MonitorPanelPlacement;
+  /** 会话全链路「反馈神经网」自我优化闭环；开发功能，默认关闭。 */
+  sessionFeedbackLoopEnabled: boolean;
+  /** 反馈神经网最大自我优化循环次数（1–5）。 */
+  sessionFeedbackLoopMaxCycles: number;
+  /** 洞察页检测到警告项时自动启动闭环。 */
+  sessionFeedbackLoopAutoStart: boolean;
+  /** 指标收敛时提前结束循环。 */
+  sessionFeedbackLoopEarlyStop: boolean;
+  /** 闭环完成后将习惯写入 Composer 常用语。 */
+  sessionFeedbackLoopSaveHabitsToComposer: boolean;
+  /** 会话 spawn 时将神经网习惯追加到 Claude CLI system prompt。 */
+  sessionFeedbackLoopInjectSystemPrompt: boolean;
 }
 
 const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
@@ -169,6 +193,12 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   fileTreeOpenInNewPane: false,
   gitPanelPlacement: "left",
   filesPanelPlacement: "left",
+  sessionFeedbackLoopEnabled: false,
+  sessionFeedbackLoopMaxCycles: 3,
+  sessionFeedbackLoopAutoStart: false,
+  sessionFeedbackLoopEarlyStop: true,
+  sessionFeedbackLoopSaveHabitsToComposer: false,
+  sessionFeedbackLoopInjectSystemPrompt: false,
 };
 
 function normalizeMonitorPanelPlacement(raw: unknown): MonitorPanelPlacement | null {
@@ -302,6 +332,45 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
       filesPanelPlacement:
         normalizeMonitorPanelPlacement(parsed.filesPanelPlacement) ??
         DEFAULT_CONFIG.filesPanelPlacement,
+      sessionFeedbackLoopEnabled:
+        parsed.sessionFeedbackLoopEnabled === undefined
+          ? DEFAULT_CONFIG.sessionFeedbackLoopEnabled
+          : normalizeBoolean(
+              parsed.sessionFeedbackLoopEnabled,
+              DEFAULT_CONFIG.sessionFeedbackLoopEnabled,
+            ),
+      sessionFeedbackLoopMaxCycles:
+        parsed.sessionFeedbackLoopMaxCycles === undefined
+          ? DEFAULT_CONFIG.sessionFeedbackLoopMaxCycles
+          : normalizeFeedbackLoopMaxCycles(parsed.sessionFeedbackLoopMaxCycles),
+      sessionFeedbackLoopAutoStart:
+        parsed.sessionFeedbackLoopAutoStart === undefined
+          ? DEFAULT_CONFIG.sessionFeedbackLoopAutoStart
+          : normalizeBoolean(
+              parsed.sessionFeedbackLoopAutoStart,
+              DEFAULT_CONFIG.sessionFeedbackLoopAutoStart,
+            ),
+      sessionFeedbackLoopEarlyStop:
+        parsed.sessionFeedbackLoopEarlyStop === undefined
+          ? DEFAULT_CONFIG.sessionFeedbackLoopEarlyStop
+          : normalizeBoolean(
+              parsed.sessionFeedbackLoopEarlyStop,
+              DEFAULT_CONFIG.sessionFeedbackLoopEarlyStop,
+            ),
+      sessionFeedbackLoopSaveHabitsToComposer:
+        parsed.sessionFeedbackLoopSaveHabitsToComposer === undefined
+          ? DEFAULT_CONFIG.sessionFeedbackLoopSaveHabitsToComposer
+          : normalizeBoolean(
+              parsed.sessionFeedbackLoopSaveHabitsToComposer,
+              DEFAULT_CONFIG.sessionFeedbackLoopSaveHabitsToComposer,
+            ),
+      sessionFeedbackLoopInjectSystemPrompt:
+        parsed.sessionFeedbackLoopInjectSystemPrompt === undefined
+          ? DEFAULT_CONFIG.sessionFeedbackLoopInjectSystemPrompt
+          : normalizeBoolean(
+              parsed.sessionFeedbackLoopInjectSystemPrompt,
+              DEFAULT_CONFIG.sessionFeedbackLoopInjectSystemPrompt,
+            ),
     };
   } catch {
     return null;
@@ -434,6 +503,12 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     fileTreeOpenInNewPane: DEFAULT_CONFIG.fileTreeOpenInNewPane,
     gitPanelPlacement: DEFAULT_CONFIG.gitPanelPlacement,
     filesPanelPlacement: DEFAULT_CONFIG.filesPanelPlacement,
+    sessionFeedbackLoopEnabled: DEFAULT_CONFIG.sessionFeedbackLoopEnabled,
+    sessionFeedbackLoopMaxCycles: DEFAULT_CONFIG.sessionFeedbackLoopMaxCycles,
+    sessionFeedbackLoopAutoStart: DEFAULT_CONFIG.sessionFeedbackLoopAutoStart,
+    sessionFeedbackLoopEarlyStop: DEFAULT_CONFIG.sessionFeedbackLoopEarlyStop,
+    sessionFeedbackLoopSaveHabitsToComposer: DEFAULT_CONFIG.sessionFeedbackLoopSaveHabitsToComposer,
+    sessionFeedbackLoopInjectSystemPrompt: DEFAULT_CONFIG.sessionFeedbackLoopInjectSystemPrompt,
   };
 }
 
@@ -510,6 +585,13 @@ function dispatchRepoPanelPlacementChanged(
   );
 }
 
+function dispatchSessionFeedbackLoopChanged(settings: SessionFeedbackLoopSettings): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(WISE_SESSION_FEEDBACK_LOOP_CHANGED, { detail: settings }),
+  );
+}
+
 /** 将旧版代码默认写入库的 `oneshot` 升为当前产品默认 `streaming`（仅执行一次）。 */
 async function maybeUpgradeOneshotDefaultToStreaming(
   config: WiseDefaultConfigV1,
@@ -569,6 +651,12 @@ export async function saveWiseDefaultConfig(
       | "fileTreeOpenInNewPane"
       | "gitPanelPlacement"
       | "filesPanelPlacement"
+      | "sessionFeedbackLoopEnabled"
+      | "sessionFeedbackLoopMaxCycles"
+      | "sessionFeedbackLoopAutoStart"
+      | "sessionFeedbackLoopEarlyStop"
+      | "sessionFeedbackLoopSaveHabitsToComposer"
+      | "sessionFeedbackLoopInjectSystemPrompt"
     >
   >,
 ): Promise<WiseDefaultConfigV1> {
@@ -623,6 +711,18 @@ export async function saveWiseDefaultConfig(
     fileTreeOpenInNewPane: patch.fileTreeOpenInNewPane ?? current.fileTreeOpenInNewPane,
     gitPanelPlacement: patch.gitPanelPlacement ?? current.gitPanelPlacement,
     filesPanelPlacement: patch.filesPanelPlacement ?? current.filesPanelPlacement,
+    sessionFeedbackLoopEnabled:
+      patch.sessionFeedbackLoopEnabled ?? current.sessionFeedbackLoopEnabled,
+    sessionFeedbackLoopMaxCycles:
+      patch.sessionFeedbackLoopMaxCycles ?? current.sessionFeedbackLoopMaxCycles,
+    sessionFeedbackLoopAutoStart:
+      patch.sessionFeedbackLoopAutoStart ?? current.sessionFeedbackLoopAutoStart,
+    sessionFeedbackLoopEarlyStop:
+      patch.sessionFeedbackLoopEarlyStop ?? current.sessionFeedbackLoopEarlyStop,
+    sessionFeedbackLoopSaveHabitsToComposer:
+      patch.sessionFeedbackLoopSaveHabitsToComposer ?? current.sessionFeedbackLoopSaveHabitsToComposer,
+    sessionFeedbackLoopInjectSystemPrompt:
+      patch.sessionFeedbackLoopInjectSystemPrompt ?? current.sessionFeedbackLoopInjectSystemPrompt,
   };
   if (patch.connectionKind !== undefined) {
     next.connectionKind = normalizeConnectionKind(patch.connectionKind) ?? current.connectionKind;
@@ -703,6 +803,39 @@ export async function saveWiseDefaultConfig(
   if (patch.filesPanelPlacement !== undefined) {
     next.filesPanelPlacement =
       normalizeMonitorPanelPlacement(patch.filesPanelPlacement) ?? current.filesPanelPlacement;
+  }
+  if (patch.sessionFeedbackLoopEnabled !== undefined) {
+    next.sessionFeedbackLoopEnabled = normalizeBoolean(
+      patch.sessionFeedbackLoopEnabled,
+      DEFAULT_CONFIG.sessionFeedbackLoopEnabled,
+    );
+  }
+  if (patch.sessionFeedbackLoopMaxCycles !== undefined) {
+    next.sessionFeedbackLoopMaxCycles = normalizeFeedbackLoopMaxCycles(patch.sessionFeedbackLoopMaxCycles);
+  }
+  if (patch.sessionFeedbackLoopAutoStart !== undefined) {
+    next.sessionFeedbackLoopAutoStart = normalizeBoolean(
+      patch.sessionFeedbackLoopAutoStart,
+      DEFAULT_CONFIG.sessionFeedbackLoopAutoStart,
+    );
+  }
+  if (patch.sessionFeedbackLoopEarlyStop !== undefined) {
+    next.sessionFeedbackLoopEarlyStop = normalizeBoolean(
+      patch.sessionFeedbackLoopEarlyStop,
+      DEFAULT_CONFIG.sessionFeedbackLoopEarlyStop,
+    );
+  }
+  if (patch.sessionFeedbackLoopSaveHabitsToComposer !== undefined) {
+    next.sessionFeedbackLoopSaveHabitsToComposer = normalizeBoolean(
+      patch.sessionFeedbackLoopSaveHabitsToComposer,
+      DEFAULT_CONFIG.sessionFeedbackLoopSaveHabitsToComposer,
+    );
+  }
+  if (patch.sessionFeedbackLoopInjectSystemPrompt !== undefined) {
+    next.sessionFeedbackLoopInjectSystemPrompt = normalizeBoolean(
+      patch.sessionFeedbackLoopInjectSystemPrompt,
+      DEFAULT_CONFIG.sessionFeedbackLoopInjectSystemPrompt,
+    );
   }
   await persistConfig(next);
   await deleteLegacyAppSettings();
@@ -829,6 +962,33 @@ export async function saveWiseDefaultConfig(
       next.filesPanelPlacement !== current.filesPanelPlacement)
   ) {
     dispatchRepoPanelPlacementChanged(next.gitPanelPlacement, next.filesPanelPlacement);
+  }
+  if (
+    patch.sessionFeedbackLoopEnabled !== undefined ||
+    patch.sessionFeedbackLoopMaxCycles !== undefined ||
+    patch.sessionFeedbackLoopAutoStart !== undefined ||
+    patch.sessionFeedbackLoopEarlyStop !== undefined ||
+    patch.sessionFeedbackLoopSaveHabitsToComposer !== undefined ||
+    patch.sessionFeedbackLoopInjectSystemPrompt !== undefined
+  ) {
+    if (
+      next.sessionFeedbackLoopEnabled !== current.sessionFeedbackLoopEnabled ||
+      next.sessionFeedbackLoopMaxCycles !== current.sessionFeedbackLoopMaxCycles ||
+      next.sessionFeedbackLoopAutoStart !== current.sessionFeedbackLoopAutoStart ||
+      next.sessionFeedbackLoopEarlyStop !== current.sessionFeedbackLoopEarlyStop ||
+      next.sessionFeedbackLoopSaveHabitsToComposer !==
+        current.sessionFeedbackLoopSaveHabitsToComposer ||
+      next.sessionFeedbackLoopInjectSystemPrompt !== current.sessionFeedbackLoopInjectSystemPrompt
+    ) {
+      dispatchSessionFeedbackLoopChanged({
+        enabled: next.sessionFeedbackLoopEnabled,
+        maxCycles: next.sessionFeedbackLoopMaxCycles,
+        autoStart: next.sessionFeedbackLoopAutoStart,
+        earlyStopConvergence: next.sessionFeedbackLoopEarlyStop,
+        autoSaveHabitsToComposer: next.sessionFeedbackLoopSaveHabitsToComposer,
+        injectHabitsToSystemPrompt: next.sessionFeedbackLoopInjectSystemPrompt,
+      });
+    }
   }
 
   return next;
@@ -1169,6 +1329,47 @@ export async function loadFileTreeOpenInNewPaneFromStore(): Promise<boolean> {
 
 export async function saveFileTreeOpenInNewPaneToStore(openInNewPane: boolean): Promise<void> {
   await saveWiseDefaultConfig({ fileTreeOpenInNewPane: openInNewPane });
+}
+
+export async function loadSessionFeedbackLoopSettingsFromStore(): Promise<SessionFeedbackLoopSettings> {
+  const config = await loadWiseDefaultConfig();
+  return {
+    enabled: config.sessionFeedbackLoopEnabled,
+    maxCycles: config.sessionFeedbackLoopMaxCycles,
+    autoStart: config.sessionFeedbackLoopAutoStart,
+    earlyStopConvergence: config.sessionFeedbackLoopEarlyStop,
+    autoSaveHabitsToComposer: config.sessionFeedbackLoopSaveHabitsToComposer,
+    injectHabitsToSystemPrompt: config.sessionFeedbackLoopInjectSystemPrompt,
+  };
+}
+
+export async function saveSessionFeedbackLoopSettingsToStore(
+  patch: Partial<SessionFeedbackLoopSettings>,
+): Promise<void> {
+  await saveWiseDefaultConfig({
+    ...(patch.enabled !== undefined ? { sessionFeedbackLoopEnabled: patch.enabled } : {}),
+    ...(patch.maxCycles !== undefined ? { sessionFeedbackLoopMaxCycles: patch.maxCycles } : {}),
+    ...(patch.autoStart !== undefined ? { sessionFeedbackLoopAutoStart: patch.autoStart } : {}),
+    ...(patch.earlyStopConvergence !== undefined
+      ? { sessionFeedbackLoopEarlyStop: patch.earlyStopConvergence }
+      : {}),
+    ...(patch.autoSaveHabitsToComposer !== undefined
+      ? { sessionFeedbackLoopSaveHabitsToComposer: patch.autoSaveHabitsToComposer }
+      : {}),
+    ...(patch.injectHabitsToSystemPrompt !== undefined
+      ? { sessionFeedbackLoopInjectSystemPrompt: patch.injectHabitsToSystemPrompt }
+      : {}),
+  });
+}
+
+/** @deprecated 使用 loadSessionFeedbackLoopSettingsFromStore */
+export async function loadSessionFeedbackLoopEnabledFromStore(): Promise<boolean> {
+  return (await loadSessionFeedbackLoopSettingsFromStore()).enabled;
+}
+
+/** @deprecated 使用 saveSessionFeedbackLoopSettingsToStore */
+export async function saveSessionFeedbackLoopEnabledToStore(enabled: boolean): Promise<void> {
+  await saveSessionFeedbackLoopSettingsToStore({ enabled });
 }
 
 let lastRegisteredAtMentionShortcutsJson = "";

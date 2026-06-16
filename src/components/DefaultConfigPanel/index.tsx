@@ -29,6 +29,7 @@ import type { AtMentionDefaultTarget } from "../../constants/atMentionDefault";
 import { useFileTreeOpenInNewPaneSetting } from "./useFileTreeOpenInNewPaneSetting";
 import { useRepoPanelPlacementSetting } from "./useRepoPanelPlacementSetting";
 import { useWorkspaceInspectorPanelsSetting } from "./useWorkspaceInspectorPanelsSetting";
+import { useSessionFeedbackLoopSetting } from "./useSessionFeedbackLoopSetting";
 import { listEmployees } from "../../services/employees";
 import type { EmployeeItem } from "../../types";
 import { isOmcMonitorEmployeeRecord } from "../../utils/omcMonitorEmployeeSession";
@@ -49,6 +50,7 @@ export function DefaultConfigPanel() {
   const defaultTerminal = useDefaultTerminalSetting();
   const workspaceInspectorPanels = useWorkspaceInspectorPanelsSetting();
   const fileTreeOpenInNewPane = useFileTreeOpenInNewPaneSetting();
+  const feedbackLoop = useSessionFeedbackLoopSetting();
   const [terminalEmployees, setTerminalEmployees] = useState<EmployeeItem[]>([]);
 
   useEffect(() => {
@@ -653,6 +655,151 @@ export function DefaultConfigPanel() {
             </div>
           </div>
         ) : null}
+      </section>
+
+      <section className="app-default-config-section" aria-label="开发实验功能">
+        <Typography.Title level={5} className="app-default-config-section__title">
+          开发实验
+        </Typography.Title>
+
+        <div className="app-default-config-row" aria-label="反馈神经网">
+          <div className="app-default-config-row__main">
+            <span className="app-default-config-row__title">反馈神经网</span>
+            <span className="app-default-config-row__hint">
+              在全链路分析 · 洞察中启用轮次分析 → 自我优化 → 效率/速度/质量比对 → 再优化闭环；默认关闭
+            </span>
+          </div>
+          <div className="app-default-config-row__control">
+            <DefaultConfigOptionPick<"off" | "on">
+              aria-label="反馈神经网开发开关"
+              disabled={feedbackLoop.loading || feedbackLoop.saving}
+              value={feedbackLoop.enabled ? "on" : "off"}
+              options={[
+                { label: "关闭", value: "off" },
+                { label: "开启", value: "on" },
+              ]}
+              onChange={(value) => {
+                void feedbackLoop.saveEnabled(value === "on");
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="app-default-config-row" aria-label="反馈神经网循环次数">
+          <div className="app-default-config-row__main">
+            <span className="app-default-config-row__title">最大循环次数</span>
+            <span className="app-default-config-row__hint">自我优化 → 比对 的最大轮数（1–5）</span>
+          </div>
+          <div className="app-default-config-row__control">
+            <DefaultConfigOptionPick<"1" | "2" | "3" | "4" | "5">
+              aria-label="反馈神经网最大循环次数"
+              disabled={feedbackLoop.loading || feedbackLoop.saving || !feedbackLoop.enabled}
+              value={String(feedbackLoop.maxCycles) as "1" | "2" | "3" | "4" | "5"}
+              options={[
+                { label: "1 轮", value: "1" },
+                { label: "2 轮", value: "2" },
+                { label: "3 轮", value: "3" },
+                { label: "4 轮", value: "4" },
+                { label: "5 轮", value: "5" },
+              ]}
+              onChange={(value) => {
+                void feedbackLoop.saveMaxCycles(Number(value));
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="app-default-config-row" aria-label="反馈神经网自动启动">
+          <div className="app-default-config-row__main">
+            <span className="app-default-config-row__title">检测到警告时自动启动</span>
+            <span className="app-default-config-row__hint">
+              打开洞察页且存在警告/严重项时，自动开始第一轮优化
+            </span>
+          </div>
+          <div className="app-default-config-row__control">
+            <DefaultConfigOptionPick<"off" | "on">
+              aria-label="反馈神经网自动启动"
+              disabled={feedbackLoop.loading || feedbackLoop.saving || !feedbackLoop.enabled}
+              value={feedbackLoop.autoStart ? "on" : "off"}
+              options={[
+                { label: "关闭", value: "off" },
+                { label: "开启", value: "on" },
+              ]}
+              onChange={(value) => {
+                void feedbackLoop.saveAutoStart(value === "on");
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="app-default-config-row" aria-label="反馈神经网收敛早停">
+          <div className="app-default-config-row__main">
+            <span className="app-default-config-row__title">收敛早停</span>
+            <span className="app-default-config-row__hint">
+              指标改善趋于平稳或连续两轮无提升时提前结束循环
+            </span>
+          </div>
+          <div className="app-default-config-row__control">
+            <DefaultConfigOptionPick<"off" | "on">
+              aria-label="反馈神经网收敛早停"
+              disabled={feedbackLoop.loading || feedbackLoop.saving || !feedbackLoop.enabled}
+              value={feedbackLoop.earlyStopConvergence ? "on" : "off"}
+              options={[
+                { label: "关闭", value: "off" },
+                { label: "开启", value: "on" },
+              ]}
+              onChange={(value) => {
+                void feedbackLoop.saveEarlyStopConvergence(value === "on");
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="app-default-config-row" aria-label="反馈神经网写入常用语">
+          <div className="app-default-config-row__main">
+            <span className="app-default-config-row__title">闭环完成写入常用语</span>
+            <span className="app-default-config-row__hint">
+              闭环结束时自动将「神经网习惯」写入 Composer 常用语（可一键插入输入框）
+            </span>
+          </div>
+          <div className="app-default-config-row__control">
+            <DefaultConfigOptionPick<"off" | "on">
+              aria-label="反馈神经网写入常用语"
+              disabled={feedbackLoop.loading || feedbackLoop.saving || !feedbackLoop.enabled}
+              value={feedbackLoop.autoSaveHabitsToComposer ? "on" : "off"}
+              options={[
+                { label: "关闭", value: "off" },
+                { label: "开启", value: "on" },
+              ]}
+              onChange={(value) => {
+                void feedbackLoop.saveAutoSaveHabitsToComposer(value === "on");
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="app-default-config-row" aria-label="反馈神经网注入 system prompt">
+          <div className="app-default-config-row__main">
+            <span className="app-default-config-row__title">习惯注入 System Prompt</span>
+            <span className="app-default-config-row__hint">
+              会话 spawn 时通过 Claude CLI --append-system-prompt 自动追加本仓库神经网习惯（需重启会话生效）
+            </span>
+          </div>
+          <div className="app-default-config-row__control">
+            <DefaultConfigOptionPick<"off" | "on">
+              aria-label="反馈神经网注入 system prompt"
+              disabled={feedbackLoop.loading || feedbackLoop.saving || !feedbackLoop.enabled}
+              value={feedbackLoop.injectHabitsToSystemPrompt ? "on" : "off"}
+              options={[
+                { label: "关闭", value: "off" },
+                { label: "开启", value: "on" },
+              ]}
+              onChange={(value) => {
+                void feedbackLoop.saveInjectHabitsToSystemPrompt(value === "on");
+              }}
+            />
+          </div>
+        </div>
       </section>
     </div>
   );

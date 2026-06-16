@@ -26,6 +26,8 @@ import {
   formatTokenCount,
 } from "../../utils/sessionInsights";
 import { ClaudeUsageTrendSection } from "./ClaudeUsageTrendSection";
+import { SessionFeedbackLoopPanel } from "./SessionFeedbackLoopPanel";
+import type { UseSessionFeedbackLoopResult } from "../../hooks/useSessionFeedbackLoop";
 import {
   buildSessionInsightRecommendationAiPrompt,
   buildSessionInsightRecommendationCopyText,
@@ -64,6 +66,9 @@ interface Props {
   repositoryPath?: string | null;
   onJumpTurn?: (turnIndex: number) => void;
   onRequestAiAnalysis?: (prompt: string) => void | Promise<void>;
+  feedbackLoop?: UseSessionFeedbackLoopResult;
+  feedbackLoopFeatureEnabled?: boolean;
+  feedbackLoopInjectSystemPrompt?: boolean;
 }
 
 function KpiCard({
@@ -178,6 +183,9 @@ export const SessionInsightsPanel = memo(function SessionInsightsPanel({
   repositoryPath,
   onJumpTurn,
   onRequestAiAnalysis,
+  feedbackLoop,
+  feedbackLoopFeatureEnabled = false,
+  feedbackLoopInjectSystemPrompt = false,
 }: Props) {
   const [aiSending, setAiSending] = useState(false);
   const [aiOptimizeSending, setAiOptimizeSending] = useState(false);
@@ -363,6 +371,14 @@ export const SessionInsightsPanel = memo(function SessionInsightsPanel({
 
   return (
     <div className="app-session-insights">
+      {feedbackLoop ? (
+        <SessionFeedbackLoopPanel
+          loop={feedbackLoop}
+          featureEnabled={feedbackLoopFeatureEnabled}
+          injectHabitsToSystemPrompt={feedbackLoopInjectSystemPrompt}
+          onRequestAiAnalysis={onRequestAiAnalysis}
+        />
+      ) : null}
       <div className="app-session-insights__actions">
         <Space size={4} wrap>
           <Button

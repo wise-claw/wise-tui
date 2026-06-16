@@ -66,6 +66,8 @@ import {
 } from "../../utils/sessionInsights";
 import type { SessionDataLinkOpenView } from "../../stores/claudeUsageUiStore";
 import { SessionInsightsPanel } from "./SessionInsightsPanel";
+import { useSessionFeedbackLoopSetting } from "../DefaultConfigPanel/useSessionFeedbackLoopSetting";
+import { useSessionFeedbackLoop } from "../../hooks/useSessionFeedbackLoop";
 import {
   filterSequenceEventsForTurn,
   filterSequenceEventsForTurnRange,
@@ -510,6 +512,45 @@ export function SessionDataLinkDrawer({
     [onClose, onRequestAiAnalysis],
   );
 
+  const feedbackLoopSetting = useSessionFeedbackLoopSetting();
+
+  const feedbackLoop = useSessionFeedbackLoop({
+    sessionId: session?.id ?? "",
+    enabled: feedbackLoopSetting.enabled,
+    maxCycles: feedbackLoopSetting.maxCycles,
+    autoStart: feedbackLoopSetting.autoStart,
+    earlyStopConvergence: feedbackLoopSetting.earlyStopConvergence,
+    autoSaveHabitsToComposer: feedbackLoopSetting.autoSaveHabitsToComposer,
+    repositoryPath: session?.repositoryPath,
+    insights: sessionInsights,
+    meta: session
+      ? {
+          repositoryName: session.repositoryName.trim() || undefined,
+          claudeSessionId: session.claudeSessionId,
+        }
+      : undefined,
+    onSendOptimizationPrompt: onRequestAiAnalysis
+      ? async (prompt) => {
+          await handleInsightsAiAnalysis(prompt);
+        }
+      : undefined,
+    onCycleComplete: (completed) => {
+      const reason =
+        completed.completionReason === "converged"
+          ? "指标已收敛"
+          : completed.completionReason === "max_cycles"
+            ? "已达最大循环次数"
+            : "循环结束";
+      const habitsHint = [
+        feedbackLoopSetting.autoSaveHabitsToComposer ? "习惯已写入常用语" : "",
+        feedbackLoopSetting.injectHabitsToSystemPrompt ? "习惯将注入新会话 System Prompt" : "",
+      ]
+        .filter(Boolean)
+        .join("，");
+      message.success(`反馈神经网：${reason}${habitsHint ? `，${habitsHint}` : ""}`);
+    },
+  });
+
   const turnDiagramEvents = useMemo(() => {
     if (turnDiagramTurn == null) return [];
     return filterSequenceEventsForTurn(events, turnDiagramTurn);
@@ -868,6 +909,9 @@ export function SessionDataLinkDrawer({
                     repositoryPath={session.repositoryPath}
                     onJumpTurn={handleJumpTurnFromInsights}
                     onRequestAiAnalysis={onRequestAiAnalysis ? handleInsightsAiAnalysis : undefined}
+                    feedbackLoop={feedbackLoop}
+                    feedbackLoopFeatureEnabled={feedbackLoopSetting.enabled}
+                    feedbackLoopInjectSystemPrompt={feedbackLoopSetting.injectHabitsToSystemPrompt}
                   />
                 ) : (
                   <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="正在计算洞察…" />

@@ -5,6 +5,11 @@ import {
   type AssistantRuntimeBundle,
 } from "./assistantPromptLayers";
 import { materializeClaudeSpawnMcpConfig } from "./claude";
+import {
+  mergeAppendSystemPromptParts,
+  resolveFeedbackLoopSystemPromptAppend,
+} from "./sessionFeedbackLoopSystemPrompt";
+import { loadSessionFeedbackLoopSettingsFromStore } from "./wiseDefaultConfigStore";
 import type { ClaudeSession } from "../types";
 import { resolveSessionProjectRepository } from "../utils/claudeConcurrencyGate";
 import type { ProjectItem, Repository } from "../types";
@@ -119,29 +124,51 @@ export async function buildClaudeSpawnExtrasFromAssistantRuntime(scopes: {
   }
 }
 
+async function mergeFeedbackLoopHabitsIntoSpawnExtras(
+  base: ClaudeSpawnCliExtras | null,
+  session: Pick<ClaudeSession, "id" | "repositoryPath">,
+): Promise<ClaudeSpawnCliExtras | null> {
+  const settings = await loadSessionFeedbackLoopSettingsFromStore();
+  if (!settings.enabled || !settings.injectHabitsToSystemPrompt) return base;
+
+  const habitsBlock = resolveFeedbackLoopSystemPromptAppend({
+    repositoryPath: session.repositoryPath,
+    sessionId: session.id,
+  });
+  if (!habitsBlock) return base;
+
+  return compactClaudeSpawnCliExtras({
+    ...(base ?? {}),
+    appendSystemPrompt: mergeAppendSystemPromptParts(base?.appendSystemPrompt, habitsBlock),
+  });
+}
+
 /**
- * 主会话 spawn：按 Cockpit 当前助手 + 会话归属项目/仓库解析 CLI 扩展。
- * 无助手或未解析归属时返回 null（沿用 Claude Code 默认 settings 加载）。
+ * 主会话 spawn：按 Cockpit 当前助手 + 会话归属项目/仓库解析 CLI 扩展；
+ * 反馈神经网开启且启用注入时，将仓库/会话习惯追加到 `--append-system-prompt`。
  */
 export async function resolveClaudeSpawnExtrasForSession(params: {
-  session: Pick<ClaudeSession, "repositoryPath" | "repositoryName">;
+  session: Pick<ClaudeSession, "id" | "repositoryPath" | "repositoryName">;
   projects: ProjectItem[];
   repositories: Repository[];
   preferredProjectId: string | null;
   activeAssistantId?: string | null;
 }): Promise<ClaudeSpawnCliExtras | null> {
   const assistantId = params.activeAssistantId?.trim();
-  if (!assistantId) return null;
-  const scoped = resolveSessionProjectRepository({
-    session: params.session as ClaudeSession,
-    projects: params.projects,
-    repositories: params.repositories,
-    preferredProjectId: params.preferredProjectId,
-  });
-  return buildClaudeSpawnExtrasFromAssistantRuntime({
-    assistantId,
-    projectId: scoped?.project.id ?? null,
-    repositoryId: scoped?.repository.id ?? null,
-    repositoryPath: params.session.repositoryPath?.trim() || null,
-  });
+  let base: ClaudeSpawnCliExtras | null = null;
+  if (assistantId) {
+    const scoped = resolveSessionProjectRepository({
+      session: params.session as ClaudeSession,
+      projects: params.projects,
+      repositories: params.repositories,
+      preferredProjectId: params.preferredProjectId,
+    });
+    base = await buildClaudeSpawnExtrasFromAssistantRuntime({
+      assistantId,
+      projectId: scoped?.project.id ?? null,
+      repositoryId: scoped?.repository.id ?? null,
+      repositoryPath: params.session.repositoryPath?.trim() || null,
+    });
+  }
+  return mergeFeedbackLoopHabitsIntoSpawnExtras(base, params.session);
 }
