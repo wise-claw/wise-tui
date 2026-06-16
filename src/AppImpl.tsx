@@ -164,6 +164,7 @@ import { useMonitorSessionsForOverview } from "./hooks/useMonitorSessionsForOver
 import { useLeftSidebarHubQuickEntries } from "./hooks/useLeftSidebarHubQuickEntries";
 import { useMonitorPanelDefault } from "./hooks/useMonitorPanelDefault";
 import { useLeftSidebarWorkspaceListDefault } from "./hooks/useLeftSidebarWorkspaceListDefault";
+import { useLeftSidebarRepositoryIconBadgesDefault } from "./hooks/useLeftSidebarRepositoryIconBadgesDefault";
 import { useScheduledClaudeTaskRunner } from "./hooks/useScheduledClaudeTaskRunner";
 import { invalidateWorkflowRunCacheForRepository } from "./hooks/useWorkflowRun";
 import { deleteAppSetting, getAppSetting, setAppSetting } from "./services/appSettingsStore";
@@ -570,6 +571,7 @@ export default function App() {
     handleDetachRepositoryFromProject,
     handleRemoveRepository,
     handleUpdateRepositorySddMode,
+    handleUpdateRepositoryIconBadge,
     handleReorderRepositoriesInProject,
     handleReconcileProjectWorkspace,
     handleBootstrapTrellisAtPath,
@@ -1591,6 +1593,7 @@ export default function App() {
   }, [activeProjectId, activeRepositoryId, enterAuthorPane]);
   const leftSidebarHubQuickEntries = useLeftSidebarHubQuickEntries();
   const showLeftSidebarWorkspaceList = useLeftSidebarWorkspaceListDefault();
+  const showRepositoryIconBadgesInWorkspaceList = useLeftSidebarRepositoryIconBadgesDefault();
   const showMonitorOnLeft =
     monitorPanelDefault.visible && monitorPanelDefault.placement === "left";
   const showMonitorOnRight =
@@ -3172,6 +3175,7 @@ export default function App() {
         leftSidebarHubQuickEntryIds: leftSidebarHubQuickEntries.enabledEntryIds,
         showLeftSidebarMonitorPanel: showMonitorOnLeft,
         showLeftSidebarWorkspaceList,
+        showRepositoryIconBadgesInWorkspaceList,
         mcpHubActive:
           viewMode.view.kind === "inspect" && viewMode.view.tool.kind === "mcp-hub",
         onOpenMcpHub: openMcpHubFromSidebar,
@@ -3260,6 +3264,7 @@ export default function App() {
         onRemoveRepository: handleRemoveRepositoryWithSessionCleanup,
         onDetachRepositoryFromProject: handleDetachRepositoryFromProjectWithSessionCleanup,
         onUpdateRepositorySddMode: handleUpdateRepositorySddMode,
+        onUpdateRepositoryIconBadge: handleUpdateRepositoryIconBadge,
         onUpdateProjectSddMode: async (projectId, sddMode) => {
           await handleUpdateProjectSddMode(projectId, sddMode);
         },

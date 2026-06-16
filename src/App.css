@@ -1994,6 +1994,14 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   margin-bottom: 4px;
 }
 
+.app-add-repo-field-label-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ant-color-text);
+}
+
 .app-add-repo-icon-swatches {
   display: flex;
   flex-wrap: wrap;
@@ -2062,6 +2070,36 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 
 .app-add-repo-field-label--spaced {
   margin-top: 6px;
+}
+
+.app-add-repo-modal-body--compact {
+  padding-top: 12px !important;
+  padding-bottom: 8px !important;
+}
+
+.app-add-repo-form--compact .app-add-repo-field-label {
+  margin-bottom: 2px;
+}
+
+.app-add-repo-form--compact .app-add-repo-field-label--spaced {
+  margin-top: 4px;
+}
+
+.app-add-repo-form--compact .app-add-repo-acquire-panel {
+  gap: 4px;
+  padding: 6px 8px;
+  border-radius: 6px;
+}
+
+.app-add-repo-form--compact .app-add-repo-acquire-hint {
+  line-height: 1.25;
+}
+
+.app-add-repo-acquire-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  gap: 8px;
+  align-items: start;
 }
 
 .app-add-repo-acquire-panel {

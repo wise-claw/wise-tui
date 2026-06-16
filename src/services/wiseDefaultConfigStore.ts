@@ -61,6 +61,9 @@ export const WISE_LEFT_SIDEBAR_MONITOR_PANEL_CHANGED = "wise:left-sidebar-monito
 
 export const WISE_LEFT_SIDEBAR_WORKSPACE_LIST_CHANGED = "wise:left-sidebar-workspace-list-changed";
 
+export const WISE_LEFT_SIDEBAR_REPOSITORY_ICON_BADGES_CHANGED =
+  "wise:left-sidebar-repository-icon-badges-changed";
+
 export const WISE_MONITOR_PANEL_PLACEMENT_CHANGED = "wise:monitor-panel-placement-changed";
 
 export const WISE_MONITOR_PANEL_VISIBLE_ROWS_CHANGED = "wise:monitor-panel-visible-rows-changed";
@@ -126,6 +129,8 @@ export interface WiseDefaultConfigV1 {
   showLeftSidebarMonitorPanel: boolean;
   /** 左栏工作区与仓库树是否显示；默认显示。 */
   showLeftSidebarWorkspaceList: boolean;
+  /** 左栏工作区列表中是否显示仓库圆形角标；默认隐藏。 */
+  showRepositoryIconBadgesInWorkspaceList: boolean;
   /** 运行面板默认栏位；默认左栏。 */
   monitorPanelPlacement: MonitorPanelPlacement;
   /** 左栏运行面板内容区默认可见行数（终端 + 派发 + 工作流合计）。 */
@@ -180,6 +185,7 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   leftSidebarHubQuickEntries: [...DEFAULT_LEFT_SIDEBAR_HUB_QUICK_ENTRIES],
   showLeftSidebarMonitorPanel: true,
   showLeftSidebarWorkspaceList: true,
+  showRepositoryIconBadgesInWorkspaceList: false,
   monitorPanelPlacement: "left",
   monitorPanelVisibleRows: MONITOR_PANEL_VISIBLE_ROWS_DEFAULT,
   executionEnvironmentDispatchHistoryDays: DEFAULT_EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAYS,
@@ -280,6 +286,13 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
           : normalizeBoolean(
               parsed.showLeftSidebarWorkspaceList,
               DEFAULT_CONFIG.showLeftSidebarWorkspaceList,
+            ),
+      showRepositoryIconBadgesInWorkspaceList:
+        parsed.showRepositoryIconBadgesInWorkspaceList === undefined
+          ? DEFAULT_CONFIG.showRepositoryIconBadgesInWorkspaceList
+          : normalizeBoolean(
+              parsed.showRepositoryIconBadgesInWorkspaceList,
+              DEFAULT_CONFIG.showRepositoryIconBadgesInWorkspaceList,
             ),
       monitorPanelPlacement:
         normalizeMonitorPanelPlacement(parsed.monitorPanelPlacement) ??
@@ -490,6 +503,7 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     leftSidebarHubQuickEntries: [...DEFAULT_LEFT_SIDEBAR_HUB_QUICK_ENTRIES],
     showLeftSidebarMonitorPanel: DEFAULT_CONFIG.showLeftSidebarMonitorPanel,
     showLeftSidebarWorkspaceList: DEFAULT_CONFIG.showLeftSidebarWorkspaceList,
+    showRepositoryIconBadgesInWorkspaceList: DEFAULT_CONFIG.showRepositoryIconBadgesInWorkspaceList,
     monitorPanelPlacement: DEFAULT_CONFIG.monitorPanelPlacement,
     monitorPanelVisibleRows: DEFAULT_CONFIG.monitorPanelVisibleRows,
     executionEnvironmentDispatchHistoryDays: DEFAULT_CONFIG.executionEnvironmentDispatchHistoryDays,
@@ -535,6 +549,15 @@ function dispatchLeftSidebarWorkspaceListChanged(visible: boolean): void {
   window.dispatchEvent(
     new CustomEvent(WISE_LEFT_SIDEBAR_WORKSPACE_LIST_CHANGED, {
       detail: { showLeftSidebarWorkspaceList: visible },
+    }),
+  );
+}
+
+function dispatchLeftSidebarRepositoryIconBadgesChanged(visible: boolean): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(WISE_LEFT_SIDEBAR_REPOSITORY_ICON_BADGES_CHANGED, {
+      detail: { showRepositoryIconBadgesInWorkspaceList: visible },
     }),
   );
 }
@@ -638,6 +661,7 @@ export async function saveWiseDefaultConfig(
       | "leftSidebarHubQuickEntries"
       | "showLeftSidebarMonitorPanel"
       | "showLeftSidebarWorkspaceList"
+      | "showRepositoryIconBadgesInWorkspaceList"
       | "monitorPanelPlacement"
       | "monitorPanelVisibleRows"
       | "executionEnvironmentDispatchHistoryDays"
@@ -682,6 +706,8 @@ export async function saveWiseDefaultConfig(
       patch.showLeftSidebarMonitorPanel ?? current.showLeftSidebarMonitorPanel,
     showLeftSidebarWorkspaceList:
       patch.showLeftSidebarWorkspaceList ?? current.showLeftSidebarWorkspaceList,
+    showRepositoryIconBadgesInWorkspaceList:
+      patch.showRepositoryIconBadgesInWorkspaceList ?? current.showRepositoryIconBadgesInWorkspaceList,
     monitorPanelPlacement: patch.monitorPanelPlacement ?? current.monitorPanelPlacement,
     monitorPanelVisibleRows: patch.monitorPanelVisibleRows ?? current.monitorPanelVisibleRows,
     executionEnvironmentDispatchHistoryDays:
@@ -762,6 +788,11 @@ export async function saveWiseDefaultConfig(
   }
   if (patch.showLeftSidebarWorkspaceList !== undefined) {
     next.showLeftSidebarWorkspaceList = normalizeBoolean(patch.showLeftSidebarWorkspaceList);
+  }
+  if (patch.showRepositoryIconBadgesInWorkspaceList !== undefined) {
+    next.showRepositoryIconBadgesInWorkspaceList = normalizeBoolean(
+      patch.showRepositoryIconBadgesInWorkspaceList,
+    );
   }
   if (patch.monitorPanelPlacement !== undefined) {
     next.monitorPanelPlacement =
@@ -896,6 +927,12 @@ export async function saveWiseDefaultConfig(
     next.showLeftSidebarWorkspaceList !== current.showLeftSidebarWorkspaceList
   ) {
     dispatchLeftSidebarWorkspaceListChanged(next.showLeftSidebarWorkspaceList);
+  }
+  if (
+    patch.showRepositoryIconBadgesInWorkspaceList !== undefined &&
+    next.showRepositoryIconBadgesInWorkspaceList !== current.showRepositoryIconBadgesInWorkspaceList
+  ) {
+    dispatchLeftSidebarRepositoryIconBadgesChanged(next.showRepositoryIconBadgesInWorkspaceList);
   }
   if (
     patch.monitorPanelPlacement !== undefined &&
@@ -1172,6 +1209,16 @@ export async function loadLeftSidebarWorkspaceListVisibleFromStore(): Promise<bo
 
 export async function saveLeftSidebarWorkspaceListVisibleToStore(visible: boolean): Promise<void> {
   await saveWiseDefaultConfig({ showLeftSidebarWorkspaceList: visible });
+}
+
+export async function loadRepositoryIconBadgesVisibleInWorkspaceListFromStore(): Promise<boolean> {
+  return (await loadWiseDefaultConfig()).showRepositoryIconBadgesInWorkspaceList;
+}
+
+export async function saveRepositoryIconBadgesVisibleInWorkspaceListToStore(
+  visible: boolean,
+): Promise<void> {
+  await saveWiseDefaultConfig({ showRepositoryIconBadgesInWorkspaceList: visible });
 }
 
 export async function loadMonitorPanelPlacementFromStore(): Promise<MonitorPanelPlacement> {

@@ -144,6 +144,7 @@ function repositoryMainSessionRunMenuItem(input: {
 }
 
 function repositoryConfigureMenuItems(input: {
+  onConfigureRepositoryIconBadge?: boolean;
   onOpenRepositoryMainOwner?: boolean;
   mainOwnerLabel?: string;
   onConfigureSddMode?: boolean;
@@ -156,6 +157,7 @@ function repositoryConfigureMenuItems(input: {
   trellisReady?: boolean;
 }): MenuItem[] {
   const {
+    onConfigureRepositoryIconBadge,
     onOpenRepositoryMainOwner,
     mainOwnerLabel = "配置 Owner",
     onConfigureSddMode,
@@ -169,6 +171,7 @@ function repositoryConfigureMenuItems(input: {
   } = input;
 
   return compactItems([
+    onConfigureRepositoryIconBadge ? { key: "icon-badge", label: "配置角标" } : null,
     REPOSITORY_MAIN_OWNER_MENU_ENABLED && onOpenRepositoryMainOwner
       ? { key: "main-owner", label: mainOwnerLabel }
       : null,
@@ -270,6 +273,7 @@ export interface BuildProjectRepositoryMoreMenuItemsInput {
   trellisEnabled?: boolean;
   trellisReady?: boolean;
   trellisRootActionEnabled?: boolean;
+  onConfigureRepositoryIconBadge?: boolean;
   onOpenRepositoryMainOwner?: boolean;
   onConfigureSddMode?: boolean;
   /** 仓库运行指令（顶栏运行指令同款） */
@@ -289,6 +293,7 @@ export function buildProjectRepositoryMoreMenuItems(
   input: BuildProjectRepositoryMoreMenuItemsInput,
 ): MenuProps["items"] {
   const {
+    onConfigureRepositoryIconBadge,
     onOpenRepositoryMainOwner,
     trellisEnabled = false,
     trellisReady = false,
@@ -321,6 +326,7 @@ export function buildProjectRepositoryMoreMenuItems(
       sessionItems.length > 0 ? sidebarMenuSection(sessionItems) : null,
       sidebarMenuSection(
         repositoryConfigureMenuItems({
+          onConfigureRepositoryIconBadge,
           onOpenRepositoryMainOwner,
           onConfigureSddMode,
           scopeOpenAppId: repositoryOpenAppId,
@@ -350,6 +356,7 @@ export interface BuildFloatingRepositoryMoreMenuItemsInput {
   joinableProjects: Workspace[];
   trellisEnabled?: boolean;
   trellisReady?: boolean;
+  onConfigureRepositoryIconBadge?: boolean;
   onOpenRepositoryMainOwner?: boolean;
   onConfigureSddMode?: boolean;
   onMainSessionRun?: boolean;
@@ -373,6 +380,7 @@ export function buildFloatingRepositoryMoreMenuItems(
     joinableProjects,
     trellisEnabled = false,
     trellisReady = false,
+    onConfigureRepositoryIconBadge,
     onOpenRepositoryMainOwner,
     onConfigureSddMode,
     onNewPaneSession,
@@ -409,6 +417,7 @@ export function buildFloatingRepositoryMoreMenuItems(
       sessionItems.length > 0 ? sidebarMenuSection(sessionItems) : null,
       sidebarMenuSection(
         repositoryConfigureMenuItems({
+          onConfigureRepositoryIconBadge,
           onOpenRepositoryMainOwner,
           mainOwnerLabel: "主 Owner 智能体…",
           onConfigureSddMode,

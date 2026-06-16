@@ -88,3 +88,36 @@
   font-style: italic;
 }
 
+.app-workspace-bootstrap-picker--compact {
+  gap: 4px;
+}
+
+.bootstrap-picker-card--compact {
+  align-items: center;
+  gap: 8px;
+  padding: 4px 8px;
+  border-radius: 4px;
+}
+
+.bootstrap-picker-card--compact .bootstrap-picker-card__indicator {
+  padding-top: 0;
+}
+
+.bootstrap-picker-card--compact .bootstrap-picker-card__content {
+  gap: 0;
+}
+
+.bootstrap-picker-card--compact .bootstrap-picker-card__label.ant-typography {
+  font-size: 11.5px;
+  line-height: 1.2;
+}
+
+.bootstrap-picker-card--compact:hover:not(.bootstrap-picker-card--disabled):not(.bootstrap-picker-card--active) {
+  transform: none;
+  box-shadow: none;
+}
+
+.bootstrap-picker-card--compact.bootstrap-picker-card--active {
+  box-shadow: none;
+}
+

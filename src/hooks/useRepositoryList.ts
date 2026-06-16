@@ -7,6 +7,8 @@ import {
   removeRepository,
   resolveRepositoryAcquirePath,
   updateRepositoryMainOwnerAgent,
+  updateRepositoryIconBadge,
+  type RepositoryIconBadgePatch,
   updateProjectSddMode,
   updateRepositorySddMode,
 } from "../services/repository";
@@ -632,6 +634,14 @@ export function useRepositoryList() {
     setRepositories((prev) => prev.map((repo) => (repo.id === repositoryId ? updated : repo)));
   }, []);
 
+  const handleUpdateRepositoryIconBadge = useCallback(
+    async (repositoryId: number, patch: RepositoryIconBadgePatch) => {
+      const updated = await updateRepositoryIconBadge(repositoryId, patch);
+      setRepositories((prev) => prev.map((repo) => (repo.id === repositoryId ? updated : repo)));
+    },
+    [],
+  );
+
   const handleReorderRepositoriesInProject = useCallback(async (projectId: string, repositoryIds: number[]) => {
     await reorderProjectRepositoriesInProject(projectId, repositoryIds);
     setProjects((prev) =>
@@ -760,6 +770,7 @@ export function useRepositoryList() {
     handleDetachRepositoryFromProject,
     handleRemoveRepository,
     handleUpdateRepositorySddMode,
+    handleUpdateRepositoryIconBadge,
     handleReorderRepositoriesInProject,
     handleMoveRepositoryToProject,
     handleReconcileProjectWorkspace,

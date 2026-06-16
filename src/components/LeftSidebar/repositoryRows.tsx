@@ -34,7 +34,7 @@ import {
   MoreIcon,
   OpenInEditorIcon,
   OpenInTerminalIcon,
-  RepositoryTypeIcon,
+  RepositorySidebarIcon,
   RepoDragHandleIcon,
   ScheduledTasksIcon,
   RequirementIcon,
@@ -461,6 +461,9 @@ function repositoryRowPropsEqual(
     if (
       a.path !== b.path ||
       a.name !== b.name ||
+      a.repositoryType !== b.repositoryType ||
+      a.iconDisplayName !== b.iconDisplayName ||
+      a.iconColor !== b.iconColor ||
       a.mainOwnerAgentName !== b.mainOwnerAgentName ||
       a.openAppId !== b.openAppId ||
       a.sddMode !== b.sddMode
@@ -470,6 +473,9 @@ function repositoryRowPropsEqual(
   }
   if (prev.project.id !== next.project.id) return false;
   if (prev.project.sddMode !== next.project.sddMode) return false;
+  if (prev.showRepositoryIconBadgesInWorkspaceList !== next.showRepositoryIconBadgesInWorkspaceList) {
+    return false;
+  }
   if (prev.isActiveRepository !== next.isActiveRepository) return false;
   if (prev.trellisReady !== next.trellisReady) return false;
   if (prev.scheduledTasksTotalCount !== next.scheduledTasksTotalCount) return false;
@@ -487,6 +493,7 @@ function repositoryRowPropsEqual(
 function RepositoryRowInner({
   project,
   repository,
+  showRepositoryIconBadgesInWorkspaceList = false,
   isActiveRepository,
   onRepositorySelect,
   onOpenTaskMode,
@@ -497,6 +504,7 @@ function RepositoryRowInner({
   onOpenRepositoryInEditor,
   onConfigureRepositoryOpenApp,
   onOpenRepositoryMainOwner,
+  onConfigureRepositoryIconBadge,
   onConfigureSddMode,
   onConfigureRepositoryMainSessionRun,
   onNewPaneSession,
@@ -519,6 +527,7 @@ function RepositoryRowInner({
 }: {
   project: Workspace;
   repository: Repository;
+  showRepositoryIconBadgesInWorkspaceList?: boolean;
   isActiveRepository: boolean;
   onRepositorySelect: (id: number | null) => void;
   onOpenTaskMode: (repository: Repository, mode: TaskMode) => void;
@@ -529,6 +538,7 @@ function RepositoryRowInner({
   onOpenRepositoryInEditor: (repository: Repository) => void;
   onConfigureRepositoryOpenApp?: (repository: Repository, openAppId: string | null) => void;
   onOpenRepositoryMainOwner?: (repository: Repository) => void;
+  onConfigureRepositoryIconBadge?: (repository: Repository) => void;
   onConfigureSddMode?: (repository: Repository) => void;
   onConfigureRepositoryMainSessionRun?: (repository: Repository) => void;
   onNewPaneSession?: (repository: Repository) => void;
@@ -557,6 +567,7 @@ function RepositoryRowInner({
     trellisRootActionEnabled: false,
     onAddWorkspaceTodo: workspaceTodosEnabled,
     onOpenRepositoryMainOwner: Boolean(onOpenRepositoryMainOwner),
+    onConfigureRepositoryIconBadge: Boolean(onConfigureRepositoryIconBadge),
     onConfigureSddMode: Boolean(onConfigureSddMode),
     onMainSessionRun: true,
     runCommandRunning,
@@ -616,7 +627,10 @@ function RepositoryRowInner({
         ) : null}
         <span className="app-repository-icon-wrap">
           <span className="app-repository-icon app-repository-icon--folder">
-            <RepositoryTypeIcon repository={repository} />
+            <RepositorySidebarIcon
+              repository={repository}
+              showIconBadgeInWorkspaceList={showRepositoryIconBadgesInWorkspaceList}
+            />
           </span>
           {hasMainOwner ? (
             <span
@@ -700,6 +714,7 @@ function RepositoryRowInner({
               if (key === "browser") onOpenRepositoryInBrowser(repository);
               if (key === "main-owner") onOpenRepositoryMainOwner?.(repository);
               if (key === "detach") onDetachFromProject(project.id, repository.id);
+              if (key === "icon-badge") onConfigureRepositoryIconBadge?.(repository);
               if (key === "sdd-mode") onConfigureSddMode?.(repository);
               if (key === "run-configure") onConfigureRepositoryMainSessionRun?.(repository);
               if (key === "run-start") onStartRepositoryRunCommand?.(repository);
@@ -750,6 +765,9 @@ function floatingRepositoryRowPropsEqual(
     if (
       a.path !== b.path ||
       a.name !== b.name ||
+      a.repositoryType !== b.repositoryType ||
+      a.iconDisplayName !== b.iconDisplayName ||
+      a.iconColor !== b.iconColor ||
       a.mainOwnerAgentName !== b.mainOwnerAgentName ||
       a.openAppId !== b.openAppId ||
       a.sddMode !== b.sddMode
@@ -758,6 +776,9 @@ function floatingRepositoryRowPropsEqual(
     }
   }
   if (prev.isActiveRepository !== next.isActiveRepository) return false;
+  if (prev.showRepositoryIconBadgesInWorkspaceList !== next.showRepositoryIconBadgesInWorkspaceList) {
+    return false;
+  }
   if (prev.joinableProjects !== next.joinableProjects) return false;
   if (prev.trellisReady !== next.trellisReady) return false;
   if (prev.scheduledTasksTotalCount !== next.scheduledTasksTotalCount) return false;
@@ -772,6 +793,7 @@ function floatingRepositoryRowPropsEqual(
 
 function FloatingRepositoryRowInner({
   repository,
+  showRepositoryIconBadgesInWorkspaceList = false,
   isActiveRepository,
   joinableProjects,
   onRepositorySelect,
@@ -782,6 +804,7 @@ function FloatingRepositoryRowInner({
   onOpenRepositoryInEditor,
   onConfigureRepositoryOpenApp,
   onOpenRepositoryMainOwner,
+  onConfigureRepositoryIconBadge,
   onConfigureSddMode,
   onConfigureRepositoryMainSessionRun,
   onNewPaneSession,
@@ -806,6 +829,7 @@ function FloatingRepositoryRowInner({
   pinnedRunCommandRowActions = false,
 }: {
   repository: StandaloneRepo;
+  showRepositoryIconBadgesInWorkspaceList?: boolean;
   isActiveRepository: boolean;
   joinableProjects: Workspace[];
   onRepositorySelect: (id: number | null) => void;
@@ -816,6 +840,7 @@ function FloatingRepositoryRowInner({
   onOpenRepositoryInEditor: (repository: Repository) => void;
   onConfigureRepositoryOpenApp?: (repository: Repository, openAppId: string | null) => void;
   onOpenRepositoryMainOwner?: (repository: Repository) => void;
+  onConfigureRepositoryIconBadge?: (repository: Repository) => void;
   onConfigureSddMode?: (repository: Repository) => void;
   onConfigureRepositoryMainSessionRun?: (repository: Repository) => void;
   onNewPaneSession?: (repository: Repository) => void;
@@ -850,6 +875,7 @@ function FloatingRepositoryRowInner({
     trellisReady,
     onAddWorkspaceTodo: workspaceTodosEnabled,
     onOpenRepositoryMainOwner: Boolean(onOpenRepositoryMainOwner),
+    onConfigureRepositoryIconBadge: Boolean(onConfigureRepositoryIconBadge),
     onConfigureSddMode: Boolean(onConfigureSddMode),
     onMainSessionRun: true,
     runCommandRunning,
@@ -881,7 +907,10 @@ function FloatingRepositoryRowInner({
       >
         <span className="app-repository-icon-wrap">
           <span className="app-repository-icon app-repository-icon--folder">
-            <RepositoryTypeIcon repository={repository} />
+            <RepositorySidebarIcon
+              repository={repository}
+              showIconBadgeInWorkspaceList={showRepositoryIconBadgesInWorkspaceList}
+            />
           </span>
           {hasMainOwner ? (
             <span
@@ -965,6 +994,7 @@ function FloatingRepositoryRowInner({
               if (key === "open-terminal") onOpenInTerminal?.(repository);
               if (key === "browser") onOpenRepositoryInBrowser(repository);
               if (key === "main-owner") onOpenRepositoryMainOwner?.(repository);
+              if (key === "icon-badge") onConfigureRepositoryIconBadge?.(repository);
               if (key === "sdd-mode") onConfigureSddMode?.(repository);
               if (key === "run-configure") onConfigureRepositoryMainSessionRun?.(repository);
               if (key === "run-start") onStartRepositoryRunCommand?.(repository);
@@ -1016,6 +1046,7 @@ export function ProjectRepositoryRows({
   projectRepos,
   activeRepositoryId,
   activeWorkspaceFocus = "repository",
+  showRepositoryIconBadgesInWorkspaceList = false,
   onRepositorySelect,
   onCreateRepositoryTask,
   onDetachRepositoryFromProject,
@@ -1028,6 +1059,7 @@ export function ProjectRepositoryRows({
   onReorderRepositoriesInProject,
   onMoveRepositoryToProject,
   onConfigureSddMode,
+  onConfigureRepositoryIconBadge,
   onConfigureRepositoryMainSessionRun,
   onNewPaneSession,
   repoSidebarDragRef,
@@ -1051,6 +1083,7 @@ export function ProjectRepositoryRows({
   projectRepos: Repository[];
   activeRepositoryId: number | null;
   activeWorkspaceFocus?: WorkspaceFocus;
+  showRepositoryIconBadgesInWorkspaceList?: boolean;
   onRepositorySelect: (id: number | null) => void;
   onCreateRepositoryTask: (repository: Repository, mode: TaskMode) => void;
   onDetachRepositoryFromProject: (projectId: string, repositoryId: number) => void;
@@ -1063,6 +1096,7 @@ export function ProjectRepositoryRows({
   onReorderRepositoriesInProject?: (projectId: string, repositoryIds: number[]) => void | Promise<void>;
   onMoveRepositoryToProject?: (targetProjectId: string, repositoryId: number) => void | Promise<void>;
   onConfigureSddMode?: (repository: Repository) => void;
+  onConfigureRepositoryIconBadge?: (repository: Repository) => void;
   onConfigureRepositoryMainSessionRun?: (repository: Repository) => void;
   onNewPaneSession?: (repository: Repository) => void;
   repoSidebarDragRef: React.MutableRefObject<{ sourceProjectId: string; repositoryId: number } | null>;
@@ -1115,6 +1149,7 @@ export function ProjectRepositoryRows({
             key={repository.id}
             project={project}
             repository={repository}
+            showRepositoryIconBadgesInWorkspaceList={showRepositoryIconBadgesInWorkspaceList}
             isActiveRepository={
               repository.id === activeRepositoryId && activeWorkspaceFocus === "repository"
             }
@@ -1128,6 +1163,7 @@ export function ProjectRepositoryRows({
             onConfigureRepositoryOpenApp={onConfigureRepositoryOpenApp}
             onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}
             onConfigureSddMode={onConfigureSddMode}
+            onConfigureRepositoryIconBadge={onConfigureRepositoryIconBadge}
             onConfigureRepositoryMainSessionRun={onConfigureRepositoryMainSessionRun}
             onNewPaneSession={onNewPaneSession}
             repositoryReorder={reorderUi}

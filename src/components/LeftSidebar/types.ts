@@ -47,6 +47,8 @@ export interface LeftSidebarProps {
   showLeftSidebarMonitorPanel?: boolean;
   /** 是否显示左栏工作区与仓库树；默认 true，由 `wise.defaultConfig.v1` 控制。 */
   showLeftSidebarWorkspaceList?: boolean;
+  /** 是否显示左栏工作区列表中的仓库圆形角标；默认 false，由 `wise.defaultConfig.v1` 控制。 */
+  showRepositoryIconBadgesInWorkspaceList?: boolean;
   mcpHubActive?: boolean;
   onOpenMcpHub?: () => void;
   skillsHubActive?: boolean;
@@ -99,6 +101,10 @@ export interface LeftSidebarProps {
   onRemoveRepository?: (repository: Repository) => void | Promise<void>;
   onDetachRepositoryFromProject: (projectId: string, repositoryId: number) => void;
   onUpdateRepositorySddMode?: (repositoryId: number, sddMode: SddMode) => void | Promise<void>;
+  onUpdateRepositoryIconBadge?: (
+    repositoryId: number,
+    patch: import("../../services/repository").RepositoryIconBadgePatch,
+  ) => void | Promise<void>;
   onUpdateProjectSddMode?: (projectId: string, sddMode: ProjectSddMode) => void | Promise<void>;
   onUpdateRepositoryOpenAppId?: (repositoryId: number, openAppId: string | null) => void | Promise<void>;
   onUpdateProjectOpenAppId?: (projectId: string, openAppId: string | null) => void | Promise<void>;

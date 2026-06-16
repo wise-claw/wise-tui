@@ -17,6 +17,7 @@ import { DefaultConfigOptionPick } from "./DefaultConfigOptionPick";
 import { useLeftSidebarHubQuickEntriesSetting } from "./useLeftSidebarHubQuickEntriesSetting";
 import { useMonitorPanelSetting } from "./useMonitorPanelSetting";
 import { useLeftSidebarWorkspaceListSetting } from "./useLeftSidebarWorkspaceListSetting";
+import { useLeftSidebarRepositoryIconBadgesSetting } from "./useLeftSidebarRepositoryIconBadgesSetting";
 import { useExecutionEnvironmentDispatchHistoryDaysSetting } from "./useExecutionEnvironmentDispatchHistoryDaysSetting";
 import { EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAY_OPTIONS } from "../../constants/executionEnvironmentDispatch";
 import { useRightPanelDefaultSetting } from "./useRightPanelDefaultSetting";
@@ -43,6 +44,7 @@ export function DefaultConfigPanel() {
   const hubQuickEntries = useLeftSidebarHubQuickEntriesSetting();
   const monitorPanel = useMonitorPanelSetting();
   const leftSidebarWorkspaceList = useLeftSidebarWorkspaceListSetting();
+  const leftSidebarRepositoryIconBadges = useLeftSidebarRepositoryIconBadgesSetting();
   const repoPanelPlacement = useRepoPanelPlacementSetting();
   const execEnvDispatchHistory = useExecutionEnvironmentDispatchHistoryDaysSetting();
   const atMentionDefault = useAtMentionDefaultSetting();
@@ -160,6 +162,31 @@ export function DefaultConfigPanel() {
               ]}
               onChange={(value) => {
                 void leftSidebarWorkspaceList.saveVisible(value === "visible");
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="app-default-config-row" aria-label="工作区仓库角标">
+          <div className="app-default-config-row__main">
+            <span className="app-default-config-row__title">工作区仓库角标</span>
+            <span className="app-default-config-row__hint">
+              左栏工作区列表中仓库前的圆形角标；隐藏后显示文件夹图标
+            </span>
+          </div>
+          <div className="app-default-config-row__control">
+            <DefaultConfigOptionPick<"hidden" | "visible">
+              aria-label="左栏工作区仓库角标默认显示"
+              disabled={
+                leftSidebarRepositoryIconBadges.loading || leftSidebarRepositoryIconBadges.saving
+              }
+              value={leftSidebarRepositoryIconBadges.visible ? "visible" : "hidden"}
+              options={[
+                { label: "显示", value: "visible" },
+                { label: "隐藏", value: "hidden" },
+              ]}
+              onChange={(value) => {
+                void leftSidebarRepositoryIconBadges.saveVisible(value === "visible");
               }}
             />
           </div>

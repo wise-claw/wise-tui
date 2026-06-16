@@ -39,6 +39,9 @@ pub(crate) struct StoredRepository {
     /// 角标首字来源；为空则取 `name`（目录名）首字。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     icon_display_name: Option<String>,
+    /// 为 true 时左栏工作区列表不展示圆形角标（仍保留角标配置）。
+    #[serde(default, alias = "icon_hidden_in_workspace_list")]
+    icon_hidden_in_workspace_list: bool,
     /// 主 Owner 子代理展示名（与 `repositoryName` 中 `…/员工:姓名` 的姓名一致）；未设置则为人类主会话逻辑。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     main_owner_agent_name: Option<String>,
@@ -447,6 +450,7 @@ pub(crate) fn create_repository_from_path(
         repository_type: normalized_repository_type,
         icon_color: normalize_hex_icon_color(icon_color),
         icon_display_name: icon_disp,
+        icon_hidden_in_workspace_list: false,
         main_owner_agent_name: None,
         execution_engine: default_execution_engine(),
         branch: git_commands::get_git_branch(&folder_path),
@@ -480,6 +484,46 @@ pub(crate) fn update_repository_icon_display(
         .filter(|s| !s.is_empty())
         .map(|s| s.to_string());
     repositories[idx].icon_display_name = trimmed;
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .map_err(|e| e.to_string())?
+        .as_millis() as i64;
+    repositories[idx].updated_at = now.to_string();
+    save_repositories(&app, &repositories)?;
+    let mut out = repositories[idx].clone();
+    out.branch = git_commands::get_git_branch(&out.path);
+    Ok(out)
+}
+
+#[tauri::command]
+pub(crate) fn update_repository_icon_badge(
+    app: tauri::AppHandle,
+    id: i64,
+    repository_type: String,
+    icon_display_name: Option<String>,
+    icon_color: Option<String>,
+) -> Result<StoredRepository, String> {
+    let normalized_repository_type = match repository_type.as_str() {
+        "frontend" | "backend" | "document" => repository_type,
+        _ => return Err("WF_INVALID_INPUT: repositoryType value not allowed".into()),
+    };
+    let icon_name = icon_display_name
+        .as_ref()
+        .map(|s| s.trim())
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string());
+    let icon_color_sql = normalize_hex_icon_color(icon_color);
+    let mut repositories = load_repositories(&app);
+    let idx = repositories
+        .iter()
+        .position(|p| p.id == id)
+        .ok_or_else(|| "仓库未找到".to_string())?;
+    repositories[idx].repository_type = normalized_repository_type.clone();
+    if repositories[idx].role_tags.is_empty() {
+        repositories[idx].role_tags = vec![normalized_repository_type.clone()];
+    }
+    repositories[idx].icon_display_name = icon_name;
+    repositories[idx].icon_color = icon_color_sql;
     let now = std::time::SystemTime::now()
         .duration_since(std::time::UNIX_EPOCH)
         .map_err(|e| e.to_string())?
@@ -1069,6 +1113,7 @@ pub(crate) fn reconcile_project_workspace(
             repository_type: "frontend".to_string(),
             icon_color: None,
             icon_display_name: None,
+            icon_hidden_in_workspace_list: false,
             main_owner_agent_name: None,
             execution_engine: default_execution_engine(),
             branch: git_commands::get_git_branch(&repo_path_str),
@@ -2319,6 +2364,7 @@ mod repository_id_tests {
             repository_type: "frontend".to_string(),
             icon_color: None,
             icon_display_name: None,
+            icon_hidden_in_workspace_list: false,
             main_owner_agent_name: None,
             execution_engine: default_execution_engine(),
             branch: None,

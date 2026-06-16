@@ -74,6 +74,7 @@ import {
 import { ProjectNameModals } from "./LeftSidebar/ProjectNameModals";
 import { RepositoryAssociateModal } from "./LeftSidebar/RepositoryAssociateModal";
 import { RepositorySddModeModal } from "./LeftSidebar/RepositorySddModeModal";
+import { RepositoryIconBadgeModal } from "./LeftSidebar/RepositoryIconBadgeModal";
 import { WorkspaceSddModeModal } from "./LeftSidebar/WorkspaceSddModeModal";
 import { LeftSidebarBottomTabPanes } from "./LeftSidebar/LeftSidebarBottomTabPanes";
 import { LeftSidebarBottomTabSwitcher } from "./LeftSidebar/LeftSidebarBottomTabSwitcher";
@@ -88,6 +89,7 @@ import { useProjectRepositorySidebarState } from "./LeftSidebar/useProjectReposi
 import { useRepositoryAssociateModalController } from "./LeftSidebar/useRepositoryAssociateModalController";
 import { useProjectSddModeModalController } from "./LeftSidebar/useProjectSddModeModalController";
 import { useRepositorySddModeModalController } from "./LeftSidebar/useRepositorySddModeModalController";
+import { useRepositoryIconBadgeModalController } from "./LeftSidebar/useRepositoryIconBadgeModalController";
 import { useSidebarScheduledTasksMap } from "./LeftSidebar/useSidebarScheduledTasksMap";
 import { useWorkspaceTodoCountsBootstrap } from "../hooks/useWorkspaceTodoCountsBootstrap";
 import { useWorkspaceInspectorPanelsDefault } from "../hooks/useWorkspaceInspectorPanelsDefault";
@@ -130,6 +132,7 @@ export function LeftSidebar({
   leftSidebarHubQuickEntryIds = [],
   showLeftSidebarMonitorPanel = true,
   showLeftSidebarWorkspaceList = true,
+  showRepositoryIconBadgesInWorkspaceList = false,
   mcpHubActive = false,
   onOpenMcpHub,
   skillsHubActive = false,
@@ -158,6 +161,7 @@ export function LeftSidebar({
   onRemoveRepository,
   onDetachRepositoryFromProject,
   onUpdateRepositorySddMode,
+  onUpdateRepositoryIconBadge,
   onUpdateProjectSddMode,
   onUpdateRepositoryOpenAppId,
   onUpdateProjectOpenAppId,
@@ -554,6 +558,9 @@ export function LeftSidebar({
   const { openAddFloatingRepositoryModal, openAddRepositoryModal } = repositoryAssociateModal;
   const repositorySddModeModal = useRepositorySddModeModalController({
     onUpdateRepositorySddMode,
+  });
+  const repositoryIconBadgeModal = useRepositoryIconBadgeModalController({
+    onUpdateRepositoryIconBadge,
   });
   const projectSddModeModal = useProjectSddModeModalController({
     projects,
@@ -1440,6 +1447,7 @@ export function LeftSidebar({
           activeProjectId={activeProjectId}
           activeWorkspaceFocus={activeWorkspaceFocus}
           activeRepositoryId={activeRepositoryId}
+          showRepositoryIconBadgesInWorkspaceList={showRepositoryIconBadgesInWorkspaceList}
           pinnedProjectIds={pinnedProjectIds}
           expandedProjects={projectRepositoryState.expandedProjects}
           projectDropTargetId={projectRepositoryState.projectDropTargetId}
@@ -1509,6 +1517,9 @@ export function LeftSidebar({
           onStartRepositoryRunCommand={onStartRepositoryRunCommand}
           onStopRepositoryRunCommand={onStopRepositoryRunCommand}
           onConfigureRepositorySddMode={onUpdateRepositorySddMode ? repositorySddModeModal.open : undefined}
+          onConfigureRepositoryIconBadge={
+            onUpdateRepositoryIconBadge ? repositoryIconBadgeModal.open : undefined
+          }
           onConfigureProjectSddMode={onUpdateProjectSddMode ? projectSddModeModal.open : undefined}
           onConfigureRepositoryOpenApp={
             onUpdateRepositoryOpenAppId ? handleConfigureRepositoryOpenApp : undefined
@@ -1783,6 +1794,13 @@ export function LeftSidebar({
         onValueChange={repositorySddModeModal.setValue}
         onCancel={repositorySddModeModal.cancel}
         onSubmit={() => void repositorySddModeModal.submit()}
+      />
+      <RepositoryIconBadgeModal
+        repository={repositoryIconBadgeModal.repository}
+        saving={repositoryIconBadgeModal.saving}
+        canSave={repositoryIconBadgeModal.canSave}
+        onCancel={repositoryIconBadgeModal.cancel}
+        onSubmit={(patch) => void repositoryIconBadgeModal.submit(patch)}
       />
       <WorkspaceSddModeModal
         project={projectSddModeModal.project}

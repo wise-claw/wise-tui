@@ -138,6 +138,26 @@ export async function updateRepositoryIconDisplay(
   });
 }
 
+export interface RepositoryIconBadgePatch {
+  repositoryType: Repository["repositoryType"];
+  iconDisplayName: string | null;
+  iconColor: string | null;
+}
+
+export async function updateRepositoryIconBadge(
+  id: number,
+  patch: RepositoryIconBadgePatch,
+): Promise<Repository> {
+  const iconDisplayName = patch.iconDisplayName?.trim();
+  const iconColor = patch.iconColor?.trim();
+  return invoke<Repository>("update_repository_icon_badge", {
+    id,
+    repositoryType: patch.repositoryType,
+    iconDisplayName: iconDisplayName && iconDisplayName.length > 0 ? iconDisplayName : null,
+    iconColor: iconColor && iconColor.length > 0 ? iconColor : null,
+  });
+}
+
 export async function updateRepositoryMainOwnerAgent(
   id: number,
   mainOwnerAgentName: string | null,

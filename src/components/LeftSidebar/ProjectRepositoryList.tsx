@@ -50,6 +50,7 @@ interface ProjectRepositoryListProps {
   activeProjectId: string | null;
   activeWorkspaceFocus?: WorkspaceFocus;
   activeRepositoryId: number | null;
+  showRepositoryIconBadgesInWorkspaceList?: boolean;
   pinnedProjectIds: string[];
   expandedProjects: Set<string>;
   projectDropTargetId: string | null;
@@ -86,6 +87,7 @@ interface ProjectRepositoryListProps {
   onStartRepositoryRunCommand?: (repository: Repository) => void;
   onStopRepositoryRunCommand?: (repository: Repository) => void;
   onConfigureRepositorySddMode?: (repository: Repository) => void;
+  onConfigureRepositoryIconBadge?: (repository: Repository) => void;
   onConfigureProjectSddMode?: (project: Workspace) => void;
   onConfigureRepositoryOpenApp?: (repository: Repository, openAppId: string | null) => void;
   onConfigureProjectOpenApp?: (project: Workspace, openAppId: string | null) => void;
@@ -131,6 +133,7 @@ export function ProjectRepositoryList({
   activeProjectId,
   activeWorkspaceFocus = "repository",
   activeRepositoryId,
+  showRepositoryIconBadgesInWorkspaceList = false,
   pinnedProjectIds,
   expandedProjects,
   projectDropTargetId,
@@ -166,6 +169,7 @@ export function ProjectRepositoryList({
   onStartRepositoryRunCommand,
   onStopRepositoryRunCommand,
   onConfigureRepositorySddMode,
+  onConfigureRepositoryIconBadge,
   onConfigureProjectSddMode,
   onConfigureRepositoryOpenApp,
   onConfigureProjectOpenApp,
@@ -325,6 +329,8 @@ export function ProjectRepositoryList({
                 onStartRepositoryRunCommand={onStartRepositoryRunCommand}
                 onStopRepositoryRunCommand={onStopRepositoryRunCommand}
                 onConfigureSddMode={onConfigureRepositorySddMode}
+                onConfigureRepositoryIconBadge={onConfigureRepositoryIconBadge}
+                showRepositoryIconBadgesInWorkspaceList={showRepositoryIconBadgesInWorkspaceList}
                 onNewPaneSession={onNewPaneSessionForRepository}
                 onBootstrapTrellis={onBootstrapTrellisForRepository}
                 onPromoteToNewProject={onPromoteFloatingRepository}
@@ -358,6 +364,7 @@ export function ProjectRepositoryList({
             projectRepos={projectReposByProjectId.get(project.id) ?? EMPTY_PROJECT_REPOS}
             isActiveProject={project.id === activeProjectId && activeWorkspaceFocus === "project"}
             activeRepositoryId={activeRepositoryId}
+            showRepositoryIconBadgesInWorkspaceList={showRepositoryIconBadgesInWorkspaceList}
             activeWorkspaceFocus={activeWorkspaceFocus}
             isPinned={pinnedProjectIds.includes(project.id)}
             expanded={expandedProjects.has(project.id)}
@@ -388,6 +395,8 @@ export function ProjectRepositoryList({
             onOpenRepositoryMainOwner={onOpenRepositoryMainOwner}
             onConfigureRepositoryMainSessionRun={onConfigureRepositoryMainSessionRun}
             onConfigureRepositorySddMode={onConfigureRepositorySddMode}
+            onConfigureRepositoryIconBadge={onConfigureRepositoryIconBadge}
+            showRepositoryIconBadgesInWorkspaceList={showRepositoryIconBadgesInWorkspaceList}
             onConfigureProjectSddMode={onConfigureProjectSddMode}
             onConfigureRepositoryOpenApp={onConfigureRepositoryOpenApp}
             onConfigureProjectOpenApp={onConfigureProjectOpenApp}
@@ -443,6 +452,7 @@ interface ProjectRowProps {
   projectRepos: Repository[];
   isActiveProject: boolean;
   activeRepositoryId: number | null;
+  showRepositoryIconBadgesInWorkspaceList?: boolean;
   activeWorkspaceFocus: WorkspaceFocus;
   isPinned: boolean;
   expanded: boolean;
@@ -476,6 +486,7 @@ interface ProjectRowProps {
   onStartRepositoryRunCommand?: (repository: Repository) => void;
   onStopRepositoryRunCommand?: (repository: Repository) => void;
   onConfigureRepositorySddMode?: (repository: Repository) => void;
+  onConfigureRepositoryIconBadge?: (repository: Repository) => void;
   onConfigureProjectSddMode?: (project: Workspace) => void;
   onConfigureRepositoryOpenApp?: (repository: Repository, openAppId: string | null) => void;
   onConfigureProjectOpenApp?: (project: Workspace, openAppId: string | null) => void;
@@ -513,6 +524,7 @@ function ProjectRow({
   projectRepos,
   isActiveProject,
   activeRepositoryId,
+  showRepositoryIconBadgesInWorkspaceList = false,
   activeWorkspaceFocus,
   isPinned,
   expanded,
@@ -543,6 +555,7 @@ function ProjectRow({
   onStartRepositoryRunCommand,
   onStopRepositoryRunCommand,
   onConfigureRepositorySddMode,
+  onConfigureRepositoryIconBadge,
   onConfigureProjectSddMode,
   onConfigureRepositoryOpenApp,
   onConfigureProjectOpenApp,
@@ -810,6 +823,8 @@ function ProjectRow({
             onReorderRepositoriesInProject={onReorderRepositoriesInProject}
             onMoveRepositoryToProject={onMoveRepositoryToProjectWithExpand}
             onConfigureSddMode={onConfigureRepositorySddMode}
+            onConfigureRepositoryIconBadge={onConfigureRepositoryIconBadge}
+            showRepositoryIconBadgesInWorkspaceList={showRepositoryIconBadgesInWorkspaceList}
             onConfigureRepositoryMainSessionRun={onConfigureRepositoryMainSessionRun}
             onNewPaneSession={onNewPaneSessionForRepository}
             repoSidebarDragRef={repoSidebarDragRef}

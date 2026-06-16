@@ -87,6 +87,15 @@ describe("buildProjectMoreMenuItems", () => {
 });
 
 describe("buildProjectRepositoryMoreMenuItems", () => {
+  test("includes icon badge configure entry when handler is available", () => {
+    const labels = menuLabels(
+      buildProjectRepositoryMoreMenuItems({
+        onConfigureRepositoryIconBadge: true,
+      }),
+    );
+    expect(labels).toContain("配置角标");
+  });
+
   test("separates repository sections with dividers instead of group titles", () => {
     const items = buildProjectRepositoryMoreMenuItems({
       trellisEnabled: true,

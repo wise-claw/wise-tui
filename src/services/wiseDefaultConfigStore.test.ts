@@ -93,6 +93,7 @@ describe("wiseDefaultConfigStore", () => {
     expect(config.leftSidebarHubQuickEntries).toEqual(["mcp", "skills", "automation"]);
     expect(config.showLeftSidebarMonitorPanel).toBe(true);
     expect(config.showLeftSidebarWorkspaceList).toBe(true);
+    expect(config.showRepositoryIconBadgesInWorkspaceList).toBe(false);
     expect(config.monitorPanelPlacement).toBe("left");
     expect(config.showWorkspaceQuickActionsPanel).toBe(true);
     expect(config.showWorkspaceMemosPanel).toBe(true);
