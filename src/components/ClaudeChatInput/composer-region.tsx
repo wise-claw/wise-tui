@@ -131,6 +131,10 @@ import {
   getContextPercentTone,
   getSessionContextMetrics,
 } from "../../services/claudeSessionContext";
+import {
+  resolveTodoBatchStartedAt,
+  shouldShowClaudeCodeTaskListInMessages,
+} from "../../utils/claudeCodeTaskListDisplay";
 import { WISE_CLAUDE_USER_SETTINGS_CHANGED } from "../../services/claudeModelProfiles";
 import { getCachedModelProfileStore } from "../../stores/modelProfileStoreCache";
 import type { ModelProfileEngine } from "../../types/claudeModelProfile";
@@ -1290,6 +1294,10 @@ function ComposerInner({
       fullLine,
     };
   }, [displayPlain, session]);
+  const todoBatchStartedAt = useMemo(
+    () => resolveTodoBatchStartedAt(session.messages, session.createdAt),
+    [session.messages, session.createdAt],
+  );
   const hasComposerPayload = canSendComposer;
 
   useEffect(() => {
@@ -3128,7 +3136,14 @@ function ComposerInner({
           )}
 
           {/* Todo dock */}
-          <TodoDock items={todos} onToggle={handleTodoToggle} onClose={onClearTodos} />
+          <TodoDock
+            items={todos}
+            sessionStartedAt={todoBatchStartedAt}
+            estimatedTokens={getSessionContextMetrics(session).estimatedTokens}
+            hidden={shouldShowClaudeCodeTaskListInMessages(session.status, todos)}
+            onToggle={handleTodoToggle}
+            onClose={onClearTodos}
+          />
 
           {/* Revert dock */}
           <RevertDock items={revertItems} onRestore={onRestoreRevert} onClose={onClearRevertItems} />

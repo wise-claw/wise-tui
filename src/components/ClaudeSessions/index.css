@@ -8024,10 +8024,205 @@ button.app-message-part-header:disabled:hover {
 }
 
 .app-claude-dock--todo {
-  background: var(--ant-color-bg-elevated);
+  background: transparent;
+  border: none;
+  border-radius: 0;
+  overflow: visible;
+}
+
+.app-cc-task-list-anchor {
+  flex-shrink: 0;
+  padding: 0 16px 8px;
+  background: var(--ant-color-bg-layout);
+}
+
+.app-cc-task-list {
   border: 1px solid var(--ant-color-border-secondary);
-  border-radius: 8px;
+  border-radius: 10px;
+  background: color-mix(in srgb, var(--ant-color-bg-container) 92%, var(--ant-color-bg-layout));
   overflow: hidden;
+  font-family: "SF Mono", "Fira Code", "Consolas", monospace;
+}
+
+.app-cc-task-list--messages {
+  max-width: min(640px, 100%);
+  margin-inline-start: 30px;
+}
+
+.app-cc-task-list--composer {
+  margin-bottom: 6px;
+}
+
+.app-cc-task-list__head {
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  min-height: 30px;
+}
+
+.app-cc-task-list__head-main {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  margin: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: var(--ant-color-text);
+  min-width: 0;
+}
+
+.app-cc-task-list__head-prefix {
+  flex-shrink: 0;
+  color: var(--ant-color-warning);
+  font-weight: 700;
+}
+
+.app-cc-task-list__head-title {
+  flex: 0 1 auto;
+  min-width: 0;
+  font-size: 12px;
+  color: var(--ant-color-text);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-cc-task-list__head-meta {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--ant-color-text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.app-cc-task-list__head-chevron {
+  flex-shrink: 0;
+  margin-inline-start: auto;
+  font-size: 9px;
+  color: var(--ant-color-text-quaternary);
+}
+
+.app-cc-task-list__close {
+  flex-shrink: 0;
+  align-self: center;
+  min-width: 20px !important;
+  width: 20px !important;
+  height: 20px !important;
+  padding: 0 !important;
+  margin-inline-end: 4px;
+  color: var(--ant-color-text-tertiary) !important;
+  font-size: 12px !important;
+  line-height: 1 !important;
+}
+
+.app-cc-task-list__tree {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 0 10px 8px;
+}
+
+.app-cc-task-list__row {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+}
+
+.app-cc-task-list__branch {
+  flex-shrink: 0;
+  width: 14px;
+  color: var(--ant-color-text-quaternary);
+  font-size: 11px;
+  line-height: 18px;
+  user-select: none;
+}
+
+.app-cc-task-list__row-btn,
+.app-cc-task-list__row-body {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.app-cc-task-list__row-btn {
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+}
+
+.app-cc-task-list__row-btn:hover .app-cc-task-list__row-text {
+  color: var(--ant-color-text);
+}
+
+.app-cc-task-list__icon {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  margin-top: 2px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 10px;
+  line-height: 1;
+}
+
+.app-cc-task-list__icon--pending {
+  border: 1px solid var(--ant-color-border);
+  border-radius: 2px;
+}
+
+.app-cc-task-list__icon--active {
+  color: var(--ant-color-warning);
+  font-size: 9px;
+}
+
+.app-cc-task-list__icon--done {
+  color: var(--ant-color-success);
+  font-size: 11px;
+}
+
+.app-cc-task-list__row-text {
+  flex: 1;
+  font-size: 11px;
+  line-height: 1.45;
+  color: var(--ant-color-text-secondary);
+  word-break: break-word;
+}
+
+.app-cc-task-list__row--in_progress .app-cc-task-list__row-text {
+  color: var(--ant-color-text);
+  font-weight: 500;
+}
+
+.app-cc-task-list__row--completed .app-cc-task-list__row-text {
+  text-decoration: line-through;
+  color: var(--ant-color-text-quaternary);
+}
+
+.app-cc-task-list__overflow {
+  padding-inline-start: 20px;
+  font-size: 11px;
+  color: var(--ant-color-text-quaternary);
+}
+
+.app-cc-task-list--collapsed .app-cc-task-list__tree {
+  padding-top: 0;
+}
+
+.app-cc-task-list--collapsed .app-cc-task-list__head-main {
+  opacity: 0.96;
 }
 
 .app-todo-head {
