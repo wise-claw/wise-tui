@@ -1,8 +1,9 @@
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import type { MessagePart, TextPart, ToolUsePart, ReasoningPart } from "../../types";
 import { isRenderableMessagePart } from "../../utils/claudeChatMessageDisplay";
 import { looksLikeStructuredMarkdownSummary, cliToolOutputForExpandedBody } from "../../utils/assistantOrphanMarkdown";
+import { reasoningPreviewOverflows } from "../../utils/reasoningPreviewOverflows";
 import { isSkillToolPart, skillToolDisplayName } from "../../utils/skillToolPart";
 import { LinkifiedPre } from "./LinkifiedPre";
 import { Markdown, StreamingReplyHint, usePacedText } from "./Markdown";
@@ -26,6 +27,31 @@ function ChevronIcon({ expanded }: { expanded: boolean }) {
       <path d="M6 4l4 4-4 4" />
     </svg>
   );
+}
+
+/** 有文本选区时，第一次点击只用于取消选中，不触发展开/收起。 */
+function useClickAfterSelectionGuard() {
+  const hadTextSelectionRef = useRef(false);
+  const onPointerDown = useCallback((event: React.PointerEvent<HTMLElement>) => {
+    const selection = window.getSelection();
+    if (!selection || selection.isCollapsed || selection.rangeCount === 0) {
+      hadTextSelectionRef.current = false;
+      return;
+    }
+    const container = event.currentTarget;
+    const range = selection.getRangeAt(0);
+    const commonAncestor = range.commonAncestorContainer;
+    hadTextSelectionRef.current = container.contains(commonAncestor);
+  }, []);
+  const consumeHadTextSelection = useCallback(() => {
+    if (!hadTextSelectionRef.current) return false;
+    hadTextSelectionRef.current = false;
+    return true;
+  }, []);
+  const resetPointerGuard = useCallback(() => {
+    hadTextSelectionRef.current = false;
+  }, []);
+  return { onPointerDown, consumeHadTextSelection, resetPointerGuard };
 }
 
 function CopyIcon() {
@@ -90,41 +116,128 @@ const ReasoningPartDisplay = memo(function ReasoningPartDisplay({
   showPendingHint: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
+  const [overflows, setOverflows] = useState(false);
+  const bodyRef = useRef<HTMLDivElement>(null);
   const text = usePacedText(part.text, streaming);
 
+  useLayoutEffect(() => {
+    if (expanded) {
+      setOverflows((prev) => (prev ? false : prev));
+      return;
+    }
+    const el = bodyRef.current;
+    if (!el) return;
+
+    let rafId = 0;
+    const measure = () => {
+      const nextOverflows = reasoningPreviewOverflows(el, text);
+      setOverflows((prev) => (prev === nextOverflows ? prev : nextOverflows));
+    };
+    const scheduleMeasure = () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(measure);
+    };
+
+    scheduleMeasure();
+    const row = el.querySelector<HTMLElement>(".app-message-part-reasoning-inline-row");
+    const observer =
+      typeof ResizeObserver !== "undefined" ? new ResizeObserver(scheduleMeasure) : null;
+    observer?.observe(el);
+    if (row) observer?.observe(row);
+    const host = el.querySelector<HTMLElement>(".app-message-part-reasoning-inline-row .app-markdown-host");
+    if (host) observer?.observe(host);
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      observer?.disconnect();
+    };
+  }, [expanded, text]);
+
+  const canToggle = overflows || expanded;
+  const { onPointerDown, consumeHadTextSelection, resetPointerGuard } = useClickAfterSelectionGuard();
+  const handleToggle = useCallback(() => {
+    setExpanded((prev) => !prev);
+  }, []);
+  const handleToggleClick = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      if (!canToggle) return;
+      if (consumeHadTextSelection()) return;
+      event.stopPropagation();
+      handleToggle();
+    },
+    [canToggle, consumeHadTextSelection, handleToggle],
+  );
+  const handleRowClick = useCallback(
+    (event: React.MouseEvent<HTMLDivElement>) => {
+      if (!canToggle) return;
+      if (consumeHadTextSelection()) return;
+      const target = event.target;
+      if (target instanceof Element && target.closest("a, button")) return;
+      handleToggle();
+    },
+    [canToggle, consumeHadTextSelection, handleToggle],
+  );
+
   return (
-    <div className={`app-message-part app-message-part--reasoning${expanded ? " app-message-part--reasoning-expanded" : ""}`}>
-      <button
-        type="button"
-        className="app-message-part-header"
-        aria-expanded={expanded}
-        onClick={() => setExpanded(!expanded)}
+    <div
+      className={`app-message-part app-message-part--reasoning${
+        expanded ? " app-message-part--reasoning-expanded" : ""
+      }`}
+    >
+      <div
+        className="app-message-part-reasoning-shell"
       >
-        <span className="app-message-part-header__leading">
-          <span className="app-message-part-icon">
-            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-              <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z" />
-            </svg>
-          </span>
-        </span>
-        <span className="app-message-part-header__main">
-          <span className="app-message-part-title">思考过程</span>
-        </span>
-        <span className="app-message-part-header__chevron" aria-hidden>
-          <ChevronIcon expanded={expanded} />
-        </span>
-      </button>
-      {!expanded && showPendingHint && <StreamingReplyHint />}
-      {expanded && (
-        <div className="app-message-part-content">
-          <Markdown
-            text={text}
-            streaming={streaming}
-            showPendingHint={showPendingHint}
-            className="app-message-part--reasoning-content"
-          />
+        <div
+          className={`app-message-part-reasoning-collapsible${
+            expanded ? " app-message-part-reasoning-collapsible--expanded" : ""
+          }`}
+        >
+          <div
+            className={`app-message-part-reasoning-collapsible__row${
+              canToggle ? " app-message-part-reasoning-collapsible__row--clickable" : ""
+            }`}
+            onPointerDown={canToggle ? onPointerDown : undefined}
+            onPointerLeave={canToggle ? resetPointerGuard : undefined}
+            onPointerCancel={canToggle ? resetPointerGuard : undefined}
+            onClick={canToggle ? handleRowClick : undefined}
+          >
+            <div
+              ref={bodyRef}
+              className="app-message-part-reasoning-collapsible__body"
+            >
+              <div className="app-message-part-reasoning-inline-row">
+                <span className="app-message-part-reasoning-label">
+                  <span className="app-message-part-reasoning-label__icon" aria-hidden>
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
+                      <path d="M9.5 2A5.5 5.5 0 0 0 4 7.5c0 1.9.96 3.58 2.42 4.56L6 18h12l-.42-5.94A5.49 5.49 0 0 0 20 7.5 5.5 5.5 0 0 0 14.5 2h-5Z" />
+                      <path d="M9 18v2M15 18v2" />
+                    </svg>
+                  </span>
+                  <span className="app-message-part-reasoning-label__text">思考过程</span>
+                </span>
+                <Markdown
+                  text={text}
+                  streaming={streaming}
+                  showPendingHint={false}
+                  className="app-message-part--reasoning-content"
+                />
+              </div>
+            </div>
+            {canToggle ? (
+              <button
+                type="button"
+                className="app-message-part-reasoning-collapsible__toggle"
+                aria-label={expanded ? "收起" : "展开"}
+                aria-expanded={expanded}
+                onPointerDown={onPointerDown}
+                onClick={handleToggleClick}
+              >
+                <ChevronIcon expanded={expanded} />
+              </button>
+            ) : null}
+          </div>
         </div>
-      )}
+        {showPendingHint ? <StreamingReplyHint /> : null}
+      </div>
     </div>
   );
 }, reasoningPartDisplayEqual);
@@ -449,6 +562,7 @@ const ToolUsePartDisplay = memo(function ToolUsePartDisplay({
         ? input.task_id.trim()
         : "";
   const outputStreaming = part.status === "running";
+  const { onPointerDown: onTogglePointerDown, consumeHadTextSelection } = useClickAfterSelectionGuard();
   const { copied, copy } = useCopyToClipboard();
   const copyText =
     (part.output?.trim() ? part.output : part.error?.trim()) ||
@@ -490,7 +604,12 @@ const ToolUsePartDisplay = memo(function ToolUsePartDisplay({
           className="app-message-part-header"
           disabled={!hasExpandableBody}
           aria-expanded={hasExpandableBody ? expanded : undefined}
-          onClick={() => hasExpandableBody && setExpanded(!expanded)}
+          onPointerDown={hasExpandableBody ? onTogglePointerDown : undefined}
+          onClick={() => {
+            if (!hasExpandableBody) return;
+            if (consumeHadTextSelection()) return;
+            setExpanded(!expanded);
+          }}
         >
           <span className="app-message-part-header__leading">{statusIcon}</span>
           <span className="app-message-part-header__main">

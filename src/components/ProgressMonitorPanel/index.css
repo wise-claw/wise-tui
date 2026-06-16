@@ -1835,12 +1835,14 @@
 }
 
 .app-monitor-panel__subagent-detail-session:not(.app-monitor-panel__subagent-detail-session--chat-layout)
-  .app-message-part--reasoning
-  .app-message-part-header {
-  padding: 1px 6px;
+  .app-message-part-reasoning-shell {
+  padding: 3px 5px;
+  border-radius: 5px;
+}
+
+.app-monitor-panel__subagent-detail-session:not(.app-monitor-panel__subagent-detail-session--chat-layout)
+  .app-message-part-reasoning-label {
   font-size: 10px;
-  border-radius: 3px;
-  gap: 2px;
 }
 
 .app-monitor-panel__subagent-detail-session:not(.app-monitor-panel__subagent-detail-session--chat-layout)

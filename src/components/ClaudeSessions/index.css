@@ -3681,7 +3681,7 @@
 }
 
 .app-claude-messages--scrolling .app-claude-messages .app-message-part--tool .app-message-part-header:hover:not(:disabled),
-.app-claude-messages--scrolling .app-claude-messages .app-message-part--reasoning .app-message-part-header:hover:not(:disabled),
+.app-claude-messages--scrolling .app-claude-messages .app-message-part-reasoning-collapsible__toggle:hover,
 .app-claude-messages--scrolling .app-claude-message:hover .app-claude-message-floating-actions,
 .app-claude-messages--scrolling .app-claude-message:hover .app-claude-message-action.ant-btn,
 .app-claude-messages--scrolling .app-message-part--tool .app-message-part-content:hover .app-tool-copy-btn {
@@ -4320,7 +4320,7 @@
 .app-claude-messages .app-message-parts__tool-group + .app-message-part--text,
 .app-claude-messages .app-message-part--reasoning + .app-message-parts__tool-group,
 .app-claude-messages .app-message-parts__tool-group + .app-message-part--reasoning {
-  margin-top: 6px;
+  margin-top: 4px;
 }
 
 .app-claude-messages .app-message-part--completion-summary {
@@ -4458,58 +4458,227 @@
   text-decoration: underline;
 }
 
-/* 主列表：思考过程独占一行展示，精简柔和，避免喧宾夺主 */
+/* 主列表：思考过程独立卡片，与正文/工具链视觉区分 */
 .app-claude-messages .app-message-part--reasoning {
+  margin: 0 0 4px;
+  display: block;
   border: none;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
-  margin: 0;
-  display: block;
+  overflow: visible;
 }
 
-.app-claude-messages .app-message-part--reasoning .app-message-part-header {
+.app-claude-messages .app-message-part-reasoning-shell {
+  --app-reasoning-font-size: 11px;
+  --app-reasoning-line-height: 1.45;
+  --app-reasoning-content-color: color-mix(in srgb, var(--ant-color-text) 82%, var(--ant-color-text-secondary));
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, #7c3aed 18%, var(--ant-color-border-secondary));
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, #7c3aed 7%, var(--ant-color-fill-quaternary)),
+    color-mix(in srgb, #7c3aed 3%, var(--ant-color-bg-container))
+  );
+  box-shadow: none;
+}
+
+.app-claude-messages .app-message-part-reasoning-shell--clickable {
+  cursor: pointer;
+}
+
+.app-claude-messages .app-message-part-reasoning-inline-row .app-markdown-host,
+.app-claude-messages .app-message-part--reasoning .app-message-part--reasoning-content {
+  user-select: text;
+}
+
+.app-claude-messages .app-message-part-reasoning-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  border-radius: 0;
+  background: transparent;
+  color: color-mix(in srgb, #7c3aed 72%, var(--ant-color-text-secondary));
+  font-size: var(--app-reasoning-font-size);
+  font-weight: 600;
+  line-height: var(--app-reasoning-line-height);
+  letter-spacing: 0.01em;
+  user-select: none;
+  flex: 0 0 auto;
+}
+
+.app-claude-messages .app-message-part-reasoning-inline-row {
   display: flex;
   flex-wrap: nowrap;
-  align-items: center;
-  width: 100%;
+  align-items: flex-start;
+  column-gap: 4px;
+  min-width: 0;
   max-width: 100%;
-  gap: 4px;
-  padding: 2px 7px;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 35%, transparent);
-  border: 1px solid transparent;
-  color: var(--ant-color-text-quaternary);
-  font-size: 11px;
+  width: 100%;
+}
+
+.app-claude-messages .app-message-part-reasoning-inline-row .app-markdown-host {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: none;
+  width: auto;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-start;
+  line-height: var(--app-reasoning-line-height);
+}
+
+.app-claude-messages .app-message-part-reasoning-inline-row .app-markdown p:only-child {
+  display: inline;
+  margin: 0;
+}
+
+.app-claude-messages
+  .app-message-part-reasoning-collapsible:not(.app-message-part-reasoning-collapsible--expanded)
+  .app-message-part-reasoning-inline-row
+  .app-markdown-host {
+  display: inline-flex;
+  align-items: flex-start;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.app-claude-messages
+  .app-message-part-reasoning-collapsible:not(.app-message-part-reasoning-collapsible--expanded)
+  .app-message-part-reasoning-inline-row
+  .app-markdown,
+.app-claude-messages
+  .app-message-part-reasoning-collapsible:not(.app-message-part-reasoning-collapsible--expanded)
+  .app-message-part-reasoning-inline-row
+  .app-markdown
+  p {
+  display: inline;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
   white-space: nowrap;
+  vertical-align: top;
 }
 
-.app-claude-messages .app-message-part--reasoning .app-message-part-header__main {
-  flex: 0 1 auto;
-  flex-direction: row;
+.app-claude-messages .app-message-part-reasoning-label__icon {
+  display: inline-flex;
   align-items: center;
-  gap: 0;
+  justify-content: center;
+  flex-shrink: 0;
+  color: color-mix(in srgb, #7c3aed 80%, var(--ant-color-primary));
+  transform: none;
 }
 
-.app-claude-messages .app-message-part--reasoning .app-message-part-header__chevron {
-  color: var(--ant-color-text-quaternary);
+.app-claude-messages .app-message-part-reasoning-label__icon svg {
+  width: 10px;
+  height: 10px;
 }
 
-.app-claude-messages .app-message-part--reasoning .app-message-part-icon,
-.app-claude-messages .app-message-part--reasoning .app-message-part-title {
-  color: var(--ant-color-text-quaternary);
+.app-claude-messages .app-message-part-reasoning-collapsible {
+  min-width: 0;
+  max-width: 100%;
 }
 
-.app-claude-messages .app-message-part--reasoning .app-message-part-header:hover:not(:disabled) {
-  background: var(--ant-color-fill-secondary);
-  border-color: transparent;
+.app-claude-messages .app-message-part-reasoning-collapsible__row {
+  display: flex;
+  position: relative;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+  min-height: calc(var(--app-reasoning-font-size) * var(--app-reasoning-line-height));
+  padding-right: 14px;
+}
+
+.app-claude-messages .app-message-part-reasoning-collapsible__body {
+  display: flex;
+  align-items: flex-start;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-height: calc(var(--app-reasoning-font-size) * var(--app-reasoning-line-height));
+  overflow: hidden;
+  word-break: break-word;
+}
+
+
+.app-claude-messages
+  .app-message-part-reasoning-collapsible--expanded
+  .app-message-part-reasoning-inline-row
+  .app-markdown-host {
+  overflow: visible;
+  white-space: normal;
+}
+
+.app-claude-messages
+  .app-message-part-reasoning-collapsible--expanded
+  .app-message-part-reasoning-inline-row
+  .app-markdown
+  p {
+  display: block;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.app-claude-messages
+  .app-message-part-reasoning-collapsible--expanded
+  .app-message-part-reasoning-collapsible__body {
+  align-items: flex-start;
+  max-height: min(50vh, 360px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  cursor: inherit;
+}
+
+.app-claude-messages
+  .app-message-part-reasoning-collapsible--expanded
+  .app-message-part-reasoning-inline-row {
+  align-items: flex-start;
+}
+
+.app-claude-messages
+  .app-message-part-reasoning-collapsible--expanded
+  .app-message-part-reasoning-collapsible__toggle,
+.app-claude-messages .app-message-part-reasoning-collapsible__toggle {
+  position: absolute;
+  right: 1px;
+  top: 1px;
+  transform: none;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
   color: var(--ant-color-text-tertiary);
+  cursor: pointer;
 }
 
-.app-claude-messages .app-message-part--reasoning .app-message-part-header:hover:not(:disabled) .app-message-part-icon,
-.app-claude-messages .app-message-part--reasoning .app-message-part-header:hover:not(:disabled) .app-message-part-title,
-.app-claude-messages .app-message-part--reasoning .app-message-part-header:hover:not(:disabled) .app-message-part-header__chevron {
-  color: var(--ant-color-text-tertiary);
+.app-claude-messages .app-message-part-reasoning-collapsible__toggle svg {
+  width: 12px;
+  height: 12px;
+}
+
+.app-claude-messages .app-message-part-reasoning-collapsible__toggle:hover {
+  color: var(--ant-color-text-secondary);
+  background: transparent;
+}
+
+.app-claude-messages .app-message-part--reasoning .app-message-part--reasoning-content,
+.app-claude-messages .app-message-part-reasoning-inline-row .app-markdown {
+  margin: 0;
+  padding: 0;
+  width: auto;
+  color: var(--app-reasoning-content-color, var(--ant-color-text-secondary));
+  font-size: var(--app-reasoning-font-size, 11px);
+  line-height: var(--app-reasoning-line-height, 1.45);
 }
 
 .app-message-parts__tool-group {
@@ -4647,6 +4816,7 @@
   font-size: 11px;
   line-height: 1.3;
   color: var(--ant-color-text-tertiary);
+  user-select: text;
 }
 
 .app-message-parts__tool-group .app-message-part--tool-result .app-message-part-subtitle {
@@ -4991,94 +5161,223 @@ button.app-message-part-header:disabled:hover {
   display: block;
 }
 
-/* 思考过程独占一行展示，精简柔和，避免喧宾夺主 */
+/* 思考过程独立卡片，与正文/工具链视觉区分 */
 .app-message-part--reasoning {
+  margin: 2px 0 4px;
+  display: block;
   border: none;
   border-radius: 0;
   background: transparent;
   box-shadow: none;
-  margin: 4px 0 6px;
-  display: block;
+  overflow: visible;
 }
 
-/* 当思考过程展开时，保持块级元素并适当调整间距 */
 .app-message-part--reasoning-expanded {
-  margin-bottom: 8px;
-}
-
-.app-message-part--reasoning .app-message-part-header {
-  display: inline-flex;
-  flex-wrap: nowrap;
-  width: auto;
-  max-width: 100%;
-  align-items: center;
-  gap: 4px;
-  padding: 2px 8px;
-  border-radius: 4px;
-  background: var(--ant-color-fill-quaternary);
-  border: 1px solid transparent;
-  cursor: pointer;
-  font-size: 11px;
-  color: var(--ant-color-text-quaternary);
-  transition: all 0.2s ease;
-  user-select: none;
-  box-sizing: border-box;
-  white-space: nowrap;
-}
-
-.app-message-part--reasoning .app-message-part-header__main {
-  flex: 0 1 auto;
-  flex-direction: row;
-  align-items: center;
-  gap: 0;
-}
-
-.app-message-part--reasoning .app-message-part-header__chevron {
-  color: var(--ant-color-text-quaternary);
-}
-
-.app-message-part--reasoning .app-message-part-header:hover:not(:disabled) {
-  background: var(--ant-color-fill-secondary);
-  border-color: transparent;
-  color: var(--ant-color-text-tertiary);
-}
-
-.app-message-part--reasoning .app-message-part-header:hover:not(:disabled) .app-message-part-icon,
-.app-message-part--reasoning .app-message-part-header:hover:not(:disabled) .app-message-part-title,
-.app-message-part--reasoning .app-message-part-header:hover:not(:disabled) .app-message-part-header__chevron {
-  color: var(--ant-color-text-tertiary);
-}
-
-.app-message-part--reasoning .app-message-part-icon {
-  color: var(--ant-color-text-quaternary);
-  display: flex;
-  align-items: center;
-  flex-shrink: 0;
-}
-
-.app-message-part--reasoning .app-message-part-title {
-  color: var(--ant-color-text-quaternary);
-  font-weight: 400;
-  font-size: 11px;
-  letter-spacing: 0.01em;
-  white-space: nowrap;
-}
-
-.app-message-part--reasoning-content {
-  font-size: 11.5px;
-  color: var(--ant-color-text-tertiary);
-  line-height: 1.55;
-  border-left: 2px solid var(--ant-color-border-secondary);
-  padding-left: 10px;
-  margin-left: 4px;
-  margin-top: 6px;
   margin-bottom: 6px;
 }
 
+.app-message-part-reasoning-shell {
+  --app-reasoning-font-size: 11px;
+  --app-reasoning-line-height: 1.45;
+  --app-reasoning-content-color: color-mix(in srgb, var(--ant-color-text) 82%, var(--ant-color-text-secondary));
+  padding: 4px 6px;
+  border-radius: 6px;
+  border: 1px solid color-mix(in srgb, #7c3aed 18%, var(--ant-color-border-secondary));
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, #7c3aed 7%, var(--ant-color-fill-quaternary)),
+    color-mix(in srgb, #7c3aed 3%, var(--ant-color-bg-container))
+  );
+  box-shadow: none;
+}
+
+.app-message-part-reasoning-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  margin: 0;
+  padding: 0;
+  color: color-mix(in srgb, #7c3aed 72%, var(--ant-color-text-secondary));
+  font-size: var(--app-reasoning-font-size);
+  font-weight: 600;
+  line-height: var(--app-reasoning-line-height);
+  letter-spacing: 0.01em;
+  user-select: none;
+  flex: 0 0 auto;
+}
+
+.app-message-part-reasoning-inline-row {
+  display: flex;
+  flex-wrap: nowrap;
+  align-items: flex-start;
+  column-gap: 4px;
+  min-width: 0;
+  max-width: 100%;
+  width: 100%;
+}
+
+.app-message-part-reasoning-inline-row .app-markdown-host {
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: none;
+  width: auto;
+  overflow: hidden;
+  display: flex;
+  align-items: flex-start;
+  line-height: var(--app-reasoning-line-height, 1.45);
+}
+
+.app-message-part-reasoning-inline-row .app-markdown p:only-child {
+  display: inline;
+  margin: 0;
+}
+
+.app-message-part-reasoning-collapsible:not(.app-message-part-reasoning-collapsible--expanded)
+  .app-message-part-reasoning-inline-row
+  .app-markdown-host {
+  display: inline-flex;
+  align-items: flex-start;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.app-message-part-reasoning-collapsible:not(.app-message-part-reasoning-collapsible--expanded)
+  .app-message-part-reasoning-inline-row
+  .app-markdown,
+.app-message-part-reasoning-collapsible:not(.app-message-part-reasoning-collapsible--expanded)
+  .app-message-part-reasoning-inline-row
+  .app-markdown
+  p {
+  display: inline;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  vertical-align: top;
+}
+
+.app-message-part-reasoning-collapsible--expanded .app-message-part-reasoning-inline-row .app-markdown-host {
+  overflow: visible;
+  white-space: normal;
+}
+
+.app-message-part-reasoning-collapsible--expanded .app-message-part-reasoning-inline-row .app-markdown,
+.app-message-part-reasoning-collapsible--expanded .app-message-part-reasoning-inline-row .app-markdown p {
+  display: block;
+  overflow: visible;
+  text-overflow: clip;
+  white-space: normal;
+}
+
+.app-message-part-reasoning-label__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: color-mix(in srgb, #7c3aed 80%, var(--ant-color-primary));
+  transform: none;
+}
+
+.app-message-part-reasoning-label__icon svg {
+  width: 10px;
+  height: 10px;
+}
+
+.app-message-part-reasoning-collapsible {
+  min-width: 0;
+  max-width: 100%;
+}
+
+.app-message-part-reasoning-collapsible__row {
+  display: flex;
+  position: relative;
+  align-items: flex-start;
+  gap: 4px;
+  min-width: 0;
+  min-height: calc(var(--app-reasoning-font-size, 11px) * var(--app-reasoning-line-height, 1.45));
+  padding-right: 14px;
+}
+
+.app-message-part-reasoning-collapsible__row--clickable {
+  cursor: pointer;
+}
+
+.app-message-part-reasoning-collapsible__body {
+  display: flex;
+  align-items: flex-start;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-height: calc(var(--app-reasoning-font-size, 11px) * var(--app-reasoning-line-height, 1.45));
+  overflow: hidden;
+  word-break: break-word;
+}
+
+.app-message-part-reasoning-shell--clickable {
+  cursor: pointer;
+}
+
+.app-message-part-reasoning-inline-row .app-markdown-host,
+.app-message-part--reasoning-content {
+  user-select: text;
+}
+
+.app-message-part-reasoning-collapsible--expanded .app-message-part-reasoning-collapsible__body {
+  align-items: flex-start;
+  max-height: min(50vh, 360px);
+  overflow-x: hidden;
+  overflow-y: auto;
+  cursor: inherit;
+}
+
+.app-message-part-reasoning-collapsible--expanded .app-message-part-reasoning-inline-row {
+  align-items: flex-start;
+}
+
+.app-message-part-reasoning-collapsible--expanded .app-message-part-reasoning-collapsible__toggle,
+.app-message-part-reasoning-collapsible__toggle {
+  position: absolute;
+  right: 1px;
+  top: 1px;
+  transform: none;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
+  margin: 0;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+  color: var(--ant-color-text-tertiary);
+  cursor: pointer;
+}
+
+.app-message-part-reasoning-collapsible__toggle svg {
+  width: 12px;
+  height: 12px;
+}
+
+.app-message-part-reasoning-collapsible__toggle:hover {
+  color: var(--ant-color-text-secondary);
+  background: transparent;
+}
+
+.app-message-part--reasoning-content,
+.app-message-part-reasoning-inline-row .app-markdown {
+  margin: 0;
+  padding: 0;
+  width: auto;
+  color: var(--app-reasoning-content-color, var(--ant-color-text-secondary));
+  font-size: var(--app-reasoning-font-size, 11px);
+  line-height: var(--app-reasoning-line-height, 1.45);
+}
+
 .app-message-part--reasoning-content p {
-  margin: 0 0 4px;
-  font-size: 11.5px;
-  line-height: 1.55;
+  margin: 0;
+  font-size: inherit;
+  line-height: inherit;
 }
 
 /* ── Tool Part ── */
