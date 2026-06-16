@@ -4460,7 +4460,7 @@
 
 /* 主列表：思考过程独立卡片，与正文/工具链视觉区分 */
 .app-claude-messages .app-message-part--reasoning {
-  margin: 0 0 4px;
+  margin: 8px 0 2px;
   display: block;
   border: none;
   border-radius: 0;
@@ -5163,7 +5163,7 @@ button.app-message-part-header:disabled:hover {
 
 /* 思考过程独立卡片，与正文/工具链视觉区分 */
 .app-message-part--reasoning {
-  margin: 2px 0 4px;
+  margin: 8px 0 2px;
   display: block;
   border: none;
   border-radius: 0;
@@ -5173,7 +5173,7 @@ button.app-message-part-header:disabled:hover {
 }
 
 .app-message-part--reasoning-expanded {
-  margin-bottom: 6px;
+  margin-bottom: 3px;
 }
 
 .app-message-part-reasoning-shell {
