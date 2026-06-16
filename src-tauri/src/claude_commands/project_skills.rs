@@ -15,11 +15,11 @@ pub(crate) fn validate_claude_skill_name(name: &str) -> Result<(), String> {
     if name.len() > 128 {
         return Err("技能名称过长（最多 128 字符）".to_string());
     }
-    let ok = name
-        .chars()
-        .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '-');
+    let ok = name.chars().all(|c| {
+        c.is_ascii_alphanumeric() || c == '_' || c == '-' || c == ':'
+    });
     if !ok {
-        return Err("仅允许 ASCII 字母、数字、下划线与连字符".to_string());
+        return Err("仅允许 ASCII 字母、数字、下划线、连字符与冒号".to_string());
     }
     Ok(())
 }
@@ -234,6 +234,11 @@ fn parse_skill_md_frontmatter_description(text: &str) -> Option<String> {
     None
 }
 
+fn read_command_markdown_description(path: &Path) -> Option<String> {
+    let text = fs::read_to_string(path).ok()?;
+    parse_skill_md_frontmatter_description(&text).or_else(|| skill_preview_from_markdown(&text))
+}
+
 fn resolve_skill_markdown_path(skill_dir: &Path) -> Option<PathBuf> {
     let canonical = skill_dir.join("SKILL.md");
     if canonical.is_file() {
@@ -290,30 +295,28 @@ fn count_skill_files_recursive(dir: &Path) -> usize {
 
 fn command_skill_name_from_relative(rel: &Path) -> Option<String> {
     let rel_no_ext = rel.with_extension("");
-    let mut out = String::new();
-    let mut prev_dash = false;
-    for ch in rel_no_ext.to_string_lossy().chars() {
-        let mapped = if ch.is_ascii_alphanumeric() || ch == '_' || ch == '-' {
-            ch
-        } else {
-            '-'
-        };
-        if mapped == '-' {
-            if prev_dash {
-                continue;
+    let parts: Vec<String> = rel_no_ext
+        .components()
+        .filter_map(|component| match component {
+            std::path::Component::Normal(segment) => {
+                let segment = segment.to_string_lossy();
+                if segment.is_empty() {
+                    None
+                } else {
+                    Some(segment.into_owned())
+                }
             }
-            prev_dash = true;
-            out.push('-');
-        } else {
-            prev_dash = false;
-            out.push(mapped);
-        }
+            _ => None,
+        })
+        .collect();
+    if parts.is_empty() {
+        return None;
     }
-    let out = out.trim_matches('-').to_string();
-    if out.is_empty() {
+    let name = parts.join(":");
+    if name.is_empty() || validate_claude_skill_name(&name).is_err() {
         None
     } else {
-        Some(out)
+        Some(name)
     }
 }
 
@@ -350,9 +353,7 @@ fn list_claude_command_skills_under_dir(commands_dir: &Path) -> Result<Vec<Claud
             let Some(name) = command_skill_name_from_relative(rel) else {
                 continue;
             };
-            let description = fs::read_to_string(&path)
-                .ok()
-                .and_then(|text| skill_preview_from_markdown(&text));
+            let description = read_command_markdown_description(&path);
             let is_symlink = crate::skills::source::is_symlink(&path);
             let command_rel_path = rel.to_string_lossy().replace('\\', "/");
             out.push(ClaudeProjectSkill {
@@ -501,22 +502,12 @@ fn annotate_plugin_slash_entry(
     mut skill: ClaudeProjectSkill,
     cache_rel: &str,
     plugin_root: &Path,
-    install_ref: &str,
+    _install_ref: &str,
 ) -> ClaudeProjectSkill {
     skill.plugin_cache_rel_path = Some(cache_rel.to_string());
     skill.plugin_cache_root = Some(skill_dir_root_path(plugin_root));
     skill.source = Some(crate::skills::source::SkillSource::Builtin);
     skill.skill_scope = Some("plugin".to_string());
-    let prefix = format!("({install_ref}) ");
-    match skill.description.as_mut() {
-        Some(desc) if !desc.contains(install_ref) => {
-            desc.insert_str(0, &prefix);
-        }
-        None => {
-            skill.description = Some(format!("{prefix}插件命令"));
-        }
-        _ => {}
-    }
     skill
 }
 
@@ -570,7 +561,11 @@ pub(crate) fn list_claude_plugin_cache_skills(
 
 #[cfg(test)]
 mod plugin_cache_skill_tests {
+    use super::command_skill_name_from_relative;
     use super::install_ref_from_cache_rel;
+    use super::read_command_markdown_description;
+    use std::io::Write;
+    use std::path::Path;
 
     #[test]
     fn install_ref_from_cache_rel_parses_marketplace_and_plugin() {
@@ -581,6 +576,37 @@ mod plugin_cache_skill_tests {
         assert_eq!(
             install_ref_from_cache_rel("claude-code-plugins/code-review").as_deref(),
             Some("code-review@claude-code-plugins")
+        );
+    }
+
+    #[test]
+    fn command_skill_name_from_relative_joins_nested_paths_with_colon() {
+        assert_eq!(
+            command_skill_name_from_relative(Path::new("loom/init.md")).as_deref(),
+            Some("loom:init")
+        );
+        assert_eq!(
+            command_skill_name_from_relative(Path::new("loom:init.md")).as_deref(),
+            Some("loom:init")
+        );
+        assert_eq!(
+            command_skill_name_from_relative(Path::new("foo/bar/baz.md")).as_deref(),
+            Some("foo:bar:baz")
+        );
+    }
+
+    #[test]
+    fn read_command_markdown_description_prefers_frontmatter() {
+        let dir = tempfile::tempdir().expect("tempdir");
+        let path = dir.path().join("loom.md");
+        let mut file = std::fs::File::create(&path).expect("create command md");
+        writeln!(file, "---").expect("write frontmatter");
+        writeln!(file, "description: 初始化 Loom 项目").expect("write description");
+        writeln!(file, "---").expect("write frontmatter end");
+        writeln!(file, "# Loom Init").expect("write heading");
+        assert_eq!(
+            read_command_markdown_description(&path).as_deref(),
+            Some("初始化 Loom 项目")
         );
     }
 }

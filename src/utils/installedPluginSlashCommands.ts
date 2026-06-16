@@ -1,4 +1,5 @@
 import type { ClaudeProjectSkill } from "../types";
+import { isSlashCommandName } from "./slashCommandName";
 
 export interface InstalledPluginSlashOptionInput {
   label: string;
@@ -6,11 +7,8 @@ export interface InstalledPluginSlashOptionInput {
   group: "plugin-cmd";
 }
 
-const SLASH_SKILL_NAME_RE = /^[a-zA-Z0-9][-a-zA-Z0-9_.]*$/;
-
 export function isSlashablePluginCommandName(name: string): boolean {
-  const trimmed = name.trim();
-  return trimmed.length > 0 && trimmed.length <= 96 && SLASH_SKILL_NAME_RE.test(trimmed);
+  return isSlashCommandName(name);
 }
 
 export function isInvocablePluginSlashSkill(skill: ClaudeProjectSkill): boolean {
@@ -43,13 +41,11 @@ export function buildInstalledPluginSlashOptionsFromSkills(
     const key = label.toLowerCase();
     if (reservedLabels.has(key) || byKey.has(key)) continue;
 
-    const pluginRef = pluginInstallRefFromCacheRel(skill.pluginCacheRelPath);
-    const pluginNote = pluginRef ? `（${pluginRef}）` : "（已安装插件）";
     const desc = skill.description?.trim();
     byKey.set(key, {
       group: "plugin-cmd",
       label,
-      description: desc ? `${desc} ${pluginNote}` : `插件命令 ${pluginNote}`,
+      description: desc || undefined,
     });
   }
 

@@ -94,6 +94,16 @@ describe("detectAtSlashTrigger", () => {
       query: "plugin ins",
       triggerStart: 0,
     });
+    expect(detectAtSlashTrigger("/loom:init", 11)).toEqual({
+      mode: "slash",
+      query: "loom:init",
+      triggerStart: 0,
+    });
+    expect(detectAtSlashTrigger("/loom:", 6)).toEqual({
+      mode: "slash",
+      query: "loom:",
+      triggerStart: 0,
+    });
   });
 });
 

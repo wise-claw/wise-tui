@@ -35,6 +35,14 @@ describe("installedPluginSlashCommands", () => {
       new Set(["setup"]),
     );
     expect(options.map((row) => row.label)).toEqual(["autopilot"]);
-    expect(options[0]?.description).toContain("oh-my-claudecode@omc");
+    expect(options[0]?.description).toBe("Auto loop");
+  });
+
+  test("includes colon namespaced plugin commands", () => {
+    const options = buildInstalledPluginSlashOptionsFromSkills(
+      [skill({ name: "loom:init", description: "Loom init", entryKind: "command" })],
+      new Set(),
+    );
+    expect(options.map((row) => row.label)).toEqual(["loom:init"]);
   });
 });

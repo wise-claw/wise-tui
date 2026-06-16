@@ -1,5 +1,6 @@
 import type { SessionExecutionEngine } from "../constants/sessionExecutionEngine";
 import { CLAUDE_BUILTIN_SLASH_COMMANDS } from "../constants/claudeCodeSlashCommands";
+import { isSlashCommandName } from "./slashCommandName";
 import {
   COMPOSER_PLUGIN_SLASH_SUBCOMMANDS,
   type ComposerPluginSlashCommandEntry,
@@ -92,8 +93,6 @@ const PLUGIN_SUBCOMMANDS: SlashOption[] = COMPOSER_PLUGIN_SLASH_SUBCOMMANDS.map(
   description: cmd.description,
 }));
 
-const SLASH_SKILL_NAME_RE = /^[a-zA-Z0-9][-a-zA-Z0-9_.]*$/;
-
 let runtimeBuiltinCache: { key: string; value: SlashOption[] } | null = null;
 
 function mergeSlashCommandOptions(items: SlashOption[]): SlashOption[] {
@@ -145,8 +144,7 @@ function mapDetectedPluginSlashEntries(
 }
 
 function isSlashableSkillName(name: string): boolean {
-  const t = name.trim();
-  return t.length > 0 && t.length <= 96 && SLASH_SKILL_NAME_RE.test(t);
+  return isSlashCommandName(name);
 }
 
 function skillIsInvocableAsSlashCommand(skill: ClaudeProjectSkill): boolean {
