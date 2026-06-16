@@ -858,20 +858,6 @@
   color: var(--ant-color-primary);
 }
 
-.app-composer-runtime-settings-btn:hover:not(:disabled) {
-  color: var(--ant-color-text-secondary);
-  background: var(--ant-color-fill-quaternary);
-}
-
-.app-composer-runtime-settings-btn:focus-visible {
-  outline: 2px solid var(--ant-color-primary);
-  outline-offset: 1px;
-}
-
-.app-composer-runtime-settings-btn--active {
-  color: var(--ant-color-primary);
-}
-
 .app-composer-runtime-settings-btn--proxy-route {
   max-width: 196px;
 }
@@ -885,15 +871,29 @@
   padding: 0 4px;
   border-radius: 999px;
   font-size: 9px;
-  font-weight: 600;
+  font-weight: 500;
   line-height: 14px;
-  color: color-mix(in srgb, var(--ant-color-primary) 88%, var(--ant-color-text));
-  background: color-mix(in srgb, var(--ant-color-primary-bg) 88%, transparent);
+  color: var(--ant-color-info);
+  background: var(--ant-color-info-bg);
 }
 
-.app-composer-runtime-settings-btn--proxy-warn .app-composer-runtime-settings-btn__proxy-badge {
-  color: var(--ant-color-warning);
-  background: color-mix(in srgb, var(--ant-color-warning-bg) 88%, transparent);
+.app-composer-runtime-settings-btn--proxy-route:hover:not(:disabled) .app-composer-runtime-settings-btn__proxy-badge {
+  color: color-mix(in srgb, var(--ant-color-info) 88%, var(--ant-color-text));
+  background: color-mix(in srgb, var(--ant-color-info-bg) 92%, var(--ant-color-info-border));
+}
+
+.app-composer-runtime-settings-btn:hover:not(:disabled) {
+  color: var(--ant-color-text-secondary);
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-composer-runtime-settings-btn:focus-visible {
+  outline: 2px solid var(--ant-color-primary);
+  outline-offset: 1px;
+}
+
+.app-composer-runtime-settings-btn--active {
+  color: var(--ant-color-primary);
 }
 
 .app-composer-runtime-settings-btn:disabled {

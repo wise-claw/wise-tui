@@ -236,7 +236,7 @@ export function ComposerRuntimeSettingsTrigger({
             hasActiveOverride ? " app-composer-runtime-settings-btn--active" : ""
           }${engineLabel ? " app-composer-runtime-settings-btn--with-engine" : ""}${
             activeProxyRoute ? " app-composer-runtime-settings-btn--proxy-route" : ""
-          }${activeProxyRoute?.needsAttention ? " app-composer-runtime-settings-btn--proxy-warn" : ""}`}
+          }`}
           aria-label={tooltip}
           aria-haspopup="menu"
           aria-expanded={menuOpen}

@@ -36,7 +36,6 @@ import {
 } from "../../utils/cursorModel";
 import {
   normalizeSessionExecutionEngine,
-  SESSION_EXECUTION_ENGINE_LABELS,
   type SessionExecutionEngine,
 } from "../../constants/sessionExecutionEngine";
 import { useComposerActiveProxyRoute } from "../../hooks/useComposerActiveProxyRoute";
@@ -91,39 +90,26 @@ function ModelPickerTriggerButton({
   modelBarTitle,
   expanded,
   disabled,
-  proxyRoute,
 }: {
   modelBarParts: { company: string; modelName: string };
   modelBarTitle: string;
   expanded: boolean;
   disabled?: boolean;
-  proxyRoute?: { needsAttention: boolean } | null;
 }) {
   return (
     <button
       type="button"
       className={
         "app-composer-model-picker__select" +
-        (expanded ? " app-composer-model-picker__select--open" : "") +
-        (proxyRoute ? " app-composer-model-picker__select--proxy" : "") +
-        (proxyRoute?.needsAttention ? " app-composer-model-picker__select--proxy-warn" : "")
+        (expanded ? " app-composer-model-picker__select--open" : "")
       }
       aria-haspopup="dialog"
-      aria-label={proxyRoute ? `当前路由：${modelBarTitle}` : `当前模型：${modelBarTitle}`}
+      aria-label={`当前模型：${modelBarTitle}`}
       aria-expanded={expanded}
       disabled={disabled}
       onMouseDown={stopSemiComposerPointerBubble}
     >
       <ModelPickerIcon />
-      {proxyRoute ? (
-        <span
-          className={
-            "app-composer-model-picker__proxy-dot" +
-            (proxyRoute.needsAttention ? " app-composer-model-picker__proxy-dot--warn" : "")
-          }
-          aria-hidden
-        />
-      ) : null}
       <ComposerModelPickerBarLabel
         company={modelBarParts.company}
         modelName={modelBarParts.modelName}
@@ -340,7 +326,7 @@ export function ComposerModelPicker({
   const modelBarParts = useMemo(() => {
     if (activeProxyRoute) {
       return {
-        company: SESSION_EXECUTION_ENGINE_LABELS[sessionExecutionEngine].short,
+        company: "",
         modelName: activeProxyRoute.label,
       };
     }
@@ -396,7 +382,6 @@ export function ComposerModelPicker({
       modelBarTitle={modelBarTitle}
       expanded={isCursorEngine ? cursorMenuOpen : panelOpen}
       disabled={disabled}
-      proxyRoute={activeProxyRoute}
     />
   );
 

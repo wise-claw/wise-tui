@@ -6,9 +6,9 @@ import type { OpencodeGoProxyStatus } from "../services/opencodeGoProxy";
 import { resolveAnthropicProxyConflict } from "./anthropicProxyConflict";
 
 export const COMPOSER_PROXY_LABELS = {
-  opencodeGo: "OpenCode 代理",
-  llmProxy: "LLM 代理",
-  fcc: "FCC 代理",
+  opencodeGo: "OpenCode",
+  llmProxy: "LLM",
+  fcc: "FCC",
 } as const;
 
 export type ComposerProxyRouteKind = "opencode-go" | "llm-proxy" | "fcc";
@@ -47,7 +47,7 @@ function buildRouteTooltip(
 ): string {
   const engineTitle = SESSION_EXECUTION_ENGINE_LABELS[engine].title;
   const parts = [
-    `${engineTitle} 经 ${route.label} 路由`,
+    `${engineTitle} 经 ${route.label} 代理路由`,
     route.detail,
   ];
   if (modelLabel?.trim()) {
