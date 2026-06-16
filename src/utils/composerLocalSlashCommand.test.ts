@@ -1,9 +1,11 @@
 import { describe, expect, test } from "bun:test";
 import {
+  isClaudeNativeSlashCommandText,
   isComposerLocalSlashEligible,
   parseComposerLocalSlashCommand,
   parseComposerPluginSlashCommand,
   resolveComposerPluginInstallRef,
+  extractClaudeNativeSlashCommandForOutbound,
 } from "./composerLocalSlashCommand";
 
 describe("parseComposerPluginSlashCommand", () => {
@@ -156,6 +158,27 @@ describe("isComposerLocalSlashEligible", () => {
         imageCount: 1,
       }),
     ).toBe(false);
+  });
+});
+
+describe("isClaudeNativeSlashCommandText", () => {
+  test("detects plugin slash commands and excludes Wise-local ones", () => {
+    expect(isClaudeNativeSlashCommandText("/loom:init")).toBe(true);
+    expect(isClaudeNativeSlashCommandText("/help")).toBe(false);
+    expect(isClaudeNativeSlashCommandText("hello")).toBe(false);
+  });
+
+  test("detects slash after @ mention prefix", () => {
+    expect(isClaudeNativeSlashCommandText("@终端01 /loom:init")).toBe(true);
+    expect(isClaudeNativeSlashCommandText("@终端01 你好")).toBe(false);
+  });
+});
+
+describe("extractClaudeNativeSlashCommandForOutbound", () => {
+  test("strips mention prefix and keeps first slash line", () => {
+    expect(extractClaudeNativeSlashCommandForOutbound("@foo /loom:init")).toBe("/loom:init");
+    expect(extractClaudeNativeSlashCommandForOutbound("/loom:init\nextra")).toBe("/loom:init");
+    expect(extractClaudeNativeSlashCommandForOutbound("/help")).toBeNull();
   });
 });
 

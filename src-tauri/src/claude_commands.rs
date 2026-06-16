@@ -1336,6 +1336,51 @@ fn create_streaming_claude_command(
     Ok(cmd)
 }
 
+fn is_claude_native_slash_prompt(prompt: &str) -> bool {
+    let t = prompt.trim();
+    !t.is_empty() && t.starts_with('/')
+}
+
+/// 原生斜杠命令经 `-p` 无法走 TUI 同款处理器；改用 stream-json stdin（与长驻会话一致）。
+fn should_spawn_claude_slash_via_stdin(prompt: &str, bare: bool) -> bool {
+    is_claude_native_slash_prompt(prompt) && !bare
+}
+
+fn prepare_claude_spawn_command(
+    project_path: &str,
+    prompt: &str,
+    model: Option<&str>,
+    extra_args: &[&str],
+    bare: bool,
+    session_id_to_resume: Option<&str>,
+    trellis_context_id: Option<&str>,
+    cli_extras: &ClaudeSpawnCliExtras,
+) -> Result<(tokio::process::Command, Option<String>), String> {
+    if should_spawn_claude_slash_via_stdin(prompt, bare) {
+        let mut cmd = create_streaming_claude_command(
+            project_path,
+            model,
+            session_id_to_resume,
+            trellis_context_id,
+            cli_extras,
+        )?;
+        for arg in extra_args {
+            cmd.arg(arg);
+        }
+        return Ok((cmd, Some(prompt.trim().to_string())));
+    }
+    let cmd = create_claude_command(
+        project_path,
+        prompt,
+        model,
+        extra_args,
+        bare,
+        trellis_context_id,
+        cli_extras,
+    )?;
+    Ok((cmd, None))
+}
+
 /// Claude `-p` 与管道 stdin 并存时，CLI 可能在 stderr 打出「数秒内无 stdin」提示后自行继续；
 /// 该行不应经 `claude-error*` 事件进入前端系统消息。
 fn claude_stderr_line_suppressed_for_ui_events(line: &str) -> bool {
@@ -1506,12 +1551,17 @@ async fn bootstrap_streaming_session_stdin(
         registry.register(sid.to_string(), project_path.to_string(), model.to_string());
     }
 
-    if *initial_sent || connection_mode != ClaudeConnectionMode::Streaming {
+    if *initial_sent {
         return;
     }
     let Some(initial) = initial_prompt.map(str::trim).filter(|p| !p.is_empty()) else {
         return;
     };
+    if connection_mode != ClaudeConnectionMode::Streaming
+        && connection_mode != ClaudeConnectionMode::Oneshot
+    {
+        return;
+    }
     if let Some(sin) = stdin_map_mtx.lock().await.get_mut(sid) {
         if write_streaming_user_message_to_stdin(sin, initial).await.is_ok() {
             *initial_sent = true;
@@ -1690,7 +1740,10 @@ async fn spawn_claude_process(
             .await
             .insert(spawn_id, sin);
         // 写入 stream-json 用户行（非占位 `\n`）：避免 Trellis Hook 阶段无 stdin 死锁。
-        if connection_mode == ClaudeConnectionMode::Streaming {
+        if connection_mode == ClaudeConnectionMode::Streaming
+            || (connection_mode == ClaudeConnectionMode::Oneshot
+                && initial_streaming_prompt.is_some())
+        {
             if let Some(ref ip) = initial_streaming_prompt {
                 try_write_initial_streaming_prompt_pending(
                     spawn_id,
@@ -2004,6 +2057,18 @@ async fn spawn_claude_process(
             }
             pending_stdin_by_spawn_clone.lock().await.remove(&spawn_id);
             release_claude_spawn_slot(&slots_mtx_clone, acquired_scope_clone.clone()).await;
+            // 逐轮 oneshot + stdin 斜杠：子进程不会自行退出，需主动结束以免残留 claude 进程。
+            if connection_mode_stdout == ClaudeConnectionMode::Oneshot
+                && initial_streaming_prompt_stdout.is_some()
+            {
+                let mut slot = wait_child_mutex_clone.lock().await;
+                if let Some(ref mut proc) = *slot {
+                    if proc.id() == Some(spawned_pid_stdout) {
+                        let _ = proc.kill().await;
+                    }
+                }
+                *slot = None;
+            }
             return;
         }
 
@@ -2112,12 +2177,13 @@ pub(crate) async fn execute_claude_code(
     let app_clone = app.clone();
     let model_for_cmd = model.as_deref().and_then(trim_model_cli_arg);
     let extras = cli_extras.unwrap_or_default();
-    let cmd = create_claude_command(
+    let (cmd, initial_prompt) = prepare_claude_spawn_command(
         &project_path,
         &prompt,
         model_for_cmd,
         &[],
         bare.unwrap_or(false),
+        None,
         trellis_context_id.as_deref(),
         &extras,
     )?;
@@ -2139,7 +2205,7 @@ pub(crate) async fn execute_claude_code(
         mode,
         concurrency_scope_key,
         concurrency_limit,
-        None,
+        initial_prompt,
     )
     .await
 }
@@ -2170,23 +2236,40 @@ pub(crate) async fn resume_claude_code(
     let model_for_cmd = model.as_deref().and_then(trim_model_cli_arg);
     let extras = cli_extras.unwrap_or_default();
     let can_resume = claude_session_jsonl_exists(&project_path, &resume_sid);
-    let cmd = if can_resume {
-        create_claude_command(
-            &project_path,
-            &prompt,
-            model_for_cmd,
-            &["-r", &resume_sid],
-            false,
-            trellis_context_id.as_deref(),
-            &extras,
-        )?
-    } else {
-        create_claude_command(
+    let (cmd, initial_prompt) = if should_spawn_claude_slash_via_stdin(&prompt, false) {
+        prepare_claude_spawn_command(
             &project_path,
             &prompt,
             model_for_cmd,
             &[],
             false,
+            if can_resume {
+                Some(resume_sid.as_str())
+            } else {
+                None
+            },
+            trellis_context_id.as_deref(),
+            &extras,
+        )?
+    } else if can_resume {
+        prepare_claude_spawn_command(
+            &project_path,
+            &prompt,
+            model_for_cmd,
+            &["-r", &resume_sid],
+            false,
+            None,
+            trellis_context_id.as_deref(),
+            &extras,
+        )?
+    } else {
+        prepare_claude_spawn_command(
+            &project_path,
+            &prompt,
+            model_for_cmd,
+            &[],
+            false,
+            None,
             trellis_context_id.as_deref(),
             &extras,
         )?
@@ -2209,7 +2292,7 @@ pub(crate) async fn resume_claude_code(
         mode,
         concurrency_scope_key,
         concurrency_limit,
-        None,
+        initial_prompt,
     )
     .await
 }
@@ -2521,4 +2604,23 @@ pub(crate) async fn close_streaming_session(
         *slot = None;
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod claude_slash_spawn_tests {
+    use super::{is_claude_native_slash_prompt, should_spawn_claude_slash_via_stdin};
+
+    #[test]
+    fn native_slash_prompt_detection() {
+        assert!(is_claude_native_slash_prompt("/loom:init"));
+        assert!(is_claude_native_slash_prompt("  /compact  "));
+        assert!(!is_claude_native_slash_prompt("hello"));
+        assert!(!is_claude_native_slash_prompt(""));
+    }
+
+    #[test]
+    fn bare_mode_keeps_print_path() {
+        assert!(!should_spawn_claude_slash_via_stdin("/loom:init", true));
+        assert!(should_spawn_claude_slash_via_stdin("/loom:init", false));
+    }
 }

@@ -121,4 +121,33 @@ describe("claudeComposerPrompt dedupe", () => {
     expect(payload.outbound).toBe("你好\n\n附图：@/tmp/wise/composer-images/demo.png");
     expect(payload.outbound.match(/附图/g)?.length).toBe(1);
   });
+
+  test("buildClaudeComposerSendPayload keeps native slash command without context bar files", async () => {
+    const payload = await buildClaudeComposerSendPayload({
+      prompt: [{ type: "text", text: "/loom:init", start: 0, end: 11 }],
+      contextItems: [{ type: "file", path: "src/main.ts", label: "main.ts" }],
+      images: [],
+      repositoryPath: "/repo",
+    });
+    expect(payload.outbound).toBe("/loom:init");
+  });
+
+  test("buildClaudeComposerSendPayload normalizes slash after @ mention and drops images", async () => {
+    const payload = await buildClaudeComposerSendPayload({
+      prompt: [{ type: "text", text: "@foo /loom:init", start: 0, end: 15 }],
+      contextItems: [],
+      images: [
+        {
+          type: "image",
+          id: "img_1",
+          filename: "a.png",
+          mime: "image/png",
+          dataUrl: "data:image/png;base64,AA==",
+        },
+      ],
+      repositoryPath: "/repo",
+    });
+    expect(payload.outbound).toBe("/loom:init");
+    expect(payload.imageDiskPaths).toEqual([null]);
+  });
 });

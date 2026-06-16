@@ -5,6 +5,10 @@ import {
 } from "../utils/serializeClaudePrompt";
 import { applyComposerDefaultInstruction } from "../utils/composerDefaultInstruction";
 import {
+  extractClaudeNativeSlashCommandForOutbound,
+  isClaudeNativeSlashCommandText,
+} from "../utils/composerLocalSlashCommand";
+import {
   loadDefaultInstructionResolveContext,
   type DefaultInstructionResolveContext,
 } from "../utils/resolveComposerDefaultInstructionOutbound";
@@ -122,7 +126,23 @@ export async function buildClaudeComposerSendPayload(
   opts: BuildClaudeOutgoingPromptOptions,
 ): Promise<ClaudeComposerSendPayload> {
   let main = serializePromptPartsToClaudeString(opts.prompt, { trimEnd: true });
-  main = mergeContextFileMentions(main, opts.contextItems);
+  const slashOnly = extractClaudeNativeSlashCommandForOutbound(main);
+  if (slashOnly) {
+    const bubbleMain =
+      opts.userBubbleMain !== undefined
+        ? normalizeComposerPlainMain(opts.userBubbleMain, false)
+        : main.trim();
+    return {
+      outbound: slashOnly,
+      userBubblePrompt: bubbleMain,
+      imageDiskPaths: opts.images.map(() => null),
+    };
+  }
+
+  const nativeSlash = isClaudeNativeSlashCommandText(main);
+  if (!nativeSlash) {
+    main = mergeContextFileMentions(main, opts.contextItems);
+  }
   main = collapseRepeatedComposerMain(main);
   if (opts.images.length > 0) {
     main = stripComposerAttachedImageSuffix(main);

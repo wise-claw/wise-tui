@@ -3,6 +3,7 @@ import {
   CLAUDE_PLUGIN_MARKET_CATALOG,
   claudePluginInstallRef,
 } from "../constants/claudePluginMarketCatalog";
+import { splitLeadingAtMentionPrefix } from "./composerDefaultInstruction";
 
 export type ComposerPluginSlashAction =
   | "install"
@@ -308,6 +309,35 @@ export function parseComposerLocalSlashCommand(text: string): ComposerLocalSlash
   }
 
   return null;
+}
+
+/** 应交给 Claude Code CLI 原生斜杠处理器（非 Wise 本地拦截）的整行命令。 */
+export function isClaudeNativeSlashCommandText(text: string): boolean {
+  const target = claudeNativeSlashCommandBody(text);
+  if (!target) return false;
+  return parseComposerLocalSlashCommand(target) == null;
+}
+
+/** 提取应发给 Claude CLI 的斜杠命令行（去掉 @ 前缀、只保留首行）。 */
+export function extractClaudeNativeSlashCommandForOutbound(text: string): string | null {
+  const target = claudeNativeSlashCommandBody(text);
+  if (!target || parseComposerLocalSlashCommand(target) != null) return null;
+  const firstLine = target.split(/\r?\n/, 1)[0]?.trim() ?? "";
+  return firstLine || null;
+}
+
+/** 发往 invoke 前规范化原生斜杠 prompt（与终端输入一致）。 */
+export function normalizeClaudeNativeSlashPrompt(text: string): string {
+  return extractClaudeNativeSlashCommandForOutbound(text) ?? text.trim();
+}
+
+function claudeNativeSlashCommandBody(text: string): string | null {
+  const trimmed = text.trim();
+  if (!trimmed) return null;
+  const { mentionPrefix, body } = splitLeadingAtMentionPrefix(trimmed);
+  const target = mentionPrefix ? body : trimmed;
+  if (!target.startsWith("/")) return null;
+  return target;
 }
 
 export const COMPOSER_LOCAL_SLASH_HELP = [

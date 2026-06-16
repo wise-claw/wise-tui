@@ -19,6 +19,12 @@ describe("slashCommandMatchesQuery", () => {
     );
   });
 
+  test("matches colon namespaced commands", () => {
+    expect(slashCommandMatchesQuery("loom:init", "loom:")).toBe(true);
+    expect(slashCommandMatchesQuery("loom:init", "loom:i")).toBe(true);
+    expect(slashCommandMatchesQuery("foo:bar:baz", "foo:bar:")).toBe(true);
+  });
+
   test("rejects unrelated queries", () => {
     expect(slashCommandMatchesQuery("plugin install", "setup")).toBe(false);
     expect(slashCommandMatchesQuery("plugin install", "plugin uninstall")).toBe(false);

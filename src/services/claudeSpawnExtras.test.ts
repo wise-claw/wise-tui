@@ -27,6 +27,7 @@ mock.module("./assistantPromptLayers", () => ({
 import {
   buildClaudeSpawnExtrasFromAssistantRuntime,
   claudeAllowedToolsFromRuntimeTools,
+  claudeSpawnExtrasForNativeSlashCommand,
   compactClaudeSpawnCliExtras,
 } from "./claudeSpawnExtras";
 
@@ -58,5 +59,18 @@ describe("claudeSpawnExtras", () => {
   test("compactClaudeSpawnCliExtras drops empty payload", () => {
     expect(compactClaudeSpawnCliExtras({})).toBeNull();
     expect(compactClaudeSpawnCliExtras({ addDirs: ["  ", ""] })).toBeNull();
+  });
+
+  test("claudeSpawnExtrasForNativeSlashCommand strips assistant runtime overrides", () => {
+    expect(
+      claudeSpawnExtrasForNativeSlashCommand({
+        allowedTools: "Read",
+        disallowedTools: "Bash",
+        appendSystemPrompt: "You are Wise.",
+        mcpConfigPath: "/tmp/mcp.json",
+        strictMcpConfig: true,
+        addDirs: ["/extra"],
+      }),
+    ).toEqual({ addDirs: ["/extra"] });
   });
 });

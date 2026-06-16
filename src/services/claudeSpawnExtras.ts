@@ -48,6 +48,22 @@ export function compactClaudeSpawnCliExtras(
   return Object.keys(out).length > 0 ? out : null;
 }
 
+/** 原生斜杠命令与终端 TUI 对齐：不注入 Wise 助手层限制。 */
+export function claudeSpawnExtrasForNativeSlashCommand(
+  extras: ClaudeSpawnCliExtras | null | undefined,
+): ClaudeSpawnCliExtras | null {
+  if (!extras) return null;
+  const {
+    appendSystemPrompt: _appendSystemPrompt,
+    allowedTools: _allowedTools,
+    disallowedTools: _disallowedTools,
+    strictMcpConfig: _strictMcpConfig,
+    mcpConfigPath: _mcpConfigPath,
+    ...rest
+  } = extras;
+  return compactClaudeSpawnCliExtras(rest);
+}
+
 export function claudeAllowedToolsFromRuntimeTools(tools: string[] | undefined | null): string | undefined {
   const list = (tools ?? []).map((t) => t.trim()).filter(Boolean);
   if (list.length === 0) return undefined;

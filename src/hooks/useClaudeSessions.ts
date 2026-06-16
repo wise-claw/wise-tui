@@ -61,6 +61,7 @@ import {
   type ClaudeSessionConnectionKind,
 } from "../constants/claudeConnection";
 import type { ClaudeSpawnCliExtras } from "../services/claudeSpawnExtras";
+import { claudeSpawnExtrasForNativeSlashCommand } from "../services/claudeSpawnExtras";
 import { deleteClaudeDiskSession, loadClaudeSessionJsonl } from "../services/claudeDisk";
 import { loadCursorSessionJsonl } from "../services/cursorDisk";
 import {
@@ -69,6 +70,7 @@ import {
   pruneInvocationSnapshotMemory,
 } from "../services/backgroundInvocationSnapshot";
 import { normalizeRepositoryPathKey, repositoryPathsMatch } from "../utils/repositoryMainSessionBinding";
+import { isClaudeNativeSlashCommandText, normalizeClaudeNativeSlashPrompt } from "../utils/composerLocalSlashCommand";
 import { pathIsAccessibleDirectoryCached } from "../utils/pathAccessibilityCache";
 import {
   listClaudeDiskSessionsForRepositoryScope,
@@ -686,6 +688,15 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     [],
   );
 
+  const resolveSpawnExtrasForClaudePrompt = useCallback(
+    async (tabSessionId: string, prompt: string): Promise<ClaudeSpawnCliExtras | null> => {
+      const extras = await resolveSpawnExtrasForTab(tabSessionId);
+      if (!isClaudeNativeSlashCommandText(prompt)) return extras;
+      return claudeSpawnExtrasForNativeSlashCommand(extras);
+    },
+    [resolveSpawnExtrasForTab],
+  );
+
   const runClaudeOneshotWithInvocation = useCallback(
     async (params: {
       tabSessionId: string;
@@ -755,7 +766,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       }
       const sk = invokeConc?.concurrencyScopeKey;
       const lim = invokeConc?.concurrencyLimit;
-      const cliExtras = await resolveSpawnExtrasForTab(tabSessionId);
+      const cliExtras = await resolveSpawnExtrasForClaudePrompt(tabSessionId, prompt);
       try {
         if (resumeClaudeSid) {
           try {
@@ -812,7 +823,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       detachClaudeInvocationStreamsForTab,
       keepInvocationStreamAfterTurnComplete,
       resolveTrellisContextId,
-      resolveSpawnExtrasForTab,
+      resolveSpawnExtrasForClaudePrompt,
     ],
   );
 
@@ -965,7 +976,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       }
       const invocationKey = detach ? inv : undefined;
       const resolvedModel = resolveCursorLocalModelId(modelArg ?? CURSOR_SDK_DEFAULT_MODEL);
-      const spawnExtras = await resolveSpawnExtrasForTab(tabSessionId);
+      const spawnExtras = await resolveSpawnExtrasForClaudePrompt(tabSessionId, prompt);
       const mcpServers = await buildCursorMcpServersForSpawn({ spawnExtras });
       try {
         await executeCursorCode(
@@ -984,7 +995,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         throw e;
       }
     },
-    [commitSessions, keepInvocationStreamAfterTurnComplete, resolveSpawnExtrasForTab, resolveTrellisContextId, scheduleStreamStallTimer],
+    [commitSessions, keepInvocationStreamAfterTurnComplete, resolveSpawnExtrasForClaudePrompt, resolveTrellisContextId, scheduleStreamStallTimer],
   );
 
   const runClaudeStreamingWithInvocation = useCallback(
@@ -1125,7 +1136,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
       const sk = invokeConc?.concurrencyScopeKey;
       const lim = invokeConc?.concurrencyLimit;
-      const cliExtras = await resolveSpawnExtrasForTab(tabSessionId);
+      const cliExtras = await resolveSpawnExtrasForClaudePrompt(tabSessionId, prompt);
 
       try {
         await spawnStreamingSession({
@@ -1148,7 +1159,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         throw e;
       }
     },
-    [keepInvocationStreamAfterTurnComplete, resolveTrellisContextId, resolveSpawnExtrasForTab],
+    [keepInvocationStreamAfterTurnComplete, resolveTrellisContextId, resolveSpawnExtrasForClaudePrompt],
   );
 
   const invokeClaudeTurn = useCallback(
@@ -3563,6 +3574,8 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       const session = sessionsRef.current.find((s) => s.id === sessionId);
       if (!session) return Promise.resolve();
 
+      const outboundPrompt = normalizeClaudeNativeSlashPrompt(prompt);
+
       notificationHub.clearTodos(sessionId);
       if (session.claudeSessionId && session.claudeSessionId !== sessionId) {
         notificationHub.clearTodos(session.claudeSessionId);
@@ -3616,7 +3629,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         turnNonce,
         invokeConc,
         repositoryPath: session.repositoryPath,
-        prompt,
+        prompt: outboundPrompt,
         modelArg,
         resumeClaudeSid: claudeSessionId,
         codexContextExecutionEngine,
