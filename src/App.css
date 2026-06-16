@@ -3106,6 +3106,14 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   padding: 2px 10px 2px 16px;
 }
 
+.app-left-sidebar .app-repository-list--hide-icon-badges .app-repository-item--repo {
+  padding-left: 11px;
+}
+
+.app-left-sidebar .app-repository-list--hide-icon-badges .app-repository-sessions .app-repository-item--repo {
+  padding-left: 13px !important;
+}
+
 .app-left-sidebar .app-repository-drag-handle {
   height: 16px;
 }

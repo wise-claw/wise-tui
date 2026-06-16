@@ -235,20 +235,7 @@ export function RepositoryTypeIcon({ repository }: { repository: Repository }) {
   );
 }
 
-function RepositoryFolderOutlineIcon() {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-      <path
-        d="M4.5 7.25h6.1l1.6 1.85h7.3V18H4.5V7.25z"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-/** 左栏仓库行图标：全局默认可隐藏圆形角标，改为文件夹轮廓。 */
+/** 左栏仓库行图标：全局关闭时不占位、不展示替代图标。 */
 export function RepositorySidebarIcon({
   repository,
   showIconBadgeInWorkspaceList = false,
@@ -257,7 +244,7 @@ export function RepositorySidebarIcon({
   showIconBadgeInWorkspaceList?: boolean;
 }) {
   if (!showIconBadgeInWorkspaceList) {
-    return <RepositoryFolderOutlineIcon />;
+    return null;
   }
   return <RepositoryTypeIcon repository={repository} />;
 }

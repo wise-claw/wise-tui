@@ -304,7 +304,11 @@ export function ProjectRepositoryList({
 
       {!sectionCollapsed ? (
       <div
-        className="app-repository-list"
+        className={
+          showRepositoryIconBadgesInWorkspaceList
+            ? "app-repository-list"
+            : "app-repository-list app-repository-list--hide-icon-badges"
+        }
         ref={repositoryListScrollRef}
         onMouseEnter={onWorkspaceListPointerEnter}
         onMouseLeave={onWorkspaceListPointerLeave}

@@ -171,7 +171,7 @@ export function DefaultConfigPanel() {
           <div className="app-default-config-row__main">
             <span className="app-default-config-row__title">工作区仓库角标</span>
             <span className="app-default-config-row__hint">
-              左栏工作区列表中仓库前的圆形角标；隐藏后显示文件夹图标
+              左栏工作区列表中仓库前的圆形角标；隐藏时不显示任何前置图标
             </span>
           </div>
           <div className="app-default-config-row__control">

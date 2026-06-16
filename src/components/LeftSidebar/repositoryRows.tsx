@@ -625,23 +625,25 @@ function RepositoryRowInner({
             <RepoDragHandleIcon />
           </span>
         ) : null}
-        <span className="app-repository-icon-wrap">
-          <span className="app-repository-icon app-repository-icon--folder">
-            <RepositorySidebarIcon
-              repository={repository}
-              showIconBadgeInWorkspaceList={showRepositoryIconBadgesInWorkspaceList}
-            />
-          </span>
-          {hasMainOwner ? (
-            <span
-              className="app-repository-main-owner-badge"
-              aria-label="已配置仓库"
-              title="已配置仓库"
-            >
-              <UserOutlined />
+        {showRepositoryIconBadgesInWorkspaceList ? (
+          <span className="app-repository-icon-wrap">
+            <span className="app-repository-icon app-repository-icon--folder">
+              <RepositorySidebarIcon
+                repository={repository}
+                showIconBadgeInWorkspaceList={showRepositoryIconBadgesInWorkspaceList}
+              />
             </span>
-          ) : null}
-        </span>
+            {hasMainOwner ? (
+              <span
+                className="app-repository-main-owner-badge"
+                aria-label="已配置仓库"
+                title="已配置仓库"
+              >
+                <UserOutlined />
+              </span>
+            ) : null}
+          </span>
+        ) : null}
         <span className="app-repository-name-block">
           <span className="app-repository-name">{repositoryFolderBasename(repository)}</span>
           {mainSessionRunning ? (
@@ -905,23 +907,25 @@ function FloatingRepositoryRowInner({
           onRepositorySelect(repository.id);
         }}
       >
-        <span className="app-repository-icon-wrap">
-          <span className="app-repository-icon app-repository-icon--folder">
-            <RepositorySidebarIcon
-              repository={repository}
-              showIconBadgeInWorkspaceList={showRepositoryIconBadgesInWorkspaceList}
-            />
-          </span>
-          {hasMainOwner ? (
-            <span
-              className="app-repository-main-owner-badge"
-              aria-label="已配置主 Owner"
-              title="已配置主 Owner"
-            >
-              <UserOutlined />
+        {showRepositoryIconBadgesInWorkspaceList ? (
+          <span className="app-repository-icon-wrap">
+            <span className="app-repository-icon app-repository-icon--folder">
+              <RepositorySidebarIcon
+                repository={repository}
+                showIconBadgeInWorkspaceList={showRepositoryIconBadgesInWorkspaceList}
+              />
             </span>
-          ) : null}
-        </span>
+            {hasMainOwner ? (
+              <span
+                className="app-repository-main-owner-badge"
+                aria-label="已配置主 Owner"
+                title="已配置主 Owner"
+              >
+                <UserOutlined />
+              </span>
+            ) : null}
+          </span>
+        ) : null}
         <span className="app-repository-name-block">
           <span className="app-repository-name">{repositoryFolderBasename(repository)}</span>
           {mainSessionRunning ? (

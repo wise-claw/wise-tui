@@ -19,6 +19,8 @@ export function dispatchWorkspaceTodosChanged(detail?: {
   repositoryId?: number | null;
   /** 已知未完成条数时可直接更新角标，跳过 IPC 重载 */
   incompleteCount?: number;
+  /** 为 false 时列表保持本地乐观状态；为 true 时从持久化层重载（如侧栏弹窗已写入）。 */
+  reloadItems?: boolean;
 }): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent(WISE_WORKSPACE_TODOS_CHANGED, { detail }));

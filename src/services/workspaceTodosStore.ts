@@ -67,6 +67,7 @@ export async function appendWorkspaceTodoItem(input: {
       projectId,
       repositoryId: null,
       incompleteCount: incompleteWorkspaceTodoCount(items),
+      reloadItems: true,
     });
     return;
   }
@@ -82,5 +83,6 @@ export async function appendWorkspaceTodoItem(input: {
     projectId: null,
     repositoryId,
     incompleteCount: incompleteWorkspaceTodoCount(items),
+    reloadItems: true,
   });
 }

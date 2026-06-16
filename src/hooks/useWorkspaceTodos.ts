@@ -31,6 +31,25 @@ export function shouldRefreshWorkspaceTodosOnChanged(
   return detail.repositoryId != null && repositoryId != null && detail.repositoryId === repositoryId;
 }
 
+export function shouldReloadWorkspaceTodosOnChanged(
+  detail:
+    | {
+        projectId?: string | null;
+        repositoryId?: number | null;
+        incompleteCount?: number;
+        reloadItems?: boolean;
+      }
+    | undefined,
+  projectId: string | null,
+  repositoryId: number | null,
+): boolean {
+  if (!shouldRefreshWorkspaceTodosOnChanged(detail, projectId, repositoryId)) return false;
+  if (detail?.reloadItems === false) return false;
+  if (detail?.reloadItems === true) return true;
+  if (typeof detail?.incompleteCount === "number") return false;
+  return true;
+}
+
 export interface UseWorkspaceTodosInput {
   projectId: string | null;
   repositoryId: number | null;
@@ -103,8 +122,15 @@ export function useWorkspaceTodos({
   useEffect(() => {
     if (!enabled || typeof window === "undefined") return;
     const onChanged = (event: Event) => {
-      const detail = (event as CustomEvent<{ projectId?: string | null; repositoryId?: number | null }>).detail;
-      if (!shouldRefreshWorkspaceTodosOnChanged(detail, projectId, repositoryId)) return;
+      const detail = (
+        event as CustomEvent<{
+          projectId?: string | null;
+          repositoryId?: number | null;
+          incompleteCount?: number;
+          reloadItems?: boolean;
+        }>
+      ).detail;
+      if (!shouldReloadWorkspaceTodosOnChanged(detail, projectId, repositoryId)) return;
       if (refreshDebounceRef.current) clearTimeout(refreshDebounceRef.current);
       refreshDebounceRef.current = setTimeout(() => {
         refreshDebounceRef.current = null;
@@ -226,7 +252,12 @@ export function useWorkspaceTodos({
         schedulePersist("project", items);
         const pid = projectId?.trim();
         if (pid) {
-          dispatchWorkspaceTodosChanged({ projectId: pid, repositoryId: null, incompleteCount });
+          dispatchWorkspaceTodosChanged({
+            projectId: pid,
+            repositoryId: null,
+            incompleteCount,
+            reloadItems: false,
+          });
         }
         return;
       }
@@ -235,7 +266,12 @@ export function useWorkspaceTodos({
       });
       schedulePersist("repository", items);
       if (repositoryId != null) {
-        dispatchWorkspaceTodosChanged({ projectId: null, repositoryId, incompleteCount });
+        dispatchWorkspaceTodosChanged({
+          projectId: null,
+          repositoryId,
+          incompleteCount,
+          reloadItems: false,
+        });
       }
     },
     [enabled, projectId, repositoryId, schedulePersist],
