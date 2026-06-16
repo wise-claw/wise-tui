@@ -97,11 +97,12 @@
 }
 
 .app-session-data-link__alert {
-  margin: 4px 10px 0;
+  margin: 2px 10px 0;
 }
 
-.app-session-data-link__alert .ant-alert {
+.app-session-data-link__alert.ant-alert {
   padding: 2px 8px;
+  align-items: flex-start;
 }
 
 .app-session-data-link__alert .ant-alert-message {
@@ -112,6 +113,41 @@
 .app-session-data-link__alert .ant-alert-description {
   font-size: 10.5px;
   margin-top: 1px;
+}
+
+.app-session-data-link__alert--compact.ant-alert {
+  padding: 1px 6px 1px 8px;
+}
+
+.app-session-data-link__alert--compact .ant-alert-icon {
+  margin-top: 1px;
+  margin-inline-end: 6px;
+  font-size: 12px;
+  line-height: 1.2;
+}
+
+.app-session-data-link__alert--compact .ant-alert-message {
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.app-session-data-link__alert-line {
+  display: block;
+}
+
+.app-session-data-link__alert-title {
+  font-weight: 600;
+  color: var(--ant-color-text);
+}
+
+.app-session-data-link__alert-detail {
+  color: var(--ant-color-text-secondary);
+  font-weight: 400;
+}
+
+.app-session-data-link__alert-detail::before {
+  content: " · ";
+  color: var(--ant-color-text-quaternary);
 }
 
 .app-session-data-link__body {

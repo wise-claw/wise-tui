@@ -813,20 +813,32 @@ export function SessionDataLinkDrawer({
 
             {showOpencodeHint ? (
               <Alert
-                className="app-session-data-link__alert"
+                className="app-session-data-link__alert app-session-data-link__alert--compact"
                 type="info"
                 showIcon
-                message="OpenCode Go 代理：HTTP 未观测"
-                description="确认代理已运行且本会话期间有模型请求；可在顶栏 OpenCode 面板「流量」Tab 查看实时 trace。"
+                message={
+                  <span className="app-session-data-link__alert-line">
+                    <span className="app-session-data-link__alert-title">OpenCode Go 代理：HTTP 未观测</span>
+                    <span className="app-session-data-link__alert-detail">
+                      确认代理已运行且会话内有模型请求；顶栏 OpenCode「流量」Tab 可看 trace。
+                    </span>
+                  </span>
+                }
               />
             ) : null}
             {showFccHint ? (
               <Alert
-                className="app-session-data-link__alert"
+                className="app-session-data-link__alert app-session-data-link__alert--compact"
                 type="info"
                 showIcon
-                message="FCC 直连：HTTP 未观测"
-                description="开启 FCC 后查看 server.log trace，或临时用 LLM 代理中转。"
+                message={
+                  <span className="app-session-data-link__alert-line">
+                    <span className="app-session-data-link__alert-title">FCC 直连：HTTP 未观测</span>
+                    <span className="app-session-data-link__alert-detail">
+                      开启 FCC 后查看 server.log trace，或临时用 LLM 代理中转。
+                    </span>
+                  </span>
+                }
               />
             ) : null}
 
