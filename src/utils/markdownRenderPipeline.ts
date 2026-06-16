@@ -88,6 +88,7 @@ export function hasMarkdownStructureCues(text: string): boolean {
   const t = text.trim();
   if (!t) return false;
   if (/^(?:#+\s|[-*+]\s|\d+\.\s)/m.test(t)) return true;
+  if (/^-\s\[[ xX]\]\s/m.test(t)) return true;
   if (/^(?:---|___|\*\*\*)$/m.test(t)) return true;
   if (/\*\*[^*]+\*\*|__[^_]+__/.test(t)) return true;
   if (/^\|.+\|.+\|/m.test(t)) return true;
@@ -95,9 +96,28 @@ export function hasMarkdownStructureCues(text: string): boolean {
   return false;
 }
 
+function isLikelyJsonLine(line: string): boolean {
+  const t = line.trim();
+  if (!t) return false;
+  if (!/^[\[{]/.test(t)) return false;
+  if (!/[\]}]\s*[,;]?$/.test(t)) return false;
+  return true;
+}
+
+function looksLikeNdjsonBlock(text: string): boolean {
+  const lines = text
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  if (lines.length === 0) return false;
+  const jsonLines = lines.filter(isLikelyJsonLine).length;
+  return jsonLines >= Math.max(1, Math.ceil(lines.length * 0.75));
+}
+
 function looksLikeShellOrSourceCode(text: string): boolean {
   const t = text.trim();
   if (!t) return false;
+  if (looksLikeNdjsonBlock(t)) return true;
   const lines = t.split("\n");
   const codeish = lines.filter((line) =>
     /^\s*(?:\$|>|#!\/|import\s+|export\s+|const\s+|let\s+|var\s+|function\s+|def\s+|class\s+|curl\s+|npm\s+|git\s+|sudo\s+|SELECT\s+)/.test(
@@ -107,6 +127,119 @@ function looksLikeShellOrSourceCode(text: string): boolean {
   if (codeish >= 2) return true;
   if (/^\{[\s\S]*\}$/.test(t) || /^\[[\s\S]*\]$/.test(t)) return true;
   return false;
+}
+
+const DATA_FENCE_LANGS =
+  /^(?:json|jsonc|json5|yaml|yml|toml|xml|csv|output|result|log|console|stderr|stdout|response)$/;
+
+const CODE_FENCE_LANGS_WITH_LINE_COMMENTS =
+  /^(?:bash|sh|shell|zsh|fish|python|py|ruby|rb|perl|pl|javascript|js|typescript|ts|jsx|tsx|go|rust|rs|java|kotlin|swift|c|cpp|csharp|cs)$/;
+
+function hasMarkdownBlockSignals(body: string): boolean {
+  const hasBlockList = /^[-*+]\s/m.test(body) || /^\d+\.\s/m.test(body);
+  const hasCheckboxList = /^-\s\[[ xX]\]\s/m.test(body);
+  const hasBlockTable = /^\|.+\|.+\|/m.test(body);
+  const hasBlockQuote = /^>\s/m.test(body);
+  const hasHorizontalRule = /^(?:---|___|\*\*\*)$/m.test(body);
+  const hasH1 = /^#\s/m.test(body);
+  const hasDeepHeading = /^#{2,6}\s/m.test(body);
+  return (
+    hasBlockList ||
+    hasCheckboxList ||
+    hasBlockTable ||
+    hasBlockQuote ||
+    hasHorizontalRule ||
+    hasDeepHeading ||
+    hasH1
+  );
+}
+
+/** 代码类围栏 info，但正文实为 Markdown（模型误标 json/bash 等）。 */
+function looksLikeMislabeledMarkdownFence(body: string, lang: string): boolean {
+  const l = lang.trim().toLowerCase();
+  if (!l || isProseFenceLanguage(l)) return false;
+  if (looksLikeShellOrSourceCode(body)) return false;
+  if (!hasMarkdownBlockSignals(body)) return false;
+
+  if (DATA_FENCE_LANGS.test(l)) return true;
+
+  if (CODE_FENCE_LANGS_WITH_LINE_COMMENTS.test(l)) {
+    // 单行 # 在 shell/python 中多为注释；## 及以上更可能是 Markdown 标题
+    return (
+      /^[-*+]\s/m.test(body) ||
+      /^\d+\.\s/m.test(body) ||
+      /^-\s\[[ xX]\]\s/m.test(body) ||
+      /^\|.+\|.+\|/m.test(body) ||
+      /^>\s/m.test(body) ||
+      /^#{2,6}\s/m.test(body)
+    );
+  }
+
+  return true;
+}
+
+/** 误标围栏内「Markdown 正文 + 尾部 NDJSON/日志行」拆分；无可拆分时返回 null。 */
+export function splitMarkdownAndTrailingDataLines(body: string): {
+  markdown: string;
+  dataLines: string;
+} | null {
+  const lines = body.split("\n");
+  let end = lines.length - 1;
+  while (end >= 0 && !lines[end]!.trim()) end -= 1;
+  if (end < 0) return null;
+
+  const dataChunk: string[] = [];
+  let i = end;
+  while (i >= 0) {
+    const raw = lines[i]!;
+    const trimmed = raw.trim();
+    if (!trimmed) {
+      if (dataChunk.length > 0) break;
+      i -= 1;
+      continue;
+    }
+    if (!isLikelyJsonLine(raw)) break;
+    dataChunk.unshift(raw);
+    i -= 1;
+  }
+  if (dataChunk.length === 0) return null;
+
+  const markdown = lines.slice(0, i + 1).join("\n").trim();
+  if (!markdown || !hasMarkdownStructureCues(markdown)) return null;
+
+  return { markdown, dataLines: dataChunk.join("\n") };
+}
+
+export type FencedBlockDisplayPlan =
+  | { kind: "mermaid"; text: string }
+  | { kind: "code"; text: string; lang: string }
+  | { kind: "markdown"; text: string }
+  | { kind: "markdown-plus-data"; markdown: string; dataLines: string; lang: string };
+
+/** 统一规划围栏块应渲染为 Mermaid / Markdown / 代码 / 混合。 */
+export function planFencedBlockDisplay(text: string, lang: string): FencedBlockDisplayPlan {
+  const body = text.replace(/\n$/, "");
+  const normalizedLang = lang.trim().toLowerCase();
+
+  if (shouldRenderFencedBlockAsMermaid(body, normalizedLang)) {
+    return { kind: "mermaid", text: body };
+  }
+
+  const split = splitMarkdownAndTrailingDataLines(body);
+  if (split && shouldRenderFencedBlockAsMarkdown(split.markdown, normalizedLang)) {
+    return {
+      kind: "markdown-plus-data",
+      markdown: split.markdown,
+      dataLines: split.dataLines,
+      lang: normalizedLang,
+    };
+  }
+
+  if (shouldRenderFencedBlockAsMarkdown(body, normalizedLang)) {
+    return { kind: "markdown", text: body };
+  }
+
+  return { kind: "code", text: body, lang: normalizedLang };
 }
 
 /** 围栏 code block 是否应解析为 Markdown 正文而非等宽代码。 */
@@ -119,6 +252,7 @@ export function shouldRenderFencedBlockAsMarkdown(codeText: string, lang: string
   // 真实语言标签但正文明显是文档（含表格 + 标题）
   if (/^\|.+\|.+\|/m.test(body) && /#{1,6}\s/m.test(body)) return true;
   if (/^\|.+\|.+\|/m.test(body) && /\*\*[^*]+\*\*/.test(body)) return true;
+  if (looksLikeMislabeledMarkdownFence(body, lang)) return true;
   return false;
 }
 
@@ -302,6 +436,40 @@ export function enhanceMarkdownHtmlString(
     }
 
     if (shouldRenderFencedBlockAsMarkdown(raw, lang)) {
+      const split = splitMarkdownAndTrailingDataLines(raw);
+      if (split && shouldRenderFencedBlockAsMarkdown(split.markdown, lang)) {
+        const innerParsed = parseMarkdownSourceToHtml(split.markdown);
+        const innerEnhanced =
+          depth < ENHANCE_RECURSE_MAX_DEPTH
+            ? enhanceMarkdownHtmlString(innerParsed, doc, enhancer, depth + 1, opts)
+            : innerParsed;
+        const prose = doc.createElement("div");
+        prose.className = "app-markdown-prose-from-fence";
+        prose.innerHTML = innerEnhanced;
+
+        const wrapper = doc.createElement("div");
+        wrapper.className = "app-markdown-code app-markdown-code--data-tail";
+        const dataPre = doc.createElement("pre");
+        const dataCode = doc.createElement("code");
+        dataCode.className = code?.getAttribute("class") ?? `language-${lang || "json"}`;
+        dataCode.textContent = split.dataLines;
+        dataPre.appendChild(dataCode);
+        wrapper.appendChild(dataPre);
+        const copyBtn = doc.createElement("button");
+        copyBtn.className = "app-markdown-copy-btn";
+        copyBtn.setAttribute("aria-label", "复制");
+        copyBtn.setAttribute("data-tooltip", "复制");
+        copyBtn.innerHTML = `<span class="copy-icon">${enhancer.copyIconHtml}</span><span class="check-icon">${enhancer.checkIconHtml}</span>`;
+        wrapper.appendChild(copyBtn);
+
+        const container = doc.createElement("div");
+        container.className = "app-markdown-prose-from-fence app-markdown-prose-from-fence--with-data-tail";
+        container.appendChild(prose);
+        container.appendChild(wrapper);
+        pre.parentElement?.replaceChild(container, pre);
+        return;
+      }
+
       const innerParsed = parseMarkdownSourceToHtml(raw);
       const innerEnhanced =
         depth < ENHANCE_RECURSE_MAX_DEPTH

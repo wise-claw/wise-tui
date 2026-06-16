@@ -6,8 +6,10 @@ import {
   hasMarkdownStructureCues,
   isProseFenceLanguage,
   parseMarkdownSourceToHtml,
+  planFencedBlockDisplay,
   renderRichMessageSourceToHtml,
   shouldRenderFencedBlockAsMarkdown,
+  splitMarkdownAndTrailingDataLines,
   stabilizeStreamingMarkdown,
   unwrapProseFencedMarkdownSource,
 } from "./markdownRenderPipeline";
@@ -136,6 +138,32 @@ describe("prose fenced blocks", () => {
     expect(hasMarkdownStructureCues(table)).toBe(true);
     expect(shouldRenderFencedBlockAsMarkdown(table, "**5**")).toBe(true);
     expect(shouldRenderFencedBlockAsMarkdown("$ npm install\n$ npm test", "bash")).toBe(false);
+  });
+
+  test("shouldRenderFencedBlockAsMarkdown treats mislabeled json/bash fences as prose", () => {
+    const markdownSummary = "## 校验\n\n- bun test pass\n- tsc exit 0";
+    expect(shouldRenderFencedBlockAsMarkdown(markdownSummary, "json")).toBe(true);
+    expect(shouldRenderFencedBlockAsMarkdown(markdownSummary, "bash")).toBe(true);
+    expect(shouldRenderFencedBlockAsMarkdown("## 校验\n\n全部通过。", "bash")).toBe(true);
+    expect(shouldRenderFencedBlockAsMarkdown("- [x] bun test\n- [x] tsc", "bash")).toBe(true);
+    expect(shouldRenderFencedBlockAsMarkdown('{"layer":"tool","observed":true}', "json")).toBe(false);
+    expect(shouldRenderFencedBlockAsMarkdown("# install deps\nnpm i", "bash")).toBe(false);
+    expect(shouldRenderFencedBlockAsMarkdown('{"a":1}\n{"b":2}', "json")).toBe(false);
+  });
+
+  test("splitMarkdownAndTrailingDataLines separates summary from NDJSON tail", () => {
+    const body = [
+      "## 校验",
+      "",
+      "- bun test pass",
+      "",
+      '{"layer":"tool","kind":"tool_use","observed":true}',
+      '{"layer":"tool","kind":"tool_use","observed":true,"summary":"Write"}',
+    ].join("\n");
+    const split = splitMarkdownAndTrailingDataLines(body);
+    expect(split?.markdown).toContain("## 校验");
+    expect(split?.dataLines).toContain('"layer":"tool"');
+    expect(planFencedBlockDisplay(body, "json").kind).toBe("markdown-plus-data");
   });
 });
 

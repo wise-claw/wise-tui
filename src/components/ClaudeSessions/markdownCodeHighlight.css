@@ -1,0 +1,62 @@
+.app-markdown-code .hljs {
+  display: block;
+  overflow-x: auto;
+  color: var(--ant-color-text);
+  background: transparent;
+}
+
+.app-markdown-code .hljs-comment,
+.app-markdown-code .hljs-quote {
+  color: var(--ant-color-text-tertiary);
+  font-style: italic;
+}
+
+.app-markdown-code .hljs-keyword,
+.app-markdown-code .hljs-selector-tag,
+.app-markdown-code .hljs-literal,
+.app-markdown-code .hljs-section,
+.app-markdown-code .hljs-link {
+  color: color-mix(in srgb, var(--ant-color-primary) 88%, #8250df);
+}
+
+.app-markdown-code .hljs-string,
+.app-markdown-code .hljs-regexp,
+.app-markdown-code .hljs-addition,
+.app-markdown-code .hljs-attribute {
+  color: color-mix(in srgb, var(--ant-color-success) 82%, var(--ant-color-text));
+}
+
+.app-markdown-code .hljs-number,
+.app-markdown-code .hljs-meta {
+  color: color-mix(in srgb, var(--ant-color-warning) 85%, var(--ant-color-text));
+}
+
+.app-markdown-code .hljs-title,
+.app-markdown-code .hljs-type,
+.app-markdown-code .hljs-built_in,
+.app-markdown-code .hljs-name,
+.app-markdown-code .hljs-selector-class,
+.app-markdown-code .hljs-selector-id {
+  color: color-mix(in srgb, var(--ant-color-info) 85%, #0550ae);
+}
+
+.app-markdown-code .hljs-variable,
+.app-markdown-code .hljs-template-variable,
+.app-markdown-code .hljs-params,
+.app-markdown-code .hljs-property {
+  color: var(--ant-color-text);
+}
+
+.app-markdown-code .hljs-symbol,
+.app-markdown-code .hljs-bullet,
+.app-markdown-code .hljs-deletion {
+  color: color-mix(in srgb, var(--ant-color-error) 78%, var(--ant-color-text));
+}
+
+.app-markdown-code .hljs-emphasis {
+  font-style: italic;
+}
+
+.app-markdown-code .hljs-strong {
+  font-weight: 600;
+}

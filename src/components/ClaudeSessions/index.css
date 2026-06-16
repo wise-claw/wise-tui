@@ -4532,7 +4532,48 @@
   line-height: 1.2;
   letter-spacing: 0.02em;
   color: var(--ant-color-text-quaternary);
-  padding: 0 2px 2px;
+  padding: 0;
+}
+
+.app-message-parts__tool-group-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 2px 4px;
+}
+
+.app-message-parts__tool-group-error {
+  color: var(--ant-color-error);
+  font-weight: 600;
+}
+
+.app-message-parts__tool-group-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.app-message-parts__tool-group-action {
+  border: none;
+  background: transparent;
+  padding: 0 4px;
+  font-size: 10px;
+  line-height: 1.2;
+  color: var(--ant-color-text-tertiary);
+  cursor: pointer;
+  border-radius: 4px;
+}
+
+.app-message-parts__tool-group-action:hover:not(:disabled) {
+  color: var(--ant-color-text-secondary);
+  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 70%, transparent);
+}
+
+.app-message-parts__tool-group-action:disabled {
+  opacity: 0.45;
+  cursor: default;
 }
 
 .app-message-parts__tool-group .app-message-part--tool {
@@ -5452,6 +5493,15 @@ button.app-message-part-header:disabled:hover {
   margin-top: 8px;
 }
 
+.app-markdown-prose-from-fence--with-data-tail > .app-markdown-prose-from-fence,
+.app-markdown-prose-from-fence--with-data-tail > .app-markdown-code--data-tail {
+  margin-top: 0;
+}
+
+.app-markdown-prose-from-fence--with-data-tail .app-markdown-code--data-tail {
+  margin-top: 8px;
+}
+
 .app-markdown-html-embed:first-child {
   margin-top: 0;
 }
@@ -5650,6 +5700,24 @@ button.app-message-part-header:disabled:hover {
   border-radius: 8px;
   overflow: hidden;
   background: var(--ant-color-fill-quaternary);
+}
+
+.app-markdown-code__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 4px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 70%, transparent);
+  background: color-mix(in srgb, var(--ant-color-bg-container) 72%, transparent);
+}
+
+.app-markdown-code__lang {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  color: var(--ant-color-text-tertiary);
+  text-transform: none;
 }
 
 .app-markdown-code:hover .app-markdown-copy-btn {

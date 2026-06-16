@@ -1,14 +1,12 @@
-import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState, type ReactNode } from "react";
+import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState, type ComponentPropsWithoutRef, type ReactNode } from "react";
 import { message } from "antd";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { isSafeExternalHref, openExternalUrl } from "../../services/openExternal";
-import {
-  prepareMarkdownForDisplay,
-  shouldRenderFencedBlockAsMarkdown,
-} from "../../utils/markdownRenderPipeline";
-import { shouldRenderFencedBlockAsMermaid } from "../../utils/mermaidBlock";
+import { highlightMarkdownCode, formatMarkdownCodeLanguageLabel } from "../../utils/markdownCodeHighlight";
+import { planFencedBlockDisplay, prepareMarkdownForDisplay } from "../../utils/markdownRenderPipeline";
 import { renderMermaidInContainer } from "../../utils/mermaidRender";
+import "./markdownCodeHighlight.css";
 
 const MAX_NESTED_MARKDOWN_DEPTH = 4;
 
@@ -68,6 +66,52 @@ const MarkdownCopyButton = memo(function MarkdownCopyButton({ text }: { text: st
     >
       <span className="copy-icon">{copied ? <CheckIcon /> : <CopyIcon />}</span>
     </button>
+  );
+});
+
+const MarkdownFencedCodeBlock = memo(function MarkdownFencedCodeBlock({
+  text,
+  lang,
+  className,
+  streaming,
+  preProps,
+  codeChildren,
+  wrapperClassName = "",
+}: {
+  text: string;
+  lang: string;
+  className: string;
+  streaming: boolean;
+  preProps: ComponentPropsWithoutRef<"pre">;
+  codeChildren: ReactNode;
+  wrapperClassName?: string;
+}) {
+  const highlighted = useMemo(() => {
+    if (streaming || !text.trim()) return null;
+    return highlightMarkdownCode(text, lang);
+  }, [lang, streaming, text]);
+
+  const codeClassName = highlighted?.resolvedLang
+    ? `hljs language-${highlighted.resolvedLang}`
+    : className || "hljs";
+  const languageLabel = formatMarkdownCodeLanguageLabel(highlighted?.resolvedLang || lang);
+
+  return (
+    <div className={`app-markdown-code${wrapperClassName ? ` ${wrapperClassName}` : ""}`}>
+      {languageLabel ? (
+        <div className="app-markdown-code__head">
+          <span className="app-markdown-code__lang">{languageLabel}</span>
+        </div>
+      ) : null}
+      <pre {...preProps}>
+        {highlighted ? (
+          <code className={codeClassName} dangerouslySetInnerHTML={{ __html: highlighted.html }} />
+        ) : (
+          <code className={className}>{codeChildren}</code>
+        )}
+      </pre>
+      <MarkdownCopyButton text={text} />
+    </div>
   );
 });
 
@@ -165,34 +209,66 @@ export function createMarkdownComponents(opts: {
     h3: ({ children }) => <h5 className="app-markdown-h">{children}</h5>,
     pre: ({ children, ...props }) => {
       const child = Array.isArray(children) ? children[0] : children;
-      if (!child || typeof child !== "object" || !("props" in child)) {
+      let className = "";
+      let text = "";
+      if (child && typeof child === "object" && "props" in child) {
+        const codeProps = (child as { props?: { className?: string; children?: ReactNode } }).props ?? {};
+        className = codeProps.className ?? "";
+        text = flattenCodeChildren(codeProps.children).replace(/\n$/, "");
+      } else {
+        text = flattenCodeChildren(children).replace(/\n$/, "");
+      }
+
+      if (!text.trim()) {
         return <pre {...props}>{children}</pre>;
       }
 
-      const codeProps = (child as { props?: { className?: string; children?: ReactNode } }).props ?? {};
-      const className = codeProps.className ?? "";
-      const text = flattenCodeChildren(codeProps.children).replace(/\n$/, "");
       const lang = extractFenceLanguage(className);
+      const plan = planFencedBlockDisplay(text, lang);
 
-      if (shouldRenderFencedBlockAsMermaid(text, lang)) {
-        return <MarkdownMermaidBlock source={text} streaming={streaming} />;
+      if (plan.kind === "mermaid") {
+        return <MarkdownMermaidBlock source={plan.text} streaming={streaming} />;
       }
 
-      if (shouldRenderFencedBlockAsMarkdown(text, lang) && depth < MAX_NESTED_MARKDOWN_DEPTH) {
+      if (plan.kind === "markdown" && depth < MAX_NESTED_MARKDOWN_DEPTH) {
         return (
           <div className="app-markdown-prose-from-fence">
-            <MarkdownBody source={text} streaming={false} depth={depth + 1} />
+            <MarkdownBody source={plan.text} streaming={false} depth={depth + 1} />
+          </div>
+        );
+      }
+
+      if (plan.kind === "markdown-plus-data" && depth < MAX_NESTED_MARKDOWN_DEPTH) {
+        const dataLang = plan.lang || "json";
+        return (
+          <div className="app-markdown-prose-from-fence app-markdown-prose-from-fence--with-data-tail">
+            <MarkdownBody source={plan.markdown} streaming={false} depth={depth + 1} />
+            <MarkdownFencedCodeBlock
+              text={plan.dataLines}
+              lang={dataLang}
+              className={className || `language-${dataLang}`}
+              streaming={false}
+              preProps={props}
+              codeChildren={plan.dataLines}
+              wrapperClassName="app-markdown-code--data-tail"
+            />
           </div>
         );
       }
 
       return (
-        <div className="app-markdown-code">
-          <pre {...props}>
-            <code className={className}>{codeProps.children}</code>
-          </pre>
-          <MarkdownCopyButton text={text} />
-        </div>
+        <MarkdownFencedCodeBlock
+          text={text}
+          lang={lang}
+          className={className}
+          streaming={streaming}
+          preProps={props}
+          codeChildren={
+            child && typeof child === "object" && "props" in child
+              ? (child as { props?: { children?: ReactNode } }).props?.children
+              : children
+          }
+        />
       );
     },
     code: ({ className, children, node: _node, ...props }) => (

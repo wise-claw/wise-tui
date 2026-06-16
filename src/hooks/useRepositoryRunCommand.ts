@@ -194,6 +194,7 @@ export function useRepositoryRunCommand({
     }
     window.localStorage.setItem(runKey, next);
     setRunCommand(next);
+    message.success("运行指令已保存");
   }, [runCommand, runKey, setRunCommand]);
 
   const saveRunOpenUrl = useCallback(() => {
@@ -211,6 +212,7 @@ export function useRepositoryRunCommand({
     }
     window.localStorage.setItem(runUrlKey, normalized);
     setRunPreferredUrl(normalized);
+    message.success("打开地址已保存");
   }, [runPreferredUrl, runUrlKey, setRunPreferredUrl]);
 
   const inferDefaultRunUrl = useCallback((): string => {

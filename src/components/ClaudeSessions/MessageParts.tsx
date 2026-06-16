@@ -1,4 +1,4 @@
-import { memo, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import type { MessagePart, TextPart, ToolUsePart, ReasoningPart } from "../../types";
 import { isRenderableMessagePart } from "../../utils/claudeChatMessageDisplay";
@@ -416,42 +416,29 @@ function messagePartContentEqual(a: MessagePart, b: MessagePart): boolean {
   }
 }
 
-function shouldAutoExpandToolOutput(part: ToolUsePart): boolean {
-  if (part.status === "running") return false;
-  const text = part.output?.trim() ?? "";
-  if (!text || text.length > 280) return false;
-  const name = part.name.trim().toLowerCase();
-  return (
-    name === "edit" ||
-    name === "edit_file" ||
-    name === "write" ||
-    name === "write_file" ||
-    name === "read" ||
-    name === "read_file" ||
-    name === "view_file" ||
-    name === "taskupdate" ||
-    name === "tasklist" ||
-    name === "taskcreate"
-  );
-}
-
-const ToolUsePartDisplay = memo(function ToolUsePartDisplay({ part }: { part: ToolUsePart }) {
+const ToolUsePartDisplay = memo(function ToolUsePartDisplay({
+  part,
+  expanded: controlledExpanded,
+  onExpandedChange,
+}: {
+  part: ToolUsePart;
+  expanded?: boolean;
+  onExpandedChange?: (expanded: boolean) => void;
+}) {
   const isSkill = isSkillToolPart(part);
   const info = useMemo(() => getToolDisplayInfo(part), [part]);
   const isToolResult = !part.name.trim() && Boolean(part.output?.trim() || part.error?.trim());
   const isErrorState = part.status === "error" || Boolean(part.error?.trim());
   const isBashOrExec = part.name.toLowerCase() === "bash" || part.name.toLowerCase() === "exec";
-  const hasExpandableBody = Boolean(
-    part.output?.trim() ||
-      part.error?.trim() ||
-      (isBashOrExec && info.subtitle?.trim())
-  );
-  const [expanded, setExpanded] = useState(
-    isSkill
-      ? false
-      : part.status === "error" ||
-          Boolean(part.error?.trim()) ||
-          shouldAutoExpandToolOutput(part),
+  const hasExpandableBody = hasExpandableToolBody(part, info);
+  const [internalExpanded, setInternalExpanded] = useState(false);
+  const expanded = controlledExpanded ?? internalExpanded;
+  const setExpanded = useCallback(
+    (next: boolean) => {
+      if (onExpandedChange) onExpandedChange(next);
+      else setInternalExpanded(next);
+    },
+    [onExpandedChange],
   );
   const tags = useMemo(() => getToolMetaTags(part), [part]);
   const input = part.input as Record<string, unknown>;
@@ -503,7 +490,7 @@ const ToolUsePartDisplay = memo(function ToolUsePartDisplay({ part }: { part: To
           className="app-message-part-header"
           disabled={!hasExpandableBody}
           aria-expanded={hasExpandableBody ? expanded : undefined}
-          onClick={() => hasExpandableBody && setExpanded((v) => !v)}
+          onClick={() => hasExpandableBody && setExpanded(!expanded)}
         >
           <span className="app-message-part-header__leading">{statusIcon}</span>
           <span className="app-message-part-header__main">
@@ -564,10 +551,126 @@ const ToolUsePartDisplay = memo(function ToolUsePartDisplay({ part }: { part: To
   );
 }, toolPartDisplayEqual);
 
-function toolPartDisplayEqual(
-  prev: Readonly<{ part: ToolUsePart }>,
-  next: Readonly<{ part: ToolUsePart }>,
+function toolPartStableKey(part: ToolUsePart, originalIndex: number): string {
+  return `${originalIndex}:${part.id}`;
+}
+
+function hasExpandableToolBody(
+  part: ToolUsePart,
+  info: ReturnType<typeof getToolDisplayInfo> = getToolDisplayInfo(part),
 ): boolean {
+  const isBashOrExec = part.name.toLowerCase() === "bash" || part.name.toLowerCase() === "exec";
+  return Boolean(
+    part.output?.trim() ||
+      part.error?.trim() ||
+      (isBashOrExec && info.subtitle?.trim()),
+  );
+}
+
+const ToolGroupDisplay = memo(function ToolGroupDisplay({
+  parts,
+}: {
+  parts: { part: ToolUsePart; originalIndex: number }[];
+}) {
+  const multiTools = parts.length > 1;
+  const keys = useMemo(
+    () => parts.map(({ part, originalIndex }) => toolPartStableKey(part, originalIndex)),
+    [parts],
+  );
+  const expandableKeys = useMemo(
+    () =>
+      parts
+        .filter(({ part }) => hasExpandableToolBody(part))
+        .map(({ part, originalIndex }) => toolPartStableKey(part, originalIndex)),
+    [parts],
+  );
+  const [expandedMap, setExpandedMap] = useState<Record<string, boolean>>({});
+
+  useEffect(() => {
+    setExpandedMap((prev) => {
+      const next: Record<string, boolean> = {};
+      for (const key of keys) {
+        next[key] = prev[key] ?? false;
+      }
+      return next;
+    });
+  }, [keys]);
+
+  const errorCount = useMemo(
+    () => parts.filter(({ part }) => part.status === "error" || Boolean(part.error?.trim())).length,
+    [parts],
+  );
+  const anyExpanded = expandableKeys.some((key) => expandedMap[key]);
+  const anyCollapsed = expandableKeys.some((key) => !expandedMap[key]);
+
+  const expandAll = useCallback(() => {
+    setExpandedMap((prev) => {
+      const next = { ...prev };
+      for (const key of expandableKeys) next[key] = true;
+      return next;
+    });
+  }, [expandableKeys]);
+
+  const collapseAll = useCallback(() => {
+    setExpandedMap((prev) => {
+      const next = { ...prev };
+      for (const key of expandableKeys) next[key] = false;
+      return next;
+    });
+  }, [expandableKeys]);
+
+  return (
+    <div className={`app-message-parts__tool-group${multiTools ? " app-message-parts__tool-group--multi" : ""}`}>
+      {multiTools ? (
+        <div className="app-message-parts__tool-group-head">
+          <span className="app-message-parts__tool-group-label">
+            工具链 · {parts.length}
+            {errorCount > 0 ? (
+              <span className="app-message-parts__tool-group-error"> · {errorCount} 失败</span>
+            ) : null}
+          </span>
+          {expandableKeys.length > 0 ? (
+            <div className="app-message-parts__tool-group-actions">
+              <button
+                type="button"
+                className="app-message-parts__tool-group-action"
+                disabled={!anyCollapsed}
+                onClick={expandAll}
+              >
+                全部展开
+              </button>
+              <button
+                type="button"
+                className="app-message-parts__tool-group-action"
+                disabled={!anyExpanded}
+                onClick={collapseAll}
+              >
+                全部收起
+              </button>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+      {parts.map(({ part, originalIndex }) => {
+        const key = toolPartStableKey(part, originalIndex);
+        return (
+          <ToolUsePartDisplay
+            key={key}
+            part={part}
+            expanded={expandedMap[key] ?? false}
+            onExpandedChange={(next) => setExpandedMap((prev) => ({ ...prev, [key]: next }))}
+          />
+        );
+      })}
+    </div>
+  );
+});
+
+function toolPartDisplayEqual(
+  prev: Readonly<{ part: ToolUsePart; expanded?: boolean; onExpandedChange?: (expanded: boolean) => void }>,
+  next: Readonly<{ part: ToolUsePart; expanded?: boolean; onExpandedChange?: (expanded: boolean) => void }>,
+): boolean {
+  if (prev.expanded !== next.expanded) return false;
   if (prev.part === next.part) return true;
   return toolPartRenderFingerprint(prev.part) === toolPartRenderFingerprint(next.part);
 }
@@ -625,23 +728,7 @@ export const MessagePartsDisplay = memo(function MessagePartsDisplay({
     <div className="app-message-parts">
       {groups.map((group, groupIdx) => {
         if (group.type === "tool_group") {
-          const multiTools = group.parts.length > 1;
-          return (
-            <div
-              key={`tool-group-${groupIdx}`}
-              className={`app-message-parts__tool-group${multiTools ? " app-message-parts__tool-group--multi" : ""}`}
-            >
-              {multiTools ? (
-                <div className="app-message-parts__tool-group-label" aria-hidden>
-                  工具链 · {group.parts.length}
-                </div>
-              ) : null}
-              {group.parts.map(({ part, originalIndex }) => {
-                const key = `${part.type}-${originalIndex}`;
-                return <ToolUsePartDisplay key={key} part={part} />;
-              })}
-            </div>
-          );
+          return <ToolGroupDisplay key={`tool-group-${groupIdx}`} parts={group.parts} />;
         } else {
           const { part, originalIndex } = group;
           const key = `${part.type}-${originalIndex}`;
