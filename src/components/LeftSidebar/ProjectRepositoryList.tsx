@@ -396,7 +396,6 @@ export function ProjectRepositoryList({
             onConfigureRepositoryMainSessionRun={onConfigureRepositoryMainSessionRun}
             onConfigureRepositorySddMode={onConfigureRepositorySddMode}
             onConfigureRepositoryIconBadge={onConfigureRepositoryIconBadge}
-            showRepositoryIconBadgesInWorkspaceList={showRepositoryIconBadgesInWorkspaceList}
             onConfigureProjectSddMode={onConfigureProjectSddMode}
             onConfigureRepositoryOpenApp={onConfigureRepositoryOpenApp}
             onConfigureProjectOpenApp={onConfigureProjectOpenApp}
