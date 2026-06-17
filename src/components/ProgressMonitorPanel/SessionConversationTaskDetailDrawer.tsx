@@ -8,6 +8,7 @@ import {
   executionEnvironmentWorkerNeedsTranscriptHydration,
   sessionConversationTaskStatusLabel,
 } from "../../utils/sessionConversationTasks";
+import { isFeedbackLoopWorkerRepositoryName } from "../../utils/sessionFeedbackLoopDispatch";
 import {
   findExecutionEnvironmentWorkerForTaskDetail,
   findSessionForMonitorDrawerResume,
@@ -47,6 +48,10 @@ function resolveTaskSession(
       repositoryPath: task.repositoryPath,
     });
     if (found) return found;
+  } else if (task.source === "feedback_loop") {
+    const found =
+      sessions.find((item) => item.id === sid || item.claudeSessionId?.trim() === sid) ?? null;
+    if (found && isFeedbackLoopWorkerRepositoryName(found.repositoryName)) return found;
   } else {
     const found = findSessionForMonitorDrawerResume(sessions, {
       sessionId: sid,
@@ -56,7 +61,11 @@ function resolveTaskSession(
     if (found) return found;
   }
 
-  if (task.source !== "execution_environment" || !task.repositoryPath?.trim()) {
+  if (task.source !== "execution_environment" && task.source !== "feedback_loop") {
+    return null;
+  }
+
+  if (!task.repositoryPath?.trim()) {
     return null;
   }
 
@@ -93,7 +102,7 @@ function sessionNeedsDiskTranscriptHydration(
   session: ClaudeSession,
   task?: SessionConversationTaskItem | null,
 ): boolean {
-  if (task?.source === "execution_environment") {
+  if (task?.source === "execution_environment" || task?.source === "feedback_loop") {
     return executionEnvironmentWorkerNeedsTranscriptHydration(session);
   }
   if (session.status === "running" || session.status === "connecting") return false;
@@ -130,7 +139,11 @@ const SessionConversationTaskDetailBody = memo(function SessionConversationTaskD
       <div className="app-monitor-panel__history-session-drawer-inner">
         <HistorySessionDrawerContextBar
           session={session}
-          updatedAtMs={task.source === "execution_environment" ? task.updatedAt : undefined}
+          updatedAtMs={
+            task.source === "execution_environment" || task.source === "feedback_loop"
+              ? task.updatedAt
+              : undefined
+          }
         />
         {task.status === "running" ? (
           <div className="app-monitor-panel__subagent-detail-hint">
@@ -138,7 +151,9 @@ const SessionConversationTaskDetailBody = memo(function SessionConversationTaskD
             <span>
               {task.source === "execution_environment"
                 ? "执行会话进行中，消息将随对话流式更新…"
-                : "子代理正在执行，内容随对话流式更新中..."}
+                : task.source === "feedback_loop"
+                  ? "反馈神经网 worker 执行中，消息将随对话流式更新…"
+                  : "子代理正在执行，内容随对话流式更新中..."}
             </span>
           </div>
         ) : null}
@@ -158,7 +173,11 @@ const SessionConversationTaskDetailBody = memo(function SessionConversationTaskD
           ) : (
             <div className="app-claude-messages-empty">
               <p>
-                {task.source === "execution_environment" ? "暂无执行会话消息" : "暂无执行输出"}
+                {task.source === "execution_environment"
+                  ? "暂无执行会话消息"
+                  : task.source === "feedback_loop"
+                    ? "暂无神经网 worker 消息"
+                    : "暂无执行输出"}
               </p>
             </div>
           )}

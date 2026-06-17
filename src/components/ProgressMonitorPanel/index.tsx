@@ -71,7 +71,7 @@ import {
 } from "../../constants/executionEnvironmentDispatch";
 import { ExecutionEnvironmentDispatchHistoryDaysDropdown } from "./ExecutionEnvironmentDispatchHistoryDaysDropdown";
 import { MonitorLazyClickPopover } from "./MonitorLazyClickPopover";
-import { canStopSessionConversationTask, filterExecutionEnvironmentDispatchTaskItems } from "../../utils/sessionConversationTasks";
+import { canStopSessionConversationTask, filterSessionDispatchTaskItems } from "../../utils/sessionConversationTasks";
 import { SessionConversationDispatchTaskRow } from "./SessionConversationDispatchTaskRow";
 import {
   buildEmployeeTerminalConversationStatusById,
@@ -1384,7 +1384,7 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
 
   const executionEnvironmentDispatchTaskItems = useMemo(
     () =>
-      filterExecutionEnvironmentDispatchTaskItems(
+      filterSessionDispatchTaskItems(
         sessionConversationTaskItems,
         executionEnvironmentDispatchSinceMs,
       ),

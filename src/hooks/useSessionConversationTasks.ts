@@ -40,6 +40,10 @@ import {
   subscribeExecutionEnvironmentDispatches,
 } from "../stores/executionEnvironmentDispatchStore";
 import {
+  getSessionFeedbackLoopDispatchesSnapshotForAnchor,
+  subscribeSessionFeedbackLoopDispatches,
+} from "../stores/sessionFeedbackLoopDispatchStore";
+import {
   anchorSessionConversationTasksFingerprint,
   buildSessionConversationTasks,
   executionEnvironmentWorkerSessionsFingerprint,
@@ -117,6 +121,11 @@ export function useSessionConversationTasks(
     () => getExecutionEnvironmentDispatchesSnapshotForAnchor(dispatchAnchorSessionId),
     () => getExecutionEnvironmentDispatchesSnapshotForAnchor(dispatchAnchorSessionId),
   );
+  const feedbackLoopRecords = useSyncExternalStore(
+    subscribeSessionFeedbackLoopDispatches,
+    () => getSessionFeedbackLoopDispatchesSnapshotForAnchor(dispatchAnchorSessionId),
+    () => getSessionFeedbackLoopDispatchesSnapshotForAnchor(dispatchAnchorSessionId),
+  );
 
   const [bundleSnapshots, setBundleSnapshots] = useState<BackgroundInvocationSnapshot[]>([]);
 
@@ -161,6 +170,7 @@ export function useSessionConversationTasks(
       repositoryInvocations,
       bundleSnapshots,
       executionEnvironmentRecords,
+      feedbackLoopRecords,
       allSessions: sessionsRef.current,
     });
   }, [
@@ -171,6 +181,7 @@ export function useSessionConversationTasks(
     repositoryInvocations,
     bundleSnapshots,
     executionEnvironmentRecords,
+    feedbackLoopRecords,
     workerSessionsFingerprint,
   ]);
 }

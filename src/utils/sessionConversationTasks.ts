@@ -3,9 +3,12 @@ import type { WorkflowInvocationStreamDetail } from "../constants/workflowUiEven
 import type { ClaudeMessage, ClaudeSession, MessagePart, SessionConversationTaskItem, ToolUsePart } from "../types";
 import { SESSION_EXECUTION_ENGINE_LABELS } from "../constants/sessionExecutionEngine";
 import type { ExecutionEnvironmentDispatchRecord } from "../stores/executionEnvironmentDispatchStore";
+import type { SessionFeedbackLoopDispatchRecord } from "../stores/sessionFeedbackLoopDispatchStore";
 import { sessionStatusToConversationTaskStatus } from "../stores/executionEnvironmentDispatchStore";
 import { indexOfLastRenderableUserMessage, isToolOnlyUserMessage, isAssistantDisplayNoiseText, parseDispatchRecordDisplayTimeMs, type DispatchRecordMeta } from "./claudeChatMessageDisplay";
 import { isExecutionEnvironmentWorkerRepositoryName, sanitizeExecutionEnvironmentWorkerUserMessages } from "./executionEnvironmentDispatch";
+import { isFeedbackLoopWorkerRepositoryName } from "./sessionFeedbackLoopDispatch";
+import { SESSION_FEEDBACK_LOOP_DISPATCH_KIND_LABELS } from "../constants/sessionFeedbackLoopDispatch";
 import { resolveSessionExecutionEngine, sessionHasDiskTranscript } from "./sessionExecutionEngine";
 import {
   findExecutionEnvironmentWorkerForTaskDetail,
@@ -79,7 +82,8 @@ export function executionEnvironmentWorkerSessionsFingerprint(
 ): string {
   const chunks: string[] = [];
   for (const session of sessions) {
-    if (!isExecutionEnvironmentWorkerRepositoryName(session.repositoryName)) continue;
+    if (!isExecutionEnvironmentWorkerRepositoryName(session.repositoryName)
+      && !isFeedbackLoopWorkerRepositoryName(session.repositoryName)) continue;
     const last = session.messages[session.messages.length - 1];
     const streaming = session.status === "running" || session.status === "connecting";
     chunks.push(
@@ -348,7 +352,9 @@ function workerLastTurnHasTrailingActivity(worker: ClaudeSession, lastUserIdx: n
 export function executionEnvironmentWorkerNeedsTranscriptHydration(
   worker: ClaudeSession | null | undefined,
 ): boolean {
-  if (!worker || !isExecutionEnvironmentWorkerRepositoryName(worker.repositoryName)) {
+  if (!worker
+    || (!isExecutionEnvironmentWorkerRepositoryName(worker.repositoryName)
+      && !isFeedbackLoopWorkerRepositoryName(worker.repositoryName))) {
     return false;
   }
   if (worker.status === "running" || worker.status === "connecting") return false;
@@ -492,18 +498,80 @@ export function buildExecutionEnvironmentConversationTasks(input: {
   return out.sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
-/** 左栏「任务派发」：仅展示执行环境派发历史，按更新时间倒序；可选 sinceMs 做展示窗口过滤。 */
-export function filterExecutionEnvironmentDispatchTaskItems(
+function feedbackLoopRecordToTaskStatus(
+  record: SessionFeedbackLoopDispatchRecord,
+): SessionConversationTaskItem["status"] {
+  if (record.status === "running") return "running";
+  if (record.status === "failed") return "failed";
+  return "completed";
+}
+
+export function buildFeedbackLoopConversationTasks(input: {
+  anchorSession: ClaudeSession | null | undefined;
+  sessions: readonly ClaudeSession[];
+  dispatchRecords: readonly SessionFeedbackLoopDispatchRecord[];
+}): SessionConversationTaskItem[] {
+  const anchor = input.anchorSession;
+  if (!anchor) return [];
+  const anchorId = anchor.id.trim();
+  const out: SessionConversationTaskItem[] = [];
+
+  for (const record of input.dispatchRecords) {
+    if (record.anchorSessionId !== anchorId) continue;
+    const worker =
+      input.sessions.find((s) => s.id === record.workerSessionId) ??
+      input.sessions.find((s) => s.claudeSessionId?.trim() === record.workerSessionId);
+    const status = worker
+      ? resolveExecutionEnvironmentWorkerConversationTaskStatus(worker)
+      : feedbackLoopRecordToTaskStatus(record);
+    const assistantPreview = worker ? resolveWorkerDispatchTurnLastAssistantPreview(worker) : "";
+    const dispatchedAt = record.completedAt ?? record.createdAt;
+    const kindLabel = SESSION_FEEDBACK_LOOP_DISPATCH_KIND_LABELS[record.kind];
+    const promptBody = record.previewText?.replace(/\s+/g, " ").trim();
+    const preview =
+      status === "running"
+        ? "执行中…"
+        : assistantPreview || truncate(promptBody || "已完成");
+    const label = promptBody.length > 0 ? truncate(promptBody, 48) : kindLabel;
+    out.push({
+      key: `feedback-loop:${record.dispatchId}`,
+      label,
+      subtitle: `神经网 · ${kindLabel}`,
+      status,
+      previewText: truncate(preview || promptBody || "执行中…"),
+      updatedAt: dispatchedAt,
+      source: "feedback_loop",
+      sessionId: record.workerSessionId,
+      repositoryPath: record.repositoryPath || anchor.repositoryPath,
+      dispatchBatchId: record.dispatchId,
+      cancellable: status === "running",
+      cancelMode: status === "running" ? "session" : undefined,
+    });
+  }
+
+  return out.sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+/** 左栏「任务派发」：执行环境 + 反馈神经网派发历史，按更新时间倒序。 */
+export function filterSessionDispatchTaskItems(
   items: readonly SessionConversationTaskItem[],
   sinceMs?: number,
 ): SessionConversationTaskItem[] {
   return [...items]
     .filter((item) => {
-      if (item.source !== "execution_environment") return false;
+      if (item.source !== "execution_environment" && item.source !== "feedback_loop") return false;
       if (sinceMs == null) return true;
       return item.updatedAt >= sinceMs;
     })
     .sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+/** @deprecated 使用 filterSessionDispatchTaskItems */
+export function filterExecutionEnvironmentDispatchTaskItems(
+  items: readonly SessionConversationTaskItem[],
+  sinceMs?: number,
+): SessionConversationTaskItem[] {
+  return filterSessionDispatchTaskItems(items, sinceMs);
 }
 
 function normalizeDispatchContentForMatch(raw: string | undefined): string {
@@ -682,6 +750,7 @@ export function buildSessionConversationTasks(input: {
   repositoryInvocations?: readonly WorkflowInvocationStreamDetail[];
   bundleSnapshots?: readonly BackgroundInvocationSnapshot[];
   executionEnvironmentRecords?: readonly ExecutionEnvironmentDispatchRecord[];
+  feedbackLoopRecords?: readonly SessionFeedbackLoopDispatchRecord[];
   allSessions?: readonly ClaudeSession[];
 }): SessionConversationTaskItem[] {
   const session = input.session;
@@ -762,6 +831,16 @@ export function buildSessionConversationTasks(input: {
       anchorSession: session,
       sessions: input.allSessions,
       dispatchRecords: input.executionEnvironmentRecords,
+    })) {
+      upsert(item);
+    }
+  }
+
+  if (input.feedbackLoopRecords?.length && input.allSessions) {
+    for (const item of buildFeedbackLoopConversationTasks({
+      anchorSession: session,
+      sessions: input.allSessions,
+      dispatchRecords: input.feedbackLoopRecords,
     })) {
       upsert(item);
     }
@@ -955,6 +1034,38 @@ export function buildSessionConversationTaskDetailSession(
       return {
         ...worker,
         id: `${worker.id}::exec-env::${task.key}`,
+        status,
+        messages,
+      };
+    }
+  }
+
+  if (task.source === "feedback_loop") {
+    const workerId = task.sessionId?.trim() ?? "";
+    const worker =
+      (sessions ?? []).find((item) => item.id === workerId || item.claudeSessionId?.trim() === workerId) ??
+      (workerId && session.id === workerId ? session : null);
+    if (worker && isFeedbackLoopWorkerRepositoryName(worker.repositoryName)) {
+      const status: ClaudeSession["status"] =
+        task.status === "running" ? "running" : task.status === "failed" ? "error" : "completed";
+      const promptFallback = task.previewText?.replace(/\s+/g, " ").trim();
+      const messages =
+        worker.messages.length > 0
+          ? worker.messages
+          : promptFallback
+            ? [
+                {
+                  id: 1,
+                  role: "user" as const,
+                  content: promptFallback,
+                  parts: [{ type: "text" as const, text: promptFallback }],
+                  timestamp: (task.updatedAt || Date.now()) - 1,
+                },
+              ]
+            : worker.messages;
+      return {
+        ...worker,
+        id: `${worker.id}::feedback-loop::${task.key}`,
         status,
         messages,
       };

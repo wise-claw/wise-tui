@@ -50,7 +50,7 @@ export const SessionConversationDispatchTaskRow = memo(function SessionConversat
           onClick={() => onOpenDetail(item)}
         >
           <span className="app-monitor-panel__dispatch-row-lead">
-            <MonitorItemTypeTag label="派发" />
+            <MonitorItemTypeTag label={item.source === "feedback_loop" ? "神经网" : "派发"} />
             {item.subtitle ? (
               <span
                 className="app-monitor-panel__session-task-meta app-monitor-panel__session-task-engine"

@@ -202,7 +202,7 @@ export interface SessionConversationTaskItem {
   status: "running" | "completed" | "failed";
   previewText: string;
   updatedAt: number;
-  source: "message_tool" | "invocation_stream" | "background_snapshot" | "execution_environment";
+  source: "message_tool" | "invocation_stream" | "background_snapshot" | "execution_environment" | "feedback_loop";
   /** 执行环境派发批次 id */
   dispatchBatchId?: string;
   /** 批次内序号（从 1 起） */

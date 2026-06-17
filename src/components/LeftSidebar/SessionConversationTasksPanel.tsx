@@ -7,7 +7,7 @@ import {
 import { ExecutionEnvironmentDispatchHistoryDaysDropdown } from "../ProgressMonitorPanel/ExecutionEnvironmentDispatchHistoryDaysDropdown";
 import {
   canStopSessionConversationTask,
-  filterExecutionEnvironmentDispatchTaskItems,
+  filterSessionDispatchTaskItems,
 } from "../../utils/sessionConversationTasks";
 import { SessionConversationDispatchTaskRow } from "../ProgressMonitorPanel/SessionConversationDispatchTaskRow";
 import {
@@ -49,7 +49,7 @@ export function SessionConversationTasksPanel({
   );
 
   const dispatchTaskItems = useMemo(
-    () => filterExecutionEnvironmentDispatchTaskItems(sessionConversationTaskItems, dispatchSinceMs),
+    () => filterSessionDispatchTaskItems(sessionConversationTaskItems, dispatchSinceMs),
     [sessionConversationTaskItems, dispatchSinceMs],
   );
   const [detailTarget, setDetailTarget] = useState<SessionConversationTaskDetailTarget | null>(null);

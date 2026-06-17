@@ -6,6 +6,7 @@ import {
   canStopSessionConversationTask,
   executionEnvironmentWorkerSessionsFingerprint,
   filterExecutionEnvironmentDispatchTaskItems,
+  filterSessionDispatchTaskItems,
   markSessionToolUseStopped,
   resolveExecutionEnvironmentTaskFromDispatchMeta,
   resolveExecutionEnvironmentTaskFromTaskItems,
@@ -722,6 +723,74 @@ describe("resolveExecutionEnvironmentTaskFromDispatchMeta", () => {
       },
     ]);
     expect(hit?.sessionId).toBe("worker-1");
+  });
+});
+
+describe("buildFeedbackLoopConversationTasks", () => {
+  test("builds neural network dispatch rows for anchor session", () => {
+    const anchor = session({ id: "main-1", repositoryPath: "/repo" });
+    const worker = session({
+      id: "worker-1",
+      repositoryName: "wise/神经网:优化-1",
+      repositoryPath: "/repo",
+      status: "idle",
+      messages: [
+        { id: 1, role: "user", content: "优化请求", parts: [{ type: "text", text: "优化请求" }], timestamp: 1 },
+        { id: 2, role: "assistant", content: "建议合并 Grep", parts: [{ type: "text", text: "建议合并 Grep" }], timestamp: 2 },
+      ],
+    });
+    const items = buildSessionConversationTasks({
+      session: anchor,
+      feedbackLoopRecords: [
+        {
+          dispatchId: "fl-1",
+          anchorSessionId: "main-1",
+          workerSessionId: "worker-1",
+          repositoryPath: "/repo",
+          kind: "optimization",
+          cycleIndex: 1,
+          previewText: "优化请求",
+          status: "completed",
+          createdAt: 100,
+          completedAt: 200,
+        },
+      ],
+      allSessions: [anchor, worker],
+    });
+    expect(items.some((item) => item.source === "feedback_loop")).toBe(true);
+    const row = items.find((item) => item.key === "feedback-loop:fl-1");
+    expect(row?.subtitle).toBe("神经网 · 优化");
+    expect(row?.status).toBe("completed");
+    expect(row?.previewText).toContain("建议合并 Grep");
+  });
+});
+
+describe("filterSessionDispatchTaskItems", () => {
+  const execItem = (updatedAt: number): SessionConversationTaskItem => ({
+    key: `exec-${updatedAt}`,
+    label: "任务",
+    status: "completed",
+    previewText: "",
+    updatedAt,
+    source: "execution_environment",
+  });
+  const feedbackItem = (updatedAt: number): SessionConversationTaskItem => ({
+    key: `fl-${updatedAt}`,
+    label: "神经网",
+    status: "completed",
+    previewText: "",
+    updatedAt,
+    source: "feedback_loop",
+  });
+
+  test("includes execution environment and feedback loop sources", () => {
+    const items = [
+      execItem(100),
+      feedbackItem(300),
+      { ...execItem(500), source: "message_tool" as const },
+    ];
+    const filtered = filterSessionDispatchTaskItems(items, 200);
+    expect(filtered.map((row) => row.updatedAt)).toEqual([300]);
   });
 });
 

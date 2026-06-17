@@ -76,9 +76,9 @@ export function subscribeSessionFeedbackLoopDispatches(listener: Listener): () =
 }
 
 export function getSessionFeedbackLoopDispatchesSnapshotForAnchor(
-  anchorSessionId: string,
+  anchorSessionId: string | null | undefined,
 ): readonly SessionFeedbackLoopDispatchRecord[] {
-  const key = anchorSessionId.trim();
+  const key = anchorSessionId?.trim() ?? "";
   if (!key) return EMPTY_SNAPSHOT;
   publishAnchorSnapshot(key);
   return anchorSnapshotById.get(key)?.snapshot ?? EMPTY_SNAPSHOT;
