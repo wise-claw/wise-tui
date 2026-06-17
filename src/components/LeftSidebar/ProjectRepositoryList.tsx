@@ -740,7 +740,10 @@ function ProjectRow({
             />
           ) : null}
           {openProjectInPreferredEditor ? (
-            <OpenInEditorAction onOpen={() => openProjectInPreferredEditor(project)} />
+            <OpenInEditorAction
+              scopeOpenAppId={project.openAppId}
+              onOpen={() => openProjectInPreferredEditor(project)}
+            />
           ) : null}
           {onOpenProjectInTerminal ? (
             <OpenInTerminalAction onOpen={() => onOpenProjectInTerminal(project)} />

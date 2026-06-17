@@ -1022,9 +1022,6 @@ export function AppWorkspaceLayout({
                       repoPanelRightRailAvailable: chatRightRailMode,
                       fileTreeRailOpen,
                       onToggleFileTreeRail: chatRightRailMode ? toggleFileTreeRail : undefined,
-                      onOpenFileTreeRail: chatRightRailMode
-                        ? () => setFileTreeRailOpen(true)
-                        : undefined,
                       onWorkspaceFileTreeRailContextChange: chatRightRailMode
                         ? setWorkspaceFileTreeRailContext
                         : undefined,

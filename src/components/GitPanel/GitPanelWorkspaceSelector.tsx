@@ -13,7 +13,7 @@ import {
   type WorkspaceRepositoryTreeNode,
   type WorkspaceRepositoryTreeSelection,
 } from "../../utils/workspaceRepositoryTreeSelect";
-import { IconFileTreeExplorer } from "../WorkspaceFileTreeRail/IconFileTreeExplorer";
+import { IconSwitchWorkspaceSession } from "./IconSwitchWorkspaceSession";
 import type { WorkspaceFocus } from "../../utils/workspaceMode";
 import { getDefaultTerminalActionIcon, getKnownOpenAppIcon } from "../OpenAppMenu/openAppIcons";
 import {
@@ -44,7 +44,7 @@ export interface GitPanelWorkspaceSelectorProps {
   directoryOnly?: boolean;
   /** 左栏 Git/文件面板当前树选择（优先于 active* 推导）。 */
   treeSelection?: WorkspaceRepositoryTreeSelection | null;
-  /** 打开文件树栏并切换全局工作区 / 仓库会话（下拉行内快捷按钮）。 */
+  /** 切换全局工作区 / 仓库会话（下拉行内快捷按钮，定位左栏文件树）。 */
   onOpenFileTreeSession?: (target: WorkspaceRepositoryTreeSelection) => void;
 }
 
@@ -100,20 +100,17 @@ function buildTreeDataWithOpenActions(
             {showFileTreeSessionAction ? (
               <button
                 type="button"
-                className="git-panel-workspace-selector__tree-open git-panel-workspace-selector__tree-open--file-tree"
-                title={`打开文件树并切换会话：${node.title}`}
-                aria-label={`打开文件树并切换会话：${node.title}`}
+                className="git-panel-workspace-selector__tree-open git-panel-workspace-selector__tree-open--session"
+                title={`切换会话并定位文件树：${node.title}`}
+                aria-label={`切换会话并定位文件树：${node.title}`}
                 onClick={(event) => {
                   event.preventDefault();
                   event.stopPropagation();
                   options.onOpenFileTreeSession?.(fileTreeSessionTarget);
                 }}
               >
-                <span
-                  className="git-panel-workspace-selector__tree-open-icon git-panel-workspace-selector__tree-open-icon--svg"
-                  aria-hidden
-                >
-                  <IconFileTreeExplorer />
+                <span className="git-panel-workspace-selector__tree-open-icon git-panel-workspace-selector__tree-open-icon--session" aria-hidden>
+                  <IconSwitchWorkspaceSession />
                 </span>
               </button>
             ) : null}

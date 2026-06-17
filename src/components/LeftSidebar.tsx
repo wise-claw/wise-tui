@@ -238,7 +238,6 @@ export function LeftSidebar({
   onRepositoryRepoPanelChange,
   fileTreeRailOpen = false,
   onToggleFileTreeRail,
-  onOpenFileTreeRail,
   onWorkspaceFileTreeRailContextChange,
   taskCardsNavProps,
 }: LeftSidebarProps) {
@@ -1059,13 +1058,8 @@ export function LeftSidebar({
       } else {
         handleRepositorySelectAndSyncRepoPanel(target.repositoryId);
       }
-      onOpenFileTreeRail?.();
     },
-    [
-      handleProjectSelectAndSyncRepoPanel,
-      handleRepositorySelectAndSyncRepoPanel,
-      onOpenFileTreeRail,
-    ],
+    [handleProjectSelectAndSyncRepoPanel, handleRepositorySelectAndSyncRepoPanel],
   );
 
   const repoPanelWorkspaceSelectorProps = useMemo(
@@ -1087,7 +1081,7 @@ export function LeftSidebar({
           setRepoPanelTreeSelection({ kind: "project", projectId });
         });
       },
-      onOpenFileTreeSession: onOpenFileTreeRail ? handleOpenFileTreeSession : undefined,
+      onOpenFileTreeSession: handleOpenFileTreeSession,
     }),
     [
       projects,
@@ -1097,7 +1091,6 @@ export function LeftSidebar({
       activeProjectId,
       activeRepositoryId,
       activeWorkspaceFocus,
-      onOpenFileTreeRail,
       handleOpenFileTreeSession,
     ],
   );

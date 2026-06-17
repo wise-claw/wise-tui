@@ -1,4 +1,5 @@
 import { memo, useState } from "react";
+import { getKnownOpenAppIcon } from "../OpenAppMenu/openAppIcons";
 import { useWorkspaceTodoIncompleteCount } from "../../hooks/useWorkspaceTodoIncompleteCount";
 import { UserOutlined } from "@ant-design/icons";
 import { App as AntdApp, Popover } from "antd";
@@ -8,7 +9,8 @@ import { workspaceTodosAnchorKey } from "../../utils/workspaceTodosAnchorKey";
 import type { Repository, StandaloneRepo, TaskMode, Workspace } from "../../types";
 import { repositoryFolderBasename } from "../../utils/repositoryType";
 import type { WorkspaceFocus } from "../../utils/workspaceMode";
-import { parseOpenAppConfigureMenuKey } from "../../utils/openAppScope";
+import { parseOpenAppConfigureMenuKey, repositoryEditorOpenMenuLabel, resolveEffectiveOpenAppId } from "../../utils/openAppScope";
+import { repositoryTerminalOpenAppIcon, repositoryTerminalOpenMenuLabel } from "../../utils/repositoryTerminalOpenMenu";
 import { reorderRepositoryIdsForDrop } from "./repositoryReorder";
 
 export interface RepositoryReorderUi {
@@ -332,11 +334,15 @@ export const SidebarExecutableTasksAction = memo(function SidebarExecutableTasks
 
 export const OpenInEditorAction = memo(function OpenInEditorAction({
   onOpen,
-  label = "在编辑器中打开",
+  scopeOpenAppId,
+  label = repositoryEditorOpenMenuLabel(scopeOpenAppId),
 }: {
   onOpen: () => void;
+  scopeOpenAppId?: string | null;
   label?: string;
 }) {
+  const editorIconSrc = getKnownOpenAppIcon(resolveEffectiveOpenAppId(scopeOpenAppId));
+
   return (
     <DeferredHoverTooltip title={label}>
       <button
@@ -348,7 +354,11 @@ export const OpenInEditorAction = memo(function OpenInEditorAction({
           onOpen();
         }}
       >
-        <OpenInEditorIcon />
+        {editorIconSrc ? (
+          <img className="app-repository-action-open-app-icon" src={editorIconSrc} alt="" aria-hidden />
+        ) : (
+          <OpenInEditorIcon />
+        )}
       </button>
     </DeferredHoverTooltip>
   );
@@ -356,11 +366,13 @@ export const OpenInEditorAction = memo(function OpenInEditorAction({
 
 export const OpenInTerminalAction = memo(function OpenInTerminalAction({
   onOpen,
-  label = "在终端中打开",
+  label = repositoryTerminalOpenMenuLabel(),
 }: {
   onOpen: () => void;
   label?: string;
 }) {
+  const terminalIconSrc = repositoryTerminalOpenAppIcon();
+
   return (
     <DeferredHoverTooltip title={label}>
       <button
@@ -372,7 +384,11 @@ export const OpenInTerminalAction = memo(function OpenInTerminalAction({
           onOpen();
         }}
       >
-        <OpenInTerminalIcon />
+        {terminalIconSrc ? (
+          <img className="app-repository-action-open-app-icon" src={terminalIconSrc} alt="" aria-hidden />
+        ) : (
+          <OpenInTerminalIcon />
+        )}
       </button>
     </DeferredHoverTooltip>
   );
@@ -690,7 +706,10 @@ function RepositoryRowInner({
               onOpen={() => onOpenExecutableTasks(repository)}
             />
           ) : null}
-          <OpenInEditorAction onOpen={() => onOpenRepositoryInEditor(repository)} />
+          <OpenInEditorAction
+            scopeOpenAppId={repository.openAppId}
+            onOpen={() => onOpenRepositoryInEditor(repository)}
+          />
           {onOpenInTerminal ? <OpenInTerminalAction onOpen={() => onOpenInTerminal(repository)} /> : null}
           <SidebarWorkspaceRemindersAction
             enabled={workspaceTodosEnabled}
@@ -973,7 +992,10 @@ function FloatingRepositoryRowInner({
               onOpen={() => onOpenExecutableTasks(repository)}
             />
           ) : null}
-          <OpenInEditorAction onOpen={() => onOpenRepositoryInEditor(repository)} />
+          <OpenInEditorAction
+            scopeOpenAppId={repository.openAppId}
+            onOpen={() => onOpenRepositoryInEditor(repository)}
+          />
           {onOpenInTerminal ? <OpenInTerminalAction onOpen={() => onOpenInTerminal(repository)} /> : null}
           <SidebarWorkspaceRemindersAction
             enabled={workspaceTodosEnabled}

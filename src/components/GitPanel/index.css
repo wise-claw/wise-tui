@@ -607,18 +607,45 @@
 }
 
 .git-panel-workspace-selector__popover .ant-popover-inner {
-  padding: 6px 4px;
+  padding: 4px 2px;
 }
 
 .git-panel-workspace-selector__tree {
   min-width: 220px;
   max-width: min(360px, 72vw);
-  max-height: 320px;
+  max-height: 300px;
   overflow: auto;
 }
 
+.git-panel-workspace-selector__tree .ant-tree-treenode {
+  align-items: center;
+  padding: 0;
+  margin: 0;
+}
+
+.git-panel-workspace-selector__tree .ant-tree-indent-unit {
+  width: 14px;
+}
+
+.git-panel-workspace-selector__tree .ant-tree-switcher {
+  flex: none;
+  width: 16px;
+  margin-inline-end: 0;
+  line-height: 20px;
+}
+
 .git-panel-workspace-selector__tree .ant-tree-node-content-wrapper {
+  flex: 1;
+  min-width: 0;
   font-size: 12px;
+  min-height: 20px;
+  line-height: 20px;
+  padding: 0 2px !important;
+}
+
+.git-panel-workspace-selector__tree .ant-tree-title {
+  flex: 1;
+  min-width: 0;
 }
 
 .git-panel-workspace-selector__label {
@@ -634,10 +661,11 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 8px;
+  gap: 4px;
   width: 100%;
   min-width: 0;
-  padding-right: 2px;
+  min-height: 20px;
+  padding-right: 1px;
 }
 
 .git-panel-workspace-selector__tree-label {
@@ -652,7 +680,7 @@
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
-  gap: 2px;
+  gap: 1px;
 }
 
 .git-panel-workspace-selector__tree-open {
@@ -660,15 +688,15 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 22px;
-  height: 22px;
+  width: 18px;
+  height: 18px;
   margin: 0;
   padding: 0;
   border: none;
-  border-radius: 5px;
+  border-radius: 4px;
   background: transparent;
   cursor: pointer;
-  opacity: 0.72;
+  opacity: 0.88;
 }
 
 .git-panel-workspace-selector__tree-open:hover {
@@ -677,32 +705,23 @@
 }
 
 .git-panel-workspace-selector__tree-open-icon {
-  width: 14px;
-  height: 14px;
+  width: 13px;
+  height: 13px;
   display: block;
-  border-radius: 3px;
+  border-radius: 2px;
 }
 
-.git-panel-workspace-selector__tree-open-icon--svg {
+.git-panel-workspace-selector__tree-open-icon--session {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: var(--ant-color-text-secondary);
 }
 
-.git-panel-workspace-selector__tree-open-icon--svg svg {
-  width: 14px;
-  height: 14px;
+.git-panel-workspace-selector__tree-open-icon--session svg {
+  width: 13px;
+  height: 13px;
   display: block;
-}
-
-.git-panel-workspace-selector__tree-open--file-tree:hover .git-panel-workspace-selector__tree-open-icon--svg {
-  color: var(--ant-color-text);
-}
-
-.git-panel-workspace-selector__tree .ant-tree-node-content-wrapper {
-  flex: 1;
-  min-width: 0;
+  border-radius: 2px;
 }
 
 
