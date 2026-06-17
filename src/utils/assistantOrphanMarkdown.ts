@@ -18,6 +18,43 @@ export function looksLikeAssistantCompletionSummary(text: string): boolean {
   return looksLikeStructuredMarkdownSummary(text);
 }
 
+/** 主会话中长段 Markdown（含 ## 标题、**小节**、多段列表等），用于增强排版与卡片容器。 */
+export function looksLikeLongFormChatMarkdown(text: string): boolean {
+  if (looksLikeStructuredMarkdownSummary(text)) return true;
+
+  const t = text.trim();
+  if (!t) return false;
+
+  const markdownHeadings = (t.match(/^#{1,6}\s+/gm) ?? []).length;
+  const boldSectionHeaders = (t.match(/^\*\*[^*\n]{2,64}\*\*\s*$/gm) ?? []).length;
+  const listItems = (t.match(/^[\s]*[-*+]\s+/gm) ?? []).length;
+  const paragraphs = t.split(/\n\s*\n/).filter((block) => block.trim()).length;
+
+  if ((markdownHeadings >= 1 || boldSectionHeaders >= 2) && listItems >= 2) return true;
+  if (boldSectionHeaders >= 2 && paragraphs >= 3) return true;
+  if (paragraphs >= 5) return true;
+  if (listItems >= 5) return true;
+  return t.length >= 720;
+}
+
+export function chatAssistantTextPartClassNames(text: string): {
+  partClassName: string;
+  markdownClassName?: string;
+} {
+  const isSummary = looksLikeStructuredMarkdownSummary(text);
+  const isLongProse = looksLikeLongFormChatMarkdown(text);
+  let partClassName = "app-message-part app-message-part--text";
+  if (isSummary) {
+    partClassName += " app-message-part--completion-summary";
+  } else if (isLongProse) {
+    partClassName += " app-message-part--long-prose";
+  }
+  return {
+    partClassName,
+    markdownClassName: isLongProse ? "app-markdown--chat-prose" : undefined,
+  };
+}
+
 /** Bash/Exec 输出尾部若附带总结 Markdown，拆成 CLI 前缀 + 总结正文。 */
 export function splitCliOutputAndMarkdownSummary(text: string): { cli: string; markdown: string } | null {
   const raw = text.trim();

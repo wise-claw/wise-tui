@@ -1860,7 +1860,10 @@ export default function App() {
     })();
   }, [activeSessionId, applyWorkflowTasksForSession]);
 
-  const activeRepository = repositories.find((p) => p.id === activeRepositoryId);
+  const activeRepository = useMemo(
+    () => repositories.find((p) => p.id === activeRepositoryId) ?? null,
+    [repositories, activeRepositoryId],
+  );
 
   const fileEditorRootPath = useMemo(() => {
     const path = resolveChatTopbarContext({
@@ -1896,15 +1899,20 @@ export default function App() {
     openScheduledTasksForRepository(scheduledTasksRepository);
   }, [openScheduledTasksForRepository, scheduledTasksRepository]);
 
+  // 仅依赖路径/名称字符串：避免 repositories 列表内任一字段（比如 metadata 流式更新）
+  // 触发 activeRepository 引用变化，从而无谓重启磁盘会话刷新。
+  const activeRepoPathForDiskRefresh = activeRepository?.path?.trim() ?? "";
+  const activeRepoNameForDiskRefresh =
+    activeRepository?.name?.trim() || (activeRepository ? repositoryFolderBasename(activeRepository) : "");
   useEffect(() => {
-    if (!tabsHydrated || !activeRepository?.path?.trim()) return;
-    const repoPath = activeRepository.path.trim();
-    const repoName = activeRepository.name?.trim() || repositoryFolderBasename(activeRepository);
+    if (!tabsHydrated || !activeRepoPathForDiskRefresh) return;
+    const repoPath = activeRepoPathForDiskRefresh;
+    const repoName = activeRepoNameForDiskRefresh || repoPath;
     const cancelIdle = runWhenIdle(() => {
       void refreshDiskSessionsForRepository(repoPath, repoName);
     }, { timeoutMs: 800 });
     return cancelIdle;
-  }, [activeRepository, refreshDiskSessionsForRepository, tabsHydrated]);
+  }, [activeRepoPathForDiskRefresh, activeRepoNameForDiskRefresh, refreshDiskSessionsForRepository, tabsHydrated]);
 
   const workflowModalRepositoryPath = useMemo(() => {
     const fromProject = workflowConfigPrdProjectId?.trim();

@@ -4,7 +4,7 @@ import type { DispatchRecordMeta } from "../../utils/claudeChatMessageDisplay";
 import { MessagePartsDisplay } from "./MessageParts";
 import { Markdown } from "./Markdown";
 import { SystemMessageContent } from "./SystemMessageContent";
-import { assistantOrphanMarkdownText } from "../../utils/assistantOrphanMarkdown";
+import { assistantOrphanMarkdownText, chatAssistantTextPartClassNames } from "../../utils/assistantOrphanMarkdown";
 import {
   hasRenderableChatMessageBody,
   isAssistantDisplayNoiseText,
@@ -28,6 +28,27 @@ interface Props {
   onOpenHistorySessionInInspector?: (sessionId: string) => void;
   onOpenSessionConversationTaskDetail?: (task: SessionConversationTaskItem) => void;
   sessionsForDispatchLookup?: readonly ClaudeSession[];
+}
+
+function renderAssistantMarkdownPart(
+  text: string,
+  streaming: boolean,
+  partClassName?: string,
+  markdownClassName?: string,
+) {
+  const classes = partClassName
+    ? { partClassName, markdownClassName }
+    : chatAssistantTextPartClassNames(text);
+  return (
+    <div className={classes.partClassName}>
+      <Markdown
+        text={text}
+        streaming={streaming}
+        showPendingHint={false}
+        className={classes.markdownClassName}
+      />
+    </div>
+  );
 }
 
 function ClaudeChatMessageRowInner({
@@ -77,22 +98,15 @@ function ClaudeChatMessageRowInner({
       return (
         <>
           <MessagePartsDisplay parts={msg.parts} streaming={streamingThisBubble} inlinePendingHint={false} />
-          {orphanMarkdown ? (
-            <div className="app-message-part app-message-part--text app-message-part--completion-summary">
-              <Markdown text={orphanMarkdown} streaming={false} showPendingHint={false} />
-            </div>
-          ) : null}
+          {orphanMarkdown ? renderAssistantMarkdownPart(orphanMarkdown, false) : null}
         </>
       );
     }
     const text = msg.content ?? "";
     if (isBlankDisplayText(text)) return null;
     if (msg.role === "assistant" && isAssistantDisplayNoiseText(text)) return null;
-    return (
-      <div className="app-message-part app-message-part--text">
-        <Markdown text={text} streaming={streamingThisBubble} showPendingHint={false} />
-      </div>
-    );
+    const { partClassName, markdownClassName } = chatAssistantTextPartClassNames(text);
+    return renderAssistantMarkdownPart(text, streamingThisBubble, partClassName, markdownClassName);
   }
 
   function renderNonSystemContent() {

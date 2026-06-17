@@ -143,7 +143,10 @@ export function useSidebarExecutableTasksMap(
       void refresh();
     }, { timeoutMs: 1800 });
     return cancelIdle;
-  }, [projectKey, repositoryKey, activeProjectId, refresh]);
+    // 仅在 projects/repositories 结构变化时刷新；activeProjectId 切换不应重发
+    // O(P×IPC) 的 Trellis 工作区拉取——它只影响 splitTodoCount 的归属，
+    // Trellis 事件监听器 + 用户后续操作会重新触发刷新足以覆盖。
+  }, [projectKey, repositoryKey, refresh]);
 
   useEffect(() => {
     let cancelled = false;

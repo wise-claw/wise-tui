@@ -2,7 +2,11 @@ import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useStat
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import type { MessagePart, TextPart, ToolUsePart, ReasoningPart } from "../../types";
 import { isRenderableMessagePart } from "../../utils/claudeChatMessageDisplay";
-import { looksLikeStructuredMarkdownSummary, cliToolOutputForExpandedBody } from "../../utils/assistantOrphanMarkdown";
+import {
+  chatAssistantTextPartClassNames,
+  looksLikeStructuredMarkdownSummary,
+  cliToolOutputForExpandedBody,
+} from "../../utils/assistantOrphanMarkdown";
 import { reasoningPreviewOverflows } from "../../utils/reasoningPreviewOverflows";
 import { isSkillToolPart, skillToolDisplayName } from "../../utils/skillToolPart";
 import { LinkifiedPre } from "./LinkifiedPre";
@@ -88,13 +92,16 @@ const TextPartDisplay = memo(function TextPartDisplay({
   showPendingHint: boolean;
 }) {
   const text = usePacedText(part.text, streaming);
-  const isCompletionSummary = looksLikeStructuredMarkdownSummary(text);
+  const { partClassName, markdownClassName } = chatAssistantTextPartClassNames(text);
 
   return (
-    <div
-      className={`app-message-part app-message-part--text${isCompletionSummary ? " app-message-part--completion-summary" : ""}`}
-    >
-      <Markdown text={text} streaming={streaming} showPendingHint={showPendingHint} />
+    <div className={partClassName}>
+      <Markdown
+        text={text}
+        streaming={streaming}
+        showPendingHint={showPendingHint}
+        className={markdownClassName}
+      />
     </div>
   );
 }, textPartDisplayEqual);

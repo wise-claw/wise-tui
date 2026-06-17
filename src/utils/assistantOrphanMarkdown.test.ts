@@ -6,7 +6,9 @@ import {
   cliToolOutputForExpandedBody,
   extractBashEmbeddedMarkdownSummary,
   looksLikeAssistantCompletionSummary,
+  looksLikeLongFormChatMarkdown,
   looksLikeStructuredMarkdownSummary,
+  chatAssistantTextPartClassNames,
   splitCliOutputAndMarkdownSummary,
 } from "./assistantOrphanMarkdown";
 
@@ -98,6 +100,55 @@ describe("looksLikeStructuredMarkdownSummary", () => {
 
   test("keeps legacy alias in sync", () => {
     expect(looksLikeAssistantCompletionSummary("已完成！\n\n## 总结")).toBe(true);
+  });
+});
+
+describe("looksLikeLongFormChatMarkdown", () => {
+  test("detects bold-section technical summaries without ## headings", () => {
+    const text = [
+      "All tests pass — GitPanel 62/62.",
+      "",
+      "**优化总结**",
+      "",
+      "**单仓 GitPanel 切换卡顿**",
+      "",
+      "- **定位**：`useEffect` 在 mount 时同步拉 IPC",
+      "- **修复**：改为 `runWhenIdle` 延迟加载",
+      "- **效果**：切换耗时从 800ms 降到 120ms",
+      "",
+      "**验证**",
+      "",
+      "- `bun test src/components/GitPanel` → 62 pass",
+    ].join("\n");
+    expect(looksLikeLongFormChatMarkdown(text)).toBe(true);
+  });
+
+  test("ignores short plain replies", () => {
+    expect(looksLikeLongFormChatMarkdown("好的，我来处理。")).toBe(false);
+  });
+});
+
+describe("chatAssistantTextPartClassNames", () => {
+  test("maps structured summary to completion card", () => {
+    expect(chatAssistantTextPartClassNames("已完成！\n\n## 总结").partClassName).toContain(
+      "app-message-part--completion-summary",
+    );
+  });
+
+  test("maps bold long prose to long-prose card", () => {
+    const text = [
+      "**Section A**",
+      "",
+      "- item one",
+      "- item two",
+      "",
+      "**Section B**",
+      "",
+      "- item three",
+      "- item four",
+    ].join("\n");
+    const { partClassName } = chatAssistantTextPartClassNames(text);
+    expect(partClassName).toContain("app-message-part--long-prose");
   });
 });
 
