@@ -94,6 +94,8 @@ export interface SessionFeedbackLoopSettings {
   earlyStopConvergence: boolean;
   autoSaveHabitsToComposer: boolean;
   injectHabitsToSystemPrompt: boolean;
+  /** 优化 CLAUDE.md / rules / memory / MCP / skills 等持久配置 */
+  optimizeConfigArtifacts: boolean;
 }
 
 export type MonitorPanelPlacement = "left" | "right";
@@ -169,6 +171,8 @@ export interface WiseDefaultConfigV1 {
   sessionFeedbackLoopSaveHabitsToComposer: boolean;
   /** 会话 spawn 时将神经网习惯追加到 Claude CLI system prompt。 */
   sessionFeedbackLoopInjectSystemPrompt: boolean;
+  /** 反馈神经网优化 CLAUDE.md / rules / memory / MCP / skills 等持久配置。 */
+  sessionFeedbackLoopOptimizeConfigArtifacts: boolean;
 }
 
 const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
@@ -205,6 +209,7 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   sessionFeedbackLoopEarlyStop: true,
   sessionFeedbackLoopSaveHabitsToComposer: false,
   sessionFeedbackLoopInjectSystemPrompt: false,
+  sessionFeedbackLoopOptimizeConfigArtifacts: true,
 };
 
 function normalizeMonitorPanelPlacement(raw: unknown): MonitorPanelPlacement | null {
@@ -384,6 +389,13 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
               parsed.sessionFeedbackLoopInjectSystemPrompt,
               DEFAULT_CONFIG.sessionFeedbackLoopInjectSystemPrompt,
             ),
+      sessionFeedbackLoopOptimizeConfigArtifacts:
+        parsed.sessionFeedbackLoopOptimizeConfigArtifacts === undefined
+          ? DEFAULT_CONFIG.sessionFeedbackLoopOptimizeConfigArtifacts
+          : normalizeBoolean(
+              parsed.sessionFeedbackLoopOptimizeConfigArtifacts,
+              DEFAULT_CONFIG.sessionFeedbackLoopOptimizeConfigArtifacts,
+            ),
     };
   } catch {
     return null;
@@ -523,6 +535,8 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     sessionFeedbackLoopEarlyStop: DEFAULT_CONFIG.sessionFeedbackLoopEarlyStop,
     sessionFeedbackLoopSaveHabitsToComposer: DEFAULT_CONFIG.sessionFeedbackLoopSaveHabitsToComposer,
     sessionFeedbackLoopInjectSystemPrompt: DEFAULT_CONFIG.sessionFeedbackLoopInjectSystemPrompt,
+    sessionFeedbackLoopOptimizeConfigArtifacts:
+      DEFAULT_CONFIG.sessionFeedbackLoopOptimizeConfigArtifacts,
   };
 }
 
@@ -681,6 +695,7 @@ export async function saveWiseDefaultConfig(
       | "sessionFeedbackLoopEarlyStop"
       | "sessionFeedbackLoopSaveHabitsToComposer"
       | "sessionFeedbackLoopInjectSystemPrompt"
+      | "sessionFeedbackLoopOptimizeConfigArtifacts"
     >
   >,
 ): Promise<WiseDefaultConfigV1> {
@@ -749,6 +764,9 @@ export async function saveWiseDefaultConfig(
       patch.sessionFeedbackLoopSaveHabitsToComposer ?? current.sessionFeedbackLoopSaveHabitsToComposer,
     sessionFeedbackLoopInjectSystemPrompt:
       patch.sessionFeedbackLoopInjectSystemPrompt ?? current.sessionFeedbackLoopInjectSystemPrompt,
+    sessionFeedbackLoopOptimizeConfigArtifacts:
+      patch.sessionFeedbackLoopOptimizeConfigArtifacts ??
+      current.sessionFeedbackLoopOptimizeConfigArtifacts,
   };
   if (patch.connectionKind !== undefined) {
     next.connectionKind = normalizeConnectionKind(patch.connectionKind) ?? current.connectionKind;
@@ -866,6 +884,12 @@ export async function saveWiseDefaultConfig(
     next.sessionFeedbackLoopInjectSystemPrompt = normalizeBoolean(
       patch.sessionFeedbackLoopInjectSystemPrompt,
       DEFAULT_CONFIG.sessionFeedbackLoopInjectSystemPrompt,
+    );
+  }
+  if (patch.sessionFeedbackLoopOptimizeConfigArtifacts !== undefined) {
+    next.sessionFeedbackLoopOptimizeConfigArtifacts = normalizeBoolean(
+      patch.sessionFeedbackLoopOptimizeConfigArtifacts,
+      DEFAULT_CONFIG.sessionFeedbackLoopOptimizeConfigArtifacts,
     );
   }
   await persistConfig(next);
@@ -1006,7 +1030,8 @@ export async function saveWiseDefaultConfig(
     patch.sessionFeedbackLoopAutoStart !== undefined ||
     patch.sessionFeedbackLoopEarlyStop !== undefined ||
     patch.sessionFeedbackLoopSaveHabitsToComposer !== undefined ||
-    patch.sessionFeedbackLoopInjectSystemPrompt !== undefined
+    patch.sessionFeedbackLoopInjectSystemPrompt !== undefined ||
+    patch.sessionFeedbackLoopOptimizeConfigArtifacts !== undefined
   ) {
     if (
       next.sessionFeedbackLoopEnabled !== current.sessionFeedbackLoopEnabled ||
@@ -1015,7 +1040,9 @@ export async function saveWiseDefaultConfig(
       next.sessionFeedbackLoopEarlyStop !== current.sessionFeedbackLoopEarlyStop ||
       next.sessionFeedbackLoopSaveHabitsToComposer !==
         current.sessionFeedbackLoopSaveHabitsToComposer ||
-      next.sessionFeedbackLoopInjectSystemPrompt !== current.sessionFeedbackLoopInjectSystemPrompt
+      next.sessionFeedbackLoopInjectSystemPrompt !== current.sessionFeedbackLoopInjectSystemPrompt ||
+      next.sessionFeedbackLoopOptimizeConfigArtifacts !==
+        current.sessionFeedbackLoopOptimizeConfigArtifacts
     ) {
       dispatchSessionFeedbackLoopChanged({
         enabled: next.sessionFeedbackLoopEnabled,
@@ -1024,6 +1051,7 @@ export async function saveWiseDefaultConfig(
         earlyStopConvergence: next.sessionFeedbackLoopEarlyStop,
         autoSaveHabitsToComposer: next.sessionFeedbackLoopSaveHabitsToComposer,
         injectHabitsToSystemPrompt: next.sessionFeedbackLoopInjectSystemPrompt,
+        optimizeConfigArtifacts: next.sessionFeedbackLoopOptimizeConfigArtifacts,
       });
     }
   }
@@ -1387,6 +1415,7 @@ export async function loadSessionFeedbackLoopSettingsFromStore(): Promise<Sessio
     earlyStopConvergence: config.sessionFeedbackLoopEarlyStop,
     autoSaveHabitsToComposer: config.sessionFeedbackLoopSaveHabitsToComposer,
     injectHabitsToSystemPrompt: config.sessionFeedbackLoopInjectSystemPrompt,
+    optimizeConfigArtifacts: config.sessionFeedbackLoopOptimizeConfigArtifacts,
   };
 }
 
@@ -1405,6 +1434,9 @@ export async function saveSessionFeedbackLoopSettingsToStore(
       : {}),
     ...(patch.injectHabitsToSystemPrompt !== undefined
       ? { sessionFeedbackLoopInjectSystemPrompt: patch.injectHabitsToSystemPrompt }
+      : {}),
+    ...(patch.optimizeConfigArtifacts !== undefined
+      ? { sessionFeedbackLoopOptimizeConfigArtifacts: patch.optimizeConfigArtifacts }
       : {}),
   });
 }

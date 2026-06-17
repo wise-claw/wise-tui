@@ -15,6 +15,7 @@ import {
   UpOutlined,
 } from "@ant-design/icons";
 import type { UseSessionFeedbackLoopResult } from "../../hooks/useSessionFeedbackLoop";
+import { SessionFeedbackConfigPatchPanel } from "./SessionFeedbackConfigPatchPanel";
 import { writeTextFileAbsolute } from "../../services/sessionLink";
 import {
   buildFeedbackLoopTrend,
@@ -44,6 +45,7 @@ interface Props {
   loop: UseSessionFeedbackLoopResult;
   featureEnabled: boolean;
   injectHabitsToSystemPrompt?: boolean;
+  optimizeConfigArtifacts?: boolean;
   onRequestAiAnalysis?: (prompt: string) => void | Promise<void>;
 }
 
@@ -162,6 +164,7 @@ export const SessionFeedbackLoopPanel = memo(function SessionFeedbackLoopPanel({
   loop,
   featureEnabled,
   injectHabitsToSystemPrompt = false,
+  optimizeConfigArtifacts = false,
   onRequestAiAnalysis,
 }: Props) {
   const { state, isActive, habits, historyRecords, historyComparison, start, stop, reset, forceCompare, saveHabitsToComposer, requestFinalSummary, requestHabitsPrompt, exportMarkdownReport } = loop;
@@ -369,6 +372,12 @@ export const SessionFeedbackLoopPanel = memo(function SessionFeedbackLoopPanel({
       ) : null}
 
       {completedCycles.length > 0 ? <TrendChart cycles={state.cycles} /> : null}
+
+      <SessionFeedbackConfigPatchPanel
+        loop={loop}
+        optimizeConfigArtifacts={optimizeConfigArtifacts}
+        onRequestAiAnalysis={onRequestAiAnalysis}
+      />
 
       {state.cycles.length > 0 ? (
         <div className="app-session-feedback-loop__cycles">

@@ -4,6 +4,16 @@ import {
   type SessionInsightsReportMeta,
 } from "./sessionInsightsReport";
 import { formatDurationMs, formatTokenCount } from "./sessionInsights";
+import {
+  buildConfigArtifactOptimizationSection,
+  type FeedbackConfigSnapshot,
+} from "./sessionFeedbackConfigPatch";
+
+export {
+  buildFeedbackLoopConfigPatchPrompt,
+  type FeedbackConfigPatch,
+  type FeedbackConfigSnapshot,
+} from "./sessionFeedbackConfigPatch";
 
 /** 反馈闭环观测的三维指标：速度、效率（Token/成本）、质量（工具使用）。 */
 export type FeedbackMetricAxis = "speed" | "efficiency" | "quality";
@@ -500,6 +510,9 @@ export interface AdvanceFeedbackLoopInput {
   earlyStopConvergence?: boolean;
   /** 忽略轮次门槛，立即比对当前洞察 */
   forceCompare?: boolean;
+  /** 在优化 prompt 中包含 CLAUDE.md / rules / MCP / skills 指引 */
+  optimizeConfigArtifacts?: boolean;
+  configSnapshot?: FeedbackConfigSnapshot | null;
 }
 
 /** 状态机：根据当前洞察与轮次变化推进反馈闭环。 */
@@ -507,7 +520,15 @@ export function advanceFeedbackLoop(input: AdvanceFeedbackLoopInput): {
   state: SessionFeedbackLoopState;
   action: FeedbackLoopAdvanceAction;
 } {
-  const { insights, meta, hasNewTurnsSinceOptimization, earlyStopConvergence = true, forceCompare = false } = input;
+  const {
+    insights,
+    meta,
+    hasNewTurnsSinceOptimization,
+    earlyStopConvergence = true,
+    forceCompare = false,
+    optimizeConfigArtifacts = false,
+    configSnapshot = null,
+  } = input;
   let state = { ...input.state, cycles: [...input.state.cycles] };
   const snapshot = extractMetricSnapshot(insights);
 
@@ -541,6 +562,8 @@ export function advanceFeedbackLoop(input: AdvanceFeedbackLoopInput): {
       maxCycles: state.maxCycles,
       baseline,
       previousCycles: state.cycles.slice(0, -1),
+      optimizeConfigArtifacts: input.optimizeConfigArtifacts,
+      configSnapshot: input.configSnapshot,
     });
     return {
       state,
@@ -611,6 +634,8 @@ export function advanceFeedbackLoop(input: AdvanceFeedbackLoopInput): {
       baseline: snapshot,
       previousCycles: cycles,
       lastComparison: comparison,
+      optimizeConfigArtifacts,
+      configSnapshot,
     });
     return {
       state,
@@ -650,6 +675,9 @@ export interface BuildFeedbackLoopOptimizationPromptInput {
   baseline: SessionFeedbackMetricSnapshot;
   previousCycles: readonly SessionFeedbackCycle[];
   lastComparison?: FeedbackComparisonResult;
+  /** 启用配置 Artifact 优化指引 */
+  optimizeConfigArtifacts?: boolean;
+  configSnapshot?: FeedbackConfigSnapshot | null;
 }
 
 /** 构建带轮次对比上下文的自我优化 prompt。 */
@@ -705,10 +733,13 @@ export function buildFeedbackLoopOptimizationPrompt(
     "",
     "约束：不要调用工具；基于以下洞察数据推断。",
     "",
-    "---",
-    "",
-    basePrompt,
   );
+
+  if (input.optimizeConfigArtifacts) {
+    lines.push(...buildConfigArtifactOptimizationSection(input.configSnapshot), "");
+  }
+
+  lines.push("---", "", basePrompt);
 
   return lines.join("\n");
 }

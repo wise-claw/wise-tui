@@ -69,6 +69,7 @@ interface Props {
   feedbackLoop?: UseSessionFeedbackLoopResult;
   feedbackLoopFeatureEnabled?: boolean;
   feedbackLoopInjectSystemPrompt?: boolean;
+  feedbackLoopOptimizeConfigArtifacts?: boolean;
 }
 
 function KpiCard({
@@ -186,6 +187,7 @@ export const SessionInsightsPanel = memo(function SessionInsightsPanel({
   feedbackLoop,
   feedbackLoopFeatureEnabled = false,
   feedbackLoopInjectSystemPrompt = false,
+  feedbackLoopOptimizeConfigArtifacts = false,
 }: Props) {
   const [aiSending, setAiSending] = useState(false);
   const [aiOptimizeSending, setAiOptimizeSending] = useState(false);
@@ -376,6 +378,7 @@ export const SessionInsightsPanel = memo(function SessionInsightsPanel({
           loop={feedbackLoop}
           featureEnabled={feedbackLoopFeatureEnabled}
           injectHabitsToSystemPrompt={feedbackLoopInjectSystemPrompt}
+          optimizeConfigArtifacts={feedbackLoopOptimizeConfigArtifacts}
           onRequestAiAnalysis={onRequestAiAnalysis}
         />
       ) : null}

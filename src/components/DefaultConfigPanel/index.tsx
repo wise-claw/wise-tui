@@ -827,6 +827,29 @@ export function DefaultConfigPanel() {
             />
           </div>
         </div>
+
+        <div className="app-default-config-row" aria-label="反馈神经网优化配置 Artifact">
+          <div className="app-default-config-row__main">
+            <span className="app-default-config-row__title">优化 CLAUDE.md / rules / MCP / skills</span>
+            <span className="app-default-config-row__hint">
+              根据会话洞察生成可审阅的配置补丁，直接改进 Claude Code 持久配置（默认开启，应用前需确认）
+            </span>
+          </div>
+          <div className="app-default-config-row__control">
+            <DefaultConfigOptionPick<"off" | "on">
+              aria-label="反馈神经网优化配置 Artifact"
+              disabled={feedbackLoop.loading || feedbackLoop.saving || !feedbackLoop.enabled}
+              value={feedbackLoop.optimizeConfigArtifacts ? "on" : "off"}
+              options={[
+                { label: "关闭", value: "off" },
+                { label: "开启", value: "on" },
+              ]}
+              onChange={(value) => {
+                void feedbackLoop.saveOptimizeConfigArtifacts(value === "on");
+              }}
+            />
+          </div>
+        </div>
       </section>
     </div>
   );

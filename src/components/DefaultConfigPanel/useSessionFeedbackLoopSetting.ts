@@ -15,6 +15,7 @@ export function useSessionFeedbackLoopSetting() {
     earlyStopConvergence: true,
     autoSaveHabitsToComposer: false,
     injectHabitsToSystemPrompt: false,
+    optimizeConfigArtifacts: true,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -49,7 +50,8 @@ export function useSessionFeedbackLoopSetting() {
         next.autoStart === settings.autoStart &&
         next.earlyStopConvergence === settings.earlyStopConvergence &&
         next.autoSaveHabitsToComposer === settings.autoSaveHabitsToComposer &&
-        next.injectHabitsToSystemPrompt === settings.injectHabitsToSystemPrompt;
+        next.injectHabitsToSystemPrompt === settings.injectHabitsToSystemPrompt &&
+        next.optimizeConfigArtifacts === settings.optimizeConfigArtifacts;
       if (unchanged) return;
       setSaving(true);
       try {
@@ -79,5 +81,7 @@ export function useSessionFeedbackLoopSetting() {
       save({ autoSaveHabitsToComposer }),
     saveInjectHabitsToSystemPrompt: (injectHabitsToSystemPrompt: boolean) =>
       save({ injectHabitsToSystemPrompt }),
+    saveOptimizeConfigArtifacts: (optimizeConfigArtifacts: boolean) =>
+      save({ optimizeConfigArtifacts }),
   };
 }

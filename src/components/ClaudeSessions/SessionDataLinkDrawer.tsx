@@ -521,6 +521,7 @@ export function SessionDataLinkDrawer({
     autoStart: feedbackLoopSetting.autoStart,
     earlyStopConvergence: feedbackLoopSetting.earlyStopConvergence,
     autoSaveHabitsToComposer: feedbackLoopSetting.autoSaveHabitsToComposer,
+    optimizeConfigArtifacts: feedbackLoopSetting.optimizeConfigArtifacts,
     repositoryPath: session?.repositoryPath,
     insights: sessionInsights,
     meta: session
@@ -912,6 +913,9 @@ export function SessionDataLinkDrawer({
                     feedbackLoop={feedbackLoop}
                     feedbackLoopFeatureEnabled={feedbackLoopSetting.enabled}
                     feedbackLoopInjectSystemPrompt={feedbackLoopSetting.injectHabitsToSystemPrompt}
+                    feedbackLoopOptimizeConfigArtifacts={
+                      feedbackLoopSetting.optimizeConfigArtifacts
+                    }
                   />
                 ) : (
                   <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="正在计算洞察…" />
