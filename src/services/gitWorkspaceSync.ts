@@ -1,6 +1,11 @@
-import type { GitStatusResponse } from "../types";
 import { refreshGitRepositoryStats } from "../stores/gitRepositoryStatsStore";
-import { gitCommit, gitPull, gitPush, gitStageAll, gitStatus, gitStatusSummary } from "./git";
+import {
+  commitPullPushRepository,
+  hasWorkingTreeChanges,
+  needsGitSyncWork,
+  needsGitSyncWorkFromSummary,
+} from "./gitCommitPullPush";
+import { gitStatus, gitStatusSummary } from "./git";
 
 export interface GitWorkspaceRepositoryRef {
   path: string;
@@ -12,15 +17,21 @@ export interface GitWorkspaceRepoSyncResult {
   name: string;
   ok: boolean;
   skipped?: boolean;
+  pushedOnly?: boolean;
   error?: string;
 }
 
-export function hasGitWorkspaceChanges(status: GitStatusResponse): boolean {
-  return status.staged.length > 0 || status.unstaged.length > 0;
+export { hasWorkingTreeChanges, needsGitSyncWork, needsGitSyncWorkFromSummary };
+
+/** @deprecated 使用 needsGitSyncWork */
+export function hasGitWorkspaceChanges(
+  status: Parameters<typeof hasWorkingTreeChanges>[0],
+): boolean {
+  return hasWorkingTreeChanges(status);
 }
 
-/** 轻量统计：有改动的仓库数量（不含文件列表）。 */
-export async function countGitWorkspaceDirtyRepositories(
+/** 统计需要 commit/push 的仓库数（含仅有 ahead 提交、无工作区改动的仓）。 */
+export async function countGitWorkspaceSyncableRepositories(
   entries: readonly GitWorkspaceRepositoryRef[],
 ): Promise<number> {
   if (entries.length === 0) return 0;
@@ -28,13 +39,20 @@ export async function countGitWorkspaceDirtyRepositories(
     entries.map(async (entry) => {
       try {
         const summary = await gitStatusSummary(entry.path);
-        return summary.stagedCount > 0 || summary.unstagedCount > 0;
+        return needsGitSyncWorkFromSummary(summary);
       } catch {
         return false;
       }
     }),
   );
   return flags.filter(Boolean).length;
+}
+
+/** @deprecated 使用 countGitWorkspaceSyncableRepositories */
+export async function countGitWorkspaceDirtyRepositories(
+  entries: readonly GitWorkspaceRepositoryRef[],
+): Promise<number> {
+  return countGitWorkspaceSyncableRepositories(entries);
 }
 
 export async function commitAndPushWorkspaceRepositories(
@@ -54,19 +72,20 @@ export async function commitAndPushWorkspaceRepositories(
     const entry = entries[index]!;
     onProgress?.(entry, index + 1, total);
     try {
-      const status = await gitStatus(entry.path);
-      if (!hasGitWorkspaceChanges(status)) {
+      const outcome = await commitPullPushRepository(entry.path, trimmed, {
+        onPhase: () => onProgress?.(entry, index + 1, total),
+      });
+      if (outcome === "noop") {
         results.push({ path: entry.path, name: entry.name, ok: true, skipped: true });
         continue;
       }
-      if (status.unstaged.length > 0) {
-        await gitStageAll(entry.path);
-      }
-      await gitCommit(entry.path, trimmed);
-      await gitPull(entry.path);
-      await gitPush(entry.path);
       refreshGitRepositoryStats(entry.path);
-      results.push({ path: entry.path, name: entry.name, ok: true });
+      results.push({
+        path: entry.path,
+        name: entry.name,
+        ok: true,
+        pushedOnly: outcome === "pushed_only",
+      });
     } catch (error) {
       results.push({
         path: entry.path,
@@ -82,10 +101,12 @@ export async function commitAndPushWorkspaceRepositories(
 
 export function summarizeGitWorkspaceSyncResults(results: readonly GitWorkspaceRepoSyncResult[]): {
   committedCount: number;
+  pushedOnlyCount: number;
   skippedCount: number;
   failed: GitWorkspaceRepoSyncResult[];
 } {
   let committedCount = 0;
+  let pushedOnlyCount = 0;
   let skippedCount = 0;
   const failed: GitWorkspaceRepoSyncResult[] = [];
 
@@ -96,10 +117,12 @@ export function summarizeGitWorkspaceSyncResults(results: readonly GitWorkspaceR
     }
     if (result.skipped) {
       skippedCount += 1;
+    } else if (result.pushedOnly) {
+      pushedOnlyCount += 1;
     } else {
       committedCount += 1;
     }
   }
 
-  return { committedCount, skippedCount, failed };
+  return { committedCount, pushedOnlyCount, skippedCount, failed };
 }

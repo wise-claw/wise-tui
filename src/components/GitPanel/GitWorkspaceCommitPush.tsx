@@ -3,10 +3,11 @@ import { Button, Input, Popover, Spin, message } from "antd";
 import { CloudUploadOutlined } from "@ant-design/icons";
 import {
   commitAndPushWorkspaceRepositories,
-  countGitWorkspaceDirtyRepositories,
   summarizeGitWorkspaceSyncResults,
   type GitWorkspaceRepositoryRef,
 } from "../../services/gitWorkspaceSync";
+import { gitStatusSummary } from "../../services/git";
+import { needsGitSyncWorkFromSummary } from "../../services/gitCommitPullPush";
 import type { GitPanelRepositoryEntry } from "../../utils/workspaceRepositoryTreeSelect";
 
 const { TextArea } = Input;
@@ -23,6 +24,7 @@ export function GitWorkspaceCommitPush({ repositoryEntries, onAfterSync }: Props
   const [submitting, setSubmitting] = useState(false);
   const [progressLabel, setProgressLabel] = useState("");
   const [dirtyRepoCount, setDirtyRepoCount] = useState(0);
+  const [aheadOnlyRepoCount, setAheadOnlyRepoCount] = useState(0);
   const loadSeqRef = useRef(0);
   const draftRef = useRef(draft);
   const submitLockRef = useRef(false);
@@ -37,12 +39,32 @@ export function GitWorkspaceCommitPush({ repositoryEntries, onAfterSync }: Props
         path: entry.path,
         name: entry.name,
       }));
-      const dirtyCount = await countGitWorkspaceDirtyRepositories(refs);
+      const summaries = await Promise.all(
+        refs.map(async (entry) => {
+          try {
+            return await gitStatusSummary(entry.path);
+          } catch {
+            return null;
+          }
+        }),
+      );
       if (seq !== loadSeqRef.current) return;
-      setDirtyRepoCount(dirtyCount);
+      let dirty = 0;
+      let aheadOnly = 0;
+      for (const summary of summaries) {
+        if (!summary || !needsGitSyncWorkFromSummary(summary)) continue;
+        if (summary.stagedCount > 0 || summary.unstagedCount > 0) {
+          dirty += 1;
+        } else if ((summary.ahead ?? 0) > 0) {
+          aheadOnly += 1;
+        }
+      }
+      setDirtyRepoCount(dirty);
+      setAheadOnlyRepoCount(aheadOnly);
     } catch (error) {
       if (seq !== loadSeqRef.current) return;
       setDirtyRepoCount(0);
+      setAheadOnlyRepoCount(0);
       const errMsg = error instanceof Error ? error.message : String(error);
       message.error(`读取工作区 Git 状态失败：${errMsg}`);
     } finally {
@@ -58,8 +80,11 @@ export function GitWorkspaceCommitPush({ repositoryEntries, onAfterSync }: Props
       setOpen(nextOpen);
       if (!nextOpen) {
         loadSeqRef.current += 1;
+        setLoadingDraft(false);
         setProgressLabel("");
         setDraft("");
+        setDirtyRepoCount(0);
+        setAheadOnlyRepoCount(0);
         return;
       }
       setDraft("");
@@ -117,10 +142,16 @@ export function GitWorkspaceCommitPush({ repositoryEntries, onAfterSync }: Props
         return;
       }
 
-      if (summary.committedCount === 0) {
-        message.info("工作区内没有可提交的改动");
+      if (summary.committedCount === 0 && summary.pushedOnlyCount === 0) {
+        message.info("工作区内没有可提交或推送的内容");
         setOpen(false);
         return;
+      }
+
+      if (summary.pushedOnlyCount > 0 && summary.committedCount === 0) {
+        message.success(`已推送 ${summary.pushedOnlyCount} 个仓库的待推送提交`);
+      } else if (summary.committedCount > 0) {
+        message.success(`已提交并推送 ${summary.committedCount} 个仓库`);
       }
 
       setOpen(false);
@@ -159,7 +190,9 @@ export function GitWorkspaceCommitPush({ repositoryEntries, onAfterSync }: Props
               ? "正在读取各仓库改动..."
               : dirtyRepoCount > 0
                 ? `${dirtyRepoCount} 个仓库有改动，将使用同一提交信息`
-                : "当前工作区暂无可提交改动"}
+                : aheadOnlyRepoCount > 0
+                  ? `${aheadOnlyRepoCount} 个仓库仅有待推送提交，将直接拉取并推送`
+                  : "当前工作区暂无可同步内容"}
           </div>
           {loadingDraft ? (
             <div className="git-workspace-sync-popover__loading">

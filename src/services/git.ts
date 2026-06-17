@@ -1,4 +1,13 @@
 import { invoke } from "@tauri-apps/api/core";
+import { promiseWithTimeout } from "../utils/promiseWithTimeout";
+import {
+  GIT_COMMIT_TIMEOUT_MS,
+  GIT_FETCH_TIMEOUT_MS,
+  GIT_PULL_TIMEOUT_MS,
+  GIT_PUSH_TIMEOUT_MS,
+  GIT_STAGE_TIMEOUT_MS,
+  GIT_STATUS_TIMEOUT_MS,
+} from "./gitOperationTimeouts";
 import {
   WORKFLOW_UI_EVENT_REPO_WORKTREES_MAY_HAVE_CHANGED,
   type RepoWorktreesMayHaveChangedDetail,
@@ -17,11 +26,19 @@ import type {
 } from "../types";
 
 export async function gitStatus(path: string): Promise<GitStatusResponse> {
-  return invoke<GitStatusResponse>("git_status", { path });
+  return promiseWithTimeout(
+    invoke<GitStatusResponse>("git_status", { path }),
+    GIT_STATUS_TIMEOUT_MS,
+    "读取 Git 状态",
+  );
 }
 
 export async function gitStatusSummary(path: string): Promise<GitStatusSummaryResponse> {
-  return invoke<GitStatusSummaryResponse>("git_status_summary", { path });
+  return promiseWithTimeout(
+    invoke<GitStatusSummaryResponse>("git_status_summary", { path }),
+    GIT_STATUS_TIMEOUT_MS,
+    "读取 Git 状态",
+  );
 }
 
 export async function gitStage(path: string, filePath: string): Promise<void> {
@@ -38,7 +55,11 @@ export async function gitStagePaths(path: string, filePaths: string[]): Promise<
 
 /** 一次性暂存全部未提交改动（单次 IPC，适合大量文件）。 */
 export async function gitStageAll(path: string): Promise<void> {
-  return invoke("git_stage_all", { path });
+  return promiseWithTimeout(
+    invoke("git_stage_all", { path }),
+    GIT_STAGE_TIMEOUT_MS,
+    "暂存",
+  );
 }
 
 export async function gitUnstage(path: string, filePath: string): Promise<void> {
@@ -50,19 +71,23 @@ export async function gitUnstageAll(path: string): Promise<void> {
 }
 
 export async function gitCommit(path: string, message: string): Promise<string> {
-  return invoke<string>("git_commit", { path, message });
+  return promiseWithTimeout(
+    invoke<string>("git_commit", { path, message }),
+    GIT_COMMIT_TIMEOUT_MS,
+    "提交",
+  );
 }
 
 export async function gitPush(path: string): Promise<void> {
-  return invoke("git_push", { path });
+  return promiseWithTimeout(invoke("git_push", { path }), GIT_PUSH_TIMEOUT_MS, "推送");
 }
 
 export async function gitPull(path: string): Promise<void> {
-  return invoke("git_pull", { path });
+  return promiseWithTimeout(invoke("git_pull", { path }), GIT_PULL_TIMEOUT_MS, "拉取");
 }
 
 export async function gitFetch(path: string): Promise<void> {
-  return invoke("git_fetch", { path });
+  return promiseWithTimeout(invoke("git_fetch", { path }), GIT_FETCH_TIMEOUT_MS, "拉取远程");
 }
 
 /** `git show` 指定版本路径（如 `HEAD:foo/bar`、`:foo/bar` 索引）；非桌面或失败时返回空串。 */

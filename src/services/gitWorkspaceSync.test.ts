@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { hasGitWorkspaceChanges } from "./gitWorkspaceSync";
+import { hasGitWorkspaceChanges, summarizeGitWorkspaceSyncResults } from "./gitWorkspaceSync";
 import type { GitStatusResponse } from "../types";
 
 function makeStatus(partial: Partial<GitStatusResponse> = {}): GitStatusResponse {
@@ -24,5 +24,18 @@ describe("hasGitWorkspaceChanges", () => {
         makeStatus({ unstaged: [{ path: "a.ts", status: "M", additions: 1, deletions: 0 }] }),
       ),
     ).toBe(true);
+  });
+});
+
+describe("summarizeGitWorkspaceSyncResults", () => {
+  it("counts pushed-only repos separately", () => {
+    const summary = summarizeGitWorkspaceSyncResults([
+      { path: "/a", name: "a", ok: true, pushedOnly: true },
+      { path: "/b", name: "b", ok: true, skipped: true },
+      { path: "/c", name: "c", ok: true },
+    ]);
+    expect(summary.pushedOnlyCount).toBe(1);
+    expect(summary.committedCount).toBe(1);
+    expect(summary.skippedCount).toBe(1);
   });
 });

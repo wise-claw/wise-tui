@@ -3,7 +3,8 @@ import { Popover, Spin, message } from "antd";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useGitRepositoryStats } from "../../hooks/useGitRepositoryStats";
 import { executeClaudeCodeAndWait, getClaudeConfigModel } from "../../services/claude";
-import { gitCommit, gitPull, gitPush, gitStageAll, gitStatus } from "../../services/git";
+import { commitPullPushRepository } from "../../services/gitCommitPullPush";
+import { gitStatus } from "../../services/git";
 import { refreshGitRepositoryStats } from "../../stores/gitRepositoryStatsStore";
 import { extractClaudeInvocationFinalText } from "../../utils/claudeInvocationText";
 import { EXECUTION_ENVIRONMENT_ENGINE_MENTION_NAMES } from "../../constants/executionEnvironmentDispatch";
@@ -77,6 +78,7 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
   const [pushSummaryLoading, setPushSummaryLoading] = useState(false);
   const [pushSummaryPhase, setPushSummaryPhase] = useState("");
   const [pushSubmitting, setPushSubmitting] = useState(false);
+  const [pushSubmitPhase, setPushSubmitPhase] = useState("");
   const pushSummaryLoadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const pushSummaryLoadSeqRef = useRef(0);
   const pushAutoFixTimerRef = useRef<number | null>(null);
@@ -89,6 +91,7 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
     setPushSummaryDraft("");
     setPushSummaryLoading(false);
     setPushSummaryPhase("");
+    setPushSubmitPhase("");
     pushSummaryLoadSeqRef.current += 1;
     if (pushAutoFixTimerRef.current != null) {
       window.clearTimeout(pushAutoFixTimerRef.current);
@@ -116,31 +119,39 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
     }
   }, []);
 
+  const resetPushSummaryBusyState = useCallback(() => {
+    setPushSummaryLoading(false);
+    setPushSummaryPhase("");
+  }, []);
+
   const loadPushSummaryDraft = useCallback(
     async (seq: number) => {
       if (!gitRepositoryPath) return;
 
+      const isCurrent = () => seq === pushSummaryLoadSeqRef.current;
+      const clearBusyIfCurrent = () => {
+        if (!isCurrent()) return;
+        resetPushSummaryBusyState();
+      };
+
       setPushSummaryLoading(true);
       setPushSummaryPhase("读取变更");
 
-      let status: Awaited<ReturnType<typeof gitStatus>> | null = null;
       try {
-        status = await gitStatus(gitRepositoryPath);
-        if (seq !== pushSummaryLoadSeqRef.current) return;
-        setPushSummaryDraft(buildAiCommitSummary(status));
-      } catch {
-        if (seq !== pushSummaryLoadSeqRef.current) return;
-        setPushSummaryDraft("");
-        setPushSummaryLoading(false);
-        setPushSummaryPhase("");
-        return;
-      }
-
-      setPushSummaryLoading(false);
-      setPushSummaryPhase("AI 润色");
-      try {
+        const status = await gitStatus(gitRepositoryPath);
+        if (!isCurrent()) return;
         const fallback = buildAiCommitSummary(status);
-        const changedFiles = [...status.staged, ...status.unstaged]
+        setPushSummaryDraft(fallback);
+
+        const changedFiles = [...status.staged, ...status.unstaged];
+        if (changedFiles.length === 0) {
+          clearBusyIfCurrent();
+          return;
+        }
+
+        setPushSummaryLoading(false);
+        setPushSummaryPhase("AI 润色");
+        const changedFileLines = changedFiles
           .map((item) => `- ${item.path} (${item.status}, +${item.additions}, -${item.deletions})`)
           .join("\n");
         const prompt = [
@@ -151,10 +162,10 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
           `总计: +${Math.max(0, status.additions || 0)} / -${Math.max(0, status.deletions || 0)}`,
           `暂存文件数: ${status.staged.length}, 未暂存文件数: ${status.unstaged.length}`,
           "文件清单：",
-          changedFiles || "- 无",
+          changedFileLines || "- 无",
         ].join("\n");
         const configuredModel = await getClaudeConfigModel(gitRepositoryPath);
-        if (seq !== pushSummaryLoadSeqRef.current) return;
+        if (!isCurrent()) return;
 
         const result = await executeClaudeCodeAndWait({
           repositoryPath: gitRepositoryPath,
@@ -163,7 +174,7 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
           timeoutMs: 45_000,
           connectionMode: "oneshot",
         });
-        if (seq !== pushSummaryLoadSeqRef.current) return;
+        if (!isCurrent()) return;
 
         if (!result.success) {
           setPushSummaryDraft(fallback);
@@ -172,15 +183,13 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
         const cleaned = extractClaudeInvocationFinalText(result.outputLines);
         setPushSummaryDraft(normalizeConventionalCommitMessage(cleaned || fallback));
       } catch {
-        if (seq !== pushSummaryLoadSeqRef.current) return;
-        setPushSummaryPhase("润色失败");
+        if (!isCurrent()) return;
+        setPushSummaryDraft("");
       } finally {
-        if (seq === pushSummaryLoadSeqRef.current) {
-          setPushSummaryPhase("");
-        }
+        clearBusyIfCurrent();
       }
     },
-    [gitRepositoryPath],
+    [gitRepositoryPath, resetPushSummaryBusyState],
   );
 
   const schedulePushSummaryLoad = useCallback(() => {
@@ -195,15 +204,17 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
 
   const handlePushPopoverOpenChange = useCallback(
     (open: boolean) => {
+      if (!open && pushSubmitting) return;
       setPushPopoverOpen(open);
       if (!open) {
         cancelScheduledPushSummaryLoad();
         pushSummaryLoadSeqRef.current += 1;
+        resetPushSummaryBusyState();
         return;
       }
       schedulePushSummaryLoad();
     },
-    [cancelScheduledPushSummaryLoad, schedulePushSummaryLoad],
+    [cancelScheduledPushSummaryLoad, pushSubmitting, resetPushSummaryBusyState, schedulePushSummaryLoad],
   );
 
   useEffect(
@@ -232,19 +243,16 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
 
     pushSubmitInFlightRef.current = true;
     setPushSubmitting(true);
+    setPushSubmitPhase("读取变更");
     try {
-      const latestStatus = await gitStatus(repoPath);
-      if (latestStatus.staged.length === 0 && latestStatus.unstaged.length === 0) {
-        message.info("当前没有可提交的改动");
+      const outcome = await commitPullPushRepository(repoPath, commitMessage, {
+        onPhase: setPushSubmitPhase,
+      });
+      if (outcome === "noop") {
+        message.info("当前没有可提交的改动，也没有待推送的提交");
         setPushPopoverOpen(false);
         return;
       }
-      if (latestStatus.unstaged.length > 0) {
-        await gitStageAll(repoPath);
-      }
-      await gitCommit(repoPath, commitMessage);
-      await gitPull(repoPath);
-      await gitPush(repoPath);
       setPushPopoverOpen(false);
       refreshGitRepositoryStats(repoPath);
     } catch (error) {
@@ -301,6 +309,7 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
     } finally {
       pushSubmitInFlightRef.current = false;
       setPushSubmitting(false);
+      setPushSubmitPhase("");
     }
   }, [gitRepositoryPath, onDispatchExecutionEnvironment, pushSummaryDraft]);
 
@@ -318,7 +327,12 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
           <div className="app-push-popover__head">
             <div className="app-push-popover__head-main">
               <span className="app-push-popover__title">推送总结</span>
-              {pushSummaryPhase ? (
+              {pushSubmitting ? (
+                <span className="app-push-popover__status" aria-live="polite">
+                  <Spin size="small" />
+                  <span>{pushSubmitPhase || "推送中"}</span>
+                </span>
+              ) : pushSummaryPhase ? (
                 <span className="app-push-popover__status" aria-live="polite">
                   {pushSummaryLoading ? <Spin size="small" /> : null}
                   <span>{pushSummaryPhase.replace(/\.{3}$/, "")}</span>
