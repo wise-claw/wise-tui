@@ -1,6 +1,12 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, type FocusEvent } from "react";
 import type { ClaudeSession } from "../types";
-import { setClaudeChatUserPausedFollow } from "../stores/claudeChatMessageScrollBridge";
+import {
+  clearChatScrollFileOpenLock,
+  isChatScrollFileOpenLocked,
+  setClaudeChatUserPausedFollow,
+  takeChatScrollFileOpenAnchor,
+} from "../stores/claudeChatMessageScrollBridge";
+import { WORKFLOW_UI_EVENT_REPOSITORY_FILE_EDITOR_CLOSED } from "../constants/workflowUiEvents";
 import {
   isClaudeScrollInteractionActive,
   markClaudeScrollInteraction,
@@ -115,6 +121,7 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
   }, [shouldAutoFollow, isSessionStreaming]);
 
   const armAutoFollowOnMessagesBlur = useCallback(() => {
+    if (isChatScrollFileOpenLocked()) return;
     if (!userPausedFollowRef.current) return;
     userPausedFollowRef.current = false;
     pinToBottomRef.current = true;
@@ -262,8 +269,44 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
     awaitNewMessageBeforeFollowRef.current = false;
     followFingerprintAtBlurRef.current = "";
     lastUserMessagePinIdRef.current = null;
+    clearChatScrollFileOpenLock();
+    takeChatScrollFileOpenAnchor();
     setClaudeChatUserPausedFollow(false);
   }, [session.id, cancelScrollFollowLoop]);
+
+  useEffect(() => {
+    const onFileEditorClosed = () => {
+      const anchor = takeChatScrollFileOpenAnchor();
+      if (!anchor) {
+        clearChatScrollFileOpenLock();
+        return;
+      }
+      const restore = () => {
+        const sc = messagesScrollRef.current;
+        if (!sc) {
+          clearChatScrollFileOpenLock();
+          return;
+        }
+        pauseFollowForMessageNavigation();
+        programmaticScrollRef.current = true;
+        sc.scrollTop = anchor.scrollTop;
+        lastScrollTopRef.current = anchor.scrollTop;
+        window.requestAnimationFrame(() => {
+          window.requestAnimationFrame(() => {
+            programmaticScrollRef.current = false;
+            clearChatScrollFileOpenLock();
+          });
+        });
+      };
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(restore);
+      });
+    };
+    window.addEventListener(WORKFLOW_UI_EVENT_REPOSITORY_FILE_EDITOR_CLOSED, onFileEditorClosed);
+    return () => {
+      window.removeEventListener(WORKFLOW_UI_EVENT_REPOSITORY_FILE_EDITOR_CLOSED, onFileEditorClosed);
+    };
+  }, [pauseFollowForMessageNavigation]);
 
   useEffect(() => {
     if (isSessionStreaming()) return;

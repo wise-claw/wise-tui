@@ -104,6 +104,8 @@ export const WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED = "wise:split-todo-count
 export const WORKFLOW_UI_EVENT_OPEN_WORKFLOW_CONFIG = "wise:open-workflow-config";
 export const WORKFLOW_UI_EVENT_WORKFLOW_GRAPH_CHANGED = "wise:workflow-graph-changed";
 export const WORKFLOW_UI_EVENT_OPEN_REPOSITORY_FILE = "wise:open-repository-file";
+/** 仓库文件编辑面板完全关闭（所有标签关闭） */
+export const WORKFLOW_UI_EVENT_REPOSITORY_FILE_EDITOR_CLOSED = "wise:repository-file-editor-closed";
 export const WORKFLOW_UI_EVENT_RUN_ASSISTANT_BRIEF = "wise:run-assistant-brief";
 
 /** 需求助手入口粒度：工作区可跨仓下发，仓库仅本仓。 */
@@ -150,6 +152,10 @@ export function dispatchOpenRepositoryFile(detail: OpenRepositoryFileDetail): vo
   window.dispatchEvent(
     new CustomEvent(WORKFLOW_UI_EVENT_OPEN_REPOSITORY_FILE, { detail }),
   );
+}
+
+export function dispatchRepositoryFileEditorClosed(): void {
+  window.dispatchEvent(new CustomEvent(WORKFLOW_UI_EVENT_REPOSITORY_FILE_EDITOR_CLOSED));
 }
 
 export interface RunAssistantBriefDetail {

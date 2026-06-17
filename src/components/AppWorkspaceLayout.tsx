@@ -44,7 +44,7 @@ import type * as PrdTaskSplitPanelModule from "./PrdTaskSplitPanel";
 import type { EmployeeItem, WorkflowGraph, WorkflowTemplateItem } from "../types";
 import { resolveCockpitHubPane, type InspectTool, type ViewMode } from "../types/viewMode";
 import { AUTHOR_CONFIG_NAV_SIDER_WIDTH_PX } from "../constants/mainLayoutWidths";
-import type { OpenRepositoryFileDetail } from "../constants/workflowUiEvents";
+import { dispatchRepositoryFileEditorClosed, type OpenRepositoryFileDetail } from "../constants/workflowUiEvents";
 import { requestExplorerFocus } from "../constants/explorerUiEvents";
 import { writePendingExplorerReveal } from "../utils/pendingExplorerReveal";
 import { resolveExplorerRevealTargetForOpen } from "../utils/explorerRevealTarget";
@@ -820,6 +820,7 @@ export function AppWorkspaceLayout({
   useEffect(() => {
     if (prevEditorVisibleRef.current && !editorVisible) {
       setFileEditorTargetPaneIndex(null);
+      dispatchRepositoryFileEditorClosed();
     }
     prevEditorVisibleRef.current = editorVisible;
   }, [editorVisible]);

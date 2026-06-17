@@ -1,9 +1,13 @@
-import { memo, useCallback, useMemo } from "react";
+import { memo, useCallback, useMemo, type MouseEvent } from "react";
 import { dispatchOpenRepositoryFile } from "../../constants/workflowUiEvents";
 import { relativePathInRepository } from "../../utils/toolFileEditPreview";
 import { ExplorerTreeFileIcon } from "../GitPanel/explorerTreeChrome";
 import { highlightMarkdownCode } from "../../utils/markdownCodeHighlight";
 import type { ToolFileEditPreview } from "../../utils/toolFileEditPreview";
+import {
+  getClaudeChatMessageScrollBridge,
+  rememberChatScrollBeforeFileOpen,
+} from "../../stores/claudeChatMessageScrollBridge";
 import { useChatRepositoryPath } from "./chatRepositoryContext";
 import "./markdownCodeHighlight.css";
 
@@ -32,12 +36,26 @@ export const ToolFileEditCard = memo(function ToolFileEditCard({
     return relativePathInRepository(repositoryPath, preview.filePath) != null;
   }, [preview.filePath, repositoryPath]);
 
-  const handleOpenFile = useCallback(() => {
-    if (!repositoryPath) return;
-    const relativePath = relativePathInRepository(repositoryPath, preview.filePath);
-    if (!relativePath) return;
-    dispatchOpenRepositoryFile({ repositoryPath, relativePath });
-  }, [preview.filePath, repositoryPath]);
+  const handleOpenFile = useCallback(
+    (event: MouseEvent<HTMLButtonElement>) => {
+      if (!repositoryPath) return;
+      const relativePath = relativePathInRepository(repositoryPath, preview.filePath);
+      if (!relativePath) return;
+
+      const scrollContainer = event.currentTarget.closest(".app-claude-messages");
+      const messageId =
+        event.currentTarget.closest("[data-message-id]")?.getAttribute("data-message-id") ?? null;
+      if (scrollContainer instanceof HTMLElement) {
+        rememberChatScrollBeforeFileOpen({
+          scrollTop: scrollContainer.scrollTop,
+          messageId,
+        });
+      }
+      getClaudeChatMessageScrollBridge().pauseFollowForMessageNavigation();
+      dispatchOpenRepositoryFile({ repositoryPath, relativePath });
+    },
+    [preview.filePath, repositoryPath],
+  );
 
   const statsLabel = useMemo(() => {
     if (preview.addedLineCount > 0 && preview.removedLineCount > 0) {

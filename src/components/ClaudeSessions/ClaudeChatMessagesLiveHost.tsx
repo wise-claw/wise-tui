@@ -66,8 +66,9 @@ export function ClaudeChatMessagesLiveHost({
       registerClaudeChatMessageScrollBridge({
         scrollToSessionMessageId,
         scrollMessageTargetIntoView,
+        pauseFollowForMessageNavigation,
       }),
-    [scrollMessageTargetIntoView, scrollToSessionMessageId],
+    [pauseFollowForMessageNavigation, scrollMessageTargetIntoView, scrollToSessionMessageId],
   );
 
   useEffect(() => {
