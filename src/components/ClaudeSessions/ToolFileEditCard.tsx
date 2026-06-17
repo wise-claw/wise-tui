@@ -33,7 +33,7 @@ function HighlightedCodeLine({
 
 function toolFileEditPreviewFingerprint(
   preview: ToolFileEditPreview,
-  streaming: boolean,
+  streaming?: boolean,
 ): string {
   if (streaming) {
     const last = preview.lines[preview.lines.length - 1];
