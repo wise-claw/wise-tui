@@ -77,6 +77,7 @@ import {
   normalizeSessionRepositoryPath,
 } from "../utils/sessionHistoryScope";
 import { loadSessionTabsState, saveSessionTabsState } from "../services/tabsStore";
+import { getAppSetting, setAppSetting } from "../services/appSettingsStore";
 import {
   CLAUDE_DISK_JSONL_TAIL_LINES_LAZY,
   CLAUDE_DISK_JSONL_TAIL_LINES_RELOAD,
@@ -1621,7 +1622,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         await state.inFlight;
       } finally {
         const current = stateMap.get(sessionId);
-        if (current?.inFlight === state.inFlight) {
+        if (current && current.inFlight === state.inFlight) {
           stateMap.set(sessionId, {
             lastAttemptAtMs: current.lastAttemptAtMs,
             lastSuccessAtMs: current.lastSuccessAtMs,

@@ -2035,7 +2035,7 @@ export default function App() {
     setMainLayoutLeftWidthPx,
     setMainLayoutRightWidthPx,
   } = useMainLayoutModes({
-    activeRepository,
+    activeRepository: activeRepository ?? undefined,
     activeProject,
     activeWorkspaceFocus,
     activeSessionId,
@@ -3700,7 +3700,7 @@ export default function App() {
         onLoadMoreTranscriptFromDisk: loadMoreTranscriptFromDisk,
         onCompactSessionHistory: compactSessionHistory,
         omcBatchPipelineActive: Boolean(omcBatchRuntime?.active),
-        activeRepository,
+        activeRepository: activeRepository ?? undefined,
         repositories,
         activeRepositoryId,
         workspaceMode,

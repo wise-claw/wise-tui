@@ -5,7 +5,7 @@ import {
   needsGitSyncWork,
   needsGitSyncWorkFromSummary,
 } from "./gitCommitPullPush";
-import { gitStatus, gitStatusSummary } from "./git";
+import { gitStatusSummary } from "./git";
 
 export interface GitWorkspaceRepositoryRef {
   path: string;
