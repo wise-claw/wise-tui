@@ -1,5 +1,6 @@
 import type { RepositoryExplorerEntry } from "../../services/repositoryFiles";
 import type { GitFileStatus, GitStatusResponse } from "../../types";
+import { buildConventionalCommitFallback } from "../../utils/conventionalCommitMessage";
 
 export function repositoryExplorerEntriesEqual(
   left: readonly RepositoryExplorerEntry[],
@@ -113,12 +114,7 @@ export function gitStatusHeaderSnapshotEqual(
 }
 
 export function buildCommitDraftFromStatus(status: GitStatusResponse): string {
-  const files = [...status.staged, ...status.unstaged];
-  const topFiles = Array.from(new Set(files.map((item) => item.path))).slice(0, 4);
-  const headline = files.length > 0 ? "更新代码变更，完善当前分支功能实现。" : "更新代码。";
-  const scopeLine = topFiles.length > 0 ? `涉及：${topFiles.join("、")}` : "涉及：无变更文件";
-  const statLine = `统计：+${Math.max(0, status.additions || 0)} / -${Math.max(0, status.deletions || 0)}`;
-  return [headline, scopeLine, statLine].join("\n");
+  return buildConventionalCommitFallback(status);
 }
 
 export function getStatusColor(status: string): string {

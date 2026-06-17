@@ -1,7 +1,6 @@
 import { startTransition, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { listen } from "@tauri-apps/api/event";
 import { safeUnlistenPromise } from "../../utils/safeTauriUnlisten";
-import { runWhenIdle } from "../../utils/deferIdle";
 import { Empty, Spin, message } from "antd";
 import {
   gitCommit,
@@ -230,11 +229,20 @@ function GitSingleRepoPanel({
 
   useEffect(() => {
     statusRef.current = null;
+    // 切仓后立即清空旧仓状态，避免点击瞬间残留上一个仓库的文件列表（无 spinner 状态）。
+    setStatus(null);
     if (!repositoryPath) return;
-    const cancelIdle = runWhenIdle(() => {
+    // 旧实现包了 runWhenIdle(timeoutMs: 1200)；点击切换瞬间主线程繁忙，
+    // 空闲回调会被推到 ~1.2s 后才发起 git_status，肉眼看上去就是 Git 面板「卡几秒」。
+    // 直接走微任务调度：让本帧渲染先 commit，下一 microtask 立刻发起 IPC。
+    let cancelled = false;
+    queueMicrotask(() => {
+      if (cancelled) return;
       void loadStatus();
-    }, { timeoutMs: 1200 });
-    return cancelIdle;
+    });
+    return () => {
+      cancelled = true;
+    };
   }, [repositoryPath, loadStatus]);
 
   useEffect(() => {

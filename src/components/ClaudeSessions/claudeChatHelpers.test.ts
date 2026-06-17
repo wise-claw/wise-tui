@@ -106,7 +106,7 @@ describe("claudeChatHelpers", () => {
 
     expect(getSessionPreview(session)).toBe("Implement a very long featur...");
     expect(truncateSingleLine(" a\n b ", 10)).toBe("a b");
-    expect(buildAiCommitSummary(status)).toContain("a.ts");
+    expect(buildAiCommitSummary(status)).toBe("feat: 更新 a.ts 相关变更");
     expect(formatShortQuestionTime(1)).toBeTruthy();
   });
 });

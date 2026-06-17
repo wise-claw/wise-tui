@@ -11,6 +11,7 @@ import {
   messageTextLooksLikeOmcDispatch,
   parseOmcSlashCommandFromUserText,
 } from "../../utils/omcUserMessageText";
+import { buildConventionalCommitFallback } from "../../utils/conventionalCommitMessage";
 
 export type NotificationInboxRow = {
   conversationId: string;
@@ -269,16 +270,7 @@ export function getSessionPreview(session: ClaudeSession): string {
 }
 
 export function buildAiCommitSummary(status: GitStatusResponse): string {
-  const changedFiles = [...status.staged, ...status.unstaged];
-  const uniqueFiles = Array.from(new Set(changedFiles.map((item) => item.path))).slice(0, 5);
-  const fileSummary = uniqueFiles.length > 0 ? `涉及文件：${uniqueFiles.join("、")}` : "涉及文件：当前无改动文件";
-  const totalChanged = changedFiles.length;
-  const scopeText = totalChanged > 0 ? `本次改动覆盖 ${totalChanged} 个文件` : "本次改动较小";
-  return [
-    `${scopeText}，优化会话与界面交互体验。`,
-    fileSummary,
-    `变更统计：+${Math.max(0, status.additions || 0)} / -${Math.max(0, status.deletions || 0)}。`,
-  ].join("\n");
+  return buildConventionalCommitFallback(status);
 }
 
 export function truncateSingleLine(value: string, maxLength: number): string {

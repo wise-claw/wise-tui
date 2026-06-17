@@ -8,6 +8,10 @@ import { refreshGitRepositoryStats } from "../../stores/gitRepositoryStatsStore"
 import { extractClaudeInvocationFinalText } from "../../utils/claudeInvocationText";
 import { EXECUTION_ENVIRONMENT_ENGINE_MENTION_NAMES } from "../../constants/executionEnvironmentDispatch";
 import { buildAiCommitSummary } from "./claudeChatHelpers";
+import {
+  conventionalCommitPromptLines,
+  normalizeConventionalCommitMessage,
+} from "../../utils/conventionalCommitMessage";
 import { filterComposerCommonPhrasesForQuickBar } from "../../constants/composerCommonPhrase";
 import { dispatchApplyComposerCommonPhrase } from "../../constants/composerCommonPhraseEvents";
 import { useComposerCommonPhrases } from "../../hooks/useComposerCommonPhrases";
@@ -140,12 +144,7 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
           .map((item) => `- ${item.path} (${item.status}, +${item.additions}, -${item.deletions})`)
           .join("\n");
         const prompt = [
-          "你是资深工程师，请基于以下 git 改动生成一段简洁的中文提交总结草稿。",
-          "要求：",
-          "1) 2-4 行；",
-          "2) 第一行说明本次改动目标；",
-          "3) 后续行按要点概述影响范围；",
-          "4) 不要使用 markdown 标题，不要输出解释。",
+          ...conventionalCommitPromptLines(),
           "",
           `仓库路径: ${gitRepositoryPath}`,
           `分支: ${status.branch ?? "(unknown)"}`,
@@ -153,8 +152,6 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
           `暂存文件数: ${status.staged.length}, 未暂存文件数: ${status.unstaged.length}`,
           "文件清单：",
           changedFiles || "- 无",
-          "",
-          "请仅输出最终提交总结正文。",
         ].join("\n");
         const configuredModel = await getClaudeConfigModel(gitRepositoryPath);
         if (seq !== pushSummaryLoadSeqRef.current) return;
@@ -173,7 +170,7 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
           return;
         }
         const cleaned = extractClaudeInvocationFinalText(result.outputLines);
-        setPushSummaryDraft(cleaned || fallback);
+        setPushSummaryDraft(normalizeConventionalCommitMessage(cleaned || fallback));
       } catch {
         if (seq !== pushSummaryLoadSeqRef.current) return;
         setPushSummaryPhase("AI 润色失败，已保留本地模板");
@@ -223,7 +220,7 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
   const handlePushSubmit = useCallback(async () => {
     if (pushSubmitInFlightRef.current) return;
     const repoPath = gitRepositoryPath;
-    const commitMessage = pushSummaryDraft.trim();
+    const commitMessage = normalizeConventionalCommitMessage(pushSummaryDraft.trim());
     if (!repoPath) {
       message.error("当前会话未绑定仓库，无法推送");
       return;
@@ -307,6 +304,8 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
     }
   }, [gitRepositoryPath, onDispatchExecutionEnvironment, pushSummaryDraft]);
 
+  const pushSummaryBusy = pushSummaryLoading || Boolean(pushSummaryPhase.trim());
+
   const pushControl = (
     <Popover
       trigger="click"
@@ -336,13 +335,14 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
               className="app-push-popover__submit"
               onMouseDown={(event) => event.preventDefault()}
               onPointerDown={(event) => {
-                if (event.button !== 0 || pushSubmitting) return;
+                if (event.button !== 0 || pushSubmitting || pushSummaryBusy) return;
                 event.preventDefault();
                 void handlePushSubmit();
               }}
-              disabled={pushSubmitting}
+              disabled={pushSubmitting || pushSummaryBusy}
+              aria-busy={pushSubmitting || pushSummaryBusy}
             >
-              {pushSubmitting ? "推送中..." : "推送"}
+              {pushSubmitting ? "推送中..." : pushSummaryBusy ? "润色中..." : "推送"}
             </button>
           </div>
         </div>

@@ -13,6 +13,10 @@ import {
 import { executeClaudeCodeAndWait, getClaudeConfigModel } from "../../services/claude";
 import type { GitFileStatus, GitStatusResponse } from "../../types";
 import { extractClaudeInvocationFinalText } from "../../utils/claudeInvocationText";
+import {
+  conventionalCommitPromptLines,
+  normalizeConventionalCommitMessage,
+} from "../../utils/conventionalCommitMessage";
 import { buildFileTree } from "./fileTree";
 import { FileRow } from "./FileRow";
 import { FileTreeView } from "./FileTreeView";
@@ -163,8 +167,7 @@ function DiffModeInner({
       const result = await executeClaudeCodeAndWait({
         repositoryPath,
         prompt: [
-          "你是资深工程师，请根据 git 变更生成可直接提交的中文 commit message。",
-          "要求：1-3 行，简洁专业，仅输出提交信息正文，不要解释。",
+          ...conventionalCommitPromptLines(),
           "",
           `分支: ${status.branch ?? "unknown"}`,
           `统计: +${Math.max(0, status.additions || 0)} / -${Math.max(0, status.deletions || 0)}`,
@@ -182,7 +185,7 @@ function DiffModeInner({
         return;
       }
       const text = extractClaudeInvocationFinalText(result.outputLines);
-      setCommitMsg(text || fallback);
+      setCommitMsg(normalizeConventionalCommitMessage(text || fallback));
     } catch {
       setCommitMsg(buildCommitDraftFromStatus(status));
       message.warning("AI 生成失败，已填充默认提交信息。");
@@ -194,7 +197,7 @@ function DiffModeInner({
   /** 在 TextArea blur 之前于 pointerdown 触发，避免「第一次点击只失焦不提交」。 */
   const submitCommit = useCallback(() => {
     if (loading.commit || commitSubmitLockRef.current) return;
-    const trimmed = commitMsgRef.current.trim();
+    const trimmed = normalizeConventionalCommitMessage(commitMsgRef.current.trim());
     if (!trimmed || !hasChangesRef.current) return;
     commitSubmitLockRef.current = true;
     onCommit(trimmed);
