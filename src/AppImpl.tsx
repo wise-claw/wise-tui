@@ -2285,7 +2285,7 @@ export default function App() {
     priorActiveId: string | null | undefined,
   ): Promise<string> {
     const target = resolveSidebarSelectionTarget({ repository });
-    const id = await createSession(target.path, target.displayName);
+    const id = await createSession(target.path, target.displayName, { immediateActivate: true });
     void bindRepositoryMainSession(target.path, id, { deferHostRelease: true });
     scheduleReleaseScopedClaudeHostsBeforeNewMain({
       kind: "repository",
@@ -2305,7 +2305,7 @@ export default function App() {
       message.warning("该 Workspace 缺少根目录，请先配置 rootPath");
       return null;
     }
-    const id = await createSession(anchor.path, anchor.displayName);
+    const id = await createSession(anchor.path, anchor.displayName, { immediateActivate: true });
     void bindRepositoryMainSession(projectMainSessionBindingKey(project.id), id, {
       deferHostRelease: true,
     });
@@ -2462,7 +2462,11 @@ export default function App() {
       viewMode.enter({ kind: "chat" });
       setActiveRepositoryWithOwner(repository.id);
     });
-    await createAndBindRepositoryMainSession(repository, activeSessionIdLatestRef.current);
+    const id = await createAndBindRepositoryMainSession(
+      repository,
+      activeSessionIdLatestRef.current,
+    );
+    jumpToSessionWithRepository(id);
   }
 
   /** 手动为 Workspace 新建项目主会话标签。 */
@@ -2490,7 +2494,10 @@ export default function App() {
         setActiveProjectId(project.id);
       }
     });
-    await createAndBindProjectMainSession(project, activeSessionIdLatestRef.current);
+    const id = await createAndBindProjectMainSession(project, activeSessionIdLatestRef.current);
+    if (id) {
+      jumpToSessionWithRepository(id);
+    }
   }
 
   const handleSidebarRepositorySelect = useCallback(

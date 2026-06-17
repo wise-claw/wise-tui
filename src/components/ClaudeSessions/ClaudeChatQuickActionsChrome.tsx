@@ -121,7 +121,7 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
       if (!gitRepositoryPath) return;
 
       setPushSummaryLoading(true);
-      setPushSummaryPhase("读取 Git 变更中...");
+      setPushSummaryPhase("读取变更");
 
       let status: Awaited<ReturnType<typeof gitStatus>> | null = null;
       try {
@@ -137,7 +137,7 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
       }
 
       setPushSummaryLoading(false);
-      setPushSummaryPhase("AI 润色中（后台）...");
+      setPushSummaryPhase("AI 润色");
       try {
         const fallback = buildAiCommitSummary(status);
         const changedFiles = [...status.staged, ...status.unstaged]
@@ -173,7 +173,7 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
         setPushSummaryDraft(normalizeConventionalCommitMessage(cleaned || fallback));
       } catch {
         if (seq !== pushSummaryLoadSeqRef.current) return;
-        setPushSummaryPhase("AI 润色失败，已保留本地模板");
+        setPushSummaryPhase("润色失败");
       } finally {
         if (seq === pushSummaryLoadSeqRef.current) {
           setPushSummaryPhase("");
@@ -315,21 +315,18 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
       classNames={{ root: "app-push-popover" }}
       content={
         <div className="app-push-popover__content">
-          <div className="app-push-popover__title">推送前提交总结（AI 生成草稿）</div>
-          {pushSummaryPhase ? (
-            <div className="app-push-popover__loading">
-              {pushSummaryLoading ? <Spin size="small" /> : null}
-              <span>{pushSummaryPhase}</span>
+          <div className="app-push-popover__head">
+            <div className="app-push-popover__head-main">
+              <span className="app-push-popover__title">推送总结</span>
+              {pushSummaryPhase ? (
+                <span className="app-push-popover__status" aria-live="polite">
+                  {pushSummaryLoading ? <Spin size="small" /> : null}
+                  <span>{pushSummaryPhase.replace(/\.{3}$/, "")}</span>
+                </span>
+              ) : (
+                <span className="app-push-popover__hint">AI 草稿</span>
+              )}
             </div>
-          ) : null}
-          <textarea
-            className="app-push-popover__textarea"
-            value={pushSummaryDraft}
-            onChange={(event) => setPushSummaryDraft(event.target.value)}
-            placeholder="提交总结..."
-            disabled={pushSubmitting}
-          />
-          <div className="app-push-popover__footer">
             <button
               type="button"
               className="app-push-popover__submit"
@@ -342,9 +339,17 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
               disabled={pushSubmitting || pushSummaryBusy}
               aria-busy={pushSubmitting || pushSummaryBusy}
             >
-              {pushSubmitting ? "推送中..." : pushSummaryBusy ? "润色中..." : "推送"}
+              {pushSubmitting ? "推送中" : pushSummaryBusy ? "润色中" : "推送"}
             </button>
           </div>
+          <textarea
+            className="app-push-popover__textarea"
+            value={pushSummaryDraft}
+            onChange={(event) => setPushSummaryDraft(event.target.value)}
+            placeholder="单行提交信息，如 fix: 修复登录问题"
+            rows={2}
+            disabled={pushSubmitting}
+          />
         </div>
       }
     >

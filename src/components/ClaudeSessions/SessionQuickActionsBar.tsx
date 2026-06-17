@@ -5,11 +5,12 @@ import {
   CommentOutlined,
   FileTextOutlined,
   LinkOutlined,
+  LoadingOutlined,
   SettingOutlined,
   UserOutlined,
 } from "@ant-design/icons";
 import { Dropdown, type MenuProps } from "antd";
-import { memo, useMemo, useState, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState, type ReactNode, type PointerEvent as ReactPointerEvent } from "react";
 import {
   partitionSessionQuickActions,
   type SessionQuickActionId,
@@ -76,6 +77,11 @@ export const SessionQuickActionsBar = memo(function SessionQuickActionsBar({
   const { layout, setLayout, resetLayout, persistLayout, catalog, assistantsById } =
     useSessionQuickActionsLayout();
   const [customizeOpen, setCustomizeOpen] = useState(false);
+  const createInvokeLockRef = useRef(false);
+
+  useEffect(() => {
+    prefetchNewSessionSurface();
+  }, []);
 
   const availability: SessionQuickActionsAvailability = useMemo(
     () => ({
@@ -99,6 +105,29 @@ export const SessionQuickActionsBar = memo(function SessionQuickActionsBar({
     onOpenBuiltinAssistant?.(assistantId);
   };
 
+  const invokeCreateNewSession = useCallback(() => {
+    if (creatingNewSession || createInvokeLockRef.current) return;
+    createInvokeLockRef.current = true;
+    queueMicrotask(() => {
+      createInvokeLockRef.current = false;
+    });
+    prefetchNewSessionSurface();
+    onCreateNewSession?.();
+  }, [creatingNewSession, onCreateNewSession]);
+
+  const handleNewSessionPointerDown = useCallback(
+    (event: ReactPointerEvent<HTMLButtonElement>) => {
+      if (event.button !== 0 || creatingNewSession) return;
+      event.preventDefault();
+      invokeCreateNewSession();
+    },
+    [creatingNewSession, invokeCreateNewSession],
+  );
+
+  const handleNewSessionClick = useCallback(() => {
+    invokeCreateNewSession();
+  }, [invokeCreateNewSession]);
+
   const renderPill = (id: SessionQuickActionId): ReactNode => {
     const meta = resolveSessionQuickActionMeta(id, catalog);
     if (id === "new-session") {
@@ -106,20 +135,19 @@ export const SessionQuickActionsBar = memo(function SessionQuickActionsBar({
         <button
           key={id}
           type="button"
-          className={`app-session-quick-pill${creatingNewSession ? " app-session-quick-pill--loading" : ""}`}
+          className={`app-session-quick-pill app-session-quick-pill--new-session${
+            creatingNewSession ? " app-session-quick-pill--loading" : ""
+          }`}
           disabled={creatingNewSession}
           aria-busy={creatingNewSession}
+          aria-label={creatingNewSession ? "正在创建会话" : meta.pillLabel}
           onMouseEnter={prefetchNewSessionSurface}
           onFocus={prefetchNewSessionSurface}
-          onMouseDown={(event) => event.preventDefault()}
-          onClick={() => {
-            if (creatingNewSession) return;
-            prefetchNewSessionSurface();
-            onCreateNewSession?.();
-          }}
+          onPointerDown={handleNewSessionPointerDown}
+          onClick={handleNewSessionClick}
         >
           <span className="app-session-quick-pill__icon app-session-quick-pill__icon--blue" aria-hidden>
-            <CommentOutlined />
+            {creatingNewSession ? <LoadingOutlined spin /> : <CommentOutlined />}
           </span>
           <span className="app-session-quick-pill__label">
             {creatingNewSession ? "创建中..." : meta.pillLabel}
@@ -174,8 +202,7 @@ export const SessionQuickActionsBar = memo(function SessionQuickActionsBar({
           icon: actionMenuIcon(id),
           disabled: creatingNewSession,
           onClick: () => {
-            if (creatingNewSession) return;
-            onCreateNewSession?.();
+            invokeCreateNewSession();
           },
         };
       }
@@ -210,7 +237,7 @@ export const SessionQuickActionsBar = memo(function SessionQuickActionsBar({
     overflow,
     catalog,
     creatingNewSession,
-    onCreateNewSession,
+    invokeCreateNewSession,
     onOpenBuiltinAssistant,
     onActivateAssistant,
     assistantsById,

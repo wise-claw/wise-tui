@@ -7427,6 +7427,7 @@ button.app-message-part-header:disabled:hover {
   overflow-y: hidden;
   scrollbar-width: none;
   -webkit-overflow-scrolling: touch;
+  overscroll-behavior-x: contain;
 }
 
 .app-session-quick-actions__primary::-webkit-scrollbar {
@@ -7622,9 +7623,10 @@ button.app-message-part-header:disabled:hover {
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  padding: 1px 1px;
+  padding: 3px 6px;
+  min-height: 24px;
   border: none;
-  border-radius: 0;
+  border-radius: 4px;
   background: transparent;
   color: var(--ant-color-text-secondary);
   font-size: 11.5px;
@@ -7632,7 +7634,27 @@ button.app-message-part-header:disabled:hover {
   cursor: pointer;
   white-space: nowrap;
   touch-action: manipulation;
-  transition: color 0.12s ease, opacity 0.12s ease;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  transition: color 0.12s ease, opacity 0.12s ease, background 0.12s ease;
+}
+
+.app-session-quick-pill--new-session {
+  position: relative;
+  z-index: 1;
+}
+
+.app-session-quick-pill--new-session.app-session-quick-pill--loading {
+  cursor: wait;
+  opacity: 0.82;
+}
+
+.app-session-quick-pill--new-session.app-session-quick-pill--loading .app-session-quick-pill__label {
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-session-quick-pill--new-session:hover:not(:disabled) {
+  background: color-mix(in srgb, var(--ant-color-primary-bg) 55%, transparent);
 }
 
 .app-session-quick-pill:disabled,
@@ -8300,66 +8322,102 @@ button.app-message-part-header:disabled:hover {
 
 .app-push-popover .ant-popover-inner {
   padding: 0;
+  border-radius: 10px;
+  overflow: hidden;
+  box-shadow: var(--ant-box-shadow-secondary);
 }
 
 .app-push-popover__content {
-  width: 360px;
-  max-width: min(80vw, 360px);
-  padding: 10px;
+  width: min(80vw, 320px);
+  max-width: 320px;
+  padding: 8px;
   display: flex;
   flex-direction: column;
+  gap: 6px;
+  box-sizing: border-box;
+}
+
+.app-push-popover__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
   gap: 8px;
+  min-width: 0;
+}
+
+.app-push-popover__head-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1 1 auto;
 }
 
 .app-push-popover__title {
-  font-size: 12px;
-  color: var(--ant-color-text-secondary);
+  font-size: 11.5px;
+  font-weight: 600;
+  color: var(--ant-color-text);
+  white-space: nowrap;
 }
 
-.app-push-popover__loading {
+.app-push-popover__hint {
+  font-size: 10.5px;
+  color: var(--ant-color-text-tertiary);
+  white-space: nowrap;
+}
+
+.app-push-popover__status {
   display: inline-flex;
   align-items: center;
-  gap: 8px;
-  font-size: 12px;
+  gap: 4px;
+  min-width: 0;
+  font-size: 10.5px;
+  line-height: 1.2;
   color: var(--ant-color-text-tertiary);
-  padding: 2px 0 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .app-push-popover__textarea {
-  min-height: 116px;
+  width: 100%;
+  min-height: 52px;
+  max-height: 120px;
   resize: vertical;
-  border: 1px solid var(--ant-color-border);
-  border-radius: 8px;
-  background: var(--ant-color-bg-container);
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 6px;
+  background: var(--ant-color-fill-quaternary);
   color: var(--ant-color-text);
   font-size: 12px;
-  line-height: 1.45;
-  padding: 8px 10px;
+  line-height: 1.4;
+  padding: 6px 8px;
   outline: none;
+  box-sizing: border-box;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono",
+    "Courier New", monospace;
 }
 
 .app-push-popover__textarea:focus {
   border-color: var(--ant-color-primary-border);
+  background: var(--ant-color-bg-container);
 }
 
 .app-push-popover__textarea:disabled {
-  opacity: 0.7;
+  opacity: 0.72;
   cursor: not-allowed;
 }
 
-.app-push-popover__footer {
-  display: flex;
-  justify-content: flex-end;
-}
-
 .app-push-popover__submit {
+  flex-shrink: 0;
   border: 1px solid var(--ant-color-primary-border);
   background: var(--ant-color-primary-bg);
   color: var(--ant-color-primary);
-  border-radius: 8px;
-  font-size: 12px;
+  border-radius: 6px;
+  font-size: 11.5px;
+  font-weight: 500;
   line-height: 1;
-  padding: 7px 14px;
+  padding: 5px 10px;
+  min-height: 24px;
   cursor: pointer;
   transition: background 0.12s ease, border-color 0.12s ease, opacity 0.12s ease;
 }
@@ -8370,7 +8428,7 @@ button.app-message-part-header:disabled:hover {
 }
 
 .app-push-popover__submit:disabled {
-  opacity: 0.6;
+  opacity: 0.55;
   cursor: not-allowed;
 }
 

@@ -94,7 +94,12 @@ export interface UseClaudeSessionsReturn {
   createSession: (
     repositoryPath: string,
     repositoryName: string,
-    opts?: { skipActivate?: boolean; connectionKind?: ClaudeSessionConnectionKind },
+    opts?: {
+      skipActivate?: boolean;
+      connectionKind?: ClaudeSessionConnectionKind;
+      /** 用户显式「新建会话」：立即切标签，避免 startTransition 延迟导致误以为点击无效 */
+      immediateActivate?: boolean;
+    },
   ) => Promise<string>;
   updateSessionModel: (sessionId: string, model: string) => void;
   /** 切换本标签连接方式；运行中拒绝；会结束长驻子进程以便下一条按新模式拉起。 */

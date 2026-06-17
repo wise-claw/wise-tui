@@ -10,7 +10,7 @@ import type {
   WorkflowTemplateItem,
   SessionConversationTaskItem,
 } from "../../types";
-import { Button, Empty } from "antd";
+import { Button, Empty, message } from "antd";
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   resolveRepositoryForSession,
@@ -350,6 +350,31 @@ export function ClaudeSessionsChatHost({
   const [creatingPrimarySession, setCreatingPrimarySession] = useState(false);
   const creatingPrimarySessionRef = useRef(false);
 
+  const resolveNewSessionRepository = useCallback((): Repository | null => {
+    if (chatContextRepository) return chatContextRepository;
+    if (activeRepository) return activeRepository;
+    if (activeSession && repositories?.length) {
+      return (
+        resolveRepositoryForSession({
+          session: activeSession,
+          repositories,
+          bindings: repositoryMainBindings,
+          sessions,
+          preferredRepositoryId: activeRepositoryId,
+        }) ?? null
+      );
+    }
+    return null;
+  }, [
+    activeRepository,
+    activeRepositoryId,
+    activeSession,
+    chatContextRepository,
+    repositories,
+    repositoryMainBindings,
+    sessions,
+  ]);
+
   const handleCreatePrimarySession = useCallback(() => {
     if (creatingPrimarySessionRef.current) {
       return;
@@ -362,21 +387,30 @@ export function ClaudeSessionsChatHost({
       setCreatingPrimarySession(false);
     };
 
-    if (activeWorkspaceFocus === "project" && activeProject && onNewProjectSession) {
-      void Promise.resolve(onNewProjectSession(activeProject)).finally(finish);
-      return;
-    }
-    if (!activeRepository) {
-      finish();
-      return;
-    }
-    void Promise.resolve(onNewSession(activeRepository)).finally(finish);
+    void (async () => {
+      try {
+        if (activeWorkspaceFocus === "project" && activeProject && onNewProjectSession) {
+          await onNewProjectSession(activeProject);
+          return;
+        }
+        const targetRepository = resolveNewSessionRepository();
+        if (!targetRepository) {
+          message.warning("请先选择工作区或仓库");
+          return;
+        }
+        await onNewSession(targetRepository);
+      } catch (err) {
+        message.error(err instanceof Error ? err.message : "新建会话失败");
+      } finally {
+        finish();
+      }
+    })();
   }, [
     activeProject,
-    activeRepository,
     activeWorkspaceFocus,
     onNewProjectSession,
     onNewSession,
+    resolveNewSessionRepository,
   ]);
 
   const handleCreatePaneSession = useCallback(

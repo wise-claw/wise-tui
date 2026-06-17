@@ -3012,7 +3012,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     async (
       repositoryPath: string,
       repositoryName: string,
-      opts?: { skipActivate?: boolean; connectionKind?: ClaudeSessionConnectionKind },
+      opts?: {
+        skipActivate?: boolean;
+        connectionKind?: ClaudeSessionConnectionKind;
+        immediateActivate?: boolean;
+      },
     ) => {
       const id = generateId();
       const newSession: ClaudeSession = {
@@ -3032,6 +3036,9 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       if (!sessionsRef.current.some((s) => s.id === id)) {
         sessionsRef.current = [...sessionsRef.current, newSession];
       }
+      if (!opts?.skipActivate && opts?.immediateActivate) {
+        setActiveSessionId(id);
+      }
       startTransition(() => {
         setSessions((prev) => {
           if (prev.some((s) => s.id === id)) {
@@ -3039,7 +3046,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           }
           return [...prev, newSession];
         });
-        if (!opts?.skipActivate) {
+        if (!opts?.skipActivate && !opts?.immediateActivate) {
           setActiveSessionId(id);
         }
       });
