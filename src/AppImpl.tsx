@@ -2530,9 +2530,11 @@ export default function App() {
         return;
       }
       const selectionEpoch = ++sidebarSelectionEpochRef.current;
-      flushSync(() => {
-        setActiveRepositoryWithOwner(repository.id);
-      });
+      // 旧实现使用 flushSync 同步提交 active id，会强制重渲染整棵 AppImpl
+      // (LeftSidebar + ChatHost 等)，造成点击瞬间的明显卡顿。
+      // ensureRepositoryMainSession 通过参数拿 repository，不读 active id state，
+      // 因此可以走默认批量更新；viewMode 切换继续走 transition。
+      setActiveRepositoryWithOwner(repository.id);
       if (leavingOverlay) {
         startTransition(() => viewMode.back());
       } else if (!viewMode.isChat) {
@@ -2643,9 +2645,9 @@ export default function App() {
       }
       const project = projects.find((p) => p.id === projectId) ?? null;
       if (!project) {
-        flushSync(() => {
-          setActiveProjectId(projectId);
-        });
+        // Fallback：找不到匹配 project 时，让 React 按默认批量调度即可，
+        // 不需要 flushSync 同步阻塞点击线程。
+        setActiveProjectId(projectId);
         return;
       }
       const leavingOverlay = viewMode.isAuthor || viewMode.isInspect || viewMode.isCockpit;
@@ -2658,10 +2660,12 @@ export default function App() {
         return;
       }
       const selectionEpoch = ++sidebarSelectionEpochRef.current;
-      flushSync(() => {
-        setAuthorTrellisProjectId(null);
-        setActiveProjectId(projectId);
-      });
+      // 旧实现使用 flushSync 同步提交 active id 与 setAuthorTrellisProjectId，
+      // 会强制重渲染整棵 AppImpl (LeftSidebar + ChatHost 等)，造成点击瞬间的明显卡顿。
+      // ensureProjectMainSession 通过参数拿 project，不读 active id state，
+      // 因此可以走默认批量更新；viewMode 切换继续走 transition。
+      setAuthorTrellisProjectId(null);
+      setActiveProjectId(projectId);
       if (leavingOverlay) {
         startTransition(() => viewMode.back());
       }

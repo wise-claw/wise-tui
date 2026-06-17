@@ -415,6 +415,7 @@ pub fn run() {
             git_commands::git_list_branches,
             git_commands::git_checkout_branch,
             git_commands::git_create_branch,
+            git_commands::git_delete_branch,
             git_commands::git_worktree_list,
             git_commands::git_worktree_remove,
             git_commands::git_worktree_add_omc_batch,

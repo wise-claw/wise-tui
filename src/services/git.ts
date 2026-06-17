@@ -224,6 +224,14 @@ export async function gitCreateBranch(
   });
 }
 
+export async function gitDeleteBranch(
+  path: string,
+  branchName: string,
+  force = false,
+): Promise<void> {
+  return invoke<void>("git_delete_branch", { path, branchName, force });
+}
+
 export async function gitWorktreeList(path: string): Promise<GitWorktreeEntry[]> {
   try {
     return await invoke<GitWorktreeEntry[]>("git_worktree_list", { path });

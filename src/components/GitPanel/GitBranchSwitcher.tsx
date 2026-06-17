@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
-import { Button, Checkbox, Empty, Input, Popover, Select, Spin } from "antd";
-import { gitCheckoutBranch, gitCreateBranch, gitListBranches, gitStatus } from "../../services/git";
+import { DeleteOutlined } from "@ant-design/icons";
+import { Button, Checkbox, Empty, Input, Modal, Popconfirm, Popover, Select, Spin, message } from "antd";
+import { gitCheckoutBranch, gitCreateBranch, gitDeleteBranch, gitListBranches, gitStatus } from "../../services/git";
 import type { GitBranchEntry } from "../../types";
 import { readVisiblePollIntervalMs } from "../../utils/adaptivePoll";
 
@@ -46,6 +47,7 @@ export function GitBranchSwitcher({
   };
   const [branchListLoading, setBranchListLoading] = useState(false);
   const [branchActionLoading, setBranchActionLoading] = useState(false);
+  const [branchDeletingName, setBranchDeletingName] = useState<string | null>(null);
   const [branches, setBranches] = useState<GitBranchEntry[]>([]);
 
   useEffect(() => {
@@ -130,6 +132,36 @@ export function GitBranchSwitcher({
       setBranchActionLoading(false);
     }
   }, [loadBranches, onBranchChanged, repositoryPath]);
+
+  const handleDeleteBranch = useCallback(
+    async (name: string, force = false) => {
+      if (!name.trim() || !repositoryPath) return;
+      setBranchDeletingName(name.trim());
+      try {
+        await gitDeleteBranch(repositoryPath, name.trim(), force);
+        await loadBranches();
+        onBranchChanged?.();
+        message.success(`已删除本地分支 ${name.trim()}`);
+      } catch (error) {
+        const errMsg = error instanceof Error ? error.message : String(error);
+        if (!force && /not fully merged|未完全合并|not merged/i.test(errMsg)) {
+          Modal.confirm({
+            title: `强制删除本地分支「${name.trim()}」？`,
+            content: "该分支含未合并提交，强制删除后无法通过此分支访问这些提交。",
+            okText: "强制删除",
+            cancelText: "取消",
+            okButtonProps: { danger: true },
+            onOk: () => handleDeleteBranch(name, true),
+          });
+          return;
+        }
+        message.error(`删除分支失败：${errMsg}`);
+      } finally {
+        setBranchDeletingName(null);
+      }
+    },
+    [loadBranches, onBranchChanged, repositoryPath],
+  );
 
   const stopPopoverPointerBubble = useCallback((event: MouseEvent) => {
     event.stopPropagation();
@@ -257,19 +289,51 @@ export function GitBranchSwitcher({
                   <>
                     <div className="app-claude-branch-popover__section-title">本地分支</div>
                     {localBranches.map((item) => (
-                      <button
+                      <div
                         key={`local-${item.name}`}
-                        type="button"
-                        className={`app-claude-branch-popover__item ${item.isCurrent ? "app-claude-branch-popover__item--active" : ""}`}
-                        onClick={() => void handleCheckoutBranch(item.name)}
-                        disabled={branchActionLoading}
+                        className={`app-claude-branch-popover__item-wrap${item.isCurrent ? " app-claude-branch-popover__item-wrap--active" : ""}`}
                       >
-                        <span className="app-claude-branch-popover__item-name">{item.name}</span>
-                        <span className="app-claude-branch-popover__item-meta">
-                          {item.author ? `${item.author} · ` : ""}
-                          {formatRelativeTime(item.lastCommitTimestamp)}
-                        </span>
-                      </button>
+                        <button
+                          type="button"
+                          className={`app-claude-branch-popover__item ${item.isCurrent ? "app-claude-branch-popover__item--active" : ""}`}
+                          onClick={() => void handleCheckoutBranch(item.name)}
+                          disabled={branchActionLoading || branchDeletingName != null}
+                        >
+                          <span className="app-claude-branch-popover__item-name">{item.name}</span>
+                          <span className="app-claude-branch-popover__item-meta">
+                            {item.author ? `${item.author} · ` : ""}
+                            {formatRelativeTime(item.lastCommitTimestamp)}
+                          </span>
+                        </button>
+                        {!item.isCurrent ? (
+                          <Popconfirm
+                            title={`删除本地分支「${item.name}」？`}
+                            description="已合并分支将安全删除；若含未合并提交需二次确认强制删除。"
+                            okText="删除"
+                            cancelText="取消"
+                            okButtonProps={{ danger: true, size: "small" }}
+                            cancelButtonProps={{ size: "small" }}
+                            onConfirm={() => void handleDeleteBranch(item.name, false)}
+                            onCancel={(event) => event?.stopPropagation()}
+                          >
+                            <Button
+                              type="text"
+                              size="small"
+                              className="app-claude-branch-popover__item-delete"
+                              icon={<DeleteOutlined />}
+                              aria-label={`删除分支 ${item.name}`}
+                              title="删除分支"
+                              loading={branchDeletingName === item.name}
+                              disabled={
+                                branchActionLoading ||
+                                (branchDeletingName != null && branchDeletingName !== item.name)
+                              }
+                              onMouseDown={stopPopoverPointerBubble}
+                              onClick={(event) => event.stopPropagation()}
+                            />
+                          </Popconfirm>
+                        ) : null}
+                      </div>
                     ))}
                   </>
                 )}

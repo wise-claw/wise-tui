@@ -42,8 +42,8 @@
     "runtime": null
   },
   "build": {
-    "buildCommand": "npm run build",
-    "testCommand": "bun test src/utils/claudeChatMessageListRows.test.ts 2>&1 | tail -40",
+    "buildCommand": "bunx tsc --noEmit -p tsconfig.json 2>&1 | head -40",
+    "testCommand": "bun test src/utils/claudeChatMessageListRows.test.ts 2>&1 | tail -20",
     "lintCommand": null,
     "devCommand": "npm run dev",
     "scripts": {
@@ -257,8 +257,8 @@
     },
     {
       "path": "src/AppImpl.tsx",
-      "accessCount": 82,
-      "lastAccessed": 1778630124152,
+      "accessCount": 90,
+      "lastAccessed": 1781689619291,
       "type": "file"
     },
     {

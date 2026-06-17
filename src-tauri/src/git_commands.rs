@@ -1720,6 +1720,28 @@ pub(crate) fn git_create_branch(
     }
 }
 
+#[tauri::command]
+pub(crate) fn git_delete_branch(
+    path: String,
+    branch_name: String,
+    force: Option<bool>,
+) -> Result<(), String> {
+    let repo = open_repo(&path)?;
+    let name = branch_name.trim();
+    if name.is_empty() {
+        return Err("分支名不能为空".to_string());
+    }
+    let head = repo.head().map_err(|e| e.to_string())?;
+    if head.shorthand() == Some(name) {
+        return Err("无法删除当前检出的分支".to_string());
+    }
+    if repo.find_branch(name, BranchType::Local).is_err() {
+        return Err(format!("本地分支不存在: {}", name));
+    }
+    let flag = if force.unwrap_or(false) { "-D" } else { "-d" };
+    run_git_command(&path, &["branch", flag, name], "Delete branch")
+}
+
 fn parse_git_worktree_porcelain(
     stdout: &str,
     repo_path: &str,

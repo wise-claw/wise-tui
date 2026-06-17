@@ -1156,6 +1156,41 @@
   padding: 4px 4px 1px;
 }
 
+.app-claude-branch-popover__item-wrap {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  min-width: 0;
+}
+
+.app-claude-branch-popover__item-wrap .app-claude-branch-popover__item {
+  flex: 1;
+  min-width: 0;
+}
+
+.app-claude-branch-popover__item-delete.ant-btn {
+  flex-shrink: 0;
+  width: 22px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0;
+  color: var(--ant-color-text-quaternary);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.15s ease, color 0.15s ease;
+}
+
+.app-claude-branch-popover__item-wrap:hover .app-claude-branch-popover__item-delete.ant-btn,
+.app-claude-branch-popover__item-wrap:focus-within .app-claude-branch-popover__item-delete.ant-btn {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.app-claude-branch-popover__item-delete.ant-btn:hover {
+  color: var(--ant-color-error) !important;
+  background: color-mix(in srgb, var(--ant-color-error) 10%, transparent) !important;
+}
+
 .app-claude-branch-popover__item {
   border: 1px solid transparent !important;
   background: transparent !important;
