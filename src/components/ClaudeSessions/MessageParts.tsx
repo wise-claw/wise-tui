@@ -702,6 +702,14 @@ function hasExpandableToolBody(
   );
 }
 
+function isCompactEditPreviewPart(part: ToolUsePart): boolean {
+  const editPreview = extractToolFileEditPreview(part);
+  if (!editPreview) return false;
+  const isErrorState = part.status === "error" || Boolean(part.error?.trim());
+  if (isErrorState) return false;
+  return !hasExpandableToolBody(part, getToolDisplayInfo(part), editPreview);
+}
+
 const ToolGroupDisplay = memo(function ToolGroupDisplay({
   parts,
 }: {
@@ -717,6 +725,10 @@ const ToolGroupDisplay = memo(function ToolGroupDisplay({
       parts
         .filter(({ part }) => hasExpandableToolBody(part))
         .map(({ part, originalIndex }) => toolPartStableKey(part, originalIndex)),
+    [parts],
+  );
+  const editCardsOnly = useMemo(
+    () => parts.length > 0 && parts.every(({ part }) => isCompactEditPreviewPart(part)),
     [parts],
   );
   const [expandedMap, setExpandedMap] = useState<Record<string, boolean>>({});
@@ -755,7 +767,9 @@ const ToolGroupDisplay = memo(function ToolGroupDisplay({
   }, [expandableKeys]);
 
   return (
-    <div className={`app-message-parts__tool-group${multiTools ? " app-message-parts__tool-group--multi" : ""}`}>
+    <div
+      className={`app-message-parts__tool-group${multiTools ? " app-message-parts__tool-group--multi" : ""}${editCardsOnly ? " app-message-parts__tool-group--edit-cards-only" : ""}`}
+    >
       {multiTools ? (
         <div className="app-message-parts__tool-group-head">
           <span className="app-message-parts__tool-group-label">

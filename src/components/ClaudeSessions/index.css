@@ -3741,23 +3741,47 @@
 }
 
 .app-claude-message--user .app-claude-message-avatar {
-  background: color-mix(in srgb, var(--ant-color-primary) 82%, var(--ant-color-fill-tertiary));
+  background: var(--ant-color-primary);
   color: #fff;
 }
 
 .app-claude-message--tool-user .app-claude-message-avatar {
-  background: color-mix(in srgb, var(--ant-color-info) 55%, var(--ant-color-fill-tertiary));
-  color: var(--ant-color-text);
+  background: var(--ant-color-info);
+  color: #fff;
 }
 
 .app-claude-message--assistant .app-claude-message-avatar {
-  background: color-mix(in srgb, var(--ant-color-success) 30%, var(--ant-color-fill-tertiary));
-  color: color-mix(in srgb, var(--ant-color-success) 75%, var(--ant-color-text));
+  background: var(--ant-color-success);
+  color: #fff;
+}
+
+/* 助手回复：内容更贴近左侧 C 标识（缩小列间距、首块顶对齐） */
+.app-claude-message--assistant {
+  gap: 4px;
+}
+
+.app-claude-messages .app-claude-message--assistant .app-message-parts > :first-child,
+.app-claude-messages .app-claude-message--assistant .app-claude-message-content > :first-child {
+  margin-top: 0;
+}
+
+.app-claude-messages .app-claude-message--assistant .app-message-parts > .app-message-part--reasoning:first-child {
+  margin-top: 0;
+}
+
+.app-claude-messages .app-claude-message--assistant .app-message-parts__tool-group {
+  padding-left: 0;
+  padding-right: 0;
+}
+
+.app-claude-messages .app-claude-message--assistant .app-message-part-reasoning-shell {
+  padding-left: 4px;
+  padding-right: 4px;
 }
 
 .app-claude-message--system .app-claude-message-avatar {
-  background: color-mix(in srgb, var(--ant-color-warning) 35%, var(--ant-color-fill-tertiary));
-  color: color-mix(in srgb, var(--ant-color-warning) 80%, var(--ant-color-text));
+  background: var(--ant-color-warning);
+  color: #fff;
 }
 
 .app-claude-message-body {
@@ -4693,6 +4717,23 @@
   border: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 62%, transparent);
   background: color-mix(in srgb, var(--ant-color-fill-quaternary) 38%, transparent);
   box-sizing: border-box;
+}
+
+/* 仅展示编辑 diff 卡片时去掉工具链外框，避免「框中框」 */
+.app-claude-messages .app-message-parts__tool-group--edit-cards-only {
+  gap: 6px;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
+}
+
+.app-claude-messages .app-message-parts__tool-group--edit-cards-only .app-message-part--tool + .app-message-part--tool {
+  border-top: none;
+}
+
+.app-claude-messages .app-message-parts__tool-group--edit-cards-only .app-tool-edit-card {
+  margin: 0;
 }
 
 .app-message-parts__tool-group-label {

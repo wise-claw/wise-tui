@@ -84,6 +84,15 @@ export function RepositoryFileEditorPanel({
   );
   const activeLargeFile = activeOptionsBucket !== "small";
   const activeHugeFile = activeOptionsBucket === "huge";
+  const canSaveActiveTab = Boolean(
+    activeTab?.relativePath &&
+      !activeTab.loading &&
+      activeTab.gitDiffSection !== "staged" &&
+      !activeTab.gitCommitSha &&
+      !activeTab.gitCommitCompare &&
+      dirty &&
+      !saving,
+  );
   const [monacoSurfaceReady, setMonacoSurfaceReady] = useState(true);
   const [monacoEditorSurface, setMonacoEditorSurface] = useState<{
     editor: MonacoEditorNamespace.IStandaloneCodeEditor;
@@ -210,6 +219,31 @@ export function RepositoryFileEditorPanel({
   }, [activeTab, activeTab?.relativePath, activeTab?.loading, activeTab?.diffOriginal, activeTab?.focusLine]);
 
   useEffect(() => {
+    function handleSaveShortcut(event: KeyboardEvent) {
+      const mod = event.metaKey || event.ctrlKey;
+      if (!mod || event.shiftKey || event.altKey) {
+        return;
+      }
+      if (event.key !== "s" && event.key !== "S" && event.code !== "KeyS") {
+        return;
+      }
+      const panel = panelRef.current;
+      const target = event.target;
+      if (!panel || !(target instanceof Node) || !panel.contains(target)) {
+        return;
+      }
+      event.preventDefault();
+      event.stopPropagation();
+      if (!canSaveActiveTab) {
+        return;
+      }
+      onSave();
+    }
+    window.addEventListener("keydown", handleSaveShortcut, { capture: true });
+    return () => window.removeEventListener("keydown", handleSaveShortcut, { capture: true });
+  }, [canSaveActiveTab, onSave]);
+
+  useEffect(() => {
     function handleCloseTabShortcut(event: KeyboardEvent) {
       const mod = event.metaKey || event.ctrlKey;
       if (!mod || event.shiftKey || event.altKey) {
@@ -281,7 +315,7 @@ export function RepositoryFileEditorPanel({
               size="small"
               onClick={onSave}
               loading={saving}
-              disabled={!activeTab?.relativePath || activeTab.loading || activeTab.gitDiffSection === "staged" || Boolean(activeTab.gitCommitSha) || Boolean(activeTab.gitCommitCompare) || !dirty}
+              disabled={!canSaveActiveTab}
             >
               保存
             </Button>
