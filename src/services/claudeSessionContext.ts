@@ -11,6 +11,15 @@ export const CONTEXT_WARN_PERCENT = 75;
 /** 发送用户消息前主动 `/compact` 的阈值 */
 export const CONTEXT_AUTO_COMPACT_BEFORE_SEND_PERCENT = 88;
 
+/** 会话空闲时在后台主动 `/compact` 的阈值（早于发送前阈值，减少发送卡顿） */
+export const CONTEXT_BACKGROUND_COMPACT_PERCENT = 72;
+
+/** 后台压缩成功后，发送前可跳过重复 compact 的有效期 */
+export const CONTEXT_BACKGROUND_COMPACT_FRESH_MS = 180_000;
+
+/** 后台压缩失败后重试冷却 */
+export const CONTEXT_BACKGROUND_COMPACT_COOLDOWN_MS = 120_000;
+
 /** 大块 Skill / 工作流斜杠命令：单轮注入上下文多，提前压缩 */
 export const CONTEXT_AUTO_COMPACT_HEAVY_SKILL_PERCENT = 72;
 
@@ -54,6 +63,10 @@ export function contextPercentToneClassName(tone: ContextPercentTone): string {
 }
 
 export interface AutoCompactBeforeSendPlan extends SessionContextMetrics {
+  needed: boolean;
+}
+
+export interface BackgroundAutoCompactPlan extends SessionContextMetrics {
   needed: boolean;
 }
 
@@ -211,11 +224,14 @@ export function looksLikeContextOverflowError(message: string): boolean {
 /**
  * 是否应在发送本轮用户消息前先跑一轮 `/compact`。
  * 需要已有 Claude `session_id`（磁盘 jsonl 可 resume）；新会话无历史可压。
+ * 若近期已在后台压缩且占用仍低于发送阈值，则跳过以免重复阻塞。
  */
 export function planAutoCompactBeforeSend(
   session: ClaudeSession,
   outgoingPrompt: string,
   metricsOverride?: SessionContextMetrics,
+  recentBackgroundCompactAtMs?: number | null,
+  nowMs: number = Date.now(),
 ): AutoCompactBeforeSendPlan {
   const metrics = metricsOverride ?? getSessionContextMetrics(session);
   if (isCompactSlashPrompt(outgoingPrompt)) {
@@ -226,16 +242,46 @@ export function planAutoCompactBeforeSend(
     return { ...metrics, needed: false };
   }
   const threshold = resolveAutoCompactThresholdPercent(outgoingPrompt);
+  if (
+    recentBackgroundCompactAtMs != null &&
+    nowMs - recentBackgroundCompactAtMs <= CONTEXT_BACKGROUND_COMPACT_FRESH_MS &&
+    metrics.ctxPercent < threshold
+  ) {
+    return { ...metrics, needed: false };
+  }
   return {
     ...metrics,
     needed: metrics.ctxPercent >= threshold,
   };
 }
 
+/** 会话空闲且上下文偏高时，是否应在后台静默 `/compact`。 */
+export function planBackgroundAutoCompact(
+  session: ClaudeSession,
+  metricsOverride?: SessionContextMetrics,
+): BackgroundAutoCompactPlan {
+  const metrics = metricsOverride ?? getSessionContextMetrics(session);
+  const claudeSid = session.claudeSessionId?.trim();
+  if (!claudeSid) {
+    return { ...metrics, needed: false };
+  }
+  if (session.status === "running" || session.status === "connecting") {
+    return { ...metrics, needed: false };
+  }
+  return {
+    ...metrics,
+    needed: metrics.ctxPercent >= CONTEXT_BACKGROUND_COMPACT_PERCENT,
+  };
+}
+
 export function formatContextStatusHint(
   metrics: SessionContextMetrics,
   outgoingPrompt?: string,
+  backgroundCompactInFlight?: boolean,
 ): string {
+  if (backgroundCompactInFlight) {
+    return "正在后台整理上下文";
+  }
   const threshold = outgoingPrompt
     ? resolveAutoCompactThresholdPercent(outgoingPrompt)
     : CONTEXT_AUTO_COMPACT_BEFORE_SEND_PERCENT;
@@ -244,6 +290,9 @@ export function formatContextStatusHint(
       return "大块 Skill 发送前将自动压缩历史";
     }
     return "发送前将自动压缩历史";
+  }
+  if (metrics.ctxPercent >= CONTEXT_BACKGROUND_COMPACT_PERCENT) {
+    return "空闲时将后台整理上下文";
   }
   if (metrics.ctxPercent >= CONTEXT_WARN_PERCENT) {
     return "上下文偏高，可用 /compact";

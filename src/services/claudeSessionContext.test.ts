@@ -4,6 +4,8 @@ import {
   CLAUDE_COMPACT_SLASH_PROMPT,
   CONTEXT_AUTO_COMPACT_BEFORE_SEND_PERCENT,
   CONTEXT_AUTO_COMPACT_HEAVY_SKILL_PERCENT,
+  CONTEXT_BACKGROUND_COMPACT_PERCENT,
+  CONTEXT_BACKGROUND_COMPACT_FRESH_MS,
   CONTEXT_SATURATED_TAIL_MIN_PERCENT,
   DEFAULT_MAX_CONTEXT_TOKENS,
   estimateContextPercent,
@@ -15,6 +17,7 @@ import {
   isHeavyContextSlashPrompt,
   looksLikeContextOverflowError,
   planAutoCompactBeforeSend,
+  planBackgroundAutoCompact,
   resolveSessionContextMetricsForSend,
   shouldLoadDiskForContextEstimate,
 } from "./claudeSessionContext";
@@ -91,6 +94,47 @@ describe("claudeSessionContext", () => {
     };
     expect(planAutoCompactBeforeSend(emptyTab, "继续任务", metrics).needed).toBe(true);
     expect(planAutoCompactBeforeSend(emptyTab, "继续任务").needed).toBe(false);
+  });
+
+  test("planAutoCompactBeforeSend skips when recent background compact lowered usage", () => {
+    const tab = session([], "sid-1");
+    const metrics = {
+      estimatedTokens: Math.round(DEFAULT_MAX_CONTEXT_TOKENS * 0.82),
+      ctxPercent: 82,
+    };
+    const recentAt = Date.now() - 60_000;
+    expect(planAutoCompactBeforeSend(tab, "hello", metrics, recentAt).needed).toBe(false);
+    expect(planAutoCompactBeforeSend(tab, "hello", metrics, null).needed).toBe(false);
+    expect(
+      planAutoCompactBeforeSend(tab, "hello", {
+        estimatedTokens: Math.round(DEFAULT_MAX_CONTEXT_TOKENS * 0.92),
+        ctxPercent: 92,
+      }, recentAt).needed,
+    ).toBe(true);
+  });
+
+  test("planBackgroundAutoCompact only runs for idle sessions with disk id", () => {
+    const huge = "x".repeat(DEFAULT_MAX_CONTEXT_TOKENS * 3);
+    const busy = session(
+      [{ id: 1, role: "user", content: huge, parts: [{ type: "text", text: huge }], timestamp: 1 }],
+      "sid-1",
+    );
+    busy.status = "running";
+    expect(planBackgroundAutoCompact(busy).needed).toBe(false);
+
+    const idle = { ...busy, status: "idle" as const };
+    expect(planBackgroundAutoCompact(idle).needed).toBe(true);
+    expect(planBackgroundAutoCompact(session([], null)).needed).toBe(false);
+  });
+
+  test("formatContextStatusHint mentions background compact before send threshold", () => {
+    const metrics = {
+      estimatedTokens: Math.round(DEFAULT_MAX_CONTEXT_TOKENS * 0.74),
+      ctxPercent: 74,
+    };
+    expect(formatContextStatusHint(metrics)).toContain("后台");
+    expect(formatContextStatusHint(metrics, undefined, true)).toContain("正在后台整理");
+    expect(metrics.ctxPercent).toBeGreaterThanOrEqual(CONTEXT_BACKGROUND_COMPACT_PERCENT);
   });
 
   test("resolveSessionContextMetricsForSend reads jsonl when messages empty", async () => {

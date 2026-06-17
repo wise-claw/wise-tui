@@ -11,6 +11,8 @@ export interface ContextCompactProgressRingProps {
   toneClassName: string;
   /** 与底栏状态行 `ctx:…` 片段一致，用于详情面板摘要 */
   ctxStatusLine?: string;
+  /** 后台 /compact 维护中：圆环轻 pulse，不阻断输入 */
+  maintaining?: boolean;
   className?: string;
   "data-ui-anchor"?: string;
   breakdown?: ContextBreakdownSnapshot | null;
@@ -27,6 +29,7 @@ export function ContextCompactProgressRing({
   "data-ui-anchor": dataUiAnchor,
   breakdown,
   breakdownLoading = false,
+  maintaining = false,
   onBreakdownOpen,
 }: ContextCompactProgressRingProps) {
   const [open, setOpen] = useState(false);
@@ -70,6 +73,7 @@ export function ContextCompactProgressRing({
         className={[
           "app-claude-context-compact-ring",
           toneClassName,
+          maintaining ? "app-claude-context-compact-ring--maintaining" : "",
           className,
         ]
           .filter(Boolean)

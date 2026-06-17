@@ -135,6 +135,7 @@ import {
 } from "../../utils/claudeCodeTaskListDisplay";
 import { WISE_CLAUDE_USER_SETTINGS_CHANGED } from "../../services/claudeModelProfiles";
 import { getCachedModelProfileStore } from "../../stores/modelProfileStoreCache";
+import { useBackgroundContextCompactInFlight } from "../../stores/backgroundContextCompactStore";
 import type { ModelProfileEngine } from "../../types/claudeModelProfile";
 import { resolveActiveModelProfileComposerBarLabel } from "../../utils/modelProfileDisplay";
 import { promptToLogicalPlainString } from "../../utils/serializeClaudePrompt";
@@ -936,7 +937,9 @@ function ComposerInner({
   );
 
   /** 主会话占用中：后续发送应入队，避免 Semi「生成中」拦截或重复 spawn */
-  const isSessionBusy = session.status === "running" || session.status === "connecting";
+  const backgroundContextCompactInFlight = useBackgroundContextCompactInFlight(session.id);
+  const isSessionEngineActive = session.status === "running" || session.status === "connecting";
+  const isSessionBusy = isSessionEngineActive && !backgroundContextCompactInFlight;
   const isSessionBusyRef = useRef(isSessionBusy);
   isSessionBusyRef.current = isSessionBusy;
   const onCancelRef = useRef(_onCancel);
@@ -1143,8 +1146,14 @@ function ComposerInner({
     const sessionDuration = formatSessionDuration(session.createdAt);
     const metrics = getSessionContextMetrics(session);
     const outgoing = displayPlain.trim();
-    const ctxHint = formatContextStatusHint(metrics, outgoing || undefined);
-    const statusText = mapSessionStatus(session.status);
+    const ctxHint = formatContextStatusHint(
+      metrics,
+      outgoing || undefined,
+      backgroundContextCompactInFlight,
+    );
+    const statusText = backgroundContextCompactInFlight
+      ? "后台整理"
+      : mapSessionStatus(session.status);
     const ctxSegment = ctxHint
       ? `ctx:${metrics.ctxPercent}% (~${metrics.estimatedTokens.toLocaleString("zh-CN")} tokens, ${ctxHint})`
       : `ctx:${metrics.ctxPercent}% (~${metrics.estimatedTokens.toLocaleString("zh-CN")} tokens)`;
@@ -1157,7 +1166,7 @@ function ComposerInner({
       statusText,
       fullLine,
     };
-  }, [displayPlain, session]);
+  }, [backgroundContextCompactInFlight, displayPlain, session]);
   const todoBatchStartedAt = useMemo(
     () => resolveTodoBatchStartedAt(session.messages, session.createdAt),
     [session.messages, session.createdAt],
@@ -2579,6 +2588,7 @@ function ComposerInner({
           ctxStatusLine={bottomStatus.ctxSegment}
           breakdown={breakdown}
           breakdownLoading={contextBreakdownLoading}
+          maintaining={backgroundContextCompactInFlight}
           onBreakdownOpen={() => void ensureBreakdown()}
         />
       </div>
@@ -2588,6 +2598,7 @@ function ComposerInner({
     bottomStatus.ctxSegment,
     bottomStatus.ctxToneClass,
     breakdown,
+    backgroundContextCompactInFlight,
     contextBreakdownLoading,
     dualPaneRepositoryPicker,
     ensureBreakdown,

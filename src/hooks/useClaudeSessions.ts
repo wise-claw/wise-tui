@@ -162,7 +162,7 @@ import {
   extractSystemErrorMessageFromStreamLine,
   parseStreamLineSessionId,
 } from "../services/claudeStreamParser";
-import { getAppSetting, setAppSetting } from "../services/appSettingsStore";
+import { setBackgroundContextCompactInFlight } from "../stores/backgroundContextCompactStore";
 import { stopClaudeMainSession } from "../services/stopClaudeMainSession";
 import { publishRunningClaudeSessionIds } from "../stores/claudeRunningSessionsRegistryStore";
 import { getSystemResourceSnapshot } from "../services/systemResource";
@@ -171,9 +171,11 @@ import {
   buildContextOverflowFailureHint,
   buildContextOverflowRetrySystemMessage,
   CLAUDE_COMPACT_SLASH_PROMPT,
+  CONTEXT_BACKGROUND_COMPACT_COOLDOWN_MS,
   isCompactSlashPrompt,
   looksLikeContextOverflowError,
   planAutoCompactBeforeSend,
+  planBackgroundAutoCompact,
   resolveSessionContextMetricsForSend,
 } from "../services/claudeSessionContext";
 import {
@@ -374,6 +376,15 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   const contextOverflowCompactRetriedNonceRef = useRef<Map<string, number>>(new Map());
   /** `/compact` 中间回合成功时勿清空 pendingTurnFailoverRef（用户正文尚未重发）。 */
   const compactTurnInFlightRef = useRef<{ tabId: string; nonce: number } | null>(null);
+  interface BackgroundCompactState {
+    inFlight?: Promise<void>;
+    lastAttemptAtMs?: number;
+    lastSuccessAtMs?: number;
+  }
+  const backgroundCompactStateRef = useRef<Map<string, BackgroundCompactState>>(new Map());
+  const scheduleBackgroundContextCompactRef = useRef<
+    (sessionId: string, opts?: { delayMs?: number }) => void
+  >(() => {});
   const attemptTurnFailoverAndRetryRef = useRef<
     (ctx: PendingTurnFailoverContext, errorPreview: string) => Promise<boolean>
   >(async () => false);
@@ -1514,6 +1525,126 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     [setSessions],
   );
 
+  const maybeRunBackgroundContextCompact = useCallback(
+    async (sessionId: string): Promise<void> => {
+      const session = sessionsRef.current.find((s) => s.id === sessionId);
+      if (!session) return;
+
+      const engineResolver = claudeSessionsOptionsRef.current?.resolveExecutionEngineRef?.current;
+      if (engineResolver?.(session) !== "claude") return;
+
+      if (session.status === "running" || session.status === "connecting") return;
+
+      const claudeSessionId =
+        session.claudeSessionId?.trim() ?? sessionIdMapRef.current.get(sessionId)?.trim();
+      if (!claudeSessionId) return;
+
+      if (compactTurnInFlightRef.current?.tabId === sessionId) return;
+
+      const stateMap = backgroundCompactStateRef.current;
+      const prevState = stateMap.get(sessionId);
+      if (prevState?.inFlight) {
+        await prevState.inFlight.catch(() => undefined);
+        return;
+      }
+
+      const now = Date.now();
+      if (
+        prevState?.lastAttemptAtMs != null &&
+        now - prevState.lastAttemptAtMs < CONTEXT_BACKGROUND_COMPACT_COOLDOWN_MS
+      ) {
+        return;
+      }
+
+      let metrics;
+      try {
+        metrics = await resolveSessionContextMetricsForSend(session, loadClaudeSessionJsonl);
+      } catch {
+        return;
+      }
+
+      const plan = planBackgroundAutoCompact(session, metrics);
+      if (!plan.needed) return;
+
+      const run = async (): Promise<void> => {
+        setBackgroundContextCompactInFlight(sessionId, true);
+        const turnNonce = ++streamTurnSeqRef.current;
+        lastUserSendNonceRef.current = turnNonce;
+        expectedTurnNonceByTabIdRef.current.set(sessionId, turnNonce);
+        markClaudeRegistryBootstrapWarmup(registryBootstrapDeadlineByClaudeSidRef, claudeSessionId);
+        streamingTargetIdRef.current = sessionId;
+        compactTurnInFlightRef.current = { tabId: sessionId, nonce: turnNonce };
+
+        const invokeConc =
+          claudeSessionsOptionsRef.current?.claudeConcurrencyInvokeContextRef?.current?.(session) ??
+          null;
+        const modelArg = session.model.trim().length > 0 ? session.model : undefined;
+
+        try {
+          await invokeClaudeTurn({
+            tabSessionId: sessionId,
+            turnNonce,
+            invokeConc,
+            repositoryPath: session.repositoryPath,
+            prompt: CLAUDE_COMPACT_SLASH_PROMPT,
+            modelArg,
+            resumeClaudeSid: claudeSessionId,
+          });
+          const result = await turnCompleteWaiterRef.current.wait(sessionId, turnNonce);
+          if (result.success) {
+            await reloadTranscriptFromDisk({
+              tabId: sessionId,
+              repositoryPath: session.repositoryPath,
+              claudeSessionId,
+            });
+            const current = stateMap.get(sessionId) ?? {};
+            current.lastSuccessAtMs = Date.now();
+            stateMap.set(sessionId, current);
+          }
+        } catch {
+          /* 后台压缩失败时不打扰用户；发送前仍会兜底 */
+        } finally {
+          setBackgroundContextCompactInFlight(sessionId, false);
+          if (compactTurnInFlightRef.current?.tabId === sessionId) {
+            compactTurnInFlightRef.current = null;
+          }
+        }
+      };
+
+      const state: BackgroundCompactState = {
+        ...(prevState ?? {}),
+        lastAttemptAtMs: now,
+        inFlight: run(),
+      };
+      stateMap.set(sessionId, state);
+      try {
+        await state.inFlight;
+      } finally {
+        const current = stateMap.get(sessionId);
+        if (current?.inFlight === state.inFlight) {
+          stateMap.set(sessionId, {
+            lastAttemptAtMs: current.lastAttemptAtMs,
+            lastSuccessAtMs: current.lastSuccessAtMs,
+          });
+        }
+      }
+    },
+    [commitSessions, invokeClaudeTurn, reloadTranscriptFromDisk],
+  );
+
+  const scheduleBackgroundContextCompact = useCallback(
+    (sessionId: string, opts?: { delayMs?: number }) => {
+      runWhenIdle(() => {
+        void maybeRunBackgroundContextCompact(sessionId);
+      }, { timeoutMs: opts?.delayMs ?? 400 });
+    },
+    [maybeRunBackgroundContextCompact],
+  );
+
+  useEffect(() => {
+    scheduleBackgroundContextCompactRef.current = scheduleBackgroundContextCompact;
+  }, [scheduleBackgroundContextCompact]);
+
   const attemptTurnFailoverAndRetry = useCallback(
     async (ctx: PendingTurnFailoverContext, _errorPreview: string): Promise<boolean> => {
       if (!ctx.autoFailoverEnabled) {
@@ -1782,8 +1913,19 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       const turnNonce = invokeRest.turnNonce;
       const waitTurnComplete = () => turnCompleteWaiterRef.current.wait(tabSessionId, turnNonce);
 
+      const bgState = backgroundCompactStateRef.current.get(tabSessionId);
+      if (bgState?.inFlight) {
+        await bgState.inFlight.catch(() => undefined);
+      }
+
       const metrics = await resolveSessionContextMetricsForSend(session, loadClaudeSessionJsonl);
-      const pre = planAutoCompactBeforeSend(session, prompt, metrics);
+      const refreshedBgState = backgroundCompactStateRef.current.get(tabSessionId);
+      const pre = planAutoCompactBeforeSend(
+        session,
+        prompt,
+        metrics,
+        refreshedBgState?.lastSuccessAtMs ?? null,
+      );
       if (pre.needed) {
         await runCompactTurnAndWait({
           tabSessionId,
@@ -2236,7 +2378,9 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         if (ctx && ctx.tabSessionId === tabSessionId && ctx.turnNonce === nonce) {
           if (success) {
             const compactFlight = compactTurnInFlightRef.current;
-            if (compactFlight?.tabId === tabSessionId && compactFlight.nonce === nonce) {
+            const wasCompactTurn =
+              compactFlight?.tabId === tabSessionId && compactFlight.nonce === nonce;
+            if (wasCompactTurn) {
               compactTurnInFlightRef.current = null;
             } else {
               pendingTurnFailoverRef.current = null;
@@ -2296,6 +2440,16 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
             return;
           } else if (!success) {
             pendingTurnFailoverRef.current = null;
+          }
+        }
+        if (success && nonce > 0) {
+          const compactFlight = compactTurnInFlightRef.current;
+          const wasCompactTurn =
+            compactFlight?.tabId === tabSessionId && compactFlight.nonce === nonce;
+          if (!wasCompactTurn) {
+            queueMicrotask(() =>
+              scheduleBackgroundContextCompactRef.current(tabSessionId, { delayMs: 2000 }),
+            );
           }
         }
         // 勿在单轮 complete 时清空 Dock：子进程若先于 UI 帧结束，会擦掉刚写入的 AskUserQuestion，导致弹窗永远不出现。
@@ -2512,13 +2666,17 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     const cancelIdle = runWhenIdle(() => {
       if (cancelled) return;
       requestDiskTranscriptHydration(activeSessionId);
+      runWhenIdle(() => {
+        if (cancelled) return;
+        scheduleBackgroundContextCompact(activeSessionId, { delayMs: 1200 });
+      }, { timeoutMs: 900 });
     }, { timeoutMs: 0 });
 
     return () => {
       cancelled = true;
       cancelIdle();
     };
-  }, [activeSessionId, sessionsStructureKey, requestDiskTranscriptHydration]);
+  }, [activeSessionId, sessionsStructureKey, requestDiskTranscriptHydration, scheduleBackgroundContextCompact]);
 
   /** 窗口重新可见时，为仍为空且未成功补全的当前标签重试磁盘加载。 */
   useEffect(() => {
