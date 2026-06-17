@@ -946,9 +946,9 @@
   flex: 0 0 auto;
 }
 
-.app-monitor-panel__item--terminal-row:hover,
-.app-monitor-panel__item-row-hit:hover {
-  background: var(--ant-color-fill-secondary);
+/* 行级 hover 已由 .app-monitor-panel__item:hover 承接；内层 hit 按钮勿再叠背景 */
+.app-monitor-panel__item .app-monitor-panel__item-row-hit:hover {
+  background: transparent;
 }
 
 .app-monitor-panel__item--terminal-row:hover {
