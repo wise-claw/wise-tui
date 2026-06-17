@@ -41,4 +41,15 @@ describe("areLeftSidebarPropsEqual", () => {
     const next = baseProps({ sessionsStructureKey: "n:1" });
     expect(areLeftSidebarPropsEqual(prev, next)).toBe(false);
   });
+
+  test("ignores active session changes when monitor is hidden and repository selection is stable", () => {
+    const shared = baseProps({
+      activeRepositoryId: 7,
+      activeWorkspaceFocus: "repository",
+      showLeftSidebarMonitorPanel: false,
+    });
+    const prev = { ...shared, activeSessionId: "session-a" };
+    const next = { ...shared, activeSessionId: "session-b" };
+    expect(areLeftSidebarPropsEqual(prev, next)).toBe(true);
+  });
 });

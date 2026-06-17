@@ -19,6 +19,7 @@ import {
   startGitWatcher,
   stopGitWatcher,
 } from "../../services/git";
+import { consumeWarmGitStatus } from "../../services/gitStatusWarmCache";
 import { openRepositoryRemoteInBrowser } from "../../services/openRepositoryRemote";
 import type { GitStatusResponse } from "../../types";
 import { runGitSyncAction, type GitSyncActionKind } from "./gitSyncActionRunner";
@@ -168,7 +169,8 @@ function GitSingleRepoPanel({
         setLoading((prev) => ({ ...prev, status: true }));
       }
       try {
-        const result = await gitStatus(repositoryPath);
+        const warm = consumeWarmGitStatus(repositoryPath);
+        const result = warm ? await warm : await gitStatus(repositoryPath);
         const apply = () => {
           if (gitStatusSnapshotEqual(statusRef.current, result)) {
             return;

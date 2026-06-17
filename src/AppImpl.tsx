@@ -67,6 +67,7 @@ import { useClaudeSessions, type ClaudeTurnCompletePayload } from "./hooks/useCl
 import { useRepositoryList } from "./hooks/useRepositoryList";
 import { openRepositoryRemoteInBrowser } from "./services/openRepositoryRemote";
 import { openInFinder } from "./services/repository";
+import { prefetchGitStatus } from "./services/gitStatusWarmCache";
 import { tryOpenWorkspaceInDefaultTerminal } from "./services/openWorkspaceWithTerminalPreference";
 import type { CommandPaletteSearchMode } from "./components/CommandPalette";
 import { LazyAppWorkspaceLayout } from "./components/AppWorkspaceLayout.lazy";
@@ -273,6 +274,15 @@ function normalizePersistedExtraPanes(raw: unknown, paneCount: PaneCount): PaneS
     });
   }
   return out;
+}
+
+/** 侧栏选中后推迟主会话切换，让工作区/仓库高亮与 Git 面板先绘制。 */
+function scheduleSidebarMainSessionEnsure(work: () => Promise<string | null>): void {
+  queueMicrotask(() => {
+    startTransition(() => {
+      void work();
+    });
+  });
 }
 
 // ── App ──
@@ -2534,6 +2544,7 @@ export default function App() {
       if (!repository) {
         return;
       }
+      prefetchGitStatus(repository.path);
       const leavingOverlay = viewMode.isCockpit || viewMode.isAuthor || viewMode.isInspect;
       // 选工作区时会把 activeRepositoryId 设为首个成员仓且 focus=project；点同一仓仍需切到 repository 焦点。
       if (
@@ -2553,12 +2564,14 @@ export default function App() {
       if (leavingOverlay) {
         startTransition(() => viewMode.back());
       } else if (!viewMode.isChat) {
-        startTransition(() => viewMode.enter({ kind: "chat" }));
+        startTransition(() => {
+          viewMode.enter({ kind: "chat" });
+        });
       }
       if (sidebarSelectionEpochRef.current !== selectionEpoch) {
         return;
       }
-      void ensureRepositoryMainSession(repository);
+      scheduleSidebarMainSessionEnsure(() => ensureRepositoryMainSession(repository));
     },
     [
       activeRepositoryId,
@@ -2683,14 +2696,15 @@ export default function App() {
       setActiveProjectId(projectId);
       if (leavingOverlay) {
         startTransition(() => viewMode.back());
+      } else if (!viewMode.isChat) {
+        startTransition(() => {
+          viewMode.enter({ kind: "chat" });
+        });
       }
-      startTransition(() => {
-        viewMode.enter({ kind: "chat" });
-      });
       if (sidebarSelectionEpochRef.current !== selectionEpoch) {
         return;
       }
-      void ensureProjectMainSession(project);
+      scheduleSidebarMainSessionEnsure(() => ensureProjectMainSession(project));
     },
     [
       activeProjectId,

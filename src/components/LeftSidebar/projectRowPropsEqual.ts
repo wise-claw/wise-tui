@@ -11,7 +11,8 @@ export type ProjectRowEqualProps = {
   project: Workspace;
   projectRepos: Repository[];
   isActiveProject: boolean;
-  activeRepositoryId: number | null;
+  /** 仅当全局选中仓属于本工作区时有值；避免跨仓切换时重渲染无关工作区行。 */
+  activeRepositoryIdInProject: number | null;
   activeWorkspaceFocus: WorkspaceFocus;
   isPinned: boolean;
   expanded: boolean;
@@ -97,7 +98,7 @@ export function projectRowPropsEqual(
     return false;
   }
   if (prev.isActiveProject !== next.isActiveProject) return false;
-  if (prev.activeRepositoryId !== next.activeRepositoryId) return false;
+  if (prev.activeRepositoryIdInProject !== next.activeRepositoryIdInProject) return false;
   if (prev.activeWorkspaceFocus !== next.activeWorkspaceFocus) return false;
   if (prev.isPinned !== next.isPinned) return false;
   if (prev.expanded !== next.expanded) return false;

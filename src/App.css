@@ -3364,11 +3364,10 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   background: var(--ant-color-primary-bg);
 }
 
-/* 当前项目：VS Code扁平高亮与左侧边条 */
+/* 当前项目：与侧栏 hover 同系、略深的 neutral 高亮 */
 .app-repository-item--project.app-repository-item--project-active {
-  background: color-mix(in srgb, var(--ant-color-primary) 10%, var(--ant-color-fill-secondary)) !important;
+  background: color-mix(in srgb, var(--ant-color-text) 8%, transparent) !important;
   border-color: transparent !important;
-  border-left-color: var(--ant-color-primary) !important;
   box-shadow: none !important;
   border-radius: 0 !important;
 }
@@ -3379,20 +3378,19 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 }
 
 .app-repository-item--project.app-repository-item--project-active:hover {
-  background: color-mix(in srgb, var(--ant-color-primary) 14%, var(--ant-color-fill-secondary)) !important;
+  background: color-mix(in srgb, var(--ant-color-text) 11%, transparent) !important;
 }
 
-/* 当前仓库：VS Code扁平高亮与左侧边条 */
+/* 当前仓库：与侧栏 hover 同系、略深的 neutral 高亮 */
 .app-repository-item--repo.app-repository-item--repo-active {
-  background: color-mix(in srgb, var(--ant-color-primary) 12%, var(--ant-color-fill-secondary)) !important;
+  background: color-mix(in srgb, var(--ant-color-text) 9%, transparent) !important;
   border-color: transparent !important;
-  border-left-color: var(--ant-color-primary) !important;
   box-shadow: none !important;
   border-radius: 0 !important;
 }
 
 .app-repository-item--repo.app-repository-item--repo-active:hover {
-  background: color-mix(in srgb, var(--ant-color-primary) 16%, var(--ant-color-fill-secondary)) !important;
+  background: color-mix(in srgb, var(--ant-color-text) 12%, transparent) !important;
 }
 
 .app-repository-item--repo.app-repository-item--repo-active .app-repository-name {
@@ -3408,11 +3406,10 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 /* 子仓库选中时弱化父项目行，避免两层灰块抢视觉 */
 .app-repository-row:has(.app-repository-item--repo-active) .app-repository-item--project.app-repository-item--project-active {
   background: transparent !important;
-  border-left-color: transparent !important;
 }
 
 .app-repository-row:has(.app-repository-item--repo-active) .app-repository-item--project.app-repository-item--project-active:hover {
-  background: var(--ant-color-fill-tertiary) !important;
+  background: color-mix(in srgb, var(--ant-color-text) 6%, transparent) !important;
 }
 
 .app-repository-row:has(.app-repository-item--repo-active) .app-repository-item--project.app-repository-item--project-active .app-repository-name {

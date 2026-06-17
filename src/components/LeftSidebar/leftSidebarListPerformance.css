@@ -18,6 +18,12 @@
   contain-intrinsic-size: auto 28px;
 }
 
+/* 展开的工作区行含子仓库列表，避免 content-visibility 延迟子项绘制 */
+.app-left-sidebar .app-repository-row:has(.app-repository-sessions) {
+  content-visibility: visible;
+  contain-intrinsic-size: auto;
+}
+
 /* 文件树滚动时 avoid contain：与大量行叠加大面积重排 */
 .app-left-sidebar .repo-tree-node {
   contain: none;

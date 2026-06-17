@@ -40,10 +40,19 @@ import {
 } from "./repositoryRows";
 import { RunningMainSessionDot } from "./RunningMainSessionDot";
 import { projectRowPropsEqual } from "./projectRowPropsEqual";
+import { projectRepositoryListPropsEqual } from "./projectRepositoryListPropsEqual";
 
 const EMPTY_PROJECT_REPOS: Repository[] = [];
 
-interface ProjectRepositoryListProps {
+function resolveActiveRepositoryIdInProject(
+  project: Workspace,
+  activeRepositoryId: number | null,
+): number | null {
+  if (activeRepositoryId == null) return null;
+  return project.repositoryIds.includes(activeRepositoryId) ? activeRepositoryId : null;
+}
+
+export interface ProjectRepositoryListProps {
   projects: Workspace[];
   repositoriesById: Map<number, Repository>;
   floatingRepositories: StandaloneRepo[];
@@ -126,7 +135,7 @@ interface ProjectRepositoryListProps {
   onSectionCollapsedChange?: (collapsed: boolean) => void;
 }
 
-export function ProjectRepositoryList({
+function ProjectRepositoryListInner({
   projects,
   repositoriesById,
   floatingRepositories,
@@ -368,6 +377,10 @@ export function ProjectRepositoryList({
             projectRepos={projectReposByProjectId.get(project.id) ?? EMPTY_PROJECT_REPOS}
             isActiveProject={project.id === activeProjectId && activeWorkspaceFocus === "project"}
             activeRepositoryId={activeRepositoryId}
+            activeRepositoryIdInProject={resolveActiveRepositoryIdInProject(
+              project,
+              activeRepositoryId,
+            )}
             showRepositoryIconBadgesInWorkspaceList={showRepositoryIconBadgesInWorkspaceList}
             activeWorkspaceFocus={activeWorkspaceFocus}
             isPinned={pinnedProjectIds.includes(project.id)}
@@ -455,6 +468,7 @@ interface ProjectRowProps {
   projectRepos: Repository[];
   isActiveProject: boolean;
   activeRepositoryId: number | null;
+  activeRepositoryIdInProject: number | null;
   showRepositoryIconBadgesInWorkspaceList?: boolean;
   activeWorkspaceFocus: WorkspaceFocus;
   isPinned: boolean;
@@ -862,3 +876,8 @@ function ProjectRow({
 }
 
 const MemoProjectRow = memo(ProjectRow, projectRowPropsEqual);
+
+export const ProjectRepositoryList = memo(
+  ProjectRepositoryListInner,
+  projectRepositoryListPropsEqual,
+);

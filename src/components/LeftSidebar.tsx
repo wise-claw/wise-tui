@@ -1,5 +1,4 @@
 import { App as AntdApp, Layout, Spin } from "antd";
-import { HoverHint } from "./shared/HoverHint";
 import {
   lazy,
   Suspense,
@@ -24,9 +23,9 @@ import { resolveRepositoryForSession } from "../utils/repositoryMainSessionBindi
 import { isMultiRepoProject, shouldRevealWorkspaceListOnRestore } from "../utils/workspaceMode";
 import {
   resolveClaudeProjectSkillsScopePath,
-  resolveScheduledTasksRepository,
 } from "../utils/workspaceSelectionState";
 import { runWhenIdle } from "../utils/deferIdle";
+import { prefetchGitStatus } from "../services/gitStatusWarmCache";
 import {
   WISE_EXPLORER_FOCUS_REQUESTED,
   type ExplorerFocusRequestedDetail,
@@ -55,10 +54,6 @@ import { TaskCardsNav } from "./TaskCardsNav";
 import { ActiveRepositoryFilesPanel } from "./LeftSidebar/ActiveRepositoryFilesPanel";
 import { LeftSidebarTopbar } from "./LeftSidebar/LeftSidebarTopbar";
 import { LeftSidebarHubQuickEntries } from "./LeftSidebar/LeftSidebarHubQuickEntries";
-import { ProjectRepositoryList } from "./LeftSidebar/ProjectRepositoryList";
-import { SidebarWorkspaceTodoAddModal } from "./LeftSidebar/SidebarWorkspaceTodoAddModal";
-import { SidebarGlobalWorkspaceTodoAddModal } from "./LeftSidebar/SidebarGlobalWorkspaceTodoAddModal";
-import { GitPanelWorkspaceSelector } from "./GitPanel/GitPanelWorkspaceSelector";
 import type { GitPanelOpenFileOptions } from "./GitPanel/types";
 import {
   readLeftFilesExplorerCollapsedFromStorage,
@@ -76,29 +71,27 @@ import { RepositoryAssociateModal } from "./LeftSidebar/RepositoryAssociateModal
 import { RepositorySddModeModal } from "./LeftSidebar/RepositorySddModeModal";
 import { RepositoryIconBadgeModal } from "./LeftSidebar/RepositoryIconBadgeModal";
 import { WorkspaceSddModeModal } from "./LeftSidebar/WorkspaceSddModeModal";
-import { LeftSidebarBottomTabPanes } from "./LeftSidebar/LeftSidebarBottomTabPanes";
 import { LeftSidebarBottomTabSwitcher } from "./LeftSidebar/LeftSidebarBottomTabSwitcher";
+import { LeftSidebarWorkspaceListSlot } from "./LeftSidebar/LeftSidebarWorkspaceListSlot";
+import {
+  buildClaudeProcessFingerprint,
+  buildClaudeRegistryRunningFingerprint,
+} from "./LeftSidebar/leftSidebarWorkspaceListSlotPropsEqual";
+import { LeftSidebarRepoPanelBottomSlot } from "./LeftSidebar/LeftSidebarRepoPanelBottomSlot";
 import { RightRailRepoPanelPanes } from "./LeftSidebar/RightRailRepoPanelPanes";
 import {
   deriveRepoPanelRenderState,
 } from "./LeftSidebar/repoPanelPlacement";
-import { ExpandIcon } from "./LeftSidebar/SidebarIcons";
 import { SystemResourceInline } from "./LeftSidebar/SystemResourceInline";
 import type { LeftSidebarProps } from "./LeftSidebar/types";
-import { useProjectRepositorySidebarState } from "./LeftSidebar/useProjectRepositorySidebarState";
 import { useRepositoryAssociateModalController } from "./LeftSidebar/useRepositoryAssociateModalController";
 import { useProjectSddModeModalController } from "./LeftSidebar/useProjectSddModeModalController";
 import { useRepositorySddModeModalController } from "./LeftSidebar/useRepositorySddModeModalController";
 import { useRepositoryIconBadgeModalController } from "./LeftSidebar/useRepositoryIconBadgeModalController";
-import { useSidebarScheduledTasksMap } from "./LeftSidebar/useSidebarScheduledTasksMap";
 import { useWorkspaceTodoCountsBootstrap } from "../hooks/useWorkspaceTodoCountsBootstrap";
 import { useWorkspaceInspectorPanelsDefault } from "../hooks/useWorkspaceInspectorPanelsDefault";
-import { useSidebarRequirementUnsplitMap } from "./LeftSidebar/useSidebarRequirementUnsplitMap";
-import { useSidebarExecutableTasksMap } from "./LeftSidebar/useSidebarExecutableTasksMap";
-import { useSidebarTrellisReadyMap } from "./LeftSidebar/useSidebarTrellisReadyMap";
 import { useClaudeProcessWorkspaceLabelCache } from "../hooks/useClaudeProcessWorkspaceLabelCache";
 import { useSystemResourceSessions } from "./LeftSidebar/useSystemResourceSessions";
-import { useSidebarRunningMainSessionIndicators } from "./LeftSidebar/useSidebarRunningMainSessionIndicators";
 import {
   LeftSidebarMonitorPanelSlot,
   preloadLeftSidebarMonitorPanel,
@@ -386,14 +379,6 @@ export function LeftSidebar({
     };
   }, []);
   const expandedFilesPanelOnMountRef = useRef(false);
-  const projectRepositoryState = useProjectRepositorySidebarState({
-    projects,
-    repositories,
-    activeProjectId,
-    activeRepositoryId,
-    activeWorkspaceFocus,
-    onMoveRepositoryToProject,
-  });
   const restoreWorkspaceListVisibilityRef = useRef(false);
   const claudeProcessLabelCache = useClaudeProcessWorkspaceLabelCache();
   const systemResourceSessions = useSystemResourceSessions({
@@ -402,6 +387,14 @@ export function LeftSidebar({
     onCancelSessionFromMonitor,
     onReloadFullDiskTranscript,
   });
+  const claudeProcessFingerprint = useMemo(
+    () => buildClaudeProcessFingerprint(systemResourceSessions.systemSummary.claudeProcesses),
+    [systemResourceSessions.systemSummary.claudeProcesses],
+  );
+  const claudeRegistryRunningFingerprint = useMemo(
+    () => buildClaudeRegistryRunningFingerprint(systemResourceSessions.claudeRegistryRunningIds),
+    [systemResourceSessions.claudeRegistryRunningIds],
+  );
 
   const claudeLabelSyncFingerprintRef = useRef("");
   useEffect(() => {
@@ -432,15 +425,6 @@ export function LeftSidebar({
     sessions.length,
     systemResourceSessions.systemSummary.claudeProcesses,
   ]);
-  const { runningByProjectId, runningByRepositoryId } = useSidebarRunningMainSessionIndicators({
-    projects,
-    repositories,
-    sessionsRef: sessionsLiveRef,
-    sessionsStructureKey,
-    repositoryMainSessionBindings,
-    claudeProcesses: systemResourceSessions.systemSummary.claudeProcesses,
-    registryRunningClaudeSessionIds: systemResourceSessions.claudeRegistryRunningIds,
-  });
 
   const handleStopBoundMainSession = useCallback(
     async (boundSessionId: string | null | undefined) => {
@@ -568,49 +552,11 @@ export function LeftSidebar({
   });
   const { showWorkspaceTodosPanel: workspaceTodosEnabled } = useWorkspaceInspectorPanelsDefault();
   useWorkspaceTodoCountsBootstrap(projects, floatingRepositories, workspaceTodosEnabled);
-  const { byId: scheduledTasksByRepoId } = useSidebarScheduledTasksMap(
-    repositories,
-  );
-  const {
-    projectUnsplitById: requirementUnsplitByProjectId,
-    repositoryUnsplitById: requirementUnsplitByRepoId,
-  } = useSidebarRequirementUnsplitMap(projects, repositories);
-  const {
-    projectExecutableById: executableTasksByProjectId,
-    repositoryExecutableById: executableTasksByRepoId,
-  } = useSidebarExecutableTasksMap(projects, repositories, activeProjectId);
-  const { projectTrellisReadyById, repositoryTrellisReadyById } = useSidebarTrellisReadyMap(
-    projects,
-    repositories,
-  );
   const openScheduledTasksForRepository = useCallback(
     (repository: Repository) => {
       onOpenScheduledTasksForRepositoryProp?.(repository);
     },
     [onOpenScheduledTasksForRepositoryProp],
-  );
-
-  const openScheduledTasksForProject = useCallback(
-    (project: ProjectItem) => {
-      if (onOpenScheduledTasksForProjectProp) {
-        onOpenScheduledTasksForProjectProp(project);
-        return;
-      }
-      const target = resolveScheduledTasksRepository({
-        activeRepository: null,
-        activeProject: project,
-        activeWorkspaceFocus: "project",
-        repositories,
-        scheduledTasksByRepoId,
-      });
-      if (target) openScheduledTasksForRepository(target);
-    },
-    [
-      onOpenScheduledTasksForProjectProp,
-      openScheduledTasksForRepository,
-      repositories,
-      scheduledTasksByRepoId,
-    ],
   );
 
   const dispatchOpenExecutableTasksDrawer = useCallback(() => {
@@ -832,22 +778,20 @@ export function LeftSidebar({
     if (globalSelectionSyncKey === lastSyncedGlobalSelectionKeyRef.current) return;
     lastSyncedGlobalSelectionKeyRef.current = globalSelectionSyncKey;
     const next = repoPanelTreeSelectionSourceRef.current;
-    startTransition(() => {
-      setRepoPanelTreeSelection((prev) => {
-        if (!next && !prev) return prev;
-        if (!next || !prev) return next;
-        if (prev.kind === "project" && next.kind === "project" && prev.projectId === next.projectId) {
-          return prev;
-        }
-        if (
-          prev.kind === "repository" &&
-          next.kind === "repository" &&
-          prev.repositoryId === next.repositoryId
-        ) {
-          return prev;
-        }
-        return next;
-      });
+    setRepoPanelTreeSelection((prev) => {
+      if (!next && !prev) return prev;
+      if (!next || !prev) return next;
+      if (prev.kind === "project" && next.kind === "project" && prev.projectId === next.projectId) {
+        return prev;
+      }
+      if (
+        prev.kind === "repository" &&
+        next.kind === "repository" &&
+        prev.repositoryId === next.repositoryId
+      ) {
+        return prev;
+      }
+      return next;
     });
   }, [globalSelectionSyncKey]);
 
@@ -926,7 +870,7 @@ export function LeftSidebar({
       }
       if (!cancelled) setAccessibleRepoPanelPath(candidate);
       })();
-    }, { timeoutMs: 1200 });
+    }, { timeoutMs: 80 });
     return () => {
       cancelled = true;
       cancelIdle();
@@ -1028,27 +972,28 @@ export function LeftSidebar({
    */
   const handleProjectSelectAndSyncRepoPanel = useCallback(
     (projectId: string) => {
-      startTransition(() => {
-        setRepoPanelTreeSelection({ kind: "project", projectId });
-        onProjectSelect(projectId);
-      });
+      // 选中态与 Git/文件树目录需同步提交；startTransition 会推迟高亮与面板切换，体感偏慢。
+      setRepoPanelTreeSelection({ kind: "project", projectId });
+      onProjectSelect(projectId);
     },
     [onProjectSelect],
   );
 
   const handleRepositorySelectAndSyncRepoPanel = useCallback(
     (repositoryId: number | null) => {
-      startTransition(() => {
-        if (repositoryId == null) {
-          setRepoPanelTreeSelection(null);
-          onRepositorySelect(null);
-          return;
-        }
-        setRepoPanelTreeSelection({ kind: "repository", repositoryId });
-        onRepositorySelect(repositoryId);
-      });
+      if (repositoryId == null) {
+        setRepoPanelTreeSelection(null);
+        onRepositorySelect(null);
+        return;
+      }
+      const repository = repositories.find((item) => item.id === repositoryId);
+      if (repository?.path) {
+        prefetchGitStatus(repository.path);
+      }
+      setRepoPanelTreeSelection({ kind: "repository", repositoryId });
+      onRepositorySelect(repositoryId);
     },
-    [onRepositorySelect],
+    [onRepositorySelect, repositories],
   );
 
   const handleOpenFileTreeSession = useCallback(
@@ -1072,14 +1017,10 @@ export function LeftSidebar({
       activeRepositoryId: repoPanelTreeView?.activeRepositoryId ?? activeRepositoryId,
       activeWorkspaceFocus: repoPanelTreeView?.activeWorkspaceFocus ?? activeWorkspaceFocus,
       onRepositorySelect: (repositoryId: number) => {
-        startTransition(() => {
-          setRepoPanelTreeSelection({ kind: "repository", repositoryId });
-        });
+        setRepoPanelTreeSelection({ kind: "repository", repositoryId });
       },
       onProjectSelect: (projectId: string) => {
-        startTransition(() => {
-          setRepoPanelTreeSelection({ kind: "project", projectId });
-        });
+        setRepoPanelTreeSelection({ kind: "project", projectId });
       },
       onOpenFileTreeSession: handleOpenFileTreeSession,
     }),
@@ -1097,6 +1038,9 @@ export function LeftSidebar({
 
   useEffect(() => {
     setRepositoryFileTreeSearch("");
+    if (effectiveRepoPanelPath.trim()) {
+      prefetchGitStatus(effectiveRepoPanelPath);
+    }
   }, [effectiveRepoPanelPath]);
 
   const lastHandledWorkspaceCreateRequestRef = useRef(0);
@@ -1181,69 +1125,6 @@ export function LeftSidebar({
       },
     );
   }
-
-  const leftTabSwitcherPrefix = repoPanelRenderState.leftTabMode ? repoPanelTabSwitcher : null;
-
-  const leftSidebarGitBottomPane = useMemo(
-    () => (
-      <Suspense
-        fallback={
-          <div className="app-file-editor-loading">
-            <Spin size="small" />
-          </div>
-        }
-      >
-        <GitPanelLazy
-          headerPrefix={
-            workspaceListEffectivelyCollapsed ? undefined : leftTabSwitcherPrefix ?? undefined
-          }
-          repositoryPath={effectiveRepoPanelPath}
-          repositoryName={repoPanelRepositoryName}
-          repositoryEntries={gitPanelRepositoryEntries}
-          multiRepoContextTitle={gitPanelContextTitle}
-          onOpenFile={handleOpenExplorerFile}
-          lazyMount
-          {...repoPanelWorkspaceSelectorProps}
-        />
-      </Suspense>
-    ),
-    [
-      effectiveRepoPanelPath,
-      gitPanelContextTitle,
-      gitPanelRepositoryEntries,
-      handleOpenExplorerFile,
-      leftTabSwitcherPrefix,
-      repoPanelRepositoryName,
-      repoPanelWorkspaceSelectorProps,
-      workspaceListEffectivelyCollapsed,
-    ],
-  );
-
-  const leftSidebarFilesBottomPane = useMemo(
-    () => (
-      <ActiveRepositoryFilesPanel
-        headerPrefix={leftTabSwitcherPrefix ?? undefined}
-        activeRepositoryPath={effectiveRepoPanelPath}
-        activeRepositoryName={repoPanelRepositoryName}
-        search={repositoryFileTreeSearch}
-        onSearchChange={setRepositoryFileTreeSearch}
-        onOpenFile={handleOpenExplorerFile}
-        sectionCollapsed={filesExplorerSectionCollapsed}
-        onSectionCollapsedChange={handleFilesExplorerSectionCollapsedChange}
-        workspaceSelector={repoPanelWorkspaceSelectorProps}
-      />
-    ),
-    [
-      effectiveRepoPanelPath,
-      filesExplorerSectionCollapsed,
-      handleFilesExplorerSectionCollapsedChange,
-      handleOpenExplorerFile,
-      leftTabSwitcherPrefix,
-      repoPanelRepositoryName,
-      repoPanelWorkspaceSelectorProps,
-      repositoryFileTreeSearch,
-    ],
-  );
 
   const rightSidebarGitBottomPane = useMemo(
     () => (
@@ -1421,30 +1302,31 @@ export function LeftSidebar({
           showLeftSidebarMonitorPanel && monitorPanelSectionCollapsed ? "true" : undefined
         }
       >
-        <SidebarWorkspaceTodoAddModal enabled={workspaceTodosEnabled} />
-        <SidebarGlobalWorkspaceTodoAddModal
-          enabled={workspaceTodosEnabled}
-          open={globalWorkspaceTodoAddOpen}
-          onClose={() => setGlobalWorkspaceTodoAddOpen(false)}
+        <LeftSidebarWorkspaceListSlot
+          showLeftSidebarWorkspaceList={showLeftSidebarWorkspaceList}
+          workspaceTodosEnabled={workspaceTodosEnabled}
+          globalWorkspaceTodoAddOpen={globalWorkspaceTodoAddOpen}
+          onCloseGlobalWorkspaceTodoAdd={() => setGlobalWorkspaceTodoAddOpen(false)}
           projects={projects}
-          repositoriesById={projectRepositoryState.repositoriesById}
-          floatingRepositories={floatingRepositories}
-          activeProjectId={activeProjectId}
-          activeRepositoryId={activeRepositoryId}
-        />
-        {showLeftSidebarWorkspaceList ? (
-        <ProjectRepositoryList
-          projects={projects}
-          repositoriesById={projectRepositoryState.repositoriesById}
+          repositories={repositories}
           floatingRepositories={floatingRepositories}
           activeProjectId={activeProjectId}
           activeWorkspaceFocus={activeWorkspaceFocus}
           activeRepositoryId={activeRepositoryId}
           showRepositoryIconBadgesInWorkspaceList={showRepositoryIconBadgesInWorkspaceList}
           pinnedProjectIds={pinnedProjectIds}
-          expandedProjects={projectRepositoryState.expandedProjects}
-          projectDropTargetId={projectRepositoryState.projectDropTargetId}
-          repoSidebarDragRef={projectRepositoryState.repoSidebarDragRef}
+          sectionCollapsed={showRepoPanel ? workspaceListSectionCollapsed : false}
+          onSectionCollapsedChange={
+            showRepoPanel ? handleWorkspaceListSectionCollapsedChange : undefined
+          }
+          sessionsStructureKey={sessionsStructureKey}
+          sessionsRef={sessionsLiveRef}
+          repositoryMainSessionBindings={repositoryMainSessionBindings}
+          claudeProcesses={systemResourceSessions.systemSummary.claudeProcesses}
+          claudeProcessFingerprint={claudeProcessFingerprint}
+          claudeRegistryRunningFingerprint={claudeRegistryRunningFingerprint}
+          registryRunningClaudeSessionIds={systemResourceSessions.claudeRegistryRunningIds}
+          onMoveRepositoryToProject={onMoveRepositoryToProject}
           onProjectSelect={handleProjectSelectAndSyncRepoPanel}
           onRepositorySelect={handleRepositorySelectAndSyncRepoPanel}
           onCreateProjectClick={() => {
@@ -1462,9 +1344,6 @@ export function LeftSidebar({
           onReconcileProject={onReconcileProject}
           onBootstrapTrellisForProject={onBootstrapTrellisForProject}
           onBootstrapTrellisForRepository={onBootstrapTrellisForRepository}
-          projectTrellisReadyById={projectTrellisReadyById}
-          repositoryTrellisReadyById={repositoryTrellisReadyById}
-          onToggleProjectExpand={projectRepositoryState.toggleProjectExpand}
           onTogglePinProject={onTogglePinProject}
           onRenameProject={(project) => {
             setEditProject(project);
@@ -1530,7 +1409,6 @@ export function LeftSidebar({
                 }
               : undefined
           }
-          onJoinFloatingRepository={undefined}
           onRemoveFloatingRepository={(repo) => {
             if (!onRemoveRepository) return;
             modal.confirm({
@@ -1544,37 +1422,20 @@ export function LeftSidebar({
           }}
           onDetachRepositoryFromProject={onDetachRepositoryFromProject}
           onReorderRepositoriesInProject={onReorderRepositoriesInProject}
-          onMoveRepositoryToProject={undefined}
-          onMoveRepositoryToProjectWithExpand={projectRepositoryState.moveRepositoryWithExpand}
-          onProjectDropTargetChange={projectRepositoryState.setProjectDropTargetId}
-          onClearRepoSidebarDrag={projectRepositoryState.clearRepoSidebarDrag}
           onMoveRepositoryError={(text, err) => {
             message.error(text);
             console.error(err);
           }}
-          scheduledTasksByRepoId={scheduledTasksByRepoId}
-          requirementUnsplitByProjectId={requirementUnsplitByProjectId}
-          requirementUnsplitByRepoId={requirementUnsplitByRepoId}
-          executableTasksByProjectId={executableTasksByProjectId}
-          executableTasksByRepoId={executableTasksByRepoId}
-          workspaceTodosEnabled={workspaceTodosEnabled}
           onOpenGlobalWorkspaceTodoAdd={
             workspaceTodosEnabled ? () => setGlobalWorkspaceTodoAddOpen(true) : undefined
           }
           onOpenScheduledTasksForRepository={openScheduledTasksForRepository}
-          onOpenScheduledTasksForProject={openScheduledTasksForProject}
+          onOpenScheduledTasksForProject={onOpenScheduledTasksForProjectProp}
           onOpenExecutableTasksForProject={openExecutableTasksForProject}
           onOpenExecutableTasksForRepository={openExecutableTasksForRepository}
-          runningMainSessionByProjectId={runningByProjectId}
-          runningMainSessionByRepositoryId={runningByRepositoryId}
           onStopProjectMainSession={handleStopProjectMainSession}
           onStopRepositoryMainSession={handleStopRepositoryMainSession}
-          sectionCollapsed={showRepoPanel ? workspaceListSectionCollapsed : false}
-          onSectionCollapsedChange={
-            showRepoPanel ? handleWorkspaceListSectionCollapsedChange : undefined
-          }
         />
-        ) : null}
 
         {monitorPanelMounted ? (
           <LeftSidebarMonitorPanelSlot
@@ -1623,40 +1484,27 @@ export function LeftSidebar({
           />
         ) : null}
 
-        {showLeftRepoPanel ? (
-          <div className="app-left-sidebar-bottom-tabs">
-            {repoPanelRenderState.showGitOnLeft && workspaceListEffectivelyCollapsed ? (
-              <div className="app-left-sidebar-repo-panel-header">
-                {repoPanelRenderState.leftTabMode ? repoPanelTabSwitcher : null}
-                <div className="app-left-sidebar-repo-panel-header__selector">
-                  <GitPanelWorkspaceSelector
-                    {...repoPanelWorkspaceSelectorProps}
-                    activeRepositoryPath={effectiveRepoPanelPath}
-                  />
-                </div>
-                {showLeftSidebarWorkspaceList ? (
-                <HoverHint title="展开工作区列表">
-                  <button
-                    type="button"
-                    className="app-left-sidebar-repo-panel-header__expand-icon"
-                    aria-label="展开工作区列表"
-                    onClick={() => handleWorkspaceListSectionCollapsedChange(false)}
-                  >
-                    <ExpandIcon expanded={false} />
-                  </button>
-                </HoverHint>
-                ) : null}
-              </div>
-            ) : null}
-            <LeftSidebarBottomTabPanes
-              showGit={repoPanelRenderState.showGitOnLeft}
-              showFiles={repoPanelRenderState.showFilesOnLeft}
-              panelsReady={bottomTabPanelsReady}
-              gitPane={leftSidebarGitBottomPane}
-              filesPane={leftSidebarFilesBottomPane}
-            />
-          </div>
-        ) : null}
+        <LeftSidebarRepoPanelBottomSlot
+          showLeftRepoPanel={showLeftRepoPanel}
+          showLeftSidebarWorkspaceList={showLeftSidebarWorkspaceList}
+          repoPanelRenderState={repoPanelRenderState}
+          workspaceListEffectivelyCollapsed={workspaceListEffectivelyCollapsed}
+          onExpandWorkspaceList={() => handleWorkspaceListSectionCollapsedChange(false)}
+          leftBottomTab={leftBottomTab}
+          onLeftBottomTabChange={handleLeftBottomTabChange}
+          bottomTabPanelsReady={bottomTabPanelsReady}
+          effectiveRepoPanelPath={effectiveRepoPanelPath}
+          repoPanelRepositoryName={repoPanelRepositoryName}
+          gitPanelRepositoryEntries={gitPanelRepositoryEntries}
+          gitPanelContextTitle={gitPanelContextTitle}
+          repoPanelTreeSelection={repoPanelTreeSelection}
+          repoPanelWorkspaceSelectorProps={repoPanelWorkspaceSelectorProps}
+          handleOpenExplorerFile={handleOpenExplorerFile}
+          repositoryFileTreeSearch={repositoryFileTreeSearch}
+          onRepositoryFileTreeSearchChange={setRepositoryFileTreeSearch}
+          filesExplorerSectionCollapsed={filesExplorerSectionCollapsed}
+          onFilesExplorerSectionCollapsedChange={handleFilesExplorerSectionCollapsedChange}
+        />
       </div>
 
       <SystemResourceInline

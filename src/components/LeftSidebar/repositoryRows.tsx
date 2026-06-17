@@ -12,6 +12,7 @@ import type { WorkspaceFocus } from "../../utils/workspaceMode";
 import { parseOpenAppConfigureMenuKey, repositoryEditorOpenMenuLabel, resolveEffectiveOpenAppId } from "../../utils/openAppScope";
 import { repositoryTerminalOpenAppIcon, repositoryTerminalOpenMenuLabel } from "../../utils/repositoryTerminalOpenMenu";
 import { reorderRepositoryIdsForDrop } from "./repositoryReorder";
+import { prefetchGitStatus } from "../../services/gitStatusWarmCache";
 
 export interface RepositoryReorderUi {
   dragHandleEnabled: boolean;
@@ -616,6 +617,9 @@ function RepositoryRowInner({
     >
       <div
         className={`app-repository-item app-repository-item--repo${showActiveRepository ? " app-repository-item--repo-active" : ""}`}
+        onPointerEnter={() => {
+          prefetchGitStatus(repository.path);
+        }}
         onClick={(e) => {
           const target = e.target as HTMLElement | null;
           if (
@@ -915,6 +919,9 @@ function FloatingRepositoryRowInner({
     <div className="app-repository-row">
       <div
         className={`app-repository-item app-repository-item--repo${showActiveRepository ? " app-repository-item--repo-active" : ""}`}
+        onPointerEnter={() => {
+          prefetchGitStatus(repository.path);
+        }}
         onClick={(e) => {
           const target = e.target as HTMLElement | null;
           if (

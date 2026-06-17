@@ -33,6 +33,42 @@ function teamMonitorItemsFingerprint(
     .join("\n");
 }
 
+function shouldBustSidebarOnActiveSessionIdChange(
+  prev: LeftSidebarContentProps,
+  next: LeftSidebarContentProps,
+): boolean {
+  if (prev.activeSessionId === next.activeSessionId) {
+    return false;
+  }
+  if (prev.showLeftSidebarMonitorPanel || next.showLeftSidebarMonitorPanel) {
+    return true;
+  }
+  if (prev.historyDrawerSessionId !== next.historyDrawerSessionId) {
+    return true;
+  }
+  if (prev.monitorActiveTarget !== next.monitorActiveTarget) {
+    return true;
+  }
+  if (
+    next.activeWorkspaceFocus === "repository" &&
+    next.activeRepositoryId != null &&
+    prev.activeRepositoryId === next.activeRepositoryId &&
+    prev.activeProjectId === next.activeProjectId &&
+    prev.activeWorkspaceFocus === next.activeWorkspaceFocus
+  ) {
+    return false;
+  }
+  if (
+    next.activeWorkspaceFocus === "project" &&
+    prev.activeWorkspaceFocus === next.activeWorkspaceFocus &&
+    prev.activeProjectId === next.activeProjectId &&
+    prev.activeRepositoryId === next.activeRepositoryId
+  ) {
+    return false;
+  }
+  return true;
+}
+
 /** 侧栏内容 props memo：不含 `dark` / `collapsed` 等壳层字段。 */
 export function areLeftSidebarContentPropsEqual(
   prev: LeftSidebarContentProps,
@@ -58,7 +94,7 @@ export function areLeftSidebarContentPropsEqual(
   ) {
     return false;
   }
-  if (prev.activeSessionId !== next.activeSessionId) return false;
+  if (shouldBustSidebarOnActiveSessionIdChange(prev, next)) return false;
   if (prev.activeProjectId !== next.activeProjectId) return false;
   if (prev.activeRepositoryId !== next.activeRepositoryId) return false;
   if (prev.activeWorkspaceFocus !== next.activeWorkspaceFocus) return false;

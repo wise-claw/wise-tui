@@ -30,7 +30,7 @@ describe("projectRowPropsEqual", () => {
       project,
       projectRepos,
       isActiveProject: false,
-      activeRepositoryId: null,
+      activeRepositoryIdInProject: null,
       activeWorkspaceFocus: "repository" as const,
       isPinned: false,
       expanded: true,
@@ -40,13 +40,13 @@ describe("projectRowPropsEqual", () => {
   });
 
   test("detects active repository changes inside the project", () => {
-    const project = stubProject("p1");
-    const projectRepos = [stubRepo(1)];
+    const project = stubProject("p1", [1, 2]);
+    const projectRepos = [stubRepo(1), stubRepo(2)];
     const base = {
       project,
       projectRepos,
       isActiveProject: false,
-      activeRepositoryId: 1,
+      activeRepositoryIdInProject: 1,
       activeWorkspaceFocus: "repository" as const,
       isPinned: false,
       expanded: true,
@@ -55,9 +55,36 @@ describe("projectRowPropsEqual", () => {
     expect(
       projectRowPropsEqual(base, {
         ...base,
-        activeRepositoryId: 2,
+        activeRepositoryIdInProject: 2,
       }),
     ).toBe(false);
+  });
+
+  test("ignores active repository changes outside the project", () => {
+    const project = stubProject("p1", [1]);
+    const projectRepos = [stubRepo(1)];
+    const base = {
+      project,
+      projectRepos,
+      isActiveProject: false,
+      activeRepositoryIdInProject: 1,
+      activeWorkspaceFocus: "repository" as const,
+      isPinned: false,
+      expanded: true,
+      projectDropTargetId: null,
+    };
+    expect(
+      projectRowPropsEqual(base, {
+        ...base,
+        activeRepositoryIdInProject: null,
+      }),
+    ).toBe(false);
+    expect(
+      projectRowPropsEqual(
+        { ...base, activeRepositoryIdInProject: null },
+        { ...base, activeRepositoryIdInProject: null },
+      ),
+    ).toBe(true);
   });
 
   test("detects per-repository badge map changes", () => {
@@ -67,7 +94,7 @@ describe("projectRowPropsEqual", () => {
       project,
       projectRepos,
       isActiveProject: false,
-      activeRepositoryId: null,
+      activeRepositoryIdInProject: null,
       activeWorkspaceFocus: "repository" as const,
       isPinned: false,
       expanded: false,
