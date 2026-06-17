@@ -45,10 +45,10 @@ export function writeLeftMonitorPanelCollapsedToStorage(collapsed: boolean): voi
 export type LeftBottomTab = "git" | "files";
 
 export function readLeftBottomTabFromStorage(): LeftBottomTab {
-  if (typeof window === "undefined") return "files";
+  if (typeof window === "undefined") return "git";
   const stored = window.localStorage.getItem(LEFT_BOTTOM_TAB_KEY);
-  if (stored === "git") return "git";
-  return "files";
+  if (stored === "files") return "files";
+  return "git";
 }
 
 export function writeLeftBottomTabToStorage(tab: LeftBottomTab): void {

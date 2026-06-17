@@ -1725,7 +1725,7 @@ export function ClaudeChatInner({
             onOpenBuiltinAssistant={onOpenBuiltinAssistant}
             onActivateAssistant={onActivateAssistant}
             onOpenAssistantsHub={onOpenAssistantsHub}
-            onSend={_onSend}
+            onDispatchExecutionEnvironment={onDispatchExecutionEnvironment}
           />
         ) : null}
         {!deferHeavySubtree ? (

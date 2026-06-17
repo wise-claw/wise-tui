@@ -25,7 +25,14 @@ export function useChatMessageListRows(session: ClaudeSession): ChatMessageListR
       showListEndThinkingHint,
     };
     const cached = cacheRef.current;
-    if (cached) {
+    // 状态/思考提示变化时不能走 patch 快路径：fast path 直接复用 prevRows，
+    // 会把 running→completed 之后该消失的 thinking-hint 与最后一条消息的
+    // streamingThisBubble 残留下来，造成「正在思考」会话执行完成后仍然显示。
+    if (
+      cached &&
+      cached.status === session.status &&
+      cached.showListEndThinkingHint === showListEndThinkingHint
+    ) {
       const patched = tryPatchChatMessageListRowsTail(
         cached.messages,
         session.messages,

@@ -3119,7 +3119,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 }
 
 .app-repository-sessions .app-repository-item--repo {
-  padding-left: 20px !important; /* Indent child repos in project layout */
+  padding-left: 8px !important; /* Indent child repos in project layout */
 }
 
 .app-repository-item--project .app-repository-name-block,

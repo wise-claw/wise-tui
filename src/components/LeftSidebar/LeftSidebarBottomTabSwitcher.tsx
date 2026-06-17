@@ -15,20 +15,6 @@ export function LeftSidebarBottomTabSwitcher({
       <button
         type="button"
         role="tab"
-        aria-selected={activeTab === "files"}
-        aria-label="文件"
-        title="仓库文件树"
-        className={
-          "app-left-sidebar-repo-panel-tab" +
-          (activeTab === "files" ? " app-left-sidebar-repo-panel-tab--active" : "")
-        }
-        onClick={() => onChange("files")}
-      >
-        <FilesBottomTabIcon />
-      </button>
-      <button
-        type="button"
-        role="tab"
         aria-selected={activeTab === "git"}
         aria-label="Git"
         title="Git 变更"
@@ -39,6 +25,20 @@ export function LeftSidebarBottomTabSwitcher({
         onClick={() => onChange("git")}
       >
         <GitBottomTabIcon />
+      </button>
+      <button
+        type="button"
+        role="tab"
+        aria-selected={activeTab === "files"}
+        aria-label="文件"
+        title="仓库文件树"
+        className={
+          "app-left-sidebar-repo-panel-tab" +
+          (activeTab === "files" ? " app-left-sidebar-repo-panel-tab--active" : "")
+        }
+        onClick={() => onChange("files")}
+      >
+        <FilesBottomTabIcon />
       </button>
     </div>
   );

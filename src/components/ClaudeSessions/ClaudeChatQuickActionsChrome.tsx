@@ -6,6 +6,7 @@ import { executeClaudeCodeAndWait, getClaudeConfigModel } from "../../services/c
 import { gitCommit, gitPull, gitPush, gitStageAll, gitStatus } from "../../services/git";
 import { refreshGitRepositoryStats } from "../../stores/gitRepositoryStatsStore";
 import { extractClaudeInvocationFinalText } from "../../utils/claudeInvocationText";
+import { EXECUTION_ENVIRONMENT_ENGINE_MENTION_NAMES } from "../../constants/executionEnvironmentDispatch";
 import { buildAiCommitSummary } from "./claudeChatHelpers";
 import { filterComposerCommonPhrasesForQuickBar } from "../../constants/composerCommonPhrase";
 import { dispatchApplyComposerCommonPhrase } from "../../constants/composerCommonPhraseEvents";
@@ -21,7 +22,10 @@ export interface ClaudeChatQuickActionsChromeProps {
   onOpenBuiltinAssistant?: (assistantId: string) => void;
   onActivateAssistant?: (assistant: import("../../types/assistant").AssistantEntry) => void | Promise<void>;
   onOpenAssistantsHub?: () => void;
-  onSend?: (prompt: string) => void;
+  onDispatchExecutionEnvironment?: (input: {
+    prompt: string;
+    userBubblePrompt?: string;
+  }) => void | Promise<void>;
   /** 与输入区一致：会话忙且无法入队时禁用「直接发送」类常用语 */
   composerSessionBusyWithoutEnqueue?: boolean;
 }
@@ -34,7 +38,7 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
   onOpenBuiltinAssistant,
   onActivateAssistant,
   onOpenAssistantsHub,
-  onSend,
+  onDispatchExecutionEnvironment,
   composerSessionBusyWithoutEnqueue = false,
 }: ClaudeChatQuickActionsChromeProps) {
   const { phrases: composerCommonPhrases } = useComposerCommonPhrases();
@@ -251,7 +255,7 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
       message.error(`推送失败: ${errMsg}`);
       const repoPathForFix = repoPath;
       const commitMessageForFix = commitMessage;
-      const sendAutoFix = onSend;
+      const dispatchAutoFix = onDispatchExecutionEnvironment;
       if (pushAutoFixTimerRef.current != null) {
         window.clearTimeout(pushAutoFixTimerRef.current);
       }
@@ -282,8 +286,16 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
               "",
               "请输出并执行修复步骤，完成后给出简短结果说明。",
             ].join("\n");
-            sendAutoFix?.(autoFixPrompt);
-            message.info("已将失败日志交给 Claude Code 自动修复。");
+            if (!dispatchAutoFix) {
+              message.warning("无法派发错误检查：执行环境派发未就绪。");
+              return;
+            }
+            const mention = EXECUTION_ENVIRONMENT_ENGINE_MENTION_NAMES.claude;
+            await dispatchAutoFix({
+              prompt: `@${mention} ${autoFixPrompt}`,
+              userBubblePrompt: "Git 提交/推送失败，排查 pre-commit、lint、typecheck 等问题",
+            });
+            message.info(`已通过 @${mention} 派发错误检查，主会话不受阻塞。`);
           } catch {
             /* ignore auto-fix dispatch failure */
           }
@@ -293,7 +305,7 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
       pushSubmitInFlightRef.current = false;
       setPushSubmitting(false);
     }
-  }, [gitRepositoryPath, onSend, pushSummaryDraft]);
+  }, [gitRepositoryPath, onDispatchExecutionEnvironment, pushSummaryDraft]);
 
   const pushControl = (
     <Popover
