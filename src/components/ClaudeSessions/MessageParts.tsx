@@ -11,6 +11,7 @@ import { ToolFileEditCard } from "./ToolFileEditCard";
 import { WORKFLOW_UI_EVENT_FOCUS_TASK_TOOL } from "../../constants/workflowUiEvents";
 import {
   extractToolFileEditPreview,
+  isFileEditToolName,
   isToolEditNoiseOutput,
 } from "../../utils/toolFileEditPreview";
 
@@ -485,7 +486,8 @@ function toolPartRenderFingerprint(part: ToolUsePart): string {
     return `${part.status}|${part.name}|${part.output?.length ?? 0}|${part.error ?? ""}`;
   }
   const subtitle = getToolDisplayInfo(part).subtitle;
-  const outBucket = Math.floor((part.output?.length ?? 0) / 512);
+  const outputBucketSize = isFileEditToolName(part.name) ? 1024 : 512;
+  const outBucket = Math.floor((part.output?.length ?? 0) / outputBucketSize);
   const subBucket = Math.floor(subtitle.length / 64);
   return `${part.status}|${part.name}|${outBucket}|${subBucket}|${part.error ?? ""}`;
 }

@@ -49,6 +49,39 @@ const AUTO_DETECT_LANGUAGES = [
 
 let registered = false;
 
+/** 已完成代码块高亮缓存；流式阶段应跳过 hljs，避免每 token 重复解析。 */
+const HIGHLIGHT_CACHE_MAX = 384;
+const highlightCache = new Map<string, { html: string; resolvedLang: string }>();
+
+function highlightCacheKey(lang: string, text: string): string {
+  return `${lang}\u0000${text}`;
+}
+
+function readHighlightCache(lang: string, text: string): { html: string; resolvedLang: string } | null {
+  return highlightCache.get(highlightCacheKey(lang, text)) ?? null;
+}
+
+function writeHighlightCache(
+  lang: string,
+  text: string,
+  value: { html: string; resolvedLang: string },
+): void {
+  const key = highlightCacheKey(lang, text);
+  if (highlightCache.has(key)) {
+    highlightCache.set(key, value);
+    return;
+  }
+  if (highlightCache.size >= HIGHLIGHT_CACHE_MAX) {
+    const oldest = highlightCache.keys().next().value;
+    if (oldest) highlightCache.delete(oldest);
+  }
+  highlightCache.set(key, value);
+}
+
+export function clearMarkdownCodeHighlightCache(): void {
+  highlightCache.clear();
+}
+
 function ensureLanguagesRegistered(): void {
   if (registered) return;
   hljs.registerLanguage("typescript", typescript);
@@ -101,17 +134,28 @@ export function highlightMarkdownCode(
   text: string,
   lang: string,
 ): { html: string; resolvedLang: string } {
+  if (!text) {
+    return { html: "", resolvedLang: "" };
+  }
   ensureLanguagesRegistered();
   const normalized = normalizeMarkdownCodeLanguage(lang);
+  const cacheLang = normalized || lang.trim().toLowerCase();
+  const cached = readHighlightCache(cacheLang, text);
+  if (cached) return cached;
+
+  let result: { html: string; resolvedLang: string };
   if (normalized && hljs.getLanguage(normalized)) {
-    return {
+    result = {
       html: hljs.highlight(text, { language: normalized }).value,
       resolvedLang: normalized,
     };
+  } else {
+    const auto = hljs.highlightAuto(text, [...AUTO_DETECT_LANGUAGES]);
+    result = {
+      html: auto.value,
+      resolvedLang: auto.language ?? "",
+    };
   }
-  const auto = hljs.highlightAuto(text, [...AUTO_DETECT_LANGUAGES]);
-  return {
-    html: auto.value,
-    resolvedLang: auto.language ?? "",
-  };
+  writeHighlightCache(cacheLang, text, result);
+  return result;
 }

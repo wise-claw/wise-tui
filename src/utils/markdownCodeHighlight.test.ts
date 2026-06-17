@@ -38,4 +38,11 @@ describe("highlightMarkdownCode", () => {
     expect(resolvedLang).toBe("javascript");
     expect(html).toContain("hljs-title");
   });
+
+  test("reuses cached highlight for identical input", () => {
+    const source = "const cached = true;";
+    const first = highlightMarkdownCode(source, "typescript");
+    const second = highlightMarkdownCode(source, "typescript");
+    expect(second).toBe(first);
+  });
 });

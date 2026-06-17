@@ -11,11 +11,19 @@ import {
 import { useChatRepositoryPath } from "./chatRepositoryContext";
 import "./markdownCodeHighlight.css";
 
-function HighlightedCodeLine({ text, lang }: { text: string; lang: string }) {
+function HighlightedCodeLine({
+  text,
+  lang,
+  streaming,
+}: {
+  text: string;
+  lang: string;
+  streaming: boolean;
+}) {
   const highlighted = useMemo(() => {
-    if (!text) return null;
+    if (!text || streaming) return null;
     return highlightMarkdownCode(text, lang);
-  }, [text, lang]);
+  }, [text, lang, streaming]);
   const codeClass = highlighted?.resolvedLang ? `hljs language-${highlighted.resolvedLang}` : "hljs";
   if (highlighted) {
     return <code className={codeClass} dangerouslySetInnerHTML={{ __html: highlighted.html }} />;
@@ -23,92 +31,112 @@ function HighlightedCodeLine({ text, lang }: { text: string; lang: string }) {
   return <code className={codeClass}>{text || " "}</code>;
 }
 
-export const ToolFileEditCard = memo(function ToolFileEditCard({
-  preview,
-  streaming = false,
-}: {
-  preview: ToolFileEditPreview;
-  streaming?: boolean;
-}) {
-  const repositoryPath = useChatRepositoryPath();
-  const canOpenFile = useMemo(() => {
-    if (!repositoryPath) return false;
-    return relativePathInRepository(repositoryPath, preview.filePath) != null;
-  }, [preview.filePath, repositoryPath]);
+function toolFileEditPreviewFingerprint(
+  preview: ToolFileEditPreview,
+  streaming: boolean,
+): string {
+  if (streaming) {
+    const last = preview.lines[preview.lines.length - 1];
+    const lastLen = last?.text.length ?? 0;
+    return `s|${preview.filePath}|${preview.lines.length}|${Math.floor(lastLen / 128)}`;
+  }
+  return `d|${preview.filePath}|${preview.addedLineCount}|${preview.removedLineCount}|${preview.truncated}|${preview.lines
+    .map((line) => `${line.kind}:${line.text}`)
+    .join("\n")}`;
+}
 
-  const handleOpenFile = useCallback(
-    (event: MouseEvent<HTMLButtonElement>) => {
-      if (!repositoryPath) return;
-      const relativePath = relativePathInRepository(repositoryPath, preview.filePath);
-      if (!relativePath) return;
+export const ToolFileEditCard = memo(
+  function ToolFileEditCard({
+    preview,
+    streaming = false,
+  }: {
+    preview: ToolFileEditPreview;
+    streaming?: boolean;
+  }) {
+    const repositoryPath = useChatRepositoryPath();
+    const canOpenFile = useMemo(() => {
+      if (!repositoryPath) return false;
+      return relativePathInRepository(repositoryPath, preview.filePath) != null;
+    }, [preview.filePath, repositoryPath]);
 
-      const scrollContainer = event.currentTarget.closest(".app-claude-messages");
-      const messageId =
-        event.currentTarget.closest("[data-message-id]")?.getAttribute("data-message-id") ?? null;
-      if (scrollContainer instanceof HTMLElement) {
-        rememberChatScrollBeforeFileOpen({
-          scrollTop: scrollContainer.scrollTop,
-          messageId,
-        });
+    const handleOpenFile = useCallback(
+      (event: MouseEvent<HTMLButtonElement>) => {
+        if (!repositoryPath) return;
+        const relativePath = relativePathInRepository(repositoryPath, preview.filePath);
+        if (!relativePath) return;
+
+        const scrollContainer = event.currentTarget.closest(".app-claude-messages");
+        const messageId =
+          event.currentTarget.closest("[data-message-id]")?.getAttribute("data-message-id") ?? null;
+        if (scrollContainer instanceof HTMLElement) {
+          rememberChatScrollBeforeFileOpen({
+            scrollTop: scrollContainer.scrollTop,
+            messageId,
+          });
+        }
+        getClaudeChatMessageScrollBridge().pauseFollowForMessageNavigation();
+        dispatchOpenRepositoryFile({ repositoryPath, relativePath });
+      },
+      [preview.filePath, repositoryPath],
+    );
+
+    const statsLabel = useMemo(() => {
+      if (preview.addedLineCount > 0 && preview.removedLineCount > 0) {
+        return `+${preview.addedLineCount} -${preview.removedLineCount}`;
       }
-      getClaudeChatMessageScrollBridge().pauseFollowForMessageNavigation();
-      dispatchOpenRepositoryFile({ repositoryPath, relativePath });
-    },
-    [preview.filePath, repositoryPath],
-  );
+      if (preview.addedLineCount > 0) return `+${preview.addedLineCount}`;
+      if (preview.removedLineCount > 0) return `-${preview.removedLineCount}`;
+      return "";
+    }, [preview.addedLineCount, preview.removedLineCount]);
 
-  const statsLabel = useMemo(() => {
-    if (preview.addedLineCount > 0 && preview.removedLineCount > 0) {
-      return `+${preview.addedLineCount} -${preview.removedLineCount}`;
-    }
-    if (preview.addedLineCount > 0) return `+${preview.addedLineCount}`;
-    if (preview.removedLineCount > 0) return `-${preview.removedLineCount}`;
-    return "";
-  }, [preview.addedLineCount, preview.removedLineCount]);
+    const statsClass =
+      preview.addedLineCount > 0 && preview.removedLineCount === 0
+        ? "app-tool-edit-card__stats app-tool-edit-card__stats--add"
+        : preview.removedLineCount > 0 && preview.addedLineCount === 0
+          ? "app-tool-edit-card__stats app-tool-edit-card__stats--remove"
+          : "app-tool-edit-card__stats";
 
-  const statsClass =
-    preview.addedLineCount > 0 && preview.removedLineCount === 0
-      ? "app-tool-edit-card__stats app-tool-edit-card__stats--add"
-      : preview.removedLineCount > 0 && preview.addedLineCount === 0
-        ? "app-tool-edit-card__stats app-tool-edit-card__stats--remove"
-        : "app-tool-edit-card__stats";
-
-  return (
-    <div
-      className={`app-tool-edit-card${streaming ? " app-tool-edit-card--streaming" : ""}${
-        preview.truncated ? " app-tool-edit-card--truncated" : ""
-      }`}
-    >
-      <div className="app-tool-edit-card__head">
-        <ExplorerTreeFileIcon fileName={preview.fileName} className="app-tool-edit-card__icon" />
-        {canOpenFile ? (
-          <button
-            type="button"
-            className="app-tool-edit-card__filename app-tool-edit-card__filename--clickable"
-            title={preview.filePath}
-            onClick={handleOpenFile}
-          >
-            {preview.fileName}
-          </button>
-        ) : (
-          <span className="app-tool-edit-card__filename" title={preview.filePath}>
-            {preview.fileName}
-          </span>
-        )}
-        {statsLabel ? <span className={statsClass}>{statsLabel}</span> : null}
-      </div>
-      <div className="app-tool-edit-card__body">
-        <pre className="app-tool-edit-card__code">
-          {preview.lines.map((line, idx) => (
-            <div
-              key={`${idx}-${line.kind}-${line.text.slice(0, 24)}`}
-              className={`app-tool-edit-card__line app-tool-edit-card__line--${line.kind}`}
+    return (
+      <div
+        className={`app-tool-edit-card${streaming ? " app-tool-edit-card--streaming" : ""}${
+          preview.truncated ? " app-tool-edit-card--truncated" : ""
+        }`}
+      >
+        <div className="app-tool-edit-card__head">
+          <ExplorerTreeFileIcon fileName={preview.fileName} className="app-tool-edit-card__icon" />
+          {canOpenFile ? (
+            <button
+              type="button"
+              className="app-tool-edit-card__filename app-tool-edit-card__filename--clickable"
+              title={preview.filePath}
+              onClick={handleOpenFile}
             >
-              <HighlightedCodeLine text={line.text} lang={preview.language} />
-            </div>
-          ))}
-        </pre>
+              {preview.fileName}
+            </button>
+          ) : (
+            <span className="app-tool-edit-card__filename" title={preview.filePath}>
+              {preview.fileName}
+            </span>
+          )}
+          {statsLabel ? <span className={statsClass}>{statsLabel}</span> : null}
+        </div>
+        <div className="app-tool-edit-card__body">
+          <pre className="app-tool-edit-card__code">
+            {preview.lines.map((line, idx) => (
+              <div
+                key={streaming ? idx : `${idx}-${line.kind}-${line.text.slice(0, 24)}`}
+                className={`app-tool-edit-card__line app-tool-edit-card__line--${line.kind}`}
+              >
+                <HighlightedCodeLine text={line.text} lang={preview.language} streaming={streaming} />
+              </div>
+            ))}
+          </pre>
+        </div>
       </div>
-    </div>
-  );
-});
+    );
+  },
+  (prev, next) =>
+    prev.streaming === next.streaming &&
+    toolFileEditPreviewFingerprint(prev.preview, prev.streaming) ===
+      toolFileEditPreviewFingerprint(next.preview, next.streaming),
+);
