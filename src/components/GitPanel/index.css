@@ -1007,6 +1007,219 @@
   padding: 4px 12px;
 }
 
+.git-push-section__actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+}
+
+.git-branch-switcher-trigger.ant-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  max-width: min(160px, 42vw);
+  min-width: 0;
+  padding-inline: 4px;
+  color: var(--ant-color-text-tertiary);
+  font-size: 11px;
+}
+
+.git-branch-switcher-trigger__name {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Monaco, Consolas, monospace;
+}
+
+.app-claude-branch-trigger.ant-btn {
+  padding-inline: 4px;
+}
+
+.app-claude-branch-popover .ant-popover-inner {
+  padding: 6px 8px !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 16px rgba(0, 0, 0, 0.08) !important;
+}
+
+.app-claude-branch-popover__content {
+  width: 310px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.app-claude-branch-popover__controls {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.app-claude-branch-popover__create-inline-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 5px;
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-claude-branch-popover__no-track-option {
+  margin-top: 4px;
+  font-size: 11px;
+  line-height: 1.2;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-claude-branch-popover__no-track-option .ant-checkbox + span {
+  padding-inline-start: 4px;
+}
+
+.app-claude-branch-popover__branch-name-input.ant-input {
+  flex: 1.2;
+  border: none !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+  font-size: 11px !important;
+  box-shadow: none !important;
+  padding: 0 4px !important;
+  border-right: 1px solid var(--ant-color-border-secondary) !important;
+  height: 22px !important;
+  min-width: 0;
+}
+
+.app-claude-branch-popover__from-select {
+  flex: 1;
+  min-width: 0;
+}
+
+.app-claude-branch-popover__from-select .ant-select-selector {
+  border: none !important;
+  background: transparent !important;
+  border-radius: 0 !important;
+  box-shadow: none !important;
+  padding: 0 4px !important;
+  font-size: 11px !important;
+  height: 22px !important;
+  border-right: 1px solid var(--ant-color-border-secondary) !important;
+}
+
+.app-claude-branch-popover__action-btn.ant-btn {
+  min-width: 42px !important;
+  height: 22px !important;
+  padding: 0 6px !important;
+  font-size: 11px !important;
+  font-weight: 600 !important;
+  border-radius: 4px !important;
+  box-shadow: none !important;
+  flex-shrink: 0;
+}
+
+.app-claude-branch-popover__search-input.ant-input-affix-wrapper,
+.app-claude-branch-popover__search-input.ant-input {
+  border-radius: 5px !important;
+  border-color: var(--ant-color-border-secondary) !important;
+  background: var(--ant-color-bg-container) !important;
+  padding: 3px 6px !important;
+  font-size: 11.5px !important;
+}
+
+.app-claude-branch-popover__search-input .ant-input:focus,
+.app-claude-branch-popover__search-input .ant-input-focused {
+  border-color: var(--ant-color-primary-border) !important;
+}
+
+.app-claude-branch-popover__list {
+  border-top: 1px solid var(--ant-color-border-secondary);
+  padding-top: 4px;
+  max-height: 220px;
+  overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.app-claude-branch-popover__loading {
+  display: flex;
+  justify-content: center;
+  padding: 8px 0;
+}
+
+.app-claude-branch-popover__section-title {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: 0.2px;
+  color: var(--ant-color-text-quaternary);
+  padding: 4px 4px 1px;
+}
+
+.app-claude-branch-popover__item {
+  border: 1px solid transparent !important;
+  background: transparent !important;
+  text-align: left;
+  width: 100%;
+  border-radius: 4px;
+  padding: 3px 6px;
+  cursor: pointer;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  transition: all 0.15s ease;
+}
+
+.app-claude-branch-popover__item:hover {
+  background: var(--ant-color-fill-quaternary) !important;
+  border-color: var(--ant-color-border-secondary) !important;
+}
+
+.app-claude-branch-popover__item--active {
+  background: var(--ant-color-primary-bg) !important;
+  border-color: var(--ant-color-primary-border) !important;
+}
+
+.app-claude-branch-popover__item-name {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--ant-color-text);
+  font-family: ui-monospace, SFMono-Regular, Monaco, Consolas, monospace;
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-claude-branch-popover__item-meta {
+  font-size: 9.5px;
+  font-weight: 500;
+  color: var(--ant-color-text-quaternary);
+  text-align: right;
+  flex-shrink: 0;
+  white-space: nowrap;
+}
+
+.app-claude-branch-popover__select-dropdown {
+  min-width: 240px !important;
+}
+
+.app-claude-branch-popover__select-dropdown .ant-select-item {
+  min-height: 22px !important;
+  padding: 2px 6px !important;
+  font-size: 11px !important;
+  line-height: 1.3 !important;
+}
+
+.app-claude-branch-popover__select-dropdown .ant-select-item-option-content {
+  font-family: ui-monospace, SFMono-Regular, Monaco, Consolas, monospace !important;
+  font-size: 11px !important;
+  font-weight: 500 !important;
+}
+
 /* ── Sections (Staged / Unstaged) ── */
 .git-section {
   overflow-x: hidden;

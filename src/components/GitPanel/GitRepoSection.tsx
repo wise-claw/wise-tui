@@ -699,6 +699,7 @@ function GitRepoSectionInner({
                 onDiscardAll={handleDiscardAll}
                 onCommit={handleCommit}
                 onOpenFile={handleOpenRepoFile}
+                onBranchChanged={() => void loadStatus({ silent: true })}
               />
             )
           )}

@@ -5,7 +5,6 @@ import {
   useMemo,
   useEffect,
   useLayoutEffect,
-  type MouseEvent,
 } from "react";
 import { flushSync } from "react-dom";
 import { HoverHint } from "../shared/HoverHint";
@@ -75,7 +74,7 @@ import { FollowupDock } from "./dock/followup-dock";
 import { TodoDock } from "./dock/todo-dock";
 import { RevertDock } from "./dock/revert-dock";
 import { addToHistory, promptLength, navigatePromptHistory, canNavigateHistoryAtCursor } from "./prompt-history";
-import { Checkbox, Button, Empty, Input, message, Popover, Select, Spin, Tabs, Tag, TreeSelect } from "antd";
+import { Button, message, Popover, Tabs, Tag, TreeSelect } from "antd";
 import { ContextCompactProgressRing } from "./ContextCompactProgressRing";
 import { useContextBreakdown } from "../../hooks/useContextBreakdown";
 import { ComposerVoiceSettingsPanel } from "./ComposerVoiceSettingsPanel";
@@ -97,7 +96,6 @@ import {
 } from "../../constants/composerSpeechPreferences";
 import type { ComposerSpeechEngine } from "../../constants/composerSpeech";
 import { formatSilenceAutoSendIdleSeconds } from "../../utils/composerSpeechSilenceIdle";
-import { readVisiblePollIntervalMs } from "../../utils/adaptivePoll";
 import { logClaudeDrop } from "./drop-debug";
 import {
   buildClaudeComposerSendPayload,
@@ -155,7 +153,6 @@ import {
   registerGlobalScreenshotRecipient,
 } from "../../services/globalScreenshotHotkey";
 import { wiseMainWindowFocus } from "../../services/wiseMascot";
-import { gitCheckoutBranch, gitCreateBranch, gitListBranches, gitStatus } from "../../services/git";
 import { recordMissionComposerMessage } from "./missionMentionHook";
 import type { ControlRequestStatus } from "../../notifications";
 import type { QuestionDockTabSpec } from "../../hooks/useQuestionDockTabs";
@@ -170,7 +167,6 @@ import { extractComposerCodeSelectionRefs } from "./extractComposerCodeSelection
 import { scheduleInsertComposerCodeSelectionRef } from "./scheduleInsertComposerCodeSelectionRef";
 import { AutoApproveBadge } from "./AutoApproveBadge";
 import { expandComposerCodeSelectionRefs } from "../../utils/expandComposerCodeSelectionRefs";
-import type { GitBranchEntry } from "../../types";
 
 function composerSpeechEngineHint(engine: ComposerSpeechEngine | null): string {
   if (engine === "sensevoice") return "SenseVoice 本地听写";
@@ -537,17 +533,6 @@ function formatSessionDuration(createdAt: number): string {
   return `${seconds}s`;
 }
 
-function formatRelativeTime(timestamp: number | null): string {
-  if (!timestamp) return "";
-  const now = Date.now() / 1000;
-  const diff = Math.max(0, now - timestamp);
-  if (diff < 60) return "刚刚";
-  if (diff < 3600) return `${Math.floor(diff / 60)} 分钟前`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)} 小时前`;
-  if (diff < 604800) return `${Math.floor(diff / 86400)} 天前`;
-  return new Date(timestamp * 1000).toLocaleDateString("zh-CN");
-}
-
 function ComposerInner({
   session,
   gitRepositoryPath,
@@ -657,25 +642,6 @@ function ComposerInner({
       ? "codex"
       : "claude";
   const defaultConnectionKind = useDefaultClaudeConnectionKind();
-  const [activeBranch, setActiveBranch] = useState<string>("-");
-  const [branchPopoverOpen, setBranchPopoverOpen] = useState(false);
-  const [branchQuery, setBranchQuery] = useState("");
-  const [branchCreateName, setBranchCreateName] = useState("");
-  const [branchCreateFromRef, setBranchCreateFromRef] = useState<string | undefined>(undefined);
-  const [branchCreateNoTrack, setBranchCreateNoTrack] = useState(true);
-  const branchCreateDraftRef = useRef({
-    name: "",
-    fromRef: undefined as string | undefined,
-    noTrack: true,
-  });
-  branchCreateDraftRef.current = {
-    name: branchCreateName,
-    fromRef: branchCreateFromRef,
-    noTrack: branchCreateNoTrack,
-  };
-  const [branchListLoading, setBranchListLoading] = useState(false);
-  const [branchActionLoading, setBranchActionLoading] = useState(false);
-  const [branches, setBranches] = useState<GitBranchEntry[]>([]);
   const lastSentDraftRef = useRef<LastSentComposerDraft | null>(null);
   /** 发送成功后、输入区为空时按 Esc 可恢复的草稿（与占位符「Esc 撤销」一致；开始新输入后自动失效） */
   const postSendEscUndoRef = useRef<LastSentComposerDraft | null>(null);
@@ -1173,108 +1139,6 @@ function ComposerInner({
     ],
   );
 
-  const loadActiveBranch = useCallback(async () => {
-    if (!gitRepositoryPath) {
-      setActiveBranch("-");
-      return;
-    }
-    try {
-      const status = await gitStatus(gitRepositoryPath);
-      setActiveBranch(status.branch?.trim() || "(detached)");
-    } catch {
-      setActiveBranch("-");
-    }
-  }, [gitRepositoryPath]);
-  const loadBranches = useCallback(async () => {
-    if (!gitRepositoryPath) {
-      setBranches([]);
-      setActiveBranch("-");
-      return;
-    }
-    setBranchListLoading(true);
-    try {
-      const list = await gitListBranches(gitRepositoryPath);
-      setBranches(list);
-      const current = list.find((item) => item.isCurrent && !item.isRemote);
-      if (current?.name) {
-        setActiveBranch(current.name);
-      } else {
-        await loadActiveBranch();
-      }
-    } catch {
-    } finally {
-      setBranchListLoading(false);
-    }
-  }, [gitRepositoryPath, loadActiveBranch]);
-  const handleCheckoutBranch = useCallback(
-    async (name: string) => {
-      if (!name.trim() || !gitRepositoryPath) return;
-      setBranchActionLoading(true);
-      try {
-        await gitCheckoutBranch(gitRepositoryPath, name.trim());
-        setActiveBranch(name.trim());
-        await loadBranches();
-      } catch {
-      } finally {
-        setBranchActionLoading(false);
-      }
-    },
-    [gitRepositoryPath, loadBranches],
-  );
-  const handleCreateBranch = useCallback(async () => {
-    const draft = branchCreateDraftRef.current;
-    const name = draft.name.trim();
-    if (!name) {
-      return;
-    }
-    if (!gitRepositoryPath) {
-      return;
-    }
-    setBranchActionLoading(true);
-    try {
-      await gitCreateBranch(
-        gitRepositoryPath,
-        name,
-        draft.fromRef ?? null,
-        true,
-        draft.noTrack,
-      );
-      setBranchCreateName("");
-      setActiveBranch(name);
-      await loadBranches();
-    } catch {
-    } finally {
-      setBranchActionLoading(false);
-    }
-  }, [gitRepositoryPath, loadBranches]);
-  const stopBranchPopoverPointerToComposer = useCallback((event: MouseEvent) => {
-    event.stopPropagation();
-  }, []);
-  const filteredBranches = useMemo(() => {
-    const keyword = branchQuery.trim().toLowerCase();
-    if (!keyword) return branches;
-    return branches.filter((item) => item.name.toLowerCase().includes(keyword));
-  }, [branches, branchQuery]);
-  const localBranches = useMemo(
-    () => filteredBranches.filter((item) => !item.isRemote),
-    [filteredBranches],
-  );
-  const remoteBranches = useMemo(
-    () => filteredBranches.filter((item) => item.isRemote),
-    [filteredBranches],
-  );
-  useEffect(() => {
-    void loadActiveBranch();
-    const timer = window.setInterval(() => {
-      if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-      void loadActiveBranch();
-    }, readVisiblePollIntervalMs(30_000, 120_000));
-    return () => window.clearInterval(timer);
-  }, [loadActiveBranch]);
-  useEffect(() => {
-    if (!branchPopoverOpen) return;
-    void loadBranches();
-  }, [branchPopoverOpen, loadBranches]);
   const bottomStatus = useMemo(() => {
     const sessionDuration = formatSessionDuration(session.createdAt);
     const metrics = getSessionContextMetrics(session);
@@ -2497,160 +2361,7 @@ function ComposerInner({
     });
   }, []);
 
-  /** 与附件、截屏同一行，位于模型选择左侧（勿 useMemo：Popover portal + Semi focusEditor 会导致首击失效） */
-  const renderBranchPickerInFooterToolbar = () => (
-      <Popover
-        trigger="click"
-        placement="topLeft"
-        open={branchPopoverOpen}
-        onOpenChange={(open) => {
-          setBranchPopoverOpen(open);
-          if (!open) {
-            setBranchQuery("");
-            setBranchCreateName("");
-            setBranchCreateFromRef(undefined);
-          }
-        }}
-        overlayClassName="app-claude-branch-popover"
-        content={
-          <div
-            className="app-claude-branch-popover__content"
-            onMouseDown={stopBranchPopoverPointerToComposer}
-            onClick={stopBranchPopoverPointerToComposer}
-          >
-            <div className="app-claude-branch-popover__controls">
-              <Input
-                size="small"
-                placeholder="搜索分支..."
-                className="app-claude-branch-popover__search-input"
-                value={branchQuery}
-                onChange={(event) => setBranchQuery(event.target.value)}
-              />
-              <div className="app-claude-branch-popover__section-title">创建分支</div>
-              <div className="app-claude-branch-popover__create-inline-row">
-                <Input
-                  size="small"
-                  placeholder="新分支名"
-                  className="app-claude-branch-popover__branch-name-input"
-                  value={branchCreateName}
-                  onChange={(event) => setBranchCreateName(event.target.value)}
-                  onPressEnter={() => void handleCreateBranch()}
-                  disabled={branchActionLoading}
-                />
-                <Select
-                  size="small"
-                  allowClear
-                  placeholder="基线(可选)"
-                  className="app-claude-branch-popover__from-select"
-                  value={branchCreateFromRef}
-                  onChange={(value) => setBranchCreateFromRef(value)}
-                  options={branches.map((item) => ({ value: item.name, label: item.name }))}
-                  disabled={branchActionLoading || branchListLoading}
-                  showSearch
-                  optionFilterProp="label"
-                  popupMatchSelectWidth={false}
-                  popupClassName="app-claude-branch-popover__select-dropdown"
-                />
-                <Button
-                  size="small"
-                  type="primary"
-                  htmlType="button"
-                  className="app-claude-branch-popover__action-btn"
-                  onMouseDown={stopBranchPopoverPointerToComposer}
-                  onClick={(event) => {
-                    event.stopPropagation();
-                    void handleCreateBranch();
-                  }}
-                  loading={branchActionLoading}
-                >
-                  新建
-                </Button>
-              </div>
-              <Checkbox
-                className="app-claude-branch-popover__no-track-option"
-                checked={branchCreateNoTrack}
-                onChange={(event) => setBranchCreateNoTrack(event.target.checked)}
-                disabled={branchActionLoading}
-              >
-                不设置上游跟踪（--no-track）
-              </Checkbox>
-            </div>
-            <div className="app-claude-branch-popover__list">
-              {branchListLoading ? (
-                <div className="app-claude-branch-popover__loading">
-                  <Spin size="small" />
-                </div>
-              ) : filteredBranches.length === 0 ? (
-                <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="无匹配分支" />
-              ) : (
-                <>
-                  {localBranches.length > 0 && (
-                    <>
-                      <div className="app-claude-branch-popover__section-title">本地分支</div>
-                      {localBranches.map((item) => (
-                        <button
-                          key={`local-${item.name}`}
-                          type="button"
-                          className={`app-claude-branch-popover__item ${item.isCurrent ? "app-claude-branch-popover__item--active" : ""}`}
-                          onClick={() => void handleCheckoutBranch(item.name)}
-                          disabled={branchActionLoading}
-                        >
-                          <span className="app-claude-branch-popover__item-name">{item.name}</span>
-                          <span className="app-claude-branch-popover__item-meta">
-                            {item.author ? `${item.author} · ` : ""}
-                            {formatRelativeTime(item.lastCommitTimestamp)}
-                          </span>
-                        </button>
-                      ))}
-                    </>
-                  )}
-                  {remoteBranches.length > 0 && (
-                    <>
-                      <div className="app-claude-branch-popover__section-title">远程分支</div>
-                      {remoteBranches.map((item) => (
-                        <button
-                          key={`remote-${item.name}`}
-                          type="button"
-                          className={`app-claude-branch-popover__item ${item.isCurrent ? "app-claude-branch-popover__item--active" : ""}`}
-                          onClick={() => void handleCheckoutBranch(item.name)}
-                          disabled={branchActionLoading}
-                        >
-                          <span className="app-claude-branch-popover__item-name">{item.name}</span>
-                          <span className="app-claude-branch-popover__item-meta">
-                            {item.author ? `${item.author} · ` : ""}
-                            {formatRelativeTime(item.lastCommitTimestamp)}
-                          </span>
-                        </button>
-                      ))}
-                    </>
-                  )}
-                </>
-              )}
-            </div>
-          </div>
-        }
-      >
-        <Button
-          type="text"
-          size="small"
-          className="app-claude-branch-trigger app-claude-semi-footer-branch-trigger"
-          style={{ color: "var(--ant-color-text-tertiary)", fontSize: 12, display: "flex", alignItems: "center", gap: 4 }}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="6" y1="3" x2="6" y2="19" />
-            <circle cx="18" cy="6" r="3" />
-            <circle cx="6" cy="18" r="3" />
-            <path d="M18 9a9 9 0 0 1-9 9" />
-          </svg>
-          <span className="app-claude-semi-footer-branch-name">{activeBranch}</span>
-          <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" aria-hidden>
-            <polyline points="6 9 12 15 18 9" />
-          </svg>
-        </Button>
-      </Popover>
-  );
-
-  /** 与 Semi 底栏同一行：左侧附件 / 截屏 / 分支 */
+  /** 与 Semi 底栏同一行：左侧附件 / 截屏 */
   const renderSemiComposerConfigureArea = useCallback(() => {
     return (
       <div
@@ -2860,7 +2571,6 @@ function ComposerInner({
             placeholder="工作区 / 仓库"
           />
         ) : null}
-        {renderBranchPickerInFooterToolbar()}
         <ContextCompactProgressRing
           className="app-claude-semi-footer-compact-context"
           data-ui-anchor="session-context-ring-btn"
@@ -2877,21 +2587,6 @@ function ComposerInner({
     bottomStatus.ctxPercent,
     bottomStatus.ctxSegment,
     bottomStatus.ctxToneClass,
-    activeBranch,
-    branchActionLoading,
-    branchCreateFromRef,
-    branchCreateName,
-    branchCreateNoTrack,
-    branchListLoading,
-    branchPopoverOpen,
-    branchQuery,
-    branches,
-    filteredBranches,
-    handleCheckoutBranch,
-    handleCreateBranch,
-    localBranches,
-    remoteBranches,
-    stopBranchPopoverPointerToComposer,
     breakdown,
     contextBreakdownLoading,
     dualPaneRepositoryPicker,

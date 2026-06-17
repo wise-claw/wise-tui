@@ -532,6 +532,7 @@ function GitSingleRepoPanel({
               onDiscardAll={handleDiscardAll}
               onCommit={handleCommit}
               onOpenFile={handleOpenRepoFile}
+              onBranchChanged={() => void loadStatus({ silent: true })}
             />
           )
         )}

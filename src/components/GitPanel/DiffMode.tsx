@@ -17,6 +17,7 @@ import { buildFileTree } from "./fileTree";
 import { FileRow } from "./FileRow";
 import { FileTreeView } from "./FileTreeView";
 import { GitFileListSection } from "./GitFileListSection";
+import { GitBranchSwitcher } from "./GitBranchSwitcher";
 import { buildCommitDraftFromStatus } from "./gitPanelUtils";
 import { RevertIcon } from "./RevertIcon";
 import type { FileTreeNode, GitPanelOpenFileOptions, UnstagedViewMode } from "./types";
@@ -37,6 +38,7 @@ interface DiffModeProps {
   onDiscardAll: () => void | Promise<void>;
   onCommit: (msg: string) => void;
   onOpenFile?: (path: string, options?: GitPanelOpenFileOptions) => void;
+  onBranchChanged?: () => void;
 }
 
 function DiffModeInner({
@@ -52,6 +54,7 @@ function DiffModeInner({
   onDiscardAll,
   onCommit,
   onOpenFile,
+  onBranchChanged,
 }: DiffModeProps) {
   const [commitMsg, setCommitMsg] = useState("");
   const [unstagedViewMode, setUnstagedViewMode] = useState<UnstagedViewMode>("tree");
@@ -280,26 +283,33 @@ function DiffModeInner({
               -{status.deletions}
             </Text>
           </Space>
-          {hasChanges && (
-            <span className="git-view-toggle">
-              <Button
-                type={unstagedViewMode === "tree" ? "primary" : "text"}
-                size="small"
-                icon={<ApartmentOutlined />}
-                onClick={() => setUnstagedViewMode("tree")}
-                style={{ width: 24, height: 20, padding: 0, fontSize: 11 }}
-                aria-label="树状视图"
-              />
-              <Button
-                type={unstagedViewMode === "list" ? "primary" : "text"}
-                size="small"
-                icon={<UnorderedListOutlined />}
-                onClick={() => setUnstagedViewMode("list")}
-                style={{ width: 24, height: 20, padding: 0, fontSize: 11 }}
-                aria-label="列表视图"
-              />
-            </span>
-          )}
+          <div className="git-push-section__actions">
+            <GitBranchSwitcher
+              repositoryPath={repositoryPath}
+              branchHint={status.branch}
+              onBranchChanged={onBranchChanged}
+            />
+            {hasChanges && (
+              <span className="git-view-toggle">
+                <Button
+                  type={unstagedViewMode === "tree" ? "primary" : "text"}
+                  size="small"
+                  icon={<ApartmentOutlined />}
+                  onClick={() => setUnstagedViewMode("tree")}
+                  style={{ width: 24, height: 20, padding: 0, fontSize: 11 }}
+                  aria-label="树状视图"
+                />
+                <Button
+                  type={unstagedViewMode === "list" ? "primary" : "text"}
+                  size="small"
+                  icon={<UnorderedListOutlined />}
+                  onClick={() => setUnstagedViewMode("list")}
+                  style={{ width: 24, height: 20, padding: 0, fontSize: 11 }}
+                  aria-label="列表视图"
+                />
+              </span>
+            )}
+          </div>
         </div>
       )}
 

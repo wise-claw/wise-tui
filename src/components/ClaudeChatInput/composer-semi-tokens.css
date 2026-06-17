@@ -506,21 +506,6 @@
   line-height: 1.2;
 }
 
-/* 分支触发器：与图标区分间距；分支名过长时省略以防挤压模型选择 */
-.app-claude-semi-footer-toolbar-left .app-claude-semi-footer-branch-trigger {
-  margin-inline-start: 4px;
-  max-width: min(200px, 38vw);
-  min-width: 0;
-}
-
-.app-claude-semi-footer-branch-name {
-  flex: 1;
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .app-claude-semi-footer-compact-context {
   flex-shrink: 0;
   margin-inline-start: 2px;
