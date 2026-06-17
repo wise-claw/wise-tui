@@ -16,6 +16,8 @@ export function useSessionFeedbackLoopSetting() {
     autoSaveHabitsToComposer: false,
     injectHabitsToSystemPrompt: false,
     optimizeConfigArtifacts: true,
+    globalRules: [],
+    injectGlobalRules: false,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -51,7 +53,9 @@ export function useSessionFeedbackLoopSetting() {
         next.earlyStopConvergence === settings.earlyStopConvergence &&
         next.autoSaveHabitsToComposer === settings.autoSaveHabitsToComposer &&
         next.injectHabitsToSystemPrompt === settings.injectHabitsToSystemPrompt &&
-        next.optimizeConfigArtifacts === settings.optimizeConfigArtifacts;
+        next.optimizeConfigArtifacts === settings.optimizeConfigArtifacts &&
+        next.injectGlobalRules === settings.injectGlobalRules &&
+        JSON.stringify(next.globalRules) === JSON.stringify(settings.globalRules);
       if (unchanged) return;
       setSaving(true);
       try {
@@ -83,5 +87,6 @@ export function useSessionFeedbackLoopSetting() {
       save({ injectHabitsToSystemPrompt }),
     saveOptimizeConfigArtifacts: (optimizeConfigArtifacts: boolean) =>
       save({ optimizeConfigArtifacts }),
+    saveInjectGlobalRules: (injectGlobalRules: boolean) => save({ injectGlobalRules }),
   };
 }

@@ -9,6 +9,7 @@ import {
   HistoryOutlined,
   ReloadOutlined,
   RobotOutlined,
+  RiseOutlined,
   UndoOutlined,
   UpOutlined,
 } from "@ant-design/icons";
@@ -25,6 +26,15 @@ import {
   computePatchDiffStats,
   formatPatchDiffStats,
 } from "../../utils/sessionFeedbackConfigPatchDiff";
+import { useSessionFeedbackLoopSetting } from "../DefaultConfigPanel/useSessionFeedbackLoopSetting";
+import {
+  isPatchAlreadyPromotedToGlobal,
+  promotePatchToGlobalRule,
+} from "../../services/sessionFeedbackGlobalRulesStore";
+import {
+  isPatchPromotableToGlobalRule,
+  isPatchSuggestedForGlobalPromotion,
+} from "../../utils/sessionFeedbackGlobalRules";
 
 const { Text } = Typography;
 
@@ -80,12 +90,22 @@ function PatchRow({
   repositoryPath,
   onToggle,
   onReject,
+  canPromote,
+  suggestPromote,
+  alreadyPromoted,
+  promoting,
+  onPromote,
 }: {
   patch: FeedbackConfigPatch;
   selected: boolean;
   repositoryPath?: string | null;
   onToggle: (checked: boolean) => void;
   onReject: () => void;
+  canPromote?: boolean;
+  suggestPromote?: boolean;
+  alreadyPromoted?: boolean;
+  promoting?: boolean;
+  onPromote?: () => void;
 }) {
   const [expanded, setExpanded] = useState(false);
   const [diffLoading, setDiffLoading] = useState(false);
@@ -140,6 +160,16 @@ function PatchRow({
             <Tag bordered={false} color={statusColor}>
               {patch.status}
             </Tag>
+            {suggestPromote && canPromote && !alreadyPromoted ? (
+              <Tag bordered={false} color="gold">
+                建议提升
+              </Tag>
+            ) : null}
+            {alreadyPromoted ? (
+              <Tag bordered={false} color="success">
+                已全局
+              </Tag>
+            ) : null}
           </Space>
           <Text type="secondary" className="app-session-feedback-loop__patch-rationale">
             {patch.rationale}
@@ -157,6 +187,18 @@ function PatchRow({
           ) : null}
           {patch.status === "pending" ? (
             <Button size="small" type="text" danger icon={<CloseOutlined />} onClick={onReject} />
+          ) : null}
+          {canPromote && !alreadyPromoted && onPromote ? (
+            <Button
+              size="small"
+              type="text"
+              icon={<RiseOutlined />}
+              loading={promoting}
+              onClick={onPromote}
+              title="提升为 Wise 全局规则（注入所有 spawn）"
+            >
+              提升全局
+            </Button>
           ) : null}
         </Space>
       </div>
@@ -250,7 +292,9 @@ export const SessionFeedbackConfigPatchPanel = memo(function SessionFeedbackConf
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [applying, setApplying] = useState(false);
   const [rollingBackId, setRollingBackId] = useState<string | null>(null);
+  const [promotingPatchId, setPromotingPatchId] = useState<string | null>(null);
   const [backupsExpanded, setBackupsExpanded] = useState(false);
+  const feedbackLoopSettings = useSessionFeedbackLoopSetting();
 
   const pendingPatches = useMemo(
     () => configPatches.filter((p) => p.status === "pending"),
@@ -298,6 +342,26 @@ export const SessionFeedbackConfigPatchPanel = memo(function SessionFeedbackConf
       message.error(`派发失败：${e instanceof Error ? e.message : String(e)}`);
     }
   }, [onDispatchSessionFeedbackLoop, requestConfigPatchPrompt]);
+
+  const handlePromoteToGlobal = useCallback(
+    async (patch: FeedbackConfigPatch) => {
+      setPromotingPatchId(patch.id);
+      try {
+        const result = await promotePatchToGlobalRule({ patch, repositoryPath });
+        if (result.ok) {
+          message.success(`已提升为全局规则：${result.rule.title}`);
+          await feedbackLoopSettings.refresh();
+        } else {
+          message.warning(result.reason);
+        }
+      } catch (e) {
+        message.error(`提升失败：${e instanceof Error ? e.message : String(e)}`);
+      } finally {
+        setPromotingPatchId(null);
+      }
+    },
+    [feedbackLoopSettings, repositoryPath],
+  );
 
   const handleParseClipboard = useCallback(async () => {
     try {
@@ -419,6 +483,14 @@ export const SessionFeedbackConfigPatchPanel = memo(function SessionFeedbackConf
               patch={patch}
               repositoryPath={repositoryPath}
               selected={selectedIds.includes(patch.id)}
+              canPromote={isPatchPromotableToGlobalRule(patch)}
+              suggestPromote={isPatchSuggestedForGlobalPromotion(patch)}
+              alreadyPromoted={isPatchAlreadyPromotedToGlobal(
+                patch.id,
+                feedbackLoopSettings.globalRules,
+              )}
+              promoting={promotingPatchId === patch.id}
+              onPromote={() => void handlePromoteToGlobal(patch)}
               onToggle={(checked) => {
                 setSelectedIds((prev) =>
                   checked ? [...prev, patch.id] : prev.filter((id) => id !== patch.id),

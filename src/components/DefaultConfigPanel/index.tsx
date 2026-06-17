@@ -31,6 +31,10 @@ import { useFileTreeOpenInNewPaneSetting } from "./useFileTreeOpenInNewPaneSetti
 import { useRepoPanelPlacementSetting } from "./useRepoPanelPlacementSetting";
 import { useWorkspaceInspectorPanelsSetting } from "./useWorkspaceInspectorPanelsSetting";
 import { useSessionFeedbackLoopSetting } from "./useSessionFeedbackLoopSetting";
+import {
+  removeFeedbackGlobalRule,
+  setFeedbackGlobalRuleEnabled,
+} from "../../services/sessionFeedbackGlobalRulesStore";
 import { listEmployees } from "../../services/employees";
 import type { EmployeeItem } from "../../types";
 import { isOmcMonitorEmployeeRecord } from "../../utils/omcMonitorEmployeeSession";
@@ -850,6 +854,70 @@ export function DefaultConfigPanel() {
             />
           </div>
         </div>
+
+        <div className="app-default-config-row" aria-label="注入全局神经网规则">
+          <div className="app-default-config-row__main">
+            <span className="app-default-config-row__title">注入全局规则到 spawn</span>
+            <span className="app-default-config-row__hint">
+              将从有效补丁提升的全局规则追加到 Claude CLI `--append-system-prompt`（跨仓库生效，默认关闭）
+            </span>
+          </div>
+          <div className="app-default-config-row__control">
+            <DefaultConfigOptionPick<"off" | "on">
+              aria-label="注入全局神经网规则"
+              disabled={
+                feedbackLoop.loading ||
+                feedbackLoop.saving ||
+                feedbackLoop.globalRules.length === 0
+              }
+              value={feedbackLoop.injectGlobalRules ? "on" : "off"}
+              options={[
+                { label: "关闭", value: "off" },
+                { label: "开启", value: "on" },
+              ]}
+              onChange={(value) => {
+                void feedbackLoop.saveInjectGlobalRules(value === "on");
+              }}
+            />
+          </div>
+        </div>
+
+        {feedbackLoop.globalRules.length > 0 ? (
+          <div className="app-default-config-global-rules" aria-label="全局神经网规则列表">
+            {feedbackLoop.globalRules.map((rule) => (
+              <div key={rule.id} className="app-default-config-global-rule">
+                <Checkbox
+                  checked={rule.enabled}
+                  disabled={feedbackLoop.saving}
+                  onChange={(e) => {
+                    void setFeedbackGlobalRuleEnabled(rule.id, e.target.checked).then(() =>
+                      feedbackLoop.refresh(),
+                    );
+                  }}
+                />
+                <div className="app-default-config-global-rule__body">
+                  <span className="app-default-config-global-rule__title">{rule.title}</span>
+                  <span className="app-default-config-global-rule__preview">{rule.body}</span>
+                </div>
+                <Button
+                  size="small"
+                  type="text"
+                  danger
+                  disabled={feedbackLoop.saving}
+                  onClick={() => {
+                    void removeFeedbackGlobalRule(rule.id).then(() => feedbackLoop.refresh());
+                  }}
+                >
+                  删除
+                </Button>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className="app-default-config-row__hint app-default-config-global-rules-empty">
+            暂无全局规则。在全链路分析 → 配置补丁中，对已应用且效果良好的补丁点「提升全局」。
+          </p>
+        )}
       </section>
     </div>
   );

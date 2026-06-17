@@ -29,6 +29,10 @@ import {
   normalizeMonitorPanelVisibleRows,
 } from "../constants/monitorPanelLayout";
 import { normalizeFeedbackLoopMaxCycles } from "../utils/sessionFeedbackLoop";
+import {
+  normalizeFeedbackGlobalRules,
+  type FeedbackGlobalRuleV1,
+} from "../utils/sessionFeedbackGlobalRules";
 import { normalizeChord } from "../utils/atMentionShortcutChord";
 import { RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK, RIGHT_PANEL_DEFAULT_COLLAPSED_KEY } from "../utils/rightPanelStorage";
 import { deleteAppSetting, getAppSetting, setAppSetting, setAppSettingJson } from "./appSettingsStore";
@@ -96,6 +100,8 @@ export interface SessionFeedbackLoopSettings {
   injectHabitsToSystemPrompt: boolean;
   /** 优化 CLAUDE.md / rules / memory / MCP / skills 等持久配置 */
   optimizeConfigArtifacts: boolean;
+  globalRules: FeedbackGlobalRuleV1[];
+  injectGlobalRules: boolean;
 }
 
 export type MonitorPanelPlacement = "left" | "right";
@@ -173,6 +179,10 @@ export interface WiseDefaultConfigV1 {
   sessionFeedbackLoopInjectSystemPrompt: boolean;
   /** 反馈神经网优化 CLAUDE.md / rules / memory / MCP / skills 等持久配置。 */
   sessionFeedbackLoopOptimizeConfigArtifacts: boolean;
+  /** 反馈神经网提升的全局 spawn 规则。 */
+  sessionFeedbackLoopGlobalRules: FeedbackGlobalRuleV1[];
+  /** spawn 时注入全局规则到 system prompt。 */
+  sessionFeedbackLoopInjectGlobalRules: boolean;
 }
 
 const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
@@ -210,6 +220,8 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   sessionFeedbackLoopSaveHabitsToComposer: false,
   sessionFeedbackLoopInjectSystemPrompt: false,
   sessionFeedbackLoopOptimizeConfigArtifacts: true,
+  sessionFeedbackLoopGlobalRules: [],
+  sessionFeedbackLoopInjectGlobalRules: false,
 };
 
 function normalizeMonitorPanelPlacement(raw: unknown): MonitorPanelPlacement | null {
@@ -396,6 +408,16 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
               parsed.sessionFeedbackLoopOptimizeConfigArtifacts,
               DEFAULT_CONFIG.sessionFeedbackLoopOptimizeConfigArtifacts,
             ),
+      sessionFeedbackLoopGlobalRules: normalizeFeedbackGlobalRules(
+        parsed.sessionFeedbackLoopGlobalRules,
+      ),
+      sessionFeedbackLoopInjectGlobalRules:
+        parsed.sessionFeedbackLoopInjectGlobalRules === undefined
+          ? DEFAULT_CONFIG.sessionFeedbackLoopInjectGlobalRules
+          : normalizeBoolean(
+              parsed.sessionFeedbackLoopInjectGlobalRules,
+              DEFAULT_CONFIG.sessionFeedbackLoopInjectGlobalRules,
+            ),
     };
   } catch {
     return null;
@@ -537,6 +559,8 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     sessionFeedbackLoopInjectSystemPrompt: DEFAULT_CONFIG.sessionFeedbackLoopInjectSystemPrompt,
     sessionFeedbackLoopOptimizeConfigArtifacts:
       DEFAULT_CONFIG.sessionFeedbackLoopOptimizeConfigArtifacts,
+    sessionFeedbackLoopGlobalRules: DEFAULT_CONFIG.sessionFeedbackLoopGlobalRules,
+    sessionFeedbackLoopInjectGlobalRules: DEFAULT_CONFIG.sessionFeedbackLoopInjectGlobalRules,
   };
 }
 
@@ -696,6 +720,8 @@ export async function saveWiseDefaultConfig(
       | "sessionFeedbackLoopSaveHabitsToComposer"
       | "sessionFeedbackLoopInjectSystemPrompt"
       | "sessionFeedbackLoopOptimizeConfigArtifacts"
+      | "sessionFeedbackLoopGlobalRules"
+      | "sessionFeedbackLoopInjectGlobalRules"
     >
   >,
 ): Promise<WiseDefaultConfigV1> {
@@ -767,6 +793,13 @@ export async function saveWiseDefaultConfig(
     sessionFeedbackLoopOptimizeConfigArtifacts:
       patch.sessionFeedbackLoopOptimizeConfigArtifacts ??
       current.sessionFeedbackLoopOptimizeConfigArtifacts,
+    sessionFeedbackLoopGlobalRules:
+      patch.sessionFeedbackLoopGlobalRules !== undefined
+        ? normalizeFeedbackGlobalRules(patch.sessionFeedbackLoopGlobalRules)
+        : current.sessionFeedbackLoopGlobalRules,
+    sessionFeedbackLoopInjectGlobalRules:
+      patch.sessionFeedbackLoopInjectGlobalRules ??
+      current.sessionFeedbackLoopInjectGlobalRules,
   };
   if (patch.connectionKind !== undefined) {
     next.connectionKind = normalizeConnectionKind(patch.connectionKind) ?? current.connectionKind;
@@ -1031,7 +1064,9 @@ export async function saveWiseDefaultConfig(
     patch.sessionFeedbackLoopEarlyStop !== undefined ||
     patch.sessionFeedbackLoopSaveHabitsToComposer !== undefined ||
     patch.sessionFeedbackLoopInjectSystemPrompt !== undefined ||
-    patch.sessionFeedbackLoopOptimizeConfigArtifacts !== undefined
+    patch.sessionFeedbackLoopOptimizeConfigArtifacts !== undefined ||
+    patch.sessionFeedbackLoopGlobalRules !== undefined ||
+    patch.sessionFeedbackLoopInjectGlobalRules !== undefined
   ) {
     if (
       next.sessionFeedbackLoopEnabled !== current.sessionFeedbackLoopEnabled ||
@@ -1042,7 +1077,10 @@ export async function saveWiseDefaultConfig(
         current.sessionFeedbackLoopSaveHabitsToComposer ||
       next.sessionFeedbackLoopInjectSystemPrompt !== current.sessionFeedbackLoopInjectSystemPrompt ||
       next.sessionFeedbackLoopOptimizeConfigArtifacts !==
-        current.sessionFeedbackLoopOptimizeConfigArtifacts
+        current.sessionFeedbackLoopOptimizeConfigArtifacts ||
+      JSON.stringify(next.sessionFeedbackLoopGlobalRules) !==
+        JSON.stringify(current.sessionFeedbackLoopGlobalRules) ||
+      next.sessionFeedbackLoopInjectGlobalRules !== current.sessionFeedbackLoopInjectGlobalRules
     ) {
       dispatchSessionFeedbackLoopChanged({
         enabled: next.sessionFeedbackLoopEnabled,
@@ -1052,6 +1090,8 @@ export async function saveWiseDefaultConfig(
         autoSaveHabitsToComposer: next.sessionFeedbackLoopSaveHabitsToComposer,
         injectHabitsToSystemPrompt: next.sessionFeedbackLoopInjectSystemPrompt,
         optimizeConfigArtifacts: next.sessionFeedbackLoopOptimizeConfigArtifacts,
+        globalRules: next.sessionFeedbackLoopGlobalRules,
+        injectGlobalRules: next.sessionFeedbackLoopInjectGlobalRules,
       });
     }
   }
@@ -1416,6 +1456,8 @@ export async function loadSessionFeedbackLoopSettingsFromStore(): Promise<Sessio
     autoSaveHabitsToComposer: config.sessionFeedbackLoopSaveHabitsToComposer,
     injectHabitsToSystemPrompt: config.sessionFeedbackLoopInjectSystemPrompt,
     optimizeConfigArtifacts: config.sessionFeedbackLoopOptimizeConfigArtifacts,
+    globalRules: config.sessionFeedbackLoopGlobalRules,
+    injectGlobalRules: config.sessionFeedbackLoopInjectGlobalRules,
   };
 }
 
@@ -1437,6 +1479,12 @@ export async function saveSessionFeedbackLoopSettingsToStore(
       : {}),
     ...(patch.optimizeConfigArtifacts !== undefined
       ? { sessionFeedbackLoopOptimizeConfigArtifacts: patch.optimizeConfigArtifacts }
+      : {}),
+    ...(patch.globalRules !== undefined
+      ? { sessionFeedbackLoopGlobalRules: normalizeFeedbackGlobalRules(patch.globalRules) }
+      : {}),
+    ...(patch.injectGlobalRules !== undefined
+      ? { sessionFeedbackLoopInjectGlobalRules: patch.injectGlobalRules }
       : {}),
   });
 }

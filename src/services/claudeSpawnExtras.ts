@@ -9,6 +9,7 @@ import {
   mergeAppendSystemPromptParts,
   resolveFeedbackLoopSystemPromptAppend,
 } from "./sessionFeedbackLoopSystemPrompt";
+import { buildFeedbackGlobalRulesSystemPromptBlock } from "../utils/sessionFeedbackGlobalRules";
 import { loadSessionFeedbackLoopSettingsFromStore } from "./wiseDefaultConfigStore";
 import type { ClaudeSession } from "../types";
 import { resolveSessionProjectRepository } from "../utils/claudeConcurrencyGate";
@@ -159,9 +160,25 @@ async function mergeFeedbackLoopHabitsIntoSpawnExtras(
   });
 }
 
+async function mergeFeedbackLoopGlobalRulesIntoSpawnExtras(
+  base: ClaudeSpawnCliExtras | null,
+): Promise<ClaudeSpawnCliExtras | null> {
+  const settings = await loadSessionFeedbackLoopSettingsFromStore();
+  if (!settings.injectGlobalRules || settings.globalRules.length === 0) return base;
+
+  const block = buildFeedbackGlobalRulesSystemPromptBlock(settings.globalRules);
+  if (!block) return base;
+
+  return compactClaudeSpawnCliExtras({
+    ...(base ?? {}),
+    appendSystemPrompt: mergeAppendSystemPromptParts(base?.appendSystemPrompt, block),
+  });
+}
+
 /**
  * 主会话 spawn：按 Cockpit 当前助手 + 会话归属项目/仓库解析 CLI 扩展；
- * 反馈神经网开启且启用注入时，将仓库/会话习惯追加到 `--append-system-prompt`。
+ * 反馈神经网开启且启用注入时，将仓库/会话习惯追加到 `--append-system-prompt`；
+ * 全局规则（跨仓库）在 injectGlobalRules 开启时一并注入。
  */
 export async function resolveClaudeSpawnExtrasForSession(params: {
   session: Pick<ClaudeSession, "id" | "repositoryPath" | "repositoryName">;
@@ -186,5 +203,7 @@ export async function resolveClaudeSpawnExtrasForSession(params: {
       repositoryPath: params.session.repositoryPath?.trim() || null,
     });
   }
-  return mergeFeedbackLoopHabitsIntoSpawnExtras(base, params.session);
+  let result = await mergeFeedbackLoopHabitsIntoSpawnExtras(base, params.session);
+  result = await mergeFeedbackLoopGlobalRulesIntoSpawnExtras(result);
+  return result;
 }
