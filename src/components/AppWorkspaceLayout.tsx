@@ -682,6 +682,8 @@ export function AppWorkspaceLayout({
             await claudeSessionsProps.onExecuteSession(mainSessionForDataLink.id, prompt);
           }
         : undefined,
+      onDispatchSessionFeedbackLoop: claudeSessionsProps.onDispatchSessionFeedbackLoop,
+      getClaudeSessions: () => claudeSessionsRef.current,
       onToggleSidebar: claudeSessionsProps.onToggleSidebar,
       onToggleRightPanel: claudeSessionsProps.onToggleRightPanel,
       rightPanelDefaultCollapsed: claudeSessionsProps.rightPanelDefaultCollapsed,
@@ -720,6 +722,7 @@ export function AppWorkspaceLayout({
       mainSessionForDataLink,
       claudeSessionsProps.onSwitchSession,
       claudeSessionsProps.onExecuteSession,
+      claudeSessionsProps.onDispatchSessionFeedbackLoop,
       onOpenRemoteChannels,
     ],
   );

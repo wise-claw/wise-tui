@@ -66,7 +66,7 @@ export interface UseSessionFeedbackLoopInput {
   repositoryPath?: string | null;
   insights: SessionInsightsResult | null;
   meta?: SessionInsightsReportMeta;
-  onSendOptimizationPrompt?: (prompt: string) => void | Promise<void>;
+  onSendOptimizationPrompt?: (prompt: string, cycleIndex: number) => void | Promise<void>;
   onCycleComplete?: (state: SessionFeedbackLoopState) => void;
 }
 
@@ -254,7 +254,7 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
   const dispatchAction = useCallback(
     async (action: ReturnType<typeof advanceFeedbackLoop>["action"]) => {
       if (action.type === "send_optimization" && onSendRef.current) {
-        await onSendRef.current(action.prompt);
+        await onSendRef.current(action.prompt, action.cycleIndex);
       }
     },
     [],

@@ -161,6 +161,14 @@ export interface TopbarProps {
   mainSessionForDataLink?: ClaudeSession | null;
   /** 全链路洞察 AI 深度解读：向主会话发送分析 prompt */
   onSessionInsightsAiAnalysis?: (prompt: string) => void | Promise<void>;
+  /** 反馈神经网：派至独立 worker 会话（不在主会话执行/展示） */
+  onDispatchSessionFeedbackLoop?: (input: {
+    anchorSessionId: string;
+    prompt: string;
+    kind: import("../../utils/sessionFeedbackLoopDispatch").FeedbackLoopDispatchKind;
+    cycleIndex?: number;
+  }) => void | Promise<void>;
+  getClaudeSessions?: () => readonly ClaudeSession[];
   onToggleSidebar?: () => void;
   onToggleRightPanel?: () => void;
   rightPanelDefaultCollapsed?: boolean;
@@ -189,6 +197,8 @@ export const Topbar = memo(function Topbar({
   activeSessionRepositoryPath,
   mainSessionForDataLink = null,
   onSessionInsightsAiAnalysis,
+  onDispatchSessionFeedbackLoop,
+  getClaudeSessions,
   onToggleSidebar,
   onToggleRightPanel,
   rightPanelDefaultCollapsed = RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK,
@@ -340,6 +350,8 @@ export const Topbar = memo(function Topbar({
           <SessionDataLinkTopbarTrigger
             mainSession={mainSessionForDataLink}
             onRequestAiAnalysis={onSessionInsightsAiAnalysis}
+            onDispatchSessionFeedbackLoop={onDispatchSessionFeedbackLoop}
+            getClaudeSessions={getClaudeSessions}
           />
         ) : null}
         {onSearch && (
@@ -445,6 +457,8 @@ export const Topbar = memo(function Topbar({
             repositoryPath={topbarOpenPath}
             mainSessionForDataLink={mainSessionForDataLink}
             onSessionInsightsAiAnalysis={onSessionInsightsAiAnalysis}
+            onDispatchSessionFeedbackLoop={onDispatchSessionFeedbackLoop}
+            getClaudeSessions={getClaudeSessions}
           />
         ) : null}
         {onToggleRightPanel && (

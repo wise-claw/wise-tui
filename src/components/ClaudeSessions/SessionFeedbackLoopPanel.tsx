@@ -41,12 +41,18 @@ const COMPLETION_LABEL = {
   manual: "手动停止",
 } as const;
 
+import type { FeedbackLoopDispatchKind } from "../../utils/sessionFeedbackLoopDispatch";
+
 interface Props {
   loop: UseSessionFeedbackLoopResult;
   featureEnabled: boolean;
   injectHabitsToSystemPrompt?: boolean;
   optimizeConfigArtifacts?: boolean;
-  onRequestAiAnalysis?: (prompt: string) => void | Promise<void>;
+  onDispatchSessionFeedbackLoop?: (
+    prompt: string,
+    kind: FeedbackLoopDispatchKind,
+    cycleIndex?: number,
+  ) => void | Promise<void>;
 }
 
 function scoreToPercent(score: number): number {
@@ -165,7 +171,7 @@ export const SessionFeedbackLoopPanel = memo(function SessionFeedbackLoopPanel({
   featureEnabled,
   injectHabitsToSystemPrompt = false,
   optimizeConfigArtifacts = false,
-  onRequestAiAnalysis,
+  onDispatchSessionFeedbackLoop,
 }: Props) {
   const { state, isActive, habits, historyRecords, historyComparison, start, stop, reset, forceCompare, saveHabitsToComposer, requestFinalSummary, requestHabitsPrompt, exportMarkdownReport } = loop;
 
@@ -181,22 +187,22 @@ export const SessionFeedbackLoopPanel = memo(function SessionFeedbackLoopPanel({
       return;
     }
     start();
-    message.info("反馈神经网已启动：将分析全链路并发送自我优化请求");
+    message.info("反馈神经网已启动：优化请求将派至独立 worker 会话");
   }, [featureEnabled, start]);
 
   const handleSummary = useCallback(async () => {
     const prompt = requestFinalSummary();
-    if (!prompt || !onRequestAiAnalysis) {
+    if (!prompt || !onDispatchSessionFeedbackLoop) {
       message.info("暂无完整循环数据");
       return;
     }
     try {
-      await onRequestAiAnalysis(prompt);
-      message.success("已发送循环总结到主会话");
+      await onDispatchSessionFeedbackLoop(prompt, "summary");
+      message.success("已派发循环总结至神经网 worker");
     } catch (e) {
-      message.error(`发送失败：${e instanceof Error ? e.message : String(e)}`);
+      message.error(`派发失败：${e instanceof Error ? e.message : String(e)}`);
     }
-  }, [onRequestAiAnalysis, requestFinalSummary]);
+  }, [onDispatchSessionFeedbackLoop, requestFinalSummary]);
 
   const handleExport = useCallback(async () => {
     const text = exportMarkdownReport();
@@ -219,17 +225,17 @@ export const SessionFeedbackLoopPanel = memo(function SessionFeedbackLoopPanel({
 
   const handleHabitsAi = useCallback(async () => {
     const prompt = requestHabitsPrompt();
-    if (!prompt || !onRequestAiAnalysis) {
+    if (!prompt || !onDispatchSessionFeedbackLoop) {
       message.info("暂无习惯沉淀数据");
       return;
     }
     try {
-      await onRequestAiAnalysis(prompt);
-      message.success("已发送习惯沉淀请求到主会话");
+      await onDispatchSessionFeedbackLoop(prompt, "habits");
+      message.success("已派发习惯沉淀至神经网 worker");
     } catch (e) {
-      message.error(`发送失败：${e instanceof Error ? e.message : String(e)}`);
+      message.error(`派发失败：${e instanceof Error ? e.message : String(e)}`);
     }
-  }, [onRequestAiAnalysis, requestHabitsPrompt]);
+  }, [onDispatchSessionFeedbackLoop, requestHabitsPrompt]);
 
   const handleSaveHabits = useCallback(async () => {
     try {
@@ -296,7 +302,7 @@ export const SessionFeedbackLoopPanel = memo(function SessionFeedbackLoopPanel({
           <Button size="small" icon={<ReloadOutlined />} onClick={reset} disabled={isActive}>
             重置
           </Button>
-          {completedCycles.length > 0 && onRequestAiAnalysis ? (
+          {completedCycles.length > 0 && onDispatchSessionFeedbackLoop ? (
             <>
               <Button size="small" icon={<RobotOutlined />} onClick={() => void handleSummary()}>
                 AI 总结
@@ -376,7 +382,7 @@ export const SessionFeedbackLoopPanel = memo(function SessionFeedbackLoopPanel({
       <SessionFeedbackConfigPatchPanel
         loop={loop}
         optimizeConfigArtifacts={optimizeConfigArtifacts}
-        onRequestAiAnalysis={onRequestAiAnalysis}
+        onDispatchSessionFeedbackLoop={onDispatchSessionFeedbackLoop}
       />
 
       {state.cycles.length > 0 ? (

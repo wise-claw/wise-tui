@@ -31,6 +31,13 @@ export interface SessionDataLinkTopbarTriggerProps {
   /** 当前项目/仓库主会话（与侧栏「主会话」绑定一致） */
   mainSession: ClaudeSession | null;
   onRequestAiAnalysis?: (prompt: string) => void | Promise<void>;
+  onDispatchSessionFeedbackLoop?: (input: {
+    anchorSessionId: string;
+    prompt: string;
+    kind: import("../../utils/sessionFeedbackLoopDispatch").FeedbackLoopDispatchKind;
+    cycleIndex?: number;
+  }) => void | Promise<void>;
+  getClaudeSessions?: () => readonly ClaudeSession[];
   open?: boolean;
   onOpenChange?: (open: boolean) => void;
   triggerHidden?: boolean;
@@ -39,6 +46,8 @@ export interface SessionDataLinkTopbarTriggerProps {
 export function SessionDataLinkTopbarTrigger({
   mainSession,
   onRequestAiAnalysis,
+  onDispatchSessionFeedbackLoop,
+  getClaudeSessions,
   open: controlledOpen,
   onOpenChange: controlledOnOpenChange,
   triggerHidden = false,
@@ -110,6 +119,8 @@ export function SessionDataLinkTopbarTrigger({
         session={mainSession}
         initialViewMode={initialViewMode}
         onRequestAiAnalysis={onRequestAiAnalysis}
+        onDispatchSessionFeedbackLoop={onDispatchSessionFeedbackLoop}
+        getClaudeSessions={getClaudeSessions}
       />
     </>
   );

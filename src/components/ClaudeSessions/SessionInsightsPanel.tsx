@@ -66,6 +66,11 @@ interface Props {
   repositoryPath?: string | null;
   onJumpTurn?: (turnIndex: number) => void;
   onRequestAiAnalysis?: (prompt: string) => void | Promise<void>;
+  onDispatchSessionFeedbackLoop?: (
+    prompt: string,
+    kind: import("../../utils/sessionFeedbackLoopDispatch").FeedbackLoopDispatchKind,
+    cycleIndex?: number,
+  ) => void | Promise<void>;
   feedbackLoop?: UseSessionFeedbackLoopResult;
   feedbackLoopFeatureEnabled?: boolean;
   feedbackLoopInjectSystemPrompt?: boolean;
@@ -184,6 +189,7 @@ export const SessionInsightsPanel = memo(function SessionInsightsPanel({
   repositoryPath,
   onJumpTurn,
   onRequestAiAnalysis,
+  onDispatchSessionFeedbackLoop,
   feedbackLoop,
   feedbackLoopFeatureEnabled = false,
   feedbackLoopInjectSystemPrompt = false,
@@ -379,7 +385,7 @@ export const SessionInsightsPanel = memo(function SessionInsightsPanel({
           featureEnabled={feedbackLoopFeatureEnabled}
           injectHabitsToSystemPrompt={feedbackLoopInjectSystemPrompt}
           optimizeConfigArtifacts={feedbackLoopOptimizeConfigArtifacts}
-          onRequestAiAnalysis={onRequestAiAnalysis}
+          onDispatchSessionFeedbackLoop={onDispatchSessionFeedbackLoop}
         />
       ) : null}
       <div className="app-session-insights__actions">

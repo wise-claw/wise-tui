@@ -93,6 +93,12 @@ interface Props {
     prompt: string;
     userBubblePrompt?: string;
   }) => void | Promise<void>;
+  onDispatchSessionFeedbackLoop?: (input: {
+    anchorSessionId: string;
+    prompt: string;
+    kind: import("../../utils/sessionFeedbackLoopDispatch").FeedbackLoopDispatchKind;
+    cycleIndex?: number;
+  }) => void | Promise<void>;
   onSendMessage: (prompt: string) => void;
   onCancelSession: (sessionId: string, opts?: { retractLastUserTurn?: boolean }) => void;
   onCloseSession: (sessionId: string) => void;
@@ -244,6 +250,7 @@ function ClaudeSessionsShell({
   onResumeSessionFromMonitorDrawer,
   onPrepareSessionForMonitorDrawer,
   onDispatchExecutionEnvironment,
+  onDispatchSessionFeedbackLoop,
   onSendMessage,
   onCancelSession,
   onCloseSession: _onCloseSession,
@@ -652,6 +659,8 @@ function ClaudeSessionsShell({
                 }
               : undefined
           }
+          onDispatchSessionFeedbackLoop={onDispatchSessionFeedbackLoop}
+          getClaudeSessions={() => sessions}
           onToggleSidebar={onToggleSidebar}
           onToggleRightPanel={onToggleRightPanel}
           rightPanelDefaultCollapsed={rightPanelDefaultCollapsed}

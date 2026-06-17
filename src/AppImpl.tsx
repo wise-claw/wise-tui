@@ -157,6 +157,8 @@ import { useExecutionEnvironmentDispatchHistoryDays } from "./hooks/useExecution
 import { useExecutionEnvironmentDispatchWorkerTranscriptPreload } from "./hooks/useExecutionEnvironmentDispatchWorkerTranscriptPreload";
 import { useSessionConversationTasks } from "./hooks/useSessionConversationTasks";
 import { dispatchExecutionEnvironmentFromMainSession } from "./services/executionEnvironmentDispatch";
+import { dispatchSessionFeedbackLoopAnalysis } from "./services/sessionFeedbackLoopDispatch";
+import type { FeedbackLoopDispatchKind } from "./utils/sessionFeedbackLoopDispatch";
 import { createFreshTerminalWorkerTab, isTerminalWorkerWiseTab } from "./services/terminalDispatch";
 import { resolveExecutionEnvironmentDispatchAnchorSessionId } from "./utils/executionEnvironmentDispatchAnchor";
 import { useClaudeSessionsStructureKey } from "./stores/claudeSessionsLiveStore";
@@ -1337,6 +1339,25 @@ export default function App() {
       );
     },
     [activeSessionId, codexAvailable, cursorAvailable, geminiAvailable, opencodeAvailable, createSession, executeSession, appendSystemMessage],
+  );
+
+  const handleDispatchSessionFeedbackLoop = useCallback(
+    async (input: {
+      anchorSessionId: string;
+      prompt: string;
+      kind: FeedbackLoopDispatchKind;
+      cycleIndex?: number;
+    }) => {
+      await dispatchSessionFeedbackLoopAnalysis(
+        {
+          getSessions: () => sessionsLatestRef.current,
+          createSession,
+          executeSession: (workerTabId, prompt, opts) => executeSession(workerTabId, prompt, opts),
+        },
+        input,
+      );
+    },
+    [createSession, executeSession],
   );
 
   useScheduledClaudeTaskRunner({
@@ -3667,6 +3688,7 @@ export default function App() {
         onResumeSessionFromMonitorDrawer: resumeSessionFromMonitorDrawer,
         onPrepareSessionForMonitorDrawer: ensureSessionForMonitorDrawer,
         onDispatchExecutionEnvironment: handleDispatchExecutionEnvironment,
+        onDispatchSessionFeedbackLoop: handleDispatchSessionFeedbackLoop,
         onSendMessage: handleSendMessageWithAtMention,
         onCancelSession: cancelSession,
         onCloseSession: handleCloseSession,

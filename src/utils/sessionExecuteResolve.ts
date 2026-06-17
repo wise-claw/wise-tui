@@ -9,7 +9,8 @@ export function preservesWorkerWiseTabId(
   const name = session.repositoryName?.trim() ?? "";
   if (!name) return false;
   if (name.includes("/员工:")) return true;
-  return name.includes("/执行环境:");
+  if (name.includes("/执行环境:")) return true;
+  return name.includes("/神经网:");
 }
 
 export function resolveSessionForExecuteKey(

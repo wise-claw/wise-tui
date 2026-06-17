@@ -7,7 +7,7 @@ import { FccTopbarTrigger } from "./FccTopbarTrigger";
 import { FccTrafficTopbarTrigger } from "./FccTrafficTopbarTrigger";
 import { OpencodeGoProxyTopbarTrigger } from "./OpencodeGoProxyTopbarTrigger";
 import { LlmProxyTopbarTrigger } from "./LlmProxyTopbarTrigger";
-import { SessionDataLinkTopbarTrigger } from "./SessionDataLinkTopbarTrigger";
+import { SessionDataLinkTopbarTrigger, type SessionDataLinkTopbarTriggerProps } from "./SessionDataLinkTopbarTrigger";
 import { topbarOverflowMenuIcon, type SessionTopbarOverflowPanel } from "./topbarOverflowMenuIcons";
 
 export type { SessionTopbarOverflowPanel };
@@ -28,12 +28,16 @@ export interface ClaudeChatSessionTopbarOverflowProps {
   repositoryPath: string;
   mainSessionForDataLink: ClaudeSession | null;
   onSessionInsightsAiAnalysis?: (prompt: string) => void | Promise<void>;
+  onDispatchSessionFeedbackLoop?: SessionDataLinkTopbarTriggerProps["onDispatchSessionFeedbackLoop"];
+  getClaudeSessions?: () => readonly ClaudeSession[];
 }
 
 export const ClaudeChatSessionTopbarOverflow = memo(function ClaudeChatSessionTopbarOverflow({
   repositoryPath,
   mainSessionForDataLink,
   onSessionInsightsAiAnalysis,
+  onDispatchSessionFeedbackLoop,
+  getClaudeSessions,
 }: ClaudeChatSessionTopbarOverflowProps) {
   const topbarChrome = useWiseTopbarChromeVisibility();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -146,6 +150,8 @@ export const ClaudeChatSessionTopbarOverflow = memo(function ClaudeChatSessionTo
         <SessionDataLinkTopbarTrigger
           mainSession={mainSessionForDataLink}
           onRequestAiAnalysis={onSessionInsightsAiAnalysis}
+          onDispatchSessionFeedbackLoop={onDispatchSessionFeedbackLoop}
+          getClaudeSessions={getClaudeSessions}
           triggerHidden
           open
           onOpenChange={(open) => handlePanelOpenChange("sessionDataLink", open)}

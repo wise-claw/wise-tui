@@ -28,10 +28,16 @@ import {
 
 const { Text } = Typography;
 
+import type { FeedbackLoopDispatchKind } from "../../utils/sessionFeedbackLoopDispatch";
+
 interface Props {
   loop: UseSessionFeedbackLoopResult;
   optimizeConfigArtifacts: boolean;
-  onRequestAiAnalysis?: (prompt: string) => void | Promise<void>;
+  onDispatchSessionFeedbackLoop?: (
+    prompt: string,
+    kind: FeedbackLoopDispatchKind,
+    cycleIndex?: number,
+  ) => void | Promise<void>;
 }
 
 function formatOverheadDelta(value: number): string {
@@ -222,7 +228,7 @@ function BackupRow({
 export const SessionFeedbackConfigPatchPanel = memo(function SessionFeedbackConfigPatchPanel({
   loop,
   optimizeConfigArtifacts,
-  onRequestAiAnalysis,
+  onDispatchSessionFeedbackLoop,
 }: Props) {
   const {
     configPatches,
@@ -281,17 +287,17 @@ export const SessionFeedbackConfigPatchPanel = memo(function SessionFeedbackConf
 
   const handleAiGenerate = useCallback(async () => {
     const prompt = requestConfigPatchPrompt();
-    if (!prompt || !onRequestAiAnalysis) {
+    if (!prompt || !onDispatchSessionFeedbackLoop) {
       message.info("暂无配置补丁生成上下文");
       return;
     }
     try {
-      await onRequestAiAnalysis(prompt);
-      message.success("已发送 AI 配置补丁请求；回复完成后点「从剪贴板解析」");
+      await onDispatchSessionFeedbackLoop(prompt, "config_patch");
+      message.success("已派发 AI 配置补丁请求至神经网 worker；完成后将自动解析 JSON 补丁");
     } catch (e) {
-      message.error(`发送失败：${e instanceof Error ? e.message : String(e)}`);
+      message.error(`派发失败：${e instanceof Error ? e.message : String(e)}`);
     }
-  }, [onRequestAiAnalysis, requestConfigPatchPrompt]);
+  }, [onDispatchSessionFeedbackLoop, requestConfigPatchPrompt]);
 
   const handleParseClipboard = useCallback(async () => {
     try {
@@ -369,7 +375,7 @@ export const SessionFeedbackConfigPatchPanel = memo(function SessionFeedbackConf
 
       <div className="app-session-feedback-loop__config-patches-actions">
         <Space size={4} wrap>
-          {onRequestAiAnalysis ? (
+          {onDispatchSessionFeedbackLoop ? (
             <Button size="small" icon={<RobotOutlined />} onClick={() => void handleAiGenerate()}>
               AI 生成补丁
             </Button>

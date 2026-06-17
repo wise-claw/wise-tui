@@ -68,6 +68,8 @@ import type { SessionDataLinkOpenView } from "../../stores/claudeUsageUiStore";
 import { SessionInsightsPanel } from "./SessionInsightsPanel";
 import { useSessionFeedbackLoopSetting } from "../DefaultConfigPanel/useSessionFeedbackLoopSetting";
 import { useSessionFeedbackLoop } from "../../hooks/useSessionFeedbackLoop";
+import { useSessionFeedbackLoopDispatchCompletion } from "../../hooks/useSessionFeedbackLoopDispatchCompletion";
+import type { FeedbackLoopDispatchKind } from "../../utils/sessionFeedbackLoopDispatch";
 import {
   filterSequenceEventsForTurn,
   filterSequenceEventsForTurnRange,
@@ -237,6 +239,14 @@ interface Props {
   initialViewMode?: SessionDataLinkOpenView;
   /** 将 AI 深度解读 prompt 发往主会话（通常关闭抽屉并 execute） */
   onRequestAiAnalysis?: (prompt: string) => void | Promise<void>;
+  /** 反馈神经网：派至独立 worker 会话 */
+  onDispatchSessionFeedbackLoop?: (input: {
+    anchorSessionId: string;
+    prompt: string;
+    kind: FeedbackLoopDispatchKind;
+    cycleIndex?: number;
+  }) => void | Promise<void>;
+  getClaudeSessions?: () => readonly ClaudeSession[];
 }
 
 export function SessionDataLinkDrawer({
@@ -245,6 +255,8 @@ export function SessionDataLinkDrawer({
   session,
   initialViewMode = "list",
   onRequestAiAnalysis,
+  onDispatchSessionFeedbackLoop,
+  getClaudeSessions,
 }: Props) {
   const [viewMode, setViewMode] = useState<"list" | "diagram" | "insights">("list");
   const [filterPreset, setFilterPreset] = useState<SessionLinkFilterPreset>("all");
@@ -512,6 +524,23 @@ export function SessionDataLinkDrawer({
     [onClose, onRequestAiAnalysis],
   );
 
+  const dispatchFeedbackLoopRef = useRef(onDispatchSessionFeedbackLoop);
+  dispatchFeedbackLoopRef.current = onDispatchSessionFeedbackLoop;
+
+  const dispatchFeedbackLoopPrompt = useCallback(
+    async (prompt: string, kind: FeedbackLoopDispatchKind, cycleIndex?: number) => {
+      const dispatch = dispatchFeedbackLoopRef.current;
+      if (!dispatch || !session?.id) return;
+      await dispatch({
+        anchorSessionId: session.id,
+        prompt,
+        kind,
+        cycleIndex,
+      });
+    },
+    [session?.id],
+  );
+
   const feedbackLoopSetting = useSessionFeedbackLoopSetting();
 
   const feedbackLoop = useSessionFeedbackLoop({
@@ -530,9 +559,9 @@ export function SessionDataLinkDrawer({
           claudeSessionId: session.claudeSessionId,
         }
       : undefined,
-    onSendOptimizationPrompt: onRequestAiAnalysis
-      ? async (prompt) => {
-          await handleInsightsAiAnalysis(prompt);
+    onSendOptimizationPrompt: onDispatchSessionFeedbackLoop
+      ? async (prompt, cycleIndex) => {
+          await dispatchFeedbackLoopPrompt(prompt, "optimization", cycleIndex);
         }
       : undefined,
     onCycleComplete: (completed) => {
@@ -549,6 +578,22 @@ export function SessionDataLinkDrawer({
         .filter(Boolean)
         .join("，");
       message.success(`反馈神经网：${reason}${habitsHint ? `，${habitsHint}` : ""}`);
+    },
+  });
+
+  const ingestConfigPatchRef = useRef(feedbackLoop.ingestConfigPatchAiResponse);
+  ingestConfigPatchRef.current = feedbackLoop.ingestConfigPatchAiResponse;
+
+  useSessionFeedbackLoopDispatchCompletion({
+    anchorSessionId: session?.id ?? "",
+    getSessions: getClaudeSessions ?? (() => []),
+    onComplete: (record, responseText) => {
+      if (record.kind === "config_patch" || record.kind === "optimization") {
+        const count = ingestConfigPatchRef.current(responseText);
+        if (count > 0) {
+          message.success(`神经网 worker 已解析 ${count} 条配置补丁，可在下方审阅`);
+        }
+      }
     },
   });
 
@@ -910,6 +955,9 @@ export function SessionDataLinkDrawer({
                     repositoryPath={session.repositoryPath}
                     onJumpTurn={handleJumpTurnFromInsights}
                     onRequestAiAnalysis={onRequestAiAnalysis ? handleInsightsAiAnalysis : undefined}
+                    onDispatchSessionFeedbackLoop={
+                      onDispatchSessionFeedbackLoop ? dispatchFeedbackLoopPrompt : undefined
+                    }
                     feedbackLoop={feedbackLoop}
                     feedbackLoopFeatureEnabled={feedbackLoopSetting.enabled}
                     feedbackLoopInjectSystemPrompt={feedbackLoopSetting.injectHabitsToSystemPrompt}
