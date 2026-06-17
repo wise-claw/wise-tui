@@ -8,6 +8,7 @@ import {
 import { useChatMessageListRows } from "../../hooks/useChatMessageListRows";
 import { useScrollEndClass } from "../../hooks/useScrollEndClass";
 import { ChatMessageListVirtualBody } from "./ChatMessageListVirtualBody";
+import { ChatRepositoryProvider } from "./chatRepositoryContext";
 import "./index.css";
 
 interface Props {
@@ -45,15 +46,17 @@ export function ClaudeSessionMessagesColumn({
             <p>暂无消息</p>
           </div>
         ) : (
-          <ChatMessageListVirtualBody
-            rows={rows}
-            scrollContainerRef={scrollRef}
-            listResetKey={session.id}
-            listVariant="monitor"
-            onOpenTaskDetail={onOpenTaskDetail}
-            onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
-            sessionsForDispatchLookup={sessionsForDispatchLookup}
-          />
+          <ChatRepositoryProvider repositoryPath={session.repositoryPath}>
+            <ChatMessageListVirtualBody
+              rows={rows}
+              scrollContainerRef={scrollRef}
+              listResetKey={session.id}
+              listVariant="monitor"
+              onOpenTaskDetail={onOpenTaskDetail}
+              onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
+              sessionsForDispatchLookup={sessionsForDispatchLookup}
+            />
+          </ChatRepositoryProvider>
         )}
       </div>
     </div>

@@ -6,6 +6,7 @@ import {
   ChatMessageListVirtualBody,
   type ChatMessageListNavigationHandle,
 } from "./ChatMessageListVirtualBody";
+import { ChatRepositoryProvider } from "./chatRepositoryContext";
 
 interface Props {
   session: ClaudeSession;
@@ -49,22 +50,24 @@ export const ClaudeVirtualMessageList = forwardRef<ChatMessageListNavigationHand
     }
 
     return (
-      <ChatMessageListVirtualBody
-        ref={ref}
-        rows={rows}
-        sessionId={session.id}
-        scrollContainerRef={scrollContainerRef}
-        listResetKey={session.id}
-        listVariant={listVariant}
-        resolveExecutionEnvironmentDispatchTask={resolveExecutionEnvironmentDispatchTask}
-        onOpenTaskDetail={onOpenTaskDetail}
-        onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
-        onOpenSessionConversationTaskDetail={onOpenSessionConversationTaskDetail}
-        sessionsForDispatchLookup={sessionsForDispatchLookup}
-        onNavigate={onNavigate}
-        messageListProfile={messageListProfile}
-        companionMessageListWindow={companionMessageListWindow}
-      />
+      <ChatRepositoryProvider repositoryPath={session.repositoryPath}>
+        <ChatMessageListVirtualBody
+          ref={ref}
+          rows={rows}
+          sessionId={session.id}
+          scrollContainerRef={scrollContainerRef}
+          listResetKey={session.id}
+          listVariant={listVariant}
+          resolveExecutionEnvironmentDispatchTask={resolveExecutionEnvironmentDispatchTask}
+          onOpenTaskDetail={onOpenTaskDetail}
+          onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
+          onOpenSessionConversationTaskDetail={onOpenSessionConversationTaskDetail}
+          sessionsForDispatchLookup={sessionsForDispatchLookup}
+          onNavigate={onNavigate}
+          messageListProfile={messageListProfile}
+          companionMessageListWindow={companionMessageListWindow}
+        />
+      </ChatRepositoryProvider>
     );
   },
 );

@@ -7,7 +7,12 @@ import { reasoningPreviewOverflows } from "../../utils/reasoningPreviewOverflows
 import { isSkillToolPart, skillToolDisplayName } from "../../utils/skillToolPart";
 import { LinkifiedPre } from "./LinkifiedPre";
 import { Markdown, StreamingReplyHint, usePacedText } from "./Markdown";
+import { ToolFileEditCard } from "./ToolFileEditCard";
 import { WORKFLOW_UI_EVENT_FOCUS_TASK_TOOL } from "../../constants/workflowUiEvents";
+import {
+  extractToolFileEditPreview,
+  isToolEditNoiseOutput,
+} from "../../utils/toolFileEditPreview";
 
 // ── SVG Icons ──
 
@@ -468,6 +473,8 @@ function shouldShowToolOutputBody(part: ToolUsePart): boolean {
   const errorText = part.error?.trim() ?? "";
   if (!outputText) return false;
   if (errorText && toolFailureTextsDuplicate(errorText, outputText)) return false;
+  const editPreview = extractToolFileEditPreview(part);
+  if (editPreview && isToolEditNoiseOutput(outputText)) return false;
   return true;
 }
 
@@ -543,7 +550,8 @@ const ToolUsePartDisplay = memo(function ToolUsePartDisplay({
   const isToolResult = !part.name.trim() && Boolean(part.output?.trim() || part.error?.trim());
   const isErrorState = part.status === "error" || Boolean(part.error?.trim());
   const isBashOrExec = part.name.toLowerCase() === "bash" || part.name.toLowerCase() === "exec";
-  const hasExpandableBody = hasExpandableToolBody(part, info);
+  const editPreview = useMemo(() => extractToolFileEditPreview(part), [part]);
+  const hasExpandableBody = hasExpandableToolBody(part, info, editPreview);
   const [internalExpanded, setInternalExpanded] = useState(false);
   const expanded = controlledExpanded ?? internalExpanded;
   const setExpanded = useCallback(
@@ -562,6 +570,7 @@ const ToolUsePartDisplay = memo(function ToolUsePartDisplay({
         ? input.task_id.trim()
         : "";
   const outputStreaming = part.status === "running";
+  const showCompactEditCard = Boolean(editPreview && !hasExpandableBody && !isErrorState);
   const { onPointerDown: onTogglePointerDown, consumeHadTextSelection } = useClickAfterSelectionGuard();
   const { copied, copy } = useCopyToClipboard();
   const copyText =
@@ -594,10 +603,11 @@ const ToolUsePartDisplay = memo(function ToolUsePartDisplay({
 
   return (
     <div
-      className={`app-message-part app-message-part--tool${isSkill ? " app-message-part--skill" : ""}${isToolResult ? " app-message-part--tool-result" : ""}${isErrorState ? " app-message-part--tool-error" : ""}${expanded ? " app-message-part--expanded" : ""}`}
+      className={`app-message-part app-message-part--tool${isSkill ? " app-message-part--skill" : ""}${isToolResult ? " app-message-part--tool-result" : ""}${isErrorState ? " app-message-part--tool-error" : ""}${editPreview ? " app-message-part--tool-edit-preview" : ""}${expanded ? " app-message-part--expanded" : ""}`}
       data-task-id={taskId || undefined}
       data-tool-name={part.name.trim().toLowerCase() || "result"}
     >
+      {showCompactEditCard ? null : (
       <div className="app-message-part-tool-head">
         <button
           type="button"
@@ -652,6 +662,8 @@ const ToolUsePartDisplay = memo(function ToolUsePartDisplay({
           </button>
         ) : null}
       </div>
+      )}
+      {editPreview ? <ToolFileEditCard preview={editPreview} streaming={outputStreaming} /> : null}
       {expanded && hasExpandableBody ? (
         <div className="app-message-part-content">
           {isBashOrExec && info.subtitle ? (
@@ -677,10 +689,14 @@ function toolPartStableKey(part: ToolUsePart, originalIndex: number): string {
 function hasExpandableToolBody(
   part: ToolUsePart,
   info: ReturnType<typeof getToolDisplayInfo> = getToolDisplayInfo(part),
+  editPreview: ReturnType<typeof extractToolFileEditPreview> = extractToolFileEditPreview(part),
 ): boolean {
   const isBashOrExec = part.name.toLowerCase() === "bash" || part.name.toLowerCase() === "exec";
+  const outputText = part.output?.trim() ?? "";
+  const effectiveOutput =
+    editPreview && outputText && isToolEditNoiseOutput(outputText) ? "" : outputText;
   return Boolean(
-    part.output?.trim() ||
+    effectiveOutput ||
       part.error?.trim() ||
       (isBashOrExec && info.subtitle?.trim()),
   );

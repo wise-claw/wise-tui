@@ -5609,6 +5609,171 @@ button.app-message-part-header:disabled:hover {
   background: var(--ant-color-border);
 }
 
+/* Cursor-style file edit preview card */
+.app-tool-edit-card {
+  margin: 4px 0 0;
+  border: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 82%, transparent);
+  border-radius: 8px;
+  background: var(--ant-color-bg-container);
+  overflow: hidden;
+  box-shadow: 0 1px 2px color-mix(in srgb, var(--ant-color-text) 4%, transparent);
+}
+
+.app-claude-messages .app-message-parts__tool-group .app-tool-edit-card {
+  margin: 3px 0 2px;
+}
+
+.app-tool-edit-card__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px;
+  border-bottom: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 68%, transparent);
+  min-height: 28px;
+}
+
+.app-tool-edit-card__icon {
+  flex-shrink: 0;
+  width: 14px;
+  height: 14px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.app-tool-edit-card__icon.explorer-tree-file-icon {
+  width: 14px;
+  height: 14px;
+  font-size: 14px;
+}
+
+.app-tool-edit-card__icon .explorer-tree-react-icon {
+  width: 14px;
+  height: 14px;
+}
+
+.app-tool-edit-card__filename {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 12px;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-tool-edit-card__filename--clickable {
+  border: none;
+  background: transparent;
+  padding: 0;
+  margin: 0;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.app-tool-edit-card__filename--clickable:hover {
+  color: var(--ant-color-primary);
+  text-decoration: underline;
+}
+
+.app-tool-edit-card__filename--clickable:focus-visible {
+  outline: 1px solid var(--ant-color-primary);
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
+.app-tool-edit-card__stats {
+  flex-shrink: 0;
+  font-family: "SF Mono", "Fira Code", Consolas, monospace;
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-tool-edit-card__stats--add {
+  color: #16a34a;
+}
+
+.app-tool-edit-card__stats--remove {
+  color: #dc2626;
+}
+
+.app-tool-edit-card__body {
+  position: relative;
+}
+
+.app-tool-edit-card--truncated .app-tool-edit-card__body::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  height: 36px;
+  pointer-events: none;
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--ant-color-bg-container) 0%, transparent),
+    var(--ant-color-bg-container)
+  );
+}
+
+.app-tool-edit-card__code {
+  margin: 0;
+  padding: 0;
+  font-size: 11px;
+  line-height: 1.45;
+  overflow: hidden;
+  background: transparent;
+  border: none;
+}
+
+.app-tool-edit-card__line {
+  display: flex;
+  align-items: stretch;
+  min-height: 1.45em;
+  white-space: pre;
+  overflow-x: auto;
+}
+
+.app-tool-edit-card__line code {
+  display: block;
+  flex: 1 1 auto;
+  min-width: 0;
+  padding: 0 8px;
+  background: transparent;
+  border: none;
+  font-family: "SF Mono", "Fira Code", Consolas, monospace;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.app-tool-edit-card__line--add {
+  background: rgba(16, 185, 129, 0.11);
+  box-shadow: inset 3px 0 0 rgba(16, 185, 129, 0.58);
+}
+
+.app-tool-edit-card__line--remove {
+  background: rgba(239, 68, 68, 0.09);
+  box-shadow: inset 3px 0 0 rgba(239, 68, 68, 0.48);
+}
+
+.app-tool-edit-card__line--same {
+  color: var(--ant-color-text-quaternary);
+}
+
+.app-tool-edit-card__line--same code {
+  color: inherit;
+}
+
+.app-tool-edit-card--streaming {
+  opacity: 0.92;
+}
+
+.app-message-part--tool-edit-preview .app-message-part-tool-head + .app-tool-edit-card {
+  margin-top: 2px;
+}
+
 .app-tool-copy-btn {
   position: absolute;
   top: 5px;
