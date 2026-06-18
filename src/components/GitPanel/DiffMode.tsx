@@ -222,8 +222,9 @@ function DiffModeInner({
   /** 在 TextArea blur 之前于 pointerdown 触发，避免「第一次点击只失焦不提交」。 */
   const submitCommit = useCallback(() => {
     if (loading.commit || loading.commitAndPush || commitSubmitLockRef.current) return;
-    const trimmed = normalizeConventionalCommitMessage(commitMsgRef.current.trim());
-    if (!trimmed || !hasChangesRef.current) return;
+    const rawMsg = commitMsgRef.current.trim();
+    if (!rawMsg || !hasChangesRef.current) return;
+    const trimmed = normalizeConventionalCommitMessage(rawMsg);
     commitSubmitLockRef.current = true;
     onCommit(trimmed);
     setCommitMsg("");
@@ -236,9 +237,10 @@ function DiffModeInner({
     if (!hasChangesRef.current && ahead <= 0) return;
 
     commitSubmitLockRef.current = true;
-    let trimmed = normalizeConventionalCommitMessage(commitMsgRef.current.trim());
+    const rawMsg = commitMsgRef.current.trim();
+    let trimmed = rawMsg ? normalizeConventionalCommitMessage(rawMsg) : "";
     try {
-      if (!trimmed) {
+      if (!rawMsg) {
         setPushPreparing(true);
         setAiSummaryLoading(true);
         try {

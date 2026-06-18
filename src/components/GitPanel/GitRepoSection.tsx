@@ -527,8 +527,9 @@ function GitRepoSectionInner({
     (msg: string) =>
       void runAction("commitAndPush", async () => {
         if (!repositoryPath) return;
-        const trimmed = normalizeConventionalCommitMessage(msg.trim());
-        if (!trimmed) throw new Error("提交信息不能为空");
+        const raw = msg.trim();
+        if (!raw) throw new Error("提交信息不能为空");
+        const trimmed = normalizeConventionalCommitMessage(raw);
         const outcome = await commitPullPushRepository(repositoryPath, trimmed);
         if (outcome === "noop") {
           message.info("当前没有可提交的改动，也没有待推送的提交");
