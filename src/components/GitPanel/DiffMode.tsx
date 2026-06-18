@@ -4,6 +4,7 @@ import { Button, Input, message, Popconfirm, Space, Typography } from "antd";
 import {
   ApartmentOutlined,
   CheckOutlined,
+  CloudUploadOutlined,
   MinusOutlined,
   PlusOutlined,
   UnorderedListOutlined,
@@ -41,6 +42,7 @@ interface DiffModeProps {
   onUnstageAll: () => void;
   onDiscardAll: () => void | Promise<void>;
   onCommit: (msg: string) => void;
+  onCommitAndPush: (msg: string) => void;
   onOpenFile?: (path: string, options?: GitPanelOpenFileOptions) => void;
   onBranchChanged?: () => void;
 }
@@ -57,6 +59,7 @@ function DiffModeInner({
   onUnstageAll,
   onDiscardAll,
   onCommit,
+  onCommitAndPush,
   onOpenFile,
   onBranchChanged,
 }: DiffModeProps) {
@@ -66,6 +69,7 @@ function DiffModeInner({
   const [treeAllExpanded, setTreeAllExpanded] = useState(false);
   const [stagedCollapsed, setStagedCollapsed] = useState(false);
   const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
+  const [pushPreparing, setPushPreparing] = useState(false);
   const commitMsgRef = useRef(commitMsg);
   const hasChangesRef = useRef(false);
   const commitSubmitLockRef = useRef(false);
@@ -73,14 +77,22 @@ function DiffModeInner({
   const hasStaged = status.staged.length > 0;
   const hasUnstaged = status.unstaged.length > 0;
   const hasChanges = hasStaged || hasUnstaged;
+  const ahead = status.ahead ?? 0;
   hasChangesRef.current = hasChanges;
-  const canCommit = commitMsg.trim().length > 0 && hasChanges && !loading.commit;
+  const showCommitCard = hasChanges || ahead > 0;
+  const canCommit = commitMsg.trim().length > 0 && hasChanges && !loading.commit && !loading.commitAndPush;
+  const canPush =
+    (hasChanges || ahead > 0) &&
+    !loading.commit &&
+    !loading.commitAndPush &&
+    !aiSummaryLoading &&
+    !pushPreparing;
 
   useEffect(() => {
-    if (!loading.commit) {
+    if (!loading.commit && !loading.commitAndPush) {
       commitSubmitLockRef.current = false;
     }
-  }, [loading.commit]);
+  }, [loading.commit, loading.commitAndPush]);
 
   const renderStagedRow = useCallback(
     (file: GitFileStatus) => (
@@ -148,21 +160,19 @@ function DiffModeInner({
     });
   }, []);
 
-  const handleGenerateCommitByAi = useCallback(async () => {
-    if (aiSummaryLoading) return;
-    setAiSummaryLoading(true);
+  const generateCommitMessageByAi = useCallback(async (): Promise<{ message: string; aiFailed: boolean }> => {
+    const fallback = buildCommitDraftFromStatus(status);
+    const allFiles = [...status.staged, ...status.unstaged];
+    const previewLimit = 40;
+    const filesPreview = allFiles
+      .slice(0, previewLimit)
+      .map((f) => `- ${f.path} (${f.status}, +${f.additions}, -${f.deletions})`)
+      .join("\n");
+    const files =
+      allFiles.length > previewLimit
+        ? `${filesPreview}\n- ... 另有 ${allFiles.length - previewLimit} 个文件未列出`
+        : filesPreview;
     try {
-      const fallback = buildCommitDraftFromStatus(status);
-      const allFiles = [...status.staged, ...status.unstaged];
-      const previewLimit = 40;
-      const filesPreview = allFiles
-        .slice(0, previewLimit)
-        .map((f) => `- ${f.path} (${f.status}, +${f.additions}, -${f.deletions})`)
-        .join("\n");
-      const files =
-        allFiles.length > previewLimit
-          ? `${filesPreview}\n- ... 另有 ${allFiles.length - previewLimit} 个文件未列出`
-          : filesPreview;
       const model = await getClaudeConfigModel(repositoryPath);
       const result = await executeClaudeCodeAndWait({
         repositoryPath,
@@ -172,37 +182,96 @@ function DiffModeInner({
           `分支: ${status.branch ?? "unknown"}`,
           `统计: +${Math.max(0, status.additions || 0)} / -${Math.max(0, status.deletions || 0)}`,
           `暂存数量: ${status.staged.length}, 未暂存数量: ${status.unstaged.length}`,
+          ahead > 0 ? `待推送提交数: ${ahead}` : "",
           "文件列表：",
           files || "- 无",
-        ].join("\n"),
+        ]
+          .filter(Boolean)
+          .join("\n"),
         model: model ?? undefined,
         timeoutMs: 45_000,
         connectionMode: "oneshot",
       });
       if (!result.success) {
-        setCommitMsg(fallback);
-        message.warning("AI 生成失败，已填充默认提交信息。");
-        return;
+        return { message: fallback, aiFailed: true };
       }
       const text = extractClaudeInvocationFinalText(result.outputLines);
-      setCommitMsg(normalizeConventionalCommitMessage(text || fallback));
+      return {
+        message: normalizeConventionalCommitMessage(text || fallback),
+        aiFailed: false,
+      };
     } catch {
-      setCommitMsg(buildCommitDraftFromStatus(status));
-      message.warning("AI 生成失败，已填充默认提交信息。");
+      return { message: fallback, aiFailed: true };
+    }
+  }, [ahead, repositoryPath, status]);
+
+  const handleGenerateCommitByAi = useCallback(async () => {
+    if (aiSummaryLoading) return;
+    setAiSummaryLoading(true);
+    try {
+      const generated = await generateCommitMessageByAi();
+      setCommitMsg(generated.message);
+      if (generated.aiFailed) {
+        message.warning("AI 生成失败，已填充默认提交信息。");
+      }
     } finally {
       setAiSummaryLoading(false);
     }
-  }, [aiSummaryLoading, repositoryPath, status]);
+  }, [aiSummaryLoading, generateCommitMessageByAi]);
 
   /** 在 TextArea blur 之前于 pointerdown 触发，避免「第一次点击只失焦不提交」。 */
   const submitCommit = useCallback(() => {
-    if (loading.commit || commitSubmitLockRef.current) return;
+    if (loading.commit || loading.commitAndPush || commitSubmitLockRef.current) return;
     const trimmed = normalizeConventionalCommitMessage(commitMsgRef.current.trim());
     if (!trimmed || !hasChangesRef.current) return;
     commitSubmitLockRef.current = true;
     onCommit(trimmed);
     setCommitMsg("");
-  }, [loading.commit, onCommit]);
+  }, [loading.commit, loading.commitAndPush, onCommit]);
+
+  const submitCommitAndPush = useCallback(async () => {
+    if (loading.commit || loading.commitAndPush || commitSubmitLockRef.current || pushPreparing || aiSummaryLoading) {
+      return;
+    }
+    if (!hasChangesRef.current && ahead <= 0) return;
+
+    commitSubmitLockRef.current = true;
+    let trimmed = normalizeConventionalCommitMessage(commitMsgRef.current.trim());
+    try {
+      if (!trimmed) {
+        setPushPreparing(true);
+        setAiSummaryLoading(true);
+        try {
+          const generated = await generateCommitMessageByAi();
+          trimmed = generated.message;
+          setCommitMsg(trimmed);
+          if (generated.aiFailed) {
+            message.warning("AI 生成失败，已使用默认提交信息继续推送。");
+          }
+        } finally {
+          setAiSummaryLoading(false);
+          setPushPreparing(false);
+        }
+      }
+      if (!trimmed) {
+        message.warning("请先填写或生成提交信息");
+        commitSubmitLockRef.current = false;
+        return;
+      }
+      onCommitAndPush(trimmed);
+      setCommitMsg("");
+    } catch {
+      commitSubmitLockRef.current = false;
+    }
+  }, [
+    ahead,
+    aiSummaryLoading,
+    generateCommitMessageByAi,
+    loading.commit,
+    loading.commitAndPush,
+    onCommitAndPush,
+    pushPreparing,
+  ]);
 
   return (
     <div className="git-diff-mode">
@@ -218,7 +287,7 @@ function DiffModeInner({
         </div>
       )}
 
-      {hasChanges && (
+      {showCommitCard && (
         <div className="git-commit-section">
           <form
             className="git-commit-card"
@@ -230,12 +299,16 @@ function DiffModeInner({
             <TextArea
               className="git-commit-card__input"
               variant="borderless"
-              placeholder="提交信息..."
+              placeholder={hasChanges ? "提交信息..." : "待推送提交，可 AI 生成描述后推送"}
               value={commitMsg}
               onChange={(e) => setCommitMsg(e.target.value)}
               onKeyDown={(event) => {
                 if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey)) return;
                 event.preventDefault();
+                if (event.shiftKey) {
+                  void submitCommitAndPush();
+                  return;
+                }
                 submitCommit();
               }}
               rows={1}
@@ -249,25 +322,44 @@ function DiffModeInner({
                 title="根据当前变更 AI 生成提交信息"
                 onMouseDown={(event) => event.preventDefault()}
                 onClick={() => void handleGenerateCommitByAi()}
-                loading={aiSummaryLoading}
-                disabled={aiSummaryLoading}
+                loading={aiSummaryLoading && !pushPreparing}
+                disabled={aiSummaryLoading || loading.commitAndPush}
               >
                 AI 生成
               </Button>
+              {hasChanges ? (
+                <Button
+                  htmlType="button"
+                  type="text"
+                  size="small"
+                  className="git-commit-btn"
+                  disabled={!canCommit || loading.commit}
+                  icon={<CheckOutlined />}
+                  onPointerDown={(event) => {
+                    if (event.button !== 0) return;
+                    event.preventDefault();
+                    submitCommit();
+                  }}
+                >
+                  {loading.commit ? "提交中..." : "提交"}
+                </Button>
+              ) : null}
               <Button
                 htmlType="button"
                 type="text"
                 size="small"
-                className="git-commit-btn"
-                disabled={!canCommit || loading.commit}
-                icon={<CheckOutlined />}
+                className="git-push-btn"
+                title="AI 生成提交信息并提交、拉取、推送"
+                disabled={!canPush}
+                icon={<CloudUploadOutlined />}
+                onMouseDown={(event) => event.preventDefault()}
                 onPointerDown={(event) => {
-                  if (event.button !== 0) return;
+                  if (event.button !== 0 || !canPush) return;
                   event.preventDefault();
-                  submitCommit();
+                  void submitCommitAndPush();
                 }}
               >
-                {loading.commit ? "提交中..." : "提交"}
+                {loading.commitAndPush ? "推送中..." : pushPreparing ? "生成中..." : "推送"}
               </Button>
             </div>
           </form>

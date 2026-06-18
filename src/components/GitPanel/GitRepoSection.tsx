@@ -21,7 +21,10 @@ import {
   gitUnstageAll,
 } from "../../services/git";
 import { openRepositoryRemoteInBrowser } from "../../services/openRepositoryRemote";
+import { commitPullPushRepository } from "../../services/gitCommitPullPush";
+import { refreshGitRepositoryStats } from "../../stores/gitRepositoryStatsStore";
 import type { GitStatusResponse } from "../../types";
+import { normalizeConventionalCommitMessage } from "../../utils/conventionalCommitMessage";
 import { DiffMode } from "./DiffMode";
 import { GitPanelMoreMenu } from "./GitPanelMoreMenu";
 import { GitSyncActions } from "./GitSyncActions";
@@ -431,7 +434,7 @@ function GitRepoSectionInner({
       lastActionTime.current.set(action, now);
       setLoading((prev) => ({ ...prev, [action]: true }));
 
-      const tracksSync = action === "commit" || action === "fetch";
+      const tracksSync = action === "commit" || action === "commitAndPush" || action === "fetch";
       if (tracksSync) beginGitSyncOperation();
 
       try {
@@ -516,6 +519,27 @@ function GitRepoSectionInner({
           throw new Error("没有可提交的改动");
         }
         await gitCommit(repositoryPath, trimmed);
+      }),
+    [repositoryPath, runAction],
+  );
+
+  const handleCommitAndPush = useCallback(
+    (msg: string) =>
+      void runAction("commitAndPush", async () => {
+        if (!repositoryPath) return;
+        const trimmed = normalizeConventionalCommitMessage(msg.trim());
+        if (!trimmed) throw new Error("提交信息不能为空");
+        const outcome = await commitPullPushRepository(repositoryPath, trimmed);
+        if (outcome === "noop") {
+          message.info("当前没有可提交的改动，也没有待推送的提交");
+          return;
+        }
+        refreshGitRepositoryStats(repositoryPath);
+        if (outcome === "pushed_only") {
+          message.success("已推送待同步提交");
+        } else {
+          message.success("已提交并推送");
+        }
       }),
     [repositoryPath, runAction],
   );
@@ -698,6 +722,7 @@ function GitRepoSectionInner({
                 onUnstageAll={handleUnstageAll}
                 onDiscardAll={handleDiscardAll}
                 onCommit={handleCommit}
+                onCommitAndPush={handleCommitAndPush}
                 onOpenFile={handleOpenRepoFile}
                 onBranchChanged={() => void loadStatus({ silent: true })}
               />

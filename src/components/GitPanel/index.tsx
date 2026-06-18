@@ -20,8 +20,11 @@ import {
   stopGitWatcher,
 } from "../../services/git";
 import { consumeWarmGitStatus } from "../../services/gitStatusWarmCache";
+import { commitPullPushRepository } from "../../services/gitCommitPullPush";
 import { openRepositoryRemoteInBrowser } from "../../services/openRepositoryRemote";
+import { refreshGitRepositoryStats } from "../../stores/gitRepositoryStatsStore";
 import type { GitStatusResponse } from "../../types";
+import { normalizeConventionalCommitMessage } from "../../utils/conventionalCommitMessage";
 import { runGitSyncAction, type GitSyncActionKind } from "./gitSyncActionRunner";
 import { DiffMode } from "./DiffMode";
 import { GitHistoryDrawer } from "./GitHistoryDrawer";
@@ -299,7 +302,7 @@ function GitSingleRepoPanel({
       lastActionTime.current.set(action, now);
       setLoading((prev) => ({ ...prev, [action]: true }));
 
-      const tracksSync = action === "commit" || action === "fetch";
+      const tracksSync = action === "commit" || action === "commitAndPush" || action === "fetch";
       if (tracksSync) beginGitSyncOperation();
 
       try {
@@ -388,6 +391,27 @@ function GitSingleRepoPanel({
     [repositoryPath, runAction],
   );
 
+  const handleCommitAndPush = useCallback(
+    (msg: string) =>
+      void runAction("commitAndPush", async () => {
+        if (!repositoryPath) return;
+        const trimmed = normalizeConventionalCommitMessage(msg.trim());
+        if (!trimmed) throw new Error("提交信息不能为空");
+        const outcome = await commitPullPushRepository(repositoryPath, trimmed);
+        if (outcome === "noop") {
+          message.info("当前没有可提交的改动，也没有待推送的提交");
+          return;
+        }
+        refreshGitRepositoryStats(repositoryPath);
+        if (outcome === "pushed_only") {
+          message.success("已推送待同步提交");
+        } else {
+          message.success("已提交并推送");
+        }
+      }),
+    [repositoryPath, runAction],
+  );
+
   const runGitSync = useCallback(
     (kind: GitSyncActionKind, work: () => Promise<void>, onErrorMessage: (msg: string) => void) => {
       void runGitSyncAction({
@@ -460,7 +484,7 @@ function GitSingleRepoPanel({
 
   const isMissingRepo = errors.status?.includes("Failed to open git repo");
   const showPanelLoadingBar = Object.entries(loading).some(
-    ([key, busy]) => busy && key !== "push" && key !== "pull" && key !== "fetch",
+    ([key, busy]) => busy && key !== "push" && key !== "pull" && key !== "fetch" && key !== "commitAndPush",
   );
 
   if (!repositoryPath) {
@@ -541,6 +565,7 @@ function GitSingleRepoPanel({
               onUnstageAll={handleUnstageAll}
               onDiscardAll={handleDiscardAll}
               onCommit={handleCommit}
+              onCommitAndPush={handleCommitAndPush}
               onOpenFile={handleOpenRepoFile}
               onBranchChanged={() => void loadStatus({ silent: true })}
             />

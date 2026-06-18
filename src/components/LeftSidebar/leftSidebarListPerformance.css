@@ -81,11 +81,25 @@
   transition: none !important;
 }
 
-.app-left-sidebar-scroll-region--scrolling
-  .app-repository-item:hover:not(.app-repository-item--project-active):not(.app-repository-item--repo-active),
-.app-repository-list--scrolling
-  .app-repository-item:hover:not(.app-repository-item--project-active):not(.app-repository-item--repo-active) {
+.app-left-sidebar-scroll-region--scrolling .app-repository-item:hover,
+.app-repository-list--scrolling .app-repository-item:hover {
   background: transparent !important;
+}
+
+/* 滚动中：选中工作区行带 color-mix + 粗体，展开子仓时重绘面积极大，改用最轻背景 */
+.app-left-sidebar-scroll-region--scrolling .app-repository-item--project-active,
+.app-repository-list--scrolling .app-repository-item--project-active,
+.app-left-sidebar-scroll-region--scrolling .app-repository-item--repo-active,
+.app-repository-list--scrolling .app-repository-item--repo-active {
+  background: transparent !important;
+  box-shadow: none !important;
+}
+
+.app-left-sidebar-scroll-region--scrolling .app-repository-item--project-active .app-repository-name,
+.app-repository-list--scrolling .app-repository-item--project-active .app-repository-name,
+.app-left-sidebar-scroll-region--scrolling .app-repository-item--repo-active .app-repository-name,
+.app-repository-list--scrolling .app-repository-item--repo-active .app-repository-name {
+  font-weight: 400;
 }
 
 .app-left-sidebar-scroll-region--scrolling .app-repository-item:hover .app-repository-action,
@@ -105,6 +119,27 @@
 .app-repository-list--scrolling .app-repository-row {
   content-visibility: visible;
   contain: layout style;
+}
+
+/* 滚动中：展开的工作区行恢复 content-visibility，并跳过子仓库列表绘制 */
+.app-left-sidebar-scroll-region--scrolling .app-repository-row:has(.app-repository-sessions),
+.app-repository-list--scrolling .app-repository-row:has(.app-repository-sessions) {
+  content-visibility: auto;
+  contain-intrinsic-size: auto 28px;
+}
+
+.app-left-sidebar-scroll-region--scrolling .app-repository-sessions,
+.app-repository-list--scrolling .app-repository-sessions {
+  content-visibility: hidden;
+  contain-intrinsic-size: 0;
+  contain: layout style paint;
+}
+
+/* 滚动中：工作区行内快捷操作按钮 DOM 多，统一隐藏减轻合成 */
+.app-left-sidebar-scroll-region--scrolling .app-repository-row-actions,
+.app-repository-list--scrolling .app-repository-row-actions {
+  visibility: hidden;
+  pointer-events: none;
 }
 
 .app-left-sidebar-scroll-region--scrolling .app-repository-item:hover .app-repository-icon--folder,
