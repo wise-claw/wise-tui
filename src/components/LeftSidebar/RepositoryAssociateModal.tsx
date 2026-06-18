@@ -1,12 +1,13 @@
 import { FolderOpenOutlined } from "@ant-design/icons";
 import { HoverHint } from "../shared/HoverHint";
-import { Button, Divider, Input, Modal, Segmented, Select, Space, Typography } from "antd";
+import { Button, Divider, Input, Modal, Select, Space, Typography } from "antd";
 import type { AddRepositoryOptions, Repository, RepositoryAssociatePreset } from "../../types";
 import type { WorkspaceBootstrapSelection } from "../../constants/workspaceBootstrapAddons";
 import type { RepositoryAcquireMode } from "../../utils/repositoryAcquire";
 import { deriveFolderNameFromGitUrl } from "../../utils/repositoryAcquire";
 import { REPOSITORY_ICON_COLOR_PRESETS } from "../../utils/repositoryType";
 import { WorkspaceBootstrapPicker } from "../WorkspaceBootstrapPicker";
+import "./RepositoryAssociateModal.css";
 
 interface RepositoryAssociateModalProps {
   open: boolean;
@@ -46,6 +47,34 @@ const ACQUIRE_MODE_OPTIONS: { value: RepositoryAcquireMode; label: string }[] = 
   { value: "create_empty", label: "新建空仓库" },
   { value: "git_clone", label: "从 Git 克隆" },
 ];
+
+function RepositoryAcquireModePicker({
+  value,
+  onChange,
+}: {
+  value: RepositoryAcquireMode;
+  onChange: (mode: RepositoryAcquireMode) => void;
+}) {
+  return (
+    <div className="app-add-repo-acquire-mode" role="tablist" aria-label="获取方式">
+      {ACQUIRE_MODE_OPTIONS.map((option) => {
+        const active = value === option.value;
+        return (
+          <button
+            key={option.value}
+            type="button"
+            role="tab"
+            aria-selected={active}
+            className={`app-add-repo-acquire-mode__item${active ? " is-active" : ""}`}
+            onClick={() => onChange(option.value)}
+          >
+            {option.label}
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 export function RepositoryAssociateModal({
   open,
@@ -89,7 +118,7 @@ export function RepositoryAssociateModal({
       }}
       okText={submitOkText}
       cancelText="取消"
-      width={compact ? 420 : 440}
+      width={440}
       classNames={{
         body: compact ? "app-add-repo-modal-body app-add-repo-modal-body--compact" : "app-add-repo-modal-body",
       }}
@@ -102,13 +131,7 @@ export function RepositoryAssociateModal({
       >
         <div>
           <div className="app-add-repo-field-label">获取方式</div>
-          <Segmented
-            block
-            size="small"
-            value={acquireMode}
-            options={ACQUIRE_MODE_OPTIONS}
-            onChange={(value) => onAcquireModeChange(value as RepositoryAcquireMode)}
-          />
+          <RepositoryAcquireModePicker value={acquireMode} onChange={onAcquireModeChange} />
         </div>
 
         <div className="app-add-repo-acquire-panel">
@@ -278,9 +301,10 @@ export function RepositoryAssociateModal({
           />
         </div>
         <div>
-          <div className="app-add-repo-field-label">{compact ? "内置能力" : "SDD 与内置能力"}</div>
+          {!floatingMode ? (
+            <div className="app-add-repo-field-label">SDD 与内置能力</div>
+          ) : null}
           <WorkspaceBootstrapPicker
-            compact={compact}
             selection={workspaceBootstrapSelection}
             onChange={onWorkspaceBootstrapSelectionChange}
           />

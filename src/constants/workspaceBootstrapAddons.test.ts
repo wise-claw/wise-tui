@@ -8,16 +8,26 @@ import {
 } from "./workspaceBootstrapAddons";
 
 describe("workspaceBootstrapAddons", () => {
-  test("defaults trellis on", () => {
-    expect(DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION.trellis).toBe(true);
+  test("defaults all bootstrap addons off", () => {
+    expect(DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION.trellis).toBe(false);
     expect(DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION.trellisInit).toBe(false);
     expect(DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION.omc).toBe(false);
   });
 
   test("maps selection to repository sddMode", () => {
     expect(workspaceBootstrapSelectionToSddMode(DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION)).toBe(
-      "wise_trellis",
+      "project_owned",
     );
+    expect(
+      workspaceBootstrapSelectionToSddMode({
+        trellis: true,
+        trellisInit: false,
+        omc: false,
+        superpowers: false,
+        gsd: false,
+        openspec: false,
+      }),
+    ).toBe("wise_trellis");
     expect(
       workspaceBootstrapSelectionToSddMode({
         trellis: false,
@@ -41,27 +51,32 @@ describe("workspaceBootstrapAddons", () => {
   });
 
   test("trellis init when wise or trellis-only", () => {
-    expect(workspaceBootstrapNeedsTrellisInit(DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION)).toBe(true);
+    expect(workspaceBootstrapNeedsTrellisInit(DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION)).toBe(false);
     expect(
       workspaceBootstrapNeedsTrellisInit({
         ...DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION,
-        trellis: false,
+        trellis: true,
+      }),
+    ).toBe(true);
+    expect(
+      workspaceBootstrapNeedsTrellisInit({
+        ...DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION,
         trellisInit: true,
       }),
     ).toBe(true);
     expect(
       workspaceBootstrapNeedsTrellisInit({
         ...DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION,
-        trellis: false,
-        trellisInit: false,
         omc: true,
       }),
     ).toBe(false);
   });
 
   test("Wise Trellis switch disables trellisInit and omc when enabled", () => {
-    expect(setWiseTrellisBootstrapEnabled(DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION, false)).toMatchObject({
-      trellis: false,
+    expect(setWiseTrellisBootstrapEnabled(DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION, true)).toMatchObject({
+      trellis: true,
+      trellisInit: false,
+      omc: false,
     });
     expect(
       setWiseTrellisBootstrapEnabled(
@@ -84,14 +99,14 @@ describe("workspaceBootstrapAddons", () => {
 
   test("addon toggles are blocked while Wise Trellis is on", () => {
     expect(
-      setWorkspaceBootstrapAddonEnabled(DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION, "omc", true),
-    ).toEqual(DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION);
-    expect(
       setWorkspaceBootstrapAddonEnabled(
-        { ...DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION, trellis: false },
+        { ...DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION, trellis: true },
         "omc",
         true,
-      ).omc,
+      ),
+    ).toEqual({ ...DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION, trellis: true });
+    expect(
+      setWorkspaceBootstrapAddonEnabled(DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION, "omc", true).omc,
     ).toBe(true);
   });
 });
