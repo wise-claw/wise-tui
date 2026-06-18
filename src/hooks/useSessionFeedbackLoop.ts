@@ -48,6 +48,7 @@ import {
   buildFeedbackLoopMarkdownReport,
   createInitialFeedbackLoopState,
   extractFeedbackLoopHabits,
+  isFeedbackLoopPhaseActive,
   normalizeFeedbackLoopMaxCycles,
   startFeedbackLoop,
   stopFeedbackLoop,
@@ -522,8 +523,7 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
     return buildFeedbackLoopMarkdownReport(state, metaRef.current);
   }, [state]);
 
-  const isActive =
-    state.phase === "running" || state.phase === "awaiting_turns" || state.phase === "comparing";
+  const isActive = isFeedbackLoopPhaseActive(state.phase);
 
   return {
     state,

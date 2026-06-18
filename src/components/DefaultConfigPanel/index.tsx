@@ -744,7 +744,7 @@ export function DefaultConfigPanel() {
           <div className="app-default-config-row__main">
             <span className="app-default-config-row__title">检测到警告时自动启动</span>
             <span className="app-default-config-row__hint">
-              打开洞察页且存在警告/严重项时，自动开始第一轮优化
+              存在警告/严重项时自动开始第一轮优化（无需打开洞察 tab，后台持续跟踪）
             </span>
           </div>
           <div className="app-default-config-row__control">

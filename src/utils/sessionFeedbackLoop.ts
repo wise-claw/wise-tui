@@ -66,6 +66,24 @@ export type FeedbackLoopPhase =
   | "completed"
   | "stopped";
 
+/** 闭环运行中（需后台持续拉取洞察数据）。 */
+export function isFeedbackLoopPhaseActive(phase: FeedbackLoopPhase): boolean {
+  return phase === "running" || phase === "awaiting_turns" || phase === "comparing";
+}
+
+/** 是否应在抽屉关闭时仍追踪会话链路数据以驱动反馈神经网。 */
+export function shouldTrackSessionLinkForFeedbackLoop(input: {
+  drawerOpen: boolean;
+  feedbackLoopEnabled: boolean;
+  autoStart: boolean;
+  loopPhase: FeedbackLoopPhase;
+}): boolean {
+  if (input.drawerOpen) return true;
+  if (!input.feedbackLoopEnabled) return false;
+  if (input.autoStart) return true;
+  return isFeedbackLoopPhaseActive(input.loopPhase);
+}
+
 export interface SessionFeedbackCycle {
   cycleIndex: number;
   baseline: SessionFeedbackMetricSnapshot;

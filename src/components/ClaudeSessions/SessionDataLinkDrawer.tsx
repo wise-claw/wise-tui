@@ -70,6 +70,11 @@ import { useSessionFeedbackLoopSetting } from "../DefaultConfigPanel/useSessionF
 import { useSessionFeedbackLoop } from "../../hooks/useSessionFeedbackLoop";
 import { useSessionFeedbackLoopDispatchCompletion } from "../../hooks/useSessionFeedbackLoopDispatchCompletion";
 import type { FeedbackLoopDispatchKind } from "../../utils/sessionFeedbackLoopDispatch";
+import { loadSessionFeedbackLoopState } from "../../services/sessionFeedbackLoopStore";
+import {
+  shouldTrackSessionLinkForFeedbackLoop,
+  type FeedbackLoopPhase,
+} from "../../utils/sessionFeedbackLoop";
 import {
   filterSequenceEventsForTurn,
   filterSequenceEventsForTurnRange,
@@ -275,9 +280,28 @@ export function SessionDataLinkDrawer({
   const repositoryPath = session?.repositoryPath?.trim() ?? "";
   const claudeSessionId = session?.claudeSessionId?.trim() ?? "";
   const canLoadDisk = Boolean(repositoryPath && claudeSessionId);
+  const sessionId = session?.id?.trim() ?? "";
+
+  const feedbackLoopSetting = useSessionFeedbackLoopSetting();
+  const storedLoopPhase = useMemo((): FeedbackLoopPhase => {
+    if (!sessionId) return "idle";
+    return loadSessionFeedbackLoopState(sessionId)?.phase ?? "idle";
+  }, [sessionId]);
+  const [trackedLoopPhase, setTrackedLoopPhase] = useState<FeedbackLoopPhase>(storedLoopPhase);
 
   useEffect(() => {
-    if (!open) return;
+    setTrackedLoopPhase(storedLoopPhase);
+  }, [sessionId, storedLoopPhase]);
+
+  const linkDataActive = shouldTrackSessionLinkForFeedbackLoop({
+    drawerOpen: open,
+    feedbackLoopEnabled: feedbackLoopSetting.enabled,
+    autoStart: feedbackLoopSetting.autoStart,
+    loopPhase: trackedLoopPhase,
+  });
+
+  useEffect(() => {
+    if (!linkDataActive) return;
     const releaseStdoutIngest = retainClaudeLlmProxyStdoutIngest();
     void refreshClaudeLlmProxyStatus(repositoryPath || undefined);
     const unsubscribe = subscribeClaudeLlmProxyStore(() => {
@@ -287,7 +311,7 @@ export function SessionDataLinkDrawer({
       unsubscribe();
       releaseStdoutIngest();
     };
-  }, [open, repositoryPath]);
+  }, [linkDataActive, repositoryPath]);
 
   useEffect(() => {
     if (open) {
@@ -301,7 +325,7 @@ export function SessionDataLinkDrawer({
   }, [open, initialViewMode]);
 
   useEffect(() => {
-    if (!open) return;
+    if (!linkDataActive) return;
     setJsonlLines(null);
     setJsonlError(null);
     if (!canLoadDisk) return;
@@ -322,11 +346,11 @@ export function SessionDataLinkDrawer({
     return () => {
       cancelled = true;
     };
-  }, [open, canLoadDisk, repositoryPath, claudeSessionId, session?.diskTranscriptPartial, messages.length]);
+  }, [linkDataActive, canLoadDisk, repositoryPath, claudeSessionId, session?.diskTranscriptPartial, messages.length]);
 
   const traceSinceMs = session?.createdAt ? session.createdAt - 60_000 : undefined;
   const { fccAligned, traces: fccTraces, loading: fccLoading } = useFccSessionTraces({
-    open,
+    open: linkDataActive,
     sessionHint: claudeSessionId || undefined,
     sinceMs: traceSinceMs,
   });
@@ -335,7 +359,7 @@ export function SessionDataLinkDrawer({
     traces: opencodeGoTraces,
     loading: opencodeLoading,
   } = useOpencodeGoSessionTraces({
-    open,
+    open: linkDataActive,
     sinceMs: traceSinceMs,
   });
 
@@ -456,8 +480,32 @@ export function SessionDataLinkDrawer({
     });
   }, [jsonlUsageLines, insightsTimestampRange]);
 
-  const sessionInsights = useMemo(() => {
-    if (viewMode !== "insights") return null;
+  const loopInsights = useMemo(() => {
+    if (!linkDataActive) return null;
+    return computeSessionInsights({
+      linkRecords,
+      turnMetrics,
+      llmProxyRecords,
+      fccTraces: fccAligned ? fccTraces : undefined,
+      opencodeGoProxyTraces: opencodeAligned ? opencodeGoTraces : undefined,
+      jsonlUsageLines,
+      llmProxyListening: proxySnap.status?.listening ?? false,
+    });
+  }, [
+    linkDataActive,
+    linkRecords,
+    turnMetrics,
+    llmProxyRecords,
+    fccAligned,
+    fccTraces,
+    opencodeAligned,
+    opencodeGoTraces,
+    jsonlUsageLines,
+    proxySnap.status?.listening,
+  ]);
+
+  const displayInsights = useMemo(() => {
+    if (!open || viewMode !== "insights") return null;
     return computeSessionInsights({
       linkRecords: insightsLinkRecords,
       turnMetrics: insightsTurnMetrics,
@@ -468,6 +516,7 @@ export function SessionDataLinkDrawer({
       llmProxyListening: proxySnap.status?.listening ?? false,
     });
   }, [
+    open,
     viewMode,
     insightsLinkRecords,
     insightsTurnMetrics,
@@ -541,8 +590,6 @@ export function SessionDataLinkDrawer({
     [session?.id],
   );
 
-  const feedbackLoopSetting = useSessionFeedbackLoopSetting();
-
   const feedbackLoop = useSessionFeedbackLoop({
     sessionId: session?.id ?? "",
     enabled: feedbackLoopSetting.enabled,
@@ -552,7 +599,7 @@ export function SessionDataLinkDrawer({
     autoSaveHabitsToComposer: feedbackLoopSetting.autoSaveHabitsToComposer,
     optimizeConfigArtifacts: feedbackLoopSetting.optimizeConfigArtifacts,
     repositoryPath: session?.repositoryPath,
-    insights: sessionInsights,
+    insights: loopInsights,
     meta: session
       ? {
           repositoryName: session.repositoryName.trim() || undefined,
@@ -580,6 +627,10 @@ export function SessionDataLinkDrawer({
       message.success(`反馈神经网：${reason}${habitsHint ? `，${habitsHint}` : ""}`);
     },
   });
+
+  useEffect(() => {
+    setTrackedLoopPhase(feedbackLoop.state.phase);
+  }, [feedbackLoop.state.phase]);
 
   const ingestConfigPatchRef = useRef(feedbackLoop.ingestConfigPatchAiResponse);
   ingestConfigPatchRef.current = feedbackLoop.ingestConfigPatchAiResponse;
@@ -946,9 +997,9 @@ export function SessionDataLinkDrawer({
 
             <div className="app-session-data-link__body">
               {viewMode === "insights" ? (
-                sessionInsights ? (
+                displayInsights ? (
                   <SessionInsightsPanel
-                    insights={sessionInsights}
+                    insights={displayInsights}
                     sessionLabel={session.repositoryName.trim() || undefined}
                     claudeSessionId={session.claudeSessionId}
                     resolveLinkMetaBundle={resolveLinkMetaBundle}

@@ -14,6 +14,8 @@ import {
   buildFeedbackLoopMarkdownReport,
   extractFeedbackLoopHabits,
   buildFeedbackLoopHabitsPhraseText,
+  isFeedbackLoopPhaseActive,
+  shouldTrackSessionLinkForFeedbackLoop,
 } from "./sessionFeedbackLoop";
 
 function sampleInsights(overrides?: Partial<SessionInsightsResult["overview"]>): SessionInsightsResult {
@@ -317,5 +319,51 @@ describe("feedback loop lifecycle", () => {
     const md = buildFeedbackLoopMarkdownReport(state, { repositoryName: "wise" });
     expect(md).toContain("得分趋势");
     expect(md).toContain("wise");
+  });
+});
+
+describe("shouldTrackSessionLinkForFeedbackLoop", () => {
+  test("drawer open always tracks", () => {
+    expect(
+      shouldTrackSessionLinkForFeedbackLoop({
+        drawerOpen: true,
+        feedbackLoopEnabled: false,
+        autoStart: false,
+        loopPhase: "idle",
+      }),
+    ).toBe(true);
+  });
+
+  test("tracks when loop is active and drawer closed", () => {
+    expect(
+      shouldTrackSessionLinkForFeedbackLoop({
+        drawerOpen: false,
+        feedbackLoopEnabled: true,
+        autoStart: false,
+        loopPhase: "awaiting_turns",
+      }),
+    ).toBe(true);
+  });
+
+  test("tracks when autoStart enabled even if idle", () => {
+    expect(
+      shouldTrackSessionLinkForFeedbackLoop({
+        drawerOpen: false,
+        feedbackLoopEnabled: true,
+        autoStart: true,
+        loopPhase: "idle",
+      }),
+    ).toBe(true);
+  });
+
+  test("does not track when disabled and drawer closed", () => {
+    expect(
+      shouldTrackSessionLinkForFeedbackLoop({
+        drawerOpen: false,
+        feedbackLoopEnabled: false,
+        autoStart: true,
+        loopPhase: "running",
+      }),
+    ).toBe(false);
   });
 });

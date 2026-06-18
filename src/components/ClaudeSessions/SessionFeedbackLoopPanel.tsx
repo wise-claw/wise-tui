@@ -327,7 +327,7 @@ export const SessionFeedbackLoopPanel = memo(function SessionFeedbackLoopPanel({
 
       {state.phase === "awaiting_turns" ? (
         <Text type="secondary" className="app-session-feedback-loop__waiting">
-          已发送自我优化请求，请继续对话产生新轮次；系统将仅对<strong>新增轮次</strong>做增量比对。也可点「立即比对」强制刷新。
+          已发送自我优化请求，请继续对话产生新轮次；系统将仅对<strong>新增轮次</strong>做增量比对（后台自动跟踪，无需保持洞察页打开）。也可点「立即比对」强制刷新。
         </Text>
       ) : null}
 
