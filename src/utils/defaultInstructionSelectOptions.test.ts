@@ -17,6 +17,7 @@ describe("defaultInstructionSelectOptions", () => {
       installedPluginCommands: [],
       installPluginCommands: [],
       projectSkills: [],
+      userSkills: [],
       pluginCacheSkills: [],
     });
     const flat = groups.flatMap((group) => group.options.map((option) => option.value));

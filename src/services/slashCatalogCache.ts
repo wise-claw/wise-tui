@@ -1,4 +1,9 @@
-import { isOmcPluginInstalled, listClaudePluginCacheSkills, listClaudeProjectSkills } from "./claude";
+import {
+  isOmcPluginInstalled,
+  listClaudePluginCacheSkills,
+  listClaudeProjectSkills,
+  listClaudeUserSkills,
+} from "./claude";
 import { claudePluginListInstalled } from "./claudePluginMarket";
 import type { ClaudeProjectSkill } from "../types";
 import { CLAUDE_BUILTIN_SLASH_COMMANDS } from "../constants/claudeCodeSlashCommands";
@@ -30,6 +35,7 @@ export interface SlashCatalogSnapshot {
   installedPluginCommands: SlashCatalogPluginCommand[];
   installPluginCommands: SlashCatalogPluginCommand[];
   projectSkills: ClaudeProjectSkill[];
+  userSkills: ClaudeProjectSkill[];
   pluginCacheSkills: ClaudeProjectSkill[];
   fetchedAt: number;
 }
@@ -62,11 +68,12 @@ function staleSnapshotForKey(key: string): SlashCatalogSnapshot | null {
 
 async function fetchSlashCatalog(repositoryPath: string | null): Promise<SlashCatalogSnapshot> {
   const repo = repositoryPath?.trim() || null;
-  const [omcInstalled, cacheSkills, installedRows, projectSkills] = await Promise.all([
+  const [omcInstalled, cacheSkills, installedRows, projectSkills, userSkills] = await Promise.all([
     isOmcPluginInstalled().catch(() => false),
     listClaudePluginCacheSkills(repo).catch(() => []),
     claudePluginListInstalled(repo).catch(() => []),
     repo ? listClaudeProjectSkills(repo).catch(() => []) : Promise.resolve([]),
+    listClaudeUserSkills().catch(() => []),
   ]);
 
   const detectedPluginCommands = buildInstalledPluginSlashOptionsFromSkills(
@@ -83,6 +90,7 @@ async function fetchSlashCatalog(repositoryPath: string | null): Promise<SlashCa
     installedPluginCommands: buildComposerPluginInstalledSlashCommands(installedRows),
     installPluginCommands: buildComposerPluginInstallSlashCommands(installedRows),
     projectSkills,
+    userSkills,
     pluginCacheSkills: cacheSkills,
     fetchedAt: Date.now(),
   };

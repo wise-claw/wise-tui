@@ -199,6 +199,7 @@ export function SlashPopover({
             installedPluginCommands: snapshot.installedPluginCommands,
             installPluginCommands: snapshot.installPluginCommands,
             projectSkills: snapshot.projectSkills,
+            userSkills: snapshot.userSkills,
             reservedSkillLabels: reserved,
           }),
         );

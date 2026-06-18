@@ -154,7 +154,10 @@ function skillIsInvocableAsSlashCommand(skill: ClaudeProjectSkill): boolean {
 }
 
 export function buildSkillSlashOptionsFromList(
-  project: ClaudeProjectSkill[],
+  input: {
+    projectSkills: ClaudeProjectSkill[];
+    userSkills?: ClaudeProjectSkill[];
+  },
   reservedLabels: ReadonlySet<string>,
 ): SlashOption[] {
   const byKey = new Map<string, SlashOption>();
@@ -174,8 +177,11 @@ export function buildSkillSlashOptionsFromList(
     });
   };
 
-  for (const skill of project) {
+  for (const skill of input.projectSkills) {
     push(skill, "项目技能");
+  }
+  for (const skill of input.userSkills ?? []) {
+    push(skill, "全局技能");
   }
 
   return Array.from(byKey.values()).sort((a, b) =>
@@ -272,6 +278,7 @@ export function mapSlashCatalogToOptions(input: {
   installedPluginCommands: ReadonlyArray<ComposerPluginSlashCommandEntry>;
   installPluginCommands: ReadonlyArray<ComposerPluginSlashCommandEntry>;
   projectSkills: ClaudeProjectSkill[];
+  userSkills?: ClaudeProjectSkill[];
   reservedSkillLabels: ReadonlySet<string>;
 }): {
   detectedPluginSlashOptions: SlashOption[];
@@ -283,7 +290,13 @@ export function mapSlashCatalogToOptions(input: {
     detectedPluginSlashOptions: mapDetectedPluginSlashEntries(input.detectedPluginCommands),
     installedPluginSlashOptions: mapPluginSlashEntries(input.installedPluginCommands),
     installPluginSlashOptions: mapPluginSlashEntries(input.installPluginCommands),
-    skillSlashOptions: buildSkillSlashOptionsFromList(input.projectSkills, input.reservedSkillLabels),
+    skillSlashOptions: buildSkillSlashOptionsFromList(
+      {
+        projectSkills: input.projectSkills,
+        userSkills: input.userSkills,
+      },
+      input.reservedSkillLabels,
+    ),
   };
 }
 

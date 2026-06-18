@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   buildRuntimeBuiltinCommands,
+  buildSkillSlashOptionsFromList,
   getFilteredSlashOptions,
   SLASH_POPOVER_MAX_OPTIONS,
 } from "./slashPopoverOptions";
@@ -87,5 +88,24 @@ describe("getFilteredSlashOptions", () => {
     expect(options.length).toBe(SLASH_POPOVER_MAX_OPTIONS);
     expect(truncated).toBe(true);
     expect(runtime.length).toBeGreaterThan(0);
+  });
+});
+
+describe("buildSkillSlashOptionsFromList", () => {
+  test("includes global user skills and prefers project over user on name clash", () => {
+    const options = buildSkillSlashOptionsFromList(
+      {
+        projectSkills: [{ name: "shared-skill", hasSkillMd: true, description: "项目版" }],
+        userSkills: [
+          { name: "shared-skill", hasSkillMd: true, description: "全局版" },
+          { name: "global-only", hasSkillMd: true, description: "仅全局" },
+        ],
+      },
+      new Set(),
+    );
+
+    expect(options.map((row) => row.label).sort()).toEqual(["global-only", "shared-skill"]);
+    expect(options.find((row) => row.label === "shared-skill")?.description).toBe("项目版");
+    expect(options.find((row) => row.label === "global-only")?.description).toBe("仅全局");
   });
 });

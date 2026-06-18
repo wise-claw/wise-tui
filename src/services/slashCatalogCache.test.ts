@@ -12,6 +12,10 @@ mock.module("./claude", () => ({
     fetchCalls.push(`project:${repo}`);
     return [];
   },
+  listClaudeUserSkills: async () => {
+    fetchCalls.push("user:global");
+    return [];
+  },
 }));
 
 mock.module("./claudePluginMarket", () => ({
@@ -36,6 +40,7 @@ describe("slashCatalogCache", () => {
     ]);
     expect(first).toBe(second);
     expect(fetchCalls.filter((call) => call.startsWith("cache:/repo-a"))).toHaveLength(1);
+    expect(fetchCalls.filter((call) => call === "user:global")).toHaveLength(1);
   });
 
   test("loadSlashCatalog keeps separate inflight requests per repository key", async () => {

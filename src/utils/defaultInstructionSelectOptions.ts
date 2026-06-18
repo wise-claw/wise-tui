@@ -59,7 +59,7 @@ function toSelectOption(
   cmd: SlashOption,
   snapshot: Pick<
     SlashCatalogSnapshot,
-    "omcInstalled" | "pluginCacheSkills" | "projectSkills"
+    "omcInstalled" | "pluginCacheSkills" | "projectSkills" | "userSkills"
   >,
 ): DefaultInstructionSelectOption {
   const shortValue = slashCommandLabelToDefaultInstructionValue(cmd.label);
@@ -82,6 +82,7 @@ export function buildDefaultInstructionSelectOptionGroups(
     | "installedPluginCommands"
     | "installPluginCommands"
     | "projectSkills"
+    | "userSkills"
     | "pluginCacheSkills"
   >,
 ): DefaultInstructionSelectOptionGroup[] {
@@ -90,6 +91,7 @@ export function buildDefaultInstructionSelectOptionGroups(
     installedPluginCommands: snapshot.installedPluginCommands,
     installPluginCommands: snapshot.installPluginCommands,
     projectSkills: snapshot.projectSkills,
+    userSkills: snapshot.userSkills,
     reservedSkillLabels: CLAUDE_RESERVED_LABELS,
   });
 
@@ -160,7 +162,7 @@ export function ensureDefaultInstructionOption(
   rawValue: string,
   snapshot?: Pick<
     SlashCatalogSnapshot,
-    "omcInstalled" | "pluginCacheSkills" | "projectSkills"
+    "omcInstalled" | "pluginCacheSkills" | "projectSkills" | "userSkills"
   >,
 ): DefaultInstructionSelectOptionGroup[] {
   const normalized = snapshot
