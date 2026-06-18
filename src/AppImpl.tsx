@@ -82,7 +82,6 @@ import {
 } from "./stores/repositoryRunCommandRuntimeStore";
 import { useMacTerminalDetectionBootstrap } from "./hooks/useMacTerminalDetectionBootstrap";
 import type { ScheduledTasksOverlayTarget } from "./components/RepositoryScheduledTasksModal";
-import { DEFAULT_PRD_SPLIT_ASSISTANT_ID } from "./services/assistantPromptLayers";
 import { activateAssistantTemplate } from "./services/assistantTemplateActivation";
 import type { AssistantEntry } from "./types/assistant";
 import {
@@ -110,7 +109,6 @@ import { getTaskTemplate, setTaskTemplate } from "./services/projectState";
 import {
   WORKFLOW_UI_EVENT_OPEN_ASSISTANT,
   WORKFLOW_UI_EVENT_OPEN_REPOSITORY_FILE,
-  WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL,
   WORKFLOW_UI_EVENT_OPEN_WORKFLOW_CONFIG,
   WORKFLOW_UI_EVENT_WORKFLOW_GRAPH_CHANGED,
   type OpenAssistantDetail,
@@ -140,7 +138,7 @@ import {
 } from "./services/atMentionDispatch";
 import { resolveProjectMainSessionAnchor } from "./utils/projectSessionAnchor";
 import { resolveChatTopbarContext, resolveProjectExplorerOpenPath, resolveScheduledTasksRepository, shouldKeepProjectFocusWhenSwitchingSession } from "./utils/workspaceSelectionState";
-import { resolveTrellisBootstrapPath } from "./utils/trellisBootstrapPath";
+import { resolveWorkspaceRootPath } from "./utils/projectSessionAnchor";
 import { resolveSidebarSelectionTarget } from "./utils/sidebarSelectionTarget";
 import {
   findOwnerProjectForRepositoryId,
@@ -236,8 +234,6 @@ import {
   addProjectPrdWorkflow,
   listWorkflowProjectIds,
 } from "./services/projectPrdScope";
-import { ensureSessionBoundToActiveMission } from "./services/mission/sessionBinding";
-import { dispatchTrellisBootstrapComplete } from "./constants/trellisUiEvents";
 
 const MULTI_PANE_LAYOUT_STATE_STORAGE_KEY = "wise.mainLayout.multiPaneState.v1";
 
@@ -304,10 +300,7 @@ export default function App() {
   const [cockpitSurfaceInitialAssistantId, setCockpitSurfaceInitialAssistantId] = useState<string | null>(null);
   const [cockpitActiveAssistantId, setCockpitActiveAssistantId] = useState<string | null>(null);
   const [cockpitResumeAssistantId, setCockpitResumeAssistantId] = useState<string | null>(null);
-  /** 点击返回时立刻撤掉需求拆分全屏叠层，避免等 viewMode 慢更新才消失 */
-  const [prdSplitUiDismissed, setPrdSplitUiDismissed] = useState(false);
   const [scheduledTasksOverlay, setScheduledTasksOverlay] = useState<ScheduledTasksOverlayTarget | null>(null);
-  const [authorTrellisProjectId, setAuthorTrellisProjectId] = useState<string | null>(null);
   const [workspaceCreateRequest, setWorkspaceCreateRequest] = useState(0);
   const [standaloneRepoAddRequest, setStandaloneRepoAddRequest] = useState(0);
   const [repositorySplitTemplate, setRepositorySplitTemplate] = useState("");
@@ -574,7 +567,6 @@ export default function App() {
     handleUpdateRepositoryIconBadge,
     handleReorderRepositoriesInProject,
     handleReconcileProjectWorkspace,
-    handleBootstrapTrellisAtPath,
     handleUpdateRepositoryMainOwnerAgent,
     handleUpdateRepositoryExecutionEngine,
     handleUpdateRepositoryOpenAppId,
@@ -1506,32 +1498,6 @@ export default function App() {
       }),
     [activeProject, activeProjectId, employeeMonitorItems, employees, omcInstalled, projects],
   );
-  const missionSessionBindingKeyRef = useRef("");
-  useEffect(() => {
-    const session = activeSessionId ? sessionsLatestRef.current.find((item) => item.id === activeSessionId) : null;
-    const rootPath = activeProject?.rootPath?.trim() || session?.repositoryPath?.trim() || null;
-    if (!session || !activeProject?.id || !rootPath) return;
-    const key = `${session.id}:${activeProject.id}:${rootPath}`;
-    if (missionSessionBindingKeyRef.current === key) return;
-    missionSessionBindingKeyRef.current = key;
-    void ensureSessionBoundToActiveMission({
-      sessionId: session.id,
-      projectId: activeProject.id,
-      rootPath,
-    })
-      .then((result) => {
-        if (!result.mission && missionSessionBindingKeyRef.current === key) {
-          missionSessionBindingKeyRef.current = "";
-        }
-      })
-      .catch((error) => {
-        if (missionSessionBindingKeyRef.current === key) {
-          missionSessionBindingKeyRef.current = "";
-        }
-        console.debug("ensureSessionBoundToActiveMission failed:", error);
-      });
-  }, [activeProject?.id, activeProject?.rootPath, activeSessionId]);
-
   const [repositoryFileOpenRequest, setRepositoryFileOpenRequest] = useState<OpenRepositoryFileDetail | null>(null);
   const openRepositoryFileByEvent = useCallback((detail: OpenRepositoryFileDetail) => {
     const relativePath = detail.relativePath.trim();
@@ -1558,7 +1524,6 @@ export default function App() {
   }, [repositories, setActiveRepositoryWithOwner, viewMode]);
   const workspaceMode = useWorkspaceMode({ activeProjectId, projects });
   const enterCockpit = useCallback((view = cockpitView()) => {
-    setPrdSplitUiDismissed(false);
     viewMode.enter(view);
   }, [viewMode]);
   /** 侧栏点「工作区/仓库需求」后短暂屏蔽「选工作区 → 回聊天」，避免菜单点击落到行上把 Cockpit 顶掉。 */
@@ -1568,10 +1533,10 @@ export default function App() {
     flushSync(() => {
       setSearchOpen(false);
       setAssistantInitialTarget(detail);
-      setCockpitSurfaceInitialAssistantId(DEFAULT_PRD_SPLIT_ASSISTANT_ID);
-      setCockpitResumeAssistantId(DEFAULT_PRD_SPLIT_ASSISTANT_ID);
+      const assistantId = typeof detail.assistantId === "string" ? detail.assistantId.trim() : "";
+      setCockpitSurfaceInitialAssistantId(assistantId || null);
+      if (assistantId) setCockpitResumeAssistantId(assistantId);
       setAssistantOpenRequestKey((value) => value + 1);
-      setPrdSplitUiDismissed(false);
     });
     viewMode.enter(cockpitView());
     requestAnimationFrame(() => {
@@ -1588,7 +1553,7 @@ export default function App() {
   }, [viewMode]);
   const openAutomationHubFromSidebar = useCallback(() => {
     setSearchOpen(false);
-    enterCockpit(cockpitView(undefined, "automation"));
+    enterCockpit(cockpitView("automation"));
   }, [enterCockpit]);
   const openAssistantsFromSidebar = useCallback(() => {
     if (!activeProjectId && activeRepositoryId != null) {
@@ -1652,7 +1617,6 @@ export default function App() {
   );
   const exitCockpit = useCallback(() => {
     flushSync(() => {
-      setPrdSplitUiDismissed(true);
       setCockpitActiveAssistantId(null);
       viewMode.enter({ kind: "chat" });
     });
@@ -1671,28 +1635,6 @@ export default function App() {
     setScheduledTasksOverlay(null);
   }, []);
 
-  /** 需求拆分助手：fixed 叠层盖住整窗（含左栏） */
-  const cockpitPrdSplitFullscreen = useMemo(() => {
-    if (prdSplitUiDismissed) return false;
-    if (viewMode.view.kind !== "cockpit") return false;
-    const activeId =
-      cockpitActiveAssistantId?.trim() || cockpitSurfaceInitialAssistantId?.trim() || "";
-    if (activeId === DEFAULT_PRD_SPLIT_ASSISTANT_ID) return true;
-    if (
-      !activeId &&
-      Boolean(assistantInitialTarget?.projectId || assistantInitialTarget?.repositoryId)
-    ) {
-      return true;
-    }
-    return false;
-  }, [
-    prdSplitUiDismissed,
-    viewMode.view.kind,
-    cockpitActiveAssistantId,
-    cockpitSurfaceInitialAssistantId,
-    assistantInitialTarget?.projectId,
-    assistantInitialTarget?.repositoryId,
-  ]);
   const composerProjectRoleTagOptions = useMemo(() => {
     if (!shouldHideEmployeeUi(activeProject)) {
       return [];
@@ -2049,7 +1991,7 @@ export default function App() {
 
   const handleNewPaneSessionForProject = useCallback(
     (project: ProjectItem) => {
-      const rootPath = resolveTrellisBootstrapPath({
+      const rootPath = resolveWorkspaceRootPath({
         scope: "project",
         project,
         repositories,
@@ -2674,7 +2616,6 @@ export default function App() {
       // 会强制重渲染整棵 AppImpl (LeftSidebar + ChatHost 等)，造成点击瞬间的明显卡顿。
       // ensureProjectMainSession 通过参数拿 project，不读 active id state，
       // 因此可以走默认批量更新；viewMode 切换继续走 transition。
-      setAuthorTrellisProjectId(null);
       setActiveProjectId(projectId);
       if (leavingOverlay) {
         startTransition(() => viewMode.back());
@@ -2805,7 +2746,6 @@ export default function App() {
       message.warning("该 Workspace 缺少根目录，请先配置 rootPath");
       return null;
     }
-    setAuthorTrellisProjectId(null);
     const isStandaloneTrellisProject = project.id.startsWith("repo:");
     if (repos[0]) {
       if (isStandaloneTrellisProject) {
@@ -2824,25 +2764,6 @@ export default function App() {
     return ensureProjectMainSession(project);
   }
 
-  async function handleRequestSpecAgentUpdate(project: ProjectItem, area: string) {
-    const sessionId = await openProjectMainSession(project);
-    if (!sessionId) return;
-    const areaPath = `.trellis/spec/${area}/index.md`;
-    executeSession(
-      sessionId,
-      [
-        `Update the Trellis spec area: ${area}`,
-        "",
-        `Project: ${project.name}`,
-        `Spec index: ${areaPath}`,
-        "",
-        "Read the current project code and the existing spec documents before editing.",
-        "Update the spec through the project workspace, keep the change focused, and report what changed and why.",
-        "Do not make unrelated product or UI changes.",
-      ].join("\n"),
-    );
-  }
-
   function handleOpenInFinder(repository: Repository) {
     openInFinder(repository.path).catch((err) => {
       console.error("Failed to open in finder:", err);
@@ -2851,7 +2772,7 @@ export default function App() {
 
   const handleOpenProjectInFinder = useCallback(
     (project: ProjectItem) => {
-      const path = resolveTrellisBootstrapPath({
+      const path = resolveWorkspaceRootPath({
         scope: "project",
         project,
         repositories,
@@ -2894,7 +2815,7 @@ export default function App() {
 
   const handleOpenProjectInTerminal = useCallback(
     (project: ProjectItem) => {
-      const path = resolveTrellisBootstrapPath({
+      const path = resolveWorkspaceRootPath({
         scope: "project",
         project,
         repositories,
@@ -3011,15 +2932,6 @@ export default function App() {
   }, [handleToggleTerminal]);
 
   useEffect(() => {
-    function handleOpenTaskSplitPanel() {
-      openRequirementAssistant(
-        activeProjectId
-          ? { projectId: activeProjectId, requirementScope: "workspace" }
-          : activeRepositoryId != null
-            ? { repositoryId: activeRepositoryId, requirementScope: "repository" }
-            : {},
-      );
-    }
     function handleOpenAssistantEvent(event: Event) {
       const detail = (event as CustomEvent<OpenAssistantDetail>).detail ?? {};
       if (typeof detail.assistantId === "string" && detail.assistantId.trim()) {
@@ -3028,13 +2940,11 @@ export default function App() {
       }
       openRequirementAssistant(detail);
     }
-    window.addEventListener(WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL, handleOpenTaskSplitPanel as EventListener);
     window.addEventListener(WORKFLOW_UI_EVENT_OPEN_ASSISTANT, handleOpenAssistantEvent as EventListener);
     return () => {
-      window.removeEventListener(WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL, handleOpenTaskSplitPanel as EventListener);
       window.removeEventListener(WORKFLOW_UI_EVENT_OPEN_ASSISTANT, handleOpenAssistantEvent as EventListener);
     };
-  }, [activeProjectId, activeRepositoryId, openBuiltinAssistant, openRequirementAssistant]);
+  }, [openBuiltinAssistant, openRequirementAssistant]);
 
   useEffect(() => {
     let cancelled = false;
@@ -3161,10 +3071,6 @@ export default function App() {
     setRepositoryFileOpenRequest(null);
   }, []);
 
-  const onEnsureChatModeForMemo = useCallback(() => {
-    viewMode.enter({ kind: "chat" });
-  }, [viewMode]);
-
   const onOpenRemoteChannels = useCallback(() => {
     enterAuthorPane("channels");
   }, [enterAuthorPane]);
@@ -3178,17 +3084,14 @@ export default function App() {
       dark={dark}
       collapsed={collapsed}
       viewMode={viewMode.view}
-      onCloseTrellisInspector={viewMode.back}
       onCloseCockpitAutomationHub={viewMode.back}
+      onCloseCockpit={exitCockpit}
       effectiveRightCollapsed={effectiveRightCollapsed}
       mainLayoutContentRef={mainLayoutContentRef}
       mainLayoutLeftWidthPx={mainLayoutLeftWidthPx}
       mainLayoutRightWidthPx={mainLayoutRightWidthPx}
       repositoryFileOpenRequest={repositoryFileOpenRequest}
       onConsumeRepositoryFileOpenRequest={onConsumeRepositoryFileOpenRequest}
-      workspaceMemosProjectId={activeProjectId}
-      workspaceMemosRepositoryId={activeRepositoryId}
-      onEnsureChatModeForMemo={onEnsureChatModeForMemo}
       onLeftWidthChange={setMainLayoutLeftWidthPx}
       onRightWidthChange={setMainLayoutRightWidthPx}
       onOpenRemoteChannels={onOpenRemoteChannels}
@@ -3234,60 +3137,6 @@ export default function App() {
         onTogglePinProject: togglePinProject,
         onAddFloatingRepository: handleAddFloatingRepository,
         onAddRepositoryToProject: handleAddRepositoryToProject,
-        onBootstrapTrellisForProject: async (project) => {
-          const targetPath = resolveTrellisBootstrapPath({
-            scope: "project",
-            project,
-            repositories,
-            projects,
-          });
-          if (!targetPath) {
-            message.warning("无法解析 Trellis 初始化目录（请配置工作区根目录或关联仓库）");
-            return;
-          }
-          const hide = message.loading({ content: "正在初始化 Trellis…", duration: 0 });
-          try {
-            const status = await handleBootstrapTrellisAtPath(targetPath);
-            if (status === "skipped") {
-              message.info("该工作区已存在 Trellis，已跳过");
-            }
-            await handleUpdateProjectSddMode(project.id, "wise_trellis");
-            dispatchTrellisBootstrapComplete({ projectId: project.id });
-          } catch (e) {
-            message.error(e instanceof Error ? e.message : String(e));
-          } finally {
-            hide();
-          }
-        },
-        onBootstrapTrellisForRepository: async (repository) => {
-          const owningProject = projects.find((p) => p.repositoryIds.includes(repository.id));
-          const targetPath = resolveTrellisBootstrapPath({
-            scope: "repository",
-            project: owningProject,
-            repository,
-            repositories,
-            projects,
-          });
-          if (!targetPath) {
-            message.warning("仓库路径为空");
-            return;
-          }
-          const hide = message.loading({ content: "正在初始化 Trellis…", duration: 0 });
-          try {
-            const status = await handleBootstrapTrellisAtPath(targetPath);
-            if (status === "skipped") {
-              message.info("该仓库已存在 Trellis，已跳过");
-            }
-            dispatchTrellisBootstrapComplete({
-              projectId: owningProject?.id,
-              repositoryId: repository.id,
-            });
-          } catch (e) {
-            message.error(e instanceof Error ? e.message : String(e));
-          } finally {
-            hide();
-          }
-        },
         onReconcileProject: async (projectId, mode: ReconcileProjectMode) => {
           try {
             await handleReconcileProjectWorkspace(projectId, mode);
@@ -3320,41 +3169,6 @@ export default function App() {
         onCreateRepositoryTask: handleCreateRepositoryTask,
         onOpenWorkspaceRequirements: openWorkspaceRequirements,
         onOpenRepositoryRequirements: openRepositoryRequirements,
-        onOpenProjectTrellis: async (project) => {
-          const targetPath = resolveTrellisBootstrapPath({
-            scope: "project",
-            project,
-            repositories,
-            projects,
-          });
-          if (!targetPath) {
-            message.warning("无法打开 Trellis：请先关联仓库或配置工作区根目录");
-            return;
-          }
-          const hide = message.loading({ content: "正在检查 Trellis…", duration: 0 });
-          try {
-            await handleBootstrapTrellisAtPath(targetPath);
-            const isStandaloneTrellisProject = project.id.startsWith("repo:");
-            if (!isStandaloneTrellisProject) {
-              await handleUpdateProjectSddMode(project.id, "wise_trellis");
-            }
-            dispatchTrellisBootstrapComplete({ projectId: project.id });
-            setAuthorTrellisProjectId(project.id);
-            if (isStandaloneTrellisProject) {
-              const repositoryId = project.repositoryIds[0] ?? null;
-              if (repositoryId !== null) {
-                setActiveRepositoryWithOwner(repositoryId);
-              }
-            } else {
-              setActiveProjectId(project.id);
-            }
-            viewMode.enter(authorView("workspaces"));
-          } catch (e) {
-            message.error(e instanceof Error ? e.message : String(e));
-          } finally {
-            hide();
-          }
-        },
         onOpenRepositoryMainOwner: (repository) => {
           void openEmployeeConfigForRepositoryOwner(repository);
         },
@@ -3455,7 +3269,6 @@ export default function App() {
           standaloneRepos,
           activeWorkspaceId: activeProjectId,
           activeRepositoryId,
-          trellisWorkspaceId: authorTrellisProjectId,
           onCreateWorkspace: () => {
             setWorkspaceCreateRequest((value) => value + 1);
           },
@@ -3464,10 +3277,6 @@ export default function App() {
           },
           onSelectWorkspace: handleProjectSelectLeavingMcpHub,
           onSelectStandaloneRepo: (repositoryId) => handleSidebarRepositorySelectLeavingMcpHub(repositoryId),
-          onOpenProjectSession: async (project) => {
-            await openProjectMainSession(project);
-          },
-          onRequestSpecAgentUpdate: handleRequestSpecAgentUpdate,
         },
         employeeConfigProps: {
           open: true,
@@ -3728,10 +3537,6 @@ export default function App() {
         onRespondToQuestion: respondToQuestion,
         onDismissQuestion: dismissQuestion,
         onRespondToPermission: respondToPermission,
-        missionContext: {
-          projectId: activeProjectId,
-          rootPath: activeProject?.rootPath ?? activeRepository?.path ?? null,
-        },
         onClearTodos: clearTodos,
         onToggleTodo: toggleTodo,
         onRestoreTodosFromTranscript: restoreTodosFromTranscript,
@@ -3885,7 +3690,6 @@ export default function App() {
       cockpitSurfaceInitialAssistantId={cockpitSurfaceInitialAssistantId}
       cockpitSurfaceResumeAssistantId={cockpitResumeAssistantId}
       cockpitSurfaceOpenRequestKey={assistantOpenRequestKey}
-      cockpitPrdSplitFullscreen={cockpitPrdSplitFullscreen}
       scheduledTasksOverlay={scheduledTasksOverlay}
       onCloseScheduledTasksOverlay={closeScheduledTasksOverlay}
       scheduledTasksOverlayEmployees={employees}
@@ -3919,24 +3723,6 @@ export default function App() {
       skillsHubProps={{
         repositoryPath: authorPanelRepositoryPath,
         onClose: () => viewMode.back(),
-      }}
-      prdTaskSplitPanelProps={{
-        projects,
-        repositories,
-        activeProjectId,
-        activeRepositoryId,
-        initialProjectId: assistantInitialTarget?.projectId ?? null,
-        initialRepositoryId: assistantInitialTarget?.repositoryId ?? null,
-        initialRequirementScope: assistantInitialTarget?.requirementScope ?? null,
-        onClose: exitCockpit,
-        onOpenMainSession: exitCockpit,
-        onOpenRuntimeLens: ({ rootPath, projectId }) => {
-          viewMode.enter(inspectView({
-            kind: "runtime-events",
-            rootPath,
-            projectId,
-          }));
-        },
       }}
       historyTranscriptDrawerProps={{
         open: inspectorHistorySessionId !== null,

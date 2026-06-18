@@ -44,7 +44,6 @@
 }
 
 .app-workspace-quick-actions-panel--section-collapsed,
-.app-workspace-memos-panel--section-collapsed,
 .app-workspace-todos-panel--section-collapsed {
   flex: 0 0 auto;
 }
@@ -53,7 +52,6 @@
   border-bottom: 1px solid var(--ant-color-border-secondary);
 }
 
-.app-workspace-memos-panel--section-collapsed,
 .app-workspace-todos-panel--section-collapsed {
   border-bottom: 1px solid var(--ant-color-border-secondary);
 }

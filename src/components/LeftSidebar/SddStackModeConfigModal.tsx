@@ -1,5 +1,5 @@
 import { Modal, Space, Typography } from "antd";
-import { resolveAutoSddMode, type SddSignals } from "../../services/trellis/sddModeDetector";
+import { resolveAutoSddMode, type SddSignals } from "../../services/sddModeDetector";
 import type { SddStackMode } from "../../constants/sddStackMode";
 import { SddStackModeSwitch } from "../SddStackModeSwitch";
 

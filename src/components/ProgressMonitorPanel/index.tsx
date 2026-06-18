@@ -61,8 +61,6 @@ import {
   sessionUpdatedAt,
 } from "./progressMonitorSearch";
 import { ClaudeSessionMessagesColumn } from "../ClaudeSessions/ClaudeSessionMessagesColumn";
-
-import { useAgentAssignments } from "../../hooks/useAgentAssignments";
 import { ExpandIcon } from "../LeftSidebar/SidebarIcons";
 import { SubagentStatusIndicator, type SubagentStatusVisual } from "./SubagentStatusIndicator";
 import {
@@ -99,15 +97,6 @@ export {
   historySessionStatusLabel,
   historySessionStatusTagColor,
 } from "./historySessionDrawerChrome";
-
-function RepositoryMiniIcon() {
-  return (
-    <svg viewBox="0 0 16 16" aria-hidden>
-      <path d="M3 4.5h10v7H3z" fill="none" stroke="currentColor" strokeWidth="1.1" />
-      <path d="M5 4.5V3h6v1.5M5.25 7h5.5M5.25 9.5h3.5" fill="none" stroke="currentColor" strokeWidth="1.1" strokeLinecap="round" />
-    </svg>
-  );
-}
 
 function MonitorItemTypeTag({ label }: { label: string }) {
   return <span className="app-monitor-panel__item-type-tag">{label}</span>;
@@ -1117,7 +1106,7 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
   onReloadFullDiskTranscript,
   onCompactSessionHistory: _onCompactSessionHistory,
   transcriptSourceSessions,
-  projectId,
+  projectId: _projectId,
   historyDrawerSessionId: _historyDrawerSessionIdProp,
   onHistoryDrawerSessionIdChange,
   onRestoreHistorySessionAsMain,
@@ -1133,10 +1122,6 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
   monitorPanelVisibleRows: _monitorPanelVisibleRows,
 }: Props) {
   const isCompactSidebarPanel = compactSidebarScrollRootRef != null;
-  const { running: agentAssignments } = useAgentAssignments({
-    projectId,
-    enabled: Boolean(projectId) && !isCompactSidebarPanel,
-  });
   const setSectionCollapsed = onSectionCollapsedChange;
 
   const [employeeHistoryPopoverId, setEmployeeHistoryPopoverId] = useState<string | null>(null);
@@ -1794,7 +1779,6 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
   const panelHasListContent =
     shouldShowSessionConversationTasks ||
     employeeItems.length > 0 ||
-    agentAssignments.length > 0 ||
     teamItems.length > 0;
 
   const monitorDrawers = (
@@ -1958,57 +1942,6 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
           ) : (
             <div className="app-monitor-panel__session-tasks-empty-hint">近 {executionEnvironmentDispatchHistoryDays ?? 1} 天暂无派发记录</div>
           )}
-        </div>
-      ) : null}
-
-      {agentAssignments.length > 0 ? (
-        <div className="app-monitor-panel__section">
-          <div className="app-monitor-panel__section-head">
-            <div className="app-monitor-panel__section-title-wrap">
-              <span className="app-monitor-panel__section-title">
-                <span className="app-monitor-panel__section-icon"><RepositoryMiniIcon /></span>
-                Mission Agent
-              </span>
-              <span className="app-monitor-panel__meta">
-                {agentAssignments.length} 活跃
-              </span>
-            </div>
-          </div>
-          {agentAssignments.map((a) => (
-            <div key={a.assignmentId} className="app-monitor-panel__item app-monitor-panel__item--readonly">
-              <div className="app-monitor-panel__item-row">
-                <span className="app-monitor-panel__item-name-wrap">
-                  <span className="app-monitor-panel__item-name">{a.agentType}</span>
-                  <span className="app-monitor-panel__repo-type">{a.stage}</span>
-                  <span className="app-monitor-panel__status app-monitor-panel__status--in_progress">
-                    {a.status === "stale" ? "疑似断连" : "运行中"}
-                  </span>
-                </span>
-                <span className="app-monitor-panel__item-actions">
-                  {a.clusterId ? (
-                    <span className="app-monitor-panel__result-pill">{a.clusterId}</span>
-                  ) : null}
-                  {a.currentFile ? (
-                    <span className="app-monitor-panel__result-pill" title={a.currentFile}>
-                      {a.currentFile.split("/").pop()}
-                    </span>
-                  ) : null}
-                </span>
-              </div>
-              {a.repositoryPath ? (
-                <div className="app-monitor-panel__subagent-tree">
-                  <div className="app-monitor-panel__subagent-row">
-                    <span className="app-monitor-panel__subagent-branch" aria-hidden />
-                    <span className="app-monitor-panel__subagent-main">
-                      <span className="app-monitor-panel__subagent-name">
-                        {(a.repositoryPath ?? "").split("/").pop()}
-                      </span>
-                    </span>
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          ))}
         </div>
       ) : null}
 

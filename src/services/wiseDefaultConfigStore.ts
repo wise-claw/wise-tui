@@ -109,7 +109,6 @@ export type MonitorPanelPlacement = "left" | "right";
 export type WorkspaceInspectorPanelsDefaults = Pick<
   WiseDefaultConfigV1,
   | "showWorkspaceQuickActionsPanel"
-  | "showWorkspaceMemosPanel"
   | "showWorkspaceTodosPanel"
 >;
 
@@ -155,8 +154,6 @@ export interface WiseDefaultConfigV1 {
   composerDefaultInstruction: string;
   /** 右栏工作区快捷操作卡片；默认显示。 */
   showWorkspaceQuickActionsPanel: boolean;
-  /** 右栏备忘录卡片；默认显示。 */
-  showWorkspaceMemosPanel: boolean;
   /** 右栏待办事项卡片；默认显示。 */
   showWorkspaceTodosPanel: boolean;
   /** 文件树点击文件时在新窗格打开，而非占用当前会话主区。 */
@@ -208,7 +205,6 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   composerCommonPhrases: [],
   composerDefaultInstruction: "",
   showWorkspaceQuickActionsPanel: true,
-  showWorkspaceMemosPanel: true,
   showWorkspaceTodosPanel: true,
   fileTreeOpenInNewPane: false,
   gitPanelPlacement: "left",
@@ -345,10 +341,6 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
               parsed.showWorkspaceQuickActionsPanel,
               DEFAULT_CONFIG.showWorkspaceQuickActionsPanel,
             ),
-      showWorkspaceMemosPanel:
-        parsed.showWorkspaceMemosPanel === undefined
-          ? DEFAULT_CONFIG.showWorkspaceMemosPanel
-          : normalizeBoolean(parsed.showWorkspaceMemosPanel, DEFAULT_CONFIG.showWorkspaceMemosPanel),
       showWorkspaceTodosPanel:
         parsed.showWorkspaceTodosPanel === undefined
           ? DEFAULT_CONFIG.showWorkspaceTodosPanel
@@ -546,7 +538,6 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     composerCommonPhrases: DEFAULT_CONFIG.composerCommonPhrases,
     composerDefaultInstruction: DEFAULT_CONFIG.composerDefaultInstruction,
     showWorkspaceQuickActionsPanel: DEFAULT_CONFIG.showWorkspaceQuickActionsPanel,
-    showWorkspaceMemosPanel: DEFAULT_CONFIG.showWorkspaceMemosPanel,
     showWorkspaceTodosPanel: DEFAULT_CONFIG.showWorkspaceTodosPanel,
     fileTreeOpenInNewPane: DEFAULT_CONFIG.fileTreeOpenInNewPane,
     gitPanelPlacement: DEFAULT_CONFIG.gitPanelPlacement,
@@ -708,7 +699,6 @@ export async function saveWiseDefaultConfig(
       | "composerCommonPhrases"
       | "composerDefaultInstruction"
       | "showWorkspaceQuickActionsPanel"
-      | "showWorkspaceMemosPanel"
       | "showWorkspaceTodosPanel"
       | "fileTreeOpenInNewPane"
       | "gitPanelPlacement"
@@ -773,7 +763,6 @@ export async function saveWiseDefaultConfig(
         : current.composerDefaultInstruction,
     showWorkspaceQuickActionsPanel:
       patch.showWorkspaceQuickActionsPanel ?? current.showWorkspaceQuickActionsPanel,
-    showWorkspaceMemosPanel: patch.showWorkspaceMemosPanel ?? current.showWorkspaceMemosPanel,
     showWorkspaceTodosPanel: patch.showWorkspaceTodosPanel ?? current.showWorkspaceTodosPanel,
     fileTreeOpenInNewPane: patch.fileTreeOpenInNewPane ?? current.fileTreeOpenInNewPane,
     gitPanelPlacement: patch.gitPanelPlacement ?? current.gitPanelPlacement,
@@ -868,9 +857,6 @@ export async function saveWiseDefaultConfig(
   }
   if (patch.showWorkspaceQuickActionsPanel !== undefined) {
     next.showWorkspaceQuickActionsPanel = normalizeBoolean(patch.showWorkspaceQuickActionsPanel);
-  }
-  if (patch.showWorkspaceMemosPanel !== undefined) {
-    next.showWorkspaceMemosPanel = normalizeBoolean(patch.showWorkspaceMemosPanel);
   }
   if (patch.showWorkspaceTodosPanel !== undefined) {
     next.showWorkspaceTodosPanel = normalizeBoolean(patch.showWorkspaceTodosPanel);
@@ -1029,17 +1015,14 @@ export async function saveWiseDefaultConfig(
   }
   if (
     patch.showWorkspaceQuickActionsPanel !== undefined ||
-    patch.showWorkspaceMemosPanel !== undefined ||
     patch.showWorkspaceTodosPanel !== undefined
   ) {
     if (
       next.showWorkspaceQuickActionsPanel !== current.showWorkspaceQuickActionsPanel ||
-      next.showWorkspaceMemosPanel !== current.showWorkspaceMemosPanel ||
       next.showWorkspaceTodosPanel !== current.showWorkspaceTodosPanel
     ) {
       dispatchWorkspaceInspectorPanelsChanged({
         showWorkspaceQuickActionsPanel: next.showWorkspaceQuickActionsPanel,
-        showWorkspaceMemosPanel: next.showWorkspaceMemosPanel,
         showWorkspaceTodosPanel: next.showWorkspaceTodosPanel,
       });
     }
@@ -1427,7 +1410,6 @@ export async function loadWorkspaceInspectorPanelsFromStore(): Promise<Workspace
   const config = await loadWiseDefaultConfig();
   return {
     showWorkspaceQuickActionsPanel: config.showWorkspaceQuickActionsPanel,
-    showWorkspaceMemosPanel: config.showWorkspaceMemosPanel,
     showWorkspaceTodosPanel: config.showWorkspaceTodosPanel,
   };
 }

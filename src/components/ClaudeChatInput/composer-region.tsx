@@ -154,7 +154,6 @@ import {
   registerGlobalScreenshotRecipient,
 } from "../../services/globalScreenshotHotkey";
 import { wiseMainWindowFocus } from "../../services/wiseMascot";
-import { recordMissionComposerMessage } from "./missionMentionHook";
 import type { ControlRequestStatus } from "../../notifications";
 import type { QuestionDockTabSpec } from "../../hooks/useQuestionDockTabs";
 import { buildClaudeSessionHoverTitle } from "../../utils/claudeSessionIdTooltip";
@@ -289,10 +288,6 @@ interface ComposerInnerProps {
   pendingExecutionTaskCount?: number;
   /** 双栏右侧：截屏按钮右侧展示仓库选择 */
   dualPaneRepositoryPicker?: DualPaneComposerRepositoryPickerProps;
-  missionContext?: {
-    projectId?: string | null;
-    rootPath?: string | null;
-  };
   /** 本地 `/plugin` 命令结果写入会话系统消息 */
   onAppendSystemMessage?: (sessionId: string, text: string) => void;
   /** 本地斜杠命令保留用户输入气泡 */
@@ -579,7 +574,6 @@ function ComposerInner({
   employeesForDispatchRoute,
   pendingExecutionTaskCount = 0,
   dualPaneRepositoryPicker,
-  missionContext,
   onAppendSystemMessage,
   onAppendUserMessage,
   onCompactSessionHistory,
@@ -1401,15 +1395,8 @@ function ComposerInner({
   const hasComposerPayloadRef = useRef(hasComposerPayload);
   hasComposerPayloadRef.current = hasComposerPayload;
   const recordMissionMessage = useCallback(
-    (text: string) => {
-      void recordMissionComposerMessage({
-        sessionId: session.id,
-        projectId: missionContext?.projectId ?? null,
-        rootPath: missionContext?.rootPath ?? session.repositoryPath,
-        text,
-      }).catch((error) => console.debug("recordMissionComposerMessage failed:", error));
-    },
-    [missionContext?.projectId, missionContext?.rootPath, session.id, session.repositoryPath],
+    (_text: string) => {},
+    [],
   );
 
   const tryComposerEscapeRef = useRef<(target: EventTarget | null) => boolean>(() => false);
@@ -3015,10 +3002,6 @@ export interface ComposerRegionProps {
   /** 草稿持久化桶（与主输入区分）；见 `PromptProvider` */
   draftBucketKey?: string;
   dualPaneRepositoryPicker?: DualPaneComposerRepositoryPickerProps;
-  missionContext?: {
-    projectId?: string | null;
-    rootPath?: string | null;
-  };
   /** 本地 `/plugin` 命令结果写入会话系统消息 */
   onAppendSystemMessage?: (sessionId: string, text: string) => void;
   /** 本地斜杠命令保留用户输入气泡 */

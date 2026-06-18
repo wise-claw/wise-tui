@@ -49,7 +49,7 @@ import {
   isSessionBoundInPanes,
   normalizeExtraPanesToPaneCount,
 } from "../utils/multiPaneSlots";
-import { resolveTrellisBootstrapPath } from "../utils/trellisBootstrapPath";
+import { resolveWorkspaceRootPath } from "../utils/projectSessionAnchor";
 import type { WorkspaceFocus } from "../utils/workspaceMode";
 import {
   canEnterMultiPaneLayout,
@@ -560,7 +560,7 @@ export function useMainLayoutModes({
         paneCountRef.current === 1
           ? 0
           : (findFirstEmptyExtraPaneIndex(extraPanesLatestRef.current) ?? plan.slotIndex);
-      const rootPath = resolveTrellisBootstrapPath({
+      const rootPath = resolveWorkspaceRootPath({
         scope: "project",
         project,
         repositories,

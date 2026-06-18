@@ -300,10 +300,6 @@ interface Props {
   activeWorkspaceFocus?: import("../../utils/workspaceMode").WorkspaceFocus;
   activeRepositoryId?: number | null;
   workspaceMode?: import("../../utils/workspaceMode").WorkspaceMode;
-  missionContext?: {
-    projectId?: string | null;
-    rootPath?: string | null;
-  };
   /** 工作区当前焦点标签；配合会话状态决定 BackgroundInvocationDock 是否挂载 */
   activeSessionId?: string | null;
   /** 多屏离屏窗格：跳过语音同步、ResizeObserver 等非必要副作用 */
@@ -401,7 +397,6 @@ export function ClaudeChatInner({
   onLoadMoreTranscriptFromDisk,
   onCompactSessionHistory: _onCompactSessionHistory,
   dualPaneRepositoryPicker,
-  missionContext,
   activeProject,
   activeWorkspaceFocus = "repository",
   activeRepositoryId = null,
@@ -417,10 +412,10 @@ export function ClaudeChatInner({
   const speechToRequirementScope = useMemo(
     () =>
       buildSpeechToRequirementScope({
-        activeProjectId: activeProject?.id ?? missionContext?.projectId ?? null,
+        activeProjectId: activeProject?.id ?? null,
         activeRepositoryId: activeRepository?.id ?? null,
       }),
-    [activeProject?.id, activeRepository?.id, missionContext?.projectId],
+    [activeProject?.id, activeRepository?.id],
   );
   useSpeechToRequirementSync(
     speechPrefs.speechToRequirementEnabled && !deferHeavySubtree,
@@ -1792,7 +1787,6 @@ export function ClaudeChatInner({
               onCompactSessionHistory={_onCompactSessionHistory}
               onCreateNewSession={onCreateNewSession}
               dualPaneRepositoryPicker={dualPaneRepositoryPicker}
-              missionContext={missionContext}
             />
           </Suspense>
         ) : (

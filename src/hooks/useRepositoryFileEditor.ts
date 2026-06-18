@@ -7,7 +7,7 @@ import {
   readProjectRelativeFile,
   readProjectRelativeFileBase64,
   writeProjectRelativeFile,
-} from "../services/materializePrdSnapshot";
+} from "../services/projectRelativeFiles";
 import { base64ToArrayBuffer, joinRepositoryAbsolutePath } from "../utils/repositoryPreviewBinary";
 import { openInFinder } from "../services/repository";
 import {

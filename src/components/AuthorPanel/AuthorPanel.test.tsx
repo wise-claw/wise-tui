@@ -58,42 +58,6 @@ mock.module("../../services/splitPromptLayersStore", () => ({
   saveRepositorySplitPromptLayers: mock(async () => undefined),
 }));
 
-mock.module("../../hooks/useTrellisRuntime", () => ({
-  useTrellisRuntime: ({ enabled }: { enabled?: boolean } = {}) => ({
-    agentGraph: enabled
-      ? {
-          nodes: [{ id: "agent-a", nodeType: "agent", label: "Agent A", metadata: {} }],
-          edges: [{ id: "edge-a", source: "agent-a", target: "task-a", edgeType: "owns", metadata: {} }],
-          runs: [],
-        }
-      : null,
-  }),
-}));
-
-mock.module("../MissionControl/canvas/AgentOwnershipGraph", () => ({
-  AgentOwnershipGraph: () => <section data-stub="ownership-graph">所有权图</section>,
-}));
-
-mock.module("../MissionControl/canvas/RuntimeEventFeed", () => ({
-  RuntimeEventFeed: () => <section data-stub="runtime-feed">运行事件</section>,
-}));
-
-mock.module("../MissionControl/canvas/SpecRevisionTimeline", () => ({
-  SpecRevisionTimeline: () => <section data-stub="spec-revisions">修订记录</section>,
-}));
-
-mock.module("../MissionControl/canvas/OnboardingChecklist", () => ({
-  OnboardingChecklist: () => <section data-stub="onboarding">健康检查</section>,
-}));
-
-mock.module("../MissionControl/canvas/WorkspaceSnapshotViewer", () => ({
-  WorkspaceSnapshotViewer: () => <section data-stub="snapshots">工作区快照</section>,
-}));
-
-mock.module("../MissionControl/engineering/WorkflowGraphPanel", () => ({
-  WorkflowGraphPanel: () => <section data-stub="workflow-graph">工作流图</section>,
-}));
-
 mock.module("../../services/appSettingsStore", () => ({
   getAppSetting: mock(async () => null),
   getAppSettingJson: mock(async () => null),
@@ -137,6 +101,7 @@ mock.module("../../services/repositoryFiles", () => ({
 
 mock.module("@tauri-apps/plugin-opener", () => ({
   openPath: mock(async () => undefined),
+  openUrl: mock(async () => undefined),
 }));
 
 mock.module("@tauri-apps/api/path", () => ({
@@ -189,6 +154,9 @@ mock.module("../ClaudeConfigDirPanel/useClaudeConnectionModeSetting", () => ({
 
 mock.module("../../services/agentRegistry", () => ({
   deleteCustomAgent: mock(async () => undefined),
+  installBuiltinAgent: mock(async () => []),
+  uninstallBuiltinAgent: mock(async () => []),
+  updateBuiltinAgent: mock(async () => []),
   listAgents: mock(async () => []),
   refreshAgents: mock(async () => []),
   saveCustomAgent: mock(async () => ({
@@ -332,16 +300,20 @@ describe("AuthorPanel", () => {
       "工作区",
       "终端",
       "工作流",
+      "我的扩展",
+      "扩展市场",
+      "助手模板",
       "MCP 工具",
       "技能市场",
       "Hooks",
-      "引擎环境",
-      "扩展市场",
-      "助手模板",
+      "插件市场",
       "执行环境",
+      "Cursor SDK 诊断",
+      "默认配置",
+      "数据清理",
+      "自动批准",
       "定时自动化",
       "远程入口",
-      "默认配置",
       "快捷键",
       "Claude 沙箱",
     ]) {

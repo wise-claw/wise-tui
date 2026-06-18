@@ -1,6 +1,9 @@
 import type { ProjectItem, Repository } from "../types";
 import { normalizeRepositoryPathKey } from "./repositoryMainSessionBinding";
 import { repositoryFolderBasename } from "./repositoryType";
+import { resolveWorkspaceMode } from "./workspaceMode";
+
+export type WorkspaceRootScope = "project" | "repository";
 
 export interface ProjectSessionAnchor {
   /** 新主会话写入 `ClaudeSession.repositoryPath` 的物理路径。空串表示项目既无 rootPath 也无成员仓库。 */
@@ -105,4 +108,40 @@ export function resolveProjectMainSessionAnchor(
     displayName: `${project.name}/${repositoryFolderBasename(primaryRepo)}`,
     isProjectRooted: false,
   };
+}
+
+/** 解析工作区或仓库在 Finder/终端/SDD 检测等场景下使用的根目录。 */
+export function resolveWorkspaceRootPath(input: {
+  scope: WorkspaceRootScope;
+  project?: ProjectItem | null;
+  repository?: Repository | null;
+  repositories: ReadonlyArray<Repository>;
+  projects?: ReadonlyArray<ProjectItem>;
+}): string | null {
+  const { scope, project, repository, repositories, projects = [] } = input;
+
+  if (scope === "repository") {
+    return repository?.path?.trim() || null;
+  }
+
+  if (!project) return null;
+
+  const mode = resolveWorkspaceMode({
+    activeProjectId: project.id,
+    projects: projects.length > 0 ? projects : [project],
+  });
+
+  if (mode === "single_repo") {
+    if (repository?.path?.trim() && project.repositoryIds.includes(repository.id)) {
+      return repository.path.trim();
+    }
+    const anchor = resolveProjectMainSessionAnchor(project, repositories);
+    return anchor.path.trim() || null;
+  }
+
+  const configuredRoot = project.rootPath?.trim();
+  if (configuredRoot) return configuredRoot;
+
+  const anchor = resolveProjectMainSessionAnchor(project, repositories);
+  return anchor.isProjectRooted ? anchor.path.trim() || null : null;
 }

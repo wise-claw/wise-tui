@@ -36,7 +36,6 @@ import {
   workspaceBootstrapSelectionToSddMode,
 } from "../constants/workspaceBootstrapAddons";
 import { runWorkspaceBootstrap } from "../services/workspaceBootstrap";
-import { bootstrapTrellisIfMissing, trellisTaskPyExistsAtPath } from "../services/trellisBootstrap";
 import { regenerateProjectWorkflowGraphsFromTemplates } from "../services/rebuildProjectWorkflowGraphs";
 import {
   deleteAppSetting,
@@ -706,23 +705,6 @@ export function useRepositoryList() {
     [projects, pinnedProjectIds, selectProjectAndRepository],
   );
 
-  const handleBootstrapTrellisAtPath = useCallback(async (targetPath: string): Promise<"initialized" | "skipped"> => {
-    const path = targetPath.trim();
-    if (!path) {
-      throw new Error("路径为空");
-    }
-    const hadTrellis = await trellisTaskPyExistsAtPath(path);
-    if (hadTrellis) {
-      return "skipped";
-    }
-    await bootstrapTrellisIfMissing(path);
-    const after = await trellisTaskPyExistsAtPath(path);
-    if (!after) {
-      throw new Error("初始化完成但未检测到 .trellis，请检查 Trellis CLI 输出");
-    }
-    return "initialized";
-  }, []);
-
   const handleReconcileProjectWorkspace = useCallback(
     async (projectId: string, mode: ReconcileProjectMode = "repos_and_graphs") => {
       const result = await reconcileProjectWorkspace(projectId);
@@ -774,7 +756,6 @@ export function useRepositoryList() {
     handleReorderRepositoriesInProject,
     handleMoveRepositoryToProject,
     handleReconcileProjectWorkspace,
-    handleBootstrapTrellisAtPath,
     handleUpdateRepositoryMainOwnerAgent,
     handleUpdateRepositoryExecutionEngine,
     handleUpdateRepositoryOpenAppId,

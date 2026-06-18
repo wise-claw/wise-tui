@@ -7,10 +7,8 @@ import {
   sddStackModeToSddMode,
   type SddStackMode,
 } from "../../constants/sddStackMode";
-import { dispatchTrellisBootstrapComplete } from "../../constants/trellisUiEvents";
-import { detectSddSignals, type SddSignals } from "../../services/trellis/sddModeDetector";
+import { detectSddSignals, type SddSignals } from "../../services/sddModeDetector";
 import { runWorkspaceBootstrap } from "../../services/workspaceBootstrap";
-import { workspaceBootstrapNeedsTrellisInit } from "../../constants/workspaceBootstrapAddons";
 
 interface UseRepositorySddModeModalControllerInput {
   onUpdateRepositorySddMode?: (repositoryId: number, sddMode: SddMode) => void | Promise<void>;
@@ -74,9 +72,6 @@ export function useRepositorySddModeModalController({
         await runWorkspaceBootstrap(repository.path, bootstrap);
       }
       await onUpdateRepositorySddMode(repository.id, sddMode);
-      if (workspaceBootstrapNeedsTrellisInit(bootstrap)) {
-        dispatchTrellisBootstrapComplete({ repositoryId: repository.id });
-      }
       setRepository(null);
     } catch (err) {
       console.error(err);

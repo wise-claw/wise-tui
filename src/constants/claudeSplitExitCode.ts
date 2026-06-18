@@ -1,9 +1,0 @@
-/** PRD 拆分执行器退出码（spec §5 C2）。 */
-export const CLAUDE_SPLIT_EXIT_CODE_OK = 0;
-export const CLAUDE_SPLIT_EXIT_CODE_RETRYABLE = 10;
-export const CLAUDE_SPLIT_EXIT_CODE_UNRECOVERABLE = 20;
-
-export type ClaudeSplitExitCode =
-  | typeof CLAUDE_SPLIT_EXIT_CODE_OK
-  | typeof CLAUDE_SPLIT_EXIT_CODE_RETRYABLE
-  | typeof CLAUDE_SPLIT_EXIT_CODE_UNRECOVERABLE;

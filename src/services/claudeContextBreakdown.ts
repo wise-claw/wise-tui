@@ -5,7 +5,7 @@ import {
   type SessionContextMetrics,
 } from "./claudeSessionContext";
 import { getClaudeMcpStatus, listClaudeProjectSkills, listClaudeSubagents } from "./claude";
-import { readProjectRelativeFile } from "./materializePrdSnapshot";
+import { readProjectRelativeFile } from "./projectRelativeFiles";
 import type { ClaudeSession } from "../types";
 
 /** 与 Claude Code `/context` 面板相近的分类（UI 估算，非官方计数）。 */

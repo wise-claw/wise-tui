@@ -1,17 +1,7 @@
-import { listen } from "@tauri-apps/api/event";
-import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
-import { safeUnlisten } from "../utils/safeTauriUnlisten";
-import { readVisiblePollIntervalMs } from "../utils/adaptivePoll";
+import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
 import { pickSessionForRepositorySidebarSelect } from "../utils/claudeSessionSelection";
 import { resolveMainOwnerAgentNameForRepositoryPath } from "../utils/repositoryMainSessionBinding";
 import { OMC_MONITOR_EMPLOYEE_NAME } from "../constants/omcMonitor";
-import {
-  MONITOR_TRELLIS_INGEST_MAX_SESSIONS,
-  MONITOR_TRELLIS_INGEST_TAIL_LINES,
-  MONITOR_TRELLIS_INGEST_TAIL_LINES_BACKGROUND,
-  MONITOR_TRELLIS_RUNS_IN_MEMORY_MAX,
-  MONITOR_TRELLIS_RUN_STALE_MS,
-} from "../constants/monitorUi";
 import {
   findLatestUserOmcDispatchPayload,
   parseOmcDispatchTaskIdFromUserText,
@@ -21,7 +11,6 @@ import {
 import { loadSessionOwnerHints } from "../utils/sessionOwnerHints";
 import { isOmcBatchHistoryStubSessionId } from "../utils/omcEmployeeBatchHistory";
 import {
-  WORKFLOW_UI_EVENT_INVOCATION_STREAM,
   type WorkflowInvocationStreamDetail,
   type WorkflowOmcBatchRuntimeDetail,
 } from "../constants/workflowUiEvents";
@@ -33,11 +22,6 @@ import {
   getRepositoryMemberInvocationsSnapshot,
   subscribeRepositoryMemberInvocations,
 } from "../stores/repositoryMemberInvocationsStore";
-import {
-  getTrellisAgentOwnershipGraph,
-  ingestExternalClaudeCliSessions,
-  type TrellisAgentRun,
-} from "../services/trellisRuntime";
 import { sanitizeOmcDirectBatchPreviewLineForList } from "../utils/claudeInvocationText";
 import { isOmcDirectBatchInvocationRunning } from "../utils/omcDirectBatchInvocationDisplay";
 import { isOmcMonitorEmployeeRecord, omcWorkerRepositoryBoundNameMatchers } from "../utils/omcMonitorEmployeeSession";
@@ -65,11 +49,30 @@ import type {
 import {
   employeeInProjectScope,
   getEffectiveRepoSddMode,
-  getProjectSddMode,
 } from "../utils/projectRepositoryRoles";
 import { sessionsReactiveStructureKey } from "../utils/sessionConversationTasks";
 
 const EMPTY_MONITOR_INVOCATIONS: WorkflowInvocationStreamDetail[] = [];
+
+export type TrellisAgentRun = {
+  agentRunId: string;
+  projectId?: string | null;
+  rootPath: string;
+  sessionId?: string | null;
+  taskPath?: string | null;
+  taskId?: string | null;
+  repositoryId?: number | null;
+  repositoryPath?: string | null;
+  agentType: string;
+  stage?: string | null;
+  status: string;
+  currentFile?: string | null;
+  startedAt: number;
+  updatedAt: number;
+  completedAt?: number | null;
+  lastHeartbeatAt: number;
+  metadata: Record<string, unknown>;
+};
 
 function noopMonitorStoreSubscribe(_listener: () => void): () => void {
   return () => {};
@@ -427,104 +430,6 @@ function resolveAgentRunRepository(
 
   const children = candidatesWithPath.filter((item) => pathContainsOrEquals(runPath, item.path));
   return children.length === 1 ? children[0]!.repo : null;
-}
-
-function buildTrellisRuntimeMonitorTargets(
-  repositories: readonly Repository[],
-  projects: ReadonlyArray<ProjectItem>,
-): Array<{ projectId: string | null; rootPath: string }> {
-  const out = new Map<string, { projectId: string | null; rootPath: string }>();
-  const repoIdsCoveredByProjectRoot = new Set<number>();
-  for (const project of projects) {
-    if (getProjectSddMode(project) !== "wise_trellis") continue;
-    const rootPath = normalizeMonitorPath(project.rootPath);
-    if (!rootPath) continue;
-    out.set(`${project.id}\n${rootPath}`, { projectId: project.id, rootPath });
-    for (const repoId of project.repositoryIds) {
-      repoIdsCoveredByProjectRoot.add(repoId);
-    }
-  }
-  for (const repo of repositories) {
-    if (repoIdsCoveredByProjectRoot.has(repo.id)) continue;
-    if (getEffectiveRepoSddMode(repo, projects) !== "wise_trellis") continue;
-    const rootPath = normalizeMonitorPath(repo.path);
-    if (!rootPath) continue;
-    out.set(`legacy-repo:${repo.id}\n${rootPath}`, { projectId: null, rootPath });
-  }
-  return Array.from(out.values()).sort((a, b) => a.rootPath.localeCompare(b.rootPath));
-}
-
-function digestTrellisAgentRuns(runs: readonly TrellisAgentRun[]): string {
-  return runs
-    .map((run) =>
-      [
-        run.agentRunId,
-        run.projectId ?? "",
-        run.rootPath,
-        run.repositoryId ?? "",
-        run.repositoryPath ?? "",
-        run.agentType,
-        run.stage ?? "",
-        run.status,
-        run.taskId ?? "",
-        run.updatedAt,
-        run.completedAt ?? "",
-      ].join("\t"),
-    )
-    .join("\n");
-}
-
-function dedupeTrellisAgentRuns(runs: readonly TrellisAgentRun[]): TrellisAgentRun[] {
-  const byId = new Map<string, TrellisAgentRun>();
-  for (const run of runs) {
-    const previous = byId.get(run.agentRunId);
-    if (!previous || run.updatedAt >= previous.updatedAt) {
-      byId.set(run.agentRunId, run);
-    }
-  }
-  return capTrellisAgentRunsForMemory(Array.from(byId.values()).sort((a, b) => b.updatedAt - a.updatedAt));
-}
-
-const TRELLIS_AGENT_RUN_METADATA_KEYS = [
-  "description",
-  "source",
-  "promptExcerpt",
-  "outputExcerpt",
-  "toolUseId",
-  "toolName",
-  "model",
-] as const;
-
-function slimTrellisAgentRunMetadata(run: TrellisAgentRun): TrellisAgentRun {
-  const meta = run.metadata;
-  if (!meta || Object.keys(meta).length === 0) return run;
-  const slim: Record<string, unknown> = {};
-  let changed = false;
-  for (const key of TRELLIS_AGENT_RUN_METADATA_KEYS) {
-    const value = meta[key];
-    if (typeof value !== "string") continue;
-    const next = value.length > 512 ? value.slice(-512) : value;
-    slim[key] = next;
-    if (meta[key] !== next) changed = true;
-  }
-  if (!changed) {
-    const extraKeys = Object.keys(meta).filter((key) => !TRELLIS_AGENT_RUN_METADATA_KEYS.includes(key as (typeof TRELLIS_AGENT_RUN_METADATA_KEYS)[number]));
-    if (extraKeys.length === 0) return run;
-  }
-  return { ...run, metadata: slim };
-}
-
-function capTrellisAgentRunsForMemory(runs: readonly TrellisAgentRun[]): TrellisAgentRun[] {
-  const now = Date.now();
-  const filtered = runs.filter((run) => {
-    const status = run.status.trim().toLowerCase();
-    if (status === "running" || status === "in_progress" || status === "started") return true;
-    const end = run.completedAt ?? run.updatedAt;
-    return now - end < MONITOR_TRELLIS_RUN_STALE_MS;
-  });
-  return filtered
-    .slice(0, MONITOR_TRELLIS_RUNS_IN_MEMORY_MAX)
-    .map(slimTrellisAgentRunMetadata);
 }
 
 export function buildRepositoryMemberMonitorItems(
@@ -1164,7 +1069,7 @@ export function useMonitorOverview({
   sessions,
   omcBatchRuntime = null,
   omcInstalled = false,
-  monitorDrawerOpen = false,
+  monitorDrawerOpen: _monitorDrawerOpen = false,
   monitorOverviewActive = true,
 }: UseMonitorOverviewInput): UseMonitorOverviewResult {
   const cachedOverviewRef = useRef<UseMonitorOverviewResult>({
@@ -1189,9 +1094,6 @@ export function useMonitorOverview({
     getRunningClaudeSessionIdsSnapshot,
     getRunningClaudeSessionIdsSnapshot,
   );
-  const [externalTrellisAgentRuns, setExternalTrellisAgentRuns] = useState<TrellisAgentRun[]>([]);
-  const monitorDrawerOpenRef = useRef(monitorDrawerOpen);
-  monitorDrawerOpenRef.current = monitorDrawerOpen;
   const monitorOverviewActiveRef = useRef(monitorOverviewActive);
   monitorOverviewActiveRef.current = monitorOverviewActive;
   const sessionsRef = useRef(sessions);
@@ -1208,26 +1110,11 @@ export function useMonitorOverview({
     monitorOverviewActive ? getRepositoryMemberInvocationsSnapshot : () => EMPTY_MONITOR_INVOCATIONS,
     monitorOverviewActive ? getRepositoryMemberInvocationsSnapshot : () => EMPTY_MONITOR_INVOCATIONS,
   );
-  const repositoryMemberInvocationsRef = useRef(repositoryMemberInvocationsSnap);
-  repositoryMemberInvocationsRef.current = repositoryMemberInvocationsSnap;
-
-  const trellisRuntimeMonitorTargets = useMemo(
-    () => buildTrellisRuntimeMonitorTargets(repositories, projects),
-    [repositories, projects],
-  );
-  const trellisRuntimeMonitorTargetKey = useMemo(
-    () => trellisRuntimeMonitorTargets.map((target) => `${target.projectId ?? ""}\n${target.rootPath}`).join("\n---\n"),
-    [trellisRuntimeMonitorTargets],
-  );
-
-  const externalTrellisRunsDigestRef = useRef("");
 
   useEffect(() => {
     if (monitorOverviewActive) return;
     const cached = cachedOverviewRef.current;
     if (cached.repositoryMemberMonitorItems.length === 0 && cached.teamMonitorItems.length === 0) {
-      externalTrellisRunsDigestRef.current = "";
-      setExternalTrellisAgentRuns((prev) => (prev.length === 0 ? prev : []));
       return;
     }
     const employeesInProgress = cached.employeeMonitorItems.filter((item) => item.status === "in_progress").length;
@@ -1244,153 +1131,7 @@ export function useMonitorOverview({
         teamsIdle: 0,
       },
     };
-    externalTrellisRunsDigestRef.current = "";
-    setExternalTrellisAgentRuns((prev) => (prev.length === 0 ? prev : []));
   }, [monitorOverviewActive]);
-
-  useEffect(() => {
-    externalTrellisRunsDigestRef.current = "";
-  }, [trellisRuntimeMonitorTargetKey]);
-
-  const refreshExternalTrellisAgentRuns = useCallback(
-    async (isActive: () => boolean = () => true) => {
-      const targets = trellisRuntimeMonitorTargets;
-      if (targets.length === 0) {
-        externalTrellisRunsDigestRef.current = "";
-        if (!isActive()) return;
-        setExternalTrellisAgentRuns((prev) => (prev.length === 0 ? prev : []));
-        return;
-      }
-      if (
-        typeof document !== "undefined" &&
-        document.visibilityState !== "visible" &&
-        !monitorDrawerOpenRef.current
-      ) {
-        if (!isActive()) return;
-        setExternalTrellisAgentRuns((prev) => (prev.length === 0 ? prev : []));
-        return;
-      }
-      const fullIngest =
-        monitorDrawerOpenRef.current ||
-        repositoryMemberInvocationsRef.current.some(
-          (inv) =>
-            inv.templateId === "trellis" &&
-            inv.ownerKind === "repository" &&
-            inv.phase !== "complete",
-        );
-      const tailLines = fullIngest
-        ? MONITOR_TRELLIS_INGEST_TAIL_LINES
-        : MONITOR_TRELLIS_INGEST_TAIL_LINES_BACKGROUND;
-      const maxSessions = fullIngest ? MONITOR_TRELLIS_INGEST_MAX_SESSIONS : Math.min(6, MONITOR_TRELLIS_INGEST_MAX_SESSIONS);
-      const batches = await Promise.all(
-        targets.map(async (target) => {
-          let effectiveRootPath = target.rootPath;
-          if (fullIngest) {
-            const ingested = await ingestExternalClaudeCliSessions({
-              projectId: target.projectId,
-              rootPath: target.rootPath,
-              maxSessions,
-              tailLines,
-            }).catch(() => null);
-            effectiveRootPath = ingested?.rootPath ?? target.rootPath;
-          }
-          const graph = await getTrellisAgentOwnershipGraph({
-            projectId: target.projectId,
-            rootPath: effectiveRootPath,
-            includeCompleted: fullIngest,
-          }).catch(() => null);
-          return graph?.runs ?? [];
-        }),
-      );
-      if (!isActive()) return;
-      const runs = dedupeTrellisAgentRuns(batches.flat());
-      const digest = digestTrellisAgentRuns(runs);
-      if (digest === externalTrellisRunsDigestRef.current) return;
-      externalTrellisRunsDigestRef.current = digest;
-      setExternalTrellisAgentRuns(runs);
-    },
-    [trellisRuntimeMonitorTargets],
-  );
-
-  useEffect(() => {
-    if (!monitorOverviewActive) {
-      return;
-    }
-    let cancelled = false;
-    let timer: number | null = null;
-    const isActive = () => !cancelled;
-
-    const scheduleTimer = () => {
-      if (timer != null) window.clearInterval(timer);
-      timer = window.setInterval(() => {
-        if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
-        void refreshExternalTrellisAgentRuns(isActive);
-      }, readVisiblePollIntervalMs(monitorDrawerOpen ? 12_000 : 30_000, monitorDrawerOpen ? 45_000 : 120_000));
-    };
-
-    void refreshExternalTrellisAgentRuns(isActive);
-    scheduleTimer();
-    const onVisibilityChange = () => {
-      if (document.visibilityState === "visible") {
-        void refreshExternalTrellisAgentRuns(isActive);
-        scheduleTimer();
-      }
-    };
-    if (typeof document !== "undefined") {
-      document.addEventListener("visibilitychange", onVisibilityChange);
-    }
-    return () => {
-      cancelled = true;
-      if (timer != null) window.clearInterval(timer);
-      if (typeof document !== "undefined") {
-        document.removeEventListener("visibilitychange", onVisibilityChange);
-      }
-    };
-  }, [monitorOverviewActive, monitorDrawerOpen, refreshExternalTrellisAgentRuns, trellisRuntimeMonitorTargetKey]);
-
-  useEffect(() => {
-    if (!monitorOverviewActive) {
-      return;
-    }
-    let cancelled = false;
-    const isActive = () => !cancelled && monitorOverviewActiveRef.current;
-    let debounceTimer: number | null = null;
-    const cleanups: Array<() => void> = [];
-
-    const scheduleRefresh = () => {
-      if (!monitorOverviewActiveRef.current) return;
-      if (debounceTimer) window.clearTimeout(debounceTimer);
-      debounceTimer = window.setTimeout(() => {
-        debounceTimer = null;
-        void refreshExternalTrellisAgentRuns(isActive);
-      }, 250);
-    };
-
-    void (async () => {
-      const unlisten = await listen("trellis-runtime-event", scheduleRefresh);
-      if (cancelled) {
-        safeUnlisten(unlisten);
-        return;
-      }
-      cleanups.push(() => safeUnlisten(unlisten));
-    })();
-
-    const onInvocationStream = (event: Event) => {
-      const detail = (event as CustomEvent<WorkflowInvocationStreamDetail>).detail;
-      if (detail?.phase !== "complete") return;
-      if (detail.templateId !== "trellis") return;
-      if (detail.ownerKind !== "repository") return;
-      scheduleRefresh();
-    };
-    window.addEventListener(WORKFLOW_UI_EVENT_INVOCATION_STREAM, onInvocationStream);
-    cleanups.push(() => window.removeEventListener(WORKFLOW_UI_EVENT_INVOCATION_STREAM, onInvocationStream));
-
-    return () => {
-      cancelled = true;
-      if (debounceTimer) window.clearTimeout(debounceTimer);
-      cleanups.forEach((cleanup) => cleanup());
-    };
-  }, [monitorOverviewActive, refreshExternalTrellisAgentRuns]);
 
   const hasRunningDirectBatchInvocationRows = directBatchInvocationsSnap.some(isOmcDirectBatchInvocationRunning);
   const overviewDeps = [
@@ -1408,7 +1149,6 @@ export function useMonitorOverview({
     omcBatchRuntime,
     directBatchInvocationsSnap,
     repositoryMemberInvocationsSnap,
-    externalTrellisAgentRuns,
     registryRunningClaudeSessionIds,
     omcInstalled,
   ] as const;
@@ -1499,7 +1239,7 @@ export function useMonitorOverview({
       repositories,
       [...directBatchInvocationsSnap, ...repositoryMemberInvocationsSnap],
       projects,
-      externalTrellisAgentRuns,
+      [],
       registryRunningClaudeSessionIds,
     );
     const omcMonitorItem: EmployeeMonitorItem = (() => {

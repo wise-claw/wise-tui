@@ -78,29 +78,23 @@ export function applyMonacoSelectionToComposer(detail: ApplyMonacoSelectionToCom
   );
 }
 
-export const WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL = "wise:open-task-split-panel";
-
-/** 打开需求拆分助手（需求来源）；宿主按当前工作区/仓库解析上下文。 */
-export function requestOpenRequirementAssistant(detail: OpenAssistantDetail = {}): void {
+/** 打开助手 Cockpit；宿主按当前工作区/仓库解析上下文。 */
+export function requestOpenAssistant(detail: OpenAssistantDetail = {}): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(
     new CustomEvent<OpenAssistantDetail>(WORKFLOW_UI_EVENT_OPEN_ASSISTANT, { detail }),
   );
 }
 
-/** 与侧栏/快捷条一致：打开当前上下文下的需求拆分助手。 */
-export function requestOpenTaskSplitPanel(): void {
-  if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent(WORKFLOW_UI_EVENT_OPEN_TASK_SPLIT_PANEL));
-}
+/** @deprecated 使用 `requestOpenAssistant` */
+export const requestOpenRequirementAssistant = requestOpenAssistant;
+
 /**
- * D13 / E4：助手宿主统一入口。
- * 替代旧的 `wise:open-prd-split-wizard` / `wise:open-mission-control`。
+ * 助手宿主统一入口。
  * detail 可携带 `assistantId`（缺省时由 cockpit 决定默认助手），以及
  * 可选的 `projectId` / `repositoryId` 作为运行上下文。
  */
 export const WORKFLOW_UI_EVENT_OPEN_ASSISTANT = "wise:open-assistant";
-export const WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED = "wise:split-todo-count-updated";
 export const WORKFLOW_UI_EVENT_OPEN_WORKFLOW_CONFIG = "wise:open-workflow-config";
 export const WORKFLOW_UI_EVENT_WORKFLOW_GRAPH_CHANGED = "wise:workflow-graph-changed";
 export const WORKFLOW_UI_EVENT_OPEN_REPOSITORY_FILE = "wise:open-repository-file";
@@ -108,24 +102,13 @@ export const WORKFLOW_UI_EVENT_OPEN_REPOSITORY_FILE = "wise:open-repository-file
 export const WORKFLOW_UI_EVENT_REPOSITORY_FILE_EDITOR_CLOSED = "wise:repository-file-editor-closed";
 export const WORKFLOW_UI_EVENT_RUN_ASSISTANT_BRIEF = "wise:run-assistant-brief";
 
-/** 需求助手入口粒度：工作区可跨仓下发，仓库仅本仓。 */
-export type RequirementAssistantScope = "workspace" | "repository";
+export type AssistantOpenScope = "workspace" | "repository";
 
 export interface OpenAssistantDetail {
   assistantId?: string | null;
   projectId?: string | null;
   repositoryId?: number | null;
-  requirementScope?: RequirementAssistantScope | null;
-}
-
-export interface SplitTodoCountUpdatedDetail {
-  source?: "wise" | "trellis";
-  openTaskDrawer?: boolean;
-  projectId?: string | null;
-  parentTaskName?: string | null;
-  childTaskNames?: string[];
-  focusParentTaskName?: string | null;
-  focusChildTaskNames?: string[];
+  requirementScope?: AssistantOpenScope | null;
 }
 
 export interface OpenWorkflowConfigDetail {

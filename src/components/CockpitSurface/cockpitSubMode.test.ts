@@ -1,5 +1,4 @@
 import { describe, expect, test } from "bun:test";
-import { DEFAULT_PRD_SPLIT_ASSISTANT_ID } from "../../services/assistantPromptLayers";
 
 function cockpitSubModeFromEntry(
   hasInitialTarget: boolean,
@@ -10,7 +9,7 @@ function cockpitSubModeFromEntry(
     return { kind: "conversation" as const, assistantId };
   }
   if (hasInitialTarget) {
-    return { kind: "conversation" as const, assistantId: DEFAULT_PRD_SPLIT_ASSISTANT_ID };
+    return { kind: "hub" as const };
   }
   return { kind: "hub" as const };
 }
@@ -29,5 +28,9 @@ describe("cockpitSubModeFromEntry", () => {
     expect(cockpitSubModeFromEntry(false, staleInitial).assistantId).toBe(staleInitial);
     expect(cockpitSubModeFromEntry(false, null)).toEqual({ kind: "hub" });
     expect(cockpitSubModeFromEntry(false, hubSelection).assistantId).toBe(hubSelection);
+  });
+
+  test("initial target without assistant id opens hub", () => {
+    expect(cockpitSubModeFromEntry(true, null)).toEqual({ kind: "hub" });
   });
 });

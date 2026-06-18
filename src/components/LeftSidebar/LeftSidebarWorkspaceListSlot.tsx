@@ -9,9 +9,6 @@ import { SidebarGlobalWorkspaceTodoAddModal } from "./SidebarGlobalWorkspaceTodo
 import { SidebarWorkspaceTodoAddModal } from "./SidebarWorkspaceTodoAddModal";
 import { useProjectRepositorySidebarState } from "./useProjectRepositorySidebarState";
 import { useSidebarScheduledTasksMap } from "./useSidebarScheduledTasksMap";
-import { useSidebarRequirementUnsplitMap } from "./useSidebarRequirementUnsplitMap";
-import { useSidebarExecutableTasksMap } from "./useSidebarExecutableTasksMap";
-import { useSidebarTrellisReadyMap } from "./useSidebarTrellisReadyMap";
 import { useSidebarRunningMainSessionIndicators } from "./useSidebarRunningMainSessionIndicators";
 
 export type LeftSidebarWorkspaceListSlotProps = {
@@ -43,14 +40,10 @@ export type LeftSidebarWorkspaceListSlotProps = {
   onAddFloatingRepositoryClick?: () => void;
   onAddRepositoryToProjectClick?: (projectId: Workspace["id"]) => void;
   onReconcileProject?: (projectId: string, mode: ReconcileProjectMode) => void | Promise<void>;
-  onBootstrapTrellisForProject?: (project: Workspace) => void | Promise<void>;
-  onBootstrapTrellisForRepository?: (repository: Repository) => void | Promise<void>;
   onTogglePinProject: (projectId: string) => void;
   onRenameProject: (project: Workspace) => void;
   onDeleteProject: (project: Workspace) => void;
   onOpenPromptsProject?: (project: Workspace) => void;
-  onOpenProjectTrellis?: (project: Workspace) => void;
-  onOpenFloatingRepositoryTrellis?: (repository: Repository) => void;
   onCreateProjectTask: (project: Workspace, mode: TaskMode) => void;
   onCreateRepositoryTask: (repository: Repository, mode: TaskMode) => void;
   onOpenWorkspaceRequirements?: (project: Workspace) => void;
@@ -98,18 +91,12 @@ function LeftSidebarWorkspaceListSlotInner(props: LeftSidebarWorkspaceListSlotPr
     onMoveRepositoryToProject: props.onMoveRepositoryToProject,
   });
   const { byId: scheduledTasksByRepoId } = useSidebarScheduledTasksMap(props.repositories);
-  const {
-    projectUnsplitById: requirementUnsplitByProjectId,
-    repositoryUnsplitById: requirementUnsplitByRepoId,
-  } = useSidebarRequirementUnsplitMap(props.projects, props.repositories);
-  const {
-    projectExecutableById: executableTasksByProjectId,
-    repositoryExecutableById: executableTasksByRepoId,
-  } = useSidebarExecutableTasksMap(props.projects, props.repositories, props.activeProjectId);
-  const { projectTrellisReadyById, repositoryTrellisReadyById } = useSidebarTrellisReadyMap(
-    props.projects,
-    props.repositories,
-  );
+  const requirementUnsplitByProjectId: Record<string, number> = {};
+  const requirementUnsplitByRepoId: Record<number, number> = {};
+  const executableTasksByProjectId: Record<string, number> = {};
+  const executableTasksByRepoId: Record<number, number> = {};
+  const projectTrellisReadyById: Record<string, boolean> = {};
+  const repositoryTrellisReadyById: Record<number, boolean> = {};
   const { runningByProjectId, runningByRepositoryId } = useSidebarRunningMainSessionIndicators({
     projects: props.projects,
     repositories: props.repositories,
@@ -177,8 +164,6 @@ function LeftSidebarWorkspaceListSlotInner(props: LeftSidebarWorkspaceListSlotPr
           onAddFloatingRepositoryClick={props.onAddFloatingRepositoryClick}
           onAddRepositoryToProjectClick={props.onAddRepositoryToProjectClick}
           onReconcileProject={props.onReconcileProject}
-          onBootstrapTrellisForProject={props.onBootstrapTrellisForProject}
-          onBootstrapTrellisForRepository={props.onBootstrapTrellisForRepository}
           projectTrellisReadyById={projectTrellisReadyById}
           repositoryTrellisReadyById={repositoryTrellisReadyById}
           onToggleProjectExpand={projectRepositoryState.toggleProjectExpand}
@@ -186,8 +171,6 @@ function LeftSidebarWorkspaceListSlotInner(props: LeftSidebarWorkspaceListSlotPr
           onRenameProject={props.onRenameProject}
           onDeleteProject={props.onDeleteProject}
           onOpenPromptsProject={props.onOpenPromptsProject}
-          onOpenProjectTrellis={props.onOpenProjectTrellis}
-          onOpenFloatingRepositoryTrellis={props.onOpenFloatingRepositoryTrellis}
           onCreateProjectTask={props.onCreateProjectTask}
           onCreateRepositoryTask={props.onCreateRepositoryTask}
           onOpenWorkspaceRequirements={props.onOpenWorkspaceRequirements}

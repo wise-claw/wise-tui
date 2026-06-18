@@ -18,7 +18,7 @@ import {
   type WorkspaceRepositoryTreeSelection,
 } from "../utils/workspaceRepositoryTreeSelect";
 import { normalizeSessionRepositoryPath } from "../utils/sessionHistoryScope";
-import { resolveTrellisBootstrapPath } from "../utils/trellisBootstrapPath";
+import { resolveWorkspaceRootPath } from "../utils/projectSessionAnchor";
 import { resolveRepositoryForSession } from "../utils/repositoryMainSessionBinding";
 import { isMultiRepoProject, shouldRevealWorkspaceListOnRestore } from "../utils/workspaceMode";
 import {
@@ -99,7 +99,6 @@ import {
 import { prefetchClaudeCodeToolsSurface } from "./ClaudeSessions/prefetchClaudeCodeToolsSurface";
 import { useChromePanelHoverHandlers } from "../hooks/useChromePanelHoverHandlers";
 import { useMonitorSidebarFingerprints } from "../hooks/useMonitorSessionsForOverview";
-import { notifySplitTodoCountUpdated } from "../utils/notifySplitTodoCountUpdated";
 import "./GitPanel/index.css";
 import "./LeftSidebar/leftSidebarListPerformance.css";
 const GitPanelLazy = lazy(() => import("./GitPanel").then((module) => ({ default: module.GitPanel })));
@@ -145,8 +144,6 @@ export function LeftSidebar({
   pinnedProjectIds,
   onTogglePinProject,
   onReconcileProject,
-  onBootstrapTrellisForProject,
-  onBootstrapTrellisForRepository,
   onAddFloatingRepository,
   onAddRepositoryToProject,
   onPromoteFloatingRepositoryToProject,
@@ -175,7 +172,6 @@ export function LeftSidebar({
   onOpenWorkspaceRequirements,
   onOpenRepositoryRequirements: onOpenRepositoryRequirementsProp,
   onOpenPromptsProject,
-  onOpenProjectTrellis,
   onOpenPromptsRepository,
   onOpenRepositoryMainOwner,
   onConfigureRepositoryMainSessionRun,
@@ -274,7 +270,7 @@ export function LeftSidebar({
 
   const openProjectInPreferredEditor = useCallback(
     (project: ProjectItem) => {
-      const path = resolveTrellisBootstrapPath({
+      const path = resolveWorkspaceRootPath({
         scope: "project",
         project,
         repositories,
@@ -559,39 +555,18 @@ export function LeftSidebar({
     [onOpenScheduledTasksForRepositoryProp],
   );
 
-  const dispatchOpenExecutableTasksDrawer = useCallback(() => {
-    notifySplitTodoCountUpdated({ openTaskDrawer: true, source: "trellis" });
-  }, []);
-
-  const openFloatingRepositoryTrellis = useCallback(
-    (repository: Repository) => {
-      onOpenProjectTrellis?.({
-        id: `repo:${repository.id}`,
-        name: repositoryFolderBasename(repository),
-        repositoryIds: [repository.id],
-        createdAt: 0,
-        updatedAt: 0,
-        rootPath: repository.path,
-        sddMode: "wise_trellis",
-      });
-    },
-    [onOpenProjectTrellis],
-  );
-
   const openExecutableTasksForProject = useCallback(
     async (project: ProjectItem) => {
       await Promise.resolve(onCreateProjectTask(project, "chat"));
-      dispatchOpenExecutableTasksDrawer();
     },
-    [dispatchOpenExecutableTasksDrawer, onCreateProjectTask],
+    [onCreateProjectTask],
   );
 
   const openExecutableTasksForRepository = useCallback(
     async (repository: Repository) => {
       await Promise.resolve(onCreateRepositoryTask(repository, "chat"));
-      dispatchOpenExecutableTasksDrawer();
     },
-    [dispatchOpenExecutableTasksDrawer, onCreateRepositoryTask],
+    [onCreateRepositoryTask],
   );
 
   const handleFilesExplorerSectionCollapsedChange = useCallback((next: boolean) => {
@@ -1342,8 +1317,6 @@ export function LeftSidebar({
             onAddRepositoryToProject ? openAddRepositoryModal : undefined
           }
           onReconcileProject={onReconcileProject}
-          onBootstrapTrellisForProject={onBootstrapTrellisForProject}
-          onBootstrapTrellisForRepository={onBootstrapTrellisForRepository}
           onTogglePinProject={onTogglePinProject}
           onRenameProject={(project) => {
             setEditProject(project);
@@ -1368,8 +1341,6 @@ export function LeftSidebar({
             });
           }}
           onOpenPromptsProject={onOpenPromptsProject}
-          onOpenProjectTrellis={onOpenProjectTrellis}
-          onOpenFloatingRepositoryTrellis={onOpenProjectTrellis ? openFloatingRepositoryTrellis : undefined}
           onCreateProjectTask={onCreateProjectTask}
           onCreateRepositoryTask={onCreateRepositoryTask}
           onOpenWorkspaceRequirements={onOpenWorkspaceRequirements}

@@ -3,7 +3,6 @@ import {
   AppstoreOutlined,
   CodeOutlined,
   CommentOutlined,
-  FileTextOutlined,
   LinkOutlined,
   LoadingOutlined,
   SettingOutlined,
@@ -45,7 +44,6 @@ export interface SessionQuickActionsBarProps {
 
 const BUILTIN_ACTION_MENU_ICONS: Partial<Record<SessionQuickActionId, ReactNode>> = {
   "new-session": <CommentOutlined />,
-  "builtin:prd-split": <FileTextOutlined />,
 };
 
 function actionMenuIcon(id: SessionQuickActionId, assistant?: AssistantEntry): ReactNode {
@@ -163,7 +161,7 @@ export const SessionQuickActionsBar = memo(function SessionQuickActionsBar({
       );
     }
     if (isAssistantTemplateQuickActionId(id)) {
-      const iconTone = id === "builtin:prd-split" ? "orange" : "neutral";
+      const iconTone = "neutral";
       return (
         <button
           key={id}

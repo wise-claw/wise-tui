@@ -3,7 +3,7 @@ import {
   loadContextOverheadEstimate,
   type ContextOverheadEstimate,
 } from "./claudeContextBreakdown";
-import { listProjectRelativeDirectory, readProjectRelativeFile } from "./materializePrdSnapshot";
+import { listProjectRelativeDirectory, readProjectRelativeFile } from "./projectRelativeFiles";
 import type {
   FeedbackConfigSnapshot,
   FeedbackConfigSnapshotFile,

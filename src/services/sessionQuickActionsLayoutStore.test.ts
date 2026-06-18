@@ -79,7 +79,7 @@ describe("sessionQuickActionsLayoutStore", () => {
     expect(setAppSettingJson).toHaveBeenCalledTimes(1);
     expect(setAppSettingJson.mock.calls[0]?.[0]).toBe(SESSION_QUICK_ACTIONS_LAYOUT_STORAGE_KEY);
     const saved = setAppSettingJson.mock.calls[0]?.[1] as { items: { id: string }[] };
-    expect(saved.items.some((item) => item.id === "builtin:prd-split")).toBe(true);
+    expect(saved.items.some((item) => item.id === "new-session")).toBe(true);
   });
 
   test("migrates legacy localStorage into app_settings once", async () => {

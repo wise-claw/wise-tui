@@ -37,7 +37,7 @@ describe("assistantTemplateEntry", () => {
   test("builtin assistants always resolve to conversation", () => {
     expect(
       resolveAssistantEntryKind({
-        id: "builtin:prd-split",
+        id: "builtin:word-doc",
         source: "builtin",
         entryKind: "open_link",
       } as AssistantEntry),

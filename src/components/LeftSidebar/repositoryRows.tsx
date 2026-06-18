@@ -41,7 +41,6 @@ import {
   RepoDragHandleIcon,
   ScheduledTasksIcon,
   RequirementIcon,
-  TrellisIcon,
   WorkspaceRemindersIcon,
 } from "./SidebarIcons";
 import { useIsRepositoryRunCommandRunning } from "../../hooks/useIsRepositoryRunCommandRunning";
@@ -186,30 +185,6 @@ export const RepositoryConversationAction = memo(function RepositoryConversation
         }}
       >
         <ChatIcon />
-      </button>
-    </DeferredHoverTooltip>
-  );
-});
-
-export const RepositoryTrellisAction = memo(function RepositoryTrellisAction({
-  onOpen,
-  variant = "repo",
-}: {
-  onOpen: () => void;
-  variant?: "repo" | "project";
-}) {
-  return (
-    <DeferredHoverTooltip title={variant === "project" ? "工作区 Trellis" : "仓库 Trellis"}>
-      <button
-        type="button"
-        className={`app-repository-action app-repository-action--task app-repository-action--primary app-repository-action--trellis${variant === "project" ? " app-repository-action--project-quick" : ""}`}
-        aria-label={variant === "project" ? "工作区 Trellis" : "仓库 Trellis"}
-        onClick={(e) => {
-          e.stopPropagation();
-          onOpen();
-        }}
-      >
-        <TrellisIcon />
       </button>
     </DeferredHoverTooltip>
   );
@@ -833,12 +808,10 @@ function FloatingRepositoryRowInner({
   onConfigureSddMode,
   onConfigureRepositoryMainSessionRun,
   onNewPaneSession,
-  onBootstrapTrellis,
   onPromoteToNewProject,
   onJoinExistingProject,
   onRemove,
   trellisReady = false,
-  onOpenFloatingRepositoryTrellis,
   scheduledTasksTotalCount = 0,
   scheduledTasksEnabledCount = 0,
   requirementUnsplitCount = 0,
@@ -869,12 +842,10 @@ function FloatingRepositoryRowInner({
   onConfigureSddMode?: (repository: Repository) => void;
   onConfigureRepositoryMainSessionRun?: (repository: Repository) => void;
   onNewPaneSession?: (repository: Repository) => void;
-  onBootstrapTrellis?: (repository: Repository) => void | Promise<void>;
   onPromoteToNewProject?: (repository: StandaloneRepo) => void;
   onJoinExistingProject?: (repository: StandaloneRepo, projectId: string) => void;
   onRemove: (repository: StandaloneRepo) => void;
   trellisReady?: boolean;
-  onOpenFloatingRepositoryTrellis?: (repository: Repository) => void;
   scheduledTasksTotalCount?: number;
   scheduledTasksEnabledCount?: number;
   requirementUnsplitCount?: number;
@@ -977,9 +948,6 @@ function FloatingRepositoryRowInner({
             }
           />
           <RepositoryConversationAction onOpen={() => onOpenTaskMode(repository, "chat")} />
-          {trellisEnabled && trellisReady && onOpenFloatingRepositoryTrellis ? (
-            <RepositoryTrellisAction onOpen={() => onOpenFloatingRepositoryTrellis(repository)} />
-          ) : null}
           {trellisEnabled && onOpenRequirements ? (
             <SidebarRequirementAction
               unsplitCount={requirementUnsplitCount}
@@ -1034,7 +1002,6 @@ function FloatingRepositoryRowInner({
               if (key === "run-stop") onStopRepositoryRunCommand?.(repository);
               if (key === "run-row-pin") void toggleRepositoryRunCommandRowPinned(repository.id);
               if (key === "new-session") onNewPaneSession?.(repository);
-              if (key === "trellis-init" && trellisEnabled) void Promise.resolve(onBootstrapTrellis?.(repository));
               if (key === "scheduled-tasks") onOpenScheduledTasks?.(repository);
               if (key === "requirements" && trellisEnabled) onOpenRequirements?.(repository);
               if (key === "executable-tasks" && trellisEnabled) onOpenExecutableTasks?.(repository);

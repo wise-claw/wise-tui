@@ -7,11 +7,9 @@ import {
   sddStackModeToBootstrap,
   type SddStackMode,
 } from "../../constants/sddStackMode";
-import { dispatchTrellisBootstrapComplete } from "../../constants/trellisUiEvents";
-import { workspaceBootstrapNeedsTrellisInit } from "../../constants/workspaceBootstrapAddons";
-import { detectSddSignals, type SddSignals } from "../../services/trellis/sddModeDetector";
+import { detectSddSignals, type SddSignals } from "../../services/sddModeDetector";
 import { runWorkspaceBootstrap } from "../../services/workspaceBootstrap";
-import { resolveTrellisBootstrapPath } from "../../utils/trellisBootstrapPath";
+import { resolveWorkspaceRootPath } from "../../utils/projectSessionAnchor";
 
 interface UseProjectSddModeModalControllerInput {
   projects: ProjectItem[];
@@ -60,7 +58,7 @@ export function useProjectSddModeModalController({
 
   const open = useCallback(
     (nextProject: ProjectItem) => {
-      const path = resolveTrellisBootstrapPath({
+      const path = resolveWorkspaceRootPath({
         scope: "project",
         project: nextProject,
         repositories,
@@ -96,9 +94,6 @@ export function useProjectSddModeModalController({
         await runWorkspaceBootstrap(bootstrapPath, bootstrap);
       }
       await onUpdateProjectSddMode(project.id, projectSddMode);
-      if (workspaceBootstrapNeedsTrellisInit(bootstrap)) {
-        dispatchTrellisBootstrapComplete({ projectId: project.id });
-      }
       setProject(null);
       setBootstrapPath(null);
     } catch (err) {

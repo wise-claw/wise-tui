@@ -178,7 +178,7 @@ interface Props {
   panelBelowMessages?: React.ReactNode;
   hideMessages?: boolean;
   hideSessionTools?: boolean;
-  /** 多屏时按窗格解析文件/备忘录等中栏辅助面板布局。 */
+  /** 多屏时按窗格解析文件等中栏辅助面板布局。 */
   resolvePaneAuxLayout?: ResolvePaneAuxLayout;
   /** 按标签会话解析并发槽位，供批量直接 OMC 与主发一致占槽 */
   resolveTaskListOmcInvokeConcurrency?: (session: ClaudeSession) => {
@@ -219,10 +219,6 @@ interface Props {
   /** 手动执行 `/compact` 压缩指定标签会话历史 */
   onCompactSessionHistory?: (sessionId: string) => void | Promise<void>;
   onStopSessionConversationTask?: (item: SessionConversationTaskItem) => void;
-  missionContext?: {
-    projectId?: string | null;
-    rootPath?: string | null;
-  };
 }
 
 function ClaudeSessionsShell({
@@ -324,7 +320,6 @@ function ClaudeSessionsShell({
   onLoadMoreTranscriptFromDisk,
   onCompactSessionHistory,
   onStopSessionConversationTask,
-  missionContext,
 }: Props) {
   const structureKey = useClaudeSessionsStructureKey();
   const [terminalFullscreen, setTerminalFullscreen] = useState(false);
@@ -760,7 +755,6 @@ function ClaudeSessionsShell({
           onLoadMoreTranscriptFromDisk={onLoadMoreTranscriptFromDisk}
           onCompactSessionHistory={onCompactSessionHistory}
           onStopSessionConversationTask={onStopSessionConversationTask}
-          missionContext={missionContext}
           chatContextRepository={chatContextRepository}
           paneRepoTreeData={paneRepoTreeData}
           projectsById={projectsById}

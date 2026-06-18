@@ -912,9 +912,7 @@ pub(crate) async fn execute_cursor_code(
     invocation_key: Option<String>,
     tab_session_id: Option<String>,
     cursor_agent_id: Option<String>,
-    trellis_context_id: Option<String>,
 ) -> Result<(), String> {
-    let _ = trellis_context_id;
     let api_key = load_cursor_api_key(&db.0).ok_or_else(|| {
         "未配置 Cursor API Key，请在执行环境中完成配置".to_string()
     })?;

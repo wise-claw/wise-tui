@@ -4,8 +4,6 @@
 //! layers / 默认 Trellis workflow / 默认 skills / 默认 MCPs / 工具表均编译期内嵌。
 //! 用户的覆盖通过 `assistant_overrides` 表追加。
 
-pub mod prd_split;
-
 use serde::Serialize;
 
 #[derive(Debug, Clone, Serialize)]
@@ -70,7 +68,7 @@ pub struct BuiltinAssistantBundle {
 }
 
 const fn registry() -> &'static [&'static BuiltinAssistantBundle] {
-    &[&prd_split::BUNDLE]
+    &[]
 }
 
 pub fn list() -> &'static [&'static BuiltinAssistantBundle] {
@@ -89,23 +87,9 @@ mod tests {
     use super::*;
 
     #[test]
-    fn registry_contains_prd_split() {
-        assert!(find("builtin:prd-split").is_some());
+    fn registry_is_empty() {
+        assert!(list().is_empty());
+        assert!(find("builtin:prd-split").is_none());
         assert!(find("builtin:nonexistent").is_none());
-    }
-
-    #[test]
-    fn prd_split_bundle_well_formed() {
-        let b = find("builtin:prd-split").unwrap();
-        assert_eq!(b.engine_id, "claude");
-        assert!(!b.system_prompt.trim().is_empty());
-        assert!(b.tools.len() >= 5);
-        assert!(b.default_skills.is_empty());
-        assert!(!b.default_workflows.is_empty());
-        assert_eq!(b.default_workflows[0].id, "trellis:requirement-intake");
-        assert_eq!(
-            b.default_prompt_layers.prd_task_split.template_id,
-            "prdTaskSplit"
-        );
     }
 }

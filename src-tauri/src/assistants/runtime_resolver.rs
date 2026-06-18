@@ -288,15 +288,11 @@ mod tests {
     }
 
     #[test]
-    fn resolve_builtin_returns_defaults_when_no_overrides() {
+    fn resolve_unknown_assistant_falls_back_to_legacy() {
         let conn = open();
         let r = resolve(&conn, "builtin:prd-split", ResolveScopes::default()).unwrap();
-        assert_eq!(r.source, AssistantSourceTag::Builtin);
+        assert_eq!(r.source, AssistantSourceTag::Legacy);
         assert_eq!(r.engine_id, "claude");
-        let bundle: Value = serde_json::from_str(&r.prompt_bundle_json).unwrap();
-        assert!(bundle["prompts"]["prdTaskSplit"].is_object());
-        let skill: Value = serde_json::from_str(&r.skill_bundle_json).unwrap();
-        assert!(skill["custom"].as_array().unwrap().is_empty());
     }
 
     #[test]
@@ -308,11 +304,11 @@ mod tests {
     }
 
     #[test]
-    fn assistant_scope_overrides_skill_bundle_without_injecting_prd_workflow() {
+    fn assistant_scope_overrides_skill_bundle() {
         let conn = open();
         overrides::save(
             &conn,
-            "builtin:prd-split",
+            "test-assistant",
             "assistant",
             &overrides::AssistantOverridesPatch {
                 skill_bundle_json: Some(
@@ -322,10 +318,9 @@ mod tests {
             },
         )
         .unwrap();
-        let r = resolve(&conn, "builtin:prd-split", ResolveScopes::default()).unwrap();
+        let r = resolve(&conn, "test-assistant", ResolveScopes::default()).unwrap();
         let skill: Value = serde_json::from_str(&r.skill_bundle_json).unwrap();
         assert_eq!(skill["disabled"][0].as_str().unwrap(), "builtin:trellis-brainstorm");
-        // PRD split 主能力由 Wise 内置 Trellis workflow 承载,不通过 Claude skill bundle 注入。
         assert!(skill["custom"].as_array().unwrap().is_empty());
     }
 
@@ -334,7 +329,7 @@ mod tests {
         let conn = open();
         overrides::save(
             &conn,
-            "builtin:prd-split",
+            "test-assistant",
             "assistant",
             &overrides::AssistantOverridesPatch {
                 engineering_json: Some("{\"reuseExistingParents\":true}".to_string()),
@@ -344,7 +339,7 @@ mod tests {
         .unwrap();
         overrides::save(
             &conn,
-            "builtin:prd-split",
+            "test-assistant",
             "project:p1",
             &overrides::AssistantOverridesPatch {
                 engineering_json: Some("{\"reuseExistingParents\":false}".to_string()),
@@ -354,7 +349,7 @@ mod tests {
         .unwrap();
         let r = resolve(
             &conn,
-            "builtin:prd-split",
+            "test-assistant",
             ResolveScopes {
                 project_id: Some("p1"),
                 repository_id: None,
@@ -370,7 +365,7 @@ mod tests {
         let conn = open();
         overrides::save(
             &conn,
-            "builtin:prd-split",
+            "test-assistant",
             "assistant",
             &overrides::AssistantOverridesPatch {
                 prompt_layers_json: Some(
@@ -380,10 +375,8 @@ mod tests {
             },
         )
         .unwrap();
-        let r = resolve(&conn, "builtin:prd-split", ResolveScopes::default()).unwrap();
+        let r = resolve(&conn, "test-assistant", ResolveScopes::default()).unwrap();
         let bundle: Value = serde_json::from_str(&r.prompt_bundle_json).unwrap();
-        // 内置默认 systemBody 为空字符串(由前端 platform_default 提供),
-        // 这里覆盖空串依然会被忽略,所以 layer 仍存在但 systemBody 不会被写入新值。
         assert!(bundle["prompts"]["prdTaskSplit"].is_object());
     }
 }

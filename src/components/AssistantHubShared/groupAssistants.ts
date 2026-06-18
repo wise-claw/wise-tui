@@ -40,14 +40,14 @@ export function buildAssistantHubSections(
   const sections: AssistantHubSection[] = [];
 
   const trellis = builtinAssistants.filter(
-    (a) => resolveAssistantKind(a) === "trellis-orchestration",
+    (a) => resolveAssistantKind(a) === "workflow-orchestration",
   );
   if (trellis.length > 0) {
     sections.push({ key: "trellis", title: "研发编排", assistants: trellis });
   }
 
   const otherBuiltin = builtinAssistants.filter(
-    (a) => resolveAssistantKind(a) !== "trellis-orchestration",
+    (a) => resolveAssistantKind(a) !== "workflow-orchestration",
   );
   if (otherBuiltin.length > 0) {
     sections.push({ key: "general", title: "其他内置", assistants: otherBuiltin });

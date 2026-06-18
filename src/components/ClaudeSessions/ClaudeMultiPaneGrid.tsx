@@ -198,10 +198,6 @@ export interface MultiPaneSharedChatProps {
   onLoadMoreTranscriptFromDisk?: (sessionId: string) => void | Promise<void>;
   onCompactSessionHistory?: (sessionId: string) => void | Promise<void>;
   onStopSessionConversationTask?: (item: SessionConversationTaskItem) => void;
-  missionContext?: {
-    projectId?: string | null;
-    rootPath?: string | null;
-  };
 }
 
 interface MultiPanePrimaryPaneProps {
@@ -321,7 +317,6 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
         onReloadFullDiskTranscript={shared.onReloadFullDiskTranscript}
         onLoadMoreTranscriptFromDisk={shared.onLoadMoreTranscriptFromDisk}
         onCompactSessionHistory={shared.onCompactSessionHistory}
-        missionContext={shared.missionContext}
       />
     </div>
   );
@@ -588,7 +583,6 @@ const MultiPaneExtraPaneCell = memo(
             onLoadMoreTranscriptFromDisk={shared.onLoadMoreTranscriptFromDisk}
             onCompactSessionHistory={shared.onCompactSessionHistory}
             dualPaneRepositoryPicker={dualPaneRepositoryPicker}
-            missionContext={shared.missionContext}
             deferHeavySubtree={deferHeavySubtree}
             messageListProfile="companion"
             companionMessageListWindow={companionMessageListWindow}

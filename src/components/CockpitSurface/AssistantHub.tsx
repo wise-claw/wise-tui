@@ -92,7 +92,7 @@ export function AssistantHub({
         emptyDescription="尚未注册任何助手"
         renderCardActions={(assistant) => {
           const needsProject =
-            resolveAssistantKind(assistant) === "trellis-orchestration" && !activeProjectId;
+            resolveAssistantKind(assistant) === "workflow-orchestration" && !activeProjectId;
           return {
             disabled: needsProject,
             disabledHint: needsProject ? "未选择工作区时会先进入助手空态" : undefined,

@@ -13,14 +13,6 @@
  */
 import { invoke } from "@tauri-apps/api/core";
 
-import {
-  parsePromptStorageRaw,
-  PROMPT_SLOT_PRD_TASK_SPLIT,
-} from "./splitPromptBundle";
-import type { SplitPromptTemplateLayers } from "../types/splitPromptLayers";
-
-export const DEFAULT_PRD_SPLIT_ASSISTANT_ID = "builtin:prd-split";
-
 export interface AssistantResolvedRuntime {
   assistantId: string;
   source: "builtin" | "custom" | "extension" | "legacy";
@@ -36,7 +28,7 @@ export interface AssistantResolvedRuntime {
 }
 
 export interface AssistantResolveScopes {
-  assistantId?: string;
+  assistantId: string;
   projectId?: string | null;
   repositoryId?: string | number | null;
 }
@@ -64,7 +56,7 @@ export async function resolveAssistantRuntime(
   scopes: AssistantResolveScopes,
 ): Promise<AssistantResolvedRuntime> {
   const args = {
-    assistantId: scopes.assistantId ?? DEFAULT_PRD_SPLIT_ASSISTANT_ID,
+    assistantId: scopes.assistantId,
     projectId: scopes.projectId ?? null,
     repositoryId:
       scopes.repositoryId == null ? null : String(scopes.repositoryId),
@@ -196,16 +188,3 @@ export function buildAssistantEngineeringJson(
   );
 }
 
-/**
- * 抽取某个 prompt slot 的助手层合并稿。返回字段非空者即为助手层覆盖,
- * 调用方再与平台默认 merge(`mergeSplitPromptLayers`)。
- */
-export function pickAssistantPromptSlotPartial(
-  runtime: AssistantResolvedRuntime,
-  slotId: string = PROMPT_SLOT_PRD_TASK_SPLIT,
-): Partial<SplitPromptTemplateLayers> | null {
-  const map = parsePromptStorageRaw(runtime.promptBundleJson);
-  const layer = map[slotId];
-  if (!layer) return null;
-  return layer;
-}

@@ -1,4 +1,4 @@
-import type { ClaudeSession, TaskItem, WorkflowTaskItem, WorkflowTemplateItem } from "../types";
+import type { ClaudeSession, WorkflowTaskItem, WorkflowTemplateItem } from "../types";
 import type { SessionOwnerHint } from "../utils/sessionOwnerHints";
 import { extractBoundEmployeeNameFromDisplay } from "../utils/sessionOwnerHints";
 import { TEAM_AUTO_DRIVER_PREFIXES } from "../constants/teamAutoDriver";
@@ -8,11 +8,7 @@ import {
   getLatestDispatchedTeamName,
   getLatestUserPlainText,
 } from "../components/ClaudeSessions/claudeChatHelpers";
-import { getTrellisTaskRelativePath, type RepositorySessionExecutionRow } from "../components/ClaudeSessions/ClaudeChatSessionFeatureShared";
-import type { TrellisRequirementTaskRow } from "../services/trellisTaskBridge";
-
-/** 无并发上下文时「可执行任务」多选上限回退值 */
-export const TASK_LIST_MAX_SELECTED = 50;
+import type { RepositorySessionExecutionRow } from "../components/ClaudeSessions/ClaudeChatSessionFeatureShared";
 
 export function mapClaudeExecutionStatusLabel(status: ClaudeSession["status"]): string {
   if (status === "running") return "运行中";
@@ -52,26 +48,6 @@ export function rowMatchesCompletionSearch(row: RepositorySessionExecutionRow, q
     .join("\n")
     .toLowerCase();
   return hay.includes(needle);
-}
-
-export function buildTrellisTaskExecutionPrompt(task: TrellisRequirementTaskRow): string {
-  const taskPath = getTrellisTaskRelativePath(task);
-  const lines = [
-    `Active task: ${taskPath}`,
-    "",
-    "请基于该 Workspace Trellis 任务继续执行。",
-    "",
-    `任务ID：${task.taskId}`,
-    `标题：${task.title || "(未命名任务)"}`,
-    `状态：${task.status || "unknown"}`,
-  ];
-  if (task.parent?.trim()) lines.push(`父任务：${task.parent.trim()}`);
-  if (task.clusterId?.trim()) lines.push(`分片：${task.clusterId.trim()}`);
-  if (task.sourceRequirementIds.length > 0) {
-    lines.push(`关联需求：${task.sourceRequirementIds.join(", ")}`);
-  }
-  lines.push("", "请先读取任务目录中的 task.json / prd.md / design.md / implement.md（如存在），再按项目 AGENTS.md 与 .trellis/spec 继续实现、验证并更新任务状态。");
-  return lines.join("\n");
 }
 
 export function getSessionTraceStorageKey(sessionId: string, repositoryPath?: string): string {
@@ -137,5 +113,5 @@ export function resolveSessionOwnerInfo(input: {
   };
 }
 
-export const EMPTY_TASK_LIST: TaskItem[] = [];
+export const EMPTY_TASK_LIST: never[] = [];
 export const EMPTY_STRING_LIST: string[] = [];

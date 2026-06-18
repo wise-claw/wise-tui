@@ -14,8 +14,7 @@ pub(crate) mod disk_sessions;
 pub(crate) mod hooks_discovery;
 pub(crate) mod mcp;
 pub(crate) mod plugin_market;
-pub(crate) mod prd_split;
-pub(crate) mod prd_split_pipeline;
+pub(crate) mod quick;
 pub(crate) mod project_skills;
 pub(crate) mod shared;
 pub(crate) mod subagents;
@@ -1223,7 +1222,6 @@ fn create_claude_command(
     model: Option<&str>,
     extra_args: &[&str],
     bare: bool,
-    trellis_context_id: Option<&str>,
     cli_extras: &ClaudeSpawnCliExtras,
 ) -> Result<tokio::process::Command, String> {
     let claude_path = find_claude_binary()?;
@@ -1265,10 +1263,6 @@ fn create_claude_command(
         cmd.env("CLAUDE_AUTOCOMPACT_PCT_OVERRIDE", "88");
     }
 
-    if let Some(context_id) = trellis_context_id.map(str::trim).filter(|v| !v.is_empty()) {
-        cmd.env("TRELLIS_CONTEXT_ID", context_id);
-    }
-
     if bare {
         // `--bare`：自动化/拆分等场景保持无 stdin，避免子进程等待控制流。
         cmd.stdin(std::process::Stdio::null());
@@ -1289,7 +1283,6 @@ fn create_streaming_claude_command(
     project_path: &str,
     model: Option<&str>,
     session_id_to_resume: Option<&str>,
-    trellis_context_id: Option<&str>,
     cli_extras: &ClaudeSpawnCliExtras,
 ) -> Result<tokio::process::Command, String> {
     let claude_path = find_claude_binary()?;
@@ -1325,10 +1318,6 @@ fn create_streaming_claude_command(
         cmd.env("CLAUDE_AUTOCOMPACT_PCT_OVERRIDE", "88");
     }
 
-    if let Some(context_id) = trellis_context_id.map(str::trim).filter(|v| !v.is_empty()) {
-        cmd.env("TRELLIS_CONTEXT_ID", context_id);
-    }
-
     cmd.stdin(std::process::Stdio::piped());
     cmd.stdout(std::process::Stdio::piped());
     cmd.stderr(std::process::Stdio::piped());
@@ -1353,7 +1342,6 @@ fn prepare_claude_spawn_command(
     extra_args: &[&str],
     bare: bool,
     session_id_to_resume: Option<&str>,
-    trellis_context_id: Option<&str>,
     cli_extras: &ClaudeSpawnCliExtras,
 ) -> Result<(tokio::process::Command, Option<String>), String> {
     if should_spawn_claude_slash_via_stdin(prompt, bare) {
@@ -1361,7 +1349,6 @@ fn prepare_claude_spawn_command(
             project_path,
             model,
             session_id_to_resume,
-            trellis_context_id,
             cli_extras,
         )?;
         for arg in extra_args {
@@ -1375,7 +1362,6 @@ fn prepare_claude_spawn_command(
         model,
         extra_args,
         bare,
-        trellis_context_id,
         cli_extras,
     )?;
     Ok((cmd, None))
@@ -2170,7 +2156,6 @@ pub(crate) async fn execute_claude_code(
     concurrency_scope_key: Option<String>,
     concurrency_limit: Option<u32>,
     bare: Option<bool>,
-    trellis_context_id: Option<String>,
     cli_extras: Option<ClaudeSpawnCliExtras>,
 ) -> Result<(), String> {
     let registry = app.state::<ClaudeSessionRegistry>();
@@ -2184,7 +2169,6 @@ pub(crate) async fn execute_claude_code(
         &[],
         bare.unwrap_or(false),
         None,
-        trellis_context_id.as_deref(),
         &extras,
     )?;
     let model_label = model
@@ -2221,7 +2205,6 @@ pub(crate) async fn resume_claude_code(
     connection_mode: Option<String>,
     concurrency_scope_key: Option<String>,
     concurrency_limit: Option<u32>,
-    trellis_context_id: Option<String>,
     cli_extras: Option<ClaudeSpawnCliExtras>,
 ) -> Result<(), String> {
     let process_state = app.state::<ClaudeProcessState>();
@@ -2248,7 +2231,6 @@ pub(crate) async fn resume_claude_code(
             } else {
                 None
             },
-            trellis_context_id.as_deref(),
             &extras,
         )?
     } else if can_resume {
@@ -2259,7 +2241,6 @@ pub(crate) async fn resume_claude_code(
             &["-r", &resume_sid],
             false,
             None,
-            trellis_context_id.as_deref(),
             &extras,
         )?
     } else {
@@ -2270,7 +2251,6 @@ pub(crate) async fn resume_claude_code(
             &[],
             false,
             None,
-            trellis_context_id.as_deref(),
             &extras,
         )?
     };
@@ -2503,7 +2483,6 @@ pub(crate) async fn spawn_streaming_session(
     invocation_key: Option<String>,
     concurrency_scope_key: Option<String>,
     concurrency_limit: Option<u32>,
-    trellis_context_id: Option<String>,
     cli_extras: Option<ClaudeSpawnCliExtras>,
 ) -> Result<(), String> {
     if initial_prompt.trim().is_empty() {
@@ -2520,7 +2499,6 @@ pub(crate) async fn spawn_streaming_session(
         &project_path,
         model_for_cmd,
         resume_sid,
-        trellis_context_id.as_deref(),
         &extras,
     )?;
     let model_label = model

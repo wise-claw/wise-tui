@@ -1,4 +1,4 @@
-import { listProjectRelativeDirectory, readProjectRelativeFile } from "./materializePrdSnapshot";
+import { listProjectRelativeDirectory, readProjectRelativeFile } from "./projectRelativeFiles";
 import {
   adaptProfileToScanRoot,
   dedupeRunProfiles,

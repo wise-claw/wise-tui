@@ -16,8 +16,6 @@ export {
   FEATURE_SESSION_LIST_PAGE_SIZE,
   SHOW_SESSION_TASK_COMPLETION_FEATURE,
   SESSION_SEND_TRACE_PERSIST_MAX,
-  getTrellisTaskRelativePath,
-  trellisTaskRowKey,
   type RefreshHistorySessionsScope,
   type RepositorySessionExecutionRow,
   type SessionSendTraceEntry,

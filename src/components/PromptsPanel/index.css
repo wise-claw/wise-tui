@@ -1,4 +1,4 @@
-/* 与任务拆分全屏页一致的壳层布局（勿再 import PrdTaskSplitPanel 的巨型 CSS，以免 Vite HMR 500） */
+/* 编辑器壳层：左侧 gutter 预留块手柄空间 */
 .app-prd-task-panel {
   padding: 12px 8px;
   overflow: hidden;

@@ -28,8 +28,7 @@ import {
 } from "../workflowGraph/workflowX6CanvasShared";
 import { WORKFLOW_MATERIAL_CATEGORIES } from "../workflowGraph/workflowMaterialsCatalog";
 import { buildOptimizeTonePrompt, isOptimizeTone, WORKFLOW_NODE_OPTIMIZE_TONE_STORAGE_KEY, type OptimizeTone } from "./optimizeTone";
-import { materializePrdSnapshot, readSnapshotFile } from "../../services/materializePrdSnapshot";
-import { runPrdSplitClaude } from "../../services/claudeSplitExecutor";
+import { runClaudeQuick } from "../../services/claudeQuick";
 import { WorkflowNodeEditModal, type WorkflowNodeEditFormValues } from "./WorkflowNodeEditModal";
 import { WorkflowStartNodeEditModal, type WorkflowStartNodeFormValues } from "./WorkflowStartNodeEditModal";
 import { WorkflowKnowledgeNodeEditModal, type WorkflowKnowledgeNodeFormValues } from "./WorkflowKnowledgeNodeEditModal";
@@ -46,7 +45,6 @@ import { branchPortLabelFromId, normalizeBranchConditions } from "../../services
 import {
   buildMergedStageTaskBasisSelectOptions,
   canvasNodeItemFromX6Node,
-  dirnameFromAbsolutePath,
   normalizeStageTaskBasisRefsForNode,
   snapshotFromWorkflowGraph,
   toErrorMessage,
@@ -171,21 +169,14 @@ export function WorkflowCanvasEditor({ value, onChange, employees, selectableEmp
     });
     setOptimizingField(field);
     try {
-      const snapshot = await materializePrdSnapshot(
-        repositoryPath,
-        `# Workflow Field Optimize\n\nfield=${field}\nts=${Date.now()}\n`,
-        null,
-        null,
-        null,
-        null,
-      );
-      const run = await runPrdSplitClaude({
+      const cleaned = (await runClaudeQuick({
         projectPath: repositoryPath,
-        runDir: dirnameFromAbsolutePath(snapshot.prdRelativePath),
         prompt,
-      });
-      const raw = await readSnapshotFile(run.rawResultPath).catch(() => "");
-      const cleaned = raw.replace(/^```[a-zA-Z]*\s*/g, "").replace(/```$/g, "").trim();
+        timeoutMs: 120_000,
+      }))
+        .replace(/^```[a-zA-Z]*\s*/g, "")
+        .replace(/```$/g, "")
+        .trim();
       if (!cleaned) {
         message.warning("AI 优化未返回有效内容。");
         return;

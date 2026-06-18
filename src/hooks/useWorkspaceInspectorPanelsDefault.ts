@@ -5,11 +5,10 @@ import {
   type WorkspaceInspectorPanelsDefaults,
 } from "../services/wiseDefaultConfigStore";
 
-/** 右栏快捷操作 / 备忘录 / 待办默认显隐（`wise.defaultConfig.v1`）。 */
+/** 右栏快捷操作 / 待办默认显隐（`wise.defaultConfig.v1`）。 */
 export function useWorkspaceInspectorPanelsDefault(): WorkspaceInspectorPanelsDefaults {
   const [state, setState] = useState<WorkspaceInspectorPanelsDefaults>({
     showWorkspaceQuickActionsPanel: true,
-    showWorkspaceMemosPanel: true,
     showWorkspaceTodosPanel: true,
   });
 
@@ -30,10 +29,6 @@ export function useWorkspaceInspectorPanelsDefault(): WorkspaceInspectorPanelsDe
           typeof detail.showWorkspaceQuickActionsPanel === "boolean"
             ? detail.showWorkspaceQuickActionsPanel
             : prev.showWorkspaceQuickActionsPanel,
-        showWorkspaceMemosPanel:
-          typeof detail.showWorkspaceMemosPanel === "boolean"
-            ? detail.showWorkspaceMemosPanel
-            : prev.showWorkspaceMemosPanel,
         showWorkspaceTodosPanel:
           typeof detail.showWorkspaceTodosPanel === "boolean"
             ? detail.showWorkspaceTodosPanel

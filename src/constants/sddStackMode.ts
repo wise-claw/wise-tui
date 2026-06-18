@@ -4,7 +4,7 @@ import {
   workspaceBootstrapSelectionToSddMode,
   type WorkspaceBootstrapSelection,
 } from "./workspaceBootstrapAddons";
-import { resolveAutoSddMode, type SddSignals } from "../services/trellis/sddModeDetector";
+import { resolveAutoSddMode, type SddSignals } from "../services/sddModeDetector";
 
 /** 仓库 SDD / 内置能力栈：用于「配置 Claude 插件」与创建时引导。 */
 export type SddStackMode =

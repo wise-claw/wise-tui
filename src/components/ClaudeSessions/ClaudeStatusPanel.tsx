@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { writeProjectRelativeFile } from "../../services/materializePrdSnapshot";
+import { writeProjectRelativeFile } from "../../services/projectRelativeFiles";
 import { readVisiblePollIntervalMs } from "../../utils/adaptivePoll";
 import {
   contextPercentToneClassName,

@@ -40,18 +40,13 @@ import {
 import { planFileViewerPaneIndex } from "../utils/fileViewerPanePlacement";
 import type { PaneAuxLayout } from "./ClaudeSessions/paneAuxLayout";
 import { waitLayoutFrames } from "../services/mainWindowLayout";
-import type * as PrdTaskSplitPanelModule from "./PrdTaskSplitPanel";
 import type { EmployeeItem, WorkflowGraph, WorkflowTemplateItem } from "../types";
-import { resolveCockpitHubPane, type InspectTool, type ViewMode } from "../types/viewMode";
+import { resolveCockpitHubPane, type ViewMode } from "../types/viewMode";
 import { AUTHOR_CONFIG_NAV_SIDER_WIDTH_PX } from "../constants/mainLayoutWidths";
 import { dispatchRepositoryFileEditorClosed, type OpenRepositoryFileDetail } from "../constants/workflowUiEvents";
 import { requestExplorerFocus } from "../constants/explorerUiEvents";
 import { writePendingExplorerReveal } from "../utils/pendingExplorerReveal";
 import { resolveExplorerRevealTargetForOpen } from "../utils/explorerRevealTarget";
-import {
-  WorkspaceMemoEditorVisibilityContext,
-  WorkspaceMemosProvider,
-} from "../contexts/WorkspaceMemosContext";
 import { useRepositoryFileEditor } from "../hooks/useRepositoryFileEditor";
 import { useWorkspaceFileTreeRail } from "../hooks/useWorkspaceFileTreeRail";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -113,22 +108,10 @@ const LazyRepositoryFileEditorPanel = lazy(() =>
 const LazyRepositoryFilePreviewModal = lazy(() =>
   import("./RepositoryFilePreviewModal").then((module) => ({ default: module.RepositoryFilePreviewModal })),
 );
-const LazyWorkspaceMemoEditorPanel = lazy(() =>
-  import("./WorkspaceMemoEditorPanel").then((module) => ({ default: module.WorkspaceMemoEditorPanel })),
-);
 
 const Inspector = lazy(() => import("./Inspector").then((module) => ({ default: module.Inspector })));
 const CockpitSurface = lazy(() =>
   import("./CockpitSurface").then((module) => ({ default: module.CockpitSurface })),
-);
-const RuntimeEventsInspector = lazy(() =>
-  import("./Inspectors").then((m) => ({ default: m.RuntimeEventsInspector })),
-);
-const WorkflowGraphInspector = lazy(() =>
-  import("./Inspectors").then((m) => ({ default: m.WorkflowGraphInspector })),
-);
-const SpecTimelineInspector = lazy(() =>
-  import("./Inspectors").then((m) => ({ default: m.SpecTimelineInspector })),
 );
 const MemoLeftSidebar = memo(LazyLeftSidebar, areLeftSidebarPropsEqual);
 const MemoClaudeSessions = memo(LazyClaudeSessions);
@@ -145,7 +128,6 @@ type LeftSidebarProps = Omit<
   | "siderWidth"
   | "onOpenActiveRepositoryFile"
 >;
-type PrdTaskSplitPanelProps = ComponentProps<typeof PrdTaskSplitPanelModule.PrdTaskSplitPanel>;
 type RightPanelProps = ChatInspectorProps;
 type InspectorCockpitProps = CockpitInspectorProps;
 
@@ -286,12 +268,10 @@ const ConnectedClaudeSessions = memo(function ConnectedClaudeSessions({
   fileEditorTargetPaneIndex,
 }: ConnectedClaudeSessionsProps) {
   const fileEditorVisible = useContext(RepositoryFileEditorVisibilityContext);
-  const memoEditorVisible = useContext(WorkspaceMemoEditorVisibilityContext);
 
   const resolvePaneAuxLayout = useCallback(
     (paneIndex: number): PaneAuxLayout => {
-      const auxVisible = fileEditorVisible || memoEditorVisible;
-      if (!auxVisible) {
+      if (!fileEditorVisible) {
         return { hideMessages: false, hideSessionTools: false };
       }
       if (fileEditorTargetPaneIndex != null) {
@@ -302,7 +282,7 @@ const ConnectedClaudeSessions = memo(function ConnectedClaudeSessions({
           hideSessionTools: isTarget,
         };
       }
-      // 文件/备忘录默认落在主窗格；其它多屏窗格须保留消息列表，避免输入区被顶到列顶。
+      // 文件编辑器默认落在主窗格；其它多屏窗格须保留消息列表，避免输入区被顶到列顶。
       const isPrimaryAuxPane = paneIndex === 0;
       return {
         panelBelowMessages: isPrimaryAuxPane ? centerAuxPanelsNode : undefined,
@@ -310,7 +290,7 @@ const ConnectedClaudeSessions = memo(function ConnectedClaudeSessions({
         hideSessionTools: isPrimaryAuxPane,
       };
     },
-    [centerAuxPanelsNode, fileEditorTargetPaneIndex, fileEditorVisible, memoEditorVisible],
+    [centerAuxPanelsNode, fileEditorTargetPaneIndex, fileEditorVisible],
   );
 
   const primaryAux = resolvePaneAuxLayout(0);
@@ -328,32 +308,16 @@ const ConnectedClaudeSessions = memo(function ConnectedClaudeSessions({
   );
 }, connectedClaudeSessionsPropsEqual);
 
-const ConnectedWorkspaceMemoEditorPanel = memo(function ConnectedWorkspaceMemoEditorPanel() {
-  const visible = useContext(WorkspaceMemoEditorVisibilityContext);
-  if (!visible) return null;
-  return (
-    <Suspense fallback={<PanelLoadingFallback />}>
-      <LazyWorkspaceMemoEditorPanel />
-    </Suspense>
-  );
-});
-
 const ConnectedCenterAuxPanels = memo(function ConnectedCenterAuxPanels({
   fileEditorNode,
 }: {
   fileEditorNode: ReactNode;
 }) {
   const fileEditorVisible = useContext(RepositoryFileEditorVisibilityContext);
-  const memoEditorVisible = useContext(WorkspaceMemoEditorVisibilityContext);
-  if (!fileEditorVisible && !memoEditorVisible) {
+  if (!fileEditorVisible) {
     return null;
   }
-  return (
-    <div className="app-center-aux-panels">
-      <ConnectedWorkspaceMemoEditorPanel />
-      {fileEditorNode}
-    </div>
-  );
+  return <div className="app-center-aux-panels">{fileEditorNode}</div>;
 });
 
 const ConnectedInspector = memo(function ConnectedInspector({
@@ -427,10 +391,10 @@ export interface AppWorkspaceLayoutProps {
   collapsed: boolean;
   /** 顶层 ViewMode；Inspector / 主屏分发 / 旧布尔判定都按它派发。 */
   viewMode: ViewMode;
-  /** Stage 5 / E7：四个 Trellis Inspector 透镜统一通过 viewMode.back() 关闭。 */
-  onCloseTrellisInspector: () => void;
   /** Cockpit 定时自动化 Hub 关闭（返回上一 ViewMode）。 */
   onCloseCockpitAutomationHub: () => void;
+  /** Cockpit 助手 Hub / 对话关闭（返回上一 ViewMode）。 */
+  onCloseCockpit: () => void;
   effectiveRightCollapsed: boolean;
   mainLayoutContentRef: RefObject<HTMLElement | null>;
   mainLayoutLeftWidthPx: number;
@@ -463,8 +427,6 @@ export interface AppWorkspaceLayoutProps {
   cockpitSurfaceResumeAssistantId?: string | null;
   /** 显式打开助手/需求拆分入口的递增信号。 */
   cockpitSurfaceOpenRequestKey: number;
-  /** 需求拆分助手全屏：收起左栏，主区仅展示 PRD 拆分面板 */
-  cockpitPrdSplitFullscreen?: boolean;
   scheduledTasksOverlay?: ScheduledTasksOverlayTarget | null;
   onCloseScheduledTasksOverlay?: () => void;
   scheduledTasksOverlayEmployees?: EmployeeItem[];
@@ -475,16 +437,12 @@ export interface AppWorkspaceLayoutProps {
   commandPaletteProps: ComponentProps<typeof CommandPalette>;
   mcpHubProps: ComponentProps<typeof McpHub>;
   skillsHubProps: ComponentProps<typeof SkillsHub>;
-  prdTaskSplitPanelProps: PrdTaskSplitPanelProps;
   progressMonitorDrawerProps: ComponentProps<typeof ProgressMonitorDrawer>;
   historyTranscriptDrawerProps: ComponentProps<typeof MonitorHistorySessionTranscriptDrawer>;
   onLeftWidthChange: (widthPx: number) => void;
   onRightWidthChange: (widthPx: number) => void;
   onConsumeRepositoryFileOpenRequest: () => void;
   repositoryFileOpenRequest?: OpenRepositoryFileDetail | null;
-  workspaceMemosProjectId?: string | null;
-  workspaceMemosRepositoryId?: number | null;
-  onEnsureChatModeForMemo?: () => void;
 }
 
 function PanelLoadingFallback() {
@@ -495,51 +453,13 @@ function PanelLoadingFallback() {
   );
 }
 
-type TrellisInspectorTool = Extract<
-  InspectTool,
-  { kind: "runtime-events" | "workflow-graph" | "spec-timeline" }
->;
-
-function isTrellisInspectorTool(tool: InspectTool): tool is TrellisInspectorTool {
-  return tool.kind === "runtime-events" || tool.kind === "workflow-graph" || tool.kind === "spec-timeline";
-}
-
-function TrellisInspectorOverlay({
-  tool,
-  onClose,
-}: {
-  tool: TrellisInspectorTool;
-  onClose: () => void;
-}) {
-  switch (tool.kind) {
-    case "runtime-events":
-      return (
-        <RuntimeEventsInspector
-          rootPath={tool.rootPath}
-          projectId={tool.projectId}
-          onClose={onClose}
-        />
-      );
-    case "workflow-graph":
-      return (
-        <WorkflowGraphInspector
-          rootPath={tool.rootPath}
-          projectId={tool.projectId}
-          onClose={onClose}
-        />
-      );
-    case "spec-timeline":
-      return <SpecTimelineInspector rootPath={tool.rootPath} onClose={onClose} />;
-  }
-}
-
 export function AppWorkspaceLayout({
   activeRepositoryPath,
   dark,
   collapsed,
   viewMode,
-  onCloseTrellisInspector,
   onCloseCockpitAutomationHub,
+  onCloseCockpit,
   effectiveRightCollapsed,
   mainLayoutContentRef,
   mainLayoutLeftWidthPx,
@@ -561,7 +481,6 @@ export function AppWorkspaceLayout({
   cockpitSurfaceInitialAssistantId,
   cockpitSurfaceResumeAssistantId,
   cockpitSurfaceOpenRequestKey,
-  cockpitPrdSplitFullscreen = false,
   scheduledTasksOverlay = null,
   onCloseScheduledTasksOverlay,
   scheduledTasksOverlayEmployees = [],
@@ -572,16 +491,12 @@ export function AppWorkspaceLayout({
   commandPaletteProps,
   mcpHubProps,
   skillsHubProps,
-  prdTaskSplitPanelProps,
   progressMonitorDrawerProps,
   historyTranscriptDrawerProps,
   onLeftWidthChange,
   onRightWidthChange,
   onConsumeRepositoryFileOpenRequest,
   repositoryFileOpenRequest,
-  workspaceMemosProjectId = null,
-  workspaceMemosRepositoryId = null,
-  onEnsureChatModeForMemo,
 }: AppWorkspaceLayoutProps) {
   const algorithm = dark ? theme.darkAlgorithm : theme.defaultAlgorithm;
   const claudeSessionsRef = useRef(claudeSessionsProps.sessions);
@@ -624,12 +539,8 @@ export function AppWorkspaceLayout({
   const skillsHubMode =
     (viewMode.kind === "author" && viewMode.pane === "skills") ||
     (viewMode.kind === "inspect" && viewMode.tool.kind === "skills-hub");
-  const trellisInspectorTool =
-    viewMode.kind === "inspect" && isTrellisInspectorTool(viewMode.tool)
-      ? viewMode.tool
-      : null;
   const chatRightRailMode = !authorMode && !missionControlMode;
-  const leftSidebarParked = cockpitPrdSplitFullscreen;
+  const leftSidebarParked = false;
   const {
     fileTreeRailOpen,
     toggleFileTreeRail,
@@ -953,15 +864,10 @@ export function AppWorkspaceLayout({
   ]);
 
   return (
-    <WorkspaceMemosProvider
-      projectId={workspaceMemosProjectId}
-      repositoryId={workspaceMemosRepositoryId}
-      onEnsureChatMode={onEnsureChatModeForMemo}
-    >
-      <RepositoryFileEditorOpenFileContext.Provider value={openRepositoryFileWithPreference}>
-        <RepositoryFileEditorVisibilityContext.Provider value={editorVisible}>
-          <RepositoryFileEditorPanelContext.Provider value={editorPanelContextValue}>
-            <ConfigProvider
+    <RepositoryFileEditorOpenFileContext.Provider value={openRepositoryFileWithPreference}>
+      <RepositoryFileEditorVisibilityContext.Provider value={editorVisible}>
+        <RepositoryFileEditorPanelContext.Provider value={editorPanelContextValue}>
+          <ConfigProvider
             locale={zhCN}
             tooltip={{ unique: true }}
             theme={{
@@ -983,8 +889,8 @@ export function AppWorkspaceLayout({
               ) : null}
               <Layout
                 className={`app-main-layout${authorMode ? " app-main-layout--author" : ""}${
-                  cockpitPrdSplitFullscreen ? " app-main-layout--prd-split-fullscreen" : ""
-                }${workspaceWelcomeFullscreen ? " app-main-layout--welcome-hidden" : ""}`}
+                  workspaceWelcomeFullscreen ? " app-main-layout--welcome-hidden" : ""
+                }`}
                 style={{ minWidth: 0, flex: 1, minHeight: 0, height: "100%" }}
               >
                 <Suspense fallback={null}>
@@ -1148,20 +1054,13 @@ export function AppWorkspaceLayout({
                         </ErrorBoundary>
                       </div>
                     ) : null}
-                    {trellisInspectorTool ? (
-                      <Suspense fallback={null}>
-                        <ErrorBoundary type="local" fallbackTitle="Trellis 运行时透镜出错">
-                          <TrellisInspectorOverlay tool={trellisInspectorTool} onClose={onCloseTrellisInspector} />
-                        </ErrorBoundary>
-                      </Suspense>
-                    ) : null}
                   </div>
 
                    {showCockpitShell ? (
                     <div
                       className={`app-full-width-main app-cockpit-workspace-layer${
                         !missionControlMode ? " app-workspace-layer--parked" : ""
-                      }${cockpitPrdSplitFullscreen ? " app-cockpit-workspace-layer--prd-split-fullscreen" : ""}`}
+                      }`}
                     >
                       <Layout.Content className="app-main-layout-content">
                         <ErrorBoundary type="local" fallbackTitle="需求与自动化调度面板出错">
@@ -1193,7 +1092,7 @@ export function AppWorkspaceLayout({
                                 initialAssistantId={cockpitSurfaceInitialAssistantId}
                                 resumeAssistantId={cockpitSurfaceResumeAssistantId}
                                 openRequestKey={cockpitSurfaceOpenRequestKey}
-                                prdTaskSplitPanelProps={prdTaskSplitPanelProps}
+                                onClose={onCloseCockpit}
                                 onActiveAssistantIdChange={onCockpitActiveAssistantIdChange}
                                 onClearInitialAssistant={onClearCockpitInitialAssistant}
                               />
@@ -1235,6 +1134,5 @@ export function AppWorkspaceLayout({
           </RepositoryFileEditorPanelContext.Provider>
         </RepositoryFileEditorVisibilityContext.Provider>
       </RepositoryFileEditorOpenFileContext.Provider>
-    </WorkspaceMemosProvider>
   );
 }

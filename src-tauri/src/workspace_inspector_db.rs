@@ -1,14 +1,12 @@
-//! 右栏 Inspector：快捷操作、备忘录与待办事项的 SQLite 持久化。
+//! 右栏 Inspector：快捷操作与待办事项的 SQLite 持久化。
 
 use crate::wise_db::WiseDb;
-use rusqlite::{params, Connection, OptionalExtension};
+use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
 const QUICK_ACTIONS_PROJECT_PREFIX: &str = "wise.workspaceQuickActions.project:";
 const QUICK_ACTIONS_REPOSITORY_PREFIX: &str = "wise.workspaceQuickActions.repository:";
-const MEMOS_PROJECT_PREFIX: &str = "wise.workspaceMemos.project:";
-const MEMOS_REPOSITORY_PREFIX: &str = "wise.workspaceMemos.repository:";
 const KEY_SUFFIX: &str = ".v1";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -29,26 +27,6 @@ pub struct WorkspaceQuickActionItemDto {
 pub struct WorkspaceQuickActionsPayloadDto {
     pub version: i32,
     pub items: Vec<WorkspaceQuickActionItemDto>,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WorkspaceMemoItemDto {
-    pub id: String,
-    pub title: String,
-    #[serde(default)]
-    pub body_markdown: String,
-    pub created_at: i64,
-    pub updated_at: i64,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize)]
-#[serde(rename_all = "camelCase")]
-pub struct WorkspaceMemosPayloadDto {
-    pub version: i32,
-    pub items: Vec<WorkspaceMemoItemDto>,
-    #[serde(default)]
-    pub last_selected_id: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -79,26 +57,6 @@ pub struct WorkspaceTodosPayloadDto {
 struct LegacyQuickActionsPayload {
     #[serde(default)]
     items: Vec<WorkspaceQuickActionItemDto>,
-}
-
-#[derive(Debug, Deserialize)]
-struct LegacyMemoItem {
-    id: Option<String>,
-    title: Option<String>,
-    #[serde(rename = "bodyMarkdown", default)]
-    body_markdown: Option<String>,
-    #[serde(rename = "createdAt")]
-    created_at: Option<i64>,
-    #[serde(rename = "updatedAt")]
-    updated_at: Option<i64>,
-}
-
-#[derive(Debug, Deserialize)]
-struct LegacyMemosPayload {
-    #[serde(default)]
-    items: Vec<LegacyMemoItem>,
-    #[serde(rename = "lastSelectedId", default)]
-    last_selected_id: Option<String>,
 }
 
 fn normalize_quick_action_kind(raw: &str) -> Option<String> {
@@ -137,73 +95,7 @@ fn normalize_quick_action_item(raw: WorkspaceQuickActionItemDto) -> Option<Works
     })
 }
 
-fn normalize_memo_item(raw: WorkspaceMemoItemDto) -> Option<WorkspaceMemoItemDto> {
-    let id = raw.id.trim();
-    if id.is_empty() {
-        return None;
-    }
-    let title = raw.title.trim();
-    let title = if title.is_empty() {
-        "无标题".to_string()
-    } else {
-        title.to_string()
-    };
-    let created_at = if raw.created_at > 0 {
-        raw.created_at
-    } else {
-        crate::wise_db::unix_now_ms()
-    };
-    let updated_at = if raw.updated_at > 0 {
-        raw.updated_at
-    } else {
-        created_at
-    };
-    Some(WorkspaceMemoItemDto {
-        id: id.to_string(),
-        title,
-        body_markdown: raw.body_markdown,
-        created_at,
-        updated_at,
-    })
-}
-
-fn legacy_memo_item(raw: LegacyMemoItem) -> Option<WorkspaceMemoItemDto> {
-    let id = raw.id.as_deref()?.trim();
-    if id.is_empty() {
-        return None;
-    }
-    let title = raw.title.as_deref().unwrap_or("").trim();
-    let title = if title.is_empty() {
-        "无标题".to_string()
-    } else {
-        title.to_string()
-    };
-    let now = crate::wise_db::unix_now_ms();
-    let created_at = raw.created_at.filter(|v| *v > 0).unwrap_or(now);
-    let updated_at = raw.updated_at.filter(|v| *v > 0).unwrap_or(created_at);
-    Some(WorkspaceMemoItemDto {
-        id: id.to_string(),
-        title,
-        body_markdown: raw.body_markdown.unwrap_or_default(),
-        created_at,
-        updated_at,
-    })
-}
-
 fn dedupe_quick_actions(items: Vec<WorkspaceQuickActionItemDto>) -> Vec<WorkspaceQuickActionItemDto> {
-    let mut seen = HashSet::new();
-    let mut out = Vec::new();
-    for item in items {
-        if !seen.insert(item.id.clone()) {
-            continue;
-        }
-        out.push(item);
-    }
-    out.sort_by(|a, b| b.updated_at.cmp(&a.updated_at));
-    out
-}
-
-fn dedupe_memos(items: Vec<WorkspaceMemoItemDto>) -> Vec<WorkspaceMemoItemDto> {
     let mut seen = HashSet::new();
     let mut out = Vec::new();
     for item in items {
@@ -284,17 +176,6 @@ fn scope_has_quick_actions(conn: &Connection, scope_kind: &str, scope_id: &str) 
     Ok(n > 0)
 }
 
-fn scope_has_memos(conn: &Connection, scope_kind: &str, scope_id: &str) -> Result<bool, String> {
-    let n: i64 = conn
-        .query_row(
-            "SELECT COUNT(*) FROM workspace_memos WHERE scope_kind = ?1 AND scope_id = ?2",
-            params![scope_kind, scope_id],
-            |row| row.get(0),
-        )
-        .map_err(|e| e.to_string())?;
-    Ok(n > 0)
-}
-
 fn replace_quick_actions_conn(
     conn: &Connection,
     scope_kind: &str,
@@ -322,57 +203,6 @@ fn replace_quick_actions_conn(
                 item.created_at,
                 item.updated_at,
             ],
-        )
-        .map_err(|e| e.to_string())?;
-    }
-    Ok(())
-}
-
-fn replace_memos_conn(
-    conn: &Connection,
-    scope_kind: &str,
-    scope_id: &str,
-    items: &[WorkspaceMemoItemDto],
-    last_selected_id: Option<&str>,
-) -> Result<(), String> {
-    conn.execute(
-        "DELETE FROM workspace_memos WHERE scope_kind = ?1 AND scope_id = ?2",
-        params![scope_kind, scope_id],
-    )
-    .map_err(|e| e.to_string())?;
-    for item in items {
-        conn.execute(
-            "INSERT INTO workspace_memos (
-                scope_kind, scope_id, id, title, body_markdown, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7)",
-            params![
-                scope_kind,
-                scope_id,
-                item.id,
-                item.title,
-                item.body_markdown,
-                item.created_at,
-                item.updated_at,
-            ],
-        )
-        .map_err(|e| e.to_string())?;
-    }
-    let selected = last_selected_id
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .filter(|id| items.iter().any(|row| row.id == *id));
-    if let Some(id) = selected {
-        conn.execute(
-            "INSERT INTO workspace_memo_scope_prefs (scope_kind, scope_id, last_selected_id)
-             VALUES (?1, ?2, ?3)
-             ON CONFLICT(scope_kind, scope_id) DO UPDATE SET last_selected_id = excluded.last_selected_id",
-            params![scope_kind, scope_id, id],
-        )
-        .map_err(|e| e.to_string())?;
-    } else {
-        conn.execute(
-            "DELETE FROM workspace_memo_scope_prefs WHERE scope_kind = ?1 AND scope_id = ?2",
-            params![scope_kind, scope_id],
         )
         .map_err(|e| e.to_string())?;
     }
@@ -413,52 +243,6 @@ fn list_quick_actions_conn(
         }
     }
     Ok(dedupe_quick_actions(items))
-}
-
-fn list_memos_conn(
-    conn: &Connection,
-    scope_kind: &str,
-    scope_id: &str,
-) -> Result<WorkspaceMemosPayloadDto, String> {
-    let mut stmt = conn
-        .prepare(
-            "SELECT id, title, body_markdown, created_at, updated_at
-             FROM workspace_memos
-             WHERE scope_kind = ?1 AND scope_id = ?2
-             ORDER BY updated_at DESC",
-        )
-        .map_err(|e| e.to_string())?;
-    let rows = stmt
-        .query_map(params![scope_kind, scope_id], |row| {
-            Ok(WorkspaceMemoItemDto {
-                id: row.get(0)?,
-                title: row.get(1)?,
-                body_markdown: row.get(2)?,
-                created_at: row.get(3)?,
-                updated_at: row.get(4)?,
-            })
-        })
-        .map_err(|e| e.to_string())?;
-    let mut items = Vec::new();
-    for row in rows {
-        if let Some(item) = normalize_memo_item(row.map_err(|e| e.to_string())?) {
-            items.push(item);
-        }
-    }
-    let last_selected_id: Option<String> = conn
-        .query_row(
-            "SELECT last_selected_id FROM workspace_memo_scope_prefs
-             WHERE scope_kind = ?1 AND scope_id = ?2",
-            params![scope_kind, scope_id],
-            |row| row.get(0),
-        )
-        .optional()
-        .map_err(|e| e.to_string())?;
-    Ok(WorkspaceMemosPayloadDto {
-        version: 1,
-        items: dedupe_memos(items),
-        last_selected_id,
-    })
 }
 
 fn replace_todos_conn(
@@ -583,40 +367,11 @@ fn import_legacy_quick_actions(
     replace_quick_actions_conn(conn, scope_kind, &scope_id, &dedupe_quick_actions(items))
 }
 
-fn import_legacy_memos(conn: &Connection, key: &str, value: &str) -> Result<(), String> {
-    let Some((scope_kind, scope_id)) =
-        parse_legacy_scope_key(key, MEMOS_PROJECT_PREFIX, MEMOS_REPOSITORY_PREFIX)
-    else {
-        return Ok(());
-    };
-    if scope_has_memos(conn, scope_kind, &scope_id)? {
-        return Ok(());
-    }
-    let parsed: LegacyMemosPayload =
-        serde_json::from_str(value).map_err(|e| format!("备忘录 JSON 无效: {}", e))?;
-    let items: Vec<WorkspaceMemoItemDto> = parsed
-        .items
-        .into_iter()
-        .filter_map(legacy_memo_item)
-        .collect();
-    let items = dedupe_memos(items);
-    if items.is_empty() && parsed.last_selected_id.is_none() {
-        return Ok(());
-    }
-    let last = parsed
-        .last_selected_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty());
-    replace_memos_conn(conn, scope_kind, &scope_id, &items, last)
-}
-
 pub fn seed_migrate_workspace_inspector_from_app_settings(conn: &Connection) -> Result<(), String> {
     let mut stmt = conn
         .prepare(
             "SELECT key, value FROM app_settings
-             WHERE key LIKE 'wise.workspaceQuickActions.%'
-                OR key LIKE 'wise.workspaceMemos.%'",
+             WHERE key LIKE 'wise.workspaceQuickActions.%'",
         )
         .map_err(|e| e.to_string())?;
     let rows = stmt
@@ -629,8 +384,6 @@ pub fn seed_migrate_workspace_inspector_from_app_settings(conn: &Connection) -> 
             || key.starts_with(QUICK_ACTIONS_REPOSITORY_PREFIX)
         {
             import_legacy_quick_actions(conn, &key, &value)?;
-        } else if key.starts_with(MEMOS_PROJECT_PREFIX) || key.starts_with(MEMOS_REPOSITORY_PREFIX) {
-            import_legacy_memos(conn, &key, &value)?;
         }
         keys_to_delete.push(key);
     }
@@ -740,94 +493,6 @@ impl WiseDb {
         replace_quick_actions_conn(&g, "repository", &scope_id, &dedupe_quick_actions(normalized))
     }
 
-    pub fn list_project_workspace_memos(
-        &self,
-        project_id: &str,
-    ) -> Result<WorkspaceMemosPayloadDto, String> {
-        let id = project_id.trim();
-        if id.is_empty() {
-            return Ok(WorkspaceMemosPayloadDto {
-                version: 1,
-                items: vec![],
-                last_selected_id: None,
-            });
-        }
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
-        list_memos_conn(&g, "project", id)
-    }
-
-    pub fn save_project_workspace_memos(
-        &self,
-        project_id: &str,
-        items: Vec<WorkspaceMemoItemDto>,
-        last_selected_id: Option<String>,
-    ) -> Result<(), String> {
-        let id = project_id.trim();
-        if id.is_empty() {
-            return Ok(());
-        }
-        let normalized: Vec<WorkspaceMemoItemDto> = items
-            .into_iter()
-            .filter_map(normalize_memo_item)
-            .collect();
-        let last = last_selected_id
-            .as_deref()
-            .map(str::trim)
-            .filter(|s| !s.is_empty());
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
-        replace_memos_conn(
-            &g,
-            "project",
-            id,
-            &dedupe_memos(normalized),
-            last,
-        )
-    }
-
-    pub fn list_repository_workspace_memos(
-        &self,
-        repository_id: i64,
-    ) -> Result<WorkspaceMemosPayloadDto, String> {
-        if repository_id <= 0 {
-            return Ok(WorkspaceMemosPayloadDto {
-                version: 1,
-                items: vec![],
-                last_selected_id: None,
-            });
-        }
-        let scope_id = repository_id.to_string();
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
-        list_memos_conn(&g, "repository", &scope_id)
-    }
-
-    pub fn save_repository_workspace_memos(
-        &self,
-        repository_id: i64,
-        items: Vec<WorkspaceMemoItemDto>,
-        last_selected_id: Option<String>,
-    ) -> Result<(), String> {
-        if repository_id <= 0 {
-            return Ok(());
-        }
-        let scope_id = repository_id.to_string();
-        let normalized: Vec<WorkspaceMemoItemDto> = items
-            .into_iter()
-            .filter_map(normalize_memo_item)
-            .collect();
-        let last = last_selected_id
-            .as_deref()
-            .map(str::trim)
-            .filter(|s| !s.is_empty());
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
-        replace_memos_conn(
-            &g,
-            "repository",
-            &scope_id,
-            &dedupe_memos(normalized),
-            last,
-        )
-    }
-
     pub fn list_project_workspace_todos(
         &self,
         project_id: &str,
@@ -901,8 +566,6 @@ impl WiseDb {
         let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
         for sql in [
             "DELETE FROM workspace_quick_actions WHERE scope_kind = 'project' AND scope_id = ?1",
-            "DELETE FROM workspace_memos WHERE scope_kind = 'project' AND scope_id = ?1",
-            "DELETE FROM workspace_memo_scope_prefs WHERE scope_kind = 'project' AND scope_id = ?1",
             "DELETE FROM workspace_todos WHERE scope_kind = 'project' AND scope_id = ?1",
         ] {
             g.execute(sql, params![id]).map_err(|e| e.to_string())?;
@@ -922,8 +585,6 @@ impl WiseDb {
         let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
         for sql in [
             "DELETE FROM workspace_quick_actions WHERE scope_kind = 'repository' AND scope_id = ?1",
-            "DELETE FROM workspace_memos WHERE scope_kind = 'repository' AND scope_id = ?1",
-            "DELETE FROM workspace_memo_scope_prefs WHERE scope_kind = 'repository' AND scope_id = ?1",
             "DELETE FROM workspace_todos WHERE scope_kind = 'repository' AND scope_id = ?1",
         ] {
             g.execute(sql, params![scope_id])
@@ -946,6 +607,8 @@ mod tests {
             .expect("todos schema applies");
         conn.execute_batch(include_str!("../migrations/035_workspace_quick_actions_pinned.sql"))
             .expect("pinned schema applies");
+        conn.execute_batch(include_str!("../migrations/042_drop_workspace_memos.sql"))
+            .expect("drop memos schema applies");
         conn
     }
 

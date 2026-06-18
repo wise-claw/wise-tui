@@ -196,10 +196,6 @@ export interface ClaudeSessionsChatHostProps {
   onLoadMoreTranscriptFromDisk?: (sessionId: string) => void | Promise<void>;
   onCompactSessionHistory?: (sessionId: string) => void | Promise<void>;
   onStopSessionConversationTask?: (item: SessionConversationTaskItem) => void;
-  missionContext?: {
-    projectId?: string | null;
-    rootPath?: string | null;
-  };
   chatContextRepository: Repository | undefined;
   paneRepoTreeData: PaneRepoTreeNode[];
   projectsById: Map<string, ProjectItem>;
@@ -289,7 +285,6 @@ export function ClaudeSessionsChatHost({
   onLoadMoreTranscriptFromDisk,
   onCompactSessionHistory,
   onStopSessionConversationTask,
-  missionContext,
   chatContextRepository,
   paneRepoTreeData,
   projectsById,
@@ -542,7 +537,6 @@ export function ClaudeSessionsChatHost({
     onLoadMoreTranscriptFromDisk,
     onCompactSessionHistory,
     onStopSessionConversationTask,
-    missionContext,
   });
 
   useEffect(() => {
@@ -682,7 +676,6 @@ export function ClaudeSessionsChatHost({
           onReloadFullDiskTranscript={onReloadFullDiskTranscript}
           onLoadMoreTranscriptFromDisk={onLoadMoreTranscriptFromDisk}
           onCompactSessionHistory={onCompactSessionHistory}
-          missionContext={missionContext}
         />
       )}
     </Suspense>

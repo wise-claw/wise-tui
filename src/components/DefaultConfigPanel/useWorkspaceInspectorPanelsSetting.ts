@@ -9,7 +9,6 @@ import {
 export function useWorkspaceInspectorPanelsSetting() {
   const [panels, setPanels] = useState<WorkspaceInspectorPanelsDefaults>({
     showWorkspaceQuickActionsPanel: true,
-    showWorkspaceMemosPanel: true,
     showWorkspaceTodosPanel: true,
   });
   const [loading, setLoading] = useState(true);
@@ -45,23 +44,6 @@ export function useWorkspaceInspectorPanelsSetting() {
     [panels.showWorkspaceQuickActionsPanel],
   );
 
-  const saveMemos = useCallback(
-    async (visible: boolean) => {
-      if (visible === panels.showWorkspaceMemosPanel) return;
-      setSaving(true);
-      try {
-        await saveWorkspaceInspectorPanelsToStore({ showWorkspaceMemosPanel: visible });
-        setPanels((prev) => ({ ...prev, showWorkspaceMemosPanel: visible }));
-      } catch (err) {
-        message.error(`保存失败：${err instanceof Error ? err.message : String(err)}`);
-        throw err;
-      } finally {
-        setSaving(false);
-      }
-    },
-    [panels.showWorkspaceMemosPanel],
-  );
-
   const saveTodos = useCallback(
     async (visible: boolean) => {
       if (visible === panels.showWorkspaceTodosPanel) return;
@@ -85,7 +67,6 @@ export function useWorkspaceInspectorPanelsSetting() {
     saving,
     refresh,
     saveQuickActions,
-    saveMemos,
     saveTodos,
   };
 }

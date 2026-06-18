@@ -57,6 +57,8 @@ const MIGRATION_037: &str = include_str!("../migrations/037_assistant_custom_ent
 const MIGRATION_038: &str = include_str!("../migrations/038_assistant_hidden.sql");
 const MIGRATION_040: &str = include_str!("../migrations/040_employee_default_instruction.sql");
 const MIGRATION_041: &str = include_str!("../migrations/041_drop_code_knowledge_graph.sql");
+const MIGRATION_042: &str = include_str!("../migrations/042_drop_workspace_memos.sql");
+const MIGRATION_043: &str = include_str!("../migrations/043_drop_trellis_mission_prd.sql");
 const PLATFORM_SPLIT_PROMPT_SEED_JSON: &str =
     include_str!("../migrations/005_platform_split_prompt_seed.json");
 
@@ -234,6 +236,14 @@ const MIGRATIONS: &[Migration] = &[
     Migration {
         name: "041_drop_code_knowledge_graph",
         action: MigrationAction::Sql(MIGRATION_041),
+    },
+    Migration {
+        name: "042_drop_workspace_memos",
+        action: MigrationAction::Sql(MIGRATION_042),
+    },
+    Migration {
+        name: "043_drop_trellis_mission_prd",
+        action: MigrationAction::Sql(MIGRATION_043),
     },
 ];
 
@@ -660,23 +670,6 @@ impl WiseDb {
                 repository_ids.push(rel.map_err(|e| e.to_string())?);
             }
             row.repository_ids = repository_ids;
-
-            let mut proj_stmt = g
-                .prepare(
-                    "SELECT project_id
-                     FROM project_prd_employees
-                     WHERE employee_id = ?1
-                     ORDER BY created_at ASC",
-                )
-                .map_err(|e| e.to_string())?;
-            let proj_rows = proj_stmt
-                .query_map(params![row.id.clone()], |r| r.get::<_, String>(0))
-                .map_err(|e| e.to_string())?;
-            let mut project_ids = Vec::new();
-            for proj in proj_rows {
-                project_ids.push(proj.map_err(|e| e.to_string())?);
-            }
-            row.project_ids = project_ids;
 
             out.push(row);
         }
@@ -1295,183 +1288,6 @@ impl WiseDb {
         Ok(())
     }
 
-    pub fn list_project_prd_employee_ids(&self, project_id: &str) -> Result<Vec<String>, String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
-        let mut stmt = g
-            .prepare(
-                "SELECT employee_id FROM project_prd_employees
-                 WHERE project_id = ?1
-                 ORDER BY created_at ASC, employee_id ASC",
-            )
-            .map_err(|e| e.to_string())?;
-        let rows = stmt
-            .query_map(params![project_id], |row| row.get::<_, String>(0))
-            .map_err(|e| e.to_string())?;
-        let mut out = Vec::new();
-        for r in rows {
-            out.push(r.map_err(|e| e.to_string())?);
-        }
-        Ok(out)
-    }
-
-    pub fn list_project_prd_workflow_ids(&self, project_id: &str) -> Result<Vec<String>, String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
-        let mut stmt = g
-            .prepare(
-                "SELECT workflow_id FROM project_prd_workflows
-                 WHERE project_id = ?1
-                 ORDER BY created_at ASC, workflow_id ASC",
-            )
-            .map_err(|e| e.to_string())?;
-        let rows = stmt
-            .query_map(params![project_id], |row| row.get::<_, String>(0))
-            .map_err(|e| e.to_string())?;
-        let mut out = Vec::new();
-        for r in rows {
-            out.push(r.map_err(|e| e.to_string())?);
-        }
-        Ok(out)
-    }
-
-    pub fn add_project_prd_employee(
-        &self,
-        project_id: &str,
-        employee_id: &str,
-        now_ms: i64,
-    ) -> Result<(), String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
-        let exists: i64 = g
-            .query_row(
-                "SELECT COUNT(*) FROM projects WHERE id = ?1",
-                params![project_id],
-                |row| row.get(0),
-            )
-            .map_err(|e| e.to_string())?;
-        if exists == 0 {
-            return Err("项目未找到".into());
-        }
-        let emp: i64 = g
-            .query_row(
-                "SELECT COUNT(*) FROM employees WHERE id = ?1",
-                params![employee_id],
-                |row| row.get(0),
-            )
-            .map_err(|e| e.to_string())?;
-        if emp == 0 {
-            return Err("员工未找到".into());
-        }
-        g.execute(
-            "INSERT OR IGNORE INTO project_prd_employees (project_id, employee_id, created_at) VALUES (?1, ?2, ?3)",
-            params![project_id, employee_id, now_ms],
-        )
-        .map_err(|e| e.to_string())?;
-        g.execute(
-            "UPDATE projects SET updated_at = ?1 WHERE id = ?2",
-            params![now_ms, project_id],
-        )
-        .map_err(|e| e.to_string())?;
-        Ok(())
-    }
-
-    pub fn remove_project_prd_employee(
-        &self,
-        project_id: &str,
-        employee_id: &str,
-        now_ms: i64,
-    ) -> Result<(), String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
-        g.execute(
-            "DELETE FROM project_prd_employees WHERE project_id = ?1 AND employee_id = ?2",
-            params![project_id, employee_id],
-        )
-        .map_err(|e| e.to_string())?;
-        g.execute(
-            "UPDATE projects SET updated_at = ?1 WHERE id = ?2",
-            params![now_ms, project_id],
-        )
-        .map_err(|e| e.to_string())?;
-        Ok(())
-    }
-
-    pub fn add_project_prd_workflow(
-        &self,
-        project_id: &str,
-        workflow_id: &str,
-        now_ms: i64,
-    ) -> Result<(), String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
-        let exists: i64 = g
-            .query_row(
-                "SELECT COUNT(*) FROM projects WHERE id = ?1",
-                params![project_id],
-                |row| row.get(0),
-            )
-            .map_err(|e| e.to_string())?;
-        if exists == 0 {
-            return Err("项目未找到".into());
-        }
-        let wf: i64 = g
-            .query_row(
-                "SELECT COUNT(*) FROM workflows WHERE id = ?1",
-                params![workflow_id],
-                |row| row.get(0),
-            )
-            .map_err(|e| e.to_string())?;
-        if wf == 0 {
-            return Err("团队未找到".into());
-        }
-        g.execute(
-            "INSERT OR IGNORE INTO project_prd_workflows (project_id, workflow_id, created_at) VALUES (?1, ?2, ?3)",
-            params![project_id, workflow_id, now_ms],
-        )
-        .map_err(|e| e.to_string())?;
-        g.execute(
-            "UPDATE projects SET updated_at = ?1 WHERE id = ?2",
-            params![now_ms, project_id],
-        )
-        .map_err(|e| e.to_string())?;
-        Ok(())
-    }
-
-    pub fn remove_project_prd_workflow(
-        &self,
-        project_id: &str,
-        workflow_id: &str,
-        now_ms: i64,
-    ) -> Result<(), String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
-        g.execute(
-            "DELETE FROM project_prd_workflows WHERE project_id = ?1 AND workflow_id = ?2",
-            params![project_id, workflow_id],
-        )
-        .map_err(|e| e.to_string())?;
-        g.execute(
-            "UPDATE projects SET updated_at = ?1 WHERE id = ?2",
-            params![now_ms, project_id],
-        )
-        .map_err(|e| e.to_string())?;
-        Ok(())
-    }
-
-    pub fn list_workflow_project_ids(&self, workflow_id: &str) -> Result<Vec<String>, String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
-        let mut stmt = g
-            .prepare(
-                "SELECT project_id FROM project_prd_workflows
-                 WHERE workflow_id = ?1
-                 ORDER BY created_at ASC",
-            )
-            .map_err(|e| e.to_string())?;
-        let rows = stmt
-            .query_map(params![workflow_id], |row| row.get::<_, String>(0))
-            .map_err(|e| e.to_string())?;
-        let mut out = Vec::new();
-        for r in rows {
-            out.push(r.map_err(|e| e.to_string())?);
-        }
-        Ok(out)
-    }
-
     pub fn add_repository_to_project(
         &self,
         project_id: &str,
@@ -1622,99 +1438,6 @@ impl WiseDb {
         let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
         g.execute("DELETE FROM app_settings WHERE key = ?1", params![key])
             .map_err(|e| e.to_string())?;
-        Ok(())
-    }
-
-    /// 读取当前 PRD 任务拆分 JSON；若新表无数据则尝试从旧版 `app_settings` 迁移一行。
-    pub fn get_prd_task_split_payload(&self) -> Result<Option<String>, String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
-        let from_table: Option<String> = g
-            .query_row(
-                "SELECT payload FROM prd_task_split_results WHERE id = 'current'",
-                [],
-                |row| row.get(0),
-            )
-            .optional()
-            .map_err(|e| e.to_string())?;
-        if from_table.is_some() {
-            return Ok(from_table);
-        }
-        let old: Option<String> = g
-            .query_row(
-                "SELECT value FROM app_settings WHERE key = 'prd_task_split_result'",
-                [],
-                |row| row.get(0),
-            )
-            .optional()
-            .map_err(|e| e.to_string())?;
-        if let Some(payload) = old {
-            let now = unix_now_ms();
-            g.execute(
-                "INSERT INTO prd_task_split_results (id, payload, updated_at) VALUES ('current', ?1, ?2)",
-                params![&payload, now],
-            )
-            .map_err(|e| e.to_string())?;
-            g.execute(
-                "DELETE FROM app_settings WHERE key = 'prd_task_split_result'",
-                [],
-            )
-            .map_err(|e| e.to_string())?;
-            return Ok(Some(payload));
-        }
-        Ok(None)
-    }
-
-    pub fn clear_prd_task_split_payload(&self) -> Result<(), String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
-        g.execute(
-            "DELETE FROM prd_task_split_results WHERE id = 'current'",
-            [],
-        )
-        .map_err(|e| e.to_string())?;
-        g.execute("DELETE FROM prd_executable_tasks WHERE id = 'current'", [])
-            .map_err(|e| e.to_string())?;
-        g.execute(
-            "DELETE FROM app_settings WHERE key = 'prd_task_split_result'",
-            [],
-        )
-        .map_err(|e| e.to_string())?;
-        Ok(())
-    }
-
-    /// 读取可执行任务 JSON（与 `prd_task_split_results` 分表）。
-    pub fn get_prd_executable_tasks_payload(&self) -> Result<Option<String>, String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
-        g.query_row(
-            "SELECT payload FROM prd_executable_tasks WHERE id = 'current'",
-            [],
-            |row| row.get(0),
-        )
-        .optional()
-        .map_err(|e| e.to_string())
-    }
-
-    /// 原子写入拆分结果与可执行任务两张表。
-    pub fn set_prd_task_split_and_executable_payloads(
-        &self,
-        split_payload: &str,
-        executable_payload: &str,
-    ) -> Result<(), String> {
-        let mut g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
-        let now = unix_now_ms();
-        let tx = g.transaction().map_err(|e| e.to_string())?;
-        tx.execute(
-            "INSERT INTO prd_task_split_results (id, payload, updated_at) VALUES ('current', ?1, ?2)
-             ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at",
-            params![split_payload, now],
-        )
-        .map_err(|e| e.to_string())?;
-        tx.execute(
-            "INSERT INTO prd_executable_tasks (id, payload, updated_at) VALUES ('current', ?1, ?2)
-             ON CONFLICT(id) DO UPDATE SET payload = excluded.payload, updated_at = excluded.updated_at",
-            params![executable_payload, now],
-        )
-        .map_err(|e| e.to_string())?;
-        tx.commit().map_err(|e| e.to_string())?;
         Ok(())
     }
 
@@ -2003,16 +1726,6 @@ pub(crate) fn unix_now_ms() -> i64 {
 
 fn delete_project_scoped_rows_conn(conn: &Connection, project_id: &str) -> Result<(), String> {
     let project_scope = format!("project:{project_id}");
-    for sql in [
-        "DELETE FROM mission_runs WHERE project_id = ?1",
-        "DELETE FROM trellis_runtime_events WHERE project_id = ?1",
-        "DELETE FROM trellis_agent_runs WHERE project_id = ?1",
-        "DELETE FROM trellis_spec_revisions WHERE project_id = ?1",
-        "DELETE FROM trellis_workspace_snapshots WHERE project_id = ?1",
-    ] {
-        conn.execute(sql, params![project_id])
-            .map_err(|e| e.to_string())?;
-    }
     conn.execute(
         "DELETE FROM assistant_overrides WHERE scope = ?1",
         params![project_scope],
@@ -2020,8 +1733,6 @@ fn delete_project_scoped_rows_conn(conn: &Connection, project_id: &str) -> Resul
     .map_err(|e| e.to_string())?;
     for sql in [
         "DELETE FROM workspace_quick_actions WHERE scope_kind = 'project' AND scope_id = ?1",
-        "DELETE FROM workspace_memos WHERE scope_kind = 'project' AND scope_id = ?1",
-        "DELETE FROM workspace_memo_scope_prefs WHERE scope_kind = 'project' AND scope_id = ?1",
         "DELETE FROM workspace_todos WHERE scope_kind = 'project' AND scope_id = ?1",
     ] {
         conn.execute(sql, params![project_id])
@@ -2048,8 +1759,6 @@ fn purge_repository_database_refs_conn(
     let scope_id = repository_id.to_string();
     for sql in [
         "DELETE FROM workspace_quick_actions WHERE scope_kind = 'repository' AND scope_id = ?1",
-        "DELETE FROM workspace_memos WHERE scope_kind = 'repository' AND scope_id = ?1",
-        "DELETE FROM workspace_memo_scope_prefs WHERE scope_kind = 'repository' AND scope_id = ?1",
         "DELETE FROM workspace_todos WHERE scope_kind = 'repository' AND scope_id = ?1",
     ] {
         conn.execute(sql, params![scope_id])
@@ -2109,8 +1818,44 @@ mod tests {
                 "039_workspace_quick_actions_pinned_repair",
                 "040_employee_default_instruction",
                 "041_drop_code_knowledge_graph",
+                "042_drop_workspace_memos",
+                "043_drop_trellis_mission_prd",
             ]
         );
+    }
+
+    #[test]
+    fn run_migrations_drops_trellis_mission_prd_tables() {
+        let conn = Connection::open_in_memory().expect("in-memory sqlite opens");
+        run_migrations(&conn).expect("migrations succeed");
+
+        for table in [
+            "mission_runs",
+            "mission_events",
+            "mission_agent_assignments",
+            "mission_reassign_previews",
+            "mission_session_bindings",
+            "mission_instructions",
+            "mission_agent_commands",
+            "mission_evidence",
+            "trellis_runtime_events",
+            "trellis_agent_runs",
+            "trellis_spec_revisions",
+            "trellis_workspace_snapshots",
+            "project_prd_employees",
+            "project_prd_workflows",
+            "prd_executable_tasks",
+            "prd_task_split_results",
+        ] {
+            let count: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+                    params![table],
+                    |row| row.get(0),
+                )
+                .expect("sqlite_master query succeeds");
+            assert_eq!(count, 0, "{table} should be dropped by migration 043");
+        }
     }
 
     #[test]
@@ -2159,69 +1904,19 @@ mod tests {
     }
 
     #[test]
-    fn run_migrations_seeds_platform_split_prompt_setting() {
+    fn run_migrations_removes_split_prompt_settings() {
         let conn = Connection::open_in_memory().expect("in-memory sqlite opens");
 
         run_migrations(&conn).expect("migrations succeed");
 
-        let value: String = conn
+        let count: i64 = conn
             .query_row(
-                "SELECT value FROM app_settings WHERE key = 'split_prompt_layers:platform_default'",
+                "SELECT COUNT(*) FROM app_settings WHERE key = 'split_prompt_layers:platform_default'",
                 [],
                 |row| row.get(0),
             )
-            .expect("seed setting exists");
-        serde_json::from_str::<serde_json::Value>(&value).expect("seed setting is valid JSON");
-    }
-
-    #[test]
-    fn run_migrations_creates_mission_control_tables() {
-        let conn = Connection::open_in_memory().expect("in-memory sqlite opens");
-
-        run_migrations(&conn).expect("migrations succeed");
-
-        for table in [
-            "mission_runs",
-            "mission_events",
-            "mission_agent_assignments",
-            "mission_reassign_previews",
-            "mission_session_bindings",
-            "mission_instructions",
-            "mission_agent_commands",
-            "mission_evidence",
-        ] {
-            let count: i64 = conn
-                .query_row(
-                    "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
-                    params![table],
-                    |row| row.get(0),
-                )
-                .expect("sqlite_master query succeeds");
-            assert_eq!(count, 1, "{table} table exists");
-        }
-    }
-
-    #[test]
-    fn run_migrations_creates_trellis_runtime_tables() {
-        let conn = Connection::open_in_memory().expect("in-memory sqlite opens");
-
-        run_migrations(&conn).expect("migrations succeed");
-
-        for table in [
-            "trellis_runtime_events",
-            "trellis_agent_runs",
-            "trellis_spec_revisions",
-            "trellis_workspace_snapshots",
-        ] {
-            let count: i64 = conn
-                .query_row(
-                    "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
-                    params![table],
-                    |row| row.get(0),
-                )
-                .expect("sqlite_master query succeeds");
-            assert_eq!(count, 1, "{table} table exists");
-        }
+            .expect("setting count query succeeds");
+        assert_eq!(count, 0);
     }
 
     #[test]

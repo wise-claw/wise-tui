@@ -11,11 +11,6 @@ import {
   type UseViewModeApi,
 } from "./useViewMode";
 
-/**
- * Bridge component that exposes a hook's return value to the test scope by
- * stashing it through a callback. Mirrors `useMissionPresenter.test.tsx`
- * conventions used elsewhere in the repo.
- */
 function ProbeViewMode({ onValue }: { onValue: (api: UseViewModeApi) => void }) {
   const api = useViewMode();
   useLayoutEffect(() => {
@@ -57,9 +52,9 @@ describe("useViewMode", () => {
   test("enter cockpit then back returns to chat", () => {
     const probe = renderProbe();
     act(() => {
-      probe.api.enter(cockpitView("m1"));
+      probe.api.enter(cockpitView("mcp"));
     });
-    expect(probe.api.view).toEqual({ kind: "cockpit", missionId: "m1" });
+    expect(probe.api.view).toEqual({ kind: "cockpit", hubPane: "mcp" });
     expect(probe.api.isCockpit).toBe(true);
     expect(probe.api.legacy.missionControlMode).toBe(true);
 
@@ -106,7 +101,7 @@ describe("useViewMode", () => {
   test("switching author panes does not stack history; back exits author once", () => {
     const probe = renderProbe();
     act(() => {
-      probe.api.enter(cockpitView("m1"));
+      probe.api.enter(cockpitView("mcp"));
     });
     act(() => {
       probe.api.enter(authorView("agents"));
@@ -119,7 +114,7 @@ describe("useViewMode", () => {
     act(() => {
       probe.api.back();
     });
-    expect(probe.api.view).toEqual({ kind: "cockpit", missionId: "m1" });
+    expect(probe.api.view).toEqual({ kind: "cockpit", hubPane: "mcp" });
     probe.unmount();
   });
 
@@ -143,37 +138,35 @@ describe("useViewMode", () => {
       probe.api.enter(cockpitView());
     });
     act(() => {
-      probe.api.patch({ kind: "cockpit", missionId: "foo" });
+      probe.api.patch({ kind: "cockpit", hubPane: "skills" });
     });
-    expect(probe.api.view).toEqual({ kind: "cockpit", missionId: "foo" });
+    expect(probe.api.view).toEqual({ kind: "cockpit", hubPane: "skills" });
 
-    // Switch to chat; patching cockpit should have no effect
     act(() => {
       probe.api.enter({ kind: "chat" });
     });
     act(() => {
-      probe.api.patch({ kind: "cockpit", missionId: "bar" });
+      probe.api.patch({ kind: "cockpit", hubPane: "automation" });
     });
     expect(probe.api.view).toEqual({ kind: "chat" });
 
-    // Back to cockpit; patch merges again
     act(() => {
       probe.api.enter(cockpitView());
     });
     act(() => {
-      probe.api.patch({ kind: "cockpit", missionId: "m42" });
+      probe.api.patch({ kind: "cockpit", hubPane: "automation" });
     });
-    expect(probe.api.view).toEqual({ kind: "cockpit", missionId: "m42" });
+    expect(probe.api.view).toEqual({ kind: "cockpit", hubPane: "automation" });
     probe.unmount();
   });
 
   test("switching cockpit hub panes does not stack history", () => {
     const probe = renderProbe();
     act(() => {
-      probe.api.enter(cockpitView(undefined, "assistant"));
+      probe.api.enter(cockpitView("assistant"));
     });
     act(() => {
-      probe.api.enter(cockpitView(undefined, "mcp"));
+      probe.api.enter(cockpitView("mcp"));
     });
     expect(probe.api.view).toEqual({ kind: "cockpit", hubPane: "mcp" });
 

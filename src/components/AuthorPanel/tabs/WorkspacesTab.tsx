@@ -1,9 +1,7 @@
 import { FolderOpenOutlined, PlusOutlined } from "@ant-design/icons";
-import { HoverHint } from "../../shared/HoverHint";
 import { Button, Empty, Space, Tag } from "antd";
 import type { Repository, StandaloneRepo, Workspace } from "../../../types";
 import { repositoryFolderBasename } from "../../../utils/repositoryType";
-import { ProjectTrellisCenter } from "../../ProjectTrellisCenter";
 import { AuthorPanelPageShell } from "../AuthorPanelPageShell";
 
 interface WorkspacesTabProps {
@@ -12,105 +10,42 @@ interface WorkspacesTabProps {
   standaloneRepos: StandaloneRepo[];
   activeWorkspaceId: string | null;
   activeRepositoryId: number | null;
-  trellisWorkspaceId?: string | null;
   onCreateWorkspace: () => void;
   onAddStandaloneRepo?: () => void;
   onSelectWorkspace: (workspaceId: string) => void;
   onSelectStandaloneRepo: (repositoryId: number) => void;
-  onOpenProjectSession?: (workspace: Workspace) => void | Promise<void>;
-  onRequestSpecAgentUpdate?: (workspace: Workspace, area: string) => void | Promise<void>;
 }
 
 export function WorkspacesTab({
   workspaces,
-  repositories,
   standaloneRepos,
   activeWorkspaceId,
   activeRepositoryId,
-  trellisWorkspaceId,
   onCreateWorkspace,
   onAddStandaloneRepo,
   onSelectWorkspace,
   onSelectStandaloneRepo,
-  onOpenProjectSession,
-  onRequestSpecAgentUpdate,
 }: WorkspacesTabProps) {
   const hasItems = workspaces.length > 0 || standaloneRepos.length > 0;
-  const activeTrellisWorkspaceId =
-    trellisWorkspaceId ??
-    (() => {
-      if (activeWorkspaceId) {
-        const activeWorkspace = workspaces.find((workspace) => workspace.id === activeWorkspaceId);
-        if (activeWorkspace?.sddMode === "wise_trellis") return activeWorkspaceId;
-      }
-      if (activeRepositoryId !== null && !activeWorkspaceId) {
-        const activeStandalone = standaloneRepos.find((repo) => repo.id === activeRepositoryId);
-        if (activeStandalone?.sddMode === "wise_trellis") return `repo:${activeRepositoryId}`;
-      }
-      return null;
-    })();
-  const standaloneTrellisRepoId = activeTrellisWorkspaceId?.startsWith("repo:")
-    ? Number(activeTrellisWorkspaceId.slice("repo:".length))
-    : null;
-  const trellisStandaloneRepo =
-    standaloneTrellisRepoId !== null && Number.isFinite(standaloneTrellisRepoId)
-      ? standaloneRepos.find((repo) => repo.id === standaloneTrellisRepoId)
-      : null;
-  const trellisStandaloneWorkspace: Workspace | null = trellisStandaloneRepo
-    ? {
-        id: `repo:${trellisStandaloneRepo.id}`,
-        name: repositoryFolderBasename(trellisStandaloneRepo),
-        repositoryIds: [trellisStandaloneRepo.id],
-        createdAt: 0,
-        updatedAt: 0,
-        rootPath: trellisStandaloneRepo.path,
-        sddMode: "wise_trellis",
-      }
-    : null;
-  const trellisWorkspace =
-    trellisStandaloneWorkspace ??
-    workspaces.find(
-      (workspace) =>
-        workspace.id === (activeTrellisWorkspaceId ?? "") &&
-        (workspace.sddMode === "wise_trellis" || workspace.sddMode == null),
-    ) ??
-    null;
 
   return (
     <AuthorPanelPageShell
-      className={`author-panel-workspaces${trellisWorkspace ? " author-panel-workspaces--trellis" : ""}`}
+      className="author-panel-workspaces"
       icon={<FolderOpenOutlined />}
       title="工作区"
-      subtitle={
-        trellisWorkspace ? undefined : "Workspace、成员仓库和 Wise Trellis 状态"
-      }
+      subtitle="Workspace、成员仓库和 Wise Trellis 状态"
       actions={
-        trellisWorkspace ? null : (
-          <Space size={8} wrap>
-            <HoverHint title="添加一个轻量 Claude Code 仓库入口">
-              <Button size="small" onClick={onAddStandaloneRepo} disabled={!onAddStandaloneRepo}>
-                添加单仓
-              </Button>
-            </HoverHint>
-            <Button size="small" type="primary" icon={<PlusOutlined />} onClick={onCreateWorkspace}>
-              新建工作区
-            </Button>
-          </Space>
-        )
+        <Space size={8} wrap>
+          <Button size="small" onClick={onAddStandaloneRepo} disabled={!onAddStandaloneRepo}>
+            添加单仓
+          </Button>
+          <Button size="small" type="primary" icon={<PlusOutlined />} onClick={onCreateWorkspace}>
+            新建工作区
+          </Button>
+        </Space>
       }
     >
-      {trellisWorkspace ? (
-        <section className="author-panel-workspaces__trellis" aria-label="工作区 Trellis">
-          <ProjectTrellisCenter
-            open
-            inline
-            project={trellisWorkspace}
-            repositories={repositories}
-            onOpenProjectSession={onOpenProjectSession}
-            onRequestSpecAgentUpdate={onRequestSpecAgentUpdate}
-          />
-        </section>
-      ) : !hasItems ? (
+      {!hasItems ? (
         <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="还没有工作区或单仓，请先新建工作区或添加单仓" />
       ) : (
         <>

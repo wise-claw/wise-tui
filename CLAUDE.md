@@ -4,7 +4,7 @@ This file provides Claude Code guidance for this repository. Trellis specs are t
 
 ## Project Overview
 
-Wise is a Tauri 2 desktop orchestration client built with Bun, Vite, React 19, TypeScript, Ant Design, Semi UI, and Rust. It manages local repositories, Claude Code sessions, workflow graphs, PRD task splitting, terminal/Git panels, MCP/skills surfaces, notifications, and SQLite-backed project state.
+Wise is a Tauri 2 desktop orchestration client built with Bun, Vite, React 19, TypeScript, Ant Design, Semi UI, and Rust. It manages local repositories, Claude Code sessions, workflow graphs, assistant hub conversations, terminal/Git panels, MCP/skills surfaces, notifications, and SQLite-backed project state.
 
 ## Commands
 
@@ -41,16 +41,12 @@ App shell:
 Feature and support modules:
 
 - `src/components/`: feature and shared UI surfaces.
-- `src/components/CockpitSurface/`: assistant hub shell — `AssistantHub` lists builtin/user assistants; `AssistantConversationView` thin-wraps each assistant (`builtin:prd-split` renders `PrdTaskSplitPanel`); `AssistantHeader` + `AssistantSettingsDrawer` cover metadata and override editing.
-- `src/components/PrdTaskSplitPanel/`: active PRD-split assistant surface — split fan-out runtime, candidate review, orchestration confirmation, materialization, runtime queue.
+- `src/components/CockpitSurface/`: assistant hub shell — `AssistantHub` lists builtin/user assistants; `AssistantConversationView` thin-wraps each assistant conversation surface; `AssistantHeader` + `AssistantSettingsDrawer` cover metadata and override editing.
 - `src/hooks/`: reusable stateful orchestration.
 - `src/services/`: Tauri IPC wrappers and pure service modules.
 - `src/services/workflow/`: workflow engine, facade, replay, event store, adapters.
-- `src/services/prdSplit/`: PRD split planning, dispatch, verification, persistence helpers.
-- `src/services/mission/`: mission session binding helpers.
 - `src/services/trellis/`: Trellis SDD-mode detection helpers.
 - `src/services/assistantPromptLayers.ts`: assistant runtime resolver (platform default → builtin → assistant scope → project scope → repository scope).
-- `src/services/taskArtifact.ts`: `.trellis/tasks/<dir>/{prd,design,implement}.md` read/write IPC wrappers (paired with `src-tauri/src/task_artifact.rs`).
 - `src/features/cc-wf-studio/`: cc-workflow-studio host integration (Wise side).
 - `src/cc-workflow-studio-core/`: pure workflow definition and prompt generation.
 - `src/stores/`: small external subscription stores for cross-component runtime state.
@@ -83,19 +79,6 @@ Repository and workspace filesystem:
 - `src-tauri/src/project_workspace_paths.rs`: project workspace path resolution.
 - `src-tauri/src/workspace_commands.rs`: workspace-level commands.
 
-PRD and split:
-
-- `src-tauri/src/prd_materialize.rs`: PRD asset materialization and path canonicalization.
-- `src-tauri/src/prd_url_fetch.rs`: PRD URL fetching commands.
-- `src-tauri/src/claude_commands/prd_split.rs`, `src-tauri/src/claude_commands/prd_split_pipeline.rs`: PRD split execution and pipeline commands.
-
-Mission and Trellis runtime:
-
-- `src-tauri/src/mission_control.rs`: Mission persistence, runs, assignments, evidence.
-- `src-tauri/src/trellis_bootstrap.rs`: Trellis bootstrap and project detection.
-- `src-tauri/src/trellis_runtime.rs`: Trellis runtime events and agent runs.
-- `src-tauri/src/trellis_bridge.rs`: Trellis ↔ Mission bridging.
-
 Workflow studio:
 
 - `src-tauri/src/cc_workflow_studio.rs`: cc-workflow-studio backend integration.
@@ -104,7 +87,6 @@ Workflow studio:
 Claude subsystem:
 
 - `src-tauri/src/claude_commands.rs` and `src-tauri/src/claude_commands/`: Claude session commands (attachments, disk sessions, MCP, skills, subagents, terminal, shared helpers).
-- `src-tauri/src/claude_external_ingest.rs`: external Claude ingest path.
 - `src-tauri/src/claude_config_dir.rs`: Claude config directory commands.
 - `src-tauri/src/claude_code_usage.rs`: Claude Code usage statistics.
 
@@ -134,12 +116,10 @@ Config surfaces:
 
 Application-owned durable data lives under `~/.wise/`:
 
-- `wise.db`: SQLite database (projects, workflows, sessions, mission).
+- `wise.db`: SQLite database (projects, workflows, sessions).
 - `repositories.json`: registered repositories.
 - `tabs.json`: tab session state.
-- `prd-images/`: materialized PRD images.
 - `composer-images/`: Claude composer screenshots, paste, and upload images (per-repository buckets).
-- `prd-runs/`: per-cluster PRD split run artifacts.
 
 Do not store durable project/workflow/session metadata in browser `localStorage` unless an existing compatibility path explicitly requires it.
 
@@ -170,7 +150,7 @@ Detailed coding rules and product context live under `.trellis/spec/`. Read the 
 | [`.trellis/spec/tauri/index.md`](.trellis/spec/tauri/index.md) | Tauri 2 IPC, security/filesystem, persistence and migrations |
 | [`.trellis/spec/guides/index.md`](.trellis/spec/guides/index.md) | Cross-layer thinking, code reuse, commit hygiene, Trellis subagent prompts |
 
-`.trellis/spec/guides/agent-harness-architecture.md` is the product constitution. Update it first when changing top-level layout, the `ViewMode` state machine, the Operator/Author/Inspector domain split, or the Trellis ↔ Mission double-write contract.
+`.trellis/spec/guides/agent-harness-architecture.md` is the product constitution. Update it first when changing top-level layout, the `ViewMode` state machine, or the Operator/Author/Inspector domain split.
 
 The Trellis workflow itself (phases, task creation, sub-agent dispatch) is documented in `.trellis/workflow.md`; load step detail on demand via `python3 ./.trellis/scripts/get_context.py --mode phase --step <X.Y>`.
 

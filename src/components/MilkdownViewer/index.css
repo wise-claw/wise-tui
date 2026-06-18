@@ -57,7 +57,7 @@
   display: none !important;
 }
 
-/* 「+」块手柄：落在编辑区左侧 gutter，不压住正文（父级需预留左 padding，见 PrdTaskSplitPanel editor-shell） */
+/* 「+」块手柄：落在编辑区左侧 gutter，不压住正文 */
 .app-milkdown-viewer--crepe .milkdown-block-handle {
   left: -28px !important;
 }

@@ -1,7 +1,7 @@
 import type { Repository } from "../../types";
 import { repositoryFolderBasename } from "../../utils/repositoryType";
 import { SddStackModeConfigModal } from "./SddStackModeConfigModal";
-import type { SddSignals } from "../../services/trellis/sddModeDetector";
+import type { SddSignals } from "../../services/sddModeDetector";
 import type { SddStackMode } from "../../constants/sddStackMode";
 
 interface RepositorySddModeModalProps {

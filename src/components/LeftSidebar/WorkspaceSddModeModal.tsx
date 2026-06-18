@@ -1,6 +1,6 @@
 import type { ProjectItem } from "../../types";
 import { SddStackModeConfigModal } from "./SddStackModeConfigModal";
-import type { SddSignals } from "../../services/trellis/sddModeDetector";
+import type { SddSignals } from "../../services/sddModeDetector";
 import type { SddStackMode } from "../../constants/sddStackMode";
 
 interface WorkspaceSddModeModalProps {

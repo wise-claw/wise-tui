@@ -15,7 +15,7 @@ export function labelForAssistantSource(source: AssistantEntry["source"]): strin
 export function cardSourceLabel(source: AssistantEntry["source"], kind: AssistantKind): string {
   if (source !== "builtin") return labelForAssistantSource(source);
   switch (kind) {
-    case "trellis-orchestration":
+    case "workflow-orchestration":
       return "Wise 内置编排";
     case "office-doc":
     case "office-deck":

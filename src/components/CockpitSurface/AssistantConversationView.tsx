@@ -1,15 +1,13 @@
-import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import { App as AntdApp, Button, Empty, Input, Spin, Tag, Typography } from "antd";
 import { CopyFeedbackIcon } from "../shared/CopyFeedbackIcon";
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { SettingOutlined } from "@ant-design/icons";
-import type { ComponentProps } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   WORKFLOW_UI_EVENT_RUN_ASSISTANT_BRIEF,
   type RunAssistantBriefDetail,
 } from "../../constants/workflowUiEvents";
 import {
-  DEFAULT_PRD_SPLIT_ASSISTANT_ID,
   parseAssistantEngineeringPreferences,
   parseAssistantRuntimeBundle,
   resolveAssistantRuntime,
@@ -25,49 +23,29 @@ import {
   getEnabledBundleItems,
 } from "./assistantArtifactBrief";
 
-const PrdTaskSplitPanel = lazy(() =>
-  import("../PrdTaskSplitPanel").then((module) => ({ default: module.PrdTaskSplitPanel })),
-);
-
-export type AssistantConversationPrdTaskSplitPanelProps = ComponentProps<typeof PrdTaskSplitPanel>;
-
 export interface AssistantConversationViewProps {
   assistantId: string;
   assistant: AssistantEntry | null;
   activeProjectId: string | null;
   activeProjectName: string | null;
-  prdTaskSplitPanelProps: AssistantConversationPrdTaskSplitPanelProps;
+  onClose: () => void;
   onOpenSettings: () => void;
 }
 
-/**
- * D13 修订:助手 conversation 视图 = `PrdTaskSplitPanel`(单栏)的薄封装。
- * 不再实现 ChatPane / ArtifactPane / 双栏 / Claude tool use,
- * 也不再依赖已删除的 MissionControl 全屏壳(E3)。
- */
 export function AssistantConversationView({
-  assistantId,
   assistant,
   activeProjectId,
   activeProjectName,
-  prdTaskSplitPanelProps,
   onOpenSettings,
 }: AssistantConversationViewProps) {
-  if (assistantId !== DEFAULT_PRD_SPLIT_ASSISTANT_ID) {
-    if (!assistant) return <ConversationFallback />;
-    return (
-      <ArtifactAssistantWorkspace
-        assistant={assistant}
-        activeProjectId={activeProjectId}
-        activeProjectName={activeProjectName}
-        onOpenSettings={onOpenSettings}
-      />
-    );
-  }
+  if (!assistant) return <ConversationFallback />;
   return (
-    <Suspense fallback={<ConversationFallback />}>
-      <PrdTaskSplitPanel {...prdTaskSplitPanelProps} />
-    </Suspense>
+    <ArtifactAssistantWorkspace
+      assistant={assistant}
+      activeProjectId={activeProjectId}
+      activeProjectName={activeProjectName}
+      onOpenSettings={onOpenSettings}
+    />
   );
 }
 

@@ -1,5 +1,5 @@
 import type * as Monaco from "monaco-editor";
-import { readProjectRelativeFile } from "./materializePrdSnapshot";
+import { readProjectRelativeFile } from "./projectRelativeFiles";
 import { shouldSkipMonacoTypeScriptModelSync } from "../utils/monacoLargeFile";
 
 type MonacoApi = typeof Monaco;

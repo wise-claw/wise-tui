@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { WorkflowInvocationStreamDetail } from "../constants/workflowUiEvents";
-import type { TrellisAgentRun } from "../services/trellisRuntime";
+import type { TrellisAgentRun } from "./useMonitorOverview";
 import type { EmployeeItem, EmployeeMonitorItem, ProjectItem, Repository } from "../types";
 import {
   buildRepositoryMemberMonitorItems,

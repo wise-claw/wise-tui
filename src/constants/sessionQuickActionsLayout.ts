@@ -39,13 +39,10 @@ export interface SessionQuickActionMeta {
 }
 
 function builtinMeta(id: SessionQuickBuiltinAssistantId, menuLabel: string): SessionQuickActionMeta {
-  const pillLabel =
-    id === "builtin:prd-split"
-      ? "需求"
-      : menuLabel.replace(/助手$/, "") || menuLabel;
+  const pillLabel = menuLabel.replace(/助手$/, "") || menuLabel;
   return {
     id,
-    label: id === "builtin:prd-split" ? "需求" : menuLabel,
+    label: menuLabel,
     pillLabel,
   };
 }
@@ -76,7 +73,6 @@ export const DEFAULT_SESSION_QUICK_ACTIONS_LAYOUT: SessionQuickActionsLayoutV1 =
   version: 1,
   items: [
     { id: "new-session", visible: true, zone: "primary" },
-    { id: "builtin:prd-split", visible: true, zone: "primary" },
     { id: "push", visible: true, zone: "primary" },
     { id: "compact-context", visible: false, zone: "overflow" },
   ],
@@ -87,9 +83,7 @@ function isSessionQuickActionId(value: unknown): value is SessionQuickActionId {
   return value in SESSION_QUICK_ACTION_META || value.startsWith("custom:") || value.startsWith("ext-");
 }
 
-/** 旧版「需求」与「需求拆分助手」合并为 builtin:prd-split */
 function normalizeSessionQuickActionId(value: unknown): SessionQuickActionId | null {
-  if (value === "requirement-split") return "builtin:prd-split";
   return isSessionQuickActionId(value) ? value : null;
 }
 
@@ -109,16 +103,6 @@ function mergeQuickActionLayoutItem(
   };
 }
 
-/** 将「需求」提升到主栏外显（如「恢复默认」或配置面板一键外显） */
-export function ensurePrdSplitQuickActionPrimary(
-  layout: SessionQuickActionsLayoutV1,
-): SessionQuickActionsLayoutV1 {
-  return updateLayoutItem(mergeSessionQuickActionsLayout(layout), "builtin:prd-split", {
-    visible: true,
-    zone: "primary",
-  });
-}
-
 function isKnownQuickActionId(
   id: SessionQuickActionId,
   catalog?: SessionQuickActionCatalog | null,
@@ -127,7 +111,7 @@ function isKnownQuickActionId(
   return isSessionQuickActionId(id) || id in SESSION_QUICK_ACTION_META;
 }
 
-/** 与目录合并：保留用户顺序，补齐缺失项，剔除未知 id */
+/** 将目录合并为稳定布局（保留用户顺序，补齐缺失项，剔除未知 id） */
 export function mergeSessionQuickActionsLayout(
   input: SessionQuickActionsLayoutV1 | null | undefined,
   catalog?: SessionQuickActionCatalog | null,

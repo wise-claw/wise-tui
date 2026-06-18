@@ -1,6 +1,6 @@
 import { setClaudeMcpServerEnabled } from "./claude";
 import { backupFeedbackConfigPatchApply } from "./sessionFeedbackConfigPatchBackup";
-import { readProjectRelativeFile, writeProjectRelativeFile } from "./materializePrdSnapshot";
+import { readProjectRelativeFile, writeProjectRelativeFile } from "./projectRelativeFiles";
 import type { FeedbackConfigPatch } from "../utils/sessionFeedbackConfigPatch";
 import {
   mergeAppendSectionContent,

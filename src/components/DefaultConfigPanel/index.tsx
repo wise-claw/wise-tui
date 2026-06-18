@@ -402,27 +402,6 @@ export function DefaultConfigPanel() {
           </div>
         </div>
 
-        <div className="app-default-config-row" aria-label="备忘录">
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">备忘录</span>
-            <span className="app-default-config-row__hint">右栏备忘录卡片；编辑页入口不受影响</span>
-          </div>
-          <div className="app-default-config-row__control">
-            <DefaultConfigOptionPick<"hidden" | "visible">
-              aria-label="备忘录右栏显示"
-              disabled={workspaceInspectorPanels.loading || workspaceInspectorPanels.saving}
-              value={workspaceInspectorPanels.showWorkspaceMemosPanel ? "visible" : "hidden"}
-              options={[
-                { label: "隐藏", value: "hidden" },
-                { label: "显示", value: "visible" },
-              ]}
-              onChange={(value) => {
-                void workspaceInspectorPanels.saveMemos(value === "visible");
-              }}
-            />
-          </div>
-        </div>
-
         <div className="app-default-config-row" aria-label="待办事项">
           <div className="app-default-config-row__main">
             <span className="app-default-config-row__title">待办事项</span>

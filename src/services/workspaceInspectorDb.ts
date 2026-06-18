@@ -1,5 +1,4 @@
 import { invoke } from "@tauri-apps/api/core";
-import type { WorkspaceMemoItem, WorkspaceMemosPayloadV1 } from "../types/workspaceMemos";
 import type { WorkspaceTodoItem, WorkspaceTodosPayloadV1 } from "../types/workspaceTodos";
 import type {
   WorkspaceQuickActionItem,
@@ -13,19 +12,6 @@ function normalizeQuickActionsPayload(
     return { version: 1, items: [] };
   }
   return raw;
-}
-
-function normalizeMemosPayload(
-  raw: WorkspaceMemosPayloadV1 | null | undefined,
-): WorkspaceMemosPayloadV1 {
-  if (!raw || raw.version !== 1 || !Array.isArray(raw.items)) {
-    return { version: 1, items: [], lastSelectedId: null };
-  }
-  return {
-    version: 1,
-    items: raw.items,
-    lastSelectedId: raw.lastSelectedId ?? null,
-  };
 }
 
 export async function listProjectWorkspaceQuickActionsDb(
@@ -65,56 +51,6 @@ export async function saveRepositoryWorkspaceQuickActionsDb(
 ): Promise<void> {
   if (!Number.isFinite(repositoryId)) return;
   await invoke("save_repository_workspace_quick_actions", { repositoryId, items });
-}
-
-export async function listProjectWorkspaceMemosDb(
-  projectId: string,
-): Promise<WorkspaceMemosPayloadV1> {
-  const id = projectId.trim();
-  if (!id) return { version: 1, items: [], lastSelectedId: null };
-  const payload = await invoke<WorkspaceMemosPayloadV1>("list_project_workspace_memos", {
-    projectId: id,
-  });
-  return normalizeMemosPayload(payload);
-}
-
-export async function saveProjectWorkspaceMemosDb(
-  projectId: string,
-  items: WorkspaceMemoItem[],
-  lastSelectedId?: string | null,
-): Promise<void> {
-  const id = projectId.trim();
-  if (!id) return;
-  await invoke("save_project_workspace_memos", {
-    projectId: id,
-    items,
-    lastSelectedId: lastSelectedId ?? null,
-  });
-}
-
-export async function listRepositoryWorkspaceMemosDb(
-  repositoryId: number,
-): Promise<WorkspaceMemosPayloadV1> {
-  if (!Number.isFinite(repositoryId)) {
-    return { version: 1, items: [], lastSelectedId: null };
-  }
-  const payload = await invoke<WorkspaceMemosPayloadV1>("list_repository_workspace_memos", {
-    repositoryId,
-  });
-  return normalizeMemosPayload(payload);
-}
-
-export async function saveRepositoryWorkspaceMemosDb(
-  repositoryId: number,
-  items: WorkspaceMemoItem[],
-  lastSelectedId?: string | null,
-): Promise<void> {
-  if (!Number.isFinite(repositoryId)) return;
-  await invoke("save_repository_workspace_memos", {
-    repositoryId,
-    items,
-    lastSelectedId: lastSelectedId ?? null,
-  });
 }
 
 function normalizeTodosPayload(

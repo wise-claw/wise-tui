@@ -1,33 +1,15 @@
 import { describe, expect, mock, test } from "bun:test";
 import { DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION } from "../constants/workspaceBootstrapAddons";
 
-mock.module("./trellisBootstrap", () => ({
-  bootstrapTrellisIfMissing: mock(async () => {}),
-}));
-
 mock.module("./claudePluginMarket", () => ({
   claudePluginMarketBootstrap: mock(async () => ({ ok: true, log: "" })),
   claudePluginInstall: mock(async () => "ok"),
 }));
 
 describe("runWorkspaceBootstrap", () => {
-  test("runs trellis by default selection", async () => {
-    const trellis = (await import("./trellisBootstrap")).bootstrapTrellisIfMissing as ReturnType<typeof mock>;
-    trellis.mockClear();
-    const { bootstrapTrellisIfMissing } = await import("./trellisBootstrap");
-    const { runWorkspaceBootstrap } = await import("./workspaceBootstrap");
-
-    await runWorkspaceBootstrap("/tmp/workspace", DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION);
-
-    expect(bootstrapTrellisIfMissing).toHaveBeenCalledWith("/tmp/workspace");
-  });
-
-  test("skips trellis when only omc is selected", async () => {
-    const trellis = (await import("./trellisBootstrap")).bootstrapTrellisIfMissing as ReturnType<typeof mock>;
-    trellis.mockClear();
-
-    const { bootstrapTrellisIfMissing } = await import("./trellisBootstrap");
+  test("runs omc when selected in bootstrap addons", async () => {
     const { claudePluginInstall } = await import("./claudePluginMarket");
+    (claudePluginInstall as ReturnType<typeof mock>).mockClear();
     const { runWorkspaceBootstrap } = await import("./workspaceBootstrap");
 
     await runWorkspaceBootstrap("/tmp/ws2", {
@@ -39,26 +21,37 @@ describe("runWorkspaceBootstrap", () => {
       openspec: false,
     });
 
-    expect(bootstrapTrellisIfMissing).not.toHaveBeenCalled();
     expect(claudePluginInstall).toHaveBeenCalled();
   });
 
-  test("runs trellis init for trellis-only selection", async () => {
-    const trellis = (await import("./trellisBootstrap")).bootstrapTrellisIfMissing as ReturnType<typeof mock>;
-    trellis.mockClear();
-
-    const { bootstrapTrellisIfMissing } = await import("./trellisBootstrap");
+  test("no-op when no bootstrap addons selected", async () => {
+    const { claudePluginInstall } = await import("./claudePluginMarket");
+    (claudePluginInstall as ReturnType<typeof mock>).mockClear();
     const { runWorkspaceBootstrap } = await import("./workspaceBootstrap");
 
-    await runWorkspaceBootstrap("/tmp/ws3", {
+    await runWorkspaceBootstrap("/tmp/workspace", {
       trellis: false,
-      trellisInit: true,
+      trellisInit: false,
       omc: false,
       superpowers: false,
       gsd: false,
       openspec: false,
     });
 
-    expect(bootstrapTrellisIfMissing).toHaveBeenCalledWith("/tmp/ws3");
+    expect(claudePluginInstall).not.toHaveBeenCalled();
+  });
+
+  test("default selection only installs omc when trellis is disabled", async () => {
+    const { claudePluginInstall } = await import("./claudePluginMarket");
+    (claudePluginInstall as ReturnType<typeof mock>).mockClear();
+    const { runWorkspaceBootstrap } = await import("./workspaceBootstrap");
+
+    await runWorkspaceBootstrap("/tmp/workspace", DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION);
+
+    if (DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION.omc) {
+      expect(claudePluginInstall).toHaveBeenCalled();
+    } else {
+      expect(claudePluginInstall).not.toHaveBeenCalled();
+    }
   });
 });

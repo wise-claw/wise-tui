@@ -30,12 +30,6 @@ const CATEGORIES: &[CleanupCategoryDef] = &[
         relative_dirs: &["prd-images"],
     },
     CleanupCategoryDef {
-        id: "prd_runs",
-        label: "PRD 拆分快照",
-        description: "已物化的 PRD 运行目录（不影响仓库内 .trellis）",
-        relative_dirs: &["prd-runs"],
-    },
-    CleanupCategoryDef {
         id: "spawn_cache",
         label: "子进程配置缓存",
         description: "Claude / MCP 派发时生成的临时 JSON 配置",

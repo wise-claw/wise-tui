@@ -8,21 +8,18 @@ import { invoke } from "@tauri-apps/api/core";
 import {
   buildAssistantEngineeringJson,
   buildAssistantRuntimeBundleJson,
-  DEFAULT_PRD_SPLIT_ASSISTANT_ID,
   parseAssistantEngineeringPreferences,
   parseAssistantRuntimeBundle,
-  pickAssistantPromptSlotPartial,
   resetAssistantRuntimeOverrides,
   resolveAssistantRuntime,
   saveAssistantRuntimeOverrides,
   type AssistantResolvedRuntime,
 } from "./assistantPromptLayers";
-import { PROMPT_SLOT_PRD_TASK_SPLIT } from "./splitPromptBundle";
 
 describe("assistantPromptLayers", () => {
-  test("resolveAssistantRuntime defaults to builtin:prd-split assistant id", async () => {
+  test("resolveAssistantRuntime forwards assistantId and scopes", async () => {
     const runtime: AssistantResolvedRuntime = {
-      assistantId: "builtin:prd-split",
+      assistantId: "builtin:word-doc",
       source: "builtin",
       systemPrompt: "你好",
       tools: ["update_prd"],
@@ -37,13 +34,13 @@ describe("assistantPromptLayers", () => {
       () => Promise.resolve(runtime),
     );
 
-    const result = await resolveAssistantRuntime({});
+    const result = await resolveAssistantRuntime({ assistantId: "builtin:word-doc" });
 
     expect((invoke as unknown as { mock: { calls: unknown[][] } }).mock.calls.at(-1)).toEqual([
       "assistants_resolve_runtime",
       {
         args: {
-          assistantId: DEFAULT_PRD_SPLIT_ASSISTANT_ID,
+          assistantId: "builtin:word-doc",
           projectId: null,
           repositoryId: null,
         },
@@ -56,7 +53,7 @@ describe("assistantPromptLayers", () => {
     (invoke as unknown as { mockImplementation: (fn: () => unknown) => void }).mockImplementation(
       () =>
         Promise.resolve({
-          assistantId: "builtin:prd-split",
+          assistantId: "builtin:word-doc",
           source: "builtin",
           systemPrompt: "",
           tools: [],
@@ -69,13 +66,13 @@ describe("assistantPromptLayers", () => {
         }),
     );
 
-    await resolveAssistantRuntime({ projectId: "p1", repositoryId: 42 });
+    await resolveAssistantRuntime({ assistantId: "builtin:word-doc", projectId: "p1", repositoryId: 42 });
 
     expect((invoke as unknown as { mock: { calls: unknown[][] } }).mock.calls.at(-1)).toEqual([
       "assistants_resolve_runtime",
       {
         args: {
-          assistantId: DEFAULT_PRD_SPLIT_ASSISTANT_ID,
+          assistantId: "builtin:word-doc",
           projectId: "p1",
           repositoryId: "42",
         },
@@ -89,7 +86,7 @@ describe("assistantPromptLayers", () => {
     );
 
     await saveAssistantRuntimeOverrides({
-      assistantId: "builtin:prd-split",
+      assistantId: "builtin:word-doc",
       scope: "assistant",
       patch: { skillBundleJson: "{\"disabled\":[]}" },
     });
@@ -98,7 +95,7 @@ describe("assistantPromptLayers", () => {
       "assistants_save_overrides",
       {
         args: {
-          assistantId: "builtin:prd-split",
+          assistantId: "builtin:word-doc",
           scope: "assistant",
           patch: { skillBundleJson: "{\"disabled\":[]}" },
         },
@@ -127,55 +124,6 @@ describe("assistantPromptLayers", () => {
         },
       },
     ]);
-  });
-
-  test("pickAssistantPromptSlotPartial returns slot from v2 bundle", () => {
-    const runtime: AssistantResolvedRuntime = {
-      assistantId: "builtin:prd-split",
-      source: "builtin",
-      systemPrompt: "",
-      tools: [],
-      model: null,
-      engineId: "claude",
-      promptBundleJson: JSON.stringify({
-        schemaVersion: 2,
-        prompts: {
-          [PROMPT_SLOT_PRD_TASK_SPLIT]: {
-            templateId: "custom",
-            version: "1.0.0",
-            enabled: true,
-            systemBody: "override system",
-            repoStrategyBody: "",
-            userBody: "",
-          },
-        },
-      }),
-      skillBundleJson: "{}",
-      mcpBundleJson: "{}",
-      engineeringJson: "{}",
-    };
-
-    const partial = pickAssistantPromptSlotPartial(runtime);
-
-    expect(partial?.systemBody).toBe("override system");
-    expect(partial?.templateId).toBe("custom");
-  });
-
-  test("pickAssistantPromptSlotPartial returns null when slot missing", () => {
-    const runtime: AssistantResolvedRuntime = {
-      assistantId: "builtin:prd-split",
-      source: "builtin",
-      systemPrompt: "",
-      tools: [],
-      model: null,
-      engineId: "claude",
-      promptBundleJson: '{"schemaVersion":2,"prompts":{}}',
-      skillBundleJson: "{}",
-      mcpBundleJson: "{}",
-      engineeringJson: "{}",
-    };
-
-    expect(pickAssistantPromptSlotPartial(runtime)).toBeNull();
   });
 
   test("assistant runtime bundle helpers preserve disabled and custom entries", () => {

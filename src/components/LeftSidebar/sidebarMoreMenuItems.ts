@@ -166,8 +166,6 @@ function repositoryConfigureMenuItems(input: {
     onMainSessionRun,
     runCommandRunning = false,
     runRowPinned = false,
-    trellisRootActionEnabled = false,
-    trellisReady = false,
   } = input;
 
   return compactItems([
@@ -178,7 +176,6 @@ function repositoryConfigureMenuItems(input: {
     onConfigureOpenApp ? openAppConfigureMenuItem(scopeOpenAppId) : null,
     onConfigureSddMode ? { key: "sdd-mode", label: "配置 Claude 插件" } : null,
     repositoryMainSessionRunMenuItem({ onMainSessionRun, runCommandRunning, runRowPinned }),
-    trellisRootActionEnabled && !trellisReady ? { key: "trellis-init", label: "启用 Wise Trellis" } : null,
   ]);
 }
 
@@ -204,7 +201,6 @@ export function buildProjectMoreMenuItems(input: BuildProjectMoreMenuItemsInput)
   const {
     isPinned,
     trellisEnabled = false,
-    trellisReady = false,
     onAddRepositoryToProject,
     onOpenProjectDirectory,
     onConfigureSddMode,
@@ -251,7 +247,6 @@ export function buildProjectMoreMenuItems(input: BuildProjectMoreMenuItemsInput)
               ],
             }
           : null,
-        trellisEnabled && !trellisReady ? { key: "trellis-init", label: "启用 Wise Trellis" } : null,
       ]),
       sidebarMenuSection(
         repositoryTaskMenuItems({

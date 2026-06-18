@@ -47,9 +47,9 @@ describe("assistants service", () => {
 
   test("deleteAssistant wraps id", async () => {
     invokeMock.mockResolvedValueOnce(undefined);
-    await deleteAssistant("builtin:prd-split");
+    await deleteAssistant("builtin:word-doc");
     expect(invokeMock).toHaveBeenCalledWith("assistants_delete", {
-      args: { id: "builtin:prd-split" },
+      args: { id: "builtin:word-doc" },
     });
   });
 

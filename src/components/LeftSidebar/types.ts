@@ -76,10 +76,6 @@ export interface LeftSidebarProps {
   pinnedProjectIds: string[];
   onTogglePinProject: (projectId: string) => void;
   onReconcileProject?: (projectId: string, mode: ReconcileProjectMode) => void | Promise<void>;
-  /** 在工作区根目录执行 `trellis init -y`（已存在则跳过）。 */
-  onBootstrapTrellisForProject?: (project: ProjectItem) => void | Promise<void>;
-  /** 在仓库目录执行 `trellis init -y`（已存在则跳过）。 */
-  onBootstrapTrellisForRepository?: (repository: Repository) => void | Promise<void>;
   onAddFloatingRepository?: (
     repositoryType: Repository["repositoryType"],
     options?: AddRepositoryOptions,
@@ -131,7 +127,6 @@ export interface LeftSidebarProps {
   /** 打开仓库需求拆分助手。 */
   onOpenRepositoryRequirements?: (repository: Repository) => void;
   onOpenPromptsProject?: (project: ProjectItem) => void;
-  onOpenProjectTrellis?: (project: ProjectItem) => void;
   onOpenPromptsRepository?: (project: ProjectItem, repository: Repository) => void;
   onOpenRepositoryMainOwner?: (repository: Repository) => void;
   /** 打开仓库运行指令配置弹窗 */

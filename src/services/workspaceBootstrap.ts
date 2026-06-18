@@ -1,11 +1,9 @@
 import {
   DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION,
   WORKSPACE_BOOTSTRAP_OMC_INSTALL_REF,
-  workspaceBootstrapNeedsTrellisInit,
   type WorkspaceBootstrapSelection,
 } from "../constants/workspaceBootstrapAddons";
 import { claudePluginInstall } from "./claudePluginMarket";
-import { bootstrapTrellisIfMissing } from "./trellisBootstrap";
 
 export type { WorkspaceBootstrapSelection };
 export { DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION };
@@ -22,14 +20,6 @@ export async function runWorkspaceBootstrap(
   const trimmed = rootPath.trim();
   if (!trimmed) {
     throw new Error("请先选择工作区根目录");
-  }
-
-  if (workspaceBootstrapNeedsTrellisInit(selection)) {
-    try {
-      await bootstrapTrellisIfMissing(trimmed);
-    } catch (err: unknown) {
-      throw new Error(`Trellis 初始化失败：${errorMessage(err)}`);
-    }
   }
 
   if (selection.omc) {

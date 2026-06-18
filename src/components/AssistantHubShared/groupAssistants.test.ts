@@ -18,13 +18,13 @@ function row(partial: Partial<AssistantEntry> & Pick<AssistantEntry, "id" | "sou
 describe("buildAssistantHubSections", () => {
   test("groups builtin assistants into hub sections", () => {
     const list: AssistantEntry[] = [
-      row({ id: "builtin:prd-split", source: "builtin", name: "需求拆分", defaultWorkflows: [{ id: "w", label: "W" }] }),
+      row({ id: "builtin:word-doc", source: "builtin", name: "文档助手", defaultWorkflows: [{ id: "w", label: "W" }] }),
       row({ id: "custom:x", source: "custom", name: "自定义", customId: "x" }),
     ];
 
     const sections = buildAssistantHubSections(list, "all");
     expect(sections.map((s) => s.title)).toEqual(["研发编排", "自建与扩展"]);
-    expect(sections[0]?.assistants[0]?.id).toBe("builtin:prd-split");
+    expect(sections[0]?.assistants[0]?.id).toBe("builtin:word-doc");
     expect(sections[1]?.assistants[0]?.id).toBe("custom:x");
   });
 

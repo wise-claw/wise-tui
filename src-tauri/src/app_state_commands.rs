@@ -1,4 +1,3 @@
-use crate::claude_commands::shared::find_trellis_project_root_from_path;
 use crate::project_workspace_paths::{
     assert_repo_dir_under_project_root, canonicalize_existing_dir,
 };
@@ -1160,14 +1159,6 @@ pub(crate) fn add_repository_to_project(
 }
 
 #[tauri::command]
-pub(crate) fn resolve_project_root_from_repository(
-    repository_path: String,
-) -> Result<Option<String>, String> {
-    Ok(find_trellis_project_root_from_path(&repository_path)
-        .map(|p| p.to_string_lossy().to_string()))
-}
-
-#[tauri::command]
 pub(crate) fn reorder_project_repositories(
     db: tauri::State<'_, wise_db::WiseDb>,
     project_id: String,
@@ -1227,90 +1218,6 @@ pub(crate) fn set_active_project_id(
 }
 
 #[tauri::command]
-pub(crate) fn list_project_prd_employee_ids(
-    db: tauri::State<'_, wise_db::WiseDb>,
-    project_id: String,
-) -> Result<Vec<String>, String> {
-    let pid = project_id.trim();
-    if pid.is_empty() {
-        return Err("项目 id 无效".into());
-    }
-    db.list_project_prd_employee_ids(pid)
-}
-
-#[tauri::command]
-pub(crate) fn list_project_prd_workflow_ids(
-    db: tauri::State<'_, wise_db::WiseDb>,
-    project_id: String,
-) -> Result<Vec<String>, String> {
-    let pid = project_id.trim();
-    if pid.is_empty() {
-        return Err("项目 id 无效".into());
-    }
-    db.list_project_prd_workflow_ids(pid)
-}
-
-#[tauri::command]
-pub(crate) fn list_workflow_project_ids(
-    db: tauri::State<'_, wise_db::WiseDb>,
-    workflow_id: String,
-) -> Result<Vec<String>, String> {
-    db.list_workflow_project_ids(&workflow_id)
-}
-
-#[tauri::command]
-pub(crate) fn add_project_prd_employee(
-    db: tauri::State<'_, wise_db::WiseDb>,
-    project_id: String,
-    employee_id: String,
-) -> Result<(), String> {
-    let now_ms = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|e| e.to_string())?
-        .as_millis() as i64;
-    db.add_project_prd_employee(project_id.trim(), employee_id.trim(), now_ms)
-}
-
-#[tauri::command]
-pub(crate) fn remove_project_prd_employee(
-    db: tauri::State<'_, wise_db::WiseDb>,
-    project_id: String,
-    employee_id: String,
-) -> Result<(), String> {
-    let now_ms = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|e| e.to_string())?
-        .as_millis() as i64;
-    db.remove_project_prd_employee(project_id.trim(), employee_id.trim(), now_ms)
-}
-
-#[tauri::command]
-pub(crate) fn add_project_prd_workflow(
-    db: tauri::State<'_, wise_db::WiseDb>,
-    project_id: String,
-    workflow_id: String,
-) -> Result<(), String> {
-    let now_ms = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|e| e.to_string())?
-        .as_millis() as i64;
-    db.add_project_prd_workflow(project_id.trim(), workflow_id.trim(), now_ms)
-}
-
-#[tauri::command]
-pub(crate) fn remove_project_prd_workflow(
-    db: tauri::State<'_, wise_db::WiseDb>,
-    project_id: String,
-    workflow_id: String,
-) -> Result<(), String> {
-    let now_ms = std::time::SystemTime::now()
-        .duration_since(std::time::UNIX_EPOCH)
-        .map_err(|e| e.to_string())?
-        .as_millis() as i64;
-    db.remove_project_prd_workflow(project_id.trim(), workflow_id.trim(), now_ms)
-}
-
-#[tauri::command]
 pub(crate) fn list_employees(
     db: tauri::State<'_, wise_db::WiseDb>,
 ) -> Result<Vec<EmployeeItem>, String> {
@@ -1355,7 +1262,7 @@ pub(crate) fn create_employee(
     }
     let id = format!("employee_{}", Uuid::new_v4().simple());
     let repository_ids = repository_ids.unwrap_or_default();
-    let project_ids = project_ids.unwrap_or_default();
+    let _project_ids = project_ids.unwrap_or_default();
     let execution_engine = normalize_execution_engine(execution_engine);
     let default_instruction = default_instruction.unwrap_or_default().trim().to_string();
     db.create_employee(
@@ -1368,9 +1275,6 @@ pub(crate) fn create_employee(
         &execution_engine,
         &default_instruction,
     )?;
-    for pid in &project_ids {
-        let _ = db.add_project_prd_employee(pid, &id, now_ms);
-    }
     let created = db
         .list_employees()?
         .into_iter()
@@ -1413,7 +1317,7 @@ pub(crate) fn update_employee(
         return Err("智能体不能为空".to_string());
     }
     let repository_ids = repository_ids.unwrap_or_default();
-    let new_project_ids = project_ids.unwrap_or_default();
+    let _new_project_ids = project_ids.unwrap_or_default();
     let execution_engine = normalize_execution_engine(execution_engine);
     let default_instruction = default_instruction.unwrap_or_default().trim().to_string();
     db.update_employee(
@@ -1433,20 +1337,6 @@ pub(crate) fn update_employee(
         .find(|item| item.id == employee_id)
         .ok_or_else(|| "员工更新后读取失败".to_string())?;
 
-    let old_ids: std::collections::HashSet<String> = updated.project_ids.iter().cloned().collect();
-    let new_ids: std::collections::HashSet<String> = new_project_ids.iter().cloned().collect();
-    for pid in old_ids.difference(&new_ids) {
-        let _ = db.remove_project_prd_employee(pid, &employee_id, now_ms);
-    }
-    for pid in new_ids.difference(&old_ids) {
-        let _ = db.add_project_prd_employee(pid, &employee_id, now_ms);
-    }
-
-    let updated = db
-        .list_employees()?
-        .into_iter()
-        .find(|item| item.id == employee_id)
-        .ok_or_else(|| "员工更新后读取失败".to_string())?;
     Ok(EmployeeItem {
         id: updated.id,
         name: updated.name,
@@ -1545,7 +1435,7 @@ pub(crate) fn save_workflow_template(
     name: String,
     is_default: bool,
     stages: Vec<WorkflowTemplateStage>,
-    project_ids: Option<Vec<String>>,
+    _project_ids: Option<Vec<String>>,
 ) -> Result<WorkflowTemplateItem, String> {
     let now_ms = unix_now_ms();
     let normalized_name = name.trim();
@@ -1605,21 +1495,6 @@ pub(crate) fn save_workflow_template(
         &db_stages,
         &db_assignees,
     )?;
-
-    // Sync project associations
-    if let Some(new_project_ids) = project_ids {
-        let old_ids = db
-            .list_workflow_project_ids(&workflow_id_value)
-            .unwrap_or_default();
-        let old_set: std::collections::HashSet<String> = old_ids.iter().cloned().collect();
-        let new_set: std::collections::HashSet<String> = new_project_ids.iter().cloned().collect();
-        for pid in old_set.difference(&new_set) {
-            let _ = db.remove_project_prd_workflow(pid, &workflow_id_value, now_ms);
-        }
-        for pid in new_set.difference(&old_set) {
-            let _ = db.add_project_prd_workflow(pid, &workflow_id_value, now_ms);
-        }
-    }
 
     let templates = list_workflow_templates(db)?;
     templates

@@ -353,7 +353,7 @@ export function AssistantsPanel({
             const entryKind = resolveAssistantEntryKind(assistant);
             const needsProject =
               entryKind === "conversation" &&
-              resolveAssistantKind(assistant) === "trellis-orchestration" &&
+              resolveAssistantKind(assistant) === "workflow-orchestration" &&
               !activeProjectId;
             const needsRepository =
               (entryKind === "run_workflow" || entryKind === "run_script") &&

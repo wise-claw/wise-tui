@@ -5,7 +5,6 @@ import { DefaultWorkflowEngine } from "./engine";
 import { LocalWorkflowStore } from "./eventStore";
 import { DefaultWorkflowFacade } from "./facade";
 import { ClaudeOmcWorkflowAdapter } from "./omcAdapter";
-import { TRELLIS_TEMPLATE_ID, TrellisWorkflowAdapter } from "./trellisAdapter";
 
 let workflowFacadeSingleton: WorkflowFacade | null = null;
 
@@ -14,8 +13,7 @@ export function getWorkflowFacade(): WorkflowFacade {
   const store = new LocalWorkflowStore();
   const router = new StaticTaskRouter();
   const adapter = new ClaudeOmcWorkflowAdapter();
-  const trellisAdapter = new TrellisWorkflowAdapter();
-  const registry = DefaultAdapterRegistry.of(adapter, [[TRELLIS_TEMPLATE_ID, trellisAdapter]]);
+  const registry = DefaultAdapterRegistry.of(adapter);
   const gate = new PassThroughGateEngine();
   const engine = new DefaultWorkflowEngine(store, router, adapter, gate, registry);
   workflowFacadeSingleton = new DefaultWorkflowFacade(engine);
@@ -27,6 +25,3 @@ export * from "./engine";
 export * from "./eventStore";
 export * from "./facade";
 export * from "./replay";
-export * from "./trellisAdapter";
-export * from "./trellisDefaults";
-

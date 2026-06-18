@@ -1,4 +1,4 @@
-import { appendWiseRelativeFile } from "./materializePrdSnapshot";
+import { appendWiseRelativeFile } from "./projectRelativeFiles";
 import {
   feedbackConfigPatchBackupRelativePath,
   type FeedbackPatchBackupRecord,

@@ -1,11 +1,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { listAssistants } from "../../services/assistants";
 import type { AssistantEntry } from "../../types/assistant";
-import { DEFAULT_PRD_SPLIT_ASSISTANT_ID } from "../../services/assistantPromptLayers";
-import {
-  AssistantConversationView,
-  type AssistantConversationPrdTaskSplitPanelProps,
-} from "./AssistantConversationView";
+import { AssistantConversationView } from "./AssistantConversationView";
 import { AssistantHeader } from "./AssistantHeader";
 import { AssistantHub } from "./AssistantHub";
 import { AssistantSettingsDrawer } from "./AssistantSettingsDrawer";
@@ -24,35 +20,23 @@ function cockpitSubModeFromEntry(
     return { kind: "conversation", assistantId };
   }
   if (hasInitialTarget) {
-    return { kind: "conversation", assistantId: DEFAULT_PRD_SPLIT_ASSISTANT_ID };
+    return { kind: "hub" };
   }
   return { kind: "hub" };
 }
 
 export interface CockpitSurfaceProps {
-  /** 当前 conversation 助手 id 变化时通知宿主（用于需求拆分全屏盖住左栏）。 */
   onActiveAssistantIdChange?: (assistantId: string | null) => void;
-  /** 当前选定的工作区 id;影响 hub 是否启用 PRD-split 助手以及对话 header 显示。 */
   activeProjectId: string | null;
   activeProjectName: string | null;
-  /** 是否携带显式入口(项目 FAB / 仓库 FAB)。携带时直接进入对话子态。 */
   hasInitialTarget: boolean;
-  /** 从会话快捷条「更多」指定内置助手时直接进入该助手对话页。 */
   initialAssistantId?: string | null;
-  /** 显式打开助手入口的递增信号;用于同一 cockpit 实例内重复打开。 */
   openRequestKey: number;
-  /** 普通助手入口再次打开时恢复上次会话，而不是回到 Hub。 */
   resumeAssistantId?: string | null;
-  /** 透传给现有 PRD 拆分面板,作为需求助手主工作台。 */
-  prdTaskSplitPanelProps: AssistantConversationPrdTaskSplitPanelProps;
-  /** Hub 内手动切换助手或返回 Hub 时清除宿主侧残留的 initialAssistantId。 */
+  onClose: () => void;
   onClearInitialAssistant?: () => void;
 }
 
-/**
- * Cockpit 主屏壳(D1):管理 `cockpitSubMode` 在 `hub` ↔ `conversation`
- * 之间切换。不引入新 ViewMode kind(宪法 §3 4-kind 约束)。
- */
 export function CockpitSurface({
   activeProjectId,
   activeProjectName,
@@ -60,7 +44,7 @@ export function CockpitSurface({
   initialAssistantId = null,
   openRequestKey,
   resumeAssistantId = null,
-  prdTaskSplitPanelProps,
+  onClose,
   onActiveAssistantIdChange,
   onClearInitialAssistant,
 }: CockpitSurfaceProps) {
@@ -72,7 +56,6 @@ export function CockpitSurface({
   const resumeAssistantIdRef = useRef(resumeAssistantId);
   resumeAssistantIdRef.current = resumeAssistantId;
 
-  // 拉一次助手列表用于 Header 渲染;失败不致命(Header 退化为简标题)。
   useEffect(() => {
     let cancelled = false;
     listAssistants()
@@ -87,7 +70,6 @@ export function CockpitSurface({
     };
   }, []);
 
-  // 仅在外部显式打开信号递增时切换子态；勿随 resumeAssistantId 变化覆盖 Hub 内手动选择。
   useEffect(() => {
     if (openRequestKey <= 0) return;
     setSubMode(
@@ -132,27 +114,20 @@ export function CockpitSurface({
     setSettingsAssistantId(null);
   }, []);
 
-  const isPrdSplitConversation =
-    subMode.kind === "conversation" && subMode.assistantId === DEFAULT_PRD_SPLIT_ASSISTANT_ID;
-
   useEffect(() => {
     if (!onActiveAssistantIdChange) return;
     onActiveAssistantIdChange(subMode.kind === "conversation" ? subMode.assistantId : null);
   }, [onActiveAssistantIdChange, subMode]);
 
   return (
-    <div
-      className={`cockpit-surface${isPrdSplitConversation ? " cockpit-surface--prd-split-fullscreen" : ""}`}
-    >
+    <div className="cockpit-surface">
       <AssistantHeader
         assistant={activeAssistant}
         activeProjectName={activeProjectName}
         showBackToHub={subMode.kind === "conversation"}
-        backClosesSurface={isPrdSplitConversation}
-        onBackToHub={
-          isPrdSplitConversation ? prdTaskSplitPanelProps.onClose : handleBackToHub
-        }
-        onOpenChat={prdTaskSplitPanelProps.onClose}
+        backClosesSurface={false}
+        onBackToHub={handleBackToHub}
+        onOpenChat={onClose}
         onOpenSettings={activeAssistant ? handleOpenActiveSettings : undefined}
       />
       <div className="cockpit-surface__body">
@@ -160,7 +135,7 @@ export function CockpitSurface({
           <AssistantHub
             activeProjectId={activeProjectId}
             activeProjectName={activeProjectName}
-            onOpenChat={prdTaskSplitPanelProps.onClose}
+            onOpenChat={onClose}
             onSelectAssistant={handleSelectAssistant}
             onOpenAssistantSettings={handleOpenSettings}
           />
@@ -170,7 +145,7 @@ export function CockpitSurface({
             assistant={activeAssistant}
             activeProjectId={activeProjectId}
             activeProjectName={activeProjectName}
-            prdTaskSplitPanelProps={prdTaskSplitPanelProps}
+            onClose={onClose}
             onOpenSettings={handleOpenActiveSettings}
           />
         )}

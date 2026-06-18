@@ -1,7 +1,7 @@
 import type { AssistantEntry } from "../../types/assistant";
 
 export type AssistantKind =
-  | "trellis-orchestration"
+  | "workflow-orchestration"
   | "office-doc"
   | "office-deck"
   | "skill-artifact"
@@ -10,8 +10,8 @@ export type AssistantKind =
 export function resolveAssistantKind(
   assistant: Pick<AssistantEntry, "id" | "defaultWorkflows" | "defaultSkills">,
 ): AssistantKind {
-  if (assistant.id === "builtin:prd-split" || (assistant.defaultWorkflows?.length ?? 0) > 0) {
-    return "trellis-orchestration";
+  if ((assistant.defaultWorkflows?.length ?? 0) > 0) {
+    return "workflow-orchestration";
   }
   if (hasDefaultSkill(assistant, "officecli-docx")) {
     return "office-doc";

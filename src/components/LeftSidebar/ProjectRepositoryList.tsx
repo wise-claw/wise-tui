@@ -32,7 +32,6 @@ import {
   OpenInEditorAction,
   OpenInTerminalAction,
   ProjectRepositoryRows,
-  RepositoryTrellisAction,
   SidebarExecutableTasksAction,
   SidebarRequirementAction,
   SidebarScheduledTasksAction,
@@ -70,15 +69,11 @@ export interface ProjectRepositoryListProps {
   onAddFloatingRepositoryClick?: () => void;
   onAddRepositoryToProjectClick?: (projectId: Workspace["id"]) => void;
   onReconcileProject?: (projectId: string, mode: ReconcileProjectMode) => void | Promise<void>;
-  onBootstrapTrellisForProject?: (project: Workspace) => void | Promise<void>;
-  onBootstrapTrellisForRepository?: (repository: Repository) => void | Promise<void>;
   onToggleProjectExpand: (projectId: string) => void;
   onTogglePinProject: (projectId: string) => void;
   onRenameProject: (project: Workspace) => void;
   onDeleteProject: (project: Workspace) => void;
   onOpenPromptsProject?: (project: Workspace) => void;
-  onOpenProjectTrellis?: (project: Workspace) => void;
-  onOpenFloatingRepositoryTrellis?: (repository: Repository) => void;
   onCreateProjectTask: (project: Workspace, mode: TaskMode) => void;
   onCreateRepositoryTask: (repository: Repository, mode: TaskMode) => void;
   onOpenWorkspaceRequirements?: (project: Workspace) => void;
@@ -153,15 +148,11 @@ function ProjectRepositoryListInner({
   onAddFloatingRepositoryClick,
   onAddRepositoryToProjectClick,
   onReconcileProject,
-  onBootstrapTrellisForProject,
-  onBootstrapTrellisForRepository,
   onToggleProjectExpand,
   onTogglePinProject,
   onRenameProject,
   onDeleteProject,
   onOpenPromptsProject,
-  onOpenProjectTrellis,
-  onOpenFloatingRepositoryTrellis,
   onCreateProjectTask,
   onCreateRepositoryTask,
   onOpenWorkspaceRequirements,
@@ -345,12 +336,10 @@ function ProjectRepositoryListInner({
                 onConfigureRepositoryIconBadge={onConfigureRepositoryIconBadge}
                 showRepositoryIconBadgesInWorkspaceList={showRepositoryIconBadgesInWorkspaceList}
                 onNewPaneSession={onNewPaneSessionForRepository}
-                onBootstrapTrellis={onBootstrapTrellisForRepository}
                 onPromoteToNewProject={onPromoteFloatingRepository}
                 onJoinExistingProject={onJoinFloatingRepository}
                 onRemove={onRemoveFloatingRepository}
                 trellisReady={repositoryTrellisReadyById[repository.id] === true}
-                onOpenFloatingRepositoryTrellis={onOpenFloatingRepositoryTrellis}
                 scheduledTasksTotalCount={scheduledTasksByRepoId[repository.id]?.total ?? 0}
                 scheduledTasksEnabledCount={scheduledTasksByRepoId[repository.id]?.enabled ?? 0}
                 requirementUnsplitCount={requirementUnsplitByRepoId[repository.id] ?? 0}
@@ -394,13 +383,11 @@ function ProjectRepositoryListInner({
             onRenameProject={onRenameProject}
             onDeleteProject={onDeleteProject}
             onOpenPromptsProject={onOpenPromptsProject}
-            onOpenProjectTrellis={onOpenProjectTrellis}
             onAddRepositoryToProject={onAddRepositoryToProjectClick}
             onCreateProjectTask={onCreateProjectTask}
             onCreateRepositoryTask={onCreateRepositoryTask}
             onOpenWorkspaceRequirements={onOpenWorkspaceRequirements}
             onReconcileProject={onReconcileProject}
-            onBootstrapTrellisForProject={onBootstrapTrellisForProject}
             onOpenInFinder={onOpenInFinder}
             onOpenProjectInFinder={onOpenProjectInFinder}
             onOpenInTerminal={onOpenInTerminal}
@@ -459,10 +446,6 @@ function ProjectRepositoryListInner({
   );
 }
 
-function ProjectTrellisAction({ onOpen }: { onOpen: () => void }) {
-  return <RepositoryTrellisAction variant="project" onOpen={onOpen} />;
-}
-
 interface ProjectRowProps {
   project: Workspace;
   projectRepos: Repository[];
@@ -482,14 +465,12 @@ interface ProjectRowProps {
   onRenameProject: (project: Workspace) => void;
   onDeleteProject: (project: Workspace) => void;
   onOpenPromptsProject?: (project: Workspace) => void;
-  onOpenProjectTrellis?: (project: Workspace) => void;
   onAddRepositoryToProject?: (projectId: Workspace["id"]) => void;
   onCreateProjectTask: (project: Workspace, mode: TaskMode) => void;
   onCreateRepositoryTask: (repository: Repository, mode: TaskMode) => void;
   onOpenWorkspaceRequirements?: (project: Workspace) => void;
   onOpenRepositoryRequirements?: (repository: Repository) => void;
   onReconcileProject?: (projectId: string, mode: ReconcileProjectMode) => void | Promise<void>;
-  onBootstrapTrellisForProject?: (project: Workspace) => void | Promise<void>;
   onOpenInFinder: (repository: Repository) => void;
   onOpenProjectInFinder?: (project: Workspace) => void;
   onOpenInTerminal?: (repository: Repository) => void;
@@ -553,13 +534,11 @@ function ProjectRow({
   onTogglePinProject,
   onRenameProject,
   onDeleteProject,
-  onOpenProjectTrellis,
   onAddRepositoryToProject,
   onCreateProjectTask,
   onCreateRepositoryTask,
   onOpenWorkspaceRequirements,
   onReconcileProject,
-  onBootstrapTrellisForProject,
   onOpenInFinder,
   onOpenProjectInFinder,
   onOpenInTerminal,
@@ -728,9 +707,6 @@ function ProjectRow({
           ) : null}
         </span>
         <div className="app-repository-row-actions app-repository-row-actions--project">
-          {projectTrellisEnabled && projectTrellisReady && onOpenProjectTrellis ? (
-            <ProjectTrellisAction onOpen={() => onOpenProjectTrellis(project)} />
-          ) : null}
           {projectTrellisEnabled ? (
             <SidebarRequirementAction
               variant="project"
@@ -793,7 +769,6 @@ function ProjectRow({
               if (key === "scheduled-tasks") onOpenScheduledTasksForProject?.(project);
               if (key === "requirements" && projectTrellisEnabled) openWorkspaceRequirements();
               if (key === "executable-tasks" && projectTrellisEnabled) onOpenExecutableTasksForProject?.(project);
-              if (key === "trellis-init") void Promise.resolve(onBootstrapTrellisForProject?.(project));
               if (key === "reconcile-repos") void Promise.resolve(onReconcileProject?.(project.id, "repos_only"));
               if (key === "reconcile-repos-graphs") {
                 void Promise.resolve(onReconcileProject?.(project.id, "repos_and_graphs"));

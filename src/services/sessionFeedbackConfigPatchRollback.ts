@@ -1,5 +1,5 @@
 import { setClaudeMcpServerEnabled } from "./claude";
-import { writeProjectRelativeFile } from "./materializePrdSnapshot";
+import { writeProjectRelativeFile } from "./projectRelativeFiles";
 import type { FeedbackPatchBackupRecord } from "../utils/sessionFeedbackConfigPatchJson";
 
 export interface RollbackFeedbackPatchResult {

@@ -1,10 +1,4 @@
 import type { ClaudeSession } from "../../types";
-import type { TrellisRequirementTaskRow } from "../../services/trellisTaskBridge";
-
-export type RefreshHistorySessionsScope = {
-  repositoryPath: string;
-  repositoryName: string;
-};
 
 /** 中栏「历史会话」「完成任务」：首屏条数与滚动加载步长 */
 export const FEATURE_SESSION_LIST_PAGE_SIZE = 20;
@@ -47,20 +41,7 @@ export interface SessionUserQuestionRow {
   timestamp: number;
 }
 
-function normalizeTrellisPath(path: string): string {
-  return path.trim().replace(/\\/g, "/").replace(/\/$/, "");
-}
-
-export function getTrellisTaskRelativePath(task: TrellisRequirementTaskRow): string {
-  const dir = normalizeTrellisPath(task.dir);
-  const root = normalizeTrellisPath(task.rootPath);
-  if (root && dir.startsWith(`${root}/`)) return dir.slice(root.length + 1);
-  const marker = "/.trellis/tasks/";
-  const markerIndex = dir.indexOf(marker);
-  if (markerIndex >= 0) return dir.slice(markerIndex + 1);
-  return dir || `.trellis/tasks/${task.taskId}`;
-}
-
-export function trellisTaskRowKey(task: TrellisRequirementTaskRow): string {
-  return `${normalizeTrellisPath(task.rootPath)}:${normalizeTrellisPath(task.dir)}`;
-}
+export type RefreshHistorySessionsScope = {
+  repositoryPath: string;
+  repositoryName: string;
+};

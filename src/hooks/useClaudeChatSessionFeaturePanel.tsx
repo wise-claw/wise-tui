@@ -22,7 +22,6 @@ import {
   FEATURE_SESSION_LIST_PAGE_SIZE,
   SHOW_SESSION_TASK_COMPLETION_FEATURE,
   SESSION_SEND_TRACE_PERSIST_MAX,
-  trellisTaskRowKey,
   type RepositorySessionExecutionRow,
   type SessionSendTraceEntry,
   type SessionUserQuestionRow,
@@ -30,33 +29,8 @@ import {
   type TaskCompletionOwnerFilter,
   type TaskCompletionStatusFilter,
 } from "../components/ClaudeSessions/ClaudeChatSessionFeaturePanel";
-import { scheduleDirectOmcBatchAfterMacrotask } from "../services/omcDirectBatchExecution";
-import { requestWorkflowRunRefresh, useWorkflowRun } from "../hooks/useWorkflowRun";
-import { getWorkflowFacade } from "../services/workflow";
-import { runSplitTasksOmcBatch } from "../services/workflow/actions";
-import { resolveTrellisSubagentForStage } from "../services/workflow/trellisDefaults";
-import {
-  isDirectOmcBatchTemplateId,
-  TRELLIS_BATCH_TEMPLATE_ID,
-  type OmcBatchTemplateId,
-} from "../constants/omcBatchTemplates";
-import { loadPrdTaskSplitResult, savePrdTaskSplitResult } from "../services/prdTaskSplitStore";
-import {
-  archiveTrellisTask,
-  listProjectRequirementWorkspace,
-  type TrellisRequirementTaskRow,
-} from "../services/trellisTaskBridge";
-import { refreshSplitResultDerivedFields } from "../services/taskSplitter";
-import { getRepositoryBaseDisplayName } from "../utils/sessionRepositoryDisplay";
 import { resolveOwnerHintForSession } from "../utils/sessionOwnerHints";
 import type { SessionOwnerHint } from "../utils/sessionOwnerHints";
-import { removeSplitResultTasksByIds } from "../utils/removeSplitResultTasksByIds";
-import { notifySplitTodoCountUpdated } from "../utils/notifySplitTodoCountUpdated";
-import {
-  countDrawerExecutableTasks,
-  listDrawerTrellisTasks,
-} from "../utils/taskDrawerCounts";
-import { buildOmcBatchTaskIntentOneLiner } from "../utils/omcBatchTaskIntentOneLiner";
 import {
   isSessionBoundAsRepositoryMain,
   repositoryPathsMatch,
@@ -68,43 +42,26 @@ import {
 } from "../utils/sessionHistoryScope";
 import { resolveProjectMainSessionAnchor } from "../utils/projectSessionAnchor";
 import { getAppSetting, setAppSetting } from "../services/appSettingsStore";
-import {
-  buildTaskExecutionPrompt,
-  getSessionPreview,
-  normalizeSplitTaskListFlowStatus,
-} from "../components/ClaudeSessions/claudeChatHelpers";
+import { getSessionPreview } from "../components/ClaudeSessions/claudeChatHelpers";
 import { getSessionUpdatedAt, groupSessionsByDay, sliceGroupedSessions, type SessionGroup } from "../components/ClaudeSessions/sessionGrouping";
 import { isToolOnlyUserMessage, userMessagePlainTextForDisplay } from "../utils/claudeChatMessageDisplay";
-import {
-  WORKFLOW_UI_EVENT_FOCUS_TASK_TOOL,
-  WORKFLOW_UI_EVENT_OMC_BATCH_RUNTIME_CHANGED,
-  WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED,
-  type SplitTodoCountUpdatedDetail,
-  type WorkflowOmcBatchRuntimeDetail,
-} from "../constants/workflowUiEvents";
 import type {
   ClaudeSession,
   EmployeeItem,
   PendingExecutionTask,
   ProjectItem,
   Repository,
-  TaskFlowStatus,
-  TaskItem,
   WorkflowTaskItem,
   WorkflowTemplateItem,
 } from "../types";
 import type { WorkspaceFocus, WorkspaceMode } from "../utils/workspaceMode";
 import {
-  buildTrellisTaskExecutionPrompt,
-  EMPTY_STRING_LIST,
-  EMPTY_TASK_LIST,
   executionStatusTagColor,
   formatCompletionActivityTime,
   getSessionTraceStorageKey,
   mapClaudeExecutionStatusLabel,
   resolveSessionOwnerInfo,
   rowMatchesCompletionSearch,
-  TASK_LIST_MAX_SELECTED,
 } from "./claudeChatSessionFeaturePanelHelpers";
 
 const EMPTY_HISTORY_GROUPS: SessionGroup[] = [];
@@ -182,174 +139,43 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
     sessions,
     allSessionsForHistory,
     repositories,
-    activeRepository,
+    activeRepository: _activeRepository,
     activeProject,
     activeWorkspaceFocus = "repository",
     activeRepositoryId = null,
     workspaceMode = "single_repo",
     sessionOwnerHints,
-    mentionEmployees,
+    mentionEmployees: _mentionEmployees,
     workflowTasks,
     workflowTemplates,
-    workflowGraphStatusByWorkflowId,
+    workflowGraphStatusByWorkflowId: _workflowGraphStatusByWorkflowId,
     taskPendingEmployeesByTaskId,
     repositoryScopePath,
     sessionRepository,
     repositoryMainBindings,
-    omcBatchAnchorSessionId,
-    omcBatchUserAbortRef,
-    omcBatchInFlightRef,
+    omcBatchAnchorSessionId: _omcBatchAnchorSessionId,
+    omcBatchUserAbortRef: _omcBatchUserAbortRef,
+    omcBatchInFlightRef: _omcBatchInFlightRef,
     hideSessionTools = false,
     scrollToSessionMessageId,
-    scrollMessageTargetIntoView,
+    scrollMessageTargetIntoView: _scrollMessageTargetIntoView,
     onSwitchSession,
-    onExecute,
+    onExecute: _onExecute,
     onOpenRepositoryScheduledTasks,
     onRefreshHistorySessions,
     onDeleteHistorySession,
     onOpenHistorySessionInInspector,
     onRestoreHistorySessionAsMain,
-    resolveTaskListOmcInvokeConcurrency,
-    onAppendSystemMessage,
-    onAppendUserMessage,
-    onNotifyOmcEmployeeDirectBatchTaskDone,
-    onPrepareFreshOmcEmployeeWorkerForDirectBatch,
+    resolveTaskListOmcInvokeConcurrency: _resolveTaskListOmcInvokeConcurrency,
+    onAppendSystemMessage: _onAppendSystemMessage,
+    onAppendUserMessage: _onAppendUserMessage,
+    onNotifyOmcEmployeeDirectBatchTaskDone: _onNotifyOmcEmployeeDirectBatchTaskDone,
+    onPrepareFreshOmcEmployeeWorkerForDirectBatch: _onPrepareFreshOmcEmployeeWorkerForDirectBatch,
   } = input;
 
-  const { run: workflowRun } = useWorkflowRun(session.id, session.repositoryPath);
-
-  const [splitTodoTasks, setSplitTodoTasks] = useState<TaskItem[]>([]);
-    const [trellisTasks, setTrellisTasks] = useState<TrellisRequirementTaskRow[]>([]);
-    const [trellisTasksLoading, setTrellisTasksLoading] = useState(false);
-    const [trellisTaskFocus, setTrellisTaskFocus] = useState<{
-      parentTaskName: string | null;
-      childTaskNames: string[];
-    } | null>(null);
-    const taskDrawerTrellisScope = useMemo(
-      () => ({
-        repositoryId: activeRepository?.id ?? null,
-        focus: trellisTaskFocus,
-      }),
-      [activeRepository?.id, trellisTaskFocus],
-    );
-    const visibleTrellisTasks = useMemo(
-      () => listDrawerTrellisTasks(trellisTasks, taskDrawerTrellisScope),
-      [taskDrawerTrellisScope, trellisTasks],
-    );
-    const taskDrawerCounts = useMemo(
-      () => countDrawerExecutableTasks(splitTodoTasks, trellisTasks, taskDrawerTrellisScope),
-      [splitTodoTasks, taskDrawerTrellisScope, trellisTasks],
-    );
-    const taskDrawerCount = taskDrawerCounts.total;
-    const syncSplitTaskList = useCallback(async () => {
-      const split = await loadPrdTaskSplitResult();
-      if (!split) {
-        setSplitTodoTasks([]);
-        return;
-      }
-      const listedTasks = split.executableTasks
-        .map((task) => {
-          const fs = normalizeSplitTaskListFlowStatus(task.flowStatus);
-          if (fs === undefined) return { ...task, flowStatus: undefined };
-          return { ...task, flowStatus: fs };
-        })
-        .filter((task) => task.flowStatus === "todo" || task.flowStatus === "done");
-      setSplitTodoTasks(listedTasks);
-    }, []);
-
-    useEffect(() => {
-      let cancelled = false;
-      const sync = async () => {
-        const split = await loadPrdTaskSplitResult();
-        if (cancelled) return;
-        if (!split) {
-          setSplitTodoTasks([]);
-          return;
-        }
-        const listedTasks = split.executableTasks
-          .map((task) => {
-            const fs = normalizeSplitTaskListFlowStatus(task.flowStatus);
-            if (fs === undefined) return { ...task, flowStatus: undefined };
-            return { ...task, flowStatus: fs };
-          })
-          .filter((task) => task.flowStatus === "todo" || task.flowStatus === "done");
-        setSplitTodoTasks(listedTasks);
-      };
-      void sync();
-      const handleSplitTodoCountUpdated = () => {
-        void sync();
-      };
-      window.addEventListener(WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED, handleSplitTodoCountUpdated as EventListener);
-      return () => {
-        cancelled = true;
-        window.removeEventListener(WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED, handleSplitTodoCountUpdated as EventListener);
-      };
-    }, [session.id, session.repositoryPath]);
-
-    const syncTrellisTaskList = useCallback(async () => {
-      const project = activeProject;
-      const rootPath = project?.rootPath?.trim();
-      if (!project || !rootPath) {
-        setTrellisTasks([]);
-        setTrellisTasksLoading(false);
-        return;
-      }
-      setTrellisTasksLoading(true);
-      try {
-        const snapshot = await listProjectRequirementWorkspace({
-          project,
-          projects: [project],
-          repositories,
-        });
-        setTrellisTasks(snapshot.tasks);
-      } catch (err) {
-        console.warn("syncTrellisTaskList failed:", err);
-        setTrellisTasks([]);
-      } finally {
-        setTrellisTasksLoading(false);
-      }
-    }, [activeProject, repositories]);
-
-    useEffect(() => {
-      let cancelled = false;
-      const sync = async () => {
-        if (cancelled) return;
-        await syncTrellisTaskList();
-      };
-      void sync();
-      const handleSplitTodoCountUpdated = (event: Event) => {
-        const detail = (event as CustomEvent<SplitTodoCountUpdatedDetail>).detail;
-        void syncTrellisTaskList().then(() => {
-          if (detail?.source === "trellis" && detail.openTaskDrawer) {
-            setTrellisTaskFocus({
-              parentTaskName: detail.focusParentTaskName ?? detail.parentTaskName ?? null,
-              childTaskNames: detail.focusChildTaskNames ?? detail.childTaskNames ?? [],
-            });
-            setTaskListStatusFilter("all");
-            setTaskListDrawerOpen(true);
-          }
-        });
-      };
-      window.addEventListener(WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED, handleSplitTodoCountUpdated as EventListener);
-      return () => {
-        cancelled = true;
-        window.removeEventListener(WORKFLOW_UI_EVENT_SPLIT_TODO_COUNT_UPDATED, handleSplitTodoCountUpdated as EventListener);
-      };
-    }, [syncTrellisTaskList]);
-
-    useEffect(() => {
-      const valid = new Set(splitTodoTasks.map((task) => task.id));
-      setTaskListSelectedIds((prev) => prev.filter((id) => valid.has(id)));
-    }, [splitTodoTasks]);
-    const [taskListDrawerOpen, setTaskListDrawerOpen] = useState(false);
-    const [taskListSelectedIds, setTaskListSelectedIds] = useState<string[]>([]);
-    const [trellisTaskSelectedKeys, setTrellisTaskSelectedKeys] = useState<string[]>([]);
-    const [trellisTaskEmployeeByKey, setTrellisTaskEmployeeByKey] = useState<Record<string, string>>({});
-    const [trellisBatchEmployeeName, setTrellisBatchEmployeeName] = useState("");
-    const [taskListStatusFilter, setTaskListStatusFilter] = useState<"all" | "todo" | "done">("todo");
-    const [omcBatchPopoverOpen, setOmcBatchPopoverOpen] = useState(false);
-    const [omcBatchTemplateId, setOmcBatchTemplateId] = useState<OmcBatchTemplateId>("autopilot");
-    const [historyPopoverOpen, setHistoryPopoverOpen] = useState(false);
+  const taskDrawerCount = 0;
+  const [taskListDrawerOpen, setTaskListDrawerOpen] = useState(false);
+  const [historyPopoverOpen, setHistoryPopoverOpen] = useState(false);
     const [userQuestionsPopoverOpen, setUserQuestionsPopoverOpen] = useState(false);
     const [historySearchText, setHistorySearchText] = useState("");
     const [historyVisibleCount, setHistoryVisibleCount] = useState(FEATURE_SESSION_LIST_PAGE_SIZE);
@@ -359,7 +185,6 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
     const historyLoadMoreLockedRef = useRef(false);
     /** 历史会话删除二次确认 Modal 打开期间，忽略 Popover 的外部点击关闭 */
     const historyPopoverCloseGuardRef = useRef(false);
-    const focusTaskScrollTimeoutRef = useRef<number | null>(null);
     const [sessionTraceDrawerOpen, setSessionTraceDrawerOpen] = useState(false);
     const [sessionSendTraces, setSessionSendTraces] = useState<SessionSendTraceEntry[]>([]);
     const [taskCompletionModalOpen, setTaskCompletionModalOpen] = useState(false);
@@ -818,673 +643,6 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
         }
       };
     }, []);
-    const publishedTeamMentions = useMemo(
-      () =>
-        workflowTemplates
-          .filter((item) => (workflowGraphStatusByWorkflowId[item.id] ?? "").toLowerCase() === "published")
-          .map((item) => ({ id: item.id, name: item.name })),
-      [workflowTemplates, workflowGraphStatusByWorkflowId],
-    );
-    const taskListEmployeeOptions = useMemo(
-      () => mentionEmployees.filter((item) => item.name.trim().length > 0),
-      [mentionEmployees],
-    );
-    const taskListTeamOptions = publishedTeamMentions;
-    const taskListMultiSelectCap = TASK_LIST_MAX_SELECTED;
-    const taskListDrawerDataActive = taskListDrawerOpen;
-    const filteredTaskList = useMemo(() => {
-      if (!taskListDrawerDataActive) {
-        return EMPTY_TASK_LIST;
-      }
-      if (taskListStatusFilter === "todo") return splitTodoTasks.filter((task) => task.flowStatus === "todo");
-      if (taskListStatusFilter === "done") return splitTodoTasks.filter((task) => task.flowStatus === "done");
-      const todos = splitTodoTasks.filter((task) => task.flowStatus === "todo");
-      const dones = splitTodoTasks.filter((task) => task.flowStatus === "done");
-      return [...todos, ...dones];
-    }, [taskListDrawerDataActive, splitTodoTasks, taskListStatusFilter]);
-    const taskListSelectableSliceIds = useMemo(
-      () => {
-        if (!taskListDrawerDataActive) {
-          return EMPTY_STRING_LIST;
-        }
-        return filteredTaskList.slice(0, taskListMultiSelectCap).map((task) => task.id);
-      },
-      [taskListDrawerDataActive, filteredTaskList, taskListMultiSelectCap],
-    );
-    const taskListSelectedSet = useMemo(() => new Set(taskListSelectedIds), [taskListSelectedIds]);
-    const taskListAllFilteredSelected = useMemo(() => {
-      if (!taskListDrawerDataActive) {
-        return false;
-      }
-      if (taskListSelectableSliceIds.length === 0) return false;
-      if (taskListSelectedIds.length !== taskListSelectableSliceIds.length) return false;
-      return taskListSelectableSliceIds.every((id) => taskListSelectedSet.has(id));
-    }, [taskListDrawerDataActive, taskListSelectableSliceIds, taskListSelectedIds, taskListSelectedSet]);
-    const trellisTaskSelectableKeys = useMemo(
-      () => {
-        if (!taskListDrawerDataActive) {
-          return EMPTY_STRING_LIST;
-        }
-        return visibleTrellisTasks.slice(0, taskListMultiSelectCap).map((task) => trellisTaskRowKey(task));
-      },
-      [taskListDrawerDataActive, visibleTrellisTasks, taskListMultiSelectCap],
-    );
-    const trellisTaskSelectedSet = useMemo(() => new Set(trellisTaskSelectedKeys), [trellisTaskSelectedKeys]);
-    const trellisTaskAllSelected = useMemo(() => {
-      if (!taskListDrawerDataActive) {
-        return false;
-      }
-      if (trellisTaskSelectableKeys.length === 0) return false;
-      if (trellisTaskSelectedKeys.length !== trellisTaskSelectableKeys.length) return false;
-      return trellisTaskSelectableKeys.every((key) => trellisTaskSelectedSet.has(key));
-    }, [taskListDrawerDataActive, trellisTaskSelectableKeys, trellisTaskSelectedKeys, trellisTaskSelectedSet]);
-    const selectedTrellisTasks = useMemo(
-      () => {
-        if (!taskListDrawerDataActive) {
-          return [] as TrellisRequirementTaskRow[];
-        }
-        return visibleTrellisTasks.filter((task) => trellisTaskSelectedSet.has(trellisTaskRowKey(task)));
-      },
-      [taskListDrawerDataActive, trellisTaskSelectedSet, visibleTrellisTasks],
-    );
-    const trellisEmployeeDispatchAvailable = taskListEmployeeOptions.length > 0;
-
-    useEffect(() => {
-      setTaskListSelectedIds((prev) => {
-        if (prev.length <= taskListMultiSelectCap) return prev;
-        return prev.slice(0, taskListMultiSelectCap);
-      });
-    }, [taskListMultiSelectCap]);
-
-    useEffect(() => {
-      const valid = new Set(visibleTrellisTasks.map((task) => trellisTaskRowKey(task)));
-      setTrellisTaskSelectedKeys((prev) => prev.filter((key) => valid.has(key)));
-    }, [visibleTrellisTasks]);
-
-    useEffect(() => {
-      setTrellisTaskSelectedKeys((prev) => {
-        if (prev.length <= taskListMultiSelectCap) return prev;
-        return prev.slice(0, taskListMultiSelectCap);
-      });
-    }, [taskListMultiSelectCap]);
-
-    /** 将「可执行任务」中的 flowStatus（仅 todo/done）写入 SQLite 拆分结果并刷新派生字段。 */
-    const persistSplitTaskFlowStatus = useCallback(async (taskId: string, nextStatus: TaskFlowStatus): Promise<boolean> => {
-      const normalized: "todo" | "done" = nextStatus === "done" ? "done" : "todo";
-      const split = await loadPrdTaskSplitResult();
-      if (!split) {
-        void message.warning("未找到可执行任务数据，无法保存状态。");
-        return false;
-      }
-      if (!split.executableTasks.some((item) => item.id === taskId)) {
-        void message.warning("可执行任务列表中找不到该任务，无法保存状态。");
-        return false;
-      }
-      const nextTasks = split.executableTasks.map((item) => (item.id === taskId ? { ...item, flowStatus: normalized } : item));
-      try {
-        await savePrdTaskSplitResult(refreshSplitResultDerivedFields({ ...split, executableTasks: nextTasks }));
-        await syncSplitTaskList();
-        return true;
-      } catch (err) {
-        const msg = err instanceof Error ? err.message : String(err);
-        void message.error(`保存任务状态失败：${msg}`);
-        return false;
-      }
-    }, [syncSplitTaskList]);
-
-    const persistSplitTaskDispatchField = useCallback(
-      async (taskId: string, field: "splitListEmployeeName" | "splitListWorkflowId", rawValue: string) => {
-        const trimmed = rawValue.trim();
-        const split = await loadPrdTaskSplitResult();
-        if (!split) {
-          void message.warning("未找到可执行任务数据，无法保存选择。");
-          return;
-        }
-        const nextTasks = split.executableTasks.map((item) => {
-          if (item.id !== taskId) return item;
-          const next = { ...item };
-          if (!trimmed) {
-            delete next[field];
-          } else {
-            next[field] = trimmed;
-          }
-          return next;
-        });
-        try {
-          await savePrdTaskSplitResult(refreshSplitResultDerivedFields({ ...split, executableTasks: nextTasks }));
-          await syncSplitTaskList();
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          void message.error(`保存失败：${msg}`);
-        }
-      },
-      [syncSplitTaskList],
-    );
-
-    useEffect(() => {
-      if (!workflowRun?.tasks?.length) return;
-      let cancelled = false;
-      const syncFlowRunStatusToSplitStore = async () => {
-        const split = await loadPrdTaskSplitResult();
-        if (!split || cancelled) return;
-        const flowStatusByTaskId = new Map(workflowRun.tasks.map((item) => [item.taskId, item.flowStatus] as const));
-        let changed = false;
-        const nextTasks = split.executableTasks.map((task) => {
-          const wf = flowStatusByTaskId.get(task.id);
-          if (wf === undefined) return task;
-          const fromWf: TaskFlowStatus = wf === "done" ? "done" : "todo";
-          /** 工作流快照为 todo 而拆分结果为 done 时，须跟随为未完成，不得保留「已完成」 */
-          if (wf === "todo" && task.flowStatus === "done") {
-            changed = true;
-            return { ...task, flowStatus: "todo" as TaskFlowStatus };
-          }
-          // 用户在列表中已标为已完成时，不因工作流仍为待审等而回写为未完成
-          if (task.flowStatus === "done" && fromWf !== "done") return task;
-          if (task.flowStatus === fromWf) return task;
-          changed = true;
-          return { ...task, flowStatus: fromWf };
-        });
-        if (!changed || cancelled) return;
-        try {
-          await savePrdTaskSplitResult(refreshSplitResultDerivedFields({ ...split, executableTasks: nextTasks }));
-          if (cancelled) return;
-          await syncSplitTaskList();
-        } catch (err) {
-          if (cancelled) return;
-          const msg = err instanceof Error ? err.message : String(err);
-          void message.error(`同步工作流状态到拆分结果失败：${msg}`);
-        }
-      };
-      void syncFlowRunStatusToSplitStore();
-      return () => {
-        cancelled = true;
-      };
-    }, [workflowRun, syncSplitTaskList]);
-
-    const handleOmcBatchConfirmFromPopover = useCallback(() => {
-      const repoPath = session.repositoryPath?.trim() ?? "";
-      if (!repoPath) {
-        void message.warning("当前会话未关联仓库路径，无法批量 OMC。");
-        return;
-      }
-      const selectedSet = new Set(taskListSelectedIds);
-      const selectedInOrder = filteredTaskList.filter((t) => selectedSet.has(t.id));
-      const tasksToRun = selectedInOrder.filter((t) => t.flowStatus === "todo");
-      if (tasksToRun.length === 0) {
-        if (selectedInOrder.length === 0) {
-          void message.info("请先勾选要批量执行的未完成任务。");
-        } else {
-          void message.warning("所选任务均为已完成，未启动批量 OMC。");
-        }
-        return;
-      }
-      if (omcBatchInFlightRef.current) {
-        void message.warning("上一批批量 OMC 仍在后台执行中，请稍候。");
-        return;
-      }
-
-      const skippedDone = selectedInOrder.length - tasksToRun.length;
-      if (skippedDone > 0) {
-        void message.info(`已跳过 ${skippedDone} 条已完成任务，将在后台对 ${tasksToRun.length} 条未完成任务启动 OMC。`);
-      }
-
-      const conc = resolveTaskListOmcInvokeConcurrency?.(session);
-      const repoDisplayRaw = (session.repositoryName ?? "").trim();
-      const repoDisplay =
-        getRepositoryBaseDisplayName(repoDisplayRaw).trim() ||
-        session.repositoryPath?.replace(/\\/g, "/").split("/").filter(Boolean).pop()?.trim() ||
-        repoPath;
-      const repositoryMemberMetadata = sessionRepository
-        ? {
-            ownerKind: "repository" as const,
-            ownerRepositoryId: sessionRepository.id,
-            ownerRepositoryName: repoDisplay,
-            ownerRepositoryPath: sessionRepository.path,
-            repositoryType: sessionRepository.repositoryType,
-          }
-        : undefined;
-      if (omcBatchTemplateId === TRELLIS_BATCH_TEMPLATE_ID) {
-        const trellisImplementSubagent = resolveTrellisSubagentForStage("implement") ?? "trellis-implement";
-        if (sessionRepository?.sddMode === "off") {
-          void message.warning("当前仓库已关闭 SDD，未启动 Trellis 批量执行。");
-          return;
-        }
-        omcBatchInFlightRef.current = true;
-        omcBatchUserAbortRef.current = false;
-        requestAnimationFrame(() => {
-          setOmcBatchPopoverOpen(false);
-          setTaskListDrawerOpen(false);
-          requestAnimationFrame(() => {
-            window.dispatchEvent(
-              new CustomEvent(WORKFLOW_UI_EVENT_OMC_BATCH_RUNTIME_CHANGED, {
-                detail: {
-                  active: true,
-                  sessionId: omcBatchAnchorSessionId,
-                  runningCount: tasksToRun.length,
-                  updatedAt: Date.now(),
-                } satisfies WorkflowOmcBatchRuntimeDetail,
-              }),
-            );
-            void (async () => {
-              try {
-                const result = await runSplitTasksOmcBatch({
-                  facade: getWorkflowFacade(),
-                  sessionId: omcBatchAnchorSessionId,
-                  repositoryPath: repoPath,
-                  tasks: tasksToRun,
-                  templateId: TRELLIS_BATCH_TEMPLATE_ID,
-                  subagentType: trellisImplementSubagent,
-                  executionMetadata: repositoryMemberMetadata,
-                  concurrency: 1,
-                  boundWorkflowRunId:
-                    omcBatchAnchorSessionId === session.id ? (workflowRun?.workflowRunId ?? null) : null,
-                });
-                onAppendSystemMessage?.(
-                  omcBatchAnchorSessionId,
-                  `[系统] Trellis 批量执行结束：任务 ${result.taskCount} 条，成功 ${result.doneCount}，失败 ${result.failedCount}。${result.workflowRunId ? `\n工作流：${result.workflowRunId}` : ""}`,
-                );
-                requestWorkflowRunRefresh(omcBatchAnchorSessionId, repoPath);
-                requestWorkflowRunRefresh(session.id, repoPath);
-                await syncSplitTaskList();
-              } catch (err) {
-                console.error("trellis batch job failed:", err);
-                const msg = err instanceof Error ? err.message : String(err);
-                onAppendSystemMessage?.(omcBatchAnchorSessionId, `[系统] Trellis 批量执行失败：${msg}`);
-                void message.error("Trellis 批量执行失败");
-              } finally {
-                window.dispatchEvent(
-                  new CustomEvent(WORKFLOW_UI_EVENT_OMC_BATCH_RUNTIME_CHANGED, {
-                    detail: {
-                      active: false,
-                      sessionId: omcBatchAnchorSessionId,
-                      runningCount: 0,
-                      updatedAt: Date.now(),
-                    } satisfies WorkflowOmcBatchRuntimeDetail,
-                  }),
-                );
-                omcBatchInFlightRef.current = false;
-                omcBatchUserAbortRef.current = false;
-              }
-            })();
-          });
-        });
-        return;
-      }
-
-      if (!isDirectOmcBatchTemplateId(omcBatchTemplateId)) {
-        void message.error("未知批量执行模板。");
-        return;
-      }
-
-      const batchParams = {
-        anchorSessionId: omcBatchAnchorSessionId,
-        repositoryPath: repoPath,
-        repositoryDisplayName: repoDisplay,
-        tasks: tasksToRun,
-        templateId: omcBatchTemplateId,
-        subagentType: "executor",
-        concurrencyScopeKey: conc?.concurrencyScopeKey,
-        concurrencyLimit: conc?.concurrencyLimit,
-        userAbortRef: omcBatchUserAbortRef,
-        inFlightRef: omcBatchInFlightRef,
-        buildTaskAppendix: buildOmcBatchTaskIntentOneLiner,
-        syncSplitTaskList,
-        onExecutableTaskDoneAfterOmcSuccess: async (taskId: string) => {
-          const ok = await persistSplitTaskFlowStatus(taskId, "done");
-          if (ok) {
-            notifySplitTodoCountUpdated();
-          }
-          return ok;
-        },
-        onAppendSystemMessage,
-        onAppendDispatchUserMessage: onAppendUserMessage,
-        onNotifyOmcEmployeeDirectBatchTaskDone,
-      };
-
-      omcBatchInFlightRef.current = true;
-      omcBatchUserAbortRef.current = false;
-      void (async () => {
-        try {
-          await onPrepareFreshOmcEmployeeWorkerForDirectBatch?.({
-            repositoryPath: repoPath,
-            repositoryDisplayName: repoDisplay,
-          });
-        } catch (err) {
-          console.error("prepareFreshOmcEmployeeWorkerForDirectBatch failed:", err);
-          omcBatchInFlightRef.current = false;
-          void message.error("清理 OMC 旧终端标签失败，已取消本次批量执行。");
-          return;
-        }
-        /** 分帧：避免「巨型 Drawer 卸载 + 批任务全局事件」挤在同一帧拖死主线程 */
-        requestAnimationFrame(() => {
-          setOmcBatchPopoverOpen(false);
-          setTaskListDrawerOpen(false);
-          requestAnimationFrame(() => {
-            scheduleDirectOmcBatchAfterMacrotask(batchParams);
-          });
-        });
-      })();
-    }, [
-      filteredTaskList,
-      omcBatchAnchorSessionId,
-      omcBatchTemplateId,
-      onAppendSystemMessage,
-      onAppendUserMessage,
-      onNotifyOmcEmployeeDirectBatchTaskDone,
-      onPrepareFreshOmcEmployeeWorkerForDirectBatch,
-      persistSplitTaskFlowStatus,
-      resolveTaskListOmcInvokeConcurrency,
-      session,
-      sessionRepository?.sddMode,
-      syncSplitTaskList,
-      taskListSelectedIds,
-      workflowRun?.workflowRunId,
-    ]);
-
-    const handleRunTaskInMainSession = useCallback(async (task: TaskItem) => {
-      const ok = await Promise.resolve(onExecute(session.id, buildTaskExecutionPrompt(task)));
-      if (ok === false) {
-        void message.error(`任务 ${task.id} 启动失败，请检查会话状态后重试。`);
-        return;
-      }
-    }, [onExecute, session.id]);
-
-    const handleRunTrellisTaskInMainSession = useCallback(async (task: TrellisRequirementTaskRow) => {
-      const ok = await Promise.resolve(onExecute(session.id, buildTrellisTaskExecutionPrompt(task)));
-      if (ok === false) {
-        void message.error(`Trellis 任务 ${task.taskId} 启动失败，请检查会话状态后重试。`);
-        return;
-      }
-    }, [onExecute, session.id]);
-
-    const handleRunTrellisTaskByEmployee = useCallback(
-      async (task: TrellisRequirementTaskRow, employeeNameOverride?: string) => {
-        const employeeName = (employeeNameOverride ?? trellisTaskEmployeeByKey[trellisTaskRowKey(task)] ?? "").trim();
-        if (!employeeName) {
-          void message.info("请先选择员工。");
-          return;
-        }
-        const ok = await Promise.resolve(onExecute(session.id, buildTrellisTaskExecutionPrompt(task), {
-          targetType: "employee",
-          targetEmployeeName: employeeName,
-        }));
-        if (ok === false) {
-          void message.error(`Trellis 任务 ${task.taskId} 派发失败，请检查终端状态后重试。`);
-          return;
-        }
-      },
-      [onExecute, session.id, trellisTaskEmployeeByKey],
-    );
-
-    const handleRunTaskByEmployee = useCallback(async (task: TaskItem) => {
-      const employeeName = task.splitListEmployeeName?.trim();
-      if (!employeeName) {
-        void message.info("请先选择员工（选择会立即保存到拆分结果）。");
-        return;
-      }
-      const ok = await Promise.resolve(onExecute(session.id, buildTaskExecutionPrompt(task), {
-        targetType: "employee",
-        targetEmployeeName: employeeName,
-      }));
-      if (ok === false) {
-        void message.error(`任务 ${task.id} 派发失败，请检查终端状态后重试。`);
-        return;
-      }
-    }, [onExecute, session.id]);
-
-    const handleRunTaskByTeam = useCallback(async (task: TaskItem) => {
-      const workflowId = task.splitListWorkflowId?.trim();
-      const workflowName = taskListTeamOptions.find((item) => item.id === workflowId)?.name;
-      if (!workflowId || !workflowName) {
-        void message.info("请先选择团队流程（选择会立即保存到拆分结果）。");
-        return;
-      }
-      const ok = await Promise.resolve(onExecute(session.id, buildTaskExecutionPrompt(task), {
-        targetType: "team",
-        targetWorkflowId: workflowId,
-        targetWorkflowName: workflowName,
-      }));
-      if (ok === false) {
-        void message.error(`任务 ${task.id} 派发失败：团队流程未实际启动。`);
-        return;
-      }
-    }, [onExecute, session.id, taskListTeamOptions]);
-
-    const handleCompleteTaskManually = useCallback(async (task: TaskItem) => {
-      await persistSplitTaskFlowStatus(task.id, "done");
-    }, [persistSplitTaskFlowStatus]);
-
-    const handleAdjustTaskStatus = useCallback(async (task: TaskItem, status: TaskFlowStatus) => {
-      await persistSplitTaskFlowStatus(task.id, status);
-    }, [persistSplitTaskFlowStatus]);
-
-    const persistSplitAfterRemovingTasks = useCallback(
-      async (ids: string[]): Promise<boolean> => {
-        const unique = Array.from(new Set(ids.map((id) => id.trim()).filter(Boolean)));
-        if (unique.length === 0) return false;
-        const split = await loadPrdTaskSplitResult();
-        if (!split) {
-          void message.error("未找到可执行任务数据，无法删除。");
-          return false;
-        }
-        const next = removeSplitResultTasksByIds(split, unique);
-        try {
-          await savePrdTaskSplitResult(next);
-          setTaskListSelectedIds((prev) => prev.filter((id) => !unique.includes(id)));
-          await syncSplitTaskList();
-          notifySplitTodoCountUpdated();
-          return true;
-        } catch (err) {
-          const msg = err instanceof Error ? err.message : String(err);
-          void message.error(`删除保存失败：${msg}`);
-          return false;
-        }
-      },
-      [syncSplitTaskList],
-    );
-
-    const handleConfirmDeleteSplitTask = useCallback(
-      async (task: TaskItem) => {
-        await persistSplitAfterRemovingTasks([task.id]);
-      },
-      [persistSplitAfterRemovingTasks],
-    );
-
-    const clearTrellisTaskFocusIfNeeded = useCallback((removedTasks: TrellisRequirementTaskRow[]) => {
-      if (removedTasks.length === 0) return;
-      setTrellisTaskFocus((prev) => {
-        if (!prev) return prev;
-        const removedIds = new Set(removedTasks.map((task) => task.taskId.trim()));
-        const removedParents = new Set(
-          removedTasks.map((task) => task.parent?.trim() ?? "").filter((name) => name.length > 0),
-        );
-        const parentFocus = prev.parentTaskName?.trim() ?? "";
-        const childNames = prev.childTaskNames.map((name) => name.trim());
-        const touchesFocus =
-          removedIds.has(parentFocus) ||
-          childNames.some((name) => removedIds.has(name)) ||
-          (parentFocus.length > 0 && removedParents.has(parentFocus)) ||
-          removedTasks.some((task) => {
-            const taskId = task.taskId.trim();
-            const parentName = task.parent?.trim() ?? "";
-            return parentFocus === taskId || parentFocus === parentName;
-          });
-        return touchesFocus ? null : prev;
-      });
-    }, []);
-
-    const archiveTrellisTasks = useCallback(
-      async (tasks: TrellisRequirementTaskRow[]): Promise<{ ok: number; fail: number; lastError?: string }> => {
-        let ok = 0;
-        let fail = 0;
-        let lastError: string | undefined;
-        const removedKeys: string[] = [];
-        for (const task of tasks) {
-          const rootPath = task.rootPath?.trim();
-          const taskDir = task.dir?.trim();
-          const rowKey = trellisTaskRowKey(task);
-          if (!rootPath || !taskDir) {
-            fail += 1;
-            lastError = "任务缺少 rootPath 或目录路径";
-            continue;
-          }
-          try {
-            await archiveTrellisTask(rootPath, taskDir);
-            ok += 1;
-            removedKeys.push(rowKey);
-          } catch (err: unknown) {
-            fail += 1;
-            lastError = err instanceof Error ? err.message : String(err);
-          }
-        }
-        if (removedKeys.length > 0) {
-          setTrellisTaskSelectedKeys((prev) => prev.filter((key) => !removedKeys.includes(key)));
-          setTrellisTaskEmployeeByKey((prev) => {
-            const next = { ...prev };
-            for (const key of removedKeys) delete next[key];
-            return next;
-          });
-          clearTrellisTaskFocusIfNeeded(tasks.filter((task) => removedKeys.includes(trellisTaskRowKey(task))));
-          await syncTrellisTaskList();
-          notifySplitTodoCountUpdated();
-        }
-        return { ok, fail, lastError };
-      },
-      [clearTrellisTaskFocusIfNeeded, syncTrellisTaskList],
-    );
-
-    const handleArchiveTrellisTask = useCallback(
-      async (task: TrellisRequirementTaskRow) => {
-        const { fail, lastError } = await archiveTrellisTasks([task]);
-        if (fail > 0) {
-          void message.error(lastError ? `删除 Trellis 任务失败：${lastError}` : "删除 Trellis 任务失败");
-        }
-      },
-      [archiveTrellisTasks],
-    );
-
-    const handleBatchArchiveTrellisTasks = useCallback(() => {
-      if (selectedTrellisTasks.length === 0) {
-        void message.info("请先勾选 Trellis 任务。");
-        return;
-      }
-      const n = selectedTrellisTasks.length;
-      Modal.confirm({
-        title: "批量删除 Trellis 任务",
-        content: `将归档 ${n} 条任务到 .trellis/tasks/archive/，并从当前列表移除。`,
-        okText: "删除",
-        okButtonProps: { danger: true },
-        cancelText: "取消",
-        onOk: async () => {
-          const { ok, fail, lastError } = await archiveTrellisTasks(selectedTrellisTasks);
-          if (ok > 0 && fail > 0) {
-            void message.warning(
-              lastError ? `已删除 ${ok} 条，${fail} 条失败：${lastError}` : `已删除 ${ok} 条，${fail} 条失败`,
-            );
-          } else if (ok === 0) {
-            void message.error(lastError ? `批量删除失败：${lastError}` : "批量删除失败");
-          }
-        },
-      });
-    }, [archiveTrellisTasks, selectedTrellisTasks]);
-
-    const handleBatchRunTrellisByEmployee = useCallback(() => {
-      if (selectedTrellisTasks.length === 0) {
-        void message.info("请先勾选 Trellis 任务。");
-        return;
-      }
-      const employeeName = trellisBatchEmployeeName.trim();
-      if (!employeeName) {
-        void message.info("请先选择批量执行员工。");
-        return;
-      }
-      for (const task of selectedTrellisTasks) {
-        onExecute(session.id, buildTrellisTaskExecutionPrompt(task), {
-          targetType: "employee",
-          targetEmployeeName: employeeName,
-        });
-      }
-    }, [onExecute, selectedTrellisTasks, session.id, trellisBatchEmployeeName]);
-
-    const handleDeleteAllSplitTasks = useCallback(() => {
-      const ids = splitTodoTasks.map((task) => task.id.trim()).filter(Boolean);
-      if (ids.length === 0) {
-        void message.info("暂无可删除任务。");
-        return;
-      }
-      const n = ids.length;
-      Modal.confirm({
-        title: "全部删除可执行任务",
-        content: `将删除当前仓库下共 ${n} 条可执行任务（未完成与已完成均包含）。任务依赖中会移除对这些 id 的引用。此操作不可撤销。`,
-        okText: "继续",
-        cancelText: "取消",
-        onOk: () => {
-          Modal.confirm({
-            title: "再次确认删除",
-            content: `请再次确认：将永久删除全部 ${n} 条可执行任务。`,
-            okText: "确认删除",
-            okType: "danger",
-            cancelText: "取消",
-            onOk: async () => {
-              await persistSplitAfterRemovingTasks(ids);
-            },
-          });
-        },
-      });
-    }, [persistSplitAfterRemovingTasks, splitTodoTasks]);
-    useEffect(() => {
-      function handleFocusTaskTool(event: Event) {
-        const custom = event as CustomEvent<{ taskId?: string }>;
-        const taskId = custom.detail?.taskId?.trim();
-        if (!taskId) return;
-        const id = taskId;
-        if (focusTaskScrollTimeoutRef.current != null) {
-          window.clearTimeout(focusTaskScrollTimeoutRef.current);
-          focusTaskScrollTimeoutRef.current = null;
-        }
-
-        function tryScroll(): boolean {
-          const target = document.querySelector(`[data-task-id="${CSS.escape(id)}"]`);
-          if (target instanceof HTMLElement) {
-            const localScroll = target.closest(".ant-drawer-body, .ant-modal-body, [data-scroll-container]");
-            if (localScroll instanceof HTMLElement) {
-              const containerRect = localScroll.getBoundingClientRect();
-              const targetRect = target.getBoundingClientRect();
-              const top =
-                localScroll.scrollTop +
-                targetRect.top -
-                containerRect.top -
-                Math.max(0, (localScroll.clientHeight - targetRect.height) / 2);
-              localScroll.scrollTo({
-                top: Math.max(0, Math.min(localScroll.scrollHeight - localScroll.clientHeight, top)),
-                behavior: "smooth",
-              });
-            } else {
-              scrollMessageTargetIntoView(target);
-            }
-            return true;
-          }
-          return false;
-        }
-
-        if (tryScroll()) return;
-
-        setTaskListStatusFilter("all");
-        setTaskListDrawerOpen(true);
-        focusTaskScrollTimeoutRef.current = window.setTimeout(() => {
-          focusTaskScrollTimeoutRef.current = null;
-          tryScroll();
-        }, 280);
-      }
-      window.addEventListener(WORKFLOW_UI_EVENT_FOCUS_TASK_TOOL, handleFocusTaskTool as EventListener);
-      return () => {
-        window.removeEventListener(WORKFLOW_UI_EVENT_FOCUS_TASK_TOOL, handleFocusTaskTool as EventListener);
-        if (focusTaskScrollTimeoutRef.current != null) {
-          window.clearTimeout(focusTaskScrollTimeoutRef.current);
-          focusTaskScrollTimeoutRef.current = null;
-        }
-      };
-    }, [scrollMessageTargetIntoView]);
     const sessionUserQuestions = useMemo((): SessionUserQuestionRow[] => {
       if (!userQuestionsPopoverOpen) {
         return [];
@@ -1609,7 +767,6 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
     scrollToSessionMessageId,
     onOpenRepositoryScheduledTasks,
     taskDrawerCount,
-    setTaskListStatusFilter,
     setTaskListDrawerOpen,
     setTaskCompletionModalOpen,
     taskCompletionModalOpen,
@@ -1665,100 +822,9 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
       open: true,
       onClose: closeTaskListDrawer,
       traceDrawerWidth,
-      taskDrawerCount,
-      taskDrawerCounts,
-      trellisTaskFocus,
-      setTrellisTaskFocus,
-      splitTodoTasks,
-      visibleTrellisTasks,
-      trellisTasksLoading,
-      taskListStatusFilter,
-      setTaskListStatusFilter,
-      taskListSelectableSliceIds,
-      taskListAllFilteredSelected,
-      taskListMultiSelectCap,
-      filteredTaskList,
-      taskListSelectedIds,
-      setTaskListSelectedIds,
-      taskListSelectedSet,
-      omcBatchPopoverOpen,
-      setOmcBatchPopoverOpen,
-      omcBatchTemplateId,
-      setOmcBatchTemplateId,
-      handleOmcBatchConfirmFromPopover,
-      handleDeleteAllSplitTasks,
-      handleAdjustTaskStatus,
-      handleCompleteTaskManually,
-      handleConfirmDeleteSplitTask,
-      handleRunTaskInMainSession,
-      persistSplitTaskDispatchField,
-      handleRunTaskByEmployee,
-      handleRunTaskByTeam,
-      taskListEmployeeOptions,
-      taskListTeamOptions,
       activeProject,
-      syncTrellisTaskList,
-      trellisTaskSelectableKeys,
-      trellisTaskAllSelected,
-      trellisTaskSelectedKeys,
-      trellisTaskSelectedSet,
-      setTrellisTaskSelectedKeys,
-      trellisBatchEmployeeName,
-      setTrellisBatchEmployeeName,
-      trellisEmployeeDispatchAvailable,
-      trellisTaskEmployeeByKey,
-      setTrellisTaskEmployeeByKey,
-      handleBatchRunTrellisByEmployee,
-      handleBatchArchiveTrellisTasks,
-      handleRunTrellisTaskInMainSession,
-      handleArchiveTrellisTask,
-      handleRunTrellisTaskByEmployee,
     };
-  }, [
-    taskListDrawerOpen,
-    closeTaskListDrawer,
-    traceDrawerWidth,
-    taskDrawerCount,
-    taskDrawerCounts,
-    trellisTaskFocus,
-    splitTodoTasks,
-    visibleTrellisTasks,
-    trellisTasksLoading,
-    taskListStatusFilter,
-    taskListSelectableSliceIds,
-    taskListAllFilteredSelected,
-    taskListMultiSelectCap,
-    filteredTaskList,
-    taskListSelectedIds,
-    taskListSelectedSet,
-    omcBatchPopoverOpen,
-    omcBatchTemplateId,
-    handleOmcBatchConfirmFromPopover,
-    handleDeleteAllSplitTasks,
-    handleAdjustTaskStatus,
-    handleCompleteTaskManually,
-    handleConfirmDeleteSplitTask,
-    handleRunTaskInMainSession,
-    persistSplitTaskDispatchField,
-    handleRunTaskByEmployee,
-    handleRunTaskByTeam,
-    taskListEmployeeOptions,
-    taskListTeamOptions,
-    activeProject,
-    syncTrellisTaskList,
-    trellisTaskSelectableKeys,
-    trellisTaskAllSelected,
-    trellisTaskSelectedKeys,
-    trellisTaskSelectedSet,
-    trellisBatchEmployeeName,
-    trellisEmployeeDispatchAvailable,
-    trellisTaskEmployeeByKey,
-    handleBatchRunTrellisByEmployee,
-    handleBatchArchiveTrellisTasks,
-    handleRunTrellisTaskInMainSession,
-    handleArchiveTrellisTask,
-    handleRunTrellisTaskByEmployee,
-  ]);
+  }, [taskListDrawerOpen, closeTaskListDrawer, traceDrawerWidth, activeProject]);
 
   const traceDrawerProps = useMemo((): ClaudeChatSessionTraceDrawerProps | null => {
     if (!sessionTraceDrawerOpen) {

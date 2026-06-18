@@ -269,7 +269,6 @@ pub(crate) async fn execute_codex_code(
     model: Option<String>,
     invocation_key: Option<String>,
     tab_session_id: Option<String>,
-    trellis_context_id: Option<String>,
     codex_resume_session_id: Option<String>,
     force_new_session: Option<bool>,
 ) -> Result<(), String> {
@@ -312,10 +311,6 @@ pub(crate) async fn execute_codex_code(
     if let Some((api_key, base_url)) = crate::opencode_go_proxy::codex_spawn_env_overrides(&db) {
         cmd.env("OPENAI_API_KEY", api_key);
         cmd.env("OPENAI_BASE_URL", base_url);
-    }
-
-    if let Some(ctx) = trellis_context_id.as_deref().map(str::trim).filter(|s| !s.is_empty()) {
-        cmd.env("TRELLIS_CONTEXT_ID", ctx);
     }
 
     let mut child = cmd

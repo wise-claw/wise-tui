@@ -110,7 +110,6 @@ export interface ClaudeChatSessionFeatureToolbarProps {
   scrollToSessionMessageId: (messageId: number) => void;
   onOpenRepositoryScheduledTasks?: () => void;
   taskDrawerCount: number;
-  setTaskListStatusFilter: Dispatch<SetStateAction<"all" | "todo" | "done">>;
   setTaskListDrawerOpen: Dispatch<SetStateAction<boolean>>;
   setTaskCompletionModalOpen: Dispatch<SetStateAction<boolean>>;
   taskCompletionModalOpen: boolean;
@@ -155,7 +154,6 @@ export const ClaudeChatSessionFeatureToolbar = memo(function ClaudeChatSessionFe
     scrollToSessionMessageId,
     onOpenRepositoryScheduledTasks,
     taskDrawerCount,
-    setTaskListStatusFilter,
     setTaskListDrawerOpen,
     setTaskCompletionModalOpen,
     taskCompletionModalOpen,
@@ -411,14 +409,13 @@ export const ClaudeChatSessionFeatureToolbar = memo(function ClaudeChatSessionFe
                   .join(" ")}
                 data-ui-anchor="session-task-list-btn"
                 onClick={() => {
-                  setTaskListStatusFilter("todo");
                   setTaskListDrawerOpen(true);
                 }}
               >
                 <UnorderedListOutlined />
                 <span className="app-claude-session-tool-btn__text">任务</span>
                 {taskDrawerCount > 0 ? (
-                  <span className="app-claude-session-tool-btn__badge" aria-label={`可执行任务与 Trellis 任务数量 ${taskDrawerCount}`}>
+                  <span className="app-claude-session-tool-btn__badge" aria-label={`可执行任务数量 ${taskDrawerCount}`}>
                     {taskDrawerCount}
                   </span>
                 ) : null}

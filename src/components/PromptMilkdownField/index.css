@@ -14,7 +14,7 @@
   font-size: 12px;
 }
 
-/* 与 PrdTaskSplitPanel 仓库提示词编辑器视觉对齐，且不依赖其 CSS 是否已加载 */
+/* 仓库提示词编辑器视觉对齐 */
 .app-prompt-milkdown-field__editor {
   min-height: 200px;
   max-height: min(45vh, 400px);
