@@ -381,12 +381,12 @@ export function ClaudeChatInner({
   hideMessages = false,
   hideSessionTools = false,
   enableSessionNotificationFeed = false,
-  resolveTaskListOmcInvokeConcurrency,
+  resolveTaskListOmcInvokeConcurrency: _resolveTaskListOmcInvokeConcurrency,
   repositoryMainBindings = {},
   onAppendSystemMessage,
   onAppendUserMessage,
-  onNotifyOmcEmployeeDirectBatchTaskDone,
-  onPrepareFreshOmcEmployeeWorkerForDirectBatch,
+  onNotifyOmcEmployeeDirectBatchTaskDone: _onNotifyOmcEmployeeDirectBatchTaskDone,
+  onPrepareFreshOmcEmployeeWorkerForDirectBatch: _onPrepareFreshOmcEmployeeWorkerForDirectBatch,
   onRefreshHistorySessions,
   onDeleteHistorySession,
   onOpenHistorySessionInInspector,
@@ -574,7 +574,6 @@ export function ClaudeChatInner({
   );
   const gitRepositoryPath = sessionRepository?.path?.trim() || session.repositoryPath.trim();
   const omcBatchUserAbortRef = useRef(false);
-  const omcBatchInFlightRef = useRef(false);
 
   const pendingTasksRef = useRef(pendingTasks);
   pendingTasksRef.current = pendingTasks;
@@ -1086,10 +1085,6 @@ export function ClaudeChatInner({
 
   const scrollToSessionMessageId = useCallback((messageId: number) => {
     getClaudeChatMessageScrollBridge().scrollToSessionMessageId(messageId);
-  }, []);
-
-  const scrollMessageTargetIntoView = useCallback((target: Element | null) => {
-    return getClaudeChatMessageScrollBridge().scrollMessageTargetIntoView(target);
   }, []);
 
   const [fullTranscriptLoading, setFullTranscriptLoading] = useState(false);
