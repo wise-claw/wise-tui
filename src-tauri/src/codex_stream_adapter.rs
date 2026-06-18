@@ -142,7 +142,8 @@ fn map_codex_item_event(event_type: &str, item: &Value) -> Vec<String> {
         "reasoning" => map_reasoning_item(item),
         "agent_message" | "assistant_message" => map_agent_message_item(item),
         "command_execution" => map_command_execution_item(event_type, item),
-        "mcp_tool_call" | "web_search" | "file_change" | "plan_update" => {
+        "error" => map_error_item(item),
+        "mcp_tool_call" | "web_search" | "file_change" | "plan_update" | "todo_list" => {
             map_generic_item_summary(kind, item)
         }
         _ => vec![],
@@ -161,6 +162,11 @@ fn map_agent_message_item(item: &Value) -> Vec<String> {
         return vec![];
     };
     vec![assistant_text_line(&text)]
+}
+
+fn map_error_item(item: &Value) -> Vec<String> {
+    let message = codex_item_text(item).unwrap_or_else(|| "Codex 执行出错".to_string());
+    vec![assistant_text_line(&message)]
 }
 
 fn map_command_execution_item(event_type: &str, item: &Value) -> Vec<String> {
@@ -188,6 +194,9 @@ fn map_command_execution_item(event_type: &str, item: &Value) -> Vec<String> {
         || status.eq_ignore_ascii_case("completed")
         || status.eq_ignore_ascii_case("success");
     let failed = status.eq_ignore_ascii_case("failed") || status.eq_ignore_ascii_case("error");
+    let in_progress = event_type == "item.updated"
+        || status.eq_ignore_ascii_case("in_progress")
+        || status.eq_ignore_ascii_case("running");
 
     if completed || failed {
         vec![assistant_tool_use_line(
@@ -201,6 +210,15 @@ fn map_command_execution_item(event_type: &str, item: &Value) -> Vec<String> {
             } else {
                 None
             },
+        )]
+    } else if in_progress && output.is_some() {
+        vec![assistant_tool_use_line(
+            &id,
+            "Bash",
+            json!({ "command": command }),
+            "running",
+            output,
+            None,
         )]
     } else {
         vec![assistant_tool_use_line(
@@ -377,6 +395,28 @@ mod tests {
         match map_codex_exec_stdout_line(line) {
             CodexStdoutMap::StreamLines(lines) => {
                 assert!(lines[0].contains("逐步推理"));
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn maps_assistant_message_item_type() {
+        let line = r#"{"type":"item.completed","item":{"id":"itm_4","item_type":"assistant_message","text":"你好。"}}"#;
+        match map_codex_exec_stdout_line(line) {
+            CodexStdoutMap::StreamLines(lines) => {
+                assert!(lines[0].contains("你好。"));
+            }
+            other => panic!("{other:?}"),
+        }
+    }
+
+    #[test]
+    fn maps_error_item_completed() {
+        let line = r#"{"type":"item.completed","item":{"id":"itm_5","item_type":"error","text":"API key invalid"}}"#;
+        match map_codex_exec_stdout_line(line) {
+            CodexStdoutMap::StreamLines(lines) => {
+                assert!(lines[0].contains("API key invalid"));
             }
             other => panic!("{other:?}"),
         }

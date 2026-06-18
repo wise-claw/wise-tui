@@ -2,15 +2,17 @@
 
 use crate::claude_commands::{ClaudeProcessState, ClaudeSessionRegistry};
 use crate::claude_model_profiles::ensure_active_codex_profile_applied;
+use crate::codex_binary::{apply_codex_child_env, codex_merged_path_env, find_codex_binary};
 use crate::codex_stream_adapter::{map_codex_exec_stdout_line, CodexStdoutMap};
 use crate::wise_db::WiseDb;
 use serde::Serialize;
+use std::collections::HashMap;
 use std::path::Path;
 use std::process::Stdio;
 use std::sync::Arc;
 use tauri::{AppHandle, Emitter, Manager};
 use tokio::io::{AsyncBufReadExt, BufReader};
-use tokio::process::Command;
+use tokio::process::{Child, Command};
 use tokio::sync::Mutex as TokioMutex;
 use uuid::Uuid;
 
@@ -24,6 +26,35 @@ struct CodexCompletePayload {
     success: bool,
 }
 
+struct CodexSpawnParams {
+    codex_path: String,
+    project_path: String,
+    prompt: String,
+    exec_model: Option<String>,
+    resume_session_id: Option<String>,
+    force_new_session: bool,
+    path_env: String,
+    spawn_env_overrides: Option<(String, String)>,
+}
+
+#[derive(Clone)]
+struct CodexRuntimeContext {
+    app: AppHandle,
+    session_id: String,
+    invocation_key: Option<String>,
+    project_path: String,
+    prompt: String,
+    exec_model: Option<String>,
+    registry: ClaudeSessionRegistry,
+    active_child_by_invocation_key:
+        Arc<TokioMutex<HashMap<String, Arc<TokioMutex<Option<Child>>>>>>,
+    active_child_by_claude_session:
+        Arc<TokioMutex<HashMap<String, Arc<TokioMutex<Option<Child>>>>>>,
+    codex_path: String,
+    path_env: String,
+    spawn_env_overrides: Option<(String, String)>,
+}
+
 fn normalize_codex_model(raw: Option<&str>) -> Option<String> {
     let trimmed = raw?.trim();
     if trimmed.is_empty() {
@@ -31,118 +62,6 @@ fn normalize_codex_model(raw: Option<&str>) -> Option<String> {
     } else {
         Some(trimmed.to_string())
     }
-}
-
-fn codex_binary_candidates() -> Vec<String> {
-    let out: Vec<String> = crate::claude_commands::claude_path_search_prefixes()
-        .into_iter()
-        .map(|dir| {
-            #[cfg(windows)]
-            {
-                dir.join("codex.cmd").to_string_lossy().to_string()
-            }
-            #[cfg(not(windows))]
-            {
-                dir.join("codex").to_string_lossy().to_string()
-            }
-        })
-        .collect();
-
-    #[cfg(windows)]
-    {
-        let mut out = out;
-        out.extend(
-            crate::claude_commands::claude_path_search_prefixes()
-                .into_iter()
-                .map(|dir| dir.join("codex.exe").to_string_lossy().to_string()),
-        );
-        out
-    }
-
-    #[cfg(not(windows))]
-    {
-        out
-    }
-}
-
-#[cfg(unix)]
-fn try_codex_from_login_shell() -> Option<String> {
-    for (shell, args) in [
-        ("/bin/zsh", vec!["-l", "-c", "command -v codex"]),
-        ("/bin/bash", vec!["-lc", "command -v codex"]),
-    ] {
-        let output = std::process::Command::new(shell)
-            .args(&args)
-            .stdout(std::process::Stdio::piped())
-            .stderr(std::process::Stdio::null())
-            .output()
-            .ok()?;
-        if !output.status.success() {
-            continue;
-        }
-        let p = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        if !p.is_empty() && Path::new(&p).is_file() {
-            return Some(p);
-        }
-    }
-    None
-}
-
-fn find_codex_binary() -> Result<String, String> {
-    for candidate in codex_binary_candidates() {
-        if Path::new(&candidate).is_file() {
-            return Ok(candidate);
-        }
-    }
-
-    #[cfg(windows)]
-    {
-        let path_merged =
-            crate::claude_commands::merge_path_env(&crate::claude_commands::claude_path_search_prefixes());
-        if let Ok(output) = std::process::Command::new("where")
-            .arg("codex")
-            .env("PATH", &path_merged)
-            .output()
-        {
-            if output.status.success() {
-                let line = String::from_utf8_lossy(&output.stdout)
-                    .lines()
-                    .next()
-                    .unwrap_or("")
-                    .trim()
-                    .to_string();
-                if !line.is_empty() && Path::new(&line).exists() {
-                    return Ok(line);
-                }
-            }
-        }
-    }
-
-    #[cfg(not(windows))]
-    {
-        let path_merged =
-            crate::claude_commands::merge_path_env(&crate::claude_commands::claude_path_search_prefixes());
-        if let Ok(output) = std::process::Command::new("which")
-            .arg("codex")
-            .env("PATH", &path_merged)
-            .output()
-        {
-            if output.status.success() {
-                let p = String::from_utf8_lossy(&output.stdout).trim().to_string();
-                if !p.is_empty() && Path::new(&p).is_file() {
-                    return Ok(p);
-                }
-            }
-        }
-        if let Some(p) = try_codex_from_login_shell() {
-            return Ok(p);
-        }
-    }
-
-    Err(
-        "未找到 codex 可执行文件。请确认已安装 codex，并确保其位于 PATH，或安装在 /opt/homebrew/bin、/usr/local/bin、以及 nvm/fnm 的 node 版本 bin 目录下。"
-            .to_string(),
-    )
 }
 
 fn codex_assistant_stream_line(text: &str) -> String {
@@ -215,10 +134,13 @@ fn append_codex_exec_shared_args(cmd: &mut Command, model: Option<&str>) {
 }
 
 /// `codex exec [OPTIONS] [PROMPT]` — supports sandbox + color flags.
-fn append_codex_exec_fresh_args(cmd: &mut Command, model: Option<&str>) {
+fn append_codex_exec_fresh_args(cmd: &mut Command, model: Option<&str>, project_path: &str) {
     cmd.arg("--color").arg("never");
     append_codex_exec_shared_args(cmd, model);
     cmd.arg("-s").arg(WISE_CODEX_EXEC_SANDBOX);
+    if !project_path.trim().is_empty() {
+        cmd.arg("-C").arg(project_path.trim());
+    }
 }
 
 /// `codex exec resume [OPTIONS] [SESSION_ID] [PROMPT]` — options must precede id/prompt; no `-s`/`--color`.
@@ -230,6 +152,7 @@ fn configure_codex_exec_command(
     cmd: &mut Command,
     prompt: &str,
     model: Option<&str>,
+    project_path: &str,
     resume_session_id: Option<&str>,
     force_new_session: bool,
 ) {
@@ -243,80 +166,92 @@ fn configure_codex_exec_command(
             return;
         }
     }
-    append_codex_exec_fresh_args(cmd, model);
+    append_codex_exec_fresh_args(cmd, model, project_path);
     cmd.arg(prompt);
 }
 
 fn stderr_suggests_resume_session_missing(lines: &[String]) -> bool {
     lines.iter().any(|line| {
         let lower = line.to_lowercase();
-        lower.contains("session")
+        let has_session_word = lower.contains("session") || line.contains("会话");
+        has_session_word
             && (lower.contains("not found")
                 || lower.contains("no such")
                 || lower.contains("unknown")
                 || lower.contains("does not exist")
+                || lower.contains("invalid")
+                || lower.contains("expired")
                 || lower.contains("找不到")
                 || lower.contains("不存在"))
     })
 }
 
-#[tauri::command]
-pub(crate) async fn execute_codex_code(
-    app: tauri::AppHandle,
-    db: tauri::State<'_, WiseDb>,
-    project_path: String,
-    prompt: String,
-    model: Option<String>,
-    invocation_key: Option<String>,
-    tab_session_id: Option<String>,
-    codex_resume_session_id: Option<String>,
-    force_new_session: Option<bool>,
-) -> Result<(), String> {
-    let proxy_model = crate::opencode_go_proxy::apply_codex_bridge_for_spawn(&db)?;
-    let use_wise_bridge = proxy_model.is_some();
-    if !use_wise_bridge {
-        ensure_active_codex_profile_applied(&db)?;
+fn stderr_line_is_actionable(line: &str) -> bool {
+    let lower = line.to_lowercase();
+    lower.contains("error")
+        || lower.contains("unauthorized")
+        || lower.contains("failed")
+        || lower.contains("legacy")
+        || lower.contains("not found")
+        || lower.contains("panic")
+        || lower.contains("denied")
+        || lower.contains("usage limit")
+        || lower.contains("rate limit")
+        || lower.contains("401")
+        || lower.contains("403")
+        || lower.contains("429")
+        || lower.contains("config")
+        || lower.contains("api key")
+        || lower.contains("apikey")
+}
+
+fn validate_codex_project_path(project_path: &str) -> Result<(), String> {
+    let trimmed = project_path.trim();
+    if trimmed.is_empty() {
+        return Err("Codex 执行需要有效的仓库路径".to_string());
     }
-    let exec_model = proxy_model.or_else(|| normalize_codex_model(model.as_deref()));
+    let path = Path::new(trimmed);
+    if !path.is_dir() {
+        return Err(format!("Codex 仓库路径不存在或不是目录: {trimmed}"));
+    }
+    Ok(())
+}
 
-    let registry = app.state::<ClaudeSessionRegistry>();
-    let process_state = app.state::<ClaudeProcessState>();
-    let session_id = tab_session_id
-        .as_deref()
-        .map(str::trim)
-        .filter(|s| !s.is_empty())
-        .map(|s| s.to_string())
-        .unwrap_or_else(|| format!("codex-{}", Uuid::new_v4().simple()));
-
-    let codex_path = find_codex_binary()?;
-    let resume_id = normalize_codex_resume_session_id(codex_resume_session_id.as_deref());
-    let force_new = force_new_session.unwrap_or(false);
-    let used_resume = !force_new && resume_id.is_some();
-    let mut cmd = Command::new(&codex_path);
+fn build_codex_command(params: &CodexSpawnParams) -> Command {
+    let mut cmd = Command::new(&params.codex_path);
     configure_codex_exec_command(
         &mut cmd,
-        prompt.trim(),
-        exec_model.as_deref(),
-        resume_id.as_deref(),
-        force_new,
+        params.prompt.trim(),
+        params.exec_model.as_deref(),
+        &params.project_path,
+        params.resume_session_id.as_deref(),
+        params.force_new_session,
     );
-    cmd.current_dir(&project_path);
+    cmd.current_dir(&params.project_path);
     cmd.stdin(Stdio::null());
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
-    cmd.env(
-        "PATH",
-        crate::claude_commands::merge_path_env(&crate::claude_commands::claude_path_search_prefixes()),
-    );
-    if let Some((api_key, base_url)) = crate::opencode_go_proxy::codex_spawn_env_overrides(&db) {
+    apply_codex_child_env(&mut cmd, &params.path_env);
+    if let Some((api_key, base_url)) = params.spawn_env_overrides.as_ref() {
         cmd.env("OPENAI_API_KEY", api_key);
         cmd.env("OPENAI_BASE_URL", base_url);
     }
+    cmd
+}
 
-    let mut child = cmd
+fn spawn_codex_process(params: &CodexSpawnParams) -> Result<Child, String> {
+    build_codex_command(params)
         .spawn()
-        .map_err(|e| format!("Failed to start codex: {}", e))?;
+        .map_err(|e| format!("Failed to start codex: {e}"))
+}
 
+fn attach_codex_child_io(
+    ctx: &CodexRuntimeContext,
+    mut child: Child,
+    wait_child: Arc<TokioMutex<Option<Child>>>,
+    used_resume: bool,
+    allow_resume_retry: bool,
+) -> Result<(), String> {
     let stdout = child
         .stdout
         .take()
@@ -326,35 +261,16 @@ pub(crate) async fn execute_codex_code(
         .take()
         .ok_or_else(|| "Failed to get codex stderr".to_string())?;
 
-    let wait_child = Arc::new(TokioMutex::new(Some(child)));
-    if let Some(inv) = invocation_key.as_deref().filter(|s| !s.is_empty()) {
-        process_state
-            .active_child_by_invocation_key
-            .lock()
-            .await
-            .insert(inv.to_string(), wait_child.clone());
-    }
-    if !session_id.is_empty() {
-        process_state
-            .active_child_by_claude_session
-            .lock()
-            .await
-            .insert(session_id.clone(), wait_child.clone());
+    {
+        let mut slot = wait_child
+            .try_lock()
+            .map_err(|_| "Failed to lock codex child slot".to_string())?;
+        *slot = Some(child);
     }
 
-    let model_label =
-        exec_model.as_deref().unwrap_or("codex").to_string();
-    emit_codex_stdout_line(
-        &app,
-        &session_id,
-        &codex_init_stream_line(&session_id),
-        invocation_key.as_deref(),
-    );
-    registry.register(session_id.clone(), project_path.clone(), model_label);
-
-    let app_stdout = app.clone();
-    let session_id_stdout = session_id.clone();
-    let invocation_key_stdout = invocation_key.clone();
+    let app_stdout = ctx.app.clone();
+    let session_id_stdout = ctx.session_id.clone();
+    let invocation_key_stdout = ctx.invocation_key.clone();
     tokio::spawn(async move {
         let reader = BufReader::new(stdout);
         let mut lines = reader.lines();
@@ -380,9 +296,9 @@ pub(crate) async fn execute_codex_code(
 
     let stderr_lines = Arc::new(TokioMutex::new(Vec::<String>::new()));
     let stderr_lines_reader = stderr_lines.clone();
-    let app_stderr = app.clone();
-    let session_id_stderr = session_id.clone();
-    let invocation_key_stderr = invocation_key.clone();
+    let app_stderr = ctx.app.clone();
+    let session_id_stderr = ctx.session_id.clone();
+    let invocation_key_stderr = ctx.invocation_key.clone();
     tokio::spawn(async move {
         let reader = BufReader::new(stderr);
         let mut lines = reader.lines();
@@ -391,14 +307,7 @@ pub(crate) async fn execute_codex_code(
                 continue;
             }
             stderr_lines_reader.lock().await.push(line.clone());
-            let lower = line.to_lowercase();
-            if lower.contains("error")
-                || lower.contains("unauthorized")
-                || lower.contains("failed")
-                || lower.contains("legacy")
-                || lower.contains("not found")
-                || lower.contains("401")
-            {
+            if stderr_line_is_actionable(&line) {
                 emit_codex_stdout_line(
                     &app_stderr,
                     &session_id_stderr,
@@ -409,14 +318,19 @@ pub(crate) async fn execute_codex_code(
         }
     });
 
-    let app_wait = app.clone();
-    let registry_wait = registry.inner().clone();
-    let session_id_wait = session_id.clone();
-    let invocation_key_wait = invocation_key.clone();
-    let active_child_by_invocation = process_state.active_child_by_invocation_key.clone();
-    let active_child_by_session = process_state.active_child_by_claude_session.clone();
+    let app_wait = ctx.app.clone();
+    let registry_wait = ctx.registry.clone();
+    let session_id_wait = ctx.session_id.clone();
+    let invocation_key_wait = ctx.invocation_key.clone();
+    let active_child_by_invocation = ctx.active_child_by_invocation_key.clone();
+    let active_child_by_session = ctx.active_child_by_claude_session.clone();
     let stderr_lines_wait = stderr_lines.clone();
     let used_resume_wait = used_resume;
+    let retry_ctx = if allow_resume_retry && used_resume {
+        Some(ctx.clone())
+    } else {
+        None
+    };
 
     tokio::spawn(async move {
         let exit_status = {
@@ -435,24 +349,95 @@ pub(crate) async fn execute_codex_code(
         }
 
         let success = exit_status.map(|status| status.success()).unwrap_or(false);
+        let lines = stderr_lines_wait.lock().await.clone();
         if !success {
-            let lines = stderr_lines_wait.lock().await;
-            if used_resume_wait && stderr_suggests_resume_session_missing(lines.as_slice()) {
-                emit_codex_stdout_line(
-                    &app_wait,
-                    &session_id_wait,
-                    &codex_session_clear_stream_line(),
-                    invocation_key_wait.as_deref(),
-                );
-                let diagnostic =
-                    "Codex 会话已失效，已清除续接 id；请重试，必要时简要说明上一轮背景。";
-                emit_codex_stdout_line(
-                    &app_wait,
-                    &session_id_wait,
-                    &codex_assistant_stream_line(diagnostic),
-                    invocation_key_wait.as_deref(),
-                );
-            } else if let Some(last_line) = lines.iter().rev().find(|line| !line.trim().is_empty()) {
+            if used_resume_wait
+                && allow_resume_retry
+                && stderr_suggests_resume_session_missing(lines.as_slice())
+            {
+                if let Some(runtime) = retry_ctx {
+                    let spawn = CodexSpawnParams {
+                        codex_path: runtime.codex_path.clone(),
+                        project_path: runtime.project_path.clone(),
+                        prompt: runtime.prompt.clone(),
+                        exec_model: runtime.exec_model.clone(),
+                        resume_session_id: None,
+                        force_new_session: true,
+                        path_env: runtime.path_env.clone(),
+                        spawn_env_overrides: runtime.spawn_env_overrides.clone(),
+                    };
+                    emit_codex_stdout_line(
+                        &app_wait,
+                        &session_id_wait,
+                        &codex_session_clear_stream_line(),
+                        invocation_key_wait.as_deref(),
+                    );
+                    emit_codex_stdout_line(
+                        &app_wait,
+                        &session_id_wait,
+                        &codex_assistant_stream_line(
+                            "Codex 续接会话已失效，正在自动以新会话重试…",
+                        ),
+                        invocation_key_wait.as_deref(),
+                    );
+                    match spawn_codex_process(&spawn) {
+                        Ok(child) => {
+                            let retry_runtime = runtime.clone();
+                            let retry_wait_child = Arc::new(TokioMutex::new(None));
+                            if let Some(inv) = invocation_key_wait.as_deref().filter(|s| !s.is_empty())
+                            {
+                                active_child_by_invocation
+                                    .lock()
+                                    .await
+                                    .insert(inv.to_string(), retry_wait_child.clone());
+                            }
+                            if !session_id_wait.is_empty() {
+                                active_child_by_session
+                                    .lock()
+                                    .await
+                                    .insert(session_id_wait.clone(), retry_wait_child.clone());
+                            }
+                            if attach_codex_child_io(
+                                &retry_runtime,
+                                child,
+                                retry_wait_child,
+                                false,
+                                false,
+                            )
+                            .is_ok()
+                            {
+                                return;
+                            }
+                        }
+                        Err(retry_err) => {
+                            emit_codex_stdout_line(
+                                &app_wait,
+                                &session_id_wait,
+                                &codex_assistant_stream_line(&format!(
+                                    "Codex 自动重试失败：{retry_err}"
+                                )),
+                                invocation_key_wait.as_deref(),
+                            );
+                        }
+                    }
+                } else {
+                    emit_codex_stdout_line(
+                        &app_wait,
+                        &session_id_wait,
+                        &codex_session_clear_stream_line(),
+                        invocation_key_wait.as_deref(),
+                    );
+                    let diagnostic =
+                        "Codex 会话已失效，已清除续接 id；请重试，必要时简要说明上一轮背景。";
+                    emit_codex_stdout_line(
+                        &app_wait,
+                        &session_id_wait,
+                        &codex_assistant_stream_line(diagnostic),
+                        invocation_key_wait.as_deref(),
+                    );
+                }
+            } else if let Some(last_line) = lines.iter().rev().find(|line| !line.trim().is_empty())
+            {
                 let diagnostic = format!("Codex 执行失败：{}", last_line.trim());
                 emit_codex_stdout_line(
                     &app_wait,
@@ -460,8 +445,18 @@ pub(crate) async fn execute_codex_code(
                     &codex_assistant_stream_line(&diagnostic),
                     invocation_key_wait.as_deref(),
                 );
+            } else {
+                emit_codex_stdout_line(
+                    &app_wait,
+                    &session_id_wait,
+                    &codex_assistant_stream_line(
+                        "Codex 执行失败（无 stderr 输出）。请检查 API Key、模型配置与网络连接。",
+                    ),
+                    invocation_key_wait.as_deref(),
+                );
             }
         }
+
         registry_wait.mark_completed(&session_id_wait, success);
         emit_codex_complete(
             &app_wait,
@@ -474,6 +469,108 @@ pub(crate) async fn execute_codex_code(
     Ok(())
 }
 
+#[tauri::command]
+pub(crate) async fn execute_codex_code(
+    app: tauri::AppHandle,
+    db: tauri::State<'_, WiseDb>,
+    project_path: String,
+    prompt: String,
+    model: Option<String>,
+    invocation_key: Option<String>,
+    tab_session_id: Option<String>,
+    codex_resume_session_id: Option<String>,
+    force_new_session: Option<bool>,
+) -> Result<(), String> {
+    let proxy_model = crate::opencode_go_proxy::apply_codex_bridge_for_spawn(&db)?;
+    let use_wise_bridge = proxy_model.is_some();
+    if !use_wise_bridge {
+        ensure_active_codex_profile_applied(&db)?;
+    }
+    let exec_model = proxy_model.or_else(|| normalize_codex_model(model.as_deref()));
+
+    validate_codex_project_path(&project_path)?;
+
+    let trimmed_prompt = prompt.trim();
+    if trimmed_prompt.is_empty() {
+        return Err("Codex 执行需要非空提示词".to_string());
+    }
+
+    let registry = app.state::<ClaudeSessionRegistry>();
+    let process_state = app.state::<ClaudeProcessState>();
+    let session_id = tab_session_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| format!("codex-{}", Uuid::new_v4().simple()));
+
+    let codex_path = find_codex_binary()?;
+    let resume_id = normalize_codex_resume_session_id(codex_resume_session_id.as_deref());
+    let force_new = force_new_session.unwrap_or(false);
+    let used_resume = !force_new && resume_id.is_some();
+    let path_env = codex_merged_path_env();
+    let spawn_env_overrides = crate::opencode_go_proxy::codex_spawn_env_overrides(&db);
+    let spawn_params = CodexSpawnParams {
+        codex_path,
+        project_path: project_path.clone(),
+        prompt: trimmed_prompt.to_string(),
+        exec_model: exec_model.clone(),
+        resume_session_id: resume_id.clone(),
+        force_new_session: force_new,
+        path_env,
+        spawn_env_overrides,
+    };
+
+    let child = spawn_codex_process(&spawn_params)?;
+    let wait_child = Arc::new(TokioMutex::new(None));
+
+    let model_label = exec_model.as_deref().unwrap_or("codex").to_string();
+    let runtime = CodexRuntimeContext {
+        app: app.clone(),
+        session_id,
+        invocation_key: invocation_key.clone(),
+        project_path,
+        prompt: trimmed_prompt.to_string(),
+        exec_model,
+        registry: registry.inner().clone(),
+        active_child_by_invocation_key: process_state.active_child_by_invocation_key.clone(),
+        active_child_by_claude_session: process_state.active_child_by_claude_session.clone(),
+        codex_path: spawn_params.codex_path.clone(),
+        path_env: spawn_params.path_env.clone(),
+        spawn_env_overrides: spawn_params.spawn_env_overrides.clone(),
+    };
+
+    if let Some(inv) = invocation_key.as_deref().filter(|s| !s.is_empty()) {
+        process_state
+            .active_child_by_invocation_key
+            .lock()
+            .await
+            .insert(inv.to_string(), wait_child.clone());
+    }
+    if !runtime.session_id.is_empty() {
+        process_state
+            .active_child_by_claude_session
+            .lock()
+            .await
+            .insert(runtime.session_id.clone(), wait_child.clone());
+    }
+
+    emit_codex_stdout_line(
+        &app,
+        &runtime.session_id,
+        &codex_init_stream_line(&runtime.session_id),
+        invocation_key.as_deref(),
+    );
+    registry.register(
+        runtime.session_id.clone(),
+        runtime.project_path.clone(),
+        model_label,
+    );
+
+    attach_codex_child_io(&runtime, child, wait_child, used_resume, true)?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -481,7 +578,14 @@ mod tests {
     #[test]
     fn fresh_exec_argv_order() {
         let mut cmd = Command::new("codex");
-        configure_codex_exec_command(&mut cmd, "hello", Some("gpt-5"), None, false);
+        configure_codex_exec_command(
+            &mut cmd,
+            "hello",
+            Some("gpt-5"),
+            "/tmp/repo",
+            None,
+            false,
+        );
         let args: Vec<String> = cmd
             .as_std()
             .get_args()
@@ -499,6 +603,8 @@ mod tests {
                 "gpt-5".to_string(),
                 "-s".to_string(),
                 WISE_CODEX_EXEC_SANDBOX.to_string(),
+                "-C".to_string(),
+                "/tmp/repo".to_string(),
                 "hello".to_string(),
             ]
         );
@@ -511,6 +617,7 @@ mod tests {
             &mut cmd,
             "continue",
             None,
+            "/tmp/repo",
             Some("0199a213-81c0-7800-8aa1-bbab2a035a53"),
             false,
         );
@@ -539,6 +646,7 @@ mod tests {
             &mut cmd,
             "fresh",
             None,
+            "/tmp/repo",
             Some("0199a213-81c0-7800-8aa1-bbab2a035a53"),
             true,
         );
@@ -550,5 +658,15 @@ mod tests {
             .collect();
         assert!(!args.contains(&"resume".to_string()));
         assert_eq!(args.last().map(String::as_str), Some("fresh"));
+    }
+
+    #[test]
+    fn stderr_resume_missing_detection() {
+        assert!(stderr_suggests_resume_session_missing(&[
+            "session not found".to_string()
+        ]));
+        assert!(stderr_suggests_resume_session_missing(&[
+            "会话不存在".to_string()
+        ]));
     }
 }

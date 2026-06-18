@@ -379,6 +379,10 @@ async fn probe_builtin(
     probe: &dyn Probe,
     env: &HashMap<String, String>,
 ) -> ProbeResult {
+    if command == "codex" {
+        return probe_codex_builtin(probe, env).await;
+    }
+
     let first = probe.probe(command, env).await;
     if first.ok || command != "claude" {
         return first;
@@ -414,6 +418,32 @@ async fn probe_builtin(
                     .unwrap_or_else(|| "binary not found on PATH".to_string())
             )),
             resolved_path: None,
+        },
+    }
+}
+
+async fn probe_codex_builtin(probe: &dyn Probe, env: &HashMap<String, String>) -> ProbeResult {
+    let first = probe.probe("codex", env).await;
+    if first.ok {
+        return first;
+    }
+
+    match crate::codex_binary::find_codex_binary() {
+        Ok(path) => ProbeResult {
+            ok: true,
+            error: None,
+            resolved_path: Some(path),
+        },
+        Err(fallback_error) => ProbeResult {
+            ok: false,
+            error: Some(format!(
+                "{}; {}",
+                first
+                    .error
+                    .unwrap_or_else(|| "binary not found on PATH".to_string()),
+                fallback_error
+            )),
+            resolved_path: first.resolved_path,
         },
     }
 }

@@ -3,6 +3,7 @@ mod agent_registry;
 mod assistants;
 mod claude_code_usage;
 mod claude_commands;
+mod codex_binary;
 mod codex_commands;
 mod codex_stream_adapter;
 mod cursor_agent;
