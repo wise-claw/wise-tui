@@ -1,0 +1,11 @@
+{
+  "active": true,
+  "started_at": "2026-06-18T10:05:23.979Z",
+  "original_prompt": "/oh-my-claudecode:autopilot 你好",
+  "session_id": "69384da1-57c0-43a1-8152-a1807bd5566c",
+  "project_path": "/Users/sjl/Documents/github/wise",
+  "reinforcement_count": 0,
+  "awaiting_confirmation": true,
+  "awaiting_confirmation_set_at": "2026-06-18T10:05:23.979Z",
+  "last_checked_at": "2026-06-18T10:05:23.979Z"
+}

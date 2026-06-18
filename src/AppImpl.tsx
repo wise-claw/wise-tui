@@ -1248,8 +1248,17 @@ export default function App() {
         void message.info("已请求结束后台任务");
         return;
       }
+      if (stopSessionConversationTask(item)) {
+        void message.info("已请求结束执行");
+        return;
+      }
+      const sid = item.sessionId?.trim();
+      if (sid) {
+        cancelSession(sid);
+        void message.info("已请求结束执行");
+      }
     },
-    [handleCancelOmcDirectBatchInvocation, stopSessionConversationTask],
+    [cancelSession, handleCancelOmcDirectBatchInvocation, stopSessionConversationTask],
   );
 
   const {
