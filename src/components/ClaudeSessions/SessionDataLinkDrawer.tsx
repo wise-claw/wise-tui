@@ -634,11 +634,16 @@ export function SessionDataLinkDrawer({
 
   const ingestConfigPatchRef = useRef(feedbackLoop.ingestConfigPatchAiResponse);
   ingestConfigPatchRef.current = feedbackLoop.ingestConfigPatchAiResponse;
+  const ingestCycleWorkerRef = useRef(feedbackLoop.ingestCycleWorkerResponse);
+  ingestCycleWorkerRef.current = feedbackLoop.ingestCycleWorkerResponse;
 
   useSessionFeedbackLoopDispatchCompletion({
     anchorSessionId: session?.id ?? "",
     getSessions: getClaudeSessions ?? (() => []),
     onComplete: (record, responseText) => {
+      if (record.kind === "optimization" && record.cycleIndex != null) {
+        ingestCycleWorkerRef.current(record.cycleIndex, responseText);
+      }
       if (record.kind === "config_patch" || record.kind === "optimization") {
         const count = ingestConfigPatchRef.current(responseText);
         if (count > 0) {
@@ -1015,6 +1020,7 @@ export function SessionDataLinkDrawer({
                     feedbackLoopOptimizeConfigArtifacts={
                       feedbackLoopSetting.optimizeConfigArtifacts
                     }
+                    feedbackLoopAnchorSessionId={session.id}
                   />
                 ) : (
                   <Empty image={Empty.PRESENTED_IMAGE_SIMPLE} description="正在计算洞察…" />

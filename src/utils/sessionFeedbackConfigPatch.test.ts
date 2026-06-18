@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { SessionInsightsResult } from "./sessionInsights";
+import { emptyRequestRationalityMetrics } from "./sessionInsights";
 import {
   CLAUDE_AUTO_MEMORY_PATCH_PATH,
   buildFeedbackLoopConfigPatchPrompt,
@@ -68,6 +69,7 @@ function sampleInsights(): SessionInsightsResult {
         description: "输出 token 比例高",
       },
     ],
+    requestRationality: emptyRequestRationalityMetrics(),
   };
 }
 

@@ -5,6 +5,8 @@ import { buildSessionLinkRecords } from "./buildSessionLinkRecords";
 import { computeSessionLinkTurnMetrics } from "./sessionLinkFilters";
 import {
   computeSessionInsights,
+  classifyLinkToolRecord,
+  emptyRequestRationalityMetrics,
   filterJsonlLinesForUsageScan,
   formatCacheHitRate,
   formatDurationMs,
@@ -164,6 +166,92 @@ describe("computeSessionInsights", () => {
     expect(insights.overview.tokens.inputTokens).toBeGreaterThan(0);
     expect(insights.recommendations.length).toBeGreaterThan(0);
     expect(insights.recommendations.some((r) => r.category === "observability")).toBe(true);
+    expect(insights.requestRationality).toBeDefined();
+  });
+
+  test("detects MCP and skill overuse recommendations", () => {
+    const linkRecords = [
+      ...Array.from({ length: 10 }, (_, i) => ({
+        id: `mcp-${i}`,
+        timestampMs: 1000 + i,
+        layer: "tool" as const,
+        kind: "tool_use",
+        turnIndex: 1,
+        summary: "mcp__codegraph__explore",
+        observed: true,
+        source: "memory" as const,
+      })),
+      ...Array.from({ length: 6 }, (_, i) => ({
+        id: `skill-${i}`,
+        timestampMs: 2000 + i,
+        layer: "tool" as const,
+        kind: "skill",
+        turnIndex: 2,
+        summary: "trellis-check",
+        observed: true,
+        source: "memory" as const,
+      })),
+    ];
+    const turnMetrics = [{ turnIndex: 1, durationMs: 30_000, toolCount: 10, httpObserved: 1 }];
+    const insights = computeSessionInsights({ linkRecords, turnMetrics });
+    expect(insights.requestRationality.toolCategories.find((c) => c.category === "mcp")?.count).toBe(
+      10,
+    );
+    expect(insights.recommendations.some((r) => r.id === "req-mcp-overuse")).toBe(true);
+    expect(insights.recommendations.some((r) => r.id === "req-skill-overuse")).toBe(true);
+  });
+});
+
+describe("classifyLinkToolRecord", () => {
+  test("classifies mcp, skill, subagent, and builtin", () => {
+    expect(
+      classifyLinkToolRecord({
+        id: "1",
+        timestampMs: 1,
+        layer: "tool",
+        kind: "mcp",
+        turnIndex: 1,
+        summary: "linear",
+        observed: true,
+        source: "memory",
+      }),
+    ).toBe("mcp");
+    expect(
+      classifyLinkToolRecord({
+        id: "2",
+        timestampMs: 1,
+        layer: "tool",
+        kind: "skill",
+        turnIndex: 1,
+        summary: "commit",
+        observed: true,
+        source: "memory",
+      }),
+    ).toBe("skill");
+    expect(
+      classifyLinkToolRecord({
+        id: "3",
+        timestampMs: 1,
+        layer: "tool",
+        kind: "tool_use",
+        turnIndex: 1,
+        summary: "Task",
+        observed: true,
+        source: "memory",
+      }),
+    ).toBe("subagent");
+    expect(
+      classifyLinkToolRecord({
+        id: "4",
+        timestampMs: 1,
+        layer: "tool",
+        kind: "tool_use",
+        turnIndex: 1,
+        summary: "Read",
+        observed: true,
+        source: "memory",
+      }),
+    ).toBe("builtin");
   });
 });
 

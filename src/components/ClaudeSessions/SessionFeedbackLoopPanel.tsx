@@ -1,11 +1,12 @@
 import { Button, Progress, Space, Tag, Typography, message } from "antd";
-import { memo, useCallback, useMemo, useState } from "react";
+import { memo, useCallback, useMemo, useState, useSyncExternalStore } from "react";
 import { save } from "@tauri-apps/plugin-dialog";
 import {
   ApiOutlined,
   DownloadOutlined,
   DownOutlined,
   HistoryOutlined,
+  LoadingOutlined,
   PauseCircleOutlined,
   PlayCircleOutlined,
   ReloadOutlined,
@@ -13,13 +14,23 @@ import {
   SaveOutlined,
   SyncOutlined,
   UpOutlined,
+  WarningOutlined,
 } from "@ant-design/icons";
 import type { UseSessionFeedbackLoopResult } from "../../hooks/useSessionFeedbackLoop";
 import { SessionFeedbackConfigPatchPanel } from "./SessionFeedbackConfigPatchPanel";
 import { writeTextFileAbsolute } from "../../services/sessionLink";
 import {
+  getSessionFeedbackLoopDispatchesSnapshotForAnchor,
+  subscribeSessionFeedbackLoopDispatches,
+} from "../../stores/sessionFeedbackLoopDispatchStore";
+import { SESSION_FEEDBACK_LOOP_DISPATCH_KIND_LABELS } from "../../constants/sessionFeedbackLoopDispatch";
+import type { SessionInsightsResult } from "../../utils/sessionInsights";
+import { formatTokenCount } from "../../utils/sessionInsights";
+import {
   buildFeedbackLoopTrend,
   formatComparisonMarkdown,
+  inferOptimizationFocusHint,
+  pickTopFeedbackWarnings,
   type FeedbackLoopPhase,
   type SessionFeedbackCycle,
 } from "../../utils/sessionFeedbackLoop";
@@ -45,6 +56,8 @@ import type { FeedbackLoopDispatchKind } from "../../utils/sessionFeedbackLoopDi
 
 interface Props {
   loop: UseSessionFeedbackLoopResult;
+  insights?: SessionInsightsResult | null;
+  anchorSessionId?: string;
   featureEnabled: boolean;
   injectHabitsToSystemPrompt?: boolean;
   optimizeConfigArtifacts?: boolean;
@@ -57,6 +70,90 @@ interface Props {
 
 function scoreToPercent(score: number): number {
   return Math.round(Math.max(0, Math.min(100, 50 + score / 2)));
+}
+
+function RequestRationalityMini({ insights }: { insights: SessionInsightsResult }) {
+  const req = insights.requestRationality;
+  const mcp = req.toolCategories.find((c) => c.category === "mcp")?.count ?? 0;
+  const skill = req.toolCategories.find((c) => c.category === "skill")?.count ?? 0;
+  const subagent = req.toolCategories.find((c) => c.category === "subagent")?.count ?? 0;
+
+  return (
+    <div className="app-session-feedback-loop__rationality">
+      <Text type="secondary" className="app-session-feedback-loop__rationality-title">
+        接口与工具链
+      </Text>
+      <div className="app-session-feedback-loop__rationality-grid">
+        <span>MCP {mcp}</span>
+        <span>Skill {skill}</span>
+        <span>子代理 {subagent}</span>
+        <span>HTTP {req.httpRequestsPerTurn.toFixed(1)}/轮</span>
+        {req.maxTurnTokenTotal != null && req.maxTurnTokenTotal > 0 ? (
+          <span>Token 峰值 {formatTokenCount(req.maxTurnTokenTotal)}</span>
+        ) : null}
+        <span>单轮工具峰值 {req.maxTurnToolCount}</span>
+      </div>
+    </div>
+  );
+}
+
+function PendingWarnings({ insights }: { insights: SessionInsightsResult }) {
+  const warnings = useMemo(() => pickTopFeedbackWarnings(insights, 3), [insights]);
+  if (warnings.length === 0) return null;
+
+  return (
+    <div className="app-session-feedback-loop__warnings">
+      <div className="app-session-feedback-loop__warnings-head">
+        <WarningOutlined />
+        <Text type="secondary">待优化问题（{warnings.length}）</Text>
+      </div>
+      <ul className="app-session-feedback-loop__warnings-list">
+        {warnings.map((w) => (
+          <li key={w.id}>
+            <Tag bordered={false} color={w.severity === "critical" ? "error" : "warning"}>
+              {w.severity === "critical" ? "严重" : "警告"}
+            </Tag>
+            <span>{w.title}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function DispatchStatusList({ anchorSessionId }: { anchorSessionId: string }) {
+  const records = useSyncExternalStore(
+    subscribeSessionFeedbackLoopDispatches,
+    () => getSessionFeedbackLoopDispatchesSnapshotForAnchor(anchorSessionId),
+    () => getSessionFeedbackLoopDispatchesSnapshotForAnchor(anchorSessionId),
+  );
+  const recent = records.slice(0, 4);
+  if (recent.length === 0) return null;
+
+  return (
+    <div className="app-session-feedback-loop__dispatch">
+      <Text type="secondary" className="app-session-feedback-loop__dispatch-title">
+        Worker 派发
+      </Text>
+      <div className="app-session-feedback-loop__dispatch-list">
+        {recent.map((rec) => (
+          <div key={rec.dispatchId} className="app-session-feedback-loop__dispatch-row">
+            {rec.status === "running" ? <LoadingOutlined spin /> : null}
+            <Tag
+              bordered={false}
+              color={
+                rec.status === "completed" ? "success" : rec.status === "failed" ? "error" : "processing"
+              }
+            >
+              {SESSION_FEEDBACK_LOOP_DISPATCH_KIND_LABELS[rec.kind]}
+              {rec.cycleIndex != null ? ` #${rec.cycleIndex}` : ""}
+            </Tag>
+            <span className="app-session-feedback-loop__dispatch-preview">{rec.previewText}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }
 
 function TrendChart({ cycles }: { cycles: readonly SessionFeedbackCycle[] }) {
@@ -160,7 +257,15 @@ function CycleCard({ cycle }: { cycle: SessionFeedbackCycle }) {
         </div>
       </div>
       {expanded ? (
-        <pre className="app-session-feedback-loop__delta-md">{formatComparisonMarkdown(comparison)}</pre>
+        <>
+          <pre className="app-session-feedback-loop__delta-md">{formatComparisonMarkdown(comparison)}</pre>
+          {cycle.workerResponsePreview ? (
+            <div className="app-session-feedback-loop__worker-response">
+              <Text type="secondary">Worker 优化建议</Text>
+              <pre className="app-session-feedback-loop__worker-response-md">{cycle.workerResponsePreview}</pre>
+            </div>
+          ) : null}
+        </>
       ) : null}
     </div>
   );
@@ -168,6 +273,8 @@ function CycleCard({ cycle }: { cycle: SessionFeedbackCycle }) {
 
 export const SessionFeedbackLoopPanel = memo(function SessionFeedbackLoopPanel({
   loop,
+  insights,
+  anchorSessionId,
   featureEnabled,
   injectHabitsToSystemPrompt = false,
   optimizeConfigArtifacts = false,
@@ -179,6 +286,11 @@ export const SessionFeedbackLoopPanel = memo(function SessionFeedbackLoopPanel({
   const completedCycles = useMemo(
     () => state.cycles.filter((c) => c.comparison != null),
     [state.cycles],
+  );
+  const lastComparison = completedCycles[completedCycles.length - 1]?.comparison;
+  const focusHint = useMemo(
+    () => (insights ? inferOptimizationFocusHint({ lastComparison, insights }) : null),
+    [insights, lastComparison],
   );
 
   const handleStart = useCallback(() => {
@@ -282,6 +394,16 @@ export const SessionFeedbackLoopPanel = memo(function SessionFeedbackLoopPanel({
           {state.completionReason ? ` · ${COMPLETION_LABEL[state.completionReason]}` : ""}
         </Tag>
       </div>
+
+      {insights ? <PendingWarnings insights={insights} /> : null}
+      {insights ? <RequestRationalityMini insights={insights} /> : null}
+      {focusHint && (isActive || completedCycles.length > 0) ? (
+        <div className="app-session-feedback-loop__focus">
+          <Text type="secondary">本轮聚焦</Text>
+          <Text className="app-session-feedback-loop__focus-text">{focusHint}</Text>
+        </div>
+      ) : null}
+      {anchorSessionId ? <DispatchStatusList anchorSessionId={anchorSessionId} /> : null}
 
       <div className="app-session-feedback-loop__actions">
         <Space size={4} wrap>

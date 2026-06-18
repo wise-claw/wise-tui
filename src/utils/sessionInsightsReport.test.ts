@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { SessionInsightsResult } from "./sessionInsights";
+import { emptyRequestRationalityMetrics } from "./sessionInsights";
 import {
   buildSessionInsightRecommendationAiPrompt,
   buildSessionInsightRecommendationCopyText,
@@ -77,6 +78,7 @@ function sampleInsights(): SessionInsightsResult {
         turnIndex: 2,
       },
     ],
+    requestRationality: emptyRequestRationalityMetrics(),
   };
 }
 
@@ -164,6 +166,7 @@ describe("buildSessionInsightsAiOptimizationPrompt", () => {
     });
     expect(prompt).toContain("规则引擎检测到的 **全部问题**");
     expect(prompt).toContain("逐条优化方案");
+    expect(prompt).toContain("接口请求合理性");
     expect(prompt).toContain("轮次 2 耗时异常");
     expect(prompt).toContain("wise");
   });

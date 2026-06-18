@@ -42,6 +42,7 @@ import {
 } from "../utils/sessionFeedbackConfigPatch";
 import {
   advanceFeedbackLoop,
+  attachFeedbackCycleWorkerResponse,
   buildFeedbackLoopComparisonPrompt,
   buildFeedbackLoopConfigPatchPrompt,
   buildFeedbackLoopHabitsPrompt,
@@ -101,6 +102,7 @@ export interface UseSessionFeedbackLoopResult {
   refreshConfigPatchBackups: () => Promise<void>;
   rollbackConfigPatchBackup: (backupId: string) => Promise<{ ok: boolean; message: string }>;
   exportMarkdownReport: () => string | null;
+  ingestCycleWorkerResponse: (cycleIndex: number, responseText: string) => void;
 }
 
 export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseSessionFeedbackLoopResult {
@@ -520,8 +522,18 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
 
   const exportMarkdownReport = useCallback((): string | null => {
     if (state.cycles.length === 0 && state.phase === "idle") return null;
-    return buildFeedbackLoopMarkdownReport(state, metaRef.current);
+    return buildFeedbackLoopMarkdownReport(state, metaRef.current, {
+      insights: insightsRef.current ?? undefined,
+    });
   }, [state]);
+
+  const ingestCycleWorkerResponse = useCallback((cycleIndex: number, responseText: string) => {
+    setState((prev) => {
+      const next = attachFeedbackCycleWorkerResponse(prev, cycleIndex, responseText);
+      stateRef.current = next;
+      return next;
+    });
+  }, []);
 
   const isActive = isFeedbackLoopPhaseActive(state.phase);
 
@@ -555,5 +567,6 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
     refreshConfigPatchBackups,
     rollbackConfigPatchBackup,
     exportMarkdownReport,
+    ingestCycleWorkerResponse,
   };
 }

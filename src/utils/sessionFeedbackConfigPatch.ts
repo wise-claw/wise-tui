@@ -243,6 +243,14 @@ export function dedupeFeedbackConfigPatches(patches: readonly FeedbackConfigPatc
 }
 
 function heuristicExplorationRule(rec: SessionInsightRecommendation): FeedbackConfigPatch {
+  const mcpSkillLines =
+    rec.id.startsWith("req-mcp") || rec.id.startsWith("req-skill")
+      ? [
+          "- 本地文件/搜索优先 Read/Grep/Glob/Shell，MCP 仅用于外部系统",
+          "- Skill 用于可复用流程；简单操作不要反复 invoke 同一 Skill",
+          "- 调用 MCP 前先确认 schema 已读，避免重复 list/describe",
+        ]
+      : [];
   return {
     id: createFeedbackConfigPatchId("heuristic"),
     kind: "rule",
@@ -256,6 +264,7 @@ function heuristicExplorationRule(rec: SessionInsightRecommendation): FeedbackCo
       "- 避免同路径重复 Grep/Read",
       "- 独立探索任务优先 Task 子代理并行",
       "- 每轮先明确目标再调用工具，避免无目的广搜",
+      ...mcpSkillLines,
     ].join("\n"),
     source: "heuristic",
     status: "pending",
@@ -723,6 +732,7 @@ export function buildConfigArtifactOptimizationSection(
     "## 配置 Artifact 优化（持久改进）",
     "",
     "除会话内策略外，请同时给出可写入 **CLAUDE.md / rules / memory / MCP / skills** 的建议（Markdown 列表）。",
+    "须审视 **接口请求合理性**：禁用未用 MCP、Skill 使用边界、rules 中约束单轮工具链长度与请求体量。",
     "每条须注明：目标文件、增量内容、预期对速度/效率/质量的收益。",
     "",
   ];

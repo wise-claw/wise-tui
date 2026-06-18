@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { SessionInsightsResult, SessionTurnInsight } from "./sessionInsights";
+import { emptyRequestRationalityMetrics } from "./sessionInsights";
 import {
   advanceFeedbackLoop,
   compareMetricSnapshots,
@@ -16,6 +17,10 @@ import {
   buildFeedbackLoopHabitsPhraseText,
   isFeedbackLoopPhaseActive,
   shouldTrackSessionLinkForFeedbackLoop,
+  buildFeedbackLoopOptimizationPrompt,
+  attachFeedbackCycleWorkerResponse,
+  inferOptimizationFocusHint,
+  pickTopFeedbackWarnings,
 } from "./sessionFeedbackLoop";
 
 function sampleInsights(overrides?: Partial<SessionInsightsResult["overview"]>): SessionInsightsResult {
@@ -71,6 +76,7 @@ function sampleInsights(overrides?: Partial<SessionInsightsResult["overview"]>):
         description: "test",
       },
     ],
+    requestRationality: emptyRequestRationalityMetrics(),
   };
 }
 
@@ -210,6 +216,7 @@ describe("advanceFeedbackLoop", () => {
     expect(action.type).toBe("send_optimization");
     if (action.type === "send_optimization") {
       expect(action.prompt).toContain("反馈神经网");
+      expect(action.prompt).toContain("接口请求合理性");
       expect(action.cycleIndex).toBe(1);
     }
     expect(next.phase).toBe("awaiting_turns");
@@ -300,6 +307,67 @@ describe("feedback loop lifecycle", () => {
     const habits = extractFeedbackLoopHabits(createInitialFeedbackLoopState("x"));
     expect(habits.length).toBeGreaterThan(0);
     expect(buildFeedbackLoopHabitsPhraseText(habits)).toContain("神经网");
+  });
+
+  test("buildFeedbackLoopOptimizationPrompt includes request rationality section", () => {
+    const prompt = buildFeedbackLoopOptimizationPrompt({
+      insights: sampleInsights(),
+      cycleIndex: 1,
+      maxCycles: 3,
+      baseline: extractMetricSnapshot(sampleInsights()),
+      previousCycles: [],
+    });
+    expect(prompt).toContain("接口与工具链合理性");
+    expect(prompt).toContain("本轮聚焦");
+    expect(prompt).toContain("MCP");
+    expect(prompt).toContain("Skill");
+  });
+
+  test("compareIncrementalAgainstBaseline includes efficiency deltas", () => {
+    const sessionBaseline = extractMetricSnapshot(sampleInsights());
+    const after = extractIncrementalSnapshot(
+      {
+        ...sampleInsights({ turnCount: 5 }),
+        turnInsights: [turnRow(5, 8_000, 2)],
+      },
+      4,
+    )!;
+    const comparison = compareIncrementalAgainstBaseline(sessionBaseline, after);
+    expect(comparison.deltas.some((d) => d.label === "Token/轮")).toBe(true);
+    expect(comparison.efficiencyScore).not.toBe(0);
+  });
+
+  test("attachFeedbackCycleWorkerResponse stores preview on cycle", () => {
+    let state = startFeedbackLoop("sess-1", 1);
+    ({ state } = advanceFeedbackLoop({
+      state,
+      insights: sampleInsights(),
+      hasNewTurnsSinceOptimization: false,
+    }));
+    const updated = attachFeedbackCycleWorkerResponse(state, 1, "优化建议：合并 Read");
+    expect(updated.cycles[0]?.workerResponsePreview).toContain("合并 Read");
+  });
+
+  test("inferOptimizationFocusHint prefers MCP when overused", () => {
+    const insights = sampleInsights();
+    insights.requestRationality.toolCategories = insights.requestRationality.toolCategories.map((c) =>
+      c.category === "mcp" ? { ...c, count: 10, perTurn: 2.5 } : c,
+    );
+    const hint = inferOptimizationFocusHint({ insights });
+    expect(hint).toContain("MCP");
+  });
+
+  test("pickTopFeedbackWarnings excludes all-good", () => {
+    const insights = sampleInsights();
+    insights.recommendations.push({
+      id: "all-good",
+      severity: "info",
+      category: "speed",
+      title: "正常",
+      description: "ok",
+    });
+    const picked = pickTopFeedbackWarnings(insights);
+    expect(picked.every((p) => p.id !== "all-good")).toBe(true);
   });
 
   test("buildFeedbackLoopMarkdownReport includes trend table", () => {

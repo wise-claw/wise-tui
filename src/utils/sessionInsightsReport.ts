@@ -1,5 +1,10 @@
 import type { SessionLinkExportBundle } from "../types/sessionLink";
-import type { SessionInsightsResult, SessionInsightRecommendation } from "./sessionInsights";
+import type {
+  SessionInsightsResult,
+  SessionInsightRecommendation,
+  SessionRequestRationalityMetrics,
+  SessionToolCategory,
+} from "./sessionInsights";
 import {
   formatCacheHitRate,
   formatDurationMs,
@@ -70,10 +75,51 @@ function buildSessionContextLines(
   return lines;
 }
 
+const TOOL_CATEGORY_LABEL: Record<SessionToolCategory, string> = {
+  builtin: "内置工具",
+  mcp: "MCP",
+  skill: "Skill",
+  subagent: "子代理",
+};
+
+export function buildRequestRationalityLines(req: SessionRequestRationalityMetrics): string[] {
+  const lines: string[] = ["## 接口与工具链合理性", ""];
+  lines.push(
+    `- **模型 HTTP 往返**：${req.httpRequestCount} 次（${req.httpRequestsPerTurn.toFixed(1)}/轮）`,
+  );
+  lines.push(`- **单轮工具峰值**：${req.maxTurnToolCount} 次`);
+  if (req.maxTurnTokenTotal != null && req.maxTurnTokenTotal > 0) {
+    lines.push(`- **单轮 Token 峰值**：${formatTokenCount(req.maxTurnTokenTotal)}`);
+  }
+  lines.push("");
+
+  const activeCategories = req.toolCategories.filter((c) => c.count > 0);
+  if (activeCategories.length > 0) {
+    lines.push("### 工具类别分布", "");
+    lines.push("| 类别 | 次数 | 次/轮 | 热点 |");
+    lines.push("|------|------|-------|------|");
+    for (const c of activeCategories) {
+      const hotspot =
+        c.topNames.length > 0
+          ? c.topNames.map((h) => `${h.name}×${h.count}`).join("、")
+          : "—";
+      lines.push(
+        `| ${TOOL_CATEGORY_LABEL[c.category]} | ${c.count} | ${c.perTurn.toFixed(1)} | ${hotspot} |`,
+      );
+    }
+    lines.push("");
+  }
+
+  return lines;
+}
+
 function buildSupportingEvidenceLines(insights: SessionInsightsResult): string[] {
-  const { slowestTurns, toolHotspots } = insights;
+  const { slowestTurns, toolHotspots, requestRationality } = insights;
   const lines: string[] = [];
-  if (slowestTurns.length === 0 && toolHotspots.length === 0) return lines;
+  if (slowestTurns.length === 0 && toolHotspots.length === 0) {
+    lines.push(...buildRequestRationalityLines(requestRationality));
+    return lines;
+  }
 
   lines.push("## 辅助证据", "");
 
@@ -102,6 +148,8 @@ function buildSupportingEvidenceLines(insights: SessionInsightsResult): string[]
     lines.push("");
   }
 
+  lines.push(...buildRequestRationalityLines(requestRationality));
+
   return lines;
 }
 
@@ -109,8 +157,9 @@ const AI_OPTIMIZATION_OUTPUT_INSTRUCTIONS = [
   "输出要求（Markdown，中文）：",
   "1. **问题清单摘要**（按严重程度 P0/P1/P2 排序）",
   "2. **逐条优化方案**（每条含：根因分析、具体步骤、预期收益、注意事项）",
-  "3. **综合优化路径**（可并行 vs 需串行、短期 vs 长期）",
-  "4. **验证与度量**（如何确认优化生效，建议观测指标）",
+  "3. **接口请求合理性**（MCP/Skill/子代理是否滥用、请求次数与体量、耗时瓶颈、应用层 vs 模型层）",
+  "4. **综合优化路径**（可并行 vs 需串行、短期 vs 长期）",
+  "5. **验证与度量**（如何确认优化生效，建议观测指标）",
   "",
   "约束：",
   "- 仅基于提供的数据推断，缺失数据处标注「未观测」",
@@ -260,6 +309,8 @@ export function buildSessionInsightsMarkdownReport(
     lines.push("");
   }
 
+  lines.push(...buildRequestRationalityLines(insights.requestRationality));
+
   lines.push("## 优化建议");
   lines.push("");
   recommendations.forEach((r, i) => {
@@ -379,8 +430,9 @@ export function buildSessionInsightsAiPrompt(
     "2. **速度分析**（瓶颈轮次、工具链 vs 模型 HTTP、可量化改进预期）",
     "3. **Token 与成本**（结构解读、Cache 策略、上下文膨胀风险）",
     "4. **工具使用模式**（重复探索、可合并步骤、子代理/Task 建议）",
-    "5. **优先级行动清单**（P0/P1/P2，每条含具体做法）",
-    "6. **研究与实验**（可选的 A/B 或度量方式，便于验证优化效果）",
+    "5. **接口请求合理性**（MCP/Skill 是否必要、调用频次与体量、HTTP 往返、单轮工具链峰值、配置面 overhead）",
+    "6. **优先级行动清单**（P0/P1/P2，每条含具体做法）",
+    "7. **研究与实验**（可选的 A/B 或度量方式，便于验证优化效果）",
     "",
     "约束：",
     "- 仅基于提供的数据推断，缺失数据处明确标注「未观测」",

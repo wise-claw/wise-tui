@@ -1,6 +1,7 @@
 import type { SessionInsightsResult, SessionInsightRecommendation } from "./sessionInsights";
 import {
   buildSessionInsightsAiOptimizationPrompt,
+  buildRequestRationalityLines,
   type SessionInsightsReportMeta,
 } from "./sessionInsightsReport";
 import { formatDurationMs, formatTokenCount } from "./sessionInsights";
@@ -32,6 +33,12 @@ export interface SessionFeedbackMetricSnapshot {
   recommendationCount: number;
   warningCount: number;
   capturedAt: number;
+  /** MCP / Skill / 子代理调用次数（会话级） */
+  mcpToolCount?: number;
+  skillToolCount?: number;
+  subagentToolCount?: number;
+  httpRequestsPerTurn?: number;
+  maxTurnToolCount?: number;
   /** 增量快照：仅统计指定轮次范围 */
   scopedTurnFrom?: number;
   scopedTurnTo?: number;
@@ -93,6 +100,9 @@ export interface SessionFeedbackCycle {
   completedAt?: number;
   /** 发送优化 prompt 时的轮次计数，用于增量比对 */
   baselineTurnCount: number;
+  /** worker 会话返回的优化建议摘要（前 2k 字符） */
+  workerResponsePreview?: string;
+  workerResponseAt?: number;
 }
 
 export interface SessionFeedbackLoopState {
@@ -129,6 +139,22 @@ function countWarnings(recommendations: readonly SessionInsightRecommendation[])
   return recommendations.filter((r) => r.severity === "warning" || r.severity === "critical").length;
 }
 
+function requestRationalityFields(insights: SessionInsightsResult): Pick<
+  SessionFeedbackMetricSnapshot,
+  "mcpToolCount" | "skillToolCount" | "subagentToolCount" | "httpRequestsPerTurn" | "maxTurnToolCount"
+> {
+  const req = insights.requestRationality;
+  const pick = (category: "mcp" | "skill" | "subagent") =>
+    req.toolCategories.find((c) => c.category === category)?.count ?? 0;
+  return {
+    mcpToolCount: pick("mcp"),
+    skillToolCount: pick("skill"),
+    subagentToolCount: pick("subagent"),
+    httpRequestsPerTurn: req.httpRequestsPerTurn,
+    maxTurnToolCount: req.maxTurnToolCount,
+  };
+}
+
 /** 从会话洞察提取可对比的指标快照。 */
 export function extractMetricSnapshot(insights: SessionInsightsResult): SessionFeedbackMetricSnapshot {
   const { overview, recommendations } = insights;
@@ -151,6 +177,7 @@ export function extractMetricSnapshot(insights: SessionInsightsResult): SessionF
     recommendationCount: recommendations.length,
     warningCount: countWarnings(recommendations),
     capturedAt: Date.now(),
+    ...requestRationalityFields(insights),
   };
 }
 
@@ -195,6 +222,7 @@ export function extractIncrementalSnapshot(
 
   const fromTurn = Math.min(...turns.map((t) => t.turnIndex));
   const toTurn = Math.max(...turns.map((t) => t.turnIndex));
+  const maxTurnToolCount = turns.reduce((m, t) => Math.max(m, t.toolCount), 0);
 
   return {
     turnCount: turns.length,
@@ -210,6 +238,7 @@ export function extractIncrementalSnapshot(
     recommendationCount: insights.recommendations.length,
     warningCount: countWarnings(insights.recommendations),
     capturedAt: Date.now(),
+    maxTurnToolCount,
     scopedTurnFrom: fromTurn,
     scopedTurnTo: toTurn,
     scopedTurnCount: turns.length,
@@ -237,8 +266,84 @@ export function buildIncrementalReferenceSnapshot(
     p95TtftMs: sessionBaseline.p95TtftMs,
     recommendationCount: sessionBaseline.recommendationCount,
     warningCount: sessionBaseline.warningCount,
+    mcpToolCount:
+      sessionBaseline.mcpToolCount != null && sessionBaseline.turnCount > 0
+        ? (sessionBaseline.mcpToolCount / sessionBaseline.turnCount) * n
+        : undefined,
+    skillToolCount:
+      sessionBaseline.skillToolCount != null && sessionBaseline.turnCount > 0
+        ? (sessionBaseline.skillToolCount / sessionBaseline.turnCount) * n
+        : undefined,
+    subagentToolCount:
+      sessionBaseline.subagentToolCount != null && sessionBaseline.turnCount > 0
+        ? (sessionBaseline.subagentToolCount / sessionBaseline.turnCount) * n
+        : undefined,
+    httpRequestsPerTurn: sessionBaseline.httpRequestsPerTurn,
+    maxTurnToolCount: sessionBaseline.maxTurnToolCount,
     capturedAt: sessionBaseline.capturedAt,
     scopedTurnCount: n,
+  };
+}
+
+function appendOptionalCountDelta(
+  deltas: FeedbackMetricDelta[],
+  label: string,
+  before: number | undefined,
+  after: number | undefined,
+): void {
+  if (before == null && after == null) return;
+  const delta = pctDelta(before ?? 0, after ?? 0, true);
+  deltas.push({
+    axis: "quality",
+    label,
+    before: before != null ? String(Math.round(before)) : "—",
+    after: after != null ? String(Math.round(after)) : "—",
+    deltaPercent: delta,
+    improved: delta != null && delta > 0,
+  });
+}
+
+function buildComparisonScores(deltas: FeedbackMetricDelta[]): {
+  speedScore: number;
+  efficiencyScore: number;
+  qualityScore: number;
+  overallScore: number;
+  improved: boolean;
+  summary: string;
+} {
+  const speedScores = deltas.filter((d) => d.axis === "speed").map((d) => scoreFromDelta(d.deltaPercent));
+  const efficiencyScores = deltas
+    .filter((d) => d.axis === "efficiency")
+    .map((d) => scoreFromDelta(d.deltaPercent));
+  const qualityScores = deltas.filter((d) => d.axis === "quality").map((d) => scoreFromDelta(d.deltaPercent));
+  const avg = (values: number[]) =>
+    values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+
+  const speedScore = avg(speedScores);
+  const efficiencyScore = avg(efficiencyScores);
+  const qualityScore = avg(qualityScores);
+  const axisScores = [speedScore, efficiencyScore, qualityScore].filter((s) => Number.isFinite(s));
+  const overallScore =
+    axisScores.length > 0 ? axisScores.reduce((a, b) => a + b, 0) / axisScores.length : 0;
+  const improved = overallScore > 2;
+
+  const summaryParts: string[] = [];
+  for (const [axis, score] of [
+    ["speed", speedScore],
+    ["efficiency", efficiencyScore],
+    ["quality", qualityScore],
+  ] as const) {
+    const sign = score > 2 ? "↑" : score < -2 ? "↓" : "→";
+    summaryParts.push(`${AXIS_LABEL[axis]}${sign}`);
+  }
+
+  return {
+    speedScore,
+    efficiencyScore,
+    qualityScore,
+    overallScore,
+    improved,
+    summary: summaryParts.join(" · "),
   };
 }
 
@@ -298,35 +403,52 @@ export function compareIncrementalAgainstBaseline(
     improved: toolCountDelta != null && toolCountDelta > 0,
   });
 
-  const speedScores = deltas.filter((d) => d.axis === "speed").map((d) => scoreFromDelta(d.deltaPercent));
-  const qualityScores = deltas.filter((d) => d.axis === "quality").map((d) => scoreFromDelta(d.deltaPercent));
-  const avg = (values: number[]) =>
-    values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
+  appendOptionalCountDelta(deltas, "MCP 次数", ref.mcpToolCount, afterIncremental.mcpToolCount);
+  appendOptionalCountDelta(deltas, "Skill 次数", ref.skillToolCount, afterIncremental.skillToolCount);
 
-  const speedScore = avg(speedScores);
-  const qualityScore = avg(qualityScores);
-  const efficiencyScore = 0;
-  const overallScore = (speedScore + qualityScore) / 2;
-  const improved = overallScore > 2;
+  const tokenPerTurnBefore = ref.turnCount > 0 ? ref.tokenTotal / ref.turnCount : 0;
+  const tokenPerTurnAfter =
+    afterIncremental.turnCount > 0 ? afterIncremental.tokenTotal / afterIncremental.turnCount : 0;
+  const tokenPerTurnDelta = pctDelta(tokenPerTurnBefore, tokenPerTurnAfter, true);
+  deltas.push({
+    axis: "efficiency",
+    label: "Token/轮",
+    before: tokenPerTurnBefore > 0 ? formatTokenCount(tokenPerTurnBefore) : "—",
+    after: tokenPerTurnAfter > 0 ? formatTokenCount(tokenPerTurnAfter) : "—",
+    deltaPercent: tokenPerTurnDelta,
+    improved: tokenPerTurnDelta != null && tokenPerTurnDelta > 0,
+  });
 
-  const summaryParts: string[] = [];
-  for (const [axis, score] of [
-    ["speed", speedScore],
-    ["quality", qualityScore],
-  ] as const) {
-    const sign = score > 2 ? "↑" : score < -2 ? "↓" : "→";
-    summaryParts.push(`${AXIS_LABEL[axis]}${sign}`);
+  const tokenDelta = pctDelta(ref.tokenTotal, afterIncremental.tokenTotal, true);
+  deltas.push({
+    axis: "efficiency",
+    label: "Token 合计",
+    before: ref.tokenTotal > 0 ? formatTokenCount(ref.tokenTotal) : "—",
+    after: afterIncremental.tokenTotal > 0 ? formatTokenCount(afterIncremental.tokenTotal) : "—",
+    deltaPercent: tokenDelta,
+    improved: tokenDelta != null && tokenDelta > 0,
+  });
+
+  const cacheBefore = ref.cacheHitRate;
+  const cacheAfter = afterIncremental.cacheHitRate;
+  const cacheDelta =
+    cacheBefore != null && cacheAfter != null ? pctDelta(cacheBefore, cacheAfter, false) : null;
+  if (cacheBefore != null || cacheAfter != null) {
+    deltas.push({
+      axis: "efficiency",
+      label: "Cache 命中率",
+      before: formatRatio(cacheBefore),
+      after: formatRatio(cacheAfter),
+      deltaPercent: cacheDelta,
+      improved: cacheDelta != null && cacheDelta > 0,
+    });
   }
-  summaryParts.push(`${AXIS_LABEL.efficiency}→`);
+
+  const scores = buildComparisonScores(deltas);
 
   return {
-    speedScore,
-    efficiencyScore,
-    qualityScore,
-    overallScore,
+    ...scores,
     deltas,
-    improved,
-    summary: summaryParts.join(" · "),
   };
 }
 
@@ -461,41 +583,14 @@ export function compareMetricSnapshots(
     improved: warnDelta != null && warnDelta > 0,
   });
 
-  const speedScores = deltas
-    .filter((d) => d.axis === "speed")
-    .map((d) => scoreFromDelta(d.deltaPercent));
-  const efficiencyScores = deltas
-    .filter((d) => d.axis === "efficiency")
-    .map((d) => scoreFromDelta(d.deltaPercent));
-  const qualityScores = deltas
-    .filter((d) => d.axis === "quality")
-    .map((d) => scoreFromDelta(d.deltaPercent));
+  appendOptionalCountDelta(deltas, "MCP 次数", baseline.mcpToolCount, after.mcpToolCount);
+  appendOptionalCountDelta(deltas, "Skill 次数", baseline.skillToolCount, after.skillToolCount);
 
-  const avg = (values: number[]) =>
-    values.length > 0 ? values.reduce((a, b) => a + b, 0) / values.length : 0;
-
-  const speedScore = avg(speedScores);
-  const efficiencyScore = avg(efficiencyScores);
-  const qualityScore = avg(qualityScores);
-  const overallScore = (speedScore + efficiencyScore + qualityScore) / 3;
-  const improved = overallScore > 2;
-
-  const summaryParts: string[] = [];
-  for (const axis of ["speed", "efficiency", "quality"] as const) {
-    const score =
-      axis === "speed" ? speedScore : axis === "efficiency" ? efficiencyScore : qualityScore;
-    const sign = score > 2 ? "↑" : score < -2 ? "↓" : "→";
-    summaryParts.push(`${AXIS_LABEL[axis]}${sign}`);
-  }
+  const scores = buildComparisonScores(deltas);
 
   return {
-    speedScore,
-    efficiencyScore,
-    qualityScore,
-    overallScore,
+    ...scores,
     deltas,
-    improved,
-    summary: summaryParts.join(" · "),
   };
 }
 
@@ -685,6 +780,100 @@ export function stopFeedbackLoop(state: SessionFeedbackLoopState): SessionFeedba
   return { ...state, phase: "stopped", completionReason: "manual" };
 }
 
+const WORKER_RESPONSE_PREVIEW_MAX = 2000;
+
+/** 将 worker 优化响应附加到指定循环（供 UI 展示与报告导出）。 */
+export function attachFeedbackCycleWorkerResponse(
+  state: SessionFeedbackLoopState,
+  cycleIndex: number,
+  responseText: string,
+): SessionFeedbackLoopState {
+  const trimmed = responseText.trim();
+  if (!trimmed) return state;
+  const preview =
+    trimmed.length > WORKER_RESPONSE_PREVIEW_MAX
+      ? `${trimmed.slice(0, WORKER_RESPONSE_PREVIEW_MAX)}…`
+      : trimmed;
+  const cycles = state.cycles.map((cycle) =>
+    cycle.cycleIndex === cycleIndex
+      ? { ...cycle, workerResponsePreview: preview, workerResponseAt: Date.now() }
+      : cycle,
+  );
+  return { ...state, cycles };
+}
+
+/** 提取优先处理的洞察警告（驱动闭环启动与 UI 展示）。 */
+export function pickTopFeedbackWarnings(
+  insights: SessionInsightsResult,
+  limit = 4,
+): SessionInsightRecommendation[] {
+  const severityOrder: Record<SessionInsightRecommendation["severity"], number> = {
+    critical: 0,
+    warning: 1,
+    info: 2,
+  };
+  return [...insights.recommendations]
+    .filter((r) => r.id !== "all-good")
+    .sort(
+      (a, b) =>
+        severityOrder[a.severity] - severityOrder[b.severity] ||
+        a.category.localeCompare(b.category),
+    )
+    .slice(0, limit);
+}
+
+/** 根据上一轮对比或洞察，推断本轮优化聚焦方向。 */
+export function inferOptimizationFocusHint(input: {
+  lastComparison?: FeedbackComparisonResult;
+  insights?: SessionInsightsResult;
+}): string {
+  const { lastComparison, insights } = input;
+  if (lastComparison) {
+    const axes: { axis: FeedbackMetricAxis; score: number; hint: string }[] = [
+      {
+        axis: "speed",
+        score: lastComparison.speedScore,
+        hint: "优先压缩均轮耗时与 TTFT：合并工具步骤、减少模型 HTTP 往返",
+      },
+      {
+        axis: "efficiency",
+        score: lastComparison.efficiencyScore,
+        hint: "优先降低 Token/轮与 Cache 写入：稳定 prompt、控制读取范围、截断 MCP 大响应",
+      },
+      {
+        axis: "quality",
+        score: lastComparison.qualityScore,
+        hint: "优先缩短工具链并审视 MCP/Skill：减少重复探索、合并同 server 调用",
+      },
+    ];
+    const weakest = [...axes].sort((a, b) => a.score - b.score)[0];
+    if (weakest && weakest.score < 0) {
+      return `上一轮 **${AXIS_LABEL[weakest.axis]}** 维度偏弱（${weakest.score.toFixed(1)}），${weakest.hint}。`;
+    }
+  }
+
+  if (insights) {
+    const req = insights.requestRationality;
+    const mcp = req.toolCategories.find((c) => c.category === "mcp")?.count ?? 0;
+    const skill = req.toolCategories.find((c) => c.category === "skill")?.count ?? 0;
+    if (mcp >= 5) {
+      return "洞察显示 **MCP 调用偏多**，本轮请重点评估可否用内置工具替代、合并 MCP 请求并 disable 未用 server。";
+    }
+    if (skill >= 4) {
+      return "洞察显示 **Skill 调用偏多**，本轮请重点判断哪些 Skill 可内联为 rules/memory 或 1–2 步内置工具。";
+    }
+    if (req.httpRequestsPerTurn >= 1.5) {
+      return "洞察显示 **模型 HTTP 往返偏多**，本轮请合并工具链、减少无效 assistant 轮次。";
+    }
+    const top = pickTopFeedbackWarnings(insights, 1)[0];
+    if (top) {
+      return `洞察优先项：**${top.title}** — ${top.description}`;
+    }
+  }
+
+  return "保持速度/效率/质量均衡优化；若数据不足请在输出中标注「未观测」。";
+}
+
 export interface BuildFeedbackLoopOptimizationPromptInput {
   insights: SessionInsightsResult;
   meta?: SessionInsightsReportMeta;
@@ -707,7 +896,7 @@ export function buildFeedbackLoopOptimizationPrompt(
     "你是 Wise **会话反馈神经网** 的优化节点。",
     "",
     `当前为第 **${input.cycleIndex}/${input.maxCycles}** 轮自我优化循环。`,
-    "目标：在 **速度**（墙钟/TTFT）、**效率**（Token/Cache）、**质量**（工具链长度/重复探索）三维上持续改进。",
+    "目标：在 **速度**（墙钟/TTFT/HTTP 往返）、**效率**（Token/Cache/单轮峰值）、**质量**（工具链长度/重复探索/接口合理性）三维上持续改进。",
     "",
     "## 本轮基线",
     "",
@@ -716,7 +905,13 @@ export function buildFeedbackLoopOptimizationPrompt(
     `- Token ${input.baseline.tokenTotal > 0 ? formatTokenCount(input.baseline.tokenTotal) : "—"}`,
     `- 警告项 ${input.baseline.warningCount}`,
     "",
+    ...buildRequestRationalityLines(input.insights.requestRationality),
   ];
+
+  lines.push("## 本轮聚焦", "", inferOptimizationFocusHint({
+    lastComparison: input.lastComparison,
+    insights: input.insights,
+  }), "");
 
   if (input.lastComparison) {
     lines.push("## 上一轮对比结果", "");
@@ -725,7 +920,7 @@ export function buildFeedbackLoopOptimizationPrompt(
     lines.push(
       input.lastComparison.improved
         ? "上一轮已有改善，请在此基础上继续收敛，避免过度优化导致质量回退。"
-        : "上一轮改善不明显，请调整策略：合并工具步骤、缩小搜索范围、稳定 system prompt。",
+        : "上一轮改善不明显，请调整策略：合并工具步骤、缩小搜索范围、稳定 system prompt，并审视 MCP/Skill 是否可替换为更轻量的内置工具。",
     );
     lines.push("");
   }
@@ -745,9 +940,16 @@ export function buildFeedbackLoopOptimizationPrompt(
     "## 输出要求",
     "",
     "1. **本轮优化策略**（针对速度/效率/质量各 1–2 条可执行动作）",
-    "2. **工具使用调整**（减少重复 Read/Grep、合并探索、何时用 Task 子代理）",
-    "3. **下轮验证指标**（列出 3 个可量化观测点）",
-    "4. **立即执行清单**（用户下一条消息可直接照做的步骤）",
+    "2. **接口请求合理性**（须覆盖以下维度，有数据则引用、无则标注「未观测」）：",
+    "   - **MCP**：是否滥用/过多、可否用 Read/Grep/Shell 替代、是否重复读 schema、是否应 disable 未用 server",
+    "   - **Skill**：是否必要、是否重复 invoke、能否沉淀为 rules/memory",
+    "   - **子代理/Task**：并行度是否过高、子任务 scope 是否过大",
+    "   - **请求次数**：单轮工具链峰值、模型 HTTP 往返、重复 Read/Grep/Explore",
+    "   - **请求体量**：单轮 Token 峰值、大段粘贴、MCP 响应未截断",
+    "   - **耗时**：均轮/TTFT/工具 vs 模型瓶颈、串行 MCP 导致的墙钟放大",
+    "3. **工具使用调整**（减少重复 Read/Grep、合并探索、何时用 Task 子代理）",
+    "4. **下轮验证指标**（列出 3 个可量化观测点，含 MCP/Skill 次数或 HTTP/轮）",
+    "5. **立即执行清单**（用户下一条消息可直接照做的步骤）",
     "",
     "约束：不要调用工具；基于以下洞察数据推断。",
     "",
@@ -790,7 +992,8 @@ export function buildFeedbackLoopComparisonPrompt(
     "请基于以下各轮自我优化循环的指标对比，总结：",
     "1. 速度/效率/质量三维的整体趋势",
     "2. 哪些优化策略有效、哪些无效",
-    "3. 下一轮应保留/放弃的习惯",
+    "3. 接口请求合理性方面的得失（MCP/Skill/子代理、请求次数/体量/耗时）",
+    "4. 下一轮应保留/放弃的习惯",
     "",
   ];
   if (meta?.repositoryName) lines.push(`仓库：${meta.repositoryName}`);
@@ -834,6 +1037,7 @@ export function buildFeedbackLoopTrend(cycles: readonly SessionFeedbackCycle[]):
 export function buildFeedbackLoopMarkdownReport(
   state: SessionFeedbackLoopState,
   meta?: SessionInsightsReportMeta,
+  options?: { insights?: SessionInsightsResult },
 ): string {
   const lines: string[] = ["# 会话反馈神经网报告", ""];
   if (meta?.repositoryName) lines.push(`- **仓库**：${meta.repositoryName}`);
@@ -850,7 +1054,26 @@ export function buildFeedbackLoopMarkdownReport(
     lines.push("## 初始基线", "");
     lines.push(`- 轮次 ${b.turnCount} · 均轮 ${formatDurationMs(b.avgTurnDurationMs)}`);
     lines.push(`- 工具 ${b.toolCallCount}（${b.toolsPerTurn.toFixed(1)}/轮）`);
+    lines.push(`- Token ${b.tokenTotal > 0 ? formatTokenCount(b.tokenTotal) : "—"}`);
     lines.push(`- 警告项 ${b.warningCount}`);
+    if (b.mcpToolCount != null || b.skillToolCount != null) {
+      lines.push(
+        `- **接口**：MCP ${b.mcpToolCount ?? 0} · Skill ${b.skillToolCount ?? 0} · HTTP ${b.httpRequestsPerTurn?.toFixed(1) ?? "—"}/轮`,
+      );
+    }
+    lines.push("");
+  }
+
+  if (options?.insights) {
+    lines.push(...buildRequestRationalityLines(options.insights.requestRationality));
+  }
+
+  const habits = extractFeedbackLoopHabits(state);
+  if (habits.length > 0) {
+    lines.push("## 沉淀习惯", "");
+    for (const h of habits) {
+      lines.push(`- ${h}`);
+    }
     lines.push("");
   }
 
@@ -877,7 +1100,11 @@ export function buildFeedbackLoopMarkdownReport(
       lines.push("");
     }
     lines.push(formatComparisonMarkdown(cycle.comparison));
-    lines.push("");
+    if (cycle.workerResponsePreview) {
+      lines.push("", "### Worker 优化建议", "", cycle.workerResponsePreview, "");
+    } else {
+      lines.push("");
+    }
   }
 
   return lines.join("\n");
@@ -902,6 +1129,18 @@ export function extractFeedbackLoopHabits(state: SessionFeedbackLoopState): stri
       if (d.label === "TTFT P95") {
         habits.add("稳定 system prompt，减少每轮动态前缀与大段粘贴");
       }
+      if (d.label === "Token 合计" || d.label === "Token/轮") {
+        habits.add("控制单轮读取范围与 MCP 响应体量，长结果先摘要再继续");
+      }
+      if (d.label === "MCP 次数") {
+        habits.add("本地任务优先内置工具，MCP 仅用于外部系统且避免重复 schema 读取");
+      }
+      if (d.label === "Skill 次数") {
+        habits.add("Skill 用于复杂流程；简单操作不要反复 invoke 同一 Skill");
+      }
+      if (d.label === "警告项") {
+        habits.add("优先处理洞察中的 MCP/Skill 滥用与单轮工具链过长警告");
+      }
     }
     if (cycle.comparison.improved) {
       habits.add("保持当前轮次内的工具链长度与并行度");
@@ -912,9 +1151,10 @@ export function extractFeedbackLoopHabits(state: SessionFeedbackLoopState): stri
       habits.add("当前节奏已收敛，保持现有探索-执行-验证模式");
     } else {
       habits.add("每轮先明确目标再调用工具，避免无目的广搜");
+      habits.add("本地任务优先内置工具，MCP/Skill 仅在确有必要时使用");
     }
   }
-  return [...habits].slice(0, 6);
+  return [...habits].slice(0, 8);
 }
 
 export function buildFeedbackLoopHabitsPhraseText(habits: readonly string[]): string {
@@ -937,6 +1177,7 @@ export function buildFeedbackLoopHabitsPrompt(
     "",
     "请基于以下闭环报告，输出 **3–5 条可长期遵守** 的 Claude Code 工具使用习惯（Markdown 列表）。",
     "每条习惯须：具体、可执行、可观测（说明如何验证是否遵守）。",
+    "须覆盖 **接口请求合理性**：MCP/Skill 使用边界、请求频次与体量控制、避免单轮工具链过长。",
     "",
     "规则引擎已提取的候选习惯：",
     ...habits.map((h) => `- ${h}`),

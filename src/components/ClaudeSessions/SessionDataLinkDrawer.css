@@ -1097,6 +1097,124 @@
   margin-bottom: 6px;
 }
 
+.app-session-feedback-loop__warnings {
+  margin-bottom: 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: rgba(245, 158, 11, 0.06);
+  border: 1px solid rgba(245, 158, 11, 0.18);
+}
+
+.app-session-feedback-loop__warnings-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  margin-bottom: 4px;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-session-feedback-loop__warnings-list {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.app-session-feedback-loop__warnings-list li {
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
+  font-size: 11px;
+  line-height: 1.35;
+}
+
+.app-session-feedback-loop__rationality {
+  margin-bottom: 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-session-feedback-loop__rationality-title {
+  display: block;
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+
+.app-session-feedback-loop__rationality-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 10px;
+  font-size: 10px;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-session-feedback-loop__focus {
+  margin-bottom: 6px;
+  padding: 6px 8px;
+  border-radius: 6px;
+  border-left: 3px solid #6366f1;
+  background: rgba(99, 102, 241, 0.06);
+}
+
+.app-session-feedback-loop__focus-text {
+  display: block;
+  font-size: 11px;
+  line-height: 1.45;
+  margin-top: 2px;
+}
+
+.app-session-feedback-loop__dispatch {
+  margin-bottom: 6px;
+}
+
+.app-session-feedback-loop__dispatch-title {
+  display: block;
+  font-size: 11px;
+  margin-bottom: 4px;
+}
+
+.app-session-feedback-loop__dispatch-list {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.app-session-feedback-loop__dispatch-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 10px;
+}
+
+.app-session-feedback-loop__dispatch-preview {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-session-feedback-loop__worker-response {
+  margin-top: 6px;
+}
+
+.app-session-feedback-loop__worker-response-md {
+  margin: 4px 0 0;
+  padding: 6px 8px;
+  font-size: 10px;
+  line-height: 1.45;
+  white-space: pre-wrap;
+  border-radius: 6px;
+  background: rgba(99, 102, 241, 0.06);
+  max-height: 160px;
+  overflow: auto;
+}
+
 .app-session-feedback-loop__waiting {
   display: block;
   font-size: 11px;

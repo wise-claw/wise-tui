@@ -76,12 +76,54 @@ export interface SessionToolHotspot {
   turns: number[];
 }
 
+/** 工具调用类别（内置 / MCP / Skill / 子代理）。 */
+export type SessionToolCategory = "builtin" | "mcp" | "skill" | "subagent";
+
+export interface SessionToolCategoryCount {
+  category: SessionToolCategory;
+  count: number;
+  perTurn: number;
+  topNames: SessionToolHotspot[];
+}
+
+/** 接口与工具链请求的合理性观测指标。 */
+export interface SessionRequestRationalityMetrics {
+  httpRequestCount: number;
+  httpRequestsPerTurn: number;
+  maxTurnToolCount: number;
+  maxTurnTokenTotal: number | null;
+  toolCategories: SessionToolCategoryCount[];
+  mcpHotspots: SessionToolHotspot[];
+  skillHotspots: SessionToolHotspot[];
+  subagentHotspots: SessionToolHotspot[];
+}
+
+/** 空合理性指标（测试与占位）。 */
+export function emptyRequestRationalityMetrics(): SessionRequestRationalityMetrics {
+  return {
+    httpRequestCount: 0,
+    httpRequestsPerTurn: 0,
+    maxTurnToolCount: 0,
+    maxTurnTokenTotal: null,
+    toolCategories: (["builtin", "mcp", "skill", "subagent"] as const).map((category) => ({
+      category,
+      count: 0,
+      perTurn: 0,
+      topNames: [],
+    })),
+    mcpHotspots: [],
+    skillHotspots: [],
+    subagentHotspots: [],
+  };
+}
+
 export interface SessionInsightsResult {
   overview: SessionInsightsOverview;
   turnInsights: SessionTurnInsight[];
   toolHotspots: SessionToolHotspot[];
   slowestTurns: SessionTurnInsight[];
   recommendations: SessionInsightRecommendation[];
+  requestRationality: SessionRequestRationalityMetrics;
 }
 
 export interface ComputeSessionInsightsInput {
@@ -272,22 +314,135 @@ function percentile(values: number[], p: number): number | null {
 }
 
 function extractToolName(record: SessionLinkRecord): string | null {
-  if (record.kind !== "tool_use") return null;
+  if (record.kind !== "tool_use" && record.kind !== "skill" && record.kind !== "mcp") return null;
   const s = record.summary.trim();
   if (!s) return null;
   const head = s.split("·")[0]?.trim();
   return head || s;
 }
 
+/** 将会话链路记录归类为工具类别（供合理性分析）。 */
+export function classifyLinkToolRecord(record: SessionLinkRecord): SessionToolCategory | null {
+  if (record.kind === "skill") return "skill";
+  if (record.kind === "mcp") return "mcp";
+  if (record.kind !== "tool_use") return null;
+
+  const name = extractToolName(record) ?? record.summary.trim();
+  const lower = name.toLowerCase();
+  if (lower === "skill" || /\bskill\b/i.test(name)) return "skill";
+  if (
+    lower.startsWith("mcp__") ||
+    lower.includes("mcp_") ||
+    lower === "mcp" ||
+    /\bmcp\b/i.test(name)
+  ) {
+    return "mcp";
+  }
+  if (lower === "task" || lower.includes("subagent") || /子\s*代理/.test(name)) return "subagent";
+  return "builtin";
+}
+
+function turnTokenTotal(tokens: TokenUsageBreakdown): number {
+  return (
+    tokens.inputTokens +
+    tokens.outputTokens +
+    tokens.cacheCreationTokens +
+    tokens.cacheReadTokens
+  );
+}
+
+function buildCategoryHotspots(
+  entries: Map<string, { count: number; turns: Set<number> }>,
+  limit = 5,
+): SessionToolHotspot[] {
+  return [...entries.entries()]
+    .map(([name, { count, turns }]) => ({
+      name,
+      count,
+      turns: [...turns].sort((a, b) => a - b),
+    }))
+    .sort((a, b) => b.count - a.count)
+    .slice(0, limit);
+}
+
+function computeRequestRationalityMetrics(input: {
+  linkRecords: readonly SessionLinkRecord[];
+  turnInsights: SessionTurnInsight[];
+  turnCount: number;
+}): SessionRequestRationalityMetrics {
+  const { linkRecords, turnInsights, turnCount } = input;
+  const perTurn = turnCount > 0 ? (n: number) => n / turnCount : () => 0;
+
+  const categoryMaps: Record<SessionToolCategory, Map<string, { count: number; turns: Set<number> }>> =
+    {
+      builtin: new Map(),
+      mcp: new Map(),
+      skill: new Map(),
+      subagent: new Map(),
+    };
+  const categoryTotals: Record<SessionToolCategory, number> = {
+    builtin: 0,
+    mcp: 0,
+    skill: 0,
+    subagent: 0,
+  };
+
+  for (const record of linkRecords) {
+    const category = classifyLinkToolRecord(record);
+    if (!category) continue;
+    categoryTotals[category] += 1;
+    const name = extractToolName(record) ?? (record.summary.trim() || category);
+    const entry = categoryMaps[category].get(name) ?? { count: 0, turns: new Set<number>() };
+    entry.count += 1;
+    entry.turns.add(record.turnIndex);
+    categoryMaps[category].set(name, entry);
+  }
+
+  const httpRequestCount = linkRecords.filter(
+    (r) => r.layer === "http" || r.kind === "http_request" || r.kind === "api_request",
+  ).length;
+
+  let maxTurnToolCount = 0;
+  let maxTurnTokenTotal: number | null = null;
+  for (const turn of turnInsights) {
+    maxTurnToolCount = Math.max(maxTurnToolCount, turn.toolCount);
+    const tt = turnTokenTotal(turn.tokens);
+    if (tt > 0) {
+      maxTurnTokenTotal = Math.max(maxTurnTokenTotal ?? 0, tt);
+    }
+  }
+
+  const toolCategories: SessionToolCategoryCount[] = (
+    ["builtin", "mcp", "skill", "subagent"] as const
+  ).map((category) => ({
+    category,
+    count: categoryTotals[category],
+    perTurn: perTurn(categoryTotals[category]),
+    topNames: buildCategoryHotspots(categoryMaps[category], 4),
+  }));
+
+  return {
+    httpRequestCount,
+    httpRequestsPerTurn: perTurn(httpRequestCount),
+    maxTurnToolCount,
+    maxTurnTokenTotal,
+    toolCategories,
+    mcpHotspots: buildCategoryHotspots(categoryMaps.mcp),
+    skillHotspots: buildCategoryHotspots(categoryMaps.skill),
+    subagentHotspots: buildCategoryHotspots(categoryMaps.subagent),
+  };
+}
+
 function buildRecommendations(input: {
   overview: SessionInsightsOverview;
   turnInsights: SessionTurnInsight[];
   toolHotspots: SessionToolHotspot[];
+  requestRationality: SessionRequestRationalityMetrics;
   llmProxyListening: boolean;
   llmProxyRecordCount: number;
 }): SessionInsightRecommendation[] {
   const out: SessionInsightRecommendation[] = [];
-  const { overview, turnInsights, toolHotspots } = input;
+  const { overview, turnInsights, toolHotspots, requestRationality: req } = input;
   const cov = overview.dataCoverage;
 
   if (cov.hasInferredHttp && !cov.hasObservedHttp) {
@@ -441,6 +596,141 @@ function buildRecommendations(input: {
       title: "输出 token 相对输入偏高",
       description: "模型生成长回复较多。若不需要详尽解释，可在 prompt 中要求简洁输出或限制 scope。",
       evidence: `输出 ${formatTokenCount(overview.tokens.outputTokens)} / 输入 ${formatTokenCount(overview.tokens.inputTokens)}`,
+    });
+  }
+
+  const mcpCategory = req.toolCategories.find((c) => c.category === "mcp");
+  const skillCategory = req.toolCategories.find((c) => c.category === "skill");
+  const subagentCategory = req.toolCategories.find((c) => c.category === "subagent");
+  const mcpCount = mcpCategory?.count ?? 0;
+  const skillCount = skillCategory?.count ?? 0;
+  const subagentCount = subagentCategory?.count ?? 0;
+
+  if (mcpCount >= 8 || (mcpCategory?.perTurn ?? 0) >= 2) {
+    out.push({
+      id: "req-mcp-overuse",
+      severity: "warning",
+      category: "tool",
+      title: "MCP 工具调用偏多",
+      description:
+        "MCP 调用会引入额外 schema 上下文、网络往返与结果序列化开销。请审视是否可用内置 Read/Grep/Shell 替代；合并同 server 的连续调用；禁用未使用的 MCP server；仅在 schema 已读后再调用。",
+      evidence: `MCP ${mcpCount} 次（${(mcpCategory?.perTurn ?? 0).toFixed(1)}/轮）`,
+    });
+  }
+
+  for (const hotspot of req.mcpHotspots) {
+    if (hotspot.count >= 4) {
+      out.push({
+        id: `req-mcp-hotspot-${hotspot.name}`,
+        severity: "info",
+        category: "tool",
+        title: `MCP「${hotspot.name}」重复调用`,
+        description:
+          "同一 MCP 工具高频出现可能表示缺少中间缓存、参数过宽或应用层循环。考虑批量查询、缩小参数范围，或改用本地工具一次完成。",
+        evidence: `${hotspot.count} 次，轮次 ${hotspot.turns.slice(0, 5).join(", ")}${hotspot.turns.length > 5 ? "…" : ""}`,
+      });
+    }
+  }
+
+  if (skillCount >= 5 || (skillCategory?.perTurn ?? 0) >= 1.5) {
+    out.push({
+      id: "req-skill-overuse",
+      severity: "warning",
+      category: "tool",
+      title: "Skill 调用偏多",
+      description:
+        "Skill 适合可复用流程，但频繁 invoke 会拉长工具链并增加上下文。请确认任务是否必须走 Skill；能否内联为 1–2 步内置工具；避免为简单操作反复加载同一 Skill。",
+      evidence: `Skill ${skillCount} 次（${(skillCategory?.perTurn ?? 0).toFixed(1)}/轮）`,
+    });
+  }
+
+  for (const hotspot of req.skillHotspots) {
+    if (hotspot.count >= 3) {
+      out.push({
+        id: `req-skill-hotspot-${hotspot.name}`,
+        severity: "info",
+        category: "tool",
+        title: `Skill「${hotspot.name}」重复调用`,
+        description:
+          "同一 Skill 多次触发可能表示流程未收敛或缺少会话内记忆。考虑将 Skill 输出摘要写入 scratchpad，或改为 rules/memory 持久化约束。",
+        evidence: `${hotspot.count} 次，轮次 ${hotspot.turns.join(", ")}`,
+      });
+    }
+  }
+
+  if (subagentCount >= 3 || (subagentCategory?.perTurn ?? 0) >= 0.75) {
+    out.push({
+      id: "req-subagent-overuse",
+      severity: "warning",
+      category: "tool",
+      title: "子代理 / Task 派发偏多",
+      description:
+        "子代理适合独立子任务，但过多并行 Task 会放大 token 与墙钟时间。请合并可串行步骤、缩小子任务 scope，并限制同时活跃的 worker 数量。",
+      evidence: `子代理 ${subagentCount} 次（${(subagentCategory?.perTurn ?? 0).toFixed(1)}/轮）`,
+    });
+  }
+
+  if (req.httpRequestsPerTurn >= 1.5 && overview.turnCount >= 2) {
+    out.push({
+      id: "req-http-roundtrips",
+      severity: "warning",
+      category: "speed",
+      title: "模型 HTTP 往返次数偏多",
+      description:
+        "平均每轮多次模型请求通常由长工具链、频繁续写或 MCP/Skill 串行引起。可合并工具步骤、减少无效 assistant 轮次，或使用 /compact 控制上下文膨胀。",
+      evidence: `HTTP ${req.httpRequestCount} 次（${req.httpRequestsPerTurn.toFixed(1)}/轮）`,
+    });
+  }
+
+  if (req.maxTurnToolCount >= 8) {
+    const heavyTurn = turnInsights.reduce<SessionTurnInsight | null>(
+      (best, t) => (!best || t.toolCount > best.toolCount ? t : best),
+      null,
+    );
+    out.push({
+      id: "req-tool-burst",
+      severity: "warning",
+      category: "tool",
+      title: "单轮工具链过长",
+      description:
+        "单轮内大量工具调用易导致请求体膨胀、结果交错与超时。应分批探索：先定位再读取，避免在同一轮内广搜 + 深读 + 多 MCP 混用。",
+      evidence: `单轮最多 ${req.maxTurnToolCount} 次工具${heavyTurn ? `（轮次 ${heavyTurn.turnIndex}）` : ""}`,
+      turnIndex: heavyTurn?.turnIndex,
+    });
+  }
+
+  if (req.maxTurnTokenTotal != null && req.maxTurnTokenTotal >= 25_000) {
+    const spikeTurn = turnInsights.reduce<SessionTurnInsight | null>(
+      (best, t) => {
+        const tt = turnTokenTotal(t.tokens);
+        if (tt <= 0) return best;
+        if (!best || tt > turnTokenTotal(best.tokens)) return t;
+        return best;
+      },
+      null,
+    );
+    out.push({
+      id: "req-turn-token-spike",
+      severity: "warning",
+      category: "token",
+      title: "单轮 Token 峰值过高",
+      description:
+        "单轮 token 过大常见于大段粘贴、宽范围工具输出或未截断的 MCP 响应。应限制读取范围、要求简洁输出，并对长结果做摘要后再进入下一轮。",
+      evidence: `单轮峰值 ${formatTokenCount(req.maxTurnTokenTotal)}${spikeTurn ? `（轮次 ${spikeTurn.turnIndex}）` : ""}`,
+      turnIndex: spikeTurn?.turnIndex,
+    });
+  }
+
+  const builtinCount = req.toolCategories.find((c) => c.category === "builtin")?.count ?? 0;
+  if (mcpCount >= 3 && builtinCount > 0 && mcpCount / Math.max(1, builtinCount) >= 0.5) {
+    out.push({
+      id: "req-mcp-vs-builtin",
+      severity: "info",
+      category: "tool",
+      title: "MCP 占比相对内置工具偏高",
+      description:
+        "本地文件/搜索类任务优先使用内置 Read/Grep/Glob/Shell；MCP 留给外部系统（Issue 跟踪、浏览器、数据库等）。检查是否重复加载 MCP schema 或未必要的 server 调用。",
+      evidence: `MCP ${mcpCount} vs 内置 ${builtinCount}`,
     });
   }
 
@@ -679,10 +969,17 @@ export function computeSessionInsights(input: ComputeSessionInsightsInput): Sess
 
   const slowestTurns = [...turnInsights].sort((a, b) => b.durationMs - a.durationMs).slice(0, 5);
 
+  const requestRationality = computeRequestRationalityMetrics({
+    linkRecords: input.linkRecords,
+    turnInsights,
+    turnCount,
+  });
+
   const recommendations = buildRecommendations({
     overview,
     turnInsights,
     toolHotspots,
+    requestRationality,
     llmProxyListening: Boolean(input.llmProxyListening),
     llmProxyRecordCount: llmProxyRecords.length,
   });
@@ -693,5 +990,6 @@ export function computeSessionInsights(input: ComputeSessionInsightsInput): Sess
     toolHotspots,
     slowestTurns,
     recommendations,
+    requestRationality,
   };
 }
