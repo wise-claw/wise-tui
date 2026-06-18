@@ -1,39 +1,26 @@
 import {
-  Button,
   message,
   Modal,
-  Tag,
 } from "antd";
-import type { ColumnsType } from "antd/es/table";
-import { HoverHint } from "../components/shared/HoverHint";
 import {
   useCallback,
   useEffect,
   useMemo,
   useRef,
   useState,
-  type MutableRefObject,
 } from "react";
 import type { ClaudeChatSessionFeaturePanelProps } from "../components/ClaudeSessions/ClaudeChatSessionFeaturePanel";
 import type { ClaudeChatSessionFeatureToolbarProps } from "../components/ClaudeSessions/ClaudeChatSessionFeatureToolbar";
-import type { ClaudeChatSessionTaskListDrawerProps } from "../components/ClaudeSessions/ClaudeChatSessionTaskListDrawer";
 import type { ClaudeChatSessionTraceDrawerProps } from "../components/ClaudeSessions/ClaudeChatSessionTraceDrawer";
 import {
   FEATURE_SESSION_LIST_PAGE_SIZE,
-  SHOW_SESSION_TASK_COMPLETION_FEATURE,
   SESSION_SEND_TRACE_PERSIST_MAX,
-  type RepositorySessionExecutionRow,
   type SessionSendTraceEntry,
   type SessionUserQuestionRow,
   type RefreshHistorySessionsScope,
-  type TaskCompletionOwnerFilter,
-  type TaskCompletionStatusFilter,
 } from "../components/ClaudeSessions/ClaudeChatSessionFeaturePanel";
-import { resolveOwnerHintForSession } from "../utils/sessionOwnerHints";
-import type { SessionOwnerHint } from "../utils/sessionOwnerHints";
 import {
   isSessionBoundAsRepositoryMain,
-  repositoryPathsMatch,
 } from "../utils/repositoryMainSessionBinding";
 import {
   dedupeClaudeSessionsByIdentity,
@@ -47,25 +34,15 @@ import { getSessionUpdatedAt, groupSessionsByDay, sliceGroupedSessions, type Ses
 import { isToolOnlyUserMessage, userMessagePlainTextForDisplay } from "../utils/claudeChatMessageDisplay";
 import type {
   ClaudeSession,
-  EmployeeItem,
-  PendingExecutionTask,
   ProjectItem,
   Repository,
-  WorkflowTaskItem,
-  WorkflowTemplateItem,
 } from "../types";
 import type { WorkspaceFocus, WorkspaceMode } from "../utils/workspaceMode";
 import {
-  executionStatusTagColor,
-  formatCompletionActivityTime,
   getSessionTraceStorageKey,
-  mapClaudeExecutionStatusLabel,
-  resolveSessionOwnerInfo,
-  rowMatchesCompletionSearch,
 } from "./claudeChatSessionFeaturePanelHelpers";
 
 const EMPTY_HISTORY_GROUPS: SessionGroup[] = [];
-const EMPTY_EXECUTION_ROWS: RepositorySessionExecutionRow[] = [];
 
 export interface UseClaudeChatSessionFeaturePanelInput {
   session: ClaudeSession;
@@ -77,50 +54,16 @@ export interface UseClaudeChatSessionFeaturePanelInput {
   activeWorkspaceFocus?: WorkspaceFocus;
   activeRepositoryId?: number | null;
   workspaceMode?: WorkspaceMode;
-  sessionOwnerHints: Record<string, SessionOwnerHint>;
-  mentionEmployees: EmployeeItem[];
-  workflowTasks: WorkflowTaskItem[];
-  workflowTemplates: WorkflowTemplateItem[];
-  workflowGraphStatusByWorkflowId: Record<string, string>;
-  taskPendingEmployeesByTaskId: Record<string, Array<{ employeeId: string; name: string }>>;
   repositoryScopePath: string;
   sessionRepository: Repository | null;
   repositoryMainBindings: Record<string, string>;
-  omcBatchAnchorSessionId: string;
-  omcBatchUserAbortRef: MutableRefObject<boolean>;
-  omcBatchInFlightRef: MutableRefObject<boolean>;
   hideSessionTools?: boolean;
   scrollToSessionMessageId: (messageId: number) => void;
-  scrollMessageTargetIntoView: (target: Element | null) => boolean;
-  onSwitchSession?: (
-    sessionId: string,
-    options?: { collapseSessionNotificationPanel?: boolean },
-  ) => void;
-  onExecute: (
-    sessionId: string,
-    prompt: string,
-    dispatchTarget?: Pick<PendingExecutionTask, "targetType" | "targetEmployeeName" | "targetWorkflowId" | "targetWorkflowName">,
-  ) => boolean | void | Promise<boolean | void>;
-  onOpenRepositoryScheduledTasks?: () => void;
   onRefreshHistorySessions?: (scope: RefreshHistorySessionsScope) => void | Promise<void>;
   onDeleteHistorySession?: (sessionId: string) => Promise<void>;
   onOpenHistorySessionInInspector?: (sessionId: string) => void;
   onRestoreHistorySessionAsMain?: (sessionId: string) => void | Promise<void>;
-  resolveTaskListOmcInvokeConcurrency?: (session: ClaudeSession) => {
-    concurrencyScopeKey: string;
-    concurrencyLimit: number;
-  } | null;
-  onAppendSystemMessage?: (sessionId: string, text: string) => void;
-  onAppendUserMessage?: (sessionId: string, text: string) => void;
-  onNotifyOmcEmployeeDirectBatchTaskDone?: (input: {
-    repositoryPath: string;
-    repositoryDisplayName: string;
-    employeeMessage: string;
-  }) => void;
-  onPrepareFreshOmcEmployeeWorkerForDirectBatch?: (input: {
-    repositoryPath: string;
-    repositoryDisplayName: string;
-  }) => void | Promise<void>;
+  onOpenRepositoryScheduledTasks?: () => void;
 }
 
 export interface UseClaudeChatSessionFeaturePanelResult {
@@ -144,257 +87,32 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
     activeWorkspaceFocus = "repository",
     activeRepositoryId = null,
     workspaceMode = "single_repo",
-    sessionOwnerHints,
-    mentionEmployees: _mentionEmployees,
-    workflowTasks,
-    workflowTemplates,
-    workflowGraphStatusByWorkflowId: _workflowGraphStatusByWorkflowId,
-    taskPendingEmployeesByTaskId,
     repositoryScopePath,
     sessionRepository,
     repositoryMainBindings,
-    omcBatchAnchorSessionId: _omcBatchAnchorSessionId,
-    omcBatchUserAbortRef: _omcBatchUserAbortRef,
-    omcBatchInFlightRef: _omcBatchInFlightRef,
     hideSessionTools = false,
     scrollToSessionMessageId,
-    scrollMessageTargetIntoView: _scrollMessageTargetIntoView,
-    onSwitchSession,
-    onExecute: _onExecute,
-    onOpenRepositoryScheduledTasks,
     onRefreshHistorySessions,
     onDeleteHistorySession,
     onOpenHistorySessionInInspector,
     onRestoreHistorySessionAsMain,
-    resolveTaskListOmcInvokeConcurrency: _resolveTaskListOmcInvokeConcurrency,
-    onAppendSystemMessage: _onAppendSystemMessage,
-    onAppendUserMessage: _onAppendUserMessage,
-    onNotifyOmcEmployeeDirectBatchTaskDone: _onNotifyOmcEmployeeDirectBatchTaskDone,
-    onPrepareFreshOmcEmployeeWorkerForDirectBatch: _onPrepareFreshOmcEmployeeWorkerForDirectBatch,
+    onOpenRepositoryScheduledTasks,
   } = input;
 
-  const taskDrawerCount = 0;
-  const [taskListDrawerOpen, setTaskListDrawerOpen] = useState(false);
   const [historyPopoverOpen, setHistoryPopoverOpen] = useState(false);
-    const [userQuestionsPopoverOpen, setUserQuestionsPopoverOpen] = useState(false);
-    const [historySearchText, setHistorySearchText] = useState("");
-    const [historyVisibleCount, setHistoryVisibleCount] = useState(FEATURE_SESSION_LIST_PAGE_SIZE);
-    const [historySessionsRefreshing, setHistorySessionsRefreshing] = useState(false);
-    const historyPopoverScrollRef = useRef<HTMLDivElement>(null);
-    const historyLoadMoreRafRef = useRef<number | null>(null);
-    const historyLoadMoreLockedRef = useRef(false);
-    /** 历史会话删除二次确认 Modal 打开期间，忽略 Popover 的外部点击关闭 */
-    const historyPopoverCloseGuardRef = useRef(false);
-    const [sessionTraceDrawerOpen, setSessionTraceDrawerOpen] = useState(false);
-    const [sessionSendTraces, setSessionSendTraces] = useState<SessionSendTraceEntry[]>([]);
-    const [taskCompletionModalOpen, setTaskCompletionModalOpen] = useState(false);
-    const [completionSearchText, setCompletionSearchText] = useState("");
-    const [completionOwnerFilter, setCompletionOwnerFilter] = useState<TaskCompletionOwnerFilter>("all");
-    const [completionStatusFilter, setCompletionStatusFilter] = useState<TaskCompletionStatusFilter>("all");
-    const [completionVisibleCount, setCompletionVisibleCount] = useState(FEATURE_SESSION_LIST_PAGE_SIZE);
-    const completionTableWrapRef = useRef<HTMLDivElement>(null);
-    const completionFilteredLengthRef = useRef(0);
+  const [userQuestionsPopoverOpen, setUserQuestionsPopoverOpen] = useState(false);
+  const [historySearchText, setHistorySearchText] = useState("");
+  const [historyVisibleCount, setHistoryVisibleCount] = useState(FEATURE_SESSION_LIST_PAGE_SIZE);
+  const [historySessionsRefreshing, setHistorySessionsRefreshing] = useState(false);
+  const historyPopoverScrollRef = useRef<HTMLDivElement>(null);
+  const historyLoadMoreRafRef = useRef<number | null>(null);
+  const historyLoadMoreLockedRef = useRef(false);
+  /** 历史会话删除二次确认 Modal 打开期间，忽略 Popover 的外部点击关闭 */
+  const historyPopoverCloseGuardRef = useRef(false);
+  const [sessionTraceDrawerOpen, setSessionTraceDrawerOpen] = useState(false);
+  const [sessionSendTraces, setSessionSendTraces] = useState<SessionSendTraceEntry[]>([]);
 
-    const taskCompletionDataActive =
-      SHOW_SESSION_TASK_COMPLETION_FEATURE && taskCompletionModalOpen;
-
-    const repositorySessionExecutionRows = useMemo((): RepositorySessionExecutionRow[] => {
-      if (!taskCompletionDataActive) {
-        return EMPTY_EXECUTION_ROWS;
-      }
-      const path = session.repositoryPath;
-      const sameRepo = sessions.filter((s) => repositoryPathsMatch(s.repositoryPath, path));
-      const rows: RepositorySessionExecutionRow[] = sameRepo.map((s) => {
-        const owner = resolveSessionOwnerInfo({
-          session: s,
-          workflowTasks,
-          workflowTemplates,
-          taskPendingEmployeesByTaskId,
-          ownerHint: resolveOwnerHintForSession(sessionOwnerHints, s),
-        });
-        const scopeLabel = owner.name ? `${owner.typeLabel} · ${owner.name}` : owner.typeLabel;
-        return {
-          key: s.id,
-          sessionId: s.id,
-          ownerType: owner.type,
-          scopeLabel,
-          preview: getSessionPreview(s),
-          status: s.status,
-          statusLabel: mapClaudeExecutionStatusLabel(s.status),
-          claudeSessionId: s.claudeSessionId?.trim() || "—",
-          messageCount: s.messages.length,
-          updatedAt: getSessionUpdatedAt(s),
-        };
-      });
-      const ownerRank = (t: RepositorySessionExecutionRow["ownerType"]) => (t === "main" ? 0 : t === "employee" ? 1 : 2);
-      rows.sort((a, b) => {
-        const r = ownerRank(a.ownerType) - ownerRank(b.ownerType);
-        if (r !== 0) return r;
-        return b.updatedAt - a.updatedAt;
-      });
-      return rows;
-    }, [
-      taskCompletionDataActive,
-      sessions,
-      session.repositoryPath,
-      workflowTasks,
-      workflowTemplates,
-      taskPendingEmployeesByTaskId,
-      sessionOwnerHints,
-    ]);
-
-    const taskCompletionTableColumns: ColumnsType<RepositorySessionExecutionRow> = useMemo(
-      () => {
-        if (!taskCompletionDataActive) {
-          return [];
-        }
-        return [
-        {
-          title: "范围",
-          dataIndex: "scopeLabel",
-          width: "12%",
-          ellipsis: true,
-        },
-        {
-          title: "摘要",
-          dataIndex: "preview",
-          width: "26%",
-          ellipsis: { showTitle: false },
-          render: (preview: string) => {
-            const text = preview?.trim() ? preview : "—";
-            const tip = text === "—" ? undefined : text;
-            return (
-              <HoverHint title={tip} placement="topLeft">
-                <span className="app-task-completion-modal__ellipsis-cell">{text}</span>
-              </HoverHint>
-            );
-          },
-        },
-        {
-          title: "状态",
-          dataIndex: "status",
-          width: "8%",
-          ellipsis: true,
-          render: (_: ClaudeSession["status"], record) => (
-            <Tag color={executionStatusTagColor(record.status)} className="app-task-completion-modal__tag-compact">
-              {record.statusLabel}
-            </Tag>
-          ),
-        },
-        {
-          title: "会话 ID",
-          dataIndex: "sessionId",
-          width: "24%",
-          ellipsis: { showTitle: false },
-          render: (id: string) => (
-            <HoverHint title={id} placement="topLeft">
-              <span className="app-task-completion-modal__ellipsis-cell app-task-completion-modal__mono">{id}</span>
-            </HoverHint>
-          ),
-        },
-        {
-          title: "条",
-          dataIndex: "messageCount",
-          width: "6%",
-          align: "right",
-        },
-        {
-          title: "活动时间",
-          dataIndex: "updatedAt",
-          width: "16%",
-          ellipsis: true,
-          render: (t: number) => formatCompletionActivityTime(t),
-        },
-        {
-          title: "操作",
-          key: "actions",
-          width: "8%",
-          align: "center",
-          render: (_: unknown, record) => (
-            <Button
-              type="link"
-              size="small"
-              className="app-task-completion-modal__enter-btn"
-              disabled={!onSwitchSession}
-              onClick={() => {
-                onSwitchSession?.(record.sessionId);
-                setTaskCompletionModalOpen(false);
-              }}
-            >
-              进入
-            </Button>
-          ),
-        },
-      ];
-      },
-      [taskCompletionDataActive, onSwitchSession, setTaskCompletionModalOpen],
-    );
-
-    const completionFilteredRows = useMemo(() => {
-      if (!taskCompletionDataActive) {
-        return EMPTY_EXECUTION_ROWS;
-      }
-      return repositorySessionExecutionRows.filter((row) => {
-        if (completionOwnerFilter !== "all" && row.ownerType !== completionOwnerFilter) {
-          return false;
-        }
-        if (completionStatusFilter !== "all" && row.status !== completionStatusFilter) {
-          return false;
-        }
-        if (!rowMatchesCompletionSearch(row, completionSearchText)) {
-          return false;
-        }
-        return true;
-      });
-    }, [
-      taskCompletionDataActive,
-      repositorySessionExecutionRows,
-      completionOwnerFilter,
-      completionStatusFilter,
-      completionSearchText,
-    ]);
-
-    completionFilteredLengthRef.current = completionFilteredRows.length;
-
-    const completionDisplayedRows = useMemo(
-      () => completionFilteredRows.slice(0, completionVisibleCount),
-      [completionFilteredRows, completionVisibleCount],
-    );
-
-    const completionHasMore = completionVisibleCount < completionFilteredRows.length;
-
-    useEffect(() => {
-      if (!taskCompletionModalOpen) return;
-      setCompletionSearchText("");
-      setCompletionOwnerFilter("all");
-      setCompletionStatusFilter("all");
-      setCompletionVisibleCount(FEATURE_SESSION_LIST_PAGE_SIZE);
-    }, [taskCompletionModalOpen]);
-
-    useEffect(() => {
-      setCompletionVisibleCount(FEATURE_SESSION_LIST_PAGE_SIZE);
-    }, [completionSearchText, completionOwnerFilter, completionStatusFilter]);
-
-    useEffect(() => {
-      if (!taskCompletionModalOpen) return;
-      let bodyEl: HTMLDivElement | null = null;
-      const handler = () => {
-        if (!bodyEl) return;
-        const max = completionFilteredLengthRef.current;
-        if (bodyEl.scrollTop + bodyEl.clientHeight >= bodyEl.scrollHeight - 48) {
-          setCompletionVisibleCount((n) => Math.min(n + FEATURE_SESSION_LIST_PAGE_SIZE, max));
-        }
-      };
-      const timer = window.setTimeout(() => {
-        bodyEl = completionTableWrapRef.current?.querySelector<HTMLDivElement>(".ant-table-body") ?? null;
-        bodyEl?.addEventListener("scroll", handler);
-      }, 50);
-      return () => {
-        window.clearTimeout(timer);
-        bodyEl?.removeEventListener("scroll", handler);
-      };
-    }, [taskCompletionModalOpen, completionDisplayedRows.length, completionFilteredRows.length]);
-    const historySessionSource = allSessionsForHistory ?? sessions;
+  const historySessionSource = allSessionsForHistory ?? sessions;
     const historyListActive = historyPopoverOpen || historySessionsRefreshing;
     const historyScopeInput = useMemo(
       () => ({
@@ -580,18 +298,14 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
       [onDeleteHistorySession, releaseHistoryPopoverCloseGuard],
     );
 
-    useEffect(() => {
-      if (!taskCompletionModalOpen) return;
-      handleHistorySessionsRefresh();
-    }, [taskCompletionModalOpen, handleHistorySessionsRefresh]);
 
-    useEffect(() => {
-      setHistoryVisibleCount(FEATURE_SESSION_LIST_PAGE_SIZE);
-    }, [historySearchText]);
+  useEffect(() => {
+    setHistoryVisibleCount(FEATURE_SESSION_LIST_PAGE_SIZE);
+  }, [historySearchText]);
 
-    useEffect(() => {
-      historyLoadMoreLockedRef.current = false;
-    }, [historyVisibleCount, filteredHistorySessions.length, historyPopoverOpen]);
+  useEffect(() => {
+    historyLoadMoreLockedRef.current = false;
+  }, [historyVisibleCount, filteredHistorySessions.length, historyPopoverOpen]);
 
     useEffect(() => {
       if (!historyPopoverOpen) return;
@@ -714,10 +428,6 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
 
   const traceDrawerWidth = Math.min(620, typeof window !== "undefined" ? window.innerWidth - 24 : 620);
 
-  const closeTaskListDrawer = useCallback(() => {
-    setTaskListDrawerOpen(false);
-  }, []);
-
   const closeSessionTraceDrawer = useCallback(() => {
     setSessionTraceDrawerOpen(false);
   }, []);
@@ -766,22 +476,6 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
     setUserQuestionsPopoverOpen,
     scrollToSessionMessageId,
     onOpenRepositoryScheduledTasks,
-    taskDrawerCount,
-    setTaskListDrawerOpen,
-    setTaskCompletionModalOpen,
-    taskCompletionModalOpen,
-    completionOwnerFilter,
-    setCompletionOwnerFilter,
-    completionStatusFilter,
-    setCompletionStatusFilter,
-    completionSearchText,
-    setCompletionSearchText,
-    completionDisplayedRows,
-    completionFilteredRows,
-    completionHasMore,
-    completionTableWrapRef,
-    repositorySessionExecutionRows,
-    taskCompletionTableColumns,
   }), [
     session.id,
     sessionUserQuestions,
@@ -801,30 +495,7 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
     userQuestionsPopoverOpen,
     scrollToSessionMessageId,
     onOpenRepositoryScheduledTasks,
-    taskDrawerCount,
-    taskCompletionModalOpen,
-    completionOwnerFilter,
-    completionStatusFilter,
-    completionSearchText,
-    completionDisplayedRows,
-    completionFilteredRows,
-    completionHasMore,
-    completionTableWrapRef,
-    repositorySessionExecutionRows,
-    taskCompletionTableColumns,
   ]);
-
-  const taskListDrawerProps = useMemo((): ClaudeChatSessionTaskListDrawerProps | null => {
-    if (!taskListDrawerOpen) {
-      return null;
-    }
-    return {
-      open: true,
-      onClose: closeTaskListDrawer,
-      traceDrawerWidth,
-      activeProject,
-    };
-  }, [taskListDrawerOpen, closeTaskListDrawer, traceDrawerWidth, activeProject]);
 
   const traceDrawerProps = useMemo((): ClaudeChatSessionTraceDrawerProps | null => {
     if (!sessionTraceDrawerOpen) {
@@ -850,9 +521,8 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
 
   const featurePanelProps = useMemo((): ClaudeChatSessionFeaturePanelProps => ({
     toolbar: toolbarProps,
-    taskListDrawer: taskListDrawerProps,
     traceDrawer: traceDrawerProps,
-  }), [toolbarProps, taskListDrawerProps, traceDrawerProps]);
+  }), [toolbarProps, traceDrawerProps]);
 
   return { featurePanelProps, appendSessionSendTrace };
 }

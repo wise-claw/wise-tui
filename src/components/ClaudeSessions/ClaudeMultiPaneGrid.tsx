@@ -259,6 +259,7 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
         onOpenBuiltinAssistant={shared.onOpenBuiltinAssistant}
         onActivateAssistant={shared.onActivateAssistant}
         onOpenAssistantsHub={shared.onOpenAssistantsHub}
+        onOpenRepositoryScheduledTasks={shared.onOpenRepositoryScheduledTasks}
         onSend={shared.onSend}
         onExecute={shared.onExecute}
         onDispatchExecutionEnvironment={shared.onDispatchExecutionEnvironment}
