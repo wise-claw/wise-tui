@@ -292,24 +292,12 @@ export default function App() {
    * 顶层 View 状态机（参见 .trellis/spec/guides/agent-harness-architecture.md §3）。
    *
    * 取代历史上的 6 个互斥布尔（promptsMode / mcpHubMode / skillsHubMode /
-   * missionControlMode / codeKnowledgeGraphMode）。
+   * missionControlMode）。
    * P0 通过 `viewMode.legacy.*` 提供过渡期兼容；P1 后 AppWorkspaceLayout 自身
    * 从 `viewMode` 派生这些布尔，AppImpl 不再依赖 legacy 别名。
    */
   const viewMode = useViewMode();
   useMacTerminalDetectionBootstrap();
-  const codeGraphSuppressIdleAutoReindex =
-    viewMode.view.kind === "inspect" && viewMode.view.tool.kind === "code-graph"
-      ? viewMode.view.tool.suppressIdleAutoReindex
-      : false;
-  const codeGraphLockToEntryRepository =
-    viewMode.view.kind === "inspect" && viewMode.view.tool.kind === "code-graph"
-      ? viewMode.view.tool.lockToEntryRepository
-      : false;
-  const codeGraphDefaultProjectMultiRepo =
-    viewMode.view.kind === "inspect" && viewMode.view.tool.kind === "code-graph"
-      ? viewMode.view.tool.defaultProjectMultiRepo
-      : false;
   const [lastAuthorPane, setLastAuthorPane] = useState(() => readAuthorPaneFromStorage());
   const [assistantInitialTarget, setAssistantInitialTarget] = useState<OpenAssistantDetail | null>(null);
   const [assistantOpenRequestKey, setAssistantOpenRequestKey] = useState(0);
@@ -1544,12 +1532,6 @@ export default function App() {
       });
   }, [activeProject?.id, activeProject?.rootPath, activeSessionId]);
 
-  const codeGraphSearchRepositoryIds = useMemo(() => {
-    if (activeProject?.repositoryIds?.length) {
-      return activeProject.repositoryIds;
-    }
-    return undefined;
-  }, [activeProject?.repositoryIds]);
   const [repositoryFileOpenRequest, setRepositoryFileOpenRequest] = useState<OpenRepositoryFileDetail | null>(null);
   const openRepositoryFileByEvent = useCallback((detail: OpenRepositoryFileDetail) => {
     const relativePath = detail.relativePath.trim();
@@ -3937,28 +3919,6 @@ export default function App() {
       skillsHubProps={{
         repositoryPath: authorPanelRepositoryPath,
         onClose: () => viewMode.back(),
-      }}
-      codeKnowledgeGraphProps={{
-        repositoryId: activeRepository?.id ?? null,
-        repositories: repositories.map((r) => ({
-          id: r.id,
-          name: r.name,
-          path: r.path,
-          repositoryType: r.repositoryType,
-        })),
-        searchRepositoryIds: codeGraphLockToEntryRepository ? undefined : codeGraphSearchRepositoryIds,
-        lockToEntryRepository: codeGraphLockToEntryRepository,
-        defaultProjectMultiRepoAssociation: codeGraphDefaultProjectMultiRepo,
-        onSelectRepository: setActiveRepositoryWithOwner,
-        onClose: () => {
-          viewMode.back();
-        },
-        onRemoveRepository: async (repoId) => {
-          const repo = repositories.find((r) => r.id === repoId);
-          if (repo) await handleRemoveRepositoryWithSessionCleanup(repo);
-        },
-        onOpenAddRepository: () => void handleAddFloatingRepository("frontend"),
-        suppressIdleAutoReindex: codeGraphSuppressIdleAutoReindex,
       }}
       prdTaskSplitPanelProps={{
         projects,

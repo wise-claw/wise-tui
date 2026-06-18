@@ -11,7 +11,7 @@ import {
 } from "../../services/workflowKnowledgeRetrieval";
 import type { WorkflowKnowledgeRetrievalConfig } from "../../types/workflowKnowledge";
 import { DEFAULT_WORKFLOW_KNOWLEDGE_CONFIG } from "../../types/workflowKnowledge";
-import type { CodeGraphSubgraphDirection } from "../../types/codeKnowledgeGraph";
+import type { WorkflowKnowledgeSubgraphDirection } from "../../types/workflowKnowledge";
 import type { CanvasNodeItem } from "../workflowGraph/workflowX6CanvasShared";
 
 export interface WorkflowKnowledgeNodeFormValues {
@@ -21,7 +21,7 @@ export interface WorkflowKnowledgeNodeFormValues {
   nodeKinds: WorkflowKnowledgeRetrievalConfig["nodeKinds"];
   topK: number;
   subgraphHop: number;
-  subgraphDirection: CodeGraphSubgraphDirection;
+  subgraphDirection: WorkflowKnowledgeSubgraphDirection;
   pathPrefix: string;
   outputMode: WorkflowKnowledgeRetrievalConfig["outputMode"];
   requireCitation: boolean;
@@ -29,7 +29,7 @@ export interface WorkflowKnowledgeNodeFormValues {
   supplementQueries: string[];
 }
 
-const DIRECTION_OPTIONS: { value: CodeGraphSubgraphDirection; label: string }[] = [
+const DIRECTION_OPTIONS: { value: WorkflowKnowledgeSubgraphDirection; label: string }[] = [
   { value: "both", label: "双向" },
   { value: "upstream", label: "上卷（依赖/调用方）" },
   { value: "downstream", label: "下钻（被引用/被调用）" },

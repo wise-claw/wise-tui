@@ -130,10 +130,6 @@ const WorkflowGraphInspector = lazy(() =>
 const SpecTimelineInspector = lazy(() =>
   import("./Inspectors").then((m) => ({ default: m.SpecTimelineInspector })),
 );
-const LazyCodeKnowledgeGraphPanel = lazy(() =>
-  import("./CodeKnowledgeGraph").then((m) => ({ default: m.CodeKnowledgeGraphPanel })),
-);
-type CodeKnowledgeGraphPanelProps = ComponentProps<typeof LazyCodeKnowledgeGraphPanel>;
 const MemoLeftSidebar = memo(LazyLeftSidebar, areLeftSidebarPropsEqual);
 const MemoClaudeSessions = memo(LazyClaudeSessions);
 const MemoInspector = memo(Inspector);
@@ -378,22 +374,6 @@ const ConnectedInspector = memo(function ConnectedInspector({
   );
 });
 
-const ConnectedCodeKnowledgeGraphPanel = memo(function ConnectedCodeKnowledgeGraphPanel({
-  codeKnowledgeGraphProps,
-}: {
-  codeKnowledgeGraphProps: CodeKnowledgeGraphPanelProps;
-}) {
-  const openRepositoryFile = useRepositoryFileEditorOpenFile();
-  return (
-    <LazyCodeKnowledgeGraphPanel
-      {...codeKnowledgeGraphProps}
-      onOpenRepositoryFile={(relativePath) => {
-        openRepositoryFile(relativePath);
-      }}
-    />
-  );
-});
-
 const ConnectedRepositoryFileEditorPanel = memo(function ConnectedRepositoryFileEditorPanel({
   dark,
 }: {
@@ -495,7 +475,6 @@ export interface AppWorkspaceLayoutProps {
   commandPaletteProps: ComponentProps<typeof CommandPalette>;
   mcpHubProps: ComponentProps<typeof McpHub>;
   skillsHubProps: ComponentProps<typeof SkillsHub>;
-  codeKnowledgeGraphProps: CodeKnowledgeGraphPanelProps;
   prdTaskSplitPanelProps: PrdTaskSplitPanelProps;
   progressMonitorDrawerProps: ComponentProps<typeof ProgressMonitorDrawer>;
   historyTranscriptDrawerProps: ComponentProps<typeof MonitorHistorySessionTranscriptDrawer>;
@@ -593,7 +572,6 @@ export function AppWorkspaceLayout({
   commandPaletteProps,
   mcpHubProps,
   skillsHubProps,
-  codeKnowledgeGraphProps,
   prdTaskSplitPanelProps,
   progressMonitorDrawerProps,
   historyTranscriptDrawerProps,
@@ -646,8 +624,6 @@ export function AppWorkspaceLayout({
   const skillsHubMode =
     (viewMode.kind === "author" && viewMode.pane === "skills") ||
     (viewMode.kind === "inspect" && viewMode.tool.kind === "skills-hub");
-  const codeKnowledgeGraphMode =
-    viewMode.kind === "inspect" && viewMode.tool.kind === "code-graph";
   const trellisInspectorTool =
     viewMode.kind === "inspect" && isTrellisInspectorTool(viewMode.tool)
       ? viewMode.tool
@@ -990,7 +966,7 @@ export function AppWorkspaceLayout({
             tooltip={{ unique: true }}
             theme={{
               algorithm,
-              /** 代码图谱等叠层局部 z-index 较高，避免 Message 被盖住看不见 */
+              /** MCP/技能等叠层局部 z-index 较高，避免 Message 被盖住看不见 */
               components: {
                 Message: { zIndexPopup: 20000 },
                 Notification: { zIndexPopup: 20000 },
@@ -1170,21 +1146,6 @@ export function AppWorkspaceLayout({
                             />
                           </Suspense>
                         </ErrorBoundary>
-                      </div>
-                    ) : null}
-                    {codeKnowledgeGraphMode ? (
-                      <div className="app-code-graph-overlay" role="region" aria-label="代码知识图谱">
-                        <Suspense
-                          fallback={
-                            <div className="app-code-graph-lazy-fallback" aria-busy="true" aria-live="polite">
-                              <Spin size="large" />
-                            </div>
-                          }
-                        >
-                          <ErrorBoundary type="local" fallbackTitle="代码知识图谱面板出错">
-                            <ConnectedCodeKnowledgeGraphPanel codeKnowledgeGraphProps={codeKnowledgeGraphProps} />
-                          </ErrorBoundary>
-                        </Suspense>
                       </div>
                     ) : null}
                     {trellisInspectorTool ? (

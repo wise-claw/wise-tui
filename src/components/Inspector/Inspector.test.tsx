@@ -120,14 +120,13 @@ describe("Inspector", () => {
     act(() => tree.unmount());
   });
 
-  test("inspect mode falls back to ChatInspector", () => {
+  test("inspect trellis tool falls back to ChatInspector", () => {
     const view: ViewMode = {
       kind: "inspect",
       tool: {
-        kind: "code-graph",
-        suppressIdleAutoReindex: false,
-        lockToEntryRepository: false,
-        defaultProjectMultiRepo: false,
+        kind: "runtime-events",
+        rootPath: "/tmp/project",
+        projectId: "p1",
       },
     };
     let tree!: ReturnType<typeof create>;

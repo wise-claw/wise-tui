@@ -423,7 +423,7 @@ fn resolve_repo_relative_file(
     Ok((root_canon, file_abs))
 }
 
-/// `graph_ide_folder_relative`：代码图谱「目录」节点时，`path` 为仓库根、本字段为相对目录，VS Code 系 CLI 使用 `cursor 根 -g 目录下源文件:1:1`。
+/// `graph_ide_folder_relative`：打开仓库内相对目录时，`path` 为仓库根、本字段为相对目录，VS Code 系 CLI 使用 `cursor 根 -g 目录下源文件:1:1`。
 /// `ide_goto_relative`：文件搜索等场景，`path` 为仓库根、本字段为要选中的相对文件，VS Code 系使用 `cursor 根 -g 文件:行:列`。
 #[allow(unused_variables)] // goto_* 仅在 command 且 code 系 CLI 分支使用
 #[tauri::command]

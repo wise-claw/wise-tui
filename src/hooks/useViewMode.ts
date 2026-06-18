@@ -5,7 +5,6 @@ import {
   resolveCockpitHubPane,
   type AuthorPane,
   type CockpitHubPane,
-  type InspectCodeGraph,
   type InspectMcpHub,
   type InspectSkillsHub,
   type InspectTool,
@@ -38,11 +37,9 @@ type ViewModeAction =
 
 /**
  * `patch` 的语义：仅当当前 view 与 partial 同 kind 时，浅合并字段。
- * 用于 cockpit 内 `setAssistantInitialTarget`、code-graph 入口微调等。
+ * 用于 cockpit 内 `setAssistantInitialTarget` 等。
  */
-type ViewModePatch =
-  | { kind: "cockpit"; missionId?: string; hubPane?: CockpitHubPane }
-  | { kind: "inspect"; tool: Partial<InspectCodeGraph> & { kind: "code-graph" } };
+type ViewModePatch = { kind: "cockpit"; missionId?: string; hubPane?: CockpitHubPane };
 
 interface ViewModeState {
   current: ViewMode;
@@ -61,13 +58,6 @@ function viewsEqual(a: ViewMode, b: ViewMode): boolean {
   }
   if (a.kind === "inspect" && b.kind === "inspect") {
     if (a.tool.kind !== b.tool.kind) return false;
-    if (a.tool.kind === "code-graph" && b.tool.kind === "code-graph") {
-      return (
-        a.tool.suppressIdleAutoReindex === b.tool.suppressIdleAutoReindex &&
-        a.tool.lockToEntryRepository === b.tool.lockToEntryRepository &&
-        a.tool.defaultProjectMultiRepo === b.tool.defaultProjectMultiRepo
-      );
-    }
     if (a.tool.kind === "runtime-events" && b.tool.kind === "runtime-events") {
       return a.tool.rootPath === b.tool.rootPath && a.tool.projectId === b.tool.projectId;
     }
@@ -118,17 +108,6 @@ function viewModeReducer(prev: ViewModeState, action: ViewModeAction): ViewModeS
       if (action.partial.kind === "cockpit" && view.kind === "cockpit") {
         return { ...prev, current: { ...view, ...action.partial } };
       }
-      if (
-        action.partial.kind === "inspect" &&
-        view.kind === "inspect" &&
-        view.tool.kind === "code-graph" &&
-        action.partial.tool.kind === "code-graph"
-      ) {
-        return {
-          ...prev,
-          current: { ...view, tool: { ...view.tool, ...action.partial.tool } },
-        };
-      }
       return prev;
     }
   }
@@ -149,12 +128,11 @@ export interface UseViewModeApi {
   isAuthor: boolean;
   isInspect: boolean;
 
-  /** 5 个互斥布尔兼容别名。仅供过渡期 layout / sidebar nav 直接读，不要在新代码里依赖。 */
+  /** 4 个互斥布尔兼容别名。仅供过渡期 layout / sidebar nav 直接读，不要在新代码里依赖。 */
   legacy: {
     mcpHubMode: boolean;
     skillsHubMode: boolean;
     missionControlMode: boolean;
-    codeKnowledgeGraphMode: boolean;
   };
 }
 
@@ -191,7 +169,6 @@ export function useViewMode(initial: ViewMode = DEFAULT_VIEW_MODE): UseViewModeA
         (view.kind === "author" && view.pane === "skills") ||
         (view.kind === "inspect" && view.tool.kind === "skills-hub"),
       missionControlMode: view.kind === "cockpit",
-      codeKnowledgeGraphMode: view.kind === "inspect" && view.tool.kind === "code-graph",
     }),
     [view],
   );
@@ -229,19 +206,6 @@ export function cockpitView(
   return missionId
     ? { kind: "cockpit", missionId, ...hubFields }
     : { kind: "cockpit", ...hubFields };
-}
-
-/** Helper：构造默认 code-graph inspect tool（所有 flag 为 false，对应顶栏入口）。 */
-export function codeGraphInspectTool(
-  overrides?: Partial<InspectCodeGraph>,
-): InspectCodeGraph {
-  return {
-    kind: "code-graph",
-    suppressIdleAutoReindex: false,
-    lockToEntryRepository: false,
-    defaultProjectMultiRepo: false,
-    ...overrides,
-  };
 }
 
 /** Helper：侧栏 MCP 叠层（保留左栏 + 主会话区）。 */

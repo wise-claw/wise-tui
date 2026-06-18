@@ -4,16 +4,16 @@ import type {
   WorkflowKnowledgeOutputMode,
   WorkflowKnowledgeRetrievalConfig,
   WorkflowKnowledgeSearchMode,
+  WorkflowKnowledgeSubgraphDirection,
 } from "../types/workflowKnowledge";
 import { DEFAULT_WORKFLOW_KNOWLEDGE_CONFIG } from "../types/workflowKnowledge";
-import type { CodeGraphSubgraphDirection } from "../types/codeKnowledgeGraph";
 import type { BranchEvaluationContext } from "./workflowBranchEvaluation";
 import { substitutePromptContent } from "./workflowPromptTemplate";
 
 const VALID_SEARCH_MODES = new Set<WorkflowKnowledgeSearchMode>(["keyword", "hybrid", "path_focus"]);
 const VALID_OUTPUT_MODES = new Set<WorkflowKnowledgeOutputMode>(["summary", "structured", "verbatim"]);
 const VALID_NODE_KINDS = new Set<WorkflowKnowledgeNodeKindFilter>(["file", "folder", "symbol", "api_operation", "schema"]);
-const VALID_DIRECTIONS = new Set<CodeGraphSubgraphDirection>(["both", "upstream", "downstream"]);
+const VALID_DIRECTIONS = new Set<WorkflowKnowledgeSubgraphDirection>(["both", "upstream", "downstream"]);
 
 export const WORKFLOW_KNOWLEDGE_BUILTIN_VARIABLES = [
   { name: "task_content", label: "任务正文（开始输入）" },
@@ -56,7 +56,7 @@ function nodeKindLabels(kinds: WorkflowKnowledgeNodeKindFilter[]): string {
     .join("、");
 }
 
-function directionLabel(direction: CodeGraphSubgraphDirection): string {
+function directionLabel(direction: WorkflowKnowledgeSubgraphDirection): string {
   if (direction === "upstream") return "上卷（调用方/依赖）";
   if (direction === "downstream") return "下钻（被调用/引用）";
   return "双向扩展";
@@ -115,8 +115,8 @@ export function knowledgeConfigFromNodeData(data: WorkflowGraphNodeData): Workfl
       : DEFAULT_WORKFLOW_KNOWLEDGE_CONFIG.outputMode;
   const subgraphDirection =
     typeof data.knowledgeSubgraphDirection === "string" &&
-    VALID_DIRECTIONS.has(data.knowledgeSubgraphDirection as CodeGraphSubgraphDirection)
-      ? (data.knowledgeSubgraphDirection as CodeGraphSubgraphDirection)
+    VALID_DIRECTIONS.has(data.knowledgeSubgraphDirection as WorkflowKnowledgeSubgraphDirection)
+      ? (data.knowledgeSubgraphDirection as WorkflowKnowledgeSubgraphDirection)
       : DEFAULT_WORKFLOW_KNOWLEDGE_CONFIG.subgraphDirection;
   const pathPrefix = typeof data.knowledgePathPrefix === "string" ? data.knowledgePathPrefix.trim() : undefined;
   const outputVariable =
@@ -182,12 +182,12 @@ export function renderKnowledgeRetrievalBlock(config: WorkflowKnowledgeRetrieval
   const supplements = substituteQueryList(config.supplementQueries, ctx);
   if (!mainQuery && supplements.length === 0) return "";
 
-  const lines = ["【知识检索 · 代码知识图谱】"];
+  const lines = ["【知识检索 · 代码库上下文】"];
 
   lines.push(
     "",
-    "请在当前工作区仓库的 **代码知识图谱** 中检索相关上下文，并将结果用于后续任务。",
-    "可使用 Wise 侧栏「代码图谱」面板或等价方式检索节点与关联边。",
+    "请在当前工作区仓库中检索相关代码、符号与依赖关系，并将结果用于后续任务。",
+    "可使用 Codegraph MCP、代码搜索工具或等价方式定位文件、符号与调用关系。",
   );
 
   lines.push("", "### 检索策略");

@@ -278,7 +278,7 @@ export async function openWorkspaceIn(
     gotoLine?: number;
     gotoColumn?: number;
     /**
-     * 代码图谱目录节点：`path` 须为仓库根，本字段为相对目录（如 `src/api/foo`）。
+     * IDE 打开仓库内相对目录：`path` 须为仓库根，本字段为相对目录（如 `src/api/foo`）。
      * Rust 侧对 VS Code 系 CLI 执行 `cursor 仓库根 -g 目录下首个源文件:1:1`，以整仓打开并靠近该目录。
      */
     graphIdeFolderRelative?: string | null;

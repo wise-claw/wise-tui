@@ -56,6 +56,7 @@ const MIGRATION_036: &str = include_str!("../migrations/036_project_open_app_id.
 const MIGRATION_037: &str = include_str!("../migrations/037_assistant_custom_entry.sql");
 const MIGRATION_038: &str = include_str!("../migrations/038_assistant_hidden.sql");
 const MIGRATION_040: &str = include_str!("../migrations/040_employee_default_instruction.sql");
+const MIGRATION_041: &str = include_str!("../migrations/041_drop_code_knowledge_graph.sql");
 const PLATFORM_SPLIT_PROMPT_SEED_JSON: &str =
     include_str!("../migrations/005_platform_split_prompt_seed.json");
 
@@ -230,6 +231,10 @@ const MIGRATIONS: &[Migration] = &[
         name: "040_employee_default_instruction",
         action: MigrationAction::Sql(MIGRATION_040),
     },
+    Migration {
+        name: "041_drop_code_knowledge_graph",
+        action: MigrationAction::Sql(MIGRATION_041),
+    },
 ];
 
 #[derive(Debug, Clone, Serialize)]
@@ -330,8 +335,6 @@ impl WiseDb {
         )
         .map_err(|e| e.to_string())?;
         run_migrations(&conn)?;
-        ensure_graph_index_meta_progress_column(&conn)?;
-        ensure_graph_index_meta_indexing_current_file_column(&conn)?;
         Ok(Self(Mutex::new(conn)))
     }
 
@@ -1948,39 +1951,6 @@ fn run_migrations(conn: &Connection) -> Result<(), String> {
     Ok(())
 }
 
-/// Best-effort: ensure `graph_index_meta` has a `progress` column.
-/// Handles databases created by earlier versions of migration 017 that
-/// lacked this column.
-fn ensure_graph_index_meta_progress_column(conn: &Connection) -> Result<(), String> {
-    let missing = conn
-        .query_row(
-            "SELECT COUNT(*) = 0 FROM pragma_table_info('graph_index_meta') WHERE name = 'progress'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap_or(false);
-    if missing {
-        let _ = conn
-            .execute_batch("ALTER TABLE graph_index_meta ADD COLUMN progress INTEGER DEFAULT 0;");
-    }
-    Ok(())
-}
-
-fn ensure_graph_index_meta_indexing_current_file_column(conn: &Connection) -> Result<(), String> {
-    let missing = conn
-        .query_row(
-            "SELECT COUNT(*) = 0 FROM pragma_table_info('graph_index_meta') WHERE name = 'indexing_current_file'",
-            [],
-            |row| row.get(0),
-        )
-        .unwrap_or(false);
-    if missing {
-        let _ = conn
-            .execute_batch("ALTER TABLE graph_index_meta ADD COLUMN indexing_current_file TEXT;");
-    }
-    Ok(())
-}
-
 fn migration_applied(conn: &Connection, name: &str) -> Result<bool, String> {
     let count: i64 = conn
         .query_row(
@@ -2085,7 +2055,6 @@ fn purge_repository_database_refs_conn(
         conn.execute(sql, params![scope_id])
             .map_err(|e| e.to_string())?;
     }
-    crate::code_knowledge_graph::storage::clear_repository_graph_index(conn, repository_id)?;
     Ok(())
 }
 
@@ -2128,8 +2097,37 @@ mod tests {
                 "027_assistant_id",
                 "028_assistant_overrides",
                 "029_migrate_prompt_layers_into_assistant_overrides",
+                "030_employee_execution_engine",
+                "031_workspace_inspector",
+                "032_migrate_workspace_inspector_from_app_settings",
+                "033_workspace_todos",
+                "034_execution_environment_dispatch",
+                "035_workspace_quick_actions_pinned",
+                "036_project_open_app_id",
+                "037_assistant_custom_entry",
+                "038_assistant_hidden",
+                "039_workspace_quick_actions_pinned_repair",
+                "040_employee_default_instruction",
+                "041_drop_code_knowledge_graph",
             ]
         );
+    }
+
+    #[test]
+    fn run_migrations_drops_code_knowledge_graph_tables() {
+        let conn = Connection::open_in_memory().expect("in-memory sqlite opens");
+        run_migrations(&conn).expect("migrations succeed");
+
+        for table in ["graph_nodes", "graph_edges", "graph_index_meta"] {
+            let count: i64 = conn
+                .query_row(
+                    "SELECT COUNT(*) FROM sqlite_master WHERE type = 'table' AND name = ?1",
+                    params![table],
+                    |row| row.get(0),
+                )
+                .expect("sqlite_master query succeeds");
+            assert_eq!(count, 0, "{table} should be dropped by migration 041");
+        }
     }
 
     #[test]
@@ -2263,11 +2261,6 @@ mod tests {
             params![now],
         )
         .expect("insert repository override");
-        conn.execute(
-            "INSERT INTO graph_index_meta (repo_id, index_version, status) VALUES (42, 'v1', 'done')",
-            [],
-        )
-        .expect("insert graph meta");
 
         delete_project_scoped_rows_conn(&conn, "ws-a").expect("delete scoped rows");
         conn.execute(
@@ -2306,14 +2299,5 @@ mod tests {
             )
             .expect("count repository overrides");
         assert_eq!(override_count, 0);
-
-        let graph_meta_count: i64 = conn
-            .query_row(
-                "SELECT COUNT(*) FROM graph_index_meta WHERE repo_id = 42",
-                [],
-                |row| row.get(0),
-            )
-            .expect("count graph meta");
-        assert_eq!(graph_meta_count, 0);
     }
 }

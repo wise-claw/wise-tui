@@ -108,10 +108,6 @@ Claude subsystem:
 - `src-tauri/src/claude_config_dir.rs`: Claude config directory commands.
 - `src-tauri/src/claude_code_usage.rs`: Claude Code usage statistics.
 
-Code knowledge graph:
-
-- `src-tauri/src/code_knowledge_graph.rs` and `src-tauri/src/code_knowledge_graph/`: indexer, storage, search, language extractors, and synthetic OpenAPI helpers.
-
 Integrations:
 
 - `src-tauri/src/dingtalk_enterprise_bot.rs`, `src-tauri/src/dingtalk_stream_gateway.rs`: DingTalk bot and stream gateway integrations.
@@ -138,7 +134,7 @@ Config surfaces:
 
 Application-owned durable data lives under `~/.wise/`:
 
-- `wise.db`: SQLite database (projects, workflows, sessions, mission, knowledge graph).
+- `wise.db`: SQLite database (projects, workflows, sessions, mission).
 - `repositories.json`: registered repositories.
 - `tabs.json`: tab session state.
 - `prd-images/`: materialized PRD images.

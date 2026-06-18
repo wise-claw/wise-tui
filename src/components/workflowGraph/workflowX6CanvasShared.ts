@@ -50,7 +50,7 @@ export interface CanvasNodeItem {
   knowledgeNodeKinds?: import("../../types/workflowKnowledge").WorkflowKnowledgeNodeKindFilter[];
   knowledgeTopK?: number;
   knowledgeSubgraphHop?: number;
-  knowledgeSubgraphDirection?: import("../../types/codeKnowledgeGraph").CodeGraphSubgraphDirection;
+  knowledgeSubgraphDirection?: import("../../types/workflowKnowledge").WorkflowKnowledgeSubgraphDirection;
   knowledgePathPrefix?: string;
   knowledgeOutputMode?: import("../../types/workflowKnowledge").WorkflowKnowledgeOutputMode;
   knowledgeRequireCitation?: boolean;

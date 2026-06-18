@@ -4,7 +4,6 @@ import { useLayoutEffect } from "react";
 import {
   authorView,
   cockpitView,
-  codeGraphInspectTool,
   inspectView,
   mcpHubInspectTool,
   skillsHubInspectTool,
@@ -77,7 +76,6 @@ describe("useViewMode", () => {
       cockpitView(),
       authorView("mcp"),
       authorView("skills"),
-      inspectView(codeGraphInspectTool()),
       inspectView(mcpHubInspectTool()),
       inspectView(skillsHubInspectTool()),
     ];
@@ -169,29 +167,6 @@ describe("useViewMode", () => {
     probe.unmount();
   });
 
-  test("patch on inspect/code-graph shallow-merges flags", () => {
-    const probe = renderProbe();
-    act(() => {
-      probe.api.enter(inspectView(codeGraphInspectTool()));
-    });
-    act(() => {
-      probe.api.patch({
-        kind: "inspect",
-        tool: { kind: "code-graph", suppressIdleAutoReindex: true },
-      });
-    });
-    expect(probe.api.view).toEqual({
-      kind: "inspect",
-      tool: {
-        kind: "code-graph",
-        suppressIdleAutoReindex: true,
-        lockToEntryRepository: false,
-        defaultProjectMultiRepo: false,
-      },
-    });
-    probe.unmount();
-  });
-
   test("switching cockpit hub panes does not stack history", () => {
     const probe = renderProbe();
     act(() => {
@@ -252,21 +227,14 @@ describe("useViewMode", () => {
   test("entering one mode clears any other previously-active legacy flag", () => {
     const probe = renderProbe();
     act(() => {
-      probe.api.enter(
-        inspectView(
-          codeGraphInspectTool({
-            lockToEntryRepository: true,
-            defaultProjectMultiRepo: true,
-          }),
-        ),
-      );
+      probe.api.enter(inspectView(mcpHubInspectTool()));
     });
-    expect(probe.api.legacy.codeKnowledgeGraphMode).toBe(true);
+    expect(probe.api.legacy.mcpHubMode).toBe(true);
 
     act(() => {
       probe.api.enter(cockpitView());
     });
-    expect(probe.api.legacy.codeKnowledgeGraphMode).toBe(false);
+    expect(probe.api.legacy.mcpHubMode).toBe(false);
     expect(probe.api.legacy.missionControlMode).toBe(true);
     probe.unmount();
   });

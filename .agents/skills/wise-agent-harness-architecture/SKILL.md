@@ -25,7 +25,7 @@ Classify every UI entry before adding or moving it:
 
 - Operator: the user is running work now. Examples: Chat, Cockpit, PRD assistant conversation, Mission execution.
 - Author: the user configures the loop's contracts and supply. Examples: Workspaces, Agents, Delegation Protocol, MCP, Skills, Hooks, Prompts, Trellis Spec.
-- Inspector: the user temporarily inspects evidence or context. Examples: code graph, git diff, task detail, progress monitor, session history.
+- Inspector: the user temporarily inspects evidence or context. Examples: git diff, task detail, progress monitor, session history, Trellis runtime lens.
 
 If a surface does not clearly fit, do not add it yet. Update the architecture guide first or reshape the feature.
 
@@ -47,7 +47,7 @@ If a surface does not clearly fit, do not add it yet. Update the architecture gu
 ## Workspace Semantics
 
 - Workspace is the scheduling boundary and Trellis runtime root.
-- Standalone Repo is still a first-class entry for Claude Code, Git, file editing, and code graph.
+- Standalone Repo is still a first-class entry for Claude Code, Git, and file editing.
 - A Standalone Repo can be promoted to a Workspace when it needs Trellis orchestration.
 - Workspace rootPath is the Trellis/runtime root, not necessarily the physical boundary of all member repositories.
 - Workspace main session and member repo execution sessions are separate.
