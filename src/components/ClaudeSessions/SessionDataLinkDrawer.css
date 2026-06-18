@@ -1343,15 +1343,31 @@
   flex-shrink: 0;
 }
 
-.app-session-feedback-loop__patch-main {
-  flex: 1;
-  min-width: 0;
+.app-session-feedback-loop__patch-path-row {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .app-session-feedback-loop__patch-path {
+  flex-shrink: 0;
   display: block;
   font-size: 12px;
   word-break: break-all;
+}
+
+.app-session-feedback-loop__patch-abs-path {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  word-break: break-all;
+  line-height: 1.35;
+}
+
+.app-session-feedback-loop__patch-main {
+  flex: 1;
+  min-width: 0;
 }
 
 .app-session-feedback-loop__patch-rationale {

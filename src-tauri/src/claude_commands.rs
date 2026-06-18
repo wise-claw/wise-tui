@@ -18,6 +18,7 @@ pub(crate) mod quick;
 pub(crate) mod project_skills;
 pub(crate) mod shared;
 pub(crate) mod subagents;
+pub(crate) mod memory;
 pub(crate) mod terminal;
 use self::hooks_discovery::{
     build_hook_scope_data_from_path, enrich_project_hooks_from_claude_hooks_dir,
@@ -778,7 +779,7 @@ pub(crate) struct ClaudeHookHandlerInput {
     model: Option<String>,
 }
 
-fn ensure_json_object(path: &Path) -> Result<serde_json::Value, String> {
+pub(crate) fn ensure_json_object(path: &Path) -> Result<serde_json::Value, String> {
     if !path.exists() {
         if let Some(parent) = path.parent() {
             fs::create_dir_all(parent).map_err(|e| e.to_string())?;
@@ -796,7 +797,7 @@ fn ensure_json_object(path: &Path) -> Result<serde_json::Value, String> {
     Ok(v)
 }
 
-fn write_json_pretty(path: &Path, value: &serde_json::Value) -> Result<(), String> {
+pub(crate) fn write_json_pretty(path: &Path, value: &serde_json::Value) -> Result<(), String> {
     if let Some(parent) = path.parent() {
         fs::create_dir_all(parent).map_err(|e| e.to_string())?;
     }

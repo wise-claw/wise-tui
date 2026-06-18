@@ -15,11 +15,13 @@ import type { ProjectSkillsPanelHandle } from "./ProjectSkillsPanel";
 import type { ClaudeHooksConfigPanelHandle } from "../ClaudeHooksConfigPanel";
 import type { SubagentsPanelHandle } from "./SubagentsPanel";
 import type { ClaudePluginsPanelHandle } from "./ClaudePluginsPanel";
+import type { ClaudeMemoryPanelHandle } from "./ClaudeMemoryPanel";
 import { openExternalUrl } from "../../services/openExternal";
 import { openClaudeUserSettingsJsonInIde } from "../../services/claudeConfigDir";
 import { OPEN_WORKSPACE_ERROR } from "../../services/openWorkspaceWithPreference";
 import {
   getClaudeHooksStatus,
+  getClaudeMemoryStatus,
   getClaudeMcpStatus,
   listClaudePluginCacheSkills,
   listClaudeProjectSkills,
@@ -45,6 +47,9 @@ const ClaudeHooksConfigPanel = lazy(() =>
 const SubagentsPanel = lazy(() => import("./SubagentsPanel").then((module) => ({ default: module.SubagentsPanel })));
 const ClaudePluginsPanel = lazy(() =>
   import("./ClaudePluginsPanel").then((module) => ({ default: module.ClaudePluginsPanel })),
+);
+const ClaudeMemoryPanel = lazy(() =>
+  import("./ClaudeMemoryPanel").then((module) => ({ default: module.ClaudeMemoryPanel })),
 );
 
 // ── Main ──
@@ -84,12 +89,14 @@ export function ClaudeCodeToolsPanel({
     hooks: 0,
     subagents: 0,
     plugins: 0,
+    memory: 0,
   });
   const mcpPanelRef = useRef<ClaudeMcpConfigPanelHandle>(null);
   const skillsPanelRef = useRef<ProjectSkillsPanelHandle>(null);
   const hooksPanelRef = useRef<ClaudeHooksConfigPanelHandle>(null);
   const subagentsPanelRef = useRef<SubagentsPanelHandle>(null);
   const pluginsPanelRef = useRef<ClaudePluginsPanelHandle>(null);
+  const memoryPanelRef = useRef<ClaudeMemoryPanelHandle>(null);
   const [pluginsRefreshing, setPluginsRefreshing] = useState(false);
 
   const handleSubagentsCountChange = useCallback((count: number) => {
@@ -110,6 +117,10 @@ export function ClaudeCodeToolsPanel({
 
   const handlePluginsCountChange = useCallback((count: number) => {
     setTabCounts((prev) => (prev.plugins === count ? prev : { ...prev, plugins: count }));
+  }, []);
+
+  const handleMemoryCountChange = useCallback((count: number) => {
+    setTabCounts((prev) => (prev.memory === count ? prev : { ...prev, memory: count }));
   }, []);
 
   const handlePluginsRefresh = useCallback(async () => {
@@ -143,7 +154,7 @@ export function ClaudeCodeToolsPanel({
     }, { timeoutMs: 1200 });
 
     async function preloadTabCounts() {
-      const [mcpRes, hooksRes, subagentsRes, skillsRes, userSkillsRes, pluginSkillsRes, pluginsRes] =
+      const [mcpRes, hooksRes, subagentsRes, skillsRes, userSkillsRes, pluginSkillsRes, pluginsRes, memoryRes] =
         await Promise.allSettled([
         getClaudeMcpStatus(repositoryPath ?? null),
         getClaudeHooksStatus(repositoryPath ?? null),
@@ -152,6 +163,7 @@ export function ClaudeCodeToolsPanel({
         listClaudeUserSkills(),
         listClaudePluginCacheSkills(repositoryPath),
         claudePluginListInstalled(repositoryPath),
+        getClaudeMemoryStatus(repositoryPath ?? null),
       ]);
       if (cancelled) return;
       setTabCounts((prev) => {
@@ -189,6 +201,9 @@ export function ClaudeCodeToolsPanel({
         if (pluginsRes.status === "fulfilled") {
           next.plugins = pluginsRes.value.length;
         }
+        if (memoryRes.status === "fulfilled") {
+          next.memory = memoryRes.value.files.filter((file) => file.exists).length;
+        }
         return next;
       });
     }
@@ -204,6 +219,7 @@ export function ClaudeCodeToolsPanel({
   const tabOptions = [
     { key: "mcp", label: withCountLabel("MCP", tabCounts.mcp) },
     { key: "skill", label: withCountLabel("技能", tabCounts.skill) },
+    { key: "memory", label: withCountLabel("记忆", tabCounts.memory) },
     { key: "hooks", label: withCountLabel("Hooks", tabCounts.hooks) },
     { key: "subagents", label: withCountLabel("子代理", tabCounts.subagents) },
     { key: "plugins", label: withCountLabel("插件", tabCounts.plugins) },
@@ -322,6 +338,36 @@ export function ClaudeCodeToolsPanel({
           Hooks 流程
         </Button>
       </Space>
+    ) : tab === "memory" ? (
+      <Space size={4}>
+        <Button
+          type="text"
+          size="small"
+          className="app-tab-extra-mcp-btn"
+          icon={<ReloadOutlined />}
+          onClick={() => void memoryPanelRef.current?.refresh()}
+        >
+          刷新
+        </Button>
+        <Button
+          type="text"
+          size="small"
+          className="app-tab-extra-mcp-btn"
+          icon={<FolderOpenOutlined />}
+          onClick={() => void memoryPanelRef.current?.openRulesRoot()}
+        >
+          Rules
+        </Button>
+        <Button
+          type="text"
+          size="small"
+          className="app-tab-extra-mcp-btn"
+          icon={<FolderOpenOutlined />}
+          onClick={() => void memoryPanelRef.current?.openMemoryRoot()}
+        >
+          记忆
+        </Button>
+      </Space>
     ) : tab === "plugins" ? (
       <Space size={4}>
         <Button
@@ -352,6 +398,8 @@ export function ClaudeCodeToolsPanel({
       ? "https://code.claude.com/docs/zh-CN/skills"
       : tab === "hooks"
         ? "https://code.claude.com/docs/zh-CN/hooks"
+        : tab === "memory"
+          ? "https://code.claude.com/docs/zh-CN/memory"
         : tab === "plugins"
           ? "https://code.claude.com/docs/zh-CN/plugins"
           : "https://code.claude.com/docs/zh-CN/mcp";
@@ -567,6 +615,27 @@ export function ClaudeCodeToolsPanel({
                       hideToolbar
                       listSearch={listSearch}
                       onCountChange={handleMcpCountChange}
+                    />
+                  </Suspense>
+                ) : null}
+              </div>
+            ),
+          },
+          {
+            key: "memory",
+            label: "记忆",
+            children: (
+              <div className="app-claude-code-tools-scroll">
+                {loadedTabs.has("memory") ? (
+                  <Suspense fallback={<Empty description="加载中..." image={Empty.PRESENTED_IMAGE_SIMPLE} />}>
+                    <ClaudeMemoryPanel
+                      repositoryPath={repositoryPath}
+                      active={panelActive && tab === "memory"}
+                      listSearch={listSearch}
+                      onCountChange={handleMemoryCountChange}
+                      onBindActions={(actions) => {
+                        memoryPanelRef.current = actions;
+                      }}
                     />
                   </Suspense>
                 ) : null}

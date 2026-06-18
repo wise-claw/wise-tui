@@ -1,4 +1,5 @@
 import { mergeJsonPatchContent } from "./sessionFeedbackConfigPatchJson";
+import { joinRepositoryAbsolutePath } from "./repositoryPreviewBinary";
 import type { SessionInsightRecommendation, SessionInsightsResult } from "./sessionInsights";
 import type { SessionInsightsReportMeta } from "./sessionInsightsReport";
 import { buildFeedbackLoopMarkdownReport, type SessionFeedbackLoopState } from "./sessionFeedbackLoop";
@@ -91,7 +92,7 @@ export interface FeedbackConfigSnapshot {
   capturedAt: number;
   claudeMd: FeedbackConfigSnapshotFile;
   agentsMd: FeedbackConfigSnapshotFile;
-  /** 项目级 memory 文件（`.claude/project-memory.md`） */
+  /** Claude Code 自动记忆入口（`~/.claude/projects/<project>/memory/MEMORY.md`） */
   memoryFile: FeedbackConfigSnapshotFile;
   settingsFile: FeedbackConfigSnapshotFile;
   ruleFiles: FeedbackConfigSnapshotFile[];
@@ -111,6 +112,9 @@ const ARTIFACT_KIND_LABEL: Record<FeedbackConfigArtifactKind, string> = {
 };
 
 const MAX_RULE_FILES_IN_PROMPT = 6;
+
+/** 反馈补丁落盘时用于标识 Claude Code 自动记忆文件（非仓库相对路径）。 */
+export const CLAUDE_AUTO_MEMORY_PATCH_PATH = "__claude_auto_memory__/MEMORY.md";
 
 export function feedbackConfigArtifactKindLabel(kind: FeedbackConfigArtifactKind): string {
   return ARTIFACT_KIND_LABEL[kind];
@@ -136,11 +140,17 @@ export function resolveFeedbackConfigPatchPath(patch: FeedbackConfigPatch): Feed
     }
   }
   if (patch.kind === "memory") {
-    if (path === "memory" || path === "memory.md" || path === "project-memory.md") {
-      return { ...patch, path: ".claude/project-memory.md" };
+    if (
+      path === "memory" ||
+      path === "memory.md" ||
+      path === "project-memory.md" ||
+      path === ".claude/project-memory.md" ||
+      path.startsWith("__claude_auto_memory__/")
+    ) {
+      return { ...patch, path: CLAUDE_AUTO_MEMORY_PATCH_PATH };
     }
     if (!path.startsWith(".claude/")) {
-      return { ...patch, path: `.claude/${path.endsWith(".md") ? path : "project-memory.md"}` };
+      return { ...patch, path: CLAUDE_AUTO_MEMORY_PATCH_PATH };
     }
   }
   if (patch.kind === "settings") {
@@ -152,6 +162,68 @@ export function resolveFeedbackConfigPatchPath(patch: FeedbackConfigPatch): Feed
     }
   }
   return { ...patch, path };
+}
+
+export type FeedbackConfigPatchOpenKind = "repository_relative" | "absolute" | "memory" | "none";
+
+export interface FeedbackConfigPatchFileTarget {
+  fileName: string;
+  displayPath: string;
+  openKind: FeedbackConfigPatchOpenKind;
+  repositoryRelativePath?: string;
+  absolutePath?: string;
+}
+
+/** 解析补丁对应文件的展示名与路径（memory 类需异步 enrich 后才有绝对路径）。 */
+export function resolveFeedbackConfigPatchFileTarget(
+  patch: FeedbackConfigPatch,
+  repositoryPath?: string | null,
+): FeedbackConfigPatchFileTarget {
+  const resolved = resolveFeedbackConfigPatchPath(patch);
+
+  if (resolved.action === "enable" || resolved.action === "disable") {
+    const sourcePath = resolved.mcp?.sourcePath?.trim() ?? "";
+    const serverName = resolved.mcp?.serverName?.trim() || resolved.path;
+    if (!sourcePath) {
+      return { fileName: serverName, displayPath: resolved.path, openKind: "none" };
+    }
+    const fileName = sourcePath.split(/[/\\]/).pop() ?? serverName;
+    return {
+      fileName,
+      displayPath: sourcePath,
+      openKind: "absolute",
+      absolutePath: sourcePath,
+    };
+  }
+
+  if (resolved.path === CLAUDE_AUTO_MEMORY_PATCH_PATH) {
+    return {
+      fileName: "MEMORY.md",
+      displayPath: "Claude 自动记忆 · MEMORY.md",
+      openKind: "memory",
+    };
+  }
+
+  const rel = resolved.path.replace(/\\/g, "/");
+  const fileName = rel.split("/").pop() ?? rel;
+  const repo = repositoryPath?.trim();
+  if (!repo) {
+    return {
+      fileName,
+      displayPath: rel,
+      openKind: "none",
+      repositoryRelativePath: rel,
+    };
+  }
+
+  const absolutePath = joinRepositoryAbsolutePath(repo, rel);
+  return {
+    fileName,
+    displayPath: absolutePath,
+    openKind: "repository_relative",
+    repositoryRelativePath: rel,
+    absolutePath,
+  };
 }
 
 function patchDedupeKey(patch: Pick<FeedbackConfigPatch, "kind" | "action" | "path" | "section">): string {
@@ -246,7 +318,7 @@ function heuristicMemoryNote(rec: SessionInsightRecommendation): FeedbackConfigP
     id: createFeedbackConfigPatchId("heuristic"),
     kind: "memory",
     action: "append_section",
-    path: ".claude/project-memory.md",
+    path: CLAUDE_AUTO_MEMORY_PATCH_PATH,
     section: "会话经验",
     rationale: `[${rec.severity}] ${rec.title}：${rec.description}`,
     content: [

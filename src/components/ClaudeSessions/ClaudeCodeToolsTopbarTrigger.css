@@ -9,16 +9,17 @@
 }
 
 .app-claude-code-tools-topbar-popover {
-  width: 420px;
-  max-width: 420px;
+  --app-claude-code-tools-popover-width: min(560px, calc(100vw - 32px));
+  width: var(--app-claude-code-tools-popover-width);
+  max-width: var(--app-claude-code-tools-popover-width);
 }
 
 .app-claude-code-tools-topbar-popover .ant-popover-container,
 .app-claude-code-tools-topbar-popover .ant-popover-inner {
   padding: 0 !important;
   overflow: hidden;
-  width: 420px !important;
-  max-width: 420px !important;
+  width: var(--app-claude-code-tools-popover-width) !important;
+  max-width: var(--app-claude-code-tools-popover-width) !important;
   box-sizing: border-box;
 }
 

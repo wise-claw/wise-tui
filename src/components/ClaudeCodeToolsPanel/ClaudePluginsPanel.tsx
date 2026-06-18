@@ -119,31 +119,31 @@ export const ClaudePluginsPanel = forwardRef<ClaudePluginsPanelHandle, Props>(fu
 
   useEffect(() => {
     if (!active) return;
+    void loadInstalled();
+  }, [active, loadInstalled]);
+
+  useEffect(() => {
+    if (!active || bootstrapOnceRef.current) return;
+    bootstrapOnceRef.current = true;
     let cancelled = false;
     void (async () => {
-      if (!bootstrapOnceRef.current) {
-        bootstrapOnceRef.current = true;
-        setBootstrapping(true);
-        try {
-          const boot = await claudePluginMarketBootstrap();
-          if (cancelled) return;
-          if (!boot.ok) {
-            message.warning("部分插件市场未能自动添加，可稍后重试刷新");
-          }
-        } catch {
-          /* 首次打开失败不阻断列表读取 */
-        } finally {
-          if (!cancelled) setBootstrapping(false);
+      setBootstrapping(true);
+      try {
+        const boot = await claudePluginMarketBootstrap();
+        if (cancelled) return;
+        if (!boot.ok) {
+          message.warning("部分插件市场未能自动添加，可稍后重试刷新");
         }
-      }
-      if (!cancelled) {
-        await loadInstalled();
+      } catch {
+        /* 首次打开失败不阻断列表读取 */
+      } finally {
+        if (!cancelled) setBootstrapping(false);
       }
     })();
     return () => {
       cancelled = true;
     };
-  }, [active, loadInstalled, message]);
+  }, [active, message]);
 
   const filteredInstalled = useMemo(() => {
     const q = listSearch.trim().toLowerCase();
@@ -328,7 +328,7 @@ export const ClaudePluginsPanel = forwardRef<ClaudePluginsPanelHandle, Props>(fu
             <Spin size="small" />
           </div>
         ) : null}
-        {loading && installed.length === 0 ? (
+        {(loading || bootstrapping) && installed.length === 0 ? (
           <div className="app-claude-plugins-panel-loading">
             <Spin size="small" />
           </div>

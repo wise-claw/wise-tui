@@ -1,6 +1,6 @@
 import type { AuthorPane } from "../types/viewMode";
 
-export type ClaudeCodeToolsTabKey = "mcp" | "skill" | "hooks" | "subagents" | "plugins";
+export type ClaudeCodeToolsTabKey = "mcp" | "skill" | "memory" | "hooks" | "subagents" | "plugins";
 
 /** Claude Code 顶栏弹层 Tab → 工作台配置侧栏页 */
 export function claudeCodeToolsTabToAuthorPane(tab: string): AuthorPane | null {

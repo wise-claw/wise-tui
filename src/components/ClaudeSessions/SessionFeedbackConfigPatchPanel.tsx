@@ -1,11 +1,13 @@
-import { Button, Checkbox, Space, Spin, Tag, Typography, message } from "antd";
+import { Button, Checkbox, Space, Spin, Tag, Typography, App, message } from "antd";
 import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { HoverHint } from "../shared/HoverHint";
 import {
   CheckOutlined,
   CloseOutlined,
   DiffOutlined,
   DownOutlined,
   FileTextOutlined,
+  FolderOpenOutlined,
   HistoryOutlined,
   ReloadOutlined,
   RobotOutlined,
@@ -15,11 +17,13 @@ import {
 } from "@ant-design/icons";
 import type { FeedbackPatchBackupRecord } from "../../utils/sessionFeedbackConfigPatchJson";
 import type { UseSessionFeedbackLoopResult } from "../../hooks/useSessionFeedbackLoop";
-import { enrichPatchWithPreview } from "../../services/sessionFeedbackConfigPatchApply";
+import { enrichPatchWithPreview, openFeedbackConfigPatchFile, enrichFeedbackConfigPatchFileTarget } from "../../services/sessionFeedbackConfigPatchApply";
 import {
   feedbackConfigArtifactKindLabel,
+  resolveFeedbackConfigPatchFileTarget,
   type FeedbackConfigPatch,
 } from "../../utils/sessionFeedbackConfigPatch";
+import { OPEN_WORKSPACE_ERROR } from "../../services/openWorkspaceWithPreference";
 import {
   buildPatchDiffLines,
   compactPatchDiffLines,
@@ -107,9 +111,14 @@ function PatchRow({
   promoting?: boolean;
   onPromote?: () => void;
 }) {
+  const { message } = App.useApp();
   const [expanded, setExpanded] = useState(false);
   const [diffLoading, setDiffLoading] = useState(false);
   const [diffPreview, setDiffPreview] = useState<{ before: string; after: string } | null>(null);
+  const [openingFile, setOpeningFile] = useState(false);
+  const [fileTarget, setFileTarget] = useState(() =>
+    resolveFeedbackConfigPatchFileTarget(patch, repositoryPath),
+  );
 
   const statusColor =
     patch.status === "applied"
@@ -122,6 +131,43 @@ function PatchRow({
 
   const canPreviewDiff =
     patch.action !== "enable" && patch.action !== "disable" && Boolean(repositoryPath?.trim());
+
+  const canOpenFile = fileTarget.openKind !== "none";
+
+  useEffect(() => {
+    const base = resolveFeedbackConfigPatchFileTarget(patch, repositoryPath);
+    setFileTarget(base);
+    if (base.openKind !== "memory") return;
+    let cancelled = false;
+    void enrichFeedbackConfigPatchFileTarget(patch, repositoryPath, base).then((enriched) => {
+      if (!cancelled) setFileTarget(enriched);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [patch, repositoryPath]);
+
+  const handleOpenFile = useCallback(async () => {
+    if (!canOpenFile) {
+      message.warning("缺少仓库路径，无法打开该文件");
+      return;
+    }
+    setOpeningFile(true);
+    try {
+      await openFeedbackConfigPatchFile({ repositoryPath, patch });
+    } catch (e) {
+      const code = e instanceof Error ? e.message : "";
+      if (code === OPEN_WORKSPACE_ERROR.NOT_CONFIGURED) {
+        message.warning("未配置可用的编辑器或命令，请在中栏顶部「打开方式」中选择");
+      } else if (code === OPEN_WORKSPACE_ERROR.NO_TARGET || code === OPEN_WORKSPACE_ERROR.EMPTY_PATH) {
+        message.warning("无法打开该补丁目标文件");
+      } else {
+        message.error(typeof e === "string" ? e : e instanceof Error ? e.message : "打开文件失败");
+      }
+    } finally {
+      setOpeningFile(false);
+    }
+  }, [canOpenFile, message, patch, repositoryPath]);
 
   useEffect(() => {
     if (!expanded || !canPreviewDiff) return;
@@ -148,9 +194,18 @@ function PatchRow({
           <span className="app-session-feedback-loop__patch-spacer" />
         )}
         <div className="app-session-feedback-loop__patch-main">
-          <Text strong className="app-session-feedback-loop__patch-path">
-            {patch.path}
-          </Text>
+          <div className="app-session-feedback-loop__patch-path-row">
+            <Text strong className="app-session-feedback-loop__patch-path">
+              {fileTarget.fileName}
+            </Text>
+            <Text
+              type="secondary"
+              className="app-session-feedback-loop__patch-abs-path"
+              title={fileTarget.displayPath}
+            >
+              {fileTarget.displayPath}
+            </Text>
+          </div>
           <Space size={4} wrap>
             <Tag bordered={false}>{feedbackConfigArtifactKindLabel(patch.kind)}</Tag>
             <Tag bordered={false}>{patch.action}</Tag>
@@ -176,17 +231,41 @@ function PatchRow({
           </Text>
         </div>
         <Space size={0}>
+          {canOpenFile ? (
+            <HoverHint title="在编辑器中打开">
+              <Button
+                size="small"
+                type="text"
+                icon={<FolderOpenOutlined />}
+                loading={openingFile}
+                aria-label="在编辑器中打开"
+                onClick={() => void handleOpenFile()}
+              />
+            </HoverHint>
+          ) : null}
           {canPreviewDiff ? (
-            <Button
-              size="small"
-              type="text"
-              icon={<DiffOutlined />}
-              aria-expanded={expanded}
-              onClick={() => setExpanded((v) => !v)}
-            />
+            <HoverHint title={expanded ? "收起 diff 预览" : "预览 diff"}>
+              <Button
+                size="small"
+                type="text"
+                icon={<DiffOutlined />}
+                aria-expanded={expanded}
+                aria-label={expanded ? "收起 diff 预览" : "预览 diff"}
+                onClick={() => setExpanded((v) => !v)}
+              />
+            </HoverHint>
           ) : null}
           {patch.status === "pending" ? (
-            <Button size="small" type="text" danger icon={<CloseOutlined />} onClick={onReject} />
+            <HoverHint title="拒绝此补丁">
+              <Button
+                size="small"
+                type="text"
+                danger
+                icon={<CloseOutlined />}
+                aria-label="拒绝此补丁"
+                onClick={onReject}
+              />
+            </HoverHint>
           ) : null}
           {canPromote && !alreadyPromoted && onPromote ? (
             <Button
@@ -423,12 +502,15 @@ export const SessionFeedbackConfigPatchPanel = memo(function SessionFeedbackConf
             {formatOverheadDelta(configOverheadDelta.mcp)}
           </Tag>
         ) : null}
-        <Button
-          size="small"
-          type="text"
-          icon={<ReloadOutlined spin={configSnapshotLoading} />}
-          onClick={() => void refreshConfigSnapshot()}
-        />
+        <HoverHint title="刷新配置快照">
+          <Button
+            size="small"
+            type="text"
+            icon={<ReloadOutlined spin={configSnapshotLoading} />}
+            aria-label="刷新配置快照"
+            onClick={() => void refreshConfigSnapshot()}
+          />
+        </HoverHint>
       </div>
 
       {patchEffectivenessHint ? (
@@ -511,15 +593,18 @@ export const SessionFeedbackConfigPatchPanel = memo(function SessionFeedbackConf
           <HistoryOutlined />
           <span>备份与回滚 ({configPatchBackups.length})</span>
           {backupsExpanded ? <UpOutlined /> : <DownOutlined />}
-          <Button
-            size="small"
-            type="text"
-            icon={<ReloadOutlined spin={configPatchBackupsLoading} />}
-            onClick={(e) => {
-              e.stopPropagation();
-              void refreshConfigPatchBackups();
-            }}
-          />
+          <HoverHint title="刷新备份列表">
+            <Button
+              size="small"
+              type="text"
+              icon={<ReloadOutlined spin={configPatchBackupsLoading} />}
+              aria-label="刷新备份列表"
+              onClick={(e) => {
+                e.stopPropagation();
+                void refreshConfigPatchBackups();
+              }}
+            />
+          </HoverHint>
         </button>
         {backupsExpanded ? (
           configPatchBackups.length === 0 ? (

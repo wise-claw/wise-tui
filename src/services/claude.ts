@@ -23,6 +23,8 @@ import type {
   ClaudeHooksStatusResponse,
   ClaudeHookSourceScope,
   ClaudeHookUpsertPayload,
+  ClaudeMemorySettingsScope,
+  ClaudeMemoryStatusResponse,
   ClaudeMcpAddPayload,
   ClaudeMcpRuntimeHealthEntry,
   ClaudeMcpStatusResponse,
@@ -949,6 +951,52 @@ export async function setClaudeDisableAllHooks(input: {
   return invoke("set_claude_disable_all_hooks", {
     scope: input.scope,
     disableAllHooks: input.disableAllHooks,
+    projectPath: input.repositoryPath ?? null,
+  });
+}
+
+export async function ensureClaudeRulesDir(input: {
+  scope: "user" | "project";
+  repositoryPath?: string | null;
+}): Promise<string> {
+  return invoke<string>("ensure_claude_rules_dir", {
+    scope: input.scope,
+    projectPath: input.repositoryPath ?? null,
+  });
+}
+
+export async function getClaudeMemoryStatus(
+  repositoryPath?: string | null,
+): Promise<ClaudeMemoryStatusResponse> {
+  return invoke<ClaudeMemoryStatusResponse>("get_claude_memory_status", {
+    projectPath: repositoryPath ?? null,
+  });
+}
+
+export async function setClaudeAutoMemoryEnabled(input: {
+  scope: ClaudeMemorySettingsScope;
+  enabled: boolean;
+  repositoryPath?: string | null;
+}): Promise<void> {
+  return invoke("set_claude_auto_memory_enabled", {
+    scope: input.scope,
+    enabled: input.enabled,
+    projectPath: input.repositoryPath ?? null,
+  });
+}
+
+export async function readClaudeAutoMemoryFile(repositoryPath?: string | null): Promise<string> {
+  return invoke<string>("read_claude_auto_memory_file", {
+    projectPath: repositoryPath ?? null,
+  });
+}
+
+export async function saveClaudeAutoMemoryFile(input: {
+  content: string;
+  repositoryPath?: string | null;
+}): Promise<string> {
+  return invoke<string>("save_claude_auto_memory_file", {
+    content: input.content,
     projectPath: input.repositoryPath ?? null,
   });
 }

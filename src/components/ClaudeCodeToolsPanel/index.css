@@ -2340,3 +2340,166 @@
   line-height: 1.25;
   margin-top: 2px;
 }
+
+/* ── Memory panel ── */
+
+.app-claude-memory-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 0 0 4px;
+}
+
+.app-claude-memory-panel-loading {
+  display: flex;
+  justify-content: center;
+  padding: 12px 0;
+}
+
+.app-claude-memory-panel-settings {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 6px;
+  padding: 5px 7px;
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-claude-memory-panel-settings-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+  flex-wrap: wrap;
+}
+
+.app-claude-memory-panel-settings-title {
+  font-size: 11px;
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.app-claude-memory-panel-settings-meta {
+  font-size: 10px;
+  color: var(--ant-color-text-tertiary);
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+  max-width: 100%;
+}
+
+.app-claude-memory-section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.app-claude-memory-section-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 0 1px;
+}
+
+.app-claude-memory-section-title {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--ant-color-text-tertiary);
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.app-claude-memory-section-hint {
+  font-size: 9px;
+  color: var(--ant-color-text-quaternary);
+  line-height: 1.25;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.app-claude-memory-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.app-claude-memory-card {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 6px;
+  padding: 4px 5px 4px 7px;
+  background: var(--ant-color-fill-quaternary);
+}
+
+.app-claude-memory-card-main {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.app-claude-memory-card-title-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  min-width: 0;
+}
+
+.app-claude-memory-card-icon {
+  flex-shrink: 0;
+  font-size: 11px;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-claude-memory-card-title {
+  font-size: 11px;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.app-claude-memory-tag.ant-tag {
+  margin-inline-end: 0;
+  padding-inline: 4px;
+  font-size: 9px;
+  line-height: 14px;
+}
+
+.app-claude-memory-card-stat {
+  font-size: 9px;
+  color: var(--ant-color-text-quaternary);
+  white-space: nowrap;
+}
+
+.app-claude-memory-card-path {
+  margin-top: 1px;
+  font-size: 9px;
+  color: var(--ant-color-text-quaternary);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  line-height: 1.25;
+}
+
+.app-claude-memory-open-btn.ant-btn {
+  flex-shrink: 0;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+}
+
+.app-claude-memory-empty {
+  font-size: 10px;
+  color: var(--ant-color-text-quaternary);
+  padding: 2px 1px 0;
+  line-height: 1.35;
+}

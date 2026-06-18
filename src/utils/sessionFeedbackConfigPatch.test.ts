@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { SessionInsightsResult } from "./sessionInsights";
 import {
+  CLAUDE_AUTO_MEMORY_PATCH_PATH,
   buildFeedbackLoopConfigPatchPrompt,
   dedupeFeedbackConfigPatches,
   inferConfigPatchCandidates,
@@ -9,6 +10,7 @@ import {
   parseConfigPatchesFromAiResponse,
   previewPatchContent,
   resolveFeedbackConfigPatchPath,
+  resolveFeedbackConfigPatchFileTarget,
 } from "./sessionFeedbackConfigPatch";
 import { createInitialFeedbackLoopState } from "./sessionFeedbackLoop";
 
@@ -188,7 +190,53 @@ describe("resolveFeedbackConfigPatchPath", () => {
       source: "heuristic",
       status: "pending",
     });
-    expect(resolved.path).toBe(".claude/project-memory.md");
+    expect(resolved.path).toBe(CLAUDE_AUTO_MEMORY_PATCH_PATH);
+  });
+});
+
+describe("resolveFeedbackConfigPatchFileTarget", () => {
+  test("resolves repository file to absolute path", () => {
+    const target = resolveFeedbackConfigPatchFileTarget(
+      {
+        id: "x",
+        kind: "claude_md",
+        action: "append_section",
+        path: "CLAUDE.md",
+        rationale: "r",
+        content: "body",
+        source: "ai",
+        status: "pending",
+      },
+      "/Users/dev/wise-tui",
+    );
+    expect(target.fileName).toBe("CLAUDE.md");
+    expect(target.displayPath).toBe("/Users/dev/wise-tui/CLAUDE.md");
+    expect(target.openKind).toBe("repository_relative");
+    expect(target.repositoryRelativePath).toBe("CLAUDE.md");
+  });
+
+  test("uses MCP source path for enable/disable patches", () => {
+    const target = resolveFeedbackConfigPatchFileTarget(
+      {
+        id: "x",
+        kind: "mcp",
+        action: "enable",
+        path: "my-server",
+        rationale: "r",
+        content: "",
+        source: "ai",
+        status: "pending",
+        mcp: {
+          serverName: "my-server",
+          scope: "user",
+          sourcePath: "/Users/dev/.claude/settings.json",
+        },
+      },
+      "/Users/dev/wise-tui",
+    );
+    expect(target.fileName).toBe("my-server");
+    expect(target.displayPath).toBe("/Users/dev/.claude/settings.json");
+    expect(target.openKind).toBe("absolute");
   });
 });
 

@@ -953,6 +953,38 @@ export interface ClaudeHooksStatusResponse {
   plugins?: ClaudeHookScopeData[];
 }
 
+export type ClaudeMemoryFileKind = "instruction" | "rule" | "auto_memory" | "legacy";
+export type ClaudeMemoryScope = "user" | "project" | "local" | "auto";
+
+export interface ClaudeMemorySettingSource {
+  scope: string;
+  sourcePath: string;
+}
+
+export interface ClaudeMemoryFileItem {
+  id: string;
+  kind: ClaudeMemoryFileKind;
+  scope: ClaudeMemoryScope;
+  label: string;
+  sourcePath: string;
+  exists: boolean;
+  charCount: number;
+  lineCount: number;
+  loadedAtStartup: boolean;
+  pathPatterns: string[];
+}
+
+export interface ClaudeMemoryStatusResponse {
+  autoMemoryEnabled: boolean;
+  autoMemoryEnabledSource: ClaudeMemorySettingSource;
+  autoMemoryDirectory: string | null;
+  autoMemoryDirectorySource: ClaudeMemorySettingSource | null;
+  autoMemoryPath: string;
+  files: ClaudeMemoryFileItem[];
+}
+
+export type ClaudeMemorySettingsScope = "user" | "project" | "local";
+
 export interface ClaudeHookUpsertPayload {
   scope: ClaudeHookSourceScope;
   repositoryPath?: string | null;

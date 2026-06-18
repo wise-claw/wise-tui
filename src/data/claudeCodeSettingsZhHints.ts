@@ -73,7 +73,7 @@ export const CLAUDE_SETTINGS_ZH_HINTS: Record<string, ClaudeSettingsZhHint> = {
     detail: "限制可选模型列表",
   },
   autoMemoryEnabled: {
-    detail: "自动内存",
+    detail: "自动记忆：Claude 跨会话写入 ~/.claude/projects/<project>/memory/",
   },
   autoMode: {
     detail: "自动模式分类器规则",

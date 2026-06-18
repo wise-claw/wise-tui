@@ -1,4 +1,4 @@
-import { getClaudeMcpStatus, listClaudeProjectSkills } from "./claude";
+import { getClaudeMcpStatus, getClaudeMemoryStatus, listClaudeProjectSkills, readClaudeAutoMemoryFile } from "./claude";
 import {
   loadContextOverheadEstimate,
   type ContextOverheadEstimate,
@@ -106,17 +106,34 @@ export async function loadFeedbackConfigSnapshot(
   const trimmed = repositoryPath.trim();
   if (!trimmed) return null;
 
-  const [claudeMd, agentsMd, memoryFile, settingsFile, ruleFiles, skills, mcpStatus, overheadEstimate] =
+  const [claudeMd, agentsMd, memoryStatus, memoryContent, settingsFile, ruleFiles, skills, mcpStatus, overheadEstimate] =
     await Promise.all([
     readSnapshotFile(trimmed, "CLAUDE.md"),
     readSnapshotFile(trimmed, "AGENTS.md"),
-    readSnapshotFile(trimmed, ".claude/project-memory.md"),
+    getClaudeMemoryStatus(trimmed).catch(() => null),
+    readClaudeAutoMemoryFile(trimmed).catch(() => ""),
     readSnapshotFile(trimmed, ".claude/settings.json"),
     listRuleFiles(trimmed),
     listClaudeProjectSkills(trimmed).catch(() => []),
     getClaudeMcpStatus(trimmed).catch(() => null),
     loadContextOverheadEstimate(trimmed).catch(() => null),
   ]);
+
+  const memoryFile = memoryStatus
+    ? {
+        path: memoryStatus.autoMemoryPath.endsWith("/")
+          ? `${memoryStatus.autoMemoryPath}MEMORY.md`
+          : `${memoryStatus.autoMemoryPath.replace(/\/+$/, "")}/MEMORY.md`,
+        exists: memoryContent.trim().length > 0 || memoryStatus.files.some((file) => file.kind === "auto_memory" && file.label === "MEMORY.md" && file.exists),
+        charCount: memoryContent.length,
+        excerpt: excerpt(memoryContent),
+      }
+    : {
+        path: "~/.claude/projects/<project>/memory/MEMORY.md",
+        exists: false,
+        charCount: 0,
+        excerpt: "",
+      };
 
   return {
     repositoryPath: trimmed,

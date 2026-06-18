@@ -1,11 +1,20 @@
-import { setClaudeMcpServerEnabled } from "./claude";
+import { setClaudeMcpServerEnabled, readClaudeAutoMemoryFile, saveClaudeAutoMemoryFile, getClaudeMemoryStatus } from "./claude";
 import { backupFeedbackConfigPatchApply } from "./sessionFeedbackConfigPatchBackup";
 import { readProjectRelativeFile, writeProjectRelativeFile } from "./projectRelativeFiles";
+import {
+  OPEN_WORKSPACE_ERROR,
+  openRepositoryEntryInPreferredEditor,
+  resolvePreferredEditorOpenAppTarget,
+} from "./openWorkspaceWithPreference";
+import { openWorkspaceIn } from "./repository";
 import type { FeedbackConfigPatch } from "../utils/sessionFeedbackConfigPatch";
 import {
+  CLAUDE_AUTO_MEMORY_PATCH_PATH,
   mergeAppendSectionContent,
   previewPatchContent,
   resolveFeedbackConfigPatchPath,
+  resolveFeedbackConfigPatchFileTarget,
+  type FeedbackConfigPatchFileTarget,
 } from "../utils/sessionFeedbackConfigPatch";
 
 export interface ApplyFeedbackConfigPatchInput {
@@ -68,7 +77,10 @@ export async function applyFeedbackConfigPatch(
       };
     }
 
-    const before = await readCurrentFile(repo, patch.path);
+    const before =
+      patch.kind === "memory" || patch.path === CLAUDE_AUTO_MEMORY_PATCH_PATH
+        ? await readClaudeAutoMemoryFile(repo).catch(() => null)
+        : await readCurrentFile(repo, patch.path);
     if (patch.action === "create" && before != null && before.trim().length > 0) {
       throw new Error(`文件已存在：${patch.path}`);
     }
@@ -80,7 +92,11 @@ export async function applyFeedbackConfigPatch(
       before,
       after: nextContent,
     });
-    await writeProjectRelativeFile(repo, patch.path, nextContent);
+    if (patch.kind === "memory" || patch.path === CLAUDE_AUTO_MEMORY_PATCH_PATH) {
+      await saveClaudeAutoMemoryFile({ content: nextContent, repositoryPath: repo });
+    } else {
+      await writeProjectRelativeFile(repo, patch.path, nextContent);
+    }
 
     return {
       patch: {
@@ -129,9 +145,77 @@ export async function enrichPatchWithPreview(
   if (resolved.action === "enable" || resolved.action === "disable") {
     return { before: resolved.mcp?.serverName ?? "", after: resolved.action };
   }
-  const before = (await readCurrentFile(repositoryPath, resolved.path)) ?? "";
+  const before =
+    resolved.kind === "memory" || resolved.path === CLAUDE_AUTO_MEMORY_PATCH_PATH
+      ? ((await readClaudeAutoMemoryFile(repositoryPath).catch(() => "")) ?? "")
+      : ((await readCurrentFile(repositoryPath, resolved.path)) ?? "");
   const after = previewPatchContent(resolved, before || null);
   return { before, after };
+}
+
+async function openAbsolutePathInPreferredEditor(absolutePath: string): Promise<void> {
+  const target = resolvePreferredEditorOpenAppTarget();
+  if (!target) {
+    throw new Error(OPEN_WORKSPACE_ERROR.NOT_CONFIGURED);
+  }
+  if (target.kind === "command") {
+    const cmd = (target.command ?? "").trim();
+    if (!cmd) throw new Error(OPEN_WORKSPACE_ERROR.NOT_CONFIGURED);
+    await openWorkspaceIn(absolutePath, { command: cmd, args: target.args, gotoLine: 1, gotoColumn: 1 });
+    return;
+  }
+  const appName = (target.appName ?? "").trim();
+  if (!appName) throw new Error(OPEN_WORKSPACE_ERROR.NOT_CONFIGURED);
+  await openWorkspaceIn(absolutePath, { appName, args: target.args, gotoLine: 1, gotoColumn: 1 });
+}
+
+/** 解析 memory 补丁的绝对路径（供展示与打开）。 */
+export async function enrichFeedbackConfigPatchFileTarget(
+  patch: FeedbackConfigPatch,
+  repositoryPath?: string | null,
+  base?: FeedbackConfigPatchFileTarget,
+): Promise<FeedbackConfigPatchFileTarget> {
+  const target = base ?? resolveFeedbackConfigPatchFileTarget(patch, repositoryPath);
+  if (target.openKind !== "memory") return target;
+  try {
+    const status = await getClaudeMemoryStatus(repositoryPath ?? null);
+    const memoryFile =
+      status.files.find(
+        (f) => f.kind === "auto_memory" && /MEMORY\.md$/i.test(f.sourcePath),
+      ) ?? status.files.find((f) => f.kind === "auto_memory");
+    const absPath =
+      memoryFile?.sourcePath ??
+      `${status.autoMemoryPath.replace(/[/\\]+$/, "")}/MEMORY.md`;
+    return { ...target, displayPath: absPath, absolutePath: absPath };
+  } catch {
+    return target;
+  }
+}
+
+/** 在偏好编辑器中打开补丁目标文件。 */
+export async function openFeedbackConfigPatchFile(input: {
+  repositoryPath?: string | null;
+  patch: FeedbackConfigPatch;
+}): Promise<void> {
+  const target = await enrichFeedbackConfigPatchFileTarget(
+    input.patch,
+    input.repositoryPath,
+  );
+  const repo = input.repositoryPath?.trim();
+
+  if (target.openKind === "repository_relative" && target.repositoryRelativePath && repo) {
+    await openRepositoryEntryInPreferredEditor(repo, target.repositoryRelativePath);
+    return;
+  }
+  if (target.openKind === "absolute" && target.absolutePath) {
+    await openAbsolutePathInPreferredEditor(target.absolutePath);
+    return;
+  }
+  if (target.openKind === "memory" && target.absolutePath) {
+    await openAbsolutePathInPreferredEditor(target.absolutePath);
+    return;
+  }
+  throw new Error(OPEN_WORKSPACE_ERROR.EMPTY_PATH);
 }
 
 export { mergeAppendSectionContent };
