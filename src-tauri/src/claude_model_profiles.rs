@@ -577,6 +577,24 @@ fn resolve_profile_model_id(profile: &ClaudeModelProfile) -> Result<String, Stri
         .ok_or_else(|| "档案中未找到模型 ID（请检查 env.ANTHROPIC_MODEL 等）".to_string())
 }
 
+/// 在 spawn `opencode run` 前将 Wise 当前激活的 OpenCode 档案写入 `~/.config/opencode`。
+pub(crate) fn ensure_active_opencode_profile_applied(db: &WiseDb) -> Result<(), String> {
+    let store = load_store(db);
+    let active_id = match store.active_opencode_profile_id.as_deref() {
+        Some(id) if !id.trim().is_empty() => id.trim().to_string(),
+        _ => return Ok(()),
+    };
+    let profile = store
+        .profiles
+        .iter()
+        .find(|p| p.id == active_id)
+        .ok_or_else(|| format!("未找到 OpenCode 模型档案: {active_id}"))?;
+    if profile_engine(profile) != "opencode" {
+        return Ok(());
+    }
+    apply_profile_to_disk(profile)
+}
+
 /// 在 spawn `codex exec` 前将 Wise 当前激活的 Codex 档案写入 `~/.codex`（auth + config）。
 pub(crate) fn ensure_active_codex_profile_applied(db: &WiseDb) -> Result<(), String> {
     let store = load_store(db);

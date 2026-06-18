@@ -9,6 +9,7 @@ import {
 } from "./claudeStreamAssembler";
 import {
   extractCodexResumeSessionIdFromStreamLine,
+  extractOpencodeResumeSessionIdFromStreamLine,
   extractCursorAgentIdFromCompletePayload,
   extractCursorAgentIdFromStreamLine,
   extractResultErrorMessageFromStreamLine,
@@ -17,6 +18,7 @@ import {
   isClaudeToolCallParseFailureText,
   isHookStartedStreamLine,
   shouldClearCodexResumeSessionFromStreamLine,
+  shouldClearOpencodeResumeSessionFromStreamLine,
   stripClaudeHarnessInjectedStreamText,
 } from "./claudeStreamParser";
 import {
@@ -416,6 +418,15 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
         }),
       );
     }
+    if (shouldClearOpencodeResumeSessionFromStreamLine(line)) {
+      onStreamActivity?.(tid);
+      setSessions((prev) =>
+        prev.map((s) => {
+          if (s.id !== tid && s.claudeSessionId !== tid) return s;
+          return { ...s, claudeSessionId: null };
+        }),
+      );
+    }
     const codexResumeSessionId = extractCodexResumeSessionIdFromStreamLine(line);
     if (codexResumeSessionId) {
       onStreamActivity?.(tid);
@@ -426,6 +437,17 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
         }),
       );
       onClaudeSessionIdAssigned?.(tid, codexResumeSessionId);
+    }
+    const opencodeResumeSessionId = extractOpencodeResumeSessionIdFromStreamLine(line);
+    if (opencodeResumeSessionId) {
+      onStreamActivity?.(tid);
+      setSessions((prev) =>
+        prev.map((s) => {
+          if (s.id !== tid && s.claudeSessionId !== tid) return s;
+          return { ...s, claudeSessionId: opencodeResumeSessionId };
+        }),
+      );
+      onClaudeSessionIdAssigned?.(tid, opencodeResumeSessionId);
     }
     const cursorAgentId = extractCursorAgentIdFromStreamLine(line);
     if (cursorAgentId) {

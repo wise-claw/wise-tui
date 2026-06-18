@@ -268,7 +268,7 @@ export function parseExecutionEnvironmentWorkerRepositoryName(
   if (idx < 0) return null;
   const tail = repositoryName.slice(idx + marker.length).trim();
   if (!tail) return null;
-  const enginePrefix = tail.match(/^(claude|codex|cursor):/i);
+  const enginePrefix = tail.match(/^(claude|codex|cursor|gemini|opencode):/i);
   if (enginePrefix) {
     const engine = enginePrefix[1].toLowerCase() as SessionExecutionEngine;
     const label = tail.slice(enginePrefix[0].length).trim();

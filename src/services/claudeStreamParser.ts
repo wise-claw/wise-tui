@@ -135,13 +135,32 @@ function extractPartsFromStreamDelta(delta: unknown): MessagePart[] {
  * 与 Hub 一致地对 `stream_event` 等外壳解包，避免仅 Hub 能解析 AskUserQuestion 而 UI 气泡已展示、Dock 未写入。
  */
 export function extractCodexResumeSessionIdFromStreamLine(line: string): string | null {
+  return extractExternalResumeSessionIdFromStreamLine(line, "codex_session");
+}
+
+export function shouldClearCodexResumeSessionFromStreamLine(line: string): boolean {
+  return shouldClearExternalResumeSessionFromStreamLine(line, "codex_session");
+}
+
+export function extractOpencodeResumeSessionIdFromStreamLine(line: string): string | null {
+  return extractExternalResumeSessionIdFromStreamLine(line, "opencode_session");
+}
+
+export function shouldClearOpencodeResumeSessionFromStreamLine(line: string): boolean {
+  return shouldClearExternalResumeSessionFromStreamLine(line, "opencode_session");
+}
+
+function extractExternalResumeSessionIdFromStreamLine(
+  line: string,
+  streamType: "codex_session" | "opencode_session",
+): string | null {
   try {
     const parsed: unknown = JSON.parse(line);
     const json =
       parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
         ? (parsed as Record<string, unknown>)
         : null;
-    if (!json || json.type !== "codex_session") return null;
+    if (!json || json.type !== streamType) return null;
     const raw = json.sessionId ?? json.session_id;
     if (typeof raw !== "string") return null;
     const trimmed = raw.trim();
@@ -151,14 +170,17 @@ export function extractCodexResumeSessionIdFromStreamLine(line: string): string 
   }
 }
 
-export function shouldClearCodexResumeSessionFromStreamLine(line: string): boolean {
+function shouldClearExternalResumeSessionFromStreamLine(
+  line: string,
+  streamType: "codex_session" | "opencode_session",
+): boolean {
   try {
     const parsed: unknown = JSON.parse(line);
     const json =
       parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
         ? (parsed as Record<string, unknown>)
         : null;
-    if (!json || json.type !== "codex_session") return false;
+    if (!json || json.type !== streamType) return false;
     const raw = json.sessionId ?? json.session_id;
     return typeof raw === "string" && raw.trim().length === 0;
   } catch {

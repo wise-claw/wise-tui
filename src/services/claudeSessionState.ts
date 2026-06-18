@@ -563,6 +563,9 @@ export function resolveNoReplyFailureMessage(
   if (executionEngine === "codex") {
     return "Codex 本轮未产出可见回复。请检查 API Key 与 Codex CLI 配置。";
   }
+  if (executionEngine === "opencode") {
+    return "OpenCode 本轮未产出可见回复。请检查 provider 凭据、模型配置与 OpenCode CLI。";
+  }
   return "Claude 未成功完成本轮请求（未产出可见回复）。请检查 Hook 配置与 Claude CLI 权限。";
 }
 

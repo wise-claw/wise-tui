@@ -33,6 +33,7 @@ import {
   listRunningClaudeSessions,
 } from "../services/claude";
 import { executeCodexCode } from "../services/codex";
+import { executeOpencodeCode } from "../services/opencode";
 import { executeCursorCode } from "../services/cursorAgentExecution";
 import { buildCursorMcpServersForSpawn } from "../services/cursorMcpConfig";
 import {
@@ -44,6 +45,8 @@ import { resolveCursorLocalModelId } from "../utils/cursorModel";
 import { resolveClaudeExecModelId } from "../utils/claudeModel";
 import { resolveCodexContextExecutionEngine, resolveCodexExecModelId } from "../utils/codexModel";
 import { resolveCodexResumeSessionId } from "../utils/codexSessionId";
+import { resolveOpencodeExecModelId } from "../utils/opencodeModel";
+import { resolveOpencodeResumeSessionId } from "../utils/opencodeSessionId";
 import { getCachedModelProfileStore } from "../stores/modelProfileStoreCache";
 import {
   WISE_CLAUDE_USER_SETTINGS_CHANGED,
@@ -928,6 +931,95 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     [commitSessions, keepInvocationStreamAfterTurnComplete, resolveTrellisContextId],
   );
 
+  const runOpencodeOneshotWithInvocation = useCallback(
+    async (params: {
+      tabSessionId: string;
+      turnNonce: number;
+      repositoryPath: string;
+      prompt: string;
+      modelArg: string | undefined;
+      contextExecutionEngine: SessionExecutionEngine;
+      opencodeResumeSessionId?: string | null;
+      forceNewClaudeConversation?: boolean;
+    }) => {
+      const {
+        tabSessionId,
+        turnNonce,
+        repositoryPath,
+        prompt,
+        modelArg,
+        contextExecutionEngine,
+        opencodeResumeSessionId,
+        forceNewClaudeConversation,
+      } = params;
+      if (!streamRuntimeRef.current) {
+        const deadline = Date.now() + CLAUDE_STREAM_RUNTIME_READY_WAIT_MS;
+        while (!streamRuntimeRef.current && Date.now() < deadline) {
+          await new Promise<void>((r) => {
+            window.setTimeout(r, CLAUDE_STREAM_RUNTIME_READY_POLL_MS);
+          });
+        }
+        if (!streamRuntimeRef.current) {
+          message.error("流式引擎尚未就绪或初始化超时，请稍后重试发送。");
+          throw new Error("Claude stream runtime not ready");
+        }
+      }
+      notificationHub.invalidateControlRequestsForSession(tabSessionId, "已发起新一轮对话");
+      const rt = streamRuntimeRef.current;
+      let detach: (() => void) | null = null;
+      const inv = crypto.randomUUID();
+      if (rt) {
+        try {
+          detach = await attachClaudeInvocationStream(
+            inv,
+            tabSessionId,
+            rt,
+            turnNonce,
+            () => {
+              claudeInvocationInflightRef.current.delete(inv);
+            },
+            (tabId, bound) => expectedTurnNonceByTabIdRef.current.get(tabId) ?? bound,
+            keepInvocationStreamAfterTurnComplete,
+          );
+          claudeInvocationInflightRef.current.set(inv, { tabId: tabSessionId, detach });
+        } catch {
+          detach = null;
+        }
+      }
+      const invocationKey = detach ? inv : undefined;
+      const opencodeModel = resolveOpencodeExecModelId({
+        sessionModel: modelArg,
+        contextExecutionEngine,
+        store: getCachedModelProfileStore(),
+      });
+      const opencodeModelLabel = opencodeModel?.trim() || "默认";
+      const resumeLabel = opencodeResumeSessionId?.trim() ? "续接会话" : "新会话";
+      commitSessions((prev) =>
+        appendSystemMessageBySessionId(
+          prev,
+          tabSessionId,
+          `OpenCode 执行中（${resumeLabel}，模型：${opencodeModelLabel}）…`,
+        ),
+      );
+      try {
+        await executeOpencodeCode(
+          repositoryPath,
+          prompt,
+          opencodeModel,
+          invocationKey,
+          tabSessionId,
+          resolveTrellisContextId(tabSessionId),
+          opencodeResumeSessionId ?? undefined,
+          forceNewClaudeConversation === true,
+        );
+      } catch (e) {
+        detach?.();
+        throw e;
+      }
+    },
+    [commitSessions, keepInvocationStreamAfterTurnComplete, resolveTrellisContextId],
+  );
+
   const runCursorOneshotWithInvocation = useCallback(
     async (params: {
       tabSessionId: string;
@@ -1229,13 +1321,33 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         });
         return;
       }
+      if (engine === "opencode") {
+        const contextExecutionEngine =
+          params.codexContextExecutionEngine ??
+          (session && resolver ? resolver(session) : "claude");
+        const opencodeResumeSessionId =
+          params.forceNewClaudeConversation || !session
+            ? null
+            : resolveOpencodeResumeSessionId(session, params.tabSessionId, sessionIdMapRef.current);
+        await runOpencodeOneshotWithInvocation({
+          tabSessionId: params.tabSessionId,
+          turnNonce: params.turnNonce,
+          repositoryPath: params.repositoryPath,
+          prompt: params.prompt,
+          modelArg: params.modelArg,
+          contextExecutionEngine,
+          opencodeResumeSessionId,
+          forceNewClaudeConversation: params.forceNewClaudeConversation,
+        });
+        return;
+      }
       if (sessionUsesStreamingConnection(session, defaultConnectionKindRef.current)) {
         await runClaudeStreamingWithInvocation(params);
       } else {
         await runClaudeOneshotWithInvocation(params);
       }
     },
-    [runClaudeStreamingWithInvocation, runClaudeOneshotWithInvocation, runCodexOneshotWithInvocation, runCursorOneshotWithInvocation],
+    [runClaudeStreamingWithInvocation, runClaudeOneshotWithInvocation, runCodexOneshotWithInvocation, runCursorOneshotWithInvocation, runOpencodeOneshotWithInvocation],
   );
 
   const pruneLiveSessionSidecars = useCallback((liveSessions: readonly ClaudeSession[]) => {
@@ -1893,6 +2005,30 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           modelArg: params.modelArg,
           cursorAgentId,
           cursorAttachments: params.cursorAttachments,
+        });
+        return;
+      }
+      if (resolver?.(session) === "opencode") {
+        const contextExecutionEngine =
+          params.codexContextExecutionEngine ?? resolver(session);
+        if (params.forceNewClaudeConversation) {
+          setSessions((prev) =>
+            prev.map((s) => (s.id === tabSessionId ? { ...s, claudeSessionId: null } : s)),
+          );
+          sessionIdMapRef.current.delete(tabSessionId);
+        }
+        const opencodeResumeSessionId = params.forceNewClaudeConversation
+          ? null
+          : resolveOpencodeResumeSessionId(session, tabSessionId, sessionIdMapRef.current);
+        await runOpencodeOneshotWithInvocation({
+          tabSessionId,
+          turnNonce: params.turnNonce,
+          repositoryPath,
+          prompt,
+          modelArg: params.modelArg,
+          contextExecutionEngine,
+          opencodeResumeSessionId,
+          forceNewClaudeConversation: params.forceNewClaudeConversation,
         });
         return;
       }
@@ -3158,7 +3294,9 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       const executionEngine: SessionExecutionEngine =
         engineResolver && liveSession ? engineResolver(liveSession) : "claude";
       const skipClaudeSidBootstrapWait =
-        executionEngine === "cursor" || executionEngine === "codex";
+        executionEngine === "cursor" ||
+        executionEngine === "codex" ||
+        executionEngine === "opencode";
       const bubblePrompt = opts?.userBubblePrompt?.trim()
         ? opts.userBubblePrompt
         : opts?.cursorAttachments && opts.cursorAttachments.length > 0
@@ -3175,13 +3313,13 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           return false;
         }
       }
-      if (executionEngine === "gemini" || executionEngine === "opencode") {
+      if (executionEngine === "gemini") {
         const engineTitle = SESSION_EXECUTION_ENGINE_LABELS[executionEngine].title;
         commitSessions((prev) =>
           appendSystemMessageBySessionId(
             prev,
             tabSessionId,
-            `[系统] ${engineTitle} 主会话派发即将支持，请暂时切换 Claude Code、Codex CLI 或 Cursor SDK。`,
+            `[系统] ${engineTitle} 主会话派发即将支持，请暂时切换 Claude Code、Codex CLI、OpenCode 或 Cursor SDK。`,
           ),
         );
         return false;

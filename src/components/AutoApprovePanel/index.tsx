@@ -1,4 +1,4 @@
-import { Alert, Empty, Radio, Space, Spin, Typography } from "antd";
+import { Alert, Empty, Radio, Spin, Typography } from "antd";
 import type { RadioChangeEvent } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import { loadRepositories } from "../../services/repository";
@@ -13,7 +13,7 @@ import type { AutoApproveMode } from "../../utils/autoApproveDecide";
 import type { Repository } from "../../types";
 import "./index.css";
 
-const { Text, Paragraph } = Typography;
+const { Text } = Typography;
 
 const MODE_OPTIONS: Array<{ value: AutoApproveMode; label: string; hint: string }> = [
   {
@@ -134,23 +134,25 @@ export function AutoApprovePanel() {
           description={error}
           closable
           onClose={() => setError(null)}
-          style={{ marginBottom: 16 }}
+          style={{ marginBottom: 8 }}
         />
       ) : null}
 
       <section className="auto-approve-panel__section">
         <header className="auto-approve-panel__section-head">
-          <Text strong>全局默认</Text>
-          <Paragraph type="secondary" style={{ margin: 0 }}>
+          <Text strong className="auto-approve-panel__section-title">
+            全局默认
+          </Text>
+          <Text type="secondary" className="auto-approve-panel__section-desc">
             所有未单独配置的仓库会沿用此设置。完全自动模式建议仅在受信、可回滚的工作树中开启。
-          </Paragraph>
+          </Text>
         </header>
-        <Radio.Group
-          value={globalMode}
-          onChange={handleGlobalChange}
-          className="auto-approve-panel__mode-group"
-        >
-          <Space direction="vertical" size={12}>
+        <div className="auto-approve-panel__mode-shell">
+          <Radio.Group
+            value={globalMode}
+            onChange={handleGlobalChange}
+            className="auto-approve-panel__mode-group"
+          >
             {MODE_OPTIONS.map((opt) => (
               <Radio key={opt.value} value={opt.value}>
                 <span className="auto-approve-panel__mode-label">{opt.label}</span>
@@ -159,16 +161,18 @@ export function AutoApprovePanel() {
                 </Text>
               </Radio>
             ))}
-          </Space>
-        </Radio.Group>
+          </Radio.Group>
+        </div>
       </section>
 
       <section className="auto-approve-panel__section">
         <header className="auto-approve-panel__section-head">
-          <Text strong>按仓库覆盖</Text>
-          <Paragraph type="secondary" style={{ margin: 0 }}>
+          <Text strong className="auto-approve-panel__section-title">
+            按仓库覆盖
+          </Text>
+          <Text type="secondary" className="auto-approve-panel__section-desc">
             为单个仓库设置不同的策略。`跟随全局` 表示删除覆盖、回到全局默认。
-          </Paragraph>
+          </Text>
         </header>
         {sortedRepos.length === 0 ? (
           <Empty description="尚未注册仓库" />
@@ -179,7 +183,9 @@ export function AutoApprovePanel() {
               return (
                 <li key={repo.id} className="auto-approve-panel__repo-row">
                   <div className="auto-approve-panel__repo-meta">
-                    <Text strong>{repo.name}</Text>
+                    <Text strong className="auto-approve-panel__repo-name">
+                      {repo.name}
+                    </Text>
                     <Text type="secondary" className="auto-approve-panel__repo-path">
                       {repo.path}
                     </Text>

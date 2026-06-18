@@ -84,6 +84,14 @@ describe("execution environment worker repository name", () => {
     });
   });
 
+  test("encodes opencode engine in worker tab name", () => {
+    const name = buildExecutionEnvironmentWorkerRepositoryName("demo", "任务 2", "opencode");
+    expect(parseExecutionEnvironmentWorkerRepositoryName(name)).toEqual({
+      engine: "opencode",
+      label: "任务 2",
+    });
+  });
+
   test("legacy worker tab without engine defaults to claude", () => {
     expect(parseExecutionEnvironmentWorkerRepositoryName("demo/执行环境:任务 1")).toEqual({
       engine: "claude",

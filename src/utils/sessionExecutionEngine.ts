@@ -207,9 +207,9 @@ export function resolveExecutionRepositoryPath(
   return session.repositoryPath.trim();
 }
 
-/** Cursor / Codex 以 Wise 标签 id 作为磁盘 transcript 与 cancel 的 session key。 */
+/** Cursor / Codex / OpenCode 以 Wise 标签 id 作为磁盘 transcript 与 cancel 的 session key。 */
 export function usesWiseTabIdForDiskTranscript(engine: SessionExecutionEngine): boolean {
-  return engine === "cursor" || engine === "codex";
+  return engine === "cursor" || engine === "codex" || engine === "opencode";
 }
 
 export function resolveDiskTranscriptSessionKey(

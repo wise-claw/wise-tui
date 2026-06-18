@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   describeWriteInputDefect,
   extractCodexResumeSessionIdFromStreamLine,
+  extractOpencodeResumeSessionIdFromStreamLine,
   extractInitSessionIdFromInvocationStdoutLines,
   extractCursorAgentIdFromCompletePayload,
   extractCursorAgentIdFromStreamLine,
@@ -14,6 +15,7 @@ import {
   isClaudeToolInputValidationErrorText,
   parseStreamLineSessionId,
   shouldClearCodexResumeSessionFromStreamLine,
+  shouldClearOpencodeResumeSessionFromStreamLine,
   stripClaudeHarnessInjectedStreamText,
 } from "./claudeStreamParser";
 
@@ -30,6 +32,22 @@ describe("extractPartsFromStreamLine", () => {
     expect(
       shouldClearCodexResumeSessionFromStreamLine(
         JSON.stringify({ type: "codex_session", sessionId: "" }),
+      ),
+    ).toBe(true);
+  });
+
+  test("parses opencode session bind and clear markers", () => {
+    expect(
+      extractOpencodeResumeSessionIdFromStreamLine(
+        JSON.stringify({
+          type: "opencode_session",
+          sessionId: "ses_abc123",
+        }),
+      ),
+    ).toBe("ses_abc123");
+    expect(
+      shouldClearOpencodeResumeSessionFromStreamLine(
+        JSON.stringify({ type: "opencode_session", sessionId: "" }),
       ),
     ).toBe(true);
   });

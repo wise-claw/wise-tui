@@ -267,7 +267,9 @@ export function AuthorPanel({
             ? "author-panel-page--default-config"
             : pane === "data-cleanup"
               ? "author-panel-page--data-cleanup"
-              : undefined
+              : pane === "auto-approve"
+                ? "author-panel-page--auto-approve"
+                : undefined
         }
       >
         {content}

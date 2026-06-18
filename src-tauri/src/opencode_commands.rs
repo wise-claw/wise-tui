@@ -1,0 +1,556 @@
+//! OpenCode CLI execution (`opencode run --format json`) for Wise main / member sessions.
+
+use crate::claude_commands::{ClaudeProcessState, ClaudeSessionRegistry};
+use crate::claude_model_profiles::ensure_active_opencode_profile_applied;
+use crate::opencode_binary::{
+    apply_opencode_child_env, find_opencode_binary, opencode_merged_path_env,
+};
+use crate::opencode_stream_adapter::{
+    opencode_session_clear_line, OpencodeStdoutMap, OpencodeStdoutMapper,
+};
+use crate::wise_db::WiseDb;
+use serde::Serialize;
+use std::collections::HashMap;
+use std::path::Path;
+use std::process::Stdio;
+use std::sync::Arc;
+use tauri::{AppHandle, Emitter, Manager};
+use tokio::io::{AsyncBufReadExt, BufReader};
+use tokio::process::{Child, Command};
+use tokio::sync::Mutex as TokioMutex;
+use uuid::Uuid;
+
+#[derive(Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+struct OpencodeCompletePayload {
+    session_id: String,
+    success: bool,
+}
+
+struct OpencodeSpawnParams {
+    opencode_path: String,
+    project_path: String,
+    prompt: String,
+    exec_model: Option<String>,
+    resume_session_id: Option<String>,
+    force_new_session: bool,
+    path_env: String,
+}
+
+#[derive(Clone)]
+struct OpencodeRuntimeContext {
+    app: AppHandle,
+    session_id: String,
+    invocation_key: Option<String>,
+    project_path: String,
+    prompt: String,
+    exec_model: Option<String>,
+    registry: ClaudeSessionRegistry,
+    active_child_by_invocation_key:
+        Arc<TokioMutex<HashMap<String, Arc<TokioMutex<Option<Child>>>>>>,
+    active_child_by_claude_session:
+        Arc<TokioMutex<HashMap<String, Arc<TokioMutex<Option<Child>>>>>>,
+    opencode_path: String,
+    path_env: String,
+}
+
+fn normalize_opencode_model(raw: Option<&str>) -> Option<String> {
+    let trimmed = raw?.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn should_pass_opencode_model_flag(model: &str) -> bool {
+    model.contains('/')
+}
+
+fn opencode_assistant_stream_line(text: &str) -> String {
+    serde_json::json!({
+        "type": "assistant",
+        "message": {
+            "role": "assistant",
+            "content": [{ "type": "text", "text": text }]
+        }
+    })
+    .to_string()
+}
+
+fn opencode_init_stream_line(session_id: &str) -> String {
+    serde_json::json!({
+        "type": "system",
+        "subtype": "init",
+        "session_id": session_id,
+    })
+    .to_string()
+}
+
+fn emit_opencode_stdout_line(app: &AppHandle, sid: &str, line: &str, invocation_key: Option<&str>) {
+    if !sid.is_empty() {
+        let _ = app.emit(&format!("claude-output:{}", sid), line);
+    }
+    let _ = app.emit("claude-output", line);
+    if let Some(inv) = invocation_key {
+        let _ = app.emit(&format!("claude-output:invocation:{}", inv), line);
+    }
+}
+
+fn emit_opencode_complete(app: &AppHandle, sid: &str, success: bool, invocation_key: Option<&str>) {
+    let payload = OpencodeCompletePayload {
+        session_id: sid.to_string(),
+        success,
+    };
+    if !sid.is_empty() {
+        let _ = app.emit(&format!("claude-complete:{}", sid), &payload);
+    }
+    let _ = app.emit("claude-complete", &payload);
+    if let Some(inv) = invocation_key {
+        let _ = app.emit(&format!("claude-complete:invocation:{}", inv), &payload);
+    }
+}
+
+fn normalize_opencode_resume_session_id(raw: Option<&str>) -> Option<String> {
+    let trimmed = raw?.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn configure_opencode_run_command(
+    cmd: &mut Command,
+    prompt: &str,
+    model: Option<&str>,
+    project_path: &str,
+    resume_session_id: Option<&str>,
+    force_new_session: bool,
+) {
+    cmd.arg("run");
+    cmd.arg("--format").arg("json");
+    cmd.arg("--dangerously-skip-permissions");
+    if !project_path.trim().is_empty() {
+        cmd.arg("--dir").arg(project_path.trim());
+    }
+    if let Some(model_name) = normalize_opencode_model(model) {
+        if should_pass_opencode_model_flag(&model_name) {
+            cmd.arg("-m").arg(model_name);
+        }
+    }
+    if !force_new_session {
+        if let Some(resume_id) = resume_session_id {
+            cmd.arg("-s").arg(resume_id);
+        }
+    }
+    cmd.arg(prompt);
+}
+
+fn stderr_suggests_resume_session_missing(lines: &[String]) -> bool {
+    lines.iter().any(|line| {
+        let lower = line.to_lowercase();
+        let has_session_word = lower.contains("session") || line.contains("会话");
+        has_session_word
+            && (lower.contains("not found")
+                || lower.contains("no such")
+                || lower.contains("unknown")
+                || lower.contains("does not exist")
+                || lower.contains("invalid")
+                || lower.contains("expired")
+                || lower.contains("找不到")
+                || lower.contains("不存在"))
+    })
+}
+
+fn stderr_line_is_actionable(line: &str) -> bool {
+    let lower = line.to_lowercase();
+    lower.contains("error")
+        || lower.contains("unauthorized")
+        || lower.contains("failed")
+        || lower.contains("not found")
+        || lower.contains("denied")
+        || lower.contains("usage limit")
+        || lower.contains("rate limit")
+        || lower.contains("401")
+        || lower.contains("403")
+        || lower.contains("429")
+        || lower.contains("api key")
+        || lower.contains("apikey")
+        || lower.contains("provider")
+}
+
+fn validate_opencode_project_path(project_path: &str) -> Result<(), String> {
+    let trimmed = project_path.trim();
+    if trimmed.is_empty() {
+        return Err("OpenCode 执行需要有效的仓库路径".to_string());
+    }
+    let path = Path::new(trimmed);
+    if !path.is_dir() {
+        return Err(format!("OpenCode 仓库路径不存在或不是目录: {trimmed}"));
+    }
+    Ok(())
+}
+
+fn build_opencode_command(params: &OpencodeSpawnParams) -> Command {
+    let mut cmd = Command::new(&params.opencode_path);
+    configure_opencode_run_command(
+        &mut cmd,
+        params.prompt.trim(),
+        params.exec_model.as_deref(),
+        &params.project_path,
+        params.resume_session_id.as_deref(),
+        params.force_new_session,
+    );
+    cmd.current_dir(&params.project_path);
+    cmd.stdin(Stdio::null());
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+    apply_opencode_child_env(&mut cmd, &params.path_env);
+    cmd
+}
+
+fn spawn_opencode_process(params: &OpencodeSpawnParams) -> Result<Child, String> {
+    build_opencode_command(params)
+        .spawn()
+        .map_err(|e| format!("Failed to start opencode: {e}"))
+}
+
+fn attach_opencode_child_io(
+    ctx: &OpencodeRuntimeContext,
+    mut child: Child,
+    wait_child: Arc<TokioMutex<Option<Child>>>,
+    used_resume: bool,
+    allow_resume_retry: bool,
+) -> Result<(), String> {
+    let stdout = child
+        .stdout
+        .take()
+        .ok_or_else(|| "Failed to get opencode stdout".to_string())?;
+    let stderr = child
+        .stderr
+        .take()
+        .ok_or_else(|| "Failed to get opencode stderr".to_string())?;
+
+    {
+        let mut slot = wait_child
+            .try_lock()
+            .map_err(|_| "Failed to lock opencode child slot".to_string())?;
+        *slot = Some(child);
+    }
+
+    let app_stdout = ctx.app.clone();
+    let session_id_stdout = ctx.session_id.clone();
+    let invocation_key_stdout = ctx.invocation_key.clone();
+    tokio::spawn(async move {
+        let reader = BufReader::new(stdout);
+        let mut lines = reader.lines();
+        let mut mapper = OpencodeStdoutMapper::default();
+        while let Ok(Some(line)) = lines.next_line().await {
+            if line.trim().is_empty() {
+                continue;
+            }
+            let stream_lines = match mapper.map_line(&line) {
+                OpencodeStdoutMap::PlainText => vec![opencode_assistant_stream_line(&line)],
+                OpencodeStdoutMap::StreamLines(mapped) if mapped.is_empty() => continue,
+                OpencodeStdoutMap::StreamLines(mapped) => mapped,
+            };
+            for stream_line in stream_lines {
+                emit_opencode_stdout_line(
+                    &app_stdout,
+                    &session_id_stdout,
+                    &stream_line,
+                    invocation_key_stdout.as_deref(),
+                );
+            }
+        }
+    });
+
+    let stderr_lines = Arc::new(TokioMutex::new(Vec::<String>::new()));
+    let stderr_lines_reader = stderr_lines.clone();
+    let app_stderr = ctx.app.clone();
+    let session_id_stderr = ctx.session_id.clone();
+    let invocation_key_stderr = ctx.invocation_key.clone();
+    tokio::spawn(async move {
+        let reader = BufReader::new(stderr);
+        let mut lines = reader.lines();
+        while let Ok(Some(line)) = lines.next_line().await {
+            let trimmed = line.trim();
+            if trimmed.is_empty() {
+                continue;
+            }
+            stderr_lines_reader.lock().await.push(trimmed.to_string());
+            if stderr_line_is_actionable(trimmed) {
+                emit_opencode_stdout_line(
+                    &app_stderr,
+                    &session_id_stderr,
+                    &opencode_assistant_stream_line(&format!("OpenCode: {trimmed}")),
+                    invocation_key_stderr.as_deref(),
+                );
+            }
+        }
+    });
+
+    let app_wait = ctx.app.clone();
+    let session_id_wait = ctx.session_id.clone();
+    let invocation_key_wait = ctx.invocation_key.clone();
+    let registry_wait = ctx.registry.clone();
+    let runtime_wait = ctx.clone();
+    let wait_child_wait = wait_child.clone();
+    tokio::spawn(async move {
+        let mut success = false;
+        if let Some(mut child) = wait_child_wait.lock().await.take() {
+            success = child.wait().await.map(|s| s.success()).unwrap_or(false);
+        }
+
+        let lines = stderr_lines.lock().await.clone();
+        if !success {
+            if used_resume
+                && allow_resume_retry
+                && stderr_suggests_resume_session_missing(&lines)
+            {
+                let retry_params = OpencodeSpawnParams {
+                    opencode_path: runtime_wait.opencode_path.clone(),
+                    project_path: runtime_wait.project_path.clone(),
+                    prompt: runtime_wait.prompt.clone(),
+                    exec_model: runtime_wait.exec_model.clone(),
+                    resume_session_id: None,
+                    force_new_session: true,
+                    path_env: runtime_wait.path_env.clone(),
+                };
+                let retry_runtime = OpencodeRuntimeContext {
+                    app: runtime_wait.app.clone(),
+                    session_id: runtime_wait.session_id.clone(),
+                    invocation_key: runtime_wait.invocation_key.clone(),
+                    project_path: runtime_wait.project_path.clone(),
+                    prompt: runtime_wait.prompt.clone(),
+                    exec_model: runtime_wait.exec_model.clone(),
+                    registry: runtime_wait.registry.clone(),
+                    active_child_by_invocation_key: runtime_wait
+                        .active_child_by_invocation_key
+                        .clone(),
+                    active_child_by_claude_session: runtime_wait
+                        .active_child_by_claude_session
+                        .clone(),
+                    opencode_path: runtime_wait.opencode_path.clone(),
+                    path_env: runtime_wait.path_env.clone(),
+                };
+                let retry_wait_child = wait_child_wait.clone();
+                match spawn_opencode_process(&retry_params) {
+                    Ok(child) => {
+                        if attach_opencode_child_io(
+                            &retry_runtime,
+                            child,
+                            retry_wait_child,
+                            false,
+                            false,
+                        )
+                        .is_ok()
+                        {
+                            return;
+                        }
+                    }
+                    Err(retry_err) => {
+                        emit_opencode_stdout_line(
+                            &app_wait,
+                            &session_id_wait,
+                            &opencode_assistant_stream_line(&format!(
+                                "OpenCode 自动重试失败：{retry_err}"
+                            )),
+                            invocation_key_wait.as_deref(),
+                        );
+                    }
+                }
+            } else if used_resume && stderr_suggests_resume_session_missing(&lines) {
+                emit_opencode_stdout_line(
+                    &app_wait,
+                    &session_id_wait,
+                    &opencode_session_clear_line(),
+                    invocation_key_wait.as_deref(),
+                );
+                let diagnostic =
+                    "OpenCode 会话已失效，已清除续接 id；请重试，必要时简要说明上一轮背景。";
+                emit_opencode_stdout_line(
+                    &app_wait,
+                    &session_id_wait,
+                    &opencode_assistant_stream_line(diagnostic),
+                    invocation_key_wait.as_deref(),
+                );
+            } else if let Some(last_line) = lines.iter().rev().find(|line| !line.trim().is_empty())
+            {
+                let diagnostic = format!("OpenCode 执行失败：{}", last_line.trim());
+                emit_opencode_stdout_line(
+                    &app_wait,
+                    &session_id_wait,
+                    &opencode_assistant_stream_line(&diagnostic),
+                    invocation_key_wait.as_deref(),
+                );
+            } else {
+                emit_opencode_stdout_line(
+                    &app_wait,
+                    &session_id_wait,
+                    &opencode_assistant_stream_line(
+                        "OpenCode 执行失败（无 stderr 输出）。请检查 provider 凭据、模型配置与网络连接。",
+                    ),
+                    invocation_key_wait.as_deref(),
+                );
+            }
+        }
+
+        registry_wait.mark_completed(&session_id_wait, success);
+        emit_opencode_complete(
+            &app_wait,
+            &session_id_wait,
+            success,
+            invocation_key_wait.as_deref(),
+        );
+    });
+
+    Ok(())
+}
+
+#[tauri::command]
+pub(crate) async fn execute_opencode_code(
+    app: tauri::AppHandle,
+    db: tauri::State<'_, WiseDb>,
+    project_path: String,
+    prompt: String,
+    model: Option<String>,
+    invocation_key: Option<String>,
+    tab_session_id: Option<String>,
+    opencode_resume_session_id: Option<String>,
+    force_new_session: Option<bool>,
+) -> Result<(), String> {
+    ensure_active_opencode_profile_applied(&db)?;
+    let exec_model = normalize_opencode_model(model.as_deref());
+
+    validate_opencode_project_path(&project_path)?;
+
+    let trimmed_prompt = prompt.trim();
+    if trimmed_prompt.is_empty() {
+        return Err("OpenCode 执行需要非空提示词".to_string());
+    }
+
+    let registry = app.state::<ClaudeSessionRegistry>();
+    let process_state = app.state::<ClaudeProcessState>();
+    let session_id = tab_session_id
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .map(|s| s.to_string())
+        .unwrap_or_else(|| format!("opencode-{}", Uuid::new_v4().simple()));
+
+    let opencode_path = find_opencode_binary()?;
+    let resume_id = normalize_opencode_resume_session_id(opencode_resume_session_id.as_deref());
+    let force_new = force_new_session.unwrap_or(false);
+    let used_resume = !force_new && resume_id.is_some();
+    let path_env = opencode_merged_path_env();
+    let spawn_params = OpencodeSpawnParams {
+        opencode_path,
+        project_path: project_path.clone(),
+        prompt: trimmed_prompt.to_string(),
+        exec_model: exec_model.clone(),
+        resume_session_id: resume_id.clone(),
+        force_new_session: force_new,
+        path_env,
+    };
+
+    let child = spawn_opencode_process(&spawn_params)?;
+    let wait_child = Arc::new(TokioMutex::new(None));
+
+    let model_label = exec_model.as_deref().unwrap_or("opencode").to_string();
+    let runtime = OpencodeRuntimeContext {
+        app: app.clone(),
+        session_id,
+        invocation_key: invocation_key.clone(),
+        project_path,
+        prompt: trimmed_prompt.to_string(),
+        exec_model,
+        registry: registry.inner().clone(),
+        active_child_by_invocation_key: process_state.active_child_by_invocation_key.clone(),
+        active_child_by_claude_session: process_state.active_child_by_claude_session.clone(),
+        opencode_path: spawn_params.opencode_path.clone(),
+        path_env: spawn_params.path_env.clone(),
+    };
+
+    if let Some(inv) = invocation_key.as_deref().filter(|s| !s.is_empty()) {
+        process_state
+            .active_child_by_invocation_key
+            .lock()
+            .await
+            .insert(inv.to_string(), wait_child.clone());
+    }
+    if !runtime.session_id.is_empty() {
+        process_state
+            .active_child_by_claude_session
+            .lock()
+            .await
+            .insert(runtime.session_id.clone(), wait_child.clone());
+    }
+
+    emit_opencode_stdout_line(
+        &app,
+        &runtime.session_id,
+        &opencode_init_stream_line(&runtime.session_id),
+        invocation_key.as_deref(),
+    );
+    registry.register(
+        runtime.session_id.clone(),
+        runtime.project_path.clone(),
+        model_label,
+    );
+
+    attach_opencode_child_io(&runtime, child, wait_child, used_resume, true)?;
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn fresh_run_argv_order() {
+        let mut cmd = Command::new("opencode");
+        configure_opencode_run_command(
+            &mut cmd,
+            "hello",
+            Some("anthropic/claude-haiku-4-5"),
+            "/tmp/repo",
+            None,
+            false,
+        );
+        let args: Vec<String> = cmd
+            .as_std()
+            .get_args()
+            .map(|s| s.to_string_lossy().into_owned())
+            .collect();
+        assert_eq!(args[0], "run");
+        assert!(args.contains(&"--format".to_string()));
+        assert!(args.contains(&"json".to_string()));
+        assert!(args.contains(&"--dangerously-skip-permissions".to_string()));
+        assert!(args.contains(&"--dir".to_string()));
+        assert!(args.contains(&"/tmp/repo".to_string()));
+        assert!(args.contains(&"-m".to_string()));
+        assert!(args.contains(&"anthropic/claude-haiku-4-5".to_string()));
+        assert_eq!(args.last().map(String::as_str), Some("hello"));
+    }
+
+    #[test]
+    fn resume_run_includes_session_flag() {
+        let mut cmd = Command::new("opencode");
+        configure_opencode_run_command(
+            &mut cmd,
+            "continue",
+            None,
+            "/tmp/repo",
+            Some("ses_abc"),
+            false,
+        );
+        let args: Vec<String> = cmd
+            .as_std()
+            .get_args()
+            .map(|s| s.to_string_lossy().into_owned())
+            .collect();
+        assert!(args.windows(2).any(|w| w[0] == "-s" && w[1] == "ses_abc"));
+    }
+}
