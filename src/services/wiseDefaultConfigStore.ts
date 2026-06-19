@@ -1389,6 +1389,7 @@ export async function loadTopbarChromeDefaultsFromStore(): Promise<
     | "showFccTrafficTopbar"
     | "showOpencodeProxyTopbar"
     | "showSessionDataLinkTopbar"
+    | "showSessionFeedbackLoopTopbar"
     | "showRemoteEntryTopbar"
     | "showTopbarRepositoryName"
   >

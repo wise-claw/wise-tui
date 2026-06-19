@@ -1,4 +1,4 @@
-import type { ClaudeLineEditsDayBucket } from "../../services/claudeCodeUsage";
+import type { ClaudeLineEditsDayBucket } from "../services/claudeCodeUsage";
 
 export interface LineEditsHeatmapCell {
   date: string;
