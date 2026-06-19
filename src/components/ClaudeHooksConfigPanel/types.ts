@@ -1,4 +1,5 @@
 import type { ClaudeHookHandler, ClaudeHookSourceScope } from "../../types";
+import type { HookOpenTarget } from "./helpers";
 
 export interface ClaudeHooksConfigPanelHandle {
   refresh: () => Promise<void>;
@@ -22,6 +23,7 @@ export type HookFlowEntry = {
   matcher: string;
   type: ClaudeHookHandler["type"];
   summary: string;
+  openTarget: HookOpenTarget | null;
 };
 
 export interface HookEditFormValues {

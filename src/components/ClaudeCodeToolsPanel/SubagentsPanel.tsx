@@ -15,6 +15,7 @@ import {
 } from "antd";
 import { useCallback, useEffect, useMemo, useState } from "react";
 import type { ClaudeSubagentItem, ClaudeSubagentScope } from "../../types";
+import { compactDisplayPath } from "../../utils/compactDisplayPath";
 import {
   createClaudeSubagent,
   deleteClaudeSubagent,
@@ -531,6 +532,9 @@ export function SubagentsPanel({
                   </Space>
                 </div>
                 <div className="app-subagents-desc">{displayDescription(item.description)}</div>
+                <div className="app-subagents-card-path" title={item.sourcePath}>
+                  {compactDisplayPath(item.sourcePath)}
+                </div>
                 <div className="app-subagents-card-meta">
                   {item.model ? (
                     <div className="app-subagents-meta-row">

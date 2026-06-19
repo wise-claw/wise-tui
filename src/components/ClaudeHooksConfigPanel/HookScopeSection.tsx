@@ -3,19 +3,26 @@ import { Button, Space, Switch, Tag } from "antd";
 import type { RefObject } from "react";
 import type { ClaudeHookHandler, ClaudeHookSourceScope, ClaudeHookScopeData } from "../../types";
 import { EVENT_HELP_TEXT } from "./constants";
-import { handlerSummary, resolveHookHandlerTargetPath } from "./helpers";
+import { compactDisplayPath } from "../../utils/compactDisplayPath";
+import {
+  formatHookOpenTargetTooltip,
+  handlerSummary,
+  resolveHookHandlerOpenTarget,
+  type HookPathResolutionContext,
+} from "./helpers";
 import { HelpIcon } from "./HelpIcon";
 
 export interface HookScopeSectionProps {
   scope: ClaudeHookSourceScope;
   title: string;
   data: ClaudeHookScopeData;
+  hookPathContext: HookPathResolutionContext;
   onCreate: (scope: ClaudeHookSourceScope, eventName: string, groupId: string) => void;
   onEdit: (scope: ClaudeHookSourceScope, eventName: string, groupId: string, handlerId: string) => void;
   onDelete: (scope: ClaudeHookSourceScope, eventName: string, groupId: string, handlerId: string) => void;
   onToggleDisableAll: (scope: ClaudeHookSourceScope, next: boolean) => void;
   sectionRef?: RefObject<HTMLElement | null>;
-  onOpenTarget: (handler: ClaudeHookHandler, matcher?: string | null) => void;
+  onOpenTarget: (handler: ClaudeHookHandler, matcher?: string | null, scopeSourcePath?: string | null) => void;
   keyword: string;
   readOnly?: boolean;
 }
@@ -24,6 +31,7 @@ export function HookScopeSection({
   scope,
   title,
   data,
+  hookPathContext,
   onCreate,
   onEdit,
   onDelete,
@@ -145,7 +153,12 @@ export function HookScopeSection({
                     </div>
                     <div className="app-hooks-handler-list">
                       {group.hooks.map((h) => {
-                        const targetPath = resolveHookHandlerTargetPath(h, group.matcher);
+                        const openTarget = resolveHookHandlerOpenTarget(h, group.matcher, {
+                          ...hookPathContext,
+                          scopeSourcePath: data.sourcePath,
+                          handlerId: h.id,
+                        });
+                        const pathLabel = formatHookOpenTargetTooltip(openTarget);
                         return (
                         <div key={h.id} className="app-hooks-handler-item">
                           <div className="app-hooks-handler-main">
@@ -154,9 +167,19 @@ export function HookScopeSection({
                             </span>
                           </div>
                           <div className="app-hooks-handler-foot">
-                            <Tag color="blue" variant="filled" className="app-hooks-handler-type-tag">
-                              {h.type}
-                            </Tag>
+                            <div className="app-hooks-handler-foot-main">
+                              <Tag color="blue" variant="filled" className="app-hooks-handler-type-tag">
+                                {h.type}
+                              </Tag>
+                              {pathLabel ? (
+                                <span
+                                  className="app-hooks-handler-path"
+                                  title={pathLabel}
+                                >
+                                  {compactDisplayPath(pathLabel)}
+                                </span>
+                              ) : null}
+                            </div>
                             {!readOnly ? (
                               <Space size={2} className="app-hooks-handler-actions">
                                 <Button
@@ -167,14 +190,14 @@ export function HookScopeSection({
                                   aria-label="编辑处理器"
                                   onClick={() => onEdit(scope as ClaudeHookSourceScope, eventName, group.id, h.id)}
                                 />
-                                {targetPath ? (
+                                {openTarget ? (
                                   <Button
                                     type="text"
                                     size="small"
                                     icon={<FileOutlined />}
                                     title="在外部 IDE 打开"
                                     aria-label="在外部 IDE 打开"
-                                    onClick={() => onOpenTarget(h, group.matcher)}
+                                    onClick={() => onOpenTarget(h, group.matcher, data.sourcePath)}
                                   />
                                 ) : null}
                                 <Button
@@ -187,7 +210,7 @@ export function HookScopeSection({
                                   onClick={() => onDelete(scope as ClaudeHookSourceScope, eventName, group.id, h.id)}
                                 />
                               </Space>
-                            ) : targetPath ? (
+                            ) : openTarget ? (
                               <Space size={2} className="app-hooks-handler-actions">
                                 <Button
                                   type="text"
@@ -195,7 +218,7 @@ export function HookScopeSection({
                                   icon={<FileOutlined />}
                                   title="在外部 IDE 打开"
                                   aria-label="在外部 IDE 打开"
-                                  onClick={() => onOpenTarget(h, group.matcher)}
+                                  onClick={() => onOpenTarget(h, group.matcher, data.sourcePath)}
                                 />
                               </Space>
                             ) : null}

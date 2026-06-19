@@ -1,7 +1,7 @@
 import { Button, Modal } from "antd";
 import type { ClaudeHookSourceScope } from "../../types";
 import { MAIN_FLOW_STEPS, SIDE_EVENTS } from "./constants";
-import { getHelpTextByTitle, getSupportedTypesText } from "./helpers";
+import { formatHookOpenTargetTooltip, getHelpTextByTitle, getSupportedTypesText, type HookOpenTarget } from "./helpers";
 import { HelpIcon } from "./HelpIcon";
 import type { HookFlowEntry, HooksFlowTheme } from "./types";
 
@@ -16,6 +16,46 @@ interface HooksFlowModalProps {
   onCreate: (scope: ClaudeHookSourceScope, eventName: string) => void;
   onCopyEventName: (eventName: string) => void;
   onEdit: (scope: ClaudeHookSourceScope, eventName: string, groupId: string, handlerId: string) => void;
+  onOpenTarget: (target: HookOpenTarget) => void;
+}
+
+function flowEntryTitle(entry: HookFlowEntry): string {
+  const pathTooltip = formatHookOpenTargetTooltip(entry.openTarget);
+  if (pathTooltip) {
+    return pathTooltip;
+  }
+  return `${entry.scope} · ${entry.matcher} · ${entry.summary}`;
+}
+
+function handleFlowEntryClick(
+  entry: HookFlowEntry,
+  onEdit: HooksFlowModalProps["onEdit"],
+  onOpenTarget: HooksFlowModalProps["onOpenTarget"],
+) {
+  if (entry.openTarget) {
+    onOpenTarget(entry.openTarget);
+    return;
+  }
+  onEdit(entry.scope, entry.eventName, entry.groupId, entry.handlerId);
+}
+
+function renderFlowConfigItem(
+  entry: HookFlowEntry,
+  onEdit: HooksFlowModalProps["onEdit"],
+  onOpenTarget: HooksFlowModalProps["onOpenTarget"],
+) {
+  const hasOpenTarget = Boolean(entry.openTarget);
+  return (
+    <button
+      key={`${entry.scope}-${entry.groupId}-${entry.handlerId}`}
+      type="button"
+      className={`app-hooks-flow-config-item${hasOpenTarget ? " has-target-path" : ""}`}
+      onClick={() => handleFlowEntryClick(entry, onEdit, onOpenTarget)}
+      title={flowEntryTitle(entry)}
+    >
+      [{entry.scope}] {entry.matcher} · {entry.type} · {entry.summary}
+    </button>
+  );
 }
 
 export function HooksFlowModal({
@@ -29,6 +69,7 @@ export function HooksFlowModal({
   onCreate,
   onCopyEventName,
   onEdit,
+  onOpenTarget,
 }: HooksFlowModalProps) {
   return (
     <Modal
@@ -92,17 +133,9 @@ export function HooksFlowModal({
                           <span>类型: {getSupportedTypesText(eventName)}</span>
                           {entries.length > 0 ? (
                             <div className="app-hooks-flow-config-list">
-                              {entries.map((entry) => (
-                                <button
-                                  key={entry.handlerId}
-                                  type="button"
-                                  className="app-hooks-flow-config-item"
-                                  onClick={() => onEdit(entry.scope, entry.eventName, entry.groupId, entry.handlerId)}
-                                  title={`${entry.scope} · ${entry.matcher} · ${entry.summary}`}
-                                >
-                                  [{entry.scope}] {entry.matcher} · {entry.type} · {entry.summary}
-                                </button>
-                              ))}
+                              {entries.map((entry) =>
+                                renderFlowConfigItem(entry, onEdit, onOpenTarget),
+                              )}
                             </div>
                           ) : null}
                         </div>
@@ -137,17 +170,9 @@ export function HooksFlowModal({
                     </div>
                     {entries.length > 0 ? (
                       <div className="app-hooks-flow-config-list app-hooks-flow-config-list--side">
-                        {entries.map((entry) => (
-                          <button
-                            key={entry.handlerId}
-                            type="button"
-                            className="app-hooks-flow-config-item"
-                            onClick={() => onEdit(entry.scope, entry.eventName, entry.groupId, entry.handlerId)}
-                            title={`${entry.scope} · ${entry.matcher} · ${entry.summary}`}
-                          >
-                            [{entry.scope}] {entry.matcher} · {entry.type} · {entry.summary}
-                          </button>
-                        ))}
+                        {entries.map((entry) =>
+                          renderFlowConfigItem(entry, onEdit, onOpenTarget),
+                        )}
                       </div>
                     ) : null}
                   </div>

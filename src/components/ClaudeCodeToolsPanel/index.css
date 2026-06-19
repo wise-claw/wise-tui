@@ -425,6 +425,15 @@
   word-break: break-word;
 }
 
+.app-subagents-card-path {
+  margin-top: 4px;
+  font-size: 9px;
+  line-height: 1.25;
+  color: var(--ant-color-text-quaternary);
+  font-family: var(--app-workspace-code-font, monospace);
+  word-break: break-all;
+}
+
 .app-subagents-card-meta {
   margin-top: 4px;
   display: flex;
@@ -1243,6 +1252,11 @@
   background: rgba(28, 63, 104, 0.8);
 }
 
+.app-hooks-flow-config-item.has-target-path {
+  text-decoration: underline dotted rgba(165, 220, 255, 0.45);
+  text-underline-offset: 2px;
+}
+
 .app-hooks-flow-life-arrow {
   margin: 0 4px;
   font-size: 12px;
@@ -1960,6 +1974,24 @@
   justify-content: space-between;
   gap: 8px;
   min-width: 0;
+}
+
+.app-hooks-handler-foot-main {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 1;
+}
+
+.app-hooks-handler-path {
+  font-size: 9px;
+  line-height: 1.25;
+  color: var(--ant-color-text-quaternary);
+  font-family: var(--app-workspace-code-font, monospace);
+  word-break: break-all;
+  min-width: 0;
+  flex: 1;
 }
 
 .app-hooks-handler-foot .ant-tag,
