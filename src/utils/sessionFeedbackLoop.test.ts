@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { SessionInsightsResult, SessionTurnInsight } from "./sessionInsights";
-import { emptyRequestRationalityMetrics } from "./sessionInsights";
+import { emptyRequestRationalityMetrics, emptySessionInsightsAnalytics } from "./sessionInsights";
 import {
   advanceFeedbackLoop,
   compareMetricSnapshots,
@@ -56,6 +56,7 @@ function sampleInsights(overrides?: Partial<SessionInsightsResult["overview"]>):
         fccTraceCount: 0,
         opencodeGoProxyTraceCount: 0,
         hasTtftData: true,
+        hasContextMetrics: false,
       },
       ...overrides,
     },
@@ -77,6 +78,7 @@ function sampleInsights(overrides?: Partial<SessionInsightsResult["overview"]>):
       },
     ],
     requestRationality: emptyRequestRationalityMetrics(),
+    ...emptySessionInsightsAnalytics(),
   };
 }
 
@@ -107,6 +109,34 @@ describe("extractMetricSnapshot", () => {
     expect(snap.warningCount).toBe(1);
     expect(snap.tokenTotal).toBe(19_000);
   });
+
+  test("captures context percent from overview", () => {
+    const insights = sampleInsights();
+    insights.overview.contextMetrics = { estimatedTokens: 160_000, ctxPercent: 80 };
+    const snap = extractMetricSnapshot(insights);
+    expect(snap.ctxPercentEnd).toBe(80);
+  });
+
+  test("captures reliability counts from insights", () => {
+    const insights = sampleInsights();
+    insights.reliability = { toolErrorCount: 4, httpErrorCount: 2 };
+    const snap = extractMetricSnapshot(insights);
+    expect(snap.toolErrorCount).toBe(4);
+    expect(snap.httpErrorCount).toBe(2);
+  });
+});
+
+describe("compareMetricSnapshots reliability", () => {
+  test("lower tool errors improve quality score", () => {
+    const before = extractMetricSnapshot(sampleInsights());
+    const afterInsights = sampleInsights();
+    afterInsights.reliability = { toolErrorCount: 0, httpErrorCount: 0 };
+    const after = { ...extractMetricSnapshot(afterInsights), toolErrorCount: 0, httpErrorCount: 0 };
+    const baseline = { ...before, toolErrorCount: 6, httpErrorCount: 2 };
+    const result = compareMetricSnapshots(baseline, after);
+    const toolErrDelta = result.deltas.find((d) => d.label === "工具错误");
+    expect(toolErrDelta?.improved).toBe(true);
+  });
 });
 
 describe("extractIncrementalSnapshot", () => {
@@ -121,6 +151,29 @@ describe("extractIncrementalSnapshot", () => {
     expect(inc!.scopedTurnCount).toBe(1);
     expect(inc!.toolCallCount).toBe(2);
     expect(inc!.avgTurnDurationMs).toBe(10_000);
+  });
+
+  test("aggregates incremental HTTP P95 from new turns", () => {
+    const insights = sampleInsights({ turnCount: 5 });
+    insights.turnInsights.push({
+      ...turnRow(5, 10_000, 2),
+      httpLatencyMs: 20_000,
+    });
+    const inc = extractIncrementalSnapshot(insights, 4);
+    expect(inc?.p95HttpLatencyMs).toBe(20_000);
+  });
+
+  test("compareIncrementalAgainstBaseline includes HTTP P95 delta", () => {
+    const sessionBaseline = extractMetricSnapshot(sampleInsights());
+    const after = extractIncrementalSnapshot(
+      {
+        ...sampleInsights({ turnCount: 5 }),
+        turnInsights: [{ ...turnRow(5, 10_000, 2), httpLatencyMs: 4000 }],
+      },
+      4,
+    )!;
+    const comparison = compareIncrementalAgainstBaseline(sessionBaseline, after);
+    expect(comparison.deltas.some((d) => d.label === "HTTP P95")).toBe(true);
   });
 
   test("compareIncrementalAgainstBaseline uses per-turn reference", () => {

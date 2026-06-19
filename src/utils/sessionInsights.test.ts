@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ClaudeMessage } from "../types";
+import type { SessionLinkRecord } from "../types/sessionLink";
 import { buildSequenceEventsFromMessages } from "./claudeSessionTrajectorySequence";
 import { buildSessionLinkRecords } from "./buildSessionLinkRecords";
 import { computeSessionLinkTurnMetrics } from "./sessionLinkFilters";
@@ -252,6 +253,216 @@ describe("classifyLinkToolRecord", () => {
         source: "memory",
       }),
     ).toBe("builtin");
+  });
+});
+
+describe("context pressure recommendations", () => {
+  test("emits critical recommendation when ctxPercent >= 95", () => {
+    const messages: ClaudeMessage[] = [
+      {
+        id: 1,
+        role: "user",
+        content: "hi",
+        timestamp: 1000,
+        parts: [{ type: "text", text: "hi" }],
+      },
+    ];
+    const events = buildSequenceEventsFromMessages(messages);
+    const records = buildSessionLinkRecords(events);
+    const turnMetrics = computeSessionLinkTurnMetrics(records);
+    const insights = computeSessionInsights({
+      linkRecords: records,
+      turnMetrics,
+      contextMetrics: { estimatedTokens: 195_000, ctxPercent: 97 },
+    });
+    expect(insights.recommendations.some((r) => r.id === "ctx-pressure-critical")).toBe(true);
+    expect(insights.overview.dataCoverage.hasContextMetrics).toBe(true);
+  });
+
+  test("emits warning when ctxPercent >= 80", () => {
+    const messages: ClaudeMessage[] = [
+      {
+        id: 1,
+        role: "user",
+        content: "hi",
+        timestamp: 1000,
+        parts: [{ type: "text", text: "hi" }],
+      },
+    ];
+    const events = buildSequenceEventsFromMessages(messages);
+    const records = buildSessionLinkRecords(events);
+    const turnMetrics = computeSessionLinkTurnMetrics(records);
+    const insights = computeSessionInsights({
+      linkRecords: records,
+      turnMetrics,
+      contextMetrics: { estimatedTokens: 165_000, ctxPercent: 82 },
+    });
+    expect(insights.recommendations.some((r) => r.id === "ctx-pressure-high")).toBe(true);
+  });
+});
+
+describe("tool latency and duplicate read insights", () => {
+  test("computeSessionInsights surfaces slow tools and duplicate reads", () => {
+    const detail = 'input:\n{"file_path":"src/a.ts"}';
+    const records: import("../types/sessionLink").SessionLinkRecord[] = [
+      {
+        id: "in-1",
+        timestampMs: 0,
+        layer: "input",
+        kind: "user_input",
+        turnIndex: 1,
+        summary: "hi",
+        observed: true,
+        source: "memory",
+      },
+      {
+        id: "tu-1",
+        timestampMs: 100,
+        layer: "tool",
+        kind: "tool_use",
+        turnIndex: 1,
+        summary: "Shell",
+        observed: true,
+        source: "memory",
+        toolUseId: "toolu_1",
+      },
+      {
+        id: "tr-1",
+        timestampMs: 12_100,
+        layer: "tool",
+        kind: "tool_result",
+        turnIndex: 1,
+        summary: "ok",
+        observed: true,
+        source: "memory",
+        toolUseId: "toolu_1",
+      },
+      {
+        id: "tu-2",
+        timestampMs: 13_000,
+        layer: "tool",
+        kind: "tool_use",
+        turnIndex: 1,
+        summary: "Read",
+        detail,
+        observed: true,
+        source: "memory",
+        toolUseId: "toolu_2",
+      },
+      {
+        id: "tr-2",
+        timestampMs: 13_100,
+        layer: "tool",
+        kind: "tool_result",
+        turnIndex: 1,
+        summary: "ok",
+        observed: true,
+        source: "memory",
+        toolUseId: "toolu_2",
+      },
+      {
+        id: "tu-3",
+        timestampMs: 14_000,
+        layer: "tool",
+        kind: "tool_use",
+        turnIndex: 2,
+        summary: "Read",
+        detail,
+        observed: true,
+        source: "memory",
+        toolUseId: "toolu_3",
+      },
+      {
+        id: "tr-3",
+        timestampMs: 14_100,
+        layer: "tool",
+        kind: "tool_result",
+        turnIndex: 2,
+        summary: "ok",
+        observed: true,
+        source: "memory",
+        toolUseId: "toolu_3",
+      },
+      {
+        id: "tu-4",
+        timestampMs: 15_000,
+        layer: "tool",
+        kind: "tool_use",
+        turnIndex: 2,
+        summary: "Read",
+        detail,
+        observed: true,
+        source: "memory",
+        toolUseId: "toolu_4",
+      },
+      {
+        id: "tr-4",
+        timestampMs: 15_100,
+        layer: "tool",
+        kind: "tool_result",
+        turnIndex: 2,
+        summary: "ok",
+        observed: true,
+        source: "memory",
+        toolUseId: "toolu_4",
+      },
+    ];
+    const turnMetrics = computeSessionLinkTurnMetrics(records);
+    const insights = computeSessionInsights({ linkRecords: records, turnMetrics });
+    expect(insights.toolLatencyHotspots.some((h) => h.name === "Shell")).toBe(true);
+    expect(insights.duplicateReadPaths.some((d) => d.path === "src/a.ts")).toBe(true);
+    expect(insights.recommendations.some((r) => r.id.startsWith("tool-duplicate-read"))).toBe(true);
+  });
+
+  test("computeReliabilityMetrics surfaces tool and http errors", () => {
+    const records: SessionLinkRecord[] = [
+      {
+        id: "tr-err",
+        layer: "tool",
+        kind: "tool_result",
+        turnIndex: 1,
+        summary: "Read failed",
+        detail: '{"is_error": true, "error": "ENOENT"}',
+        observed: true,
+        source: "memory",
+        toolUseId: "toolu_e1",
+      },
+      {
+        id: "http-500",
+        layer: "http",
+        kind: "http",
+        turnIndex: 1,
+        summary: "POST /v1/messages 500",
+        observed: true,
+        source: "llm_proxy",
+      },
+    ];
+    const turnMetrics = computeSessionLinkTurnMetrics(records);
+    const insights = computeSessionInsights({ linkRecords: records, turnMetrics });
+    expect(insights.reliability.toolErrorCount).toBe(1);
+    expect(insights.reliability.httpErrorCount).toBe(1);
+    expect(insights.recommendations.some((r) => r.category === "reliability")).toBe(false);
+  });
+
+  test("reliability recommendations appear when error counts exceed threshold", () => {
+    const records: SessionLinkRecord[] = [];
+    for (let i = 0; i < 3; i += 1) {
+      records.push({
+        id: `tr-${i}`,
+        layer: "tool",
+        kind: "tool_result",
+        turnIndex: 1,
+        summary: "error",
+        detail: "is_error",
+        observed: true,
+        source: "memory",
+        toolUseId: `toolu_${i}`,
+      });
+    }
+    const turnMetrics = computeSessionLinkTurnMetrics(records);
+    const insights = computeSessionInsights({ linkRecords: records, turnMetrics });
+    expect(insights.reliability.toolErrorCount).toBe(3);
+    expect(insights.recommendations.some((r) => r.id === "reliability-tool-errors")).toBe(true);
   });
 });
 

@@ -39,10 +39,18 @@ export interface SessionFeedbackMetricSnapshot {
   subagentToolCount?: number;
   httpRequestsPerTurn?: number;
   maxTurnToolCount?: number;
+  /** 会话上下文占用（insights 观测时） */
+  ctxPercentEnd?: number;
+  /** 输入侧 token / 轮（含 cache） */
+  inputTokensPerTurn?: number;
   /** 增量快照：仅统计指定轮次范围 */
   scopedTurnFrom?: number;
   scopedTurnTo?: number;
   scopedTurnCount?: number;
+  /** 工具 result 错误次数 */
+  toolErrorCount?: number;
+  /** HTTP 4xx/5xx 次数 */
+  httpErrorCount?: number;
 }
 
 export interface FeedbackMetricDelta {
@@ -177,6 +185,10 @@ export function extractMetricSnapshot(insights: SessionInsightsResult): SessionF
     recommendationCount: recommendations.length,
     warningCount: countWarnings(recommendations),
     capturedAt: Date.now(),
+    ctxPercentEnd: overview.contextMetrics?.ctxPercent,
+    inputTokensPerTurn: overview.turnCount > 0 ? inputSide / overview.turnCount : undefined,
+    toolErrorCount: insights.reliability.toolErrorCount,
+    httpErrorCount: insights.reliability.httpErrorCount,
     ...requestRationalityFields(insights),
   };
 }
@@ -219,10 +231,12 @@ export function extractIncrementalSnapshot(
   const cacheCreation = turns.reduce((a, t) => a + t.tokens.cacheCreationTokens, 0);
   const cacheDenom = inputSide + cacheCreation;
   const ttfts = turns.map((t) => t.ttftMs).filter((v): v is number => v != null && v > 0);
+  const httpLatencies = turns.map((t) => t.httpLatencyMs).filter((v) => v > 0);
 
   const fromTurn = Math.min(...turns.map((t) => t.turnIndex));
   const toTurn = Math.max(...turns.map((t) => t.turnIndex));
   const maxTurnToolCount = turns.reduce((m, t) => Math.max(m, t.toolCount), 0);
+  const sessionCtx = insights.overview.contextMetrics?.ctxPercent;
 
   return {
     turnCount: turns.length,
@@ -233,12 +247,14 @@ export function extractIncrementalSnapshot(
     tokenTotal,
     outputTokenRatio: inputSide > 0 ? outputTokens / inputSide : 0,
     cacheHitRate: cacheDenom > 0 ? cacheRead / cacheDenom : null,
-    p95HttpLatencyMs: null,
+    p95HttpLatencyMs: percentile(httpLatencies, 95),
     p95TtftMs: percentile(ttfts, 95),
     recommendationCount: insights.recommendations.length,
     warningCount: countWarnings(insights.recommendations),
     capturedAt: Date.now(),
     maxTurnToolCount,
+    ctxPercentEnd: sessionCtx,
+    inputTokensPerTurn: turns.length > 0 ? inputSide / turns.length : undefined,
     scopedTurnFrom: fromTurn,
     scopedTurnTo: toTurn,
     scopedTurnCount: turns.length,
@@ -280,6 +296,16 @@ export function buildIncrementalReferenceSnapshot(
         : undefined,
     httpRequestsPerTurn: sessionBaseline.httpRequestsPerTurn,
     maxTurnToolCount: sessionBaseline.maxTurnToolCount,
+    ctxPercentEnd: sessionBaseline.ctxPercentEnd,
+    inputTokensPerTurn: sessionBaseline.inputTokensPerTurn,
+    toolErrorCount:
+      sessionBaseline.toolErrorCount != null && sessionBaseline.turnCount > 0
+        ? (sessionBaseline.toolErrorCount / sessionBaseline.turnCount) * n
+        : undefined,
+    httpErrorCount:
+      sessionBaseline.httpErrorCount != null && sessionBaseline.turnCount > 0
+        ? (sessionBaseline.httpErrorCount / sessionBaseline.turnCount) * n
+        : undefined,
     capturedAt: sessionBaseline.capturedAt,
     scopedTurnCount: n,
   };
@@ -383,6 +409,21 @@ export function compareIncrementalAgainstBaseline(
     });
   }
 
+  const httpDelta =
+    ref.p95HttpLatencyMs != null && afterIncremental.p95HttpLatencyMs != null
+      ? pctDelta(ref.p95HttpLatencyMs, afterIncremental.p95HttpLatencyMs, true)
+      : null;
+  if (ref.p95HttpLatencyMs != null || afterIncremental.p95HttpLatencyMs != null) {
+    deltas.push({
+      axis: "speed",
+      label: "HTTP P95",
+      before: formatMs(ref.p95HttpLatencyMs),
+      after: formatMs(afterIncremental.p95HttpLatencyMs),
+      deltaPercent: httpDelta,
+      improved: httpDelta != null && httpDelta > 0,
+    });
+  }
+
   const toolsDelta = pctDelta(ref.toolsPerTurn, afterIncremental.toolsPerTurn, true);
   deltas.push({
     axis: "quality",
@@ -405,6 +446,8 @@ export function compareIncrementalAgainstBaseline(
 
   appendOptionalCountDelta(deltas, "MCP 次数", ref.mcpToolCount, afterIncremental.mcpToolCount);
   appendOptionalCountDelta(deltas, "Skill 次数", ref.skillToolCount, afterIncremental.skillToolCount);
+  appendOptionalCountDelta(deltas, "工具错误", ref.toolErrorCount, afterIncremental.toolErrorCount);
+  appendOptionalCountDelta(deltas, "HTTP 错误", ref.httpErrorCount, afterIncremental.httpErrorCount);
 
   const tokenPerTurnBefore = ref.turnCount > 0 ? ref.tokenTotal / ref.turnCount : 0;
   const tokenPerTurnAfter =
@@ -441,6 +484,24 @@ export function compareIncrementalAgainstBaseline(
       after: formatRatio(cacheAfter),
       deltaPercent: cacheDelta,
       improved: cacheDelta != null && cacheDelta > 0,
+    });
+  }
+
+  const ctxDelta =
+    ref.ctxPercentEnd != null && afterIncremental.ctxPercentEnd != null
+      ? pctDelta(ref.ctxPercentEnd, afterIncremental.ctxPercentEnd, true)
+      : null;
+  if (ref.ctxPercentEnd != null || afterIncremental.ctxPercentEnd != null) {
+    deltas.push({
+      axis: "efficiency",
+      label: "上下文占用",
+      before: ref.ctxPercentEnd != null ? `${Math.round(ref.ctxPercentEnd)}%` : "—",
+      after:
+        afterIncremental.ctxPercentEnd != null
+          ? `${Math.round(afterIncremental.ctxPercentEnd)}%`
+          : "—",
+      deltaPercent: ctxDelta,
+      improved: ctxDelta != null && ctxDelta > 0,
     });
   }
 
@@ -536,6 +597,21 @@ export function compareMetricSnapshots(
     });
   }
 
+  const httpDelta =
+    baseline.p95HttpLatencyMs != null && after.p95HttpLatencyMs != null
+      ? pctDelta(baseline.p95HttpLatencyMs, after.p95HttpLatencyMs, true)
+      : null;
+  if (baseline.p95HttpLatencyMs != null || after.p95HttpLatencyMs != null) {
+    deltas.push({
+      axis: "speed",
+      label: "HTTP P95",
+      before: formatMs(baseline.p95HttpLatencyMs),
+      after: formatMs(after.p95HttpLatencyMs),
+      deltaPercent: httpDelta,
+      improved: httpDelta != null && httpDelta > 0,
+    });
+  }
+
   const tokenDelta = pctDelta(baseline.tokenTotal, after.tokenTotal, true);
   deltas.push({
     axis: "efficiency",
@@ -585,6 +661,8 @@ export function compareMetricSnapshots(
 
   appendOptionalCountDelta(deltas, "MCP 次数", baseline.mcpToolCount, after.mcpToolCount);
   appendOptionalCountDelta(deltas, "Skill 次数", baseline.skillToolCount, after.skillToolCount);
+  appendOptionalCountDelta(deltas, "工具错误", baseline.toolErrorCount, after.toolErrorCount);
+  appendOptionalCountDelta(deltas, "HTTP 错误", baseline.httpErrorCount, after.httpErrorCount);
 
   const scores = buildComparisonScores(deltas);
 

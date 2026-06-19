@@ -1,6 +1,12 @@
 import type { FeedbackLoopTrendPoint } from "../utils/sessionFeedbackLoop";
 import { buildFeedbackLoopTrend, extractFeedbackLoopHabits } from "../utils/sessionFeedbackLoop";
 import type { SessionFeedbackLoopState } from "../utils/sessionFeedbackLoop";
+import {
+  listSessionFeedbackLoopHistoryDb,
+  migrateSessionFeedbackLoopLocalStorageToDb,
+  upsertSessionFeedbackLoopHistoryDb,
+} from "./sessionFeedbackLoopDb";
+import { loadAllPatchEffectivenessRecordsLocal } from "./sessionFeedbackConfigPatchEffectiveness";
 
 const HISTORY_KEY = "wise.sessionFeedbackLoop.history.v1";
 const MAX_HISTORY = 40;
@@ -22,6 +28,9 @@ export interface FeedbackLoopHistoryRecord {
   trend: FeedbackLoopTrendPoint[];
 }
 
+let historyCache: FeedbackLoopHistoryRecord[] | null = null;
+let hydratePromise: Promise<void> | null = null;
+
 function readStorage(): Storage | null {
   try {
     if (typeof window !== "undefined" && window.localStorage) return window.localStorage;
@@ -38,7 +47,7 @@ function normalizePath(path: string): string {
   return path.trim().replace(/\\/g, "/").replace(/\/$/, "");
 }
 
-function loadAll(): FeedbackLoopHistoryRecord[] {
+function loadAllLocal(): FeedbackLoopHistoryRecord[] {
   const storage = readStorage();
   if (!storage) return [];
   try {
@@ -51,7 +60,7 @@ function loadAll(): FeedbackLoopHistoryRecord[] {
   }
 }
 
-function saveAll(records: FeedbackLoopHistoryRecord[]): void {
+function saveAllLocal(records: FeedbackLoopHistoryRecord[]): void {
   const storage = readStorage();
   if (!storage) return;
   try {
@@ -59,6 +68,33 @@ function saveAll(records: FeedbackLoopHistoryRecord[]): void {
   } catch {
     /* quota */
   }
+}
+
+function setHistoryCache(records: FeedbackLoopHistoryRecord[]): void {
+  historyCache = records.slice(0, MAX_HISTORY);
+  saveAllLocal(historyCache);
+}
+
+/** 桌面版从 SQLite 水合历史缓存（一次性迁移 localStorage）。 */
+export function ensureFeedbackLoopHistoryHydrated(): Promise<void> {
+  if (hydratePromise) return hydratePromise;
+  hydratePromise = (async () => {
+    const local = loadAllLocal();
+    await migrateSessionFeedbackLoopLocalStorageToDb({
+      historyRecords: local,
+      patchRecords: loadAllPatchEffectivenessRecordsLocal(),
+    });
+    const dbRows = await listSessionFeedbackLoopHistoryDb(null, MAX_HISTORY);
+    if (dbRows.length > 0) {
+      historyCache = dbRows.slice(0, MAX_HISTORY);
+      saveAllLocal(historyCache);
+    } else if (local.length > 0) {
+      historyCache = local.slice(0, MAX_HISTORY);
+    }
+  })().catch(() => {
+    historyCache = loadAllLocal();
+  });
+  return hydratePromise;
 }
 
 export function archiveFeedbackLoopHistory(input: {
@@ -89,14 +125,15 @@ export function archiveFeedbackLoopHistory(input: {
     trend,
   };
 
-  const all = loadAll().filter((r) => r.id !== record.id);
+  const all = (historyCache ?? loadAllLocal()).filter((r) => r.id !== record.id);
   all.unshift(record);
-  saveAll(all);
+  setHistoryCache(all);
+  void upsertSessionFeedbackLoopHistoryDb(record);
   return record;
 }
 
 export function listFeedbackLoopHistory(repositoryPath?: string | null): FeedbackLoopHistoryRecord[] {
-  const all = loadAll();
+  const all = historyCache ?? loadAllLocal();
   const path = repositoryPath?.trim() ? normalizePath(repositoryPath) : "";
   if (!path) return all.slice(0, 8);
   return all.filter((r) => normalizePath(r.repositoryPath) === path).slice(0, 8);

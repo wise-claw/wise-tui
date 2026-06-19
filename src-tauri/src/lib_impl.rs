@@ -11,6 +11,7 @@ use crate::{
     workspace_commands,
     workspace_inspector_commands,
     execution_environment_dispatch_commands,
+    session_feedback_loop_commands,
 };
 #[cfg(target_os = "macos")]
 use crate::macos_terminal_detect;
@@ -313,6 +314,11 @@ pub fn run() {
             execution_environment_dispatch_commands::upsert_execution_environment_dispatch_item,
             execution_environment_dispatch_commands::list_execution_environment_dispatches_for_anchor,
             execution_environment_dispatch_commands::list_execution_environment_dispatches_for_repository,
+            session_feedback_loop_commands::upsert_session_feedback_loop_history,
+            session_feedback_loop_commands::list_session_feedback_loop_history,
+            session_feedback_loop_commands::insert_session_feedback_patch_effectiveness_batch,
+            session_feedback_loop_commands::list_session_feedback_patch_effectiveness,
+            session_feedback_loop_commands::attach_session_feedback_patch_scores,
             app_state_commands::workflow_run_commands::get_workflow_run,
             app_state_commands::workflow_run_commands::set_workflow_run,
             app_state_commands::workflow_run_commands::list_workflow_runs,

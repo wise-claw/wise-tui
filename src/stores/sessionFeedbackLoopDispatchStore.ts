@@ -13,6 +13,8 @@ export interface SessionFeedbackLoopDispatchRecord {
   status: FeedbackLoopDispatchStatus;
   createdAt: number;
   completedAt?: number;
+  /** 闭环比对综合得分（optimization 派发完成后回填） */
+  comparisonOverallScore?: number;
 }
 
 type Listener = () => void;
@@ -50,6 +52,7 @@ function digestRecords(records: readonly SessionFeedbackLoopDispatchRecord[]): s
         r.status,
         String(r.createdAt),
         String(r.completedAt ?? 0),
+        String(r.comparisonOverallScore ?? ""),
       ].join(":"),
     )
     .join("|");
@@ -125,6 +128,33 @@ export function updateSessionFeedbackLoopDispatchStatus(input: {
         }
       : record,
   );
+  recordsByAnchor.set(anchorSessionId, next);
+  publishAnchorSnapshot(anchorSessionId);
+  notify();
+}
+
+/** 闭环比对完成后，为对应 optimization 派发记录回填综合得分。 */
+export function attachSessionFeedbackLoopDispatchComparisonScore(input: {
+  anchorSessionId: string;
+  cycleIndex: number;
+  comparisonOverallScore: number;
+}): void {
+  const anchorSessionId = input.anchorSessionId.trim();
+  const prev = recordsByAnchor.get(anchorSessionId);
+  if (!prev) return;
+  let changed = false;
+  const next = prev.map((record) => {
+    if (
+      record.kind !== "optimization" ||
+      record.cycleIndex !== input.cycleIndex ||
+      record.comparisonOverallScore === input.comparisonOverallScore
+    ) {
+      return record;
+    }
+    changed = true;
+    return { ...record, comparisonOverallScore: input.comparisonOverallScore };
+  });
+  if (!changed) return;
   recordsByAnchor.set(anchorSessionId, next);
   publishAnchorSnapshot(anchorSessionId);
   notify();

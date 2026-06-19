@@ -327,6 +327,7 @@ export function buildSessionInsightsMarkdownReport(
   lines.push(`- FCC trace：${cov.fccTraceCount} 条`);
   lines.push(`- OpenCode Go trace：${cov.opencodeGoProxyTraceCount} 条`);
   lines.push(`- TTFT 明细：${cov.hasTtftData ? "是（LLM 代理）" : "否"}`);
+  lines.push(`- 上下文占用：${cov.hasContextMetrics ? "是" : "否"}`);
   lines.push("");
 
   return lines.join("\n");

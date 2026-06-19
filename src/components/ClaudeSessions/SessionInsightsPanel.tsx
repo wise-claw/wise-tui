@@ -182,7 +182,8 @@ export const SessionInsightsPanel = memo(function SessionInsightsPanel({
   const [aiSending, setAiSending] = useState(false);
   const [aiOptimizeSending, setAiOptimizeSending] = useState(false);
   const [singleAiTargetId, setSingleAiTargetId] = useState<string | null>(null);
-  const { overview, slowestTurns, toolHotspots, recommendations } = insights;
+  const { overview, slowestTurns, toolHotspots, toolLatencyHotspots, duplicateReadPaths, recommendations, baselineComparison, reliability } =
+    insights;
   const tokens = overview.tokens;
   const tokenTotal =
     tokens.inputTokens +
@@ -225,6 +226,9 @@ export const SessionInsightsPanel = memo(function SessionInsightsPanel({
     coverageHints.push(
       `OpenCode trace ${overview.dataCoverage.opencodeGoProxyTraceCount} 条`,
     );
+  }
+  if (baselineComparison) {
+    coverageHints.push(baselineComparison.summary);
   }
 
   const buildReportMarkdown = useCallback(
@@ -452,12 +456,24 @@ export const SessionInsightsPanel = memo(function SessionInsightsPanel({
             sub={`HTTP 推断 ${overview.httpInferredCount}`}
             accent="#a855f7"
           />
+          {reliability.toolErrorCount > 0 || reliability.httpErrorCount > 0 ? (
+            <KpiCard
+              icon={<WarningOutlined />}
+              label="可靠性"
+              value={`工具错误 ${reliability.toolErrorCount}`}
+              sub={`HTTP 错误 ${reliability.httpErrorCount}`}
+              accent="#ef4444"
+            />
+          ) : null}
           <KpiCard
             icon={<DollarOutlined />}
             label="Token / 费用"
             value={tokenTotal > 0 ? formatTokenCount(tokenTotal) : "—"}
             sub={
               [
+                overview.contextMetrics
+                  ? `上下文 ${overview.contextMetrics.ctxPercent}%`
+                  : null,
                 overview.cacheHitRate != null ? `Cache ${formatCacheHitRate(overview.cacheHitRate)}` : null,
                 tokens.costUsd > 0 ? `$${tokens.costUsd.toFixed(3)}` : null,
               ]
@@ -489,7 +505,7 @@ export const SessionInsightsPanel = memo(function SessionInsightsPanel({
         </section>
       ) : null}
 
-      {slowestTurns.length > 0 || toolHotspots.length > 0 ? (
+      {slowestTurns.length > 0 || toolHotspots.length > 0 || toolLatencyHotspots.length > 0 ? (
         <div className="app-session-insights__mid-grid">
           {slowestTurns.length > 0 ? (
             <section className="app-session-insights__section">
@@ -538,6 +554,44 @@ export const SessionInsightsPanel = memo(function SessionInsightsPanel({
                   <div key={h.name} className="app-session-insights__hotspot">
                     <Text strong>{h.name}</Text>
                     <Text type="secondary">×{h.count}</Text>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {toolLatencyHotspots.length > 0 ? (
+            <section className="app-session-insights__section">
+              <Text className="app-session-insights__section-title">慢工具 Top</Text>
+              <div className="app-session-insights__table">
+                <div className="app-session-insights__table-head">
+                  <span>工具</span>
+                  <span>P95</span>
+                  <span>均耗时</span>
+                  <span>次数</span>
+                </div>
+                {toolLatencyHotspots.map((h) => (
+                  <div key={h.name} className="app-session-insights__table-row">
+                    <span>{h.name}</span>
+                    <span>{formatDurationMs(h.p95DurationMs ?? h.maxDurationMs)}</span>
+                    <span>{formatDurationMs(h.avgDurationMs)}</span>
+                    <span>{h.count}</span>
+                  </div>
+                ))}
+              </div>
+            </section>
+          ) : null}
+
+          {duplicateReadPaths.length > 0 ? (
+            <section className="app-session-insights__section">
+              <Text className="app-session-insights__section-title">重复 Read</Text>
+              <div className="app-session-insights__hotspots">
+                {duplicateReadPaths.slice(0, 5).map((d) => (
+                  <div key={d.path} className="app-session-insights__hotspot">
+                    <Text strong className="app-session-insights__dup-path">
+                      {d.path}
+                    </Text>
+                    <Text type="secondary">×{d.count}</Text>
                   </div>
                 ))}
               </div>

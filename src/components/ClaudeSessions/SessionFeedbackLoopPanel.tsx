@@ -34,6 +34,10 @@ import {
   type FeedbackLoopPhase,
   type SessionFeedbackCycle,
 } from "../../utils/sessionFeedbackLoop";
+import {
+  parseFeedbackLoopStructuredActions,
+  type FeedbackLoopStructuredAction,
+} from "../../utils/sessionFeedbackLoopActions";
 
 const { Text } = Typography;
 
@@ -186,7 +190,49 @@ function TrendChart({ cycles }: { cycles: readonly SessionFeedbackCycle[] }) {
   );
 }
 
-function CycleCard({ cycle }: { cycle: SessionFeedbackCycle }) {
+function StructuredActionsBlock({
+  responseText,
+  pendingPatchIds,
+}: {
+  responseText: string;
+  pendingPatchIds: readonly string[];
+}) {
+  const actions = useMemo(
+    () => parseFeedbackLoopStructuredActions(responseText, { pendingPatchIds }),
+    [responseText, pendingPatchIds],
+  );
+  if (actions.length === 0) return null;
+
+  const kindLabel: Record<FeedbackLoopStructuredAction["kind"], string> = {
+    compact: "压缩",
+    disable_mcp: "MCP",
+    composer_phrase: "常用语",
+    apply_patch: "补丁",
+    generic: "动作",
+  };
+
+  return (
+    <div className="app-session-feedback-loop__structured-actions">
+      <Text type="secondary">可执行动作</Text>
+      <ul className="app-session-feedback-loop__structured-actions-list">
+        {actions.map((action) => (
+          <li key={action.id}>
+            <Tag bordered={false}>{kindLabel[action.kind]}</Tag>
+            <span>{action.label}</span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  );
+}
+
+function CycleCard({
+  cycle,
+  pendingPatchIds,
+}: {
+  cycle: SessionFeedbackCycle;
+  pendingPatchIds: readonly string[];
+}) {
   const [expanded, setExpanded] = useState(false);
   const comparison = cycle.comparison;
 
@@ -263,6 +309,10 @@ function CycleCard({ cycle }: { cycle: SessionFeedbackCycle }) {
             <div className="app-session-feedback-loop__worker-response">
               <Text type="secondary">Worker 优化建议</Text>
               <pre className="app-session-feedback-loop__worker-response-md">{cycle.workerResponsePreview}</pre>
+              <StructuredActionsBlock
+                responseText={cycle.workerResponsePreview}
+                pendingPatchIds={pendingPatchIds}
+              />
             </div>
           ) : null}
         </>
@@ -280,7 +330,12 @@ export const SessionFeedbackLoopPanel = memo(function SessionFeedbackLoopPanel({
   optimizeConfigArtifacts = false,
   onDispatchSessionFeedbackLoop,
 }: Props) {
-  const { state, isActive, habits, historyRecords, historyComparison, start, stop, reset, forceCompare, saveHabitsToComposer, requestFinalSummary, requestHabitsPrompt, exportMarkdownReport } = loop;
+  const { state, isActive, habits, historyRecords, historyComparison, configPatches, start, stop, reset, forceCompare, saveHabitsToComposer, requestFinalSummary, requestHabitsPrompt, exportMarkdownReport } = loop;
+
+  const pendingPatchIds = useMemo(
+    () => configPatches.filter((p) => p.status === "pending").map((p) => p.id),
+    [configPatches],
+  );
 
   const phaseLabel = PHASE_LABEL[state.phase];
   const completedCycles = useMemo(
@@ -510,7 +565,7 @@ export const SessionFeedbackLoopPanel = memo(function SessionFeedbackLoopPanel({
       {state.cycles.length > 0 ? (
         <div className="app-session-feedback-loop__cycles">
           {state.cycles.map((cycle) => (
-            <CycleCard key={cycle.cycleIndex} cycle={cycle} />
+            <CycleCard key={cycle.cycleIndex} cycle={cycle} pendingPatchIds={pendingPatchIds} />
           ))}
         </div>
       ) : null}

@@ -187,7 +187,7 @@ export function resolveFeedbackConfigPatchFileTarget(
     if (!sourcePath) {
       return { fileName: serverName, displayPath: resolved.path, openKind: "none" };
     }
-    const fileName = sourcePath.split(/[/\\]/).pop() ?? serverName;
+    const fileName = serverName || sourcePath.split(/[/\\]/).pop() || resolved.path;
     return {
       fileName,
       displayPath: sourcePath,
@@ -375,6 +375,59 @@ function heuristicRulesTrim(snapshot: FeedbackConfigSnapshot): FeedbackConfigPat
   };
 }
 
+function mcpHotspotReferencesServer(hotspotName: string, serverName: string): boolean {
+  const hot = hotspotName.toLowerCase();
+  const server = serverName.toLowerCase().trim();
+  if (!server) return false;
+  if (hot.includes(server)) return true;
+  if (hot.startsWith("mcp__")) {
+    const parts = hot.replace(/^mcp__/, "").split("__");
+    if (parts[0]?.includes(server) || server.includes(parts[0] ?? "")) return true;
+  }
+  const head = hot.split("·")[0]?.trim() ?? hot;
+  return head.includes(server) || server.includes(head);
+}
+
+/** 禁用会话中未调用但已启用的 MCP server（降低 schema 开销）。 */
+function heuristicDisableUnusedMcpServers(input: {
+  insights: SessionInsightsResult;
+  snapshot: FeedbackConfigSnapshot;
+}): FeedbackConfigPatch[] {
+  const enabled = input.snapshot.mcpServers.filter((s) => s.enabled);
+  if (enabled.length < 2) return [];
+
+  const mcpUsed =
+    (input.insights.requestRationality.toolCategories.find((c) => c.category === "mcp")?.count ??
+      0) > 0;
+  const hotspotNames = [
+    ...input.insights.requestRationality.mcpHotspots.map((h) => h.name),
+    ...input.insights.toolHotspots.filter((h) => /mcp/i.test(h.name)).map((h) => h.name),
+  ];
+
+  const patches: FeedbackConfigPatch[] = [];
+  for (const server of enabled) {
+    const referenced = hotspotNames.some((name) => mcpHotspotReferencesServer(name, server.name));
+    if (referenced) continue;
+    if (mcpUsed && enabled.length <= 2) continue;
+    patches.push({
+      id: createFeedbackConfigPatchId("heuristic"),
+      kind: "mcp",
+      action: "disable",
+      path: server.sourcePath,
+      rationale: `会话未观测到 MCP「${server.name}」调用，禁用可降低 schema 上下文开销`,
+      content: "",
+      source: "heuristic",
+      status: "pending",
+      mcp: {
+        serverName: server.name,
+        scope: server.scope,
+        sourcePath: server.sourcePath,
+      },
+    });
+  }
+  return patches.slice(0, 3);
+}
+
 /** 从洞察与配置快照推断可审阅的配置补丁候选（规则引擎，不依赖 AI）。 */
 export function inferConfigPatchCandidates(input: {
   insights: SessionInsightsResult;
@@ -398,6 +451,8 @@ export function inferConfigPatchCandidates(input: {
   if (input.snapshot) {
     const trim = heuristicRulesTrim(input.snapshot);
     if (trim) patches.push(trim);
+
+    patches.push(...heuristicDisableUnusedMcpServers({ insights: input.insights, snapshot: input.snapshot }));
 
     const disabledMcp = input.snapshot.mcpServers.filter((s) => !s.enabled);
     if (disabledMcp.length > 0 && input.insights.toolHotspots.some((h) => h.name.includes("MCP"))) {

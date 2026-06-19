@@ -59,6 +59,7 @@ const MIGRATION_040: &str = include_str!("../migrations/040_employee_default_ins
 const MIGRATION_041: &str = include_str!("../migrations/041_drop_code_knowledge_graph.sql");
 const MIGRATION_042: &str = include_str!("../migrations/042_drop_workspace_memos.sql");
 const MIGRATION_043: &str = include_str!("../migrations/043_drop_trellis_mission_prd.sql");
+const MIGRATION_044: &str = include_str!("../migrations/044_session_feedback_loop.sql");
 const PLATFORM_SPLIT_PROMPT_SEED_JSON: &str =
     include_str!("../migrations/005_platform_split_prompt_seed.json");
 
@@ -244,6 +245,10 @@ const MIGRATIONS: &[Migration] = &[
     Migration {
         name: "043_drop_trellis_mission_prd",
         action: MigrationAction::Sql(MIGRATION_043),
+    },
+    Migration {
+        name: "044_session_feedback_loop",
+        action: MigrationAction::Sql(MIGRATION_044),
     },
 ];
 
@@ -1820,6 +1825,7 @@ mod tests {
                 "041_drop_code_knowledge_graph",
                 "042_drop_workspace_memos",
                 "043_drop_trellis_mission_prd",
+                "044_session_feedback_loop",
             ]
         );
     }

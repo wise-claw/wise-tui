@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ClaudeSession } from "../types";
 import {
+  buildFeedbackLoopConversationTasks,
   buildSessionConversationTasks,
   buildConversationTaskDetailMessages,
   canStopSessionConversationTask,
@@ -759,9 +760,35 @@ describe("buildFeedbackLoopConversationTasks", () => {
     });
     expect(items.some((item) => item.source === "feedback_loop")).toBe(true);
     const row = items.find((item) => item.key === "feedback-loop:fl-1");
-    expect(row?.subtitle).toBe("神经网 · 优化");
+    expect(row?.subtitle).toBe("神经网 · 优化 #1");
     expect(row?.status).toBe("completed");
     expect(row?.previewText).toContain("建议合并 Grep");
+  });
+
+  test("includes comparison score in subtitle when present", () => {
+    const anchor = session({ id: "main-1", repositoryPath: "/repo" });
+    const items = buildFeedbackLoopConversationTasks({
+      anchorSession: anchor,
+      sessions: [anchor],
+      dispatchRecords: [
+        {
+          dispatchId: "fl-2",
+          anchorSessionId: "main-1",
+          workerSessionId: "worker-2",
+          repositoryPath: "/repo",
+          kind: "optimization",
+          cycleIndex: 2,
+          previewText: "第二轮优化",
+          status: "completed",
+          createdAt: 100,
+          completedAt: 200,
+          comparisonOverallScore: 12.5,
+        },
+      ],
+    });
+    const row = items.find((item) => item.key === "feedback-loop:fl-2");
+    expect(row?.subtitle).toContain("得分 +12.5");
+    expect(row?.feedbackLoopComparisonScore).toBe(12.5);
   });
 });
 

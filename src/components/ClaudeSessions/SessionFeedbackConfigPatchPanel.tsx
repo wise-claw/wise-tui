@@ -39,6 +39,7 @@ import {
   isPatchPromotableToGlobalRule,
   isPatchSuggestedForGlobalPromotion,
 } from "../../utils/sessionFeedbackGlobalRules";
+import { isLowRiskAutoApplyPatch } from "../../utils/sessionFeedbackLoopActions";
 
 const { Text } = Typography;
 
@@ -362,6 +363,7 @@ export const SessionFeedbackConfigPatchPanel = memo(function SessionFeedbackConf
     repositoryPath,
     requestConfigPatchPrompt,
     applySelectedConfigPatches,
+    applyLowRiskConfigPatches,
     rejectConfigPatch,
     refreshConfigSnapshot,
     refreshConfigPatchBackups,
@@ -378,6 +380,10 @@ export const SessionFeedbackConfigPatchPanel = memo(function SessionFeedbackConf
   const pendingPatches = useMemo(
     () => configPatches.filter((p) => p.status === "pending"),
     [configPatches],
+  );
+  const lowRiskPatches = useMemo(
+    () => pendingPatches.filter((patch) => isLowRiskAutoApplyPatch(patch)),
+    [pendingPatches],
   );
 
   const handleSelectAll = useCallback(
@@ -407,6 +413,27 @@ export const SessionFeedbackConfigPatchPanel = memo(function SessionFeedbackConf
       setApplying(false);
     }
   }, [applySelectedConfigPatches, selectedIds]);
+
+  const handleApplyLowRisk = useCallback(async () => {
+    if (lowRiskPatches.length === 0) {
+      message.info("暂无低风险 MCP 禁用补丁");
+      return;
+    }
+    setApplying(true);
+    try {
+      const count = await applyLowRiskConfigPatches();
+      if (count > 0) {
+        message.success(`已自动应用 ${count} 条低风险 MCP 禁用补丁`);
+        setSelectedIds([]);
+      } else {
+        message.warning("未能应用低风险补丁");
+      }
+    } catch (e) {
+      message.error(`应用失败：${e instanceof Error ? e.message : String(e)}`);
+    } finally {
+      setApplying(false);
+    }
+  }, [applyLowRiskConfigPatches, lowRiskPatches.length]);
 
   const handleAiGenerate = useCallback(async () => {
     const prompt = requestConfigPatchPrompt();
@@ -529,6 +556,11 @@ export const SessionFeedbackConfigPatchPanel = memo(function SessionFeedbackConf
           <Button size="small" onClick={() => void handleParseClipboard()}>
             从剪贴板解析
           </Button>
+          {lowRiskPatches.length > 0 ? (
+            <Button size="small" loading={applying} onClick={() => void handleApplyLowRisk()}>
+              应用低风险 MCP 禁用 ({lowRiskPatches.length})
+            </Button>
+          ) : null}
           {pendingPatches.length > 0 ? (
             <>
               <Checkbox

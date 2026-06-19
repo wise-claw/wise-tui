@@ -21,9 +21,13 @@ import { upsertFeedbackLoopHabitsPhrase } from "../services/sessionFeedbackLoopC
 import {
   archiveFeedbackLoopHistory,
   compareWithHistoryAverage,
+  ensureFeedbackLoopHistoryHydrated,
   listFeedbackLoopHistory,
   type FeedbackLoopHistoryRecord,
 } from "../services/sessionFeedbackLoopHistoryStore";
+import {
+  attachSessionFeedbackLoopDispatchComparisonScore,
+} from "../stores/sessionFeedbackLoopDispatchStore";
 import {
   clearSessionFeedbackLoopState,
   loadSessionFeedbackLoopState,
@@ -40,6 +44,9 @@ import {
   inferConfigPatchCandidates,
   parseConfigPatchesFromAiResponse,
 } from "../utils/sessionFeedbackConfigPatch";
+import {
+  isLowRiskAutoApplyPatch,
+} from "../utils/sessionFeedbackLoopActions";
 import {
   advanceFeedbackLoop,
   attachFeedbackCycleWorkerResponse,
@@ -99,6 +106,7 @@ export interface UseSessionFeedbackLoopResult {
   refreshConfigSnapshot: () => Promise<void>;
   rejectConfigPatch: (patchId: string) => void;
   applySelectedConfigPatches: (patchIds: readonly string[]) => Promise<number>;
+  applyLowRiskConfigPatches: () => Promise<number>;
   refreshConfigPatchBackups: () => Promise<void>;
   rollbackConfigPatchBackup: (backupId: string) => Promise<{ ok: boolean; message: string }>;
   exportMarkdownReport: () => string | null;
@@ -192,6 +200,12 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
   }, [sessionId, maxCycles]);
 
   useEffect(() => {
+    void ensureFeedbackLoopHistoryHydrated().then(() => {
+      setHistoryVersion((v) => v + 1);
+    });
+  }, []);
+
+  useEffect(() => {
     if (!enabled || !sessionId.trim()) return;
     saveSessionFeedbackLoopState(state);
   }, [enabled, sessionId, state]);
@@ -273,6 +287,9 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
 
       processingRef.current = true;
       try {
+        const prevCompared = new Set(
+          activeState.cycles.filter((c) => c.comparison).map((c) => c.cycleIndex),
+        );
         const { state: next, action } = advanceFeedbackLoop({
           state: activeState,
           insights: currentInsights,
@@ -283,6 +300,15 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
           optimizeConfigArtifacts,
           configSnapshot: configSnapshotRef.current,
         });
+        for (const cycle of next.cycles) {
+          if (cycle.comparison && !prevCompared.has(cycle.cycleIndex)) {
+            attachSessionFeedbackLoopDispatchComparisonScore({
+              anchorSessionId: sessionId,
+              cycleIndex: cycle.cycleIndex,
+              comparisonOverallScore: cycle.comparison.overallScore,
+            });
+          }
+        }
         stateRef.current = next;
         setState(next);
         await dispatchAction(action);
@@ -293,7 +319,7 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
         processingRef.current = false;
       }
     },
-    [dispatchAction, earlyStopConvergence, optimizeConfigArtifacts, syncConfigPatchCandidates],
+    [dispatchAction, earlyStopConvergence, optimizeConfigArtifacts, sessionId, syncConfigPatchCandidates],
   );
 
   const finalizeCompletedRun = useCallback(
@@ -504,6 +530,14 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
     [refreshConfigPatchBackups, sessionId],
   );
 
+  const applyLowRiskConfigPatches = useCallback(async (): Promise<number> => {
+    const pending = loadFeedbackConfigPatches(sessionId).filter(
+      (patch) => patch.status === "pending" && isLowRiskAutoApplyPatch(patch),
+    );
+    if (pending.length === 0) return 0;
+    return applySelectedConfigPatches(pending.map((patch) => patch.id));
+  }, [applySelectedConfigPatches, sessionId]);
+
   const rollbackConfigPatchBackup = useCallback(
     async (backupId: string): Promise<{ ok: boolean; message: string }> => {
       const repo = repoPathRef.current?.trim();
@@ -564,6 +598,7 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
     refreshConfigSnapshot,
     rejectConfigPatch,
     applySelectedConfigPatches,
+    applyLowRiskConfigPatches,
     refreshConfigPatchBackups,
     rollbackConfigPatchBackup,
     exportMarkdownReport,

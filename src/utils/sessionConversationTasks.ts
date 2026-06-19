@@ -527,6 +527,10 @@ export function buildFeedbackLoopConversationTasks(input: {
     const assistantPreview = worker ? resolveWorkerDispatchTurnLastAssistantPreview(worker) : "";
     const dispatchedAt = record.completedAt ?? record.createdAt;
     const kindLabel = SESSION_FEEDBACK_LOOP_DISPATCH_KIND_LABELS[record.kind];
+    const scoreSuffix =
+      record.comparisonOverallScore != null
+        ? ` · 得分 ${record.comparisonOverallScore >= 0 ? "+" : ""}${record.comparisonOverallScore.toFixed(1)}`
+        : "";
     const promptBody = record.previewText?.replace(/\s+/g, " ").trim();
     const preview =
       status === "running"
@@ -536,7 +540,7 @@ export function buildFeedbackLoopConversationTasks(input: {
     out.push({
       key: `feedback-loop:${record.dispatchId}`,
       label,
-      subtitle: `神经网 · ${kindLabel}`,
+      subtitle: `神经网 · ${kindLabel}${record.cycleIndex != null ? ` #${record.cycleIndex}` : ""}${scoreSuffix}`,
       status,
       previewText: truncate(preview || promptBody || "执行中…"),
       updatedAt: dispatchedAt,
@@ -544,6 +548,7 @@ export function buildFeedbackLoopConversationTasks(input: {
       sessionId: record.workerSessionId,
       repositoryPath: record.repositoryPath || anchor.repositoryPath,
       dispatchBatchId: record.dispatchId,
+      feedbackLoopComparisonScore: record.comparisonOverallScore,
       cancellable: status === "running",
       cancelMode: status === "running" ? "session" : undefined,
     });

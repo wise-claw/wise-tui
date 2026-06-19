@@ -217,6 +217,8 @@ export interface SessionConversationTaskItem {
   cancellable?: boolean;
   /** 手动结束时的取消方式 */
   cancelMode?: "session" | "invocation";
+  /** 反馈神经网闭环比对综合得分（派发任务详情用） */
+  feedbackLoopComparisonScore?: number;
 }
 
 export interface MonitorStats {

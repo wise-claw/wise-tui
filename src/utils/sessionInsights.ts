@@ -4,6 +4,16 @@ import type { OpencodeGoProxyTraceEntry } from "../types/opencodeGoProxyTrace";
 import type { SessionLinkRecord } from "../types/sessionLink";
 import { resolveProxyFirstByteMs, resolveProxyRttMs, resolveProxyTtftMs } from "./llmProxyTtft";
 import type { SessionLinkTurnMetric } from "./sessionLinkFilters";
+import {
+  analyzeSessionLinkToolLatency,
+  type SessionDuplicateReadPath,
+  type SessionToolLatencyHotspot,
+} from "./sessionLinkToolLatency";
+import {
+  compareSessionTokensToBaseline,
+  type SessionBaselineComparison,
+  type SessionRepositoryUsageBaseline,
+} from "./sessionUsageBaseline";
 
 export interface TokenUsageBreakdown {
   inputTokens: number;
@@ -50,6 +60,13 @@ export interface SessionInsightsDataCoverage {
   fccTraceCount: number;
   opencodeGoProxyTraceCount: number;
   hasTtftData: boolean;
+  hasContextMetrics: boolean;
+}
+
+/** 会话上下文占用（与 claudeSessionContext 口径对齐，由调用方注入）。 */
+export interface SessionContextInsightMetrics {
+  estimatedTokens: number;
+  ctxPercent: number;
 }
 
 export interface SessionInsightsOverview {
@@ -68,6 +85,7 @@ export interface SessionInsightsOverview {
   tokens: TokenUsageBreakdown;
   cacheHitRate: number | null;
   dataCoverage: SessionInsightsDataCoverage;
+  contextMetrics?: SessionContextInsightMetrics | null;
 }
 
 export interface SessionToolHotspot {
@@ -98,6 +116,12 @@ export interface SessionRequestRationalityMetrics {
   subagentHotspots: SessionToolHotspot[];
 }
 
+/** 工具/HTTP 可靠性观测（错误与失败次数）。 */
+export interface SessionReliabilityMetrics {
+  toolErrorCount: number;
+  httpErrorCount: number;
+}
+
 /** 空合理性指标（测试与占位）。 */
 export function emptyRequestRationalityMetrics(): SessionRequestRationalityMetrics {
   return {
@@ -117,13 +141,36 @@ export function emptyRequestRationalityMetrics(): SessionRequestRationalityMetri
   };
 }
 
+export function emptyReliabilityMetrics(): SessionReliabilityMetrics {
+  return { toolErrorCount: 0, httpErrorCount: 0 };
+}
+
 export interface SessionInsightsResult {
   overview: SessionInsightsOverview;
   turnInsights: SessionTurnInsight[];
   toolHotspots: SessionToolHotspot[];
+  toolLatencyHotspots: SessionToolLatencyHotspot[];
+  duplicateReadPaths: SessionDuplicateReadPath[];
   slowestTurns: SessionTurnInsight[];
   recommendations: SessionInsightRecommendation[];
   requestRationality: SessionRequestRationalityMetrics;
+  baselineComparison: SessionBaselineComparison | null;
+  reliability: SessionReliabilityMetrics;
+}
+
+export type { SessionBaselineComparison, SessionDuplicateReadPath, SessionRepositoryUsageBaseline, SessionToolLatencyHotspot };
+
+/** 测试与占位：洞察分析扩展字段默认值。 */
+export function emptySessionInsightsAnalytics(): Pick<
+  SessionInsightsResult,
+  "toolLatencyHotspots" | "duplicateReadPaths" | "baselineComparison" | "reliability"
+> {
+  return {
+    toolLatencyHotspots: [],
+    duplicateReadPaths: [],
+    baselineComparison: null,
+    reliability: emptyReliabilityMetrics(),
+  };
 }
 
 export interface ComputeSessionInsightsInput {
@@ -135,6 +182,10 @@ export interface ComputeSessionInsightsInput {
   /** 已预过滤的 JSONL usage 行；省略时不再扫描全量 JSONL。 */
   jsonlUsageLines?: readonly string[] | null;
   llmProxyListening?: boolean;
+  /** 当前会话上下文估算（内存 messages）；可选。 */
+  contextMetrics?: SessionContextInsightMetrics | null;
+  /** 仓库近 N 日 JSONL 用量基线；可选。 */
+  repositoryBaseline?: SessionRepositoryUsageBaseline | null;
 }
 
 const EMPTY_TOKENS: TokenUsageBreakdown = {
@@ -433,6 +484,31 @@ function computeRequestRationalityMetrics(input: {
   };
 }
 
+function computeReliabilityMetrics(
+  linkRecords: readonly SessionLinkRecord[],
+): SessionReliabilityMetrics {
+  let toolErrorCount = 0;
+  let httpErrorCount = 0;
+  for (const record of linkRecords) {
+    if (record.kind === "tool_result") {
+      const detail = (record.detail ?? "").toLowerCase();
+      const summary = record.summary.toLowerCase();
+      if (
+        detail.includes('"error"') ||
+        detail.includes("is_error") ||
+        detail.includes("失败") ||
+        summary.includes("error")
+      ) {
+        toolErrorCount += 1;
+      }
+    }
+    if (record.layer === "http" && /\b[45]\d{2}\b/.test(record.summary)) {
+      httpErrorCount += 1;
+    }
+  }
+  return { toolErrorCount, httpErrorCount };
+}
+
 function buildRecommendations(input: {
   overview: SessionInsightsOverview;
   turnInsights: SessionTurnInsight[];
@@ -440,10 +516,59 @@ function buildRecommendations(input: {
   requestRationality: SessionRequestRationalityMetrics;
   llmProxyListening: boolean;
   llmProxyRecordCount: number;
+  contextMetrics?: SessionContextInsightMetrics | null;
+  toolLatencyHotspots: SessionToolLatencyHotspot[];
+  duplicateReadPaths: SessionDuplicateReadPath[];
+  baselineComparison: SessionBaselineComparison | null;
+  reliability: SessionReliabilityMetrics;
 }): SessionInsightRecommendation[] {
   const out: SessionInsightRecommendation[] = [];
   const { overview, turnInsights, toolHotspots, requestRationality: req } = input;
   const cov = overview.dataCoverage;
+
+  const ctx = input.contextMetrics ?? overview.contextMetrics;
+  if (ctx && ctx.ctxPercent >= 95) {
+    out.push({
+      id: "ctx-pressure-critical",
+      severity: "critical",
+      category: "token",
+      title: "上下文窗口接近上限",
+      description:
+        "估算占用已达 95% 以上，后续轮次易触发截断或失败。请尽快执行 /compact，或拆分为新会话继续。",
+      evidence: `约 ${formatTokenCount(ctx.estimatedTokens)} tokens（${ctx.ctxPercent}%）`,
+    });
+  } else if (ctx && ctx.ctxPercent >= 80) {
+    out.push({
+      id: "ctx-pressure-high",
+      severity: "warning",
+      category: "token",
+      title: "上下文占用偏高",
+      description:
+        "上下文膨胀会拉高 input token 与 TTFT。可执行 /compact 压缩历史，或减少每轮粘贴的大段内容。",
+      evidence: `约 ${formatTokenCount(ctx.estimatedTokens)} tokens（${ctx.ctxPercent}%）`,
+    });
+  }
+
+  if (turnInsights.length >= 2) {
+    const first = turnInsights[0]!;
+    const last = turnInsights[turnInsights.length - 1]!;
+    const turnInput = (t: SessionTurnInsight) =>
+      t.tokens.inputTokens + t.tokens.cacheCreationTokens + t.tokens.cacheReadTokens;
+    const firstIn = turnInput(first);
+    const lastIn = turnInput(last);
+    if (firstIn > 1000 && lastIn > firstIn * 3) {
+      out.push({
+        id: "ctx-growth-fast",
+        severity: "info",
+        category: "token",
+        title: "会话 input 侧快速膨胀",
+        description:
+          "末轮 input 显著高于首轮，常见于重复粘贴、宽范围工具输出未摘要。考虑 /compact 或限制每轮读取范围。",
+        evidence: `轮次 ${first.turnIndex} ${formatTokenCount(firstIn)} → 轮次 ${last.turnIndex} ${formatTokenCount(lastIn)}`,
+        turnIndex: last.turnIndex,
+      });
+    }
+  }
 
   if (cov.hasInferredHttp && !cov.hasObservedHttp) {
     out.push({
@@ -454,6 +579,29 @@ function buildRecommendations(input: {
       description:
         "当前链路中的 HTTP 节点为推断占位，无法精确分析延迟与 token。建议开启 LLM 代理（上游指向 FCC）或启用 FCC trace。",
       evidence: `推断 HTTP ${overview.httpInferredCount} 条，已观测 0 条`,
+    });
+  }
+
+  if (input.reliability.toolErrorCount >= 3) {
+    out.push({
+      id: "reliability-tool-errors",
+      severity: "warning",
+      category: "reliability",
+      title: "工具调用失败偏多",
+      description:
+        "会话内出现多次 tool_result 错误。请检查路径/权限、MCP 连接，或减少重复失败的重试调用。",
+      evidence: `${input.reliability.toolErrorCount} 次工具错误`,
+    });
+  }
+
+  if (input.reliability.httpErrorCount >= 2) {
+    out.push({
+      id: "reliability-http-errors",
+      severity: "warning",
+      category: "reliability",
+      title: "HTTP 4xx/5xx 响应",
+      description: "模型或代理 HTTP 出现客户端/服务端错误，可能影响稳定性与延迟观测。",
+      evidence: `${input.reliability.httpErrorCount} 次 HTTP 错误`,
     });
   }
 
@@ -734,6 +882,61 @@ function buildRecommendations(input: {
     });
   }
 
+  for (const hotspot of input.toolLatencyHotspots) {
+    const p95 = hotspot.p95DurationMs ?? hotspot.maxDurationMs;
+    if (p95 < 10_000 || hotspot.count < 2) continue;
+    out.push({
+      id: `tool-slow-${hotspot.name.replace(/\s+/g, "-").slice(0, 32)}`,
+      severity: "warning",
+      category: "speed",
+      title: `工具「${hotspot.name}」墙钟偏慢`,
+      description:
+        "单工具耗时过长会放大墙钟时间。检查是否参数过宽、网络 IO 阻塞，或可否用更轻量的内置工具替代。",
+      evidence: `P95 ${formatDurationMs(p95)} · ${hotspot.count} 次 · 轮次 ${hotspot.turns.slice(0, 4).join(", ")}`,
+      turnIndex: hotspot.turns[0],
+    });
+  }
+
+  for (const dup of input.duplicateReadPaths.slice(0, 3)) {
+    out.push({
+      id: `tool-duplicate-read-${dup.path.replace(/[^\w.-]+/g, "_").slice(0, 40)}`,
+      severity: "warning",
+      category: "tool",
+      title: "重复 Read 同一路径",
+      description:
+        "同文件多次 Read 浪费 token 与墙钟。先用 Grep/codegraph 定位，再 Read 必要片段；或将会话内摘要写入 scratchpad。",
+      evidence: `\`${dup.path}\` · ${dup.count} 次 · 轮次 ${dup.turns.join(", ")}`,
+      turnIndex: dup.turns[dup.turns.length - 1],
+    });
+  }
+
+  const baseline = input.baselineComparison;
+  if (baseline && baseline.ratioToBaseline >= 1.5) {
+    out.push({
+      id: "baseline-token-high",
+      severity: "warning",
+      category: "token",
+      title: "本会话 Token 高于仓库基线",
+      description:
+        "相对该仓库近期日均用量偏高。检查是否探索范围过大、MCP/Skill 滥用，或缺少 /compact。",
+      evidence: baseline.summary,
+    });
+  } else if (
+    baseline &&
+    baseline.sessionCacheHitRate != null &&
+    baseline.baselineCacheHitRate != null &&
+    baseline.baselineCacheHitRate - baseline.sessionCacheHitRate >= 0.12
+  ) {
+    out.push({
+      id: "baseline-cache-low",
+      severity: "info",
+      category: "token",
+      title: "Cache 命中率低于仓库基线",
+      description: "稳定 system prompt、减少每轮动态前缀，或检查是否频繁改写 rules/memory。",
+      evidence: baseline.summary,
+    });
+  }
+
   if (!cov.hasJsonlUsage && !cov.hasHttpUsage && overview.turnCount > 0) {
     out.push({
       id: "obs-no-token-data",
@@ -964,16 +1167,35 @@ export function computeSessionInsights(input: ComputeSessionInsightsInput): Sess
       fccTraceCount: fccTraces.length,
       opencodeGoProxyTraceCount: opencodeGoTraces.length,
       hasTtftData: ttftLatencies.length > 0,
+      hasContextMetrics: input.contextMetrics != null,
     },
+    contextMetrics: input.contextMetrics ?? null,
   };
 
   const slowestTurns = [...turnInsights].sort((a, b) => b.durationMs - a.durationMs).slice(0, 5);
+
+  const toolLatency = analyzeSessionLinkToolLatency(input.linkRecords);
+
+  const sessionTokenTotal =
+    sessionTokens.inputTokens +
+    sessionTokens.outputTokens +
+    sessionTokens.cacheCreationTokens +
+    sessionTokens.cacheReadTokens;
+  const baselineComparison =
+    input.repositoryBaseline != null
+      ? compareSessionTokensToBaseline({
+          sessionTokenTotal,
+          sessionCacheHitRate: cacheHitRate(sessionTokens),
+          baseline: input.repositoryBaseline,
+        })
+      : null;
 
   const requestRationality = computeRequestRationalityMetrics({
     linkRecords: input.linkRecords,
     turnInsights,
     turnCount,
   });
+  const reliability = computeReliabilityMetrics(input.linkRecords);
 
   const recommendations = buildRecommendations({
     overview,
@@ -982,14 +1204,23 @@ export function computeSessionInsights(input: ComputeSessionInsightsInput): Sess
     requestRationality,
     llmProxyListening: Boolean(input.llmProxyListening),
     llmProxyRecordCount: llmProxyRecords.length,
+    contextMetrics: input.contextMetrics,
+    toolLatencyHotspots: toolLatency.hotspots,
+    duplicateReadPaths: toolLatency.duplicateReadPaths,
+    baselineComparison,
+    reliability,
   });
 
   return {
     overview,
     turnInsights,
     toolHotspots,
+    toolLatencyHotspots: toolLatency.hotspots,
+    duplicateReadPaths: toolLatency.duplicateReadPaths,
     slowestTurns,
     recommendations,
     requestRationality,
+    baselineComparison,
+    reliability,
   };
 }

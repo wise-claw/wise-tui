@@ -10,6 +10,7 @@ import {
   retainClaudeLlmProxyStdoutIngest,
   subscribeClaudeLlmProxyStore,
 } from "../stores/claudeLlmProxyStore";
+import { getSessionContextMetrics } from "../services/claudeSessionContext";
 import { aggregateSessionLinkRecords } from "../utils/sessionLinkFilters";
 import { filterLlmProxyRecordsForDisplay } from "../utils/llmProxyTrafficDisplay";
 import { buildSessionLinkPipeline } from "../utils/sessionLinkPipeline";
@@ -18,6 +19,7 @@ import {
   filterJsonlLinesForUsageScan,
 } from "../utils/sessionInsights";
 import { useSessionFeedbackLoopSetting } from "../components/DefaultConfigPanel/useSessionFeedbackLoopSetting";
+import { useRepositoryUsageBaseline } from "./useRepositoryUsageBaseline";
 import { useSessionFeedbackLoop } from "./useSessionFeedbackLoop";
 import { useSessionFeedbackLoopDispatchCompletion } from "./useSessionFeedbackLoopDispatchCompletion";
 import { loadSessionFeedbackLoopState } from "../services/sessionFeedbackLoopStore";
@@ -170,8 +172,11 @@ export function useSessionFeedbackLoopWorkspace(
     [jsonlLines],
   );
 
+  const repositoryBaseline = useRepositoryUsageBaseline(session?.repositoryPath);
+
   const loopInsights = useMemo(() => {
     if (!linkDataActive) return null;
+    const contextMetrics = session ? getSessionContextMetrics(session) : null;
     return computeSessionInsights({
       linkRecords: linkPipeline.records,
       turnMetrics,
@@ -180,6 +185,8 @@ export function useSessionFeedbackLoopWorkspace(
       opencodeGoProxyTraces: opencodeAligned ? opencodeGoTraces : undefined,
       jsonlUsageLines,
       llmProxyListening: proxySnap.status?.listening ?? false,
+      contextMetrics,
+      repositoryBaseline,
     });
   }, [
     linkDataActive,
@@ -192,6 +199,8 @@ export function useSessionFeedbackLoopWorkspace(
     opencodeGoTraces,
     jsonlUsageLines,
     proxySnap.status?.listening,
+    session,
+    repositoryBaseline,
   ]);
 
   const dispatchFeedbackLoopRef = useRef(onDispatchSessionFeedbackLoop);

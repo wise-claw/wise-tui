@@ -57,6 +57,57 @@ export interface BuildSessionLinkRecordsInput {
   opencodeGoProxyTraces?: readonly OpencodeGoProxyTraceEntry[];
 }
 
+const PIPELINE_CACHE_MAX = 8;
+const pipelineCache = new Map<
+  string,
+  { events: SequenceEvent[]; records: SessionLinkRecord[] }
+>();
+
+function buildPipelineCacheKey(input: BuildSessionLinkRecordsInput): string {
+  const msg = input.messages;
+  const jsonl = input.jsonlLines;
+  const llm = input.llmProxyRecords;
+  const fcc = input.fccTraces;
+  const oc = input.opencodeGoProxyTraces;
+  const lastMsg = msg.length > 0 ? msg[msg.length - 1] : undefined;
+  return [
+    msg.length,
+    lastMsg?.id ?? 0,
+    lastMsg?.timestamp ?? 0,
+    jsonl?.length ?? -1,
+    jsonl && jsonl.length > 0 ? jsonl[jsonl.length - 1]!.length : 0,
+    llm?.length ?? 0,
+    llm && llm.length > 0 ? llm[llm.length - 1]!.id : "",
+    fcc?.length ?? 0,
+    fcc && fcc.length > 0 ? fcc[fcc.length - 1]!.id : "",
+    oc?.length ?? 0,
+    oc && oc.length > 0 ? oc[oc.length - 1]!.id : "",
+  ].join("\0");
+}
+
+/** 测试或会话切换时清空 pipeline 缓存。 */
+export function clearSessionLinkPipelineCache(): void {
+  pipelineCache.clear();
+}
+
+function buildSessionLinkPipelineUncached(input: BuildSessionLinkRecordsInput): {
+  events: SequenceEvent[];
+  records: SessionLinkRecord[];
+} {
+  const fcc = input.fccTraces ?? [];
+  const llm = input.llmProxyRecords ?? [];
+  const opencode = input.opencodeGoProxyTraces ?? [];
+  const events = buildTrajectorySequenceModel(input.messages, input.jsonlLines ?? undefined, {
+    opencodeGoProxyTraces: opencode.length > 0 ? opencode : undefined,
+    fccTraces: fcc.length > 0 ? fcc : undefined,
+    llmProxyRecords: llm.length > 0 ? llm : undefined,
+  });
+  return {
+    events,
+    records: buildSessionLinkRecordsFromEvents(events, { fccTraces: fcc }),
+  };
+}
+
 /** 由已构建的序列事件生成链路记录（避免重复跑 trajectory 模型）。 */
 export function buildSessionLinkRecordsFromEvents(
   events: readonly SequenceEvent[],
@@ -92,21 +143,20 @@ export function buildSessionLinkRecordsFromSources(input: BuildSessionLinkRecord
   return buildSessionLinkRecordsFromEvents(events, { fccTraces: fcc });
 }
 
-/** 一次构建 trajectory 事件 + 链路记录（供全链路抽屉复用，避免双份 trajectory 计算）。 */
+/** 一次构建 trajectory 事件 + 链路记录（LRU 缓存，供抽屉与反馈神经网复用）。 */
 export function buildSessionLinkPipeline(input: BuildSessionLinkRecordsInput): {
   events: SequenceEvent[];
   records: SessionLinkRecord[];
 } {
-  const fcc = input.fccTraces ?? [];
-  const llm = input.llmProxyRecords ?? [];
-  const opencode = input.opencodeGoProxyTraces ?? [];
-  const events = buildTrajectorySequenceModel(input.messages, input.jsonlLines ?? undefined, {
-    opencodeGoProxyTraces: opencode.length > 0 ? opencode : undefined,
-    fccTraces: fcc.length > 0 ? fcc : undefined,
-    llmProxyRecords: llm.length > 0 ? llm : undefined,
-  });
-  return {
-    events,
-    records: buildSessionLinkRecordsFromEvents(events, { fccTraces: fcc }),
-  };
+  const key = buildPipelineCacheKey(input);
+  const cached = pipelineCache.get(key);
+  if (cached) return cached;
+
+  const built = buildSessionLinkPipelineUncached(input);
+  if (pipelineCache.size >= PIPELINE_CACHE_MAX) {
+    const oldest = pipelineCache.keys().next().value;
+    if (oldest != null) pipelineCache.delete(oldest);
+  }
+  pipelineCache.set(key, built);
+  return built;
 }

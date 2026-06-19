@@ -1,3 +1,10 @@
+import {
+  attachSessionFeedbackPatchScoresDb,
+  insertSessionFeedbackPatchEffectivenessBatchDb,
+  listSessionFeedbackPatchEffectivenessDb,
+} from "./sessionFeedbackLoopDb";
+import { ensureFeedbackLoopHistoryHydrated } from "./sessionFeedbackLoopHistoryStore";
+
 import type {
   FeedbackConfigArtifactKind,
   FeedbackConfigOverheadDelta,
@@ -6,6 +13,8 @@ import type {
 
 const STORAGE_KEY = "wise.sessionFeedbackLoop.patchEffectiveness.v1";
 const MAX_RECORDS = 200;
+
+let patchCache: PatchEffectivenessRecord[] | null = null;
 
 export interface PatchEffectivenessRecord {
   id: string;
@@ -44,6 +53,11 @@ function readStorage(): Storage | null {
 }
 
 function loadAll(): PatchEffectivenessRecord[] {
+  if (patchCache) return patchCache;
+  return loadAllPatchEffectivenessRecordsLocal();
+}
+
+export function loadAllPatchEffectivenessRecordsLocal(): PatchEffectivenessRecord[] {
   const storage = readStorage();
   if (!storage) return [];
   try {
@@ -58,11 +72,22 @@ function loadAll(): PatchEffectivenessRecord[] {
 
 function saveAll(records: PatchEffectivenessRecord[]): void {
   const storage = readStorage();
+  patchCache = records.slice(0, MAX_RECORDS);
   if (!storage) return;
   try {
-    storage.setItem(STORAGE_KEY, JSON.stringify(records.slice(0, MAX_RECORDS)));
+    storage.setItem(STORAGE_KEY, JSON.stringify(patchCache));
   } catch {
     /* quota */
+  }
+}
+
+async function refreshPatchCacheFromDb(repositoryPath?: string | null): Promise<void> {
+  await ensureFeedbackLoopHistoryHydrated();
+  const rows = await listSessionFeedbackPatchEffectivenessDb(repositoryPath, MAX_RECORDS);
+  if (rows.length > 0) {
+    patchCache = rows;
+    const storage = readStorage();
+    storage?.setItem(STORAGE_KEY, JSON.stringify(patchCache));
   }
 }
 
@@ -89,6 +114,7 @@ export function recordPatchApplyBatch(input: {
 
   if (entries.length === 0) return;
   saveAll([...entries, ...loadAll()]);
+  void insertSessionFeedbackPatchEffectivenessBatchDb(entries);
 }
 
 export function attachSessionScoreToRecentPatchRecords(input: {
@@ -109,12 +135,20 @@ export function attachSessionScoreToRecentPatchRecords(input: {
     return { ...record, sessionFinalScore: input.sessionFinalScore };
   });
   if (changed) saveAll(next);
+  if (changed && input.sessionFinalScore != null) {
+    void attachSessionFeedbackPatchScoresDb({
+      repositoryPath: repo,
+      sessionFinalScore: input.sessionFinalScore,
+      withinMs: input.withinMs,
+    });
+  }
 }
 
 export function rankPatchKindEffectiveness(
   repositoryPath?: string | null,
   limit = 4,
 ): PatchKindEffectivenessSummary[] {
+  void refreshPatchCacheFromDb(repositoryPath);
   const path = repositoryPath?.trim() ? normalizePath(repositoryPath) : "";
   const records = loadAll().filter((r) => !path || normalizePath(r.repositoryPath) === path);
 

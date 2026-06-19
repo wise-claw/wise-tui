@@ -29,7 +29,9 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ClaudeSession } from "../../types";
 import type { SessionLinkRecord } from "../../types/sessionLink";
 import { loadClaudeSessionJsonl } from "../../services/claudeDisk";
+import { getSessionContextMetrics } from "../../services/claudeSessionContext";
 import { useFccSessionTraces } from "../../hooks/useFccSessionTraces";
+import { useRepositoryUsageBaseline } from "../../hooks/useRepositoryUsageBaseline";
 import { useOpencodeGoSessionTraces } from "../../hooks/useOpencodeGoSessionTraces";
 import { writeTextFileAbsolute } from "../../services/sessionLink";
 import {
@@ -261,6 +263,7 @@ export function SessionDataLinkDrawer({
   const repositoryPath = session?.repositoryPath?.trim() ?? "";
   const claudeSessionId = session?.claudeSessionId?.trim() ?? "";
   const canLoadDisk = Boolean(repositoryPath && claudeSessionId);
+  const repositoryBaseline = useRepositoryUsageBaseline(repositoryPath || null);
 
   useEffect(() => {
     if (!open) return;
@@ -444,6 +447,7 @@ export function SessionDataLinkDrawer({
 
   const displayInsights = useMemo(() => {
     if (!open || viewMode !== "insights") return null;
+    const contextMetrics = session ? getSessionContextMetrics(session) : null;
     return computeSessionInsights({
       linkRecords: insightsLinkRecords,
       turnMetrics: insightsTurnMetrics,
@@ -452,6 +456,8 @@ export function SessionDataLinkDrawer({
       opencodeGoProxyTraces: insightsOpencodeGoTraces,
       jsonlUsageLines: insightsJsonlUsageLines,
       llmProxyListening: proxySnap.status?.listening ?? false,
+      contextMetrics,
+      repositoryBaseline,
     });
   }, [
     open,
@@ -463,6 +469,8 @@ export function SessionDataLinkDrawer({
     insightsOpencodeGoTraces,
     insightsJsonlUsageLines,
     proxySnap.status?.listening,
+    session,
+    repositoryBaseline,
   ]);
 
   const buildExportBundle = useCallback(

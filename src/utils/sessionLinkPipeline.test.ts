@@ -6,6 +6,8 @@ import { buildSequenceEventsFromMessages } from "./claudeSessionTrajectorySequen
 import { buildSessionLinkRecords } from "./buildSessionLinkRecords";
 import {
   buildSessionLinkRecordsFromSources,
+  buildSessionLinkPipeline,
+  clearSessionLinkPipelineCache,
   suppressInferredHttpWhenObserved,
 } from "./sessionLinkPipeline";
 
@@ -157,5 +159,23 @@ describe("sessionLinkPipeline", () => {
       opencodeGoProxyTraces: opencode,
     });
     expect(records.some((r) => r.source === "opencode_go_proxy" && r.observed)).toBe(true);
+  });
+
+  test("buildSessionLinkPipeline returns cached result for identical input", () => {
+    clearSessionLinkPipelineCache();
+    const messages: ClaudeMessage[] = [
+      {
+        id: 1,
+        role: "user",
+        content: "hi",
+        timestamp: 1000,
+        parts: [{ type: "text", text: "hi" }],
+      },
+    ];
+    const input = { messages };
+    const first = buildSessionLinkPipeline(input);
+    const second = buildSessionLinkPipeline(input);
+    expect(second).toBe(first);
+    clearSessionLinkPipelineCache();
   });
 });

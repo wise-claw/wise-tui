@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { SessionInsightsResult } from "./sessionInsights";
-import { emptyRequestRationalityMetrics } from "./sessionInsights";
+import { emptyRequestRationalityMetrics, emptySessionInsightsAnalytics } from "./sessionInsights";
 import {
   buildSessionInsightRecommendationAiPrompt,
   buildSessionInsightRecommendationCopyText,
@@ -44,6 +44,7 @@ function sampleInsights(): SessionInsightsResult {
         fccTraceCount: 0,
         opencodeGoProxyTraceCount: 0,
         hasTtftData: true,
+        hasContextMetrics: false,
       },
     },
     turnInsights: [],
@@ -79,6 +80,7 @@ function sampleInsights(): SessionInsightsResult {
       },
     ],
     requestRationality: emptyRequestRationalityMetrics(),
+    ...emptySessionInsightsAnalytics(),
   };
 }
 

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { SessionInsightsResult } from "./sessionInsights";
-import { emptyRequestRationalityMetrics } from "./sessionInsights";
+import { emptyRequestRationalityMetrics, emptySessionInsightsAnalytics } from "./sessionInsights";
 import {
   CLAUDE_AUTO_MEMORY_PATCH_PATH,
   buildFeedbackLoopConfigPatchPrompt,
@@ -48,6 +48,7 @@ function sampleInsights(): SessionInsightsResult {
         fccTraceCount: 0,
         opencodeGoProxyTraceCount: 0,
         hasTtftData: false,
+        hasContextMetrics: false,
       },
     },
     turnInsights: [],
@@ -70,6 +71,7 @@ function sampleInsights(): SessionInsightsResult {
       },
     ],
     requestRationality: emptyRequestRationalityMetrics(),
+    ...emptySessionInsightsAnalytics(),
   };
 }
 
@@ -79,6 +81,41 @@ describe("inferConfigPatchCandidates", () => {
     expect(patches.length).toBeGreaterThan(0);
     expect(patches.some((p) => p.path.includes("rules"))).toBe(true);
     expect(patches.some((p) => p.path === "CLAUDE.md")).toBe(true);
+  });
+
+  test("suggests disable for enabled MCP servers with no session usage", () => {
+    const insights = sampleInsights();
+    const patches = inferConfigPatchCandidates({
+      insights,
+      snapshot: {
+        repositoryPath: "/repo",
+        capturedAt: Date.now(),
+        claudeMd: { path: "CLAUDE.md", exists: false, charCount: 0, excerpt: "" },
+        agentsMd: { path: "AGENTS.md", exists: false, charCount: 0, excerpt: "" },
+        memoryFile: { path: "memory", exists: false, charCount: 0, excerpt: "" },
+        settingsFile: { path: ".claude/settings.json", exists: true, charCount: 10, excerpt: "{}" },
+        ruleFiles: [],
+        skills: [],
+        mcpServers: [
+          {
+            name: "unused-server",
+            enabled: true,
+            scope: "project",
+            sourcePath: "/repo/.claude/settings.json",
+            toolCount: 3,
+          },
+          {
+            name: "other-server",
+            enabled: true,
+            scope: "project",
+            sourcePath: "/repo/.claude/settings.json",
+            toolCount: 2,
+          },
+        ],
+        overhead: { rules: 100, skills: 0, mcp: 500, subagents: 0 },
+      },
+    });
+    expect(patches.some((p) => p.kind === "mcp" && p.action === "disable")).toBe(true);
   });
 });
 
