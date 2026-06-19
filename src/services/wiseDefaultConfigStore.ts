@@ -126,6 +126,8 @@ export interface WiseDefaultConfigV1 {
   showOpencodeProxyTopbar: boolean;
   /** 主会话顶栏全链路分析图标；默认隐藏。 */
   showSessionDataLinkTopbar: boolean;
+  /** 主会话顶栏反馈神经网图标；默认隐藏。 */
+  showSessionFeedbackLoopTopbar: boolean;
   /** 中栏顶栏远程入口（钉钉 / WebSocket 开关与配置）；默认显示。 */
   showRemoteEntryTopbar: boolean;
   /** 主会话顶栏当前仓库 / 工作区名称；默认不显示。 */
@@ -191,6 +193,7 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   showFccTrafficTopbar: false,
   showOpencodeProxyTopbar: false,
   showSessionDataLinkTopbar: false,
+  showSessionFeedbackLoopTopbar: false,
   showRemoteEntryTopbar: true,
   showTopbarRepositoryName: false,
   leftSidebarHubQuickEntries: [...DEFAULT_LEFT_SIDEBAR_HUB_QUICK_ENTRIES],
@@ -280,6 +283,7 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
           ? DEFAULT_CONFIG.showOpencodeProxyTopbar
           : normalizeBoolean(parsed.showOpencodeProxyTopbar),
       showSessionDataLinkTopbar: normalizeBoolean(parsed.showSessionDataLinkTopbar),
+      showSessionFeedbackLoopTopbar: normalizeBoolean(parsed.showSessionFeedbackLoopTopbar),
       showRemoteEntryTopbar:
         parsed.showRemoteEntryTopbar === undefined
           ? DEFAULT_CONFIG.showRemoteEntryTopbar
@@ -477,6 +481,7 @@ function dispatchTopbarChromeDefaultChanged(
     | "showFccTrafficTopbar"
     | "showOpencodeProxyTopbar"
     | "showSessionDataLinkTopbar"
+    | "showSessionFeedbackLoopTopbar"
     | "showRemoteEntryTopbar"
     | "showTopbarRepositoryName"
   >,
@@ -490,6 +495,7 @@ function dispatchTopbarChromeDefaultChanged(
         showFccTrafficTopbar: config.showFccTrafficTopbar,
         showOpencodeProxyTopbar: config.showOpencodeProxyTopbar,
         showSessionDataLinkTopbar: config.showSessionDataLinkTopbar,
+        showSessionFeedbackLoopTopbar: config.showSessionFeedbackLoopTopbar,
         showRemoteEntryTopbar: config.showRemoteEntryTopbar,
         showTopbarRepositoryName: config.showTopbarRepositoryName,
       },
@@ -524,6 +530,7 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     showFccTrafficTopbar: DEFAULT_CONFIG.showFccTrafficTopbar,
     showOpencodeProxyTopbar: DEFAULT_CONFIG.showOpencodeProxyTopbar,
     showSessionDataLinkTopbar: DEFAULT_CONFIG.showSessionDataLinkTopbar,
+    showSessionFeedbackLoopTopbar: DEFAULT_CONFIG.showSessionFeedbackLoopTopbar,
     showRemoteEntryTopbar: DEFAULT_CONFIG.showRemoteEntryTopbar,
     showTopbarRepositoryName: DEFAULT_CONFIG.showTopbarRepositoryName,
     leftSidebarHubQuickEntries: [...DEFAULT_LEFT_SIDEBAR_HUB_QUICK_ENTRIES],
@@ -685,6 +692,7 @@ export async function saveWiseDefaultConfig(
       | "showFccTrafficTopbar"
       | "showOpencodeProxyTopbar"
       | "showSessionDataLinkTopbar"
+      | "showSessionFeedbackLoopTopbar"
       | "showRemoteEntryTopbar"
       | "showTopbarRepositoryName"
       | "leftSidebarHubQuickEntries"
@@ -727,6 +735,8 @@ export async function saveWiseDefaultConfig(
     showOpencodeProxyTopbar: patch.showOpencodeProxyTopbar ?? current.showOpencodeProxyTopbar,
     showSessionDataLinkTopbar:
       patch.showSessionDataLinkTopbar ?? current.showSessionDataLinkTopbar,
+    showSessionFeedbackLoopTopbar:
+      patch.showSessionFeedbackLoopTopbar ?? current.showSessionFeedbackLoopTopbar,
     showRemoteEntryTopbar: patch.showRemoteEntryTopbar ?? current.showRemoteEntryTopbar,
     showTopbarRepositoryName: patch.showTopbarRepositoryName ?? current.showTopbarRepositoryName,
     leftSidebarHubQuickEntries:
@@ -807,6 +817,9 @@ export async function saveWiseDefaultConfig(
   }
   if (patch.showSessionDataLinkTopbar !== undefined) {
     next.showSessionDataLinkTopbar = normalizeBoolean(patch.showSessionDataLinkTopbar);
+  }
+  if (patch.showSessionFeedbackLoopTopbar !== undefined) {
+    next.showSessionFeedbackLoopTopbar = normalizeBoolean(patch.showSessionFeedbackLoopTopbar);
   }
   if (patch.showRemoteEntryTopbar !== undefined) {
     next.showRemoteEntryTopbar = normalizeBoolean(
@@ -930,6 +943,7 @@ export async function saveWiseDefaultConfig(
     patch.showFccTrafficTopbar !== undefined ||
     patch.showOpencodeProxyTopbar !== undefined ||
     patch.showSessionDataLinkTopbar !== undefined ||
+    patch.showSessionFeedbackLoopTopbar !== undefined ||
     patch.showRemoteEntryTopbar !== undefined ||
     patch.showTopbarRepositoryName !== undefined
   ) {
@@ -939,6 +953,7 @@ export async function saveWiseDefaultConfig(
       next.showFccTrafficTopbar !== current.showFccTrafficTopbar ||
       next.showOpencodeProxyTopbar !== current.showOpencodeProxyTopbar ||
       next.showSessionDataLinkTopbar !== current.showSessionDataLinkTopbar ||
+      next.showSessionFeedbackLoopTopbar !== current.showSessionFeedbackLoopTopbar ||
       next.showRemoteEntryTopbar !== current.showRemoteEntryTopbar ||
       next.showTopbarRepositoryName !== current.showTopbarRepositoryName
     ) {
@@ -948,6 +963,7 @@ export async function saveWiseDefaultConfig(
         showFccTrafficTopbar: next.showFccTrafficTopbar,
         showOpencodeProxyTopbar: next.showOpencodeProxyTopbar,
         showSessionDataLinkTopbar: next.showSessionDataLinkTopbar,
+        showSessionFeedbackLoopTopbar: next.showSessionFeedbackLoopTopbar,
         showRemoteEntryTopbar: next.showRemoteEntryTopbar,
         showTopbarRepositoryName: next.showTopbarRepositoryName,
       });
@@ -1384,6 +1400,7 @@ export async function loadTopbarChromeDefaultsFromStore(): Promise<
     showFccTrafficTopbar: config.showFccTrafficTopbar,
     showOpencodeProxyTopbar: config.showOpencodeProxyTopbar,
     showSessionDataLinkTopbar: config.showSessionDataLinkTopbar,
+    showSessionFeedbackLoopTopbar: config.showSessionFeedbackLoopTopbar,
     showRemoteEntryTopbar: config.showRemoteEntryTopbar,
     showTopbarRepositoryName: config.showTopbarRepositoryName,
   };
@@ -1398,6 +1415,7 @@ export async function saveTopbarChromeDefaultsToStore(
       | "showFccTrafficTopbar"
       | "showOpencodeProxyTopbar"
       | "showSessionDataLinkTopbar"
+      | "showSessionFeedbackLoopTopbar"
       | "showRemoteEntryTopbar"
       | "showTopbarRepositoryName"
     >

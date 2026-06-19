@@ -68,11 +68,13 @@ export const ClaudeChatSessionTopbarOverflow = memo(function ClaudeChatSessionTo
         disabled: !mainSessionForDataLink,
       });
     }
-    items.push({
-      key: "sessionFeedbackLoop",
-      label: "反馈神经网",
-      disabled: !mainSessionForDataLink,
-    });
+    if (!topbarChrome.showSessionFeedbackLoopTopbar) {
+      items.push({
+        key: "sessionFeedbackLoop",
+        label: "反馈神经网",
+        disabled: !mainSessionForDataLink,
+      });
+    }
     return items;
   }, [topbarChrome, mainSessionForDataLink]);
 
@@ -164,7 +166,7 @@ export const ClaudeChatSessionTopbarOverflow = memo(function ClaudeChatSessionTo
           onOpenChange={(open) => handlePanelOpenChange("sessionDataLink", open)}
         />
       ) : null}
-      {activePanel === "sessionFeedbackLoop" ? (
+      {!topbarChrome.showSessionFeedbackLoopTopbar && activePanel === "sessionFeedbackLoop" ? (
         <SessionFeedbackLoopTopbarTrigger
           mainSession={mainSessionForDataLink}
           onDispatchSessionFeedbackLoop={onDispatchSessionFeedbackLoop}

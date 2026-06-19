@@ -605,6 +605,29 @@ export function DefaultConfigPanel() {
           </div>
         </div>
 
+        <div className="app-default-config-row" aria-label="反馈神经网图标">
+          <div className="app-default-config-row__main">
+            <span className="app-default-config-row__title">反馈神经网</span>
+            <span className="app-default-config-row__hint">
+              控制主会话顶栏反馈神经网入口；默认不显示，隐藏时仍可从顶栏「更多」打开
+            </span>
+          </div>
+          <div className="app-default-config-row__control">
+            <DefaultConfigOptionPick<"hidden" | "visible">
+              aria-label="反馈神经网顶栏显示"
+              disabled={topbarChrome.loading || topbarChrome.saving}
+              value={topbarChrome.showSessionFeedbackLoopTopbar ? "visible" : "hidden"}
+              options={[
+                { label: "不显示", value: "hidden" },
+                { label: "显示", value: "visible" },
+              ]}
+              onChange={(value) => {
+                void topbarChrome.saveSessionFeedbackLoop(value === "visible");
+              }}
+            />
+          </div>
+        </div>
+
         {defaultTerminal.isMac ? (
           <div
             className="app-default-config-row app-default-config-row--terminal"

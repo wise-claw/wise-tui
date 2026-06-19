@@ -353,7 +353,7 @@ export const Topbar = memo(function Topbar({
             onRequestAiAnalysis={onSessionInsightsAiAnalysis}
           />
         ) : null}
-        {topbarToolsReady ? (
+        {topbarToolsReady && topbarChrome.showSessionFeedbackLoopTopbar ? (
           <SessionFeedbackLoopTopbarTrigger
             mainSession={mainSessionForDataLink}
             onDispatchSessionFeedbackLoop={onDispatchSessionFeedbackLoop}

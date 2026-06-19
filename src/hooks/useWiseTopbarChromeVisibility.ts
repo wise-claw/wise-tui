@@ -11,6 +11,7 @@ export function useWiseTopbarChromeVisibility(): {
   showFccTrafficTopbar: boolean;
   showOpencodeProxyTopbar: boolean;
   showSessionDataLinkTopbar: boolean;
+  showSessionFeedbackLoopTopbar: boolean;
   showRemoteEntryTopbar: boolean;
   showTopbarRepositoryName: boolean;
 } {
@@ -19,6 +20,7 @@ export function useWiseTopbarChromeVisibility(): {
   const [showFccTrafficTopbar, setShowFccTrafficTopbar] = useState(false);
   const [showOpencodeProxyTopbar, setShowOpencodeProxyTopbar] = useState(false);
   const [showSessionDataLinkTopbar, setShowSessionDataLinkTopbar] = useState(false);
+  const [showSessionFeedbackLoopTopbar, setShowSessionFeedbackLoopTopbar] = useState(false);
   const [showRemoteEntryTopbar, setShowRemoteEntryTopbar] = useState(true);
   const [showTopbarRepositoryName, setShowTopbarRepositoryName] = useState(false);
 
@@ -29,6 +31,7 @@ export function useWiseTopbarChromeVisibility(): {
       showFccTrafficTopbar?: boolean;
       showOpencodeProxyTopbar?: boolean;
       showSessionDataLinkTopbar?: boolean;
+      showSessionFeedbackLoopTopbar?: boolean;
       showRemoteEntryTopbar?: boolean;
       showTopbarRepositoryName?: boolean;
     }) => {
@@ -46,6 +49,9 @@ export function useWiseTopbarChromeVisibility(): {
       }
       if (typeof next.showSessionDataLinkTopbar === "boolean") {
         setShowSessionDataLinkTopbar(next.showSessionDataLinkTopbar);
+      }
+      if (typeof next.showSessionFeedbackLoopTopbar === "boolean") {
+        setShowSessionFeedbackLoopTopbar(next.showSessionFeedbackLoopTopbar);
       }
       if (typeof next.showRemoteEntryTopbar === "boolean") {
         setShowRemoteEntryTopbar(next.showRemoteEntryTopbar);
@@ -69,6 +75,7 @@ export function useWiseTopbarChromeVisibility(): {
           showFccTopbar?: boolean;
           showFccTrafficTopbar?: boolean;
           showSessionDataLinkTopbar?: boolean;
+          showSessionFeedbackLoopTopbar?: boolean;
           showRemoteEntryTopbar?: boolean;
           showTopbarRepositoryName?: boolean;
         }>
@@ -88,6 +95,7 @@ export function useWiseTopbarChromeVisibility(): {
     showFccTrafficTopbar,
     showOpencodeProxyTopbar,
     showSessionDataLinkTopbar,
+    showSessionFeedbackLoopTopbar,
     showRemoteEntryTopbar,
     showTopbarRepositoryName,
   };

@@ -11,6 +11,7 @@ export function useTopbarChromeDefaultSetting() {
   const [showFccTrafficTopbar, setShowFccTrafficTopbar] = useState(false);
   const [showOpencodeProxyTopbar, setShowOpencodeProxyTopbar] = useState(false);
   const [showSessionDataLinkTopbar, setShowSessionDataLinkTopbar] = useState(false);
+  const [showSessionFeedbackLoopTopbar, setShowSessionFeedbackLoopTopbar] = useState(false);
   const [showRemoteEntryTopbar, setShowRemoteEntryTopbar] = useState(true);
   const [showTopbarRepositoryName, setShowTopbarRepositoryName] = useState(false);
   const [loading, setLoading] = useState(true);
@@ -25,6 +26,7 @@ export function useTopbarChromeDefaultSetting() {
       setShowFccTrafficTopbar(loaded.showFccTrafficTopbar);
       setShowOpencodeProxyTopbar(loaded.showOpencodeProxyTopbar);
       setShowSessionDataLinkTopbar(loaded.showSessionDataLinkTopbar);
+      setShowSessionFeedbackLoopTopbar(loaded.showSessionFeedbackLoopTopbar);
       setShowRemoteEntryTopbar(loaded.showRemoteEntryTopbar);
       setShowTopbarRepositoryName(loaded.showTopbarRepositoryName);
     } finally {
@@ -121,6 +123,23 @@ export function useTopbarChromeDefaultSetting() {
     [showSessionDataLinkTopbar],
   );
 
+  const saveSessionFeedbackLoop = useCallback(
+    async (visible: boolean) => {
+      if (visible === showSessionFeedbackLoopTopbar) return;
+      setSaving(true);
+      try {
+        await saveTopbarChromeDefaultsToStore({ showSessionFeedbackLoopTopbar: visible });
+        setShowSessionFeedbackLoopTopbar(visible);
+      } catch (err) {
+        message.error(`保存失败：${err instanceof Error ? err.message : String(err)}`);
+        throw err;
+      } finally {
+        setSaving(false);
+      }
+    },
+    [showSessionFeedbackLoopTopbar],
+  );
+
   const saveRemoteEntry = useCallback(
     async (visible: boolean) => {
       if (visible === showRemoteEntryTopbar) return;
@@ -161,6 +180,7 @@ export function useTopbarChromeDefaultSetting() {
     showFccTrafficTopbar,
     showOpencodeProxyTopbar,
     showSessionDataLinkTopbar,
+    showSessionFeedbackLoopTopbar,
     showRemoteEntryTopbar,
     showTopbarRepositoryName,
     loading,
@@ -171,6 +191,7 @@ export function useTopbarChromeDefaultSetting() {
     saveFccTraffic,
     saveOpencodeProxy,
     saveSessionDataLink,
+    saveSessionFeedbackLoop,
     saveRemoteEntry,
     saveTopbarRepositoryName,
   };

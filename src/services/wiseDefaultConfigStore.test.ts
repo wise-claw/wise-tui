@@ -307,6 +307,7 @@ describe("wiseDefaultConfigStore", () => {
     expect(config.showFccTrafficTopbar).toBe(false);
     expect(config.showOpencodeProxyTopbar).toBe(false);
     expect(config.showSessionDataLinkTopbar).toBe(false);
+    expect(config.showSessionFeedbackLoopTopbar).toBe(false);
     expect(config.showRemoteEntryTopbar).toBe(true);
     expect(config.showTopbarRepositoryName).toBe(true);
   });
