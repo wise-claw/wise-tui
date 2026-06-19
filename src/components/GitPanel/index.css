@@ -440,6 +440,10 @@
   padding-bottom: 6px;
 }
 
+.git-diff-mode__head .git-diff-mode__empty {
+  margin: 0 8px 8px;
+}
+
 .git-diff-mode-scroll {
   flex: 1 1 0;
   min-height: 0;
