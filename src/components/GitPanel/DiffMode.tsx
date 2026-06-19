@@ -410,7 +410,8 @@ function DiffModeInner({
         </div>
       )}
 
-      <div className="git-diff-mode-scroll">
+      {hasChanges ? (
+        <div className="git-diff-mode-scroll">
       {hasStaged && (
         <div className={`git-section${stagedCollapsed ? " git-section--collapsed" : ""}`}>
           <div className="git-section-header">
@@ -538,13 +539,15 @@ function DiffModeInner({
           )}
         </div>
       )}
-
-      {!hasChanges && status.branch ? (
-        <div className="git-diff-mode__empty" role="status">
-          没有检测到变更
         </div>
       ) : null}
-      </div>
+
+      {hasChanges ? null : status.branch ? (
+        <div className="git-diff-mode__empty" role="status">
+          <CheckOutlined className="git-diff-mode__empty-icon" aria-hidden />
+          <span>没有检测到变更</span>
+        </div>
+      ) : null}
     </div>
   );
 }

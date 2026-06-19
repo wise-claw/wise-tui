@@ -438,11 +438,25 @@
 }
 
 .git-diff-mode__empty {
-  padding: 6px 10px 8px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 6px;
+  align-self: center;
+  margin: 2px 10px 8px;
+  padding: 6px 10px;
+  border-radius: 999px;
+  background: var(--ant-color-fill-quaternary);
+  border: 1px solid var(--ant-color-border-secondary);
   font-size: 11px;
   line-height: 1.35;
   color: var(--ant-color-text-tertiary);
-  text-align: center;
+}
+
+.git-diff-mode__empty-icon {
+  font-size: 11px;
+  color: var(--ant-color-success);
 }
 
 .git-panel-body-placeholder {
@@ -454,7 +468,8 @@
 }
 
 .app-git-panel--multi .git-diff-mode__empty {
-  padding: 4px 8px 6px;
+  margin: 2px 8px 6px;
+  padding: 5px 9px;
 }
 
 /* ── Header ── */
