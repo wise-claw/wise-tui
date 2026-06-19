@@ -18,6 +18,7 @@ export interface SlashOption {
   label: string;
   description?: string;
   path?: string;
+  isDir?: boolean;
   name?: string;
   workflowId?: string;
   group?: "claude" | "skill" | "plugin" | "plugin-cmd";

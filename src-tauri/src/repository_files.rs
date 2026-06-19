@@ -52,9 +52,60 @@ fn project_file_rel_path(root: &Path, path: &Path) -> Option<String> {
     Some(rel.to_string_lossy().replace('\\', "/"))
 }
 
-/// Fast in-process file search for @ mentions (no shell spawn).
+#[derive(Debug, Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct RepositoryExplorerEntry {
+    path: String,
+    is_dir: bool,
+}
+
+fn searchable_walk_entry(
+    entry: &walkdir::DirEntry,
+    root_path: &Path,
+) -> Option<(String, bool)> {
+    if entry.depth() == 0 {
+        return None;
+    }
+    let file_type = entry.file_type();
+    let is_dir = file_type.is_dir();
+    let is_file = file_type.is_file();
+    if !is_dir && !is_file {
+        return None;
+    }
+    if is_dir && should_skip_walk_dir(&entry.file_name().to_string_lossy()) {
+        return None;
+    }
+    let rel = project_file_rel_path(root_path, entry.path())?;
+    Some((rel, is_dir))
+}
+
+fn score_repository_search_match(base_l: &str, rel_l: &str, q: &str) -> Option<u8> {
+    if !rel_l.contains(q) && !base_l.contains(q) {
+        return None;
+    }
+    Some(if base_l.starts_with(q) {
+        0u8
+    } else if base_l.contains(q) {
+        1u8
+    } else {
+        2u8
+    })
+}
+
+fn sort_repository_search_results(entries: &mut [RepositoryExplorerEntry]) {
+    entries.sort_by(|a, b| {
+        b.is_dir
+            .cmp(&a.is_dir)
+            .then_with(|| a.path.cmp(&b.path))
+    });
+}
+
+/// Fast in-process file/directory search for @ mentions (no shell spawn).
 #[tauri::command]
-pub(crate) fn search_repository_files(root: String, query: String) -> Result<Vec<String>, String> {
+pub(crate) fn search_repository_files(
+    root: String,
+    query: String,
+) -> Result<Vec<RepositoryExplorerEntry>, String> {
     const MAX_RESULTS: usize = 50;
     const MAX_MATCH_COLLECT: usize = 150;
     const MAX_SCAN_ENTRIES: usize = 300_000;
@@ -81,35 +132,30 @@ pub(crate) fn search_repository_files(root: String, query: String) -> Result<Vec
         });
 
     if q.is_empty() {
-        let mut out: Vec<String> = Vec::new();
+        let mut out: Vec<RepositoryExplorerEntry> = Vec::new();
         for entry in walker.filter_map(|e| e.ok()) {
             scanned += 1;
             if scanned > MAX_SCAN_ENTRIES {
                 break;
             }
-            if !entry.file_type().is_file() {
-                continue;
-            }
-            let Some(rel) = project_file_rel_path(&root_path, entry.path()) else {
+            let Some((path, is_dir)) = searchable_walk_entry(&entry, &root_path) else {
                 continue;
             };
-            out.push(rel);
+            out.push(RepositoryExplorerEntry { path, is_dir });
             if out.len() >= MAX_RESULTS {
                 break;
             }
         }
+        sort_repository_search_results(&mut out);
         Ok(out)
     } else {
-        let mut scored: Vec<(u8, String)> = Vec::new();
+        let mut scored: Vec<(u8, String, bool)> = Vec::new();
         for entry in walker.filter_map(|e| e.ok()) {
             scanned += 1;
             if scanned > MAX_SCAN_ENTRIES {
                 break;
             }
-            if !entry.file_type().is_file() {
-                continue;
-            }
-            let Some(rel) = project_file_rel_path(&root_path, entry.path()) else {
+            let Some((rel, is_dir)) = searchable_walk_entry(&entry, &root_path) else {
                 continue;
             };
             let base = Path::new(&rel)
@@ -118,24 +164,24 @@ pub(crate) fn search_repository_files(root: String, query: String) -> Result<Vec
                 .unwrap_or("");
             let rel_l = rel.to_lowercase();
             let base_l = base.to_lowercase();
-            if !rel_l.contains(&q) && !base_l.contains(&q) {
+            let Some(score) = score_repository_search_match(&base_l, &rel_l, &q) else {
                 continue;
-            }
-            let score = if base_l.starts_with(&q) {
-                0u8
-            } else if base_l.contains(&q) {
-                1u8
-            } else {
-                2u8
             };
-            scored.push((score, rel));
+            scored.push((score, rel, is_dir));
             if scored.len() >= MAX_MATCH_COLLECT {
                 break;
             }
         }
-        scored.sort_by(|a, b| a.0.cmp(&b.0).then_with(|| a.1.len().cmp(&b.1.len())));
+        scored.sort_by(|a, b| {
+            a.0.cmp(&b.0)
+                .then_with(|| a.1.len().cmp(&b.1.len()))
+                .then_with(|| b.2.cmp(&a.2))
+        });
         scored.truncate(MAX_RESULTS);
-        Ok(scored.into_iter().map(|(_, p)| p).collect())
+        Ok(scored
+            .into_iter()
+            .map(|(_, path, is_dir)| RepositoryExplorerEntry { path, is_dir })
+            .collect())
     }
 }
 
@@ -353,13 +399,6 @@ pub(crate) async fn search_repository_file_contents(
     tokio::task::spawn_blocking(move || search_repository_file_contents_blocking(root, query))
         .await
         .map_err(|e| format!("文件内容搜索任务异常: {e}"))?
-}
-
-#[derive(Debug, Serialize, Clone)]
-#[serde(rename_all = "camelCase")]
-pub(crate) struct RepositoryExplorerEntry {
-    path: String,
-    is_dir: bool,
 }
 
 /// Join `relative_path` under repository root; rejects `..` and absolute paths.
@@ -621,6 +660,37 @@ pub(crate) fn delete_repository_entry(root: String, relative_path: String) -> Re
         return Err("不支持的文件类型".into());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod repository_search_tests {
+    use super::*;
+    use std::fs;
+
+    #[test]
+    fn search_repository_files_includes_directories() {
+        let root = std::env::temp_dir().join("wise-repo-search-dir-test");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("src/components")).unwrap();
+        fs::write(root.join("src/components/App.tsx"), "export {}").unwrap();
+
+        let results = search_repository_files(
+            root.to_string_lossy().to_string(),
+            "components".into(),
+        )
+        .expect("search");
+
+        assert!(
+            results.iter().any(|entry| entry.is_dir && entry.path == "src/components"),
+            "expected directory match: {results:?}",
+        );
+        assert!(
+            results.iter().any(|entry| !entry.is_dir && entry.path == "src/components/App.tsx"),
+            "expected file match: {results:?}",
+        );
+
+        let _ = fs::remove_dir_all(&root);
+    }
 }
 
 #[cfg(test)]

@@ -156,7 +156,12 @@ export function ArtifactsPanel({ repositories, activeRepositoryId, onOpenReposit
       ]);
       const previewable = entries.filter((entry) => !entry.isDir && isPreviewablePath(entry.path)).map((entry) => entry.path);
       setRepositoryFiles(previewable);
-      setMatchedFiles((query.trim() ? matched : previewable).filter(isPreviewablePath));
+      setMatchedFiles(
+        (query.trim()
+          ? matched.filter((entry) => !entry.isDir).map((entry) => entry.path)
+          : previewable
+        ).filter(isPreviewablePath),
+      );
     } finally {
       setLoading(false);
     }

@@ -5,6 +5,7 @@ import { ExplorerTreeChevron, ExplorerTreeFolderIcon } from "./explorerTreeChrom
 import { repositoryTreeDirShouldUpdate } from "./repositoryTreeNodeMemo";
 import { explorerDirKey } from "./repositoryExplorerDirKey";
 import { repositoryTreeDepthIndentPx } from "./repositoryTreeLayout";
+import { setWiseRepositoryFileDragData } from "../../utils/repositoryFileDrag";
 import { RepositoryTreeFileNode } from "./RepositoryTreeFileNode";
 import type { ExplorerInlineCreateState, RepositoryFileTreeNode } from "./types";
 
@@ -54,9 +55,14 @@ function RepositoryTreeDirNodeInner({
         className={`repo-tree-node repo-tree-node--dir${isSelected ? " repo-tree-node--selected" : ""}${isExpanded ? " repo-tree-node--expanded" : ""}`}
         data-repo-path={node.path}
         data-repo-is-dir="1"
+        draggable
         role="treeitem"
         tabIndex={0}
         aria-expanded={isExpanded}
+        onDragStart={(e) => {
+          e.stopPropagation();
+          setWiseRepositoryFileDragData(e.dataTransfer, node.path);
+        }}
         onClick={activateDir}
         onKeyDown={(event) => {
           if (event.key === "Enter" || event.key === " ") {

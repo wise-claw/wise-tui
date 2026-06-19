@@ -12,14 +12,14 @@ export interface RepositoryFileContentMatch {
 }
 
 /**
- * Fast file search under a repository root (for @ mentions).
+ * Fast file/directory search under a repository root (for @ mentions and explorer search).
  */
 export async function searchRepositoryFiles(
   repositoryRoot: string,
   query: string,
-): Promise<string[]> {
+): Promise<RepositoryExplorerEntry[]> {
   try {
-    return await invoke<string[]>("search_repository_files", {
+    return await invoke<RepositoryExplorerEntry[]>("search_repository_files", {
       root: repositoryRoot,
       query,
     });

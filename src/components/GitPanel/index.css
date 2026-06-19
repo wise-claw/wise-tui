@@ -2322,11 +2322,13 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-file
   cursor: pointer;
 }
 
-.repo-tree-node--file[draggable] {
+.repo-tree-node--file[draggable],
+.repo-tree-node--dir[draggable] {
   cursor: grab;
 }
 
-.repo-tree-node--file[draggable]:active {
+.repo-tree-node--file[draggable]:active,
+.repo-tree-node--dir[draggable]:active {
   cursor: grabbing;
 }
 

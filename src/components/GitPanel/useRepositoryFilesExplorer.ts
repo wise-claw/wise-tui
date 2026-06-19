@@ -95,12 +95,13 @@ function removePendingLoadDir(prev: ReadonlySet<string>, dirKey: string): Set<st
   return next;
 }
 
-function searchPathsToRows(paths: string[]): ExplorerSearchResultRow[] {
-  return paths.map((path) => {
+function searchEntriesToRows(entries: Array<{ path: string; isDir: boolean }>): ExplorerSearchResultRow[] {
+  return entries.map((entry) => {
+    const path = entry.path;
     const slash = path.lastIndexOf("/");
     const name = slash >= 0 ? path.slice(slash + 1) : path;
     const parentPath = slash >= 0 ? path.slice(0, slash) : "";
-    return { path, isDir: false, name, parentPath, score: 0 };
+    return { path, isDir: entry.isDir, name, parentPath, score: 0 };
   });
 }
 
@@ -526,11 +527,11 @@ export function useRepositoryFilesExplorer({
     setSearchPending(true);
     void (async () => {
       try {
-        const paths = await searchRepositoryFiles(path, q);
+        const entries = await searchRepositoryFiles(path, q);
         if (cancelled) {
           return;
         }
-        setSearchResultRows(searchPathsToRows(paths));
+        setSearchResultRows(searchEntriesToRows(entries));
       } catch {
         if (!cancelled) {
           setSearchResultRows([]);

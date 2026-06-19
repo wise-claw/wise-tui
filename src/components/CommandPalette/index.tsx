@@ -166,13 +166,13 @@ export function CommandPalette({
       if (cancelled) return;
       try {
         if (searchMode === "filename") {
-          const paths = await searchRepositoryFiles(repositoryPath, q);
+          const entries = await searchRepositoryFiles(repositoryPath, q);
           if (cancelled || requestId !== searchRequestIdRef.current) return;
           setResults(
-            paths.map((rel) => ({
+            entries.map((entry) => ({
               kind: "filename" as const,
-              path: rel,
-              display: rel,
+              path: entry.path,
+              display: entry.path,
             })),
           );
         } else {

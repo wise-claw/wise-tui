@@ -29,7 +29,7 @@ import {
   replaceSlashCommandLine,
 } from "./composer-plain-utils";
 import { computeSlashPopoverPlacement } from "./composer-trigger-anchor";
-import { ExplorerTreeFileIcon } from "../GitPanel/explorerTreeChrome";
+import { ExplorerTreeFileIcon, ExplorerTreeFolderIcon } from "../GitPanel/explorerTreeChrome";
 
 export type { SlashOption };
 
@@ -233,14 +233,15 @@ export function SlashPopover({
     const timer = window.setTimeout(async () => {
       if (cancelled) return;
       try {
-        const paths = await searchRepositoryFiles(repositoryPath, token);
+        const entries = await searchRepositoryFiles(repositoryPath, token);
         if (cancelled) return;
         setFileResults(
-          paths.map((relPath) => ({
+          entries.map((entry) => ({
             type: "file" as const,
-            label: relPath.split("/").pop() || relPath,
-            description: relPath,
-            path: relPath,
+            label: entry.path.split("/").pop() || entry.path,
+            description: entry.path,
+            path: entry.path,
+            isDir: entry.isDir,
           })),
         );
       } catch {
@@ -678,12 +679,19 @@ function renderOptionContent(opt: SlashOption, isAtMentionDefault = false) {
           )}
         </span>
       )}
-      {opt.type === "file" && (
+      {opt.type === "file" && opt.isDir ? (
+        <ExplorerTreeFolderIcon
+          name={opt.label || opt.path?.split("/").pop() || "folder"}
+          expanded={false}
+          className="app-claude-slash-popover__file-icon"
+        />
+      ) : null}
+      {opt.type === "file" && !opt.isDir ? (
         <ExplorerTreeFileIcon
           fileName={opt.label || opt.path?.split("/").pop() || "file"}
           className="app-claude-slash-popover__file-icon"
         />
-      )}
+      ) : null}
       <span
         style={{
           flex: 1,

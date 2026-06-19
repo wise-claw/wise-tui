@@ -1,6 +1,6 @@
 import type { DragEvent } from "react";
 
-/** 右栏「开发文件」树拖到聊天输入框时使用的 DataTransfer MIME（非系统文件拖放）。 */
+/** 「开发文件」树（文件/目录）拖到聊天输入框时使用的 DataTransfer MIME（非系统文件拖放）。 */
 export const WISE_REPOSITORY_FILE_DRAG_MIME = "application/x-wise-repository-file";
 
 export interface WiseRepositoryFileDragPayload {
@@ -25,7 +25,7 @@ export function isWiseRepositoryFileDrag(event: DragEvent): boolean {
   return isWiseRepositoryFileDragDataTransfer(event.dataTransfer);
 }
 
-/** 从拖放事件解析仓库内相对路径（单文件）。 */
+/** 从拖放事件解析仓库内相对路径（文件或目录）。 */
 export function getWiseRepositoryFileDragPaths(event: DragEvent): string[] {
   const raw = event.dataTransfer.getData(WISE_REPOSITORY_FILE_DRAG_MIME);
   if (raw) {
