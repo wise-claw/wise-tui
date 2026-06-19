@@ -367,7 +367,7 @@ export const SessionFeedbackLoopPanel = memo(function SessionFeedbackLoopPanel({
           <div>
             <Text className="app-session-feedback-loop__title">反馈神经网</Text>
             <Text type="secondary" className="app-session-feedback-loop__hint">
-              开发功能已关闭。在 Author → 默认配置 → 开发实验 中开启后可启用轮次分析 → 自我优化 → 比对 → 再优化闭环。
+              开发功能已关闭。在 Author → 默认配置 → 开发实验 中开启后，可通过顶栏神经网图标打开。
             </Text>
           </div>
         </div>

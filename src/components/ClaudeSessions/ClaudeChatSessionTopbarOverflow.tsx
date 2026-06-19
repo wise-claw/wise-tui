@@ -7,7 +7,11 @@ import { FccTopbarTrigger } from "./FccTopbarTrigger";
 import { FccTrafficTopbarTrigger } from "./FccTrafficTopbarTrigger";
 import { OpencodeGoProxyTopbarTrigger } from "./OpencodeGoProxyTopbarTrigger";
 import { LlmProxyTopbarTrigger } from "./LlmProxyTopbarTrigger";
-import { SessionDataLinkTopbarTrigger, type SessionDataLinkTopbarTriggerProps } from "./SessionDataLinkTopbarTrigger";
+import { SessionDataLinkTopbarTrigger } from "./SessionDataLinkTopbarTrigger";
+import {
+  SessionFeedbackLoopTopbarTrigger,
+  type SessionFeedbackLoopTopbarTriggerProps,
+} from "./SessionFeedbackLoopTopbarTrigger";
 import { topbarOverflowMenuIcon, type SessionTopbarOverflowPanel } from "./topbarOverflowMenuIcons";
 
 export type { SessionTopbarOverflowPanel };
@@ -28,7 +32,7 @@ export interface ClaudeChatSessionTopbarOverflowProps {
   repositoryPath: string;
   mainSessionForDataLink: ClaudeSession | null;
   onSessionInsightsAiAnalysis?: (prompt: string) => void | Promise<void>;
-  onDispatchSessionFeedbackLoop?: SessionDataLinkTopbarTriggerProps["onDispatchSessionFeedbackLoop"];
+  onDispatchSessionFeedbackLoop?: SessionFeedbackLoopTopbarTriggerProps["onDispatchSessionFeedbackLoop"];
   getClaudeSessions?: () => readonly ClaudeSession[];
 }
 
@@ -64,6 +68,11 @@ export const ClaudeChatSessionTopbarOverflow = memo(function ClaudeChatSessionTo
         disabled: !mainSessionForDataLink,
       });
     }
+    items.push({
+      key: "sessionFeedbackLoop",
+      label: "反馈神经网",
+      disabled: !mainSessionForDataLink,
+    });
     return items;
   }, [topbarChrome, mainSessionForDataLink]);
 
@@ -150,11 +159,19 @@ export const ClaudeChatSessionTopbarOverflow = memo(function ClaudeChatSessionTo
         <SessionDataLinkTopbarTrigger
           mainSession={mainSessionForDataLink}
           onRequestAiAnalysis={onSessionInsightsAiAnalysis}
+          triggerHidden
+          open
+          onOpenChange={(open) => handlePanelOpenChange("sessionDataLink", open)}
+        />
+      ) : null}
+      {activePanel === "sessionFeedbackLoop" ? (
+        <SessionFeedbackLoopTopbarTrigger
+          mainSession={mainSessionForDataLink}
           onDispatchSessionFeedbackLoop={onDispatchSessionFeedbackLoop}
           getClaudeSessions={getClaudeSessions}
           triggerHidden
           open
-          onOpenChange={(open) => handlePanelOpenChange("sessionDataLink", open)}
+          onOpenChange={(open) => handlePanelOpenChange("sessionFeedbackLoop", open)}
         />
       ) : null}
     </div>

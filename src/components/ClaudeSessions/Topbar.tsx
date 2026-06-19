@@ -11,6 +11,7 @@ import { OpencodeGoProxyTopbarTrigger } from "./OpencodeGoProxyTopbarTrigger";
 import { FccTrafficTopbarTrigger } from "./FccTrafficTopbarTrigger";
 import { LlmProxyTopbarTrigger } from "./LlmProxyTopbarTrigger";
 import { SessionDataLinkTopbarTrigger } from "./SessionDataLinkTopbarTrigger";
+import { SessionFeedbackLoopTopbarTrigger } from "./SessionFeedbackLoopTopbarTrigger";
 import { ClaudeChatSessionTopbarOverflow } from "./ClaudeChatSessionTopbarOverflow";
 import { DEFAULT_OPEN_APP_ID } from "../OpenAppMenu/constants";
 import { getOpenAppPreferenceSync, hydrateOpenAppPreference } from "../../services/openAppPreference";
@@ -350,6 +351,11 @@ export const Topbar = memo(function Topbar({
           <SessionDataLinkTopbarTrigger
             mainSession={mainSessionForDataLink}
             onRequestAiAnalysis={onSessionInsightsAiAnalysis}
+          />
+        ) : null}
+        {topbarToolsReady ? (
+          <SessionFeedbackLoopTopbarTrigger
+            mainSession={mainSessionForDataLink}
             onDispatchSessionFeedbackLoop={onDispatchSessionFeedbackLoop}
             getClaudeSessions={getClaudeSessions}
           />

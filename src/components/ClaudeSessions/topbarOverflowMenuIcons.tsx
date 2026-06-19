@@ -1,12 +1,14 @@
 import type { ReactNode } from "react";
 import { IconSessionDataLink } from "./SessionDataLinkTopbarTrigger";
+import { IconSessionFeedbackLoop } from "./SessionFeedbackLoopTopbarTrigger";
 
 export type SessionTopbarOverflowPanel =
   | "fcc"
   | "fccTraffic"
   | "opencodeProxy"
   | "llmProxy"
-  | "sessionDataLink";
+  | "sessionDataLink"
+  | "sessionFeedbackLoop";
 
 function TopbarMenuIconSvg({ children }: { children: ReactNode }) {
   return (
@@ -77,12 +79,21 @@ function IconSessionDataLinkMenu() {
   );
 }
 
+function IconSessionFeedbackLoopMenu() {
+  return (
+    <span className="app-topbar-overflow-menu-icon" aria-hidden>
+      <IconSessionFeedbackLoop />
+    </span>
+  );
+}
+
 const OVERFLOW_MENU_ICONS: Record<SessionTopbarOverflowPanel, ReactNode> = {
   fcc: <IconFccProxyMenu />,
   fccTraffic: <IconFccTrafficMenu />,
   opencodeProxy: <IconOpencodeProxyMenu />,
   llmProxy: <IconLlmProxyMenu />,
   sessionDataLink: <IconSessionDataLinkMenu />,
+  sessionFeedbackLoop: <IconSessionFeedbackLoopMenu />,
 };
 
 export function topbarOverflowMenuIcon(panel: SessionTopbarOverflowPanel): ReactNode {

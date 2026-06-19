@@ -26,8 +26,6 @@ import {
   formatTokenCount,
 } from "../../utils/sessionInsights";
 import { ClaudeUsageTrendSection } from "./ClaudeUsageTrendSection";
-import { SessionFeedbackLoopPanel } from "./SessionFeedbackLoopPanel";
-import type { UseSessionFeedbackLoopResult } from "../../hooks/useSessionFeedbackLoop";
 import {
   buildSessionInsightRecommendationAiPrompt,
   buildSessionInsightRecommendationCopyText,
@@ -66,16 +64,6 @@ interface Props {
   repositoryPath?: string | null;
   onJumpTurn?: (turnIndex: number) => void;
   onRequestAiAnalysis?: (prompt: string) => void | Promise<void>;
-  onDispatchSessionFeedbackLoop?: (
-    prompt: string,
-    kind: import("../../utils/sessionFeedbackLoopDispatch").FeedbackLoopDispatchKind,
-    cycleIndex?: number,
-  ) => void | Promise<void>;
-  feedbackLoop?: UseSessionFeedbackLoopResult;
-  feedbackLoopFeatureEnabled?: boolean;
-  feedbackLoopInjectSystemPrompt?: boolean;
-  feedbackLoopOptimizeConfigArtifacts?: boolean;
-  feedbackLoopAnchorSessionId?: string;
 }
 
 function KpiCard({
@@ -190,12 +178,6 @@ export const SessionInsightsPanel = memo(function SessionInsightsPanel({
   repositoryPath,
   onJumpTurn,
   onRequestAiAnalysis,
-  onDispatchSessionFeedbackLoop,
-  feedbackLoop,
-  feedbackLoopFeatureEnabled = false,
-  feedbackLoopInjectSystemPrompt = false,
-  feedbackLoopOptimizeConfigArtifacts = false,
-  feedbackLoopAnchorSessionId,
 }: Props) {
   const [aiSending, setAiSending] = useState(false);
   const [aiOptimizeSending, setAiOptimizeSending] = useState(false);
@@ -381,17 +363,6 @@ export const SessionInsightsPanel = memo(function SessionInsightsPanel({
 
   return (
     <div className="app-session-insights">
-      {feedbackLoop ? (
-        <SessionFeedbackLoopPanel
-          loop={feedbackLoop}
-          insights={insights}
-          anchorSessionId={feedbackLoopAnchorSessionId}
-          featureEnabled={feedbackLoopFeatureEnabled}
-          injectHabitsToSystemPrompt={feedbackLoopInjectSystemPrompt}
-          optimizeConfigArtifacts={feedbackLoopOptimizeConfigArtifacts}
-          onDispatchSessionFeedbackLoop={onDispatchSessionFeedbackLoop}
-        />
-      ) : null}
       <div className="app-session-insights__actions">
         <Space size={4} wrap>
           <Button
