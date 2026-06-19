@@ -1,12 +1,13 @@
-import { Segmented, Spin, Typography } from "antd";
+import { Popover, Spin, Typography } from "antd";
 import type { ReactNode } from "react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo } from "react";
 import type {
   ClaudeUsageBucket,
   ClaudeUsageGranularity,
   ClaudeUsageSeriesPayload,
   ClaudeUsageSnapshotResponse,
 } from "../../services/claudeCodeUsage";
+import { UsagePillGroup } from "./UsagePillGroup";
 import "./index.css";
 
 function formatUsd(n: number): string {
@@ -153,6 +154,57 @@ export interface ClaudeUsageChartContentProps {
   footerExtra?: ReactNode;
 }
 
+const GRANULARITY_OPTIONS = [
+  { value: "day" as const, label: "日" },
+  { value: "week" as const, label: "周" },
+  { value: "month" as const, label: "月" },
+];
+
+function UsageBarPopoverContent({
+  bucket,
+  granularity,
+}: {
+  bucket: ClaudeUsageBucket;
+  granularity: ClaudeUsageGranularity;
+}) {
+  const periodLabel = usageLabelFromSortKey(granularity, bucket.sortKey);
+  const cacheCalc = hasCacheInputActivity(bucket)
+    ? formatCacheHitFormulaSubstitution(
+        bucket.cacheReadTokens,
+        bucket.inputTokens,
+        bucket.cacheCreationTokens,
+      )
+    : "";
+
+  return (
+    <div className="app-cc-usage-bar-popover">
+      <div className="app-cc-line-edits-tooltip-date">{periodLabel}</div>
+      <div className="app-cc-usage-bar-popover__metric app-cc-usage-bar-popover__metric--tokens">
+        {formatUsd(bucket.costUsd)} · {formatTokensShort(bucket.totalTokens)} tokens
+      </div>
+      {hasCacheInputActivity(bucket) ? (
+        <>
+          <div className="app-cc-usage-bar-popover__cache">
+            缓存命中 {formatCacheHitRate(bucket.cacheHitRate)} · 读 {formatTokensShort(bucket.cacheReadTokens)} · 写{" "}
+            {formatTokensShort(bucket.cacheCreationTokens)} · 未缓存 {formatTokensShort(bucket.inputTokens)}
+          </div>
+          {cacheCalc ? (
+            <div className="app-cc-usage-bar-popover__calc">
+              = {cacheCalc}
+              {bucket.cacheHitRate != null ? ` = ${formatCacheHitRate(bucket.cacheHitRate)}` : null}
+            </div>
+          ) : null}
+        </>
+      ) : null}
+      {bucket.outputTokens > 0 ? (
+        <div className="app-cc-usage-bar-popover__output">
+          输出 {formatTokensShort(bucket.outputTokens)} tokens
+        </div>
+      ) : null}
+    </div>
+  );
+}
+
 export function ClaudeUsageChartContent({
   granularity,
   onGranularityChange,
@@ -163,12 +215,6 @@ export function ClaudeUsageChartContent({
   compact = false,
   footerExtra,
 }: ClaudeUsageChartContentProps) {
-  const [hoverIdx, setHoverIdx] = useState<number | null>(null);
-
-  useEffect(() => {
-    setHoverIdx(null);
-  }, [granularity]);
-
   const series = useMemo(() => pickSeries(snapshot, granularity), [snapshot, granularity]);
 
   const buckets: ClaudeUsageBucket[] = series?.buckets ?? [];
@@ -180,36 +226,15 @@ export function ClaudeUsageChartContent({
     return m > 0 ? m : 1;
   }, [buckets]);
 
-  const activeIdx = hoverIdx !== null ? hoverIdx : buckets.length > 0 ? buckets.length - 1 : null;
-  const active: ClaudeUsageBucket | null =
-    activeIdx !== null && activeIdx >= 0 && activeIdx < buckets.length ? buckets[activeIdx]! : null;
-
-  const activeCacheCalc = useMemo(() => {
-    if (!active || !hasCacheInputActivity(active)) return "";
-    return formatCacheHitFormulaSubstitution(
-      active.cacheReadTokens,
-      active.inputTokens,
-      active.cacheCreationTokens,
-    );
-  }, [active]);
-
   return (
     <div className={`app-cc-usage-popover${compact ? " app-cc-usage-popover--compact" : ""}`}>
-      <Segmented<ClaudeUsageGranularity>
-        size="small"
-        block
+      <UsagePillGroup
         value={granularity}
-        onChange={(v) => {
-          const s = String(v);
-          if (s === "day" || s === "week" || s === "month") {
-            onGranularityChange(s);
-          }
-        }}
-        options={[
-          { label: "日", value: "day" },
-          { label: "周", value: "week" },
-          { label: "月", value: "month" },
-        ]}
+        options={GRANULARITY_OPTIONS}
+        onChange={onGranularityChange}
+        size="sm"
+        ariaLabel="时间粒度"
+        className="app-cc-usage-granularity"
       />
       {snapshotLoading ? (
         <div style={{ padding: "24px 0", textAlign: "center" }}>
@@ -219,53 +244,32 @@ export function ClaudeUsageChartContent({
         <Typography.Text type="danger">{snapshotError}</Typography.Text>
       ) : (
         <>
-          <div className="app-cc-usage-chart" onMouseLeave={() => setHoverIdx(null)}>
-            {buckets.map((b, i) => {
+          <div className="app-cc-usage-chart">
+            {buckets.map((b) => {
               const h = Math.max(2, Math.round((b.totalTokens / maxTok) * 100));
               return (
-                <div
-                  key={b.sortKey}
-                  className={`app-cc-usage-bar-wrap${i === activeIdx ? " app-cc-usage-bar-wrap--active" : ""}`}
-                  onMouseEnter={() => setHoverIdx(i)}
-                >
-                  <div className="app-cc-usage-bar" style={{ height: `${h}%` }} />
+                <div key={b.sortKey} className="app-cc-usage-bar-wrap">
+                  <div className="app-cc-usage-bar-slot" style={{ height: `${h}%` }}>
+                    <Popover
+                      trigger="hover"
+                      placement="top"
+                      mouseEnterDelay={0.08}
+                      destroyOnHidden
+                      arrow={{ pointAtCenter: true }}
+                      overlayClassName="app-cc-usage-bar-popover-overlay"
+                      getPopupContainer={() => document.body}
+                      content={<UsageBarPopoverContent bucket={b} granularity={granularity} />}
+                    >
+                      <div
+                        className="app-cc-usage-bar"
+                        aria-label={usageLabelFromSortKey(granularity, b.sortKey)}
+                      />
+                    </Popover>
+                  </div>
                 </div>
               );
             })}
           </div>
-          <div className="app-cc-usage-x-label">
-            {active
-              ? usageLabelFromSortKey(granularity, active.sortKey)
-              : buckets[0]
-                ? usageLabelFromSortKey(granularity, buckets[0].sortKey)
-                : ""}
-          </div>
-          {active ? (
-            <>
-              <div className="app-cc-usage-detail">
-                {usageLabelFromSortKey(granularity, active.sortKey)}：{formatUsd(active.costUsd)} ·{" "}
-                {formatTokensShort(active.totalTokens)} tokens
-              </div>
-              {hasCacheInputActivity(active) ? (
-                <div className="app-cc-usage-cache">
-                  缓存命中 {formatCacheHitRate(active.cacheHitRate)} · 读{" "}
-                  {formatTokensShort(active.cacheReadTokens)} · 写{" "}
-                  {formatTokensShort(active.cacheCreationTokens)} · 未缓存{" "}
-                  {formatTokensShort(active.inputTokens)}
-                  {activeCacheCalc ? (
-                    <>
-                      <br />
-                      <span className="app-cc-usage-cache-calc">
-                        = {activeCacheCalc} = {formatCacheHitRate(active.cacheHitRate)}
-                      </span>
-                    </>
-                  ) : null}
-                </div>
-              ) : null}
-            </>
-          ) : (
-            <div className="app-cc-usage-detail">暂无数据</div>
-          )}
           <div className="app-cc-usage-total">
             合计（{series?.periodCaption ?? "—"}）：{formatUsd(series?.totalCostUsd ?? 0)} ·{" "}
             {formatTokensShort(series?.totalTokens ?? 0)} tokens

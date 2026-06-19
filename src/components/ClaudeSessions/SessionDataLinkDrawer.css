@@ -757,7 +757,7 @@
   width: 100%;
 }
 
-.app-session-insights__usage-trend .app-cc-usage-popover .ant-segmented {
+.app-session-insights__usage-trend .app-cc-usage-granularity {
   margin-bottom: 6px;
 }
 

@@ -1,15 +1,25 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { HoverHint } from "../shared/HoverHint";
-import { Popover, Segmented, Typography } from "antd";
+import { Popover, Typography } from "antd";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
-import type { ClaudeUsageGranularity, ClaudeUsageSnapshotResponse } from "../../services/claudeCodeUsage";
-import { getClaudeCodeUsageSnapshot } from "../../services/claudeCodeUsage";
+import type {
+  ClaudeLineEditsSnapshotResponse,
+  ClaudeUsageGranularity,
+  ClaudeUsageSnapshotResponse,
+} from "../../services/claudeCodeUsage";
+import {
+  getClaudeCodeLineEditsSnapshot,
+  getClaudeCodeUsageSnapshot,
+  invalidateClaudeCodeUsageSnapshotCache,
+} from "../../services/claudeCodeUsage";
 import {
   getClaudeUsageUiStoreSnapshot,
   requestOpenSessionDataLink,
   subscribeClaudeUsageUiStore,
 } from "../../stores/claudeUsageUiStore";
+import { ClaudeLineEditsContent } from "./ClaudeLineEditsContent";
 import { ClaudeUsageChartContent } from "./ClaudeUsageChartContent";
+import { ClaudeUsageToolbar } from "./ClaudeUsageToolbar";
 import "./index.css";
 
 function IconClaudeUsage() {
@@ -23,6 +33,7 @@ function IconClaudeUsage() {
 }
 
 type UsageScope = "global" | "repository";
+type UsageView = "tokens" | "lineEdits";
 
 interface Props {
   repositoryPath?: string | null;
@@ -38,13 +49,18 @@ export function ClaudeCodeUsageHeaderBtn({ repositoryPath }: Props) {
 
   const [open, setOpen] = useState(false);
   const [scope, setScope] = useState<UsageScope>("global");
+  const [view, setView] = useState<UsageView>("tokens");
   const [granularity, setGranularity] = useState<ClaudeUsageGranularity>("day");
   const [snapshot, setSnapshot] = useState<ClaudeUsageSnapshotResponse | null>(null);
+  const [lineEditsSnapshot, setLineEditsSnapshot] = useState<ClaudeLineEditsSnapshotResponse | null>(null);
   const [snapshotLoading, setSnapshotLoading] = useState(false);
+  const [lineEditsLoading, setLineEditsLoading] = useState(false);
   const [snapshotError, setSnapshotError] = useState<string | null>(null);
+  const [lineEditsError, setLineEditsError] = useState<string | null>(null);
 
   const repoPath = repositoryPath?.trim() || "";
   const effectiveScope: UsageScope = repoPath ? scope : "global";
+  const projectPath = effectiveScope === "repository" ? repoPath : null;
 
   useEffect(() => {
     if (uiSnap.usagePopoverOpenNonce === lastOpenNonce.current) return;
@@ -52,7 +68,7 @@ export function ClaudeCodeUsageHeaderBtn({ repositoryPath }: Props) {
     setOpen(true);
   }, [uiSnap.usagePopoverOpenNonce]);
 
-  const loadSnapshot = useCallback(async () => {
+  const loadTokenSnapshot = useCallback(async () => {
     if (!isTauri()) {
       setSnapshot(null);
       setSnapshotError("用量统计仅在 Wise 桌面版中可用。");
@@ -61,9 +77,7 @@ export function ClaudeCodeUsageHeaderBtn({ repositoryPath }: Props) {
     setSnapshotLoading(true);
     setSnapshotError(null);
     try {
-      const res = await getClaudeCodeUsageSnapshot({
-        projectPath: effectiveScope === "repository" ? repoPath : null,
-      });
+      const res = await getClaudeCodeUsageSnapshot({ projectPath });
       setSnapshot(res);
       if (!res) {
         setSnapshotError("无法读取用量数据。");
@@ -74,18 +88,45 @@ export function ClaudeCodeUsageHeaderBtn({ repositoryPath }: Props) {
     } finally {
       setSnapshotLoading(false);
     }
-  }, [effectiveScope, repoPath]);
+  }, [projectPath]);
+
+  const loadLineEditsSnapshot = useCallback(async () => {
+    if (!isTauri()) {
+      setLineEditsSnapshot(null);
+      setLineEditsError("代码编辑量统计仅在 Wise 桌面版中可用。");
+      return;
+    }
+    setLineEditsLoading(true);
+    setLineEditsError(null);
+    try {
+      const res = await getClaudeCodeLineEditsSnapshot({ projectPath });
+      setLineEditsSnapshot(res);
+      if (!res) {
+        setLineEditsError("无法读取代码编辑量数据。");
+      }
+    } catch (e) {
+      setLineEditsSnapshot(null);
+      setLineEditsError(e instanceof Error ? e.message : String(e));
+    } finally {
+      setLineEditsLoading(false);
+    }
+  }, [projectPath]);
 
   useEffect(() => {
     if (!open) return;
-    void loadSnapshot();
-  }, [open, loadSnapshot]);
+    void loadTokenSnapshot();
+    void loadLineEditsSnapshot();
+  }, [open, loadTokenSnapshot, loadLineEditsSnapshot]);
 
   const handleRefresh = useCallback(() => {
+    invalidateClaudeCodeUsageSnapshotCache(projectPath);
     setSnapshot(null);
+    setLineEditsSnapshot(null);
     setSnapshotError(null);
-    void loadSnapshot();
-  }, [loadSnapshot]);
+    setLineEditsError(null);
+    void loadTokenSnapshot();
+    void loadLineEditsSnapshot();
+  }, [loadLineEditsSnapshot, loadTokenSnapshot, projectPath]);
 
   const footerExtra = (
     <>
@@ -112,49 +153,56 @@ export function ClaudeCodeUsageHeaderBtn({ repositoryPath }: Props) {
       onOpenChange={(next) => {
         setOpen(next);
         if (!next) {
+          setView("tokens");
           setGranularity("day");
           setSnapshot(null);
+          setLineEditsSnapshot(null);
           setSnapshotError(null);
+          setLineEditsError(null);
         }
       }}
       trigger="click"
       placement="bottomRight"
       destroyOnHidden
+      overlayClassName={`app-cc-usage-popover-overlay${view === "lineEdits" ? " app-cc-usage-popover-overlay--wide" : ""}`}
       content={
-        <div>
-          {repoPath ? (
-            <Segmented<UsageScope>
-              size="small"
-              block
-              className="app-cc-usage-scope"
-              value={effectiveScope}
-              onChange={(v) => {
-                const s = String(v);
-                if (s === "global" || s === "repository") {
-                  setScope(s);
-                  setSnapshot(null);
-                  setSnapshotError(null);
-                }
-              }}
-              options={[
-                { label: "全局", value: "global" },
-                { label: "本仓库", value: "repository" },
-              ]}
-            />
-          ) : null}
-          <ClaudeUsageChartContent
-            granularity={granularity}
-            onGranularityChange={setGranularity}
-            snapshot={snapshot}
-            snapshotLoading={snapshotLoading}
-            snapshotError={snapshotError}
-            onRefresh={handleRefresh}
-            footerExtra={footerExtra}
+        <div className="app-cc-usage-popover-body">
+          <ClaudeUsageToolbar
+            view={view}
+            onViewChange={setView}
+            scope={effectiveScope}
+            onScopeChange={(next) => {
+              setScope(next);
+              setSnapshot(null);
+              setLineEditsSnapshot(null);
+              setSnapshotError(null);
+              setLineEditsError(null);
+            }}
+            showScope={Boolean(repoPath)}
           />
+          {view === "tokens" ? (
+            <ClaudeUsageChartContent
+              granularity={granularity}
+              onGranularityChange={setGranularity}
+              snapshot={snapshot}
+              snapshotLoading={snapshotLoading}
+              snapshotError={snapshotError}
+              onRefresh={handleRefresh}
+              footerExtra={footerExtra}
+            />
+          ) : (
+            <ClaudeLineEditsContent
+              snapshot={lineEditsSnapshot}
+              snapshotLoading={lineEditsLoading}
+              snapshotError={lineEditsError}
+              onRefresh={handleRefresh}
+              footerExtra={footerExtra}
+            />
+          )}
         </div>
       }
     >
-      <HoverHint title="Claude Code 用量（本机 JSONL，对齐 ccusage）" open={open ? false : undefined}>
+      <HoverHint title="Claude Code 用量（Token + 代码编辑量）" open={open ? false : undefined}>
         <button type="button" className="app-left-sidebar-topbar-btn" aria-label="Claude Code 用量统计">
           <IconClaudeUsage />
         </button>

@@ -1,7 +1,7 @@
 use crate::{
     agent_registry, app_state_commands, assistants, at_mention_shortcuts, cc_switch_import,
     in_app_shortcuts,
-    claude_code_usage, claude_commands, codex_commands, opencode_commands, claude_config_dir,
+    claude_code_line_edits, claude_code_usage, claude_commands, codex_commands, opencode_commands, claude_config_dir,
     claude_llm_proxy, claude_model_profiles,
     cursor_agent, fcc_traces, free_claude_code, opencode_go_proxy,
     cua_driver, dingtalk_enterprise_bot, dingtalk_stream_gateway, extensions, git_commands,
@@ -415,6 +415,7 @@ pub fn run() {
             claude_commands::list_running_claude_sessions,
             system_resource::get_system_resource_snapshot,
             system_resource::kill_claude_host_process,
+            claude_code_line_edits::get_claude_code_line_edits_snapshot,
             claude_code_usage::get_claude_code_usage_snapshot,
             claude_commands::get_claude_config_model,
             claude_commands::get_claude_model_picker_options,
