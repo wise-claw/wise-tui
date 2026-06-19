@@ -417,10 +417,27 @@
   overflow: hidden;
 }
 
-.git-diff-mode > .git-error-banner,
-.git-diff-mode > .git-commit-section,
-.git-diff-mode > .git-push-section {
+.git-diff-mode > .git-error-banner {
   flex-shrink: 0;
+}
+
+.git-diff-mode__head {
+  flex-shrink: 0;
+  position: sticky;
+  top: 0;
+  z-index: 2;
+  background: var(--ant-color-bg-container);
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+}
+
+.git-diff-mode__head .git-commit-section {
+  border-bottom: none;
+  padding-bottom: 4px;
+}
+
+.git-diff-mode__head .git-push-section {
+  padding-top: 0;
+  padding-bottom: 6px;
 }
 
 .git-diff-mode-scroll {

@@ -289,126 +289,128 @@ function DiffModeInner({
         </div>
       )}
 
-      {showCommitCard && (
-        <div className="git-commit-section">
-          <form
-            className="git-commit-card"
-            onSubmit={(event) => {
-              event.preventDefault();
-              submitCommit();
-            }}
-          >
-            <TextArea
-              className="git-commit-card__input"
-              variant="borderless"
-              placeholder={hasChanges ? "提交信息..." : "待推送提交，可 AI 生成描述后推送"}
-              value={commitMsg}
-              onChange={(e) => setCommitMsg(e.target.value)}
-              onKeyDown={(event) => {
-                if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey)) return;
-                event.preventDefault();
-                if (event.shiftKey) {
-                  void submitCommitAndPush();
-                  return;
-                }
-                submitCommit();
-              }}
-              rows={1}
-              autoSize={{ minRows: 1, maxRows: 2 }}
-            />
-            <div className="git-commit-card__footer">
-              <Button
-                type="text"
-                size="small"
-                className="git-ai-summary-btn"
-                title="根据当前变更 AI 生成提交信息"
-                onMouseDown={(event) => event.preventDefault()}
-                onClick={() => void handleGenerateCommitByAi()}
-                loading={aiSummaryLoading && !pushPreparing}
-                disabled={aiSummaryLoading || loading.commitAndPush}
-              >
-                AI 生成
-              </Button>
-              {hasChanges ? (
-                <Button
-                  htmlType="button"
-                  type="text"
-                  size="small"
-                  className="git-commit-btn"
-                  disabled={!canCommit || loading.commit}
-                  icon={<CheckOutlined />}
-                  onPointerDown={(event) => {
-                    if (event.button !== 0) return;
-                    event.preventDefault();
-                    submitCommit();
-                  }}
-                >
-                  {loading.commit ? "提交中..." : "提交"}
-                </Button>
-              ) : null}
-              <Button
-                htmlType="button"
-                type="text"
-                size="small"
-                className="git-push-btn"
-                title="AI 生成提交信息并提交、拉取、推送"
-                disabled={!canPush}
-                icon={<CloudUploadOutlined />}
-                onMouseDown={(event) => event.preventDefault()}
-                onPointerDown={(event) => {
-                  if (event.button !== 0 || !canPush) return;
+      {(showCommitCard || (status.branch && hasChanges)) ? (
+        <div className="git-diff-mode__head">
+          {showCommitCard ? (
+            <div className="git-commit-section">
+              <form
+                className="git-commit-card"
+                onSubmit={(event) => {
                   event.preventDefault();
-                  void submitCommitAndPush();
+                  submitCommit();
                 }}
               >
-                {loading.commitAndPush ? "推送中..." : pushPreparing ? "生成中..." : "推送"}
-              </Button>
+                <TextArea
+                  className="git-commit-card__input"
+                  variant="borderless"
+                  placeholder={hasChanges ? "提交信息..." : "待推送提交，可 AI 生成描述后推送"}
+                  value={commitMsg}
+                  onChange={(e) => setCommitMsg(e.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key !== "Enter" || !(event.metaKey || event.ctrlKey)) return;
+                    event.preventDefault();
+                    if (event.shiftKey) {
+                      void submitCommitAndPush();
+                      return;
+                    }
+                    submitCommit();
+                  }}
+                  rows={1}
+                  autoSize={{ minRows: 1, maxRows: 2 }}
+                />
+                <div className="git-commit-card__footer">
+                  <Button
+                    type="text"
+                    size="small"
+                    className="git-ai-summary-btn"
+                    title="根据当前变更 AI 生成提交信息"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={() => void handleGenerateCommitByAi()}
+                    loading={aiSummaryLoading && !pushPreparing}
+                    disabled={aiSummaryLoading || loading.commitAndPush}
+                  >
+                    AI 生成
+                  </Button>
+                  {hasChanges ? (
+                    <Button
+                      htmlType="button"
+                      type="text"
+                      size="small"
+                      className="git-commit-btn"
+                      disabled={!canCommit || loading.commit}
+                      icon={<CheckOutlined />}
+                      onPointerDown={(event) => {
+                        if (event.button !== 0) return;
+                        event.preventDefault();
+                        submitCommit();
+                      }}
+                    >
+                      {loading.commit ? "提交中..." : "提交"}
+                    </Button>
+                  ) : null}
+                  <Button
+                    htmlType="button"
+                    type="text"
+                    size="small"
+                    className="git-push-btn"
+                    title="AI 生成提交信息并提交、拉取、推送"
+                    disabled={!canPush}
+                    icon={<CloudUploadOutlined />}
+                    onMouseDown={(event) => event.preventDefault()}
+                    onPointerDown={(event) => {
+                      if (event.button !== 0 || !canPush) return;
+                      event.preventDefault();
+                      void submitCommitAndPush();
+                    }}
+                  >
+                    {loading.commitAndPush ? "推送中..." : pushPreparing ? "生成中..." : "推送"}
+                  </Button>
+                </div>
+              </form>
             </div>
-          </form>
-        </div>
-      )}
+          ) : null}
 
-      {status.branch && (hasStaged || hasUnstaged) && (
-        <div className="git-push-section">
-          <Space size={2}>
-            <Text style={{ fontSize: 11, color: "#8b8b8b" }}>合计:</Text>
-            <Text style={{ fontSize: 11, color: "#52c41a" }}>
-              +{status.additions}
-            </Text>
-            <Text style={{ fontSize: 11, color: "#8b8b8b" }}>/</Text>
-            <Text style={{ fontSize: 11, color: "#ff4d4f" }}>
-              -{status.deletions}
-            </Text>
-          </Space>
-          <div className="git-push-section__actions">
-            <GitBranchSwitcher
-              repositoryPath={repositoryPath}
-              branchHint={status.branch}
-              onBranchChanged={onBranchChanged}
-            />
-            {hasChanges && (
-              <span className="git-view-toggle">
-                <Button
-                  type={unstagedViewMode === "tree" ? "primary" : "text"}
-                  size="small"
-                  icon={<ApartmentOutlined />}
-                  onClick={() => setUnstagedViewMode("tree")}
-                  style={{ width: 24, height: 20, padding: 0, fontSize: 11 }}
-                  aria-label="树状视图"
+          {status.branch && hasChanges ? (
+            <div className="git-push-section">
+              <Space size={2}>
+                <Text style={{ fontSize: 11, color: "#8b8b8b" }}>合计:</Text>
+                <Text style={{ fontSize: 11, color: "#52c41a" }}>
+                  +{status.additions}
+                </Text>
+                <Text style={{ fontSize: 11, color: "#8b8b8b" }}>/</Text>
+                <Text style={{ fontSize: 11, color: "#ff4d4f" }}>
+                  -{status.deletions}
+                </Text>
+              </Space>
+              <div className="git-push-section__actions">
+                <GitBranchSwitcher
+                  repositoryPath={repositoryPath}
+                  branchHint={status.branch}
+                  onBranchChanged={onBranchChanged}
                 />
-                <Button
-                  type={unstagedViewMode === "list" ? "primary" : "text"}
-                  size="small"
-                  icon={<UnorderedListOutlined />}
-                  onClick={() => setUnstagedViewMode("list")}
-                  style={{ width: 24, height: 20, padding: 0, fontSize: 11 }}
-                  aria-label="列表视图"
-                />
-              </span>
-            )}
-          </div>
+                <span className="git-view-toggle">
+                  <Button
+                    type={unstagedViewMode === "tree" ? "primary" : "text"}
+                    size="small"
+                    icon={<ApartmentOutlined />}
+                    onClick={() => setUnstagedViewMode("tree")}
+                    style={{ width: 24, height: 20, padding: 0, fontSize: 11 }}
+                    aria-label="树状视图"
+                  />
+                  <Button
+                    type={unstagedViewMode === "list" ? "primary" : "text"}
+                    size="small"
+                    icon={<UnorderedListOutlined />}
+                    onClick={() => setUnstagedViewMode("list")}
+                    style={{ width: 24, height: 20, padding: 0, fontSize: 11 }}
+                    aria-label="列表视图"
+                  />
+                </span>
+              </div>
+            </div>
+          ) : null}
         </div>
-      )}
+      ) : null}
 
       {hasChanges ? (
         <div className="git-diff-mode-scroll">
