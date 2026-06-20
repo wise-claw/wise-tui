@@ -27,11 +27,11 @@ function RepositoryTreeFileNodeInner({
 }: RepositoryTreeFileNodeProps) {
   const { onSelectNode, onOpenFile } = useRepositoryExplorerTreeActions();
   const { getFileStatus, isEditorDirty } = useRepositoryExplorerGitStatus();
+  const isEditorDirtyPath = isEditorDirty(node.path);
   const isSelected = selectedPath === node.path;
-  const isPointerHover = hoverPath === node.path && !isSelected;
-  const depthIndentPx = repositoryTreeFileDepthIndentPx(depth);
+  const isPointerHover = hoverPath === node.path;
   const gitStatus = getFileStatus(node.path);
-  const editorDirty = isEditorDirty(node.path);
+  const depthIndentPx = repositoryTreeFileDepthIndentPx(depth);
 
   return (
     <div
@@ -68,8 +68,8 @@ function RepositoryTreeFileNodeInner({
         }}
       >
         <ExplorerTreeFileIcon fileName={node.name} className="repo-tree-node-icon repo-tree-node-icon--file" />
-        <span className="repo-tree-file-name">{node.name}</span>
-        <RepoTreeGitFileDecoration status={gitStatus} editorDirty={editorDirty} />
+        <span className={`repo-tree-file-name${gitStatus ? ` repo-tree-file-name--status-${gitStatus.toLowerCase()}` : ""}${isEditorDirtyPath && !gitStatus ? " repo-tree-file-name--editor-dirty" : ""}`}>{node.name}</span>
+        <RepoTreeGitFileDecoration status={gitStatus} editorDirty={isEditorDirtyPath} />
       </div>
     </div>
   );

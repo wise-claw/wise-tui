@@ -3,7 +3,7 @@ import { useRepositoryExplorerTreeActions } from "./RepositoryExplorerTreeAction
 import { useRepositoryExplorerGitStatus } from "./RepositoryExplorerGitStatusContext";
 import { ExplorerTreeChevron, ExplorerTreeFolderIcon } from "./explorerTreeChrome";
 import { repositoryDirNodeContentKey } from "./lazyExplorerTree";
-import { RepoTreeGitDirDot } from "./repoTreeGitDecoration";
+import { RepoTreeGitDirDecoration } from "./repoTreeGitDecoration";
 import { repositoryTreeDepthIndentPx } from "./repositoryTreeLayout";
 import { setWiseRepositoryFileDragData } from "../../utils/repositoryFileDrag";
 import type { RepositoryFileTreeNode } from "./types";
@@ -26,11 +26,11 @@ function RepositoryTreeDirRowInner({
   gitStatusRevision: _gitStatusRevision,
 }: RepositoryTreeDirRowProps) {
   const { onToggleDir, onSelectNode } = useRepositoryExplorerTreeActions();
-  const { dirHasChanges } = useRepositoryExplorerGitStatus();
+  const { getDirStatus } = useRepositoryExplorerGitStatus();
   const depthIndentPx = repositoryTreeDepthIndentPx(depth);
   const isSelected = selectedPath === node.path;
   const isPointerHover = hoverPath === node.path && !isSelected;
-  const showGitDot = dirHasChanges(node.path);
+  const dirStatus = getDirStatus(node.path);
 
   const activateDir = useCallback(() => {
     onSelectNode(node.path, true);
@@ -39,7 +39,7 @@ function RepositoryTreeDirRowInner({
 
   return (
     <div
-      className={`repo-tree-node repo-tree-node--dir${isSelected ? " repo-tree-node--selected" : ""}${isPointerHover ? " repo-tree-node--pointer-hover" : ""}${isExpanded ? " repo-tree-node--expanded" : ""}`}
+      className={`repo-tree-node repo-tree-node--dir${isSelected ? " repo-tree-node--selected" : ""}${isPointerHover ? " repo-tree-node--pointer-hover" : ""}${isExpanded ? " repo-tree-node--expanded" : ""}${dirStatus ? ` repo-tree-node--dir--status-${dirStatus.toLowerCase()}` : ""}`}
       data-repo-path={node.path}
       data-repo-is-dir="1"
       draggable
@@ -70,8 +70,8 @@ function RepositoryTreeDirRowInner({
         expanded={isExpanded}
         className="repo-tree-node-icon repo-tree-node-icon--dir"
       />
-      <span className="repo-tree-node-name">{node.name}</span>
-      <RepoTreeGitDirDot visible={showGitDot} />
+      <span className={`repo-tree-node-name${dirStatus ? ` repo-tree-node-name--status-${dirStatus.toLowerCase()}` : ""}`}>{node.name}</span>
+      <RepoTreeGitDirDecoration status={dirStatus} />
     </div>
   );
 }

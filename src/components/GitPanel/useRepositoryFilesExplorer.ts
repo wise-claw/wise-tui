@@ -37,7 +37,7 @@ import {
   MIN_EXPLORER_SEARCH_QUERY_LEN,
   type ExplorerSearchResultRow,
 } from "./fileTree";
-import { buildLazyRepositoryFileTree, capLoadedChildrenMap, pruneLoadedChildrenMap, pruneStaleExplorerDirFromMap } from "./lazyExplorerTree";
+import { buildLazyRepositoryFileTree, capLoadedChildrenMap, patchLazyRepositoryFileTree, pruneLoadedChildrenMap, pruneStaleExplorerDirFromMap } from "./lazyExplorerTree";
 import {
   shouldApplyExplorerChildLoadResult,
   shouldApplyExplorerLoadResult,
@@ -72,7 +72,7 @@ import {
   INITIAL_REPOSITORY_EXPLORER_EXPAND_STATE,
   reduceRepositoryExplorerExpandState,
 } from "./repositoryExplorerExpandState";
-import type { ExplorerContextMenuState, ExplorerInlineCreateState } from "./types";
+import type { ExplorerContextMenuState, ExplorerInlineCreateState, RepositoryFileTreeNode } from "./types";
 
 export type ExplorerChildrenLoadOptions = {
   force?: boolean;
@@ -178,10 +178,30 @@ export function useRepositoryFilesExplorer({
   pendingLoadDirsRef.current = pendingLoadDirs;
   repositoryPathRef.current = repositoryPath;
 
+  /** 变更目录追踪：增量 patch 需要知道哪些目录的子节点变了。 */
+  const changedDirKeysRef = useRef<Set<string>>(new Set());
+
   const commitLoadedChildrenByDir = useCallback(
-    (mutate: (prev: Map<string, RepositoryExplorerEntry[]>) => Map<string, RepositoryExplorerEntry[]>) => {
+    (mutate: (prev: Map<string, RepositoryExplorerEntry[]>) => Map<string, RepositoryExplorerEntry[]>, changedDirs?: string[]) => {
       setLoadedChildrenByDir((prev) => {
         const next = capLoadedChildrenMap(mutate(new Map(prev)));
+        // 检测哪些 key 变化了（新增或子节点内容不同）
+        for (const key of next.keys()) {
+          if (!prev.has(key) || prev.get(key) !== next.get(key)) {
+            changedDirKeysRef.current.add(key);
+          }
+        }
+        for (const key of prev.keys()) {
+          if (!next.has(key)) {
+            changedDirKeysRef.current.add(key);
+          }
+        }
+        // 显式传入的 changedDirs 也记录
+        if (changedDirs) {
+          for (const d of changedDirs) {
+            changedDirKeysRef.current.add(d);
+          }
+        }
         loadedChildrenByDirRef.current = next;
         return next;
       });
@@ -208,11 +228,37 @@ export function useRepositoryFilesExplorer({
     return keys;
   }, [loadingDirPath, pendingLoadDirs]);
 
+  const prevTreeRef = useRef<RepositoryFileTreeNode[]>([]);
   const filteredTree = useMemo(() => {
     if (treeStale || !loadedChildrenByDir.has("")) {
+      prevTreeRef.current = [];
       return [];
     }
-    return buildLazyRepositoryFileTree(loadedChildrenByDir);
+    const changedDirs = changedDirKeysRef.current;
+    // 无变化时保持上一次引用
+    if (changedDirs.size === 0 && prevTreeRef.current.length > 0) {
+      return prevTreeRef.current;
+    }
+    // 少量目录变化时使用增量 patch
+    if (prevTreeRef.current.length > 0 && changedDirs.size > 0 && changedDirs.size <= 4) {
+      let tree = prevTreeRef.current;
+      for (const dirKey of changedDirs) {
+        if (dirKey === "") {
+          // 根目录变化 → 全量重建
+          tree = buildLazyRepositoryFileTree(loadedChildrenByDir);
+          break;
+        }
+        tree = patchLazyRepositoryFileTree(tree, loadedChildrenByDir, dirKey);
+      }
+      changedDirs.clear();
+      prevTreeRef.current = tree;
+      return tree;
+    }
+    // 多目录同时变化（刷新/初始化）或首次构建 → 全量重建
+    changedDirs.clear();
+    const tree = buildLazyRepositoryFileTree(loadedChildrenByDir);
+    prevTreeRef.current = tree;
+    return tree;
   }, [childrenMapRevision, loadedChildrenByDir, treeStale]);
 
   const prevSearchQueryRef = useRef("");
@@ -373,6 +419,8 @@ export function useRepositoryFilesExplorer({
     loadInFlightRef.current.clear();
     setLoadingDirPath(null);
     setPendingLoadDirs(new Set());
+    changedDirKeysRef.current.clear();
+    prevTreeRef.current = [];
     setLoading(true);
     try {
       await yieldToPaint();
@@ -410,6 +458,8 @@ export function useRepositoryFilesExplorer({
       loadInFlightRef.current.clear();
       setLoadingDirPath(null);
       setPendingLoadDirs(new Set());
+      changedDirKeysRef.current.clear();
+      prevTreeRef.current = [];
       return;
     }
     setLoadError(null);
@@ -417,6 +467,8 @@ export function useRepositoryFilesExplorer({
     loadInFlightRef.current.clear();
     setLoadingDirPath(null);
     setPendingLoadDirs(new Set());
+    changedDirKeysRef.current.clear();
+    prevTreeRef.current = [];
     const generation = explorerScanGenerationRef.current;
 
     const cachedRoot = getCachedRepositoryExplorerRootChildren(path);

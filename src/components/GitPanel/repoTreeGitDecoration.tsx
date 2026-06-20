@@ -43,3 +43,21 @@ export function RepoTreeGitDirDot({ visible }: RepoTreeGitDirDotProps) {
   }
   return <span className="repo-tree-git-dot" aria-hidden />;
 }
+
+interface RepoTreeGitDirDecorationProps {
+  status: string | null;
+}
+
+/** 目录右侧着色圆点——颜色跟随目录聚合状态。 */
+export function RepoTreeGitDirDecoration({ status }: RepoTreeGitDirDecorationProps) {
+  if (!status) {
+    return null;
+  }
+  return (
+    <span
+      className={`repo-tree-git-dot repo-tree-git-dot--status-${status.toLowerCase()}`}
+      aria-label={`Git ${getStatusSymbol(status)}`}
+      title={`Git ${getStatusSymbol(status)}`}
+    />
+  );
+}

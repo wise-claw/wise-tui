@@ -4,7 +4,7 @@ import { useRepositoryExplorerGitStatus } from "./RepositoryExplorerGitStatusCon
 import { ExplorerInlineCreateRow } from "./ExplorerInlineCreateRow";
 import { ExplorerTreeChevron, ExplorerTreeFolderIcon } from "./explorerTreeChrome";
 import { repositoryTreeDirShouldUpdate } from "./repositoryTreeNodeMemo";
-import { RepoTreeGitDirDot } from "./repoTreeGitDecoration";
+import { RepoTreeGitDirDecoration } from "./repoTreeGitDecoration";
 import { explorerDirKey } from "./repositoryExplorerDirKey";
 import { repositoryTreeDepthIndentPx } from "./repositoryTreeLayout";
 import { setWiseRepositoryFileDragData } from "../../utils/repositoryFileDrag";
@@ -38,7 +38,7 @@ function RepositoryTreeDirNodeInner({
 }: RepositoryTreeDirNodeProps) {
   const { onToggleDir, onSelectNode, onInlineValueChange, onInlineCommit, onInlineCancel } =
     useRepositoryExplorerTreeActions();
-  const { dirHasChanges } = useRepositoryExplorerGitStatus();
+  const { getDirStatus } = useRepositoryExplorerGitStatus();
   const depthIndentPx = repositoryTreeDepthIndentPx(depth);
   const isSelected = selectedPath === node.path;
   const showInlineHere = inlineCreate != null && inlineCreate.parentDir === node.path;
@@ -48,6 +48,7 @@ function RepositoryTreeDirNodeInner({
   const isLoadingChildren = loadingDirKeys.has(nodeDirKey) && childNodes === undefined;
   const showEmptyDirHint =
     isExpanded && !isLoadingChildren && Array.isArray(childNodes) && childNodes.length === 0;
+  const dirStatus = getDirStatus(node.path);
 
   const activateDir = useCallback(() => {
     onSelectNode(node.path, true);
@@ -57,7 +58,7 @@ function RepositoryTreeDirNodeInner({
   return (
     <>
       <div
-        className={`repo-tree-node repo-tree-node--dir${isSelected ? " repo-tree-node--selected" : ""}${isExpanded ? " repo-tree-node--expanded" : ""}`}
+        className={`repo-tree-node repo-tree-node--dir${isSelected ? " repo-tree-node--selected" : ""}${isExpanded ? " repo-tree-node--expanded" : ""}${dirStatus ? ` repo-tree-node--dir--status-${dirStatus.toLowerCase()}` : ""}`}
         data-repo-path={node.path}
         data-repo-is-dir="1"
         draggable
@@ -88,8 +89,8 @@ function RepositoryTreeDirNodeInner({
           expanded={isExpanded}
           className="repo-tree-node-icon repo-tree-node-icon--dir"
         />
-        <span className="repo-tree-node-name">{node.name}</span>
-        <RepoTreeGitDirDot visible={dirHasChanges(node.path)} />
+        <span className={`repo-tree-node-name${dirStatus ? ` repo-tree-node-name--status-${dirStatus.toLowerCase()}` : ""}`}>{node.name}</span>
+        <RepoTreeGitDirDecoration status={dirStatus} />
       </div>
       {showChildren ? (
         <div className="repo-tree-children">

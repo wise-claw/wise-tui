@@ -15,7 +15,7 @@ import { ExplorerInlineCreateRow } from "./ExplorerInlineCreateRow";
 import { ExplorerSearchResultList } from "./ExplorerSearchResultList";
 import { RepositoryExplorerTreeActionsProvider } from "./RepositoryExplorerTreeActionsContext";
 import { RepositoryExplorerGitStatusProvider } from "./RepositoryExplorerGitStatusContext";
-import { flattenRepositoryTreeRows } from "./repositoryTreeFlatten";
+import { flattenRepositoryTreeRows, type FlatRepositoryTreeRow } from "./repositoryTreeFlatten";
 import { REPOSITORY_TREE_ROW_HEIGHT_PX } from "./repositoryTreeLayout";
 import { RepositoryVirtualTreeList } from "./RepositoryVirtualTreeList";
 import { MIN_EXPLORER_SEARCH_QUERY_LEN } from "./fileTree";
@@ -82,6 +82,7 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
       generation: explorerGitStatus.generation,
       editorDirtyRevision: editorDirtyPaths.generation,
       getFileStatus: explorerGitStatus.getFileStatus,
+      getDirStatus: explorerGitStatus.getDirStatus,
       dirHasChanges: (path: string) =>
         explorerGitStatus.dirHasChanges(path) || editorDirtyPaths.dirHasDirty(path),
       isEditorDirty: editorDirtyPaths.isDirty,
@@ -112,8 +113,6 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
     relieveSidePanelPriority: true,
     relieveFileTreePriority: true,
   });
-  const pointerHoverPath = useRepositoryExplorerPointerHover(scrollRegionRef, !searchActive);
-
   const flatTreeRows = useMemo(
     () =>
       flattenRepositoryTreeRows({
@@ -130,6 +129,10 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
       explorer.childrenMapRevision,
     ],
   );
+
+  const pointerHoverRowsRef = useRef<readonly FlatRepositoryTreeRow[] | null>(flatTreeRows);
+  pointerHoverRowsRef.current = flatTreeRows;
+  const pointerHoverPath = useRepositoryExplorerPointerHover(scrollRegionRef, !searchActive, pointerHoverRowsRef);
 
   const treeActions = useMemo(
     () => ({
@@ -150,18 +153,24 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
     ],
   );
 
+  const pathToRowIndex = useMemo(() => {
+    const map = new Map<string, number>();
+    for (let i = 0; i < flatTreeRows.length; i++) {
+      const row = flatTreeRows[i];
+      if (row.kind === "file" || row.kind === "dir") {
+        map.set(row.node.path, i);
+      }
+    }
+    return map;
+  }, [flatTreeRows]);
+
   useEffect(() => {
     const selectedPath = explorer.selected?.path?.trim();
     if (!selectedPath || searchActive) {
       return;
     }
-    const index = flatTreeRows.findIndex((row) => {
-      if (row.kind === "file" || row.kind === "dir") {
-        return row.node.path === selectedPath;
-      }
-      return false;
-    });
-    if (index < 0) {
+    const index = pathToRowIndex.get(selectedPath);
+    if (index === undefined) {
       return;
     }
     const el = scrollRegionRef.current;
@@ -175,7 +184,7 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
     } else if (rowBottom > el.scrollTop + el.clientHeight) {
       el.scrollTop = rowBottom - el.clientHeight;
     }
-  }, [explorer.selected?.path, flatTreeRows, searchActive]);
+  }, [explorer.selected?.path, pathToRowIndex, searchActive]);
 
   if (!trimmedRepositoryPath) {
     return (

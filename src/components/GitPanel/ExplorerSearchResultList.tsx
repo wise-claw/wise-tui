@@ -1,7 +1,7 @@
 import { memo } from "react";
 import { ExplorerTreeFileIcon, ExplorerTreeFolderIcon } from "./explorerTreeChrome";
 import { useRepositoryExplorerGitStatus } from "./RepositoryExplorerGitStatusContext";
-import { RepoTreeGitDirDot, RepoTreeGitFileDecoration } from "./repoTreeGitDecoration";
+import { RepoTreeGitDirDecoration, RepoTreeGitFileDecoration } from "./repoTreeGitDecoration";
 import type { ExplorerSearchResultRow } from "./fileTree";
 import type { GitPanelOpenFileOptions } from "./types";
 
@@ -24,10 +24,10 @@ function ExplorerSearchResultRowItem({
   onSelect: ExplorerSearchResultListProps["onSelect"];
   onOpenFile?: ExplorerSearchResultListProps["onOpenFile"];
 }) {
-  const { getFileStatus, dirHasChanges, isEditorDirty } = useRepositoryExplorerGitStatus();
+  const { getFileStatus, getDirStatus, isEditorDirty } = useRepositoryExplorerGitStatus();
   const parentLabel = row.parentPath || "";
   const gitStatus = row.isDir ? null : getFileStatus(row.path);
-  const showGitDot = row.isDir ? dirHasChanges(row.path) : false;
+  const dirStatus = row.isDir ? getDirStatus(row.path) : null;
   const editorDirty = !row.isDir && isEditorDirty(row.path);
   return (
     <div
@@ -55,10 +55,10 @@ function ExplorerSearchResultRowItem({
       )}
       <span className="repo-search-result-row-text">
         {parentLabel ? <span className="repo-search-result-row-parent">{parentLabel}/</span> : null}
-        <span className="repo-search-result-row-name">{row.name}</span>
+        <span className={`repo-search-result-row-name${gitStatus ? ` repo-search-result-row-name--status-${gitStatus.toLowerCase()}` : ""}${dirStatus ? ` repo-search-result-row-name--status-${dirStatus.toLowerCase()}` : ""}${!gitStatus && !dirStatus && editorDirty ? " repo-search-result-row-name--editor-dirty" : ""}`}>{row.name}</span>
       </span>
       {row.isDir ? (
-        <RepoTreeGitDirDot visible={showGitDot} />
+        <RepoTreeGitDirDecoration status={dirStatus} />
       ) : (
         <RepoTreeGitFileDecoration status={gitStatus} editorDirty={editorDirty} />
       )}

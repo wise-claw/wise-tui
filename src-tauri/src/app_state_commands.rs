@@ -5,6 +5,7 @@ use crate::wise_paths::{
     wise_legacy_projects_json, wise_repositories_json, write_file_atomic,
 };
 use crate::{git_commands, wise_db};
+use rayon::prelude::*;
 use rusqlite::params;
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
@@ -380,9 +381,14 @@ pub(crate) fn save_session_tabs(
     write_file_atomic(&path, &json)
 }
 
+/// 为每个仓库补齐当前 git 分支。
+///
+/// 各仓库的 `git2::Repository::open` + `head` 互相独立，使用 rayon 并行执行，
+/// 将 N 个仓库的串行读取收敛为接近单仓库耗时。该函数在 `list_repositories`
+/// （应用启动及每次仓库增删改）的关键路径上调用，并行化可显著缩短可交互等待。
 fn enrich_repositories_with_branch(repositories: Vec<StoredRepository>) -> Vec<StoredRepository> {
     repositories
-        .into_iter()
+        .into_par_iter()
         .map(|mut p| {
             p.branch = git_commands::get_git_branch(&p.path);
             p

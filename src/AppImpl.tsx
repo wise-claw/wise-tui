@@ -571,19 +571,24 @@ export default function App() {
   const [workflowVerdictMode, setWorkflowVerdictMode] = useState<WorkflowVerdictMode>(DEFAULT_WORKFLOW_VERDICT_MODE);
   useEffect(() => {
     let cancelled = false;
-    void (async () => {
-      try {
-        const raw = (await getAppSetting(WORKFLOW_VERDICT_MODE_STORAGE_KEY))?.trim();
-        if (cancelled || !raw) return;
-        if (raw === "heuristic" || raw === "structured_only" || raw === "structured_plus_extractor") {
-          setWorkflowVerdictMode(raw);
+    // 判定模式仅在工作流执行时使用，推迟到空闲期加载，避免与首屏渲染争抢主线程。
+    const cancelIdle = runWhenIdle(() => {
+      if (cancelled) return;
+      void (async () => {
+        try {
+          const raw = (await getAppSetting(WORKFLOW_VERDICT_MODE_STORAGE_KEY))?.trim();
+          if (cancelled || !raw) return;
+          if (raw === "heuristic" || raw === "structured_only" || raw === "structured_plus_extractor") {
+            setWorkflowVerdictMode(raw);
+          }
+        } catch {
+          // ignore setting read errors, keep default mode
         }
-      } catch {
-        // ignore setting read errors, keep default mode
-      }
-    })();
+      })();
+    }, { timeoutMs: 2000 });
     return () => {
       cancelled = true;
+      cancelIdle();
     };
   }, []);
 
@@ -788,20 +793,25 @@ export default function App() {
 
   useEffect(() => {
     let cancelled = false;
-    void (async () => {
-      try {
-        const loaded = await loadClaudeConcurrencyLimits();
-        if (!cancelled) {
-          setClaudeConcurrencyLimitsMap(loaded);
+    // 并发上限仅在 spawn Claude 时使用，推迟到空闲期加载，避免与首屏渲染争抢主线程。
+    const cancelIdle = runWhenIdle(() => {
+      if (cancelled) return;
+      void (async () => {
+        try {
+          const loaded = await loadClaudeConcurrencyLimits();
+          if (!cancelled) {
+            setClaudeConcurrencyLimitsMap(loaded);
+          }
+        } catch {
+          if (!cancelled) {
+            setClaudeConcurrencyLimitsMap({});
+          }
         }
-      } catch {
-        if (!cancelled) {
-          setClaudeConcurrencyLimitsMap({});
-        }
-      }
-    })();
+      })();
+    }, { timeoutMs: 2000 });
     return () => {
       cancelled = true;
+      cancelIdle();
     };
   }, []);
 

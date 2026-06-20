@@ -211,8 +211,12 @@ export function useRepositoryList() {
         setProjects(sortedProjects);
         setActiveWorkspaceFocus(startup.workspaceFocus);
         setActiveProjectId(startup.projectId);
-        await persistActiveProjectId(startup.projectId);
         setActiveRepositoryId(startup.repositoryId);
+        // activeProjectId 持久化是启动恢复后的兜底写入，与首屏可交互态解耦：
+        // 不阻塞 setLoading(false)，避免一次 IPC 拖慢侧栏 / 欢迎屏 / 启动会话恢复。
+        void persistActiveProjectId(startup.projectId).catch(() => {
+          /* 持久化失败不影响启动恢复 */
+        });
       } finally {
         setLoading(false);
       }

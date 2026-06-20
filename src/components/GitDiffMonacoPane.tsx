@@ -40,6 +40,7 @@ export function GitDiffMonacoPane({
 }: Props) {
   const modifiedListenerRef = useRef<{ dispose: () => void } | null>(null);
   const trackpadGuardRef = useRef<{ dispose: () => void } | null>(null);
+  const diffEditorRef = useRef<MonacoEditorNamespace.IStandaloneDiffEditor | null>(null);
   const onModifiedChangeRef = useRef(onModifiedChange);
   onModifiedChangeRef.current = onModifiedChange;
   const [monacoApi, setMonacoApi] = useState<typeof Monaco | null>(null);
@@ -74,8 +75,30 @@ export function GitDiffMonacoPane({
       modifiedListenerRef.current = null;
       trackpadGuardRef.current?.dispose();
       trackpadGuardRef.current = null;
+      diffEditorRef.current = null;
     };
   }, [relativePath]);
+
+  // 用 ResizeObserver 替代 automaticLayout：仅在容器尺寸真正变化时调用 diffEditor.layout()。
+  useEffect(() => {
+    const diffEditor = diffEditorRef.current;
+    if (!diffEditor) return;
+    const container = diffEditor.getContainerDomNode()?.parentElement;
+    if (!container) return;
+    let lastWidth = container.clientWidth;
+    let lastHeight = container.clientHeight;
+    const observer = new ResizeObserver(() => {
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+      if (width !== lastWidth || height !== lastHeight) {
+        lastWidth = width;
+        lastHeight = height;
+        diffEditor.layout();
+      }
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [diffEditors]);
 
   return (
     <Suspense
@@ -116,9 +139,12 @@ export function GitDiffMonacoPane({
               modifiedListenerRef.current?.dispose();
               modifiedListenerRef.current = null;
               trackpadGuardRef.current?.dispose();
+              diffEditorRef.current = diffEditor;
               const originalEditor = diffEditor.getOriginalEditor();
               const modifiedEditor = diffEditor.getModifiedEditor();
               setDiffEditors({ original: originalEditor, modified: modifiedEditor });
+              // automaticLayout 已移除：挂载后立即 layout 一次，后续由 ResizeObserver 接管。
+              diffEditor.layout();
               const guards = [
                 installMonacoTrackpadSelectionGuard(originalEditor),
                 installMonacoTrackpadSelectionGuard(modifiedEditor),

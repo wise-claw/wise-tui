@@ -19,6 +19,8 @@ export function useGitRepositoryExplorerStatus(repositoryPath: string) {
       generation,
       getFileStatus: (path: string) =>
         trimmedPath ? (index.fileStatusByPath.get(path) ?? null) : null,
+      getDirStatus: (path: string) =>
+        trimmedPath ? (index.dirStatusByPath.get(path) ?? null) : null,
       dirHasChanges: (path: string) =>
         trimmedPath ? index.dirsWithChanges.has(path) : false,
     }),

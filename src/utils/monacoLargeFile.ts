@@ -1,6 +1,9 @@
 import type { editor } from "monaco-editor";
 import { WISE_MONACO_EDITOR_OPTIONS } from "./wiseMonacoEditorOptions";
 
+/** 超过此字符数视为中等文件，关闭出现高亮/选区高亮等较重的实时特性。 */
+export const MONACO_MEDIUM_FILE_CHAR_THRESHOLD = 50 * 1024;
+
 /** 超过此字符数视为大文件，关闭部分 Monaco 特性并延后 TS 依赖同步。 */
 export const MONACO_LARGE_FILE_CHAR_THRESHOLD = 128 * 1024;
 
@@ -10,11 +13,12 @@ export const MONACO_HUGE_FILE_CHAR_THRESHOLD = 512 * 1024;
 /** 超大文件 onChange 合并写入 React 状态的间隔（毫秒）。 */
 export const MONACO_LARGE_FILE_CHANGE_DEBOUNCE_MS = 180;
 
-export type MonacoEditorOptionsBucket = "small" | "large" | "huge";
+export type MonacoEditorOptionsBucket = "small" | "medium" | "large" | "huge";
 
 export function monacoEditorOptionsBucket(length: number): MonacoEditorOptionsBucket {
   if (length >= MONACO_HUGE_FILE_CHAR_THRESHOLD) return "huge";
   if (length >= MONACO_LARGE_FILE_CHAR_THRESHOLD) return "large";
+  if (length >= MONACO_MEDIUM_FILE_CHAR_THRESHOLD) return "medium";
   return "small";
 }
 
@@ -51,8 +55,18 @@ export function resolveWiseMonacoEditorOptions(
 export function resolveWiseMonacoEditorOptionsFromLength(
   length: number,
 ): editor.IStandaloneEditorConstructionOptions {
-  if (length < MONACO_LARGE_FILE_CHAR_THRESHOLD) {
+  if (length < MONACO_MEDIUM_FILE_CHAR_THRESHOLD) {
     return WISE_MONACO_EDITOR_OPTIONS;
+  }
+
+  // 中等文件（50KB-128KB）：仅关闭出现高亮/选区高亮等实时渲染开销大的特性，
+  // 保留折行、折叠、校验等正常编辑体验。
+  if (length < MONACO_LARGE_FILE_CHAR_THRESHOLD) {
+    return {
+      ...WISE_MONACO_EDITOR_OPTIONS,
+      occurrencesHighlight: "off",
+      selectionHighlight: false,
+    };
   }
 
   const huge = length >= MONACO_HUGE_FILE_CHAR_THRESHOLD;

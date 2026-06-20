@@ -110,7 +110,9 @@ export function RepositoryFileEditorTabSurface({
     () => resolveWiseMonacoEditorOptionsFromLength(contentLength),
     [optionsBucket],
   );
-  const largeFile = optionsBucket !== "small";
+  // medium 文件（50KB-128KB）仅关闭高亮特性，仍走受控 value 路径，
+  // 不进入大文件的 defaultValue/延后注入流程。
+  const largeFile = optionsBucket === "large" || optionsBucket === "huge";
   const hugeFile = optionsBucket === "huge";
 
   const [monacoSurfaceReady, setMonacoSurfaceReady] = useState(true);
@@ -212,6 +214,43 @@ export function RepositoryFileEditorTabSurface({
     [],
   );
 
+  // 非活跃 tab 不挂载 Monaco 实例：切走时主动清理编辑器引用与监听，避免后续 effect
+  // 操作已卸载的编辑器；切回时由 onMount 重新建立引用与内容注入。
+  useEffect(() => {
+    if (isActive) return;
+    contentInjectionCancelRef.current?.();
+    contentInjectionCancelRef.current = null;
+    monacoMountGuardRef.current?.dispose();
+    monacoMountGuardRef.current = null;
+    editorRef.current = null;
+    monacoRef.current = null;
+    lastInjectedContentVersionRef.current = null;
+    setMonacoEditorSurface(null);
+  }, [isActive]);
+
+  // 用 ResizeObserver 替代 automaticLayout：仅在活跃 tab 且容器尺寸真正变化时
+  // 调用 editor.layout()，避免每个实例持续轮询容器尺寸。
+  useEffect(() => {
+    if (!isActive) return;
+    const editor = editorRef.current;
+    if (!editor) return;
+    const container = editor.getDomNode()?.parentElement;
+    if (!container) return;
+    let lastWidth = container.clientWidth;
+    let lastHeight = container.clientHeight;
+    const observer = new ResizeObserver(() => {
+      const width = container.clientWidth;
+      const height = container.clientHeight;
+      if (width !== lastWidth || height !== lastHeight) {
+        lastWidth = width;
+        lastHeight = height;
+        editor.layout();
+      }
+    });
+    observer.observe(container);
+    return () => observer.disconnect();
+  }, [isActive, monacoEditorSurface]);
+
   const handleMonacoMount = useCallback(
     (editor: MonacoEditorNamespace.IStandaloneCodeEditor, monaco: typeof Monaco) => {
       monacoMountGuardRef.current?.dispose();
@@ -226,19 +265,24 @@ export function RepositoryFileEditorTabSurface({
       editorRef.current = editor;
       monacoRef.current = monaco;
       setMonacoEditorSurface({ editor, monaco });
+      // automaticLayout 已移除：挂载后立即 layout 一次以匹配容器尺寸，后续由 ResizeObserver 接管。
+      editor.layout();
+      // 用 tabRef.current 而非闭包 tab：本回调为 useCallback([]) 固定闭包，
+      // 非活跃→活跃会重新挂载，需读取最新 tab（content 可能已被外部刷新更新）。
+      const currentTab = tabRef.current;
       const reveal = () => {
-        revealEditorLineFocus(editor, tab, lastAppliedFocusRef, isActiveRef.current);
+        revealEditorLineFocus(editor, currentTab, lastAppliedFocusRef, isActiveRef.current);
       };
-      if (shouldInjectMonacoContentAfterMount(tab.content.length)) {
+      if (shouldInjectMonacoContentAfterMount(currentTab.content.length)) {
         contentInjectionCancelRef.current?.();
         contentInjectionCancelRef.current = scheduleMonacoLargeFileContentInjection(
           editor,
-          tab.content,
+          currentTab.content,
           reveal,
         );
         return;
       }
-      if (isMonacoLargeFileContent(tab.content)) {
+      if (isMonacoLargeFileContent(currentTab.content)) {
         runWhenIdle(reveal, { timeoutMs: 400 });
       } else {
         window.requestAnimationFrame(reveal);
@@ -266,20 +310,22 @@ export function RepositoryFileEditorTabSurface({
         className={`app-file-editor-tab-surface${isActive ? " app-file-editor-tab-surface--active" : ""}`}
         aria-hidden={!isActive}
       >
-        <GitDiffMonacoPane
-          relativePath={tab.relativePath}
-          original={tab.diffOriginal}
-          modified={tab.content}
-          language={language}
-          readOnly={
-            tab.gitDiffSection === "staged" ||
-            Boolean(tab.gitCommitSha) ||
-            Boolean(tab.gitCommitCompare)
-          }
-          dark={dark}
-          activeSessionId={activeSessionId}
-          onModifiedChange={(next) => onTabContentChange(tab.relativePath, next)}
-        />
+        {isActive ? (
+          <GitDiffMonacoPane
+            relativePath={tab.relativePath}
+            original={tab.diffOriginal}
+            modified={tab.content}
+            language={language}
+            readOnly={
+              tab.gitDiffSection === "staged" ||
+              Boolean(tab.gitCommitSha) ||
+              Boolean(tab.gitCommitCompare)
+            }
+            dark={dark}
+            activeSessionId={activeSessionId}
+            onModifiedChange={(next) => onTabContentChange(tab.relativePath, next)}
+          />
+        ) : null}
       </div>
     );
   }
@@ -325,50 +371,52 @@ export function RepositoryFileEditorTabSurface({
             sessionId={activeSessionId}
           />
         ) : null}
-        {!monacoSurfaceReady ? (
-          <div className="app-file-editor-loading">
-            <Spin size="small" tip="准备编辑器…" />
-          </div>
-        ) : (
-          <Suspense
-            fallback={
-              <div className="app-file-editor-loading">
-                <Spin size="small" />
-              </div>
-            }
-          >
-            <MonacoEditor
-              key={`${tab.relativePath}:${language}`}
-              className="app-file-editor-monaco"
-              height="100%"
-              path={editorPath}
-              defaultLanguage={language}
-              language={language}
-              {...(hugeFile
-                ? { defaultValue: "" }
-                : largeFile
-                  ? { defaultValue: tab.content }
-                  : { value: tab.content })}
-              beforeMount={(monaco) => {
-                configureWiseMonacoTypeScript(monaco);
-                if (repositoryPath && isTypeScriptLikeRepositoryPath(tab.relativePath)) {
-                  void ensureRepositoryTypeScriptEnvironment(monaco, repositoryPath);
-                }
-              }}
-              onMount={(editor, monaco) => {
-                handleMonacoMount(editor, monaco);
-              }}
-              onChange={(value) => onTabContentChange(tab.relativePath, value ?? "")}
-              theme={dark ? "vs-dark" : "vs"}
-              options={editorOptions}
-              loading={
+        {isActive ? (
+          !monacoSurfaceReady ? (
+            <div className="app-file-editor-loading">
+              <Spin size="small" tip="准备编辑器…" />
+            </div>
+          ) : (
+            <Suspense
+              fallback={
                 <div className="app-file-editor-loading">
                   <Spin size="small" />
                 </div>
               }
-            />
-          </Suspense>
-        )}
+            >
+              <MonacoEditor
+                key={`${tab.relativePath}:${language}`}
+                className="app-file-editor-monaco"
+                height="100%"
+                path={editorPath}
+                defaultLanguage={language}
+                language={language}
+                {...(hugeFile
+                  ? { defaultValue: "" }
+                  : largeFile
+                    ? { defaultValue: tab.content }
+                    : { value: tab.content })}
+                beforeMount={(monaco) => {
+                  configureWiseMonacoTypeScript(monaco);
+                  if (repositoryPath && isTypeScriptLikeRepositoryPath(tab.relativePath)) {
+                    void ensureRepositoryTypeScriptEnvironment(monaco, repositoryPath);
+                  }
+                }}
+                onMount={(editor, monaco) => {
+                  handleMonacoMount(editor, monaco);
+                }}
+                onChange={(value) => onTabContentChange(tab.relativePath, value ?? "")}
+                theme={dark ? "vs-dark" : "vs"}
+                options={editorOptions}
+                loading={
+                  <div className="app-file-editor-loading">
+                    <Spin size="small" />
+                  </div>
+                }
+              />
+            </Suspense>
+          )
+        ) : null}
       </div>
     </div>
   );

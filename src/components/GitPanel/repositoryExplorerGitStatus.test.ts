@@ -42,6 +42,28 @@ describe("buildExplorerGitStatusIndex", () => {
     const index = buildExplorerGitStatusIndex(null);
     expect(index.fileStatusByPath.size).toBe(0);
     expect(index.dirsWithChanges.size).toBe(0);
+    expect(index.dirStatusByPath.size).toBe(0);
+  });
+
+  it("computes dir status by aggregating child severity", () => {
+    const index = buildExplorerGitStatusIndex({
+      ...emptyStatus,
+      unstaged: [
+        { path: "src/cli/ask.ts", status: "A", additions: 1, deletions: 0 },
+        { path: "src/util.ts", status: "M", additions: 0, deletions: 1 },
+      ],
+    });
+    expect(index.dirStatusByPath.get("src")).toBe("M");
+    expect(index.dirStatusByPath.get("src/cli")).toBe("A");
+    // D 取最高优先级
+    const index2 = buildExplorerGitStatusIndex({
+      ...emptyStatus,
+      unstaged: [
+        { path: "src/a.ts", status: "M", additions: 0, deletions: 0 },
+        { path: "src/b.ts", status: "D", additions: 0, deletions: 0 },
+      ],
+    });
+    expect(index2.dirStatusByPath.get("src")).toBe("D");
   });
 });
 

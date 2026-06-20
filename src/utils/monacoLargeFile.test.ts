@@ -5,6 +5,7 @@ import {
   maxMonacoContentLength,
   MONACO_HUGE_FILE_CHAR_THRESHOLD,
   MONACO_LARGE_FILE_CHAR_THRESHOLD,
+  MONACO_MEDIUM_FILE_CHAR_THRESHOLD,
   monacoEditorOptionsBucket,
   resolveWiseMonacoEditorOptions,
   shouldDeferMonacoEditorMount,
@@ -45,6 +46,15 @@ describe("monacoLargeFile", () => {
     expect(huge.stopRenderingLineAfter).toBe(10000);
   });
 
+  test("turns off highlight features for medium files", () => {
+    const medium = resolveWiseMonacoEditorOptions("x".repeat(MONACO_MEDIUM_FILE_CHAR_THRESHOLD));
+    // 中等文件保留正常编辑体验，仅关闭出现/选区高亮。
+    expect(medium.occurrencesHighlight).toBe("off");
+    expect(medium.selectionHighlight).toBe(false);
+    expect(medium.wordWrap).toBe("on");
+    expect(medium.largeFileOptimizations).toBeUndefined();
+  });
+
   test("maxMonacoContentLength picks the largest body", () => {
     expect(maxMonacoContentLength("abc", "abcdef")).toBe(6);
   });
@@ -53,7 +63,9 @@ describe("monacoLargeFile", () => {
     expect(shouldDeferMonacoEditorMount(MONACO_LARGE_FILE_CHAR_THRESHOLD)).toBe(true);
     expect(shouldSkipMonacoTypeScriptModelSync(MONACO_LARGE_FILE_CHAR_THRESHOLD)).toBe(true);
     expect(shouldInjectMonacoContentAfterMount(MONACO_HUGE_FILE_CHAR_THRESHOLD)).toBe(true);
-    expect(monacoEditorOptionsBucket(MONACO_LARGE_FILE_CHAR_THRESHOLD - 1)).toBe("small");
+    expect(monacoEditorOptionsBucket(MONACO_MEDIUM_FILE_CHAR_THRESHOLD - 1)).toBe("small");
+    expect(monacoEditorOptionsBucket(MONACO_MEDIUM_FILE_CHAR_THRESHOLD)).toBe("medium");
+    expect(monacoEditorOptionsBucket(MONACO_LARGE_FILE_CHAR_THRESHOLD - 1)).toBe("medium");
     expect(monacoEditorOptionsBucket(MONACO_LARGE_FILE_CHAR_THRESHOLD)).toBe("large");
     expect(monacoEditorOptionsBucket(MONACO_HUGE_FILE_CHAR_THRESHOLD)).toBe("huge");
   });

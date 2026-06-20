@@ -182,6 +182,24 @@
   color: var(--ant-color-text, rgba(0, 0, 0, 0.88));
 }
 
+.repo-search-result-row-name--status-a {
+  color: color-mix(in srgb, #73c991 78%, var(--ant-color-text));
+}
+
+.repo-search-result-row-name--status-m,
+.repo-search-result-row-name--editor-dirty {
+  color: color-mix(in srgb, #e2c08d 78%, var(--ant-color-text));
+}
+
+.repo-search-result-row-name--status-d {
+  color: color-mix(in srgb, #f85149 78%, var(--ant-color-text));
+}
+
+.repo-search-result-row-name--status-r,
+.repo-search-result-row-name--status-t {
+  color: var(--ant-color-text-secondary);
+}
+
 .repo-search-result-row-icon {
   flex-shrink: 0;
 }
@@ -2410,6 +2428,61 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-file
   border-radius: 50%;
   background: #e2c08d;
   opacity: 0.92;
+}
+
+/* 目录圆点着色——跟随聚合状态 */
+.repo-tree-git-dot--status-a {
+  background: #73c991;
+}
+
+.repo-tree-git-dot--status-m {
+  background: #e2c08d;
+}
+
+.repo-tree-git-dot--status-d {
+  background: #f85149;
+}
+
+.repo-tree-git-dot--status-r,
+.repo-tree-git-dot--status-t,
+.repo-tree-git-dot--status-\? {
+  background: var(--ant-color-text-quaternary);
+}
+
+/* 文件名/目录名 Git 状态着色 */
+.repo-tree-file-name--status-a {
+  color: color-mix(in srgb, #73c991 78%, var(--ant-color-text));
+}
+
+.repo-tree-file-name--status-m,
+.repo-tree-file-name--editor-dirty {
+  color: color-mix(in srgb, #e2c08d 78%, var(--ant-color-text));
+}
+
+.repo-tree-file-name--status-d {
+  color: color-mix(in srgb, #f85149 78%, var(--ant-color-text));
+}
+
+.repo-tree-file-name--status-r,
+.repo-tree-file-name--status-t {
+  color: var(--ant-color-text-secondary);
+}
+
+.repo-tree-node-name--status-a {
+  color: color-mix(in srgb, #73c991 78%, var(--ant-color-text));
+}
+
+.repo-tree-node-name--status-m {
+  color: color-mix(in srgb, #e2c08d 78%, var(--ant-color-text));
+}
+
+.repo-tree-node-name--status-d {
+  color: color-mix(in srgb, #f85149 78%, var(--ant-color-text));
+}
+
+.repo-tree-node-name--status-r,
+.repo-tree-node-name--status-t {
+  color: var(--ant-color-text-secondary);
 }
 
 .repo-tree-node--dir {
