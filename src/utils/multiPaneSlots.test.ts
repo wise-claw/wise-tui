@@ -76,7 +76,37 @@ describe("multiPaneSlots", () => {
     const next = assignSessionToNormalizedExtraPanes(4, extraPanes, "s-new", () => slot({ slotId: "x" }), 2);
     expect(next).toHaveLength(3);
     expect(next[1]?.sessionId).toBe("s-new");
+    expect(next[1]?.executionEngine).toBeUndefined();
     expect(next[2]?.sessionId).toBeNull();
+  });
+
+  test("assignSessionToNormalizedExtraPanes clears stale slot runtime when primary unset", () => {
+    const extraPanes: PaneSlot[] = [
+      slot({ slotId: "a", executionEngine: "codex", claudeProxyRoute: undefined }),
+    ];
+    const next = assignSessionToNormalizedExtraPanes(
+      2,
+      extraPanes,
+      "s-new",
+      () => slot({ slotId: "x" }),
+      0,
+      null,
+    );
+    expect(next[0]?.executionEngine).toBeUndefined();
+    expect(next[0]?.claudeProxyRoute).toBeUndefined();
+  });
+
+  test("assignSessionToNormalizedExtraPanes inherits primary pane runtime", () => {
+    const extraPanes: PaneSlot[] = [slot({ slotId: "a" }), slot({ slotId: "b" })];
+    const next = assignSessionToNormalizedExtraPanes(
+      2,
+      extraPanes,
+      "s-new",
+      () => slot({ slotId: "x" }),
+      0,
+      { executionEngine: "codex" },
+    );
+    expect(next[0]?.executionEngine).toBe("codex");
   });
 
   test("assignSessionToNormalizedExtraPanes pads slots when paneCount increases", () => {

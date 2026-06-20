@@ -27,7 +27,7 @@ import {
 import type { ClaudeSessionConnectionKind } from "../../constants/claudeConnection";
 import type { SessionExecutionEngine } from "../../types";
 import type { RoleTagOption, RepositoryMentionOption } from "../../utils/projectRoleTagOptions";
-import { paneGridDimensions, type PaneCount, type PaneSlot } from "../../constants/mainLayoutWidths";
+import { paneGridDimensions, type PaneCount, type PaneSlot, paneSlotRuntimeOverride } from "../../constants/mainLayoutWidths";
 import { useInViewActive } from "../../hooks/useInView";
 import { useDockSlice } from "../../hooks/useDockSlice";
 import { isProjectRootSessionDisplayName } from "../../utils/repositoryMainSessionBinding";
@@ -600,10 +600,7 @@ const MultiPaneExtraPaneCell = memo(
             companionMessageListWindow={companionMessageListWindow}
             paneIndex={paneIdx + 1}
             paneCount={paneCount}
-            paneRuntimeOverride={{
-              executionEngine: slot.executionEngine,
-              claudeProxyRoute: slot.claudeProxyRoute,
-            }}
+            paneRuntimeOverride={paneSlotRuntimeOverride(slot)}
             onUpdatePaneRuntimeOverride={shared.onUpdatePaneRuntimeOverride}
           />
         </div>
@@ -716,12 +713,16 @@ const MultiPaneExtraPaneCell = memo(
                   if (isCreating || !selected) return;
                   onPickerOpenChange(paneIdx, false);
                   if (selected.startsWith("repo:")) {
-                    if (onPaneRepositorySelect) {
+                    const repoId = Number(selected.slice(5));
+                    const selectedRepo = (shared.repositories ?? []).find((repo) => repo.id === repoId);
+                    if (selectedRepo && onNewPaneSession) {
                       runPaneCreateTask(
-                        Promise.resolve(onPaneRepositorySelect(paneIdx, Number(selected.slice(5)))),
+                        Promise.resolve(onNewPaneSession(paneIdx, selectedRepo)),
                         paneIdx,
                         setCreatingPaneSlots,
                       );
+                    } else {
+                      message.warning("未找到所选仓库");
                     }
                     return;
                   }

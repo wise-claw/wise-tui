@@ -1,4 +1,6 @@
 import type { PaneCount, PaneSlot } from "../constants/mainLayoutWidths";
+import type { PaneRuntimeOverride } from "../types/paneRuntimeOverride";
+import { companionPaneRuntimeFromPrimary } from "../types/paneRuntimeOverride";
 
 export function extraPanesLayoutFingerprint(panes: readonly PaneSlot[]): string {
   return panes
@@ -75,7 +77,28 @@ export interface PlanNextPaneSlotPlacementResult {
   slotIndex: number;
 }
 
-/** 按行优先网格为下一窗格分配槽位（与多屏 2×2 等布局一致）。 */
+/** 额外窗格绑定隔离执行会话，并默认继承主窗格执行环境覆盖。 */
+export function assignCompanionSessionToPaneSlot(
+  slot: PaneSlot,
+  sessionId: string,
+  repositoryId: number | null,
+  primaryPaneRuntime?: PaneRuntimeOverride | null,
+): PaneSlot {
+  const inherited = companionPaneRuntimeFromPrimary(primaryPaneRuntime);
+  const next: PaneSlot = {
+    slotId: slot.slotId,
+    sessionId,
+    repositoryId,
+  };
+  if (inherited.executionEngine) {
+    next.executionEngine = inherited.executionEngine;
+  }
+  if (inherited.claudeProxyRoute) {
+    next.claudeProxyRoute = inherited.claudeProxyRoute;
+  }
+  return next;
+}
+
 /** 在已对齐长度的 extraPanes 上写入 session，优先第一个空槽。 */
 export function assignSessionToNormalizedExtraPanes(
   paneCount: PaneCount,
@@ -83,13 +106,19 @@ export function assignSessionToNormalizedExtraPanes(
   sessionId: string,
   createSlot: () => PaneSlot,
   fallbackSlotIndex: number,
+  primaryPaneRuntime?: PaneRuntimeOverride | null,
 ): PaneSlot[] {
   const base = normalizeExtraPanesToPaneCount(paneCount, extraPanes, createSlot);
   const slotIndex =
     findFirstEmptyExtraPaneIndex(base) ?? Math.min(fallbackSlotIndex, Math.max(0, base.length - 1));
   const next = base.map((slot) => ({ ...slot }));
   if (next[slotIndex]) {
-    next[slotIndex] = { ...next[slotIndex], sessionId, repositoryId: null };
+    next[slotIndex] = assignCompanionSessionToPaneSlot(
+      next[slotIndex],
+      sessionId,
+      null,
+      primaryPaneRuntime,
+    );
   }
   return next;
 }

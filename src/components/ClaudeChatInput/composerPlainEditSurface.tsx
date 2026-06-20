@@ -200,10 +200,11 @@ export function ComposerPlainEditSurface({
       return value;
     },
     getCursor: () => {
-      const ed = aiChatRef.current?.getEditor?.();
+      const rawEd = aiChatRef.current?.getEditor?.();
+      const ed = rawEd as ComposerProseMirrorEditor | null | undefined;
       if (ed?.state?.doc) {
         try {
-          const from = ed.state.selection.from;
+          const from = ed.state.selection?.from ?? ed.state.doc.content.size;
           return ed.state.doc.textBetween(0, from, "\n").length;
         } catch {
           return cursorRef.current;
@@ -232,7 +233,8 @@ export function ComposerPlainEditSurface({
 
   const applySemiContentChange = useCallback(
     (contents: Content[]) => {
-      const ed = aiChatRef.current?.getEditor?.();
+      const rawEd = aiChatRef.current?.getEditor?.();
+      const ed = rawEd as ComposerProseMirrorEditor | null | undefined;
       let plain = normalizeComposerEditorPlain(contentsToPlain(contents));
       if (ed) {
         try {
@@ -256,7 +258,8 @@ export function ComposerPlainEditSurface({
       let cursor = plain.length;
       if (ed?.state?.doc) {
         try {
-          cursor = ed.state.doc.textBetween(0, ed.state.selection.from, "\n").length;
+          const from = ed.state.selection?.from ?? ed.state.doc.content.size;
+          cursor = ed.state.doc.textBetween(0, from, "\n").length;
         } catch {
           cursor = plain.length;
         }

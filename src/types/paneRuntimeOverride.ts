@@ -50,6 +50,24 @@ export interface PaneRuntimeOverride {
 
 export type PaneRuntimePreset = "claude-direct" | "claude-proxy" | "codex";
 
+/** 无实际覆盖字段时视为未设置（避免 `{}` 被误判为 claude-proxy）。 */
+export function isPaneRuntimeOverrideEmpty(
+  override: PaneRuntimeOverride | null | undefined,
+): boolean {
+  if (!override) return true;
+  return !override.executionEngine && !override.claudeProxyRoute;
+}
+
+export function normalizePaneRuntimeOverride(
+  override: PaneRuntimeOverride | null | undefined,
+): PaneRuntimeOverride | null {
+  if (isPaneRuntimeOverrideEmpty(override)) return null;
+  return {
+    ...(override?.executionEngine ? { executionEngine: override.executionEngine } : {}),
+    ...(override?.claudeProxyRoute ? { claudeProxyRoute: override.claudeProxyRoute } : {}),
+  };
+}
+
 export function paneRuntimePresetToOverride(preset: PaneRuntimePreset): PaneRuntimeOverride {
   if (preset === "claude-direct") {
     return { executionEngine: "claude", claudeProxyRoute: "bypass" };
@@ -60,15 +78,28 @@ export function paneRuntimePresetToOverride(preset: PaneRuntimePreset): PaneRunt
   return { executionEngine: "codex", claudeProxyRoute: undefined };
 }
 
+/** 新建额外窗格执行会话时继承主窗格运行时覆盖；未设置则与 Pane 0 一样走仓库默认。 */
+export function companionPaneRuntimeFromPrimary(
+  primary: PaneRuntimeOverride | null | undefined,
+): Pick<PaneRuntimeOverride, "executionEngine" | "claudeProxyRoute"> {
+  const normalized = normalizePaneRuntimeOverride(primary);
+  if (!normalized) return {};
+  return {
+    ...(normalized.executionEngine ? { executionEngine: normalized.executionEngine } : {}),
+    ...(normalized.claudeProxyRoute ? { claudeProxyRoute: normalized.claudeProxyRoute } : {}),
+  };
+}
+
 export function resolvePaneRuntimePreset(
   override: PaneRuntimeOverride | null | undefined,
   resolvedEngine: SessionExecutionEngine,
 ): PaneRuntimePreset | null {
-  if (!override) return null;
-  const engine = override.executionEngine ?? resolvedEngine;
+  if (isPaneRuntimeOverrideEmpty(override)) return null;
+  const resolved = override!;
+  const engine = resolved.executionEngine ?? resolvedEngine;
   if (engine === "codex") return "codex";
   if (engine === "claude") {
-    return override.claudeProxyRoute === "bypass" ? "claude-direct" : "claude-proxy";
+    return resolved.claudeProxyRoute === "bypass" ? "claude-direct" : "claude-proxy";
   }
   return null;
 }

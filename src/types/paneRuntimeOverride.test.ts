@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  companionPaneRuntimeFromPrimary,
   mergePaneRuntimeOverride,
   paneRuntimePresetToOverride,
   resolvePaneRuntimePreset,
@@ -39,5 +40,23 @@ describe("paneRuntimeOverride", () => {
         { executionEngine: "codex" },
       ),
     ).toEqual({ executionEngine: "codex" });
+  });
+
+  test("resolvePaneRuntimePreset treats empty override as unset", () => {
+    expect(resolvePaneRuntimePreset({}, "claude")).toBeNull();
+    expect(resolvePaneRuntimePreset(null, "claude")).toBeNull();
+  });
+
+  test("companion pane inherits primary runtime override", () => {
+    expect(companionPaneRuntimeFromPrimary(null)).toEqual({});
+    expect(
+      companionPaneRuntimeFromPrimary({
+        executionEngine: "claude",
+        claudeProxyRoute: "bypass",
+      }),
+    ).toEqual({
+      executionEngine: "claude",
+      claudeProxyRoute: "bypass",
+    });
   });
 });

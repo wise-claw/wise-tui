@@ -8,10 +8,15 @@ export type ComposerProseMirrorView = {
 };
 
 export type ComposerProseMirrorEditor = {
+  getText?: (opts?: { blockSeparator?: string }) => string;
   state: {
     doc: {
       content: { size: number };
       textBetween: (from: number, to: number, blockSeparator?: string) => string;
+    };
+    selection?: {
+      from: number;
+      to?: number;
     };
   };
   view: ComposerProseMirrorView;

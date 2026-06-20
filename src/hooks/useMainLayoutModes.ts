@@ -3,6 +3,7 @@ import { listen } from "@tauri-apps/api/event";
 import { safeUnlisten } from "../utils/safeTauriUnlisten";
 import { message } from "antd";
 import type { ClaudeSession, ProjectItem, Repository } from "../types";
+import type { PaneRuntimeOverride } from "../types/paneRuntimeOverride";
 import {
   readMainWindowInnerSize,
   restoreMainWindowInnerSnapshot,
@@ -24,15 +25,7 @@ import {
   longestCommonRepositoryPathPrefix,
   resolveProjectMainSessionAnchor,
 } from "../utils/projectSessionAnchor";
-import { pickSessionForRepositorySidebarSelect } from "../utils/claudeSessionSelection";
-import { loadSessionOwnerHints } from "../utils/sessionOwnerHints";
 import { repositorySessionTabDisplayName } from "../utils/repositoryType";
-import {
-  isRepositoryMainSessionTab,
-  normalizeRepositoryPathKey as normalizeRepositoryPathForMatch,
-  resolveBoundMainSessionId,
-  resolveMainOwnerAgentNameForRepositoryPath,
-} from "../utils/repositoryMainSessionBinding";
 import { usePersistedMainLayoutSiderWidths } from "./usePersistedMainLayoutSiderWidths";
 import { listProjects } from "../services/projectState";
 import {
@@ -42,6 +35,7 @@ import {
 } from "../services/wiseDefaultConfigStore";
 import { RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK } from "../utils/rightPanelStorage";
 import {
+  assignCompanionSessionToPaneSlot,
   assignSessionToNormalizedExtraPanes,
   extraPanesLayoutFingerprint,
   findFirstEmptyExtraPaneIndex,
@@ -81,6 +75,10 @@ interface UseMainLayoutModesOptions {
   setActiveRepositoryId: (repositoryId: number | null) => void;
   setPaneCount: (count: PaneCount) => void;
   setExtraPanes: (panes: PaneSlot[] | ((prev: PaneSlot[]) => PaneSlot[])) => void;
+  /** 主窗格（Pane 0）运行时覆盖；新建额外窗格会话时默认继承。 */
+  primaryPaneRuntimeOverride?: PaneRuntimeOverride | null;
+  /** 新建额外窗格会话后同步主会话模型。 */
+  updateSessionModel?: (sessionId: string, model: string) => void;
   /** AppImpl 多屏布局持久化 hydration 完成后为 true。 */
   paneLayoutHydrated?: boolean;
 }
@@ -114,11 +112,13 @@ export function useMainLayoutModes({
   extraPanes,
   projects,
   repositories,
-  repositoryMainSessionBindings,
+  repositoryMainSessionBindings: _repositoryMainSessionBindings,
   sessions,
   setActiveRepositoryId,
   setPaneCount,
   setExtraPanes,
+  primaryPaneRuntimeOverride = null,
+  updateSessionModel,
   paneLayoutHydrated = false,
 }: UseMainLayoutModesOptions) {
   const [rightCollapsed, setRightCollapsed] = useState(RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK);
@@ -172,8 +172,33 @@ export function useMainLayoutModes({
   extraPanesLatestRef.current = extraPanes;
   const activeSessionIdLatestRef = useRef(activeSessionId);
   activeSessionIdLatestRef.current = activeSessionId;
-  const repositoryMainBindingsLatestRef = useRef(repositoryMainSessionBindings);
-  repositoryMainBindingsLatestRef.current = repositoryMainSessionBindings;
+  const primaryPaneRuntimeOverrideLatestRef = useRef(primaryPaneRuntimeOverride);
+  primaryPaneRuntimeOverrideLatestRef.current = primaryPaneRuntimeOverride;
+
+  const inheritMainSessionModel = useCallback(
+    (sessionId: string) => {
+      if (!updateSessionModel) return;
+      const mainId = activeSessionIdLatestRef.current?.trim();
+      if (!mainId || mainId === sessionId.trim()) return;
+      const mainSession = sessionsLatestRef.current.find((item) => item.id === mainId);
+      const model = mainSession?.model?.trim();
+      if (model) {
+        updateSessionModel(sessionId, model);
+      }
+    },
+    [updateSessionModel],
+  );
+
+  const bindCompanionSessionToSlot = useCallback(
+    (slot: PaneSlot, sessionId: string, repositoryId: number | null): PaneSlot =>
+      assignCompanionSessionToPaneSlot(
+        slot,
+        sessionId,
+        repositoryId,
+        primaryPaneRuntimeOverrideLatestRef.current,
+      ),
+    [],
+  );
 
   /** 切换到指定屏数，每次切换都会自适应调整窗口宽度。成功返回 true。 */
   const handleChangePaneCount = useCallback(
@@ -287,13 +312,11 @@ export function useMainLayoutModes({
     async (sessionId: string): Promise<boolean> => {
       setExtraPanes(() => {
         const slot = createPaneSlot();
-        slot.sessionId = sessionId;
-        slot.repositoryId = null;
-        return [slot];
+        return [bindCompanionSessionToSlot(slot, sessionId, null)];
       });
       return handleChangePaneCount(2);
     },
-    [handleChangePaneCount, setExtraPanes],
+    [bindCompanionSessionToSlot, handleChangePaneCount, setExtraPanes],
   );
 
   const handleChangePaneCountRef = useRef(handleChangePaneCount);
@@ -308,7 +331,7 @@ export function useMainLayoutModes({
   const handleCyclePaneCountRef = useRef(handleCyclePaneCount);
   handleCyclePaneCountRef.current = handleCyclePaneCount;
 
-  /** 为指定窗格选择仓库（创建或复用 session）。 */
+  /** 为指定窗格选择仓库：始终新建隔离执行会话（不复用主会话绑定）。 */
   const handlePaneRepositorySelect = useCallback(
     async (slotIndex: number, repositoryId: number) => {
       const repo = repositories.find((r) => r.id === repositoryId);
@@ -316,57 +339,44 @@ export function useMainLayoutModes({
         message.warning("未找到所选仓库");
         return;
       }
-      const ownerHints = loadSessionOwnerHints();
-      const sessionsNow = sessionsLatestRef.current;
-      const pathKey = normalizeRepositoryPathForMatch(repo.path);
+      setActiveRepositoryId(repo.id);
       const leftId = activeSessionIdLatestRef.current?.trim() ?? "";
-
-      const mainOwnerPick = resolveMainOwnerAgentNameForRepositoryPath(repositories, repo.path);
-      const bound = resolveBoundMainSessionId(
-        repo.path,
-        repositoryMainBindingsLatestRef.current,
-        sessionsNow,
-        mainOwnerPick,
-      );
-      const boundSession = bound ? sessionsNow.find((s) => s.id === bound) : undefined;
-      const boundOk = Boolean(boundSession && isRepositoryMainSessionTab(boundSession, pathKey, mainOwnerPick));
-      const picked = pickSessionForRepositorySidebarSelect(sessionsNow, repo.path, ownerHints, {
-        mainOwnerAgentName: mainOwnerPick,
-      });
-
-      let nextSessionId: string;
-      if (boundOk && boundSession && boundSession.id !== leftId) {
-        nextSessionId = boundSession.id;
-      } else if (picked && picked.id !== leftId) {
-        nextSessionId = picked.id;
-      } else {
-        try {
-          nextSessionId = await createSession(repo.path, repositorySessionTabDisplayName(repo), { skipActivate: true });
-        } catch (error) {
-          console.error("Failed to switch pane repository:", error);
-          message.error("切换窗格仓库失败");
+      try {
+        const nextSessionId = await createSession(
+          repo.path,
+          repositorySessionTabDisplayName(repo),
+          { skipActivate: true },
+        );
+        inheritMainSessionModel(nextSessionId);
+        if (isSessionBoundInPanes(nextSessionId, leftId, extraPanesLatestRef.current, slotIndex)) {
+          message.warning("该会话已在其它窗格中打开");
           return;
         }
+        setExtraPanes((prev) => {
+          const next = [...prev];
+          if (next[slotIndex]) {
+            next[slotIndex] = bindCompanionSessionToSlot(
+              next[slotIndex],
+              nextSessionId,
+              activeRepository?.id === repositoryId ? null : repositoryId,
+            );
+          }
+          return next;
+        });
+      } catch (error) {
+        console.error("Failed to switch pane repository:", error);
+        message.error("切换窗格仓库失败");
       }
-
-      if (isSessionBoundInPanes(nextSessionId, leftId, extraPanesLatestRef.current, slotIndex)) {
-        message.warning("该会话已在其它窗格中打开");
-        return;
-      }
-
-      setExtraPanes((prev) => {
-        const next = [...prev];
-        if (next[slotIndex]) {
-          next[slotIndex] = {
-            ...next[slotIndex],
-            sessionId: nextSessionId,
-            repositoryId: activeRepository?.id === repositoryId ? null : repositoryId,
-          };
-        }
-        return next;
-      });
     },
-    [activeRepository?.id, createSession, repositories, setExtraPanes],
+    [
+      activeRepository?.id,
+      bindCompanionSessionToSlot,
+      createSession,
+      inheritMainSessionModel,
+      repositories,
+      setActiveRepositoryId,
+      setExtraPanes,
+    ],
   );
 
   /** 为指定窗格选择工作区：在该项目根目录直接新建会话（不绑定到具体仓库）。 */
@@ -388,10 +398,11 @@ export function useMainLayoutModes({
         try {
           const displayName = `Project: ${options?.projectName?.trim() || projectIdKey || "工作区"}`;
           const sessionId = await createSession(explicitRootPath, displayName, { skipActivate: true });
+          inheritMainSessionModel(sessionId);
           setExtraPanes((prev) => {
             const next = [...prev];
             if (next[slotIndex]) {
-              next[slotIndex] = { ...next[slotIndex], sessionId, repositoryId: null };
+              next[slotIndex] = bindCompanionSessionToSlot(next[slotIndex], sessionId, null);
             }
             return next;
           });
@@ -436,10 +447,11 @@ export function useMainLayoutModes({
       }
       try {
         const sessionId = await createSession(createPath, createDisplayName, { skipActivate: true });
+        inheritMainSessionModel(sessionId);
         setExtraPanes((prev) => {
           const next = [...prev];
           if (next[slotIndex]) {
-            next[slotIndex] = { ...next[slotIndex], sessionId, repositoryId: null };
+            next[slotIndex] = bindCompanionSessionToSlot(next[slotIndex], sessionId, null);
           }
           return next;
         });
@@ -448,7 +460,7 @@ export function useMainLayoutModes({
         message.error("新建工作区执行会话失败");
       }
     },
-    [createSession, repositories, setExtraPanes],
+    [bindCompanionSessionToSlot, createSession, inheritMainSessionModel, repositories, setExtraPanes],
   );
 
   /** 为指定窗格创建新 session。 */
@@ -459,6 +471,7 @@ export function useMainLayoutModes({
         const id = await createSession(repository.path, repositorySessionTabDisplayName(repository), {
           skipActivate: true,
         });
+        inheritMainSessionModel(id);
 
         // 若当前是单屏，先切到双屏
         if (paneCountRef.current === 1) {
@@ -471,7 +484,7 @@ export function useMainLayoutModes({
           setExtraPanes((prev) => {
             const next = [...prev];
             if (next[slotIndex]) {
-              next[slotIndex] = { ...next[slotIndex], sessionId: id, repositoryId: null };
+              next[slotIndex] = bindCompanionSessionToSlot(next[slotIndex], id, null);
             }
             return next;
           });
@@ -481,7 +494,14 @@ export function useMainLayoutModes({
         message.error("创建窗格执行会话失败");
       }
     },
-    [createSession, promoteToDualPaneWithSession, setActiveRepositoryId, setExtraPanes],
+    [
+      bindCompanionSessionToSlot,
+      createSession,
+      inheritMainSessionModel,
+      promoteToDualPaneWithSession,
+      setActiveRepositoryId,
+      setExtraPanes,
+    ],
   );
 
   /** 侧栏「新开会话」：按多屏规则占用下一空窗格并创建执行会话。 */
@@ -497,6 +517,7 @@ export function useMainLayoutModes({
         const sessionId = await createSession(path, repositorySessionTabDisplayName(repository), {
           skipActivate: true,
         });
+        inheritMainSessionModel(sessionId);
 
         if (paneCountRef.current === 1) {
           await promoteToDualPaneWithSession(sessionId);
@@ -527,6 +548,7 @@ export function useMainLayoutModes({
             sessionId,
             createPaneSlot,
             plan.slotIndex,
+            primaryPaneRuntimeOverrideLatestRef.current,
           ),
         );
       } catch (error) {
@@ -534,7 +556,14 @@ export function useMainLayoutModes({
         message.error("新开会话失败");
       }
     },
-    [createSession, handleChangePaneCount, promoteToDualPaneWithSession, setActiveRepositoryId, setExtraPanes],
+    [
+      createSession,
+      handleChangePaneCount,
+      inheritMainSessionModel,
+      promoteToDualPaneWithSession,
+      setActiveRepositoryId,
+      setExtraPanes,
+    ],
   );
 
   /** 工作区侧栏「新开会话」：在工作区根目录创建会话并占用下一窗格。 */

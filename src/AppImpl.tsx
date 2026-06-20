@@ -2076,6 +2076,8 @@ export default function App() {
     setPaneCount,
     setExtraPanes,
     paneLayoutHydrated,
+    primaryPaneRuntimeOverride,
+    updateSessionModel,
   });
 
   const repoPanelPlacementDefault = useRepoPanelPlacementDefault();
