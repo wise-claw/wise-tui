@@ -24,6 +24,7 @@ import {
   WISE_MONITOR_PANEL_PLACEMENT_CHANGED,
   WISE_RIGHT_PANEL_DEFAULT_CHANGED,
   WISE_TOPBAR_CHROME_DEFAULT_CHANGED,
+  WISE_COMPOSER_FOOTER_CHROME_DEFAULT_CHANGED,
   WISE_WORKSPACE_INSPECTOR_PANELS_CHANGED,
 } from "./wiseDefaultConfigStore";
 
@@ -100,6 +101,13 @@ describe("wiseDefaultConfigStore", () => {
     expect(config.showRemoteEntryTopbar).toBe(true);
     expect(config.showTopbarRepositoryName).toBe(false);
     expect(config.fileTreeOpenInNewPane).toBe(false);
+    expect(config.showComposerFooterAttachButton).toBe(true);
+    expect(config.showComposerFooterScreenshotButton).toBe(true);
+    expect(config.showComposerFooterVoiceButton).toBe(true);
+    expect(config.showComposerFooterContextRing).toBe(true);
+    expect(config.showComposerFooterCommonPhrases).toBe(true);
+    expect(config.showComposerFooterRuntimeSettings).toBe(true);
+    expect(config.showComposerFooterModelPicker).toBe(true);
     expect(config.gitPanelPlacement).toBe("left");
     expect(config.filesPanelPlacement).toBe("left");
     expect(setAppSetting).toHaveBeenCalled();
@@ -340,6 +348,34 @@ describe("wiseDefaultConfigStore", () => {
     expect(seen).toEqual([{ showLlmProxyTopbar: true }]);
   });
 
+  test("save composer footer chrome dispatches visibility event", async () => {
+    getAppSetting.mockImplementation(async (key: string) => {
+      if (key === WISE_DEFAULT_CONFIG_ONESHOT_TO_STREAMING_MIGRATION_KEY) return "1";
+      if (key === WISE_DEFAULT_CONFIG_KEY) {
+        return JSON.stringify({
+          version: 1,
+          connectionKind: "streaming",
+          rightPanelDefaultCollapsed: false,
+          showComposerFooterAttachButton: true,
+        });
+      }
+      return null;
+    });
+    const seen: Array<{ showComposerFooterAttachButton: boolean }> = [];
+    window.addEventListener(WISE_COMPOSER_FOOTER_CHROME_DEFAULT_CHANGED, (e: Event) => {
+      const detail = (e as CustomEvent<{ showComposerFooterAttachButton?: boolean }>).detail;
+      if (detail) {
+        seen.push({
+          showComposerFooterAttachButton: Boolean(detail.showComposerFooterAttachButton),
+        });
+      }
+    });
+    await saveWiseDefaultConfig({
+      showComposerFooterAttachButton: false,
+    });
+    expect(seen).toEqual([{ showComposerFooterAttachButton: false }]);
+  });
+
   test("load backfills missing workspace inspector panels with product defaults", async () => {
     getAppSetting.mockImplementation(async (key: string) =>
       key === WISE_DEFAULT_CONFIG_KEY
@@ -353,6 +389,8 @@ describe("wiseDefaultConfigStore", () => {
     const config = await loadWiseDefaultConfig();
     expect(config.showWorkspaceQuickActionsPanel).toBe(true);
     expect(config.showWorkspaceTodosPanel).toBe(true);
+    expect(config.showComposerFooterAttachButton).toBe(true);
+    expect(config.showComposerFooterModelPicker).toBe(true);
   });
 
   test("save workspace inspector panels dispatches event", async () => {

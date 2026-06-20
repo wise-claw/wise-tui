@@ -22,6 +22,7 @@ import { useExecutionEnvironmentDispatchHistoryDaysSetting } from "./useExecutio
 import { EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAY_OPTIONS } from "../../constants/executionEnvironmentDispatch";
 import { useRightPanelDefaultSetting } from "./useRightPanelDefaultSetting";
 import { useTopbarChromeDefaultSetting } from "./useTopbarChromeDefaultSetting";
+import { useComposerFooterChromeDefaultSetting } from "./useComposerFooterChromeDefaultSetting";
 import { useDefaultTerminalSetting } from "./useDefaultTerminalSetting";
 import { useAtMentionDefaultSetting } from "./useAtMentionDefaultSetting";
 import { useAtMentionShortcuts } from "../../hooks/useAtMentionShortcuts";
@@ -45,6 +46,7 @@ export function DefaultConfigPanel() {
   const connection = useClaudeConnectionModeSetting();
   const rightPanel = useRightPanelDefaultSetting();
   const topbarChrome = useTopbarChromeDefaultSetting();
+  const composerFooterChrome = useComposerFooterChromeDefaultSetting();
   const hubQuickEntries = useLeftSidebarHubQuickEntriesSetting();
   const monitorPanel = useMonitorPanelSetting();
   const leftSidebarWorkspaceList = useLeftSidebarWorkspaceListSetting();
@@ -623,6 +625,155 @@ export function DefaultConfigPanel() {
               ]}
               onChange={(value) => {
                 void topbarChrome.saveSessionFeedbackLoop(value === "visible");
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="app-default-config-row" aria-label="输入框附件上传">
+          <div className="app-default-config-row__main">
+            <span className="app-default-config-row__title">输入框附件上传</span>
+            <span className="app-default-config-row__hint">主会话输入框底栏「+」按钮；快捷键 ⌘I / Ctrl+I 仍可用</span>
+          </div>
+          <div className="app-default-config-row__control">
+            <DefaultConfigOptionPick<"hidden" | "visible">
+              aria-label="输入框附件上传显示"
+              disabled={composerFooterChrome.loading || composerFooterChrome.saving}
+              value={composerFooterChrome.showComposerFooterAttachButton ? "visible" : "hidden"}
+              options={[
+                { label: "不显示", value: "hidden" },
+                { label: "显示", value: "visible" },
+              ]}
+              onChange={(value) => {
+                void composerFooterChrome.saveAttachButton(value === "visible");
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="app-default-config-row" aria-label="输入框截屏">
+          <div className="app-default-config-row__main">
+            <span className="app-default-config-row__title">输入框截屏</span>
+            <span className="app-default-config-row__hint">主会话输入框底栏截屏按钮；快捷键 F3 仍可用</span>
+          </div>
+          <div className="app-default-config-row__control">
+            <DefaultConfigOptionPick<"hidden" | "visible">
+              aria-label="输入框截屏显示"
+              disabled={composerFooterChrome.loading || composerFooterChrome.saving}
+              value={composerFooterChrome.showComposerFooterScreenshotButton ? "visible" : "hidden"}
+              options={[
+                { label: "不显示", value: "hidden" },
+                { label: "显示", value: "visible" },
+              ]}
+              onChange={(value) => {
+                void composerFooterChrome.saveScreenshotButton(value === "visible");
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="app-default-config-row" aria-label="输入框语音听写">
+          <div className="app-default-config-row__main">
+            <span className="app-default-config-row__title">输入框语音听写</span>
+            <span className="app-default-config-row__hint">主会话输入框底栏麦克风按钮；本机不支持听写时始终不显示</span>
+          </div>
+          <div className="app-default-config-row__control">
+            <DefaultConfigOptionPick<"hidden" | "visible">
+              aria-label="输入框语音听写显示"
+              disabled={composerFooterChrome.loading || composerFooterChrome.saving}
+              value={composerFooterChrome.showComposerFooterVoiceButton ? "visible" : "hidden"}
+              options={[
+                { label: "不显示", value: "hidden" },
+                { label: "显示", value: "visible" },
+              ]}
+              onChange={(value) => {
+                void composerFooterChrome.saveVoiceButton(value === "visible");
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="app-default-config-row" aria-label="输入框上下文环">
+          <div className="app-default-config-row__main">
+            <span className="app-default-config-row__title">输入框上下文环</span>
+            <span className="app-default-config-row__hint">主会话输入框底栏上下文占用进度环</span>
+          </div>
+          <div className="app-default-config-row__control">
+            <DefaultConfigOptionPick<"hidden" | "visible">
+              aria-label="输入框上下文环显示"
+              disabled={composerFooterChrome.loading || composerFooterChrome.saving}
+              value={composerFooterChrome.showComposerFooterContextRing ? "visible" : "hidden"}
+              options={[
+                { label: "不显示", value: "hidden" },
+                { label: "显示", value: "visible" },
+              ]}
+              onChange={(value) => {
+                void composerFooterChrome.saveContextRing(value === "visible");
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="app-default-config-row" aria-label="输入框常用语">
+          <div className="app-default-config-row__main">
+            <span className="app-default-config-row__title">输入框常用语</span>
+            <span className="app-default-config-row__hint">主会话输入框底栏「常用语」入口</span>
+          </div>
+          <div className="app-default-config-row__control">
+            <DefaultConfigOptionPick<"hidden" | "visible">
+              aria-label="输入框常用语显示"
+              disabled={composerFooterChrome.loading || composerFooterChrome.saving}
+              value={composerFooterChrome.showComposerFooterCommonPhrases ? "visible" : "hidden"}
+              options={[
+                { label: "不显示", value: "hidden" },
+                { label: "显示", value: "visible" },
+              ]}
+              onChange={(value) => {
+                void composerFooterChrome.saveCommonPhrases(value === "visible");
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="app-default-config-row" aria-label="输入框执行环境">
+          <div className="app-default-config-row__main">
+            <span className="app-default-config-row__title">输入框执行环境</span>
+            <span className="app-default-config-row__hint">
+              主会话输入框底栏执行环境 / 连接方式设置（Claude Code、代理、Codex 等）
+            </span>
+          </div>
+          <div className="app-default-config-row__control">
+            <DefaultConfigOptionPick<"hidden" | "visible">
+              aria-label="输入框执行环境显示"
+              disabled={composerFooterChrome.loading || composerFooterChrome.saving}
+              value={composerFooterChrome.showComposerFooterRuntimeSettings ? "visible" : "hidden"}
+              options={[
+                { label: "不显示", value: "hidden" },
+                { label: "显示", value: "visible" },
+              ]}
+              onChange={(value) => {
+                void composerFooterChrome.saveRuntimeSettings(value === "visible");
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="app-default-config-row" aria-label="输入框模型选择">
+          <div className="app-default-config-row__main">
+            <span className="app-default-config-row__title">输入框模型选择</span>
+            <span className="app-default-config-row__hint">主会话输入框底栏模型选择器</span>
+          </div>
+          <div className="app-default-config-row__control">
+            <DefaultConfigOptionPick<"hidden" | "visible">
+              aria-label="输入框模型选择显示"
+              disabled={composerFooterChrome.loading || composerFooterChrome.saving}
+              value={composerFooterChrome.showComposerFooterModelPicker ? "visible" : "hidden"}
+              options={[
+                { label: "不显示", value: "hidden" },
+                { label: "显示", value: "visible" },
+              ]}
+              onChange={(value) => {
+                void composerFooterChrome.saveModelPicker(value === "visible");
               }}
             />
           </div>

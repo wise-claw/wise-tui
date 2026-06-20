@@ -59,6 +59,9 @@ export const WISE_RIGHT_PANEL_DEFAULT_CHANGED = "wise:right-panel-default-change
 
 export const WISE_TOPBAR_CHROME_DEFAULT_CHANGED = "wise:topbar-chrome-default-changed";
 
+export const WISE_COMPOSER_FOOTER_CHROME_DEFAULT_CHANGED =
+  "wise:composer-footer-chrome-default-changed";
+
 export const WISE_LEFT_SIDEBAR_HUB_QUICK_ENTRIES_CHANGED = "wise:left-sidebar-hub-quick-entries-changed";
 
 export const WISE_LEFT_SIDEBAR_MONITOR_PANEL_CHANGED = "wise:left-sidebar-monitor-panel-changed";
@@ -118,6 +121,17 @@ export type WorkspaceInspectorPanelsDefaults = Pick<
   | "showWorkspaceTodosPanel"
 >;
 
+export type ComposerFooterChromeDefaults = Pick<
+  WiseDefaultConfigV1,
+  | "showComposerFooterAttachButton"
+  | "showComposerFooterScreenshotButton"
+  | "showComposerFooterVoiceButton"
+  | "showComposerFooterContextRing"
+  | "showComposerFooterCommonPhrases"
+  | "showComposerFooterRuntimeSettings"
+  | "showComposerFooterModelPicker"
+>;
+
 export interface WiseDefaultConfigV1 {
   version: 1;
   connectionKind: ClaudeSessionConnectionKind;
@@ -160,6 +174,20 @@ export interface WiseDefaultConfigV1 {
   composerCommonPhrases: ComposerCommonPhrase[];
   /** 主会话发送时自动前缀的斜杠指令（如 /autopilot）。 */
   composerDefaultInstruction: string;
+  /** 主会话输入框底栏附件上传（+）按钮；默认显示。 */
+  showComposerFooterAttachButton: boolean;
+  /** 主会话输入框底栏截屏按钮；默认显示。 */
+  showComposerFooterScreenshotButton: boolean;
+  /** 主会话输入框底栏语音听写按钮；默认显示。 */
+  showComposerFooterVoiceButton: boolean;
+  /** 主会话输入框底栏上下文占用环；默认显示。 */
+  showComposerFooterContextRing: boolean;
+  /** 主会话输入框底栏常用语按钮；默认显示。 */
+  showComposerFooterCommonPhrases: boolean;
+  /** 主会话输入框底栏执行环境 / 连接方式设置；默认显示。 */
+  showComposerFooterRuntimeSettings: boolean;
+  /** 主会话输入框底栏模型选择；默认显示。 */
+  showComposerFooterModelPicker: boolean;
   /** 右栏工作区快捷操作卡片；默认显示。 */
   showWorkspaceQuickActionsPanel: boolean;
   /** 右栏待办事项卡片；默认显示。 */
@@ -219,6 +247,13 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   atMentionShortcutByTarget: {},
   composerCommonPhrases: [],
   composerDefaultInstruction: "",
+  showComposerFooterAttachButton: true,
+  showComposerFooterScreenshotButton: true,
+  showComposerFooterVoiceButton: true,
+  showComposerFooterContextRing: true,
+  showComposerFooterCommonPhrases: true,
+  showComposerFooterRuntimeSettings: true,
+  showComposerFooterModelPicker: true,
   showWorkspaceQuickActionsPanel: true,
   showWorkspaceTodosPanel: true,
   fileTreeOpenInNewPane: false,
@@ -353,6 +388,55 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
         typeof parsed.composerDefaultInstruction === "string"
           ? parsed.composerDefaultInstruction.trim()
           : DEFAULT_CONFIG.composerDefaultInstruction,
+      showComposerFooterAttachButton:
+        parsed.showComposerFooterAttachButton === undefined
+          ? DEFAULT_CONFIG.showComposerFooterAttachButton
+          : normalizeBoolean(
+              parsed.showComposerFooterAttachButton,
+              DEFAULT_CONFIG.showComposerFooterAttachButton,
+            ),
+      showComposerFooterScreenshotButton:
+        parsed.showComposerFooterScreenshotButton === undefined
+          ? DEFAULT_CONFIG.showComposerFooterScreenshotButton
+          : normalizeBoolean(
+              parsed.showComposerFooterScreenshotButton,
+              DEFAULT_CONFIG.showComposerFooterScreenshotButton,
+            ),
+      showComposerFooterVoiceButton:
+        parsed.showComposerFooterVoiceButton === undefined
+          ? DEFAULT_CONFIG.showComposerFooterVoiceButton
+          : normalizeBoolean(
+              parsed.showComposerFooterVoiceButton,
+              DEFAULT_CONFIG.showComposerFooterVoiceButton,
+            ),
+      showComposerFooterContextRing:
+        parsed.showComposerFooterContextRing === undefined
+          ? DEFAULT_CONFIG.showComposerFooterContextRing
+          : normalizeBoolean(
+              parsed.showComposerFooterContextRing,
+              DEFAULT_CONFIG.showComposerFooterContextRing,
+            ),
+      showComposerFooterCommonPhrases:
+        parsed.showComposerFooterCommonPhrases === undefined
+          ? DEFAULT_CONFIG.showComposerFooterCommonPhrases
+          : normalizeBoolean(
+              parsed.showComposerFooterCommonPhrases,
+              DEFAULT_CONFIG.showComposerFooterCommonPhrases,
+            ),
+      showComposerFooterRuntimeSettings:
+        parsed.showComposerFooterRuntimeSettings === undefined
+          ? DEFAULT_CONFIG.showComposerFooterRuntimeSettings
+          : normalizeBoolean(
+              parsed.showComposerFooterRuntimeSettings,
+              DEFAULT_CONFIG.showComposerFooterRuntimeSettings,
+            ),
+      showComposerFooterModelPicker:
+        parsed.showComposerFooterModelPicker === undefined
+          ? DEFAULT_CONFIG.showComposerFooterModelPicker
+          : normalizeBoolean(
+              parsed.showComposerFooterModelPicker,
+              DEFAULT_CONFIG.showComposerFooterModelPicker,
+            ),
       showWorkspaceQuickActionsPanel:
         parsed.showWorkspaceQuickActionsPanel === undefined
           ? DEFAULT_CONFIG.showWorkspaceQuickActionsPanel
@@ -509,6 +593,23 @@ function dispatchRightPanelDefaultChanged(collapsed: boolean): void {
   window.dispatchEvent(new CustomEvent(WISE_RIGHT_PANEL_DEFAULT_CHANGED, { detail: { collapsed } }));
 }
 
+function dispatchComposerFooterChromeDefaultChanged(config: ComposerFooterChromeDefaults): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(WISE_COMPOSER_FOOTER_CHROME_DEFAULT_CHANGED, {
+      detail: {
+        showComposerFooterAttachButton: config.showComposerFooterAttachButton,
+        showComposerFooterScreenshotButton: config.showComposerFooterScreenshotButton,
+        showComposerFooterVoiceButton: config.showComposerFooterVoiceButton,
+        showComposerFooterContextRing: config.showComposerFooterContextRing,
+        showComposerFooterCommonPhrases: config.showComposerFooterCommonPhrases,
+        showComposerFooterRuntimeSettings: config.showComposerFooterRuntimeSettings,
+        showComposerFooterModelPicker: config.showComposerFooterModelPicker,
+      },
+    }),
+  );
+}
+
 function dispatchTopbarChromeDefaultChanged(
   config: Pick<
     WiseDefaultConfigV1,
@@ -580,6 +681,13 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     atMentionShortcutByTarget: DEFAULT_CONFIG.atMentionShortcutByTarget,
     composerCommonPhrases: DEFAULT_CONFIG.composerCommonPhrases,
     composerDefaultInstruction: DEFAULT_CONFIG.composerDefaultInstruction,
+    showComposerFooterAttachButton: DEFAULT_CONFIG.showComposerFooterAttachButton,
+    showComposerFooterScreenshotButton: DEFAULT_CONFIG.showComposerFooterScreenshotButton,
+    showComposerFooterVoiceButton: DEFAULT_CONFIG.showComposerFooterVoiceButton,
+    showComposerFooterContextRing: DEFAULT_CONFIG.showComposerFooterContextRing,
+    showComposerFooterCommonPhrases: DEFAULT_CONFIG.showComposerFooterCommonPhrases,
+    showComposerFooterRuntimeSettings: DEFAULT_CONFIG.showComposerFooterRuntimeSettings,
+    showComposerFooterModelPicker: DEFAULT_CONFIG.showComposerFooterModelPicker,
     showWorkspaceQuickActionsPanel: DEFAULT_CONFIG.showWorkspaceQuickActionsPanel,
     showWorkspaceTodosPanel: DEFAULT_CONFIG.showWorkspaceTodosPanel,
     fileTreeOpenInNewPane: DEFAULT_CONFIG.fileTreeOpenInNewPane,
@@ -748,6 +856,13 @@ export async function saveWiseDefaultConfig(
       | "atMentionShortcutByTarget"
       | "composerCommonPhrases"
       | "composerDefaultInstruction"
+      | "showComposerFooterAttachButton"
+      | "showComposerFooterScreenshotButton"
+      | "showComposerFooterVoiceButton"
+      | "showComposerFooterContextRing"
+      | "showComposerFooterCommonPhrases"
+      | "showComposerFooterRuntimeSettings"
+      | "showComposerFooterModelPicker"
       | "showWorkspaceQuickActionsPanel"
       | "showWorkspaceTodosPanel"
       | "fileTreeOpenInNewPane"
@@ -816,6 +931,20 @@ export async function saveWiseDefaultConfig(
       patch.composerDefaultInstruction !== undefined
         ? patch.composerDefaultInstruction.trim()
         : current.composerDefaultInstruction,
+    showComposerFooterAttachButton:
+      patch.showComposerFooterAttachButton ?? current.showComposerFooterAttachButton,
+    showComposerFooterScreenshotButton:
+      patch.showComposerFooterScreenshotButton ?? current.showComposerFooterScreenshotButton,
+    showComposerFooterVoiceButton:
+      patch.showComposerFooterVoiceButton ?? current.showComposerFooterVoiceButton,
+    showComposerFooterContextRing:
+      patch.showComposerFooterContextRing ?? current.showComposerFooterContextRing,
+    showComposerFooterCommonPhrases:
+      patch.showComposerFooterCommonPhrases ?? current.showComposerFooterCommonPhrases,
+    showComposerFooterRuntimeSettings:
+      patch.showComposerFooterRuntimeSettings ?? current.showComposerFooterRuntimeSettings,
+    showComposerFooterModelPicker:
+      patch.showComposerFooterModelPicker ?? current.showComposerFooterModelPicker,
     showWorkspaceQuickActionsPanel:
       patch.showWorkspaceQuickActionsPanel ?? current.showWorkspaceQuickActionsPanel,
     showWorkspaceTodosPanel: patch.showWorkspaceTodosPanel ?? current.showWorkspaceTodosPanel,
@@ -921,6 +1050,48 @@ export async function saveWiseDefaultConfig(
   }
   if (patch.composerCommonPhrases !== undefined) {
     next.composerCommonPhrases = normalizeComposerCommonPhrases(patch.composerCommonPhrases);
+  }
+  if (patch.showComposerFooterAttachButton !== undefined) {
+    next.showComposerFooterAttachButton = normalizeBoolean(
+      patch.showComposerFooterAttachButton,
+      DEFAULT_CONFIG.showComposerFooterAttachButton,
+    );
+  }
+  if (patch.showComposerFooterScreenshotButton !== undefined) {
+    next.showComposerFooterScreenshotButton = normalizeBoolean(
+      patch.showComposerFooterScreenshotButton,
+      DEFAULT_CONFIG.showComposerFooterScreenshotButton,
+    );
+  }
+  if (patch.showComposerFooterVoiceButton !== undefined) {
+    next.showComposerFooterVoiceButton = normalizeBoolean(
+      patch.showComposerFooterVoiceButton,
+      DEFAULT_CONFIG.showComposerFooterVoiceButton,
+    );
+  }
+  if (patch.showComposerFooterContextRing !== undefined) {
+    next.showComposerFooterContextRing = normalizeBoolean(
+      patch.showComposerFooterContextRing,
+      DEFAULT_CONFIG.showComposerFooterContextRing,
+    );
+  }
+  if (patch.showComposerFooterCommonPhrases !== undefined) {
+    next.showComposerFooterCommonPhrases = normalizeBoolean(
+      patch.showComposerFooterCommonPhrases,
+      DEFAULT_CONFIG.showComposerFooterCommonPhrases,
+    );
+  }
+  if (patch.showComposerFooterRuntimeSettings !== undefined) {
+    next.showComposerFooterRuntimeSettings = normalizeBoolean(
+      patch.showComposerFooterRuntimeSettings,
+      DEFAULT_CONFIG.showComposerFooterRuntimeSettings,
+    );
+  }
+  if (patch.showComposerFooterModelPicker !== undefined) {
+    next.showComposerFooterModelPicker = normalizeBoolean(
+      patch.showComposerFooterModelPicker,
+      DEFAULT_CONFIG.showComposerFooterModelPicker,
+    );
   }
   if (patch.showWorkspaceQuickActionsPanel !== undefined) {
     next.showWorkspaceQuickActionsPanel = normalizeBoolean(patch.showWorkspaceQuickActionsPanel);
@@ -1038,6 +1209,35 @@ export async function saveWiseDefaultConfig(
         showSessionFeedbackLoopTopbar: next.showSessionFeedbackLoopTopbar,
         showRemoteEntryTopbar: next.showRemoteEntryTopbar,
         showTopbarRepositoryName: next.showTopbarRepositoryName,
+      });
+    }
+  }
+  if (
+    patch.showComposerFooterAttachButton !== undefined ||
+    patch.showComposerFooterScreenshotButton !== undefined ||
+    patch.showComposerFooterVoiceButton !== undefined ||
+    patch.showComposerFooterContextRing !== undefined ||
+    patch.showComposerFooterCommonPhrases !== undefined ||
+    patch.showComposerFooterRuntimeSettings !== undefined ||
+    patch.showComposerFooterModelPicker !== undefined
+  ) {
+    if (
+      next.showComposerFooterAttachButton !== current.showComposerFooterAttachButton ||
+      next.showComposerFooterScreenshotButton !== current.showComposerFooterScreenshotButton ||
+      next.showComposerFooterVoiceButton !== current.showComposerFooterVoiceButton ||
+      next.showComposerFooterContextRing !== current.showComposerFooterContextRing ||
+      next.showComposerFooterCommonPhrases !== current.showComposerFooterCommonPhrases ||
+      next.showComposerFooterRuntimeSettings !== current.showComposerFooterRuntimeSettings ||
+      next.showComposerFooterModelPicker !== current.showComposerFooterModelPicker
+    ) {
+      dispatchComposerFooterChromeDefaultChanged({
+        showComposerFooterAttachButton: next.showComposerFooterAttachButton,
+        showComposerFooterScreenshotButton: next.showComposerFooterScreenshotButton,
+        showComposerFooterVoiceButton: next.showComposerFooterVoiceButton,
+        showComposerFooterContextRing: next.showComposerFooterContextRing,
+        showComposerFooterCommonPhrases: next.showComposerFooterCommonPhrases,
+        showComposerFooterRuntimeSettings: next.showComposerFooterRuntimeSettings,
+        showComposerFooterModelPicker: next.showComposerFooterModelPicker,
       });
     }
   }
@@ -1505,6 +1705,25 @@ export async function saveTopbarChromeDefaultsToStore(
       | "showTopbarRepositoryName"
     >
   >,
+): Promise<void> {
+  await saveWiseDefaultConfig(patch);
+}
+
+export async function loadComposerFooterChromeDefaultsFromStore(): Promise<ComposerFooterChromeDefaults> {
+  const config = await loadWiseDefaultConfig();
+  return {
+    showComposerFooterAttachButton: config.showComposerFooterAttachButton,
+    showComposerFooterScreenshotButton: config.showComposerFooterScreenshotButton,
+    showComposerFooterVoiceButton: config.showComposerFooterVoiceButton,
+    showComposerFooterContextRing: config.showComposerFooterContextRing,
+    showComposerFooterCommonPhrases: config.showComposerFooterCommonPhrases,
+    showComposerFooterRuntimeSettings: config.showComposerFooterRuntimeSettings,
+    showComposerFooterModelPicker: config.showComposerFooterModelPicker,
+  };
+}
+
+export async function saveComposerFooterChromeDefaultsToStore(
+  patch: Partial<ComposerFooterChromeDefaults>,
 ): Promise<void> {
   await saveWiseDefaultConfig(patch);
 }

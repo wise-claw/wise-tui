@@ -63,6 +63,7 @@ import {
 } from "../../constants/composerCommonPhraseEvents";
 import { useComposerCommonPhrases } from "../../hooks/useComposerCommonPhrases";
 import { useComposerDefaultInstruction } from "../../hooks/useComposerDefaultInstruction";
+import { useWiseComposerFooterChromeVisibility } from "../../hooks/useWiseComposerFooterChromeVisibility";
 import { applyComposerCommonPhraseToSurface } from "../../utils/applyComposerCommonPhrase";
 import { chordMatchesKeyboardEvent } from "../../utils/atMentionShortcutChord";
 import { isWiseAppFocused } from "../../utils/isWiseAppFocused";
@@ -592,6 +593,7 @@ function ComposerInner({
 }: ComposerInnerProps) {
   const { breakdown, loading: contextBreakdownLoading, ensureBreakdown } =
     useContextBreakdown(session);
+  const composerFooterChrome = useWiseComposerFooterChromeVisibility();
   /** 含题卡/待办/底栏等整块输入 chrome，用于 Esc 命中判定（仅 shellRef 会漏掉模型选择、停止等） */
   const composerEscapeRootRef = useRef<HTMLDivElement>(null);
   const shellRef = useRef<HTMLDivElement>(null);
@@ -2377,33 +2379,37 @@ function ComposerInner({
         onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
       >
-        <Button
-          type="text"
-          size="small"
-          onClick={handleFileAttach}
-          title="上传图片或文件（⌘I / Ctrl+I）"
-          style={{ color: "var(--ant-color-text-secondary)" }}
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <line x1="12" y1="5" x2="12" y2="19" />
-            <line x1="5" y1="12" x2="19" y2="12" />
-          </svg>
-        </Button>
-        <Button
-          type="text"
-          size="small"
-          onClick={handleScreenshot}
-          style={{ color: "var(--ant-color-text-secondary)" }}
-          title="截屏"
-        >
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-            <rect x="2" y="3" width="20" height="14" rx="2" />
-            <circle cx="12" cy="10" r="3" />
-            <path d="M7 21h10" />
-            <path d="M12 17v4" />
-          </svg>
-        </Button>
-        {speechDictation.supported ? (
+        {composerFooterChrome.showComposerFooterAttachButton ? (
+          <Button
+            type="text"
+            size="small"
+            onClick={handleFileAttach}
+            title="上传图片或文件（⌘I / Ctrl+I）"
+            style={{ color: "var(--ant-color-text-secondary)" }}
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          </Button>
+        ) : null}
+        {composerFooterChrome.showComposerFooterScreenshotButton ? (
+          <Button
+            type="text"
+            size="small"
+            onClick={handleScreenshot}
+            style={{ color: "var(--ant-color-text-secondary)" }}
+            title="截屏"
+          >
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <rect x="2" y="3" width="20" height="14" rx="2" />
+              <circle cx="12" cy="10" r="3" />
+              <path d="M7 21h10" />
+              <path d="M12 17v4" />
+            </svg>
+          </Button>
+        ) : null}
+        {composerFooterChrome.showComposerFooterVoiceButton && speechDictation.supported ? (
           <Popover
             content={voiceSettingsPanel}
             trigger="contextMenu"
@@ -2578,17 +2584,19 @@ function ComposerInner({
             placeholder="工作区 / 仓库"
           />
         ) : null}
-        <ContextCompactProgressRing
-          className="app-claude-semi-footer-compact-context"
-          data-ui-anchor="session-context-ring-btn"
-          percent={bottomStatus.ctxPercent}
-          toneClassName={bottomStatus.ctxToneClass}
-          ctxStatusLine={bottomStatus.ctxSegment}
-          breakdown={breakdown}
-          breakdownLoading={contextBreakdownLoading}
-          maintaining={backgroundContextCompactInFlight}
-          onBreakdownOpen={() => void ensureBreakdown()}
-        />
+        {composerFooterChrome.showComposerFooterContextRing ? (
+          <ContextCompactProgressRing
+            className="app-claude-semi-footer-compact-context"
+            data-ui-anchor="session-context-ring-btn"
+            percent={bottomStatus.ctxPercent}
+            toneClassName={bottomStatus.ctxToneClass}
+            ctxStatusLine={bottomStatus.ctxSegment}
+            breakdown={breakdown}
+            breakdownLoading={contextBreakdownLoading}
+            maintaining={backgroundContextCompactInFlight}
+            onBreakdownOpen={() => void ensureBreakdown()}
+          />
+        ) : null}
       </div>
     );
   }, [
@@ -2597,6 +2605,7 @@ function ComposerInner({
     bottomStatus.ctxToneClass,
     breakdown,
     backgroundContextCompactInFlight,
+    composerFooterChrome,
     contextBreakdownLoading,
     dualPaneRepositoryPicker,
     ensureBreakdown,
@@ -2637,43 +2646,49 @@ function ComposerInner({
             </Button>
           </HoverHint>
         ) : null}
-        <ComposerCommonPhrasesManageTrigger
-          phrases={composerCommonPhrases}
-          loading={composerCommonPhrasesLoading}
-          saving={composerCommonPhrasesSaving}
-          onPersist={persistComposerCommonPhrases}
-          defaultInstruction={composerDefaultInstruction}
-          defaultInstructionLoading={composerDefaultInstructionLoading}
-          defaultInstructionSaving={composerDefaultInstructionSaving}
-          onDefaultInstructionSave={saveComposerDefaultInstruction}
-          repositoryPath={session.repositoryPath}
-        />
-        <ComposerRuntimeSettingsTrigger
-          engine={sessionExecutionEngine}
-          codexAvailable={codexAvailable}
-          cursorAvailable={cursorAvailable}
-          geminiAvailable={geminiAvailable}
-          opencodeAvailable={opencodeAvailable}
-          disabled={isSessionBusy}
-          onEngineChange={paneCount > 1 ? undefined : onSessionExecutionEngineChange}
-          onOpenExecutionEnvironment={onOpenExecutionEnvironment}
-          connectionKind={session.connectionKind}
-          defaultConnectionKind={defaultConnectionKind}
-          onConnectionKindChange={onSessionConnectionKindChange}
-          claudeProxyRoute={
-            paneCount > 1 ? (paneRuntimeOverride?.claudeProxyRoute ?? "auto") : undefined
-          }
-          paneIndex={paneIndex}
-          paneRuntimeOverride={paneRuntimeOverride}
-          onUpdatePaneRuntimeOverride={paneCount > 1 ? onUpdatePaneRuntimeOverride : undefined}
-        />
-        <ComposerModelPicker
-          session={session}
-          sessionExecutionEngine={sessionExecutionEngine}
-          model={model}
-          onModelChange={handleComposerModelChange}
-          disabled={isSessionBusy}
-        />
+        {composerFooterChrome.showComposerFooterCommonPhrases ? (
+          <ComposerCommonPhrasesManageTrigger
+            phrases={composerCommonPhrases}
+            loading={composerCommonPhrasesLoading}
+            saving={composerCommonPhrasesSaving}
+            onPersist={persistComposerCommonPhrases}
+            defaultInstruction={composerDefaultInstruction}
+            defaultInstructionLoading={composerDefaultInstructionLoading}
+            defaultInstructionSaving={composerDefaultInstructionSaving}
+            onDefaultInstructionSave={saveComposerDefaultInstruction}
+            repositoryPath={session.repositoryPath}
+          />
+        ) : null}
+        {composerFooterChrome.showComposerFooterRuntimeSettings ? (
+          <ComposerRuntimeSettingsTrigger
+            engine={sessionExecutionEngine}
+            codexAvailable={codexAvailable}
+            cursorAvailable={cursorAvailable}
+            geminiAvailable={geminiAvailable}
+            opencodeAvailable={opencodeAvailable}
+            disabled={isSessionBusy}
+            onEngineChange={paneCount > 1 ? undefined : onSessionExecutionEngineChange}
+            onOpenExecutionEnvironment={onOpenExecutionEnvironment}
+            connectionKind={session.connectionKind}
+            defaultConnectionKind={defaultConnectionKind}
+            onConnectionKindChange={onSessionConnectionKindChange}
+            claudeProxyRoute={
+              paneCount > 1 ? (paneRuntimeOverride?.claudeProxyRoute ?? "auto") : undefined
+            }
+            paneIndex={paneIndex}
+            paneRuntimeOverride={paneRuntimeOverride}
+            onUpdatePaneRuntimeOverride={paneCount > 1 ? onUpdatePaneRuntimeOverride : undefined}
+          />
+        ) : null}
+        {composerFooterChrome.showComposerFooterModelPicker ? (
+          <ComposerModelPicker
+            session={session}
+            sessionExecutionEngine={sessionExecutionEngine}
+            model={model}
+            onModelChange={handleComposerModelChange}
+            disabled={isSessionBusy}
+          />
+        ) : null}
         {menuItem}
       </div>
     ),
@@ -2702,6 +2717,7 @@ function ComposerInner({
       composerDefaultInstructionLoading,
       composerDefaultInstructionSaving,
       saveComposerDefaultInstruction,
+      composerFooterChrome,
       paneCount,
       paneIndex,
       paneRuntimeOverride,
