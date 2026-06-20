@@ -42,15 +42,36 @@ describe("parseFeedbackLoopStructuredActions", () => {
 });
 
 describe("isLowRiskAutoApplyPatch", () => {
-  test("only heuristic MCP disable patches qualify", () => {
+  test("non-destructive patches qualify regardless of source", () => {
+    // append_section：向已存在文件追加章节，不覆盖既有内容
+    expect(
+      isLowRiskAutoApplyPatch({ kind: "claude_md", action: "append_section", source: "heuristic" }),
+    ).toBe(true);
+    expect(
+      isLowRiskAutoApplyPatch({ kind: "memory", action: "append_section", source: "ai" }),
+    ).toBe(true);
+    // mcp disable：禁用 MCP server，可经备份回滚
     expect(
       isLowRiskAutoApplyPatch({ kind: "mcp", action: "disable", source: "heuristic" }),
     ).toBe(true);
     expect(
       isLowRiskAutoApplyPatch({ kind: "mcp", action: "disable", source: "ai" }),
+    ).toBe(true);
+  });
+
+  test("destructive patches are excluded from auto-apply", () => {
+    expect(
+      isLowRiskAutoApplyPatch({ kind: "rule", action: "create", source: "heuristic" }),
     ).toBe(false);
     expect(
-      isLowRiskAutoApplyPatch({ kind: "rule", action: "append", source: "heuristic" }),
+      isLowRiskAutoApplyPatch({ kind: "claude_md", action: "update", source: "heuristic" }),
+    ).toBe(false);
+    expect(
+      isLowRiskAutoApplyPatch({ kind: "settings", action: "merge_json", source: "heuristic" }),
+    ).toBe(false);
+    // enable MCP 可能引入新副作用，需人工审阅
+    expect(
+      isLowRiskAutoApplyPatch({ kind: "mcp", action: "enable", source: "heuristic" }),
     ).toBe(false);
   });
 });

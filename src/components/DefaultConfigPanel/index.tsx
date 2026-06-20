@@ -857,6 +857,90 @@ export function DefaultConfigPanel() {
           </div>
         </div>
 
+        <div className="app-default-config-row" aria-label="反馈神经网自动应用补丁">
+          <div className="app-default-config-row__main">
+            <span className="app-default-config-row__title">自动写入配置补丁</span>
+            <span className="app-default-config-row__hint">
+              worker 解析出非破坏性补丁（追加章节 / 禁用 MCP）后自动落盘并备份，无需手动审阅（默认关闭）
+            </span>
+          </div>
+          <div className="app-default-config-row__control">
+            <DefaultConfigOptionPick<"off" | "on">
+              aria-label="反馈神经网自动应用补丁"
+              disabled={
+                feedbackLoop.loading ||
+                feedbackLoop.saving ||
+                !feedbackLoop.enabled ||
+                !feedbackLoop.optimizeConfigArtifacts
+              }
+              value={feedbackLoop.autoApplyConfigPatches ? "on" : "off"}
+              options={[
+                { label: "关闭", value: "off" },
+                { label: "开启", value: "on" },
+              ]}
+              onChange={(value) => {
+                void feedbackLoop.saveAutoApplyConfigPatches(value === "on");
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="app-default-config-row" aria-label="反馈神经网自动验证轮次">
+          <div className="app-default-config-row__main">
+            <span className="app-default-config-row__title">自动触发验证轮次</span>
+            <span className="app-default-config-row__hint">
+              补丁应用后自动比对当前指标，将补丁效果纳入循环评分（默认关闭）
+            </span>
+          </div>
+          <div className="app-default-config-row__control">
+            <DefaultConfigOptionPick<"off" | "on">
+              aria-label="反馈神经网自动验证轮次"
+              disabled={
+                feedbackLoop.loading ||
+                feedbackLoop.saving ||
+                !feedbackLoop.enabled ||
+                !feedbackLoop.optimizeConfigArtifacts
+              }
+              value={feedbackLoop.autoVerifyAfterApply ? "on" : "off"}
+              options={[
+                { label: "关闭", value: "off" },
+                { label: "开启", value: "on" },
+              ]}
+              onChange={(value) => {
+                void feedbackLoop.saveAutoVerifyAfterApply(value === "on");
+              }}
+            />
+          </div>
+        </div>
+
+        <div className="app-default-config-row" aria-label="反馈神经网评分回归自动回滚">
+          <div className="app-default-config-row__main">
+            <span className="app-default-config-row__title">评分回归自动回滚</span>
+            <span className="app-default-config-row__hint">
+              闭环评分低于本轮基线时，自动回滚本轮应用的补丁（默认关闭）
+            </span>
+          </div>
+          <div className="app-default-config-row__control">
+            <DefaultConfigOptionPick<"off" | "on">
+              aria-label="反馈神经网评分回归自动回滚"
+              disabled={
+                feedbackLoop.loading ||
+                feedbackLoop.saving ||
+                !feedbackLoop.enabled ||
+                !feedbackLoop.optimizeConfigArtifacts
+              }
+              value={feedbackLoop.autoRollbackOnRegression ? "on" : "off"}
+              options={[
+                { label: "关闭", value: "off" },
+                { label: "开启", value: "on" },
+              ]}
+              onChange={(value) => {
+                void feedbackLoop.saveAutoRollbackOnRegression(value === "on");
+              }}
+            />
+          </div>
+        </div>
+
         <div className="app-default-config-row" aria-label="注入全局神经网规则">
           <div className="app-default-config-row__main">
             <span className="app-default-config-row__title">注入全局规则到 spawn</span>

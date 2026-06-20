@@ -1,14 +1,20 @@
 import { MoreOutlined } from "@ant-design/icons";
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Button, Dropdown, Input, Modal, message, type MenuProps } from "antd";
-import type { PendingExecutionTask } from "../../types";
+import type { EmployeeItem, PendingExecutionTask } from "../../types";
 import { findHeadTaskPerLane } from "../../utils/pendingQueueLanes";
+import {
+  inferPendingQueueTargetFromPrompt,
+  resolvePendingQueueExecutorDisplayLabel,
+} from "../../utils/pendingQueueExecutor";
+import { singleTextPrompt } from "../ClaudeChatInput/composer-plain-utils";
+import { ComposerPlainEditSurface } from "../ClaudeChatInput/composerPlainEditSurface";
 
 // ── Icons ──
 
 function IconEdit() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
       <path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
@@ -16,7 +22,7 @@ function IconEdit() {
 
 function IconPin() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
       <path d="M12 17v5M5 17h14l-1-7H6l-1 7zM9 10V3h6v7" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
@@ -24,7 +30,7 @@ function IconPin() {
 
 function IconTrash() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
       <path d="M3 6h18M8 6V4a1 1 0 0 1 1-1h6a1 1 0 0 1 1 1v2M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6" strokeLinecap="round" />
       <path d="M10 11v6M14 11v6" strokeLinecap="round" />
     </svg>
@@ -34,7 +40,7 @@ function IconTrash() {
 /** 收起列表：上箭头 */
 function IconCollapseList() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
       <path d="M18 15l-6-6-6 6" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
@@ -43,7 +49,7 @@ function IconCollapseList() {
 /** 展开列表：下箭头 */
 function IconExpandList() {
   return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
+    <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" aria-hidden>
       <path d="M6 9l6 6 6-6" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
@@ -54,11 +60,32 @@ function IconExpandList() {
 interface Props {
   sessionStatus: "idle" | "connecting" | "running" | "completed" | "cancelled" | "error";
   tasks: PendingExecutionTask[];
+  repositoryPath?: string;
+  employees?: EmployeeItem[];
+  employeeMentions?: Array<{ id: string; name: string }>;
+  teamMentions?: Array<{ id: string; name: string }>;
+  codexAvailable?: boolean;
+  cursorAvailable?: boolean;
+  geminiAvailable?: boolean;
+  opencodeAvailable?: boolean;
   /** 已预约在本轮 Claude 结束后自动发送队首 */
   deferredSendQueued?: boolean;
   onPin: (id: string) => void;
   onRemove: (id: string) => void;
-  onUpdate: (id: string, fields: Partial<Pick<PendingExecutionTask, "promptText" | "executorLabel">>) => void;
+  onUpdate: (
+    id: string,
+    fields: Partial<
+      Pick<
+        PendingExecutionTask,
+        | "promptText"
+        | "executorLabel"
+        | "targetType"
+        | "targetEmployeeName"
+        | "targetWorkflowId"
+        | "targetWorkflowName"
+      >
+    >,
+  ) => void;
   taskDispatchStateById?: Record<string, { label: string; tone: "ready" | "waiting" }>;
   onSendNext: () => void;
   onClearAll: () => void;
@@ -69,6 +96,14 @@ interface Props {
 export function PendingTaskQueuePanel({
   sessionStatus,
   tasks,
+  repositoryPath,
+  employees = [],
+  employeeMentions = [],
+  teamMentions = [],
+  codexAvailable = true,
+  cursorAvailable = true,
+  geminiAvailable = false,
+  opencodeAvailable = false,
   deferredSendQueued = false,
   onPin,
   onRemove,
@@ -81,7 +116,6 @@ export function PendingTaskQueuePanel({
   const prevTaskCountRef = useRef(tasks.length);
   const [editing, setEditing] = useState<PendingExecutionTask | null>(null);
   const [editText, setEditText] = useState("");
-  const [editExecutor, setEditExecutor] = useState("");
 
   const isRunning = sessionStatus === "running";
 
@@ -96,7 +130,6 @@ export function PendingTaskQueuePanel({
   const openEdit = useCallback((t: PendingExecutionTask) => {
     setEditing(t);
     setEditText(t.promptText);
-    setEditExecutor(t.executorLabel);
   }, []);
 
   const saveEdit = useCallback(() => {
@@ -106,9 +139,17 @@ export function PendingTaskQueuePanel({
       message.warning("任务内容不能为空");
       return;
     }
-    onUpdate(editing.id, { promptText: text, executorLabel: editExecutor.trim() || "未指定" });
+    const target = inferPendingQueueTargetFromPrompt(singleTextPrompt(text), "", employees);
+    onUpdate(editing.id, {
+      promptText: text,
+      executorLabel: target.executorLabel,
+      targetType: target.targetType,
+      targetEmployeeName: target.targetEmployeeName,
+      targetWorkflowId: target.targetWorkflowId,
+      targetWorkflowName: target.targetWorkflowName,
+    });
     setEditing(null);
-  }, [editing, editText, editExecutor, onUpdate]);
+  }, [editText, editing, employees, onUpdate]);
 
   const multitaskItems: MenuProps["items"] = [
     {
@@ -156,7 +197,9 @@ export function PendingTaskQueuePanel({
         ? `队首阻塞：${taskDispatchStateById[waitingLaneHeads[0]!.id]?.label ?? ""}`
         : [
             readyLaneHeads.length > 0 ? `${readyLaneHeads.length} 路可出队` : null,
-            ...waitingLaneHeads.map((t) => taskDispatchStateById[t.id]?.label ?? t.executorLabel),
+            ...waitingLaneHeads.map(
+              (t) => taskDispatchStateById[t.id]?.label ?? resolvePendingQueueExecutorDisplayLabel(t),
+            ),
           ]
             .filter(Boolean)
             .join("；");
@@ -168,7 +211,12 @@ export function PendingTaskQueuePanel({
           本轮后发送
         </span>
       ) : null}
-      <Dropdown menu={{ items: multitaskItems, onClick: onMultitaskClick }} trigger={["click"]} placement="bottomRight">
+      <Dropdown
+        menu={{ items: multitaskItems, onClick: onMultitaskClick, className: "app-pending-task-queue-more-menu-inner" }}
+        trigger={["click"]}
+        placement="bottomRight"
+        classNames={{ root: "app-pending-task-queue-more-dropdown" }}
+      >
         <Button type="text" size="small" icon={<MoreOutlined />} className="app-pending-task-queue-more-btn" aria-label="更多操作" />
       </Dropdown>
       {listCollapsed ? (
@@ -209,6 +257,8 @@ export function PendingTaskQueuePanel({
     </div>
   );
 
+  const editingExecutorLabel = editing ? resolvePendingQueueExecutorDisplayLabel(editing) : "";
+
   return (
     <div className="app-pending-task-queue-inner">
       {count > 0 ? (
@@ -223,37 +273,40 @@ export function PendingTaskQueuePanel({
           </div>
           {!listCollapsed ? (
             <ul className="app-pending-task-queue-panel__list">
-              {tasks.map((t) => (
-                <li key={t.id} className="app-pending-task-queue-panel__item">
-                  <div className="app-pending-task-queue-panel__item-main">
-                    <span className="app-pending-task-queue-panel__executor" title={t.executorLabel}>
-                      {t.executorLabel}
-                    </span>
-                    {taskDispatchStateById[t.id] ? (
-                      <span
-                        className={`app-pending-task-queue-panel__dispatch-state app-pending-task-queue-panel__dispatch-state--${taskDispatchStateById[t.id]!.tone}`}
-                        title={taskDispatchStateById[t.id]!.label}
-                      >
-                        {taskDispatchStateById[t.id]!.label}
+              {tasks.map((t, index) => {
+                const executorDisplayLabel = resolvePendingQueueExecutorDisplayLabel(t);
+                return (
+                  <li key={t.id} className="app-pending-task-queue-panel__item">
+                    <div className="app-pending-task-queue-panel__item-main">
+                      <span className="app-pending-task-queue-panel__executor" title={executorDisplayLabel}>
+                        {executorDisplayLabel}
                       </span>
-                    ) : null}
-                    <span className="app-pending-task-queue-panel__text" title={t.promptText}>
-                      {t.promptText}
-                    </span>
-                  </div>
-                  <div className="app-pending-task-queue-panel__actions">
-                    <button type="button" className="app-pending-task-queue-icon-btn" title="编辑" onClick={() => openEdit(t)}>
-                      <IconEdit />
-                    </button>
-                    <button type="button" className="app-pending-task-queue-icon-btn" title="置顶" onClick={() => onPin(t.id)}>
-                      <IconPin />
-                    </button>
-                    <button type="button" className="app-pending-task-queue-icon-btn" title="删除" onClick={() => onRemove(t.id)}>
-                      <IconTrash />
-                    </button>
-                  </div>
-                </li>
-              ))}
+                      {taskDispatchStateById[t.id] && !(index === 0 && headDispatchHint) ? (
+                        <span
+                          className={`app-pending-task-queue-panel__dispatch-state app-pending-task-queue-panel__dispatch-state--${taskDispatchStateById[t.id]!.tone}`}
+                          title={taskDispatchStateById[t.id]!.label}
+                        >
+                          {taskDispatchStateById[t.id]!.label}
+                        </span>
+                      ) : null}
+                      <span className="app-pending-task-queue-panel__text" title={t.promptText}>
+                        {t.promptText}
+                      </span>
+                    </div>
+                    <div className="app-pending-task-queue-panel__actions">
+                      <button type="button" className="app-pending-task-queue-icon-btn" title="编辑" onClick={() => openEdit(t)}>
+                        <IconEdit />
+                      </button>
+                      <button type="button" className="app-pending-task-queue-icon-btn" title="置顶" onClick={() => onPin(t.id)}>
+                        <IconPin />
+                      </button>
+                      <button type="button" className="app-pending-task-queue-icon-btn" title="删除" onClick={() => onRemove(t.id)}>
+                        <IconTrash />
+                      </button>
+                    </div>
+                  </li>
+                );
+              })}
             </ul>
           ) : null}
         </div>
@@ -265,14 +318,31 @@ export function PendingTaskQueuePanel({
         onOk={saveEdit}
         onCancel={() => setEditing(null)}
         okText="保存"
+        keyboard={false}
         destroyOnHidden
-        width={560}
+        width={640}
+        className="app-pending-task-queue-edit-modal"
       >
         <div className="app-pending-task-queue-edit">
-          <label className="app-pending-task-queue-edit__label">由谁执行（展示）</label>
-          <Input value={editExecutor} onChange={(e) => setEditExecutor(e.target.value)} placeholder="例如 @张三 或 Sonnet" />
+          <label className="app-pending-task-queue-edit__label">由谁执行</label>
+          <Input value={editingExecutorLabel} readOnly />
           <label className="app-pending-task-queue-edit__label">任务内容</label>
-          <Input.TextArea value={editText} onChange={(e) => setEditText(e.target.value)} rows={8} />
+          {editing ? (
+            <ComposerPlainEditSurface
+              key={editing.id}
+              value={editText}
+              onChange={setEditText}
+              repositoryPath={repositoryPath}
+              employeeMentions={employeeMentions}
+              teamMentions={teamMentions}
+              codexAvailable={codexAvailable}
+              cursorAvailable={cursorAvailable}
+              geminiAvailable={geminiAvailable}
+              opencodeAvailable={opencodeAvailable}
+              autoFocus
+              className="app-pending-task-queue-edit-composer"
+            />
+          ) : null}
         </div>
       </Modal>
     </div>

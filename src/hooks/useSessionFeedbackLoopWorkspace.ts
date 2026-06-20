@@ -228,6 +228,9 @@ export function useSessionFeedbackLoopWorkspace(
     earlyStopConvergence: feedbackLoopSetting.earlyStopConvergence,
     autoSaveHabitsToComposer: feedbackLoopSetting.autoSaveHabitsToComposer,
     optimizeConfigArtifacts: feedbackLoopSetting.optimizeConfigArtifacts,
+    autoApplyConfigPatches: feedbackLoopSetting.autoApplyConfigPatches,
+    autoRollbackOnRegression: feedbackLoopSetting.autoRollbackOnRegression,
+    autoVerifyAfterApply: feedbackLoopSetting.autoVerifyAfterApply,
     repositoryPath: session?.repositoryPath,
     insights: loopInsights,
     meta: session
@@ -266,6 +269,8 @@ export function useSessionFeedbackLoopWorkspace(
   ingestConfigPatchRef.current = feedbackLoop.ingestConfigPatchAiResponse;
   const ingestCycleWorkerRef = useRef(feedbackLoop.ingestCycleWorkerResponse);
   ingestCycleWorkerRef.current = feedbackLoop.ingestCycleWorkerResponse;
+  const maybeAutoApplyConfigPatchesRef = useRef(feedbackLoop.maybeAutoApplyConfigPatches);
+  maybeAutoApplyConfigPatchesRef.current = feedbackLoop.maybeAutoApplyConfigPatches;
 
   useSessionFeedbackLoopDispatchCompletion({
     anchorSessionId: sessionId,
@@ -278,6 +283,12 @@ export function useSessionFeedbackLoopWorkspace(
         const count = ingestConfigPatchRef.current(responseText);
         if (count > 0) {
           message.success(`神经网 worker 已解析 ${count} 条配置补丁，可在抽屉中审阅`);
+          // 自动写入：worker 解析出补丁后，若开启自动应用则立即落盘低风险补丁。
+          void maybeAutoApplyConfigPatchesRef.current().then((applied) => {
+            if (applied > 0) {
+              message.success(`反馈神经网：已自动应用 ${applied} 条低风险补丁`);
+            }
+          });
         }
       }
     },

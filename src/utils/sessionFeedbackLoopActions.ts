@@ -105,10 +105,22 @@ export function parseFeedbackLoopStructuredActions(
   return actions;
 }
 
+/**
+ * 判定一条配置补丁是否属于「非破坏性」、可被自动落盘的低风险补丁。
+ *
+ * 保守扩展策略：仅放行追加类与可回滚的禁用类动作，覆盖面与安全性兼顾。
+ *  - `append_section`：向已存在文件（CLAUDE.md / rules / memory）追加章节，不覆盖既有内容；
+ *  - `mcp` + `disable`：禁用 MCP server，可经备份一键回滚。
+ *
+ * 明确排除（需人工审阅）：`create`（新建文件）、`update`（覆盖）、`merge_json`（改写 settings）、
+ * `enable`（启用 MCP，可能引入新副作用）。
+ */
 export function isLowRiskAutoApplyPatch(input: {
   kind: string;
   action: string;
   source: string;
 }): boolean {
-  return input.kind === "mcp" && input.action === "disable" && input.source === "heuristic";
+  if (input.action === "append_section") return true;
+  if (input.kind === "mcp" && input.action === "disable") return true;
+  return false;
 }

@@ -102,6 +102,12 @@ export interface SessionFeedbackLoopSettings {
   optimizeConfigArtifacts: boolean;
   globalRules: FeedbackGlobalRuleV1[];
   injectGlobalRules: boolean;
+  /** worker 解析出非破坏性补丁后自动落盘 */
+  autoApplyConfigPatches: boolean;
+  /** 评分回归时自动回滚本轮应用的补丁 */
+  autoRollbackOnRegression: boolean;
+  /** 补丁应用后自动触发验证轮次 */
+  autoVerifyAfterApply: boolean;
 }
 
 export type MonitorPanelPlacement = "left" | "right";
@@ -182,6 +188,12 @@ export interface WiseDefaultConfigV1 {
   sessionFeedbackLoopGlobalRules: FeedbackGlobalRuleV1[];
   /** spawn 时注入全局规则到 system prompt。 */
   sessionFeedbackLoopInjectGlobalRules: boolean;
+  /** worker 解析出非破坏性补丁后自动落盘（追加章节 / 禁用 MCP）。 */
+  sessionFeedbackLoopAutoApplyConfigPatches: boolean;
+  /** 闭环评分回归时自动回滚本轮应用的补丁。 */
+  sessionFeedbackLoopAutoRollbackOnRegression: boolean;
+  /** 补丁应用后自动触发验证轮次，将效果纳入循环评分。 */
+  sessionFeedbackLoopAutoVerifyAfterApply: boolean;
 }
 
 const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
@@ -221,6 +233,9 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   sessionFeedbackLoopOptimizeConfigArtifacts: true,
   sessionFeedbackLoopGlobalRules: [],
   sessionFeedbackLoopInjectGlobalRules: false,
+  sessionFeedbackLoopAutoApplyConfigPatches: false,
+  sessionFeedbackLoopAutoRollbackOnRegression: false,
+  sessionFeedbackLoopAutoVerifyAfterApply: false,
 };
 
 function normalizeMonitorPanelPlacement(raw: unknown): MonitorPanelPlacement | null {
@@ -414,6 +429,27 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
               parsed.sessionFeedbackLoopInjectGlobalRules,
               DEFAULT_CONFIG.sessionFeedbackLoopInjectGlobalRules,
             ),
+      sessionFeedbackLoopAutoApplyConfigPatches:
+        parsed.sessionFeedbackLoopAutoApplyConfigPatches === undefined
+          ? DEFAULT_CONFIG.sessionFeedbackLoopAutoApplyConfigPatches
+          : normalizeBoolean(
+              parsed.sessionFeedbackLoopAutoApplyConfigPatches,
+              DEFAULT_CONFIG.sessionFeedbackLoopAutoApplyConfigPatches,
+            ),
+      sessionFeedbackLoopAutoRollbackOnRegression:
+        parsed.sessionFeedbackLoopAutoRollbackOnRegression === undefined
+          ? DEFAULT_CONFIG.sessionFeedbackLoopAutoRollbackOnRegression
+          : normalizeBoolean(
+              parsed.sessionFeedbackLoopAutoRollbackOnRegression,
+              DEFAULT_CONFIG.sessionFeedbackLoopAutoRollbackOnRegression,
+            ),
+      sessionFeedbackLoopAutoVerifyAfterApply:
+        parsed.sessionFeedbackLoopAutoVerifyAfterApply === undefined
+          ? DEFAULT_CONFIG.sessionFeedbackLoopAutoVerifyAfterApply
+          : normalizeBoolean(
+              parsed.sessionFeedbackLoopAutoVerifyAfterApply,
+              DEFAULT_CONFIG.sessionFeedbackLoopAutoVerifyAfterApply,
+            ),
     };
   } catch {
     return null;
@@ -559,6 +595,12 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
       DEFAULT_CONFIG.sessionFeedbackLoopOptimizeConfigArtifacts,
     sessionFeedbackLoopGlobalRules: DEFAULT_CONFIG.sessionFeedbackLoopGlobalRules,
     sessionFeedbackLoopInjectGlobalRules: DEFAULT_CONFIG.sessionFeedbackLoopInjectGlobalRules,
+    sessionFeedbackLoopAutoApplyConfigPatches:
+      DEFAULT_CONFIG.sessionFeedbackLoopAutoApplyConfigPatches,
+    sessionFeedbackLoopAutoRollbackOnRegression:
+      DEFAULT_CONFIG.sessionFeedbackLoopAutoRollbackOnRegression,
+    sessionFeedbackLoopAutoVerifyAfterApply:
+      DEFAULT_CONFIG.sessionFeedbackLoopAutoVerifyAfterApply,
   };
 }
 
@@ -720,6 +762,9 @@ export async function saveWiseDefaultConfig(
       | "sessionFeedbackLoopOptimizeConfigArtifacts"
       | "sessionFeedbackLoopGlobalRules"
       | "sessionFeedbackLoopInjectGlobalRules"
+      | "sessionFeedbackLoopAutoApplyConfigPatches"
+      | "sessionFeedbackLoopAutoRollbackOnRegression"
+      | "sessionFeedbackLoopAutoVerifyAfterApply"
     >
   >,
 ): Promise<WiseDefaultConfigV1> {
@@ -799,6 +844,15 @@ export async function saveWiseDefaultConfig(
     sessionFeedbackLoopInjectGlobalRules:
       patch.sessionFeedbackLoopInjectGlobalRules ??
       current.sessionFeedbackLoopInjectGlobalRules,
+    sessionFeedbackLoopAutoApplyConfigPatches:
+      patch.sessionFeedbackLoopAutoApplyConfigPatches ??
+      current.sessionFeedbackLoopAutoApplyConfigPatches,
+    sessionFeedbackLoopAutoRollbackOnRegression:
+      patch.sessionFeedbackLoopAutoRollbackOnRegression ??
+      current.sessionFeedbackLoopAutoRollbackOnRegression,
+    sessionFeedbackLoopAutoVerifyAfterApply:
+      patch.sessionFeedbackLoopAutoVerifyAfterApply ??
+      current.sessionFeedbackLoopAutoVerifyAfterApply,
   };
   if (patch.connectionKind !== undefined) {
     next.connectionKind = normalizeConnectionKind(patch.connectionKind) ?? current.connectionKind;
@@ -922,6 +976,24 @@ export async function saveWiseDefaultConfig(
     next.sessionFeedbackLoopOptimizeConfigArtifacts = normalizeBoolean(
       patch.sessionFeedbackLoopOptimizeConfigArtifacts,
       DEFAULT_CONFIG.sessionFeedbackLoopOptimizeConfigArtifacts,
+    );
+  }
+  if (patch.sessionFeedbackLoopAutoApplyConfigPatches !== undefined) {
+    next.sessionFeedbackLoopAutoApplyConfigPatches = normalizeBoolean(
+      patch.sessionFeedbackLoopAutoApplyConfigPatches,
+      DEFAULT_CONFIG.sessionFeedbackLoopAutoApplyConfigPatches,
+    );
+  }
+  if (patch.sessionFeedbackLoopAutoRollbackOnRegression !== undefined) {
+    next.sessionFeedbackLoopAutoRollbackOnRegression = normalizeBoolean(
+      patch.sessionFeedbackLoopAutoRollbackOnRegression,
+      DEFAULT_CONFIG.sessionFeedbackLoopAutoRollbackOnRegression,
+    );
+  }
+  if (patch.sessionFeedbackLoopAutoVerifyAfterApply !== undefined) {
+    next.sessionFeedbackLoopAutoVerifyAfterApply = normalizeBoolean(
+      patch.sessionFeedbackLoopAutoVerifyAfterApply,
+      DEFAULT_CONFIG.sessionFeedbackLoopAutoVerifyAfterApply,
     );
   }
   await persistConfig(next);
@@ -1065,7 +1137,10 @@ export async function saveWiseDefaultConfig(
     patch.sessionFeedbackLoopInjectSystemPrompt !== undefined ||
     patch.sessionFeedbackLoopOptimizeConfigArtifacts !== undefined ||
     patch.sessionFeedbackLoopGlobalRules !== undefined ||
-    patch.sessionFeedbackLoopInjectGlobalRules !== undefined
+    patch.sessionFeedbackLoopInjectGlobalRules !== undefined ||
+    patch.sessionFeedbackLoopAutoApplyConfigPatches !== undefined ||
+    patch.sessionFeedbackLoopAutoRollbackOnRegression !== undefined ||
+    patch.sessionFeedbackLoopAutoVerifyAfterApply !== undefined
   ) {
     if (
       next.sessionFeedbackLoopEnabled !== current.sessionFeedbackLoopEnabled ||
@@ -1079,7 +1154,13 @@ export async function saveWiseDefaultConfig(
         current.sessionFeedbackLoopOptimizeConfigArtifacts ||
       JSON.stringify(next.sessionFeedbackLoopGlobalRules) !==
         JSON.stringify(current.sessionFeedbackLoopGlobalRules) ||
-      next.sessionFeedbackLoopInjectGlobalRules !== current.sessionFeedbackLoopInjectGlobalRules
+      next.sessionFeedbackLoopInjectGlobalRules !== current.sessionFeedbackLoopInjectGlobalRules ||
+      next.sessionFeedbackLoopAutoApplyConfigPatches !==
+        current.sessionFeedbackLoopAutoApplyConfigPatches ||
+      next.sessionFeedbackLoopAutoRollbackOnRegression !==
+        current.sessionFeedbackLoopAutoRollbackOnRegression ||
+      next.sessionFeedbackLoopAutoVerifyAfterApply !==
+        current.sessionFeedbackLoopAutoVerifyAfterApply
     ) {
       dispatchSessionFeedbackLoopChanged({
         enabled: next.sessionFeedbackLoopEnabled,
@@ -1091,6 +1172,9 @@ export async function saveWiseDefaultConfig(
         optimizeConfigArtifacts: next.sessionFeedbackLoopOptimizeConfigArtifacts,
         globalRules: next.sessionFeedbackLoopGlobalRules,
         injectGlobalRules: next.sessionFeedbackLoopInjectGlobalRules,
+        autoApplyConfigPatches: next.sessionFeedbackLoopAutoApplyConfigPatches,
+        autoRollbackOnRegression: next.sessionFeedbackLoopAutoRollbackOnRegression,
+        autoVerifyAfterApply: next.sessionFeedbackLoopAutoVerifyAfterApply,
       });
     }
   }
@@ -1459,6 +1543,9 @@ export async function loadSessionFeedbackLoopSettingsFromStore(): Promise<Sessio
     optimizeConfigArtifacts: config.sessionFeedbackLoopOptimizeConfigArtifacts,
     globalRules: config.sessionFeedbackLoopGlobalRules,
     injectGlobalRules: config.sessionFeedbackLoopInjectGlobalRules,
+    autoApplyConfigPatches: config.sessionFeedbackLoopAutoApplyConfigPatches,
+    autoRollbackOnRegression: config.sessionFeedbackLoopAutoRollbackOnRegression,
+    autoVerifyAfterApply: config.sessionFeedbackLoopAutoVerifyAfterApply,
   };
 }
 
@@ -1486,6 +1573,15 @@ export async function saveSessionFeedbackLoopSettingsToStore(
       : {}),
     ...(patch.injectGlobalRules !== undefined
       ? { sessionFeedbackLoopInjectGlobalRules: patch.injectGlobalRules }
+      : {}),
+    ...(patch.autoApplyConfigPatches !== undefined
+      ? { sessionFeedbackLoopAutoApplyConfigPatches: patch.autoApplyConfigPatches }
+      : {}),
+    ...(patch.autoRollbackOnRegression !== undefined
+      ? { sessionFeedbackLoopAutoRollbackOnRegression: patch.autoRollbackOnRegression }
+      : {}),
+    ...(patch.autoVerifyAfterApply !== undefined
+      ? { sessionFeedbackLoopAutoVerifyAfterApply: patch.autoVerifyAfterApply }
       : {}),
   });
 }

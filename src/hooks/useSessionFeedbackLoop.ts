@@ -1,3 +1,4 @@
+import { message } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { applyFeedbackConfigPatches } from "../services/sessionFeedbackConfigPatchApply";
 import { listFeedbackConfigPatchBackups } from "../services/sessionFeedbackConfigPatchBackupList";
@@ -64,6 +65,9 @@ import {
   type SessionFeedbackLoopState,
 } from "../utils/sessionFeedbackLoop";
 
+/** 自动调整：最终分低于历史基线超过该阈值时，视为评分回归并回滚本轮补丁。 */
+const FEEDBACK_LOOP_REGRESSION_THRESHOLD = 5;
+
 export interface UseSessionFeedbackLoopInput {
   sessionId: string;
   enabled: boolean;
@@ -72,6 +76,12 @@ export interface UseSessionFeedbackLoopInput {
   earlyStopConvergence?: boolean;
   autoSaveHabitsToComposer?: boolean;
   optimizeConfigArtifacts?: boolean;
+  /** worker 解析出非破坏性补丁后自动落盘 */
+  autoApplyConfigPatches?: boolean;
+  /** 评分回归时自动回滚本轮应用的补丁 */
+  autoRollbackOnRegression?: boolean;
+  /** 补丁应用后自动触发验证轮次 */
+  autoVerifyAfterApply?: boolean;
   repositoryPath?: string | null;
   insights: SessionInsightsResult | null;
   meta?: SessionInsightsReportMeta;
@@ -107,6 +117,7 @@ export interface UseSessionFeedbackLoopResult {
   rejectConfigPatch: (patchId: string) => void;
   applySelectedConfigPatches: (patchIds: readonly string[]) => Promise<number>;
   applyLowRiskConfigPatches: () => Promise<number>;
+  maybeAutoApplyConfigPatches: () => Promise<number>;
   refreshConfigPatchBackups: () => Promise<void>;
   rollbackConfigPatchBackup: (backupId: string) => Promise<{ ok: boolean; message: string }>;
   exportMarkdownReport: () => string | null;
@@ -127,6 +138,9 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
     earlyStopConvergence = true,
     autoSaveHabitsToComposer = false,
     optimizeConfigArtifacts = false,
+    autoApplyConfigPatches = false,
+    autoRollbackOnRegression = false,
+    autoVerifyAfterApply = false,
   } = input;
 
   const maxCycles = normalizeFeedbackLoopMaxCycles(maxCyclesInput);
@@ -168,6 +182,19 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
 
   const configSnapshotRef = useRef(configSnapshot);
   configSnapshotRef.current = configSnapshot;
+
+  const autoApplyConfigPatchesRef = useRef(autoApplyConfigPatches);
+  autoApplyConfigPatchesRef.current = autoApplyConfigPatches;
+  const autoRollbackOnRegressionRef = useRef(autoRollbackOnRegression);
+  autoRollbackOnRegressionRef.current = autoRollbackOnRegression;
+  const autoVerifyAfterApplyRef = useRef(autoVerifyAfterApply);
+  autoVerifyAfterApplyRef.current = autoVerifyAfterApply;
+
+  const configPatchBackupsRef = useRef(configPatchBackups);
+  configPatchBackupsRef.current = configPatchBackups;
+
+  /** 本轮运行中已应用补丁的 patchId 集合，用于评分回归时精确回滚。 */
+  const runAppliedPatchIdsRef = useRef<Set<string>>(new Set());
 
   const processingRef = useRef(false);
   const autoStartedRef = useRef(false);
@@ -251,6 +278,9 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
     const currentSessionId = state.sessionId;
     return listFeedbackLoopHistory(repositoryPath).filter((r) => r.sessionId !== currentSessionId);
   }, [historyVersion, repositoryPath, state.sessionId]);
+
+  const historyRecordsRef = useRef(historyRecords);
+  historyRecordsRef.current = historyRecords;
 
   const historyComparison = useMemo(() => {
     const outcome = summarizeFeedbackLoopOutcome(state);
@@ -349,6 +379,42 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
       });
       setEffectivenessVersion((v) => v + 1);
 
+      // 自动调整：最终分显著低于历史基线时，回滚本轮应用的补丁备份。
+      // 基线取归档前的历史平均分（不含本次），delta = 本次分 - 基线。
+      if (autoRollbackOnRegressionRef.current) {
+        const finalScore = outcome.finalOverallScore;
+        const baseline = compareWithHistoryAverage(historyRecordsRef.current, finalScore);
+        if (
+          finalScore != null &&
+          baseline.average != null &&
+          baseline.delta != null &&
+          baseline.delta <= -FEEDBACK_LOOP_REGRESSION_THRESHOLD
+        ) {
+          const appliedIds = runAppliedPatchIdsRef.current;
+          if (appliedIds.size > 0) {
+            const targets = configPatchBackupsRef.current.filter((b) =>
+              appliedIds.has(b.patchId),
+            );
+            let rolledBack = 0;
+            for (const backup of targets) {
+              const result = await rollbackFeedbackConfigPatchBackup({
+                repositoryPath: repo,
+                backup,
+              });
+              if (result.ok) rolledBack += 1;
+            }
+            if (rolledBack > 0) {
+              appliedIds.clear();
+              void refreshConfigSnapshot();
+              void refreshConfigPatchBackups();
+              message.warning(
+                `反馈神经网：评分低于基线 ${Math.abs(baseline.delta).toFixed(1)} 分，已自动回滚 ${rolledBack} 条补丁`,
+              );
+            }
+          }
+        }
+      }
+
       if (autoSaveHabitsToComposer) {
         const extracted = extractFeedbackLoopHabits(completed);
         if (extracted.length > 0) {
@@ -356,7 +422,13 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
         }
       }
     },
-    [autoSaveHabitsToComposer, optimizeConfigArtifacts, syncConfigPatchCandidates],
+    [
+      autoSaveHabitsToComposer,
+      optimizeConfigArtifacts,
+      refreshConfigPatchBackups,
+      refreshConfigSnapshot,
+      syncConfigPatchCandidates,
+    ],
   );
 
   useEffect(() => {
@@ -397,6 +469,7 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
     if (!enabled) return;
     autoStartedRef.current = true;
     archivedRunRef.current = null;
+    runAppliedPatchIdsRef.current = new Set();
     const next = startFeedbackLoop(sessionId, maxCycles);
     stateRef.current = next;
     setState(next);
@@ -416,6 +489,7 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
     clearFeedbackConfigPatches(sessionId);
     autoStartedRef.current = false;
     archivedRunRef.current = null;
+    runAppliedPatchIdsRef.current = new Set();
     const next = createInitialFeedbackLoopState(sessionId, maxCycles);
     stateRef.current = next;
     setState(next);
@@ -425,6 +499,9 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
   const forceCompare = useCallback(() => {
     void tick(true, undefined, true);
   }, [tick]);
+
+  const forceCompareRef = useRef<() => void>(forceCompare);
+  forceCompareRef.current = forceCompare;
 
   const saveHabitsToComposerManual = useCallback(async (): Promise<boolean> => {
     const extracted = extractFeedbackLoopHabits(stateRef.current);
@@ -515,12 +592,21 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
       }
 
       if (applied.length > 0) {
+        for (const patch of applied) {
+          runAppliedPatchIdsRef.current.add(patch.id);
+        }
         recordPatchApplyBatch({
           repositoryPath: repo,
           appliedPatches: applied,
           overheadDelta,
         });
         setEffectivenessVersion((v) => v + 1);
+
+        // 自动优化：补丁落盘后若开启自动验证，触发一次比对将补丁效果纳入循环评分。
+        // 仅在循环仍处于活跃阶段（running / awaiting_turns）时生效；已完成循环不重启。
+        if (autoVerifyAfterApplyRef.current) {
+          forceCompareRef.current();
+        }
       }
 
       void refreshConfigPatchBackups();
@@ -537,6 +623,15 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
     if (pending.length === 0) return 0;
     return applySelectedConfigPatches(pending.map((patch) => patch.id));
   }, [applySelectedConfigPatches, sessionId]);
+
+  /**
+   * 自动写入：worker 解析出非破坏性补丁后，若开启自动应用则立即落盘低风险补丁。
+   * 由调用方（onComplete）在补丁解析完成后调用。返回应用的补丁数。
+   */
+  const maybeAutoApplyConfigPatches = useCallback(async (): Promise<number> => {
+    if (!autoApplyConfigPatchesRef.current) return 0;
+    return applyLowRiskConfigPatches();
+  }, [applyLowRiskConfigPatches]);
 
   const rollbackConfigPatchBackup = useCallback(
     async (backupId: string): Promise<{ ok: boolean; message: string }> => {
@@ -599,6 +694,7 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
     rejectConfigPatch,
     applySelectedConfigPatches,
     applyLowRiskConfigPatches,
+    maybeAutoApplyConfigPatches,
     refreshConfigPatchBackups,
     rollbackConfigPatchBackup,
     exportMarkdownReport,

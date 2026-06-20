@@ -1,5 +1,7 @@
-import type { EmployeeItem, Prompt } from "../types";
+import type { EmployeeItem, PendingExecutionTask, Prompt } from "../types";
 import { isOmcMonitorDispatchMentionName, isOmcMonitorEmployeeRecord } from "./omcMonitorEmployeeSession";
+
+export const PENDING_QUEUE_MAIN_EXECUTOR_LABEL = "主会话";
 
 function isAgentPillOmcDispatchRoute(normalizedName: string, employees?: readonly EmployeeItem[]): boolean {
   if (isOmcMonitorDispatchMentionName(normalizedName)) return true;
@@ -16,19 +18,19 @@ export interface PendingQueueTargetInfo {
   targetWorkflowName?: string;
 }
 
-/** 从编辑器段落推断「由谁执行」：优先 @员工 / 团队药丸，否则用当前模型展示名 */
+/** 从编辑器段落推断「由谁执行」：优先 @员工 / 团队药丸，否则为主会话。 */
 export function inferExecutorLabelFromPrompt(
   prompt: Prompt,
-  modelDisplayLabel: string,
+  _modelDisplayLabel?: string,
   employees?: readonly EmployeeItem[],
 ): string {
-  return inferPendingQueueTargetFromPrompt(prompt, modelDisplayLabel, employees).executorLabel;
+  return inferPendingQueueTargetFromPrompt(prompt, _modelDisplayLabel, employees).executorLabel;
 }
 
 /** 从编辑器段落推断队列调度目标。 */
 export function inferPendingQueueTargetFromPrompt(
   prompt: Prompt,
-  modelDisplayLabel: string,
+  _modelDisplayLabel?: string,
   employees?: readonly EmployeeItem[],
 ): PendingQueueTargetInfo {
   for (const p of prompt) {
@@ -54,7 +56,27 @@ export function inferPendingQueueTargetFromPrompt(
     }
   }
   return {
-    executorLabel: modelDisplayLabel,
+    executorLabel: PENDING_QUEUE_MAIN_EXECUTOR_LABEL,
     targetType: "main",
   };
+}
+
+/** 队列行展示：只显示执行体（主会话 / @员工 / 团队），不展示模型名。 */
+export function resolvePendingQueueExecutorDisplayLabel(
+  task: Pick<
+    PendingExecutionTask,
+    "executorLabel" | "targetType" | "targetEmployeeName" | "targetWorkflowName"
+  >,
+): string {
+  const targetType = task.targetType ?? "main";
+  if (targetType === "employee") {
+    const name = task.targetEmployeeName?.trim();
+    if (name) return name.startsWith("@") ? name : `@${name}`;
+    return task.executorLabel;
+  }
+  if (targetType === "team") {
+    const name = task.targetWorkflowName?.trim();
+    return name ? `团队:${name}` : task.executorLabel;
+  }
+  return PENDING_QUEUE_MAIN_EXECUTOR_LABEL;
 }

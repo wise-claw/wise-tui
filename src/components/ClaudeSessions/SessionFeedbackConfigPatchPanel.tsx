@@ -416,14 +416,14 @@ export const SessionFeedbackConfigPatchPanel = memo(function SessionFeedbackConf
 
   const handleApplyLowRisk = useCallback(async () => {
     if (lowRiskPatches.length === 0) {
-      message.info("暂无低风险 MCP 禁用补丁");
+      message.info("暂无低风险补丁（追加章节 / 禁用 MCP）");
       return;
     }
     setApplying(true);
     try {
       const count = await applyLowRiskConfigPatches();
       if (count > 0) {
-        message.success(`已自动应用 ${count} 条低风险 MCP 禁用补丁`);
+        message.success(`已自动应用 ${count} 条低风险补丁（已备份，可回滚）`);
         setSelectedIds([]);
       } else {
         message.warning("未能应用低风险补丁");
@@ -558,7 +558,7 @@ export const SessionFeedbackConfigPatchPanel = memo(function SessionFeedbackConf
           </Button>
           {lowRiskPatches.length > 0 ? (
             <Button size="small" loading={applying} onClick={() => void handleApplyLowRisk()}>
-              应用低风险 MCP 禁用 ({lowRiskPatches.length})
+              应用低风险补丁 ({lowRiskPatches.length})
             </Button>
           ) : null}
           {pendingPatches.length > 0 ? (

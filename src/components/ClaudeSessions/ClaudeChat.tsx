@@ -913,7 +913,7 @@ export function ClaudeChatInner({
     (task: PendingExecutionTask): { label: string; tone: "ready" | "waiting" } => {
       const targetType = task.targetType ?? "main";
       if (targetType === "main" && !isMainIdle) {
-        return { label: "等待主会话空闲", tone: "waiting" };
+        return { label: "等待空闲", tone: "waiting" };
       }
       if (targetType === "employee") {
         if (isEmployeeIdle(task.targetEmployeeName)) {
@@ -934,7 +934,7 @@ export function ClaudeChatInner({
         const teamName = task.targetWorkflowName?.trim() || task.executorLabel;
         return { label: `等待团队空闲: ${teamName}`, tone: "waiting" };
       }
-      return { label: "主会话可执行", tone: "ready" };
+      return { label: "可执行", tone: "ready" };
     },
     [isMainIdle, isEmployeeIdle, isTeamIdle, workflowGraphStatusByWorkflowId],
   );
@@ -1681,6 +1681,14 @@ export function ClaudeChatInner({
           <PendingTaskQueuePanel
             sessionStatus={session.status}
             tasks={pendingTasks}
+            repositoryPath={session.repositoryPath}
+            employees={employees}
+            employeeMentions={mentionEmployees.map((item) => ({ id: item.id, name: item.name }))}
+            teamMentions={publishedTeamMentions}
+            codexAvailable={codexAvailable}
+            cursorAvailable={cursorAvailable}
+            geminiAvailable={geminiAvailable}
+            opencodeAvailable={opencodeAvailable}
             deferredSendQueued={deferredSendQueued}
             taskDispatchStateById={Object.fromEntries(
               pendingTasks.map((task) => [task.id, getPendingTaskDispatchState(task)]),

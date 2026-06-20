@@ -728,7 +728,7 @@ export interface PendingExecutionTask {
   id: string;
   /** 将发给 Claude 的完整提示（与直接发送时 buildClaudeOutgoingPrompt 结果一致） */
   promptText: string;
-  /** 展示用：@员工 / 团队名 / 当前模型等 */
+  /** 展示用：@员工 / 团队名 / 主会话（不含模型名） */
   executorLabel: string;
   /** 执行目标：主会话 / 指定员工 / 指定团队 */
   targetType?: "main" | "employee" | "team";

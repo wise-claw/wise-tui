@@ -150,7 +150,20 @@ export function usePendingTaskQueue(sessionId: string, repositoryPath: string) {
   );
 
   const updateTask = useCallback(
-    (id: string, fields: Partial<Pick<PendingExecutionTask, "promptText" | "executorLabel">>) => {
+    (
+      id: string,
+      fields: Partial<
+        Pick<
+          PendingExecutionTask,
+          | "promptText"
+          | "executorLabel"
+          | "targetType"
+          | "targetEmployeeName"
+          | "targetWorkflowId"
+          | "targetWorkflowName"
+        >
+      >,
+    ) => {
       bumpMutationEpoch();
       setTasks((prev) => {
         const next = prev.map((t) => (t.id === id ? { ...t, ...fields } : t));

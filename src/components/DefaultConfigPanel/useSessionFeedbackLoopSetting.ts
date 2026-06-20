@@ -18,6 +18,9 @@ export function useSessionFeedbackLoopSetting() {
     optimizeConfigArtifacts: true,
     globalRules: [],
     injectGlobalRules: false,
+    autoApplyConfigPatches: false,
+    autoRollbackOnRegression: false,
+    autoVerifyAfterApply: false,
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -55,6 +58,9 @@ export function useSessionFeedbackLoopSetting() {
         next.injectHabitsToSystemPrompt === settings.injectHabitsToSystemPrompt &&
         next.optimizeConfigArtifacts === settings.optimizeConfigArtifacts &&
         next.injectGlobalRules === settings.injectGlobalRules &&
+        next.autoApplyConfigPatches === settings.autoApplyConfigPatches &&
+        next.autoRollbackOnRegression === settings.autoRollbackOnRegression &&
+        next.autoVerifyAfterApply === settings.autoVerifyAfterApply &&
         JSON.stringify(next.globalRules) === JSON.stringify(settings.globalRules);
       if (unchanged) return;
       setSaving(true);
@@ -88,5 +94,11 @@ export function useSessionFeedbackLoopSetting() {
     saveOptimizeConfigArtifacts: (optimizeConfigArtifacts: boolean) =>
       save({ optimizeConfigArtifacts }),
     saveInjectGlobalRules: (injectGlobalRules: boolean) => save({ injectGlobalRules }),
+    saveAutoApplyConfigPatches: (autoApplyConfigPatches: boolean) =>
+      save({ autoApplyConfigPatches }),
+    saveAutoRollbackOnRegression: (autoRollbackOnRegression: boolean) =>
+      save({ autoRollbackOnRegression }),
+    saveAutoVerifyAfterApply: (autoVerifyAfterApply: boolean) =>
+      save({ autoVerifyAfterApply }),
   };
 }
