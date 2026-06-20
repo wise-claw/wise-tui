@@ -1,0 +1,371 @@
+import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import type { IDisposable } from "monaco-editor";
+import { Button, Spin } from "antd";
+import { ReloadOutlined, WarningOutlined } from "@ant-design/icons";
+import type * as Monaco from "monaco-editor";
+import type { editor as MonacoEditorNamespace } from "monaco-editor";
+import { GitDiffMonacoPane } from "./GitDiffMonacoPane";
+import type { FileEditorTab } from "../hooks/useRepositoryFileEditor";
+import { monacoLanguageFromRepositoryPath } from "../utils/repositoryFilePreview";
+import {
+  configureWiseMonacoTypeScript,
+  ensureRepositoryTypeScriptEnvironment,
+  isTypeScriptLikeRepositoryPath,
+  monacoUriForRepositoryPath,
+  syncMonacoRepositoryTypeScriptModels,
+} from "../services/monacoTypeScriptEnvironment";
+import { installMonacoGlobalFindRedirect } from "../utils/monacoGlobalFindRedirect";
+import { installMonacoTrackpadSelectionGuard } from "../utils/monacoTrackpadSelectionGuard";
+import {
+  isMonacoLargeFileContent,
+  monacoEditorOptionsBucket,
+  resolveWiseMonacoEditorOptionsFromLength,
+  shouldDeferMonacoEditorMount,
+  shouldInjectMonacoContentAfterMount,
+  shouldSyncMonacoTypeScriptDependencies,
+} from "../utils/monacoLargeFile";
+import { scheduleMonacoLargeFileContentInjection } from "../utils/monacoLargeFileContentInjection";
+import { runWhenIdle } from "../utils/deferIdle";
+import { MonacoSelectionChatToolbar } from "./MonacoSelectionChatToolbar";
+import { useGitRepositoryExplorerStatus } from "../hooks/useGitRepositoryExplorerStatus";
+import { useMonacoGitModifiedLineDecorations } from "../hooks/useMonacoGitModifiedLineDecorations";
+
+const MonacoEditor = lazy(() => import("@monaco-editor/react"));
+
+export interface RepositoryFileEditorTabSurfaceProps {
+  tab: FileEditorTab;
+  isActive: boolean;
+  dark: boolean;
+  repositoryPath: string | null | undefined;
+  activeSessionId: string | null;
+  onTabContentChange: (relativePath: string, content: string) => void;
+  onCloseTab: (relativePath: string) => void;
+  onReloadTab: (relativePath: string) => void;
+}
+
+function normalizeEditorLine(value: number | null | undefined): number | null {
+  if (typeof value !== "number" || !Number.isFinite(value)) return null;
+  const line = Math.floor(value);
+  return line > 0 ? line : null;
+}
+
+function revealEditorLineFocus(
+  editor: MonacoEditorNamespace.IStandaloneCodeEditor,
+  tab: FileEditorTab,
+  lastAppliedFocusRef: { current: string | null },
+  shouldFocus: boolean,
+): void {
+  const line = normalizeEditorLine(tab.focusLine);
+  if (line == null) return;
+  const focusKey = `${tab.relativePath}:${line}`;
+  if (lastAppliedFocusRef.current === focusKey) return;
+  const lineCount = Math.max(1, editor.getModel()?.getLineCount() ?? 1);
+  const targetLine = Math.min(Math.max(1, line), lineCount);
+  editor.setPosition({ lineNumber: targetLine, column: 1 });
+  const lineMaxColumn = Math.max(1, editor.getModel()?.getLineMaxColumn(targetLine) ?? 1);
+  editor.setSelection({
+    startLineNumber: targetLine,
+    startColumn: 1,
+    endLineNumber: targetLine,
+    endColumn: lineMaxColumn,
+  });
+  editor.revealLineInCenter(targetLine);
+  if (shouldFocus) {
+    editor.focus();
+  }
+  lastAppliedFocusRef.current = focusKey;
+}
+
+export function RepositoryFileEditorTabSurface({
+  tab,
+  isActive,
+  dark,
+  repositoryPath,
+  activeSessionId,
+  onTabContentChange,
+  onCloseTab,
+  onReloadTab,
+}: RepositoryFileEditorTabSurfaceProps) {
+  const monacoRef = useRef<typeof Monaco | null>(null);
+  const editorRef = useRef<MonacoEditorNamespace.IStandaloneCodeEditor | null>(null);
+  const lastAppliedFocusRef = useRef<string | null>(null);
+  const monacoMountGuardRef = useRef<IDisposable | null>(null);
+  const contentInjectionCancelRef = useRef<(() => void) | null>(null);
+  const lastInjectedContentVersionRef = useRef<number | null>(null);
+
+  const language = monacoLanguageFromRepositoryPath(tab.relativePath);
+  const editorPath = isTypeScriptLikeRepositoryPath(tab.relativePath)
+    ? monacoUriForRepositoryPath(tab.relativePath, repositoryPath)
+    : tab.relativePath;
+  const typeScriptSources = useMemo(
+    () =>
+      tab.diffOriginal === undefined
+        ? [{ relativePath: tab.relativePath, content: tab.content }]
+        : [],
+    [tab.content, tab.diffOriginal, tab.relativePath],
+  );
+  const contentLength = tab.content.length;
+  const optionsBucket = monacoEditorOptionsBucket(contentLength);
+  const editorOptions = useMemo(
+    () => resolveWiseMonacoEditorOptionsFromLength(contentLength),
+    [optionsBucket],
+  );
+  const largeFile = optionsBucket !== "small";
+  const hugeFile = optionsBucket === "huge";
+
+  const [monacoSurfaceReady, setMonacoSurfaceReady] = useState(true);
+  const [monacoEditorSurface, setMonacoEditorSurface] = useState<{
+    editor: MonacoEditorNamespace.IStandaloneCodeEditor;
+    monaco: typeof Monaco;
+  } | null>(null);
+
+  const isActiveRef = useRef(isActive);
+  isActiveRef.current = isActive;
+
+  const explorerGitStatus = useGitRepositoryExplorerStatus(repositoryPath ?? "");
+
+  useMonacoGitModifiedLineDecorations({
+    editor: isActive ? (monacoEditorSurface?.editor ?? null) : null,
+    monaco: isActive ? (monacoEditorSurface?.monaco ?? null) : null,
+    repositoryPath,
+    relativePath: tab.relativePath,
+    diskContent: tab.originalContent,
+    gitStatusRevision: explorerGitStatus.generation,
+    enabled: Boolean(
+      isActive &&
+        tab.diffOriginal === undefined &&
+        !tab.gitCommitSha &&
+        !tab.gitCommitCompare,
+    ),
+  });
+
+  useEffect(() => {
+    if (tab.diffOriginal !== undefined) {
+      lastInjectedContentVersionRef.current = null;
+      return;
+    }
+    const version = tab.contentVersion ?? 0;
+    if (version === lastInjectedContentVersionRef.current) return;
+    lastInjectedContentVersionRef.current = version;
+    if (!largeFile) return;
+    const editor = editorRef.current;
+    if (!editor) return;
+    const view = editor.saveViewState();
+    contentInjectionCancelRef.current?.();
+    contentInjectionCancelRef.current = scheduleMonacoLargeFileContentInjection(
+      editor,
+      tab.content,
+      () => {
+        if (view) editor.restoreViewState(view);
+      },
+    );
+  }, [largeFile, tab]);
+
+  useEffect(() => {
+    if (tab.diffOriginal !== undefined) {
+      setMonacoSurfaceReady(true);
+      return;
+    }
+    if (!shouldDeferMonacoEditorMount(contentLength)) {
+      setMonacoSurfaceReady(true);
+      return;
+    }
+    setMonacoSurfaceReady(false);
+    return runWhenIdle(() => setMonacoSurfaceReady(true), {
+      timeoutMs: hugeFile ? 96 : 24,
+    });
+  }, [contentLength, hugeFile, tab.diffOriginal, tab.relativePath]);
+
+  useEffect(() => {
+    if (!isActive) return;
+    const monaco = monacoRef.current;
+    if (
+      !monaco ||
+      !repositoryPath ||
+      !isTypeScriptLikeRepositoryPath(tab.relativePath) ||
+      !shouldSyncMonacoTypeScriptDependencies(tab.content)
+    ) {
+      return;
+    }
+    const cancel = runWhenIdle(
+      () => {
+        void syncMonacoRepositoryTypeScriptModels({
+          monaco,
+          repositoryPath,
+          sourceFiles: typeScriptSources,
+        });
+      },
+      { timeoutMs: isMonacoLargeFileContent(tab.content) ? 4000 : 1200 },
+    );
+    return cancel;
+  }, [isActive, repositoryPath, tab.content, tab.relativePath, typeScriptSources]);
+
+  useEffect(
+    () => () => {
+      contentInjectionCancelRef.current?.();
+      contentInjectionCancelRef.current = null;
+      monacoMountGuardRef.current?.dispose();
+      monacoMountGuardRef.current = null;
+    },
+    [],
+  );
+
+  const handleMonacoMount = useCallback(
+    (editor: MonacoEditorNamespace.IStandaloneCodeEditor, monaco: typeof Monaco) => {
+      monacoMountGuardRef.current?.dispose();
+      const trackpadGuard = installMonacoTrackpadSelectionGuard(editor);
+      const findRedirect = installMonacoGlobalFindRedirect(editor);
+      monacoMountGuardRef.current = {
+        dispose: () => {
+          trackpadGuard.dispose();
+          findRedirect.dispose();
+        },
+      };
+      editorRef.current = editor;
+      monacoRef.current = monaco;
+      setMonacoEditorSurface({ editor, monaco });
+      const reveal = () => {
+        revealEditorLineFocus(editor, tab, lastAppliedFocusRef, isActiveRef.current);
+      };
+      if (shouldInjectMonacoContentAfterMount(tab.content.length)) {
+        contentInjectionCancelRef.current?.();
+        contentInjectionCancelRef.current = scheduleMonacoLargeFileContentInjection(
+          editor,
+          tab.content,
+          reveal,
+        );
+        return;
+      }
+      if (isMonacoLargeFileContent(tab.content)) {
+        runWhenIdle(reveal, { timeoutMs: 400 });
+      } else {
+        window.requestAnimationFrame(reveal);
+      }
+    },
+    [],
+  );
+
+  useEffect(() => {
+    if (!isActive || tab.diffOriginal !== undefined) return;
+    const editor = editorRef.current;
+    if (!editor) return;
+    const frame = window.requestAnimationFrame(() => {
+      editor.layout();
+      revealEditorLineFocus(editor, tab, lastAppliedFocusRef, true);
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [isActive, tab, tab.focusLine, tab.relativePath, tab.diffOriginal]);
+
+  if (tab.diffOriginal !== undefined) {
+    return (
+      <div
+        className={`app-file-editor-tab-surface${isActive ? " app-file-editor-tab-surface--active" : ""}`}
+        aria-hidden={!isActive}
+      >
+        <GitDiffMonacoPane
+          relativePath={tab.relativePath}
+          original={tab.diffOriginal}
+          modified={tab.content}
+          language={language}
+          readOnly={
+            tab.gitDiffSection === "staged" ||
+            Boolean(tab.gitCommitSha) ||
+            Boolean(tab.gitCommitCompare)
+          }
+          dark={dark}
+          activeSessionId={activeSessionId}
+          onModifiedChange={(next) => onTabContentChange(tab.relativePath, next)}
+        />
+      </div>
+    );
+  }
+
+  return (
+    <div
+      className={`app-file-editor-tab-surface${isActive ? " app-file-editor-tab-surface--active" : ""}`}
+      aria-hidden={!isActive}
+    >
+      <div className="app-file-editor-monaco-wrap">
+        {tab.externalDeleted ? (
+          <div className="app-file-editor-external-banner app-file-editor-external-banner--deleted" role="alert">
+            <WarningOutlined />
+            <span className="app-file-editor-external-banner-text">
+              文件已被外部删除，内容保留供复制。
+            </span>
+            <Button type="link" size="small" onClick={() => onCloseTab(tab.relativePath)}>
+              关闭
+            </Button>
+          </div>
+        ) : tab.externalChanged ? (
+          <div className="app-file-editor-external-banner" role="alert">
+            <WarningOutlined />
+            <span className="app-file-editor-external-banner-text">
+              文件已被外部修改，重新加载将覆盖当前未保存的修改。
+            </span>
+            <Button
+              type="link"
+              size="small"
+              icon={<ReloadOutlined />}
+              onClick={() => onReloadTab(tab.relativePath)}
+            >
+              重新加载
+            </Button>
+          </div>
+        ) : null}
+        {isActive ? (
+          <MonacoSelectionChatToolbar
+            editor={monacoEditorSurface?.editor ?? null}
+            monaco={monacoEditorSurface?.monaco ?? null}
+            relativePath={tab.relativePath}
+            language={language}
+            sessionId={activeSessionId}
+          />
+        ) : null}
+        {!monacoSurfaceReady ? (
+          <div className="app-file-editor-loading">
+            <Spin size="small" tip="准备编辑器…" />
+          </div>
+        ) : (
+          <Suspense
+            fallback={
+              <div className="app-file-editor-loading">
+                <Spin size="small" />
+              </div>
+            }
+          >
+            <MonacoEditor
+              key={`${tab.relativePath}:${language}`}
+              className="app-file-editor-monaco"
+              height="100%"
+              path={editorPath}
+              defaultLanguage={language}
+              language={language}
+              {...(hugeFile
+                ? { defaultValue: "" }
+                : largeFile
+                  ? { defaultValue: tab.content }
+                  : { value: tab.content })}
+              beforeMount={(monaco) => {
+                configureWiseMonacoTypeScript(monaco);
+                if (repositoryPath && isTypeScriptLikeRepositoryPath(tab.relativePath)) {
+                  void ensureRepositoryTypeScriptEnvironment(monaco, repositoryPath);
+                }
+              }}
+              onMount={(editor, monaco) => {
+                handleMonacoMount(editor, monaco);
+              }}
+              onChange={(value) => onTabContentChange(tab.relativePath, value ?? "")}
+              theme={dark ? "vs-dark" : "vs"}
+              options={editorOptions}
+              loading={
+                <div className="app-file-editor-loading">
+                  <Spin size="small" />
+                </div>
+              }
+            />
+          </Suspense>
+        )}
+      </div>
+    </div>
+  );
+}

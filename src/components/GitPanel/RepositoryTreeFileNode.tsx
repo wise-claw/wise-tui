@@ -12,6 +12,7 @@ interface RepositoryTreeFileNodeProps {
   node: RepositoryFileTreeNode;
   depth: number;
   selectedPath: string | null;
+  hoverPath: string | null;
   gitStatusRevision: number;
 }
 
@@ -19,17 +20,19 @@ function RepositoryTreeFileNodeInner({
   node,
   depth,
   selectedPath,
+  hoverPath,
   gitStatusRevision: _gitStatusRevision,
 }: RepositoryTreeFileNodeProps) {
   const { onSelectNode, onOpenFile } = useRepositoryExplorerTreeActions();
   const { getFileStatus } = useRepositoryExplorerGitStatus();
   const isSelected = selectedPath === node.path;
+  const isPointerHover = hoverPath === node.path && !isSelected;
   const depthIndentPx = repositoryTreeFileDepthIndentPx(depth);
   const gitStatus = getFileStatus(node.path);
 
   return (
     <div
-      className={`repo-tree-node repo-tree-node--file${onOpenFile ? " repo-tree-node--file--clickable" : ""}${isSelected ? " repo-tree-node--selected" : ""}`}
+      className={`repo-tree-node repo-tree-node--file${onOpenFile ? " repo-tree-node--file--clickable" : ""}${isSelected ? " repo-tree-node--selected" : ""}${isPointerHover ? " repo-tree-node--pointer-hover" : ""}`}
       data-repo-path={node.path}
       data-repo-is-dir="0"
       draggable
@@ -42,9 +45,12 @@ function RepositoryTreeFileNodeInner({
       <span className="repo-tree-node-indent" style={{ width: depthIndentPx }} aria-hidden />
       <div
         className={`repo-tree-node-body repo-tree-node-body--file${onOpenFile ? " repo-tree-node-body--clickable" : ""}`}
-        onClick={() => {
+        onPointerDown={(event) => {
+          if (event.button !== 0) return;
           onSelectNode(node.path, false);
-          onOpenFile?.(node.path);
+        }}
+        onClick={() => {
+          onOpenFile?.(node.path, { fromFileTree: true });
         }}
         role={onOpenFile ? "button" : undefined}
         tabIndex={onOpenFile ? 0 : undefined}
@@ -54,7 +60,7 @@ function RepositoryTreeFileNodeInner({
           }
           if (event.key === "Enter" || event.key === " ") {
             event.preventDefault();
-            onOpenFile(node.path);
+            onOpenFile(node.path, { fromFileTree: true });
           }
         }}
       >
@@ -77,6 +83,8 @@ function fileNodeMemoCompare(
     nextDepth: next.depth,
     prevSelectedPath: prev.selectedPath,
     nextSelectedPath: next.selectedPath,
+    prevHoverPath: prev.hoverPath,
+    nextHoverPath: next.hoverPath,
     prevGitStatusRevision: prev.gitStatusRevision,
     nextGitStatusRevision: next.gitStatusRevision,
   });

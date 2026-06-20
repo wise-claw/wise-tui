@@ -22,6 +22,7 @@ import { MIN_EXPLORER_SEARCH_QUERY_LEN } from "./fileTree";
 import type { GitPanelOpenFileOptions } from "./types";
 import { useRepositoryFilesExplorer } from "./useRepositoryFilesExplorer";
 import { useGitRepositoryExplorerStatus } from "../../hooks/useGitRepositoryExplorerStatus";
+import { useRepositoryExplorerPointerHover } from "../../hooks/useRepositoryExplorerPointerHover";
 import { useScrollEndClass } from "../../hooks/useScrollEndClass";
 import { LEFT_SIDEBAR_SCROLLING_CLASS } from "../../constants/leftSidebarScrollPerformance";
 import { formatRepositoryExplorerLoadError } from "../../utils/repositoryPathAccessibility";
@@ -94,10 +95,11 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
   useScrollEndClass(scrollRegionRef, [
     LEFT_SIDEBAR_SCROLLING_CLASS,
     "git-files-explorer-scroll-region--scrolling",
-  ], 280, {
+  ], 160, {
     relieveSidePanelPriority: true,
     relieveFileTreePriority: true,
   });
+  const pointerHoverPath = useRepositoryExplorerPointerHover(scrollRegionRef, !searchActive);
 
   const flatTreeRows = useMemo(
     () =>
@@ -237,6 +239,7 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
           scrollRootRef={scrollRegionRef}
           rows={flatTreeRows}
           selectedPath={explorer.selected?.path ?? null}
+          hoverPath={pointerHoverPath}
           loadingDirKeys={explorer.loadingDirKeys}
           inlineCreate={explorer.inlineCreate}
           onInlineValueChange={explorer.handleInlineValueChange}

@@ -2184,15 +2184,15 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-file
   display: flex;
   align-items: center;
   gap: 4px;
-  min-height: 22px;
-  padding: 0 6px 2px;
-  border-radius: 4px;
+  min-height: 26px;
+  padding: 0 8px 2px 4px;
+  border-radius: 5px;
 }
 
 .repo-tree-node--inline-create .repo-tree-inline-input {
   flex: 1;
   min-width: 0;
-  font-size: 12px;
+  font-size: 13px;
 }
 
 .repo-tree-node--inline-create .repo-tree-inline-input.ant-input-sm {
@@ -2204,11 +2204,13 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-file
 }
 
 .repo-tree-list {
-  padding: 6px 6px 10px;
+  --repo-tree-indent-step: 16px;
+  padding: 8px 8px 12px 6px;
   overflow-x: hidden;
 }
 
 .repo-tree-virtual-list {
+  --repo-tree-indent-step: 16px;
   width: 100%;
 }
 
@@ -2227,20 +2229,14 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-file
 }
 
 .repo-tree-virtual-list__hint {
-  min-height: 22px;
-  padding-top: 2px;
-  padding-bottom: 2px;
-  line-height: 18px;
+  min-height: 26px;
+  padding-top: 3px;
+  padding-bottom: 3px;
+  line-height: 20px;
 }
 
 .git-files-explorer-scroll-region--scrolling .repo-tree-node {
   transition: none !important;
-  pointer-events: none;
-}
-
-.git-files-explorer-scroll-region--scrolling .repo-tree-node:hover:not(.repo-tree-node--selected) {
-  background: transparent !important;
-  box-shadow: none !important;
 }
 
 .git-files-explorer-scroll-region--scrolling .repo-tree-virtual-list__row {
@@ -2249,26 +2245,36 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-file
 }
 
 .repo-tree-node {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 0;
-  min-height: 22px;
-  padding: 0 6px 0 0;
-  border-radius: 4px;
-  font-size: 12px;
+  min-height: 26px;
+  padding: 0 8px 0 4px;
+  border-radius: 5px;
+  font-size: 13px;
   color: var(--ant-color-text);
-  transition: background 0.12s ease, color 0.12s ease, box-shadow 0.12s ease;
-  content-visibility: auto;
-  contain-intrinsic-size: 22px 200px;
+  transition: none;
   box-shadow: inset 0 0 0 0 transparent;
   touch-action: manipulation;
 }
 
 .repo-tree-node-indent {
   flex: 0 0 auto;
+  align-self: stretch;
   min-width: 0;
-  height: 1px;
+  min-height: 100%;
   pointer-events: none;
+  background-image: repeating-linear-gradient(
+    to right,
+    transparent 0,
+    transparent calc(var(--repo-tree-indent-step, 16px) - 1px),
+    color-mix(in srgb, var(--ant-color-border-secondary) 58%, transparent)
+      calc(var(--repo-tree-indent-step, 16px) - 1px),
+    color-mix(in srgb, var(--ant-color-border-secondary) 58%, transparent)
+      var(--repo-tree-indent-step, 16px)
+  );
+  background-size: var(--repo-tree-indent-step, 16px) 100%;
 }
 
 .repo-tree-node-body {
@@ -2276,7 +2282,7 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-file
   min-width: 0;
   display: inline-flex;
   align-items: center;
-  gap: 1px;
+  gap: 3px;
   margin: 0;
   padding: 0;
   border: none;
@@ -2297,22 +2303,35 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-file
   background: var(--ant-color-primary-bg);
 }
 
-.repo-tree-node:hover {
-  background: color-mix(in srgb, var(--ant-color-fill-content) 80%, transparent);
+.repo-tree-node:hover,
+.repo-tree-node--pointer-hover {
+  background: var(--ant-color-fill-quaternary);
 }
 
 .repo-tree-node--selected {
-  background: color-mix(in srgb, var(--ant-color-fill-content) 100%, transparent);
-  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--ant-color-primary) 22%, transparent);
+  background: color-mix(in srgb, var(--ant-color-primary-bg) 88%, var(--ant-color-fill-content));
+  box-shadow: none;
+}
+
+.repo-tree-node--selected::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 5px;
+  bottom: 5px;
+  width: 2.5px;
+  border-radius: 2px;
+  background: var(--ant-color-primary);
+  opacity: 0.9;
 }
 
 .repo-tree-node--selected:hover {
-  background: color-mix(in srgb, var(--ant-color-fill-content) 100%, transparent);
+  background: color-mix(in srgb, var(--ant-color-primary-bg) 96%, var(--ant-color-fill-content));
 }
 
 .repo-tree-node--dir {
   font-weight: 400;
-  color: var(--ant-color-text-secondary);
+  color: var(--ant-color-text);
   cursor: pointer;
 }
 
@@ -2325,8 +2344,14 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-file
   pointer-events: none;
 }
 
+.repo-tree-node--dir .repo-tree-node-name {
+  font-weight: 400;
+  color: color-mix(in srgb, var(--ant-color-text) 88%, var(--ant-color-text-secondary));
+}
+
 .repo-tree-node--dir.repo-tree-node--expanded .repo-tree-node-name {
-  color: var(--ant-color-text-secondary);
+  font-weight: 500;
+  color: var(--ant-color-text);
 }
 
 /* VS Code 风格 SCM 装饰：文件右侧字母、文件夹右侧圆点 */
@@ -2416,9 +2441,9 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-file
 .repo-tree-node-arrow {
   position: relative;
   z-index: 1;
-  flex: 0 0 22px;
-  width: 22px;
-  height: 22px;
+  flex: 0 0 24px;
+  width: 24px;
+  height: 24px;
   border: none;
   border-radius: 4px;
   padding: 0;
@@ -2443,7 +2468,7 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-file
 }
 
 .repo-tree-node-arrow .codicon {
-  font-size: 13px;
+  font-size: 14px;
 }
 
 .repo-tree-node:hover .repo-tree-node-arrow {
@@ -2451,8 +2476,8 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-file
 }
 
 .repo-tree-node-icon {
-  width: 16px;
-  height: 16px;
+  width: 17px;
+  height: 17px;
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -2460,8 +2485,8 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-file
 }
 
 .repo-tree-node-icon svg {
-  width: 16px;
-  height: 16px;
+  width: 17px;
+  height: 17px;
 }
 
 .repo-tree-node-icon--file {
@@ -2483,7 +2508,12 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-file
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
-  line-height: 1.35;
+  line-height: 1.4;
+  letter-spacing: 0.01em;
+}
+
+.repo-tree-file-name {
+  color: var(--ant-color-text);
 }
 
 .repo-tree-children {
@@ -2502,13 +2532,13 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-file
 /* ── VS Code 风格 codicon：文件夹 / 文件图标基线与 Seti 系配色 ── */
 .explorer-tree-folder-icon,
 .explorer-tree-file-icon {
-  width: 16px;
-  height: 16px;
+  width: 17px;
+  height: 17px;
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 16px;
+  font-size: 17px;
   line-height: 1;
 }
 

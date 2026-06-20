@@ -7,13 +7,14 @@ import { repositoryTreeDepthIndentPx, REPOSITORY_TREE_ROW_HEIGHT_PX } from "./re
 import type { FlatRepositoryTreeRow } from "./repositoryTreeFlatten";
 import type { ExplorerInlineCreateState } from "./types";
 
-const OVERSCAN_ROWS = 5;
-const FILE_TREE_BUSY_RANGE_MIN_MS = 52;
+const OVERSCAN_ROWS = 10;
+const FILE_TREE_BUSY_RANGE_MIN_MS = 24;
 
 export interface RepositoryVirtualTreeListProps {
   scrollRootRef: RefObject<HTMLDivElement | null>;
   rows: readonly FlatRepositoryTreeRow[];
   selectedPath: string | null;
+  hoverPath: string | null;
   loadingDirKeys: ReadonlySet<string>;
   inlineCreate: ExplorerInlineCreateState | null;
   onInlineValueChange: (value: string) => void;
@@ -27,6 +28,7 @@ function RepositoryVirtualTreeListInner({
   scrollRootRef,
   rows,
   selectedPath,
+  hoverPath,
   loadingDirKeys: _loadingDirKeys,
   inlineCreate: _inlineCreate,
   onInlineValueChange,
@@ -64,6 +66,7 @@ function RepositoryVirtualTreeListInner({
                   depth={row.depth}
                   isExpanded={row.isExpanded}
                   selectedPath={selectedPath}
+                  hoverPath={hoverPath}
                   gitStatusRevision={gitStatusRevision}
                 />
               ) : null}
@@ -72,6 +75,7 @@ function RepositoryVirtualTreeListInner({
                   node={row.node}
                   depth={row.depth}
                   selectedPath={selectedPath}
+                  hoverPath={hoverPath}
                   gitStatusRevision={gitStatusRevision}
                 />
               ) : null}

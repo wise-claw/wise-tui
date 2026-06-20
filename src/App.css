@@ -1279,9 +1279,36 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 }
 
 .app-file-editor-body {
+  position: relative;
   flex: 1 1 0%;
   min-height: 0;
   padding: 0;
+  overflow: hidden;
+}
+
+.app-file-editor-tab-surface {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  overflow: hidden;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 0;
+}
+
+.app-file-editor-tab-surface--active {
+  visibility: visible;
+  pointer-events: auto;
+  z-index: 1;
+}
+
+.app-file-editor-loading--overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 2;
+  background: color-mix(in srgb, var(--ant-color-bg-container) 88%, transparent);
 }
 
 .app-file-editor-loading {
@@ -2685,9 +2712,9 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 
 .app-left-sidebar-bottom-tab-content .git-files-explorer-search .git-files-explorer-search-field.ant-input-affix-wrapper,
 .app-left-sidebar-bottom-tab-content .git-files-explorer-search .ant-input-affix-wrapper {
-  min-height: 22px;
-  height: 22px;
-  font-size: 11px;
+  min-height: 26px;
+  height: 26px;
+  font-size: 12px;
 }
 
 /* GitPanel 在左栏 Tab 内填满可用高度 */

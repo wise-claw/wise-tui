@@ -52,7 +52,7 @@
 }
 
 .app-left-sidebar .repo-tree-node {
-  transition: background 0.05s ease;
+  transition: none;
   box-shadow: none !important;
 }
 
@@ -109,9 +109,7 @@
 }
 
 .app-left-sidebar-scroll-region--scrolling .app-repository-item,
-.app-repository-list--scrolling .app-repository-item,
-.app-left-sidebar-scroll-region--scrolling .repo-tree-node,
-.git-files-explorer-scroll-region--scrolling .repo-tree-node {
+.app-repository-list--scrolling .app-repository-item {
   pointer-events: none;
 }
 
@@ -157,8 +155,9 @@
   animation-play-state: paused;
 }
 
-.app-left-sidebar-scroll-region--scrolling .repo-tree-node:hover:not(.repo-tree-node--selected) {
-  background: transparent !important;
+.git-files-explorer-scroll-region--scrolling .repo-tree-virtual-list__row {
+  contain: layout style paint;
+  content-visibility: visible !important;
 }
 
 .app-left-sidebar-scroll-region--scrolling .repo-tree-virtual-list__row {
@@ -184,13 +183,4 @@
 
 .app-left-sidebar-scroll-region--scrolling .git-file-row:hover {
   background: transparent !important;
-}
-
-.git-files-explorer-scroll-region--scrolling .repo-tree-node:hover:not(.repo-tree-node--selected) {
-  background: transparent !important;
-}
-
-.git-files-explorer-scroll-region--scrolling .repo-tree-virtual-list__row {
-  contain: layout style paint;
-  content-visibility: visible !important;
 }

@@ -73,11 +73,17 @@ export function repositoryTreeFileShouldUpdate(args: {
   nextDepth: number;
   prevSelectedPath: string | null;
   nextSelectedPath: string | null;
+  prevHoverPath?: string | null;
+  nextHoverPath?: string | null;
   prevGitStatusRevision?: number;
   nextGitStatusRevision?: number;
 }): boolean {
   if (args.prevNode !== args.nextNode) return false;
   if (args.prevDepth !== args.nextDepth) return false;
   if ((args.prevGitStatusRevision ?? 0) !== (args.nextGitStatusRevision ?? 0)) return false;
-  return (args.prevSelectedPath === args.prevNode.path) === (args.nextSelectedPath === args.nextNode.path);
+  if ((args.prevSelectedPath === args.prevNode.path) !== (args.nextSelectedPath === args.nextNode.path)) {
+    return false;
+  }
+  const path = args.prevNode.path;
+  return (args.prevHoverPath === path) === (args.nextHoverPath === path);
 }

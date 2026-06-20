@@ -13,6 +13,7 @@ export interface RepositoryTreeDirRowProps {
   depth: number;
   isExpanded: boolean;
   selectedPath: string | null;
+  hoverPath: string | null;
   gitStatusRevision: number;
 }
 
@@ -21,12 +22,14 @@ function RepositoryTreeDirRowInner({
   depth,
   isExpanded,
   selectedPath,
+  hoverPath,
   gitStatusRevision: _gitStatusRevision,
 }: RepositoryTreeDirRowProps) {
   const { onToggleDir, onSelectNode } = useRepositoryExplorerTreeActions();
   const { dirHasChanges } = useRepositoryExplorerGitStatus();
   const depthIndentPx = repositoryTreeDepthIndentPx(depth);
   const isSelected = selectedPath === node.path;
+  const isPointerHover = hoverPath === node.path && !isSelected;
   const showGitDot = dirHasChanges(node.path);
 
   const activateDir = useCallback(() => {
@@ -36,7 +39,7 @@ function RepositoryTreeDirRowInner({
 
   return (
     <div
-      className={`repo-tree-node repo-tree-node--dir${isSelected ? " repo-tree-node--selected" : ""}${isExpanded ? " repo-tree-node--expanded" : ""}`}
+      className={`repo-tree-node repo-tree-node--dir${isSelected ? " repo-tree-node--selected" : ""}${isPointerHover ? " repo-tree-node--pointer-hover" : ""}${isExpanded ? " repo-tree-node--expanded" : ""}`}
       data-repo-path={node.path}
       data-repo-is-dir="1"
       draggable
@@ -80,7 +83,11 @@ function dirRowMemoCompare(prev: Readonly<RepositoryTreeDirRowProps>, next: Read
   if (prev.depth !== next.depth) return false;
   if (prev.isExpanded !== next.isExpanded) return false;
   if (prev.gitStatusRevision !== next.gitStatusRevision) return false;
-  return (prev.selectedPath === prev.node.path) === (next.selectedPath === next.node.path);
+  if ((prev.selectedPath === prev.node.path) !== (next.selectedPath === next.node.path)) {
+    return false;
+  }
+  const path = prev.node.path;
+  return (prev.hoverPath === path) === (next.hoverPath === path);
 }
 
 export const RepositoryTreeDirRow = memo(RepositoryTreeDirRowInner, dirRowMemoCompare);
