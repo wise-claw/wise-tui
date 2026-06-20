@@ -52,8 +52,35 @@ export function ClaudeCodeTaskListStatus({
   const [nowMs, setNowMs] = useState(() => Date.now());
 
   useEffect(() => {
-    const timer = window.setInterval(() => setNowMs(Date.now()), 1000);
-    return () => window.clearInterval(timer);
+    // 仅用于时长显示的每秒刷新。后台标签页（不可见）时暂停 interval，避免无意义重渲染
+    // 与 buildTaskListDisplayModel 重算；回到前台立即刷新一次并恢复。与项目其他定时器
+    // （DingTalk/Channels 等的可见性门控）保持一致。
+    let timer: number | undefined;
+    const tick = () => setNowMs(Date.now());
+    const start = () => {
+      if (timer !== undefined) return;
+      tick();
+      timer = window.setInterval(tick, 1000);
+    };
+    const stop = () => {
+      if (timer === undefined) return;
+      window.clearInterval(timer);
+      timer = undefined;
+    };
+    const onVisibility = () => {
+      if (document.visibilityState === "visible") start();
+      else stop();
+    };
+    if (document.visibilityState !== "visible") {
+      stop();
+    } else {
+      start();
+    }
+    document.addEventListener("visibilitychange", onVisibility);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibility);
+      stop();
+    };
   }, []);
 
   const model = useMemo(

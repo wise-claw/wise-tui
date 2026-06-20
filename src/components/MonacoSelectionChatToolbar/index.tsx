@@ -12,6 +12,23 @@ import {
 } from "../../utils/monacoSelectionSnapshot";
 import "./index.css";
 
+function snapshotsEqual(
+  a: MonacoSelectionSnapshot | null,
+  b: MonacoSelectionSnapshot | null,
+): boolean {
+  if (a === b) return true;
+  if (!a || !b) return false;
+  return (
+    a.top === b.top &&
+    a.left === b.left &&
+    a.startLine === b.startLine &&
+    a.endLine === b.endLine &&
+    a.startChar === b.startChar &&
+    a.endChar === b.endChar &&
+    a.selectedText === b.selectedText
+  );
+}
+
 interface Props {
   /** 单编辑器模式（与普通文件编辑兼容） */
   editor?: MonacoEditorNamespace.IStandaloneCodeEditor | null;
@@ -39,29 +56,48 @@ function MonacoSelectionChatToolbarInner({
   const snapshotRef = useRef<MonacoSelectionSnapshot | null>(null);
   const pinnedSnapshotRef = useRef<MonacoSelectionSnapshot | null>(null);
   const pointerOnToolbarRef = useRef(false);
+  const refreshRafRef = useRef(0);
   snapshotRef.current = snapshot;
 
   const refreshSnapshot = useCallback(() => {
     const next = readMonacoSelectionSnapshotFromEditors(editorList);
     if (next) {
       pinnedSnapshotRef.current = next;
-      setSnapshot(next);
+      // 内容未变则跳过重渲染（如滚动后选区位置/文本均未变化）。
+      if (!snapshotsEqual(next, snapshotRef.current)) {
+        setSnapshot(next);
+      }
       return;
     }
     if (pointerOnToolbarRef.current && pinnedSnapshotRef.current) {
-      setSnapshot(pinnedSnapshotRef.current);
+      if (!snapshotsEqual(pinnedSnapshotRef.current, snapshotRef.current)) {
+        setSnapshot(pinnedSnapshotRef.current);
+      }
       return;
     }
     if (editorList.every((item) => !item)) {
       if (!pointerOnToolbarRef.current) {
         pinnedSnapshotRef.current = null;
-        setSnapshot(null);
+        if (snapshotRef.current !== null) {
+          setSnapshot(null);
+        }
       }
       return;
     }
     pinnedSnapshotRef.current = null;
-    setSnapshot(null);
+    if (snapshotRef.current !== null) {
+      setSnapshot(null);
+    }
   }, [editorList]);
+
+  // Monaco 滚动/选区/布局变化与窗口滚动可达每帧多次触发，用 rAF 合并，一帧最多一次实际刷新。
+  const scheduleRefreshSnapshot = useCallback(() => {
+    if (refreshRafRef.current) return;
+    refreshRafRef.current = requestAnimationFrame(() => {
+      refreshRafRef.current = 0;
+      refreshSnapshot();
+    });
+  }, [refreshSnapshot]);
 
   const addSelectionToComposer = useCallback(() => {
     const current = snapshotRef.current ?? pinnedSnapshotRef.current;
@@ -92,16 +128,16 @@ function MonacoSelectionChatToolbarInner({
     for (const activeEditor of editorList) {
       if (!activeEditor) continue;
       disposables.push(
-        activeEditor.onDidChangeCursorSelection(refreshSnapshot),
-        activeEditor.onDidScrollChange(refreshSnapshot),
-        activeEditor.onDidLayoutChange(refreshSnapshot),
+        activeEditor.onDidChangeCursorSelection(scheduleRefreshSnapshot),
+        activeEditor.onDidScrollChange(scheduleRefreshSnapshot),
+        activeEditor.onDidLayoutChange(scheduleRefreshSnapshot),
       );
     }
 
     const scrollNodes = editorList
       .map((activeEditor) => activeEditor?.getDomNode())
       .filter((node): node is HTMLElement => Boolean(node));
-    const onWindowChange = () => refreshSnapshot();
+    const onWindowChange = () => scheduleRefreshSnapshot();
     window.addEventListener("resize", onWindowChange);
     window.addEventListener("scroll", onWindowChange, true);
     for (const node of scrollNodes) {
@@ -117,8 +153,12 @@ function MonacoSelectionChatToolbarInner({
       for (const node of scrollNodes) {
         node.removeEventListener("scroll", onWindowChange, true);
       }
+      if (refreshRafRef.current) {
+        cancelAnimationFrame(refreshRafRef.current);
+        refreshRafRef.current = 0;
+      }
     };
-  }, [editorList, refreshSnapshot]);
+  }, [editorList, refreshSnapshot, scheduleRefreshSnapshot]);
 
   useEffect(() => {
     if (!monaco) return;

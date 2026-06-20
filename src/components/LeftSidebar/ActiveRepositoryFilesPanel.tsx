@@ -1,4 +1,4 @@
-import { memo, type ReactNode } from "react";
+import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 import { RepositoryFilesExplorer } from "../GitPanel/RepositoryFilesExplorer";
 import type { GitPanelOpenFileOptions } from "../GitPanel/types";
 import type { GitPanelWorkspaceSelectorProps } from "../GitPanel/GitPanelWorkspaceSelector";
@@ -40,6 +40,27 @@ export const ActiveRepositoryFilesPanel = memo(function ActiveRepositoryFilesPan
   workspaceSelector,
   variant = "left-sidebar",
 }: ActiveRepositoryFilesPanelProps) {
+  // 多 panel 并存时（split 模式可达 3 个 explorer 实例），用 IntersectionObserver
+  // 检测本面板是否可见；隐藏态（父容器 hidden 属性 → display:none）时通知子树降级，
+  // 跳过 git status 的 reactive 订阅与 hover，避免 N 倍渲染放大。默认可见（乐观），
+  // 观察到不可见才降级，避免首次挂载延迟。
+  const rootRef = useRef<HTMLDivElement>(null);
+  const [visible, setVisible] = useState(true);
+  useEffect(() => {
+    const el = rootRef.current;
+    if (!el || typeof IntersectionObserver === "undefined") return;
+    const observer = new IntersectionObserver(
+      (entries) => {
+        for (const entry of entries) {
+          setVisible(entry.isIntersecting);
+        }
+      },
+      { threshold: 0 },
+    );
+    observer.observe(el);
+    return () => observer.disconnect();
+  }, []);
+
   const rootClassName =
     variant === "workspace-rail"
       ? "app-workspace-file-tree-rail-panel"
@@ -50,7 +71,7 @@ export const ActiveRepositoryFilesPanel = memo(function ActiveRepositoryFilesPan
           (sectionCollapsed ? " app-left-sidebar-files-explorer--section-collapsed" : "");
 
   return (
-    <div className={rootClassName}>
+    <div ref={rootRef} className={rootClassName}>
       <div
         className={
           variant === "workspace-rail"
@@ -61,6 +82,7 @@ export const ActiveRepositoryFilesPanel = memo(function ActiveRepositoryFilesPan
         }
       >
         <RepositoryFilesExplorer
+          active={visible}
           headerPrefix={headerPrefix}
           repositoryPath={activeRepositoryPath}
           repositoryLabel={

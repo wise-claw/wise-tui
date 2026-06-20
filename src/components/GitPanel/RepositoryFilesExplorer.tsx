@@ -51,6 +51,11 @@ export interface RepositoryFilesExplorerProps {
   hideContextHeader?: boolean;
   /** 多实例文件树并存时，用于搜索/外链打开后只定位到对应实例。 */
   explorerRevealTarget?: ExplorerRevealTarget;
+  /**
+   * 面板是否可见。隐藏态（keep-alive 的 hidden）时降级：跳过 git status reactive
+   * 订阅与 hover，避免多 panel 并存时 N 倍渲染放大。默认 true。
+   */
+  active?: boolean;
 }
 
 export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
@@ -67,6 +72,7 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
   workspaceSelector,
   hideContextHeader = false,
   explorerRevealTarget,
+  active = true,
 }: RepositoryFilesExplorerProps) {
   const trimmedRepositoryPath = repositoryPath.trim();
   const explorer = useRepositoryFilesExplorer({
@@ -75,7 +81,7 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
     onClearExplorerSearch,
     explorerRevealTarget,
   });
-  const explorerGitStatus = useGitRepositoryExplorerStatus(trimmedRepositoryPath);
+  const explorerGitStatus = useGitRepositoryExplorerStatus(trimmedRepositoryPath, active);
   const editorDirtyPaths = useRepositoryEditorDirtyPaths(trimmedRepositoryPath);
   const explorerDecorations = useMemo(
     () => ({
@@ -132,7 +138,11 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
 
   const pointerHoverRowsRef = useRef<readonly FlatRepositoryTreeRow[] | null>(flatTreeRows);
   pointerHoverRowsRef.current = flatTreeRows;
-  const pointerHoverPath = useRepositoryExplorerPointerHover(scrollRegionRef, !searchActive, pointerHoverRowsRef);
+  const pointerHoverPath = useRepositoryExplorerPointerHover(
+    scrollRegionRef,
+    active && !searchActive,
+    pointerHoverRowsRef,
+  );
 
   const treeActions = useMemo(
     () => ({

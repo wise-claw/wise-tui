@@ -77,20 +77,23 @@ export function areLeftSidebarContentPropsEqual(
   if (prev === next) return true;
   if (prev.sessionsStructureKey !== next.sessionsStructureKey) return false;
   if (
+    prev.monitorPanelSessions !== next.monitorPanelSessions &&
     monitorSessionsOverviewFingerprint(prev.monitorPanelSessions ?? []) !==
-    monitorSessionsOverviewFingerprint(next.monitorPanelSessions ?? [])
+      monitorSessionsOverviewFingerprint(next.monitorPanelSessions ?? [])
   ) {
     return false;
   }
   if (
+    prev.sessionConversationTaskItems !== next.sessionConversationTaskItems &&
     monitorTaskItemsFingerprint(prev.sessionConversationTaskItems) !==
-    monitorTaskItemsFingerprint(next.sessionConversationTaskItems)
+      monitorTaskItemsFingerprint(next.sessionConversationTaskItems)
   ) {
     return false;
   }
   if (
+    prev.employeeMonitorItems !== next.employeeMonitorItems &&
     employeeMonitorItemsFingerprint(prev.employeeMonitorItems) !==
-    employeeMonitorItemsFingerprint(next.employeeMonitorItems)
+      employeeMonitorItemsFingerprint(next.employeeMonitorItems)
   ) {
     return false;
   }
@@ -106,8 +109,9 @@ export function areLeftSidebarContentPropsEqual(
   if (prev.historyDrawerSessionId !== next.historyDrawerSessionId) return false;
   if (prev.monitorActiveTarget !== next.monitorActiveTarget) return false;
   if (
+    prev.teamMonitorItems !== next.teamMonitorItems &&
     teamMonitorItemsFingerprint(prev.teamMonitorItems) !==
-    teamMonitorItemsFingerprint(next.teamMonitorItems)
+      teamMonitorItemsFingerprint(next.teamMonitorItems)
   ) {
     return false;
   }

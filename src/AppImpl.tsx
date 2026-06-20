@@ -1240,7 +1240,9 @@ export default function App() {
         employeesLatestRef.current,
         buildSessionPaneSpawnContext(),
       );
-  });
+    // 闭包仅捕获稳定的 ref 与模块级函数，resolve 被调用时才读取最新 ref.current，
+    // 故只需在挂载时赋值一次；避免流式期间每帧重新创建并赋值闭包。
+  }, []);
 
   /** 与 ClaudeSessions 内 handleSwitchToSession 对齐：先同步项目+仓库再切会话，否则 activeSession 会因 path 不一致为空。 */
   const jumpToSessionWithRepository = useCallback(

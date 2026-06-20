@@ -25,7 +25,9 @@ export function useRepositoryExplorerPointerHover(
 ): string | null {
   const [hoverPath, setHoverPath] = useState<string | null>(null);
   const pointerRef = useRef({ x: 0, y: 0, inside: false });
-  const rafRef = useRef(0);
+  const moveRafRef = useRef(0);
+  const scrollRafRef = useRef(0);
+  const pendingTargetRef = useRef<EventTarget | null>(null);
 
   const syncHoverFromPosition = useCallback(() => {
     if (!enabled) {
@@ -89,21 +91,29 @@ export function useRepositoryExplorerPointerHover(
 
     const onPointerMove = (event: PointerEvent) => {
       pointerRef.current = { x: event.clientX, y: event.clientY, inside: true };
-      syncHoverFromTarget(event.target);
+      pendingTargetRef.current = event.target;
+      // pointermove 在高刷新率设备上可达 60–120 次/秒，用 rAF 合并，一帧最多一次 setHoverPath。
+      if (moveRafRef.current) return;
+      moveRafRef.current = requestAnimationFrame(() => {
+        moveRafRef.current = 0;
+        syncHoverFromTarget(pendingTargetRef.current);
+      });
     };
     const onPointerLeave = () => {
       pointerRef.current.inside = false;
+      pendingTargetRef.current = null;
+      if (moveRafRef.current) {
+        cancelAnimationFrame(moveRafRef.current);
+        moveRafRef.current = 0;
+      }
       setHoverPath(null);
     };
     const onScroll = () => {
       if (!pointerRef.current.inside) return;
-      // 滚动时用位置计算而非 elementFromPoint
-      if (rafRef.current) return;
-      rafRef.current = requestAnimationFrame(() => {
-        rafRef.current = 0;
-        syncHoverFromPosition();
-      });
-      requestAnimationFrame(() => {
+      // 滚动时用位置计算而非 elementFromPoint；rAF 合并，一帧最多一次（避免冗余的 getBoundingClientRect reflow）。
+      if (scrollRafRef.current) return;
+      scrollRafRef.current = requestAnimationFrame(() => {
+        scrollRafRef.current = 0;
         syncHoverFromPosition();
       });
     };
@@ -116,9 +126,13 @@ export function useRepositoryExplorerPointerHover(
       el.removeEventListener("pointermove", onPointerMove);
       el.removeEventListener("pointerleave", onPointerLeave);
       el.removeEventListener("scroll", onScroll);
-      if (rafRef.current) {
-        cancelAnimationFrame(rafRef.current);
-        rafRef.current = 0;
+      if (moveRafRef.current) {
+        cancelAnimationFrame(moveRafRef.current);
+        moveRafRef.current = 0;
+      }
+      if (scrollRafRef.current) {
+        cancelAnimationFrame(scrollRafRef.current);
+        scrollRafRef.current = 0;
       }
     };
   }, [enabled, scrollRootRef, syncHoverFromPosition, syncHoverFromTarget]);

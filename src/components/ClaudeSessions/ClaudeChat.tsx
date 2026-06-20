@@ -872,15 +872,19 @@ export function ClaudeChatInner({
     [pendingTasks],
   );
 
-  const repoRunningSessionsFingerprint = buildRepoRunningSessionsFingerprint(
-    sessions,
-    session.repositoryPath,
+  const repoRunningSessionsFingerprint = useMemo(
+    () => buildRepoRunningSessionsFingerprint(sessions, session.repositoryPath),
+    [sessions, session.repositoryPath],
   );
-  const workflowBusyFingerprint = workflowTasks
-    .filter((task) => task.status === "in_progress")
-    .map((task) => `${task.id}:${task.workflowId ?? ""}`)
-    .sort()
-    .join(",");
+  const workflowBusyFingerprint = useMemo(
+    () =>
+      workflowTasks
+        .filter((task) => task.status === "in_progress")
+        .map((task) => `${task.id}:${task.workflowId ?? ""}`)
+        .sort()
+        .join(","),
+    [workflowTasks],
+  );
 
   const taskPendingEmployeesFingerprint = useMemo(() => {
     return Object.entries(taskPendingEmployeesByTaskId)
@@ -888,6 +892,12 @@ export function ClaudeChatInner({
       .map(([taskId, rows]) => `${taskId}:${rows.map((row) => row.employeeId).join(",")}`)
       .join("\n");
   }, [taskPendingEmployeesByTaskId]);
+
+  // 提及员工选项（仅 id/name），两处子组件共用；memo 化避免每次渲染都新建数组。
+  const employeeMentionOptions = useMemo(
+    () => mentionEmployees.map((item) => ({ id: item.id, name: item.name })),
+    [mentionEmployees],
+  );
 
   const pendingDispatchGateKey = useMemo(
     () =>
@@ -1308,7 +1318,10 @@ export function ClaudeChatInner({
   });
 
   /** 当前仓库范围内未读通知（含员工/团队子会话），用于会话内消息通知面板列表与显隐 */
-  const sessionsNotificationScopeFingerprint = buildSessionsNotificationScopeFingerprint(sessions);
+  const sessionsNotificationScopeFingerprint = useMemo(
+    () => buildSessionsNotificationScopeFingerprint(sessions),
+    [sessions],
+  );
 
   const sessionUnreadNotificationRows = useMemo(
     () => notificationRows.filter((row) => notificationRowInSessionInboxScope(row, session, sessions)),
@@ -1683,7 +1696,7 @@ export function ClaudeChatInner({
             tasks={pendingTasks}
             repositoryPath={session.repositoryPath}
             employees={employees}
-            employeeMentions={mentionEmployees.map((item) => ({ id: item.id, name: item.name }))}
+            employeeMentions={employeeMentionOptions}
             teamMentions={publishedTeamMentions}
             codexAvailable={codexAvailable}
             cursorAvailable={cursorAvailable}
@@ -1791,7 +1804,7 @@ export function ClaudeChatInner({
               onClearRevertItems={onClearRevertItems}
               onSendFollowup={onSendFollowup}
               onRestoreRevert={onRestoreRevert}
-              employeeMentions={mentionEmployees.map((item) => ({ id: item.id, name: item.name }))}
+              employeeMentions={employeeMentionOptions}
               teamMentions={publishedTeamMentions}
               projectRoleTagOptions={projectRoleTagOptions}
               projectRepositoryMentionOptions={projectRepositoryMentionOptions}
