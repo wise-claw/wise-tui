@@ -40,6 +40,10 @@ import {
   isPatchSuggestedForGlobalPromotion,
 } from "../../utils/sessionFeedbackGlobalRules";
 import { isLowRiskAutoApplyPatch } from "../../utils/sessionFeedbackLoopActions";
+import {
+  formatFeedbackAutomationAuditEntry,
+  type FeedbackAutomationAuditEntry,
+} from "../../utils/feedbackAutomationAuditLog";
 
 const { Text } = Typography;
 
@@ -368,6 +372,10 @@ export const SessionFeedbackConfigPatchPanel = memo(function SessionFeedbackConf
     refreshConfigSnapshot,
     refreshConfigPatchBackups,
     rollbackConfigPatchBackup,
+    automationCircuitBreakerTripped,
+    automationAuditEntries,
+    clearAutomationAudit,
+    resetAutomationCircuitBreaker,
   } = loop;
 
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
@@ -375,6 +383,7 @@ export const SessionFeedbackConfigPatchPanel = memo(function SessionFeedbackConf
   const [rollingBackId, setRollingBackId] = useState<string | null>(null);
   const [promotingPatchId, setPromotingPatchId] = useState<string | null>(null);
   const [backupsExpanded, setBackupsExpanded] = useState(false);
+  const [auditExpanded, setAuditExpanded] = useState(false);
   const feedbackLoopSettings = useSessionFeedbackLoopSetting();
 
   const pendingPatches = useMemo(
@@ -655,6 +664,60 @@ export const SessionFeedbackConfigPatchPanel = memo(function SessionFeedbackConf
               ))}
             </div>
           )
+        ) : null}
+      </div>
+
+      <div className="app-session-feedback-loop__audit">
+        <button
+          type="button"
+          className="app-session-feedback-loop__backups-toggle"
+          onClick={() => setAuditExpanded((v) => !v)}
+        >
+          <RobotOutlined />
+          <span>自动化护栏与审计 ({automationAuditEntries.length})</span>
+          {automationCircuitBreakerTripped ? (
+            <Tag bordered={false} color="error">已熔断</Tag>
+          ) : (
+            <Tag bordered={false} color="success">正常</Tag>
+          )}
+          {auditExpanded ? <UpOutlined /> : <DownOutlined />}
+        </button>
+        {auditExpanded ? (
+          <div className="app-session-feedback-loop__audit-body">
+            {automationCircuitBreakerTripped ? (
+              <Space size={4} wrap className="app-session-feedback-loop__audit-circuit">
+                <Text type="danger">连续回滚已触发熔断，自动应用已暂停。</Text>
+                <Button size="small" onClick={() => resetAutomationCircuitBreaker()}>
+                  重置熔断
+                </Button>
+              </Space>
+            ) : null}
+            {automationAuditEntries.length === 0 ? (
+              <Text type="secondary" className="app-session-feedback-loop__backups-empty">
+                暂无自动化决策记录（开启自动写入/调整/优化后记录在此）
+              </Text>
+            ) : (
+              <div className="app-session-feedback-loop__audit-list">
+                {automationAuditEntries.slice(0, 8).map((entry: FeedbackAutomationAuditEntry) => (
+                  <Text
+                    key={entry.id}
+                    type="secondary"
+                    className="app-session-feedback-loop__audit-line"
+                  >
+                    {formatFeedbackAutomationAuditEntry(entry)}
+                  </Text>
+                ))}
+              </div>
+            )}
+            <Button
+              size="small"
+              type="text"
+              disabled={automationAuditEntries.length === 0}
+              onClick={() => clearAutomationAudit()}
+            >
+              清空审计
+            </Button>
+          </div>
         ) : null}
       </div>
     </div>

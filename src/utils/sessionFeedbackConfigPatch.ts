@@ -3,6 +3,10 @@ import { joinRepositoryAbsolutePath } from "./repositoryPreviewBinary";
 import type { SessionInsightRecommendation, SessionInsightsResult } from "./sessionInsights";
 import type { SessionInsightsReportMeta } from "./sessionInsightsReport";
 import { buildFeedbackLoopMarkdownReport, type SessionFeedbackLoopState } from "./sessionFeedbackLoop";
+import {
+  identifyUnderperformingPatchKinds,
+  type PatchKindEffectivenessHint,
+} from "./feedbackAutomationGuard";
 
 /** Claude Code 持久配置面（反馈神经网可优化的 Artifact 类型）。 */
 export type FeedbackConfigArtifactKind =
@@ -432,6 +436,8 @@ function heuristicDisableUnusedMcpServers(input: {
 export function inferConfigPatchCandidates(input: {
   insights: SessionInsightsResult;
   snapshot?: FeedbackConfigSnapshot | null;
+  /** 闭环学习：历史补丁效果摘要，用于对表现不佳的 kind 降权。 */
+  effectivenessHints?: readonly PatchKindEffectivenessHint[];
 }): FeedbackConfigPatch[] {
   const patches: FeedbackConfigPatch[] = [];
 
@@ -495,7 +501,16 @@ export function inferConfigPatchCandidates(input: {
     });
   }
 
-  return dedupeFeedbackConfigPatches(patches).slice(0, 8);
+  const deduped = dedupeFeedbackConfigPatches(patches);
+  const underperforming = identifyUnderperformingPatchKinds(input.effectivenessHints);
+  if (underperforming.size === 0) return deduped.slice(0, 8);
+  // 闭环学习：表现不佳的 kind 候选排到末尾（保留可审阅，不删除），避免反复产生已知无效补丁。
+  deduped.sort((a, b) => {
+    const au = underperforming.has(a.kind) ? 1 : 0;
+    const bu = underperforming.has(b.kind) ? 1 : 0;
+    return au - bu;
+  });
+  return deduped.slice(0, 8);
 }
 
 export function formatConfigSnapshotMarkdown(snapshot: FeedbackConfigSnapshot): string[] {
@@ -572,6 +587,8 @@ export function buildFeedbackLoopConfigPatchPrompt(input: {
   snapshot?: FeedbackConfigSnapshot | null;
   meta?: SessionInsightsReportMeta;
   existingPatches?: readonly FeedbackConfigPatch[];
+  /** 闭环学习：历史补丁效果摘要，引导 AI 优先正效果 kind、规避负效果 kind。 */
+  effectivenessHints?: readonly PatchKindEffectivenessHint[];
 }): string {
   const report = buildFeedbackLoopMarkdownReport(input.loopState, input.meta);
   const lines: string[] = [
@@ -597,6 +614,25 @@ export function buildFeedbackLoopConfigPatchPrompt(input: {
     "- 除 JSON 块外，先用 Markdown 简要说明策略",
     "",
   ];
+
+  if (input.effectivenessHints && input.effectivenessHints.length > 0) {
+    lines.push("## 历史补丁效果（闭环学习）", "");
+    lines.push("参考过往各 kind 补丁的平均会话分与规则开销变化：");
+    for (const h of input.effectivenessHints) {
+      const scorePart = h.avgSessionScore != null ? h.avgSessionScore.toFixed(1) : "—";
+      const deltaPart =
+        h.avgRulesDelta != null
+          ? h.avgRulesDelta > 0
+            ? `+${h.avgRulesDelta}`
+            : String(h.avgRulesDelta)
+          : "—";
+      lines.push(`- ${h.kind}：n=${h.count}，均分 ${scorePart}，Δrules ${deltaPart}`);
+    }
+    lines.push(
+      "优先采用正效果（高均分 / Δrules 为负）的 kind；对均分偏低（< 50）的 kind 谨慎，避免再次产生同类低效补丁。",
+      "",
+    );
+  }
 
   if (input.snapshot) {
     lines.push(...formatConfigSnapshotMarkdown(input.snapshot));

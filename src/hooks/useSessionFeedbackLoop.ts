@@ -49,6 +49,23 @@ import {
   isLowRiskAutoApplyPatch,
 } from "../utils/sessionFeedbackLoopActions";
 import {
+  canAutoApplyPatch,
+  collectRecentlyRolledBackKeys,
+  createInitialAutomationGuardState,
+  isAutomationCircuitBreakerTripped,
+  markPatchAutoApplied,
+  markPatchAutoRolledBack,
+  resetAutomationCircuitBreaker as resetAutomationCircuitBreakerState,
+  resetAutomationGuardForCycle,
+  type FeedbackAutomationGuardState,
+} from "../utils/feedbackAutomationGuard";
+import {
+  appendFeedbackAutomationAudit,
+  clearFeedbackAutomationAudit,
+  listFeedbackAutomationAudit,
+  type FeedbackAutomationAuditEntry,
+} from "../utils/feedbackAutomationAuditLog";
+import {
   advanceFeedbackLoop,
   attachFeedbackCycleWorkerResponse,
   buildFeedbackLoopComparisonPrompt,
@@ -122,6 +139,14 @@ export interface UseSessionFeedbackLoopResult {
   rollbackConfigPatchBackup: (backupId: string) => Promise<{ ok: boolean; message: string }>;
   exportMarkdownReport: () => string | null;
   ingestCycleWorkerResponse: (cycleIndex: number, responseText: string) => void;
+  /** 自动化护栏是否已熔断（连续回滚达阈值，自动应用暂停）。 */
+  automationCircuitBreakerTripped: boolean;
+  /** 自动化审计日志（apply / rollback / verify / 护栏拦截 / 熔断）。 */
+  automationAuditEntries: FeedbackAutomationAuditEntry[];
+  /** 清空当前仓库的自动化审计日志。 */
+  clearAutomationAudit: () => void;
+  /** 手动解除熔断，恢复自动应用。 */
+  resetAutomationCircuitBreaker: () => void;
 }
 
 export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseSessionFeedbackLoopResult {
@@ -161,6 +186,8 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
   const [configPatchBackups, setConfigPatchBackups] = useState<FeedbackPatchBackupRecord[]>([]);
   const [configPatchBackupsLoading, setConfigPatchBackupsLoading] = useState(false);
   const [effectivenessVersion, setEffectivenessVersion] = useState(0);
+  const [auditVersion, setAuditVersion] = useState(0);
+  const [circuitBreakerTripped, setCircuitBreakerTripped] = useState(false);
 
   const stateRef = useRef(state);
   stateRef.current = state;
@@ -195,6 +222,11 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
 
   /** 本轮运行中已应用补丁的 patchId 集合，用于评分回归时精确回滚。 */
   const runAppliedPatchIdsRef = useRef<Set<string>>(new Set());
+
+  /** 自动化护栏状态（单轮上限 / 连续回滚熔断 / 跨轮幂等去重）。 */
+  const automationGuardRef = useRef<FeedbackAutomationGuardState>(
+    createInitialAutomationGuardState(),
+  );
 
   const processingRef = useRef(false);
   const autoStartedRef = useRef(false);
@@ -261,6 +293,9 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
     return rankPatchKindEffectiveness(repositoryPath, 4);
   }, [effectivenessVersion, repositoryPath]);
 
+  const patchKindEffectivenessRef = useRef(patchKindEffectiveness);
+  patchKindEffectivenessRef.current = patchKindEffectiveness;
+
   const patchEffectivenessHint = useMemo(
     () => formatPatchKindEffectivenessHint(patchKindEffectiveness),
     [patchKindEffectiveness],
@@ -282,6 +317,21 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
   const historyRecordsRef = useRef(historyRecords);
   historyRecordsRef.current = historyRecords;
 
+  /** 自动化审计日志（可观测），随 auditVersion 与仓库变化刷新。 */
+  const automationAuditEntries = useMemo(() => {
+    void auditVersion;
+    return listFeedbackAutomationAudit(repositoryPath, 30);
+  }, [auditVersion, repositoryPath]);
+
+  // 仓库或审计变化时，从审计日志重建「近期自动回滚补丁键集合」，供护栏跨轮去重。
+  useEffect(() => {
+    const repo = repositoryPath?.trim();
+    if (!repo) return;
+    automationGuardRef.current.recentlyRolledBackKeys = collectRecentlyRolledBackKeys(
+      listFeedbackAutomationAudit(repo, 20),
+    );
+  }, [repositoryPath, auditVersion]);
+
   const historyComparison = useMemo(() => {
     const outcome = summarizeFeedbackLoopOutcome(state);
     return compareWithHistoryAverage(historyRecords, outcome.finalOverallScore);
@@ -293,6 +343,7 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
     const candidates = inferConfigPatchCandidates({
       insights: currentInsights,
       snapshot: configSnapshotRef.current,
+      effectivenessHints: patchKindEffectivenessRef.current,
     });
     const merged = mergeFeedbackConfigPatches(sessionId, candidates);
     setConfigPatches(merged);
@@ -379,6 +430,7 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
       });
       setEffectivenessVersion((v) => v + 1);
 
+      let didRollback = false;
       // 自动调整：最终分显著低于历史基线时，回滚本轮应用的补丁备份。
       // 基线取归档前的历史平均分（不含本次），delta = 本次分 - 基线。
       if (autoRollbackOnRegressionRef.current) {
@@ -395,16 +447,47 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
             const targets = configPatchBackupsRef.current.filter((b) =>
               appliedIds.has(b.patchId),
             );
+            const guard = automationGuardRef.current;
             let rolledBack = 0;
             for (const backup of targets) {
               const result = await rollbackFeedbackConfigPatchBackup({
                 repositoryPath: repo,
                 backup,
               });
-              if (result.ok) rolledBack += 1;
+              if (!result.ok) continue;
+              rolledBack += 1;
+              // 用备份元数据派生补丁，登记护栏熔断计数与审计。
+              const rolledPatch: FeedbackConfigPatch = {
+                id: backup.patchId,
+                kind: backup.kind,
+                action: backup.action,
+                path: backup.path,
+                rationale: backup.rationale || "评分回归自动回滚",
+                content: "",
+                source: "ai",
+                status: "rejected",
+              };
+              markPatchAutoRolledBack(guard, rolledPatch);
+              appendFeedbackAutomationAudit({
+                repositoryPath: repo,
+                action: "auto_rollback",
+                patch: rolledPatch,
+                reason: `评分低于基线 ${Math.abs(baseline.delta).toFixed(1)} 分，自动回滚`,
+              });
             }
             if (rolledBack > 0) {
+              didRollback = true;
               appliedIds.clear();
+              const tripped = isAutomationCircuitBreakerTripped(guard);
+              setCircuitBreakerTripped(tripped);
+              if (tripped) {
+                appendFeedbackAutomationAudit({
+                  repositoryPath: repo,
+                  action: "circuit_breaker",
+                  reason: `连续回滚 ${guard.consecutiveRollbacks} 次达熔断阈值，自动应用暂停`,
+                });
+              }
+              setAuditVersion((v) => v + 1);
               void refreshConfigSnapshot();
               void refreshConfigPatchBackups();
               message.warning(
@@ -413,6 +496,18 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
             }
           }
         }
+      }
+
+      // 本轮无回滚完成：清零连续回滚计数，熔断自动解除（若有）。
+      if (!didRollback && automationGuardRef.current.consecutiveRollbacks > 0) {
+        resetAutomationCircuitBreakerState(automationGuardRef.current);
+        setCircuitBreakerTripped(false);
+        appendFeedbackAutomationAudit({
+          repositoryPath: repo,
+          action: "circuit_reset",
+          reason: "本轮无回滚完成，连续回滚计数清零，熔断自动解除",
+        });
+        setAuditVersion((v) => v + 1);
       }
 
       if (autoSaveHabitsToComposer) {
@@ -470,6 +565,7 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
     autoStartedRef.current = true;
     archivedRunRef.current = null;
     runAppliedPatchIdsRef.current = new Set();
+    automationGuardRef.current = resetAutomationGuardForCycle(automationGuardRef.current);
     const next = startFeedbackLoop(sessionId, maxCycles);
     stateRef.current = next;
     setState(next);
@@ -490,6 +586,7 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
     autoStartedRef.current = false;
     archivedRunRef.current = null;
     runAppliedPatchIdsRef.current = new Set();
+    automationGuardRef.current = resetAutomationGuardForCycle(automationGuardRef.current);
     const next = createInitialFeedbackLoopState(sessionId, maxCycles);
     stateRef.current = next;
     setState(next);
@@ -529,6 +626,7 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
       snapshot: configSnapshotRef.current,
       meta: metaRef.current,
       existingPatches: configPatches,
+      effectivenessHints: patchKindEffectivenessRef.current,
     });
   }, [configPatches, optimizeConfigArtifacts]);
 
@@ -605,6 +703,17 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
         // 自动优化：补丁落盘后若开启自动验证，触发一次比对将补丁效果纳入循环评分。
         // 仅在循环仍处于活跃阶段（running / awaiting_turns）时生效；已完成循环不重启。
         if (autoVerifyAfterApplyRef.current) {
+          const phase = stateRef.current.phase;
+          const active = isFeedbackLoopPhaseActive(phase);
+          appendFeedbackAutomationAudit({
+            repositoryPath: repo,
+            action: "auto_verify",
+            outcome: active ? "success" : "skipped",
+            reason: active
+              ? `补丁落盘后自动触发验证轮次，纳入 ${applied.length} 条补丁效果`
+              : `循环已结束（${phase}），跳过自动验证`,
+          });
+          setAuditVersion((v) => v + 1);
           forceCompareRef.current();
         }
       }
@@ -627,11 +736,60 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
   /**
    * 自动写入：worker 解析出非破坏性补丁后，若开启自动应用则立即落盘低风险补丁。
    * 由调用方（onComplete）在补丁解析完成后调用。返回应用的补丁数。
+   * 经护栏守卫（单轮上限 / 连续回滚熔断 / 跨轮幂等去重），被拦截的补丁记审计。
    */
   const maybeAutoApplyConfigPatches = useCallback(async (): Promise<number> => {
     if (!autoApplyConfigPatchesRef.current) return 0;
-    return applyLowRiskConfigPatches();
-  }, [applyLowRiskConfigPatches]);
+    const repo = repoPathRef.current?.trim();
+    if (!repo) return 0;
+    const pending = loadFeedbackConfigPatches(sessionId).filter(
+      (patch) => patch.status === "pending" && isLowRiskAutoApplyPatch(patch),
+    );
+    if (pending.length === 0) return 0;
+
+    const guard = automationGuardRef.current;
+    const allowed: FeedbackConfigPatch[] = [];
+    for (const patch of pending) {
+      const decision = canAutoApplyPatch(patch, guard);
+      if (decision.allowed) {
+        allowed.push(patch);
+      } else {
+        appendFeedbackAutomationAudit({
+          repositoryPath: repo,
+          action: "guard_block",
+          outcome: "skipped",
+          patch,
+          reason: decision.reason ?? "护栏拦截",
+        });
+      }
+    }
+    if (allowed.length === 0) {
+      setAuditVersion((v) => v + 1);
+      return 0;
+    }
+
+    const appliedCount = await applySelectedConfigPatches(allowed.map((p) => p.id));
+    if (appliedCount > 0) {
+      // 取落盘后最新状态登记护栏计数与审计（仅记实际 applied 的补丁）。
+      const latest = loadFeedbackConfigPatches(sessionId);
+      let registered = 0;
+      for (const patch of allowed) {
+        if (registered >= appliedCount) break;
+        const fresh = latest.find((p) => p.id === patch.id);
+        if (!fresh || fresh.status !== "applied") continue;
+        markPatchAutoApplied(guard, fresh);
+        appendFeedbackAutomationAudit({
+          repositoryPath: repo,
+          action: "auto_apply",
+          patch: fresh,
+          reason: fresh.rationale,
+        });
+        registered += 1;
+      }
+      setAuditVersion((v) => v + 1);
+    }
+    return appliedCount;
+  }, [applySelectedConfigPatches, sessionId]);
 
   const rollbackConfigPatchBackup = useCallback(
     async (backupId: string): Promise<{ ok: boolean; message: string }> => {
@@ -648,6 +806,27 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
     },
     [configPatchBackups, refreshConfigPatchBackups, refreshConfigSnapshot],
   );
+
+  /** 清空当前仓库的自动化审计日志。 */
+  const clearAutomationAudit = useCallback(() => {
+    clearFeedbackAutomationAudit(repositoryPath);
+    setAuditVersion((v) => v + 1);
+  }, [repositoryPath]);
+
+  /** 手动解除熔断，恢复自动应用（连续回滚计数清零）。 */
+  const resetAutomationCircuitBreaker = useCallback(() => {
+    resetAutomationCircuitBreakerState(automationGuardRef.current);
+    setCircuitBreakerTripped(false);
+    const repo = repoPathRef.current?.trim();
+    if (repo) {
+      appendFeedbackAutomationAudit({
+        repositoryPath: repo,
+        action: "circuit_reset",
+        reason: "用户手动重置熔断，恢复自动应用",
+      });
+      setAuditVersion((v) => v + 1);
+    }
+  }, []);
 
   const exportMarkdownReport = useCallback((): string | null => {
     if (state.cycles.length === 0 && state.phase === "idle") return null;
@@ -699,5 +878,9 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
     rollbackConfigPatchBackup,
     exportMarkdownReport,
     ingestCycleWorkerResponse,
+    automationCircuitBreakerTripped: circuitBreakerTripped,
+    automationAuditEntries,
+    clearAutomationAudit,
+    resetAutomationCircuitBreaker,
   };
 }
