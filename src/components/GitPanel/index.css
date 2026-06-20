@@ -1037,11 +1037,18 @@
   background: transparent !important;
 }
 
+.git-commit-card__push-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+  margin-left: auto;
+  flex-shrink: 0;
+}
+
 .git-commit-card__footer .git-push-btn.ant-btn-text {
   height: 18px;
   min-height: 18px;
   margin: 0;
-  margin-left: auto;
   padding: 0 2px;
   font-size: 11px;
   font-weight: 500;
@@ -1051,6 +1058,27 @@
   background: transparent !important;
   box-shadow: none !important;
   color: var(--ant-color-success);
+}
+
+.git-commit-card__footer .git-push-cancel-btn.ant-btn-text {
+  height: 18px;
+  min-height: 18px;
+  margin: 0;
+  padding: 0 2px;
+  font-size: 11px;
+  font-weight: 500;
+  line-height: 18px;
+  border: none !important;
+  border-radius: 4px !important;
+  background: transparent !important;
+  box-shadow: none !important;
+  color: var(--ant-color-text-tertiary);
+}
+
+.git-commit-card__footer .git-push-cancel-btn.ant-btn-text:hover:not(:disabled),
+.git-commit-card__footer .git-push-cancel-btn.ant-btn-text:focus:not(:disabled) {
+  color: var(--ant-color-error) !important;
+  background: var(--ant-color-fill-content) !important;
 }
 
 .git-commit-card__footer .git-push-btn.ant-btn-text .anticon {

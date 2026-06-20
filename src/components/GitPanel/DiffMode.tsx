@@ -11,7 +11,7 @@ import {
   VerticalAlignBottomOutlined,
   VerticalAlignTopOutlined,
 } from "@ant-design/icons";
-import { executeClaudeCodeAndWait, getClaudeConfigModel } from "../../services/claude";
+import { executeClaudeCodeAndWait, getClaudeConfigModel, cancelClaudeInvocation } from "../../services/claude";
 import type { GitFileStatus, GitStatusResponse } from "../../types";
 import { extractClaudeInvocationFinalText } from "../../utils/claudeInvocationText";
 import {
@@ -73,6 +73,8 @@ function DiffModeInner({
   const commitMsgRef = useRef(commitMsg);
   const hasChangesRef = useRef(false);
   const commitSubmitLockRef = useRef(false);
+  const aiInvocationKeyRef = useRef<string | null>(null);
+  const aiGenerationCancelledRef = useRef(false);
   commitMsgRef.current = commitMsg;
   const hasStaged = status.staged.length > 0;
   const hasUnstaged = status.unstaged.length > 0;
@@ -161,6 +163,9 @@ function DiffModeInner({
 
   const generateCommitMessageByAi = useCallback(async (): Promise<{ message: string; aiFailed: boolean }> => {
     const fallback = buildCommitDraftFromStatus(status);
+    if (aiGenerationCancelledRef.current) {
+      return { message: fallback, aiFailed: true };
+    }
     const allFiles = [...status.staged, ...status.unstaged];
     const previewLimit = 40;
     const filesPreview = allFiles
@@ -190,7 +195,13 @@ function DiffModeInner({
         model: model ?? undefined,
         timeoutMs: 45_000,
         connectionMode: "oneshot",
+        onInvocationKey: (invocationKey) => {
+          aiInvocationKeyRef.current = invocationKey;
+        },
       });
+      if (aiGenerationCancelledRef.current) {
+        return { message: fallback, aiFailed: true };
+      }
       if (!result.success) {
         return { message: fallback, aiFailed: true };
       }
@@ -206,17 +217,35 @@ function DiffModeInner({
 
   const handleGenerateCommitByAi = useCallback(async () => {
     if (aiSummaryLoading) return;
+    aiGenerationCancelledRef.current = false;
+    aiInvocationKeyRef.current = null;
     setAiSummaryLoading(true);
     try {
       const generated = await generateCommitMessageByAi();
+      if (aiGenerationCancelledRef.current) return;
       setCommitMsg(generated.message);
       if (generated.aiFailed) {
         message.warning("AI 生成失败，已填充默认提交信息。");
       }
     } finally {
-      setAiSummaryLoading(false);
+      if (!aiGenerationCancelledRef.current) {
+        setAiSummaryLoading(false);
+      }
+      aiInvocationKeyRef.current = null;
     }
   }, [aiSummaryLoading, generateCommitMessageByAi]);
+
+  const cancelPushPreparation = useCallback(() => {
+    aiGenerationCancelledRef.current = true;
+    const invocationKey = aiInvocationKeyRef.current;
+    if (invocationKey) {
+      void cancelClaudeInvocation(invocationKey).catch(() => {});
+    }
+    aiInvocationKeyRef.current = null;
+    commitSubmitLockRef.current = false;
+    setAiSummaryLoading(false);
+    setPushPreparing(false);
+  }, []);
 
   /** 在 TextArea blur 之前于 pointerdown 触发，避免「第一次点击只失焦不提交」。 */
   const submitCommit = useCallback(() => {
@@ -240,19 +269,32 @@ function DiffModeInner({
     let trimmed = rawMsg ? normalizeConventionalCommitMessage(rawMsg) : "";
     try {
       if (!rawMsg) {
+        aiGenerationCancelledRef.current = false;
+        aiInvocationKeyRef.current = null;
         setPushPreparing(true);
         setAiSummaryLoading(true);
         try {
           const generated = await generateCommitMessageByAi();
+          if (aiGenerationCancelledRef.current) {
+            commitSubmitLockRef.current = false;
+            return;
+          }
           trimmed = generated.message;
           setCommitMsg(trimmed);
           if (generated.aiFailed) {
             message.warning("AI 生成失败，已使用默认提交信息继续推送。");
           }
         } finally {
-          setAiSummaryLoading(false);
-          setPushPreparing(false);
+          if (!aiGenerationCancelledRef.current) {
+            setAiSummaryLoading(false);
+            setPushPreparing(false);
+          }
+          aiInvocationKeyRef.current = null;
         }
+      }
+      if (aiGenerationCancelledRef.current) {
+        commitSubmitLockRef.current = false;
+        return;
       }
       if (!trimmed) {
         message.warning("请先填写或生成提交信息");
@@ -346,23 +388,38 @@ function DiffModeInner({
                   {loading.commit ? "提交中..." : "提交"}
                 </Button>
               ) : null}
-              <Button
-                htmlType="button"
-                type="text"
-                size="small"
-                className="git-push-btn"
-                title="AI 生成提交信息并提交、拉取、推送"
-                disabled={!canPush}
-                icon={<CloudUploadOutlined />}
-                onMouseDown={(event) => event.preventDefault()}
-                onPointerDown={(event) => {
-                  if (event.button !== 0 || !canPush) return;
-                  event.preventDefault();
-                  void submitCommitAndPush();
-                }}
-              >
-                {loading.commitAndPush ? "推送中..." : pushPreparing ? "生成中..." : "推送"}
-              </Button>
+              <div className="git-commit-card__push-group">
+                <Button
+                  htmlType="button"
+                  type="text"
+                  size="small"
+                  className="git-push-btn"
+                  title="AI 生成提交信息并提交、拉取、推送"
+                  disabled={!canPush}
+                  icon={<CloudUploadOutlined />}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onPointerDown={(event) => {
+                    if (event.button !== 0 || !canPush) return;
+                    event.preventDefault();
+                    void submitCommitAndPush();
+                  }}
+                >
+                  {loading.commitAndPush ? "推送中..." : pushPreparing ? "生成中..." : "推送"}
+                </Button>
+                {pushPreparing ? (
+                  <Button
+                    htmlType="button"
+                    type="text"
+                    size="small"
+                    className="git-push-cancel-btn"
+                    title="取消 AI 生成"
+                    onMouseDown={(event) => event.preventDefault()}
+                    onClick={cancelPushPreparation}
+                  >
+                    取消
+                  </Button>
+                ) : null}
+              </div>
             </div>
           </form>
           </div>

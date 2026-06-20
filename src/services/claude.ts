@@ -184,8 +184,11 @@ export async function executeClaudeCodeAndWait(params: {
   bare?: boolean;
   /** 若提供，则向会话 UI 派发轻量进度事件（右下角摘要），不写入主聊天 */
   streamUi?: ClaudeInvocationStreamUi;
+  /** spawn 前回调，供调用方在生成过程中取消 invocation。 */
+  onInvocationKey?: (invocationKey: string) => void;
 }): Promise<ClaudeInvocationResult> {
   const invocationKey = crypto.randomUUID();
+  params.onInvocationKey?.(invocationKey);
   const outputLines: string[] = [];
   const errorLines: string[] = [];
   /** 防止子进程海量流式行撑爆内存与主线程（仍足够解析 OMC_RESULT） */
