@@ -26,6 +26,13 @@ pub fn workspace_window_selection_storage_key(window_label: &str) -> String {
     )
 }
 
+pub fn workspace_window_multi_pane_storage_key(window_label: &str) -> String {
+    format!(
+        "wise.mainLayout.multiPaneState.v1:{}",
+        sanitize_window_label_for_filename(window_label)
+    )
+}
+
 /// 辅助窗销毁后清理按窗隔离的 tabs 与侧栏选中快照。
 pub fn cleanup_aux_main_workspace_window_assets(app: &AppHandle, window_label: &str) {
     if !window_label.starts_with(AUX_MAIN_WINDOW_LABEL_PREFIX) {
@@ -37,8 +44,10 @@ pub fn cleanup_aux_main_workspace_window_assets(app: &AppHandle, window_label: &
         }
     }
     if let Some(db) = app.try_state::<WiseDb>() {
-        let key = workspace_window_selection_storage_key(window_label);
-        let _ = db.delete_setting(&key);
+        let selection_key = workspace_window_selection_storage_key(window_label);
+        let _ = db.delete_setting(&selection_key);
+        let multi_pane_key = workspace_window_multi_pane_storage_key(window_label);
+        let _ = db.delete_setting(&multi_pane_key);
     }
 }
 
@@ -208,6 +217,14 @@ mod tests {
         assert_eq!(
             workspace_window_selection_storage_key("main-dock-123"),
             "wise.workspace.windowSelection.v1:main-dock-123"
+        );
+    }
+
+    #[test]
+    fn workspace_multi_pane_key_matches_frontend() {
+        assert_eq!(
+            workspace_window_multi_pane_storage_key("main-dock-123"),
+            "wise.mainLayout.multiPaneState.v1:main-dock-123"
         );
     }
 }

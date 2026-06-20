@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
   extractMonacoTypeScriptModuleSpecifiers,
+  resolveImportSpecifierToRelativePath,
   resolveMonacoRepositoryRelativeImportCandidates,
 } from "./monacoTypeScriptEnvironment";
 
@@ -18,6 +19,20 @@ describe("Monaco TypeScript repository import helpers", () => {
         "../constants/directBatchInvocationLog",
       ),
     ).toContain("src/constants/directBatchInvocationLog.ts");
+  });
+
+  test("resolves NodeNext .js imports to .ts source files", () => {
+    expect(
+      resolveMonacoRepositoryRelativeImportCandidates("src/cli/ask.ts", "../lib/security-config.js"),
+    ).toEqual(
+      expect.arrayContaining(["src/lib/security-config.js", "src/lib/security-config.ts"]),
+    );
+  });
+
+  test("maps .js import specifiers to import-relative model paths", () => {
+    expect(resolveImportSpecifierToRelativePath("src/cli/ask.ts", "../lib/security-config.js")).toBe(
+      "src/lib/security-config.js",
+    );
   });
 
   test("extracts static, dynamic, and require module specifiers", () => {

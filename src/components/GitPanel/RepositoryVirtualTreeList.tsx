@@ -20,6 +20,7 @@ export interface RepositoryVirtualTreeListProps {
   onInlineCommit: () => void;
   onInlineCancel: () => void;
   rowHeight?: number;
+  gitStatusRevision: number;
 }
 
 function RepositoryVirtualTreeListInner({
@@ -32,6 +33,7 @@ function RepositoryVirtualTreeListInner({
   onInlineCommit,
   onInlineCancel,
   rowHeight = REPOSITORY_TREE_ROW_HEIGHT_PX,
+  gitStatusRevision,
 }: RepositoryVirtualTreeListProps) {
   const range = useVirtualListVisibleRange({
     scrollRootRef,
@@ -62,10 +64,16 @@ function RepositoryVirtualTreeListInner({
                   depth={row.depth}
                   isExpanded={row.isExpanded}
                   selectedPath={selectedPath}
+                  gitStatusRevision={gitStatusRevision}
                 />
               ) : null}
               {row.kind === "file" ? (
-                <RepositoryTreeFileNode node={row.node} depth={row.depth} selectedPath={selectedPath} />
+                <RepositoryTreeFileNode
+                  node={row.node}
+                  depth={row.depth}
+                  selectedPath={selectedPath}
+                  gitStatusRevision={gitStatusRevision}
+                />
               ) : null}
               {row.kind === "loading" ? (
                 <div

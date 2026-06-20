@@ -1,4 +1,5 @@
 import { refreshGitRepositoryStats } from "../stores/gitRepositoryStatsStore";
+import { refreshGitRepositoryExplorerStatus } from "../stores/gitRepositoryExplorerStatusStore";
 import {
   commitPullPushRepository,
   hasWorkingTreeChanges,
@@ -80,6 +81,7 @@ export async function commitAndPushWorkspaceRepositories(
         continue;
       }
       refreshGitRepositoryStats(entry.path);
+      refreshGitRepositoryExplorerStatus(entry.path);
       results.push({
         path: entry.path,
         name: entry.name,

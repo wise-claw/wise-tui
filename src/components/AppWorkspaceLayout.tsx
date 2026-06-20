@@ -155,6 +155,7 @@ interface RepositoryFileEditorPanelContextValue {
   onActivePathChange: (path: string) => void;
   onClosePanel: () => void;
   onCloseTab: (relativePath: string, event?: ReactMouseEvent) => void;
+  onReloadTab: (relativePath: string) => void;
   onSave: () => void;
   onTabContentChange: (relativePath: string, content: string) => void;
   preview: ComponentProps<typeof RepositoryFilePreviewModal>["preview"];
@@ -351,6 +352,7 @@ const ConnectedRepositoryFileEditorPanel = memo(function ConnectedRepositoryFile
     onActivePathChange,
     onClosePanel,
     onCloseTab,
+    onReloadTab,
     onSave,
     onTabContentChange,
     repositoryPath,
@@ -373,6 +375,7 @@ const ConnectedRepositoryFileEditorPanel = memo(function ConnectedRepositoryFile
         onActivePathChange={onActivePathChange}
         onClosePanel={onClosePanel}
         onCloseTab={onCloseTab}
+        onReloadTab={onReloadTab}
         onSave={onSave}
         onTabContentChange={onTabContentChange}
       />
@@ -668,6 +671,7 @@ export function AppWorkspaceLayout({
     fileEditorActivePath,
     fileEditorTabs,
     openRepositoryFile,
+    reloadEditorTabFromDisk,
     repositoryBinaryPreview,
     saveEditor,
     setFileEditorActivePath,
@@ -778,6 +782,9 @@ export function AppWorkspaceLayout({
       onClosePanel: closeFileEditorPanel,
       onClosePreview: closeRepositoryBinaryPreview,
       onCloseTab: closeFileEditorTab,
+      onReloadTab: (relativePath: string) => {
+        void reloadEditorTabFromDisk(relativePath);
+      },
       onSave: () => {
         void saveEditor();
       },
@@ -801,6 +808,7 @@ export function AppWorkspaceLayout({
       fileEditorActivePath,
       fileEditorTabs,
       handleFileEditorTabContentChange,
+      reloadEditorTabFromDisk,
       repositoryBinaryPreview,
       saveEditor,
       setFileEditorActivePath,

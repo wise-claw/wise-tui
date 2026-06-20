@@ -75,6 +75,10 @@ export interface UseClaudeSessionsOptions {
   resolveExecutionRepositoryPathRef?: MutableRefObject<
     ((session: ClaudeSession) => string) | null
   >;
+  /** 多屏窗格 Claude spawn 是否绕过 Wise 内置 Anthropic 代理。 */
+  resolveClaudeProxyBypassRef?: MutableRefObject<
+    ((session: ClaudeSession) => boolean) | null
+  >;
   /**
    * 为 false 时 hook 仅随会话结构变化重渲染（流式正文走 `sessionsLiveRef` + live store）。
    * App 壳层应设为 false，聊天/监控 transcript 子树用 `useClaudeSessionsLiveSnapshot()`。

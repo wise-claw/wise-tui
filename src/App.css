@@ -1307,15 +1307,56 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 .app-file-editor-monaco-wrap {
   height: 100%;
   min-height: 0;
+  display: flex;
+  flex-direction: column;
 }
 
 .app-file-editor-monaco {
   height: 100%;
+  flex: 1 1 auto;
+  min-height: 0;
+}
+
+.app-file-editor-external-banner {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: #fffbe6;
+  border-bottom: 1px solid #ffe58f;
+  color: #614700;
+  font-size: 12px;
+}
+
+.app-file-editor-external-banner--deleted {
+  background: #fff1f0;
+  border-bottom-color: #ffa39e;
+  color: #820014;
+}
+
+.app-file-editor-external-banner-text {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.app-file-editor-external-banner .ant-btn.ant-btn-link {
+  flex: 0 0 auto;
+  height: auto;
+  padding: 0 4px;
+  font-size: 12px;
 }
 
 .app-file-editor-monaco .monaco-editor,
 .app-file-editor-monaco .overflow-guard {
   border-radius: 8px;
+}
+
+.app-file-editor-monaco .wise-monaco-git-modified-gutter {
+  width: 3px !important;
+  margin-left: 5px;
+  background: #3794ff;
+  opacity: 0.85;
 }
 
 .app-repository-file-preview-body {

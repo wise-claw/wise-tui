@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState, startTransition, type MouseEvent } from "react";
 import DOMPurify from "dompurify";
 import { message, Modal } from "antd";
+import { listen } from "@tauri-apps/api/event";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { GitPanelOpenFileOptions } from "../components/GitPanel/types";
 import { gitShowRevision } from "../services/git";
 import {
@@ -26,6 +28,10 @@ import {
   isMonacoLargeFileContent,
   MONACO_LARGE_FILE_CHANGE_DEBOUNCE_MS,
 } from "../utils/monacoLargeFile";
+import { safeUnlisten } from "../utils/safeTauriUnlisten";
+
+/** 外部变更触发磁盘重读的合并节流间隔（毫秒）。git-changed 与窗口聚焦共用。 */
+const EDITOR_EXTERNAL_REFRESH_THROTTLE_MS = 300;
 
 export interface FileEditorTab {
   relativePath: string;
@@ -42,6 +48,55 @@ export interface FileEditorTab {
   gitCommitSha?: string;
   /** Compare two commits; read-only. */
   gitCommitCompare?: { baseSha: string; headSha: string };
+  /** 文件被外部修改且当前 tab 有未保存修改；等待用户确认是否覆盖。 */
+  externalChanged?: boolean;
+  /** 文件被外部删除；保留内容供复制，提示用户关闭。 */
+  externalDeleted?: boolean;
+  /** 外部内容替换计数；自增时驱动大文件（非受控）编辑器重新注入内容。 */
+  contentVersion?: number;
+}
+
+/**
+ * 单个编辑器 tab 在外部磁盘刷新时的决策。抽为纯函数便于单测。
+ * - skip：loading / diff 只读视图 / 正在保存，不处理。
+ * - unchanged：磁盘未变。
+ * - reload-clean：tab 干净（effectiveContent === originalContent），用磁盘内容覆盖。
+ * - mark-external-changed：tab 脏（有未保存修改），磁盘已变，仅打标记、不动内容。
+ * - external-deleted：文件被外部删除。
+ * - clear-external-flag：磁盘又变回与 originalContent 一致，清除旧标记。
+ */
+export type EditorTabRefreshDecision =
+  | { kind: "skip"; reason: "loading" | "diff" | "saving" }
+  | { kind: "unchanged" }
+  | { kind: "reload-clean"; disk: string }
+  | { kind: "mark-external-changed" }
+  | { kind: "external-deleted" }
+  | { kind: "clear-external-flag" };
+
+export function planEditorTabRefresh(args: {
+  tab: FileEditorTab;
+  /** 考虑了待写入防抖的当前有效内容（pendingTabContentRef ?? tab.content）。 */
+  effectiveContent: string;
+  /** 磁盘内容；null 表示读取失败（通常为文件被删除）。 */
+  diskContent: string | null;
+  isSaving: boolean;
+}): EditorTabRefreshDecision {
+  const { tab, effectiveContent, diskContent, isSaving } = args;
+  if (tab.loading) return { kind: "skip", reason: "loading" };
+  if (tab.diffOriginal !== undefined) return { kind: "skip", reason: "diff" };
+  if (isSaving) return { kind: "skip", reason: "saving" };
+  if (diskContent === null) return { kind: "external-deleted" };
+  if (diskContent === tab.originalContent) {
+    if (tab.externalChanged || tab.externalDeleted) {
+      return { kind: "clear-external-flag" };
+    }
+    return { kind: "unchanged" };
+  }
+  // 磁盘已变：干净 tab 直接覆盖，脏 tab 仅打标记。
+  if (effectiveContent === tab.originalContent) {
+    return { kind: "reload-clean", disk: diskContent };
+  }
+  return { kind: "mark-external-changed" };
 }
 
 interface UseRepositoryFileEditorOptions {
@@ -72,6 +127,9 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
   const gitDiffLoadGenerationRef = useRef(0);
   const pendingTabContentRef = useRef<Map<string, string>>(new Map());
   const tabContentDebounceRef = useRef<Map<string, number>>(new Map());
+  const savingPathsRef = useRef<Set<string>>(new Set());
+  const refreshGenerationRef = useRef(0);
+  const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const flushPendingTabContent = useCallback((relativePath?: string) => {
     const paths = relativePath
@@ -742,6 +800,7 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
       return;
     }
     setEditorSaving(true);
+    savingPathsRef.current.add(fileEditorActivePath);
     try {
       await writeProjectRelativeFile(rootPath, fileEditorActivePath, content);
       pendingTabContentRef.current.delete(fileEditorActivePath);
@@ -753,7 +812,13 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
       setFileEditorTabs((prev) =>
         prev.map((t) =>
           t.relativePath === fileEditorActivePath
-            ? { ...t, content, originalContent: content }
+            ? {
+                ...t,
+                content,
+                originalContent: content,
+                externalChanged: false,
+                externalDeleted: false,
+              }
             : t,
         ),
       );
@@ -761,9 +826,239 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
       console.error("Failed to save file:", error);
       message.error(`保存失败：${fileEditorActivePath}`);
     } finally {
+      savingPathsRef.current.delete(fileEditorActivePath);
       setEditorSaving(false);
     }
-  }, [fileEditorActivePath, flushPendingTabContent]);
+  }, [fileEditorActivePath]);
+
+  /** 清掉指定 tab 待写入的防抖内容与定时器，用于外部刷新覆盖内容前避免残留 flush 覆盖。 */
+  const discardTabPendingContent = useCallback((relativePath: string) => {
+    pendingTabContentRef.current.delete(relativePath);
+    const timer = tabContentDebounceRef.current.get(relativePath);
+    if (timer != null) {
+      window.clearTimeout(timer);
+      tabContentDebounceRef.current.delete(relativePath);
+    }
+  }, []);
+
+  /** 用磁盘内容覆盖一个干净 tab 的内容（含大文件 startTransition、contentVersion 自增）。 */
+  const applyExternalDiskContent = useCallback(
+    (relativePath: string, disk: string) => {
+      discardTabPendingContent(relativePath);
+      const apply = () => {
+        setFileEditorTabs((prev) =>
+          prev.map((t) =>
+            t.relativePath === relativePath
+              ? {
+                  ...t,
+                  content: disk,
+                  originalContent: disk,
+                  loading: false,
+                  externalChanged: false,
+                  externalDeleted: false,
+                  contentVersion: (t.contentVersion ?? 0) + 1,
+                }
+              : t,
+          ),
+        );
+      };
+      if (isMonacoLargeFileContent(disk)) {
+        startTransition(apply);
+      } else {
+        apply();
+      }
+    },
+    [discardTabPendingContent],
+  );
+
+  /**
+   * 刷新所有（或某仓库下）已打开的普通 tab，用磁盘最新内容对齐。
+   * - 合并节流 EDITOR_EXTERNAL_REFRESH_THROTTLE_MS。
+   * - 跳过 loading / diff 只读视图 / 正在保存的 tab。
+   * - 干净 tab 静默覆盖；脏 tab 仅打 externalChanged 标记；删除打 externalDeleted。
+   * 用 refreshGenerationRef 丢弃过期异步读结果，避免竞态覆盖。
+   */
+  const refreshOpenEditorTabsFromDisk = useCallback(
+    (opts?: { repoPath?: string; trigger: "git-changed" | "focus" }) => {
+      // 窗口隐藏时，git-changed 触发的刷新延迟到回焦统一处理。
+      if (opts?.trigger === "git-changed" && typeof document !== "undefined" && document.hidden) {
+        return;
+      }
+      if (refreshTimerRef.current != null) {
+        clearTimeout(refreshTimerRef.current);
+      }
+      refreshTimerRef.current = setTimeout(() => {
+        refreshTimerRef.current = null;
+        const generation = ++refreshGenerationRef.current;
+        const repoPath = opts?.repoPath?.trim() ?? "";
+        const snapshot = fileEditorTabsRef.current.filter((tab) => {
+          if (tab.loading) return false;
+          if (tab.diffOriginal !== undefined) return false;
+          if (savingPathsRef.current.has(tab.relativePath)) return false;
+          if (repoPath && tab.rootPath.trim() !== repoPath) return false;
+          return true;
+        });
+        if (snapshot.length === 0) return;
+        void Promise.allSettled(
+          snapshot.map(async (tab) => {
+            try {
+              const disk = await readProjectRelativeFile(tab.rootPath, tab.relativePath);
+              return { tab, disk: disk as string };
+            } catch {
+              return { tab, disk: null };
+            }
+          }),
+        ).then((results) => {
+          if (generation !== refreshGenerationRef.current) return;
+          for (const result of results) {
+            if (result.status !== "fulfilled") continue;
+            const { tab, disk } = result.value;
+            const effectiveContent =
+              pendingTabContentRef.current.get(tab.relativePath) ?? tab.content;
+            const decision = planEditorTabRefresh({
+              tab,
+              effectiveContent,
+              diskContent: disk,
+              isSaving: savingPathsRef.current.has(tab.relativePath),
+            });
+            if (decision.kind === "skip") continue;
+            // apply 前再次校验：tab 可能已被关闭或切换为 diff 视图。
+            const current = fileEditorTabsRef.current.find(
+              (t) => t.relativePath === tab.relativePath,
+            );
+            if (!current || current.loading || current.diffOriginal !== undefined) continue;
+            if (savingPathsRef.current.has(tab.relativePath)) continue;
+            switch (decision.kind) {
+              case "unchanged":
+                continue;
+              case "reload-clean":
+                applyExternalDiskContent(tab.relativePath, decision.disk);
+                continue;
+              case "mark-external-changed":
+                setFileEditorTabs((prev) =>
+                  prev.map((t) =>
+                    t.relativePath === tab.relativePath
+                      ? { ...t, externalChanged: true, externalDeleted: false }
+                      : t,
+                  ),
+                );
+                continue;
+              case "external-deleted":
+                setFileEditorTabs((prev) =>
+                  prev.map((t) =>
+                    t.relativePath === tab.relativePath
+                      ? { ...t, externalDeleted: true, externalChanged: false }
+                      : t,
+                  ),
+                );
+                continue;
+              case "clear-external-flag":
+                setFileEditorTabs((prev) =>
+                  prev.map((t) =>
+                    t.relativePath === tab.relativePath
+                      ? { ...t, externalChanged: false, externalDeleted: false }
+                      : t,
+                  ),
+                );
+                continue;
+              default:
+                continue;
+            }
+          }
+        });
+      }, EDITOR_EXTERNAL_REFRESH_THROTTLE_MS);
+    },
+    [applyExternalDiskContent],
+  );
+
+  /** 用户点「重新加载」：强制用磁盘内容覆盖（即使 tab 脏）。 */
+  const reloadEditorTabFromDisk = useCallback(
+    async (relativePath: string) => {
+      const tab = fileEditorTabsRef.current.find((t) => t.relativePath === relativePath);
+      if (!tab || tab.loading) return;
+      const rootPath = tab.rootPath.trim();
+      if (!rootPath) {
+        missingFileRootMessage();
+        return;
+      }
+      try {
+        const disk = await readProjectRelativeFile(rootPath, relativePath);
+        const current = fileEditorTabsRef.current.find((t) => t.relativePath === relativePath);
+        if (!current || current.loading || current.diffOriginal !== undefined) return;
+        applyExternalDiskContent(relativePath, disk);
+      } catch (error) {
+        console.error("Failed to reload file from disk:", error);
+        setFileEditorTabs((prev) =>
+          prev.map((t) =>
+            t.relativePath === relativePath
+              ? { ...t, externalDeleted: true, externalChanged: false }
+              : t,
+          ),
+        );
+        message.error(`重新加载失败：${relativePath}`);
+      }
+    },
+    [applyExternalDiskContent],
+  );
+
+  // 监听后端文件系统变更事件（notify watcher 发出 git-changed），刷新所属仓库的已打开 tab。
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    let cancelled = false;
+    void listen<{ path?: string }>("git-changed", (event) => {
+      const repoPath = event.payload?.path?.trim() ?? "";
+      refreshOpenEditorTabsFromDisk({ repoPath, trigger: "git-changed" });
+    })
+      .then((fn) => {
+        if (cancelled) {
+          safeUnlisten(fn);
+          return;
+        }
+        unlisten = fn;
+      })
+      .catch(() => {
+        /* 非 Tauri 环境或监听失败，忽略；聚焦兜底仍可用 */
+      });
+    return () => {
+      cancelled = true;
+      safeUnlisten(unlisten);
+    };
+  }, [refreshOpenEditorTabsFromDisk]);
+
+  // 窗口聚焦兜底：watcher 仅由 Git 面板启动，未挂载时无事件；回焦时直接重读磁盘刷新所有 tab。
+  useEffect(() => {
+    let unlisten: (() => void) | null = null;
+    let cancelled = false;
+    void getCurrentWindow()
+      .onFocusChanged(({ payload: focused }) => {
+        if (!focused) return;
+        refreshOpenEditorTabsFromDisk({ trigger: "focus" });
+      })
+      .then((fn) => {
+        if (cancelled) {
+          safeUnlisten(fn);
+          return;
+        }
+        unlisten = fn;
+      })
+      .catch(() => {
+        /* 非 Tauri 测试环境忽略 */
+      });
+    return () => {
+      cancelled = true;
+      safeUnlisten(unlisten);
+    };
+  }, [refreshOpenEditorTabsFromDisk]);
+
+  useEffect(
+    () => () => {
+      if (refreshTimerRef.current != null) {
+        clearTimeout(refreshTimerRef.current);
+        refreshTimerRef.current = null;
+      }
+    },
+    [],
+  );
 
   useEffect(
     () => () => {
@@ -787,6 +1082,8 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
     fileEditorActivePath,
     fileEditorTabs,
     openRepositoryFile,
+    refreshOpenEditorTabsFromDisk,
+    reloadEditorTabFromDisk,
     repositoryBinaryPreview,
     saveEditor,
     setFileEditorActivePath,

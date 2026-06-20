@@ -1640,6 +1640,7 @@ async fn spawn_claude_process(
     concurrency_scope_key: Option<String>,
     concurrency_limit: Option<u32>,
     initial_streaming_prompt: Option<String>,
+    anthropic_proxy_bypass: bool,
 ) -> Result<(), String> {
     let process_state = app.state::<ClaudeProcessState>();
     let child_mutex = process_state.current_process.clone();
@@ -1669,15 +1670,16 @@ async fn spawn_claude_process(
     }
 
     let mut cmd = cmd;
-    let (base_url_override, llm_traffic_capture) =
-        if let Some(url) = crate::opencode_go_proxy::claude_spawn_anthropic_base_url_override() {
-            (Some(url), false)
-        } else if let Some(url) = crate::claude_llm_proxy::claude_spawn_anthropic_base_url_override()
-        {
-            (Some(url), true)
-        } else {
-            (None, false)
-        };
+    let (base_url_override, llm_traffic_capture) = if anthropic_proxy_bypass {
+        (None, false)
+    } else if let Some(url) = crate::opencode_go_proxy::claude_spawn_anthropic_base_url_override() {
+        (Some(url), false)
+    } else if let Some(url) = crate::claude_llm_proxy::claude_spawn_anthropic_base_url_override()
+    {
+        (Some(url), true)
+    } else {
+        (None, false)
+    };
     crate::claude_config_dir::configure_claude_child_process(
         &mut cmd,
         &project_path,
@@ -2158,6 +2160,7 @@ pub(crate) async fn execute_claude_code(
     concurrency_limit: Option<u32>,
     bare: Option<bool>,
     cli_extras: Option<ClaudeSpawnCliExtras>,
+    anthropic_proxy_bypass: Option<bool>,
 ) -> Result<(), String> {
     let registry = app.state::<ClaudeSessionRegistry>();
     let app_clone = app.clone();
@@ -2191,6 +2194,7 @@ pub(crate) async fn execute_claude_code(
         concurrency_scope_key,
         concurrency_limit,
         initial_prompt,
+        anthropic_proxy_bypass.unwrap_or(false),
     )
     .await
 }
@@ -2207,6 +2211,7 @@ pub(crate) async fn resume_claude_code(
     concurrency_scope_key: Option<String>,
     concurrency_limit: Option<u32>,
     cli_extras: Option<ClaudeSpawnCliExtras>,
+    anthropic_proxy_bypass: Option<bool>,
 ) -> Result<(), String> {
     let process_state = app.state::<ClaudeProcessState>();
     kill_active_claude_run_for_session(&process_state, &session_id).await;
@@ -2274,6 +2279,7 @@ pub(crate) async fn resume_claude_code(
         concurrency_scope_key,
         concurrency_limit,
         initial_prompt,
+        anthropic_proxy_bypass.unwrap_or(false),
     )
     .await
 }
@@ -2523,6 +2529,7 @@ pub(crate) async fn spawn_streaming_session(
         concurrency_scope_key,
         concurrency_limit,
         Some(initial_prompt),
+        false,
     )
     .await
 }

@@ -36,10 +36,14 @@ import {
 import { runWhenIdle } from "./utils/deferIdle";
 import { isSessionBoundAsRepositoryMain } from "./utils/repositoryMainSessionBinding";
 import {
+  resolveClaudeProxyBypassForSessionSpawn,
   resolveEngineForSessionSpawn,
   resolveRepositoryPathForSessionSpawn,
   type SessionPaneSpawnContext,
 } from "./utils/sessionExecutionEngine";
+import { mergePaneRuntimeOverride, type PaneRuntimeOverride } from "./types/paneRuntimeOverride";
+import { isSessionExecutionEngine } from "./constants/sessionExecutionEngine";
+import type { PaneClaudeProxyRoute } from "./types/paneRuntimeOverride";
 import { resolveChatContextRepository } from "./utils/workspaceSelectionState";
 import {
   capWorkflowTaskEvents,
@@ -95,7 +99,12 @@ import { reloadAppWindow } from "./services/window";
 import {
   getCurrentMainWorkspaceWindowLabel,
   isPrimaryMainWorkspaceWindowLabel,
+  PRIMARY_MAIN_WINDOW_LABEL,
 } from "./services/mainWindow";
+import {
+  LEGACY_MULTI_PANE_LAYOUT_STATE_STORAGE_KEY,
+  resolveCurrentMultiPaneLayoutStorageKey,
+} from "./utils/multiPaneLayoutStorage";
 import { isWiseAppFocused } from "./utils/isWiseAppFocused";
 import { openMonacoFindIfFocused } from "./utils/monacoGlobalFindRedirect";
 import { wiseMascotShow } from "./services/wiseMascot";
@@ -235,18 +244,20 @@ import {
   listWorkflowProjectIds,
 } from "./services/projectPrdScope";
 
-const MULTI_PANE_LAYOUT_STATE_STORAGE_KEY = "wise.mainLayout.multiPaneState.v1";
 
 interface PersistedMultiPaneSlotV1 {
   slotId?: string;
   sessionId?: string | null;
   repositoryId?: number | null;
+  executionEngine?: string;
+  claudeProxyRoute?: PaneClaudeProxyRoute;
 }
 
 interface PersistedMultiPaneStateV1 {
   version: 1;
   paneCount: PaneCount;
   extraPanes: PersistedMultiPaneSlotV1[];
+  primaryPaneRuntime?: PaneRuntimeOverride;
 }
 
 function normalizePersistedPaneCount(raw: unknown): PaneCount {
@@ -267,6 +278,14 @@ function normalizePersistedExtraPanes(raw: unknown, paneCount: PaneCount): PaneS
         typeof row.repositoryId === "number" && Number.isFinite(row.repositoryId)
           ? row.repositoryId
           : null,
+      executionEngine:
+        typeof row.executionEngine === "string" && isSessionExecutionEngine(row.executionEngine)
+          ? row.executionEngine
+          : undefined,
+      claudeProxyRoute:
+        row.claudeProxyRoute === "auto" || row.claudeProxyRoute === "bypass"
+          ? row.claudeProxyRoute
+          : undefined,
     });
   }
   return out;
@@ -333,6 +352,12 @@ export default function App() {
   const [paneCount, setPaneCount] = useState<PaneCount>(1);
   /** 多屏模式下额外窗格槽位（Pane 0 始终是 activeSession）。 */
   const [extraPanes, setExtraPanes] = useState<PaneSlot[]>([]);
+  /** 主窗格（Pane 0）运行时覆盖：执行引擎 / Claude 代理路由。 */
+  const [primaryPaneRuntimeOverride, setPrimaryPaneRuntimeOverride] =
+    useState<PaneRuntimeOverride | null>(null);
+  const multiPaneStorageKeyRef = useRef(
+    resolveCurrentMultiPaneLayoutStorageKey(getCurrentMainWorkspaceWindowLabel()),
+  );
   const paneLayoutHydratedRef = useRef(false);
   const [paneLayoutHydrated, setPaneLayoutHydrated] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
@@ -354,8 +379,19 @@ export default function App() {
   useEffect(() => {
     let cancelled = false;
     void (async () => {
+      const windowLabel = getCurrentMainWorkspaceWindowLabel() ?? PRIMARY_MAIN_WINDOW_LABEL;
+      const storageKey = resolveCurrentMultiPaneLayoutStorageKey(windowLabel);
+      multiPaneStorageKeyRef.current = storageKey;
       try {
-        const raw = (await getAppSetting(MULTI_PANE_LAYOUT_STATE_STORAGE_KEY))?.trim();
+        let raw = (await getAppSetting(storageKey))?.trim();
+        if (!raw && isPrimaryMainWorkspaceWindowLabel(windowLabel)) {
+          const legacyRaw = (await getAppSetting(LEGACY_MULTI_PANE_LAYOUT_STATE_STORAGE_KEY))?.trim();
+          if (legacyRaw) {
+            raw = legacyRaw;
+            void setAppSetting(storageKey, legacyRaw);
+            void deleteAppSetting(LEGACY_MULTI_PANE_LAYOUT_STATE_STORAGE_KEY);
+          }
+        }
         if (!raw || cancelled) return;
         const parsed = JSON.parse(raw) as Partial<PersistedMultiPaneStateV1>;
         const restoredPaneCount = normalizePersistedPaneCount(parsed.paneCount);
@@ -363,9 +399,13 @@ export default function App() {
         if (cancelled) return;
         setPaneCount(restoredPaneCount);
         setExtraPanes(restoredExtraPanes);
+        if (parsed.primaryPaneRuntime && typeof parsed.primaryPaneRuntime === "object") {
+          setPrimaryPaneRuntimeOverride(
+            mergePaneRuntimeOverride(null, parsed.primaryPaneRuntime as PaneRuntimeOverride),
+          );
+        }
       } catch {
-        // 自愈：损坏 payload 自动清理，避免后续启动重复失败
-        void deleteAppSetting(MULTI_PANE_LAYOUT_STATE_STORAGE_KEY);
+        void deleteAppSetting(storageKey);
       } finally {
         paneLayoutHydratedRef.current = true;
         setPaneLayoutHydrated(true);
@@ -385,10 +425,13 @@ export default function App() {
         slotId: slot.slotId,
         sessionId: slot.sessionId,
         repositoryId: slot.repositoryId,
+        executionEngine: slot.executionEngine,
+        claudeProxyRoute: slot.claudeProxyRoute,
       })),
+      primaryPaneRuntime: primaryPaneRuntimeOverride ?? undefined,
     };
-    void setAppSetting(MULTI_PANE_LAYOUT_STATE_STORAGE_KEY, JSON.stringify(payload));
-  }, [paneCount, extraPanes]);
+    void setAppSetting(multiPaneStorageKeyRef.current, JSON.stringify(payload));
+  }, [paneCount, extraPanes, primaryPaneRuntimeOverride]);
 
   useEffect(() => {
     void loadWiseDefaultConfig().catch(() => {
@@ -782,6 +825,10 @@ export default function App() {
     ((session: ClaudeSession) => string) | null
   >(null);
 
+  const resolveClaudeProxyBypassRef = useRef<
+    ((session: ClaudeSession) => boolean) | null
+  >(null);
+
   const codexAvailable = useAgentRegistryCodexAvailable();
   const cursorAvailable = useAgentRegistryCursorAvailable();
   const geminiAvailable = useAgentRegistryGeminiAvailable();
@@ -805,6 +852,37 @@ export default function App() {
       );
     },
     [employees],
+  );
+
+  const handleUpdatePaneRuntimeOverride = useCallback(
+    (paneIndex: number, patch: Partial<PaneRuntimeOverride>) => {
+      if (paneCount <= 1) return;
+      if (paneIndex === 0) {
+        setPrimaryPaneRuntimeOverride((prev) => mergePaneRuntimeOverride(prev, patch));
+        return;
+      }
+      const slotIndex = paneIndex - 1;
+      setExtraPanes((prev) => {
+        if (slotIndex < 0 || slotIndex >= prev.length) return prev;
+        const slot = prev[slotIndex];
+        if (!slot) return prev;
+        const merged = mergePaneRuntimeOverride(
+          {
+            executionEngine: slot.executionEngine,
+            claudeProxyRoute: slot.claudeProxyRoute,
+          },
+          patch,
+        );
+        const next = [...prev];
+        next[slotIndex] = {
+          ...slot,
+          executionEngine: merged.executionEngine,
+          claudeProxyRoute: merged.claudeProxyRoute,
+        };
+        return next;
+      });
+    },
+    [paneCount],
   );
 
   const advanceTeamAfterTurnRef = useRef<(p: ClaudeTurnCompletePayload) => void>(() => {});
@@ -889,6 +967,7 @@ export default function App() {
     claudeSpawnExtrasContextRef,
     resolveExecutionEngineRef,
     resolveExecutionRepositoryPathRef,
+    resolveClaudeProxyBypassRef,
     onClaudeSpawnBlocked: (blockedMessage) => {
       message.warning(blockedMessage);
     },
@@ -1086,6 +1165,8 @@ export default function App() {
 
   const extraPanesLatestRef = useRef(extraPanes);
   extraPanesLatestRef.current = extraPanes;
+  const primaryPaneRuntimeOverrideLatestRef = useRef(primaryPaneRuntimeOverride);
+  primaryPaneRuntimeOverrideLatestRef.current = primaryPaneRuntimeOverride;
   const activeRepositoryIdLatestRef = useRef(activeRepositoryId);
   activeRepositoryIdLatestRef.current = activeRepositoryId;
   const activeProjectIdLatestRef = useRef(activeProjectId);
@@ -1123,6 +1204,7 @@ export default function App() {
       return {
         activeSessionId: activeId || null,
         chatContextRepository,
+        primaryPaneRuntime: primaryPaneRuntimeOverrideLatestRef.current,
         extraPanes: extraPanesLatestRef.current,
       };
     };
@@ -1136,6 +1218,13 @@ export default function App() {
       );
     resolveExecutionRepositoryPathRef.current = (session) =>
       resolveRepositoryPathForSessionSpawn(
+        session,
+        repositoriesLatestRef.current,
+        employeesLatestRef.current,
+        buildSessionPaneSpawnContext(),
+      );
+    resolveClaudeProxyBypassRef.current = (session) =>
+      resolveClaudeProxyBypassForSessionSpawn(
         session,
         repositoriesLatestRef.current,
         employeesLatestRef.current,
@@ -1967,6 +2056,7 @@ export default function App() {
     mainLayoutRightWidthPx,
     setMainLayoutLeftWidthPx,
     setMainLayoutRightWidthPx,
+    paneChangeInFlight,
   } = useMainLayoutModes({
     activeRepository: activeRepository ?? undefined,
     activeProject,
@@ -3555,7 +3645,10 @@ export default function App() {
         onSendFollowup: sendFollowup,
         onRestoreRevert: restoreRevert,
         paneCount,
+        paneChangeInFlight,
         extraPanes,
+        primaryPaneRuntimeOverride,
+        onUpdatePaneRuntimeOverride: handleUpdatePaneRuntimeOverride,
         onChangePaneCount: handleChangePaneCount,
         onPaneRepositorySelect: handlePaneRepositorySelect,
         onPaneProjectNewSession: handlePaneProjectNewSession,

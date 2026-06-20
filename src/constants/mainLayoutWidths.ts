@@ -1,3 +1,6 @@
+import type { SessionExecutionEngine } from "./sessionExecutionEngine";
+import type { PaneClaudeProxyRoute, PaneRuntimeOverride } from "../types/paneRuntimeOverride";
+
 /** 与 `LeftSidebar` 中 `Layout.Sider` 的 `width` 一致。 */
 export const MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX = 260;
 
@@ -156,6 +159,18 @@ export interface PaneSlot {
   sessionId: string | null;
   /** 该窗格绑定的 repository id；null 表示未选择。 */
   repositoryId: number | null;
+  /** 窗格级执行引擎覆盖（多屏并发时与侧栏仓库配置解耦）。 */
+  executionEngine?: SessionExecutionEngine;
+  /** Claude 专用：是否经 Wise 内置代理路由。 */
+  claudeProxyRoute?: PaneClaudeProxyRoute;
+}
+
+export function paneSlotRuntimeOverride(slot: PaneRuntimeOverride | null | undefined): PaneRuntimeOverride | null {
+  if (!slot) return null;
+  const out: PaneRuntimeOverride = {};
+  if (slot.executionEngine) out.executionEngine = slot.executionEngine;
+  if (slot.claudeProxyRoute) out.claudeProxyRoute = slot.claudeProxyRoute;
+  return Object.keys(out).length > 0 ? out : null;
 }
 
 /** 多屏模式下的有效屏数列表（用于 UI 枚举）。 */

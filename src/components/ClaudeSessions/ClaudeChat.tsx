@@ -75,6 +75,7 @@ import {
   WISE_SESSION_OWNER_HINTS_CHANGED_EVENT,
 } from "../../utils/sessionOwnerHints";
 import { resolveEngineForSession } from "../../utils/sessionExecutionEngine";
+import { normalizeSessionExecutionEngine } from "../../constants/sessionExecutionEngine";
 import { pickSessionForRepositorySidebarSelect } from "../../utils/claudeSessionSelection";
 import { useComposerSpeechPreferences } from "../../hooks/useComposerSpeechPreferences";
 import { ClaudeCodeTaskListMessagesDock } from "./ClaudeCodeTaskListMessagesDock";
@@ -308,6 +309,14 @@ interface Props {
   messageListProfile?: "primary" | "companion";
   /** 伴生窗格按屏数缩小的消息列表尾部窗口 */
   companionMessageListWindow?: { initialVisible: number; loadStep: number };
+  /** 多屏窗格索引：0=主窗格，1+=额外窗格。 */
+  paneIndex?: number;
+  paneCount?: import("../../constants/mainLayoutWidths").PaneCount;
+  paneRuntimeOverride?: import("../../types/paneRuntimeOverride").PaneRuntimeOverride | null;
+  onUpdatePaneRuntimeOverride?: (
+    paneIndex: number,
+    patch: Partial<import("../../types/paneRuntimeOverride").PaneRuntimeOverride>,
+  ) => void;
 }
 
 const RETURN_MAIN_SESSION_KEY = "wise:return-main-session-id";
@@ -405,6 +414,10 @@ export function ClaudeChatInner({
   deferHeavySubtree = false,
   messageListProfile = "primary",
   companionMessageListWindow,
+  paneIndex = 0,
+  paneCount = 1,
+  paneRuntimeOverride = null,
+  onUpdatePaneRuntimeOverride,
 }: Props) {
   const chatRootRef = useRef<HTMLDivElement>(null);
   const composerTrayRef = useRef<HTMLDivElement>(null);
@@ -1147,13 +1160,22 @@ export function ClaudeChatInner({
 
   const questionDockTabs = useQuestionDockTabsForRepository(session, sessions, sessionOwnerHints);
 
-  const sessionExecutionEngine = useMemo(
-    () => resolveEngineForSession(session, repositories, employees, sessionRepository),
-    [session, repositories, employees, sessionRepository],
-  );
+  const sessionExecutionEngine = useMemo(() => {
+    if (paneCount > 1 && paneRuntimeOverride?.executionEngine) {
+      return normalizeSessionExecutionEngine(paneRuntimeOverride.executionEngine);
+    }
+    return resolveEngineForSession(session, repositories, employees, sessionRepository);
+  }, [paneCount, paneRuntimeOverride?.executionEngine, session, repositories, employees, sessionRepository]);
 
   const handleSessionExecutionEngineChange = useCallback(
     (engine: SessionExecutionEngine) => {
+      if (paneCount > 1 && onUpdatePaneRuntimeOverride) {
+        onUpdatePaneRuntimeOverride(paneIndex, {
+          executionEngine: engine,
+          claudeProxyRoute: engine === "claude" ? paneRuntimeOverride?.claudeProxyRoute ?? "auto" : undefined,
+        });
+        return;
+      }
       const employeeName = extractBoundEmployeeNameFromDisplay(session.repositoryName ?? "");
       if (employeeName) {
         const match = employees.find(
@@ -1173,6 +1195,10 @@ export function ClaudeChatInner({
       employees,
       onUpdateEmployeeExecutionEngine,
       onUpdateRepositoryExecutionEngine,
+      onUpdatePaneRuntimeOverride,
+      paneCount,
+      paneIndex,
+      paneRuntimeOverride?.claudeProxyRoute,
       session.repositoryName,
       sessionRepository,
     ],
@@ -1732,6 +1758,10 @@ export function ClaudeChatInner({
               opencodeAvailable={opencodeAvailable}
               onOpenExecutionEnvironment={onOpenExecutionEnvironment}
               onSessionExecutionEngineChange={handleSessionExecutionEngineChange}
+              paneIndex={paneIndex}
+              paneCount={paneCount}
+              paneRuntimeOverride={paneRuntimeOverride}
+              onUpdatePaneRuntimeOverride={onUpdatePaneRuntimeOverride}
               onCancel={onCancel}
               todos={todos}
               questionRequest={questionRequest}

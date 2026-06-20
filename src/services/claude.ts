@@ -50,6 +50,7 @@ export async function executeClaudeCode(
   bare?: boolean,
   trellisContextId?: string,
   cliExtras?: ClaudeSpawnCliExtras | null,
+  anthropicProxyBypass?: boolean,
 ): Promise<void> {
   const normalizedTrellisContextId = trellisContextId?.trim() || null;
   return invoke("execute_claude_code", {
@@ -63,6 +64,7 @@ export async function executeClaudeCode(
     bare: bare ?? false,
     trellisContextId: normalizedTrellisContextId,
     cliExtras: compactClaudeSpawnCliExtras(cliExtras),
+    anthropicProxyBypass: anthropicProxyBypass ?? false,
   });
 }
 
@@ -588,6 +590,7 @@ export async function resumeClaudeCode(
   concurrencyLimit?: number,
   trellisContextId?: string,
   cliExtras?: ClaudeSpawnCliExtras | null,
+  anthropicProxyBypass?: boolean,
 ): Promise<void> {
   const normalizedTrellisContextId = trellisContextId?.trim() || null;
   return invoke("resume_claude_code", {
@@ -601,6 +604,7 @@ export async function resumeClaudeCode(
     concurrencyLimit,
     trellisContextId: normalizedTrellisContextId,
     cliExtras: compactClaudeSpawnCliExtras(cliExtras),
+    anthropicProxyBypass: anthropicProxyBypass ?? false,
   });
 }
 

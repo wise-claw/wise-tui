@@ -1,8 +1,10 @@
 import { memo, useCallback } from "react";
 import { useRepositoryExplorerTreeActions } from "./RepositoryExplorerTreeActionsContext";
+import { useRepositoryExplorerGitStatus } from "./RepositoryExplorerGitStatusContext";
 import { ExplorerInlineCreateRow } from "./ExplorerInlineCreateRow";
 import { ExplorerTreeChevron, ExplorerTreeFolderIcon } from "./explorerTreeChrome";
 import { repositoryTreeDirShouldUpdate } from "./repositoryTreeNodeMemo";
+import { RepoTreeGitDirDot } from "./repoTreeGitDecoration";
 import { explorerDirKey } from "./repositoryExplorerDirKey";
 import { repositoryTreeDepthIndentPx } from "./repositoryTreeLayout";
 import { setWiseRepositoryFileDragData } from "../../utils/repositoryFileDrag";
@@ -19,6 +21,7 @@ export interface RepositoryTreeDirNodeProps {
   expandedDirs: Set<string>;
   inlineCreate: ExplorerInlineCreateState | null;
   loadingDirKeys: ReadonlySet<string>;
+  gitStatusRevision: number;
 }
 
 function RepositoryTreeDirNodeInner({
@@ -31,9 +34,11 @@ function RepositoryTreeDirNodeInner({
   expandedDirs,
   inlineCreate,
   loadingDirKeys,
+  gitStatusRevision: _gitStatusRevision,
 }: RepositoryTreeDirNodeProps) {
   const { onToggleDir, onSelectNode, onInlineValueChange, onInlineCommit, onInlineCancel } =
     useRepositoryExplorerTreeActions();
+  const { dirHasChanges } = useRepositoryExplorerGitStatus();
   const depthIndentPx = repositoryTreeDepthIndentPx(depth);
   const isSelected = selectedPath === node.path;
   const showInlineHere = inlineCreate != null && inlineCreate.parentDir === node.path;
@@ -84,7 +89,7 @@ function RepositoryTreeDirNodeInner({
           className="repo-tree-node-icon repo-tree-node-icon--dir"
         />
         <span className="repo-tree-node-name">{node.name}</span>
-        {isExpanded ? <span className="repo-tree-node-branch-indicator" aria-hidden /> : null}
+        <RepoTreeGitDirDot visible={dirHasChanges(node.path)} />
       </div>
       {showChildren ? (
         <div className="repo-tree-children">
@@ -111,6 +116,7 @@ function RepositoryTreeDirNodeInner({
                 expandedDirs={expandedDirs}
                 inlineCreate={inlineCreate}
                 loadingDirKeys={loadingDirKeys}
+                gitStatusRevision={_gitStatusRevision}
               />
             ) : (
               <RepositoryTreeFileNode
@@ -118,6 +124,7 @@ function RepositoryTreeDirNodeInner({
                 node={childNode}
                 depth={depth + 1}
                 selectedPath={selectedPath}
+                gitStatusRevision={_gitStatusRevision}
               />
             ),
           )}
@@ -155,6 +162,8 @@ function dirNodeMemoCompare(prev: Readonly<RepositoryTreeDirNodeProps>, next: Re
     nextInlineCreate: next.inlineCreate,
     prevLoadingDirKeys: prev.loadingDirKeys,
     nextLoadingDirKeys: next.loadingDirKeys,
+    prevGitStatusRevision: prev.gitStatusRevision,
+    nextGitStatusRevision: next.gitStatusRevision,
   });
 }
 

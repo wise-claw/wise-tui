@@ -14,6 +14,7 @@ export interface RepositoryTreeListProps {
   loadingDirKeys: ReadonlySet<string>;
   /** Bumps when lazy map / derived tree changes — keeps memoized list in sync. */
   treeContentRevision: number;
+  gitStatusRevision: number;
 }
 
 function repositoryTreeListShouldUpdate(
@@ -25,6 +26,7 @@ function repositoryTreeListShouldUpdate(
   if (prev.expandedDirs !== next.expandedDirs) return false;
   if (prev.loadingDirKeys !== next.loadingDirKeys) return false;
   if (prev.treeContentRevision !== next.treeContentRevision) return false;
+  if (prev.gitStatusRevision !== next.gitStatusRevision) return false;
   if (prev.inlineCreate?.parentDir !== next.inlineCreate?.parentDir) return false;
   if (prev.inlineCreate?.type !== next.inlineCreate?.type) return false;
   if (prev.inlineCreate?.value !== next.inlineCreate?.value) return false;
@@ -40,6 +42,7 @@ function RepositoryTreeListInner({
   inlineCreate,
   loadingDirKeys,
   treeContentRevision: _treeContentRevision,
+  gitStatusRevision,
 }: RepositoryTreeListProps) {
   return (
     <>
@@ -56,6 +59,7 @@ function RepositoryTreeListInner({
             expandedDirs={expandedDirs}
             inlineCreate={inlineCreate}
             loadingDirKeys={loadingDirKeys}
+            gitStatusRevision={gitStatusRevision}
           />
         ) : (
           <RepositoryTreeFileNode
@@ -63,6 +67,7 @@ function RepositoryTreeListInner({
             node={node}
             depth={0}
             selectedPath={selectedPath}
+            gitStatusRevision={gitStatusRevision}
           />
         ),
       )}

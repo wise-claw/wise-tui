@@ -1,5 +1,10 @@
 import type * as Monaco from "monaco-editor";
 import { readProjectRelativeFile } from "./projectRelativeFiles";
+import {
+  loadRepositoryTypeScriptProfile,
+  mapTsconfigCompilerOptionsToMonaco,
+  registerRepositoryTypeScriptLibs,
+} from "./monacoRepositoryTypeScriptConfig";
 import { shouldSkipMonacoTypeScriptModelSync } from "../utils/monacoLargeFile";
 
 type MonacoApi = typeof Monaco;
@@ -44,8 +49,11 @@ interface MonacoTypeScriptRuntime {
 }
 
 export interface MonacoRepositorySourceFile {
+  /** 仓库内真实文件路径，用于继续解析依赖。 */
   relativePath: string;
   content: string;
+  /** 与 import 语句一致的模型路径（例如 .js 导入映射到 .ts 源文件）。 */
+  modelRelativePath?: string;
 }
 
 interface SyncMonacoTypeScriptModelsInput {
@@ -98,6 +106,7 @@ const REGISTERED_REPOSITORY_EXTRA_LIBS = new WeakMap<
 const DEPENDENCY_FILE_CONTENT_CACHE = new Map<string, string>();
 const PENDING_DEPENDENCY_FILES = new Map<string, Promise<string | null>>();
 const LAST_SYNC_SIGNATURE_BY_REPOSITORY = new WeakMap<MonacoApi, Map<string, string>>();
+const APPLIED_REPOSITORY_TS_ENVIRONMENT = new WeakMap<MonacoApi, string>();
 
 export function isTypeScriptLikeRepositoryPath(path: string): boolean {
   return TYPESCRIPT_LIKE_EXTENSIONS.has(getPathExtension(path));
@@ -136,6 +145,7 @@ export function configureWiseMonacoTypeScript(monaco: MonacoApi): void {
     noFallthroughCasesInSwitch: true,
     resolvePackageJsonExports: true,
     resolvePackageJsonImports: true,
+    allowNonTsExtensions: true,
   };
 
   applyWiseTypeScriptDefaults(ts.typescriptDefaults, compilerOptions);
@@ -148,12 +158,20 @@ export function configureWiseMonacoTypeScript(monaco: MonacoApi): void {
   registerAmbientModules(monaco, COMMON_AMBIENT_MODULES);
 }
 
+export async function ensureRepositoryTypeScriptEnvironment(
+  monaco: MonacoApi,
+  repositoryPath: string,
+): Promise<void> {
+  await applyRepositoryTypeScriptEnvironment(monaco, repositoryPath);
+}
+
 export async function syncMonacoRepositoryTypeScriptModels({
   monaco,
   repositoryPath,
   sourceFiles,
 }: SyncMonacoTypeScriptModelsInput): Promise<void> {
   configureWiseMonacoTypeScript(monaco);
+  await applyRepositoryTypeScriptEnvironment(monaco, repositoryPath);
 
   const normalizedSources = sourceFiles
     .filter((file) => isTypeScriptLikeRepositoryPath(file.relativePath))
@@ -187,7 +205,7 @@ export async function syncMonacoRepositoryTypeScriptModels({
   repositorySignatures.set(repositoryPath, syncSignature);
 
   for (const source of normalizedSources) {
-    registerRepositorySource(monaco, repositoryPath, source, true);
+    registerRepositorySource(monaco, repositoryPath, source);
   }
 
   const queue = normalizedSources.map((source) => ({ ...source, depth: 0 }));
@@ -208,13 +226,64 @@ export async function syncMonacoRepositoryTypeScriptModels({
 
       visited.add(dependency.relativePath);
       loadedCount += 1;
-      registerRepositorySource(monaco, repositoryPath, dependency, false);
+      registerRepositorySource(monaco, repositoryPath, dependency);
       if (isTypeScriptLikeRepositoryPath(dependency.relativePath)) {
         queue.push({ ...dependency, depth: current.depth + 1 });
       }
       if (loadedCount >= MAX_DEPENDENCY_MODEL_COUNT) break;
     }
   }
+}
+
+async function applyRepositoryTypeScriptEnvironment(
+  monaco: MonacoApi,
+  repositoryPath: string,
+): Promise<void> {
+  const signature = repositoryPath.trim();
+  if (!signature) return;
+  if (APPLIED_REPOSITORY_TS_ENVIRONMENT.get(monaco) === signature) {
+    return;
+  }
+
+  const profile = await loadRepositoryTypeScriptProfile(signature);
+  const ts = getMonacoTypeScriptRuntime(monaco);
+  const mappedOptions = mapTsconfigCompilerOptionsToMonaco(profile.compilerOptions, ts);
+  const compilerOptions: MonacoCompilerOptions = {
+    target: ts.ScriptTarget.ES2020,
+    module: ts.ModuleKind.ESNext,
+    moduleResolution: resolveMonacoBundlerModuleResolution(ts),
+    jsx: ts.JsxEmit.ReactJSX,
+    useDefineForClassFields: true,
+    allowSyntheticDefaultImports: true,
+    allowImportingTsExtensions: true,
+    resolveJsonModule: true,
+    isolatedModules: true,
+    noEmit: true,
+    strict: true,
+    skipLibCheck: true,
+    noUnusedLocals: true,
+    noUnusedParameters: true,
+    noFallthroughCasesInSwitch: true,
+    resolvePackageJsonExports: true,
+    resolvePackageJsonImports: true,
+    allowNonTsExtensions: true,
+    ...mappedOptions,
+  };
+
+  applyWiseTypeScriptDefaults(ts.typescriptDefaults, compilerOptions);
+  applyWiseTypeScriptDefaults(ts.javascriptDefaults, {
+    ...compilerOptions,
+    allowJs: typeof compilerOptions.allowJs === "boolean" ? compilerOptions.allowJs : true,
+    checkJs: typeof compilerOptions.checkJs === "boolean" ? compilerOptions.checkJs : false,
+  });
+
+  await registerRepositoryTypeScriptLibs(
+    signature,
+    profile.typePackages,
+    (content, filePath) => ts.typescriptDefaults.addExtraLib(content, filePath),
+    monaco,
+  );
+  APPLIED_REPOSITORY_TS_ENVIRONMENT.set(monaco, signature);
 }
 
 function applyWiseTypeScriptDefaults(
@@ -230,9 +299,9 @@ function applyWiseTypeScriptDefaults(
     noSyntaxValidation: false,
     noSemanticValidation: false,
     noSuggestionDiagnostics: false,
-    onlyVisible: true,
+    onlyVisible: false,
   });
-  defaults.setEagerModelSync(false);
+  defaults.setEagerModelSync(true);
 }
 
 function resolveMonacoBundlerModuleResolution(
@@ -275,30 +344,19 @@ function registerRepositorySource(
   monaco: MonacoApi,
   repositoryPath: string,
   source: MonacoRepositorySourceFile,
-  openInEditor: boolean,
 ): void {
-  if (openInEditor || !isExtraLibSupportedRepositoryPath(source.relativePath)) {
-    disposeRepositoryExtraLib(monaco, repositoryPath, source.relativePath);
-    ensureMonacoModel(monaco, repositoryPath, source.relativePath, source.content);
-    return;
+  disposeRepositoryExtraLib(monaco, repositoryPath, source.relativePath);
+  if (source.modelRelativePath && source.modelRelativePath !== source.relativePath) {
+    disposeRepositoryExtraLib(monaco, repositoryPath, source.modelRelativePath);
   }
 
-  const filePath = monacoUriForRepositoryPath(source.relativePath, repositoryPath);
-  let registered = REGISTERED_REPOSITORY_EXTRA_LIBS.get(monaco);
-  if (!registered) {
-    registered = new Map();
-    REGISTERED_REPOSITORY_EXTRA_LIBS.set(monaco, registered);
+  const modelPaths = new Set<string>([source.relativePath]);
+  if (source.modelRelativePath) {
+    modelPaths.add(source.modelRelativePath);
   }
-  const existing = registered.get(filePath);
-  if (existing?.content === source.content) {
-    return;
+  for (const modelPath of modelPaths) {
+    ensureMonacoModel(monaco, repositoryPath, modelPath, source.content);
   }
-  existing?.disposable.dispose();
-  const ts = getMonacoTypeScriptRuntime(monaco);
-  registered.set(filePath, {
-    content: source.content,
-    disposable: ts.typescriptDefaults.addExtraLib(source.content, filePath),
-  });
 }
 
 function disposeRepositoryExtraLib(monaco: MonacoApi, repositoryPath: string, relativePath: string): void {
@@ -309,8 +367,9 @@ function disposeRepositoryExtraLib(monaco: MonacoApi, repositoryPath: string, re
   registered.delete(filePath);
 }
 
-function isExtraLibSupportedRepositoryPath(relativePath: string): boolean {
-  return isTypeScriptLikeRepositoryPath(relativePath);
+export function resolveImportSpecifierToRelativePath(fromRelativePath: string, specifier: string): string {
+  const fromDir = dirname(normalizeRepositoryRelativePath(fromRelativePath));
+  return normalizeRepositoryRelativePath(`${fromDir}/${specifier}`);
 }
 
 function registerAmbientModules(monaco: MonacoApi, moduleSpecifiers: string[]): void {
@@ -354,11 +413,16 @@ async function readFirstExistingRelativeImport(
   fromRelativePath: string,
   specifier: string,
 ): Promise<MonacoRepositorySourceFile | null> {
+  const importRelativePath = resolveImportSpecifierToRelativePath(fromRelativePath, specifier);
   const candidates = resolveMonacoRepositoryRelativeImportCandidates(fromRelativePath, specifier);
   for (const candidate of candidates) {
     const content = await readProjectFileIfExists(repositoryPath, candidate);
     if (content != null) {
-      return { relativePath: candidate, content };
+      return {
+        relativePath: candidate,
+        content,
+        modelRelativePath: importRelativePath !== candidate ? importRelativePath : undefined,
+      };
     }
   }
   return null;
@@ -369,7 +433,14 @@ export function resolveMonacoRepositoryRelativeImportCandidates(fromRelativePath
   const rawTarget = normalizeRepositoryRelativePath(`${fromDir}/${specifier}`);
   const ext = getPathExtension(rawTarget);
   if (ext.length > 0) {
-    return MODEL_SOURCE_EXTENSIONS.has(ext) ? [rawTarget] : [];
+    const candidates = MODEL_SOURCE_EXTENSIONS.has(ext) ? [rawTarget] : [];
+    if (["js", "mjs", "cjs"].includes(ext)) {
+      const withoutExt = rawTarget.slice(0, -(ext.length + 1));
+      candidates.push(
+        ...["ts", "tsx", "mts", "cts", "d.ts"].map((sourceExt) => `${withoutExt}.${sourceExt}`),
+      );
+    }
+    return Array.from(new Set(candidates));
   }
 
   const candidates = [

@@ -141,6 +141,7 @@ export function useMainLayoutModes({
   /** 累计从单屏基准扩展的逻辑像素增量，关闭多屏时按此值缩回。 */
   const multiPaneAccumulatedDeltaRef = useRef<number>(0);
   const paneChangeInFlightRef = useRef(false);
+  const [paneChangeInFlight, setPaneChangeInFlight] = useState(false);
   const multiPaneRestoreExpandDoneRef = useRef(false);
   const paneCountRef = useRef(paneCount);
   paneCountRef.current = paneCount;
@@ -183,10 +184,12 @@ export function useMainLayoutModes({
       }
       if (targetCount === paneCountRef.current) return false;
       paneChangeInFlightRef.current = true;
+      setPaneChangeInFlight(true);
       const currentPaneCount = paneCountRef.current;
       const timeoutId = window.setTimeout(() => {
         if (paneChangeInFlightRef.current) {
           paneChangeInFlightRef.current = false;
+          setPaneChangeInFlight(false);
           message.warning("多屏切换超时，已恢复操作");
         }
       }, PANE_CHANGE_IN_FLIGHT_TIMEOUT_MS);
@@ -213,7 +216,9 @@ export function useMainLayoutModes({
         }
         singlePaneWindowSnapshotRef.current = null;
         await waitLayoutFrames(1);
-        await shrinkMainWindowToRemoveHorizontalSlack();
+        // 单次收敛即可：上方已按 accumulated delta / 快照恢复窗口尺寸，
+        // shrink 内部会再等 2 帧测量并收窄。原先第二次 shrink 仅作保险，
+        // 徒增 2 帧 + 2 次 IPC，是关闭多屏卡顿感的显性来源。
         await shrinkMainWindowToRemoveHorizontalSlack();
         return true;
       }
@@ -271,6 +276,7 @@ export function useMainLayoutModes({
       } finally {
         window.clearTimeout(timeoutId);
         paneChangeInFlightRef.current = false;
+        setPaneChangeInFlight(false);
       }
     },
     [multiPaneLayoutReady, setExtraPanes, setPaneCount],
@@ -728,6 +734,7 @@ export function useMainLayoutModes({
     handleNewPaneSessionInNextSlot,
     handleNewPaneProjectSessionInNextSlot,
     handleChangePaneCount,
+    paneChangeInFlight,
     handleCyclePaneCount,
     handleToggleRightPanel,
     handleSetRightPanelDefaultCollapsed,

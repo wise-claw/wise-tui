@@ -23,6 +23,7 @@ import {
 import { openRepositoryRemoteInBrowser } from "../../services/openRepositoryRemote";
 import { commitPullPushRepository } from "../../services/gitCommitPullPush";
 import { refreshGitRepositoryStats } from "../../stores/gitRepositoryStatsStore";
+import { refreshGitRepositoryExplorerStatus } from "../../stores/gitRepositoryExplorerStatusStore";
 import type { GitStatusResponse } from "../../types";
 import { normalizeConventionalCommitMessage } from "../../utils/conventionalCommitMessage";
 import { DiffMode } from "./DiffMode";
@@ -536,6 +537,7 @@ function GitRepoSectionInner({
           return;
         }
         refreshGitRepositoryStats(repositoryPath);
+        refreshGitRepositoryExplorerStatus(repositoryPath);
         if (outcome === "pushed_only") {
           message.success("已推送待同步提交");
         } else {

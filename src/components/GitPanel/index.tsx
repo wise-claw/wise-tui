@@ -23,6 +23,7 @@ import { consumeWarmGitStatus } from "../../services/gitStatusWarmCache";
 import { commitPullPushRepository } from "../../services/gitCommitPullPush";
 import { openRepositoryRemoteInBrowser } from "../../services/openRepositoryRemote";
 import { refreshGitRepositoryStats } from "../../stores/gitRepositoryStatsStore";
+import { refreshGitRepositoryExplorerStatus } from "../../stores/gitRepositoryExplorerStatusStore";
 import type { GitStatusResponse } from "../../types";
 import { normalizeConventionalCommitMessage } from "../../utils/conventionalCommitMessage";
 import { runGitSyncAction, type GitSyncActionKind } from "./gitSyncActionRunner";
@@ -404,6 +405,7 @@ function GitSingleRepoPanel({
           return;
         }
         refreshGitRepositoryStats(repositoryPath);
+        refreshGitRepositoryExplorerStatus(repositoryPath);
         if (outcome === "pushed_only") {
           message.success("已推送待同步提交");
         } else {

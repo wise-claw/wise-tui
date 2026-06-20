@@ -124,8 +124,16 @@ interface Props {
   onAutoFixRunError?: (prompt: string) => void | Promise<void>;
   /** 多屏模式屏数：1=单屏，2/4/6/8=多屏 */
   paneCount?: PaneCount;
+  /** 多屏切换进行中，用于切换按钮 loading/disabled 反馈 */
+  paneChangeInFlight?: boolean;
   /** 多屏额外窗格槽位 */
   extraPanes?: PaneSlot[];
+  /** 主窗格运行时覆盖 */
+  primaryPaneRuntimeOverride?: import("../../types/paneRuntimeOverride").PaneRuntimeOverride | null;
+  onUpdatePaneRuntimeOverride?: (
+    paneIndex: number,
+    patch: Partial<import("../../types/paneRuntimeOverride").PaneRuntimeOverride>,
+  ) => void;
   onChangePaneCount?: (count: PaneCount) => void;
   onPaneRepositorySelect?: (slotIndex: number, repositoryId: number) => void | Promise<void>;
   onPaneProjectNewSession?: (
@@ -267,7 +275,10 @@ function ClaudeSessionsShell({
   onSendFollowup,
   onRestoreRevert,
   paneCount = 1,
+  paneChangeInFlight = false,
   extraPanes = [],
+  primaryPaneRuntimeOverride = null,
+  onUpdatePaneRuntimeOverride,
   onChangePaneCount,
   onPaneRepositorySelect,
   onPaneProjectNewSession,
@@ -390,10 +401,10 @@ function ClaudeSessionsShell({
   useEffect(() => {
     if (!chatSurfaceReady) return;
     prefetchNewSessionSurface();
-    if (paneCount > 1) {
-      prefetchModule(() => import("./ClaudeMultiPaneGrid"), "ClaudeMultiPaneGrid");
-    }
-  }, [chatSurfaceReady, paneCount]);
+    // 首次进入多屏前预热 grid chunk，消除冷加载卡顿；
+    // 原 paneCount>1 门控只有已进入多屏后才预热，无法覆盖首次 1→N 切换。
+    prefetchModule(() => import("./ClaudeMultiPaneGrid"), "ClaudeMultiPaneGrid");
+  }, [chatSurfaceReady]);
 
   const mainSessionForDataLink = useMemo(
     () =>
@@ -668,6 +679,7 @@ function ClaudeSessionsShell({
           terminalPanelMounted={terminalPanelMounted}
           onAutoFixRunError={(prompt) => onAutoFixRunErrorFromProps?.(prompt)}
           paneCount={paneCount}
+          paneChangeInFlight={paneChangeInFlight}
           onChangePaneCount={onChangePaneCount}
         />
       )}
@@ -717,6 +729,8 @@ function ClaudeSessionsShell({
           onRestoreRevert={onRestoreRevert}
           paneCount={paneCount}
           extraPanes={extraPanes}
+          primaryPaneRuntimeOverride={primaryPaneRuntimeOverride}
+          onUpdatePaneRuntimeOverride={onUpdatePaneRuntimeOverride}
           onPaneRepositorySelect={onPaneRepositorySelect}
           onPaneProjectNewSession={onPaneProjectNewSession}
           onNewPaneSession={onNewPaneSession}

@@ -1,5 +1,7 @@
 import { memo } from "react";
 import { ExplorerTreeFileIcon, ExplorerTreeFolderIcon } from "./explorerTreeChrome";
+import { useRepositoryExplorerGitStatus } from "./RepositoryExplorerGitStatusContext";
+import { RepoTreeGitDirDot, RepoTreeGitFileDecoration } from "./repoTreeGitDecoration";
 import type { ExplorerSearchResultRow } from "./fileTree";
 import type { GitPanelOpenFileOptions } from "./types";
 
@@ -22,7 +24,10 @@ function ExplorerSearchResultRowItem({
   onSelect: ExplorerSearchResultListProps["onSelect"];
   onOpenFile?: ExplorerSearchResultListProps["onOpenFile"];
 }) {
+  const { getFileStatus, dirHasChanges } = useRepositoryExplorerGitStatus();
   const parentLabel = row.parentPath || "";
+  const gitStatus = row.isDir ? null : getFileStatus(row.path);
+  const showGitDot = row.isDir ? dirHasChanges(row.path) : false;
   return (
     <div
       className={`repo-search-result-row${selected ? " repo-search-result-row--selected" : ""}${row.isDir ? " repo-search-result-row--dir" : ""}${!row.isDir && onOpenFile ? " repo-search-result-row--file--clickable" : ""}`}
@@ -51,6 +56,7 @@ function ExplorerSearchResultRowItem({
         {parentLabel ? <span className="repo-search-result-row-parent">{parentLabel}/</span> : null}
         <span className="repo-search-result-row-name">{row.name}</span>
       </span>
+      {row.isDir ? <RepoTreeGitDirDot visible={showGitDot} /> : <RepoTreeGitFileDecoration status={gitStatus} />}
     </div>
   );
 }

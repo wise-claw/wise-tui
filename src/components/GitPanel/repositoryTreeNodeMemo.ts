@@ -20,6 +20,8 @@ export function repositoryTreeDirShouldUpdate(args: {
   nextInlineCreate: ExplorerInlineCreateState | null;
   prevLoadingDirKeys: ReadonlySet<string>;
   nextLoadingDirKeys: ReadonlySet<string>;
+  prevGitStatusRevision?: number;
+  nextGitStatusRevision?: number;
 }): boolean {
   if (repositoryDirNodeContentKey(args.prevNode) !== repositoryDirNodeContentKey(args.nextNode)) {
     return false;
@@ -57,6 +59,10 @@ export function repositoryTreeDirShouldUpdate(args: {
     }
   }
 
+  if ((args.prevGitStatusRevision ?? 0) !== (args.nextGitStatusRevision ?? 0)) {
+    return false;
+  }
+
   return true;
 }
 
@@ -67,8 +73,11 @@ export function repositoryTreeFileShouldUpdate(args: {
   nextDepth: number;
   prevSelectedPath: string | null;
   nextSelectedPath: string | null;
+  prevGitStatusRevision?: number;
+  nextGitStatusRevision?: number;
 }): boolean {
   if (args.prevNode !== args.nextNode) return false;
   if (args.prevDepth !== args.nextDepth) return false;
+  if ((args.prevGitStatusRevision ?? 0) !== (args.nextGitStatusRevision ?? 0)) return false;
   return (args.prevSelectedPath === args.prevNode.path) === (args.nextSelectedPath === args.nextNode.path);
 }

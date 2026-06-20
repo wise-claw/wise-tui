@@ -1,7 +1,9 @@
 import { memo, useCallback } from "react";
 import { useRepositoryExplorerTreeActions } from "./RepositoryExplorerTreeActionsContext";
+import { useRepositoryExplorerGitStatus } from "./RepositoryExplorerGitStatusContext";
 import { ExplorerTreeChevron, ExplorerTreeFolderIcon } from "./explorerTreeChrome";
 import { repositoryDirNodeContentKey } from "./lazyExplorerTree";
+import { RepoTreeGitDirDot } from "./repoTreeGitDecoration";
 import { repositoryTreeDepthIndentPx } from "./repositoryTreeLayout";
 import { setWiseRepositoryFileDragData } from "../../utils/repositoryFileDrag";
 import type { RepositoryFileTreeNode } from "./types";
@@ -11,12 +13,21 @@ export interface RepositoryTreeDirRowProps {
   depth: number;
   isExpanded: boolean;
   selectedPath: string | null;
+  gitStatusRevision: number;
 }
 
-function RepositoryTreeDirRowInner({ node, depth, isExpanded, selectedPath }: RepositoryTreeDirRowProps) {
+function RepositoryTreeDirRowInner({
+  node,
+  depth,
+  isExpanded,
+  selectedPath,
+  gitStatusRevision: _gitStatusRevision,
+}: RepositoryTreeDirRowProps) {
   const { onToggleDir, onSelectNode } = useRepositoryExplorerTreeActions();
+  const { dirHasChanges } = useRepositoryExplorerGitStatus();
   const depthIndentPx = repositoryTreeDepthIndentPx(depth);
   const isSelected = selectedPath === node.path;
+  const showGitDot = dirHasChanges(node.path);
 
   const activateDir = useCallback(() => {
     onSelectNode(node.path, true);
@@ -57,7 +68,7 @@ function RepositoryTreeDirRowInner({ node, depth, isExpanded, selectedPath }: Re
         className="repo-tree-node-icon repo-tree-node-icon--dir"
       />
       <span className="repo-tree-node-name">{node.name}</span>
-      {isExpanded ? <span className="repo-tree-node-branch-indicator" aria-hidden /> : null}
+      <RepoTreeGitDirDot visible={showGitDot} />
     </div>
   );
 }
@@ -68,6 +79,7 @@ function dirRowMemoCompare(prev: Readonly<RepositoryTreeDirRowProps>, next: Read
   }
   if (prev.depth !== next.depth) return false;
   if (prev.isExpanded !== next.isExpanded) return false;
+  if (prev.gitStatusRevision !== next.gitStatusRevision) return false;
   return (prev.selectedPath === prev.node.path) === (next.selectedPath === next.node.path);
 }
 

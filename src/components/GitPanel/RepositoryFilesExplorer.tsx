@@ -14,12 +14,14 @@ import { GitPanelWorkspaceSelector, type GitPanelWorkspaceSelectorProps } from "
 import { ExplorerInlineCreateRow } from "./ExplorerInlineCreateRow";
 import { ExplorerSearchResultList } from "./ExplorerSearchResultList";
 import { RepositoryExplorerTreeActionsProvider } from "./RepositoryExplorerTreeActionsContext";
+import { RepositoryExplorerGitStatusProvider } from "./RepositoryExplorerGitStatusContext";
 import { flattenRepositoryTreeRows } from "./repositoryTreeFlatten";
 import { REPOSITORY_TREE_ROW_HEIGHT_PX } from "./repositoryTreeLayout";
 import { RepositoryVirtualTreeList } from "./RepositoryVirtualTreeList";
 import { MIN_EXPLORER_SEARCH_QUERY_LEN } from "./fileTree";
 import type { GitPanelOpenFileOptions } from "./types";
 import { useRepositoryFilesExplorer } from "./useRepositoryFilesExplorer";
+import { useGitRepositoryExplorerStatus } from "../../hooks/useGitRepositoryExplorerStatus";
 import { useScrollEndClass } from "../../hooks/useScrollEndClass";
 import { LEFT_SIDEBAR_SCROLLING_CLASS } from "../../constants/leftSidebarScrollPerformance";
 import { formatRepositoryExplorerLoadError } from "../../utils/repositoryPathAccessibility";
@@ -71,6 +73,7 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
     onClearExplorerSearch,
     explorerRevealTarget,
   });
+  const explorerGitStatus = useGitRepositoryExplorerStatus(trimmedRepositoryPath);
   const trimmedSearch = search.trim();
   const searchActive = trimmedSearch.length > 0;
   const rootInline = explorer.inlineCreate?.parentDir === "" && !searchActive;
@@ -239,6 +242,7 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
           onInlineValueChange={explorer.handleInlineValueChange}
           onInlineCommit={explorer.handleInlineCommit}
           onInlineCancel={explorer.cancelInlineCreate}
+          gitStatusRevision={explorerGitStatus.generation}
         />
       </RepositoryExplorerTreeActionsProvider>
     </div>
@@ -305,6 +309,7 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
     ) : null;
 
   return (
+    <RepositoryExplorerGitStatusProvider value={explorerGitStatus}>
     <div
       className={
         "git-files-mode" +
@@ -454,5 +459,6 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
         </Popconfirm>
       ) : null}
     </div>
+    </RepositoryExplorerGitStatusProvider>
   );
 });

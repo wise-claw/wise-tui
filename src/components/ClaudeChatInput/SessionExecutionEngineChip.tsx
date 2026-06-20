@@ -62,8 +62,13 @@ export function buildSessionExecutionEngineMenuItems({
   opencodeAvailable = false,
   onOpenExecutionEnvironment,
   onProbeClick,
-}: PickerSectionProps & { onProbeClick?: () => void }): MenuProps["items"] {
-  return visibleExecutionEngines(cursorAvailable).map((key) => {
+  engines,
+}: PickerSectionProps & {
+  onProbeClick?: () => void;
+  engines?: readonly SessionExecutionEngine[];
+}): MenuProps["items"] {
+  const visibleEngines = engines ?? visibleExecutionEngines(cursorAvailable);
+  return visibleEngines.map((key) => {
     const itemMeta = SESSION_EXECUTION_ENGINE_LABELS[key];
     const itemDisabled = !isEngineAvailable(
       key,

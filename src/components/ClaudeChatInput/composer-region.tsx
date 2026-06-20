@@ -296,6 +296,13 @@ interface ComposerInnerProps {
   onCompactSessionHistory?: (sessionId: string, prompt?: string) => void | Promise<void>;
   /** 本地斜杠：/clear /reset /new */
   onCreateNewSession?: () => void | Promise<void>;
+  paneIndex?: number;
+  paneCount?: import("../../constants/mainLayoutWidths").PaneCount;
+  paneRuntimeOverride?: import("../../types/paneRuntimeOverride").PaneRuntimeOverride | null;
+  onUpdatePaneRuntimeOverride?: (
+    paneIndex: number,
+    patch: Partial<import("../../types/paneRuntimeOverride").PaneRuntimeOverride>,
+  ) => void;
 }
 
 interface LastSentComposerDraft {
@@ -578,6 +585,10 @@ function ComposerInner({
   onAppendUserMessage,
   onCompactSessionHistory,
   onCreateNewSession,
+  paneIndex = 0,
+  paneCount = 1,
+  paneRuntimeOverride = null,
+  onUpdatePaneRuntimeOverride,
 }: ComposerInnerProps) {
   const { breakdown, loading: contextBreakdownLoading, ensureBreakdown } =
     useContextBreakdown(session);
@@ -2644,11 +2655,17 @@ function ComposerInner({
           geminiAvailable={geminiAvailable}
           opencodeAvailable={opencodeAvailable}
           disabled={isSessionBusy}
-          onEngineChange={onSessionExecutionEngineChange}
+          onEngineChange={paneCount > 1 ? undefined : onSessionExecutionEngineChange}
           onOpenExecutionEnvironment={onOpenExecutionEnvironment}
           connectionKind={session.connectionKind}
           defaultConnectionKind={defaultConnectionKind}
           onConnectionKindChange={onSessionConnectionKindChange}
+          claudeProxyRoute={
+            paneCount > 1 ? (paneRuntimeOverride?.claudeProxyRoute ?? "auto") : undefined
+          }
+          paneIndex={paneIndex}
+          paneRuntimeOverride={paneRuntimeOverride}
+          onUpdatePaneRuntimeOverride={paneCount > 1 ? onUpdatePaneRuntimeOverride : undefined}
         />
         <ComposerModelPicker
           session={session}
@@ -2685,6 +2702,10 @@ function ComposerInner({
       composerDefaultInstructionLoading,
       composerDefaultInstructionSaving,
       saveComposerDefaultInstruction,
+      paneCount,
+      paneIndex,
+      paneRuntimeOverride,
+      onUpdatePaneRuntimeOverride,
     ],
   );
 
@@ -3010,6 +3031,13 @@ export interface ComposerRegionProps {
   onCompactSessionHistory?: (sessionId: string, prompt?: string) => void | Promise<void>;
   /** 本地斜杠：/clear /reset /new */
   onCreateNewSession?: () => void | Promise<void>;
+  paneIndex?: number;
+  paneCount?: import("../../constants/mainLayoutWidths").PaneCount;
+  paneRuntimeOverride?: import("../../types/paneRuntimeOverride").PaneRuntimeOverride | null;
+  onUpdatePaneRuntimeOverride?: (
+    paneIndex: number,
+    patch: Partial<import("../../types/paneRuntimeOverride").PaneRuntimeOverride>,
+  ) => void;
 }
 
 export function ComposerRegion({ session, draftBucketKey, ...rest }: ComposerRegionProps) {

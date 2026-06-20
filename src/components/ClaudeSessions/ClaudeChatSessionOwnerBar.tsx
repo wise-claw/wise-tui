@@ -28,7 +28,7 @@ export const ClaudeChatSessionOwnerBar = memo(function ClaudeChatSessionOwnerBar
         {typeLabel}
       </span>
       {name.trim() ? <span className="app-session-owner-panel__text">{name}</span> : null}
-      {session.status === "running" || session.status === "connecting" ? (
+      {type !== "main" && (session.status === "running" || session.status === "connecting") ? (
         <HoverHint title="结束当前 Claude Code 运行（与输入区结束按钮相同）" placement="bottom">
           <button
             type="button"

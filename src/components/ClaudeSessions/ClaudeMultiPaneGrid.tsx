@@ -198,6 +198,12 @@ export interface MultiPaneSharedChatProps {
   onLoadMoreTranscriptFromDisk?: (sessionId: string) => void | Promise<void>;
   onCompactSessionHistory?: (sessionId: string) => void | Promise<void>;
   onStopSessionConversationTask?: (item: SessionConversationTaskItem) => void;
+  paneCount: PaneCount;
+  primaryPaneRuntimeOverride?: import("../../types/paneRuntimeOverride").PaneRuntimeOverride | null;
+  onUpdatePaneRuntimeOverride?: (
+    paneIndex: number,
+    patch: Partial<import("../../types/paneRuntimeOverride").PaneRuntimeOverride>,
+  ) => void;
 }
 
 interface MultiPanePrimaryPaneProps {
@@ -318,6 +324,10 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
         onReloadFullDiskTranscript={shared.onReloadFullDiskTranscript}
         onLoadMoreTranscriptFromDisk={shared.onLoadMoreTranscriptFromDisk}
         onCompactSessionHistory={shared.onCompactSessionHistory}
+        paneIndex={0}
+        paneCount={shared.paneCount}
+        paneRuntimeOverride={shared.primaryPaneRuntimeOverride}
+        onUpdatePaneRuntimeOverride={shared.onUpdatePaneRuntimeOverride}
       />
     </div>
   );
@@ -363,6 +373,7 @@ interface MultiPaneExtraPaneCellProps {
 
 const MultiPaneExtraPaneCell = memo(
   function MultiPaneExtraPaneCell({
+    slot,
     paneIdx,
     paneCount,
     activeSessionId,
@@ -587,6 +598,13 @@ const MultiPaneExtraPaneCell = memo(
             deferHeavySubtree={deferHeavySubtree}
             messageListProfile="companion"
             companionMessageListWindow={companionMessageListWindow}
+            paneIndex={paneIdx + 1}
+            paneCount={paneCount}
+            paneRuntimeOverride={{
+              executionEngine: slot.executionEngine,
+              claudeProxyRoute: slot.claudeProxyRoute,
+            }}
+            onUpdatePaneRuntimeOverride={shared.onUpdatePaneRuntimeOverride}
           />
         </div>
       );

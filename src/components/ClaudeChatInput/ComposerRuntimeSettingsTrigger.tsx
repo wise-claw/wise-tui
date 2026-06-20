@@ -17,6 +17,19 @@ import {
 import { buildConnectionKindMenuItems } from "./ClaudeConnectionKindChip";
 import { ExecutionEnvironmentDropdownHeader } from "./ExecutionEnvironmentDropdownHeader";
 import { buildSessionExecutionEngineMenuItems } from "./SessionExecutionEngineChip";
+import {
+  applyPaneRuntimePreset,
+  buildPaneRuntimePresetMenuItems,
+  isPaneRuntimePresetKey,
+  resolvePaneRuntimePresetLabel,
+} from "./composerPaneRuntimePresetMenu";
+import {
+  isPaneExtraExecutionEngine,
+  PANE_EXTRA_EXECUTION_ENGINES,
+  resolvePaneEffectiveEngine,
+  resolvePaneRuntimePreset,
+  type PaneRuntimeOverride,
+} from "../../types/paneRuntimeOverride";
 import { useComposerActiveProxyRoute } from "../../hooks/useComposerActiveProxyRoute";
 
 interface Props {
@@ -31,6 +44,15 @@ interface Props {
   defaultConnectionKind?: ClaudeSessionConnectionKind;
   onConnectionKindChange?: (kind: ClaudeSessionConnectionKind) => void;
   disabled?: boolean;
+  /** 多屏窗格 Claude 代理路由；bypass 时不展示代理角标。 */
+  claudeProxyRoute?: "auto" | "bypass";
+  /** 多屏窗格：将 Claude 直连 / 代理 / Codex 并入本弹窗「执行环境」区。 */
+  paneIndex?: number;
+  paneRuntimeOverride?: PaneRuntimeOverride | null;
+  onUpdatePaneRuntimeOverride?: (
+    paneIndex: number,
+    patch: Partial<PaneRuntimeOverride>,
+  ) => void;
 }
 
 function RuntimeSettingsIcon() {
@@ -79,28 +101,51 @@ export function ComposerRuntimeSettingsTrigger({
   defaultConnectionKind = CLAUDE_DEFAULT_CONNECTION_KIND_FALLBACK,
   onConnectionKindChange,
   disabled = false,
+  claudeProxyRoute,
+  paneIndex = 0,
+  paneRuntimeOverride = null,
+  onUpdatePaneRuntimeOverride,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
   const engine = normalizeSessionExecutionEngine(engineProp);
-  const activeProxyRoute = useComposerActiveProxyRoute(engine);
+  const showPaneRuntimePresets = Boolean(onUpdatePaneRuntimeOverride);
+  const activePanePreset = showPaneRuntimePresets
+    ? resolvePaneRuntimePreset(paneRuntimeOverride, engine)
+    : null;
+  const effectiveEngine = showPaneRuntimePresets
+    ? resolvePaneEffectiveEngine(paneRuntimeOverride, engine)
+    : engine;
 
+  const activeProxyRoute = useComposerActiveProxyRoute(effectiveEngine, {
+    claudeProxyBypass: claudeProxyRoute === "bypass",
+  });
+
+  const showExtraPaneEngines =
+    showPaneRuntimePresets &&
+    (codexAvailable || cursorAvailable || geminiAvailable || opencodeAvailable);
   const showEngine =
+    !showPaneRuntimePresets &&
     (codexAvailable || cursorAvailable || geminiAvailable || opencodeAvailable) &&
     Boolean(onEngineChange);
-  const showConnection = engine === "claude" && Boolean(onConnectionKindChange);
+  const showConnection = effectiveEngine === "claude" && Boolean(onConnectionKindChange);
 
   const resolvedConnectionKind = resolveSessionConnectionKind(connectionKind, defaultConnectionKind);
   const hasConnectionOverride = isTabConnectionKindOverride(connectionKind);
   const hasActiveOverride =
-    engine === "codex" ||
-    engine === "cursor" ||
-    engine === "gemini" ||
-    engine === "opencode" ||
-    hasConnectionOverride;
-
+    effectiveEngine === "codex" ||
+    effectiveEngine === "cursor" ||
+    effectiveEngine === "gemini" ||
+    effectiveEngine === "opencode" ||
+    hasConnectionOverride ||
+    (showPaneRuntimePresets &&
+      (activePanePreset === "claude-proxy" ||
+        activePanePreset === "codex" ||
+        isPaneExtraExecutionEngine(effectiveEngine)));
   const tooltip = useMemo(() => {
     const parts: string[] = [];
-    if (showEngine) {
+    if (showPaneRuntimePresets) {
+      parts.push(`执行环境：${resolvePaneRuntimePresetLabel(paneRuntimeOverride, engine)}`);
+    } else if (showEngine) {
       parts.push(`执行引擎：${SESSION_EXECUTION_ENGINE_LABELS[engine].title}`);
     }
     if (activeProxyRoute) {
@@ -114,12 +159,43 @@ export function ComposerRuntimeSettingsTrigger({
       parts.push(`连接方式：${CLAUDE_CONNECTION_KIND_LABELS[resolvedConnectionKind].title}`);
     }
     return parts.length > 0 ? `${parts.join(" · ")}；点击配置` : "运行时配置";
-  }, [activeProxyRoute, engine, resolvedConnectionKind, showConnection, showEngine]);
+  }, [
+    activeProxyRoute,
+    engine,
+    paneRuntimeOverride,
+    resolvedConnectionKind,
+    showConnection,
+    showEngine,
+    showPaneRuntimePresets,
+  ]);
 
   const menuItems = useMemo((): MenuProps["items"] => {
     const items: MenuProps["items"] = [];
 
-    if (showEngine) {
+    if (showPaneRuntimePresets) {
+      const presetItems = buildPaneRuntimePresetMenuItems(activePanePreset);
+      if (presetItems?.length) {
+        items.push(...presetItems);
+      }
+      if (showExtraPaneEngines) {
+        const extraEngineItems = buildSessionExecutionEngineMenuItems({
+          engine: effectiveEngine,
+          codexAvailable,
+          cursorAvailable,
+          geminiAvailable,
+          opencodeAvailable,
+          onOpenExecutionEnvironment,
+          onProbeClick: () => setMenuOpen(false),
+          engines: PANE_EXTRA_EXECUTION_ENGINES,
+        });
+        if (extraEngineItems?.length) {
+          if (items.length > 0) {
+            items.push({ type: "divider" });
+          }
+          items.push(...extraEngineItems);
+        }
+      }
+    } else if (showEngine) {
       const engineItems = buildSessionExecutionEngineMenuItems({
         engine,
         codexAvailable,
@@ -140,7 +216,7 @@ export function ComposerRuntimeSettingsTrigger({
         defaultConnectionKind,
       );
       if (connectionItems?.length) {
-        if (showEngine && items.length > 0) {
+        if (items.length > 0) {
           items.push({ type: "divider" });
         }
         items.push({
@@ -153,8 +229,10 @@ export function ComposerRuntimeSettingsTrigger({
 
     return items;
   }, [
+    activePanePreset,
     codexAvailable,
     cursorAvailable,
+    effectiveEngine,
     geminiAvailable,
     opencodeAvailable,
     defaultConnectionKind,
@@ -163,16 +241,36 @@ export function ComposerRuntimeSettingsTrigger({
     resolvedConnectionKind,
     showConnection,
     showEngine,
+    showExtraPaneEngines,
+    showPaneRuntimePresets,
   ]);
 
   const selectedKeys = useMemo(() => {
     const keys: string[] = [];
-    if (showEngine) keys.push(engine);
+    if (showPaneRuntimePresets) {
+      if (activePanePreset) {
+        keys.push(activePanePreset);
+      } else if (paneRuntimeOverride?.executionEngine) {
+        keys.push(paneRuntimeOverride.executionEngine);
+      } else {
+        keys.push("claude-direct");
+      }
+    } else if (showEngine) {
+      keys.push(engine);
+    }
     if (showConnection) keys.push(resolvedConnectionKind);
     return keys;
-  }, [engine, resolvedConnectionKind, showConnection, showEngine]);
+  }, [
+    activePanePreset,
+    engine,
+    paneRuntimeOverride?.executionEngine,
+    resolvedConnectionKind,
+    showConnection,
+    showEngine,
+    showPaneRuntimePresets,
+  ]);
 
-  if (!showEngine && !showConnection) {
+  if (!showEngine && !showConnection && !showPaneRuntimePresets) {
     return null;
   }
 
@@ -180,7 +278,13 @@ export function ComposerRuntimeSettingsTrigger({
     return null;
   }
 
-  const engineLabel = showEngine ? SESSION_EXECUTION_ENGINE_LABELS[engine].title : null;
+  const triggerLabel = showPaneRuntimePresets
+    ? resolvePaneRuntimePresetLabel(paneRuntimeOverride, engine)
+    : showEngine
+      ? SESSION_EXECUTION_ENGINE_LABELS[engine].title
+      : null;
+  const showProxyBadge =
+    Boolean(activeProxyRoute) && !(showPaneRuntimePresets && activePanePreset === "claude-proxy");
 
   return (
     <Dropdown
@@ -191,7 +295,19 @@ export function ComposerRuntimeSettingsTrigger({
         selectedKeys,
         onClick: ({ key }) => {
           if (typeof key !== "string") return;
+          if (isPaneRuntimePresetKey(key)) {
+            if (key !== activePanePreset && onUpdatePaneRuntimeOverride) {
+              applyPaneRuntimePreset(paneIndex, key, onUpdatePaneRuntimeOverride);
+            }
+            return;
+          }
           if (isSessionExecutionEngineKey(key)) {
+            if (showPaneRuntimePresets && onUpdatePaneRuntimeOverride) {
+              if (key !== effectiveEngine) {
+                onUpdatePaneRuntimeOverride(paneIndex, { executionEngine: key });
+              }
+              return;
+            }
             if (key !== engine) {
               onEngineChange?.(key);
               setMenuOpen(false);
@@ -212,7 +328,7 @@ export function ComposerRuntimeSettingsTrigger({
       onOpenChange={setMenuOpen}
       popupRender={(menu) => (
         <div className="app-claude-connection-kind-dropdown-container app-composer-runtime-settings-popover">
-          {showEngine ? (
+          {showEngine || showPaneRuntimePresets ? (
             <ExecutionEnvironmentDropdownHeader
               showSubtitle={false}
               onOpenConfig={
@@ -234,8 +350,8 @@ export function ComposerRuntimeSettingsTrigger({
           type="button"
           className={`app-composer-runtime-settings-btn${
             hasActiveOverride ? " app-composer-runtime-settings-btn--active" : ""
-          }${engineLabel ? " app-composer-runtime-settings-btn--with-engine" : ""}${
-            activeProxyRoute ? " app-composer-runtime-settings-btn--proxy-route" : ""
+          }${triggerLabel ? " app-composer-runtime-settings-btn--with-engine" : ""}${
+            showProxyBadge ? " app-composer-runtime-settings-btn--proxy-route" : ""
           }`}
           aria-label={tooltip}
           aria-haspopup="menu"
@@ -243,10 +359,10 @@ export function ComposerRuntimeSettingsTrigger({
           disabled={disabled}
         >
           <RuntimeSettingsIcon />
-          {engineLabel ? (
-            <span className="app-composer-runtime-settings-btn__engine-label">{engineLabel}</span>
+          {triggerLabel ? (
+            <span className="app-composer-runtime-settings-btn__engine-label">{triggerLabel}</span>
           ) : null}
-          {activeProxyRoute ? (
+          {showProxyBadge ? (
             <span className="app-composer-runtime-settings-btn__proxy-badge" aria-hidden>
               代理
             </span>

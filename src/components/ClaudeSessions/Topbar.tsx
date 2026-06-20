@@ -185,6 +185,8 @@ export interface TopbarProps {
   onAutoFixRunError?: (prompt: string) => void | Promise<void>;
   /** 多屏模式屏数 */
   paneCount?: PaneCount;
+  /** 多屏切换进行中 */
+  paneChangeInFlight?: boolean;
   onChangePaneCount?: (count: PaneCount) => void;
   /** 打开创作台「远程入口」配置页 */
   onOpenRemoteChannels?: () => void;
@@ -213,6 +215,7 @@ export const Topbar = memo(function Topbar({
   terminalPanelMounted = false,
   onAutoFixRunError,
   paneCount = 1,
+  paneChangeInFlight = false,
   onChangePaneCount,
   onOpenRemoteChannels,
 }: TopbarProps) {
@@ -439,13 +442,16 @@ export const Topbar = memo(function Topbar({
             <button
               className={`app-topbar-btn ${paneCount > 1 ? "active" : ""}`}
               type="button"
+              disabled={paneChangeInFlight}
               title={
-                paneCount > 1
-                  ? `${paneCount}屏模式（⌥K 切换）`
-                  : "多屏：打开多个隔离并行窗格（快捷键 ⌥K）"
+                paneChangeInFlight
+                  ? "正在切换多屏布局…"
+                  : paneCount > 1
+                    ? `${paneCount}屏模式（⌥K 切换）`
+                    : "多屏：打开多个隔离并行窗格（快捷键 ⌥K）"
               }
             >
-              <IconDualPane />
+              {paneChangeInFlight ? <Spin size="small" /> : <IconDualPane />}
             </button>
           </Dropdown>
         )}

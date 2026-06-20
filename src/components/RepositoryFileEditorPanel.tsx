@@ -1,6 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import type { IDisposable } from "monaco-editor";
-import { CloseOutlined } from "@ant-design/icons";
+import { CloseOutlined, ReloadOutlined, WarningOutlined } from "@ant-design/icons";
 import { Button, Spin } from "antd";
 import type * as Monaco from "monaco-editor";
 import type { editor as MonacoEditorNamespace } from "monaco-editor";
@@ -9,6 +9,7 @@ import type { FileEditorTab } from "../hooks/useRepositoryFileEditor";
 import { monacoLanguageFromRepositoryPath } from "../utils/repositoryFilePreview";
 import {
   configureWiseMonacoTypeScript,
+  ensureRepositoryTypeScriptEnvironment,
   isTypeScriptLikeRepositoryPath,
   monacoUriForRepositoryPath,
   syncMonacoRepositoryTypeScriptModels,
@@ -26,6 +27,8 @@ import {
 import { scheduleMonacoLargeFileContentInjection } from "../utils/monacoLargeFileContentInjection";
 import { runWhenIdle } from "../utils/deferIdle";
 import { MonacoSelectionChatToolbar } from "./MonacoSelectionChatToolbar";
+import { useGitRepositoryExplorerStatus } from "../hooks/useGitRepositoryExplorerStatus";
+import { useMonacoGitModifiedLineDecorations } from "../hooks/useMonacoGitModifiedLineDecorations";
 
 const MonacoEditor = lazy(() => import("@monaco-editor/react"));
 
@@ -40,6 +43,7 @@ interface Props {
   onActivePathChange: (path: string) => void;
   onClosePanel: () => void;
   onCloseTab: (relativePath: string, event?: MouseEvent) => void;
+  onReloadTab: (relativePath: string) => void;
   onSave: () => void;
   onTabContentChange: (relativePath: string, content: string) => void;
 }
@@ -55,6 +59,7 @@ export function RepositoryFileEditorPanel({
   onActivePathChange,
   onClosePanel,
   onCloseTab,
+  onReloadTab,
   onSave,
   onTabContentChange,
 }: Props) {
@@ -98,7 +103,49 @@ export function RepositoryFileEditorPanel({
     editor: MonacoEditorNamespace.IStandaloneCodeEditor;
     monaco: typeof Monaco;
   } | null>(null);
+  const explorerGitStatus = useGitRepositoryExplorerStatus(repositoryPath ?? "");
   const contentInjectionCancelRef = useRef<(() => void) | null>(null);
+
+  useMonacoGitModifiedLineDecorations({
+    editor: monacoEditorSurface?.editor ?? null,
+    monaco: monacoEditorSurface?.monaco ?? null,
+    repositoryPath,
+    relativePath: activeTab?.relativePath,
+    diskContent: activeTab?.originalContent,
+    gitStatusRevision: explorerGitStatus.generation,
+    enabled: Boolean(
+      activeTab &&
+        !activeTab.loading &&
+        activeTab.diffOriginal === undefined &&
+        !activeTab.gitCommitSha &&
+        !activeTab.gitCommitCompare,
+    ),
+  });
+
+  // 大文件（非受控 defaultValue）编辑器在外部内容替换后需显式重新注入。
+  // contentVersion 仅在外部刷新时自增（保存路径不自增），故此 effect 不会误注入。
+  const lastInjectedContentVersionRef = useRef<number | null>(null);
+  useEffect(() => {
+    if (!activeTab || activeTab.diffOriginal !== undefined) {
+      lastInjectedContentVersionRef.current = null;
+      return;
+    }
+    const version = activeTab.contentVersion ?? 0;
+    if (version === lastInjectedContentVersionRef.current) return;
+    lastInjectedContentVersionRef.current = version;
+    if (!activeLargeFile) return; // 小文件受控 value 自动同步
+    const editor = editorRef.current;
+    if (!editor) return;
+    const view = editor.saveViewState();
+    contentInjectionCancelRef.current?.();
+    contentInjectionCancelRef.current = scheduleMonacoLargeFileContentInjection(
+      editor,
+      activeTab.content,
+      () => {
+        if (view) editor.restoreViewState(view);
+      },
+    );
+  }, [activeTab, activeLargeFile]);
 
   useEffect(() => {
     contentInjectionCancelRef.current?.();
@@ -336,6 +383,36 @@ export function RepositoryFileEditorPanel({
           </div>
         ) : (
           <div className="app-file-editor-monaco-wrap">
+            {activeTab.diffOriginal !== undefined ? null : activeTab.externalDeleted ? (
+              <div className="app-file-editor-external-banner app-file-editor-external-banner--deleted" role="alert">
+                <WarningOutlined />
+                <span className="app-file-editor-external-banner-text">
+                  文件已被外部删除，内容保留供复制。
+                </span>
+                <Button
+                  type="link"
+                  size="small"
+                  onClick={() => onCloseTab(activeTab.relativePath)}
+                >
+                  关闭
+                </Button>
+              </div>
+            ) : activeTab.externalChanged ? (
+              <div className="app-file-editor-external-banner" role="alert">
+                <WarningOutlined />
+                <span className="app-file-editor-external-banner-text">
+                  文件已被外部修改，重新加载将覆盖当前未保存的修改。
+                </span>
+                <Button
+                  type="link"
+                  size="small"
+                  icon={<ReloadOutlined />}
+                  onClick={() => onReloadTab(activeTab.relativePath)}
+                >
+                  重新加载
+                </Button>
+              </div>
+            ) : null}
             {activeTab.diffOriginal !== undefined ? null : (
               <MonacoSelectionChatToolbar
                 editor={monacoEditorSurface?.editor ?? null}
@@ -378,6 +455,9 @@ export function RepositoryFileEditorPanel({
                       : { value: activeTab.content })}
                   beforeMount={(monaco) => {
                     configureWiseMonacoTypeScript(monaco);
+                    if (repositoryPath && activeTab && isTypeScriptLikeRepositoryPath(activeTab.relativePath)) {
+                      void ensureRepositoryTypeScriptEnvironment(monaco, repositoryPath);
+                    }
                   }}
                   onMount={(editor, monaco) => {
                     handleMonacoMount(editor, monaco, activeTab, activeTypeScriptSources);

@@ -1,6 +1,8 @@
 import { memo } from "react";
 import { useRepositoryExplorerTreeActions } from "./RepositoryExplorerTreeActionsContext";
+import { useRepositoryExplorerGitStatus } from "./RepositoryExplorerGitStatusContext";
 import { ExplorerTreeFileIcon } from "./explorerTreeChrome";
+import { RepoTreeGitFileDecoration } from "./repoTreeGitDecoration";
 import { repositoryTreeFileShouldUpdate } from "./repositoryTreeNodeMemo";
 import { repositoryTreeFileDepthIndentPx } from "./repositoryTreeLayout";
 import { setWiseRepositoryFileDragData } from "../../utils/repositoryFileDrag";
@@ -10,12 +12,20 @@ interface RepositoryTreeFileNodeProps {
   node: RepositoryFileTreeNode;
   depth: number;
   selectedPath: string | null;
+  gitStatusRevision: number;
 }
 
-function RepositoryTreeFileNodeInner({ node, depth, selectedPath }: RepositoryTreeFileNodeProps) {
+function RepositoryTreeFileNodeInner({
+  node,
+  depth,
+  selectedPath,
+  gitStatusRevision: _gitStatusRevision,
+}: RepositoryTreeFileNodeProps) {
   const { onSelectNode, onOpenFile } = useRepositoryExplorerTreeActions();
+  const { getFileStatus } = useRepositoryExplorerGitStatus();
   const isSelected = selectedPath === node.path;
   const depthIndentPx = repositoryTreeFileDepthIndentPx(depth);
+  const gitStatus = getFileStatus(node.path);
 
   return (
     <div
@@ -50,6 +60,7 @@ function RepositoryTreeFileNodeInner({ node, depth, selectedPath }: RepositoryTr
       >
         <ExplorerTreeFileIcon fileName={node.name} className="repo-tree-node-icon repo-tree-node-icon--file" />
         <span className="repo-tree-file-name">{node.name}</span>
+        <RepoTreeGitFileDecoration status={gitStatus} />
       </div>
     </div>
   );
@@ -66,6 +77,8 @@ function fileNodeMemoCompare(
     nextDepth: next.depth,
     prevSelectedPath: prev.selectedPath,
     nextSelectedPath: next.selectedPath,
+    prevGitStatusRevision: prev.gitStatusRevision,
+    nextGitStatusRevision: next.gitStatusRevision,
   });
 }
 

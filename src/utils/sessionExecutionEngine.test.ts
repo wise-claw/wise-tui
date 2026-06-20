@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { EmployeeItem, Repository } from "../types";
 import {
   buildSessionEmptyChatPrompt,
+  resolveClaudeProxyBypassForSessionSpawn,
   resolveEngineForSession,
   resolveEngineForSessionSpawn,
   resolveSessionExecutionEngine,
@@ -210,6 +211,77 @@ describe("resolveSessionExecutionEngine", () => {
         },
       ),
     ).toEqual(codexRepo);
+  });
+
+  test("spawn resolver honors pane executionEngine override on extra slot", () => {
+    const claudeRepo = repo({ id: 1, executionEngine: "claude" });
+    const codexRepo = repo({ id: 2, executionEngine: "codex" });
+    const paneContext = {
+      activeSessionId: "primary-1",
+      chatContextRepository: claudeRepo,
+      extraPanes: [
+        {
+          sessionId: "pane-extra-1",
+          repositoryId: 1,
+          executionEngine: "codex" as const,
+        },
+      ],
+    };
+    expect(
+      resolveEngineForSessionSpawn(
+        { id: "pane-extra-1", repositoryPath: "/repo/frontend", repositoryName: "frontend" },
+        [claudeRepo, codexRepo],
+        [],
+        paneContext,
+      ),
+    ).toBe("codex");
+  });
+
+  test("spawn resolver honors primary pane runtime override", () => {
+    const claudeRepo = repo({ id: 1, executionEngine: "claude" });
+    const paneContext = {
+      activeSessionId: "primary-1",
+      chatContextRepository: claudeRepo,
+      primaryPaneRuntime: { executionEngine: "codex" as const },
+      extraPanes: [],
+    };
+    expect(
+      resolveEngineForSessionSpawn(
+        { id: "primary-1", repositoryPath: "/repo/frontend", repositoryName: "frontend" },
+        [claudeRepo],
+        [],
+        paneContext,
+      ),
+    ).toBe("codex");
+  });
+
+  test("claude proxy bypass follows pane override", () => {
+    const claudeRepo = repo({ id: 1, executionEngine: "claude" });
+    const paneContext = {
+      activeSessionId: "primary-1",
+      chatContextRepository: claudeRepo,
+      primaryPaneRuntime: { executionEngine: "claude" as const, claudeProxyRoute: "bypass" as const },
+      extraPanes: [],
+    };
+    expect(
+      resolveClaudeProxyBypassForSessionSpawn(
+        { id: "primary-1", repositoryPath: "/repo/frontend", repositoryName: "frontend" },
+        [claudeRepo],
+        [],
+        paneContext,
+      ),
+    ).toBe(true);
+    expect(
+      resolveClaudeProxyBypassForSessionSpawn(
+        { id: "primary-1", repositoryPath: "/repo/frontend", repositoryName: "frontend" },
+        [claudeRepo],
+        [],
+        {
+          ...paneContext,
+          primaryPaneRuntime: { executionEngine: "claude", claudeProxyRoute: "auto" },
+        },
+      ),
+    ).toBe(false);
   });
 
   test("resolveEngineForSession matches composer when project session uses sidebar repo", () => {

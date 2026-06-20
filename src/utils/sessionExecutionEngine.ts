@@ -3,6 +3,7 @@ import {
   SESSION_EXECUTION_ENGINE_LABELS,
   type SessionExecutionEngine,
 } from "../constants/sessionExecutionEngine";
+import type { PaneClaudeProxyRoute, PaneRuntimeOverride } from "../types/paneRuntimeOverride";
 import type { EmployeeItem, Repository } from "../types";
 import { normalizeEmployeeBindingName } from "./employeeBindingName";
 import { parseExecutionEnvironmentWorkerRepositoryName } from "./executionEnvironmentDispatch";
@@ -31,7 +32,14 @@ export interface SessionPaneSpawnContext {
   activeSessionId?: string | null;
   /** 主窗格 chatContextRepository；extra 槽位 repositoryId 为空时的回退。 */
   chatContextRepository?: Repository | null;
-  extraPanes?: readonly { sessionId: string | null; repositoryId: number | null }[];
+  /** 主窗格（Pane 0）运行时覆盖。 */
+  primaryPaneRuntime?: PaneRuntimeOverride | null;
+  extraPanes?: readonly {
+    sessionId: string | null;
+    repositoryId: number | null;
+    executionEngine?: SessionExecutionEngine;
+    claudeProxyRoute?: PaneClaudeProxyRoute;
+  }[];
 }
 
 /** 与 ClaudeChat composer 一致的会话所属仓库（侧栏选中或路径匹配）。 */
@@ -109,6 +117,47 @@ export function resolveSessionPaneContextRepository(
   return resolveSessionOwnedRepository(session, repositories, employees);
 }
 
+export function resolvePaneRuntimeOverrideForSession(
+  session: ClaudeSessionLike & { id?: string },
+  paneContext?: SessionPaneSpawnContext | null,
+): PaneRuntimeOverride | null {
+  const sessionId = typeof session.id === "string" ? session.id.trim() : "";
+  if (!paneContext || !sessionId) return null;
+
+  if (paneContext.activeSessionId?.trim() === sessionId && paneContext.primaryPaneRuntime) {
+    const primary = paneContext.primaryPaneRuntime;
+    if (primary.executionEngine || primary.claudeProxyRoute) {
+      return primary;
+    }
+  }
+
+  for (const slot of paneContext.extraPanes ?? []) {
+    if (slot.sessionId?.trim() !== sessionId) continue;
+    if (slot.executionEngine || slot.claudeProxyRoute) {
+      return {
+        executionEngine: slot.executionEngine,
+        claudeProxyRoute: slot.claudeProxyRoute,
+      };
+    }
+    break;
+  }
+
+  return null;
+}
+
+/** 多屏窗格 Claude spawn 是否绕过 Wise 内置 Anthropic 代理注入。 */
+export function resolveClaudeProxyBypassForSessionSpawn(
+  session: ClaudeSessionLike & { id?: string },
+  repositories: readonly Repository[],
+  employees: readonly EmployeeItem[],
+  paneContext?: SessionPaneSpawnContext | null,
+): boolean {
+  const engine = resolveEngineForSessionSpawn(session, repositories, employees, paneContext);
+  if (engine !== "claude") return false;
+  const override = resolvePaneRuntimeOverrideForSession(session, paneContext);
+  return override?.claudeProxyRoute === "bypass";
+}
+
 /** 多窗格 / 多窗口 spawn：各会话按所在窗格 executionEngine 路由，不受其它窗格焦点影响。 */
 export function resolveEngineForSessionSpawn(
   session: ClaudeSessionLike & { id?: string },
@@ -116,6 +165,10 @@ export function resolveEngineForSessionSpawn(
   employees: readonly EmployeeItem[],
   paneContext?: SessionPaneSpawnContext | null,
 ): SessionExecutionEngine {
+  const override = resolvePaneRuntimeOverrideForSession(session, paneContext);
+  if (override?.executionEngine) {
+    return normalizeSessionExecutionEngine(override.executionEngine);
+  }
   const contextRepo = resolveSessionPaneContextRepository(
     session,
     repositories,

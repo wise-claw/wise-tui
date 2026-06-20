@@ -782,6 +782,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       const sk = invokeConc?.concurrencyScopeKey;
       const lim = invokeConc?.concurrencyLimit;
       const cliExtras = await resolveSpawnExtrasForClaudePrompt(tabSessionId, prompt);
+      const spawnSession =
+        sessionsRef.current.find((s) => s.id === tabSessionId) ?? null;
+      const proxyBypassResolver = claudeSessionsOptionsRef.current?.resolveClaudeProxyBypassRef?.current;
+      const anthropicProxyBypass =
+        spawnSession && proxyBypassResolver ? proxyBypassResolver(spawnSession) : false;
       try {
         if (resumeClaudeSid) {
           try {
@@ -796,6 +801,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
               lim,
               resolveTrellisContextId(tabSessionId, resumeClaudeSid),
               cliExtras,
+              anthropicProxyBypass,
             );
           } catch (resumeError) {
             if (!isClaudeConversationMissingError(resumeError)) {
@@ -813,6 +819,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
               undefined,
               resolveTrellisContextId(tabSessionId),
               cliExtras,
+              anthropicProxyBypass,
             );
           }
         } else {
@@ -827,6 +834,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
             undefined,
             resolveTrellisContextId(tabSessionId),
             cliExtras,
+            anthropicProxyBypass,
           );
         }
       } catch (e) {

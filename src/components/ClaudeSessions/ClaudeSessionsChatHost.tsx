@@ -140,6 +140,11 @@ export interface ClaudeSessionsChatHostProps {
   onRestoreRevert: (sessionId: string, id: string) => void;
   paneCount?: PaneCount;
   extraPanes?: PaneSlot[];
+  primaryPaneRuntimeOverride?: import("../../types/paneRuntimeOverride").PaneRuntimeOverride | null;
+  onUpdatePaneRuntimeOverride?: (
+    paneIndex: number,
+    patch: Partial<import("../../types/paneRuntimeOverride").PaneRuntimeOverride>,
+  ) => void;
   onChangePaneCount?: (count: PaneCount) => void;
   onPaneRepositorySelect?: (paneIndex: number, repositoryId: number) => void;
   onPaneProjectNewSession?: (
@@ -247,6 +252,8 @@ export function ClaudeSessionsChatHost({
   onRestoreRevert,
   paneCount = 1,
   extraPanes = [],
+  primaryPaneRuntimeOverride = null,
+  onUpdatePaneRuntimeOverride,
   onPaneRepositorySelect,
   onPaneProjectNewSession,
   onNewPaneSession,
@@ -537,6 +544,9 @@ export function ClaudeSessionsChatHost({
     onLoadMoreTranscriptFromDisk,
     onCompactSessionHistory,
     onStopSessionConversationTask,
+    paneCount,
+    primaryPaneRuntimeOverride,
+    onUpdatePaneRuntimeOverride,
   });
 
   useEffect(() => {
