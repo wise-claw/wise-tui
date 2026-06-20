@@ -67,7 +67,9 @@ function RepositoryTreeListInner({
             node={node}
             depth={0}
             selectedPath={selectedPath}
+            hoverPath={null}
             gitStatusRevision={gitStatusRevision}
+            editorDirtyRevision={0}
           />
         ),
       )}

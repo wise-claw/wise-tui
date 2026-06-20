@@ -77,10 +77,13 @@ export function repositoryTreeFileShouldUpdate(args: {
   nextHoverPath?: string | null;
   prevGitStatusRevision?: number;
   nextGitStatusRevision?: number;
+  prevEditorDirtyRevision?: number;
+  nextEditorDirtyRevision?: number;
 }): boolean {
   if (args.prevNode !== args.nextNode) return false;
   if (args.prevDepth !== args.nextDepth) return false;
   if ((args.prevGitStatusRevision ?? 0) !== (args.nextGitStatusRevision ?? 0)) return false;
+  if ((args.prevEditorDirtyRevision ?? 0) !== (args.nextEditorDirtyRevision ?? 0)) return false;
   if ((args.prevSelectedPath === args.prevNode.path) !== (args.nextSelectedPath === args.nextNode.path)) {
     return false;
   }

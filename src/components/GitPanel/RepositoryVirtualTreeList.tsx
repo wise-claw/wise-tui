@@ -22,6 +22,7 @@ export interface RepositoryVirtualTreeListProps {
   onInlineCancel: () => void;
   rowHeight?: number;
   gitStatusRevision: number;
+  editorDirtyRevision: number;
 }
 
 function RepositoryVirtualTreeListInner({
@@ -36,6 +37,7 @@ function RepositoryVirtualTreeListInner({
   onInlineCancel,
   rowHeight = REPOSITORY_TREE_ROW_HEIGHT_PX,
   gitStatusRevision,
+  editorDirtyRevision,
 }: RepositoryVirtualTreeListProps) {
   const range = useVirtualListVisibleRange({
     scrollRootRef,
@@ -77,6 +79,7 @@ function RepositoryVirtualTreeListInner({
                   selectedPath={selectedPath}
                   hoverPath={hoverPath}
                   gitStatusRevision={gitStatusRevision}
+                  editorDirtyRevision={editorDirtyRevision}
                 />
               ) : null}
               {row.kind === "loading" ? (

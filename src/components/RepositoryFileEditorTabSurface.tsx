@@ -121,6 +121,8 @@ export function RepositoryFileEditorTabSurface({
 
   const isActiveRef = useRef(isActive);
   isActiveRef.current = isActive;
+  const tabRef = useRef(tab);
+  tabRef.current = tab;
 
   const explorerGitStatus = useGitRepositoryExplorerStatus(repositoryPath ?? "");
 
@@ -129,7 +131,7 @@ export function RepositoryFileEditorTabSurface({
     monaco: isActive ? (monacoEditorSurface?.monaco ?? null) : null,
     repositoryPath,
     relativePath: tab.relativePath,
-    diskContent: tab.originalContent,
+    baselineContent: tab.originalContent,
     gitStatusRevision: explorerGitStatus.generation,
     enabled: Boolean(
       isActive &&
@@ -246,15 +248,17 @@ export function RepositoryFileEditorTabSurface({
   );
 
   useEffect(() => {
-    if (!isActive || tab.diffOriginal !== undefined) return;
+    if (!isActive || tabRef.current.diffOriginal !== undefined) return;
     const editor = editorRef.current;
     if (!editor) return;
     const frame = window.requestAnimationFrame(() => {
       editor.layout();
-      revealEditorLineFocus(editor, tab, lastAppliedFocusRef, true);
+      revealEditorLineFocus(editor, tabRef.current, lastAppliedFocusRef, true);
     });
     return () => window.cancelAnimationFrame(frame);
-  }, [isActive, tab, tab.focusLine, tab.relativePath, tab.diffOriginal]);
+    // 依赖不含 tab.content：仅在激活态切换、文件切换、聚焦行、diff 模式变化时
+    // layout + reveal；否则每次按键编辑都会触发 editor.layout() 造成输入卡顿。
+  }, [isActive, tab.relativePath, tab.focusLine, tab.diffOriginal]);
 
   if (tab.diffOriginal !== undefined) {
     return (

@@ -2378,6 +2378,15 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-file
   color: #e2c08d;
 }
 
+.repo-tree-git-letter--dirty {
+  color: #e2c08d;
+  opacity: 0.96;
+}
+
+.repo-tree-git-letter--editor-dirty {
+  box-shadow: inset 0 -1px 0 color-mix(in srgb, #e2c08d 55%, transparent);
+}
+
 .repo-tree-git-letter--A {
   color: #73c991;
 }

@@ -124,7 +124,9 @@ function RepositoryTreeDirNodeInner({
                 node={childNode}
                 depth={depth + 1}
                 selectedPath={selectedPath}
+                hoverPath={null}
                 gitStatusRevision={_gitStatusRevision}
+                editorDirtyRevision={0}
               />
             ),
           )}

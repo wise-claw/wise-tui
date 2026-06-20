@@ -226,8 +226,18 @@ export async function syncMonacoRepositoryTypeScriptModels({
 
       visited.add(dependency.relativePath);
       loadedCount += 1;
-      registerRepositorySource(monaco, repositoryPath, dependency);
-      if (isTypeScriptLikeRepositoryPath(dependency.relativePath)) {
+      const dependencySource = shouldSkipMonacoTypeScriptModelSync(dependency.content.length)
+        ? {
+            relativePath: dependency.relativePath,
+            content: buildMonacoLargeModuleStub(dependency.relativePath),
+            modelRelativePath: dependency.modelRelativePath,
+          }
+        : dependency;
+      registerRepositorySource(monaco, repositoryPath, dependencySource);
+      if (
+        !shouldSkipMonacoTypeScriptModelSync(dependency.content.length) &&
+        isTypeScriptLikeRepositoryPath(dependency.relativePath)
+      ) {
         queue.push({ ...dependency, depth: current.depth + 1 });
       }
       if (loadedCount >= MAX_DEPENDENCY_MODEL_COUNT) break;
@@ -299,7 +309,11 @@ function applyWiseTypeScriptDefaults(
     noSyntaxValidation: false,
     noSemanticValidation: false,
     noSuggestionDiagnostics: false,
-    onlyVisible: false,
+    // 仅诊断可见区：打开中等 .ts 文件（几 KB~128KB，依赖图最多 80 个 model）时，
+    // 避免 ts.worker 全量编译整个依赖图造成的首次打开卡顿。语法诊断仍全量；
+    // 语义诊断（类型错误）仅在滚动到可见时标红。本项目无问题面板消费全量诊断，
+    // 故无功能损失。>128KB 文件本就跳过 model 同步，此处主要惠及中等文件。
+    onlyVisible: true,
   });
   defaults.setEagerModelSync(true);
 }
@@ -406,6 +420,14 @@ export function extractMonacoTypeScriptModuleSpecifiers(source: string): string[
     }
   }
   return Array.from(new Set(specifiers));
+}
+
+/** 超大依赖只注册轻量 stub，避免 Monaco TS worker 拉全量文件后仍报「找不到模块」。 */
+export function buildMonacoLargeModuleStub(_relativePath: string): string {
+  return [
+    "// Wise: type stub for large module (omitted from Monaco dependency graph)",
+    "export default {} as import(\"react\").ComponentType<Record<string, unknown>>;",
+  ].join("\n");
 }
 
 async function readFirstExistingRelativeImport(

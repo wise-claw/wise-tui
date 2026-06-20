@@ -14,6 +14,7 @@ interface RepositoryTreeFileNodeProps {
   selectedPath: string | null;
   hoverPath: string | null;
   gitStatusRevision: number;
+  editorDirtyRevision: number;
 }
 
 function RepositoryTreeFileNodeInner({
@@ -22,13 +23,15 @@ function RepositoryTreeFileNodeInner({
   selectedPath,
   hoverPath,
   gitStatusRevision: _gitStatusRevision,
+  editorDirtyRevision: _editorDirtyRevision,
 }: RepositoryTreeFileNodeProps) {
   const { onSelectNode, onOpenFile } = useRepositoryExplorerTreeActions();
-  const { getFileStatus } = useRepositoryExplorerGitStatus();
+  const { getFileStatus, isEditorDirty } = useRepositoryExplorerGitStatus();
   const isSelected = selectedPath === node.path;
   const isPointerHover = hoverPath === node.path && !isSelected;
   const depthIndentPx = repositoryTreeFileDepthIndentPx(depth);
   const gitStatus = getFileStatus(node.path);
+  const editorDirty = isEditorDirty(node.path);
 
   return (
     <div
@@ -66,7 +69,7 @@ function RepositoryTreeFileNodeInner({
       >
         <ExplorerTreeFileIcon fileName={node.name} className="repo-tree-node-icon repo-tree-node-icon--file" />
         <span className="repo-tree-file-name">{node.name}</span>
-        <RepoTreeGitFileDecoration status={gitStatus} />
+        <RepoTreeGitFileDecoration status={gitStatus} editorDirty={editorDirty} />
       </div>
     </div>
   );
@@ -87,6 +90,8 @@ function fileNodeMemoCompare(
     nextHoverPath: next.hoverPath,
     prevGitStatusRevision: prev.gitStatusRevision,
     nextGitStatusRevision: next.gitStatusRevision,
+    prevEditorDirtyRevision: prev.editorDirtyRevision,
+    nextEditorDirtyRevision: next.editorDirtyRevision,
   });
 }
 

@@ -29,6 +29,8 @@ import {
   MONACO_LARGE_FILE_CHANGE_DEBOUNCE_MS,
 } from "../utils/monacoLargeFile";
 import { safeUnlisten } from "../utils/safeTauriUnlisten";
+import { setRepositoryEditorDirtyPaths } from "../stores/repositoryEditorDirtyPathsStore";
+import { refreshGitRepositoryExplorerStatus } from "../stores/gitRepositoryExplorerStatusStore";
 
 /** 外部变更触发磁盘重读的合并节流间隔（毫秒）。git-changed 与窗口聚焦共用。 */
 const EDITOR_EXTERNAL_REFRESH_THROTTLE_MS = 300;
@@ -245,6 +247,21 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
       activeFileEditorTab.content;
     return effectiveContent !== activeFileEditorTab.originalContent;
   }, [activeFileEditorTab, contentSyncVersion]);
+
+  useEffect(() => {
+    const rootPath = repositoryPath?.trim() ?? "";
+    if (!rootPath) {
+      return;
+    }
+    const dirtyPaths = new Set<string>();
+    for (const tab of fileEditorTabsRef.current) {
+      const effectiveContent = pendingTabContentRef.current.get(tab.relativePath) ?? tab.content;
+      if (effectiveContent !== tab.originalContent) {
+        dirtyPaths.add(tab.relativePath);
+      }
+    }
+    setRepositoryEditorDirtyPaths(rootPath, dirtyPaths);
+  }, [repositoryPath, fileEditorTabs, contentSyncVersion]);
 
   const [repositoryBinaryPreview, setRepositoryBinaryPreview] = useState<RepositoryBinaryPreviewState | null>(null);
 
@@ -822,6 +839,7 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
             : t,
         ),
       );
+      refreshGitRepositoryExplorerStatus(rootPath);
     } catch (error) {
       console.error("Failed to save file:", error);
       message.error(`保存失败：${fileEditorActivePath}`);

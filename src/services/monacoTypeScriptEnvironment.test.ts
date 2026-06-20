@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  buildMonacoLargeModuleStub,
   extractMonacoTypeScriptModuleSpecifiers,
   resolveImportSpecifierToRelativePath,
   resolveMonacoRepositoryRelativeImportCandidates,
@@ -33,6 +34,17 @@ describe("Monaco TypeScript repository import helpers", () => {
     expect(resolveImportSpecifierToRelativePath("src/cli/ask.ts", "../lib/security-config.js")).toBe(
       "src/lib/security-config.js",
     );
+  });
+
+  test("resolves App.tsx dynamic import to AppImpl.tsx", () => {
+    expect(resolveMonacoRepositoryRelativeImportCandidates("src/App.tsx", "./AppImpl")).toContain(
+      "src/AppImpl.tsx",
+    );
+    expect(resolveImportSpecifierToRelativePath("src/App.tsx", "./AppImpl")).toBe("src/AppImpl");
+  });
+
+  test("large module stub exports a default component type", () => {
+    expect(buildMonacoLargeModuleStub("src/AppImpl.tsx")).toContain("export default");
   });
 
   test("extracts static, dynamic, and require module specifiers", () => {

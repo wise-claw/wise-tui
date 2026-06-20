@@ -2,8 +2,10 @@ import { createContext, useContext, type ReactNode } from "react";
 
 export interface RepositoryExplorerGitStatusValue {
   generation: number;
+  editorDirtyRevision: number;
   getFileStatus: (path: string) => string | null;
   dirHasChanges: (path: string) => boolean;
+  isEditorDirty: (path: string) => boolean;
 }
 
 const RepositoryExplorerGitStatusContext = createContext<RepositoryExplorerGitStatusValue | null>(
@@ -29,8 +31,10 @@ export function useRepositoryExplorerGitStatus(): RepositoryExplorerGitStatusVal
   if (!ctx) {
     return {
       generation: 0,
+      editorDirtyRevision: 0,
       getFileStatus: () => null,
       dirHasChanges: () => false,
+      isEditorDirty: () => false,
     };
   }
   return ctx;
