@@ -200,7 +200,7 @@ export function ComposerPlainEditSurface({
       return value;
     },
     getCursor: () => {
-      const ed = aiChatRef.current?.getEditor?.() as ComposerProseMirrorEditor | undefined;
+      const ed = aiChatRef.current?.getEditor?.();
       if (ed?.state?.doc) {
         try {
           const from = ed.state.selection.from;
@@ -232,7 +232,7 @@ export function ComposerPlainEditSurface({
 
   const applySemiContentChange = useCallback(
     (contents: Content[]) => {
-      const ed = aiChatRef.current?.getEditor?.() as ComposerProseMirrorEditor | undefined;
+      const ed = aiChatRef.current?.getEditor?.();
       let plain = normalizeComposerEditorPlain(contentsToPlain(contents));
       if (ed) {
         try {
