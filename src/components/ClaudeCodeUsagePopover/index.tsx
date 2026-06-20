@@ -1,6 +1,6 @@
 import { isTauri } from "@tauri-apps/api/core";
 import { HoverHint } from "../shared/HoverHint";
-import { Popover, Typography } from "antd";
+import { Popover } from "antd";
 import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import type {
   ClaudeLineEditsSnapshotResponse,
@@ -14,7 +14,6 @@ import {
 } from "../../services/claudeCodeUsage";
 import {
   getClaudeUsageUiStoreSnapshot,
-  requestOpenSessionDataLink,
   subscribeClaudeUsageUiStore,
 } from "../../stores/claudeUsageUiStore";
 import { ClaudeLineEditsContent } from "./ClaudeLineEditsContent";
@@ -128,25 +127,6 @@ export function ClaudeCodeUsageHeaderBtn({ repositoryPath }: Props) {
     void loadLineEditsSnapshot();
   }, [loadLineEditsSnapshot, loadTokenSnapshot, projectPath]);
 
-  const footerExtra = (
-    <>
-      {repoPath ? (
-        <>
-          {" "}
-          ·{" "}
-          <Typography.Link
-            onClick={() => {
-              setOpen(false);
-              requestOpenSessionDataLink("insights");
-            }}
-          >
-            全链路洞察
-          </Typography.Link>
-        </>
-      ) : null}
-    </>
-  );
-
   return (
     <Popover
       open={open}
@@ -188,7 +168,6 @@ export function ClaudeCodeUsageHeaderBtn({ repositoryPath }: Props) {
               snapshotLoading={snapshotLoading}
               snapshotError={snapshotError}
               onRefresh={handleRefresh}
-              footerExtra={footerExtra}
             />
           ) : (
             <ClaudeLineEditsContent
@@ -196,7 +175,6 @@ export function ClaudeCodeUsageHeaderBtn({ repositoryPath }: Props) {
               snapshotLoading={lineEditsLoading}
               snapshotError={lineEditsError}
               onRefresh={handleRefresh}
-              footerExtra={footerExtra}
             />
           )}
         </div>

@@ -14,26 +14,28 @@ const { Text } = Typography;
 export function IconSessionFeedbackLoop() {
   return (
     <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-      <circle cx="5" cy="6" r="2" stroke="currentColor" strokeWidth="1.6" />
-      <circle cx="12" cy="4" r="2" stroke="currentColor" strokeWidth="1.6" />
-      <circle cx="19" cy="6" r="2" stroke="currentColor" strokeWidth="1.6" />
-      <circle cx="8" cy="14" r="2" stroke="currentColor" strokeWidth="1.6" />
-      <circle cx="16" cy="14" r="2" stroke="currentColor" strokeWidth="1.6" />
-      <circle cx="12" cy="20" r="2" fill="currentColor" />
-      <path
-        d="M6.6 7.4 10.2 5.4M13.8 5.4l3.6 2M7.2 12.2l2.2-5.4M16.8 12.2l-2.2-5.4M9.4 15l1.2 3.4M14.6 15l-1.2 3.4"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinecap="round"
-      />
-      <path
-        d="M12 20c-4-2.5-6-5.5-6-8.5 0-1.2.4-2.3 1.2-3.2"
-        stroke="currentColor"
-        strokeWidth="1.4"
-        strokeLinecap="round"
-        strokeDasharray="2.5 2"
-        opacity="0.75"
-      />
+      <g transform="translate(12 12) scale(0.88) translate(-12 -12)">
+        <circle cx="5" cy="6" r="2" stroke="currentColor" strokeWidth="1.6" />
+        <circle cx="12" cy="4" r="2" stroke="currentColor" strokeWidth="1.6" />
+        <circle cx="19" cy="6" r="2" stroke="currentColor" strokeWidth="1.6" />
+        <circle cx="8" cy="14" r="2" stroke="currentColor" strokeWidth="1.6" />
+        <circle cx="16" cy="14" r="2" stroke="currentColor" strokeWidth="1.6" />
+        <circle cx="12" cy="20" r="2" fill="currentColor" />
+        <path
+          d="M6.6 7.4 10.2 5.4M13.8 5.4l3.6 2M7.2 12.2l2.2-5.4M16.8 12.2l-2.2-5.4M9.4 15l1.2 3.4M14.6 15l-1.2 3.4"
+          stroke="currentColor"
+          strokeWidth="1.4"
+          strokeLinecap="round"
+        />
+        <path
+          d="M12 20c-4-2.5-6-5.5-6-8.5 0-1.2.4-2.3 1.2-3.2"
+          stroke="currentColor"
+          strokeWidth="1.4"
+          strokeLinecap="round"
+          strokeDasharray="2.5 2"
+          opacity="0.75"
+        />
+      </g>
     </svg>
   );
 }

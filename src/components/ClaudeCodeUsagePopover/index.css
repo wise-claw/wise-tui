@@ -178,12 +178,14 @@
 .app-cc-usage-bar-slot {
   width: 10px;
   min-height: 2px;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
 }
 
-.app-cc-usage-bar-slot > span {
-  display: block !important;
-  width: 100%;
-  height: 100%;
+.app-cc-usage-bar-slot > .app-cc-usage-bar {
+  flex: 1 1 auto;
+  min-height: 2px;
 }
 
 .app-cc-usage-bar {
@@ -197,7 +199,8 @@
   transition: opacity 0.12s, filter 0.12s, outline 0.12s;
 }
 
-.app-cc-usage-bar:hover {
+.app-cc-usage-bar:hover,
+.app-cc-usage-bar--active {
   opacity: 1;
   filter: brightness(1.08);
   outline: 1px solid var(--ant-color-primary);
@@ -270,8 +273,79 @@
 }
 
 .app-cc-usage-total {
+  margin-bottom: 8px;
+  padding: 8px 12px;
+  border-radius: 10px;
   font-size: 12px;
+  line-height: 1.45;
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--ant-color-warning) 10%, var(--ant-color-fill-quaternary)) 0%,
+    var(--ant-color-fill-quaternary) 100%
+  );
+  border: 1px solid color-mix(in srgb, var(--ant-color-warning) 22%, var(--ant-color-border-secondary));
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease;
+}
+
+.app-cc-usage-total--detail {
+  background: linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--ant-color-primary) 8%, var(--ant-color-fill-quaternary)) 0%,
+    var(--ant-color-fill-quaternary) 100%
+  );
+  border-color: color-mix(in srgb, var(--ant-color-primary) 24%, var(--ant-color-border-secondary));
+}
+
+.app-cc-usage-total__main {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0;
+}
+
+.app-cc-usage-total__breakdown {
+  margin-top: 4px;
+  font-size: 11px;
   color: var(--ant-color-text-secondary);
+  word-break: break-all;
+}
+
+.app-cc-usage-total__caption {
+  font-weight: 500;
+  color: var(--ant-color-text-secondary);
+  white-space: nowrap;
+}
+
+.app-cc-usage-total__hero {
+  font-size: 15px;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ant-color-text);
+  white-space: nowrap;
+}
+
+.app-cc-usage-total__unit {
+  font-size: 12px;
+  font-weight: 500;
+  color: var(--ant-color-warning);
+}
+
+.app-cc-usage-total__meta {
+  color: var(--ant-color-text-secondary);
+  white-space: nowrap;
+}
+
+.app-cc-usage-total__cache-hit {
+  font-weight: 600;
+  color: var(--ant-color-success);
+}
+
+.app-cc-usage-total__sep {
+  margin: 0 5px;
+  color: var(--ant-color-text-quaternary);
+  white-space: nowrap;
 }
 
 .app-cc-usage-hint {

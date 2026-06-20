@@ -1,6 +1,5 @@
-import { Popover, Spin, Typography } from "antd";
-import type { ReactNode } from "react";
-import { useMemo } from "react";
+import { Spin, Typography } from "antd";
+import { useEffect, useMemo, useState } from "react";
 import type {
   ClaudeUsageBucket,
   ClaudeUsageGranularity,
@@ -151,7 +150,6 @@ export interface ClaudeUsageChartContentProps {
   snapshotError: string | null;
   onRefresh: () => void;
   compact?: boolean;
-  footerExtra?: ReactNode;
 }
 
 const GRANULARITY_OPTIONS = [
@@ -160,45 +158,90 @@ const GRANULARITY_OPTIONS = [
   { value: "month" as const, label: "月" },
 ];
 
-function UsageBarPopoverContent({
-  bucket,
-  granularity,
-}: {
-  bucket: ClaudeUsageBucket;
-  granularity: ClaudeUsageGranularity;
-}) {
-  const periodLabel = usageLabelFromSortKey(granularity, bucket.sortKey);
-  const cacheCalc = hasCacheInputActivity(bucket)
-    ? formatCacheHitFormulaSubstitution(
-        bucket.cacheReadTokens,
-        bucket.inputTokens,
-        bucket.cacheCreationTokens,
-      )
-    : "";
+interface UsageSummaryView {
+  caption: string;
+  totalTokens: number;
+  costUsd: number;
+  cacheHitRate: number | null;
+  showCacheHit: boolean;
+  cacheRead: number;
+  cacheCreate: number;
+  input: number;
+  outputTokens: number;
+  hasCacheInput: boolean;
+  isDetail: boolean;
+}
+
+function buildSeriesSummaryView(series: ClaudeUsageSeriesPayload): UsageSummaryView {
+  return {
+    caption: `合计（${series.periodCaption}）`,
+    totalTokens: series.totalTokens,
+    costUsd: series.totalCostUsd,
+    cacheHitRate: series.cacheHitRate,
+    showCacheHit: series.cacheHitRate != null || series.totalCacheReadTokens > 0,
+    cacheRead: series.totalCacheReadTokens,
+    cacheCreate: series.totalCacheCreationTokens,
+    input: series.totalInputTokens,
+    outputTokens: 0,
+    hasCacheInput: seriesHasCacheInput(series),
+    isDetail: false,
+  };
+}
+
+function buildBucketSummaryView(bucket: ClaudeUsageBucket, granularity: ClaudeUsageGranularity): UsageSummaryView {
+  return {
+    caption: usageLabelFromSortKey(granularity, bucket.sortKey),
+    totalTokens: bucket.totalTokens,
+    costUsd: bucket.costUsd,
+    cacheHitRate: bucket.cacheHitRate,
+    showCacheHit: hasCacheInputActivity(bucket),
+    cacheRead: bucket.cacheReadTokens,
+    cacheCreate: bucket.cacheCreationTokens,
+    input: bucket.inputTokens,
+    outputTokens: bucket.outputTokens,
+    hasCacheInput: hasCacheInputActivity(bucket),
+    isDetail: true,
+  };
+}
+
+function UsageSummaryBar({ view }: { view: UsageSummaryView }) {
+  const showBreakdown = view.isDetail && (view.hasCacheInput || view.outputTokens > 0);
 
   return (
-    <div className="app-cc-usage-bar-popover">
-      <div className="app-cc-line-edits-tooltip-date">{periodLabel}</div>
-      <div className="app-cc-usage-bar-popover__metric app-cc-usage-bar-popover__metric--tokens">
-        {formatUsd(bucket.costUsd)} · {formatTokensShort(bucket.totalTokens)} tokens
+    <div className={`app-cc-usage-total${view.isDetail ? " app-cc-usage-total--detail" : ""}`}>
+      <div className="app-cc-usage-total__main">
+        <span className="app-cc-usage-total__caption">{view.caption}</span>
+        <span className="app-cc-usage-total__sep">：</span>
+        <span className="app-cc-usage-total__hero">
+          {formatTokensShort(view.totalTokens)}
+          <span className="app-cc-usage-total__unit"> tokens</span>
+        </span>
+        <span className="app-cc-usage-total__sep">·</span>
+        <span className="app-cc-usage-total__meta">{formatUsd(view.costUsd)}</span>
+        {view.showCacheHit ? (
+          <>
+            <span className="app-cc-usage-total__sep">·</span>
+            <span className="app-cc-usage-total__meta">
+              缓存命中{" "}
+              <span className="app-cc-usage-total__cache-hit">{formatCacheHitRate(view.cacheHitRate)}</span>
+            </span>
+          </>
+        ) : null}
       </div>
-      {hasCacheInputActivity(bucket) ? (
-        <>
-          <div className="app-cc-usage-bar-popover__cache">
-            缓存命中 {formatCacheHitRate(bucket.cacheHitRate)} · 读 {formatTokensShort(bucket.cacheReadTokens)} · 写{" "}
-            {formatTokensShort(bucket.cacheCreationTokens)} · 未缓存 {formatTokensShort(bucket.inputTokens)}
-          </div>
-          {cacheCalc ? (
-            <div className="app-cc-usage-bar-popover__calc">
-              = {cacheCalc}
-              {bucket.cacheHitRate != null ? ` = ${formatCacheHitRate(bucket.cacheHitRate)}` : null}
-            </div>
+      {showBreakdown ? (
+        <div className="app-cc-usage-total__breakdown">
+          {view.hasCacheInput ? (
+            <>
+              读 {formatTokensShort(view.cacheRead)} · 写 {formatTokensShort(view.cacheCreate)} · 未缓存{" "}
+              {formatTokensShort(view.input)}
+            </>
           ) : null}
-        </>
-      ) : null}
-      {bucket.outputTokens > 0 ? (
-        <div className="app-cc-usage-bar-popover__output">
-          输出 {formatTokensShort(bucket.outputTokens)} tokens
+          {view.outputTokens > 0 ? (
+            <>
+              {view.hasCacheInput ? <span className="app-cc-usage-total__sep">·</span> : null}
+              输出 {formatTokensShort(view.outputTokens)} tokens
+            </>
+          ) : null}
         </div>
       ) : null}
     </div>
@@ -213,8 +256,8 @@ export function ClaudeUsageChartContent({
   snapshotError,
   onRefresh,
   compact = false,
-  footerExtra,
 }: ClaudeUsageChartContentProps) {
+  const [hoveredBucket, setHoveredBucket] = useState<ClaudeUsageBucket | null>(null);
   const series = useMemo(() => pickSeries(snapshot, granularity), [snapshot, granularity]);
 
   const buckets: ClaudeUsageBucket[] = series?.buckets ?? [];
@@ -225,6 +268,36 @@ export function ClaudeUsageChartContent({
     }
     return m > 0 ? m : 1;
   }, [buckets]);
+
+  useEffect(() => {
+    setHoveredBucket(null);
+  }, [granularity, series?.periodCaption]);
+
+  const summaryView = useMemo((): UsageSummaryView | null => {
+    if (hoveredBucket) return buildBucketSummaryView(hoveredBucket, granularity);
+    if (series) return buildSeriesSummaryView(series);
+    return null;
+  }, [granularity, hoveredBucket, series]);
+
+  const formulaView = useMemo(() => {
+    if (hoveredBucket && hasCacheInputActivity(hoveredBucket)) {
+      return {
+        cacheRead: hoveredBucket.cacheReadTokens,
+        input: hoveredBucket.inputTokens,
+        cacheCreate: hoveredBucket.cacheCreationTokens,
+        hitRate: hoveredBucket.cacheHitRate,
+      };
+    }
+    if (series && seriesHasCacheInput(series)) {
+      return {
+        cacheRead: series.totalCacheReadTokens,
+        input: series.totalInputTokens,
+        cacheCreate: series.totalCacheCreationTokens,
+        hitRate: series.cacheHitRate,
+      };
+    }
+    return null;
+  }, [hoveredBucket, series]);
 
   return (
     <div className={`app-cc-usage-popover${compact ? " app-cc-usage-popover--compact" : ""}`}>
@@ -244,45 +317,33 @@ export function ClaudeUsageChartContent({
         <Typography.Text type="danger">{snapshotError}</Typography.Text>
       ) : (
         <>
-          <div className="app-cc-usage-chart">
+          <div className="app-cc-usage-chart" onMouseLeave={() => setHoveredBucket(null)}>
             {buckets.map((b) => {
               const h = Math.max(2, Math.round((b.totalTokens / maxTok) * 100));
+              const isActive = hoveredBucket?.sortKey === b.sortKey;
               return (
-                <div key={b.sortKey} className="app-cc-usage-bar-wrap">
+                <div
+                  key={b.sortKey}
+                  className="app-cc-usage-bar-wrap"
+                  onMouseEnter={() => setHoveredBucket(b)}
+                >
                   <div className="app-cc-usage-bar-slot" style={{ height: `${h}%` }}>
-                    <Popover
-                      trigger="hover"
-                      placement="top"
-                      mouseEnterDelay={0.08}
-                      destroyOnHidden
-                      arrow={{ pointAtCenter: true }}
-                      overlayClassName="app-cc-usage-bar-popover-overlay"
-                      getPopupContainer={() => document.body}
-                      content={<UsageBarPopoverContent bucket={b} granularity={granularity} />}
-                    >
-                      <div
-                        className="app-cc-usage-bar"
-                        aria-label={usageLabelFromSortKey(granularity, b.sortKey)}
-                      />
-                    </Popover>
+                    <div
+                      className={`app-cc-usage-bar${isActive ? " app-cc-usage-bar--active" : ""}`}
+                      aria-label={usageLabelFromSortKey(granularity, b.sortKey)}
+                    />
                   </div>
                 </div>
               );
             })}
           </div>
-          <div className="app-cc-usage-total">
-            合计（{series?.periodCaption ?? "—"}）：{formatUsd(series?.totalCostUsd ?? 0)} ·{" "}
-            {formatTokensShort(series?.totalTokens ?? 0)} tokens
-            {series && (series.cacheHitRate != null || series.totalCacheReadTokens > 0) ? (
-              <> · 缓存命中 {formatCacheHitRate(series.cacheHitRate)}</>
-            ) : null}
-          </div>
-          {seriesHasCacheInput(series) ? (
+          {summaryView ? <UsageSummaryBar view={summaryView} /> : null}
+          {formulaView ? (
             <CacheHitRateFormulaBlock
-              cacheRead={series!.totalCacheReadTokens}
-              input={series!.totalInputTokens}
-              cacheCreate={series!.totalCacheCreationTokens}
-              hitRate={series!.cacheHitRate}
+              cacheRead={formulaView.cacheRead}
+              input={formulaView.input}
+              cacheCreate={formulaView.cacheCreate}
+              hitRate={formulaView.hitRate}
             />
           ) : null}
           {snapshot?.hint ? <div className="app-cc-usage-hint">{snapshot.hint}</div> : null}
@@ -295,7 +356,6 @@ export function ClaudeUsageChartContent({
                   · 已解析 {snapshot.eventsParsed.toLocaleString()} 条 · {snapshot.scannedFiles} 个文件
                 </Typography.Text>
               ) : null}
-              {footerExtra}
             </div>
           ) : null}
         </>

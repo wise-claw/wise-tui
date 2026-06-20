@@ -3,11 +3,6 @@
   cursor: not-allowed;
 }
 
-.app-session-feedback-loop-topbar-btn svg {
-  width: 18px;
-  height: 18px;
-}
-
 .app-session-feedback-loop-topbar-btn--running:not(.active) {
   color: #6366f1;
 }

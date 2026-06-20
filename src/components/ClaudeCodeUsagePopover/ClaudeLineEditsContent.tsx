@@ -1,5 +1,4 @@
 import { Popover, Spin, Typography } from "antd";
-import type { ReactNode } from "react";
 import { useMemo } from "react";
 import type { ClaudeLineEditsSnapshotResponse } from "../../services/claudeCodeUsage";
 import {
@@ -17,7 +16,6 @@ export interface ClaudeLineEditsContentProps {
   snapshotLoading: boolean;
   snapshotError: string | null;
   onRefresh: () => void;
-  footerExtra?: ReactNode;
 }
 
 function LineEditsCellPopoverContent({
@@ -47,7 +45,6 @@ export function ClaudeLineEditsContent({
   snapshotLoading,
   snapshotError,
   onRefresh,
-  footerExtra,
 }: ClaudeLineEditsContentProps) {
   const { weeks, monthLabels } = useMemo(
     () => buildLineEditsHeatmapWeeks(snapshot?.days ?? []),
@@ -186,7 +183,6 @@ export function ClaudeLineEditsContent({
                   · 已解析 {snapshot.eventsParsed.toLocaleString()} 条 · {snapshot.scannedFiles} 个文件
                 </Typography.Text>
               ) : null}
-              {footerExtra}
             </div>
           ) : null}
         </>
