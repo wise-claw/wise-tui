@@ -20,6 +20,15 @@ export const PATCH_EFFECTIVENESS_MIN_SAMPLES = 2;
 /** 历史平均会话分低于该值且样本足够时，视为该 kind「表现不佳」。 */
 export const PATCH_EFFECTIVENESS_UNDERPERFORM_SCORE = 50;
 
+/** 历史平均会话分不低于该值且样本足够时，视为该 kind「高表现」，候选上采样（正向加权）。 */
+export const PATCH_EFFECTIVENESS_HIGH_PERFORM_SCORE = 65;
+
+/** 评分回归阈值：最终分低于历史基线超过该值时，触发本轮补丁自动回滚。 */
+export const FEEDBACK_LOOP_REGRESSION_THRESHOLD = 5;
+
+/** 近期回滚键冷却时长：仅该窗口内的 auto_rollback 计入跨轮去重，过期后允许重试。 */
+export const ROLLBACK_KEY_COOLDOWN_MS = 24 * 60 * 60 * 1000;
+
 export type FeedbackPatchDedupeKey = string;
 
 /** 补丁去重键：kind | action | path | section。与候选去重保持一致。 */
@@ -133,20 +142,23 @@ export function resetAutomationCircuitBreaker(
 
 /**
  * 从审计日志条目构建「近期自动回滚补丁 key 集合」，供护栏跨轮去重使用。
- * 仅扫描最近 windowSize 条记录中的 auto_rollback 条目。
+ * 仅扫描最近 windowSize 条记录中的 auto_rollback 条目；
+ * 若给定 maxAgeMs，则仅保留该时间窗口内的回滚键，过期后允许重试（避免永久拉黑）。
  */
 export function collectRecentlyRolledBackKeys(
-  entries: ReadonlyArray<{ action: string; patchKey?: string }>,
+  entries: ReadonlyArray<{ action: string; patchKey?: string; at?: number }>,
   windowSize = 20,
+  maxAgeMs?: number,
 ): Set<FeedbackPatchDedupeKey> {
   const out = new Set<FeedbackPatchDedupeKey>();
+  const now = Date.now();
   let scanned = 0;
   for (const entry of entries) {
     if (scanned >= windowSize) break;
     scanned += 1;
-    if (entry.action === "auto_rollback" && entry.patchKey) {
-      out.add(entry.patchKey);
-    }
+    if (entry.action !== "auto_rollback" || !entry.patchKey) continue;
+    if (maxAgeMs != null && entry.at != null && now - entry.at > maxAgeMs) continue;
+    out.add(entry.patchKey);
   }
   return out;
 }
@@ -180,4 +192,67 @@ export function identifyUnderperformingPatchKinds(
     }
   }
   return out;
+}
+
+/**
+ * 闭环学习：从历史效果摘要中识别「高表现」的 artifact kind。
+ * 判据：样本数 ≥ 最低门槛，且平均会话分不低于基线。
+ * 这些 kind 的候选将被上采样（排到前面），让规则引擎优先复用已知有效补丁。
+ * 与 identifyUnderperformingPatchKinds 阈值不重叠（< 50 vs ≥ 65），不会冲突。
+ */
+export function identifyHighPerformingPatchKinds(
+  hints: readonly PatchKindEffectivenessHint[] | null | undefined,
+): Set<FeedbackConfigPatch["kind"]> {
+  const out = new Set<FeedbackConfigPatch["kind"]>();
+  if (!hints || hints.length === 0) return out;
+  for (const hint of hints) {
+    if (hint.count < PATCH_EFFECTIVENESS_MIN_SAMPLES) continue;
+    if (
+      hint.avgSessionScore != null &&
+      hint.avgSessionScore >= PATCH_EFFECTIVENESS_HIGH_PERFORM_SCORE
+    ) {
+      out.add(hint.kind);
+    }
+  }
+  return out;
+}
+
+/** 历史基线比较结果的最小同构接口（与 historyStore 的 compareWithHistoryAverage 对齐）。 */
+export interface RegressionBaseline {
+  average: number | null;
+  delta: number | null;
+}
+
+export interface RegressionAssessment {
+  shouldRollback: boolean;
+  delta: number | null;
+  reason?: string;
+}
+
+/**
+ * 自动调整：判定本轮最终分是否相对历史基线显著回归，应触发补丁回滚。
+ * 纯函数化便于单元测试；delta = finalScore - baseline.average，delta ≤ -threshold 视为回归。
+ */
+export function assessRegression(input: {
+  finalScore: number | null;
+  baseline: RegressionBaseline;
+  threshold?: number;
+}): RegressionAssessment {
+  const threshold = input.threshold ?? FEEDBACK_LOOP_REGRESSION_THRESHOLD;
+  const { finalScore, baseline } = input;
+  if (
+    finalScore == null ||
+    baseline.average == null ||
+    baseline.delta == null
+  ) {
+    return { shouldRollback: false, delta: baseline.delta ?? null };
+  }
+  if (baseline.delta <= -threshold) {
+    return {
+      shouldRollback: true,
+      delta: baseline.delta,
+      reason: `评分低于基线 ${Math.abs(baseline.delta).toFixed(1)} 分，达回归阈值 ${threshold}`,
+    };
+  }
+  return { shouldRollback: false, delta: baseline.delta };
 }

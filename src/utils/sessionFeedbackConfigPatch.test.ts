@@ -117,6 +117,27 @@ describe("inferConfigPatchCandidates", () => {
     });
     expect(patches.some((p) => p.kind === "mcp" && p.action === "disable")).toBe(true);
   });
+
+  test("ranks high-performing kind before underperforming kind when effectiveness hints given", () => {
+    const base = inferConfigPatchCandidates({ insights: sampleInsights() });
+    const kinds = Array.from(new Set(base.map((p) => p.kind)));
+    expect(kinds.length).toBeGreaterThanOrEqual(2);
+    const highKind = kinds[0]!;
+    const underKind = kinds[kinds.length - 1]!;
+    const patches = inferConfigPatchCandidates({
+      insights: sampleInsights(),
+      effectivenessHints: [
+        { kind: highKind, count: 3, avgSessionScore: 80, avgRulesDelta: -10, score: 0 },
+        { kind: underKind, count: 3, avgSessionScore: 20, avgRulesDelta: 100, score: 0 },
+      ],
+    });
+    const firstHigh = patches.findIndex((p) => p.kind === highKind);
+    const lastUnder = Math.max(...patches.map((p, i) => (p.kind === underKind ? i : -1)));
+    expect(firstHigh).toBeGreaterThanOrEqual(0);
+    expect(lastUnder).toBeGreaterThanOrEqual(0);
+    // 闭环学习双向加权：高表现 kind 候选应排在表现不佳 kind 之前
+    expect(firstHigh).toBeLessThan(lastUnder);
+  });
 });
 
 describe("parseConfigPatchesFromAiResponse", () => {

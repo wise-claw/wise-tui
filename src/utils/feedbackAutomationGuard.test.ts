@@ -3,10 +3,12 @@ import type { FeedbackConfigPatch } from "./sessionFeedbackConfigPatch";
 import {
   AUTO_APPLY_ROLLBACK_CIRCUIT_BREAKER,
   MAX_AUTO_APPLY_PATCHES_PER_CYCLE,
+  assessRegression,
   canAutoApplyPatch,
   collectRecentlyRolledBackKeys,
   createInitialAutomationGuardState,
   feedbackPatchDedupeKey,
+  identifyHighPerformingPatchKinds,
   identifyUnderperformingPatchKinds,
   isAutomationCircuitBreakerTripped,
   markPatchAutoApplied,
@@ -153,5 +155,111 @@ describe("feedbackAutomationGuard / identifyUnderperformingPatchKinds", () => {
     ]);
     expect(out.has("claude_md")).toBe(true);
     expect(out.has("rule")).toBe(false);
+  });
+});
+
+describe("feedbackAutomationGuard / identifyHighPerformingPatchKinds", () => {
+  test("returns empty when no hints", () => {
+    expect(identifyHighPerformingPatchKinds(null).size).toBe(0);
+    expect(identifyHighPerformingPatchKinds([]).size).toBe(0);
+  });
+
+  test("ignores kinds below min sample count", () => {
+    const out = identifyHighPerformingPatchKinds([
+      { kind: "claude_md", count: 1, avgSessionScore: 90, avgRulesDelta: 0, score: 0 },
+    ]);
+    expect(out.size).toBe(0);
+  });
+
+  test("flags kind with sufficient samples and high average score", () => {
+    const out = identifyHighPerformingPatchKinds([
+      { kind: "claude_md", count: 3, avgSessionScore: 80, avgRulesDelta: -10, score: 0 },
+      { kind: "rule", count: 5, avgSessionScore: 55, avgRulesDelta: 0, score: 0 },
+    ]);
+    expect(out.has("claude_md")).toBe(true);
+    expect(out.has("rule")).toBe(false);
+  });
+
+  test("thresholds are disjoint with underperforming kinds", () => {
+    const hints = [
+      { kind: "claude_md", count: 3, avgSessionScore: 20, avgRulesDelta: 100, score: 0 },
+      { kind: "rule", count: 3, avgSessionScore: 80, avgRulesDelta: -10, score: 0 },
+      { kind: "memory", count: 3, avgSessionScore: 55, avgRulesDelta: 0, score: 0 },
+    ];
+    const under = identifyUnderperformingPatchKinds(hints);
+    const high = identifyHighPerformingPatchKinds(hints);
+    expect(under.has("claude_md")).toBe(true);
+    expect(high.has("rule")).toBe(true);
+    expect(high.has("claude_md")).toBe(false);
+    expect(under.has("rule")).toBe(false);
+    // memory 处于中性区间（50 ≤ 55 < 65），既非高表现也非表现不佳
+    expect(high.has("memory")).toBe(false);
+    expect(under.has("memory")).toBe(false);
+  });
+});
+
+describe("feedbackAutomationGuard / assessRegression", () => {
+  test("no rollback when finalScore is null", () => {
+    const r = assessRegression({ finalScore: null, baseline: { average: 70, delta: 0 } });
+    expect(r.shouldRollback).toBe(false);
+    expect(r.delta).toBe(0);
+  });
+
+  test("no rollback when baseline average is null", () => {
+    const r = assessRegression({ finalScore: 60, baseline: { average: null, delta: null } });
+    expect(r.shouldRollback).toBe(false);
+    expect(r.delta).toBeNull();
+  });
+
+  test("no rollback when delta above threshold", () => {
+    const r = assessRegression({ finalScore: 66, baseline: { average: 70, delta: -4 } });
+    expect(r.shouldRollback).toBe(false);
+  });
+
+  test("rollback when delta at or below negative threshold", () => {
+    const r = assessRegression({ finalScore: 60, baseline: { average: 70, delta: -10 } });
+    expect(r.shouldRollback).toBe(true);
+    expect(r.delta).toBe(-10);
+    expect(r.reason).toContain("10.0");
+    expect(r.reason).toContain("阈值");
+  });
+
+  test("custom threshold overrides default", () => {
+    const r = assessRegression({
+      finalScore: 67,
+      baseline: { average: 70, delta: -3 },
+      threshold: 2,
+    });
+    expect(r.shouldRollback).toBe(true);
+  });
+});
+
+describe("feedbackAutomationGuard / collectRecentlyRolledBackKeys cooldown", () => {
+  test("filters out rollback keys older than maxAgeMs", () => {
+    const now = Date.now();
+    const entries = [
+      { action: "auto_rollback", patchKey: "recent", at: now - 1000 },
+      { action: "auto_rollback", patchKey: "stale", at: now - 10 * 60 * 60 * 1000 },
+    ];
+    const keys = collectRecentlyRolledBackKeys(entries, 10, 60 * 60 * 1000);
+    expect(keys.has("recent")).toBe(true);
+    expect(keys.has("stale")).toBe(false);
+  });
+
+  test("keeps entries without at field when maxAgeMs given (backward compat)", () => {
+    const entries = [{ action: "auto_rollback", patchKey: "no-at" }];
+    const keys = collectRecentlyRolledBackKeys(entries, 10, 60 * 60 * 1000);
+    expect(keys.has("no-at")).toBe(true);
+  });
+
+  test("no maxAgeMs keeps all rollback keys within window", () => {
+    const now = Date.now();
+    const entries = [
+      { action: "auto_rollback", patchKey: "recent", at: now - 1000 },
+      { action: "auto_rollback", patchKey: "stale", at: now - 10 * 60 * 60 * 1000 },
+    ];
+    const keys = collectRecentlyRolledBackKeys(entries, 10);
+    expect(keys.has("recent")).toBe(true);
+    expect(keys.has("stale")).toBe(true);
   });
 });

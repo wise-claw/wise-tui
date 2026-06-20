@@ -4,6 +4,7 @@ import type { SessionInsightRecommendation, SessionInsightsResult } from "./sess
 import type { SessionInsightsReportMeta } from "./sessionInsightsReport";
 import { buildFeedbackLoopMarkdownReport, type SessionFeedbackLoopState } from "./sessionFeedbackLoop";
 import {
+  identifyHighPerformingPatchKinds,
   identifyUnderperformingPatchKinds,
   type PatchKindEffectivenessHint,
 } from "./feedbackAutomationGuard";
@@ -503,12 +504,17 @@ export function inferConfigPatchCandidates(input: {
 
   const deduped = dedupeFeedbackConfigPatches(patches);
   const underperforming = identifyUnderperformingPatchKinds(input.effectivenessHints);
-  if (underperforming.size === 0) return deduped.slice(0, 8);
-  // 闭环学习：表现不佳的 kind 候选排到末尾（保留可审阅，不删除），避免反复产生已知无效补丁。
+  const highPerforming = identifyHighPerformingPatchKinds(input.effectivenessHints);
+  if (underperforming.size === 0 && highPerforming.size === 0) return deduped.slice(0, 8);
+  // 闭环学习：高表现 kind 候选排前（上采样，优先复用已知有效补丁），表现不佳 kind 排末尾
+  // （降权，保留可审阅不删除）。两集合阈值不重叠（< 50 vs ≥ 65），不会冲突；保守起见先判降权。
   deduped.sort((a, b) => {
-    const au = underperforming.has(a.kind) ? 1 : 0;
-    const bu = underperforming.has(b.kind) ? 1 : 0;
-    return au - bu;
+    const rank = (kind: FeedbackConfigPatch["kind"]) => {
+      if (underperforming.has(kind)) return 1;
+      if (highPerforming.has(kind)) return -1;
+      return 0;
+    };
+    return rank(a.kind) - rank(b.kind);
   });
   return deduped.slice(0, 8);
 }
@@ -629,7 +635,7 @@ export function buildFeedbackLoopConfigPatchPrompt(input: {
       lines.push(`- ${h.kind}：n=${h.count}，均分 ${scorePart}，Δrules ${deltaPart}`);
     }
     lines.push(
-      "优先采用正效果（高均分 / Δrules 为负）的 kind；对均分偏低（< 50）的 kind 谨慎，避免再次产生同类低效补丁。",
+      "优先采用高表现 kind（均分 ≥ 65、Δrules 为负）的补丁；对表现不佳 kind（均分 < 50）谨慎，避免再次产生同类低效补丁；中性 kind 按需使用。",
       "",
     );
   }

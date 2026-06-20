@@ -49,6 +49,7 @@ import {
   isLowRiskAutoApplyPatch,
 } from "../utils/sessionFeedbackLoopActions";
 import {
+  assessRegression,
   canAutoApplyPatch,
   collectRecentlyRolledBackKeys,
   createInitialAutomationGuardState,
@@ -57,6 +58,7 @@ import {
   markPatchAutoRolledBack,
   resetAutomationCircuitBreaker as resetAutomationCircuitBreakerState,
   resetAutomationGuardForCycle,
+  ROLLBACK_KEY_COOLDOWN_MS,
   type FeedbackAutomationGuardState,
 } from "../utils/feedbackAutomationGuard";
 import {
@@ -81,9 +83,6 @@ import {
   summarizeFeedbackLoopOutcome,
   type SessionFeedbackLoopState,
 } from "../utils/sessionFeedbackLoop";
-
-/** 自动调整：最终分低于历史基线超过该阈值时，视为评分回归并回滚本轮补丁。 */
-const FEEDBACK_LOOP_REGRESSION_THRESHOLD = 5;
 
 export interface UseSessionFeedbackLoopInput {
   sessionId: string;
@@ -324,11 +323,14 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
   }, [auditVersion, repositoryPath]);
 
   // 仓库或审计变化时，从审计日志重建「近期自动回滚补丁键集合」，供护栏跨轮去重。
+  // 仅保留冷却窗口（ROLLBACK_KEY_COOLDOWN_MS）内的回滚键，过期后允许重试，避免永久拉黑。
   useEffect(() => {
     const repo = repositoryPath?.trim();
     if (!repo) return;
     automationGuardRef.current.recentlyRolledBackKeys = collectRecentlyRolledBackKeys(
       listFeedbackAutomationAudit(repo, 20),
+      20,
+      ROLLBACK_KEY_COOLDOWN_MS,
     );
   }, [repositoryPath, auditVersion]);
 
@@ -432,16 +434,12 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
 
       let didRollback = false;
       // 自动调整：最终分显著低于历史基线时，回滚本轮应用的补丁备份。
-      // 基线取归档前的历史平均分（不含本次），delta = 本次分 - 基线。
+      // 基线取归档前的历史平均分（不含本次），delta = 本次分 - 基线；回归判定由 assessRegression 纯函数完成。
       if (autoRollbackOnRegressionRef.current) {
         const finalScore = outcome.finalOverallScore;
         const baseline = compareWithHistoryAverage(historyRecordsRef.current, finalScore);
-        if (
-          finalScore != null &&
-          baseline.average != null &&
-          baseline.delta != null &&
-          baseline.delta <= -FEEDBACK_LOOP_REGRESSION_THRESHOLD
-        ) {
+        const regression = assessRegression({ finalScore, baseline });
+        if (regression.shouldRollback) {
           const appliedIds = runAppliedPatchIdsRef.current;
           if (appliedIds.size > 0) {
             const targets = configPatchBackupsRef.current.filter((b) =>
@@ -472,7 +470,7 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
                 repositoryPath: repo,
                 action: "auto_rollback",
                 patch: rolledPatch,
-                reason: `评分低于基线 ${Math.abs(baseline.delta).toFixed(1)} 分，自动回滚`,
+                reason: regression.reason ?? "评分回归自动回滚",
               });
             }
             if (rolledBack > 0) {
@@ -491,7 +489,7 @@ export function useSessionFeedbackLoop(input: UseSessionFeedbackLoopInput): UseS
               void refreshConfigSnapshot();
               void refreshConfigPatchBackups();
               message.warning(
-                `反馈神经网：评分低于基线 ${Math.abs(baseline.delta).toFixed(1)} 分，已自动回滚 ${rolledBack} 条补丁`,
+                `反馈神经网：评分低于基线 ${Math.abs(baseline.delta ?? 0).toFixed(1)} 分，已自动回滚 ${rolledBack} 条补丁`,
               );
             }
           }

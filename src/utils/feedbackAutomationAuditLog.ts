@@ -12,6 +12,8 @@ import { feedbackPatchDedupeKey } from "./feedbackAutomationGuard";
 
 const STORAGE_KEY = "wise.sessionFeedbackLoop.automationAudit.v1";
 const MAX_ENTRIES = 200;
+/** 每仓库最多保留的审计条目数，防多仓库场景下旧仓库记录被全局上限挤掉。 */
+const MAX_ENTRIES_PER_REPO = 80;
 
 export type FeedbackAutomationAuditAction =
   | "auto_apply"
@@ -63,9 +65,28 @@ export function loadAllFeedbackAutomationAudit(): FeedbackAutomationAuditEntry[]
   }
 }
 
+/**
+ * 审计条目裁剪：先按仓库分组各保留最新 MAX_ENTRIES_PER_REPO 条，再按时间降序全局截断至 MAX_ENTRIES。
+ * 输入应为 newest-first；输出保证 newest-first 且每仓库不超配额，避免旧仓库记录被挤掉。
+ */
+function capAuditEntries(entries: readonly FeedbackAutomationAuditEntry[]): FeedbackAutomationAuditEntry[] {
+  const byRepo = new Map<string, FeedbackAutomationAuditEntry[]>();
+  for (const entry of entries) {
+    const list = byRepo.get(entry.repositoryPath) ?? [];
+    list.push(entry);
+    byRepo.set(entry.repositoryPath, list);
+  }
+  const capped: FeedbackAutomationAuditEntry[] = [];
+  for (const list of byRepo.values()) {
+    capped.push(...list.slice(0, MAX_ENTRIES_PER_REPO));
+  }
+  capped.sort((a, b) => b.at - a.at);
+  return capped.slice(0, MAX_ENTRIES);
+}
+
 function saveAll(entries: FeedbackAutomationAuditEntry[]): void {
   const storage = readStorage();
-  auditCache = entries.slice(0, MAX_ENTRIES);
+  auditCache = capAuditEntries(entries);
   if (!storage) return;
   try {
     storage.setItem(STORAGE_KEY, JSON.stringify(auditCache));

@@ -179,3 +179,57 @@ describe("feedbackAutomationAuditLog / formatting", () => {
     expect(summary.split("\n").length).toBe(3);
   });
 });
+
+describe("feedbackAutomationAuditLog / per-repo quota", () => {
+  test("caps entries per repository to MAX_ENTRIES_PER_REPO", () => {
+    for (let i = 0; i < 100; i += 1) {
+      appendFeedbackAutomationAudit({
+        repositoryPath: "/repo/a",
+        action: "auto_apply",
+        reason: `r${i}`,
+        patch: makePatch({ id: `p-${i}`, path: `f${i}.md` }),
+      });
+    }
+    const repoA = loadAllFeedbackAutomationAudit().filter((e) => e.repositoryPath === "/repo/a");
+    expect(repoA.length).toBe(80);
+  });
+
+  test("per-repo quota is independent across repositories and respects global cap", () => {
+    for (let i = 0; i < 90; i += 1) {
+      appendFeedbackAutomationAudit({
+        repositoryPath: "/repo/a",
+        action: "auto_apply",
+        reason: `a${i}`,
+        patch: makePatch({ id: `pa-${i}`, path: `fa${i}.md` }),
+      });
+    }
+    for (let i = 0; i < 90; i += 1) {
+      appendFeedbackAutomationAudit({
+        repositoryPath: "/repo/b",
+        action: "auto_rollback",
+        reason: `b${i}`,
+        patch: makePatch({ id: `pb-${i}`, path: `fb${i}.md` }),
+      });
+    }
+    const all = loadAllFeedbackAutomationAudit();
+    expect(all.filter((e) => e.repositoryPath === "/repo/a").length).toBe(80);
+    expect(all.filter((e) => e.repositoryPath === "/repo/b").length).toBe(80);
+    // 两仓库共 160 条，未触全局上限 200
+    expect(all.length).toBe(160);
+  });
+
+  test("entries remain newest-first after per-repo capping", () => {
+    for (let i = 0; i < 85; i += 1) {
+      appendFeedbackAutomationAudit({
+        repositoryPath: "/repo/a",
+        action: "auto_apply",
+        reason: `r${i}`,
+        patch: makePatch({ id: `p-${i}`, path: `f${i}.md` }),
+      });
+    }
+    const all = loadAllFeedbackAutomationAudit();
+    expect(all.length).toBe(80);
+    // 缓存为 newest-first，第一条 at 不小于最后一条 at
+    expect(all[0]!.at).toBeGreaterThanOrEqual(all[all.length - 1]!.at);
+  });
+});

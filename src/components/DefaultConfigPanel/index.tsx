@@ -1,5 +1,5 @@
 import { Button, Checkbox, Select, Typography } from "antd";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { ClaudeSessionConnectionKind } from "../../constants/claudeConnection";
 import {
   encodeAtMentionDefaultSelectValue,
@@ -14,6 +14,8 @@ import { LEFT_SIDEBAR_HUB_QUICK_ENTRY_LABELS } from "../../constants/leftSidebar
 import type { LeftSidebarHubQuickEntryId } from "../../constants/leftSidebarHubQuickEntries";
 import { useClaudeConnectionModeSetting } from "../ClaudeConfigDirPanel/useClaudeConnectionModeSetting";
 import { DefaultConfigOptionPick } from "./DefaultConfigOptionPick";
+import { DefaultConfigRow } from "./DefaultConfigRow";
+import { DefaultConfigCheckboxGrid } from "./defaultConfigCheckboxGrid";
 import { useLeftSidebarHubQuickEntriesSetting } from "./useLeftSidebarHubQuickEntriesSetting";
 import { useMonitorPanelSetting } from "./useMonitorPanelSetting";
 import { useLeftSidebarWorkspaceListSetting } from "./useLeftSidebarWorkspaceListSetting";
@@ -40,6 +42,15 @@ import { listEmployees } from "../../services/employees";
 import type { EmployeeItem } from "../../types";
 import { isOmcMonitorEmployeeRecord } from "../../utils/omcMonitorEmployeeSession";
 import "./index.css";
+
+function DefaultConfigSection({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="app-default-config-section" aria-label={title}>
+      <h3 className="app-default-config-section__title">{title}</h3>
+      <div className="app-default-config-panel__settings">{children}</div>
+    </section>
+  );
+}
 
 /** 工作台配置 / 运行设置 / 默认配置：全局会话与布局默认值。 */
 export function DefaultConfigPanel() {
@@ -107,1055 +118,815 @@ export function DefaultConfigPanel() {
     return rows;
   }, [terminalEmployees]);
 
-  return (
-    <div className="app-default-config-panel">
-      <section className="app-default-config-panel__settings" aria-label="全局默认项">
-        <div className="app-default-config-row" aria-label="会话处理方式">
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">会话处理方式</span>
-            <span className="app-default-config-row__hint">新建标签默认；已单独设置过的标签不变</span>
-          </div>
-          <div className="app-default-config-row__control">
-            <DefaultConfigOptionPick<ClaudeSessionConnectionKind>
-              aria-label="会话处理方式"
-              disabled={connection.loading || connection.saving}
-              value={connection.kind}
-              options={[
-                { label: "逐轮处理", value: "oneshot" },
-                { label: "长驻会话", value: "streaming" },
-              ]}
-              onChange={(value) => {
-                void connection.save(value);
-              }}
-            />
-          </div>
-        </div>
+  const topbarToolOptions = useMemo(
+    () => [
+      { label: "FCC", value: "fcc", checked: topbarChrome.showFccTopbar },
+      { label: "OpenCode", value: "opencode", checked: topbarChrome.showOpencodeProxyTopbar },
+      { label: "FCC 流量", value: "fcc-traffic", checked: topbarChrome.showFccTrafficTopbar },
+      { label: "LLM 代理", value: "llm-proxy", checked: topbarChrome.showLlmProxyTopbar },
+      { label: "全链路", value: "data-link", checked: topbarChrome.showSessionDataLinkTopbar },
+      { label: "神经网", value: "feedback-loop", checked: topbarChrome.showSessionFeedbackLoopTopbar },
+    ],
+    [topbarChrome],
+  );
 
-        <div className="app-default-config-row" aria-label="右侧面板">
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">右侧面板</span>
-            <span className="app-default-config-row__hint">启动时展开或收起；顶栏按钮右键可改</span>
-          </div>
-          <div className="app-default-config-row__control">
-            <DefaultConfigOptionPick<"expanded" | "collapsed">
-              aria-label="右侧面板默认状态"
-              disabled={rightPanel.loading || rightPanel.saving}
-              value={rightPanel.collapsed ? "collapsed" : "expanded"}
-              options={[
-                { label: "展开", value: "expanded" },
-                { label: "收起", value: "collapsed" },
-              ]}
-              onChange={(value) => {
-                void rightPanel.save(value === "collapsed");
-              }}
-            />
-          </div>
-        </div>
+  const composerFooterOptions = useMemo(
+    () => [
+      {
+        label: "附件",
+        value: "attach",
+        checked: composerFooterChrome.showComposerFooterAttachButton,
+      },
+      {
+        label: "截屏",
+        value: "screenshot",
+        checked: composerFooterChrome.showComposerFooterScreenshotButton,
+      },
+      {
+        label: "语音",
+        value: "voice",
+        checked: composerFooterChrome.showComposerFooterVoiceButton,
+      },
+      {
+        label: "上下文",
+        value: "context",
+        checked: composerFooterChrome.showComposerFooterContextRing,
+      },
+      {
+        label: "常用语",
+        value: "phrases",
+        checked: composerFooterChrome.showComposerFooterCommonPhrases,
+      },
+      {
+        label: "执行环境",
+        value: "runtime",
+        checked: composerFooterChrome.showComposerFooterRuntimeSettings,
+      },
+      {
+        label: "模型",
+        value: "model",
+        checked: composerFooterChrome.showComposerFooterModelPicker,
+      },
+    ],
+    [composerFooterChrome],
+  );
 
-        <div className="app-default-config-row" aria-label="工作区">
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">工作区</span>
-            <span className="app-default-config-row__hint">左栏工作区与仓库树；隐藏后仍可用目录选择器切换</span>
-          </div>
-          <div className="app-default-config-row__control">
-            <DefaultConfigOptionPick<"hidden" | "visible">
-              aria-label="左栏工作区默认显示"
-              disabled={leftSidebarWorkspaceList.loading || leftSidebarWorkspaceList.saving}
-              value={leftSidebarWorkspaceList.visible ? "visible" : "hidden"}
-              options={[
-                { label: "显示", value: "visible" },
-                { label: "隐藏", value: "hidden" },
-              ]}
-              onChange={(value) => {
-                void leftSidebarWorkspaceList.saveVisible(value === "visible");
-              }}
-            />
-          </div>
-        </div>
+  const feedbackBehaviorOptions = useMemo(
+    () => [
+      {
+        label: "警告时自动启动",
+        value: "auto-start",
+        checked: feedbackLoop.autoStart,
+      },
+      {
+        label: "收敛早停",
+        value: "early-stop",
+        checked: feedbackLoop.earlyStopConvergence,
+      },
+      {
+        label: "写入常用语",
+        value: "save-habits",
+        checked: feedbackLoop.autoSaveHabitsToComposer,
+      },
+      {
+        label: "注入 System Prompt",
+        value: "inject-prompt",
+        checked: feedbackLoop.injectHabitsToSystemPrompt,
+      },
+      {
+        label: "优化持久配置",
+        value: "optimize-artifacts",
+        checked: feedbackLoop.optimizeConfigArtifacts,
+      },
+      {
+        label: "自动写入补丁",
+        value: "auto-apply",
+        checked: feedbackLoop.autoApplyConfigPatches,
+      },
+      {
+        label: "自动验证轮次",
+        value: "auto-verify",
+        checked: feedbackLoop.autoVerifyAfterApply,
+      },
+      {
+        label: "评分回归回滚",
+        value: "auto-rollback",
+        checked: feedbackLoop.autoRollbackOnRegression,
+      },
+      {
+        label: "注入全局规则",
+        value: "inject-global",
+        checked: feedbackLoop.injectGlobalRules,
+      },
+    ],
+    [feedbackLoop],
+  );
 
-        <div className="app-default-config-row" aria-label="工作区仓库角标">
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">工作区仓库角标</span>
-            <span className="app-default-config-row__hint">
-              左栏工作区列表中仓库前的圆形角标；隐藏时不显示任何前置图标
-            </span>
-          </div>
-          <div className="app-default-config-row__control">
-            <DefaultConfigOptionPick<"hidden" | "visible">
-              aria-label="左栏工作区仓库角标默认显示"
-              disabled={
-                leftSidebarRepositoryIconBadges.loading || leftSidebarRepositoryIconBadges.saving
-              }
-              value={leftSidebarRepositoryIconBadges.visible ? "visible" : "hidden"}
-              options={[
-                { label: "显示", value: "visible" },
-                { label: "隐藏", value: "hidden" },
-              ]}
-              onChange={(value) => {
-                void leftSidebarRepositoryIconBadges.saveVisible(value === "visible");
-              }}
-            />
-          </div>
-        </div>
+  const handleTopbarToolToggle = (value: string, checked: boolean) => {
+    switch (value) {
+      case "fcc":
+        void topbarChrome.saveFcc(checked);
+        break;
+      case "opencode":
+        void topbarChrome.saveOpencodeProxy(checked);
+        break;
+      case "fcc-traffic":
+        void topbarChrome.saveFccTraffic(checked);
+        break;
+      case "llm-proxy":
+        void topbarChrome.saveLlmProxy(checked);
+        break;
+      case "data-link":
+        void topbarChrome.saveSessionDataLink(checked);
+        break;
+      case "feedback-loop":
+        void topbarChrome.saveSessionFeedbackLoop(checked);
+        break;
+      default:
+        break;
+    }
+  };
 
-        <div className="app-default-config-row" aria-label="运行面板">
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">运行面板</span>
-            <span className="app-default-config-row__hint">
-              终端、派发与工作流合并列表；按可见行数限制高度
-            </span>
-          </div>
-          <div className="app-default-config-row__control app-default-config-row__control--monitor">
-            <div className="app-default-config-monitor-panel__field">
-              <span className="app-default-config-monitor-panel__field-label">显示</span>
-              <DefaultConfigOptionPick<"visible" | "hidden">
-                aria-label="运行面板默认显示"
-                disabled={monitorPanel.loading || monitorPanel.saving}
-                value={monitorPanel.visible ? "visible" : "hidden"}
+  const handleComposerFooterToggle = (value: string, checked: boolean) => {
+    switch (value) {
+      case "attach":
+        void composerFooterChrome.saveAttachButton(checked);
+        break;
+      case "screenshot":
+        void composerFooterChrome.saveScreenshotButton(checked);
+        break;
+      case "voice":
+        void composerFooterChrome.saveVoiceButton(checked);
+        break;
+      case "context":
+        void composerFooterChrome.saveContextRing(checked);
+        break;
+      case "phrases":
+        void composerFooterChrome.saveCommonPhrases(checked);
+        break;
+      case "runtime":
+        void composerFooterChrome.saveRuntimeSettings(checked);
+        break;
+      case "model":
+        void composerFooterChrome.saveModelPicker(checked);
+        break;
+      default:
+        break;
+    }
+  };
+
+  const handleFeedbackBehaviorToggle = (value: string, checked: boolean) => {
+    const disabled =
+      feedbackLoop.loading || feedbackLoop.saving || !feedbackLoop.enabled;
+    if (disabled) return;
+
+    switch (value) {
+      case "auto-start":
+        void feedbackLoop.saveAutoStart(checked);
+        break;
+      case "early-stop":
+        void feedbackLoop.saveEarlyStopConvergence(checked);
+        break;
+      case "save-habits":
+        void feedbackLoop.saveAutoSaveHabitsToComposer(checked);
+        break;
+      case "inject-prompt":
+        void feedbackLoop.saveInjectHabitsToSystemPrompt(checked);
+        break;
+      case "optimize-artifacts":
+        void feedbackLoop.saveOptimizeConfigArtifacts(checked);
+        break;
+      case "auto-apply":
+        if (!feedbackLoop.optimizeConfigArtifacts && checked) return;
+        void feedbackLoop.saveAutoApplyConfigPatches(checked);
+        break;
+      case "auto-verify":
+        if (!feedbackLoop.optimizeConfigArtifacts && checked) return;
+        void feedbackLoop.saveAutoVerifyAfterApply(checked);
+        break;
+      case "auto-rollback":
+        if (!feedbackLoop.optimizeConfigArtifacts && checked) return;
+        void feedbackLoop.saveAutoRollbackOnRegression(checked);
+        break;
+      case "inject-global":
+        if (feedbackLoop.globalRules.length === 0 && checked) return;
+        void feedbackLoop.saveInjectGlobalRules(checked);
+        break;
+      default:
+        break;
+    }
+  };
+
+  const sections = [
+    {
+      key: "session",
+      title: "会话",
+      content: (
+        <>
+          <DefaultConfigRow
+            title="会话处理方式"
+            hint="新建标签默认"
+            detail="新建标签默认；已单独设置过的标签不变"
+            control={
+              <DefaultConfigOptionPick<ClaudeSessionConnectionKind>
+                aria-label="会话处理方式"
+                disabled={connection.loading || connection.saving}
+                value={connection.kind}
+                options={[
+                  { label: "逐轮", value: "oneshot" },
+                  { label: "长驻", value: "streaming" },
+                ]}
+                onChange={(value) => {
+                  void connection.save(value);
+                }}
+              />
+            }
+          />
+        </>
+      ),
+    },
+    {
+      key: "layout",
+      title: "布局",
+      content: (
+        <>
+          <DefaultConfigRow
+            title="右侧面板"
+            hint="启动默认"
+            detail="启动时展开或收起；顶栏按钮右键可改"
+            control={
+              <DefaultConfigOptionPick<"expanded" | "collapsed">
+                aria-label="右侧面板默认状态"
+                disabled={rightPanel.loading || rightPanel.saving}
+                value={rightPanel.collapsed ? "collapsed" : "expanded"}
+                options={[
+                  { label: "展开", value: "expanded" },
+                  { label: "收起", value: "collapsed" },
+                ]}
+                onChange={(value) => {
+                  void rightPanel.save(value === "collapsed");
+                }}
+              />
+            }
+          />
+
+          <DefaultConfigRow
+            title="工作区树"
+            hint="左栏"
+            detail="左栏工作区与仓库树；隐藏后仍可用目录选择器切换"
+            control={
+              <DefaultConfigOptionPick<"hidden" | "visible">
+                aria-label="左栏工作区默认显示"
+                disabled={leftSidebarWorkspaceList.loading || leftSidebarWorkspaceList.saving}
+                value={leftSidebarWorkspaceList.visible ? "visible" : "hidden"}
                 options={[
                   { label: "显示", value: "visible" },
                   { label: "隐藏", value: "hidden" },
                 ]}
                 onChange={(value) => {
-                  void monitorPanel.saveVisible(value === "visible");
+                  void leftSidebarWorkspaceList.saveVisible(value === "visible");
                 }}
               />
-            </div>
-            <div className="app-default-config-monitor-panel__field">
-              <span className="app-default-config-monitor-panel__field-label">栏位</span>
-              <DefaultConfigOptionPick<"left" | "right">
-                aria-label="运行面板默认栏位"
-                disabled={monitorPanel.loading || monitorPanel.saving || !monitorPanel.visible}
-                value={monitorPanel.placement}
+            }
+          />
+
+          <DefaultConfigRow
+            title="仓库角标"
+            hint="列表前置图标"
+            detail="左栏工作区列表中仓库前的圆形角标"
+            control={
+              <DefaultConfigOptionPick<"hidden" | "visible">
+                aria-label="左栏工作区仓库角标默认显示"
+                disabled={
+                  leftSidebarRepositoryIconBadges.loading || leftSidebarRepositoryIconBadges.saving
+                }
+                value={leftSidebarRepositoryIconBadges.visible ? "visible" : "hidden"}
                 options={[
-                  { label: "左栏", value: "left" },
-                  { label: "右栏", value: "right" },
+                  { label: "显示", value: "visible" },
+                  { label: "隐藏", value: "hidden" },
                 ]}
                 onChange={(value) => {
-                  void monitorPanel.savePlacement(value);
+                  void leftSidebarRepositoryIconBadges.saveVisible(value === "visible");
                 }}
               />
-            </div>
-            <div className="app-default-config-monitor-panel__field app-default-config-monitor-panel__field--rows">
-              <span className="app-default-config-monitor-panel__field-label">可见行数</span>
+            }
+          />
+
+          <DefaultConfigRow
+            title="运行面板"
+            hint="终端 / 派发 / 工作流"
+            detail="终端、派发与工作流合并列表；按可见行数限制高度"
+            control={
+              <div className="app-default-config-row__control--monitor">
+                <div className="app-default-config-monitor-panel__field">
+                  <span className="app-default-config-monitor-panel__field-label">显示</span>
+                  <DefaultConfigOptionPick<"visible" | "hidden">
+                    aria-label="运行面板默认显示"
+                    disabled={monitorPanel.loading || monitorPanel.saving}
+                    value={monitorPanel.visible ? "visible" : "hidden"}
+                    options={[
+                      { label: "显示", value: "visible" },
+                      { label: "隐藏", value: "hidden" },
+                    ]}
+                    onChange={(value) => {
+                      void monitorPanel.saveVisible(value === "visible");
+                    }}
+                  />
+                </div>
+                <div className="app-default-config-monitor-panel__field">
+                  <span className="app-default-config-monitor-panel__field-label">栏位</span>
+                  <DefaultConfigOptionPick<"left" | "right">
+                    aria-label="运行面板默认栏位"
+                    disabled={monitorPanel.loading || monitorPanel.saving || !monitorPanel.visible}
+                    value={monitorPanel.placement}
+                    options={[
+                      { label: "左", value: "left" },
+                      { label: "右", value: "right" },
+                    ]}
+                    onChange={(value) => {
+                      void monitorPanel.savePlacement(value);
+                    }}
+                  />
+                </div>
+                <div className="app-default-config-monitor-panel__field app-default-config-monitor-panel__field--rows">
+                  <span className="app-default-config-monitor-panel__field-label">行数</span>
+                  <Select
+                    size="small"
+                    className="app-default-config-monitor-panel__rows-select"
+                    aria-label="运行面板可见行数"
+                    disabled={monitorPanel.loading || monitorPanel.saving || !monitorPanel.visible}
+                    value={monitorPanel.visibleRows}
+                    options={MONITOR_PANEL_VISIBLE_ROWS_OPTIONS.map((rows) => ({
+                      value: rows,
+                      label: `${rows}`,
+                    }))}
+                    onChange={(value) => {
+                      void monitorPanel.saveVisibleRows(value);
+                    }}
+                  />
+                </div>
+              </div>
+            }
+          />
+
+          <DefaultConfigRow
+            title="Git / 文件树"
+            hint="默认栏位"
+            detail="Git 与文件树默认栏位；同在左栏时 Tab 切换"
+            control={
+              <div className="app-default-config-row__control--monitor">
+                <DefaultConfigOptionPick<"left" | "right">
+                  aria-label="Git 默认栏位"
+                  disabled={repoPanelPlacement.loading || repoPanelPlacement.saving}
+                  value={repoPanelPlacement.gitPanelPlacement}
+                  options={[
+                    { label: "Git·左", value: "left" },
+                    { label: "Git·右", value: "right" },
+                  ]}
+                  onChange={(value) => {
+                    void repoPanelPlacement.saveGitPlacement(value);
+                  }}
+                />
+                <DefaultConfigOptionPick<"left" | "right">
+                  aria-label="文件树默认栏位"
+                  disabled={repoPanelPlacement.loading || repoPanelPlacement.saving}
+                  value={repoPanelPlacement.filesPanelPlacement}
+                  options={[
+                    { label: "文件·左", value: "left" },
+                    { label: "文件·右", value: "right" },
+                  ]}
+                  onChange={(value) => {
+                    void repoPanelPlacement.saveFilesPlacement(value);
+                  }}
+                />
+              </div>
+            }
+          />
+
+          <DefaultConfigRow
+            title="文件打开"
+            hint="侧栏点击"
+            detail="侧栏文件在当前会话打开或新开一屏"
+            control={
+              <DefaultConfigOptionPick<"current" | "new-pane">
+                aria-label="文件树打开方式"
+                disabled={fileTreeOpenInNewPane.loading || fileTreeOpenInNewPane.saving}
+                value={fileTreeOpenInNewPane.openInNewPane ? "new-pane" : "current"}
+                options={[
+                  { label: "当前", value: "current" },
+                  { label: "新屏", value: "new-pane" },
+                ]}
+                onChange={(value) => {
+                  void fileTreeOpenInNewPane.save(value === "new-pane");
+                }}
+              />
+            }
+          />
+
+          <DefaultConfigRow
+            title="右栏卡片"
+            hint="快捷操作 / 待办"
+            control={
+              <div className="app-default-config-row__control--monitor">
+                <DefaultConfigOptionPick<"hidden" | "visible">
+                  aria-label="快捷操作右栏显示"
+                  disabled={workspaceInspectorPanels.loading || workspaceInspectorPanels.saving}
+                  value={
+                    workspaceInspectorPanels.showWorkspaceQuickActionsPanel ? "visible" : "hidden"
+                  }
+                  options={[
+                    { label: "快捷·显", value: "visible" },
+                    { label: "快捷·隐", value: "hidden" },
+                  ]}
+                  onChange={(value) => {
+                    void workspaceInspectorPanels.saveQuickActions(value === "visible");
+                  }}
+                />
+                <DefaultConfigOptionPick<"hidden" | "visible">
+                  aria-label="待办事项右栏显示"
+                  disabled={workspaceInspectorPanels.loading || workspaceInspectorPanels.saving}
+                  value={workspaceInspectorPanels.showWorkspaceTodosPanel ? "visible" : "hidden"}
+                  options={[
+                    { label: "待办·显", value: "visible" },
+                    { label: "待办·隐", value: "hidden" },
+                  ]}
+                  onChange={(value) => {
+                    void workspaceInspectorPanels.saveTodos(value === "visible");
+                  }}
+                />
+              </div>
+            }
+          />
+
+          <DefaultConfigRow
+            title="左栏快捷入口"
+            hint="顶栏图标"
+            detail="显示在左栏顶部；入口分别进入 Cockpit / 工作台配置"
+            layout="stack"
+            control={
+              <Checkbox.Group
+                className="app-default-config-hub-quick-checkboxes"
+                disabled={hubQuickEntries.loading || hubQuickEntries.saving}
+                value={hubQuickEntries.selected}
+                options={hubQuickEntries.allEntryIds.map((id) => ({
+                  label: LEFT_SIDEBAR_HUB_QUICK_ENTRY_LABELS[id],
+                  value: id,
+                }))}
+                onChange={(values) => {
+                  void hubQuickEntries.save(values as LeftSidebarHubQuickEntryId[]);
+                }}
+              />
+            }
+          />
+        </>
+      ),
+    },
+    {
+      key: "composer",
+      title: "输入框",
+      content: (
+        <>
+          <DefaultConfigRow
+            title="@ 默认选中"
+            hint="无筛选时高亮"
+            control={
               <Select
                 size="small"
-                className="app-default-config-monitor-panel__rows-select"
-                aria-label="运行面板可见行数"
-                disabled={monitorPanel.loading || monitorPanel.saving || !monitorPanel.visible}
-                value={monitorPanel.visibleRows}
-                options={MONITOR_PANEL_VISIBLE_ROWS_OPTIONS.map((rows) => ({
-                  value: rows,
-                  label: `${rows} 行`,
-                }))}
+                showSearch
+                optionFilterProp="label"
+                aria-label="@ 默认选中"
+                disabled={atMentionDefault.loading || atMentionDefault.saving}
+                value={atMentionDefaultSelectValue}
+                options={atMentionDefaultSelectOptions}
                 onChange={(value) => {
-                  void monitorPanel.saveVisibleRows(value);
+                  const decoded = decodeAtMentionDefaultSelectValue(String(value));
+                  if (decoded) void atMentionDefault.save(decoded);
                 }}
               />
-            </div>
-          </div>
-        </div>
+            }
+          />
 
-        <div className="app-default-config-row" aria-label="Git 与文件树栏位">
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">Git 与文件树</span>
-            <span className="app-default-config-row__hint">Git 与文件树默认栏位；同在左栏时 Tab 切换</span>
-          </div>
-          <div className="app-default-config-row__control app-default-config-row__control--monitor">
-            <DefaultConfigOptionPick<"left" | "right">
-              aria-label="Git 默认栏位"
-              disabled={repoPanelPlacement.loading || repoPanelPlacement.saving}
-              value={repoPanelPlacement.gitPanelPlacement}
-              options={[
-                { label: "Git·左栏", value: "left" },
-                { label: "Git·右栏", value: "right" },
-              ]}
-              onChange={(value) => {
-                void repoPanelPlacement.saveGitPlacement(value);
-              }}
-            />
-            <DefaultConfigOptionPick<"left" | "right">
-              aria-label="文件树默认栏位"
-              disabled={repoPanelPlacement.loading || repoPanelPlacement.saving}
-              value={repoPanelPlacement.filesPanelPlacement}
-              options={[
-                { label: "文件·左栏", value: "left" },
-                { label: "文件·右栏", value: "right" },
-              ]}
-              onChange={(value) => {
-                void repoPanelPlacement.saveFilesPlacement(value);
-              }}
-            />
-          </div>
-        </div>
-
-        <div className="app-default-config-row" aria-label="文件树打开方式">
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">文件树打开方式</span>
-            <span className="app-default-config-row__hint">侧栏文件在当前会话打开或新开一屏</span>
-          </div>
-          <div className="app-default-config-row__control">
-            <DefaultConfigOptionPick<"current" | "new-pane">
-              aria-label="文件树打开方式"
-              disabled={fileTreeOpenInNewPane.loading || fileTreeOpenInNewPane.saving}
-              value={fileTreeOpenInNewPane.openInNewPane ? "new-pane" : "current"}
-              options={[
-                { label: "当前会话", value: "current" },
-                { label: "新开一屏", value: "new-pane" },
-              ]}
-              onChange={(value) => {
-                void fileTreeOpenInNewPane.save(value === "new-pane");
-              }}
-            />
-          </div>
-        </div>
-
-        <div className="app-default-config-row" aria-label="@ 默认选中">
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">@ 默认选中</span>
-            <span className="app-default-config-row__hint">@ 补全无筛选时的默认高亮项</span>
-          </div>
-          <div className="app-default-config-row__control">
-            <Select
-              size="small"
-              showSearch
-              optionFilterProp="label"
-              aria-label="@ 默认选中"
-              disabled={atMentionDefault.loading || atMentionDefault.saving}
-              value={atMentionDefaultSelectValue}
-              options={atMentionDefaultSelectOptions}
-              onChange={(value) => {
-                const decoded = decodeAtMentionDefaultSelectValue(String(value));
-                if (decoded) void atMentionDefault.save(decoded);
-              }}
-            />
-          </div>
-        </div>
-
-        <div
-          className="app-default-config-row app-default-config-row--at-mention-shortcuts"
-          aria-label="@ 快捷键"
-        >
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">@ 快捷键</span>
-            <span className="app-default-config-row__hint">聚焦输入框时按键插入 @ 提及（Esc 取消录制）</span>
-          </div>
-          <div className="app-default-config-row__control app-default-config-row__control--shortcut-list">
-            <ul className="app-default-config-at-mention-shortcuts">
-              {atMentionShortcutRows.map((row) => (
-                <li key={encodeAtMentionDefaultSelectValue(row.target)} className="app-default-config-at-mention-shortcuts__row">
-                  <span className="app-default-config-at-mention-shortcuts__label">
-                    <span className="app-default-config-at-mention-shortcuts__group">{row.group}</span>
-                    {row.label}
-                  </span>
-                  <KeyShortcutCapture
-                    value={atMentionShortcuts.chordForTarget(row.target)}
-                    disabled={atMentionShortcuts.loading || atMentionShortcuts.saving}
-                    onChange={(chord) => {
-                      void atMentionShortcuts.saveForTarget(row.target, chord);
-                    }}
-                  />
-                </li>
-              ))}
-            </ul>
-          </div>
-        </div>
-
-        <div className="app-default-config-row" aria-label="派发任务历史">
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">派发任务历史</span>
-            <span className="app-default-config-row__hint">左栏派发任务默认查询天数；列表头可临时切换</span>
-          </div>
-          <div className="app-default-config-row__control">
-            <Select
-              size="small"
-              aria-label="派发任务默认历史天数"
-              disabled={execEnvDispatchHistory.loading || execEnvDispatchHistory.saving}
-              value={execEnvDispatchHistory.days}
-              options={EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAY_OPTIONS.map((day) => ({
-                value: day,
-                label: `近 ${day} 天`,
-              }))}
-              onChange={(value) => {
-                void execEnvDispatchHistory.save(value);
-              }}
-            />
-          </div>
-        </div>
-
-        <div className="app-default-config-row" aria-label="快捷操作">
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">快捷操作</span>
-            <span className="app-default-config-row__hint">右栏快捷操作卡片；侧栏菜单仍可访问</span>
-          </div>
-          <div className="app-default-config-row__control">
-            <DefaultConfigOptionPick<"hidden" | "visible">
-              aria-label="快捷操作右栏显示"
-              disabled={workspaceInspectorPanels.loading || workspaceInspectorPanels.saving}
-              value={workspaceInspectorPanels.showWorkspaceQuickActionsPanel ? "visible" : "hidden"}
-              options={[
-                { label: "隐藏", value: "hidden" },
-                { label: "显示", value: "visible" },
-              ]}
-              onChange={(value) => {
-                void workspaceInspectorPanels.saveQuickActions(value === "visible");
-              }}
-            />
-          </div>
-        </div>
-
-        <div className="app-default-config-row" aria-label="待办事项">
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">待办事项</span>
-            <span className="app-default-config-row__hint">右栏待办与左栏待办菜单、徽章</span>
-          </div>
-          <div className="app-default-config-row__control">
-            <DefaultConfigOptionPick<"hidden" | "visible">
-              aria-label="待办事项右栏显示"
-              disabled={workspaceInspectorPanels.loading || workspaceInspectorPanels.saving}
-              value={workspaceInspectorPanels.showWorkspaceTodosPanel ? "visible" : "hidden"}
-              options={[
-                { label: "隐藏", value: "hidden" },
-                { label: "显示", value: "visible" },
-              ]}
-              onChange={(value) => {
-                void workspaceInspectorPanels.saveTodos(value === "visible");
-              }}
-            />
-          </div>
-        </div>
-
-        <div className="app-default-config-row app-default-config-row--hub-quick" aria-label="左栏快捷入口">
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">左栏快捷入口</span>
-            <span className="app-default-config-row__hint">显示在左栏顶部；入口分别进入 Cockpit / 工作台配置</span>
-          </div>
-          <div className="app-default-config-row__control app-default-config-row__control--hub-quick">
-            <Checkbox.Group
-              className="app-default-config-hub-quick-checkboxes"
-              disabled={hubQuickEntries.loading || hubQuickEntries.saving}
-              value={hubQuickEntries.selected}
-              options={hubQuickEntries.allEntryIds.map((id) => ({
-                label: LEFT_SIDEBAR_HUB_QUICK_ENTRY_LABELS[id],
-                value: id,
-              }))}
-              onChange={(values) => {
-                void hubQuickEntries.save(values as LeftSidebarHubQuickEntryId[]);
-              }}
-            />
-          </div>
-        </div>
-
-        <div className="app-default-config-row" aria-label="顶栏仓库名称">
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">顶栏仓库名称</span>
-            <span className="app-default-config-row__hint">
-              控制主会话顶栏左侧当前仓库 / 工作区名称；点击名称可复制绝对路径
-            </span>
-          </div>
-          <div className="app-default-config-row__control">
-            <DefaultConfigOptionPick<"hidden" | "visible">
-              aria-label="顶栏仓库名称显示"
-              disabled={topbarChrome.loading || topbarChrome.saving}
-              value={topbarChrome.showTopbarRepositoryName ? "visible" : "hidden"}
-              options={[
-                { label: "不显示", value: "hidden" },
-                { label: "显示", value: "visible" },
-              ]}
-              onChange={(value) => {
-                void topbarChrome.saveTopbarRepositoryName(value === "visible");
-              }}
-            />
-          </div>
-        </div>
-
-        <div className="app-default-config-row" aria-label="远程入口顶栏">
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">远程入口</span>
-            <span className="app-default-config-row__hint">
-              控制中栏顶栏「远程」区（钉钉 / WebSocket 开关与配置入口）；创作台远程入口配置不受影响
-            </span>
-          </div>
-          <div className="app-default-config-row__control">
-            <DefaultConfigOptionPick<"hidden" | "visible">
-              aria-label="远程入口顶栏显示"
-              disabled={topbarChrome.loading || topbarChrome.saving}
-              value={topbarChrome.showRemoteEntryTopbar ? "visible" : "hidden"}
-              options={[
-                { label: "不显示", value: "hidden" },
-                { label: "显示", value: "visible" },
-              ]}
-              onChange={(value) => {
-                void topbarChrome.saveRemoteEntry(value === "visible");
-              }}
-            />
-          </div>
-        </div>
-
-        <div className="app-default-config-row" aria-label="FCC 顶栏图标">
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">FCC 顶栏图标</span>
-            <span className="app-default-config-row__hint">
-              控制主会话顶栏 Free Claude Code 服务入口；默认不显示
-            </span>
-          </div>
-          <div className="app-default-config-row__control">
-            <DefaultConfigOptionPick<"hidden" | "visible">
-              aria-label="FCC 顶栏显示"
-              disabled={topbarChrome.loading || topbarChrome.saving}
-              value={topbarChrome.showFccTopbar ? "visible" : "hidden"}
-              options={[
-                { label: "不显示", value: "hidden" },
-                { label: "显示", value: "visible" },
-              ]}
-              onChange={(value) => {
-                void topbarChrome.saveFcc(value === "visible");
-              }}
-            />
-          </div>
-        </div>
-
-        <div className="app-default-config-row" aria-label="OpenCode 代理顶栏图标">
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">OpenCode 代理图标</span>
-            <span className="app-default-config-row__hint">
-              控制主会话顶栏 OpenCode Go / Zen 内置代理入口；默认不显示
-            </span>
-          </div>
-          <div className="app-default-config-row__control">
-            <DefaultConfigOptionPick<"hidden" | "visible">
-              aria-label="OpenCode 代理顶栏显示"
-              disabled={topbarChrome.loading || topbarChrome.saving}
-              value={topbarChrome.showOpencodeProxyTopbar ? "visible" : "hidden"}
-              options={[
-                { label: "不显示", value: "hidden" },
-                { label: "显示", value: "visible" },
-              ]}
-              onChange={(value) => {
-                void topbarChrome.saveOpencodeProxy(value === "visible");
-              }}
-            />
-          </div>
-        </div>
-
-        <div className="app-default-config-row" aria-label="FCC 请求流量图标">
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">FCC 请求流量</span>
-            <span className="app-default-config-row__hint">
-              控制主会话顶栏 FCC 请求流量监听入口；默认不显示
-            </span>
-          </div>
-          <div className="app-default-config-row__control">
-            <DefaultConfigOptionPick<"hidden" | "visible">
-              aria-label="FCC 请求流量顶栏显示"
-              disabled={topbarChrome.loading || topbarChrome.saving}
-              value={topbarChrome.showFccTrafficTopbar ? "visible" : "hidden"}
-              options={[
-                { label: "不显示", value: "hidden" },
-                { label: "显示", value: "visible" },
-              ]}
-              onChange={(value) => {
-                void topbarChrome.saveFccTraffic(value === "visible");
-              }}
-            />
-          </div>
-        </div>
-
-        <div className="app-default-config-row" aria-label="LLM 代理图标">
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">LLM 代理图标</span>
-            <span className="app-default-config-row__hint">
-              控制主会话顶栏 LLM 流量监听入口；默认不显示
-            </span>
-          </div>
-          <div className="app-default-config-row__control">
-            <DefaultConfigOptionPick<"hidden" | "visible">
-              aria-label="LLM 代理顶栏显示"
-              disabled={topbarChrome.loading || topbarChrome.saving}
-              value={topbarChrome.showLlmProxyTopbar ? "visible" : "hidden"}
-              options={[
-                { label: "不显示", value: "hidden" },
-                { label: "显示", value: "visible" },
-              ]}
-              onChange={(value) => {
-                void topbarChrome.saveLlmProxy(value === "visible");
-              }}
-            />
-          </div>
-        </div>
-
-        <div className="app-default-config-row" aria-label="全链路分析图标">
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">全链路分析</span>
-            <span className="app-default-config-row__hint">
-              控制主会话顶栏会话全链路分析入口；默认不显示
-            </span>
-          </div>
-          <div className="app-default-config-row__control">
-            <DefaultConfigOptionPick<"hidden" | "visible">
-              aria-label="全链路分析顶栏显示"
-              disabled={topbarChrome.loading || topbarChrome.saving}
-              value={topbarChrome.showSessionDataLinkTopbar ? "visible" : "hidden"}
-              options={[
-                { label: "不显示", value: "hidden" },
-                { label: "显示", value: "visible" },
-              ]}
-              onChange={(value) => {
-                void topbarChrome.saveSessionDataLink(value === "visible");
-              }}
-            />
-          </div>
-        </div>
-
-        <div className="app-default-config-row" aria-label="反馈神经网图标">
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">反馈神经网</span>
-            <span className="app-default-config-row__hint">
-              控制主会话顶栏反馈神经网入口；默认不显示，隐藏时仍可从顶栏「更多」打开
-            </span>
-          </div>
-          <div className="app-default-config-row__control">
-            <DefaultConfigOptionPick<"hidden" | "visible">
-              aria-label="反馈神经网顶栏显示"
-              disabled={topbarChrome.loading || topbarChrome.saving}
-              value={topbarChrome.showSessionFeedbackLoopTopbar ? "visible" : "hidden"}
-              options={[
-                { label: "不显示", value: "hidden" },
-                { label: "显示", value: "visible" },
-              ]}
-              onChange={(value) => {
-                void topbarChrome.saveSessionFeedbackLoop(value === "visible");
-              }}
-            />
-          </div>
-        </div>
-
-        <div className="app-default-config-row" aria-label="输入框附件上传">
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">输入框附件上传</span>
-            <span className="app-default-config-row__hint">主会话输入框底栏「+」按钮；快捷键 ⌘I / Ctrl+I 仍可用</span>
-          </div>
-          <div className="app-default-config-row__control">
-            <DefaultConfigOptionPick<"hidden" | "visible">
-              aria-label="输入框附件上传显示"
-              disabled={composerFooterChrome.loading || composerFooterChrome.saving}
-              value={composerFooterChrome.showComposerFooterAttachButton ? "visible" : "hidden"}
-              options={[
-                { label: "不显示", value: "hidden" },
-                { label: "显示", value: "visible" },
-              ]}
-              onChange={(value) => {
-                void composerFooterChrome.saveAttachButton(value === "visible");
-              }}
-            />
-          </div>
-        </div>
-
-        <div className="app-default-config-row" aria-label="输入框截屏">
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">输入框截屏</span>
-            <span className="app-default-config-row__hint">主会话输入框底栏截屏按钮；快捷键 F3 仍可用</span>
-          </div>
-          <div className="app-default-config-row__control">
-            <DefaultConfigOptionPick<"hidden" | "visible">
-              aria-label="输入框截屏显示"
-              disabled={composerFooterChrome.loading || composerFooterChrome.saving}
-              value={composerFooterChrome.showComposerFooterScreenshotButton ? "visible" : "hidden"}
-              options={[
-                { label: "不显示", value: "hidden" },
-                { label: "显示", value: "visible" },
-              ]}
-              onChange={(value) => {
-                void composerFooterChrome.saveScreenshotButton(value === "visible");
-              }}
-            />
-          </div>
-        </div>
-
-        <div className="app-default-config-row" aria-label="输入框语音听写">
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">输入框语音听写</span>
-            <span className="app-default-config-row__hint">主会话输入框底栏麦克风按钮；本机不支持听写时始终不显示</span>
-          </div>
-          <div className="app-default-config-row__control">
-            <DefaultConfigOptionPick<"hidden" | "visible">
-              aria-label="输入框语音听写显示"
-              disabled={composerFooterChrome.loading || composerFooterChrome.saving}
-              value={composerFooterChrome.showComposerFooterVoiceButton ? "visible" : "hidden"}
-              options={[
-                { label: "不显示", value: "hidden" },
-                { label: "显示", value: "visible" },
-              ]}
-              onChange={(value) => {
-                void composerFooterChrome.saveVoiceButton(value === "visible");
-              }}
-            />
-          </div>
-        </div>
-
-        <div className="app-default-config-row" aria-label="输入框上下文环">
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">输入框上下文环</span>
-            <span className="app-default-config-row__hint">主会话输入框底栏上下文占用进度环</span>
-          </div>
-          <div className="app-default-config-row__control">
-            <DefaultConfigOptionPick<"hidden" | "visible">
-              aria-label="输入框上下文环显示"
-              disabled={composerFooterChrome.loading || composerFooterChrome.saving}
-              value={composerFooterChrome.showComposerFooterContextRing ? "visible" : "hidden"}
-              options={[
-                { label: "不显示", value: "hidden" },
-                { label: "显示", value: "visible" },
-              ]}
-              onChange={(value) => {
-                void composerFooterChrome.saveContextRing(value === "visible");
-              }}
-            />
-          </div>
-        </div>
-
-        <div className="app-default-config-row" aria-label="输入框常用语">
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">输入框常用语</span>
-            <span className="app-default-config-row__hint">主会话输入框底栏「常用语」入口</span>
-          </div>
-          <div className="app-default-config-row__control">
-            <DefaultConfigOptionPick<"hidden" | "visible">
-              aria-label="输入框常用语显示"
-              disabled={composerFooterChrome.loading || composerFooterChrome.saving}
-              value={composerFooterChrome.showComposerFooterCommonPhrases ? "visible" : "hidden"}
-              options={[
-                { label: "不显示", value: "hidden" },
-                { label: "显示", value: "visible" },
-              ]}
-              onChange={(value) => {
-                void composerFooterChrome.saveCommonPhrases(value === "visible");
-              }}
-            />
-          </div>
-        </div>
-
-        <div className="app-default-config-row" aria-label="输入框执行环境">
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">输入框执行环境</span>
-            <span className="app-default-config-row__hint">
-              主会话输入框底栏执行环境 / 连接方式设置（Claude Code、代理、Codex 等）
-            </span>
-          </div>
-          <div className="app-default-config-row__control">
-            <DefaultConfigOptionPick<"hidden" | "visible">
-              aria-label="输入框执行环境显示"
-              disabled={composerFooterChrome.loading || composerFooterChrome.saving}
-              value={composerFooterChrome.showComposerFooterRuntimeSettings ? "visible" : "hidden"}
-              options={[
-                { label: "不显示", value: "hidden" },
-                { label: "显示", value: "visible" },
-              ]}
-              onChange={(value) => {
-                void composerFooterChrome.saveRuntimeSettings(value === "visible");
-              }}
-            />
-          </div>
-        </div>
-
-        <div className="app-default-config-row" aria-label="输入框模型选择">
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">输入框模型选择</span>
-            <span className="app-default-config-row__hint">主会话输入框底栏模型选择器</span>
-          </div>
-          <div className="app-default-config-row__control">
-            <DefaultConfigOptionPick<"hidden" | "visible">
-              aria-label="输入框模型选择显示"
-              disabled={composerFooterChrome.loading || composerFooterChrome.saving}
-              value={composerFooterChrome.showComposerFooterModelPicker ? "visible" : "hidden"}
-              options={[
-                { label: "不显示", value: "hidden" },
-                { label: "显示", value: "visible" },
-              ]}
-              onChange={(value) => {
-                void composerFooterChrome.saveModelPicker(value === "visible");
-              }}
-            />
-          </div>
-        </div>
-
-        {defaultTerminal.isMac ? (
-          <div
-            className="app-default-config-row app-default-config-row--terminal"
-            aria-label="默认终端"
-          >
-            <div className="app-default-config-row__main">
-              <span className="app-default-config-row__title">默认终端</span>
-              <span className="app-default-config-row__hint">
-                在外部打开仓库目录时使用的 macOS 终端；可从本机已检测到的应用中任选一项
-              </span>
-            </div>
-            <div className="app-default-config-row__control app-default-config-row__control--terminal">
-              {defaultTerminal.detected.length > 0 ? (
-                <div className="app-default-config-terminal-picker">
-                  <Select
-                    className="app-default-config-terminal-select"
-                    aria-label="默认终端"
-                    placeholder="选择终端"
-                    loading={defaultTerminal.loading}
-                    disabled={defaultTerminal.loading || defaultTerminal.saving}
-                    value={defaultTerminal.selectedId ?? undefined}
-                    options={defaultTerminal.options}
-                    onChange={(value) => {
-                      void defaultTerminal.save(String(value));
-                    }}
-                  />
-                  <Button
-                    type="link"
-                    size="small"
-                    className="app-default-config-terminal-rescan"
-                    disabled={defaultTerminal.loading || defaultTerminal.saving}
-                    onClick={() => {
-                      void defaultTerminal.refresh();
-                    }}
+          <DefaultConfigRow
+            title="@ 快捷键"
+            hint="聚焦输入框时"
+            detail="聚焦输入框时按键插入 @ 提及（Esc 取消录制）"
+            layout="stack"
+            control={
+              <ul className="app-default-config-at-mention-shortcuts">
+                {atMentionShortcutRows.map((row) => (
+                  <li
+                    key={encodeAtMentionDefaultSelectValue(row.target)}
+                    className="app-default-config-at-mention-shortcuts__row"
                   >
-                    重新检测
-                  </Button>
-                </div>
-              ) : (
-                <div className="app-default-config-terminal-picker">
-                  <Typography.Text type="secondary" className="app-default-config-terminal-empty">
-                    {defaultTerminal.loading ? "正在检测终端…" : "未检测到可用的终端应用"}
-                  </Typography.Text>
-                  {!defaultTerminal.loading ? (
+                    <span className="app-default-config-at-mention-shortcuts__label">
+                      <span className="app-default-config-at-mention-shortcuts__group">{row.group}</span>
+                      {row.label}
+                    </span>
+                    <KeyShortcutCapture
+                      value={atMentionShortcuts.chordForTarget(row.target)}
+                      disabled={atMentionShortcuts.loading || atMentionShortcuts.saving}
+                      onChange={(chord) => {
+                        void atMentionShortcuts.saveForTarget(row.target, chord);
+                      }}
+                    />
+                  </li>
+                ))}
+              </ul>
+            }
+          />
+
+          <DefaultConfigRow
+            title="底栏按钮"
+            hint="主会话输入框"
+            detail="附件 ⌘I、截屏 F3 等快捷键在隐藏按钮后仍可用"
+            layout="stack"
+            control={
+              <DefaultConfigCheckboxGrid
+                ariaLabel="输入框底栏按钮显示"
+                disabled={composerFooterChrome.loading || composerFooterChrome.saving}
+                options={composerFooterOptions}
+                onToggle={handleComposerFooterToggle}
+              />
+            }
+          />
+        </>
+      ),
+    },
+    {
+      key: "topbar",
+      title: "顶栏",
+      content: (
+        <>
+          <DefaultConfigRow
+            title="仓库名称"
+            hint="点击复制路径"
+            detail="主会话顶栏左侧当前仓库 / 工作区名称"
+            control={
+              <DefaultConfigOptionPick<"hidden" | "visible">
+                aria-label="顶栏仓库名称显示"
+                disabled={topbarChrome.loading || topbarChrome.saving}
+                value={topbarChrome.showTopbarRepositoryName ? "visible" : "hidden"}
+                options={[
+                  { label: "隐藏", value: "hidden" },
+                  { label: "显示", value: "visible" },
+                ]}
+                onChange={(value) => {
+                  void topbarChrome.saveTopbarRepositoryName(value === "visible");
+                }}
+              />
+            }
+          />
+
+          <DefaultConfigRow
+            title="远程入口"
+            hint="中栏顶栏"
+            detail="钉钉 / WebSocket 开关与配置；创作台远程配置不受影响"
+            control={
+              <DefaultConfigOptionPick<"hidden" | "visible">
+                aria-label="远程入口顶栏显示"
+                disabled={topbarChrome.loading || topbarChrome.saving}
+                value={topbarChrome.showRemoteEntryTopbar ? "visible" : "hidden"}
+                options={[
+                  { label: "隐藏", value: "hidden" },
+                  { label: "显示", value: "visible" },
+                ]}
+                onChange={(value) => {
+                  void topbarChrome.saveRemoteEntry(value === "visible");
+                }}
+              />
+            }
+          />
+
+          <DefaultConfigRow
+            title="工具图标"
+            hint="默认均隐藏"
+            detail="主会话顶栏实验 / 诊断类图标；隐藏后部分仍可从「更多」打开"
+            layout="stack"
+            control={
+              <DefaultConfigCheckboxGrid
+                ariaLabel="顶栏工具图标显示"
+                disabled={topbarChrome.loading || topbarChrome.saving}
+                options={topbarToolOptions}
+                onToggle={handleTopbarToolToggle}
+              />
+            }
+          />
+        </>
+      ),
+    },
+    {
+      key: "runtime",
+      title: "运行",
+      content: (
+        <>
+          <DefaultConfigRow
+            title="派发历史"
+            hint="左栏默认天数"
+            detail="左栏派发任务默认查询天数；列表头可临时切换"
+            control={
+              <Select
+                size="small"
+                aria-label="派发任务默认历史天数"
+                disabled={execEnvDispatchHistory.loading || execEnvDispatchHistory.saving}
+                value={execEnvDispatchHistory.days}
+                options={EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAY_OPTIONS.map((day) => ({
+                  value: day,
+                  label: `${day} 天`,
+                }))}
+                onChange={(value) => {
+                  void execEnvDispatchHistory.save(value);
+                }}
+              />
+            }
+          />
+
+          {defaultTerminal.isMac ? (
+            <DefaultConfigRow
+              title="默认终端"
+              hint="外部打开目录"
+              detail="在外部打开仓库目录时使用的 macOS 终端"
+              layout="stack"
+              control={
+                defaultTerminal.detected.length > 0 ? (
+                  <div className="app-default-config-terminal-picker">
+                    <Select
+                      className="app-default-config-terminal-select"
+                      aria-label="默认终端"
+                      placeholder="选择终端"
+                      loading={defaultTerminal.loading}
+                      disabled={defaultTerminal.loading || defaultTerminal.saving}
+                      value={defaultTerminal.selectedId ?? undefined}
+                      options={defaultTerminal.options}
+                      onChange={(value) => {
+                        void defaultTerminal.save(String(value));
+                      }}
+                    />
                     <Button
                       type="link"
                       size="small"
                       className="app-default-config-terminal-rescan"
+                      disabled={defaultTerminal.loading || defaultTerminal.saving}
                       onClick={() => {
                         void defaultTerminal.refresh();
                       }}
                     >
                       重新检测
                     </Button>
-                  ) : null}
+                  </div>
+                ) : (
+                  <div className="app-default-config-terminal-picker">
+                    <Typography.Text type="secondary" className="app-default-config-terminal-empty">
+                      {defaultTerminal.loading ? "正在检测终端…" : "未检测到可用的终端应用"}
+                    </Typography.Text>
+                    {!defaultTerminal.loading ? (
+                      <Button
+                        type="link"
+                        size="small"
+                        className="app-default-config-terminal-rescan"
+                        onClick={() => {
+                          void defaultTerminal.refresh();
+                        }}
+                      >
+                        重新检测
+                      </Button>
+                    ) : null}
+                  </div>
+                )
+              }
+            />
+          ) : null}
+        </>
+      ),
+    },
+    {
+      key: "dev",
+      title: "开发实验",
+      content: (
+        <>
+          <DefaultConfigRow
+            title="反馈神经网"
+            hint="全链路自我优化"
+            detail="在全链路分析 · 洞察中启用轮次分析 → 自我优化闭环；默认关闭"
+            control={
+              <DefaultConfigOptionPick<"off" | "on">
+                aria-label="反馈神经网开发开关"
+                disabled={feedbackLoop.loading || feedbackLoop.saving}
+                value={feedbackLoop.enabled ? "on" : "off"}
+                options={[
+                  { label: "关", value: "off" },
+                  { label: "开", value: "on" },
+                ]}
+                onChange={(value) => {
+                  void feedbackLoop.saveEnabled(value === "on");
+                }}
+              />
+            }
+          />
+
+          <DefaultConfigRow
+            title="最大循环"
+            hint="1–5 轮"
+            control={
+              <DefaultConfigOptionPick<"1" | "2" | "3" | "4" | "5">
+                aria-label="反馈神经网最大循环次数"
+                disabled={feedbackLoop.loading || feedbackLoop.saving || !feedbackLoop.enabled}
+                value={String(feedbackLoop.maxCycles) as "1" | "2" | "3" | "4" | "5"}
+                options={[
+                  { label: "1", value: "1" },
+                  { label: "2", value: "2" },
+                  { label: "3", value: "3" },
+                  { label: "4", value: "4" },
+                  { label: "5", value: "5" },
+                ]}
+                onChange={(value) => {
+                  void feedbackLoop.saveMaxCycles(Number(value));
+                }}
+              />
+            }
+          />
+
+          <DefaultConfigRow
+            title="闭环选项"
+            hint="开启后可勾选"
+            layout="stack"
+            control={
+              <DefaultConfigCheckboxGrid
+                ariaLabel="反馈神经网闭环选项"
+                disabled={feedbackLoop.loading || feedbackLoop.saving || !feedbackLoop.enabled}
+                options={feedbackBehaviorOptions.map((item) => {
+                  const artifactGated =
+                    item.value === "auto-apply" ||
+                    item.value === "auto-verify" ||
+                    item.value === "auto-rollback";
+                  const globalGated = item.value === "inject-global";
+                  return {
+                    ...item,
+                    checked: artifactGated
+                      ? item.checked && feedbackLoop.optimizeConfigArtifacts
+                      : globalGated
+                        ? item.checked && feedbackLoop.globalRules.length > 0
+                        : item.checked,
+                    disabled:
+                      artifactGated && !feedbackLoop.optimizeConfigArtifacts
+                        ? true
+                        : globalGated && feedbackLoop.globalRules.length === 0
+                          ? true
+                          : false,
+                  };
+                })}
+                onToggle={handleFeedbackBehaviorToggle}
+              />
+            }
+          />
+
+          {feedbackLoop.globalRules.length > 0 ? (
+            <div className="app-default-config-global-rules" aria-label="全局神经网规则列表">
+              {feedbackLoop.globalRules.map((rule) => (
+                <div key={rule.id} className="app-default-config-global-rule">
+                  <Checkbox
+                    checked={rule.enabled}
+                    disabled={feedbackLoop.saving}
+                    onChange={(e) => {
+                      void setFeedbackGlobalRuleEnabled(rule.id, e.target.checked).then(() =>
+                        feedbackLoop.refresh(),
+                      );
+                    }}
+                  />
+                  <div className="app-default-config-global-rule__body">
+                    <span className="app-default-config-global-rule__title">{rule.title}</span>
+                    <span className="app-default-config-global-rule__preview">{rule.body}</span>
+                  </div>
+                  <Button
+                    size="small"
+                    type="text"
+                    danger
+                    disabled={feedbackLoop.saving}
+                    onClick={() => {
+                      void removeFeedbackGlobalRule(rule.id).then(() => feedbackLoop.refresh());
+                    }}
+                  >
+                    删除
+                  </Button>
                 </div>
-              )}
+              ))}
             </div>
-          </div>
-        ) : null}
-      </section>
+          ) : (
+            <p className="app-default-config-row__hint app-default-config-global-rules-empty">
+              暂无全局规则。在全链路分析 → 配置补丁中提升全局。
+            </p>
+          )}
+        </>
+      ),
+    },
+  ];
 
-      <section className="app-default-config-section" aria-label="开发实验功能">
-        <Typography.Title level={5} className="app-default-config-section__title">
-          开发实验
-        </Typography.Title>
-
-        <div className="app-default-config-row" aria-label="反馈神经网">
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">反馈神经网</span>
-            <span className="app-default-config-row__hint">
-              在全链路分析 · 洞察中启用轮次分析 → 自我优化 → 效率/速度/质量比对 → 再优化闭环；默认关闭
-            </span>
-          </div>
-          <div className="app-default-config-row__control">
-            <DefaultConfigOptionPick<"off" | "on">
-              aria-label="反馈神经网开发开关"
-              disabled={feedbackLoop.loading || feedbackLoop.saving}
-              value={feedbackLoop.enabled ? "on" : "off"}
-              options={[
-                { label: "关闭", value: "off" },
-                { label: "开启", value: "on" },
-              ]}
-              onChange={(value) => {
-                void feedbackLoop.saveEnabled(value === "on");
-              }}
-            />
-          </div>
-        </div>
-
-        <div className="app-default-config-row" aria-label="反馈神经网循环次数">
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">最大循环次数</span>
-            <span className="app-default-config-row__hint">自我优化 → 比对 的最大轮数（1–5）</span>
-          </div>
-          <div className="app-default-config-row__control">
-            <DefaultConfigOptionPick<"1" | "2" | "3" | "4" | "5">
-              aria-label="反馈神经网最大循环次数"
-              disabled={feedbackLoop.loading || feedbackLoop.saving || !feedbackLoop.enabled}
-              value={String(feedbackLoop.maxCycles) as "1" | "2" | "3" | "4" | "5"}
-              options={[
-                { label: "1 轮", value: "1" },
-                { label: "2 轮", value: "2" },
-                { label: "3 轮", value: "3" },
-                { label: "4 轮", value: "4" },
-                { label: "5 轮", value: "5" },
-              ]}
-              onChange={(value) => {
-                void feedbackLoop.saveMaxCycles(Number(value));
-              }}
-            />
-          </div>
-        </div>
-
-        <div className="app-default-config-row" aria-label="反馈神经网自动启动">
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">检测到警告时自动启动</span>
-            <span className="app-default-config-row__hint">
-              存在警告/严重项时自动开始第一轮优化（无需打开洞察 tab，后台持续跟踪）
-            </span>
-          </div>
-          <div className="app-default-config-row__control">
-            <DefaultConfigOptionPick<"off" | "on">
-              aria-label="反馈神经网自动启动"
-              disabled={feedbackLoop.loading || feedbackLoop.saving || !feedbackLoop.enabled}
-              value={feedbackLoop.autoStart ? "on" : "off"}
-              options={[
-                { label: "关闭", value: "off" },
-                { label: "开启", value: "on" },
-              ]}
-              onChange={(value) => {
-                void feedbackLoop.saveAutoStart(value === "on");
-              }}
-            />
-          </div>
-        </div>
-
-        <div className="app-default-config-row" aria-label="反馈神经网收敛早停">
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">收敛早停</span>
-            <span className="app-default-config-row__hint">
-              指标改善趋于平稳或连续两轮无提升时提前结束循环
-            </span>
-          </div>
-          <div className="app-default-config-row__control">
-            <DefaultConfigOptionPick<"off" | "on">
-              aria-label="反馈神经网收敛早停"
-              disabled={feedbackLoop.loading || feedbackLoop.saving || !feedbackLoop.enabled}
-              value={feedbackLoop.earlyStopConvergence ? "on" : "off"}
-              options={[
-                { label: "关闭", value: "off" },
-                { label: "开启", value: "on" },
-              ]}
-              onChange={(value) => {
-                void feedbackLoop.saveEarlyStopConvergence(value === "on");
-              }}
-            />
-          </div>
-        </div>
-
-        <div className="app-default-config-row" aria-label="反馈神经网写入常用语">
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">闭环完成写入常用语</span>
-            <span className="app-default-config-row__hint">
-              闭环结束时自动将「神经网习惯」写入 Composer 常用语（可一键插入输入框）
-            </span>
-          </div>
-          <div className="app-default-config-row__control">
-            <DefaultConfigOptionPick<"off" | "on">
-              aria-label="反馈神经网写入常用语"
-              disabled={feedbackLoop.loading || feedbackLoop.saving || !feedbackLoop.enabled}
-              value={feedbackLoop.autoSaveHabitsToComposer ? "on" : "off"}
-              options={[
-                { label: "关闭", value: "off" },
-                { label: "开启", value: "on" },
-              ]}
-              onChange={(value) => {
-                void feedbackLoop.saveAutoSaveHabitsToComposer(value === "on");
-              }}
-            />
-          </div>
-        </div>
-
-        <div className="app-default-config-row" aria-label="反馈神经网注入 system prompt">
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">习惯注入 System Prompt</span>
-            <span className="app-default-config-row__hint">
-              会话 spawn 时通过 Claude CLI --append-system-prompt 自动追加本仓库神经网习惯（需重启会话生效）
-            </span>
-          </div>
-          <div className="app-default-config-row__control">
-            <DefaultConfigOptionPick<"off" | "on">
-              aria-label="反馈神经网注入 system prompt"
-              disabled={feedbackLoop.loading || feedbackLoop.saving || !feedbackLoop.enabled}
-              value={feedbackLoop.injectHabitsToSystemPrompt ? "on" : "off"}
-              options={[
-                { label: "关闭", value: "off" },
-                { label: "开启", value: "on" },
-              ]}
-              onChange={(value) => {
-                void feedbackLoop.saveInjectHabitsToSystemPrompt(value === "on");
-              }}
-            />
-          </div>
-        </div>
-
-        <div className="app-default-config-row" aria-label="反馈神经网优化配置 Artifact">
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">优化 CLAUDE.md / rules / MCP / skills</span>
-            <span className="app-default-config-row__hint">
-              根据会话洞察生成可审阅的配置补丁，直接改进 Claude Code 持久配置（默认开启，应用前需确认）
-            </span>
-          </div>
-          <div className="app-default-config-row__control">
-            <DefaultConfigOptionPick<"off" | "on">
-              aria-label="反馈神经网优化配置 Artifact"
-              disabled={feedbackLoop.loading || feedbackLoop.saving || !feedbackLoop.enabled}
-              value={feedbackLoop.optimizeConfigArtifacts ? "on" : "off"}
-              options={[
-                { label: "关闭", value: "off" },
-                { label: "开启", value: "on" },
-              ]}
-              onChange={(value) => {
-                void feedbackLoop.saveOptimizeConfigArtifacts(value === "on");
-              }}
-            />
-          </div>
-        </div>
-
-        <div className="app-default-config-row" aria-label="反馈神经网自动应用补丁">
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">自动写入配置补丁</span>
-            <span className="app-default-config-row__hint">
-              worker 解析出非破坏性补丁（追加章节 / 禁用 MCP）后自动落盘并备份，无需手动审阅（默认关闭）
-            </span>
-          </div>
-          <div className="app-default-config-row__control">
-            <DefaultConfigOptionPick<"off" | "on">
-              aria-label="反馈神经网自动应用补丁"
-              disabled={
-                feedbackLoop.loading ||
-                feedbackLoop.saving ||
-                !feedbackLoop.enabled ||
-                !feedbackLoop.optimizeConfigArtifacts
-              }
-              value={feedbackLoop.autoApplyConfigPatches ? "on" : "off"}
-              options={[
-                { label: "关闭", value: "off" },
-                { label: "开启", value: "on" },
-              ]}
-              onChange={(value) => {
-                void feedbackLoop.saveAutoApplyConfigPatches(value === "on");
-              }}
-            />
-          </div>
-        </div>
-
-        <div className="app-default-config-row" aria-label="反馈神经网自动验证轮次">
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">自动触发验证轮次</span>
-            <span className="app-default-config-row__hint">
-              补丁应用后自动比对当前指标，将补丁效果纳入循环评分（默认关闭）
-            </span>
-          </div>
-          <div className="app-default-config-row__control">
-            <DefaultConfigOptionPick<"off" | "on">
-              aria-label="反馈神经网自动验证轮次"
-              disabled={
-                feedbackLoop.loading ||
-                feedbackLoop.saving ||
-                !feedbackLoop.enabled ||
-                !feedbackLoop.optimizeConfigArtifacts
-              }
-              value={feedbackLoop.autoVerifyAfterApply ? "on" : "off"}
-              options={[
-                { label: "关闭", value: "off" },
-                { label: "开启", value: "on" },
-              ]}
-              onChange={(value) => {
-                void feedbackLoop.saveAutoVerifyAfterApply(value === "on");
-              }}
-            />
-          </div>
-        </div>
-
-        <div className="app-default-config-row" aria-label="反馈神经网评分回归自动回滚">
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">评分回归自动回滚</span>
-            <span className="app-default-config-row__hint">
-              闭环评分低于本轮基线时，自动回滚本轮应用的补丁（默认关闭）
-            </span>
-          </div>
-          <div className="app-default-config-row__control">
-            <DefaultConfigOptionPick<"off" | "on">
-              aria-label="反馈神经网评分回归自动回滚"
-              disabled={
-                feedbackLoop.loading ||
-                feedbackLoop.saving ||
-                !feedbackLoop.enabled ||
-                !feedbackLoop.optimizeConfigArtifacts
-              }
-              value={feedbackLoop.autoRollbackOnRegression ? "on" : "off"}
-              options={[
-                { label: "关闭", value: "off" },
-                { label: "开启", value: "on" },
-              ]}
-              onChange={(value) => {
-                void feedbackLoop.saveAutoRollbackOnRegression(value === "on");
-              }}
-            />
-          </div>
-        </div>
-
-        <div className="app-default-config-row" aria-label="注入全局神经网规则">
-          <div className="app-default-config-row__main">
-            <span className="app-default-config-row__title">注入全局规则到 spawn</span>
-            <span className="app-default-config-row__hint">
-              将从有效补丁提升的全局规则追加到 Claude CLI `--append-system-prompt`（跨仓库生效，默认关闭）
-            </span>
-          </div>
-          <div className="app-default-config-row__control">
-            <DefaultConfigOptionPick<"off" | "on">
-              aria-label="注入全局神经网规则"
-              disabled={
-                feedbackLoop.loading ||
-                feedbackLoop.saving ||
-                feedbackLoop.globalRules.length === 0
-              }
-              value={feedbackLoop.injectGlobalRules ? "on" : "off"}
-              options={[
-                { label: "关闭", value: "off" },
-                { label: "开启", value: "on" },
-              ]}
-              onChange={(value) => {
-                void feedbackLoop.saveInjectGlobalRules(value === "on");
-              }}
-            />
-          </div>
-        </div>
-
-        {feedbackLoop.globalRules.length > 0 ? (
-          <div className="app-default-config-global-rules" aria-label="全局神经网规则列表">
-            {feedbackLoop.globalRules.map((rule) => (
-              <div key={rule.id} className="app-default-config-global-rule">
-                <Checkbox
-                  checked={rule.enabled}
-                  disabled={feedbackLoop.saving}
-                  onChange={(e) => {
-                    void setFeedbackGlobalRuleEnabled(rule.id, e.target.checked).then(() =>
-                      feedbackLoop.refresh(),
-                    );
-                  }}
-                />
-                <div className="app-default-config-global-rule__body">
-                  <span className="app-default-config-global-rule__title">{rule.title}</span>
-                  <span className="app-default-config-global-rule__preview">{rule.body}</span>
-                </div>
-                <Button
-                  size="small"
-                  type="text"
-                  danger
-                  disabled={feedbackLoop.saving}
-                  onClick={() => {
-                    void removeFeedbackGlobalRule(rule.id).then(() => feedbackLoop.refresh());
-                  }}
-                >
-                  删除
-                </Button>
-              </div>
-            ))}
-          </div>
-        ) : (
-          <p className="app-default-config-row__hint app-default-config-global-rules-empty">
-            暂无全局规则。在全链路分析 → 配置补丁中，对已应用且效果良好的补丁点「提升全局」。
-          </p>
-        )}
-      </section>
+  return (
+    <div className="app-default-config-panel">
+      {sections.map((section) => (
+        <DefaultConfigSection key={section.key} title={section.title}>
+          {section.content}
+        </DefaultConfigSection>
+      ))}
     </div>
   );
 }
