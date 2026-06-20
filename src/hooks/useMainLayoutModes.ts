@@ -27,6 +27,7 @@ import {
 } from "../utils/projectSessionAnchor";
 import { repositorySessionTabDisplayName } from "../utils/repositoryType";
 import { usePersistedMainLayoutSiderWidths } from "./usePersistedMainLayoutSiderWidths";
+import { useMainWindowMinLogicalSize } from "./useMainWindowMinLogicalSize";
 import { listProjects } from "../services/projectState";
 import {
   loadRightPanelDefaultCollapsed,
@@ -134,6 +135,14 @@ export function useMainLayoutModes({
   } = usePersistedMainLayoutSiderWidths({
     leftCollapsed: collapsed,
     rightCollapsed: effectiveRightCollapsed,
+  });
+
+  useMainWindowMinLogicalSize({
+    paneCount,
+    leftCollapsed: collapsed,
+    rightCollapsed: effectiveRightCollapsed,
+    leftWidthPx: mainLayoutLeftWidthPx,
+    rightWidthPx: mainLayoutRightWidthPx,
   });
 
   /** 进入多屏前（paneCount=1）的窗口快照，关闭多屏时恢复。 */

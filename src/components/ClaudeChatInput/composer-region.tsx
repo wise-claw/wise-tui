@@ -2597,6 +2597,19 @@ function ComposerInner({
             onBreakdownOpen={() => void ensureBreakdown()}
           />
         ) : null}
+        {isSessionBusy ? (
+          <HoverHint title="结束当前运行" placement="top">
+            <Button
+              type="text"
+              size="small"
+              className="app-claude-semi-footer-stop-btn"
+              aria-label="结束当前运行"
+              onClick={() => _onCancel()}
+            >
+              结束
+            </Button>
+          </HoverHint>
+        ) : null}
       </div>
     );
   }, [
@@ -2612,6 +2625,7 @@ function ComposerInner({
     handleFileAttach,
     handleScreenshot,
     isSessionBusy,
+    _onCancel,
     speechDictation.engine,
     speechDictation.listening,
     speechDictation.supported,
@@ -2625,7 +2639,7 @@ function ComposerInner({
     voiceSettingsPanel,
   ]);
 
-  /** 与 Semi 底栏同一行：结束（占用中）+ 模型选择 + 发送（Semi 在 generating 时会拦截发送，故用独立结束 + generating=false） */
+  /** 与 Semi 底栏同一行：常用语 + 模型选择 + 发送（结束按钮在左侧 configure 区） */
   const renderSemiComposerActionArea = useCallback(
     ({ menuItem, className }: { menuItem: React.ReactNode[]; className: string }) => (
       <div
@@ -2633,19 +2647,6 @@ function ComposerInner({
         onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
       >
-        {isSessionBusy ? (
-          <HoverHint title="结束当前运行" placement="top">
-            <Button
-              type="text"
-              size="small"
-              className="app-claude-semi-footer-stop-btn"
-              aria-label="结束当前运行"
-              onClick={() => _onCancel()}
-            >
-              结束
-            </Button>
-          </HoverHint>
-        ) : null}
         {composerFooterChrome.showComposerFooterCommonPhrases ? (
           <ComposerCommonPhrasesManageTrigger
             phrases={composerCommonPhrases}
@@ -2694,7 +2695,6 @@ function ComposerInner({
     ),
     [
       isSessionBusy,
-      _onCancel,
       session.connectionKind,
       defaultConnectionKind,
       onSessionConnectionKindChange,

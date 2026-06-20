@@ -36,7 +36,7 @@
 
 .app-claude-sessions__dual-panes {
   /* 与 `src/constants/mainLayoutWidths.ts` 中 MAIN_LAYOUT_DUAL_SESSION_MIN_WIDTH_PX 一致 */
-  --app-dual-pane-session-min-width: 460px;
+  --app-dual-pane-session-min-width: 420px;
   display: flex;
   flex: 1 1 0;
   min-height: 0;
@@ -69,7 +69,7 @@
 
 .app-claude-sessions__multi-panes {
   /* 与 `src/constants/mainLayoutWidths.ts` 中 MAIN_LAYOUT_MULTI_PANE_MIN_WIDTH_PX 一致 */
-  --app-multi-pane-min-width: 460px;
+  --app-multi-pane-min-width: 420px;
   position: relative;
   display: grid;
   gap: 1px;
@@ -77,6 +77,11 @@
   min-height: 0;
   min-width: 0;
   background: var(--ant-color-split);
+}
+
+/* 双屏：列宽由 JS 像素控制，避免 fr + min-width 与分隔条错位 */
+.app-claude-sessions__multi-panes--two-pane .app-claude-sessions__pane {
+  min-width: 0;
 }
 
 .app-claude-sessions__two-pane-resizer {

@@ -27,7 +27,7 @@ import {
 import type { ClaudeSessionConnectionKind } from "../../constants/claudeConnection";
 import type { SessionExecutionEngine } from "../../types";
 import type { RoleTagOption, RepositoryMentionOption } from "../../utils/projectRoleTagOptions";
-import { paneGridDimensions, type PaneCount, type PaneSlot, paneSlotRuntimeOverride } from "../../constants/mainLayoutWidths";
+import { MAIN_LAYOUT_MULTI_PANE_MIN_WIDTH_PX, paneGridDimensions, type PaneCount, type PaneSlot, paneSlotRuntimeOverride } from "../../constants/mainLayoutWidths";
 import { useInViewActive } from "../../hooks/useInView";
 import { useDockSlice } from "../../hooks/useDockSlice";
 import { isProjectRootSessionDisplayName } from "../../utils/repositoryMainSessionBinding";
@@ -37,13 +37,19 @@ import {
   shouldLazyMountMultiPaneExtraCells,
   shouldUseOffscreenRunningShell,
 } from "../../utils/multiPanePerformance";
+import {
+  clampTwoPaneSplitRatio,
+  DEFAULT_TWO_PANE_SPLIT_RATIO,
+  formatTwoPaneSplitGridTemplateColumnsPx,
+  resolveTwoPaneLeftWidthPx,
+} from "../../utils/twoPaneSplitRatio";
 import { ClaudeSessionChatWithDock } from "./ClaudeSessionChatWithDock";
 import { MultiPaneOffscreenRunningPane } from "./MultiPaneOffscreenRunningPane";
 import { runPaneCreateTask } from "./paneCreateLoading";
 import type { RefreshHistorySessionsScope } from "./ClaudeChat";
 import type { PaneAuxLayout, ResolvePaneAuxLayout } from "./paneAuxLayout";
 
-const TWO_PANE_MIN_WIDTH_PX = 460;
+const TWO_PANE_MIN_WIDTH_PX = MAIN_LAYOUT_MULTI_PANE_MIN_WIDTH_PX;
 
 interface PaneRepoTreeNode {
   title: string;
@@ -856,49 +862,40 @@ export const ClaudeMultiPaneGrid = memo(function ClaudeMultiPaneGrid({
   );
   const primaryPaneAuxLayout = resolveLayout(0);
   const multiPanesRef = useRef<HTMLDivElement | null>(null);
-  const [twoPaneLeftWidthPx, setTwoPaneLeftWidthPx] = useState<number | null>(null);
+  const [twoPaneSplitRatio, setTwoPaneSplitRatio] = useState(DEFAULT_TWO_PANE_SPLIT_RATIO);
+  const [twoPaneContainerWidthPx, setTwoPaneContainerWidthPx] = useState(0);
+  const prevPaneCountRef = useRef(paneCount);
 
   const { rows, cols } = paneGridDimensions(paneCount);
 
-  const resolveTwoPaneLeftWidthPx = useCallback(() => {
-    const containerWidth = multiPanesRef.current?.clientWidth ?? 0;
-    if (containerWidth <= 0) return null;
-    const min = TWO_PANE_MIN_WIDTH_PX;
-    const max = Math.max(min, containerWidth - TWO_PANE_MIN_WIDTH_PX);
-    const fallback = Math.round(containerWidth / 2);
-    const base = twoPaneLeftWidthPx ?? fallback;
-    return Math.min(max, Math.max(min, base));
-  }, [twoPaneLeftWidthPx]);
-
-  const twoPaneLeft = paneCount === 2 ? resolveTwoPaneLeftWidthPx() : null;
+  const twoPaneLeftWidthPx =
+    paneCount === 2 && twoPaneContainerWidthPx > 0
+      ? resolveTwoPaneLeftWidthPx(
+          twoPaneSplitRatio,
+          twoPaneContainerWidthPx,
+          TWO_PANE_MIN_WIDTH_PX,
+        )
+      : null;
 
   const handleResetTwoPaneSplit = useCallback(() => {
-    if (paneCount !== 2) return;
-    const containerWidth = multiPanesRef.current?.clientWidth ?? 0;
-    if (containerWidth <= 0) return;
-    setTwoPaneLeftWidthPx(Math.round(containerWidth / 2));
-  }, [paneCount]);
+    setTwoPaneSplitRatio(DEFAULT_TWO_PANE_SPLIT_RATIO);
+  }, []);
 
   const handleStartTwoPaneResize = useCallback(
     (event: ReactPointerEvent<HTMLDivElement>) => {
       if (paneCount !== 2) return;
       const container = multiPanesRef.current;
       if (!container) return;
-      const containerWidth = container.clientWidth;
-      if (containerWidth <= 0) return;
-      const min = TWO_PANE_MIN_WIDTH_PX;
-      const max = Math.max(min, containerWidth - TWO_PANE_MIN_WIDTH_PX);
-      const startLeft = resolveTwoPaneLeftWidthPx() ?? Math.round(containerWidth / 2);
-      const startX = event.clientX;
       const pointerId = event.pointerId;
       event.preventDefault();
       container.setPointerCapture(pointerId);
       const previousUserSelect = document.body.style.userSelect;
       document.body.style.userSelect = "none";
       const onMove = (moveEvent: PointerEvent) => {
-        const delta = moveEvent.clientX - startX;
-        const next = Math.min(max, Math.max(min, Math.round(startLeft + delta)));
-        setTwoPaneLeftWidthPx(next);
+        const rect = container.getBoundingClientRect();
+        if (rect.width <= 0) return;
+        const ratio = (moveEvent.clientX - rect.left) / rect.width;
+        setTwoPaneSplitRatio(clampTwoPaneSplitRatio(ratio, rect.width, TWO_PANE_MIN_WIDTH_PX));
       };
       const finish = () => {
         document.body.style.userSelect = previousUserSelect;
@@ -918,27 +915,55 @@ export const ClaudeMultiPaneGrid = memo(function ClaudeMultiPaneGrid({
       window.addEventListener("pointerup", onUp, { once: true });
       window.addEventListener("pointercancel", onUp, { once: true });
     },
-    [paneCount, resolveTwoPaneLeftWidthPx],
+    [paneCount],
   );
 
   useEffect(() => {
+    const prev = prevPaneCountRef.current;
+    prevPaneCountRef.current = paneCount;
+    if (paneCount === 2 && prev !== 2) {
+      setTwoPaneSplitRatio(DEFAULT_TWO_PANE_SPLIT_RATIO);
+    }
+  }, [paneCount]);
+
+  useEffect(() => {
     if (paneCount !== 2) {
-      setTwoPaneLeftWidthPx(null);
+      setTwoPaneContainerWidthPx(0);
       return;
     }
-    const next = resolveTwoPaneLeftWidthPx();
-    if (next != null) setTwoPaneLeftWidthPx(next);
-  }, [paneCount, resolveTwoPaneLeftWidthPx]);
+    const el = multiPanesRef.current;
+    if (!el || typeof ResizeObserver === "undefined") return;
+
+    const syncContainerWidth = (width: number) => {
+      if (width <= 0) return;
+      setTwoPaneContainerWidthPx(width);
+      setTwoPaneSplitRatio((current) =>
+        clampTwoPaneSplitRatio(current, width, TWO_PANE_MIN_WIDTH_PX),
+      );
+    };
+
+    syncContainerWidth(el.clientWidth);
+    const ro = new ResizeObserver(() => {
+      syncContainerWidth(el.clientWidth);
+    });
+
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [paneCount]);
+
+  const twoPaneGridColumns =
+    paneCount === 2 && twoPaneLeftWidthPx != null
+      ? formatTwoPaneSplitGridTemplateColumnsPx(twoPaneLeftWidthPx)
+      : `repeat(${cols}, minmax(0, 1fr))`;
 
   return (
     <div
       ref={multiPanesRef}
-      className="app-claude-sessions__multi-panes"
+      className={`app-claude-sessions__multi-panes${
+        paneCount === 2 ? " app-claude-sessions__multi-panes--two-pane" : ""
+      }`}
       style={{
-        gridTemplateColumns:
-          paneCount === 2 && twoPaneLeft
-            ? `${twoPaneLeft}px minmax(${TWO_PANE_MIN_WIDTH_PX}px, 1fr)`
-            : `repeat(${cols}, 1fr)`,
+        gridTemplateColumns: twoPaneGridColumns,
         gridTemplateRows: rows > 1 ? `repeat(${rows}, 1fr)` : undefined,
       }}
     >
@@ -983,10 +1008,10 @@ export const ClaudeMultiPaneGrid = memo(function ClaudeMultiPaneGrid({
           paneAuxLayout={resolveLayout(paneIdx + 1)}
         />
       ))}
-      {paneCount === 2 ? (
+      {paneCount === 2 && twoPaneLeftWidthPx != null ? (
         <div
           className="app-claude-sessions__two-pane-resizer"
-          style={{ left: twoPaneLeft ? `${twoPaneLeft}px` : "50%" }}
+          style={{ left: `${twoPaneLeftWidthPx}px` }}
           onPointerDown={handleStartTwoPaneResize}
           onDoubleClick={handleResetTwoPaneSplit}
           role="separator"

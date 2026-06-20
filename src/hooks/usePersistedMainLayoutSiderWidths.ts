@@ -92,14 +92,6 @@ export function usePersistedMainLayoutSiderWidths(options: {
     clampBothToViewport();
   }, [leftCollapsed, rightCollapsed, clampBothToViewport]);
 
-  useEffect(() => {
-    const onResize = () => {
-      clampBothToViewport();
-    };
-    window.addEventListener("resize", onResize);
-    return () => window.removeEventListener("resize", onResize);
-  }, [clampBothToViewport]);
-
   const setLeftWidthPx = useCallback((next: number) => {
     if (typeof window === "undefined") return;
     const inner = window.innerWidth;

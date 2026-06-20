@@ -1,4 +1,4 @@
-import { editor as MonacoEditorNamespace, type editor, Selection } from "monaco-editor";
+import type { editor, Selection } from "monaco-editor";
 import { clampMonacoSelectionToolbarPosition } from "./clampMonacoSelectionToolbarPosition";
 import type { MonacoSelectionToolbarViewportPosition } from "./monacoSelectionToolbarPosition";
 
@@ -42,7 +42,9 @@ function resolveToolbarAnchor(
   const dom = codeEditor.getDomNode();
   if (!dom) return null;
   const rect = dom.getBoundingClientRect();
-  const lineHeight = codeEditor.getOption(MonacoEditorNamespace.EditorOption.lineHeight) as number;
+  // EditorOption.lineHeight 枚举值为 75（monaco-editor 源码 super(75, 'lineHeight', ...)），
+  // 用数值常量避免在模块顶层运行时 import monaco-editor 命名空间（否则无 window 的测试环境加载即崩溃）。
+  const lineHeight = codeEditor.getOption(75 as editor.EditorOption) as number;
   return clampMonacoSelectionToolbarPosition({
     top: rect.top + anchor.top + lineHeight + 4,
     left: rect.left + anchor.left,

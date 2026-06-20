@@ -180,7 +180,7 @@ export const PANE_COUNT_OPTIONS: readonly PaneCount[] = [1, 2, 4, 6, 8] as const
 export const PANE_COUNT_CYCLE_ORDER: readonly PaneCount[] = [1, 2, 4, 6, 8] as const;
 
 /** 多屏模式下每个窗格的最小宽度（与 CSS --app-multi-pane-min-width 一致）。 */
-export const MAIN_LAYOUT_MULTI_PANE_MIN_WIDTH_PX = 460;
+export const MAIN_LAYOUT_MULTI_PANE_MIN_WIDTH_PX = 420;
 
 /** 窗格之间的分隔间距（CSS grid gap）。 */
 export const MAIN_LAYOUT_MULTI_PANE_GAP_PX = 1;
@@ -233,6 +233,31 @@ export function computeMinLogicalInnerWidthForMultiPaneLayout(
     (!options.leftCollapsed ? MAIN_LAYOUT_RESIZE_HANDLE_PX : 0) +
     (!options.rightCollapsed ? MAIN_LAYOUT_RESIZE_HANDLE_PX : 0);
   const center = computeMinLogicalCenterWidthForPaneCount(count);
+  return left + center + right + handleGutter;
+}
+
+/** 主窗口逻辑最小宽度：左/右栏当前宽度（收起为 0）+ 中栏最小宽度 + 拖动手柄。 */
+export function computeMainWindowMinLogicalWidth(options: {
+  paneCount: PaneCount;
+  leftCollapsed: boolean;
+  rightCollapsed: boolean;
+  leftWidthPx?: number;
+  rightWidthPx?: number;
+}): number {
+  const paneCount = options.paneCount <= 1 ? 1 : options.paneCount;
+  const left = options.leftCollapsed
+    ? 0
+    : (options.leftWidthPx ?? MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX);
+  const right = options.rightCollapsed
+    ? 0
+    : (options.rightWidthPx ?? MAIN_LAYOUT_RIGHT_SIDER_WIDTH_PX);
+  const handleGutter =
+    (!options.leftCollapsed ? MAIN_LAYOUT_RESIZE_HANDLE_PX : 0) +
+    (!options.rightCollapsed ? MAIN_LAYOUT_RESIZE_HANDLE_PX : 0);
+  const center =
+    paneCount <= 1
+      ? MAIN_LAYOUT_CENTER_MIN_WIDTH_WHILE_RESIZE_PX
+      : computeMinLogicalCenterWidthForPaneCount(paneCount);
   return left + center + right + handleGutter;
 }
 

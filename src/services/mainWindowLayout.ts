@@ -1,6 +1,7 @@
 import { LogicalSize, PhysicalSize } from "@tauri-apps/api/dpi";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import {
+  computeMainWindowMinLogicalWidth,
   computeDualPaneTargetCenterLogical,
   computeMultiPaneTargetCenterLogical,
   MAIN_LAYOUT_DUAL_EXPAND_INNER_WIDTH_BUFFER_PX,
@@ -48,6 +49,22 @@ export async function setMainWindowInnerSize(width: number, height: number): Pro
 export async function setMainWindowLogicalInnerSize(width: number, height: number): Promise<void> {
   const win = getCurrentWindow();
   await win.setSize(new LogicalSize(Math.round(width), Math.round(height)));
+}
+
+/** 按当前三栏布局同步主窗口逻辑最小尺寸（仅宽度由布局决定）。 */
+export async function syncMainWindowMinLogicalSize(options: {
+  paneCount: PaneCount;
+  leftCollapsed: boolean;
+  rightCollapsed: boolean;
+  leftWidthPx: number;
+  rightWidthPx: number;
+}): Promise<void> {
+  const minWidth = computeMainWindowMinLogicalWidth(options);
+  try {
+    await getCurrentWindow().setMinSize(new LogicalSize(minWidth, 480));
+  } catch {
+    /* 浏览器 dev / 非 Tauri */
+  }
 }
 
 /** 在保持高度的前提下，按逻辑像素增减主窗口 inner 宽度（用于侧栏收起/展开时由窗口承接宽度变化）。 */

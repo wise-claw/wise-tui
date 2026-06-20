@@ -1,5 +1,4 @@
-import type { editor, IDisposable } from "monaco-editor";
-import { Selection } from "monaco-editor";
+import type { editor, IDisposable, Selection } from "monaco-editor";
 
 /** 无按键移动时，超过此行数视为触控板惯性滚动误选。 */
 export const ACCIDENTAL_MIN_LINE_SPAN = 2;
@@ -26,8 +25,9 @@ export function isAccidentalBlockSelection(
 function collapseSelectionToAnchor(editor: editor.IStandaloneCodeEditor): void {
   const selection = editor.getSelection();
   if (!selection || selection.isEmpty()) return;
-  const anchor = selection.getStartPosition();
-  editor.setSelection(Selection.fromPositions(anchor, anchor));
+  // 等价于 setSelection(Selection.fromPositions(anchor, anchor))：把光标收到锚点，清空误选区。
+  // 用 setPosition 避免 import monaco-editor 命名空间（无 window 的测试环境加载即崩溃）。
+  editor.setPosition(selection.getStartPosition());
 }
 
 function shouldCollapseSelection(
