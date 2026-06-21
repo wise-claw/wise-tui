@@ -5,6 +5,7 @@ import {
   useMemo,
   useEffect,
   useLayoutEffect,
+  useSyncExternalStore,
 } from "react";
 import { flushSync } from "react-dom";
 import { HoverHint } from "../shared/HoverHint";
@@ -67,6 +68,17 @@ import { useWiseComposerFooterChromeVisibility } from "../../hooks/useWiseCompos
 import { applyComposerCommonPhraseToSurface } from "../../utils/applyComposerCommonPhrase";
 import { chordMatchesKeyboardEvent } from "../../utils/atMentionShortcutChord";
 import { isWiseAppFocused } from "../../utils/isWiseAppFocused";
+import {
+  clearComposerInteraction,
+  markComposerInteraction,
+  isComposerInteractionActive,
+  subscribeComposerInteraction,
+} from "../../stores/composerInteractionGate";
+import {
+  isMainThreadCongested,
+  subscribeMainThreadCongestion,
+} from "../../stores/mainThreadCongestionStore";
+import { sessionContextRefreshFingerprint } from "../../utils/sessionContextRefreshFingerprint";
 import { ComposerCommonPhrasesManageTrigger } from "./ComposerCommonPhrasesManageTrigger";
 import { ImageThumbnails } from "./attachment-manager";
 import { QuestionDock } from "./dock/question-dock";
@@ -842,8 +854,28 @@ function ComposerInner({
     const flushPromptSync = () => {
       debouncedPromptSyncRef.current.flush();
     };
-    shell.addEventListener("focusout", flushPromptSync);
-    return () => shell.removeEventListener("focusout", flushPromptSync);
+    const onFocusIn = () => {
+      markComposerInteraction();
+    };
+    const onFocusOut = (event: FocusEvent) => {
+      flushPromptSync();
+      const next = event.relatedTarget;
+      if (next instanceof Node && shell.contains(next)) return;
+      clearComposerInteraction();
+    };
+    const onComposerInput = () => {
+      markComposerInteraction();
+    };
+    shell.addEventListener("focusin", onFocusIn);
+    shell.addEventListener("focusout", onFocusOut);
+    shell.addEventListener("keydown", onComposerInput);
+    shell.addEventListener("beforeinput", onComposerInput);
+    return () => {
+      shell.removeEventListener("focusin", onFocusIn);
+      shell.removeEventListener("focusout", onFocusOut);
+      shell.removeEventListener("keydown", onComposerInput);
+      shell.removeEventListener("beforeinput", onComposerInput);
+    };
   }, [session.id]);
 
   useEffect(() => {
@@ -1149,6 +1181,20 @@ function ComposerInner({
     ],
   );
 
+  const congested = useSyncExternalStore(
+    subscribeMainThreadCongestion,
+    isMainThreadCongested,
+    () => false,
+  );
+  const composerInteractionActive = useSyncExternalStore(
+    subscribeComposerInteraction,
+    isComposerInteractionActive,
+    () => false,
+  );
+  const sessionMetricsFingerprint = sessionContextRefreshFingerprint(session, {
+    congested: congested || composerInteractionActive,
+  });
+
   const bottomStatus = useMemo(() => {
     const sessionDuration = formatSessionDuration(session.createdAt);
     const metrics = getSessionContextMetrics(session);
@@ -1173,7 +1219,7 @@ function ComposerInner({
       statusText,
       fullLine,
     };
-  }, [backgroundContextCompactInFlight, displayPlain, session]);
+  }, [backgroundContextCompactInFlight, displayPlain, sessionMetricsFingerprint, session]);
   const todoBatchStartedAt = useMemo(
     () => resolveTodoBatchStartedAt(session.messages, session.createdAt),
     [session.messages, session.createdAt],

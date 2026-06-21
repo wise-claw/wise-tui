@@ -12,7 +12,7 @@ const TONE: Record<"edits" | "all", { color: string; label: string; tooltip: str
     color: "gold",
     label: "自动 · 仅编辑",
     tooltip:
-      "当前会话已开启自动批准（仅文件编辑工具）。Edit / Write / MultiEdit / NotebookEdit / Update 会被自动通过；其它工具与提问仍需人工确认。",
+      "当前会话已开启自动批准（仅文件编辑与计划批准）。Edit / Write / MultiEdit / NotebookEdit 与 ExitPlanMode 会被自动通过；其它工具与提问仍需人工确认。",
   },
   all: {
     color: "volcano",

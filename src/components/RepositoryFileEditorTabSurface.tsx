@@ -26,6 +26,7 @@ import {
 } from "../utils/monacoLargeFile";
 import { scheduleMonacoLargeFileContentInjection } from "../utils/monacoLargeFileContentInjection";
 import { runWhenIdle } from "../utils/deferIdle";
+import { resolveMonacoIdleDeferTimeoutMs } from "../utils/uiWorkDefer";
 import { MonacoSelectionChatToolbar } from "./MonacoSelectionChatToolbar";
 import { useGitRepositoryExplorerStatus } from "../hooks/useGitRepositoryExplorerStatus";
 import { useMonacoGitModifiedLineDecorations } from "../hooks/useMonacoGitModifiedLineDecorations";
@@ -41,6 +42,11 @@ export interface RepositoryFileEditorTabSurfaceProps {
   onTabContentChange: (relativePath: string, content: string) => void;
   onCloseTab: (relativePath: string) => void;
   onReloadTab: (relativePath: string) => void;
+  /**
+   * 是否保留 Monaco 实例（keep-alive）。Panel 用 LRU 维护最近若干活跃 tab，
+   * 被逐出时 keepAlive 翻 false，surface 执行与卸载等价的清理并允许重新挂载。
+   */
+  keepAlive: boolean;
 }
 
 function normalizeEditorLine(value: number | null | undefined): number | null {
@@ -85,6 +91,7 @@ export function RepositoryFileEditorTabSurface({
   onTabContentChange,
   onCloseTab,
   onReloadTab,
+  keepAlive,
 }: RepositoryFileEditorTabSurfaceProps) {
   const monacoRef = useRef<typeof Monaco | null>(null);
   const editorRef = useRef<MonacoEditorNamespace.IStandaloneCodeEditor | null>(null);
@@ -120,6 +127,15 @@ export function RepositoryFileEditorTabSurface({
     editor: MonacoEditorNamespace.IStandaloneCodeEditor;
     monaco: typeof Monaco;
   } | null>(null);
+
+  // keep-alive：一旦被激活过即保留 Monaco 实例挂载，切换 tab 仅靠 CSS 显隐，
+  // 不再随 isActive 销毁/重建编辑器。被 LRU 逐出（keepAlive 翻 false）时重置。
+  const [everActivated, setEverActivated] = useState(false);
+  useEffect(() => {
+    if (isActive && !everActivated) {
+      setEverActivated(true);
+    }
+  }, [isActive, everActivated]);
 
   const isActiveRef = useRef(isActive);
   isActiveRef.current = isActive;
@@ -166,6 +182,12 @@ export function RepositoryFileEditorTabSurface({
   }, [largeFile, tab]);
 
   useEffect(() => {
+    // keep-alive：已挂载过的编辑器不再因内容长度变化重新 defer/卸载，
+    // 避免隐藏 tab 内容增长越过 128KB 阈值时把已挂载编辑器卸载。
+    if (everActivated) {
+      setMonacoSurfaceReady(true);
+      return;
+    }
     if (tab.diffOriginal !== undefined) {
       setMonacoSurfaceReady(true);
       return;
@@ -176,9 +198,9 @@ export function RepositoryFileEditorTabSurface({
     }
     setMonacoSurfaceReady(false);
     return runWhenIdle(() => setMonacoSurfaceReady(true), {
-      timeoutMs: hugeFile ? 96 : 24,
+      timeoutMs: resolveMonacoIdleDeferTimeoutMs(hugeFile ? 96 : 24),
     });
-  }, [contentLength, hugeFile, tab.diffOriginal, tab.relativePath]);
+  }, [everActivated, contentLength, hugeFile, tab.diffOriginal, tab.relativePath]);
 
   useEffect(() => {
     if (!isActive) return;
@@ -199,7 +221,7 @@ export function RepositoryFileEditorTabSurface({
           sourceFiles: typeScriptSources,
         });
       },
-      { timeoutMs: isMonacoLargeFileContent(tab.content) ? 4000 : 1200 },
+      { timeoutMs: resolveMonacoIdleDeferTimeoutMs(isMonacoLargeFileContent(tab.content) ? 4000 : 1200) },
     );
     return cancel;
   }, [isActive, repositoryPath, tab.content, tab.relativePath, typeScriptSources]);
@@ -214,10 +236,12 @@ export function RepositoryFileEditorTabSurface({
     [],
   );
 
-  // 非活跃 tab 不挂载 Monaco 实例：切走时主动清理编辑器引用与监听，避免后续 effect
-  // 操作已卸载的编辑器；切回时由 onMount 重新建立引用与内容注入。
+  // keep-alive 驱逐：被 LRU 逐出（keepAlive 翻 false）时执行与卸载等价的清理，
+  // 释放 trackpad/find guard、注入任务与编辑器引用，并重置 everActivated 以便
+  // 重新激活时由 onMount 重建实例。注意清理职责从「isActive 翻 false」转移到
+  // 「keepAlive 翻 false」——切 tab 不再卸载编辑器，故切走时不清理 refs。
   useEffect(() => {
-    if (isActive) return;
+    if (keepAlive || !everActivated) return;
     contentInjectionCancelRef.current?.();
     contentInjectionCancelRef.current = null;
     monacoMountGuardRef.current?.dispose();
@@ -226,7 +250,8 @@ export function RepositoryFileEditorTabSurface({
     monacoRef.current = null;
     lastInjectedContentVersionRef.current = null;
     setMonacoEditorSurface(null);
-  }, [isActive]);
+    setEverActivated(false);
+  }, [keepAlive, everActivated]);
 
   // 用 ResizeObserver 替代 automaticLayout：仅在活跃 tab 且容器尺寸真正变化时
   // 调用 editor.layout()，避免每个实例持续轮询容器尺寸。
@@ -310,8 +335,9 @@ export function RepositoryFileEditorTabSurface({
         className={`app-file-editor-tab-surface${isActive ? " app-file-editor-tab-surface--active" : ""}`}
         aria-hidden={!isActive}
       >
-        {isActive ? (
+        {everActivated ? (
           <GitDiffMonacoPane
+            isActive={isActive}
             relativePath={tab.relativePath}
             original={tab.diffOriginal}
             modified={tab.content}
@@ -371,7 +397,7 @@ export function RepositoryFileEditorTabSurface({
             sessionId={activeSessionId}
           />
         ) : null}
-        {isActive ? (
+        {everActivated ? (
           !monacoSurfaceReady ? (
             <div className="app-file-editor-loading">
               <Spin size="small" tip="准备编辑器…" />

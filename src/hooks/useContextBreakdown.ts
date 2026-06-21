@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
 import {
   buildContextBreakdownSnapshot,
   getDefaultContextOverheadEstimate,
@@ -8,6 +8,17 @@ import {
 } from "../services/claudeContextBreakdown";
 import { getSessionContextMetrics } from "../services/claudeSessionContext";
 import type { ClaudeSession } from "../types";
+import {
+  isComposerInteractionActive,
+  subscribeComposerInteraction,
+} from "../stores/composerInteractionGate";
+import {
+  isMainThreadCongested,
+  subscribeMainThreadCongestion,
+} from "../stores/mainThreadCongestionStore";
+import { sessionContextRefreshFingerprint } from "../utils/sessionContextRefreshFingerprint";
+import { shouldDeferNonCriticalUiWork } from "../utils/uiWorkDefer";
+import { runWhenIdle } from "../utils/deferIdle";
 
 function buildSnapshot(
   session: ClaudeSession,
@@ -26,18 +37,17 @@ function contextBreakdownFingerprint(snapshot: ContextBreakdownSnapshot): string
   ].join("|");
 }
 
-/** 流式正文按长度分桶，避免每个 token 触发 effect。 */
-function sessionMessagesBreakdownFingerprint(session: ClaudeSession): string {
-  const last = session.messages[session.messages.length - 1];
-  const previewBucket =
-    last?.content && last.content.length > 0 ? Math.floor(last.content.length / 280) : 0;
-  const partsLen =
-    last?.parts?.reduce((sum, part) => {
-      if (part.type === "text" || part.type === "reasoning") return sum + part.text.length;
-      return sum;
-    }, 0) ?? 0;
-  const partsBucket = partsLen > 0 ? Math.floor(partsLen / 280) : 0;
-  return `${session.messages.length}:${last?.id ?? ""}:${last?.role ?? ""}:${previewBucket}:${partsBucket}`;
+function subscribeContextBreakdownDefer(onStoreChange: () => void): () => void {
+  const unsubCongestion = subscribeMainThreadCongestion(onStoreChange);
+  const unsubComposer = subscribeComposerInteraction(onStoreChange);
+  return () => {
+    unsubCongestion();
+    unsubComposer();
+  };
+}
+
+function isContextBreakdownDeferActive(): boolean {
+  return shouldDeferNonCriticalUiWork();
 }
 
 export function useContextBreakdown(session: ClaudeSession) {
@@ -56,17 +66,21 @@ export function useContextBreakdown(session: ClaudeSession) {
   } | null>(null);
 
   const repositoryPath = session.repositoryPath.trim();
-  const messageFingerprint = sessionMessagesBreakdownFingerprint(session);
+  const congested = useSyncExternalStore(
+    subscribeMainThreadCongestion,
+    isMainThreadCongested,
+    () => false,
+  );
+  const composerActive = useSyncExternalStore(
+    subscribeComposerInteraction,
+    isComposerInteractionActive,
+    () => false,
+  );
+  const messageFingerprint = sessionContextRefreshFingerprint(session, {
+    congested: congested || composerActive,
+  });
 
-  useEffect(() => {
-    requestIdRef.current += 1;
-    setBreakdown(null);
-    setLoading(false);
-    overheadCacheRef.current = null;
-    overheadResolvedRef.current = null;
-  }, [session.id, repositoryPath]);
-
-  useEffect(() => {
+  const applyQuickBreakdown = useCallback(() => {
     const cachedOverhead =
       overheadResolvedRef.current?.repositoryPath === repositoryPath
         ? overheadResolvedRef.current.value
@@ -78,7 +92,37 @@ export function useContextBreakdown(session: ClaudeSession) {
       }
       return next;
     });
-  }, [messageFingerprint, repositoryPath]);
+  }, [repositoryPath]);
+
+  useEffect(() => {
+    requestIdRef.current += 1;
+    setBreakdown(null);
+    setLoading(false);
+    overheadCacheRef.current = null;
+    overheadResolvedRef.current = null;
+  }, [session.id, repositoryPath]);
+
+  useEffect(() => {
+    if (isContextBreakdownDeferActive()) return;
+    applyQuickBreakdown();
+  }, [applyQuickBreakdown, messageFingerprint]);
+
+  useEffect(() => {
+    if (!isContextBreakdownDeferActive()) return;
+    const cancel = runWhenIdle(() => {
+      if (!isContextBreakdownDeferActive()) {
+        applyQuickBreakdown();
+      }
+    }, { timeoutMs: 480 });
+    return cancel;
+  }, [applyQuickBreakdown, messageFingerprint, congested, composerActive]);
+
+  useEffect(() => {
+    return subscribeContextBreakdownDefer(() => {
+      if (isContextBreakdownDeferActive()) return;
+      applyQuickBreakdown();
+    });
+  }, [applyQuickBreakdown]);
 
   const ensureBreakdown = useCallback(async () => {
     const requestId = requestIdRef.current + 1;

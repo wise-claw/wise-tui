@@ -1,5 +1,6 @@
 import { startTransition, useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { isFileTreeScrollActive, isSidePanelPriorityReliefActive } from "../stores/chromePanelHoverStore";
+import { isMainThreadCongested } from "../stores/mainThreadCongestionStore";
 
 export type VirtualListVisibleRange = Readonly<{ start: number; end: number }>;
 
@@ -16,6 +17,8 @@ type UseVirtualListVisibleRangeOptions = {
   remeasureKey?: number;
   /** 侧栏 busy 时 range 更新最小间隔（默认 36ms）。文件树可加大以减轻主线程压力。 */
   busyRangeMinMs?: number;
+  /** 同步更新 range（跳过 startTransition 与 busy 节流，仅保留 rAF 每帧一次）：用于滚动须紧跟 scrollTop 的强交互列表（文件树、运行面板等），避免快速滑动空白。 */
+  preferSyncRangeUpdates?: boolean;
 };
 
 const DEFAULT_SIDE_PANEL_BUSY_RANGE_MIN_MS = 36;
@@ -31,6 +34,7 @@ export function useVirtualListVisibleRange({
   enabled = true,
   remeasureKey = 0,
   busyRangeMinMs = DEFAULT_SIDE_PANEL_BUSY_RANGE_MIN_MS,
+  preferSyncRangeUpdates = false,
 }: UseVirtualListVisibleRangeOptions): VirtualListVisibleRange {
   const [range, setRange] = useState({ start: 0, end: initialVisibleEnd });
   const rafRef = useRef(0);
@@ -50,10 +54,15 @@ export function useVirtualListVisibleRange({
     const start = Math.max(0, Math.floor(relativeScroll / rowHeight) - overscanRows);
     const visibleRows = Math.ceil(height / rowHeight) + overscanRows * 2;
     const end = Math.min(rowCount, start + visibleRows);
+    const nextRange = { start, end };
+    if (preferSyncRangeUpdates) {
+      setRange((prev) => (prev.start === start && prev.end === end ? prev : nextRange));
+      return;
+    }
     startTransition(() => {
-      setRange((prev) => (prev.start === start && prev.end === end ? prev : { start, end }));
+      setRange((prev) => (prev.start === start && prev.end === end ? prev : nextRange));
     });
-  }, [enabled, overscanRows, rowCount, rowHeight, scrollRootRef]);
+  }, [enabled, overscanRows, preferSyncRangeUpdates, rowCount, rowHeight, scrollRootRef]);
 
   useEffect(() => {
     if (!enabled) return;
@@ -62,7 +71,11 @@ export function useVirtualListVisibleRange({
     if (!el) return;
 
     const runUpdateRange = () => {
-      if (isSidePanelPriorityReliefActive()) {
+      const shouldThrottleBusyRange =
+        !preferSyncRangeUpdates ||
+        (preferSyncRangeUpdates && isMainThreadCongested() && !isFileTreeScrollActive());
+      // 同步模式：滚动中须紧跟 scrollTop；主线程拥塞且未在滚文件树时略节流 range 更新。
+      if (shouldThrottleBusyRange && isSidePanelPriorityReliefActive()) {
         const elapsed = performance.now() - lastRangeUpdateAtRef.current;
         if (elapsed < busyRangeMinMs) {
           if (trailingTimerRef.current) return;
@@ -101,7 +114,7 @@ export function useVirtualListVisibleRange({
         trailingTimerRef.current = null;
       }
     };
-  }, [busyRangeMinMs, enabled, scrollRootRef, updateRange]);
+  }, [busyRangeMinMs, enabled, preferSyncRangeUpdates, scrollRootRef, updateRange]);
 
   useEffect(() => {
     if (!enabled) return;

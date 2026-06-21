@@ -34,6 +34,7 @@ import {
 } from "../utils/terminalTheme";
 import { terminalWriter } from "../utils/terminalWriter";
 import { shouldIgnoreTerminalError } from "../utils/terminalErrors";
+import { shouldDeferNonCriticalUiWork } from "../utils/uiWorkDefer";
 
 export type TerminalStatus = "idle" | "connecting" | "ready" | "error";
 
@@ -237,13 +238,26 @@ export function useTerminalSession({
         }
       });
 
+      let outputFlushRaf = 0;
+      const scheduleTerminalOutputFlush = () => {
+        if (!shouldDeferNonCriticalUiWork()) {
+          outputWriter?.flush();
+          return;
+        }
+        if (outputFlushRaf) return;
+        outputFlushRaf = requestAnimationFrame(() => {
+          outputFlushRaf = 0;
+          outputWriter?.flush();
+        });
+      };
+
       const outputUnsubscribe = subscribeTerminalOutput((event) => {
         if (event.workspaceId === workspaceId && event.terminalId === terminalId) {
           const sanitized = sanitizeTerminalPtyOutput(event.data);
           if (!sanitized) return;
           outputWriter?.push(sanitized);
           streamCursor += event.data.length;
-          outputWriter?.flush();
+          scheduleTerminalOutputFlush();
         }
       });
 
@@ -576,6 +590,10 @@ export function useTerminalSession({
           blankRecoveryTimerRef.current = null;
         }
         blankRecoveryGenerationRef.current += 1;
+        if (outputFlushRaf) {
+          cancelAnimationFrame(outputFlushRaf);
+          outputFlushRaf = 0;
+        }
         resizeObserver.disconnect();
         unregisterLinks();
         unregisterInputSurface();

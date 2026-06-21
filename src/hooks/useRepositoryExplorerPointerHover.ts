@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
+import { isFileTreeScrollActive } from "../stores/chromePanelHoverStore";
+import { isMainThreadCongested } from "../stores/mainThreadCongestionStore";
 import { REPOSITORY_TREE_ROW_HEIGHT_PX } from "../components/GitPanel/repositoryTreeLayout";
 
 /**
@@ -90,6 +92,7 @@ export function useRepositoryExplorerPointerHover(
     if (!el) return;
 
     const onPointerMove = (event: PointerEvent) => {
+      if (isMainThreadCongested() || isFileTreeScrollActive()) return;
       pointerRef.current = { x: event.clientX, y: event.clientY, inside: true };
       pendingTargetRef.current = event.target;
       // pointermove 在高刷新率设备上可达 60–120 次/秒，用 rAF 合并，一帧最多一次 setHoverPath。
@@ -110,6 +113,7 @@ export function useRepositoryExplorerPointerHover(
     };
     const onScroll = () => {
       if (!pointerRef.current.inside) return;
+      if (isMainThreadCongested()) return;
       // 滚动时用位置计算而非 elementFromPoint；rAF 合并，一帧最多一次（避免冗余的 getBoundingClientRect reflow）。
       if (scrollRafRef.current) return;
       scrollRafRef.current = requestAnimationFrame(() => {

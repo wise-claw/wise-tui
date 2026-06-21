@@ -24,7 +24,7 @@ const MODE_OPTIONS: Array<{ value: AutoApproveMode; label: string; hint: string 
   {
     value: "edits",
     label: "仅文件编辑自动批准",
-    hint: "Edit / Write / MultiEdit / NotebookEdit / Update 自动通过；其它工具与问题仍走坞栏。",
+    hint: "Edit / Write / MultiEdit / NotebookEdit 与计划批准（ExitPlanMode）自动通过；其它工具与问题仍走坞栏。",
   },
   {
     value: "all",

@@ -95,7 +95,7 @@ export function SessionConversationTasksPanel({
               </div>
             ) : (
               <div className="app-monitor-panel__session-tasks-empty-hint">
-                近 {executionEnvironmentDispatchHistoryDays ?? 1} 天暂无派发记录
+                近 {executionEnvironmentDispatchHistoryDays ?? 1} 天暂无执行环境派发记录
               </div>
             )}
           </div>

@@ -117,12 +117,12 @@ export function resolveSessionFromBindingValue(
 
 export function resolveBoundMainSessionId(
   repositoryPath: string,
-  bindings: Record<string, string>,
+  bindings: Record<string, string> | null | undefined,
   sessions: readonly ClaudeSession[],
   mainOwnerAgentName?: string | null,
 ): string | null {
   const key = normalizeRepositoryPathKey(repositoryPath);
-  const bound = bindings[key]?.trim();
+  const bound = bindings?.[key]?.trim();
   if (!bound) return null;
   const s = resolveSessionFromBindingValue(bound, sessions);
   if (!s) return null;

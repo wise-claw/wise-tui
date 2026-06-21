@@ -1,8 +1,14 @@
-import { useCallback, useEffect, useRef, type MouseEvent } from "react";
+import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
 import { CloseOutlined } from "@ant-design/icons";
 import { Button, Spin } from "antd";
 import { RepositoryFileEditorTabSurface } from "./RepositoryFileEditorTabSurface";
 import type { FileEditorTab } from "../hooks/useRepositoryFileEditor";
+
+/**
+ * keep-alive 保留的 Monaco 实例上限。超出时最久未活跃的 tab 被逐出（卸载编辑器），
+ * 平衡切换流畅度与内存/TS worker 项目图规模。
+ */
+const FILE_EDITOR_KEEP_ALIVE_LIMIT = 8;
 
 interface Props {
   activePath: string | null;
@@ -37,6 +43,21 @@ export function RepositoryFileEditorPanel({
 }: Props) {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const activeTab = tabs.find((tab) => tab.relativePath === activePath) ?? null;
+
+  // LRU：活跃路径前插并截断至上限，决定哪些 tab 的 Monaco 实例保留（keep-alive）。
+  // 切换 tab 时被逐出的 surface 收到 keepAlive=false，执行与卸载等价的清理。
+  const [keepAlivePaths, setKeepAlivePaths] = useState<string[]>([]);
+  useEffect(() => {
+    if (!activePath) return;
+    setKeepAlivePaths((prev) => {
+      const next = [activePath, ...prev.filter((path) => path !== activePath)];
+      if (next.length > FILE_EDITOR_KEEP_ALIVE_LIMIT) {
+        next.length = FILE_EDITOR_KEEP_ALIVE_LIMIT;
+      }
+      return next;
+    });
+  }, [activePath]);
+
   const canSaveActiveTab = Boolean(
     activeTab?.relativePath &&
       !activeTab.loading &&
@@ -186,6 +207,7 @@ export function RepositoryFileEditorPanel({
               onTabContentChange={handleTabContentChange}
               onCloseTab={onCloseTab}
               onReloadTab={onReloadTab}
+              keepAlive={keepAlivePaths.includes(tab.relativePath)}
             />
           ))}
       </div>

@@ -150,7 +150,7 @@ import {
   beginSessionTurnWithUserPrompt,
 } from "../services/claudeSessionState";
 import { markSessionToolUseStopped } from "../utils/sessionConversationTasks";
-import { isTerminalWorkerWiseTab, sanitizeTerminalWorkerTranscriptMessages, clearTerminalDefaultWorkerTabIfMatch } from "../services/terminalDispatch";
+import { isTerminalWorkerWiseTab, sanitizeTerminalWorkerTranscriptMessages, clearTerminalDefaultWorkerTabIfMatch, waitForTerminalWorkerTurnStarted } from "../services/terminalDispatch";
 import {
   resolveDiskTranscriptSessionKey,
   sessionHasDiskTranscript,
@@ -252,6 +252,7 @@ import {
   subscribeClaudeSessionsLive,
   subscribeClaudeSessionsStructure,
   getClaudeSessionsSnapshot,
+  getClaudeSessionSnapshot,
   getClaudeSessionsStructureKey,
 } from "../stores/claudeSessionsLiveStore";
 import { setSessionTranscriptHydrating } from "../stores/claudeTranscriptHydrationStore";
@@ -308,7 +309,10 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     getClaudeSessionsStructureKey,
   );
   const sessionsRef = useRef(sessions);
-  sessionsRef.current = sessions;
+  // commitSessions / createSession 会同步写入 ref；仅在结构订阅推进时从 store 对齐，避免 subscribeLive:false 下每帧用陈旧 sessions 覆盖派发中的 worker 状态。
+  useEffect(() => {
+    sessionsRef.current = getClaudeSessionsSnapshot();
+  }, [sessionsStructureKey]);
   const memoryKeepSessionIdsRef = useRef<Set<string>>(new Set());
 
   const buildMemoryKeepSessionIds = useCallback((list: ClaudeSession[]) => {
@@ -3177,9 +3181,13 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         ...(opts?.connectionKind ? { connectionKind: opts.connectionKind } : {}),
       };
 
-      // ref 同步写入，保证 bind/切会话逻辑立即可见；React state 走 transition 降低点击卡顿。
+      // ref 同步写入，保证 bind/切会话逻辑立即可见；后台 worker（skipActivate）同步发布 store 供派发轮询读取。
       if (!sessionsRef.current.some((s) => s.id === id)) {
-        sessionsRef.current = [...sessionsRef.current, newSession];
+        const next = [...sessionsRef.current, newSession];
+        sessionsRef.current = next;
+        if (opts?.skipActivate) {
+          publishClaudeSessions(next);
+        }
       }
       if (!opts?.skipActivate && opts?.immediateActivate) {
         setActiveSessionId(id);
@@ -3814,13 +3822,20 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       const prompt = input.prompt.trim();
       if (!workerKey || !prompt) return false;
 
-      const findWorker = () =>
-        findSessionForMonitorDrawerResume(sessionsRef.current, {
+      const findWorker = () => {
+        const snap = getClaudeSessionSnapshot(workerKey);
+        const pool = snap
+          ? sessionsRef.current.some((item) => item.id === snap.id)
+            ? sessionsRef.current
+            : [...sessionsRef.current, snap]
+          : sessionsRef.current;
+        return findSessionForMonitorDrawerResume(pool, {
           sessionId: workerKey,
           repositoryPath: input.repositoryPath,
           taskLabel: input.taskLabel,
           sessionIdMap: sessionIdMapRef.current,
         });
+      };
 
       const worker = await ensureSessionForMonitorDrawer(input);
       if (!worker) return false;
@@ -3845,9 +3860,10 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       const executeTabId = latestWorker.id;
       let ok = executeSession(executeTabId, prompt, executeOpts);
       if (ok === false) {
-        await new Promise((resolve) => setTimeout(resolve, 200));
-        const again = findWorker();
-        if (again) {
+        for (let attempt = 0; attempt < 4; attempt += 1) {
+          await new Promise((resolve) => setTimeout(resolve, 80));
+          const again = findWorker();
+          if (!again) continue;
           const retryFresh =
             isTerminalWorkerWiseTab(again) &&
             (!again.claudeSessionId?.trim() ||
@@ -3858,9 +3874,16 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
             userBubblePrompt: prompt,
             ...(retryFresh ? { terminalFreshTurn: true as const } : {}),
           });
+          if (ok !== false) break;
         }
       }
-      return ok !== false;
+      if (ok === false) return false;
+
+      if (isTerminalWorkerWiseTab(latestWorker)) {
+        const started = await waitForTerminalWorkerTurnStarted(() => sessionsRef.current, executeTabId);
+        return started;
+      }
+      return true;
     },
     [commitSessions, executeSession, ensureSessionForMonitorDrawer, reloadFullDiskTranscript],
   );

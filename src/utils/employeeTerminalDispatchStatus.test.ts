@@ -130,6 +130,26 @@ describe("buildEmployeeTerminalConversationStatusById", () => {
     expect(map.get("e1")).toBe("completed");
     expect(map.get("e2")).toBe("idle");
   });
+
+  test("uses per-employee repositoryPath when fallback is empty", () => {
+    const map = buildEmployeeTerminalConversationStatusById({
+      employeeItems: [
+        { employeeId: "e1", name: "终端01", repositoryPath: "/repo/wise-tui" },
+      ],
+      repositoryPath: "",
+      sessions: [
+        session({
+          id: "w1",
+          repositoryPath: "/repo/wise-tui",
+          repositoryName: "wise-tui/员工:终端01",
+          status: "running",
+          messages: [{ id: 1, role: "user", content: "go", timestamp: 1 }],
+        }),
+      ],
+      dispatchTasks: [],
+    });
+    expect(map.get("e1")).toBe("running");
+  });
 });
 
 describe("resolveEmployeeTerminalLastMessagePreview", () => {

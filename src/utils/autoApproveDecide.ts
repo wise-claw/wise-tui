@@ -3,7 +3,7 @@ import type { PermissionRequest, QuestionRequest } from "../types";
 /**
  * Wise 「自动批准」三态模式。
  * - `off`：不自动应答，所有 PermissionRequest / QuestionRequest 走人工 dock。
- * - `edits`：仅文件编辑类工具自动 allow，其它仍弹 dock；不影响 question。
+ * - `edits`：文件编辑类工具与计划批准（ExitPlanMode）自动 allow，其它仍弹 dock；不影响 question。
  * - `all`：全部 PermissionRequest 自动 allow；AskUserQuestion 自动选首项 / 全选 (multiSelect)。
  */
 export type AutoApproveMode = "off" | "edits" | "all";
@@ -21,6 +21,9 @@ export const EDIT_AUTO_APPROVE_TOOLS: ReadonlySet<string> = new Set([
   "MultiEdit",
   "NotebookEdit",
 ]);
+
+/** Claude Code 规划模式退出确认（计划批准）；`edits` 模式下与编辑类工具一并自动 allow。 */
+export const PLAN_AUTO_APPROVE_TOOLS: ReadonlySet<string> = new Set(["ExitPlanMode"]);
 
 /**
  * 把任意字符串归一化为合法 mode；非法值（例如 app_setting 历史脏值）一律降级为 `"off"`，
@@ -40,7 +43,8 @@ export function normalizeAutoApproveMode(raw: unknown): AutoApproveMode {
  * 规则：
  * - `mode === "off"` → 始终 null。
  * - `mode === "all"` → 始终 allow_once（无论 tool 是什么 / 控制子类型）。
- * - `mode === "edits"` → 仅当 `request.tool` 命中 `EDIT_AUTO_APPROVE_TOOLS` 才 allow_once。
+ * - `mode === "edits"` → 当 `request.tool` 命中 `EDIT_AUTO_APPROVE_TOOLS` 或
+ *   `PLAN_AUTO_APPROVE_TOOLS` 才 allow_once。
  *   `controlSubtype` 不参与判定（permission / can_use_tool 均按工具白名单处理）。
  */
 export function decidePermissionAutoApprove(
@@ -51,7 +55,9 @@ export function decidePermissionAutoApprove(
   if (mode === "all") return "allow_once";
   // mode === "edits"
   if (typeof request.tool !== "string" || request.tool.length === 0) return null;
-  return EDIT_AUTO_APPROVE_TOOLS.has(request.tool) ? "allow_once" : null;
+  return EDIT_AUTO_APPROVE_TOOLS.has(request.tool) || PLAN_AUTO_APPROVE_TOOLS.has(request.tool)
+    ? "allow_once"
+    : null;
 }
 
 /**

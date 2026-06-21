@@ -1417,7 +1417,13 @@ export default function App() {
       userBubblePrompt?: string;
       defaultInstructionApplied?: string;
     }) => {
-      const mainSessionId = activeSessionId;
+      const mainSessionId =
+        resolveExecutionEnvironmentDispatchAnchorSessionId({
+          activeSessionId,
+          sessions: sessionsLatestRef.current,
+          repositoryMainSessionBindings: repositoryMainBindingsLatestRef.current,
+          repositories: repositoriesLatestRef.current,
+        }) ?? activeSessionId;
       if (!mainSessionId) return;
       await dispatchExecutionEnvironmentFromMainSession(
         {

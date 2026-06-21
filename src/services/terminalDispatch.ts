@@ -12,6 +12,7 @@ import {
 } from "../constants/sessionExecutionEngine";
 import { extractBoundEmployeeNameFromSessionRepositoryName } from "./workflowGraphHelpers";
 import { isOmcMonitorEmployeeRecord } from "../utils/omcMonitorEmployeeSession";
+import { resolveExecutionEnvironmentDispatchAnchorSessionId } from "../utils/executionEnvironmentDispatchAnchor";
 import {
   isRepositoryMainSessionTab,
   normalizeRepositoryPathKey,
@@ -20,6 +21,7 @@ import {
   resolveMainOwnerAgentNameForRepositoryPath,
 } from "../utils/repositoryMainSessionBinding";
 import { notificationHub } from "../notifications";
+import { getClaudeSessionSnapshot } from "../stores/claudeSessionsLiveStore";
 import { normalizeEmployeeBindingName } from "../utils/employeeBindingName";
 
 /** 终端派发名称规范化：`终端01` 与 `终端1` 视为同一终端。 */
@@ -451,32 +453,72 @@ export async function createFreshTerminalWorkerTab(
   return { workerTabId };
 }
 
+function resolveTerminalWorkerSession(
+  getSessions: () => ClaudeSession[],
+  workerTabId: string,
+): ClaudeSession | undefined {
+  const key = workerTabId.trim();
+  if (!key) return undefined;
+  return getClaudeSessionSnapshot(key) ?? getSessions().find((item) => item.id === key);
+}
+
 async function waitForTerminalTurnStarted(
   getSessions: () => ClaudeSession[],
   workerTabId: string,
-  maxWaitMs = 3200,
+  maxWaitMs = 6400,
 ): Promise<boolean> {
   const key = workerTabId.trim();
   if (!key) return false;
   const deadline = Date.now() + maxWaitMs;
   while (Date.now() < deadline) {
-    const worker = getSessions().find((item) => item.id === key);
+    const worker = resolveTerminalWorkerSession(getSessions, key);
     if (terminalWorkerTurnLooksStarted(worker)) {
       return true;
     }
     await new Promise<void>((resolve) => {
-      window.setTimeout(() => resolve(), 40);
+      window.setTimeout(() => resolve(), 48);
     });
   }
-  const worker = getSessions().find((item) => item.id === key);
-  return terminalWorkerTurnLooksStarted(worker);
+  return terminalWorkerTurnLooksStarted(resolveTerminalWorkerSession(getSessions, key));
 }
 
 function terminalWorkerTurnLooksStarted(worker: ClaudeSession | undefined): boolean {
   if (!worker) return false;
-  const hasUser = worker.messages.some((item) => item.role === "user");
-  if (!hasUser) return false;
-  return worker.status === "running" || worker.status === "connecting";
+  if (worker.status === "running" || worker.status === "connecting") {
+    return true;
+  }
+  return worker.messages.some((item) => item.role === "user");
+}
+
+/** 运行面板 resume / 派发后：轮询 worker 是否已进入可执行态。 */
+export async function waitForTerminalWorkerTurnStarted(
+  getSessions: () => ClaudeSession[],
+  workerTabId: string,
+  maxWaitMs = 6400,
+): Promise<boolean> {
+  return waitForTerminalTurnStarted(getSessions, workerTabId, maxWaitMs);
+}
+
+async function spawnTerminalSessionWithRetry(
+  executeTerminalSession: TerminalDispatchDeps["executeTerminalSession"],
+  workerTabId: string,
+  outboundPrompt: string,
+  opts: {
+    userBubblePrompt?: string;
+    defaultInstructionApplied?: string;
+  },
+): Promise<boolean> {
+  const prompt = outboundPrompt.trim();
+  let spawnOk = executeTerminalSession(workerTabId, prompt, opts);
+  if (spawnOk !== false) return true;
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    await new Promise<void>((resolve) => {
+      window.setTimeout(() => resolve(), 64);
+    });
+    spawnOk = executeTerminalSession(workerTabId, prompt, opts);
+    if (spawnOk !== false) return true;
+  }
+  return false;
 }
 
 async function dispatchTerminalWorkerTurn(
@@ -527,10 +569,15 @@ async function dispatchTerminalWorkerTurn(
     });
   }
 
-  const spawnOk = deps.executeTerminalSession(workerTabId, outboundPrompt.trim(), {
-    userBubblePrompt,
-    ...(defaultInstructionApplied ? { defaultInstructionApplied } : {}),
-  });
+  const spawnOk = await spawnTerminalSessionWithRetry(
+    deps.executeTerminalSession,
+    workerTabId,
+    outboundPrompt.trim(),
+    {
+      userBubblePrompt,
+      ...(defaultInstructionApplied ? { defaultInstructionApplied } : {}),
+    },
+  );
   if (!spawnOk) {
     const engineTitle = terminalExecutionEngineTitle(terminal);
     const failureText = `任务分发失败：终端「${terminal.name}」未能启动 ${engineTitle}（请检查并发上限、CLI 安装或网络）。`;
@@ -566,7 +613,7 @@ function mirrorTerminalToControlDock(
   workerTabId: string,
   mainSessionId: string,
 ): void {
-  const worker = deps.getSessions().find((item) => item.id === workerTabId);
+  const worker = resolveTerminalWorkerSession(deps.getSessions, workerTabId);
   if (!worker || !isTerminalWorkerWiseTab(worker)) return;
 
   const pathKey = normalizeRepositoryPathKey(worker.repositoryPath);
@@ -610,7 +657,15 @@ export async function dispatchTerminalFromMainSession(
     explicitTerminalName?: string;
   },
 ): Promise<"not_terminal" | "failed" | "ok"> {
-  const mainSession = deps.getSessions().find((item) => item.id === input.mainSessionId);
+  const sessions = deps.getSessions();
+  const anchorSessionId =
+    resolveExecutionEnvironmentDispatchAnchorSessionId({
+      activeSessionId: input.mainSessionId,
+      sessions,
+      repositoryMainSessionBindings: deps.repositoryMainSessionBindings,
+      repositories: deps.repositories,
+    }) ?? input.mainSessionId.trim();
+  const mainSession = sessions.find((item) => item.id === anchorSessionId);
   if (!mainSession) return "not_terminal";
 
   const explicitName = input.explicitTerminalName?.trim();
@@ -622,7 +677,7 @@ export async function dispatchTerminalFromMainSession(
   if (explicitName && !explicitTerminal) {
     const warningText = `未找到终端「${explicitName}」，请检查终端名称后重试。`;
     message.warning(warningText);
-    deps.appendSystemMessage(input.mainSessionId, warningText);
+    deps.appendSystemMessage(anchorSessionId, warningText);
     return "failed";
   }
 
@@ -653,7 +708,7 @@ export async function dispatchTerminalFromMainSession(
       mainSession,
       terminal,
       taskPrompt,
-      input.mainSessionId,
+      anchorSessionId,
       sessionDefaultInstruction,
     );
     if (result === "ok") {

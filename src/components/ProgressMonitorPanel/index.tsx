@@ -69,6 +69,7 @@ import {
 } from "../../constants/executionEnvironmentDispatch";
 import { ExecutionEnvironmentDispatchHistoryDaysDropdown } from "./ExecutionEnvironmentDispatchHistoryDaysDropdown";
 import { MonitorLazyClickPopover } from "./MonitorLazyClickPopover";
+import { resolveMonitorRepositoryPath } from "../../utils/executionEnvironmentDispatchAnchor";
 import { canStopSessionConversationTask, filterSessionDispatchTaskItems } from "../../utils/sessionConversationTasks";
 import { SessionConversationDispatchTaskRow } from "./SessionConversationDispatchTaskRow";
 import {
@@ -1376,14 +1377,25 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
     [sessionConversationTaskItems, executionEnvironmentDispatchSinceMs],
   );
 
-  const monitorRepositoryPath = useMemo(() => {
-    if (activeSessionId) {
-      const hit = sessions.find((session) => session.id === activeSessionId);
-      if (hit?.repositoryPath?.trim()) return hit.repositoryPath.trim();
-    }
-    const fromDispatch = executionEnvironmentDispatchTaskItems.find((item) => item.repositoryPath?.trim());
-    return fromDispatch?.repositoryPath?.trim() ?? "";
-  }, [activeSessionId, executionEnvironmentDispatchTaskItems, sessions]);
+  const monitorRepositoryPath = useMemo(
+    () =>
+      resolveMonitorRepositoryPath({
+        activeSessionId,
+        sessions,
+        repositoryMainSessionBindings: repositoryMainBindings,
+        repositories,
+        employeeItems,
+        dispatchTasks: executionEnvironmentDispatchTaskItems,
+      }),
+    [
+      activeSessionId,
+      employeeItems,
+      executionEnvironmentDispatchTaskItems,
+      repositories,
+      repositoryMainBindings,
+      sessions,
+    ],
+  );
 
   const activateEmployeeTerminalRow = useCallback(
     (item: EmployeeMonitorItem) => {
@@ -1898,7 +1910,7 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
           />
           {shouldShowSessionConversationTasks && executionEnvironmentDispatchTaskItems.length === 0 ? (
             <div className="app-monitor-panel__session-tasks-empty-hint">
-              近 {executionEnvironmentDispatchHistoryDays ?? 1} 天暂无派发记录
+              近 {executionEnvironmentDispatchHistoryDays ?? 1} 天暂无执行环境派发记录
             </div>
           ) : null}
         </div>
@@ -1913,7 +1925,7 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
           </div>
           {shouldShowSessionConversationTasks && executionEnvironmentDispatchTaskItems.length === 0 ? (
             <div className="app-monitor-panel__session-tasks-empty-hint">
-              近 {executionEnvironmentDispatchHistoryDays ?? 1} 天暂无派发记录
+              近 {executionEnvironmentDispatchHistoryDays ?? 1} 天暂无执行环境派发记录
             </div>
           ) : null}
         </div>
@@ -1940,7 +1952,7 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
               {executionEnvironmentDispatchTaskItems.map((item) => renderDispatchTaskRow(item))}
             </div>
           ) : (
-            <div className="app-monitor-panel__session-tasks-empty-hint">近 {executionEnvironmentDispatchHistoryDays ?? 1} 天暂无派发记录</div>
+            <div className="app-monitor-panel__session-tasks-empty-hint">近 {executionEnvironmentDispatchHistoryDays ?? 1} 天暂无执行环境派发记录</div>
           )}
         </div>
       ) : null}

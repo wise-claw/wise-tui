@@ -11,6 +11,8 @@ import {
   isSidePanelPriorityReliefActive,
   isWorkspacePriorityReliefActive,
 } from "./chromePanelHoverStore";
+import { isComposerInteractionActive } from "./composerInteractionGate";
+import { isMainThreadCongested } from "./mainThreadCongestionStore";
 
 let sessionsSnapshot: ClaudeSession[] = [];
 let structureKey = "";
@@ -25,6 +27,8 @@ function liveFlushMinIntervalMs(): number {
   if (typeof document !== "undefined" && document.visibilityState !== "visible") {
     return 900;
   }
+  if (isMainThreadCongested()) return 460;
+  if (isComposerInteractionActive()) return 360;
   if (isFileTreeScrollActive()) return 200;
   if (isWorkspacePriorityReliefActive()) return 195;
   if (isSidePanelPriorityReliefActive()) return 180;

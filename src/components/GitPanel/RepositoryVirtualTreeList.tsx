@@ -1,14 +1,37 @@
-import { memo, type RefObject } from "react";
+import { memo, useSyncExternalStore, type RefObject } from "react";
 import { useVirtualListVisibleRange } from "../../hooks/useVirtualListVisibleRange";
 import { ExplorerInlineCreateRow } from "./ExplorerInlineCreateRow";
 import { RepositoryTreeDirRow } from "./RepositoryTreeDirRow";
 import { RepositoryTreeFileNode } from "./RepositoryTreeFileNode";
 import { repositoryTreeDepthIndentPx, REPOSITORY_TREE_ROW_HEIGHT_PX } from "./repositoryTreeLayout";
+import {
+  isMainThreadCongested,
+  subscribeMainThreadCongestion,
+} from "../../stores/mainThreadCongestionStore";
 import type { FlatRepositoryTreeRow } from "./repositoryTreeFlatten";
 import type { ExplorerInlineCreateState } from "./types";
 
-const OVERSCAN_ROWS = 10;
+const OVERSCAN_ROWS = 16;
+const OVERSCAN_ROWS_CONGESTED = 6;
 const FILE_TREE_BUSY_RANGE_MIN_MS = 24;
+const FILE_TREE_CONGESTED_BUSY_RANGE_MIN_MS = 40;
+
+function useFileTreeOverscanRows(): number {
+  return useSyncExternalStore(
+    subscribeMainThreadCongestion,
+    () => (isMainThreadCongested() ? OVERSCAN_ROWS_CONGESTED : OVERSCAN_ROWS),
+    () => OVERSCAN_ROWS,
+  );
+}
+
+function useFileTreeBusyRangeMinMs(): number {
+  return useSyncExternalStore(
+    subscribeMainThreadCongestion,
+    () =>
+      isMainThreadCongested() ? FILE_TREE_CONGESTED_BUSY_RANGE_MIN_MS : FILE_TREE_BUSY_RANGE_MIN_MS,
+    () => FILE_TREE_BUSY_RANGE_MIN_MS,
+  );
+}
 
 export interface RepositoryVirtualTreeListProps {
   scrollRootRef: RefObject<HTMLDivElement | null>;
@@ -39,13 +62,17 @@ function RepositoryVirtualTreeListInner({
   gitStatusRevision,
   editorDirtyRevision,
 }: RepositoryVirtualTreeListProps) {
+  const overscanRows = useFileTreeOverscanRows();
+  const busyRangeMinMs = useFileTreeBusyRangeMinMs();
   const range = useVirtualListVisibleRange({
     scrollRootRef,
     rowCount: rows.length,
     rowHeight,
-    overscanRows: OVERSCAN_ROWS,
+    overscanRows,
     initialVisibleEnd: 48,
-    busyRangeMinMs: FILE_TREE_BUSY_RANGE_MIN_MS,
+    busyRangeMinMs,
+    // 文件树滚动须同步跟随 scrollTop，消除快速滑动的大片空白与卡顿。
+    preferSyncRangeUpdates: true,
   });
 
   const totalHeight = rows.length * rowHeight;

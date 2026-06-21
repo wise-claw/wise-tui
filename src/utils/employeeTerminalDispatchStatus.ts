@@ -139,7 +139,11 @@ export function resolveEmployeeTerminalConversationStatus(input: {
 }
 
 export function buildEmployeeTerminalConversationStatusById(input: {
-  employeeItems: ReadonlyArray<{ employeeId: string; name: string }>;
+  employeeItems: ReadonlyArray<{
+    employeeId: string;
+    name: string;
+    repositoryPath?: string | null;
+  }>;
   repositoryPath: string;
   sessions: readonly ClaudeSession[];
   dispatchTasks: readonly SessionConversationTaskItem[];
@@ -147,11 +151,12 @@ export function buildEmployeeTerminalConversationStatusById(input: {
   const panelEmployeeNames = input.employeeItems.map((item) => item.name);
   const map = new Map<string, EmployeeTerminalConversationStatus>();
   for (const item of input.employeeItems) {
+    const repoPath = item.repositoryPath?.trim() || input.repositoryPath;
     map.set(
       item.employeeId,
       resolveEmployeeTerminalConversationStatus({
         employeeName: item.name,
-        repositoryPath: input.repositoryPath,
+        repositoryPath: repoPath,
         sessions: input.sessions,
         dispatchTasks: input.dispatchTasks,
         panelEmployeeNames,
@@ -206,7 +211,11 @@ export function resolveEmployeeTerminalLastMessagePreview(input: {
 }
 
 export function buildEmployeeTerminalLastMessagePreviewById(input: {
-  employeeItems: ReadonlyArray<{ employeeId: string; name: string }>;
+  employeeItems: ReadonlyArray<{
+    employeeId: string;
+    name: string;
+    repositoryPath?: string | null;
+  }>;
   repositoryPath: string;
   sessions: readonly ClaudeSession[];
   dispatchTasks: readonly SessionConversationTaskItem[];
@@ -215,11 +224,12 @@ export function buildEmployeeTerminalLastMessagePreviewById(input: {
   const panelEmployeeNames = input.employeeItems.map((item) => item.name);
   const map = new Map<string, string>();
   for (const item of input.employeeItems) {
+    const repoPath = item.repositoryPath?.trim() || input.repositoryPath;
     map.set(
       item.employeeId,
       resolveEmployeeTerminalLastMessagePreview({
         employeeName: item.name,
-        repositoryPath: input.repositoryPath,
+        repositoryPath: repoPath,
         sessions: input.sessions,
         dispatchTasks: input.dispatchTasks,
         panelEmployeeNames,

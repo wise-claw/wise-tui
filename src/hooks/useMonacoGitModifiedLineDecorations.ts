@@ -8,6 +8,7 @@ import {
   monacoLineChangeGutterClassName,
   monacoLineChangeOverviewColor,
 } from "../utils/monacoGitModifiedLineDecorations";
+import { shouldDeferNonCriticalUiWork } from "../utils/uiWorkDefer";
 
 function applyLineChangeDecorations(
   editor: MonacoEditorNamespace.IStandaloneCodeEditor,
@@ -101,6 +102,7 @@ export function useMonacoGitModifiedLineDecorations(args: {
     };
 
     const scheduleRefresh = () => {
+      if (shouldDeferNonCriticalUiWork() && !editor.hasTextFocus()) return;
       if (rafId) window.cancelAnimationFrame(rafId);
       rafId = window.requestAnimationFrame(() => {
         rafId = 0;

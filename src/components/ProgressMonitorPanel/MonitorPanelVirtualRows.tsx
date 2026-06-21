@@ -61,6 +61,7 @@ function MonitorPanelVirtualRowsInner<TRow>({
     initialVisibleEnd: 32,
     getScrollOffset: () => listOffsetRef.current,
     remeasureKey,
+    preferSyncRangeUpdates: true,
   });
 
   useEffect(() => {

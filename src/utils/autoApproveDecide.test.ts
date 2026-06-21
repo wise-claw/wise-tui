@@ -4,6 +4,7 @@ import {
   decideQuestionAutoApprove,
   normalizeAutoApproveMode,
   EDIT_AUTO_APPROVE_TOOLS,
+  PLAN_AUTO_APPROVE_TOOLS,
   type AutoApproveMode,
 } from "./autoApproveDecide";
 
@@ -25,6 +26,13 @@ describe("normalizeAutoApproveMode", () => {
     expect(normalizeAutoApproveMode(0)).toBe("off");
     expect(normalizeAutoApproveMode(1)).toBe("off");
     expect(normalizeAutoApproveMode({})).toBe("off");
+  });
+});
+
+describe("PLAN_AUTO_APPROVE_TOOLS", () => {
+  it("contains ExitPlanMode for plan approval", () => {
+    expect(PLAN_AUTO_APPROVE_TOOLS.has("ExitPlanMode")).toBe(true);
+    expect(PLAN_AUTO_APPROVE_TOOLS.size).toBe(1);
   });
 });
 
@@ -54,7 +62,8 @@ describe("EDIT_AUTO_APPROVE_TOOLS", () => {
 
 describe("decidePermissionAutoApprove", () => {
   const editTools = ["Edit", "Write", "MultiEdit", "NotebookEdit"];
-  const nonEditTools = ["Bash", "Read", "ExitPlanMode", "UnknownTool", "mcp_xyz", "Update"];
+  const planTools = ["ExitPlanMode"];
+  const nonEditTools = ["Bash", "Read", "UnknownTool", "mcp_xyz", "Update"];
 
   describe("mode = off", () => {
     it.each([...editTools, ...nonEditTools])("returns null for tool=%s", (tool) => {
@@ -71,8 +80,9 @@ describe("decidePermissionAutoApprove", () => {
   });
 
   describe("mode = edits", () => {
-    it.each(editTools)("returns allow_once for edit tool=%s", (tool) => {
+    it.each([...editTools, ...planTools])("returns allow_once for edit/plan tool=%s", (tool) => {
       expect(decidePermissionAutoApprove("edits", { tool, controlSubtype: "permission" })).toBe("allow_once");
+      expect(decidePermissionAutoApprove("edits", { tool, controlSubtype: "can_use_tool" })).toBe("allow_once");
     });
 
     it.each(nonEditTools)("returns null for non-edit tool=%s", (tool) => {

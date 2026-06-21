@@ -11,6 +11,7 @@ import {
   shouldDeferMonacoEditorMount,
 } from "../utils/monacoLargeFile";
 import { runWhenIdle } from "../utils/deferIdle";
+import { resolveMonacoIdleDeferTimeoutMs } from "../utils/uiWorkDefer";
 import { MonacoSelectionChatToolbar } from "./MonacoSelectionChatToolbar";
 
 const DiffEditor = lazy(() =>
@@ -24,6 +25,8 @@ interface Props {
   language: string;
   readOnly: boolean;
   dark: boolean;
+  /** keep-alive 下编辑器常驻挂载，仅在活跃时才需要 layout。 */
+  isActive: boolean;
   activeSessionId?: string | null;
   onModifiedChange: (value: string) => void;
 }
@@ -35,6 +38,7 @@ export function GitDiffMonacoPane({
   language,
   readOnly,
   dark,
+  isActive,
   activeSessionId = null,
   onModifiedChange,
 }: Props) {
@@ -68,7 +72,9 @@ export function GitDiffMonacoPane({
       return;
     }
     setSurfaceReady(false);
-    return runWhenIdle(() => setSurfaceReady(true), { timeoutMs: 48 });
+    return runWhenIdle(() => setSurfaceReady(true), {
+      timeoutMs: resolveMonacoIdleDeferTimeoutMs(48),
+    });
   }, [diffContentLength, relativePath]);
 
   useEffect(() => {
@@ -102,6 +108,18 @@ export function GitDiffMonacoPane({
     observer.observe(container);
     return () => observer.disconnect();
   }, [diffEditors]);
+
+  // keep-alive：diff 编辑器常驻挂载，切回活跃态时 display:none→flex，需在下一帧
+  // 显式 layout（双栏布局对尺寸更敏感），与普通编辑器的切回兜底对齐。
+  useEffect(() => {
+    if (!isActive) return;
+    const diffEditor = diffEditorRef.current;
+    if (!diffEditor) return;
+    const frame = window.requestAnimationFrame(() => {
+      diffEditor.layout();
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [isActive]);
 
   return (
     <Suspense

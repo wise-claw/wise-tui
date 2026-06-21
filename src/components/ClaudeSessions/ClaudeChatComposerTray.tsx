@@ -2,6 +2,7 @@ import { Spin } from "antd";
 import { lazy, Suspense, memo, type RefObject } from "react";
 import type { ComposerRegionProps } from "../ClaudeChatInput";
 import { BackgroundInvocationDock } from "./BackgroundInvocationDock";
+import { claudeChatComposerTrayPropsEqual } from "./claudeChatComposerTrayPropsEqual";
 
 /** Semi AIChatInput（Tiptap/ProseMirror）与聊天输入区同 chunk，按需加载。 */
 export const composerRegionChunk = import("../ClaudeChatInput/composer-region");
@@ -35,4 +36,4 @@ export const ClaudeChatComposerTray = memo(function ClaudeChatComposerTray({
       </Suspense>
     </div>
   );
-});
+}, claudeChatComposerTrayPropsEqual);

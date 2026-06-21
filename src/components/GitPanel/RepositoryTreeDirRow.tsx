@@ -77,8 +77,11 @@ function RepositoryTreeDirRowInner({
 }
 
 function dirRowMemoCompare(prev: Readonly<RepositoryTreeDirRowProps>, next: Readonly<RepositoryTreeDirRowProps>): boolean {
-  if (repositoryDirNodeContentKey(prev.node) !== repositoryDirNodeContentKey(next.node)) {
-    return false;
+  // 引用相等的节点（滚动时 flatTreeRows 稳定）跳过 children-path 字符串重建。
+  if (prev.node !== next.node) {
+    if (repositoryDirNodeContentKey(prev.node) !== repositoryDirNodeContentKey(next.node)) {
+      return false;
+    }
   }
   if (prev.depth !== next.depth) return false;
   if (prev.isExpanded !== next.isExpanded) return false;
