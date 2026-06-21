@@ -12,9 +12,11 @@ import {
 interface Props {
   sourceValue: ModelProfileQuickConfig;
   onApply: (value: ModelProfileQuickConfig) => boolean;
+  /** 模型输入框占位文本；OpenCode 用 `provider/model`，其余默认 `model id`。 */
+  modelPlaceholder?: string;
 }
 
-export function ModelProfileQuickConfigFields({ sourceValue, onApply }: Props) {
+export function ModelProfileQuickConfigFields({ sourceValue, onApply, modelPlaceholder }: Props) {
   const [draft, setDraft] = useState(sourceValue);
   const [dirty, setDirty] = useState(false);
   const draftRef = useRef(draft);
@@ -110,7 +112,7 @@ export function ModelProfileQuickConfigFields({ sourceValue, onApply }: Props) {
             onChange={(e) => updateField("model", e.target.value)}
             onBlur={handleFieldBlur}
             onKeyDown={handleEnter}
-            placeholder="model id"
+            placeholder={modelPlaceholder ?? "model id"}
             maxLength={120}
           />
         </div>

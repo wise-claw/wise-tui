@@ -205,6 +205,19 @@ fn stderr_line_is_actionable(line: &str) -> bool {
         || lower.contains("apikey")
 }
 
+/// 判定一行 codex 输出是否为可忽略的内部噪音（非用户可行动错误）。
+///
+/// codex 会在 stdout/stderr 混入两类干扰：
+/// 1. `codex_core::util: ... without active item` —— 某些模型 provider 的流式事件顺序
+///    与 codex 内部预期不符时打出的追踪日志，会随每个 delta 反复刷屏，但不影响最终结果。
+/// 2. `Model metadata for <model> not found. Defaulting to fallback metadata` —— codex
+///    未识别该模型元数据，回退后仍可运行，属一次性非致命警告。
+/// 两者既不该作为正文展示，也不该计入失败诊断（避免遮蔽真实错误），统一过滤。
+fn codex_line_is_benign_noise(line: &str) -> bool {
+    let lower = line.to_lowercase();
+    lower.contains("without active item") || lower.contains("defaulting to fallback metadata")
+}
+
 fn validate_codex_project_path(project_path: &str) -> Result<(), String> {
     let trimmed = project_path.trim();
     if trimmed.is_empty() {
@@ -279,7 +292,14 @@ fn attach_codex_child_io(
                 continue;
             }
             let stream_lines = match map_codex_exec_stdout_line(&line) {
-                CodexStdoutMap::PlainText => vec![codex_assistant_stream_line(&line)],
+                CodexStdoutMap::PlainText => {
+                    // codex 会把非 JSON 的内部日志/警告（如模型元数据回退）混入 stdout，
+                    // 它们不是模型回复，跳过避免当成正文展示。
+                    if codex_line_is_benign_noise(&line) {
+                        continue;
+                    }
+                    vec![codex_assistant_stream_line(&line)]
+                }
                 CodexStdoutMap::StreamLines(mapped) if mapped.is_empty() => continue,
                 CodexStdoutMap::StreamLines(mapped) => mapped,
             };
@@ -304,6 +324,11 @@ fn attach_codex_child_io(
         let mut lines = reader.lines();
         while let Ok(Some(line)) = lines.next_line().await {
             if line.trim().is_empty() {
+                continue;
+            }
+            // codex_core 的流式追踪噪音（如 "without active item"）会随每个 delta 反复刷屏，
+            // 既不展示也不计入失败诊断，避免遮蔽真实错误。
+            if codex_line_is_benign_noise(&line) {
                 continue;
             }
             stderr_lines_reader.lock().await.push(line.clone());
@@ -668,5 +693,28 @@ mod tests {
         assert!(stderr_suggests_resume_session_missing(&[
             "会话不存在".to_string()
         ]));
+    }
+
+    #[test]
+    fn benign_noise_filtered_from_codex_output() {
+        // codex_core 流式追踪噪音：随每个 delta 反复刷屏，但不影响结果。
+        assert!(codex_line_is_benign_noise(
+            "2026-06-21T23:41:58.897639Z ERROR codex_core::util: ReasoningSummaryPartAdded without active item"
+        ));
+        assert!(codex_line_is_benign_noise(
+            "2026-06-21T23:42:00.941926Z ERROR codex_core::util: OutputTextDelta without active item"
+        ));
+        // 模型元数据回退警告：codex 未识别该模型，回退后仍可运行，非致命。
+        assert!(codex_line_is_benign_noise(
+            "Model metadata for minimax-m3 not found. Defaulting to fallback metadata; this can degrade performance and cause issues."
+        ));
+    }
+
+    #[test]
+    fn real_errors_not_mistaken_for_benign_noise() {
+        // 真实错误与续接失效信号不应被 benign 过滤吞掉。
+        assert!(!codex_line_is_benign_noise("Error: unauthorized 401"));
+        assert!(!codex_line_is_benign_noise("session not found"));
+        assert!(!codex_line_is_benign_noise("API key invalid"));
     }
 }

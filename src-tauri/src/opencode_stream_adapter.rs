@@ -14,6 +14,8 @@ pub struct OpencodeStdoutMapper {
     text_by_part_id: HashMap<String, String>,
     tool_output_by_call_id: HashMap<String, String>,
     emitted_session_id: Option<String>,
+    /// 最近一次 `error` 事件解析到的真实错误文本，供等待任务复用，避免兜底提示遮蔽真实错误。
+    last_error: Option<String>,
 }
 
 impl OpencodeStdoutMapper {
@@ -237,19 +239,67 @@ impl OpencodeStdoutMapper {
     }
 
     fn map_error_event(&mut self, value: &Value) -> Vec<String> {
-        let message = value
-            .get("message")
-            .or_else(|| value.get("error"))
-            .and_then(Value::as_str)
-            .or_else(|| {
-                value
-                    .get("part")
-                    .and_then(|p| p.get("message").or_else(|| p.get("text")))
-                    .and_then(Value::as_str)
-            })
-            .unwrap_or("OpenCode 执行出错");
-        vec![assistant_text_line(message)]
+        let extracted = extract_opencode_error_text(value);
+        let message = extracted
+            .clone()
+            .unwrap_or_else(|| "OpenCode 执行出错".to_string());
+        // 仅留存真正解析到的文本；回退占位符不写入，留给等待任务走兜底而非用占位符充当诊断。
+        self.last_error = extracted;
+        vec![assistant_text_line(&message)]
     }
+
+    /// 取出最近一次 `error` 事件解析到的真实错误文本（供等待任务复用，避免兜底）。
+    pub fn take_last_error(&mut self) -> Option<String> {
+        self.last_error.take()
+    }
+}
+
+/// 从 OpenCode `error` 事件中提取可读错误文本。
+///
+/// OpenCode 以 `--format json` 运行时，错误经 stdout 以 `{"type":"error",...}` 事件输出，
+/// 其消息可能位于顶层字符串字段，也可能嵌套在 `error` / `part` / `cause` 等对象内。
+/// 逐层尝试常见字段，避免因结构差异丢失真实错误而回退成无意义的「OpenCode 执行出错」。
+fn extract_opencode_error_text(value: &Value) -> Option<String> {
+    extract_opencode_error_text_inner(value, 0)
+}
+
+const OPENCODE_ERROR_TEXT_MAX_DEPTH: usize = 4;
+
+fn extract_opencode_error_text_inner(value: &Value, depth: usize) -> Option<String> {
+    if depth > OPENCODE_ERROR_TEXT_MAX_DEPTH {
+        return None;
+    }
+    if let Some(s) = value.as_str() {
+        let trimmed = s.trim();
+        return if trimmed.is_empty() {
+            None
+        } else {
+            Some(trimmed.to_string())
+        };
+    }
+    let Some(obj) = value.as_object() else {
+        return None;
+    };
+    // 1. 顶层常见字符串字段（最常见形态）。
+    for key in ["message", "error", "details", "reason", "text", "msg"] {
+        if let Some(s) = obj.get(key).and_then(Value::as_str) {
+            let trimmed = s.trim();
+            if !trimmed.is_empty() {
+                return Some(trimmed.to_string());
+            }
+        }
+    }
+    // 2. 上述字段为对象时递归提取（如 {"error":{"message":"..."}} 或 {"part":{"text":"..."}}）。
+    for key in ["error", "message", "details", "reason", "part", "cause"] {
+        if let Some(inner) = obj.get(key) {
+            if inner.is_object() {
+                if let Some(text) = extract_opencode_error_text_inner(inner, depth + 1) {
+                    return Some(text);
+                }
+            }
+        }
+    }
+    None
 }
 
 pub fn opencode_session_clear_line() -> String {
@@ -342,5 +392,55 @@ mod tests {
             }
             other => panic!("{other:?}"),
         }
+    }
+
+    #[test]
+    fn maps_error_event_extracts_nested_object_message() {
+        let mut mapper = OpencodeStdoutMapper::default();
+        // provider 凭据失败常以嵌套对象形态输出，旧逻辑会丢失真实消息。
+        let line = r#"{"type":"error","sessionID":"ses_1","error":{"message":"provider returned 401 unauthorized"}}"#;
+        match mapper.map_line(line) {
+            OpencodeStdoutMap::StreamLines(lines) => {
+                assert!(lines
+                    .iter()
+                    .any(|l| l.contains("provider returned 401 unauthorized")));
+                assert!(!lines.iter().any(|l| l.contains("OpenCode 执行出错")));
+            }
+            other => panic!("{other:?}"),
+        }
+        assert_eq!(
+            mapper.take_last_error().as_deref(),
+            Some("provider returned 401 unauthorized")
+        );
+    }
+
+    #[test]
+    fn maps_error_event_extracts_part_text() {
+        let mut mapper = OpencodeStdoutMapper::default();
+        let line = r#"{"type":"error","sessionID":"ses_1","part":{"type":"error","text":"network unreachable"}}"#;
+        match mapper.map_line(line) {
+            OpencodeStdoutMap::StreamLines(lines) => {
+                assert!(lines.iter().any(|l| l.contains("network unreachable")));
+            }
+            other => panic!("{other:?}"),
+        }
+        assert_eq!(
+            mapper.take_last_error().as_deref(),
+            Some("network unreachable")
+        );
+    }
+
+    #[test]
+    fn maps_error_event_falls_back_when_no_text() {
+        let mut mapper = OpencodeStdoutMapper::default();
+        let line = r#"{"type":"error","sessionID":"ses_1","error":{"code":42}}"#;
+        match mapper.map_line(line) {
+            OpencodeStdoutMap::StreamLines(lines) => {
+                assert!(lines.iter().any(|l| l.contains("OpenCode 执行出错")));
+            }
+            other => panic!("{other:?}"),
+        }
+        // 无可读文本时不写入 last_error，留给等待任务走兜底。
+        assert_eq!(mapper.take_last_error(), None);
     }
 }

@@ -180,6 +180,32 @@ fn stderr_line_is_actionable(line: &str) -> bool {
         || lower.contains("provider")
 }
 
+/// 进程非零退出时产出一条诊断文案。
+///
+/// 优先级：stderr 可行动行 > stdout `error` 事件真实消息 > stderr 最后非空行 > 兜底。
+/// 可行动的 stderr（含 error/401/403/api key 等关键词）最可信；其次复用 OpenCode 经 stdout
+/// JSON 事件报告的真实错误（如 provider 401），它优先于无关的 stderr 普通日志；最后才兜底。
+/// 这样避免过去「stdout 已吐真实错误，等待任务却无视它再发『无 stderr 输出』笼统提示」的遮蔽。
+fn build_opencode_failure_diagnostic(
+    stderr_lines: &[String],
+    stdout_error: Option<&str>,
+) -> String {
+    if let Some(line) = stderr_lines
+        .iter()
+        .rev()
+        .find(|l| stderr_line_is_actionable(l))
+    {
+        return format!("OpenCode 执行失败：{}", line.trim());
+    }
+    if let Some(msg) = stdout_error.map(str::trim).filter(|s| !s.is_empty()) {
+        return format!("OpenCode 执行失败：{}", msg);
+    }
+    if let Some(last) = stderr_lines.iter().rev().find(|l| !l.trim().is_empty()) {
+        return format!("OpenCode 执行失败：{}", last.trim());
+    }
+    "OpenCode 执行失败（未捕获到错误输出）。请检查 provider 凭据、模型配置与网络连接。".to_string()
+}
+
 fn validate_opencode_project_path(project_path: &str) -> Result<(), String> {
     let trimmed = project_path.trim();
     if trimmed.is_empty() {
@@ -239,9 +265,14 @@ fn attach_opencode_child_io(
         *slot = Some(child);
     }
 
+    // OpenCode 以 `--format json` 运行时，错误经 stdout 以 `{"type":"error",...}` 事件输出，
+    // 而非 stderr。这里把流适配器解析出的真实错误文本留存一份，供进程退出后的等待任务复用，
+    // 避免在 stdout 已吐出真实错误的情况下仍回退成「无 stderr 输出」的笼统提示。
+    let stdout_error_message = Arc::new(TokioMutex::new(None::<String>));
     let app_stdout = ctx.app.clone();
     let session_id_stdout = ctx.session_id.clone();
     let invocation_key_stdout = ctx.invocation_key.clone();
+    let stdout_error_writer = stdout_error_message.clone();
     tokio::spawn(async move {
         let reader = BufReader::new(stdout);
         let mut lines = reader.lines();
@@ -255,6 +286,9 @@ fn attach_opencode_child_io(
                 OpencodeStdoutMap::StreamLines(mapped) if mapped.is_empty() => continue,
                 OpencodeStdoutMap::StreamLines(mapped) => mapped,
             };
+            if let Some(msg) = mapper.take_last_error() {
+                *stdout_error_writer.lock().await = Some(msg);
+            }
             for stream_line in stream_lines {
                 emit_opencode_stdout_line(
                     &app_stdout,
@@ -297,12 +331,14 @@ fn attach_opencode_child_io(
     let registry_wait = ctx.registry.clone();
     let runtime_wait = ctx.clone();
     let wait_child_wait = wait_child.clone();
+    let stdout_error_reader = stdout_error_message.clone();
     tokio::spawn(async move {
         let mut success = false;
         if let Some(mut child) = wait_child_wait.lock().await.take() {
             success = child.wait().await.map(|s| s.success()).unwrap_or(false);
         }
 
+        let stdout_err = stdout_error_reader.lock().await.clone();
         let lines = stderr_lines.lock().await.clone();
         if !success {
             if used_resume
@@ -376,22 +412,13 @@ fn attach_opencode_child_io(
                     &opencode_assistant_stream_line(diagnostic),
                     invocation_key_wait.as_deref(),
                 );
-            } else if let Some(last_line) = lines.iter().rev().find(|line| !line.trim().is_empty())
-            {
-                let diagnostic = format!("OpenCode 执行失败：{}", last_line.trim());
+            } else {
+                let diagnostic =
+                    build_opencode_failure_diagnostic(&lines, stdout_err.as_deref());
                 emit_opencode_stdout_line(
                     &app_wait,
                     &session_id_wait,
                     &opencode_assistant_stream_line(&diagnostic),
-                    invocation_key_wait.as_deref(),
-                );
-            } else {
-                emit_opencode_stdout_line(
-                    &app_wait,
-                    &session_id_wait,
-                    &opencode_assistant_stream_line(
-                        "OpenCode 执行失败（无 stderr 输出）。请检查 provider 凭据、模型配置与网络连接。",
-                    ),
                     invocation_key_wait.as_deref(),
                 );
             }
@@ -552,5 +579,39 @@ mod tests {
             .map(|s| s.to_string_lossy().into_owned())
             .collect();
         assert!(args.windows(2).any(|w| w[0] == "-s" && w[1] == "ses_abc"));
+    }
+
+    #[test]
+    fn failure_diagnostic_prefers_actionable_stderr() {
+        let lines = vec![
+            "loading config".to_string(),
+            "Error: unauthorized 401".to_string(),
+        ];
+        let d = build_opencode_failure_diagnostic(&lines, Some("provider 401"));
+        // stderr 可行动行优先于 stdout error，避免重复。
+        assert!(d.contains("unauthorized 401"));
+    }
+
+    #[test]
+    fn failure_diagnostic_uses_stdout_error_when_no_stderr() {
+        let d = build_opencode_failure_diagnostic(&[], Some("provider returned 401"));
+        assert!(d.contains("provider returned 401"));
+        assert!(!d.contains("未捕获到错误输出"));
+    }
+
+    #[test]
+    fn failure_diagnostic_prefers_stdout_error_over_non_actionable_stderr() {
+        // stderr 仅有无关日志时，stdout 的真实 error 事件应优先于 stderr 普通行。
+        let lines = vec!["loading plugins".to_string(), "done init".to_string()];
+        let d = build_opencode_failure_diagnostic(&lines, Some("provider returned 401"));
+        assert!(d.contains("provider returned 401"));
+        assert!(!d.contains("done init"));
+    }
+
+    #[test]
+    fn failure_diagnostic_falls_back_when_silent() {
+        let d = build_opencode_failure_diagnostic(&[], None);
+        assert!(d.contains("未捕获到错误输出"));
+        assert!(d.contains("provider 凭据"));
     }
 }

@@ -374,6 +374,191 @@ export function tryMergeCodexQuickConfig(
   }
 }
 
+// ──────────────────────────────────────────────────────────────────────────
+// OpenCode 快捷配置
+//
+// OpenCode (sst/opencode) 的 `opencode.json` provider 块遵循 AI SDK
+// `@ai-sdk/openai-compatible` 形态：
+//   {
+//     "provider": {
+//       "<id>": {
+//         "name": "...", "npm": "@ai-sdk/openai-compatible",
+//         "options": { "baseURL": "...", "apiKey": "..." },
+//         "models": { "<model>": { "name": "<model>" } }
+//       }
+//     },
+//     "model": "<id>/<model>"
+//   }
+// 顶层 `model` 必须为 `provider/model` 格式，其 provider id 与 provider 块 key 对应。
+// 字段名 `options.baseURL` / `options.apiKey` 为规范写法；extract 侧兼容 snake_case 等
+// 变体（其他工具生成的配置），merge 侧统一写规范字段。
+// ──────────────────────────────────────────────────────────────────────────
+
+/** 规范写入的 provider id（裸 model + url/auth 兜底挂载点）。 */
+const OPENCODE_FALLBACK_PROVIDER_ID = "wise";
+/** provider 块创建时的默认 npm 包（OpenAI 兼容）。 */
+const OPENCODE_DEFAULT_PROVIDER_NPM = "@ai-sdk/openai-compatible";
+
+/** 从 `provider/model` 解析 provider id 与 model name；无 `/` / 空段返回 null。 */
+function parseOpencodeProviderId(model: string): { providerId: string; modelName: string } | null {
+  const mid = model.trim();
+  if (!mid) return null;
+  const slash = mid.indexOf("/");
+  if (slash <= 0) return null;
+  const providerId = mid.slice(0, slash).trim();
+  const modelName = mid.slice(slash + 1).trim();
+  if (!providerId || !modelName) return null;
+  return { providerId, modelName };
+}
+
+/** 按变体优先级读取 provider 的 baseURL / apiKey（兼容其他工具生成的配置）。 */
+function readOpencodeProviderOptions(provider: Record<string, unknown>): {
+  url: string;
+  auth: string;
+} {
+  const options = provider.options;
+  const opts =
+    options !== null && typeof options === "object" && !Array.isArray(options)
+      ? (options as Record<string, unknown>)
+      : {};
+  const url =
+    trimField(typeof opts.baseURL === "string" ? opts.baseURL : undefined) ||
+    trimField(typeof opts.api_base_url === "string" ? opts.api_base_url : undefined) ||
+    trimField(typeof opts.base_url === "string" ? opts.base_url : undefined) ||
+    trimField(typeof opts.url === "string" ? opts.url : undefined);
+  const auth =
+    trimField(typeof opts.apiKey === "string" ? opts.apiKey : undefined) ||
+    trimField(typeof opts.api_key === "string" ? opts.api_key : undefined) ||
+    trimField(typeof opts.apikey === "string" ? opts.apikey : undefined);
+  return { url, auth };
+}
+
+export function extractOpencodeQuickConfig(settingsJson: string): ModelProfileQuickConfig {
+  try {
+    const root = parseJsonObject(settingsJson, "配置 JSON");
+    const model = trimField(typeof root.model === "string" ? root.model : undefined);
+    const parsed = parseOpencodeProviderId(model);
+    if (!parsed) {
+      // 裸 model 或空：model 可能仍有用，但 url/auth 无法定位 provider。
+      return { url: "", auth: "", model };
+    }
+    const provider = root.provider;
+    const providerMap =
+      provider !== null && typeof provider === "object" && !Array.isArray(provider)
+        ? (provider as Record<string, unknown>)
+        : {};
+    const entry = providerMap[parsed.providerId];
+    if (entry === null || typeof entry !== "object" || Array.isArray(entry)) {
+      return { url: "", auth: "", model };
+    }
+    const { url, auth } = readOpencodeProviderOptions(entry as Record<string, unknown>);
+    return { url, auth, model };
+  } catch {
+    return { ...EMPTY_MODEL_PROFILE_QUICK_CONFIG };
+  }
+}
+
+/** 确保 root.provider[id] 为对象；不存在时创建带默认字段的 provider 块。 */
+function ensureOpencodeProviderEntry(
+  root: Record<string, unknown>,
+  providerId: string,
+  modelName: string,
+): Record<string, unknown> {
+  const existingProvider = root.provider;
+  const providerMap =
+    existingProvider !== null && typeof existingProvider === "object" && !Array.isArray(existingProvider)
+      ? (existingProvider as Record<string, unknown>)
+      : {};
+  root.provider = providerMap;
+  const existing = providerMap[providerId];
+  if (existing !== null && typeof existing === "object" && !Array.isArray(existing)) {
+    return existing as Record<string, unknown>;
+  }
+  // 新建 provider 块：给 opencode 加载所需的最小默认字段。
+  const entry: Record<string, unknown> = {
+    name: providerId,
+    npm: OPENCODE_DEFAULT_PROVIDER_NPM,
+    options: {} as Record<string, unknown>,
+  };
+  providerMap[providerId] = entry;
+  // 顺手登记 model，避免 opencode 不识别自定义模型。
+  entry.models = { [modelName]: { name: modelName } };
+  return entry;
+}
+
+/** 确保 entry.options 为对象并返回可写引用。 */
+function ensureOpencodeOptions(entry: Record<string, unknown>): Record<string, unknown> {
+  const existing = entry.options;
+  if (existing !== null && typeof existing === "object" && !Array.isArray(existing)) {
+    return existing as Record<string, unknown>;
+  }
+  const opts: Record<string, unknown> = {};
+  entry.options = opts;
+  return opts;
+}
+
+/** 已存在 models 时 additive 登记 model（不覆盖用户已注册项）。 */
+function ensureOpencodeModelRegistered(
+  entry: Record<string, unknown>,
+  modelName: string,
+): void {
+  const existing = entry.models;
+  if (existing !== null && typeof existing === "object" && !Array.isArray(existing)) {
+    const models = existing as Record<string, unknown>;
+    if (models[modelName] === undefined) {
+      models[modelName] = { name: modelName };
+    }
+    return;
+  }
+  entry.models = { [modelName]: { name: modelName } };
+}
+
+export function mergeOpencodeQuickConfig(
+  settingsJson: string,
+  patch: ModelProfileQuickConfig,
+): string {
+  const root = parseJsonObject(settingsJson, "配置 JSON");
+  const normalized = normalizeModelProfileQuickConfig(patch);
+
+  let effectiveModel = normalized.model;
+  let parsed = parseOpencodeProviderId(effectiveModel);
+
+  // 仅当提供 url/auth 时才需要 provider 块；此时若 model 为裸名，需兜底挂到 wise/ 下，
+  // 否则 OpenCode 找不到 provider，url/auth 无效。
+  const needsProviderBlock = Boolean(normalized.url || normalized.auth);
+  if (needsProviderBlock && !parsed && effectiveModel) {
+    effectiveModel = `${OPENCODE_FALLBACK_PROVIDER_ID}/${effectiveModel}`;
+    root.model = effectiveModel;
+    parsed = parseOpencodeProviderId(effectiveModel);
+  } else if (effectiveModel) {
+    root.model = effectiveModel;
+  }
+
+  if (parsed && needsProviderBlock) {
+    const entry = ensureOpencodeProviderEntry(root, parsed.providerId, parsed.modelName);
+    const opts = ensureOpencodeOptions(entry);
+    if (normalized.url) opts.baseURL = normalized.url;
+    if (normalized.auth) opts.apiKey = normalized.auth;
+    ensureOpencodeModelRegistered(entry, parsed.modelName);
+  }
+
+  return `${JSON.stringify(root, null, 2)}\n`;
+}
+
+export function tryMergeOpencodeQuickConfig(
+  settingsJson: string,
+  patch: ModelProfileQuickConfig,
+): { ok: true; value: string } | { ok: false; error: string } {
+  try {
+    return { ok: true, value: mergeOpencodeQuickConfig(settingsJson, patch) };
+  } catch (e) {
+    return {
+      ok: false,
+      error: e instanceof Error ? e.message : "OpenCode 快捷配置合并失败",
+    };
+  }
+}
+
 function hasQuickConfigInput(patch: ModelProfileQuickConfig): boolean {
   return Boolean(trimField(patch.url) || trimField(patch.auth) || trimField(patch.model));
 }

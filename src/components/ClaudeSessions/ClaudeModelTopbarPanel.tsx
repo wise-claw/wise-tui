@@ -44,8 +44,10 @@ import {
 import {
   extractClaudeQuickConfig,
   extractCodexQuickConfig,
+  extractOpencodeQuickConfig,
   tryMergeClaudeQuickConfig,
   tryMergeCodexQuickConfig,
+  tryMergeOpencodeQuickConfig,
   type ModelProfileQuickConfig,
 } from "../../utils/modelProfileQuickConfig";
 import { ClaudeSettingsJsonEditor } from "./ClaudeSettingsJsonEditor";
@@ -158,6 +160,9 @@ export function ClaudeModelTopbarPanel({
     if (panelEngine === "codex") {
       return extractCodexQuickConfig(addCodexAuthJson, addCodexConfigToml);
     }
+    if (panelEngine === "opencode") {
+      return extractOpencodeQuickConfig(addSettingsJson);
+    }
     if (panelEngine === "claude") {
       return extractClaudeQuickConfig(addSettingsJson);
     }
@@ -169,6 +174,9 @@ export function ClaudeModelTopbarPanel({
     const engine = normalizeModelProfileEngine(configProfile.engine);
     if (engine === "codex") {
       return extractCodexQuickConfig(configCodexAuthJson, configCodexConfigToml);
+    }
+    if (engine === "opencode") {
+      return extractOpencodeQuickConfig(settingsDraft);
     }
     if (engine === "claude") {
       return extractClaudeQuickConfig(settingsDraft);
@@ -189,6 +197,13 @@ export function ClaudeModelTopbarPanel({
         setAddCodexConfigToml(merged.value.configToml);
       } else if (panelEngine === "claude") {
         const merged = tryMergeClaudeQuickConfig(addSettingsJson, patch);
+        if (!merged.ok) {
+          message.warning(merged.error);
+          return false;
+        }
+        setAddSettingsJson(merged.value);
+      } else if (panelEngine === "opencode") {
+        const merged = tryMergeOpencodeQuickConfig(addSettingsJson, patch);
         if (!merged.ok) {
           message.warning(merged.error);
           return false;
@@ -221,6 +236,13 @@ export function ClaudeModelTopbarPanel({
         setConfigCodexConfigToml(merged.value.configToml);
       } else if (engine === "claude") {
         const merged = tryMergeClaudeQuickConfig(settingsDraft, patch);
+        if (!merged.ok) {
+          message.warning(merged.error);
+          return false;
+        }
+        setSettingsDraft(merged.value);
+      } else if (engine === "opencode") {
+        const merged = tryMergeOpencodeQuickConfig(settingsDraft, patch);
         if (!merged.ok) {
           message.warning(merged.error);
           return false;
@@ -721,10 +743,11 @@ export function ClaudeModelTopbarPanel({
               />
             </div>
           </div>
-          {panelEngine === "claude" || panelEngine === "codex" ? (
+          {panelEngine === "claude" || panelEngine === "codex" || panelEngine === "opencode" ? (
             <ModelProfileQuickConfigFields
               sourceValue={addQuickConfigSource}
               onApply={applyAddQuickConfig}
+              modelPlaceholder={panelEngine === "opencode" ? "provider/model" : "model id"}
             />
           ) : null}
           <div className="app-claude-model-topbar-panel__json-head">
@@ -844,10 +867,16 @@ export function ClaudeModelTopbarPanel({
           </div>
           {configProfile &&
           (normalizeModelProfileEngine(configProfile.engine) === "claude" ||
-            normalizeModelProfileEngine(configProfile.engine) === "codex") ? (
+            normalizeModelProfileEngine(configProfile.engine) === "codex" ||
+            normalizeModelProfileEngine(configProfile.engine) === "opencode") ? (
             <ModelProfileQuickConfigFields
               sourceValue={configQuickConfigSource}
               onApply={applyConfigQuickConfig}
+              modelPlaceholder={
+                normalizeModelProfileEngine(configProfile.engine) === "opencode"
+                  ? "provider/model"
+                  : "model id"
+              }
             />
           ) : null}
           <div className="app-claude-model-topbar-panel__json-head">
