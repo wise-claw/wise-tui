@@ -2,17 +2,10 @@ import { CloudUploadOutlined } from "@ant-design/icons";
 import { Spin, message } from "antd";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useGitRepositoryStats } from "../../hooks/useGitRepositoryStats";
-import { executeClaudeCodeAndWait, getClaudeConfigModel } from "../../services/claude";
-import { commitPullPushRepository } from "../../services/gitCommitPullPush";
 import { gitStatus } from "../../services/git";
+import { aiCommitPullPushRepository, isGitMergeConflictError } from "../../services/gitCommitPullPush";
 import { refreshGitRepositoryStats } from "../../stores/gitRepositoryStatsStore";
-import { extractClaudeInvocationFinalText } from "../../utils/claudeInvocationText";
 import { EXECUTION_ENVIRONMENT_ENGINE_MENTION_NAMES } from "../../constants/executionEnvironmentDispatch";
-import { buildAiCommitSummary } from "./claudeChatHelpers";
-import {
-  conventionalCommitPromptLines,
-  normalizeConventionalCommitMessage,
-} from "../../utils/conventionalCommitMessage";
 import { filterComposerCommonPhrasesForQuickBar } from "../../constants/composerCommonPhrase";
 import { dispatchApplyComposerCommonPhrase } from "../../constants/composerCommonPhraseEvents";
 import { useComposerCommonPhrases } from "../../hooks/useComposerCommonPhrases";
@@ -125,45 +118,8 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
     setPushSubmitting(true);
     setPushSubmitPhase("读取变更");
     try {
-      // 1. 读取变更并 AI 生成提交信息（失败回退到规则生成，不阻断流程）
-      const status = await gitStatus(repoPath);
-      const fallback = buildAiCommitSummary(status);
-      let commitMessage = normalizeConventionalCommitMessage(fallback);
-
-      const changedFiles = [...status.staged, ...status.unstaged];
-      if (changedFiles.length > 0) {
-        setPushSubmitPhase("AI 润色");
-        const changedFileLines = changedFiles
-          .map((item) => `- ${item.path} (${item.status}, +${item.additions}, -${item.deletions})`)
-          .join("\n");
-        const prompt = [
-          ...conventionalCommitPromptLines(),
-          "",
-          `仓库路径: ${repoPath}`,
-          `分支: ${status.branch ?? "(unknown)"}`,
-          `总计: +${Math.max(0, status.additions || 0)} / -${Math.max(0, status.deletions || 0)}`,
-          `暂存文件数: ${status.staged.length}, 未暂存文件数: ${status.unstaged.length}`,
-          "文件清单：",
-          changedFileLines || "- 无",
-        ].join("\n");
-        const configuredModel = await getClaudeConfigModel(repoPath);
-
-        const result = await executeClaudeCodeAndWait({
-          repositoryPath: repoPath,
-          prompt,
-          model: configuredModel ?? undefined,
-          timeoutMs: 45_000,
-          connectionMode: "oneshot",
-        });
-        if (result.success) {
-          const cleaned = extractClaudeInvocationFinalText(result.outputLines);
-          commitMessage = normalizeConventionalCommitMessage(cleaned || fallback);
-        }
-      }
-
-      // 2. 暂存 + 提交 + 拉取 + 推送（一体化）
-      setPushSubmitPhase("提交并推送");
-      const outcome = await commitPullPushRepository(repoPath, commitMessage, {
+      // AI 生成提交信息 + 暂存 + 提交 + 拉取 + 推送（一体化，phase 由 service 经 onPhase 推进）
+      const outcome = await aiCommitPullPushRepository(repoPath, {
         onPhase: setPushSubmitPhase,
       });
       if (outcome === "noop") {
@@ -174,52 +130,58 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
       }
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);
-      message.error(`推送失败: ${errMsg}`);
-      const dispatchAutoFix = onDispatchExecutionEnvironment;
-      if (pushAutoFixTimerRef.current != null) {
-        window.clearTimeout(pushAutoFixTimerRef.current);
-      }
-      pushAutoFixTimerRef.current = window.setTimeout(() => {
-        pushAutoFixTimerRef.current = null;
-        void (async () => {
-          try {
-            const latest = await gitStatus(repoPath).catch(() => null);
-            const stagedFiles =
-              latest?.staged.map((f) => `${f.path}(${f.status}, +${f.additions}, -${f.deletions})`) ?? [];
-            const unstagedFiles =
-              latest?.unstaged.map((f) => `${f.path}(${f.status}, +${f.additions}, -${f.deletions})`) ?? [];
-            const autoFixPrompt = [
-              "下面是一次 git 提交/同步/推送流程失败日志，请直接定位问题并修改代码后再次验证。",
-              "优先处理 pre-commit、husky、lint、typecheck 或测试失败。",
-              "",
-              `仓库路径：${repoPath}`,
-              `分支：${latest?.branch ?? "unknown"}`,
-              `变更统计：+${Math.max(0, latest?.additions || 0)} / -${Math.max(0, latest?.deletions || 0)}`,
-              `暂存文件：${stagedFiles.length > 0 ? stagedFiles.join("、") : "(无)"}`,
-              `未暂存文件：${unstagedFiles.length > 0 ? unstagedFiles.join("、") : "(无)"}`,
-              "",
-              "失败日志：",
-              "```text",
-              errMsg,
-              "```",
-              "",
-              "请输出并执行修复步骤，完成后给出简短结果说明。",
-            ].join("\n");
-            if (!dispatchAutoFix) {
-              message.warning("无法派发错误检查：执行环境派发未就绪。");
-              return;
+      // pull/merge 冲突：AI 无法解决语义冲突，提示用户手动处理，不派发 autoFix
+      if (isGitMergeConflictError(errMsg)) {
+        message.warning("拉取/合并存在冲突，请手动解决冲突后重试推送");
+        refreshGitRepositoryStats(repoPath);
+      } else {
+        message.error(`推送失败: ${errMsg}`);
+        const dispatchAutoFix = onDispatchExecutionEnvironment;
+        if (pushAutoFixTimerRef.current != null) {
+          window.clearTimeout(pushAutoFixTimerRef.current);
+        }
+        pushAutoFixTimerRef.current = window.setTimeout(() => {
+          pushAutoFixTimerRef.current = null;
+          void (async () => {
+            try {
+              const latest = await gitStatus(repoPath).catch(() => null);
+              const stagedFiles =
+                latest?.staged.map((f) => `${f.path}(${f.status}, +${f.additions}, -${f.deletions})`) ?? [];
+              const unstagedFiles =
+                latest?.unstaged.map((f) => `${f.path}(${f.status}, +${f.additions}, -${f.deletions})`) ?? [];
+              const autoFixPrompt = [
+                "下面是一次 git 提交/同步/推送流程失败日志，请直接定位问题并修改代码后再次验证。",
+                "优先处理 pre-commit、husky、lint、typecheck 或测试失败。",
+                "",
+                `仓库路径：${repoPath}`,
+                `分支：${latest?.branch ?? "unknown"}`,
+                `变更统计：+${Math.max(0, latest?.additions || 0)} / -${Math.max(0, latest?.deletions || 0)}`,
+                `暂存文件：${stagedFiles.length > 0 ? stagedFiles.join("、") : "(无)"}`,
+                `未暂存文件：${unstagedFiles.length > 0 ? unstagedFiles.join("、") : "(无)"}`,
+                "",
+                "失败日志：",
+                "```text",
+                errMsg,
+                "```",
+                "",
+                "请输出并执行修复步骤，完成后给出简短结果说明。",
+              ].join("\n");
+              if (!dispatchAutoFix) {
+                message.warning("无法派发错误检查：执行环境派发未就绪。");
+                return;
+              }
+              const mention = EXECUTION_ENVIRONMENT_ENGINE_MENTION_NAMES.claude;
+              await dispatchAutoFix({
+                prompt: `@${mention} ${autoFixPrompt}`,
+                userBubblePrompt: "Git 提交/推送失败，排查 pre-commit、lint、typecheck 等问题",
+              });
+              message.info(`已通过 @${mention} 派发错误检查，主会话不受阻塞。`);
+            } catch {
+              /* ignore auto-fix dispatch failure */
             }
-            const mention = EXECUTION_ENVIRONMENT_ENGINE_MENTION_NAMES.claude;
-            await dispatchAutoFix({
-              prompt: `@${mention} ${autoFixPrompt}`,
-              userBubblePrompt: "Git 提交/推送失败，排查 pre-commit、lint、typecheck 等问题",
-            });
-            message.info(`已通过 @${mention} 派发错误检查，主会话不受阻塞。`);
-          } catch {
-            /* ignore auto-fix dispatch failure */
-          }
-        })();
-      }, 0);
+          })();
+        }, 0);
+      }
     } finally {
       pushSubmitInFlightRef.current = false;
       setPushSubmitting(false);
@@ -227,13 +189,32 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
     }
   }, [gitRepositoryPath, onDispatchExecutionEnvironment]);
 
+  const ahead = stats.ahead ?? 0;
+  const behind = stats.behind ?? 0;
+  const hasSyncCount = ahead > 0 || behind > 0;
+  const idleTitle = [
+    "拉取 / AI 生成提交信息 / 提交 / 推送",
+    ahead > 0 ? `领先 ${ahead} 个提交` : null,
+    behind > 0 ? `落后 ${behind} 个提交` : null,
+    `工作区 +${stats.additions} / -${stats.deletions}`,
+  ]
+    .filter(Boolean)
+    .join(" · ");
+
   const pushControl = (
     <button
       type="button"
       className="app-session-quick-pill app-session-quick-pill--push"
       disabled={pushSubmitting}
       aria-busy={pushSubmitting}
-      title={pushSubmitting ? pushSubmitPhase || "推送中" : "拉取 / AI 生成提交信息 / 提交 / 推送"}
+      aria-label={
+        pushSubmitting
+          ? pushSubmitPhase || "推送中"
+          : ahead > 0
+            ? `推送，领先 ${ahead} 个提交${behind > 0 ? `，落后 ${behind}` : ""}`
+            : "推送"
+      }
+      title={pushSubmitting ? pushSubmitPhase || "推送中" : idleTitle}
       onPointerDown={(event) => {
         if (event.button !== 0 || pushSubmitting) return;
         event.preventDefault();
@@ -247,8 +228,17 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
       <span
         className={`app-session-quick-pill__stats${reviewGitStatsPulse ? " app-session-quick-pill__stats--pulse" : ""}`}
       >
-        <span className="app-session-quick-pill__add">+{stats.additions}</span>
-        <span className="app-session-quick-pill__del">-{stats.deletions}</span>
+        {hasSyncCount ? (
+          <>
+            {ahead > 0 ? <span className="app-session-quick-pill__ahead">↑{ahead}</span> : null}
+            {behind > 0 ? <span className="app-session-quick-pill__behind">↓{behind}</span> : null}
+          </>
+        ) : (
+          <>
+            <span className="app-session-quick-pill__add">+{stats.additions}</span>
+            <span className="app-session-quick-pill__del">-{stats.deletions}</span>
+          </>
+        )}
       </span>
     </button>
   );

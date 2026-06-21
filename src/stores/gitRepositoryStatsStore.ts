@@ -3,9 +3,9 @@ import { startAdaptiveInterval } from "../utils/adaptivePoll";
 
 const VISIBLE_POLL_INTERVAL_MS = 10000;
 const HIDDEN_POLL_INTERVAL_MS = 30000;
-const EMPTY_STATS = { additions: 0, deletions: 0 } as const;
+const EMPTY_STATS = { additions: 0, deletions: 0, ahead: 0, behind: 0 } as const;
 
-export type GitRepositoryStats = { additions: number; deletions: number };
+export type GitRepositoryStats = { additions: number; deletions: number; ahead: number; behind: number };
 
 type PathEntry = {
   stats: GitRepositoryStats;
@@ -44,15 +44,27 @@ async function refreshPath(pathKey: string): Promise<void> {
     const next: GitRepositoryStats = {
       additions: Math.max(0, status.additions || 0),
       deletions: Math.max(0, status.deletions || 0),
+      ahead: Math.max(0, status.ahead || 0),
+      behind: Math.max(0, status.behind || 0),
     };
-    if (entry.stats.additions === next.additions && entry.stats.deletions === next.deletions) {
+    if (
+      entry.stats.additions === next.additions
+      && entry.stats.deletions === next.deletions
+      && entry.stats.ahead === next.ahead
+      && entry.stats.behind === next.behind
+    ) {
       return;
     }
     entry.stats = next;
     entry.generation += 1;
     publish(pathKey);
   } catch {
-    if (entry.stats.additions === 0 && entry.stats.deletions === 0) return;
+    if (
+      entry.stats.additions === 0
+      && entry.stats.deletions === 0
+      && entry.stats.ahead === 0
+      && entry.stats.behind === 0
+    ) return;
     entry.stats = { ...EMPTY_STATS };
     entry.generation += 1;
     publish(pathKey);

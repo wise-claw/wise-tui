@@ -17,10 +17,10 @@ describe("gitRepositoryStatsStore", () => {
     const unsubB = subscribeGitRepositoryStats("/repo/a", () => {
       genB = getGitRepositoryStatsGeneration("/repo/a");
     });
-    expect(getGitRepositoryStatsSnapshot("/repo/a")).toEqual({ additions: 0, deletions: 0 });
+    expect(getGitRepositoryStatsSnapshot("/repo/a")).toEqual({ additions: 0, deletions: 0, ahead: 0, behind: 0 });
     unsubA();
     unsubB();
-    expect(getGitRepositoryStatsSnapshot("/repo/a")).toEqual({ additions: 0, deletions: 0 });
+    expect(getGitRepositoryStatsSnapshot("/repo/a")).toEqual({ additions: 0, deletions: 0, ahead: 0, behind: 0 });
     expect(genA).toBe(0);
     expect(genB).toBe(0);
   });

@@ -7795,6 +7795,14 @@ button.app-message-part-header:disabled:hover {
   color: var(--ant-color-error);
 }
 
+.app-session-quick-pill__ahead {
+  color: var(--ant-color-success);
+}
+
+.app-session-quick-pill__behind {
+  color: var(--ant-color-error);
+}
+
 /* 会话区左下浮层：不占用布局，宽度 260px，可收起 */
 .app-session-notification-dock {
   position: absolute;

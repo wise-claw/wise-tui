@@ -11,7 +11,6 @@ import {
   gitFetch,
   gitInit,
   gitPull,
-  gitPush,
   gitStage,
   gitStagePaths,
   gitStageAll,
@@ -21,7 +20,7 @@ import {
   gitUnstageAll,
 } from "../../services/git";
 import { openRepositoryRemoteInBrowser } from "../../services/openRepositoryRemote";
-import { commitPullPushRepository } from "../../services/gitCommitPullPush";
+import { aiCommitPullPushRepository, commitPullPushRepository, isGitMergeConflictError } from "../../services/gitCommitPullPush";
 import { refreshGitRepositoryStats } from "../../stores/gitRepositoryStatsStore";
 import { refreshGitRepositoryExplorerStatus } from "../../stores/gitRepositoryExplorerStatusStore";
 import type { GitStatusResponse } from "../../types";
@@ -585,7 +584,24 @@ function GitRepoSectionInner({
 
   const handlePush = useCallback(() => {
     if (!repositoryPath) return;
-    runGitSync("push", () => gitPush(repositoryPath), (msg) => message.error(`推送失败: ${msg}`));
+    runGitSync(
+      "push",
+      async () => {
+        const outcome = await aiCommitPullPushRepository(repositoryPath);
+        if (outcome === "noop") {
+          message.info("当前没有可提交的改动，也没有待推送的提交");
+        } else {
+          message.success(outcome === "pushed_only" ? "已推送待同步提交" : "已提交并推送");
+        }
+      },
+      (msg) => {
+        if (isGitMergeConflictError(msg)) {
+          message.warning("拉取/合并存在冲突，请手动解决后重试");
+        } else {
+          message.error(`推送失败: ${msg}`);
+        }
+      },
+    );
   }, [repositoryPath, runGitSync]);
 
   const handlePull = useCallback(() => {

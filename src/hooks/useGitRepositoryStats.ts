@@ -6,7 +6,7 @@ import {
   type GitRepositoryStats,
 } from "../stores/gitRepositoryStatsStore";
 
-const EMPTY_STATS: GitRepositoryStats = { additions: 0, deletions: 0 };
+const EMPTY_STATS: GitRepositoryStats = { additions: 0, deletions: 0, ahead: 0, behind: 0 };
 
 export function useGitRepositoryStats(repositoryPath: string | null | undefined): GitRepositoryStats {
   const path = repositoryPath?.trim() ?? "";

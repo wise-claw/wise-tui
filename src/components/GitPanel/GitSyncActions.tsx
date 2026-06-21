@@ -43,7 +43,9 @@ export const GitSyncActions = memo(function GitSyncActions({
   const ahead = status.ahead ?? 0;
   const behind = status.behind ?? 0;
   const pullTitle = behind > 0 ? `拉取 · 落后 ${behind}` : "拉取";
-  const pushTitle = ahead > 0 ? `推送 · 领先 ${ahead}` : "推送";
+  const pushTitle = ahead > 0
+    ? `AI 生成提交信息并提交、拉取、推送 · 领先 ${ahead}`
+    : "AI 生成提交信息并提交、拉取、推送";
 
   return (
     <Space size={compact ? 0 : 4} className="git-header-sync-actions">
@@ -76,7 +78,7 @@ export const GitSyncActions = memo(function GitSyncActions({
           ) : null}
         </span>
       </HoverHint>
-      <HoverHint title={compact ? pushTitle : "推送"} placement="top">
+      <HoverHint title={pushTitle} placement="top">
         <span className="git-sync-count-btn-wrap">
           <Button
             type="text"
