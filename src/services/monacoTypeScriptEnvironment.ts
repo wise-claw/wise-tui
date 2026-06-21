@@ -97,6 +97,27 @@ const VITE_CLIENT_AMBIENT_TYPES = [
 ].join("\n");
 const MAX_DEPENDENCY_MODEL_COUNT = 80;
 const MAX_DEPENDENCY_DEPTH = 3;
+
+/**
+ * 在依赖图不完整的浏览场景下屏蔽的 TypeScript 诊断码。
+ *
+ * Monaco TS worker 只同步了有限依赖 model（最多 {@link MAX_DEPENDENCY_MODEL_COUNT} 个、
+ * 深度 {@link MAX_DEPENDENCY_DEPTH} 层）与有限的 @types 包，无法像本地 tsc 那样解析
+ * 整棵 node_modules。因此「找不到模块/声明/导出」类诊断在仓库文件浏览器里几乎全是误报，
+ * 满屏红波浪线。这里按码屏蔽这类解析性误报，保留真实类型错误。
+ *
+ * 刻意排除会误伤真错误的码：2304（Cannot find name，多为拼写错误）、
+ * 6xxx 系列（unused，由 noUnusedLocals/Parameters 控制，不在此屏蔽以尊重仓库 tsconfig）。
+ */
+export const WISE_MONACO_TS_IGNORED_DIAGNOSTIC_CODES = [
+  2305, // Module '{0}' has no exported member '{1}'
+  2306, // File '{0}' is not a module
+  2307, // Cannot find module '{0}' or its corresponding type declarations
+  2459, // Module '{0}' declares '{1}' locally, but it is not exported
+  2688, // Cannot find type definition file for '{0}'
+  2792, // Cannot find module '{0}'. Did you mean to set 'moduleResolution'?
+  7016, // Could not find a declaration file for module '{0}'
+];
 const CONFIGURED_MONACO_INSTANCES = new WeakSet<MonacoApi>();
 const REGISTERED_AMBIENT_MODULES = new WeakMap<MonacoApi, Set<string>>();
 const REGISTERED_REPOSITORY_EXTRA_LIBS = new WeakMap<
@@ -140,8 +161,11 @@ export function configureWiseMonacoTypeScript(monaco: MonacoApi): void {
     noEmit: true,
     strict: true,
     skipLibCheck: true,
-    noUnusedLocals: true,
-    noUnusedParameters: true,
+    // 浏览仓库文件时「声明但未使用」是纯噪音（第三方库/示例代码大量未使用变量），
+    // 默认关闭。仓库 tsconfig 若显式开启，applyRepositoryTypeScriptEnvironment 的
+    // mappedOptions 会覆盖此默认值，尊重仓库自身配置。
+    noUnusedLocals: false,
+    noUnusedParameters: false,
     noFallthroughCasesInSwitch: true,
     resolvePackageJsonExports: true,
     resolvePackageJsonImports: true,
@@ -271,8 +295,10 @@ async function applyRepositoryTypeScriptEnvironment(
     noEmit: true,
     strict: true,
     skipLibCheck: true,
-    noUnusedLocals: true,
-    noUnusedParameters: true,
+    // 同 configureWiseMonacoTypeScript：浏览场景默认关闭未使用诊断。
+    // mappedOptions 在下方展开，仓库 tsconfig 显式开启时覆盖此默认值。
+    noUnusedLocals: false,
+    noUnusedParameters: false,
     noFallthroughCasesInSwitch: true,
     resolvePackageJsonExports: true,
     resolvePackageJsonImports: true,
@@ -296,7 +322,7 @@ async function applyRepositoryTypeScriptEnvironment(
   APPLIED_REPOSITORY_TS_ENVIRONMENT.set(monaco, signature);
 }
 
-function applyWiseTypeScriptDefaults(
+export function applyWiseTypeScriptDefaults(
   defaults: MonacoLanguageDefaults,
   compilerOptions: MonacoCompilerOptions,
 ): void {
@@ -306,14 +332,20 @@ function applyWiseTypeScriptDefaults(
   });
   defaults.setDiagnosticsOptions({
     ...defaults.getDiagnosticsOptions(),
+    // 语法诊断保留：语法错误是真错误，且不依赖类型解析，无误报。
     noSyntaxValidation: false,
+    // 语义诊断保留：真实类型错误仍有价值。依赖图不全导致的「找不到模块/声明」
+    // 误报通过下方 diagnosticCodesToIgnore 按码屏蔽，而非整体关闭。
     noSemanticValidation: false,
-    noSuggestionDiagnostics: false,
+    // 建议诊断关闭：可转 const、未处理 await 等在浏览场景纯噪音，浅色波浪线干扰阅读。
+    noSuggestionDiagnostics: true,
     // 仅诊断可见区：打开中等 .ts 文件（几 KB~128KB，依赖图最多 80 个 model）时，
     // 避免 ts.worker 全量编译整个依赖图造成的首次打开卡顿。语法诊断仍全量；
     // 语义诊断（类型错误）仅在滚动到可见时标红。本项目无问题面板消费全量诊断，
     // 故无功能损失。>128KB 文件本就跳过 model 同步，此处主要惠及中等文件。
     onlyVisible: true,
+    // 屏蔽依赖解析类误报码（见 WISE_MONACO_TS_IGNORED_DIAGNOSTIC_CODES 注释）。
+    diagnosticCodesToIgnore: WISE_MONACO_TS_IGNORED_DIAGNOSTIC_CODES,
   });
   defaults.setEagerModelSync(true);
 }

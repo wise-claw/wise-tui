@@ -59,8 +59,8 @@ export function GitDiffMonacoPane({
 
   const diffContentLength = maxMonacoContentLength(original, modified);
   const diffEditorOptions = useMemo(
-    () => resolveWiseMonacoEditorOptionsFromLength(diffContentLength),
-    [diffContentLength],
+    () => resolveWiseMonacoEditorOptionsFromLength(diffContentLength, relativePath),
+    [diffContentLength, relativePath],
   );
   const [surfaceReady, setSurfaceReady] = useState(
     () => !shouldDeferMonacoEditorMount(diffContentLength),

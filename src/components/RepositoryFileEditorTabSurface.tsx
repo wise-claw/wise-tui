@@ -114,8 +114,8 @@ export function RepositoryFileEditorTabSurface({
   const contentLength = tab.content.length;
   const optionsBucket = monacoEditorOptionsBucket(contentLength);
   const editorOptions = useMemo(
-    () => resolveWiseMonacoEditorOptionsFromLength(contentLength),
-    [optionsBucket],
+    () => resolveWiseMonacoEditorOptionsFromLength(contentLength, tab.relativePath),
+    [optionsBucket, tab.relativePath],
   );
   // medium 文件（50KB-128KB）仅关闭高亮特性，仍走受控 value 路径，
   // 不进入大文件的 defaultValue/延后注入流程。

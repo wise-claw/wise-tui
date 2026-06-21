@@ -13,7 +13,10 @@ import {
   shouldSkipMonacoTypeScriptModelSync,
   shouldSyncMonacoTypeScriptDependencies,
 } from "./monacoLargeFile";
-import { WISE_MONACO_EDITOR_OPTIONS } from "./wiseMonacoEditorOptions";
+import {
+  shouldEnableMonacoSemanticHighlighting,
+  WISE_MONACO_EDITOR_OPTIONS,
+} from "./wiseMonacoEditorOptions";
 
 describe("monacoLargeFile", () => {
   test("classifies content by thresholds", () => {
@@ -59,6 +62,42 @@ describe("monacoLargeFile", () => {
     expect(maxMonacoContentLength("abc", "abcdef")).toBe(6);
   });
 
+  test("tsx/jsx 文件开启语义高亮以支持 JSX 标签着色", () => {
+    // Monaco typescript Monarch tokenizer 不含 JSX 规则，JSX 标签着色依赖 semantic tokens。
+    const tsxOptions = resolveWiseMonacoEditorOptions("export const X = () => <div />;", "src/App.tsx");
+    expect(tsxOptions.semanticHighlighting).toEqual({ enabled: true });
+
+    const jsxOptions = resolveWiseMonacoEditorOptions("const X = () => <div />;", "src/Foo.jsx");
+    expect(jsxOptions.semanticHighlighting).toEqual({ enabled: true });
+  });
+
+  test("非 tsx/jsx 文件保持语义高亮关闭", () => {
+    // 避免 TS worker 依赖图不全时的标识符着色异常。
+    const tsOptions = resolveWiseMonacoEditorOptions("const a = 1;", "src/lib.ts");
+    expect(tsOptions.semanticHighlighting).toEqual({ enabled: false });
+
+    const noPathOptions = resolveWiseMonacoEditorOptions("const a = 1;");
+    expect(noPathOptions.semanticHighlighting).toEqual({ enabled: false });
+  });
+
+  test("large/huge tsx 文件不开启语义高亮（性能）", () => {
+    const largeTsx = resolveWiseMonacoEditorOptions(
+      "x".repeat(MONACO_LARGE_FILE_CHAR_THRESHOLD),
+      "src/Huge.tsx",
+    );
+    expect(largeTsx.semanticHighlighting).toEqual({ enabled: false });
+  });
+
+  test("中等 tsx 文件仍开启语义高亮", () => {
+    const mediumTsx = resolveWiseMonacoEditorOptions(
+      "x".repeat(MONACO_MEDIUM_FILE_CHAR_THRESHOLD),
+      "src/Mid.tsx",
+    );
+    expect(mediumTsx.semanticHighlighting).toEqual({ enabled: true });
+    // 中等文件特性不受影响。
+    expect(mediumTsx.occurrencesHighlight).toBe("off");
+  });
+
   test("defers mount and skips model sync for large content", () => {
     expect(shouldDeferMonacoEditorMount(MONACO_LARGE_FILE_CHAR_THRESHOLD)).toBe(true);
     expect(shouldSkipMonacoTypeScriptModelSync(MONACO_LARGE_FILE_CHAR_THRESHOLD)).toBe(true);
@@ -68,5 +107,23 @@ describe("monacoLargeFile", () => {
     expect(monacoEditorOptionsBucket(MONACO_LARGE_FILE_CHAR_THRESHOLD - 1)).toBe("medium");
     expect(monacoEditorOptionsBucket(MONACO_LARGE_FILE_CHAR_THRESHOLD)).toBe("large");
     expect(monacoEditorOptionsBucket(MONACO_HUGE_FILE_CHAR_THRESHOLD)).toBe("huge");
+  });
+});
+
+describe("shouldEnableMonacoSemanticHighlighting", () => {
+  test("tsx/jsx 扩展名（含大小写、Windows 路径）判定为开启", () => {
+    expect(shouldEnableMonacoSemanticHighlighting("src/App.tsx")).toBe(true);
+    expect(shouldEnableMonacoSemanticHighlighting("src/Foo.jsx")).toBe(true);
+    expect(shouldEnableMonacoSemanticHighlighting("src/Foo.TSX")).toBe(true);
+    expect(shouldEnableMonacoSemanticHighlighting("src\\sub\\Foo.jsx")).toBe(true);
+  });
+
+  test("非 JSX 扩展名或空路径判定为关闭", () => {
+    expect(shouldEnableMonacoSemanticHighlighting("src/lib.ts")).toBe(false);
+    expect(shouldEnableMonacoSemanticHighlighting("src/lib.js")).toBe(false);
+    expect(shouldEnableMonacoSemanticHighlighting("README.md")).toBe(false);
+    expect(shouldEnableMonacoSemanticHighlighting("")).toBe(false);
+    expect(shouldEnableMonacoSemanticHighlighting(null)).toBe(false);
+    expect(shouldEnableMonacoSemanticHighlighting(undefined)).toBe(false);
   });
 });

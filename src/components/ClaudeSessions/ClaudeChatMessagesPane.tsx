@@ -76,11 +76,12 @@ function chatMessagesPanePropsEqual(
   const prevMessages = prev.session.messages;
   const nextMessages = next.session.messages;
   if (prevMessages.length !== nextMessages.length) return false;
-  for (let i = 0; i < prevMessages.length - 1; i += 1) {
-    if (prevMessages[i] !== nextMessages[i]) return false;
-  }
+  // 流式时末条引用每 tick 必变：先查末条短路，避免 O(n) 前缀扫描。
   if (prevMessages.length > 0 && prevMessages[prevMessages.length - 1] !== nextMessages[nextMessages.length - 1]) {
     return false;
+  }
+  for (let i = 0; i < prevMessages.length - 1; i += 1) {
+    if (prevMessages[i] !== nextMessages[i]) return false;
   }
   return true;
 }

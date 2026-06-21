@@ -1,5 +1,8 @@
 import type { editor } from "monaco-editor";
-import { WISE_MONACO_EDITOR_OPTIONS } from "./wiseMonacoEditorOptions";
+import {
+  applyMonacoSemanticHighlightingForPath,
+  WISE_MONACO_EDITOR_OPTIONS,
+} from "./wiseMonacoEditorOptions";
 
 /** 超过此字符数视为中等文件，关闭出现高亮/选区高亮等较重的实时特性。 */
 export const MONACO_MEDIUM_FILE_CHAR_THRESHOLD = 50 * 1024;
@@ -48,25 +51,33 @@ export function shouldInjectMonacoContentAfterMount(contentLength: number): bool
 
 export function resolveWiseMonacoEditorOptions(
   content: string,
+  relativePath?: string,
 ): editor.IStandaloneEditorConstructionOptions {
-  return resolveWiseMonacoEditorOptionsFromLength(content.length);
+  return resolveWiseMonacoEditorOptionsFromLength(content.length, relativePath);
 }
 
 export function resolveWiseMonacoEditorOptionsFromLength(
   length: number,
+  relativePath?: string,
 ): editor.IStandaloneEditorConstructionOptions {
+  // 仅小/中文件为 tsx/jsx 开启语义高亮（JSX 标签着色所必需）。
+  // large/huge 文件本就跳过 TS model 同步、关闭诊断渲染，开启语义高亮无 TS worker
+  // 支撑且徒增开销，故保持关闭。
   if (length < MONACO_MEDIUM_FILE_CHAR_THRESHOLD) {
-    return WISE_MONACO_EDITOR_OPTIONS;
+    return applyMonacoSemanticHighlightingForPath(WISE_MONACO_EDITOR_OPTIONS, relativePath);
   }
 
   // 中等文件（50KB-128KB）：仅关闭出现高亮/选区高亮等实时渲染开销大的特性，
   // 保留折行、折叠、校验等正常编辑体验。
   if (length < MONACO_LARGE_FILE_CHAR_THRESHOLD) {
-    return {
-      ...WISE_MONACO_EDITOR_OPTIONS,
-      occurrencesHighlight: "off",
-      selectionHighlight: false,
-    };
+    return applyMonacoSemanticHighlightingForPath(
+      {
+        ...WISE_MONACO_EDITOR_OPTIONS,
+        occurrencesHighlight: "off",
+        selectionHighlight: false,
+      },
+      relativePath,
+    );
   }
 
   const huge = length >= MONACO_HUGE_FILE_CHAR_THRESHOLD;
