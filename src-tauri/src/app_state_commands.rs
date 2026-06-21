@@ -72,6 +72,8 @@ fn normalize_execution_engine(raw: Option<String>) -> String {
     match raw.as_deref().map(str::trim) {
         Some("codex") => "codex".to_string(),
         Some("cursor") => "cursor".to_string(),
+        Some("gemini") => "gemini".to_string(),
+        Some("opencode") => "opencode".to_string(),
         _ => "claude".to_string(),
     }
 }

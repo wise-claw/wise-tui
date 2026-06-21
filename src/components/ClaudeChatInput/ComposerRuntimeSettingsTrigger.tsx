@@ -295,7 +295,7 @@ export function ComposerRuntimeSettingsTrigger({
         selectedKeys,
         onClick: ({ key }) => {
           if (typeof key !== "string") return;
-          if (isPaneRuntimePresetKey(key)) {
+          if (showPaneRuntimePresets && isPaneRuntimePresetKey(key)) {
             if (key !== activePanePreset && onUpdatePaneRuntimeOverride) {
               applyPaneRuntimePreset(paneIndex, key, onUpdatePaneRuntimeOverride);
             }

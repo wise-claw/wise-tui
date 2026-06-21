@@ -116,7 +116,13 @@ pub fn parse_codex_profile_envelope(raw: &str) -> Result<CodexProfileEnvelope, S
     if !obj.contains_key("auth") && !obj.contains_key("config") {
         return Err("Codex 配置需包含 auth 与 config 字段（与 CC Switch 一致）".to_string());
     }
-    serde_json::from_value(value).map_err(|e| format!("Codex 配置结构无效: {e}"))
+    let mut envelope: CodexProfileEnvelope =
+        serde_json::from_value(value).map_err(|e| format!("Codex 配置结构无效: {e}"))?;
+    // 历史档案可能落入重复 `model =` 行（CC Switch / 旧版 Wise 导入），先做去重，避免下游
+    // 写盘后 codex 解析 TOML 直接报 `duplicate key`。
+    let (deduped, _) = dedupe_top_level_model_lines(&envelope.config);
+    envelope.config = deduped;
+    Ok(envelope)
 }
 
 /// 从 `config.toml` 文本解析 `model = "..."` / `model="..."`。
@@ -156,20 +162,38 @@ fn auth_maps_equal(a: &Map<String, Value>, b: &Map<String, Value>) -> bool {
 /// 在现有 `config.toml` 中替换或插入 `model = "..."` 行，保留其余配置。
 pub fn patch_codex_config_model(config: &str, new_model: &str) -> String {
     let model = new_model.trim();
-    let mut replaced = false;
+    // 仅处理顶层（首个 `[section]` 之前）的 `model =` 行：替换首个，删除其余重复，保留其它配置。
     let mut lines: Vec<String> = config.lines().map(str::to_string).collect();
-    for line in lines.iter_mut() {
+    let mut first_top_level_model: Option<usize> = None;
+    let mut duplicates: Vec<usize> = Vec::new();
+    let mut in_table = false;
+    for (idx, line) in lines.iter().enumerate() {
         let trimmed = line.trim();
         if trimmed.is_empty() || trimmed.starts_with('#') {
             continue;
         }
-        if trimmed.starts_with("model") && trimmed.contains('=') {
-            *line = format!("model = \"{model}\"");
-            replaced = true;
-            break;
+        if trimmed.starts_with('[') {
+            in_table = true;
+            continue;
+        }
+        if in_table {
+            continue;
+        }
+        if is_top_level_model_assignment(trimmed) {
+            if first_top_level_model.is_none() {
+                first_top_level_model = Some(idx);
+            } else {
+                duplicates.push(idx);
+            }
         }
     }
-    if !replaced {
+    if let Some(first) = first_top_level_model {
+        lines[first] = format!("model = \"{model}\"");
+        // 从后往前删，避免索引位移
+        for idx in duplicates.into_iter().rev() {
+            lines.remove(idx);
+        }
+    } else {
         lines.insert(0, format!("model = \"{model}\""));
     }
     let mut out = lines.join("\n");
@@ -177,6 +201,72 @@ pub fn patch_codex_config_model(config: &str, new_model: &str) -> String {
         out.push('\n');
     }
     out
+}
+
+fn is_top_level_model_assignment(trimmed: &str) -> bool {
+    let Some(rest) = trimmed.strip_prefix("model") else {
+        return false;
+    };
+    // 排除 `model_reasoning_effort` / `model_max_output_tokens` / `model_providers` 等同前缀键。
+    let next = rest.chars().next();
+    match next {
+        Some('=') => true,
+        Some(c) if c.is_whitespace() => rest.trim_start().starts_with('='),
+        _ => false,
+    }
+}
+
+/// 解析顶层（首个 `[section]` 之前）所有 `model =` 行：保留最后一行的值，删除其它重复。
+/// 返回去重后的文本以及最终保留的 model 值（若存在）。
+pub fn dedupe_top_level_model_lines(config: &str) -> (String, Option<String>) {
+    let mut lines: Vec<String> = config.lines().map(str::to_string).collect();
+    let mut model_indices: Vec<usize> = Vec::new();
+    let mut in_table = false;
+    for (idx, line) in lines.iter().enumerate() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        if trimmed.starts_with('[') {
+            in_table = true;
+            continue;
+        }
+        if in_table {
+            continue;
+        }
+        if is_top_level_model_assignment(trimmed) {
+            model_indices.push(idx);
+        }
+    }
+    if model_indices.len() <= 1 {
+        let kept = model_indices
+            .first()
+            .and_then(|idx| extract_model_value(&lines[*idx]));
+        return (config.to_string(), kept);
+    }
+    let keep_idx = *model_indices.last().expect("non-empty");
+    let kept = extract_model_value(&lines[keep_idx]);
+    for idx in model_indices.into_iter().rev() {
+        if idx == keep_idx {
+            continue;
+        }
+        lines.remove(idx);
+    }
+    let mut out = lines.join("\n");
+    if config.ends_with('\n') && !out.ends_with('\n') {
+        out.push('\n');
+    }
+    (out, kept)
+}
+
+fn extract_model_value(line: &str) -> Option<String> {
+    let after_eq = line.split_once('=').map(|(_, rhs)| rhs)?;
+    let trimmed = after_eq.trim().trim_matches('"').trim_matches('\'').trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
 }
 
 /// 仅按 envelope 中存在的 key 覆盖 current.auth；其他键（用户自定）保留。
@@ -393,5 +483,53 @@ foo = "bar"
         let merged_auth = merge_auth_maps(&current_auth, &envelope.auth);
         assert_eq!(merged_auth["OPENAI_API_KEY"].as_str(), Some("new"));
         assert_eq!(merged_auth["MY_TOKEN"].as_str(), Some("secret"));
+    }
+
+    #[test]
+    fn dedupe_top_level_model_lines_keeps_last_value() {
+        let cfg = "model = \"a\"\nmodel = \"b\"\nmodel_reasoning_effort = \"high\"\n[custom]\nmodel = \"in-section\"\n";
+        let (out, kept) = dedupe_top_level_model_lines(cfg);
+        assert_eq!(kept.as_deref(), Some("b"));
+        assert!(out.contains("model = \"b\""));
+        assert!(!out.contains("model = \"a\""));
+        // model_reasoning_effort 不能被误删
+        assert!(out.contains("model_reasoning_effort = \"high\""));
+        // section 内部的 model 不动
+        assert!(out.contains("[custom]"));
+        assert!(out.contains("model = \"in-section\""));
+    }
+
+    #[test]
+    fn patch_codex_config_model_dedupes_duplicate_top_level_models() {
+        let cfg = "# header\nmodel = \"old1\"\nmodel = \"old2\"\nmodel_reasoning_effort = \"medium\"\n[section]\nfoo = \"bar\"\n";
+        let patched = patch_codex_config_model(cfg, "new");
+        let occurrences = patched
+            .lines()
+            .filter(|line| {
+                let t = line.trim();
+                !t.is_empty()
+                    && !t.starts_with('#')
+                    && !t.starts_with('[')
+                    && is_top_level_model_assignment(t)
+            })
+            .count();
+        assert_eq!(occurrences, 1);
+        assert!(patched.contains("model = \"new\""));
+        assert!(!patched.contains("old1"));
+        assert!(!patched.contains("old2"));
+        assert!(patched.contains("model_reasoning_effort = \"medium\""));
+        assert!(patched.contains("[section]"));
+    }
+
+    #[test]
+    fn parse_envelope_dedupes_model_lines() {
+        let raw = serde_json::json!({
+            "auth": {},
+            "config": "model = \"a\"\nmodel = \"b\"\n"
+        })
+        .to_string();
+        let envelope = parse_codex_profile_envelope(&raw).expect("parses");
+        assert!(!envelope.config.contains("model = \"a\""));
+        assert!(envelope.config.contains("model = \"b\""));
     }
 }
