@@ -348,7 +348,7 @@ export function useMainLayoutModes({
         message.warning("未找到所选仓库");
         return;
       }
-      setActiveRepositoryId(repo.id);
+      // 仅切换该窗格的隔离会话仓库，不联动左栏全局选中（activeRepositoryId）。
       const leftId = activeSessionIdLatestRef.current?.trim() ?? "";
       try {
         const nextSessionId = await createSession(
@@ -383,7 +383,6 @@ export function useMainLayoutModes({
       createSession,
       inheritMainSessionModel,
       repositories,
-      setActiveRepositoryId,
       setExtraPanes,
     ],
   );
@@ -475,7 +474,7 @@ export function useMainLayoutModes({
   /** 为指定窗格创建新 session。 */
   const handleNewPaneSession = useCallback(
     async (slotIndex: number, repository: Repository) => {
-      setActiveRepositoryId(repository.id);
+      // 仅在该窗格创建隔离会话，不联动左栏全局选中（activeRepositoryId）。
       try {
         const id = await createSession(repository.path, repositorySessionTabDisplayName(repository), {
           skipActivate: true,
@@ -508,7 +507,6 @@ export function useMainLayoutModes({
       createSession,
       inheritMainSessionModel,
       promoteToDualPaneWithSession,
-      setActiveRepositoryId,
       setExtraPanes,
     ],
   );

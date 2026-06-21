@@ -164,12 +164,18 @@ export function RepositoryFileEditorTabSurface({
       lastInjectedContentVersionRef.current = null;
       return;
     }
+    if (!largeFile) {
+      // 非大文件走受控 value，无需注入；同步标记避免文件大小越过阈值时漏注入。
+      lastInjectedContentVersionRef.current = tab.contentVersion ?? 0;
+      return;
+    }
+    const editor = editorRef.current;
+    // 编辑器尚未挂载/被 keep-alive 驱逐：不推进 version，等实例可用后由本 effect
+    // （依赖 monacoEditorSurface）补注入，避免外部刷新内容丢失。
+    if (!editor) return;
     const version = tab.contentVersion ?? 0;
     if (version === lastInjectedContentVersionRef.current) return;
     lastInjectedContentVersionRef.current = version;
-    if (!largeFile) return;
-    const editor = editorRef.current;
-    if (!editor) return;
     const view = editor.saveViewState();
     contentInjectionCancelRef.current?.();
     contentInjectionCancelRef.current = scheduleMonacoLargeFileContentInjection(
@@ -179,7 +185,7 @@ export function RepositoryFileEditorTabSurface({
         if (view) editor.restoreViewState(view);
       },
     );
-  }, [largeFile, tab]);
+  }, [largeFile, tab.contentVersion, tab.content, tab.diffOriginal, monacoEditorSurface]);
 
   useEffect(() => {
     // keep-alive：已挂载过的编辑器不再因内容长度变化重新 defer/卸载，
@@ -305,9 +311,14 @@ export function RepositoryFileEditorTabSurface({
           currentTab.content,
           reveal,
         );
+        // huge 文件挂载已注入当前内容，标记 version 已同步，避免后续 effect 冗余注入。
+        lastInjectedContentVersionRef.current = currentTab.contentVersion ?? 0;
         return;
       }
       if (isMonacoLargeFileContent(currentTab.content)) {
+        // large 文件挂载由 defaultValue 提供当前内容，标记 version 已同步，
+        // 后续外部刷新（contentVersion 自增）再由注入 effect 接管。
+        lastInjectedContentVersionRef.current = currentTab.contentVersion ?? 0;
         runWhenIdle(reveal, { timeoutMs: 400 });
       } else {
         window.requestAnimationFrame(reveal);

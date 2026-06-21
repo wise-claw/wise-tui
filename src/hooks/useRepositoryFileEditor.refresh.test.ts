@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
-import { planEditorTabRefresh, type FileEditorTab } from "./useRepositoryFileEditor";
+import {
+  mergeEditorRefreshScope,
+  planEditorTabRefresh,
+  type FileEditorTab,
+} from "./useRepositoryFileEditor";
 
 /** 构造一个普通（非 diff）已加载完成的 tab 工厂。 */
 function makeTab(overrides: Partial<FileEditorTab> = {}): FileEditorTab {
@@ -123,5 +127,31 @@ describe("planEditorTabRefresh", () => {
       isSaving: false,
     });
     expect(decision).toEqual({ kind: "reload-clean", disk: "changed" });
+  });
+});
+
+describe("mergeEditorRefreshScope", () => {
+  test("无待执行 + 限定仓库 -> 该仓库", () => {
+    expect(mergeEditorRefreshScope(undefined, "repoA")).toBe("repoA");
+  });
+
+  test("无待执行 + 全量 -> 全量", () => {
+    expect(mergeEditorRefreshScope(undefined, null)).toBeNull();
+  });
+
+  test("已全量 + 限定仓库 -> 保持全量（不被降级）", () => {
+    expect(mergeEditorRefreshScope(null, "repoA")).toBeNull();
+  });
+
+  test("限定仓库 + 全量 -> 升级全量", () => {
+    expect(mergeEditorRefreshScope("repoA", null)).toBeNull();
+  });
+
+  test("同仓库 + 同仓库 -> 保持", () => {
+    expect(mergeEditorRefreshScope("repoA", "repoA")).toBe("repoA");
+  });
+
+  test("不同仓库 -> 升级全量（避免多仓库漏刷）", () => {
+    expect(mergeEditorRefreshScope("repoA", "repoB")).toBeNull();
   });
 });

@@ -32,8 +32,15 @@ import { safeUnlisten } from "../utils/safeTauriUnlisten";
 import { setRepositoryEditorDirtyPaths } from "../stores/repositoryEditorDirtyPathsStore";
 import { refreshGitRepositoryExplorerStatus } from "../stores/gitRepositoryExplorerStatusStore";
 
-/** 外部变更触发磁盘重读的合并节流间隔（毫秒）。git-changed 与窗口聚焦共用。 */
+/** 外部变更触发磁盘重读的合并节流间隔（毫秒）。git-changed、窗口聚焦、轮询共用。 */
 const EDITOR_EXTERNAL_REFRESH_THROTTLE_MS = 300;
+
+/**
+ * 前台轮询兜底间隔（毫秒）。watcher 仅由 Git 面板启动，面板未挂载时无 git-changed
+ * 事件；窗口持续聚焦在前台也不会触发 focus 兜底。故在编辑器可见且页面可见时低频
+ * 轮询，确保外部修改（含多仓库、子工作区 tab）最终被刷新。
+ */
+const EDITOR_FOREGROUND_POLL_MS = 4000;
 
 export interface FileEditorTab {
   relativePath: string;
@@ -101,6 +108,23 @@ export function planEditorTabRefresh(args: {
   return { kind: "mark-external-changed" };
 }
 
+/**
+ * 合并待执行的外部刷新范围，用于节流去抖时保留最宽的刷新意图。
+ * - null 表示全量刷新（focus/poll，或不同限定仓库冲突升级）。
+ * - string 表示仅刷新该仓库的 tab。
+ * - undefined 表示当前无待执行刷新。
+ * 规则：全量(null)吞噬一切；不同限定仓库升级为全量（避免多仓库漏刷）；
+ * 同限定仓库保持；已全量时不被后到的限定刷新降级。
+ */
+export function mergeEditorRefreshScope(
+  prev: string | null | undefined,
+  incoming: string | null,
+): string | null | undefined {
+  if (prev === undefined) return incoming;
+  if (prev === null || incoming === null) return null;
+  return prev === incoming ? prev : null;
+}
+
 interface UseRepositoryFileEditorOptions {
   repositoryPath: string | null | undefined;
 }
@@ -132,6 +156,8 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
   const savingPathsRef = useRef<Set<string>>(new Set());
   const refreshGenerationRef = useRef(0);
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** 待执行刷新的范围：undefined=无，null=全量，string=限定仓库。节流期间合并保留最宽意图。 */
+  const pendingRefreshScopeRef = useRef<string | null | undefined>(undefined);
 
   const flushPendingTabContent = useCallback((relativePath?: string) => {
     const paths = relativePath
@@ -897,18 +923,29 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
    * 用 refreshGenerationRef 丢弃过期异步读结果，避免竞态覆盖。
    */
   const refreshOpenEditorTabsFromDisk = useCallback(
-    (opts?: { repoPath?: string; trigger: "git-changed" | "focus" }) => {
-      // 窗口隐藏时，git-changed 触发的刷新延迟到回焦统一处理。
+    (opts?: { repoPath?: string; trigger: "git-changed" | "focus" | "poll" }) => {
+      // 窗口隐藏时，git-changed 触发的刷新延迟到回焦/轮询统一处理。
       if (opts?.trigger === "git-changed" && typeof document !== "undefined" && document.hidden) {
         return;
       }
+      // 合并待执行刷新范围：focus/poll 为全量(null)；git-changed 为限定仓库（空则全量）。
+      // 后到的限定刷新不会降级已排队的全量；不同限定仓库升级为全量，避免多仓库漏刷。
+      const incomingScope =
+        opts?.trigger === "git-changed" ? opts.repoPath?.trim() || null : null;
+      pendingRefreshScopeRef.current = mergeEditorRefreshScope(
+        pendingRefreshScopeRef.current,
+        incomingScope,
+      );
       if (refreshTimerRef.current != null) {
         clearTimeout(refreshTimerRef.current);
       }
       refreshTimerRef.current = setTimeout(() => {
         refreshTimerRef.current = null;
+        const scheduledScope = pendingRefreshScopeRef.current;
+        pendingRefreshScopeRef.current = undefined;
+        if (scheduledScope === undefined) return;
         const generation = ++refreshGenerationRef.current;
-        const repoPath = opts?.repoPath?.trim() ?? "";
+        const repoPath = scheduledScope ?? "";
         const snapshot = fileEditorTabsRef.current.filter((tab) => {
           if (tab.loading) return false;
           if (tab.diffOriginal !== undefined) return false;
@@ -1067,6 +1104,26 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
       safeUnlisten(unlisten);
     };
   }, [refreshOpenEditorTabsFromDisk]);
+
+  // 前台轮询兜底：watcher 仅由 Git 面板启动，面板未挂载时无 git-changed 事件；
+  // 窗口持续聚焦在前台也不会触发 focus 兜底。故在编辑器可见且页面可见时低频轮询，
+  // 确保外部修改（含多仓库、子工作区 tab）最终被刷新。轮询为全量范围，与 git-changed
+  // 限定刷新经 mergeEditorRefreshScope 合并，不会互相降级。
+  useEffect(() => {
+    if (!editorVisible) return;
+    let cancelled = false;
+    const interval = window.setInterval(() => {
+      if (cancelled) return;
+      if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+        return;
+      }
+      refreshOpenEditorTabsFromDisk({ trigger: "poll" });
+    }, EDITOR_FOREGROUND_POLL_MS);
+    return () => {
+      cancelled = true;
+      window.clearInterval(interval);
+    };
+  }, [editorVisible, refreshOpenEditorTabsFromDisk]);
 
   useEffect(
     () => () => {
