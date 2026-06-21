@@ -38,6 +38,7 @@ import { type PaneCount, type PaneSlot } from "../../constants/mainLayoutWidths"
 import type { PaneRepoTreeNode } from "./ClaudeMultiPaneGrid";
 import { prefetchModule } from "../../utils/prefetchModule";
 import { prefetchNewSessionSurface } from "./prefetchNewSessionSurface";
+import { claudeSessionsShellPropsEqual } from "./claudeSessionsPropsEqual";
 import "./index.css";
 
 const TerminalPanelLazy = lazy(() =>
@@ -810,14 +811,6 @@ function ClaudeSessionsShell({
       )}
     </div>
   );
-}
-
-function claudeSessionsShellPropsEqual(prev: Props, next: Props): boolean {
-  for (const key of Object.keys(prev) as (keyof Props)[]) {
-    if (key === "sessions") continue;
-    if (!Object.is(prev[key], next[key])) return false;
-  }
-  return true;
 }
 
 export const ClaudeSessions = memo(ClaudeSessionsShell, claudeSessionsShellPropsEqual);

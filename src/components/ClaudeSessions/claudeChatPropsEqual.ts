@@ -1,5 +1,6 @@
 import type { ClaudeSession } from "../../types";
 import { sessionChatChromeStructureKey } from "../../utils/sessionConversationTasks";
+import { arePropsEqualSkipping } from "../../utils/reactPropsEqual";
 
 export function claudeChatSessionPropsEqual(
   prevSession: ClaudeSession,
@@ -13,9 +14,8 @@ export function claudeChatPropsEqual<T extends { session: ClaudeSession }>(
   next: T,
 ): boolean {
   if (!claudeChatSessionPropsEqual(prev.session, next.session)) return false;
-  for (const key of Object.keys(prev) as (keyof T)[]) {
-    if (key === "session") continue;
-    if (!Object.is(prev[key], next[key])) return false;
-  }
-  return true;
+  return arePropsEqualSkipping(prev, next, {
+    skipKeys: ["session"],
+    skipFunctions: true,
+  });
 }

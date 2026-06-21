@@ -1,5 +1,5 @@
 import { Layout } from "antd";
-import type { ReactNode } from "react";
+import { memo, type ReactNode } from "react";
 import type {
   ClaudeSession,
   EmployeeMonitorItem,
@@ -14,6 +14,7 @@ import { MAIN_LAYOUT_RIGHT_SIDER_WIDTH_PX } from "../../constants/mainLayoutWidt
 import { ProgressMonitorPanel } from "../ProgressMonitorPanel";
 import { useChromePanelHoverHandlers } from "../../hooks/useChromePanelHoverHandlers";
 import { WorkspaceInspectorPanelsSection } from "./WorkspaceInspectorPanelsSection";
+import { areChatInspectorPropsEqual } from "./chatInspectorPropsEqual";
 import "./Inspector.css";
 
 const { Sider } = Layout;
@@ -79,7 +80,7 @@ export interface ChatInspectorProps {
  * 历史名为 `RightPanel`，P1 时按宪法 §4 改名为 ChatInspector。`RightPanel.tsx`
  * 仅保留 re-export 以支持过渡期 import；新代码请直接 import 这里。
  */
-export function ChatInspector({
+export const ChatInspector = memo(function ChatInspector({
   dark,
   collapsed,
   siderWidth = MAIN_LAYOUT_RIGHT_SIDER_WIDTH_PX,
@@ -189,4 +190,4 @@ export function ChatInspector({
       </div>
     </Sider>
   );
-}
+}, areChatInspectorPropsEqual);

@@ -54,6 +54,8 @@ import {
   areLeftSidebarContentPropsEqual,
   areLeftSidebarPropsEqual,
 } from "./LeftSidebar/leftSidebarPropsEqual";
+import { claudeSessionsShellPropsEqual } from "./ClaudeSessions/claudeSessionsPropsEqual";
+import { areInspectorShellPropsEqual } from "./Inspector/chatInspectorPropsEqual";
 import { WorkspaceFileTreeRail } from "./WorkspaceFileTreeRail";
 import type { WorkspaceFileTreeRailContext } from "./WorkspaceFileTreeRail/types";
 import { WorkspaceViewportLoading } from "./WorkspaceViewportLoading";
@@ -114,8 +116,8 @@ const CockpitSurface = lazy(() =>
   import("./CockpitSurface").then((module) => ({ default: module.CockpitSurface })),
 );
 const MemoLeftSidebar = memo(LazyLeftSidebar, areLeftSidebarPropsEqual);
-const MemoClaudeSessions = memo(LazyClaudeSessions);
-const MemoInspector = memo(Inspector);
+const MemoClaudeSessions = memo(LazyClaudeSessions, claudeSessionsShellPropsEqual);
+const MemoInspector = memo(Inspector, areInspectorShellPropsEqual);
 
 type ClaudeSessionsProps = Omit<
   ComponentProps<typeof LazyClaudeSessions>,
@@ -255,11 +257,7 @@ function connectedClaudeSessionsPropsEqual(
   if (prev.mainLayoutContentRef !== next.mainLayoutContentRef) return false;
   if (prev.centerAuxPanelsNode !== next.centerAuxPanelsNode) return false;
   if (prev.fileEditorTargetPaneIndex !== next.fileEditorTargetPaneIndex) return false;
-  for (const key of Object.keys(prev.claudeSessionsProps) as (keyof ClaudeSessionsProps)[]) {
-    if (key === "sessions") continue;
-    if (!Object.is(prev.claudeSessionsProps[key], next.claudeSessionsProps[key])) return false;
-  }
-  return true;
+  return claudeSessionsShellPropsEqual(prev.claudeSessionsProps, next.claudeSessionsProps);
 }
 
 const ConnectedClaudeSessions = memo(function ConnectedClaudeSessions({
@@ -337,7 +335,7 @@ const ConnectedInspector = memo(function ConnectedInspector({
       cockpitInspectorProps={cockpitInspectorProps}
     />
   );
-});
+}, areInspectorShellPropsEqual);
 
 const ConnectedRepositoryFileEditorPanel = memo(function ConnectedRepositoryFileEditorPanel({
   dark,

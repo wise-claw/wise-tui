@@ -1,6 +1,8 @@
 import type { ViewMode } from "../../types/viewMode";
+import { memo } from "react";
 import { ChatInspector, type ChatInspectorProps } from "./ChatInspector";
 import { CockpitInspector, type CockpitInspectorProps } from "./CockpitInspector";
+import { areInspectorShellPropsEqual } from "./chatInspectorPropsEqual";
 
 export interface InspectorProps {
   /** 当前 ViewMode；Inspector 按 kind 决定渲染内容。 */
@@ -25,10 +27,14 @@ export interface InspectorProps {
  *   - inspect 与 chat 共享同一份 ChatInspector；inspect 叠层渲染在主区之上，
  *     底层右栏继续显示。
  */
-export function Inspector({ viewMode, chatInspectorProps, cockpitInspectorProps }: InspectorProps) {
+export const Inspector = memo(function Inspector({
+  viewMode,
+  chatInspectorProps,
+  cockpitInspectorProps,
+}: InspectorProps) {
   if (viewMode.kind === "author") return null;
   if (viewMode.kind === "cockpit") {
     return <CockpitInspector {...cockpitInspectorProps} />;
   }
   return <ChatInspector {...chatInspectorProps} />;
-}
+}, areInspectorShellPropsEqual);

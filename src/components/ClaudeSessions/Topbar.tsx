@@ -20,6 +20,7 @@ import { resolveChatTopbarContext } from "../../utils/workspaceSelectionState";
 import { RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK } from "../../utils/rightPanelStorage";
 import type { WorkspaceFocus } from "../../utils/workspaceMode";
 import { PANE_COUNT_OPTIONS, isPaneCount, type PaneCount } from "../../constants/mainLayoutWidths";
+import { topbarPropsEqual } from "./topbarPropsEqual";
 
 const RunCommandPanelLazy = lazy(() =>
   import("../RunCommand").then((module) => ({ default: module.RunCommandPanel })),
@@ -548,4 +549,4 @@ export const Topbar = memo(function Topbar({
       </div>
     </div>
   );
-});
+}, topbarPropsEqual);
