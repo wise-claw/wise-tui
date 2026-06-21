@@ -10,7 +10,11 @@
   font-size: 13px;
 }
 
-.wise-cursor-sdk-diagnostic-panel__label {
+.wise-cursor-sdk-diagnostic-panel__field {
+  margin-bottom: 0 !important;
+}
+
+.wise-cursor-sdk-diagnostic-panel__field .ant-form-item-label > label {
   font-size: 13px;
   color: var(--ant-color-text-secondary);
 }

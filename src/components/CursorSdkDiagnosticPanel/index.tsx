@@ -1,5 +1,5 @@
 import { ReloadOutlined } from "@ant-design/icons";
-import { Button, Input, Space, Typography } from "antd";
+import { Button, Form, Input, Space, Typography } from "antd";
 import { isTauri } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
 import { CopyFeedbackIcon } from "../shared/CopyFeedbackIcon";
@@ -167,16 +167,17 @@ export function CursorSdkDiagnosticPanel({
           。请在 Wise 桌面窗口内打开（需 Tauri IPC）；单独用浏览器打开无法探测 SDK。
         </Typography.Paragraph>
       ) : null}
-      <label className="wise-cursor-sdk-diagnostic-panel__label" htmlFor="wise-cursor-sdk-repo">
-        仓库路径（可选，用于读/写探测）
-      </label>
-      <Input
-        id="wise-cursor-sdk-repo"
-        value={repositoryPath}
-        onChange={(event) => setRepositoryPath(event.target.value)}
-        placeholder="/path/to/your/repo"
-        disabled={busy}
-      />
+      <Form.Item
+        label="仓库路径（可选，用于读/写探测）"
+        className="wise-cursor-sdk-diagnostic-panel__field"
+      >
+        <Input
+          value={repositoryPath}
+          onChange={(event) => setRepositoryPath(event.target.value)}
+          placeholder="/path/to/your/repo"
+          disabled={busy}
+        />
+      </Form.Item>
       <Space wrap className="wise-cursor-sdk-diagnostic-panel__actions">
         <Button icon={<ReloadOutlined />} onClick={() => void runProbe()} loading={busy}>
           重新探测 SDK

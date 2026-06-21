@@ -1,5 +1,8 @@
 import type { ClaudeMessage, ClaudeSession } from "../types";
-import { foldToolResultUserMessagesIntoAssistant } from "../services/claudeStreamAssembler";
+import {
+  foldToolResultUserMessagesIntoAssistant,
+  isToolResultUpdatePart,
+} from "../services/claudeStreamAssembler";
 import {
   getMessageSenderGroupKey,
   hasRenderableChatMessageBody,
@@ -75,10 +78,16 @@ function buildSingleChatMessageListRow(
   };
 }
 
-export function buildChatMessageListRows(
+export interface ChatMessageListRowsBuildResult {
+  rows: ChatMessageListRow[];
+  /** fold 后的消息数组（已合并 tool_result），供 tail-patch 增量复用。 */
+  folded: ClaudeMessage[];
+}
+
+export function buildChatMessageListRowsWithFolded(
   messages: readonly ClaudeMessage[],
   options: ChatMessageListRowsBuildOptions,
-): ChatMessageListRow[] {
+): ChatMessageListRowsBuildResult {
   const foldedMessages = foldToolResultUserMessagesIntoAssistant(messages);
   const rows: ChatMessageListRow[] = [];
 
@@ -91,29 +100,65 @@ export function buildChatMessageListRows(
     rows.push({ kind: "thinking-hint", key: "thinking-hint" });
   }
 
-  return rows;
+  return { rows, folded: foldedMessages };
+}
+
+export function buildChatMessageListRows(
+  messages: readonly ClaudeMessage[],
+  options: ChatMessageListRowsBuildOptions,
+): ChatMessageListRow[] {
+  return buildChatMessageListRowsWithFolded(messages, options).rows;
 }
 
 /**
  * 流式输出时仅最后一条消息变化：复用前缀 row 对象，避免 O(n) 全量重建与整表重渲染。
+ *
+ * 增量 fold 快路径：tail-patch 前提（前缀引用全相同、仅末条变）下 fold 前缀结果不变。
+ * 流式中末条恒为 assistant（fold 原样 push），故可复用缓存的 prevFolded 去尾作为前缀、
+ * 直接换末条，省去每 tick 全量 fold（含对历史 K 轮 tool_result 的重复 apply）。
+ * 仅当 prev/next 末条均被 fold 原样 push 时启用；末条为 tool-only-with-updates
+ * （合并/orphan，理论场景，流式中不发生）时回退全量 fold。
  */
 export function tryPatchChatMessageListRowsTail(
   prevMessages: readonly ClaudeMessage[],
   nextMessages: readonly ClaudeMessage[],
   prevRows: readonly ChatMessageListRow[],
   options: ChatMessageListRowsBuildOptions,
-): ChatMessageListRow[] | null {
-  if (prevMessages === nextMessages) return [...prevRows];
+  prevFolded?: readonly ClaudeMessage[],
+): ChatMessageListRowsBuildResult | null {
+  if (prevMessages === nextMessages) {
+    return { rows: [...prevRows], folded: prevFolded ? [...prevFolded] : foldToolResultUserMessagesIntoAssistant(prevMessages) };
+  }
   if (prevMessages.length === 0 || nextMessages.length === 0) return null;
   if (prevMessages.length !== nextMessages.length) return null;
   for (let i = 0; i < nextMessages.length - 1; i += 1) {
     if (prevMessages[i] !== nextMessages[i]) return null;
   }
-  if (prevMessages[nextMessages.length - 1] === nextMessages[nextMessages.length - 1]) {
-    return [...prevRows];
+  const prevLast = prevMessages[prevMessages.length - 1]!;
+  const nextLast = nextMessages[nextMessages.length - 1]!;
+  if (prevLast === nextLast) {
+    return { rows: [...prevRows], folded: prevFolded ? [...prevFolded] : foldToolResultUserMessagesIntoAssistant(prevMessages) };
   }
 
-  const nextFolded = foldToolResultUserMessagesIntoAssistant(nextMessages);
+  // 增量 fold：prev 末条被原样 push（prevFolded 末 === prevLast，精确判别 fold CASE A/B）且
+  // next 末条也会被原样 push（非 tool-only，或 tool-only 无 tool_use result updates）时，
+  // nextFolded = [...foldPrefix, nextLast]，foldPrefix = prevFolded.slice(0,-1) = fold(前缀)。
+  // 否则回退全量 fold（末条 tool-only 有 updates 的合并/orphan 场景）。
+  const prevLastPushedAsIs =
+    prevFolded !== undefined &&
+    prevFolded.length > 0 &&
+    prevFolded[prevFolded.length - 1] === prevLast;
+  const nextLastPushedAsIs =
+    !isToolOnlyUserMessage(nextLast) ||
+    !(nextLast.parts ?? []).some((part) => part.type === "tool_use" && isToolResultUpdatePart(part));
+  let nextFolded: ClaudeMessage[];
+  if (prevLastPushedAsIs && nextLastPushedAsIs && prevFolded !== undefined) {
+    nextFolded = prevFolded.slice(0, -1);
+    nextFolded.push(nextLast);
+  } else {
+    nextFolded = foldToolResultUserMessagesIntoAssistant(nextMessages);
+  }
+
   const lastMessageIndex = nextFolded.length - 1;
   const prefixRows: ChatMessageListMessageRow[] = [];
   for (const row of prevRows) {
@@ -134,5 +179,5 @@ export function tryPatchChatMessageListRowsTail(
   if (options.showListEndThinkingHint) {
     nextRows.push({ kind: "thinking-hint", key: "thinking-hint" });
   }
-  return nextRows;
+  return { rows: nextRows, folded: nextFolded };
 }
