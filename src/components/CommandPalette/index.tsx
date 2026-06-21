@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState, memo } from "react";
 import { Input, Spin, message } from "antd";
 import { FileOutlined, SearchOutlined } from "@ant-design/icons";
 import { openRepositoryFileWithStoredPreference } from "../../services/openWorkspaceWithPreference";
@@ -7,6 +7,7 @@ import {
   searchRepositoryFiles,
   type RepositoryFileContentMatch,
 } from "../../services/repositoryFiles";
+import { commandPalettePropsEqual } from "./commandPalettePropsEqual";
 import "./index.css";
 
 export type CommandPaletteSearchMode = "filename" | "content";
@@ -95,7 +96,7 @@ function toContentResults(matches: RepositoryFileContentMatch[]): ContentResult[
   }));
 }
 
-export function CommandPalette({
+export const CommandPalette = memo(function CommandPalette({
   open,
   onClose,
   repositoryPath,
@@ -311,4 +312,4 @@ export function CommandPalette({
       </div>
     </div>
   );
-}
+}, commandPalettePropsEqual);

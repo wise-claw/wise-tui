@@ -28,6 +28,12 @@ export type ChatMessageListThinkingRow = {
 
 export type ChatMessageListRow = ChatMessageListMessageRow | ChatMessageListThinkingRow;
 
+/**
+ * thinking-hint 行常量：引用稳定，供 ChatMessageListVirtualBody 的 element 缓存命中，
+ * 避免每 tick 新建对象导致缓存失效（bailout 失败、StreamingReplyHint 动画状态每 tick 重置）。
+ */
+const THINKING_HINT_ROW: ChatMessageListThinkingRow = { kind: "thinking-hint", key: "thinking-hint" };
+
 export function shouldShowListEndThinkingHint(
   messages: readonly ClaudeMessage[],
   status: ClaudeSession["status"],
@@ -97,7 +103,7 @@ export function buildChatMessageListRowsWithFolded(
   }
 
   if (options.showListEndThinkingHint) {
-    rows.push({ kind: "thinking-hint", key: "thinking-hint" });
+    rows.push(THINKING_HINT_ROW);
   }
 
   return { rows, folded: foldedMessages };
@@ -177,7 +183,7 @@ export function tryPatchChatMessageListRowsTail(
   const lastRow = buildSingleChatMessageListRow(nextFolded, lastMessageIndex, options);
   const nextRows: ChatMessageListRow[] = lastRow ? [...prefixRows, lastRow] : [...prefixRows];
   if (options.showListEndThinkingHint) {
-    nextRows.push({ kind: "thinking-hint", key: "thinking-hint" });
+    nextRows.push(THINKING_HINT_ROW);
   }
   return { rows: nextRows, folded: nextFolded };
 }

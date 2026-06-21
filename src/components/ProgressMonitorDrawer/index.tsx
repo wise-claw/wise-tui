@@ -1,4 +1,4 @@
-import { Button, Drawer, Empty, Space, Tag, Typography, message } from "antd";
+import { progressMonitorDrawerPropsEqual } from "../ProgressMonitorPanel/monitorOverlayPropsEqual";
 import { HoverHint } from "../shared/HoverHint";
 import { List } from "../ui/AppList";
 import { memo, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from "react";
@@ -139,7 +139,7 @@ const OmcWorkerDrawerInvocationList = memo(function OmcWorkerDrawerInvocationLis
   );
 });
 
-interface Props {
+interface ProgressMonitorDrawerProps {
   open: boolean;
   target: MonitorDrawerTarget | null;
   onClose: () => void;
@@ -169,6 +169,10 @@ interface Props {
   /** 历史会话抽屉底部：resume 继续执行 */
   onResumeSession?: import("../ProgressMonitorPanel/MonitorDrawerSessionComposer").MonitorDrawerResumeSessionFn;
 }
+
+type Props = ProgressMonitorDrawerProps;
+
+export type { ProgressMonitorDrawerProps };
 
 interface SessionMessageRow {
   sessionId: string;
@@ -571,7 +575,7 @@ function collectOmcRuns(events: WorkflowTaskEventItem[], taskId: string): OmcExe
     .sort((a, b) => (b.endedAt ?? b.startedAt ?? 0) - (a.endedAt ?? a.startedAt ?? 0));
 }
 
-export function ProgressMonitorDrawer({
+export const ProgressMonitorDrawer = memo(function ProgressMonitorDrawer({
   open,
   target,
   onClose,
@@ -1225,4 +1229,4 @@ export function ProgressMonitorDrawer({
     />
     </>
   );
-}
+}, progressMonitorDrawerPropsEqual);

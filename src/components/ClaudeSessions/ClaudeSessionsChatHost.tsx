@@ -11,7 +11,7 @@ import type {
   SessionConversationTaskItem,
 } from "../../types";
 import { Button, Empty, message } from "antd";
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, Suspense, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   resolveRepositoryForSession,
 } from "../../utils/repositoryMainSessionBinding";
@@ -23,6 +23,7 @@ import { runPaneCreateTask } from "./paneCreateLoading";
 import { prefetchNewSessionSurface } from "./prefetchNewSessionSurface";
 import { WorkspaceViewportLoading } from "../WorkspaceViewportLoading";
 import type { ResolvePaneAuxLayout } from "./paneAuxLayout";
+import { claudeSessionsChatHostPropsEqual } from "./claudeSessionsChatHostPropsEqual";
 
 const ClaudeMultiPaneGridLazy = lazy(() =>
   import("./ClaudeMultiPaneGrid").then((module) => ({ default: module.ClaudeMultiPaneGrid })),
@@ -208,7 +209,7 @@ export interface ClaudeSessionsChatHostProps {
 }
 
 /** 聊天区壳层：不订阅 live；消息列表由 `ClaudeChatMessagesLiveHost` 独立更新。 */
-export function ClaudeSessionsChatHost({
+export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
   incomingSessions,
   sessions,
   activeSession,
@@ -690,4 +691,4 @@ export function ClaudeSessionsChatHost({
       )}
     </Suspense>
   );
-}
+}, claudeSessionsChatHostPropsEqual);

@@ -91,6 +91,7 @@ import {
   type SessionConversationTaskDetailTarget,
 } from "./SessionConversationTaskDetailDrawer";
 import "./index.css";
+import { progressMonitorPanelPropsEqual } from "./progressMonitorPanelPropsEqual";
 
 export {
   getSessionPreview,
@@ -162,7 +163,7 @@ function MonitorPanelHeadConfigActions({
   );
 }
 
-interface Props {
+export interface ProgressMonitorPanelProps {
   employeeItems: EmployeeMonitorItem[];
   repositoryMemberItems: RepositoryMemberMonitorItem[];
   teamItems: TeamMonitorItem[];
@@ -230,6 +231,8 @@ interface Props {
   /** 左栏内容区可见行数（由默认配置注入，高度由外层 CSS 变量控制）。 */
   monitorPanelVisibleRows?: number;
 }
+
+type Props = ProgressMonitorPanelProps;
 
 type MonitorCompactFlatRow =
   | { kind: "terminal"; item: EmployeeMonitorItem }
@@ -1970,4 +1973,4 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
       {monitorDrawers}
     </div>
   );
-});
+}, progressMonitorPanelPropsEqual);

@@ -502,6 +502,8 @@ export function AppWorkspaceLayout({
   const algorithm = dark ? theme.darkAlgorithm : theme.defaultAlgorithm;
   const claudeSessionsRef = useRef(claudeSessionsProps.sessions);
   claudeSessionsRef.current = claudeSessionsProps.sessions;
+  const claudeSessionsPropsRef = useRef(claudeSessionsProps);
+  claudeSessionsPropsRef.current = claudeSessionsProps;
 
   const mainSessionForDataLink = useMemo(
     () =>
@@ -552,7 +554,21 @@ export function AppWorkspaceLayout({
   const showWorkspaceFileTreeRail =
     chatRightRailMode && fileTreeRailOpen && !workspaceWelcomeFullscreen && !leftSidebarParked;
   const [workspaceFileTreeRailContext, setWorkspaceFileTreeRailContext] =
-    useState<WorkspaceFileTreeRailContext | null>(null);
+    useState<WorkspaceFileTreeRailContext | null>(null  );
+
+  const getClaudeSessionsForTopbar = useCallback(() => claudeSessionsRef.current, []);
+
+  const onSessionInsightsAiAnalysis = useMemo(
+    () =>
+      mainSessionForDataLink
+        ? async (prompt: string) => {
+            const props = claudeSessionsPropsRef.current;
+            props.onSwitchSession(mainSessionForDataLink.id);
+            await props.onExecuteSession(mainSessionForDataLink.id, prompt);
+          }
+        : undefined,
+    [mainSessionForDataLink?.id],
+  );
 
   const topbarProps = useMemo(
     () => ({
@@ -564,28 +580,23 @@ export function AppWorkspaceLayout({
         mainSessionForDataLink?.repositoryPath?.trim() ||
         claudeSessionsProps.activeRepository?.path,
       mainSessionForDataLink,
-      onSessionInsightsAiAnalysis: mainSessionForDataLink
-        ? async (prompt: string) => {
-            claudeSessionsProps.onSwitchSession(mainSessionForDataLink.id);
-            await claudeSessionsProps.onExecuteSession(mainSessionForDataLink.id, prompt);
-          }
-        : undefined,
-      onDispatchSessionFeedbackLoop: claudeSessionsProps.onDispatchSessionFeedbackLoop,
-      getClaudeSessions: () => claudeSessionsRef.current,
-      onToggleSidebar: claudeSessionsProps.onToggleSidebar,
-      onToggleRightPanel: claudeSessionsProps.onToggleRightPanel,
+      onSessionInsightsAiAnalysis,
+      onDispatchSessionFeedbackLoop: claudeSessionsPropsRef.current.onDispatchSessionFeedbackLoop,
+      getClaudeSessions: getClaudeSessionsForTopbar,
+      onToggleSidebar: claudeSessionsPropsRef.current.onToggleSidebar,
+      onToggleRightPanel: claudeSessionsPropsRef.current.onToggleRightPanel,
       rightPanelDefaultCollapsed: claudeSessionsProps.rightPanelDefaultCollapsed,
-      onSetRightPanelDefaultCollapsed: claudeSessionsProps.onSetRightPanelDefaultCollapsed,
-      onToggleTerminal: claudeSessionsProps.onToggleTerminal,
-      onSearch: claudeSessionsProps.onSearch,
+      onSetRightPanelDefaultCollapsed: claudeSessionsPropsRef.current.onSetRightPanelDefaultCollapsed,
+      onToggleTerminal: claudeSessionsPropsRef.current.onToggleTerminal,
+      onSearch: claudeSessionsPropsRef.current.onSearch,
       collapsed: claudeSessionsProps.collapsed,
       fileTreeRailOpen: showWorkspaceFileTreeRail,
       rightCollapsed: claudeSessionsProps.rightCollapsed,
       terminalCollapsed: claudeSessionsProps.terminalCollapsed,
       terminalPanelMounted: claudeSessionsProps.terminalPanelMounted,
-      onAutoFixRunError: claudeSessionsProps.onAutoFixRunError,
+      onAutoFixRunError: claudeSessionsPropsRef.current.onAutoFixRunError,
       paneCount: claudeSessionsProps.paneCount,
-      onChangePaneCount: claudeSessionsProps.onChangePaneCount,
+      onChangePaneCount: claudeSessionsPropsRef.current.onChangePaneCount,
       onOpenRemoteChannels,
     }),
     [
@@ -593,24 +604,16 @@ export function AppWorkspaceLayout({
       claudeSessionsProps.activeWorkspaceFocus,
       claudeSessionsProps.activeRepository,
       claudeSessionsProps.repositories,
-      claudeSessionsProps.onToggleSidebar,
-      claudeSessionsProps.onToggleRightPanel,
       claudeSessionsProps.rightPanelDefaultCollapsed,
-      claudeSessionsProps.onSetRightPanelDefaultCollapsed,
-      claudeSessionsProps.onToggleTerminal,
-      claudeSessionsProps.onSearch,
       claudeSessionsProps.collapsed,
       showWorkspaceFileTreeRail,
       claudeSessionsProps.rightCollapsed,
       claudeSessionsProps.terminalCollapsed,
       claudeSessionsProps.terminalPanelMounted,
-      claudeSessionsProps.onAutoFixRunError,
       claudeSessionsProps.paneCount,
-      claudeSessionsProps.onChangePaneCount,
       mainSessionForDataLink,
-      claudeSessionsProps.onSwitchSession,
-      claudeSessionsProps.onExecuteSession,
-      claudeSessionsProps.onDispatchSessionFeedbackLoop,
+      onSessionInsightsAiAnalysis,
+      getClaudeSessionsForTopbar,
       onOpenRemoteChannels,
     ],
   );

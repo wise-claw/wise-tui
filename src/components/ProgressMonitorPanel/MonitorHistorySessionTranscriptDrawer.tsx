@@ -1,7 +1,7 @@
 import { Button, Drawer, Empty, Space, Tag, message } from "antd";
 import { HoverHint } from "../shared/HoverHint";
 import { ReloadOutlined } from "@ant-design/icons";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ClaudeSession } from "../../types";
 import { useClaudeSessionsLiveSnapshot } from "../../stores/claudeSessionsLiveStore";
 import { ClaudeSessionMessagesColumn } from "../ClaudeSessions/ClaudeSessionMessagesColumn";
@@ -18,6 +18,7 @@ import {
 } from "./MonitorDrawerSessionComposer";
 import { latestTerminalTurnHasAssistant } from "../../hooks/useClaudeSessions.transcript";
 import { isTerminalWorkerWiseTab } from "../../services/terminalDispatch";
+import { monitorHistoryTranscriptDrawerPropsEqual } from "./monitorOverlayPropsEqual";
 
 export interface MonitorHistorySessionTranscriptDrawerProps {
   open: boolean;
@@ -57,7 +58,7 @@ function resolveLiveSession(
   );
 }
 
-export function MonitorHistorySessionTranscriptDrawer({
+export const MonitorHistorySessionTranscriptDrawer = memo(function MonitorHistorySessionTranscriptDrawer({
   open,
   sessionId,
   onClose,
@@ -371,4 +372,4 @@ export function MonitorHistorySessionTranscriptDrawer({
       )}
     </Drawer>
   );
-}
+}, monitorHistoryTranscriptDrawerPropsEqual);

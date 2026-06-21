@@ -1,44 +1,13 @@
-import { monitorSessionsOverviewFingerprint } from "../../hooks/useMonitorSessionsForOverview";
+import {
+  employeeMonitorItemsFingerprint,
+  monitorSessionsFingerprint,
+  monitorStatsFingerprint,
+  monitorTaskItemsFingerprint,
+  teamMonitorItemsFingerprint,
+} from "../../utils/monitorUiPropsFingerprints";
 import { arePropsEqualSkipping } from "../../utils/reactPropsEqual";
 import type { ChatInspectorProps } from "./ChatInspector";
 import type { CockpitInspectorProps } from "./CockpitInspector";
-
-function monitorTaskItemsFingerprint(
-  items: ChatInspectorProps["sessionConversationTaskItems"],
-): string {
-  if (!items?.length) return "0";
-  return items
-    .map((item) => `${item.key}|${item.status}|${item.updatedAt}`)
-    .join("\n");
-}
-
-function employeeMonitorItemsFingerprint(
-  items: ChatInspectorProps["employeeMonitorItems"],
-): string {
-  if (!items?.length) return "0";
-  return items
-    .map((item) => `${item.employeeId}|${item.status}|${item.name}`)
-    .join("\n");
-}
-
-function teamMonitorItemsFingerprint(items: ChatInspectorProps["teamMonitorItems"]): string {
-  if (!items?.length) return "0";
-  return items
-    .map((item) => `${item.workflowId}|${item.status}|${item.workflowName}`)
-    .join("\n");
-}
-
-function monitorStatsFingerprint(stats: ChatInspectorProps["monitorStats"]): string {
-  if (!stats) return "";
-  return [
-    stats.activeEmployees,
-    stats.employeesInProgress,
-    stats.employeesIdle,
-    stats.teamsTotal,
-    stats.teamsInProgress,
-    stats.teamsIdle,
-  ].join("|");
-}
 
 /** ChatInspector memo：流式正文与 App 壳层新建回调不触发右栏整树重渲染。 */
 export function areChatInspectorPropsEqual(
@@ -54,15 +23,15 @@ export function areChatInspectorPropsEqual(
   }
   if (
     prev.monitorPanelSessions !== next.monitorPanelSessions &&
-    monitorSessionsOverviewFingerprint(prev.monitorPanelSessions ?? []) !==
-      monitorSessionsOverviewFingerprint(next.monitorPanelSessions ?? [])
+    monitorSessionsFingerprint(prev.monitorPanelSessions) !==
+      monitorSessionsFingerprint(next.monitorPanelSessions)
   ) {
     return false;
   }
   if (
     prev.monitorTranscriptSourceSessions !== next.monitorTranscriptSourceSessions &&
-    monitorSessionsOverviewFingerprint(prev.monitorTranscriptSourceSessions ?? []) !==
-      monitorSessionsOverviewFingerprint(next.monitorTranscriptSourceSessions ?? [])
+    monitorSessionsFingerprint(prev.monitorTranscriptSourceSessions) !==
+      monitorSessionsFingerprint(next.monitorTranscriptSourceSessions)
   ) {
     return false;
   }
@@ -110,6 +79,29 @@ export function areChatInspectorPropsEqual(
   return true;
 }
 
+export function areCockpitInspectorPropsEqual(
+  prev: CockpitInspectorProps,
+  next: CockpitInspectorProps,
+): boolean {
+  if (prev.dark !== next.dark) return false;
+  if (prev.collapsed !== next.collapsed) return false;
+  if (prev.siderWidth !== next.siderWidth) return false;
+  if (prev.activeProject !== next.activeProject) return false;
+  if (prev.activeProjectId !== next.activeProjectId) return false;
+  if (prev.activeRepositoryId !== next.activeRepositoryId) return false;
+  if (prev.activeRepositoryName !== next.activeRepositoryName) return false;
+  if (
+    employeeMonitorItemsFingerprint(prev.employeeMonitorItems) !==
+    employeeMonitorItemsFingerprint(next.employeeMonitorItems)
+  ) {
+    return false;
+  }
+  return arePropsEqualSkipping(prev, next, {
+    skipKeys: ["employeeMonitorItems"],
+    skipFunctions: true,
+  });
+}
+
 export function areInspectorShellPropsEqual(
   prev: {
     viewMode: import("../../types/viewMode").ViewMode;
@@ -124,14 +116,5 @@ export function areInspectorShellPropsEqual(
 ): boolean {
   if (prev.viewMode !== next.viewMode) return false;
   if (!areChatInspectorPropsEqual(prev.chatInspectorProps, next.chatInspectorProps)) return false;
-  if (
-    employeeMonitorItemsFingerprint(prev.cockpitInspectorProps.employeeMonitorItems) !==
-    employeeMonitorItemsFingerprint(next.cockpitInspectorProps.employeeMonitorItems)
-  ) {
-    return false;
-  }
-  return arePropsEqualSkipping(prev.cockpitInspectorProps, next.cockpitInspectorProps, {
-    skipKeys: ["employeeMonitorItems"],
-    skipFunctions: true,
-  });
+  return areCockpitInspectorPropsEqual(prev.cockpitInspectorProps, next.cockpitInspectorProps);
 }

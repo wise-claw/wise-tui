@@ -2,6 +2,8 @@ import {
   forwardRef,
   useCallback,
   useImperativeHandle,
+  useRef,
+  type ReactElement,
   type ReactNode,
   type RefObject,
 } from "react";
@@ -42,6 +44,52 @@ interface Props {
   onNavigate?: () => void;
   messageListProfile?: "primary" | "companion";
   companionMessageListWindow?: { initialVisible: number; loadStep: number };
+}
+
+/** 影响单行 element 输出的上下文 prop 集合（element 缓存引用相等判据用）。 */
+export interface RowElementCacheContext {
+  sessionId?: string;
+  listVariant?: "chat" | "monitor";
+  resolveExecutionEnvironmentDispatchTask?: (meta: DispatchRecordMeta) => SessionConversationTaskItem | null;
+  onOpenTaskDetail?: (taskId: string) => void;
+  onOpenHistorySessionInInspector?: (sessionId: string) => void;
+  onOpenSessionConversationTaskDetail?: (task: SessionConversationTaskItem) => void;
+  sessionsForDispatchLookup?: readonly ClaudeSession[];
+  renderRow?: (row: ChatMessageListRow, index: number) => ReactNode;
+}
+
+/** 单行 element 缓存条目：element 引用 + 命中判据所需的全量输入。 */
+export interface CachedRowElement extends RowElementCacheContext {
+  element: ReactElement;
+  row: ChatMessageListRow;
+  index: number;
+}
+
+/**
+ * 行 element 缓存命中判据（纯函数，便于单测）。
+ * token tick 时前缀行 row 引用不变、所有 ctx prop 引用稳定 → 命中复用 element 引用，
+ * 触发 React bailoutOnAlreadyFinishedWork 跳过整子树（不 diff div、不调 rowContentEqual / rowPropsEqual）。
+ * messageListProfile/companionMessageListWindow 仅经窗口 sizing → index 间接影响，已被 index 覆盖；
+ * onNavigate/scrollContainerRef 不传入行 element，不需纳入；listResetKey 单独触发清空。
+ */
+export function rowElementCacheHit(
+  cached: CachedRowElement,
+  row: ChatMessageListRow,
+  index: number,
+  ctx: RowElementCacheContext,
+): boolean {
+  return (
+    cached.row === row &&
+    cached.index === index &&
+    cached.sessionId === ctx.sessionId &&
+    cached.listVariant === ctx.listVariant &&
+    cached.resolveExecutionEnvironmentDispatchTask === ctx.resolveExecutionEnvironmentDispatchTask &&
+    cached.onOpenTaskDetail === ctx.onOpenTaskDetail &&
+    cached.onOpenHistorySessionInInspector === ctx.onOpenHistorySessionInInspector &&
+    cached.onOpenSessionConversationTaskDetail === ctx.onOpenSessionConversationTaskDetail &&
+    cached.sessionsForDispatchLookup === ctx.sessionsForDispatchLookup &&
+    cached.renderRow === ctx.renderRow
+  );
 }
 
 function scrollElementIntoScrollContainer(
@@ -165,6 +213,61 @@ export const ChatMessageListVirtualBody = forwardRef<ChatMessageListNavigationHa
       ],
     );
 
+    // 行 element 引用缓存：按 row.key 复用前缀行 element，token tick 时命中 → React bailout 跳过整子树。
+    const elementCacheRef = useRef<Map<string, CachedRowElement>>(new Map());
+    const prevListResetKeyRef = useRef(listResetKey);
+    // 切会话（listResetKey = session.id 变化）时清空缓存，渲染期生效（effect 前），无跨会话污染。
+    if (prevListResetKeyRef.current !== listResetKey) {
+      elementCacheRef.current = new Map();
+      prevListResetKeyRef.current = listResetKey;
+    }
+
+    const rowRenderCtx: RowElementCacheContext = {
+      sessionId,
+      listVariant,
+      resolveExecutionEnvironmentDispatchTask,
+      onOpenTaskDetail,
+      onOpenHistorySessionInInspector,
+      onOpenSessionConversationTaskDetail,
+      sessionsForDispatchLookup,
+      renderRow,
+    };
+    // 迁移式缓存：每轮新建 nextCache，命中条目迁移，未命中 createElement 写入；
+    // 循环后替换 ref，旧 Map 中未迁移条目（已移出窗口的行）随旧 Map GC。
+    const nextElementCache = new Map<string, CachedRowElement>();
+    const renderedRows = visibleRows.map((row, offset) => {
+      const index = visibleStartIndex + offset;
+      if (row.kind === "message" && !hasRenderableChatMessageBody(row.msg)) {
+        return null;
+      }
+      const cached = elementCacheRef.current.get(row.key);
+      if (cached && rowElementCacheHit(cached, row, index, rowRenderCtx)) {
+        nextElementCache.set(row.key, cached);
+        return cached.element;
+      }
+      const element = (
+        <div key={row.key} className={chatMessageListRowClassName(row, index)}>
+          {renderRow ? (
+            renderRow(row, index)
+          ) : (
+            <ChatMessageListRowContent
+              row={row}
+              sessionId={sessionId}
+              listVariant={listVariant}
+              resolveExecutionEnvironmentDispatchTask={resolveExecutionEnvironmentDispatchTask}
+              onOpenTaskDetail={onOpenTaskDetail}
+              onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
+              onOpenSessionConversationTaskDetail={onOpenSessionConversationTaskDetail}
+              sessionsForDispatchLookup={sessionsForDispatchLookup}
+            />
+          )}
+        </div>
+      );
+      nextElementCache.set(row.key, { element, row, index, ...rowRenderCtx });
+      return element;
+    });
+    elementCacheRef.current = nextElementCache;
+
     return (
       <>
         {windowActive && hiddenRowCount > 0 ? (
@@ -174,30 +277,7 @@ export const ChatMessageListVirtualBody = forwardRef<ChatMessageListNavigationHa
             </button>
           </div>
         ) : null}
-        {visibleRows.map((row, offset) => {
-          const index = visibleStartIndex + offset;
-          if (row.kind === "message" && !hasRenderableChatMessageBody(row.msg)) {
-            return null;
-          }
-          return (
-            <div key={row.key} className={chatMessageListRowClassName(row, index)}>
-              {renderRow ? (
-                renderRow(row, index)
-              ) : (
-                <ChatMessageListRowContent
-                  row={row}
-                  sessionId={sessionId}
-                  listVariant={listVariant}
-                  resolveExecutionEnvironmentDispatchTask={resolveExecutionEnvironmentDispatchTask}
-                  onOpenTaskDetail={onOpenTaskDetail}
-                  onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
-                  onOpenSessionConversationTaskDetail={onOpenSessionConversationTaskDetail}
-                  sessionsForDispatchLookup={sessionsForDispatchLookup}
-                />
-              )}
-            </div>
-          );
-        })}
+        {renderedRows}
       </>
     );
   },

@@ -1,11 +1,12 @@
 import { Layout, Typography } from "antd";
-import { useMemo } from "react";
+import { memo, useMemo } from "react";
 import { MAIN_LAYOUT_RIGHT_SIDER_WIDTH_PX } from "../../constants/mainLayoutWidths";
 import type {
   EmployeeMonitorItem,
   ProjectItem,
 } from "../../types";
 import { WorkspaceInspectorPanelsSection } from "./WorkspaceInspectorPanelsSection";
+import { areCockpitInspectorPropsEqual } from "./chatInspectorPropsEqual";
 import "./Inspector.css";
 
 const { Sider } = Layout;
@@ -36,7 +37,7 @@ export interface CockpitInspectorProps {
  * 任务详情 / PRD 锚点 / 实时 stdout 等更深的视角由需求助手工作台或
  * Trellis 运行透镜承担；本 Inspector 只是 Cockpit 主屏的补充上下文。
  */
-export function CockpitInspector({
+export const CockpitInspector = memo(function CockpitInspector({
   dark,
   collapsed,
   siderWidth = MAIN_LAYOUT_RIGHT_SIDER_WIDTH_PX,
@@ -134,4 +135,4 @@ export function CockpitInspector({
       </div>
     </Sider>
   );
-}
+}, areCockpitInspectorPropsEqual);
