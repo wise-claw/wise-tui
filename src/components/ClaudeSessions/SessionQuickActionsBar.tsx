@@ -34,7 +34,7 @@ export interface SessionQuickActionsBarProps {
   onActivateAssistant?: (assistant: AssistantEntry) => void | Promise<void>;
   /** 进入 Author 域「助手模板」管理页 */
   onOpenAssistantsHub?: () => void;
-  /** 推送按钮（含 Popover 等交互，由父组件组装） */
+  /** 推送按钮（由父组件组装：拉取 / AI 生成提交信息 / 提交 / 推送，无弹窗） */
   pushControl: ReactNode;
   /** 常用语 chip，展示在快捷条主行（推送与「更多」之间） */
   commonPhrasesSlot?: ReactNode;
@@ -167,7 +167,11 @@ export const SessionQuickActionsBar = memo(function SessionQuickActionsBar({
           key={id}
           type="button"
           className="app-session-quick-pill"
-          onClick={() => activateAssistantById(id)}
+          onPointerDown={(event) => {
+            if (event.button !== 0) return;
+            event.preventDefault();
+            activateAssistantById(id);
+          }}
         >
           <span
             className={`app-session-quick-pill__icon app-session-quick-pill__icon--${iconTone}`}

@@ -1,6 +1,6 @@
 import { Button } from "antd";
 import { HoverHint } from "../shared/HoverHint";
-import { memo, useMemo } from "react";
+import { memo, useMemo, type PointerEvent as ReactPointerEvent } from "react";
 import {
   buildComposerCommonPhraseTooltipTitle,
   resolveComposerCommonPhraseAction,
@@ -43,8 +43,11 @@ const PhraseQuickLabel = memo(function PhraseQuickLabel({
         }`}
         disabled={disabled}
         aria-label={ariaLabel}
-        onMouseDown={(event) => event.preventDefault()}
-        onClick={() => onApplyPhrase(phrase)}
+        onPointerDown={(event: ReactPointerEvent<HTMLButtonElement>) => {
+          if (event.button !== 0 || disabled) return;
+          event.preventDefault();
+          onApplyPhrase(phrase);
+        }}
       >
         {phrase.title}
       </button>

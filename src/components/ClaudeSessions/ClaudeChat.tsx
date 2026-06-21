@@ -528,6 +528,7 @@ export function ClaudeChatInner({
     ) {
       return;
     }
+    if (hit.closest(".app-session-quick-actions")) return;
     if (hit.closest("[data-wise-composer-root]")) return;
     if (hit.closest(".monaco-editor, .milkdown")) return;
     if (document.activeElement === root) return;

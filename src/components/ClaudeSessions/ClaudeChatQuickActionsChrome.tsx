@@ -1,5 +1,5 @@
 import { CloudUploadOutlined } from "@ant-design/icons";
-import { Popover, Spin, message } from "antd";
+import { Spin, message } from "antd";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useGitRepositoryStats } from "../../hooks/useGitRepositoryStats";
 import { executeClaudeCodeAndWait, getClaudeConfigModel } from "../../services/claude";
@@ -73,31 +73,32 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
   const [reviewGitStatsPulse, setReviewGitStatsPulse] = useState(false);
   const prevGitStatsForPulseRef = useRef({ additions: 0, deletions: 0 });
 
-  const [pushPopoverOpen, setPushPopoverOpen] = useState(false);
-  const [pushSummaryDraft, setPushSummaryDraft] = useState("");
-  const [pushSummaryLoading, setPushSummaryLoading] = useState(false);
-  const [pushSummaryPhase, setPushSummaryPhase] = useState("");
   const [pushSubmitting, setPushSubmitting] = useState(false);
   const [pushSubmitPhase, setPushSubmitPhase] = useState("");
-  const pushSummaryLoadTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pushSummaryLoadSeqRef = useRef(0);
-  const pushAutoFixTimerRef = useRef<number | null>(null);
   const pushSubmitInFlightRef = useRef(false);
+  const pushAutoFixTimerRef = useRef<number | null>(null);
 
   useEffect(() => {
     prevGitStatsForPulseRef.current = { additions: 0, deletions: 0 };
     setReviewGitStatsPulse(false);
-    setPushPopoverOpen(false);
-    setPushSummaryDraft("");
-    setPushSummaryLoading(false);
-    setPushSummaryPhase("");
+    pushSubmitInFlightRef.current = false;
+    setPushSubmitting(false);
     setPushSubmitPhase("");
-    pushSummaryLoadSeqRef.current += 1;
     if (pushAutoFixTimerRef.current != null) {
       window.clearTimeout(pushAutoFixTimerRef.current);
       pushAutoFixTimerRef.current = null;
     }
   }, [sessionId]);
+
+  useEffect(
+    () => () => {
+      if (pushAutoFixTimerRef.current != null) {
+        window.clearTimeout(pushAutoFixTimerRef.current);
+        pushAutoFixTimerRef.current = null;
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     const prev = prevGitStatsForPulseRef.current;
@@ -112,132 +113,11 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
     return () => window.clearTimeout(t);
   }, [stats.additions, stats.deletions]);
 
-  const cancelScheduledPushSummaryLoad = useCallback(() => {
-    if (pushSummaryLoadTimerRef.current != null) {
-      clearTimeout(pushSummaryLoadTimerRef.current);
-      pushSummaryLoadTimerRef.current = null;
-    }
-  }, []);
-
-  const resetPushSummaryBusyState = useCallback(() => {
-    setPushSummaryLoading(false);
-    setPushSummaryPhase("");
-  }, []);
-
-  const loadPushSummaryDraft = useCallback(
-    async (seq: number) => {
-      if (!gitRepositoryPath) return;
-
-      const isCurrent = () => seq === pushSummaryLoadSeqRef.current;
-      const clearBusyIfCurrent = () => {
-        if (!isCurrent()) return;
-        resetPushSummaryBusyState();
-      };
-
-      setPushSummaryLoading(true);
-      setPushSummaryPhase("读取变更");
-
-      try {
-        const status = await gitStatus(gitRepositoryPath);
-        if (!isCurrent()) return;
-        const fallback = buildAiCommitSummary(status);
-        setPushSummaryDraft(fallback);
-
-        const changedFiles = [...status.staged, ...status.unstaged];
-        if (changedFiles.length === 0) {
-          clearBusyIfCurrent();
-          return;
-        }
-
-        setPushSummaryLoading(false);
-        setPushSummaryPhase("AI 润色");
-        const changedFileLines = changedFiles
-          .map((item) => `- ${item.path} (${item.status}, +${item.additions}, -${item.deletions})`)
-          .join("\n");
-        const prompt = [
-          ...conventionalCommitPromptLines(),
-          "",
-          `仓库路径: ${gitRepositoryPath}`,
-          `分支: ${status.branch ?? "(unknown)"}`,
-          `总计: +${Math.max(0, status.additions || 0)} / -${Math.max(0, status.deletions || 0)}`,
-          `暂存文件数: ${status.staged.length}, 未暂存文件数: ${status.unstaged.length}`,
-          "文件清单：",
-          changedFileLines || "- 无",
-        ].join("\n");
-        const configuredModel = await getClaudeConfigModel(gitRepositoryPath);
-        if (!isCurrent()) return;
-
-        const result = await executeClaudeCodeAndWait({
-          repositoryPath: gitRepositoryPath,
-          prompt,
-          model: configuredModel ?? undefined,
-          timeoutMs: 45_000,
-          connectionMode: "oneshot",
-        });
-        if (!isCurrent()) return;
-
-        if (!result.success) {
-          setPushSummaryDraft(fallback);
-          return;
-        }
-        const cleaned = extractClaudeInvocationFinalText(result.outputLines);
-        setPushSummaryDraft(normalizeConventionalCommitMessage(cleaned || fallback));
-      } catch {
-        if (!isCurrent()) return;
-        setPushSummaryDraft("");
-      } finally {
-        clearBusyIfCurrent();
-      }
-    },
-    [gitRepositoryPath, resetPushSummaryBusyState],
-  );
-
-  const schedulePushSummaryLoad = useCallback(() => {
-    cancelScheduledPushSummaryLoad();
-    pushSummaryLoadSeqRef.current += 1;
-    const seq = pushSummaryLoadSeqRef.current;
-    pushSummaryLoadTimerRef.current = setTimeout(() => {
-      pushSummaryLoadTimerRef.current = null;
-      void loadPushSummaryDraft(seq);
-    }, 350);
-  }, [cancelScheduledPushSummaryLoad, loadPushSummaryDraft]);
-
-  const handlePushPopoverOpenChange = useCallback(
-    (open: boolean) => {
-      if (!open && pushSubmitting) return;
-      setPushPopoverOpen(open);
-      if (!open) {
-        cancelScheduledPushSummaryLoad();
-        pushSummaryLoadSeqRef.current += 1;
-        resetPushSummaryBusyState();
-        return;
-      }
-      schedulePushSummaryLoad();
-    },
-    [cancelScheduledPushSummaryLoad, pushSubmitting, resetPushSummaryBusyState, schedulePushSummaryLoad],
-  );
-
-  useEffect(
-    () => () => {
-      cancelScheduledPushSummaryLoad();
-      if (pushAutoFixTimerRef.current != null) {
-        window.clearTimeout(pushAutoFixTimerRef.current);
-        pushAutoFixTimerRef.current = null;
-      }
-    },
-    [cancelScheduledPushSummaryLoad],
-  );
-
-  const handlePushSubmit = useCallback(async () => {
+  const handlePush = useCallback(async () => {
     if (pushSubmitInFlightRef.current) return;
     const repoPath = gitRepositoryPath;
-    const commitMessage = normalizeConventionalCommitMessage(pushSummaryDraft.trim());
     if (!repoPath) {
       message.error("当前会话未绑定仓库，无法推送");
-      return;
-    }
-    if (!commitMessage) {
-      message.warning("请先填写提交总结");
       return;
     }
 
@@ -245,21 +125,56 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
     setPushSubmitting(true);
     setPushSubmitPhase("读取变更");
     try {
+      // 1. 读取变更并 AI 生成提交信息（失败回退到规则生成，不阻断流程）
+      const status = await gitStatus(repoPath);
+      const fallback = buildAiCommitSummary(status);
+      let commitMessage = normalizeConventionalCommitMessage(fallback);
+
+      const changedFiles = [...status.staged, ...status.unstaged];
+      if (changedFiles.length > 0) {
+        setPushSubmitPhase("AI 润色");
+        const changedFileLines = changedFiles
+          .map((item) => `- ${item.path} (${item.status}, +${item.additions}, -${item.deletions})`)
+          .join("\n");
+        const prompt = [
+          ...conventionalCommitPromptLines(),
+          "",
+          `仓库路径: ${repoPath}`,
+          `分支: ${status.branch ?? "(unknown)"}`,
+          `总计: +${Math.max(0, status.additions || 0)} / -${Math.max(0, status.deletions || 0)}`,
+          `暂存文件数: ${status.staged.length}, 未暂存文件数: ${status.unstaged.length}`,
+          "文件清单：",
+          changedFileLines || "- 无",
+        ].join("\n");
+        const configuredModel = await getClaudeConfigModel(repoPath);
+
+        const result = await executeClaudeCodeAndWait({
+          repositoryPath: repoPath,
+          prompt,
+          model: configuredModel ?? undefined,
+          timeoutMs: 45_000,
+          connectionMode: "oneshot",
+        });
+        if (result.success) {
+          const cleaned = extractClaudeInvocationFinalText(result.outputLines);
+          commitMessage = normalizeConventionalCommitMessage(cleaned || fallback);
+        }
+      }
+
+      // 2. 暂存 + 提交 + 拉取 + 推送（一体化）
+      setPushSubmitPhase("提交并推送");
       const outcome = await commitPullPushRepository(repoPath, commitMessage, {
         onPhase: setPushSubmitPhase,
       });
       if (outcome === "noop") {
         message.info("当前没有可提交的改动，也没有待推送的提交");
-        setPushPopoverOpen(false);
-        return;
+      } else {
+        refreshGitRepositoryStats(repoPath);
+        message.success(outcome === "pushed_only" ? "已推送待同步提交" : "已提交并推送");
       }
-      setPushPopoverOpen(false);
-      refreshGitRepositoryStats(repoPath);
     } catch (error) {
       const errMsg = error instanceof Error ? error.message : String(error);
       message.error(`推送失败: ${errMsg}`);
-      const repoPathForFix = repoPath;
-      const commitMessageForFix = commitMessage;
       const dispatchAutoFix = onDispatchExecutionEnvironment;
       if (pushAutoFixTimerRef.current != null) {
         window.clearTimeout(pushAutoFixTimerRef.current);
@@ -268,7 +183,7 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
         pushAutoFixTimerRef.current = null;
         void (async () => {
           try {
-            const latest = await gitStatus(repoPathForFix).catch(() => null);
+            const latest = await gitStatus(repoPath).catch(() => null);
             const stagedFiles =
               latest?.staged.map((f) => `${f.path}(${f.status}, +${f.additions}, -${f.deletions})`) ?? [];
             const unstagedFiles =
@@ -277,9 +192,8 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
               "下面是一次 git 提交/同步/推送流程失败日志，请直接定位问题并修改代码后再次验证。",
               "优先处理 pre-commit、husky、lint、typecheck 或测试失败。",
               "",
-              `仓库路径：${repoPathForFix}`,
+              `仓库路径：${repoPath}`,
               `分支：${latest?.branch ?? "unknown"}`,
-              `提交信息：${commitMessageForFix}`,
               `变更统计：+${Math.max(0, latest?.additions || 0)} / -${Math.max(0, latest?.deletions || 0)}`,
               `暂存文件：${stagedFiles.length > 0 ? stagedFiles.join("、") : "(无)"}`,
               `未暂存文件：${unstagedFiles.length > 0 ? unstagedFiles.join("、") : "(无)"}`,
@@ -311,80 +225,32 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
       setPushSubmitting(false);
       setPushSubmitPhase("");
     }
-  }, [gitRepositoryPath, onDispatchExecutionEnvironment, pushSummaryDraft]);
-
-  const pushSummaryBusy = pushSummaryLoading || Boolean(pushSummaryPhase.trim());
+  }, [gitRepositoryPath, onDispatchExecutionEnvironment]);
 
   const pushControl = (
-    <Popover
-      trigger="click"
-      placement="topLeft"
-      open={pushPopoverOpen}
-      onOpenChange={handlePushPopoverOpenChange}
-      classNames={{ root: "app-push-popover" }}
-      content={
-        <div className="app-push-popover__content">
-          <div className="app-push-popover__head">
-            <div className="app-push-popover__head-main">
-              <span className="app-push-popover__title">推送总结</span>
-              {pushSubmitting ? (
-                <span className="app-push-popover__status" aria-live="polite">
-                  <Spin size="small" />
-                  <span>{pushSubmitPhase || "推送中"}</span>
-                </span>
-              ) : pushSummaryPhase ? (
-                <span className="app-push-popover__status" aria-live="polite">
-                  {pushSummaryLoading ? <Spin size="small" /> : null}
-                  <span>{pushSummaryPhase.replace(/\.{3}$/, "")}</span>
-                </span>
-              ) : (
-                <span className="app-push-popover__hint">AI 草稿</span>
-              )}
-            </div>
-            <button
-              type="button"
-              className="app-push-popover__submit"
-              onMouseDown={(event) => event.preventDefault()}
-              onPointerDown={(event) => {
-                if (event.button !== 0 || pushSubmitting || pushSummaryBusy) return;
-                event.preventDefault();
-                void handlePushSubmit();
-              }}
-              disabled={pushSubmitting || pushSummaryBusy}
-              aria-busy={pushSubmitting || pushSummaryBusy}
-            >
-              {pushSubmitting ? "推送中" : pushSummaryBusy ? "润色中" : "推送"}
-            </button>
-          </div>
-          <textarea
-            className="app-push-popover__textarea"
-            value={pushSummaryDraft}
-            onChange={(event) => setPushSummaryDraft(event.target.value)}
-            placeholder="单行提交信息，如 fix: 修复登录问题"
-            rows={2}
-            disabled={pushSubmitting}
-          />
-        </div>
-      }
+    <button
+      type="button"
+      className="app-session-quick-pill app-session-quick-pill--push"
+      disabled={pushSubmitting}
+      aria-busy={pushSubmitting}
+      title={pushSubmitting ? pushSubmitPhase || "推送中" : "拉取 / AI 生成提交信息 / 提交 / 推送"}
+      onPointerDown={(event) => {
+        if (event.button !== 0 || pushSubmitting) return;
+        event.preventDefault();
+        void handlePush();
+      }}
     >
-      <button
-        type="button"
-        className="app-session-quick-pill app-session-quick-pill--push"
-        disabled={pushSubmitting}
-        aria-busy={pushSubmitting}
+      <span className="app-session-quick-pill__icon app-session-quick-pill__icon--green" aria-hidden>
+        {pushSubmitting ? <Spin size="small" /> : <CloudUploadOutlined />}
+      </span>
+      <span className="app-session-quick-pill__label">{pushSubmitting ? pushSubmitPhase || "推送中" : "推送"}</span>
+      <span
+        className={`app-session-quick-pill__stats${reviewGitStatsPulse ? " app-session-quick-pill__stats--pulse" : ""}`}
       >
-        <span className="app-session-quick-pill__icon app-session-quick-pill__icon--green" aria-hidden>
-          <CloudUploadOutlined />
-        </span>
-        <span className="app-session-quick-pill__label">推送</span>
-        <span
-          className={`app-session-quick-pill__stats${reviewGitStatsPulse ? " app-session-quick-pill__stats--pulse" : ""}`}
-        >
-          <span className="app-session-quick-pill__add">+{stats.additions}</span>
-          <span className="app-session-quick-pill__del">-{stats.deletions}</span>
-        </span>
-      </button>
-    </Popover>
+        <span className="app-session-quick-pill__add">+{stats.additions}</span>
+        <span className="app-session-quick-pill__del">-{stats.deletions}</span>
+      </span>
+    </button>
   );
 
   return (
