@@ -44,9 +44,11 @@ export function nextChatMessageVisibleCount(
 ): number {
   if (rowsLength <= 0) return 0;
   // 增量浏览封顶 maxVisible，防止长会话 DOM 无限膨胀（定位路径豁免，见 visibleCountToIncludeRowIndex）。
-  return Math.min(
-    maxVisible,
-    Math.min(rowsLength, Math.max(1, current + step)),
+  // Math.max(current, ...) 保证不回缩：ensureMessageVisible 豁免后 visibleCount 可能已超 cap，
+  // 此时 loadMoreOlder 不应缩小窗口，仅在未达 cap 时增长。
+  return Math.max(
+    current,
+    Math.min(maxVisible, Math.min(rowsLength, Math.max(1, current + step))),
   );
 }
 

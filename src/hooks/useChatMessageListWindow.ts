@@ -35,16 +35,19 @@ function resolveWindowSizing(
   companionMessageListWindow?: Options["companionMessageListWindow"],
 ) {
   if (profile === "companion") {
-    return (
-      companionMessageListWindow ?? {
-        initialVisible: CHAT_MESSAGE_LIST_COMPANION_INITIAL_VISIBLE,
-        loadStep: CHAT_MESSAGE_LIST_COMPANION_LOAD_STEP,
-      }
-    );
+    // 调用方传入的 companionMessageListWindow 仅含 initialVisible/loadStep（如 6/8 屏），
+    // 始终补上 companion maxVisible，保证增量浏览封顶语义一致。
+    return {
+      initialVisible: CHAT_MESSAGE_LIST_COMPANION_INITIAL_VISIBLE,
+      loadStep: CHAT_MESSAGE_LIST_COMPANION_LOAD_STEP,
+      maxVisible: CHAT_MESSAGE_LIST_COMPANION_MAX_VISIBLE,
+      ...companionMessageListWindow,
+    };
   }
   return {
     initialVisible: CHAT_MESSAGE_LIST_INITIAL_VISIBLE,
     loadStep: CHAT_MESSAGE_LIST_LOAD_STEP,
+    maxVisible: CHAT_MESSAGE_LIST_MAX_VISIBLE,
   };
 }
 
@@ -55,7 +58,7 @@ export function useChatMessageListWindow({
   profile = "primary",
   companionMessageListWindow,
 }: Options) {
-  const { initialVisible, loadStep } = resolveWindowSizing(profile, companionMessageListWindow);
+  const { initialVisible, loadStep, maxVisible } = resolveWindowSizing(profile, companionMessageListWindow);
   const [visibleCount, setVisibleCount] = useState(initialVisible);
   const loadLockedRef = useRef(false);
   const prevRowsLengthRef = useRef(rows.length);
@@ -69,6 +72,14 @@ export function useChatMessageListWindow({
   const slice = sliceChatMessageListRows(rows, visibleCount);
   const rowsLengthRef = useRef(rows.length);
   rowsLengthRef.current = rows.length;
+  // onScroll effect 依赖 slice.hiddenRowCount；当 visibleCount 与 rows.length 同步等量变化时
+  // hiddenRowCount 不变 → effect 不重订阅 → 闭包里 visibleCount 陈旧。故回收判断读 ref。
+  const visibleCountRef = useRef(visibleCount);
+  visibleCountRef.current = visibleCount;
+  // initialVisible 仅由 profile 决定，但 onScroll effect 不把它列入依赖（避免重订阅），
+  // 用 ref 读取以反映 profile/companion 配置变化。
+  const initialVisibleRef = useRef(initialVisible);
+  initialVisibleRef.current = initialVisible;
   const pendingTailExpandRafRef = useRef(0);
   const pendingTailExpandDeltaRef = useRef(0);
 
@@ -87,7 +98,8 @@ export function useChatMessageListWindow({
         pendingTailExpandDeltaRef.current = 0;
         if (expandBy <= 0) return;
         setVisibleCount((current) =>
-          Math.min(rowsLengthRef.current, current + expandBy),
+          // Math.max(current, ...) 防回缩：visibleCount 若已因定位豁免超过 cap，扩展时保持不缩。
+          Math.max(current, Math.min(maxVisible, Math.min(rowsLengthRef.current, current + expandBy))),
         );
       });
     }
@@ -97,7 +109,7 @@ export function useChatMessageListWindow({
         pendingTailExpandRafRef.current = 0;
       }
     };
-  }, [rows.length, slice.hiddenRowCount, slice.windowActive]);
+  }, [maxVisible, rows.length, slice.hiddenRowCount, slice.windowActive]);
 
   const loadMoreOlder = useCallback(() => {
     if (!slice.windowActive || slice.hiddenRowCount <= 0 || loadLockedRef.current) {
@@ -108,7 +120,7 @@ export function useChatMessageListWindow({
     const prevScrollHeight = sc?.scrollHeight ?? 0;
     const prevScrollTop = sc?.scrollTop ?? 0;
 
-    setVisibleCount((current) => nextChatMessageVisibleCount(current, rows.length, loadStep));
+    setVisibleCount((current) => nextChatMessageVisibleCount(current, rows.length, loadStep, maxVisible));
 
     requestAnimationFrame(() => {
       if (sc) {
@@ -116,7 +128,7 @@ export function useChatMessageListWindow({
       }
       loadLockedRef.current = false;
     });
-  }, [loadStep, rows.length, scrollContainerRef, slice.hiddenRowCount, slice.windowActive]);
+  }, [loadStep, maxVisible, rows.length, scrollContainerRef, slice.hiddenRowCount, slice.windowActive]);
 
   useEffect(() => {
     if (!slice.windowActive || slice.hiddenRowCount <= 0) return;
@@ -130,6 +142,20 @@ export function useChatMessageListWindow({
         raf = 0;
         if (sc.scrollTop <= CHAT_MESSAGE_LIST_SCROLL_LOAD_PX) {
           loadMoreOlder();
+        }
+        // 贴底回收：视口最新内容在 slice 尾部，回收顶部最旧行不影响可见区域，
+        // 浏览器 clamp scrollTop 无跳动；读 ref 避免 hiddenRowCount 稳定时闭包陈旧。
+        if (
+          !loadLockedRef.current &&
+          shouldReclaimOnBottom(
+            sc.scrollTop,
+            sc.clientHeight,
+            sc.scrollHeight,
+            visibleCountRef.current,
+            initialVisibleRef.current,
+          )
+        ) {
+          setVisibleCount(initialVisibleRef.current);
         }
       });
     };
