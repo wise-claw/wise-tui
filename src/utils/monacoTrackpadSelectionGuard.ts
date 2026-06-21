@@ -106,7 +106,7 @@ export function installMonacoTrackpadSelectionGuard(
         userCommittedSelection = false;
       }
     }),
-    editor.onMouseUp((e) => {
+    editor.onMouseUp(() => {
       const wasSelecting = primaryButtonDown;
       primaryButtonDown = false;
       const selection = editor.getSelection();

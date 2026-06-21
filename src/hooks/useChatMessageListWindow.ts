@@ -1,7 +1,6 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
 import {
-  CHAT_MESSAGE_LIST_BOTTOM_RECLAIM_PX,
   CHAT_MESSAGE_LIST_COMPANION_INITIAL_VISIBLE,
   CHAT_MESSAGE_LIST_COMPANION_LOAD_STEP,
   CHAT_MESSAGE_LIST_COMPANION_MAX_VISIBLE,

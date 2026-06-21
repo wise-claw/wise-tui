@@ -1,5 +1,10 @@
 import type { editor } from "monaco-editor";
 
+/** Monaco 运行时支持 semanticHighlighting，但 @monaco-editor/react 的类型定义尚未收录。 */
+export type WiseMonacoEditorConstructionOptions = editor.IStandaloneEditorConstructionOptions & {
+  semanticHighlighting?: { enabled: boolean };
+};
+
 /**
  * Wise 仓库文件编辑器等场景共用的 Monaco 选项（减轻触控板滚动误选等问题）。
  *
@@ -8,7 +13,7 @@ import type { editor } from "monaco-editor";
  * 仅在容器尺寸真正变化时调用 `editor.layout()`（见 RepositoryFileEditorTabSurface /
  * GitDiffMonacoPane）。非活跃 tab 不挂载编辑器，进一步避免无谓的布局计算。
  */
-export const WISE_MONACO_EDITOR_OPTIONS: editor.IStandaloneEditorConstructionOptions = {
+export const WISE_MONACO_EDITOR_OPTIONS: WiseMonacoEditorConstructionOptions = {
   minimap: { enabled: false },
   stickyScroll: { enabled: false },
   fontSize: 13,
@@ -64,9 +69,9 @@ export function shouldEnableMonacoSemanticHighlighting(
  * 返回新对象，不修改入参。
  */
 export function applyMonacoSemanticHighlightingForPath(
-  options: editor.IStandaloneEditorConstructionOptions,
+  options: WiseMonacoEditorConstructionOptions,
   relativePath: string | null | undefined,
-): editor.IStandaloneEditorConstructionOptions {
+): WiseMonacoEditorConstructionOptions {
   if (!shouldEnableMonacoSemanticHighlighting(relativePath)) return options;
   return { ...options, semanticHighlighting: { enabled: true } };
 }

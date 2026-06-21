@@ -2,7 +2,9 @@ import type { ClaudeSession, Repository } from "../../types";
 import { sessionsReactiveStructureKey } from "../../utils/sessionConversationTasks";
 import { arePropsEqualSkipping } from "../../utils/reactPropsEqual";
 import { claudeChatSessionPropsEqual } from "./claudeChatPropsEqual";
-import type { ClaudeSessionsChatHostProps } from "./ClaudeSessionsChatHost";(repo: Repository | undefined): string {
+import type { ClaudeSessionsChatHostProps } from "./ClaudeSessionsChatHost";
+
+function repositoryScopeFingerprint(repo: Repository | undefined): string {
   if (!repo) return "";
   return `${repo.id}|${repo.path}|${repo.name ?? ""}`;
 }
