@@ -43,6 +43,7 @@ import {
   planNextPaneSlotPlacement,
   isSessionBoundInPanes,
   normalizeExtraPanesToPaneCount,
+  rebindPaneSlotPreservingRuntime,
 } from "../utils/multiPaneSlots";
 import { resolveWorkspaceRootPath } from "../utils/projectSessionAnchor";
 import type { WorkspaceFocus } from "../utils/workspaceMode";
@@ -56,7 +57,7 @@ const PANE_CHANGE_IN_FLIGHT_TIMEOUT_MS = 8000;
 type CreateSession = (
   repositoryPath: string,
   repositoryName: string,
-  opts?: { skipActivate?: boolean },
+  opts?: { skipActivate?: boolean; initialModel?: string },
 ) => Promise<string>;
 
 interface UseMainLayoutModesOptions {
@@ -351,12 +352,24 @@ export function useMainLayoutModes({
       // 仅切换该窗格的隔离会话仓库，不联动左栏全局选中（activeRepositoryId）。
       const leftId = activeSessionIdLatestRef.current?.trim() ?? "";
       try {
+        // 已有会话的窗格切仓库时，保留该窗格执行环境与模型；空槽则继承主窗格。
+        const currentSlot = extraPanesLatestRef.current[slotIndex];
+        const previousSessionId = currentSlot?.sessionId?.trim() ?? "";
+        const isReplace = previousSessionId.length > 0;
+        let initialModel: string | undefined;
+        if (isReplace) {
+          const prevSession = sessionsLatestRef.current.find((item) => item.id === previousSessionId);
+          initialModel = prevSession?.model?.trim() || undefined;
+        }
+
         const nextSessionId = await createSession(
           repo.path,
           repositorySessionTabDisplayName(repo),
-          { skipActivate: true },
+          { skipActivate: true, ...(initialModel ? { initialModel } : {}) },
         );
-        inheritMainSessionModel(nextSessionId);
+        if (!isReplace) {
+          inheritMainSessionModel(nextSessionId);
+        }
         if (isSessionBoundInPanes(nextSessionId, leftId, extraPanesLatestRef.current, slotIndex)) {
           message.warning("该会话已在其它窗格中打开");
           return;
@@ -364,11 +377,10 @@ export function useMainLayoutModes({
         setExtraPanes((prev) => {
           const next = [...prev];
           if (next[slotIndex]) {
-            next[slotIndex] = bindCompanionSessionToSlot(
-              next[slotIndex],
-              nextSessionId,
-              activeRepository?.id === repositoryId ? null : repositoryId,
-            );
+            const repoIdForSlot = activeRepository?.id === repositoryId ? null : repositoryId;
+            next[slotIndex] = isReplace
+              ? rebindPaneSlotPreservingRuntime(next[slotIndex], nextSessionId, repoIdForSlot)
+              : bindCompanionSessionToSlot(next[slotIndex], nextSessionId, repoIdForSlot);
           }
           return next;
         });
@@ -382,6 +394,7 @@ export function useMainLayoutModes({
       bindCompanionSessionToSlot,
       createSession,
       inheritMainSessionModel,
+      rebindPaneSlotPreservingRuntime,
       repositories,
       setExtraPanes,
     ],
@@ -402,15 +415,31 @@ export function useMainLayoutModes({
         message.warning("未找到所选工作区");
         return;
       }
+      // 已有会话的窗格切工作区时，保留该窗格执行环境与模型；空槽则继承主窗格。
+      const currentSlot = extraPanesLatestRef.current[slotIndex];
+      const previousSessionId = currentSlot?.sessionId?.trim() ?? "";
+      const isReplace = previousSessionId.length > 0;
+      let initialModel: string | undefined;
+      if (isReplace) {
+        const prevSession = sessionsLatestRef.current.find((item) => item.id === previousSessionId);
+        initialModel = prevSession?.model?.trim() || undefined;
+      }
       if (!project && explicitRootPath) {
         try {
           const displayName = `Project: ${options?.projectName?.trim() || projectIdKey || "工作区"}`;
-          const sessionId = await createSession(explicitRootPath, displayName, { skipActivate: true });
-          inheritMainSessionModel(sessionId);
+          const sessionId = await createSession(explicitRootPath, displayName, {
+            skipActivate: true,
+            ...(initialModel ? { initialModel } : {}),
+          });
+          if (!isReplace) {
+            inheritMainSessionModel(sessionId);
+          }
           setExtraPanes((prev) => {
             const next = [...prev];
             if (next[slotIndex]) {
-              next[slotIndex] = bindCompanionSessionToSlot(next[slotIndex], sessionId, null);
+              next[slotIndex] = isReplace
+                ? rebindPaneSlotPreservingRuntime(next[slotIndex], sessionId, null)
+                : bindCompanionSessionToSlot(next[slotIndex], sessionId, null);
             }
             return next;
           });
@@ -454,12 +483,19 @@ export function useMainLayoutModes({
         return;
       }
       try {
-        const sessionId = await createSession(createPath, createDisplayName, { skipActivate: true });
-        inheritMainSessionModel(sessionId);
+        const sessionId = await createSession(createPath, createDisplayName, {
+          skipActivate: true,
+          ...(initialModel ? { initialModel } : {}),
+        });
+        if (!isReplace) {
+          inheritMainSessionModel(sessionId);
+        }
         setExtraPanes((prev) => {
           const next = [...prev];
           if (next[slotIndex]) {
-            next[slotIndex] = bindCompanionSessionToSlot(next[slotIndex], sessionId, null);
+            next[slotIndex] = isReplace
+              ? rebindPaneSlotPreservingRuntime(next[slotIndex], sessionId, null)
+              : bindCompanionSessionToSlot(next[slotIndex], sessionId, null);
           }
           return next;
         });
@@ -468,7 +504,7 @@ export function useMainLayoutModes({
         message.error("新建工作区执行会话失败");
       }
     },
-    [bindCompanionSessionToSlot, createSession, inheritMainSessionModel, repositories, setExtraPanes],
+    [bindCompanionSessionToSlot, createSession, inheritMainSessionModel, rebindPaneSlotPreservingRuntime, repositories, setExtraPanes],
   );
 
   /** 为指定窗格创建新 session。 */
@@ -476,10 +512,23 @@ export function useMainLayoutModes({
     async (slotIndex: number, repository: Repository) => {
       // 仅在该窗格创建隔离会话，不联动左栏全局选中（activeRepositoryId）。
       try {
+        // 已有会话的窗格新建/替换会话时，保留该窗格执行环境与模型；空槽则继承主窗格。
+        const currentSlot = extraPanesLatestRef.current[slotIndex];
+        const previousSessionId = currentSlot?.sessionId?.trim() ?? "";
+        const isReplace = previousSessionId.length > 0;
+        let initialModel: string | undefined;
+        if (isReplace) {
+          const prevSession = sessionsLatestRef.current.find((item) => item.id === previousSessionId);
+          initialModel = prevSession?.model?.trim() || undefined;
+        }
+
         const id = await createSession(repository.path, repositorySessionTabDisplayName(repository), {
           skipActivate: true,
+          ...(initialModel ? { initialModel } : {}),
         });
-        inheritMainSessionModel(id);
+        if (!isReplace) {
+          inheritMainSessionModel(id);
+        }
 
         // 若当前是单屏，先切到双屏
         if (paneCountRef.current === 1) {
@@ -492,7 +541,9 @@ export function useMainLayoutModes({
           setExtraPanes((prev) => {
             const next = [...prev];
             if (next[slotIndex]) {
-              next[slotIndex] = bindCompanionSessionToSlot(next[slotIndex], id, null);
+              next[slotIndex] = isReplace
+                ? rebindPaneSlotPreservingRuntime(next[slotIndex], id, null)
+                : bindCompanionSessionToSlot(next[slotIndex], id, null);
             }
             return next;
           });
@@ -507,6 +558,7 @@ export function useMainLayoutModes({
       createSession,
       inheritMainSessionModel,
       promoteToDualPaneWithSession,
+      rebindPaneSlotPreservingRuntime,
       setExtraPanes,
     ],
   );

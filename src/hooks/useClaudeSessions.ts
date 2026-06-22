@@ -3165,6 +3165,8 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         skipActivate?: boolean;
         connectionKind?: ClaudeSessionConnectionKind;
         immediateActivate?: boolean;
+        /** 初始模型；提供后跳过异步读取全局档案/仓库默认模型，用于多屏保留窗格模型。 */
+        initialModel?: string;
       },
     ) => {
       const id = generateId();
@@ -3173,7 +3175,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         claudeSessionId: null,
         repositoryPath: normalizeRepositoryPathKey(repositoryPath) || repositoryPath.trim(),
         repositoryName,
-        model: "sonnet",
+        model: opts?.initialModel?.trim() || "sonnet",
         status: "idle",
         messages: [],
         createdAt: Date.now(),
@@ -3206,20 +3208,23 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       trellisContextIdBySessionRef.current.set(id, trellisContextIdForTab(id));
       persistTrellisContextBindings(trellisContextIdBySessionRef.current);
 
-      void (async () => {
-        try {
-          const profileModel = resolveClaudeExecModelId({ store: getCachedModelProfileStore() });
-          const configModel = profileModel ?? (await getCachedClaudeConfigModel(repositoryPath));
-          if (!configModel?.trim()) return;
-          setSessions((prev) => {
-            const next = prev.map((s) => (s.id === id ? { ...s, model: configModel } : s));
-            sessionsRef.current = next;
-            return next;
-          });
-        } catch {
-          /* keep default */
-        }
-      })();
+      // 多屏保留窗格模型时传入 initialModel，跳过异步读取全局档案/仓库默认模型，避免覆盖。
+      if (!opts?.initialModel?.trim()) {
+        void (async () => {
+          try {
+            const profileModel = resolveClaudeExecModelId({ store: getCachedModelProfileStore() });
+            const configModel = profileModel ?? (await getCachedClaudeConfigModel(repositoryPath));
+            if (!configModel?.trim()) return;
+            setSessions((prev) => {
+              const next = prev.map((s) => (s.id === id ? { ...s, model: configModel } : s));
+              sessionsRef.current = next;
+              return next;
+            });
+          } catch {
+            /* keep default */
+          }
+        })();
+      }
 
       return id;
     },

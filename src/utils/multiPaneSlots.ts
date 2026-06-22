@@ -99,6 +99,26 @@ export function assignCompanionSessionToPaneSlot(
   return next;
 }
 
+/** 已有会话的窗格新建/替换会话时，保留 slot 自身的执行环境覆盖，仅替换 sessionId/repositoryId（不继承主窗格）。 */
+export function rebindPaneSlotPreservingRuntime(
+  slot: PaneSlot,
+  sessionId: string,
+  repositoryId: number | null,
+): PaneSlot {
+  const next: PaneSlot = {
+    slotId: slot.slotId,
+    sessionId,
+    repositoryId,
+  };
+  if (slot.executionEngine) {
+    next.executionEngine = slot.executionEngine;
+  }
+  if (slot.claudeProxyRoute) {
+    next.claudeProxyRoute = slot.claudeProxyRoute;
+  }
+  return next;
+}
+
 /** 在已对齐长度的 extraPanes 上写入 session，优先第一个空槽。 */
 export function assignSessionToNormalizedExtraPanes(
   paneCount: PaneCount,

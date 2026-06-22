@@ -7,6 +7,7 @@ import {
   minPaneCountForOccupiedExtras,
   normalizeExtraPanesToPaneCount,
   planNextPaneSlotPlacement,
+  rebindPaneSlotPreservingRuntime,
 } from "./multiPaneSlots";
 
 function slot(partial: Partial<PaneSlot> & { slotId: string }): PaneSlot {
@@ -119,5 +120,43 @@ describe("multiPaneSlots", () => {
     );
     expect(next).toHaveLength(3);
     expect(next.filter((row) => row.sessionId === "s2")).toHaveLength(1);
+  });
+
+  test("rebindPaneSlotPreservingRuntime preserves slot runtime and replaces session/repo", () => {
+    const pane: PaneSlot = {
+      slotId: "a",
+      sessionId: "old-session",
+      repositoryId: 1,
+      executionEngine: "codex",
+      claudeProxyRoute: "bypass",
+    };
+    const next = rebindPaneSlotPreservingRuntime(pane, "new-session", 2);
+    expect(next.slotId).toBe("a");
+    expect(next.sessionId).toBe("new-session");
+    expect(next.repositoryId).toBe(2);
+    expect(next.executionEngine).toBe("codex");
+    expect(next.claudeProxyRoute).toBe("bypass");
+  });
+
+  test("rebindPaneSlotPreservingRuntime drops runtime when slot has none", () => {
+    const pane: PaneSlot = { slotId: "a", sessionId: "old", repositoryId: 1 };
+    const next = rebindPaneSlotPreservingRuntime(pane, "new", null);
+    expect(next.sessionId).toBe("new");
+    expect(next.repositoryId).toBeNull();
+    expect(next.executionEngine).toBeUndefined();
+    expect(next.claudeProxyRoute).toBeUndefined();
+  });
+
+  test("rebindPaneSlotPreservingRuntime does not inherit primary pane runtime", () => {
+    const pane: PaneSlot = {
+      slotId: "a",
+      sessionId: "old",
+      repositoryId: null,
+      executionEngine: "claude",
+      claudeProxyRoute: "auto",
+    };
+    const next = rebindPaneSlotPreservingRuntime(pane, "new", null);
+    expect(next.executionEngine).toBe("claude");
+    expect(next.claudeProxyRoute).toBe("auto");
   });
 });
