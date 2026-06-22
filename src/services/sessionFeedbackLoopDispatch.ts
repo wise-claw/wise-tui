@@ -22,6 +22,12 @@ export type SessionFeedbackLoopDispatchDeps = {
     prompt: string,
     opts?: { userBubblePrompt?: string },
   ) => boolean;
+  /**
+   * 把派发对应的用户问题以用户气泡形式回写到主会话；用于在主会话保留
+   * 反馈神经网派发历史，并支持「填入输入框」回填。
+   * 未提供时不写入（保持兼容旧调用方）。
+   */
+  appendUserMessage?: (sessionId: string, text: string) => void;
 };
 
 export type SessionFeedbackLoopDispatchInput = {
@@ -87,6 +93,11 @@ export async function dispatchSessionFeedbackLoopAnalysis(
     cycleIndex: input.cycleIndex,
     previewText: preview,
   });
+  // 主会话写回原始用户输入；带 @-mention 时「填入输入框」回填后可直接再次派发。
+  const anchorUserPrompt = input.prompt.trim();
+  if (anchorUserPrompt) {
+    deps.appendUserMessage?.(anchorSession.id, anchorUserPrompt);
+  }
 
   const spawnOk = deps.executeSession(workerTabId, prompt, { userBubblePrompt: bubble });
   if (spawnOk === false) {

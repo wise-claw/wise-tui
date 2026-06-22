@@ -1375,6 +1375,7 @@ export default function App() {
   } = useWorkflowTeamAutomation({
     activeSessionId,
     appendSystemMessage,
+    appendUserMessage,
     closeSession: handleCloseSession,
     createSession,
     employees,
@@ -1435,6 +1436,7 @@ export default function App() {
           createSession,
           executeSession: (workerTabId, prompt, opts) => executeSession(workerTabId, prompt, opts),
           appendSystemMessage,
+          appendUserMessage,
         },
         {
           mainSessionId,
@@ -1444,7 +1446,17 @@ export default function App() {
         },
       );
     },
-    [activeSessionId, codexAvailable, cursorAvailable, geminiAvailable, opencodeAvailable, createSession, executeSession, appendSystemMessage],
+    [
+      activeSessionId,
+      codexAvailable,
+      cursorAvailable,
+      geminiAvailable,
+      opencodeAvailable,
+      createSession,
+      executeSession,
+      appendSystemMessage,
+      appendUserMessage,
+    ],
   );
 
   const handleDispatchSessionFeedbackLoop = useCallback(
@@ -1459,11 +1471,12 @@ export default function App() {
           getSessions: () => sessionsLatestRef.current,
           createSession,
           executeSession: (workerTabId, prompt, opts) => executeSession(workerTabId, prompt, opts),
+          appendUserMessage,
         },
         input,
       );
     },
-    [createSession, executeSession],
+    [createSession, executeSession, appendUserMessage],
   );
 
   useScheduledClaudeTaskRunner({

@@ -281,6 +281,8 @@ fn extract_opencode_error_text_inner(value: &Value, depth: usize) -> Option<Stri
         return None;
     };
     // 1. 顶层常见字符串字段（最常见形态）。
+    // 注意：name 故意不放在这里，因为它通常只是泛化类型（如 APIError），
+    // 而 data.message 更有用。name 作为最后的回退（见步骤 3）。
     for key in ["message", "error", "details", "reason", "text", "msg"] {
         if let Some(s) = obj.get(key).and_then(Value::as_str) {
             let trimmed = s.trim();
@@ -290,13 +292,21 @@ fn extract_opencode_error_text_inner(value: &Value, depth: usize) -> Option<Stri
         }
     }
     // 2. 上述字段为对象时递归提取（如 {"error":{"message":"..."}} 或 {"part":{"text":"..."}}）。
-    for key in ["error", "message", "details", "reason", "part", "cause"] {
+    // OpenCode 真实格式：{"type":"error","error":{"name":"APIError","data":{"message":"..."}}}
+    for key in ["error", "message", "details", "reason", "part", "cause", "data"] {
         if let Some(inner) = obj.get(key) {
             if inner.is_object() {
                 if let Some(text) = extract_opencode_error_text_inner(inner, depth + 1) {
                     return Some(text);
                 }
             }
+        }
+    }
+    // 3. 回退：error.name（如 APIError），只在上述两种都失败时使用。
+    if let Some(s) = obj.get("name").and_then(Value::as_str) {
+        let trimmed = s.trim();
+        if !trimmed.is_empty() {
+            return Some(trimmed.to_string());
         }
     }
     None
@@ -442,5 +452,39 @@ mod tests {
         }
         // 无可读文本时不写入 last_error，留给等待任务走兜底。
         assert_eq!(mapper.take_last_error(), None);
+    }
+
+    #[test]
+    fn maps_error_event_with_opencode_real_format() {
+        // OpenCode 真实 error 事件格式：error.data.message
+        // 参考 https://takopi.dev/reference/runners/opencode/stream-json-cheatsheet/
+        let mut mapper = OpencodeStdoutMapper::default();
+        let line = r#"{"type":"error","timestamp":1767036065000,"sessionID":"ses_1","error":{"name":"APIError","data":{"message":"Rate limit exceeded","statusCode":429,"isRetryable":true}}}"#;
+        match mapper.map_line(line) {
+            OpencodeStdoutMap::StreamLines(lines) => {
+                assert!(lines.iter().any(|l| l.contains("Rate limit exceeded")));
+                assert!(!lines.iter().any(|l| l.contains("OpenCode 执行出错")));
+            }
+            other => panic!("{other:?}"),
+        }
+        assert_eq!(
+            mapper.take_last_error().as_deref(),
+            Some("Rate limit exceeded")
+        );
+    }
+
+    #[test]
+    fn maps_error_event_extracts_error_name_when_data_message_missing() {
+        // 当 error.data.message 不可用时，退而提取 error.name
+        let mut mapper = OpencodeStdoutMapper::default();
+        let line = r#"{"type":"error","sessionID":"ses_1","error":{"name":"AuthError","data":{"statusCode":401}}}"#;
+        match mapper.map_line(line) {
+            OpencodeStdoutMap::StreamLines(lines) => {
+                assert!(lines.iter().any(|l| l.contains("AuthError")));
+                assert!(!lines.iter().any(|l| l.contains("OpenCode 执行出错")));
+            }
+            other => panic!("{other:?}"),
+        }
+        assert_eq!(mapper.take_last_error().as_deref(), Some("AuthError"));
     }
 }

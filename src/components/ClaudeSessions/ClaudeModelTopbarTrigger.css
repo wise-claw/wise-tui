@@ -512,3 +512,38 @@
   font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
   font-size: 11px;
 }
+
+/* ── 模板选择行 ─────────────────────────────────────────────────────────── */
+
+.app-claude-model-topbar-panel__template-row {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.app-claude-model-topbar-panel__template-row .ant-btn {
+  font-size: 11px;
+  height: 24px;
+  line-height: 22px;
+  border-radius: 4px;
+}
+
+/* ── 模型选择器 ─────────────────────────────────────────────────────────── */
+
+.app-claude-model-topbar-panel__model-field-wrap {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.app-claude-model-topbar-panel__model-select {
+  width: 100%;
+}
+
+.app-claude-model-topbar-panel__model-select .ant-select-selection-item {
+  font-size: 12px;
+}
+
+.app-claude-model-topbar-panel__model-hint {
+  display: block;
+}

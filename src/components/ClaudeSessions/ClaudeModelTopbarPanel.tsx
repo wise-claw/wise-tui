@@ -1,5 +1,5 @@
-import { CloudSyncOutlined, PlusOutlined } from "@ant-design/icons";
-import { Button, Empty, Input, Modal, Segmented, Switch, Typography, message } from "antd";
+import { CheckOutlined, CloudSyncOutlined, PlusOutlined } from "@ant-design/icons";
+import { Button, Empty, Input, Modal, Segmented, Space, Switch, Typography, message } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   applyClaudeModelProfile,
@@ -57,6 +57,11 @@ import {
   ModelProfileQuickConfigFields,
 } from "./ModelProfileQuickConfigFields";
 import { ModelProfileSortableList } from "./ModelProfileSortableList";
+import { OpencodeSettingsEditor } from "./OpencodeSettingsEditor";
+import {
+  OPENCODE_PROFILE_TEMPLATES,
+  findOpencodeProfileTemplate,
+} from "../../utils/opencodeProfileTemplates";
 import "./ClaudeModelTopbarTrigger.css";
 
 /** 高于模型切换 Popover/Dropdown（1200），保证编辑/新增 Modal 叠在其上 */
@@ -74,6 +79,35 @@ interface Props {
   /** Composer 等入口打开时，优先展示与会话一致的引擎 Tab */
   preferredEngine?: ModelProfileEngine;
   onApplied?: () => void;
+}
+
+/** 从 opencode JSON 中提取所有 `provider/model` 选项供快捷选择。 */
+function extractOpencodeModelOptions(
+  settingsJson: string,
+): { label: string; value: string }[] {
+  try {
+    const trimmed = settingsJson.trim();
+    if (!trimmed) return [];
+    const root = JSON.parse(trimmed) as Record<string, unknown>;
+    const provider = root.provider;
+    if (!provider || typeof provider !== "object" || Array.isArray(provider)) {
+      return [];
+    }
+    const result: { label: string; value: string }[] = [];
+    for (const [id, entry] of Object.entries(provider as Record<string, unknown>)) {
+      const e = entry as Record<string, unknown>;
+      const models = e.models;
+      if (models && typeof models === "object" && !Array.isArray(models)) {
+        for (const modelName of Object.keys(models as Record<string, unknown>)) {
+          const path = `${id}/${modelName}`;
+          result.push({ label: path, value: path });
+        }
+      }
+    }
+    return result;
+  } catch {
+    return [];
+  }
 }
 
 function validateSettingsJson(text: string, engine: ModelProfileEngine): string | null {
@@ -141,6 +175,7 @@ export function ClaudeModelTopbarPanel({
   const [addCodexAuthJson, setAddCodexAuthJson] = useState(EMPTY_CODEX_AUTH_JSON);
   const [addCodexConfigToml, setAddCodexConfigToml] = useState(EMPTY_CODEX_CONFIG_TOML);
   const [addLoadingJson, setAddLoadingJson] = useState(false);
+  const [addAppliedTemplate, setAddAppliedTemplate] = useState<string | null>(null);
   const [addSaving, setAddSaving] = useState(false);
   const [configOpen, setConfigOpen] = useState(false);
   const [configProfile, setConfigProfile] = useState<ClaudeModelProfile | null>(null);
@@ -168,6 +203,18 @@ export function ClaudeModelTopbarPanel({
     }
     return EMPTY_MODEL_PROFILE_QUICK_CONFIG;
   }, [addCodexAuthJson, addCodexConfigToml, addSettingsJson, panelEngine]);
+
+  const addModelOptions = useMemo(
+    () => (panelEngine === "opencode" ? extractOpencodeModelOptions(addSettingsJson) : undefined),
+    [addSettingsJson, panelEngine],
+  );
+  const configModelOptions = useMemo(
+    () => {
+      if (!configProfile || normalizeModelProfileEngine(configProfile.engine) !== "opencode") return undefined;
+      return extractOpencodeModelOptions(settingsDraft);
+    },
+    [configProfile, settingsDraft],
+  );
 
   const configQuickConfigSource = useMemo((): ModelProfileQuickConfig => {
     if (!configProfile) return EMPTY_MODEL_PROFILE_QUICK_CONFIG;
@@ -282,6 +329,19 @@ export function ClaudeModelTopbarPanel({
     }
   }, [panelEngine]);
 
+  const applyTemplate = useCallback(
+    (templateId: string) => {
+      const template = findOpencodeProfileTemplate(templateId);
+      if (!template) return;
+      setAddSettingsJson(template.generate());
+      setAddAppliedTemplate(templateId);
+      if (!addName.trim()) {
+        setAddName(template.label);
+      }
+    },
+    [addName],
+  );
+
   const openAddModal = useCallback(() => {
     setAddCompany("");
     setAddName("");
@@ -289,6 +349,7 @@ export function ClaudeModelTopbarPanel({
     setAddSettingsJson("{\n}\n");
     setAddCodexAuthJson(EMPTY_CODEX_AUTH_JSON);
     setAddCodexConfigToml(EMPTY_CODEX_CONFIG_TOML);
+    setAddAppliedTemplate(null);
     setAddOpen(true);
     void loadGlobalSettingsIntoAdd();
   }, [loadGlobalSettingsIntoAdd]);
@@ -748,6 +809,8 @@ export function ClaudeModelTopbarPanel({
               sourceValue={addQuickConfigSource}
               onApply={applyAddQuickConfig}
               modelPlaceholder={panelEngine === "opencode" ? "provider/model" : "model id"}
+              engine={panelEngine}
+              modelOptions={panelEngine === "opencode" ? addModelOptions : undefined}
             />
           ) : null}
           <div className="app-claude-model-topbar-panel__json-head">
@@ -797,6 +860,32 @@ export function ClaudeModelTopbarPanel({
               onAuthJsonChange={setAddCodexAuthJson}
               onConfigTomlChange={setAddCodexConfigToml}
             />
+          ) : panelEngine === "opencode" ? (
+            <>
+              <div className="app-claude-model-topbar-panel__template-row">
+                <Typography.Text className="app-claude-model-topbar-panel__label">
+                  模板
+                </Typography.Text>
+                <Space wrap size={4}>
+                  {OPENCODE_PROFILE_TEMPLATES.map((t) => (
+                    <Button
+                      key={t.id}
+                      size="small"
+                      icon={addAppliedTemplate === t.id ? <CheckOutlined /> : undefined}
+                      type={addAppliedTemplate === t.id ? "primary" : "default"}
+                      onClick={() => applyTemplate(t.id)}
+                    >
+                      {t.label}
+                    </Button>
+                  ))}
+                </Space>
+              </div>
+              <OpencodeSettingsEditor
+                value={addSettingsJson}
+                onChange={setAddSettingsJson}
+                height={MODEL_PROFILE_JSON_EDITOR_HEIGHT}
+              />
+            </>
           ) : (
             <ClaudeSettingsJsonEditor
               value={addSettingsJson}
@@ -877,6 +966,8 @@ export function ClaudeModelTopbarPanel({
                   ? "provider/model"
                   : "model id"
               }
+              engine={normalizeModelProfileEngine(configProfile.engine)}
+              modelOptions={configModelOptions}
             />
           ) : null}
           <div className="app-claude-model-topbar-panel__json-head">
@@ -912,6 +1003,12 @@ export function ClaudeModelTopbarPanel({
               configToml={configCodexConfigToml}
               onAuthJsonChange={setConfigCodexAuthJson}
               onConfigTomlChange={setConfigCodexConfigToml}
+            />
+          ) : configProfile && normalizeModelProfileEngine(configProfile.engine) === "opencode" ? (
+            <OpencodeSettingsEditor
+              value={settingsDraft}
+              onChange={setSettingsDraft}
+              height={MODEL_PROFILE_JSON_EDITOR_HEIGHT}
             />
           ) : (
             <ClaudeSettingsJsonEditor

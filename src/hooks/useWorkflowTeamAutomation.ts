@@ -106,6 +106,7 @@ interface FlushDingTalkAutomationReplyForTurnInput {
 interface UseWorkflowTeamAutomationOptions {
   activeSessionId: string | null;
   appendSystemMessage: (sessionId: string, text: string) => void;
+  appendUserMessage?: (sessionId: string, text: string) => void;
   closeSession: (sessionId: string) => void;
   createSession: CreateSession;
   employees: EmployeeItem[];
@@ -163,6 +164,7 @@ function updateSnapshotOutput(
 export function useWorkflowTeamAutomation({
   activeSessionId,
   appendSystemMessage,
+  appendUserMessage,
   closeSession,
   createSession,
   employees,
@@ -219,6 +221,7 @@ export function useWorkflowTeamAutomation({
     createSession,
     executeTerminalSession,
     appendSystemMessage,
+    appendUserMessage,
     closeWorkerTab: closeSession,
   });
   terminalDispatchDeps.current = {
@@ -229,6 +232,7 @@ export function useWorkflowTeamAutomation({
     createSession,
     executeTerminalSession,
     appendSystemMessage,
+    appendUserMessage,
     closeWorkerTab: closeSession,
   };
 
