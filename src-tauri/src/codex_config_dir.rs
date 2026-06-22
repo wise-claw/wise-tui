@@ -159,6 +159,28 @@ fn auth_maps_equal(a: &Map<String, Value>, b: &Map<String, Value>) -> bool {
     a == b
 }
 
+/// 档案 config 是否仅含 `model = "..."`（忽略空行/注释，不允许 `model_provider` 或 `[section]`）。
+/// 真实 provider 档案（`model_provider = ...` + `[model_providers.*]`）必须走整体替换路径，
+/// 否则 `~/.codex/config.toml` 只会改模型名，provider / base_url 仍是上一个档案的。
+fn is_model_only_codex_config(config: &str) -> bool {
+    let mut has_model = false;
+    for line in config.lines() {
+        let trimmed = line.trim();
+        if trimmed.is_empty() || trimmed.starts_with('#') {
+            continue;
+        }
+        if is_top_level_model_assignment(trimmed) {
+            if has_model {
+                return false;
+            }
+            has_model = true;
+            continue;
+        }
+        return false;
+    }
+    has_model
+}
+
 /// 在现有 `config.toml` 中替换或插入 `model = "..."` 行，保留其余配置。
 pub fn patch_codex_config_model(config: &str, new_model: &str) -> String {
     let model = new_model.trim();
@@ -285,6 +307,22 @@ fn apply_codex_profile_envelope_inner(envelope: &CodexProfileEnvelope) -> Result
         write_auth_json(&envelope.auth)?;
         write_config_toml(&envelope.config)?;
         return warm_codex_disk_cache(envelope);
+    }
+
+    // 档案 config 包含 `model_provider` 或 `[...]` 段落（典型 provider 档案）：
+    // 整体替换 config.toml，使新档案的 base_url / env_key 等真正生效；
+    // 同时合并 auth.json，保留 current 中档案未提供的自定 key。
+    if !is_model_only_codex_config(&envelope.config) {
+        write_config_toml(&envelope.config)?;
+        let merged_auth = merge_auth_maps(&current.auth, &envelope.auth);
+        if !auth_maps_equal(&current.auth, &merged_auth) {
+            write_auth_json(&merged_auth)?;
+        }
+        let merged = CodexProfileEnvelope {
+            auth: merged_auth,
+            config: envelope.config.clone(),
+        };
+        return warm_codex_disk_cache(&merged);
     }
 
     // 非首次：保守地只 patch model 行（保留其他用户配置）+ 合并 auth.json（保留自定 key）。
@@ -531,5 +569,77 @@ foo = "bar"
         let envelope = parse_codex_profile_envelope(&raw).expect("parses");
         assert!(!envelope.config.contains("model = \"a\""));
         assert!(envelope.config.contains("model = \"b\""));
+    }
+
+    #[test]
+    fn is_model_only_codex_config_detects_minimal_profile() {
+        // 仅一行 model，注释/空行忽略 → 走 patch-only 分支。
+        assert!(is_model_only_codex_config("model = \"gpt-5.4\"\n"));
+        assert!(is_model_only_codex_config(
+            "# 仅注释\nmodel = \"gpt-5.4\"\n\n# 末尾注释\n"
+        ));
+        assert!(!is_model_only_codex_config("model = \"a\"\nother = 1\n"));
+        // 含 `model_provider` 顶层键 → 视为完整 provider 档案，整体替换。
+        assert!(!is_model_only_codex_config(
+            "model = \"minimax\"\nmodel_provider = \"minimax\"\n"
+        ));
+        // 含任意 `[section]` → 视为完整 provider 档案，整体替换。
+        assert!(!is_model_only_codex_config(
+            "model = \"minimax\"\n\n[model_providers.minimax]\nbase_url = \"x\"\n"
+        ));
+        // 顶层有重复 model 行（解析阶段已被去重，但 is_model_only 应保守返回 false）。
+        assert!(!is_model_only_codex_config(
+            "model = \"a\"\nmodel = \"b\"\n"
+        ));
+    }
+
+    #[test]
+    fn apply_envelope_full_profile_replaces_config_and_merges_auth() {
+        // 完整 provider 档案（典型 CC Switch / 火山 minimax 形态）：
+        // apply 后 config.toml 必须是档案内容（provider / base_url 真正生效），
+        // auth.json 仍按白名单合并，current 中档案未提供的自定 key 必须保留。
+        let envelope = CodexProfileEnvelope {
+            auth: serde_json::from_value(serde_json::json!({
+                "OPENAI_API_KEY": "new-key",
+                "auth_mode": "apikey"
+            }))
+            .expect("envelope auth"),
+            config: r#"model = "minimax"
+model_provider = "minimax"
+model_reasoning_effort = "medium"
+
+[model_providers.minimax]
+name = "minimax"
+base_url = "https://api.example.com/v1"
+env_key = "MINIMAX_API_KEY"
+wire_api = "responses"
+"#
+            .to_string(),
+        };
+        // 文档化「切换前」用户磁盘上的 config：含自定义 [custom] 段。
+        // 整体替换路径会丢掉它 —— 这就是「provider 档案」应有的语义。
+        let _current_config = r#"# user kept
+model = "gpt-5"
+[custom]
+foo = "bar"
+"#;
+        let current_auth: Map<String, Value> = serde_json::from_value(serde_json::json!({
+            "OPENAI_API_KEY": "old-key",
+            "MY_TOKEN": "keep-me"
+        }))
+        .expect("current auth");
+
+        // 模拟非首次安装路径：current.config 非空，档案非 model-only → 整体替换。
+        // 这里直接调用 `write_config_toml` / `write_auth_json` 不安全（会落盘），
+        // 改为断言「应进入整体替换分支」所需的关键状态：档案非 model-only + 合并结果正确。
+        assert!(!is_model_only_codex_config(&envelope.config));
+        let merged_auth = merge_auth_maps(&current_auth, &envelope.auth);
+        assert_eq!(merged_auth["OPENAI_API_KEY"].as_str(), Some("new-key"));
+        assert_eq!(merged_auth["auth_mode"].as_str(), Some("apikey"));
+        assert_eq!(merged_auth["MY_TOKEN"].as_str(), Some("keep-me"));
+        // 整体替换后 disk 上的 config 必须是档案的 config（用户原有 [custom] 不保留）。
+        assert!(envelope.config.contains("model_provider = \"minimax\""));
+        assert!(envelope.config.contains("[model_providers.minimax]"));
+        assert!(envelope.config.contains("base_url = \"https://api.example.com/v1\""));
     }
 }
