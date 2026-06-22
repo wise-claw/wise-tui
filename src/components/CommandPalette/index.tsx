@@ -355,24 +355,24 @@ export const CommandPalette = memo(function CommandPalette({
       >
         <div className="app-command-palette-header">
           <CommandPaletteModeTabs searchMode={searchMode} onSearchModeChange={onSearchModeChange} />
-        </div>
-        <div className="app-command-palette-scope">
-          <TreeSelect
-            value={scopeDir || undefined}
-            onChange={(v) => setScopeDir(typeof v === "string" ? v : "")}
-            treeData={scopeTreeData}
-            loadData={onLoadScopeTreeData}
-            placeholder="搜索范围：整个仓库"
-            showSearch
-            treeNodeFilterProp="title"
-            allowClear
-            size="small"
-            variant="borderless"
-            suffixIcon={<FolderOutlined style={{ color: "var(--ant-color-text-tertiary)" }} />}
-            style={{ width: "100%" }}
-            dropdownStyle={{ maxHeight: 400, overflow: "auto" }}
-            listHeight={320}
-          />
+          <div className="app-command-palette-scope">
+            <TreeSelect
+              value={scopeDir || undefined}
+              onChange={(v) => setScopeDir(typeof v === "string" ? v : "")}
+              treeData={scopeTreeData}
+              loadData={onLoadScopeTreeData}
+              placeholder="搜索范围：整个仓库"
+              showSearch
+              treeNodeFilterProp="title"
+              allowClear
+              size="small"
+              variant="borderless"
+              suffixIcon={<FolderOutlined style={{ color: "var(--ant-color-text-tertiary)" }} />}
+              style={{ width: "100%" }}
+              dropdownStyle={{ maxHeight: 400, overflow: "auto" }}
+              listHeight={320}
+            />
+          </div>
         </div>
         <div className="app-command-palette-input">
           <Input
@@ -388,7 +388,6 @@ export const CommandPalette = memo(function CommandPalette({
             spellCheck={false}
             variant="borderless"
             placeholder={placeholder}
-            suffix={<CommandPaletteShortcutHints />}
             autoFocus
           />
         </div>
@@ -437,6 +436,12 @@ export const CommandPalette = memo(function CommandPalette({
         ) : (
           <div className="app-command-palette-empty">{emptyHint}</div>
         )}
+        <div className="app-command-palette-footer">
+          <CommandPaletteShortcutHints />
+          <span className="app-command-palette-footer-count">
+            {loading && query ? "搜索中…" : results.length > 0 ? `${results.length} 项结果` : ""}
+          </span>
+        </div>
       </div>
     </div>
   );

@@ -16,6 +16,8 @@
 }
 
 .app-command-palette {
+  display: flex;
+  flex-direction: column;
   width: 560px;
   max-height: 420px;
   background: var(--ant-color-bg-container);
@@ -25,10 +27,13 @@
   overflow: hidden;
 }
 
+/* 顶部一行：左侧模式 Tabs + 右侧搜索范围 */
 .app-command-palette-header {
   display: flex;
   align-items: stretch;
-  padding: 0 4px;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 0 6px 0 4px;
   background: var(--ant-color-fill-quaternary);
   border-bottom: 1px solid var(--ant-color-border-secondary);
 }
@@ -38,12 +43,13 @@
   align-items: stretch;
   gap: 2px;
   min-width: 0;
+  flex: 0 0 auto;
 }
 
 .app-command-palette-tab {
   position: relative;
   margin: 0;
-  padding: 10px 14px 9px;
+  padding: 7px 12px;
   border: none;
   border-bottom: 2px solid transparent;
   border-radius: 0;
@@ -82,11 +88,29 @@
   outline-offset: -2px;
 }
 
+.app-command-palette-scope {
+  flex: 1 1 auto;
+  min-width: 160px;
+  max-width: 260px;
+  align-self: center;
+  margin: 4px 0;
+}
+
+.app-command-palette-scope .ant-select {
+  width: 100%;
+}
+
+.app-command-palette-scope .ant-select .ant-select-selection-item,
+.app-command-palette-scope .ant-select .ant-select-selection-placeholder {
+  font-size: 12px;
+}
+
 .app-command-palette-input {
-  padding: 6px 12px;
+  padding: 5px 12px;
   border-bottom: 1px solid var(--ant-color-border-secondary);
   font-size: 13px;
   background: var(--ant-color-bg-container);
+  flex: 0 0 auto;
 }
 
 .app-command-palette-input .ant-input-affix-wrapper {
@@ -96,43 +120,6 @@
 .app-command-palette-input .ant-input {
   font-size: 13px;
   color: var(--ant-color-text);
-}
-
-.app-command-palette-shortcuts {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
-  margin-inline-start: 8px;
-  pointer-events: none;
-  user-select: none;
-}
-
-.app-command-palette-shortcut {
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  white-space: nowrap;
-}
-
-.app-command-palette-shortcut__keys {
-  display: inline-block;
-  min-width: 1.2em;
-  padding: 0 4px;
-  font-size: 10px;
-  font-weight: 500;
-  line-height: 16px;
-  font-family: inherit;
-  text-align: center;
-  color: var(--ant-color-text-secondary);
-  background: var(--ant-color-fill-tertiary);
-  border: 1px solid var(--ant-color-border-secondary);
-  border-radius: 4px;
-}
-
-.app-command-palette-shortcut__label {
-  font-size: 11px;
-  color: var(--ant-color-text-tertiary);
 }
 
 .app-command-palette-input .ant-input::placeholder {
@@ -148,7 +135,8 @@
 }
 
 .app-command-palette-list {
-  max-height: 320px;
+  flex: 1 1 auto;
+  min-height: 0;
   overflow-y: auto;
   padding: 2px 0;
 }
@@ -190,7 +178,7 @@
 }
 
 .app-command-palette-item {
-  padding: 5px 12px;
+  padding: 4px 12px;
   cursor: pointer;
   font-size: 12px;
   color: var(--ant-color-text);
@@ -219,21 +207,61 @@
   text-align: center;
   color: var(--ant-color-text-tertiary);
   font-size: 12px;
+  flex: 0 0 auto;
 }
 
-.app-command-palette-scope {
+/* 底部状态栏：左侧快捷键提示 + 右侧结果计数 */
+.app-command-palette-footer {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
   padding: 4px 12px;
-  border-bottom: 1px solid var(--ant-color-border-secondary);
+  border-top: 1px solid var(--ant-color-border-secondary);
+  background: var(--ant-color-fill-quaternary);
+  flex: 0 0 auto;
+}
+
+.app-command-palette-shortcuts {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  pointer-events: none;
+  user-select: none;
+}
+
+.app-command-palette-shortcut {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  white-space: nowrap;
+}
+
+.app-command-palette-shortcut__keys {
+  display: inline-block;
+  min-width: 1.2em;
+  padding: 0 4px;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 16px;
+  font-family: inherit;
+  text-align: center;
+  color: var(--ant-color-text-secondary);
   background: var(--ant-color-bg-container);
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 4px;
 }
 
-.app-command-palette-scope .ant-select {
-  width: 100%;
+.app-command-palette-shortcut__label {
+  font-size: 11px;
+  color: var(--ant-color-text-tertiary);
 }
 
-.app-command-palette-scope .ant-select .ant-select-selection-item,
-.app-command-palette-scope .ant-select .ant-select-selection-placeholder {
-  font-size: 12px;
+.app-command-palette-footer-count {
+  font-size: 11px;
+  color: var(--ant-color-text-tertiary);
+  white-space: nowrap;
 }
 
 .app-command-palette-item-preview mark {
