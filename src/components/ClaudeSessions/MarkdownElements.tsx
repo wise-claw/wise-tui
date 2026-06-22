@@ -157,24 +157,32 @@ export const MarkdownBody = memo(function MarkdownBody({
   source,
   streaming = false,
   depth = 0,
+  components: componentsOverrides,
+  rehypePlugins,
 }: {
   source: string;
   streaming?: boolean;
   depth?: number;
+  components?: Partial<Components>;
+  rehypePlugins?: readonly any[];
 }) {
   const displaySource = useMemo(
     () => (depth === 0 ? source : prepareMarkdownForDisplay(source, { streaming })),
     [depth, source, streaming],
   );
-  const components = useMemo(
+  const defaultComponents = useMemo(
     () => createMarkdownComponents({ streaming, depth }),
     [streaming, depth],
+  );
+  const mergedComponents = useMemo(
+    () => (componentsOverrides ? { ...defaultComponents, ...componentsOverrides } : defaultComponents),
+    [defaultComponents, componentsOverrides],
   );
 
   if (!displaySource.trim()) return null;
 
   return (
-    <ReactMarkdown remarkPlugins={[remarkGfm]} components={components}>
+    <ReactMarkdown remarkPlugins={[remarkGfm]} rehypePlugins={rehypePlugins} components={mergedComponents}>
       {displaySource}
     </ReactMarkdown>
   );

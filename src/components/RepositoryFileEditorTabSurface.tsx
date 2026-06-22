@@ -31,6 +31,7 @@ import { MonacoSelectionChatToolbar } from "./MonacoSelectionChatToolbar";
 import { useGitRepositoryExplorerStatus } from "../hooks/useGitRepositoryExplorerStatus";
 import { useMonacoGitModifiedLineDecorations } from "../hooks/useMonacoGitModifiedLineDecorations";
 import { MarkdownBody } from "./ClaudeSessions/MarkdownElements";
+import rehypeRaw from "rehype-raw";
 
 const MonacoEditor = lazy(() => import("@monaco-editor/react"));
 
@@ -438,7 +439,7 @@ export function RepositoryFileEditorTabSurface({
         ) : null}
         {mdPreview && isActive ? (
           <div className="app-file-editor-md-preview">
-            <MarkdownBody source={tab.content} />
+            <MarkdownBody source={tab.content} rehypePlugins={[rehypeRaw]} />
           </div>
         ) : everActivated ? (
           !monacoSurfaceReady ? (
