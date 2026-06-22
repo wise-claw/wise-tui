@@ -1842,12 +1842,10 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
       <div className="app-monitor-panel__head">
         <div className="app-monitor-panel__head-start">
           <div className="app-monitor-panel__title">运行面板</div>
-          {!sectionCollapsed ? (
-            <MonitorPanelHeadConfigActions
-              onOpenEmployeeConfig={onOpenEmployeeConfig}
-              onOpenWorkflowConfig={onOpenWorkflowConfig}
-            />
-          ) : null}
+          <MonitorPanelHeadConfigActions
+            onOpenEmployeeConfig={onOpenEmployeeConfig}
+            onOpenWorkflowConfig={onOpenWorkflowConfig}
+          />
         </div>
         <div className="app-monitor-panel__head-end">
           {shouldShowSessionConversationTasks &&

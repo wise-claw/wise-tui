@@ -3684,7 +3684,7 @@
 }
 
 .app-claude-messages-virtual-row--group-start {
-  padding-top: 8px;
+  padding-top: 14px;
 }
 
 .app-claude-messages-end-thinking {
@@ -3754,13 +3754,13 @@
 
 /* 新发送者一组：仅留白区隔，无顶部分隔线 */
 .app-claude-messages > .app-claude-message + .app-claude-message:not(.app-claude-message--merged) {
-  margin-top: 8px; /* Snugger breathing space between different messages */
+  margin-top: 14px; /* 不同发送者/消息组之间的呼吸空间 */
   padding-top: 0;
 }
 
 /* 与上一条同发送者：不再重复头像与时间，仅保留内容以纵向成组 */
 .app-claude-message--merged {
-  margin-top: 2px;
+  margin-top: 3px;
 }
 
 .app-claude-message--merged .app-claude-message-avatar {
@@ -3769,17 +3769,19 @@
 }
 
 .app-claude-message-avatar {
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 10px;
+  font-size: 11px;
   font-weight: 600;
   flex-shrink: 0;
   background: var(--ant-color-fill);
   color: var(--ant-color-text);
+  /* 与单行正文高度协调，顶部微下沉让字符视觉居中 */
+  margin-top: 1px;
 }
 
 .app-claude-message--user .app-claude-message-avatar {
@@ -3797,9 +3799,9 @@
   color: #fff;
 }
 
-/* 助手回复：内容更贴近左侧 C 标识（缩小列间距、首块顶对齐） */
+/* 助手回复：内容贴近左侧 C 标识（缩小列间距、首块顶对齐）；放大头像后留 6px 呼吸 */
 .app-claude-message--assistant {
-  gap: 4px;
+  gap: 6px;
 }
 
 .app-claude-messages .app-claude-message--assistant .app-message-parts > :first-child,
@@ -4531,8 +4533,8 @@
 }
 
 .app-claude-messages .app-message-part--text {
-  font-size: 13.5px;
-  line-height: 1.55;
+  font-size: 14px;
+  line-height: 1.62;
   color: var(--ant-color-text);
 }
 
@@ -4559,7 +4561,13 @@
   box-sizing: border-box;
 }
 
-.app-claude-messages .app-claude-message--user .app-message-part--text,
+/* 用户消息：淡 primary 阅读区块，长对话里"我问了什么"一眼可辨；助手保持白底平铺形成对比 */
+.app-claude-messages .app-claude-message--user .app-message-part--text {
+  padding: 7px 12px;
+  border-radius: 8px;
+  background: color-mix(in srgb, var(--ant-color-primary-bg) 60%, var(--ant-color-bg-container));
+}
+
 .app-claude-messages .app-claude-message--assistant .app-message-part--text {
   background: transparent;
   border: none;
@@ -6239,14 +6247,73 @@ button.app-message-part-header:disabled:hover {
   margin-top: 0;
 }
 
+/* 消息列表有序 / 无序列表：保持呼吸感，marker 用弱化色与正文区分；嵌套列表逐级收缩 */
 .app-markdown ul,
 .app-markdown ol {
-  margin: 0 0 6px;
-  padding-left: 20px;
+  margin: 0.45em 0 0.7em;
+  padding-left: 1.5em;
+  list-style-position: outside;
+  color: var(--ant-color-text);
+}
+
+.app-markdown ul {
+  list-style-type: disc;
+}
+
+.app-markdown ol {
+  list-style-type: decimal;
+}
+
+.app-markdown ul ul,
+.app-markdown ol ul,
+.app-markdown ul ol,
+.app-markdown ol ol {
+  margin: 0.25em 0 0.4em;
+  padding-left: 1.2em;
+}
+
+.app-markdown ul ul {
+  list-style-type: circle;
+}
+
+.app-markdown ul ul ul {
+  list-style-type: square;
+}
+
+.app-markdown ol ol {
+  list-style-type: lower-alpha;
+}
+
+.app-markdown ol ol ol {
+  list-style-type: lower-roman;
 }
 
 .app-markdown li {
-  margin-bottom: 2px;
+  margin: 0.18em 0;
+  padding-left: 0.15em;
+}
+
+/* 让 marker 颜色弱于正文，长列表里更易扫读 */
+.app-markdown li::marker {
+  color: color-mix(in srgb, var(--ant-color-text-tertiary) 92%, var(--ant-color-text-secondary));
+  font-variant-numeric: tabular-nums;
+}
+
+.app-markdown li > p {
+  margin: 0.15em 0;
+}
+
+.app-markdown li > p:first-child {
+  margin-top: 0;
+}
+
+.app-markdown li > p:last-child {
+  margin-bottom: 0;
+}
+
+.app-markdown li > strong:first-child {
+  color: var(--ant-color-text);
+  font-weight: 600;
 }
 
 .app-markdown code {
