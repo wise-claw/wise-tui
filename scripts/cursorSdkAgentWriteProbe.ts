@@ -93,7 +93,7 @@ export async function runAgentWriteProbe(params: {
   const { Agent } = await import("@cursor/sdk");
   const local = {
     cwd: repositoryPath,
-    settingSources: [] as const,
+    settingSources: ["user"] as const,
     sandboxOptions: { enabled: false },
   };
 

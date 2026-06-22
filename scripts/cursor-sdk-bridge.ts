@@ -61,8 +61,12 @@ type CursorMcpServerConfig = {
 
 type CursorSettingSource = "project" | "user" | "team" | "mdm" | "plugins" | "all";
 
-/** Wise 无头 bridge 默认不加载仓库 project 层，避免目标仓 `.cursor/sandbox.json` / hooks 禁用写盘。 */
-const DEFAULT_SETTING_SOURCES: CursorSettingSource[] = [];
+/**
+ * 加载 user 层设置确保 Local Agent 正确挂载文件读写工具（read/write/edit/grep/bash），
+ * 不加 project 层避免目标仓 `.cursor/sandbox.json` / hooks 禁用写盘，
+ * sandboxOptions.enabled=false 已额外确保沙箱强制 disabled。
+ */
+const DEFAULT_SETTING_SOURCES: CursorSettingSource[] = ["user"];
 
 function buildLocalAgentOptions(cwd: string, settingSources: CursorSettingSource[]) {
   return {
