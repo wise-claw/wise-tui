@@ -148,6 +148,22 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
   const [fileEditorActivePath, setFileEditorActivePath] = useState<string | null>(null);
   const [editorSaving, setEditorSaving] = useState(false);
   const [contentSyncVersion, setContentSyncVersion] = useState(0);
+  /**
+   * md 预览状态按 relativePath 持久化。提升到 hook 层，避免文件编辑器面板随
+   * ClaudeChat（panelBelowMessages）重挂时本地 useState 丢失，导致预览回退到编辑态。
+   */
+  const [mdPreviewByPath, setMdPreviewByPath] = useState<Record<string, boolean>>({});
+  const setEditorTabMdPreview = useCallback((relativePath: string, value: boolean) => {
+    setMdPreviewByPath((prev) => {
+      if (value) {
+        return prev[relativePath] === true ? prev : { ...prev, [relativePath]: true };
+      }
+      if (prev[relativePath] === undefined) return prev;
+      const next = { ...prev };
+      delete next[relativePath];
+      return next;
+    });
+  }, []);
   const fileEditorTabsRef = useRef<FileEditorTab[]>([]);
   fileEditorTabsRef.current = fileEditorTabs;
   const gitDiffLoadGenerationRef = useRef(0);
@@ -387,6 +403,12 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
   );
 
   const removeFileEditorTab = useCallback((relativePath: string) => {
+    setMdPreviewByPath((prev) => {
+      if (prev[relativePath] === undefined) return prev;
+      const next = { ...prev };
+      delete next[relativePath];
+      return next;
+    });
     setFileEditorTabs((prevTabs) => {
       const idx = prevTabs.findIndex((t) => t.relativePath === relativePath);
       const nextTabs = prevTabs.filter((t) => t.relativePath !== relativePath);
@@ -776,6 +798,7 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
       setFileEditorTabs([]);
       setFileEditorActivePath(null);
       setEditorSaving(false);
+      setMdPreviewByPath({});
     };
     if (dirtyCount === 0) {
       clearAll();
@@ -1156,11 +1179,13 @@ export function useRepositoryFileEditor({ repositoryPath }: UseRepositoryFileEdi
     editorVisible,
     fileEditorActivePath,
     fileEditorTabs,
+    mdPreviewByPath,
     openRepositoryFile,
     refreshOpenEditorTabsFromDisk,
     reloadEditorTabFromDisk,
     repositoryBinaryPreview,
     saveEditor,
+    setEditorTabMdPreview,
     setFileEditorActivePath,
     setFileEditorTabs,
     updateFileEditorTabContent,

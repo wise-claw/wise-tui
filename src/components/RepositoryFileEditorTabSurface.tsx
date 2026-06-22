@@ -49,6 +49,8 @@ export interface RepositoryFileEditorTabSurfaceProps {
    * 被逐出时 keepAlive 翻 false，surface 执行与卸载等价的清理并允许重新挂载。
    */
   keepAlive: boolean;
+  mdPreviewRequested: boolean;
+  onMdPreviewRequestedChange: (value: boolean) => void;
 }
 
 function normalizeEditorLine(value: number | null | undefined): number | null {
@@ -94,6 +96,8 @@ export function RepositoryFileEditorTabSurface({
   onCloseTab,
   onReloadTab,
   keepAlive,
+  mdPreviewRequested,
+  onMdPreviewRequestedChange,
 }: RepositoryFileEditorTabSurfaceProps) {
   const monacoRef = useRef<typeof Monaco | null>(null);
   const editorRef = useRef<MonacoEditorNamespace.IStandaloneCodeEditor | null>(null);
@@ -128,7 +132,6 @@ export function RepositoryFileEditorTabSurface({
     () => tab.relativePath.endsWith(".md") || tab.relativePath.endsWith(".mdx"),
     [tab.relativePath],
   );
-  const [mdPreviewRequested, setMdPreviewRequested] = useState(false);
   const mdPreview = isMdFile && mdPreviewRequested;
 
   const [monacoSurfaceReady, setMonacoSurfaceReady] = useState(true);
@@ -423,7 +426,7 @@ export function RepositoryFileEditorTabSurface({
               type={mdPreview ? "default" : "primary"}
               size="small"
               icon={<EditOutlined />}
-              onClick={() => setMdPreviewRequested(false)}
+              onClick={() => onMdPreviewRequestedChange(false)}
             >
               编辑
             </Button>
@@ -431,7 +434,7 @@ export function RepositoryFileEditorTabSurface({
               type={mdPreview ? "primary" : "default"}
               size="small"
               icon={<EyeOutlined />}
-              onClick={() => setMdPreviewRequested(true)}
+              onClick={() => onMdPreviewRequestedChange(true)}
             >
               预览
             </Button>

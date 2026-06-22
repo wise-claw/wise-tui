@@ -24,6 +24,8 @@ interface Props {
   onReloadTab: (relativePath: string) => void;
   onSave: () => void;
   onTabContentChange: (relativePath: string, content: string) => void;
+  mdPreviewByPath: Record<string, boolean>;
+  onMdPreviewTabChange: (relativePath: string, value: boolean) => void;
 }
 
 export function RepositoryFileEditorPanel({
@@ -40,6 +42,8 @@ export function RepositoryFileEditorPanel({
   onReloadTab,
   onSave,
   onTabContentChange,
+  mdPreviewByPath,
+  onMdPreviewTabChange,
 }: Props) {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const activeTab = tabs.find((tab) => tab.relativePath === activePath) ?? null;
@@ -204,6 +208,10 @@ export function RepositoryFileEditorPanel({
               dark={dark}
               repositoryPath={repositoryPath}
               activeSessionId={activeSessionId}
+              mdPreviewRequested={mdPreviewByPath[tab.relativePath] ?? false}
+              onMdPreviewRequestedChange={(value) =>
+                onMdPreviewTabChange(tab.relativePath, value)
+              }
               onTabContentChange={handleTabContentChange}
               onCloseTab={onCloseTab}
               onReloadTab={onReloadTab}

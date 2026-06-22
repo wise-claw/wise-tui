@@ -154,6 +154,8 @@ interface RepositoryFileEditorPanelContextValue {
   activeSessionId: string | null;
   dirty: boolean;
   editorVisible: boolean;
+  mdPreviewByPath: Record<string, boolean>;
+  setEditorTabMdPreview: (relativePath: string, value: boolean) => void;
   onActivePathChange: (path: string) => void;
   onClosePanel: () => void;
   onCloseTab: (relativePath: string, event?: ReactMouseEvent) => void;
@@ -347,6 +349,8 @@ const ConnectedRepositoryFileEditorPanel = memo(function ConnectedRepositoryFile
     activeSessionId,
     dirty,
     editorVisible,
+    mdPreviewByPath,
+    setEditorTabMdPreview,
     onActivePathChange,
     onClosePanel,
     onCloseTab,
@@ -367,6 +371,8 @@ const ConnectedRepositoryFileEditorPanel = memo(function ConnectedRepositoryFile
         activeSessionId={activeSessionId}
         dark={dark}
         dirty={dirty}
+        mdPreviewByPath={mdPreviewByPath}
+        onMdPreviewTabChange={setEditorTabMdPreview}
         repositoryPath={repositoryPath}
         saving={saving}
         tabs={tabs}
@@ -671,10 +677,12 @@ export function AppWorkspaceLayout({
     editorVisible,
     fileEditorActivePath,
     fileEditorTabs,
+    mdPreviewByPath,
     openRepositoryFile,
     reloadEditorTabFromDisk,
     repositoryBinaryPreview,
     saveEditor,
+    setEditorTabMdPreview,
     setFileEditorActivePath,
     updateFileEditorTabContent,
   } = useRepositoryFileEditor({ repositoryPath: activeRepositoryPath });
@@ -779,6 +787,8 @@ export function AppWorkspaceLayout({
       activeSessionId: claudeSessionsProps.activeSessionId,
       dirty: editorDirty,
       editorVisible,
+      mdPreviewByPath,
+      setEditorTabMdPreview,
       onActivePathChange: setFileEditorActivePath,
       onClosePanel: closeFileEditorPanel,
       onClosePreview: closeRepositoryBinaryPreview,
@@ -809,9 +819,11 @@ export function AppWorkspaceLayout({
       fileEditorActivePath,
       fileEditorTabs,
       handleFileEditorTabContentChange,
+      mdPreviewByPath,
       reloadEditorTabFromDisk,
       repositoryBinaryPreview,
       saveEditor,
+      setEditorTabMdPreview,
       setFileEditorActivePath,
     ],
   );
