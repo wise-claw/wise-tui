@@ -12,6 +12,7 @@ import { flushSync } from "react-dom";
 import type { MouseEvent } from "react";
 import type { MenuProps } from "antd";
 import { message } from "antd";
+import { emit } from "@tauri-apps/api/event";
 import {
   createRepositoryDirectory,
   createRepositoryFile,
@@ -852,6 +853,24 @@ export function useRepositoryFilesExplorer({
         onClick: () => {
           close();
           openInlineCreate("folder", targetForCreate);
+        },
+      },
+      { type: "divider" },
+      {
+        key: "search-file",
+        label: "在此搜索文件",
+        onClick: () => {
+          close();
+          // 携带右键目标目录作为搜索范围；AppImpl 监听读取后预置命令面板 scopeDir。
+          void emit("global-open-filename-search", { scopeDir: targetForCreate });
+        },
+      },
+      {
+        key: "search-content",
+        label: "在此搜索内容",
+        onClick: () => {
+          close();
+          void emit("global-open-content-search", { scopeDir: targetForCreate });
         },
       },
       { type: "divider" },

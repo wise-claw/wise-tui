@@ -361,6 +361,11 @@ export default function App() {
   const paneLayoutHydratedRef = useRef(false);
   const [paneLayoutHydrated, setPaneLayoutHydrated] = useState(false);
   const [searchOpen, setSearchOpen] = useState(false);
+  /**
+   * 搜索面板打开时预置的目录范围（仓库相对路径）。
+   * 文件树右键"在此搜索"通过事件携带 scopeDir 写入此 state；快捷键打开时为 undefined（整个仓库）。
+   */
+  const [searchInitialScopeDir, setSearchInitialScopeDir] = useState<string | undefined>(undefined);
   const [searchMode, setSearchMode] = useState<CommandPaletteSearchMode>("filename");
   /** 右侧 Inspector 历史会话消息抽屉（由中栏「历史会话」列表打开；默认收起右栏时不强制展开） */
   const [inspectorHistorySessionId, setInspectorHistorySessionId] = useState<string | null>(null);
@@ -2978,20 +2983,28 @@ export default function App() {
     setWorkflowTemplates(templates);
   }
 
-  const openFilenameSearchPalette = useCallback(() => {
+  const openFilenameSearchPalette = useCallback((scopeDir?: string) => {
     setSearchMode("filename");
+    setSearchInitialScopeDir(scopeDir);
     setSearchOpen(true);
   }, []);
 
-  const openContentSearchPalette = useCallback(() => {
+  const openContentSearchPalette = useCallback((scopeDir?: string) => {
     setSearchMode("content");
+    setSearchInitialScopeDir(scopeDir);
     setSearchOpen(true);
   }, []);
 
   useEffect(() => {
     let unlistenFilename: (() => void) | undefined;
     let unlistenContent: (() => void) | undefined;
-    void listen("global-open-filename-search", () => {
+    void listen("global-open-filename-search", (event) => {
+      const scopeDir = (event.payload as { scopeDir?: string } | undefined)?.scopeDir;
+      // 带目录范围的入口（文件树右键"在此搜索"）直接打开，跳过 Monaco 焦点拦截。
+      if (scopeDir) {
+        openFilenameSearchPalette(scopeDir);
+        return;
+      }
       if (openMonacoFindIfFocused()) return;
       openFilenameSearchPalette();
     })
@@ -2999,8 +3012,9 @@ export default function App() {
         unlistenFilename = fn;
       })
       .catch(() => undefined);
-    void listen("global-open-content-search", () => {
-      openContentSearchPalette();
+    void listen("global-open-content-search", (event) => {
+      const scopeDir = (event.payload as { scopeDir?: string } | undefined)?.scopeDir;
+      openContentSearchPalette(scopeDir);
     })
       .then((fn) => {
         unlistenContent = fn;
@@ -3840,6 +3854,7 @@ export default function App() {
         onClose: () => setSearchOpen(false),
         repositoryPath: activeRepository?.path,
         searchMode,
+        initialScopeDir: searchInitialScopeDir,
         onSearchModeChange: setSearchMode,
         onOpenInApp: (relativePath, options) => {
           if (!activeRepository) return;

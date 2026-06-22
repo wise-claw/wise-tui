@@ -81,7 +81,10 @@ fn emit_cursor_stdout_line(
     if !sid.is_empty() {
         let _ = app.emit(&format!("claude-output:{}", sid), line);
     }
-    let _ = app.emit("claude-output", line);
+    // 带 invocation_key（前端定向监听已建立）时抑制全局通道，避免多屏并行被全局 handleOutput 的单值兜底路由串屏。
+    if invocation_key.is_none() {
+        let _ = app.emit("claude-output", line);
+    }
     if let Some(inv) = invocation_key {
         let _ = app.emit(&format!("claude-output:invocation:{}", inv), line);
     }
@@ -102,7 +105,10 @@ fn emit_cursor_complete(
     if !sid.is_empty() {
         let _ = app.emit(&format!("claude-complete:{}", sid), &payload);
     }
-    let _ = app.emit("claude-complete", &payload);
+    // 同 emit_cursor_stdout_line：带 invocation_key 时抑制全局通道。
+    if invocation_key.is_none() {
+        let _ = app.emit("claude-complete", &payload);
+    }
     if let Some(inv) = invocation_key {
         let _ = app.emit(&format!("claude-complete:invocation:{}", inv), &payload);
     }

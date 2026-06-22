@@ -220,3 +220,30 @@
   color: var(--ant-color-text-tertiary);
   font-size: 12px;
 }
+
+.app-command-palette-scope {
+  padding: 4px 12px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  background: var(--ant-color-bg-container);
+}
+
+.app-command-palette-scope .ant-select {
+  width: 100%;
+}
+
+.app-command-palette-scope .ant-select .ant-select-selection-item,
+.app-command-palette-scope .ant-select .ant-select-selection-placeholder {
+  font-size: 12px;
+}
+
+.app-command-palette-item-preview mark {
+  background: var(--ant-color-primary-bg, #e6f4ff);
+  color: var(--ant-color-primary, #1677ff);
+  border-radius: 2px;
+  padding: 0 1px;
+  font-weight: 600;
+}
+
+.app-command-palette-item--active .app-command-palette-item-preview mark {
+  background: var(--ant-color-primary-bg-hover, #bae0ff);
+}

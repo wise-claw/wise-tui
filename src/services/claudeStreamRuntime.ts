@@ -97,6 +97,13 @@ interface RuntimeDeps {
   /** Claude Hook 启动事件（不写入会话气泡，仅用于延长 stall 看门狗）。 */
   onHookStreamActivity?: (tabId: string) => void;
   /**
+   * 多屏模式（companionSessionIds 非空）下为 true：全局 `claude-output`/`claude-complete`/`claude-error`
+   * 回调禁用 `streamingTargetIdRef` 单值兜底路由，仅按行内 / complete payload 的 session_id 匹配真实会话，
+   * 匹配不到则丢弃，防止多屏多执行环境并行时后发送窗格覆盖 ref 导致串屏。
+   * 单屏（false）时保留原 refTid 兜底，作为 attach 定向通道失败时的降级生命线。
+   */
+  isMultiPaneRef?: MutableRefObject<boolean>;
+  /**
    * 一轮流式结束后用磁盘 `*.jsonl` 覆盖内存消息，与 Claude Code 原生会话对齐。
    * 流式路径会把多行 delta 压成少量气泡并带去重，仅靠内存会与 jsonl 条数不一致。
    */
@@ -177,6 +184,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     resolveSessionExecutionEngine,
     onStreamActivity,
     onHookStreamActivity,
+    isMultiPaneRef,
   } = deps;
 
   const deferredStreamTabIds = new Set<string>();
@@ -537,7 +545,19 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
   function handleOutput(payload: unknown) {
     const refTid = streamingTargetIdRef.current;
     if (!refTid) return;
-    // 与 invocation 路径共用 tab 映射：`system.init` 后 tab id 会变为 Claude session_id，旧 ref 须经 sessionIdMap 解析。
+    if (isMultiPaneRef?.current) {
+      // 多屏并行：禁用 streamingTargetIdRef 单值兜底（后发送窗格会覆盖 ref 导致串屏），
+      // 仅按行内 session_id 匹配真实会话，匹配不到则丢弃。定向 invocation/session 通道不受影响。
+      const line = typeof payload === "string" ? payload : JSON.stringify(payload);
+      const lineSid = parseStreamLineSessionId(line);
+      if (!lineSid) return;
+      const tid = resolveTabIdForClaudeStream(sessionsRef.current, lineSid, null);
+      if (!tid) return;
+      onStreamActivity?.(tid);
+      applyOutputLine(tid, line, { syncStreamingTargetRefOnInit: false });
+      return;
+    }
+    // 单屏：与 invocation 路径共用 tab 映射，`system.init` 后 tab id 会变为 Claude session_id，旧 ref 须经 sessionIdMap 解析。
     handleOutputForSendTab(refTid, payload, { syncStreamingTargetRefOnInit: true });
   }
 
@@ -794,6 +814,27 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
   function handleComplete(payload: unknown) {
     const refTid = streamingTargetIdRef.current;
     if (!refTid) return;
+    if (isMultiPaneRef?.current) {
+      // 多屏并行：complete payload 的 session_id 必须匹配到真实会话才路由，禁用 refTid 兜底，防串屏。
+      const payloadTid = resolveTabIdFromCompletePayload(payload, sessionsRef.current, null);
+      if (!payloadTid) return;
+      const session = sessionsRef.current.find(
+        (s) => s.id === payloadTid || s.claudeSessionId === payloadTid,
+      );
+      // resolveTabIdFromCompletePayload 在 payload 带 sid 时可能返回裸 sid（无会话匹配），需校验为真实会话。
+      if (!session) return;
+      const mapRef = expectedTurnNonceByTabIdRef?.current;
+      const nonceForTurn = resolveExpectedTurnNonceForTab({
+        tabId: session.id,
+        sessionIdMap: sessionIdMapRef.current,
+        nonceByTabId: mapRef ?? new Map(),
+        sessions: sessionsRef.current,
+        boundNonce: lastUserSendNonceRef.current,
+      });
+      if (nonceForTurn === undefined) return;
+      applySessionComplete(session.id, payload, nonceForTurn);
+      return;
+    }
     const mapRef = expectedTurnNonceByTabIdRef?.current;
     const nonceForTurn = resolveExpectedTurnNonceForTab({
       tabId: refTid,
@@ -825,6 +866,12 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
   function handleError(payload: unknown) {
     const refTid = streamingTargetIdRef.current;
     if (!refTid) return;
+    if (isMultiPaneRef?.current) {
+      // 多屏并行：error payload 为纯字符串无 session_id，无法可靠路由，丢弃。
+      // claude stderr 在 invocation_key 存在时已由后端 suppress 全局 claude-error，
+      // 定向 invocation 通道仍会投递 claude-error:invocation:{inv}；codex/cursor/opencode 不 emit claude-error。
+      return;
+    }
     handleErrorForSendTab(refTid, payload);
   }
 

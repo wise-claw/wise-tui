@@ -401,6 +401,9 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   >(async () => false);
   /** Which session tab receives stdout until `claude-complete` / `claude-error`. */
   const streamingTargetIdRef = useRef<string | null>(null);
+  /** 多屏模式标记：companionSessionIds 非空时为 true，供 stream runtime 全局通道回调禁用 refTid 兜底路由，防多屏串屏。 */
+  const isMultiPaneRef = useRef(false);
+  isMultiPaneRef.current = companionSessionIds.length > 0;
   /** 长驻 streaming 子进程：tab id → 已知 Claude session_id（init 前可为 null）。 */
   const streamingProcessByTabRef = useRef<Map<string, { claudeSessionId: string | null }>>(new Map());
   /** 供 `attachClaudeInvocationStream` 使用；挂载后由 stream effect 赋值。 */
@@ -2724,6 +2727,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         recentHookActivityByTabRef.current.set(key, Date.now());
         scheduleStreamStallTimer(key);
       },
+      isMultiPaneRef,
     });
 
     void (async () => {

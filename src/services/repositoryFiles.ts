@@ -9,19 +9,27 @@ export interface RepositoryFileContentMatch {
   path: string;
   line: number;
   preview: string;
+  /** 匹配区间在 preview 中的起始 char 偏移（与 code point 切分一致），无匹配时缺省。 */
+  matchStart?: number | null;
+  /** 匹配区间在 preview 中的结束 char 偏移（exclusive），无匹配时缺省。 */
+  matchEnd?: number | null;
 }
 
 /**
  * Fast file/directory search under a repository root (for @ mentions and explorer search).
+ *
+ * `relativeDir` 为仓库相对目录，限定搜索范围；省略/空串表示整个仓库。
  */
 export async function searchRepositoryFiles(
   repositoryRoot: string,
   query: string,
+  relativeDir?: string,
 ): Promise<RepositoryExplorerEntry[]> {
   try {
     return await invoke<RepositoryExplorerEntry[]>("search_repository_files", {
       root: repositoryRoot,
       query,
+      relativeDir: relativeDir ? relativeDir : null,
     });
   } catch {
     return [];
@@ -30,15 +38,19 @@ export async function searchRepositoryFiles(
 
 /**
  * Search plain-text file contents under a repository root (global search).
+ *
+ * `relativeDir` 为仓库相对目录，限定搜索范围；省略/空串表示整个仓库。
  */
 export async function searchRepositoryFileContents(
   repositoryRoot: string,
   query: string,
+  relativeDir?: string,
 ): Promise<RepositoryFileContentMatch[]> {
   try {
     return await invoke<RepositoryFileContentMatch[]>("search_repository_file_contents", {
       root: repositoryRoot,
       query,
+      relativeDir: relativeDir ? relativeDir : null,
     });
   } catch {
     return [];

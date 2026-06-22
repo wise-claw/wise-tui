@@ -1791,7 +1791,7 @@ async fn spawn_claude_process(
             && (connection_mode_stdout == ClaudeConnectionMode::Oneshot
                 || connection_mode_stdout == ClaudeConnectionMode::Streaming);
         let active_invocation_key = invocation_key_clone.clone();
-        let mut active_suppress_shared = suppress_shared_stdout;
+        let active_suppress_shared = suppress_shared_stdout;
 
         while let Ok(Some(line)) = lines.next_line().await {
             maybe_ack_control_initialize(&line, &pending_stdin_by_spawn_clone, spawn_id).await;
@@ -1879,7 +1879,8 @@ async fn spawn_claude_process(
                             active_suppress_shared,
                         ) {
                             streaming_turn_complete_sent = true;
-                            active_suppress_shared = false;
+                            // 不在 turn complete 后重置 suppress：续答/下一轮 stdout 仍只走 invocation/session 通道，
+                            // 避免多屏并行时全局通道把后续行串到别的窗格。
                         }
                     }
                 }
@@ -1960,8 +1961,8 @@ async fn spawn_claude_process(
                                     sid_for_turn,
                                     turn_ok,
                                     turn_verdict,
-                                    None,
-                                    false,
+                                    active_invocation_key.as_deref(),
+                                    active_suppress_shared,
                                 );
                             }
                         }
@@ -1972,7 +1973,7 @@ async fn spawn_claude_process(
                             &line,
                             connection_mode_stdout,
                             active_invocation_key.as_deref(),
-                            false,
+                            active_suppress_shared,
                         );
                     }
                     Ok(None) => {

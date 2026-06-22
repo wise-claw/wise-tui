@@ -1,12 +1,14 @@
 import { useCallback, useEffect, useRef, useState, memo } from "react";
-import { Input, Spin, message } from "antd";
-import { FileOutlined, SearchOutlined } from "@ant-design/icons";
+import { Input, Spin, TreeSelect, message } from "antd";
+import { FileOutlined, FolderOutlined, SearchOutlined } from "@ant-design/icons";
 import { openRepositoryFileWithStoredPreference } from "../../services/openWorkspaceWithPreference";
 import {
+  listRepositoryExplorerChildren,
   searchRepositoryFileContents,
   searchRepositoryFiles,
   type RepositoryFileContentMatch,
 } from "../../services/repositoryFiles";
+import { highlightMatchSegments } from "./highlightMatch";
 import { commandPalettePropsEqual } from "./commandPalettePropsEqual";
 import "./index.css";
 
@@ -18,6 +20,8 @@ interface Props {
   repositoryPath: string | undefined;
   searchMode: CommandPaletteSearchMode;
   onSearchModeChange: (mode: CommandPaletteSearchMode) => void;
+  /** 文件树右键"在此搜索"预置的搜索范围（仓库相对目录）；undefined=整个仓库。 */
+  initialScopeDir?: string;
   /** Enter / 单击：在 Wise 内打开仓库文件 */
   onOpenInApp: (relativePath: string, options?: { line?: number | null }) => void;
 }
@@ -33,6 +37,8 @@ interface ContentResult {
   path: string;
   line: number;
   preview: string;
+  matchStart?: number | null;
+  matchEnd?: number | null;
   display: string;
 }
 
@@ -92,8 +98,57 @@ function toContentResults(matches: RepositoryFileContentMatch[]): ContentResult[
     path: match.path,
     line: match.line,
     preview: match.preview,
+    matchStart: match.matchStart ?? null,
+    matchEnd: match.matchEnd ?? null,
     display: `${match.path}:${match.line}`,
   }));
+}
+
+/** 目录范围选择树节点（仅目录，懒加载子目录）。 */
+interface ScopeTreeNode {
+  title: string;
+  value: string;
+  isLeaf?: boolean;
+  children?: ScopeTreeNode[];
+}
+
+/** 递归地把 `children` 挂到 value 等于 `targetValue` 的节点下（不可变更新）。 */
+function setChildrenAt(
+  nodes: ScopeTreeNode[],
+  targetValue: string,
+  children: ScopeTreeNode[],
+): ScopeTreeNode[] {
+  return nodes.map((n) => {
+    if (n.value === targetValue) {
+      return { ...n, children };
+    }
+    if (n.children) {
+      return { ...n, children: setChildrenAt(n.children, targetValue, children) };
+    }
+    return n;
+  });
+}
+
+function PreviewWithHighlight({
+  preview,
+  matchStart,
+  matchEnd,
+  query,
+}: {
+  preview: string;
+  matchStart?: number | null;
+  matchEnd?: number | null;
+  query: string;
+}) {
+  const segs = highlightMatchSegments(preview, matchStart, matchEnd, query);
+  if (!segs) return <>{preview}</>;
+  return (
+    <>
+      {segs.before}
+      <mark>{segs.match}</mark>
+      {segs.after}
+    </>
+  );
 }
 
 export const CommandPalette = memo(function CommandPalette({
@@ -102,14 +157,41 @@ export const CommandPalette = memo(function CommandPalette({
   repositoryPath,
   searchMode,
   onSearchModeChange,
+  initialScopeDir,
   onOpenInApp,
 }: Props) {
   const [query, setQuery] = useState("");
   const [activeIndex, setActiveIndex] = useState(0);
   const [results, setResults] = useState<SearchResult[]>([]);
   const [loading, setLoading] = useState(false);
+  /** 文件内容搜索的目录范围（仓库相对路径，空串=整个仓库）。 */
+  const [scopeDir, setScopeDir] = useState("");
+  const [scopeTreeData, setScopeTreeData] = useState<ScopeTreeNode[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const searchRequestIdRef = useRef(0);
+
+  const loadScopeChildren = useCallback(
+    async (parentDir: string): Promise<ScopeTreeNode[]> => {
+      if (!repositoryPath) return [];
+      const entries = await listRepositoryExplorerChildren(repositoryPath, parentDir);
+      return entries
+        .filter((e) => e.isDir)
+        .map((e) => {
+          const name = e.path.split("/").pop() || e.path;
+          return { title: name, value: e.path, isLeaf: false };
+        });
+    },
+    [repositoryPath],
+  );
+
+  const onLoadScopeTreeData = useCallback(
+    async (node: { value?: string | number | null }) => {
+      const parentDir = typeof node?.value === "string" ? node.value : "";
+      const children = await loadScopeChildren(parentDir);
+      setScopeTreeData((prev) => setChildrenAt(prev, parentDir, children));
+    },
+    [loadScopeChildren],
+  );
 
   const openSearchResultInApp = useCallback(
     (item: SearchResult) => {
@@ -146,6 +228,23 @@ export const CommandPalette = memo(function CommandPalette({
     }
   }, [open, searchMode]);
 
+  // 打开搜索面板时初始化目录范围树与初始 scope：
+  // - 默认整个仓库；initialScopeDir（文件树右键"在此搜索"预置）非空时限定到该目录。
+  // - 两种搜索模式（文件名 / 内容）共用同一目录范围选择器。
+  useEffect(() => {
+    if (!open) return;
+    setScopeDir(initialScopeDir ?? "");
+    setScopeTreeData([{ title: "整个仓库", value: "", isLeaf: false, children: [] }]);
+    let cancelled = false;
+    void loadScopeChildren("").then((children) => {
+      if (cancelled) return;
+      setScopeTreeData((prev) => setChildrenAt(prev, "", children));
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [open, initialScopeDir, loadScopeChildren]);
+
   useEffect(() => {
     if (!open || !repositoryPath) {
       setResults([]);
@@ -167,7 +266,7 @@ export const CommandPalette = memo(function CommandPalette({
       if (cancelled) return;
       try {
         if (searchMode === "filename") {
-          const entries = await searchRepositoryFiles(repositoryPath, q);
+          const entries = await searchRepositoryFiles(repositoryPath, q, scopeDir || undefined);
           if (cancelled || requestId !== searchRequestIdRef.current) return;
           setResults(
             entries.map((entry) => ({
@@ -177,7 +276,11 @@ export const CommandPalette = memo(function CommandPalette({
             })),
           );
         } else {
-          const matches = await searchRepositoryFileContents(repositoryPath, q);
+          const matches = await searchRepositoryFileContents(
+            repositoryPath,
+            q,
+            scopeDir || undefined,
+          );
           if (cancelled || requestId !== searchRequestIdRef.current) return;
           setResults(toContentResults(matches));
         }
@@ -192,7 +295,7 @@ export const CommandPalette = memo(function CommandPalette({
       cancelled = true;
       window.clearTimeout(timer);
     };
-  }, [open, query, repositoryPath, searchMode]);
+  }, [open, query, repositoryPath, searchMode, scopeDir]);
 
   useEffect(() => {
     if (!open) return;
@@ -253,6 +356,24 @@ export const CommandPalette = memo(function CommandPalette({
         <div className="app-command-palette-header">
           <CommandPaletteModeTabs searchMode={searchMode} onSearchModeChange={onSearchModeChange} />
         </div>
+        <div className="app-command-palette-scope">
+          <TreeSelect
+            value={scopeDir || undefined}
+            onChange={(v) => setScopeDir(typeof v === "string" ? v : "")}
+            treeData={scopeTreeData}
+            loadData={onLoadScopeTreeData}
+            placeholder="搜索范围：整个仓库"
+            showSearch
+            treeNodeFilterProp="title"
+            allowClear
+            size="small"
+            variant="borderless"
+            suffixIcon={<FolderOutlined style={{ color: "var(--ant-color-text-tertiary)" }} />}
+            style={{ width: "100%" }}
+            dropdownStyle={{ maxHeight: 400, overflow: "auto" }}
+            listHeight={320}
+          />
+        </div>
         <div className="app-command-palette-input">
           <Input
             ref={inputRef as any}
@@ -293,7 +414,14 @@ export const CommandPalette = memo(function CommandPalette({
                       <span className="app-command-palette-item-path">{item.display}</span>
                     </div>
                     {item.preview ? (
-                      <div className="app-command-palette-item-preview">{item.preview}</div>
+                      <div className="app-command-palette-item-preview">
+                        <PreviewWithHighlight
+                          preview={item.preview}
+                          matchStart={item.matchStart}
+                          matchEnd={item.matchEnd}
+                          query={query}
+                        />
+                      </div>
                     ) : null}
                   </div>
                 ) : (

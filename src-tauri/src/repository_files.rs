@@ -105,6 +105,7 @@ fn sort_repository_search_results(entries: &mut [RepositoryExplorerEntry]) {
 pub(crate) fn search_repository_files(
     root: String,
     query: String,
+    relative_dir: Option<String>,
 ) -> Result<Vec<RepositoryExplorerEntry>, String> {
     const MAX_RESULTS: usize = 50;
     const MAX_MATCH_COLLECT: usize = 150;
@@ -115,10 +116,19 @@ pub(crate) fn search_repository_files(
         return Err("Not a directory".to_string());
     }
 
+    // 搜索起始目录：仓库根 + relative_dir（空=整个仓库）。
+    // explorer_join_dir 经 safe_join_repository_root 校验拒绝 `..`/绝对路径，并保证拼接结果在仓库根下。
+    // `searchable_walk_entry` 仍按仓库根计算 rel，因此结果 path 始终相对仓库根，与打开/展示逻辑一致。
+    let rel = relative_dir.unwrap_or_default();
+    let search_root = explorer_join_dir(&root_path, &rel)?;
+    if !search_root.is_dir() {
+        return Err(format!("搜索目录不存在或不是目录：{rel}"));
+    }
+
     let q = query.trim().to_lowercase();
     let mut scanned: usize = 0;
 
-    let walker = WalkDir::new(&root_path)
+    let walker = WalkDir::new(&search_root)
         .follow_links(false)
         .into_iter()
         .filter_entry(|e| {
@@ -260,15 +270,19 @@ fn contains_case_insensitive(haystack: &str, needle: &str) -> bool {
         .contains(&needle.to_lowercase())
 }
 
-fn build_content_preview(line: &str, query: &str, max_len: usize) -> String {
+/// 构造行预览，并返回匹配区间在最终 preview 中的 char 偏移 `(start, end)`。
+///
+/// 偏移在最终 preview（含可能的前后省略号、截断）上重新按 `chars()` 计数定位，
+/// 与前端 `Array.from(preview)` 的 code point 切分保持一致；找不到匹配返回 `None`。
+fn build_content_preview(line: &str, query: &str, max_len: usize) -> (String, Option<(usize, usize)>) {
     let trimmed = line.trim();
     if trimmed.is_empty() {
-        return String::new();
+        return (String::new(), None);
     }
     let lower = trimmed.to_lowercase();
     let q = query.to_lowercase();
     let Some(byte_idx) = lower.find(&q) else {
-        return truncate_utf8_chars(trimmed, max_len);
+        return (truncate_utf8_chars(trimmed, max_len), None);
     };
     // Byte indices from `lower` may not align with `trimmed` after case folding; use char indices.
     let match_char = lower[..byte_idx].chars().count();
@@ -284,7 +298,18 @@ fn build_content_preview(line: &str, query: &str, max_len: usize) -> String {
     if end < chars.len() {
         slice.push('…');
     }
-    truncate_utf8_chars(&slice, max_len)
+    let preview = truncate_utf8_chars(&slice, max_len);
+    // 在最终 preview 上重新定位匹配区间（char 偏移）。匹配位于 preview 前 24+query_len 字符内，
+    // 不会超出 160 截断点，故一定能复现匹配。
+    let preview_chars = preview.chars().count();
+    let range = preview
+        .to_lowercase()
+        .find(&q)
+        .map(|b| {
+            let s = preview[..b].chars().count();
+            (s, (s + q.chars().count()).min(preview_chars))
+        });
+    (preview, range)
 }
 
 fn truncate_utf8_chars(s: &str, max_len: usize) -> String {
@@ -300,11 +325,18 @@ pub(crate) struct RepositoryFileContentMatch {
     path: String,
     line: u32,
     preview: String,
+    /// 匹配区间在 `preview` 中的起始 char 偏移（与前端 code point 切分一致）。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    match_start: Option<u32>,
+    /// 匹配区间在 `preview` 中的结束 char 偏移（exclusive）。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    match_end: Option<u32>,
 }
 
 fn search_repository_file_contents_blocking(
     root: String,
     query: String,
+    relative_dir: String,
 ) -> Result<Vec<RepositoryFileContentMatch>, String> {
     const MAX_RESULTS: usize = 80;
     const MAX_SCAN_ENTRIES: usize = 300_000;
@@ -321,7 +353,14 @@ fn search_repository_file_contents_blocking(
         return Ok(Vec::new());
     }
 
-    let walker = WalkDir::new(&root_path)
+    // 搜索起始目录：仓库根 + relative_dir（空=整个仓库）。
+    // explorer_join_dir 内部经 safe_join_repository_root 校验拒绝 `..`/绝对路径，并保证拼接结果在仓库根下。
+    let search_root = explorer_join_dir(&root_path, &relative_dir)?;
+    if !search_root.is_dir() {
+        return Err(format!("搜索目录不存在或不是目录：{relative_dir}"));
+    }
+
+    let walker = WalkDir::new(&search_root)
         .follow_links(false)
         .into_iter()
         .filter_entry(|e| {
@@ -379,10 +418,13 @@ fn search_repository_file_contents_blocking(
             if !contains_case_insensitive(&line, q) {
                 continue;
             }
+            let (preview, match_range) = build_content_preview(&line, q, 160);
             out.push(RepositoryFileContentMatch {
                 path: rel.clone(),
                 line: (line_no as u32).saturating_add(1),
-                preview: build_content_preview(&line, q, 160),
+                preview,
+                match_start: match_range.map(|(s, _)| s as u32),
+                match_end: match_range.map(|(_, e)| e as u32),
             });
         }
     }
@@ -391,12 +433,16 @@ fn search_repository_file_contents_blocking(
 }
 
 /// Search plain-text file contents under a repository root (for global search).
+///
+/// `relative_dir` 为仓库相对目录，限定搜索范围；`None`/空串表示整个仓库。
 #[tauri::command]
 pub(crate) async fn search_repository_file_contents(
     root: String,
     query: String,
+    relative_dir: Option<String>,
 ) -> Result<Vec<RepositoryFileContentMatch>, String> {
-    tokio::task::spawn_blocking(move || search_repository_file_contents_blocking(root, query))
+    let rel = relative_dir.unwrap_or_default();
+    tokio::task::spawn_blocking(move || search_repository_file_contents_blocking(root, query, rel))
         .await
         .map_err(|e| format!("文件内容搜索任务异常: {e}"))?
 }
@@ -677,6 +723,7 @@ mod repository_search_tests {
         let results = search_repository_files(
             root.to_string_lossy().to_string(),
             "components".into(),
+            None,
         )
         .expect("search");
 
@@ -687,6 +734,35 @@ mod repository_search_tests {
         assert!(
             results.iter().any(|entry| !entry.is_dir && entry.path == "src/components/App.tsx"),
             "expected file match: {results:?}",
+        );
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn search_repository_files_scopes_to_relative_dir() {
+        let root = std::env::temp_dir().join("wise-repo-search-scope-test");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::create_dir_all(root.join("docs")).unwrap();
+        fs::write(root.join("src/widget.ts"), "export {}").unwrap();
+        fs::write(root.join("docs/widget.md"), "# widget").unwrap();
+
+        // 限定到 src/ 搜索 "widget"：只应命中 src/widget.ts，不命中 docs/widget.md。
+        let results = search_repository_files(
+            root.to_string_lossy().to_string(),
+            "widget".into(),
+            Some("src".into()),
+        )
+        .expect("scoped search");
+
+        assert!(
+            results.iter().any(|entry| !entry.is_dir && entry.path == "src/widget.ts"),
+            "expected scoped file match: {results:?}",
+        );
+        assert!(
+            !results.iter().any(|entry| entry.path == "docs/widget.md"),
+            "docs/ must be excluded when scoped to src/: {results:?}",
         );
 
         let _ = fs::remove_dir_all(&root);
@@ -709,25 +785,78 @@ mod content_search_tests {
         )
         .unwrap();
 
-        let matches =
-            search_repository_file_contents_blocking(root.to_string_lossy().to_string(), "beta".into())
-                .expect("search");
+        let matches = search_repository_file_contents_blocking(
+            root.to_string_lossy().to_string(),
+            "beta".into(),
+            String::new(),
+        )
+        .expect("search");
         assert_eq!(matches.len(), 1);
         assert_eq!(matches[0].path, "src/hello.ts");
         assert_eq!(matches[0].line, 2);
         assert!(matches[0].preview.contains("beta"));
+        // 偏移指向 preview 中的 "beta" 子串（按 char 计数）。
+        let preview_chars: Vec<char> = matches[0].preview.chars().collect();
+        let ms = matches[0].match_start.expect("match_start") as usize;
+        let me = matches[0].match_end.expect("match_end") as usize;
+        assert_eq!(&preview_chars[ms..me].iter().collect::<String>(), "beta");
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn search_repository_file_contents_scopes_to_relative_dir() {
+        let root = std::env::temp_dir().join("wise-content-search-scope-test");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("src")).unwrap();
+        fs::create_dir_all(root.join("docs")).unwrap();
+        fs::write(
+            root.join("src/hello.ts"),
+            "export const scoped = 1;\n",
+        )
+        .unwrap();
+        fs::write(
+            root.join("docs/hello.md"),
+            "export const scoped = 2;\n",
+        )
+        .unwrap();
+
+        // 限定 src 子目录：只命中 src/hello.ts，不命中 docs/hello.md。
+        let matches = search_repository_file_contents_blocking(
+            root.to_string_lossy().to_string(),
+            "scoped".into(),
+            "src".to_string(),
+        )
+        .expect("scoped search");
+        assert_eq!(matches.len(), 1);
+        assert_eq!(matches[0].path, "src/hello.ts");
 
         let _ = fs::remove_dir_all(&root);
     }
 
     #[test]
     fn build_content_preview_truncates_long_lines() {
-        let preview = build_content_preview(
+        let (preview, range) = build_content_preview(
             "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
             "bbbb",
             20,
         );
         assert!(preview.chars().count() <= 21);
+        // 无匹配时不含偏移。
+        assert!(range.is_none());
+    }
+
+    #[test]
+    fn build_content_preview_range_aligns_with_match_after_ellipsis() {
+        // 匹配靠后，preview 开头会补省略号；偏移仍应指向最终 preview 中的匹配子串。
+        let (preview, range) = build_content_preview(
+            "prefix padding padding padding padding padding target suffix",
+            "target",
+            160,
+        );
+        let (start, end) = range.expect("range");
+        let chars: Vec<char> = preview.chars().collect();
+        assert_eq!(&chars[start..end].iter().collect::<String>(), "target");
     }
 }
 
