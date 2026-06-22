@@ -858,7 +858,7 @@ export function useRepositoryFilesExplorer({
       { type: "divider" },
       {
         key: "search-file",
-        label: "在此搜索文件",
+        label: "搜索文件",
         onClick: () => {
           close();
           // 携带右键目标目录作为搜索范围；AppImpl 监听读取后预置命令面板 scopeDir。
@@ -867,7 +867,7 @@ export function useRepositoryFilesExplorer({
       },
       {
         key: "search-content",
-        label: "在此搜索内容",
+        label: "搜索内容",
         onClick: () => {
           close();
           void emit("global-open-content-search", { scopeDir: targetForCreate });
