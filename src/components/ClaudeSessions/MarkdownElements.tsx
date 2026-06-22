@@ -164,7 +164,7 @@ export const MarkdownBody = memo(function MarkdownBody({
   streaming?: boolean;
   depth?: number;
   components?: Partial<Components>;
-  rehypePlugins?: readonly any[];
+  rehypePlugins?: any[];
 }) {
   const displaySource = useMemo(
     () => (depth === 0 ? source : prepareMarkdownForDisplay(source, { streaming })),
