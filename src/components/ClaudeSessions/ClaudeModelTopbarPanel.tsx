@@ -381,7 +381,7 @@ export function ClaudeModelTopbarPanel({
         dispatchModelProfileStoreChanged(next, {
           engine: appliedEngine,
           effectiveModel: effective,
-          sessionReconnect: appliedEngine === "claude",
+          sessionReconnect: appliedEngine === "claude" || appliedEngine === "opencode",
         });
         onApplied?.();
       } catch (e) {

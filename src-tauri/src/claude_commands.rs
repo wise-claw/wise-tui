@@ -423,6 +423,7 @@ pub(crate) fn claude_path_search_prefixes() -> Vec<PathBuf> {
     if let Some(home) = dirs::home_dir() {
         v.push(home.join("bin"));
         v.push(home.join(".local/bin"));
+        v.push(home.join(".opencode/bin"));
         v.push(home.join(".volta/bin"));
         v.push(home.join(".bun/bin"));
         v.push(home.join(".npm-global/bin"));

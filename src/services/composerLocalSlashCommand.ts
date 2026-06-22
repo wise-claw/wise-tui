@@ -38,6 +38,7 @@ import {
   type ComposerLocalSlashCommand,
   type ComposerPluginSlashCommand,
 } from "../utils/composerLocalSlashCommand";
+import { dispatchOpenModelPicker } from "./claudeModelProfiles";
 
 export { parseComposerLocalSlashCommand, COMPOSER_LOCAL_SLASH_HELP };
 
@@ -395,6 +396,8 @@ function pendingLabelFor(command: ComposerLocalSlashCommand): string {
       return "正在重新扫描 Skills…";
     case "redirect":
       return command.redirectMessage ?? "该命令需在 Wise 中通过替代入口完成。";
+    case "models":
+      return "正在打开模型切换面板…";
     case "config":
       return [
         "Claude Code 交互式 /config 在 Wise 嵌入式会话中不可用。",
@@ -411,7 +414,8 @@ export function composerLocalSlashPendingMessage(command: ComposerLocalSlashComm
     command.kind === "help" ||
     command.kind === "config" ||
     command.kind === "compact" ||
-    command.kind === "redirect"
+    command.kind === "redirect" ||
+    command.kind === "models"
   ) {
     return null;
   }
@@ -494,6 +498,10 @@ export async function executeComposerLocalSlashCommand(
 
     case "help":
       return COMPOSER_LOCAL_SLASH_HELP;
+
+    case "models":
+      dispatchOpenModelPicker();
+      return "模型切换面板已打开。";
 
     case "config":
       return pendingLabelFor(command);

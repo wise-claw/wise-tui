@@ -40,6 +40,7 @@ export type ComposerLocalSlashKind =
   | "hooks"
   | "agents"
   | "status"
+  | "models"
   | "redirect";
 
 export interface ComposerLocalSlashCommand {
@@ -302,6 +303,10 @@ export function parseComposerLocalSlashCommand(text: string): ComposerLocalSlash
     return { kind: "status", raw: trimmed };
   }
 
+  if ((head === "model" || head === "models") && trimmed === `/${head}`) {
+    return { kind: "models", raw: trimmed };
+  }
+
   for (const entry of TUI_SLASH_REDIRECTS) {
     if (entry.test(trimmed)) {
       return redirectCommand(trimmed, entry.message);
@@ -356,6 +361,7 @@ export const COMPOSER_LOCAL_SLASH_HELP = [
   "• /doctor — 运行 claude doctor 诊断",
   "• /reload-plugins — 刷新插件市场缓存",
   "• /reload-skills — 重新扫描 Skills 目录",
+  "• /model、/models — 打开模型切换面板",
   "• /config、/settings — Wise 配置入口说明",
   "• /help — 显示本帮助",
   "",

@@ -15,6 +15,13 @@ import { seedModelProfileStoreCache } from "../stores/modelProfileStoreCache";
 /** 全局 `settings.json` 已变更（模型切换或配置保存后派发）。 */
 export const WISE_CLAUDE_USER_SETTINGS_CHANGED = "wise-claude-user-settings-changed";
 
+/** 请求 Composer 弹出模型切换面板（由 /model、/models 斜杠命令触发）。 */
+export const WISE_OPEN_MODEL_PICKER = "wise-open-model-picker";
+
+export function dispatchOpenModelPicker(): void {
+  window.dispatchEvent(new CustomEvent(WISE_OPEN_MODEL_PICKER));
+}
+
 export interface ClaudeUserSettingsChangedDetail {
   /** 写入磁盘后的生效模型（`env.ANTHROPIC_MODEL` 或 `model`）。 */
   effectiveModel?: string | null;

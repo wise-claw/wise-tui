@@ -6,6 +6,7 @@ import { listCursorModels, type CursorModelListItem } from "../../services/curso
 import {
   getClaudeModelProfileStore,
   WISE_CLAUDE_USER_SETTINGS_CHANGED,
+  WISE_OPEN_MODEL_PICKER,
   type ClaudeUserSettingsChangedDetail,
 } from "../../services/claudeModelProfiles";
 import { CURSOR_SDK_DEFAULT_MODEL } from "../../constants/cursorSdk";
@@ -156,7 +157,9 @@ export function ComposerModelPicker({
     ? null
     : sessionExecutionEngine === "codex"
       ? "codex"
-      : "claude";
+      : sessionExecutionEngine === "opencode"
+        ? "opencode"
+        : "claude";
 
   const [claudePicker, setClaudePicker] = useState<
     Awaited<ReturnType<typeof getClaudeModelPickerOptions>> | null
@@ -231,6 +234,16 @@ export function ComposerModelPicker({
     window.addEventListener(WISE_CLAUDE_USER_SETTINGS_CHANGED, onSettingsChanged);
     return () => window.removeEventListener(WISE_CLAUDE_USER_SETTINGS_CHANGED, onSettingsChanged);
   }, [isCursorEngine, syncModelIfNeeded, refreshClaudeModelPicker]);
+
+  useEffect(() => {
+    const onOpenModelPicker = () => {
+      setPanelOpen(true);
+      setPanelMounted(true);
+      void claudeModelTopbarPanelChunk;
+    };
+    window.addEventListener(WISE_OPEN_MODEL_PICKER, onOpenModelPicker);
+    return () => window.removeEventListener(WISE_OPEN_MODEL_PICKER, onOpenModelPicker);
+  }, []);
 
   const claudeSettingsModel = claudePicker?.defaultModel?.trim() || null;
 

@@ -3667,9 +3667,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       if (!detail?.sessionReconnect || detail.optimistic || detail.skipComposerPickerRefresh) {
         return;
       }
-      if (detail.engine !== "claude") return;
+      if (detail.engine !== "claude" && detail.engine !== "opencode") return;
 
-      claudeConfigModelByRepoPathRef.current.clear();
+      if (detail.engine === "claude") {
+        claudeConfigModelByRepoPathRef.current.clear();
+      }
 
       const effectiveModel = detail.effectiveModel?.trim() || null;
       if (effectiveModel) {
@@ -3681,6 +3683,8 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           }),
         );
       }
+
+      if (detail.engine !== "claude") return;
 
       const targetTabIds = new Set<string>();
       const activeTabId = activeSessionIdRef.current?.trim();
