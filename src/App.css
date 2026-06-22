@@ -1391,6 +1391,40 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   opacity: 0.85;
 }
 
+.app-file-editor-md-toggle {
+  display: flex;
+  gap: 0;
+  padding: 2px 8px;
+  border-bottom: 1px solid var(--wise-border-color, #e8e8e8);
+  background: var(--wise-bg-secondary, #fafafa);
+  flex-shrink: 0;
+}
+.app-file-editor-md-toggle .ant-btn {
+  font-size: 11px;
+  line-height: 1;
+  height: 20px;
+  padding: 0 6px;
+}
+.app-file-editor-md-toggle .ant-btn:not(:last-child) {
+  border-right: 0;
+  border-top-right-radius: 0;
+  border-bottom-right-radius: 0;
+}
+.app-file-editor-md-toggle .ant-btn + .ant-btn {
+  border-top-left-radius: 0;
+  border-bottom-left-radius: 0;
+}
+.app-file-editor-md-toggle .anticon {
+  font-size: 11px;
+}
+
+.app-file-editor-md-preview {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  padding: 16px 24px;
+}
+
 .app-repository-file-preview-body {
   flex: 1 1 auto;
   min-height: 0;

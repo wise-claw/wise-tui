@@ -1,7 +1,7 @@
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { IDisposable } from "monaco-editor";
 import { Button, Spin } from "antd";
-import { ReloadOutlined, WarningOutlined } from "@ant-design/icons";
+import { ReloadOutlined, WarningOutlined, EyeOutlined, EditOutlined } from "@ant-design/icons";
 import type * as Monaco from "monaco-editor";
 import type { editor as MonacoEditorNamespace } from "monaco-editor";
 import { GitDiffMonacoPane } from "./GitDiffMonacoPane";
@@ -30,6 +30,7 @@ import { resolveMonacoIdleDeferTimeoutMs } from "../utils/uiWorkDefer";
 import { MonacoSelectionChatToolbar } from "./MonacoSelectionChatToolbar";
 import { useGitRepositoryExplorerStatus } from "../hooks/useGitRepositoryExplorerStatus";
 import { useMonacoGitModifiedLineDecorations } from "../hooks/useMonacoGitModifiedLineDecorations";
+import { MarkdownBody } from "./ClaudeSessions/MarkdownElements";
 
 const MonacoEditor = lazy(() => import("@monaco-editor/react"));
 
@@ -121,6 +122,13 @@ export function RepositoryFileEditorTabSurface({
   // 不进入大文件的 defaultValue/延后注入流程。
   const largeFile = optionsBucket === "large" || optionsBucket === "huge";
   const hugeFile = optionsBucket === "huge";
+
+  const isMdFile = useMemo(
+    () => tab.relativePath.endsWith(".md") || tab.relativePath.endsWith(".mdx"),
+    [tab.relativePath],
+  );
+  const [mdPreviewRequested, setMdPreviewRequested] = useState(false);
+  const mdPreview = isMdFile && mdPreviewRequested;
 
   const [monacoSurfaceReady, setMonacoSurfaceReady] = useState(true);
   const [monacoEditorSurface, setMonacoEditorSurface] = useState<{
@@ -408,7 +416,31 @@ export function RepositoryFileEditorTabSurface({
             sessionId={activeSessionId}
           />
         ) : null}
-        {everActivated ? (
+        {isMdFile && isActive ? (
+          <div className="app-file-editor-md-toggle">
+            <Button
+              type={mdPreview ? "default" : "primary"}
+              size="small"
+              icon={<EditOutlined />}
+              onClick={() => setMdPreviewRequested(false)}
+            >
+              编辑
+            </Button>
+            <Button
+              type={mdPreview ? "primary" : "default"}
+              size="small"
+              icon={<EyeOutlined />}
+              onClick={() => setMdPreviewRequested(true)}
+            >
+              预览
+            </Button>
+          </div>
+        ) : null}
+        {mdPreview && isActive ? (
+          <div className="app-file-editor-md-preview">
+            <MarkdownBody source={tab.content} />
+          </div>
+        ) : everActivated ? (
           !monacoSurfaceReady ? (
             <div className="app-file-editor-loading">
               <Spin size="small" tip="准备编辑器…" />
