@@ -2,7 +2,7 @@
   <img src="imgs/icon.png" alt="Wise" width="96" height="96" />
 </p>
 
-<h1 align="center">Wise</h1>
+<h1 align="center">Wise-Tui</h1>
 
 <p align="center">
   <strong>以 Claude Code 为底座的 AI 研发新范式</strong>
