@@ -7,7 +7,13 @@ interface AutoApproveBadgeProps {
   repositoryPath?: string | null;
 }
 
-const TONE: Record<"edits" | "all", { color: string; label: string; tooltip: string }> = {
+const TONE: Record<"plans" | "edits" | "all", { color: string; label: string; tooltip: string }> = {
+  plans: {
+    color: "cyan",
+    label: "自动 · 仅计划",
+    tooltip:
+      "当前会话已开启计划自动批准。仅 ExitPlanMode（退出规划模式）会被自动通过；文件编辑与其它工具仍需人工确认。",
+  },
   edits: {
     color: "gold",
     label: "自动 · 仅编辑",
@@ -32,7 +38,7 @@ const TONE: Record<"edits" | "all", { color: string; label: string; tooltip: str
  */
 export function AutoApproveBadge({ repositoryPath }: AutoApproveBadgeProps) {
   const mode = useEffectiveAutoApproveMode(repositoryPath ?? null);
-  if (mode !== "edits" && mode !== "all") return null;
+  if (mode !== "plans" && mode !== "edits" && mode !== "all") return null;
   const tone = TONE[mode];
   return (
     <Tooltip title={tone.tooltip} placement="top">

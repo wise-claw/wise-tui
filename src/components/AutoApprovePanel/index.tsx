@@ -22,6 +22,11 @@ const MODE_OPTIONS: Array<{ value: AutoApproveMode; label: string; hint: string 
     hint: "所有 Permission / AskUserQuestion 都进入右下方坞栏，由人手动决策。",
   },
   {
+    value: "plans",
+    label: "仅计划批准",
+    hint: "仅计划批准（ExitPlanMode）自动通过；文件编辑与其它工具仍走坞栏。",
+  },
+  {
     value: "edits",
     label: "仅文件编辑自动批准",
     hint: "Edit / Write / MultiEdit / NotebookEdit 与计划批准（ExitPlanMode）自动通过；其它工具与问题仍走坞栏。",
@@ -36,6 +41,7 @@ const MODE_OPTIONS: Array<{ value: AutoApproveMode; label: string; hint: string 
 const OVERRIDE_OPTIONS: Array<{ value: RepoAutoApproveOverride; label: string }> = [
   { value: "inherit", label: "跟随全局" },
   { value: "off", label: "关闭" },
+  { value: "plans", label: "仅计划" },
   { value: "edits", label: "仅编辑" },
   { value: "all", label: "完全自动" },
 ];

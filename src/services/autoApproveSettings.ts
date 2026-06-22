@@ -91,14 +91,14 @@ export async function getRepoAutoApproveOverride(
   if (!norm) return "inherit";
   const raw = await getAppSetting(repoKey(norm));
   if (raw === null || raw === undefined || raw === "") return "inherit";
-  if (raw === "off" || raw === "edits" || raw === "all") return raw;
+  if (raw === "off" || raw === "plans" || raw === "edits" || raw === "all") return raw;
   return "inherit";
 }
 
 /**
  * 写入仓库级覆盖：
  * - `"inherit"` → 删除 key（恢复跟随全局）。
- * - `"off" | "edits" | "all"` → 显式写入。
+ * - `"off" | "plans" | "edits" | "all"` → 显式写入。
  *
  * 非法 repoPath 直接 no-op，不抛错（保持调用方简单）。
  */

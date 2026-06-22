@@ -13,6 +13,7 @@ import {
 describe("normalizeAutoApproveMode", () => {
   it("keeps valid modes unchanged", () => {
     expect(normalizeAutoApproveMode("off")).toBe("off");
+    expect(normalizeAutoApproveMode("plans")).toBe("plans");
     expect(normalizeAutoApproveMode("edits")).toBe("edits");
     expect(normalizeAutoApproveMode("all")).toBe("all");
   });
@@ -79,6 +80,17 @@ describe("decidePermissionAutoApprove", () => {
     });
   });
 
+  describe("mode = plans", () => {
+    it.each(planTools)("returns allow_once for plan tool=%s", (tool) => {
+      expect(decidePermissionAutoApprove("plans", { tool, controlSubtype: "permission" })).toBe("allow_once");
+      expect(decidePermissionAutoApprove("plans", { tool, controlSubtype: "can_use_tool" })).toBe("allow_once");
+    });
+
+    it.each([...editTools, ...nonEditTools])("returns null for non-plan tool=%s", (tool) => {
+      expect(decidePermissionAutoApprove("plans", { tool, controlSubtype: "can_use_tool" })).toBeNull();
+    });
+  });
+
   describe("mode = edits", () => {
     it.each([...editTools, ...planTools])("returns allow_once for edit/plan tool=%s", (tool) => {
       expect(decidePermissionAutoApprove("edits", { tool, controlSubtype: "permission" })).toBe("allow_once");
@@ -90,8 +102,12 @@ describe("decidePermissionAutoApprove", () => {
     });
   });
 
-  it("returns null when tool is empty or missing", () => {
+  it("returns null when tool is empty or missing for non-all modes", () => {
+    expect(decidePermissionAutoApprove("plans", { tool: "", controlSubtype: "permission" })).toBeNull();
     expect(decidePermissionAutoApprove("edits", { tool: "", controlSubtype: "permission" })).toBeNull();
+    expect(
+      decidePermissionAutoApprove("plans", { tool: "", controlSubtype: "can_use_tool" }),
+    ).toBeNull();
     expect(
       decidePermissionAutoApprove("edits", { tool: "", controlSubtype: "can_use_tool" }),
     ).toBeNull();
@@ -123,8 +139,8 @@ describe("decideQuestionAutoApprove", () => {
     { value: "no", label: "No" },
   ];
 
-  describe("mode = off or edits", () => {
-    it.each<AutoApproveMode>(["off", "edits"])("returns null for mode=%s", (mode) => {
+  describe("mode = off / plans / edits", () => {
+    it.each<AutoApproveMode>(["off", "plans", "edits"])("returns null for mode=%s", (mode) => {
       expect(
         decideQuestionAutoApprove(mode, { options: simpleOptions, multiSelect: false }),
       ).toBeNull();

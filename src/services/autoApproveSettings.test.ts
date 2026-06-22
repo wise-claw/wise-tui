@@ -51,6 +51,8 @@ describe("getGlobalAutoApproveMode", () => {
   });
 
   it("returns valid stored modes", async () => {
+    store.set(__TEST__.GLOBAL_KEY, "plans");
+    expect(await getGlobalAutoApproveMode()).toBe("plans");
     store.set(__TEST__.GLOBAL_KEY, "edits");
     expect(await getGlobalAutoApproveMode()).toBe("edits");
     store.set(__TEST__.GLOBAL_KEY, "all");
@@ -62,6 +64,8 @@ describe("getGlobalAutoApproveMode", () => {
 
 describe("setGlobalAutoApproveMode", () => {
   it("writes the value verbatim", async () => {
+    await setGlobalAutoApproveMode("plans");
+    expect(store.get(__TEST__.GLOBAL_KEY)).toBe("plans");
     await setGlobalAutoApproveMode("edits");
     expect(store.get(__TEST__.GLOBAL_KEY)).toBe("edits");
     await setGlobalAutoApproveMode("all");
@@ -92,6 +96,8 @@ describe("getRepoAutoApproveOverride", () => {
   });
 
   it("returns the explicit mode when set", async () => {
+    store.set(__TEST__.repoKey(PATH_A), "plans");
+    expect(await getRepoAutoApproveOverride(PATH_A)).toBe("plans");
     store.set(__TEST__.repoKey(PATH_A), "edits");
     expect(await getRepoAutoApproveOverride(PATH_A)).toBe("edits");
     store.set(__TEST__.repoKey(PATH_B), "all");
@@ -146,14 +152,25 @@ describe("resolveEffectiveAutoApproveMode", () => {
 
   it("repo override beats global", async () => {
     store.set(__TEST__.GLOBAL_KEY, "off");
-    store.set(__TEST__.repoKey(PATH_A), "all");
-    expect(await resolveEffectiveAutoApproveMode(PATH_A)).toBe("all");
+    store.set(__TEST__.repoKey(PATH_A), "plans");
+    expect(await resolveEffectiveAutoApproveMode(PATH_A)).toBe("plans");
   });
 
   it("repo override of 'off' silences a global 'all'", async () => {
     store.set(__TEST__.GLOBAL_KEY, "all");
     store.set(__TEST__.repoKey(PATH_A), "off");
     expect(await resolveEffectiveAutoApproveMode(PATH_A)).toBe("off");
+  });
+
+  it("resolves 'plans' correctly from repo override", async () => {
+    store.set(__TEST__.GLOBAL_KEY, "off");
+    store.set(__TEST__.repoKey(PATH_A), "plans");
+    expect(await resolveEffectiveAutoApproveMode(PATH_A)).toBe("plans");
+  });
+
+  it("resolves 'plans' correctly from global", async () => {
+    store.set(__TEST__.GLOBAL_KEY, "plans");
+    expect(await resolveEffectiveAutoApproveMode(PATH_A)).toBe("plans");
   });
 
   it("invalid repo override falls through to global", async () => {
