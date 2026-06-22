@@ -128,14 +128,10 @@ pub(crate) fn opencode_merged_path_env() -> String {
 
 pub(crate) fn apply_opencode_child_env(cmd: &mut tokio::process::Command, path_env: &str) {
     cmd.env("PATH", path_env);
+    // 与 claude_commands 对齐：无条件设置 HOME，确保子进程有确定的家目录。
     if let Some(home) = dirs::home_dir() {
         let home_s = home.to_string_lossy().to_string();
-        if std::env::var("HOME")
-            .map(|v| v.trim().is_empty())
-            .unwrap_or(true)
-        {
-            cmd.env("HOME", &home_s);
-        }
+        cmd.env("HOME", &home_s);
         if std::env::var("NVM_DIR")
             .map(|v| v.trim().is_empty())
             .unwrap_or(true)

@@ -365,6 +365,47 @@ export function getToolDisplayInfo(part: ToolUsePart): { label: string; subtitle
         label: "网页搜索",
         subtitle: pickInputString(input, ["query"], 120),
       };
+    case "apply_patch": {
+      // Codex 文件编辑：路径已在 Rust 端解析到 file_path；副标题展示首个受影响的文件。
+      const filePath = pickInputString(input, ["file_path", "path"]);
+      const fileName = filePath ? filePath.split("/").pop() || filePath : "补丁";
+      return {
+        label: "应用补丁",
+        subtitle: fileName,
+      };
+    }
+    case "update_plan": {
+      const plan = input.plan;
+      const steps = Array.isArray(plan) ? plan.length : 0;
+      const inProgress = Array.isArray(plan)
+        ? (plan as Array<Record<string, unknown>>).findIndex(
+            (s) => (s.status ?? "").toString() === "in_progress",
+          )
+        : -1;
+      const headline = inProgress >= 0
+        ? (plan as Array<Record<string, unknown>>)[inProgress]?.step
+        : "";
+      const summary = steps > 0 ? `共 ${steps} 步` : "";
+      return {
+        label: "更新计划",
+        subtitle:
+          [headline, summary].filter(Boolean).join(" · ") ||
+          pickInputString(input, ["summary"], 140),
+      };
+    }
+    case "view_image": {
+      const imagePath = pickInputString(input, ["path"]);
+      const fileName = imagePath ? imagePath.split("/").pop() || imagePath : "";
+      return {
+        label: "查看图片",
+        subtitle: fileName,
+      };
+    }
+    case "write_stdin":
+      return {
+        label: "写入 stdin",
+        subtitle: pickInputString(input, ["session_id", "input", "command"], 140),
+      };
     case "task": {
       const agentType = pickInputString(input, ["subagent_type", "agent_type"], 48);
       const headline = pickInputString(input, ["description", "title", "summary"], 140);

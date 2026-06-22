@@ -64,7 +64,10 @@ fn normalize_opencode_model(raw: Option<&str>) -> Option<String> {
 }
 
 fn should_pass_opencode_model_flag(model: &str) -> bool {
-    model.contains('/')
+    // 只要 model 非空就传参，不再要求必须包含 '/'（provider/model 格式）。
+    // 即使裸模型名（如 claude-sonnet-4-20250514）也透传给 opencode，由它自行解析；
+    // 这样用户自定义的不带 provider 前缀的模型名不会被静默丢弃。
+    !model.is_empty()
 }
 
 fn opencode_assistant_stream_line(text: &str) -> String {
@@ -560,6 +563,28 @@ mod tests {
         assert!(args.contains(&"-m".to_string()));
         assert!(args.contains(&"anthropic/claude-haiku-4-5".to_string()));
         assert_eq!(args.last().map(String::as_str), Some("hello"));
+    }
+
+    #[test]
+    fn passes_bare_model_name_without_slash() {
+        let mut cmd = Command::new("opencode");
+        configure_opencode_run_command(
+            &mut cmd,
+            "hello",
+            Some("claude-sonnet-4-20250514"),
+            "/tmp/repo",
+            None,
+            false,
+        );
+        let args: Vec<String> = cmd
+            .as_std()
+            .get_args()
+            .map(|s| s.to_string_lossy().into_owned())
+            .collect();
+        // 裸模型名也应传递 -m 参数，不再因缺少 '/' 被静默丢弃
+        assert!(args.windows(2).any(|w| {
+            w[0] == "-m" && w[1] == "claude-sonnet-4-20250514"
+        }));
     }
 
     #[test]

@@ -281,9 +281,13 @@ fn attach_codex_child_io(
         *slot = Some(child);
     }
 
+    // 捕获 stdout JSON 错误事件中的真实消息，供进程退出后的等待任务复用，
+    // 避免在 stdout 已吐出真实错误的情况下仍回退成「无 stderr 输出」的兜底。
+    let stdout_error_message = Arc::new(TokioMutex::new(None::<String>));
     let app_stdout = ctx.app.clone();
     let session_id_stdout = ctx.session_id.clone();
     let invocation_key_stdout = ctx.invocation_key.clone();
+    let stdout_error_writer = stdout_error_message.clone();
     tokio::spawn(async move {
         let reader = BufReader::new(stdout);
         let mut lines = reader.lines();
@@ -291,6 +295,9 @@ fn attach_codex_child_io(
             if line.trim().is_empty() {
                 continue;
             }
+            // 在传给 mapper 之前先尝试从 JSON error 事件中提取错误文本，
+            // 确保等待任务能拿到 stdout 上的真实错误消息。
+            capture_codex_stdout_error(&line, &stdout_error_writer).await;
             let stream_lines = match map_codex_exec_stdout_line(&line) {
                 CodexStdoutMap::PlainText => {
                     // codex 会把非 JSON 的内部日志/警告（如模型元数据回退）混入 stdout，
@@ -350,6 +357,7 @@ fn attach_codex_child_io(
     let active_child_by_invocation = ctx.active_child_by_invocation_key.clone();
     let active_child_by_session = ctx.active_child_by_claude_session.clone();
     let stderr_lines_wait = stderr_lines.clone();
+    let stdout_error_reader = stdout_error_message.clone();
     let used_resume_wait = used_resume;
     let retry_ctx = if allow_resume_retry && used_resume {
         Some(ctx.clone())
@@ -375,6 +383,7 @@ fn attach_codex_child_io(
 
         let success = exit_status.map(|status| status.success()).unwrap_or(false);
         let lines = stderr_lines_wait.lock().await.clone();
+        let stdout_err = stdout_error_reader.lock().await.clone();
         if !success {
             if used_resume_wait
                 && allow_resume_retry
@@ -461,6 +470,14 @@ fn attach_codex_child_io(
                         invocation_key_wait.as_deref(),
                     );
                 }
+            } else if let Some(msg) = stdout_err.as_ref().map(String::as_str).filter(|s| !s.trim().is_empty()) {
+                let diagnostic = format!("Codex 执行失败：{}", msg.trim());
+                emit_codex_stdout_line(
+                    &app_wait,
+                    &session_id_wait,
+                    &codex_assistant_stream_line(&diagnostic),
+                    invocation_key_wait.as_deref(),
+                );
             } else if let Some(last_line) = lines.iter().rev().find(|line| !line.trim().is_empty())
             {
                 let diagnostic = format!("Codex 执行失败：{}", last_line.trim());
@@ -594,6 +611,39 @@ pub(crate) async fn execute_codex_code(
 
     attach_codex_child_io(&runtime, child, wait_child, used_resume, true)?;
     Ok(())
+}
+
+/// 从 stdout 行中提前捕获 JSON error 事件的错误文本，供等待任务产出失败诊断。
+///
+/// Codex `exec --json` 的 error / turn.failed 等事件经 stdout JSONL 输出，
+/// 但等待任务只持有 stderr 收集结果，不持有 stdout 映射后的状态。此函数在
+/// stdout 逐行处理时并行捕获错误文本，通过 Arc<Mutex> 传递给等待任务，
+/// 确保进程非零退出时诊断能取到 stdout 上的真实错误。
+async fn capture_codex_stdout_error(
+    line: &str,
+    stdout_error_writer: &Arc<TokioMutex<Option<String>>>,
+) {
+    let trimmed = line.trim();
+    if !trimmed.starts_with('{') {
+        return;
+    }
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(trimmed) else {
+        return;
+    };
+    let Some(obj) = value.as_object() else {
+        return;
+    };
+    let Some(event_type) = obj.get("type").and_then(serde_json::Value::as_str) else {
+        return;
+    };
+    if event_type != "error" && !event_type.starts_with("turn.") {
+        return;
+    }
+    if let Some(text) = crate::codex_stream_adapter::extract_codex_error_text_pub(&value) {
+        if !text.trim().is_empty() {
+            *stdout_error_writer.lock().await = Some(text);
+        }
+    }
 }
 
 #[cfg(test)]

@@ -110,3 +110,47 @@ describe("relativePathInRepository", () => {
     expect(relativePathInRepository("/Users/me/wise", "/tmp/other.ts")).toBeNull();
   });
 });
+
+describe("extractToolFileEditPreview apply_patch", () => {
+  test("parses codex apply_patch command into added/removed line preview", () => {
+    const part = buildPart({
+      name: "apply_patch",
+      input: {
+        file_path: "src/foo.ts",
+        command: [
+          "*** Begin Patch",
+          "*** Update File: src/foo.ts",
+          "@@",
+          " const a = 1;",
+          "-const a = 1;",
+          "+const a = 2;",
+          " const b = 2;",
+          "*** End Patch",
+        ].join("\n"),
+      },
+    });
+    const preview = extractToolFileEditPreview(part);
+    expect(preview).not.toBeNull();
+    expect(preview?.filePath).toBe("src/foo.ts");
+    expect(preview?.addedLineCount).toBe(1);
+    expect(preview?.removedLineCount).toBe(1);
+    const removed = preview?.lines.find((l) => l.kind === "remove");
+    const added = preview?.lines.find((l) => l.kind === "add");
+    expect(removed?.text).toBe("const a = 1;");
+    expect(added?.text).toBe("const a = 2;");
+  });
+
+  test("returns null for apply_patch without file_path", () => {
+    const part = buildPart({
+      name: "apply_patch",
+      input: {
+        command: "*** Begin Patch\n+foo\n*** End Patch",
+      },
+    });
+    expect(extractToolFileEditPreview(part)).toBeNull();
+  });
+
+  test("isFileEditToolName accepts apply_patch", () => {
+    expect(isFileEditToolName("apply_patch")).toBe(true);
+  });
+});

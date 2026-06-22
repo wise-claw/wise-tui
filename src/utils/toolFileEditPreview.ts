@@ -16,6 +16,8 @@ const FILE_EDIT_TOOL_NAMES = new Set([
   "search_replace",
   "strreplace",
   "str_replace",
+  // Codex CLI 的 `apply_patch` 工具。
+  "apply_patch",
 ]);
 
 export interface ToolFileEditPreviewLine {
@@ -115,6 +117,32 @@ function truncatePreviewLines(lines: PatchDiffLine[]): { lines: PatchDiffLine[];
   return { lines: lines.slice(0, MAX_PREVIEW_LINES), truncated: true };
 }
 
+/**
+ * 解析 Codex `apply_patch` 的文本：返回按行排列的 (old | new) 差异预览。
+ * 支持 `*** Update File: <path>` / `*** Add File:` / `*** Delete File:` 三种块。
+ */
+function linesFromApplyPatch(command: string): PatchDiffLine[] {
+  const result: PatchDiffLine[] = [];
+  for (const rawLine of command.replace(/\r\n/g, "\n").split("\n")) {
+    const line = rawLine.replace(/\r$/, "");
+    if (!line) continue;
+    if (line.startsWith("*** Begin Patch") || line.startsWith("*** End Patch")) continue;
+    if (line.startsWith("*** ")) continue;
+    if (line.startsWith("@@")) continue;
+    if (line.startsWith("+")) {
+      result.push({ kind: "add", text: line.slice(1) });
+    } else if (line.startsWith("-")) {
+      result.push({ kind: "remove", text: line.slice(1) });
+    } else if (line.startsWith(" ")) {
+      result.push({ kind: "same", text: line.slice(1) });
+    } else {
+      // 未带前缀的行（极少见）按 same 处理以保留上下文。
+      result.push({ kind: "same", text: line });
+    }
+  }
+  return result;
+}
+
 export function extractToolFileEditPreview(part: ToolUsePart): ToolFileEditPreview | null {
   if (!isFileEditToolName(part.name)) return null;
   const input = part.input as Record<string, unknown>;
@@ -130,6 +158,10 @@ export function extractToolFileEditPreview(part: ToolUsePart): ToolFileEditPrevi
     diffLines = content.replace(/\r\n/g, "\n").split("\n").map((text) => ({ kind: "add" as const, text }));
   } else if (toolName === "multiedit" || toolName === "notebookedit") {
     diffLines = linesFromMultiEdit(input);
+  } else if (toolName === "apply_patch") {
+    const command = pickInputString(input, ["command", "patch", "diff"]);
+    if (!command) return null;
+    diffLines = linesFromApplyPatch(command);
   } else {
     const oldString = pickInputString(input, ["old_string", "oldString", "old_text", "oldText"]);
     const newString = pickInputString(input, [
