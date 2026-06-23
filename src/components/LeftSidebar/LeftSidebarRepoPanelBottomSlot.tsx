@@ -59,9 +59,7 @@ function toEqualProps(
 
 function LeftSidebarRepoPanelBottomSlotInner({
   showLeftRepoPanel,
-  showLeftSidebarWorkspaceList,
   repoPanelRenderState,
-  workspaceListEffectivelyCollapsed,
   leftBottomTab,
   onLeftBottomTabChange,
   bottomTabPanelsReady,

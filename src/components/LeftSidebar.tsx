@@ -1406,7 +1406,6 @@ export function LeftSidebar({
           showLeftSidebarWorkspaceList={showLeftSidebarWorkspaceList}
           repoPanelRenderState={repoPanelRenderState}
           workspaceListEffectivelyCollapsed={workspaceListEffectivelyCollapsed}
-          onExpandWorkspaceList={() => handleWorkspaceListSectionCollapsedChange(false)}
           leftBottomTab={leftBottomTab}
           onLeftBottomTabChange={handleLeftBottomTabChange}
           bottomTabPanelsReady={bottomTabPanelsReady}
