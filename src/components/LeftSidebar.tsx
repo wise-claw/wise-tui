@@ -32,7 +32,6 @@ import {
 } from "../constants/explorerUiEvents";
 import { MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX } from "../constants/mainLayoutWidths";
 import { DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION } from "../constants/workspaceBootstrapAddons";
-import { cancelClaudeExecution } from "../services/claude";
 import { stopClaudeMainSession } from "../services/stopClaudeMainSession";
 import {
   projectMainSessionBindingKey,
@@ -40,7 +39,6 @@ import {
   resolveMainOwnerAgentNameForRepositoryPath,
   resolveRepositoryMainSessionId,
 } from "../utils/repositoryMainSessionBinding";
-import { endClaudeProcessRow } from "./LeftSidebar/endClaudeProcessRow";
 import { pickFolder } from "../services/repository";
 import {
   pathIsAccessibleDirectoryCached,
@@ -475,57 +473,6 @@ export function LeftSidebar({
       void handleStopBoundMainSession(boundSessionId);
     },
     [handleStopBoundMainSession, repositories, repositoryMainSessionBindings, sessionsLiveRef],
-  );
-
-  const finishClaudeProcessPopoverEnd = useCallback(() => {
-    systemResourceSessions.setClaudeCountPopoverOpen(false);
-    systemResourceSessions.setSystemSessionDrawerId(null);
-  }, [message, systemResourceSessions]);
-
-  const failClaudeProcessPopoverEnd = useCallback(
-    (err: unknown) => {
-      message.error(err instanceof Error ? err.message : "结束失败");
-    },
-    [message],
-  );
-
-  const endClaudeProcessPopoverRow = useCallback(
-    async (rowSessionId: string) => {
-      const rowSession = systemResourceSessions.matchedSystemInlineSessions.find(
-        (s) => s.id === rowSessionId,
-      );
-      await endClaudeProcessRow({
-        rowSessionId,
-        rowSession,
-        onCancelTabSession: onCancelSessionFromMonitor,
-      });
-    },
-    [onCancelSessionFromMonitor, systemResourceSessions.matchedSystemInlineSessions],
-  );
-
-  const handleBatchEndClaudeProcessRows = useCallback(
-    async (sessionIds: string[]) => {
-      const uniqueIds = [...new Set(sessionIds.map((id) => id.trim()).filter(Boolean))];
-      if (uniqueIds.length === 0) {
-        return;
-      }
-      const results = await Promise.allSettled(
-        uniqueIds.map((rowSessionId) => endClaudeProcessPopoverRow(rowSessionId)),
-      );
-      const failed = results.filter((r) => r.status === "rejected").length;
-      systemResourceSessions.setClaudeCountPopoverOpen(false);
-      systemResourceSessions.setSystemSessionDrawerId(null);
-      systemResourceSessions.setClaudeSystemSessionSearch("");
-      if (failed === 0) {
-      } else if (failed < uniqueIds.length) {
-        message.warning(
-          `已请求结束 ${uniqueIds.length - failed} 个进程，${failed} 个失败`,
-        );
-      } else {
-        message.error("批量结束失败");
-      }
-    },
-    [endClaudeProcessPopoverRow, message, systemResourceSessions],
   );
 
   const repositoryAssociateModal = useRepositoryAssociateModalController({

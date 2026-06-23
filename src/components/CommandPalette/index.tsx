@@ -18,9 +18,6 @@ export type CommandPaletteSearchMode = "filename" | "content";
 const FILENAME_SEARCH_DEBOUNCE_MS = 120;
 /** content 模式防抖：全文搜索更重，保留更长防抖。 */
 const CONTENT_SEARCH_DEBOUNCE_MS = 250;
-/** 最多渲染的结果项数；超出部分以提示带出，避免大结果集全量渲染卡顿。 */
-const MAX_RENDERED_RESULTS = 80;
-
 interface Props {
   open: boolean;
   onClose: () => void;
