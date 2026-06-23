@@ -399,6 +399,26 @@ export function DefaultConfigPanel() {
                       }}
                     />
                   </span>
+                  <span className="app-default-config-claude-settings__toggle">
+                    权限模式
+                    <Select
+                      size="small"
+                      aria-label="Claude permission-mode"
+                      disabled={claudeDefaultSettings.loading || claudeDefaultSettings.saving}
+                      value={claudeDefaultSettings.permissionMode ?? ""}
+                      onChange={(v: string) => {
+                        void claudeDefaultSettings.savePermissionMode(v || null);
+                      }}
+                      style={{ minWidth: 168 }}
+                      options={[
+                        { label: "默认 (bypassPermissions)", value: "" },
+                        { label: "default", value: "default" },
+                        { label: "acceptEdits", value: "acceptEdits" },
+                        { label: "plan", value: "plan" },
+                        { label: "bypassPermissions", value: "bypassPermissions" },
+                      ]}
+                    />
+                  </span>
                 </div>
               </div>
             }

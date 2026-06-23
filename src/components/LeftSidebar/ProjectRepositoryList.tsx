@@ -248,11 +248,18 @@ function ProjectRepositoryListInner({
 
   return (
     <>
-      <div className="app-repository-header">
+      <div
+        className="app-repository-header"
+        onClick={setSectionCollapsed ? () => setSectionCollapsed(!sectionCollapsed) : undefined}
+        style={setSectionCollapsed ? { cursor: 'pointer' } : undefined}
+      >
         <Typography.Text className="app-repository-header-title">
           工作区
         </Typography.Text>
-        <div className="app-repository-header-actions">
+        <div
+          className="app-repository-header-actions"
+          onClick={(e) => { e.stopPropagation(); }}
+        >
           {workspaceTodosEnabled && onOpenGlobalWorkspaceTodoAdd ? (
             <DeferredHoverTooltip title="添加待办事项">
               <button

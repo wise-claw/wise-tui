@@ -6,10 +6,14 @@ import {
   WISE_CLAUDE_DEFAULT_SETTINGS_KEY,
 } from "../../services/appSettingsStore";
 import {
+  CLAUDE_PERMISSION_MODES,
+  ClaudePermissionMode,
+  extractPermissionMode,
   formatClaudeDefaultSettings,
   isSandboxDisabledInSettings,
   isUltracodeEnabledInSettings,
   parseClaudeDefaultSettings,
+  setPermissionModeInSettings,
   toggleSandboxDisabledInSettings,
   toggleUltracodeInSettings,
 } from "./claudeDefaultSettings";
@@ -133,12 +137,37 @@ export function useClaudeDefaultSettingsSetting() {
     [value],
   );
 
+  const savePermissionMode = useCallback(
+    async (mode: string | null) => {
+      // Select options 固定为已知枚举 + ""；这里再校验一次归一化，避免任意串写入 settings。
+      // 后端 `extract_claude_permission_mode` 仍会兜底只接受四个已知值。
+      const normalized =
+        mode && (CLAUDE_PERMISSION_MODES as readonly string[]).includes(mode)
+          ? (mode as ClaudePermissionMode)
+          : null;
+      setSaving(true);
+      try {
+        const next = setPermissionModeInSettings(value, normalized);
+        await setAppSetting(WISE_CLAUDE_DEFAULT_SETTINGS_KEY, next);
+        setValue(next);
+        setDraft(next);
+      } catch (err) {
+        message.error(`保存失败：${err instanceof Error ? err.message : String(err)}`);
+        throw err;
+      } finally {
+        setSaving(false);
+      }
+    },
+    [value],
+  );
+
   return {
     value,
     draft,
     setDraft,
     ultracodeEnabled: isUltracodeEnabledInSettings(value),
     sandboxDisabled: isSandboxDisabledInSettings(value),
+    permissionMode: extractPermissionMode(value),
     loading,
     saving,
     refresh,
@@ -146,5 +175,6 @@ export function useClaudeDefaultSettingsSetting() {
     format,
     saveUltracode,
     saveSandboxDisabled,
+    savePermissionMode,
   };
 }

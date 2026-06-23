@@ -9,6 +9,7 @@ use std::sync::RwLock;
 use uuid::Uuid;
 
 use crate::wise_db::WiseDb;
+use tauri::Manager;
 
 /// 历史 `app_settings` 键；启动时删除，避免旧版自定义目录残留。
 pub(crate) const CLAUDE_USER_CONFIG_DIR_SETTING_KEY: &str = "claude_user_config_dir";
@@ -16,6 +17,46 @@ pub(crate) const CLAUDE_USER_CONFIG_DIR_SETTING_KEY: &str = "claude_user_config_
 /// 用户配置的 Claude 启动默认 `--settings` JSON（存原始字符串）。
 /// 前端常量 `WISE_CLAUDE_DEFAULT_SETTINGS_KEY`（`appSettingsStore.ts`）须与此一致。
 pub(crate) const CLAUDE_DEFAULT_SETTINGS_KEY: &str = "wise.claudeDefaultSettings.v1";
+
+/// `--permission-mode` 合法取值（对齐 claude code CLI）。
+/// `bypassPermissions` 为 wise 默认（绕过逐项工具提示，自动化更顺），用户可经默认配置改为其它。
+pub(crate) const CLAUDE_DEFAULT_PERMISSION_MODE: &str = "bypassPermissions";
+
+/// 从用户默认 settings JSON 提取 `permissionMode`（camelCase，与前端对齐）。
+/// 非字符串/空串/非法 JSON 均返回 None（调用方回退默认 `bypassPermissions`）。
+pub(crate) fn extract_claude_permission_mode(user_settings: Option<&serde_json::Value>) -> Option<String> {
+    let v = user_settings?;
+    let mode = v.get("permissionMode")?.as_str()?.trim();
+    if mode.is_empty() {
+        return None;
+    }
+    // 只接受 claude code 已知取值，拒绝任意串透传到命令行。
+    match mode {
+        "default" | "acceptEdits" | "plan" | "bypassPermissions" => Some(mode.to_string()),
+        _ => None,
+    }
+}
+
+/// 读取用户配置的 Claude 启动默认 settings JSON（已解析、已过滤空对象）。
+/// 供 `execute_claude_code`/`resume_claude_code`/`spawn_streaming_session` 等持 `AppHandle` 的调用方复用，
+/// 避免各自重复「读 DB → trim → parse → 过滤空」四步。DB 读失败或 JSON 非法时返回 None（回退默认）。
+pub(crate) fn read_claude_default_settings(app: &tauri::AppHandle) -> Option<serde_json::Value> {
+    app.try_state::<crate::wise_db::WiseDb>()
+        .and_then(|db| {
+            db.get_setting(CLAUDE_DEFAULT_SETTINGS_KEY)
+                .ok()
+                .flatten()
+        })
+        .and_then(|s| {
+            let t = s.trim();
+            if t.is_empty() {
+                None
+            } else {
+                serde_json::from_str::<serde_json::Value>(&t).ok()
+            }
+        })
+        .filter(|v| v.as_object().map_or(false, |o| !o.is_empty()))
+}
 
 /// 全局缓存：写命令更新 / 启动 init 时写入；读命令尽量从这里出。
 static USER_CLAUDE_DIR_CACHE: RwLock<Option<PathBuf>> = RwLock::new(None);
@@ -626,5 +667,43 @@ mod tests {
         assert_eq!(json_alt, alt.parent().unwrap().join("cc.json"));
 
         update_cache(None);
+    }
+
+    #[test]
+    fn extract_permission_mode_known_values() {
+        for mode in ["default", "acceptEdits", "plan", "bypassPermissions"] {
+            let settings = serde_json::json!({ "permissionMode": mode });
+            assert_eq!(
+                extract_claude_permission_mode(Some(&settings)).as_deref(),
+                Some(mode)
+            );
+        }
+    }
+
+    #[test]
+    fn extract_permission_mode_trims_whitespace() {
+        let settings = serde_json::json!({ "permissionMode": "  plan  " });
+        assert_eq!(
+            extract_claude_permission_mode(Some(&settings)).as_deref(),
+            Some("plan")
+        );
+    }
+
+    #[test]
+    fn extract_permission_mode_rejects_unknown_string() {
+        // 任意串不透传到命令行，避免注入风险。
+        let settings = serde_json::json!({ "permissionMode": "yolo" });
+        assert_eq!(extract_claude_permission_mode(Some(&settings)), None);
+    }
+
+    #[test]
+    fn extract_permission_mode_none_or_missing() {
+        assert_eq!(extract_claude_permission_mode(None), None);
+        let settings = serde_json::json!({ "ultracode": true });
+        assert_eq!(extract_claude_permission_mode(Some(&settings)), None);
+        let empty = serde_json::json!({ "permissionMode": "  " });
+        assert_eq!(extract_claude_permission_mode(Some(&empty)), None);
+        let non_str = serde_json::json!({ "permissionMode": 123 });
+        assert_eq!(extract_claude_permission_mode(Some(&non_str)), None);
     }
 }

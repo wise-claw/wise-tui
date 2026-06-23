@@ -134,7 +134,7 @@ function MonitorPanelHeadConfigActions({
     return null;
   }
   return (
-    <div className="app-monitor-panel__head-actions">
+    <div className="app-monitor-panel__head-actions" onClick={(e) => e.stopPropagation()}>
       {onOpenEmployeeConfig ? (
         <button
           type="button"
@@ -1839,7 +1839,11 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
         (isCompactSidebarPanel ? " app-monitor-panel--compact-sidebar" : "")
       }
     >
-      <div className="app-monitor-panel__head">
+      <div
+        className="app-monitor-panel__head"
+        onClick={setSectionCollapsed ? () => setSectionCollapsed(!sectionCollapsed) : undefined}
+        style={setSectionCollapsed ? { cursor: 'pointer' } : undefined}
+      >
         <div className="app-monitor-panel__head-start">
           <div className="app-monitor-panel__title">运行面板</div>
           <MonitorPanelHeadConfigActions
@@ -1847,7 +1851,7 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
             onOpenWorkflowConfig={onOpenWorkflowConfig}
           />
         </div>
-        <div className="app-monitor-panel__head-end">
+        <div className="app-monitor-panel__head-end" onClick={(e) => e.stopPropagation()}>
           {shouldShowSessionConversationTasks &&
           executionEnvironmentDispatchHistoryDays != null &&
           onExecutionEnvironmentDispatchHistoryDaysChange ? (

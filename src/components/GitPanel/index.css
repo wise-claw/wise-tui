@@ -167,15 +167,10 @@
 .repo-search-result-row-text {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
   font-size: 12px;
   line-height: 18px;
-}
-
-.repo-search-result-row-parent {
-  color: var(--ant-color-text-tertiary, rgba(0, 0, 0, 0.45));
+  overflow-wrap: break-word;
+  word-break: break-all;
 }
 
 .repo-search-result-row-name {

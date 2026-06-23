@@ -1,16 +1,13 @@
 import { memo, Suspense, useMemo, type ReactNode } from "react";
 import { Spin } from "antd";
 import { lazy } from "react";
-import { HoverHint } from "../shared/HoverHint";
-import { GitPanelWorkspaceSelector } from "../GitPanel/GitPanelWorkspaceSelector";
-import type { GitPanelWorkspaceSelectorProps } from "../GitPanel/GitPanelWorkspaceSelector";
 import type { GitPanelOpenFileOptions } from "../GitPanel/types";
+import type { GitPanelWorkspaceSelectorProps } from "../GitPanel/GitPanelWorkspaceSelector";
 import type { GitPanelRepositoryEntry } from "../../utils/workspaceRepositoryTreeSelect";
 import type { WorkspaceRepositoryTreeSelection } from "../../utils/workspaceRepositoryTreeSelect";
 import { ActiveRepositoryFilesPanel } from "./ActiveRepositoryFilesPanel";
 import { LeftSidebarBottomTabPanes } from "./LeftSidebarBottomTabPanes";
 import { LeftSidebarBottomTabSwitcher } from "./LeftSidebarBottomTabSwitcher";
-import { ExpandIcon } from "./SidebarIcons";
 import type { LeftBottomTab } from "./sidebarStorage";
 import { leftSidebarRepoPanelBottomSlotPropsEqual } from "./leftSidebarRepoPanelBottomSlotPropsEqual";
 
@@ -25,7 +22,6 @@ export type LeftSidebarRepoPanelBottomSlotProps = {
     leftTabMode: boolean;
   };
   workspaceListEffectivelyCollapsed: boolean;
-  onExpandWorkspaceList: () => void;
   leftBottomTab: LeftBottomTab;
   onLeftBottomTabChange: (tab: LeftBottomTab) => void;
   bottomTabPanelsReady: boolean;
@@ -66,7 +62,6 @@ function LeftSidebarRepoPanelBottomSlotInner({
   showLeftSidebarWorkspaceList,
   repoPanelRenderState,
   workspaceListEffectivelyCollapsed,
-  onExpandWorkspaceList,
   leftBottomTab,
   onLeftBottomTabChange,
   bottomTabPanelsReady,
@@ -96,9 +91,7 @@ function LeftSidebarRepoPanelBottomSlotInner({
         }
       >
         <GitPanelLazy
-          headerPrefix={
-            workspaceListEffectivelyCollapsed ? undefined : leftTabSwitcherPrefix ?? undefined
-          }
+          headerPrefix={leftTabSwitcherPrefix ?? undefined}
           repositoryPath={effectiveRepoPanelPath}
           repositoryName={repoPanelRepositoryName}
           repositoryEntries={gitPanelRepositoryEntries}
@@ -119,7 +112,6 @@ function LeftSidebarRepoPanelBottomSlotInner({
       repoPanelRepositoryName,
       repoPanelTreeSelection,
       repoPanelWorkspaceSelectorProps,
-      workspaceListEffectivelyCollapsed,
     ],
   );
 
@@ -156,29 +148,6 @@ function LeftSidebarRepoPanelBottomSlotInner({
 
   return (
     <div className="app-left-sidebar-bottom-tabs">
-      {repoPanelRenderState.showGitOnLeft && workspaceListEffectivelyCollapsed ? (
-        <div className="app-left-sidebar-repo-panel-header">
-          {repoPanelRenderState.leftTabMode ? leftTabSwitcherPrefix : null}
-          <div className="app-left-sidebar-repo-panel-header__selector">
-            <GitPanelWorkspaceSelector
-              {...repoPanelWorkspaceSelectorProps}
-              activeRepositoryPath={effectiveRepoPanelPath}
-            />
-          </div>
-          {showLeftSidebarWorkspaceList ? (
-            <HoverHint title="展开工作区列表">
-              <button
-                type="button"
-                className="app-left-sidebar-repo-panel-header__expand-icon"
-                aria-label="展开工作区列表"
-                onClick={onExpandWorkspaceList}
-              >
-                <ExpandIcon expanded={false} />
-              </button>
-            </HoverHint>
-          ) : null}
-        </div>
-      ) : null}
       <LeftSidebarBottomTabPanes
         showGit={repoPanelRenderState.showGitOnLeft}
         showFiles={repoPanelRenderState.showFilesOnLeft}

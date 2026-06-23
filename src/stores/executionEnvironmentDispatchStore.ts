@@ -36,6 +36,30 @@ const batchIdsByAnchor = new Map<string, string[]>();
 const MAX_BATCHES_PER_ANCHOR = 40;
 const MAX_ITEMS_PER_BATCH = 12;
 
+/**
+ * rehydrate / 持久化在找不到真实 worker 时写入的占位 workerSessionId 前缀。
+ * 真实 worker 的 workerSessionId 是 session id，不会以此前缀开头。
+ */
+const REHYDRATED_PLACEHOLDER_WORKER_ID_PREFIX = "rehydrated:";
+
+function isRehydratedPlaceholderWorkerId(workerSessionId: string): boolean {
+  return workerSessionId.startsWith(REHYDRATED_PLACEHOLDER_WORKER_ID_PREFIX);
+}
+
+/**
+ * 同一批次出现真实 worker item 后移除 `rehydrated:` 占位 item。
+ * 占位是 worker 未匹配时的兜底；真实 item 到位后若不清除占位，
+ * 二者 workerSessionId 不同不会被 `mergeDispatchItems` 合并，
+ * 会导致运行面板同一派发批次渲染两行（真实 + 占位）。
+ */
+function pruneRehydratedPlaceholders(
+  items: readonly ExecutionEnvironmentDispatchItem[],
+): ExecutionEnvironmentDispatchItem[] {
+  const hasReal = items.some((item) => !isRehydratedPlaceholderWorkerId(item.workerSessionId));
+  if (!hasReal) return [...items];
+  return items.filter((item) => !isRehydratedPlaceholderWorkerId(item.workerSessionId));
+}
+
 const EMPTY_ANCHOR_SNAPSHOT: ExecutionEnvironmentDispatchRecord[] = [];
 
 /** anchorSessionId → 稳定快照（仅 digest 变化时替换引用，供 useSyncExternalStore） */
@@ -194,6 +218,7 @@ export function upsertExecutionEnvironmentDispatchItem(
   } else {
     record.items = [...record.items, row].slice(-MAX_ITEMS_PER_BATCH);
   }
+  record.items = pruneRehydratedPlaceholders(record.items);
   publishAnchor(anchorSessionId);
 }
 
@@ -245,7 +270,7 @@ function mergeDispatchItems(
       byWorker.set(item.workerSessionId, item);
     }
   }
-  return [...byWorker.values()];
+  return pruneRehydratedPlaceholders([...byWorker.values()]);
 }
 
 export function replaceExecutionEnvironmentDispatchesForAnchor(
@@ -270,7 +295,7 @@ export function replaceExecutionEnvironmentDispatchesForAnchor(
     recordsByBatch.set(batchId, {
       ...record,
       anchorSessionId: anchor,
-      items: [...record.items],
+      items: pruneRehydratedPlaceholders(record.items),
     });
     nextIds.push(batchId);
   }

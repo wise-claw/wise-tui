@@ -1225,6 +1225,7 @@ fn create_claude_command(
     extra_args: &[&str],
     bare: bool,
     cli_extras: &ClaudeSpawnCliExtras,
+    permission_mode: Option<&str>,
 ) -> Result<tokio::process::Command, String> {
     let claude_path = find_claude_binary()?;
 
@@ -1237,7 +1238,9 @@ fn create_claude_command(
     cmd.arg("--output-format").arg("stream-json");
     // 非 `--bare` 时见下方 piped stdin：`initialize` / AskUserQuestion 等控制行经 stdio 写回。
     cmd.arg("--verbose");
-    cmd.arg("--permission-mode").arg("bypassPermissions");
+    cmd.arg("--permission-mode").arg(
+        permission_mode.unwrap_or(crate::claude_config_dir::CLAUDE_DEFAULT_PERMISSION_MODE),
+    );
 
     if let Some(m) = model.and_then(trim_model_cli_arg) {
         cmd.arg("--model").arg(m);
@@ -1286,6 +1289,7 @@ fn create_streaming_claude_command(
     model: Option<&str>,
     session_id_to_resume: Option<&str>,
     cli_extras: &ClaudeSpawnCliExtras,
+    permission_mode: Option<&str>,
 ) -> Result<tokio::process::Command, String> {
     let claude_path = find_claude_binary()?;
 
@@ -1294,7 +1298,9 @@ fn create_streaming_claude_command(
     cmd.arg("--input-format").arg("stream-json");
     cmd.arg("--output-format").arg("stream-json");
     cmd.arg("--verbose");
-    cmd.arg("--permission-mode").arg("bypassPermissions");
+    cmd.arg("--permission-mode").arg(
+        permission_mode.unwrap_or(crate::claude_config_dir::CLAUDE_DEFAULT_PERMISSION_MODE),
+    );
     cmd.arg("--permission-prompt-tool").arg("stdio");
 
     if let Some(m) = model.and_then(trim_model_cli_arg) {
@@ -1345,6 +1351,7 @@ fn prepare_claude_spawn_command(
     bare: bool,
     session_id_to_resume: Option<&str>,
     cli_extras: &ClaudeSpawnCliExtras,
+    permission_mode: Option<&str>,
 ) -> Result<(tokio::process::Command, Option<String>), String> {
     if should_spawn_claude_slash_via_stdin(prompt, bare) {
         let mut cmd = create_streaming_claude_command(
@@ -1352,6 +1359,7 @@ fn prepare_claude_spawn_command(
             model,
             session_id_to_resume,
             cli_extras,
+            permission_mode,
         )?;
         for arg in extra_args {
             cmd.arg(arg);
@@ -1365,6 +1373,7 @@ fn prepare_claude_spawn_command(
         extra_args,
         bare,
         cli_extras,
+        permission_mode,
     )?;
     Ok((cmd, None))
 }
@@ -1683,22 +1692,7 @@ async fn spawn_claude_process(
     };
     // 读取用户配置的 Claude 启动默认 --settings JSON，合并进 FCC 认证 settings 文件。
     // 每次 spawn 现读现解析（非热路径），用户在 UI 改完立即对下次会话生效。
-    let user_settings: Option<serde_json::Value> = app
-        .try_state::<crate::wise_db::WiseDb>()
-        .and_then(|db| {
-            db.get_setting(crate::claude_config_dir::CLAUDE_DEFAULT_SETTINGS_KEY)
-                .ok()
-                .flatten()
-        })
-        .and_then(|s| {
-            let t = s.trim();
-            if t.is_empty() {
-                None
-            } else {
-                serde_json::from_str::<serde_json::Value>(&t).ok()
-            }
-        })
-        .filter(|v| v.as_object().map_or(false, |o| !o.is_empty()));
+    let user_settings = crate::claude_config_dir::read_claude_default_settings(&app);
     crate::claude_config_dir::configure_claude_child_process(
         &mut cmd,
         &project_path,
@@ -2187,6 +2181,10 @@ pub(crate) async fn execute_claude_code(
     let app_clone = app.clone();
     let model_for_cmd = model.as_deref().and_then(trim_model_cli_arg);
     let extras = cli_extras.unwrap_or_default();
+    // 全局默认配置：permissionMode（default/acceptEdits/plan/bypassPermissions）。
+    // 与 --settings 同源（CLAUDE_DEFAULT_SETTINGS_KEY），缺省回退 bypassPermissions。
+    let user_settings = crate::claude_config_dir::read_claude_default_settings(&app);
+    let permission_mode = crate::claude_config_dir::extract_claude_permission_mode(user_settings.as_ref());
     let (cmd, initial_prompt) = prepare_claude_spawn_command(
         &project_path,
         &prompt,
@@ -2195,6 +2193,7 @@ pub(crate) async fn execute_claude_code(
         bare.unwrap_or(false),
         None,
         &extras,
+        permission_mode.as_deref(),
     )?;
     let model_label = model
         .as_deref()
@@ -2245,6 +2244,9 @@ pub(crate) async fn resume_claude_code(
     let app_clone = app.clone();
     let model_for_cmd = model.as_deref().and_then(trim_model_cli_arg);
     let extras = cli_extras.unwrap_or_default();
+    // 全局默认配置：permissionMode（与 execute_claude_code 同源）。
+    let user_settings = crate::claude_config_dir::read_claude_default_settings(&app);
+    let permission_mode = crate::claude_config_dir::extract_claude_permission_mode(user_settings.as_ref());
     let can_resume = claude_session_jsonl_exists(&project_path, &resume_sid);
     let (cmd, initial_prompt) = if should_spawn_claude_slash_via_stdin(&prompt, false) {
         prepare_claude_spawn_command(
@@ -2259,6 +2261,7 @@ pub(crate) async fn resume_claude_code(
                 None
             },
             &extras,
+            permission_mode.as_deref(),
         )?
     } else if can_resume {
         prepare_claude_spawn_command(
@@ -2269,6 +2272,7 @@ pub(crate) async fn resume_claude_code(
             false,
             None,
             &extras,
+            permission_mode.as_deref(),
         )?
     } else {
         prepare_claude_spawn_command(
@@ -2279,6 +2283,7 @@ pub(crate) async fn resume_claude_code(
             false,
             None,
             &extras,
+            permission_mode.as_deref(),
         )?
     };
     let model_label = model
@@ -2523,11 +2528,15 @@ pub(crate) async fn spawn_streaming_session(
         .map(str::trim)
         .filter(|s| !s.is_empty());
     let extras = cli_extras.unwrap_or_default();
+    // 全局默认配置：permissionMode（与 execute/resume 同源）。
+    let user_settings = crate::claude_config_dir::read_claude_default_settings(&app);
+    let permission_mode = crate::claude_config_dir::extract_claude_permission_mode(user_settings.as_ref());
     let cmd = create_streaming_claude_command(
         &project_path,
         model_for_cmd,
         resume_sid,
         &extras,
+        permission_mode.as_deref(),
     )?;
     let model_label = model
         .as_deref()

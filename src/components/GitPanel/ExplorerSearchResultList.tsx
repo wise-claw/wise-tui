@@ -25,7 +25,6 @@ function ExplorerSearchResultRowItem({
   onOpenFile?: ExplorerSearchResultListProps["onOpenFile"];
 }) {
   const { getFileStatus, getDirStatus, isEditorDirty } = useRepositoryExplorerGitStatus();
-  const parentLabel = row.parentPath || "";
   const gitStatus = row.isDir ? null : getFileStatus(row.path);
   const dirStatus = row.isDir ? getDirStatus(row.path) : null;
   const editorDirty = !row.isDir && isEditorDirty(row.path);
@@ -54,8 +53,7 @@ function ExplorerSearchResultRowItem({
         <ExplorerTreeFileIcon fileName={row.name} className="repo-search-result-row-icon repo-search-result-row-icon--file" />
       )}
       <span className="repo-search-result-row-text">
-        <span className={`repo-search-result-row-name${gitStatus ? ` repo-search-result-row-name--status-${gitStatus.toLowerCase()}` : ""}${dirStatus ? ` repo-search-result-row-name--status-${dirStatus.toLowerCase()}` : ""}${!gitStatus && !dirStatus && editorDirty ? " repo-search-result-row-name--editor-dirty" : ""}`}>{row.name}</span>
-        {parentLabel ? <span className="repo-search-result-row-parent"> &mdash; {parentLabel}</span> : null}
+        <span className={`repo-search-result-row-name${gitStatus ? ` repo-search-result-row-name--status-${gitStatus.toLowerCase()}` : ""}${dirStatus ? ` repo-search-result-row-name--status-${dirStatus.toLowerCase()}` : ""}${!gitStatus && !dirStatus && editorDirty ? " repo-search-result-row-name--editor-dirty" : ""}`}>{row.path}</span>
       </span>
       {row.isDir ? (
         <RepoTreeGitDirDecoration status={dirStatus} />

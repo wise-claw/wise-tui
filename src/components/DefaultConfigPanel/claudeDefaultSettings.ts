@@ -7,6 +7,15 @@
 /** 占位示例。 */
 export const CLAUDE_DEFAULT_SETTINGS_PLACEHOLDER = `{"ultracode": true}`;
 
+/** `--permission-mode` 合法取值（对齐 claude code CLI）。 */
+export const CLAUDE_PERMISSION_MODES = [
+  "default",
+  "acceptEdits",
+  "plan",
+  "bypassPermissions",
+] as const;
+export type ClaudePermissionMode = (typeof CLAUDE_PERMISSION_MODES)[number];
+
 /**
  * 把 settings 文本解析为对象。空文本返回空对象 `{}`；非法或非对象（数组/原始值）返回 `null`。
  */
@@ -28,6 +37,41 @@ export function isUltracodeEnabledInSettings(text: string): boolean {
   const obj = parseClaudeDefaultSettings(text);
   if (!obj) return false;
   return obj["ultracode"] === true;
+}
+
+/**
+ * 读取 `permissionMode`（camelCase，与 Rust `extract_claude_permission_mode` 对齐）。
+ * 非合法取值/未设置/空文本/非法 JSON 返回 `null`（后端回退 `bypassPermissions`）。
+ */
+export function extractPermissionMode(text: string): ClaudePermissionMode | null {
+  const obj = parseClaudeDefaultSettings(text);
+  if (!obj) return null;
+  const v = obj["permissionMode"];
+  if (typeof v !== "string") return null;
+  return (CLAUDE_PERMISSION_MODES as readonly string[]).includes(v)
+    ? (v as ClaudePermissionMode)
+    : null;
+}
+
+/**
+ * 设置 `permissionMode`，返回新的 settings JSON 文本。
+ * - 传入合法值：置该键（保留其它键）；
+ * - 传入 `null`：移除该键（后端回退默认 `bypassPermissions`）；
+ * - 结果为空对象时返回空串。
+ * 当前文本非法时按空对象处理。
+ */
+export function setPermissionModeInSettings(
+  text: string,
+  mode: ClaudePermissionMode | null,
+): string {
+  const obj = parseClaudeDefaultSettings(text) ?? {};
+  if (mode) {
+    obj["permissionMode"] = mode;
+  } else {
+    delete obj["permissionMode"];
+  }
+  if (Object.keys(obj).length === 0) return "";
+  return JSON.stringify(obj, null, 2);
 }
 
 /**
