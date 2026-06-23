@@ -79,6 +79,10 @@ export function useChatMessageListWindow({
   // 用 ref 读取以反映 profile/companion 配置变化。
   const initialVisibleRef = useRef(initialVisible);
   initialVisibleRef.current = initialVisible;
+  // loadMoreOlder 视口保持会把 scrollTop 推到新位置，大视口下可能恰好贴底；
+  // 此时属于「主动加载更早」而非「用户滚到底看最新」，抑制紧接着的一次贴底回收，
+  // 否则刚扩展的窗口会被立即收回（表现为点击/滚动加载更早消息无效）。由 onScroll 消费。
+  const suppressReclaimRef = useRef(false);
   const pendingTailExpandRafRef = useRef(0);
   const pendingTailExpandDeltaRef = useRef(0);
 
@@ -115,6 +119,9 @@ export function useChatMessageListWindow({
       return;
     }
     loadLockedRef.current = true;
+    // 标记抑制下一次贴底回收：视口保持设置的 scrollTop 在大视口下可能贴底，
+    // 不抑制则会把刚加载的更早消息立即收回。
+    suppressReclaimRef.current = true;
     const sc = scrollContainerRef.current;
     const prevScrollHeight = sc?.scrollHeight ?? 0;
     const prevScrollTop = sc?.scrollTop ?? 0;
@@ -144,7 +151,10 @@ export function useChatMessageListWindow({
         }
         // 贴底回收：视口最新内容在 slice 尾部，回收顶部最旧行不影响可见区域，
         // 浏览器 clamp scrollTop 无跳动；读 ref 避免 hiddenRowCount 稳定时闭包陈旧。
-        if (
+        // loadMoreOlder 主动加载后视口保持可能把视口推到底部（大视口下），属「加载更早」
+        // 而非「用户滚到底看最新」——抑制标志只在「本应回收」时消费并跳过，确保用在
+        // loadMoreOlder 视口保持引起的那次 scroll，而非前置的不回收帧；之后用户主动贴底才回收。
+        const reclaimable =
           !loadLockedRef.current &&
           shouldReclaimOnBottom(
             sc.scrollTop,
@@ -152,8 +162,10 @@ export function useChatMessageListWindow({
             sc.scrollHeight,
             visibleCountRef.current,
             initialVisibleRef.current,
-          )
-        ) {
+          );
+        if (reclaimable && suppressReclaimRef.current) {
+          suppressReclaimRef.current = false;
+        } else if (reclaimable) {
           setVisibleCount(initialVisibleRef.current);
         }
       });
