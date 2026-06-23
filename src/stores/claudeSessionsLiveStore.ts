@@ -40,6 +40,7 @@ let liveFlushTimer: ReturnType<typeof setTimeout> | null = null;
 let lastLiveFlushAt = 0;
 let deferFlushWhileHidden = false;
 let visibilityFlushHookAttached = false;
+let structureFlushRaf: number | null = null;
 
 function attachVisibilityFlushHook(): void {
   if (visibilityFlushHookAttached || typeof document === "undefined") return;
@@ -119,6 +120,24 @@ function scheduleLiveListenerFlush(): void {
   liveFlushTimer = setTimeout(runFlush, minInterval - elapsed);
 }
 
+function flushStructureListeners(): void {
+  structureFlushRaf = null;
+  for (const listener of structureListeners) {
+    listener();
+  }
+}
+
+function scheduleStructureListenerFlush(): void {
+  if (structureListeners.size === 0) return;
+  // 隐藏时 rAF 不触发，立即通知
+  if (typeof document !== "undefined" && document.visibilityState !== "visible") {
+    flushStructureListeners();
+    return;
+  }
+  if (structureFlushRaf !== null) return;
+  structureFlushRaf = window.requestAnimationFrame(flushStructureListeners);
+}
+
 export function getClaudeSessionsSnapshot(): ClaudeSession[] {
   return sessionsSnapshot;
 }
@@ -144,9 +163,7 @@ export function publishClaudeSessions(next: ClaudeSession[]): void {
   const nextStructureKey = sessionsReactiveStructureKey(next);
   if (nextStructureKey === structureKey) return;
   structureKey = nextStructureKey;
-  for (const listener of structureListeners) {
-    listener();
-  }
+  scheduleStructureListenerFlush();
 }
 
 export function subscribeClaudeSessionLive(sessionId: string, onStoreChange: () => void): () => void {

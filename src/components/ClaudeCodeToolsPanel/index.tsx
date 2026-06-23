@@ -51,6 +51,9 @@ const ClaudePluginsPanel = lazy(() =>
 const ClaudeMemoryPanel = lazy(() =>
   import("./ClaudeMemoryPanel").then((module) => ({ default: module.ClaudeMemoryPanel })),
 );
+const ClaudeProcessPanel = lazy(() =>
+  import("./ClaudeProcessPanel").then((module) => ({ default: module.ClaudeProcessPanel })),
+);
 
 // ── Main ──
 
@@ -90,6 +93,7 @@ export function ClaudeCodeToolsPanel({
     subagents: 0,
     plugins: 0,
     memory: 0,
+    processes: 0,
   });
   const mcpPanelRef = useRef<ClaudeMcpConfigPanelHandle>(null);
   const skillsPanelRef = useRef<ProjectSkillsPanelHandle>(null);
@@ -121,6 +125,10 @@ export function ClaudeCodeToolsPanel({
 
   const handleMemoryCountChange = useCallback((count: number) => {
     setTabCounts((prev) => (prev.memory === count ? prev : { ...prev, memory: count }));
+  }, []);
+
+  const handleProcessesCountChange = useCallback((count: number) => {
+    setTabCounts((prev) => (prev.processes === count ? prev : { ...prev, processes: count }));
   }, []);
 
   const handlePluginsRefresh = useCallback(async () => {
@@ -217,6 +225,7 @@ export function ClaudeCodeToolsPanel({
     return `${label}·${count}`;
   }
   const tabOptions = [
+    { key: "processes", label: withCountLabel("进程", tabCounts.processes) },
     { key: "mcp", label: withCountLabel("MCP", tabCounts.mcp) },
     { key: "skill", label: withCountLabel("技能", tabCounts.skill) },
     { key: "memory", label: withCountLabel("记忆", tabCounts.memory) },
@@ -559,6 +568,23 @@ export function ClaudeCodeToolsPanel({
         className="app-claude-code-tools-tabs"
         renderTabBar={() => <></>}
         items={[
+          {
+            key: "processes",
+            label: "进程",
+            children: (
+              <div className="app-claude-code-tools-scroll">
+                {loadedTabs.has("processes") ? (
+                  <Suspense fallback={<Empty description="加载中..." image={Empty.PRESENTED_IMAGE_SIMPLE} />}>
+                    <ClaudeProcessPanel
+                      active={panelActive && tab === "processes"}
+                      listSearch={listSearch}
+                      onCountChange={handleProcessesCountChange}
+                    />
+                  </Suspense>
+                ) : null}
+              </div>
+            ),
+          },
           {
             key: "subagents",
             label: "Subagents",

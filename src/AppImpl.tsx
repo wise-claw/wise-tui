@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type ReactNode,
 } from "react";
 import { flushSync } from "react-dom";
@@ -169,7 +170,7 @@ import { dispatchSessionFeedbackLoopAnalysis } from "./services/sessionFeedbackL
 import type { FeedbackLoopDispatchKind } from "./utils/sessionFeedbackLoopDispatch";
 import { createFreshTerminalWorkerTab, isTerminalWorkerWiseTab } from "./services/terminalDispatch";
 import { resolveExecutionEnvironmentDispatchAnchorSessionId } from "./utils/executionEnvironmentDispatchAnchor";
-import { useClaudeSessionsStructureKey } from "./stores/claudeSessionsLiveStore";
+import { subscribeClaudeSessionsStructure, getClaudeSessionsStructureKey } from "./stores/claudeSessionsLiveStore";
 import { useMonitorSessionsForOverview } from "./hooks/useMonitorSessionsForOverview";
 import { useLeftSidebarHubQuickEntries } from "./hooks/useLeftSidebarHubQuickEntries";
 import { useMonitorPanelDefault } from "./hooks/useMonitorPanelDefault";
@@ -243,6 +244,7 @@ import {
   addProjectPrdWorkflow,
   listWorkflowProjectIds,
 } from "./services/projectPrdScope";
+import { isCurrentPrimaryMainWorkspaceWindowSync } from "./services/mainWindow";
 
 
 interface PersistedMultiPaneSlotV1 {
@@ -991,7 +993,13 @@ export default function App() {
   });
 
   const sessionsLatestRef = sessionsLiveRef;
-  const sessionsStructureKey = useClaudeSessionsStructureKey();
+  const sessionsStructureKey = useSyncExternalStore(
+    isCurrentPrimaryMainWorkspaceWindowSync()
+      ? subscribeClaudeSessionsStructure
+      : () => () => {},
+    getClaudeSessionsStructureKey,
+    getClaudeSessionsStructureKey,
+  );
 
   const closeSessionsForRepositoryPath = useCallback(
     (repositoryPath: string) => {

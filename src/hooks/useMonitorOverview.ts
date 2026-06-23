@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useSyncExternalStore } from "react";
+import { useEffect, useDeferredValue, useMemo, useRef, useSyncExternalStore } from "react";
 import { pickSessionForRepositorySidebarSelect } from "../utils/claudeSessionSelection";
 import { resolveMainOwnerAgentNameForRepositoryPath } from "../utils/repositoryMainSessionBinding";
 import { OMC_MONITOR_EMPLOYEE_NAME } from "../constants/omcMonitor";
@@ -1098,7 +1098,11 @@ export function useMonitorOverview({
   monitorOverviewActiveRef.current = monitorOverviewActive;
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
-  const sessionsStructureKey = sessionsReactiveStructureKey(sessions);
+  const sessionsStructureKey = useMemo(
+    () => sessionsReactiveStructureKey(sessions),
+    [sessions],
+  );
+  const deferredSessionsStructureKey = useDeferredValue(sessionsStructureKey);
 
   const directBatchInvocationsSnap = useSyncExternalStore(
     monitorOverviewActive ? subscribeOmcDirectBatchInvocations : noopMonitorStoreSubscribe,
@@ -1139,7 +1143,7 @@ export function useMonitorOverview({
     employees,
     repositories,
     projects,
-    sessionsStructureKey,
+    deferredSessionsStructureKey,
     taskPendingEmployeesByTaskId,
     workflowRuntimeSnapshotsByTaskId,
     workflowTaskEventsByTaskId,

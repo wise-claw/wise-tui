@@ -82,7 +82,6 @@ import { RightRailRepoPanelPanes } from "./LeftSidebar/RightRailRepoPanelPanes";
 import {
   deriveRepoPanelRenderState,
 } from "./LeftSidebar/repoPanelPlacement";
-import { SystemResourceInline } from "./LeftSidebar/SystemResourceInline";
 import type { LeftSidebarProps } from "./LeftSidebar/types";
 import { useRepositoryAssociateModalController } from "./LeftSidebar/useRepositoryAssociateModalController";
 import { useProjectSddModeModalController } from "./LeftSidebar/useProjectSddModeModalController";
@@ -1478,55 +1477,6 @@ export function LeftSidebar({
         />
       </div>
 
-      <SystemResourceInline
-        systemSummary={systemResourceSessions.systemSummary}
-        systemSummaryError={systemResourceSessions.systemSummaryError}
-        popoverOpen={systemResourceSessions.claudeCountPopoverOpen}
-        onPopoverOpenChange={(nextOpen) => {
-          systemResourceSessions.setClaudeCountPopoverOpen(nextOpen);
-          if (!nextOpen) systemResourceSessions.setClaudeSystemSessionSearch("");
-        }}
-        searchValue={systemResourceSessions.claudeSystemSessionSearch}
-        onSearchChange={systemResourceSessions.setClaudeSystemSessionSearch}
-        matchedSessions={systemResourceSessions.matchedSystemInlineSessions}
-        allSessions={sessions}
-        projects={projects}
-        repositories={repositories}
-        repositoryMainSessionBindings={repositoryMainSessionBindings}
-        claudeProcesses={systemResourceSessions.systemSummary.claudeProcesses}
-        claudeProcessLabelCache={claudeProcessLabelCache}
-        claudeProcessCount={systemResourceSessions.systemSummary.claudeProcessCount}
-        onSelectSession={(sessionId) => {
-          systemResourceSessions.setClaudeCountPopoverOpen(false);
-          systemResourceSessions.setClaudeSystemSessionSearch("");
-          systemResourceSessions.setSystemSessionDrawerId(sessionId);
-        }}
-        onEndSession={(rowSessionId) => {
-          void endClaudeProcessPopoverRow(rowSessionId).then(finishClaudeProcessPopoverEnd, failClaudeProcessPopoverEnd);
-        }}
-        onBatchEndSessions={handleBatchEndClaudeProcessRows}
-        drawerTitle={systemResourceSessions.systemSessionDrawerTitle}
-        drawerOpen={systemResourceSessions.systemSessionDrawerId !== null}
-        onCloseDrawer={() => systemResourceSessions.setSystemSessionDrawerId(null)}
-        drawerWidth={systemResourceSessions.systemSessionDrawerWidth}
-        liveDrawerSession={systemResourceSessions.liveSystemDrawerSession}
-        drawerRegistryOrphanSid={systemResourceSessions.drawerRegistryOrphanSid}
-        drawerRegistryOrphanInfo={systemResourceSessions.drawerRegistryOrphanInfo}
-        drawerHostProcess={systemResourceSessions.drawerHostProcess}
-        canStopLiveDrawerSession={systemResourceSessions.canStopSystemDrawerSession}
-        onCancelLiveDrawerSession={onCancelSessionFromMonitor}
-        onCancelRegistryOrphanSession={(sid) => {
-          void cancelClaudeExecution(sid).then(
-            () => {
-              systemResourceSessions.setSystemSessionDrawerId(null);
-            },
-            (err: unknown) => {
-              message.error(err instanceof Error ? err.message : "终止失败");
-            },
-          );
-        }}
-        onOpenTaskDetailFromMonitor={onOpenTaskDetailFromMonitor}
-      />
 
       <ProjectNameModals
         createOpen={createProjectOpen}
