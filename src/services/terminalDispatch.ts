@@ -377,12 +377,6 @@ export type TerminalDispatchDeps = {
     },
   ) => boolean;
   appendSystemMessage: (sessionId: string, text: string) => void;
-  /**
-   * 把派发对应的用户问题以用户气泡形式回写到主会话；用于在主会话保留
-   * 终端派发历史，并支持「填入输入框」回填。
-   * 未提供时不写入（保持兼容旧调用方）。
-   */
-  appendUserMessage?: (sessionId: string, text: string) => void;
   /** 关闭磁盘空壳标签，避免同一终端堆积多个无效 tab。 */
   closeWorkerTab?: (tabId: string) => void;
   /**
@@ -722,13 +716,6 @@ export async function dispatchTerminalFromMainSession(
     } else {
       failCount += 1;
     }
-  }
-
-  // 主会话写回原始用户输入（带 @终端 提及），便于在主会话查看派发历史以及
-  // 「填入输入框」回填后能直接再次派发。
-  const anchorUserPrompt = input.prompt.trim();
-  if (okCount > 0 && anchorUserPrompt) {
-    deps.appendUserMessage?.(anchorSessionId, anchorUserPrompt);
   }
 
   if (okCount > 0) return "ok";

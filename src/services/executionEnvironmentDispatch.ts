@@ -40,12 +40,6 @@ export type ExecutionEnvironmentDispatchDeps = {
     opts?: { userBubblePrompt?: string; defaultInstructionApplied?: string },
   ) => boolean;
   appendSystemMessage: (sessionId: string, text: string) => void;
-  /**
-   * 把派发对应的用户问题以用户气泡形式回写到主会话；用于在主会话保留
-   * 派发历史，并支持「填入输入框」回填。
-   * 未提供时不写入（保持兼容旧调用方）。
-   */
-  appendUserMessage?: (sessionId: string, text: string) => void;
 };
 
 function resolveEngineAvailability(deps: ExecutionEnvironmentDispatchDeps) {
@@ -155,12 +149,6 @@ export async function dispatchExecutionEnvironmentFromMainSession(
     `- 时间：${new Date().toLocaleString("zh-CN", { hour12: false })}`,
   ].filter(Boolean);
   deps.appendSystemMessage(mainSession.id, summaryLines.join("\n"));
-  // 主会话写回原始用户输入（带 @-mention），便于在主会话查看派发历史以及
-  // 「填入输入框」回填后能直接再次派发。
-  const anchorUserPrompt = input.prompt.trim();
-  if (anchorUserPrompt) {
-    deps.appendUserMessage?.(mainSession.id, anchorUserPrompt);
-  }
 
   let started = 0;
   let blocked = 0;
