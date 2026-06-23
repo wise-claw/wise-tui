@@ -349,9 +349,16 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       globalMessagesBudget: companionMemoryLimits.globalBudget,
     });
     if (capped === prev) return;
+    // 被全局预算裁剪清零的 session 需清其 diskLoadDone 标记。原实现逐 row 在 prev 里 find 为 O(n²)，
+    // 流式期间 commitSessions 每帧高频触发、sessions 多时（多 tab/worker/派发）平方膨胀致卡顿。
+    // capped 仅对被裁剪的 session 产生新对象，其余引用与 prev 相同；先用 messages.length!==0 跳过绝大多数 row，
+    // 再用 id→session 索引 O(1) 查 prev，整体降到 O(n)，行为与原逻辑等价。
+    const prevById = new Map<string, ClaudeSession>();
+    for (const prevRow of prev) prevById.set(prevRow.id, prevRow);
     for (const row of capped) {
-      const prevRow = prev.find((x) => x.id === row.id);
-      if (prevRow && prevRow.messages.length > 0 && row.messages.length === 0) {
+      if (row.messages.length !== 0) continue;
+      const prevRow = prevById.get(row.id);
+      if (prevRow && prevRow.messages.length > 0) {
         diskLoadDoneRef.current.delete(row.id);
       }
     }

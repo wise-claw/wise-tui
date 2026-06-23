@@ -16,6 +16,10 @@ import { isMainThreadCongested } from "./mainThreadCongestionStore";
 
 let sessionsSnapshot: ClaudeSession[] = [];
 let structureKey = "";
+/** id → session 索引：供 getClaudeSessionSnapshot O(1) 查询。流式期间每个聊天标签的 live host
+ *  每帧经 useSyncExternalStore 调 getSnapshot，原 find 为 O(n)，多标签时累积成持续主线程开销。
+ *  仅索引 id；claudeSessionId 查询少见，仍走 find 兜底，行为不变。 */
+let sessionById = new Map<string, ClaudeSession>();
 
 const liveListeners = new Set<() => void>();
 const structureListeners = new Set<() => void>();
@@ -150,12 +154,17 @@ export function publishClaudeSessions(next: ClaudeSession[]): void {
   const prev = sessionsSnapshot;
   sessionsSnapshot = next;
 
-  const prevById = new Map(prev.map((session) => [session.id, session]));
+  // diff 出引用变化的 session（只 notify 这些），同时顺带建 next 的 id 索引供 getSnapshot O(1) 查询。
+  const prevById = new Map<string, ClaudeSession>();
+  for (const session of prev) prevById.set(session.id, session);
+  const nextById = new Map<string, ClaudeSession>();
   for (const session of next) {
+    nextById.set(session.id, session);
     if (prevById.get(session.id) !== session) {
       queueSessionLiveNotification(session.id);
     }
   }
+  sessionById = nextById;
 
   if (liveListeners.size > 0 || sessionLiveListeners.size > 0 || pendingSessionLiveIds.size > 0) {
     scheduleLiveListenerFlush();
@@ -184,6 +193,8 @@ export function subscribeClaudeSessionLive(sessionId: string, onStoreChange: () 
 export function getClaudeSessionSnapshot(sessionId: string): ClaudeSession | null {
   const trimmed = sessionId.trim();
   if (!trimmed) return null;
+  const byId = sessionById.get(trimmed);
+  if (byId) return byId;
   return (
     sessionsSnapshot.find((session) => session.id === trimmed || session.claudeSessionId === trimmed) ??
     null
