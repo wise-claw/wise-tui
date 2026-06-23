@@ -6,6 +6,7 @@ import {
   formatTaskListOverflowLabel,
   type TaskListTreeRow,
 } from "../../../utils/claudeCodeTaskListDisplay";
+import { isMainThreadCongested } from "../../../stores/mainThreadCongestionStore";
 
 export interface ClaudeCodeTaskListStatusProps {
   items: TodoItem[];
@@ -56,11 +57,14 @@ export function ClaudeCodeTaskListStatus({
     // 与 buildTaskListDisplayModel 重算；回到前台立即刷新一次并恢复。与项目其他定时器
     // （DingTalk/Channels 等的可见性门控）保持一致。
     let timer: number | undefined;
-    const tick = () => setNowMs(Date.now());
+    const tick = () => {
+      if (isMainThreadCongested()) return;
+      setNowMs(Date.now());
+    };
     const start = () => {
       if (timer !== undefined) return;
       tick();
-      timer = window.setInterval(tick, 1000);
+      timer = window.setInterval(tick, 2000);
     };
     const stop = () => {
       if (timer === undefined) return;

@@ -4,6 +4,9 @@ const DEVTOOLS_CHROME_PX = 120;
 /** Vite dev / 未压缩 bundle 下主线程更忙，非关键轮询略放慢。 */
 const DEV_POLL_MULTIPLIER = import.meta.env.DEV ? 1.5 : 1;
 
+/** 主线程拥塞时轮询间隔翻倍，避免卡顿期间轮询回调雪上加霜。 */
+const CONGESTION_MULTIPLIER = 2;
+
 /** DevTools 打开时主线程与 IPC 成本显著上升，用于放慢非关键轮询。 */
 export function isWebViewDevToolsLikelyOpen(): boolean {
   if (typeof window === "undefined") return false;
@@ -18,8 +21,19 @@ export function scalePollIntervalMs(baseMs: number, devtoolsMultiplier = 2.5): n
   if (isWebViewDevToolsLikelyOpen()) {
     scaled = Math.round(scaled * devtoolsMultiplier);
   }
+  // 延迟导入避免循环依赖：adaptivePoll 被 claudeSessionsLiveStore 依赖，
+  // 而 liveFlushMinIntervalMs 依赖 mainThreadCongestionStore。
+  if (congestionCheckRef.current?.()) {
+    scaled = Math.round(scaled * CONGESTION_MULTIPLIER);
+  }
   return scaled;
 }
+
+/**
+ * 注入拥塞检测函数引用，避免 adaptivePoll ↔ mainThreadCongestionStore 循环依赖。
+ * 由 mainThreadCongestionStore 在模块加载时调用。
+ */
+export const congestionCheckRef: { current: (() => boolean) | null } = { current: null };
 
 export function readVisiblePollIntervalMs(visibleMs: number, hiddenMs: number): number {
   if (typeof document === "undefined") return visibleMs;

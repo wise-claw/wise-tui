@@ -1,3 +1,5 @@
+import { congestionCheckRef } from "../utils/adaptivePoll";
+
 /** rAF 帧间隔探测：主线程卡顿时段落时略降非关键 UI 刷新优先级。 */
 let congested = false;
 let congestedUntilMs = 0;
@@ -36,6 +38,8 @@ function probeFrame(now: number): void {
   lastFrameAt = now;
   probeRaf = requestAnimationFrame(probeFrame);
 }
+
+congestionCheckRef.current = isMainThreadCongested;
 
 /** 启动全局帧探测（幂等，首屏后调用一次即可）。 */
 export function ensureMainThreadCongestionProbe(): void {

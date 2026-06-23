@@ -3,6 +3,7 @@ import { HoverHint } from "./shared/HoverHint";
 import { isTauri } from "@tauri-apps/api/core";
 import { useCallback, useEffect, useState } from "react";
 import { readVisiblePollIntervalMs } from "../utils/adaptivePoll";
+import { isCurrentPrimaryMainWorkspaceWindowSync } from "../services/mainWindow";
 import {
   dingtalkStreamGatewayIsRunning,
   dingtalkStreamGatewayStart,
@@ -28,10 +29,13 @@ export function DingTalkStreamGatewayTopbarSwitch() {
   useEffect(() => {
     if (!isTauri()) return;
     void refresh();
+    const dingtalkPrimaryMs = POLL_MS;
+    const dingtalkHiddenMs = 15000;
+    const dingtalkVisibleMs = isCurrentPrimaryMainWorkspaceWindowSync() ? dingtalkPrimaryMs : dingtalkHiddenMs;
     const id = window.setInterval(() => {
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       void refresh();
-    }, readVisiblePollIntervalMs(POLL_MS, 15000));
+    }, readVisiblePollIntervalMs(dingtalkVisibleMs, dingtalkHiddenMs * 2));
     return () => window.clearInterval(id);
   }, [refresh]);
 

@@ -943,12 +943,20 @@ export const ClaudeMultiPaneGrid = memo(function ClaudeMultiPaneGrid({
     };
 
     syncContainerWidth(el.clientWidth);
+    let rafId: number | null = null;
     const ro = new ResizeObserver(() => {
-      syncContainerWidth(el.clientWidth);
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        syncContainerWidth(el.clientWidth);
+      });
     });
 
     ro.observe(el);
-    return () => ro.disconnect();
+    return () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
+      ro.disconnect();
+    };
   }, [paneCount]);
 
   const twoPaneGridColumns =

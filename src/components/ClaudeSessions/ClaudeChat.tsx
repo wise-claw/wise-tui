@@ -500,11 +500,17 @@ export function ClaudeChatInner({
     }
 
     syncComposerTrayHeight();
+    let rafId: number | null = null;
     const ro = new ResizeObserver(() => {
-      syncComposerTrayHeight();
+      if (rafId !== null) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = null;
+        syncComposerTrayHeight();
+      });
     });
     ro.observe(tray);
     return () => {
+      if (rafId !== null) cancelAnimationFrame(rafId);
       ro.disconnect();
     };
   }, [deferHeavySubtree, session.id]);

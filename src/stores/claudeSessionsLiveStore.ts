@@ -27,7 +27,7 @@ function liveFlushMinIntervalMs(): number {
   if (typeof document !== "undefined" && document.visibilityState !== "visible") {
     return 900;
   }
-  if (isMainThreadCongested()) return 460;
+  if (isMainThreadCongested()) return 800;
   if (isComposerInteractionActive()) return 360;
   if (isFileTreeScrollActive()) return 200;
   if (isWorkspacePriorityReliefActive()) return 195;
