@@ -1,5 +1,14 @@
 import { invoke } from "@tauri-apps/api/core";
 
+/** 用户配置的 Claude 启动默认 `--settings` JSON（原始字符串）。Rust 侧 `CLAUDE_DEFAULT_SETTINGS_KEY` 须与此一致。 */
+export const WISE_CLAUDE_DEFAULT_SETTINGS_KEY = "wise.claudeDefaultSettings.v1";
+
+/** 用户配置的 codex 启动默认沙箱/审批设置 JSON（原始字符串）。Rust 侧 `CODEX_DEFAULT_SETTINGS_KEY` 须与此一致。 */
+export const WISE_CODEX_DEFAULT_SETTINGS_KEY = "wise.codexDefaultSettings.v1";
+
+/** 用户配置的 opencode 启动默认权限设置 JSON（原始字符串）。Rust 侧 `OPENCODE_DEFAULT_SETTINGS_KEY` 须与此一致。 */
+export const WISE_OPENCODE_DEFAULT_SETTINGS_KEY = "wise.opencodeDefaultSettings.v1";
+
 export async function getAppSetting(key: string): Promise<string | null> {
   const normalized = key.trim();
   if (!normalized) return null;

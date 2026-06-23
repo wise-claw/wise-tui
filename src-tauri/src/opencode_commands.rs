@@ -9,7 +9,7 @@ use crate::opencode_stream_adapter::{
     opencode_session_clear_line, OpencodeStdoutMap, OpencodeStdoutMapper,
 };
 use crate::wise_db::WiseDb;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 use std::process::Stdio;
@@ -27,6 +27,42 @@ struct OpencodeCompletePayload {
     success: bool,
 }
 
+/// 默认配置 DB key：opencode 启动默认权限设置（JSON）。
+/// 与前端 `WISE_OPENCODE_DEFAULT_SETTINGS_KEY` 一致。
+pub(crate) const OPENCODE_DEFAULT_SETTINGS_KEY: &str = "wise.opencodeDefaultSettings.v1";
+
+/// opencode 启动默认权限设置。
+/// - `mode == "auto"`（或缺省）：保留 `--dangerously-skip-permissions`（自动批准，现状）；
+/// - `mode == "custom"`：移除 skip，改用 `OPENCODE_PERMISSION` 注入用户 permission JSON
+///   （allow/ask/deny 规则全部生效）。
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct OpencodeDefaultSettings {
+    mode: Option<String>,            // "auto" | "custom"
+    permission_json: Option<String>, // OPENCODE_PERMISSION 内容
+}
+
+/// 解析 opencode 默认设置，返回 (是否保留 `--dangerously-skip-permissions`, `OPENCODE_PERMISSION` env 值)。
+///
+/// custom 模式移除 skip 让规则生效；`permission_json` 为空时不注入 env（仍移除 skip，
+/// 此时 opencode 回退其内置默认规则）。auto/None 维持现状（skip=true、不注入 env）。
+fn resolve_opencode_permission(
+    settings: Option<&OpencodeDefaultSettings>,
+) -> (bool, Option<String>) {
+    match settings {
+        Some(s) if s.mode.as_deref() == Some("custom") => {
+            let env = s
+                .permission_json
+                .as_deref()
+                .map(str::trim)
+                .filter(|t| !t.is_empty())
+                .map(|t| t.to_string());
+            (false, env)
+        }
+        _ => (true, None),
+    }
+}
+
 struct OpencodeSpawnParams {
     opencode_path: String,
     project_path: String,
@@ -35,6 +71,7 @@ struct OpencodeSpawnParams {
     resume_session_id: Option<String>,
     force_new_session: bool,
     path_env: String,
+    default_settings: Option<OpencodeDefaultSettings>,
 }
 
 #[derive(Clone)]
@@ -52,6 +89,7 @@ struct OpencodeRuntimeContext {
         Arc<TokioMutex<HashMap<String, Arc<TokioMutex<Option<Child>>>>>>,
     opencode_path: String,
     path_env: String,
+    default_settings: Option<OpencodeDefaultSettings>,
 }
 
 fn normalize_opencode_model(raw: Option<&str>) -> Option<String> {
@@ -136,10 +174,13 @@ fn configure_opencode_run_command(
     project_path: &str,
     resume_session_id: Option<&str>,
     force_new_session: bool,
+    skip_permissions: bool,
 ) {
     cmd.arg("run");
     cmd.arg("--format").arg("json");
-    cmd.arg("--dangerously-skip-permissions");
+    if skip_permissions {
+        cmd.arg("--dangerously-skip-permissions");
+    }
     if !project_path.trim().is_empty() {
         cmd.arg("--dir").arg(project_path.trim());
     }
@@ -229,6 +270,8 @@ fn validate_opencode_project_path(project_path: &str) -> Result<(), String> {
 
 fn build_opencode_command(params: &OpencodeSpawnParams) -> Command {
     let mut cmd = Command::new(&params.opencode_path);
+    let (skip_permissions, permission_env) =
+        resolve_opencode_permission(params.default_settings.as_ref());
     configure_opencode_run_command(
         &mut cmd,
         params.prompt.trim(),
@@ -236,12 +279,16 @@ fn build_opencode_command(params: &OpencodeSpawnParams) -> Command {
         &params.project_path,
         params.resume_session_id.as_deref(),
         params.force_new_session,
+        skip_permissions,
     );
     cmd.current_dir(&params.project_path);
     cmd.stdin(Stdio::null());
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
     apply_opencode_child_env(&mut cmd, &params.path_env);
+    if let Some(permission_json) = permission_env {
+        cmd.env("OPENCODE_PERMISSION", permission_json);
+    }
     cmd
 }
 
@@ -362,6 +409,7 @@ fn attach_opencode_child_io(
                     resume_session_id: None,
                     force_new_session: true,
                     path_env: runtime_wait.path_env.clone(),
+                    default_settings: runtime_wait.default_settings.clone(),
                 };
                 let retry_runtime = OpencodeRuntimeContext {
                     app: runtime_wait.app.clone(),
@@ -379,6 +427,7 @@ fn attach_opencode_child_io(
                         .clone(),
                     opencode_path: runtime_wait.opencode_path.clone(),
                     path_env: runtime_wait.path_env.clone(),
+                    default_settings: runtime_wait.default_settings.clone(),
                 };
                 let retry_wait_child = wait_child_wait.clone();
                 match spawn_opencode_process(&retry_params) {
@@ -481,6 +530,19 @@ pub(crate) async fn execute_opencode_code(
     let force_new = force_new_session.unwrap_or(false);
     let used_resume = !force_new && resume_id.is_some();
     let path_env = opencode_merged_path_env();
+    // 全局默认配置：opencode 权限模式。DB 读失败或 JSON 非法时回退 None（现状=自动批准）。
+    let default_settings = db
+        .get_setting(OPENCODE_DEFAULT_SETTINGS_KEY)
+        .ok()
+        .flatten()
+        .and_then(|s| {
+            let t = s.trim();
+            if t.is_empty() {
+                None
+            } else {
+                serde_json::from_str::<OpencodeDefaultSettings>(&t).ok()
+            }
+        });
     let spawn_params = OpencodeSpawnParams {
         opencode_path,
         project_path: project_path.clone(),
@@ -489,6 +551,7 @@ pub(crate) async fn execute_opencode_code(
         resume_session_id: resume_id.clone(),
         force_new_session: force_new,
         path_env,
+        default_settings,
     };
 
     let child = spawn_opencode_process(&spawn_params)?;
@@ -507,6 +570,7 @@ pub(crate) async fn execute_opencode_code(
         active_child_by_claude_session: process_state.active_child_by_claude_session.clone(),
         opencode_path: spawn_params.opencode_path.clone(),
         path_env: spawn_params.path_env.clone(),
+        default_settings: spawn_params.default_settings.clone(),
     };
 
     if let Some(inv) = invocation_key.as_deref().filter(|s| !s.is_empty()) {
@@ -554,6 +618,7 @@ mod tests {
             "/tmp/repo",
             None,
             false,
+            true,
         );
         let args: Vec<String> = cmd
             .as_std()
@@ -581,6 +646,7 @@ mod tests {
             "/tmp/repo",
             None,
             false,
+            true,
         );
         let args: Vec<String> = cmd
             .as_std()
@@ -603,6 +669,7 @@ mod tests {
             "/tmp/repo",
             Some("ses_abc"),
             false,
+            true,
         );
         let args: Vec<String> = cmd
             .as_std()
@@ -610,6 +677,79 @@ mod tests {
             .map(|s| s.to_string_lossy().into_owned())
             .collect();
         assert!(args.windows(2).any(|w| w[0] == "-s" && w[1] == "ses_abc"));
+    }
+
+    #[test]
+    fn custom_mode_omits_skip_permissions() {
+        // custom 模式：configure 不应加 --dangerously-skip-permissions（skip=false）。
+        let mut cmd = Command::new("opencode");
+        configure_opencode_run_command(
+            &mut cmd,
+            "hello",
+            None,
+            "/tmp/repo",
+            None,
+            false,
+            false,
+        );
+        let args: Vec<String> = cmd
+            .as_std()
+            .get_args()
+            .map(|s| s.to_string_lossy().into_owned())
+            .collect();
+        assert!(!args.contains(&"--dangerously-skip-permissions".to_string()));
+    }
+
+    #[test]
+    fn resolve_permission_auto_keeps_skip() {
+        let settings = OpencodeDefaultSettings {
+            mode: Some("auto".to_string()),
+            permission_json: Some("{\"bash\":{\"rm *\":\"deny\"}}".to_string()),
+        };
+        let (skip, env) = resolve_opencode_permission(Some(&settings));
+        assert!(skip);
+        assert!(env.is_none());
+    }
+
+    #[test]
+    fn resolve_permission_none_keeps_skip() {
+        let (skip, env) = resolve_opencode_permission(None);
+        assert!(skip);
+        assert!(env.is_none());
+    }
+
+    #[test]
+    fn resolve_permission_custom_with_json() {
+        let settings = OpencodeDefaultSettings {
+            mode: Some("custom".to_string()),
+            permission_json: Some("  {\"bash\":{\"rm *\":\"deny\"}}  ".to_string()),
+        };
+        let (skip, env) = resolve_opencode_permission(Some(&settings));
+        assert!(!skip);
+        assert_eq!(env.as_deref(), Some("{\"bash\":{\"rm *\":\"deny\"}}"));
+    }
+
+    #[test]
+    fn resolve_permission_custom_empty_json_no_env() {
+        // custom 模式但 permission_json 为空：仍移除 skip，但不注入空 env。
+        let settings = OpencodeDefaultSettings {
+            mode: Some("custom".to_string()),
+            permission_json: Some("   ".to_string()),
+        };
+        let (skip, env) = resolve_opencode_permission(Some(&settings));
+        assert!(!skip);
+        assert!(env.is_none());
+    }
+
+    #[test]
+    fn resolve_permission_custom_no_json_field() {
+        let settings = OpencodeDefaultSettings {
+            mode: Some("custom".to_string()),
+            permission_json: None,
+        };
+        let (skip, env) = resolve_opencode_permission(Some(&settings));
+        assert!(!skip);
+        assert!(env.is_none());
     }
 
     #[test]

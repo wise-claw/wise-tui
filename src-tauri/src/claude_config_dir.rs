@@ -13,6 +13,10 @@ use crate::wise_db::WiseDb;
 /// 历史 `app_settings` 键；启动时删除，避免旧版自定义目录残留。
 pub(crate) const CLAUDE_USER_CONFIG_DIR_SETTING_KEY: &str = "claude_user_config_dir";
 
+/// 用户配置的 Claude 启动默认 `--settings` JSON（存原始字符串）。
+/// 前端常量 `WISE_CLAUDE_DEFAULT_SETTINGS_KEY`（`appSettingsStore.ts`）须与此一致。
+pub(crate) const CLAUDE_DEFAULT_SETTINGS_KEY: &str = "wise.claudeDefaultSettings.v1";
+
 /// 全局缓存：写命令更新 / 启动 init 时写入；读命令尽量从这里出。
 static USER_CLAUDE_DIR_CACHE: RwLock<Option<PathBuf>> = RwLock::new(None);
 
@@ -275,19 +279,49 @@ pub(crate) fn build_claude_spawn_env(
     merged
 }
 
-fn write_claude_spawn_settings_file(env: &HashMap<String, String>) -> Result<String, String> {
+fn write_claude_spawn_settings_file(
+    env: &HashMap<String, String>,
+    user_settings: Option<&serde_json::Value>,
+) -> Result<String, String> {
     let wise_dir = crate::wise_paths::wise_dir()?;
     let out_dir = wise_dir.join("claude-spawn");
     std::fs::create_dir_all(&out_dir).map_err(|e| e.to_string())?;
     let out_path = out_dir.join(format!("{}.json", Uuid::new_v4()));
-    let env_json: serde_json::Map<String, serde_json::Value> = env
-        .iter()
-        .map(|(k, v)| (k.clone(), serde_json::Value::String(v.clone())))
-        .collect();
-    let payload = serde_json::json!({ "env": env_json });
+    let payload = build_claude_spawn_settings_payload(env, user_settings);
     let serialized = serde_json::to_string_pretty(&payload).map_err(|e| e.to_string())?;
     crate::wise_paths::write_file_atomic(&out_path, &serialized)?;
     Ok(out_path.to_string_lossy().to_string())
+}
+
+/// 构造 claude `--settings` 文件 payload：以用户默认 settings 顶层对象为 base
+/// （全量拷入 `ultracode`/`permissions`/`hooks` 等键），再把 FCC 认证 env 叠加进
+/// `env` 子对象——认证 env 同名键优先（认证是会话能否跑起来的硬依赖）。
+/// 抽成纯函数便于单测，不碰文件系统。
+fn build_claude_spawn_settings_payload(
+    env: &HashMap<String, String>,
+    user_settings: Option<&serde_json::Value>,
+) -> serde_json::Value {
+    let mut payload: serde_json::Map<String, serde_json::Value> = user_settings
+        .and_then(|v| v.as_object().map(|m| m.clone()))
+        .unwrap_or_default();
+    if !env.is_empty() {
+        // 用户若把 `env` 设成非对象（不合理但需防御），用 FCC env 覆盖。
+        if !payload
+            .get("env")
+            .map_or(false, |v| v.is_object())
+        {
+            payload.insert(
+                "env".to_string(),
+                serde_json::Value::Object(serde_json::Map::new()),
+            );
+        }
+        if let Some(env_map) = payload.get_mut("env").and_then(|v| v.as_object_mut()) {
+            for (k, v) in env.iter() {
+                env_map.insert(k.clone(), serde_json::Value::String(v.clone()));
+            }
+        }
+    }
+    serde_json::Value::Object(payload)
 }
 
 /// 对齐终端 CLI 的 FCC / free-claude-code 认证：`--settings` + 子进程 `env`，并清理 `~/.claude.json` 中冲突项。
@@ -296,6 +330,7 @@ pub(crate) fn configure_claude_child_process(
     project_path: &str,
     anthropic_base_url_override: Option<&str>,
     llm_traffic_capture: bool,
+    user_settings: Option<&serde_json::Value>,
 ) {
     let _ = sanitize_claude_root_json_for_fcc_proxy();
 
@@ -318,10 +353,15 @@ pub(crate) fn configure_claude_child_process(
         cmd.env_remove("ANTHROPIC_API_KEY");
     }
 
-    if merged.is_empty() {
+    // 既无 FCC 认证 env 也无用户默认 settings 时，才不注入 --settings。
+    // 否则无认证场景下用户配置的 settings（如 {"ultracode": true}）会丢失。
+    let has_user = user_settings
+        .map(|v| v.as_object().map_or(false, |o| !o.is_empty()))
+        .unwrap_or(false);
+    if merged.is_empty() && !has_user {
         return;
     }
-    if let Ok(settings_path) = write_claude_spawn_settings_file(&merged) {
+    if let Ok(settings_path) = write_claude_spawn_settings_file(&merged, user_settings) {
         cmd.arg("--settings").arg(settings_path);
     }
 }
@@ -347,6 +387,97 @@ pub(crate) fn get_claude_user_settings_json_path() -> Result<String, String> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn build_spawn_settings_payload_merges_user_settings_with_fcc_env_priority() {
+        // 用户默认 settings 作为 base，FCC 认证 env 叠加进 env 子对象且同名键优先。
+        let mut user_env = serde_json::Map::new();
+        user_env.insert(
+            "ANTHROPIC_AUTH_TOKEN".to_string(),
+            serde_json::Value::String("user-token".to_string()),
+        );
+        user_env.insert("FOO".to_string(), serde_json::Value::String("bar".to_string()));
+        let mut user_obj = serde_json::Map::new();
+        user_obj.insert("ultracode".to_string(), serde_json::Value::Bool(true));
+        user_obj.insert("env".to_string(), serde_json::Value::Object(user_env));
+        let user = serde_json::Value::Object(user_obj);
+
+        let env = HashMap::from([("ANTHROPIC_AUTH_TOKEN".to_string(), "fcc-token".to_string())]);
+        let payload = build_claude_spawn_settings_payload(&env, Some(&user));
+        let obj = payload.as_object().expect("payload should be object");
+        assert_eq!(obj.get("ultracode"), Some(&serde_json::Value::Bool(true)));
+        let env_obj = obj
+            .get("env")
+            .and_then(|v| v.as_object())
+            .expect("env should be object");
+        // FCC 认证 env 覆盖用户同名键。
+        assert_eq!(
+            env_obj.get("ANTHROPIC_AUTH_TOKEN"),
+            Some(&serde_json::Value::String("fcc-token".to_string()))
+        );
+        // 用户独有 env 键保留。
+        assert_eq!(
+            env_obj.get("FOO"),
+            Some(&serde_json::Value::String("bar".to_string()))
+        );
+    }
+
+    #[test]
+    fn build_spawn_settings_payload_user_only_omits_empty_env() {
+        // 仅用户 settings、无 FCC env 时，不应产生空 env 键。
+        let user = serde_json::json!({ "ultracode": true });
+        let env = HashMap::<String, String>::new();
+        let payload = build_claude_spawn_settings_payload(&env, Some(&user));
+        let obj = payload.as_object().expect("payload should be object");
+        assert_eq!(obj.get("ultracode"), Some(&serde_json::Value::Bool(true)));
+        assert!(
+            obj.get("env").is_none(),
+            "empty env should not produce an env key"
+        );
+    }
+
+    #[test]
+    fn build_spawn_settings_payload_env_only_matches_legacy() {
+        // 无用户 settings 时，行为与旧版一致：只含 env。
+        let env = HashMap::from([(
+            "ANTHROPIC_BASE_URL".to_string(),
+            "http://localhost:8082".to_string(),
+        )]);
+        let payload = build_claude_spawn_settings_payload(&env, None);
+        let obj = payload.as_object().expect("payload should be object");
+        assert_eq!(obj.len(), 1);
+        let env_obj = obj
+            .get("env")
+            .and_then(|v| v.as_object())
+            .expect("env should be object");
+        assert_eq!(
+            env_obj.get("ANTHROPIC_BASE_URL"),
+            Some(&serde_json::Value::String("http://localhost:8082".to_string()))
+        );
+    }
+
+    #[test]
+    fn build_spawn_settings_payload_overwrites_non_object_user_env() {
+        // 用户把 env 设成非对象（不合理但需防御）：FCC env 覆盖为对象。
+        let user = serde_json::json!({ "env": "not-an-object" });
+        let env = HashMap::from([("ANTHROPIC_AUTH_TOKEN".to_string(), "fcc-token".to_string())]);
+        let payload = build_claude_spawn_settings_payload(&env, Some(&user));
+        let env_obj = payload
+            .get("env")
+            .and_then(|v| v.as_object())
+            .expect("env should be object");
+        assert_eq!(
+            env_obj.get("ANTHROPIC_AUTH_TOKEN"),
+            Some(&serde_json::Value::String("fcc-token".to_string()))
+        );
+    }
+
+    #[test]
+    fn build_spawn_settings_payload_empty_when_nothing() {
+        let env = HashMap::<String, String>::new();
+        let payload = build_claude_spawn_settings_payload(&env, None);
+        assert!(payload.as_object().map_or(false, |o| o.is_empty()));
+    }
 
     #[test]
     fn sanitize_root_json_removes_conflicting_env_for_fcc() {

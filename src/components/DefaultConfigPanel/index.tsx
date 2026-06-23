@@ -1,4 +1,4 @@
-import { Button, Checkbox, Select, Typography } from "antd";
+import { Button, Checkbox, Input, Select, Switch, Typography } from "antd";
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import type { ClaudeSessionConnectionKind } from "../../constants/claudeConnection";
 import {
@@ -26,6 +26,10 @@ import { useRightPanelDefaultSetting } from "./useRightPanelDefaultSetting";
 import { useTopbarChromeDefaultSetting } from "./useTopbarChromeDefaultSetting";
 import { useComposerFooterChromeDefaultSetting } from "./useComposerFooterChromeDefaultSetting";
 import { useDefaultTerminalSetting } from "./useDefaultTerminalSetting";
+import { useClaudeDefaultSettingsSetting } from "./useClaudeDefaultSettingsSetting";
+import { useCodexDefaultSettingsSetting } from "./useCodexDefaultSettingsSetting";
+import { useOpencodeDefaultSettingsSetting } from "./useOpencodeDefaultSettingsSetting";
+import { OPENCODE_PERMISSION_PLACEHOLDER } from "./opencodeDefaultSettings";
 import { useAtMentionDefaultSetting } from "./useAtMentionDefaultSetting";
 import { useAtMentionShortcuts } from "../../hooks/useAtMentionShortcuts";
 import { KeyShortcutCapture } from "./KeyShortcutCapture";
@@ -55,6 +59,9 @@ function DefaultConfigSection({ title, children }: { title: string; children: Re
 /** 工作台配置 / 运行设置 / 默认配置：全局会话与布局默认值。 */
 export function DefaultConfigPanel() {
   const connection = useClaudeConnectionModeSetting();
+  const claudeDefaultSettings = useClaudeDefaultSettingsSetting();
+  const codexDefaultSettings = useCodexDefaultSettingsSetting();
+  const opencodeDefaultSettings = useOpencodeDefaultSettingsSetting();
   const rightPanel = useRightPanelDefaultSetting();
   const topbarChrome = useTopbarChromeDefaultSetting();
   const composerFooterChrome = useComposerFooterChromeDefaultSetting();
@@ -340,6 +347,174 @@ export function DefaultConfigPanel() {
                   void connection.save(value);
                 }}
               />
+            }
+          />
+          <DefaultConfigRow
+            title="Claude 启动 --settings"
+            hint="默认配置"
+            detail='作为 claude --settings 加载，等同编辑 settings.json；留空不注入。例：{"ultracode": true}'
+            layout="stack"
+            control={
+              <div className="app-default-config-claude-settings">
+                <Input.TextArea
+                  aria-label="Claude 启动 --settings JSON"
+                  value={claudeDefaultSettings.draft}
+                  placeholder={'{"ultracode": true}'}
+                  autoSize={{ minRows: 3, maxRows: 10 }}
+                  disabled={claudeDefaultSettings.loading || claudeDefaultSettings.saving}
+                  onChange={(e) => claudeDefaultSettings.setDraft(e.target.value)}
+                  onBlur={() => {
+                    void claudeDefaultSettings.commit();
+                  }}
+                />
+                <div className="app-default-config-claude-settings__actions">
+                  <Button
+                    size="small"
+                    disabled={claudeDefaultSettings.loading || claudeDefaultSettings.saving}
+                    onClick={() => {
+                      void claudeDefaultSettings.format();
+                    }}
+                  >
+                    格式化
+                  </Button>
+                  <span className="app-default-config-claude-settings__toggle">
+                    ultracode
+                    <Switch
+                      size="small"
+                      checked={claudeDefaultSettings.ultracodeEnabled}
+                      disabled={claudeDefaultSettings.loading || claudeDefaultSettings.saving}
+                      onChange={(checked) => {
+                        void claudeDefaultSettings.saveUltracode(checked);
+                      }}
+                    />
+                  </span>
+                  <span className="app-default-config-claude-settings__toggle">
+                    取消沙箱限制
+                    <Switch
+                      size="small"
+                      checked={claudeDefaultSettings.sandboxDisabled}
+                      disabled={claudeDefaultSettings.loading || claudeDefaultSettings.saving}
+                      onChange={(checked) => {
+                        void claudeDefaultSettings.saveSandboxDisabled(checked);
+                      }}
+                    />
+                  </span>
+                </div>
+              </div>
+            }
+          />
+          <DefaultConfigRow
+            title="Codex 沙箱/审批"
+            hint="默认配置"
+            detail="codex exec 新会话注入 -s sandbox_mode 与 -c approval_policy；resume 沿用原会话。留空=workspace-write（现状）"
+            layout="stack"
+            control={
+              <div className="app-default-config-cli-settings">
+                <div className="app-default-config-cli-settings__actions">
+                  <span className="app-default-config-cli-settings__toggle">
+                    沙箱
+                    <Select
+                      size="small"
+                      aria-label="Codex sandbox_mode"
+                      disabled={codexDefaultSettings.loading || codexDefaultSettings.saving}
+                      value={codexDefaultSettings.sandboxMode ?? ""}
+                      onChange={(v: string) => {
+                        void codexDefaultSettings.saveSandboxMode(v || null);
+                      }}
+                      style={{ minWidth: 168 }}
+                      options={[
+                        { label: "默认 (workspace-write)", value: "" },
+                        { label: "read-only", value: "read-only" },
+                        { label: "workspace-write", value: "workspace-write" },
+                        { label: "danger-full-access", value: "danger-full-access" },
+                      ]}
+                    />
+                  </span>
+                  <span className="app-default-config-cli-settings__toggle">
+                    审批
+                    <Select
+                      size="small"
+                      aria-label="Codex approval_policy"
+                      disabled={codexDefaultSettings.loading || codexDefaultSettings.saving}
+                      value={codexDefaultSettings.approvalPolicy ?? ""}
+                      onChange={(v: string) => {
+                        void codexDefaultSettings.saveApprovalPolicy(v || null);
+                      }}
+                      style={{ minWidth: 124 }}
+                      options={[
+                        { label: "默认", value: "" },
+                        { label: "untrusted", value: "untrusted" },
+                        { label: "on-request", value: "on-request" },
+                        { label: "never", value: "never" },
+                      ]}
+                    />
+                  </span>
+                  <span className="app-default-config-cli-settings__toggle">
+                    取消沙箱限制
+                    <Switch
+                      size="small"
+                      checked={codexDefaultSettings.fullAccess}
+                      disabled={codexDefaultSettings.loading || codexDefaultSettings.saving}
+                      onChange={(checked) => {
+                        void codexDefaultSettings.saveFullAccess(checked);
+                      }}
+                    />
+                  </span>
+                </div>
+              </div>
+            }
+          />
+          <DefaultConfigRow
+            title="OpenCode 权限"
+            hint="默认配置"
+            detail="自动批准=--dangerously-skip-permissions（现状）；自定义规则=移除 skip，改用 OPENCODE_PERMISSION 注入 allow/ask/deny 规则"
+            layout="stack"
+            control={
+              <div className="app-default-config-cli-settings">
+                <div className="app-default-config-cli-settings__actions">
+                  <span className="app-default-config-cli-settings__toggle">
+                    权限模式
+                    <Select
+                      size="small"
+                      aria-label="OpenCode 权限模式"
+                      disabled={opencodeDefaultSettings.loading || opencodeDefaultSettings.saving}
+                      value={opencodeDefaultSettings.mode}
+                      onChange={(v: string) => {
+                        void opencodeDefaultSettings.saveMode(v as "auto" | "custom");
+                      }}
+                      style={{ minWidth: 124 }}
+                      options={[
+                        { label: "自动批准", value: "auto" },
+                        { label: "自定义规则", value: "custom" },
+                      ]}
+                    />
+                  </span>
+                  {opencodeDefaultSettings.mode === "custom" ? (
+                    <Button
+                      size="small"
+                      disabled={opencodeDefaultSettings.loading || opencodeDefaultSettings.saving}
+                      onClick={() => {
+                        void opencodeDefaultSettings.format();
+                      }}
+                    >
+                      格式化
+                    </Button>
+                  ) : null}
+                </div>
+                {opencodeDefaultSettings.mode === "custom" ? (
+                  <Input.TextArea
+                    aria-label="OpenCode permission JSON"
+                    value={opencodeDefaultSettings.permissionDraft}
+                    placeholder={OPENCODE_PERMISSION_PLACEHOLDER}
+                    autoSize={{ minRows: 3, maxRows: 10 }}
+                    disabled={opencodeDefaultSettings.loading || opencodeDefaultSettings.saving}
+                    onChange={(e) => opencodeDefaultSettings.setPermissionDraft(e.target.value)}
+                    onBlur={() => {
+                      void opencodeDefaultSettings.commit();
+                    }}
+                  />
+                ) : null}
+              </div>
             }
           />
         </>

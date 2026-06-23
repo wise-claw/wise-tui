@@ -297,3 +297,48 @@
   max-height: 3.6em;
   overflow: hidden;
 }
+
+.app-default-config-claude-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.app-default-config-claude-settings__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+
+.app-default-config-claude-settings__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--ant-color-text-secondary);
+}
+
+/* codex / opencode 启动默认设置复用的通用布局（与 claude-settings 同结构）。 */
+.app-default-config-cli-settings {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  width: 100%;
+}
+
+.app-default-config-cli-settings__actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px 12px;
+}
+
+.app-default-config-cli-settings__toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 11px;
+  color: var(--ant-color-text-secondary);
+}

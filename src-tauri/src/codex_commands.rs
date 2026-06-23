@@ -5,7 +5,7 @@ use crate::claude_model_profiles::ensure_active_codex_profile_applied;
 use crate::codex_binary::{apply_codex_child_env, codex_merged_path_env, find_codex_binary};
 use crate::codex_stream_adapter::{map_codex_exec_stdout_line, CodexStdoutMap};
 use crate::wise_db::WiseDb;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use std::collections::HashMap;
 use std::path::Path;
 use std::process::Stdio;
@@ -18,6 +18,19 @@ use uuid::Uuid;
 
 /// Codex `exec` defaults to read-only; Wise main/member chat needs repo edits in the session workdir.
 const WISE_CODEX_EXEC_SANDBOX: &str = "workspace-write";
+
+/// 默认配置 DB key：codex 启动默认沙箱/审批设置（JSON）。
+/// 与前端 `WISE_CODEX_DEFAULT_SETTINGS_KEY` 一致。
+pub(crate) const CODEX_DEFAULT_SETTINGS_KEY: &str = "wise.codexDefaultSettings.v1";
+
+/// codex 启动默认设置（经 `-s`/`-c` 注入 `codex exec` fresh 会话）。
+/// 字段缺省（None）时回退现状：sandbox=workspace-write、不传 approval_policy。
+#[derive(Debug, Clone, Default, Deserialize)]
+#[serde(rename_all = "camelCase")]
+struct CodexDefaultSettings {
+    sandbox_mode: Option<String>,    // read-only | workspace-write | danger-full-access
+    approval_policy: Option<String>, // untrusted | on-request | never
+}
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -35,6 +48,7 @@ struct CodexSpawnParams {
     force_new_session: bool,
     path_env: String,
     spawn_env_overrides: Option<(String, String)>,
+    default_settings: Option<CodexDefaultSettings>,
 }
 
 #[derive(Clone)]
@@ -53,6 +67,7 @@ struct CodexRuntimeContext {
     codex_path: String,
     path_env: String,
     spawn_env_overrides: Option<(String, String)>,
+    default_settings: Option<CodexDefaultSettings>,
 }
 
 fn normalize_codex_model(raw: Option<&str>) -> Option<String> {
@@ -141,10 +156,25 @@ fn append_codex_exec_shared_args(cmd: &mut Command, model: Option<&str>) {
 }
 
 /// `codex exec [OPTIONS] [PROMPT]` — supports sandbox + color flags.
-fn append_codex_exec_fresh_args(cmd: &mut Command, model: Option<&str>, project_path: &str) {
+///
+/// fresh 会话按默认设置注入沙箱/审批：`-s <sandbox_mode>`（缺省 `workspace-write`）
+/// + `-c approval_policy=<v>`（仅当显式配置时）。resume 子命令不接受这些 flag，
+/// 见 `append_codex_exec_resume_args`（resume 完全不注入，沿用原会话配置）。
+fn append_codex_exec_fresh_args(
+    cmd: &mut Command,
+    model: Option<&str>,
+    project_path: &str,
+    settings: Option<&CodexDefaultSettings>,
+) {
     cmd.arg("--color").arg("never");
     append_codex_exec_shared_args(cmd, model);
-    cmd.arg("-s").arg(WISE_CODEX_EXEC_SANDBOX);
+    let sandbox_mode = settings
+        .and_then(|s| s.sandbox_mode.as_deref())
+        .unwrap_or(WISE_CODEX_EXEC_SANDBOX);
+    cmd.arg("-s").arg(sandbox_mode);
+    if let Some(policy) = settings.and_then(|s| s.approval_policy.as_deref()) {
+        cmd.arg("-c").arg(format!("approval_policy={policy}"));
+    }
     if !project_path.trim().is_empty() {
         cmd.arg("-C").arg(project_path.trim());
     }
@@ -162,6 +192,7 @@ fn configure_codex_exec_command(
     project_path: &str,
     resume_session_id: Option<&str>,
     force_new_session: bool,
+    settings: Option<&CodexDefaultSettings>,
 ) {
     cmd.arg("exec");
     if !force_new_session {
@@ -173,7 +204,7 @@ fn configure_codex_exec_command(
             return;
         }
     }
-    append_codex_exec_fresh_args(cmd, model, project_path);
+    append_codex_exec_fresh_args(cmd, model, project_path, settings);
     cmd.arg(prompt);
 }
 
@@ -246,6 +277,7 @@ fn build_codex_command(params: &CodexSpawnParams) -> Command {
         &params.project_path,
         params.resume_session_id.as_deref(),
         params.force_new_session,
+        params.default_settings.as_ref(),
     );
     cmd.current_dir(&params.project_path);
     cmd.stdin(Stdio::null());
@@ -406,6 +438,7 @@ fn attach_codex_child_io(
                         force_new_session: true,
                         path_env: runtime.path_env.clone(),
                         spawn_env_overrides: runtime.spawn_env_overrides.clone(),
+                        default_settings: runtime.default_settings.clone(),
                     };
                     emit_codex_stdout_line(
                         &app_wait,
@@ -559,6 +592,19 @@ pub(crate) async fn execute_codex_code(
     let used_resume = !force_new && resume_id.is_some();
     let path_env = codex_merged_path_env();
     let spawn_env_overrides = crate::opencode_go_proxy::codex_spawn_env_overrides(&db);
+    // 全局默认配置：codex 启动沙箱/审批设置。DB 读失败或 JSON 非法时回退 None（现状）。
+    let default_settings = db
+        .get_setting(CODEX_DEFAULT_SETTINGS_KEY)
+        .ok()
+        .flatten()
+        .and_then(|s| {
+            let t = s.trim();
+            if t.is_empty() {
+                None
+            } else {
+                serde_json::from_str::<CodexDefaultSettings>(&t).ok()
+            }
+        });
     let spawn_params = CodexSpawnParams {
         codex_path,
         project_path: project_path.clone(),
@@ -568,6 +614,7 @@ pub(crate) async fn execute_codex_code(
         force_new_session: force_new,
         path_env,
         spawn_env_overrides,
+        default_settings,
     };
 
     let child = spawn_codex_process(&spawn_params)?;
@@ -587,6 +634,7 @@ pub(crate) async fn execute_codex_code(
         codex_path: spawn_params.codex_path.clone(),
         path_env: spawn_params.path_env.clone(),
         spawn_env_overrides: spawn_params.spawn_env_overrides.clone(),
+        default_settings: spawn_params.default_settings.clone(),
     };
 
     if let Some(inv) = invocation_key.as_deref().filter(|s| !s.is_empty()) {
@@ -667,6 +715,7 @@ mod tests {
             "/tmp/repo",
             None,
             false,
+            None,
         );
         let args: Vec<String> = cmd
             .as_std()
@@ -702,6 +751,7 @@ mod tests {
             "/tmp/repo",
             Some("0199a213-81c0-7800-8aa1-bbab2a035a53"),
             false,
+            None,
         );
         let args: Vec<String> = cmd
             .as_std()
@@ -731,6 +781,7 @@ mod tests {
             "/tmp/repo",
             Some("0199a213-81c0-7800-8aa1-bbab2a035a53"),
             true,
+            None,
         );
         let args: Vec<String> = cmd
             .as_std()
@@ -740,6 +791,84 @@ mod tests {
             .collect();
         assert!(!args.contains(&"resume".to_string()));
         assert_eq!(args.last().map(String::as_str), Some("fresh"));
+    }
+
+    #[test]
+    fn fresh_exec_injects_default_settings() {
+        // 显式配置 sandbox_mode=danger-full-access + approval_policy=never（取消沙箱限制）
+        // 时，fresh 会话 argv 应注入对应 -s / -c。
+        let settings = CodexDefaultSettings {
+            sandbox_mode: Some("danger-full-access".to_string()),
+            approval_policy: Some("never".to_string()),
+        };
+        let mut cmd = Command::new("codex");
+        configure_codex_exec_command(
+            &mut cmd,
+            "hello",
+            None,
+            "/tmp/repo",
+            None,
+            false,
+            Some(&settings),
+        );
+        let args: Vec<String> = cmd
+            .as_std()
+            .get_args()
+            .map(|s| s.to_string_lossy().into_owned())
+            .collect();
+        assert!(args.windows(2).any(|w| w[0] == "-s" && w[1] == "danger-full-access"));
+        assert!(args
+            .windows(2)
+            .any(|w| w[0] == "-c" && w[1] == "approval_policy=never"));
+    }
+
+    #[test]
+    fn fresh_exec_none_keeps_workspace_write_no_config_flag() {
+        // settings=None 时回退现状：-s workspace-write，且不含 -c。
+        let mut cmd = Command::new("codex");
+        configure_codex_exec_command(
+            &mut cmd,
+            "hello",
+            None,
+            "/tmp/repo",
+            None,
+            false,
+            None,
+        );
+        let args: Vec<String> = cmd
+            .as_std()
+            .get_args()
+            .map(|s| s.to_string_lossy().into_owned())
+            .collect();
+        assert!(args.windows(2).any(|w| w[0] == "-s" && w[1] == WISE_CODEX_EXEC_SANDBOX));
+        assert!(!args.contains(&"-c".to_string()));
+    }
+
+    #[test]
+    fn resume_exec_ignores_default_settings() {
+        // resume 子命令不接受 -s/-c：即使配置了 settings 也不应注入，沿用原会话。
+        let settings = CodexDefaultSettings {
+            sandbox_mode: Some("danger-full-access".to_string()),
+            approval_policy: Some("never".to_string()),
+        };
+        let mut cmd = Command::new("codex");
+        configure_codex_exec_command(
+            &mut cmd,
+            "continue",
+            None,
+            "/tmp/repo",
+            Some("0199a213-81c0-7800-8aa1-bbab2a035a53"),
+            false,
+            Some(&settings),
+        );
+        let args: Vec<String> = cmd
+            .as_std()
+            .get_args()
+            .map(|s| s.to_string_lossy().into_owned())
+            .collect();
+        assert!(!args.contains(&"-s".to_string()));
+        assert!(!args.contains(&"-c".to_string()));
+        assert!(args.contains(&"resume".to_string()));
     }
 
     #[test]

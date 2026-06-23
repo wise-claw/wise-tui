@@ -1681,11 +1681,30 @@ async fn spawn_claude_process(
     } else {
         (None, false)
     };
+    // 读取用户配置的 Claude 启动默认 --settings JSON，合并进 FCC 认证 settings 文件。
+    // 每次 spawn 现读现解析（非热路径），用户在 UI 改完立即对下次会话生效。
+    let user_settings: Option<serde_json::Value> = app
+        .try_state::<crate::wise_db::WiseDb>()
+        .and_then(|db| {
+            db.get_setting(crate::claude_config_dir::CLAUDE_DEFAULT_SETTINGS_KEY)
+                .ok()
+                .flatten()
+        })
+        .and_then(|s| {
+            let t = s.trim();
+            if t.is_empty() {
+                None
+            } else {
+                serde_json::from_str::<serde_json::Value>(&t).ok()
+            }
+        })
+        .filter(|v| v.as_object().map_or(false, |o| !o.is_empty()));
     crate::claude_config_dir::configure_claude_child_process(
         &mut cmd,
         &project_path,
         base_url_override.as_deref(),
         llm_traffic_capture,
+        user_settings.as_ref(),
     );
     let mut child = match cmd.spawn() {
         Ok(c) => c,
