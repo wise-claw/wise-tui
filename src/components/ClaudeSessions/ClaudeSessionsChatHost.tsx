@@ -314,11 +314,38 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
   }, [extraPanes, sessionById]);
 
   const resolvedPaneRepositories = useMemo(() => {
+    const repoList = repositories ?? [];
     return extraPanes.map((slot) => {
-      if (slot.repositoryId == null) return chatContextRepository ?? null;
-      return (repositories ?? []).find((r) => r.id === slot.repositoryId) ?? chatContextRepository ?? null;
+      // 1. slot 已显式绑定仓库：直接用绑定的仓库。
+      if (slot.repositoryId != null) {
+        return repoList.find((r) => r.id === slot.repositoryId) ?? null;
+      }
+      // 2. slot 已占会话：从会话本身解析仓库，避免跟随左栏 global active 切换。
+      //    新建 pane session 时 assignSessionToNormalizedExtraPanes 写入 repositoryId=null，
+      //    旧实现此处回退到 chatContextRepository，导致左栏点仓库把所有已占 pane 的展示仓库一并切换。
+      if (slot.sessionId) {
+        const paneSession = sessionById.get(slot.sessionId);
+        if (paneSession) {
+          const repo = resolveRepositoryForSession({
+            session: paneSession,
+            repositories: repoList,
+            bindings: repositoryMainBindings,
+            sessions: incomingSessions,
+          });
+          if (repo) return repo;
+        }
+      }
+      // 3. 真正空槽：用聊天上下文仓库作占位默认，供 TreeSelect 新建会话使用。
+      return chatContextRepository ?? null;
     });
-  }, [chatContextRepository, extraPanes, repositories]);
+  }, [
+    chatContextRepository,
+    extraPanes,
+    incomingSessions,
+    repositories,
+    repositoryMainBindings,
+    sessionById,
+  ]);
 
   const workflowTasksByCreator = useMemo(() => {
     const map = new Map<string, WorkflowTaskItem[]>();

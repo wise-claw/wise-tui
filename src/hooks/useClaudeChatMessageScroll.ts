@@ -346,12 +346,20 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
       return ae instanceof Element && ae.closest("[data-wise-composer-root] .ProseMirror") != null;
     };
 
+    const ensureScrollContainerFocus = () => {
+      if (composerEditorHasFocus()) return;
+      const ae = document.activeElement;
+      // 已在本滚动容器内：再 focus 会触发 WebKit 隐式 scroll-into-view，
+      // 触顶时 wheel 与 focus-rect reset 互相拉锯 → 弹簧式上下微弹。跳过重复 focus。
+      if (ae instanceof Element && sc.contains(ae)) return;
+      sc.focus({ preventScroll: true });
+    };
+
     const onWheel = (event: WheelEvent) => {
       if (programmaticScrollRef.current) return;
       if (Math.abs(event.deltaY) <= 2) return;
       markClaudeScrollInteraction();
-      if (composerEditorHasFocus()) return;
-      sc.focus({ preventScroll: true });
+      ensureScrollContainerFocus();
       pauseAutoFollowForUserScroll();
     };
 
@@ -365,9 +373,7 @@ export function useClaudeChatMessageScroll({ session, hideMessages = false }: Us
         const currentScrollTop = sc.scrollTop;
         const prevScrollTop = lastScrollTopRef.current;
         if (Math.abs(currentScrollTop - prevScrollTop) > 1) {
-          if (!composerEditorHasFocus()) {
-            sc.focus({ preventScroll: true });
-          }
+          ensureScrollContainerFocus();
           pauseAutoFollowForUserScroll();
         }
         lastScrollTopRef.current = currentScrollTop;

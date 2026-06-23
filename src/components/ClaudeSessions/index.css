@@ -3576,8 +3576,8 @@
   background: var(--ant-color-bg-container);
   /* 多屏窗格父级可能设 content-visibility:auto，消息区必须始终绘制 */
   content-visibility: visible;
-  /* 减少滚动链传到外层布局，降低嵌套滚动时的合成/重绘开销 */
-  overscroll-behavior: contain;
+  /* none 同时阻 scroll-chain 与 rubber-band 弹跳；contain 在 WKWebView 仍会弹 */
+  overscroll-behavior-y: none;
   overflow-anchor: none;
   /* 贴底跟随由 JS 缓动驱动；避免与原生 smooth 叠加产生迟滞 */
   scroll-behavior: auto;
@@ -4563,9 +4563,11 @@
 
 /* 用户消息：淡 primary 阅读区块，长对话里"我问了什么"一眼可辨；助手保持白底平铺形成对比 */
 .app-claude-messages .app-claude-message--user .app-message-part--text {
-  padding: 7px 12px;
+  padding: 9px 14px;
   border-radius: 8px;
-  background: color-mix(in srgb, var(--ant-color-primary-bg) 60%, var(--ant-color-bg-container));
+  border: 1px solid var(--ant-color-border-secondary);
+  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 50%, var(--ant-color-bg-container));
+  box-sizing: border-box;
 }
 
 .app-claude-messages .app-claude-message--assistant .app-message-part--text {

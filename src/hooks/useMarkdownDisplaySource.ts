@@ -7,11 +7,23 @@ import {
 import { containsStreamingHtmlMarkup } from "../utils/markdownDisplayNormalize";
 import { findHtmlDocumentStartIndex } from "../utils/richMessageHtml";
 
-const STREAMING_MIN_REBUILD_MS = 96;
+const STREAMING_MIN_REBUILD_MS = 200;
+const STREAMING_SHORT_TEXT_FAST_PATH_LIMIT = 600;
+const MARKDOWN_STRUCTURE_HINT_RE = /[<|`#>*\-\uFF5C]|\]\(|!\[|^\s*\d+\.\s/m;
 
 function shouldBypassStreamingRebuildThrottle(text: string): boolean {
   if (findHtmlDocumentStartIndex(text) !== null) return true;
   return containsStreamingHtmlMarkup(text);
+}
+
+/**
+ * 流式短累积快速路径：跳过 `prepareMarkdownForDisplay` 的 11 个全文规范化 pass，
+ * 直接交由 ReactMarkdown 解析原文。命中时省下每 tick 的 O(n) × 11 正则扫描。
+ * 触发后 `lastBuiltRef` 不写 source，下次累积超阈值或 throttle 到期会落回完整规范化。
+ */
+function streamingShortTextFastPath(text: string): boolean {
+  if (text.length >= STREAMING_SHORT_TEXT_FAST_PATH_LIMIT) return false;
+  return !MARKDOWN_STRUCTURE_HINT_RE.test(text);
 }
 
 /** 构建聊天 Markdown 展示源码（预处理后交给 ReactMarkdown）。 */
@@ -50,14 +62,18 @@ export function useMarkdownDisplaySource(text: string, streaming: boolean): stri
 
     const prev = lastBuiltRef.current;
     const now = performance.now();
-    if (
+    const withinThrottle =
       prev.text
       && stabilizedText.startsWith(prev.text)
       && prev.source
       && now - prev.at < STREAMING_MIN_REBUILD_MS
-      && !shouldBypassStreamingRebuildThrottle(stabilizedText)
-    ) {
+      && !shouldBypassStreamingRebuildThrottle(stabilizedText);
+    if (withinThrottle) {
       return prev.source;
+    }
+
+    if (streamingShortTextFastPath(stabilizedText)) {
+      return stabilizedText;
     }
 
     const source = prepareMarkdownForDisplay(stabilizedText, { streaming: true });
