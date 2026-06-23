@@ -54,8 +54,8 @@ function ExplorerSearchResultRowItem({
         <ExplorerTreeFileIcon fileName={row.name} className="repo-search-result-row-icon repo-search-result-row-icon--file" />
       )}
       <span className="repo-search-result-row-text">
-        {parentLabel ? <span className="repo-search-result-row-parent">{parentLabel}/</span> : null}
         <span className={`repo-search-result-row-name${gitStatus ? ` repo-search-result-row-name--status-${gitStatus.toLowerCase()}` : ""}${dirStatus ? ` repo-search-result-row-name--status-${dirStatus.toLowerCase()}` : ""}${!gitStatus && !dirStatus && editorDirty ? " repo-search-result-row-name--editor-dirty" : ""}`}>{row.name}</span>
+        {parentLabel ? <span className="repo-search-result-row-parent"> &mdash; {parentLabel}</span> : null}
       </span>
       {row.isDir ? (
         <RepoTreeGitDirDecoration status={dirStatus} />

@@ -4561,12 +4561,15 @@
   box-sizing: border-box;
 }
 
-/* 用户消息：淡 primary 阅读区块，长对话里"我问了什么"一眼可辨；助手保持白底平铺形成对比 */
+/* 用户消息：无框纯文本左对齐 */
 .app-claude-messages .app-claude-message--user .app-message-part--text {
-  padding: 9px 14px;
-  border-radius: 8px;
-  border: 1px solid var(--ant-color-border-secondary);
-  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 50%, var(--ant-color-bg-container));
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  padding: 0;
+  border: none;
+  border-radius: 0;
+  background: transparent;
   box-sizing: border-box;
 }
 

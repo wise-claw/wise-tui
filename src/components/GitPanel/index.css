@@ -161,7 +161,7 @@
 }
 
 .repo-search-result-row--selected {
-  background: var(--ant-color-primary-bg, rgba(22, 119, 255, 0.12));
+  background: color-mix(in srgb, var(--ant-color-primary) 18%, var(--ant-color-bg-container));
 }
 
 .repo-search-result-row-text {
@@ -179,7 +179,7 @@
 }
 
 .repo-search-result-row-name {
-  color: var(--ant-color-text, rgba(0, 0, 0, 0.88));
+  font-weight: 600;
 }
 
 .repo-search-result-row-name--status-a {

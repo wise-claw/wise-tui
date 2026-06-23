@@ -163,8 +163,10 @@
 
 .app-command-palette-item-path {
   overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  display: flex;
+  align-items: baseline;
+  gap: 0;
+  min-width: 0;
   font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
 }
 
@@ -200,6 +202,33 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  display: flex;
+  align-items: baseline;
+  gap: 0;
+  min-width: 0;
+}
+
+.app-command-palette-item-name {
+  flex-shrink: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-weight: 600;
+}
+
+.app-command-palette-item-dir {
+  flex-shrink: 0;
+  color: var(--ant-color-text-tertiary);
+  font-weight: 400;
+  font-size: 11px;
+  white-space: nowrap;
+}
+
+.app-command-palette-item-line {
+  flex-shrink: 0;
+  color: var(--ant-color-text-quaternary, var(--ant-color-text-tertiary));
+  font-weight: 400;
+  font-size: 11px;
 }
 
 .app-command-palette-empty {
@@ -265,13 +294,13 @@
 }
 
 .app-command-palette-item-preview mark {
-  background: var(--ant-color-primary-bg, #e6f4ff);
+  background: color-mix(in srgb, var(--ant-color-primary) 22%, var(--ant-color-bg-container));
   color: var(--ant-color-primary, #1677ff);
   border-radius: 2px;
-  padding: 0 1px;
+  padding: 0 2px;
   font-weight: 600;
 }
 
 .app-command-palette-item--active .app-command-palette-item-preview mark {
-  background: var(--ant-color-primary-bg-hover, #bae0ff);
+  background: color-mix(in srgb, var(--ant-color-primary) 32%, var(--ant-color-bg-container));
 }

@@ -96,6 +96,13 @@ function CommandPaletteShortcutHints() {
   );
 }
 
+function splitFilePath(filePath: string): { name: string; dir: string } {
+  const normalized = filePath.replace(/\\/g, "/");
+  const idx = normalized.lastIndexOf("/");
+  if (idx < 0) return { name: normalized, dir: "" };
+  return { name: normalized.slice(idx + 1), dir: normalized.slice(0, idx) };
+}
+
 function toContentResults(matches: RepositoryFileContentMatch[]): ContentResult[] {
   return matches.map((match) => ({
     kind: "content" as const,
@@ -415,26 +422,33 @@ export const CommandPalette = memo(function CommandPalette({
                 }}
                 onMouseEnter={() => setActiveIndex(index)}
               >
-                {item.kind === "content" ? (
-                  <div className="app-command-palette-item-content">
-                    <div className="app-command-palette-item-head">
-                      <FileOutlined className="app-command-palette-item-icon" />
-                      <span className="app-command-palette-item-path">{item.display}</span>
-                    </div>
-                    {item.preview ? (
-                      <div className="app-command-palette-item-preview">
-                        <PreviewWithHighlight
-                          preview={item.preview}
-                          matchStart={item.matchStart}
-                          matchEnd={item.matchEnd}
-                          query={query}
-                        />
+                  {item.kind === "content" ? (
+                    <div className="app-command-palette-item-content">
+                      <div className="app-command-palette-item-head">
+                        <FileOutlined className="app-command-palette-item-icon" />
+                        <span className="app-command-palette-item-path">
+                          <span className="app-command-palette-item-name">{splitFilePath(item.path).name}</span>
+                          <span className="app-command-palette-item-dir"> &mdash; {splitFilePath(item.path).dir}</span>
+                          <span className="app-command-palette-item-line">:{item.line}</span>
+                        </span>
                       </div>
-                    ) : null}
-                  </div>
-                ) : (
-                  <span className="app-command-palette-item-label">{item.display}</span>
-                )}
+                      {item.preview ? (
+                        <div className="app-command-palette-item-preview">
+                          <PreviewWithHighlight
+                            preview={item.preview}
+                            matchStart={item.matchStart}
+                            matchEnd={item.matchEnd}
+                            query={query}
+                          />
+                        </div>
+                      ) : null}
+                    </div>
+                  ) : (
+                    <span className="app-command-palette-item-label">
+                      <span className="app-command-palette-item-name">{splitFilePath(item.path).name}</span>
+                      {splitFilePath(item.path).dir ? <span className="app-command-palette-item-dir"> &mdash; {splitFilePath(item.path).dir}</span> : null}
+                    </span>
+                  )}
               </div>
             ))}
           </div>
