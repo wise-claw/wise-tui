@@ -1,6 +1,6 @@
 [package]
 name = "wise"
-version = "0.1.0"
+version = "1.1.0"
 description = "Wise desktop orchestration client"
 authors = ["Wise contributors"]
 license = "Apache-2.0"
