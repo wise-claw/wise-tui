@@ -1,5 +1,6 @@
 import { useEffect, useRef } from "react";
 import type { ClaudeSession } from "../types";
+import { isCurrentPrimaryMainWorkspaceWindowSync } from "../services/mainWindow";
 import { assistantMessageVisiblePlainText } from "../services/claudeSessionState";
 import {
   findRunningFeedbackLoopDispatchesForWorker,
@@ -68,7 +69,8 @@ export function useSessionFeedbackLoopDispatchCompletion(input: {
 
     scan();
     const unsubscribe = subscribeSessionFeedbackLoopDispatches(scan);
-    const timer = window.setInterval(scan, 1200);
+    const feedbackPollMs = isCurrentPrimaryMainWorkspaceWindowSync() ? 3000 : 5000;
+    const timer = window.setInterval(scan, feedbackPollMs);
     return () => {
       unsubscribe();
       window.clearInterval(timer);

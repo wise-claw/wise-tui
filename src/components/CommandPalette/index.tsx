@@ -14,6 +14,13 @@ import "./index.css";
 
 export type CommandPaletteSearchMode = "filename" | "content";
 
+/** filename 模式防抖：120ms 平衡响应感与 IPC 频率（原 50ms 在低端机几乎每键触发搜索）。 */
+const FILENAME_SEARCH_DEBOUNCE_MS = 120;
+/** content 模式防抖：全文搜索更重，保留更长防抖。 */
+const CONTENT_SEARCH_DEBOUNCE_MS = 250;
+/** 最多渲染的结果项数；超出部分以提示带出，避免大结果集全量渲染卡顿。 */
+const MAX_RENDERED_RESULTS = 80;
+
 interface Props {
   open: boolean;
   onClose: () => void;
@@ -129,7 +136,7 @@ function setChildrenAt(
   });
 }
 
-function PreviewWithHighlight({
+const PreviewWithHighlight = memo(function PreviewWithHighlight({
   preview,
   matchStart,
   matchEnd,
@@ -149,7 +156,7 @@ function PreviewWithHighlight({
       {segs.after}
     </>
   );
-}
+});
 
 export const CommandPalette = memo(function CommandPalette({
   open,
@@ -169,6 +176,11 @@ export const CommandPalette = memo(function CommandPalette({
   const [scopeTreeData, setScopeTreeData] = useState<ScopeTreeNode[]>([]);
   const inputRef = useRef<HTMLInputElement>(null);
   const searchRequestIdRef = useRef(0);
+  // 键盘监听用 ref 持有可变值，避免 results/activeIndex 每次变化都重绑全局 keydown。
+  const resultsRef = useRef(results);
+  resultsRef.current = results;
+  const activeIndexRef = useRef(activeIndex);
+  activeIndexRef.current = activeIndex;
 
   const loadScopeChildren = useCallback(
     async (parentDir: string): Promise<ScopeTreeNode[]> => {
@@ -289,7 +301,7 @@ export const CommandPalette = memo(function CommandPalette({
       } finally {
         if (!cancelled && requestId === searchRequestIdRef.current) setLoading(false);
       }
-    }, searchMode === "content" ? 250 : 50);
+    }, searchMode === "content" ? CONTENT_SEARCH_DEBOUNCE_MS : FILENAME_SEARCH_DEBOUNCE_MS);
 
     return () => {
       cancelled = true;

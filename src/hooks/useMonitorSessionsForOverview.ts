@@ -5,6 +5,7 @@ import { assistantMessageVisiblePlainText } from "../services/claudeSessionState
 import { MONITOR_SESSIONS_SYNC_INTERVAL_MS } from "../constants/monitorUi";
 import { runWhenIdle } from "../utils/deferIdle";
 import { readVisiblePollIntervalMs } from "../utils/adaptivePoll";
+import { isCurrentPrimaryMainWorkspaceWindowSync } from "../services/mainWindow";
 import { subscribeClaudeSessionsStructure } from "../stores/claudeSessionsLiveStore";
 
 const MONITOR_FINGERPRINT_HIDDEN_INTERVAL_MS = MONITOR_SESSIONS_SYNC_INTERVAL_MS * 3;
@@ -23,11 +24,14 @@ function attachMonitorFingerprintPolling(
 
   const scheduleTimer = () => {
     if (timer != null) window.clearInterval(timer);
+    const monitorVisibleMs = isCurrentPrimaryMainWorkspaceWindowSync()
+      ? MONITOR_SESSIONS_SYNC_INTERVAL_MS
+      : MONITOR_FINGERPRINT_HIDDEN_INTERVAL_MS;
     timer = window.setInterval(
       runCommit,
       readVisiblePollIntervalMs(
-        MONITOR_SESSIONS_SYNC_INTERVAL_MS,
-        MONITOR_FINGERPRINT_HIDDEN_INTERVAL_MS,
+        monitorVisibleMs,
+        MONITOR_FINGERPRINT_HIDDEN_INTERVAL_MS * 3,
       ),
     );
   };

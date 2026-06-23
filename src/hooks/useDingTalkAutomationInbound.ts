@@ -18,6 +18,7 @@ import { repositorySessionTabDisplayName } from "../utils/repositoryType";
 import { loadSessionOwnerHints } from "../utils/sessionOwnerHints";
 import { resolveBoundMainSessionId, resolveMainOwnerAgentNameForRepositoryPath } from "../utils/repositoryMainSessionBinding";
 import { readVisiblePollIntervalMs } from "../utils/adaptivePoll";
+import { isCurrentPrimaryMainWorkspaceWindowSync } from "../services/mainWindow";
 
 type CreateSession = (
   repositoryPath: string,
@@ -119,6 +120,7 @@ export function useDingTalkAutomationInbound({
   }, []);
 
   useEffect(() => {
+    if (!isCurrentPrimaryMainWorkspaceWindowSync()) return;
     const sweep = () => {
       const now = Date.now();
       for (const [tabKey, pending] of [...pendingRef.current.entries()]) {

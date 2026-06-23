@@ -89,6 +89,7 @@ import {
 } from "../constants/claudeMessageListWindow";
 import { runWhenIdle } from "../utils/deferIdle";
 import { readVisiblePollIntervalMs, startAdaptiveInterval } from "../utils/adaptivePoll";
+import { isCurrentPrimaryMainWorkspaceWindowSync } from "../services/mainWindow";
 import { wiseNotificationIngest } from "../services/wiseMascot";
 import {
   buildQuestionFallbackUserPrompt,
@@ -2980,9 +2981,12 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
     const scheduleTimer = () => {
       if (timer != null) window.clearInterval(timer);
+      const memCapPrimaryMs = 45_000;
+      const memCapHiddenMs = 90_000;
+      const memCapVisibleMs = isCurrentPrimaryMainWorkspaceWindowSync() ? memCapPrimaryMs : memCapHiddenMs;
       timer = window.setInterval(
         runMemoryCapPass,
-        readVisiblePollIntervalMs(45_000, 90_000),
+        readVisiblePollIntervalMs(memCapVisibleMs, memCapHiddenMs * 2),
       );
     };
 
@@ -3015,13 +3019,16 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
     const scheduleTimer = () => {
       if (timer != null) window.clearInterval(timer);
+      const regPrimaryMs = 15_000;
+      const regHiddenMs = 45_000;
+      const regVisibleMs = isCurrentPrimaryMainWorkspaceWindowSync() ? regPrimaryMs : regHiddenMs;
       timer = window.setInterval(() => {
         if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
         if (cancelIdle) cancelIdle();
         cancelIdle = runWhenIdle(() => {
           void tick();
         }, { timeoutMs: 1800 });
-      }, readVisiblePollIntervalMs(15_000, 45_000));
+      }, readVisiblePollIntervalMs(regVisibleMs, regHiddenMs * 2));
     };
 
     const tick = async () => {

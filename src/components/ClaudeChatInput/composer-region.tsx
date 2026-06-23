@@ -709,12 +709,16 @@ function ComposerInner({
   }, [set]);
 
   const syncCanSendComposer = useCallback((plain: string) => {
-    const codeSelectionRefs = extractComposerCodeSelectionRefs(aiChatRef.current?.getEditor?.());
+    // 打字常态（有文本/图片/上下文）下直接判可发送，跳过对整篇 Tiptap doc 的 pill 遍历，
+    // 避免每次按键 O(n) 全量扫描。仅当三者皆空时才需提取 code-selection pill 判断。
+    const hasText = plain.trim().length > 0;
+    const hasImages = imagesRef.current.length > 0;
+    const hasContext = contextItemsRef.current.length > 0;
     const active =
-      plain.trim().length > 0 ||
-      imagesRef.current.length > 0 ||
-      contextItemsRef.current.length > 0 ||
-      codeSelectionRefs.length > 0;
+      hasText ||
+      hasImages ||
+      hasContext ||
+      extractComposerCodeSelectionRefs(aiChatRef.current?.getEditor?.()).length > 0;
     if (active === canSendComposerRef.current) return;
     canSendComposerRef.current = active;
     setCanSendComposer(active);
@@ -894,13 +898,18 @@ function ComposerInner({
   const applySemiContentChange = useCallback((contents: Content[]) => {
     if (!semiEditorReadyRef.current) return;
     const ed = aiChatRef.current?.getEditor?.();
-    let plain = normalizeComposerEditorPlain(contentsToPlain(contents));
+    // 优先从 Tiptap editor 读取权威 plain（已 normalize），避免每键同时跑
+    // contentsToPlain 遍历 + readSemiEditorPlain 两次提取。editor 无文本时回退 contentsToPlain。
+    let plain: string;
     if (ed) {
       try {
-        plain = readSemiEditorPlain(ed) || plain;
+        const edPlain = readSemiEditorPlain(ed);
+        plain = edPlain !== "" ? edPlain : normalizeComposerEditorPlain(contentsToPlain(contents));
       } catch {
-        /* keep contentsToPlain */
+        plain = normalizeComposerEditorPlain(contentsToPlain(contents));
       }
+    } else {
+      plain = normalizeComposerEditorPlain(contentsToPlain(contents));
     }
     if (skipContentSyncRemainingRef.current > 0) {
       if (plain !== lastEditorPlainRef.current) {

@@ -10,6 +10,7 @@ import {
   resolveScheduledTaskExecutionKind,
 } from "../utils/scheduledTaskExecution";
 import { readVisiblePollIntervalMs } from "../utils/adaptivePoll";
+import { isCurrentPrimaryMainWorkspaceWindowSync } from "../services/mainWindow";
 
 const TICK_MS = 45_000;
 const TICK_MS_HIDDEN = 180_000;
@@ -50,6 +51,7 @@ export function useScheduledClaudeTaskRunner({
 
   useEffect(() => {
     let cancelled = false;
+    if (!isCurrentPrimaryMainWorkspaceWindowSync()) return;
     const tick = async () => {
       if (cancelled || inFlightRef.current) return;
       inFlightRef.current = true;

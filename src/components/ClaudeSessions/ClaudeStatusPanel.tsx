@@ -43,7 +43,7 @@ interface SnapshotSource {
   messageCount: number;
 }
 
-const PANEL_REFRESH_MS = 2000;
+const PANEL_REFRESH_MS = 10000;
 const FILE_PERSIST_MIN_INTERVAL_MS = 10_000;
 const PANEL_IDLE_REFRESH_MS = 60_000;
 const FILE_IDLE_PERSIST_MIN_INTERVAL_MS = 30_000;

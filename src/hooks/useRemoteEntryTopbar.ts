@@ -18,6 +18,7 @@ import {
   type RemoteEntryTopbarSnapshot,
 } from "../services/remoteEntryTopbar";
 import { readVisiblePollIntervalMs } from "../utils/adaptivePoll";
+import { isCurrentPrimaryMainWorkspaceWindowSync } from "../services/mainWindow";
 import { safeUnlisten } from "../utils/safeTauriUnlisten";
 
 const POLL_MS = 5000;
@@ -38,10 +39,13 @@ export function useRemoteEntryTopbar() {
   useEffect(() => {
     if (!isTauri()) return;
     void refresh();
+    const remotePrimaryMs = POLL_MS;
+    const remoteHiddenMs = 20000;
+    const remoteVisibleMs = isCurrentPrimaryMainWorkspaceWindowSync() ? remotePrimaryMs : remoteHiddenMs;
     const id = window.setInterval(() => {
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       void refresh();
-    }, readVisiblePollIntervalMs(POLL_MS, 20000));
+    }, readVisiblePollIntervalMs(remoteVisibleMs, remoteHiddenMs * 2));
     return () => window.clearInterval(id);
   }, [refresh]);
 

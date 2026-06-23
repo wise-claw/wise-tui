@@ -3,6 +3,7 @@ import type { ClaudeSession } from "../types";
 import { CLAUDE_DISK_JSONL_TAIL_LINES_RELOAD } from "../constants/claudeMessageListWindow";
 import { loadClaudeSessionJsonl } from "../services/claudeDisk";
 import { readVisiblePollIntervalMs } from "../utils/adaptivePoll";
+import { isCurrentPrimaryMainWorkspaceWindowSync } from "../services/mainWindow";
 import {
   capSessionMessagesForMemory,
   sessionMessagesFromJsonlLines,
@@ -97,11 +98,14 @@ export function useSubagentDiskTranscript(params: {
     };
 
     void load();
+    const subPrimaryMs = RUNNING_POLL_MS;
+    const subHiddenMs = RUNNING_POLL_MS_HIDDEN;
+    const subVisibleMs = isCurrentPrimaryMainWorkspaceWindowSync() ? subPrimaryMs : subHiddenMs;
     if (pollWhileRunning && (status === "running" || status === "connecting")) {
       timer = window.setInterval(() => {
         if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
         void load();
-      }, readVisiblePollIntervalMs(RUNNING_POLL_MS, RUNNING_POLL_MS_HIDDEN));
+      }, readVisiblePollIntervalMs(subVisibleMs, subHiddenMs * 2));
     }
 
     return () => {

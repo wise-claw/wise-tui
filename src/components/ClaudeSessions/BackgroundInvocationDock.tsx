@@ -272,10 +272,10 @@ function BackgroundInvocationDockInner({ session }: { session: ClaudeSession }) 
     const intervalMs = document.hidden
       ? 2000
       : isWebViewDevToolsLikelyOpen()
-        ? 1500
+        ? 2000
         : drawerOpenRef.current
-          ? 800
-          : 2500;
+          ? 2000
+          : 3000;
     flushTimerRef.current = window.setInterval(() => {
       if (typeof document !== "undefined" && document.visibilityState !== "visible") return;
       const keys = Object.keys(unsubsByKeyRef.current);
