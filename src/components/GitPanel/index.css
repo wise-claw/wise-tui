@@ -456,11 +456,6 @@
   padding-bottom: 6px;
 }
 
-.git-diff-mode__head .git-diff-mode__empty {
-  align-self: center;
-  margin: 0 8px 8px;
-}
-
 .git-diff-mode-scroll {
   flex: 1 1 0;
   min-height: 0;
@@ -475,16 +470,15 @@
   pointer-events: none;
 }
 
+/* 空态占满 head 下方的剩余空间，撑到底部；不再做成按钮形状 */
 .git-diff-mode__empty {
-  flex-shrink: 0;
-  display: inline-flex;
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
   align-items: center;
   justify-content: center;
   gap: 6px;
-  padding: 6px 10px;
-  border-radius: 999px;
-  background: var(--ant-color-fill-quaternary);
-  border: 1px solid var(--ant-color-border-secondary);
+  padding: 8px 12px;
   font-size: 11px;
   line-height: 1.35;
   color: var(--ant-color-text-tertiary);
@@ -504,8 +498,8 @@
 }
 
 .app-git-panel--multi .git-diff-mode__empty {
-  margin-bottom: 6px;
-  padding: 5px 9px;
+  flex: none;
+  padding: 6px 12px;
 }
 
 /* ── Header ── */

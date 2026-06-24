@@ -463,13 +463,13 @@ function DiffModeInner({
               ) : null}
             </div>
           </div>
+        </div>
+      ) : null}
 
-          {!hasChanges ? (
-            <div className="git-diff-mode__empty" role="status">
-              <CheckOutlined className="git-diff-mode__empty-icon" aria-hidden />
-              <span>没有检测到变更</span>
-            </div>
-          ) : null}
+      {!hasChanges && status.branch ? (
+        <div className="git-diff-mode__empty" role="status">
+          <CheckOutlined className="git-diff-mode__empty-icon" aria-hidden />
+          <span>没有检测到变更</span>
         </div>
       ) : null}
 
