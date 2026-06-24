@@ -444,126 +444,119 @@ fn compute_ahead_behind(repo: &Repository) -> Result<(usize, usize, Option<Strin
 }
 
 #[tauri::command]
-pub(crate) fn git_status(path: String) -> Result<GitStatusResponse, String> {
-    let repo = open_repo(&path)?;
-    let branch = get_git_branch(&path);
+pub(crate) async fn git_status(path: String) -> Result<GitStatusResponse, String> {
+    run_git_blocking("git_status", move || {
+        let repo = open_repo(&path)?;
+        let branch = get_git_branch(&path);
 
-    let mut opts = StatusOptions::new();
-    opts.include_untracked(true);
-    opts.include_ignored(false);
-    opts.recurse_untracked_dirs(true);
+        let mut opts = StatusOptions::new();
+        opts.include_untracked(true);
+        opts.include_ignored(false);
+        opts.recurse_untracked_dirs(true);
 
-    let statuses = repo
-        .statuses(Some(&mut opts))
-        .map_err(|e| format!("Failed to get status: {}", e))?;
+        let statuses = repo
+            .statuses(Some(&mut opts))
+            .map_err(|e| format!("Failed to get status: {}", e))?;
 
-    let file_count = statuses
-        .iter()
-        .filter(|entry| !entry.path().unwrap_or("").is_empty())
-        .count();
-    let skip_per_file_stats = file_count > GIT_STATUS_PER_FILE_STATS_LIMIT;
+        let mut staged: Vec<GitFileStatus> = Vec::new();
+        let mut unstaged: Vec<GitFileStatus> = Vec::new();
 
-    let mut staged: Vec<GitFileStatus> = Vec::new();
-    let mut unstaged: Vec<GitFileStatus> = Vec::new();
+        let head_tree = repo.head().ok().and_then(|h| h.peel_to_tree().ok());
 
-    let head_tree = repo.head().ok().and_then(|h| h.peel_to_tree().ok());
+        let staged_line_stats = collect_staged_line_stats(&repo, head_tree.as_ref());
+        let unstaged_line_stats = collect_unstaged_line_stats(&repo);
 
-    let (staged_line_stats, unstaged_line_stats) = if skip_per_file_stats {
-        (HashMap::new(), HashMap::new())
-    } else {
-        (
-            collect_staged_line_stats(&repo, head_tree.as_ref()),
-            collect_unstaged_line_stats(&repo),
-        )
-    };
+        for entry in statuses.iter() {
+            let status = entry.status();
+            let file_path = entry.path().unwrap_or("").to_string();
+            if file_path.is_empty() {
+                continue;
+            }
+            let status_str = status_char_to_str(status);
 
-    for entry in statuses.iter() {
-        let status = entry.status();
-        let file_path = entry.path().unwrap_or("").to_string();
-        if file_path.is_empty() {
-            continue;
-        }
-        let status_str = status_char_to_str(status);
+            let is_index = status.is_index_new()
+                || status.is_index_modified()
+                || status.is_index_deleted()
+                || status.is_index_renamed()
+                || status.is_index_typechange();
+            let is_wt = status.is_wt_new()
+                || status.is_wt_modified()
+                || status.is_wt_deleted()
+                || status.is_wt_renamed()
+                || status.is_wt_typechange();
 
-        let is_index = status.is_index_new()
-            || status.is_index_modified()
-            || status.is_index_deleted()
-            || status.is_index_renamed()
-            || status.is_index_typechange();
-        let is_wt = status.is_wt_new()
-            || status.is_wt_modified()
-            || status.is_wt_deleted()
-            || status.is_wt_renamed()
-            || status.is_wt_typechange();
-
-        let file_status = GitFileStatus {
-            path: file_path.clone(),
-            status: status_str,
-            additions: 0,
-            deletions: 0,
-        };
-
-        if is_index {
-            let (adds, dels) = staged_line_stats.get(&file_path).copied().unwrap_or((0, 0));
             let file_status = GitFileStatus {
-                additions: adds,
-                deletions: dels,
-                ..file_status
+                path: file_path.clone(),
+                status: status_str,
+                additions: 0,
+                deletions: 0,
             };
-            if is_wt {
-                let (wt_adds, wt_dels) = unstaged_line_stats
+
+            if is_index {
+                let (adds, dels) = staged_line_stats.get(&file_path).copied().unwrap_or((0, 0));
+                let file_status = GitFileStatus {
+                    additions: adds,
+                    deletions: dels,
+                    ..file_status
+                };
+                if is_wt {
+                    let (wt_adds, wt_dels) = unstaged_line_stats
+                        .get(&file_path)
+                        .copied()
+                        .unwrap_or_else(|| {
+                            if status.is_wt_new() {
+                                count_file_lines_for_untracked(&path, &file_path)
+                            } else {
+                                (0, 0)
+                            }
+                        });
+                    unstaged.push(GitFileStatus {
+                        additions: wt_adds,
+                        deletions: wt_dels,
+                        ..file_status.clone()
+                    });
+                }
+                staged.push(file_status);
+            } else {
+                let (adds, dels) = unstaged_line_stats
                     .get(&file_path)
                     .copied()
-                    .unwrap_or((0, 0));
+                    .unwrap_or_else(|| {
+                        if status.is_wt_new() {
+                            count_file_lines_for_untracked(&path, &file_path)
+                        } else {
+                            (0, 0)
+                        }
+                    });
                 unstaged.push(GitFileStatus {
-                    additions: wt_adds,
-                    deletions: wt_dels,
-                    ..file_status.clone()
+                    additions: adds,
+                    deletions: dels,
+                    ..file_status
                 });
             }
-            staged.push(file_status);
-        } else {
-            let (adds, dels) = unstaged_line_stats
-                .get(&file_path)
-                .copied()
-                .unwrap_or_else(|| {
-                    if !skip_per_file_stats && status.is_wt_new() {
-                        count_file_lines_for_untracked(&path, &file_path)
-                    } else {
-                        (0, 0)
-                    }
-                });
-            unstaged.push(GitFileStatus {
-                additions: adds,
-                deletions: dels,
-                ..file_status
-            });
         }
-    }
 
-    let (total_additions, total_deletions) = if skip_per_file_stats {
-        collect_aggregate_line_totals(&repo, &path, head_tree.as_ref())
-    } else {
-        (
+        let (total_additions, total_deletions) = (
             staged.iter().map(|f| f.additions).sum::<usize>()
                 + unstaged.iter().map(|f| f.additions).sum::<usize>(),
             staged.iter().map(|f| f.deletions).sum::<usize>()
                 + unstaged.iter().map(|f| f.deletions).sum::<usize>(),
-        )
-    };
+        );
 
-    let (ahead, behind, upstream) = compute_ahead_behind(&repo).unwrap_or((0, 0, None));
+        let (ahead, behind, upstream) = compute_ahead_behind(&repo).unwrap_or((0, 0, None));
 
-    Ok(GitStatusResponse {
-        staged,
-        unstaged,
-        branch,
-        additions: total_additions,
-        deletions: total_deletions,
-        ahead,
-        behind,
-        upstream,
+        Ok(GitStatusResponse {
+            staged,
+            unstaged,
+            branch,
+            additions: total_additions,
+            deletions: total_deletions,
+            ahead,
+            behind,
+            upstream,
+        })
     })
+    .await
 }
 
 #[tauri::command]
@@ -645,9 +638,6 @@ fn collect_unstaged_line_stats(repo: &Repository) -> HashMap<String, (usize, usi
     };
     collect_line_stats_from_diff(&diff)
 }
-
-/// 变更文件过多时跳过逐文件行统计（避免对数十万行做 HashMap 插入）。
-const GIT_STATUS_PER_FILE_STATS_LIMIT: usize = 400;
 
 fn diff_foreach_totals(diff: &git2::Diff<'_>) -> (usize, usize) {
     let mut adds = 0usize;
