@@ -463,8 +463,8 @@ pub(crate) async fn git_status(path: String) -> Result<GitStatusResponse, String
 
         let head_tree = repo.head().ok().and_then(|h| h.peel_to_tree().ok());
 
-        let staged_line_stats = collect_staged_line_stats(&repo, head_tree.as_ref());
-        let unstaged_line_stats = collect_unstaged_line_stats(&repo);
+        let staged_line_stats = collect_staged_line_stats(&path);
+        let unstaged_line_stats = collect_unstaged_line_stats(&path);
 
         for entry in statuses.iter() {
             let status = entry.status();
@@ -603,7 +603,7 @@ pub(crate) async fn git_status_summary(path: String) -> Result<GitStatusSummaryR
         }
 
         let head_tree = repo.head().ok().and_then(|h| h.peel_to_tree().ok());
-        let (additions, deletions) = collect_aggregate_line_totals(&repo, &path, head_tree.as_ref());
+        let (additions, deletions) = collect_aggregate_line_totals(&path);
         let (ahead, behind, _upstream) = compute_ahead_behind(&repo).unwrap_or((0, 0, None));
 
         Ok(GitStatusSummaryResponse {
@@ -619,70 +619,65 @@ pub(crate) async fn git_status_summary(path: String) -> Result<GitStatusSummaryR
     .await
 }
 
-fn collect_staged_line_stats(
-    repo: &Repository,
-    head_tree: Option<&git2::Tree<'_>>,
-) -> HashMap<String, (usize, usize)> {
-    let Ok(diff) = repo.diff_tree_to_index(head_tree, None, None) else {
+fn parse_numstat(repo_path: &str, args: &[&str]) -> HashMap<String, (usize, usize)> {
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(repo_path)
+        .args(args)
+        .output();
+    let Ok(output) = output else { return HashMap::new() };
+    if !output.status.success() {
         return HashMap::new();
-    };
-    collect_line_stats_from_diff(&diff)
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let mut map = HashMap::new();
+    for line in stdout.lines() {
+        let mut parts = line.splitn(3, '\t');
+        let adds_str = parts.next().unwrap_or("0");
+        let dels_str = parts.next().unwrap_or("0");
+        let path = parts.next().unwrap_or("").trim();
+        if path.is_empty() {
+            continue;
+        }
+        let adds: usize = adds_str.parse().unwrap_or(0);
+        let dels: usize = dels_str.parse().unwrap_or(0);
+        map.insert(path.to_string(), (adds, dels));
+    }
+    map
 }
 
-fn collect_unstaged_line_stats(repo: &Repository) -> HashMap<String, (usize, usize)> {
-    let mut opts = DiffOptions::new();
-    opts.include_untracked(true);
-    opts.recurse_untracked_dirs(true);
-    let Ok(diff) = repo.diff_index_to_workdir(None, Some(&mut opts)) else {
-        return HashMap::new();
-    };
-    collect_line_stats_from_diff(&diff)
+fn collect_staged_line_stats(repo_path: &str) -> HashMap<String, (usize, usize)> {
+    parse_numstat(repo_path, &["diff", "--numstat", "--cached", "HEAD"])
 }
 
-fn diff_foreach_totals(diff: &git2::Diff<'_>) -> (usize, usize) {
+fn collect_unstaged_line_stats(repo_path: &str) -> HashMap<String, (usize, usize)> {
+    parse_numstat(repo_path, &["diff", "--numstat"])
+}
+
+fn collect_aggregate_line_totals(repo_path: &str) -> (usize, usize) {
+    let staged = parse_numstat(repo_path, &["diff", "--numstat", "--cached", "HEAD"]);
+    let unstaged = parse_numstat(repo_path, &["diff", "--numstat"]);
+    let untracked = collect_all_untracked_line_totals(repo_path);
     let mut adds = 0usize;
     let mut dels = 0usize;
-    let _ = diff.foreach(
-        &mut |_delta, _| true,
-        None,
-        None,
-        Some(&mut |_delta, _hunk, line| {
-            match line.origin() {
-                '+' => adds += 1,
-                '-' => dels += 1,
-                _ => {}
-            }
-            true
-        }),
-    );
-    (adds, dels)
-}
-
-fn collect_aggregate_line_totals(
-    repo: &Repository,
-    repo_path: &str,
-    head_tree: Option<&git2::Tree<'_>>,
-) -> (usize, usize) {
-    let mut adds = 0usize;
-    let mut dels = 0usize;
-    if let Ok(diff) = repo.diff_tree_to_index(head_tree, None, None) {
-        let (a, d) = diff_foreach_totals(&diff);
+    for (_, (a, d)) in &staged {
         adds += a;
         dels += d;
     }
-    let mut opts = DiffOptions::new();
-    if let Ok(diff) = repo.diff_index_to_workdir(None, Some(&mut opts)) {
-        let (a, d) = diff_foreach_totals(&diff);
+    for (_, (a, d)) in &unstaged {
         adds += a;
         dels += d;
     }
-    let (ut_adds, ut_dels) = collect_all_untracked_line_totals(repo, repo_path);
-    adds += ut_adds;
-    dels += ut_dels;
+    adds += untracked.0;
+    dels += untracked.1;
     (adds, dels)
 }
 
-fn collect_all_untracked_line_totals(repo: &Repository, repo_path: &str) -> (usize, usize) {
+fn collect_all_untracked_line_totals(repo_path: &str) -> (usize, usize) {
+    let repo = match Repository::open(repo_path) {
+        Ok(r) => r,
+        Err(_) => return (0, 0),
+    };
     let mut adds = 0usize;
     let mut dels = 0usize;
     let mut opts = StatusOptions::new();
@@ -705,34 +700,6 @@ fn collect_all_untracked_line_totals(repo: &Repository, repo_path: &str) -> (usi
         }
     }
     (adds, dels)
-}
-
-fn collect_line_stats_from_diff(diff: &git2::Diff<'_>) -> HashMap<String, (usize, usize)> {
-    let mut map: HashMap<String, (usize, usize)> = HashMap::new();
-    let _ = diff.foreach(
-        &mut |_delta, _| true,
-        None,
-        None,
-        Some(&mut |delta, _hunk, line| {
-            let path = delta
-                .new_file()
-                .path()
-                .or_else(|| delta.old_file().path())
-                .map(|p| p.to_string_lossy().to_string())
-                .unwrap_or_default();
-            if path.is_empty() {
-                return true;
-            }
-            let entry = map.entry(path).or_insert((0, 0));
-            match line.origin() {
-                '+' => entry.0 += 1,
-                '-' => entry.1 += 1,
-                _ => {}
-            }
-            true
-        }),
-    );
-    map
 }
 
 fn count_file_lines_for_untracked(repo_path: &str, rel_path: &str) -> (usize, usize) {
