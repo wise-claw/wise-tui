@@ -646,10 +646,26 @@ fn collect_unstaged_line_stats(repo: &Repository) -> HashMap<String, (usize, usi
 /// 变更文件过多时跳过逐文件行统计（避免对数十万行做 HashMap 插入）。
 const GIT_STATUS_PER_FILE_STATS_LIMIT: usize = 400;
 
-fn diff_stats_totals(diff: &git2::Diff<'_>) -> (usize, usize) {
-    diff.stats()
-        .map(|stats| (stats.insertions(), stats.deletions()))
-        .unwrap_or((0, 0))
+/// 遍历 diff 逐行统计增减行数（不创建 per-file HashMap）。
+/// libgit2 的 `diff.stats().insertions()` 不会计入未跟踪文件的行数，
+/// 而 `diff.foreach` 配合 `show_untracked_content` 能正确统计所有行。
+fn diff_foreach_totals(diff: &git2::Diff<'_>) -> (usize, usize) {
+    let mut adds = 0usize;
+    let mut dels = 0usize;
+    let _ = diff.foreach(
+        &mut |_delta, _| true,
+        None,
+        None,
+        Some(&mut |_delta, _hunk, line| {
+            match line.origin() {
+                '+' => adds += 1,
+                '-' => dels += 1,
+                _ => {}
+            }
+            true
+        }),
+    );
+    (adds, dels)
 }
 
 fn collect_aggregate_line_totals(
@@ -659,18 +675,18 @@ fn collect_aggregate_line_totals(
     let mut adds = 0usize;
     let mut dels = 0usize;
     if let Ok(diff) = repo.diff_tree_to_index(head_tree, None, None) {
-        let (a, d) = diff_stats_totals(&diff);
+        let (a, d) = diff_foreach_totals(&diff);
         adds += a;
         dels += d;
     }
     let mut opts = DiffOptions::new();
     opts.include_untracked(true);
     opts.recurse_untracked_dirs(true);
-    // libgit2 默认不在 diff stats 中计入未跟踪文件的内容行数，
-    // 启用 show_untracked_content 让 diff 生成未跟踪文件的行信息，使 stats() 正确统计。
+    // 启用 show_untracked_content 让 diff 读取未跟踪文件内容，
+    // diff_foreach_totals 才能通过行回调统计其行数。
     opts.show_untracked_content(true);
     if let Ok(diff) = repo.diff_index_to_workdir(None, Some(&mut opts)) {
-        let (a, d) = diff_stats_totals(&diff);
+        let (a, d) = diff_foreach_totals(&diff);
         adds += a;
         dels += d;
     }
