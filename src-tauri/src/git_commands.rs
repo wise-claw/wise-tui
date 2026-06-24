@@ -1,6 +1,6 @@
 use crate::project_workspace_paths::{canonicalize_existing_dir, validate_repository_folder_name};
 use git2::build::CheckoutBuilder;
-use git2::{BranchType, DiffOptions, Oid, Repository, Sort, Status, StatusOptions};
+use git2::{BranchType, Oid, Repository, Sort, Status, StatusOptions};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::fs;
@@ -461,8 +461,6 @@ pub(crate) async fn git_status(path: String) -> Result<GitStatusResponse, String
         let mut staged: Vec<GitFileStatus> = Vec::new();
         let mut unstaged: Vec<GitFileStatus> = Vec::new();
 
-        let head_tree = repo.head().ok().and_then(|h| h.peel_to_tree().ok());
-
         let staged_line_stats = collect_staged_line_stats(&path);
         let unstaged_line_stats = collect_unstaged_line_stats(&path);
 
@@ -602,7 +600,6 @@ pub(crate) async fn git_status_summary(path: String) -> Result<GitStatusSummaryR
             }
         }
 
-        let head_tree = repo.head().ok().and_then(|h| h.peel_to_tree().ok());
         let (additions, deletions) = collect_aggregate_line_totals(&path);
         let (ahead, behind, _upstream) = compute_ahead_behind(&repo).unwrap_or((0, 0, None));
 
@@ -704,10 +701,22 @@ fn collect_all_untracked_line_totals(repo_path: &str) -> (usize, usize) {
 
 fn count_file_lines_for_untracked(repo_path: &str, rel_path: &str) -> (usize, usize) {
     let full_path = Path::new(repo_path).join(rel_path);
-    let Ok(content) = fs::read_to_string(full_path) else {
+    // 走字节级扫描：untracked 可能含 binary / 非 UTF-8 内容，
+    // 用 `\n` 个数代替 `lines().count()` 避免整文件解码失败导致行数归零。
+    let Ok(bytes) = fs::read(&full_path) else {
         return (0, 0);
     };
-    (content.lines().count(), 0)
+    let newline_count = memchr::memchr_iter(b'\n', &bytes).count();
+    // 与 `str::lines().count()` 行为对齐：最后一行若无换行也算 1 行；
+    // 全空文件 / 只有换行的文件都按 0/1 走，实际多数代码库不会全是空文件。
+    let additions = if bytes.is_empty() {
+        0
+    } else if bytes.last() == Some(&b'\n') {
+        newline_count
+    } else {
+        newline_count + 1
+    };
+    (additions, 0)
 }
 
 /// 将相对路径转为 libgit2 pathspec：目录用 `dir/**` 一次匹配子树，单文件用精确路径。
@@ -1232,8 +1241,10 @@ fn delta_status_label(status: git2::Delta) -> &'static str {
     }
 }
 
-fn collect_diff_file_changes(diff: &git2::Diff<'_>) -> Result<Vec<GitCommitFileChange>, String> {
-    let stats = collect_line_stats_from_diff(diff);
+fn collect_diff_file_changes(
+    diff: &git2::Diff<'_>,
+    line_stats: &HashMap<String, (usize, usize)>,
+) -> Result<Vec<GitCommitFileChange>, String> {
     let mut files = Vec::new();
     diff.foreach(
         &mut |delta, _| {
@@ -1246,7 +1257,18 @@ fn collect_diff_file_changes(diff: &git2::Diff<'_>) -> Result<Vec<GitCommitFileC
             if path.is_empty() {
                 return true;
             }
-            let (additions, deletions) = stats.get(&path).copied().unwrap_or((0, 0));
+            // numstat 对重命名使用 "{old} => {new}" 形式；优先按 new path 查，
+            // 命中失败再按 old path 反查一次，避免重命名后行数完全归零。
+            let (additions, deletions) = line_stats
+                .get(&path)
+                .copied()
+                .or_else(|| {
+                    line_stats
+                        .iter()
+                        .find(|(k, _)| k.contains(" => ") && k.ends_with(&format!(" => {path}")))
+                        .map(|(_, v)| *v)
+                })
+                .unwrap_or((0, 0));
             files.push(GitCommitFileChange {
                 path,
                 status: delta_status_label(delta.status()).to_string(),
@@ -1279,6 +1301,7 @@ fn find_peeled_commit<'repo>(
 }
 
 fn collect_commit_file_changes(
+    repo_path: &str,
     repo: &Repository,
     commit: &git2::Commit<'_>,
 ) -> Result<Vec<GitCommitFileChange>, String> {
@@ -1293,7 +1316,18 @@ fn collect_commit_file_changes(
             .map_err(|e| e.to_string())?
     };
 
-    collect_diff_file_changes(&diff)
+    // 使用 `git show <sha> --numstat` 一次性取到每个文件相对父提交的 +/- 数。
+    // libgit2 diff 本身不直接产出 hunk 粒度的行数，借 numstat 既快又免去读 worktree。
+    let line_stats = parse_numstat(
+        repo_path,
+        &[
+            "show",
+            commit.id().to_string().as_str(),
+            "--numstat",
+            "--format=",
+        ],
+    );
+    collect_diff_file_changes(&diff, &line_stats)
 }
 
 #[tauri::command]
@@ -1319,7 +1353,7 @@ pub(crate) fn git_commit_detail(path: String, sha: String) -> Result<GitCommitDe
     };
     let author = commit.author().name().unwrap_or("Unknown").to_string();
     let timestamp = commit.time().seconds();
-    let files = collect_commit_file_changes(&repo, &commit)?;
+    let files = collect_commit_file_changes(&path, &repo, &commit)?;
 
     Ok(GitCommitDetailResponse {
         sha: oid.to_string(),
@@ -1347,12 +1381,22 @@ pub(crate) fn git_compare_commits(
         .diff_tree_to_tree(Some(&base_tree), Some(&head_tree), None)
         .map_err(|e| e.to_string())?;
 
+    // 使用 `git diff base..head --numstat` 一次性取到行数；libgit2 diff 本身不提供 hunk 行数。
+    let line_stats = parse_numstat(
+        &path,
+        &[
+            "diff",
+            format!("{base_sha}..{head_sha}").as_str(),
+            "--numstat",
+        ],
+    );
+
     Ok(GitCompareCommitsResponse {
         base_sha: base.id().to_string(),
         head_sha: head.id().to_string(),
         base_summary: base.summary().unwrap_or("").to_string(),
         head_summary: head.summary().unwrap_or("").to_string(),
-        files: collect_diff_file_changes(&diff)?,
+        files: collect_diff_file_changes(&diff, &line_stats)?,
     })
 }
 
@@ -2099,8 +2143,8 @@ mod git_status_line_totals_tests {
         }
     }
 
-    #[test]
-    fn git_status_summary_includes_pure_untracked_line_counts() {
+    #[tokio::test]
+    async fn git_status_summary_includes_pure_untracked_line_counts() {
         let dir = tempdir().expect("tempdir");
         let path = dir.path().to_string_lossy().to_string();
         let repo = Repository::init(dir.path()).expect("init");
@@ -2117,8 +2161,8 @@ mod git_status_line_totals_tests {
 
         fs::write(dir.path().join("new.txt"), "a\nb\nc\n").expect("write untracked");
 
-        let status = git_status(path.clone()).expect("git_status");
-        let summary = git_status_summary(path).expect("git_status_summary");
+        let status = git_status(path.clone()).await.expect("git_status");
+        let summary = git_status_summary(path).await.expect("git_status_summary");
 
         assert_eq!(
             summary.additions, status.additions,
@@ -2139,6 +2183,113 @@ mod git_status_line_totals_tests {
             .find(|f| f.path == "new.txt")
             .expect("untracked file in unstaged list");
         assert_eq!(untracked.additions, 3, "new.txt line count");
+    }
+
+    /// 复现 1000+ untracked 文件时 per-file 行数全 0 的回归。
+    /// 之前的实现用 libgit2 diff.foreach，能正确对每个 untracked 文件调
+    /// `count_file_lines_for_untracked`；新实现改用 `git --numstat` 时，map
+    /// 对 untracked 始终 miss，回退到 per-file `fs::read_to_string` —— 这一步
+    /// 在大量文件下应正常返回行数；若这里失败，说明 per-file 行数通道有 bug。
+    #[tokio::test]
+    async fn git_status_reports_untracked_line_counts_for_many_files() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().to_string_lossy().to_string();
+        let repo = Repository::init(dir.path()).expect("init");
+        write_and_commit(&repo, "tracked.txt", "init\n");
+        drop(repo);
+
+        // 模拟用户场景：一次性产生 1100 全新未跟踪文件
+        for i in 0..1100 {
+            let rel = format!("src/dir{i}/file{i}.txt");
+            let full = dir.path().join(&rel);
+            if let Some(parent) = full.parent() {
+                fs::create_dir_all(parent).expect("mkdir");
+            }
+            fs::write(&full, format!("line-{i}-1\nline-{i}-2\nline-{i}-3\n")).expect("write");
+        }
+
+        let status = git_status(path).await.expect("git_status");
+        assert_eq!(
+            status.unstaged.len(),
+            1100,
+            "expected 1100 untracked files, got {}",
+            status.unstaged.len()
+        );
+        let nonzero = status
+            .unstaged
+            .iter()
+            .filter(|f| f.additions > 0)
+            .count();
+        assert_eq!(
+            nonzero, 1100,
+            "expected all untracked files to have non-zero line counts, got {nonzero}/1100"
+        );
+        // 合计应等于 sum(per-file)
+        let sum: usize = status.unstaged.iter().map(|f| f.additions).sum();
+        assert_eq!(
+            status.additions, sum,
+            "total additions ({}) must equal sum of per-file additions ({})",
+            status.additions, sum
+        );
+    }
+
+    /// 复现 binary / 非 UTF-8 untracked 文件不该把行数归零：之前用
+    /// `fs::read_to_string` 一旦遇到无效 UTF-8 就回 (0, 0)，导致 per-file 全 0。
+    /// 新实现走 memchr 字节扫描，应能正确数到换行数。
+    #[tokio::test]
+    async fn git_status_counts_lines_for_binary_untracked_files() {
+        let dir = tempdir().expect("tempdir");
+        let path = dir.path().to_string_lossy().to_string();
+        let repo = Repository::init(dir.path()).expect("init");
+        write_and_commit(&repo, "tracked.txt", "init\n");
+        drop(repo);
+
+        // 模拟图片 / 资源类文件：含 0xFF 0xFE 等非 UTF-8 字节，但有多次换行
+        let binary_path = dir.path().join("image.bin");
+        let binary_content: Vec<u8> = vec![
+            0xFF, 0xD8, 0xFF, 0xE0, b'\n', // 4 bytes + newline
+            0x00, 0x01, 0x02, b'\n', b'\n', // 3 bytes + 2 newlines
+            0xCA, 0xFE, 0xBA, 0xBE, b'\n', // 4 bytes + newline
+        ];
+        fs::write(&binary_path, &binary_content).expect("write binary");
+
+        // 一行无末尾换行的短文本
+        fs::write(dir.path().join("no-trailing-newline.txt"), "single-line").expect("write");
+        // 空文件
+        fs::write(dir.path().join("empty.txt"), "").expect("write empty");
+
+        let status = git_status(path).await.expect("git_status");
+        assert_eq!(status.unstaged.len(), 3, "expected 3 untracked files");
+
+        let by_path: std::collections::HashMap<_, _> = status
+            .unstaged
+            .iter()
+            .map(|f| (f.path.as_str(), f))
+            .collect();
+
+        let bin = by_path.get("image.bin").expect("image.bin present");
+        // 4 newlines (last byte is '\n'), 跟 str::lines().count() 行为一致 => 4 lines
+        assert_eq!(
+            bin.additions, 4,
+            "binary file should count newlines, got {}",
+            bin.additions
+        );
+
+        let no_trail = by_path
+            .get("no-trailing-newline.txt")
+            .expect("no-trailing-newline.txt present");
+        assert_eq!(no_trail.additions, 1, "single line no newline should be 1");
+
+        let empty = by_path.get("empty.txt").expect("empty.txt present");
+        assert_eq!(empty.additions, 0, "empty file should be 0 lines");
+
+        // 合计应等于 sum
+        let sum: usize = status.unstaged.iter().map(|f| f.additions).sum();
+        assert_eq!(
+            status.additions, sum,
+            "total additions ({}) must equal sum of per-file additions ({})",
+            status.additions, sum
+        );
     }
 }
 
