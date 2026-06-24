@@ -627,10 +627,7 @@ fn collect_staged_line_stats(
     repo: &Repository,
     head_tree: Option<&git2::Tree<'_>>,
 ) -> HashMap<String, (usize, usize)> {
-    let Some(tree) = head_tree else {
-        return HashMap::new();
-    };
-    let Ok(diff) = repo.diff_tree_to_index(Some(tree), None, None) else {
+    let Ok(diff) = repo.diff_tree_to_index(head_tree, None, None) else {
         return HashMap::new();
     };
     collect_line_stats_from_diff(&diff)
@@ -696,12 +693,10 @@ fn collect_aggregate_line_totals(
 ) -> (usize, usize) {
     let mut adds = 0usize;
     let mut dels = 0usize;
-    if let Some(tree) = head_tree {
-        if let Ok(diff) = repo.diff_tree_to_index(Some(tree), None, None) {
-            let (a, d) = diff_stats_totals(&diff);
-            adds += a;
-            dels += d;
-        }
+    if let Ok(diff) = repo.diff_tree_to_index(head_tree, None, None) {
+        let (a, d) = diff_stats_totals(&diff);
+        adds += a;
+        dels += d;
     }
     let mut opts = DiffOptions::new();
     opts.include_untracked(true);
