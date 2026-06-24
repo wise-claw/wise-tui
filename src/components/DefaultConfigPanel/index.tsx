@@ -27,6 +27,7 @@ import { useTopbarChromeDefaultSetting } from "./useTopbarChromeDefaultSetting";
 import { useComposerFooterChromeDefaultSetting } from "./useComposerFooterChromeDefaultSetting";
 import { useDefaultTerminalSetting } from "./useDefaultTerminalSetting";
 import { useClaudeDefaultSettingsSetting } from "./useClaudeDefaultSettingsSetting";
+import { ClaudeSettingsJsonEditor } from "../ClaudeSessions/ClaudeSettingsJsonEditor";
 import { useCodexDefaultSettingsSetting } from "./useCodexDefaultSettingsSetting";
 import { useOpencodeDefaultSettingsSetting } from "./useOpencodeDefaultSettingsSetting";
 import { OPENCODE_PERMISSION_PLACEHOLDER } from "./opencodeDefaultSettings";
@@ -356,14 +357,14 @@ export function DefaultConfigPanel() {
             layout="stack"
             control={
               <div className="app-default-config-claude-settings">
-                <Input.TextArea
-                  aria-label="Claude 启动 --settings JSON"
+                <ClaudeSettingsJsonEditor
+                  ariaLabel="Claude 启动 --settings JSON"
                   value={claudeDefaultSettings.draft}
-                  placeholder={'{"ultracode": true}'}
-                  autoSize={{ minRows: 3, maxRows: 10 }}
-                  disabled={claudeDefaultSettings.loading || claudeDefaultSettings.saving}
-                  onChange={(e) => claudeDefaultSettings.setDraft(e.target.value)}
+                  height={240}
+                  readOnly={claudeDefaultSettings.loading || claudeDefaultSettings.saving}
+                  onChange={claudeDefaultSettings.setDraft}
                   onBlur={() => {
+                    if (claudeDefaultSettings.loading || claudeDefaultSettings.saving) return;
                     void claudeDefaultSettings.commit();
                   }}
                 />

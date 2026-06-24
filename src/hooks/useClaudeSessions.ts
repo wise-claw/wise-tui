@@ -4740,6 +4740,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
                   tool: pr.tool,
                   controlSubtype: pr.controlSubtype,
                 });
+                if (debug) {
+                  console.info(
+                    `[wise:auto-approve] decide sid=${sid} tool=${pr.tool} mode=${mode} → ${decision}`,
+                  );
+                }
                 if (decision === "allow_once") {
                   // TOCTOU 二次确认：用户可能在 await 期间把模式拨回 off。
                   const recheck = await resolveEffectiveAutoApproveMode(repoPath);
@@ -4748,6 +4753,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
                     controlSubtype: pr.controlSubtype,
                   });
                   if (recheckDecision !== "allow_once") {
+                    if (debug) {
+                      console.info(
+                        `[wise:auto-approve] TOCTOU revoke sid=${sid} tool=${pr.tool} mode=${recheck}`,
+                      );
+                    }
                     handled.delete(pr.id);
                     return;
                   }
@@ -4757,6 +4767,9 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
                     );
                   }
                   await respondToPermission(sid, "allow_once");
+                  if (debug) {
+                    console.info(`[wise:auto-approve] responded sid=${sid} tool=${pr.tool}`);
+                  }
                 } else {
                   // 未命中：撤掉 dedup 记录，让用户手动应答后下一次仍可被新的 requestId 走流程。
                   handled.delete(pr.id);
@@ -4766,7 +4779,15 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
                 console.warn("[wise:auto-approve] permission decide failed", err);
               }
             })();
+          } else if (debug) {
+            console.info(
+              `[wise:auto-approve] skip non-pending sid=${sid} tool=${pr.tool} life=${life?.status}`,
+            );
           }
+        } else if (pr && debug) {
+          console.info(
+            `[wise:auto-approve] skip handled sid=${sid} tool=${pr.tool} id=${pr.id}`,
+          );
         }
 
         const qr = slice.questionRequest;

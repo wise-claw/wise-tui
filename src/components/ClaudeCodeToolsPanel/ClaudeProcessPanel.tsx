@@ -13,6 +13,9 @@ import {
   formatBytes,
 } from "../LeftSidebar/systemSessions";
 import type { ClaudeHostProcess, ClaudeSession, ClaudeSessionInfo } from "../../types";
+// 复用 LeftSidebar 进程弹窗的卡片样式（app-claude-process-popover__*）；该 CSS 仅由孤儿组件
+// SystemResourceInline 静态引入，本面板经 lazy 加载时未必生效，故在此显式声明依赖。
+import "../LeftSidebar/ClaudeProcessPopoverContent.css";
 
 interface Props {
   active: boolean;

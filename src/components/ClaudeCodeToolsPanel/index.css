@@ -280,6 +280,12 @@
   gap: 6px;
 }
 
+/* 进程卡片列表复用 LeftSidebar 的 popover 样式，交由外层 scroll 容器统一滚动，避免嵌套滚动条 */
+.app-claude-code-tools-scroll .app-claude-process-popover__list {
+  flex: none;
+  overflow: visible;
+}
+
 .app-claude-code-tools-tab {
   padding: 2px 8px 8px;
   height: 100%;

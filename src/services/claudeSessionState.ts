@@ -159,20 +159,14 @@ export function appendAssistantPreviewTextMessage(
       return session;
     }
     const existingPostTool = assistantMessagePostToolTextParts(parts).trim();
-    if (existingPostTool.length >= trimmed.length) return session;
+    // 末条 assistant 已有「工具后总结」文本，说明流式总结已正常落盘：此安全网本意是
+    // 「缓冲有正文但 messages 未落盘时补一条避免闪空」，已落盘时不应再用整轮 previewRaw
+    // 覆盖总结 part（previewRaw 取整轮缓冲，含 intro/引导语，会污染总结并致引导语重复）。
+    if (existingPostTool.length > 0) return session;
     if (hasTools) {
-      const nextParts = [...parts];
-      if (existingPostTool.length > 0) {
-        for (let i = nextParts.length - 1; i >= 0; i -= 1) {
-          const p = nextParts[i];
-          if (p?.type === "text" && p.text.trim() === existingPostTool) {
-            nextParts[i] = { ...p, text: trimmed };
-            break;
-          }
-        }
-      } else {
-        nextParts.push({ type: "text", text: trimmed });
-      }
+      // 走到这里 existingPostTool 必为空：末条 assistant 有工具但无工具后总结，
+      // 流式缓冲的正文未落进 parts，补一条 post-tool text part 兜底避免闪空。
+      const nextParts = [...parts, { type: "text" as const, text: trimmed }];
       messages[messages.length - 1] = {
         ...last,
         content: trimmed,
