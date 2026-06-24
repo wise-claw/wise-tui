@@ -470,15 +470,15 @@
   pointer-events: none;
 }
 
-/* 空态占满 head 下方的剩余空间，撑到底部；不再做成按钮形状 */
+/* 空态占满 head 下方的剩余空间，撑到底部；不再做成按钮形状，距顶部 30px */
 .git-diff-mode__empty {
   flex: 1 1 0;
   min-height: 0;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   gap: 6px;
-  padding: 8px 12px;
+  padding: 30px 12px 8px;
   font-size: 11px;
   line-height: 1.35;
   color: var(--ant-color-text-tertiary);
