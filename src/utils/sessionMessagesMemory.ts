@@ -65,7 +65,21 @@ export function trimMessagePartsForMemory(
   return changed ? next : messages;
 }
 
-export function applySessionMemoryCap(
+interface SessionMemoryCapCacheEntry {
+  max: number;
+  result: ClaudeSession;
+}
+
+// 流式期间 applySessionsMemoryCap 每帧对每个 session 调用 applySessionMemoryCap，
+// 但绝大多数 session 的 messages 引用未变（通常只有活动标签在流式追加）。
+// 用 WeakMap 记住「同一 session 对象 + 同一 max 上次的处理结果」：session 对象引用不变 ⇒
+// 其 messages / transcriptMemoryUnlimited / diskTranscriptPartial 均不变 ⇒ 结果确定可复用，
+// 从而跳过 O(总 parts) 的 trimMessagePartsForMemory 遍历。session 被丢弃时缓存条目自动 GC，
+// 不会泄漏。messages 引用变化时调用方必定产生新的 session 对象 ⇒ 缓存未命中 ⇒ 重新计算，
+// 裁剪时机不遗漏。
+const sessionMemoryCapCache = new WeakMap<ClaudeSession, SessionMemoryCapCacheEntry>();
+
+function computeSessionMemoryCap(
   session: ClaudeSession,
   max: number = IN_MEMORY_SESSION_MESSAGES_MAX,
 ): ClaudeSession {
@@ -92,6 +106,21 @@ export function applySessionMemoryCap(
   };
 }
 
+export function applySessionMemoryCap(
+  session: ClaudeSession,
+  max: number = IN_MEMORY_SESSION_MESSAGES_MAX,
+): ClaudeSession {
+  // 同一 session 对象 + 同一 max 的处理结果是确定性的：对象引用不变即所有输入字段不变，
+  // 直接复用上次结果，跳过逐 part 遍历。这是多屏流式变慢的核心根因修复点。
+  const cached = sessionMemoryCapCache.get(session);
+  if (cached !== undefined && cached.max === max) {
+    return cached.result;
+  }
+  const result = computeSessionMemoryCap(session, max);
+  sessionMemoryCapCache.set(session, { max, result });
+  return result;
+}
+
 export interface SessionsMemoryCapOptions {
   /** 活动/多屏伴生/运行中标签：全局预算紧张时仍尽量保留正文 */
   keepSessionIds?: ReadonlySet<string>;
@@ -104,6 +133,9 @@ function enforceGlobalMessagesBudget(
   keepSessionIds: ReadonlySet<string>,
   budget: number,
 ): { sessions: ClaudeSession[]; changed: boolean } {
+  // 仅在 keepSessionIds 非空时由 applySessionsMemoryCap 调用；reduce 只对 session 数求和（O(n)，n=标签数），
+  // 成本远低于逐 part 的 trimMessagePartsForMemory（已由 applySessionMemoryCap 的 WeakMap 缓存跳过）。
+  // 故这里维持原样，不做增量维护，避免引入跨帧 total 状态与裁剪时序风险。
   let total = sessions.reduce((sum, session) => sum + session.messages.length, 0);
   if (total <= budget) {
     return { sessions, changed: false };

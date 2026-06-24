@@ -1808,8 +1808,9 @@ async fn spawn_claude_process(
 
         while let Ok(Some(line)) = lines.next_line().await {
             maybe_ack_control_initialize(&line, &pending_stdin_by_spawn_clone, spawn_id).await;
-            // Try to parse as JSON to extract session_id
-            if let Ok(json) = serde_json::from_str::<serde_json::Value>(&line) {
+            // 每行只解析一次 JSON；下方 oneshot 路径复用同一解析结果，避免二次 from_str。
+            let parsed_line_json: Option<serde_json::Value> = serde_json::from_str(&line).ok();
+            if let Some(json) = parsed_line_json.as_ref() {
                 let line_sid = extract_claude_session_id_from_stream_json(&json);
                 let line_type = json.get("type").and_then(|v| v.as_str());
                 let line_subtype = json.get("subtype").and_then(|v| v.as_str());
@@ -1912,7 +1913,7 @@ async fn spawn_claude_process(
 
             // Oneshot：在 stdout 行已转发后再发 result complete，避免前端先收到 success=false 而助手正文尚未入库。
             if connection_mode_stdout == ClaudeConnectionMode::Oneshot && !streaming_turn_complete_sent {
-                if let Ok(json) = serde_json::from_str::<serde_json::Value>(&line) {
+                if let Some(json) = parsed_line_json.as_ref() {
                     if let Some(turn_ok) = streaming_turn_success_from_result(&json) {
                         let line_sid = extract_claude_session_id_from_stream_json(&json);
                         let sid_for_turn = real_session_id

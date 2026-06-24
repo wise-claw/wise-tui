@@ -105,7 +105,6 @@ import {
   buildQuestionStdinLine,
   ingestAskUserQuestionFromMessageParts,
   extractLatestTodoWriteFromMessages,
-  ingestClaudeStreamLineForHub,
   ingestPendingPermissionsFromSessionMessages,
   notificationHub,
 } from "../notifications";
@@ -164,11 +163,6 @@ import {
   resolveSessionForExecuteKey,
 } from "../utils/sessionExecuteResolve";
 import { createClaudeStreamRuntime } from "../services/claudeStreamRuntime";
-import {
-  extractPartsFromStreamLine,
-  extractSystemErrorMessageFromStreamLine,
-  parseStreamLineSessionId,
-} from "../services/claudeStreamParser";
 import { setBackgroundContextCompactInFlight } from "../stores/backgroundContextCompactStore";
 import { stopClaudeMainSession } from "../services/stopClaudeMainSession";
 import { publishRunningClaudeSessionIds } from "../stores/claudeRunningSessionsRegistryStore";
@@ -2522,7 +2516,6 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       assistantStreamTextByTabRef,
       setSessions: commitSessions,
       setActiveSessionId,
-      ingestClaudeStreamLineForHub,
       ingestAskUserQuestionFromMessageParts,
       ingestStreamAssistText: (sessionId, text) => notificationHub.ingestStreamAssistText(sessionId, text),
       ingestTodosFromSessionMessages: (sessionId, messages) => {
@@ -2690,13 +2683,10 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           /* 通知失败不影响会话 UI */
         });
       },
-      parseStreamLineSessionId,
       resolveTabIdForClaudeStream: resolveTabIdForStream,
       resolveTabIdFromCompletePayload: resolveCompleteTabIdForStream,
       resolveSuccessFromCompletePayload: resolveClaudeCompleteSuccess,
       resolveSessionExecutionEngine,
-      extractSystemErrorMessageFromStreamLine,
-      extractPartsFromStreamLine,
       onClaudeSessionIdAssigned: (tabId, claudeSessionId) => {
         markClaudeRegistryBootstrapWarmup(registryBootstrapDeadlineByClaudeSidRef, claudeSessionId);
         const nonceMap = expectedTurnNonceByTabIdRef.current;

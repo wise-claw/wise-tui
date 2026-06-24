@@ -60,6 +60,8 @@ const MIGRATION_041: &str = include_str!("../migrations/041_drop_code_knowledge_
 const MIGRATION_042: &str = include_str!("../migrations/042_drop_workspace_memos.sql");
 const MIGRATION_043: &str = include_str!("../migrations/043_drop_trellis_mission_prd.sql");
 const MIGRATION_044: &str = include_str!("../migrations/044_session_feedback_loop.sql");
+const MIGRATION_045: &str = include_str!("../migrations/045_task_events_index.sql");
+const MIGRATION_046: &str = include_str!("../migrations/046_tasks_workflow_index.sql");
 const PLATFORM_SPLIT_PROMPT_SEED_JSON: &str =
     include_str!("../migrations/005_platform_split_prompt_seed.json");
 
@@ -250,6 +252,14 @@ const MIGRATIONS: &[Migration] = &[
         name: "044_session_feedback_loop",
         action: MigrationAction::Sql(MIGRATION_044),
     },
+    Migration {
+        name: "045_task_events_index",
+        action: MigrationAction::Sql(MIGRATION_045),
+    },
+    Migration {
+        name: "046_tasks_workflow_index",
+        action: MigrationAction::Sql(MIGRATION_046),
+    },
 ];
 
 #[derive(Debug, Clone, Serialize)]
@@ -346,7 +356,10 @@ impl WiseDb {
             "PRAGMA journal_mode = WAL;
              PRAGMA synchronous = NORMAL;
              PRAGMA foreign_keys = ON;
-             PRAGMA busy_timeout = 5000;",
+             PRAGMA busy_timeout = 5000;
+             PRAGMA mmap_size = 268435456;
+             PRAGMA cache_size = -65536;
+             PRAGMA temp_store = MEMORY;",
         )
         .map_err(|e| e.to_string())?;
         run_migrations(&conn)?;
@@ -1826,6 +1839,8 @@ mod tests {
                 "042_drop_workspace_memos",
                 "043_drop_trellis_mission_prd",
                 "044_session_feedback_loop",
+                "045_task_events_index",
+                "046_tasks_workflow_index",
             ]
         );
     }

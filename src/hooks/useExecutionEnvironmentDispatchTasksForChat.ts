@@ -33,13 +33,15 @@ export function useExecutionEnvironmentDispatchTasksForChat(
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
 
-  const workerSessionsById = indexDispatchWorkerSessions(
-    sessions,
-    executionEnvironmentDispatchRecords,
+  // 顶层直接调用会在每次 render 全量重算 index/digest；用 useMemo 仅在 sessions 或派发记录变化时重算。
+  // digest 稳定后下游 taskItems 的 useMemo 命中率提升，resolveDispatchTask 引用更稳定（不弱于改前）。
+  const workerSessionsById = useMemo(
+    () => indexDispatchWorkerSessions(sessions, executionEnvironmentDispatchRecords),
+    [sessions, executionEnvironmentDispatchRecords],
   );
-  const workerSessionsDigest = digestWorkerSessionsForExecutionEnvironmentTasks(
-    workerSessionsById,
-    executionEnvironmentDispatchRecords,
+  const workerSessionsDigest = useMemo(
+    () => digestWorkerSessionsForExecutionEnvironmentTasks(workerSessionsById, executionEnvironmentDispatchRecords),
+    [workerSessionsById, executionEnvironmentDispatchRecords],
   );
 
   const taskItems = useMemo(() => {

@@ -1,4 +1,4 @@
-import { useDeferredValue, useEffect, useSyncExternalStore } from "react";
+import { useDeferredValue, useEffect, useRef, useSyncExternalStore } from "react";
 import type { ClaudeSession } from "../../types";
 import {
   getClaudeChatUserPausedFollow,
@@ -35,6 +35,11 @@ export function ClaudeChatMessagesLiveHost({
     () => false,
   );
   const session = useClaudeSessionLiveSnapshot(sessionId);
+  // render 期同步最新 session 到 ref：待处理通知滚动 effect 不再依赖 session 引用（流式 live flush
+  // 每 ~100ms 产生新引用会致 effect 反复重跑），改为仅切会话（claudeSessionId 变）时重扫，
+  // effect 内通过 sessionRef.current 读取当前 session。
+  const sessionRef = useRef(session);
+  sessionRef.current = session;
   const deferredSession = useDeferredValue(session);
   const renderSession = userPausedFollow ? deferredSession : session;
 
@@ -72,7 +77,10 @@ export function ClaudeChatMessagesLiveHost({
   );
 
   useEffect(() => {
-    if (!session) return;
+    // 通过 ref 读取当前 session，避免把 session 列入依赖（流式 live flush 每 ~100ms 新引用会反复重跑）。
+    // 仅 claudeSessionId / scrollMessageTargetIntoView 变化时重扫；pending 匹配与消息定位均用此处读取的 session。
+    const currentSession = sessionRef.current;
+    if (!currentSession) return;
     let pending: { conversationId?: string; messageId?: string; body?: string; taskId?: string } | null = null;
     try {
       const raw = sessionStorage.getItem(WISE_PENDING_NOTIFICATION_SCROLL_STORAGE_KEY);
@@ -91,7 +99,8 @@ export function ClaudeChatMessagesLiveHost({
       return;
     }
     const matchesSession =
-      pending.conversationId === session.id || pending.conversationId === (session.claudeSessionId ?? claudeSessionId ?? "");
+      pending.conversationId === currentSession.id ||
+      pending.conversationId === (currentSession.claudeSessionId ?? claudeSessionId ?? "");
     if (!matchesSession) {
       return;
     }
@@ -127,8 +136,8 @@ export function ClaudeChatMessagesLiveHost({
     if (!target && pending.body?.trim()) {
       const keyword = extractNotificationScrollKeyword(pending.body);
       if (keyword) {
-        for (let i = session.messages.length - 1; i >= 0; i -= 1) {
-          const msg = session.messages[i]!;
+        for (let i = currentSession.messages.length - 1; i >= 0; i -= 1) {
+          const msg = currentSession.messages[i]!;
           const partTexts =
             msg.parts
               ?.filter((part): part is { type: "text"; text: string } => part.type === "text" && typeof part.text === "string")
@@ -148,9 +157,9 @@ export function ClaudeChatMessagesLiveHost({
       const rawId = (pending.messageId ?? "").trim();
       const scrollIndex =
         rawId !== ""
-          ? session.messages.findIndex((m) => String(m.id) === rawId)
-          : session.messages.findIndex((m) => String(m.id) === target?.getAttribute("data-message-id"));
-      const msg = scrollIndex >= 0 ? session.messages[scrollIndex] : undefined;
+          ? currentSession.messages.findIndex((m) => String(m.id) === rawId)
+          : currentSession.messages.findIndex((m) => String(m.id) === target?.getAttribute("data-message-id"));
+      const msg = scrollIndex >= 0 ? currentSession.messages[scrollIndex] : undefined;
       const messageIdForScroll = rawId || (msg != null ? String(msg.id) : "");
       const row =
         msg != null
@@ -182,7 +191,7 @@ export function ClaudeChatMessagesLiveHost({
     return () => {
       scrollTimeouts.forEach((id) => window.clearTimeout(id));
     };
-  }, [claudeSessionId, scrollMessageTargetIntoView, session]);
+  }, [claudeSessionId, scrollMessageTargetIntoView]);
 
   if (!renderSession) {
     return null;

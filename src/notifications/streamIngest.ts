@@ -281,16 +281,10 @@ export function ingestAskUserQuestionFromMessageParts(sessionId: string, parts: 
   }
 }
 
-/** 将 stdout 一行 JSON 并入 Hub（权限等）；解析失败则忽略。 */
-export function ingestClaudeStreamLineForHub(sessionId: string, line: string): void {
-  if (!sessionId || !line.trim()) return;
-  let root: unknown;
-  try {
-    root = JSON.parse(line) as unknown;
-  } catch {
-    return;
-  }
-  let j = asRecord(root);
+/** 将 stdout 一行已 parse 的 JSON 对象并入 Hub（权限等）；对象非 record 时忽略。 */
+export function ingestClaudeStreamLineForHubParsed(sessionId: string, obj: unknown): void {
+  if (!sessionId) return;
+  let j = asRecord(obj);
   if (!j) return;
   j = unwrapClaudeStreamLineRoot(j);
 
@@ -343,6 +337,18 @@ export function ingestClaudeStreamLineForHub(sessionId: string, line: string): v
   }
 
   ingestAskUserQuestionFromAssistantToolUse(sessionId, j);
+}
+
+/** 将 stdout 一行 JSON 并入 Hub（权限等）；解析失败则忽略。向后兼容薄包装。 */
+export function ingestClaudeStreamLineForHub(sessionId: string, line: string): void {
+  if (!sessionId || !line.trim()) return;
+  let root: unknown;
+  try {
+    root = JSON.parse(line) as unknown;
+  } catch {
+    return;
+  }
+  ingestClaudeStreamLineForHubParsed(sessionId, root);
 }
 
 /** 构造写入 Claude stdin 的 `control_response` 一行 JSON（permission 决策）。 */

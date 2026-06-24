@@ -8,19 +8,23 @@ import {
   partitionStreamMessageParts,
 } from "./claudeStreamAssembler";
 import {
-  extractCodexResumeSessionIdFromStreamLine,
-  extractOpencodeResumeSessionIdFromStreamLine,
+  extractCodexResumeSessionIdFromParsed,
   extractCursorAgentIdFromCompletePayload,
-  extractCursorAgentIdFromStreamLine,
-  extractResultErrorMessageFromStreamLine,
+  extractCursorAgentIdFromParsed,
+  extractOpencodeResumeSessionIdFromParsed,
+  extractPartsFromParsed,
+  extractResultErrorMessageFromParsed,
+  extractSystemErrorMessageFromParsed,
   formatClaudeResultErrorForSessionUi,
   isClaudeHarnessInjectedStreamText,
   isClaudeToolCallParseFailureText,
-  isHookStartedStreamLine,
-  shouldClearCodexResumeSessionFromStreamLine,
-  shouldClearOpencodeResumeSessionFromStreamLine,
+  isHookStartedFromParsed,
+  parseStreamLineSessionIdFromParsed,
+  shouldClearCodexResumeSessionFromParsed,
+  shouldClearOpencodeResumeSessionFromParsed,
   stripClaudeHarnessInjectedStreamText,
 } from "./claudeStreamParser";
+import { ingestClaudeStreamLineForHubParsed } from "../notifications/streamIngest";
 import {
   appendAssistantPreviewTextMessage,
   appendSystemMessageBySessionOrClaudeId,
@@ -46,12 +50,6 @@ import { preservesWorkerWiseTabId } from "../utils/sessionExecuteResolve";
 type SetSessions = (updater: (prev: ClaudeSession[]) => ClaudeSession[]) => void;
 type SetActiveSessionId = (updater: (prev: string | null) => string | null) => void;
 
-interface ExtractPartsResult {
-  parts: MessagePart[];
-  isInit: boolean;
-  sessionId: string | null;
-}
-
 interface RuntimeDeps {
   sessionsRef: MutableRefObject<ClaudeSession[]>;
   streamingTargetIdRef: MutableRefObject<string | null>;
@@ -63,14 +61,12 @@ interface RuntimeDeps {
   assistantStreamTextByTabRef: MutableRefObject<Map<string, string>>;
   setSessions: SetSessions;
   setActiveSessionId: SetActiveSessionId;
-  ingestClaudeStreamLineForHub: (sessionId: string, line: string) => void;
   ingestAskUserQuestionFromMessageParts: (sessionId: string, parts: readonly MessagePart[]) => void;
   ingestStreamAssistText: (sessionId: string, text: string) => void;
   ingestTodosFromSessionMessages: (sessionId: string, messages: ClaudeSession["messages"]) => void;
   finalizeTodosAfterSuccessfulTurn: (sessionId: string, messages: ClaudeSession["messages"]) => void;
   migrateSessionKey: (from: string, to: string) => void;
   notifyCompletion: (payload: { tid: string; success: boolean; nonce: number; previewRaw: string; structuredVerdict?: unknown }) => void;
-  parseStreamLineSessionId: (line: string) => string | null;
   resolveTabIdForClaudeStream: (
     sessions: ClaudeSession[],
     lineSid: string | null,
@@ -82,8 +78,6 @@ interface RuntimeDeps {
     refTid: string | null,
   ) => string | null;
   resolveSuccessFromCompletePayload: (payload: unknown) => boolean;
-  extractSystemErrorMessageFromStreamLine: (line: string) => string | null;
-  extractPartsFromStreamLine: (line: string) => ExtractPartsResult;
   /** 临时 tab id 合并为 Claude `session_id` 时通知宿主（用于双栏右侧绑定 id 同步） */
   onSessionTabIdMigrated?: (fromTabId: string, toClaudeSessionId: string) => void;
   /** `system.init` 绑定 Claude `session_id`（含保留 Wise 标签 id 的终端 worker） */
@@ -119,6 +113,15 @@ function extractStructuredVerdictFromCompletePayload(payload: unknown): unknown 
   if (!payload || typeof payload !== "object") return undefined;
   const obj = payload as Record<string, unknown>;
   return obj.structuredVerdict ?? obj.workflowAcceptanceVerdictPayload ?? obj.verdictPayload;
+}
+
+/** 流式行安全 JSON 解析：失败返回 null（与 `*FromParsed` 的兜底语义一致）。 */
+function safeJsonParse(line: string): unknown {
+  try {
+    return JSON.parse(line);
+  } catch {
+    return null;
+  }
 }
 
 function isDocumentHidden(): boolean {
@@ -164,19 +167,15 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     assistantStreamTextByTabRef,
     setSessions,
     setActiveSessionId,
-    ingestClaudeStreamLineForHub,
     ingestAskUserQuestionFromMessageParts,
     ingestStreamAssistText,
     ingestTodosFromSessionMessages,
     finalizeTodosAfterSuccessfulTurn,
     migrateSessionKey,
     notifyCompletion,
-    parseStreamLineSessionId,
     resolveTabIdForClaudeStream,
     resolveTabIdFromCompletePayload,
     resolveSuccessFromCompletePayload,
-    extractSystemErrorMessageFromStreamLine,
-    extractPartsFromStreamLine,
     onSessionTabIdMigrated,
     onClaudeSessionIdAssigned,
     reloadTranscriptFromDisk,
@@ -351,7 +350,8 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     opts?: { syncStreamingTargetRefOnInit?: boolean },
   ) {
     const line = typeof payload === "string" ? payload : JSON.stringify(payload);
-    const lineSid = parseStreamLineSessionId(line);
+    const parsed = safeJsonParse(line);
+    const lineSid = parseStreamLineSessionIdFromParsed(parsed);
     const mapped = sessionIdMapRef.current.get(stableTabId) ?? stableTabId;
     let tid = resolveTabIdForClaudeStream(sessionsRef.current, lineSid, mapped);
     if (!tid) {
@@ -361,24 +361,25 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     onStreamActivity?.(tid);
     applyOutputLine(tid, line, {
       syncStreamingTargetRefOnInit: opts?.syncStreamingTargetRefOnInit ?? false,
-    });
+    }, parsed);
   }
 
   function applyOutputLine(
     tid: string,
     line: string,
     opts: { syncStreamingTargetRefOnInit: boolean },
+    parsed: unknown,
   ) {
     const hidden = isDocumentHidden();
     const now = Date.now();
 
     if (hidden && !streamLineNeedsHubWhileHidden(line) && !streamLineMayInit(line)) {
       deferredStreamTabIds.add(tid);
-      const systemErrMsg = extractSystemErrorMessageFromStreamLine(line);
+      const systemErrMsg = extractSystemErrorMessageFromParsed(parsed);
       if (systemErrMsg) {
         pushDeferredSystemError(tid, systemErrMsg);
       }
-      const resultErrMsg = extractResultErrorMessageFromStreamLine(line);
+      const resultErrMsg = extractResultErrorMessageFromParsed(parsed);
       if (resultErrMsg) {
         pushDeferredSystemError(
           tid,
@@ -395,12 +396,12 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     }
     lastStreamLineBySessionRef.current.set(tid, { line: lineForDedup, at: now });
     if (!hidden || streamLineNeedsHubWhileHidden(line)) {
-      ingestClaudeStreamLineForHub(tid, line);
+      ingestClaudeStreamLineForHubParsed(tid, parsed);
     }
-    if (isHookStartedStreamLine(line)) {
+    if (isHookStartedFromParsed(parsed)) {
       onHookStreamActivity?.(tid);
     }
-    const systemErrMsg = extractSystemErrorMessageFromStreamLine(line);
+    const systemErrMsg = extractSystemErrorMessageFromParsed(parsed);
     if (systemErrMsg) {
       if (isDocumentHidden()) {
         pushDeferredSystemError(tid, systemErrMsg);
@@ -408,7 +409,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
         setSessions((prev) => appendSystemMessageBySessionOrClaudeId(prev, tid, systemErrMsg));
       }
     }
-    const resultErrMsg = extractResultErrorMessageFromStreamLine(line);
+    const resultErrMsg = extractResultErrorMessageFromParsed(parsed);
     if (resultErrMsg) {
       const formatted = formatClaudeResultErrorForSessionUi(resultErrMsg);
       if (isDocumentHidden()) {
@@ -417,7 +418,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
         setSessions((prev) => appendSystemMessageBySessionOrClaudeId(prev, tid, formatted));
       }
     }
-    if (shouldClearCodexResumeSessionFromStreamLine(line)) {
+    if (shouldClearCodexResumeSessionFromParsed(parsed)) {
       onStreamActivity?.(tid);
       setSessions((prev) =>
         prev.map((s) => {
@@ -426,7 +427,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
         }),
       );
     }
-    if (shouldClearOpencodeResumeSessionFromStreamLine(line)) {
+    if (shouldClearOpencodeResumeSessionFromParsed(parsed)) {
       onStreamActivity?.(tid);
       setSessions((prev) =>
         prev.map((s) => {
@@ -435,7 +436,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
         }),
       );
     }
-    const codexResumeSessionId = extractCodexResumeSessionIdFromStreamLine(line);
+    const codexResumeSessionId = extractCodexResumeSessionIdFromParsed(parsed);
     if (codexResumeSessionId) {
       onStreamActivity?.(tid);
       setSessions((prev) =>
@@ -446,7 +447,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
       );
       onClaudeSessionIdAssigned?.(tid, codexResumeSessionId);
     }
-    const opencodeResumeSessionId = extractOpencodeResumeSessionIdFromStreamLine(line);
+    const opencodeResumeSessionId = extractOpencodeResumeSessionIdFromParsed(parsed);
     if (opencodeResumeSessionId) {
       onStreamActivity?.(tid);
       setSessions((prev) =>
@@ -457,7 +458,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
       );
       onClaudeSessionIdAssigned?.(tid, opencodeResumeSessionId);
     }
-    const cursorAgentId = extractCursorAgentIdFromStreamLine(line);
+    const cursorAgentId = extractCursorAgentIdFromParsed(parsed);
     if (cursorAgentId) {
       onStreamActivity?.(tid);
       setSessions((prev) =>
@@ -468,7 +469,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
       );
       onClaudeSessionIdAssigned?.(tid, cursorAgentId);
     }
-    const { parts, isInit, sessionId: realSessionId } = extractPartsFromStreamLine(line);
+    const { parts, isInit, sessionId: realSessionId } = extractPartsFromParsed(parsed);
     const sanitizedParts: MessagePart[] = parts.flatMap((part): MessagePart[] => {
       if (part.type !== "text") return [part];
       const cleaned = stripClaudeHarnessInjectedStreamText(part.text);
@@ -549,12 +550,13 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
       // 多屏并行：禁用 streamingTargetIdRef 单值兜底（后发送窗格会覆盖 ref 导致串屏），
       // 仅按行内 session_id 匹配真实会话，匹配不到则丢弃。定向 invocation/session 通道不受影响。
       const line = typeof payload === "string" ? payload : JSON.stringify(payload);
-      const lineSid = parseStreamLineSessionId(line);
+      const parsed = safeJsonParse(line);
+      const lineSid = parseStreamLineSessionIdFromParsed(parsed);
       if (!lineSid) return;
       const tid = resolveTabIdForClaudeStream(sessionsRef.current, lineSid, null);
       if (!tid) return;
       onStreamActivity?.(tid);
-      applyOutputLine(tid, line, { syncStreamingTargetRefOnInit: false });
+      applyOutputLine(tid, line, { syncStreamingTargetRefOnInit: false }, parsed);
       return;
     }
     // 单屏：与 invocation 路径共用 tab 映射，`system.init` 后 tab id 会变为 Claude session_id，旧 ref 须经 sessionIdMap 解析。

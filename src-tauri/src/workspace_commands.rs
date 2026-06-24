@@ -1,10 +1,12 @@
 use notify::{Config, RecommendedWatcher, RecursiveMode, Watcher};
 use serde::{Deserialize, Serialize};
-use std::collections::VecDeque;
+use std::collections::{HashSet, VecDeque};
 use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
-use std::sync::Mutex;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::{Arc, Mutex};
+use std::time::Duration;
 use tauri::Emitter;
 use tauri_plugin_opener::OpenerExt;
 
@@ -709,6 +711,10 @@ pub(crate) fn open_workspace_in(
 
 // ── File Watcher ──
 
+/// git 事件 debounce 窗口：commit/checkout 等会在 `.git` 与工作树产生大量文件事件，
+/// 合并到该窗口结束后统一 emit，避免事件风暴打爆前端刷新。
+const GIT_WATCHER_DEBOUNCE: Duration = Duration::from_millis(250);
+
 pub(crate) struct GitWatcherState {
     watcher: Option<RecommendedWatcher>,
     watched_paths: Vec<String>,
@@ -774,6 +780,11 @@ pub(crate) fn start_git_watcher(
 
     let watch_targets_for_emit = watch_targets.clone();
     let app_handle = app.clone();
+    // debounce：用「脏仓库集合 + 单计时器」合并事件。首个相关事件启动 250ms 计时器，
+    // 期间累积触发的仓库，到点后一次性 emit 各仓库的 git-changed，避免 git 操作产生的
+    // 事件风暴逐条打爆前端刷新。.git 仍用 Recursive（NonRecursive 对子目录变化捕获不稳定）。
+    let dirty_repos: Arc<Mutex<HashSet<String>>> = Arc::new(Mutex::new(HashSet::new()));
+    let timer_active: Arc<AtomicBool> = Arc::new(AtomicBool::new(false));
     let mut watcher: RecommendedWatcher = RecommendedWatcher::new(
         move |result: notify::Result<notify::Event>| {
             if let Ok(event) = result {
@@ -786,10 +797,28 @@ pub(crate) fn start_git_watcher(
                     let watch_str = watch_path.to_string_lossy();
                     for (target_path, repo_path) in &watch_targets_for_emit {
                         if watch_str.starts_with(target_path.to_string_lossy().as_ref()) {
-                            let payload = GitChangedPayload {
-                                path: repo_path.clone(),
-                            };
-                            let _ = app_handle.emit("git-changed", payload);
+                            // 累积命中的仓库到脏集合
+                            if let Ok(mut dirty) = dirty_repos.lock() {
+                                dirty.insert(repo_path.clone());
+                            }
+                            // 仅首个事件启动计时器，后续事件只累积不重启（固定窗口）
+                            if !timer_active.swap(true, Ordering::SeqCst) {
+                                let dirty_arc = dirty_repos.clone();
+                                let timer_arc = timer_active.clone();
+                                let app_h = app_handle.clone();
+                                tauri::async_runtime::spawn(async move {
+                                    tokio::time::sleep(GIT_WATCHER_DEBOUNCE).await;
+                                    let repos: Vec<String> = dirty_arc
+                                        .lock()
+                                        .map(|mut g| g.drain().collect())
+                                        .unwrap_or_default();
+                                    for repo in repos {
+                                        let _ = app_h
+                                            .emit("git-changed", GitChangedPayload { path: repo });
+                                    }
+                                    timer_arc.store(false, Ordering::SeqCst);
+                                });
+                            }
                             return;
                         }
                     }

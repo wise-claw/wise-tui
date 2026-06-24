@@ -580,6 +580,16 @@ pub(crate) async fn list_repository_explorer_children(
 pub(crate) async fn list_repository_explorer_entries(
     root: String,
 ) -> Result<Vec<RepositoryExplorerEntry>, String> {
+    tokio::task::spawn_blocking(move || list_repository_explorer_entries_blocking(root))
+        .await
+        .map_err(|e| format!("仓库条目枚举任务异常: {e}"))?
+}
+
+/// `list_repository_explorer_entries` 的同步实现：大仓库（上限 40 万条目）的 WalkDir
+/// 遍历是纯同步 IO，放在 `spawn_blocking` 中执行以免阻塞 tokio 运行时。
+fn list_repository_explorer_entries_blocking(
+    root: String,
+) -> Result<Vec<RepositoryExplorerEntry>, String> {
     const MAX_SCAN_ENTRIES: usize = 400_000;
     const MAX_RESULTS: usize = 30_000;
 

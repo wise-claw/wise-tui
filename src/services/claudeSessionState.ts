@@ -142,8 +142,9 @@ export function appendAssistantPreviewTextMessage(
 ): ClaudeSession[] {
   const trimmed = previewText.trim();
   if (!trimmed) return sessions;
+  const matches = buildCrossTabTargetMatcher(sessions, targetId);
   return sessions.map((session) => {
-    if (!sessionMatchesCrossTabTargetId(sessions, session, targetId)) return session;
+    if (!matches(session)) return session;
     const messages = [...session.messages];
     const last = messages[messages.length - 1];
     if (last?.role !== "assistant") {
@@ -188,18 +189,27 @@ export function appendAssistantPreviewTextMessage(
 }
 
 /**
+ * 构建「跨标签目标匹配」谓词。语义与原 sessionMatchesCrossTabTargetId 完全一致：
  * 当 `targetId` 已是某标签的 `session.id` 时，只按 id 匹配；否则再允许 `claudeSessionId` 匹配。
  * 避免：主会话迁移前的 tab id 被误记在员工子标签的 `claudeSessionId` 上时，向锚点追加派发气泡会写入两条会话。
+ *
+ * 性能：原实现把对 sessions 的 O(n) `some` 放进 `sessions.map` 回调里，整体 O(n²)；
+ * 这里把 `anyTabHasThisId` 提到 map 之外只算一次，调用点降为 O(n)。
  */
-function sessionMatchesCrossTabTargetId(sessions: ClaudeSession[], session: ClaudeSession, targetId: string): boolean {
+function buildCrossTabTargetMatcher(
+  sessions: ClaudeSession[],
+  targetId: string,
+): (session: ClaudeSession) => boolean {
   const tid = targetId.trim();
-  if (!tid) return false;
+  if (!tid) return () => false;
   const anyTabHasThisId = sessions.some((s) => s.id === tid);
   if (anyTabHasThisId) {
-    return session.id === tid;
+    return (session: ClaudeSession) => session.id === tid;
   }
-  const cid = session.claudeSessionId?.trim();
-  return session.id === tid || cid === tid;
+  return (session: ClaudeSession) => {
+    const cid = session.claudeSessionId?.trim();
+    return session.id === tid || cid === tid;
+  };
 }
 
 export function setSessionRunningWithUserPrompt(
@@ -211,8 +221,9 @@ export function setSessionRunningWithUserPrompt(
   const trimmed = prompt.trim();
   if (!trimmed) return sessions;
   const applied = defaultInstructionApplied?.trim() || undefined;
+  const matches = buildCrossTabTargetMatcher(sessions, sessionId);
   return sessions.map((session) => {
-    if (!sessionMatchesCrossTabTargetId(sessions, session, sessionId)) return session;
+    if (!matches(session)) return session;
     const last = session.messages[session.messages.length - 1];
     if (last?.role === "user" && !isToolOnlyUserMessage(last)) {
       if (userMessagePlainTextForDisplay(last).trim() === trimmed) {
@@ -393,8 +404,9 @@ export function appendUserMessageBySessionOrClaudeId(
 ): ClaudeSession[] {
   const trimmed = text.trim();
   if (!trimmed) return sessions;
+  const matches = buildCrossTabTargetMatcher(sessions, targetId);
   return sessions.map((session) => {
-    if (!sessionMatchesCrossTabTargetId(sessions, session, targetId)) return session;
+    if (!matches(session)) return session;
     return {
       ...session,
       messages: [...session.messages, createUserTextMessage(trimmed)],
@@ -449,8 +461,9 @@ export function appendSystemMessageBySessionOrClaudeId(
 ): ClaudeSession[] {
   const trimmed = text.trim();
   if (!trimmed) return sessions;
+  const matches = buildCrossTabTargetMatcher(sessions, targetId);
   return sessions.map((session) => {
-    if (!sessionMatchesCrossTabTargetId(sessions, session, targetId)) return session;
+    if (!matches(session)) return session;
     const last = session.messages[session.messages.length - 1];
     if (
       last?.role === "system" &&
@@ -586,8 +599,9 @@ export function finalizeSessionAfterComplete(params: {
     streamingResident = false,
     executionEngine,
   } = params;
+  const matches = buildCrossTabTargetMatcher(sessions, targetId);
   return sessions.map((session) => {
-    if (!sessionMatchesCrossTabTargetId(sessions, session, targetId)) return session;
+    if (!matches(session)) return session;
     const isUserCancelled = session.status === "cancelled";
     const noReplyFailureMessage = resolveNoReplyFailureMessage(executionEngine, isUserCancelled);
     const shouldAppendNoReplyFailure =

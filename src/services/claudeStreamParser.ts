@@ -1,6 +1,40 @@
 import type { MessagePart, ToolUsePart, ToolUseDiagnostics } from "../types";
 import { unwrapClaudeStreamLineRoot } from "../notifications/streamIngest";
 
+/**
+ * 流式行安全 JSON 解析：失败返回 null。
+ * 与各 `*FromStreamLine` 旧实现里 `try { JSON.parse } catch { return 默认 }` 的兜底语义一致，
+ * 供入口处解析一次后把已 parse 对象传给 `*FromParsed`，避免同一行被反复 parse。
+ */
+function safeJsonParse(line: string): unknown {
+  try {
+    return JSON.parse(line);
+  } catch {
+    return null;
+  }
+}
+
+/** 非数组的普通对象才视为 record；数组/原始类型返回 null（与既有 extract 守卫一致）。 */
+function asNonArrayRecord(v: unknown): Record<string, unknown> | null {
+  return v !== null && typeof v === "object" && !Array.isArray(v)
+    ? (v as Record<string, unknown>)
+    : null;
+}
+
+const EMPTY_RECORD: Record<string, unknown> = {};
+
+/**
+ * 模拟 `a ?? b ?? ...` 链：返回首个非 null/undefined 的字段值；均缺失则 undefined。
+ * 后续统一经 `typeof raw === "string"` 判定，故 null/undefined 行为等价于 `??` 链。
+ */
+function pickFirstDefined(json: Record<string, unknown>, fields: readonly string[]): unknown {
+  for (const f of fields) {
+    const v = json[f];
+    if (v !== null && v !== undefined) return v;
+  }
+  return undefined;
+}
+
 /** Built-in `Write` tool name is matched case-insensitively. */
 function isWriteToolName(name: unknown): name is string {
   return typeof name === "string" && name.trim().toLowerCase() === "write";
@@ -134,75 +168,75 @@ function extractPartsFromStreamDelta(delta: unknown): MessagePart[] {
  * Extract structured parts from a Claude stream-json line。
  * 与 Hub 一致地对 `stream_event` 等外壳解包，避免仅 Hub 能解析 AskUserQuestion 而 UI 气泡已展示、Dock 未写入。
  */
+const CODEX_SESSION_ID_FIELDS = ["sessionId", "session_id"] as const;
+const OPENCODE_SESSION_ID_FIELDS = ["sessionId", "session_id"] as const;
+const CURSOR_AGENT_ID_FIELDS = ["agentId", "agent_id"] as const;
+
+export function extractCodexResumeSessionIdFromParsed(obj: unknown): string | null {
+  return extractExternalAgentIdFromParsed(obj, "codex_session", CODEX_SESSION_ID_FIELDS);
+}
+
+export function shouldClearCodexResumeSessionFromParsed(obj: unknown): boolean {
+  return shouldClearExternalAgentIdFromParsed(obj, "codex_session", CODEX_SESSION_ID_FIELDS);
+}
+
+export function extractOpencodeResumeSessionIdFromParsed(obj: unknown): string | null {
+  return extractExternalAgentIdFromParsed(obj, "opencode_session", OPENCODE_SESSION_ID_FIELDS);
+}
+
+export function shouldClearOpencodeResumeSessionFromParsed(obj: unknown): boolean {
+  return shouldClearExternalAgentIdFromParsed(obj, "opencode_session", OPENCODE_SESSION_ID_FIELDS);
+}
+
+export function extractCursorAgentIdFromParsed(obj: unknown): string | null {
+  return extractExternalAgentIdFromParsed(obj, "cursor_agent", CURSOR_AGENT_ID_FIELDS);
+}
+
+/** Codex / Opencode / Cursor 绑定行同构：type 匹配 → 取首个非空 id 字段 → trim 后非空才返回。 */
+function extractExternalAgentIdFromParsed(
+  obj: unknown,
+  expectedType: string,
+  idFields: readonly string[],
+): string | null {
+  const json = asNonArrayRecord(obj);
+  if (!json || json.type !== expectedType) return null;
+  const raw = pickFirstDefined(json, idFields);
+  if (typeof raw !== "string") return null;
+  const trimmed = raw.trim();
+  return trimmed.length > 0 ? trimmed : null;
+}
+
+/** Codex / Opencode 清除标记：type 匹配且 id 字段为空字符串。 */
+function shouldClearExternalAgentIdFromParsed(
+  obj: unknown,
+  expectedType: string,
+  idFields: readonly string[],
+): boolean {
+  const json = asNonArrayRecord(obj);
+  if (!json || json.type !== expectedType) return false;
+  const raw = pickFirstDefined(json, idFields);
+  return typeof raw === "string" && raw.trim().length === 0;
+}
+
+// 向后兼容的薄包装：仅做一次 JSON.parse 后转发到 *FromParsed，供 Hub/transcript/test 等现有调用方零改动使用。
 export function extractCodexResumeSessionIdFromStreamLine(line: string): string | null {
-  return extractExternalResumeSessionIdFromStreamLine(line, "codex_session");
+  return extractCodexResumeSessionIdFromParsed(safeJsonParse(line));
 }
 
 export function shouldClearCodexResumeSessionFromStreamLine(line: string): boolean {
-  return shouldClearExternalResumeSessionFromStreamLine(line, "codex_session");
+  return shouldClearCodexResumeSessionFromParsed(safeJsonParse(line));
 }
 
 export function extractOpencodeResumeSessionIdFromStreamLine(line: string): string | null {
-  return extractExternalResumeSessionIdFromStreamLine(line, "opencode_session");
+  return extractOpencodeResumeSessionIdFromParsed(safeJsonParse(line));
 }
 
 export function shouldClearOpencodeResumeSessionFromStreamLine(line: string): boolean {
-  return shouldClearExternalResumeSessionFromStreamLine(line, "opencode_session");
-}
-
-function extractExternalResumeSessionIdFromStreamLine(
-  line: string,
-  streamType: "codex_session" | "opencode_session",
-): string | null {
-  try {
-    const parsed: unknown = JSON.parse(line);
-    const json =
-      parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
-        ? (parsed as Record<string, unknown>)
-        : null;
-    if (!json || json.type !== streamType) return null;
-    const raw = json.sessionId ?? json.session_id;
-    if (typeof raw !== "string") return null;
-    const trimmed = raw.trim();
-    return trimmed.length > 0 ? trimmed : null;
-  } catch {
-    return null;
-  }
-}
-
-function shouldClearExternalResumeSessionFromStreamLine(
-  line: string,
-  streamType: "codex_session" | "opencode_session",
-): boolean {
-  try {
-    const parsed: unknown = JSON.parse(line);
-    const json =
-      parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
-        ? (parsed as Record<string, unknown>)
-        : null;
-    if (!json || json.type !== streamType) return false;
-    const raw = json.sessionId ?? json.session_id;
-    return typeof raw === "string" && raw.trim().length === 0;
-  } catch {
-    return false;
-  }
+  return shouldClearOpencodeResumeSessionFromParsed(safeJsonParse(line));
 }
 
 export function extractCursorAgentIdFromStreamLine(line: string): string | null {
-  try {
-    const parsed: unknown = JSON.parse(line);
-    const json =
-      parsed !== null && typeof parsed === "object" && !Array.isArray(parsed)
-        ? (parsed as Record<string, unknown>)
-        : null;
-    if (!json || json.type !== "cursor_agent") return null;
-    const raw = json.agentId ?? json.agent_id;
-    if (typeof raw !== "string") return null;
-    const trimmed = raw.trim();
-    return trimmed.length > 0 ? trimmed : null;
-  } catch {
-    return null;
-  }
+  return extractCursorAgentIdFromParsed(safeJsonParse(line));
 }
 
 export function extractCursorAgentIdFromCompletePayload(payload: unknown): string | null {
@@ -214,11 +248,10 @@ export function extractCursorAgentIdFromCompletePayload(payload: unknown): strin
   return trimmed.length > 0 ? trimmed : null;
 }
 
-export function extractPartsFromStreamLine(line: string): { parts: MessagePart[]; isInit: boolean; sessionId: string | null } {
+export function extractPartsFromParsed(obj: unknown): { parts: MessagePart[]; isInit: boolean; sessionId: string | null } {
   try {
-    const parsed: unknown = JSON.parse(line);
     const json = unwrapClaudeStreamLineRoot(
-      parsed !== null && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : {},
+      asNonArrayRecord(obj) ?? EMPTY_RECORD,
     ) as Record<string, unknown> & {
       type?: string;
       subtype?: string;
@@ -351,19 +384,25 @@ export function extractPartsFromStreamLine(line: string): { parts: MessagePart[]
   }
 }
 
+/** 向后兼容薄包装：解析一次后转发到 {@link extractPartsFromParsed}。 */
+export function extractPartsFromStreamLine(line: string): { parts: MessagePart[]; isInit: boolean; sessionId: string | null } {
+  return extractPartsFromParsed(safeJsonParse(line));
+}
+
 /** Claude Code `type:result` + `is_error:true` 轮次失败摘要（含工具调用无法解析）。 */
+export function extractResultErrorMessageFromParsed(obj: unknown): string | null {
+  const p = asNonArrayRecord(obj) ?? EMPTY_RECORD;
+  if (p.type !== "result" || p.is_error !== true) return null;
+  const r = typeof p.result === "string" ? p.result.trim() : "";
+  if (r) return r;
+  const errs = p.errors;
+  if (typeof errs === "string" && errs.trim()) return errs.trim();
+  return "Claude Code 返回错误结果";
+}
+
+/** 向后兼容薄包装：解析一次后转发到 {@link extractResultErrorMessageFromParsed}。 */
 export function extractResultErrorMessageFromStreamLine(line: string): string | null {
-  try {
-    const p = JSON.parse(line) as Record<string, unknown>;
-    if (p.type !== "result" || p.is_error !== true) return null;
-    const r = typeof p.result === "string" ? p.result.trim() : "";
-    if (r) return r;
-    const errs = p.errors;
-    if (typeof errs === "string" && errs.trim()) return errs.trim();
-    return "Claude Code 返回错误结果";
-  } catch {
-    return null;
-  }
+  return extractResultErrorMessageFromParsed(safeJsonParse(line));
 }
 
 /** 已知 CLI 工具调用解析失败文案；勿当作「有可见助手回复」抵消 complete.success=false。 */
@@ -413,50 +452,52 @@ function isIgnorableClaudeStreamSystemErrorDetail(detail: string): boolean {
   return normalized === "unknown" || normalized === "undefined";
 }
 
-export function isHookStartedStreamLine(line: string): boolean {
-  try {
-    const json = JSON.parse(line) as Record<string, unknown>;
-    const type = typeof json.type === "string" ? json.type : "";
-    const subtype = typeof json.subtype === "string" ? json.subtype : "";
-    return type === "system" && subtype === "hook_started";
-  } catch {
-    return false;
-  }
+export function isHookStartedFromParsed(obj: unknown): boolean {
+  const json = asNonArrayRecord(obj) ?? EMPTY_RECORD;
+  const type = typeof json.type === "string" ? json.type : "";
+  const subtype = typeof json.subtype === "string" ? json.subtype : "";
+  return type === "system" && subtype === "hook_started";
 }
 
-export function extractSystemErrorMessageFromStreamLine(line: string): string | null {
-  try {
-    const json = JSON.parse(line) as Record<string, unknown>;
-    const type = typeof json.type === "string" ? json.type : "";
-    const subtype = typeof json.subtype === "string" ? json.subtype : "";
-    if (type !== "system") return null;
+/** 向后兼容薄包装：解析一次后转发到 {@link isHookStartedFromParsed}。 */
+export function isHookStartedStreamLine(line: string): boolean {
+  return isHookStartedFromParsed(safeJsonParse(line));
+}
 
-    if (subtype === "hook_started") {
-      return null;
-    }
+export function extractSystemErrorMessageFromParsed(obj: unknown): string | null {
+  const json = asNonArrayRecord(obj) ?? EMPTY_RECORD;
+  const type = typeof json.type === "string" ? json.type : "";
+  const subtype = typeof json.subtype === "string" ? json.subtype : "";
+  if (type !== "system") return null;
 
-    if (subtype === "hook_response") {
-      const outcome = typeof json.outcome === "string" ? json.outcome : "";
-      if (outcome !== "error") return null;
-      const output = typeof json.output === "string" ? json.output.trim() : "";
-      const stderr = typeof json.stderr === "string" ? json.stderr.trim() : "";
-      const message = output || stderr || "Claude Hook 执行失败";
-      return `Claude Hook 错误: ${message}`;
-    }
-
-    const msg =
-      typeof json.message === "string"
-        ? json.message.trim()
-        : typeof json.error === "string"
-          ? json.error.trim()
-          : "";
-    if (msg && !isIgnorableClaudeStreamSystemErrorDetail(msg)) {
-      return `Claude 系统错误: ${msg}`;
-    }
-    return null;
-  } catch {
+  if (subtype === "hook_started") {
     return null;
   }
+
+  if (subtype === "hook_response") {
+    const outcome = typeof json.outcome === "string" ? json.outcome : "";
+    if (outcome !== "error") return null;
+    const output = typeof json.output === "string" ? json.output.trim() : "";
+    const stderr = typeof json.stderr === "string" ? json.stderr.trim() : "";
+    const message = output || stderr || "Claude Hook 执行失败";
+    return `Claude Hook 错误: ${message}`;
+  }
+
+  const msg =
+    typeof json.message === "string"
+      ? json.message.trim()
+      : typeof json.error === "string"
+        ? json.error.trim()
+        : "";
+  if (msg && !isIgnorableClaudeStreamSystemErrorDetail(msg)) {
+    return `Claude 系统错误: ${msg}`;
+  }
+  return null;
+}
+
+/** 向后兼容薄包装：解析一次后转发到 {@link extractSystemErrorMessageFromParsed}。 */
+export function extractSystemErrorMessageFromStreamLine(line: string): string | null {
+  return extractSystemErrorMessageFromParsed(safeJsonParse(line));
 }
 
 /**
@@ -470,28 +511,30 @@ export function extractInitSessionIdFromInvocationStdoutLines(lines: readonly st
     if (typeof raw !== "string") continue;
     const line = raw.trim();
     if (!line) continue;
-    try {
-      const r = extractPartsFromStreamLine(line);
-      if (r.isInit && r.sessionId?.trim()) return r.sessionId.trim();
-      const anySid = parseStreamLineSessionId(line);
-      if (anySid) return anySid;
-    } catch {
-      /* 非 JSON 行 */
-    }
+    // 入口解析一次，复用给 parts 与 session_id 提取（原先每行各 parse 一次共 2 次）。
+    const parsed = safeJsonParse(line);
+    const r = extractPartsFromParsed(parsed);
+    if (r.isInit && r.sessionId?.trim()) return r.sessionId.trim();
+    const anySid = parseStreamLineSessionIdFromParsed(parsed);
+    if (anySid) return anySid;
   }
   return null;
 }
 
 /** stream-json 行首级 `session_id`（若存在），用于在 ref 漂移时仍将输出归到正确标签。 */
-export function parseStreamLineSessionId(line: string): string | null {
+export function parseStreamLineSessionIdFromParsed(obj: unknown): string | null {
   try {
-    const p: unknown = JSON.parse(line);
-    const j0 = p !== null && typeof p === "object" && !Array.isArray(p) ? (p as Record<string, unknown>) : {};
+    const j0 = asNonArrayRecord(obj) ?? EMPTY_RECORD;
     const j = unwrapClaudeStreamLineRoot(j0);
     const sid = typeof j.session_id === "string" ? j.session_id : j.sessionId;
     return typeof sid === "string" && sid.trim().length > 0 ? sid.trim() : null;
   } catch {
     return null;
   }
+}
+
+/** 向后兼容薄包装：解析一次后转发到 {@link parseStreamLineSessionIdFromParsed}。 */
+export function parseStreamLineSessionId(line: string): string | null {
+  return parseStreamLineSessionIdFromParsed(safeJsonParse(line));
 }
 
