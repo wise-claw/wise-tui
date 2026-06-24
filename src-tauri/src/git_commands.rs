@@ -567,60 +567,63 @@ pub(crate) fn git_status(path: String) -> Result<GitStatusResponse, String> {
 }
 
 #[tauri::command]
-pub(crate) fn git_status_summary(path: String) -> Result<GitStatusSummaryResponse, String> {
-    let repo = open_repo(&path)?;
-    let branch = get_git_branch(&path);
+pub(crate) async fn git_status_summary(path: String) -> Result<GitStatusSummaryResponse, String> {
+    run_git_blocking("git_status_summary", move || {
+        let repo = open_repo(&path)?;
+        let branch = get_git_branch(&path);
 
-    let mut opts = StatusOptions::new();
-    opts.include_untracked(true);
-    opts.include_ignored(false);
-    opts.recurse_untracked_dirs(true);
+        let mut opts = StatusOptions::new();
+        opts.include_untracked(true);
+        opts.include_ignored(false);
+        opts.recurse_untracked_dirs(true);
 
-    let statuses = repo
-        .statuses(Some(&mut opts))
-        .map_err(|e| format!("Failed to get status: {}", e))?;
+        let statuses = repo
+            .statuses(Some(&mut opts))
+            .map_err(|e| format!("Failed to get status: {}", e))?;
 
-    let mut staged_count = 0usize;
-    let mut unstaged_count = 0usize;
+        let mut staged_count = 0usize;
+        let mut unstaged_count = 0usize;
 
-    for entry in statuses.iter() {
-        let status = entry.status();
-        if entry.path().unwrap_or("").is_empty() {
-            continue;
+        for entry in statuses.iter() {
+            let status = entry.status();
+            if entry.path().unwrap_or("").is_empty() {
+                continue;
+            }
+
+            let is_index = status.is_index_new()
+                || status.is_index_modified()
+                || status.is_index_deleted()
+                || status.is_index_renamed()
+                || status.is_index_typechange();
+            let is_wt = status.is_wt_new()
+                || status.is_wt_modified()
+                || status.is_wt_deleted()
+                || status.is_wt_renamed()
+                || status.is_wt_typechange();
+
+            if is_index {
+                staged_count += 1;
+            }
+            if is_wt {
+                unstaged_count += 1;
+            }
         }
 
-        let is_index = status.is_index_new()
-            || status.is_index_modified()
-            || status.is_index_deleted()
-            || status.is_index_renamed()
-            || status.is_index_typechange();
-        let is_wt = status.is_wt_new()
-            || status.is_wt_modified()
-            || status.is_wt_deleted()
-            || status.is_wt_renamed()
-            || status.is_wt_typechange();
+        let head_tree = repo.head().ok().and_then(|h| h.peel_to_tree().ok());
+        let (additions, deletions) = collect_aggregate_line_totals(&repo, &path, head_tree.as_ref());
+        let (ahead, behind, _upstream) = compute_ahead_behind(&repo).unwrap_or((0, 0, None));
 
-        if is_index {
-            staged_count += 1;
-        }
-        if is_wt {
-            unstaged_count += 1;
-        }
-    }
-
-    let head_tree = repo.head().ok().and_then(|h| h.peel_to_tree().ok());
-    let (additions, deletions) = collect_aggregate_line_totals(&repo, &path, head_tree.as_ref());
-    let (ahead, behind, _upstream) = compute_ahead_behind(&repo).unwrap_or((0, 0, None));
-
-    Ok(GitStatusSummaryResponse {
-        branch,
-        additions,
-        deletions,
-        ahead,
-        behind,
-        staged_count,
-        unstaged_count,
+        Ok(GitStatusSummaryResponse {
+            branch,
+            additions,
+            deletions,
+            ahead,
+            behind,
+            staged_count,
+            unstaged_count,
+        })
     })
+    .await
 }
 
 fn collect_staged_line_stats(
