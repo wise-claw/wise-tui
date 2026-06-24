@@ -45,25 +45,9 @@ pub(crate) fn get_claude_user_agents_dir() -> Result<String, String> {
 /// macOS：`open` 失败时仍可能返回 `Ok` 给 invoke（此前未检查退出码）；WPS 营销名与 `-a` 所需名不一致。
 #[cfg(target_os = "macos")]
 fn macos_open_with_named_app(path: &Path, app_name: &str, args: &[String]) -> Result<(), String> {
-    let mut last_stderr = String::new();
-
-    let mut run_open = |cmd: &mut std::process::Command| -> bool {
-        match cmd.output() {
-            Ok(out) => {
-                if out.status.success() {
-                    return true;
-                }
-                let s = String::from_utf8_lossy(&out.stderr).trim().to_string();
-                if !s.is_empty() {
-                    last_stderr = s;
-                }
-                false
-            }
-            Err(e) => {
-                last_stderr = e.to_string();
-                false
-            }
-        }
+    // macOS `open -a App` 可能因授权弹窗而卡住，使用 spawn 避免阻塞 Tauri IPC。
+    let run_open = |cmd: &mut std::process::Command| -> bool {
+        cmd.spawn().map(|_| true).unwrap_or(false)
     };
 
     // WPS：常见安装为 `wpsoffice.app`，Bundle ID 多为 `com.kingsoft.wpsoffice.mac`（国区/国际略有差异）
@@ -85,11 +69,7 @@ fn macos_open_with_named_app(path: &Path, app_name: &str, args: &[String]) -> Re
                 return Ok(());
             }
         }
-        return Err(if last_stderr.is_empty() {
-            "无法用 WPS 打开该文件，请确认已安装 WPS Office，或改用「用默认应用打开」。".to_string()
-        } else {
-            format!("无法用 WPS 打开：{last_stderr}")
-        });
+        return Err("无法用 WPS 打开该文件，请确认已安装 WPS Office，或改用「用默认应用打开」。".to_string());
     }
 
     // Microsoft Word：优先显示名，失败再按 Bundle ID
@@ -104,11 +84,7 @@ fn macos_open_with_named_app(path: &Path, app_name: &str, args: &[String]) -> Re
         if run_open(&mut c) {
             return Ok(());
         }
-        return Err(if last_stderr.is_empty() {
-            "无法用 Microsoft Word 打开，请确认已安装 Word，或改用「用默认应用打开」。".to_string()
-        } else {
-            format!("无法用 Microsoft Word 打开：{last_stderr}")
-        });
+        return Err("无法用 Microsoft Word 打开，请确认已安装 Word，或改用「用默认应用打开」。".to_string());
     }
 
     let mut c = std::process::Command::new("open");
@@ -116,11 +92,7 @@ fn macos_open_with_named_app(path: &Path, app_name: &str, args: &[String]) -> Re
     if run_open(&mut c) {
         return Ok(());
     }
-    Err(if last_stderr.is_empty() {
-        format!("无法使用「{app_name}」打开该文件。")
-    } else {
-        format!("无法使用「{app_name}」打开：{last_stderr}")
-    })
+    Err(format!("无法使用「{app_name}」打开该文件。"))
 }
 
 fn is_skipped_binary_extension(path: &Path) -> bool {
@@ -332,58 +304,31 @@ fn resolve_vscode_family_cli(cli: &str) -> Option<PathBuf> {
     None
 }
 
-fn vscode_cli_failure(cmd: &Path, out: &std::process::Output) -> String {
-    let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
-    let label = cmd.to_string_lossy();
-    if err.is_empty() {
-        format!(
-            "命令「{}」执行失败（退出码 {:?}）",
-            label,
-            out.status.code()
-        )
-    } else {
-        format!("命令「{}」失败：{}", label, err)
-    }
-}
-
 /// 在已打开/新窗口中以仓库为工作区并 `-g` 到目标文件（搜索、图谱文件节点）
 fn run_vscode_family_cli_repo_goto(
     cmd: &Path,
     root_canon: &Path,
     goto_arg: &str,
-    file_abs: &Path,
+    _file_abs: &Path,
     args: &[String],
 ) -> Result<(), String> {
-    let mut strategies: Vec<std::process::Command> = Vec::new();
-
-    let mut reuse_root_goto = std::process::Command::new(cmd);
-    reuse_root_goto
+    // 使用 spawn 避免 CLI 阻塞 Tauri IPC 导致 webview 重载。
+    let mut child = std::process::Command::new(cmd);
+    child
         .arg("-r")
         .arg(root_canon)
         .arg("-g")
         .arg(goto_arg)
         .args(args);
-    strategies.push(reuse_root_goto);
-
-    let mut reuse_goto_only = std::process::Command::new(cmd);
-    reuse_goto_only.arg("-r").arg("-g").arg(goto_arg).args(args);
-    strategies.push(reuse_goto_only);
-
-    let mut reuse_root_file = std::process::Command::new(cmd);
-    reuse_root_file.arg("-r").arg(root_canon).arg(file_abs).args(args);
-    strategies.push(reuse_root_file);
-
-    let mut last_err = String::new();
-    for mut attempt in strategies {
-        let out = attempt
-            .output()
-            .map_err(|e| format!("Failed to run command {}: {}", cmd.display(), e))?;
-        if out.status.success() {
-            return Ok(());
-        }
-        last_err = vscode_cli_failure(cmd, &out);
-    }
-    Err(last_err)
+    child.spawn().map_err(|e| {
+        format!(
+            "无法启动「{}」：{}。请在编辑器中执行 Shell Command: Install '{}' command in PATH。",
+            cmd.display(),
+            e,
+            cmd.display(),
+        )
+    })?;
+    Ok(())
 }
 
 fn open_ide_file_with_vscode_cli(
@@ -547,57 +492,44 @@ pub(crate) fn open_workspace_in(
                 if let Some(f) = goto_file {
                     let f_c = fs::canonicalize(&f).unwrap_or_else(|_| f);
                     let goto_arg = format!("{}:1:1", f_c.to_string_lossy());
-                    let out = std::process::Command::new(&cmd)
+                    std::process::Command::new(&cmd)
                         .arg(&root_canon)
                         .arg("-g")
                         .arg(&goto_arg)
                         .args(&args)
-                        .output()
+                        .spawn()
                         .map_err(|e| format!("Failed to run command {}: {}", cmd, e))?;
-                    if !out.status.success() {
-                        let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
-                        return Err(if err.is_empty() {
-                            format!("命令「{}」执行失败（退出码 {:?}）", cmd, out.status.code())
-                        } else {
-                            format!("命令「{}」失败：{}", cmd, err)
-                        });
-                    }
                     return Ok(());
                 }
-                let out = std::process::Command::new(&cmd)
+                std::process::Command::new(&cmd)
                     .arg(&root_canon)
                     .args(&args)
-                    .output()
+                    .spawn()
                     .map_err(|e| format!("Failed to run command {}: {}", cmd, e))?;
-                if !out.status.success() {
-                    let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
-                    return Err(if err.is_empty() {
-                        format!("命令「{}」执行失败（退出码 {:?}）", cmd, out.status.code())
-                    } else {
-                        format!("命令「{}」失败：{}", cmd, err)
-                    });
-                }
                 return Ok(());
             }
-            let out = std::process::Command::new(&cmd)
+            std::process::Command::new(&cmd)
                 .arg(&root_canon)
                 .args(&args)
-                .output()
+                .spawn()
                 .map_err(|e| format!("Failed to run command {}: {}", cmd, e))?;
-            if !out.status.success() {
-                let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
-                return Err(if err.is_empty() {
-                    format!("命令「{}」执行失败（退出码 {:?}）", cmd, out.status.code())
-                } else {
-                    format!("命令「{}」失败：{}", cmd, err)
-                });
-            }
             return Ok(());
         }
 
         if let Some(name) = app_name {
             #[cfg(target_os = "macos")]
             {
+                // VS Code 系优先使用 CLI（避免 `open -a` 触发 Launch Services 导致 webview 重载）
+                if let Some(cli) = app_name_to_vscode_cli(name.trim()) {
+                    if let Some(exe) = resolve_vscode_family_cli(cli) {
+                        std::process::Command::new(exe)
+                            .arg(&root_canon)
+                            .args(&args)
+                            .spawn()
+                            .map_err(|e| format!("无法启动「{}」：{}", cli, e))?;
+                        return Ok(());
+                    }
+                }
                 return macos_open_with_named_app(root_canon.as_path(), name.trim(), &args);
             }
             #[cfg(target_os = "windows")]
@@ -636,6 +568,17 @@ pub(crate) fn open_workspace_in(
     if let Some(name) = app_name {
         #[cfg(target_os = "macos")]
         {
+            // VS Code 系优先使用 CLI（避免 `open -a` 触发 Launch Services 导致 webview 重载）
+            if let Some(cli) = app_name_to_vscode_cli(name.trim()) {
+                if let Some(exe) = resolve_vscode_family_cli(cli) {
+                    std::process::Command::new(exe)
+                        .arg(&path_buf)
+                        .args(&args)
+                        .spawn()
+                        .map_err(|e| format!("无法启动「{}」：{}", cli, e))?;
+                    return Ok(());
+                }
+            }
             return macos_open_with_named_app(path_buf.as_path(), name.trim(), &args);
         }
         #[cfg(target_os = "windows")]
@@ -671,36 +614,20 @@ pub(crate) fn open_workspace_in(
             let col = goto_column.unwrap_or(1).max(1);
             let abs = fs::canonicalize(&path_buf).unwrap_or_else(|_| path_buf.clone());
             let goto_arg = format!("{}:{}:{}", abs.to_string_lossy(), line, col);
-            let out = std::process::Command::new(&cmd)
+            std::process::Command::new(&cmd)
                 .arg("-g")
                 .arg(&goto_arg)
                 .args(args)
-                .output()
+                .spawn()
                 .map_err(|e| format!("Failed to run command {}: {}", cmd, e))?;
-            if !out.status.success() {
-                let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
-                return Err(if err.is_empty() {
-                    format!("命令「{}」执行失败（退出码 {:?}）", cmd, out.status.code())
-                } else {
-                    format!("命令「{}」失败：{}", cmd, err)
-                });
-            }
             return Ok(());
         }
 
-        let out = std::process::Command::new(&cmd)
+        std::process::Command::new(&cmd)
             .arg(&path_buf)
             .args(&args)
-            .output()
+            .spawn()
             .map_err(|e| format!("Failed to run command {}: {}", cmd, e))?;
-        if !out.status.success() {
-            let err = String::from_utf8_lossy(&out.stderr).trim().to_string();
-            return Err(if err.is_empty() {
-                format!("命令「{}」执行失败（退出码 {:?}）", cmd, out.status.code())
-            } else {
-                format!("命令「{}」失败：{}", cmd, err)
-            });
-        }
         return Ok(());
     }
 

@@ -1,4 +1,4 @@
-import { memo, type RefObject, useCallback } from "react";
+import { memo, type RefObject, useCallback, useEffect, useState } from "react";
 import type { ClaudeHostProcess, ClaudeSession, Repository, StandaloneRepo, TaskMode, Workspace } from "../../types";
 import type { ProjectItem } from "../../types";
 import type { ReconcileProjectMode } from "../../constants/reconcileProjectMode";
@@ -10,6 +10,13 @@ import { SidebarWorkspaceTodoAddModal } from "./SidebarWorkspaceTodoAddModal";
 import { useProjectRepositorySidebarState } from "./useProjectRepositorySidebarState";
 import { useSidebarScheduledTasksMap } from "./useSidebarScheduledTasksMap";
 import { useSidebarRunningMainSessionIndicators } from "./useSidebarRunningMainSessionIndicators";
+import { useRepositoryActionShortcuts } from "../../hooks/useRepositoryActionShortcuts";
+import {
+  loadOpenInTerminalShortcutFromStore,
+  loadOpenInEditorShortcutFromStore,
+  WISE_OPEN_IN_TERMINAL_SHORTCUT_CHANGED,
+  WISE_OPEN_IN_EDITOR_SHORTCUT_CHANGED,
+} from "../../services/wiseDefaultConfigStore";
 
 export type LeftSidebarWorkspaceListSlotProps = {
   showLeftSidebarWorkspaceList: boolean;
@@ -91,6 +98,41 @@ function LeftSidebarWorkspaceListSlotInner(props: LeftSidebarWorkspaceListSlotPr
     onMoveRepositoryToProject: props.onMoveRepositoryToProject,
   });
   const { byId: scheduledTasksByRepoId } = useSidebarScheduledTasksMap(props.repositories);
+
+  // ── 仓库操作快捷键（打开终端 / 编辑器） ──
+  const [terminalShortcut, setTerminalShortcut] = useState("");
+  const [editorShortcut, setEditorShortcut] = useState("");
+
+  useEffect(() => {
+    void loadOpenInTerminalShortcutFromStore().then(setTerminalShortcut);
+    void loadOpenInEditorShortcutFromStore().then(setEditorShortcut);
+  }, []);
+
+  useEffect(() => {
+    const onTerminalChanged = (event: Event) => {
+      const { chord } = (event as CustomEvent<{ chord: string }>).detail;
+      setTerminalShortcut(chord);
+    };
+    const onEditorChanged = (event: Event) => {
+      const { chord } = (event as CustomEvent<{ chord: string }>).detail;
+      setEditorShortcut(chord);
+    };
+    window.addEventListener(WISE_OPEN_IN_TERMINAL_SHORTCUT_CHANGED, onTerminalChanged as EventListener);
+    window.addEventListener(WISE_OPEN_IN_EDITOR_SHORTCUT_CHANGED, onEditorChanged as EventListener);
+    return () => {
+      window.removeEventListener(WISE_OPEN_IN_TERMINAL_SHORTCUT_CHANGED, onTerminalChanged as EventListener);
+      window.removeEventListener(WISE_OPEN_IN_EDITOR_SHORTCUT_CHANGED, onEditorChanged as EventListener);
+    };
+  }, []);
+
+  useRepositoryActionShortcuts({
+    terminalShortcut,
+    editorShortcut,
+    activeRepositoryId: props.activeRepositoryId,
+    repositoriesById: projectRepositoryState.repositoriesById,
+    onOpenInTerminal: props.onOpenInTerminal,
+    openRepositoryInPreferredEditor: props.openRepositoryInPreferredEditor,
+  });
   const requirementUnsplitByProjectId: Record<string, number> = {};
   const requirementUnsplitByRepoId: Record<number, number> = {};
   const executableTasksByProjectId: Record<string, number> = {};

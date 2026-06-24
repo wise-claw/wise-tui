@@ -6,6 +6,7 @@ import { useWiseTopbarChromeVisibility } from "../../hooks/useWiseTopbarChromeVi
 import { RemoteEntryTopbarStrip } from "../RemoteEntryTopbarStrip";
 import { WorkspaceQuickActionsTopbarStrip } from "../WorkspaceQuickActionsTopbarStrip";
 import { OpenAppMenu } from "../OpenAppMenu";
+import { tryOpenWorkspaceInDefaultTerminal } from "../../services/openWorkspaceWithTerminalPreference";
 import { FccTopbarTrigger } from "./FccTopbarTrigger";
 import { OpencodeGoProxyTopbarTrigger } from "./OpencodeGoProxyTopbarTrigger";
 import { FccTrafficTopbarTrigger } from "./FccTrafficTopbarTrigger";
@@ -334,6 +335,24 @@ export const Topbar = memo(function Topbar({
         </div>
       </div>
       <div className="app-chat-topbar-right">
+        {topbarToolsReady && topbarChrome.showTopbarOpenInTerminal ? (
+          <HoverHint title="在外部终端打开">
+            <button
+              type="button"
+              className="app-topbar-btn"
+              aria-label="在外部终端打开"
+              onClick={() => {
+                if (topbarOpenPath) {
+                  void tryOpenWorkspaceInDefaultTerminal(topbarOpenPath).then((result) => {
+                    if (!result.ok) message.warning(result.message);
+                  });
+                }
+              }}
+            >
+              <IconTerminal />
+            </button>
+          </HoverHint>
+        ) : null}
         {topbarToolsReady ? (
           <OpenAppMenu
             path={topbarOpenPath}
@@ -459,7 +478,7 @@ export const Topbar = memo(function Topbar({
         {onToggleTerminal && (
           <TopbarBtn
             icon={<IconTerminal />}
-            label="终端"
+            label="内置终端"
             active={terminalPanelMounted && !terminalCollapsed}
             onClick={onToggleTerminal}
           />

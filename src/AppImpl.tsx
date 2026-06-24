@@ -1,5 +1,6 @@
 import {
   Suspense,
+  lazy,
   startTransition,
   useCallback,
   useEffect,
@@ -174,6 +175,13 @@ import { subscribeClaudeSessionsStructure, getClaudeSessionsStructureKey } from 
 import { useMonitorSessionsForOverview } from "./hooks/useMonitorSessionsForOverview";
 import { useLeftSidebarHubQuickEntries } from "./hooks/useLeftSidebarHubQuickEntries";
 import { useMonitorPanelDefault } from "./hooks/useMonitorPanelDefault";
+import { useRightInspectorTerminalVisible } from "./hooks/useRightInspectorTerminalVisible";
+
+// 右栏顶部独立终端：与主区 TerminalPanelLazy 互相独立（独立 PTY 会话），按
+// `showRightInspectorTerminal` 默认配置项挂载；不在主会话渲染，避免与顶栏 terminal 按钮互相干扰。
+const RightInspectorTerminalPanelLazy = lazy(() =>
+  import("./components/TerminalPanel").then((module) => ({ default: module.TerminalPanel })),
+);
 import { useLeftSidebarWorkspaceListDefault } from "./hooks/useLeftSidebarWorkspaceListDefault";
 import { useLeftSidebarRepositoryIconBadgesDefault } from "./hooks/useLeftSidebarRepositoryIconBadgesDefault";
 import { useScheduledClaudeTaskRunner } from "./hooks/useScheduledClaudeTaskRunner";
@@ -350,6 +358,35 @@ export default function App() {
       setTerminalCollapsed(true);
     }
   }, [terminalPanelMounted]);
+  /**
+   * 右栏顶部独立终端面板状态（与主区 terminalCollapsed / terminalPanelMounted 互不干扰，
+   * 独立 PTY 会话；由 `useRightInspectorTerminalVisible` 默认配置项控制挂载生命周期）。
+   */
+  const [rightTerminalPanelMounted, setRightTerminalPanelMounted] = useState(false);
+  const [rightTerminalCollapsed, setRightTerminalCollapsed] = useState(false);
+  const handleCollapseRightTerminal = useCallback(() => {
+    setRightTerminalCollapsed(true);
+  }, []);
+  const handleCloseRightTerminalPanel = useCallback(() => {
+    setRightTerminalPanelMounted(false);
+    setRightTerminalCollapsed(false);
+  }, []);
+
+  const rightInspectorTerminalVisible = useRightInspectorTerminalVisible();
+  /**
+   * 默认配置项切换时同步生命周期：
+   * - 关闭 → 卸载右栏 terminal（释放独立 PTY）
+   * - 开启 → 自动挂载并展开，避免用户多一次点击
+   */
+  useEffect(() => {
+    if (rightInspectorTerminalVisible) {
+      setRightTerminalPanelMounted((mounted) => mounted || true);
+      setRightTerminalCollapsed(false);
+    } else {
+      setRightTerminalPanelMounted(false);
+      setRightTerminalCollapsed(false);
+    }
+  }, [rightInspectorTerminalVisible]);
   /** 中栏多屏模式屏数：1=单屏（关闭），2/4/6/8=多屏。 */
   const [paneCount, setPaneCount] = useState<PaneCount>(1);
   /** 多屏模式下额外窗格槽位（Pane 0 始终是 activeSession）。 */
@@ -2122,6 +2159,44 @@ export default function App() {
 
   const repoPanelPlacementDefault = useRepoPanelPlacementDefault();
   const [repositoryRepoPanelNode, setRepositoryRepoPanelNode] = useState<ReactNode | null>(null);
+  /**
+   * 右栏顶部独立终端节点。仅在 `showRightInspectorTerminal` 为 true 且存在活跃仓库时挂载，
+   * 内部用独立 PTY 状态(右栏 terminal)，与主会话 TerminalPanel 互不干扰。
+   */
+  const rightInspectorTerminalNode: ReactNode = useMemo(() => {
+    if (!rightInspectorTerminalVisible) return null;
+    if (!activeRepository) return null;
+    if (!rightTerminalPanelMounted) return null;
+    return (
+      <div
+        className={
+          rightTerminalCollapsed
+            ? "app-right-inspector-terminal-host app-right-inspector-terminal-host--collapsed"
+            : "app-right-inspector-terminal-host"
+        }
+        aria-hidden={rightTerminalCollapsed}
+      >
+        <Suspense fallback={<div className="app-right-inspector-terminal-lazy-fallback">终端加载中…</div>}>
+          <RightInspectorTerminalPanelLazy
+            repositoryPath={activeRepository.path}
+            repositoryName={activeRepository.name}
+            branch={activeRepository.branch ?? ""}
+            dirty={false}
+            collapsed={rightTerminalCollapsed}
+            onCollapse={handleCollapseRightTerminal}
+            onClose={handleCloseRightTerminalPanel}
+          />
+        </Suspense>
+      </div>
+    );
+  }, [
+    rightInspectorTerminalVisible,
+    activeRepository,
+    rightTerminalPanelMounted,
+    rightTerminalCollapsed,
+    handleCollapseRightTerminal,
+    handleCloseRightTerminalPanel,
+  ]);
 
   const handleNewPaneSessionForRepository = useCallback(
     (repository: Repository) => {
@@ -3814,6 +3889,7 @@ export default function App() {
         repositoryMainBindings: repositoryMainSessionBindings,
         repositories,
         repositoryRepoPanel: repositoryRepoPanelNode,
+        rightTerminalPanelNode: rightInspectorTerminalNode,
       }}
       cockpitInspectorProps={{
         dark,

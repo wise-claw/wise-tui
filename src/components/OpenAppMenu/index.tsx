@@ -146,7 +146,6 @@ export function OpenAppMenu({
               aria-hidden
             />
           )}
-          <span>{selectedTarget?.label ?? "Open"}</span>
         </Button>
       </HoverHint>
       <Dropdown

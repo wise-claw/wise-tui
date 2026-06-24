@@ -16,6 +16,7 @@
   font-size: 12px;
   color: var(--ant-color-text);
   border-right: 1px solid var(--ant-color-border-secondary);
+  padding-right: 0 !important;
 }
 
 .app-open-app-btn:disabled {

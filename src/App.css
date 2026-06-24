@@ -2597,6 +2597,14 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   gap: 4px;
 }
 
+/* 与左栏 .git-panel-header 对齐:文件树 bar 的左侧内边距需保持一致,
+   避免 Git ↔ 文件树切换时 headerPrefix(tab 按钮容器)整体左偏移抖动。 */
+.app-left-sidebar-bottom-tab-content .git-files-explorer-bar {
+  min-height: 30px;
+  padding: 0 6px 2px 2px;
+  gap: 4px;
+}
+
 .app-left-sidebar-bottom-tab-content .git-panel-header-left {
   gap: 6px;
 }

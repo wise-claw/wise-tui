@@ -76,6 +76,7 @@ export function areChatInspectorPropsEqual(
   if (prev.repositoryMainBindings !== next.repositoryMainBindings) return false;
   if (prev.repositories !== next.repositories) return false;
   if (prev.repositoryRepoPanel !== next.repositoryRepoPanel) return false;
+  if (prev.rightTerminalPanelNode !== next.rightTerminalPanelNode) return false;
   return true;
 }
 

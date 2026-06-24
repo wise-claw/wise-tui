@@ -88,9 +88,15 @@ export const WISE_COMPOSER_DEFAULT_INSTRUCTION_CHANGED = "wise:composer-default-
 
 export const WISE_WORKSPACE_INSPECTOR_PANELS_CHANGED = "wise:workspace-inspector-panels-changed";
 
+export const WISE_RIGHT_INSPECTOR_TERMINAL_CHANGED = "wise:right-inspector-terminal-changed";
+
 export const WISE_FILE_TREE_OPEN_IN_NEW_PANE_CHANGED = "wise:file-tree-open-in-new-pane-changed";
 
 export const WISE_REPO_PANEL_PLACEMENT_CHANGED = "wise:repo-panel-placement-changed";
+
+export const WISE_OPEN_IN_TERMINAL_SHORTCUT_CHANGED = "wise:open-in-terminal-shortcut-changed";
+
+export const WISE_OPEN_IN_EDITOR_SHORTCUT_CHANGED = "wise:open-in-editor-shortcut-changed";
 
 export const WISE_SESSION_FEEDBACK_LOOP_CHANGED = "wise:session-feedback-loop-changed";
 
@@ -152,6 +158,8 @@ export interface WiseDefaultConfigV1 {
   showRemoteEntryTopbar: boolean;
   /** 主会话顶栏当前仓库 / 工作区名称；默认不显示。 */
   showTopbarRepositoryName: boolean;
+  /** 主会话顶栏「在终端中打开」按钮；默认显示。 */
+  showTopbarOpenInTerminal: boolean;
   /** 左栏 AI 工作台快捷入口；默认 MCP、技能、自动化。 */
   leftSidebarHubQuickEntries: LeftSidebarHubQuickEntryId[];
   /** 运行面板（终端 / 工作流运行态）是否显示；默认显示。 */
@@ -192,12 +200,18 @@ export interface WiseDefaultConfigV1 {
   showWorkspaceQuickActionsPanel: boolean;
   /** 右栏待办事项卡片；默认显示。 */
   showWorkspaceTodosPanel: boolean;
+  /** 右栏顶部独立终端面板（与运行面板并列，Tab 切换）；默认隐藏。 */
+  showRightInspectorTerminal: boolean;
   /** 文件树点击文件时在新窗格打开，而非占用当前会话主区。 */
   fileTreeOpenInNewPane: boolean;
   /** Git 变更面板默认栏位；默认左栏。 */
   gitPanelPlacement: MonitorPanelPlacement;
   /** 仓库文件树默认栏位；默认左栏（与 Git 同在左栏时 Tab 切换）。 */
   filesPanelPlacement: MonitorPanelPlacement;
+  /** 在仓库列表中「打开终端」的快捷键 chord（如 Mod+Shift+T）；空=未设置。 */
+  openInTerminalShortcut: string;
+  /** 在仓库列表中「打开编辑器」的快捷键 chord（如 Mod+Shift+E）；空=未设置。 */
+  openInEditorShortcut: string;
   /** 会话全链路「反馈神经网」自我优化闭环；开发功能，默认关闭。 */
   sessionFeedbackLoopEnabled: boolean;
   /** 反馈神经网最大自我优化循环次数（1–5）。 */
@@ -236,6 +250,7 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   showSessionFeedbackLoopTopbar: false,
   showRemoteEntryTopbar: true,
   showTopbarRepositoryName: false,
+  showTopbarOpenInTerminal: true,
   leftSidebarHubQuickEntries: [...DEFAULT_LEFT_SIDEBAR_HUB_QUICK_ENTRIES],
   showLeftSidebarMonitorPanel: true,
   showLeftSidebarWorkspaceList: true,
@@ -256,6 +271,7 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   showComposerFooterModelPicker: true,
   showWorkspaceQuickActionsPanel: true,
   showWorkspaceTodosPanel: true,
+  showRightInspectorTerminal: false,
   fileTreeOpenInNewPane: false,
   gitPanelPlacement: "left",
   filesPanelPlacement: "left",
@@ -271,6 +287,8 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   sessionFeedbackLoopAutoApplyConfigPatches: false,
   sessionFeedbackLoopAutoRollbackOnRegression: false,
   sessionFeedbackLoopAutoVerifyAfterApply: false,
+  openInTerminalShortcut: "",
+  openInEditorShortcut: "",
 };
 
 function normalizeMonitorPanelPlacement(raw: unknown): MonitorPanelPlacement | null {
@@ -342,6 +360,13 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
         parsed.showTopbarRepositoryName === undefined
           ? true
           : normalizeBoolean(parsed.showTopbarRepositoryName, DEFAULT_CONFIG.showTopbarRepositoryName),
+      showTopbarOpenInTerminal:
+        parsed.showTopbarOpenInTerminal === undefined
+          ? DEFAULT_CONFIG.showTopbarOpenInTerminal
+          : normalizeBoolean(
+              parsed.showTopbarOpenInTerminal,
+              DEFAULT_CONFIG.showTopbarOpenInTerminal,
+            ),
       leftSidebarHubQuickEntries: normalizeLeftSidebarHubQuickEntries(parsed.leftSidebarHubQuickEntries),
       showLeftSidebarMonitorPanel:
         parsed.showLeftSidebarMonitorPanel === undefined
@@ -448,6 +473,13 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
         parsed.showWorkspaceTodosPanel === undefined
           ? DEFAULT_CONFIG.showWorkspaceTodosPanel
           : normalizeBoolean(parsed.showWorkspaceTodosPanel, DEFAULT_CONFIG.showWorkspaceTodosPanel),
+      showRightInspectorTerminal:
+        parsed.showRightInspectorTerminal === undefined
+          ? DEFAULT_CONFIG.showRightInspectorTerminal
+          : normalizeBoolean(
+              parsed.showRightInspectorTerminal,
+              DEFAULT_CONFIG.showRightInspectorTerminal,
+            ),
       fileTreeOpenInNewPane:
         parsed.fileTreeOpenInNewPane === undefined
           ? DEFAULT_CONFIG.fileTreeOpenInNewPane
@@ -534,6 +566,14 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
               parsed.sessionFeedbackLoopAutoVerifyAfterApply,
               DEFAULT_CONFIG.sessionFeedbackLoopAutoVerifyAfterApply,
             ),
+      openInTerminalShortcut:
+        typeof parsed.openInTerminalShortcut === "string"
+          ? normalizeChord(parsed.openInTerminalShortcut)
+          : DEFAULT_CONFIG.openInTerminalShortcut,
+      openInEditorShortcut:
+        typeof parsed.openInEditorShortcut === "string"
+          ? normalizeChord(parsed.openInEditorShortcut)
+          : DEFAULT_CONFIG.openInEditorShortcut,
     };
   } catch {
     return null;
@@ -621,6 +661,7 @@ function dispatchTopbarChromeDefaultChanged(
     | "showSessionFeedbackLoopTopbar"
     | "showRemoteEntryTopbar"
     | "showTopbarRepositoryName"
+    | "showTopbarOpenInTerminal"
   >,
 ): void {
   if (typeof window === "undefined") return;
@@ -635,6 +676,7 @@ function dispatchTopbarChromeDefaultChanged(
         showSessionFeedbackLoopTopbar: config.showSessionFeedbackLoopTopbar,
         showRemoteEntryTopbar: config.showRemoteEntryTopbar,
         showTopbarRepositoryName: config.showTopbarRepositoryName,
+        showTopbarOpenInTerminal: config.showTopbarOpenInTerminal,
       },
     }),
   );
@@ -670,6 +712,7 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     showSessionFeedbackLoopTopbar: DEFAULT_CONFIG.showSessionFeedbackLoopTopbar,
     showRemoteEntryTopbar: DEFAULT_CONFIG.showRemoteEntryTopbar,
     showTopbarRepositoryName: DEFAULT_CONFIG.showTopbarRepositoryName,
+    showTopbarOpenInTerminal: DEFAULT_CONFIG.showTopbarOpenInTerminal,
     leftSidebarHubQuickEntries: [...DEFAULT_LEFT_SIDEBAR_HUB_QUICK_ENTRIES],
     showLeftSidebarMonitorPanel: DEFAULT_CONFIG.showLeftSidebarMonitorPanel,
     showLeftSidebarWorkspaceList: DEFAULT_CONFIG.showLeftSidebarWorkspaceList,
@@ -690,6 +733,7 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     showComposerFooterModelPicker: DEFAULT_CONFIG.showComposerFooterModelPicker,
     showWorkspaceQuickActionsPanel: DEFAULT_CONFIG.showWorkspaceQuickActionsPanel,
     showWorkspaceTodosPanel: DEFAULT_CONFIG.showWorkspaceTodosPanel,
+    showRightInspectorTerminal: DEFAULT_CONFIG.showRightInspectorTerminal,
     fileTreeOpenInNewPane: DEFAULT_CONFIG.fileTreeOpenInNewPane,
     gitPanelPlacement: DEFAULT_CONFIG.gitPanelPlacement,
     filesPanelPlacement: DEFAULT_CONFIG.filesPanelPlacement,
@@ -709,6 +753,8 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
       DEFAULT_CONFIG.sessionFeedbackLoopAutoRollbackOnRegression,
     sessionFeedbackLoopAutoVerifyAfterApply:
       DEFAULT_CONFIG.sessionFeedbackLoopAutoVerifyAfterApply,
+    openInTerminalShortcut: DEFAULT_CONFIG.openInTerminalShortcut,
+    openInEditorShortcut: DEFAULT_CONFIG.openInEditorShortcut,
   };
 }
 
@@ -782,6 +828,13 @@ function dispatchFileTreeOpenInNewPaneChanged(openInNewPane: boolean): void {
   );
 }
 
+function dispatchRightInspectorTerminalChanged(visible: boolean): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(WISE_RIGHT_INSPECTOR_TERMINAL_CHANGED, { detail: { visible } }),
+  );
+}
+
 function dispatchRepoPanelPlacementChanged(
   gitPanelPlacement: MonitorPanelPlacement,
   filesPanelPlacement: MonitorPanelPlacement,
@@ -791,6 +844,20 @@ function dispatchRepoPanelPlacementChanged(
     new CustomEvent(WISE_REPO_PANEL_PLACEMENT_CHANGED, {
       detail: { gitPanelPlacement, filesPanelPlacement },
     }),
+  );
+}
+
+function dispatchOpenInTerminalShortcutChanged(chord: string): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(WISE_OPEN_IN_TERMINAL_SHORTCUT_CHANGED, { detail: { chord } }),
+  );
+}
+
+function dispatchOpenInEditorShortcutChanged(chord: string): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(WISE_OPEN_IN_EDITOR_SHORTCUT_CHANGED, { detail: { chord } }),
   );
 }
 
@@ -845,6 +912,7 @@ export async function saveWiseDefaultConfig(
       | "showSessionFeedbackLoopTopbar"
       | "showRemoteEntryTopbar"
       | "showTopbarRepositoryName"
+      | "showTopbarOpenInTerminal"
       | "leftSidebarHubQuickEntries"
       | "showLeftSidebarMonitorPanel"
       | "showLeftSidebarWorkspaceList"
@@ -865,6 +933,7 @@ export async function saveWiseDefaultConfig(
       | "showComposerFooterModelPicker"
       | "showWorkspaceQuickActionsPanel"
       | "showWorkspaceTodosPanel"
+      | "showRightInspectorTerminal"
       | "fileTreeOpenInNewPane"
       | "gitPanelPlacement"
       | "filesPanelPlacement"
@@ -880,6 +949,8 @@ export async function saveWiseDefaultConfig(
       | "sessionFeedbackLoopAutoApplyConfigPatches"
       | "sessionFeedbackLoopAutoRollbackOnRegression"
       | "sessionFeedbackLoopAutoVerifyAfterApply"
+      | "openInTerminalShortcut"
+      | "openInEditorShortcut"
     >
   >,
 ): Promise<WiseDefaultConfigV1> {
@@ -899,6 +970,8 @@ export async function saveWiseDefaultConfig(
       patch.showSessionFeedbackLoopTopbar ?? current.showSessionFeedbackLoopTopbar,
     showRemoteEntryTopbar: patch.showRemoteEntryTopbar ?? current.showRemoteEntryTopbar,
     showTopbarRepositoryName: patch.showTopbarRepositoryName ?? current.showTopbarRepositoryName,
+    showTopbarOpenInTerminal:
+      patch.showTopbarOpenInTerminal ?? current.showTopbarOpenInTerminal,
     leftSidebarHubQuickEntries:
       patch.leftSidebarHubQuickEntries !== undefined
         ? normalizeLeftSidebarHubQuickEntries(patch.leftSidebarHubQuickEntries)
@@ -948,6 +1021,8 @@ export async function saveWiseDefaultConfig(
     showWorkspaceQuickActionsPanel:
       patch.showWorkspaceQuickActionsPanel ?? current.showWorkspaceQuickActionsPanel,
     showWorkspaceTodosPanel: patch.showWorkspaceTodosPanel ?? current.showWorkspaceTodosPanel,
+    showRightInspectorTerminal:
+      patch.showRightInspectorTerminal ?? current.showRightInspectorTerminal,
     fileTreeOpenInNewPane: patch.fileTreeOpenInNewPane ?? current.fileTreeOpenInNewPane,
     gitPanelPlacement: patch.gitPanelPlacement ?? current.gitPanelPlacement,
     filesPanelPlacement: patch.filesPanelPlacement ?? current.filesPanelPlacement,
@@ -982,6 +1057,14 @@ export async function saveWiseDefaultConfig(
     sessionFeedbackLoopAutoVerifyAfterApply:
       patch.sessionFeedbackLoopAutoVerifyAfterApply ??
       current.sessionFeedbackLoopAutoVerifyAfterApply,
+    openInTerminalShortcut:
+      patch.openInTerminalShortcut !== undefined
+        ? normalizeChord(patch.openInTerminalShortcut)
+        : current.openInTerminalShortcut,
+    openInEditorShortcut:
+      patch.openInEditorShortcut !== undefined
+        ? normalizeChord(patch.openInEditorShortcut)
+        : current.openInEditorShortcut,
   };
   if (patch.connectionKind !== undefined) {
     next.connectionKind = normalizeConnectionKind(patch.connectionKind) ?? current.connectionKind;
@@ -1014,6 +1097,12 @@ export async function saveWiseDefaultConfig(
     next.showTopbarRepositoryName = normalizeBoolean(
       patch.showTopbarRepositoryName,
       DEFAULT_CONFIG.showTopbarRepositoryName,
+    );
+  }
+  if (patch.showTopbarOpenInTerminal !== undefined) {
+    next.showTopbarOpenInTerminal = normalizeBoolean(
+      patch.showTopbarOpenInTerminal,
+      DEFAULT_CONFIG.showTopbarOpenInTerminal,
     );
   }
   if (patch.leftSidebarHubQuickEntries !== undefined) {
@@ -1099,6 +1188,12 @@ export async function saveWiseDefaultConfig(
   if (patch.showWorkspaceTodosPanel !== undefined) {
     next.showWorkspaceTodosPanel = normalizeBoolean(patch.showWorkspaceTodosPanel);
   }
+  if (patch.showRightInspectorTerminal !== undefined) {
+    next.showRightInspectorTerminal = normalizeBoolean(
+      patch.showRightInspectorTerminal,
+      DEFAULT_CONFIG.showRightInspectorTerminal,
+    );
+  }
   if (patch.fileTreeOpenInNewPane !== undefined) {
     next.fileTreeOpenInNewPane = normalizeBoolean(patch.fileTreeOpenInNewPane);
   }
@@ -1167,6 +1262,12 @@ export async function saveWiseDefaultConfig(
       DEFAULT_CONFIG.sessionFeedbackLoopAutoVerifyAfterApply,
     );
   }
+  if (patch.openInTerminalShortcut !== undefined) {
+    next.openInTerminalShortcut = normalizeChord(patch.openInTerminalShortcut);
+  }
+  if (patch.openInEditorShortcut !== undefined) {
+    next.openInEditorShortcut = normalizeChord(patch.openInEditorShortcut);
+  }
   await persistConfig(next);
   await deleteLegacyAppSettings();
   clearLegacyLocalStorage();
@@ -1188,7 +1289,8 @@ export async function saveWiseDefaultConfig(
     patch.showSessionDataLinkTopbar !== undefined ||
     patch.showSessionFeedbackLoopTopbar !== undefined ||
     patch.showRemoteEntryTopbar !== undefined ||
-    patch.showTopbarRepositoryName !== undefined
+    patch.showTopbarRepositoryName !== undefined ||
+    patch.showTopbarOpenInTerminal !== undefined
   ) {
     if (
       next.showLlmProxyTopbar !== current.showLlmProxyTopbar ||
@@ -1198,7 +1300,8 @@ export async function saveWiseDefaultConfig(
       next.showSessionDataLinkTopbar !== current.showSessionDataLinkTopbar ||
       next.showSessionFeedbackLoopTopbar !== current.showSessionFeedbackLoopTopbar ||
       next.showRemoteEntryTopbar !== current.showRemoteEntryTopbar ||
-      next.showTopbarRepositoryName !== current.showTopbarRepositoryName
+      next.showTopbarRepositoryName !== current.showTopbarRepositoryName ||
+      next.showTopbarOpenInTerminal !== current.showTopbarOpenInTerminal
     ) {
       dispatchTopbarChromeDefaultChanged({
         showLlmProxyTopbar: next.showLlmProxyTopbar,
@@ -1209,6 +1312,7 @@ export async function saveWiseDefaultConfig(
         showSessionFeedbackLoopTopbar: next.showSessionFeedbackLoopTopbar,
         showRemoteEntryTopbar: next.showRemoteEntryTopbar,
         showTopbarRepositoryName: next.showTopbarRepositoryName,
+        showTopbarOpenInTerminal: next.showTopbarOpenInTerminal,
       });
     }
   }
@@ -1316,6 +1420,12 @@ export async function saveWiseDefaultConfig(
     }
   }
   if (
+    patch.showRightInspectorTerminal !== undefined &&
+    next.showRightInspectorTerminal !== current.showRightInspectorTerminal
+  ) {
+    dispatchRightInspectorTerminalChanged(next.showRightInspectorTerminal);
+  }
+  if (
     patch.fileTreeOpenInNewPane !== undefined &&
     next.fileTreeOpenInNewPane !== current.fileTreeOpenInNewPane
   ) {
@@ -1327,6 +1437,18 @@ export async function saveWiseDefaultConfig(
       next.filesPanelPlacement !== current.filesPanelPlacement)
   ) {
     dispatchRepoPanelPlacementChanged(next.gitPanelPlacement, next.filesPanelPlacement);
+  }
+  if (
+    patch.openInTerminalShortcut !== undefined &&
+    next.openInTerminalShortcut !== current.openInTerminalShortcut
+  ) {
+    dispatchOpenInTerminalShortcutChanged(next.openInTerminalShortcut);
+  }
+  if (
+    patch.openInEditorShortcut !== undefined &&
+    next.openInEditorShortcut !== current.openInEditorShortcut
+  ) {
+    dispatchOpenInEditorShortcutChanged(next.openInEditorShortcut);
   }
   if (
     patch.sessionFeedbackLoopEnabled !== undefined ||
@@ -1501,6 +1623,26 @@ export async function saveComposerCommonPhrasesToStore(
   return normalized;
 }
 
+export async function loadOpenInTerminalShortcutFromStore(): Promise<string> {
+  return (await loadWiseDefaultConfig()).openInTerminalShortcut;
+}
+
+export async function saveOpenInTerminalShortcutToStore(chord: string): Promise<string> {
+  const normalized = normalizeChord(chord);
+  await saveWiseDefaultConfig({ openInTerminalShortcut: normalized });
+  return normalized;
+}
+
+export async function loadOpenInEditorShortcutFromStore(): Promise<string> {
+  return (await loadWiseDefaultConfig()).openInEditorShortcut;
+}
+
+export async function saveOpenInEditorShortcutToStore(chord: string): Promise<string> {
+  const normalized = normalizeChord(chord);
+  await saveWiseDefaultConfig({ openInEditorShortcut: normalized });
+  return normalized;
+}
+
 export async function loadComposerDefaultInstructionFromStore(): Promise<string> {
   return (await loadWiseDefaultConfig()).composerDefaultInstruction;
 }
@@ -1665,6 +1807,14 @@ export const loadRightPanelDefaultCollapsed = loadRightPanelDefaultCollapsedFrom
 /** @alias saveRightPanelDefaultCollapsedToStore */
 export const saveRightPanelDefaultCollapsed = saveRightPanelDefaultCollapsedToStore;
 
+export async function loadRightInspectorTerminalVisibleFromStore(): Promise<boolean> {
+  return (await loadWiseDefaultConfig()).showRightInspectorTerminal;
+}
+
+export async function saveRightInspectorTerminalVisibleToStore(visible: boolean): Promise<void> {
+  await saveWiseDefaultConfig({ showRightInspectorTerminal: visible });
+}
+
 export async function loadTopbarChromeDefaultsFromStore(): Promise<
   Pick<
     WiseDefaultConfigV1,
@@ -1676,6 +1826,7 @@ export async function loadTopbarChromeDefaultsFromStore(): Promise<
     | "showSessionFeedbackLoopTopbar"
     | "showRemoteEntryTopbar"
     | "showTopbarRepositoryName"
+    | "showTopbarOpenInTerminal"
   >
 > {
   const config = await loadWiseDefaultConfig();
@@ -1688,6 +1839,7 @@ export async function loadTopbarChromeDefaultsFromStore(): Promise<
     showSessionFeedbackLoopTopbar: config.showSessionFeedbackLoopTopbar,
     showRemoteEntryTopbar: config.showRemoteEntryTopbar,
     showTopbarRepositoryName: config.showTopbarRepositoryName,
+    showTopbarOpenInTerminal: config.showTopbarOpenInTerminal,
   };
 }
 
@@ -1703,6 +1855,7 @@ export async function saveTopbarChromeDefaultsToStore(
       | "showSessionFeedbackLoopTopbar"
       | "showRemoteEntryTopbar"
       | "showTopbarRepositoryName"
+      | "showTopbarOpenInTerminal"
     >
   >,
 ): Promise<void> {

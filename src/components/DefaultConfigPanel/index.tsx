@@ -38,7 +38,10 @@ import type { AtMentionDefaultTarget } from "../../constants/atMentionDefault";
 import { useFileTreeOpenInNewPaneSetting } from "./useFileTreeOpenInNewPaneSetting";
 import { useRepoPanelPlacementSetting } from "./useRepoPanelPlacementSetting";
 import { useWorkspaceInspectorPanelsSetting } from "./useWorkspaceInspectorPanelsSetting";
+import { useRightInspectorTerminalSetting } from "./useRightInspectorTerminalSetting";
 import { useSessionFeedbackLoopSetting } from "./useSessionFeedbackLoopSetting";
+import { useOpenInTerminalShortcutSetting } from "./useOpenInTerminalShortcutSetting";
+import { useOpenInEditorShortcutSetting } from "./useOpenInEditorShortcutSetting";
 import {
   removeFeedbackGlobalRule,
   setFeedbackGlobalRuleEnabled,
@@ -76,8 +79,11 @@ export function DefaultConfigPanel() {
   const atMentionShortcuts = useAtMentionShortcuts();
   const defaultTerminal = useDefaultTerminalSetting();
   const workspaceInspectorPanels = useWorkspaceInspectorPanelsSetting();
+  const rightInspectorTerminal = useRightInspectorTerminalSetting();
   const fileTreeOpenInNewPane = useFileTreeOpenInNewPaneSetting();
   const feedbackLoop = useSessionFeedbackLoopSetting();
+  const openInTerminalShortcut = useOpenInTerminalShortcutSetting();
+  const openInEditorShortcut = useOpenInEditorShortcutSetting();
   const [terminalEmployees, setTerminalEmployees] = useState<EmployeeItem[]>([]);
 
   useEffect(() => {
@@ -755,6 +761,55 @@ export function DefaultConfigPanel() {
           />
 
           <DefaultConfigRow
+            title="右栏运行/终端"
+            hint="顶部分别显示"
+            detail="「运行」与「终端」两个独立开关：均关闭时右栏顶部不展示 Tab。"
+            control={
+              <div className="app-default-config-row__control--monitor">
+                <DefaultConfigOptionPick<"hidden" | "visible">
+                  aria-label="运行面板右栏顶部显示"
+                  disabled={monitorPanel.loading || monitorPanel.saving}
+                  value={
+                    monitorPanel.visible && monitorPanel.placement === "right" ? "visible" : "hidden"
+                  }
+                  options={[
+                    { label: "运行·显", value: "visible" },
+                    { label: "运行·隐", value: "hidden" },
+                  ]}
+                  onChange={(value) => {
+                    const shouldShow = value === "visible";
+                    void (async () => {
+                      if (shouldShow) {
+                        if (monitorPanel.placement !== "right") {
+                          await monitorPanel.savePlacement("right");
+                        }
+                        if (!monitorPanel.visible) {
+                          await monitorPanel.saveVisible(true);
+                        }
+                      } else if (monitorPanel.visible && monitorPanel.placement === "right") {
+                        // 用户明确把右栏运行关掉,改放到左栏,避免"两个开关都关"导致运行消失。
+                        await monitorPanel.savePlacement("left");
+                      }
+                    })();
+                  }}
+                />
+                <DefaultConfigOptionPick<"hidden" | "visible">
+                  aria-label="终端右栏顶部显示"
+                  disabled={rightInspectorTerminal.loading || rightInspectorTerminal.saving}
+                  value={rightInspectorTerminal.visible ? "visible" : "hidden"}
+                  options={[
+                    { label: "终端·显", value: "visible" },
+                    { label: "终端·隐", value: "hidden" },
+                  ]}
+                  onChange={(value) => {
+                    void rightInspectorTerminal.save(value === "visible");
+                  }}
+                />
+              </div>
+            }
+          />
+
+          <DefaultConfigRow
             title="左栏快捷入口"
             hint="顶栏图标"
             detail="显示在左栏顶部；入口分别进入 Cockpit / 工作台配置"
@@ -894,6 +949,26 @@ export function DefaultConfigPanel() {
           />
 
           <DefaultConfigRow
+            title="顶栏终端"
+            hint="IDE 左侧"
+            detail="主会话顶栏 OpenAppMenu 左侧的终端打开按钮"
+            control={
+              <DefaultConfigOptionPick<"hidden" | "visible">
+                aria-label="顶栏终端按钮显示"
+                disabled={topbarChrome.loading || topbarChrome.saving}
+                value={topbarChrome.showTopbarOpenInTerminal ? "visible" : "hidden"}
+                options={[
+                  { label: "隐藏", value: "hidden" },
+                  { label: "显示", value: "visible" },
+                ]}
+                onChange={(value) => {
+                  void topbarChrome.saveTopbarOpenInTerminal(value === "visible");
+                }}
+              />
+            }
+          />
+
+          <DefaultConfigRow
             title="工具图标"
             hint="默认均隐藏"
             detail="主会话顶栏实验 / 诊断类图标；隐藏后部分仍可从「更多」打开"
@@ -991,6 +1066,42 @@ export function DefaultConfigPanel() {
               }
             />
           ) : null}
+        </>
+      ),
+    },
+    {
+      key: "shortcuts",
+      title: "快捷键",
+      content: (
+        <>
+          <DefaultConfigRow
+            title="打开终端"
+            hint="仓库列表"
+            detail="在仓库列表中快速打开当前选中仓库的终端"
+            control={
+              <KeyShortcutCapture
+                value={openInTerminalShortcut.shortcut}
+                disabled={openInTerminalShortcut.loading || openInTerminalShortcut.saving}
+                onChange={(chord) => {
+                  void openInTerminalShortcut.save(chord);
+                }}
+              />
+            }
+          />
+          <DefaultConfigRow
+            title="打开编辑器"
+            hint="仓库列表"
+            detail="在仓库列表中快速用编辑器打开当前选中仓库"
+            control={
+              <KeyShortcutCapture
+                value={openInEditorShortcut.shortcut}
+                disabled={openInEditorShortcut.loading || openInEditorShortcut.saving}
+                onChange={(chord) => {
+                  void openInEditorShortcut.save(chord);
+                }}
+              />
+            }
+          />
         </>
       ),
     },

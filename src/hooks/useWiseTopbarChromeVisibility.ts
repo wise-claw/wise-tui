@@ -14,6 +14,7 @@ export function useWiseTopbarChromeVisibility(): {
   showSessionFeedbackLoopTopbar: boolean;
   showRemoteEntryTopbar: boolean;
   showTopbarRepositoryName: boolean;
+  showTopbarOpenInTerminal: boolean;
 } {
   const [showLlmProxyTopbar, setShowLlmProxyTopbar] = useState(false);
   const [showFccTopbar, setShowFccTopbar] = useState(false);
@@ -23,6 +24,7 @@ export function useWiseTopbarChromeVisibility(): {
   const [showSessionFeedbackLoopTopbar, setShowSessionFeedbackLoopTopbar] = useState(false);
   const [showRemoteEntryTopbar, setShowRemoteEntryTopbar] = useState(true);
   const [showTopbarRepositoryName, setShowTopbarRepositoryName] = useState(false);
+  const [showTopbarOpenInTerminal, setShowTopbarOpenInTerminal] = useState(true);
 
   const apply = useCallback(
     (next: {
@@ -34,6 +36,7 @@ export function useWiseTopbarChromeVisibility(): {
       showSessionFeedbackLoopTopbar?: boolean;
       showRemoteEntryTopbar?: boolean;
       showTopbarRepositoryName?: boolean;
+      showTopbarOpenInTerminal?: boolean;
     }) => {
       if (typeof next.showLlmProxyTopbar === "boolean") {
         setShowLlmProxyTopbar(next.showLlmProxyTopbar);
@@ -59,6 +62,9 @@ export function useWiseTopbarChromeVisibility(): {
       if (typeof next.showTopbarRepositoryName === "boolean") {
         setShowTopbarRepositoryName(next.showTopbarRepositoryName);
       }
+      if (typeof next.showTopbarOpenInTerminal === "boolean") {
+        setShowTopbarOpenInTerminal(next.showTopbarOpenInTerminal);
+      }
     },
     [],
   );
@@ -78,6 +84,7 @@ export function useWiseTopbarChromeVisibility(): {
           showSessionFeedbackLoopTopbar?: boolean;
           showRemoteEntryTopbar?: boolean;
           showTopbarRepositoryName?: boolean;
+          showTopbarOpenInTerminal?: boolean;
         }>
       ).detail;
       if (detail) apply(detail);
@@ -98,5 +105,6 @@ export function useWiseTopbarChromeVisibility(): {
     showSessionFeedbackLoopTopbar,
     showRemoteEntryTopbar,
     showTopbarRepositoryName,
+    showTopbarOpenInTerminal,
   };
 }
