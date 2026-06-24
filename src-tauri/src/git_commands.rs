@@ -542,7 +542,7 @@ pub(crate) fn git_status(path: String) -> Result<GitStatusResponse, String> {
     }
 
     let (total_additions, total_deletions) = if skip_per_file_stats {
-        collect_aggregate_line_totals(&repo, head_tree.as_ref())
+        collect_aggregate_line_totals(&repo, &path, head_tree.as_ref())
     } else {
         (
             staged.iter().map(|f| f.additions).sum::<usize>()
@@ -609,7 +609,7 @@ pub(crate) fn git_status_summary(path: String) -> Result<GitStatusSummaryRespons
     }
 
     let head_tree = repo.head().ok().and_then(|h| h.peel_to_tree().ok());
-    let (additions, deletions) = collect_aggregate_line_totals(&repo, head_tree.as_ref());
+    let (additions, deletions) = collect_aggregate_line_totals(&repo, &path, head_tree.as_ref());
     let (ahead, behind, _upstream) = compute_ahead_behind(&repo).unwrap_or((0, 0, None));
 
     Ok(GitStatusSummaryResponse {
@@ -646,9 +646,6 @@ fn collect_unstaged_line_stats(repo: &Repository) -> HashMap<String, (usize, usi
 /// 变更文件过多时跳过逐文件行统计（避免对数十万行做 HashMap 插入）。
 const GIT_STATUS_PER_FILE_STATS_LIMIT: usize = 400;
 
-/// 遍历 diff 逐行统计增减行数（不创建 per-file HashMap）。
-/// libgit2 的 `diff.stats().insertions()` 不会计入未跟踪文件的行数，
-/// 而 `diff.foreach` 配合 `show_untracked_content` 能正确统计所有行。
 fn diff_foreach_totals(diff: &git2::Diff<'_>) -> (usize, usize) {
     let mut adds = 0usize;
     let mut dels = 0usize;
@@ -670,6 +667,7 @@ fn diff_foreach_totals(diff: &git2::Diff<'_>) -> (usize, usize) {
 
 fn collect_aggregate_line_totals(
     repo: &Repository,
+    repo_path: &str,
     head_tree: Option<&git2::Tree<'_>>,
 ) -> (usize, usize) {
     let mut adds = 0usize;
@@ -680,15 +678,38 @@ fn collect_aggregate_line_totals(
         dels += d;
     }
     let mut opts = DiffOptions::new();
-    opts.include_untracked(true);
-    opts.recurse_untracked_dirs(true);
-    // 启用 show_untracked_content 让 diff 读取未跟踪文件内容，
-    // diff_foreach_totals 才能通过行回调统计其行数。
-    opts.show_untracked_content(true);
     if let Ok(diff) = repo.diff_index_to_workdir(None, Some(&mut opts)) {
         let (a, d) = diff_foreach_totals(&diff);
         adds += a;
         dels += d;
+    }
+    let (ut_adds, ut_dels) = collect_all_untracked_line_totals(repo, repo_path);
+    adds += ut_adds;
+    dels += ut_dels;
+    (adds, dels)
+}
+
+fn collect_all_untracked_line_totals(repo: &Repository, repo_path: &str) -> (usize, usize) {
+    let mut adds = 0usize;
+    let mut dels = 0usize;
+    let mut opts = StatusOptions::new();
+    opts.include_untracked(true);
+    opts.include_ignored(false);
+    opts.recurse_untracked_dirs(true);
+    let Ok(statuses) = repo.statuses(Some(&mut opts)) else {
+        return (0, 0);
+    };
+    for entry in statuses.iter() {
+        let status = entry.status();
+        let file_path = entry.path().unwrap_or("");
+        if file_path.is_empty() {
+            continue;
+        }
+        if status.is_wt_new() && !status.is_index_new() {
+            let (a, d) = count_file_lines_for_untracked(repo_path, file_path);
+            adds += a;
+            dels += d;
+        }
     }
     (adds, dels)
 }
