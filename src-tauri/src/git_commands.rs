@@ -542,7 +542,7 @@ pub(crate) fn git_status(path: String) -> Result<GitStatusResponse, String> {
     }
 
     let (total_additions, total_deletions) = if skip_per_file_stats {
-        collect_aggregate_line_totals(&repo, &path, head_tree.as_ref())
+        collect_aggregate_line_totals(&repo, head_tree.as_ref())
     } else {
         (
             staged.iter().map(|f| f.additions).sum::<usize>()
@@ -609,7 +609,7 @@ pub(crate) fn git_status_summary(path: String) -> Result<GitStatusSummaryRespons
     }
 
     let head_tree = repo.head().ok().and_then(|h| h.peel_to_tree().ok());
-    let (additions, deletions) = collect_aggregate_line_totals(&repo, &path, head_tree.as_ref());
+    let (additions, deletions) = collect_aggregate_line_totals(&repo, head_tree.as_ref());
     let (ahead, behind, _upstream) = compute_ahead_behind(&repo).unwrap_or((0, 0, None));
 
     Ok(GitStatusSummaryResponse {
@@ -652,43 +652,8 @@ fn diff_stats_totals(diff: &git2::Diff<'_>) -> (usize, usize) {
         .unwrap_or((0, 0))
 }
 
-/// 纯未跟踪文件（工作区新增、尚未 `git add`）的行数。
-/// libgit2 `diff_index_to_workdir` 的 `stats()` 不会计入这类文件，需与 `git_status` 逐文件逻辑对齐。
-const GIT_STATUS_UNTRACKED_LINE_COUNT_LIMIT: usize = 80;
-
-fn collect_pure_untracked_line_totals(repo: &Repository, repo_path: &str) -> (usize, usize) {
-    let mut adds = 0usize;
-    let mut dels = 0usize;
-    let mut counted = 0usize;
-    let mut opts = StatusOptions::new();
-    opts.include_untracked(true);
-    opts.include_ignored(false);
-    opts.recurse_untracked_dirs(true);
-    let Ok(statuses) = repo.statuses(Some(&mut opts)) else {
-        return (0, 0);
-    };
-    for entry in statuses.iter() {
-        if counted >= GIT_STATUS_UNTRACKED_LINE_COUNT_LIMIT {
-            break;
-        }
-        let status = entry.status();
-        let file_path = entry.path().unwrap_or("");
-        if file_path.is_empty() {
-            continue;
-        }
-        if status.is_wt_new() && !status.is_index_new() {
-            counted += 1;
-            let (a, d) = count_file_lines_for_untracked(repo_path, file_path);
-            adds += a;
-            dels += d;
-        }
-    }
-    (adds, dels)
-}
-
 fn collect_aggregate_line_totals(
     repo: &Repository,
-    repo_path: &str,
     head_tree: Option<&git2::Tree<'_>>,
 ) -> (usize, usize) {
     let mut adds = 0usize;
@@ -701,14 +666,14 @@ fn collect_aggregate_line_totals(
     let mut opts = DiffOptions::new();
     opts.include_untracked(true);
     opts.recurse_untracked_dirs(true);
+    // libgit2 默认不在 diff stats 中计入未跟踪文件的内容行数，
+    // 启用 show_untracked_content 让 diff 生成未跟踪文件的行信息，使 stats() 正确统计。
+    opts.show_untracked_content(true);
     if let Ok(diff) = repo.diff_index_to_workdir(None, Some(&mut opts)) {
         let (a, d) = diff_stats_totals(&diff);
         adds += a;
         dels += d;
     }
-    let (ut_adds, ut_dels) = collect_pure_untracked_line_totals(repo, repo_path);
-    adds += ut_adds;
-    dels += ut_dels;
     (adds, dels)
 }
 
