@@ -1,7 +1,9 @@
 import type { MutableRefObject } from "react";
-import { memo, useCallback, useEffect, useMemo, useRef } from "react";
-import { Typography } from "antd";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Popover, Typography } from "antd";
 import { DeferredHoverTooltip } from "../shared/DeferredHoverTooltip";
+import { useWorkspaceTodoIncompleteCount } from "../../hooks/useWorkspaceTodoIncompleteCount";
+import { WorkspaceTodosPopoverContent } from "./WorkspaceTodosPopoverContent";
 import { LEFT_SIDEBAR_SCROLLING_CLASS } from "../../constants/leftSidebarScrollPerformance";
 import { useScrollEndClass } from "../../hooks/useScrollEndClass";
 import { useRepositoryRunCommandRowPinnedMap } from "../../hooks/useRepositoryRunCommandRowPinned";
@@ -35,7 +37,6 @@ import {
   SidebarExecutableTasksAction,
   SidebarRequirementAction,
   SidebarScheduledTasksAction,
-  SidebarWorkspaceRemindersAction,
 } from "./repositoryRows";
 import { RunningMainSessionDot } from "./RunningMainSessionDot";
 import { projectRowPropsEqual } from "./projectRowPropsEqual";
@@ -218,6 +219,14 @@ function ProjectRepositoryListInner({
     },
   );
 
+  const [headerTodosPopoverOpen, setHeaderTodosPopoverOpen] = useState(false);
+  const headerTodoCount = useWorkspaceTodoIncompleteCount(
+    "project",
+    activeProjectId,
+    null,
+    workspaceTodosEnabled && Boolean(activeProjectId?.trim()),
+  );
+
   const runCommandRowPinnedMap = useRepositoryRunCommandRowPinnedMap();
 
   const projectReposByProjectId = useMemo(() => {
@@ -260,16 +269,68 @@ function ProjectRepositoryListInner({
           className="app-repository-header-actions"
           onClick={(e) => { e.stopPropagation(); }}
         >
-          {workspaceTodosEnabled && onOpenGlobalWorkspaceTodoAdd ? (
-            <DeferredHoverTooltip title="添加待办事项">
-              <button
-                className="app-repository-header-btn"
-                aria-label="添加待办事项"
-                onClick={onOpenGlobalWorkspaceTodoAdd}
+          {workspaceTodosEnabled ? (
+            activeProjectId?.trim() ? (
+              <Popover
+                open={headerTodosPopoverOpen}
+                onOpenChange={setHeaderTodosPopoverOpen}
+                trigger="click"
+                placement="rightTop"
+                destroyOnHidden
+                getPopupContainer={() => document.body}
+                rootClassName="app-left-sidebar-workspace-todos-popover"
+                styles={{ root: { zIndex: 1200 } }}
+                title="工作区待办事项"
+                content={
+                  headerTodosPopoverOpen ? (
+                    <WorkspaceTodosPopoverContent
+                      projectId={activeProjectId}
+                      repositoryId={null}
+                      title="工作区待办事项"
+                    />
+                  ) : null
+                }
               >
-                <WorkspaceRemindersIcon />
-              </button>
-            </DeferredHoverTooltip>
+                <span
+                  className="app-repository-action-popover-trigger"
+                  onClick={(e) => e.stopPropagation()}
+                >
+                  <DeferredHoverTooltip
+                    title={
+                      headerTodoCount > 0
+                        ? `工作区待办事项：${headerTodoCount} 条未完成`
+                        : "工作区待办事项"
+                    }
+                  >
+                    <button
+                      type="button"
+                      className="app-repository-header-btn"
+                      aria-label="工作区待办事项"
+                      aria-expanded={headerTodosPopoverOpen}
+                    >
+                      <span className="app-repository-action-icon-wrap">
+                        <WorkspaceRemindersIcon />
+                        {headerTodoCount > 0 ? (
+                          <span className="app-repository-action-count-badge app-repository-action-count-badge--workspace-reminders">
+                            {headerTodoCount > 99 ? "99+" : String(headerTodoCount)}
+                          </span>
+                        ) : null}
+                      </span>
+                    </button>
+                  </DeferredHoverTooltip>
+                </span>
+              </Popover>
+            ) : onOpenGlobalWorkspaceTodoAdd ? (
+              <DeferredHoverTooltip title="添加待办事项">
+                <button
+                  className="app-repository-header-btn"
+                  aria-label="添加待办事项"
+                  onClick={onOpenGlobalWorkspaceTodoAdd}
+                >
+                  <WorkspaceRemindersIcon />
+                </button>
+              </DeferredHoverTooltip>
+            ) : null
           ) : null}
           {onAddFloatingRepositoryClick ? (
             <DeferredHoverTooltip title="添加单仓（不绑定工作区）">
@@ -745,12 +806,6 @@ function ProjectRow({
           {onOpenProjectInTerminal ? (
             <OpenInTerminalAction onOpen={() => onOpenProjectInTerminal(project)} />
           ) : null}
-          <SidebarWorkspaceRemindersAction
-            enabled={workspaceTodosEnabled}
-            variant="project"
-            projectId={project.id}
-            repositoryId={null}
-          />
           <SidebarMoreMenuDropdown
             items={projectMoreItems}
             onMenuClick={({ key, domEvent }) => {

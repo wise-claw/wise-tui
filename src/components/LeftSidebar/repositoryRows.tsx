@@ -690,11 +690,6 @@ function RepositoryRowInner({
             onOpen={() => onOpenRepositoryInEditor(repository)}
           />
           {onOpenInTerminal ? <OpenInTerminalAction onOpen={() => onOpenInTerminal(repository)} /> : null}
-          <SidebarWorkspaceRemindersAction
-            enabled={workspaceTodosEnabled}
-            projectId={project.id}
-            repositoryId={repository.id}
-          />
           <RepositorySddStackBadge repository={repository} trellisReady={trellisReady} />
           <SidebarMoreMenuDropdown
             items={moreItems}
@@ -972,11 +967,6 @@ function FloatingRepositoryRowInner({
             onOpen={() => onOpenRepositoryInEditor(repository)}
           />
           {onOpenInTerminal ? <OpenInTerminalAction onOpen={() => onOpenInTerminal(repository)} /> : null}
-          <SidebarWorkspaceRemindersAction
-            enabled={workspaceTodosEnabled}
-            projectId={null}
-            repositoryId={repository.id}
-          />
           <RepositorySddStackBadge repository={repository} trellisReady={trellisReady} />
           <SidebarMoreMenuDropdown
             items={moreItems}
