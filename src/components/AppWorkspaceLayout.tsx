@@ -46,7 +46,7 @@ import { AUTHOR_CONFIG_NAV_SIDER_WIDTH_PX } from "../constants/mainLayoutWidths"
 import { dispatchRepositoryFileEditorClosed, type OpenRepositoryFileDetail } from "../constants/workflowUiEvents";
 import { requestExplorerFocus } from "../constants/explorerUiEvents";
 import { writePendingExplorerReveal } from "../utils/pendingExplorerReveal";
-import { resolveExplorerRevealTargetForOpen } from "../utils/explorerRevealTarget";
+import { resolveExplorerRevealTargetForOpen, resolveVisibleExplorerRevealTarget } from "../utils/explorerRevealTarget";
 import { useRepositoryFileEditor } from "../hooks/useRepositoryFileEditor";
 import { useWorkspaceFileTreeRail } from "../hooks/useWorkspaceFileTreeRail";
 import { ErrorBoundary } from "./ErrorBoundary";
@@ -344,6 +344,7 @@ const ConnectedRepositoryFileEditorPanel = memo(function ConnectedRepositoryFile
 }: {
   dark: boolean;
 }) {
+  const openFile = useRepositoryFileEditorOpenFile();
   const {
     activePath,
     activeSessionId,
@@ -382,6 +383,7 @@ const ConnectedRepositoryFileEditorPanel = memo(function ConnectedRepositoryFile
         onReloadTab={onReloadTab}
         onSave={onSave}
         onTabContentChange={onTabContentChange}
+        onNavigateToFile={openFile}
       />
     </Suspense>
   );
@@ -781,6 +783,38 @@ export function AppWorkspaceLayout({
 
   const handleFileEditorTabContentChange = updateFileEditorTabContent;
 
+  /** 切换编辑器 Tab 时让文件树跟随定位到该文件。仅当文件树已可见时才触发，不强制展开侧栏。 */
+  const handleActivePathChange = useCallback(
+    (path: string) => {
+      setFileEditorActivePath(path);
+      if (!path || !activeRepositoryPath?.trim()) return;
+      const revealTarget = resolveVisibleExplorerRevealTarget({
+        workspaceFileTreeRailOpen: showWorkspaceFileTreeRail,
+        filesPanelPlacement: leftSidebarProps.filesPanelPlacement ?? "left",
+        gitPanelPlacement: leftSidebarProps.gitPanelPlacement ?? "left",
+        leftSidebarCollapsed: collapsed,
+        leftSidebarParked,
+        rightRailAvailable: chatRightRailMode,
+      });
+      if (!revealTarget) return;
+      writePendingExplorerReveal({
+        repositoryPath: activeRepositoryPath.trim(),
+        relativePath: path,
+        isDirectory: false,
+        revealTarget,
+      });
+    },
+    [
+      setFileEditorActivePath,
+      activeRepositoryPath,
+      showWorkspaceFileTreeRail,
+      leftSidebarProps.filesPanelPlacement,
+      leftSidebarProps.gitPanelPlacement,
+      collapsed,
+      chatRightRailMode,
+    ],
+  );
+
   const editorPanelContextValue = useMemo<RepositoryFileEditorPanelContextValue>(
     () => ({
       activePath: fileEditorActivePath,
@@ -789,7 +823,7 @@ export function AppWorkspaceLayout({
       editorVisible,
       mdPreviewByPath,
       setEditorTabMdPreview,
-      onActivePathChange: setFileEditorActivePath,
+      onActivePathChange: handleActivePathChange,
       onClosePanel: closeFileEditorPanel,
       onClosePreview: closeRepositoryBinaryPreview,
       onCloseTab: closeFileEditorTab,
@@ -824,7 +858,7 @@ export function AppWorkspaceLayout({
       repositoryBinaryPreview,
       saveEditor,
       setEditorTabMdPreview,
-      setFileEditorActivePath,
+      handleActivePathChange,
     ],
   );
   const editorPanelNode = useMemo(() => <ConnectedRepositoryFileEditorPanel dark={dark} />, [dark]);

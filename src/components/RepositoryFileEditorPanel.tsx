@@ -26,6 +26,8 @@ interface Props {
   onTabContentChange: (relativePath: string, content: string) => void;
   mdPreviewByPath: Record<string, boolean>;
   onMdPreviewTabChange: (relativePath: string, value: boolean) => void;
+  /** Ctrl/Cmd+Click import/export 路径时导航打开目标文件。 */
+  onNavigateToFile?: (relativePath: string) => void;
 }
 
 export function RepositoryFileEditorPanel({
@@ -44,6 +46,7 @@ export function RepositoryFileEditorPanel({
   onTabContentChange,
   mdPreviewByPath,
   onMdPreviewTabChange,
+  onNavigateToFile,
 }: Props) {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const activeTab = tabs.find((tab) => tab.relativePath === activePath) ?? null;
@@ -216,6 +219,7 @@ export function RepositoryFileEditorPanel({
               onCloseTab={onCloseTab}
               onReloadTab={onReloadTab}
               keepAlive={keepAlivePaths.includes(tab.relativePath)}
+              onNavigateToFile={onNavigateToFile}
             />
           ))}
       </div>

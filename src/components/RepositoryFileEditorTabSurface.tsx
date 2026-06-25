@@ -6,6 +6,7 @@ import type * as Monaco from "monaco-editor";
 import type { editor as MonacoEditorNamespace } from "monaco-editor";
 import { GitDiffMonacoPane } from "./GitDiffMonacoPane";
 import type { FileEditorTab } from "../hooks/useRepositoryFileEditor";
+import { registerImportNavigation } from "../utils/monacoImportNavigation";
 import { monacoLanguageFromRepositoryPath } from "../utils/repositoryFilePreview";
 import {
   configureWiseMonacoTypeScript,
@@ -51,6 +52,8 @@ export interface RepositoryFileEditorTabSurfaceProps {
   keepAlive: boolean;
   mdPreviewRequested: boolean;
   onMdPreviewRequestedChange: (value: boolean) => void;
+  /** Ctrl/Cmd+Click import/export 路径时导航打开目标文件。 */
+  onNavigateToFile?: (relativePath: string) => void;
 }
 
 function normalizeEditorLine(value: number | null | undefined): number | null {
@@ -98,6 +101,7 @@ export function RepositoryFileEditorTabSurface({
   keepAlive,
   mdPreviewRequested,
   onMdPreviewRequestedChange,
+  onNavigateToFile,
 }: RepositoryFileEditorTabSurfaceProps) {
   const monacoRef = useRef<typeof Monaco | null>(null);
   const editorRef = useRef<MonacoEditorNamespace.IStandaloneCodeEditor | null>(null);
@@ -351,6 +355,19 @@ export function RepositoryFileEditorTabSurface({
     // 依赖不含 tab.content：仅在激活态切换、文件切换、聚焦行、diff 模式变化时
     // layout + reveal；否则每次按键编辑都会触发 editor.layout() 造成输入卡顿。
   }, [isActive, tab.relativePath, tab.focusLine, tab.diffOriginal]);
+
+  // ── import/export 路径 Ctrl/Cmd+Click 导航 ──
+  useEffect(() => {
+    if (!monacoEditorSurface || tab.diffOriginal !== undefined || !isActive) return;
+    if (!repositoryPath || !onNavigateToFile) return;
+    const { editor, monaco } = monacoEditorSurface;
+    const disposable = registerImportNavigation(monaco, editor, {
+      repositoryPath,
+      fromRelativePath: tab.relativePath,
+      onNavigate: onNavigateToFile,
+    });
+    return () => disposable.dispose();
+  }, [monacoEditorSurface, repositoryPath, tab.relativePath, tab.diffOriginal, isActive, onNavigateToFile]);
 
   if (tab.diffOriginal !== undefined) {
     return (

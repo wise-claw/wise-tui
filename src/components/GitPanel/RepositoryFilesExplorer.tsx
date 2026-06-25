@@ -192,7 +192,9 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
     if (rowTop < el.scrollTop) {
       el.scrollTop = rowTop;
     } else if (rowBottom > el.scrollTop + el.clientHeight) {
-      el.scrollTop = rowBottom - el.clientHeight;
+      // 留出底部 padding，避免定位到的文件紧贴视口底部
+      const bottomPadding = Math.min(el.clientHeight * 0.3, 120);
+      el.scrollTop = rowBottom - el.clientHeight + bottomPadding;
     }
   }, [explorer.selected?.path, pathToRowIndex, searchActive]);
 
