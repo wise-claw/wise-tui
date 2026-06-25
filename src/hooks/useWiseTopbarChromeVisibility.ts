@@ -15,6 +15,7 @@ export function useWiseTopbarChromeVisibility(): {
   showRemoteEntryTopbar: boolean;
   showTopbarRepositoryName: boolean;
   showTopbarOpenInTerminal: boolean;
+  showTopbarOpenDirectory: boolean;
 } {
   const [showLlmProxyTopbar, setShowLlmProxyTopbar] = useState(false);
   const [showFccTopbar, setShowFccTopbar] = useState(false);
@@ -25,6 +26,7 @@ export function useWiseTopbarChromeVisibility(): {
   const [showRemoteEntryTopbar, setShowRemoteEntryTopbar] = useState(true);
   const [showTopbarRepositoryName, setShowTopbarRepositoryName] = useState(false);
   const [showTopbarOpenInTerminal, setShowTopbarOpenInTerminal] = useState(true);
+  const [showTopbarOpenDirectory, setShowTopbarOpenDirectory] = useState(true);
 
   const apply = useCallback(
     (next: {
@@ -37,6 +39,7 @@ export function useWiseTopbarChromeVisibility(): {
       showRemoteEntryTopbar?: boolean;
       showTopbarRepositoryName?: boolean;
       showTopbarOpenInTerminal?: boolean;
+      showTopbarOpenDirectory?: boolean;
     }) => {
       if (typeof next.showLlmProxyTopbar === "boolean") {
         setShowLlmProxyTopbar(next.showLlmProxyTopbar);
@@ -65,6 +68,9 @@ export function useWiseTopbarChromeVisibility(): {
       if (typeof next.showTopbarOpenInTerminal === "boolean") {
         setShowTopbarOpenInTerminal(next.showTopbarOpenInTerminal);
       }
+      if (typeof next.showTopbarOpenDirectory === "boolean") {
+        setShowTopbarOpenDirectory(next.showTopbarOpenDirectory);
+      }
     },
     [],
   );
@@ -85,6 +91,7 @@ export function useWiseTopbarChromeVisibility(): {
           showRemoteEntryTopbar?: boolean;
           showTopbarRepositoryName?: boolean;
           showTopbarOpenInTerminal?: boolean;
+          showTopbarOpenDirectory?: boolean;
         }>
       ).detail;
       if (detail) apply(detail);
@@ -106,5 +113,6 @@ export function useWiseTopbarChromeVisibility(): {
     showRemoteEntryTopbar,
     showTopbarRepositoryName,
     showTopbarOpenInTerminal,
+    showTopbarOpenDirectory,
   };
 }

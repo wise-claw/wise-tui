@@ -2445,6 +2445,16 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   pointer-events: none;
 }
 
+/* Git / 文件树同栏上下分栏时，两个面板之间显示分隔线 */
+.app-left-sidebar-bottom-tab-content--split > .app-left-sidebar-bottom-tab-pane + .app-left-sidebar-bottom-tab-pane {
+  border-top: 1px solid var(--ant-color-border-secondary);
+}
+
+/* 分栏模式：Git 面板在底部，最高 230px */
+.app-left-sidebar-bottom-tab-content--split > .app-left-sidebar-bottom-tab-pane:last-child {
+  max-height: 230px;
+}
+
 .app-left-sidebar-repo-panel-header {
   display: flex;
   align-items: center;

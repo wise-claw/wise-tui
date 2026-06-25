@@ -199,6 +199,8 @@ export interface LeftSidebarProps {
   gitPanelPlacement?: MonitorPanelPlacement;
   /** 仓库文件树默认栏位。 */
   filesPanelPlacement?: MonitorPanelPlacement;
+  /** Git 与文件树同栏时是否上下分栏展示（而非 Tab 切换）。 */
+  repoPanelSplitMode?: boolean;
   /** Chat 模式是否存在右栏（Author / Cockpit 全屏时为 false）。 */
   repoPanelRightRailAvailable?: boolean;
   /** 右栏仓库面板（Git / 文件树）节点。 */

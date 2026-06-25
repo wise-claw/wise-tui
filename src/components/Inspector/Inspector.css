@@ -296,6 +296,15 @@
   gap: 0;
 }
 
+.app-right-repo-panel--split > :not(:only-child):not(:first-child) {
+  border-top: 1px solid var(--ant-color-border-secondary);
+}
+
+/* 分栏模式：Git 在底部，最高 230px */
+.app-right-repo-panel--split > .app-right-panel-git-explorer {
+  max-height: 230px;
+}
+
 .app-right-panel-git-explorer {
   flex: 1 1 0;
   min-height: 0;

@@ -134,6 +134,7 @@ export function DefaultConfigPanel() {
 
   const topbarToolOptions = useMemo(
     () => [
+      { label: "打开目录", value: "open-directory", checked: topbarChrome.showTopbarOpenDirectory },
       { label: "FCC", value: "fcc", checked: topbarChrome.showFccTopbar },
       { label: "OpenCode", value: "opencode", checked: topbarChrome.showOpencodeProxyTopbar },
       { label: "FCC 流量", value: "fcc-traffic", checked: topbarChrome.showFccTrafficTopbar },
@@ -238,6 +239,9 @@ export function DefaultConfigPanel() {
 
   const handleTopbarToolToggle = (value: string, checked: boolean) => {
     switch (value) {
+      case "open-directory":
+        void topbarChrome.saveTopbarOpenDirectory(checked);
+        break;
       case "fcc":
         void topbarChrome.saveFcc(checked);
         break;
@@ -366,7 +370,7 @@ export function DefaultConfigPanel() {
                 <ClaudeSettingsJsonEditor
                   ariaLabel="Claude 启动 --settings JSON"
                   value={claudeDefaultSettings.draft}
-                  height={240}
+                  height={120}
                   readOnly={claudeDefaultSettings.loading || claudeDefaultSettings.saving}
                   onChange={claudeDefaultSettings.setDraft}
                   onBlur={() => {
@@ -702,6 +706,21 @@ export function DefaultConfigPanel() {
                   }}
                 />
               </div>
+            }
+          />
+          <DefaultConfigRow
+            title="同栏分栏"
+            hint="Git / 文件树"
+            detail="同一栏时上下分栏展示（关闭时 Tab 切换）"
+            control={
+              <Switch
+                aria-label="Git / 文件树分栏展示"
+                disabled={repoPanelPlacement.loading || repoPanelPlacement.saving}
+                checked={repoPanelPlacement.repoPanelSplitMode}
+                onChange={(checked) => {
+                  void repoPanelPlacement.saveSplitMode(checked);
+                }}
+              />
             }
           />
 

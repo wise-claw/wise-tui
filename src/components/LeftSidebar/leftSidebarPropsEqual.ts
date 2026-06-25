@@ -134,6 +134,7 @@ export function areLeftSidebarContentPropsEqual(
   if (prev.standaloneRepoAddRequest !== next.standaloneRepoAddRequest) return false;
   if (prev.gitPanelPlacement !== next.gitPanelPlacement) return false;
   if (prev.filesPanelPlacement !== next.filesPanelPlacement) return false;
+  if (prev.repoPanelSplitMode !== next.repoPanelSplitMode) return false;
   if (prev.activeRepositoryPath !== next.activeRepositoryPath) return false;
   if (prev.activeRepositoryName !== next.activeRepositoryName) return false;
   if (prev.repoPanelRightRailAvailable !== next.repoPanelRightRailAvailable) return false;

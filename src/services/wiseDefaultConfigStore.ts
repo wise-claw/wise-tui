@@ -93,6 +93,7 @@ export const WISE_RIGHT_INSPECTOR_TERMINAL_CHANGED = "wise:right-inspector-termi
 export const WISE_FILE_TREE_OPEN_IN_NEW_PANE_CHANGED = "wise:file-tree-open-in-new-pane-changed";
 
 export const WISE_REPO_PANEL_PLACEMENT_CHANGED = "wise:repo-panel-placement-changed";
+export const WISE_REPO_PANEL_SPLIT_MODE_CHANGED = "wise:repo-panel-split-mode-changed";
 
 export const WISE_OPEN_IN_TERMINAL_SHORTCUT_CHANGED = "wise:open-in-terminal-shortcut-changed";
 
@@ -160,6 +161,8 @@ export interface WiseDefaultConfigV1 {
   showTopbarRepositoryName: boolean;
   /** 主会话顶栏「在终端中打开」按钮；默认显示。 */
   showTopbarOpenInTerminal: boolean;
+  /** 主会话顶栏「在 Finder 中打开目录」按钮；默认显示。 */
+  showTopbarOpenDirectory: boolean;
   /** 左栏 AI 工作台快捷入口；默认 MCP、技能、自动化。 */
   leftSidebarHubQuickEntries: LeftSidebarHubQuickEntryId[];
   /** 运行面板（终端 / 工作流运行态）是否显示；默认显示。 */
@@ -208,6 +211,8 @@ export interface WiseDefaultConfigV1 {
   gitPanelPlacement: MonitorPanelPlacement;
   /** 仓库文件树默认栏位；默认左栏（与 Git 同在左栏时 Tab 切换）。 */
   filesPanelPlacement: MonitorPanelPlacement;
+  /** Git 与文件树同栏时上下分栏展示（而非 Tab 切换）。 */
+  repoPanelSplitMode: boolean;
   /** 在仓库列表中「打开终端」的快捷键 chord（如 Mod+Shift+T）；空=未设置。 */
   openInTerminalShortcut: string;
   /** 在仓库列表中「打开编辑器」的快捷键 chord（如 Mod+Shift+E）；空=未设置。 */
@@ -251,6 +256,7 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   showRemoteEntryTopbar: true,
   showTopbarRepositoryName: false,
   showTopbarOpenInTerminal: true,
+  showTopbarOpenDirectory: true,
   leftSidebarHubQuickEntries: [...DEFAULT_LEFT_SIDEBAR_HUB_QUICK_ENTRIES],
   showLeftSidebarMonitorPanel: true,
   showLeftSidebarWorkspaceList: true,
@@ -275,6 +281,7 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   fileTreeOpenInNewPane: false,
   gitPanelPlacement: "left",
   filesPanelPlacement: "left",
+  repoPanelSplitMode: false,
   sessionFeedbackLoopEnabled: false,
   sessionFeedbackLoopMaxCycles: 3,
   sessionFeedbackLoopAutoStart: false,
@@ -366,6 +373,13 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
           : normalizeBoolean(
               parsed.showTopbarOpenInTerminal,
               DEFAULT_CONFIG.showTopbarOpenInTerminal,
+            ),
+      showTopbarOpenDirectory:
+        parsed.showTopbarOpenDirectory === undefined
+          ? DEFAULT_CONFIG.showTopbarOpenDirectory
+          : normalizeBoolean(
+              parsed.showTopbarOpenDirectory,
+              DEFAULT_CONFIG.showTopbarOpenDirectory,
             ),
       leftSidebarHubQuickEntries: normalizeLeftSidebarHubQuickEntries(parsed.leftSidebarHubQuickEntries),
       showLeftSidebarMonitorPanel:
@@ -489,6 +503,10 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
       filesPanelPlacement:
         normalizeMonitorPanelPlacement(parsed.filesPanelPlacement) ??
         DEFAULT_CONFIG.filesPanelPlacement,
+      repoPanelSplitMode:
+        typeof parsed.repoPanelSplitMode === "boolean"
+          ? parsed.repoPanelSplitMode
+          : DEFAULT_CONFIG.repoPanelSplitMode,
       sessionFeedbackLoopEnabled:
         parsed.sessionFeedbackLoopEnabled === undefined
           ? DEFAULT_CONFIG.sessionFeedbackLoopEnabled
@@ -662,6 +680,7 @@ function dispatchTopbarChromeDefaultChanged(
     | "showRemoteEntryTopbar"
     | "showTopbarRepositoryName"
     | "showTopbarOpenInTerminal"
+    | "showTopbarOpenDirectory"
   >,
 ): void {
   if (typeof window === "undefined") return;
@@ -677,6 +696,7 @@ function dispatchTopbarChromeDefaultChanged(
         showRemoteEntryTopbar: config.showRemoteEntryTopbar,
         showTopbarRepositoryName: config.showTopbarRepositoryName,
         showTopbarOpenInTerminal: config.showTopbarOpenInTerminal,
+        showTopbarOpenDirectory: config.showTopbarOpenDirectory,
       },
     }),
   );
@@ -713,6 +733,7 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     showRemoteEntryTopbar: DEFAULT_CONFIG.showRemoteEntryTopbar,
     showTopbarRepositoryName: DEFAULT_CONFIG.showTopbarRepositoryName,
     showTopbarOpenInTerminal: DEFAULT_CONFIG.showTopbarOpenInTerminal,
+    showTopbarOpenDirectory: DEFAULT_CONFIG.showTopbarOpenDirectory,
     leftSidebarHubQuickEntries: [...DEFAULT_LEFT_SIDEBAR_HUB_QUICK_ENTRIES],
     showLeftSidebarMonitorPanel: DEFAULT_CONFIG.showLeftSidebarMonitorPanel,
     showLeftSidebarWorkspaceList: DEFAULT_CONFIG.showLeftSidebarWorkspaceList,
@@ -737,6 +758,7 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     fileTreeOpenInNewPane: DEFAULT_CONFIG.fileTreeOpenInNewPane,
     gitPanelPlacement: DEFAULT_CONFIG.gitPanelPlacement,
     filesPanelPlacement: DEFAULT_CONFIG.filesPanelPlacement,
+    repoPanelSplitMode: DEFAULT_CONFIG.repoPanelSplitMode,
     sessionFeedbackLoopEnabled: DEFAULT_CONFIG.sessionFeedbackLoopEnabled,
     sessionFeedbackLoopMaxCycles: DEFAULT_CONFIG.sessionFeedbackLoopMaxCycles,
     sessionFeedbackLoopAutoStart: DEFAULT_CONFIG.sessionFeedbackLoopAutoStart,
@@ -847,6 +869,15 @@ function dispatchRepoPanelPlacementChanged(
   );
 }
 
+function dispatchRepoPanelSplitModeChanged(splitMode: boolean): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(WISE_REPO_PANEL_SPLIT_MODE_CHANGED, {
+      detail: { repoPanelSplitMode: splitMode },
+    }),
+  );
+}
+
 function dispatchOpenInTerminalShortcutChanged(chord: string): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(
@@ -913,6 +944,7 @@ export async function saveWiseDefaultConfig(
       | "showRemoteEntryTopbar"
       | "showTopbarRepositoryName"
       | "showTopbarOpenInTerminal"
+      | "showTopbarOpenDirectory"
       | "leftSidebarHubQuickEntries"
       | "showLeftSidebarMonitorPanel"
       | "showLeftSidebarWorkspaceList"
@@ -937,6 +969,7 @@ export async function saveWiseDefaultConfig(
       | "fileTreeOpenInNewPane"
       | "gitPanelPlacement"
       | "filesPanelPlacement"
+      | "repoPanelSplitMode"
       | "sessionFeedbackLoopEnabled"
       | "sessionFeedbackLoopMaxCycles"
       | "sessionFeedbackLoopAutoStart"
@@ -972,6 +1005,8 @@ export async function saveWiseDefaultConfig(
     showTopbarRepositoryName: patch.showTopbarRepositoryName ?? current.showTopbarRepositoryName,
     showTopbarOpenInTerminal:
       patch.showTopbarOpenInTerminal ?? current.showTopbarOpenInTerminal,
+    showTopbarOpenDirectory:
+      patch.showTopbarOpenDirectory ?? current.showTopbarOpenDirectory,
     leftSidebarHubQuickEntries:
       patch.leftSidebarHubQuickEntries !== undefined
         ? normalizeLeftSidebarHubQuickEntries(patch.leftSidebarHubQuickEntries)
@@ -1026,6 +1061,8 @@ export async function saveWiseDefaultConfig(
     fileTreeOpenInNewPane: patch.fileTreeOpenInNewPane ?? current.fileTreeOpenInNewPane,
     gitPanelPlacement: patch.gitPanelPlacement ?? current.gitPanelPlacement,
     filesPanelPlacement: patch.filesPanelPlacement ?? current.filesPanelPlacement,
+    repoPanelSplitMode:
+      patch.repoPanelSplitMode ?? current.repoPanelSplitMode,
     sessionFeedbackLoopEnabled:
       patch.sessionFeedbackLoopEnabled ?? current.sessionFeedbackLoopEnabled,
     sessionFeedbackLoopMaxCycles:
@@ -1103,6 +1140,12 @@ export async function saveWiseDefaultConfig(
     next.showTopbarOpenInTerminal = normalizeBoolean(
       patch.showTopbarOpenInTerminal,
       DEFAULT_CONFIG.showTopbarOpenInTerminal,
+    );
+  }
+  if (patch.showTopbarOpenDirectory !== undefined) {
+    next.showTopbarOpenDirectory = normalizeBoolean(
+      patch.showTopbarOpenDirectory,
+      DEFAULT_CONFIG.showTopbarOpenDirectory,
     );
   }
   if (patch.leftSidebarHubQuickEntries !== undefined) {
@@ -1205,6 +1248,9 @@ export async function saveWiseDefaultConfig(
     next.filesPanelPlacement =
       normalizeMonitorPanelPlacement(patch.filesPanelPlacement) ?? current.filesPanelPlacement;
   }
+  if (patch.repoPanelSplitMode !== undefined) {
+    next.repoPanelSplitMode = normalizeBoolean(patch.repoPanelSplitMode);
+  }
   if (patch.sessionFeedbackLoopEnabled !== undefined) {
     next.sessionFeedbackLoopEnabled = normalizeBoolean(
       patch.sessionFeedbackLoopEnabled,
@@ -1290,7 +1336,8 @@ export async function saveWiseDefaultConfig(
     patch.showSessionFeedbackLoopTopbar !== undefined ||
     patch.showRemoteEntryTopbar !== undefined ||
     patch.showTopbarRepositoryName !== undefined ||
-    patch.showTopbarOpenInTerminal !== undefined
+    patch.showTopbarOpenInTerminal !== undefined ||
+    patch.showTopbarOpenDirectory !== undefined
   ) {
     if (
       next.showLlmProxyTopbar !== current.showLlmProxyTopbar ||
@@ -1301,7 +1348,8 @@ export async function saveWiseDefaultConfig(
       next.showSessionFeedbackLoopTopbar !== current.showSessionFeedbackLoopTopbar ||
       next.showRemoteEntryTopbar !== current.showRemoteEntryTopbar ||
       next.showTopbarRepositoryName !== current.showTopbarRepositoryName ||
-      next.showTopbarOpenInTerminal !== current.showTopbarOpenInTerminal
+      next.showTopbarOpenInTerminal !== current.showTopbarOpenInTerminal ||
+      next.showTopbarOpenDirectory !== current.showTopbarOpenDirectory
     ) {
       dispatchTopbarChromeDefaultChanged({
         showLlmProxyTopbar: next.showLlmProxyTopbar,
@@ -1313,6 +1361,7 @@ export async function saveWiseDefaultConfig(
         showRemoteEntryTopbar: next.showRemoteEntryTopbar,
         showTopbarRepositoryName: next.showTopbarRepositoryName,
         showTopbarOpenInTerminal: next.showTopbarOpenInTerminal,
+        showTopbarOpenDirectory: next.showTopbarOpenDirectory,
       });
     }
   }
@@ -1778,6 +1827,15 @@ export async function saveRepoPanelPlacementToStore(
   await saveWiseDefaultConfig(normalized);
 }
 
+export async function loadRepoPanelSplitModeFromStore(): Promise<boolean> {
+  return (await loadWiseDefaultConfig()).repoPanelSplitMode;
+}
+
+export async function saveRepoPanelSplitModeToStore(splitMode: boolean): Promise<void> {
+  await saveWiseDefaultConfig({ repoPanelSplitMode: splitMode });
+  dispatchRepoPanelSplitModeChanged(splitMode);
+}
+
 export async function loadDefaultClaudeConnectionKindFromStore(): Promise<ClaudeSessionConnectionKind> {
   return (await loadWiseDefaultConfig()).connectionKind;
 }
@@ -1827,6 +1885,7 @@ export async function loadTopbarChromeDefaultsFromStore(): Promise<
     | "showRemoteEntryTopbar"
     | "showTopbarRepositoryName"
     | "showTopbarOpenInTerminal"
+    | "showTopbarOpenDirectory"
   >
 > {
   const config = await loadWiseDefaultConfig();
@@ -1840,6 +1899,7 @@ export async function loadTopbarChromeDefaultsFromStore(): Promise<
     showRemoteEntryTopbar: config.showRemoteEntryTopbar,
     showTopbarRepositoryName: config.showTopbarRepositoryName,
     showTopbarOpenInTerminal: config.showTopbarOpenInTerminal,
+    showTopbarOpenDirectory: config.showTopbarOpenDirectory,
   };
 }
 
@@ -1856,6 +1916,7 @@ export async function saveTopbarChromeDefaultsToStore(
       | "showRemoteEntryTopbar"
       | "showTopbarRepositoryName"
       | "showTopbarOpenInTerminal"
+      | "showTopbarOpenDirectory"
     >
   >,
 ): Promise<void> {

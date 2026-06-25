@@ -220,6 +220,7 @@ export function LeftSidebar({
   onOpenActiveRepositoryFile,
   gitPanelPlacement = "left",
   filesPanelPlacement = "left",
+  repoPanelSplitMode = false,
   repoPanelRightRailAvailable = true,
   onRepositoryRepoPanelChange,
   fileTreeRailOpen = false,
@@ -339,9 +340,9 @@ export function LeftSidebar({
         gitPanelPlacement,
         filesPanelPlacement,
         leftBottomTab,
-        { rightRailAvailable: repoPanelRightRailAvailable },
+        { rightRailAvailable: repoPanelRightRailAvailable, splitMode: repoPanelSplitMode },
       ),
-    [filesPanelPlacement, gitPanelPlacement, leftBottomTab, repoPanelRightRailAvailable],
+    [filesPanelPlacement, gitPanelPlacement, leftBottomTab, repoPanelRightRailAvailable, repoPanelSplitMode],
   );
   const [bottomTabPanelsReady, setBottomTabPanelsReady] = useState(false);
   const [monitorPanelMounted, setMonitorPanelMounted] = useState(false);
@@ -1124,8 +1125,8 @@ export function LeftSidebar({
     }
     return (
       <div className="app-right-repo-panel app-right-repo-panel--split">
-        {repoPanelRenderState.showGitOnRight ? rightSidebarGitBottomPane : null}
         {repoPanelRenderState.showFilesOnRight ? rightSidebarFilesBottomPane : null}
+        {repoPanelRenderState.showGitOnRight ? rightSidebarGitBottomPane : null}
       </div>
     );
   }, [

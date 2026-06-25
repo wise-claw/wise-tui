@@ -28,6 +28,10 @@ import {
   removeAtTriggerFromPlain,
   replaceSlashCommandLine,
 } from "./composer-plain-utils";
+import {
+  hasExecutionEnvironmentMention,
+  stripExecutionEnvironmentMention,
+} from "../../utils/executionEnvironmentDispatch";
 import { computeSlashPopoverPlacement } from "./composer-trigger-anchor";
 import { ExplorerTreeFileIcon, ExplorerTreeFolderIcon } from "../GitPanel/explorerTreeChrome";
 
@@ -375,6 +379,11 @@ export function SlashPopover({
         } else if (option.type === "team" && option.name) {
           ({ plain, cursor } = insertPlainAt(plain, cursor, `@${option.name}`));
         } else if (option.type === "execution_engine" && option.name) {
+          if (hasExecutionEnvironmentMention(plain)) {
+            const { text: strippedText } = stripExecutionEnvironmentMention(plain);
+            plain = strippedText;
+            cursor = Math.min(cursor, plain.length);
+          }
           ({ plain, cursor } = insertPlainAt(plain, cursor, `@${option.name}`));
         }
         ({ plain, cursor } = ensureSpaceAfterAtInsert(plain, cursor));

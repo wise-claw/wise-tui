@@ -3482,6 +3482,7 @@ export default function App() {
         activeRepositoryName: activeRepository?.name,
         gitPanelPlacement: repoPanelPlacementDefault.gitPanelPlacement,
         filesPanelPlacement: repoPanelPlacementDefault.filesPanelPlacement,
+        repoPanelSplitMode: repoPanelPlacementDefault.repoPanelSplitMode,
         onRepositoryRepoPanelChange: setRepositoryRepoPanelNode,
       }}
       authorPanelProps={{

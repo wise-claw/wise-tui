@@ -196,7 +196,7 @@ function resolveMentionAtIndex(
   return null;
 }
 
-function stripExecutionEnvironmentMention(text: string): {
+export function stripExecutionEnvironmentMention(text: string): {
   text: string;
   engine: SessionExecutionEngine;
 } {

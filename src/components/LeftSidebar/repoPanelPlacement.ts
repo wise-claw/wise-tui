@@ -18,6 +18,8 @@ export interface RepoPanelRenderState {
 export interface DeriveRepoPanelRenderStateOptions {
   /** Chat 模式右栏是否可用；为 false 时仅隐藏右栏内容，不回退配置。 */
   rightRailAvailable?: boolean;
+  /** Git 与文件树同栏时是否上下分栏展示（而非 Tab 切换）。 */
+  splitMode?: boolean;
 }
 
 export function deriveRepoPanelRenderState(
@@ -27,11 +29,24 @@ export function deriveRepoPanelRenderState(
   options?: DeriveRepoPanelRenderStateOptions,
 ): RepoPanelRenderState {
   const rightRailAvailable = options?.rightRailAvailable ?? true;
+  const splitMode = options?.splitMode ?? false;
   const leftTabMode = gitPlacement === "left" && filesPlacement === "left";
   const rightTabMode = gitPlacement === "right" && filesPlacement === "right";
   const usesRightRail = gitPlacement === "right" || filesPlacement === "right";
 
   if (leftTabMode) {
+    if (splitMode) {
+      return {
+        showGitOnLeft: true,
+        showFilesOnLeft: true,
+        showGitOnRight: false,
+        showFilesOnRight: false,
+        leftTabMode: false,
+        rightTabMode: false,
+        activeTab,
+        usesRightRail: false,
+      };
+    }
     return {
       showGitOnLeft: activeTab === "git",
       showFilesOnLeft: activeTab === "files",
@@ -45,6 +60,18 @@ export function deriveRepoPanelRenderState(
   }
 
   if (rightTabMode) {
+    if (splitMode) {
+      return {
+        showGitOnLeft: false,
+        showFilesOnLeft: false,
+        showGitOnRight: rightRailAvailable,
+        showFilesOnRight: rightRailAvailable,
+        leftTabMode: false,
+        rightTabMode: false,
+        activeTab,
+        usesRightRail: true,
+      };
+    }
     return {
       showGitOnLeft: false,
       showFilesOnLeft: false,

@@ -2,22 +2,29 @@ import { message } from "antd";
 import { useCallback, useEffect, useState } from "react";
 import {
   loadRepoPanelPlacementFromStore,
+  loadRepoPanelSplitModeFromStore,
   saveRepoPanelPlacementToStore,
+  saveRepoPanelSplitModeToStore,
   type MonitorPanelPlacement,
 } from "../../services/wiseDefaultConfigStore";
 
 export function useRepoPanelPlacementSetting() {
   const [gitPanelPlacement, setGitPanelPlacement] = useState<MonitorPanelPlacement>("left");
   const [filesPanelPlacement, setFilesPanelPlacement] = useState<MonitorPanelPlacement>("left");
+  const [repoPanelSplitMode, setRepoPanelSplitMode] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      const loaded = await loadRepoPanelPlacementFromStore();
-      setGitPanelPlacement(loaded.gitPanelPlacement);
-      setFilesPanelPlacement(loaded.filesPanelPlacement);
+      const [placement, splitMode] = await Promise.all([
+        loadRepoPanelPlacementFromStore(),
+        loadRepoPanelSplitModeFromStore(),
+      ]);
+      setGitPanelPlacement(placement.gitPanelPlacement);
+      setFilesPanelPlacement(placement.filesPanelPlacement);
+      setRepoPanelSplitMode(splitMode);
     } finally {
       setLoading(false);
     }
@@ -61,13 +68,28 @@ export function useRepoPanelPlacementSetting() {
     [filesPanelPlacement],
   );
 
+  const saveSplitMode = useCallback(async (next: boolean) => {
+    setSaving(true);
+    try {
+      await saveRepoPanelSplitModeToStore(next);
+      setRepoPanelSplitMode(next);
+    } catch (err) {
+      message.error(`保存失败：${err instanceof Error ? err.message : String(err)}`);
+      throw err;
+    } finally {
+      setSaving(false);
+    }
+  }, []);
+
   return {
     gitPanelPlacement,
     filesPanelPlacement,
+    repoPanelSplitMode,
     loading,
     saving,
     refresh,
     saveGitPlacement,
     saveFilesPlacement,
+    saveSplitMode,
   };
 }

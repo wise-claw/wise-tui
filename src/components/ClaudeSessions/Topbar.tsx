@@ -7,6 +7,8 @@ import { RemoteEntryTopbarStrip } from "../RemoteEntryTopbarStrip";
 import { WorkspaceQuickActionsTopbarStrip } from "../WorkspaceQuickActionsTopbarStrip";
 import { OpenAppMenu } from "../OpenAppMenu";
 import { tryOpenWorkspaceInDefaultTerminal } from "../../services/openWorkspaceWithTerminalPreference";
+import { openInFinder } from "../../services/repository";
+import { FolderOpenOutlined } from "@ant-design/icons";
 import { FccTopbarTrigger } from "./FccTopbarTrigger";
 import { OpencodeGoProxyTopbarTrigger } from "./OpencodeGoProxyTopbarTrigger";
 import { FccTrafficTopbarTrigger } from "./FccTrafficTopbarTrigger";
@@ -335,6 +337,24 @@ export const Topbar = memo(function Topbar({
         </div>
       </div>
       <div className="app-chat-topbar-right">
+        {topbarToolsReady && topbarChrome.showTopbarOpenDirectory ? (
+          <HoverHint title="在 Finder 中打开目录">
+            <button
+              type="button"
+              className="app-topbar-btn"
+              aria-label="在 Finder 中打开目录"
+              onClick={() => {
+                if (topbarOpenPath) {
+                  void openInFinder(topbarOpenPath).catch((err: unknown) => {
+                    message.error(err instanceof Error ? err.message : "打开目录失败");
+                  });
+                }
+              }}
+            >
+              <FolderOpenOutlined />
+            </button>
+          </HoverHint>
+        ) : null}
         {topbarToolsReady && topbarChrome.showTopbarOpenInTerminal ? (
           <HoverHint title="在外部终端打开">
             <button
@@ -478,7 +498,7 @@ export const Topbar = memo(function Topbar({
         {onToggleTerminal && (
           <TopbarBtn
             icon={<IconTerminal />}
-            label="内置终端"
+            label="内置终端 (⌃`)"
             active={terminalPanelMounted && !terminalCollapsed}
             onClick={onToggleTerminal}
           />
