@@ -371,23 +371,21 @@ function DiffModeInner({
               >
                 AI 生成
               </Button>
-              {hasChanges ? (
-                <Button
-                  htmlType="button"
-                  type="text"
-                  size="small"
-                  className="git-commit-btn"
-                  disabled={!canCommit || loading.commit}
-                  icon={<CheckOutlined />}
-                  onPointerDown={(event) => {
-                    if (event.button !== 0) return;
-                    event.preventDefault();
-                    submitCommit();
-                  }}
-                >
-                  {loading.commit ? "提交中..." : "提交"}
-                </Button>
-              ) : null}
+              <Button
+                htmlType="button"
+                type="text"
+                size="small"
+                className="git-commit-btn"
+                disabled={!canCommit || loading.commit}
+                icon={<CheckOutlined />}
+                onPointerDown={(event) => {
+                  if (event.button !== 0) return;
+                  event.preventDefault();
+                  submitCommit();
+                }}
+              >
+                {loading.commit ? "提交中..." : "提交"}
+              </Button>
               <div className="git-commit-card__push-group">
                 <Button
                   htmlType="button"
