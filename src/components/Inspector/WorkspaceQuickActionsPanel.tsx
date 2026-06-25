@@ -128,13 +128,11 @@ export function WorkspaceQuickActionsPanel({
     async (item: WorkspaceQuickActionDisplayItem) => {
       const pinned = resolveWorkspaceQuickActionPinnedToTopbar(item);
       const source = quickActions.readScopeItems(item.scope);
-      const now = Date.now();
       const next = source.map((row) =>
         row.id === item.id
           ? {
               ...row,
               pinnedToTopbar: pinned ? undefined : true,
-              updatedAt: now,
             }
           : row,
       );

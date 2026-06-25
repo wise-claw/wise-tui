@@ -6,6 +6,7 @@ import {
   registerRepositoryTypeScriptLibs,
 } from "./monacoRepositoryTypeScriptConfig";
 import { shouldSkipMonacoTypeScriptModelSync } from "../utils/monacoLargeFile";
+import { applyReactCoreTypeLibs, filterAsyncTypePackages } from "./monacoReactTypeLibs";
 
 type MonacoApi = typeof Monaco;
 type MonacoCompilerOptionsValue =
@@ -180,6 +181,11 @@ export function configureWiseMonacoTypeScript(monaco: MonacoApi): void {
   });
   ts.typescriptDefaults.addExtraLib(VITE_CLIENT_AMBIENT_TYPES, "file:///node_modules/vite/client.d.ts");
   registerAmbientModules(monaco, COMMON_AMBIENT_MODULES);
+  // 同步注入 react / react-dom 核心类型（仓库 100% 依赖）。
+  // 必须在 monaco 启动前的同步路径调用；之前走异步 registerRepositoryTypeScriptLibs 时，
+  // Monaco TS worker 首轮诊断时 JSX.IntrinsicElements 还没就绪，所有 JSX 元素被按 unknown
+  // 报红（满屏红波浪线）。详见 monacoReactTypeLibs.ts 顶部注释。
+  applyReactCoreTypeLibs((content, filePath) => ts.typescriptDefaults.addExtraLib(content, filePath));
 }
 
 export async function ensureRepositoryTypeScriptEnvironment(
@@ -313,9 +319,12 @@ async function applyRepositoryTypeScriptEnvironment(
     checkJs: typeof compilerOptions.checkJs === "boolean" ? compilerOptions.checkJs : false,
   });
 
+  // 异步路径只加载非 React 核心类型。react / react-dom 已在 configureWiseMonacoTypeScript
+  // 同步注入，这里再走一次会重复 addExtraLib 同一份内容。
+  const asyncTypePackages = filterAsyncTypePackages(profile.typePackages);
   await registerRepositoryTypeScriptLibs(
     signature,
-    profile.typePackages,
+    asyncTypePackages,
     (content, filePath) => ts.typescriptDefaults.addExtraLib(content, filePath),
     monaco,
   );
