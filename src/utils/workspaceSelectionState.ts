@@ -52,7 +52,10 @@ export function resolveChatTopbarContext(input: {
     openPath = resolveProjectExplorerOpenPath(input.activeProject, input.repositories).trim();
   }
   if (!openPath) {
-    openPath = sessionPath || contextRepository?.path?.trim() || "";
+    // 仓库焦点时优先使用显式选中的仓库路径，避免项目级会话的 repositoryPath 覆盖。
+    // 项目级会话（ensureProjectMainSession 创建）的 repositoryPath 可能是 workspace
+    // 根目录而非具体仓库目录，导致打开外部终端 / 文件目录时路径错误。
+    openPath = input.activeRepository?.path?.trim() ?? (sessionPath || contextRepository?.path?.trim() || "");
   }
 
   return { contextRepository, openPath };
