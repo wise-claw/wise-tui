@@ -71,6 +71,7 @@ import { RepositoryIconBadgeModal } from "./LeftSidebar/RepositoryIconBadgeModal
 import { WorkspaceSddModeModal } from "./LeftSidebar/WorkspaceSddModeModal";
 import { LeftSidebarBottomTabSwitcher } from "./LeftSidebar/LeftSidebarBottomTabSwitcher";
 import { LeftSidebarWorkspaceListSlot } from "./LeftSidebar/LeftSidebarWorkspaceListSlot";
+import { useSidebarRepositoryActiveSessionCounts } from "../hooks/useSidebarRepositoryActiveSessionCounts";
 import {
   buildClaudeProcessFingerprint,
   buildClaudeRegistryRunningFingerprint,
@@ -385,6 +386,11 @@ export function LeftSidebar({
     () => buildClaudeProcessFingerprint(systemResourceSessions.systemSummary.claudeProcesses),
     [systemResourceSessions.systemSummary.claudeProcesses],
   );
+  const workspaceSelectorActiveSessionCounts = useSidebarRepositoryActiveSessionCounts({
+    repositories,
+    sessionsRef: sessionsLiveRef,
+    sessionsStructureKey,
+  });
   const claudeRegistryRunningFingerprint = useMemo(
     () => buildClaudeRegistryRunningFingerprint(systemResourceSessions.claudeRegistryRunningIds),
     [systemResourceSessions.claudeRegistryRunningIds],
@@ -933,6 +939,7 @@ export function LeftSidebar({
     () => ({
       projects,
       repositories,
+      activeSessionCountsByRepositoryId: workspaceSelectorActiveSessionCounts,
       directoryOnly: true as const,
       treeSelection: repoPanelTreeSelection,
       activeProjectId: repoPanelTreeView?.activeProjectId ?? activeProjectId,
@@ -949,6 +956,7 @@ export function LeftSidebar({
     [
       projects,
       repositories,
+      workspaceSelectorActiveSessionCounts,
       repoPanelTreeSelection,
       repoPanelTreeView,
       activeProjectId,

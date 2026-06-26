@@ -29,10 +29,12 @@ import {
   repositoryTerminalOpenMenuLabel,
   showRepositoryTerminalOpenMenuItem,
 } from "../../utils/repositoryTerminalOpenMenu";
+import { RepositoryActiveSessionBadge } from "../LeftSidebar/RepositoryActiveSessionBadge";
 
 export interface GitPanelWorkspaceSelectorProps {
   projects: ProjectItem[];
   repositories: Repository[];
+  activeSessionCountsByRepositoryId?: Record<number, number>;
   activeProjectId: string | null;
   activeRepositoryId: number | null;
   activeWorkspaceFocus: WorkspaceFocus;
@@ -50,6 +52,7 @@ export interface GitPanelWorkspaceSelectorProps {
 interface TreeOpenActionsOptions {
   projects: ProjectItem[];
   repositories: Repository[];
+  activeSessionCountsByRepositoryId?: Record<number, number>;
   onOpenEditorPath: (path: string, scopeOpenAppId?: string | null) => void;
   showTerminalOpen: boolean;
   terminalIconSrc: string;
@@ -75,9 +78,16 @@ function buildTreeDataWithOpenActions(
       ? `在 ${editorTarget.label} 中打开`
       : repositoryEditorOpenMenuLabel(scopeOpenAppId);
     const editorIconSrc = getKnownOpenAppIcon(effectiveOpenAppId) ?? "";
+    const countForRepo =
+      node.nodeType === "repo" && node.repositoryId != null
+        ? (options.activeSessionCountsByRepositoryId?.[node.repositoryId] ?? 0)
+        : 0;
     const title: ReactNode = (
       <div className="git-panel-workspace-selector__tree-row">
-        <span className="git-panel-workspace-selector__tree-label">{node.title}</span>
+        <span className="git-panel-workspace-selector__tree-label" title={node.title}>
+          <span className="git-panel-workspace-selector__tree-label-text">{node.title}</span>
+          <RepositoryActiveSessionBadge count={countForRepo} />
+        </span>
         {openPath ? (
           <div className="git-panel-workspace-selector__tree-actions">
             <button
@@ -136,6 +146,7 @@ function buildTreeDataWithOpenActions(
 export function GitPanelWorkspaceSelector({
   projects,
   repositories,
+  activeSessionCountsByRepositoryId,
   activeProjectId,
   activeRepositoryId,
   activeWorkspaceFocus,
@@ -213,6 +224,7 @@ export function GitPanelWorkspaceSelector({
       buildTreeDataWithOpenActions(treeNodes, {
         projects,
         repositories,
+        activeSessionCountsByRepositoryId,
         onOpenEditorPath: handleOpenEditorPath,
         showTerminalOpen,
         terminalIconSrc,
@@ -223,6 +235,7 @@ export function GitPanelWorkspaceSelector({
       treeNodes,
       projects,
       repositories,
+      activeSessionCountsByRepositoryId,
       handleOpenEditorPath,
       showTerminalOpen,
       terminalIconSrc,

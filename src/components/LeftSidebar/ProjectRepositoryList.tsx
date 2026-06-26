@@ -125,6 +125,7 @@ export interface ProjectRepositoryListProps {
   onOpenExecutableTasksForRepository?: (repository: Repository) => void;
   runningMainSessionByProjectId?: Record<string, boolean>;
   runningMainSessionByRepositoryId?: Record<number, boolean>;
+
   onStopProjectMainSession?: (projectId: string) => void;
   onStopRepositoryMainSession?: (repository: Repository) => void;
   sectionCollapsed?: boolean;
@@ -202,6 +203,7 @@ function ProjectRepositoryListInner({
   onOpenExecutableTasksForRepository,
   runningMainSessionByProjectId = {},
   runningMainSessionByRepositoryId = {},
+
   onStopProjectMainSession,
   onStopRepositoryMainSession,
   sectionCollapsed = false,
@@ -581,6 +583,7 @@ interface ProjectRowProps {
   mainSessionRunning?: boolean;
   onStopProjectMainSession?: (projectId: string) => void;
   runningMainSessionByRepositoryId?: Record<number, boolean>;
+
   onStopRepositoryMainSession?: (repository: Repository) => void;
   runCommandRowPinnedMap?: RepositoryRunCommandRowPinnedMap;
 }
@@ -648,6 +651,7 @@ function ProjectRow({
   mainSessionRunning = false,
   onStopProjectMainSession,
   runningMainSessionByRepositoryId = {},
+
   onStopRepositoryMainSession,
   runCommandRowPinnedMap = {},
 }: ProjectRowProps) {
