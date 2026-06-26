@@ -13,7 +13,6 @@ import {
   type WorkspaceRepositoryTreeNode,
   type WorkspaceRepositoryTreeSelection,
 } from "../../utils/workspaceRepositoryTreeSelect";
-import { IconSwitchWorkspaceSession } from "./IconSwitchWorkspaceSession";
 import type { WorkspaceFocus } from "../../utils/workspaceMode";
 import { getDefaultTerminalActionIcon, getKnownOpenAppIcon } from "../OpenAppMenu/openAppIcons";
 import {
@@ -52,23 +51,10 @@ interface TreeOpenActionsOptions {
   projects: ProjectItem[];
   repositories: Repository[];
   onOpenEditorPath: (path: string, scopeOpenAppId?: string | null) => void;
-  onOpenFileTreeSession?: (target: WorkspaceRepositoryTreeSelection) => void;
   showTerminalOpen: boolean;
   terminalIconSrc: string;
   terminalActionLabel: string;
   onOpenTerminalPath: (path: string) => void;
-}
-
-function resolveTreeNodeFileTreeSessionTarget(
-  node: WorkspaceRepositoryTreeNode,
-): WorkspaceRepositoryTreeSelection | null {
-  if (node.nodeType === "repo" && node.repositoryId != null) {
-    return { kind: "repository", repositoryId: node.repositoryId };
-  }
-  if (node.nodeType === "project" && node.projectId) {
-    return { kind: "project", projectId: node.projectId };
-  }
-  return null;
 }
 
 function buildTreeDataWithOpenActions(
@@ -89,51 +75,29 @@ function buildTreeDataWithOpenActions(
       ? `在 ${editorTarget.label} 中打开`
       : repositoryEditorOpenMenuLabel(scopeOpenAppId);
     const editorIconSrc = getKnownOpenAppIcon(effectiveOpenAppId) ?? "";
-    const fileTreeSessionTarget = resolveTreeNodeFileTreeSessionTarget(node);
-    const showFileTreeSessionAction =
-      fileTreeSessionTarget != null && options.onOpenFileTreeSession != null;
     const title: ReactNode = (
       <div className="git-panel-workspace-selector__tree-row">
         <span className="git-panel-workspace-selector__tree-label">{node.title}</span>
-        {showFileTreeSessionAction || openPath ? (
+        {openPath ? (
           <div className="git-panel-workspace-selector__tree-actions">
-            {showFileTreeSessionAction ? (
-              <button
-                type="button"
-                className="git-panel-workspace-selector__tree-open git-panel-workspace-selector__tree-open--session"
-                title={`切换会话并定位文件树：${node.title}`}
-                aria-label={`切换会话并定位文件树：${node.title}`}
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  options.onOpenFileTreeSession?.(fileTreeSessionTarget);
-                }}
-              >
-                <span className="git-panel-workspace-selector__tree-open-icon git-panel-workspace-selector__tree-open-icon--session" aria-hidden>
-                  <IconSwitchWorkspaceSession />
-                </span>
-              </button>
-            ) : null}
-            {openPath ? (
-              <button
-                type="button"
-                className="git-panel-workspace-selector__tree-open"
-                title={`${editorActionLabel}：${node.title}`}
-                aria-label={`${editorActionLabel}：${node.title}`}
-                onClick={(event) => {
-                  event.preventDefault();
-                  event.stopPropagation();
-                  options.onOpenEditorPath(openPath, scopeOpenAppId);
-                }}
-              >
-                <img
-                  className="git-panel-workspace-selector__tree-open-icon"
-                  src={editorIconSrc}
-                  alt=""
-                  aria-hidden
-                />
-              </button>
-            ) : null}
+            <button
+              type="button"
+              className="git-panel-workspace-selector__tree-open"
+              title={`${editorActionLabel}：${node.title}`}
+              aria-label={`${editorActionLabel}：${node.title}`}
+              onClick={(event) => {
+                event.preventDefault();
+                event.stopPropagation();
+                options.onOpenEditorPath(openPath, scopeOpenAppId);
+              }}
+            >
+              <img
+                className="git-panel-workspace-selector__tree-open-icon"
+                src={editorIconSrc}
+                alt=""
+                aria-hidden
+              />
+            </button>
             {openPath && options.showTerminalOpen ? (
               <button
                 type="button"
@@ -221,10 +185,22 @@ export function GitPanelWorkspaceSelector({
 
   const handleOpenFileTreeSession = useCallback(
     (target: WorkspaceRepositoryTreeSelection) => {
-      onOpenFileTreeSession?.(target);
+      if (target.kind === "project") {
+        if (onOpenFileTreeSession) {
+          onOpenFileTreeSession(target);
+        } else {
+          onProjectSelect?.(target.projectId);
+        }
+      } else {
+        if (onOpenFileTreeSession) {
+          onOpenFileTreeSession(target);
+        } else {
+          onRepositorySelect(target.repositoryId);
+        }
+      }
       setPickerOpen(false);
     },
-    [onOpenFileTreeSession],
+    [onOpenFileTreeSession, onProjectSelect, onRepositorySelect],
   );
 
   const treeNodes = useMemo(
@@ -238,7 +214,6 @@ export function GitPanelWorkspaceSelector({
         projects,
         repositories,
         onOpenEditorPath: handleOpenEditorPath,
-        onOpenFileTreeSession: onOpenFileTreeSession ? handleOpenFileTreeSession : undefined,
         showTerminalOpen,
         terminalIconSrc,
         terminalActionLabel,
@@ -249,8 +224,6 @@ export function GitPanelWorkspaceSelector({
       projects,
       repositories,
       handleOpenEditorPath,
-      onOpenFileTreeSession,
-      handleOpenFileTreeSession,
       showTerminalOpen,
       terminalIconSrc,
       terminalActionLabel,
@@ -318,11 +291,10 @@ export function GitPanelWorkspaceSelector({
         const parsed = parseWorkspaceRepositoryTreeValue(raw);
         if (!parsed) return;
         if (parsed.kind === "project") {
-          onProjectSelect?.(parsed.projectId);
+          handleOpenFileTreeSession({ kind: "project", projectId: parsed.projectId });
         } else {
-          onRepositorySelect(parsed.repositoryId);
+          handleOpenFileTreeSession({ kind: "repository", repositoryId: parsed.repositoryId });
         }
-        setPickerOpen(false);
       }}
     />
   );
