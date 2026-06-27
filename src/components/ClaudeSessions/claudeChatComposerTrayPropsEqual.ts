@@ -71,7 +71,6 @@ export function claudeChatComposerTrayPropsEqual(
     "respondQuestionAt",
     "dismissQuestionAt",
     "onRespondToPermission",
-    "onClearTodos",
     "onToggleTodo",
     "onSendFollowup",
     "onClearFollowups",

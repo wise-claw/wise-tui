@@ -219,7 +219,6 @@ interface Props {
   respondQuestionAt: (sessionId: string, answers: string[], customAnswer?: string) => void;
   dismissQuestionAt: (sessionId: string) => void;
   onRespondToPermission: (response: "allow_once" | "allow_always" | "deny") => void;
-  onClearTodos: () => void;
   onToggleTodo?: (todoId: string) => void;
   /** Hub 无 todo 时从 transcript 恢复（重开会话等） */
   onRestoreTodosFromTranscript?: () => void;
@@ -366,7 +365,6 @@ export function ClaudeChatInner({
   respondQuestionAt,
   dismissQuestionAt,
   onRespondToPermission,
-  onClearTodos,
   onToggleTodo,
   onRestoreTodosFromTranscript,
   onRestorePendingPermissionFromTranscript,
@@ -1808,7 +1806,6 @@ export function ClaudeChatInner({
               respondQuestionAt={respondQuestionAt}
               dismissQuestionAt={dismissQuestionAt}
               onRespondToPermission={onRespondToPermission}
-              onClearTodos={onClearTodos}
               onToggleTodo={onToggleTodo}
               onClearFollowups={onClearFollowups}
               onClearRevertItems={onClearRevertItems}

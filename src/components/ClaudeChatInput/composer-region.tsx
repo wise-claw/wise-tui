@@ -261,7 +261,6 @@ interface ComposerInnerProps {
   respondQuestionAt: (ownerSessionId: string, answers: string[], customAnswer?: string) => void;
   dismissQuestionAt: (ownerSessionId: string) => void;
   onRespondToPermission: (response: "allow_once" | "allow_always" | "deny") => void;
-  onClearTodos?: () => void;
   onToggleTodo?: (todoId: string) => void;
   onSendFollowup: (id: string) => void;
   onClearFollowups?: () => void;
@@ -577,7 +576,6 @@ function ComposerInner({
   respondQuestionAt,
   dismissQuestionAt,
   onRespondToPermission,
-  onClearTodos,
   onToggleTodo,
   onSendFollowup,
   onClearFollowups,
@@ -3053,7 +3051,6 @@ export interface ComposerRegionProps {
   respondQuestionAt: (ownerSessionId: string, answers: string[], customAnswer?: string) => void;
   dismissQuestionAt: (ownerSessionId: string) => void;
   onRespondToPermission: (response: "allow_once" | "allow_always" | "deny") => void;
-  onClearTodos?: () => void;
   onToggleTodo?: (todoId: string) => void;
   onSendFollowup: (id: string) => void;
   onClearFollowups?: () => void;

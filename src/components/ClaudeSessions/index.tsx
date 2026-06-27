@@ -113,7 +113,6 @@ interface Props {
   onRespondToQuestion: (sessionId: string, answers: string[], customAnswer?: string) => void;
   onDismissQuestion: (sessionId: string) => void;
   onRespondToPermission: (sessionId: string, response: "allow_once" | "allow_always" | "deny") => void;
-  onClearTodos: (sessionId: string) => void;
   onToggleTodo: (sessionId: string, todoId: string) => void;
   onRestoreTodosFromTranscript: (sessionId: string) => void;
   onRestorePendingPermissionFromTranscript: (sessionId: string) => void;
@@ -267,7 +266,6 @@ function ClaudeSessionsShell({
   onRespondToQuestion,
   onDismissQuestion,
   onRespondToPermission,
-  onClearTodos,
   onToggleTodo,
   onRestoreTodosFromTranscript,
   onRestorePendingPermissionFromTranscript,
@@ -720,7 +718,6 @@ function ClaudeSessionsShell({
           onRespondToQuestion={onRespondToQuestion}
           onDismissQuestion={onDismissQuestion}
           onRespondToPermission={onRespondToPermission}
-          onClearTodos={onClearTodos}
           onToggleTodo={onToggleTodo}
           onRestoreTodosFromTranscript={onRestoreTodosFromTranscript}
           onRestorePendingPermissionFromTranscript={onRestorePendingPermissionFromTranscript}
