@@ -2927,7 +2927,6 @@ function ComposerInner({
             estimatedTokens={getSessionContextMetrics(session).estimatedTokens}
             hidden={shouldShowClaudeCodeTaskListInMessages(session.status, todos)}
             onToggle={handleTodoToggle}
-            onClose={onClearTodos}
           />
 
           {/* Revert dock */}
