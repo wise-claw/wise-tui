@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { Button } from "antd";
+import { CloseOutlined } from "@ant-design/icons";
 import type { TodoItem } from "../../../types";
 import {
   buildTaskListDisplayModel,
@@ -152,9 +153,8 @@ export function ClaudeCodeTaskListStatus({
               onClose();
             }}
             className="app-cc-task-list__close"
-          >
-            ×
-          </Button>
+            icon={<CloseOutlined />}
+          />
         ) : null}
       </div>
 

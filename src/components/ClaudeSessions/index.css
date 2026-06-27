@@ -8625,14 +8625,19 @@ button.app-message-part-header:disabled:hover {
 .app-cc-task-list__close {
   flex-shrink: 0;
   align-self: center;
-  min-width: 20px !important;
-  width: 20px !important;
-  height: 20px !important;
+  width: 22px !important;
+  height: 22px !important;
+  min-width: 22px !important;
   padding: 0 !important;
   margin-inline-end: 4px;
   color: var(--ant-color-text-tertiary) !important;
   font-size: 12px !important;
-  line-height: 1 !important;
+  cursor: pointer !important;
+}
+.app-cc-task-list__close:hover {
+  color: var(--ant-color-text) !important;
+  background: color-mix(in srgb, var(--ant-color-fill-secondary) 60%, transparent);
+  border-radius: 4px;
 }
 
 .app-cc-task-list__tree {
