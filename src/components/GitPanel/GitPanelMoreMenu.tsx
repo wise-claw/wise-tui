@@ -171,7 +171,7 @@ export function GitPanelMoreMenu({
         flowInfo, flowLoading, actionLoading,
         handleFlowInit, openFlowModal,
       );
-      if (flowItems.length > 0) {
+      if (flowItems && flowItems.length > 0) {
         items.push({
           key: "git-flow",
           label: "Git Flow",
@@ -229,7 +229,7 @@ export function GitPanelMoreMenu({
     return btns;
   }, [showInlineKeys, historyActive, onOpenHistory, repositoryPath]);
 
-  const showDropdown = menuItems.length > 0;
+  const showDropdown = (menuItems?.length ?? 0) > 0;
 
   // — Flow Modal 统一放在组件层级 —
   const flowModalTitle = useMemo(() => {
