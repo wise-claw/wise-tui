@@ -549,10 +549,12 @@ function GitSingleRepoPanel({
             />
           ) : null}
           <GitPanelMoreMenu
+            repositoryPath={repositoryPath}
             historyActive={historyDrawerOpen}
             onOpenHistory={() => setHistoryDrawerOpen(true)}
             onOpenInBrowser={handleOpenRemoteInBrowser}
             openingBrowser={openingRemote}
+            onFlowOperationDone={() => void loadStatus({ silent: true })}
           />
         </div>
       </div>

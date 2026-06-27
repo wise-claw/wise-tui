@@ -1950,6 +1950,313 @@ pub(crate) fn git_worktree_add_omc_batch(
     })
 }
 
+// ── Git Flow Operations ──
+
+/// Git Flow 配置信息
+#[derive(Serialize, Clone)]
+#[serde(rename_all = "camelCase")]
+pub(crate) struct GitFlowInfo {
+    main_branch: String,
+    develop_branch: Option<String>,
+    has_develop: bool,
+    current_branch: Option<String>,
+    feature_prefix: String,
+    release_prefix: String,
+    hotfix_prefix: String,
+}
+
+/// 检测仓库的 Git Flow 状态（主分支、develop 分支、前缀配置）
+#[tauri::command]
+pub(crate) fn git_flow_info(path: String) -> Result<GitFlowInfo, String> {
+    let repo = open_repo(&path)?;
+    let head = repo.head().ok();
+    let current_branch = head
+        .as_ref()
+        .and_then(|h| {
+            if h.is_branch() {
+                h.shorthand().map(|s| s.to_string())
+            } else {
+                None
+            }
+        });
+
+    // 判断 main 和 develop 分支是否存在
+    let has_main = repo.find_branch("main", BranchType::Local).is_ok()
+        || repo.find_branch("master", BranchType::Local).is_ok();
+    let has_develop = repo.find_branch("develop", BranchType::Local).is_ok();
+
+    // 读取 git flow 前缀配置，若未配置则用默认值
+    let feature_prefix = repo.config().ok()
+        .and_then(|cfg| cfg.get_string("gitflow.prefix.feature").ok())
+        .unwrap_or_else(|| "feature/".to_string());
+    let release_prefix = repo.config().ok()
+        .and_then(|cfg| cfg.get_string("gitflow.prefix.release").ok())
+        .unwrap_or_else(|| "release/".to_string());
+    let hotfix_prefix = repo.config().ok()
+        .and_then(|cfg| cfg.get_string("gitflow.prefix.hotfix").ok())
+        .unwrap_or_else(|| "hotfix/".to_string());
+
+    let main_branch = if has_main {
+        // 确定实际 main 分支名
+        if repo.find_branch("main", BranchType::Local).is_ok() { "main" } else { "master" }
+    } else {
+        "main"
+    }.to_string();
+
+    Ok(GitFlowInfo {
+        main_branch,
+        develop_branch: if has_develop { Some("develop".to_string()) } else { None },
+        has_develop,
+        current_branch,
+        feature_prefix,
+        release_prefix,
+        hotfix_prefix,
+    })
+}
+
+/// 初始化 Git Flow：确保 develop 分支存在，写入 git flow 前缀配置
+#[tauri::command]
+pub(crate) async fn git_flow_init(path: String) -> Result<String, String> {
+    run_git_blocking("git_flow_init", move || {
+        let repo = open_repo(&path)?;
+
+        // 确定 main 分支名
+        let main_branch = if repo.find_branch("main", BranchType::Local).is_ok() {
+            "main"
+        } else if repo.find_branch("master", BranchType::Local).is_ok() {
+            "master"
+        } else {
+            return Err("未找到 main/master 分支，请先创建初始分支".to_string());
+        };
+
+        // 如果 develop 不存在，从 main 创建
+        if repo.find_branch("develop", BranchType::Local).is_err() {
+            run_git_command(&path, &["branch", "develop", main_branch], "Git Flow Init (create develop)")?;
+        }
+
+        // 写入 git flow 前缀配置（libgit2 config）
+        let mut cfg = repo.config().map_err(|e| e.to_string())?;
+        let _ = cfg.set_str("gitflow.prefix.feature", "feature/");
+        let _ = cfg.set_str("gitflow.prefix.release", "release/");
+        let _ = cfg.set_str("gitflow.prefix.hotfix", "hotfix/");
+        let _ = cfg.set_str("gitflow.branch.main", main_branch);
+        let _ = cfg.set_str("gitflow.branch.develop", "develop");
+
+        // 如果当前不在 develop，切过去
+        let head = repo.head().ok();
+        let on_main = head.as_ref().and_then(|h| h.shorthand()).map(|s| s.to_lowercase()) == Some(main_branch.to_lowercase());
+        if on_main {
+            run_git_command(&path, &["checkout", "develop"], "Git Flow Init (checkout develop)")?;
+        }
+
+        Ok(format!("Git Flow 初始化完成，main={main_branch}, develop=develop"))
+    }).await
+}
+
+/// 开始一个 feature：从 develop 创建 feature/<name> 分支并切换过去
+#[tauri::command]
+pub(crate) async fn git_flow_feature_start(path: String, name: String) -> Result<(), String> {
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return Err("Feature 名称不能为空".to_string());
+    }
+    if name.contains('/') || name.contains(' ') {
+        return Err("Feature 名称不能包含斜杠或空格".to_string());
+    }
+
+    run_git_blocking("git_flow_feature_start", move || {
+        let branch_name = format!("feature/{}", name);
+        let repo = open_repo(&path)?;
+
+        // 确保 develop 存在
+        if repo.find_branch("develop", BranchType::Local).is_err() {
+            return Err("develop 分支不存在，请先执行 Git Flow 初始化".to_string());
+        }
+
+        // 检查 feature 分支是否已存在
+        if repo.find_branch(&branch_name, BranchType::Local).is_ok() {
+            return Err(format!("Feature 分支已存在: {}", branch_name));
+        }
+
+        run_git_command(&path, &["checkout", "-b", &branch_name, "develop", "--no-track"], "Git Flow Feature Start")
+    }).await
+}
+
+/// 完成一个 feature：切换到 develop → merge feature/<name> → 删除 feature 分支
+#[tauri::command]
+pub(crate) async fn git_flow_feature_finish(path: String, name: String) -> Result<(), String> {
+    let name = name.trim().to_string();
+    if name.is_empty() {
+        return Err("Feature 名称不能为空".to_string());
+    }
+    let branch_name = format!("feature/{}", name);
+
+    run_git_blocking("git_flow_feature_finish", move || {
+        let repo = open_repo(&path)?;
+
+        if repo.find_branch(&branch_name, BranchType::Local).is_err() {
+            return Err(format!("Feature 分支不存在: {}", branch_name));
+        }
+
+        // 切换到 develop
+        run_git_command(&path, &["checkout", "develop"], "Git Flow Feature Finish (checkout develop)")?;
+
+        // 合并 feature 分支
+        run_git_command(&path, &["merge", "--no-ff", &branch_name, "-m", format!("Merge feature '{}' into develop", name).as_str()], "Git Flow Feature Finish (merge)")?;
+
+        // 删除 feature 分支
+        run_git_command(&path, &["branch", "-d", &branch_name], "Git Flow Feature Finish (delete branch)")?;
+
+        Ok(())
+    }).await
+}
+
+/// 开始一个 release：从 develop 创建 release/<version> 分支并切换过去
+#[tauri::command]
+pub(crate) async fn git_flow_release_start(path: String, version: String) -> Result<(), String> {
+    let version = version.trim().to_string();
+    if version.is_empty() {
+        return Err("Release 版本号不能为空".to_string());
+    }
+    if version.contains(' ') {
+        return Err("版本号不能包含空格".to_string());
+    }
+    let branch_name = format!("release/{}", version);
+
+    run_git_blocking("git_flow_release_start", move || {
+        let repo = open_repo(&path)?;
+
+        if repo.find_branch("develop", BranchType::Local).is_err() {
+            return Err("develop 分支不存在，请先执行 Git Flow 初始化".to_string());
+        }
+        if repo.find_branch(&branch_name, BranchType::Local).is_ok() {
+            return Err(format!("Release 分支已存在: {}", branch_name));
+        }
+
+        run_git_command(&path, &["checkout", "-b", &branch_name, "develop", "--no-track"], "Git Flow Release Start")
+    }).await
+}
+
+/// 完成一个 release：合并到 main 和 develop，打标签，删除 release 分支
+#[tauri::command]
+pub(crate) async fn git_flow_release_finish(path: String, version: String) -> Result<(), String> {
+    let version = version.trim().to_string();
+    if version.is_empty() {
+        return Err("Release 版本号不能为空".to_string());
+    }
+    let branch_name = format!("release/{}", version);
+
+    run_git_blocking("git_flow_release_finish", move || {
+        let repo = open_repo(&path)?;
+
+        if repo.find_branch(&branch_name, BranchType::Local).is_err() {
+            return Err(format!("Release 分支不存在: {}", branch_name));
+        }
+
+        // 确定 main 分支名
+        let main_branch = if repo.find_branch("main", BranchType::Local).is_ok() {
+            "main"
+        } else if repo.find_branch("master", BranchType::Local).is_ok() {
+            "master"
+        } else {
+            return Err("未找到 main/master 分支".to_string());
+        };
+
+        // 1. 切换到 main，合并 release
+        run_git_command(&path, &["checkout", main_branch], "Git Flow Release Finish (checkout main)")?;
+        run_git_command(&path, &["merge", "--no-ff", &branch_name, "-m", format!("Merge release '{}' into {}", version, main_branch).as_str()], "Git Flow Release Finish (merge main)")?;
+
+        // 2. 打标签
+        let tag_name = format!("v{}", version);
+        run_git_command(&path, &["tag", "-a", &tag_name, "-m", format!("Release {}", version).as_str()], "Git Flow Release Finish (tag)")?;
+
+        // 3. 切换到 develop，合并 release
+        run_git_command(&path, &["checkout", "develop"], "Git Flow Release Finish (checkout develop)")?;
+        run_git_command(&path, &["merge", "--no-ff", &branch_name, "-m", format!("Merge release '{}' into develop", version).as_str()], "Git Flow Release Finish (merge develop)")?;
+
+        // 4. 删除 release 分支
+        run_git_command(&path, &["branch", "-d", &branch_name], "Git Flow Release Finish (delete branch)")?;
+
+        Ok(())
+    }).await
+}
+
+/// 开始一个 hotfix：从 main 创建 hotfix/<version> 分支并切换过去
+#[tauri::command]
+pub(crate) async fn git_flow_hotfix_start(path: String, version: String) -> Result<(), String> {
+    let version = version.trim().to_string();
+    if version.is_empty() {
+        return Err("Hotfix 版本号不能为空".to_string());
+    }
+    if version.contains(' ') {
+        return Err("版本号不能包含空格".to_string());
+    }
+    let branch_name = format!("hotfix/{}", version);
+
+    run_git_blocking("git_flow_hotfix_start", move || {
+        let repo = open_repo(&path)?;
+
+        // 确定 main 分支名
+        let main_branch = if repo.find_branch("main", BranchType::Local).is_ok() {
+            "main"
+        } else if repo.find_branch("master", BranchType::Local).is_ok() {
+            "master"
+        } else {
+            return Err("未找到 main/master 分支".to_string());
+        };
+
+        if repo.find_branch(&branch_name, BranchType::Local).is_ok() {
+            return Err(format!("Hotfix 分支已存在: {}", branch_name));
+        }
+
+        run_git_command(&path, &["checkout", "-b", &branch_name, main_branch, "--no-track"], "Git Flow Hotfix Start")
+    }).await
+}
+
+/// 完成一个 hotfix：合并到 main 和 develop，打标签，删除 hotfix 分支
+#[tauri::command]
+pub(crate) async fn git_flow_hotfix_finish(path: String, version: String) -> Result<(), String> {
+    let version = version.trim().to_string();
+    if version.is_empty() {
+        return Err("Hotfix 版本号不能为空".to_string());
+    }
+    let branch_name = format!("hotfix/{}", version);
+
+    run_git_blocking("git_flow_hotfix_finish", move || {
+        let repo = open_repo(&path)?;
+
+        if repo.find_branch(&branch_name, BranchType::Local).is_err() {
+            return Err(format!("Hotfix 分支不存在: {}", branch_name));
+        }
+
+        // 确定 main 分支名
+        let main_branch = if repo.find_branch("main", BranchType::Local).is_ok() {
+            "main"
+        } else if repo.find_branch("master", BranchType::Local).is_ok() {
+            "master"
+        } else {
+            return Err("未找到 main/master 分支".to_string());
+        };
+
+        // 1. 切换到 main，合并 hotfix
+        run_git_command(&path, &["checkout", main_branch], "Git Flow Hotfix Finish (checkout main)")?;
+        run_git_command(&path, &["merge", "--no-ff", &branch_name, "-m", format!("Merge hotfix '{}' into {}", version, main_branch).as_str()], "Git Flow Hotfix Finish (merge main)")?;
+
+        // 2. 打标签
+        let tag_name = format!("v{}", version);
+        run_git_command(&path, &["tag", "-a", &tag_name, "-m", format!("Hotfix {}", version).as_str()], "Git Flow Hotfix Finish (tag)")?;
+
+        // 3. 切换到 develop，合并 hotfix
+        run_git_command(&path, &["checkout", "develop"], "Git Flow Hotfix Finish (checkout develop)")?;
+        run_git_command(&path, &["merge", "--no-ff", &branch_name, "-m", format!("Merge hotfix '{}' into develop", version).as_str()], "Git Flow Hotfix Finish (merge develop)")?;
+
+        // 4. 删除 hotfix 分支
+        run_git_command(&path, &["branch", "-d", &branch_name], "Git Flow Hotfix Finish (delete branch)")?;
+
+        Ok(())
+    }).await
+}
+
 fn derive_folder_name_from_git_url(url: &str) -> String {
     let trimmed = url.trim().trim_end_matches('/');
     if trimmed.is_empty() {

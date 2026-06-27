@@ -2867,6 +2867,104 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-file
   background: color-mix(in srgb, var(--ant-color-primary-bg) 75%, transparent);
 }
 
+/* ── Git Flow Trigger Button ── */
+.git-flow-trigger-btn.ant-btn-sm,
+.git-panel-header .git-flow-trigger-btn.ant-btn-sm {
+  width: 22px;
+  height: 22px;
+  min-width: 22px;
+  max-width: 22px;
+  padding: 0;
+  margin-left: 2px;
+  color: var(--ant-color-text-secondary);
+}
+
+.app-git-panel--multi .git-repo-section__actions .git-flow-trigger-btn.ant-btn-sm,
+.app-git-panel--multi .git-panel-header-right .git-flow-trigger-btn.ant-btn-sm {
+  margin-left: 0;
+}
+
+.git-flow-trigger-btn.ant-btn-sm .anticon {
+  font-size: 14px;
+}
+
+.git-flow-trigger-btn--active {
+  color: var(--ant-color-primary) !important;
+  background: color-mix(in srgb, var(--ant-color-primary-bg) 75%, transparent);
+}
+
+.git-flow-dropdown-menu,
+.git-flow-dropdown-menu .ant-dropdown-menu {
+  min-width: 200px !important;
+}
+.git-flow-dropdown-menu .ant-dropdown-menu-item {
+  font-size: 11px !important;
+  padding: 1px 8px !important;
+  line-height: 18px !important;
+  min-height: 22px !important;
+  height: auto !important;
+}
+.git-flow-dropdown-menu .ant-dropdown-menu-item .anticon {
+  font-size: 11px !important;
+}
+.git-flow-dropdown-menu .ant-dropdown-menu-item-divider {
+  margin: 1px 0 !important;
+}
+.git-flow-dropdown-menu .ant-dropdown-menu-item .ant-dropdown-menu-title-content {
+  font-size: 11px !important;
+  line-height: 18px !important;
+}
+/* 「更多」中的 Git Flow 父项与上面的菜单项对齐 */
+.git-panel-more-menu-dropdown .ant-dropdown-menu-submenu {
+  font-size: 11px !important;
+  line-height: 18px !important;
+}
+.git-panel-more-menu-dropdown .ant-dropdown-menu-submenu .ant-dropdown-menu-submenu-title {
+  font-size: 11px !important;
+  line-height: 18px !important;
+  padding: 1px 8px !important;
+  min-height: 22px !important;
+  height: auto !important;
+}
+.git-panel-more-menu-dropdown .ant-dropdown-menu-submenu .ant-dropdown-menu-submenu-title .anticon {
+  font-size: 11px !important;
+}
+.git-flow-menu-status {
+  font-size: 11px;
+  color: var(--ant-color-text-tertiary);
+  display: inline-flex;
+  gap: 6px;
+  align-items: center;
+  line-height: 1;
+}
+.git-flow-menu-status__main::before {
+  content: "main:";
+  color: var(--ant-color-text-quaternary);
+  margin-right: 2px;
+}
+.git-flow-menu-status__main {
+  color: var(--ant-color-text);
+  font-weight: 500;
+}
+.git-flow-menu-status__dev::before {
+  content: "dev:";
+  color: var(--ant-color-text-quaternary);
+  margin-right: 2px;
+}
+.git-flow-menu-status__dev {
+  color: #1677ff;
+  font-weight: 500;
+}
+.git-flow-menu-status__cur::before {
+  content: "当前:";
+  color: var(--ant-color-text-quaternary);
+  margin-right: 2px;
+}
+.git-flow-menu-status__cur {
+  color: #52c41a;
+  font-weight: 500;
+}
+
 .git-panel-more-menu-dropdown {
   --git-graph-ui-font-size: 11px;
   --git-graph-ui-line-height: 18px;
