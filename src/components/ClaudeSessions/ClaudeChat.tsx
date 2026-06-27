@@ -458,6 +458,9 @@ export function ClaudeChatInner({
 
   useEffect(() => {
     if (todos.length > 0) return;
+    // 新轮发送后（最后一条是 user 消息），不还原上一轮的过期 todo
+    const lastMsg = session.messages[session.messages.length - 1];
+    if (lastMsg?.role === "user") return;
     onRestoreTodosFromTranscript?.();
   }, [session.id, session.messages.length, todos.length, onRestoreTodosFromTranscript]);
 
