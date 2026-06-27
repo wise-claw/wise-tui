@@ -78,12 +78,7 @@ import { resolveEngineForSession } from "../../utils/sessionExecutionEngine";
 import { normalizeSessionExecutionEngine } from "../../constants/sessionExecutionEngine";
 import { pickSessionForRepositorySidebarSelect } from "../../utils/claudeSessionSelection";
 import { useComposerSpeechPreferences } from "../../hooks/useComposerSpeechPreferences";
-import { ClaudeCodeTaskListMessagesDock } from "./ClaudeCodeTaskListMessagesDock";
-import { getSessionContextMetrics } from "../../services/claudeSessionContext";
-import {
-  resolveTodoBatchStartedAt,
-  shouldShowClaudeCodeTaskListInMessages,
-} from "../../utils/claudeCodeTaskListDisplay";
+
 import {
   buildSpeechToRequirementScope,
   useSpeechToRequirementSync,
@@ -572,15 +567,6 @@ export function ClaudeChatInner({
     session.repositoryPath,
   );
   const showPendingTaskQueue = pendingTasks.length > 0;
-  const sessionContextMetrics = useMemo(
-    () => getSessionContextMetrics(session),
-    [session.messages, session.model],
-  );
-  const todoBatchStartedAt = useMemo(
-    () => resolveTodoBatchStartedAt(session.messages, session.createdAt),
-    [session.messages, session.createdAt],
-  );
-  const showClaudeCodeTaskListStatus = shouldShowClaudeCodeTaskListInMessages(session.status, todos);
 
   const sessionRepository = useMemo(
     () =>
@@ -1688,13 +1674,6 @@ export function ClaudeChatInner({
           sessionExecutionEngine={sessionExecutionEngine}
         />
       )}
-      {showClaudeCodeTaskListStatus ? (
-        <ClaudeCodeTaskListMessagesDock
-          items={todos}
-          sessionStartedAt={todoBatchStartedAt}
-          estimatedTokens={sessionContextMetrics.estimatedTokens}
-        />
-      ) : null}
       {panelBelowMessages}
 
       {showPendingTaskQueue ? (
