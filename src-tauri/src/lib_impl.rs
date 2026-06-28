@@ -83,6 +83,21 @@ pub fn run() {
                 })
                 .map_err(|e| e.to_string())?;
 
+            // ⌘N / Ctrl+N：新建会话
+            #[cfg(target_os = "macos")]
+            let new_session_mods = Modifiers::SUPER;
+            #[cfg(not(target_os = "macos"))]
+            let new_session_mods = Modifiers::CONTROL;
+            let new_session_shortcut = Shortcut::new(Some(new_session_mods), Code::KeyN);
+            app.global_shortcut()
+                .on_shortcut(new_session_shortcut, |_app, _shortcut, event| {
+                    if event.state() == ShortcutState::Pressed {
+                        let _ = wise_mascot::wise_main_window_focus(_app.clone());
+                        let _ = _app.emit("global-create-new-session", ());
+                    }
+                })
+                .map_err(|e| e.to_string())?;
+
             at_mention_shortcuts::init(app.handle());
             in_app_shortcuts::init(app.handle());
             for (label, win) in app.webview_windows() {
