@@ -2,6 +2,75 @@
 
 本项目所有重要变更将记录于此文件。
 
+## [1.2.0] - 2026-06-28
+
+1.2.0 围绕"会话面板与输入体验重构、模型/Provider 配置简化、Git 面板全面增强、性能与稳定性修复"四条主线推进。核心亮点包括：**仓库主会话面板**与 Composer 运行时设置重构、Codex 第三方 Provider 预设、默认配置面板快捷键与外观设置、新增 ⌘N/Ctrl+N 全局快捷键一键新建会话，以及 Git Flow / 行统计 / 工作区切换的一体化重构。
+
+本版本涵盖 33 个提交，覆盖前端与 Tauri 后端共 70+ 个文件。
+
+### ✨ 新功能
+
+#### 会话与输入体验
+- **仓库主会话面板（RepositorySessionPanel）**：在右侧 Inspector 新增按仓库维度管理"主会话"，支持面板过滤、绑定关系持久化与折叠分组。
+- **Composer 运行时设置重构**：将运行时配置从隐式状态抽离为可触发的 `ComposerRuntimeSettingsTrigger`，并接入新的 `ComposerModelPicker`，运行时切换与模型切换解耦。
+- **全局快捷键 ⌘N / Ctrl+N 快速创建新会话**：在任意焦点下按下即可唤起新建会话入口。
+- **会话界面 ClaudeChat 逻辑收敛**：移除冗余分支，统一到会话宿主层。
+- **Todo Dock 修复后闭环**：todo 关闭后，新任务写入自动重新展开；新轮发送不再错误还原上一轮已完成的 todo。
+
+#### 模型与 Provider
+- **Codex 第三方 Provider 预设**：内置 9 个常用 Provider（DeepSeek、Minimax、百炼、火山等），自动填充 baseURL 与推荐模型；Codex 模型切换页集成 Provider 下拉，简化配置流程。
+- **Claude 模型顶栏面板高级配置折叠**：原始 `auth.json` / `config.toml` 编辑器默认收起，引导用户优先选择 Provider + API Key。
+- **`/models` 快捷字段 `ModelProfileQuickConfigFields`**：与 Provider 预设联动，减少面板来回切换。
+
+#### 默认配置面板
+- **快捷键设置项**：在默认配置面板新增全局快捷键相关的可配置项。
+- **外观设置项**：UI 主题、Chrome 可见性等外观相关配置集中入口。
+
+#### Git 面板
+- **Git Flow 面板（`GitFlowPanel`）**：从 0 到 1 实现的流程视图，整合分支状态、暂存区与提交流。
+- **Git 面板更多菜单（`GitPanelMoreMenu`）**：将 Flow、菜单项等操作整合为统一菜单，并补齐空值安全保护。
+- **左栏仓库列表 `RepositoryActiveSessionBadge`**：仓库行内显示当前活跃会话计数，状态一目了然。
+- **`useSidebarRepositoryActiveSessionCounts` hook**：高效统计每个仓库的活跃会话数。
+- **Diff Mode 提交按钮**：可一键生成提交信息。
+- **编辑器支持 Ctrl/Cmd 点击 `import` / `export` 路径跳转目标文件**。
+- **Monaco TypeScript 环境补充 React 类型库**：编辑器智能提示更准确。
+
+### ⚡ 性能优化
+- **Claude 会话流式解析优化 + 任务事件查询索引**：流式期间减少重复解析，新增任务事件索引加速回查。
+- **Git 行统计改用 `git --numstat` + `memchr` 字节扫描**：相比 `libgit2` 自实现统计路径在大量变更下显著提速。
+- **`git_status_summary` 改为异步执行**：避免在主线程阻塞 UI。
+- **`git --numstat` 命令统计暂存与未跟踪文件行数**：命令路径替代内部库，规避多处精度 bug。
+- **Git 工作区选择器 `GitPanelWorkspaceSelector` 重构**：去掉冗余渲染路径，简化状态切换。
+- **未跟踪文件行数统计**：改用 libgit2 `show_untracked_content` 选项替代手写实现，并简化暂存区行统计的树比较分支。
+- **工作区选择状态 `workspaceSelectionState`**：减少不必要的状态广播。
+
+### 🐛 问题修复
+- 修复加载更早消息后视口贴底误触窗口回收。
+- 修复多屏窗格仓库跟随左栏误切与滚动弹跳。
+- 修复 Git `flowItems` / `menuItems` 渲染时空指针崩溃（增加空值安全保护）。
+- 修复 todo 关闭后新任务写入未自动重新显示。
+- 修复新轮发送后错误还原上一轮已完成的 todo。
+- 修复 `statuses` / `diff.foreach` 遍历逻辑，正确统计未跟踪文件行数。
+- 修复 `propsEqual` 相关回归补全。
+
+### 🧹 重构与精简
+- **Composer 区域逻辑收敛**：移除冗余状态与重复 effect。
+- **多屏窗格 `ClaudeMultiPaneGrid` 与宿主简化**：去掉不必要的派生状态。
+- **`claudeChatComposerTrayPropsEqual` 增补**：浅比较覆盖新加的运行时设置 prop，避免无效重渲染。
+- **`InspectorCollapsibleSection` 增强**：仓库主会话面板的折叠分组支持稳定展开/收起。
+- **`inspectorStorage` 持久化键调整**：避免与现有 Inspector 状态冲突。
+- **`claudeSessionContext` 流式上下文清理**：去除重复写入路径，索引替代全量遍历。
+- **`wiseDefaultConfigStore` 默认配置 store**：集中快捷键、外观等设置项的写入。
+
+### 🗃 数据库
+- 本版本无破坏性迁移；`session_feedback_loop`、`session_feedback_patch_effectiveness` 等 1.1.0 表保持兼容。
+
+### 📦 升级说明
+- 升级后默认配置面板中可立即看到新的「快捷键」「外观」分类。
+- Codex 用户在模型切换页可直接下拉选择 Provider，URL/Model 自动填充；如需手写 `auth.json` / `config.toml`，点击"高级配置"展开。
+- 全局快捷键 ⌘N / Ctrl+N 默认启用；若与其他应用冲突，可在默认配置面板中调整。
+- 仓库主会话面板绑定信息持久化于 Inspector 存储中，升级后无需重新绑定。
+
 ## [1.1.0] - 2026-06-23
 
 1.1.0 将 Wise 进一步演进为多引擎 AI 工作台：新增 **OpenCode** 作为与 Claude Code、Codex 并列的可执行引擎，建立 **会话反馈循环**（补丁有效性评分 + 自动化守卫 + 审计日志），强化用量可观测性（**Claude 行编辑热力图**），并完成一轮渲染性能重构与 Trellis 遗留运行时精简。
