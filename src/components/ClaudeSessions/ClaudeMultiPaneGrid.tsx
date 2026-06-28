@@ -154,7 +154,6 @@ export interface MultiPaneSharedChatProps {
   onRespondToQuestion: (sessionId: string, answers: string[], customAnswer?: string) => void;
   onDismissQuestion: (sessionId: string) => void;
   onRespondToPermission: (sessionId: string, response: "allow_once" | "allow_always" | "deny") => void;
-  onClearTodos: (sessionId: string) => void;
   onToggleTodo: (sessionId: string, todoId: string) => void;
   onRestoreTodosFromTranscript: (sessionId: string) => void;
   onRestorePendingPermissionFromTranscript: (sessionId: string) => void;
@@ -289,7 +288,6 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
         respondQuestionAt={shared.onRespondToQuestion}
         dismissQuestionAt={shared.onDismissQuestion}
         onRespondToPermission={onRespondToPermission}
-        onClearTodos={() => shared.onClearTodos(sessionId)}
         onToggleTodo={(todoId) => shared.onToggleTodo(sessionId, todoId)}
         onRestoreTodosFromTranscript={() => shared.onRestoreTodosFromTranscript(sessionId)}
         onRestorePendingPermissionFromTranscript={() =>
@@ -559,7 +557,6 @@ const MultiPaneExtraPaneCell = memo(
             respondQuestionAt={shared.onRespondToQuestion}
             dismissQuestionAt={shared.onDismissQuestion}
             onRespondToPermission={(response) => shared.onRespondToPermission(sessionId, response)}
-            onClearTodos={() => shared.onClearTodos(sessionId)}
             onToggleTodo={(todoId) => shared.onToggleTodo(sessionId, todoId)}
             onRestoreTodosFromTranscript={() => shared.onRestoreTodosFromTranscript(sessionId)}
             onRestorePendingPermissionFromTranscript={() =>

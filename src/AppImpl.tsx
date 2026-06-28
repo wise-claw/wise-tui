@@ -995,7 +995,6 @@ export default function App() {
     respondToQuestion,
     dismissQuestion,
     respondToPermission,
-    clearTodos,
     toggleTodo,
     restoreTodosFromTranscript,
     restorePendingPermissionFromTranscript,
@@ -3105,6 +3104,31 @@ export default function App() {
     };
   }, [openFilenameSearchPalette, openContentSearchPalette]);
 
+  /** ⌘N / Ctrl+N：新建会话 */
+  useEffect(() => {
+    let unlisten: (() => void) | undefined;
+    void listen("global-create-new-session", () => {
+      const repoId = activeRepositoryIdLatestRef.current;
+      if (repoId == null) {
+        message.warning("请先选择一个仓库");
+        return;
+      }
+      const repo = repositoriesLatestRef.current.find((item) => item.id === repoId);
+      if (!repo) {
+        message.warning("当前仓库不可用");
+        return;
+      }
+      void handleManualNewRepositorySession(repo);
+    })
+      .then((fn) => {
+        unlisten = fn;
+      })
+      .catch(() => undefined);
+    return () => {
+      void safeUnlisten(unlisten);
+    };
+  }, []);
+
   useEffect(() => {
     initGlobalAtMentionShortcutRouting();
     let cancelled = false;
@@ -3763,7 +3787,6 @@ export default function App() {
         onRespondToQuestion: respondToQuestion,
         onDismissQuestion: dismissQuestion,
         onRespondToPermission: respondToPermission,
-        onClearTodos: clearTodos,
         onToggleTodo: toggleTodo,
         onRestoreTodosFromTranscript: restoreTodosFromTranscript,
         onRestorePendingPermissionFromTranscript: restorePendingPermissionFromTranscript,

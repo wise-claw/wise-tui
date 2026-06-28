@@ -78,12 +78,7 @@ import { resolveEngineForSession } from "../../utils/sessionExecutionEngine";
 import { normalizeSessionExecutionEngine } from "../../constants/sessionExecutionEngine";
 import { pickSessionForRepositorySidebarSelect } from "../../utils/claudeSessionSelection";
 import { useComposerSpeechPreferences } from "../../hooks/useComposerSpeechPreferences";
-import { ClaudeCodeTaskListMessagesDock } from "./ClaudeCodeTaskListMessagesDock";
-import { getSessionContextMetrics } from "../../services/claudeSessionContext";
-import {
-  resolveTodoBatchStartedAt,
-  shouldShowClaudeCodeTaskListInMessages,
-} from "../../utils/claudeCodeTaskListDisplay";
+
 import {
   buildSpeechToRequirementScope,
   useSpeechToRequirementSync,
@@ -219,7 +214,6 @@ interface Props {
   respondQuestionAt: (sessionId: string, answers: string[], customAnswer?: string) => void;
   dismissQuestionAt: (sessionId: string) => void;
   onRespondToPermission: (response: "allow_once" | "allow_always" | "deny") => void;
-  onClearTodos: () => void;
   onToggleTodo?: (todoId: string) => void;
   /** Hub 无 todo 时从 transcript 恢复（重开会话等） */
   onRestoreTodosFromTranscript?: () => void;
@@ -366,7 +360,6 @@ export function ClaudeChatInner({
   respondQuestionAt,
   dismissQuestionAt,
   onRespondToPermission,
-  onClearTodos,
   onToggleTodo,
   onRestoreTodosFromTranscript,
   onRestorePendingPermissionFromTranscript,
@@ -458,6 +451,9 @@ export function ClaudeChatInner({
 
   useEffect(() => {
     if (todos.length > 0) return;
+    // 新轮发送后（最后一条是 user 消息），不还原上一轮的过期 todo
+    const lastMsg = session.messages[session.messages.length - 1];
+    if (lastMsg?.role === "user") return;
     onRestoreTodosFromTranscript?.();
   }, [session.id, session.messages.length, todos.length, onRestoreTodosFromTranscript]);
 
@@ -571,15 +567,6 @@ export function ClaudeChatInner({
     session.repositoryPath,
   );
   const showPendingTaskQueue = pendingTasks.length > 0;
-  const sessionContextMetrics = useMemo(
-    () => getSessionContextMetrics(session),
-    [session.messages, session.model],
-  );
-  const todoBatchStartedAt = useMemo(
-    () => resolveTodoBatchStartedAt(session.messages, session.createdAt),
-    [session.messages, session.createdAt],
-  );
-  const showClaudeCodeTaskListStatus = shouldShowClaudeCodeTaskListInMessages(session.status, todos);
 
   const sessionRepository = useMemo(
     () =>
@@ -1687,13 +1674,6 @@ export function ClaudeChatInner({
           sessionExecutionEngine={sessionExecutionEngine}
         />
       )}
-      {showClaudeCodeTaskListStatus ? (
-        <ClaudeCodeTaskListMessagesDock
-          items={todos}
-          sessionStartedAt={todoBatchStartedAt}
-          estimatedTokens={sessionContextMetrics.estimatedTokens}
-        />
-      ) : null}
       {panelBelowMessages}
 
       {showPendingTaskQueue ? (
@@ -1805,7 +1785,6 @@ export function ClaudeChatInner({
               respondQuestionAt={respondQuestionAt}
               dismissQuestionAt={dismissQuestionAt}
               onRespondToPermission={onRespondToPermission}
-              onClearTodos={onClearTodos}
               onToggleTodo={onToggleTodo}
               onClearFollowups={onClearFollowups}
               onClearRevertItems={onClearRevertItems}

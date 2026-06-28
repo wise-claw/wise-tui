@@ -568,6 +568,18 @@ export interface GitWorktreeEntry {
   isPrimary: boolean;
 }
 
+// ── Git Flow Types ──
+
+export interface GitFlowInfo {
+  mainBranch: string;
+  developBranch: string | null;
+  hasDevelop: boolean;
+  currentBranch: string | null;
+  featurePrefix: string;
+  releasePrefix: string;
+  hotfixPrefix: string;
+}
+
 /** `git_worktree_add_omc_batch`：在仓库上一级 `wise-worktrees/` 下创建独立 worktree 并检出新分支。 */
 export interface GitWorktreeAddOmcBatchResult {
   repoRoot: string;

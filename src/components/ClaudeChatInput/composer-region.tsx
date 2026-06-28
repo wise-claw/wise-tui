@@ -84,7 +84,7 @@ import { ImageThumbnails } from "./attachment-manager";
 import { QuestionDock } from "./dock/question-dock";
 import { PermissionDock } from "./dock/permission-dock";
 import { FollowupDock } from "./dock/followup-dock";
-import { TodoDock } from "./dock/todo-dock";
+
 import { RevertDock } from "./dock/revert-dock";
 import { addToHistory, promptLength, navigatePromptHistory, canNavigateHistoryAtCursor } from "./prompt-history";
 import { Button, message, Popover, Tabs, Tag, TreeSelect } from "antd";
@@ -142,10 +142,6 @@ import {
   getContextPercentTone,
   getSessionContextMetrics,
 } from "../../services/claudeSessionContext";
-import {
-  resolveTodoBatchStartedAt,
-  shouldShowClaudeCodeTaskListInMessages,
-} from "../../utils/claudeCodeTaskListDisplay";
 import { WISE_CLAUDE_USER_SETTINGS_CHANGED } from "../../services/claudeModelProfiles";
 import { getCachedModelProfileStore } from "../../stores/modelProfileStoreCache";
 import { useBackgroundContextCompactInFlight } from "../../stores/backgroundContextCompactStore";
@@ -261,7 +257,6 @@ interface ComposerInnerProps {
   respondQuestionAt: (ownerSessionId: string, answers: string[], customAnswer?: string) => void;
   dismissQuestionAt: (ownerSessionId: string) => void;
   onRespondToPermission: (response: "allow_once" | "allow_always" | "deny") => void;
-  onClearTodos?: () => void;
   onToggleTodo?: (todoId: string) => void;
   onSendFollowup: (id: string) => void;
   onClearFollowups?: () => void;
@@ -563,7 +558,6 @@ function ComposerInner({
   onSessionExecutionEngineChange,
   onOpenExecutionEnvironment,
   onCancel: _onCancel,
-  todos,
   questionRequest,
   questionRequestQueueLength = 0,
   questionRequestStatus,
@@ -577,8 +571,6 @@ function ComposerInner({
   respondQuestionAt,
   dismissQuestionAt,
   onRespondToPermission,
-  onClearTodos,
-  onToggleTodo,
   onSendFollowup,
   onClearFollowups,
   onRestoreRevert,
@@ -1229,10 +1221,6 @@ function ComposerInner({
       fullLine,
     };
   }, [backgroundContextCompactInFlight, displayPlain, sessionMetricsFingerprint, session]);
-  const todoBatchStartedAt = useMemo(
-    () => resolveTodoBatchStartedAt(session.messages, session.createdAt),
-    [session.messages, session.createdAt],
-  );
   const hasComposerPayload = canSendComposer;
 
   useEffect(() => {
@@ -2804,13 +2792,6 @@ function ComposerInner({
     });
   }, [session.id]);
 
-  const handleTodoToggle = useCallback(
-    (id: string) => {
-      onToggleTodo?.(id);
-    },
-    [onToggleTodo],
-  );
-
   const showQuestionChrome = Boolean(useAggregatedQuestionDock || questionRequest);
   const showPermissionChrome = Boolean(permissionRequest);
 
@@ -2919,16 +2900,6 @@ function ComposerInner({
               onClose={onClearFollowups}
             />
           )}
-
-          {/* Todo dock */}
-          <TodoDock
-            items={todos}
-            sessionStartedAt={todoBatchStartedAt}
-            estimatedTokens={getSessionContextMetrics(session).estimatedTokens}
-            hidden={shouldShowClaudeCodeTaskListInMessages(session.status, todos)}
-            onToggle={handleTodoToggle}
-            onClose={onClearTodos}
-          />
 
           {/* Revert dock */}
           <RevertDock items={revertItems} onRestore={onRestoreRevert} onClose={onClearRevertItems} />
@@ -3054,7 +3025,6 @@ export interface ComposerRegionProps {
   respondQuestionAt: (ownerSessionId: string, answers: string[], customAnswer?: string) => void;
   dismissQuestionAt: (ownerSessionId: string) => void;
   onRespondToPermission: (response: "allow_once" | "allow_always" | "deny") => void;
-  onClearTodos?: () => void;
   onToggleTodo?: (todoId: string) => void;
   onSendFollowup: (id: string) => void;
   onClearFollowups?: () => void;

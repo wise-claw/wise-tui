@@ -23,6 +23,7 @@ import type {
   GitBranchEntry,
   GitWorktreeEntry,
   GitWorktreeAddOmcBatchResult,
+  GitFlowInfo,
 } from "../types";
 
 export async function gitStatus(path: string): Promise<GitStatusResponse> {
@@ -290,6 +291,40 @@ export async function gitWorktreeAddOmcBatch(
     });
   }
   return result;
+}
+
+// ── Git Flow Operations ──
+
+export async function gitFlowInfo(path: string): Promise<GitFlowInfo> {
+  return invoke<GitFlowInfo>("git_flow_info", { path });
+}
+
+export async function gitFlowInit(path: string): Promise<string> {
+  return invoke<string>("git_flow_init", { path });
+}
+
+export async function gitFlowFeatureStart(path: string, name: string): Promise<void> {
+  return invoke<void>("git_flow_feature_start", { path, name });
+}
+
+export async function gitFlowFeatureFinish(path: string, name: string): Promise<void> {
+  return invoke<void>("git_flow_feature_finish", { path, name });
+}
+
+export async function gitFlowReleaseStart(path: string, version: string): Promise<void> {
+  return invoke<void>("git_flow_release_start", { path, version });
+}
+
+export async function gitFlowReleaseFinish(path: string, version: string): Promise<void> {
+  return invoke<void>("git_flow_release_finish", { path, version });
+}
+
+export async function gitFlowHotfixStart(path: string, version: string): Promise<void> {
+  return invoke<void>("git_flow_hotfix_start", { path, version });
+}
+
+export async function gitFlowHotfixFinish(path: string, version: string): Promise<void> {
+  return invoke<void>("git_flow_hotfix_finish", { path, version });
 }
 
 export async function startGitWatcher(paths: string | string[]): Promise<void> {

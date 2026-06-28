@@ -35,6 +35,10 @@ export const APP_SHORTCUT_GROUPS: AppShortcutGroup[] = [
     title: "应用内",
     rows: [
       {
+        keys: "⌘N · Ctrl+N",
+        description: "为当前仓库新建一个对话会话。",
+      },
+      {
         keys: "Esc",
         description: "焦点在会话输入框内且无 @ / 补全菜单时：撤销上一步编辑（与 Ctrl+Z 同一栈）。",
       },

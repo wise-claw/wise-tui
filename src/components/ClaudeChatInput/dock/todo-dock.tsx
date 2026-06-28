@@ -1,3 +1,4 @@
+import { useEffect, useRef, useState } from "react";
 import { useTodoListCollapse } from "../../../hooks/useTodoListCollapse";
 import { ClaudeCodeTaskListStatus } from "./claude-code-task-list-status";
 
@@ -13,8 +14,6 @@ interface TodoDockProps {
   estimatedTokens?: number | null;
   hidden?: boolean;
   onToggle: (id: string) => void;
-  /** 清空并收起任务列表（不触发折叠行的展开/收起） */
-  onClose?: () => void;
 }
 
 export function TodoDock({
@@ -23,11 +22,27 @@ export function TodoDock({
   estimatedTokens,
   hidden = false,
   onToggle,
-  onClose,
 }: TodoDockProps) {
   const { collapsed, setCollapsed } = useTodoListCollapse(items);
+  const [dismissed, setDismissed] = useState(false);
+  const prevItemsLengthRef = useRef(items.length);
 
-  if (hidden || items.length === 0) return null;
+  // 新 todo 写入时自动取消关闭状态，重新显示
+  useEffect(() => {
+    if (items.length > prevItemsLengthRef.current) {
+      setDismissed(false);
+    }
+    prevItemsLengthRef.current = items.length;
+  }, [items.length]);
+
+  // 全部清空时重置关闭状态
+  useEffect(() => {
+    if (items.length === 0) {
+      setDismissed(false);
+    }
+  }, [items.length]);
+
+  if (hidden || items.length === 0 || dismissed) return null;
 
   return (
     <div className="app-claude-dock app-claude-dock--todo">
@@ -39,7 +54,7 @@ export function TodoDock({
         collapsed={collapsed}
         onCollapsedChange={setCollapsed}
         onToggleItem={onToggle}
-        onClose={onClose}
+        onClose={() => setDismissed(true)}
       />
     </div>
   );
