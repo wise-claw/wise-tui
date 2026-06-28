@@ -20,6 +20,50 @@ export const CONTEXT_BACKGROUND_COMPACT_FRESH_MS = 180_000;
 /** 后台压缩失败后重试冷却 */
 export const CONTEXT_BACKGROUND_COMPACT_COOLDOWN_MS = 120_000;
 
+/**
+ * 压缩相关 sysmsg 相邻写入去重窗口。
+ * 同会话在窗口内写入同 token 的 sysmsg 会复用上一条，避免"自动 + 手动 + 重试"叠三条相同语义的提示。
+ */
+export const COMPRESS_NOTICE_DEBOUNCE_MS = 3_000;
+
+/** 压缩提示归一化 token，供 sysmsg / status hint / 失败 hint 共享，避免同事实不同字面。 */
+export type CompactNoticeKind = "auto-before-send" | "overflow-retry" | "manual";
+
+export interface CompactNoticeTokens {
+  /** 写入气泡的 sysmsg 全文。 */
+  sysmsg: string;
+  /** 写入 status bar / 圆环下方提示的短文案（应避免与 sysmsg 字面重复）。 */
+  hint: string;
+}
+
+/**
+ * 生成「压缩进行中」共享文案对：`sysmsg` 进气泡，`hint` 进底栏。
+ * 不同 kind（auto/overflow/manual）共享同一组事实字段，让状态栏与气泡不再描述同一件事两遍。
+ */
+export function composeCompactNoticeTokens(
+  metrics: SessionContextMetrics,
+  kind: CompactNoticeKind,
+): CompactNoticeTokens {
+  const header = `上下文约 ${metrics.ctxPercent}%（约 ${metrics.estimatedTokens.toLocaleString("zh-CN")} tokens）`;
+  switch (kind) {
+    case "auto-before-send":
+      return {
+        sysmsg: `${header}，发送前自动 /compact 压缩历史…`,
+        hint: "自动压缩中",
+      };
+    case "overflow-retry":
+      return {
+        sysmsg: `${header}，检测到溢出，压缩历史后重试发送…`,
+        hint: "压缩后重试",
+      };
+    case "manual":
+      return {
+        sysmsg: `正在执行 /compact 压缩会话历史…（${header}）`,
+        hint: "正在压缩",
+      };
+  }
+}
+
 /** 大块 Skill / 工作流斜杠命令：单轮注入上下文多，提前压缩 */
 export const CONTEXT_AUTO_COMPACT_HEAVY_SKILL_PERCENT = 72;
 
@@ -279,41 +323,42 @@ export function formatContextStatusHint(
   outgoingPrompt?: string,
   backgroundCompactInFlight?: boolean,
 ): string {
+  // 状态栏 hint 只展示短标签，避免与气泡 sysmsg 重复表达同一件事；
+  // 详细数值（百分比 / token 数）由圆环和气泡承载。
   if (backgroundCompactInFlight) {
-    return "正在后台整理上下文";
+    return "后台整理中";
   }
   const threshold = outgoingPrompt
     ? resolveAutoCompactThresholdPercent(outgoingPrompt)
     : CONTEXT_AUTO_COMPACT_BEFORE_SEND_PERCENT;
   if (metrics.ctxPercent >= threshold) {
     if (outgoingPrompt && isHeavyContextSlashPrompt(outgoingPrompt)) {
-      return "大块 Skill 发送前将自动压缩历史";
+      return "大块 Skill 将自动压缩";
     }
-    return "发送前将自动压缩历史";
+    return "将自动压缩";
   }
   if (metrics.ctxPercent >= CONTEXT_BACKGROUND_COMPACT_PERCENT) {
-    return "空闲时将后台整理上下文";
+    return "空闲时自动整理";
   }
   if (metrics.ctxPercent >= CONTEXT_WARN_PERCENT) {
-    return "上下文偏高，可用 /compact";
+    return "上下文偏高";
   }
   return "";
 }
 
 export function buildAutoCompactSystemMessage(metrics: SessionContextMetrics): string {
-  return (
-    `上下文约 ${metrics.ctxPercent}%（约 ${metrics.estimatedTokens.toLocaleString("zh-CN")} tokens），` +
-    "正在自动执行 /compact 压缩历史…"
-  );
+  return composeCompactNoticeTokens(metrics, "auto-before-send").sysmsg;
 }
 
-export function buildContextOverflowRetrySystemMessage(): string {
-  return "检测到上下文溢出，正在压缩历史后重试发送…";
+export function buildContextOverflowRetrySystemMessage(metrics?: SessionContextMetrics): string {
+  if (!metrics) {
+    return "检测到上下文溢出，正在压缩历史后重试发送…";
+  }
+  return composeCompactNoticeTokens(metrics, "overflow-retry").sysmsg;
 }
 
 export function buildContextOverflowFailureHint(): string {
-  return (
-    "上下文仍超出模型限制。请发送 /compact 并附带聚焦说明，或 /clear 开新会话；" +
-    "大块 Skill（如 /claude-api、/deep-research）建议在压缩后或新会话中使用。"
-  );
+  // 单行短提示：失败细节走 status bar hint 与本地斜杠命令提示，气泡只放一行
+  // 简洁说明，避免与前一条「压缩中」sysmsg 重复表达同一件事。
+  return "上下文仍超出模型限制，请发送 /compact 并附带聚焦说明，或 /clear 开新会话。";
 }

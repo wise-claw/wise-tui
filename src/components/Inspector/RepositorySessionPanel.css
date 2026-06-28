@@ -55,15 +55,13 @@
 }
 
 .app-repository-session-panel__messages {
-  /* 父容器给出可用高度后，本元素吃掉所有剩余空间，composer 自然贴底 */
+  /* 父容器给出可用高度后，本元素吃掉所有剩余空间，composer 自然贴底。
+   * 右栏内不放外框 / 圆角 / 填充背景，与待办、运行面板保持统一的裸分区视觉。 */
   flex: 1 1 0;
   min-height: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  border: 1px solid var(--wise-panel-border-color, rgba(127, 127, 127, 0.2));
-  border-radius: 6px;
-  background: var(--wise-panel-bg, transparent);
 }
 
 /* 复用中栏消息列表的滚动容器样式（在 index.css 里定义），确保 rail 内一致观感 */
@@ -79,6 +77,15 @@
 
 /* composer tray 在窄列下做轻量样式覆盖 */
 .app-repository-session-panel .app-claude-composer-tray {
-  margin-top: 8px;
   flex-shrink: 0;
+}
+
+/* 「新会话」pill 容器：上分隔线 + 横向 padding。pill 本身复用中栏 app-session-quick-pill BEM class。 */
+.app-repository-session-panel__new-session {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  padding: 4px 6px;
+  border-top: 1px solid var(--ant-color-border-secondary);
+  background: transparent;
 }

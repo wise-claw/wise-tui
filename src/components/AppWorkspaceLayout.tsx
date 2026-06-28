@@ -428,6 +428,8 @@ export interface AppWorkspaceLayoutProps {
    */
   repositorySideSessionSharedProps: MultiPaneSharedChatProps;
   repositorySideSessionContext: {
+    /** 默认配置 `showRightInspectorRepositorySession` 实时值；false 时右栏中部不渲染仓库会话面板。 */
+    visible: boolean;
     sessionId: string | null;
     repository: Repository | null;
     onEnsureSession: () => void;
@@ -1079,7 +1081,8 @@ export function AppWorkspaceLayout({
                                   chatInspectorProps={{
                                     ...chatInspectorProps,
                                     repositorySessionPanel:
-                                      viewMode.kind === "chat" || viewMode.kind === "inspect" ? (
+                                      (viewMode.kind === "chat" || viewMode.kind === "inspect") &&
+                                      repositorySideSessionContext.visible ? (
                                         <RepositorySessionPanel
                                           shared={repositorySideSessionSharedProps}
                                           sessionId={repositorySideSessionContext.sessionId}

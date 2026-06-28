@@ -622,6 +622,11 @@ function ComposerInner({
   const ignoreNextContentSyncRef = useRef(false);
   const skipContentSyncRemainingRef = useRef(0);
   const composerSendInFlightRef = useRef(false);
+  /** 正在异步写入 Tiptap 的 setContent 任务数：>0 时 React 与 Tiptap 不一致，syncCanSendComposer 必须把 canSend 钉为 false，
+   *  避免 Semi Foundation.handleSend 在 Tiptap 仍空时按 props.canSend=true 静默吞 Enter。 */
+  const pendingSetContentRef = useRef(0);
+  /** clearComposerSurfaceSync 进行中：Tiptap 的 onContentChange 不应回流改 React 状态，否则会被 setContent("") 异步清空回调污染。 */
+  const composerResettingRef = useRef(false);
   const cursorRef = useRef(0);
   const dragOverLoggedRef = useRef(false);
   const { target: atMentionDefaultTarget, save: saveAtMentionDefaultTarget } =
@@ -707,6 +712,18 @@ function ComposerInner({
   const syncCanSendComposer = useCallback((plain: string) => {
     // 打字常态（有文本/图片/上下文）下直接判可发送，跳过对整篇 Tiptap doc 的 pill 遍历，
     // 避免每次按键 O(n) 全量扫描。仅当三者皆空时才需提取 code-selection pill 判断。
+    //
+    // 加固：pending setContent 期间（rAF 异步把 React prompt 写进 Tiptap 之前的窗口），
+    // 必须把 canSend 钉为 false。否则 Semi Foundation.handleSend 在 Tiptap 仍空时
+    // 会按 props.canSend=true 调 _adapter.notifyMessageSend，而 Tiptap 拿到的 contents 为空，
+    // 表现为"按了 Enter 没反应"。
+    if (pendingSetContentRef.current > 0) {
+      if (canSendComposerRef.current !== false) {
+        canSendComposerRef.current = false;
+        setCanSendComposer(false);
+      }
+      return;
+    }
     const hasText = plain.trim().length > 0;
     const hasImages = imagesRef.current.length > 0;
     const hasContext = contextItemsRef.current.length > 0;
@@ -723,6 +740,12 @@ function ComposerInner({
   const scheduleComposerSetContent = useCallback(
     (plain: string, onAfterSet?: () => void) => {
       const normalized = normalizeComposerEditorPlain(plain);
+      pendingSetContentRef.current += 1;
+      // 立刻把 canSend 钉为 false（异步写入完成前 React 与 Tiptap 不一致）
+      if (canSendComposerRef.current !== false) {
+        canSendComposerRef.current = false;
+        setCanSendComposer(false);
+      }
       scheduleSafeAiChatSetContent(
         () => aiChatRef.current,
         normalized,
@@ -730,6 +753,7 @@ function ComposerInner({
           const actual = readSemiEditorPlain(aiChatRef.current?.getEditor?.());
           if (actual) lastEditorPlainRef.current = actual;
           onAfterSet?.();
+          pendingSetContentRef.current = Math.max(0, pendingSetContentRef.current - 1);
         },
         { isEditorFocused: () => isProseMirrorFocused(shellRef.current) },
       );
@@ -797,6 +821,10 @@ function ComposerInner({
 
   useEffect(() => {
     lastEditorPlainRef.current = "";
+    // 会话切换/draftBucketKey 变化：旧会话遗留的 rAF 写入与 resetting 标记全部作废，
+    // 避免新会话在 onContentChange 仍被 resetting 误吞，或被 stale pending 卡住 canSend。
+    pendingSetContentRef.current = 0;
+    composerResettingRef.current = false;
   }, [session.id, draftBucketKey]);
 
   /** 会话输入区：Tab 仅用于 @ / 补全，不触发浏览器默认焦点切换（底栏按钮等） */
@@ -893,6 +921,10 @@ function ComposerInner({
 
   const applySemiContentChange = useCallback((contents: Content[]) => {
     if (!semiEditorReadyRef.current) return;
+    // 清空发送中：Tiptap 的 onContentChange 不应回流改 React 状态；
+    // scheduleComposerSetContent("") 异步清空 Tiptap，期间任何回流都会被忽略，
+    // 等 onAfterSet 真正把 Tiptap 清干净后才放开。
+    if (composerResettingRef.current) return;
     const ed = aiChatRef.current?.getEditor?.();
     // 优先从 Tiptap editor 读取权威 plain（已 normalize），避免每键同时跑
     // contentsToPlain 遍历 + readSemiEditorPlain 两次提取。editor 无文本时回退 contentsToPlain。
@@ -1536,6 +1568,17 @@ function ComposerInner({
       if (composerSendInFlightRef.current) return;
       composerSendInFlightRef.current = true;
       try {
+      // 兜底：rAF race 期间 lastEditorPlainRef 可能落后于 React prompt。
+      // Semi Foundation.handleSend 读的是 Tiptap doc（pending 阶段仍空），
+      // 用户已经显式按 Enter，强制把 React 文本刷回权威并放行 pending 计数。
+      const reactDisplayPlain = promptToDisplayPlain(prompt);
+      if (reactDisplayPlain) lastEditorPlainRef.current = reactDisplayPlain;
+      pendingSetContentRef.current = 0;
+      // 不在 resetting 期（resetting 期 clearComposerSurfaceSync 已持有锁）
+      if (!composerResettingRef.current) {
+        syncCanSendComposer(reactDisplayPlain || lastEditorPlainRef.current);
+      }
+
       clearSpeechIdleAutoSendTimer();
       debouncedPromptSyncRef.current.flush();
       const effectivePlain =
@@ -1576,11 +1619,17 @@ function ComposerInner({
         ignoreNextContentSyncRef.current = true;
         lastEditorPlainRef.current = "";
         cursorRef.current = 0;
+        // 标记 resetting：Tiptap 异步 setContent("") 完成前的 onContentChange 全部吞掉，
+        // 避免清空过程中回流把 React 状态再"复活"。
+        composerResettingRef.current = true;
         flushSync(() => {
           reset();
           setImages([]);
         });
-        scheduleComposerSetContent("");
+        scheduleComposerSetContent("", () => {
+          // Tiptap 真正清干净后释放 resetting 标记
+          composerResettingRef.current = false;
+        });
         queueMicrotask(() => aiChatRef.current?.focusEditor?.("end"));
         void clearPromptContextSessionKey(draftBucketKey);
       };
@@ -2956,7 +3005,16 @@ function ComposerInner({
                   onStopGenerate={() => _onCancel()}
                   canSend={canSendComposer}
                   onMessageSend={(msg) => {
-                    const plain = contentsToPlain((msg.inputContents ?? []) as Content[]);
+                    const tiptapPlain = contentsToPlain((msg.inputContents ?? []) as Content[]);
+                    // 兜底：Tiptap 与 React 在 pending setContent 期间不一致。
+                    // 优先用 lastEditorPlainRef（handleSend 入口已把 React prompt 刷回这里），
+                    // 避免发出"用户没看到的空白"或漏发刚键入的字符。
+                    const reactPlain = lastEditorPlainRef.current || promptToDisplayPlain(prompt);
+                    const normalizedTiptap = normalizeComposerEditorPlain(tiptapPlain);
+                    const normalizedReact = normalizeComposerEditorPlain(reactPlain);
+                    const plain = normalizedTiptap === normalizedReact || !normalizedReact
+                      ? tiptapPlain
+                      : reactPlain;
                     void handleSendRef.current(plain);
                   }}
                   onContentChange={applySemiContentChange}

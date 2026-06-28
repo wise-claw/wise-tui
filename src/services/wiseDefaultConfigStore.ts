@@ -90,6 +90,9 @@ export const WISE_WORKSPACE_INSPECTOR_PANELS_CHANGED = "wise:workspace-inspector
 
 export const WISE_RIGHT_INSPECTOR_TERMINAL_CHANGED = "wise:right-inspector-terminal-changed";
 
+export const WISE_RIGHT_INSPECTOR_REPOSITORY_SESSION_CHANGED =
+  "wise:right-inspector-repository-session-changed";
+
 export const WISE_FILE_TREE_OPEN_IN_NEW_PANE_CHANGED = "wise:file-tree-open-in-new-pane-changed";
 
 export const WISE_REPO_PANEL_PLACEMENT_CHANGED = "wise:repo-panel-placement-changed";
@@ -205,6 +208,8 @@ export interface WiseDefaultConfigV1 {
   showWorkspaceTodosPanel: boolean;
   /** 右栏顶部独立终端面板（与运行面板并列，Tab 切换）；默认隐藏。 */
   showRightInspectorTerminal: boolean;
+  /** 右栏待办事项之下的「仓库会话」面板；默认显示。 */
+  showRightInspectorRepositorySession: boolean;
   /** 文件树点击文件时在新窗格打开，而非占用当前会话主区。 */
   fileTreeOpenInNewPane: boolean;
   /** Git 变更面板默认栏位；默认左栏。 */
@@ -278,6 +283,7 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   showWorkspaceQuickActionsPanel: true,
   showWorkspaceTodosPanel: true,
   showRightInspectorTerminal: false,
+  showRightInspectorRepositorySession: true,
   fileTreeOpenInNewPane: false,
   gitPanelPlacement: "left",
   filesPanelPlacement: "left",
@@ -493,6 +499,13 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
           : normalizeBoolean(
               parsed.showRightInspectorTerminal,
               DEFAULT_CONFIG.showRightInspectorTerminal,
+            ),
+      showRightInspectorRepositorySession:
+        parsed.showRightInspectorRepositorySession === undefined
+          ? DEFAULT_CONFIG.showRightInspectorRepositorySession
+          : normalizeBoolean(
+              parsed.showRightInspectorRepositorySession,
+              DEFAULT_CONFIG.showRightInspectorRepositorySession,
             ),
       fileTreeOpenInNewPane:
         parsed.fileTreeOpenInNewPane === undefined
@@ -755,6 +768,7 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     showWorkspaceQuickActionsPanel: DEFAULT_CONFIG.showWorkspaceQuickActionsPanel,
     showWorkspaceTodosPanel: DEFAULT_CONFIG.showWorkspaceTodosPanel,
     showRightInspectorTerminal: DEFAULT_CONFIG.showRightInspectorTerminal,
+    showRightInspectorRepositorySession: DEFAULT_CONFIG.showRightInspectorRepositorySession,
     fileTreeOpenInNewPane: DEFAULT_CONFIG.fileTreeOpenInNewPane,
     gitPanelPlacement: DEFAULT_CONFIG.gitPanelPlacement,
     filesPanelPlacement: DEFAULT_CONFIG.filesPanelPlacement,
@@ -854,6 +868,13 @@ function dispatchRightInspectorTerminalChanged(visible: boolean): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(
     new CustomEvent(WISE_RIGHT_INSPECTOR_TERMINAL_CHANGED, { detail: { visible } }),
+  );
+}
+
+function dispatchRightInspectorRepositorySessionChanged(visible: boolean): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(WISE_RIGHT_INSPECTOR_REPOSITORY_SESSION_CHANGED, { detail: { visible } }),
   );
 }
 
@@ -966,6 +987,7 @@ export async function saveWiseDefaultConfig(
       | "showWorkspaceQuickActionsPanel"
       | "showWorkspaceTodosPanel"
       | "showRightInspectorTerminal"
+      | "showRightInspectorRepositorySession"
       | "fileTreeOpenInNewPane"
       | "gitPanelPlacement"
       | "filesPanelPlacement"
@@ -1058,6 +1080,8 @@ export async function saveWiseDefaultConfig(
     showWorkspaceTodosPanel: patch.showWorkspaceTodosPanel ?? current.showWorkspaceTodosPanel,
     showRightInspectorTerminal:
       patch.showRightInspectorTerminal ?? current.showRightInspectorTerminal,
+    showRightInspectorRepositorySession:
+      patch.showRightInspectorRepositorySession ?? current.showRightInspectorRepositorySession,
     fileTreeOpenInNewPane: patch.fileTreeOpenInNewPane ?? current.fileTreeOpenInNewPane,
     gitPanelPlacement: patch.gitPanelPlacement ?? current.gitPanelPlacement,
     filesPanelPlacement: patch.filesPanelPlacement ?? current.filesPanelPlacement,
@@ -1235,6 +1259,12 @@ export async function saveWiseDefaultConfig(
     next.showRightInspectorTerminal = normalizeBoolean(
       patch.showRightInspectorTerminal,
       DEFAULT_CONFIG.showRightInspectorTerminal,
+    );
+  }
+  if (patch.showRightInspectorRepositorySession !== undefined) {
+    next.showRightInspectorRepositorySession = normalizeBoolean(
+      patch.showRightInspectorRepositorySession,
+      DEFAULT_CONFIG.showRightInspectorRepositorySession,
     );
   }
   if (patch.fileTreeOpenInNewPane !== undefined) {
@@ -1473,6 +1503,12 @@ export async function saveWiseDefaultConfig(
     next.showRightInspectorTerminal !== current.showRightInspectorTerminal
   ) {
     dispatchRightInspectorTerminalChanged(next.showRightInspectorTerminal);
+  }
+  if (
+    patch.showRightInspectorRepositorySession !== undefined &&
+    next.showRightInspectorRepositorySession !== current.showRightInspectorRepositorySession
+  ) {
+    dispatchRightInspectorRepositorySessionChanged(next.showRightInspectorRepositorySession);
   }
   if (
     patch.fileTreeOpenInNewPane !== undefined &&
@@ -1871,6 +1907,16 @@ export async function loadRightInspectorTerminalVisibleFromStore(): Promise<bool
 
 export async function saveRightInspectorTerminalVisibleToStore(visible: boolean): Promise<void> {
   await saveWiseDefaultConfig({ showRightInspectorTerminal: visible });
+}
+
+export async function loadRightInspectorRepositorySessionVisibleFromStore(): Promise<boolean> {
+  return (await loadWiseDefaultConfig()).showRightInspectorRepositorySession;
+}
+
+export async function saveRightInspectorRepositorySessionVisibleToStore(
+  visible: boolean,
+): Promise<void> {
+  await saveWiseDefaultConfig({ showRightInspectorRepositorySession: visible });
 }
 
 export async function loadTopbarChromeDefaultsFromStore(): Promise<

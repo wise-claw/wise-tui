@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import type { ClaudeSession } from "../types";
 import {
   CLAUDE_COMPACT_SLASH_PROMPT,
+  COMPRESS_NOTICE_DEBOUNCE_MS,
+  composeCompactNoticeTokens,
   CONTEXT_AUTO_COMPACT_BEFORE_SEND_PERCENT,
   CONTEXT_AUTO_COMPACT_HEAVY_SKILL_PERCENT,
   CONTEXT_BACKGROUND_COMPACT_PERCENT,
@@ -132,8 +134,10 @@ describe("claudeSessionContext", () => {
       estimatedTokens: Math.round(DEFAULT_MAX_CONTEXT_TOKENS * 0.74),
       ctxPercent: 74,
     };
-    expect(formatContextStatusHint(metrics)).toContain("后台");
-    expect(formatContextStatusHint(metrics, undefined, true)).toContain("正在后台整理");
+    // 74% 在 background compact 阈值（72%）以上，hint 应提示空闲时整理。
+    expect(formatContextStatusHint(metrics)).toBe("空闲时自动整理");
+    // backgroundCompactInFlight=true 时覆盖为「后台整理中」短标签，与 sysmsg 不重复。
+    expect(formatContextStatusHint(metrics, undefined, true)).toBe("后台整理中");
     expect(metrics.ctxPercent).toBeGreaterThanOrEqual(CONTEXT_BACKGROUND_COMPACT_PERCENT);
   });
 
@@ -209,5 +213,38 @@ describe("claudeSessionContext", () => {
       },
     ]);
     expect(estimateSessionTokens(s)).toBeGreaterThan(0);
+  });
+
+  describe("composeCompactNoticeTokens / 压缩降噪", () => {
+    const metrics = { estimatedTokens: 176_000, ctxPercent: 88 };
+
+    test("auto-before-send 输出共享 token，且 hint 不与 sysmsg 字面重复", () => {
+      const out = composeCompactNoticeTokens(metrics, "auto-before-send");
+      expect(out.sysmsg).toContain("/compact");
+      expect(out.sysmsg).toContain("88%");
+      expect(out.hint.length).toBeGreaterThan(0);
+      expect(out.sysmsg).not.toContain(out.hint);
+    });
+
+    test("overflow-retry / manual 输出不同 sysmsg 但 hint 都是短标签", () => {
+      const a = composeCompactNoticeTokens(metrics, "overflow-retry");
+      const b = composeCompactNoticeTokens(metrics, "manual");
+      expect(a.sysmsg).not.toBe(b.sysmsg);
+      expect(a.hint.length).toBeLessThanOrEqual(6);
+      expect(b.hint.length).toBeLessThanOrEqual(6);
+    });
+
+    test("formatContextStatusHint 不再与 sysmsg 字面重复", () => {
+      // 旧实现：`发送前将自动压缩历史` 会与 sysmsg `正在自动执行 /compact 压缩历史…` 部分重复。
+      const hint = formatContextStatusHint(metrics, "hello");
+      const out = composeCompactNoticeTokens(metrics, "auto-before-send");
+      expect(hint).not.toContain("压缩历史");
+      expect(hint).not.toBe(out.sysmsg);
+    });
+
+    test("COMPRESS_NOTICE_DEBOUNCE_MS 在 1-5s 之间，约束去重窗口", () => {
+      expect(COMPRESS_NOTICE_DEBOUNCE_MS).toBeGreaterThanOrEqual(1_000);
+      expect(COMPRESS_NOTICE_DEBOUNCE_MS).toBeLessThanOrEqual(5_000);
+    });
   });
 });

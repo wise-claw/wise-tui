@@ -77,6 +77,8 @@ export function areChatInspectorPropsEqual(
   if (prev.repositories !== next.repositories) return false;
   if (prev.repositoryRepoPanel !== next.repositoryRepoPanel) return false;
   if (prev.rightTerminalPanelNode !== next.rightTerminalPanelNode) return false;
+  // 右栏仓库会话面板：`AppWorkspaceLayout` 内联构造的 Node；显隐切换通过引用差异触发重渲染
+  if (prev.repositorySessionPanel !== next.repositorySessionPanel) return false;
   return true;
 }
 

@@ -172,7 +172,10 @@ import {
   buildContextOverflowFailureHint,
   buildContextOverflowRetrySystemMessage,
   CLAUDE_COMPACT_SLASH_PROMPT,
+  COMPRESS_NOTICE_DEBOUNCE_MS,
+  composeCompactNoticeTokens,
   CONTEXT_BACKGROUND_COMPACT_COOLDOWN_MS,
+  getSessionContextMetrics,
   isCompactSlashPrompt,
   looksLikeContextOverflowError,
   planAutoCompactBeforeSend,
@@ -1485,6 +1488,32 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     [commitSessions],
   );
 
+  /**
+   * 写入「压缩进行中」sysmsg：同会话相邻 COMPRESS_NOTICE_DEBOUNCE_MS 内同文本直接跳过。
+   * 避免 auto-compact / context-overflow / 手动 /compact / composer 本地斜杠派发同时
+   * 写多条「正在压缩…」同语义消息。
+   */
+  const appendCompactNotice = useCallback(
+    (tabSessionId: string, sysmsg: string, nowMs: number = Date.now()) => {
+      const trimmed = sysmsg.trim();
+      if (!trimmed) return;
+      const last = sessionsRef.current
+        .find((s) => s.id === tabSessionId)
+        ?.messages.filter((m) => m.role === "system")
+        .pop();
+      if (last && last.content.trim() === trimmed) {
+        const age = nowMs - last.timestamp;
+        if (age >= 0 && age <= COMPRESS_NOTICE_DEBOUNCE_MS) {
+          return;
+        }
+      }
+      commitSessions((prev) =>
+        appendSystemMessageBySessionId(prev, tabSessionId, sysmsg),
+      );
+    },
+    [commitSessions],
+  );
+
   const runCompactTurnAndWait = useCallback(
     async (params: {
       tabSessionId: string;
@@ -1495,7 +1524,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     }) => {
       const { tabSessionId, turnNonce, runOnce, reloadAfterCompact, systemMessage } = params;
       if (systemMessage) {
-        commitSessions((prev) => appendSystemMessageBySessionId(prev, tabSessionId, systemMessage));
+        appendCompactNotice(tabSessionId, systemMessage);
       }
       compactTurnInFlightRef.current = { tabId: tabSessionId, nonce: turnNonce };
       await runOnce(CLAUDE_COMPACT_SLASH_PROMPT);
@@ -1504,7 +1533,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         await reloadAfterCompact();
       }
     },
-    [commitSessions],
+    [appendCompactNotice],
   );
 
   const flushBlockingDesktopIfHidden = useCallback(() => {
@@ -1871,13 +1900,20 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       contextOverflowCompactRetriedNonceRef.current.set(tabId, nonce);
       const waiter = turnCompleteWaiterRef.current;
 
+      const overflowMetrics = getSessionContextMetrics(
+        sessionsRef.current.find((s) => s.id === tabId) ??
+          ({
+            id: tabId,
+            messages: [],
+          } as unknown as ClaudeSession),
+      );
+      appendCompactNotice(
+        tabId,
+        buildContextOverflowRetrySystemMessage(overflowMetrics),
+      );
       commitSessions((prev) =>
-        appendSystemMessageBySessionId(
-          prev.map((s) =>
-            s.id === tabId ? { ...s, status: "running" as const } : s,
-          ),
-          tabId,
-          buildContextOverflowRetrySystemMessage(),
+        prev.map((s) =>
+          s.id === tabId ? { ...s, status: "running" as const } : s,
         ),
       );
       scheduleStreamStallTimer(tabId);
@@ -1931,6 +1967,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       }
     },
     [
+      appendCompactNotice,
       appendContextOverflowFailureHint,
       commitSessions,
       invokeClaudeTurn,
@@ -2101,6 +2138,8 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         });
       }
 
+      // appendCompactNotice 已由 runCompactTurnAndWait 内部调用；这里无需重复写入。
+
       try {
         await runOnce(prompt);
         const turnResult = await waitTurnComplete();
@@ -2137,7 +2176,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           turnNonce,
           runOnce,
           reloadAfterCompact,
-          systemMessage: buildContextOverflowRetrySystemMessage(),
+          systemMessage: buildContextOverflowRetrySystemMessage(metrics),
         });
         await runOnce(prompt);
         const retryResult = await waitTurnComplete();
@@ -4067,12 +4106,13 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       const turnNonce = lastUserSendNonceRef.current;
       expectedTurnNonceByTabIdRef.current.set(sessionId, turnNonce);
       markClaudeRegistryBootstrapWarmup(registryBootstrapDeadlineByClaudeSidRef, claudeSessionId);
+      const manualMetrics = getSessionContextMetrics(session);
+      appendCompactNotice(
+        sessionId,
+        composeCompactNoticeTokens(manualMetrics, "manual").sysmsg,
+      );
       setSessions((prev) =>
-        setSessionRunningWithUserPrompt(
-          appendSystemMessageBySessionId(prev, sessionId, "正在执行 /compact 压缩会话历史…"),
-          sessionId,
-          compactPrompt,
-        ),
+        setSessionRunningWithUserPrompt(prev, sessionId, compactPrompt),
       );
       const invokeConc =
         claudeSessionsOptionsRef.current?.claudeConcurrencyInvokeContextRef?.current?.(session) ?? null;

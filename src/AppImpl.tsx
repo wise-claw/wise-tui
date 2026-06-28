@@ -176,6 +176,7 @@ import { useMonitorSessionsForOverview } from "./hooks/useMonitorSessionsForOver
 import { useLeftSidebarHubQuickEntries } from "./hooks/useLeftSidebarHubQuickEntries";
 import { useMonitorPanelDefault } from "./hooks/useMonitorPanelDefault";
 import { useRightInspectorTerminalVisible } from "./hooks/useRightInspectorTerminalVisible";
+import { useRightInspectorRepositorySessionVisible } from "./hooks/useRightInspectorRepositorySessionVisible";
 
 // 右栏顶部独立终端：与主区 TerminalPanelLazy 互相独立（独立 PTY 会话），按
 // `showRightInspectorTerminal` 默认配置项挂载；不在主会话渲染，避免与顶栏 terminal 按钮互相干扰。
@@ -375,6 +376,7 @@ export default function App() {
   }, []);
 
   const rightInspectorTerminalVisible = useRightInspectorTerminalVisible();
+  const repositorySideSessionVisible = useRightInspectorRepositorySessionVisible();
   /**
    * 默认配置项切换时同步生命周期：
    * - 关闭 → 卸载右栏 terminal（释放独立 PTY）
@@ -2002,6 +2004,7 @@ export default function App() {
   const ensureRepositorySideSession = useCallback(
     async (repository: Repository): Promise<string | null> => {
       if (!tabsHydrated) return null;
+      if (!repositorySideSessionVisible) return null;
       const key = normalizeRepositoryPathForMatch(repository.path);
       if (!key) return null;
       if (ensureSideSessionInFlightRef.current === key) {
@@ -2040,7 +2043,7 @@ export default function App() {
         ensureSideSessionInFlightRef.current = null;
       }
     },
-    [createSession, sessions, tabsHydrated],
+    [createSession, sessions, tabsHydrated, repositorySideSessionVisible],
   );
 
   /** 当前 active 仓库的侧会话 id；优先用绑定表，其次扫描 live sessions（覆盖重启/迁移场景）。 */
@@ -2090,6 +2093,7 @@ export default function App() {
   // composer `/new` 等本地斜杠：丢弃当前侧会话，新建一条（保持同一个仓库）。
   const handleCreateNewSideSession = useCallback(async () => {
     if (!activeRepository) return;
+    if (!repositorySideSessionVisible) return;
     const key = normalizeRepositoryPathForMatch(activeRepository.path);
     if (!key) return;
     const target = resolveSidebarSelectionTarget({ repository: activeRepository });
@@ -2102,7 +2106,7 @@ export default function App() {
       void setAppSetting(REPOSITORY_SIDE_SESSION_BINDING_STORAGE_KEY, JSON.stringify(next));
       return next;
     });
-  }, [activeRepository, createSession]);
+  }, [activeRepository, createSession, repositorySideSessionVisible]);
 
   const fileEditorRootPath = useMemo(() => {
     const path = resolveChatTopbarContext({
@@ -3931,6 +3935,7 @@ export default function App() {
         primaryPaneRuntimeOverride: null,
       }}
       repositorySideSessionContext={{
+        visible: repositorySideSessionVisible,
         sessionId: activeRepositorySideSessionId,
         repository: activeRepository,
         onEnsureSession: () => {
