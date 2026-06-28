@@ -1,0 +1,84 @@
+/* 右栏「仓库会话」面板：在右栏 Sider（默认 300px）内展示会话消息与 composer。
+ * 整面板作为右栏内独立的滚动容器接管滚动，消息列表在父级可用空间内 flex 撑满剩余高度，
+ * composer 自然贴底。父级链路上每一层都必须保留 min-height: 0，否则 flex 计算会被内容自然高度截断。 */
+.app-repository-session-panel {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* 与右栏待办事项标题（.app-workspace-todos-panel）保持一致：紧凑 head + 12px 标题 + 分隔线。
+ * 基类 .app-inspector-collapsible-section__head 只定义了对齐与 cursor，没有 padding/border/font-size。 */
+.app-repository-session-panel__head,
+.app-repository-session-panel .app-inspector-collapsible-section__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 4px 6px 3px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+  flex-shrink: 0;
+}
+
+.app-repository-session-panel__title {
+  font-size: 12px;
+  line-height: 1.25;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.app-repository-session-panel__body {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-repository-session-panel__placeholder {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px;
+  color: var(--wise-text-color-secondary, #888);
+  font-size: 12px;
+}
+
+.app-repository-session-panel__content {
+  display: flex;
+  flex-direction: column;
+  flex: 1 1 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.app-repository-session-panel__messages {
+  /* 父容器给出可用高度后，本元素吃掉所有剩余空间，composer 自然贴底 */
+  flex: 1 1 0;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--wise-panel-border-color, rgba(127, 127, 127, 0.2));
+  border-radius: 6px;
+  background: var(--wise-panel-bg, transparent);
+}
+
+/* 复用中栏消息列表的滚动容器样式（在 index.css 里定义），确保 rail 内一致观感 */
+.app-repository-session-panel__messages .app-claude-chat {
+  flex: 1 1 0;
+  min-height: 0;
+  height: 100%;
+}
+
+.app-repository-session-panel__messages .app-claude-messages {
+  max-height: none;
+}
+
+/* composer tray 在窄列下做轻量样式覆盖 */
+.app-repository-session-panel .app-claude-composer-tray {
+  margin-top: 8px;
+  flex-shrink: 0;
+}

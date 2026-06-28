@@ -1,9 +1,10 @@
-export type InspectorSectionId = "quickActions" | "memos" | "todos";
+export type InspectorSectionId = "quickActions" | "memos" | "todos" | "repositorySession";
 
 const STORAGE_KEYS: Record<InspectorSectionId, string> = {
   quickActions: "wise.rightPanel.quickActionsCollapsed",
   memos: "wise.rightPanel.memosCollapsed",
   todos: "wise.rightPanel.todosCollapsed",
+  repositorySession: "wise.rightPanel.repositorySessionCollapsed",
 };
 
 export function readInspectorSectionCollapsedFromStorage(sectionId: InspectorSectionId): boolean {

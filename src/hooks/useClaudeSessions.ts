@@ -3186,6 +3186,8 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         immediateActivate?: boolean;
         /** 初始模型；提供后跳过异步读取全局档案/仓库默认模型，用于多屏保留窗格模型。 */
         initialModel?: string;
+        /** 标记为右栏侧会话：不进中栏 tab 列表、不抢 active、不写入主会话绑定表。 */
+        isSide?: boolean;
       },
     ) => {
       const id = generateId();
@@ -3200,6 +3202,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         createdAt: Date.now(),
         pendingPrompt: "",
         ...(opts?.connectionKind ? { connectionKind: opts.connectionKind } : {}),
+        ...(opts?.isSide ? { isSide: true } : {}),
       };
 
       // ref 同步写入，保证 bind/切会话逻辑立即可见；后台 worker（skipActivate）同步发布 store 供派发轮询读取。

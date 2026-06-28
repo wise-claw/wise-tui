@@ -1,6 +1,6 @@
 import { Typography } from "antd";
 import { HoverHint } from "../shared/HoverHint";
-import type { ReactNode } from "react";
+import type { MouseEvent, ReactNode } from "react";
 import { ExpandIcon } from "../LeftSidebar/SidebarIcons";
 import { useInspectorSectionCollapsed } from "./useInspectorSectionCollapsed";
 import type { InspectorSectionId } from "./inspectorStorage";
@@ -37,20 +37,35 @@ export function InspectorCollapsibleSection({
   const [collapsed, setCollapsed] = useInspectorSectionCollapsed(sectionId);
   const bemClass = resolvePanelClassName(className, panelClassName);
 
+  const handleHeadClick = () => {
+    setCollapsed(!collapsed);
+  };
+
+  const handleHeadActionsClick = (e: MouseEvent) => {
+    // 阻止操作按钮所在区域的点击冒泡到 header，避免误触发收起/展开
+    e.stopPropagation();
+  };
+
   return (
     <section
       className={`${className}${collapsed ? ` ${bemClass}--section-collapsed` : ""}`}
       aria-label={ariaLabel}
     >
-      <header className={`${bemClass}__head app-inspector-collapsible-section__head`}>
+      <header
+        className={`${bemClass}__head app-inspector-collapsible-section__head`}
+        onClick={handleHeadClick}
+      >
         <Typography.Text strong className={`${bemClass}__title`}>
           {title}
         </Typography.Text>
-        <div className="app-inspector-collapsible-section__head-actions">
+        <div
+          className="app-inspector-collapsible-section__head-actions"
+          onClick={handleHeadActionsClick}
+        >
           {headActions}
           <HoverHint
             title={collapsed ? `展开${title}` : `收起${title}`}
-           
+
           >
             <button
               type="button"

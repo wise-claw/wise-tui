@@ -3,6 +3,7 @@ import type { ClaudeSession, Repository } from "../types";
 import {
   isRepositoryMainSessionTab,
   projectMainSessionBindingKey,
+  parseRepositorySideSessionBindings,
   repositoryPathsMatch,
   sessionMatchesRepositoryScope,
   resolveBoundMainSessionId,
@@ -212,5 +213,31 @@ describe("repositoryPathsMatch", () => {
     expect(repositoryPathsMatch("/work/repo/", "/work/repo")).toBe(true);
     expect(repositoryPathsMatch("C:\\work\\repo", "C:/work/repo")).toBe(true);
     expect(repositoryPathsMatch("/work/a", "/work/b")).toBe(false);
+  });
+});
+
+describe("parseRepositorySideSessionBindings", () => {
+  it("returns empty record for empty / invalid input", () => {
+    expect(parseRepositorySideSessionBindings(null)).toEqual({});
+    expect(parseRepositorySideSessionBindings(undefined)).toEqual({});
+    expect(parseRepositorySideSessionBindings("")).toEqual({});
+    expect(parseRepositorySideSessionBindings("not-json")).toEqual({});
+    expect(parseRepositorySideSessionBindings("[]")).toEqual({});
+    expect(parseRepositorySideSessionBindings('"string"')).toEqual({});
+  });
+
+  it("parses and normalizes keys, strips empty values", () => {
+    const parsed = parseRepositorySideSessionBindings(
+      JSON.stringify({
+        "/work/repo/": "side-1",
+        "C:\\work\\repo": "side-2",
+        "/work/empty": "  ",
+        "/work/bad": 42,
+      }),
+    );
+    expect(parsed["/work/repo"]).toBe("side-1");
+    expect(parsed["C:/work/repo"]).toBe("side-2");
+    expect(parsed["/work/empty"]).toBeUndefined();
+    expect(parsed["/work/bad"]).toBeUndefined();
   });
 });

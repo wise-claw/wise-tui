@@ -214,6 +214,8 @@ import {
   projectMainSessionBindingKey,
   repositoryPathsMatch,
   REPOSITORY_MAIN_SESSION_BINDING_STORAGE_KEY,
+  REPOSITORY_SIDE_SESSION_BINDING_STORAGE_KEY,
+  parseRepositorySideSessionBindings,
   resolveRepositoryForSession,
   resolveBoundMainSessionId,
   resolveMainOwnerAgentNameForRepositoryPath,
@@ -1972,6 +1974,135 @@ export default function App() {
     () => repositories.find((p) => p.id === activeRepositoryId) ?? null,
     [repositories, activeRepositoryId],
   );
+
+  // ── 右栏「仓库会话」侧会话绑定：按仓库 path → 侧 session id；持久化到 localStorage ──
+  // 必须放在 activeRepository 之后定义：依赖 activeRepository / createSession / sessions / tabsHydrated。
+  const [sideSessionBindings, setSideSessionBindings] = useState<Record<string, string>>({});
+  const sideSessionBindingsRef = useRef(sideSessionBindings);
+  sideSessionBindingsRef.current = sideSessionBindings;
+
+  useEffect(() => {
+    let cancelled = false;
+    void (async () => {
+      try {
+        const raw = await getAppSetting(REPOSITORY_SIDE_SESSION_BINDING_STORAGE_KEY);
+        if (cancelled) return;
+        setSideSessionBindings(parseRepositorySideSessionBindings(raw));
+      } catch {
+        /* ignore */
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const ensureSideSessionInFlightRef = useRef<string | null>(null);
+  /** 复用 useClaudeSessions 的 createSession，但要求 tabsHydrated 已就绪避免覆盖启动态。 */
+  const ensureRepositorySideSession = useCallback(
+    async (repository: Repository): Promise<string | null> => {
+      if (!tabsHydrated) return null;
+      const key = normalizeRepositoryPathForMatch(repository.path);
+      if (!key) return null;
+      if (ensureSideSessionInFlightRef.current === key) {
+        return sideSessionBindingsRef.current[key] ?? null;
+      }
+      ensureSideSessionInFlightRef.current = key;
+      try {
+        // 优先复用已有侧会话（live store / sessions 中存在的 isSide 会话）。
+        const existing = sessions.find(
+          (s) =>
+            s.isSide === true &&
+            normalizeRepositoryPathForMatch(s.repositoryPath) === key,
+        );
+        if (existing) {
+          setSideSessionBindings((prev) => {
+            if (prev[key] === existing.id) return prev;
+            const next = { ...prev, [key]: existing.id };
+            void setAppSetting(REPOSITORY_SIDE_SESSION_BINDING_STORAGE_KEY, JSON.stringify(next));
+            return next;
+          });
+          return existing.id;
+        }
+        const target = resolveSidebarSelectionTarget({ repository });
+        const id = await createSession(target.path, target.displayName, {
+          skipActivate: true,
+          isSide: true,
+        });
+        setSideSessionBindings((prev) => {
+          if (prev[key] === id) return prev;
+          const next = { ...prev, [key]: id };
+          void setAppSetting(REPOSITORY_SIDE_SESSION_BINDING_STORAGE_KEY, JSON.stringify(next));
+          return next;
+        });
+        return id;
+      } finally {
+        ensureSideSessionInFlightRef.current = null;
+      }
+    },
+    [createSession, sessions, tabsHydrated],
+  );
+
+  /** 当前 active 仓库的侧会话 id；优先用绑定表，其次扫描 live sessions（覆盖重启/迁移场景）。 */
+  const activeRepositorySideSessionId = useMemo(() => {
+    if (!activeRepository) return null;
+    const key = normalizeRepositoryPathForMatch(activeRepository.path);
+    if (!key) return null;
+    const bound = sideSessionBindings[key];
+    if (bound && sessions.some((s) => s.id === bound && s.isSide === true)) {
+      return bound;
+    }
+    const found = sessions.find(
+      (s) =>
+        s.isSide === true &&
+        normalizeRepositoryPathForMatch(s.repositoryPath) === key,
+    );
+    return found?.id ?? null;
+  }, [activeRepository, sideSessionBindings, sessions]);
+
+  // 侧会话生命周期：active 仓库变更且无侧会话时，懒创建。
+  useEffect(() => {
+    if (!tabsHydrated) return;
+    if (!activeRepository) return;
+    if (activeRepositorySideSessionId) return;
+    void ensureRepositorySideSession(activeRepository);
+  }, [activeRepository, activeRepositorySideSessionId, ensureRepositorySideSession, tabsHydrated]);
+
+  // 启动后清理：把绑定表中已不存在的 session id 移除（用户可能删除了 tabs.json 里的侧会话）。
+  useEffect(() => {
+    if (!tabsHydrated) return;
+    setSideSessionBindings((prev) => {
+      let changed = false;
+      const next: Record<string, string> = {};
+      for (const [k, v] of Object.entries(prev)) {
+        if (sessions.some((s) => s.id === v && s.isSide === true)) {
+          next[k] = v;
+        } else {
+          changed = true;
+        }
+      }
+      if (!changed) return prev;
+      void setAppSetting(REPOSITORY_SIDE_SESSION_BINDING_STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, [sessions, tabsHydrated]);
+
+  // composer `/new` 等本地斜杠：丢弃当前侧会话，新建一条（保持同一个仓库）。
+  const handleCreateNewSideSession = useCallback(async () => {
+    if (!activeRepository) return;
+    const key = normalizeRepositoryPathForMatch(activeRepository.path);
+    if (!key) return;
+    const target = resolveSidebarSelectionTarget({ repository: activeRepository });
+    const id = await createSession(target.path, target.displayName, {
+      skipActivate: true,
+      isSide: true,
+    });
+    setSideSessionBindings((prev) => {
+      const next = { ...prev, [key]: id };
+      void setAppSetting(REPOSITORY_SIDE_SESSION_BINDING_STORAGE_KEY, JSON.stringify(next));
+      return next;
+    });
+  }, [activeRepository, createSession]);
 
   const fileEditorRootPath = useMemo(() => {
     const path = resolveChatTopbarContext({
@@ -3734,6 +3865,83 @@ export default function App() {
         workflowStudioAction: undefined,
       }}
       sessionsStructureKey={sessionsStructureKey}
+      repositorySideSessionSharedProps={{
+        sessions,
+        allSessionsForHistory: sessions,
+        repositories,
+        activeProject,
+        activeWorkspaceFocus,
+        activeRepositoryId,
+        workspaceMode,
+        onSwitchSession: jumpToSessionWithRepository,
+        onSend: handleSendMessageWithAtMention,
+        onExecute: handleComposerExecute,
+        onDispatchExecutionEnvironment: handleDispatchExecutionEnvironment,
+        onUpdateSessionModel: updateSessionModel,
+        onUpdateSessionConnectionKind: updateSessionConnectionKind,
+        onUpdateRepositoryExecutionEngine: handleUpdateRepositoryExecutionEngine,
+        onUpdateEmployeeExecutionEngine: handleUpdateEmployeeExecutionEngine,
+        codexAvailable,
+        cursorAvailable,
+        geminiAvailable,
+        opencodeAvailable,
+        onOpenExecutionEnvironment: handleOpenExecutionEnvironment,
+        onCancelSession: cancelSession,
+        onRespondToQuestion: respondToQuestion,
+        onDismissQuestion: dismissQuestion,
+        onRespondToPermission: respondToPermission,
+        onToggleTodo: toggleTodo,
+        onRestoreTodosFromTranscript: restoreTodosFromTranscript,
+        onRestorePendingPermissionFromTranscript: restorePendingPermissionFromTranscript,
+        onClearFollowups: clearFollowups,
+        onClearRevertItems: clearRevertItems,
+        onSendFollowup: sendFollowup,
+        onRestoreRevert: restoreRevert,
+        onOpenWorkflowConfig: openWorkflowConfigFromSidebar,
+        onOpenBuiltinAssistant: openBuiltinAssistant,
+        onActivateAssistant: activateAssistant,
+        onOpenAssistantsHub: openAssistantsFromSidebar,
+        onOpenRepositoryScheduledTasks: scheduledTasksRepository
+          ? openActiveScheduledTasksOverlay
+          : undefined,
+        employees,
+        mentionEmployees,
+        composerProjectRoleTagOptions,
+        composerProjectRepositoryMentionOptions,
+        composerHideEmployeesInAtMode,
+        taskPendingEmployeesByTaskId,
+        workflowTemplates,
+        workflowGraphsByWorkflowId,
+        workflowGraphStatusByWorkflowId,
+        onOpenTaskDetail: (taskId) => {
+          setMonitorDrawerTarget({ type: "task", taskId });
+        },
+        hideMessages: false,
+        hideSessionTools: true,
+        resolveTaskListOmcInvokeConcurrency,
+        repositoryMainBindings: repositoryMainSessionBindings,
+        onAppendSystemMessage: appendSystemMessage,
+        onAppendUserMessage: appendUserMessage,
+        onReloadFullDiskTranscript: reloadFullDiskTranscript,
+        onLoadMoreTranscriptFromDisk: loadMoreTranscriptFromDisk,
+        onCompactSessionHistory: compactSessionHistory,
+        onStopSessionConversationTask: handleStopSessionConversationTask,
+        omcBatchPipelineActive: Boolean(omcBatchRuntime?.active),
+        paneCount: 1,
+        primaryPaneRuntimeOverride: null,
+      }}
+      repositorySideSessionContext={{
+        sessionId: activeRepositorySideSessionId,
+        repository: activeRepository,
+        onEnsureSession: () => {
+          if (activeRepository) {
+            void ensureRepositorySideSession(activeRepository);
+          }
+        },
+        onCreateNewSession: () => {
+          void handleCreateNewSideSession();
+        },
+      }}
       claudeSessionsProps={{
         sessions,
         activeSessionId,

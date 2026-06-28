@@ -3,6 +3,30 @@ import { extractBoundEmployeeNameFromDisplay } from "./sessionOwnerHints";
 
 export const REPOSITORY_MAIN_SESSION_BINDING_STORAGE_KEY = "wise.repositoryMainSessionBindings.v1";
 
+/**
+ * 右栏「仓库会话」专属的侧会话绑定表（key=仓库 path，value=side session id）。
+ * 与主会话绑定表隔离；侧会话不进中栏 tab 列表，不影响主会话 resolve。
+ */
+export const REPOSITORY_SIDE_SESSION_BINDING_STORAGE_KEY = "wise.repositorySideSessionBindings.v1";
+
+/** 解析侧会话绑定表（与 `parseRepositoryMainSessionBindings` 同形态）。 */
+export function parseRepositorySideSessionBindings(raw: string | null | undefined): Record<string, string> {
+  if (!raw?.trim()) return {};
+  try {
+    const parsed = JSON.parse(raw) as unknown;
+    if (parsed === null || typeof parsed !== "object" || Array.isArray(parsed)) return {};
+    const out: Record<string, string> = {};
+    for (const [k, v] of Object.entries(parsed as Record<string, unknown>)) {
+      if (typeof v === "string" && v.trim()) {
+        out[normalizeRepositoryPathKey(k)] = v.trim();
+      }
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
 /** 项目主会话绑定 key，与成员仓 filesystem path 隔离。 */
 export const PROJECT_MAIN_SESSION_BINDING_PREFIX = "wise://workspace/";
 

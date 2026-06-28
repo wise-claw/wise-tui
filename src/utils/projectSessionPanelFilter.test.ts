@@ -38,6 +38,7 @@ function session(
     status: input.status ?? "idle",
     messages,
     createdAt: input.createdAt ?? 0,
+    ...(input.isSide ? { isSide: true } : {}),
   };
 }
 
@@ -200,5 +201,50 @@ describe("filterSessionsForWorkspace", () => {
       activeRepositoryId: 1,
     });
     expect(filtered.map((s) => s.id)).toEqual(["s-repo"]);
+  });
+
+  test("isSide side sessions are excluded from every focus branch", () => {
+    const r1 = repo({ id: 1, path: "/work/wise/frontend" });
+    const r2 = repo({ id: 2, path: "/work/wise/backend" });
+    const p = project({
+      id: "p1",
+      name: "Wise",
+      repositoryIds: [1, 2],
+      rootPath: "/work/wise",
+      sddMode: "wise_trellis",
+    });
+    const sessions = [
+      session({ id: "s-main", repositoryPath: "/work/wise", repositoryName: "Project: Wise" }),
+      session({ id: "s-side-front", repositoryPath: "/work/wise/frontend", isSide: true }),
+      session({ id: "s-side-back", repositoryPath: "/work/wise/backend", isSide: true }),
+      session({ id: "s-front", repositoryPath: "/work/wise/frontend" }),
+    ];
+
+    const projectFocus = filterSessionsForWorkspace({
+      sessions,
+      workspaceMode: "multi_repo",
+      project: p,
+      repositories: [r1, r2],
+      activeWorkspaceFocus: "project",
+    });
+    expect(projectFocus.map((s) => s.id)).toEqual(["s-main"]);
+
+    const repoFocus = filterSessionsForWorkspace({
+      sessions,
+      workspaceMode: "multi_repo",
+      project: p,
+      repositories: [r1, r2],
+      activeWorkspaceFocus: "repository",
+      activeRepositoryId: 1,
+    });
+    expect(repoFocus.map((s) => s.id)).toEqual(["s-front"]);
+
+    const floating = filterSessionsForWorkspace({
+      sessions,
+      workspaceMode: "single_repo",
+      project: null,
+      repositories: [r1],
+    });
+    expect(floating.map((s) => s.id)).toEqual(["s-main", "s-front"]);
   });
 });

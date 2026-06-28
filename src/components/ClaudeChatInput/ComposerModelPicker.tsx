@@ -91,18 +91,22 @@ function ModelPickerTriggerButton({
   modelBarTitle,
   expanded,
   disabled,
+  iconOnly = false,
 }: {
   modelBarParts: { company: string; modelName: string };
   modelBarTitle: string;
   expanded: boolean;
   disabled?: boolean;
+  /** 右栏紧凑模式：只渲染图标，去掉模型名/厂商与 chevron。 */
+  iconOnly?: boolean;
 }) {
   return (
     <button
       type="button"
       className={
         "app-composer-model-picker__select" +
-        (expanded ? " app-composer-model-picker__select--open" : "")
+        (expanded ? " app-composer-model-picker__select--open" : "") +
+        (iconOnly ? " app-composer-model-picker__select--icon-only" : "")
       }
       aria-haspopup="dialog"
       aria-label={`当前模型：${modelBarTitle}`}
@@ -111,25 +115,29 @@ function ModelPickerTriggerButton({
       onMouseDown={stopSemiComposerPointerBubble}
     >
       <ModelPickerIcon />
-      <ComposerModelPickerBarLabel
-        company={modelBarParts.company}
-        modelName={modelBarParts.modelName}
-        title={modelBarTitle}
-      />
-      <svg
-        className="app-composer-model-picker__chevron"
-        width="8"
-        height="8"
-        viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        strokeWidth="2.5"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-        aria-hidden
-      >
-        <polyline points="6 9 12 15 18 9" />
-      </svg>
+      {iconOnly ? null : (
+        <>
+          <ComposerModelPickerBarLabel
+            company={modelBarParts.company}
+            modelName={modelBarParts.modelName}
+            title={modelBarTitle}
+          />
+          <svg
+            className="app-composer-model-picker__chevron"
+            width="8"
+            height="8"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            aria-hidden
+          >
+            <polyline points="6 9 12 15 18 9" />
+          </svg>
+        </>
+      )}
     </button>
   );
 }
@@ -140,6 +148,8 @@ interface Props {
   model: string;
   onModelChange: (model: string) => void;
   disabled?: boolean;
+  /** 右栏紧凑模式：触发按钮只渲染图标。 */
+  iconOnly?: boolean;
 }
 
 export function ComposerModelPicker({
@@ -148,6 +158,7 @@ export function ComposerModelPicker({
   model,
   onModelChange,
   disabled = false,
+  iconOnly = false,
 }: Props) {
   const sessionExecutionEngine = normalizeSessionExecutionEngine(
     sessionExecutionEngineProp ?? "claude",
@@ -395,6 +406,7 @@ export function ComposerModelPicker({
       modelBarTitle={modelBarTitle}
       expanded={isCursorEngine ? cursorMenuOpen : panelOpen}
       disabled={disabled}
+      iconOnly={iconOnly}
     />
   );
 

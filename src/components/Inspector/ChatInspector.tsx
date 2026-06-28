@@ -73,6 +73,8 @@ export interface ChatInspectorProps {
   repositoryRepoPanel?: ReactNode | null;
   /** 右栏顶部独立终端面板节点（`TerminalPanelLazy`，由 AppImpl 按 `showRightInspectorTerminal` 注入）。 */
   rightTerminalPanelNode?: ReactNode | null;
+  /** 右栏待办事项之下的「仓库会话」面板节点（`RepositorySessionPanel`，由 AppImpl 注入）。 */
+  repositorySessionPanel?: ReactNode | null;
 }
 
 /**
@@ -121,6 +123,7 @@ export const ChatInspector = memo(function ChatInspector({
   activeRepositoryId = null,
   repositoryRepoPanel = null,
   rightTerminalPanelNode = null,
+  repositorySessionPanel = null,
 }: ChatInspectorProps) {
   const sessionsForMonitor = monitorPanelSessions ?? [];
   const transcriptSessions = monitorTranscriptSourceSessions ?? sessionsForMonitor;
@@ -186,6 +189,11 @@ export const ChatInspector = memo(function ChatInspector({
           projectId={projectId ?? null}
           repositoryId={activeRepositoryId}
         />
+        {repositorySessionPanel ? (
+          <div className="app-chat-inspector-card app-chat-inspector-card--repository-session" aria-label="仓库会话">
+            {repositorySessionPanel}
+          </div>
+        ) : null}
         {showRunningOnRight && effectiveRightTopPane === "running" ? (
           <div className="app-chat-inspector-card app-chat-inspector-card--secondary" data-right-top-pane="running">
             <div className="app-chat-inspector-section app-chat-inspector-section--team" aria-label="我的团队">

@@ -58,6 +58,7 @@ export function claudeChatComposerTrayPropsEqual(
   if (prev.projectRepositoryMentionOptions !== next.projectRepositoryMentionOptions) return false;
   if (prev.employeesForDispatchRoute !== next.employeesForDispatchRoute) return false;
   if (prev.draftBucketKey !== next.draftBucketKey) return false;
+  if (prev.compactFooterChrome !== next.compactFooterChrome) return false;
 
   const callbackKeys = [
     "onExecute",

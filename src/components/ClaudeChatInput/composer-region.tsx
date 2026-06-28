@@ -311,6 +311,9 @@ interface ComposerInnerProps {
     paneIndex: number,
     patch: Partial<import("../../types/paneRuntimeOverride").PaneRuntimeOverride>,
   ) => void;
+  /** 右栏紧凑模式：隐藏常用语按钮，并把执行环境 / 模型切换压成只渲染图标。
+   * 不影响 `composerFooterChrome` 的全局配置（中栏依旧按用户偏好显示）。 */
+  compactFooterChrome?: boolean;
 }
 
 interface LastSentComposerDraft {
@@ -594,6 +597,7 @@ function ComposerInner({
   paneCount = 1,
   paneRuntimeOverride = null,
   onUpdatePaneRuntimeOverride,
+  compactFooterChrome = false,
 }: ComposerInnerProps) {
   const { breakdown, loading: contextBreakdownLoading, ensureBreakdown } =
     useContextBreakdown(session);
@@ -2690,7 +2694,8 @@ function ComposerInner({
         onMouseDown={(e) => e.stopPropagation()}
         onClick={(e) => e.stopPropagation()}
       >
-        {composerFooterChrome.showComposerFooterCommonPhrases ? (
+        {/* 右栏紧凑模式：跳过常用语 trigger。仍受全局 composerFooterChrome 控制以保持中栏一致。 */}
+        {!compactFooterChrome && composerFooterChrome.showComposerFooterCommonPhrases ? (
           <ComposerCommonPhrasesManageTrigger
             phrases={composerCommonPhrases}
             loading={composerCommonPhrasesLoading}
@@ -2722,6 +2727,7 @@ function ComposerInner({
             paneIndex={paneIndex}
             paneRuntimeOverride={paneRuntimeOverride}
             onUpdatePaneRuntimeOverride={paneCount > 1 ? onUpdatePaneRuntimeOverride : undefined}
+            iconOnly={compactFooterChrome}
           />
         ) : null}
         {composerFooterChrome.showComposerFooterModelPicker ? (
@@ -2731,6 +2737,7 @@ function ComposerInner({
             model={model}
             onModelChange={handleComposerModelChange}
             disabled={isSessionBusy}
+            iconOnly={compactFooterChrome}
           />
         ) : null}
         {menuItem}
@@ -2765,6 +2772,7 @@ function ComposerInner({
       paneIndex,
       paneRuntimeOverride,
       onUpdatePaneRuntimeOverride,
+      compactFooterChrome,
     ],
   );
 
@@ -3079,6 +3087,9 @@ export interface ComposerRegionProps {
     paneIndex: number,
     patch: Partial<import("../../types/paneRuntimeOverride").PaneRuntimeOverride>,
   ) => void;
+  /** 右栏紧凑模式：隐藏常用语按钮，并把执行环境 / 模型切换压成只渲染图标。
+   * 不影响 `composerFooterChrome` 的全局配置（中栏依旧按用户偏好显示）。 */
+  compactFooterChrome?: boolean;
 }
 
 export function ComposerRegion({ session, draftBucketKey, ...rest }: ComposerRegionProps) {

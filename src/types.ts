@@ -784,6 +784,13 @@ export interface ClaudeSession {
    * - `"oneshot"` 逐轮 `claude -p`
    */
   connectionKind?: "streaming" | "oneshot";
+  /**
+   * 为 true 时标记为「右栏侧会话」：专用于右栏对当前仓库的独立对话，
+   * 不计入中栏会话 tab 列表（`filterSessionsForWorkspace` 排除），
+   * 也不写入 `repositoryMainSessionBindings`，故不影响中栏 active 解析。
+   * 落盘到 tabs.json，重启后恢复。
+   */
+  isSide?: boolean;
 }
 
 /** One session row from `list_claude_disk_sessions` (Claude Code on-disk index). */

@@ -53,6 +53,8 @@ interface Props {
     paneIndex: number,
     patch: Partial<PaneRuntimeOverride>,
   ) => void;
+  /** 右栏紧凑模式：只渲染图标，去掉执行引擎文字标签与代理角标。 */
+  iconOnly?: boolean;
 }
 
 function RuntimeSettingsIcon() {
@@ -105,6 +107,7 @@ export function ComposerRuntimeSettingsTrigger({
   paneIndex = 0,
   paneRuntimeOverride = null,
   onUpdatePaneRuntimeOverride,
+  iconOnly = false,
 }: Props) {
   const [menuOpen, setMenuOpen] = useState(false);
   const engine = normalizeSessionExecutionEngine(engineProp);
@@ -278,13 +281,18 @@ export function ComposerRuntimeSettingsTrigger({
     return null;
   }
 
-  const triggerLabel = showPaneRuntimePresets
-    ? resolvePaneRuntimePresetLabel(paneRuntimeOverride, engine)
-    : showEngine
-      ? SESSION_EXECUTION_ENGINE_LABELS[engine].title
-      : null;
+  const triggerLabel = iconOnly
+    ? null
+    : showPaneRuntimePresets
+      ? resolvePaneRuntimePresetLabel(paneRuntimeOverride, engine)
+      : showEngine
+        ? SESSION_EXECUTION_ENGINE_LABELS[engine].title
+        : null;
+  // iconOnly 模式下连代理角标也隐藏：右栏空间窄，tooltip 已经能告诉用户当前路由。
   const showProxyBadge =
-    Boolean(activeProxyRoute) && !(showPaneRuntimePresets && activePanePreset === "claude-proxy");
+    !iconOnly &&
+    Boolean(activeProxyRoute) &&
+    !(showPaneRuntimePresets && activePanePreset === "claude-proxy");
 
   return (
     <Dropdown

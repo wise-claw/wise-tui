@@ -37,7 +37,7 @@ export function filterSessionsForWorkspace(
   } = input;
 
   if (!project) {
-    return [...sessions];
+    return sessions.filter((session) => !session.isSide);
   }
 
   if (activeWorkspaceFocus === "repository") {
@@ -47,9 +47,12 @@ export function filterSessionsForWorkspace(
         : null;
     const repoKey = repo ? normalizeRepositoryPathKey(repo.path) : "";
     if (!repoKey) {
-      return [...sessions];
+      return sessions.filter((session) => !session.isSide);
     }
     return sessions.filter((session) => {
+      if (session.isSide) {
+        return false;
+      }
       if (normalizeRepositoryPathKey(session.repositoryPath) !== repoKey) {
         return false;
       }
@@ -60,7 +63,7 @@ export function filterSessionsForWorkspace(
   const anchor = resolveProjectMainSessionAnchor(project, repositories);
   const anchorKey = normalizeRepositoryPathKey(anchor.path);
   if (!anchorKey) {
-    return [...sessions];
+    return sessions.filter((session) => !session.isSide);
   }
 
   const memberRepoKeys = new Set(
@@ -72,6 +75,9 @@ export function filterSessionsForWorkspace(
   );
 
   return sessions.filter((session) => {
+    if (session.isSide) {
+      return false;
+    }
     if (extractBoundEmployeeNameFromDisplay(session.repositoryName ?? "")) {
       return false;
     }

@@ -23,6 +23,8 @@ import type { WorkspaceWelcomeLandingProps } from "./WorkspaceWelcomeLanding";
 import type { CommandPalette } from "./CommandPalette";
 import type { GitPanelOpenFileOptions } from "./GitPanel";
 import { type ChatInspectorProps, type CockpitInspectorProps } from "./Inspector";
+import { RepositorySessionPanel } from "./Inspector/RepositorySessionPanel";
+import type { MultiPaneSharedChatProps } from "./ClaudeSessions/ClaudeMultiPaneGrid";
 import { MainLayoutResizeHandle } from "./MainLayoutResizeHandle";
 import type { McpHub } from "./McpHub";
 import type { ProgressMonitorDrawer } from "./ProgressMonitorDrawer";
@@ -40,7 +42,7 @@ import {
 import { planFileViewerPaneIndex } from "../utils/fileViewerPanePlacement";
 import type { PaneAuxLayout } from "./ClaudeSessions/paneAuxLayout";
 import { waitLayoutFrames } from "../services/mainWindowLayout";
-import type { EmployeeItem, WorkflowGraph, WorkflowTemplateItem } from "../types";
+import type { EmployeeItem, Repository, WorkflowGraph, WorkflowTemplateItem } from "../types";
 import { resolveCockpitHubPane, type ViewMode } from "../types/viewMode";
 import { AUTHOR_CONFIG_NAV_SIDER_WIDTH_PX } from "../constants/mainLayoutWidths";
 import { dispatchRepositoryFileEditorClosed, type OpenRepositoryFileDetail } from "../constants/workflowUiEvents";
@@ -419,6 +421,18 @@ export interface AppWorkspaceLayoutProps {
   chatInspectorProps: RightPanelProps;
   /** Inspector 在 cockpit 模式下使用的 props（Mission 概览 + 子代理活动 + 活动仓库 Git）。 */
   cockpitInspectorProps: InspectorCockpitProps;
+  /**
+   * 右栏「仓库会话」面板所需的共享回调与上下文。
+   * 由 AppImpl 组装（与中栏 `claudeSessionsProps` 同源的 session-id 参数化 handlers），
+   * AppWorkspaceLayout 在此将其渲染为 `RepositorySessionPanel` 并注入 ChatInspector。
+   */
+  repositorySideSessionSharedProps: MultiPaneSharedChatProps;
+  repositorySideSessionContext: {
+    sessionId: string | null;
+    repository: Repository | null;
+    onEnsureSession: () => void;
+    onCreateNewSession: () => void;
+  };
   /** Cockpit 主屏空态：用户没有任何 Workspace / Standalone Repo 时引导创建。 */
   cockpitEmpty: boolean;
   cockpitOnboardingProps: CockpitOnboardingProps;
@@ -480,6 +494,8 @@ export function AppWorkspaceLayout({
   onOpenRemoteChannels,
   chatInspectorProps,
   cockpitInspectorProps,
+  repositorySideSessionSharedProps,
+  repositorySideSessionContext,
   cockpitEmpty,
   cockpitOnboardingProps,
   workspaceWelcomeFullscreen = false,
@@ -1060,7 +1076,19 @@ export function AppWorkspaceLayout({
                               <ErrorBoundary type="local" fallbackTitle="右侧属性检查器出错">
                                 <ConnectedInspector
                                   viewMode={viewMode}
-                                  chatInspectorProps={chatInspectorProps}
+                                  chatInspectorProps={{
+                                    ...chatInspectorProps,
+                                    repositorySessionPanel:
+                                      viewMode.kind === "chat" || viewMode.kind === "inspect" ? (
+                                        <RepositorySessionPanel
+                                          shared={repositorySideSessionSharedProps}
+                                          sessionId={repositorySideSessionContext.sessionId}
+                                          repository={repositorySideSessionContext.repository}
+                                          onEnsureSession={repositorySideSessionContext.onEnsureSession}
+                                          onCreateNewSession={repositorySideSessionContext.onCreateNewSession}
+                                        />
+                                      ) : null,
+                                  }}
                                   cockpitInspectorProps={cockpitInspectorProps}
                                 />
                               </ErrorBoundary>
