@@ -1,5 +1,5 @@
 import { CheckOutlined, CloudSyncOutlined, PlusOutlined } from "@ant-design/icons";
-import { Button, Empty, Input, Modal, Segmented, Space, Switch, Typography, message } from "antd";
+import { Button, Collapse, Empty, Input, Modal, Segmented, Space, Switch, Typography, message } from "antd";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   applyClaudeModelProfile,
@@ -824,9 +824,9 @@ export function ClaudeModelTopbarPanel({
               >
                 {panelEngine === "codex" ? (
                   <>
-                    分别编辑 <Typography.Text code>auth.json</Typography.Text> 与{" "}
-                    <Typography.Text code>config.toml</Typography.Text>；保存后写入{" "}
-                    <Typography.Text code>~/.codex/</Typography.Text>（与 CC Switch 相同）。
+                    选择 Provider 后自动填充 URL 与模型；在下方"高级配置"中可编辑{" "}
+                    <Typography.Text code>auth.json</Typography.Text> 与{" "}
+                    <Typography.Text code>config.toml</Typography.Text>（与 CC Switch 相同）。
                   </>
                 ) : panelEngine === "opencode" ? (
                   <>
@@ -853,12 +853,26 @@ export function ClaudeModelTopbarPanel({
             </Button>
           </div>
           {panelEngine === "codex" ? (
-            <CodexProfileSettingsEditor
-              compact
-              authJson={addCodexAuthJson}
-              configToml={addCodexConfigToml}
-              onAuthJsonChange={setAddCodexAuthJson}
-              onConfigTomlChange={setAddCodexConfigToml}
+            <Collapse
+              ghost
+              size="small"
+              className="app-claude-model-topbar-panel__codex-editor-collapse"
+              defaultActiveKey={[]}
+              items={[
+                {
+                  key: "advanced",
+                  label: "高级配置（auth.json / config.toml）",
+                  children: (
+                    <CodexProfileSettingsEditor
+                      compact
+                      authJson={addCodexAuthJson}
+                      configToml={addCodexConfigToml}
+                      onAuthJsonChange={setAddCodexAuthJson}
+                      onConfigTomlChange={setAddCodexConfigToml}
+                    />
+                  ),
+                },
+              ]}
             />
           ) : panelEngine === "opencode" ? (
             <>
@@ -978,8 +992,9 @@ export function ClaudeModelTopbarPanel({
               <Typography.Paragraph type="secondary" className="app-claude-model-topbar-panel__hint">
                 {editingCodexProfile ? (
                   <>
-                    分别编辑 <Typography.Text code>auth.json</Typography.Text> 与{" "}
-                    <Typography.Text code>config.toml</Typography.Text>，保存后更新档案。
+                    使用快捷配置选择 Provider 可快速填充；如需精细控制，展开高级编辑{" "}
+                    <Typography.Text code>auth.json</Typography.Text> 与{" "}
+                    <Typography.Text code>config.toml</Typography.Text>。
                   </>
                 ) : normalizeModelProfileEngine(configProfile?.engine) === "opencode" ? (
                   <>
@@ -997,12 +1012,26 @@ export function ClaudeModelTopbarPanel({
             </div>
           </div>
           {editingCodexProfile ? (
-            <CodexProfileSettingsEditor
-              compact
-              authJson={configCodexAuthJson}
-              configToml={configCodexConfigToml}
-              onAuthJsonChange={setConfigCodexAuthJson}
-              onConfigTomlChange={setConfigCodexConfigToml}
+            <Collapse
+              ghost
+              size="small"
+              className="app-claude-model-topbar-panel__codex-editor-collapse"
+              defaultActiveKey={[]}
+              items={[
+                {
+                  key: "advanced",
+                  label: "高级配置（auth.json / config.toml）",
+                  children: (
+                    <CodexProfileSettingsEditor
+                      compact
+                      authJson={configCodexAuthJson}
+                      configToml={configCodexConfigToml}
+                      onAuthJsonChange={setConfigCodexAuthJson}
+                      onConfigTomlChange={setConfigCodexConfigToml}
+                    />
+                  ),
+                },
+              ]}
             />
           ) : configProfile && normalizeModelProfileEngine(configProfile.engine) === "opencode" ? (
             <OpencodeSettingsEditor

@@ -9,6 +9,10 @@ import {
   normalizeModelProfileQuickConfig,
   type ModelProfileQuickConfig,
 } from "../../utils/modelProfileQuickConfig";
+import {
+  CODEX_PROVIDER_PRESETS,
+  findCodexProviderPreset,
+} from "../../utils/codexProviderPresets";
 
 interface Props {
   sourceValue: ModelProfileQuickConfig;
@@ -55,12 +59,34 @@ export function ModelProfileQuickConfigFields({
   const [dirty, setDirty] = useState(false);
   const draftRef = useRef(draft);
   draftRef.current = draft;
+  // Codex provider 选择状态（仅 engine === "codex" 时使用）
+  const [selectedProvider, setSelectedProvider] = useState<string | null>(null);
+  const providerAppliedRef = useRef(false);
 
   useEffect(() => {
     if (!dirty) {
       setDraft(sourceValue);
+      // 外部值同步时重置 provider 选择标记
+      providerAppliedRef.current = false;
     }
   }, [dirty, sourceValue]);
+
+  /** 选择 Codex provider 时自动填充 URL 与 Model。 */
+  const handleProviderChange = useCallback(
+    (providerId: string) => {
+      setSelectedProvider(providerId);
+      const preset = findCodexProviderPreset(providerId);
+      if (!preset) return;
+      setDirty(true);
+      providerAppliedRef.current = true;
+      setDraft((prev) => ({
+        ...prev,
+        url: preset.defaultBaseUrl,
+        model: prev.model || preset.defaultModel,
+      }));
+    },
+    [],
+  );
 
   const applyDraft = useCallback(() => {
     const normalized = normalizeModelProfileQuickConfig(draftRef.current);
@@ -120,6 +146,31 @@ export function ModelProfileQuickConfigFields({
           应用
         </Button>
       </div>
+      {engine === "codex" ? (
+        <div className="app-claude-model-topbar-panel__form-field app-claude-model-topbar-panel__provider-select">
+          <label className="app-claude-model-topbar-panel__label">Provider</label>
+          <Select
+            size="small"
+            value={selectedProvider}
+            placeholder="选择第三方 API 服务商…"
+            allowClear
+            showSearch
+            optionFilterProp="label"
+            onChange={(val) => {
+              if (val) {
+                handleProviderChange(String(val));
+              } else {
+                setSelectedProvider(null);
+              }
+            }}
+            options={CODEX_PROVIDER_PRESETS.map((p) => ({
+              value: p.id,
+              label: p.label,
+            }))}
+            style={{ width: "100%" }}
+          />
+        </div>
+      ) : null}
       <div className="app-claude-model-topbar-panel__quick-config-grid">
         <div className="app-claude-model-topbar-panel__form-field">
           <label className="app-claude-model-topbar-panel__label">URL</label>
