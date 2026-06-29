@@ -366,6 +366,7 @@ pub fn run() {
             git_commands::git_commit_detail,
             git_commands::git_compare_commits,
             git_commands::git_create_tag,
+            git_commands::git_push_tag,
             git_commands::git_delete_tag,
             git_commands::git_blame_file,
             git_commands::git_checkout_revision,

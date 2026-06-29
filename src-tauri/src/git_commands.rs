@@ -865,6 +865,106 @@ fn git_push_blocking(path: String) -> Result<(), String> {
     verify_head_on_remote(&repo, &verify_remote, &verify_branch, head_oid)
 }
 
+/// 推送单个 tag 到指定远端（默认 origin），适用于在 tag 创建弹窗中"创建即推送"场景。
+/// 失败时不会回滚本地 tag，由前端根据错误信息提示用户重试。
+#[tauri::command]
+pub(crate) async fn git_push_tag(
+    path: String,
+    tag_name: String,
+    remote: Option<String>,
+    force: Option<bool>,
+) -> Result<(), String> {
+    run_git_blocking("git_push_tag", move || {
+        git_push_tag_blocking(path, tag_name, remote, force.unwrap_or(false))
+    })
+    .await
+}
+
+fn git_push_tag_blocking(
+    path: String,
+    tag_name: String,
+    remote: Option<String>,
+    force: bool,
+) -> Result<(), String> {
+    let name = tag_name.trim();
+    if name.is_empty() {
+        return Err("标签名不能为空".to_string());
+    }
+    if name.contains(' ') {
+        return Err("标签名不能包含空格".to_string());
+    }
+
+    let repo = open_repo(&path)?;
+    let remote_name = remote.unwrap_or_else(|| "origin".to_string());
+
+    if repo.find_remote(&remote_name).is_err() {
+        return Err(format!("未找到远程 '{}'，请先添加远程仓库", remote_name));
+    }
+
+    repo.revparse_single(name)
+        .map_err(|_| format!("本地不存在标签 '{}'，请先创建", name))?;
+
+    let refspec = format!("refs/tags/{}", name);
+    let mut args: Vec<String> = vec!["push".to_string()];
+    if force {
+        args.push("--force".to_string());
+    }
+    args.push(remote_name.clone());
+    args.push(refspec.clone());
+    let arg_refs: Vec<&str> = args.iter().map(String::as_str).collect();
+    run_git_command(&path, &arg_refs, "Push tag")?;
+
+    let repo = open_repo(&path)?;
+    verify_tag_on_remote(&repo, &remote_name, name)
+}
+
+/// 推送 tag 后用 `git ls-remote` 二次校验远端是否真的接收到该 tag。
+/// 严格按 `git ls-remote` 的 `<oid>\t<refname>` 输出格式精确匹配第二列，
+/// 避免把同名 substring（如 `refs/tags/v1.0.0^{}` 的 peeled 形式）误判为命中。
+/// 某些托管平台（pre-receive hook 部分通过、HTTP 502 等）会让 `git push` exit 0 但实际未落盘，
+/// 这一步确保用户看到的"已推送"是有真实远端引用的。
+fn verify_tag_on_remote(
+    repo: &Repository,
+    remote_name: &str,
+    tag_name: &str,
+) -> Result<(), String> {
+    let workdir = repo
+        .workdir()
+        .ok_or_else(|| "无法定位仓库工作目录".to_string())?;
+    let refspec = format!("refs/tags/{}", tag_name);
+    let output = Command::new("git")
+        .arg("-C")
+        .arg(workdir)
+        .args(["ls-remote", "--tags", remote_name, &refspec])
+        .output()
+        .map_err(|e| format!("ls-remote 启动失败: {}", e))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!("ls-remote 失败: {}", stderr.trim()));
+    }
+
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // ls-remote 输出每行格式：`<oid>\t<refname>`，按 tab 切分后严格比较第二列
+    // 排除 peeled 形式 `refs/tags/<name>^{}` 以避免误判未推送 annotated tag 对象
+    let matched = stdout.lines().any(|line| {
+        let mut parts = line.splitn(2, '\t');
+        match (parts.next(), parts.next()) {
+            (Some(_oid), Some(rname)) => rname == refspec,
+            _ => false,
+        }
+    });
+
+    if matched {
+        Ok(())
+    } else {
+        Err(format!(
+            "推送似乎成功但远端未找到标签 '{}'，请稍后重试或检查远程权限",
+            tag_name
+        ))
+    }
+}
+
 #[tauri::command]
 pub(crate) async fn git_pull(path: String) -> Result<(), String> {
     run_git_blocking("git_pull", move || git_pull_blocking(path)).await
@@ -2406,6 +2506,166 @@ mod git_push_tests {
                 "origin".to_string(),
                 "feature/foo".to_string(),
             ]
+        );
+    }
+}
+
+#[cfg(test)]
+mod git_push_tag_tests {
+    use super::*;
+    use git2::Repository;
+    use std::process::Command;
+    use tempfile::tempdir;
+
+    fn run_git(dir: &std::path::Path, args: &[&str]) {
+        let status = Command::new("git")
+            .arg("-C")
+            .arg(dir)
+            .args(args)
+            .status()
+            .expect("git command should run");
+        assert!(status.success(), "git {:?} failed in {:?}", args, dir);
+    }
+
+    /// 建立一个本地 bare 远端 + 普通 work 仓库，并把 HEAD 推到 bare，建立 origin/main。
+    fn setup_with_bare_remote() -> (tempfile::TempDir, tempfile::TempDir) {
+        let work = tempdir().unwrap();
+        let bare = tempdir().unwrap();
+        let work_path = work.path().to_path_buf();
+        let bare_path = bare.path().to_path_buf();
+
+        Repository::init_bare(&bare_path).unwrap();
+        let repo = Repository::init(&work_path).unwrap();
+
+        run_git(&work_path, &["config", "user.email", "t@t.com"]);
+        run_git(&work_path, &["config", "user.name", "T"]);
+        run_git(&work_path, &["config", "commit.gpgsign", "false"]);
+        run_git(&work_path, &["commit", "--allow-empty", "-m", "init"]);
+
+        run_git(
+            &work_path,
+            &["remote", "add", "origin", bare_path.to_str().unwrap()],
+        );
+        // HEAD 指向 main，先推送建好 main
+        run_git(
+            &work_path,
+            &["push", "-u", "origin", "HEAD:refs/heads/main"],
+        );
+
+        drop(repo);
+        (work, bare)
+    }
+
+    #[test]
+    fn push_tag_success_to_bare_remote() {
+        let (work, _bare) = setup_with_bare_remote();
+        let work_path = work.path().to_path_buf();
+
+        // 本地创建 tag
+        run_git(&work_path, &["tag", "v1.0.0"]);
+
+        // 调用被测函数
+        git_push_tag_blocking(
+            work_path.to_string_lossy().to_string(),
+            "v1.0.0".to_string(),
+            Some("origin".to_string()),
+            false,
+        )
+        .expect("push tag should succeed");
+
+        // 远端应存在该 tag
+        let output = Command::new("git")
+            .arg("-C")
+            .arg(&work_path)
+            .args(["ls-remote", "--tags", "origin", "refs/tags/v1.0.0"])
+            .output()
+            .expect("ls-remote should run");
+        let stdout = String::from_utf8_lossy(&output.stdout);
+        assert!(
+            stdout.contains("refs/tags/v1.0.0"),
+            "expected remote tag, got: {}",
+            stdout
+        );
+    }
+
+    #[test]
+    fn push_tag_fails_when_remote_missing() {
+        let work = tempdir().unwrap();
+        let work_path = work.path().to_path_buf();
+        Repository::init(&work_path).unwrap();
+        run_git(&work_path, &["config", "user.email", "t@t.com"]);
+        run_git(&work_path, &["config", "user.name", "T"]);
+        run_git(&work_path, &["commit", "--allow-empty", "-m", "init"]);
+        run_git(&work_path, &["tag", "v0.1.0"]);
+
+        let err = git_push_tag_blocking(
+            work_path.to_string_lossy().to_string(),
+            "v0.1.0".to_string(),
+            Some("origin".to_string()),
+            false,
+        )
+        .unwrap_err();
+        assert!(
+            err.contains("未找到远程"),
+            "expected remote-not-found error, got: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn push_tag_fails_when_tag_not_local() {
+        let (work, _bare) = setup_with_bare_remote();
+        let work_path = work.path().to_path_buf();
+
+        let err = git_push_tag_blocking(
+            work_path.to_string_lossy().to_string(),
+            "v9.9.9".to_string(),
+            Some("origin".to_string()),
+            false,
+        )
+        .unwrap_err();
+        assert!(
+            err.contains("本地不存在标签"),
+            "expected missing-local error, got: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn push_tag_rejects_empty_name() {
+        let (work, _bare) = setup_with_bare_remote();
+        let work_path = work.path().to_path_buf();
+
+        let err = git_push_tag_blocking(
+            work_path.to_string_lossy().to_string(),
+            "  ".to_string(),
+            None,
+            false,
+        )
+        .unwrap_err();
+        assert!(
+            err.contains("标签名不能为空"),
+            "expected empty-name error, got: {}",
+            err
+        );
+    }
+
+    #[test]
+    fn push_tag_rejects_space_in_name() {
+        let (work, _bare) = setup_with_bare_remote();
+        let work_path = work.path().to_path_buf();
+
+        let err = git_push_tag_blocking(
+            work_path.to_string_lossy().to_string(),
+            "bad name".to_string(),
+            None,
+            false,
+        )
+        .unwrap_err();
+        assert!(
+            err.contains("标签名不能包含空格"),
+            "expected space-in-name error, got: {}",
+            err
         );
     }
 }

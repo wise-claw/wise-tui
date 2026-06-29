@@ -165,6 +165,21 @@ export async function gitCreateTag(
   });
 }
 
+/** 推送单个 tag 到指定远端（默认 origin），与 `gitCreateTag` 组合使用于"创建即推送"场景。
+ *  `force` 为 true 时使用 `--force`，可覆盖远端同名 tag；否则远端 tag 已存在会被 [rejected]。 */
+export async function gitPushTag(
+  path: string,
+  tagName: string,
+  remote: string = "origin",
+  force: boolean = false,
+): Promise<void> {
+  return promiseWithTimeout(
+    invoke<void>("git_push_tag", { path, tagName, remote, force }),
+    GIT_PUSH_TIMEOUT_MS,
+    "推送标签",
+  );
+}
+
 export async function gitDeleteTag(path: string, tagName: string): Promise<void> {
   return invoke<void>("git_delete_tag", { path, tagName });
 }

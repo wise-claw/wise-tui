@@ -1,6 +1,13 @@
 import { useEffect, useState } from "react";
-import { Input, Modal, Radio, Typography, message } from "antd";
-import { gitCreateBranch, gitCreateTag, gitReset, type GitResetMode } from "../../services/git";
+import { Checkbox, Input, Modal, Radio, Typography, message } from "antd";
+import {
+  gitCreateBranch,
+  gitCreateTag,
+  gitPushTag,
+  gitRemoteUrl,
+  gitReset,
+  type GitResetMode,
+} from "../../services/git";
 
 const { Text } = Typography;
 
@@ -173,13 +180,33 @@ export function GraphCreateTagDialog({
   const [tagName, setTagName] = useState("");
   const [tagMessage, setTagMessage] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [pushToRemote, setPushToRemote] = useState(true);
+  const [remoteAvailable, setRemoteAvailable] = useState(false);
+  const [remoteName] = useState("origin");
 
   useEffect(() => {
-    if (open) {
-      setTagName("");
-      setTagMessage("");
-    }
-  }, [open, sha]);
+    if (!open) return;
+    setTagName("");
+    setTagMessage("");
+    setSubmitting(false);
+    setPushToRemote(true);
+
+    // 探测 origin remote 是否配置：无 origin 时 Checkbox 自动降级为 disabled
+    let cancelled = false;
+    void (async () => {
+      try {
+        const url = await gitRemoteUrl(repositoryPath);
+        if (cancelled) return;
+        setRemoteAvailable(Boolean(url && url.trim().length > 0));
+      } catch {
+        if (!cancelled) setRemoteAvailable(false);
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [open, sha, repositoryPath]);
 
   return (
     <Modal
@@ -195,11 +222,31 @@ export function GraphCreateTagDialog({
           message.warning("请输入标签名");
           return Promise.reject(new Error("tag name required"));
         }
+        if (name.includes(" ")) {
+          message.warning("标签名不能包含空格");
+          return Promise.reject(new Error("tag name has space"));
+        }
         setSubmitting(true);
         try {
           await gitCreateTag(repositoryPath, sha, name, tagMessage.trim() || null);
+          if (pushToRemote && remoteAvailable) {
+            try {
+              await gitPushTag(repositoryPath, name, remoteName);
+              message.success(`标签 ${name} 已创建并推送到 ${remoteName}`);
+            } catch (pushError) {
+              const reason = String(pushError ?? "未知错误");
+              message.warning(
+                `标签 ${name} 已创建到本地，但推送到 ${remoteName} 失败：${reason}`,
+              );
+            }
+          } else {
+            message.success(`标签 ${name} 已创建`);
+          }
           onSuccess();
           onClose();
+        } catch (createError) {
+          const reason = String(createError ?? "未知错误");
+          message.error(`创建标签失败：${reason}`);
         } finally {
           setSubmitting(false);
         }
@@ -221,6 +268,15 @@ export function GraphCreateTagDialog({
           autoSize={{ minRows: 2, maxRows: 4 }}
           onChange={(event) => setTagMessage(event.target.value)}
         />
+        <Checkbox
+          checked={pushToRemote && remoteAvailable}
+          disabled={!remoteAvailable}
+          onChange={(event) => setPushToRemote(event.target.checked)}
+        >
+          {remoteAvailable
+            ? `创建后推送到远程 (${remoteName})`
+            : "当前仓库未配置远程，仅在本地创建"}
+        </Checkbox>
       </div>
     </Modal>
   );
