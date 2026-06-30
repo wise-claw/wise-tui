@@ -6,20 +6,16 @@ import type {
   ComposerSpeechSendMode,
 } from "../constants/composerSpeechPreferences";
 import { polishComposerSpeechTranscript } from "../services/composerSpeechPolish";
-import { applyLocalSpeechPolishFallback } from "../utils/composerSpeechPolish";
-import { processComposerSpeechTranscriptUpdate } from "../utils/composerSpeechTranscriptPipeline";
+import { buildSpeechInsertion } from "../utils/composerSpeechRecognition";
 import {
-  commitComposerSpeechTranscriptBaselineForSend,
-  createComposerSpeechStreamAnchor,
-  pickLongerSpeechBaseline,
-  resolveComposerSpeechDisplayText,
-  stripComposerSpeechDeltaOverlap,
-  stripSpeechCompareNoise,
-} from "../utils/composerSpeechStreaming";
+  detectComposerSpeechInterimTrigger,
+  resolveComposerSpeechSegmentAction,
+} from "../utils/composerSpeechTranscriptPipeline";
 import { useComposerSpeechDictation } from "./useComposerSpeechDictation";
 
 export interface ComposerSpeechPipelineSurface {
   getPlain: () => string;
+  getCursor?: () => number;
   setPlainAndCursor: (plain: string, cursor: number) => void;
 }
 
@@ -50,19 +46,23 @@ export function useComposerSpeechPipeline({
 }: UseComposerSpeechPipelineOptions) {
   const speechPrefsRef = useRef(speechPrefs);
   speechPrefsRef.current = speechPrefs;
+  const speechPolishProjectPathRef = useRef(speechPolishProjectPath);
+  speechPolishProjectPathRef.current = speechPolishProjectPath;
 
-  const speechStreamAnchorRef = useRef<ReturnType<typeof createComposerSpeechStreamAnchor> | null>(
-    null,
-  );
-  const speechEngineTranscriptBaselineRef = useRef("");
-  const speechEngineTranscriptBaselineRollbackRef = useRef<string | null>(null);
-  const speechBaselinePreparedForSendRef = useRef(false);
-  const lastRawSpeechTranscriptRef = useRef("");
-  const speechLastSentPlainRef = useRef("");
-  const speechIdleAutoSendTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const speechPolishSeqRef = useRef(0);
-  const suffixAutoSendFiredRef = useRef(false);
-  const [speechPolishing, setSpeechPolishing] = useState(false);
+  // 当前段实时草稿（仅预览，不入框）。
+  const interimRef = useRef("");
+  const [speechPreviewText, setSpeechPreviewText] = useState("");
+  // 后处理（整理）进行中。
+  const [speechProcessing, setSpeechProcessing] = useState(false);
+  const speechProcessingRef = useRef(false);
+  speechProcessingRef.current = speechProcessing;
+  const processingSeqRef = useRef(0);
+  const processingPromiseRef = useRef<Promise<void> | null>(null);
+
+  const silenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const autoSendNextFinalRef = useRef(false);
+  const segmentTriggerActedRef = useRef(false);
+
   const [speechKeepAliveDuringBusy, setSpeechKeepAliveDuringBusy] = useState(false);
   const speechKeepAliveDuringBusyRef = useRef(false);
   speechKeepAliveDuringBusyRef.current = speechKeepAliveDuringBusy;
@@ -74,136 +74,110 @@ export function useComposerSpeechPipeline({
   const clearComposerInputRef = useRef(clearComposerInput);
   clearComposerInputRef.current = clearComposerInput;
 
-  const clearSpeechIdleAutoSendTimer = useCallback(() => {
-    if (speechIdleAutoSendTimerRef.current != null) {
-      clearTimeout(speechIdleAutoSendTimerRef.current);
-      speechIdleAutoSendTimerRef.current = null;
+  const speechDictationRef = useRef<ReturnType<typeof useComposerSpeechDictation> | null>(null);
+
+  const clearSilenceTimer = useCallback(() => {
+    if (silenceTimerRef.current != null) {
+      clearTimeout(silenceTimerRef.current);
+      silenceTimerRef.current = null;
     }
   }, []);
 
-  useEffect(() => () => clearSpeechIdleAutoSendTimer(), [clearSpeechIdleAutoSendTimer]);
+  /** 清空当前段的跟踪状态（预览 / 计时器 / 触发标记 / 取消在途整理）。 */
+  const resetSegmentState = useCallback(() => {
+    clearSilenceTimer();
+    interimRef.current = "";
+    setSpeechPreviewText("");
+    autoSendNextFinalRef.current = false;
+    segmentTriggerActedRef.current = false;
+    processingSeqRef.current += 1; // 作废在途整理
+    processingPromiseRef.current = null;
+    setSpeechProcessing(false);
+  }, [clearSilenceTimer]);
 
-  const prepareTranscriptBaselineForSend = useCallback((sentPlain?: string) => {
-    const lastRaw = lastRawSpeechTranscriptRef.current.trim();
-    const sent = sentPlain?.trim() ?? "";
-    if (!lastRaw && !sent) return;
-
-    speechEngineTranscriptBaselineRollbackRef.current = speechEngineTranscriptBaselineRef.current;
-    speechEngineTranscriptBaselineRef.current = commitComposerSpeechTranscriptBaselineForSend(
-      speechEngineTranscriptBaselineRef.current,
-      lastRaw,
-      sent,
-    );
-    if (sent) {
-      speechLastSentPlainRef.current = sent;
-    }
-    speechBaselinePreparedForSendRef.current = true;
-  }, []);
-
-  const triggerComposerSpeechAutoSend = useCallback(() => {
-    const surface = surfaceRef.current;
-    if (!surface) return;
-    const rawPlain = surface.getPlain().trim();
-    if (!rawPlain) return;
-    const stripped = stripComposerSpeechDeltaOverlap(rawPlain, speechLastSentPlainRef.current);
-    const plain = resolveComposerSpeechDisplayText(stripped).plain;
-    if (!plain) return;
-    if (plain !== rawPlain) {
-      speechStreamAnchorRef.current = createComposerSpeechStreamAnchor("", 0);
-      surface.setPlainAndCursor(plain, plain.length);
-    }
-    prepareTranscriptBaselineForSend(plain);
-    speechStreamAnchorRef.current = createComposerSpeechStreamAnchor("", 0);
-    speechPolishSeqRef.current += 1;
-    setSpeechPolishing(false);
-    suffixAutoSendFiredRef.current = false;
-    onAutoSendRef.current(plain);
-  }, [prepareTranscriptBaselineForSend, surfaceRef]);
-
-  const scheduleSpeechIdleAutoSend = useCallback(() => {
-    if (speechPrefsRef.current.sendMode !== "silenceAutoSend") return;
-    clearSpeechIdleAutoSendTimer();
-    speechIdleAutoSendTimerRef.current = setTimeout(() => {
-      speechIdleAutoSendTimerRef.current = null;
-      if (speechPrefsRef.current.sendMode !== "silenceAutoSend") return;
-      triggerComposerSpeechAutoSend();
-    }, speechPrefsRef.current.silenceAutoSendIdleMs);
-  }, [clearSpeechIdleAutoSendTimer, triggerComposerSpeechAutoSend]);
-
-  const applySpeechUtteranceToComposer = useCallback(
-    (spokenText: string, shouldAutoSend: boolean) => {
+  const insertProcessedText = useCallback(
+    (processed: string) => {
       const surface = surfaceRef.current;
-      if (!surface) return;
-
-      const { plain, cursor } = resolveComposerSpeechDisplayText(spokenText);
-      const lastSent = speechLastSentPlainRef.current;
-      const sentCmp = stripSpeechCompareNoise(lastSent);
-      const plainCmp = stripSpeechCompareNoise(plain);
-      if (plain) {
-        if (sentCmp && plainCmp === sentCmp && !shouldAutoSend) {
-          return;
-        }
-        speechStreamAnchorRef.current = createComposerSpeechStreamAnchor("", 0);
-        surface.setPlainAndCursor(plain, cursor);
-        if (lastSent && sentCmp && !plainCmp.startsWith(sentCmp)) {
-          speechLastSentPlainRef.current = "";
-        }
-      } else if (!shouldAutoSend) {
-        return;
-      }
-
-      if (plain && speechPrefsRef.current.sendMode === "silenceAutoSend") {
-        scheduleSpeechIdleAutoSend();
-      }
-
-      if (shouldAutoSend && !suffixAutoSendFiredRef.current) {
-        suffixAutoSendFiredRef.current = true;
-        clearSpeechIdleAutoSendTimer();
-        triggerComposerSpeechAutoSend();
-      }
+      const text = processed.trim();
+      if (!surface || !text) return;
+      const plain = surface.getPlain();
+      const rawCursor = surface.getCursor?.() ?? plain.length;
+      const cursor = Math.max(0, Math.min(rawCursor, plain.length));
+      const { insertion, nextCursor } = buildSpeechInsertion(plain, cursor, text);
+      if (!insertion) return;
+      const next = plain.slice(0, cursor) + insertion + plain.slice(cursor);
+      surface.setPlainAndCursor(next, nextCursor);
     },
-    [clearSpeechIdleAutoSendTimer, scheduleSpeechIdleAutoSend, surfaceRef, triggerComposerSpeechAutoSend],
+    [surfaceRef],
   );
 
-  const executeVoiceClearComposer = useCallback(() => {
-    speechPolishSeqRef.current += 1;
-    setSpeechPolishing(false);
-    clearSpeechIdleAutoSendTimer();
-    speechStreamAnchorRef.current = createComposerSpeechStreamAnchor("", 0);
-    speechLastSentPlainRef.current = "";
-    suffixAutoSendFiredRef.current = false;
-    speechBaselinePreparedForSendRef.current = false;
-    speechEngineTranscriptBaselineRollbackRef.current = null;
-    const lastRaw = lastRawSpeechTranscriptRef.current.trim();
-    if (lastRaw) {
-      speechEngineTranscriptBaselineRef.current = pickLongerSpeechBaseline(
-        speechEngineTranscriptBaselineRef.current,
-        lastRaw,
-      );
-    }
+  const scheduleSilenceFinalize = useCallback(() => {
+    if (speechPrefsRef.current.sendMode !== "silenceAutoSend") return;
+    clearSilenceTimer();
+    silenceTimerRef.current = setTimeout(() => {
+      silenceTimerRef.current = null;
+      if (speechPrefsRef.current.sendMode !== "silenceAutoSend") return;
+      if (segmentTriggerActedRef.current) return;
+      segmentTriggerActedRef.current = true;
+      autoSendNextFinalRef.current = true;
+      speechDictationRef.current?.finalizeSegment({ continueListening: true });
+    }, speechPrefsRef.current.silenceAutoSendIdleMs);
+  }, [clearSilenceTimer]);
+
+  const handleSegmentInterim = useCallback(
+    (text: string) => {
+      interimRef.current = text;
+      setSpeechPreviewText(text);
+
+      const trimmed = text.trim();
+      if (!trimmed) return;
+
+      if (!segmentTriggerActedRef.current) {
+        const trigger = detectComposerSpeechInterimTrigger(text, speechPrefsRef.current);
+        if (trigger) {
+          // 命中收尾触发：结束当前段，由 final 统一执行 clear / cancel / send。
+          segmentTriggerActedRef.current = true;
+          clearSilenceTimer();
+          if (trigger === "send") autoSendNextFinalRef.current = true;
+          speechDictationRef.current?.finalizeSegment({ continueListening: true });
+          return;
+        }
+      }
+
+      if (speechPrefsRef.current.sendMode === "silenceAutoSend") {
+        scheduleSilenceFinalize();
+      }
+    },
+    [clearSilenceTimer, scheduleSilenceFinalize],
+  );
+
+  const executeVoiceClear = useCallback(() => {
+    resetSegmentState();
     clearComposerInputRef.current();
-  }, [clearSpeechIdleAutoSendTimer]);
+  }, [resetSegmentState]);
 
-  const speechDictationEngineRef = useRef<ComposerSpeechEngine | null>(null);
+  const handleSegmentFinal = useCallback(
+    (segmentText: string) => {
+      clearSilenceTimer();
+      interimRef.current = "";
+      setSpeechPreviewText("");
 
-  const handleSpeechTranscriptUpdate = useCallback(
-    ({ text, isFinal }: { text: string; isFinal: boolean }) => {
-      lastRawSpeechTranscriptRef.current = text;
-      const action = processComposerSpeechTranscriptUpdate({
-        engine: speechDictationEngineRef.current,
-        baseline: speechEngineTranscriptBaselineRef.current,
-        lastSentPlain: speechLastSentPlainRef.current,
-        rawTranscript: text,
-        isFinal,
+      const forceAutoSend = autoSendNextFinalRef.current;
+      autoSendNextFinalRef.current = false;
+      segmentTriggerActedRef.current = false;
+
+      const action = resolveComposerSpeechSegmentAction({
+        segmentText,
         speechPrefs: speechPrefsRef.current,
+        forceAutoSend,
       });
 
       if (action.type === "clear") {
-        executeVoiceClearComposer();
+        executeVoiceClear();
         return;
       }
       if (action.type === "cancel") {
-        clearSpeechIdleAutoSendTimer();
+        resetSegmentState();
         onCancelSessionRef.current();
         return;
       }
@@ -211,32 +185,37 @@ export function useComposerSpeechPipeline({
         return;
       }
 
-      const { spokenText, shouldAutoSend, useLlmPolish } = action;
-      if (!useLlmPolish) {
-        const normalized = applyLocalSpeechPolishFallback(spokenText) || spokenText;
-        applySpeechUtteranceToComposer(normalized, shouldAutoSend);
-        return;
-      }
-
-      const seq = ++speechPolishSeqRef.current;
-      setSpeechPolishing(true);
-      void polishComposerSpeechTranscript(speechPolishProjectPath, spokenText)
-        .then((polished) => {
-          if (seq !== speechPolishSeqRef.current) return;
-          applySpeechUtteranceToComposer(polished, shouldAutoSend);
+      const { spokenText, shouldAutoSend } = action;
+      const seq = ++processingSeqRef.current;
+      setSpeechProcessing(true);
+      // speechPolishEnabled=true → AI 整理（带本地兜底）；false → 仅本地整理（projectPath 置空即降级）。
+      const projectPath = speechPrefsRef.current.speechPolishEnabled
+        ? speechPolishProjectPathRef.current
+        : "";
+      const promise = polishComposerSpeechTranscript(projectPath, spokenText)
+        .then((processed) => {
+          if (seq !== processingSeqRef.current) return;
+          const finalText = processed.trim() || spokenText.trim();
+          if (finalText) insertProcessedText(finalText);
+          if (shouldAutoSend) {
+            const plain = surfaceRef.current?.getPlain().trim() ?? "";
+            if (plain) onAutoSendRef.current(plain);
+          }
+        })
+        .catch(() => {
+          if (seq !== processingSeqRef.current) return;
+          const fallback = spokenText.trim();
+          if (fallback) insertProcessedText(fallback);
         })
         .finally(() => {
-          if (seq === speechPolishSeqRef.current) {
-            setSpeechPolishing(false);
+          if (seq === processingSeqRef.current) {
+            setSpeechProcessing(false);
+            if (processingPromiseRef.current === promise) processingPromiseRef.current = null;
           }
         });
+      processingPromiseRef.current = promise;
     },
-    [
-      applySpeechUtteranceToComposer,
-      clearSpeechIdleAutoSendTimer,
-      executeVoiceClearComposer,
-      speechPolishProjectPath,
-    ],
+    [clearSilenceTimer, executeVoiceClear, insertProcessedText, resetSegmentState, surfaceRef],
   );
 
   const handleSpeechError = useCallback((errorMessage: string) => {
@@ -245,19 +224,9 @@ export function useComposerSpeechPipeline({
     message.warning(msg);
   }, []);
 
-  const resetSpeechTrackingState = useCallback(() => {
-    speechStreamAnchorRef.current = null;
-    speechEngineTranscriptBaselineRef.current = "";
-    speechEngineTranscriptBaselineRollbackRef.current = null;
-    speechBaselinePreparedForSendRef.current = false;
-    lastRawSpeechTranscriptRef.current = "";
-    speechLastSentPlainRef.current = "";
-    suffixAutoSendFiredRef.current = false;
+  const handleListeningEnd = useCallback(() => {
+    setSpeechKeepAliveDuringBusy(false);
   }, []);
-
-  const handleSpeechSessionEnd = useCallback(() => {
-    resetSpeechTrackingState();
-  }, [resetSpeechTrackingState]);
 
   const speechDictation = useComposerSpeechDictation({
     enabled: !isSessionBusy || speechKeepAliveDuringBusy,
@@ -266,97 +235,100 @@ export function useComposerSpeechPipeline({
       isAutoSendSpeechMode(speechPrefsRef.current.sendMode),
     speechEngineMode: speechPrefs.speechEngineMode,
     senseVoiceLang: speechPrefs.senseVoiceLang,
-    onTranscriptUpdate: handleSpeechTranscriptUpdate,
-    onSessionEnd: handleSpeechSessionEnd,
+    continueAfterSegment: () => isAutoSendSpeechMode(speechPrefsRef.current.sendMode),
+    onSegmentInterim: handleSegmentInterim,
+    onSegmentFinal: handleSegmentFinal,
+    onListeningEnd: handleListeningEnd,
     onError: handleSpeechError,
   });
+  speechDictationRef.current = speechDictation;
 
-  speechDictationEngineRef.current = speechDictation.engine;
-
-  const finalizeTranscriptBaselineAfterSend = useCallback(() => {
-    speechEngineTranscriptBaselineRollbackRef.current = null;
-  }, []);
-
-  const rollbackTranscriptBaselineOnSendFailure = useCallback(() => {
-    if (speechEngineTranscriptBaselineRollbackRef.current == null) {
-      return;
+  /**
+   * 发送前等待在途整理完成，确保输入框里是整理后的文本。
+   * 返回 true 表示确有在途整理被等待（其结果可能已插入输入框，调用方应改读刷新后的内容）。
+   */
+  const flushPendingSpeechForSend = useCallback(async (): Promise<boolean> => {
+    const pending = processingPromiseRef.current;
+    if (!pending) return false;
+    try {
+      await pending;
+    } catch {
+      /* 已在 finally 处理 */
     }
-    speechEngineTranscriptBaselineRef.current = speechEngineTranscriptBaselineRollbackRef.current;
-    speechEngineTranscriptBaselineRollbackRef.current = null;
-    speechBaselinePreparedForSendRef.current = false;
-    speechLastSentPlainRef.current = "";
+    return true;
   }, []);
 
+  /** 发送清空输入框时复位听写段状态（旧 baseline 机制已移除，仅做复位）。 */
   const onComposerInputClearedForSend = useCallback(
-    (sentPlain?: string) => {
-      speechPolishSeqRef.current += 1;
-      setSpeechPolishing(false);
-      clearSpeechIdleAutoSendTimer();
-      if (!speechBaselinePreparedForSendRef.current) {
-        prepareTranscriptBaselineForSend(sentPlain);
+    (_sentPlain?: string) => {
+      resetSegmentState();
+      // 手动模式下「边说边按发送」：当前段可能仍在采集 / 收尾且尚未整理入框；
+      // 必须丢弃它，否则其稍后整理后的文本会串入下一条消息（REQ1 跨发送泄漏）。
+      const dictation = speechDictationRef.current;
+      if (
+        dictation &&
+        !isAutoSendSpeechMode(speechPrefsRef.current.sendMode) &&
+        (dictation.listening || dictation.transcribing)
+      ) {
+        dictation.cancel();
       }
-      speechBaselinePreparedForSendRef.current = false;
-      speechStreamAnchorRef.current = createComposerSpeechStreamAnchor("", 0);
-      suffixAutoSendFiredRef.current = false;
     },
-    [clearSpeechIdleAutoSendTimer, prepareTranscriptBaselineForSend],
+    [resetSegmentState],
   );
 
-  const isBaselinePreparedForSend = useCallback(() => speechBaselinePreparedForSendRef.current, []);
+  // 以下为旧 API 兼容（baseline/anchor 已移除，保留空实现以最小化调用方改动）。
+  const finalizeTranscriptBaselineAfterSend = useCallback(() => {}, []);
+  const rollbackTranscriptBaselineOnSendFailure = useCallback(() => {}, []);
+  const resetStreamAnchor = useCallback(() => {}, []);
 
-  const resetStreamAnchor = useCallback(() => {
-    speechStreamAnchorRef.current = null;
-  }, []);
+  const clearSpeechIdleAutoSendTimer = useCallback(() => {
+    clearSilenceTimer();
+  }, [clearSilenceTimer]);
 
-  useEffect(() => {
-    if (speechPrefs.sendMode === "manual") {
-      clearSpeechIdleAutoSendTimer();
-    }
-  }, [clearSpeechIdleAutoSendTimer, speechPrefs.sendMode]);
-
+  // 进入自动发送模式且开始听写：维持 busy 期间保活，使连续对话可跨执行排队。
   const speechListeningPrevRef = useRef(false);
   useEffect(() => {
     if (speechDictation.listening && !speechListeningPrevRef.current) {
-      if (!speechKeepAliveDuringBusyRef.current) {
-        resetSpeechTrackingState();
-      }
-      clearSpeechIdleAutoSendTimer();
       if (isAutoSendSpeechMode(speechPrefsRef.current.sendMode)) {
         setSpeechKeepAliveDuringBusy(true);
       }
     }
-    if (
-      !speechDictation.listening &&
-      !speechDictation.transcribing &&
-      speechListeningPrevRef.current
-    ) {
+    if (!speechDictation.listening && !speechDictation.transcribing && speechListeningPrevRef.current) {
       setSpeechKeepAliveDuringBusy(false);
     }
     speechListeningPrevRef.current = speechDictation.listening;
-  }, [
-    clearSpeechIdleAutoSendTimer,
-    resetSpeechTrackingState,
-    speechDictation.listening,
-    speechDictation.transcribing,
-  ]);
+  }, [speechDictation.listening, speechDictation.transcribing]);
 
   useEffect(() => {
-    resetSpeechTrackingState();
-    speechDictation.stop();
+    if (speechPrefs.sendMode !== "silenceAutoSend") {
+      clearSilenceTimer();
+    }
+  }, [clearSilenceTimer, speechPrefs.sendMode]);
+
+  // 会话切换：彻底复位并停止听写（绝不把上个会话的语音带入下个会话）。
+  useEffect(() => {
+    resetSegmentState();
+    speechDictation.cancel();
     setSpeechKeepAliveDuringBusy(false);
-    clearSpeechIdleAutoSendTimer();
-  }, [sessionId, speechDictation.stop, clearSpeechIdleAutoSendTimer, resetSpeechTrackingState]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionId]);
+
+  useEffect(() => () => clearSilenceTimer(), [clearSilenceTimer]);
 
   return {
     speechDictation,
-    speechPolishing,
+    speechPreviewText,
+    speechProcessing,
+    // 兼容旧命名：mic 按钮 loading 等仍读取 speechPolishing。
+    speechPolishing: speechProcessing,
     speechKeepAliveDuringBusy,
-    prepareTranscriptBaselineForSend,
+    flushPendingSpeechForSend,
     finalizeTranscriptBaselineAfterSend,
     rollbackTranscriptBaselineOnSendFailure,
     onComposerInputClearedForSend,
-    isBaselinePreparedForSend,
     resetStreamAnchor,
     clearSpeechIdleAutoSendTimer,
   };
 }
+
+export type { ComposerSpeechEngine };
