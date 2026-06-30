@@ -5,9 +5,11 @@ import {
   applyBaselinePrepare,
   applyBaselineReset,
   applyBaselineRollback,
+  applyComposerSpeechCancelReset,
   baselineReducer,
   type BaselineRef,
 } from "./useComposerSpeechPipeline";
+import { stripClearedRawPrefix } from "../utils/composerSpeechStreaming";
 
 function makeRef(
   initial: { baseline: string; rollback: string | null; prepared: boolean } = {
@@ -218,5 +220,92 @@ describe("applyBaseline* 同步写（Bug A 修复点）", () => {
     void _ref; // 标记使用
     // 不再可触发——保留注释作为历史陷阱记录。
     expect(true).toBe(true);
+  });
+});
+
+// ---------------- Bug C 回归：cancel handler 未清 baseline / 多次 cancel 后 ASR 重启的 raw 不被剥前缀 ----------------
+//
+// 历史上 cancel handler 只调 abortPolish / clearTimer / onCancelSession，
+// baselineStateRef.baseline 和 lastRawSpeechTranscriptRef 都没动；
+// cancel session 后 ASR 引擎通常会中断重连，新一轮 cumulative 与旧 baseline
+// 不重叠也不嵌入（embedIdx === -1），extract delta 走 fallback 把整段 raw
+// 写回输入框（「清楚 取消 取消 还能干什么」被原样带回）。
+//
+// 修法：cancel handler 改成复用 clear 的 stripClearedRawPrefix 兜底机制——
+// snapshot 当前 lastRaw 到 lastClearedRawRef，并 reset baseline，下一帧入口
+// 先 stripClearedRawPrefix 剥前缀。本组单测覆盖：
+// 1) applyComposerSpeechCancelReset 纯函数契约（baseline 清零 + lastCleared 写入）
+// 2) 真实轨迹：cancel 后下一帧 raw 走 stripClearedRawPrefix 应被剥到只剩新内容
+
+describe("applyComposerSpeechCancelReset（Bug C 修复点）", () => {
+  test("reset baseline 同时 snapshot lastRaw 到 lastClearedRawRef", () => {
+    const baseRef = makeRef({ baseline: "你好 你能干什么", rollback: null, prepared: false });
+    const clearedRef: { current: string } = { current: "" };
+
+    applyComposerSpeechCancelReset(baseRef, clearedRef, "你好 你能干什么 取消");
+
+    expect(baseRef.current).toEqual({ baseline: "", rollback: null, prepared: false });
+    expect(clearedRef.current).toBe("你好 你能干什么 取消");
+  });
+
+  test("lastRaw 为空时不污染 lastClearedRawRef（保持上一轮 snapshot）", () => {
+    const baseRef = makeRef({ baseline: "旧 baseline", rollback: null, prepared: false });
+    const clearedRef: { current: string } = { current: "上轮 snapshot" };
+
+    applyComposerSpeechCancelReset(baseRef, clearedRef, "   ");
+
+    expect(baseRef.current.baseline).toBe("");
+    // 空 lastRaw 不覆盖原有的 lastClearedRawRef（避免误清 clear 的 snapshot）
+    expect(clearedRef.current).toBe("上轮 snapshot");
+  });
+
+  test("cancel 后下一帧 raw 走 stripClearedRawPrefix 剥前缀：'清除前缀新内容' → '新内容'", () => {
+    // 模拟用户场景：cancel 前 baseline="清除前缀"，lastRaw="清除前缀"
+    // cancel 触发 → cancel reset，snapshot lastRaw 到 lastClearedRawRef。
+    // 紧接着 ASR 重启推 raw="清除前缀新内容"，下一帧入口 strip prefix。
+    const baseRef = makeRef();
+    const clearedRef: { current: string } = { current: "" };
+    applyComposerSpeechCancelReset(baseRef, clearedRef, "清除前缀");
+
+    const stripped = stripClearedRawPrefix("清除前缀新内容", clearedRef.current);
+    expect(stripped).toBe("新内容");
+  });
+
+  test("Bug C 真实回归：cancel 后 ASR 推 raw 含 canceled prefix，应被 stripClearedRawPrefix 剥掉", () => {
+    // 历史上 cancel handler 不 snapshot lastRaw：
+    // baseline 仍为旧 "你好 你能干什么 取消 清空"，ASR 重启后推 raw
+    // "清楚 取消 取消 还能干什么"，与旧 baseline 不重叠不嵌入，
+    // extract delta 走 fallback → rawCmp.baseCmp 不匹配 → 整段 raw 写回输入框。
+    //
+    // 修法后 cancel reset snapshot lastRaw="清楚"（cancel 前最后一帧 ASR cumulative）
+    // 到 lastClearedRawRef，下一帧入口先 stripClearedRawPrefix 把"清楚 "剥掉，
+    // 剩下 "取消 取消 还能干什么" 进 pipeline；再走 extract delta（baseline=""），
+    // 因 stripClearedRawPrefix 后 raw 与 baseline 不重叠，应触发更彻底的处理。
+    //
+    // 这里先断言 cancel reset 完成后语义快照：
+    const baseRef = makeRef({ baseline: "你好 你能干什么 取消 清空", rollback: null, prepared: false });
+    const clearedRef: { current: string } = { current: "" };
+    applyComposerSpeechCancelReset(baseRef, clearedRef, "清楚");
+
+    // baseline 已清空 → 下一帧 delta 计算时新旧 baseline=""，extract 直接返回 raw
+    expect(baseRef.current.baseline).toBe("");
+    // lastClearedRaw 已被设置成 cancel 前的最后一帧 lastRaw
+    expect(clearedRef.current).toBe("清楚");
+
+    // 关键契约：stripClearedRawPrefix 会按"cancel 前的旧段"剥前缀，
+    // 即使用户后续 ASR 重启 cumulative 仍带旧段，也能剥出"新内容"。
+    const afterStrip = stripClearedRawPrefix("清楚 取消 取消 还能干什么", clearedRef.current);
+    expect(afterStrip).toBe("取消 取消 还能干什么");
+  });
+
+  test("Bug C: command-word-aware cancel：cancel 前的命令字也应作为 snapshot 前缀", () => {
+    // 用户场景：cancel 之前 ASR 推 "取消"（命中 cancel 命令） → cancel handler
+    // 此时 lastRaw = "...取消"。后续 ASR 帧 raw = "取消 还能干什么"，strip 后应为
+    // "还能干什么"。
+    const baseRef = makeRef({ baseline: "旧段", rollback: null, prepared: false });
+    const clearedRef: { current: string } = { current: "" };
+    applyComposerSpeechCancelReset(baseRef, clearedRef, "取消");
+
+    expect(stripClearedRawPrefix("取消 还能干什么", clearedRef.current)).toBe("还能干什么");
   });
 });

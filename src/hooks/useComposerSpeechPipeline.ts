@@ -176,6 +176,30 @@ export function applyBaselineReset(ref: BaselineRef): void {
   ref.current = { baseline: "", rollback: null, prepared: false };
 }
 
+/**
+ * cancel 重置契约：cancel session 后 ASR 引擎通常会中断重连，新一轮 cumulative
+ * 与旧 baseline 不重叠也不嵌入（embedIdx === -1），extract delta 走 fallback
+ * 把整段 raw 写回输入框（「清楚 取消 取消 还能干什么」被原样带回）。
+ *
+ * 复用 clear 的 stripClearedRawPrefix 兜底机制：
+ * - lastClearedRawRef 写入 cancel 前最后一帧 lastRaw
+ * - baselineStateRef 重置为空
+ * - 下一帧入口先 stripClearedRawPrefix，新内容前的旧段会被剥掉
+ *
+ * 为可测性抽成纯函数 + ref 助手导出，单测直接调它断言两边 ref 的写入顺序。
+ */
+export function applyComposerSpeechCancelReset(
+  baselineRef: BaselineRef,
+  lastClearedRawRef: { current: string },
+  lastRaw: string,
+): void {
+  applyBaselineReset(baselineRef);
+  const trimmed = lastRaw.trim();
+  if (trimmed) {
+    lastClearedRawRef.current = trimmed;
+  }
+}
+
 export function applyBaselineAdvance(ref: BaselineRef, raw: string): void {
   const cur = ref.current;
   const advanced = advanceBaselineIfExtendedByRaw(cur.baseline, raw);
@@ -413,6 +437,16 @@ export function useComposerSpeechPipeline({
       if (action.type === "cancel") {
         abortPolish();
         clearSpeechIdleAutoSendTimer();
+        // 根因 cancel：cancel 会中断 ASR 会话，引擎 cumulative 重启后新推 raw
+        // 与旧 baseline 不重叠又不嵌入（embedIdx === -1），extract delta 走 fallback
+        // 全量返回 raw，导致「清楚 取消 取消 还能干什么」等旧片段被原样写入输入框。
+        // 复用 clear 的兜底机制：snapshot 当前 lastRaw 到 lastClearedRawRef 并
+        // reset baseline，下一帧入口先 stripClearedRawPrefix 剥前缀。
+        applyComposerSpeechCancelReset(
+          baselineStateRef,
+          lastClearedRawRef,
+          lastRawSpeechTranscriptRef.current,
+        );
         onCancelSessionRef.current();
         return;
       }
