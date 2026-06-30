@@ -7,10 +7,12 @@ import {
   resolveCompanionDiskLoadStaggerMs,
   resolveCompanionDiskTranscriptTailLines,
   resolveCompanionMessageListWindow,
+  resolveCompanionPaneRenderDecision,
   resolveCompanionSessionMessagesMax,
   resolveGlobalMessagesBudget,
   shouldLazyMountMultiPaneExtraCells,
   shouldUseOffscreenRunningShell,
+  type CompanionPaneRenderInput,
 } from "./multiPanePerformance";
 
 describe("multiPanePerformance", () => {
@@ -57,5 +59,69 @@ describe("multiPanePerformance", () => {
 
   test("companion disk load is staggered by index", () => {
     expect(resolveCompanionDiskLoadStaggerMs(0)).toBeLessThan(resolveCompanionDiskLoadStaggerMs(3));
+  });
+});
+
+describe("resolveCompanionPaneRenderDecision", () => {
+  const base: CompanionPaneRenderInput = {
+    paneCount: 4,
+    hasSession: true,
+    isRunning: true,
+    isActivePane: false,
+    inView: true,
+    mounted: true,
+    hasQuestionRequest: false,
+  };
+
+  test("REGRESSION: visible running companion in 3+ panes keeps full chat (message list + composer)", () => {
+    // 这是用户报告的 bug：3+ 屏在屏窗格发消息后看不到消息列表与输入框。
+    const decision = resolveCompanionPaneRenderDecision(base);
+    expect(decision.useOffscreenRunningShell).toBe(false);
+    expect(decision.deferHeavySubtree).toBe(false);
+  });
+
+  test("REGRESSION: visible running companion with pending question keeps full chat (so question is answerable)", () => {
+    const decision = resolveCompanionPaneRenderDecision({ ...base, hasQuestionRequest: true });
+    expect(decision.useOffscreenRunningShell).toBe(false);
+    expect(decision.deferHeavySubtree).toBe(false);
+  });
+
+  test("offscreen running companion in 3+ panes downgrades to lightweight shell", () => {
+    const decision = resolveCompanionPaneRenderDecision({ ...base, inView: false });
+    expect(decision.useOffscreenRunningShell).toBe(true);
+    expect(decision.deferHeavySubtree).toBe(true);
+  });
+
+  test("offscreen running companion with pending question bypasses shell but still defers heavy subtree", () => {
+    const decision = resolveCompanionPaneRenderDecision({
+      ...base,
+      inView: false,
+      hasQuestionRequest: true,
+    });
+    expect(decision.useOffscreenRunningShell).toBe(false);
+    expect(decision.deferHeavySubtree).toBe(true);
+  });
+
+  test("two-pane mode never downgrades (lazy disabled)", () => {
+    const decision = resolveCompanionPaneRenderDecision({ ...base, paneCount: 2, inView: false });
+    expect(decision.useOffscreenRunningShell).toBe(false);
+    expect(decision.deferHeavySubtree).toBe(false);
+  });
+
+  test("idle companion never uses the running shell", () => {
+    const decision = resolveCompanionPaneRenderDecision({ ...base, inView: false, isRunning: false });
+    expect(decision.useOffscreenRunningShell).toBe(false);
+    expect(decision.deferHeavySubtree).toBe(false);
+  });
+
+  test("active companion pane is never downgraded even when offscreen", () => {
+    const decision = resolveCompanionPaneRenderDecision({ ...base, inView: false, isActivePane: true });
+    expect(decision.useOffscreenRunningShell).toBe(false);
+  });
+
+  test("unmounted offscreen running companion does not defer (nothing mounted yet)", () => {
+    const decision = resolveCompanionPaneRenderDecision({ ...base, inView: false, mounted: false });
+    expect(decision.useOffscreenRunningShell).toBe(true);
+    expect(decision.deferHeavySubtree).toBe(false);
   });
 });

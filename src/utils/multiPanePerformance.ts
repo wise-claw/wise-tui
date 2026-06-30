@@ -23,6 +23,50 @@ export function shouldUseOffscreenRunningShell(paneCount: number): boolean {
   return paneCount > 2;
 }
 
+export interface CompanionPaneRenderInput {
+  paneCount: PaneCount;
+  /** 窗格是否已绑定执行会话。 */
+  hasSession: boolean;
+  /** 会话处于 running / connecting（必须保持挂载）。 */
+  isRunning: boolean;
+  /** 该伴生窗格是否即为当前活动会话（一般为 false）。 */
+  isActivePane: boolean;
+  /** 窗格是否在视口内（含 rootMargin）。 */
+  inView: boolean;
+  /** 懒挂载状态机是否已挂载该窗格。 */
+  mounted: boolean;
+  /** 是否有待处理的提问请求（有则需用完整聊天回答）。 */
+  hasQuestionRequest: boolean;
+}
+
+export interface CompanionPaneRenderDecision {
+  /** 用离屏精简壳替代完整 ClaudeChat（仅离屏且运行中的窗格）。 */
+  useOffscreenRunningShell: boolean;
+  /** 推迟挂载消息列表 / 输入框等重型子树（仅离屏且运行中的窗格）。 */
+  deferHeavySubtree: boolean;
+}
+
+/**
+ * 伴生窗格渲染降级决策。核心不变量：**在视口内的窗格永远渲染完整 ClaudeChat**
+ * （消息列表 + 输入框 + 提问 dock），无论是否在运行；仅对真正离屏且仍在运行的窗格
+ * 才降级为精简壳 / 推迟重型子树。这样 6/8 屏仍能节省离屏内存，同时修复「3+ 屏在屏窗格
+ * 发消息后看不到消息列表与输入框」的问题。
+ */
+export function resolveCompanionPaneRenderDecision(
+  input: CompanionPaneRenderInput,
+): CompanionPaneRenderDecision {
+  const lazy = shouldLazyMountMultiPaneExtraCells(input.paneCount);
+  const offscreenRunning =
+    lazy && input.hasSession && input.isRunning && !input.isActivePane && !input.inView;
+  return {
+    useOffscreenRunningShell:
+      offscreenRunning &&
+      shouldUseOffscreenRunningShell(input.paneCount) &&
+      !input.hasQuestionRequest,
+    deferHeavySubtree: lazy && input.mounted && input.isRunning && !input.inView,
+  };
+}
+
 /** 伴生窗格按数量分摊全局消息预算，避免 6/8 屏时内存线性膨胀。 */
 export function resolveCompanionSessionMessagesMax(companionCount: number): number {
   if (companionCount <= 0) return IN_MEMORY_COMPANION_SESSION_MESSAGES_MAX;

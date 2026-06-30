@@ -34,8 +34,8 @@ import { isProjectRootSessionDisplayName } from "../../utils/repositoryMainSessi
 import {
   MULTI_PANE_LAZY_UNMOUNT_MS,
   resolveCompanionMessageListWindow,
+  resolveCompanionPaneRenderDecision,
   shouldLazyMountMultiPaneExtraCells,
-  shouldUseOffscreenRunningShell,
 } from "../../utils/multiPanePerformance";
 import {
   clampTwoPaneSplitRatio,
@@ -416,9 +416,6 @@ const MultiPaneExtraPaneCell = memo(
     if (inView) {
       wasEverInViewRef.current = true;
     }
-    /** 非焦点窗格在 running 时始终用精简壳，避免 IO 边界反复挂载完整 ClaudeChat。 */
-    const pinOffscreenRunningShell =
-      lazyEnabled && Boolean(paneSession) && Boolean(mustStayMounted) && !isActivePane;
     const setPaneDivRef = useCallback(
       (node: HTMLDivElement | null) => {
         if (typeof paneRef === "function") {
@@ -442,15 +439,18 @@ const MultiPaneExtraPaneCell = memo(
       return () => window.clearTimeout(timer);
     }, [inView, lazyEnabled, mustStayMounted]);
 
-    const deferHeavySubtree =
-      lazyEnabled && mounted && Boolean(mustStayMounted) && (pinOffscreenRunningShell || !inView);
+    // 关键不变量：在屏窗格永远渲染完整 ClaudeChat（消息列表 + 输入框），
+    // 仅离屏且运行中的窗格才降级为精简壳 / 推迟重型子树。
+    const { useOffscreenRunningShell, deferHeavySubtree } = resolveCompanionPaneRenderDecision({
+      paneCount,
+      hasSession: Boolean(paneSession),
+      isRunning: Boolean(mustStayMounted),
+      isActivePane,
+      inView,
+      mounted,
+      hasQuestionRequest: Boolean(offscreenDock.questionRequest),
+    });
     const hidePaneMessages = paneAuxLayout.hideMessages || deferHeavySubtree;
-    const useOffscreenRunningShell =
-      (pinOffscreenRunningShell ||
-        (lazyEnabled && !inView && Boolean(mustStayMounted))) &&
-      shouldUseOffscreenRunningShell(paneCount) &&
-      Boolean(paneSession) &&
-      !offscreenDock.questionRequest;
     const companionMessageListWindow = useMemo(
       () => resolveCompanionMessageListWindow(paneCount),
       [paneCount],
