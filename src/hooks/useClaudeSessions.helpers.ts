@@ -490,7 +490,13 @@ export function mergeRepositoryDiskSessions(
         repositoryName: shouldPreserveRepositoryDisplayName(s.repositoryName) ? s.repositoryName : repositoryName,
         model: item.modelHint ?? s.model,
         diskPreview: item.preview || s.diskPreview,
-        createdAt: Math.min(s.createdAt, item.updatedAtMs),
+        // 内存有消息：取较早时间，让 createdAt 不晚于首次出现时刻（历史正确语义）。
+        // 内存无消息（磁盘索引占位）：磁盘 mtime 才是「上次活跃」真值，
+        // 用 max 让 createdAt 与磁盘 updatedAtMs 对齐，左栏 groupSessionsByDay
+        // 才能把它分到「今天/昨天」；否则可能被 Math.min 压回「更早日期」并随机错位。
+        createdAt: s.messages.length > 0
+          ? Math.min(s.createdAt, item.updatedAtMs)
+          : Math.max(s.createdAt, item.updatedAtMs),
       };
     } else {
       copy[i] = { ...s, repositoryPath: canonicalPath };

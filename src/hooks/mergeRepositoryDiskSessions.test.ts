@@ -111,4 +111,51 @@ describe("mergeRepositoryDiskSessions", () => {
     expect(next.find((session) => session.id === "wise-tab-main")).toBeDefined();
     expect(next.find((session) => session.id === "wise-tab-main")?.messages.length).toBe(1);
   });
+
+  test("matches an existing empty session on disk and picks the newer createdAt (today bucket)", () => {
+    // 仓库来回切换：内存有一条之前创建的老会话（messages.length === 0），
+    // 磁盘 jsonl 的 updatedAtMs 是「今天」；不能被压回老 createdAt，否则
+    // groupSessionsByDay 会把它分到「过去 7 天/更久」，看起来"随机"。
+    const claudeId = "cccccccc-cccc-4000-8000-000000000001";
+    const stored: ClaudeSession = {
+      id: claudeId,
+      claudeSessionId: claudeId,
+      repositoryPath: REPO,
+      repositoryName: "eco-ai-web",
+      model: "sonnet",
+      status: "completed",
+      messages: [],
+      createdAt: 1_600_000_000_000, // 上周
+      pendingPrompt: "",
+    };
+    const disk: ClaudeDiskSessionItem[] = [
+      { sessionId: claudeId, updatedAtMs: 1_700_000_000_000, preview: "今天活跃", modelHint: "sonnet" },
+    ];
+    const next = mergeRepositoryDiskSessions([stored], REPO, "eco-ai-web", disk, "sonnet");
+    const merged = next.find((s) => s.claudeSessionId === claudeId);
+    expect(merged).toBeDefined();
+    expect(merged?.createdAt).toBe(1_700_000_000_000);
+  });
+
+  test("keeps Math.min semantics when an existing session already has messages in memory", () => {
+    // 内存有消息的真实会话：createdAt 应取较早值，不被磁盘 mtime 推后。
+    const claudeId = "cccccccc-cccc-4000-8000-000000000002";
+    const stored: ClaudeSession = {
+      id: claudeId,
+      claudeSessionId: claudeId,
+      repositoryPath: REPO,
+      repositoryName: "eco-ai-web",
+      model: "sonnet",
+      status: "completed",
+      messages: [{ id: 1, role: "user", content: "hi", parts: [{ type: "text", text: "hi" }], timestamp: 1 }],
+      createdAt: 1_600_000_000_000,
+      pendingPrompt: "",
+    };
+    const disk: ClaudeDiskSessionItem[] = [
+      { sessionId: claudeId, updatedAtMs: 1_700_000_000_000, preview: "more", modelHint: "sonnet" },
+    ];
+    const next = mergeRepositoryDiskSessions([stored], REPO, "eco-ai-web", disk, "sonnet");
+    const merged = next.find((s) => s.claudeSessionId === claudeId);
+    expect(merged?.createdAt).toBe(1_600_000_000_000);
+  });
 });
