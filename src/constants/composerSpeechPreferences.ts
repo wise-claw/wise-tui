@@ -18,7 +18,7 @@ export interface ComposerSpeechPreferencesV1 {
   silenceAutoSendIdleMs: number;
   /** 开启后会话谈话内容自动追加到当前项目/仓库的需求草稿（与需求拆分助手保存一致）。 */
   speechToRequirementEnabled: boolean;
-  /** 将 ASR 转写整理为清晰表达后再写入输入框（默认开启）。 */
+  /** 整理方式：true=AI 智能整理（带本地兜底），false=仅本地整理。无论开关如何，落到输入框的文本都已整理（绝不写入原始转写）。默认开启。 */
   speechPolishEnabled: boolean;
   /** 听写引擎策略：auto=SenseVoice 优先；sensevoice/web=显式指定（不可用时降级）。 */
   speechEngineMode: ComposerSpeechEnginePreference;

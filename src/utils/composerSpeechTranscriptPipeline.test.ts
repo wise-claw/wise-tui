@@ -1,110 +1,105 @@
 import { describe, expect, test } from "bun:test";
 import { DEFAULT_COMPOSER_SPEECH_PREFERENCES } from "../constants/composerSpeechPreferences";
 import {
-  processComposerSpeechTranscriptUpdate,
-  shouldUseLlmSpeechPolish,
+  detectComposerSpeechInterimCommand,
+  detectComposerSpeechInterimTrigger,
+  resolveComposerSpeechSegmentAction,
 } from "./composerSpeechTranscriptPipeline";
 
-describe("composerSpeechTranscriptPipeline", () => {
-  test("shouldUseLlmSpeechPolish skips short clean utterances", () => {
-    expect(shouldUseLlmSpeechPolish("今天干什么")).toBe(false);
-    expect(shouldUseLlmSpeechPolish("帮我写一个登录组件")).toBe(false);
-    expect(shouldUseLlmSpeechPolish("嗯那个帮我写个组件")).toBe(true);
+const PREFS = DEFAULT_COMPOSER_SPEECH_PREFERENCES;
+
+describe("resolveComposerSpeechSegmentAction", () => {
+  test("commits a plain segment with no auto-send by default (manual mode)", () => {
     expect(
-      shouldUseLlmSpeechPolish("请帮我重构整个项目的鉴权模块并补齐单元测试"),
-    ).toBe(true);
+      resolveComposerSpeechSegmentAction({
+        segmentText: "帮我写一个登录组件",
+        speechPrefs: PREFS,
+      }),
+    ).toEqual({ type: "commit", spokenText: "帮我写一个登录组件", shouldAutoSend: false });
   });
 
-  test("detects clear command on final raw fallback", () => {
+  test("voice 'clear' command yields clear", () => {
     expect(
-      processComposerSpeechTranscriptUpdate({
-        engine: "sensevoice",
-        baseline: "今天干什么",
-        lastSentPlain: "今天干什么",
-        rawTranscript: "清除",
-        isFinal: true,
-        speechPrefs: DEFAULT_COMPOSER_SPEECH_PREFERENCES,
-      }),
+      resolveComposerSpeechSegmentAction({ segmentText: "清除", speechPrefs: PREFS }),
     ).toEqual({ type: "clear" });
   });
 
-  test("strips sent plain and returns noop for duplicate sensevoice transcript", () => {
+  test("voice 'cancel' command yields cancel", () => {
     expect(
-      processComposerSpeechTranscriptUpdate({
-        engine: "sensevoice",
-        baseline: "",
-        lastSentPlain: "今天干什么",
-        rawTranscript: "今天干什么",
-        isFinal: true,
-        speechPrefs: DEFAULT_COMPOSER_SPEECH_PREFERENCES,
+      resolveComposerSpeechSegmentAction({ segmentText: "取消", speechPrefs: PREFS }),
+    ).toEqual({ type: "cancel" });
+  });
+
+  test("ending '发送' is stripped and marks auto-send (voice commands include send phrase)", () => {
+    expect(
+      resolveComposerSpeechSegmentAction({
+        segmentText: "写个组件发送",
+        speechPrefs: PREFS,
       }),
+    ).toEqual({ type: "commit", spokenText: "写个组件", shouldAutoSend: true });
+  });
+
+  test("forceAutoSend (silence) sends without an ending word", () => {
+    expect(
+      resolveComposerSpeechSegmentAction({
+        segmentText: "把登录逻辑改一下",
+        speechPrefs: { ...PREFS, sendMode: "silenceAutoSend" },
+        forceAutoSend: true,
+      }),
+    ).toEqual({ type: "commit", spokenText: "把登录逻辑改一下", shouldAutoSend: true });
+  });
+
+  test("endingWordAutoSend mode strips the ending word when voice commands are off", () => {
+    expect(
+      resolveComposerSpeechSegmentAction({
+        segmentText: "写个组件发送",
+        speechPrefs: {
+          ...PREFS,
+          voiceCommandsEnabled: false,
+          sendMode: "endingWordAutoSend",
+        },
+      }),
+    ).toEqual({ type: "commit", spokenText: "写个组件", shouldAutoSend: true });
+  });
+
+  test("empty segment is a noop", () => {
+    expect(
+      resolveComposerSpeechSegmentAction({ segmentText: "   ", speechPrefs: PREFS }),
     ).toEqual({ type: "noop" });
   });
 
-  test("returns apply with shouldAutoSend for ending send command", () => {
-    expect(
-      processComposerSpeechTranscriptUpdate({
-        engine: "web",
-        baseline: "",
-        lastSentPlain: "",
-        rawTranscript: "写个组件发送",
-        isFinal: true,
-        speechPrefs: DEFAULT_COMPOSER_SPEECH_PREFERENCES,
-      }),
-    ).toEqual({
-      type: "apply",
-      spokenText: "写个组件",
-      shouldAutoSend: true,
-      useLlmPolish: false,
+  test("REQ1: each segment is resolved on its OWN text only (no prior-segment carryover)", () => {
+    // The resolver has no baseline/lastSent inputs at all — a second segment cannot
+    // be contaminated by a previous one because there is no cross-segment state.
+    const first = resolveComposerSpeechSegmentAction({
+      segmentText: "第一段内容",
+      speechPrefs: PREFS,
     });
+    const second = resolveComposerSpeechSegmentAction({
+      segmentText: "第二段内容",
+      speechPrefs: PREFS,
+    });
+    expect(first).toEqual({ type: "commit", spokenText: "第一段内容", shouldAutoSend: false });
+    expect(second).toEqual({ type: "commit", spokenText: "第二段内容", shouldAutoSend: false });
+  });
+});
+
+describe("detectComposerSpeechInterimCommand / Trigger", () => {
+  test("detects clear/cancel/send commands mid-stream", () => {
+    expect(detectComposerSpeechInterimCommand("清除", PREFS)).toBe("clear");
+    expect(detectComposerSpeechInterimCommand("取消", PREFS)).toBe("cancel");
+    expect(detectComposerSpeechInterimCommand("写个组件发送", PREFS)).toBe("send");
+    expect(detectComposerSpeechInterimCommand("写个组件", PREFS)).toBeNull();
   });
 
-  test("waits for final when polish enabled and LLM needed", () => {
-    expect(
-      processComposerSpeechTranscriptUpdate({
-        engine: "web",
-        baseline: "",
-        lastSentPlain: "",
-        rawTranscript: "嗯那个写组件",
-        isFinal: false,
-        speechPrefs: { ...DEFAULT_COMPOSER_SPEECH_PREFERENCES, speechPolishEnabled: true },
-      }),
-    ).toEqual({ type: "noop" });
+  test("interim trigger also fires on ending word when voice commands are disabled", () => {
+    const prefs = { ...PREFS, voiceCommandsEnabled: false, sendMode: "endingWordAutoSend" as const };
+    expect(detectComposerSpeechInterimTrigger("写个组件发送", prefs)).toBe("send");
+    expect(detectComposerSpeechInterimTrigger("写个组件", prefs)).toBeNull();
   });
 
-  test("applies partial clean utterance without waiting for final", () => {
-    expect(
-      processComposerSpeechTranscriptUpdate({
-        engine: "web",
-        baseline: "",
-        lastSentPlain: "",
-        rawTranscript: "今天干什么",
-        isFinal: false,
-        speechPrefs: { ...DEFAULT_COMPOSER_SPEECH_PREFERENCES, speechPolishEnabled: true },
-      }),
-    ).toEqual({
-      type: "apply",
-      spokenText: "今天干什么",
-      shouldAutoSend: false,
-      useLlmPolish: false,
-    });
-  });
-
-  test("auto send on partial skips final wait even with fillers", () => {
-    expect(
-      processComposerSpeechTranscriptUpdate({
-        engine: "web",
-        baseline: "",
-        lastSentPlain: "",
-        rawTranscript: "嗯写个组件发送",
-        isFinal: false,
-        speechPrefs: { ...DEFAULT_COMPOSER_SPEECH_PREFERENCES, speechPolishEnabled: true },
-      }),
-    ).toEqual({
-      type: "apply",
-      spokenText: "嗯写个组件",
-      shouldAutoSend: true,
-      useLlmPolish: false,
-    });
+  test("no interim command when voice commands disabled and manual mode", () => {
+    const prefs = { ...PREFS, voiceCommandsEnabled: false, sendMode: "manual" as const };
+    expect(detectComposerSpeechInterimTrigger("写个组件发送", prefs)).toBeNull();
   });
 });

@@ -1,6 +1,9 @@
-/** 语音听写：转写增量解析 → 口播命令 → 写入/整理 的纯函数流水线。 */
+/** 语音听写：对「一整段」最终转写解析口播命令 / 结束词，决定提交动作（纯函数，无副作用）。
+ *
+ * 重构要点：每段语音是独立单元（一个 ASR 会话 = 一段），不再做 cumulative 基线相减。
+ * 后处理（整理）统一在下游闸口完成，这里只负责剥离命令词并判定 commit / clear / cancel。
+ */
 
-import type { ComposerSpeechEngine } from "../constants/composerSpeech";
 import type { ComposerSpeechPreferencesV1 } from "../constants/composerSpeechPreferences";
 import { splitUtteranceAtAutoSendEnding } from "./composerSpeechAutoSendEnding";
 import {
@@ -8,29 +11,28 @@ import {
   type ComposerSpeechVoiceCommandAction,
   splitUtteranceAtVoiceCommand,
 } from "./composerSpeechVoiceCommands";
-import { resolveComposerSpeechTranscriptDelta } from "./composerSpeechStreaming";
 
-export type ComposerSpeechTranscriptPipelineAction =
+export type ComposerSpeechSegmentAction =
   | { type: "noop" }
   | { type: "clear" }
   | { type: "cancel" }
-  | { type: "apply"; spokenText: string; shouldAutoSend: boolean; useLlmPolish: boolean };
+  | { type: "commit"; spokenText: string; shouldAutoSend: boolean };
 
-export interface ProcessComposerSpeechTranscriptInput {
-  engine: ComposerSpeechEngine | null;
-  baseline: string;
-  lastSentPlain: string;
-  rawTranscript: string;
-  isFinal: boolean;
-  speechPrefs: Pick<
-    ComposerSpeechPreferencesV1,
-    | "voiceCommandsEnabled"
-    | "autoSendEndingText"
-    | "voiceCommandClearText"
-    | "voiceCommandCancelText"
-    | "sendMode"
-    | "speechPolishEnabled"
-  >;
+export type ComposerSpeechSegmentPrefs = Pick<
+  ComposerSpeechPreferencesV1,
+  | "voiceCommandsEnabled"
+  | "autoSendEndingText"
+  | "voiceCommandClearText"
+  | "voiceCommandCancelText"
+  | "sendMode"
+>;
+
+export interface ResolveComposerSpeechSegmentInput {
+  /** 一整段语音的最终转写文本。 */
+  segmentText: string;
+  speechPrefs: ComposerSpeechSegmentPrefs;
+  /** 该段由静音自动发送触发：即使无结束词也强制发送。 */
+  forceAutoSend?: boolean;
 }
 
 interface ResolvedVoiceCommand {
@@ -41,7 +43,7 @@ interface ResolvedVoiceCommand {
 
 function resolveVoiceCommand(
   utterance: string,
-  prefs: ProcessComposerSpeechTranscriptInput["speechPrefs"],
+  prefs: ComposerSpeechSegmentPrefs,
 ): ResolvedVoiceCommand {
   if (prefs.voiceCommandsEnabled) {
     const commands = buildComposerSpeechVoiceCommands(prefs);
@@ -63,74 +65,53 @@ function resolveVoiceCommand(
   return { spokenText: utterance, shouldAutoSend: false, voiceAction: null };
 }
 
-function resolveSpeechVoiceCommand(
-  delta: string,
-  rawTranscriptFallback: string | undefined,
-  prefs: ProcessComposerSpeechTranscriptInput["speechPrefs"],
-): ResolvedVoiceCommand {
-  const primary = resolveVoiceCommand(delta, prefs);
-  if (primary.voiceAction || !rawTranscriptFallback?.trim()) {
-    return primary;
-  }
-  const fallback = resolveVoiceCommand(rawTranscriptFallback, prefs);
-  if (
-    fallback.voiceAction === "clear" ||
-    fallback.voiceAction === "cancel" ||
-    (fallback.voiceAction === "send" && fallback.shouldAutoSend)
-  ) {
-    return fallback;
-  }
-  return primary;
-}
-
-const SPEECH_FILLER_FOR_LLM =
-  /(?:嗯|啊|呃|额|诶|那个|就是|然后|就是说|怎么说呢|这样的话)/u;
-
-/** 短句或已足够清晰时跳过 LLM 整理，降低听写延迟。 */
-export function shouldUseLlmSpeechPolish(rawTranscript: string): boolean {
-  const text = rawTranscript.replace(/\s+/g, " ").trim();
-  if (!text) return false;
-  if (SPEECH_FILLER_FOR_LLM.test(text)) return true;
-  return text.length > 20;
-}
-
-/** 解析单次转写更新应执行的动作（不含副作用）。 */
-export function processComposerSpeechTranscriptUpdate(
-  input: ProcessComposerSpeechTranscriptInput,
-): ComposerSpeechTranscriptPipelineAction {
-  const delta = resolveComposerSpeechTranscriptDelta({
-    engine: input.engine,
-    baseline: input.baseline,
-    rawTranscript: input.rawTranscript,
-    lastSentPlain: input.lastSentPlain,
-  });
-
-  const { spokenText, shouldAutoSend, voiceAction } = resolveSpeechVoiceCommand(
-    delta,
-    input.isFinal ? input.rawTranscript : undefined,
+/** 解析一整段最终转写应执行的动作。 */
+export function resolveComposerSpeechSegmentAction(
+  input: ResolveComposerSpeechSegmentInput,
+): ComposerSpeechSegmentAction {
+  const { spokenText, shouldAutoSend, voiceAction } = resolveVoiceCommand(
+    input.segmentText,
     input.speechPrefs,
   );
 
   if (voiceAction === "clear") return { type: "clear" };
   if (voiceAction === "cancel") return { type: "cancel" };
-  if (!spokenText.trim() && !shouldAutoSend) return { type: "noop" };
 
-  const useLlmPolish =
-    input.speechPrefs.speechPolishEnabled &&
-    shouldUseLlmSpeechPolish(spokenText) &&
-    !shouldAutoSend;
+  const autoSend = Boolean(input.forceAutoSend) || shouldAutoSend;
+  const trimmed = spokenText.trim();
+  if (!trimmed && !autoSend) return { type: "noop" };
 
-  // 仅「需要 LLM 整理」且非口播发送时等待 final；清晰短句与结束词发送走本地整理，减少等 ASR 收尾延迟。
-  if (input.speechPrefs.speechPolishEnabled && !input.isFinal) {
-    if (useLlmPolish && !shouldAutoSend) {
-      return { type: "noop" };
-    }
+  return { type: "commit", spokenText: trimmed, shouldAutoSend: autoSend };
+}
+
+/**
+ * 听写过程中扫描「实时草稿」里的口播命令（清除 / 取消 / 发送），用于即时响应而无需等整段收尾。
+ * 返回命令动作或 null。
+ */
+export function detectComposerSpeechInterimCommand(
+  interimText: string,
+  prefs: ComposerSpeechSegmentPrefs,
+): ComposerSpeechVoiceCommandAction | null {
+  if (!prefs.voiceCommandsEnabled) return null;
+  const commands = buildComposerSpeechVoiceCommands(prefs);
+  if (!commands.length) return null;
+  return splitUtteranceAtVoiceCommand(interimText, commands).action;
+}
+
+/**
+ * 实时草稿中的「收尾触发」：口播命令（清除/取消/发送）或结束词自动发送。
+ * 命中后上层应立即结束当前段，由 {@link resolveComposerSpeechSegmentAction} 在 final 时统一执行，
+ * 避免实时与收尾两处重复动作。
+ */
+export function detectComposerSpeechInterimTrigger(
+  interimText: string,
+  prefs: ComposerSpeechSegmentPrefs,
+): ComposerSpeechVoiceCommandAction | null {
+  const command = detectComposerSpeechInterimCommand(interimText, prefs);
+  if (command) return command;
+  if (prefs.sendMode === "endingWordAutoSend") {
+    const split = splitUtteranceAtAutoSendEnding(interimText, prefs.autoSendEndingText);
+    if (split.shouldAutoSend) return "send";
   }
-
-  return {
-    type: "apply",
-    spokenText,
-    shouldAutoSend,
-    useLlmPolish,
-  };
+  return null;
 }

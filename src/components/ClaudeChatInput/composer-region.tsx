@@ -1050,8 +1050,10 @@ function ComposerInner({
 
   const {
     speechDictation,
+    speechPreviewText,
     speechPolishing,
     speechKeepAliveDuringBusy,
+    flushPendingSpeechForSend,
     finalizeTranscriptBaselineAfterSend,
     rollbackTranscriptBaselineOnSendFailure,
     onComposerInputClearedForSend,
@@ -1065,6 +1067,8 @@ function ComposerInner({
     surfaceRef: plainSurfaceRef,
     clearComposerInput: clearComposerInputForSpeech,
     onAutoSend: (plain) => {
+      // 必须 fire-and-forget：onAutoSend 在整理 promise 的 .then 内被调用，而 handleSend 会
+      // await flushPendingSpeechForSend()（等待同一个 promise）。改成 await 会自等死锁，勿动。
       void handleSendRef.current(plain);
     },
     onCancelSession: () => onCancelRef.current(),
@@ -1573,10 +1577,17 @@ function ComposerInner({
       if (composerSendInFlightRef.current) return;
       composerSendInFlightRef.current = true;
       try {
+      // 语音听写：发送前等待在途「整理」完成，确保发送的是整理后的文本（REQ2）。
+      // 若整理在等待期间把文本插入了输入框，则改用刷新后的权威内容（避免发送旧快照、丢失刚整理的语音）。
+      const speechFlushed = await flushPendingSpeechForSend();
+      const postFlushPlain = speechFlushed
+        ? plainSurfaceRef.current?.getPlain() ?? lastEditorPlainRef.current
+        : "";
       // 兜底：rAF race 期间 lastEditorPlainRef 可能落后于 React prompt。
       // Semi Foundation.handleSend 读的是 Tiptap doc（pending 阶段仍空），
       // 用户已经显式按 Enter，强制把 React 文本刷回权威并放行 pending 计数。
-      const reactDisplayPlain = promptToDisplayPlain(prompt);
+      // 注意：speechFlushed 时闭包里的 prompt 是整理前的旧值，不能用它回写覆盖刚插入的整理文本。
+      const reactDisplayPlain = speechFlushed ? postFlushPlain : promptToDisplayPlain(prompt);
       if (reactDisplayPlain) lastEditorPlainRef.current = reactDisplayPlain;
       pendingSetContentRef.current = 0;
       // 不在 resetting 期（resetting 期 clearComposerSurfaceSync 已持有锁）
@@ -1586,8 +1597,9 @@ function ComposerInner({
 
       clearSpeechIdleAutoSendTimer();
       debouncedPromptSyncRef.current.flush();
-      const effectivePlain =
-        plainFromEditor !== undefined
+      const effectivePlain = speechFlushed
+        ? postFlushPlain || lastEditorPlainRef.current
+        : plainFromEditor !== undefined
           ? plainFromEditor
           : lastEditorPlainRef.current || promptToDisplayPlain(prompt);
       const codeSelectionRefs = extractComposerCodeSelectionRefs(aiChatRef.current?.getEditor?.());
@@ -2110,6 +2122,7 @@ function ComposerInner({
       draftBucketKey,
       recordMissionMessage,
       clearSpeechIdleAutoSendTimer,
+      flushPendingSpeechForSend,
       onComposerInputClearedForSend,
       finalizeTranscriptBaselineAfterSend,
       onAppendSystemMessage,
@@ -2521,6 +2534,69 @@ function ComposerInner({
             overlayClassName="app-composer-voice-panel-popover"
           >
             <span className="app-claude-composer-voice-trigger-wrap">
+            {speechDictation.listening || speechDictation.transcribing || speechPolishing ? (
+              <div
+                className="app-claude-composer-voice-preview"
+                role="status"
+                aria-live="polite"
+                style={{
+                  position: "absolute",
+                  bottom: "calc(100% + 6px)",
+                  left: 0,
+                  zIndex: 20,
+                  maxWidth: 360,
+                  display: "flex",
+                  alignItems: "flex-start",
+                  gap: 6,
+                  padding: "6px 10px",
+                  borderRadius: 10,
+                  background: "var(--ant-color-bg-elevated, #1f1f1f)",
+                  border: "1px solid var(--ant-color-border, rgba(255,255,255,0.12))",
+                  boxShadow: "var(--ant-box-shadow-secondary, 0 6px 16px rgba(0,0,0,0.16))",
+                  fontSize: 12,
+                  lineHeight: 1.5,
+                  color: "var(--ant-color-text, rgba(255,255,255,0.88))",
+                  pointerEvents: "none",
+                }}
+              >
+                <span
+                  aria-hidden
+                  style={{
+                    flex: "0 0 auto",
+                    marginTop: 5,
+                    width: 6,
+                    height: 6,
+                    borderRadius: "50%",
+                    background:
+                      speechPolishing || speechDictation.transcribing
+                        ? "var(--ant-color-warning, #d89614)"
+                        : "var(--ant-color-error, #dc4446)",
+                  }}
+                />
+                <span
+                  style={{
+                    whiteSpace: "pre-wrap",
+                    wordBreak: "break-word",
+                    maxHeight: 60,
+                    overflow: "hidden",
+                  }}
+                >
+                  <span style={{ color: "var(--ant-color-text-secondary)", marginRight: 6 }}>
+                    {speechPolishing
+                      ? "整理中…"
+                      : speechDictation.transcribing
+                        ? "转写中…"
+                        : "听写中"}
+                  </span>
+                  {speechPreviewText ||
+                    (speechDictation.listening &&
+                    !speechDictation.transcribing &&
+                    !speechPolishing
+                      ? "请说话…"
+                      : "")}
+                </span>
+              </div>
+            ) : null}
             <HoverHint
               title={
                 speechDictation.transcribing
@@ -2573,10 +2649,13 @@ function ComposerInner({
                 }
                 disabled={
                   (isSessionBusy && !speechKeepAliveDuringBusy) ||
-                  speechDictation.transcribing ||
-                  speechPolishing
+                  ((speechDictation.transcribing || speechPolishing) &&
+                    !speechDictation.listening)
                 }
-                loading={speechDictation.transcribing || speechPolishing}
+                loading={
+                  (speechDictation.transcribing || speechPolishing) &&
+                  !speechDictation.listening
+                }
                 aria-pressed={speechDictation.listening}
                 aria-label={
                   speechDictation.transcribing
@@ -2735,6 +2814,7 @@ function ComposerInner({
     speechKeepAliveDuringBusy,
     speechMenuOpen,
     speechPolishing,
+    speechPreviewText,
     speechPrefs.autoSendEndingText,
     speechPrefs.sendMode,
     voiceSettingsPanel,

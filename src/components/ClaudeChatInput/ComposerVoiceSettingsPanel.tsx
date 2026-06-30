@@ -317,8 +317,11 @@ export function ComposerVoiceSettingsPanel({
               onChange={(checked) => void updateSpeechPrefs({ speechToRequirementEnabled: checked })}
             />
           </div>
-          <div className="app-composer-voice-panel__switch-row">
-            <span>转写整理</span>
+          <div
+            className="app-composer-voice-panel__switch-row"
+            title="开启：用 AI 智能整理（纠错字、去口头语、补标点，保留全部原意）后再入框；关闭：仅本地整理。语音结果始终经过整理，不会写入原始转写。"
+          >
+            <span>AI 智能整理</span>
             <Switch
               size="small"
               checked={speechPrefs.speechPolishEnabled}
