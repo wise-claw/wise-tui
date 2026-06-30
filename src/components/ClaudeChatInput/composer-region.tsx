@@ -144,7 +144,10 @@ import {
 } from "../../services/claudeSessionContext";
 import { WISE_CLAUDE_USER_SETTINGS_CHANGED } from "../../services/claudeModelProfiles";
 import { getCachedModelProfileStore } from "../../stores/modelProfileStoreCache";
-import { useBackgroundContextCompactInFlight } from "../../stores/backgroundContextCompactStore";
+import {
+  isBackgroundContextCompactInFlight,
+  useBackgroundContextCompactInFlight,
+} from "../../stores/backgroundContextCompactStore";
 import type { ModelProfileEngine } from "../../types/claudeModelProfile";
 import { resolveActiveModelProfileComposerBarLabel } from "../../utils/modelProfileDisplay";
 import { promptToLogicalPlainString } from "../../utils/serializeClaudePrompt";
@@ -2058,11 +2061,17 @@ function ComposerInner({
           timestamp: Date.now(),
           detail: dispatchTargetDetail,
         });
-        if (pendingExecutionTaskCount > 0) {
+        // 后台自动压缩进行中：主会话被 /compact turn 占用。若此时直发会被压缩 turn 阻塞
+        // （体感「点了没反应」）。改为入队——输入框立即释放、消息显示为排队中，压缩一结束
+        //（session.status 转空闲，pendingDispatchGateKey 变化触发 flush）即自动派发本条消息。
+        const queuedBehindBackgroundCompact = isBackgroundContextCompactInFlight(session.id);
+        if (pendingExecutionTaskCount > 0 || queuedBehindBackgroundCompact) {
           sendFlowNodes.push({
-            label: "按序排队",
+            label: queuedBehindBackgroundCompact ? "等待后台整理完成" : "按序排队",
             timestamp: Date.now(),
-            detail: "队列中仍有未派发任务，本消息已加入队尾，将在可派发窗口依次执行。",
+            detail: queuedBehindBackgroundCompact
+              ? "正在后台整理上下文，本消息已入队，整理完成后自动发送。"
+              : "队列中仍有未派发任务，本消息已加入队尾，将在可派发窗口依次执行。",
           });
           onTrackSendFlow?.({
             sessionId: session.id,
