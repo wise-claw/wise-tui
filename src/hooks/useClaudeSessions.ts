@@ -168,7 +168,6 @@ import { stopClaudeMainSession } from "../services/stopClaudeMainSession";
 import { publishRunningClaudeSessionIds } from "../stores/claudeRunningSessionsRegistryStore";
 import { getSystemResourceSnapshot } from "../services/systemResource";
 import {
-  buildAutoCompactSystemMessage,
   buildContextOverflowFailureHint,
   buildContextOverflowRetrySystemMessage,
   CLAUDE_COMPACT_SLASH_PROMPT,

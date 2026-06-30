@@ -364,10 +364,6 @@ export function formatContextStatusHint(
   return "";
 }
 
-export function buildAutoCompactSystemMessage(metrics: SessionContextMetrics): string {
-  return composeCompactNoticeTokens(metrics, "auto-before-send").sysmsg;
-}
-
 /** 先发后压：告知用户本轮消息照常发送，turn 收尾后转后台压缩。 */
 export function buildAutoCompactAfterSendSystemMessage(metrics: SessionContextMetrics): string {
   return composeCompactNoticeTokens(metrics, "auto-after-send").sysmsg;

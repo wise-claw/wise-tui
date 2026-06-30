@@ -754,11 +754,16 @@ function ComposerInner({
           if (actual) lastEditorPlainRef.current = actual;
           onAfterSet?.();
           pendingSetContentRef.current = Math.max(0, pendingSetContentRef.current - 1);
+          // setContent 完成后兜底算一次 canSend：Tiptap 的 onContentChange 可能在 pending 期间
+          // 已被 applySemiContentChange 的 skip 节流分支（skipContentSyncRemainingRef>0 且 plain===lastEditor）
+          // 吞掉，导致 React 端 canSend 永远不翻转。"粘贴后按钮一直灰"就是这条路径。
+          // pendingSetContentRef 已在上一行归零，syncCanSendComposer 不会再被钉 false 短路。
+          syncCanSendComposer(actual);
         },
         { isEditorFocused: () => isProseMirrorFocused(shellRef.current) },
       );
     },
-    [],
+    [syncCanSendComposer],
   );
 
   plainSurfaceRef.current = {

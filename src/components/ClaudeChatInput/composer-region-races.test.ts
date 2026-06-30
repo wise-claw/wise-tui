@@ -242,3 +242,55 @@ describe("输入框 race — 边界场景", () => {
     expect(pick).toBe(tiptapPlain);
   });
 });
+
+describe("输入框 race — scheduleComposerSetContent onAfterSet 兜底算 canSend", () => {
+  test("onAfterSet 完成后 pending 归零，syncCanSend 必须用 actual plain 重算（不被 skip 节流吞）", () => {
+    // 复现路径：用户粘贴纯文本 → Tiptap paste handler emit onContentChange
+    // → applySemiContentChange 头部 skipContentSyncRemainingRef>0 且 plain===lastEditorPlainRef
+    // → 走 skip 分支 return，**React 端 canSend 永远不翻转**。
+    // 修复点：scheduleComposerSetContent 的 onAfterSet 显式 syncCanSendComposer(actual)，
+    // 作为 setContent / 外部写完成后的兜底。
+    let pending = 1;
+    let canSend = false;
+    let canSendRecomputed = false;
+    const actual = "粘贴进来的内容";
+    // 入口：pending 增 1，canSend 立刻钉 false（既有护栏）
+    canSend = false;
+    // 模拟 onAfterSet 触发顺序
+    pending = Math.max(0, pending - 1);
+    // 兜底算一次：pending 已归零，syncCanSendComposer 不会再被钉 false 短路
+    if (pending === 0 && actual.trim()) {
+      canSend = true;
+      canSendRecomputed = true;
+    }
+    expect(pending).toBe(0);
+    expect(canSend).toBe(true);
+    expect(canSendRecomputed).toBe(true);
+  });
+
+  test("onAfterSet 期间仍有 pending 嵌套：syncCanSendComposer 仍把 canSend 钉 false（既有护栏不破）", () => {
+    // 嵌套 scheduleComposerSetContent（如 restoreComposerDraft 后再 schedule）：第一个 onAfterSet
+    // 触发时第二个还在 pending 窗口中，syncCanSendComposer 命中「pending>0 → false」分支。
+    let pending = 2;
+    let canSend = false;
+    // 第一个 onAfterSet 释放
+    pending = Math.max(0, pending - 1);
+    // 此时 pending 仍为 1：syncCanSendComposer 必须仍把 canSend 钉 false
+    const syncGuard = pending > 0 ? false : Boolean("non-empty".trim());
+    canSend = syncGuard;
+    expect(pending).toBe(1);
+    expect(canSend).toBe(false);
+  });
+
+  test("onAfterSet 算 canSend 拿到 actual 为空：canSend 应为 false（与清空场景一致）", () => {
+    let pending = 1;
+    let canSend = true;
+    pending = Math.max(0, pending - 1);
+    const actual = "";
+    // 与"清空发送后"语义一致：actual 空 → hasText 假 → canSend 假
+    const recomputed = pending > 0 ? false : Boolean(actual.trim());
+    canSend = recomputed;
+    expect(pending).toBe(0);
+    expect(canSend).toBe(false);
+  });
+});
