@@ -51,6 +51,27 @@ function isAutoSendSpeechMode(mode: ComposerSpeechSendMode): boolean {
 }
 
 /**
+ * keepAlive 自动关闭契约：listening/transcribing 都被引擎翻 false 时，是否应
+ * 同步关闭 `speechKeepAliveDuringBusy`。
+ *
+ * 历史行为（BAD）：无条件关 keepAlive，导致 `enabled = !isSessionBusy || false`。
+ * Sherpa streaming finalize 完成时 listening/transcribing 几乎同时翻 false
+ * （仍处于 isSessionBusy=true 阶段），keepAlive 被翻 false 后 enabled=false
+ * → 引擎 stop → 用户感受「会话执行完语音会自动关闭」(Bug D)。
+ *
+ * 修法：仅当 `!isSessionBusy`（会话不在忙）时才关闭 keepAlive。
+ * - busy=true：引擎 finalize race，不关 keepAlive，麦克风继续工作。
+ * - busy=false：listening 翻 false 大概率是用户主动 toggle off，允许关 keepAlive。
+ *
+ * 函数保留为导出供单测覆盖「Bug D 不再自动关麦」契约。
+ */
+export function shouldCloseSpeechKeepAliveOnListeningEnd(
+  isSessionBusy: boolean,
+): boolean {
+  return !isSessionBusy;
+}
+
+/**
  * 双阶段 polish 阶段 2 覆盖短路：LLM resolve 后覆盖前判断是否应跳过 setPlainAndCursor。
  *
  * - `currentSurfacePlain` = 阶段 1 写完后用户实际在屏幕上看到的输入框文本（可能含用户手改）
@@ -620,11 +641,18 @@ export function useComposerSpeechPipeline({
       !speechDictation.transcribing &&
       speechListeningPrevRef.current
     ) {
-      setSpeechKeepAliveDuringBusy(false);
+      // Bug D 修复点：listening/transcribing 被引擎 finalize 翻 false 时
+      // 区分「用户主动 toggle off」与「Sherpa streaming finalize race」。
+      // 仅当会话不在忙（busy=false）才关闭 keepAlive；busy=true 时引擎
+      // finalize 是 race，不关 keepAlive，让麦克风在会话执行期间继续工作。
+      if (shouldCloseSpeechKeepAliveOnListeningEnd(isSessionBusy)) {
+        setSpeechKeepAliveDuringBusy(false);
+      }
     }
     speechListeningPrevRef.current = speechDictation.listening;
   }, [
     clearSpeechIdleAutoSendTimer,
+    isSessionBusy,
     resetSpeechTrackingState,
     speechDictation.listening,
     speechDictation.transcribing,
