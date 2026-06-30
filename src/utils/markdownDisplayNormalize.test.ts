@@ -39,6 +39,44 @@ describe("normalizeInlineMarkdownStructures", () => {
     expect(out).toContain("## 现状下能做什么");
     expect(out).toContain("## 如果想接入 Exa");
   });
+
+  test("splits heading-into-emphasis inline so heading body stays separate", () => {
+    const raw = "## 一、项目定位 **Wise 是一款基于 Tauri 2 的桌面 AI 研发工作台**，以 Claude Code 为底座";
+    const out = normalizeInlineMarkdownStructures(raw);
+    const lines = out.split("\n");
+    expect(lines[0]).toBe("## 一、项目定位");
+    expect(lines[1]).toBe("");
+    expect(lines[2]).toBe("**Wise 是一款基于 Tauri 2 的桌面 AI 研发工作台**，以 Claude Code 为底座");
+  });
+
+  test("splits heading underline-style emphasis trailing chunk", () => {
+    const raw = "### 关键能力 __亮点__ 一段说明文字";
+    const out = normalizeInlineMarkdownStructures(raw);
+    expect(out).toMatch(/^### 关键能力\s*$/m);
+    expect(out).toMatch(/\n\n__亮点__/);
+  });
+
+  test("does not split headings when emphasis is inside backticks", () => {
+    const raw = "## 标题 `**不会拆**` 继续正文";
+    const out = normalizeInlineMarkdownStructures(raw);
+    expect(out).toBe(raw);
+  });
+
+  test("does not split a heading with no trailing emphasis", () => {
+    const raw = "## 仅有一句话的标题";
+    const out = normalizeInlineMarkdownStructures(raw);
+    expect(out).toBe(raw);
+  });
+
+  test("renders heading + emphasis as h2 + paragraph after split", async () => {
+    const { marked } = await import("marked");
+    marked.use({ gfm: true, breaks: true });
+    const raw = "## 一、项目定位 **Wise 是一款基于 Tauri 2 的桌面 AI 研发工作台**，以 Claude Code 为底座";
+    const normalized = normalizeMarkdownForDisplay(raw);
+    const html = String(marked.parse(normalized, { gfm: true, breaks: true }));
+    expect(html).toMatch(/<h2[^>]*>一、项目定位<\/h2>/);
+    expect(html).toMatch(/<p><strong>Wise 是一款基于 Tauri 2 的桌面 AI 研发工作台<\/strong>/);
+  });
 });
 
 describe("normalizePipeTables", () => {

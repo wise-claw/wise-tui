@@ -128,6 +128,102 @@ function breakInlineMarkdownHeadings(text: string): string {
   return text.replace(/([^\n#])(#{1,6}\s)/g, "$1\n\n$2");
 }
 
+/**
+ * 行内 `# 标题 **重点内容** 后续正文` 后段会被 marked 整体吞进 `<h2>`，
+ * 这里按行扫描，若标题行内出现 `**` / `__` 等块级段落标记，则在首个标记处拆分。
+ * 保守实现：只处理单行、未被反引号包裹的强调 token，标题文字为空时不拆。
+ */
+function breakTrailingInlineAfterHeadings(text: string): string {
+  const lines = text.split("\n");
+  const out: string[] = [];
+  const headingRe = /^(#{1,6})\s+(.*)$/;
+
+  // 标识 rest 中每个 index 是否落在 inline code span `` `...` `` 或被 `\\` 转义的位置上。
+  function buildMask(rest: string): boolean[] {
+    const mask = new Array(rest.length).fill(false);
+    let i = 0;
+    while (i < rest.length) {
+      const ch = rest[i]!;
+      if (ch === "\\" && i + 1 < rest.length) {
+        mask[i] = true;
+        mask[i + 1] = true;
+        i += 2;
+        continue;
+      }
+      if (ch === "`") {
+        const close = rest.indexOf("`", i + 1);
+        const end = close === -1 ? rest.length : close + 1;
+        for (let j = i; j < end; j++) mask[j] = true;
+        i = end;
+        continue;
+      }
+      i += 1;
+    }
+    return mask;
+  }
+
+  // 在 rest 中查找第一个未被 mask 标记、且后续字符能闭合的强调 token 起首。
+  function firstEmphasisStart(rest: string, mask: boolean[]): number {
+    for (let i = 0; i < rest.length - 1; i++) {
+      if (mask[i]) continue;
+      const ch = rest[i]!;
+      const next = rest[i + 1]!;
+      if (ch === "*" && next === "*") {
+        const close = rest.indexOf("**", i + 2);
+        if (close !== -1 && !mask[close]) return i;
+        i += 1;
+        continue;
+      }
+      if (ch === "_" && next === "_") {
+        const close = rest.indexOf("__", i + 2);
+        if (close !== -1 && !mask[close]) return i;
+        i += 1;
+        continue;
+      }
+    }
+    return -1;
+  }
+
+  for (const line of lines) {
+    const match = headingRe.exec(line);
+    if (!match) {
+      out.push(line);
+      continue;
+    }
+    const hashes = match[1] ?? "";
+    const rest = match[2] ?? "";
+    if (!rest.trim()) {
+      out.push(line);
+      continue;
+    }
+
+    const mask = buildMask(rest);
+    const splitAt = firstEmphasisStart(rest, mask);
+    if (splitAt === -1) {
+      out.push(line);
+      continue;
+    }
+
+    const titleText = rest.slice(0, splitAt).trimEnd();
+    if (!titleText) {
+      out.push(line);
+      continue;
+    }
+    const tail = rest.slice(splitAt);
+    if (!tail.trim()) {
+      out.push(line);
+      continue;
+    }
+
+    const head = `${hashes} ${titleText}`.trimEnd();
+    out.push(head);
+    out.push("");
+    out.push(tail);
+  }
+
+  return out.join("\n");
+}
+
 function breakInlineCodeFences(text: string): string {
   let s = text.replace(/([^\n`])(```[a-z]*)/gi, "$1\n\n$2");
   s = s.replace(/(```)\s+([^\n`])/g, "$1\n\n$2");
@@ -159,6 +255,7 @@ function splitTrailingContentAfterTableRow(line: string): string {
 /** Claude 助手消息：拆行内标题、表格、代码围栏后再解析。 */
 export function normalizeInlineMarkdownStructures(text: string): string {
   let s = breakInlineMarkdownHeadings(text);
+  s = breakTrailingInlineAfterHeadings(s);
   s = breakInlineCodeFences(s);
   return s
     .split("\n")
