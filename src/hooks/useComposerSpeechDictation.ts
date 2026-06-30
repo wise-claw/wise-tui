@@ -99,6 +99,14 @@ export function useComposerSpeechDictation({
   const webSegmentTextRef = useRef("");
   const webContinueRef = useRef(false);
 
+  // 电平采集：两路共用一个 ref，UI 通过 subscribeAudioLevel 订阅（避免组件高频重渲染）。
+  // SenseVoice 路径由 ComposerAudioRecorder 直接写；Web Speech 路径由 hook 自己起轻量 AnalyserNode。
+  const audioLevelRef = useRef<number>(0);
+  const webLevelStreamRef = useRef<MediaStream | null>(null);
+  const webLevelContextRef = useRef<AudioContext | null>(null);
+  const webLevelAnalyserRef = useRef<AnalyserNode | null>(null);
+  const webLevelRafRef = useRef<number | null>(null);
+
   const lastInterimRef = useRef("");
 
   const onSegmentInterimRef = useRef(onSegmentInterim);
@@ -118,6 +126,108 @@ export function useComposerSpeechDictation({
   langRef.current = lang;
   const senseVoiceLangRef = useRef(senseVoiceLang);
   senseVoiceLangRef.current = senseVoiceLang;
+
+  // ---- 电平订阅 ----
+  // 波形组件订阅本 ref 的最新值，避免每帧 setState。
+  const audioLevelSinkRef = useRef<((level: number) => void) | null>(null);
+  const setAudioLevelSink = useCallback((sink: ((level: number) => void) | null) => {
+    audioLevelSinkRef.current = sink;
+    if (sink) {
+      // 立即推送当前值，避免首帧空白
+      sink(audioLevelRef.current);
+    }
+  }, []);
+
+  const stopWebLevelMeter = useCallback(() => {
+    if (webLevelRafRef.current != null) {
+      cancelAnimationFrame(webLevelRafRef.current);
+      webLevelRafRef.current = null;
+    }
+    if (webLevelAnalyserRef.current) {
+      try {
+        webLevelAnalyserRef.current.disconnect();
+      } catch {
+        /* ignore */
+      }
+      webLevelAnalyserRef.current = null;
+    }
+    if (webLevelStreamRef.current) {
+      for (const track of webLevelStreamRef.current.getTracks()) {
+        try {
+          track.stop();
+        } catch {
+          /* ignore */
+        }
+      }
+      webLevelStreamRef.current = null;
+    }
+    if (webLevelContextRef.current) {
+      void webLevelContextRef.current.close().catch(() => undefined);
+      webLevelContextRef.current = null;
+    }
+    audioLevelRef.current = 0;
+    audioLevelSinkRef.current?.(0);
+  }, []);
+
+  const startWebLevelMeter = useCallback(async () => {
+    if (webLevelStreamRef.current) return;
+    const mediaDevices = navigator.mediaDevices;
+    if (!mediaDevices?.getUserMedia) return;
+    try {
+      const stream = await mediaDevices.getUserMedia({
+        audio: {
+          channelCount: 1,
+          echoCancellation: true,
+          noiseSuppression: true,
+        },
+      });
+      // hook 在 openWebSegment 期间可能要 teardownAll，竞态防护：若此时已不再需要，关闭流。
+      if (!wantListeningRef.current || engineRef.current !== "web") {
+        for (const track of stream.getTracks()) {
+          try {
+            track.stop();
+          } catch {
+            /* ignore */
+          }
+        }
+        return;
+      }
+      const Ctx = window.AudioContext ?? (window as unknown as { webkitAudioContext?: typeof AudioContext }).webkitAudioContext;
+      if (!Ctx) return;
+      webLevelStreamRef.current = stream;
+      const ctx = new Ctx();
+      webLevelContextRef.current = ctx;
+      const source = ctx.createMediaStreamSource(stream);
+      const analyser = ctx.createAnalyser();
+      analyser.fftSize = 1024;
+      analyser.smoothingTimeConstant = 0.6;
+      source.connect(analyser);
+      webLevelAnalyserRef.current = analyser;
+      const buf = new Float32Array(analyser.fftSize);
+      const tick = () => {
+        const analyserRef = webLevelAnalyserRef.current;
+        if (!analyserRef) return;
+        analyserRef.getFloatTimeDomainData(buf);
+        let sumSquares = 0;
+        for (let i = 0; i < buf.length; i += 1) {
+          const v = buf[i] ?? 0;
+          sumSquares += v * v;
+        }
+        const rms = Math.sqrt(sumSquares / buf.length);
+        let level = 0;
+        if (Number.isFinite(rms) && rms > 0) {
+          const scaled = Math.min(1, rms * 6);
+          level = scaled < 0.02 ? 0 : scaled;
+        }
+        audioLevelRef.current = level;
+        audioLevelSinkRef.current?.(level);
+        webLevelRafRef.current = requestAnimationFrame(tick);
+      };
+      webLevelRafRef.current = requestAnimationFrame(tick);
+    } catch {
+      // 麦权限失败/无设备：交给 SpeechRecognition 的 onerror 报
+    }
+  }, []);
 
   const emitInterim = useCallback((text: string) => {
     if (text === lastInterimRef.current) return;
@@ -221,6 +331,8 @@ export function useComposerSpeechDictation({
       } catch {
         /* ignore */
       }
+      // abort 不会触发 onend，必须显式关 meter
+      stopWebLevelMeter();
     } else {
       try {
         rec.stop();
@@ -230,9 +342,10 @@ export function useComposerSpeechDictation({
         } catch {
           /* ignore */
         }
+        stopWebLevelMeter();
       }
     }
-  }, []);
+  }, [stopWebLevelMeter]);
 
   /** 彻底停止并丢弃所有进行中的捕获状态（不发 final）。 */
   const teardownAll = useCallback(() => {
@@ -248,11 +361,12 @@ export function useComposerSpeechDictation({
     if (finalizing) void cancelComposerSherpaStreamingSpeech(finalizing).catch(() => undefined);
     teardownSenseVoiceRecorder();
     stopWebRecognition(true);
+    stopWebLevelMeter();
     webSegmentTextRef.current = "";
     lastInterimRef.current = "";
     setListening(false);
     setTranscribing(false);
-  }, [stopWebRecognition, teardownSenseVoiceRecorder]);
+  }, [stopWebLevelMeter, stopWebRecognition, teardownSenseVoiceRecorder]);
 
   // ---- SenseVoice 段生命周期 ----
   const openSenseVoiceSegment = useCallback(async () => {
@@ -281,6 +395,10 @@ export function useComposerSpeechDictation({
             if (captureRate > 0) captureSampleRateRef.current = captureRate;
             pcmPendingRef.current.push(chunk);
             schedulePcmFlush();
+          },
+          onAudioLevel: (level) => {
+            audioLevelRef.current = level;
+            audioLevelSinkRef.current?.(level);
           },
         });
         // getUserMedia 期间可能已被 teardown（会话切换 / 取消 / 卸载）：teardown 在 stream 尚为 null 时
@@ -369,6 +487,7 @@ export function useComposerSpeechDictation({
       emitInterim("");
       setTranscribing(false);
       setListening(true);
+      void startWebLevelMeter();
     };
     recognition.onresult = (event) => {
       const { text } = collectLiveSpeechTranscript(event);
@@ -386,6 +505,7 @@ export function useComposerSpeechDictation({
       ) {
         wantListeningRef.current = false;
         webContinueRef.current = false;
+        stopWebLevelMeter();
         if (event.error === "not-allowed" || event.error === "service-not-allowed") {
           void openComposerMicrophonePrivacySettings();
         }
@@ -405,6 +525,7 @@ export function useComposerSpeechDictation({
       } else {
         wantListeningRef.current = false;
         setListening(false);
+        stopWebLevelMeter();
         onListeningEndRef.current?.();
       }
     };
@@ -571,5 +692,11 @@ export function useComposerSpeechDictation({
     cancel,
     toggle,
     finalizeSegment,
+    /**
+     * 订阅/取消订阅实时电平（0..1）。
+     * 回调以 ref.current 形式被调用方缓存，组件无需高频重渲染；
+     * meter 通过本接口注册，并在卸载时传 null 解除。
+     */
+    setAudioLevelSink,
   };
 }

@@ -93,7 +93,12 @@ import { useContextBreakdown } from "../../hooks/useContextBreakdown";
 import { ComposerVoiceSettingsPanel } from "./ComposerVoiceSettingsPanel";
 import { ComposerRuntimeSettingsTrigger } from "./ComposerRuntimeSettingsTrigger";
 import { ComposerModelPicker } from "./ComposerModelPicker";
+import {
+  ComposerVoiceDictationBubble,
+  type ComposerVoiceBubblePhase,
+} from "./ComposerVoiceDictationBubble";
 import { useDefaultClaudeConnectionKind } from "../../hooks/useDefaultClaudeConnectionKind";
+import { useComposerSpeechLevelMeter } from "../../hooks/useComposerSpeechLevelMeter";
 import { useComposerSpeechPipeline } from "../../hooks/useComposerSpeechPipeline";
 import { useComposerSpeechPreferences } from "../../hooks/useComposerSpeechPreferences";
 import {
@@ -1077,6 +1082,16 @@ function ComposerInner({
     onCancelSession: () => onCancelRef.current(),
   });
 
+  const voiceLevelRef = useComposerSpeechLevelMeter(speechDictation.setAudioLevelSink ?? null);
+
+  const voiceBubblePhase: ComposerVoiceBubblePhase = speechPolishing
+    ? "polishing"
+    : speechDictation.transcribing
+      ? "transcribing"
+      : speechDictation.listening
+        ? "listening"
+        : "idle";
+
   const [sherpaSpeechCaps, setSherpaSpeechCaps] = useState<ComposerSherpaSpeechCapabilities | null>(
     null,
   );
@@ -1137,8 +1152,14 @@ function ComposerInner({
   const [draftSilenceIdleSeconds, setDraftSilenceIdleSeconds] = useState(
     speechPrefs.silenceAutoSendIdleMs / 1000,
   );
+  const [draftManualSegmentIdleSeconds, setDraftManualSegmentIdleSeconds] = useState(
+    speechPrefs.manualSegmentIdleMs / 1000,
+  );
   const silenceIdleSecondsLabel = formatSilenceAutoSendIdleSeconds(
     speechPrefs.silenceAutoSendIdleMs,
+  );
+  const manualSegmentIdleSecondsLabel = formatSilenceAutoSendIdleSeconds(
+    speechPrefs.manualSegmentIdleMs,
   );
 
   useEffect(() => {
@@ -1147,6 +1168,7 @@ function ComposerInner({
       setDraftVoiceCommandClearText(speechPrefs.voiceCommandClearText);
       setDraftVoiceCommandCancelText(speechPrefs.voiceCommandCancelText);
       setDraftSilenceIdleSeconds(speechPrefs.silenceAutoSendIdleMs / 1000);
+      setDraftManualSegmentIdleSeconds(speechPrefs.manualSegmentIdleMs / 1000);
     }
   }, [
     speechMenuOpen,
@@ -1154,6 +1176,7 @@ function ComposerInner({
     speechPrefs.voiceCommandCancelText,
     speechPrefs.voiceCommandClearText,
     speechPrefs.silenceAutoSendIdleMs,
+    speechPrefs.manualSegmentIdleMs,
   ]);
 
   const handleDownloadSherpaModels = useCallback(() => {
@@ -1198,6 +1221,8 @@ function ComposerInner({
         updateSpeechPrefs={updateSpeechPrefs}
         draftSilenceIdleSeconds={draftSilenceIdleSeconds}
         setDraftSilenceIdleSeconds={setDraftSilenceIdleSeconds}
+        draftManualSegmentIdleSeconds={draftManualSegmentIdleSeconds}
+        setDraftManualSegmentIdleSeconds={setDraftManualSegmentIdleSeconds}
         draftAutoSendEndingText={draftAutoSendEndingText}
         setDraftAutoSendEndingText={setDraftAutoSendEndingText}
         draftVoiceCommandClearText={draftVoiceCommandClearText}
@@ -1216,6 +1241,7 @@ function ComposerInner({
     [
       draftAutoSendEndingText,
       draftSilenceIdleSeconds,
+      draftManualSegmentIdleSeconds,
       draftVoiceCommandCancelText,
       draftVoiceCommandClearText,
       handleCancelSherpaDownload,
@@ -2543,68 +2569,26 @@ function ComposerInner({
             overlayClassName="app-composer-voice-panel-popover"
           >
             <span className="app-claude-composer-voice-trigger-wrap">
-            {speechDictation.listening || speechDictation.transcribing || speechPolishing ? (
-              <div
-                className="app-claude-composer-voice-preview"
-                role="status"
-                aria-live="polite"
-                style={{
-                  position: "absolute",
-                  bottom: "calc(100% + 6px)",
-                  left: 0,
-                  zIndex: 20,
-                  maxWidth: 360,
-                  display: "flex",
-                  alignItems: "flex-start",
-                  gap: 6,
-                  padding: "6px 10px",
-                  borderRadius: 10,
-                  background: "var(--ant-color-bg-elevated, #1f1f1f)",
-                  border: "1px solid var(--ant-color-border, rgba(255,255,255,0.12))",
-                  boxShadow: "var(--ant-box-shadow-secondary, 0 6px 16px rgba(0,0,0,0.16))",
-                  fontSize: 12,
-                  lineHeight: 1.5,
-                  color: "var(--ant-color-text, rgba(255,255,255,0.88))",
-                  pointerEvents: "none",
+            {voiceBubblePhase !== "idle" ? (
+              <ComposerVoiceDictationBubble
+                phase={voiceBubblePhase}
+                levelRef={voiceLevelRef}
+                previewText={speechPreviewText}
+                onCancel={() => speechDictation.cancel()}
+                onFinalizeNow={() => {
+                  // manual 模式：直接停 + finalize 当前段（保留 listening=false）。
+                  // silenceAutoSend/endingWordAutoSend 模式：等价于 toggle 的"按一下停"，不影响后续自动发送节奏。
+                  if (speechPrefs.sendMode === "manual") {
+                    speechDictation.finalizeSegment({ continueListening: false });
+                  } else {
+                    speechDictation.stop();
+                  }
                 }}
-              >
-                <span
-                  aria-hidden
-                  style={{
-                    flex: "0 0 auto",
-                    marginTop: 5,
-                    width: 6,
-                    height: 6,
-                    borderRadius: "50%",
-                    background:
-                      speechPolishing || speechDictation.transcribing
-                        ? "var(--ant-color-warning, #d89614)"
-                        : "var(--ant-color-error, #dc4446)",
-                  }}
-                />
-                <span
-                  style={{
-                    whiteSpace: "pre-wrap",
-                    wordBreak: "break-word",
-                    maxHeight: 60,
-                    overflow: "hidden",
-                  }}
-                >
-                  <span style={{ color: "var(--ant-color-text-secondary)", marginRight: 6 }}>
-                    {speechPolishing
-                      ? "整理中…"
-                      : speechDictation.transcribing
-                        ? "转写中…"
-                        : "听写中"}
-                  </span>
-                  {speechPreviewText ||
-                    (speechDictation.listening &&
-                    !speechDictation.transcribing &&
-                    !speechPolishing
-                      ? "请说话…"
-                      : "")}
-                </span>
-              </div>
+                manualSegmentIdleMs={speechPrefs.manualSegmentIdleMs}
+                onManualSegmentIdleChange={(ms) => {
+                  void updateSpeechPrefs({ manualSegmentIdleMs: ms });
+                }}
+              />
             ) : null}
             <HoverHint
               title={
@@ -2627,9 +2611,15 @@ function ComposerInner({
                               ? `；${composerSpeechVoiceCommandsHint(speechPrefs)}`
                               : ""
                           }`
-                        : composerSpeechVoiceCommandsHint(speechPrefs)
-                          ? `${composerSpeechStopHint(speechDictation.engine)}；${composerSpeechVoiceCommandsHint(speechPrefs)}`
-                          : composerSpeechStopHint(speechDictation.engine)
+                        : speechPrefs.sendMode === "manual"
+                          ? `停顿 ${manualSegmentIdleSecondsLabel} 秒自动转写入框并继续听下一段；录音持续至点击停止${
+                              composerSpeechVoiceCommandsHint(speechPrefs)
+                                ? `；${composerSpeechVoiceCommandsHint(speechPrefs)}`
+                                : ""
+                            }`
+                          : composerSpeechVoiceCommandsHint(speechPrefs)
+                            ? `${composerSpeechStopHint(speechDictation.engine)}；${composerSpeechVoiceCommandsHint(speechPrefs)}`
+                            : composerSpeechStopHint(speechDictation.engine)
                     : speechPrefs.sendMode === "silenceAutoSend"
                       ? `点击开始听写，停顿 ${silenceIdleSecondsLabel} 秒自动发送；需点击停止结束录音${
                           composerSpeechVoiceCommandsHint(speechPrefs)
@@ -2642,9 +2632,15 @@ function ComposerInner({
                               ? `；${composerSpeechVoiceCommandsHint(speechPrefs)}`
                               : ""
                           }`
-                        : composerSpeechVoiceCommandsHint(speechPrefs)
-                          ? `${composerSpeechEngineHint(speechDictation.engine)}；${composerSpeechVoiceCommandsHint(speechPrefs)}；右键配置`
-                          : `${composerSpeechEngineHint(speechDictation.engine)}（手动发送）；右键配置`
+                        : speechPrefs.sendMode === "manual"
+                          ? `点击开始听写，停顿 ${manualSegmentIdleSecondsLabel} 秒自动转写入框；需点击停止结束录音${
+                              composerSpeechVoiceCommandsHint(speechPrefs)
+                                ? `；${composerSpeechVoiceCommandsHint(speechPrefs)}`
+                                : ""
+                            }`
+                          : composerSpeechVoiceCommandsHint(speechPrefs)
+                            ? `${composerSpeechEngineHint(speechDictation.engine)}；${composerSpeechVoiceCommandsHint(speechPrefs)}；右键配置`
+                            : `${composerSpeechEngineHint(speechDictation.engine)}（手动发送）；右键配置`
               }
               placement="top"
             >

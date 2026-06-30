@@ -2,6 +2,29 @@
 
 本项目所有重要变更将记录于此文件。
 
+## [1.2.1] - 2026-06-30
+
+1.2.1 聚焦语音听写体验收尾与一项 dev 构建回归修复。核心改动包括：**手动模式段尾停顿时长改为弹窗可配（默认 1s）**、**移除录音转需求功能**及其偏好开关，以及修复导致 `Importing a module script failed` 的 4 处 TS 错误（流水线解构未导出字段、未使用变量、`ComposerSpeechEngine` 枚举不匹配比较）。
+
+### ✨ 新功能
+- **手动模式段尾停顿可在语音听写弹窗配置**：新增 `manualSegmentIdleMs` 偏好（400–10000ms，步长 100ms，默认 1000ms），与 `silenceAutoSendIdleMs` 解耦——前者表达「一段说完自动 finalize 入框但不发」，后者表达「整段结束并自动发送」。偏好落库到 `wise.composer.speech.v1`，已有用户无感升级，未持久化时按默认值兜底。手动模式下 hover 提示文案同步显示当前段尾停顿秒数。
+
+### 🧹 重构与精简
+- **移除录音转需求功能**：删除 `useSpeechToRequirementSync` hook、`prdSpeechToRequirement` 服务与单测，以及 `ClaudeChat` 中相关 scope/调用链。
+- **偏好模型精简**：从 `ComposerSpeechPreferencesV1` 移除 `speechToRequirementEnabled` 字段；`normalizeComposerSpeechPreferences` 不再读写该字段。
+- **语音听写弹窗 UI 精简**：移除对应的「录音转需求」开关区块。
+
+### 🐛 问题修复
+- **修复 dev/build 阶段 `Importing a module script failed`**：根因为 4 处 TypeScript 错误导致 Vite 转译 chunk 失败。
+  - `composer-region.tsx` 解构了 `useComposerSpeechPipeline` 不再导出的 `setAudioLevelSink`，改用 `speechDictation.setAudioLevelSink` 注入到 `useComposerSpeechLevelMeter`，恢复电平柱条动效。
+  - `ComposerVoiceDictationBubble.tsx` 删除未被引用的旧函数 `nextBarTargets`。
+  - `ClaudeChat.tsx` 清理上一轮删 `useSpeechToRequirementSync` 时残留的未消费 `speechPrefs` 与对应 `useComposerSpeechPreferences` import。
+  - `useComposerSpeechDictation.ts` 把与 `ComposerSpeechEngine = "sensevoice" | "web"` 类型无交集的 `=== "webspeech"` 比较改为 `=== "web"`。
+
+### 🧪 测试
+- `composerSpeechPreferences.test.ts` 同步移除 `speechToRequirementEnabled` 相关断言，新增 `manualSegmentIdleMs` clamp + step 用例。
+- `composerSpeechSilenceIdle.test.ts` 与 `composerSpeechSegmentIdle.test.ts` 补齐自定义 `idleMs` 与格式化函数的覆盖。
+
 ## [1.2.0] - 2026-06-28
 
 1.2.0 围绕"会话面板与输入体验重构、模型/Provider 配置简化、Git 面板全面增强、性能与稳定性修复"四条主线推进。核心亮点包括：**仓库主会话面板**与 Composer 运行时设置重构、Codex 第三方 Provider 预设、默认配置面板快捷键与外观设置、新增 ⌘N/Ctrl+N 全局快捷键一键新建会话，以及 Git Flow / 行统计 / 工作区切换的一体化重构。

@@ -2,6 +2,8 @@ import { DownloadOutlined } from "@ant-design/icons";
 import { Button, Input, InputNumber, Progress, Segmented, Switch, Tag } from "antd";
 import type { ComposerSpeechEngine } from "../../constants/composerSpeech";
 import {
+  COMPOSER_SPEECH_MANUAL_SEGMENT_IDLE_MS_MAX,
+  COMPOSER_SPEECH_MANUAL_SEGMENT_IDLE_MS_MIN,
   COMPOSER_SPEECH_SILENCE_AUTO_SEND_IDLE_MS_MAX,
   COMPOSER_SPEECH_SILENCE_AUTO_SEND_IDLE_MS_MIN,
   type ComposerSpeechEnginePreference,
@@ -42,6 +44,8 @@ export interface ComposerVoiceSettingsPanelProps {
   updateSpeechPrefs: (patch: Partial<ComposerSpeechPreferencesV1>) => Promise<ComposerSpeechPreferencesV1>;
   draftSilenceIdleSeconds: number;
   setDraftSilenceIdleSeconds: (value: number) => void;
+  draftManualSegmentIdleSeconds: number;
+  setDraftManualSegmentIdleSeconds: (value: number) => void;
   draftAutoSendEndingText: string;
   setDraftAutoSendEndingText: (value: string) => void;
   draftVoiceCommandClearText: string;
@@ -62,6 +66,8 @@ export function ComposerVoiceSettingsPanel({
   updateSpeechPrefs,
   draftSilenceIdleSeconds,
   setDraftSilenceIdleSeconds,
+  draftManualSegmentIdleSeconds,
+  setDraftManualSegmentIdleSeconds,
   draftAutoSendEndingText,
   setDraftAutoSendEndingText,
   draftVoiceCommandClearText,
@@ -89,6 +95,12 @@ export function ComposerVoiceSettingsPanel({
     const nextMs = Math.round(draftSilenceIdleSeconds * 1000);
     if (nextMs === speechPrefs.silenceAutoSendIdleMs) return;
     void updateSpeechPrefs({ silenceAutoSendIdleMs: nextMs });
+  };
+
+  const persistManualSegmentIdleSeconds = () => {
+    const nextMs = Math.round(draftManualSegmentIdleSeconds * 1000);
+    if (nextMs === speechPrefs.manualSegmentIdleMs) return;
+    void updateSpeechPrefs({ manualSegmentIdleMs: nextMs });
   };
 
   const persistAutoSendEndingText = () => {
@@ -145,6 +157,27 @@ export function ComposerVoiceSettingsPanel({
               }}
               onBlur={persistSilenceIdleSeconds}
               onPressEnter={persistSilenceIdleSeconds}
+              className="app-composer-voice-panel__param-input"
+            />
+            <span className="app-composer-voice-panel__param-unit">秒</span>
+          </div>
+        ) : null}
+        {speechPrefs.sendMode === "manual" ? (
+          <div className="app-composer-voice-panel__param app-composer-voice-panel__param--inline">
+            <span className="app-composer-voice-panel__param-label">段尾停顿</span>
+            <InputNumber
+              size="small"
+              min={COMPOSER_SPEECH_MANUAL_SEGMENT_IDLE_MS_MIN / 1000}
+              max={COMPOSER_SPEECH_MANUAL_SEGMENT_IDLE_MS_MAX / 1000}
+              step={0.1}
+              value={draftManualSegmentIdleSeconds}
+              onChange={(value) => {
+                if (typeof value === "number" && Number.isFinite(value)) {
+                  setDraftManualSegmentIdleSeconds(value);
+                }
+              }}
+              onBlur={persistManualSegmentIdleSeconds}
+              onPressEnter={persistManualSegmentIdleSeconds}
               className="app-composer-voice-panel__param-input"
             />
             <span className="app-composer-voice-panel__param-unit">秒</span>
@@ -309,14 +342,6 @@ export function ComposerVoiceSettingsPanel({
           </div>
         ) : null}
         <div className="app-composer-voice-panel__switch-grid">
-          <div className="app-composer-voice-panel__switch-row">
-            <span>录音转需求</span>
-            <Switch
-              size="small"
-              checked={speechPrefs.speechToRequirementEnabled}
-              onChange={(checked) => void updateSpeechPrefs({ speechToRequirementEnabled: checked })}
-            />
-          </div>
           <div
             className="app-composer-voice-panel__switch-row"
             title="开启：用 AI 智能整理（纠错字、去口头语、补标点，保留全部原意）后再入框；关闭：仅本地整理。语音结果始终经过整理，不会写入原始转写。"

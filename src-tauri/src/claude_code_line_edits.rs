@@ -24,14 +24,24 @@ pub struct ClaudeLineEditsDayBucket {
     pub date: String,
     pub lines_edited: u64,
     pub diff_count: u64,
+    /// 新增行数：Edit/MultiEdit 的 new_string 净增；Write/Write_File 全部计入。
+    pub lines_added: u64,
+    /// 删除行数：Edit/MultiEdit 的 old_string 净减；Write/Write_File 始终为 0。
+    pub lines_removed: u64,
 }
 
 #[derive(Debug, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub struct ClaudeLineEditsSnapshotResponse {
     pub total_lines_edited: u64,
+    pub total_lines_added: u64,
+    pub total_lines_removed: u64,
     pub total_diff_count: u64,
     pub days: Vec<ClaudeLineEditsDayBucket>,
+    /// 最近 7 天聚合；空数据时为 None。
+    pub last_7_days: Option<ClaudeLineEditsWindowSummary>,
+    /// 最近 30 天聚合；空数据时为 None。
+    pub last_30_days: Option<ClaudeLineEditsWindowSummary>,
     pub most_active_month: Option<String>,
     pub most_active_day: Option<String>,
     pub longest_streak_days: u32,
@@ -42,16 +52,45 @@ pub struct ClaudeLineEditsSnapshotResponse {
     pub events_parsed: u64,
 }
 
+/// 固定时间窗口内的代码编辑量聚合。`days` 是按日期升序（最早 → 最近）的桶数组。
+#[derive(Debug, Clone, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ClaudeLineEditsWindowSummary {
+    pub lines_edited: u64,
+    pub lines_added: u64,
+    pub lines_removed: u64,
+    pub diff_count: u64,
+}
+
+/// 从按时间升序的日桶数组中取最近 N 天聚合。`days` 为空时返回 None。
+fn window_summary(days: &[ClaudeLineEditsDayBucket], n: usize) -> Option<ClaudeLineEditsWindowSummary> {
+    if days.is_empty() || n == 0 {
+        return None;
+    }
+    let take = n.min(days.len());
+    let slice = &days[days.len() - take..];
+    Some(ClaudeLineEditsWindowSummary {
+        lines_edited: slice.iter().map(|d| d.lines_edited).sum(),
+        lines_added: slice.iter().map(|d| d.lines_added).sum(),
+        lines_removed: slice.iter().map(|d| d.lines_removed).sum(),
+        diff_count: slice.iter().map(|d| d.diff_count).sum(),
+    })
+}
+
 #[derive(Default, Clone)]
 struct DayAcc {
     lines: u64,
     diffs: u64,
+    lines_added: u64,
+    lines_removed: u64,
 }
 
 impl DayAcc {
     fn merge(&mut self, o: &DayAcc) {
         self.lines += o.lines;
         self.diffs += o.diffs;
+        self.lines_added += o.lines_added;
+        self.lines_removed += o.lines_removed;
     }
 }
 
@@ -166,16 +205,25 @@ fn split_lines(text: &str) -> Vec<String> {
     text.replace("\r\n", "\n").split('\n').map(String::from).collect()
 }
 
+/// 旧 API：返回新增+删除合计。仅在单元测试与未来"合计"导出场景使用，
+/// 生产路径统一走 `count_edit_lines_split`，避免在调用方做无谓相加。
+#[allow(dead_code)]
 fn count_edit_lines(old_str: &str, new_str: &str) -> u64 {
+    let (added, removed) = count_edit_lines_split(old_str, new_str);
+    added + removed
+}
+
+/// 返回 (新增行数, 删除行数)；空 old + 非空 new 时仅 new 全数计入 added。
+fn count_edit_lines_split(old_str: &str, new_str: &str) -> (u64, u64) {
     if old_str.is_empty() && !new_str.is_empty() {
-        return split_lines(new_str).len() as u64;
+        return (split_lines(new_str).len() as u64, 0);
     }
     let a = split_lines(old_str);
     let b = split_lines(new_str);
     let n = a.len();
     let m = b.len();
     if n == 0 && m == 0 {
-        return 0;
+        return (0, 0);
     }
     let mut dp = vec![vec![0u32; m + 1]; n + 1];
     for i in (0..n).rev() {
@@ -205,10 +253,18 @@ fn count_edit_lines(old_str: &str, new_str: &str) -> u64 {
     }
     removed += (n - i) as u64;
     added += (m - j) as u64;
-    added + removed
+    (added, removed)
 }
 
+/// 旧 API：返回新增+删除合计。生产路径统一走 `count_lines_from_tool_split`。
+#[allow(dead_code)]
 fn count_lines_from_tool(name: &str, input: &Value) -> Option<u64> {
+    let (added, removed) = count_lines_from_tool_split(name, input)?;
+    Some(added + removed)
+}
+
+/// 返回 (新增行数, 删除行数)；写入工具全数计入 added。
+fn count_lines_from_tool_split(name: &str, input: &Value) -> Option<(u64, u64)> {
     if !is_file_edit_tool(name) {
         return None;
     }
@@ -229,11 +285,12 @@ fn count_lines_from_tool(name: &str, input: &Value) -> Option<u64> {
                     "data",
                 ],
             )?;
-            Some(split_lines(content).len() as u64)
+            Some((split_lines(content).len() as u64, 0))
         }
         "multiedit" | "notebookedit" => {
             let edits = input.get("edits")?.as_array()?;
-            let mut total = 0u64;
+            let mut added = 0u64;
+            let mut removed = 0u64;
             for edit in edits {
                 let Some(row) = edit.as_object() else { continue };
                 let row_val = Value::Object(row.clone());
@@ -254,12 +311,14 @@ fn count_lines_from_tool(name: &str, input: &Value) -> Option<u64> {
                 if old.is_empty() && new.is_empty() {
                     continue;
                 }
-                total += count_edit_lines(old, new);
+                let (a, r) = count_edit_lines_split(old, new);
+                added += a;
+                removed += r;
             }
-            if total == 0 {
+            if added == 0 && removed == 0 {
                 None
             } else {
-                Some(total)
+                Some((added, removed))
             }
         }
         _ => {
@@ -283,16 +342,17 @@ fn count_lines_from_tool(name: &str, input: &Value) -> Option<u64> {
             if old.is_empty() && new.is_empty() {
                 return None;
             }
-            Some(count_edit_lines(old, new))
+            Some(count_edit_lines_split(old, new))
         }
     }
 }
 
-fn extract_edits_from_content(content: &Value) -> (u64, u64) {
+fn extract_edits_from_content(content: &Value) -> (u64, u64, u64) {
     let Some(blocks) = content.as_array() else {
-        return (0, 0);
+        return (0, 0, 0);
     };
-    let mut lines = 0u64;
+    let mut added = 0u64;
+    let mut removed = 0u64;
     let mut diffs = 0u64;
     for block in blocks {
         if block.get("type").and_then(|t| t.as_str()) != Some("tool_use") {
@@ -300,12 +360,13 @@ fn extract_edits_from_content(content: &Value) -> (u64, u64) {
         }
         let name = block.get("name").and_then(|n| n.as_str()).unwrap_or("");
         let input = block.get("input").unwrap_or(&Value::Null);
-        if let Some(l) = count_lines_from_tool(name, input) {
-            lines += l;
+        if let Some((a, r)) = count_lines_from_tool_split(name, input) {
+            added += a;
+            removed += r;
             diffs += 1;
         }
     }
-    (lines, diffs)
+    (added, removed, diffs)
 }
 
 #[inline]
@@ -336,15 +397,17 @@ fn parse_edit_event(line: &str, min_day: NaiveDate) -> Option<(NaiveDate, DayAcc
         return None;
     }
     let content = v.get("message")?.get("content")?;
-    let (lines, diffs) = extract_edits_from_content(content);
+    let (added, removed, diffs) = extract_edits_from_content(content);
     if diffs == 0 {
         return None;
     }
     Some((
         day,
         DayAcc {
-            lines,
+            lines: added + removed,
             diffs,
+            lines_added: added,
+            lines_removed: removed,
         },
     ))
 }
@@ -397,6 +460,8 @@ fn fill_day_window(anchor: NaiveDate, days: i64, source: &HashMap<String, DayAcc
             date: k,
             lines_edited: acc.lines,
             diff_count: acc.diffs,
+            lines_added: acc.lines_added,
+            lines_removed: acc.lines_removed,
         });
     }
     v
@@ -482,8 +547,12 @@ fn build_snapshot_inner(project_path_filter: Option<&str>) -> Result<ClaudeLineE
     if bases.is_empty() {
         return Ok(ClaudeLineEditsSnapshotResponse {
             total_lines_edited: 0,
+            total_lines_added: 0,
+            total_lines_removed: 0,
             total_diff_count: 0,
             days: vec![],
+            last_7_days: None,
+            last_30_days: None,
             most_active_month: None,
             most_active_day: None,
             longest_streak_days: 0,
@@ -539,6 +608,8 @@ fn build_snapshot_inner(project_path_filter: Option<&str>) -> Result<ClaudeLineE
 
     let days = fill_day_window(anchor, HEATMAP_DAYS, &daily);
     let total_lines_edited: u64 = days.iter().map(|d| d.lines_edited).sum();
+    let total_lines_added: u64 = days.iter().map(|d| d.lines_added).sum();
+    let total_lines_removed: u64 = days.iter().map(|d| d.lines_removed).sum();
     let total_diff_count: u64 = days.iter().map(|d| d.diff_count).sum();
 
     let (longest_streak_days, current_streak_days) =
@@ -561,10 +632,16 @@ fn build_snapshot_inner(project_path_filter: Option<&str>) -> Result<ClaudeLineE
         scope_hint
     };
 
+    let last_7_days = window_summary(&days, 7);
+    let last_30_days = window_summary(&days, 30);
     Ok(ClaudeLineEditsSnapshotResponse {
         total_lines_edited,
+        total_lines_added,
+        total_lines_removed,
         total_diff_count,
         days,
+        last_7_days,
+        last_30_days,
         most_active_month: compute_most_active_month(&daily),
         most_active_day: compute_most_active_day(&daily),
         longest_streak_days,
@@ -598,6 +675,125 @@ mod tests {
     fn count_edit_lines_simple_replace() {
         assert_eq!(count_edit_lines("a\nb\nc", "a\nx\nc"), 2);
         assert_eq!(count_edit_lines("", "hello\nworld"), 2);
+    }
+
+    #[test]
+    fn count_edit_lines_split_basic() {
+        // 单行替换：b → x，新增 1 行，删除 1 行
+        assert_eq!(count_edit_lines_split("a\nb\nc", "a\nx\nc"), (1, 1));
+        // 旧 API 仍返回合计
+        assert_eq!(count_edit_lines("a\nb\nc", "a\nx\nc"), 2);
+    }
+
+    #[test]
+    fn count_edit_lines_split_empty_old() {
+        // 空 old + 非空 new：全数计入 added
+        assert_eq!(count_edit_lines_split("", "x\ny\nz"), (3, 0));
+        assert_eq!(count_edit_lines("", "x\ny\nz"), 3);
+    }
+
+    #[test]
+    fn count_edit_lines_split_empty_new() {
+        // 非空 old + 空 new：全数计入 removed
+        assert_eq!(count_edit_lines_split("x\ny", ""), (0, 2));
+        assert_eq!(count_edit_lines("x\ny", ""), 2);
+    }
+
+    #[test]
+    fn count_lines_from_tool_split_write_counts_added_only() {
+        let input = json!({
+            "file_path": "/tmp/a.ts",
+            "content": "line1\nline2\nline3"
+        });
+        assert_eq!(
+            count_lines_from_tool_split("Write", &input),
+            Some((3, 0))
+        );
+        // 旧 API 行为不变
+        assert_eq!(count_lines_from_tool("Write", &input), Some(3));
+    }
+
+    #[test]
+    fn count_lines_from_tool_split_edit_splits_added_removed() {
+        // old="foo" 单行；new="bar\nbaz" 两行 → 新增 2 行、删除 1 行
+        let input = json!({
+            "file_path": "src/a.ts",
+            "old_string": "foo",
+            "new_string": "bar\nbaz"
+        });
+        assert_eq!(
+            count_lines_from_tool_split("Edit", &input),
+            Some((2, 1))
+        );
+        assert_eq!(count_lines_from_tool("Edit", &input), Some(3));
+    }
+
+    #[test]
+    fn fill_day_window_carries_split_lines() {
+        let mut daily = HashMap::new();
+        let d = NaiveDate::from_ymd_opt(2026, 6, 1).unwrap();
+        daily.insert(
+            d.format("%Y-%m-%d").to_string(),
+            DayAcc {
+                lines: 5,
+                diffs: 2,
+                lines_added: 4,
+                lines_removed: 1,
+            },
+        );
+        let anchor = NaiveDate::from_ymd_opt(2026, 6, 1).unwrap();
+        let days = fill_day_window(anchor, 0, &daily);
+        assert_eq!(days.len(), 1);
+        assert_eq!(days[0].lines_edited, 5);
+        assert_eq!(days[0].lines_added, 4);
+        assert_eq!(days[0].lines_removed, 1);
+        assert_eq!(days[0].diff_count, 2);
+    }
+
+    #[test]
+    fn window_summary_takes_trailing_slice_and_sums() {
+        // 模拟 fill_day_window 行为：按时间升序（最老 → 最新），每桶 1 行新增 + 0 删除 + 1 次编辑。
+        // 最近 7 天 = 末尾 7 桶；最近 30 天 = 末尾 30 桶。
+        let mut daily = HashMap::new();
+        let anchor = NaiveDate::from_ymd_opt(2026, 6, 30).unwrap();
+        for offset in 0..35i64 {
+            let d = anchor - Duration::days(offset);
+            daily.insert(
+                d.format("%Y-%m-%d").to_string(),
+                DayAcc {
+                    lines: 1,
+                    diffs: 1,
+                    lines_added: 1,
+                    lines_removed: 0,
+                },
+            );
+        }
+        let days = fill_day_window(anchor, 34, &daily);
+        assert_eq!(days.len(), 35);
+        // 数组末尾是"最近一天"——验证我们确实在末尾聚合，不是头部
+        assert_eq!(days.last().unwrap().date, "2026-06-30");
+        assert_eq!(days.first().unwrap().date, "2026-05-27");
+
+        let last_7 = window_summary(&days, 7).expect("7 天窗口应非空");
+        assert_eq!(last_7.lines_edited, 7);
+        assert_eq!(last_7.lines_added, 7);
+        assert_eq!(last_7.lines_removed, 0);
+        assert_eq!(last_7.diff_count, 7);
+
+        let last_30 = window_summary(&days, 30).expect("30 天窗口应非空");
+        assert_eq!(last_30.lines_edited, 30);
+        assert_eq!(last_30.lines_added, 30);
+        assert_eq!(last_30.diff_count, 30);
+
+        // 超出范围时取全部
+        let last_999 = window_summary(&days, 999).expect("999 天窗口应非空");
+        assert_eq!(last_999.lines_edited, 35);
+
+        // 空数组 → None
+        let empty: Vec<ClaudeLineEditsDayBucket> = vec![];
+        assert!(window_summary(&empty, 7).is_none());
+        // n = 0 也视为无数据
+        assert!(window_summary(&days, 0).is_none());
     }
 
     #[test]
@@ -646,6 +842,8 @@ mod tests {
                 DayAcc {
                     lines: 10,
                     diffs: 1,
+                    lines_added: 10,
+                    lines_removed: 0,
                 },
             );
         }

@@ -372,8 +372,9 @@
 
 .app-cc-line-edits-head {
   display: flex;
-  align-items: flex-start;
+  align-items: flex-end;
   justify-content: space-between;
+  gap: 12px;
   margin-bottom: 10px;
 }
 
@@ -389,6 +390,43 @@
   line-height: 1.15;
   color: var(--ant-color-text);
   letter-spacing: -0.02em;
+}
+
+.app-cc-line-edits-split {
+  display: flex;
+  gap: 18px;
+  align-items: baseline;
+  flex-shrink: 0;
+}
+
+.app-cc-line-edits-split-stat {
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 6px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* 横排：label 在左、value 数字紧跟其后。 */
+.app-cc-line-edits-split-label {
+  font-size: 11px;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-cc-line-edits-split-value {
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.1;
+  letter-spacing: -0.01em;
+  /* 颜色由 --add / --remove modifier 提供 */
+}
+
+.app-cc-line-edits-split-stat--add {
+  color: var(--ant-color-success);
+}
+
+.app-cc-line-edits-split-stat--remove {
+  color: var(--ant-color-error);
 }
 
 .app-cc-line-edits-heatmap-wrap {
@@ -429,12 +467,10 @@
   gap: 1px;
   width: 12px;
   flex-shrink: 0;
-  height: 77px;
 }
 
 .app-cc-line-edits-heatmap-weekday {
-  flex: 1 1 0;
-  min-height: 0;
+  height: 11px;
   font-size: 8px;
   line-height: 1;
   color: var(--ant-color-text-tertiary);
@@ -447,34 +483,26 @@
   flex: 1 1 0;
   gap: 1px;
   min-width: 0;
-  height: 77px;
 }
 
 .app-cc-line-edits-heatmap-col {
   flex: 1 1 0;
   min-width: 0;
-  height: 100%;
   display: flex;
   flex-direction: column;
   gap: 1px;
 }
 
 .app-cc-line-edits-heatmap-col > span {
-  flex: 1 1 0;
-  min-height: 0;
   display: flex !important;
   width: 100%;
 }
 
-.app-cc-line-edits-heatmap-col > .app-cc-line-edits-heatmap-cell--empty {
-  flex: 1 1 0;
-  min-height: 0;
-}
-
+/* 每行方块固定高度：列宽由 flex 均分，行高按 11px + 1px gap 收敛，
+   保证首尾空列的可见方块不会因「7 行里只剩 1 行可见」而被拉伸。 */
 .app-cc-line-edits-heatmap-cell {
   width: 100%;
-  height: 100%;
-  min-height: 0;
+  height: 11px;
   border-radius: 2px;
   box-sizing: border-box;
   cursor: default;
@@ -486,7 +514,18 @@
 }
 
 .app-cc-line-edits-heatmap-cell--empty {
-  visibility: hidden;
+  /* 保留高度对齐周几行,但不绘制颜色:empty 行仍占 11px,
+     这样首列/末列可见方块不会因 7 行里只剩 1 行可见而被拉伸。 */
+  background: transparent;
+  border: 1px solid transparent;
+}
+
+/* 补齐占位列里的 cell：极淡骨架轮廓，让用户能看到完整的 7 列结构，
+   避免数据少时视觉上只剩 1-2 列。 */
+.app-cc-line-edits-heatmap-cell--placeholder {
+  background: var(--ant-color-fill-quaternary);
+  border: 1px solid var(--ant-color-border-secondary);
+  opacity: 0.35;
 }
 
 .app-cc-line-edits-heatmap-cell--l0 {
@@ -558,7 +597,9 @@
 
 .app-cc-line-edits-stats {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  grid-auto-rows: minmax(36px, auto);
+  align-content: start;
   gap: 8px;
   margin-bottom: 8px;
 }
@@ -573,9 +614,32 @@
   font-size: 11px;
   color: var(--ant-color-text);
   word-break: break-all;
+  font-variant-numeric: tabular-nums;
+}
+
+.app-cc-line-edits-stat-sub {
+  margin-top: 1px;
+  font-size: 10px;
+  font-variant-numeric: tabular-nums;
 }
 
 .app-cc-line-edits-summary {
   font-size: 12px;
   color: var(--ant-color-text-secondary);
+}
+
+.app-cc-line-edits-summary--add {
+  color: var(--ant-color-success);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.app-cc-line-edits-summary--remove {
+  color: var(--ant-color-error);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.app-cc-line-edits-summary-sep {
+  color: var(--ant-color-text-quaternary);
 }

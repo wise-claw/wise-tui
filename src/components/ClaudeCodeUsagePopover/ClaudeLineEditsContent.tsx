@@ -11,6 +11,31 @@ import {
 } from "../../utils/claudeLineEditsHeatmap";
 import "./index.css";
 
+/**
+ * 顶部「新增 / 删除」对比条：label + 数值横排展示。
+ * 不再渲染比例柱，避免视觉噪音；如需恢复比例可视化见 git history。
+ */
+function LineEditsSplitBars({
+  added,
+  removed,
+}: {
+  added: number;
+  removed: number;
+}) {
+  return (
+    <div className="app-cc-line-edits-split" aria-label="代码编辑量前后对比">
+      <div className="app-cc-line-edits-split-stat app-cc-line-edits-split-stat--add">
+        <div className="app-cc-line-edits-split-label">新增</div>
+        <div className="app-cc-line-edits-split-value">+{formatLinesEdited(added)}</div>
+      </div>
+      <div className="app-cc-line-edits-split-stat app-cc-line-edits-split-stat--remove">
+        <div className="app-cc-line-edits-split-label">删除</div>
+        <div className="app-cc-line-edits-split-value">−{formatLinesEdited(removed)}</div>
+      </div>
+    </div>
+  );
+}
+
 export interface ClaudeLineEditsContentProps {
   snapshot: ClaudeLineEditsSnapshotResponse | null;
   snapshotLoading: boolean;
@@ -60,6 +85,8 @@ export function ClaudeLineEditsContent({
   }, [snapshot?.days]);
 
   const totalLines = snapshot?.totalLinesEdited ?? 0;
+  const totalAdded = snapshot?.totalLinesAdded ?? 0;
+  const totalRemoved = snapshot?.totalLinesRemoved ?? 0;
 
   return (
     <div className="app-cc-line-edits">
@@ -68,6 +95,7 @@ export function ClaudeLineEditsContent({
           <div className="app-cc-line-edits-title">AI 代码编辑量</div>
           <div className="app-cc-line-edits-total">{formatLinesEdited(totalLines)}</div>
         </div>
+        <LineEditsSplitBars added={totalAdded} removed={totalRemoved} />
       </div>
 
       {snapshotLoading ? (
@@ -100,8 +128,22 @@ export function ClaudeLineEditsContent({
               </div>
               <div className="app-cc-line-edits-heatmap-cols">
                 {weeks.map((week) => (
-                  <div key={week.weekStart} className="app-cc-line-edits-heatmap-col">
+                  <div
+                    key={week.key}
+                    className={`app-cc-line-edits-heatmap-col${
+                      week.isPlaceholder ? " app-cc-line-edits-heatmap-col--placeholder" : ""
+                    }`}
+                  >
                     {week.cells.map((cell, row) => {
+                      if (week.isPlaceholder) {
+                        return (
+                          <div
+                            key={`${cell.date}-${row}`}
+                            className="app-cc-line-edits-heatmap-cell app-cc-line-edits-heatmap-cell--placeholder"
+                            aria-hidden="true"
+                          />
+                        );
+                      }
                       if (!cell.inRange) {
                         return (
                           <div
@@ -160,6 +202,36 @@ export function ClaudeLineEditsContent({
               <div className="app-cc-line-edits-stat-value">{snapshot?.mostActiveDay ?? "—"}</div>
             </div>
             <div className="app-cc-line-edits-stat">
+              <div className="app-cc-line-edits-stat-label">最近 7 天</div>
+              <div className="app-cc-line-edits-stat-value">
+                {snapshot?.last7Days ? (
+                  <>
+                    {formatLinesEdited(snapshot.last7Days.linesEdited)} 行 · {formatLinesEdited(snapshot.last7Days.diffCount)} 次
+                    <div className="app-cc-line-edits-stat-sub">
+                      <span className="app-cc-line-edits-summary--add">+{formatLinesEdited(snapshot.last7Days.linesAdded)}</span>
+                      <span className="app-cc-line-edits-summary-sep"> / </span>
+                      <span className="app-cc-line-edits-summary--remove">−{formatLinesEdited(snapshot.last7Days.linesRemoved)}</span>
+                    </div>
+                  </>
+                ) : "—"}
+              </div>
+            </div>
+            <div className="app-cc-line-edits-stat">
+              <div className="app-cc-line-edits-stat-label">最近 30 天</div>
+              <div className="app-cc-line-edits-stat-value">
+                {snapshot?.last30Days ? (
+                  <>
+                    {formatLinesEdited(snapshot.last30Days.linesEdited)} 行 · {formatLinesEdited(snapshot.last30Days.diffCount)} 次
+                    <div className="app-cc-line-edits-stat-sub">
+                      <span className="app-cc-line-edits-summary--add">+{formatLinesEdited(snapshot.last30Days.linesAdded)}</span>
+                      <span className="app-cc-line-edits-summary-sep"> / </span>
+                      <span className="app-cc-line-edits-summary--remove">−{formatLinesEdited(snapshot.last30Days.linesRemoved)}</span>
+                    </div>
+                  </>
+                ) : "—"}
+              </div>
+            </div>
+            <div className="app-cc-line-edits-stat">
               <div className="app-cc-line-edits-stat-label">最长连续</div>
               <div className="app-cc-line-edits-stat-value">{snapshot?.longestStreakDays ?? 0} 天</div>
             </div>
@@ -171,6 +243,9 @@ export function ClaudeLineEditsContent({
 
           <div className="app-cc-line-edits-summary">
             合计（近一年）：{formatLinesEdited(totalLines)} 行 · {formatLinesEdited(snapshot?.totalDiffCount ?? 0)} 次编辑
+            （<span className="app-cc-line-edits-summary--add">+{formatLinesEdited(totalAdded)}</span>
+            <span className="app-cc-line-edits-summary-sep"> / </span>
+            <span className="app-cc-line-edits-summary--remove">−{formatLinesEdited(totalRemoved)}</span>）
           </div>
 
           {snapshot?.hint ? <div className="app-cc-usage-hint">{snapshot.hint}</div> : null}

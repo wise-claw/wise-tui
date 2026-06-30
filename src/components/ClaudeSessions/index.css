@@ -3992,92 +3992,21 @@
   padding: 0;
 }
 
-/* ── System message（卡片 + 长日志折叠） ── */
+/* ── System message（裸展示：不加外框 / 工具栏；仅保留错误态文字色） ── */
 
 .app-system-message {
-  border-radius: 8px;
-  border: 1px solid var(--ant-color-border-secondary);
-  background: var(--ant-color-fill-quaternary);
-  overflow: hidden;
   max-width: 100%;
+  font-size: 12px;
+  line-height: 1.55;
+  color: var(--ant-color-text-secondary);
+  white-space: pre-wrap;
+  word-break: break-word;
 }
 
 .app-system-message--error {
-  border-color: var(--ant-color-error-border);
-  background: var(--ant-color-error-bg);
-}
-
-.app-system-message-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 5px 10px;
-  border-bottom: 1px solid var(--ant-color-border-secondary);
-  min-height: 28px;
-}
-
-.app-system-message--error .app-system-message-bar {
-  border-bottom-color: var(--ant-color-error-border);
-}
-
-.app-system-message-badge {
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  padding: 2px 6px;
-  border-radius: 4px;
-  background: var(--ant-color-fill-secondary);
-  color: var(--ant-color-text-secondary);
-}
-
-.app-system-message--error .app-system-message-badge {
-  background: var(--ant-color-error);
-  color: #fff;
-}
-
-.app-system-message-badge--format {
-  text-transform: none;
-  letter-spacing: 0;
-  font-weight: 600;
-  font-size: 10px;
-  background: var(--ant-color-info-bg);
-  color: var(--ant-color-info);
-  border: 1px solid var(--ant-color-border-secondary);
-}
-
-.app-system-message--error .app-system-message-badge--format {
-  background: rgba(255, 255, 255, 0.9);
+  /* 错误态不上边框/底色，仅通过文字色与下行空行让原文读起来被注意到 */
   color: var(--ant-color-error);
-  border-color: var(--ant-color-error-border);
-}
-
-.app-system-message-meta {
-  font-size: 11px;
-  color: var(--ant-color-text-tertiary);
-  font-variant-numeric: tabular-nums;
-}
-
-.app-system-message-bar-spacer {
-  flex: 1;
-  min-width: 4px;
-}
-
-.app-system-message-btn {
-  border: none;
-  background: transparent;
-  padding: 2px 8px;
-  font-size: 11px;
-  color: var(--ant-color-primary);
-  cursor: pointer;
-  border-radius: 4px;
-}
-
-.app-system-message-btn:hover {
-  background: var(--ant-color-primary-bg);
-}
-
-.app-system-message-body {
-  min-width: 0;
+  font-weight: 500;
 }
 
 .app-system-message-md.app-markdown {
@@ -4086,141 +4015,9 @@
   color: var(--ant-color-text-secondary);
 }
 
-.app-system-message-md.app-markdown h2 {
-  font-size: 14px;
-  font-weight: 600;
-  color: var(--ant-color-text);
-  margin: 0 0 8px;
-}
-
-.app-system-message-md.app-markdown h3 {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--ant-color-text);
-  margin: 12px 0 6px;
-}
-
-.app-system-message-md.app-markdown ul {
-  margin: 4px 0 8px;
-  padding-left: 1.2em;
-}
-
-.app-system-message-md.app-markdown li {
-  margin: 2px 0;
-}
-
-.app-system-message-md.app-markdown hr {
-  border: none;
-  border-top: 1px solid var(--ant-color-border-secondary);
-  margin: 10px 0;
-}
-
-.app-system-message-md.app-markdown blockquote {
-  margin: 8px 0 0;
-  padding: 6px 10px;
-  border-left: 3px solid var(--ant-color-primary);
-  background: var(--ant-color-fill-tertiary);
-  color: var(--ant-color-text);
-}
-
-.app-system-message-md.app-markdown a {
-  color: var(--ant-color-link);
-  text-decoration: none;
-}
-
-.app-system-message-md.app-markdown a:hover {
-  color: var(--ant-color-link-hover);
-  text-decoration: underline;
-}
-
-.app-system-message-md.app-markdown h4 {
-  font-size: 12px;
-  font-weight: 600;
-  color: var(--ant-color-text-tertiary);
-  margin: 10px 0 6px;
-  text-transform: none;
-  letter-spacing: 0.02em;
-}
-
-.app-system-message-md.app-markdown ol {
-  margin: 0 0 4px;
-  padding-left: 1.35em;
-}
-
-.app-system-message-md.app-markdown ol li {
-  margin: 4px 0;
-  color: var(--ant-color-text-secondary);
-}
-
-.app-system-message-md.app-markdown ol li strong {
-  color: var(--ant-color-text);
-  font-weight: 600;
-}
-
-.app-system-message-md.app-markdown code {
-  font-size: 11px;
-  word-break: break-all;
-}
-
-.app-system-message-body--log {
-  max-height: min(70vh, 640px);
-  overflow: auto;
-}
-
-.app-system-message-body--log.app-system-message-body--clamped {
-  max-height: 200px;
-}
-
-.app-system-message-body--log .app-markdown-host {
-  min-height: 0;
-}
-
-.app-system-message-json-wrap {
-  box-sizing: border-box;
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  border: 1px solid var(--ant-color-border-secondary);
-  border-radius: 8px;
-  overflow: hidden;
-  background: var(--ant-color-fill-quaternary);
-}
-
-.app-system-message--error .app-system-message-json-wrap {
-  background: rgba(255, 255, 255, 0.45);
-  border-color: var(--ant-color-error-border);
-}
-
-.app-system-message-json-pre {
-  margin: 0;
-  padding: 10px 12px;
-  min-width: 0;
-  max-width: 100%;
-  overflow-x: auto;
-  font-size: 12px;
-  line-height: 1.55;
-  tab-size: 2;
-}
-
-.app-system-message-json-code {
-  display: block;
-  font-family:
-    "SF Mono",
-    "Fira Code",
-    ui-monospace,
-    "PingFang SC",
-    "Hiragino Sans GB",
-    "Microsoft YaHei",
-    sans-serif,
-    monospace;
-  font-size: 12px;
-  line-height: 1.55;
-  color: var(--ant-color-text);
-  white-space: pre;
-  word-break: normal;
-  background: none;
-  padding: 0;
-}
+/* 注：以下样式段（JSON 卡片 + 折叠栏 + Markdown 子节点细节）在裸展示方案下
+   已不再被渲染——保留 .app-system-message-md 基础字号 / 行高 / 颜色即可，
+   子节点标题/列表/代码块样式回归全局 .app-markdown。 */
 
 .app-json__punct {
   color: var(--ant-color-text-tertiary);
@@ -9419,22 +9216,14 @@ button.app-message-part-header:disabled:hover {
   border-radius: 0 6px 6px 0;
 }
 
-/* 合并行：保留一条淡连接轨，维持发送者纵列身份 */
+/* 合并行：保留发送者纵列身份靠 3px margin-top。
+   原先 avatar::after 画一条贯穿线，多 assistant 行堆叠时观感沉重且掩盖对话边界，移除。 */
 .app-claude-message--merged .app-claude-message-avatar {
   position: relative;
 }
 
 .app-claude-message--merged .app-claude-message-avatar::after {
-  content: "";
-  visibility: visible;
-  position: absolute;
-  left: 50%;
-  top: -3px;
-  bottom: -3px;
-  width: 2px;
-  transform: translateX(-50%);
-  border-radius: 2px;
-  background: color-mix(in srgb, var(--ant-color-border-secondary) 70%, transparent);
+  content: none;
 }
 
 /* 思考过程：折叠态字数提示 */
@@ -9443,24 +9232,6 @@ button.app-message-part-header:disabled:hover {
   font-size: 10px;
   color: var(--ant-color-text-tertiary);
   font-variant-numeric: tabular-nums;
-}
-
-/* 系统消息：正文留白 + 全宽「展开全文 / 收起」 */
-.app-system-message-body {
-  padding: 8px 10px;
-}
-
-.app-system-message-expand {
-  display: block;
-  width: 100%;
-  text-align: center;
-  border-top: 1px solid var(--ant-color-border-secondary);
-  border-radius: 0;
-  padding: 5px 8px;
-}
-
-.app-system-message--error .app-system-message-expand {
-  border-top-color: var(--ant-color-error-border);
 }
 
 

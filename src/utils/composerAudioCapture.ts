@@ -98,6 +98,28 @@ function arrayBufferToBase64(buffer: ArrayBuffer): string {
   return btoa(binary);
 }
 
+/**
+ * 计算一帧 PCM 的 RMS（root mean square），映射到 0..1。
+ * 16-bit 满量程下，安静环境约 0.001，普通说话约 0.05~0.25，大声可达 0.5+。
+ * 折算使用 `1 / (1 + exp(-k * (rms - mid)))` 形式的轻 sigmoid，凸显人声区间的差异。
+ */
+export function computePcmRmsLevel(samples: Float32Array): number {
+  if (samples.length === 0) return 0;
+  let sumSquares = 0;
+  for (let i = 0; i < samples.length; i += 1) {
+    const v = samples[i] ?? 0;
+    sumSquares += v * v;
+  }
+  const rms = Math.sqrt(sumSquares / samples.length);
+  if (!Number.isFinite(rms) || rms <= 0) return 0;
+  // 简化：将 RMS 直接夹紧；提供 floor=0.02 让静音时仍可见极小底噪。
+  const scaled = Math.min(1, rms * 6);
+  return scaled < 0.02 ? 0 : scaled;
+}
+
+/** rAF 节流：约 60fps 上限（≈16ms）。 */
+const LEVEL_EMIT_MIN_INTERVAL_MS = 16;
+
 type ScriptProcessorNodeLike = AudioNode & {
   onaudioprocess: ((event: AudioProcessingEvent) => void) | null;
 };
@@ -106,6 +128,11 @@ export interface ComposerStreamingRecorderOptions {
   /** 与 Speech `nativeAudioFormat` 一致，默认 16000。 */
   sampleRate?: number;
   onPcmChunk: (chunk: Float32Array, sampleRate: number) => void;
+  /**
+   * 可选：实时音频电平回调（RMS，0..1 区间，约 60fps 节流）。
+   * 仅用于听写气泡的波形可视化，不影响 PCM 推送；调用方负责避免高频重渲染。
+   */
+  onAudioLevel?: (level: number) => void;
 }
 
 /** 在 WebView 内采集麦克风 PCM（支持流式回调或结束后导出 WAV）。 */
@@ -117,6 +144,8 @@ export class ComposerAudioRecorder {
   private silentGain: GainNode | null = null;
   private chunks: Float32Array[] = [];
   private onPcmChunk: ((chunk: Float32Array, sampleRate: number) => void) | null = null;
+  private onAudioLevel: ((level: number) => void) | null = null;
+  private lastLevelEmitAt = 0;
   private startedAt = 0;
 
   get recording(): boolean {
@@ -129,6 +158,8 @@ export class ComposerAudioRecorder {
 
   async startStreaming(options: ComposerStreamingRecorderOptions): Promise<void> {
     this.onPcmChunk = options.onPcmChunk;
+    this.onAudioLevel = options.onAudioLevel ?? null;
+    this.lastLevelEmitAt = 0;
     await this.start(options.sampleRate);
   }
 
@@ -167,6 +198,7 @@ export class ComposerAudioRecorder {
       const chunk = new Float32Array(input);
       this.chunks.push(chunk);
       this.onPcmChunk?.(chunk, this.context?.sampleRate ?? TARGET_SAMPLE_RATE);
+      this.emitAudioLevel(input);
     };
 
     this.silentGain = this.context.createGain();
@@ -181,7 +213,20 @@ export class ComposerAudioRecorder {
 
   stopStreaming(): void {
     this.onPcmChunk = null;
+    this.onAudioLevel = null;
+    this.lastLevelEmitAt = 0;
     this.cleanup();
+  }
+
+  /** 计算并按 rAF 节流推送电平；无回调时跳过。 */
+  private emitAudioLevel(samples: Float32Array): void {
+    if (!this.onAudioLevel) return;
+    const now = typeof performance !== "undefined" ? performance.now() : Date.now();
+    if (this.lastLevelEmitAt > 0 && now - this.lastLevelEmitAt < LEVEL_EMIT_MIN_INTERVAL_MS) {
+      return;
+    }
+    this.lastLevelEmitAt = now;
+    this.onAudioLevel(computePcmRmsLevel(samples));
   }
 
   async stop(): Promise<ComposerRecordedWav> {
@@ -252,6 +297,8 @@ export class ComposerAudioRecorder {
     }
     this.chunks = [];
     this.onPcmChunk = null;
+    this.onAudioLevel = null;
+    this.lastLevelEmitAt = 0;
     this.startedAt = 0;
   }
 }

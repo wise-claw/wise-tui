@@ -7,7 +7,7 @@ import {
 import { normalizeComposerSpeechAutoSendEndingText } from "../utils/composerSpeechAutoSendEnding";
 import { normalizeComposerSpeechEnginePreference } from "../utils/composerSpeechEngine";
 import { normalizeSenseVoiceLanguagePreference } from "../utils/senseVoiceLang";
-import { normalizeSilenceAutoSendIdleMs } from "../utils/composerSpeechSilenceIdle";
+import { normalizeSilenceAutoSendIdleMs, normalizeManualSegmentIdleMs } from "../utils/composerSpeechSilenceIdle";
 import { getAppSettingJson, setAppSettingJson } from "./appSettingsStore";
 
 let current: ComposerSpeechPreferencesV1 = { ...DEFAULT_COMPOSER_SPEECH_PREFERENCES };
@@ -47,7 +47,7 @@ export function normalizeComposerSpeechPreferences(
     autoSendEndingText:
       autoSendEndingText || DEFAULT_COMPOSER_SPEECH_PREFERENCES.autoSendEndingText,
     silenceAutoSendIdleMs: normalizeSilenceAutoSendIdleMs(o.silenceAutoSendIdleMs),
-    speechToRequirementEnabled: o.speechToRequirementEnabled === true,
+    manualSegmentIdleMs: normalizeManualSegmentIdleMs(o.manualSegmentIdleMs),
     speechPolishEnabled: o.speechPolishEnabled !== false,
     speechEngineMode: normalizeComposerSpeechEnginePreference(o.speechEngineMode),
     senseVoiceLang: normalizeSenseVoiceLanguagePreference(o.senseVoiceLang),

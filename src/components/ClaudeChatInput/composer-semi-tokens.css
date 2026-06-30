@@ -182,6 +182,7 @@
 .app-claude-composer-voice-trigger-wrap {
   display: inline-flex;
   align-items: center;
+  position: relative;
 }
 
 .app-composer-voice-panel-popover.ant-popover .ant-popover-inner {

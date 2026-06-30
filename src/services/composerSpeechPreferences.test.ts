@@ -7,7 +7,7 @@ describe("normalizeComposerSpeechPreferences", () => {
       sendMode: "manual",
       autoSendEndingText: "发送",
       silenceAutoSendIdleMs: 1000,
-      speechToRequirementEnabled: false,
+      manualSegmentIdleMs: 1000,
       speechPolishEnabled: true,
       speechEngineMode: "auto",
       senseVoiceLang: "auto",
@@ -26,7 +26,7 @@ describe("normalizeComposerSpeechPreferences", () => {
       sendMode: "silenceAutoSend",
       autoSendEndingText: "发送",
       silenceAutoSendIdleMs: 1000,
-      speechToRequirementEnabled: false,
+      manualSegmentIdleMs: 1000,
       speechPolishEnabled: true,
       speechEngineMode: "auto",
       senseVoiceLang: "auto",
@@ -46,7 +46,7 @@ describe("normalizeComposerSpeechPreferences", () => {
       sendMode: "silenceAutoSend",
       autoSendEndingText: "提交",
       silenceAutoSendIdleMs: 1000,
-      speechToRequirementEnabled: false,
+      manualSegmentIdleMs: 1000,
       speechPolishEnabled: true,
       speechEngineMode: "auto",
       senseVoiceLang: "auto",
@@ -84,14 +84,22 @@ describe("normalizeComposerSpeechPreferences", () => {
     ).toMatchObject({ silenceAutoSendIdleMs: 10_000 });
   });
 
-  test("enables speechToRequirement when true", () => {
+  test("clamps and steps manualSegmentIdleMs", () => {
     expect(
       normalizeComposerSpeechPreferences({
-        speechToRequirementEnabled: true,
+        manualSegmentIdleMs: 1234,
       }),
-    ).toMatchObject({
-      speechToRequirementEnabled: true,
-    });
+    ).toMatchObject({ manualSegmentIdleMs: 1200 });
+    expect(
+      normalizeComposerSpeechPreferences({
+        manualSegmentIdleMs: 50,
+      }),
+    ).toMatchObject({ manualSegmentIdleMs: 400 });
+    expect(
+      normalizeComposerSpeechPreferences({
+        manualSegmentIdleMs: 99_999,
+      }),
+    ).toMatchObject({ manualSegmentIdleMs: 10_000 });
   });
 
   test("falls back when mode unknown or ending empty", () => {
@@ -104,7 +112,7 @@ describe("normalizeComposerSpeechPreferences", () => {
       sendMode: "manual",
       autoSendEndingText: "发送",
       silenceAutoSendIdleMs: 1000,
-      speechToRequirementEnabled: false,
+      manualSegmentIdleMs: 1000,
       speechPolishEnabled: true,
       speechEngineMode: "auto",
       senseVoiceLang: "auto",

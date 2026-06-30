@@ -44,12 +44,32 @@ export interface ClaudeLineEditsDayBucket {
   date: string;
   linesEdited: number;
   diffCount: number;
+  /** Edit/Write/MultiEdit 等工具调用产生的新增行数。 */
+  linesAdded: number;
+  /** Edit/Write/MultiEdit 等工具调用产生的删除行数。 */
+  linesRemoved: number;
+}
+
+/** 固定时间窗口内的代码编辑量聚合。 */
+export interface ClaudeLineEditsWindowSummary {
+  linesEdited: number;
+  linesAdded: number;
+  linesRemoved: number;
+  diffCount: number;
 }
 
 export interface ClaudeLineEditsSnapshotResponse {
   totalLinesEdited: number;
+  /** 近一年汇总：新增行数。 */
+  totalLinesAdded: number;
+  /** 近一年汇总：删除行数。 */
+  totalLinesRemoved: number;
   totalDiffCount: number;
   days: ClaudeLineEditsDayBucket[];
+  /** 最近 7 天聚合；无数据时为 null。 */
+  last7Days: ClaudeLineEditsWindowSummary | null;
+  /** 最近 30 天聚合；无数据时为 null。 */
+  last30Days: ClaudeLineEditsWindowSummary | null;
   mostActiveMonth: string | null;
   mostActiveDay: string | null;
   longestStreakDays: number;

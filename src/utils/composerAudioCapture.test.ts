@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { encodeMonoPcm16ToWav, resampleFloat32Linear } from "./composerAudioCapture";
+import { computePcmRmsLevel, encodeMonoPcm16ToWav, resampleFloat32Linear } from "./composerAudioCapture";
 
 describe("encodeMonoPcm16ToWav", () => {
   test("writes RIFF header and 16-bit PCM payload", () => {
@@ -31,5 +31,36 @@ describe("resampleFloat32Linear", () => {
   test("returns same buffer when rates match", () => {
     const input = new Float32Array([0.1, 0.2]);
     expect(resampleFloat32Linear(input, 16_000, 16_000)).toBe(input);
+  });
+});
+
+describe("computePcmRmsLevel", () => {
+  test("静音返回 0", () => {
+    const silent = new Float32Array(1024);
+    expect(computePcmRmsLevel(silent)).toBe(0);
+  });
+
+  test("高电平映射到接近 1", () => {
+    const loud = new Float32Array(1024);
+    for (let i = 0; i < loud.length; i += 1) {
+      loud[i] = i % 2 === 0 ? 0.9 : -0.9;
+    }
+    const level = computePcmRmsLevel(loud);
+    expect(level).toBeGreaterThan(0.7);
+    expect(level).toBeLessThanOrEqual(1);
+  });
+
+  test("人声区间落在 0.05~0.8", () => {
+    const voice = new Float32Array(1024);
+    for (let i = 0; i < voice.length; i += 1) {
+      voice[i] = Math.sin(i * 0.1) * 0.15;
+    }
+    const level = computePcmRmsLevel(voice);
+    expect(level).toBeGreaterThan(0.05);
+    expect(level).toBeLessThan(0.8);
+  });
+
+  test("空 buffer 返回 0", () => {
+    expect(computePcmRmsLevel(new Float32Array(0))).toBe(0);
   });
 });

@@ -77,12 +77,7 @@ import {
 import { resolveEngineForSession } from "../../utils/sessionExecutionEngine";
 import { normalizeSessionExecutionEngine } from "../../constants/sessionExecutionEngine";
 import { pickSessionForRepositorySidebarSelect } from "../../utils/claudeSessionSelection";
-import { useComposerSpeechPreferences } from "../../hooks/useComposerSpeechPreferences";
 
-import {
-  buildSpeechToRequirementScope,
-  useSpeechToRequirementSync,
-} from "../../hooks/useSpeechToRequirementSync";
 import {
   repositoryPathsMatch,
   resolveRepositoryMainSessionId,
@@ -414,20 +409,6 @@ export function ClaudeChatInner({
 }: Props) {
   const chatRootRef = useRef<HTMLDivElement>(null);
   const composerTrayRef = useRef<HTMLDivElement>(null);
-  const { prefs: speechPrefs } = useComposerSpeechPreferences();
-  const speechToRequirementScope = useMemo(
-    () =>
-      buildSpeechToRequirementScope({
-        activeProjectId: activeProject?.id ?? null,
-        activeRepositoryId: activeRepository?.id ?? null,
-      }),
-    [activeProject?.id, activeRepository?.id],
-  );
-  useSpeechToRequirementSync(
-    speechPrefs.speechToRequirementEnabled && !deferHeavySubtree,
-    speechToRequirementScope,
-    session,
-  );
 
   const backgroundInvocationDockEnabled = useMemo(() => {
     if (session.status === "running" || session.status === "connecting") return true;

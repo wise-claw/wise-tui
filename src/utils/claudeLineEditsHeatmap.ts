@@ -10,9 +10,20 @@ export interface LineEditsHeatmapCell {
 export interface LineEditsHeatmapWeek {
   /** 该列周一的 ISO 日期 YYYY-MM-DD */
   weekStart: string;
+  /** 稳定唯一 id：真实列等于 weekStart，占位列带 __pad: 前缀避免与 ISO 日期冲突 */
+  key: string;
+  /** 该列是否为补齐占位列（视觉上以极淡骨架呈现，保持 7 列结构可见） */
+  isPlaceholder?: boolean;
   /** 7 格：周一 … 周日 */
   cells: LineEditsHeatmapCell[];
 }
+
+/**
+ * 视觉最小有意义列数。当数据只覆盖几天（weeks.length < MIN_VISIBLE_WEEKS）时，
+ * 左侧补占位列把列数补齐到 MIN_VISIBLE_WEEKS，避免 flex 列被拉伸成「超大块」。
+ */
+const MIN_VISIBLE_WEEKS = 7;
+const PAD_KEY_PREFIX = "__pad:";
 
 const WEEKDAY_LABELS = ["一", "三", "五"] as const;
 const WEEKDAY_LABEL_ROWS = [0, 2, 4] as const;
@@ -92,8 +103,43 @@ export function buildLineEditsHeatmapWeeks(
       lastMonth = month;
     }
 
-    weeks.push({ weekStart, cells });
+    weeks.push({ weekStart, key: weekStart, cells });
     cursor = addDays(cursor, 7);
+  }
+
+  // 数据只覆盖几天时,左侧补占位列,避免 flex 列被拉伸成超大块。
+  // 占位列整体早于 gridStart,inRange 全为 false,月份 label 不显示。
+  if (weeks.length < MIN_VISIBLE_WEEKS) {
+    const padCount = MIN_VISIBLE_WEEKS - weeks.length;
+    const padWeeks: LineEditsHeatmapWeek[] = [];
+    // 从 gridStart 倒推 padCount 周作为左侧占位的起点
+    let padCursor = addDays(gridStart, -padCount * 7);
+    for (let i = 0; i < padCount; i += 1) {
+      const weekStart = formatIsoDate(padCursor);
+      const cells: LineEditsHeatmapCell[] = [];
+      for (let row = 0; row < 7; row += 1) {
+        const cellDate = addDays(padCursor, row);
+        cells.push({
+          date: formatIsoDate(cellDate),
+          linesEdited: 0,
+          diffCount: 0,
+          inRange: false,
+        });
+      }
+      padWeeks.push({
+        weekStart,
+        key: `${PAD_KEY_PREFIX}${i}`,
+        isPlaceholder: true,
+        cells,
+      });
+      padCursor = addDays(padCursor, 7);
+    }
+    // 占位列里的 month label 不写入 monthLabels(避免连续幽灵月份)
+    weeks.unshift(...padWeeks);
+    // 已有的真实列 monthLabel 索引需要整体右移 padCount
+    for (const m of monthLabels) {
+      m.weekIndex += padCount;
+    }
   }
 
   return { weeks, monthLabels };
