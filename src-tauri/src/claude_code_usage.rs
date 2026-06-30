@@ -40,6 +40,8 @@ pub struct ClaudeUsageSeriesPayload {
     pub buckets: Vec<ClaudeUsageBucket>,
     pub total_tokens: u64,
     pub total_input_tokens: u64,
+    /// 输出 token 总量；与 `total_tokens` 拆分展示，便于和"输入侧缓存命中率"分母区分。
+    pub total_output_tokens: u64,
     pub total_cache_creation_tokens: u64,
     pub total_cache_read_tokens: u64,
     pub cache_hit_rate: Option<f64>,
@@ -80,6 +82,9 @@ impl Acc {
         self.cost_entries += o.cost_entries;
     }
 
+    /// 全量 token 合计：输入 + 输出 + 缓存写 + 缓存读。
+    /// 注意：`cache_hit_rate` 的分母只覆盖输入侧（input + cache_create + cache_read），
+    /// 不含 output —— 与 ccusage / Anthropic 计费口径一致。
     fn total_tokens(&self) -> u64 {
         self.input + self.output + self.cache_create + self.cache_read
     }
@@ -430,6 +435,7 @@ fn acc_to_bucket(sort_key: String, label: String, acc: Acc) -> ClaudeUsageBucket
 struct SeriesTotals {
     total_tokens: u64,
     total_input: u64,
+    total_output: u64,
     total_cache_create: u64,
     total_cache_read: u64,
     total_cost: f64,
@@ -440,6 +446,7 @@ fn series_totals(buckets: &[ClaudeUsageBucket]) -> SeriesTotals {
     let mut out = SeriesTotals {
         total_tokens: 0,
         total_input: 0,
+        total_output: 0,
         total_cache_create: 0,
         total_cache_read: 0,
         total_cost: 0.0,
@@ -448,6 +455,7 @@ fn series_totals(buckets: &[ClaudeUsageBucket]) -> SeriesTotals {
     for b in buckets {
         out.total_tokens += b.total_tokens;
         out.total_input += b.input_tokens;
+        out.total_output += b.output_tokens;
         out.total_cache_create += b.cache_creation_tokens;
         out.total_cache_read += b.cache_read_tokens;
         out.total_cost += b.cost_usd;
@@ -465,6 +473,7 @@ fn build_series_payload(
         buckets,
         total_tokens: t.total_tokens,
         total_input_tokens: t.total_input,
+        total_output_tokens: t.total_output,
         total_cache_creation_tokens: t.total_cache_create,
         total_cache_read_tokens: t.total_cache_read,
         cache_hit_rate: cache_hit_rate(t.total_input, t.total_cache_create, t.total_cache_read),
@@ -642,5 +651,47 @@ mod tests {
             },
         );
         assert_eq!(b.cache_hit_rate, Some(0.85));
+    }
+
+    #[test]
+    fn series_payload_aggregates_output_tokens() {
+        // 模拟合计 2800M 的口径：input 384 + output 27 + cache_create 9 + cache_read 2380 = 2800；
+        // 命中率分母（输入侧）= 384 + 9 + 2380 = 2773，与前端展示一致。
+        let buckets = vec![
+            acc_to_bucket(
+                "2026-01-01".into(),
+                "1/1".into(),
+                Acc {
+                    input: 200,
+                    output: 15,
+                    cache_create: 5,
+                    cache_read: 1200,
+                    ..Default::default()
+                },
+            ),
+            acc_to_bucket(
+                "2026-01-02".into(),
+                "1/2".into(),
+                Acc {
+                    input: 184,
+                    output: 12,
+                    cache_create: 4,
+                    cache_read: 1180,
+                    ..Default::default()
+                },
+            ),
+        ];
+
+        let payload = build_series_payload(buckets, "近 30 天".into());
+
+        assert_eq!(payload.total_tokens, 2800);
+        assert_eq!(payload.total_input_tokens, 384);
+        assert_eq!(payload.total_output_tokens, 27);
+        assert_eq!(payload.total_cache_creation_tokens, 9);
+        assert_eq!(payload.total_cache_read_tokens, 2380);
+        // cache_read / (input + cache_creation + cache_read) ≈ 2380 / 2773 ≈ 0.8584
+        let rate = payload.cache_hit_rate.expect("hit rate present");
+        assert!((rate - 0.8584).abs() < 0.001, "rate={rate}");
+        assert_eq!(payload.period_caption, "近 30 天");
     }
 }

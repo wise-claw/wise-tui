@@ -35,6 +35,7 @@ function sampleSeries(): ClaudeUsageSeriesPayload {
     ],
     totalTokens: 41_000,
     totalInputTokens: 22_000,
+    totalOutputTokens: 5000,
     totalCacheCreationTokens: 2000,
     totalCacheReadTokens: 12_000,
     cacheHitRate: 0.34,

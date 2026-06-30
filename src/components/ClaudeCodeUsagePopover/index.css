@@ -272,6 +272,12 @@
   color: var(--ant-color-text);
 }
 
+.app-cc-usage-cache-formula-note {
+  margin-top: 4px;
+  font-size: 10px;
+  color: var(--ant-color-text-tertiary);
+}
+
 .app-cc-usage-total {
   margin-bottom: 8px;
   padding: 8px 12px;

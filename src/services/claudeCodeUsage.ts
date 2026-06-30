@@ -20,6 +20,8 @@ export interface ClaudeUsageSeriesPayload {
   buckets: ClaudeUsageBucket[];
   totalTokens: number;
   totalInputTokens: number;
+  /** 输出 token 总量；与 `totalTokens` 拆分展示，便于和"输入侧缓存命中率"分母区分。 */
+  totalOutputTokens: number;
   totalCacheCreationTokens: number;
   totalCacheReadTokens: number;
   cacheHitRate: number | null;

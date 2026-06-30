@@ -5150,7 +5150,8 @@
 }
 
 .app-claude-messages .app-message-part--tool.app-message-part--expanded .app-message-part-header {
-  border-bottom: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 55%, transparent);
+  /* 不再画 header/content 分隔线；保留浅灰底色以体现展开态。 */
+  border-bottom: none;
   background: color-mix(in srgb, var(--ant-color-fill-quaternary) 45%, transparent);
 }
 
