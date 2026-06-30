@@ -42,7 +42,13 @@ function flattenCodeChildren(children: ReactNode): string {
   return String(children ?? "");
 }
 
-const MarkdownCopyButton = memo(function MarkdownCopyButton({ text }: { text: string }) {
+const MarkdownCopyButton = memo(function MarkdownCopyButton({
+  text,
+  variant,
+}: {
+  text: string;
+  variant?: "floating" | "head";
+}) {
   const [copied, setCopied] = useState(false);
 
   const handleCopy = useCallback(() => {
@@ -58,9 +64,9 @@ const MarkdownCopyButton = memo(function MarkdownCopyButton({ text }: { text: st
   return (
     <button
       type="button"
-      className="app-markdown-copy-btn"
-      aria-label="复制"
-      data-tooltip={copied ? "已复制" : "复制"}
+      className={`app-markdown-copy-btn${variant === "head" ? " app-markdown-copy-btn--head" : ""}`}
+      aria-label={copied ? "已复制" : "复制代码"}
+      title={copied ? "已复制" : "复制代码"}
       data-copied={copied ? "true" : undefined}
       onClick={handleCopy}
     >
@@ -86,6 +92,7 @@ const MarkdownFencedCodeBlock = memo(function MarkdownFencedCodeBlock({
   codeChildren: ReactNode;
   wrapperClassName?: string;
 }) {
+  const [wrap, setWrap] = useState(false);
   const highlighted = useMemo(() => {
     if (streaming || !text.trim()) return null;
     return highlightMarkdownCode(text, lang);
@@ -94,15 +101,30 @@ const MarkdownFencedCodeBlock = memo(function MarkdownFencedCodeBlock({
   const codeClassName = highlighted?.resolvedLang
     ? `hljs language-${highlighted.resolvedLang}`
     : className || "hljs";
-  const languageLabel = formatMarkdownCodeLanguageLabel(highlighted?.resolvedLang || lang);
+  // 仅用显式 fence 语言作徽标；highlightAuto 的猜测语言不外显，避免误导标签。
+  const languageLabel = formatMarkdownCodeLanguageLabel(lang) || "文本";
 
   return (
-    <div className={`app-markdown-code${wrapperClassName ? ` ${wrapperClassName}` : ""}`}>
-      {languageLabel ? (
-        <div className="app-markdown-code__head">
-          <span className="app-markdown-code__lang">{languageLabel}</span>
+    <div
+      className={`app-markdown-code${wrap ? " app-markdown-code--wrap" : ""}${
+        wrapperClassName ? ` ${wrapperClassName}` : ""
+      }`}
+    >
+      <div className="app-markdown-code__head">
+        <span className="app-markdown-code__lang">{languageLabel}</span>
+        <div className="app-markdown-code__actions">
+          <button
+            type="button"
+            className="app-markdown-code__head-btn"
+            aria-pressed={wrap}
+            title={wrap ? "取消自动换行" : "自动换行"}
+            onClick={() => setWrap((prev) => !prev)}
+          >
+            {wrap ? "不换行" : "换行"}
+          </button>
+          <MarkdownCopyButton text={text} variant="head" />
         </div>
-      ) : null}
+      </div>
       <pre {...preProps}>
         {highlighted ? (
           <code className={codeClassName} dangerouslySetInnerHTML={{ __html: highlighted.html }} />
@@ -110,7 +132,6 @@ const MarkdownFencedCodeBlock = memo(function MarkdownFencedCodeBlock({
           <code className={className}>{codeChildren}</code>
         )}
       </pre>
-      <MarkdownCopyButton text={text} />
     </div>
   );
 });
@@ -212,9 +233,11 @@ export function createMarkdownComponents(opts: {
         {children}
       </a>
     ),
-    h1: ({ children }) => <h3 className="app-markdown-h">{children}</h3>,
-    h2: ({ children }) => <h4 className="app-markdown-h">{children}</h4>,
-    h3: ({ children }) => <h5 className="app-markdown-h">{children}</h5>,
+    // 保留原始标题层级：基础 .app-markdown 已有 16/14.5/13.5 的大小阶梯，
+    // chat-prose 还会给 h2 加分隔线；此前统一降级为 h3/h4/h5 使 ##/### 几乎与正文同号。
+    h1: ({ children }) => <h1 className="app-markdown-h">{children}</h1>,
+    h2: ({ children }) => <h2 className="app-markdown-h">{children}</h2>,
+    h3: ({ children }) => <h3 className="app-markdown-h">{children}</h3>,
     pre: ({ children, ...props }) => {
       const child = Array.isArray(children) ? children[0] : children;
       let className = "";

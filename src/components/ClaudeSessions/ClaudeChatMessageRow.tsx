@@ -16,6 +16,7 @@ import { DispatchRecordMessage } from "./DispatchRecordMessage";
 import { UserMessageDisplayBody } from "./UserMessageDisplayBody";
 import { ChatMessageRowActions } from "./ChatMessageRowActions";
 import { useChatMessageCopyText } from "./useChatMessageCopyText";
+import { formatChatMessageListTime } from "../../utils/formatChatMessageListTime";
 
 interface Props {
   sessionId?: string;
@@ -116,7 +117,16 @@ function ClaudeChatMessageRowInner({
     return renderChatBody();
   }
 
-  const showSender = !mergedWithPrevious && (toolUser || (msg.role !== "user" && msg.role !== "assistant"));
+  // 非合并行（一组的首条）统一展示发送者标签 + 时间戳，便于扫读对话轮次；
+  // 合并行（与上一条同发送者）仅保留浮动操作，纵向成组。
+  const showHeader = !mergedWithPrevious;
+  const senderLabel = toolUser
+    ? "工具"
+    : msg.role === "user"
+      ? "我"
+      : msg.role === "assistant"
+        ? "Claude"
+        : "系统";
   const visibleBody = msg.role === "system" ? renderSystemBody() : renderNonSystemContent();
   if (!visibleBody || !hasRenderableChatMessageBody(msg)) {
     return null;
@@ -131,12 +141,10 @@ function ClaudeChatMessageRowInner({
         {toolUser ? "具" : msg.role === "user" ? "我" : msg.role === "assistant" ? "C" : "S"}
       </div>
       <div className="app-claude-message-body">
-        {showSender ? (
+        {showHeader ? (
           <div className="app-claude-message-header">
             <div className="app-claude-message-header-leading">
-              <span className="app-claude-message-sender">
-                {toolUser ? "工具" : "系统"}
-              </span>
+              <span className="app-claude-message-sender">{senderLabel}</span>
               <ChatMessageRowActions
                 sessionId={sessionId}
                 msg={msg}
@@ -145,6 +153,12 @@ function ClaudeChatMessageRowInner({
                 sessionsForDispatchLookup={sessionsForDispatchLookup}
               />
             </div>
+            <span
+              className="app-claude-message-time"
+              title={new Date(msg.timestamp).toLocaleString("zh-CN")}
+            >
+              {formatChatMessageListTime(msg.timestamp)}
+            </span>
           </div>
         ) : (
           <ChatMessageRowActions

@@ -3712,7 +3712,7 @@
 
 .app-claude-messages--scrolling .app-claude-message-floating-actions,
 .app-claude-messages--scrolling .app-tool-copy-btn,
-.app-claude-messages--scrolling .app-markdown-copy-btn {
+.app-claude-messages--scrolling .app-markdown-copy-btn:not(.app-markdown-copy-btn--head) {
   opacity: 0 !important;
   pointer-events: none !important;
 }
@@ -6327,7 +6327,7 @@ button.app-message-part-header:disabled:hover {
   background: var(--ant-color-fill-quaternary);
   padding: 1px 4px;
   border-radius: 3px;
-  color: var(--ant-color-text-secondary);
+  color: var(--ant-color-text);
 }
 
 .app-markdown pre {
@@ -9287,6 +9287,179 @@ button.app-message-part-header:disabled:hover {
 
 .app-markdown-host--continuation::-webkit-scrollbar-thumb:hover {
   background: var(--ant-color-border);
+}
+
+/* ───────────────────────────────────────────────────────────────────────────
+   会话消息列表清晰度优化：工具入参 / 失败标记 / 代码块头 / 角色时间 / 系统折叠
+   ─────────────────────────────────────────────────────────────────────────── */
+
+/* 工具卡：失败标记（不只靠状态点颜色，折叠态也可见） */
+.app-message-part-fail-chip {
+  flex-shrink: 0;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1.5;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: var(--ant-color-error-bg);
+  color: var(--ant-color-error);
+  border: 1px solid var(--ant-color-error-border);
+}
+
+.app-message-part--tool-error {
+  border-left: 2px solid var(--ant-color-error-border);
+}
+
+/* 工具卡：展开体内的入参 key/value 列表 */
+.app-tool-input-params {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.app-tool-input-param {
+  display: grid;
+  grid-template-columns: minmax(64px, max-content) 1fr;
+  gap: 8px;
+  align-items: start;
+}
+
+.app-tool-input-param__key {
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 11px;
+  color: var(--ant-color-text-tertiary);
+  word-break: break-all;
+}
+
+.app-tool-input-param__value {
+  margin: 0;
+  padding: 0;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  font-size: 11.5px;
+  line-height: 1.5;
+  color: var(--ant-color-text);
+  white-space: pre-wrap;
+  word-break: break-word;
+  max-height: 200px;
+  overflow: auto;
+}
+
+/* 代码块：头部操作区（换行切换 + 复制常驻可见、可键盘聚焦） */
+.app-markdown-code__actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  flex-shrink: 0;
+}
+
+.app-markdown-code__head-btn {
+  border: none;
+  background: transparent;
+  padding: 1px 6px;
+  border-radius: 4px;
+  font-size: 11px;
+  color: var(--ant-color-text-tertiary);
+  cursor: pointer;
+  transition: color 0.15s, background 0.15s;
+}
+
+.app-markdown-code__head-btn:hover,
+.app-markdown-code__head-btn:focus-visible {
+  color: var(--ant-color-text);
+  background: var(--ant-color-fill-tertiary);
+}
+
+.app-markdown-code__head-btn[aria-pressed="true"] {
+  color: var(--ant-color-primary);
+}
+
+/* 复制按钮移入头部：静态定位、默认半可见、可键盘聚焦 */
+.app-markdown-copy-btn--head {
+  position: static;
+  top: auto;
+  right: auto;
+  width: 22px;
+  height: 22px;
+  opacity: 0.6;
+  background: transparent;
+}
+
+.app-markdown-copy-btn--head:hover,
+.app-markdown-copy-btn--head:focus-visible {
+  opacity: 1;
+}
+
+/* 代码块软换行模式 */
+.app-markdown-code--wrap pre {
+  overflow-x: visible;
+}
+
+.app-markdown-code--wrap pre code {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+}
+
+/* Markdown 图片不溢出消息宽度 */
+.app-markdown img {
+  max-width: 100%;
+  height: auto;
+  border-radius: 6px;
+}
+
+/* 角色：用户消息微弱区分（适度增强，保持扁平、不做气泡/右对齐）。
+   排除工具结果行（同时带 --user 与 --tool-user），其内容是工具卡而非用户输入。 */
+.app-claude-message--user:not(.app-claude-message--tool-user) .app-claude-message-content {
+  box-sizing: border-box;
+  border-left: 2px solid color-mix(in srgb, var(--ant-color-primary) 45%, transparent);
+  padding-left: 10px;
+  background: color-mix(in srgb, var(--ant-color-primary-bg) 22%, transparent);
+  border-radius: 0 6px 6px 0;
+}
+
+/* 合并行：保留一条淡连接轨，维持发送者纵列身份 */
+.app-claude-message--merged .app-claude-message-avatar {
+  position: relative;
+}
+
+.app-claude-message--merged .app-claude-message-avatar::after {
+  content: "";
+  visibility: visible;
+  position: absolute;
+  left: 50%;
+  top: -3px;
+  bottom: -3px;
+  width: 2px;
+  transform: translateX(-50%);
+  border-radius: 2px;
+  background: color-mix(in srgb, var(--ant-color-border-secondary) 70%, transparent);
+}
+
+/* 思考过程：折叠态字数提示 */
+.app-message-part-reasoning-label__count {
+  flex-shrink: 0;
+  font-size: 10px;
+  color: var(--ant-color-text-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+/* 系统消息：正文留白 + 全宽「展开全文 / 收起」 */
+.app-system-message-body {
+  padding: 8px 10px;
+}
+
+.app-system-message-expand {
+  display: block;
+  width: 100%;
+  text-align: center;
+  border-top: 1px solid var(--ant-color-border-secondary);
+  border-radius: 0;
+  padding: 5px 8px;
+}
+
+.app-system-message--error .app-system-message-expand {
+  border-top-color: var(--ant-color-error-border);
 }
 
 

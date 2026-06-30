@@ -1,4 +1,5 @@
-import { useMemo } from "react";
+import { useLayoutEffect, useMemo, useRef, useState } from "react";
+import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import { Markdown } from "./Markdown";
 import { formatJsonPrettyRoot, JsonSyntaxHighlight } from "./systemMessageJson";
 
@@ -64,21 +65,72 @@ function hardenMarkdownOutsideCodeFences(md: string): string {
 
 export function SystemMessageContent({ text }: { text: string }) {
   const normalizedText = useMemo(() => normalizeSystemText(text), [text]);
-  const trimmed = normalizedText.trim();
-  if (!trimmed) return null;
-
   const parsedJson = useMemo(() => tryParseJsonValue(normalizedText), [normalizedText]);
   const isJson = parsedJson !== null;
   const formattedJson = useMemo(() => {
     if (parsedJson === null) return "";
     return formatJsonPrettyRoot(parsedJson);
   }, [parsedJson]);
-
   const error = isErrorNotice(normalizedText);
+
+  const bodyRef = useRef<HTMLDivElement>(null);
+  const [expanded, setExpanded] = useState(false);
+  const [overflows, setOverflows] = useState(false);
+  const { copied, copy } = useCopyToClipboard();
+
+  // 折叠态（未展开）始终套用 --clamped(200px) 高度，超出即给出「展开全文」，
+  // 避免超长系统/JSON/日志淹没整段对话。
+  useLayoutEffect(() => {
+    if (expanded) {
+      setOverflows((prev) => (prev ? false : prev));
+      return;
+    }
+    const el = bodyRef.current;
+    if (!el) return;
+    let rafId = 0;
+    const measure = () => {
+      const next = el.scrollHeight > el.clientHeight + 1;
+      setOverflows((prev) => (prev === next ? prev : next));
+    };
+    const schedule = () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(measure);
+    };
+    schedule();
+    const observer = typeof ResizeObserver !== "undefined" ? new ResizeObserver(schedule) : null;
+    observer?.observe(el);
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      observer?.disconnect();
+    };
+  }, [expanded, normalizedText]);
+
+  const trimmed = normalizedText.trim();
+  if (!trimmed) return null;
+
+  const formatBadge = error ? "错误" : isJson ? "JSON" : "Markdown";
+  const copyPayload = isJson ? formattedJson : normalizedText;
 
   return (
     <div className={`app-system-message${error ? " app-system-message--error" : ""}`}>
-      <div className="app-system-message-body">
+      <div className="app-system-message-bar">
+        <span className="app-system-message-badge app-system-message-badge--format">{formatBadge}</span>
+        <span className="app-system-message-bar-spacer" />
+        <button
+          type="button"
+          className="app-system-message-btn"
+          onClick={() => void copy(copyPayload)}
+          title={copied ? "已复制" : "复制"}
+        >
+          {copied ? "已复制" : "复制"}
+        </button>
+      </div>
+      <div
+        ref={bodyRef}
+        className={`app-system-message-body app-system-message-body--log${
+          expanded ? "" : " app-system-message-body--clamped"
+        }`}
+      >
         {isJson ? (
           <div className="app-system-message-json-wrap">
             <pre className="app-system-message-json-pre">
@@ -96,6 +148,15 @@ export function SystemMessageContent({ text }: { text: string }) {
           />
         )}
       </div>
+      {overflows || expanded ? (
+        <button
+          type="button"
+          className="app-system-message-btn app-system-message-expand"
+          onClick={() => setExpanded((prev) => !prev)}
+        >
+          {expanded ? "收起" : "展开全文"}
+        </button>
+      ) : null}
     </div>
   );
 }

@@ -37,7 +37,7 @@ export const UserMessageDisplayBody = memo(function UserMessageDisplayBody({ msg
 
   return (
     <div className="app-claude-user-message-display">
-      <UserMessageCollapsibleBody>
+      <UserMessageCollapsibleBody collapsible={!showFullInput}>
         <div className="app-message-part app-message-part--text">
           {defaultInstructionApplied && !showFullInput ? (
             <div className="app-claude-user-message-inline-row">
@@ -54,7 +54,7 @@ export const UserMessageDisplayBody = memo(function UserMessageDisplayBody({ msg
           ) : (
             <Markdown text={visibleText} streaming={streaming} showPendingHint={false} />
           )}
-          {!showFullInput && display.attachmentPaths.length > 0 ? (
+          {display.attachmentPaths.length > 0 ? (
             <div
               className="app-claude-user-message-attachments"
               title={display.attachmentPaths.join("\n")}
@@ -69,8 +69,9 @@ export const UserMessageDisplayBody = memo(function UserMessageDisplayBody({ msg
           type="button"
           className="app-claude-user-message-collapsible__toggle"
           onClick={() => setShowFullInput((prev) => !prev)}
+          title="包含被精简的规则 / 上下文等原始输入"
         >
-          {showFullInput ? "收起完整输入" : "查看完整输入"}
+          {showFullInput ? "收起原始输入" : "显示原始输入"}
         </button>
       ) : null}
     </div>

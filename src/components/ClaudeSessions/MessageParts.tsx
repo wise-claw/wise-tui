@@ -166,6 +166,7 @@ const ReasoningPartDisplay = memo(function ReasoningPartDisplay({
   }, [expanded, text]);
 
   const canToggle = overflows || expanded;
+  const charCount = part.text.trim().length;
   const { onPointerDown, consumeHadTextSelection, resetPointerGuard } = useClickAfterSelectionGuard();
   const handleToggle = useCallback(() => {
     setExpanded((prev) => !prev);
@@ -226,6 +227,9 @@ const ReasoningPartDisplay = memo(function ReasoningPartDisplay({
                     </svg>
                   </span>
                   <span className="app-message-part-reasoning-label__text">思考过程</span>
+                  {!expanded && canToggle && charCount > 0 ? (
+                    <span className="app-message-part-reasoning-label__count">{charCount} 字</span>
+                  ) : null}
                 </span>
                 <Markdown
                   text={text}
@@ -292,9 +296,22 @@ function truncateToolPreview(text: string, maxLen = 72): string {
   return normalized.length > maxLen ? `${normalized.slice(0, maxLen)}…` : normalized;
 }
 
+/** 解析 MCP 工具线名 `mcp__<server>__<tool>` 为可读的 server / tool。 */
+export function parseMcpToolName(name: string): { server: string; tool: string } | null {
+  if (!/^mcp__/i.test(name)) return null;
+  const segs = name.split("__");
+  const server = (segs[1] ?? "").trim();
+  const tool = segs.slice(2).join("__").trim() || server || name;
+  // 仅把下划线转空格作展示，保留连字符（多为 server 标识的一部分，如 ida-pro-mcp）。
+  const humanize = (s: string) => s.replace(/_+/g, " ").trim();
+  return { server: humanize(server), tool: humanize(tool) || name };
+}
+
 export function getToolDisplayInfo(part: ToolUsePart): { label: string; subtitle: string } {
   const input = part.input as Record<string, unknown>;
-  const n = part.name.trim();
+  const rawName = part.name.trim();
+  // 解析阶段对缺名 tool_use 默认填 "unknown"；展示时归一化为空，走「工具结果」分支。
+  const n = rawName.toLowerCase() === "unknown" ? "" : rawName;
   if (!n && (part.output?.trim() || part.error?.trim())) {
     const err = part.error?.trim() ?? "";
     const out = part.output?.trim() ?? "";
@@ -417,11 +434,28 @@ export function getToolDisplayInfo(part: ToolUsePart): { label: string; subtitle
         subtitle: bits.join(" · "),
       };
     }
-    default:
+    default: {
       if (isSkillToolPart(part)) {
         return {
           label: "Skill",
           subtitle: skillToolDisplayName(part),
+        };
+      }
+      const mcp = parseMcpToolName(n);
+      if (mcp) {
+        const detail = pickInputString(input, [
+          "query",
+          "url",
+          "path",
+          "file_path",
+          "command",
+          "pattern",
+          "prompt",
+          "description",
+        ]);
+        return {
+          label: mcp.tool,
+          subtitle: [mcp.server && `${mcp.server}`, detail].filter(Boolean).join(" · "),
         };
       }
       return {
@@ -442,6 +476,7 @@ export function getToolDisplayInfo(part: ToolUsePart): { label: string; subtitle
           "target_directory",
         ]),
       };
+    }
   }
 }
 
@@ -452,6 +487,8 @@ function getToolMetaTags(part: ToolUsePart): string[] {
   const taskId = typeof taskIdRaw === "string" && taskIdRaw.trim() ? taskIdRaw.trim() : "";
   const stage = typeof stageRaw === "string" && stageRaw.trim() ? stageRaw.trim() : "";
   const tags: string[] = [];
+  const mcp = parseMcpToolName(part.name.trim());
+  if (mcp?.server) tags.push(`MCP: ${mcp.server}`);
   if (taskId) tags.push(`任务: ${taskId}`);
   if (stage) tags.push(`阶段: ${stage}`);
   return tags;
@@ -500,11 +537,17 @@ export function shouldRenderOutputAsMarkdown(part: ToolUsePart): boolean {
 
   if (!text.trim()) return false;
 
-  // Use robust regex with multiline flag 'm' to detect markdown structures
+  // Use robust regex with multiline flag 'm' to detect markdown structures.
+  // 强调标记必须成对且非空：避免 snake_case / file_path / base_url 这类含单个下划线的
+  // 纯文本被误判为 Markdown，从而被重排、吞字或斜体化。
   const hasMarkdownCues =
     /^(?:#+\s|[-*+]\s|\d+\.\s)/m.test(text) ||  // headings, bullets, numbered lists at the start of any line
     /^(?:---|___|\*\*\*)$/m.test(text) ||       // horizontal lines
-    /\*\*|__|_|`[^`]+`/.test(text) ||            // bold, italic, or inline code
+    /^```/m.test(text) ||                       // 围栏代码块（整段为 ``` 代码时仍按 Markdown 渲染）
+    /\*\*[^*\n]+\*\*/.test(text) ||             // **bold**
+    /`[^`\n]+`/.test(text) ||                   // `inline code`
+    /(?:^|[^A-Za-z0-9_])__[^_\n]+__(?:[^A-Za-z0-9_]|$)/m.test(text) ||     // __bold__（两侧非单词字符）
+    /(?:^|[^A-Za-z0-9_])_[^_\s][^_\n]*_(?:[^A-Za-z0-9_]|$)/m.test(text) || // _emphasis_（两侧非单词字符）
     /\|.+\|.+\|/m.test(text);                   // tables
 
   return hasMarkdownCues;
@@ -528,6 +571,33 @@ function shouldShowToolOutputBody(part: ToolUsePart): boolean {
 }
 
 export { shouldShowToolOutputBody, toolFailureTextsDuplicate };
+
+const TOOL_INPUT_VALUE_MAX = 2000;
+
+/** 工具调用参数 → 可读的 key/value 行；用于在展开体内展示（bash 与文件编辑各有专属展示，调用方需自行排除）。 */
+export function getToolInputParamRows(part: ToolUsePart): { key: string; value: string }[] {
+  const input = part.input;
+  if (!input || typeof input !== "object" || Array.isArray(input)) return [];
+  const rows: { key: string; value: string }[] = [];
+  for (const [key, raw] of Object.entries(input as Record<string, unknown>)) {
+    if (raw == null) continue;
+    let value: string;
+    if (typeof raw === "string") value = raw;
+    else if (typeof raw === "number" || typeof raw === "boolean") value = String(raw);
+    else {
+      try {
+        value = JSON.stringify(raw, null, 2);
+      } catch {
+        continue;
+      }
+    }
+    value = value.trim();
+    if (!value) continue;
+    if (value.length > TOOL_INPUT_VALUE_MAX) value = `${value.slice(0, TOOL_INPUT_VALUE_MAX)}…`;
+    rows.push({ key, value });
+  }
+  return rows;
+}
 
 function toolPartRenderFingerprint(part: ToolUsePart): string {
   if (part.status !== "running") {
@@ -601,6 +671,10 @@ const ToolUsePartDisplay = memo(function ToolUsePartDisplay({
   const isErrorState = part.status === "error" || Boolean(part.error?.trim());
   const isBashOrExec = part.name.toLowerCase() === "bash" || part.name.toLowerCase() === "exec";
   const editPreview = useMemo(() => extractToolFileEditPreview(part), [part]);
+  const inputParamRows = useMemo(
+    () => (!isBashOrExec && !editPreview ? getToolInputParamRows(part) : []),
+    [part, isBashOrExec, editPreview],
+  );
   const hasExpandableBody = hasExpandableToolBody(part, info, editPreview);
   const [internalExpanded, setInternalExpanded] = useState(false);
   const expanded = controlledExpanded ?? internalExpanded;
@@ -674,6 +748,7 @@ const ToolUsePartDisplay = memo(function ToolUsePartDisplay({
           <span className="app-message-part-header__leading">{statusIcon}</span>
           <span className="app-message-part-header__main">
             <span className="app-message-part-title">{info.label}</span>
+            {isErrorState ? <span className="app-message-part-fail-chip">失败</span> : null}
             {info.subtitle ? (
               <span className="app-message-part-subtitle" title={info.subtitle}>
                 {info.subtitle}
@@ -722,6 +797,16 @@ const ToolUsePartDisplay = memo(function ToolUsePartDisplay({
               <pre className="app-tool-expanded-input-code"><code>{info.subtitle}</code></pre>
             </div>
           ) : null}
+          {inputParamRows.length > 0 ? (
+            <div className="app-tool-input-params">
+              {inputParamRows.map(({ key, value }) => (
+                <div className="app-tool-input-param" key={key}>
+                  <span className="app-tool-input-param__key">{key}</span>
+                  <pre className="app-tool-input-param__value">{value}</pre>
+                </div>
+              ))}
+            </div>
+          ) : null}
           {part.error?.trim() ? <pre className="app-tool-error">{part.error.trim()}</pre> : null}
           {shouldShowToolOutputBody(part) ? (
             <ToolUseOutputBody part={part} streaming={outputStreaming} />
@@ -745,11 +830,14 @@ function hasExpandableToolBody(
   const outputText = part.output?.trim() ?? "";
   const effectiveOutput =
     editPreview && outputText && isToolEditNoiseOutput(outputText) ? "" : outputText;
-  return Boolean(
-    effectiveOutput ||
-      part.error?.trim() ||
-      (isBashOrExec && info.subtitle?.trim()),
-  );
+  if (effectiveOutput || part.error?.trim() || (isBashOrExec && info.subtitle?.trim())) {
+    return true;
+  }
+  // 仅有入参（无输出）的工具（如 MCP / web_fetch / grep / Task）也可展开查看参数。
+  if (!isBashOrExec && !editPreview && getToolInputParamRows(part).length > 0) {
+    return true;
+  }
+  return false;
 }
 
 function isCompactEditPreviewPart(part: ToolUsePart): boolean {

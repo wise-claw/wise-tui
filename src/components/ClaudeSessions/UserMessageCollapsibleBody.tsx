@@ -2,16 +2,18 @@ import { useLayoutEffect, useRef, useState, type ReactNode } from "react";
 
 interface Props {
   children: ReactNode;
+  /** 为 false 时不做高度折叠（如已展开「原始输入」时避免与其叠加两个展开按钮）。 */
+  collapsible?: boolean;
 }
 
 /** 主会话用户消息：默认限制高度，过长时提供展开/收起。 */
-export function UserMessageCollapsibleBody({ children }: Props) {
+export function UserMessageCollapsibleBody({ children, collapsible = true }: Props) {
   const bodyRef = useRef<HTMLDivElement>(null);
   const [expanded, setExpanded] = useState(false);
   const [overflows, setOverflows] = useState(false);
 
   useLayoutEffect(() => {
-    if (expanded) {
+    if (!collapsible || expanded) {
       setOverflows((prev) => (prev ? false : prev));
       return;
     }
@@ -36,18 +38,20 @@ export function UserMessageCollapsibleBody({ children }: Props) {
       if (rafId) cancelAnimationFrame(rafId);
       observer?.disconnect();
     };
-  }, [expanded]);
+  }, [collapsible, expanded]);
+
+  const effectiveExpanded = !collapsible || expanded;
 
   return (
     <div
       className={`app-claude-user-message-collapsible${
-        expanded ? " app-claude-user-message-collapsible--expanded" : ""
+        effectiveExpanded ? " app-claude-user-message-collapsible--expanded" : ""
       }`}
     >
       <div ref={bodyRef} className="app-claude-user-message-collapsible__body">
         {children}
       </div>
-      {overflows && !expanded ? (
+      {collapsible && overflows && !expanded ? (
         <button
           type="button"
           className="app-claude-user-message-collapsible__toggle"
@@ -56,7 +60,7 @@ export function UserMessageCollapsibleBody({ children }: Props) {
           展开全文
         </button>
       ) : null}
-      {expanded ? (
+      {collapsible && expanded ? (
         <button
           type="button"
           className="app-claude-user-message-collapsible__toggle"
