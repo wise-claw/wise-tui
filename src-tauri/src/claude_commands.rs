@@ -1263,9 +1263,9 @@ fn create_claude_command(
     // Subprocess PATH：与查找逻辑一致，避免 GUI 下子进程找不到 node / 其它 CLI
     cmd.env("PATH", merge_path_env(&claude_path_search_prefixes()));
 
-    // 与 Wise 前端发送前 `/compact` 策略对齐：未显式配置时让 Claude Code 在约 88% 窗口时自动压缩。
+    // 与 Wise 前端发送前 `/compact` 策略对齐：未显式配置时让 Claude Code 在约 75% 窗口时自动压缩。
     if std::env::var("CLAUDE_AUTOCOMPACT_PCT_OVERRIDE").is_err() {
-        cmd.env("CLAUDE_AUTOCOMPACT_PCT_OVERRIDE", "88");
+        cmd.env("CLAUDE_AUTOCOMPACT_PCT_OVERRIDE", "75");
     }
 
     if bare {
@@ -1323,7 +1323,7 @@ fn create_streaming_claude_command(
     cmd.env("PATH", merge_path_env(&claude_path_search_prefixes()));
 
     if std::env::var("CLAUDE_AUTOCOMPACT_PCT_OVERRIDE").is_err() {
-        cmd.env("CLAUDE_AUTOCOMPACT_PCT_OVERRIDE", "88");
+        cmd.env("CLAUDE_AUTOCOMPACT_PCT_OVERRIDE", "75");
     }
 
     cmd.stdin(std::process::Stdio::piped());

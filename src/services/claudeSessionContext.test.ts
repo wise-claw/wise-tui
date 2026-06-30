@@ -100,9 +100,10 @@ describe("claudeSessionContext", () => {
 
   test("planAutoCompactBeforeSend skips when recent background compact lowered usage", () => {
     const tab = session([], "sid-1");
+    // 占用 < 发送阈值 (75%)，且近期 background 刚成功过 → 跳过重复压缩。
     const metrics = {
-      estimatedTokens: Math.round(DEFAULT_MAX_CONTEXT_TOKENS * 0.82),
-      ctxPercent: 82,
+      estimatedTokens: Math.round(DEFAULT_MAX_CONTEXT_TOKENS * 0.7),
+      ctxPercent: 70,
     };
     const recentAt = Date.now() - 60_000;
     expect(planAutoCompactBeforeSend(tab, "hello", metrics, recentAt).needed).toBe(false);
@@ -134,7 +135,7 @@ describe("claudeSessionContext", () => {
       estimatedTokens: Math.round(DEFAULT_MAX_CONTEXT_TOKENS * 0.74),
       ctxPercent: 74,
     };
-    // 74% 在 background compact 阈值（72%）以上，hint 应提示空闲时整理。
+    // 74% 在 background compact 阈值（60%）以上，hint 应提示空闲时整理。
     expect(formatContextStatusHint(metrics)).toBe("空闲时自动整理");
     // backgroundCompactInFlight=true 时覆盖为「后台整理中」短标签，与 sysmsg 不重复。
     expect(formatContextStatusHint(metrics, undefined, true)).toBe("后台整理中");
@@ -168,9 +169,11 @@ describe("claudeSessionContext", () => {
 
   test("planAutoCompactBeforeSend lowers threshold for heavy skill commands", () => {
     const tab = session([], "sid-1");
+    // 用低于常规阈值（75%）、高于重型阈值（60%）的占用：
+    // 普通 prompt 不触发；/claude-api 这种重型斜杠应该被压制触发。
     const metrics = {
-      estimatedTokens: Math.round(DEFAULT_MAX_CONTEXT_TOKENS * 0.75),
-      ctxPercent: 75,
+      estimatedTokens: Math.round(DEFAULT_MAX_CONTEXT_TOKENS * 0.65),
+      ctxPercent: 65,
     };
     expect(planAutoCompactBeforeSend(tab, "hello", metrics).needed).toBe(false);
     expect(planAutoCompactBeforeSend(tab, "/claude-api", metrics).needed).toBe(true);
@@ -183,6 +186,15 @@ describe("claudeSessionContext", () => {
       ctxPercent: 80,
     };
     expect(formatContextStatusHint(metrics, "/claude-api")).toContain("大块 Skill");
+  });
+
+  test("formatContextStatusHint says 后台自动整理 above send threshold (auto-after-send semantics)", () => {
+    // 先发后压：到达常规阈值时 hint 应表明是后台行为，避免「将自动压缩」暗示同步阻塞。
+    const metrics = {
+      estimatedTokens: Math.round(DEFAULT_MAX_CONTEXT_TOKENS * 0.8),
+      ctxPercent: 80,
+    };
+    expect(formatContextStatusHint(metrics, "hello")).toBe("后台自动整理");
   });
 
   test("resolveSessionContextMetricsForSend bumps estimate when jsonl tail saturated", async () => {
@@ -245,6 +257,47 @@ describe("claudeSessionContext", () => {
     test("COMPRESS_NOTICE_DEBOUNCE_MS 在 1-5s 之间，约束去重窗口", () => {
       expect(COMPRESS_NOTICE_DEBOUNCE_MS).toBeGreaterThanOrEqual(1_000);
       expect(COMPRESS_NOTICE_DEBOUNCE_MS).toBeLessThanOrEqual(5_000);
+    });
+
+    test("auto-after-send 提示已发出消息，预告后台压缩", () => {
+      const out = composeCompactNoticeTokens(metrics, "auto-after-send");
+      expect(out.sysmsg).toContain("后台");
+      expect(out.sysmsg).toContain("/compact");
+      expect(out.hint.length).toBeGreaterThan(0);
+      expect(out.sysmsg).not.toContain(out.hint);
+      // 与 before-send 文案必须不同，避免同场景复用同一 token 误导用户。
+      const before = composeCompactNoticeTokens(metrics, "auto-before-send");
+      expect(out.sysmsg).not.toBe(before.sysmsg);
+    });
+  });
+
+  describe("planBackgroundAutoCompact / fresh 节流", () => {
+    function idleTabWithDiskId(): ClaudeSession {
+      return {
+        ...session([], "sid-1"),
+        status: "idle",
+      };
+    }
+
+    test("recent background success within FRESH_MS window blocks re-fire", () => {
+      const tab = idleTabWithDiskId();
+      const metrics = {
+        estimatedTokens: Math.round(DEFAULT_MAX_CONTEXT_TOKENS * 0.8),
+        ctxPercent: 80,
+      };
+      expect(planBackgroundAutoCompact(tab, metrics).needed).toBe(true);
+      const withinFresh = Date.now() - 30_000;
+      expect(planBackgroundAutoCompact(tab, metrics, withinFresh).needed).toBe(false);
+    });
+
+    test("stale background success beyond FRESH_MS does not block re-fire", () => {
+      const tab = idleTabWithDiskId();
+      const metrics = {
+        estimatedTokens: Math.round(DEFAULT_MAX_CONTEXT_TOKENS * 0.8),
+        ctxPercent: 80,
+      };
+      const stale = Date.now() - (CONTEXT_BACKGROUND_COMPACT_FRESH_MS + 60_000);
+      expect(planBackgroundAutoCompact(tab, metrics, stale).needed).toBe(true);
     });
   });
 });

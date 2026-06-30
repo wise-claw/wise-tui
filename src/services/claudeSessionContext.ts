@@ -9,10 +9,10 @@ export const DEFAULT_MAX_CONTEXT_TOKENS = 200_000;
 export const CONTEXT_WARN_PERCENT = 75;
 
 /** 发送用户消息前主动 `/compact` 的阈值 */
-export const CONTEXT_AUTO_COMPACT_BEFORE_SEND_PERCENT = 88;
+export const CONTEXT_AUTO_COMPACT_BEFORE_SEND_PERCENT = 75;
 
 /** 会话空闲时在后台主动 `/compact` 的阈值（早于发送前阈值，减少发送卡顿） */
-export const CONTEXT_BACKGROUND_COMPACT_PERCENT = 72;
+export const CONTEXT_BACKGROUND_COMPACT_PERCENT = 60;
 
 /** 后台压缩成功后，发送前可跳过重复 compact 的有效期 */
 export const CONTEXT_BACKGROUND_COMPACT_FRESH_MS = 180_000;
@@ -27,7 +27,7 @@ export const CONTEXT_BACKGROUND_COMPACT_COOLDOWN_MS = 120_000;
 export const COMPRESS_NOTICE_DEBOUNCE_MS = 3_000;
 
 /** 压缩提示归一化 token，供 sysmsg / status hint / 失败 hint 共享，避免同事实不同字面。 */
-export type CompactNoticeKind = "auto-before-send" | "overflow-retry" | "manual";
+export type CompactNoticeKind = "auto-before-send" | "auto-after-send" | "overflow-retry" | "manual";
 
 export interface CompactNoticeTokens {
   /** 写入气泡的 sysmsg 全文。 */
@@ -51,6 +51,12 @@ export function composeCompactNoticeTokens(
         sysmsg: `${header}，发送前自动 /compact 压缩历史…`,
         hint: "自动压缩中",
       };
+    case "auto-after-send":
+      return {
+        // 先发后压：本轮已发出，等当前 turn 收尾后转后台，体感上消息不卡。
+        sysmsg: `${header}，当前消息照常发送，本轮回复后会在后台自动 /compact 压缩历史。`,
+        hint: "后台整理",
+      };
     case "overflow-retry":
       return {
         sysmsg: `${header}，检测到溢出，压缩历史后重试发送…`,
@@ -65,7 +71,7 @@ export function composeCompactNoticeTokens(
 }
 
 /** 大块 Skill / 工作流斜杠命令：单轮注入上下文多，提前压缩 */
-export const CONTEXT_AUTO_COMPACT_HEAVY_SKILL_PERCENT = 72;
+export const CONTEXT_AUTO_COMPACT_HEAVY_SKILL_PERCENT = 60;
 
 /** 内存估算偏高时主动读磁盘 jsonl 尾部以对齐 resume 历史 */
 export const CONTEXT_DISK_ESTIMATE_LOAD_PERCENT = 70;
@@ -303,6 +309,8 @@ export function planAutoCompactBeforeSend(
 export function planBackgroundAutoCompact(
   session: ClaudeSession,
   metricsOverride?: SessionContextMetrics,
+  recentBackgroundCompactAtMs?: number | null,
+  nowMs: number = Date.now(),
 ): BackgroundAutoCompactPlan {
   const metrics = metricsOverride ?? getSessionContextMetrics(session);
   const claudeSid = session.claudeSessionId?.trim();
@@ -310,6 +318,14 @@ export function planBackgroundAutoCompact(
     return { ...metrics, needed: false };
   }
   if (session.status === "running" || session.status === "connecting") {
+    return { ...metrics, needed: false };
+  }
+  // 先发后压场景下，background 可能紧跟 user turn 触发；fresh 窗口内不再叠加，
+  // 避免连发多条「后台整理」sysmsg 或把刚压缩过的 transcript 立刻再压一遍。
+  if (
+    recentBackgroundCompactAtMs != null &&
+    nowMs - recentBackgroundCompactAtMs <= CONTEXT_BACKGROUND_COMPACT_FRESH_MS
+  ) {
     return { ...metrics, needed: false };
   }
   return {
@@ -332,10 +348,12 @@ export function formatContextStatusHint(
     ? resolveAutoCompactThresholdPercent(outgoingPrompt)
     : CONTEXT_AUTO_COMPACT_BEFORE_SEND_PERCENT;
   if (metrics.ctxPercent >= threshold) {
+    // 先发后压：到达阈值后本轮消息照常发送，turn 收尾时后台自动压缩。
+    // 文案避免"将同步压缩"的暗示，统一描述成后台行为。
     if (outgoingPrompt && isHeavyContextSlashPrompt(outgoingPrompt)) {
-      return "大块 Skill 将自动压缩";
+      return "大块 Skill 后台整理";
     }
-    return "将自动压缩";
+    return "后台自动整理";
   }
   if (metrics.ctxPercent >= CONTEXT_BACKGROUND_COMPACT_PERCENT) {
     return "空闲时自动整理";
@@ -348,6 +366,11 @@ export function formatContextStatusHint(
 
 export function buildAutoCompactSystemMessage(metrics: SessionContextMetrics): string {
   return composeCompactNoticeTokens(metrics, "auto-before-send").sysmsg;
+}
+
+/** 先发后压：告知用户本轮消息照常发送，turn 收尾后转后台压缩。 */
+export function buildAutoCompactAfterSendSystemMessage(metrics: SessionContextMetrics): string {
+  return composeCompactNoticeTokens(metrics, "auto-after-send").sysmsg;
 }
 
 export function buildContextOverflowRetrySystemMessage(metrics?: SessionContextMetrics): string {

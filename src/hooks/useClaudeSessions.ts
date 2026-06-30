@@ -406,6 +406,10 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     lastSuccessAtMs?: number;
   }
   const backgroundCompactStateRef = useRef<Map<string, BackgroundCompactState>>(new Map());
+  /** 发送前判定需要压缩时，登记于此，等当前 user turn 收尾后再 fire background。 */
+  const deferredBackgroundCompactRef = useRef<Map<string, { turnNonce: number; scheduledAtMs: number }>>(
+    new Map(),
+  );
   const scheduleBackgroundContextCompactRef = useRef<
     (sessionId: string, opts?: { delayMs?: number }) => void
   >(() => {});
@@ -1733,7 +1737,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         return;
       }
 
-      const plan = planBackgroundAutoCompact(session, metrics);
+      const plan = planBackgroundAutoCompact(
+        session,
+        metrics,
+        stateMap.get(sessionId)?.lastSuccessAtMs ?? null,
+      );
       if (!plan.needed) return;
 
       const run = async (): Promise<void> => {
@@ -2129,16 +2137,20 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         refreshedBgState?.lastSuccessAtMs ?? null,
       );
       if (pre.needed) {
-        await runCompactTurnAndWait({
+        // 先发后压：本轮直接发出，turn 收尾后由 notifyCompletion 触发 background。
+        // 体感上用户消息不再被压缩 turn 阻塞，连续对话恢复顺滑。
+        // 写新 entry 前先清掉旧的，避免上一轮 turn 收尾于这条 turn 期间到达时
+        // 把上一轮的 deferred 当成这一轮消费、导致后续 background 错过本轮收尾。
+        deferredBackgroundCompactRef.current.delete(tabSessionId);
+        appendCompactNotice(
           tabSessionId,
+          composeCompactNoticeTokens(pre, "auto-after-send").sysmsg,
+        );
+        deferredBackgroundCompactRef.current.set(tabSessionId, {
           turnNonce,
-          runOnce,
-          reloadAfterCompact,
-          systemMessage: buildAutoCompactSystemMessage(pre),
+          scheduledAtMs: Date.now(),
         });
       }
-
-      // appendCompactNotice 已由 runCompactTurnAndWait 内部调用；这里无需重复写入。
 
       try {
         await runOnce(prompt);
@@ -2650,9 +2662,19 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           const wasCompactTurn =
             compactFlight?.tabId === tabSessionId && compactFlight.nonce === nonce;
           if (!wasCompactTurn) {
-            queueMicrotask(() =>
-              scheduleBackgroundContextCompactRef.current(tabSessionId, { delayMs: 2000 }),
-            );
+            // 先发后压：本轮发送前已登记 deferred，user turn 收尾立刻 fire，
+            // 不再等 2 秒 idle——因为 ctx% 已经到阈值，越压越好。
+            const deferred = deferredBackgroundCompactRef.current.get(tabSessionId);
+            if (deferred && deferred.turnNonce === nonce) {
+              deferredBackgroundCompactRef.current.delete(tabSessionId);
+              queueMicrotask(() =>
+                scheduleBackgroundContextCompactRef.current(tabSessionId, { delayMs: 0 }),
+              );
+            } else {
+              queueMicrotask(() =>
+                scheduleBackgroundContextCompactRef.current(tabSessionId, { delayMs: 2000 }),
+              );
+            }
           }
         }
         // 勿在单轮 complete 时清空 Dock：子进程若先于 UI 帧结束，会擦掉刚写入的 AskUserQuestion，导致弹窗永远不出现。
@@ -4251,6 +4273,8 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     executeSessionRetryCountRef.current.delete(sessionId);
     workflowRunBySessionRef.current.delete(sessionId);
     persistWorkflowBindings(workflowRunBySessionRef.current);
+    // 关 tab 时顺手清掉先发后压登记的 deferred，避免孤儿 entry 一直占着 map。
+    deferredBackgroundCompactRef.current.delete(sessionId);
   }, [clearStreamStallTimer, detachClaudeInvocationsForSessionKey, purgeStreamSidecarsForSession]);
 
   const deleteSession = useCallback(
