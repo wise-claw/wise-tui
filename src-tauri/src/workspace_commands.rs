@@ -889,6 +889,7 @@ fn escape_for_applescript(s: &str) -> String {
 fn spawn_app_with_args(app_name: &str, args: &[&str]) -> Result<(), String> {
     let mut cmd = std::process::Command::new("open");
     cmd.arg("-na").arg(app_name);
+    cmd.arg("--args");
     for a in args {
         cmd.arg(a);
     }
@@ -944,21 +945,33 @@ pub(crate) fn macos_open_terminal_with_command(
             run_osascript(&script)
         }
 
-        // Ghostty：`open -a Ghostty --working-directory <path> -e <shell> -lc <cmd>`
+        // Ghostty：不支持 CLI 位置参数传命令，先用 --working-directory
+        // 打开终端，再用 AppleScript 模拟键入命令。
         "ghostty" => {
             if command.trim().is_empty() {
-                spawn_app_with_args(def.open_app_name, &[path_trimmed])
+                spawn_app_with_args(
+                    def.open_app_name,
+                    &[format!("--working-directory={path_trimmed}").as_str()],
+                )
             } else {
                 spawn_app_with_args(
                     def.open_app_name,
-                    &[
-                        format!("--working-directory={path_trimmed}").as_str(),
-                        "-e",
-                        "/bin/zsh",
-                        "-lc",
-                        &command,
-                    ],
-                )
+                    &[format!("--working-directory={path_trimmed}").as_str()],
+                )?;
+                let composed = composed_cd_command(path_trimmed, &command);
+                let script = format!(
+                    "delay 0.3\n\
+                     tell application \"Ghostty\" to activate\n\
+                     delay 0.2\n\
+                     tell application \"System Events\"\n\
+                     \x20\x20tell process \"Ghostty\"\n\
+                     \x20\x20\x20\x20keystroke \"{}\"\n\
+                     \x20\x20\x20\x20key code 36\n\
+                     \x20\x20end tell\n\
+                     end tell",
+                    escape_for_applescript(&composed)
+                );
+                run_osascript(&script)
             }
         }
 
@@ -983,17 +996,19 @@ pub(crate) fn macos_open_terminal_with_command(
         }
 
         // Kitty：`open -a kitty --args -d <path> <shell> -lc <cmd>`
+        // 追加 exec $SHELL 保持终端窗口在命令执行完后不关闭。
         "kitty" => {
             if command.trim().is_empty() {
                 spawn_app_with_args("kitty", &[format!("--directory={path_trimmed}").as_str()])
             } else {
+                let exec_command = format!("{}; exec $SHELL", command);
                 spawn_app_with_args(
                     "kitty",
                     &[
                         format!("--directory={path_trimmed}").as_str(),
                         "/bin/zsh",
                         "-lc",
-                        &command,
+                        &exec_command,
                     ],
                 )
             }
@@ -1007,6 +1022,7 @@ pub(crate) fn macos_open_terminal_with_command(
                     &[format!("--working-directory={path_trimmed}").as_str()],
                 )
             } else {
+                let exec_command = format!("{}; exec $SHELL", command);
                 spawn_app_with_args(
                     def.open_app_name,
                     &[
@@ -1014,7 +1030,7 @@ pub(crate) fn macos_open_terminal_with_command(
                         "-e",
                         "/bin/zsh",
                         "-lc",
-                        &command,
+                        &exec_command,
                     ],
                 )
             }
@@ -1025,6 +1041,7 @@ pub(crate) fn macos_open_terminal_with_command(
             if command.trim().is_empty() {
                 spawn_app_with_args(def.open_app_name, &[format!("--cwd={path_trimmed}").as_str()])
             } else {
+                let exec_command = format!("{}; exec $SHELL", command);
                 spawn_app_with_args(
                     def.open_app_name,
                     &[
@@ -1032,7 +1049,7 @@ pub(crate) fn macos_open_terminal_with_command(
                         "--",
                         "/bin/zsh",
                         "-lc",
-                        &command,
+                        &exec_command,
                     ],
                 )
             }
