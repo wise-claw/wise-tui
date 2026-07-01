@@ -897,7 +897,7 @@ fn spawn_app_with_args(app_name: &str, args: &[&str]) -> Result<(), String> {
 #[cfg(target_os = "macos")]
 #[tauri::command]
 pub(crate) fn macos_open_terminal_with_command(
-    app_name: String,
+    #[allow(non_snake_case)] appName: String,
     path: String,
     command: String,
 ) -> Result<(), String> {
@@ -909,8 +909,8 @@ pub(crate) fn macos_open_terminal_with_command(
     if !path_buf.exists() {
         return Err(format!("Path does not exist: {}", path_trimmed));
     }
-    let def = find_terminal_def(&app_name)
-        .ok_or_else(|| format!("未知的终端应用：{app_name}"))?;
+    let def = find_terminal_def(&appName)
+        .ok_or_else(|| format!("未知的终端应用：{appName}"))?;
 
     match def.id {
         // Terminal.app：AppleScript 新窗口执行 `cd && command`

@@ -88,6 +88,13 @@ export async function tryOpenWorkspaceInDefaultTerminalWithCommand(
     });
     return { ok: true };
   } catch (err) {
-    return { ok: false, message: err instanceof Error ? err.message : String(err) };
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error("[external-terminal] macos_open_terminal_with_command failed", {
+      appName: terminal.appName,
+      path: workspacePath.trim(),
+      command: trimmed,
+      err,
+    });
+    return { ok: false, message: msg };
   }
 }
