@@ -875,9 +875,20 @@ fn run_osascript(script: &str) -> Result<(), String> {
         if stderr_trimmed.is_empty() {
             return Err(format!("osascript 执行失败（退出码 {code}）"));
         }
-        Err(format!(
+        let detail = format!(
             "osascript 执行失败（退出码 {code}）：{stderr_trimmed}"
-        ))
+        );
+        // macOS 辅助功能（Accessibility）权限被拒绝——错误码 1002，
+        // 常见于使用 System Events keystroke 时。
+        if stderr_trimmed.contains("不允许发送按键") || stderr_trimmed.contains("(1002)") {
+            return Err(format!(
+                "{detail}\n\n\
+                 💡 提示：当前终端需要通过 macOS 辅助功能注入命令。\n\
+                 请前往「系统设置 → 隐私与安全性 → 辅助功能」→\n\
+                 将「Wise」（或对应终端应用）添加到允许列表中，然后重试。"
+            ));
+        }
+        Err(detail)
     } else {
         Ok(())
     }
@@ -951,8 +962,9 @@ pub(crate) fn macos_open_terminal_with_command(
             run_osascript(&script)
         }
 
-        // Ghostty：不支持 CLI 位置参数传命令，先用 --working-directory
-        // 打开终端，再用 AppleScript 模拟键入命令。
+        // Ghostty：使用 Ghostty 原生 AppleScript API（input text + send key）代替
+        // System Events keystroke，无需 macOS 辅助功能权限。
+        // 参考：https://ghostty.org/docs/features/applescript
         "ghostty" => {
             if command.trim().is_empty() {
                 spawn_app_with_args(
@@ -960,21 +972,19 @@ pub(crate) fn macos_open_terminal_with_command(
                     &[format!("--working-directory={path_trimmed}").as_str()],
                 )
             } else {
-                spawn_app_with_args(
-                    def.open_app_name,
-                    &[format!("--working-directory={path_trimmed}").as_str()],
-                )?;
                 let composed = composed_cd_command(path_trimmed, &command);
                 let script = format!(
-                    "tell application \"Ghostty\" to activate\n\
-                     delay 1.0\n\
-                     tell application \"System Events\"\n\
-                     \x20\x20tell process \"Ghostty\"\n\
-                     \x20\x20\x20\x20keystroke \"{}\"\n\
-                     \x20\x20\x20\x20key code 36\n\
-                     \x20\x20end tell\n\
+                    "tell application \"Ghostty\"\n\
+                     \x20\x20set cfg to new surface configuration\n\
+                     \x20\x20set initial working directory of cfg to \"{path}\"\n\
+                     \x20\x20set win to new window with configuration cfg\n\
+                     \x20\x20activate\n\
+                     \x20\x20delay 0.5\n\
+                     \x20\x20input text \"{cmd}\" to (terminal 1 of selected tab of win)\n\
+                     \x20\x20send key \"enter\" to (terminal 1 of selected tab of win)\n\
                      end tell",
-                    escape_for_applescript(&composed)
+                    path = escape_for_applescript(path_trimmed),
+                    cmd = escape_for_applescript(&composed),
                 );
                 run_osascript(&script)
             }
