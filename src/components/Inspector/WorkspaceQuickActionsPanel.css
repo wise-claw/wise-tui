@@ -176,6 +176,113 @@
   padding-left: 0;
 }
 
+.app-workspace-quick-actions-edit-modal--compact .ant-modal-header {
+  padding: 8px 14px;
+}
+
+.app-workspace-quick-actions-edit-modal--compact .ant-modal-title {
+  font-size: 13px;
+}
+
+.app-workspace-quick-actions-edit-modal--compact .ant-modal-body {
+  padding: 6px 14px 10px;
+}
+
+.app-workspace-quick-actions-edit-modal--compact .ant-form-item {
+  margin-bottom: 6px;
+}
+
+.app-workspace-quick-actions-edit-modal__scope-option {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+}
+
+.app-workspace-quick-actions-edit-modal__scope-tag {
+  flex-shrink: 0;
+  font-size: 10px;
+  line-height: 14px;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: var(--ant-color-fill-tertiary);
+  color: var(--ant-color-text-secondary);
+}
+
+.app-workspace-quick-actions-edit-modal__scope-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-workspace-quick-actions-edit-modal--compact .ant-form-item-label > label {
+  font-size: 11px;
+  height: 20px;
+}
+
+.app-workspace-quick-actions-edit-modal--compact .ant-input {
+  font-size: 12px;
+  padding: 2px 6px;
+}
+
+.app-workspace-quick-actions-edit-modal--compact .ant-segmented {
+  font-size: 11px;
+}
+
+.app-workspace-quick-actions-edit-modal--compact .ant-segmented-item {
+  padding: 0 8px;
+  min-height: 24px;
+  line-height: 24px;
+  font-size: 11px;
+}
+
+.app-workspace-quick-actions-edit-modal--compact .ant-segmented-item-label {
+  min-height: 24px;
+  line-height: 24px;
+  font-size: 11px;
+}
+
+.app-workspace-quick-actions-edit-modal--compact .ant-form-item-extra {
+  font-size: 10px;
+  margin-top: 2px;
+}
+
+.app-workspace-quick-actions-edit-modal--compact .ant-modal-footer {
+  padding: 4px 14px 8px;
+}
+
+.app-workspace-quick-actions-edit-modal__rows {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.app-workspace-quick-actions-edit-modal--compact .app-workspace-quick-actions-edit-modal__form .ant-form-item {
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.app-workspace-quick-actions-edit-modal--compact .app-workspace-quick-actions-edit-modal__form .ant-form-item-label {
+  flex: 0 0 auto;
+  min-width: 56px;
+  text-align: right;
+  padding: 0;
+}
+
+.app-workspace-quick-actions-edit-modal--compact .app-workspace-quick-actions-edit-modal__form .ant-form-item-label > label {
+  height: auto;
+  line-height: 24px;
+  font-size: 11px;
+}
+
+.app-workspace-quick-actions-edit-modal--compact .app-workspace-quick-actions-edit-modal__form .ant-form-item-control {
+  flex: 1 1 0;
+  min-width: 0;
+}
+
 .app-chat-inspector .app-workspace-quick-actions-panel,
 .app-cockpit-inspector .app-workspace-quick-actions-panel {
   flex-shrink: 0;

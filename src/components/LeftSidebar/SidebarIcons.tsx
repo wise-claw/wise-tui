@@ -307,3 +307,12 @@ export function OpenInTerminalIcon() {
     </svg>
   );
 }
+
+/** 左栏工作区标题栏：快捷操作（闪电符号） */
+export function QuickActionsIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <path d="M9 2L4 9h3.5L7 14l5-7H8.5L9 2z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+    </svg>
+  );
+}

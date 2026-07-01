@@ -38,6 +38,7 @@ import {
   SidebarRequirementAction,
   SidebarScheduledTasksAction,
 } from "./repositoryRows";
+import { LeftSidebarQuickActionsPopover } from "./LeftSidebarQuickActionsPopover";
 import { RunningMainSessionDot } from "./RunningMainSessionDot";
 import { projectRowPropsEqual } from "./projectRowPropsEqual";
 import { projectRepositoryListPropsEqual } from "./projectRepositoryListPropsEqual";
@@ -334,6 +335,13 @@ function ProjectRepositoryListInner({
               </DeferredHoverTooltip>
             ) : null
           ) : null}
+          <LeftSidebarQuickActionsPopover
+            projectId={activeProjectId}
+            repositoryId={activeRepositoryId}
+            workspaces={projects}
+            repositoriesById={repositoriesById}
+            floatingRepositories={floatingRepositories}
+          />
           {onAddFloatingRepositoryClick ? (
             <DeferredHoverTooltip title="添加单仓（不绑定工作区）">
               <button

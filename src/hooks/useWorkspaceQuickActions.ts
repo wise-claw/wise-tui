@@ -36,6 +36,43 @@ function resolveWorkspaceQuickActionScopeId(
   return null;
 }
 
+function normalizeScopeIdForRead(
+  scope: WorkspaceQuickActionScope,
+  overrideScopeId: string | null | undefined,
+  fallbackScopeId: string | number | null,
+): string | null {
+  if (overrideScopeId != null) {
+    const trimmed = String(overrideScopeId).trim();
+    if (trimmed) return trimmed;
+  }
+  if (scope === "project") {
+    return typeof fallbackScopeId === "string" ? fallbackScopeId.trim() || null : null;
+  }
+  if (typeof fallbackScopeId === "number" && Number.isFinite(fallbackScopeId) && fallbackScopeId > 0) {
+    return String(fallbackScopeId);
+  }
+  if (typeof fallbackScopeId === "string") {
+    const trimmed = fallbackScopeId.trim();
+    if (trimmed && Number.isFinite(Number(trimmed)) && Number(trimmed) > 0) {
+      return trimmed;
+    }
+  }
+  return null;
+}
+
+function normalizeScopeIdForPersist(
+  scope: WorkspaceQuickActionScope,
+  overrideScopeId: string | null | undefined,
+  projectId: string | null,
+  repositoryId: number | null,
+): string | null {
+  if (overrideScopeId != null) {
+    const trimmed = String(overrideScopeId).trim();
+    if (trimmed) return trimmed;
+  }
+  return resolveWorkspaceQuickActionScopeId(scope, projectId, repositoryId);
+}
+
 function buildDisplayItems(
   projectId: string | null,
   repositoryId: number | null,
@@ -82,8 +119,13 @@ export function useWorkspaceQuickActions({ projectId, repositoryId }: UseWorkspa
   repositoryItemsRef.current = repositoryItems;
 
   const flushPersist = useCallback(
-    async (scope: WorkspaceQuickActionScope, items: WorkspaceQuickActionItem[]) => {
-      const scopeId = resolveWorkspaceQuickActionScopeId(scope, projectId, repositoryId);
+    async (
+      scope: WorkspaceQuickActionScope,
+      items: WorkspaceQuickActionItem[],
+      overrideScopeId?: string | null,
+    ) => {
+      const scopeId =
+        normalizeScopeIdForPersist(scope, overrideScopeId, projectId, repositoryId);
       if (!scopeId) {
         message.error(scope === "project" ? "请先选择工作区" : "请先选择仓库");
         return false;
@@ -94,11 +136,11 @@ export function useWorkspaceQuickActions({ projectId, repositoryId }: UseWorkspa
   );
 
   const readScopeItems = useCallback(
-    (scope: WorkspaceQuickActionScope): WorkspaceQuickActionItem[] => {
-      return getWorkspaceQuickActionsScopeItems(
-        scope,
-        scope === "project" ? projectId : repositoryId,
-      );
+    (scope: WorkspaceQuickActionScope, overrideScopeId?: string | null): WorkspaceQuickActionItem[] => {
+      const fallbackScopeId = scope === "project" ? projectId : repositoryId;
+      const normalizedScopeId = normalizeScopeIdForRead(scope, overrideScopeId, fallbackScopeId);
+      if (!normalizedScopeId) return [];
+      return getWorkspaceQuickActionsScopeItems(scope, normalizedScopeId);
     },
     [projectId, repositoryId],
   );

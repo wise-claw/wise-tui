@@ -20,6 +20,8 @@ import {
   type WorkspaceQuickActionItem,
   type WorkspaceQuickActionScope,
 } from "../../types/workspaceQuickActions";
+import type { Repository, Workspace } from "../../types";
+import { flushWorkspaceQuickActionsPersist } from "../../stores/workspaceQuickActionsRuntimeStore";
 import { WorkspaceQuickActionsEditModal } from "./WorkspaceQuickActionsEditModal";
 import { InspectorCollapsibleSection } from "./InspectorCollapsibleSection";
 import "./WorkspaceQuickActionsPanel.css";
@@ -27,23 +29,33 @@ import "./WorkspaceQuickActionsPanel.css";
 export interface WorkspaceQuickActionsPanelProps {
   projectId: string | null;
   repositoryId: number | null;
+  /** 可选工作区集合；缺省时 Modal 仅允许选当前 scope。 */
+  workspaces?: Workspace[];
+  /** 工作区内仓库（按 id 索引）。 */
+  repositoriesById?: Map<number, Repository>;
+  /** 浮动仓库（未绑定工作区的仓库）。 */
+  floatingRepositories?: Repository[];
 }
 
 type EditState =
   | { mode: "create" }
-  | { mode: "edit"; item: WorkspaceQuickActionItem; scope: WorkspaceQuickActionScope };
+  | { mode: "edit"; item: WorkspaceQuickActionItem; scope: WorkspaceQuickActionScope; scopeId: string };
 
 export function WorkspaceQuickActionsPanel({
   projectId,
   repositoryId,
+  workspaces,
+  repositoriesById,
+  floatingRepositories,
 }: WorkspaceQuickActionsPanelProps) {
   const { message, modal } = App.useApp();
   const quickActions = useWorkspaceQuickActions({ projectId, repositoryId });
   const [editState, setEditState] = useState<EditState | null>(null);
 
-  const allowProjectScope = Boolean(projectId?.trim());
-  const allowRepositoryScope = repositoryId != null;
-  const defaultScope: WorkspaceQuickActionScope = allowRepositoryScope ? "repository" : "project";
+  const allowProjectScope = Boolean(projectId?.trim()) || (workspaces?.length ?? 0) > 0;
+  const allowRepositoryScope = repositoryId != null || (repositoriesById?.size ?? 0) > 0;
+  const defaultScope: WorkspaceQuickActionScope =
+    allowRepositoryScope && repositoryId != null ? "repository" : "project";
 
   const stopRowActionEvent = useCallback((event: MouseEvent<HTMLElement>) => {
     event.preventDefault();
@@ -53,11 +65,12 @@ export function WorkspaceQuickActionsPanel({
   const upsertItem = useCallback(
     async (
       scope: WorkspaceQuickActionScope,
+      scopeId: string,
       input: { kind: WorkspaceQuickActionItem["kind"]; label: string; target: string },
       existingId?: string,
     ) => {
       const now = Date.now();
-      let source = quickActions.readScopeItems(scope);
+      let source = quickActions.readScopeItems(scope, scopeId);
       if (existingId && !source.some((row) => row.id === existingId)) {
         source = quickActions.displayItems
           .filter((row) => row.scope === scope)
@@ -83,7 +96,7 @@ export function WorkspaceQuickActionsPanel({
           updatedAt: now,
         });
       }
-      const ok = await quickActions.flushPersist(scope, next);
+      const ok = await quickActions.flushPersist(scope, next, scopeId);
       if (!ok) {
         message.error("快捷操作保存失败");
         throw new Error("快捷操作保存失败");
@@ -93,7 +106,7 @@ export function WorkspaceQuickActionsPanel({
   );
 
   const removeItem = useCallback(
-    (item: WorkspaceQuickActionDisplayItem) => {
+    (item: WorkspaceQuickActionDisplayItem, scopeId: string) => {
       modal.confirm({
         title: "删除该快捷操作？",
         content: `「${item.label}」将从${item.scope === "project" ? "工作区" : "仓库"}配置中移除。`,
@@ -101,7 +114,7 @@ export function WorkspaceQuickActionsPanel({
         okType: "danger",
         cancelText: "取消",
         onOk: async () => {
-          const source = quickActions.readScopeItems(item.scope);
+          const source = quickActions.readScopeItems(item.scope, scopeId);
           let next = source.filter((row) => row.id !== item.id);
           if (next.length === source.length) {
             const fallbackSource = quickActions.displayItems
@@ -113,7 +126,7 @@ export function WorkspaceQuickActionsPanel({
               throw new Error("未找到要删除的快捷操作");
             }
           }
-          const ok = await quickActions.flushPersist(item.scope, next);
+          const ok = await quickActions.flushPersist(item.scope, next, scopeId);
           if (!ok) {
             message.error("快捷操作删除失败");
             throw new Error("快捷操作删除失败");
@@ -125,9 +138,9 @@ export function WorkspaceQuickActionsPanel({
   );
 
   const togglePinToTopbar = useCallback(
-    async (item: WorkspaceQuickActionDisplayItem) => {
+    async (item: WorkspaceQuickActionDisplayItem, scopeId: string) => {
       const pinned = resolveWorkspaceQuickActionPinnedToTopbar(item);
-      const source = quickActions.readScopeItems(item.scope);
+      const source = quickActions.readScopeItems(item.scope, scopeId);
       const next = source.map((row) =>
         row.id === item.id
           ? {
@@ -136,7 +149,7 @@ export function WorkspaceQuickActionsPanel({
             }
           : row,
       );
-      const ok = await quickActions.flushPersist(item.scope, next);
+      const ok = await quickActions.flushPersist(item.scope, next, scopeId);
       if (!ok) {
         message.error("快捷操作保存失败");
         throw new Error("快捷操作保存失败");
@@ -186,19 +199,27 @@ export function WorkspaceQuickActionsPanel({
           mode={editState?.mode === "edit" ? "edit" : "create"}
           initialItem={editState?.mode === "edit" ? editState.item : null}
           initialScope={editState?.mode === "edit" ? editState.scope : undefined}
+          initialScopeId={editState?.mode === "edit" ? editState.scopeId : null}
           defaultScope={defaultScope}
-          allowProjectScope={allowProjectScope}
-          allowRepositoryScope={allowRepositoryScope}
+          activeProjectId={projectId}
+          activeRepositoryId={repositoryId}
+          workspaces={workspaces}
+          repositoriesById={repositoriesById}
+          floatingRepositories={floatingRepositories}
           onClose={() => setEditState(null)}
           onSubmit={async (input) => {
             if (editState?.mode === "edit" && editState.scope !== input.scope) {
-              const oldSource = quickActions.readScopeItems(editState.scope);
+              const oldSource = quickActions.readScopeItems(editState.scope, editState.scopeId);
               const without = oldSource.filter((row) => row.id !== editState.item.id);
-              const removedOk = await quickActions.flushPersist(editState.scope, without);
+              const removedOk = await quickActions.flushPersist(
+                editState.scope,
+                without,
+                editState.scopeId,
+              );
               if (!removedOk) throw new Error("快捷操作保存失败");
             }
             const existingId = editState?.mode === "edit" ? editState.item.id : undefined;
-            await upsertItem(input.scope, input, existingId);
+            await upsertItem(input.scope, input.scopeId, input, existingId);
           }}
         />
       }
@@ -226,7 +247,10 @@ export function WorkspaceQuickActionsPanel({
           </div>
         ) : (
           <ul className="app-workspace-quick-actions-panel__list">
-            {quickActions.displayItems.map((item) => (
+            {quickActions.displayItems.map((item) => {
+              const itemScopeId =
+                item.scope === "project" ? projectId : repositoryId != null ? String(repositoryId) : null;
+              return (
               <li key={`${item.scope}:${item.id}`} className="app-workspace-quick-actions-panel__row">
                 <button
                   type="button"
@@ -250,7 +274,7 @@ export function WorkspaceQuickActionsPanel({
                         ? "从顶栏移除"
                         : "固定到顶栏（远程后面）"
                     }
-                   
+
                   >
                     <Button
                       type="text"
@@ -274,7 +298,7 @@ export function WorkspaceQuickActionsPanel({
                       }
                       onClick={(event) => {
                         stopRowActionEvent(event);
-                        void togglePinToTopbar(item);
+                        if (itemScopeId) void togglePinToTopbar(item, itemScopeId);
                       }}
                     />
                   </HoverHint>
@@ -286,7 +310,8 @@ export function WorkspaceQuickActionsPanel({
                       aria-label="编辑"
                       onClick={(event) => {
                         stopRowActionEvent(event);
-                        setEditState({ mode: "edit", item, scope: item.scope });
+                        if (!itemScopeId) return;
+                        setEditState({ mode: "edit", item, scope: item.scope, scopeId: itemScopeId });
                       }}
                     />
                   </HoverHint>
@@ -299,13 +324,14 @@ export function WorkspaceQuickActionsPanel({
                       aria-label="删除"
                       onClick={(event) => {
                         stopRowActionEvent(event);
-                        removeItem(item);
+                        if (itemScopeId) removeItem(item, itemScopeId);
                       }}
                     />
                   </HoverHint>
                 </span>
               </li>
-            ))}
+              );
+            })}
           </ul>
         )}
       </div>
