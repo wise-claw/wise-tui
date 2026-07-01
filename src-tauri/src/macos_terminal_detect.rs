@@ -10,15 +10,15 @@ pub struct MacTerminalApp {
     pub app_name: String,
 }
 
-struct TerminalDef {
-    id: &'static str,
-    label: &'static str,
-    app_folder_names: &'static [&'static str],
-    open_app_name: &'static str,
-    bundle_id: Option<&'static str>,
+pub struct TerminalDef {
+    pub id: &'static str,
+    pub label: &'static str,
+    pub app_folder_names: &'static [&'static str],
+    pub open_app_name: &'static str,
+    pub bundle_id: Option<&'static str>,
 }
 
-const CATALOG: &[TerminalDef] = &[
+pub const CATALOG: &[TerminalDef] = &[
     TerminalDef {
         id: "terminal",
         label: "终端",

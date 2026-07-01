@@ -34,7 +34,7 @@ mod macos_speech;
 #[cfg(target_os = "macos")]
 mod macos_speech_stream;
 #[cfg(target_os = "macos")]
-mod macos_terminal_detect;
+pub(crate) mod macos_terminal_detect;
 #[cfg(target_os = "macos")]
 mod macos_webview_wake_recovery;
 mod at_mention_shortcuts;

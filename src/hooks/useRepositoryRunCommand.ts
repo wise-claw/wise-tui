@@ -275,6 +275,9 @@ export function useRepositoryRunCommand({
 
   return {
     runCwd: trimmedCwd,
+    runKey,
+    runUrlKey,
+    runAutoOpenKey,
     runCommand,
     setRunCommand,
     runPreferredUrl,

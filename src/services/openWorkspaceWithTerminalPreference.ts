@@ -1,3 +1,5 @@
+import { invoke } from "@tauri-apps/api/core";
+import { isMacPlatform } from "./macosTerminal";
 import type { OpenAppTarget } from "../types";
 import { ensureMacTerminalsDetected, detectedMacTerminalToOpenTarget } from "./macosTerminal";
 import { OPEN_WORKSPACE_ERROR, openWorkspaceWithOpenAppTarget } from "./openWorkspaceWithPreference";
@@ -42,5 +44,50 @@ export async function tryOpenWorkspaceInDefaultTerminal(
     return { ok: true };
   } catch (err) {
     return { ok: false, message: resolveOpenDefaultTerminalUserMessage(err) };
+  }
+}
+
+/**
+ * 在默认终端中打开工作目录并执行用户配置的运行指令。
+ *
+ * - macOS：调用后端 `macos_open_terminal_with_command`，由后端按终端类型分发
+ *   AppleScript / `open -a --args` 路径，新窗口先 `cd` 再跑命令。
+ * - 其它平台 / 未配置默认终端：直接退化为 `tryOpenWorkspaceInDefaultTerminal`
+ *   （只打开终端，不注入命令）。
+ */
+export async function tryOpenWorkspaceInDefaultTerminalWithCommand(
+  workspacePath: string,
+  command: string,
+): Promise<{ ok: true } | { ok: false; message: string }> {
+  const trimmed = command.trim();
+  // 命令为空时走原有"只打开终端"路径，避免额外加 IPC 调用。
+  if (!trimmed) {
+    return tryOpenWorkspaceInDefaultTerminal(workspacePath);
+  }
+  if (!isMacPlatform()) {
+    return tryOpenWorkspaceInDefaultTerminal(workspacePath);
+  }
+
+  await ensureMacTerminalsDetected();
+  await hydrateTerminalAppPreference();
+  const terminal = resolveStoredTerminalOpenTarget();
+  if (!terminal) {
+    return {
+      ok: false,
+      message: resolveOpenDefaultTerminalUserMessage(
+        new Error(OPEN_WORKSPACE_ERROR.NOT_CONFIGURED),
+      ),
+    };
+  }
+
+  try {
+    await invoke("macos_open_terminal_with_command", {
+      appName: terminal.appName,
+      path: workspacePath.trim(),
+      command: trimmed,
+    });
+    return { ok: true };
+  } catch (err) {
+    return { ok: false, message: err instanceof Error ? err.message : String(err) };
   }
 }

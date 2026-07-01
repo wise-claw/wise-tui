@@ -819,3 +819,237 @@ pub(crate) fn write_text_file_absolute(path: String, contents: String) -> Result
     }
     crate::wise_paths::write_file_atomic(&p, &contents)
 }
+
+// ── 外部终端注入运行指令 ──
+//
+// 在用户的默认终端（Terminal / iTerm / Ghostty / Warp / Kitty / Alacritty /
+// WezTerm / Hyper）中打开新窗口，先 `cd` 到工作区路径再执行用户配置的运行
+// 指令。命令为空字符串时退化为 `cd "<path>"` 单纯打开终端，等价于只打开
+// 工作目录的行为。
+#[cfg(target_os = "macos")]
+fn shell_single_quote(s: &str) -> String {
+    // 把所有单引号换成 `'\''`，再用单引号包起来，确保 shell 解析时原样保留。
+    let escaped = s.replace('\'', "'\\''");
+    format!("'{escaped}'")
+}
+
+#[cfg(target_os = "macos")]
+fn composed_cd_command(path: &str, command: &str) -> String {
+    let cd = shell_single_quote(path);
+    let trimmed = command.trim();
+    if trimmed.is_empty() {
+        format!("cd {cd} && clear")
+    } else {
+        format!("cd {cd} && {trimmed}")
+    }
+}
+
+#[cfg(target_os = "macos")]
+fn find_terminal_def(app_name: &str) -> Option<&'static crate::macos_terminal_detect::TerminalDef> {
+    let needle = app_name.trim();
+    if needle.is_empty() {
+        return None;
+    }
+    crate::macos_terminal_detect::CATALOG
+        .iter()
+        .find(|def| def.open_app_name.eq_ignore_ascii_case(needle))
+}
+
+/// 通过 `osascript` 执行 AppleScript，让 Terminal.app/iTerm/Warp/Hyper 新建
+/// 窗口并跑一段 shell。返回值表示 osascript 退出是否成功。
+#[cfg(target_os = "macos")]
+fn run_osascript(script: &str) -> Result<(), String> {
+    let status = std::process::Command::new("osascript")
+        .arg("-e")
+        .arg(script)
+        .spawn()
+        .map_err(|e| format!("无法启动 osascript：{e}"))?
+        .wait()
+        .map_err(|e| format!("等待 osascript 退出失败：{e}"))?;
+    if !status.success() {
+        return Err(format!(
+            "osascript 执行失败（退出码 {:?}）",
+            status.code()
+        ));
+    }
+    Ok(())
+}
+
+#[cfg(target_os = "macos")]
+fn escape_for_applescript(s: &str) -> String {
+    s.replace('\\', "\\\\").replace('"', "\\\"")
+}
+
+#[cfg(target_os = "macos")]
+fn spawn_app_with_args(app_name: &str, args: &[&str]) -> Result<(), String> {
+    let mut cmd = std::process::Command::new("open");
+    cmd.arg("-a").arg(app_name);
+    for a in args {
+        cmd.arg(a);
+    }
+    cmd.spawn()
+        .map_err(|e| format!("无法启动「{app_name}」：{e}"))?;
+    Ok(())
+}
+
+/// 在 macOS 默认终端中打开工作区路径并执行运行指令。命令为空字符串时
+/// 退化为只打开终端到指定目录，保持原有"打开外部终端"行为不变。
+#[cfg(target_os = "macos")]
+#[tauri::command]
+pub(crate) fn macos_open_terminal_with_command(
+    app_name: String,
+    path: String,
+    command: String,
+) -> Result<(), String> {
+    let path_trimmed = path.trim();
+    if path_trimmed.is_empty() {
+        return Err("工作区路径不能为空".to_string());
+    }
+    let path_buf = PathBuf::from(path_trimmed);
+    if !path_buf.exists() {
+        return Err(format!("Path does not exist: {}", path_trimmed));
+    }
+    let def = find_terminal_def(&app_name)
+        .ok_or_else(|| format!("未知的终端应用：{app_name}"))?;
+
+    match def.id {
+        // Terminal.app：AppleScript 新窗口执行 `cd && command`
+        "terminal" => {
+            let composed = composed_cd_command(path_trimmed, &command);
+            let script = format!(
+                "tell application \"Terminal\" to do script \"{}\"",
+                escape_for_applescript(&composed)
+            );
+            run_osascript(&script)
+        }
+
+        // iTerm：先 activate 再开新窗口运行命令
+        "iterm" => {
+            let composed = composed_cd_command(path_trimmed, &command);
+            let script = format!(
+                "tell application \"iTerm\"\n\
+                 \x20\x20activate\n\
+                 \x20\x20tell current session of current window to write text \"{}\"\n\
+                 tell application \"System Events\" to keystroke \"d\" using {{command down}}\n\
+                 tell application \"iTerm\" to create window with default profile command \"{}\"\n\
+                 end tell",
+                escape_for_applescript(&composed),
+                escape_for_applescript(&composed),
+            );
+            run_osascript(&script)
+        }
+
+        // Ghostty：`open -a Ghostty --working-directory <path> -e <shell> -lc <cmd>`
+        "ghostty" => {
+            if command.trim().is_empty() {
+                spawn_app_with_args(def.open_app_name, &[path_trimmed])
+            } else {
+                spawn_app_with_args(
+                    def.open_app_name,
+                    &[
+                        format!("--working-directory={path_trimmed}").as_str(),
+                        "-e",
+                        "/bin/zsh",
+                        "-lc",
+                        &command,
+                    ],
+                )
+            }
+        }
+
+        // Warp：不支持 CLI 命令注入；通过 AppleScript 让 Warp 新建会话并预填 cd 命令
+        "warp" => {
+            let composed = composed_cd_command(path_trimmed, &command);
+            let script = format!(
+                "tell application \"Warp\"\n\
+                 \x20\x20activate\n\
+                 end tell\n\
+                 tell application \"System Events\"\n\
+                 \x20\x20tell process \"Warp\"\n\
+                 \x20\x20\x20\x20keystroke \"l\" using {{command down}}\n\
+                 \x20\x20\x20\x20delay 0.1\n\
+                 \x20\x20\x20\x20keystroke \"{}\"\n\
+                 \x20\x20\x20\x20key code 36\n\
+                 \x20\x20end tell\n\
+                 end tell",
+                escape_for_applescript(&composed)
+            );
+            run_osascript(&script)
+        }
+
+        // Kitty：`open -a kitty --args -d <path> <shell> -lc <cmd>`
+        "kitty" => {
+            if command.trim().is_empty() {
+                spawn_app_with_args("kitty", &[format!("--directory={path_trimmed}").as_str()])
+            } else {
+                spawn_app_with_args(
+                    "kitty",
+                    &[
+                        format!("--directory={path_trimmed}").as_str(),
+                        "/bin/zsh",
+                        "-lc",
+                        &command,
+                    ],
+                )
+            }
+        }
+
+        // Alacritty：`open -a Alacritty --args --working-directory <path> -e <shell> -lc <cmd>`
+        "alacritty" => {
+            if command.trim().is_empty() {
+                spawn_app_with_args(
+                    def.open_app_name,
+                    &[format!("--working-directory={path_trimmed}").as_str()],
+                )
+            } else {
+                spawn_app_with_args(
+                    def.open_app_name,
+                    &[
+                        format!("--working-directory={path_trimmed}").as_str(),
+                        "-e",
+                        "/bin/zsh",
+                        "-lc",
+                        &command,
+                    ],
+                )
+            }
+        }
+
+        // WezTerm：`open -a WezTerm --args start --cwd <path> -- /bin/zsh -lc <cmd>`
+        "wezterm" => {
+            if command.trim().is_empty() {
+                spawn_app_with_args(def.open_app_name, &[format!("--cwd={path_trimmed}").as_str()])
+            } else {
+                spawn_app_with_args(
+                    def.open_app_name,
+                    &[
+                        format!("--cwd={path_trimmed}").as_str(),
+                        "--",
+                        "/bin/zsh",
+                        "-lc",
+                        &command,
+                    ],
+                )
+            }
+        }
+
+        // Hyper：CLI 注入能力较弱；用 AppleScript 让 Hyper 现有窗口执行 cd 命令
+        "hyper" => {
+            let composed = composed_cd_command(path_trimmed, &command);
+            let script = format!(
+                "tell application \"Hyper\" to activate\n\
+                 delay 0.3\n\
+                 tell application \"System Events\"\n\
+                 \x20\x20tell process \"Hyper\"\n\
+                 \x20\x20\x20\x20keystroke \"{}\"\n\
+                 \x20\x20\x20\x20key code 36\n\
+                 \x20\x20end tell\n\
+                 end tell",
+                escape_for_applescript(&composed)
+            );
+            run_osascript(&script)
+        }
+
+        other => Err(format!("暂不支持在该终端注入运行指令：{other}")),
+    }
+}

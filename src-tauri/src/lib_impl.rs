@@ -346,6 +346,8 @@ pub fn run() {
             workspace_commands::get_claude_user_agents_dir,
             workspace_commands::open_workspace_in,
             #[cfg(target_os = "macos")]
+            workspace_commands::macos_open_terminal_with_command,
+            #[cfg(target_os = "macos")]
             macos_terminal_detect::macos_detect_terminals,
             git_commands::git_status,
             git_commands::git_status_summary,

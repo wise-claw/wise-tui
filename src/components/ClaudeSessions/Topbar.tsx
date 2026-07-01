@@ -6,7 +6,10 @@ import { useWiseTopbarChromeVisibility } from "../../hooks/useWiseTopbarChromeVi
 import { RemoteEntryTopbarStrip } from "../RemoteEntryTopbarStrip";
 import { WorkspaceQuickActionsTopbarStrip } from "../WorkspaceQuickActionsTopbarStrip";
 import { OpenAppMenu } from "../OpenAppMenu";
-import { tryOpenWorkspaceInDefaultTerminal } from "../../services/openWorkspaceWithTerminalPreference";
+import {
+  tryOpenWorkspaceInDefaultTerminal,
+  tryOpenWorkspaceInDefaultTerminalWithCommand,
+} from "../../services/openWorkspaceWithTerminalPreference";
 import { openInFinder } from "../../services/repository";
 import { FolderOpenOutlined } from "@ant-design/icons";
 import { FccTopbarTrigger } from "./FccTopbarTrigger";
@@ -27,6 +30,11 @@ import { topbarPropsEqual } from "./topbarPropsEqual";
 
 const RunCommandPanelLazy = lazy(() =>
   import("../RunCommand").then((module) => ({ default: module.RunCommandPanel })),
+);
+const ExternalTerminalCommandPopoverLazy = lazy(() =>
+  import("./ExternalTerminalCommandPopover").then((module) => ({
+    default: module.ExternalTerminalCommandPopover,
+  })),
 );
 
 // ── SVG Icons ──
@@ -228,6 +236,7 @@ export const Topbar = memo(function Topbar({
     return getOpenAppPreferenceSync() || DEFAULT_OPEN_APP_ID;
   });
   const [runPopoverOpen, setRunPopoverOpen] = useState(false);
+  const [externalTerminalPopoverOpen, setExternalTerminalPopoverOpen] = useState(false);
   const [rightPanelDefaultPopoverOpen, setRightPanelDefaultPopoverOpen] = useState(false);
   const [rightPanelDefaultDraftCollapsed, setRightPanelDefaultDraftCollapsed] = useState(
     rightPanelDefaultCollapsed ?? RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK,
@@ -356,22 +365,70 @@ export const Topbar = memo(function Topbar({
           </HoverHint>
         ) : null}
         {topbarToolsReady && topbarChrome.showTopbarOpenInTerminal ? (
-          <HoverHint title="在外部终端打开">
-            <button
-              type="button"
-              className="app-topbar-btn"
-              aria-label="在外部终端打开"
-              onClick={() => {
-                if (topbarOpenPath) {
-                  void tryOpenWorkspaceInDefaultTerminal(topbarOpenPath).then((result) => {
+          <Popover
+            trigger={[]}
+            placement="bottomRight"
+            open={externalTerminalPopoverOpen}
+            onOpenChange={setExternalTerminalPopoverOpen}
+            classNames={{ root: "app-run-command-popover" }}
+            content={
+              <Suspense fallback={<Spin size="small" />}>
+                <ExternalTerminalCommandPopoverLazy
+                  workspacePath={topbarOpenPath}
+                  initialCommand={repositoryRunCommand.runCommand}
+                  detectedCommand={repositoryRunCommand.detectedProfile?.runCommand ?? null}
+                  onSave={(value) => {
+                    repositoryRunCommand.setRunCommand(value);
+                    repositoryRunCommand.saveRunCommand();
+                  }}
+                  onClear={() => {
+                    repositoryRunCommand.setRunCommand("");
+                    if (repositoryRunCommand.runKey) {
+                      window.localStorage.removeItem(repositoryRunCommand.runKey);
+                    }
+                  }}
+                  onClose={() => setExternalTerminalPopoverOpen(false)}
+                />
+              </Suspense>
+            }
+          >
+            <HoverHint
+              title={
+                !topbarOpenPath
+                  ? "当前会话未绑定仓库路径，无法打开外部终端"
+                  : repositoryRunCommand.runCommand.trim()
+                    ? `在外部终端打开并执行：${repositoryRunCommand.runCommand
+                        .trim()
+                        .slice(0, 40)}${repositoryRunCommand.runCommand.trim().length > 40 ? "…" : ""}（右键配置）`
+                    : "在外部终端打开（右键配置运行指令）"
+              }
+              open={externalTerminalPopoverOpen ? false : undefined}
+            >
+              <button
+                type="button"
+                className="app-topbar-btn"
+                aria-label="在外部终端打开"
+                disabled={!topbarOpenPath}
+                onClick={() => {
+                  if (!topbarOpenPath) return;
+                  const cmd = repositoryRunCommand.runCommand.trim();
+                  const handler = cmd
+                    ? tryOpenWorkspaceInDefaultTerminalWithCommand
+                    : tryOpenWorkspaceInDefaultTerminal;
+                  void handler(topbarOpenPath, cmd).then((result) => {
                     if (!result.ok) message.warning(result.message);
                   });
-                }
-              }}
-            >
-              <IconTerminal />
-            </button>
-          </HoverHint>
+                }}
+                onContextMenu={(event) => {
+                  if (!topbarOpenPath) return;
+                  event.preventDefault();
+                  setExternalTerminalPopoverOpen(true);
+                }}
+              >
+                <IconTerminal />
+              </button>
+            </HoverHint>
+          </Popover>
         ) : null}
         {topbarToolsReady ? (
           <OpenAppMenu
