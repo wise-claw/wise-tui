@@ -880,10 +880,15 @@ fn escape_for_applescript(s: &str) -> String {
     s.replace('\\', "\\\\").replace('"', "\\\"")
 }
 
+/// 用 `open -na <App> --args <...>` 强制开新实例并把参数透传给 CLI 终端
+/// (Ghostty / Kitty / Alacritty / WezTerm)。`-n` 是关键：app 已运行时
+/// `open -a` 不会开新窗口，`--args` 也会被 macOS 静默丢弃，导致点击"打开
+/// 外部终端"后毫无反应。Ghostty 官方 README 也明确要求 `open -na
+/// Ghostty.app --args ...`。
 #[cfg(target_os = "macos")]
 fn spawn_app_with_args(app_name: &str, args: &[&str]) -> Result<(), String> {
     let mut cmd = std::process::Command::new("open");
-    cmd.arg("-a").arg(app_name);
+    cmd.arg("-na").arg(app_name);
     for a in args {
         cmd.arg(a);
     }
