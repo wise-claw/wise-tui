@@ -4580,17 +4580,42 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         return;
       }
 
-      const targetSessionId = claudeSid ?? session?.id ?? ownerSessionId;
+      // 终端 / 派发 / 反馈循环 sub-agent（connectionKind=oneshot）首次出题时，
+      // claudeSid 还没在 oneshot bootstrap 路径里落地（参考同文件下方
+      // executeSession 的 1.6s × 20 次轮询），如果直接写 stdin 会让
+      // targetSessionId 退化成 Wise tab id、撞后端 claude_stdin_by_session[claude_sid]
+      // map miss → "已结束" 错误 → 兜底走 resume，但 dock 已被标 failed 卡死。
+      // 这里在 oneshot 路径上做一次短轮询拿 claudeSid（最多 1.2s），保持主会话路径不变。
+      let resolvedClaudeSid = claudeSid;
+      if (
+        !resolvedClaudeSid &&
+        session &&
+        !sessionUsesStreamingConnection(session, defaultConnectionKindRef.current)
+      ) {
+        const deadline = Date.now() + 1200;
+        while (!resolvedClaudeSid && Date.now() < deadline) {
+          await new Promise<void>((resolve) => window.setTimeout(resolve, 80));
+          const fresh = sessionsRef.current.find(
+            (row) => row.id === (session?.id ?? tabSessionId),
+          );
+          resolvedClaudeSid =
+            fresh?.claudeSessionId?.trim() ||
+            sessionIdMapRef.current.get(tabSessionId ?? "")?.trim() ||
+            null;
+          if (resolvedClaudeSid) break;
+        }
+      }
+      const targetSessionId = resolvedClaudeSid || session?.id || ownerSessionId;
       const nextTurnNonceState = consumeNextTurnNonce(
         streamTurnSeqRef.current,
-        Boolean(preferStdinControlResponse && claudeSid),
+        Boolean(preferStdinControlResponse && resolvedClaudeSid),
       );
       streamTurnSeqRef.current = nextTurnNonceState.nextSeq;
       const nextTurnNonce = nextTurnNonceState.turnNonce;
       try {
         await submitQuestionViaStdin({
           tabSessionId,
-          claudeSid,
+          claudeSid: resolvedClaudeSid,
           targetSessionId,
           nextTurnNonce,
           qr,
@@ -4632,6 +4657,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           notificationHub.invalidateControlRequestsForSession(ownerSessionId, msg);
           await deliverQuestionAnswerViaResume(ownerSessionId, qr, answers, customAnswer);
         } else {
+          // 既不匹配 stdin-unavailable 也不是"已结束"语义的子集，可能是
+          // Promise cancel、序列化失败、tab 已迁移等。旧逻辑只 markRequestFailed
+          // 把 lifecycle 标 failed 但不清 dock head → 用户既看不到自动答、又点不动；
+          // 改为先清 head 再标 failed，让 dock 至少能手动关掉、自动答 effect 也保留机会下轮再处理。
+          notificationHub.invalidateControlRequestsForSession(ownerSessionId, msg);
           notificationHub.markRequestFailed(qr.id, msg);
         }
         return;

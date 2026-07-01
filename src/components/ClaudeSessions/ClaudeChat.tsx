@@ -111,6 +111,7 @@ import {
   findNextDispatchableLaneHead,
   pendingTaskExecutorLaneKey,
 } from "../../utils/pendingQueueLanes";
+import { isWithinBackgroundCompactGraceWindow } from "../../stores/backgroundContextCompactStore";
 import type {
   EmployeeItem,
   PendingExecutionTask,
@@ -801,6 +802,12 @@ export function ClaudeChatInner({
       return;
     }
 
+    // 后台压缩（auto-compact / /compact）刚结束的 grace 窗口内，gate-key 翻转
+    // 会让所有 lane head 同时满足 canDispatchHead，于是同一 flush 把多条同时派发。
+    // grace 窗内收敛 main lane：仅派 main head1，其它 lane 仍保持既定并行语义。
+    // 窗结束后恢复旧行为（dispatchable 全发），保证非压缩场景零回归。
+    const inCompactGraceWindow = isWithinBackgroundCompactGraceWindow(session.id);
+
     let mainHoldDelay = 0;
     for (const task of dispatchable) {
       const laneKey = pendingTaskExecutorLaneKey(task);
@@ -825,7 +832,23 @@ export function ClaudeChatInner({
     }
 
     clearIdlePendingDispatchTimer();
-    for (const task of dispatchable) {
+    // 决定本次派发集合。
+    let toDispatch = dispatchable;
+    if (inCompactGraceWindow) {
+      let mainHeadQueued = false;
+      toDispatch = dispatchable.filter((task) => {
+        const laneKey = pendingTaskExecutorLaneKey(task);
+        if (laneKey !== "main") {
+          return true; // employee / team 仍并行
+        }
+        if (mainHeadQueued) {
+          return false; // grace 窗内 main 只派队首
+        }
+        mainHeadQueued = true;
+        return true;
+      });
+    }
+    for (const task of toDispatch) {
       const laneKey = pendingTaskExecutorLaneKey(task);
       if (pendingQueueDispatchInFlightLanesRef.current.has(laneKey)) {
         continue;
@@ -835,7 +858,7 @@ export function ClaudeChatInner({
       }
       dispatchPendingTask(task);
     }
-  }, [canDispatchHead, clearIdlePendingDispatchTimer, dispatchPendingTask]);
+  }, [canDispatchHead, clearIdlePendingDispatchTimer, dispatchPendingTask, session.id]);
 
   flushPendingLaneDispatchesRef.current = flushPendingLaneDispatches;
 
