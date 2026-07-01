@@ -95,8 +95,10 @@ import {
   buildQuestionFallbackUserPrompt,
   buildQuestionResumeUserPrompt,
   hasLiveStreamingClaudeProcess,
+  isOneshotBootstrapPendingError,
   isQuestionStdinUnavailableError,
   isToolUseQuestionRequestId,
+  QUESTION_BOOTSTRAP_PENDING_SENTINEL,
   shouldDeliverQuestionViaResume,
   shouldUseProxyQuestionResumeDelivery,
 } from "../utils/questionControlDelivery";
@@ -4584,15 +4586,18 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       // claudeSid 还没在 oneshot bootstrap 路径里落地（参考同文件下方
       // executeSession 的 1.6s × 20 次轮询），如果直接写 stdin 会让
       // targetSessionId 退化成 Wise tab id、撞后端 claude_stdin_by_session[claude_sid]
-      // map miss → "已结束" 错误 → 兜底走 resume，但 dock 已被标 failed 卡死。
-      // 这里在 oneshot 路径上做一次短轮询拿 claudeSid（最多 1.2s），保持主会话路径不变。
+      // map miss → "已结束" 错误 → 兜底走 resume，但 resume 会在 claudeSid=null 时
+      // 重启全新进程、丢掉正在提问的旧 oneshot。
+      // 这里在 oneshot 路径上对齐 executeSession 的 bootstrap 窗口轮询拿 claudeSid
+      //（最多 ~1.7s = 20×80ms + 100ms 余量）；超时仍未落地且 worker 仍 running 时，
+      // 抛 sentinel 让 auto-answer effect 下个 tick 重试，绝不走 stdin/resume/failed。
       let resolvedClaudeSid = claudeSid;
       if (
         !resolvedClaudeSid &&
         session &&
         !sessionUsesStreamingConnection(session, defaultConnectionKindRef.current)
       ) {
-        const deadline = Date.now() + 1200;
+        const deadline = Date.now() + 1700;
         while (!resolvedClaudeSid && Date.now() < deadline) {
           await new Promise<void>((resolve) => window.setTimeout(resolve, 80));
           const fresh = sessionsRef.current.find(
@@ -4604,6 +4609,18 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
             null;
           if (resolvedClaudeSid) break;
         }
+      }
+      // 1b：oneshot running worker 在 bootstrap 窗口内仍没拿到 claudeSid ——
+      // 子进程大概率仍在启动，question 仍 pending。此时写 stdin 必撞 map miss、
+      // 走 resume 会重启丢上下文。抛 sentinel 交由 effect 重试，直到 bootstrap 完成
+      // 或子进程真退出（status !== running，届时下方 1c 的 resume 分支会接管）。
+      if (
+        !resolvedClaudeSid &&
+        session &&
+        !sessionUsesStreamingConnection(session, defaultConnectionKindRef.current) &&
+        session.status === "running"
+      ) {
+        throw new Error(QUESTION_BOOTSTRAP_PENDING_SENTINEL);
       }
       const targetSessionId = resolvedClaudeSid || session?.id || ownerSessionId;
       const nextTurnNonceState = consumeNextTurnNonce(
@@ -4654,6 +4671,23 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       } catch (error) {
         const msg = error instanceof Error ? error.message : String(error);
         if (isQuestionStdinUnavailableError(msg)) {
+          // 1c：oneshot running worker 撞 map miss，多半是 bootstrap 竞态
+          // （claudeSid 刚落地但 stdin map 尚未注册，或轮询边界擦过）——子进程
+          // 仍存活。走 resume 会重启丢上下文，改为抛 sentinel 交由 effect 重试。
+          // 子进程真退出（status !== running）时才走 resume 兜底，那是 resume 的正当场景。
+          const liveSessionForRecover = sessionsRef.current.find(
+            (s) => s.id === (session?.id ?? tabSessionId),
+          );
+          const isOneshotStillRunning =
+            liveSessionForRecover &&
+            !sessionUsesStreamingConnection(
+              liveSessionForRecover,
+              defaultConnectionKindRef.current,
+            ) &&
+            liveSessionForRecover.status === "running";
+          if (isOneshotStillRunning) {
+            throw new Error(QUESTION_BOOTSTRAP_PENDING_SENTINEL);
+          }
           notificationHub.invalidateControlRequestsForSession(ownerSessionId, msg);
           await deliverQuestionAnswerViaResume(ownerSessionId, qr, answers, customAnswer);
         } else {
@@ -4925,6 +4959,15 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
                   handled.delete(qr.id);
                 }
               } catch (err) {
+                const errMsg = err instanceof Error ? err.message : String(err);
+                // respondToQuestion 在 oneshot worker bootstrap 未完成时抛 sentinel，
+                // 要求下个 hub tick 重试：delete handled 让该题重新可被处理，
+                // 静默返回（不 warn、不泄漏到 UI）。question 仍 pending、worker 仍 running，
+                // 下次 bump（流事件 / expireStale 定时器）会再次进入。
+                if (isOneshotBootstrapPendingError(errMsg)) {
+                  handled.delete(qr.id);
+                  return;
+                }
                 handled.delete(qr.id);
                 console.warn("[wise:auto-approve] question decide failed", err);
               }

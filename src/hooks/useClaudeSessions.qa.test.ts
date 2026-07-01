@@ -1,5 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { submitQuestionViaStdin } from "./useClaudeSessions.qa";
+import {
+  QUESTION_BOOTSTRAP_PENDING_SENTINEL,
+  isOneshotBootstrapPendingError,
+} from "../utils/questionControlDelivery";
 import type { QuestionRequest } from "../types";
 
 function makeQr(overrides: Partial<QuestionRequest> = {}): QuestionRequest {
@@ -84,5 +88,22 @@ describe("submitQuestionViaStdin targetSessionId plumbing", () => {
       sendStreamingUserMessage: async () => undefined,
     });
     expect(stdinCalled).toBe(true);
+  });
+});
+
+describe("isOneshotBootstrapPendingError sentinel", () => {
+  // 关键回归：oneshot worker 在 claudeSid 未落地时，respondToQuestion 抛 sentinel
+  // 要求 effect 下个 tick 重试，绝不能被当成普通失败 warn 或泄漏到 UI。
+  // effect catch 用本函数判定；sentinel 字符串必须与抛出端常量严格一致。
+  test("matches the exported sentinel exactly (trim-tolerant)", () => {
+    expect(isOneshotBootstrapPendingError(QUESTION_BOOTSTRAP_PENDING_SENTINEL)).toBe(true);
+    expect(isOneshotBootstrapPendingError(`  ${QUESTION_BOOTSTRAP_PENDING_SENTINEL}  `)).toBe(true);
+  });
+
+  test("rejects unrelated error messages (including stdin-unavailable ones)", () => {
+    expect(isOneshotBootstrapPendingError("")).toBe(false);
+    expect(isOneshotBootstrapPendingError("会话 X 没有可写 stdin（可能已结束）")).toBe(false);
+    expect(isOneshotBootstrapPendingError("broken pipe")).toBe(false);
+    expect(isOneshotBootstrapPendingError("__WISE_QUESTION_BOOTSTRAP")).toBe(false);
   });
 });

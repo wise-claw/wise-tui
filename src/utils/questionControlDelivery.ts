@@ -12,6 +12,20 @@ export function isQuestionStdinUnavailableError(message: string): boolean {
   return QUESTION_STDIN_UNAVAILABLE_RE.test(msg);
 }
 
+/**
+ * oneshot worker 的 claudeSid 尚未在 bootstrap 路径落地（首个 system.init 还没到），
+ * 或因竞态导致 stdin map miss 但子进程仍存活时：既不能写 stdin（会撞后端 map miss），
+ * 也不能走 resume（会丢上下文重启新进程），而应让 auto-answer effect 在下个 hub tick 重试。
+ *
+ * 用 sentinel 字符串而非自定义 Error 子类：catch 端只能拿到 message（message.error 的入参也是 string），
+ * 字符串匹配最稳，且 effect 端吞掉后不会泄漏到 UI。
+ */
+export const QUESTION_BOOTSTRAP_PENDING_SENTINEL = "__WISE_QUESTION_BOOTSTRAP_PENDING__";
+
+export function isOneshotBootstrapPendingError(message: string): boolean {
+  return message?.trim() === QUESTION_BOOTSTRAP_PENDING_SENTINEL;
+}
+
 /** stdin 不可用或代理续跑时，用户消息正文（仅所选文案）。 */
 export function buildQuestionFallbackUserPrompt(
   qr: Pick<QuestionRequest, "options">,
