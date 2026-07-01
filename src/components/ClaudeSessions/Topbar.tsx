@@ -378,8 +378,14 @@ export const Topbar = memo(function Topbar({
                   initialCommand={repositoryRunCommand.runCommand}
                   detectedCommand={repositoryRunCommand.detectedProfile?.runCommand ?? null}
                   onSave={(value) => {
+                    // 直接写 localStorage + 同步 React 状态：
+                    // 不调 `saveRunCommand()`，因为它内部已经会弹
+                    // "运行指令已保存" message，与 popover 自己弹的
+                    // "已保存运行指令" 会导致双弹提示。
+                    if (repositoryRunCommand.runKey) {
+                      window.localStorage.setItem(repositoryRunCommand.runKey, value);
+                    }
                     repositoryRunCommand.setRunCommand(value);
-                    repositoryRunCommand.saveRunCommand();
                   }}
                   onClear={() => {
                     repositoryRunCommand.setRunCommand("");
