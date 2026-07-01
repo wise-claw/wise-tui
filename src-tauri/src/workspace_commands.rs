@@ -937,17 +937,15 @@ pub(crate) fn macos_open_terminal_with_command(
             run_osascript(&script)
         }
 
-        // iTerm：先 activate 再开新窗口运行命令
+        // iTerm：activate 后等待窗口就绪，再创建新窗口执行命令
         "iterm" => {
             let composed = composed_cd_command(path_trimmed, &command);
             let script = format!(
                 "tell application \"iTerm\"\n\
                  \x20\x20activate\n\
-                 \x20\x20tell current session of current window to write text \"{}\"\n\
-                 tell application \"System Events\" to keystroke \"d\" using {{command down}}\n\
-                 tell application \"iTerm\" to create window with default profile command \"{}\"\n\
+                 \x20\x20delay 1.0\n\
+                 \x20\x20create window with default profile command \"{}\"\n\
                  end tell",
-                escape_for_applescript(&composed),
                 escape_for_applescript(&composed),
             );
             run_osascript(&script)
@@ -968,9 +966,8 @@ pub(crate) fn macos_open_terminal_with_command(
                 )?;
                 let composed = composed_cd_command(path_trimmed, &command);
                 let script = format!(
-                    "delay 0.3\n\
-                     tell application \"Ghostty\" to activate\n\
-                     delay 0.2\n\
+                    "tell application \"Ghostty\" to activate\n\
+                     delay 1.0\n\
                      tell application \"System Events\"\n\
                      \x20\x20tell process \"Ghostty\"\n\
                      \x20\x20\x20\x20keystroke \"{}\"\n\
@@ -990,10 +987,11 @@ pub(crate) fn macos_open_terminal_with_command(
                 "tell application \"Warp\"\n\
                  \x20\x20activate\n\
                  end tell\n\
+                 delay 1.0\n\
                  tell application \"System Events\"\n\
                  \x20\x20tell process \"Warp\"\n\
                  \x20\x20\x20\x20keystroke \"l\" using {{command down}}\n\
-                 \x20\x20\x20\x20delay 0.1\n\
+                 \x20\x20\x20\x20delay 0.3\n\
                  \x20\x20\x20\x20keystroke \"{}\"\n\
                  \x20\x20\x20\x20key code 36\n\
                  \x20\x20end tell\n\
@@ -1063,12 +1061,12 @@ pub(crate) fn macos_open_terminal_with_command(
             }
         }
 
-        // Hyper：CLI 注入能力较弱；用 AppleScript 让 Hyper 现有窗口执行 cd 命令
+        // Hyper：activate 后等待窗口就绪，再模拟键入命令
         "hyper" => {
             let composed = composed_cd_command(path_trimmed, &command);
             let script = format!(
                 "tell application \"Hyper\" to activate\n\
-                 delay 0.3\n\
+                 delay 1.0\n\
                  tell application \"System Events\"\n\
                  \x20\x20tell process \"Hyper\"\n\
                  \x20\x20\x20\x20keystroke \"{}\"\n\
