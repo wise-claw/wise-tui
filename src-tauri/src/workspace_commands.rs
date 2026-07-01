@@ -859,20 +859,28 @@ fn find_terminal_def(app_name: &str) -> Option<&'static crate::macos_terminal_de
 /// 窗口并跑一段 shell。返回值表示 osascript 退出是否成功。
 #[cfg(target_os = "macos")]
 fn run_osascript(script: &str) -> Result<(), String> {
-    let status = std::process::Command::new("osascript")
+    let output = std::process::Command::new("osascript")
         .arg("-e")
         .arg(script)
-        .spawn()
-        .map_err(|e| format!("无法启动 osascript：{e}"))?
-        .wait()
-        .map_err(|e| format!("等待 osascript 退出失败：{e}"))?;
-    if !status.success() {
-        return Err(format!(
-            "osascript 执行失败（退出码 {:?}）",
-            status.code()
-        ));
+        .output()
+        .map_err(|e| format!("无法启动 osascript：{e}"))?;
+    if !output.status.success() {
+        let code = output
+            .status
+            .code()
+            .map(|c| c.to_string())
+            .unwrap_or_else(|| "未知".to_string());
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        let stderr_trimmed = stderr.trim();
+        if stderr_trimmed.is_empty() {
+            return Err(format!("osascript 执行失败（退出码 {code}）"));
+        }
+        Err(format!(
+            "osascript 执行失败（退出码 {code}）：{stderr_trimmed}"
+        ))
+    } else {
+        Ok(())
     }
-    Ok(())
 }
 
 #[cfg(target_os = "macos")]
