@@ -10,6 +10,70 @@ const RUN_LOG_IPV6_BRACKET_PORT_REGEX = /\[([0-9a-fA-F:]+)\]:(\d{2,5})(\/[^\s]*)
 export const RUN_ERROR_REGEX =
   /(error|failed|exception|traceback|npm err|build failed|编译失败|报错|panic)/i;
 
+/**
+ * 从运行报错日志尾提取稳定指纹，用于识别"同一报错在循环出现"。
+ *
+ * 取命中错误关键词的行，剥离 ANSI 控制序列、时间戳、内存地址，并将所有数字
+ * 归一为 N（行号 / 端口 / 循环序号 / 错误码每次都可能不同），压缩空白后取末尾若干行。
+ * 这样循环报错（仅时间戳 / 行号 / 序号每次不同）会被归一到同一指纹。
+ */
+export function buildRunErrorFingerprint(tailText: string): string {
+  const plain = tailText
+    .replace(/\u001b\[[0-9;]*[A-Za-z]/g, "")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n");
+  const errorLines = plain
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => RUN_ERROR_REGEX.test(line))
+    .map((line) =>
+      line
+        .replace(/\b\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}:\d{2}(\.\d+)?Z?\b/g, "")
+        .replace(/\b\d{2}:\d{2}:\d{2}\b/g, "")
+        .replace(/\b0x[0-9a-fA-F]+\b/g, "")
+        .replace(/\d+/g, "N")
+        .replace(/\s+/g, " ")
+        .trim()
+        .toLowerCase(),
+    )
+    .filter(Boolean)
+    .slice(-5);
+  return errorLines.join(" | ");
+}
+
+/** 两枚指纹是否代表同一报错。空指纹不判定为同一（避免误判为循环）。 */
+export function isSameRunErrorFingerprint(a: string | null, b: string): boolean {
+  if (!a || !b) return false;
+  return a === b;
+}
+
+export type RunErrorMonitorDecision =
+  | { action: "arm-dispatch" }
+  | { action: "report-loop"; loopCount: number }
+  | { action: "report-new-after-dispatch" };
+
+/**
+ * 判定某段报错输出在 AI 报错监控状态机中应触发何种动作（同一错误只派发一次）。
+ *
+ * - 未派发过：排程首次派发。
+ * - 已派发且指纹匹配：同一报错循环，仅递增计数并提示，不再派发。
+ * - 已派发但指纹不同：本次运行 AI 已介入，仅提示，不再派发。
+ */
+export function decideRunErrorMonitorStep(input: {
+  autoFixSent: boolean;
+  dispatchedFingerprint: string | null;
+  fingerprint: string;
+  loopCount: number;
+}): RunErrorMonitorDecision {
+  if (!input.autoFixSent) {
+    return { action: "arm-dispatch" };
+  }
+  if (isSameRunErrorFingerprint(input.dispatchedFingerprint, input.fingerprint)) {
+    return { action: "report-loop", loopCount: input.loopCount + 1 };
+  }
+  return { action: "report-new-after-dispatch" };
+}
+
 const RUN_ERROR_MONITOR_DEDUP_WINDOW_MS = 60_000;
 const runErrorMonitorSentAtByKey = new Map<string, number>();
 
