@@ -70,13 +70,15 @@
 .app-claude-sessions__multi-panes {
   /* 与 `src/constants/mainLayoutWidths.ts` 中 MAIN_LAYOUT_MULTI_PANE_MIN_WIDTH_PX 一致 */
   --app-multi-pane-min-width: 420px;
+  --app-multi-pane-divider: var(--ant-color-fill-secondary);
   position: relative;
   display: grid;
-  gap: 1px;
+  /* 2px 细缝在深色/浅色主题下都能区分屏幕；边框再补一层 outline 兜底 */
+  gap: 2px;
   flex: 1 1 0;
   min-height: 0;
   min-width: 0;
-  background: var(--ant-color-split);
+  background: var(--app-multi-pane-divider);
 }
 
 /* 双屏：列宽由 JS 像素控制，避免 fr + min-width 与分隔条错位 */
@@ -116,6 +118,9 @@
   flex-direction: column;
   overflow: hidden;
   background: var(--ant-color-bg-container);
+  /* 1px 外描边补足 grid gap 在深色主题下的可见性；使用 outline 不挤占布局空间 */
+  outline: 1px solid var(--app-multi-pane-divider);
+  outline-offset: -1px;
   /* 多屏时跳过视口外窗格的布局/绘制，减轻 6/8 屏压力 */
   content-visibility: auto;
   contain-intrinsic-size: auto 480px;
