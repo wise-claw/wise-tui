@@ -107,6 +107,12 @@ export interface UseClaudeSessionsReturn {
       initialModel?: string;
       /** 标记为右栏侧会话：不进中栏 tab 列表、不抢 active、不写入主会话绑定表。 */
       isSide?: boolean;
+      /**
+       * 激活前钩子：在 `setActiveSessionId` 触发新会话挂载与草稿 hydration 之前 await 完成。
+       * 用于把旧会话草稿先迁移到新会话 key，避免新会话 hydration 读盘早于写入而显示为空。
+       * `skipActivate` 时不调用。
+       */
+      onBeforeActivate?: (newSessionId: string) => Promise<void> | void;
     },
   ) => Promise<string>;
   updateSessionModel: (sessionId: string, model: string) => void;

@@ -2567,9 +2567,18 @@ export default function App() {
   async function createAndBindRepositoryMainSession(
     repository: Repository,
     priorActiveId: string | null | undefined,
+    opts?: { carryDraft?: boolean },
   ): Promise<string> {
     const target = resolveSidebarSelectionTarget({ repository });
-    const id = await createSession(target.path, target.displayName, { immediateActivate: true });
+    // 手动「新建会话」时把旧会话输入框草稿迁移到新会话，避免新会话输入框显示为空。
+    // 必须在 createSession 内部 setActiveSessionId 之前完成（见 onBeforeActivate 钩子）。
+    const carryDraftFromId = opts?.carryDraft ? priorActiveId ?? undefined : undefined;
+    const id = await createSession(target.path, target.displayName, {
+      immediateActivate: true,
+      onBeforeActivate: carryDraftFromId
+        ? (newId) => migratePromptContextSessionKey(carryDraftFromId, newId)
+        : undefined,
+    });
     void bindRepositoryMainSession(target.path, id, { deferHostRelease: true });
     scheduleReleaseScopedClaudeHostsBeforeNewMain({
       kind: "repository",
@@ -2583,13 +2592,20 @@ export default function App() {
   async function createAndBindProjectMainSession(
     project: ProjectItem,
     priorActiveId: string | null | undefined,
+    opts?: { carryDraft?: boolean },
   ): Promise<string | null> {
     const anchor = resolveProjectMainSessionAnchor(project, repositories);
     if (!anchor.path) {
       message.warning("该 Workspace 缺少根目录，请先配置 rootPath");
       return null;
     }
-    const id = await createSession(anchor.path, anchor.displayName, { immediateActivate: true });
+    const carryDraftFromId = opts?.carryDraft ? priorActiveId ?? undefined : undefined;
+    const id = await createSession(anchor.path, anchor.displayName, {
+      immediateActivate: true,
+      onBeforeActivate: carryDraftFromId
+        ? (newId) => migratePromptContextSessionKey(carryDraftFromId, newId)
+        : undefined,
+    });
     void bindRepositoryMainSession(projectMainSessionBindingKey(project.id), id, {
       deferHostRelease: true,
     });
@@ -2749,6 +2765,7 @@ export default function App() {
     const id = await createAndBindRepositoryMainSession(
       repository,
       activeSessionIdLatestRef.current,
+      { carryDraft: true },
     );
     jumpToSessionWithRepository(id);
   }
@@ -2778,7 +2795,9 @@ export default function App() {
         setActiveProjectId(project.id);
       }
     });
-    const id = await createAndBindProjectMainSession(project, activeSessionIdLatestRef.current);
+    const id = await createAndBindProjectMainSession(project, activeSessionIdLatestRef.current, {
+      carryDraft: true,
+    });
     if (id) {
       jumpToSessionWithRepository(id);
     }
