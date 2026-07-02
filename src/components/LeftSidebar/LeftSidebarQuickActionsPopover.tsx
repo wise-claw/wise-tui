@@ -51,7 +51,6 @@ export function LeftSidebarQuickActionsPopover({
   const [open, setOpen] = useState(false);
   const [editState, setEditState] = useState<EditState | null>(null);
 
-  const allowProjectScope = Boolean(projectId?.trim()) || workspaces.length > 0;
   const allowRepositoryScope = repositoryId != null || repositoriesById.size > 0;
   const defaultScope: WorkspaceQuickActionScope = allowRepositoryScope && repositoryId != null
     ? "repository"
@@ -61,19 +60,6 @@ export function LeftSidebarQuickActionsPopover({
     event.preventDefault();
     event.stopPropagation();
   }, []);
-
-  const resolveScopeId = useCallback(
-    (scope: WorkspaceQuickActionScope): string | null => {
-      if (scope === "project") {
-        return projectId?.trim() || null;
-      }
-      if (repositoryId != null && Number.isFinite(repositoryId) && repositoryId > 0) {
-        return String(repositoryId);
-      }
-      return null;
-    },
-    [projectId, repositoryId],
-  );
 
   const upsertItem = useCallback(
     async (

@@ -55,6 +55,7 @@ export function ClaudeSessionMessagesColumn({
               onOpenTaskDetail={onOpenTaskDetail}
               onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
               sessionsForDispatchLookup={sessionsForDispatchLookup}
+              transcriptMemoryUnlimited={session.transcriptMemoryUnlimited}
             />
           </ChatRepositoryProvider>
         )}

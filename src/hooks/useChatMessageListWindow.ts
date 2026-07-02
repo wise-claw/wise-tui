@@ -27,27 +27,45 @@ interface Options {
   profile?: "primary" | "companion";
   /** 伴生窗格 profile 下按屏数覆盖尾部窗口大小 */
   companionMessageListWindow?: { initialVisible: number; loadStep: number };
+  /** 内存窗口耗尽（已展示全部内存 rows）时回调，用于衔接磁盘全量重载拉取更早落盘内容；
+   *  省略时（如 monitor 变体）耗尽后不再监听滚动，行为不变。 */
+  onWindowExhausted?: () => void;
+  /** 全量磁盘重载后（transcriptMemoryUnlimited）解除 maxVisible 封顶：内存已保留全部磁盘
+   *  消息，让「加载更早消息」按钮在长会话下仍可逐段扩展窗口直至展示全部内存 rows；
+   *  贴底回收仍回落到 initialVisible 保护 DOM。 */
+  transcriptMemoryUnlimited?: boolean;
 }
 
-function resolveWindowSizing(
+/**
+ * 解析尾部窗口 sizing（纯函数，便于单测）。
+ * `transcriptMemoryUnlimited` 为真时（全量磁盘重载后，内存已保留全部磁盘消息）解除
+ * `maxVisible` 封顶，使「加载更早消息」按钮在长会话下仍可逐段扩展窗口直至展示全部内存
+ * rows；贴底回收仍回落到 initialVisible 保护 DOM，不会无限膨胀。
+ */
+export function resolveWindowSizing(
   profile: Options["profile"],
   companionMessageListWindow?: Options["companionMessageListWindow"],
+  transcriptMemoryUnlimited?: boolean,
 ) {
-  if (profile === "companion") {
-    // 调用方传入的 companionMessageListWindow 仅含 initialVisible/loadStep（如 6/8 屏），
-    // 始终补上 companion maxVisible，保证增量浏览封顶语义一致。
-    return {
-      initialVisible: CHAT_MESSAGE_LIST_COMPANION_INITIAL_VISIBLE,
-      loadStep: CHAT_MESSAGE_LIST_COMPANION_LOAD_STEP,
-      maxVisible: CHAT_MESSAGE_LIST_COMPANION_MAX_VISIBLE,
-      ...companionMessageListWindow,
-    };
+  const base =
+    profile === "companion"
+      ? {
+          // 调用方传入的 companionMessageListWindow 仅含 initialVisible/loadStep（如 6/8 屏），
+          // 始终补上 companion maxVisible，保证增量浏览封顶语义一致。
+          initialVisible: CHAT_MESSAGE_LIST_COMPANION_INITIAL_VISIBLE,
+          loadStep: CHAT_MESSAGE_LIST_COMPANION_LOAD_STEP,
+          maxVisible: CHAT_MESSAGE_LIST_COMPANION_MAX_VISIBLE,
+          ...companionMessageListWindow,
+        }
+      : {
+          initialVisible: CHAT_MESSAGE_LIST_INITIAL_VISIBLE,
+          loadStep: CHAT_MESSAGE_LIST_LOAD_STEP,
+          maxVisible: CHAT_MESSAGE_LIST_MAX_VISIBLE,
+        };
+  if (transcriptMemoryUnlimited) {
+    return { ...base, maxVisible: Number.POSITIVE_INFINITY };
   }
-  return {
-    initialVisible: CHAT_MESSAGE_LIST_INITIAL_VISIBLE,
-    loadStep: CHAT_MESSAGE_LIST_LOAD_STEP,
-    maxVisible: CHAT_MESSAGE_LIST_MAX_VISIBLE,
-  };
+  return base;
 }
 
 export function useChatMessageListWindow({
@@ -56,8 +74,14 @@ export function useChatMessageListWindow({
   listResetKey,
   profile = "primary",
   companionMessageListWindow,
+  onWindowExhausted,
+  transcriptMemoryUnlimited,
 }: Options) {
-  const { initialVisible, loadStep, maxVisible } = resolveWindowSizing(profile, companionMessageListWindow);
+  const { initialVisible, loadStep, maxVisible } = resolveWindowSizing(
+    profile,
+    companionMessageListWindow,
+    transcriptMemoryUnlimited,
+  );
   const [visibleCount, setVisibleCount] = useState(initialVisible);
   const loadLockedRef = useRef(false);
   const prevRowsLengthRef = useRef(rows.length);
@@ -79,6 +103,9 @@ export function useChatMessageListWindow({
   // 用 ref 读取以反映 profile/companion 配置变化。
   const initialVisibleRef = useRef(initialVisible);
   initialVisibleRef.current = initialVisible;
+  // onWindowExhausted 用 ref 持有：onScroll effect 不把它列入依赖，避免回调变更触发重订阅。
+  const onWindowExhaustedRef = useRef<(() => void) | null>(onWindowExhausted ?? null);
+  onWindowExhaustedRef.current = onWindowExhausted ?? null;
   // loadMoreOlder 视口保持会把 scrollTop 推到新位置，大视口下可能恰好贴底；
   // 此时属于「主动加载更早」而非「用户滚到底看最新」，抑制紧接着的一次贴底回收，
   // 否则刚扩展的窗口会被立即收回（表现为点击/滚动加载更早消息无效）。由 onScroll 消费。
@@ -137,7 +164,14 @@ export function useChatMessageListWindow({
   }, [loadStep, maxVisible, rows.length, scrollContainerRef, slice.hiddenRowCount, slice.windowActive]);
 
   useEffect(() => {
-    if (!slice.windowActive || slice.hiddenRowCount <= 0) return;
+    // 窗口未激活（rows ≤ 阈值）时不监听；窗口激活但已耗尽时，仅当提供 onWindowExhausted
+    // 才继续监听以衔接磁盘全量重载，否则不订阅（monitor 变体行为不变）。
+    if (
+      !slice.windowActive ||
+      (slice.hiddenRowCount <= 0 && onWindowExhaustedRef.current === null)
+    ) {
+      return;
+    }
     const sc = scrollContainerRef.current;
     if (!sc) return;
 
@@ -147,26 +181,35 @@ export function useChatMessageListWindow({
       raf = window.requestAnimationFrame(() => {
         raf = 0;
         if (sc.scrollTop <= CHAT_MESSAGE_LIST_SCROLL_LOAD_PX) {
-          loadMoreOlder();
+          if (slice.hiddenRowCount > 0) {
+            loadMoreOlder();
+          } else {
+            // 内存窗口已耗尽：衔接磁盘全量重载，拉取更早落盘内容（统一触发点，避免与独立
+            // scroll 监听器的 rAF 时序竞争导致「有时加载不了」）。
+            onWindowExhaustedRef.current?.();
+          }
         }
-        // 贴底回收：视口最新内容在 slice 尾部，回收顶部最旧行不影响可见区域，
-        // 浏览器 clamp scrollTop 无跳动；读 ref 避免 hiddenRowCount 稳定时闭包陈旧。
-        // loadMoreOlder 主动加载后视口保持可能把视口推到底部（大视口下），属「加载更早」
-        // 而非「用户滚到底看最新」——抑制标志只在「本应回收」时消费并跳过，确保用在
-        // loadMoreOlder 视口保持引起的那次 scroll，而非前置的不回收帧；之后用户主动贴底才回收。
-        const reclaimable =
-          !loadLockedRef.current &&
-          shouldReclaimOnBottom(
-            sc.scrollTop,
-            sc.clientHeight,
-            sc.scrollHeight,
-            visibleCountRef.current,
-            initialVisibleRef.current,
-          );
-        if (reclaimable && suppressReclaimRef.current) {
-          suppressReclaimRef.current = false;
-        } else if (reclaimable) {
-          setVisibleCount(initialVisibleRef.current);
+        // 贴底回收仅在窗口尚有隐藏行时执行（耗尽后无回收意义）。
+        if (slice.hiddenRowCount > 0) {
+          // 贴底回收：视口最新内容在 slice 尾部，回收顶部最旧行不影响可见区域，
+          // 浏览器 clamp scrollTop 无跳动；读 ref 避免 hiddenRowCount 稳定时闭包陈旧。
+          // loadMoreOlder 主动加载后视口保持可能把视口推到底部（大视口下），属「加载更早」
+          // 而非「用户滚到底看最新」——抑制标志只在「本应回收」时消费并跳过，确保用在
+          // loadMoreOlder 视口保持引起的那次 scroll，而非前置的不回收帧；之后用户主动贴底才回收。
+          const reclaimable =
+            !loadLockedRef.current &&
+            shouldReclaimOnBottom(
+              sc.scrollTop,
+              sc.clientHeight,
+              sc.scrollHeight,
+              visibleCountRef.current,
+              initialVisibleRef.current,
+            );
+          if (reclaimable && suppressReclaimRef.current) {
+            suppressReclaimRef.current = false;
+          } else if (reclaimable) {
+            setVisibleCount(initialVisibleRef.current);
+          }
         }
       });
     };

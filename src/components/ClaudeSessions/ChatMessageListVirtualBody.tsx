@@ -44,6 +44,10 @@ interface Props {
   onNavigate?: () => void;
   messageListProfile?: "primary" | "companion";
   companionMessageListWindow?: { initialVisible: number; loadStep: number };
+  /** 内存窗口耗尽时衔接磁盘全量重载（仅主窗格 chat 变体传入） */
+  onWindowExhausted?: () => void;
+  /** 全量磁盘重载后解除 maxVisible 封顶，使加载更早消息按钮在长会话下仍可逐段扩展窗口。 */
+  transcriptMemoryUnlimited?: boolean;
 }
 
 /** 影响单行 element 输出的上下文 prop 集合（element 缓存引用相等判据用）。 */
@@ -125,6 +129,8 @@ export const ChatMessageListVirtualBody = forwardRef<ChatMessageListNavigationHa
       onNavigate,
       messageListProfile = "primary",
       companionMessageListWindow,
+      onWindowExhausted,
+      transcriptMemoryUnlimited,
     },
     ref,
   ) {
@@ -144,6 +150,8 @@ export const ChatMessageListVirtualBody = forwardRef<ChatMessageListNavigationHa
       listResetKey,
       profile: messageListProfile,
       companionMessageListWindow,
+      onWindowExhausted,
+      transcriptMemoryUnlimited,
     });
 
     const scrollFn = useCallback(

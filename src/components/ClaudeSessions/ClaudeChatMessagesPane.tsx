@@ -1,4 +1,12 @@
-import { memo, type FocusEvent, type RefObject, useSyncExternalStore } from "react";
+import {
+  memo,
+  useCallback,
+  useEffect,
+  useRef,
+  type FocusEvent,
+  type RefObject,
+  useSyncExternalStore,
+} from "react";
 import type { SessionExecutionEngine } from "../../constants/sessionExecutionEngine";
 import type { ClaudeSession, SessionConversationTaskItem } from "../../types";
 import { buildSessionEmptyChatPrompt } from "../../utils/sessionExecutionEngine";
@@ -9,7 +17,6 @@ import {
   useChatMessagesPointerBusy,
 } from "../../hooks/useChatMessagesPointerBusy";
 import { useScrollEndClass } from "../../hooks/useScrollEndClass";
-import { useDiskTranscriptScrollLoad } from "../../hooks/useDiskTranscriptScrollLoad";
 import {
   isSessionTranscriptHydrating,
   subscribeSessionTranscriptHydrating,
@@ -24,9 +31,7 @@ export interface ClaudeChatMessagesPaneProps {
   messagesScrollRef: RefObject<HTMLDivElement | null>;
   messageListNavRef: RefObject<ChatMessageListNavigationHandle | null>;
   showListEndThinkingHint: boolean;
-  loadMoreTranscriptLoading: boolean;
   fullTranscriptLoading: boolean;
-  onLoadMoreTranscriptFromDisk?: (sessionId: string) => void | Promise<void>;
   onReloadFullDiskTranscript?: (sessionId: string) => void | Promise<void>;
   resolveExecutionEnvironmentDispatchTask?: (meta: DispatchRecordMeta) => SessionConversationTaskItem | null;
   onOpenTaskDetail?: (taskId: string) => void;
@@ -35,8 +40,6 @@ export interface ClaudeChatMessagesPaneProps {
   sessionsForDispatchLookup?: readonly ClaudeSession[];
   onMessagesBlur: (event: FocusEvent<HTMLDivElement>) => void;
   onNavigateMessage: () => void;
-  onLoadMoreTranscriptStart: () => void;
-  onLoadMoreTranscriptEnd: () => void;
   onFullTranscriptStart: () => void;
   onFullTranscriptEnd: () => void;
   messageListProfile?: "primary" | "companion";
@@ -51,8 +54,8 @@ function chatMessagesPanePropsEqual(
   if (prev.session.id !== next.session.id) return false;
   if (prev.session.status !== next.session.status) return false;
   if (prev.session.diskTranscriptPartial !== next.session.diskTranscriptPartial) return false;
+  if (prev.session.transcriptMemoryUnlimited !== next.session.transcriptMemoryUnlimited) return false;
   if (prev.showListEndThinkingHint !== next.showListEndThinkingHint) return false;
-  if (prev.loadMoreTranscriptLoading !== next.loadMoreTranscriptLoading) return false;
   if (prev.fullTranscriptLoading !== next.fullTranscriptLoading) return false;
   if (prev.messageListProfile !== next.messageListProfile) return false;
   if (prev.companionMessageListWindow !== next.companionMessageListWindow) return false;
@@ -62,14 +65,11 @@ function chatMessagesPanePropsEqual(
   if (prev.sessionsForDispatchLookup !== next.sessionsForDispatchLookup) return false;
   if (prev.onMessagesBlur !== next.onMessagesBlur) return false;
   if (prev.onNavigateMessage !== next.onNavigateMessage) return false;
-  if (prev.onLoadMoreTranscriptFromDisk !== next.onLoadMoreTranscriptFromDisk) return false;
   if (prev.onReloadFullDiskTranscript !== next.onReloadFullDiskTranscript) return false;
   if (prev.onOpenTaskDetail !== next.onOpenTaskDetail) return false;
   if (prev.onOpenHistorySessionInInspector !== next.onOpenHistorySessionInInspector) return false;
   if (prev.onOpenSessionConversationTaskDetail !== next.onOpenSessionConversationTaskDetail) return false;
   if (prev.resolveExecutionEnvironmentDispatchTask !== next.resolveExecutionEnvironmentDispatchTask) return false;
-  if (prev.onLoadMoreTranscriptStart !== next.onLoadMoreTranscriptStart) return false;
-  if (prev.onLoadMoreTranscriptEnd !== next.onLoadMoreTranscriptEnd) return false;
   if (prev.onFullTranscriptStart !== next.onFullTranscriptStart) return false;
   if (prev.onFullTranscriptEnd !== next.onFullTranscriptEnd) return false;
   if (prev.session === next.session) return true;
@@ -117,15 +117,39 @@ export const ClaudeChatMessagesPane = memo(function ClaudeChatMessagesPane({
   });
   useChatMessagesPointerBusy(messagesScrollRef, streamingActive);
 
-  useDiskTranscriptScrollLoad({
-    sessionId: session.id,
-    diskTranscriptPartial: Boolean(session.diskTranscriptPartial),
-    scrollContainerRef: messagesScrollRef,
+  // 全量磁盘重载帧内同步锁:与 fullTranscriptLoading 跨帧锁配合去重,
+  // 避免滚动事件在一帧内多次触发 onReloadFullDiskTranscript。
+  const fullDiskLoadLockedRef = useRef(false);
+  // 切会话时重置锁,避免上一次会话的未释锁阻塞新会话的首次加载。
+  useEffect(() => {
+    fullDiskLoadLockedRef.current = false;
+  }, [session.id]);
+
+  // 内存窗口耗尽(已展示全部内存 rows)时衔接磁盘全量重载,拉取更早落盘内容。
+  // 统一由 useChatMessageListWindow 的同一 scroll 监听器触发,消除两条独立监听器的
+  // rAF 时序竞争(原 useDiskTranscriptScrollLoad 与 window hook 抢占 scrollTop)。
+  const handleWindowExhausted = useCallback(() => {
+    // 全量重载后 diskTranscriptPartial 置 false，不再有更早内容可拉，防重复触发。
+    if (!session.diskTranscriptPartial) return;
+    // onReloadFullDiskTranscript 可选，未传入时无磁盘重载能力，直接返回（避免空跑 start/end）。
+    if (!onReloadFullDiskTranscript) return;
+    // ref 帧内同步锁 + state 跨帧锁双重去重。
+    if (fullDiskLoadLockedRef.current || fullTranscriptLoading) return;
+    fullDiskLoadLockedRef.current = true;
+    onFullTranscriptStart();
+    // onReloadFullDiskTranscript 返回 void | Promise<void>，用 Promise.resolve 统一接 finally。
+    void Promise.resolve(onReloadFullDiskTranscript(session.id)).finally(() => {
+      onFullTranscriptEnd();
+      fullDiskLoadLockedRef.current = false;
+    });
+  }, [
+    session.diskTranscriptPartial,
+    session.id,
     fullTranscriptLoading,
-    onReloadFullDiskTranscript,
     onFullTranscriptStart,
     onFullTranscriptEnd,
-  });
+    onReloadFullDiskTranscript,
+  ]);
 
   return (
     <div
@@ -165,6 +189,7 @@ export const ClaudeChatMessagesPane = memo(function ClaudeChatMessagesPane({
           onNavigate={onNavigateMessage}
           messageListProfile={messageListProfile}
           companionMessageListWindow={companionMessageListWindow}
+          onWindowExhausted={handleWindowExhausted}
         />
       )}
     </div>

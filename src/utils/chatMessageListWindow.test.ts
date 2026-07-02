@@ -7,6 +7,11 @@ import {
   sliceChatMessageListRows,
   visibleCountToIncludeRowIndex,
 } from "./chatMessageListWindow";
+import {
+  CHAT_MESSAGE_LIST_COMPANION_MAX_VISIBLE,
+  CHAT_MESSAGE_LIST_MAX_VISIBLE,
+} from "../constants/claudeMessageList";
+import { resolveWindowSizing } from "../hooks/useChatMessageListWindow";
 
 function msgRow(id: number, key?: string): ChatMessageListRow {
   return {
@@ -63,6 +68,14 @@ describe("nextChatMessageVisibleCount", () => {
     // current=170 超默认 cap=160：保持不缩
     expect(nextChatMessageVisibleCount(170, 300, 28, 160)).toBe(170);
   });
+
+  test("unlimited maxVisible (transcriptMemoryUnlimited) does not cap incremental browsing", () => {
+    // 全量磁盘重载后 maxVisible=Infinity：visibleCount 可持续增长，仅受 rowsLength 约束
+    expect(nextChatMessageVisibleCount(150, 300, 28, Number.POSITIVE_INFINITY)).toBe(178);
+    expect(nextChatMessageVisibleCount(280, 300, 28, Number.POSITIVE_INFINITY)).toBe(300);
+    // 已达 rowsLength 时不再增长
+    expect(nextChatMessageVisibleCount(300, 300, 28, Number.POSITIVE_INFINITY)).toBe(300);
+  });
 });
 
 describe("shouldReclaimOnBottom", () => {
@@ -108,5 +121,20 @@ describe("findChatMessageRowIndexByMessageId", () => {
     const rows = [msgRow(1), msgRow(42, "42:1")];
     expect(findChatMessageRowIndexByMessageId(rows, 42)).toBe(1);
     expect(findChatMessageRowIndexByMessageId(rows, 99)).toBe(-1);
+  });
+});
+
+describe("resolveWindowSizing", () => {
+  test("primary profile uses primary maxVisible", () => {
+    expect(resolveWindowSizing("primary").maxVisible).toBe(CHAT_MESSAGE_LIST_MAX_VISIBLE);
+  });
+
+  test("companion profile uses companion maxVisible", () => {
+    expect(resolveWindowSizing("companion").maxVisible).toBe(CHAT_MESSAGE_LIST_COMPANION_MAX_VISIBLE);
+  });
+
+  test("transcriptMemoryUnlimited lifts maxVisible cap to Infinity", () => {
+    expect(resolveWindowSizing("primary", undefined, true).maxVisible).toBe(Number.POSITIVE_INFINITY);
+    expect(resolveWindowSizing("companion", undefined, true).maxVisible).toBe(Number.POSITIVE_INFINITY);
   });
 });

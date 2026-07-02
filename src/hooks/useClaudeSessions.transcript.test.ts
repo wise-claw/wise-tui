@@ -10,6 +10,7 @@ import {
   shouldDeferOneshotTurnComplete,
   shouldForceFinalizeDeferredOneshotComplete,
   shouldPreserveMemoryTranscriptOverDisk,
+  shouldSkipFullDiskReloadForRunningSession,
 } from "./useClaudeSessions.transcript";
 import { sessionHasVisibleStreamProgress } from "./useClaudeSessions.helpers";
 
@@ -380,5 +381,155 @@ describe("resolveDiskTranscriptKeyCandidates", () => {
         "cursor",
       ),
     ).toEqual(["wise-tab-1", "claude-sid-1"]);
+  });
+});
+
+describe("shouldSkipFullDiskReloadForRunningSession", () => {
+  test("skips reload when running memory leads disk (user bubble not yet on disk)", () => {
+    const session = terminalWorker({
+      repositoryName: "demo",
+      status: "running",
+      messages: [
+        { role: "user", content: "第一轮", timestamp: 1 },
+        { role: "assistant", content: "回复", timestamp: 2 },
+        { role: "user", content: "刚发送", timestamp: 3 },
+      ],
+    });
+    expect(
+      shouldSkipFullDiskReloadForRunningSession(session, [
+        { role: "user", content: "第一轮", timestamp: 1 },
+        { role: "assistant", content: "回复", timestamp: 2 },
+      ]),
+    ).toBe(true);
+  });
+
+  test("skips reload when running turn has visible assistant content not yet on disk", () => {
+    const session = terminalWorker({
+      repositoryName: "demo",
+      status: "running",
+      messages: [
+        { role: "user", content: "你好", timestamp: 1 },
+        { role: "assistant", content: "正在思考", timestamp: 2 },
+      ],
+    });
+    // 磁盘尚无助手内容(仅 user)→ 当前轮未落盘,跳过全量覆盖
+    expect(
+      shouldSkipFullDiskReloadForRunningSession(session, [
+        { role: "user", content: "你好", timestamp: 1 },
+      ]),
+    ).toBe(true);
+  });
+
+  test("allows reload when running but disk already has the assistant content", () => {
+    const session = terminalWorker({
+      repositoryName: "demo",
+      status: "running",
+      messages: [
+        { role: "user", content: "你好", timestamp: 1 },
+        { role: "assistant", content: "回复", timestamp: 2 },
+      ],
+    });
+    expect(
+      shouldSkipFullDiskReloadForRunningSession(session, [
+        { role: "user", content: "你好", timestamp: 1 },
+        { role: "assistant", content: "回复", timestamp: 2 },
+      ]),
+    ).toBe(false);
+  });
+
+  test("allows reload when idle (not running/connecting)", () => {
+    const session = terminalWorker({
+      repositoryName: "demo",
+      status: "idle",
+      messages: [
+        { role: "user", content: "你好", timestamp: 1 },
+        { role: "assistant", content: "回复", timestamp: 2 },
+      ],
+    });
+    expect(
+      shouldSkipFullDiskReloadForRunningSession(session, [
+        { role: "user", content: "你好", timestamp: 1 },
+      ]),
+    ).toBe(false);
+  });
+
+  test("terminal worker always allows reload (dedicated merge path)", () => {
+    // terminal worker 默认 repositoryName 含「终端」,走专用合并逻辑,不跳过
+    const session = terminalWorker({
+      status: "running",
+      messages: [
+        { role: "user", content: "你好", timestamp: 1 },
+        { role: "assistant", content: "回复", timestamp: 2 },
+      ],
+    });
+    expect(
+      shouldSkipFullDiskReloadForRunningSession(session, [
+        { role: "user", content: "你好", timestamp: 1 },
+      ]),
+    ).toBe(false);
+  });
+});
+
+describe("reloadFullDiskTranscriptByKey running protection", () => {
+  test("running main session keeps in-memory turn when disk lacks assistant content", async () => {
+    const sessions = [
+      terminalWorker({
+        repositoryName: "demo",
+        status: "running",
+        messages: [
+          { role: "user", content: "你好", timestamp: 1 },
+          { role: "assistant", content: "正在思考", timestamp: 2 },
+        ],
+      }),
+    ];
+    let nextSessions: ClaudeSession[] = sessions;
+    const result = await reloadFullDiskTranscriptByKey({
+      sessionKey: "wise-tab-1",
+      sessions,
+      setSessions: (updater) => {
+        nextSessions = updater(nextSessions);
+      },
+      diskTailLinesBySession: new Map(),
+      resolveSessionExecutionEngine: () => "claude",
+      // 磁盘仅含 user,缺当前轮助手内容 → 触发运行态保护,跳过全量覆盖
+      loadSessionTranscriptLines: async () => [
+        JSON.stringify({ type: "user", message: { role: "user", content: "你好" } }),
+      ],
+    });
+    expect(result).toBe(false);
+    const recovered = nextSessions.find((item) => item.id === "wise-tab-1");
+    expect(recovered?.messages).toHaveLength(2);
+    expect(recovered?.messages[1]?.content).toBe("正在思考");
+  });
+
+  test("idle main session reloads full disk transcript over memory", async () => {
+    const sessions = [
+      terminalWorker({
+        repositoryName: "demo",
+        status: "idle",
+        messages: [{ role: "user", content: "旧内存", timestamp: 1 }],
+      }),
+    ];
+    let nextSessions: ClaudeSession[] = sessions;
+    const result = await reloadFullDiskTranscriptByKey({
+      sessionKey: "wise-tab-1",
+      sessions,
+      setSessions: (updater) => {
+        nextSessions = updater(nextSessions);
+      },
+      diskTailLinesBySession: new Map(),
+      resolveSessionExecutionEngine: () => "claude",
+      loadSessionTranscriptLines: async () => [
+        JSON.stringify({ type: "user", message: { role: "user", content: "磁盘第一轮" } }),
+        JSON.stringify({
+          type: "assistant",
+          message: { role: "assistant", content: [{ type: "text", text: "磁盘回复" }] },
+        }),
+      ],
+    });
+    expect(result).toBe(true);
+    const recovered = nextSessions.find((item) => item.id === "wise-tab-1");
+    expect(recovered?.messages).toHaveLength(2);
+    expect(recovered?.messages[0]?.content).toBe("磁盘第一轮");
   });
 });

@@ -23,6 +23,8 @@ interface Props {
   /** 主窗格 vs 多屏伴生窗格 */
   messageListProfile?: "primary" | "companion";
   companionMessageListWindow?: { initialVisible: number; loadStep: number };
+  /** 内存窗口耗尽时衔接磁盘全量重载（仅主窗格 chat 变体传入） */
+  onWindowExhausted?: () => void;
 }
 
 export const ClaudeVirtualMessageList = forwardRef<ChatMessageListNavigationHandle, Props>(
@@ -40,6 +42,7 @@ export const ClaudeVirtualMessageList = forwardRef<ChatMessageListNavigationHand
       onNavigate,
       messageListProfile = "primary",
       companionMessageListWindow,
+      onWindowExhausted,
     },
     ref,
   ) {
@@ -66,6 +69,8 @@ export const ClaudeVirtualMessageList = forwardRef<ChatMessageListNavigationHand
           onNavigate={onNavigate}
           messageListProfile={messageListProfile}
           companionMessageListWindow={companionMessageListWindow}
+          onWindowExhausted={onWindowExhausted}
+          transcriptMemoryUnlimited={session.transcriptMemoryUnlimited}
         />
       </ChatRepositoryProvider>
     );

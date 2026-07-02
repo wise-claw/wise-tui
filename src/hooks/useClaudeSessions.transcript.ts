@@ -185,6 +185,27 @@ export function shouldPreserveMemoryTranscriptOverDisk(
   return false;
 }
 
+/**
+ * 全量磁盘重载前的运行态保护：running/connecting 会话若内存 transcript 领先磁盘
+ * （刚发送的用户气泡尚未落盘），或当前轮已有可见助手内容而磁盘尚未落盘，则跳过全量覆盖，
+ * 避免抹掉正在进行的回合；用户回合结束后可再次滚动触发。terminal worker 走专用合并逻辑，不跳过。
+ */
+export function shouldSkipFullDiskReloadForRunningSession(
+  session: ClaudeSession,
+  diskMessages: readonly ClaudeMessage[],
+): boolean {
+  if (isTerminalWorkerWiseTab(session)) return false;
+  if (session.status !== "running" && session.status !== "connecting") return false;
+  if (shouldPreserveMemoryTranscriptOverDisk(session, diskMessages)) return true;
+  if (
+    latestTurnHasVisibleAssistantContent(session.messages) &&
+    !latestTurnHasVisibleAssistantContent(diskMessages)
+  ) {
+    return true;
+  }
+  return false;
+}
+
 function lastDiskAssistantMessage(disk: readonly ClaudeMessage[]): ClaudeMessage | null {
   for (let i = disk.length - 1; i >= 0; i -= 1) {
     const msg = disk[i]!;
@@ -301,6 +322,10 @@ export async function reloadFullDiskTranscriptByKey(params: {
     : null;
   const nextMessages = isTerminalWorker ? mergedTerminalMessages : sanitizedDisk;
   if (!nextMessages || nextMessages.length === 0) return false;
+  // 运行态保护：内存领先磁盘或当前轮未落盘时跳过全量覆盖，避免抹掉进行中的回合。
+  if (shouldSkipFullDiskReloadForRunningSession(session, sanitizedDisk)) {
+    return false;
+  }
   const hasAssistant = nextMessages.some((message) => message.role === "assistant");
   params.setSessions((prev) =>
     prev.map((row) => {

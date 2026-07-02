@@ -392,7 +392,6 @@ export function ClaudeChatInner({
   onRestoreHistorySessionAsMain,
   omcBatchPipelineActive = false,
   onReloadFullDiskTranscript,
-  onLoadMoreTranscriptFromDisk,
   onCompactSessionHistory: _onCompactSessionHistory,
   dualPaneRepositoryPicker,
   activeProject,
@@ -1109,7 +1108,6 @@ export function ClaudeChatInner({
   }, []);
 
   const [fullTranscriptLoading, setFullTranscriptLoading] = useState(false);
-  const [loadMoreTranscriptLoading, setLoadMoreTranscriptLoading] = useState(false);
 
   const [notificationRows, setNotificationRows] = useState<WiseInboundMessageRow[]>([]);
   const [notificationLoading, setNotificationLoading] = useState(false);
@@ -1131,14 +1129,6 @@ export function ClaudeChatInner({
   /** 每实例固定（主栏 true / 多屏副窗 false）；用 ref 保持 effect deps 长度稳定，避免 HMR 改 deps 时报错。 */
   const enableSessionNotificationFeedRef = useRef(enableSessionNotificationFeed);
   enableSessionNotificationFeedRef.current = enableSessionNotificationFeed;
-
-  const handleLoadMoreTranscriptStart = useCallback(() => {
-    setLoadMoreTranscriptLoading(true);
-  }, []);
-
-  const handleLoadMoreTranscriptEnd = useCallback(() => {
-    setLoadMoreTranscriptLoading(false);
-  }, []);
 
   const handleFullTranscriptStart = useCallback(() => {
     setFullTranscriptLoading(true);
@@ -1660,17 +1650,13 @@ export function ClaudeChatInner({
           sessionId={session.id}
           claudeSessionId={session.claudeSessionId}
           hideMessagesScroll={hideMessages || deferHeavySubtree}
-          loadMoreTranscriptLoading={loadMoreTranscriptLoading}
           fullTranscriptLoading={fullTranscriptLoading}
-          onLoadMoreTranscriptFromDisk={onLoadMoreTranscriptFromDisk}
           onReloadFullDiskTranscript={onReloadFullDiskTranscript}
           onOpenTaskDetail={onOpenTaskDetail}
           onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
           onOpenSessionConversationTaskDetail={openSessionConversationTaskDetail}
           resolveExecutionEnvironmentDispatchTask={resolveExecutionEnvironmentDispatchTask}
           sessionsForDispatchLookup={sessions}
-          onLoadMoreTranscriptStart={handleLoadMoreTranscriptStart}
-          onLoadMoreTranscriptEnd={handleLoadMoreTranscriptEnd}
           onFullTranscriptStart={handleFullTranscriptStart}
           onFullTranscriptEnd={handleFullTranscriptEnd}
           messageListProfile={messageListProfile}

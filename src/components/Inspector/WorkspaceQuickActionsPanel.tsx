@@ -21,7 +21,6 @@ import {
   type WorkspaceQuickActionScope,
 } from "../../types/workspaceQuickActions";
 import type { Repository, Workspace } from "../../types";
-import { flushWorkspaceQuickActionsPersist } from "../../stores/workspaceQuickActionsRuntimeStore";
 import { WorkspaceQuickActionsEditModal } from "./WorkspaceQuickActionsEditModal";
 import { InspectorCollapsibleSection } from "./InspectorCollapsibleSection";
 import "./WorkspaceQuickActionsPanel.css";
@@ -52,7 +51,6 @@ export function WorkspaceQuickActionsPanel({
   const quickActions = useWorkspaceQuickActions({ projectId, repositoryId });
   const [editState, setEditState] = useState<EditState | null>(null);
 
-  const allowProjectScope = Boolean(projectId?.trim()) || (workspaces?.length ?? 0) > 0;
   const allowRepositoryScope = repositoryId != null || (repositoriesById?.size ?? 0) > 0;
   const defaultScope: WorkspaceQuickActionScope =
     allowRepositoryScope && repositoryId != null ? "repository" : "project";
