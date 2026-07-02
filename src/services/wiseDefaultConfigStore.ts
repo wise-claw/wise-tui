@@ -283,7 +283,7 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   showWorkspaceQuickActionsPanel: true,
   showWorkspaceTodosPanel: true,
   showRightInspectorTerminal: false,
-  showRightInspectorRepositorySession: true,
+  showRightInspectorRepositorySession: false,
   fileTreeOpenInNewPane: false,
   gitPanelPlacement: "left",
   filesPanelPlacement: "left",

@@ -7,7 +7,7 @@ import {
 } from "../../services/wiseDefaultConfigStore";
 
 export function useRightInspectorRepositorySessionSetting() {
-  const [visible, setVisible] = useState(true);
+  const [visible, setVisible] = useState(false);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
