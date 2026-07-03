@@ -65,7 +65,8 @@ export function useRepositoryRunCommand({
 }: UseRepositoryRunCommandOptions) {
   const repositoryId = repository?.id ?? null;
   const trimmedCwd = runCwd.trim();
-  const { runKey, runUrlKey, runAutoOpenKey } = repositoryRunCommandStorageKeys(trimmedCwd);
+  const { runKey, runUrlKey, runAutoOpenKey, terminalRunKey } =
+    repositoryRunCommandStorageKeys(trimmedCwd);
 
   const subscribeRuntime = useCallback(
     (listener: () => void) => {
@@ -85,6 +86,9 @@ export function useRepositoryRunCommand({
   const runtime = useSyncExternalStore(subscribeRuntime, getRuntimeSlice, getRuntimeSlice);
 
   const [runCommand, setRunCommand] = useLocalStorageBackedState(runKey, "");
+  // 外部终端按钮的运行指令独立存储，不参与 profile 自动应用，纯手动配置。
+  const [terminalRunCommand, setTerminalRunCommand] =
+    useLocalStorageBackedState(terminalRunKey, "");
   const [runPreferredUrl, setRunPreferredUrl] = useLocalStorageBackedState(runUrlKey, "");
   const [runAutoOpenPageEnabled, setRunAutoOpenPageEnabled] = useState(() =>
     readRunAutoOpenPageEnabled(runAutoOpenKey),
@@ -278,8 +282,11 @@ export function useRepositoryRunCommand({
     runKey,
     runUrlKey,
     runAutoOpenKey,
+    terminalRunKey,
     runCommand,
     setRunCommand,
+    terminalRunCommand,
+    setTerminalRunCommand,
     runPreferredUrl,
     setRunPreferredUrl,
     runStatus: runtime.status,

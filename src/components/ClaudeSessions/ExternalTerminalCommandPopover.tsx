@@ -21,8 +21,8 @@ export type ExternalTerminalCommandPopoverProps = {
 /**
  * 精简版 popover：仅一个"运行指令"输入框 + 保存/清空/关闭按钮。
  *
- * 复用 `useRepositoryRunCommand` 的存储键 `wise.topbar.run-command:<cwd>`，
- * 让"运行"按钮和"外部终端"按钮共享同一份用户偏好。
+ * 外部终端按钮的运行指令独立存储（`wise.topbar.terminal-run-command:<cwd>`），
+ * 与「运行」按钮的 `wise.topbar.run-command:<cwd>` 分开配置，互不影响。
  */
 export function ExternalTerminalCommandPopover({
   workspacePath,

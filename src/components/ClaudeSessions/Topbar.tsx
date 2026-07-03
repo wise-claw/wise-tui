@@ -375,22 +375,22 @@ export const Topbar = memo(function Topbar({
               <Suspense fallback={<Spin size="small" />}>
                 <ExternalTerminalCommandPopoverLazy
                   workspacePath={topbarOpenPath}
-                  initialCommand={repositoryRunCommand.runCommand}
+                  initialCommand={repositoryRunCommand.terminalRunCommand}
                   detectedCommand={repositoryRunCommand.detectedProfile?.runCommand ?? null}
                   onSave={(value) => {
-                    // 直接写 localStorage + 同步 React 状态：
-                    // 不调 `saveRunCommand()`，因为它内部已经会弹
-                    // "运行指令已保存" message，与 popover 自己弹的
-                    // "已保存运行指令" 会导致双弹提示。
-                    if (repositoryRunCommand.runKey) {
-                      window.localStorage.setItem(repositoryRunCommand.runKey, value);
+                    // 外部终端运行指令独立存储（terminalRunKey），与「运行」按钮的
+                    // runCommand 互不影响。直接写 localStorage + 同步 React 状态：
+                    // 不调任何会弹 message 的 helper，避免与 popover 自己弹的
+                    // 「已保存运行指令」双弹提示。
+                    if (repositoryRunCommand.terminalRunKey) {
+                      window.localStorage.setItem(repositoryRunCommand.terminalRunKey, value);
                     }
-                    repositoryRunCommand.setRunCommand(value);
+                    repositoryRunCommand.setTerminalRunCommand(value);
                   }}
                   onClear={() => {
-                    repositoryRunCommand.setRunCommand("");
-                    if (repositoryRunCommand.runKey) {
-                      window.localStorage.removeItem(repositoryRunCommand.runKey);
+                    repositoryRunCommand.setTerminalRunCommand("");
+                    if (repositoryRunCommand.terminalRunKey) {
+                      window.localStorage.removeItem(repositoryRunCommand.terminalRunKey);
                     }
                   }}
                   onClose={() => setExternalTerminalPopoverOpen(false)}
@@ -402,10 +402,10 @@ export const Topbar = memo(function Topbar({
               title={
                 !topbarOpenPath
                   ? "当前会话未绑定仓库路径，无法打开外部终端"
-                  : repositoryRunCommand.runCommand.trim()
-                    ? `在外部终端打开并执行：${repositoryRunCommand.runCommand
+                  : repositoryRunCommand.terminalRunCommand.trim()
+                    ? `在外部终端打开并执行：${repositoryRunCommand.terminalRunCommand
                         .trim()
-                        .slice(0, 40)}${repositoryRunCommand.runCommand.trim().length > 40 ? "…" : ""}（右键配置）`
+                        .slice(0, 40)}${repositoryRunCommand.terminalRunCommand.trim().length > 40 ? "…" : ""}（右键配置）`
                     : "在外部终端打开（右键配置运行指令）"
               }
               open={externalTerminalPopoverOpen ? false : undefined}
@@ -417,7 +417,7 @@ export const Topbar = memo(function Topbar({
                 disabled={!topbarOpenPath}
                 onClick={() => {
                   if (!topbarOpenPath) return;
-                  const cmd = repositoryRunCommand.runCommand.trim();
+                  const cmd = repositoryRunCommand.terminalRunCommand.trim();
                   const handler = cmd
                     ? tryOpenWorkspaceInDefaultTerminalWithCommand
                     : tryOpenWorkspaceInDefaultTerminal;

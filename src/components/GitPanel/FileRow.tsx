@@ -5,6 +5,7 @@ import type { GitFileStatus } from "../../types";
 import { setWiseRepositoryFileDragData } from "../../utils/repositoryFileDrag";
 import { DiscardFilePopconfirm } from "./DiscardFilePopconfirm";
 import { getStatusColor, getStatusSymbol, splitNameAndExt, splitPath } from "./gitPanelUtils";
+import { OpenFileIcon } from "./OpenFileIcon";
 import { RevertIcon } from "./RevertIcon";
 import type { GitPanelOpenFileOptions } from "./types";
 
@@ -76,6 +77,19 @@ export const FileRow = memo(function FileRow({
           onMouseDown={(e) => e.stopPropagation()}
           onClick={(e) => e.stopPropagation()}
         >
+          {onOpenFile && (
+            <Button
+              type="text"
+              size="small"
+              title="打开文件"
+              aria-label="打开文件"
+              icon={<OpenFileIcon />}
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpenFile(file.path, { fromGitChanges: section });
+              }}
+            />
+          )}
           {section === "unstaged" && onStage && (
             <Button
               type="text"

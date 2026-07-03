@@ -160,11 +160,13 @@ export function readRunAutoOpenPageEnabled(storageKey: string | null): boolean {
 export function repositoryRunCommandStorageKeys(runCwd: string) {
   const trimmed = runCwd.trim();
   if (!trimmed) {
-    return { runKey: null, runUrlKey: null, runAutoOpenKey: null };
+    return { runKey: null, runUrlKey: null, runAutoOpenKey: null, terminalRunKey: null };
   }
   return {
     runKey: `wise.topbar.run-command:${trimmed}`,
     runUrlKey: `wise.topbar.run-open-url:${trimmed}`,
     runAutoOpenKey: `wise.topbar.run-auto-open:${trimmed}`,
+    // 外部终端按钮的运行指令独立存储，与「运行」按钮分开配置，互不影响。
+    terminalRunKey: `wise.topbar.terminal-run-command:${trimmed}`,
   };
 }
