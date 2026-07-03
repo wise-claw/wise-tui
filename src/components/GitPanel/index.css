@@ -1708,14 +1708,9 @@
   background: var(--ant-color-fill-quaternary);
 }
 
-.git-tree-node:hover .git-tree-node-arrow {
-  color: var(--ant-color-text-secondary);
-}
-
 .git-tree-node:hover .git-tree-node-arrow,
 .git-tree-node:focus-within .git-tree-node-arrow {
-  opacity: 0;
-  visibility: hidden;
+  color: var(--ant-color-text-secondary);
 }
 
 .git-tree-node:hover .git-tree-node-stats,
