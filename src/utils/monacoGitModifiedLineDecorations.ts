@@ -1,3 +1,5 @@
+import { diffLines, type Change } from "diff";
+
 export type MonacoLineChangeKind = "added" | "modified";
 
 export interface MonacoLineChange {
@@ -5,25 +7,51 @@ export interface MonacoLineChange {
   kind: MonacoLineChangeKind;
 }
 
-function normalizeEditorLines(content: string): string[] {
-  return content.replace(/\r\n/g, "\n").split("\n");
+function normalizeNewlines(content: string): string {
+  return content.replace(/\r\n/g, "\n");
 }
 
 export function classifyLineChanges(base: string, current: string): MonacoLineChange[] {
-  const baseLines = normalizeEditorLines(base);
-  const currentLines = normalizeEditorLines(current);
-  const maxLen = Math.max(baseLines.length, currentLines.length);
+  const baseNorm = normalizeNewlines(base);
+  const currentNorm = normalizeNewlines(current);
+
+  if (baseNorm === currentNorm) return [];
+
+  const parts: Change[] = diffLines(baseNorm, currentNorm);
   const changes: MonacoLineChange[] = [];
-  for (let index = 0; index < maxLen; index += 1) {
-    const baseLine = baseLines[index];
-    const currentLine = currentLines[index];
-    if (baseLine === currentLine) continue;
-    if (baseLine === undefined) {
-      changes.push({ lineNumber: index + 1, kind: "added" });
-      continue;
+  let currentLine = 1;
+  let prevRemovedCount = 0;
+
+  for (const part of parts) {
+    const count = part.count ?? 1;
+
+    if (!part.added && !part.removed) {
+      currentLine += count;
+      prevRemovedCount = 0;
+    } else if (part.removed && !part.added) {
+      prevRemovedCount += count;
+    } else if (part.added && !part.removed) {
+      limitedReplace: {
+        const replacedCount = Math.min(count, prevRemovedCount);
+        for (let i = 0; i < replacedCount; i++) {
+          changes.push({ lineNumber: currentLine + i, kind: "modified" });
+        }
+        for (let i = replacedCount; i < count; i++) {
+          changes.push({ lineNumber: currentLine + i, kind: "added" });
+        }
+        prevRemovedCount = 0;
+        break limitedReplace;
+      }
+      currentLine += count;
+    } else {
+      for (let i = 0; i < count; i++) {
+        changes.push({ lineNumber: currentLine + i, kind: "modified" });
+      }
+      currentLine += count;
+      prevRemovedCount = 0;
     }
-    changes.push({ lineNumber: index + 1, kind: "modified" });
   }
+
   return changes;
 }
 

@@ -1378,17 +1378,19 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 }
 
 .app-file-editor-monaco .wise-monaco-edit-added-gutter {
-  width: 3px !important;
-  margin-left: 5px;
+  width: 4px !important;
+  margin-left: 3px;
   background: #3fb950;
-  opacity: 0.92;
+  border-radius: 2px;
+  opacity: 1;
 }
 
 .app-file-editor-monaco .wise-monaco-edit-modified-gutter {
-  width: 3px !important;
-  margin-left: 5px;
+  width: 4px !important;
+  margin-left: 3px;
   background: #3794ff;
-  opacity: 0.85;
+  border-radius: 2px;
+  opacity: 1;
 }
 
 .app-file-editor-md-toggle {

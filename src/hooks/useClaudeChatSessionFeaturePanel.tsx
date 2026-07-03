@@ -31,7 +31,7 @@ import { resolveProjectMainSessionAnchor } from "../utils/projectSessionAnchor";
 import { getAppSetting, setAppSetting } from "../services/appSettingsStore";
 import { getSessionPreview } from "../components/ClaudeSessions/claudeChatHelpers";
 import { getSessionUpdatedAt, groupSessionsByDay, sliceGroupedSessions, type SessionGroup } from "../components/ClaudeSessions/sessionGrouping";
-import { isToolOnlyUserMessage, userMessagePlainTextForDisplay } from "../utils/claudeChatMessageDisplay";
+import { isToolOnlyUserMessage, userMessagePlainTextForDisplay, isDisplayNoiseUserMessageText } from "../utils/claudeChatMessageDisplay";
 import type {
   ClaudeSession,
   ProjectItem,
@@ -366,6 +366,9 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
         if (m.role !== "user" || isToolOnlyUserMessage(m)) continue;
         const text = userMessagePlainTextForDisplay(m).trim();
         if (!text) continue;
+        // 过滤 CLI 注入的压缩/命令输出、压缩恢复 summary、AskUserQuestion 已作答标记，
+        // 这些都不是用户真实输入，不应出现在「历史消息」提问历史里。
+        if (isDisplayNoiseUserMessageText(text)) continue;
         rows.push({ id: m.id, text, timestamp: m.timestamp });
       }
       rows.sort((a, b) => b.timestamp - a.timestamp);

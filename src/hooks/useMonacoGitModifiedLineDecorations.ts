@@ -2,7 +2,6 @@ import { useEffect, useRef } from "react";
 import type * as Monaco from "monaco-editor";
 import type { editor as MonacoEditorNamespace } from "monaco-editor";
 import { gitShowRevision } from "../services/git";
-import { getGitRepositoryExplorerStatusSnapshot } from "../stores/gitRepositoryExplorerStatusStore";
 import {
   classifyLineChanges,
   monacoLineChangeGutterClassName,
@@ -82,17 +81,13 @@ export function useMonacoGitModifiedLineDecorations(args: {
 
     const refreshGitDecorations = async () => {
       if (!repoPath) return;
-      const gitStatus = getGitRepositoryExplorerStatusSnapshot(repoPath).fileStatusByPath.get(filePath);
-      if (!gitStatus) return;
-
       const loadGeneration = ++gitLoadGenerationRef.current;
       try {
         const headContent = await gitShowRevision(repoPath, `HEAD:${filePath}`);
         if (cancelled || loadGeneration !== gitLoadGenerationRef.current) return;
         const model = editor.getModel();
-        if (!model || model.getValue() !== baseline) return;
-
-        applyLineChangeDecorations(editor, monaco, headContent, baseline, decorationRef);
+        if (!model) return;
+        applyLineChangeDecorations(editor, monaco, headContent, model.getValue(), decorationRef);
       } catch {
         if (!cancelled) {
           decorationRef.current?.clear();
@@ -111,7 +106,9 @@ export function useMonacoGitModifiedLineDecorations(args: {
     };
 
     const contentListener = editor.onDidChangeModelContent(scheduleRefresh);
-    scheduleRefresh();
+    // 首次强制执行：onDidChangeModelContent 注册时 model 已有内容，
+    // 不会有 content change 事件来触发，必须手动调用一次。
+    refreshFromEditor();
 
     return () => {
       cancelled = true;

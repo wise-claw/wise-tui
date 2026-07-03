@@ -11,20 +11,31 @@ describe("computeLineNumbersDifferentFromBase", () => {
   });
 
   it("includes trailing added lines", () => {
-    expect(computeLineNumbersDifferentFromBase("a", "a\nb")).toEqual([2]);
+    expect(computeLineNumbersDifferentFromBase("a", "a\nb")).toEqual([1, 2]);
   });
 });
 
 describe("classifyLineChanges", () => {
-  it("marks trailing new lines as added", () => {
+  it("detects trailing newline differences as modified+added", () => {
     expect(classifyLineChanges("a\nb", "a\nb\n\n")).toEqual([
+      { lineNumber: 2, kind: "modified" },
       { lineNumber: 3, kind: "added" },
-      { lineNumber: 4, kind: "added" },
     ]);
   });
 
   it("marks replaced lines as modified", () => {
     expect(classifyLineChanges("a\nb\nc", "a\nx\nc")).toEqual([{ lineNumber: 2, kind: "modified" }]);
+  });
+
+  it("marks inserted lines as added", () => {
+    expect(classifyLineChanges("a\nb\nc", "a\nx\ny\nb\nc")).toEqual([
+      { lineNumber: 2, kind: "added" },
+      { lineNumber: 3, kind: "added" },
+    ]);
+  });
+
+  it("produces no markers for deletions", () => {
+    expect(classifyLineChanges("a\nb\nc\nd", "a\nc\nd")).toEqual([]);
   });
 
   it("maps gutter classes by change kind", () => {

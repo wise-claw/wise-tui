@@ -86,7 +86,7 @@ export const FileRow = memo(function FileRow({
               icon={<OpenFileIcon />}
               onClick={(e) => {
                 e.stopPropagation();
-                onOpenFile(file.path, { fromGitChanges: section });
+                onOpenFile(file.path);
               }}
             />
           )}

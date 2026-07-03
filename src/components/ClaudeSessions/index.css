@@ -2260,6 +2260,10 @@
   pointer-events: auto;
 }
 
+.app-claude-session-user-questions-popover .ant-popover-container {
+  padding: 0;
+}
+
 .app-claude-session-user-questions-popover .ant-popover-inner {
   padding: 0;
 }

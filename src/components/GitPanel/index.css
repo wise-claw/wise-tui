@@ -1523,17 +1523,20 @@
 }
 
 .git-file-meta {
-  display: flex;
+  display: grid;
+  grid-template-columns: 1fr;
   align-items: center;
-  gap: 2px;
   flex-shrink: 0;
   margin-left: auto;
 }
 
 .git-file-counts {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: end;
   font-size: 10px;
   font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
-  flex-shrink: 0;
+  transition: opacity 0.12s, visibility 0.12s;
 }
 
 .git-file-add {
@@ -1552,6 +1555,10 @@
   display: flex;
   align-items: center;
   gap: 0;
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: end;
+  z-index: 1;
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
@@ -1563,6 +1570,12 @@
   opacity: 1;
   visibility: visible;
   pointer-events: auto;
+}
+
+.git-file-row:hover .git-file-counts,
+.git-file-row:focus-within .git-file-counts {
+  opacity: 0;
+  visibility: hidden;
 }
 
 .git-file-actions .ant-btn,
@@ -1681,7 +1694,7 @@
 .git-tree-node-arrow {
   font-size: 10px;
   color: var(--ant-color-text-tertiary);
-  transition: transform 0.15s, color 0.12s;
+  transition: transform 0.15s, color 0.12s, opacity 0.12s, visibility 0.12s;
   flex-shrink: 0;
   width: 16px;
   height: 16px;
@@ -1697,6 +1710,18 @@
 
 .git-tree-node:hover .git-tree-node-arrow {
   color: var(--ant-color-text-secondary);
+}
+
+.git-tree-node:hover .git-tree-node-arrow,
+.git-tree-node:focus-within .git-tree-node-arrow {
+  opacity: 0;
+  visibility: hidden;
+}
+
+.git-tree-node:hover .git-tree-node-stats,
+.git-tree-node:focus-within .git-tree-node-stats {
+  opacity: 0;
+  visibility: hidden;
 }
 
 .git-tree-node-arrow--expanded {
@@ -1737,24 +1762,42 @@
   min-width: 0;
 }
 
-.git-tree-node-stats {
-  font-size: 10px;
-  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+.git-tree-node-meta {
+  display: grid;
+  grid-template-columns: 1fr;
+  align-items: center;
   flex-shrink: 0;
   margin-left: auto;
+}
+
+.git-tree-node-stats {
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: end;
+  font-size: 10px;
+  font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
+  transition: opacity 0.12s, visibility 0.12s;
 }
 
 .git-tree-node-actions {
   display: flex;
   align-items: center;
   gap: 0;
+  grid-column: 1;
+  grid-row: 1;
+  justify-self: end;
+  z-index: 1;
   opacity: 0;
-  transition: opacity 0.15s;
-  flex-shrink: 0;
+  visibility: hidden;
+  pointer-events: none;
+  transition: opacity 0.12s, visibility 0.12s;
 }
 
-.git-tree-node:hover .git-tree-node-actions {
+.git-tree-node:hover .git-tree-node-actions,
+.git-tree-node:focus-within .git-tree-node-actions {
   opacity: 1;
+  visibility: visible;
+  pointer-events: auto;
 }
 
 .git-tree-children {

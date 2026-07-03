@@ -18,6 +18,7 @@ import {
   resolveControlRequestId,
 } from "./permissionIngest";
 import { extractTodoWriteFromMessageParts, isTodoWriteToolName, parseTodoWriteInput } from "./todoIngest";
+import { isAskUserQuestionToolName } from "../utils/claudeChatMessageDisplay";
 
 function asRecord(v: unknown): Record<string, unknown> | null {
   return v !== null && typeof v === "object" ? (v as Record<string, unknown>) : null;
@@ -61,11 +62,6 @@ function normalizeAskUserOptions(rawOpts: unknown, requestId: string): { value: 
     });
   }
   return options;
-}
-
-function isAskUserQuestionName(name: unknown): boolean {
-  const n = typeof name === "string" ? name : "";
-  return n === "AskUserQuestion" || n.includes("AskUserQuestion") || n.includes("AskUser");
 }
 
 function ingestPermissionControlRequest(
@@ -209,7 +205,7 @@ function ingestAskUserQuestionFromAssistantToolUse(sessionId: string, j: Record<
       continue;
     }
 
-    if (!isAskUserQuestionName(b.name)) continue;
+    if (!isAskUserQuestionToolName(b.name)) continue;
 
     const requestId = str(b.id)?.trim();
     if (!requestId) continue;
@@ -267,7 +263,7 @@ export function ingestAskUserQuestionFromMessageParts(sessionId: string, parts: 
       if (payload) notificationHub.setPermissionRequest(sessionId, payload);
       continue;
     }
-    if (!isAskUserQuestionName(part.name)) continue;
+    if (!isAskUserQuestionToolName(part.name)) continue;
     const requestId = typeof part.id === "string" ? part.id.trim() : "";
     if (!requestId) continue;
     const input = asRecord(part.input) ?? {};

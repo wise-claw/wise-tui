@@ -21,6 +21,7 @@ import {
   subscribeOmcDirectBatchInvocations,
 } from "../../stores/omcDirectBatchInvocationsStore";
 import { sortWorkflowRuntimeSnapshotsChronological } from "../../utils/sortWorkflowRuntimeSnapshots";
+import { hasRenderableChatMessageBody } from "../../utils/claudeChatMessageDisplay";
 import { resolveWorkflowProgressGraphHighlight } from "../../utils/resolveWorkflowProgressGraphHighlight";
 import { describeNextExecutorAfterDispatch } from "../../utils/workflowTeamNextExecutor";
 import { findLatestRuntimeSnapshotForGraphNode } from "../../utils/findLatestRuntimeSnapshotForGraphNode";
@@ -408,13 +409,15 @@ function extractSessionPreview(session: ClaudeSession | undefined): string {
 function flattenSessionMessages(sessions: ClaudeSession[]): SessionMessageRow[] {
   return sessions
     .flatMap((session) =>
-      session.messages.map((msg) => ({
-        sessionId: session.id,
-        sessionTitle: session.repositoryName || session.id,
-        role: msg.role,
-        content: msg.content || "(空消息)",
-        timestamp: msg.timestamp,
-      })),
+      session.messages
+        .filter(hasRenderableChatMessageBody)
+        .map((msg) => ({
+          sessionId: session.id,
+          sessionTitle: session.repositoryName || session.id,
+          role: msg.role,
+          content: msg.content || "(空消息)",
+          timestamp: msg.timestamp,
+        })),
     )
     .sort((a, b) => b.timestamp - a.timestamp);
 }

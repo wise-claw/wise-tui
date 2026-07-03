@@ -92,6 +92,10 @@ function toolResultToText(block: Record<string, unknown>): string {
 export function parseClaudeSessionJsonlLines(lines: string[]): ClaudeMessage[] {
   const messages: ClaudeMessage[] = [];
   let idCounter = 0;
+  // Claude Code 在 /compact 或 resume 后会把同一 uuid 的行重复写入 JSONL（字节级一致的重放）。
+  // 按 uuid 去重，同一 uuid 只保留首次出现的那行，避免主消息列表与「历史消息」弹窗出现重复消息。
+  // 无 uuid 的老格式行无法去重，保持原样。
+  const seenUuids = new Set<string>();
 
   for (const line of lines) {
     const trimmed = line.trim();
@@ -106,8 +110,18 @@ export function parseClaudeSessionJsonlLines(lines: string[]): ClaudeMessage[] {
     const rowType = row.type;
     if (rowType === "cursor_complete") continue;
 
+    const rowUuid = typeof row.uuid === "string" ? row.uuid : null;
+    if (rowUuid) {
+      if (seenUuids.has(rowUuid)) continue;
+      seenUuids.add(rowUuid);
+    }
+
     if (rowType === "user") {
       if (row.isMeta === true) continue;
+      // Claude Code 用 `isCompactSummary: true`（伴随 `isVisibleInTranscriptOnly: true`）
+      // 标记 /compact 后注入的会话恢复 summary，仅 transcript 可见、不应进 UI。
+      // 跳过避免上万字 summary 污染主消息列表与「历史消息」提问历史弹窗。
+      if (row.isCompactSummary === true) continue;
       const msg = row.message as Record<string, unknown> | undefined;
       if (!msg || msg.role !== "user") continue;
       const rawContent = msg.content;

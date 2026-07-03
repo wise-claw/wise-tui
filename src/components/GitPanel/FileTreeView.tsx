@@ -57,55 +57,57 @@ function FileTreeNodeComponent({
             className="git-tree-node-name"
             onClick={() => onToggleDir(node.path)}
           >{node.name}</span>
-          <Space size={0} className="git-tree-node-actions">
-            {section === "unstaged" && onStage ? (
-              <Button
-                type="text"
-                size="small"
-                title="暂存"
-                aria-label="暂存"
-                icon={<PlusOutlined />}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onStage(node.path);
-                }}
-              />
-            ) : null}
-            {section === "staged" && onUnstage ? (
-              <Button
-                type="text"
-                size="small"
-                title="取消暂存"
-                aria-label="取消暂存"
-                icon={<MinusOutlined />}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onUnstage(node.path);
-                }}
-              />
-            ) : null}
-            {section === "unstaged" && onDiscard ? (
-              <DiscardFilePopconfirm
-                filePath={node.path}
-                onConfirm={() => onDiscard(node.path)}
-              >
+          <span className="git-tree-node-meta">
+            <Space size={0} className="git-tree-node-actions">
+              {section === "unstaged" && onStage ? (
                 <Button
                   type="text"
                   size="small"
-                  title="放弃更改"
-                  aria-label="放弃更改"
-                  icon={<RevertIcon />}
+                  title="暂存"
+                  aria-label="暂存"
+                  icon={<PlusOutlined />}
                   onClick={(e) => {
                     e.stopPropagation();
+                    onStage(node.path);
                   }}
                 />
-              </DiscardFilePopconfirm>
-            ) : null}
-          </Space>
-          <span className="git-tree-node-stats">
-            <span className="git-file-add">+{node.additions}</span>
-            <span className="git-file-sep">/</span>
-            <span className="git-file-del">-{node.deletions}</span>
+              ) : null}
+              {section === "staged" && onUnstage ? (
+                <Button
+                  type="text"
+                  size="small"
+                  title="取消暂存"
+                  aria-label="取消暂存"
+                  icon={<MinusOutlined />}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onUnstage(node.path);
+                  }}
+                />
+              ) : null}
+              {section === "unstaged" && onDiscard ? (
+                <DiscardFilePopconfirm
+                  filePath={node.path}
+                  onConfirm={() => onDiscard(node.path)}
+                >
+                  <Button
+                    type="text"
+                    size="small"
+                    title="放弃更改"
+                    aria-label="放弃更改"
+                    icon={<RevertIcon />}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                    }}
+                  />
+                </DiscardFilePopconfirm>
+              ) : null}
+            </Space>
+            <span className="git-tree-node-stats">
+              <span className="git-file-add">+{node.additions}</span>
+              <span className="git-file-sep">/</span>
+              <span className="git-file-del">-{node.deletions}</span>
+            </span>
           </span>
         </div>
         {isExpanded && node.children && (

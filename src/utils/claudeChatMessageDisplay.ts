@@ -41,9 +41,43 @@ export function isSystemMessageDisplayNoiseText(text: string): boolean {
   return SYSTEM_MESSAGE_DISPLAY_NOISE.some((pattern) => pattern.test(normalized));
 }
 
+/**
+ * 压缩相关系统通知（/compact 进行中 / 溢出重试 / 失败提示）。
+ * 文案由 `composeCompactNoticeTokens` / `buildContextOverflowRetrySystemMessage` /
+ * `buildContextOverflowFailureHint` 产出；历史列表过滤掉这类进度噪声，
+ * 压缩状态仍由状态栏 hint 与上下文圆环承载，不依赖气泡。
+ */
+export function isCompactNoticeSystemText(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (t.includes("压缩历史") || t.includes("压缩会话历史")) return true;
+  if (t.includes("检测到溢出") || t.includes("上下文溢出")) return true;
+  if (t.includes("上下文仍超出模型限制")) return true;
+  return false;
+}
+
 export function isAssistantDisplayNoiseText(text: string): boolean {
   const normalized = text.trim().toLowerCase();
   return normalized.length > 0 && ASSISTANT_DISPLAY_NOISE_TEXT.has(normalized);
+}
+
+/**
+ * 「历史消息」弹窗（用户提问历史 `sessionUserQuestions`）应跳过的噪声 user message：
+ * - Claude CLI 注入的本地命令块（`<local-command-caveat/stdout/stderr>`），如 `/compact` 输出；
+ * - 压缩后恢复的 summary（"This session is being continued from a previous conversation..."）；
+ * - wise 为 AskUserQuestion 续跑注入的「【AskUserQuestion 已作答】」标记消息（问答已由 Dock 题卡承载）。
+ * 这些都不是用户真实输入，不应出现在提问历史里。与 `isCompactNoticeSystemText`（system 通道）
+ * 配合，覆盖 user 通道的同类噪声。
+ */
+export function isDisplayNoiseUserMessageText(text: string): boolean {
+  const t = text.trim();
+  if (!t) return false;
+  if (t.includes("<local-command-caveat>")) return true;
+  if (t.includes("<local-command-stdout>")) return true;
+  if (t.includes("<local-command-stderr>")) return true;
+  if (t.startsWith("This session is being continued from a previous conversation")) return true;
+  if (t.startsWith("【AskUserQuestion 已作答】")) return true;
+  return false;
 }
 
 /** 去掉空白与零宽字符后是否仍无可见正文。 */
@@ -65,6 +99,15 @@ function toolUsePartHasVisiblePayload(part: ToolUsePart): boolean {
   return false;
 }
 
+/**
+ * AskUserQuestion 工具名识别（与 `notifications/streamIngest` 同源，统一来源避免分叉）。
+ * 该工具的问答交互已在 Dock 题卡中呈现，消息列表不再重复渲染其 tool_use 卡片。
+ */
+export function isAskUserQuestionToolName(name: unknown): boolean {
+  const n = typeof name === "string" ? name : "";
+  return n === "AskUserQuestion" || n.includes("AskUserQuestion") || n.includes("AskUser");
+}
+
 /** 单条 part 是否在消息列表中有展示价值（空白/占位句不计）。 */
 export function isRenderableMessagePart(part: MessagePart): boolean {
   switch (part.type) {
@@ -78,6 +121,9 @@ export function isRenderableMessagePart(part: MessagePart): boolean {
     case "reasoning":
       return !isBlankDisplayText(part.text);
     case "tool_use":
+      // AskUserQuestion 的问答由 Dock 题卡承载，消息列表过滤其工具卡片；其 tool_result
+      // 已 fold 进同一 tool_use（按 id），一并隐藏，避免「只见答案不见问题」的割裂。
+      if (isAskUserQuestionToolName(part.name)) return false;
       return toolUsePartHasVisiblePayload(part);
     default:
       return false;
@@ -88,7 +134,10 @@ export function isRenderableMessagePart(part: MessagePart): boolean {
 export function hasRenderableChatMessageBody(msg: ClaudeMessage): boolean {
   if (msg.role === "system") {
     const text = systemMessagePlainText(msg).trim();
-    return text.length > 0 && !isSystemMessageDisplayNoiseText(text);
+    if (text.length === 0) return false;
+    if (isSystemMessageDisplayNoiseText(text)) return false;
+    if (isCompactNoticeSystemText(text)) return false;
+    return true;
   }
   const parts = msg.parts;
   if (Array.isArray(parts) && parts.length > 0) {
