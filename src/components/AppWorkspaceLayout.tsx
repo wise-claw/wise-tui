@@ -1026,42 +1026,47 @@ export function AppWorkspaceLayout({
     if (!request || !targetPath) return;
 
     // 多屏下将文件编辑器路由到正确的窗格。
+    // 注意：仅当目标仓库命中某个 extra pane 时才 setFileEditorTargetPaneIndex(i+1)，
+    // 命中前**不要**先 set(null)。原因：用户从 primary pane（顶栏 ⌘K / 左栏文件树）
+    // 打开 primary repo 的文件时，extraPanes 不会命中任何 slot；如果提前 reset 为
+    // null，pane 1 已挂载的 `panelBelowMessages` 会被卸下，pane 1 上的 tab 列表
+    // 看似"被关闭"。正确语义：primary repo 的文件保持 fileEditorTargetPaneIndex
+    // 不动（或保持 null），让 resolvePaneAuxLayout 走 primary pane fallback 分支
+    // 渲染（其它 pane 仍可保留消息列表，编辑器沿用前一目标位置）。
     const currentPaneCount = claudeSessionsProps.paneCount ?? 1;
-    if (currentPaneCount > 1) {
-      // 先重置，避免遗留的 pane index 越界导致编辑器不可见
-      setFileEditorTargetPaneIndex(null);
-
-      // 尝试将文件路由到拥有匹配仓库的额外窗格。
-      // 命令面板搜索锁定到某 pane 仓库时（`keepActiveRepository: true`），
-      // 当前活动仓库可能不是它，必须按额外窗格的 `repositoryId`/`session`
-      // 双路径匹配，而不能只依赖 `activeRepositoryPath`。
-      if (request.repositoryPath) {
-        const extraPanes = claudeSessionsProps.extraPanes ?? [];
-        const sessions = claudeSessionsProps.sessions ?? [];
-        const repositories = claudeSessionsProps.repositories ?? [];
-        const targetRepositoryId =
-          request.repositoryId != null
-            ? request.repositoryId
-            : repositories.find((repo) => repo.path?.trim() === targetPath)?.id ?? null;
-        for (let i = 0; i < extraPanes.length; i++) {
-          const slot = extraPanes[i];
-          if (!slot.sessionId) continue;
-          const session = sessions.find((s) => s.id === slot.sessionId);
-          const sessionRepoPath = session?.repositoryPath?.trim() ?? "";
-          const slotRepo =
-            slot.repositoryId != null
-              ? repositories.find((repo) => repo.id === slot.repositoryId)?.path?.trim() ?? ""
-              : "";
-          if (
-            sessionRepoPath === targetPath ||
-            (targetRepositoryId != null && slot.repositoryId === targetRepositoryId) ||
-            (slotRepo && slotRepo === targetPath)
-          ) {
-            setFileEditorTargetPaneIndex(i + 1);
-            break;
-          }
+    if (currentPaneCount > 1 && request.repositoryPath) {
+      const extraPanes = claudeSessionsProps.extraPanes ?? [];
+      const sessions = claudeSessionsProps.sessions ?? [];
+      const repositories = claudeSessionsProps.repositories ?? [];
+      const targetRepositoryId =
+        request.repositoryId != null
+          ? request.repositoryId
+          : repositories.find((repo) => repo.path?.trim() === targetPath)?.id ?? null;
+      let matchedPaneIndex: number | null = null;
+      for (let i = 0; i < extraPanes.length; i++) {
+        const slot = extraPanes[i];
+        if (!slot.sessionId) continue;
+        const session = sessions.find((s) => s.id === slot.sessionId);
+        const sessionRepoPath = session?.repositoryPath?.trim() ?? "";
+        const slotRepo =
+          slot.repositoryId != null
+            ? repositories.find((repo) => repo.id === slot.repositoryId)?.path?.trim() ?? ""
+            : "";
+        if (
+          sessionRepoPath === targetPath ||
+          (targetRepositoryId != null && slot.repositoryId === targetRepositoryId) ||
+          (slotRepo && slotRepo === targetPath)
+        ) {
+          matchedPaneIndex = i + 1;
+          break;
         }
       }
+      if (matchedPaneIndex != null) {
+        setFileEditorTargetPaneIndex(matchedPaneIndex);
+      }
+      // 未匹配：保持 fileEditorTargetPaneIndex 现状（可能为 null，也可能为上一目标），
+      // 让 resolvePaneAuxLayout 走默认（primary pane 显示）或沿用上次路由；不主动 reset
+      // 避免误卸下其它 pane 的编辑器节点。
     }
 
     const revealTarget = resolveExplorerRevealTargetForOpen({
