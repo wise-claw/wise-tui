@@ -11,10 +11,12 @@ import {
   useState,
   type CSSProperties,
   type ComponentProps,
+  type ComponentType,
   type MouseEvent as ReactMouseEvent,
   type ReactNode,
   type RefObject,
 } from "react";
+import type * as React from "react";
 import { App as AntdApp, ConfigProvider, Layout, Spin, theme } from "antd";
 import zhCN from "antd/locale/zh_CN";
 import type { AuthorPanelProps } from "./AuthorPanel/AuthorPanel";
@@ -25,6 +27,8 @@ import type { GitPanelOpenFileOptions } from "./GitPanel";
 import { type ChatInspectorProps, type CockpitInspectorProps } from "./Inspector";
 import { RepositorySessionPanel } from "./Inspector/RepositorySessionPanel";
 import type { MultiPaneSharedChatProps } from "./ClaudeSessions/ClaudeMultiPaneGrid";
+import type { PaneLocalHeaderSharedProps } from "./ClaudeSessions/PaneLocalHeader";
+import type { ClaudeSessionsProps as ClaudeSessionsExternalProps } from "./ClaudeSessions";
 import { MainLayoutResizeHandle } from "./MainLayoutResizeHandle";
 import type { McpHub } from "./McpHub";
 import type { ProgressMonitorDrawer } from "./ProgressMonitorDrawer";
@@ -51,6 +55,7 @@ import { writePendingExplorerReveal } from "../utils/pendingExplorerReveal";
 import { resolveExplorerRevealTargetForOpen, resolveVisibleExplorerRevealTarget } from "../utils/explorerRevealTarget";
 import { useRepositoryFileEditor } from "../hooks/useRepositoryFileEditor";
 import { useWorkspaceFileTreeRail } from "../hooks/useWorkspaceFileTreeRail";
+import { hydrateOpenAppPreference } from "../services/openAppPreference";
 import { ErrorBoundary } from "./ErrorBoundary";
 import {
   areLeftSidebarContentPropsEqual,
@@ -69,10 +74,22 @@ const topbarChunk = import("./ClaudeSessions/Topbar");
 const LazyLeftSidebar = lazy(() =>
   leftSidebarChunk.then((module) => ({ default: module.LeftSidebar })),
 );
-const LazyClaudeSessions = lazy(() =>
+// 直接为 lazy 标注 props，让 `ComponentProps<typeof LazyClaudeSessions>` 能反推完整 props（含 paneHeaderSharedProps）。
+const LazyClaudeSessions = lazy<ComponentType<ClaudeSessionsExternalProps>>(() =>
   claudeSessionsChunk.then((module) => ({ default: module.ClaudeSessions })),
 );
 const LazyTopbar = lazy(() => topbarChunk.then((module) => ({ default: module.Topbar })));
+// 1 屏下把 PaneLocalButtons（运行 / 外部终端 / OpenAppMenu / FCC / 多屏切换）并入顶部 Topbar 右侧。
+// 右栏折叠按钮单独提取为 RightPanelToggleButton，放在 Topbar 右侧最末（内置终端 / 多屏切换之后）。
+const LazyPaneLocalButtons = lazy(() =>
+  import("./ClaudeSessions/PaneLocalHeader").then((module) => ({ default: module.PaneLocalButtons })),
+);
+const LazyRightPanelToggleButton = lazy(() =>
+  import("./ClaudeSessions/PaneLocalHeader").then((module) => ({ default: module.RightPanelToggleButton })),
+);
+// 单例 hydrate：AppWorkspaceLayout 一旦进入 import graph 即触发；多 pane 共用同一份内存副本。
+// 多次调用由 `hydrateOpenAppPreference` 内部 `hydrated/hydrating` 守卫去重。
+void hydrateOpenAppPreference();
 const LazyAuthorPanel = lazy(() =>
   import("./AuthorPanel/AuthorPanel").then((module) => ({ default: module.AuthorPanel })),
 );
@@ -118,13 +135,17 @@ const CockpitSurface = lazy(() =>
   import("./CockpitSurface").then((module) => ({ default: module.CockpitSurface })),
 );
 const MemoLeftSidebar = memo(LazyLeftSidebar, areLeftSidebarPropsEqual);
-const MemoClaudeSessions = memo(LazyClaudeSessions, claudeSessionsShellPropsEqual);
+const MemoClaudeSessions = memo(LazyClaudeSessions, claudeSessionsShellPropsEqual) as unknown as React.MemoExoticComponent<
+  ComponentType<ClaudeSessionsProps>
+>;
 const MemoInspector = memo(Inspector, areInspectorShellPropsEqual);
 
-type ClaudeSessionsProps = Omit<
-  ComponentProps<typeof LazyClaudeSessions>,
-  "panelBelowMessages" | "hideMessages" | "hideSessionTools"
->;
+// shell 层透传：仅在 `ClaudeSessionsExternalProps` 基础上补一个
+// `paneHeaderSharedProps?`，其余三个辅助 prop（panelBelowMessages / hideMessages /
+// hideSessionTools）由 ConnectedClaudeSessions 在 JSX 内部覆盖，本类型按原状保留。
+// 注：`paneHeaderSharedProps` 已在 `ClaudeSessionsExternalProps` 中正式声明，此处不再额外扩展，
+// 避免出现第二个类型入口与不同步风险。
+type ClaudeSessionsProps = ClaudeSessionsExternalProps;
 type LeftSidebarProps = Omit<
   ComponentProps<typeof LazyLeftSidebar>,
   | "dark"
@@ -596,52 +617,157 @@ export function AppWorkspaceLayout({
     [mainSessionForDataLink?.id],
   );
 
+  // 1 屏下把 PaneLocalButtons（运行 / 外部终端 / OpenAppMenu / FCC / 多屏切换 / 右栏）整体并入
+  // 顶部 Topbar 右侧；多屏时各 pane 自管，slot 为 null（Topbar 改渲染多屏切换按钮）。
+  // 无活动会话时 slot 为 null，Topbar 仍渲染窗口级控件 + 搜索 + 终端 + 多屏切换。
+  // 依赖只用 id / path 标量，避免 `mainSessionForDataLink` / `activeRepository` 引用漂移触发 slot 重算。
+  const paneLocalButtonsSlot = useMemo(() => {
+    if ((claudeSessionsProps.paneCount ?? 1) !== 1) return null;
+    const session = mainSessionForDataLink;
+    if (!session) return null;
+    const repository = claudeSessionsProps.activeRepository;
+    const repositoryPath =
+      repository?.path?.trim() || session.repositoryPath?.trim() || "";
+    return (
+      <Suspense fallback={null}>
+        <LazyPaneLocalButtons
+          session={session}
+          repository={repository}
+          repositoryPath={repositoryPath}
+          paneCount={claudeSessionsProps.paneCount ?? 1}
+          inTopbarContext
+          onAutoFixRunError={claudeSessionsPropsRef.current.onAutoFixRunError}
+          paneChangeInFlight={claudeSessionsPropsRef.current.paneChangeInFlight}
+          onChangePaneCount={claudeSessionsPropsRef.current.onChangePaneCount}
+          mainSessionForDataLink={mainSessionForDataLink}
+          onSessionInsightsAiAnalysis={onSessionInsightsAiAnalysis}
+          onDispatchSessionFeedbackLoop={claudeSessionsPropsRef.current.onDispatchSessionFeedbackLoop}
+          getClaudeSessions={getClaudeSessionsForTopbar}
+        />
+      </Suspense>
+    );
+  }, [
+    claudeSessionsProps.paneCount,
+    claudeSessionsProps.paneChangeInFlight,
+    mainSessionForDataLink?.id,
+    claudeSessionsProps.activeRepository?.path,
+    onSessionInsightsAiAnalysis,
+    getClaudeSessionsForTopbar,
+  ]);
+
+  // 1 屏下右栏折叠/展开按钮单独放到 Topbar 最右；多屏或无活动会话时为 null（各 pane 自管）。
+  const rightPanelToggleSlot = useMemo(() => {
+    if ((claudeSessionsProps.paneCount ?? 1) !== 1) return null;
+    if (!mainSessionForDataLink) return null;
+    return (
+      <Suspense fallback={null}>
+        <LazyRightPanelToggleButton
+          rightCollapsed={claudeSessionsProps.rightCollapsed}
+          onToggleRightPanel={claudeSessionsPropsRef.current.onToggleRightPanel}
+          rightPanelDefaultCollapsed={claudeSessionsProps.rightPanelDefaultCollapsed}
+          onSetRightPanelDefaultCollapsed={claudeSessionsPropsRef.current.onSetRightPanelDefaultCollapsed}
+        />
+      </Suspense>
+    );
+  }, [
+    claudeSessionsProps.paneCount,
+    mainSessionForDataLink?.id,
+    claudeSessionsProps.rightCollapsed,
+    claudeSessionsProps.rightPanelDefaultCollapsed,
+  ]);
+
+  // 1 屏下顶部 Topbar 的 props（跨整宽，覆盖中栏 + 右栏）。多屏（paneCount>1）不再渲染
+  // 单独的全局 Topbar 行，由各 pane 的 PaneLocalHeader 自管（窗口级控件只在 primary pane）。
+  // 仅注入 TopbarProps 实际消费字段；多出的 `paneHeaderSharedProps` 字段不再下放到 Topbar，
+  // 由 `ClaudeSessions` 通过 `claudeSessionsProps.paneHeaderSharedProps` 单独注入。
   const topbarProps = useMemo(
     () => ({
       activeProject: claudeSessionsProps.activeProject,
       activeWorkspaceFocus: claudeSessionsProps.activeWorkspaceFocus,
       activeRepository: claudeSessionsProps.activeRepository,
-      repositories: claudeSessionsProps.repositories ?? [],
-      activeSessionRepositoryPath:
-        mainSessionForDataLink?.repositoryPath?.trim() ||
-        claudeSessionsProps.activeRepository?.path,
-      mainSessionForDataLink,
-      onSessionInsightsAiAnalysis,
-      onDispatchSessionFeedbackLoop: claudeSessionsPropsRef.current.onDispatchSessionFeedbackLoop,
-      getClaudeSessions: getClaudeSessionsForTopbar,
       onToggleSidebar: claudeSessionsPropsRef.current.onToggleSidebar,
-      onToggleRightPanel: claudeSessionsPropsRef.current.onToggleRightPanel,
-      rightPanelDefaultCollapsed: claudeSessionsProps.rightPanelDefaultCollapsed,
-      onSetRightPanelDefaultCollapsed: claudeSessionsPropsRef.current.onSetRightPanelDefaultCollapsed,
       onToggleTerminal: claudeSessionsPropsRef.current.onToggleTerminal,
       onSearch: claudeSessionsPropsRef.current.onSearch,
       collapsed: claudeSessionsProps.collapsed,
       fileTreeRailOpen: showWorkspaceFileTreeRail,
-      rightCollapsed: claudeSessionsProps.rightCollapsed,
       terminalCollapsed: claudeSessionsProps.terminalCollapsed,
       terminalPanelMounted: claudeSessionsProps.terminalPanelMounted,
-      onAutoFixRunError: claudeSessionsPropsRef.current.onAutoFixRunError,
       paneCount: claudeSessionsProps.paneCount,
+      paneChangeInFlight: claudeSessionsProps.paneChangeInFlight,
       onChangePaneCount: claudeSessionsPropsRef.current.onChangePaneCount,
       onOpenRemoteChannels,
+      paneLocalButtonsSlot,
+      rightPanelToggleSlot,
     }),
     [
       claudeSessionsProps.activeProject,
       claudeSessionsProps.activeWorkspaceFocus,
       claudeSessionsProps.activeRepository,
-      claudeSessionsProps.repositories,
-      claudeSessionsProps.rightPanelDefaultCollapsed,
       claudeSessionsProps.collapsed,
       showWorkspaceFileTreeRail,
-      claudeSessionsProps.rightCollapsed,
       claudeSessionsProps.terminalCollapsed,
       claudeSessionsProps.terminalPanelMounted,
       claudeSessionsProps.paneCount,
+      claudeSessionsProps.paneChangeInFlight,
+      onOpenRemoteChannels,
+      paneLocalButtonsSlot,
+      rightPanelToggleSlot,
+    ],
+  );
+
+  /** 多屏时每个 pane 自己 header 共用的回调聚合；下沉到 `ClaudeMultiPaneGrid` 经
+   *  `MultiPaneSharedChatProps` 派发到每个 `<PaneLocalHeader />`。补全全局顶栏字段，
+   *  使 primary pane 的 PaneLocalHeader 能渲染窗口级控件（侧栏 / 终端 / RemoteEntry / WorkspaceQuickActions）。
+   *  此处是 `paneHeaderSharedProps` 的**唯一组装点**——`ClaudeSessions` 不再二次封装，
+   *  避免 `ConnectedClaudeSessions` 必重渲。 */
+  const paneHeaderSharedProps = useMemo<PaneLocalHeaderSharedProps>(
+    () => ({
+      onAutoFixRunError: claudeSessionsPropsRef.current.onAutoFixRunError,
+      paneChangeInFlight: claudeSessionsPropsRef.current.paneChangeInFlight,
+      onChangePaneCount: claudeSessionsPropsRef.current.onChangePaneCount,
       mainSessionForDataLink,
       onSessionInsightsAiAnalysis,
-      getClaudeSessionsForTopbar,
+      onDispatchSessionFeedbackLoop: claudeSessionsPropsRef.current.onDispatchSessionFeedbackLoop,
+      getClaudeSessions: getClaudeSessionsForTopbar,
+      rightCollapsed: claudeSessionsProps.rightCollapsed,
+      onToggleRightPanel: claudeSessionsPropsRef.current.onToggleRightPanel,
+      rightPanelDefaultCollapsed: claudeSessionsProps.rightPanelDefaultCollapsed,
+      onSetRightPanelDefaultCollapsed: claudeSessionsPropsRef.current.onSetRightPanelDefaultCollapsed,
+      onToggleSidebar: claudeSessionsPropsRef.current.onToggleSidebar,
+      onToggleTerminal: claudeSessionsPropsRef.current.onToggleTerminal,
+      onSearch: claudeSessionsPropsRef.current.onSearch,
+      collapsed: claudeSessionsProps.collapsed,
+      fileTreeRailOpen: showWorkspaceFileTreeRail,
+      terminalCollapsed: claudeSessionsProps.terminalCollapsed,
+      terminalPanelMounted: claudeSessionsProps.terminalPanelMounted,
+      onOpenRemoteChannels,
+      activeProject: claudeSessionsProps.activeProject,
+      activeWorkspaceFocus: claudeSessionsProps.activeWorkspaceFocus,
+    }),
+    [
+      mainSessionForDataLink,
+      claudeSessionsProps.paneChangeInFlight,
+      onSessionInsightsAiAnalysis,
+      claudeSessionsProps.rightCollapsed,
+      claudeSessionsProps.rightPanelDefaultCollapsed,
+      claudeSessionsProps.collapsed,
+      showWorkspaceFileTreeRail,
+      claudeSessionsProps.terminalCollapsed,
+      claudeSessionsProps.terminalPanelMounted,
+      claudeSessionsProps.activeProject,
+      claudeSessionsProps.activeWorkspaceFocus,
       onOpenRemoteChannels,
     ],
+  );
+
+  /** 透传给 `<MemoClaudeSessions>` 的 props：原 `claudeSessionsProps` 与 `paneHeaderSharedProps` 合并。
+   *  合并后 `ClaudeSessions` 内部不再二次组装 `paneHeaderSharedProps`，单源 `useMemo` 引用稳定。 */
+  const claudeSessionsPropsWithHeader = useMemo<ClaudeSessionsProps>(
+    () => ({
+      ...claudeSessionsProps,
+      paneHeaderSharedProps,
+    }),
+    [claudeSessionsProps, paneHeaderSharedProps],
   );
 
   const [authorShellMounted, setAuthorShellMounted] = useState(authorMode);
@@ -887,10 +1013,56 @@ export function AppWorkspaceLayout({
 
   useEffect(() => {
     const request = repositoryFileOpenRequest;
-    const repositoryPath = activeRepositoryPath?.trim() ?? "";
+    // `repositoryFileOpenRequest` 是"打开文件"事件的唯一 source of truth：`openRepositoryFileByEvent`
+    // 已经在写入前校验过目标仓库合法。因此 routing 时仅需判断 `request.repositoryPath`
+    // 是否落在某一已绑定 pane 仓库范围内（包括 active 仓库 / 各 extra pane 的
+    // session.repositoryPath / slot.repositoryId）；不再依赖 UI 层的 `commandPaletteProps.repositoryPath`
+    // 作为 override 判定 —— 因为 `commandPaletteProps.onClose` 会在 `onOpenInApp`
+    // 同一渲染周期清掉对应的 `searchRepositoryPathOverride`，React 18 合批后
+    // `commandPaletteProps.repositoryPath` 会回退到 `activeRepository.path`，导致多 pane
+    // 下"在第二屏搜索 → 应当路由到第二屏"的请求被此处提前 return 退掉，文件编辑器
+    // fallback 到 primary pane。
     const targetPath = request?.repositoryPath?.trim() ?? "";
-    if (!request || !targetPath || !repositoryPath) return;
-    if (repositoryPath !== targetPath) return;
+    if (!request || !targetPath) return;
+
+    // 多屏下将文件编辑器路由到正确的窗格。
+    const currentPaneCount = claudeSessionsProps.paneCount ?? 1;
+    if (currentPaneCount > 1) {
+      // 先重置，避免遗留的 pane index 越界导致编辑器不可见
+      setFileEditorTargetPaneIndex(null);
+
+      // 尝试将文件路由到拥有匹配仓库的额外窗格。
+      // 命令面板搜索锁定到某 pane 仓库时（`keepActiveRepository: true`），
+      // 当前活动仓库可能不是它，必须按额外窗格的 `repositoryId`/`session`
+      // 双路径匹配，而不能只依赖 `activeRepositoryPath`。
+      if (request.repositoryPath) {
+        const extraPanes = claudeSessionsProps.extraPanes ?? [];
+        const sessions = claudeSessionsProps.sessions ?? [];
+        const repositories = claudeSessionsProps.repositories ?? [];
+        const targetRepositoryId =
+          request.repositoryId != null
+            ? request.repositoryId
+            : repositories.find((repo) => repo.path?.trim() === targetPath)?.id ?? null;
+        for (let i = 0; i < extraPanes.length; i++) {
+          const slot = extraPanes[i];
+          if (!slot.sessionId) continue;
+          const session = sessions.find((s) => s.id === slot.sessionId);
+          const sessionRepoPath = session?.repositoryPath?.trim() ?? "";
+          const slotRepo =
+            slot.repositoryId != null
+              ? repositories.find((repo) => repo.id === slot.repositoryId)?.path?.trim() ?? ""
+              : "";
+          if (
+            sessionRepoPath === targetPath ||
+            (targetRepositoryId != null && slot.repositoryId === targetRepositoryId) ||
+            (slotRepo && slotRepo === targetPath)
+          ) {
+            setFileEditorTargetPaneIndex(i + 1);
+            break;
+          }
+        }
+      }
+    }
 
     const revealTarget = resolveExplorerRevealTargetForOpen({
       workspaceFileTreeRailOpen: showWorkspaceFileTreeRail,
@@ -918,12 +1090,24 @@ export function AppWorkspaceLayout({
     });
 
     if (!request.isDirectory) {
-      openRepositoryFile(request.relativePath, { line: request.line ?? null, fromFileTree: true });
+      // 关键：`request.repositoryPath` 是文件所属仓库的真实根（多 pane 下可能是
+      // extra pane 的仓库）。必须作为 `fileRootPath` 传给 hook，否则 `useRepositoryFileEditor`
+      // 内的 `loadEditorFile` 会 fallback 到 hook 默认的 `activeRepository.path`（primary pane
+      // 仓库），导致"编辑器面板路由到正确 pane，但磁盘读的是别仓的文件"——典型表现是
+      // 第二屏打开的是第一屏仓库的文件。
+      openRepositoryFile(request.relativePath, {
+        fileRootPath: request.repositoryPath,
+        line: request.line ?? null,
+        fromFileTree: true,
+      });
     }
     onConsumeRepositoryFileOpenRequest();
   }, [
     activeRepositoryPath,
     chatRightRailMode,
+    claudeSessionsProps.extraPanes,
+    claudeSessionsProps.paneCount,
+    claudeSessionsProps.sessions,
     collapsed,
     fileTreeRailOpen,
     leftSidebarParked,
@@ -932,6 +1116,7 @@ export function AppWorkspaceLayout({
     onConsumeRepositoryFileOpenRequest,
     openRepositoryFile,
     repositoryFileOpenRequest,
+    setFileEditorTargetPaneIndex,
     setFileTreeRailOpen,
     showWorkspaceFileTreeRail,
   ]);
@@ -1027,7 +1212,8 @@ export function AppWorkspaceLayout({
                       authorMode || missionControlMode ? " app-workspace-layer--parked" : ""
                     }`}
                   >
-                    {chatRightRailMode ? (
+                    {chatRightRailMode && (claudeSessionsProps.paneCount ?? 1) === 1 ? (
+                      // 1 屏：跨整宽全局 Topbar（覆盖中栏 + 右栏）。多屏时不渲染，由各 pane 顶栏自管。
                       <Suspense fallback={null}>
                         <LazyTopbar {...topbarProps} />
                       </Suspense>
@@ -1046,7 +1232,7 @@ export function AppWorkspaceLayout({
                       <ErrorBoundary type="local" fallbackTitle="智能对话会话模块出错">
                         <Suspense fallback={<WorkspaceViewportLoading />}>
                           <ConnectedClaudeSessions
-                            claudeSessionsProps={claudeSessionsProps}
+                            claudeSessionsProps={claudeSessionsPropsWithHeader}
                             mainLayoutContentRef={mainLayoutContentRef}
                             centerAuxPanelsNode={centerAuxPanelsNode}
                             fileEditorTargetPaneIndex={fileEditorTargetPaneIndex}
