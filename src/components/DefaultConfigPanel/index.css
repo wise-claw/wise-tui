@@ -188,8 +188,9 @@
 }
 
 .app-default-config-terminal-select {
-  min-width: min(100%, 200px);
-  flex: 1 1 160px;
+  min-width: 0;
+  width: 140px;
+  flex: 0 0 auto;
 }
 
 .app-default-config-terminal-rescan.ant-btn {
@@ -326,6 +327,7 @@
   flex-direction: column;
   gap: 6px;
   width: 100%;
+  padding: 0 10px 6px;
 }
 
 .app-default-config-cli-settings__actions {
@@ -333,6 +335,22 @@
   flex-wrap: wrap;
   align-items: center;
   gap: 6px 12px;
+}
+
+.app-default-config-cli-settings__actions--compact {
+  gap: 4px 8px;
+}
+
+.app-default-config-cli-settings__actions--compact .app-default-config-cli-settings__toggle {
+  font-size: 10px;
+}
+
+/* antd Select 下拉是 portal 渲染（不在 compact 容器 DOM 子树里），挂在 popupClassName 上接管样式。 */
+.app-default-config-dropdown--compact .ant-select-item {
+  font-size: 11px;
+  line-height: 1.4;
+  min-height: 22px;
+  padding-inline: 6px;
 }
 
 .app-default-config-cli-settings__toggle {

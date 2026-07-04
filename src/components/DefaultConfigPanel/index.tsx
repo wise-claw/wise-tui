@@ -460,60 +460,59 @@ export function DefaultConfigPanel() {
             title="Codex 沙箱/审批"
             hint="默认配置"
             detail="codex exec 新会话注入 -s sandbox_mode 与 -c approval_policy；resume 沿用原会话。留空=workspace-write（现状）"
-            layout="stack"
             control={
-              <div className="app-default-config-cli-settings">
-                <div className="app-default-config-cli-settings__actions">
-                  <span className="app-default-config-cli-settings__toggle">
-                    沙箱
-                    <Select
-                      size="small"
-                      aria-label="Codex sandbox_mode"
-                      disabled={codexDefaultSettings.loading || codexDefaultSettings.saving}
-                      value={codexDefaultSettings.sandboxMode ?? ""}
-                      onChange={(v: string) => {
-                        void codexDefaultSettings.saveSandboxMode(v || null);
-                      }}
-                      style={{ minWidth: 168 }}
-                      options={[
-                        { label: "默认 (workspace-write)", value: "" },
-                        { label: "read-only", value: "read-only" },
-                        { label: "workspace-write", value: "workspace-write" },
-                        { label: "danger-full-access", value: "danger-full-access" },
-                      ]}
-                    />
-                  </span>
-                  <span className="app-default-config-cli-settings__toggle">
-                    审批
-                    <Select
-                      size="small"
-                      aria-label="Codex approval_policy"
-                      disabled={codexDefaultSettings.loading || codexDefaultSettings.saving}
-                      value={codexDefaultSettings.approvalPolicy ?? ""}
-                      onChange={(v: string) => {
-                        void codexDefaultSettings.saveApprovalPolicy(v || null);
-                      }}
-                      style={{ minWidth: 124 }}
-                      options={[
-                        { label: "默认", value: "" },
-                        { label: "untrusted", value: "untrusted" },
-                        { label: "on-request", value: "on-request" },
-                        { label: "never", value: "never" },
-                      ]}
-                    />
-                  </span>
-                  <span className="app-default-config-cli-settings__toggle">
-                    取消沙箱限制
-                    <Switch
-                      size="small"
-                      checked={codexDefaultSettings.fullAccess}
-                      disabled={codexDefaultSettings.loading || codexDefaultSettings.saving}
-                      onChange={(checked) => {
-                        void codexDefaultSettings.saveFullAccess(checked);
-                      }}
-                    />
-                  </span>
-                </div>
+              <div className="app-default-config-cli-settings__actions app-default-config-cli-settings__actions--compact">
+                <span className="app-default-config-cli-settings__toggle">
+                  沙箱
+                  <Select
+                    size="small"
+                    aria-label="Codex sandbox_mode"
+                    popupClassName="app-default-config-dropdown--compact"
+                    disabled={codexDefaultSettings.loading || codexDefaultSettings.saving}
+                    value={codexDefaultSettings.sandboxMode ?? ""}
+                    onChange={(v: string) => {
+                      void codexDefaultSettings.saveSandboxMode(v || null);
+                    }}
+                    style={{ minWidth: 124 }}
+                    options={[
+                      { label: "默认", value: "" },
+                      { label: "read-only", value: "read-only" },
+                      { label: "write", value: "workspace-write" },
+                      { label: "danger-full", value: "danger-full-access" },
+                    ]}
+                  />
+                </span>
+                <span className="app-default-config-cli-settings__toggle">
+                  审批
+                  <Select
+                    size="small"
+                    aria-label="Codex approval_policy"
+                    popupClassName="app-default-config-dropdown--compact"
+                    disabled={codexDefaultSettings.loading || codexDefaultSettings.saving}
+                    value={codexDefaultSettings.approvalPolicy ?? ""}
+                    onChange={(v: string) => {
+                      void codexDefaultSettings.saveApprovalPolicy(v || null);
+                    }}
+                    style={{ minWidth: 96 }}
+                    options={[
+                      { label: "默认", value: "" },
+                      { label: "untrusted", value: "untrusted" },
+                      { label: "on-request", value: "on-request" },
+                      { label: "never", value: "never" },
+                    ]}
+                  />
+                </span>
+                <span className="app-default-config-cli-settings__toggle">
+                  忽略沙箱
+                  <Switch
+                    size="small"
+                    checked={codexDefaultSettings.fullAccess}
+                    disabled={codexDefaultSettings.loading || codexDefaultSettings.saving}
+                    onChange={(checked) => {
+                      void codexDefaultSettings.saveFullAccess(checked);
+                    }}
+                  />
+                </span>
               </div>
             }
           />
@@ -521,65 +520,65 @@ export function DefaultConfigPanel() {
             title="OpenCode 权限"
             hint="默认配置"
             detail="自动批准=--dangerously-skip-permissions（现状）；自定义规则=移除 skip，改用 OPENCODE_PERMISSION 注入 allow/ask/deny 规则"
-            layout="stack"
             control={
-              <div className="app-default-config-cli-settings">
-                <div className="app-default-config-cli-settings__actions">
-                  <span className="app-default-config-cli-settings__toggle">
-                    权限模式
-                    <Select
-                      size="small"
-                      aria-label="OpenCode 权限模式"
-                      disabled={opencodeDefaultSettings.loading || opencodeDefaultSettings.saving}
-                      value={opencodeDefaultSettings.mode}
-                      onChange={(v: string) => {
-                        void opencodeDefaultSettings.saveMode(v as "auto" | "custom");
-                      }}
-                      style={{ minWidth: 124 }}
-                      options={[
-                        { label: "自动批准", value: "auto" },
-                        { label: "自定义规则", value: "custom" },
-                      ]}
-                    />
-                  </span>
-                  {opencodeDefaultSettings.mode === "custom" ? (
-                    <Button
-                      size="small"
-                      disabled={opencodeDefaultSettings.loading || opencodeDefaultSettings.saving}
-                      onClick={() => {
-                        void opencodeDefaultSettings.format();
-                      }}
-                    >
-                      格式化
-                    </Button>
-                  ) : null}
-                </div>
-                {opencodeDefaultSettings.mode === "custom" ? (
-                  <Input.TextArea
-                    aria-label="OpenCode permission JSON"
-                    value={opencodeDefaultSettings.permissionDraft}
-                    placeholder={OPENCODE_PERMISSION_PLACEHOLDER}
-                    autoSize={{ minRows: 3, maxRows: 10 }}
+              <div className="app-default-config-cli-settings__actions">
+                <span className="app-default-config-cli-settings__toggle">
+                  权限模式
+                  <Select
+                    size="small"
+                    aria-label="OpenCode 权限模式"
+                    popupClassName="app-default-config-dropdown--compact"
                     disabled={opencodeDefaultSettings.loading || opencodeDefaultSettings.saving}
-                    onChange={(e) => opencodeDefaultSettings.setPermissionDraft(e.target.value)}
-                    onBlur={() => {
-                      void opencodeDefaultSettings.commit();
+                    value={opencodeDefaultSettings.mode}
+                    onChange={(v: string) => {
+                      void opencodeDefaultSettings.saveMode(v as "auto" | "custom");
                     }}
+                    style={{ minWidth: 124 }}
+                    options={[
+                      { label: "自动批准", value: "auto" },
+                      { label: "自定义规则", value: "custom" },
+                    ]}
                   />
+                </span>
+                {opencodeDefaultSettings.mode === "custom" ? (
+                  <Button
+                    size="small"
+                    disabled={opencodeDefaultSettings.loading || opencodeDefaultSettings.saving}
+                    onClick={() => {
+                      void opencodeDefaultSettings.format();
+                    }}
+                  >
+                    格式化
+                  </Button>
                 ) : null}
               </div>
             }
           />
+          {opencodeDefaultSettings.mode === "custom" ? (
+            <div className="app-default-config-cli-settings">
+              <Input.TextArea
+                aria-label="OpenCode permission JSON"
+                value={opencodeDefaultSettings.permissionDraft}
+                placeholder={OPENCODE_PERMISSION_PLACEHOLDER}
+                autoSize={{ minRows: 3, maxRows: 10 }}
+                disabled={opencodeDefaultSettings.loading || opencodeDefaultSettings.saving}
+                onChange={(e) => opencodeDefaultSettings.setPermissionDraft(e.target.value)}
+                onBlur={() => {
+                  void opencodeDefaultSettings.commit();
+                }}
+              />
+            </div>
+          ) : null}
           {defaultTerminal.isMac ? (
             <DefaultConfigRow
               title="默认终端"
               hint="外部打开目录"
               detail="在外部打开仓库目录时使用的 macOS 终端"
-              layout="stack"
               control={
                 defaultTerminal.detected.length > 0 ? (
                   <div className="app-default-config-terminal-picker">
                     <Select
+                      size="small"
                       className="app-default-config-terminal-select"
                       aria-label="默认终端"
                       placeholder="选择终端"
