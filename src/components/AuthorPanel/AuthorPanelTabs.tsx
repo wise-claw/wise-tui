@@ -35,12 +35,6 @@ export const AUTHOR_TAB_GROUPS: Array<{ title: string; items: AuthorTabDefinitio
   {
     title: "工作台",
     items: [
-      {
-        key: "workspaces",
-        label: "工作区",
-        description: "规范库、工作流图、运行证据与 Trellis 状态",
-        icon: <FolderOpenOutlined />,
-      },
       { key: "agents", label: "终端", description: "终端供给、职责和默认仓库", icon: <RobotOutlined /> },
       { key: "workflows", label: "工作流", description: "阶段派发、验收和工作流画布", icon: <BranchesOutlined /> },
     ],
@@ -109,6 +103,14 @@ export const AUTHOR_TAB_GROUPS: Array<{ title: string; items: AuthorTabDefinitio
 ];
 
 export const AUTHOR_TABS: AuthorTabDefinition[] = [
+  // 「工作区」已从工作台分组中移除，但保留为可路由 AuthorPane，
+  // 以兼容深链跳转、isAuthorPane 校验与 AuthorPanel 路由分支。
+  {
+    key: "workspaces",
+    label: "工作区",
+    description: "规范库、工作流图、运行证据与 Trellis 状态",
+    icon: <FolderOpenOutlined />,
+  },
   ...AUTHOR_TAB_GROUPS.flatMap((group) => group.items),
 ];
 
