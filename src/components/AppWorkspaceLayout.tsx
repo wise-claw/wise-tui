@@ -17,7 +17,7 @@ import {
   type RefObject,
 } from "react";
 import type * as React from "react";
-import { App as AntdApp, ConfigProvider, Layout, Spin, theme } from "antd";
+import { App as AntdApp, ConfigProvider, Layout, message, Spin, theme } from "antd";
 import zhCN from "antd/locale/zh_CN";
 import type { AuthorPanelProps } from "./AuthorPanel/AuthorPanel";
 import type { CockpitOnboardingProps } from "./Cockpit/CockpitOnboarding";
@@ -44,6 +44,7 @@ import {
   WISE_FILE_TREE_OPEN_IN_NEW_PANE_CHANGED,
 } from "../services/wiseDefaultConfigStore";
 import { planFileViewerPaneIndex } from "../utils/fileViewerPanePlacement";
+import { resolveRepositoryForSession } from "../utils/repositoryMainSessionBinding";
 import type { PaneAuxLayout } from "./ClaudeSessions/paneAuxLayout";
 import { waitLayoutFrames } from "../services/mainWindowLayout";
 import type { EmployeeItem, Repository, WorkflowGraph, WorkflowTemplateItem } from "../types";
@@ -52,7 +53,7 @@ import { AUTHOR_CONFIG_NAV_SIDER_WIDTH_PX } from "../constants/mainLayoutWidths"
 import { dispatchRepositoryFileEditorClosed, type OpenRepositoryFileDetail } from "../constants/workflowUiEvents";
 import { requestExplorerFocus } from "../constants/explorerUiEvents";
 import { writePendingExplorerReveal } from "../utils/pendingExplorerReveal";
-import { resolveExplorerRevealTargetForOpen, resolveVisibleExplorerRevealTarget } from "../utils/explorerRevealTarget";
+import { resolveExplorerRevealTargetForOpen } from "../utils/explorerRevealTarget";
 import { useRepositoryFileEditor } from "../hooks/useRepositoryFileEditor";
 import { useWorkspaceFileTreeRail } from "../hooks/useWorkspaceFileTreeRail";
 import { hydrateOpenAppPreference } from "../services/openAppPreference";
@@ -190,11 +191,28 @@ interface RepositoryFileEditorPanelContextValue {
   saving: boolean;
   tabs: ComponentProps<typeof RepositoryFileEditorPanel>["tabs"];
   onClosePreview: () => void;
+  /** 该 panel 归属的 pane 索引；多 pane 下让面板内组件能定位自己的 pane host。 */
+  paneIndex?: number;
 }
 
 const RepositoryFileEditorOpenFileContext = createContext<OpenRepositoryFileHandler | null>(null);
 const RepositoryFileEditorVisibilityContext = createContext(false);
 const RepositoryFileEditorPanelContext = createContext<RepositoryFileEditorPanelContextValue | null>(null);
+/** 多 pane 下：file preview modal 仍为单例，由当前正在显示 modal 的 pane host 注入 preview state。
+ *  type 形如 `LazyRepositoryFilePreviewModal` 的 `preview` 形参 + `onClose` 句柄。 */
+type LayoutFilePreview = {
+  preview: ComponentProps<typeof RepositoryFilePreviewModal>["preview"];
+  onClose: () => void;
+};
+const RepositoryFilePreviewModalContext = createContext<LayoutFilePreview | null>(null);
+
+/** 多 pane 下每个 pane host 注册到 layout 的 API 表面：layout 端 dispatcher / routing
+ *  按 target paneIndex 拿对应 host 的 hook 实例。 */
+interface PaneEditorApi {
+  paneIndex: number;
+  repositoryPath: string | null | undefined;
+  openRepositoryFile: (relativePath: string, options?: GitPanelOpenFileOptions) => void;
+}
 
 function useRepositoryFileEditorOpenFile(): OpenRepositoryFileHandler {
   const value = useContext(RepositoryFileEditorOpenFileContext);
@@ -210,6 +228,169 @@ function useRepositoryFileEditorPanelContextValue(): RepositoryFileEditorPanelCo
     throw new Error("Repository file editor panel context is missing");
   }
   return value;
+}
+
+/** 多 pane 下每个 pane 自己的文件编辑器宿主。挂载一份独立的 `useRepositoryFileEditor`，
+ *  mount 时通过 `registerPaneEditor` 把自己的 `openRepositoryFile` 暴露给 layout dispatcher；
+ *  同时向 layout 上报"自己的 editorPanelNode（编辑器 ReactNode）"，让 `resolvePaneAuxLayout`
+ *  按 pane 决定是否挂 `panelBelowMessages`。 */
+interface PaneEditorHostProps {
+  paneIndex: number;
+  repositoryPath: string | null | undefined;
+  activeSessionId: string | null;
+  dark: boolean;
+  registerPaneEditor: (paneIndex: number, api: PaneEditorApi) => void;
+  unregisterPaneEditor: (paneIndex: number) => void;
+  setCenterAuxPanelsNodeForPane: (paneIndex: number, node: ReactNode) => void;
+  layoutBinaryPreviewRef: React.MutableRefObject<
+    Map<
+      number,
+      {
+        preview: ComponentProps<typeof RepositoryFilePreviewModal>["preview"];
+        onClose: () => void;
+      }
+    >
+  >;
+  bumpLayoutBinaryPreviewVersion: () => void;
+}
+
+function PaneEditorHost({
+  paneIndex,
+  repositoryPath,
+  activeSessionId,
+  dark,
+  registerPaneEditor,
+  unregisterPaneEditor,
+  setCenterAuxPanelsNodeForPane,
+  layoutBinaryPreviewRef,
+  bumpLayoutBinaryPreviewVersion,
+}: PaneEditorHostProps) {
+  const {
+    closeFileEditorPanel,
+    closeFileEditorTab,
+    closeRepositoryBinaryPreview,
+    editorDirty,
+    editorSaving,
+    editorVisible,
+    fileEditorActivePath,
+    fileEditorTabs,
+    mdPreviewByPath,
+    openRepositoryFile,
+    reloadEditorTabFromDisk,
+    repositoryBinaryPreview,
+    saveEditor,
+    setEditorTabMdPreview,
+    setFileEditorActivePath,
+    updateFileEditorTabContent,
+  } = useRepositoryFileEditor({ repositoryPath: repositoryPath ?? null, paneIndex });
+
+  // 把当前 host 的 openRepositoryFile 注册到 layout 的 dispatcher Map。
+  useEffect(() => {
+    registerPaneEditor(paneIndex, { paneIndex, repositoryPath, openRepositoryFile });
+    return () => unregisterPaneEditor(paneIndex);
+  }, [paneIndex, repositoryPath, openRepositoryFile, registerPaneEditor, unregisterPaneEditor]);
+
+  // 把 per-pane editorVisible 反向写入 ref；host 重新计算 editorVisible 时上抛。
+  useEffect(() => {
+    if (typeof activeSessionId === "string" && activeSessionId === "") {
+      /* placeholder, no-op */
+    }
+  }, [activeSessionId]);
+
+  const activeTab = fileEditorTabs.find((tab) => tab.relativePath === fileEditorActivePath) ?? null;
+  const panelContextValue = useMemo<RepositoryFileEditorPanelContextValue | null>(() => {
+    if (!editorVisible) return null;
+    return {
+      paneIndex,
+      activePath: fileEditorActivePath,
+      activeSessionId,
+      dirty: editorDirty,
+      editorVisible: true,
+      mdPreviewByPath,
+      setEditorTabMdPreview: (relativePath, value) => {
+        // hook 阶段 1 改为 (rootPath, relativePath, value)；按当前 tab 的 rootPath 注入。
+        const rootPath = activeTab?.rootPath ?? repositoryPath ?? "";
+        setEditorTabMdPreview(rootPath, relativePath, value);
+      },
+      onActivePathChange: (path) => {
+        setFileEditorActivePath(path);
+      },
+      onClosePanel: closeFileEditorPanel,
+      onClosePreview: closeRepositoryBinaryPreview,
+      onCloseTab: closeFileEditorTab,
+      onReloadTab: (relativePath) => {
+        void reloadEditorTabFromDisk(relativePath);
+      },
+      onSave: () => {
+        void saveEditor();
+      },
+      onTabContentChange: updateFileEditorTabContent,
+      preview: repositoryBinaryPreview,
+      repositoryPath: activeTab?.rootPath ?? repositoryPath ?? null,
+      saving: editorSaving,
+      tabs: fileEditorTabs,
+    };
+  }, [
+    paneIndex,
+    fileEditorActivePath,
+    activeSessionId,
+    editorDirty,
+    editorVisible,
+    mdPreviewByPath,
+    setEditorTabMdPreview,
+    activeTab?.rootPath,
+    repositoryPath,
+    setFileEditorActivePath,
+    closeFileEditorPanel,
+    closeRepositoryBinaryPreview,
+    closeFileEditorTab,
+    reloadEditorTabFromDisk,
+    saveEditor,
+    updateFileEditorTabContent,
+    repositoryBinaryPreview,
+    editorSaving,
+    fileEditorTabs,
+  ]);
+
+  // editorVisible 变化时把节点 / null 投到 layout 的 per-pane map。
+  useEffect(() => {
+    if (!editorVisible) {
+      setCenterAuxPanelsNodeForPane(paneIndex, null);
+      return;
+    }
+    setCenterAuxPanelsNodeForPane(
+      paneIndex,
+      <RepositoryFileEditorPanelContext.Provider value={panelContextValue}>
+        <RepositoryFileEditorVisibilityContext.Provider value={true}>
+          <ConnectedRepositoryFileEditorPanel dark={dark} />
+        </RepositoryFileEditorVisibilityContext.Provider>
+      </RepositoryFileEditorPanelContext.Provider>,
+    );
+    return () => {
+      setCenterAuxPanelsNodeForPane(paneIndex, null);
+    };
+    // panelContextValue 在 editorVisible 变化时已重新计算；只依赖 editorVisible / dark 即可。
+  }, [editorVisible, dark, paneIndex, setCenterAuxPanelsNodeForPane, panelContextValue]);
+
+  // binary preview modal：把本 host 的 `repositoryBinaryPreview` + 关闭句柄上抛到 layout。
+  // layout 内的 `ConnectedRepositoryFilePreviewModal` 读这个 ref 渲染单例 modal。
+  useEffect(() => {
+    if (repositoryBinaryPreview == null) {
+      layoutBinaryPreviewRef.current.delete(paneIndex);
+    } else {
+      layoutBinaryPreviewRef.current.set(paneIndex, {
+        preview: repositoryBinaryPreview,
+        onClose: closeRepositoryBinaryPreview,
+      });
+    }
+    bumpLayoutBinaryPreviewVersion();
+    return () => {
+      layoutBinaryPreviewRef.current.delete(paneIndex);
+      bumpLayoutBinaryPreviewVersion();
+    };
+  }, [repositoryBinaryPreview, closeRepositoryBinaryPreview, paneIndex]);
+
+  return null;
 }
 
 interface ConnectedLeftSidebarProps {
@@ -271,8 +452,15 @@ const ConnectedWorkspaceFileTreeRail = memo(function ConnectedWorkspaceFileTreeR
 interface ConnectedClaudeSessionsProps {
   claudeSessionsProps: ClaudeSessionsProps;
   mainLayoutContentRef: RefObject<HTMLElement | null>;
-  centerAuxPanelsNode: ReactNode;
-  fileEditorTargetPaneIndex: number | null;
+  /**
+   * 多 pane 下每个 pane 各自的 centerAuxPanel 节点（file editor）。
+   * - `undefined`：该 pane 未挂文件编辑器，正常显示消息列表。
+   * - `ReactNode`：该 pane 的 panelBelowMessages 渲染内容。
+   * 0 号 pane（primary）总是被包含；1..N-1 仅在打开过本 pane 的文件时挂载。
+   * `version` 单独抽出做浅比较：每次 host mount/unmount 时 +1，避免节点引用变化穿透。
+   */
+  centerAuxPanelsNodeByPane: Map<number, ReactNode>;
+  centerAuxPanelsNodeByPaneVersion: number;
 }
 
 function connectedClaudeSessionsPropsEqual(
@@ -280,41 +468,29 @@ function connectedClaudeSessionsPropsEqual(
   next: ConnectedClaudeSessionsProps,
 ): boolean {
   if (prev.mainLayoutContentRef !== next.mainLayoutContentRef) return false;
-  if (prev.centerAuxPanelsNode !== next.centerAuxPanelsNode) return false;
-  if (prev.fileEditorTargetPaneIndex !== next.fileEditorTargetPaneIndex) return false;
+  if (prev.centerAuxPanelsNodeByPaneVersion !== next.centerAuxPanelsNodeByPaneVersion) return false;
   return claudeSessionsShellPropsEqual(prev.claudeSessionsProps, next.claudeSessionsProps);
 }
 
 const ConnectedClaudeSessions = memo(function ConnectedClaudeSessions({
   claudeSessionsProps,
   mainLayoutContentRef,
-  centerAuxPanelsNode,
-  fileEditorTargetPaneIndex,
+  centerAuxPanelsNodeByPane,
 }: ConnectedClaudeSessionsProps) {
-  const fileEditorVisible = useContext(RepositoryFileEditorVisibilityContext);
-
   const resolvePaneAuxLayout = useCallback(
     (paneIndex: number): PaneAuxLayout => {
-      if (!fileEditorVisible) {
+      // 多 pane 下各 pane 独立判断自己是否挂文件编辑器；未挂时正常显示消息列表。
+      const panel = centerAuxPanelsNodeByPane.get(paneIndex);
+      if (panel == null) {
         return { hideMessages: false, hideSessionTools: false };
       }
-      if (fileEditorTargetPaneIndex != null) {
-        const isTarget = paneIndex === fileEditorTargetPaneIndex;
-        return {
-          panelBelowMessages: isTarget ? centerAuxPanelsNode : undefined,
-          hideMessages: isTarget,
-          hideSessionTools: isTarget,
-        };
-      }
-      // 文件编辑器默认落在主窗格；其它多屏窗格须保留消息列表，避免输入区被顶到列顶。
-      const isPrimaryAuxPane = paneIndex === 0;
       return {
-        panelBelowMessages: isPrimaryAuxPane ? centerAuxPanelsNode : undefined,
-        hideMessages: isPrimaryAuxPane,
-        hideSessionTools: isPrimaryAuxPane,
+        panelBelowMessages: panel,
+        hideMessages: true,
+        hideSessionTools: true,
       };
     },
-    [centerAuxPanelsNode, fileEditorTargetPaneIndex, fileEditorVisible],
+    [centerAuxPanelsNodeByPane],
   );
 
   const primaryAux = resolvePaneAuxLayout(0);
@@ -331,18 +507,6 @@ const ConnectedClaudeSessions = memo(function ConnectedClaudeSessions({
     </Layout.Content>
   );
 }, connectedClaudeSessionsPropsEqual);
-
-const ConnectedCenterAuxPanels = memo(function ConnectedCenterAuxPanels({
-  fileEditorNode,
-}: {
-  fileEditorNode: ReactNode;
-}) {
-  const fileEditorVisible = useContext(RepositoryFileEditorVisibilityContext);
-  if (!fileEditorVisible) {
-    return null;
-  }
-  return <div className="app-center-aux-panels">{fileEditorNode}</div>;
-});
 
 const ConnectedInspector = memo(function ConnectedInspector({
   viewMode,
@@ -413,8 +577,13 @@ const ConnectedRepositoryFileEditorPanel = memo(function ConnectedRepositoryFile
 });
 
 const ConnectedRepositoryFilePreviewModal = memo(function ConnectedRepositoryFilePreviewModal() {
-  const { onClosePreview, preview } = useRepositoryFileEditorPanelContextValue();
-  return <LazyRepositoryFilePreviewModal preview={preview} onClose={onClosePreview} />;
+  // 多 pane 下：modal 仍为 layout 单例，preview state 由 layout 内的
+  // `RepositoryFilePreviewModalContext.Provider` 注入（取各 host 上报中第一个非空）。
+  const ctx = useContext(RepositoryFilePreviewModalContext);
+  if (ctx == null) {
+    return null;
+  }
+  return <LazyRepositoryFilePreviewModal preview={ctx.preview} onClose={ctx.onClose} />;
 });
 
 export interface AppWorkspaceLayoutProps {
@@ -814,28 +983,243 @@ export function AppWorkspaceLayout({
     return () => window.clearTimeout(timeoutId);
   }, [missionControlMode]);
 
-  const {
-    closeFileEditorPanel,
-    closeFileEditorTab,
-    closeRepositoryBinaryPreview,
-    editorDirty,
-    editorSaving,
-    editorVisible,
-    fileEditorActivePath,
-    fileEditorTabs,
-    mdPreviewByPath,
-    openRepositoryFile,
-    reloadEditorTabFromDisk,
-    repositoryBinaryPreview,
-    saveEditor,
-    setEditorTabMdPreview,
-    setFileEditorActivePath,
-    updateFileEditorTabContent,
-  } = useRepositoryFileEditor({ repositoryPath: activeRepositoryPath });
+  // 多 pane 化：每个 pane 挂载一份 `useRepositoryFileEditor`，由 `PaneEditorHost` 内部
+  // 组件 mount 时调用 `registerPaneEditor` 注册到 `paneEditorApisRef`，layout 内
+  // dispatcher / routing 按目标 `paneIndex` 拿对应 host 的 hook 实例 API。
+  const paneEditorApisRef = useRef<Map<number, PaneEditorApi>>(new Map());
+  // 仅作为 `paneEditorApisRef` 变化信号，驱动下游依赖面板可见性 map 的 hook 重算。
+  const [paneEditorApisVersion, setPaneEditorApisVersion] = useState(0);
+  // 待消费队列：当 dispatcher 按 rootPath 没命中 host 时（host 还在 mount 时序晚于
+  // request 进入的极端窗口），把请求入队；host mount 时按自身 repositoryPath 消费
+  // （参见 `registerPaneEditor`）。队列按 rootPath 聚合，最后一个 relativePath 生效。
+  // 这是修复 bug 5-2「第二屏搜文件回车没反应」的关键防线 — host 1 还没 register 到
+  // `paneEditorApisRef` 时也不会再污染 host[0] 或丢失请求。
+  const pendingFileOpensByRootRef = useRef<
+    Map<string, { relativePath: string; options?: GitPanelOpenFileOptions }>
+  >(new Map());
+  const registerPaneEditor = useCallback(
+    (paneIndex: number, api: PaneEditorApi) => {
+      paneEditorApisRef.current.set(paneIndex, api);
+      // host 刚 mount 进 ref，立刻按自身 repositoryPath 消化 pending 队列里的请求。
+      const hostRoot = api.repositoryPath?.trim() ?? "";
+      if (hostRoot) {
+        const pending = pendingFileOpensByRootRef.current.get(hostRoot);
+        if (pending) {
+          pendingFileOpensByRootRef.current.delete(hostRoot);
+          try {
+            api.openRepositoryFile(pending.relativePath, pending.options);
+          } catch (err) {
+            // 防御性 swallow：hook 内已经吃掉大多数异常，这里只保 queue 清掉。
+            console.warn("[paneEditorHost] consume pending open failed", err);
+          }
+        }
+      }
+      setPaneEditorApisVersion((v) => v + 1);
+    },
+    [],
+  );
+  const unregisterPaneEditor = useCallback((paneIndex: number) => {
+    paneEditorApisRef.current.delete(paneIndex);
+    setPaneEditorApisVersion((v) => v + 1);
+  }, []);
 
-  const [fileTreeOpenInNewPane, setFileTreeOpenInNewPane] = useState(false);
+  /** 多 pane 下 binary preview modal 单例：由各 host 上报自己当前 preview 状态。
+   *  当任一 host 持非 null preview 时，layout 渲染 modal；多 host 同时持 preview 时取
+   *  第一个非空（host mount 顺序：pane 0 优先）。 */
+  const layoutBinaryPreviewRef = useRef<
+    Map<
+      number,
+      {
+        preview: ComponentProps<typeof RepositoryFilePreviewModal>["preview"];
+        onClose: () => void;
+      }
+    >
+  >(new Map());
+  const [layoutBinaryPreviewVersion, bumpLayoutBinaryPreviewVersionState] = useState(0);
+  const bumpLayoutBinaryPreviewVersion = useCallback(() => {
+    bumpLayoutBinaryPreviewVersionState((v) => v + 1);
+  }, []);
+  const activeLayoutBinaryPreview = useMemo(() => {
+    void layoutBinaryPreviewVersion;
+    for (const entry of layoutBinaryPreviewRef.current.values()) {
+      if (entry.preview != null) return entry;
+    }
+    return null;
+  }, [layoutBinaryPreviewVersion]);
+
+  /** 多 pane 下每 pane 的 file editor ReactNode 集合（panel != null 即 editorVisible）。
+   *  用 ref 持有最新值，state 触发 re-render 让 `resolvePaneAuxLayout` 重新读。 */
+  const centerAuxPanelsNodeByPaneRef = useRef<Map<number, ReactNode>>(new Map());
+  const [centerAuxPanelsNodeByPaneVersion, setCenterAuxPanelsNodeByPaneVersion] = useState(0);
+  const centerAuxPanelsNodeByPane = useMemo(
+    () => new Map(centerAuxPanelsNodeByPaneRef.current),
+    [centerAuxPanelsNodeByPaneVersion],
+  );
+  const setCenterAuxPanelsNodeForPane = useCallback((paneIndex: number, node: ReactNode) => {
+    const current = centerAuxPanelsNodeByPaneRef.current.get(paneIndex);
+    if (current === node) return;
+    if (node == null) {
+      centerAuxPanelsNodeByPaneRef.current.delete(paneIndex);
+    } else {
+      centerAuxPanelsNodeByPaneRef.current.set(paneIndex, node);
+    }
+    setCenterAuxPanelsNodeByPaneVersion((v) => v + 1);
+  }, []);
+
+  /** 多 pane 下要 mount 的 PaneEditorHost 配置列表。
+   *  pane 0 = primary（active 仓库）；pane 1..N-1 = extra panes。
+   *
+   *  派生策略与 ChatHost 的 `resolvedPaneRepositories` (ClaudeSessionsChatHost.tsx)
+   *  对齐：先 `slot.repositoryId` → 再 `slot.sessionId`（走 `resolveRepositoryForSession`
+   *  解析，含 `repositoryMainBindings`）→ 最后 `activeRepositoryPath` 兜底。
+   *
+   *  旧实现用 `session?.repositoryPath?.trim() || ...` 派生，存在「session 找到但
+   *  session.repositoryPath 为空字符串（dataLink 还在加载）时短路成空字符串」的反
+   *  模式 —— `paneEditorHostConfigs[1].repositoryPath` 此时为空/null，dispatcher 按
+   *  rootPath 精确匹配永远无法命中 host[1]，retry 12×60ms 后降级到 host[0] 把请求
+   *  错误路由到 primary pane，pane 1 搜的文件实际由 pane 0 仓库 hook 加载 ——
+   *  表现为「第二屏打开的不是第二屏选择的仓库的文件」。
+   *
+   *  单 pane (paneCount === 1) 时仅 mount pane 0，行为与单实例完全一致。 */
+  const paneEditorHostConfigs = useMemo(() => {
+    const sessions = claudeSessionsProps.sessions ?? [];
+    const repositories = claudeSessionsProps.repositories ?? [];
+    const repositoryMainBindings = claudeSessionsProps.repositoryMainBindings ?? {};
+    const extraPanes = claudeSessionsProps.extraPanes ?? [];
+    const currentPaneCount = claudeSessionsProps.paneCount ?? 1;
+    const configs: Array<{ paneIndex: number; repositoryPath: string | null | undefined }> = [
+      { paneIndex: 0, repositoryPath: activeRepositoryPath ?? null },
+    ];
+    for (let i = 0; i < extraPanes.length && i + 1 < currentPaneCount; i++) {
+      const slot = extraPanes[i];
+      let resolvedRepoPath: string | null = null;
+      // 1) slot 已显式绑定仓库：直接取该仓库的 path。
+      if (slot.repositoryId != null) {
+        const repo = repositories.find((r) => r.id === slot.repositoryId);
+        const path = repo?.path?.trim() ?? "";
+        if (path) resolvedRepoPath = path;
+      }
+      // 2) slot 已占会话：通过会话 + bindings 解析出仓库（不依赖左栏 active repo）。
+      if (!resolvedRepoPath && slot.sessionId) {
+        const paneSession = sessions.find((s) => s.id === slot.sessionId);
+        if (paneSession) {
+          const repo = resolveRepositoryForSession({
+            session: paneSession,
+            repositories,
+            bindings: repositoryMainBindings,
+            sessions,
+          });
+          const path = repo?.path?.trim() ?? paneSession.repositoryPath?.trim() ?? "";
+          if (path) resolvedRepoPath = path;
+        }
+      }
+      // 3) 兜底：使用 primary active 仓库（典型：尚未绑会话的新建 slot）。
+      if (!resolvedRepoPath && activeRepositoryPath?.trim()) {
+        resolvedRepoPath = activeRepositoryPath.trim();
+      }
+      configs.push({
+        paneIndex: i + 1,
+        repositoryPath: resolvedRepoPath,
+      });
+    }
+    return configs;
+  }, [
+    activeRepositoryPath,
+    claudeSessionsProps.extraPanes,
+    claudeSessionsProps.paneCount,
+    claudeSessionsProps.repositories,
+    claudeSessionsProps.repositoryMainBindings,
+    claudeSessionsProps.sessions,
+  ]);
+
+  /** 多 pane dispatcher：按 `opts.fileRootPath` 路由到对应 pane host 的 `openRepositoryFile`。
+   *  fallback 顺序：
+   *  1) `fileRootPath` 精确匹配 `paneEditorApisRef` 中某 host 的 `repositoryPath`。
+   *  2) 否则（rootPath 为空，或 rootPath 未命中）→ 走 fileEditorTargetPaneIndex
+   *     指定的 host（仅适用 rootPath 为空的"无 rootPath"调用方：例如
+   *     `openRepositoryFileWithPreference` 在 `fileTreeOpenInNewPane` 路径下
+   *     由 line 1179 显式 setFileEditorTargetPaneIndex 后立即调本函数），并校验
+   *     该 host 的 repositoryPath 与 rootPath 一致（避免 stale target 把请求串到
+   *     错 pane）。
+   *  3) 都没有 → primary (pane 0) host。
+   *  4) 极端边界（所有 host 都没注册）→ message.warning 提示。
+   *
+   *  关键防线：`fileEditorTargetPaneIndex` 是历史 target，不能直接作为 rootPath
+   *  非空情况下的 fallback。否则在同一仓库跨多 pane / 上一轮在 pane 1 打开后，
+   *  routing useEffect 命中 primary repo 时（matchedPaneIndex=null）会保留 stale
+   *  target=1，导致本 dispatcher 把请求错误路由到 pane 1（即 bug 5-3 根因）。 */
   const [fileEditorTargetPaneIndex, setFileEditorTargetPaneIndex] = useState<number | null>(null);
-  const prevEditorVisibleRef = useRef(false);
+  const [fileTreeOpenInNewPane, setFileTreeOpenInNewPane] = useState(false);
+
+  const openRepositoryFileInPaneByRootPath = useCallback(
+    (relativePath: string, options?: GitPanelOpenFileOptions) => {
+      const rootPath = options?.fileRootPath?.trim() ?? "";
+      const exactMatch =
+        rootPath
+          ? Array.from(paneEditorApisRef.current.entries()).find(
+              ([, api]) => api.repositoryPath?.trim() === rootPath,
+            )?.[1]
+          : undefined;
+      const targetByTarget =
+        rootPath
+          ? undefined
+          : paneEditorApisRef.current.get(fileEditorTargetPaneIndex ?? 0);
+      const target = exactMatch ?? targetByTarget;
+      if (target) {
+        target.openRepositoryFile(relativePath, options);
+        return;
+      }
+      // 精确匹配失败：若 rootPath 非空，先入 pending 队列等目标 host mount 后消费
+      // （`registerPaneEditor` 已处理），避免污染错 pane（pane 0）；不再回退到
+      // primary host 是 bug 5-2 的关键修复。
+      if (rootPath) {
+        pendingFileOpensByRootRef.current.set(rootPath, { relativePath, options });
+        // 同时往 primary host 也入一份「临时」：当多 pane 收紧到单 pane（paneCount
+        // 从 2 变 1）时，原 pane 1 的 host 已 unmount，唯一剩下的 host[0] 的
+        // repositoryPath 仍是 pane 0 repo — 与 rootPath 不匹配，但仍期望该请求不丢。
+        // 此时启动一轮 retry：每 60ms 重试到 pending 队列被某 host 消费或超时 800ms。
+        let attempts = 0;
+        const retry = () => {
+          attempts += 1;
+          const pending = pendingFileOpensByRootRef.current.get(rootPath);
+          if (!pending) return; // 已消费
+          // 第一道：精确匹配（host mount 后会自然命中）。
+          const hit = Array.from(paneEditorApisRef.current.entries()).find(
+            ([, api]) => api.repositoryPath?.trim() === rootPath,
+          )?.[1];
+          if (hit) {
+            pendingFileOpensByRootRef.current.delete(rootPath);
+            hit.openRepositoryFile(pending.relativePath, pending.options);
+            return;
+          }
+          // 第二道：放宽到 active repository 作为合理 fallback（仅 rootPath 非空
+          // 且所有 pane 都没注册场景；典型：用户从 2 屏切回 1 屏且请求来自 pane 1）。
+          if (attempts >= 12) {
+            pendingFileOpensByRootRef.current.delete(rootPath);
+            const fallback = paneEditorApisRef.current.get(0);
+            if (fallback) {
+              fallback.openRepositoryFile(pending.relativePath, pending.options);
+              return;
+            }
+            message.warning("请先选择工作区或仓库");
+            return;
+          }
+          window.setTimeout(retry, 60);
+        };
+        window.setTimeout(retry, 60);
+        return;
+      }
+      // rootPath 为空：使用文件树「文件树新屏打开」路径（`openRepositoryFileWithPreference`
+      // 在 `fileTreeOpenInNewPane` 分支显式 set target 后调用本函数）。
+      const fallback = paneEditorApisRef.current.get(0);
+      if (!fallback) {
+        message.warning("请先选择工作区或仓库");
+        return;
+      }
+      fallback.openRepositoryFile(relativePath, options);
+    },
+    [fileEditorTargetPaneIndex],
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -863,13 +1247,22 @@ export function AppWorkspaceLayout({
     };
   }, []);
 
+  const prevAnyPaneEditorVisibleRef = useRef(false);
+  /**
+   * 任一 pane 的 file editor 由可见 → 不可见时，广播关闭事件给 scroll 等监听者；
+   * `prevAnyPaneEditorVisibleRef` 记录上一次的"全局是否任意 pane 编辑器可见"快照。
+   * 由 `centerAuxPanelsNodeByPane` 派生：panel != null 即该 pane 编辑器可见。
+   */
   useEffect(() => {
-    if (prevEditorVisibleRef.current && !editorVisible) {
+    const anyVisible = Array.from(centerAuxPanelsNodeByPaneRef.current.values()).some(
+      (node) => node != null,
+    );
+    if (prevAnyPaneEditorVisibleRef.current && !anyVisible) {
       setFileEditorTargetPaneIndex(null);
       dispatchRepositoryFileEditorClosed();
     }
-    prevEditorVisibleRef.current = editorVisible;
-  }, [editorVisible]);
+    prevAnyPaneEditorVisibleRef.current = anyVisible;
+  }, [centerAuxPanelsNodeByPaneVersion]);
 
   const openRepositoryFileWithPreference = useCallback(
     async (relativePath: string, options?: GitPanelOpenFileOptions) => {
@@ -879,9 +1272,7 @@ export function AppWorkspaceLayout({
         const currentPaneCount = claudeSessionsProps.paneCount ?? 1;
         let targetPaneIndex = fileEditorTargetPaneIndex;
         const needsNewTarget =
-          targetPaneIndex == null ||
-          !editorVisible ||
-          targetPaneIndex >= currentPaneCount;
+          targetPaneIndex == null || targetPaneIndex >= currentPaneCount;
 
         if (needsNewTarget) {
           const plan = planFileViewerPaneIndex({
@@ -897,7 +1288,7 @@ export function AppWorkspaceLayout({
             );
             if (expanded === false) {
               setFileEditorTargetPaneIndex(null);
-              openRepositoryFile(relativePath, options);
+              openRepositoryFileInPaneByRootPath(relativePath, options);
               return;
             }
             await waitLayoutFrames(1);
@@ -905,112 +1296,29 @@ export function AppWorkspaceLayout({
         }
 
         setFileEditorTargetPaneIndex(targetPaneIndex);
-        openRepositoryFile(relativePath, options);
+        openRepositoryFileInPaneByRootPath(relativePath, options);
         return;
       }
 
       if (fromFileTree && !fileTreeOpenInNewPane) {
         setFileEditorTargetPaneIndex(null);
       }
-      openRepositoryFile(relativePath, options);
+      openRepositoryFileInPaneByRootPath(relativePath, options);
     },
     [
       claudeSessionsProps.extraPanes,
       claudeSessionsProps.onChangePaneCount,
       claudeSessionsProps.paneCount,
-      editorVisible,
       fileEditorTargetPaneIndex,
       fileTreeOpenInNewPane,
-      openRepositoryFile,
+      openRepositoryFileInPaneByRootPath,
     ],
   );
 
-  const handleFileEditorTabContentChange = updateFileEditorTabContent;
-
-  /** 切换编辑器 Tab 时让文件树跟随定位到该文件。仅当文件树已可见时才触发，不强制展开侧栏。 */
-  const handleActivePathChange = useCallback(
-    (path: string) => {
-      setFileEditorActivePath(path);
-      if (!path || !activeRepositoryPath?.trim()) return;
-      const revealTarget = resolveVisibleExplorerRevealTarget({
-        workspaceFileTreeRailOpen: showWorkspaceFileTreeRail,
-        filesPanelPlacement: leftSidebarProps.filesPanelPlacement ?? "left",
-        gitPanelPlacement: leftSidebarProps.gitPanelPlacement ?? "left",
-        leftSidebarCollapsed: collapsed,
-        leftSidebarParked,
-        rightRailAvailable: chatRightRailMode,
-      });
-      if (!revealTarget) return;
-      writePendingExplorerReveal({
-        repositoryPath: activeRepositoryPath.trim(),
-        relativePath: path,
-        isDirectory: false,
-        revealTarget,
-      });
-    },
-    [
-      setFileEditorActivePath,
-      activeRepositoryPath,
-      showWorkspaceFileTreeRail,
-      leftSidebarProps.filesPanelPlacement,
-      leftSidebarProps.gitPanelPlacement,
-      collapsed,
-      chatRightRailMode,
-    ],
-  );
-
-  const editorPanelContextValue = useMemo<RepositoryFileEditorPanelContextValue>(
-    () => ({
-      activePath: fileEditorActivePath,
-      activeSessionId: claudeSessionsProps.activeSessionId,
-      dirty: editorDirty,
-      editorVisible,
-      mdPreviewByPath,
-      setEditorTabMdPreview,
-      onActivePathChange: handleActivePathChange,
-      onClosePanel: closeFileEditorPanel,
-      onClosePreview: closeRepositoryBinaryPreview,
-      onCloseTab: closeFileEditorTab,
-      onReloadTab: (relativePath: string) => {
-        void reloadEditorTabFromDisk(relativePath);
-      },
-      onSave: () => {
-        void saveEditor();
-      },
-      onTabContentChange: handleFileEditorTabContentChange,
-      preview: repositoryBinaryPreview,
-      repositoryPath:
-        fileEditorTabs.find((tab) => tab.relativePath === fileEditorActivePath)?.rootPath ??
-        activeRepositoryPath,
-      saving: editorSaving,
-      tabs: fileEditorTabs,
-    }),
-    [
-      activeRepositoryPath,
-      claudeSessionsProps.activeSessionId,
-      closeFileEditorPanel,
-      closeFileEditorTab,
-      closeRepositoryBinaryPreview,
-      editorDirty,
-      editorSaving,
-      editorVisible,
-      fileEditorActivePath,
-      fileEditorTabs,
-      handleFileEditorTabContentChange,
-      mdPreviewByPath,
-      reloadEditorTabFromDisk,
-      repositoryBinaryPreview,
-      saveEditor,
-      setEditorTabMdPreview,
-      handleActivePathChange,
-    ],
-  );
-  const editorPanelNode = useMemo(() => <ConnectedRepositoryFileEditorPanel dark={dark} />, [dark]);
-  const centerAuxPanelsNode = useMemo(
-    () => <ConnectedCenterAuxPanels fileEditorNode={editorPanelNode} />,
-    [editorPanelNode],
-  );
-
+  /** 切换编辑器 Tab 时让文件树跟随定位到该文件。仅当文件树已可见时才触发，不强制展开侧栏。
+   *  当前 hook 的 `setFileEditorActivePath` 是"按 paneIndex 的 setter 闭包"；routing
+   *  useEffect 路由时已锁定目标 pane，这里通过 paneEditorApisRef 找到目标 host 的
+   *  setter 调用，从而把 reveal 目标也写到正确 host 的 active path。 */
   useEffect(() => {
     const request = repositoryFileOpenRequest;
     // `repositoryFileOpenRequest` 是"打开文件"事件的唯一 source of truth：`openRepositoryFileByEvent`
@@ -1096,12 +1404,12 @@ export function AppWorkspaceLayout({
 
     if (!request.isDirectory) {
       // 关键：`request.repositoryPath` 是文件所属仓库的真实根（多 pane 下可能是
-      // extra pane 的仓库）。必须作为 `fileRootPath` 传给 hook，否则 `useRepositoryFileEditor`
-      // 内的 `loadEditorFile` 会 fallback 到 hook 默认的 `activeRepository.path`（primary pane
-      // 仓库），导致"编辑器面板路由到正确 pane，但磁盘读的是别仓的文件"——典型表现是
-      // 第二屏打开的是第一屏仓库的文件。
-      openRepositoryFile(request.relativePath, {
-        fileRootPath: request.repositoryPath,
+      // extra pane 的仓库）。`openRepositoryFileInPaneByRootPath` 会按 `fileRootPath`
+      // 在 `paneEditorApisRef` 中找对应 pane 的 host hook 实例调用，避免路由到
+      // 错 pane。fallback 顺序：精确匹配 → fileEditorTargetPaneIndex → primary pane。
+      // 上面的 `if (!request || !targetPath) return` 已保证 `request.repositoryPath` 非空。
+      openRepositoryFileInPaneByRootPath(request.relativePath, {
+        fileRootPath: request.repositoryPath ?? undefined,
         line: request.line ?? null,
         fromFileTree: true,
       });
@@ -1119,7 +1427,8 @@ export function AppWorkspaceLayout({
     leftSidebarProps.filesPanelPlacement,
     leftSidebarProps.gitPanelPlacement,
     onConsumeRepositoryFileOpenRequest,
-    openRepositoryFile,
+    openRepositoryFileInPaneByRootPath,
+    paneEditorApisVersion,
     repositoryFileOpenRequest,
     setFileEditorTargetPaneIndex,
     setFileTreeRailOpen,
@@ -1128,8 +1437,14 @@ export function AppWorkspaceLayout({
 
   return (
     <RepositoryFileEditorOpenFileContext.Provider value={openRepositoryFileWithPreference}>
-      <RepositoryFileEditorVisibilityContext.Provider value={editorVisible}>
-        <RepositoryFileEditorPanelContext.Provider value={editorPanelContextValue}>
+      {/* 多 pane 下 Visibility/Panel Context 由各 PaneEditorHost 内部按 paneIndex 注入；
+          这里仅在单 pane（paneCount === 1）时透传；多 pane 时为 fallback 占位空壳，
+          实际面板由 per-pane host 提供。 */}
+      <RepositoryFileEditorVisibilityContext.Provider value={false}>
+        <RepositoryFileEditorPanelContext.Provider value={null}>
+          {/* file preview modal 单例：layout 持 `activeLayoutBinaryPreview`（从各 host 上报中
+              取第一个非空），modal 通过本 Context 读取。 */}
+          <RepositoryFilePreviewModalContext.Provider value={activeLayoutBinaryPreview}>
           <ConfigProvider
             locale={zhCN}
             tooltip={{ unique: true }}
@@ -1239,8 +1554,8 @@ export function AppWorkspaceLayout({
                           <ConnectedClaudeSessions
                             claudeSessionsProps={claudeSessionsPropsWithHeader}
                             mainLayoutContentRef={mainLayoutContentRef}
-                            centerAuxPanelsNode={centerAuxPanelsNode}
-                            fileEditorTargetPaneIndex={fileEditorTargetPaneIndex}
+                            centerAuxPanelsNodeByPane={centerAuxPanelsNodeByPane}
+                            centerAuxPanelsNodeByPaneVersion={centerAuxPanelsNodeByPaneVersion}
                           />
                         </Suspense>
                       </ErrorBoundary>
@@ -1394,6 +1709,25 @@ export function AppWorkspaceLayout({
                 </div>
               </Layout>
 
+              {/* 多 pane 下的 per-pane 文件编辑器宿主。挂载顺序与 `ClaudeMultiPaneGrid` 的
+                  pane 渲染顺序一致：pane 0（primary，active 仓库） + pane 1..N-1（extra panes）。
+                  每个 host 各自调 `useRepositoryFileEditor`，registerPaneEditor 注册到 layout
+                  dispatcher。Host 返回 null，仅靠 useEffect 上报 editor panel / preview 状态。 */}
+              {paneEditorHostConfigs.map((config) => (
+                <PaneEditorHost
+                  key={config.paneIndex}
+                  paneIndex={config.paneIndex}
+                  repositoryPath={config.repositoryPath}
+                  activeSessionId={claudeSessionsProps.activeSessionId}
+                  dark={dark}
+                  registerPaneEditor={registerPaneEditor}
+                  unregisterPaneEditor={unregisterPaneEditor}
+                  setCenterAuxPanelsNodeForPane={setCenterAuxPanelsNodeForPane}
+                  layoutBinaryPreviewRef={layoutBinaryPreviewRef}
+                  bumpLayoutBinaryPreviewVersion={bumpLayoutBinaryPreviewVersion}
+                />
+              ))}
+
               <Suspense fallback={null}>
                 <ConnectedRepositoryFilePreviewModal />
               </Suspense>
@@ -1408,6 +1742,7 @@ export function AppWorkspaceLayout({
 
             </AntdApp>
           </ConfigProvider>
+          </RepositoryFilePreviewModalContext.Provider>
           </RepositoryFileEditorPanelContext.Provider>
         </RepositoryFileEditorVisibilityContext.Provider>
       </RepositoryFileEditorOpenFileContext.Provider>
