@@ -17,8 +17,8 @@ import {
   useClaudeSessionsStructureKey,
 } from "../../stores/claudeSessionsLiveStore";
 import { ClaudeSessionsChatHost } from "./ClaudeSessionsChatHost";
-import { Topbar } from "./Topbar";
-export { Topbar, type TopbarProps } from "./Topbar";
+import { Topbar, type PaneTopbarSharedProps } from "./Topbar";
+export { Topbar, type TopbarProps, type PaneTopbarSharedProps } from "./Topbar";
 import { pickSessionForRepositorySidebarSelect } from "../../utils/claudeSessionSelection";
 import { filterSessionsForWorkspace, sessionMatchesProjectWorkspaceFocus } from "../../utils/projectSessionPanelFilter";
 import {
@@ -45,7 +45,7 @@ const TerminalPanelLazy = lazy(() =>
   import("../TerminalPanel").then((module) => ({ default: module.TerminalPanel })),
 );
 
-interface Props {
+export interface ClaudeSessionsProps {
   sessions: ClaudeSession[];
   activeSessionId: string | null;
   hideTopbar?: boolean;
@@ -151,6 +151,8 @@ interface Props {
   onCollapseTerminal?: () => void;
   onCloseTerminalPanel?: () => void;
   onSearch?: () => void;
+  /** 按指定仓库路径打开搜索面板（多屏 per-pane 顶栏搜索按钮，作用于该 pane 仓库）。 */
+  onSearchForRepository?: (repositoryPath: string) => void;
   collapsed?: boolean;
   rightCollapsed?: boolean;
   terminalCollapsed?: boolean;
@@ -188,6 +190,13 @@ interface Props {
   hideSessionTools?: boolean;
   /** 多屏时按窗格解析文件等中栏辅助面板布局。 */
   resolvePaneAuxLayout?: ResolvePaneAuxLayout;
+  /**
+   * 多屏辅助面板（文件编辑器）布局版本号。每次某 pane 的 editorVisible 变化（开/关文件）
+   * 时 +1。`MemoClaudeSessions` 的 memo comparator 会跳过函数 prop（`resolvePaneAuxLayout`
+   * 每次渲染都是新引用），若仅靠它无法触发重渲；这里用一个 number 显式驱动：版本号变化即
+   * 重渲，从而让 `resolvePaneAuxLayout(paneIndex)` 返回的最新 bridge 元素被挂载/卸载。
+   */
+  centerAuxPanelsNodeByPaneVersion?: number;
   /** 按标签会话解析并发槽位，供批量直接 OMC 与主发一致占槽 */
   resolveTaskListOmcInvokeConcurrency?: (session: ClaudeSession) => {
     concurrencyScopeKey: string;
@@ -227,6 +236,9 @@ interface Props {
   /** 手动执行 `/compact` 压缩指定标签会话历史 */
   onCompactSessionHistory?: (sessionId: string) => void | Promise<void>;
   onStopSessionConversationTask?: (item: SessionConversationTaskItem) => void;
+  /** 多屏下每个 pane 顶栏共享的回调与状态（窗口级 + 会话级 + per-pane 搜索入口）。
+   *  由 AppWorkspaceLayout 组装，经 ClaudeSessionsChatHost 透传到 ClaudeMultiPaneGrid 各 pane。 */
+  paneTopbarShared?: PaneTopbarSharedProps;
 }
 
 function ClaudeSessionsShell({
@@ -315,6 +327,7 @@ function ClaudeSessionsShell({
   hideMessages = false,
   hideSessionTools = false,
   resolvePaneAuxLayout,
+  centerAuxPanelsNodeByPaneVersion,
   resolveTaskListOmcInvokeConcurrency,
   repositoryMainBindings = {},
   onAppendSystemMessage,
@@ -330,7 +343,8 @@ function ClaudeSessionsShell({
   onLoadMoreTranscriptFromDisk,
   onCompactSessionHistory,
   onStopSessionConversationTask,
-}: Props) {
+  paneTopbarShared,
+}: ClaudeSessionsProps) {
   const structureKey = useClaudeSessionsStructureKey();
   const [terminalFullscreen, setTerminalFullscreen] = useState(false);
   const incomingSessions = useMemo(() => getClaudeSessionsSnapshot(), [structureKey]);
@@ -752,6 +766,7 @@ function ClaudeSessionsShell({
           hideMessages={hideMessages}
           hideSessionTools={hideSessionTools}
           resolvePaneAuxLayout={resolvePaneAuxLayout}
+          centerAuxPanelsNodeByPaneVersion={centerAuxPanelsNodeByPaneVersion}
           resolveTaskListOmcInvokeConcurrency={resolveTaskListOmcInvokeConcurrency}
           repositoryMainBindings={repositoryMainBindings}
           onAppendSystemMessage={onAppendSystemMessage}
@@ -771,6 +786,7 @@ function ClaudeSessionsShell({
           paneRepoTreeData={paneRepoTreeData}
           projectsById={projectsById}
           mainSessionForDataLink={mainSessionForDataLink}
+          paneTopbarShared={paneTopbarShared}
         />
       ) : null}
       </div>

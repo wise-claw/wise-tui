@@ -1277,6 +1277,24 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
     [],
   );
 
+  /**
+   * per-pane 化后：layout 端持有一份"按 paneIndex 取 setter 闭包"的 map
+   * （见 `AppWorkspaceLayout` 的 `paneProviderMap`）。这里的 setter 只改
+   * 当前 hook 实例的 pane，保持原签名以便 layout 直接接入。
+   *
+   * 必须用 `useCallback` 稳定引用：`AppWorkspaceLayout` 的 `panelContextValue`
+   * useMemo 依赖本 setter，若每次渲染为新箭头会让 `panelContextValue` 每渲染变新引用，
+   * 进而触发 `setCenterAuxPanelsNodeForPane` 所在 useEffect（依赖 panelContextValue）
+   * 每渲染重跑 → 每次写入新 JSX 节点 → version++ → 重渲 → 死循环
+   * （编辑器可见时才暴露，因 editorVisible=false 走 null 早退分支被 current===node 守卫挡住）。
+   */
+  const setFileEditorActivePath = useCallback(
+    (path: string | null) => {
+      updatePaneActivePath(paneIndex, () => path);
+    },
+    [paneIndex, updatePaneActivePath],
+  );
+
   return {
     closeFileEditorPanel,
     closeFileEditorTab,
@@ -1293,14 +1311,7 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
     repositoryBinaryPreview,
     saveEditor,
     setEditorTabMdPreview,
-    /**
-     * per-pane 化后：layout 端持有一份"按 paneIndex 取 setter 闭包"的 map
-     * （见 `AppWorkspaceLayout` 的 `paneProviderMap`）。这里的 setter 只改
-     * 当前 hook 实例的 pane，保持原签名以便 layout 直接接入。
-     */
-    setFileEditorActivePath: (path: string | null) => {
-      updatePaneActivePath(paneIndex, () => path);
-    },
+    setFileEditorActivePath,
     updateFileEditorTabContent,
   };
 }

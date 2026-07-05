@@ -111,9 +111,15 @@ export function RepositoryFileEditorTabSurface({
   const lastInjectedContentVersionRef = useRef<number | null>(null);
 
   const language = monacoLanguageFromRepositoryPath(tab.relativePath);
+  // 多 pane 下同 relativePath 但不同仓库的文件（典型：两屏各自打开 README.md）必须落到不同
+  // Monaco model。@monaco-editor/react 按 `path` 取/建 model：若两屏 path 相同，会复用同一
+  // model，导致两屏互相 setValue 覆盖内容（最后写者赢），且关闭一屏时 dispose 共享 model
+  // 会让另一屏内容消失（tab 头还在）。非 TS 文件原先只用 relativePath 当 path，这里改成按
+  // tab 自身 rootPath 哈希进 URI，保证 (rootPath, relativePath) 唯一。TS 分支保持原样
+  // （已用 repositoryPath 走 monacoUriForRepositoryPath，且与 TS env 对齐）。
   const editorPath = isTypeScriptLikeRepositoryPath(tab.relativePath)
     ? monacoUriForRepositoryPath(tab.relativePath, repositoryPath)
-    : tab.relativePath;
+    : monacoUriForRepositoryPath(tab.relativePath, tab.rootPath || repositoryPath);
   const typeScriptSources = useMemo(
     () =>
       tab.diffOriginal === undefined

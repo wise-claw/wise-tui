@@ -119,7 +119,9 @@ export function rebindPaneSlotPreservingRuntime(
   return next;
 }
 
-/** 在已对齐长度的 extraPanes 上写入 session，优先第一个空槽。 */
+/** 在已对齐长度的 extraPanes 上写入 session，优先第一个空槽。
+ *  `repositoryId` 持久化到 slot，使 `paneEditorHostConfigs` 能在 step 1 直接命中该仓库，
+ *  不再依赖 session 解析或全局 active 回退（避免多屏下 extra pane 误用 primary 仓库路径）。 */
 export function assignSessionToNormalizedExtraPanes(
   paneCount: PaneCount,
   extraPanes: readonly PaneSlot[],
@@ -127,6 +129,7 @@ export function assignSessionToNormalizedExtraPanes(
   createSlot: () => PaneSlot,
   fallbackSlotIndex: number,
   primaryPaneRuntime?: PaneRuntimeOverride | null,
+  repositoryId?: number | null,
 ): PaneSlot[] {
   const base = normalizeExtraPanesToPaneCount(paneCount, extraPanes, createSlot);
   const slotIndex =
@@ -136,7 +139,7 @@ export function assignSessionToNormalizedExtraPanes(
     next[slotIndex] = assignCompanionSessionToPaneSlot(
       next[slotIndex],
       sessionId,
-      null,
+      repositoryId ?? null,
       primaryPaneRuntime,
     );
   }

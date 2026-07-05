@@ -48,6 +48,7 @@ import { MultiPaneOffscreenRunningPane } from "./MultiPaneOffscreenRunningPane";
 import { runPaneCreateTask } from "./paneCreateLoading";
 import type { RefreshHistorySessionsScope } from "./ClaudeChat";
 import type { PaneAuxLayout, ResolvePaneAuxLayout } from "./paneAuxLayout";
+import { Topbar, type PaneTopbarSharedProps } from "./Topbar";
 
 const TWO_PANE_MIN_WIDTH_PX = MAIN_LAYOUT_MULTI_PANE_MIN_WIDTH_PX;
 
@@ -60,6 +61,26 @@ interface PaneRepoTreeNode {
   projectRootPath?: string;
   repositoryId?: number;
   children?: PaneRepoTreeNode[];
+}
+
+/** 为 extra pane 仓库解析其所属 project：优先与主会话一致的 preferred project，
+ *  否则取第一个包含该仓库的 project。使顶栏 project scope 快捷操作在 extra pane
+ *  也能正确加载（与 primary pane 行为一致）。 */
+function resolveProjectForRepository(
+  projects: ReadonlyArray<ProjectItem>,
+  repositoryId: number | null | undefined,
+  preferred: ProjectItem | null | undefined,
+): ProjectItem | null {
+  if (repositoryId == null) return preferred ?? null;
+  if (preferred && preferred.repositoryIds.includes(repositoryId)) {
+    return preferred;
+  }
+  for (const project of projects) {
+    if (project.repositoryIds.includes(repositoryId)) {
+      return project;
+    }
+  }
+  return null;
 }
 
 function IconNewSession() {
@@ -209,6 +230,10 @@ export interface MultiPaneSharedChatProps {
     paneIndex: number,
     patch: Partial<import("../../types/paneRuntimeOverride").PaneRuntimeOverride>,
   ) => void;
+  /** 多屏下每个 pane 顶栏共享的回调与状态（窗口级 + 会话级 + per-pane 搜索入口）。
+   *  primary pane 展开后补全主会话仓库；extra pane 展开后将窗口级回调置 undefined。
+   *  可选：非多屏路径（如仓库侧会话面板复用本类型）不提供，ClaudeMultiPaneGrid 渲染时判空。 */
+  paneTopbarShared?: PaneTopbarSharedProps;
 }
 
 interface MultiPanePrimaryPaneProps {
@@ -252,6 +277,18 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
 
   return (
     <div className="app-claude-sessions__pane">
+      {shared.paneTopbarShared ? (
+        <Topbar
+          {...shared.paneTopbarShared}
+          activeRepository={activeRepository}
+          activeSessionRepositoryPath={session.repositoryPath?.trim() || activeRepository.path}
+          repositories={shared.repositories}
+          activeProject={shared.activeProject ?? null}
+          activeWorkspaceFocus={shared.activeWorkspaceFocus ?? "repository"}
+          mainSessionForDataLink={session}
+          onSearch={() => shared.paneTopbarShared?.onSearchForRepository?.(activeRepository.path)}
+        />
+      ) : null}
       <ClaudeSessionChatWithDock
         key={sessionId}
         session={session}
@@ -456,6 +493,13 @@ const MultiPaneExtraPaneCell = memo(
       [paneCount],
     );
 
+    // extra pane 顶栏 project scope 快捷操作需要该仓库所属 project；优先与主会话一致
+    // 的 shared.activeProject（若该仓为其成员），否则取第一个包含该仓库的 project。
+    const paneProject = useMemo(
+      () => resolveProjectForRepository(projects, resolvedRepo?.id, shared.activeProject ?? null),
+      [projects, resolvedRepo?.id, shared.activeProject],
+    );
+
     const dualPaneRepositoryPicker = useMemo(() => {
       if (!paneSession || !onPaneRepositorySelect || !resolvedRepo) return undefined;
       const sessionPath = (paneSession.repositoryPath ?? "").trim();
@@ -521,6 +565,26 @@ const MultiPaneExtraPaneCell = memo(
       }
       return (
         <div ref={lazyEnabled ? setPaneDivRef : undefined} className="app-claude-sessions__pane">
+          {shared.paneTopbarShared ? (
+            <Topbar
+              {...shared.paneTopbarShared}
+              // extra pane 不渲染窗口级按钮（侧栏 / 内置终端 / 多屏切换 / 右侧面板 / RemoteEntry）：
+              // 把窗口级回调显式置 undefined，Topbar 内 `onXxx && (...)` 判定为假即不渲染。
+              onToggleSidebar={undefined}
+              onToggleTerminal={undefined}
+              onChangePaneCount={undefined}
+              onToggleRightPanel={undefined}
+              onSetRightPanelDefaultCollapsed={undefined}
+              onOpenRemoteChannels={undefined}
+              activeRepository={resolvedRepo}
+              activeSessionRepositoryPath={paneSession.repositoryPath?.trim() || resolvedRepo?.path}
+              repositories={shared.repositories}
+              activeProject={paneProject}
+              activeWorkspaceFocus="repository"
+              mainSessionForDataLink={paneSession}
+              onSearch={() => shared.paneTopbarShared?.onSearchForRepository?.(resolvedRepo?.path ?? "")}
+            />
+          ) : null}
           <ClaudeSessionChatWithDock
             key={sessionId}
             session={paneSession}

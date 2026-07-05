@@ -204,6 +204,29 @@ export interface TopbarProps {
   onOpenRemoteChannels?: () => void;
 }
 
+/**
+ * 多屏下每个 pane 顶栏共享的字段：窗口级回调 + 会话级回调 + 全局状态 + per-pane 搜索入口。
+ * per-pane 的 `activeRepository` / `activeSessionRepositoryPath` / `mainSessionForDataLink` /
+ * `repositories` / `activeProject` / `activeWorkspaceFocus` 由各 pane 渲染处单独传入
+ * （primary 用主会话仓库；extra 用 `resolvedRepo` 与 `paneSession`）。
+ *
+ * - primary pane：直接展开 shared 字段并补全 per-pane 字段，窗口级按钮正常渲染。
+ * - extra pane：展开后将窗口级回调（onToggleSidebar / onToggleTerminal / onChangePaneCount /
+ *   onToggleRightPanel / onOpenRemoteChannels）显式置 undefined，使 Topbar 只渲染仓库级按钮。
+ */
+export type PaneTopbarSharedProps = Omit<
+  TopbarProps,
+  | "activeRepository"
+  | "activeSessionRepositoryPath"
+  | "repositories"
+  | "activeProject"
+  | "activeWorkspaceFocus"
+  | "mainSessionForDataLink"
+> & {
+  /** 按指定仓库路径打开搜索面板（per-pane 搜索按钮，作用于该 pane 仓库）。 */
+  onSearchForRepository?: (repositoryPath: string) => void;
+};
+
 export const Topbar = memo(function Topbar({
   activeProject,
   activeWorkspaceFocus = "repository",

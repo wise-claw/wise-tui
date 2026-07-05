@@ -72,7 +72,7 @@ export function WorkspaceQuickActionsPanel({
       if (existingId && !source.some((row) => row.id === existingId)) {
         source = quickActions.displayItems
           .filter((row) => row.scope === scope)
-          .map(({ scope: _scope, ...row }) => row);
+          .map(({ scope: _scope, scopeId: _scopeId, ...row }) => row);
       }
       const next = [...source];
       const index = existingId ? next.findIndex((row) => row.id === existingId) : -1;
@@ -117,7 +117,7 @@ export function WorkspaceQuickActionsPanel({
           if (next.length === source.length) {
             const fallbackSource = quickActions.displayItems
               .filter((row) => row.scope === item.scope)
-              .map(({ scope: _scope, ...row }) => row);
+              .map(({ scope: _scope, scopeId: _scopeId, ...row }) => row);
             next = fallbackSource.filter((row) => row.id !== item.id);
             if (next.length === fallbackSource.length) {
               message.error("未找到要删除的快捷操作");
@@ -246,8 +246,7 @@ export function WorkspaceQuickActionsPanel({
         ) : (
           <ul className="app-workspace-quick-actions-panel__list">
             {quickActions.displayItems.map((item) => {
-              const itemScopeId =
-                item.scope === "project" ? projectId : repositoryId != null ? String(repositoryId) : null;
+              const itemScopeId = item.scopeId;
               return (
               <li key={`${item.scope}:${item.id}`} className="app-workspace-quick-actions-panel__row">
                 <button

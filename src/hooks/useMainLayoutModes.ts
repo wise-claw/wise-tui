@@ -319,10 +319,10 @@ export function useMainLayoutModes({
 
   /** 单屏下为首个额外窗格写入 session 并切到双屏（复用 handleChangePaneCount 与 in-flight 锁）。 */
   const promoteToDualPaneWithSession = useCallback(
-    async (sessionId: string): Promise<boolean> => {
+    async (sessionId: string, repositoryId?: number | null): Promise<boolean> => {
       setExtraPanes(() => {
         const slot = createPaneSlot();
-        return [bindCompanionSessionToSlot(slot, sessionId, null)];
+        return [bindCompanionSessionToSlot(slot, sessionId, repositoryId ?? null)];
       });
       return handleChangePaneCount(2);
     },
@@ -532,7 +532,7 @@ export function useMainLayoutModes({
 
         // 若当前是单屏，先切到双屏
         if (paneCountRef.current === 1) {
-          await promoteToDualPaneWithSession(id);
+          await promoteToDualPaneWithSession(id, repository.id);
         } else {
           if (isSessionBoundInPanes(id, activeSessionIdLatestRef.current, extraPanesLatestRef.current, slotIndex)) {
             message.warning("该会话已在其它窗格中打开");
@@ -541,9 +541,10 @@ export function useMainLayoutModes({
           setExtraPanes((prev) => {
             const next = [...prev];
             if (next[slotIndex]) {
+              const repoIdForSlot = activeRepository?.id === repository.id ? null : repository.id;
               next[slotIndex] = isReplace
-                ? rebindPaneSlotPreservingRuntime(next[slotIndex], id, null)
-                : bindCompanionSessionToSlot(next[slotIndex], id, null);
+                ? rebindPaneSlotPreservingRuntime(next[slotIndex], id, repoIdForSlot)
+                : bindCompanionSessionToSlot(next[slotIndex], id, repoIdForSlot);
             }
             return next;
           });
@@ -554,6 +555,7 @@ export function useMainLayoutModes({
       }
     },
     [
+      activeRepository?.id,
       bindCompanionSessionToSlot,
       createSession,
       inheritMainSessionModel,
@@ -571,7 +573,11 @@ export function useMainLayoutModes({
         message.warning("仓库路径为空");
         return;
       }
-      setActiveRepositoryId(repository.id);
+      // 多屏下不切全局 active：各 pane 自管仓库，避免第二屏新开会话污染 primary pane /
+      // 左栏 / 文件树。单屏仍保留"新开会话切到该仓库"语义。
+      if (paneCountRef.current === 1) {
+        setActiveRepositoryId(repository.id);
+      }
       try {
         const sessionId = await createSession(path, repositorySessionTabDisplayName(repository), {
           skipActivate: true,
@@ -579,7 +585,7 @@ export function useMainLayoutModes({
         inheritMainSessionModel(sessionId);
 
         if (paneCountRef.current === 1) {
-          await promoteToDualPaneWithSession(sessionId);
+          await promoteToDualPaneWithSession(sessionId, repository.id);
           return;
         }
 
@@ -608,6 +614,7 @@ export function useMainLayoutModes({
             createPaneSlot,
             plan.slotIndex,
             primaryPaneRuntimeOverrideLatestRef.current,
+            repository.id,
           ),
         );
       } catch (error) {
@@ -631,7 +638,8 @@ export function useMainLayoutModes({
       const anchorRepo = project.repositoryIds
         .map((repositoryId) => repositories.find((item) => item.id === repositoryId))
         .find((item): item is Repository => Boolean(item));
-      if (anchorRepo) {
+      // 多屏下不切全局 active：避免工作区新窗格污染 primary pane / 左栏 / 文件树。
+      if (anchorRepo && paneCountRef.current === 1) {
         setActiveRepositoryId(anchorRepo.id);
       }
       const plan = planNextPaneSlotPlacement({

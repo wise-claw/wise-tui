@@ -393,6 +393,9 @@ export default function App() {
   }, [rightInspectorTerminalVisible]);
   /** 中栏多屏模式屏数：1=单屏（关闭），2/4/6/8=多屏。 */
   const [paneCount, setPaneCount] = useState<PaneCount>(1);
+  /** paneCount 的 ref：供 openRepositoryFileByEvent 等回调在多屏下避免污染全局 active。 */
+  const paneCountRef = useRef(paneCount);
+  paneCountRef.current = paneCount;
   /** 多屏模式下额外窗格槽位（Pane 0 始终是 activeSession）。 */
   const [extraPanes, setExtraPanes] = useState<PaneSlot[]>([]);
   /** 主窗格（Pane 0）运行时覆盖：执行引擎 / Claude 代理路由。 */
@@ -410,6 +413,16 @@ export default function App() {
    */
   const [searchInitialScopeDir, setSearchInitialScopeDir] = useState<string | undefined>(undefined);
   const [searchMode, setSearchMode] = useState<CommandPaletteSearchMode>("filename");
+  /**
+   * 搜索面板的仓库路径 override：多屏下 per-pane 搜索按钮作用于该 pane 仓库，
+   * 而非全局 activeRepository。undefined 时回退到 activeRepository?.path（单屏行为不变）。
+   * 注：UI 侧状态，onClose 时清空；多屏文件路由不依赖它（改信任 repositoryFileOpenRequest）。
+   */
+  const [searchRepositoryPathOverride, setSearchRepositoryPathOverride] = useState<
+    string | undefined
+  >(undefined);
+  const searchRepositoryPathOverrideRef = useRef<string | undefined>(undefined);
+  searchRepositoryPathOverrideRef.current = searchRepositoryPathOverride;
   /** 右侧 Inspector 历史会话消息抽屉（由中栏「历史会话」列表打开；默认收起右栏时不强制展开） */
   const [inspectorHistorySessionId, setInspectorHistorySessionId] = useState<string | null>(null);
 
@@ -1690,7 +1703,11 @@ export default function App() {
       message.warning("未找到代码锚点对应的仓库");
       return;
     }
-    setActiveRepositoryWithOwner(repo.id);
+    // 多屏下不切全局 active：各 pane 自管仓库，避免第二屏打开文件污染 primary pane / 左栏 / 文件树。
+    // 单屏仍保留"打开文件时切到该仓库"语义。文件路由由 repositoryFileOpenRequest + fileRootPath 处理。
+    if (paneCountRef.current === 1) {
+      setActiveRepositoryWithOwner(repo.id);
+    }
     setRepositoryFileOpenRequest({
       repositoryId: repo.id,
       repositoryPath: repo.path,
@@ -3215,11 +3232,23 @@ export default function App() {
     setWorkflowTemplates(templates);
   }
 
-  const openFilenameSearchPalette = useCallback((scopeDir?: string) => {
-    setSearchMode("filename");
-    setSearchInitialScopeDir(scopeDir);
-    setSearchOpen(true);
-  }, []);
+  const openFilenameSearchPalette = useCallback(
+    (scopeDir?: string, repositoryPathOverride?: string) => {
+      setSearchMode("filename");
+      setSearchInitialScopeDir(scopeDir);
+      setSearchRepositoryPathOverride(repositoryPathOverride);
+      setSearchOpen(true);
+    },
+    [],
+  );
+  /** 多屏 per-pane 搜索按钮：作用于指定 pane 仓库（整个仓库，scopeDir=undefined），仓库路径作为 override。 */
+  const openFilenameSearchPaletteForRepository = useCallback(
+    (repositoryPath: string) => {
+      const trimmed = repositoryPath.trim();
+      openFilenameSearchPalette(undefined, trimmed || undefined);
+    },
+    [openFilenameSearchPalette],
+  );
 
   const openContentSearchPalette = useCallback((scopeDir?: string) => {
     setSearchMode("content");
@@ -4043,6 +4072,7 @@ export default function App() {
         onCollapseTerminal: handleCollapseTerminal,
         onCloseTerminalPanel: handleCloseTerminalPanel,
         onSearch: openFilenameSearchPalette,
+        onSearchForRepository: openFilenameSearchPaletteForRepository,
         collapsed,
         rightCollapsed: effectiveRightCollapsed,
         terminalCollapsed,
@@ -4187,16 +4217,24 @@ export default function App() {
       onClearCockpitInitialAssistant={() => setCockpitSurfaceInitialAssistantId(null)}
       commandPaletteProps={{
         open: searchOpen,
-        onClose: () => setSearchOpen(false),
-        repositoryPath: activeRepository?.path,
+        onClose: () => {
+          setSearchOpen(false);
+          setSearchRepositoryPathOverride(undefined);
+        },
+        repositoryPath: searchRepositoryPathOverride ?? activeRepository?.path,
         searchMode,
         initialScopeDir: searchInitialScopeDir,
         onSearchModeChange: setSearchMode,
         onOpenInApp: (relativePath, options) => {
-          if (!activeRepository) return;
+          // 多屏 per-pane 搜索时用 override 仓库；ref 取值避免 onClose 同周期清空后 closure 过期。
+          const overridePath = searchRepositoryPathOverrideRef.current;
+          const targetRepo = overridePath
+            ? repositories.find((r) => r.path === overridePath) ?? activeRepository
+            : activeRepository;
+          if (!targetRepo) return;
           openRepositoryFileByEvent({
-            repositoryId: activeRepository.id,
-            repositoryPath: activeRepository.path,
+            repositoryId: targetRepo.id,
+            repositoryPath: targetRepo.path,
             relativePath,
             line: options?.line ?? null,
           });

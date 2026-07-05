@@ -19,6 +19,7 @@ import type { WorkspaceMode, WorkspaceFocus } from "../../utils/workspaceMode";
 import { shouldKeepProjectFocusWhenSwitchingSession } from "../../utils/workspaceSelectionState";
 import { type PaneCount, type PaneSlot } from "../../constants/mainLayoutWidths";
 import type { MultiPaneSharedChatProps, PaneRepoTreeNode } from "./ClaudeMultiPaneGrid";
+import type { PaneTopbarSharedProps } from "./Topbar";
 import { runPaneCreateTask } from "./paneCreateLoading";
 import { prefetchNewSessionSurface } from "./prefetchNewSessionSurface";
 import { WorkspaceViewportLoading } from "../WorkspaceViewportLoading";
@@ -176,6 +177,12 @@ export interface ClaudeSessionsChatHostProps {
   hideMessages?: boolean;
   hideSessionTools?: boolean;
   resolvePaneAuxLayout?: ResolvePaneAuxLayout;
+  /**
+   * 多屏辅助面板布局版本号。comparator 会跳过函数 prop（`resolvePaneAuxLayout`），
+   * 仅靠它无法触发重渲；这里用 number 显式驱动：版本号变化即重渲，让本组件把新的
+   * `resolvePaneAuxLayout`（已读到最新 bridge 元素）透传给 `ClaudeMultiPaneGrid`。
+   */
+  centerAuxPanelsNodeByPaneVersion?: number;
   resolveTaskListOmcInvokeConcurrency?: (session: ClaudeSession) => {
     concurrencyScopeKey: string;
     concurrencyLimit: number;
@@ -205,6 +212,8 @@ export interface ClaudeSessionsChatHostProps {
   paneRepoTreeData: PaneRepoTreeNode[];
   projectsById: Map<string, ProjectItem>;
   mainSessionForDataLink: ClaudeSession | null;
+  /** 多屏下每个 pane 顶栏共享的回调与状态，透传到 ClaudeMultiPaneGrid 各 pane 顶栏。 */
+  paneTopbarShared?: PaneTopbarSharedProps;
 }
 
 /** 聊天区壳层：不订阅 live；消息列表由 `ClaudeChatMessagesLiveHost` 独立更新。 */
@@ -295,6 +304,7 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
   paneRepoTreeData,
   projectsById,
   mainSessionForDataLink: _mainSessionForDataLink,
+  paneTopbarShared,
 }: ClaudeSessionsChatHostProps) {
   const sessionById = useMemo(() => {
     const map = new Map<string, ClaudeSession>();
@@ -319,8 +329,8 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
         return repoList.find((r) => r.id === slot.repositoryId) ?? null;
       }
       // 2. slot 已占会话：从会话本身解析仓库，避免跟随左栏 global active 切换。
-      //    新建 pane session 时 assignSessionToNormalizedExtraPanes 写入 repositoryId=null，
-      //    旧实现此处回退到 chatContextRepository，导致左栏点仓库把所有已占 pane 的展示仓库一并切换。
+      //    新建 pane session 时 assignSessionToNormalizedExtraPanes 会写入 repositoryId，
+      //    通常走步骤 1 命中；此处作为 session 已存在但 repositoryId 尚未持久化的兜底。
       if (slot.sessionId) {
         const paneSession = sessionById.get(slot.sessionId);
         if (paneSession) {
@@ -572,6 +582,7 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
     paneCount,
     primaryPaneRuntimeOverride,
     onUpdatePaneRuntimeOverride,
+    paneTopbarShared,
   });
 
   useEffect(() => {

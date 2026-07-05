@@ -168,8 +168,15 @@ export function releaseWorkspaceQuickActionsScope(
   if (!entry) return;
   entry.consumers = Math.max(0, entry.consumers - 1);
   if (entry.consumers > 0) return;
-  const snapshot = [...entry.items];
-  void flushWorkspaceQuickActionsPersist(scope, scopeId, snapshot);
+  // 仅在 load 已完成时才用内存快照 flush：load 未完成时 entry.items 是初始空数组，
+  // flush 会用空数组覆盖 DB（DELETE 已有数据）。多屏下 Topbar 的 strip 因
+  // activeProject/paneProject 变化频繁 retain/release，release 时 load 往往还没完成，
+  // 会反复用空数组清空 DB —— 这正是「添加后内存有、刷新后 DB 空」的根因。
+  // load 未完成时直接丢弃 entry，不触发 flush。
+  if (entry.loaded) {
+    const snapshot = [...entry.items];
+    void flushWorkspaceQuickActionsPersist(scope, scopeId, snapshot);
+  }
   loadGenerations.set(key, (loadGenerations.get(key) ?? 0) + 1);
   entries.delete(key);
   loadPromises.delete(key);

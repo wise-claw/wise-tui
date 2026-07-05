@@ -9,6 +9,7 @@ import {
   useMemo,
   useRef,
   useState,
+  useSyncExternalStore,
   type CSSProperties,
   type ComponentProps,
   type ComponentType,
@@ -27,8 +28,14 @@ import type { GitPanelOpenFileOptions } from "./GitPanel";
 import { type ChatInspectorProps, type CockpitInspectorProps } from "./Inspector";
 import { RepositorySessionPanel } from "./Inspector/RepositorySessionPanel";
 import type { MultiPaneSharedChatProps } from "./ClaudeSessions/ClaudeMultiPaneGrid";
-import type { PaneLocalHeaderSharedProps } from "./ClaudeSessions/PaneLocalHeader";
+import type { PaneTopbarSharedProps } from "./ClaudeSessions/Topbar";
 import type { ClaudeSessionsProps as ClaudeSessionsExternalProps } from "./ClaudeSessions";
+import {
+  clearPaneEditorPanelContext,
+  getPaneEditorPanelContextSnapshot,
+  setPaneEditorPanelContext,
+  subscribePaneEditorPanelContext,
+} from "../stores/paneEditorPanelContextStore";
 import { MainLayoutResizeHandle } from "./MainLayoutResizeHandle";
 import type { McpHub } from "./McpHub";
 import type { ProgressMonitorDrawer } from "./ProgressMonitorDrawer";
@@ -75,19 +82,11 @@ const topbarChunk = import("./ClaudeSessions/Topbar");
 const LazyLeftSidebar = lazy(() =>
   leftSidebarChunk.then((module) => ({ default: module.LeftSidebar })),
 );
-// 直接为 lazy 标注 props，让 `ComponentProps<typeof LazyClaudeSessions>` 能反推完整 props（含 paneHeaderSharedProps）。
+// 直接为 lazy 标注 props，让 `ComponentProps<typeof LazyClaudeSessions>` 能反推完整 props（含 paneTopbarShared）。
 const LazyClaudeSessions = lazy<ComponentType<ClaudeSessionsExternalProps>>(() =>
   claudeSessionsChunk.then((module) => ({ default: module.ClaudeSessions })),
 );
 const LazyTopbar = lazy(() => topbarChunk.then((module) => ({ default: module.Topbar })));
-// 1 屏下把 PaneLocalButtons（运行 / 外部终端 / OpenAppMenu / FCC / 多屏切换）并入顶部 Topbar 右侧。
-// 右栏折叠按钮单独提取为 RightPanelToggleButton，放在 Topbar 右侧最末（内置终端 / 多屏切换之后）。
-const LazyPaneLocalButtons = lazy(() =>
-  import("./ClaudeSessions/PaneLocalHeader").then((module) => ({ default: module.PaneLocalButtons })),
-);
-const LazyRightPanelToggleButton = lazy(() =>
-  import("./ClaudeSessions/PaneLocalHeader").then((module) => ({ default: module.RightPanelToggleButton })),
-);
 // 单例 hydrate：AppWorkspaceLayout 一旦进入 import graph 即触发；多 pane 共用同一份内存副本。
 // 多次调用由 `hydrateOpenAppPreference` 内部 `hydrated/hydrating` 守卫去重。
 void hydrateOpenAppPreference();
@@ -142,9 +141,9 @@ const MemoClaudeSessions = memo(LazyClaudeSessions, claudeSessionsShellPropsEqua
 const MemoInspector = memo(Inspector, areInspectorShellPropsEqual);
 
 // shell 层透传：仅在 `ClaudeSessionsExternalProps` 基础上补一个
-// `paneHeaderSharedProps?`，其余三个辅助 prop（panelBelowMessages / hideMessages /
+// `paneTopbarShared?`，其余三个辅助 prop（panelBelowMessages / hideMessages /
 // hideSessionTools）由 ConnectedClaudeSessions 在 JSX 内部覆盖，本类型按原状保留。
-// 注：`paneHeaderSharedProps` 已在 `ClaudeSessionsExternalProps` 中正式声明，此处不再额外扩展，
+// 注：`paneTopbarShared` 已在 `ClaudeSessionsExternalProps` 中正式声明，此处不再额外扩展，
 // 避免出现第二个类型入口与不同步风险。
 type ClaudeSessionsProps = ClaudeSessionsExternalProps;
 type LeftSidebarProps = Omit<
@@ -353,6 +352,13 @@ function PaneEditorHost({
   ]);
 
   // editorVisible 变化时把节点 / null 投到 layout 的 per-pane map。
+  // 关键性能修复：不再把 `panelContextValue` 作为依赖、也不再把含其的 Provider JSX 直接存入 map。
+  // 否则打开一个文件过程中 panelContextValue 变化十几次（加 tab / 设 active / 加载 content /
+  // contentSync / dirty），每次都 bump `centerAuxPanelsNodeByPaneVersion` → 整个 layout +
+  // ConnectedClaudeSessions + MemoClaudeSessions 重渲 → 「第二屏开/关文件超级慢」。
+  // 改存稳定的 `PaneEditorPanelBridge` 元素（只随 editorVisible / dark / paneIndex 变化），
+  // panelContextValue 由下方 effect 写入 per-pane 外部 store，bridge 用 useSyncExternalStore
+  // 订阅并局部重渲，不波及 layout。
   useEffect(() => {
     if (!editorVisible) {
       setCenterAuxPanelsNodeForPane(paneIndex, null);
@@ -360,17 +366,25 @@ function PaneEditorHost({
     }
     setCenterAuxPanelsNodeForPane(
       paneIndex,
-      <RepositoryFileEditorPanelContext.Provider value={panelContextValue}>
-        <RepositoryFileEditorVisibilityContext.Provider value={true}>
-          <ConnectedRepositoryFileEditorPanel dark={dark} />
-        </RepositoryFileEditorVisibilityContext.Provider>
-      </RepositoryFileEditorPanelContext.Provider>,
+      <PaneEditorPanelBridge paneIndex={paneIndex} dark={dark} />,
     );
     return () => {
       setCenterAuxPanelsNodeForPane(paneIndex, null);
     };
-    // panelContextValue 在 editorVisible 变化时已重新计算；只依赖 editorVisible / dark 即可。
-  }, [editorVisible, dark, paneIndex, setCenterAuxPanelsNodeForPane, panelContextValue]);
+  }, [editorVisible, dark, paneIndex, setCenterAuxPanelsNodeForPane]);
+
+  // 把最新 panelContextValue 写入 per-pane 外部 store。bridge 订阅本 store 局部重渲，
+  // 避免 panelContextValue 频繁变化时 bump layout version。
+  useEffect(() => {
+    setPaneEditorPanelContext(paneIndex, panelContextValue);
+  }, [paneIndex, panelContextValue]);
+
+  // host 卸载时清掉本 pane 的 context 值，避免 bridge 读到陈旧引用。
+  useEffect(() => {
+    return () => {
+      clearPaneEditorPanelContext(paneIndex);
+    };
+  }, [paneIndex]);
 
   // binary preview modal：把本 host 的 `repositoryBinaryPreview` + 关闭句柄上抛到 layout。
   // layout 内的 `ConnectedRepositoryFilePreviewModal` 读这个 ref 渲染单例 modal。
@@ -476,6 +490,7 @@ const ConnectedClaudeSessions = memo(function ConnectedClaudeSessions({
   claudeSessionsProps,
   mainLayoutContentRef,
   centerAuxPanelsNodeByPane,
+  centerAuxPanelsNodeByPaneVersion,
 }: ConnectedClaudeSessionsProps) {
   const resolvePaneAuxLayout = useCallback(
     (paneIndex: number): PaneAuxLayout => {
@@ -502,6 +517,7 @@ const ConnectedClaudeSessions = memo(function ConnectedClaudeSessions({
         hideSessionTools={primaryAux.hideSessionTools}
         panelBelowMessages={primaryAux.panelBelowMessages}
         resolvePaneAuxLayout={resolvePaneAuxLayout}
+        centerAuxPanelsNodeByPaneVersion={centerAuxPanelsNodeByPaneVersion}
         hideTopbar={true}
       />
     </Layout.Content>
@@ -573,6 +589,43 @@ const ConnectedRepositoryFileEditorPanel = memo(function ConnectedRepositoryFile
         onNavigateToFile={openFile}
       />
     </Suspense>
+  );
+});
+
+/**
+ * per-pane 文件编辑器面板的"桥接"渲染单元。`PaneEditorHost` 在 `editorVisible` 变化时把本组件
+ * 作为稳定元素存入 `centerAuxPanelsNodeByPane`（layout 只在 visibility 变化时 bump version）；
+ * 面板真正消费的 `panelContextValue`（tabs / activePath / dirty / contentSync 派生）由 host
+ * 写入 per-pane 外部 store，本组件用 `useSyncExternalStore` 订阅，变化时**局部重渲**，
+ * 不触发 `AppWorkspaceLayout` 重渲。这是修复「第二屏开/关文件超级慢」的关键：打开一个文件过程中
+ * panelContextValue 变化十几次，原先每次都 bump layout version 全局重渲，现在只重渲本 bridge。
+ */
+const PaneEditorPanelBridge = memo(function PaneEditorPanelBridge({
+  paneIndex,
+  dark,
+}: {
+  paneIndex: number;
+  dark: boolean;
+}) {
+  const subscribe = useCallback(
+    (listener: () => void) => subscribePaneEditorPanelContext(paneIndex, listener),
+    [paneIndex],
+  );
+  const getSnapshot = useCallback(
+    () => getPaneEditorPanelContextSnapshot(paneIndex),
+    [paneIndex],
+  );
+  const value = useSyncExternalStore(
+    subscribe,
+    getSnapshot,
+  ) as RepositoryFileEditorPanelContextValue | null;
+  if (!value) return null;
+  return (
+    <RepositoryFileEditorPanelContext.Provider value={value}>
+      <RepositoryFileEditorVisibilityContext.Provider value={true}>
+        <ConnectedRepositoryFileEditorPanel dark={dark} />
+      </RepositoryFileEditorVisibilityContext.Provider>
+    </RepositoryFileEditorPanelContext.Provider>
   );
 });
 
@@ -786,69 +839,9 @@ export function AppWorkspaceLayout({
     [mainSessionForDataLink?.id],
   );
 
-  // 1 屏下把 PaneLocalButtons（运行 / 外部终端 / OpenAppMenu / FCC / 多屏切换 / 右栏）整体并入
-  // 顶部 Topbar 右侧；多屏时各 pane 自管，slot 为 null（Topbar 改渲染多屏切换按钮）。
-  // 无活动会话时 slot 为 null，Topbar 仍渲染窗口级控件 + 搜索 + 终端 + 多屏切换。
-  // 依赖只用 id / path 标量，避免 `mainSessionForDataLink` / `activeRepository` 引用漂移触发 slot 重算。
-  const paneLocalButtonsSlot = useMemo(() => {
-    if ((claudeSessionsProps.paneCount ?? 1) !== 1) return null;
-    const session = mainSessionForDataLink;
-    if (!session) return null;
-    const repository = claudeSessionsProps.activeRepository;
-    const repositoryPath =
-      repository?.path?.trim() || session.repositoryPath?.trim() || "";
-    return (
-      <Suspense fallback={null}>
-        <LazyPaneLocalButtons
-          session={session}
-          repository={repository}
-          repositoryPath={repositoryPath}
-          paneCount={claudeSessionsProps.paneCount ?? 1}
-          inTopbarContext
-          onAutoFixRunError={claudeSessionsPropsRef.current.onAutoFixRunError}
-          paneChangeInFlight={claudeSessionsPropsRef.current.paneChangeInFlight}
-          onChangePaneCount={claudeSessionsPropsRef.current.onChangePaneCount}
-          mainSessionForDataLink={mainSessionForDataLink}
-          onSessionInsightsAiAnalysis={onSessionInsightsAiAnalysis}
-          onDispatchSessionFeedbackLoop={claudeSessionsPropsRef.current.onDispatchSessionFeedbackLoop}
-          getClaudeSessions={getClaudeSessionsForTopbar}
-        />
-      </Suspense>
-    );
-  }, [
-    claudeSessionsProps.paneCount,
-    claudeSessionsProps.paneChangeInFlight,
-    mainSessionForDataLink?.id,
-    claudeSessionsProps.activeRepository?.path,
-    onSessionInsightsAiAnalysis,
-    getClaudeSessionsForTopbar,
-  ]);
-
-  // 1 屏下右栏折叠/展开按钮单独放到 Topbar 最右；多屏或无活动会话时为 null（各 pane 自管）。
-  const rightPanelToggleSlot = useMemo(() => {
-    if ((claudeSessionsProps.paneCount ?? 1) !== 1) return null;
-    if (!mainSessionForDataLink) return null;
-    return (
-      <Suspense fallback={null}>
-        <LazyRightPanelToggleButton
-          rightCollapsed={claudeSessionsProps.rightCollapsed}
-          onToggleRightPanel={claudeSessionsPropsRef.current.onToggleRightPanel}
-          rightPanelDefaultCollapsed={claudeSessionsProps.rightPanelDefaultCollapsed}
-          onSetRightPanelDefaultCollapsed={claudeSessionsPropsRef.current.onSetRightPanelDefaultCollapsed}
-        />
-      </Suspense>
-    );
-  }, [
-    claudeSessionsProps.paneCount,
-    mainSessionForDataLink?.id,
-    claudeSessionsProps.rightCollapsed,
-    claudeSessionsProps.rightPanelDefaultCollapsed,
-  ]);
-
   // 1 屏下顶部 Topbar 的 props（跨整宽，覆盖中栏 + 右栏）。多屏（paneCount>1）不再渲染
-  // 单独的全局 Topbar 行，由各 pane 的 PaneLocalHeader 自管（窗口级控件只在 primary pane）。
-  // 仅注入 TopbarProps 实际消费字段；多出的 `paneHeaderSharedProps` 字段不再下放到 Topbar，
-  // 由 `ClaudeSessions` 通过 `claudeSessionsProps.paneHeaderSharedProps` 单独注入。
+  // 全局 Topbar，由 `ClaudeMultiPaneGrid` 每个 pane 内部的 `<Topbar>` 自管
+  // （窗口级控件只在 primary pane；仓库级按钮每个 pane 都有，作用于各自仓库）。
   const topbarProps = useMemo(
     () => ({
       activeProject: claudeSessionsProps.activeProject,
@@ -865,8 +858,6 @@ export function AppWorkspaceLayout({
       paneChangeInFlight: claudeSessionsProps.paneChangeInFlight,
       onChangePaneCount: claudeSessionsPropsRef.current.onChangePaneCount,
       onOpenRemoteChannels,
-      paneLocalButtonsSlot,
-      rightPanelToggleSlot,
     }),
     [
       claudeSessionsProps.activeProject,
@@ -879,22 +870,20 @@ export function AppWorkspaceLayout({
       claudeSessionsProps.paneCount,
       claudeSessionsProps.paneChangeInFlight,
       onOpenRemoteChannels,
-      paneLocalButtonsSlot,
-      rightPanelToggleSlot,
     ],
   );
 
-  /** 多屏时每个 pane 自己 header 共用的回调聚合；下沉到 `ClaudeMultiPaneGrid` 经
-   *  `MultiPaneSharedChatProps` 派发到每个 `<PaneLocalHeader />`。补全全局顶栏字段，
-   *  使 primary pane 的 PaneLocalHeader 能渲染窗口级控件（侧栏 / 终端 / RemoteEntry / WorkspaceQuickActions）。
-   *  此处是 `paneHeaderSharedProps` 的**唯一组装点**——`ClaudeSessions` 不再二次封装，
-   *  避免 `ConnectedClaudeSessions` 必重渲。 */
-  const paneHeaderSharedProps = useMemo<PaneLocalHeaderSharedProps>(
+  /** 多屏时每个 pane 顶栏共用的回调与状态聚合；下沉到 `ClaudeMultiPaneGrid` 经
+   *  `MultiPaneSharedChatProps.paneTopbarShared` 派发到每个 pane 的 `<Topbar>`。
+   *  primary pane 展开后补全主会话仓库（含窗口级按钮）；extra pane 展开后将窗口级回调
+   *  置 undefined（只渲染仓库级按钮，作用于各自仓库）。此处是 `paneTopbarShared` 的唯一组装点，
+   *  单源 `useMemo` 引用稳定，避免 `ConnectedClaudeSessions` 必重渲。 */
+  const paneTopbarShared = useMemo<PaneTopbarSharedProps>(
     () => ({
       onAutoFixRunError: claudeSessionsPropsRef.current.onAutoFixRunError,
+      paneCount: claudeSessionsProps.paneCount ?? 1,
       paneChangeInFlight: claudeSessionsPropsRef.current.paneChangeInFlight,
       onChangePaneCount: claudeSessionsPropsRef.current.onChangePaneCount,
-      mainSessionForDataLink,
       onSessionInsightsAiAnalysis,
       onDispatchSessionFeedbackLoop: claudeSessionsPropsRef.current.onDispatchSessionFeedbackLoop,
       getClaudeSessions: getClaudeSessionsForTopbar,
@@ -905,16 +894,15 @@ export function AppWorkspaceLayout({
       onToggleSidebar: claudeSessionsPropsRef.current.onToggleSidebar,
       onToggleTerminal: claudeSessionsPropsRef.current.onToggleTerminal,
       onSearch: claudeSessionsPropsRef.current.onSearch,
+      onSearchForRepository: claudeSessionsPropsRef.current.onSearchForRepository,
       collapsed: claudeSessionsProps.collapsed,
       fileTreeRailOpen: showWorkspaceFileTreeRail,
       terminalCollapsed: claudeSessionsProps.terminalCollapsed,
       terminalPanelMounted: claudeSessionsProps.terminalPanelMounted,
       onOpenRemoteChannels,
-      activeProject: claudeSessionsProps.activeProject,
-      activeWorkspaceFocus: claudeSessionsProps.activeWorkspaceFocus,
     }),
     [
-      mainSessionForDataLink,
+      claudeSessionsProps.paneCount,
       claudeSessionsProps.paneChangeInFlight,
       onSessionInsightsAiAnalysis,
       claudeSessionsProps.rightCollapsed,
@@ -923,20 +911,18 @@ export function AppWorkspaceLayout({
       showWorkspaceFileTreeRail,
       claudeSessionsProps.terminalCollapsed,
       claudeSessionsProps.terminalPanelMounted,
-      claudeSessionsProps.activeProject,
-      claudeSessionsProps.activeWorkspaceFocus,
       onOpenRemoteChannels,
     ],
   );
 
-  /** 透传给 `<MemoClaudeSessions>` 的 props：原 `claudeSessionsProps` 与 `paneHeaderSharedProps` 合并。
-   *  合并后 `ClaudeSessions` 内部不再二次组装 `paneHeaderSharedProps`，单源 `useMemo` 引用稳定。 */
+  /** 透传给 `<MemoClaudeSessions>` 的 props：原 `claudeSessionsProps` 与 `paneTopbarShared` 合并。
+   *  合并后 `ClaudeSessions` 内部不再二次组装 `paneTopbarShared`，单源 `useMemo` 引用稳定。 */
   const claudeSessionsPropsWithHeader = useMemo<ClaudeSessionsProps>(
     () => ({
       ...claudeSessionsProps,
-      paneHeaderSharedProps,
+      paneTopbarShared,
     }),
-    [claudeSessionsProps, paneHeaderSharedProps],
+    [claudeSessionsProps, paneTopbarShared],
   );
 
   const [authorShellMounted, setAuthorShellMounted] = useState(authorMode);
@@ -1149,76 +1135,127 @@ export function AppWorkspaceLayout({
    *  routing useEffect 命中 primary repo 时（matchedPaneIndex=null）会保留 stale
    *  target=1，导致本 dispatcher 把请求错误路由到 pane 1（即 bug 5-3 根因）。 */
   const [fileEditorTargetPaneIndex, setFileEditorTargetPaneIndex] = useState<number | null>(null);
+  /** fileEditorTargetPaneIndex 的 ref：routing 的 setFileEditorTargetPaneIndex 是异步 state，
+   *  但 openRepositoryFileInPaneByRootPath 在同一 useEffect 同步调用，闭包拿到的是旧 target。
+   *  retry 用 ref 读最新 target，确保 host repositoryPath 不匹配时仍能 fallback 到 routing 刚设的 target host。 */
+  const fileEditorTargetPaneIndexRef = useRef<number | null>(null);
+  fileEditorTargetPaneIndexRef.current = fileEditorTargetPaneIndex;
   const [fileTreeOpenInNewPane, setFileTreeOpenInNewPane] = useState(false);
+  /** paneCount 的 ref：供 retry fallback 判断当前是否多屏 —— 多屏下不回退 primary host，
+   *  避免 exactMatch 失败时把第二屏文件错开到第一屏（错屏 + close 按钮不在本屏）。 */
+  const paneCountRef = useRef(claudeSessionsProps.paneCount ?? 1);
+  paneCountRef.current = claudeSessionsProps.paneCount ?? 1;
 
   const openRepositoryFileInPaneByRootPath = useCallback(
-    (relativePath: string, options?: GitPanelOpenFileOptions) => {
+    (relativePath: string, options?: GitPanelOpenFileOptions, targetPaneIndexOverride?: number | null) => {
       const rootPath = options?.fileRootPath?.trim() ?? "";
-      const exactMatch =
-        rootPath
-          ? Array.from(paneEditorApisRef.current.entries()).find(
-              ([, api]) => api.repositoryPath?.trim() === rootPath,
-            )?.[1]
-          : undefined;
-      const targetByTarget =
-        rootPath
-          ? undefined
-          : paneEditorApisRef.current.get(fileEditorTargetPaneIndex ?? 0);
-      const target = exactMatch ?? targetByTarget;
-      if (target) {
-        target.openRepositoryFile(relativePath, options);
+      // 优先 routing 设定的 targetPaneIndex 指向的 host（若 rootPath 匹配，或 rootPath 为空）。
+      // 关键：避免「两 host 同 repo（如 pane 1 空槽 fallback active，或 pane 1 绑了与 primary
+      // 相同的 repo）时，find 按 insertion order 总命中 host[0]」导致第二屏文件错开到第一屏、
+      // 或多屏不 fallback 后第二屏打不开。routing 已按 rootPath 匹配到正确 pane，此处信任它。
+      // 注：routing 的 setFileEditorTargetPaneIndex 是异步 state，本函数同步调用时闭包拿到的
+      // 是旧值；故 routing 通过 `targetPaneIndexOverride` 显式传入刚算出的 matchedPaneIndex。
+      // `undefined` 表示调用者未传（用 ref 最新值）；`null` 表示明确无 target（primary 操作）。
+      const targetIdx =
+        targetPaneIndexOverride !== undefined
+          ? targetPaneIndexOverride
+          : fileEditorTargetPaneIndexRef.current;
+      const targetHost = targetIdx != null ? paneEditorApisRef.current.get(targetIdx) : undefined;
+      // routing 显式指定目标 pane（override 为 number）且 rootPath 非空：直接信任，跳过
+      // host.repositoryPath 校验。原因：host.repositoryPath 派生自 slot/session，可能在
+      // session.repositoryPath 未加载 / slot 兜底到 active 仓库时暂态错误，但 hook 内
+      // `resolveFileRootPath` 优先用 `options.fileRootPath` 加载文件，不依赖 host.repositoryPath。
+      // 若此处校验 host.repositoryPath === rootPath，会因配置暂态错误误判失败 → retry 720ms
+      // →「第二屏打开文件超级慢」。routing 已通过 slot/session/repositoryId 三重匹配锁定目标，
+      // 校验多余。rootPath 为空时不走本快路（fileTreeOpenInNewPane 无 fileRootPath，仍需
+      // host.repositoryPath 对齐才能正确加载）。
+      const routingExplicit = typeof targetPaneIndexOverride === "number";
+      if (routingExplicit && rootPath && targetHost) {
+        targetHost.openRepositoryFile(relativePath, options);
         return;
       }
-      // 精确匹配失败：若 rootPath 非空，先入 pending 队列等目标 host mount 后消费
-      // （`registerPaneEditor` 已处理），避免污染错 pane（pane 0）；不再回退到
-      // primary host 是 bug 5-2 的关键修复。
-      if (rootPath) {
-        pendingFileOpensByRootRef.current.set(rootPath, { relativePath, options });
-        // 同时往 primary host 也入一份「临时」：当多 pane 收紧到单 pane（paneCount
-        // 从 2 变 1）时，原 pane 1 的 host 已 unmount，唯一剩下的 host[0] 的
-        // repositoryPath 仍是 pane 0 repo — 与 rootPath 不匹配，但仍期望该请求不丢。
-        // 此时启动一轮 retry：每 60ms 重试到 pending 队列被某 host 消费或超时 800ms。
-        let attempts = 0;
-        const retry = () => {
-          attempts += 1;
-          const pending = pendingFileOpensByRootRef.current.get(rootPath);
-          if (!pending) return; // 已消费
-          // 第一道：精确匹配（host mount 后会自然命中）。
-          const hit = Array.from(paneEditorApisRef.current.entries()).find(
+      const targetHostMatches =
+        targetHost != null && (rootPath ? targetHost.repositoryPath?.trim() === rootPath : true);
+      if (targetHostMatches) {
+        targetHost.openRepositoryFile(relativePath, options);
+        return;
+      }
+      // exactMatch：rootPath 非空时，find 第一个 repositoryPath 匹配的 host
+      // （典型：primary repo 文件，target 未匹配 extra pane，find 命中 host[0]）。
+      const exactMatch = rootPath
+        ? Array.from(paneEditorApisRef.current.entries()).find(
             ([, api]) => api.repositoryPath?.trim() === rootPath,
-          )?.[1];
-          if (hit) {
-            pendingFileOpensByRootRef.current.delete(rootPath);
-            hit.openRepositoryFile(pending.relativePath, pending.options);
-            return;
-          }
-          // 第二道：放宽到 active repository 作为合理 fallback（仅 rootPath 非空
-          // 且所有 pane 都没注册场景；典型：用户从 2 屏切回 1 屏且请求来自 pane 1）。
-          if (attempts >= 12) {
-            pendingFileOpensByRootRef.current.delete(rootPath);
-            const fallback = paneEditorApisRef.current.get(0);
-            if (fallback) {
-              fallback.openRepositoryFile(pending.relativePath, pending.options);
-              return;
-            }
-            message.warning("请先选择工作区或仓库");
-            return;
-          }
-          window.setTimeout(retry, 60);
-        };
-        window.setTimeout(retry, 60);
+          )?.[1]
+        : undefined;
+      if (exactMatch) {
+        exactMatch.openRepositoryFile(relativePath, options);
         return;
       }
-      // rootPath 为空：使用文件树「文件树新屏打开」路径（`openRepositoryFileWithPreference`
-      // 在 `fileTreeOpenInNewPane` 分支显式 set target 后调用本函数）。
-      const fallback = paneEditorApisRef.current.get(0);
-      if (!fallback) {
+      // rootPath 为空：fallback target host（若存在）或 primary
+      if (!rootPath) {
+        const fallback = targetHost ?? paneEditorApisRef.current.get(0);
+        if (fallback) {
+          fallback.openRepositoryFile(relativePath, options);
+          return;
+        }
         message.warning("请先选择工作区或仓库");
         return;
       }
-      fallback.openRepositoryFile(relativePath, options);
+      // rootPath 非空但无 host 匹配（host 还在 mount 时序晚于 request 的极端窗口）：
+      // 入 pending 队列等目标 host mount 后消费（`registerPaneEditor` 已处理）。
+      pendingFileOpensByRootRef.current.set(rootPath, { relativePath, options });
+      // retry：每 60ms 重试到 pending 被某 host 消费或超时 720ms。
+      let attempts = 0;
+      const retry = () => {
+        attempts += 1;
+        const pending = pendingFileOpensByRootRef.current.get(rootPath);
+        if (!pending) return; // 已消费
+        // 第一道：target host 匹配（host mount 后 repositoryPath 对齐）。
+        const th = targetIdx != null ? paneEditorApisRef.current.get(targetIdx) : undefined;
+        if (th && th.repositoryPath?.trim() === rootPath) {
+          pendingFileOpensByRootRef.current.delete(rootPath);
+          th.openRepositoryFile(pending.relativePath, pending.options);
+          return;
+        }
+        // 第二道：exactMatch（任一 host repositoryPath 匹配）。
+        const hit = Array.from(paneEditorApisRef.current.entries()).find(
+          ([, api]) => api.repositoryPath?.trim() === rootPath,
+        )?.[1];
+        if (hit) {
+          pendingFileOpensByRootRef.current.delete(rootPath);
+          hit.openRepositoryFile(pending.relativePath, pending.options);
+          return;
+        }
+        // 第三道：超时 fallback。单屏（paneCount===1）回退 primary（2→1 屏 host[1] 已 unmount）。
+        // 多屏下回退 target host —— `resolveFileRootPath` 优先 `options.fileRootPath`，
+        // 即使 target host 的 repositoryPath 不匹配，文件仍按 rootPath 加载并写入 target pane，
+        // 避免多屏下"打不开"。target host 也不存在时（target=null，典型 primary 操作）回退 primary。
+        if (attempts >= 12) {
+          pendingFileOpensByRootRef.current.delete(rootPath);
+          if (paneCountRef.current === 1) {
+            const fb = paneEditorApisRef.current.get(0);
+            if (fb) {
+              fb.openRepositoryFile(pending.relativePath, pending.options);
+              return;
+            }
+          } else if (th) {
+            th.openRepositoryFile(pending.relativePath, pending.options);
+            return;
+          } else {
+            const fb = paneEditorApisRef.current.get(0);
+            if (fb) {
+              fb.openRepositoryFile(pending.relativePath, pending.options);
+              return;
+            }
+          }
+          message.warning("未找到目标仓库的编辑器，请重试");
+          return;
+        }
+        window.setTimeout(retry, 60);
+      };
+      window.setTimeout(retry, 60);
     },
-    [fileEditorTargetPaneIndex],
+    [],
   );
 
   useEffect(() => {
@@ -1288,7 +1325,7 @@ export function AppWorkspaceLayout({
             );
             if (expanded === false) {
               setFileEditorTargetPaneIndex(null);
-              openRepositoryFileInPaneByRootPath(relativePath, options);
+              openRepositoryFileInPaneByRootPath(relativePath, options, null);
               return;
             }
             await waitLayoutFrames(1);
@@ -1296,12 +1333,14 @@ export function AppWorkspaceLayout({
         }
 
         setFileEditorTargetPaneIndex(targetPaneIndex);
-        openRepositoryFileInPaneByRootPath(relativePath, options);
+        openRepositoryFileInPaneByRootPath(relativePath, options, targetPaneIndex);
         return;
       }
 
       if (fromFileTree && !fileTreeOpenInNewPane) {
         setFileEditorTargetPaneIndex(null);
+        openRepositoryFileInPaneByRootPath(relativePath, options, null);
+        return;
       }
       openRepositoryFileInPaneByRootPath(relativePath, options);
     },
@@ -1342,6 +1381,9 @@ export function AppWorkspaceLayout({
     // 不动（或保持 null），让 resolvePaneAuxLayout 走 primary pane fallback 分支
     // 渲染（其它 pane 仍可保留消息列表，编辑器沿用前一目标位置）。
     const currentPaneCount = claudeSessionsProps.paneCount ?? 1;
+    // routing 算出的目标 pane：传给 openRepositoryFileInPaneByRootPath 作为 override，
+    // 避免依赖异步 state（setFileEditorTargetPaneIndex 在本 useEffect 同步调用时还未生效）。
+    let routingTargetPaneIndex: number | null = null;
     if (currentPaneCount > 1 && request.repositoryPath) {
       const extraPanes = claudeSessionsProps.extraPanes ?? [];
       const sessions = claudeSessionsProps.sessions ?? [];
@@ -1371,6 +1413,7 @@ export function AppWorkspaceLayout({
       }
       if (matchedPaneIndex != null) {
         setFileEditorTargetPaneIndex(matchedPaneIndex);
+        routingTargetPaneIndex = matchedPaneIndex;
       }
       // 未匹配：保持 fileEditorTargetPaneIndex 现状（可能为 null，也可能为上一目标），
       // 让 resolvePaneAuxLayout 走默认（primary pane 显示）或沿用上次路由；不主动 reset
@@ -1404,15 +1447,20 @@ export function AppWorkspaceLayout({
 
     if (!request.isDirectory) {
       // 关键：`request.repositoryPath` 是文件所属仓库的真实根（多 pane 下可能是
-      // extra pane 的仓库）。`openRepositoryFileInPaneByRootPath` 会按 `fileRootPath`
-      // 在 `paneEditorApisRef` 中找对应 pane 的 host hook 实例调用，避免路由到
-      // 错 pane。fallback 顺序：精确匹配 → fileEditorTargetPaneIndex → primary pane。
+      // extra pane 的仓库）。`openRepositoryFileInPaneByRootPath` 优先用 routing 刚算出的
+      // `routingTargetPaneIndex` 指向的 host（若 rootPath 匹配），否则按 `fileRootPath`
+      // 在 `paneEditorApisRef` 中 find 匹配 host。传 override 是为避开异步 state 时序
+      // （setFileEditorTargetPaneIndex 在本 useEffect 同步调用时还未生效）。
       // 上面的 `if (!request || !targetPath) return` 已保证 `request.repositoryPath` 非空。
-      openRepositoryFileInPaneByRootPath(request.relativePath, {
-        fileRootPath: request.repositoryPath ?? undefined,
-        line: request.line ?? null,
-        fromFileTree: true,
-      });
+      openRepositoryFileInPaneByRootPath(
+        request.relativePath,
+        {
+          fileRootPath: request.repositoryPath ?? undefined,
+          line: request.line ?? null,
+          fromFileTree: true,
+        },
+        routingTargetPaneIndex,
+      );
     }
     onConsumeRepositoryFileOpenRequest();
   }, [

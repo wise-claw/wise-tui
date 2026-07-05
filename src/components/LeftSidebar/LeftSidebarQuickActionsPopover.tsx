@@ -8,7 +8,7 @@ import {
   PushpinOutlined,
 } from "@ant-design/icons";
 import { App, Button, Popover, Spin, Tag, Typography } from "antd";
-import { useCallback, useState, type MouseEvent } from "react";
+import { useCallback, useMemo, useState, type MouseEvent } from "react";
 import { openExternalUrl } from "../../services/openExternal";
 import { openInFinder } from "../../services/repository";
 import { useWorkspaceQuickActions } from "../../hooks/useWorkspaceQuickActions";
@@ -47,7 +47,23 @@ export function LeftSidebarQuickActionsPopover({
   floatingRepositories,
 }: LeftSidebarQuickActionsPopoverProps) {
   const { message, modal } = App.useApp();
-  const quickActions = useWorkspaceQuickActions({ projectId, repositoryId });
+  // 弹窗展示所有注册仓库的快捷操作（不只当前选中的仓库）：把 repositoriesById 与 floating
+  // 合并去重后作为 additionalRepositoryIds 传入，displayItems 会合并所有仓库的 repository scope。
+  const allRepositoryIds = useMemo(() => {
+    const ids = new Set<number>();
+    for (const id of repositoriesById.keys()) {
+      if (Number.isFinite(id) && id > 0) ids.add(id);
+    }
+    for (const repo of floatingRepositories) {
+      if (Number.isFinite(repo.id) && repo.id > 0) ids.add(repo.id);
+    }
+    return [...ids];
+  }, [repositoriesById, floatingRepositories]);
+  const quickActions = useWorkspaceQuickActions({
+    projectId,
+    repositoryId,
+    additionalRepositoryIds: allRepositoryIds,
+  });
   const [open, setOpen] = useState(false);
   const [editState, setEditState] = useState<EditState | null>(null);
 
@@ -74,7 +90,7 @@ export function LeftSidebarQuickActionsPopover({
         // 兜底：旧实现下跨 scope 编辑，先用 displayItems 拿到同 scope 的其它条目
         source = quickActions.displayItems
           .filter((row) => row.scope === scope)
-          .map(({ scope: _scope, ...row }) => row);
+          .map(({ scope: _scope, scopeId: _scopeId, ...row }) => row);
       }
       const next = [...source];
       const index = existingId ? next.findIndex((row) => row.id === existingId) : -1;
@@ -119,7 +135,7 @@ export function LeftSidebarQuickActionsPopover({
           if (next.length === source.length) {
             const fallbackSource = quickActions.displayItems
               .filter((row) => row.scope === item.scope)
-              .map(({ scope: _scope, ...row }) => row);
+              .map(({ scope: _scope, scopeId: _scopeId, ...row }) => row);
             next = fallbackSource.filter((row) => row.id !== item.id);
             if (next.length === fallbackSource.length) {
               message.error("未找到要删除的快捷操作");
@@ -224,8 +240,7 @@ export function LeftSidebarQuickActionsPopover({
             ) : (
               <ul className="app-left-sidebar-quick-actions-popover__list">
                 {quickActions.displayItems.map((item) => {
-                  const itemScopeId =
-                    item.scope === "project" ? projectId : repositoryId != null ? String(repositoryId) : null;
+                  const itemScopeId = item.scopeId;
                   const pinned = resolveWorkspaceQuickActionPinnedToTopbar(item);
                   return (
                     <li

@@ -329,4 +329,46 @@ describe("workspaceQuickActionsRuntimeStore", () => {
     expect(saveCalls).toHaveLength(1);
     expect((saveCalls[0]?.[1] as { items: unknown[] }).items).toEqual([]);
   });
+
+  test("release does not flush when load is still in flight (avoid wiping DB)", async () => {
+    // 多屏下 Topbar strip 频繁 retain/release：retain 后 load 尚未完成就 release，
+    // entry.items 仍是初始空数组。若此时 flush 会用空数组覆盖 DB（DELETE 已有数据）。
+    // 修复：load 未完成（!entry.loaded）时 release 跳过 flush。
+    let resolveLoad: (value: { version: number; items: unknown[] }) => void = () => undefined;
+    const pendingLoad = new Promise<{ version: number; items: unknown[] }>((resolve) => {
+      resolveLoad = resolve;
+    });
+    invoke.mockImplementation(async (command: string) => {
+      if (command === "list_project_workspace_quick_actions") {
+        return pendingLoad;
+      }
+      return { version: 1, items: [] };
+    });
+
+    retainWorkspaceQuickActionsScope("project", "proj-load-inflight");
+    // 不等待 load 完成，立即 release（模拟 strip projectId 快速变化）
+    releaseWorkspaceQuickActionsScope("project", "proj-load-inflight");
+
+    // load 完成（返回 DB 中已有的一条数据）
+    resolveLoad({
+      version: 1,
+      items: [
+        {
+          id: "existing",
+          kind: "link",
+          label: "Existing",
+          target: "https://existing.example",
+          createdAt: 1,
+          updatedAt: 1,
+        },
+      ],
+    });
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const saveCalls = invoke.mock.calls.filter(
+      ([command]) => command === "save_project_workspace_quick_actions",
+    );
+    // 关键断言：load 未完成时 release 不得 flush，否则会用空数组清空 DB
+    expect(saveCalls).toHaveLength(0);
+  });
 });

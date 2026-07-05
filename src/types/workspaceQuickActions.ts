@@ -21,6 +21,9 @@ export interface WorkspaceQuickActionsPayloadV1 {
 
 export type WorkspaceQuickActionDisplayItem = WorkspaceQuickActionItem & {
   scope: WorkspaceQuickActionScope;
+  /** 该条目所属 scope 的具体 id：project 时为 projectId，repository 时为 repositoryId 字符串。
+   *  用于在「合并多个仓库展示」的场景下定位编辑/删除/置顶的正确 scope。 */
+  scopeId: string;
 };
 
 export function resolveWorkspaceQuickActionPinnedToTopbar(
