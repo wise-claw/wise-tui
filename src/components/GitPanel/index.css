@@ -2467,7 +2467,7 @@ button.git-files-explorer-title.git-files-explorer-title--toggle:hover .git-file
 
 .repo-tree-git-letter--R,
 .repo-tree-git-letter--T,
-.repo-tree-git-letter--? {
+.repo-tree-git-letter--\? {
   color: var(--ant-color-text-tertiary);
 }
 
