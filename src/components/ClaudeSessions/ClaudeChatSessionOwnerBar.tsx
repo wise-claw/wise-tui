@@ -1,7 +1,10 @@
-import { memo } from "react";
+import { memo, useCallback, useMemo } from "react";
 import { HoverHint } from "../shared/HoverHint";
 import type { ClaudeSession } from "../../types";
 import { buildClaudeSessionHoverTitle } from "../../utils/claudeSessionIdTooltip";
+import { getLatestUserPlainText } from "./claudeChatHelpers";
+import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
+import { CopyFeedbackIcon } from "../shared/CopyFeedbackIcon";
 
 export interface ClaudeChatSessionOwnerBarProps {
   session: ClaudeSession;
@@ -22,12 +25,45 @@ export const ClaudeChatSessionOwnerBar = memo(function ClaudeChatSessionOwnerBar
   onCancel,
   onReturnMainSession,
 }: ClaudeChatSessionOwnerBarProps) {
+  const latestUserText = useMemo(() => getLatestUserPlainText(session), [session]);
+  const { copied, copy } = useCopyToClipboard();
+  const handleCopy = useCallback(
+    (event: React.MouseEvent<HTMLButtonElement>) => {
+      event.stopPropagation();
+      void copy(latestUserText);
+    },
+    [copy, latestUserText],
+  );
+  const showLatestUserMessage = type === "main" && latestUserText.trim().length > 0;
+
   const panel = (
-    <div className="app-session-owner-panel">
-      <span className={`app-session-owner-panel__tag app-session-owner-panel__tag--${type}`}>
-        {typeLabel}
-      </span>
-      {name.trim() ? <span className="app-session-owner-panel__text">{name}</span> : null}
+    <div
+      className={`app-session-owner-panel${showLatestUserMessage ? " app-session-owner-panel--with-message" : ""}`}
+    >
+      {showLatestUserMessage ? (
+        <>
+          <span className="app-session-owner-panel__msg-text" title={latestUserText}>
+            {latestUserText}
+          </span>
+          <HoverHint title={copied ? "已复制" : "复制最近发送的消息"} placement="bottom">
+            <button
+              type="button"
+              className="app-session-owner-panel__copy-btn"
+              aria-label="复制最近发送的消息"
+              onClick={handleCopy}
+            >
+              <CopyFeedbackIcon copied={copied} />
+            </button>
+          </HoverHint>
+        </>
+      ) : (
+        <>
+          <span className={`app-session-owner-panel__tag app-session-owner-panel__tag--${type}`}>
+            {typeLabel}
+          </span>
+          {name.trim() ? <span className="app-session-owner-panel__text">{name}</span> : null}
+        </>
+      )}
       {type !== "main" && (session.status === "running" || session.status === "connecting") ? (
         <HoverHint title="结束当前 Claude Code 运行（与输入区结束按钮相同）" placement="bottom">
           <button
