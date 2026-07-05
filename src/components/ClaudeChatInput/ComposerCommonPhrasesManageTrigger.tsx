@@ -2,6 +2,7 @@ import { Popover } from "antd";
 import { HoverHint } from "../shared/HoverHint";
 import { useState } from "react";
 import type { ComposerCommonPhrase } from "../../constants/composerCommonPhrase";
+import type { ComposerCommonPhrasesScopeLabel } from "../../hooks/useComposerCommonPhrases";
 import { ComposerCommonPhrasesPanel } from "./ComposerCommonPhrasesPanel";
 import "./ComposerCommonPhrasesManageTrigger.css";
 
@@ -10,6 +11,7 @@ export function ComposerCommonPhrasesManageTrigger({
   loading,
   saving,
   onPersist,
+  scope = "global",
   defaultInstruction,
   defaultInstructionLoading,
   defaultInstructionSaving,
@@ -20,6 +22,7 @@ export function ComposerCommonPhrasesManageTrigger({
   loading: boolean;
   saving: boolean;
   onPersist: (next: ComposerCommonPhrase[]) => Promise<void>;
+  scope?: ComposerCommonPhrasesScopeLabel;
   defaultInstruction: string;
   defaultInstructionLoading: boolean;
   defaultInstructionSaving: boolean;
@@ -47,6 +50,7 @@ export function ComposerCommonPhrasesManageTrigger({
             loading={loading}
             saving={saving}
             onPersist={onPersist}
+            scope={scope}
             defaultInstruction={defaultInstruction}
             defaultInstructionLoading={defaultInstructionLoading}
             defaultInstructionSaving={defaultInstructionSaving}

@@ -225,6 +225,8 @@ export interface DualPaneComposerRepositoryPickerProps {
 interface ComposerInnerProps {
   session: ClaudeSession;
   gitRepositoryPath?: string;
+  /** 当前会话所属仓库 id；提供时常用语走「仓库优先 + 全局兜底」。 */
+  repositoryId?: number | null;
   /** 第三参：刚入队的任务（优先）或任务 id；第四参：兜底分发目标（避免 ref 未刷新时回退主会话） */
   onExecute: (
     sessionId: string,
@@ -558,6 +560,7 @@ function formatSessionDuration(createdAt: number): string {
 function ComposerInner({
   session,
   gitRepositoryPath,
+  repositoryId,
   onExecute,
   onSessionModelChange,
   onSessionConnectionKindChange,
@@ -646,7 +649,8 @@ function ComposerInner({
     loading: composerCommonPhrasesLoading,
     saving: composerCommonPhrasesSaving,
     persist: persistComposerCommonPhrases,
-  } = useComposerCommonPhrases();
+    scope: composerCommonPhrasesScope,
+  } = useComposerCommonPhrases({ repositoryId });
   const {
     text: composerDefaultInstruction,
     loading: composerDefaultInstructionLoading,
@@ -2840,6 +2844,7 @@ function ComposerInner({
             loading={composerCommonPhrasesLoading}
             saving={composerCommonPhrasesSaving}
             onPersist={persistComposerCommonPhrases}
+            scope={composerCommonPhrasesScope}
             defaultInstruction={composerDefaultInstruction}
             defaultInstructionLoading={composerDefaultInstructionLoading}
             defaultInstructionSaving={composerDefaultInstructionSaving}
@@ -3141,6 +3146,8 @@ function ComposerInner({
 export interface ComposerRegionProps {
   session: ClaudeSession;
   gitRepositoryPath?: string;
+  /** 当前会话所属仓库 id；提供时常用语走「仓库优先 + 全局兜底」。 */
+  repositoryId?: number | null;
   /** 第三参：刚入队的任务（优先）或任务 id；第四参：兜底分发目标（避免 ref 未刷新时回退主会话） */
   onExecute: (
     sessionId: string,

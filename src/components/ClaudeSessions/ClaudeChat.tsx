@@ -1717,6 +1717,7 @@ export function ClaudeChatInner({
           <ClaudeChatQuickActionsChrome
             sessionId={session.id}
             gitRepositoryPath={gitRepositoryPath}
+            repositoryId={sessionRepository?.id ?? null}
             onCreateNewSession={onCreateNewSession}
             creatingNewSession={creatingNewSession}
             onOpenBuiltinAssistant={onOpenBuiltinAssistant}
@@ -1743,6 +1744,7 @@ export function ClaudeChatInner({
               backgroundInvocationDockEnabled={backgroundInvocationDockEnabled}
               session={session}
               gitRepositoryPath={gitRepositoryPath}
+              repositoryId={sessionRepository?.id ?? null}
               employeesForDispatchRoute={employees}
               pendingExecutionTaskCount={pendingTasks.length}
               onExecute={handleComposerExecute}

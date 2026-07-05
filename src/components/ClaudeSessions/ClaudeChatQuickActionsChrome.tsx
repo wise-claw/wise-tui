@@ -15,6 +15,8 @@ import { SessionQuickActionsBar } from "./SessionQuickActionsBar";
 export interface ClaudeChatQuickActionsChromeProps {
   sessionId: string;
   gitRepositoryPath: string;
+  /** 当前会话所属仓库 id；提供时常用语走「仓库优先 + 全局兜底」，多屏下各 pane 显示各自仓库的。 */
+  repositoryId?: number | null;
   onCreateNewSession?: () => void;
   creatingNewSession?: boolean;
   onOpenBuiltinAssistant?: (assistantId: string) => void;
@@ -31,6 +33,7 @@ export interface ClaudeChatQuickActionsChromeProps {
 export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActionsChrome({
   sessionId,
   gitRepositoryPath,
+  repositoryId,
   onCreateNewSession,
   creatingNewSession = false,
   onOpenBuiltinAssistant,
@@ -39,7 +42,7 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
   onDispatchExecutionEnvironment,
   composerSessionBusyWithoutEnqueue = false,
 }: ClaudeChatQuickActionsChromeProps) {
-  const { phrases: composerCommonPhrases } = useComposerCommonPhrases();
+  const { phrases: composerCommonPhrases } = useComposerCommonPhrases({ repositoryId });
   const applyCommonPhrase = useCallback(
     (phrase: Parameters<typeof dispatchApplyComposerCommonPhrase>[1]) => {
       dispatchApplyComposerCommonPhrase(sessionId, phrase);

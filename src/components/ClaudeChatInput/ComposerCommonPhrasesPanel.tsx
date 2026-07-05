@@ -8,6 +8,7 @@ import {
   resolveComposerCommonPhraseShowInQuickBar,
   type ComposerCommonPhrase,
 } from "../../constants/composerCommonPhrase";
+import type { ComposerCommonPhrasesScopeLabel } from "../../hooks/useComposerCommonPhrases";
 import { formatChordForDisplay } from "../../utils/atMentionShortcutChord";
 import { ComposerCommonPhraseEditModal } from "./ComposerCommonPhraseEditModal";
 import { ComposerDefaultInstructionField } from "./ComposerDefaultInstructionField";
@@ -36,39 +37,72 @@ function previewText(text: string, max = 28): string {
   return `${trimmed.slice(0, max)}…`;
 }
 
+// 仓库目录名仅用于 scope 提示展示，不参与任何存储/匹配。
+function repositoryBasename(path?: string | null): string {
+  if (!path) return "";
+  const parts = path.replace(/\\/g, "/").split("/").filter(Boolean);
+  return parts[parts.length - 1] ?? "";
+}
+
+function scopeHintFor(
+  scope: ComposerCommonPhrasesScopeLabel,
+  repositoryPath?: string | null,
+): { title: string; hint?: string } {
+  const name = repositoryBasename(repositoryPath);
+  switch (scope) {
+    case "repository":
+      return { title: name ? `当前仓库：${name}` : "当前仓库常用语" };
+    case "fallback-global":
+      return {
+        title: name ? `当前仓库：${name}（未自定义）` : "当前仓库未自定义",
+        hint: "当前显示全局常用语，编辑将创建该仓库独立配置。",
+      };
+    case "global":
+    default:
+      return { title: "全局常用语" };
+  }
+}
+
 export function ComposerCommonPhrasesPanel({
   phrases,
   loading,
   saving,
   onPersist,
+  scope = "global",
   defaultInstruction,
   defaultInstructionLoading,
   defaultInstructionSaving,
   onDefaultInstructionSave,
+  hideDefaultInstruction = false,
   repositoryPath,
 }: {
   phrases: readonly ComposerCommonPhrase[];
   loading: boolean;
   saving: boolean;
   onPersist: (next: ComposerCommonPhrase[]) => Promise<void>;
-  defaultInstruction: string;
-  defaultInstructionLoading: boolean;
-  defaultInstructionSaving: boolean;
-  onDefaultInstructionSave: (text: string) => Promise<void>;
+  scope?: ComposerCommonPhrasesScopeLabel;
+  defaultInstruction?: string;
+  defaultInstructionLoading?: boolean;
+  defaultInstructionSaving?: boolean;
+  onDefaultInstructionSave?: (text: string) => Promise<void>;
+  hideDefaultInstruction?: boolean;
   repositoryPath?: string | null;
 }) {
   const busy = loading || saving;
-  const defaultBusy = defaultInstructionLoading || defaultInstructionSaving;
-  const [defaultDraft, setDefaultDraft] = useState(defaultInstruction);
+  const defaultBusy = (defaultInstructionLoading ?? false) || (defaultInstructionSaving ?? false);
+  const [defaultDraft, setDefaultDraft] = useState(defaultInstruction ?? "");
+  const scopeHint = scopeHintFor(scope, repositoryPath);
 
   useEffect(() => {
-    setDefaultDraft(defaultInstruction);
+    setDefaultDraft(defaultInstruction ?? "");
   }, [defaultInstruction]);
 
   const saveDefaultInstruction = useCallback(
     async (next?: string) => {
+      if (!onDefaultInstructionSave) return;
+      const current = (defaultInstruction ?? "").trim();
       const candidate = (next ?? defaultDraft).trim();
-      if (candidate === defaultInstruction.trim()) return;
+      if (candidate === current) return;
       await onDefaultInstructionSave(candidate);
     },
     [defaultDraft, defaultInstruction, onDefaultInstructionSave],
@@ -165,23 +199,34 @@ export function ComposerCommonPhrasesPanel({
 
   return (
     <div className="app-composer-common-phrases-panel">
-      <section className="app-composer-common-phrases-panel__default" aria-label="主会话默认指令">
-        <div className="app-composer-common-phrases-panel__default-head">
-          <span className="app-composer-common-phrases-panel__default-title">默认指令</span>
-          <span className="app-composer-common-phrases-panel__default-hint">
-            自动前缀；已有 / 命令不追加；@终端优先终端默认
-          </span>
-        </div>
-        <ComposerDefaultInstructionField
-          value={defaultDraft}
-          disabled={defaultBusy}
-          loading={defaultBusy}
-          repositoryPath={repositoryPath}
-          placeholder="选择或输入 /autopilot"
-          onChange={setDefaultDraft}
-          onCommit={saveDefaultInstruction}
-        />
-      </section>
+      <div
+        className={`app-composer-common-phrases-panel__scope app-composer-common-phrases-panel__scope--${scope}`}
+        role="status"
+      >
+        <span className="app-composer-common-phrases-panel__scope-title">{scopeHint.title}</span>
+        {scopeHint.hint ? (
+          <span className="app-composer-common-phrases-panel__scope-hint">{scopeHint.hint}</span>
+        ) : null}
+      </div>
+      {hideDefaultInstruction ? null : (
+        <section className="app-composer-common-phrases-panel__default" aria-label="主会话默认指令">
+          <div className="app-composer-common-phrases-panel__default-head">
+            <span className="app-composer-common-phrases-panel__default-title">默认指令</span>
+            <span className="app-composer-common-phrases-panel__default-hint">
+              自动前缀；已有 / 命令不追加；@终端优先终端默认
+            </span>
+          </div>
+          <ComposerDefaultInstructionField
+            value={defaultDraft}
+            disabled={defaultBusy}
+            loading={defaultBusy}
+            repositoryPath={repositoryPath}
+            placeholder="选择或输入 /autopilot"
+            onChange={setDefaultDraft}
+            onCommit={saveDefaultInstruction}
+          />
+        </section>
+      )}
       <p className="app-composer-common-phrases-panel__hint">点击编辑；快捷栏按触发方式发送或填入</p>
       {phrases.length === 0 ? (
         <p className="app-composer-common-phrases-panel__empty">暂无常用语，点击下方新增。</p>
