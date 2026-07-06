@@ -158,6 +158,13 @@ type InspectorCockpitProps = CockpitInspectorProps;
 
 type OpenRepositoryFileHandler = (path: string, options?: GitPanelOpenFileOptions) => void;
 
+/** 把指定文件在文件树中展开父目录链并滚动高亮定位。多 pane 下按文件所属仓库根路由。 */
+type RevealFileInExplorerHandler = (
+  repositoryPath: string,
+  relativePath: string,
+  isDirectory?: boolean,
+) => void;
+
 let fileViewerPaneSlotCounter = 0;
 function createFileViewerPaneSlot(): PaneSlot {
   fileViewerPaneSlotCounter += 1;
@@ -197,6 +204,10 @@ interface RepositoryFileEditorPanelContextValue {
 const RepositoryFileEditorOpenFileContext = createContext<OpenRepositoryFileHandler | null>(null);
 const RepositoryFileEditorVisibilityContext = createContext(false);
 const RepositoryFileEditorPanelContext = createContext<RepositoryFileEditorPanelContextValue | null>(null);
+const RepositoryFileEditorRevealInExplorerContext = createContext<RevealFileInExplorerHandler | null>(null);
+function useRepositoryFileEditorRevealInExplorer(): RevealFileInExplorerHandler | null {
+  return useContext(RepositoryFileEditorRevealInExplorerContext);
+}
 /** 多 pane 下：file preview modal 仍为单例，由当前正在显示 modal 的 pane host 注入 preview state。
  *  type 形如 `LazyRepositoryFilePreviewModal` 的 `preview` 形参 + `onClose` 句柄。 */
 type LayoutFilePreview = {
@@ -548,6 +559,7 @@ const ConnectedRepositoryFileEditorPanel = memo(function ConnectedRepositoryFile
   dark: boolean;
 }) {
   const openFile = useRepositoryFileEditorOpenFile();
+  const revealInExplorer = useRepositoryFileEditorRevealInExplorer();
   const {
     activePath,
     activeSessionId,
@@ -587,6 +599,7 @@ const ConnectedRepositoryFileEditorPanel = memo(function ConnectedRepositoryFile
         onSave={onSave}
         onTabContentChange={onTabContentChange}
         onNavigateToFile={openFile}
+        onRevealInExplorer={revealInExplorer ?? undefined}
       />
     </Suspense>
   );
@@ -1483,7 +1496,54 @@ export function AppWorkspaceLayout({
     showWorkspaceFileTreeRail,
   ]);
 
+  /** 在文件树中定位到指定文件/目录：算出目标文件树实例，必要时打开 workspace rail 或请求
+   *  侧栏文件树聚焦，再通过 pendingExplorerReveal（sessionStorage + 全局事件）让对应
+   *  `useRepositoryFilesExplorer` 展开父目录链并 setSelected。与「搜索/外链打开文件」走同一条
+   *  reveal 通路。供中栏编辑器顶栏按钮与 tab 右键菜单调用。 */
+  const revealFileInExplorer = useCallback<RevealFileInExplorerHandler>(
+    (repositoryPath, relativePath, isDirectory = false) => {
+      const targetPath = repositoryPath.trim();
+      const targetRelative = relativePath.trim();
+      if (!targetPath || !targetRelative) {
+        return;
+      }
+      const revealTarget = resolveExplorerRevealTargetForOpen({
+        workspaceFileTreeRailOpen: showWorkspaceFileTreeRail,
+        filesPanelPlacement: leftSidebarProps.filesPanelPlacement ?? "left",
+        gitPanelPlacement: leftSidebarProps.gitPanelPlacement ?? "left",
+        leftSidebarCollapsed: collapsed,
+        leftSidebarParked,
+        rightRailAvailable: chatRightRailMode,
+      });
+      if (revealTarget === "workspace-rail" && !fileTreeRailOpen) {
+        setFileTreeRailOpen(true);
+      } else if (revealTarget === "left-sidebar" || revealTarget === "right-rail") {
+        requestExplorerFocus(revealTarget);
+      }
+      const pendingReveal = {
+        repositoryPath: targetPath,
+        relativePath: targetRelative,
+        isDirectory,
+        revealTarget,
+      };
+      requestAnimationFrame(() => {
+        writePendingExplorerReveal(pendingReveal);
+      });
+    },
+    [
+      showWorkspaceFileTreeRail,
+      leftSidebarProps.filesPanelPlacement,
+      leftSidebarProps.gitPanelPlacement,
+      collapsed,
+      leftSidebarParked,
+      chatRightRailMode,
+      fileTreeRailOpen,
+      setFileTreeRailOpen,
+    ],
+  );
+
   return (
+    <RepositoryFileEditorRevealInExplorerContext.Provider value={revealFileInExplorer}>
     <RepositoryFileEditorOpenFileContext.Provider value={openRepositoryFileWithPreference}>
       {/* 多 pane 下 Visibility/Panel Context 由各 PaneEditorHost 内部按 paneIndex 注入；
           这里仅在单 pane（paneCount === 1）时透传；多 pane 时为 fallback 占位空壳，
@@ -1794,5 +1854,6 @@ export function AppWorkspaceLayout({
           </RepositoryFileEditorPanelContext.Provider>
         </RepositoryFileEditorVisibilityContext.Provider>
       </RepositoryFileEditorOpenFileContext.Provider>
+    </RepositoryFileEditorRevealInExplorerContext.Provider>
   );
 }

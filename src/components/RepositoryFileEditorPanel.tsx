@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
-import { CloseOutlined } from "@ant-design/icons";
-import { Button, Spin } from "antd";
+import { AimOutlined, CloseOutlined } from "@ant-design/icons";
+import { Button, Dropdown, Spin, type MenuProps } from "antd";
 import { RepositoryFileEditorTabSurface } from "./RepositoryFileEditorTabSurface";
+import { HoverHint } from "./shared/HoverHint";
 import type { FileEditorTab } from "../hooks/useRepositoryFileEditor";
 
 /**
@@ -28,6 +29,8 @@ interface Props {
   onMdPreviewTabChange: (relativePath: string, value: boolean) => void;
   /** Ctrl/Cmd+Click import/export 路径时导航打开目标文件。 */
   onNavigateToFile?: (relativePath: string) => void;
+  /** 在文件树中定位到指定文件（顶栏按钮 / tab 右键触发）。 */
+  onRevealInExplorer?: (repositoryPath: string, relativePath: string) => void;
 }
 
 export function RepositoryFileEditorPanel({
@@ -47,6 +50,7 @@ export function RepositoryFileEditorPanel({
   mdPreviewByPath,
   onMdPreviewTabChange,
   onNavigateToFile,
+  onRevealInExplorer,
 }: Props) {
   const panelRef = useRef<HTMLDivElement | null>(null);
   const activeTab = tabs.find((tab) => tab.relativePath === activePath) ?? null;
@@ -138,6 +142,39 @@ export function RepositoryFileEditorPanel({
     [onTabContentChange],
   );
 
+  const revealTab = useCallback(
+    (tab: FileEditorTab) => {
+      if (!onRevealInExplorer || !tab.rootPath) return;
+      onRevealInExplorer(tab.rootPath, tab.relativePath);
+    },
+    [onRevealInExplorer],
+  );
+
+  const buildTabContextMenuItems = useCallback(
+    (tab: FileEditorTab): MenuProps["items"] => {
+      return [
+        {
+          key: "reveal-in-explorer",
+          label: "在文件树中定位",
+          disabled: !onRevealInExplorer || !tab.rootPath,
+          onClick: () => revealTab(tab),
+        },
+      ];
+    },
+    [onRevealInExplorer, revealTab],
+  );
+
+  /** 切换 tab 时让文件树跟随定位：切激活路径 + 触发 reveal（展开父目录链并滚动高亮）。
+   *  revealFileInExplorer 会按当前布局算 revealTarget，文件树不可见时把侧栏切到文件 Tab
+   *  并展开 section，再 reveal；可见时 requestExplorerFocus 为 no-op。 */
+  const handleActivateTab = useCallback(
+    (tab: FileEditorTab) => {
+      onActivePathChange(tab.relativePath);
+      revealTab(tab);
+    },
+    [onActivePathChange, revealTab],
+  );
+
   return (
     <div ref={panelRef} className="app-file-editor-panel">
       <div className="app-file-editor-header">
@@ -148,37 +185,56 @@ export function RepositoryFileEditorPanel({
               const tabDirty = tab.content !== tab.originalContent;
               const label = tab.relativePath.split(/[/\\]/).pop() ?? tab.relativePath;
               return (
-                <div
+                <Dropdown
                   key={tab.relativePath}
-                  role="tab"
-                  aria-selected={isActive}
-                  tabIndex={0}
-                  className={`app-file-editor-tab${isActive ? " app-file-editor-tab--active" : ""}`}
-                  title={tab.relativePath}
-                  onClick={() => onActivePathChange(tab.relativePath)}
-                  onKeyDown={(event) => {
-                    if (event.key === "Enter" || event.key === " ") {
-                      event.preventDefault();
-                      onActivePathChange(tab.relativePath);
-                    }
-                  }}
+                  trigger={["contextMenu"]}
+                  menu={{ items: buildTabContextMenuItems(tab) }}
                 >
-                  <span className={`app-file-editor-tab-label${tabDirty ? " app-file-editor-tab-label--dirty" : ""}`}>
-                    {label}
-                  </span>
-                  <button
-                    type="button"
-                    className="app-file-editor-tab-close"
-                    aria-label={`关闭 ${label}`}
-                    onClick={(event) => onCloseTab(tab.relativePath, event)}
+                  <div
+                    role="tab"
+                    aria-selected={isActive}
+                    tabIndex={0}
+                    className={`app-file-editor-tab${isActive ? " app-file-editor-tab--active" : ""}`}
+                    title={tab.relativePath}
+                    onClick={() => handleActivateTab(tab)}
+                    onKeyDown={(event) => {
+                      if (event.key === "Enter" || event.key === " ") {
+                        event.preventDefault();
+                        handleActivateTab(tab);
+                      }
+                    }}
                   >
-                    <CloseOutlined />
-                  </button>
-                </div>
+                    <span className={`app-file-editor-tab-label${tabDirty ? " app-file-editor-tab-label--dirty" : ""}`}>
+                      {label}
+                    </span>
+                    <button
+                      type="button"
+                      className="app-file-editor-tab-close"
+                      aria-label={`关闭 ${label}`}
+                      onClick={(event) => onCloseTab(tab.relativePath, event)}
+                    >
+                      <CloseOutlined />
+                    </button>
+                  </div>
+                </Dropdown>
               );
             })}
           </div>
           <div className="app-file-editor-tab-bar-actions">
+            {onRevealInExplorer ? (
+              <HoverHint title="在文件树中定位">
+                <Button
+                  type="text"
+                  size="small"
+                  icon={<AimOutlined />}
+                  aria-label="在文件树中定位"
+                  disabled={!activeTab?.rootPath}
+                  onClick={() => {
+                    if (activeTab) revealTab(activeTab);
+                  }}
+                />
+              </HoverHint>
+            ) : null}
             {dirty ? <span className="app-file-editor-dirty app-file-editor-dirty--tab-bar">未保存</span> : null}
             <Button
               type="primary"
