@@ -1,6 +1,6 @@
 import type { ClaudeSession, ProjectItem, Repository } from "../../types";
 import { HoverHint } from "../shared/HoverHint";
-import { Dropdown, message, Popover, Spin, Switch } from "antd";
+import { Dropdown, message, Popover, Segmented, Spin, Switch } from "antd";
 import { lazy, Suspense, memo, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from "react";
 import { useWiseTopbarChromeVisibility } from "../../hooks/useWiseTopbarChromeVisibility";
 import { RemoteEntryTopbarStrip } from "../RemoteEntryTopbarStrip";
@@ -27,6 +27,7 @@ import { RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK } from "../../utils/rightPanelSt
 import type { WorkspaceFocus } from "../../utils/workspaceMode";
 import { PANE_COUNT_OPTIONS, isPaneCount, type PaneCount } from "../../constants/mainLayoutWidths";
 import { topbarPropsEqual } from "./topbarPropsEqual";
+import type { CenterView } from "./ClaudeChat";
 
 const RunCommandPanelLazy = lazy(() =>
   import("../RunCommand").then((module) => ({ default: module.RunCommandPanel })),
@@ -202,6 +203,12 @@ export interface TopbarProps {
   onChangePaneCount?: (count: PaneCount) => void;
   /** 打开创作台「远程入口」配置页 */
   onOpenRemoteChannels?: () => void;
+  /** 中栏「消息/文件」切换器当前视图（有编辑器时显示）。 */
+  centerView?: CenterView;
+  /** 切换器变化回调。 */
+  onCenterViewChange?: (view: CenterView) => void;
+  /** 是否显示中栏「消息/文件」切换器（有编辑器且消息列表未隐藏时）。 */
+  centerSwitcherVisible?: boolean;
 }
 
 /**
@@ -222,6 +229,9 @@ export type PaneTopbarSharedProps = Omit<
   | "activeProject"
   | "activeWorkspaceFocus"
   | "mainSessionForDataLink"
+  | "centerView"
+  | "onCenterViewChange"
+  | "centerSwitcherVisible"
 > & {
   /** 按指定仓库路径打开搜索面板（per-pane 搜索按钮，作用于该 pane 仓库）。 */
   onSearchForRepository?: (repositoryPath: string) => void;
@@ -253,6 +263,9 @@ export const Topbar = memo(function Topbar({
   paneChangeInFlight = false,
   onChangePaneCount,
   onOpenRemoteChannels,
+  centerView = "messages",
+  onCenterViewChange,
+  centerSwitcherVisible = false,
 }: TopbarProps) {
   const topbarChrome = useWiseTopbarChromeVisibility();
   const [selectedOpenAppId, setSelectedOpenAppId] = useState<string>(() => {
@@ -328,6 +341,18 @@ export const Topbar = memo(function Topbar({
                 icon={<IconCollapseSidebar collapsed={collapsed ?? false} />}
                 label={collapsed ? "展开侧边栏" : "收起侧边栏"}
                 onClick={onToggleSidebar}
+              />
+            ) : null}
+            {centerSwitcherVisible && onCenterViewChange ? (
+              <Segmented
+                className="app-topbar-center-switcher"
+                size="small"
+                value={centerView}
+                onChange={(value) => onCenterViewChange(value as CenterView)}
+                options={[
+                  { label: "消息", value: "messages" },
+                  { label: "文件", value: "files" },
+                ]}
               />
             ) : null}
             {showRepoTitle ? (

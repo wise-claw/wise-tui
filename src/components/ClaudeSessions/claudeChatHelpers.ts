@@ -11,7 +11,35 @@ import {
   messageTextLooksLikeOmcDispatch,
   parseOmcSlashCommandFromUserText,
 } from "../../utils/omcUserMessageText";
+import { useEffect, useState, type ReactNode } from "react";
 import { buildConventionalCommitFallback } from "../../utils/conventionalCommitMessage";
+import { isDisplayNoiseUserMessageText } from "../../utils/claudeChatMessageDisplay";
+import type { CenterView } from "./ClaudeChat";
+
+/**
+ * 中栏「消息/文件」视图切换状态：有编辑器时默认「文件」，无编辑器回「消息」。
+ * 状态提升到 pane 组件 / 会话壳层，供顶栏 Segmented 与 ClaudeChat 共享同一份视图。
+ * panelBelowMessages 是稳定的 bridge 元素，identity 仅在 editorVisible 翻转时变化，
+ * 故该 effect 精确地在「打开/关闭文件」时触发，同 pane 内切换文件不打断当前视图。
+ */
+export function useCenterView(
+  panelBelowMessages: ReactNode,
+  hideMessages: boolean,
+): {
+  centerView: CenterView;
+  setCenterView: (view: CenterView) => void;
+  visible: boolean;
+} {
+  const [centerView, setCenterView] = useState<CenterView>("messages");
+  useEffect(() => {
+    setCenterView(panelBelowMessages ? "files" : "messages");
+  }, [panelBelowMessages]);
+  return {
+    centerView,
+    setCenterView,
+    visible: !hideMessages && Boolean(panelBelowMessages),
+  };
+}
 
 export type NotificationInboxRow = {
   conversationId: string;
@@ -204,10 +232,12 @@ export function getLatestUserPlainText(session: ClaudeSession): string {
         .filter(Boolean)
         .join("\n\n") ?? "";
     if (fromParts) {
+      if (isDisplayNoiseUserMessageText(fromParts)) continue;
       return fromParts;
     }
     const fromContent = msg.content.trim();
     if (fromContent) {
+      if (isDisplayNoiseUserMessageText(fromContent)) continue;
       return fromContent;
     }
   }

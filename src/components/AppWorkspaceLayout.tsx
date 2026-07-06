@@ -70,6 +70,8 @@ import {
   areLeftSidebarPropsEqual,
 } from "./LeftSidebar/leftSidebarPropsEqual";
 import { claudeSessionsShellPropsEqual } from "./ClaudeSessions/claudeSessionsPropsEqual";
+import { useCenterView } from "./ClaudeSessions/claudeChatHelpers";
+import type { CenterView } from "./ClaudeSessions/ClaudeChat";
 import { areInspectorShellPropsEqual } from "./Inspector/chatInspectorPropsEqual";
 import { WorkspaceFileTreeRail } from "./WorkspaceFileTreeRail";
 import type { WorkspaceFileTreeRailContext } from "./WorkspaceFileTreeRail/types";
@@ -486,6 +488,8 @@ interface ConnectedClaudeSessionsProps {
    */
   centerAuxPanelsNodeByPane: Map<number, ReactNode>;
   centerAuxPanelsNodeByPaneVersion: number;
+  /** 单屏中栏「消息/文件」视图值（由 layout 壳层提升持有，透传给 ClaudeSessions）。 */
+  centerView?: CenterView;
 }
 
 function connectedClaudeSessionsPropsEqual(
@@ -494,6 +498,7 @@ function connectedClaudeSessionsPropsEqual(
 ): boolean {
   if (prev.mainLayoutContentRef !== next.mainLayoutContentRef) return false;
   if (prev.centerAuxPanelsNodeByPaneVersion !== next.centerAuxPanelsNodeByPaneVersion) return false;
+  if (prev.centerView !== next.centerView) return false;
   return claudeSessionsShellPropsEqual(prev.claudeSessionsProps, next.claudeSessionsProps);
 }
 
@@ -502,18 +507,23 @@ const ConnectedClaudeSessions = memo(function ConnectedClaudeSessions({
   mainLayoutContentRef,
   centerAuxPanelsNodeByPane,
   centerAuxPanelsNodeByPaneVersion,
+  centerView,
 }: ConnectedClaudeSessionsProps) {
   const resolvePaneAuxLayout = useCallback(
     (paneIndex: number): PaneAuxLayout => {
-      // 多 pane 下各 pane 独立判断自己是否挂文件编辑器；未挂时正常显示消息列表。
+      // 多 pane 下各 pane 独立判断自己是否挂文件编辑器。
+      // 挂了编辑器时也不再隐藏消息列表：由 ClaudeChat 内的 Segmented 切换器在
+      // 「消息」与「文件」视图间互斥切换，当前视图占满整个主区，无需关文件即可查看消息。
+      // 离屏 pane 的性能护栏由 deferHeavySubtree 在下游保留
+      // （hidePaneMessages = hideMessages || deferHeavySubtree）。
       const panel = centerAuxPanelsNodeByPane.get(paneIndex);
       if (panel == null) {
         return { hideMessages: false, hideSessionTools: false };
       }
       return {
         panelBelowMessages: panel,
-        hideMessages: true,
-        hideSessionTools: true,
+        hideMessages: false,
+        hideSessionTools: false,
       };
     },
     [centerAuxPanelsNodeByPane],
@@ -529,6 +539,7 @@ const ConnectedClaudeSessions = memo(function ConnectedClaudeSessions({
         panelBelowMessages={primaryAux.panelBelowMessages}
         resolvePaneAuxLayout={resolvePaneAuxLayout}
         centerAuxPanelsNodeByPaneVersion={centerAuxPanelsNodeByPaneVersion}
+        centerView={centerView}
         hideTopbar={true}
       />
     </Layout.Content>
@@ -861,6 +872,10 @@ export function AppWorkspaceLayout({
       activeWorkspaceFocus: claudeSessionsProps.activeWorkspaceFocus,
       activeRepository: claudeSessionsProps.activeRepository,
       onToggleSidebar: claudeSessionsPropsRef.current.onToggleSidebar,
+      onToggleRightPanel: claudeSessionsPropsRef.current.onToggleRightPanel,
+      rightCollapsed: claudeSessionsProps.rightCollapsed,
+      rightPanelDefaultCollapsed: claudeSessionsProps.rightPanelDefaultCollapsed,
+      onSetRightPanelDefaultCollapsed: claudeSessionsPropsRef.current.onSetRightPanelDefaultCollapsed,
       onToggleTerminal: claudeSessionsPropsRef.current.onToggleTerminal,
       onSearch: claudeSessionsPropsRef.current.onSearch,
       collapsed: claudeSessionsProps.collapsed,
@@ -876,6 +891,8 @@ export function AppWorkspaceLayout({
       claudeSessionsProps.activeProject,
       claudeSessionsProps.activeWorkspaceFocus,
       claudeSessionsProps.activeRepository,
+      claudeSessionsProps.rightCollapsed,
+      claudeSessionsProps.rightPanelDefaultCollapsed,
       claudeSessionsProps.collapsed,
       showWorkspaceFileTreeRail,
       claudeSessionsProps.terminalCollapsed,
@@ -1064,6 +1081,17 @@ export function AppWorkspaceLayout({
     }
     setCenterAuxPanelsNodeByPaneVersion((v) => v + 1);
   }, []);
+
+  // 单屏中栏「消息/文件」视图切换：状态提升到 layout 壳层，使 1 屏全局 Topbar（下方
+  // `<LazyTopbar>`）与 ClaudeSessions 内的 ClaudeChat 共享同一份 centerView。多屏（paneCount>1）
+  // 不渲染全局 Topbar，各 pane 在 ClaudeMultiPaneGrid 内独立 useCenterView；此处 primary 的
+  // panelBelowMessages 取自 `centerAuxPanelsNodeByPane.get(0)`，与 ConnectedClaudeSessions 的
+  // resolvePaneAuxLayout(0) 同源。放在 centerAuxPanelsNodeByPane 定义之后以避开 TDZ。
+  const primaryPanelBelowMessages = centerAuxPanelsNodeByPane.get(0);
+  const { centerView, setCenterView, visible: centerSwitcherVisible } = useCenterView(
+    primaryPanelBelowMessages,
+    false, // 单屏 primary 的 hideMessages 恒为 false
+  );
 
   /** 多 pane 下要 mount 的 PaneEditorHost 配置列表。
    *  pane 0 = primary（active 仓库）；pane 1..N-1 = extra panes。
@@ -1643,7 +1671,12 @@ export function AppWorkspaceLayout({
                     {chatRightRailMode && (claudeSessionsProps.paneCount ?? 1) === 1 ? (
                       // 1 屏：跨整宽全局 Topbar（覆盖中栏 + 右栏）。多屏时不渲染，由各 pane 顶栏自管。
                       <Suspense fallback={null}>
-                        <LazyTopbar {...topbarProps} />
+                        <LazyTopbar
+                          {...topbarProps}
+                          centerView={centerView}
+                          onCenterViewChange={setCenterView}
+                          centerSwitcherVisible={centerSwitcherVisible}
+                        />
                       </Suspense>
                     ) : null}
 
@@ -1661,6 +1694,7 @@ export function AppWorkspaceLayout({
                         <Suspense fallback={<WorkspaceViewportLoading />}>
                           <ConnectedClaudeSessions
                             claudeSessionsProps={claudeSessionsPropsWithHeader}
+                            centerView={centerView}
                             mainLayoutContentRef={mainLayoutContentRef}
                             centerAuxPanelsNodeByPane={centerAuxPanelsNodeByPane}
                             centerAuxPanelsNodeByPaneVersion={centerAuxPanelsNodeByPaneVersion}

@@ -19,6 +19,7 @@ import {
 import { ClaudeSessionsChatHost } from "./ClaudeSessionsChatHost";
 import { Topbar, type PaneTopbarSharedProps } from "./Topbar";
 export { Topbar, type TopbarProps, type PaneTopbarSharedProps } from "./Topbar";
+import type { CenterView } from "./ClaudeChat";
 import { pickSessionForRepositorySidebarSelect } from "../../utils/claudeSessionSelection";
 import { filterSessionsForWorkspace, sessionMatchesProjectWorkspaceFocus } from "../../utils/projectSessionPanelFilter";
 import {
@@ -188,6 +189,9 @@ export interface ClaudeSessionsProps {
   panelBelowMessages?: React.ReactNode;
   hideMessages?: boolean;
   hideSessionTools?: boolean;
+  /** 中栏「消息/文件」视图当前值（由 layout 壳层提升持有，全局 Topbar 的 Segmented
+   *  与 ClaudeChat 共享同一份状态；多屏时各 pane 在 ClaudeMultiPaneGrid 内自管，不读此 prop）。 */
+  centerView?: CenterView;
   /** 多屏时按窗格解析文件等中栏辅助面板布局。 */
   resolvePaneAuxLayout?: ResolvePaneAuxLayout;
   /**
@@ -324,6 +328,7 @@ function ClaudeSessionsShell({
   workflowGraphStatusByWorkflowId = {},
   onOpenTaskDetail,
   panelBelowMessages,
+  centerView,
   hideMessages = false,
   hideSessionTools = false,
   resolvePaneAuxLayout,
@@ -347,6 +352,7 @@ function ClaudeSessionsShell({
 }: ClaudeSessionsProps) {
   const structureKey = useClaudeSessionsStructureKey();
   const [terminalFullscreen, setTerminalFullscreen] = useState(false);
+
   const incomingSessions = useMemo(() => getClaudeSessionsSnapshot(), [structureKey]);
 
   useEffect(() => {
@@ -763,6 +769,7 @@ function ClaudeSessionsShell({
           workflowGraphStatusByWorkflowId={workflowGraphStatusByWorkflowId}
           onOpenTaskDetail={onOpenTaskDetail}
           panelBelowMessages={panelBelowMessages}
+          centerView={centerView}
           hideMessages={hideMessages}
           hideSessionTools={hideSessionTools}
           resolvePaneAuxLayout={resolvePaneAuxLayout}

@@ -49,6 +49,7 @@ import { runPaneCreateTask } from "./paneCreateLoading";
 import type { RefreshHistorySessionsScope } from "./ClaudeChat";
 import type { PaneAuxLayout, ResolvePaneAuxLayout } from "./paneAuxLayout";
 import { Topbar, type PaneTopbarSharedProps } from "./Topbar";
+import { useCenterView } from "./claudeChatHelpers";
 
 const TWO_PANE_MIN_WIDTH_PX = MAIN_LAYOUT_MULTI_PANE_MIN_WIDTH_PX;
 
@@ -275,6 +276,11 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
     [shared, sessionId],
   );
 
+  const { centerView, setCenterView, visible: centerSwitcherVisible } = useCenterView(
+    paneAuxLayout.panelBelowMessages,
+    paneAuxLayout.hideMessages,
+  );
+
   return (
     <div className="app-claude-sessions__pane">
       {shared.paneTopbarShared ? (
@@ -287,6 +293,9 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
           activeWorkspaceFocus={shared.activeWorkspaceFocus ?? "repository"}
           mainSessionForDataLink={session}
           onSearch={() => shared.paneTopbarShared?.onSearchForRepository?.(activeRepository.path)}
+          centerView={centerView}
+          onCenterViewChange={setCenterView}
+          centerSwitcherVisible={centerSwitcherVisible}
         />
       ) : null}
       <ClaudeSessionChatWithDock
@@ -349,6 +358,7 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
             panelBelowMessages={paneAuxLayout.panelBelowMessages}
             hideMessages={paneAuxLayout.hideMessages}
             hideSessionTools={paneAuxLayout.hideSessionTools}
+            centerView={centerView}
             enableSessionNotificationFeed={false}
         resolveTaskListOmcInvokeConcurrency={shared.resolveTaskListOmcInvokeConcurrency}
         repositoryMainBindings={shared.repositoryMainBindings}
@@ -488,6 +498,10 @@ const MultiPaneExtraPaneCell = memo(
       hasQuestionRequest: Boolean(offscreenDock.questionRequest),
     });
     const hidePaneMessages = paneAuxLayout.hideMessages || deferHeavySubtree;
+    const { centerView, setCenterView, visible: centerSwitcherVisible } = useCenterView(
+      paneAuxLayout.panelBelowMessages,
+      hidePaneMessages,
+    );
     const companionMessageListWindow = useMemo(
       () => resolveCompanionMessageListWindow(paneCount),
       [paneCount],
@@ -583,6 +597,9 @@ const MultiPaneExtraPaneCell = memo(
               activeWorkspaceFocus="repository"
               mainSessionForDataLink={paneSession}
               onSearch={() => shared.paneTopbarShared?.onSearchForRepository?.(resolvedRepo?.path ?? "")}
+              centerView={centerView}
+              onCenterViewChange={setCenterView}
+              centerSwitcherVisible={centerSwitcherVisible}
             />
           ) : null}
           <ClaudeSessionChatWithDock
@@ -645,6 +662,7 @@ const MultiPaneExtraPaneCell = memo(
             panelBelowMessages={paneAuxLayout.panelBelowMessages}
             hideMessages={hidePaneMessages}
             hideSessionTools={paneAuxLayout.hideSessionTools}
+            centerView={centerView}
             enableSessionNotificationFeed={false}
             resolveTaskListOmcInvokeConcurrency={shared.resolveTaskListOmcInvokeConcurrency}
             repositoryMainBindings={shared.repositoryMainBindings}

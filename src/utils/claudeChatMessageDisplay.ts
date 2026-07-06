@@ -139,6 +139,11 @@ export function hasRenderableChatMessageBody(msg: ClaudeMessage): boolean {
     if (isCompactNoticeSystemText(text)) return false;
     return true;
   }
+  // 与「历史消息」弹窗（sessionUserQuestions）一致：过滤自动压缩、AskUserQuestion 已作答等噪声。
+  if (msg.role === "user") {
+    const text = userMessagePlainTextForDisplay(msg).trim();
+    if (text.length > 0 && isDisplayNoiseUserMessageText(text)) return false;
+  }
   const parts = msg.parts;
   if (Array.isArray(parts) && parts.length > 0) {
     return parts.some(isRenderableMessagePart);

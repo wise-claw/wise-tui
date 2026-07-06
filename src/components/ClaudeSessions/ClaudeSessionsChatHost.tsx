@@ -20,6 +20,7 @@ import { shouldKeepProjectFocusWhenSwitchingSession } from "../../utils/workspac
 import { type PaneCount, type PaneSlot } from "../../constants/mainLayoutWidths";
 import type { MultiPaneSharedChatProps, PaneRepoTreeNode } from "./ClaudeMultiPaneGrid";
 import type { PaneTopbarSharedProps } from "./Topbar";
+import type { CenterView } from "./ClaudeChat";
 import { runPaneCreateTask } from "./paneCreateLoading";
 import { prefetchNewSessionSurface } from "./prefetchNewSessionSurface";
 import { WorkspaceViewportLoading } from "../WorkspaceViewportLoading";
@@ -174,6 +175,8 @@ export interface ClaudeSessionsChatHostProps {
   workflowGraphStatusByWorkflowId?: Record<string, string>;
   onOpenTaskDetail?: (taskId: string) => void;
   panelBelowMessages?: React.ReactNode;
+  /** 中栏当前视图（由顶栏切换器控制）：单屏路径透传给 ClaudeChat；多屏各 pane 自持。 */
+  centerView?: CenterView;
   hideMessages?: boolean;
   hideSessionTools?: boolean;
   resolvePaneAuxLayout?: ResolvePaneAuxLayout;
@@ -282,6 +285,7 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
   workflowGraphStatusByWorkflowId = {},
   onOpenTaskDetail,
   panelBelowMessages,
+  centerView,
   hideMessages = false,
   hideSessionTools = false,
   resolvePaneAuxLayout,
@@ -704,6 +708,7 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
           workflowGraphStatusByWorkflowId={workflowGraphStatusByWorkflowId}
           onOpenTaskDetail={onOpenTaskDetail}
           panelBelowMessages={panelBelowMessages}
+          centerView={centerView}
           hideMessages={hideMessages}
           hideSessionTools={hideSessionTools}
           resolveTaskListOmcInvokeConcurrency={resolveTaskListOmcInvokeConcurrency}

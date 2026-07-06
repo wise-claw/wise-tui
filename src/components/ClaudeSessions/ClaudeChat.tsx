@@ -140,6 +140,12 @@ function logWorkflowTrace(step: string, payload: Record<string, unknown>) {
 /** 主 Claude Code 从 running/connecting 进入空闲后，自动出队待发送任务前等待，减轻与子进程收尾的竞态 */
 const POST_CLAUDE_IDLE_PENDING_DISPATCH_DELAY_MS = 500;
 
+/**
+ * 中栏主区视图切换：消息列表 / 文件编辑器。
+ * 有编辑器时由顶栏 Segmented 切换，当前视图占满整个主区（而非上下分屏，避免每个框过矮）。
+ */
+export type CenterView = "messages" | "files";
+
 export type { RefreshHistorySessionsScope } from "./ClaudeChatSessionFeaturePanel";
 
 interface Props {
@@ -235,6 +241,8 @@ interface Props {
   panelBelowMessages?: React.ReactNode;
   hideMessages?: boolean;
   hideSessionTools?: boolean;
+  /** 中栏当前视图（由顶栏切换器控制）：messages=消息列表，files=文件编辑器。无编辑器时忽略。 */
+  centerView?: CenterView;
   /**
    * 中栏「消息通知」浮层；默认关闭（有未读也不展示）。顶栏铃铛收件箱不受影响。
    * 多屏副窗格应设为 false，避免重复订阅通知 feed 与 IPC 拉取。
@@ -378,6 +386,7 @@ export function ClaudeChatInner({
   panelBelowMessages,
   hideMessages = false,
   hideSessionTools = false,
+  centerView = "messages",
   enableSessionNotificationFeed = false,
   resolveTaskListOmcInvokeConcurrency: _resolveTaskListOmcInvokeConcurrency,
   repositoryMainBindings = {},
@@ -1644,27 +1653,44 @@ export function ClaudeChatInner({
       <div className="app-claude-chat-body">
         <div className="app-claude-chat-main">
 
-      {/* Messages */}
-      {!hideMessages && (
-        <ClaudeChatMessagesLiveHost
-          sessionId={session.id}
-          claudeSessionId={session.claudeSessionId}
-          hideMessagesScroll={hideMessages || deferHeavySubtree}
-          fullTranscriptLoading={fullTranscriptLoading}
-          onReloadFullDiskTranscript={onReloadFullDiskTranscript}
-          onOpenTaskDetail={onOpenTaskDetail}
-          onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
-          onOpenSessionConversationTaskDetail={openSessionConversationTaskDetail}
-          resolveExecutionEnvironmentDispatchTask={resolveExecutionEnvironmentDispatchTask}
-          sessionsForDispatchLookup={sessions}
-          onFullTranscriptStart={handleFullTranscriptStart}
-          onFullTranscriptEnd={handleFullTranscriptEnd}
-          messageListProfile={messageListProfile}
-          companionMessageListWindow={companionMessageListWindow}
-          sessionExecutionEngine={sessionExecutionEngine}
-        />
-      )}
-      {panelBelowMessages}
+      <div
+        className={`app-claude-chat-center-pane${
+          !hideMessages && (!panelBelowMessages || centerView === "messages") ? "" : " is-hidden"
+        }`}
+      >
+        {!hideMessages ? (
+          <ClaudeChatMessagesLiveHost
+            sessionId={session.id}
+            claudeSessionId={session.claudeSessionId}
+            hideMessagesScroll={
+              hideMessages ||
+              deferHeavySubtree ||
+              (Boolean(panelBelowMessages) && centerView === "files")
+            }
+            fullTranscriptLoading={fullTranscriptLoading}
+            onReloadFullDiskTranscript={onReloadFullDiskTranscript}
+            onOpenTaskDetail={onOpenTaskDetail}
+            onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
+            onOpenSessionConversationTaskDetail={openSessionConversationTaskDetail}
+            resolveExecutionEnvironmentDispatchTask={resolveExecutionEnvironmentDispatchTask}
+            sessionsForDispatchLookup={sessions}
+            onFullTranscriptStart={handleFullTranscriptStart}
+            onFullTranscriptEnd={handleFullTranscriptEnd}
+            messageListProfile={messageListProfile}
+            companionMessageListWindow={companionMessageListWindow}
+            sessionExecutionEngine={sessionExecutionEngine}
+          />
+        ) : null}
+      </div>
+      {panelBelowMessages ? (
+        <div
+          className={`app-claude-chat-center-pane${
+            hideMessages || centerView === "files" ? "" : " is-hidden"
+          }`}
+        >
+          {panelBelowMessages}
+        </div>
+      ) : null}
 
       {showPendingTaskQueue ? (
         <div className="app-pending-task-queue-anchor">

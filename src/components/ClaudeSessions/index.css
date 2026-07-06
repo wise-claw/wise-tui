@@ -426,6 +426,41 @@
   pointer-events: auto;
 }
 
+/* 顶栏「消息/文件」切换器：紧凑纯文字胶囊，融入玻璃顶栏。
+   外层 fill-content 淡灰胶囊提供分组感；thumb 用 bg-container 白底 + 微阴影浮起；
+   item 18px 高、4px 圆角、5px 横向内边距，未选中 secondary、选中 text + 500。 */
+.app-topbar-center-switcher.ant-segmented {
+  flex-shrink: 0;
+  margin-left: 4px;
+  padding: 2px;
+  background: var(--ant-color-fill-content);
+  border-radius: 6px;
+}
+.app-topbar-center-switcher.ant-segmented .ant-segmented-item {
+  min-height: 18px;
+  height: 18px;
+  padding: 0 5px;
+  border-radius: 4px;
+  font-size: 12px;
+  line-height: 18px;
+  color: var(--ant-color-text-secondary);
+  transition: color 0.15s ease;
+}
+.app-topbar-center-switcher.ant-segmented
+  .ant-segmented-item:not(.ant-segmented-item-selected):hover {
+  color: var(--ant-color-text);
+}
+.app-topbar-center-switcher.ant-segmented .ant-segmented-item-selected,
+.app-topbar-center-switcher.ant-segmented .ant-segmented-item-selected:hover {
+  color: var(--ant-color-text);
+  font-weight: 500;
+}
+.app-topbar-center-switcher.ant-segmented .ant-segmented-thumb {
+  background: var(--ant-color-bg-container);
+  border-radius: 4px;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
 .app-chat-topbar-left > * {
   pointer-events: auto;
 }
@@ -1700,6 +1735,18 @@
   min-height: 0;
   overflow: hidden;
   contain: layout style;
+}
+
+/* 消息 / 文件视图：各自占满主区剩余高度，互斥显示（is-hidden 隐藏但保留挂载以保状态） */
+.app-claude-chat-center-pane {
+  flex: 1 1 0;
+  min-height: 0;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+}
+.app-claude-chat-center-pane.is-hidden {
+  display: none;
 }
 
 /* 消息区与底部（快捷条 + 输入）的分界 */
