@@ -59,6 +59,34 @@ export function LeftSidebarQuickActionsPopover({
     }
     return [...ids];
   }, [repositoriesById, floatingRepositories]);
+  // 列表项归属标签展示具体工作区/仓库名称（找不到时回退为「工作区」/「仓库」）。
+  const workspaceNameById = useMemo(() => {
+    const map = new Map<string, string>();
+    for (const ws of workspaces) {
+      if (ws.id) map.set(ws.id, ws.name);
+    }
+    return map;
+  }, [workspaces]);
+  const repositoryNameById = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const [id, repo] of repositoriesById) {
+      if (Number.isFinite(id) && id > 0) map.set(id, repo.name);
+    }
+    for (const repo of floatingRepositories) {
+      if (Number.isFinite(repo.id) && repo.id > 0) map.set(repo.id, repo.name);
+    }
+    return map;
+  }, [repositoriesById, floatingRepositories]);
+  const resolveScopeLabel = useCallback(
+    (item: WorkspaceQuickActionDisplayItem): string => {
+      if (item.scope === "project") {
+        return workspaceNameById.get(item.scopeId) ?? "工作区";
+      }
+      const repoId = Number(item.scopeId);
+      return repositoryNameById.get(repoId) ?? "仓库";
+    },
+    [workspaceNameById, repositoryNameById],
+  );
   const quickActions = useWorkspaceQuickActions({
     projectId,
     repositoryId,
@@ -258,8 +286,12 @@ export function LeftSidebarQuickActionsPopover({
                         </span>
                         <span className="app-left-sidebar-quick-actions-popover__row-label">{item.label}</span>
                         <span className="app-left-sidebar-quick-actions-popover__row-target">{item.target}</span>
-                        <Tag bordered={false} className="app-left-sidebar-quick-actions-popover__scope-tag">
-                          {item.scope === "project" ? "工作区" : "仓库"}
+                        <Tag
+                          bordered={false}
+                          className="app-left-sidebar-quick-actions-popover__scope-tag"
+                          title={resolveScopeLabel(item)}
+                        >
+                          {resolveScopeLabel(item)}
                         </Tag>
                       </button>
                       <span className="app-left-sidebar-quick-actions-popover__row-actions">

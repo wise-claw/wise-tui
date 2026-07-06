@@ -111,11 +111,15 @@
 
 .app-left-sidebar-quick-actions-popover__scope-tag {
   flex-shrink: 0;
+  max-width: 84px;
   margin: 0;
   padding-inline: 4px;
   font-size: 10px;
   line-height: 16px;
   min-height: 16px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .app-left-sidebar-quick-actions-popover__row-actions {
