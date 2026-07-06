@@ -125,6 +125,9 @@ export interface SessionFeedbackLoopSettings {
 
 export type MonitorPanelPlacement = "left" | "right";
 
+/** 主会话底栏「执行环境」与「模型切换」触发器显示模式。 */
+export type ComposerFooterTriggerDisplayMode = "full" | "icon";
+
 export type WorkspaceInspectorPanelsDefaults = Pick<
   WiseDefaultConfigV1,
   | "showWorkspaceQuickActionsPanel"
@@ -140,6 +143,7 @@ export type ComposerFooterChromeDefaults = Pick<
   | "showComposerFooterCommonPhrases"
   | "showComposerFooterRuntimeSettings"
   | "showComposerFooterModelPicker"
+  | "composerFooterTriggerDisplayMode"
 >;
 
 export interface WiseDefaultConfigV1 {
@@ -202,6 +206,8 @@ export interface WiseDefaultConfigV1 {
   showComposerFooterRuntimeSettings: boolean;
   /** 主会话输入框底栏模型选择；默认显示。 */
   showComposerFooterModelPicker: boolean;
+  /** 主会话底栏「执行环境」与「模型切换」触发器显示模式：完整（图标+文字）或仅图标；默认完整。 */
+  composerFooterTriggerDisplayMode: ComposerFooterTriggerDisplayMode;
   /** 右栏工作区快捷操作卡片；默认显示。 */
   showWorkspaceQuickActionsPanel: boolean;
   /** 右栏待办事项卡片；默认显示。 */
@@ -280,6 +286,7 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   showComposerFooterCommonPhrases: true,
   showComposerFooterRuntimeSettings: true,
   showComposerFooterModelPicker: true,
+  composerFooterTriggerDisplayMode: "full",
   showWorkspaceQuickActionsPanel: true,
   showWorkspaceTodosPanel: true,
   showRightInspectorTerminal: false,
@@ -315,6 +322,14 @@ function normalizeBoolean(raw: unknown, fallback = false): boolean {
   if (trimmed === "1" || trimmed === "true") return true;
   if (trimmed === "0" || trimmed === "false") return false;
   return fallback;
+}
+
+function normalizeComposerFooterTriggerDisplayMode(
+  raw: unknown,
+): ComposerFooterTriggerDisplayMode {
+  return raw === "full" || raw === "icon"
+    ? raw
+    : DEFAULT_CONFIG.composerFooterTriggerDisplayMode;
 }
 
 function normalizeConnectionKind(raw: unknown): ClaudeSessionConnectionKind | null {
@@ -482,6 +497,9 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
               parsed.showComposerFooterModelPicker,
               DEFAULT_CONFIG.showComposerFooterModelPicker,
             ),
+      composerFooterTriggerDisplayMode: normalizeComposerFooterTriggerDisplayMode(
+        parsed.composerFooterTriggerDisplayMode,
+      ),
       showWorkspaceQuickActionsPanel:
         parsed.showWorkspaceQuickActionsPanel === undefined
           ? DEFAULT_CONFIG.showWorkspaceQuickActionsPanel
@@ -676,6 +694,7 @@ function dispatchComposerFooterChromeDefaultChanged(config: ComposerFooterChrome
         showComposerFooterCommonPhrases: config.showComposerFooterCommonPhrases,
         showComposerFooterRuntimeSettings: config.showComposerFooterRuntimeSettings,
         showComposerFooterModelPicker: config.showComposerFooterModelPicker,
+        composerFooterTriggerDisplayMode: config.composerFooterTriggerDisplayMode,
       },
     }),
   );
@@ -765,6 +784,7 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     showComposerFooterCommonPhrases: DEFAULT_CONFIG.showComposerFooterCommonPhrases,
     showComposerFooterRuntimeSettings: DEFAULT_CONFIG.showComposerFooterRuntimeSettings,
     showComposerFooterModelPicker: DEFAULT_CONFIG.showComposerFooterModelPicker,
+    composerFooterTriggerDisplayMode: DEFAULT_CONFIG.composerFooterTriggerDisplayMode,
     showWorkspaceQuickActionsPanel: DEFAULT_CONFIG.showWorkspaceQuickActionsPanel,
     showWorkspaceTodosPanel: DEFAULT_CONFIG.showWorkspaceTodosPanel,
     showRightInspectorTerminal: DEFAULT_CONFIG.showRightInspectorTerminal,
@@ -984,6 +1004,7 @@ export async function saveWiseDefaultConfig(
       | "showComposerFooterCommonPhrases"
       | "showComposerFooterRuntimeSettings"
       | "showComposerFooterModelPicker"
+      | "composerFooterTriggerDisplayMode"
       | "showWorkspaceQuickActionsPanel"
       | "showWorkspaceTodosPanel"
       | "showRightInspectorTerminal"
@@ -1075,6 +1096,10 @@ export async function saveWiseDefaultConfig(
       patch.showComposerFooterRuntimeSettings ?? current.showComposerFooterRuntimeSettings,
     showComposerFooterModelPicker:
       patch.showComposerFooterModelPicker ?? current.showComposerFooterModelPicker,
+    composerFooterTriggerDisplayMode:
+      patch.composerFooterTriggerDisplayMode !== undefined
+        ? normalizeComposerFooterTriggerDisplayMode(patch.composerFooterTriggerDisplayMode)
+        : current.composerFooterTriggerDisplayMode,
     showWorkspaceQuickActionsPanel:
       patch.showWorkspaceQuickActionsPanel ?? current.showWorkspaceQuickActionsPanel,
     showWorkspaceTodosPanel: patch.showWorkspaceTodosPanel ?? current.showWorkspaceTodosPanel,
@@ -1402,7 +1427,8 @@ export async function saveWiseDefaultConfig(
     patch.showComposerFooterContextRing !== undefined ||
     patch.showComposerFooterCommonPhrases !== undefined ||
     patch.showComposerFooterRuntimeSettings !== undefined ||
-    patch.showComposerFooterModelPicker !== undefined
+    patch.showComposerFooterModelPicker !== undefined ||
+    patch.composerFooterTriggerDisplayMode !== undefined
   ) {
     if (
       next.showComposerFooterAttachButton !== current.showComposerFooterAttachButton ||
@@ -1411,7 +1437,8 @@ export async function saveWiseDefaultConfig(
       next.showComposerFooterContextRing !== current.showComposerFooterContextRing ||
       next.showComposerFooterCommonPhrases !== current.showComposerFooterCommonPhrases ||
       next.showComposerFooterRuntimeSettings !== current.showComposerFooterRuntimeSettings ||
-      next.showComposerFooterModelPicker !== current.showComposerFooterModelPicker
+      next.showComposerFooterModelPicker !== current.showComposerFooterModelPicker ||
+      next.composerFooterTriggerDisplayMode !== current.composerFooterTriggerDisplayMode
     ) {
       dispatchComposerFooterChromeDefaultChanged({
         showComposerFooterAttachButton: next.showComposerFooterAttachButton,
@@ -1421,6 +1448,7 @@ export async function saveWiseDefaultConfig(
         showComposerFooterCommonPhrases: next.showComposerFooterCommonPhrases,
         showComposerFooterRuntimeSettings: next.showComposerFooterRuntimeSettings,
         showComposerFooterModelPicker: next.showComposerFooterModelPicker,
+        composerFooterTriggerDisplayMode: next.composerFooterTriggerDisplayMode,
       });
     }
   }
@@ -1979,6 +2007,7 @@ export async function loadComposerFooterChromeDefaultsFromStore(): Promise<Compo
     showComposerFooterCommonPhrases: config.showComposerFooterCommonPhrases,
     showComposerFooterRuntimeSettings: config.showComposerFooterRuntimeSettings,
     showComposerFooterModelPicker: config.showComposerFooterModelPicker,
+    composerFooterTriggerDisplayMode: config.composerFooterTriggerDisplayMode,
   };
 }
 

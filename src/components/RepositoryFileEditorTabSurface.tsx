@@ -15,7 +15,6 @@ import {
   monacoUriForRepositoryPath,
   syncMonacoRepositoryTypeScriptModels,
 } from "../services/monacoTypeScriptEnvironment";
-import { installMonacoGlobalFindRedirect } from "../utils/monacoGlobalFindRedirect";
 import { installMonacoTrackpadSelectionGuard } from "../utils/monacoTrackpadSelectionGuard";
 import {
   isMonacoLargeFileContent,
@@ -308,11 +307,9 @@ export function RepositoryFileEditorTabSurface({
     (editor: MonacoEditorNamespace.IStandaloneCodeEditor, monaco: typeof Monaco) => {
       monacoMountGuardRef.current?.dispose();
       const trackpadGuard = installMonacoTrackpadSelectionGuard(editor);
-      const findRedirect = installMonacoGlobalFindRedirect(editor);
       monacoMountGuardRef.current = {
         dispose: () => {
           trackpadGuard.dispose();
-          findRedirect.dispose();
         },
       };
       editorRef.current = editor;

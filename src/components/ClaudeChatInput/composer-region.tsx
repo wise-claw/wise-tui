@@ -2871,7 +2871,7 @@ function ComposerInner({
             paneIndex={paneIndex}
             paneRuntimeOverride={paneRuntimeOverride}
             onUpdatePaneRuntimeOverride={paneCount > 1 ? onUpdatePaneRuntimeOverride : undefined}
-            iconOnly={compactFooterChrome}
+            iconOnly={compactFooterChrome || composerFooterChrome.composerFooterTriggerDisplayMode === "icon"}
           />
         ) : null}
         {composerFooterChrome.showComposerFooterModelPicker ? (
@@ -2881,7 +2881,7 @@ function ComposerInner({
             model={model}
             onModelChange={handleComposerModelChange}
             disabled={isSessionBusy}
-            iconOnly={compactFooterChrome}
+            iconOnly={compactFooterChrome || composerFooterChrome.composerFooterTriggerDisplayMode === "icon"}
           />
         ) : null}
         {menuItem}

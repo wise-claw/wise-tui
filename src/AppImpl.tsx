@@ -108,7 +108,6 @@ import {
   resolveCurrentMultiPaneLayoutStorageKey,
 } from "./utils/multiPaneLayoutStorage";
 import { isWiseAppFocused } from "./utils/isWiseAppFocused";
-import { openMonacoFindIfFocused } from "./utils/monacoGlobalFindRedirect";
 import { wiseMascotShow } from "./services/wiseMascot";
 import { initGlobalAtMentionShortcutRouting } from "./services/globalScreenshotHotkey";
 import {
@@ -3261,13 +3260,9 @@ export default function App() {
     let unlistenContent: (() => void) | undefined;
     void listen("global-open-filename-search", (event) => {
       const scopeDir = (event.payload as { scopeDir?: string } | undefined)?.scopeDir;
-      // 带目录范围的入口（文件树右键"在此搜索"）直接打开，跳过 Monaco 焦点拦截。
-      if (scopeDir) {
-        openFilenameSearchPalette(scopeDir);
-        return;
-      }
-      if (openMonacoFindIfFocused()) return;
-      openFilenameSearchPalette();
+      // ⌘F 始终打开 Wise 文件名搜索：即便 Monaco 聚焦也不再触发编辑器内查找，直接启动搜索文件。
+      // 带目录范围（文件树右键"在此搜索"）则限定搜索范围，否则全局搜索。
+      openFilenameSearchPalette(scopeDir);
     })
       .then((fn) => {
         unlistenFilename = fn;

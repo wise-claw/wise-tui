@@ -3,7 +3,6 @@ import { Spin } from "antd";
 import type * as Monaco from "monaco-editor";
 import type { editor as MonacoEditorNamespace } from "monaco-editor";
 import { configureWiseMonacoTypeScript } from "../services/monacoTypeScriptEnvironment";
-import { installMonacoGlobalFindRedirect } from "../utils/monacoGlobalFindRedirect";
 import { installMonacoTrackpadSelectionGuard } from "../utils/monacoTrackpadSelectionGuard";
 import {
   maxMonacoContentLength,
@@ -169,8 +168,6 @@ export function GitDiffMonacoPane({
               const guards = [
                 installMonacoTrackpadSelectionGuard(originalEditor),
                 installMonacoTrackpadSelectionGuard(modifiedEditor),
-                installMonacoGlobalFindRedirect(originalEditor),
-                installMonacoGlobalFindRedirect(modifiedEditor),
               ];
               trackpadGuardRef.current = {
                 dispose: () => {

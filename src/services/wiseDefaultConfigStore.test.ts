@@ -108,6 +108,7 @@ describe("wiseDefaultConfigStore", () => {
     expect(config.showComposerFooterCommonPhrases).toBe(true);
     expect(config.showComposerFooterRuntimeSettings).toBe(true);
     expect(config.showComposerFooterModelPicker).toBe(true);
+    expect(config.composerFooterTriggerDisplayMode).toBe("full");
     expect(config.gitPanelPlacement).toBe("left");
     expect(config.filesPanelPlacement).toBe("left");
     expect(setAppSetting).toHaveBeenCalled();
@@ -374,6 +375,49 @@ describe("wiseDefaultConfigStore", () => {
       showComposerFooterAttachButton: false,
     });
     expect(seen).toEqual([{ showComposerFooterAttachButton: false }]);
+  });
+
+  test("save composer footer trigger display mode dispatches visibility event", async () => {
+    getAppSetting.mockImplementation(async (key: string) => {
+      if (key === WISE_DEFAULT_CONFIG_ONESHOT_TO_STREAMING_MIGRATION_KEY) return "1";
+      if (key === WISE_DEFAULT_CONFIG_KEY) {
+        return JSON.stringify({
+          version: 1,
+          connectionKind: "streaming",
+          rightPanelDefaultCollapsed: false,
+          composerFooterTriggerDisplayMode: "full",
+        });
+      }
+      return null;
+    });
+    const seen: Array<{ composerFooterTriggerDisplayMode?: string }> = [];
+    window.addEventListener(WISE_COMPOSER_FOOTER_CHROME_DEFAULT_CHANGED, (e: Event) => {
+      const detail = (e as CustomEvent<{ composerFooterTriggerDisplayMode?: string }>).detail;
+      if (detail) {
+        seen.push({ composerFooterTriggerDisplayMode: detail.composerFooterTriggerDisplayMode });
+      }
+    });
+    await saveWiseDefaultConfig({ composerFooterTriggerDisplayMode: "icon" });
+    expect(seen).toEqual([{ composerFooterTriggerDisplayMode: "icon" }]);
+    const lastCall = setAppSetting.mock.calls.at(-1);
+    expect(JSON.parse(String(lastCall?.[1]))).toMatchObject({
+      composerFooterTriggerDisplayMode: "icon",
+    });
+  });
+
+  test("load backfills missing or invalid composer footer trigger display mode with full", async () => {
+    getAppSetting.mockImplementation(async (key: string) =>
+      key === WISE_DEFAULT_CONFIG_KEY
+        ? JSON.stringify({
+            version: 1,
+            connectionKind: "streaming",
+            rightPanelDefaultCollapsed: false,
+            composerFooterTriggerDisplayMode: "bogus",
+          })
+        : null,
+    );
+    const config = await loadWiseDefaultConfig();
+    expect(config.composerFooterTriggerDisplayMode).toBe("full");
   });
 
   test("load backfills missing workspace inspector panels with product defaults", async () => {

@@ -1,7 +1,6 @@
 import { lazy, Suspense, useCallback, useEffect, useRef, type ComponentProps } from "react";
 import { Spin } from "antd";
 import type { IDisposable } from "monaco-editor";
-import { installMonacoGlobalFindRedirect } from "../utils/monacoGlobalFindRedirect";
 import { installMonacoTrackpadSelectionGuard } from "../utils/monacoTrackpadSelectionGuard";
 
 const MonacoEditorLazy = lazy(() => import("@monaco-editor/react"));
@@ -27,11 +26,9 @@ export function LazyMonacoEditor({
     (editor, monaco) => {
       monacoMountGuardRef.current?.dispose();
       const trackpadGuard = installMonacoTrackpadSelectionGuard(editor);
-      const findRedirect = installMonacoGlobalFindRedirect(editor);
       monacoMountGuardRef.current = {
         dispose: () => {
           trackpadGuard.dispose();
-          findRedirect.dispose();
         },
       };
       onMount?.(editor, monaco);

@@ -36,6 +36,7 @@ import {
   setPaneEditorPanelContext,
   subscribePaneEditorPanelContext,
 } from "../stores/paneEditorPanelContextStore";
+import { getActivePaneIndex } from "../stores/activePaneIndexStore";
 import { MainLayoutResizeHandle } from "./MainLayoutResizeHandle";
 import type { McpHub } from "./McpHub";
 import type { ProgressMonitorDrawer } from "./ProgressMonitorDrawer";
@@ -1379,6 +1380,17 @@ export function AppWorkspaceLayout({
       }
 
       if (fromFileTree && !fileTreeOpenInNewPane) {
+        // 多屏下路由到最近聚焦的 pane：文件树是全局的（绑定 primary 仓库，不绑定某屏），
+        // 用户点击某屏聚焦后，文件树点击的文件应在该屏打开。activeIdx 为 null（未聚焦 / 单屏）
+        // 或超出当前屏数时 fallback primary。传 number override 走 routingExplicit 快路，直接在
+        // target host 打开（按 options.fileRootPath 加载，不依赖 host.repositoryPath 校验）。
+        const currentPaneCount = claudeSessionsProps.paneCount ?? 1;
+        const activeIdx = currentPaneCount > 1 ? getActivePaneIndex() : null;
+        if (activeIdx != null && activeIdx < currentPaneCount) {
+          setFileEditorTargetPaneIndex(activeIdx);
+          openRepositoryFileInPaneByRootPath(relativePath, options, activeIdx);
+          return;
+        }
         setFileEditorTargetPaneIndex(null);
         openRepositoryFileInPaneByRootPath(relativePath, options, null);
         return;

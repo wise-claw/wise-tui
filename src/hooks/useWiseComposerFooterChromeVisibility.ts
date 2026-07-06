@@ -15,6 +15,7 @@ export function useWiseComposerFooterChromeVisibility(): ComposerFooterChromeDef
     showComposerFooterCommonPhrases: true,
     showComposerFooterRuntimeSettings: true,
     showComposerFooterModelPicker: true,
+    composerFooterTriggerDisplayMode: "full",
   });
 
   const apply = useCallback((next: Partial<ComposerFooterChromeDefaults>) => {

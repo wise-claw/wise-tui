@@ -1035,6 +1035,26 @@ export function DefaultConfigPanel() {
           />
 
           <DefaultConfigRow
+            title="触发器显示"
+            hint="执行环境 / 模型"
+            detail="主会话底栏「执行环境」与「模型切换」触发器：仅图标或完整（图标+文字）；右栏紧凑模式始终仅图标"
+            control={
+              <DefaultConfigOptionPick<"full" | "icon">
+                aria-label="底栏触发器显示模式"
+                disabled={composerFooterChrome.loading || composerFooterChrome.saving}
+                value={composerFooterChrome.composerFooterTriggerDisplayMode}
+                options={[
+                  { label: "完整", value: "full" },
+                  { label: "图标", value: "icon" },
+                ]}
+                onChange={(value) => {
+                  void composerFooterChrome.saveTriggerDisplayMode(value);
+                }}
+              />
+            }
+          />
+
+          <DefaultConfigRow
             title="全局常用语"
             hint="无仓库独立配置时回落使用"
             control={<GlobalComposerCommonPhrasesManager />}

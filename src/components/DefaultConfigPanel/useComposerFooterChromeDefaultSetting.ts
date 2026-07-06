@@ -4,6 +4,7 @@ import {
   loadComposerFooterChromeDefaultsFromStore,
   saveComposerFooterChromeDefaultsToStore,
   type ComposerFooterChromeDefaults,
+  type ComposerFooterTriggerDisplayMode,
 } from "../../services/wiseDefaultConfigStore";
 
 export function useComposerFooterChromeDefaultSetting() {
@@ -15,6 +16,7 @@ export function useComposerFooterChromeDefaultSetting() {
     showComposerFooterCommonPhrases: true,
     showComposerFooterRuntimeSettings: true,
     showComposerFooterModelPicker: true,
+    composerFooterTriggerDisplayMode: "full",
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
@@ -68,5 +70,18 @@ export function useComposerFooterChromeDefaultSetting() {
     saveRuntimeSettings: (visible: boolean) =>
       saveField("showComposerFooterRuntimeSettings", visible),
     saveModelPicker: (visible: boolean) => saveField("showComposerFooterModelPicker", visible),
+    saveTriggerDisplayMode: (mode: ComposerFooterTriggerDisplayMode) => {
+      if (mode === footerChrome.composerFooterTriggerDisplayMode) return;
+      setSaving(true);
+      return saveComposerFooterChromeDefaultsToStore({ composerFooterTriggerDisplayMode: mode })
+        .then(() => {
+          setFooterChrome((prev) => ({ ...prev, composerFooterTriggerDisplayMode: mode }));
+        })
+        .catch((err) => {
+          message.error(`保存失败：${err instanceof Error ? err.message : String(err)}`);
+          throw err;
+        })
+        .finally(() => setSaving(false));
+    },
   };
 }

@@ -217,9 +217,11 @@ export interface TopbarProps {
  * `repositories` / `activeProject` / `activeWorkspaceFocus` 由各 pane 渲染处单独传入
  * （primary 用主会话仓库；extra 用 `resolvedRepo` 与 `paneSession`）。
  *
- * - primary pane：直接展开 shared 字段并补全 per-pane 字段，窗口级按钮正常渲染。
+ * - primary pane：直接展开 shared 字段并补全 per-pane 字段；多屏下窗口级按钮正常渲染，但「右侧面板」按钮
+ *   改由最右列 extra pane 承载（primary 位于左上，不渲染该按钮）。
  * - extra pane：展开后将窗口级回调（onToggleSidebar / onToggleTerminal / onChangePaneCount /
- *   onToggleRightPanel / onOpenRemoteChannels）显式置 undefined，使 Topbar 只渲染仓库级按钮。
+ *   onOpenRemoteChannels）显式置 undefined；最右列 pane 例外，保留 onToggleRightPanel /
+ *   onSetRightPanelDefaultCollapsed 以渲染右侧面板按钮。
  */
 export type PaneTopbarSharedProps = Omit<
   TopbarProps,

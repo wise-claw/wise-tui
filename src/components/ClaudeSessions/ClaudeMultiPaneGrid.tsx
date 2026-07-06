@@ -28,6 +28,7 @@ import type { ClaudeSessionConnectionKind } from "../../constants/claudeConnecti
 import type { SessionExecutionEngine } from "../../types";
 import type { RoleTagOption, RepositoryMentionOption } from "../../utils/projectRoleTagOptions";
 import { MAIN_LAYOUT_MULTI_PANE_MIN_WIDTH_PX, paneGridDimensions, type PaneCount, type PaneSlot, paneSlotRuntimeOverride } from "../../constants/mainLayoutWidths";
+import { markPaneActive, resetActivePaneIndex } from "../../stores/activePaneIndexStore";
 import { useInViewActive } from "../../hooks/useInView";
 import { useDockSlice } from "../../hooks/useDockSlice";
 import { isProjectRootSessionDisplayName } from "../../utils/repositoryMainSessionBinding";
@@ -246,6 +247,8 @@ interface MultiPanePrimaryPaneProps {
   initialNotificationPanelCollapsed: boolean;
   onCreateNewSession: () => void;
   paneAuxLayout: PaneAuxLayout;
+  /** 当前屏数：多屏时 primary 不渲染右侧面板按钮（改由最右列 extra pane 承载）。 */
+  paneCount: PaneCount;
 }
 
 const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
@@ -257,6 +260,7 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
   initialNotificationPanelCollapsed,
   onCreateNewSession,
   paneAuxLayout,
+  paneCount,
 }: MultiPanePrimaryPaneProps) {
   const sessionId = session.id;
   const onSessionModelChange = useCallback(
@@ -282,10 +286,19 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
   );
 
   return (
-    <div className="app-claude-sessions__pane">
+    <div
+      className="app-claude-sessions__pane"
+      onMouseDownCapture={() => markPaneActive(0)}
+    >
       {shared.paneTopbarShared ? (
         <Topbar
           {...shared.paneTopbarShared}
+          // 多屏下「展开右侧面板」按钮改由最右列 extra pane 渲染（紧邻右侧面板 rail）；
+          // primary 位于左上 (0,0) 永不在最右列，故多屏时关闭该按钮。单屏走全局 Topbar，此处防御性保留。
+          onToggleRightPanel={paneCount > 1 ? undefined : shared.paneTopbarShared?.onToggleRightPanel}
+          onSetRightPanelDefaultCollapsed={
+            paneCount > 1 ? undefined : shared.paneTopbarShared?.onSetRightPanelDefaultCollapsed
+          }
           activeRepository={activeRepository}
           activeSessionRepositoryPath={session.repositoryPath?.trim() || activeRepository.path}
           repositories={shared.repositories}
@@ -448,6 +461,9 @@ const MultiPaneExtraPaneCell = memo(
     paneAuxLayout,
   }: MultiPaneExtraPaneCellProps) {
     const resolvedRepo = paneRepo ?? activeRepository;
+    // 最右列 pane（cell index = paneIdx + 1，列号 = cellIndex % cols）紧邻右侧面板 rail，负责渲染右侧面板按钮。
+    const { cols } = paneGridDimensions(paneCount);
+    const isRightmostColumn = (paneIdx + 1) % cols === cols - 1;
     const lazyEnabled = shouldLazyMountMultiPaneExtraCells(paneCount);
     const mustStayMounted =
       paneSession?.status === "running" || paneSession?.status === "connecting";
@@ -578,17 +594,23 @@ const MultiPaneExtraPaneCell = memo(
         );
       }
       return (
-        <div ref={lazyEnabled ? setPaneDivRef : undefined} className="app-claude-sessions__pane">
+        <div
+          ref={lazyEnabled ? setPaneDivRef : undefined}
+          className="app-claude-sessions__pane"
+          onMouseDownCapture={() => markPaneActive(paneIdx + 1)}
+        >
           {shared.paneTopbarShared ? (
             <Topbar
               {...shared.paneTopbarShared}
-              // extra pane 不渲染窗口级按钮（侧栏 / 内置终端 / 多屏切换 / 右侧面板 / RemoteEntry）：
-              // 把窗口级回调显式置 undefined，Topbar 内 `onXxx && (...)` 判定为假即不渲染。
+              // extra pane 不渲染窗口级按钮（侧栏 / 内置终端 / 多屏切换 / RemoteEntry）；右侧面板按钮例外，
+              // 仅最右列 pane 保留（紧邻右侧面板 rail）。置 undefined 时 Topbar 内 `onXxx && (...)` 判定为假即不渲染。
               onToggleSidebar={undefined}
               onToggleTerminal={undefined}
               onChangePaneCount={undefined}
-              onToggleRightPanel={undefined}
-              onSetRightPanelDefaultCollapsed={undefined}
+              onToggleRightPanel={isRightmostColumn ? shared.paneTopbarShared?.onToggleRightPanel : undefined}
+              onSetRightPanelDefaultCollapsed={
+                isRightmostColumn ? shared.paneTopbarShared?.onSetRightPanelDefaultCollapsed : undefined
+              }
               onOpenRemoteChannels={undefined}
               activeRepository={resolvedRepo}
               activeSessionRepositoryPath={paneSession.repositoryPath?.trim() || resolvedRepo?.path}
@@ -1003,6 +1025,9 @@ export const ClaudeMultiPaneGrid = memo(function ClaudeMultiPaneGrid({
     if (paneCount === 2 && prev !== 2) {
       setTwoPaneSplitRatio(DEFAULT_TWO_PANE_SPLIT_RATIO);
     }
+    // 屏数变化是显著的布局切换：重置最近聚焦 pane，避免残留旧索引（可能已超出新屏数
+    // 或指向非预期 pane）导致文件树点击路由错位；之后 fallback primary，直到用户再次聚焦某屏。
+    resetActivePaneIndex();
   }, [paneCount]);
 
   useEffect(() => {
@@ -1065,6 +1090,7 @@ export const ClaudeMultiPaneGrid = memo(function ClaudeMultiPaneGrid({
         }
         onCreateNewSession={onCreatePrimarySession}
         paneAuxLayout={primaryPaneAuxLayout}
+        paneCount={paneCount}
       />
       {extraPanes.map((slot, paneIdx) => (
         <MultiPaneExtraPaneCell
