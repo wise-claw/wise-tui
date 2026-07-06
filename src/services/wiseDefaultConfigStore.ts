@@ -62,6 +62,9 @@ export const WISE_TOPBAR_CHROME_DEFAULT_CHANGED = "wise:topbar-chrome-default-ch
 export const WISE_COMPOSER_FOOTER_CHROME_DEFAULT_CHANGED =
   "wise:composer-footer-chrome-default-changed";
 
+export const WISE_FEATURE_PANEL_CHROME_DEFAULT_CHANGED =
+  "wise:feature-panel-chrome-default-changed";
+
 export const WISE_LEFT_SIDEBAR_HUB_QUICK_ENTRIES_CHANGED = "wise:left-sidebar-hub-quick-entries-changed";
 
 export const WISE_LEFT_SIDEBAR_MONITOR_PANEL_CHANGED = "wise:left-sidebar-monitor-panel-changed";
@@ -144,6 +147,13 @@ export type ComposerFooterChromeDefaults = Pick<
   | "showComposerFooterRuntimeSettings"
   | "showComposerFooterModelPicker"
   | "composerFooterTriggerDisplayMode"
+>;
+
+export type FeaturePanelChromeDefaults = Pick<
+  WiseDefaultConfigV1,
+  | "showFeaturePanelHistorySessions"
+  | "showFeaturePanelHistoryMessages"
+  | "showFeaturePanelScheduledTasks"
 >;
 
 export interface WiseDefaultConfigV1 {
@@ -252,6 +262,12 @@ export interface WiseDefaultConfigV1 {
   sessionFeedbackLoopAutoRollbackOnRegression: boolean;
   /** 补丁应用后自动触发验证轮次，将效果纳入循环评分。 */
   sessionFeedbackLoopAutoVerifyAfterApply: boolean;
+  /** 会话功能面板「历史会话」按钮；默认显示。 */
+  showFeaturePanelHistorySessions: boolean;
+  /** 会话功能面板「历史消息」按钮；默认显示。 */
+  showFeaturePanelHistoryMessages: boolean;
+  /** 会话功能面板「定时任务」按钮；默认显示。 */
+  showFeaturePanelScheduledTasks: boolean;
 }
 
 const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
@@ -307,6 +323,9 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   sessionFeedbackLoopAutoApplyConfigPatches: false,
   sessionFeedbackLoopAutoRollbackOnRegression: false,
   sessionFeedbackLoopAutoVerifyAfterApply: false,
+  showFeaturePanelHistorySessions: true,
+  showFeaturePanelHistoryMessages: true,
+  showFeaturePanelScheduledTasks: true,
   openInTerminalShortcut: "",
   openInEditorShortcut: "",
 };
@@ -615,6 +634,18 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
               parsed.sessionFeedbackLoopAutoVerifyAfterApply,
               DEFAULT_CONFIG.sessionFeedbackLoopAutoVerifyAfterApply,
             ),
+      showFeaturePanelHistorySessions:
+        parsed.showFeaturePanelHistorySessions === undefined
+          ? DEFAULT_CONFIG.showFeaturePanelHistorySessions
+          : normalizeBoolean(parsed.showFeaturePanelHistorySessions),
+      showFeaturePanelHistoryMessages:
+        parsed.showFeaturePanelHistoryMessages === undefined
+          ? DEFAULT_CONFIG.showFeaturePanelHistoryMessages
+          : normalizeBoolean(parsed.showFeaturePanelHistoryMessages),
+      showFeaturePanelScheduledTasks:
+        parsed.showFeaturePanelScheduledTasks === undefined
+          ? DEFAULT_CONFIG.showFeaturePanelScheduledTasks
+          : normalizeBoolean(parsed.showFeaturePanelScheduledTasks),
       openInTerminalShortcut:
         typeof parsed.openInTerminalShortcut === "string"
           ? normalizeChord(parsed.openInTerminalShortcut)
@@ -695,6 +726,19 @@ function dispatchComposerFooterChromeDefaultChanged(config: ComposerFooterChrome
         showComposerFooterRuntimeSettings: config.showComposerFooterRuntimeSettings,
         showComposerFooterModelPicker: config.showComposerFooterModelPicker,
         composerFooterTriggerDisplayMode: config.composerFooterTriggerDisplayMode,
+      },
+    }),
+  );
+}
+
+function dispatchFeaturePanelChromeDefaultChanged(config: FeaturePanelChromeDefaults): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(WISE_FEATURE_PANEL_CHROME_DEFAULT_CHANGED, {
+      detail: {
+        showFeaturePanelHistorySessions: config.showFeaturePanelHistorySessions,
+        showFeaturePanelHistoryMessages: config.showFeaturePanelHistoryMessages,
+        showFeaturePanelScheduledTasks: config.showFeaturePanelScheduledTasks,
       },
     }),
   );
@@ -809,6 +853,9 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
       DEFAULT_CONFIG.sessionFeedbackLoopAutoRollbackOnRegression,
     sessionFeedbackLoopAutoVerifyAfterApply:
       DEFAULT_CONFIG.sessionFeedbackLoopAutoVerifyAfterApply,
+    showFeaturePanelHistorySessions: DEFAULT_CONFIG.showFeaturePanelHistorySessions,
+    showFeaturePanelHistoryMessages: DEFAULT_CONFIG.showFeaturePanelHistoryMessages,
+    showFeaturePanelScheduledTasks: DEFAULT_CONFIG.showFeaturePanelScheduledTasks,
     openInTerminalShortcut: DEFAULT_CONFIG.openInTerminalShortcut,
     openInEditorShortcut: DEFAULT_CONFIG.openInEditorShortcut,
   };
@@ -1005,6 +1052,9 @@ export async function saveWiseDefaultConfig(
       | "showComposerFooterRuntimeSettings"
       | "showComposerFooterModelPicker"
       | "composerFooterTriggerDisplayMode"
+      | "showFeaturePanelHistorySessions"
+      | "showFeaturePanelHistoryMessages"
+      | "showFeaturePanelScheduledTasks"
       | "showWorkspaceQuickActionsPanel"
       | "showWorkspaceTodosPanel"
       | "showRightInspectorTerminal"
@@ -1143,6 +1193,12 @@ export async function saveWiseDefaultConfig(
     sessionFeedbackLoopAutoVerifyAfterApply:
       patch.sessionFeedbackLoopAutoVerifyAfterApply ??
       current.sessionFeedbackLoopAutoVerifyAfterApply,
+    showFeaturePanelHistorySessions:
+      patch.showFeaturePanelHistorySessions ?? current.showFeaturePanelHistorySessions,
+    showFeaturePanelHistoryMessages:
+      patch.showFeaturePanelHistoryMessages ?? current.showFeaturePanelHistoryMessages,
+    showFeaturePanelScheduledTasks:
+      patch.showFeaturePanelScheduledTasks ?? current.showFeaturePanelScheduledTasks,
     openInTerminalShortcut:
       patch.openInTerminalShortcut !== undefined
         ? normalizeChord(patch.openInTerminalShortcut)
@@ -1613,6 +1669,23 @@ export async function saveWiseDefaultConfig(
       });
     }
   }
+  if (
+    patch.showFeaturePanelHistorySessions !== undefined ||
+    patch.showFeaturePanelHistoryMessages !== undefined ||
+    patch.showFeaturePanelScheduledTasks !== undefined
+  ) {
+    if (
+      next.showFeaturePanelHistorySessions !== current.showFeaturePanelHistorySessions ||
+      next.showFeaturePanelHistoryMessages !== current.showFeaturePanelHistoryMessages ||
+      next.showFeaturePanelScheduledTasks !== current.showFeaturePanelScheduledTasks
+    ) {
+      dispatchFeaturePanelChromeDefaultChanged({
+        showFeaturePanelHistorySessions: next.showFeaturePanelHistorySessions,
+        showFeaturePanelHistoryMessages: next.showFeaturePanelHistoryMessages,
+        showFeaturePanelScheduledTasks: next.showFeaturePanelScheduledTasks,
+      });
+    }
+  }
 
   return next;
 }
@@ -2013,6 +2086,21 @@ export async function loadComposerFooterChromeDefaultsFromStore(): Promise<Compo
 
 export async function saveComposerFooterChromeDefaultsToStore(
   patch: Partial<ComposerFooterChromeDefaults>,
+): Promise<void> {
+  await saveWiseDefaultConfig(patch);
+}
+
+export async function loadFeaturePanelChromeDefaultsFromStore(): Promise<FeaturePanelChromeDefaults> {
+  const config = await loadWiseDefaultConfig();
+  return {
+    showFeaturePanelHistorySessions: config.showFeaturePanelHistorySessions,
+    showFeaturePanelHistoryMessages: config.showFeaturePanelHistoryMessages,
+    showFeaturePanelScheduledTasks: config.showFeaturePanelScheduledTasks,
+  };
+}
+
+export async function saveFeaturePanelChromeDefaultsToStore(
+  patch: Partial<FeaturePanelChromeDefaults>,
 ): Promise<void> {
   await saveWiseDefaultConfig(patch);
 }

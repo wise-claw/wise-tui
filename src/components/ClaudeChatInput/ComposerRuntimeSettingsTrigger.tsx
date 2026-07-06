@@ -29,6 +29,7 @@ import {
   resolvePaneEffectiveEngine,
   resolvePaneRuntimePreset,
   type PaneRuntimeOverride,
+  type PaneRuntimePreset,
 } from "../../types/paneRuntimeOverride";
 import { useComposerActiveProxyRoute } from "../../hooks/useComposerActiveProxyRoute";
 
@@ -123,6 +124,24 @@ export function ComposerRuntimeSettingsTrigger({
     claudeProxyBypass: claudeProxyRoute === "bypass",
   });
 
+  // 多屏 pane 无显式 override（或仅 claude/codex）时，根据生效引擎与代理路由推断默认选中预设，
+  // 确保继承默认的 pane 也能在菜单中高亮当前预设（claude-direct / claude-proxy / codex）。
+  // 当 route=auto 时，检查是否真有代理活跃；无代理则退回到直连，避免无代理时仍选中「代理」项。
+  const inferredPanePreset = useMemo<PaneRuntimePreset | null>(() => {
+    if (!showPaneRuntimePresets) return null;
+    if (activePanePreset) return activePanePreset;
+    const overrideEngine = paneRuntimeOverride?.executionEngine;
+    if (overrideEngine && isPaneExtraExecutionEngine(overrideEngine)) {
+      // cursor / gemini / opencode 走 extra 引擎区，不选中任何预设
+      return null;
+    }
+    const effectiveOverrideEngine = overrideEngine ?? effectiveEngine;
+    if (effectiveOverrideEngine === "codex") return "codex";
+    const route = paneRuntimeOverride?.claudeProxyRoute ?? claudeProxyRoute ?? "auto";
+    if (route === "bypass") return "claude-direct";
+    return activeProxyRoute ? "claude-proxy" : "claude-direct";
+  }, [showPaneRuntimePresets, activePanePreset, paneRuntimeOverride, effectiveEngine, claudeProxyRoute, activeProxyRoute]);
+
   const showExtraPaneEngines =
     showPaneRuntimePresets &&
     (codexAvailable || cursorAvailable || geminiAvailable || opencodeAvailable);
@@ -176,7 +195,7 @@ export function ComposerRuntimeSettingsTrigger({
     const items: MenuProps["items"] = [];
 
     if (showPaneRuntimePresets) {
-      const presetItems = buildPaneRuntimePresetMenuItems(activePanePreset);
+      const presetItems = buildPaneRuntimePresetMenuItems(activePanePreset, inferredPanePreset, { codexAvailable });
       if (presetItems?.length) {
         items.push(...presetItems);
       }
@@ -187,8 +206,6 @@ export function ComposerRuntimeSettingsTrigger({
           cursorAvailable,
           geminiAvailable,
           opencodeAvailable,
-          onOpenExecutionEnvironment,
-          onProbeClick: () => setMenuOpen(false),
           engines: PANE_EXTRA_EXECUTION_ENGINES,
         });
         if (extraEngineItems?.length) {
@@ -205,8 +222,6 @@ export function ComposerRuntimeSettingsTrigger({
         cursorAvailable,
         geminiAvailable,
         opencodeAvailable,
-        onOpenExecutionEnvironment,
-        onProbeClick: () => setMenuOpen(false),
       });
       if (engineItems?.length) {
         items.push(...engineItems);
@@ -240,6 +255,7 @@ export function ComposerRuntimeSettingsTrigger({
     opencodeAvailable,
     defaultConnectionKind,
     engine,
+    inferredPanePreset,
     onOpenExecutionEnvironment,
     resolvedConnectionKind,
     showConnection,
@@ -251,9 +267,13 @@ export function ComposerRuntimeSettingsTrigger({
   const selectedKeys = useMemo(() => {
     const keys: string[] = [];
     if (showPaneRuntimePresets) {
-      if (activePanePreset) {
-        keys.push(activePanePreset);
-      } else if (paneRuntimeOverride?.executionEngine) {
+      if (inferredPanePreset) {
+        keys.push(inferredPanePreset);
+      } else if (
+        paneRuntimeOverride?.executionEngine &&
+        isPaneExtraExecutionEngine(paneRuntimeOverride.executionEngine)
+      ) {
+        // cursor / gemini / opencode 等额外引擎：选中 extra 区对应项
         keys.push(paneRuntimeOverride.executionEngine);
       } else {
         keys.push("claude-direct");
@@ -264,13 +284,13 @@ export function ComposerRuntimeSettingsTrigger({
     if (showConnection) keys.push(resolvedConnectionKind);
     return keys;
   }, [
-    activePanePreset,
-    engine,
+    inferredPanePreset,
     paneRuntimeOverride?.executionEngine,
-    resolvedConnectionKind,
     showConnection,
     showEngine,
     showPaneRuntimePresets,
+    engine,
+    resolvedConnectionKind,
   ]);
 
   if (!showEngine && !showConnection && !showPaneRuntimePresets) {

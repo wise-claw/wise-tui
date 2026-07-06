@@ -7,6 +7,9 @@ describe("composer runtime settings menu items", () => {
     const engineItems = buildSessionExecutionEngineMenuItems({
       engine: "claude",
       codexAvailable: true,
+      cursorAvailable: true,
+      geminiAvailable: true,
+      opencodeAvailable: true,
     });
     const connectionItems = buildConnectionKindMenuItems("streaming", "streaming");
 
@@ -16,13 +19,27 @@ describe("composer runtime settings menu items", () => {
     expect(connectionItems?.[1]?.key).toBe("streaming");
   });
 
-  test("hides Cursor SDK from engine menu when not available", () => {
+  test("only shows detected or installed engines", () => {
     const engineItems = buildSessionExecutionEngineMenuItems({
       engine: "claude",
       codexAvailable: true,
       cursorAvailable: false,
+      geminiAvailable: false,
+      opencodeAvailable: false,
     });
-    expect(engineItems).toHaveLength(4);
-    expect(engineItems?.map((item) => item?.key)).toEqual(["claude", "codex", "gemini", "opencode"]);
+    expect(engineItems).toHaveLength(2);
+    expect(engineItems?.map((item) => item?.key)).toEqual(["claude", "codex"]);
+  });
+
+  test("hides all optional engines when none are available", () => {
+    const engineItems = buildSessionExecutionEngineMenuItems({
+      engine: "claude",
+      codexAvailable: false,
+      cursorAvailable: false,
+      geminiAvailable: false,
+      opencodeAvailable: false,
+    });
+    expect(engineItems).toHaveLength(1);
+    expect(engineItems?.[0]?.key).toBe("claude");
   });
 });

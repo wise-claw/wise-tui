@@ -25,6 +25,7 @@ import {
   type RefreshHistorySessionsScope,
   type SessionUserQuestionRow,
 } from "./ClaudeChatSessionFeatureShared";
+import { useWiseFeaturePanelChromeVisibility } from "../../hooks/useWiseFeaturePanelChromeVisibility";
 
 function ClockIcon() {
   return (
@@ -120,11 +121,17 @@ export const ClaudeChatSessionFeatureToolbar = memo(function ClaudeChatSessionFe
     onOpenRepositoryScheduledTasks,
   } = props;
 
+  const { showFeaturePanelHistorySessions, showFeaturePanelHistoryMessages, showFeaturePanelScheduledTasks }
+    = useWiseFeaturePanelChromeVisibility();
+  const showAnyLeft = showFeaturePanelHistorySessions || showFeaturePanelHistoryMessages;
+
   return (
     <div className="app-claude-session-feature-panel" role="toolbar" aria-label="会话功能面板">
+      {showAnyLeft ? (
       <div className="app-claude-session-feature-panel__left">
         <div className="app-claude-session-history-tools" role="toolbar" aria-label="历史会话与历史消息">
           <div className="app-claude-session-tool-group app-claude-session-tool-group--compact">
+            {showFeaturePanelHistorySessions ? (
             <Popover
               trigger="click"
               placement="bottomLeft"
@@ -256,7 +263,9 @@ export const ClaudeChatSessionFeatureToolbar = memo(function ClaudeChatSessionFe
                 </button>
               </HoverHint>
             </Popover>
+            ) : null}
 
+            {showFeaturePanelHistoryMessages ? (
             <Popover
               trigger="click"
               placement="bottomLeft"
@@ -324,10 +333,13 @@ export const ClaudeChatSessionFeatureToolbar = memo(function ClaudeChatSessionFe
                 </button>
               </HoverHint>
             </Popover>
+            ) : null}
           </div>
         </div>
       </div>
+      ) : null}
 
+      {showFeaturePanelScheduledTasks ? (
       <div className="app-claude-session-feature-panel__right">
         <div
           className="app-claude-session-tools app-claude-session-tool-group app-claude-session-tool-group--compact"
@@ -348,6 +360,7 @@ export const ClaudeChatSessionFeatureToolbar = memo(function ClaudeChatSessionFe
           </HoverHint>
         </div>
       </div>
+      ) : null}
     </div>
   );
 });

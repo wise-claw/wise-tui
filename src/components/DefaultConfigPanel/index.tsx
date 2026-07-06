@@ -25,6 +25,7 @@ import { EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAY_OPTIONS } from "../../consta
 import { useRightPanelDefaultSetting } from "./useRightPanelDefaultSetting";
 import { useTopbarChromeDefaultSetting } from "./useTopbarChromeDefaultSetting";
 import { useComposerFooterChromeDefaultSetting } from "./useComposerFooterChromeDefaultSetting";
+import { useFeaturePanelChromeDefaultSetting } from "./useFeaturePanelChromeDefaultSetting";
 import { useDefaultTerminalSetting } from "./useDefaultTerminalSetting";
 import { useClaudeDefaultSettingsSetting } from "./useClaudeDefaultSettingsSetting";
 import { ClaudeSettingsJsonEditor } from "../ClaudeSessions/ClaudeSettingsJsonEditor";
@@ -78,6 +79,7 @@ export function DefaultConfigPanel() {
   const rightPanel = useRightPanelDefaultSetting();
   const topbarChrome = useTopbarChromeDefaultSetting();
   const composerFooterChrome = useComposerFooterChromeDefaultSetting();
+  const featurePanelChrome = useFeaturePanelChromeDefaultSetting();
   const hubQuickEntries = useLeftSidebarHubQuickEntriesSetting();
   const monitorPanel = useMonitorPanelSetting();
   const leftSidebarWorkspaceList = useLeftSidebarWorkspaceListSetting();
@@ -199,6 +201,27 @@ export function DefaultConfigPanel() {
     [composerFooterChrome],
   );
 
+  const featurePanelOptions = useMemo(
+    () => [
+      {
+        label: "历史会话",
+        value: "history-sessions",
+        checked: featurePanelChrome.showFeaturePanelHistorySessions,
+      },
+      {
+        label: "历史消息",
+        value: "history-messages",
+        checked: featurePanelChrome.showFeaturePanelHistoryMessages,
+      },
+      {
+        label: "定时任务",
+        value: "scheduled-tasks",
+        checked: featurePanelChrome.showFeaturePanelScheduledTasks,
+      },
+    ],
+    [featurePanelChrome],
+  );
+
   const feedbackBehaviorOptions = useMemo(
     () => [
       {
@@ -309,6 +332,22 @@ export function DefaultConfigPanel() {
         break;
       case "model":
         void composerFooterChrome.saveModelPicker(checked);
+        break;
+      default:
+        break;
+    }
+  };
+
+  const handleFeaturePanelToggle = (value: string, checked: boolean) => {
+    switch (value) {
+      case "history-sessions":
+        void featurePanelChrome.saveHistorySessions(checked);
+        break;
+      case "history-messages":
+        void featurePanelChrome.saveHistoryMessages(checked);
+        break;
+      case "scheduled-tasks":
+        void featurePanelChrome.saveScheduledTasks(checked);
         break;
       default:
         break;
@@ -1060,6 +1099,27 @@ export function DefaultConfigPanel() {
             control={<GlobalComposerCommonPhrasesManager />}
           />
         </>
+      ),
+    },
+    // 会话功能面板：历史会话 / 历史消息 / 定时任务 按钮显隐。
+    {
+      key: "feature-panel",
+      title: "功能面板",
+      content: (
+        <DefaultConfigRow
+          title="功能按钮"
+          hint="主会话顶栏下方"
+          detail="主会话顶栏下方的会话功能面板按钮"
+          layout="stack"
+          control={
+            <DefaultConfigCheckboxGrid
+              ariaLabel="会话功能面板按钮显示"
+              disabled={featurePanelChrome.loading || featurePanelChrome.saving}
+              options={featurePanelOptions}
+              onToggle={handleFeaturePanelToggle}
+            />
+          }
+        />
       ),
     },
     // 主会话顶栏：仓库名 / 远程入口 / 终端 / 工具图标（合并到一个 grid）。

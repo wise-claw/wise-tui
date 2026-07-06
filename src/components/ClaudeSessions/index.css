@@ -6853,16 +6853,21 @@ button.app-message-part-header:disabled:hover {
   background: var(--ant-color-fill-quaternary) !important;
 }
 
-/* 选中项：实色背景 + 左侧色条 + 标题高亮；hover specificity 更高需显式保持选中态 */
-.app-claude-connection-kind-dropdown .app-claude-connection-kind-menu-item-wrapper--selected {
+/* 选中项：实色背景 + 左侧色条 + 标题高亮；hover specificity 更高需显式保持选中态。
+   同时匹配 AntD 原生 .ant-dropdown-menu-item-selected，确保 selectedKeys 标记的项
+   即便自定义 --selected class 未加上（如多屏 pane 继承默认无 override）也能显示选中态。 */
+.app-claude-connection-kind-dropdown .ant-dropdown-menu-item.ant-dropdown-menu-item-selected,
+.app-claude-connection-kind-dropdown .ant-dropdown-menu-item.app-claude-connection-kind-menu-item-wrapper--selected {
   background: var(--ant-color-primary-bg) !important;
   box-shadow: inset 2px 0 0 var(--ant-color-primary) !important;
 }
 
+.app-claude-connection-kind-dropdown .ant-dropdown-menu-item.ant-dropdown-menu-item-selected:hover:not(.ant-dropdown-menu-item-disabled),
 .app-claude-connection-kind-dropdown .ant-dropdown-menu-item.app-claude-connection-kind-menu-item-wrapper--selected:hover:not(.ant-dropdown-menu-item-disabled) {
   background: var(--ant-color-primary-bg) !important;
 }
 
+.app-claude-connection-kind-dropdown .ant-dropdown-menu-item-selected .app-claude-connection-kind-menu-item__title,
 .app-claude-connection-kind-menu-item-wrapper--selected .app-claude-connection-kind-menu-item__title {
   color: var(--ant-color-primary);
 }
@@ -6895,6 +6900,7 @@ button.app-message-part-header:disabled:hover {
   transition: all 0.2s ease;
 }
 
+.app-claude-connection-kind-dropdown .ant-dropdown-menu-item-selected .app-claude-connection-kind-menu-item__icon-wrap,
 .app-claude-connection-kind-menu-item--selected .app-claude-connection-kind-menu-item__icon-wrap {
   background: var(--ant-color-primary) !important;
   color: #fff !important;

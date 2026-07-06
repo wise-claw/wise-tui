@@ -38,13 +38,6 @@ function isEngineAvailable(
   return true;
 }
 
-function unavailableDescription(key: SessionExecutionEngine): string {
-  if (key === "codex") return "未检测到 Codex CLI，点击右侧探测";
-  if (key === "gemini") return "未检测到 Gemini CLI，点击右侧探测";
-  if (key === "opencode") return "未检测到 OpenCode，点击右侧探测";
-  return SESSION_EXECUTION_ENGINE_LABELS[key].description;
-}
-
 function visibleExecutionEngines(
   cursorAvailable: boolean,
 ): readonly SessionExecutionEngine[] {
@@ -60,52 +53,29 @@ export function buildSessionExecutionEngineMenuItems({
   cursorAvailable = true,
   geminiAvailable = false,
   opencodeAvailable = false,
-  onOpenExecutionEnvironment,
-  onProbeClick,
   engines,
 }: PickerSectionProps & {
-  onProbeClick?: () => void;
   engines?: readonly SessionExecutionEngine[];
 }): MenuProps["items"] {
   const visibleEngines = engines ?? visibleExecutionEngines(cursorAvailable);
-  return visibleEngines.map((key) => {
+  return visibleEngines
+    .filter((key) => {
+      // 只显示已探测到或已安装的引擎
+      if (key === "claude") return true; // Claude 始终可用
+      return isEngineAvailable(key, codexAvailable, cursorAvailable, geminiAvailable, opencodeAvailable);
+    })
+    .map((key) => {
     const itemMeta = SESSION_EXECUTION_ENGINE_LABELS[key];
-    const itemDisabled = !isEngineAvailable(
-      key,
-      codexAvailable,
-      cursorAvailable,
-      geminiAvailable,
-      opencodeAvailable,
-    );
     const isSelected = engine === key;
-
-    const probeAction =
-      itemDisabled &&
-      onOpenExecutionEnvironment &&
-      (key === "codex" || key === "gemini" || key === "opencode") ? (
-        <button
-          type="button"
-          className="app-claude-connection-kind-menu-item__probe"
-          onClick={(event) => {
-            event.preventDefault();
-            event.stopPropagation();
-            onProbeClick?.();
-            onOpenExecutionEnvironment();
-          }}
-        >
-          探测
-        </button>
-      ) : null;
 
     return {
       key,
-      disabled: itemDisabled,
       className: `app-claude-connection-kind-menu-item-wrapper ${isSelected ? "app-claude-connection-kind-menu-item-wrapper--selected" : ""}`,
       label: (
         <div
           className={`app-claude-connection-kind-menu-item ${
-            itemDisabled ? "app-claude-connection-kind-menu-item--disabled" : ""
-          } ${isSelected ? "app-claude-connection-kind-menu-item--selected" : ""}`}
+            isSelected ? "app-claude-connection-kind-menu-item--selected" : ""
+          }`}
         >
           <div className="app-claude-connection-kind-menu-item__icon-wrap">
             {key === "claude" ? (
@@ -134,23 +104,22 @@ export function buildSessionExecutionEngineMenuItems({
               {key === "claude" ? (
                 <span className="app-claude-connection-kind-menu-item__badge">默认</span>
               ) : null}
-              {key === "codex" && !itemDisabled ? (
+              {key === "codex" ? (
                 <span className="app-claude-connection-kind-menu-item__badge app-claude-connection-kind-menu-item__badge--codex">本地</span>
               ) : null}
-              {key === "cursor" && !itemDisabled ? (
+              {key === "cursor" ? (
                 <span className="app-claude-connection-kind-menu-item__badge app-claude-connection-kind-menu-item__badge--cursor">SDK</span>
               ) : null}
-              {(key === "gemini" || key === "opencode") && !itemDisabled ? (
+              {(key === "gemini" || key === "opencode") ? (
                 <span className="app-claude-connection-kind-menu-item__badge app-claude-connection-kind-menu-item__badge--codex">本地</span>
               ) : null}
             </div>
             <span className="app-claude-connection-kind-menu-item__desc">
-              {itemDisabled ? unavailableDescription(key) : itemMeta.description}
+              {itemMeta.description}
             </span>
           </div>
           <div className="app-claude-connection-kind-menu-item__action-wrap">
-            {probeAction}
-            {isSelected && !itemDisabled ? (
+            {isSelected ? (
               <svg className="app-claude-connection-kind-menu-item__checkmark" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3.5" strokeLinecap="round" strokeLinejoin="round">
                 <polyline points="20 6 9 17 4 12" />
               </svg>
@@ -179,9 +148,8 @@ export function SessionExecutionEnginePickerSection({
         cursorAvailable,
         geminiAvailable,
         opencodeAvailable,
-        onOpenExecutionEnvironment,
       }),
-    [codexAvailable, cursorAvailable, geminiAvailable, opencodeAvailable, engine, onOpenExecutionEnvironment],
+    [codexAvailable, cursorAvailable, geminiAvailable, opencodeAvailable, engine],
   );
 
   return (
@@ -232,10 +200,8 @@ export function SessionExecutionEngineChip({
         cursorAvailable,
         geminiAvailable,
         opencodeAvailable,
-        onOpenExecutionEnvironment,
-        onProbeClick: () => setMenuOpen(false),
       }),
-    [codexAvailable, cursorAvailable, geminiAvailable, opencodeAvailable, engine, onOpenExecutionEnvironment],
+    [codexAvailable, cursorAvailable, geminiAvailable, opencodeAvailable, engine],
   );
 
   const chipTooltip = !engineReady
