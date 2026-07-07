@@ -5,6 +5,7 @@ import {
   mergeSessionQuickActionsLayout,
   type SessionQuickActionsLayoutV1,
 } from "../constants/sessionQuickActionsLayout";
+import { WISE_UI_EVENT_ASSISTANTS_CHANGED } from "../constants/assistantsUiEvents";
 import { listAssistants } from "../services/assistants";
 import {
   loadSessionQuickActionsLayout,
@@ -56,6 +57,30 @@ export function useSessionQuickActionsLayout() {
       });
     return () => {
       cancelled = true;
+    };
+  }, []);
+
+  /**
+   * 助手模板落库（新建 / 编辑 / 删除）后由 `dispatchAssistantsChanged()`
+   * 触发，重新拉取 `listAssistants()` 让「更多」弹窗与外显主行同步出现新模板。
+   */
+  useEffect(() => {
+    const handler = () => {
+      let cancelled = false;
+      void listAssistants()
+        .then((rows) => {
+          if (!cancelled) setAssistants(rows);
+        })
+        .catch(() => {
+          if (!cancelled) setAssistants([]);
+        });
+      return () => {
+        cancelled = true;
+      };
+    };
+    window.addEventListener(WISE_UI_EVENT_ASSISTANTS_CHANGED, handler);
+    return () => {
+      window.removeEventListener(WISE_UI_EVENT_ASSISTANTS_CHANGED, handler);
     };
   }, []);
 

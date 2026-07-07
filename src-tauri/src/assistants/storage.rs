@@ -111,10 +111,9 @@ pub fn upsert(conn: &Connection, input: &CustomAssistantInput) -> Result<CustomA
         }
     }
     if entry_kind == "run_workflow" {
-        let workflow_id = input.entry_workflow_id.as_deref().unwrap_or("").trim();
-        if workflow_id.is_empty() {
-            return Err("entryWorkflowId must not be empty for run_workflow".to_string());
-        }
+        // run_workflow 的 entryWorkflowId 改为可选：留空时走「轻量 executeSession」
+        // （与 dispatch_direct 等价），有值时按所选工作流入队（leader worker 拉起）。
+        // 这里不再做非空校验，激活阶段由前端 + executeSession 共同决定。
     }
     if entry_kind == "run_script" && input.entry_script.trim().is_empty() {
         return Err("entryScript must not be empty for run_script".to_string());
@@ -304,5 +303,18 @@ mod tests {
         let row = upsert(&conn, &link).unwrap();
         assert_eq!(row.entry_kind, "open_link");
         assert_eq!(row.entry_url, "https://example.com");
+    }
+
+    #[test]
+    fn run_workflow_with_empty_workflow_id_is_allowed() {
+        // 「直接派发执行」的 entryWorkflowId 改为可选：留空时走轻量 executeSession
+        // （不入队），所以写入路径上必须允许 workflowId 为空。
+        let conn = open_in_memory();
+        let mut wf = input("wf", "claude");
+        wf.entry_kind = "run_workflow".to_string();
+        wf.entry_workflow_id = Some(String::new());
+        let row = upsert(&conn, &wf).unwrap();
+        assert_eq!(row.entry_kind, "run_workflow");
+        assert_eq!(row.entry_workflow_id.as_deref(), Some(""));
     }
 }

@@ -107,7 +107,8 @@ describe("activateAssistantTemplate", () => {
     const [sessionId, prompt] = executeSession.mock.calls[0] ?? [];
     expect(sessionId).toBe("session:main");
     expect(prompt).toBe("outbound prompt");
-    expect(calls[0]?.type).toBe("success");
+    // 当前成功路径上不弹 success 提示，仅 warning 路径有反馈；这里断言没有 error/warning。
+    expect(calls.some((c) => c.type === "error" || c.type === "warning")).toBe(false);
   });
 
   test("dispatch_direct requires repository", async () => {
@@ -188,5 +189,66 @@ describe("activateAssistantTemplate", () => {
       message,
     });
     expect(runShellCommandMock).toHaveBeenCalledWith("/repo/a", "echo hi");
+  });
+
+  test("run_workflow with empty workflowId falls back to lightweight executeSession", async () => {
+    // 行为约定：run_workflow 的 entryWorkflowId 留空时，不入队、不依赖工作流，
+    // 走与 dispatch_direct 等价的轻量 executeSession 路径。
+    const executeSession = mock(async () => true);
+    const { message, calls } = messageStub();
+    const binding = repoBinding("/repo/a");
+    await activateAssistantTemplate({
+      assistant: customAssistant({ entryKind: "run_workflow", entryWorkflowId: undefined }),
+      repositoryPath: "/repo/a",
+      workflowTemplates: [],
+      ...binding,
+      executeSession,
+      message,
+    });
+    expect(executeSession).toHaveBeenCalledTimes(1);
+    const args = executeSession.mock.calls[0];
+    expect(args?.[0]).toBe("session:main");
+    expect(args?.[1]).toBe("outbound prompt");
+    // 不传 dispatchTarget（第三参数），避免被识别为入队任务。
+    expect(args?.[2]).toBeUndefined();
+    // 走轻量路径成功，弹"已立即执行（未指定工作流）"提示。
+    expect(
+      calls.some(
+        (c) => c.type === "success" && c.text.includes("未指定工作流"),
+      ),
+    ).toBe(true);
+  });
+
+  test("run_workflow with workflowId enqueues via team target", async () => {
+    const executeSession = mock(async () => true);
+    const { message, calls } = messageStub();
+    const binding = repoBinding("/repo/a");
+    await activateAssistantTemplate({
+      assistant: customAssistant({
+        entryKind: "run_workflow",
+        entryWorkflowId: "wf-1",
+      }),
+      repositoryPath: "/repo/a",
+      workflowTemplates: [
+        {
+          id: "wf-1",
+          name: "团队工作流",
+          description: "",
+        } as never,
+      ],
+      ...binding,
+      executeSession,
+      message,
+    });
+    expect(executeSession).toHaveBeenCalledTimes(1);
+    const args = executeSession.mock.calls[0];
+    expect(args?.[0]).toBe("session:main");
+    expect(args?.[1]).toBe("outbound prompt");
+    expect(args?.[2]).toEqual({
+      targetType: "team",
+      targetWorkflowId: "wf-1",
+      targetWorkflowName: "团队工作流",
+    });
+    expect(calls.some((c) => c.type === "success" && c.text.includes("团队工作流"))).toBe(true);
   });
 });

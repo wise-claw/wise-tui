@@ -11,6 +11,7 @@ import {
   listAssistants,
   saveCustomAssistant,
 } from "../../services/assistants";
+import { dispatchAssistantsChanged } from "../../constants/assistantsUiEvents";
 import type { DetectedAgent } from "../../types/detectedAgent";
 import type { AssistantEntry, AssistantEntryKind, CustomAssistantInput } from "../../types/assistant";
 import type { WorkflowTemplateItem } from "../../types";
@@ -216,6 +217,8 @@ export function AssistantsPanel({
         });
       }
       await fetchAll();
+      // 通知「更多」弹窗 / 外显主行：助手模板已更新。
+      dispatchAssistantsChanged();
       closeDrawer();
     } catch (e) {
       if (e instanceof Error) message.error(e.message);
@@ -242,6 +245,8 @@ export function AssistantsPanel({
           try {
             await deleteAssistant(row.id);
             await fetchAll();
+            // 通知「更多」弹窗 / 外显主行：助手模板已更新。
+            dispatchAssistantsChanged();
           } catch (e) {
             message.error(e instanceof Error ? e.message : String(e));
             throw e;
@@ -482,12 +487,13 @@ export function AssistantsPanel({
             <>
               <Form.Item
                 name="entryWorkflowId"
-                label="团队工作流"
-                rules={[{ required: true, message: "需要选择工作流" }]}
+                label="团队工作流（可选）"
+                help="不选时：跳过工作流入队，直接 executeSession（与「立即执行」等价）。选择后：按所选工作流入队，由 leader worker 拉起。"
               >
                 <Select
+                  allowClear
                   options={workflowOptions}
-                  placeholder={workflowOptions.length > 0 ? "选择要执行的工作流" : "请先在「工作流」中创建工作流"}
+                  placeholder={workflowOptions.length > 0 ? "选择要执行的工作流（可留空）" : "请先在「工作流」中创建工作流"}
                   showSearch
                   optionFilterProp="label"
                 />

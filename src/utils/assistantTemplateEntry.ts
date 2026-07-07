@@ -13,7 +13,7 @@ export const ASSISTANT_ENTRY_KIND_OPTIONS: {
   {
     value: "run_workflow",
     label: "直接派发执行",
-    description: "按所选团队工作流入队，由 leader worker 拉起",
+    description: "选择团队工作流时按所选入队（leader worker 拉起）；不选工作流时与「立即执行」等价",
   },
   {
     value: "run_script",

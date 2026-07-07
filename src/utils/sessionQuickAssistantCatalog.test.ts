@@ -33,6 +33,21 @@ describe("sessionQuickAssistantCatalog", () => {
     expect(catalog.meta["custom:writer"]?.label).toBe("写作助手");
   });
 
+  test("dispatch_direct custom assistants also appear in catalog", () => {
+    // 「对话助手」下线后，新保存的「立即执行」(dispatch_direct) 模板必须
+    // 出现在 catalog 中，否则「更多」弹窗拿不到这个 id。
+    const catalog = buildSessionQuickActionCatalog([
+      assistant({
+        id: "custom:immediate",
+        name: "立即执行助手",
+        customId: "immediate",
+        entryKind: "dispatch_direct",
+      }),
+    ]);
+    expect(catalog.order).toContain("custom:immediate");
+    expect(catalog.meta["custom:immediate"]?.label).toBe("立即执行助手");
+  });
+
   test("new assistant templates default visible in overflow menu", () => {
     expect(defaultQuickActionItemForId("custom:writer")).toEqual({
       visible: true,

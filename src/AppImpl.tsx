@@ -1741,6 +1741,7 @@ export default function App() {
       await activateAssistantTemplate({
         assistant,
         repositoryPath,
+        preferredSessionId: activeSessionId ?? undefined,
         workflowTemplates,
         repositories,
         sessions,
@@ -1751,6 +1752,7 @@ export default function App() {
     },
     [
       activeRepositoryId,
+      activeSessionId,
       handleComposerExecute,
       message,
       repositories,
