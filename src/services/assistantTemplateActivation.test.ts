@@ -4,6 +4,7 @@ import type { ClaudeSession, Repository } from "../types";
 
 const openExternalUrlMock = mock(async () => undefined);
 const runShellCommandMock = mock(async () => ({ stdout: "", stderr: "", exit_code: 0 }));
+const spawnShellCommandMock = mock(async () => ({ pid: 4242 }));
 const buildClaudeOutgoingPromptMock = mock(async () => "outbound prompt");
 
 mock.module("./openExternal", () => ({
@@ -13,6 +14,7 @@ mock.module("./openExternal", () => ({
 
 mock.module("./terminal", () => ({
   runShellCommand: runShellCommandMock,
+  spawnShellCommand: spawnShellCommandMock,
 }));
 
 mock.module("./claudeComposerPrompt", () => ({
@@ -121,9 +123,11 @@ function repoBinding(repositoryPath: string): {
 beforeEach(() => {
   openExternalUrlMock.mockReset();
   runShellCommandMock.mockReset();
+  spawnShellCommandMock.mockReset();
   buildClaudeOutgoingPromptMock.mockReset();
   openExternalUrlMock.mockResolvedValue(undefined);
   runShellCommandMock.mockResolvedValue({ stdout: "ok", stderr: "", exit_code: 0 });
+  spawnShellCommandMock.mockResolvedValue({ pid: 4242 });
   buildClaudeOutgoingPromptMock.mockResolvedValue("outbound prompt");
 });
 
@@ -210,11 +214,12 @@ describe("activateAssistantTemplate", () => {
       message,
     });
     expect(calls[0]?.type).toBe("warning");
+    expect(spawnShellCommandMock).not.toHaveBeenCalled();
     expect(runShellCommandMock).not.toHaveBeenCalled();
   });
 
-  test("runs script in repository cwd", async () => {
-    const { message } = messageStub();
+  test("spawns script in background with repository cwd (fire-and-forget)", async () => {
+    const { message, calls } = messageStub();
     await activateAssistantTemplate({
       assistant: customAssistant({ entryKind: "run_script", entryScript: "echo hi" }),
       repositoryPath: "/repo/a",
@@ -225,96 +230,27 @@ describe("activateAssistantTemplate", () => {
       executeSession: mock(async () => true),
       message,
     });
-    expect(runShellCommandMock).toHaveBeenCalledWith("/repo/a", "echo hi");
+    // 走后台 spawn 路径，不再调用同步的 run_shell_command
+    expect(spawnShellCommandMock).toHaveBeenCalledWith("/repo/a", "echo hi");
+    expect(runShellCommandMock).not.toHaveBeenCalled();
+    // 成功提示带上 pid
+    const success = calls.find((c) => c.type === "success");
+    expect(success?.text).toContain("脚本已后台启动");
+    expect(success?.text).toContain("4242");
+    // 没有 error/warning，也没有 modal 调用（fire-and-forget 不接 stdout/stderr）
+    expect(calls.some((c) => c.type === "error" || c.type === "warning")).toBe(false);
   });
 
-  test("run_script failure surfaces summary via message and full output via modal", async () => {
-    // 模拟 bun test 失败的真实场景：stderr 含测试结果、stdout 为空、退出码 1
-    const longStderr = [
-      "$ bun test scripts/cursor-sdk-bridge.stderr.test.ts",
-      "(pass) isCursorSdkNoiseStderr > filters Connect RPC HTTP/2 stream close noise",
-      "(pass) isCursorSdkNoiseStderr > filters connect-error.js so",
-      "(fail) isCursorSdkNoiseStderr > keeps meaningful panic stack visible",
-      " (stdin <stdin>:1:9)",
-      "expect(received).toBe(expected)",
-      "",
-      " 0 pass",
-      " 1 fail",
-      " 2 expect() calls",
-      "Ran 2 tests across 1 file. [0.5ms]",
-    ].join("\n");
-    runShellCommandMock.mockResolvedValueOnce({
-      stdout: "",
-      stderr: longStderr,
-      exit_code: 1,
-    });
-    const { message, modal, calls, modalCalls } = messageStub();
+  test("run_script spawn failure surfaces error via message (no modal)", async () => {
+    // 复现：后端 spawn 阶段失败（命令找不到、路径无效等）
+    spawnShellCommandMock.mockRejectedValueOnce(new Error("仓库路径不存在或不是目录：/repo/missing"));
+    const stub = messageStub();
     await activateAssistantTemplate({
       assistant: customAssistant({
         entryKind: "run_script",
         entryScript: "bun test scripts/cursor-sdk-bridge.stderr.test.ts",
       }),
-      repositoryPath: "/repo/a",
-      workflowTemplates: [],
-      repositories: [],
-      sessions: [],
-      repositoryMainBindings: {},
-      executeSession: mock(async () => true),
-      message,
-      modal,
-    });
-    // message.error 顶部摘要只显示一行（截断到 160 字符）+ 退出码
-    const errCall = calls.find((c) => c.type === "error");
-    expect(errCall?.text.startsWith("脚本退出码 1：")).toBe(true);
-    expect(errCall?.text.length ?? 0).toBeLessThanOrEqual(200);
-    // Modal.error 被弹，title 含退出码，content 含完整 stderr
-    expect(modalCalls).toHaveLength(1);
-    expect(modalCalls[0]?.title).toContain("退出码 1");
-    expect(modalCalls[0]?.content).toContain("(fail) isCursorSdkNoiseStderr");
-    expect(modalCalls[0]?.content).toContain("Ran 2 tests across 1 file.");
-  });
-
-  test("run_script failure falls back to message-only when modal is not provided", async () => {
-    runShellCommandMock.mockResolvedValueOnce({
-      stdout: "out-stdout\nmore",
-      stderr: "out-stderr",
-      exit_code: 2,
-    });
-    const stub = messageStub();
-    await activateAssistantTemplate({
-      assistant: customAssistant({
-        entryKind: "run_script",
-        entryScript: "false",
-      }),
-      repositoryPath: "/repo/a",
-      workflowTemplates: [],
-      repositories: [],
-      sessions: [],
-      repositoryMainBindings: {},
-      executeSession: mock(async () => true),
-      message: stub.message,
-      // 不传 modal：旧调用方降级行为仍保留
-    });
-    // 没有 modal 调用
-    expect(stub.modalCalls).toHaveLength(0);
-    // message.error 顶部摘要仍然存在
-    const errCall = stub.calls.find((c) => c.type === "error");
-    expect(errCall?.text.startsWith("脚本退出码 2：")).toBe(true);
-  });
-
-  test("run_script failure with empty output only shows exit code in message", async () => {
-    runShellCommandMock.mockResolvedValueOnce({
-      stdout: "",
-      stderr: "",
-      exit_code: 1,
-    });
-    const stub = messageStub();
-    await activateAssistantTemplate({
-      assistant: customAssistant({
-        entryKind: "run_script",
-        entryScript: "true",
-      }),
-      repositoryPath: "/repo/a",
+      repositoryPath: "/repo/missing",
       workflowTemplates: [],
       repositories: [],
       sessions: [],
@@ -323,10 +259,10 @@ describe("activateAssistantTemplate", () => {
       message: stub.message,
       modal: stub.modal,
     });
+    // 后台 spawn 失败只在 message.error 给提示，不再弹 modal/notification
     const errCall = stub.calls.find((c) => c.type === "error");
-    expect(errCall?.text).toBe("脚本退出码 1");
-    expect(stub.modalCalls).toHaveLength(1);
-    expect(stub.modalCalls[0]?.content).toContain("(脚本无 stdout / stderr 输出)");
+    expect(errCall?.text).toContain("仓库路径不存在或不是目录");
+    expect(stub.modalCalls).toHaveLength(0);
   });
 
   test("run_workflow without workflowId works without main session binding", async () => {
@@ -425,22 +361,11 @@ describe("activateAssistantTemplate", () => {
     expect(calls.some((c) => c.type === "success" && c.text.includes("团队工作流"))).toBe(true);
   });
 
-  test("run_script failure falls back to notification when modal is empty object (no <App> Provider)", async () => {
-    // 复现：上游注入的 modal 没有方法（antd `App.useApp()` 在没有 `<App>` Provider 时
-    // 会返回 `{message:{}, notification:{}, modal:{}}`，看似有效但 `.error` undefined）。
-    // service 必须能优雅降级到 notification，否则会抛 "is not a function" 阻断脚本执行。
-    runShellCommandMock.mockResolvedValueOnce({
-      stdout: "",
-      stderr: "(fail) isCursorSdkNoiseStderr\nRan 2 tests across 1 file.",
-      exit_code: 1,
-    });
-    // 显式不传 modal，但传 notification：模拟实际生产环境 antd App context 缺失的场景。
-    const stub = messageStub({ modal: false });
+  test("run_script empty script content surfaces error and skips spawn", async () => {
+    // entryScript 为空时直接报错，不发起后台 spawn。
+    const stub = messageStub();
     await activateAssistantTemplate({
-      assistant: customAssistant({
-        entryKind: "run_script",
-        entryScript: "bun test scripts/cursor-sdk-bridge.stderr.test.ts",
-      }),
+      assistant: customAssistant({ entryKind: "run_script", entryScript: "" }),
       repositoryPath: "/repo/a",
       workflowTemplates: [],
       repositories: [],
@@ -448,51 +373,9 @@ describe("activateAssistantTemplate", () => {
       repositoryMainBindings: {},
       executeSession: mock(async () => true),
       message: stub.message,
-      notification: stub.notification,
     });
-    // 没传 modal：原有 modalCalls 仍然为空
-    expect(stub.modalCalls).toHaveLength(0);
-    // message.error 顶部仍给摘要
-    const errCall = stub.calls.find((c) => c.type === "error");
-    expect(errCall?.text.startsWith("脚本退出码 1：")).toBe(true);
-    // 完整 stdout+stderr 通过 notification 通道呈给用户
-    expect(stub.notificationCalls).toHaveLength(1);
-    expect(stub.notificationCalls[0]?.message).toContain("退出码 1");
-    expect(stub.notificationCalls[0]?.description).toContain("(fail) isCursorSdkNoiseStderr");
-    expect(stub.notificationCalls[0]?.description).toContain("Ran 2 tests across 1 file.");
-  });
-
-  test("run_script failure falls back to message-only truncation when modal & notification both missing", async () => {
-    // 兜底兜底：modal 是空对象且 notification 也没传，service 不能抛错，必须降级到
-    // message.error 并把内容截断到 ~1 KB，让用户至少能看到诊断线索。
-    const longStdout = "x".repeat(2048);
-    runShellCommandMock.mockResolvedValueOnce({
-      stdout: longStdout,
-      stderr: "",
-      exit_code: 3,
-    });
-    const stub = messageStub({ modal: false, notification: false });
-    await activateAssistantTemplate({
-      assistant: customAssistant({
-        entryKind: "run_script",
-        entryScript: "echo long",
-      }),
-      repositoryPath: "/repo/a",
-      workflowTemplates: [],
-      repositories: [],
-      sessions: [],
-      repositoryMainBindings: {},
-      executeSession: mock(async () => true),
-      message: stub.message,
-      // modal/notification 都不传
-    });
-    expect(stub.modalCalls).toHaveLength(0);
-    expect(stub.notificationCalls).toHaveLength(0);
-    const errCalls = stub.calls.filter((c) => c.type === "error");
-    expect(errCalls.length).toBeGreaterThanOrEqual(1);
-    // 第二条是带内容截断的兜底消息，包含省略标记
-    const truncated = errCalls.find((c) => c.text.includes("已省略"));
-    expect(truncated).toBeDefined();
-    expect(truncated?.text).toContain("脚本退出码 3");
+    expect(stub.calls.some((c) => c.type === "error" && c.text.includes("脚本内容为空"))).toBe(true);
+    expect(spawnShellCommandMock).not.toHaveBeenCalled();
+    expect(runShellCommandMock).not.toHaveBeenCalled();
   });
 });

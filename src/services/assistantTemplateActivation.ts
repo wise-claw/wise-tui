@@ -1,4 +1,3 @@
-import { createElement, type ReactElement } from "react";
 import type { MessageInstance } from "antd/es/message/interface";
 import type { ModalStaticFunctions } from "antd/es/modal/confirm";
 import type { NotificationInstance } from "antd/es/notification/interface";
@@ -6,7 +5,7 @@ import type { AssistantEntry } from "../types/assistant";
 import type { ClaudeSession, PendingExecutionTask, Repository, WorkflowTemplateItem } from "../types";
 import { buildClaudeOutgoingPrompt } from "./claudeComposerPrompt";
 import { openExternalUrl, isSafeExternalHref } from "./openExternal";
-import { runShellCommand } from "./terminal";
+import { spawnShellCommand } from "./terminal";
 import { resolveAssistantEntryKind } from "../utils/assistantTemplateEntry";
 import { repositoryFolderBasename } from "../utils/repositoryType";
 import { resolveExecutionEnvironmentDispatchAnchorSessionId } from "../utils/executionEnvironmentDispatchAnchor";
@@ -72,91 +71,6 @@ export interface ActivateAssistantTemplateInput {
   notification?: Pick<NotificationInstance, "success" | "warning" | "error" | "info">;
 }
 
-/**
- * 判断上游注入的 modal 是否真正可用。
- * antd `App.useApp()` 在没有 `<App>` Provider 时会返回 `{modal: {}}`，
- * 看似有效但 `.error` 不是函数，调用会抛错。
- */
-function isUsableModal(
-  modal: ActivateAssistantTemplateInput["modal"],
-): modal is NonNullable<ActivateAssistantTemplateInput["modal"]> {
-  return Boolean(modal && typeof (modal as { error?: unknown }).error === "function");
-}
-
-/**
- * 把脚本失败反馈呈给用户。
- * 优先级：
- * 1. usable modal → Modal.error（可放大的滚动 <pre>）
- * 2. usable notification → notification.error（不回滚到 message，能装长文本且不会中断脚本执行链路）
- * 3. 仅 message → 把"完整 stdout+stderr"截断若干字符塞进 message.error，避免完全看不到内容
- *
- * 切忌在 modal 不可用时直接调 `input.modal.error(...)`：上游若没在 antd `<App>` Provider 下注入，
- * `App.useApp()` 会返回 `{modal: {}}` 这种空对象，调 `.error` 会抛 "is not a function"，
- * 阻断 `run_script` 后续业务流并引发卡死观感。
- */
-function surfaceScriptFailure(
-  input: ActivateAssistantTemplateInput,
-  payload: { exitCode: number; stderr: string; stdout: string },
-): void {
-  const { exitCode, stderr, stdout } = payload;
-  const firstLine = (stderr || stdout).split(/\r?\n/, 1)[0] ?? "";
-  const summary = firstLine
-    ? `脚本退出码 ${exitCode}：${firstLine.slice(0, 160)}`
-    : `脚本退出码 ${exitCode}`;
-  input.message.error(summary);
-
-  const combined = [stderr, stdout].filter((s) => s.length > 0).join("\n\n");
-  const fullContent = combined.length > 0 ? combined : "(脚本无 stdout / stderr 输出)";
-
-  if (isUsableModal(input.modal)) {
-    const preNode: ReactElement = createElement(
-      "pre",
-      {
-        style: {
-          margin: 0,
-          maxHeight: 420,
-          overflow: "auto",
-          whiteSpace: "pre-wrap",
-          wordBreak: "break-word",
-          fontFamily: "ui-monospace, SFMono-Regular, Menlo, monospace",
-          fontSize: 12,
-          lineHeight: 1.55,
-          background: "var(--wise-bg-elevated, rgba(0,0,0,0.04))",
-          padding: 12,
-          borderRadius: 6,
-        },
-      },
-      fullContent,
-    );
-    input.modal.error({
-      title: `脚本执行失败 · 退出码 ${exitCode}`,
-      width: 720,
-      okText: "关闭",
-      content: preNode,
-    });
-    return;
-  }
-
-  if (
-    input.notification &&
-    typeof (input.notification as { error?: unknown }).error === "function"
-  ) {
-    input.notification.error({
-      message: `脚本执行失败 · 退出码 ${exitCode}`,
-      description: fullContent,
-      duration: 0,
-    });
-    return;
-  }
-
-  // 兜底：把截断到 ~1 KB 的 stdout+stderr 塞进 message.error，给用户最起码的诊断线索。
-  const TRUNCATE_LIMIT = 1024;
-  const truncated = fullContent.length > TRUNCATE_LIMIT
-    ? `${fullContent.slice(0, TRUNCATE_LIMIT)}\n…（后续 ${fullContent.length - TRUNCATE_LIMIT} 字符已省略）`
-    : fullContent;
-  input.message.error(`脚本退出码 ${exitCode}（输出已截断）：\n${truncated}`);
-}
-
 export async function activateAssistantTemplate(
   input: ActivateAssistantTemplateInput,
 ): Promise<void> {
@@ -185,16 +99,12 @@ export async function activateAssistantTemplate(
       return;
     }
     try {
-      const result = await runShellCommand(repoPath, script);
-      if (result.exit_code === 0) {
-        input.message.success("脚本执行成功");
-      } else {
-        surfaceScriptFailure(input, {
-          exitCode: result.exit_code,
-          stderr: result.stderr.trim(),
-          stdout: result.stdout.trim(),
-        });
-      }
+      // 后台通过 shell 启动执行：fire-and-forget，不接管 stdout/stderr，
+      // 适合 dev server / watcher 等长期任务；脚本完成/失败不再弹 modal/notification。
+      // 失败只可能发生在 spawn 阶段（命令不存在、仓库路径无效等），
+      // 进程启动后用户需自行观察终端/日志。
+      const { pid } = await spawnShellCommand(repoPath, script);
+      input.message.success(`脚本已后台启动（pid ${pid}）`);
     } catch (error) {
       input.message.error(error instanceof Error ? error.message : String(error));
     }

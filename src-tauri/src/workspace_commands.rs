@@ -801,6 +801,40 @@ pub(crate) fn run_shell_command(
     })
 }
 
+#[derive(Serialize, Deserialize, Clone)]
+pub(crate) struct SpawnShellCommandResponse {
+    /// 后台子进程的 pid，可用于日志/排障；不要据此判断脚本是否完成。
+    pid: u32,
+}
+
+/// 后台通过 shell 启动执行命令（fire-and-forget）：
+/// - 不接管 stdout/stderr，调用方拿不到结果；适合 dev server / watcher / 长期任务。
+/// - 不像 `run_shell_command` 阻塞等子进程结束再返回，
+///   前端也不应再弹 modal/notification 展示 stdout/stderr。
+/// - cwd 为仓库根，使用 `zsh -c` 解析命令以与现有 `run_shell_command` 语义一致。
+/// - path 必须存在且是目录，否则直接返回 Err 提示用户。
+#[tauri::command]
+pub(crate) fn spawn_shell_command(path: String, command: String) -> Result<SpawnShellCommandResponse, String> {
+    let trimmed = path.trim();
+    if trimmed.is_empty() {
+        return Err("仓库路径为空".to_string());
+    }
+    if !std::path::Path::new(trimmed).is_dir() {
+        return Err(format!("仓库路径不存在或不是目录：{trimmed}"));
+    }
+    let child = Command::new("zsh")
+        .arg("-c")
+        .arg(&command)
+        .current_dir(trimmed)
+        .stdin(std::process::Stdio::null())
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .spawn()
+        .map_err(|e| format!("Failed to spawn shell command: {}", e))?;
+
+    Ok(SpawnShellCommandResponse { pid: child.id() })
+}
+
 /// 将文本写入用户通过系统对话框选择的绝对路径（供会话链路包导出等）。
 #[tauri::command]
 pub(crate) fn write_text_file_absolute(path: String, contents: String) -> Result<(), String> {

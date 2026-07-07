@@ -385,6 +385,7 @@ pub fn run() {
             workspace_commands::start_git_watcher,
             workspace_commands::stop_git_watcher,
             workspace_commands::run_shell_command,
+            workspace_commands::spawn_shell_command,
             repository_files::search_repository_files,
             repository_files::search_repository_file_contents,
             repository_files::path_is_accessible_directory,

@@ -11,11 +11,28 @@ export interface ShellCommandResponse {
   exit_code: number;
 }
 
+export interface SpawnShellCommandResponse {
+  /** 后台子进程的 pid，仅用于日志/排障，不要据此判断脚本是否完成。 */
+  pid: number;
+}
+
 export async function runShellCommand(
   path: string,
   command: string,
 ): Promise<ShellCommandResponse> {
   return invoke<ShellCommandResponse>("run_shell_command", { path, command });
+}
+
+/**
+ * 后台通过 shell 启动执行命令（fire-and-forget）。
+ * 不会等子进程结束，也不接管 stdout/stderr；适合 dev server / watcher 等
+ * 长期任务。调用方拿到的 `pid` 仅用于日志/排障，不要据此判断脚本是否完成。
+ */
+export async function spawnShellCommand(
+  path: string,
+  command: string,
+): Promise<SpawnShellCommandResponse> {
+  return invoke<SpawnShellCommandResponse>("spawn_shell_command", { path, command });
 }
 
 // ── PTY Terminal Session ──
