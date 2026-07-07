@@ -3282,8 +3282,9 @@ export default function App() {
     let unlistenContent: (() => void) | undefined;
     void listen("global-open-filename-search", (event) => {
       const scopeDir = (event.payload as { scopeDir?: string } | undefined)?.scopeDir;
-      // ⌘F 始终打开 Wise 文件名搜索：即便 Monaco 聚焦也不再触发编辑器内查找，直接启动搜索文件。
-      // 带目录范围（文件树右键"在此搜索"）则限定搜索范围，否则全局搜索。
+      // Ctrl+F 打开 Wise 文件名搜索（macOS 也用 Control 而非 Cmd）：
+      // ⌘F 留给 Monaco 编辑器自身的内查找；带目录范围（文件树右键"在此搜索"）
+      // 则限定搜索范围，否则全局搜索。
       openFilenameSearchPalette(scopeDir);
     })
       .then((fn) => {

@@ -1,7 +1,8 @@
 //! 应用内快捷键：仅在主窗口聚焦时注册，并在回调里再次校验聚焦状态，
 //! 避免在其他应用中误触。
 //!
-//! - `filename` / `content`：⌘F / ⌘⇧F（macOS）或 Ctrl+F / Ctrl+Shift+F（其他平台）。
+//! - `filename` / `content`：统一为 Ctrl+F / Ctrl+Shift+F（macOS 也用 CONTROL 而非 SUPER），
+//!   避免占用 ⌘F / ⌘⇧F，让 Monaco 编辑器在聚焦时能正常触发自身内查找。
 //! - `new_session`：⌘N / Ctrl+N，新建会话；刻意做成「应用内」，避免在别的 App 里误触。
 //!
 //! 双重保险：
@@ -45,14 +46,9 @@ struct InAppSearchShortcutState {
 
 impl InAppSearchShortcutState {
     fn new() -> Self {
-        #[cfg(target_os = "macos")]
-        let filename_mods = Modifiers::SUPER;
-        #[cfg(not(target_os = "macos"))]
+        // 文件名 / 内容搜索统一走 Ctrl+F / Ctrl+Shift+F（macOS 也用 CONTROL），
+        // 释放 ⌘F / ⌘⇧F 给 Monaco 编辑器自身处理内查找。
         let filename_mods = Modifiers::CONTROL;
-
-        #[cfg(target_os = "macos")]
-        let content_mods = Modifiers::SUPER | Modifiers::SHIFT;
-        #[cfg(not(target_os = "macos"))]
         let content_mods = Modifiers::CONTROL | Modifiers::SHIFT;
 
         #[cfg(target_os = "macos")]
