@@ -12,7 +12,7 @@ import { flushSync } from "react-dom";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { safeUnlisten } from "./utils/safeTauriUnlisten";
-import { App as AntdApp, message } from "antd";
+import { App as AntdApp, message, notification } from "antd";
 import type {
   ClaudeSession,
   EmployeeItem,
@@ -1754,6 +1754,7 @@ export default function App() {
         createSession,
         message,
         modal: appModal,
+        notification,
       });
     },
     [
