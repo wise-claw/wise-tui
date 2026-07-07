@@ -11,7 +11,7 @@ import {
   listAssistants,
   saveCustomAssistant,
 } from "../../services/assistants";
-import { dispatchAssistantsChanged } from "../../constants/assistantsUiEvents";
+import { setAssistantsCache } from "../../stores/assistantsStore";
 import type { DetectedAgent } from "../../types/detectedAgent";
 import type { AssistantEntry, AssistantEntryKind, CustomAssistantInput } from "../../types/assistant";
 import type { WorkflowTemplateItem } from "../../types";
@@ -107,6 +107,8 @@ export function AssistantsPanel({
       const [a, eng] = await Promise.all([listAssistants(), listAgents().catch(() => [])]);
       setList(a);
       setAgents(eng);
+      // 同步到共享 store：让「更多」弹窗 / 外显主行立刻看到新模板。
+      setAssistantsCache(a);
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
     } finally {
@@ -217,8 +219,7 @@ export function AssistantsPanel({
         });
       }
       await fetchAll();
-      // 通知「更多」弹窗 / 外显主行：助手模板已更新。
-      dispatchAssistantsChanged();
+      // fetchAll 内已 setAssistantsCache(a)，订阅方会自动重算 catalog。
       closeDrawer();
     } catch (e) {
       if (e instanceof Error) message.error(e.message);
@@ -245,8 +246,7 @@ export function AssistantsPanel({
           try {
             await deleteAssistant(row.id);
             await fetchAll();
-            // 通知「更多」弹窗 / 外显主行：助手模板已更新。
-            dispatchAssistantsChanged();
+            // fetchAll 内已 setAssistantsCache(a)，订阅方会自动重算 catalog。
           } catch (e) {
             message.error(e instanceof Error ? e.message : String(e));
             throw e;

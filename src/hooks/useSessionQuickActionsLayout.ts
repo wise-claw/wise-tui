@@ -5,12 +5,12 @@ import {
   mergeSessionQuickActionsLayout,
   type SessionQuickActionsLayoutV1,
 } from "../constants/sessionQuickActionsLayout";
-import { WISE_UI_EVENT_ASSISTANTS_CHANGED } from "../constants/assistantsUiEvents";
 import { listAssistants } from "../services/assistants";
 import {
   loadSessionQuickActionsLayout,
   saveSessionQuickActionsLayout,
 } from "../services/sessionQuickActionsLayoutStore";
+import { setAssistantsCache, subscribeAssistants } from "../stores/assistantsStore";
 import type { AssistantEntry } from "../types/assistant";
 import {
   buildSessionQuickActionCatalog,
@@ -46,41 +46,29 @@ export function useSessionQuickActionsLayout() {
     [catalog],
   );
 
+  /**
+   * 助手模板数据由共享 store 同步：
+   * - 第一次订阅时 store 立即推一次当前缓存（初始空）。
+   * - 组件首次挂载自己拉一次 `listAssistants` 写回 store。
+   * - 保存/删除后 `AssistantsPanel` 自己拉 `listAssistants` 写回 store。
+   * 改用 store 替代之前 `useEffect + window event` 的写法，避免多屏下
+   * 各自缓存、事件闭包 stale 等问题。
+   */
   useEffect(() => {
+    const unsubscribe = subscribeAssistants((rows) => {
+      setAssistants(rows);
+    });
     let cancelled = false;
     void listAssistants()
       .then((rows) => {
-        if (!cancelled) setAssistants(rows);
+        if (!cancelled) setAssistantsCache(rows);
       })
       .catch(() => {
-        if (!cancelled) setAssistants([]);
+        if (!cancelled) setAssistantsCache([]);
       });
     return () => {
       cancelled = true;
-    };
-  }, []);
-
-  /**
-   * 助手模板落库（新建 / 编辑 / 删除）后由 `dispatchAssistantsChanged()`
-   * 触发，重新拉取 `listAssistants()` 让「更多」弹窗与外显主行同步出现新模板。
-   */
-  useEffect(() => {
-    const handler = () => {
-      let cancelled = false;
-      void listAssistants()
-        .then((rows) => {
-          if (!cancelled) setAssistants(rows);
-        })
-        .catch(() => {
-          if (!cancelled) setAssistants([]);
-        });
-      return () => {
-        cancelled = true;
-      };
-    };
-    window.addEventListener(WISE_UI_EVENT_ASSISTANTS_CHANGED, handler);
-    return () => {
-      window.removeEventListener(WISE_UI_EVENT_ASSISTANTS_CHANGED, handler);
+      unsubscribe();
     };
   }, []);
 
