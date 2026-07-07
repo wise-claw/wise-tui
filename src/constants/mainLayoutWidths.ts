@@ -10,7 +10,7 @@ export const AUTHOR_CONFIG_NAV_SIDER_WIDTH_PX = 212;
 /** 历史左栏默认宽度；持久化值与之相同时归一化为 {@link MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX}。 */
 const MAIN_LAYOUT_LEFT_SIDER_PRIOR_DEFAULT_WIDTHS_PX: readonly number[] = [300, 280, 270];
 
-/** 与 `RightPanel` 中 `Layout.Sider` 的 `width` 一致。 */
+/** 与 `CockpitInspector` 中 `Layout.Sider` 的 `width` 一致。 */
 export const MAIN_LAYOUT_RIGHT_SIDER_WIDTH_PX = 300;
 
 /** 主三栏之间拖动手柄占位宽度（与中栏之间的间隔）。 */

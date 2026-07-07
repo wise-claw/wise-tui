@@ -5,12 +5,40 @@ import type {
   EmployeeMonitorItem,
   ProjectItem,
 } from "../../types";
+import { employeeMonitorItemsFingerprint } from "../../utils/monitorUiPropsFingerprints";
+import { arePropsEqualSkipping } from "../../utils/reactPropsEqual";
 import { WorkspaceInspectorPanelsSection } from "./WorkspaceInspectorPanelsSection";
-import { areCockpitInspectorPropsEqual } from "./chatInspectorPropsEqual";
 import "./Inspector.css";
 
 const { Sider } = Layout;
 const { Text } = Typography;
+
+/**
+ * CockpitInspector memo 比较：流式子代理列表按指纹跳过重渲染，其余按引用比对。
+ * 局部内联避免 `chatInspectorPropsEqual.ts`（已随 ChatInspector 一并下线）。
+ */
+function areCockpitInspectorPropsEqual(
+  prev: CockpitInspectorProps,
+  next: CockpitInspectorProps,
+): boolean {
+  if (prev.dark !== next.dark) return false;
+  if (prev.collapsed !== next.collapsed) return false;
+  if (prev.siderWidth !== next.siderWidth) return false;
+  if (prev.activeProject !== next.activeProject) return false;
+  if (prev.activeProjectId !== next.activeProjectId) return false;
+  if (prev.activeRepositoryId !== next.activeRepositoryId) return false;
+  if (prev.activeRepositoryName !== next.activeRepositoryName) return false;
+  if (
+    employeeMonitorItemsFingerprint(prev.employeeMonitorItems) !==
+    employeeMonitorItemsFingerprint(next.employeeMonitorItems)
+  ) {
+    return false;
+  }
+  return arePropsEqualSkipping(prev, next, {
+    skipKeys: ["employeeMonitorItems"],
+    skipFunctions: true,
+  });
+}
 
 export interface CockpitInspectorProps {
   dark: boolean;

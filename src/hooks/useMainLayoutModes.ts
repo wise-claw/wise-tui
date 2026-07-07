@@ -30,12 +30,6 @@ import { usePersistedMainLayoutSiderWidths } from "./usePersistedMainLayoutSider
 import { useMainWindowMinLogicalSize } from "./useMainWindowMinLogicalSize";
 import { listProjects } from "../services/projectState";
 import {
-  loadRightPanelDefaultCollapsed,
-  saveRightPanelDefaultCollapsed,
-  WISE_RIGHT_PANEL_DEFAULT_CHANGED,
-} from "../services/wiseDefaultConfigStore";
-import { RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK } from "../utils/rightPanelStorage";
-import {
   assignCompanionSessionToPaneSlot,
   assignSessionToNormalizedExtraPanes,
   extraPanesLayoutFingerprint,
@@ -126,10 +120,9 @@ export function useMainLayoutModes({
   paneLayoutHydrated = false,
   tabsHydrated = false,
 }: UseMainLayoutModesOptions) {
-  const [rightCollapsed, setRightCollapsed] = useState(RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK);
-  const [rightPanelDefaultCollapsed, setRightPanelDefaultCollapsed] = useState(
-    RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK,
-  );
+  // Chat 右栏模块已删除：右侧栏现在只承载 Cockpit Mission 概览，无折叠交互。
+  // 保留 `rightCollapsed` 与 `effectiveRightCollapsed` 以维持下游 Cockpit props 类型稳定。
+  const rightCollapsed = false;
   const effectiveRightCollapsed = rightCollapsed;
   const {
     leftWidthPx: mainLayoutLeftWidthPx,
@@ -823,45 +816,6 @@ export function useMainLayoutModes({
     };
   }, []);
 
-  const handleToggleRightPanel = useCallback(() => {
-    setRightCollapsed((c) => !c);
-  }, []);
-
-  useEffect(() => {
-    let cancelled = false;
-    void loadRightPanelDefaultCollapsed().then((collapsed) => {
-      if (cancelled) return;
-      setRightPanelDefaultCollapsed(collapsed);
-      setRightCollapsed(collapsed);
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  useEffect(() => {
-    if (typeof window === "undefined") return;
-    const handler = (event: Event) => {
-      const collapsed = (event as CustomEvent<{ collapsed?: boolean }>).detail?.collapsed;
-      if (typeof collapsed !== "boolean") return;
-      setRightPanelDefaultCollapsed(collapsed);
-      setRightCollapsed(collapsed);
-    };
-    window.addEventListener(WISE_RIGHT_PANEL_DEFAULT_CHANGED, handler);
-    return () => window.removeEventListener(WISE_RIGHT_PANEL_DEFAULT_CHANGED, handler);
-  }, []);
-
-  const handleSetRightPanelDefaultCollapsed = useCallback((collapsed: boolean) => {
-    void saveRightPanelDefaultCollapsed(collapsed)
-      .then(() => {
-        setRightPanelDefaultCollapsed(collapsed);
-        setRightCollapsed(collapsed);
-      })
-      .catch(() => {
-        message.error("保存右侧面板默认状态失败");
-      });
-  }, []);
-
   return {
     effectiveRightCollapsed,
     handlePaneRepositorySelect,
@@ -872,9 +826,6 @@ export function useMainLayoutModes({
     handleChangePaneCount,
     paneChangeInFlight,
     handleCyclePaneCount,
-    handleToggleRightPanel,
-    handleSetRightPanelDefaultCollapsed,
-    rightPanelDefaultCollapsed,
     mainLayoutContentRef,
     mainLayoutLeftWidthPx,
     mainLayoutRightWidthPx,

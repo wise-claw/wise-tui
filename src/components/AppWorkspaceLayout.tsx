@@ -25,9 +25,6 @@ import type { CockpitOnboardingProps } from "./Cockpit/CockpitOnboarding";
 import type { WorkspaceWelcomeLandingProps } from "./WorkspaceWelcomeLanding";
 import type { CommandPalette } from "./CommandPalette";
 import type { GitPanelOpenFileOptions } from "./GitPanel";
-import { type ChatInspectorProps, type CockpitInspectorProps } from "./Inspector";
-import { RepositorySessionPanel } from "./Inspector/RepositorySessionPanel";
-import type { MultiPaneSharedChatProps } from "./ClaudeSessions/ClaudeMultiPaneGrid";
 import type { PaneTopbarSharedProps } from "./ClaudeSessions/Topbar";
 import type { ClaudeSessionsProps as ClaudeSessionsExternalProps } from "./ClaudeSessions";
 import {
@@ -55,7 +52,7 @@ import { planFileViewerPaneIndex } from "../utils/fileViewerPanePlacement";
 import { resolveRepositoryForSession } from "../utils/repositoryMainSessionBinding";
 import type { PaneAuxLayout } from "./ClaudeSessions/paneAuxLayout";
 import { waitLayoutFrames } from "../services/mainWindowLayout";
-import type { EmployeeItem, Repository, WorkflowGraph, WorkflowTemplateItem } from "../types";
+import type { EmployeeItem, WorkflowGraph, WorkflowTemplateItem } from "../types";
 import { resolveCockpitHubPane, type ViewMode } from "../types/viewMode";
 import { AUTHOR_CONFIG_NAV_SIDER_WIDTH_PX } from "../constants/mainLayoutWidths";
 import { dispatchRepositoryFileEditorClosed, type OpenRepositoryFileDetail } from "../constants/workflowUiEvents";
@@ -73,7 +70,6 @@ import {
 import { claudeSessionsShellPropsEqual } from "./ClaudeSessions/claudeSessionsPropsEqual";
 import { useCenterView } from "./ClaudeSessions/claudeChatHelpers";
 import type { CenterView } from "./ClaudeSessions/ClaudeChat";
-import { areInspectorShellPropsEqual } from "./Inspector/chatInspectorPropsEqual";
 import { WorkspaceFileTreeRail } from "./WorkspaceFileTreeRail";
 import type { WorkspaceFileTreeRailContext } from "./WorkspaceFileTreeRail/types";
 import { WorkspaceViewportLoading } from "./WorkspaceViewportLoading";
@@ -133,7 +129,6 @@ const LazyRepositoryFilePreviewModal = lazy(() =>
   import("./RepositoryFilePreviewModal").then((module) => ({ default: module.RepositoryFilePreviewModal })),
 );
 
-const Inspector = lazy(() => import("./Inspector").then((module) => ({ default: module.Inspector })));
 const CockpitSurface = lazy(() =>
   import("./CockpitSurface").then((module) => ({ default: module.CockpitSurface })),
 );
@@ -141,7 +136,6 @@ const MemoLeftSidebar = memo(LazyLeftSidebar, areLeftSidebarPropsEqual);
 const MemoClaudeSessions = memo(LazyClaudeSessions, claudeSessionsShellPropsEqual) as unknown as React.MemoExoticComponent<
   ComponentType<ClaudeSessionsProps>
 >;
-const MemoInspector = memo(Inspector, areInspectorShellPropsEqual);
 
 // shell 层透传：仅在 `ClaudeSessionsExternalProps` 基础上补一个
 // `paneTopbarShared?`，其余三个辅助 prop（panelBelowMessages / hideMessages /
@@ -156,8 +150,6 @@ type LeftSidebarProps = Omit<
   | "siderWidth"
   | "onOpenActiveRepositoryFile"
 >;
-type RightPanelProps = ChatInspectorProps;
-type InspectorCockpitProps = CockpitInspectorProps;
 
 type OpenRepositoryFileHandler = (path: string, options?: GitPanelOpenFileOptions) => void;
 
@@ -547,24 +539,6 @@ const ConnectedClaudeSessions = memo(function ConnectedClaudeSessions({
   );
 }, connectedClaudeSessionsPropsEqual);
 
-const ConnectedInspector = memo(function ConnectedInspector({
-  viewMode,
-  chatInspectorProps,
-  cockpitInspectorProps,
-}: {
-  viewMode: ViewMode;
-  chatInspectorProps: RightPanelProps;
-  cockpitInspectorProps: InspectorCockpitProps;
-}) {
-  return (
-    <MemoInspector
-      viewMode={viewMode}
-      chatInspectorProps={chatInspectorProps}
-      cockpitInspectorProps={cockpitInspectorProps}
-    />
-  );
-}, areInspectorShellPropsEqual);
-
 const ConnectedRepositoryFileEditorPanel = memo(function ConnectedRepositoryFileEditorPanel({
   dark,
 }: {
@@ -685,24 +659,6 @@ export interface AppWorkspaceLayoutProps {
   sessionsStructureKey: string;
   /** 顶栏「远程」区跳转创作台远程入口 */
   onOpenRemoteChannels?: () => void;
-  /** 历史名 `rightPanelProps`，与 ChatInspector 的 props 一致。 */
-  chatInspectorProps: RightPanelProps;
-  /** Inspector 在 cockpit 模式下使用的 props（Mission 概览 + 子代理活动 + 活动仓库 Git）。 */
-  cockpitInspectorProps: InspectorCockpitProps;
-  /**
-   * 右栏「仓库会话」面板所需的共享回调与上下文。
-   * 由 AppImpl 组装（与中栏 `claudeSessionsProps` 同源的 session-id 参数化 handlers），
-   * AppWorkspaceLayout 在此将其渲染为 `RepositorySessionPanel` 并注入 ChatInspector。
-   */
-  repositorySideSessionSharedProps: MultiPaneSharedChatProps;
-  repositorySideSessionContext: {
-    /** 默认配置 `showRightInspectorRepositorySession` 实时值；false 时右栏中部不渲染仓库会话面板。 */
-    visible: boolean;
-    sessionId: string | null;
-    repository: Repository | null;
-    onEnsureSession: () => void;
-    onCreateNewSession: () => void;
-  };
   /** Cockpit 主屏空态：用户没有任何 Workspace / Standalone Repo 时引导创建。 */
   cockpitEmpty: boolean;
   cockpitOnboardingProps: CockpitOnboardingProps;
@@ -753,7 +709,7 @@ export function AppWorkspaceLayout({
   viewMode,
   onCloseCockpitAutomationHub,
   onCloseCockpit,
-  effectiveRightCollapsed,
+  effectiveRightCollapsed: _effectiveRightCollapsed,
   mainLayoutContentRef,
   mainLayoutLeftWidthPx,
   mainLayoutRightWidthPx,
@@ -762,10 +718,6 @@ export function AppWorkspaceLayout({
   claudeSessionsProps,
   sessionsStructureKey,
   onOpenRemoteChannels,
-  chatInspectorProps,
-  cockpitInspectorProps,
-  repositorySideSessionSharedProps,
-  repositorySideSessionContext,
   cockpitEmpty,
   cockpitOnboardingProps,
   workspaceWelcomeFullscreen = false,
@@ -789,7 +741,7 @@ export function AppWorkspaceLayout({
   progressMonitorDrawerProps,
   historyTranscriptDrawerProps,
   onLeftWidthChange,
-  onRightWidthChange,
+  onRightWidthChange: _onRightWidthChange,
   onConsumeRepositoryFileOpenRequest,
   repositoryFileOpenRequest,
 }: AppWorkspaceLayoutProps) {
@@ -873,10 +825,6 @@ export function AppWorkspaceLayout({
       activeWorkspaceFocus: claudeSessionsProps.activeWorkspaceFocus,
       activeRepository: claudeSessionsProps.activeRepository,
       onToggleSidebar: claudeSessionsPropsRef.current.onToggleSidebar,
-      onToggleRightPanel: claudeSessionsPropsRef.current.onToggleRightPanel,
-      rightCollapsed: claudeSessionsProps.rightCollapsed,
-      rightPanelDefaultCollapsed: claudeSessionsProps.rightPanelDefaultCollapsed,
-      onSetRightPanelDefaultCollapsed: claudeSessionsPropsRef.current.onSetRightPanelDefaultCollapsed,
       onToggleTerminal: claudeSessionsPropsRef.current.onToggleTerminal,
       onSearch: claudeSessionsPropsRef.current.onSearch,
       collapsed: claudeSessionsProps.collapsed,
@@ -892,8 +840,6 @@ export function AppWorkspaceLayout({
       claudeSessionsProps.activeProject,
       claudeSessionsProps.activeWorkspaceFocus,
       claudeSessionsProps.activeRepository,
-      claudeSessionsProps.rightCollapsed,
-      claudeSessionsProps.rightPanelDefaultCollapsed,
       claudeSessionsProps.collapsed,
       showWorkspaceFileTreeRail,
       claudeSessionsProps.terminalCollapsed,
@@ -918,10 +864,6 @@ export function AppWorkspaceLayout({
       onSessionInsightsAiAnalysis,
       onDispatchSessionFeedbackLoop: claudeSessionsPropsRef.current.onDispatchSessionFeedbackLoop,
       getClaudeSessions: getClaudeSessionsForTopbar,
-      rightCollapsed: claudeSessionsProps.rightCollapsed,
-      onToggleRightPanel: claudeSessionsPropsRef.current.onToggleRightPanel,
-      rightPanelDefaultCollapsed: claudeSessionsProps.rightPanelDefaultCollapsed,
-      onSetRightPanelDefaultCollapsed: claudeSessionsPropsRef.current.onSetRightPanelDefaultCollapsed,
       onToggleSidebar: claudeSessionsPropsRef.current.onToggleSidebar,
       onToggleTerminal: claudeSessionsPropsRef.current.onToggleTerminal,
       onSearch: claudeSessionsPropsRef.current.onSearch,
@@ -936,8 +878,6 @@ export function AppWorkspaceLayout({
       claudeSessionsProps.paneCount,
       claudeSessionsProps.paneChangeInFlight,
       onSessionInsightsAiAnalysis,
-      claudeSessionsProps.rightCollapsed,
-      claudeSessionsProps.rightPanelDefaultCollapsed,
       claudeSessionsProps.collapsed,
       showWorkspaceFileTreeRail,
       claudeSessionsProps.terminalCollapsed,
@@ -1713,52 +1653,6 @@ export function AppWorkspaceLayout({
                           />
                         </Suspense>
                       </ErrorBoundary>
-
-                      {chatRightRailMode ? (
-                        <>
-                          <div
-                            className={`app-right-panel-rail${
-                              effectiveRightCollapsed ? " app-right-panel-rail--collapsed" : ""
-                            }`}
-                            aria-hidden={effectiveRightCollapsed}
-                          >
-                            <MainLayoutResizeHandle
-                              variant="right"
-                              startWidthPx={mainLayoutRightWidthPx}
-                              onWidthChange={onRightWidthChange}
-                            />
-                          </div>
-                          <div
-                            className={`app-right-panel-rail__panel${
-                              effectiveRightCollapsed ? " app-right-panel-rail__panel--collapsed" : ""
-                            }`}
-                            aria-hidden={effectiveRightCollapsed}
-                          >
-                            <Suspense fallback={null}>
-                              <ErrorBoundary type="local" fallbackTitle="右侧属性检查器出错">
-                                <ConnectedInspector
-                                  viewMode={viewMode}
-                                  chatInspectorProps={{
-                                    ...chatInspectorProps,
-                                    repositorySessionPanel:
-                                      (viewMode.kind === "chat" || viewMode.kind === "inspect") &&
-                                      repositorySideSessionContext.visible ? (
-                                        <RepositorySessionPanel
-                                          shared={repositorySideSessionSharedProps}
-                                          sessionId={repositorySideSessionContext.sessionId}
-                                          repository={repositorySideSessionContext.repository}
-                                          onEnsureSession={repositorySideSessionContext.onEnsureSession}
-                                          onCreateNewSession={repositorySideSessionContext.onCreateNewSession}
-                                        />
-                                      ) : null,
-                                  }}
-                                  cockpitInspectorProps={cockpitInspectorProps}
-                                />
-                              </ErrorBoundary>
-                            </Suspense>
-                          </div>
-                        </>
-                      ) : null}
                     </div>
 
                     <Suspense fallback={null}>

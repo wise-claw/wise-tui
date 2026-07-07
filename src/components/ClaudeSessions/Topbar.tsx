@@ -1,6 +1,6 @@
 import type { ClaudeSession, ProjectItem, Repository } from "../../types";
 import { HoverHint } from "../shared/HoverHint";
-import { Dropdown, message, Popover, Segmented, Spin, Switch } from "antd";
+import { Dropdown, message, Popover, Segmented, Spin } from "antd";
 import { lazy, Suspense, memo, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from "react";
 import { useWiseTopbarChromeVisibility } from "../../hooks/useWiseTopbarChromeVisibility";
 import { RemoteEntryTopbarStrip } from "../RemoteEntryTopbarStrip";
@@ -23,7 +23,6 @@ import { DEFAULT_OPEN_APP_ID } from "../OpenAppMenu/constants";
 import { getOpenAppPreferenceSync, hydrateOpenAppPreference } from "../../services/openAppPreference";
 import { useRepositoryRunCommand } from "../../hooks/useRepositoryRunCommand";
 import { resolveChatTopbarContext } from "../../utils/workspaceSelectionState";
-import { RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK } from "../../utils/rightPanelStorage";
 import type { WorkspaceFocus } from "../../utils/workspaceMode";
 import { PANE_COUNT_OPTIONS, isPaneCount, type PaneCount } from "../../constants/mainLayoutWidths";
 import { topbarPropsEqual } from "./topbarPropsEqual";
@@ -118,20 +117,6 @@ function IconCollapseSidebar({ collapsed }: { collapsed: boolean }) {
   );
 }
 
-function IconRightPanel({ collapsed }: { collapsed: boolean }) {
-  return (
-    <svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-      <rect x="3" y="3" width="18" height="18" rx="2.5" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M15 3v18" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      {collapsed ? (
-        <path d="M11 15l-3-3 3-3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      ) : (
-        <path d="M8 9l3 3-3 3" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
-      )}
-    </svg>
-  );
-}
-
 // ── Topbar Button ──
 
 interface TopbarBtnProps {
@@ -184,15 +169,11 @@ export interface TopbarProps {
   }) => void | Promise<void>;
   getClaudeSessions?: () => readonly ClaudeSession[];
   onToggleSidebar?: () => void;
-  onToggleRightPanel?: () => void;
-  rightPanelDefaultCollapsed?: boolean;
-  onSetRightPanelDefaultCollapsed?: (collapsed: boolean) => void;
   onToggleTerminal?: () => void;
   onSearch?: () => void;
   collapsed?: boolean;
   /** 文件树侧栏展开时，顶栏已不在窗口左缘，无需再为交通灯预留左边距。 */
   fileTreeRailOpen?: boolean;
-  rightCollapsed?: boolean;
   terminalCollapsed?: boolean;
   terminalPanelMounted?: boolean;
   onAutoFixRunError?: (prompt: string) => void | Promise<void>;
@@ -217,11 +198,9 @@ export interface TopbarProps {
  * `repositories` / `activeProject` / `activeWorkspaceFocus` 由各 pane 渲染处单独传入
  * （primary 用主会话仓库；extra 用 `resolvedRepo` 与 `paneSession`）。
  *
- * - primary pane：直接展开 shared 字段并补全 per-pane 字段；多屏下窗口级按钮正常渲染，但「右侧面板」按钮
- *   改由最右列 extra pane 承载（primary 位于左上，不渲染该按钮）。
+ * - primary pane：直接展开 shared 字段并补全 per-pane 字段。
  * - extra pane：展开后将窗口级回调（onToggleSidebar / onToggleTerminal / onChangePaneCount /
- *   onOpenRemoteChannels）显式置 undefined；最右列 pane 例外，保留 onToggleRightPanel /
- *   onSetRightPanelDefaultCollapsed 以渲染右侧面板按钮。
+ *   onOpenRemoteChannels）显式置 undefined。
  */
 export type PaneTopbarSharedProps = Omit<
   TopbarProps,
@@ -250,14 +229,10 @@ export const Topbar = memo(function Topbar({
   onDispatchSessionFeedbackLoop,
   getClaudeSessions,
   onToggleSidebar,
-  onToggleRightPanel,
-  rightPanelDefaultCollapsed = RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK,
-  onSetRightPanelDefaultCollapsed,
   onToggleTerminal,
   onSearch,
   collapsed,
   fileTreeRailOpen = false,
-  rightCollapsed,
   terminalCollapsed,
   terminalPanelMounted = false,
   onAutoFixRunError,
@@ -275,10 +250,6 @@ export const Topbar = memo(function Topbar({
   });
   const [runPopoverOpen, setRunPopoverOpen] = useState(false);
   const [externalTerminalPopoverOpen, setExternalTerminalPopoverOpen] = useState(false);
-  const [rightPanelDefaultPopoverOpen, setRightPanelDefaultPopoverOpen] = useState(false);
-  const [rightPanelDefaultDraftCollapsed, setRightPanelDefaultDraftCollapsed] = useState(
-    rightPanelDefaultCollapsed ?? RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK,
-  );
 
   const topbarContext = useMemo(
     () =>
@@ -626,78 +597,6 @@ export const Topbar = memo(function Topbar({
             getClaudeSessions={getClaudeSessions}
           />
         ) : null}
-        {onToggleRightPanel && (
-          <Popover
-            trigger={[]}
-            open={rightPanelDefaultPopoverOpen}
-            onOpenChange={(open) => {
-              setRightPanelDefaultPopoverOpen(open);
-              if (open) {
-                setRightPanelDefaultDraftCollapsed(rightPanelDefaultCollapsed);
-              }
-            }}
-            placement="bottomRight"
-            classNames={{ root: "app-topbar-right-panel-default-popover" }}
-            content={
-              onSetRightPanelDefaultCollapsed ? (
-                <div
-                  className="app-topbar-right-panel-default-popover__content"
-                  onMouseDown={(event) => event.stopPropagation()}
-                  onClick={(event) => event.stopPropagation()}
-                >
-                  <div className="app-topbar-right-panel-default-popover__row">
-                    <span className="app-topbar-right-panel-default-popover__label">启动默认收起</span>
-                    <Switch
-                      size="small"
-                      checked={rightPanelDefaultDraftCollapsed}
-                      onChange={setRightPanelDefaultDraftCollapsed}
-                    />
-                  </div>
-                  <footer className="app-topbar-right-panel-default-popover__footer">
-                    <button
-                      type="button"
-                      className="app-topbar-right-panel-default-popover__btn app-topbar-right-panel-default-popover__btn--ghost"
-                      onClick={() => setRightPanelDefaultPopoverOpen(false)}
-                    >
-                      关闭
-                    </button>
-                    <button
-                      type="button"
-                      className="app-topbar-right-panel-default-popover__btn app-topbar-right-panel-default-popover__btn--primary"
-                      onClick={() => {
-                        onSetRightPanelDefaultCollapsed(rightPanelDefaultDraftCollapsed);
-                        setRightPanelDefaultPopoverOpen(false);
-                      }}
-                    >
-                      确认
-                    </button>
-                  </footer>
-                </div>
-              ) : null
-            }
-          >
-            <span className="app-topbar-right-panel-trigger-wrap">
-              <TopbarBtn
-                icon={<IconRightPanel collapsed={rightCollapsed ?? false} />}
-                label={
-                  rightCollapsed
-                    ? "展开右侧面板（右键设默认）"
-                    : "收起右侧面板（右键设默认）"
-                }
-                onClick={onToggleRightPanel}
-                onContextMenu={
-                  onSetRightPanelDefaultCollapsed
-                    ? (event) => {
-                        event.preventDefault();
-                        setRightPanelDefaultDraftCollapsed(rightPanelDefaultCollapsed);
-                        setRightPanelDefaultPopoverOpen(true);
-                      }
-                    : undefined
-                }
-              />
-            </span>
-          </Popover>
-        )}
       </div>
     </div>
   );

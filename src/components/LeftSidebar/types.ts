@@ -19,7 +19,7 @@ import type {
 import type { ReconcileProjectMode } from "../../constants/reconcileProjectMode";
 import type { LeftSidebarHubQuickEntryId } from "../../constants/leftSidebarHubQuickEntries";
 import type { WorkspaceFocus } from "../../utils/workspaceMode";
-import type { ReactNode, RefObject } from "react";
+import type { RefObject } from "react";
 import type { GitPanelOpenFileOptions } from "../GitPanel";
 import type { TaskCardsNavProps } from "../TaskCardsNav";
 import type { AuthorPane } from "../../types/viewMode";
@@ -203,8 +203,6 @@ export interface LeftSidebarProps {
   repoPanelSplitMode?: boolean;
   /** Chat 模式是否存在右栏（Author / Cockpit 全屏时为 false）。 */
   repoPanelRightRailAvailable?: boolean;
-  /** 右栏仓库面板（Git / 文件树）节点。 */
-  onRepositoryRepoPanelChange?: (node: ReactNode | null) => void;
   fileTreeRailOpen?: boolean;
   onToggleFileTreeRail?: () => void;
   onWorkspaceFileTreeRailContextChange?: (context: WorkspaceFileTreeRailContext | null) => void;

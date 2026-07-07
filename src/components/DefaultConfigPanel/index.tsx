@@ -22,7 +22,6 @@ import { useLeftSidebarWorkspaceListSetting } from "./useLeftSidebarWorkspaceLis
 import { useLeftSidebarRepositoryIconBadgesSetting } from "./useLeftSidebarRepositoryIconBadgesSetting";
 import { useExecutionEnvironmentDispatchHistoryDaysSetting } from "./useExecutionEnvironmentDispatchHistoryDaysSetting";
 import { EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAY_OPTIONS } from "../../constants/executionEnvironmentDispatch";
-import { useRightPanelDefaultSetting } from "./useRightPanelDefaultSetting";
 import { useTopbarChromeDefaultSetting } from "./useTopbarChromeDefaultSetting";
 import { useComposerFooterChromeDefaultSetting } from "./useComposerFooterChromeDefaultSetting";
 import { useFeaturePanelChromeDefaultSetting } from "./useFeaturePanelChromeDefaultSetting";
@@ -39,9 +38,6 @@ import { KeyShortcutCapture } from "./KeyShortcutCapture";
 import type { AtMentionDefaultTarget } from "../../constants/atMentionDefault";
 import { useFileTreeOpenInNewPaneSetting } from "./useFileTreeOpenInNewPaneSetting";
 import { useRepoPanelPlacementSetting } from "./useRepoPanelPlacementSetting";
-import { useWorkspaceInspectorPanelsSetting } from "./useWorkspaceInspectorPanelsSetting";
-import { useRightInspectorTerminalSetting } from "./useRightInspectorTerminalSetting";
-import { useRightInspectorRepositorySessionSetting } from "./useRightInspectorRepositorySessionSetting";
 import { useSessionFeedbackLoopSetting } from "./useSessionFeedbackLoopSetting";
 import { useOpenInTerminalShortcutSetting } from "./useOpenInTerminalShortcutSetting";
 import { useOpenInEditorShortcutSetting } from "./useOpenInEditorShortcutSetting";
@@ -67,7 +63,7 @@ function DefaultConfigSection({ title, children }: { title: string; children: Re
  *
  * 弹窗按"用户能看到的视觉区域"分组：
  * - 启动 / CLI 默认：新建会话的运行模式与 CLI 注入配置
- * - 左栏 / 右栏 / 运行面板 / Git 文件树：屏幕上的四个栏位与显隐
+ * - 左栏 / 运行面板 / Git 文件树：屏幕上的栏位与显隐
  * - 输入框 / 顶栏 / 仓库列表快捷键：交互元素自身的默认
  * - 开发实验：反馈神经网（默认折叠态）
  */
@@ -76,7 +72,6 @@ export function DefaultConfigPanel() {
   const claudeDefaultSettings = useClaudeDefaultSettingsSetting();
   const codexDefaultSettings = useCodexDefaultSettingsSetting();
   const opencodeDefaultSettings = useOpencodeDefaultSettingsSetting();
-  const rightPanel = useRightPanelDefaultSetting();
   const topbarChrome = useTopbarChromeDefaultSetting();
   const composerFooterChrome = useComposerFooterChromeDefaultSetting();
   const featurePanelChrome = useFeaturePanelChromeDefaultSetting();
@@ -89,9 +84,6 @@ export function DefaultConfigPanel() {
   const atMentionDefault = useAtMentionDefaultSetting();
   const atMentionShortcuts = useAtMentionShortcuts();
   const defaultTerminal = useDefaultTerminalSetting();
-  const workspaceInspectorPanels = useWorkspaceInspectorPanelsSetting();
-  const rightInspectorTerminal = useRightInspectorTerminalSetting();
-  const rightInspectorRepositorySession = useRightInspectorRepositorySessionSetting();
   const fileTreeOpenInNewPane = useFileTreeOpenInNewPaneSetting();
   const feedbackLoop = useSessionFeedbackLoopSetting();
   const openInTerminalShortcut = useOpenInTerminalShortcutSetting();
@@ -759,112 +751,7 @@ export function DefaultConfigPanel() {
         </>
       ),
     },
-    // 右栏：启动默认状态、卡片显隐、顶部独立终端、仓库会话面板。
-    {
-      key: "rightSidebar",
-      title: "右栏",
-      content: (
-        <>
-          <DefaultConfigRow
-            title="启动默认"
-            hint="展开 / 收起"
-            detail="启动时展开或收起；顶栏按钮右键可改"
-            control={
-              <DefaultConfigOptionPick<"expanded" | "collapsed">
-                aria-label="右侧面板默认状态"
-                disabled={rightPanel.loading || rightPanel.saving}
-                value={rightPanel.collapsed ? "collapsed" : "expanded"}
-                options={[
-                  { label: "展开", value: "expanded" },
-                  { label: "收起", value: "collapsed" },
-                ]}
-                onChange={(value) => {
-                  void rightPanel.save(value === "collapsed");
-                }}
-              />
-            }
-          />
-
-          <DefaultConfigRow
-            title="工作区卡片"
-            hint="快捷操作 / 待办"
-            control={
-              <div className="app-default-config-row__control--monitor">
-                <DefaultConfigOptionPick<"hidden" | "visible">
-                  aria-label="快捷操作右栏显示"
-                  disabled={workspaceInspectorPanels.loading || workspaceInspectorPanels.saving}
-                  value={
-                    workspaceInspectorPanels.showWorkspaceQuickActionsPanel ? "visible" : "hidden"
-                  }
-                  options={[
-                    { label: "快捷·显", value: "visible" },
-                    { label: "快捷·隐", value: "hidden" },
-                  ]}
-                  onChange={(value) => {
-                    void workspaceInspectorPanels.saveQuickActions(value === "visible");
-                  }}
-                />
-                <DefaultConfigOptionPick<"hidden" | "visible">
-                  aria-label="待办事项右栏显示"
-                  disabled={workspaceInspectorPanels.loading || workspaceInspectorPanels.saving}
-                  value={workspaceInspectorPanels.showWorkspaceTodosPanel ? "visible" : "hidden"}
-                  options={[
-                    { label: "待办·显", value: "visible" },
-                    { label: "待办·隐", value: "hidden" },
-                  ]}
-                  onChange={(value) => {
-                    void workspaceInspectorPanels.saveTodos(value === "visible");
-                  }}
-                />
-              </div>
-            }
-          />
-
-          <DefaultConfigRow
-            title="顶部独立终端"
-            hint="与运行并列 Tab"
-            detail="关闭后右栏顶部不再展示独立终端 Tab；运行仍由运行面板 section 控制"
-            control={
-              <DefaultConfigOptionPick<"hidden" | "visible">
-                aria-label="终端右栏顶部显示"
-                disabled={rightInspectorTerminal.loading || rightInspectorTerminal.saving}
-                value={rightInspectorTerminal.visible ? "visible" : "hidden"}
-                options={[
-                  { label: "终端·显", value: "visible" },
-                  { label: "终端·隐", value: "hidden" },
-                ]}
-                onChange={(value) => {
-                  void rightInspectorTerminal.save(value === "visible");
-                }}
-              />
-            }
-          />
-
-          <DefaultConfigRow
-            title="仓库会话"
-            hint="待办之下"
-            detail="关闭后右栏中部不展示仓库专属侧会话面板，且不会在仓库切换时懒创建该侧会话；已存在的会话保留，重开后自动恢复"
-            control={
-              <DefaultConfigOptionPick<"hidden" | "visible">
-                aria-label="仓库会话右栏显示"
-                disabled={
-                  rightInspectorRepositorySession.loading || rightInspectorRepositorySession.saving
-                }
-                value={rightInspectorRepositorySession.visible ? "visible" : "hidden"}
-                options={[
-                  { label: "仓库会话·显", value: "visible" },
-                  { label: "仓库会话·隐", value: "hidden" },
-                ]}
-                onChange={(value) => {
-                  void rightInspectorRepositorySession.save(value === "visible");
-                }}
-              />
-            }
-          />
-        </>
-      ),
-    },
-    // 运行面板：显隐、栏位、行数（与右栏"顶部独立终端"独立但相关）。
+    // 运行面板：显隐、栏位、行数。
     {
       key: "monitor",
       title: "运行面板",
@@ -1076,7 +963,7 @@ export function DefaultConfigPanel() {
           <DefaultConfigRow
             title="触发器显示"
             hint="执行环境 / 模型"
-            detail="主会话底栏「执行环境」与「模型切换」触发器：仅图标或完整（图标+文字）；右栏紧凑模式始终仅图标"
+            detail="主会话底栏「执行环境」与「模型切换」触发器：仅图标或完整（图标+文字）；紧凑模式始终仅图标"
             control={
               <DefaultConfigOptionPick<"full" | "icon">
                 aria-label="底栏触发器显示模式"

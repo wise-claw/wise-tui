@@ -152,7 +152,6 @@
 
 /* ── Chat Inspector：右栏贴边撑满、白底、区块分隔线 ── */
 
-.app-main-chat-and-rail-body > .app-right-panel-rail__panel .app-chat-inspector.ant-layout-sider,
 .app-chat-inspector.ant-layout-sider,
 .app-chat-inspector .ant-layout-sider-children {
   height: 100%;

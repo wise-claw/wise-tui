@@ -1,4 +1,4 @@
-import { App as AntdApp, Layout, Spin } from "antd";
+import { App as AntdApp, Layout } from "antd";
 import {
   lazy,
   Suspense,
@@ -49,7 +49,6 @@ import {
   openWorkspaceWithStoredPreference,
 } from "../services/openWorkspaceWithPreference";
 import { TaskCardsNav } from "./TaskCardsNav";
-import { ActiveRepositoryFilesPanel } from "./LeftSidebar/ActiveRepositoryFilesPanel";
 import { LeftSidebarTopbar } from "./LeftSidebar/LeftSidebarTopbar";
 import { LeftSidebarHubQuickEntries } from "./LeftSidebar/LeftSidebarHubQuickEntries";
 import type { GitPanelOpenFileOptions } from "./GitPanel/types";
@@ -69,7 +68,6 @@ import { RepositoryAssociateModal } from "./LeftSidebar/RepositoryAssociateModal
 import { RepositorySddModeModal } from "./LeftSidebar/RepositorySddModeModal";
 import { RepositoryIconBadgeModal } from "./LeftSidebar/RepositoryIconBadgeModal";
 import { WorkspaceSddModeModal } from "./LeftSidebar/WorkspaceSddModeModal";
-import { LeftSidebarBottomTabSwitcher } from "./LeftSidebar/LeftSidebarBottomTabSwitcher";
 import { LeftSidebarWorkspaceListSlot } from "./LeftSidebar/LeftSidebarWorkspaceListSlot";
 import { useSidebarRepositoryActiveSessionCounts } from "../hooks/useSidebarRepositoryActiveSessionCounts";
 import {
@@ -77,7 +75,6 @@ import {
   buildClaudeRegistryRunningFingerprint,
 } from "./LeftSidebar/leftSidebarWorkspaceListSlotPropsEqual";
 import { LeftSidebarRepoPanelBottomSlot } from "./LeftSidebar/LeftSidebarRepoPanelBottomSlot";
-import { RightRailRepoPanelPanes } from "./LeftSidebar/RightRailRepoPanelPanes";
 import {
   deriveRepoPanelRenderState,
 } from "./LeftSidebar/repoPanelPlacement";
@@ -99,7 +96,6 @@ import { useChromePanelHoverHandlers } from "../hooks/useChromePanelHoverHandler
 import { useMonitorSidebarFingerprints } from "../hooks/useMonitorSessionsForOverview";
 import "./GitPanel/index.css";
 import "./LeftSidebar/leftSidebarListPerformance.css";
-const GitPanelLazy = lazy(() => import("./GitPanel").then((module) => ({ default: module.GitPanel })));
 const AppSettingsModalLazy = lazy(() =>
   import("./AppSettingsModal").then((module) => ({ default: module.AppSettingsModal })),
 );
@@ -223,7 +219,6 @@ export function LeftSidebar({
   filesPanelPlacement = "left",
   repoPanelSplitMode = false,
   repoPanelRightRailAvailable = true,
-  onRepositoryRepoPanelChange,
   fileTreeRailOpen = false,
   onToggleFileTreeRail,
   onWorkspaceFileTreeRailContextChange,
@@ -610,16 +605,6 @@ export function LeftSidebar({
       window.removeEventListener(WISE_EXPLORER_FOCUS_REQUESTED, onFocusRequested);
     };
   }, [filesExplorerSectionCollapsed, handleFilesExplorerSectionCollapsedChange]);
-
-  const repoPanelTabSwitcher = useMemo(
-    () => (
-      <LeftSidebarBottomTabSwitcher
-        activeTab={leftBottomTab}
-        onChange={handleLeftBottomTabChange}
-      />
-    ),
-    [handleLeftBottomTabChange, leftBottomTab],
-  );
 
   const globalWorkspaceTreeSelection = useMemo(
     () =>
@@ -1055,106 +1040,6 @@ export function LeftSidebar({
       },
     );
   }
-
-  const rightSidebarGitBottomPane = useMemo(
-    () => (
-      <div className="app-right-panel-git-explorer">
-        <Suspense
-          fallback={
-            <div className="app-file-editor-loading">
-              <Spin size="small" />
-            </div>
-          }
-        >
-          <GitPanelLazy
-            repositoryPath={effectiveRepoPanelPath}
-            repositoryName={repoPanelRepositoryName}
-            repositoryEntries={gitPanelRepositoryEntries}
-            multiRepoContextTitle={gitPanelContextTitle}
-            onOpenFile={handleOpenExplorerFile}
-            lazyMount
-            {...repoPanelWorkspaceSelectorProps}
-          />
-        </Suspense>
-      </div>
-    ),
-    [
-      effectiveRepoPanelPath,
-      gitPanelContextTitle,
-      gitPanelRepositoryEntries,
-      handleOpenExplorerFile,
-      repoPanelRepositoryName,
-      repoPanelWorkspaceSelectorProps,
-    ],
-  );
-
-  const rightSidebarFilesBottomPane = useMemo(
-    () => (
-      <ActiveRepositoryFilesPanel
-        activeRepositoryPath={effectiveRepoPanelPath}
-        activeRepositoryName={repoPanelRepositoryName}
-        search={repositoryFileTreeSearch}
-        onSearchChange={setRepositoryFileTreeSearch}
-        onOpenFile={handleOpenExplorerFile}
-        sectionCollapsed={filesExplorerSectionCollapsed}
-        onSectionCollapsedChange={handleFilesExplorerSectionCollapsedChange}
-        workspaceSelector={repoPanelWorkspaceSelectorProps}
-        variant="right-rail"
-      />
-    ),
-    [
-      effectiveRepoPanelPath,
-      filesExplorerSectionCollapsed,
-      handleFilesExplorerSectionCollapsedChange,
-      handleOpenExplorerFile,
-      repoPanelRepositoryName,
-      repoPanelWorkspaceSelectorProps,
-      repositoryFileTreeSearch,
-    ],
-  );
-
-  const rightRepositoryRepoPanel = useMemo(() => {
-    if (!showRepoPanel || !repoPanelRenderState.usesRightRail) return null;
-    if (!repoPanelRenderState.showGitOnRight && !repoPanelRenderState.showFilesOnRight) {
-      return null;
-    }
-    if (repoPanelRenderState.rightTabMode) {
-      return (
-        <div className="app-right-repo-panel">
-          <div className="app-right-repo-panel-tabs">{repoPanelTabSwitcher}</div>
-          <RightRailRepoPanelPanes
-            showGit={repoPanelRenderState.showGitOnRight}
-            showFiles={repoPanelRenderState.showFilesOnRight}
-            gitPane={rightSidebarGitBottomPane}
-            filesPane={rightSidebarFilesBottomPane}
-          />
-        </div>
-      );
-    }
-    return (
-      <div className="app-right-repo-panel app-right-repo-panel--split">
-        {repoPanelRenderState.showFilesOnRight ? rightSidebarFilesBottomPane : null}
-        {repoPanelRenderState.showGitOnRight ? rightSidebarGitBottomPane : null}
-      </div>
-    );
-  }, [
-    repoPanelRenderState.rightTabMode,
-    repoPanelRenderState.showFilesOnRight,
-    repoPanelRenderState.showGitOnRight,
-    repoPanelRenderState.usesRightRail,
-    repoPanelTabSwitcher,
-    rightSidebarFilesBottomPane,
-    rightSidebarGitBottomPane,
-    showRepoPanel,
-  ]);
-
-  useEffect(() => {
-    if (!onRepositoryRepoPanelChange) return;
-    onRepositoryRepoPanelChange(rightRepositoryRepoPanel);
-    return () => {
-      onRepositoryRepoPanelChange(null);
-    };
-  }, [onRepositoryRepoPanelChange, rightRepositoryRepoPanel]);
 
   useEffect(() => {
     if (!onWorkspaceFileTreeRailContextChange) return;

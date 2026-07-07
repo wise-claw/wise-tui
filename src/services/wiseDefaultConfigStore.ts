@@ -34,7 +34,6 @@ import {
   type FeedbackGlobalRuleV1,
 } from "../utils/sessionFeedbackGlobalRules";
 import { normalizeChord } from "../utils/atMentionShortcutChord";
-import { RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK, RIGHT_PANEL_DEFAULT_COLLAPSED_KEY } from "../utils/rightPanelStorage";
 import { deleteAppSetting, getAppSetting, setAppSetting, setAppSettingJson } from "./appSettingsStore";
 
 export type ClaudeSessionConnectionKind = NonNullable<ClaudeSession["connectionKind"]>;
@@ -48,14 +47,9 @@ export const WISE_DEFAULT_CONFIG_ONESHOT_TO_STREAMING_MIGRATION_KEY =
 /** @deprecated 迁移后删除；读路径仅用于迁入 `wise.defaultConfig.v1`。 */
 export const CLAUDE_DEFAULT_CONNECTION_KIND_KEY = "wise.claudeDefaultConnectionKind.v1";
 
-/** @deprecated 迁移后删除；读路径仅用于迁入 `wise.defaultConfig.v1`。 */
-export const RIGHT_PANEL_DEFAULT_COLLAPSED_APP_KEY = "wise.rightPanel.defaultCollapsed.v1";
-
 export const CLAUDE_DEFAULT_CONNECTION_KIND_FALLBACK: ClaudeSessionConnectionKind = "streaming";
 
 export const WISE_CLAUDE_CONNECTION_KIND_CHANGED = "wise:claude-connection-kind-changed";
-
-export const WISE_RIGHT_PANEL_DEFAULT_CHANGED = "wise:right-panel-default-changed";
 
 export const WISE_TOPBAR_CHROME_DEFAULT_CHANGED = "wise:topbar-chrome-default-changed";
 
@@ -90,11 +84,6 @@ export const WISE_COMPOSER_COMMON_PHRASES_CHANGED = "wise:composer-common-phrase
 export const WISE_COMPOSER_DEFAULT_INSTRUCTION_CHANGED = "wise:composer-default-instruction-changed";
 
 export const WISE_WORKSPACE_INSPECTOR_PANELS_CHANGED = "wise:workspace-inspector-panels-changed";
-
-export const WISE_RIGHT_INSPECTOR_TERMINAL_CHANGED = "wise:right-inspector-terminal-changed";
-
-export const WISE_RIGHT_INSPECTOR_REPOSITORY_SESSION_CHANGED =
-  "wise:right-inspector-repository-session-changed";
 
 export const WISE_FILE_TREE_OPEN_IN_NEW_PANE_CHANGED = "wise:file-tree-open-in-new-pane-changed";
 
@@ -159,7 +148,6 @@ export type FeaturePanelChromeDefaults = Pick<
 export interface WiseDefaultConfigV1 {
   version: 1;
   connectionKind: ClaudeSessionConnectionKind;
-  rightPanelDefaultCollapsed: boolean;
   /** 主会话顶栏 LLM 代理图标；默认隐藏。 */
   showLlmProxyTopbar: boolean;
   /** 主会话顶栏 Free Claude Code 图标；默认隐藏。 */
@@ -222,10 +210,6 @@ export interface WiseDefaultConfigV1 {
   showWorkspaceQuickActionsPanel: boolean;
   /** 右栏待办事项卡片；默认显示。 */
   showWorkspaceTodosPanel: boolean;
-  /** 右栏顶部独立终端面板（与运行面板并列，Tab 切换）；默认隐藏。 */
-  showRightInspectorTerminal: boolean;
-  /** 右栏待办事项之下的「仓库会话」面板；默认显示。 */
-  showRightInspectorRepositorySession: boolean;
   /** 文件树点击文件时在新窗格打开，而非占用当前会话主区。 */
   fileTreeOpenInNewPane: boolean;
   /** Git 变更面板默认栏位；默认左栏。 */
@@ -273,7 +257,6 @@ export interface WiseDefaultConfigV1 {
 const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   version: 1,
   connectionKind: CLAUDE_DEFAULT_CONNECTION_KIND_FALLBACK,
-  rightPanelDefaultCollapsed: RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK,
   showLlmProxyTopbar: false,
   showFccTopbar: false,
   showFccTrafficTopbar: false,
@@ -305,8 +288,6 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   composerFooterTriggerDisplayMode: "full",
   showWorkspaceQuickActionsPanel: true,
   showWorkspaceTodosPanel: true,
-  showRightInspectorTerminal: false,
-  showRightInspectorRepositorySession: false,
   fileTreeOpenInNewPane: false,
   gitPanelPlacement: "left",
   filesPanelPlacement: "left",
@@ -367,26 +348,15 @@ function normalizeAtMentionShortcutByTarget(raw: unknown): Record<string, string
   return out;
 }
 
-function normalizeRightPanelCollapsed(raw: unknown): boolean | null {
-  if (raw === true || raw === false) return raw;
-  if (typeof raw !== "string") return null;
-  const trimmed = raw.trim();
-  if (trimmed === "1" || trimmed === "true") return true;
-  if (trimmed === "0" || trimmed === "false") return false;
-  return null;
-}
-
 function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | null {
   if (!raw?.trim()) return null;
   try {
     const parsed = JSON.parse(raw) as Partial<WiseDefaultConfigV1>;
     const connectionKind = normalizeConnectionKind(parsed.connectionKind);
-    const rightPanelDefaultCollapsed = normalizeRightPanelCollapsed(parsed.rightPanelDefaultCollapsed);
-    if (connectionKind === null || rightPanelDefaultCollapsed === null) return null;
+    if (connectionKind === null) return null;
     return {
       version: 1,
       connectionKind,
-      rightPanelDefaultCollapsed,
       showLlmProxyTopbar: normalizeBoolean(parsed.showLlmProxyTopbar),
       showFccTopbar:
         parsed.showFccTopbar === undefined
@@ -530,20 +500,6 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
         parsed.showWorkspaceTodosPanel === undefined
           ? DEFAULT_CONFIG.showWorkspaceTodosPanel
           : normalizeBoolean(parsed.showWorkspaceTodosPanel, DEFAULT_CONFIG.showWorkspaceTodosPanel),
-      showRightInspectorTerminal:
-        parsed.showRightInspectorTerminal === undefined
-          ? DEFAULT_CONFIG.showRightInspectorTerminal
-          : normalizeBoolean(
-              parsed.showRightInspectorTerminal,
-              DEFAULT_CONFIG.showRightInspectorTerminal,
-            ),
-      showRightInspectorRepositorySession:
-        parsed.showRightInspectorRepositorySession === undefined
-          ? DEFAULT_CONFIG.showRightInspectorRepositorySession
-          : normalizeBoolean(
-              parsed.showRightInspectorRepositorySession,
-              DEFAULT_CONFIG.showRightInspectorRepositorySession,
-            ),
       fileTreeOpenInNewPane:
         parsed.fileTreeOpenInNewPane === undefined
           ? DEFAULT_CONFIG.fileTreeOpenInNewPane
@@ -660,42 +616,9 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
   }
 }
 
-function legacyLocalStorage(): Storage | null {
-  try {
-    if (typeof window !== "undefined" && window.localStorage) return window.localStorage;
-    if (typeof globalThis !== "undefined" && "localStorage" in globalThis) {
-      return globalThis.localStorage;
-    }
-  } catch {
-    /* ignore */
-  }
-  return null;
-}
-
-function readLegacyLocalStorageCollapsed(): boolean | null {
-  const storage = legacyLocalStorage();
-  if (!storage) return null;
-  try {
-    return normalizeRightPanelCollapsed(storage.getItem(RIGHT_PANEL_DEFAULT_COLLAPSED_KEY));
-  } catch {
-    return null;
-  }
-}
-
-function clearLegacyLocalStorage(): void {
-  const storage = legacyLocalStorage();
-  if (!storage) return;
-  try {
-    storage.removeItem(RIGHT_PANEL_DEFAULT_COLLAPSED_KEY);
-  } catch {
-    /* ignore */
-  }
-}
-
 async function deleteLegacyAppSettings(): Promise<void> {
   await Promise.all([
     deleteAppSetting(CLAUDE_DEFAULT_CONNECTION_KIND_KEY).catch(() => {}),
-    deleteAppSetting(RIGHT_PANEL_DEFAULT_COLLAPSED_APP_KEY).catch(() => {}),
   ]);
 }
 
@@ -706,11 +629,6 @@ async function persistConfig(config: WiseDefaultConfigV1): Promise<void> {
 function dispatchConnectionKindChanged(kind: ClaudeSessionConnectionKind): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(new CustomEvent(WISE_CLAUDE_CONNECTION_KIND_CHANGED, { detail: { kind } }));
-}
-
-function dispatchRightPanelDefaultChanged(collapsed: boolean): void {
-  if (typeof window === "undefined") return;
-  window.dispatchEvent(new CustomEvent(WISE_RIGHT_PANEL_DEFAULT_CHANGED, { detail: { collapsed } }));
 }
 
 function dispatchComposerFooterChromeDefaultChanged(config: ComposerFooterChromeDefaults): void {
@@ -780,26 +698,15 @@ function dispatchTopbarChromeDefaultChanged(
 
 async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
   let connectionKind: ClaudeSessionConnectionKind | null = null;
-  let rightPanelDefaultCollapsed: boolean | null = null;
 
   const legacyConnection = normalizeConnectionKind(await getAppSetting(CLAUDE_DEFAULT_CONNECTION_KIND_KEY));
   if (legacyConnection) connectionKind = legacyConnection;
 
-  const legacyRightPanel = normalizeRightPanelCollapsed(
-    await getAppSetting(RIGHT_PANEL_DEFAULT_COLLAPSED_APP_KEY),
-  );
-  if (legacyRightPanel !== null) rightPanelDefaultCollapsed = legacyRightPanel;
-
-  const legacyLocalRight = readLegacyLocalStorageCollapsed();
-  if (legacyLocalRight !== null) rightPanelDefaultCollapsed = legacyLocalRight;
-
-  if (connectionKind === null && rightPanelDefaultCollapsed === null) return null;
+  if (connectionKind === null) return null;
 
   return {
     version: 1,
     connectionKind: connectionKind ?? DEFAULT_CONFIG.connectionKind,
-    rightPanelDefaultCollapsed:
-      rightPanelDefaultCollapsed ?? DEFAULT_CONFIG.rightPanelDefaultCollapsed,
     showLlmProxyTopbar: DEFAULT_CONFIG.showLlmProxyTopbar,
     showFccTopbar: DEFAULT_CONFIG.showFccTopbar,
     showFccTrafficTopbar: DEFAULT_CONFIG.showFccTrafficTopbar,
@@ -831,8 +738,6 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     composerFooterTriggerDisplayMode: DEFAULT_CONFIG.composerFooterTriggerDisplayMode,
     showWorkspaceQuickActionsPanel: DEFAULT_CONFIG.showWorkspaceQuickActionsPanel,
     showWorkspaceTodosPanel: DEFAULT_CONFIG.showWorkspaceTodosPanel,
-    showRightInspectorTerminal: DEFAULT_CONFIG.showRightInspectorTerminal,
-    showRightInspectorRepositorySession: DEFAULT_CONFIG.showRightInspectorRepositorySession,
     fileTreeOpenInNewPane: DEFAULT_CONFIG.fileTreeOpenInNewPane,
     gitPanelPlacement: DEFAULT_CONFIG.gitPanelPlacement,
     filesPanelPlacement: DEFAULT_CONFIG.filesPanelPlacement,
@@ -931,20 +836,6 @@ function dispatchFileTreeOpenInNewPaneChanged(openInNewPane: boolean): void {
   );
 }
 
-function dispatchRightInspectorTerminalChanged(visible: boolean): void {
-  if (typeof window === "undefined") return;
-  window.dispatchEvent(
-    new CustomEvent(WISE_RIGHT_INSPECTOR_TERMINAL_CHANGED, { detail: { visible } }),
-  );
-}
-
-function dispatchRightInspectorRepositorySessionChanged(visible: boolean): void {
-  if (typeof window === "undefined") return;
-  window.dispatchEvent(
-    new CustomEvent(WISE_RIGHT_INSPECTOR_REPOSITORY_SESSION_CHANGED, { detail: { visible } }),
-  );
-}
-
 function dispatchRepoPanelPlacementChanged(
   gitPanelPlacement: MonitorPanelPlacement,
   filesPanelPlacement: MonitorPanelPlacement,
@@ -1013,7 +904,6 @@ export async function loadWiseDefaultConfig(): Promise<WiseDefaultConfigV1> {
   const resolved = migrated ?? DEFAULT_CONFIG;
   await persistConfig(resolved);
   await deleteLegacyAppSettings();
-  clearLegacyLocalStorage();
   return await maybeUpgradeOneshotDefaultToStreaming(resolved);
 }
 
@@ -1022,7 +912,6 @@ export async function saveWiseDefaultConfig(
     Pick<
       WiseDefaultConfigV1,
       | "connectionKind"
-      | "rightPanelDefaultCollapsed"
       | "showLlmProxyTopbar"
       | "showFccTopbar"
       | "showFccTrafficTopbar"
@@ -1057,8 +946,6 @@ export async function saveWiseDefaultConfig(
       | "showFeaturePanelScheduledTasks"
       | "showWorkspaceQuickActionsPanel"
       | "showWorkspaceTodosPanel"
-      | "showRightInspectorTerminal"
-      | "showRightInspectorRepositorySession"
       | "fileTreeOpenInNewPane"
       | "gitPanelPlacement"
       | "filesPanelPlacement"
@@ -1084,8 +971,6 @@ export async function saveWiseDefaultConfig(
   const next: WiseDefaultConfigV1 = {
     version: 1,
     connectionKind: patch.connectionKind ?? current.connectionKind,
-    rightPanelDefaultCollapsed:
-      patch.rightPanelDefaultCollapsed ?? current.rightPanelDefaultCollapsed,
     showLlmProxyTopbar: patch.showLlmProxyTopbar ?? current.showLlmProxyTopbar,
     showFccTopbar: patch.showFccTopbar ?? current.showFccTopbar,
     showFccTrafficTopbar: patch.showFccTrafficTopbar ?? current.showFccTrafficTopbar,
@@ -1153,10 +1038,6 @@ export async function saveWiseDefaultConfig(
     showWorkspaceQuickActionsPanel:
       patch.showWorkspaceQuickActionsPanel ?? current.showWorkspaceQuickActionsPanel,
     showWorkspaceTodosPanel: patch.showWorkspaceTodosPanel ?? current.showWorkspaceTodosPanel,
-    showRightInspectorTerminal:
-      patch.showRightInspectorTerminal ?? current.showRightInspectorTerminal,
-    showRightInspectorRepositorySession:
-      patch.showRightInspectorRepositorySession ?? current.showRightInspectorRepositorySession,
     fileTreeOpenInNewPane: patch.fileTreeOpenInNewPane ?? current.fileTreeOpenInNewPane,
     gitPanelPlacement: patch.gitPanelPlacement ?? current.gitPanelPlacement,
     filesPanelPlacement: patch.filesPanelPlacement ?? current.filesPanelPlacement,
@@ -1336,18 +1217,6 @@ export async function saveWiseDefaultConfig(
   if (patch.showWorkspaceTodosPanel !== undefined) {
     next.showWorkspaceTodosPanel = normalizeBoolean(patch.showWorkspaceTodosPanel);
   }
-  if (patch.showRightInspectorTerminal !== undefined) {
-    next.showRightInspectorTerminal = normalizeBoolean(
-      patch.showRightInspectorTerminal,
-      DEFAULT_CONFIG.showRightInspectorTerminal,
-    );
-  }
-  if (patch.showRightInspectorRepositorySession !== undefined) {
-    next.showRightInspectorRepositorySession = normalizeBoolean(
-      patch.showRightInspectorRepositorySession,
-      DEFAULT_CONFIG.showRightInspectorRepositorySession,
-    );
-  }
   if (patch.fileTreeOpenInNewPane !== undefined) {
     next.fileTreeOpenInNewPane = normalizeBoolean(patch.fileTreeOpenInNewPane);
   }
@@ -1427,16 +1296,9 @@ export async function saveWiseDefaultConfig(
   }
   await persistConfig(next);
   await deleteLegacyAppSettings();
-  clearLegacyLocalStorage();
 
   if (patch.connectionKind !== undefined && next.connectionKind !== current.connectionKind) {
     dispatchConnectionKindChanged(next.connectionKind);
-  }
-  if (
-    patch.rightPanelDefaultCollapsed !== undefined &&
-    next.rightPanelDefaultCollapsed !== current.rightPanelDefaultCollapsed
-  ) {
-    dispatchRightPanelDefaultChanged(next.rightPanelDefaultCollapsed);
   }
   if (
     patch.showLlmProxyTopbar !== undefined ||
@@ -1581,18 +1443,6 @@ export async function saveWiseDefaultConfig(
         showWorkspaceTodosPanel: next.showWorkspaceTodosPanel,
       });
     }
-  }
-  if (
-    patch.showRightInspectorTerminal !== undefined &&
-    next.showRightInspectorTerminal !== current.showRightInspectorTerminal
-  ) {
-    dispatchRightInspectorTerminalChanged(next.showRightInspectorTerminal);
-  }
-  if (
-    patch.showRightInspectorRepositorySession !== undefined &&
-    next.showRightInspectorRepositorySession !== current.showRightInspectorRepositorySession
-  ) {
-    dispatchRightInspectorRepositorySessionChanged(next.showRightInspectorRepositorySession);
   }
   if (
     patch.fileTreeOpenInNewPane !== undefined &&
@@ -1983,41 +1833,6 @@ export async function saveDefaultClaudeConnectionKindToStore(
   const normalized = normalizeConnectionKind(kind);
   if (!normalized) return;
   await saveWiseDefaultConfig({ connectionKind: normalized });
-}
-
-export async function loadRightPanelDefaultCollapsedFromStore(
-  fallback: boolean = RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK,
-): Promise<boolean> {
-  const fromStore = (await loadWiseDefaultConfig()).rightPanelDefaultCollapsed;
-  return typeof fromStore === "boolean" ? fromStore : fallback;
-}
-
-export async function saveRightPanelDefaultCollapsedToStore(collapsed: boolean): Promise<void> {
-  await saveWiseDefaultConfig({ rightPanelDefaultCollapsed: collapsed });
-}
-
-/** @alias loadRightPanelDefaultCollapsedFromStore */
-export const loadRightPanelDefaultCollapsed = loadRightPanelDefaultCollapsedFromStore;
-
-/** @alias saveRightPanelDefaultCollapsedToStore */
-export const saveRightPanelDefaultCollapsed = saveRightPanelDefaultCollapsedToStore;
-
-export async function loadRightInspectorTerminalVisibleFromStore(): Promise<boolean> {
-  return (await loadWiseDefaultConfig()).showRightInspectorTerminal;
-}
-
-export async function saveRightInspectorTerminalVisibleToStore(visible: boolean): Promise<void> {
-  await saveWiseDefaultConfig({ showRightInspectorTerminal: visible });
-}
-
-export async function loadRightInspectorRepositorySessionVisibleFromStore(): Promise<boolean> {
-  return (await loadWiseDefaultConfig()).showRightInspectorRepositorySession;
-}
-
-export async function saveRightInspectorRepositorySessionVisibleToStore(
-  visible: boolean,
-): Promise<void> {
-  await saveWiseDefaultConfig({ showRightInspectorRepositorySession: visible });
 }
 
 export async function loadTopbarChromeDefaultsFromStore(): Promise<

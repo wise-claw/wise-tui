@@ -4,7 +4,7 @@
  * discriminated union，表达用户当前处于哪个全屏视图 / 叠层。
  *
  * P0 阶段渲染规则：
- *   - `chat`     → ClaudeSessions + RightPanel（默认主屏）
+ *   - `chat`     → ClaudeSessions（默认主屏）
  *   - `cockpit`  → AssistantHub / MCP / 技能 / 自动化 Hub（替换主区，左栏保留）
  *   - `author`   → 三种 pane 渲染规则不同（详见下方）
  *   - `inspect`  → 叠层（在底层 view 之上，左栏保留；MCP / 技能快捷入口）

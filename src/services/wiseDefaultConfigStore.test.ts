@@ -1,5 +1,4 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from "bun:test";
-import { RIGHT_PANEL_DEFAULT_COLLAPSED_KEY } from "../utils/rightPanelStorage";
 
 const getAppSetting = mock(async () => null as string | null);
 const setAppSetting = mock(async () => undefined);
@@ -22,7 +21,6 @@ import {
   WISE_LEFT_SIDEBAR_MONITOR_PANEL_CHANGED,
   WISE_LEFT_SIDEBAR_WORKSPACE_LIST_CHANGED,
   WISE_MONITOR_PANEL_PLACEMENT_CHANGED,
-  WISE_RIGHT_PANEL_DEFAULT_CHANGED,
   WISE_TOPBAR_CHROME_DEFAULT_CHANGED,
   WISE_COMPOSER_FOOTER_CHROME_DEFAULT_CHANGED,
   WISE_WORKSPACE_INSPECTOR_PANELS_CHANGED,
@@ -89,7 +87,6 @@ describe("wiseDefaultConfigStore", () => {
   test("load persists code defaults when unset", async () => {
     const config = await loadWiseDefaultConfig();
     expect(config.connectionKind).toBe("streaming");
-    expect(config.rightPanelDefaultCollapsed).toBe(false);
     expect(config.showLlmProxyTopbar).toBe(false);
     expect(config.leftSidebarHubQuickEntries).toEqual(["mcp", "skills", "automation"]);
     expect(config.showLeftSidebarMonitorPanel).toBe(true);
@@ -116,7 +113,6 @@ describe("wiseDefaultConfigStore", () => {
     expect(payload).toMatchObject({
       version: 1,
       connectionKind: "streaming",
-      rightPanelDefaultCollapsed: false,
       showLlmProxyTopbar: false,
       leftSidebarHubQuickEntries: ["mcp", "skills", "automation"],
       showLeftSidebarMonitorPanel: true,
@@ -130,7 +126,6 @@ describe("wiseDefaultConfigStore", () => {
         return JSON.stringify({
           version: 1,
           connectionKind: "oneshot",
-          rightPanelDefaultCollapsed: false,
         });
       }
       if (key === WISE_DEFAULT_CONFIG_ONESHOT_TO_STREAMING_MIGRATION_KEY) return null;
@@ -150,7 +145,6 @@ describe("wiseDefaultConfigStore", () => {
         return JSON.stringify({
           version: 1,
           connectionKind: "oneshot",
-          rightPanelDefaultCollapsed: false,
         });
       }
       if (key === WISE_DEFAULT_CONFIG_ONESHOT_TO_STREAMING_MIGRATION_KEY) return "1";
@@ -166,54 +160,11 @@ describe("wiseDefaultConfigStore", () => {
         ? JSON.stringify({
             version: 1,
             connectionKind: "streaming",
-            rightPanelDefaultCollapsed: true,
           })
         : null,
     );
     const config = await loadWiseDefaultConfig();
     expect(config.connectionKind).toBe("streaming");
-    expect(config.rightPanelDefaultCollapsed).toBe(true);
-  });
-
-  test("load migrates legacy keys and localStorage into unified key", async () => {
-    getAppSetting.mockImplementation(async (key: string) => {
-      if (key === "wise.claudeDefaultConnectionKind.v1") return "streaming";
-      if (key === "wise.rightPanel.defaultCollapsed.v1") return "1";
-      return null;
-    });
-    const config = await loadWiseDefaultConfig();
-    expect(config.connectionKind).toBe("streaming");
-    expect(config.rightPanelDefaultCollapsed).toBe(true);
-    expect(deleteAppSetting).toHaveBeenCalled();
-  });
-
-  test("save updates unified json and dispatches right panel event", async () => {
-    getAppSetting.mockImplementation(async (key: string) => {
-      if (key === WISE_DEFAULT_CONFIG_ONESHOT_TO_STREAMING_MIGRATION_KEY) return "1";
-      if (key === WISE_DEFAULT_CONFIG_KEY) {
-        return JSON.stringify({
-          version: 1,
-          connectionKind: "oneshot",
-          rightPanelDefaultCollapsed: false,
-        });
-      }
-      return null;
-    });
-    const seen: boolean[] = [];
-    window.addEventListener(WISE_RIGHT_PANEL_DEFAULT_CHANGED, (e: Event) => {
-      const collapsed = (e as CustomEvent<{ collapsed: boolean }>).detail?.collapsed;
-      if (typeof collapsed === "boolean") seen.push(collapsed);
-    });
-    await saveWiseDefaultConfig({ rightPanelDefaultCollapsed: true });
-    expect(seen).toEqual([true]);
-    const lastCall = setAppSetting.mock.calls.at(-1);
-    expect(lastCall?.[0]).toBe(WISE_DEFAULT_CONFIG_KEY);
-    expect(JSON.parse(String(lastCall?.[1]))).toMatchObject({
-      version: 1,
-      connectionKind: "oneshot",
-      rightPanelDefaultCollapsed: true,
-    });
-    expect(storage?.getItem(RIGHT_PANEL_DEFAULT_COLLAPSED_KEY)).toBeNull();
   });
 
   test("load backfills missing monitor panel visibility with product default", async () => {
@@ -222,7 +173,6 @@ describe("wiseDefaultConfigStore", () => {
         ? JSON.stringify({
             version: 1,
             connectionKind: "streaming",
-            rightPanelDefaultCollapsed: false,
           })
         : null,
     );
@@ -238,7 +188,6 @@ describe("wiseDefaultConfigStore", () => {
         return JSON.stringify({
           version: 1,
           connectionKind: "streaming",
-          rightPanelDefaultCollapsed: false,
           showLeftSidebarMonitorPanel: true,
         });
       }
@@ -261,7 +210,6 @@ describe("wiseDefaultConfigStore", () => {
         return JSON.stringify({
           version: 1,
           connectionKind: "streaming",
-          rightPanelDefaultCollapsed: false,
           showLeftSidebarWorkspaceList: true,
         });
       }
@@ -284,7 +232,6 @@ describe("wiseDefaultConfigStore", () => {
         return JSON.stringify({
           version: 1,
           connectionKind: "streaming",
-          rightPanelDefaultCollapsed: false,
           monitorPanelPlacement: "left",
         });
       }
@@ -306,7 +253,6 @@ describe("wiseDefaultConfigStore", () => {
         ? JSON.stringify({
             version: 1,
             connectionKind: "streaming",
-            rightPanelDefaultCollapsed: false,
           })
         : null,
     );
@@ -328,7 +274,6 @@ describe("wiseDefaultConfigStore", () => {
         return JSON.stringify({
           version: 1,
           connectionKind: "streaming",
-          rightPanelDefaultCollapsed: false,
           showLlmProxyTopbar: false,
         });
       }
@@ -356,7 +301,6 @@ describe("wiseDefaultConfigStore", () => {
         return JSON.stringify({
           version: 1,
           connectionKind: "streaming",
-          rightPanelDefaultCollapsed: false,
           showComposerFooterAttachButton: true,
         });
       }
@@ -384,7 +328,6 @@ describe("wiseDefaultConfigStore", () => {
         return JSON.stringify({
           version: 1,
           connectionKind: "streaming",
-          rightPanelDefaultCollapsed: false,
           composerFooterTriggerDisplayMode: "full",
         });
       }
@@ -411,7 +354,6 @@ describe("wiseDefaultConfigStore", () => {
         ? JSON.stringify({
             version: 1,
             connectionKind: "streaming",
-            rightPanelDefaultCollapsed: false,
             composerFooterTriggerDisplayMode: "bogus",
           })
         : null,
@@ -426,7 +368,6 @@ describe("wiseDefaultConfigStore", () => {
         ? JSON.stringify({
             version: 1,
             connectionKind: "streaming",
-            rightPanelDefaultCollapsed: false,
           })
         : null,
     );
@@ -444,7 +385,6 @@ describe("wiseDefaultConfigStore", () => {
         return JSON.stringify({
           version: 1,
           connectionKind: "streaming",
-          rightPanelDefaultCollapsed: false,
           showWorkspaceTodosPanel: true,
         });
       }

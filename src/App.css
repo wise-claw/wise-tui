@@ -278,113 +278,12 @@ body {
     max-width var(--app-layout-rail-duration) var(--app-layout-rail-easing);
 }
 
-/* 右栏轨道：面板宽度 + 1px 分界拖条（原 5px 会在中栏与右栏之间露出宽空隙） */
-.app-right-panel-rail {
-  --app-right-panel-handle: 1px;
-  position: relative;
-  z-index: 1;
-  flex: 0 0 calc(var(--app-right-panel-width, 300px) + var(--app-right-panel-handle));
-  display: flex;
-  flex-direction: row;
-  align-items: stretch;
-  min-height: 0;
-  min-width: 0;
-  overflow: visible;
-  pointer-events: none;
-  width: calc(var(--app-right-panel-width, 300px) + var(--app-right-panel-handle));
-  max-width: calc(var(--app-right-panel-width, 300px) + var(--app-right-panel-handle));
-  transition:
-    width var(--app-layout-rail-duration) var(--app-layout-rail-easing),
-    max-width var(--app-layout-rail-duration) var(--app-layout-rail-easing),
-    flex var(--app-layout-rail-duration) var(--app-layout-rail-easing),
-    flex-basis var(--app-layout-rail-duration) var(--app-layout-rail-easing);
-}
-
-.app-right-panel-rail--collapsed {
-  flex: 0 0 0 !important;
-  width: 0 !important;
-  max-width: 0 !important;
-  min-width: 0 !important;
-  overflow: hidden;
-  pointer-events: none;
-}
-
-/* 面板挂在中栏行容器上，与轨道同步收放；滑出时叠在中栏之上 */
-.app-main-chat-and-rail-body > .app-right-panel-rail__panel {
-  position: absolute;
-  top: 0;
-  right: 0;
-  bottom: 0;
-  z-index: 2;
-  width: var(--app-right-panel-width, 300px);
-  min-width: 0;
-  max-width: var(--app-right-panel-width, 300px);
-  display: flex;
-  min-height: 0;
-  pointer-events: auto;
-  transform: translateX(0);
-  opacity: 1;
-  transition:
-    transform var(--app-layout-rail-duration) var(--app-layout-rail-easing),
-    opacity calc(var(--app-layout-rail-duration) * 0.85) var(--app-layout-rail-easing);
-  will-change: transform, opacity;
-}
-
-.app-main-chat-and-rail-body > .app-right-panel-rail__panel--collapsed {
-  transform: translateX(100%);
-  opacity: 0;
-  pointer-events: none;
-}
-
-.app-right-panel-rail--collapsed .app-main-layout-resize-handle {
-  opacity: 0;
-  pointer-events: none;
-}
-
-/* 分界拖条：保留 1px 可见线 + 更宽命中区，叠在右栏左缘之上可拖 */
-.app-right-panel-rail .app-main-layout-resize-handle {
-  flex: 0 0 var(--app-right-panel-handle, 1px);
-  width: var(--app-right-panel-handle, 1px);
-  min-width: var(--app-right-panel-handle, 1px);
-  z-index: 5;
-  pointer-events: auto;
-}
-
-.app-right-panel-rail .app-main-layout-resize-handle::before {
-  content: "";
-  position: absolute;
-  top: 0;
-  bottom: 0;
-  left: 50%;
-  width: 8px;
-  transform: translateX(-50%);
-}
-
-.app-right-panel-rail__panel .app-right-panel.ant-layout-sider {
-  flex: 1 1 auto;
-  height: 100%;
-  width: 100% !important;
-  min-width: 0 !important;
-  max-width: 100% !important;
-}
-
-.app-right-panel-rail__panel .app-right-panel.app-chat-inspector.ant-layout-sider {
-  margin: 0 !important;
-  border-radius: 0 !important;
-}
-
 @media (prefers-reduced-motion: reduce) {
   .app-main-layout.ant-layout > .app-left-sidebar.ant-layout-sider:not(.app-left-sidebar--parked),
   .app-main-layout.ant-layout > .app-workspace-main,
   .app-main-chat-and-rail-body > .app-main-layout-content.ant-layout-content,
-  .app-right-panel-rail,
-  .app-right-panel-rail__panel,
   .app-left-sidebar .ant-layout-sider-children {
     transition: none !important;
-  }
-
-  .app-right-panel-rail__panel {
-    will-change: auto;
   }
 }
 

@@ -1,6 +1,5 @@
 import {
   Suspense,
-  lazy,
   startTransition,
   useCallback,
   useEffect,
@@ -8,7 +7,6 @@ import {
   useRef,
   useState,
   useSyncExternalStore,
-  type ReactNode,
 } from "react";
 import { flushSync } from "react-dom";
 import { listen } from "@tauri-apps/api/event";
@@ -174,14 +172,6 @@ import { subscribeClaudeSessionsStructure, getClaudeSessionsStructureKey } from 
 import { useMonitorSessionsForOverview } from "./hooks/useMonitorSessionsForOverview";
 import { useLeftSidebarHubQuickEntries } from "./hooks/useLeftSidebarHubQuickEntries";
 import { useMonitorPanelDefault } from "./hooks/useMonitorPanelDefault";
-import { useRightInspectorTerminalVisible } from "./hooks/useRightInspectorTerminalVisible";
-import { useRightInspectorRepositorySessionVisible } from "./hooks/useRightInspectorRepositorySessionVisible";
-
-// 右栏顶部独立终端：与主区 TerminalPanelLazy 互相独立（独立 PTY 会话），按
-// `showRightInspectorTerminal` 默认配置项挂载；不在主会话渲染，避免与顶栏 terminal 按钮互相干扰。
-const RightInspectorTerminalPanelLazy = lazy(() =>
-  import("./components/TerminalPanel").then((module) => ({ default: module.TerminalPanel })),
-);
 import { useLeftSidebarWorkspaceListDefault } from "./hooks/useLeftSidebarWorkspaceListDefault";
 import { useLeftSidebarRepositoryIconBadgesDefault } from "./hooks/useLeftSidebarRepositoryIconBadgesDefault";
 import { useScheduledClaudeTaskRunner } from "./hooks/useScheduledClaudeTaskRunner";
@@ -214,8 +204,6 @@ import {
   projectMainSessionBindingKey,
   repositoryPathsMatch,
   REPOSITORY_MAIN_SESSION_BINDING_STORAGE_KEY,
-  REPOSITORY_SIDE_SESSION_BINDING_STORAGE_KEY,
-  parseRepositorySideSessionBindings,
   resolveRepositoryForSession,
   resolveBoundMainSessionId,
   resolveMainOwnerAgentNameForRepositoryPath,
@@ -360,36 +348,6 @@ export default function App() {
       setTerminalCollapsed(true);
     }
   }, [terminalPanelMounted]);
-  /**
-   * 右栏顶部独立终端面板状态（与主区 terminalCollapsed / terminalPanelMounted 互不干扰，
-   * 独立 PTY 会话；由 `useRightInspectorTerminalVisible` 默认配置项控制挂载生命周期）。
-   */
-  const [rightTerminalPanelMounted, setRightTerminalPanelMounted] = useState(false);
-  const [rightTerminalCollapsed, setRightTerminalCollapsed] = useState(false);
-  const handleCollapseRightTerminal = useCallback(() => {
-    setRightTerminalCollapsed(true);
-  }, []);
-  const handleCloseRightTerminalPanel = useCallback(() => {
-    setRightTerminalPanelMounted(false);
-    setRightTerminalCollapsed(false);
-  }, []);
-
-  const rightInspectorTerminalVisible = useRightInspectorTerminalVisible();
-  const repositorySideSessionVisible = useRightInspectorRepositorySessionVisible();
-  /**
-   * 默认配置项切换时同步生命周期：
-   * - 关闭 → 卸载右栏 terminal（释放独立 PTY）
-   * - 开启 → 自动挂载并展开，避免用户多一次点击
-   */
-  useEffect(() => {
-    if (rightInspectorTerminalVisible) {
-      setRightTerminalPanelMounted((mounted) => mounted || true);
-      setRightTerminalCollapsed(false);
-    } else {
-      setRightTerminalPanelMounted(false);
-      setRightTerminalCollapsed(false);
-    }
-  }, [rightInspectorTerminalVisible]);
   /** 中栏多屏模式屏数：1=单屏（关闭），2/4/6/8=多屏。 */
   const [paneCount, setPaneCount] = useState<PaneCount>(1);
   /** paneCount 的 ref：供 openRepositoryFileByEvent 等回调在多屏下避免污染全局 active。 */
@@ -1612,7 +1570,6 @@ export default function App() {
     employeeMonitorItems,
     repositoryMemberMonitorItems,
     teamMonitorItems,
-    stats: monitorOverviewStats,
   } = useMonitorOverview({
     employees,
     repositories,
@@ -1765,8 +1722,6 @@ export default function App() {
   const showRepositoryIconBadgesInWorkspaceList = useLeftSidebarRepositoryIconBadgesDefault();
   const showMonitorOnLeft =
     monitorPanelDefault.visible && monitorPanelDefault.placement === "left";
-  const showMonitorOnRight =
-    monitorPanelDefault.visible && monitorPanelDefault.placement === "right";
   const openBuiltinAssistant = useCallback((assistantId: string) => {
     const trimmed = assistantId.trim();
     if (!trimmed) return;
@@ -1990,137 +1945,6 @@ export default function App() {
     [repositories, activeRepositoryId],
   );
 
-  // ── 右栏「仓库会话」侧会话绑定：按仓库 path → 侧 session id；持久化到 localStorage ──
-  // 必须放在 activeRepository 之后定义：依赖 activeRepository / createSession / sessions / tabsHydrated。
-  const [sideSessionBindings, setSideSessionBindings] = useState<Record<string, string>>({});
-  const sideSessionBindingsRef = useRef(sideSessionBindings);
-  sideSessionBindingsRef.current = sideSessionBindings;
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const raw = await getAppSetting(REPOSITORY_SIDE_SESSION_BINDING_STORAGE_KEY);
-        if (cancelled) return;
-        setSideSessionBindings(parseRepositorySideSessionBindings(raw));
-      } catch {
-        /* ignore */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const ensureSideSessionInFlightRef = useRef<string | null>(null);
-  /** 复用 useClaudeSessions 的 createSession，但要求 tabsHydrated 已就绪避免覆盖启动态。 */
-  const ensureRepositorySideSession = useCallback(
-    async (repository: Repository): Promise<string | null> => {
-      if (!tabsHydrated) return null;
-      if (!repositorySideSessionVisible) return null;
-      const key = normalizeRepositoryPathForMatch(repository.path);
-      if (!key) return null;
-      if (ensureSideSessionInFlightRef.current === key) {
-        return sideSessionBindingsRef.current[key] ?? null;
-      }
-      ensureSideSessionInFlightRef.current = key;
-      try {
-        // 优先复用已有侧会话（live store / sessions 中存在的 isSide 会话）。
-        const existing = sessions.find(
-          (s) =>
-            s.isSide === true &&
-            normalizeRepositoryPathForMatch(s.repositoryPath) === key,
-        );
-        if (existing) {
-          setSideSessionBindings((prev) => {
-            if (prev[key] === existing.id) return prev;
-            const next = { ...prev, [key]: existing.id };
-            void setAppSetting(REPOSITORY_SIDE_SESSION_BINDING_STORAGE_KEY, JSON.stringify(next));
-            return next;
-          });
-          return existing.id;
-        }
-        const target = resolveSidebarSelectionTarget({ repository });
-        const id = await createSession(target.path, target.displayName, {
-          skipActivate: true,
-          isSide: true,
-        });
-        setSideSessionBindings((prev) => {
-          if (prev[key] === id) return prev;
-          const next = { ...prev, [key]: id };
-          void setAppSetting(REPOSITORY_SIDE_SESSION_BINDING_STORAGE_KEY, JSON.stringify(next));
-          return next;
-        });
-        return id;
-      } finally {
-        ensureSideSessionInFlightRef.current = null;
-      }
-    },
-    [createSession, sessions, tabsHydrated, repositorySideSessionVisible],
-  );
-
-  /** 当前 active 仓库的侧会话 id；优先用绑定表，其次扫描 live sessions（覆盖重启/迁移场景）。 */
-  const activeRepositorySideSessionId = useMemo(() => {
-    if (!activeRepository) return null;
-    const key = normalizeRepositoryPathForMatch(activeRepository.path);
-    if (!key) return null;
-    const bound = sideSessionBindings[key];
-    if (bound && sessions.some((s) => s.id === bound && s.isSide === true)) {
-      return bound;
-    }
-    const found = sessions.find(
-      (s) =>
-        s.isSide === true &&
-        normalizeRepositoryPathForMatch(s.repositoryPath) === key,
-    );
-    return found?.id ?? null;
-  }, [activeRepository, sideSessionBindings, sessions]);
-
-  // 侧会话生命周期：active 仓库变更且无侧会话时，懒创建。
-  useEffect(() => {
-    if (!tabsHydrated) return;
-    if (!activeRepository) return;
-    if (activeRepositorySideSessionId) return;
-    void ensureRepositorySideSession(activeRepository);
-  }, [activeRepository, activeRepositorySideSessionId, ensureRepositorySideSession, tabsHydrated]);
-
-  // 启动后清理：把绑定表中已不存在的 session id 移除（用户可能删除了 tabs.json 里的侧会话）。
-  useEffect(() => {
-    if (!tabsHydrated) return;
-    setSideSessionBindings((prev) => {
-      let changed = false;
-      const next: Record<string, string> = {};
-      for (const [k, v] of Object.entries(prev)) {
-        if (sessions.some((s) => s.id === v && s.isSide === true)) {
-          next[k] = v;
-        } else {
-          changed = true;
-        }
-      }
-      if (!changed) return prev;
-      void setAppSetting(REPOSITORY_SIDE_SESSION_BINDING_STORAGE_KEY, JSON.stringify(next));
-      return next;
-    });
-  }, [sessions, tabsHydrated]);
-
-  // composer `/new` 等本地斜杠：丢弃当前侧会话，新建一条（保持同一个仓库）。
-  const handleCreateNewSideSession = useCallback(async () => {
-    if (!activeRepository) return;
-    if (!repositorySideSessionVisible) return;
-    const key = normalizeRepositoryPathForMatch(activeRepository.path);
-    if (!key) return;
-    const target = resolveSidebarSelectionTarget({ repository: activeRepository });
-    const id = await createSession(target.path, target.displayName, {
-      skipActivate: true,
-      isSide: true,
-    });
-    setSideSessionBindings((prev) => {
-      const next = { ...prev, [key]: id };
-      void setAppSetting(REPOSITORY_SIDE_SESSION_BINDING_STORAGE_KEY, JSON.stringify(next));
-      return next;
-    });
-  }, [activeRepository, createSession, repositorySideSessionVisible]);
-
   const fileEditorRootPath = useMemo(() => {
     const path = resolveChatTopbarContext({
       activeRepository,
@@ -2272,9 +2096,6 @@ export default function App() {
     handleNewPaneSessionInNextSlot,
     handleNewPaneProjectSessionInNextSlot,
     handleChangePaneCount,
-    handleToggleRightPanel,
-    handleSetRightPanelDefaultCollapsed,
-    rightPanelDefaultCollapsed,
     mainLayoutContentRef,
     mainLayoutLeftWidthPx,
     mainLayoutRightWidthPx,
@@ -2330,45 +2151,6 @@ export default function App() {
   }, [paneLayoutHydrated, tabsHydrated, sessions, extraPanes, setExtraPanes]);
 
   const repoPanelPlacementDefault = useRepoPanelPlacementDefault();
-  const [repositoryRepoPanelNode, setRepositoryRepoPanelNode] = useState<ReactNode | null>(null);
-  /**
-   * 右栏顶部独立终端节点。仅在 `showRightInspectorTerminal` 为 true 且存在活跃仓库时挂载，
-   * 内部用独立 PTY 状态(右栏 terminal)，与主会话 TerminalPanel 互不干扰。
-   */
-  const rightInspectorTerminalNode: ReactNode = useMemo(() => {
-    if (!rightInspectorTerminalVisible) return null;
-    if (!activeRepository) return null;
-    if (!rightTerminalPanelMounted) return null;
-    return (
-      <div
-        className={
-          rightTerminalCollapsed
-            ? "app-right-inspector-terminal-host app-right-inspector-terminal-host--collapsed"
-            : "app-right-inspector-terminal-host"
-        }
-        aria-hidden={rightTerminalCollapsed}
-      >
-        <Suspense fallback={<div className="app-right-inspector-terminal-lazy-fallback">终端加载中…</div>}>
-          <RightInspectorTerminalPanelLazy
-            repositoryPath={activeRepository.path}
-            repositoryName={activeRepository.name}
-            branch={activeRepository.branch ?? ""}
-            dirty={false}
-            collapsed={rightTerminalCollapsed}
-            onCollapse={handleCollapseRightTerminal}
-            onClose={handleCloseRightTerminalPanel}
-          />
-        </Suspense>
-      </div>
-    );
-  }, [
-    rightInspectorTerminalVisible,
-    activeRepository,
-    rightTerminalPanelMounted,
-    rightTerminalCollapsed,
-    handleCollapseRightTerminal,
-    handleCloseRightTerminalPanel,
-  ]);
 
   const handleNewPaneSessionForRepository = useCallback(
     (repository: Repository) => {
@@ -2403,21 +2185,8 @@ export default function App() {
       const sid = sessionId.trim();
       if (!sid) return;
       setInspectorHistorySessionId(sid);
-      // 运行面板在右栏且默认展开右栏时，打开历史会话自动展开右栏；左栏展示时由运行面板内抽屉承接。
-      if (
-        showMonitorOnRight &&
-        !rightPanelDefaultCollapsed &&
-        effectiveRightCollapsed
-      ) {
-        handleToggleRightPanel();
-      }
     },
-    [
-      effectiveRightCollapsed,
-      handleToggleRightPanel,
-      rightPanelDefaultCollapsed,
-      showMonitorOnRight,
-    ],
+    [],
   );
 
   const handleCreateTerminalEmployeeSession = useCallback(
@@ -3708,7 +3477,6 @@ export default function App() {
         gitPanelPlacement: repoPanelPlacementDefault.gitPanelPlacement,
         filesPanelPlacement: repoPanelPlacementDefault.filesPanelPlacement,
         repoPanelSplitMode: repoPanelPlacementDefault.repoPanelSplitMode,
-        onRepositoryRepoPanelChange: setRepositoryRepoPanelNode,
       }}
       authorPanelProps={{
         pane: authorPane,
@@ -3935,84 +3703,6 @@ export default function App() {
         workflowStudioAction: undefined,
       }}
       sessionsStructureKey={sessionsStructureKey}
-      repositorySideSessionSharedProps={{
-        sessions,
-        allSessionsForHistory: sessions,
-        repositories,
-        activeProject,
-        activeWorkspaceFocus,
-        activeRepositoryId,
-        workspaceMode,
-        onSwitchSession: jumpToSessionWithRepository,
-        onSend: handleSendMessageWithAtMention,
-        onExecute: handleComposerExecute,
-        onDispatchExecutionEnvironment: handleDispatchExecutionEnvironment,
-        onUpdateSessionModel: updateSessionModel,
-        onUpdateSessionConnectionKind: updateSessionConnectionKind,
-        onUpdateRepositoryExecutionEngine: handleUpdateRepositoryExecutionEngine,
-        onUpdateEmployeeExecutionEngine: handleUpdateEmployeeExecutionEngine,
-        codexAvailable,
-        cursorAvailable,
-        geminiAvailable,
-        opencodeAvailable,
-        onOpenExecutionEnvironment: handleOpenExecutionEnvironment,
-        onCancelSession: cancelSession,
-        onRespondToQuestion: respondToQuestion,
-        onDismissQuestion: dismissQuestion,
-        onRespondToPermission: respondToPermission,
-        onToggleTodo: toggleTodo,
-        onRestoreTodosFromTranscript: restoreTodosFromTranscript,
-        onRestorePendingPermissionFromTranscript: restorePendingPermissionFromTranscript,
-        onClearFollowups: clearFollowups,
-        onClearRevertItems: clearRevertItems,
-        onSendFollowup: sendFollowup,
-        onRestoreRevert: restoreRevert,
-        onOpenWorkflowConfig: openWorkflowConfigFromSidebar,
-        onOpenBuiltinAssistant: openBuiltinAssistant,
-        onActivateAssistant: activateAssistant,
-        onOpenAssistantsHub: openAssistantsFromSidebar,
-        onOpenRepositoryScheduledTasks: scheduledTasksRepository
-          ? openActiveScheduledTasksOverlay
-          : undefined,
-        employees,
-        mentionEmployees,
-        composerProjectRoleTagOptions,
-        composerProjectRepositoryMentionOptions,
-        composerHideEmployeesInAtMode,
-        taskPendingEmployeesByTaskId,
-        workflowTemplates,
-        workflowGraphsByWorkflowId,
-        workflowGraphStatusByWorkflowId,
-        onOpenTaskDetail: (taskId) => {
-          setMonitorDrawerTarget({ type: "task", taskId });
-        },
-        hideMessages: false,
-        hideSessionTools: true,
-        resolveTaskListOmcInvokeConcurrency,
-        repositoryMainBindings: repositoryMainSessionBindings,
-        onAppendSystemMessage: appendSystemMessage,
-        onAppendUserMessage: appendUserMessage,
-        onReloadFullDiskTranscript: reloadFullDiskTranscript,
-        onLoadMoreTranscriptFromDisk: loadMoreTranscriptFromDisk,
-        onCompactSessionHistory: compactSessionHistory,
-        onStopSessionConversationTask: handleStopSessionConversationTask,
-        omcBatchPipelineActive: Boolean(omcBatchRuntime?.active),
-        paneCount: 1,
-        primaryPaneRuntimeOverride: null,
-      }}
-      repositorySideSessionContext={{
-        visible: repositorySideSessionVisible,
-        sessionId: activeRepositorySideSessionId,
-        repository: activeRepository,
-        onEnsureSession: () => {
-          if (activeRepository) {
-            void ensureRepositorySideSession(activeRepository);
-          }
-        },
-        onCreateNewSession: () => {
-          void handleCreateNewSideSession();
-        },
-      }}
       claudeSessionsProps={{
         sessions,
         activeSessionId,
@@ -4083,9 +3773,6 @@ export default function App() {
         onPaneProjectNewSession: handlePaneProjectNewSession,
         onNewPaneSession: handleNewPaneSession,
         onToggleSidebar: () => setCollapsed((c) => !c),
-        onToggleRightPanel: handleToggleRightPanel,
-        rightPanelDefaultCollapsed,
-        onSetRightPanelDefaultCollapsed: handleSetRightPanelDefaultCollapsed,
         onToggleTerminal: handleToggleTerminal,
         onCollapseTerminal: handleCollapseTerminal,
         onCloseTerminalPanel: handleCloseTerminalPanel,
@@ -4118,92 +3805,6 @@ export default function App() {
         resolveTaskListOmcInvokeConcurrency,
         onDecideWorkflowTask: handleDecideWorkflowTask,
         onStopSessionConversationTask: handleStopSessionConversationTask,
-      }}
-      chatInspectorProps={{
-        dark,
-        collapsed: effectiveRightCollapsed,
-        projectId: activeProjectId,
-        activeProjectName: activeProject?.name ?? null,
-        activeRepositoryId,
-        activeRepositoryName: activeRepository?.name ?? null,
-        siderWidth: mainLayoutRightWidthPx,
-        monitorStats: showMonitorOnRight ? monitorOverviewStats : null,
-        monitorPanelSessions: monitorPanelSessionsMerged,
-        monitorTranscriptSourceSessions: sessions,
-        employeeMonitorItems: teamPanelEmployeeMonitorItems,
-        repositoryMemberMonitorItems: scopedRepositoryMemberMonitorItems,
-        sessionConversationTaskItems,
-        executionEnvironmentDispatchHistoryDays: executionEnvironmentDispatchHistory.days,
-        onExecutionEnvironmentDispatchHistoryDaysChange: executionEnvironmentDispatchHistory.applyDays,
-        executionEnvironmentDispatchHistoryDaysSaving: false,
-        teamMonitorItems,
-        monitorActiveTarget: monitorDrawerTarget,
-        onOpenTeamMonitorDetail: (workflowId) => {
-          setMonitorDrawerTarget({ type: "team", workflowId });
-        },
-        onOpenEmployeeConfig: () => {
-          void openEmployeeConfigWithContext();
-        },
-        onOpenWorkflowConfig: openWorkflowConfigFromSidebar,
-        onStopEmployeeMonitor: (employeeId) => handleStopEmployeeMonitorRef.current(employeeId),
-        onStopTeamMonitor: (workflowId) => {
-          const item = teamMonitorItems.find((entry) => entry.workflowId === workflowId);
-          if (!item?.activeTaskId) return;
-          const targetTaskId = item.activeTaskId;
-          const task = workflowTasks.find((entry) => entry.id === targetTaskId);
-          if (task?.creator) {
-            cancelSession(task.creator);
-          }
-          void endWorkflowTask({
-            taskId: targetTaskId,
-            reason: "在监控面板中手动结束团队任务",
-          })
-            .then(async (updatedTask) => {
-              setWorkflowTasks((prev) =>
-                prev.map((entry) => (entry.id === updatedTask.id ? updatedTask : entry)),
-              );
-              const [events, pendingEmployees] = await Promise.all([
-                listTaskEvents(updatedTask.id),
-                listTaskPendingEmployees(updatedTask.id),
-              ]);
-              commitWorkflowTaskEventsByTaskId((prev) => ({ ...prev, [updatedTask.id]: events }));
-              setTaskPendingEmployeesByTaskId((prev) => ({ ...prev, [updatedTask.id]: pendingEmployees }));
-            })
-            .catch((error) => {
-              console.error("Failed to end team workflow task:", error);
-              message.error("结束团队任务失败");
-            });
-        },
-        hideEmployeeUi: shouldHideEmployeeUi(activeProject),
-        onCancelSessionFromMonitor: cancelSession,
-        onOpenTaskDetailFromMonitor: (taskId) => {
-          setMonitorDrawerTarget({ type: "task", taskId });
-        },
-        onOpenOmcBatchInvocationDetail: handleOpenOmcBatchInvocationDetail,
-        onCancelOmcDirectBatchInvocation: handleCancelOmcDirectBatchInvocation,
-        onStopSessionConversationTask: handleStopSessionConversationTask,
-        onReloadFullDiskTranscript: reloadFullDiskTranscript,
-        onLoadMoreTranscriptFromDisk: loadMoreTranscriptFromDisk,
-        onCompactSessionHistory: compactSessionHistory,
-        historyDrawerSessionId: inspectorHistorySessionId,
-        onHistoryDrawerSessionIdChange: setInspectorHistorySessionId,
-        onRestoreHistorySessionAsMain: handleRestoreHistorySessionAsMain,
-        onCreateTerminalEmployeeSession: handleCreateTerminalEmployeeSession,
-        onResumeSession: resumeSessionFromMonitorDrawer,
-        repositoryMainBindings: repositoryMainSessionBindings,
-        repositories,
-        repositoryRepoPanel: repositoryRepoPanelNode,
-        rightTerminalPanelNode: rightInspectorTerminalNode,
-      }}
-      cockpitInspectorProps={{
-        dark,
-        collapsed: effectiveRightCollapsed,
-        siderWidth: mainLayoutRightWidthPx,
-        activeProject,
-        activeProjectId,
-        activeRepositoryId,
-        activeRepositoryName: activeRepository?.name ?? null,
-        employeeMonitorItems,
       }}
       cockpitEmpty={projects.length === 0 && floatingRepositories.length === 0}
       cockpitOnboardingProps={{

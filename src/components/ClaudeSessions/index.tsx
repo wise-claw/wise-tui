@@ -145,9 +145,6 @@ export interface ClaudeSessionsProps {
   ) => void | Promise<void>;
   onNewPaneSession?: (slotIndex: number, repository: Repository) => void | Promise<void>;
   onToggleSidebar?: () => void;
-  onToggleRightPanel?: () => void;
-  rightPanelDefaultCollapsed?: boolean;
-  onSetRightPanelDefaultCollapsed?: (collapsed: boolean) => void;
   onToggleTerminal?: () => void;
   onCollapseTerminal?: () => void;
   onCloseTerminalPanel?: () => void;
@@ -299,15 +296,11 @@ function ClaudeSessionsShell({
   onPaneProjectNewSession,
   onNewPaneSession,
   onToggleSidebar,
-  onToggleRightPanel,
-  rightPanelDefaultCollapsed,
-  onSetRightPanelDefaultCollapsed,
   onToggleTerminal,
   onCollapseTerminal,
   onCloseTerminalPanel,
   onSearch,
   collapsed,
-  rightCollapsed,
   terminalCollapsed,
   terminalPanelMounted = false,
   onAutoFixRunError: onAutoFixRunErrorFromProps,
@@ -687,13 +680,9 @@ function ClaudeSessionsShell({
           onDispatchSessionFeedbackLoop={onDispatchSessionFeedbackLoop}
           getClaudeSessions={() => sessions}
           onToggleSidebar={onToggleSidebar}
-          onToggleRightPanel={onToggleRightPanel}
-          rightPanelDefaultCollapsed={rightPanelDefaultCollapsed}
-          onSetRightPanelDefaultCollapsed={onSetRightPanelDefaultCollapsed}
           onToggleTerminal={onToggleTerminal}
           onSearch={onSearch}
           collapsed={collapsed}
-          rightCollapsed={rightCollapsed}
           terminalCollapsed={terminalCollapsed}
           terminalPanelMounted={terminalPanelMounted}
           onAutoFixRunError={(prompt) => onAutoFixRunErrorFromProps?.(prompt)}
