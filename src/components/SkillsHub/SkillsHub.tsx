@@ -780,7 +780,7 @@ function ExtensionContributedSkills({ skills, loading, onRefresh, searchQuery }:
                   <div className="app-skills-hub-card-title-group">
                     <div className="app-skills-hub-card-name" style={{ display: "flex", alignItems: "center", gap: 6 }}>
                       {s.name}
-                      <Tag color="purple" bordered={false} style={{ margin: 0, fontSize: 10 }}>扩展</Tag>
+                      <Tag color="purple" variant="filled" style={{ margin: 0, fontSize: 10 }}>扩展</Tag>
                     </div>
                     <div className="app-skills-hub-card-source" title={s.location}>
                       来自扩展 {s.extension}
@@ -914,7 +914,7 @@ function ExternalBrowse({
                       <div className="app-skills-hub-card-title-group">
                         <div className="app-skills-hub-card-name" style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                           {s.name}
-                          {s.isSymlink ? <Tag color="blue" bordered={false} style={{ margin: 0, fontSize: 10 }}>链接</Tag> : null}
+                          {s.isSymlink ? <Tag color="blue" variant="filled" style={{ margin: 0, fontSize: 10 }}>链接</Tag> : null}
                         </div>
                         <div className="app-skills-hub-card-source" title={s.location}>
                           {s.location}

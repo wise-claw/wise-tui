@@ -42,7 +42,7 @@ export function SidebarMoreMenuDropdown({
       {...dropdownProps}
       rootClassName="app-sidebar-more-menu-dropdown"
       getPopupContainer={() => document.body}
-      dropdownRender={dropdownRender}
+      popupRender={dropdownRender}
       menu={menu}
     >
       {children}

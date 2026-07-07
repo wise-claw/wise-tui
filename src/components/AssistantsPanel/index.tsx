@@ -389,7 +389,7 @@ export function AssistantsPanel({
         open={editor.open}
         onClose={closeDrawer}
         size="large"
-        destroyOnClose
+        destroyOnHidden
         footer={
           <div style={{ display: "flex", justifyContent: "flex-end", gap: 8 }}>
             <Button size="small" onClick={closeDrawer}>

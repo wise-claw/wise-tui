@@ -286,6 +286,10 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     return Array.from(ids);
   }, [companionSessionIdsJoinKey, options?.companionSessionId]);
 
+  // 同步 ref：disk merge 等异步回调需读最新 companion 集合，避免闭包滞后或重建 callback。
+  const companionSessionIdsRef = useRef<ReadonlySet<string>>(new Set());
+  companionSessionIdsRef.current = new Set(companionSessionIds);
+
   const companionMemoryLimits = useMemo(
     () => ({
       companionMax: resolveCompanionSessionMessagesMax(companionSessionIds.length),
@@ -466,6 +470,9 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     (tabSessionId: string, claudeSessionId: string, turnNonce?: number) => Promise<void>
   >(() => Promise.resolve());
 
+  /** 追踪最新会话 tabs 状态，供 beforeunload 同步刷写时取最新快照 */
+  const latestTabsForSaveRef = useRef({ sessions, activeSessionId, tabsHydrated });
+  latestTabsForSaveRef.current = { sessions, activeSessionId, tabsHydrated };
   const clearStreamStallTimer = useCallback((tabId: string) => {
     const key = tabId.trim();
     if (!key) return;
@@ -2431,13 +2438,38 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     };
   }, []);
 
+  /** localStorage 备份 key：在 beforeunload 中同步写入，供下次启动时合并恢复。 */
+  const TABS_BACKUP_KEY = "wise.tabs.backup.v1";
+
   useEffect(() => {
     if (!trellisContextBindingsHydrated) return;
     let cancelled = false;
     void (async () => {
       try {
-        const data = await loadSessionTabsState();
+        let data = await loadSessionTabsState();
         if (cancelled) return;
+        // 合并 beforeunload 写入的 localStorage 备份（弥补异步 IPC 在页面卸载时可能未送达的空窗）
+        try {
+          const backupRaw = localStorage.getItem(TABS_BACKUP_KEY);
+          localStorage.removeItem(TABS_BACKUP_KEY);
+          if (backupRaw) {
+            const backup = JSON.parse(backupRaw);
+            if (backup?.sessions?.length) {
+
+              if (!data) {
+                data = backup;
+              } else {
+                const existingIds = new Set(data.sessions.map((x: ClaudeSession) => x.id));
+                for (const bs of backup.sessions as ClaudeSession[]) {
+                  if (!existingIds.has(bs.id)) {
+                    (data.sessions as ClaudeSession[]).push(bs);
+                    existingIds.add(bs.id);
+                  }
+                }
+              }
+            }
+          }
+        } catch { /* ignore parse errors */ }
         if (data?.sessions && data.sessions.length > 0) {
           const globalDefault = await loadDefaultClaudeConnectionKind();
           if (!cancelled) defaultConnectionKindRef.current = globalDefault;
@@ -2516,6 +2548,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
               ? data.activeSessionId
               : normalizedWithModels[0]!.id;
           memoryKeepSessionIdsRef.current = new Set<string>([active]);
+
           setSessions(normalizedWithModels);
           setActiveSessionId(active);
         }
@@ -2835,7 +2868,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       sessionsRef.current,
     );
     const prev = sessionsRef.current;
-    const next = mergeRepositoryDiskSessions(prev, mergePath, repositoryName, disk, "sonnet");
+    const next = mergeRepositoryDiskSessions(prev, mergePath, repositoryName, disk, "sonnet", companionSessionIdsRef.current);
     const migrations = collectDiskMergeTabIdMigrations(prev, next, mergePath);
     if (next !== prev) {
       for (const migration of migrations) {
@@ -2851,7 +2884,6 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           memoryKeepSessionIdsRef.current.add(row.id);
         }
       }
-      sessionsRef.current = next;
       setSessions(next);
       for (const migration of migrations) {
         applySessionTabIdMigration(migration.fromTabId, migration.toClaudeSessionId);
@@ -3315,6 +3347,43 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
             /* keep default */
           }
         })();
+      }
+
+      // 新创建会话同步落盘 localStorage，弥补 debounce 取消 + beforeunload 不可靠的双重缺口。
+      // 后续 if (!opts.skipActivate) 路径还会走 setSessions → 触发 debounced save（450ms），
+      // 但此处立即写入确保即使立即刷新也不丢失。
+      console.warn("[debug] createSession: writing localStorage backup", {
+        sessionId: id,
+        totalSessions: sessionsRef.current.length,
+        sessionIds: sessionsRef.current.map(s => s.id),
+        isCompanion: Boolean(opts?.skipActivate),
+      });
+      try {
+        localStorage.setItem(
+          TABS_BACKUP_KEY,
+          JSON.stringify({
+            version: 1,
+            activeSessionId: id,
+            sessions: sessionsRef.current.map((ses) => {
+              const {
+                diskTranscriptPartial: _omitPartial,
+                transcriptMemoryUnlimited: _omitUnlimited,
+                ...rest
+              } = ses;
+              const messages =
+                rest.messages.length <= PERSIST_SESSION_MESSAGES_MAX
+                  ? rest.messages
+                  : rest.messages.slice(-PERSIST_SESSION_MESSAGES_MAX);
+              return {
+                ...rest,
+                repositoryPath: normalizeSessionRepositoryPath(rest.repositoryPath),
+                messages,
+              };
+            }),
+          }),
+        );
+      } catch {
+        /* localStorage full or unavailable */
       }
 
       return id;
@@ -5053,6 +5122,78 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     }, debounceMs);
     return () => window.clearTimeout(t);
   }, [sessions, activeSessionId, tabsHydrated, pruneLiveSessionSidecars]);
+
+  // 页面卸载前同步刷写未保存的 tabs 状态，避免 companion session 因 debounce 取消而丢失。
+  // 同时使用 visibilitychange（更可靠，在 Tauri webview 页面隐藏/刷新时保证触发）与 beforeunload 兜底。
+  useEffect(() => {
+    const saveNow = () => {
+      const latest = latestTabsForSaveRef.current;
+      if (!latest.tabsHydrated) return;
+      try {
+        localStorage.setItem(
+          TABS_BACKUP_KEY,
+          JSON.stringify({
+            version: 1,
+            activeSessionId: latest.activeSessionId,
+            sessions: latest.sessions.map((ses) => {
+              const {
+                diskTranscriptPartial: _omitPartial,
+                transcriptMemoryUnlimited: _omitUnlimited,
+                ...rest
+              } = ses;
+              const messages =
+                rest.messages.length <= PERSIST_SESSION_MESSAGES_MAX
+                  ? rest.messages
+                  : rest.messages.slice(-PERSIST_SESSION_MESSAGES_MAX);
+              return {
+                ...rest,
+                repositoryPath: normalizeSessionRepositoryPath(rest.repositoryPath),
+                messages,
+              };
+            }),
+          }),
+        );
+      } catch {
+        /* localStorage full or unavailable */
+      }
+      const latestSessions = latest.sessions;
+      const bindingsChanged = pruneLiveSessionSidecars(latestSessions);
+      if (bindingsChanged) {
+        persistWorkflowBindings(workflowRunBySessionRef.current);
+        persistTrellisContextBindings(trellisContextIdBySessionRef.current);
+      }
+      void saveSessionTabsState({
+        version: 1,
+        activeSessionId: latest.activeSessionId,
+        sessions: latestSessions.map((ses) => {
+          const {
+            diskTranscriptPartial: _omitPartial,
+            transcriptMemoryUnlimited: _omitUnlimited,
+            ...rest
+          } = ses;
+          const messages =
+            rest.messages.length <= PERSIST_SESSION_MESSAGES_MAX
+              ? rest.messages
+              : rest.messages.slice(-PERSIST_SESSION_MESSAGES_MAX);
+          return {
+            ...rest,
+            repositoryPath: normalizeSessionRepositoryPath(rest.repositoryPath),
+            messages,
+          };
+        }),
+      });
+    };
+    // visibilitychange 在页面隐藏时触发，比 beforeunload 可靠性更高（Tauri webview 中也能触发）
+    const onVisibilityChange = () => {
+      if (document.visibilityState === "hidden") saveNow();
+    };
+    document.addEventListener("visibilitychange", onVisibilityChange);
+    window.addEventListener("beforeunload", saveNow);
+    return () => {
+      document.removeEventListener("visibilitychange", onVisibilityChange);
+      window.removeEventListener("beforeunload", saveNow);
+    };
+  }, [pruneLiveSessionSidecars]);
 
   useEffect(() => {
     return () => {

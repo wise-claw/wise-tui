@@ -282,23 +282,22 @@ export function ClaudeMemoryPanel({
                           {item.label}
                         </span>
                         <Tag
-                          bordered={false}
-                          className="app-claude-memory-tag"
+                          variant="filled" className="app-claude-memory-tag"
                           style={{ color: scopeMeta.color, background: scopeMeta.bg }}
                         >
                           {scopeMeta.label}
                         </Tag>
                         {!item.exists ? (
-                          <Tag bordered={false} className="app-claude-memory-tag" color="default">
+                          <Tag variant="filled" className="app-claude-memory-tag" color="default">
                             {isRuleDirAnchor(item) ? "目录" : "未创建"}
                           </Tag>
                         ) : isRuleDirAnchor(item) ? (
-                          <Tag bordered={false} className="app-claude-memory-tag" color="default">
+                          <Tag variant="filled" className="app-claude-memory-tag" color="default">
                             目录
                           </Tag>
                         ) : null}
                         {item.loadedAtStartup ? (
-                          <Tag bordered={false} className="app-claude-memory-tag" color="processing">
+                          <Tag variant="filled" className="app-claude-memory-tag" color="processing">
                             启动
                           </Tag>
                         ) : null}

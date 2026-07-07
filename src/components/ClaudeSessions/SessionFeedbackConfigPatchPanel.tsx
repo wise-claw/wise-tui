@@ -212,21 +212,21 @@ function PatchRow({
             </Text>
           </div>
           <Space size={4} wrap>
-            <Tag bordered={false}>{feedbackConfigArtifactKindLabel(patch.kind)}</Tag>
-            <Tag bordered={false}>{patch.action}</Tag>
-            <Tag bordered={false} color={patch.source === "ai" ? "purple" : "blue"}>
+            <Tag variant="filled">{feedbackConfigArtifactKindLabel(patch.kind)}</Tag>
+            <Tag variant="filled">{patch.action}</Tag>
+            <Tag variant="filled" color={patch.source === "ai" ? "purple" : "blue"}>
               {patch.source === "ai" ? "AI" : "规则"}
             </Tag>
-            <Tag bordered={false} color={statusColor}>
+            <Tag variant="filled" color={statusColor}>
               {patch.status}
             </Tag>
             {suggestPromote && canPromote && !alreadyPromoted ? (
-              <Tag bordered={false} color="gold">
+              <Tag variant="filled" color="gold">
                 建议提升
               </Tag>
             ) : null}
             {alreadyPromoted ? (
-              <Tag bordered={false} color="success">
+              <Tag variant="filled" color="success">
                 已全局
               </Tag>
             ) : null}
@@ -333,8 +333,8 @@ function BackupRow({
       <div className="app-session-feedback-loop__backup-main">
         <Text className="app-session-feedback-loop__backup-path">{backup.path}</Text>
         <Space size={4} wrap>
-          <Tag bordered={false}>{backup.kind}</Tag>
-          <Tag bordered={false}>{backup.action}</Tag>
+          <Tag variant="filled">{backup.kind}</Tag>
+          <Tag variant="filled">{backup.action}</Tag>
           <Text type="secondary">{new Date(backup.at).toLocaleString()}</Text>
         </Space>
       </div>
@@ -521,15 +521,14 @@ export const SessionFeedbackConfigPatchPanel = memo(function SessionFeedbackConf
         <FileTextOutlined />
         <Text strong>配置 Artifact 补丁</Text>
         {configSnapshot ? (
-          <Tag bordered={false}>
+          <Tag variant="filled">
             rules ~{configSnapshot.overhead.rules} · skills ~{configSnapshot.overhead.skills} · mcp ~
             {configSnapshot.overhead.mcp} tok
           </Tag>
         ) : null}
         {configOverheadDelta ? (
           <Tag
-            bordered={false}
-            color={
+              variant="filled" color={
               configOverheadDelta.rules + configOverheadDelta.mcp <= 0 ? "success" : "warning"
             }
           >
@@ -676,9 +675,9 @@ export const SessionFeedbackConfigPatchPanel = memo(function SessionFeedbackConf
           <RobotOutlined />
           <span>自动化护栏与审计 ({automationAuditEntries.length})</span>
           {automationCircuitBreakerTripped ? (
-            <Tag bordered={false} color="error">已熔断</Tag>
+            <Tag variant="filled" color="error">已熔断</Tag>
           ) : (
-            <Tag bordered={false} color="success">正常</Tag>
+            <Tag variant="filled" color="success">正常</Tag>
           )}
           {auditExpanded ? <UpOutlined /> : <DownOutlined />}
         </button>

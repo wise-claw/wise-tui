@@ -46,7 +46,7 @@ export function HostProcessSessionDetails({ proc }: { proc: ClaudeHostProcess })
           <MetaRow label="类型">
             <span className="app-sys-resource-details__inline">
               本机 Claude
-              <Tag bordered={false} className="app-sys-resource-details__tag">
+              <Tag variant="filled" className="app-sys-resource-details__tag">
                 系统扫描
               </Tag>
             </span>
@@ -90,7 +90,7 @@ export function RegistryOrphanSessionDetails({
           <MetaRow label="类型">
             <span className="app-sys-resource-details__inline">
               注册表进程
-              <Tag bordered={false} color="processing" className="app-sys-resource-details__tag">
+              <Tag variant="filled" color="processing" className="app-sys-resource-details__tag">
                 运行中
               </Tag>
             </span>

@@ -126,7 +126,7 @@ export function ComposerVoiceSettingsPanel({
     <div className="app-composer-voice-panel" onClick={(ev) => ev.stopPropagation()}>
       <header className="app-composer-voice-panel__header">
         <span className="app-composer-voice-panel__title">语音听写</span>
-        <Tag bordered={false} className="app-composer-voice-panel__engine-tag">
+        <Tag variant="filled" className="app-composer-voice-panel__engine-tag">
           {activeEngineLabel(activeEngine)}
         </Tag>
       </header>

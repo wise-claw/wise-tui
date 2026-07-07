@@ -117,7 +117,7 @@ function RecommendationItem({
           <Text strong className="app-session-insights__rec-title">
             {item.title}
           </Text>
-          <Tag bordered={false} className="app-session-insights__rec-tag">
+          <Tag variant="filled" className="app-session-insights__rec-tag">
             {CATEGORY_LABEL[item.category]}
           </Tag>
           {item.turnIndex != null && onJumpTurn ? (
@@ -407,7 +407,7 @@ export const SessionInsightsPanel = memo(function SessionInsightsPanel({
       {coverageHints.length > 0 ? (
         <div className="app-session-insights__coverage">
           {coverageHints.map((hint) => (
-            <Tag key={hint} bordered={false} className="app-session-insights__coverage-tag">
+            <Tag key={hint} variant="filled" className="app-session-insights__coverage-tag">
               {hint}
             </Tag>
           ))}
@@ -620,8 +620,7 @@ export const SessionInsightsPanel = memo(function SessionInsightsPanel({
                   severityCounts[severity] > 0 ? (
                     <Tag
                       key={severity}
-                      bordered={false}
-                      className={`app-session-insights__severity-tag app-session-insights__severity-tag--${severity}`}
+  variant="filled"                      className={`app-session-insights__severity-tag app-session-insights__severity-tag--${severity}`}
                     >
                       {SEVERITY_CONFIG[severity].label} {severityCounts[severity]}
                     </Tag>

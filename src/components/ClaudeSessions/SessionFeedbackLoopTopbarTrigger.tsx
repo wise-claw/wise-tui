@@ -149,7 +149,7 @@ export function SessionFeedbackLoopTopbarTrigger({
         }
         placement="right"
         size={640}
-        destroyOnClose={false}
+        destroyOnHidden={false}
         open={open}
         onClose={() => setOpen(false)}
         styles={{ body: { padding: "12px 14px", overflow: "auto" } }}

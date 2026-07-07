@@ -260,7 +260,7 @@ export function WorkspaceQuickActionsPanel({
                   </span>
                   <span className="app-workspace-quick-actions-panel__row-label">{item.label}</span>
                   <span className="app-workspace-quick-actions-panel__row-target">{item.target}</span>
-                  <Tag bordered={false} className="app-workspace-quick-actions-panel__scope-tag">
+                  <Tag variant="filled" className="app-workspace-quick-actions-panel__scope-tag">
                     {item.scope === "project" ? "工作区" : "仓库"}
                   </Tag>
                 </button>

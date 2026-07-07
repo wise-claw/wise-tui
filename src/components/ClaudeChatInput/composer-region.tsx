@@ -2708,7 +2708,7 @@ function ComposerInner({
             size="small"
             variant="borderless"
             className="app-claude-dual-pane-repo-picker"
-            popupClassName="app-claude-dual-pane-repo-picker-dropdown"
+            classNames={{ popup: { root: "app-claude-dual-pane-repo-picker-dropdown" } }}
             popupMatchSelectWidth={false}
             showSearch
             treeNodeFilterProp="title"

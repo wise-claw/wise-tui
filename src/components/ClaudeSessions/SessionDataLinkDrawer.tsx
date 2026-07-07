@@ -690,7 +690,7 @@ export function SessionDataLinkDrawer({
       }
       placement="right"
       size={880}
-      destroyOnClose
+      destroyOnHidden
       open={open}
       onClose={onClose}
       extra={
@@ -914,7 +914,7 @@ export function SessionDataLinkDrawer({
         onCancel={() => setTurnDiagramTurn(null)}
         footer={null}
         width={920}
-        destroyOnClose
+        destroyOnHidden
         className="app-session-data-link-turn-diagram-modal"
         styles={{ body: { padding: 0 } }}
       >

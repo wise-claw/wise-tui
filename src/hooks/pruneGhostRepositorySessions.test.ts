@@ -81,4 +81,24 @@ describe("pruneGhostRepositorySessions", () => {
     expect(next).toHaveLength(1);
     expect(next[0]?.id).toBe("wise-tab-terminal-02");
   });
+
+  test("keeps companion session even when messages absent and disk index missing", () => {
+    const companionId = "0123456789abcdef0123456789abcdef";
+    const companion = session({
+      id: companionId,
+      claudeSessionId: companionId,
+      status: "completed",
+      messages: [],
+    });
+    const disk: ClaudeDiskSessionItem[] = [
+      { sessionId: "fedcba9876543210fedcba9876543210", updatedAtMs: 1, preview: "" },
+    ];
+    // 不传 companionSessionIds：无消息且磁盘索引未收录的会话被 prune
+    const withoutCompanion = pruneGhostRepositorySessions([companion], REPO, disk);
+    expect(withoutCompanion).toHaveLength(0);
+    // 传 companionSessionIds：多屏额外窗格正在引用，保留
+    const withCompanion = pruneGhostRepositorySessions([companion], REPO, disk, new Set([companionId]));
+    expect(withCompanion).toHaveLength(1);
+    expect(withCompanion[0]?.id).toBe(companionId);
+  });
 });

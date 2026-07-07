@@ -407,6 +407,7 @@ export function pruneGhostRepositorySessions(
   sessions: ClaudeSession[],
   repositoryPath: string,
   disk: ClaudeDiskSessionItem[],
+  companionSessionIds?: ReadonlySet<string>,
 ): ClaudeSession[] {
   if (disk.length === 0) {
     return sessions;
@@ -420,6 +421,12 @@ export function pruneGhostRepositorySessions(
     if (!claudeId) return true;
     if (diskIds.has(claudeId) || diskIds.has(s.id)) return true;
     if (s.messages.length > 0) return true;
+    // 多屏额外窗格正在引用的 companion 会话：即使消息尚未到达内存、磁盘索引也未收录，
+    // 也必须保留。否则 stream 刚设置 claudeSessionId 的窗口期会被误删，
+    // 进而触发 extraPanes slot 失效、刷新后第二屏无法恢复。
+    if (companionSessionIds && (companionSessionIds.has(s.id) || companionSessionIds.has(claudeId))) {
+      return true;
+    }
     return false;
   });
 }
@@ -466,9 +473,10 @@ export function mergeRepositoryDiskSessions(
   repositoryName: string,
   disk: ClaudeDiskSessionItem[],
   configFallbackModel: string,
+  companionSessionIds?: ReadonlySet<string>,
 ): ClaudeSession[] {
   const canonicalPath = normalizeRepositoryPathKey(repositoryPath) || repositoryPath.trim();
-  const pruned = pruneGhostRepositorySessions(prev, canonicalPath, disk);
+  const pruned = pruneGhostRepositorySessions(prev, canonicalPath, disk, companionSessionIds);
   const copy = pruned.map((s) => ({ ...s }));
 
   for (let i = 0; i < copy.length; i++) {

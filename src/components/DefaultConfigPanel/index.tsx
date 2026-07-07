@@ -507,7 +507,7 @@ export function DefaultConfigPanel() {
                   <Select
                     size="small"
                     aria-label="Codex sandbox_mode"
-                    popupClassName="app-default-config-dropdown--compact"
+                    classNames={{ popup: { root: "app-default-config-dropdown--compact" } }}
                     disabled={codexDefaultSettings.loading || codexDefaultSettings.saving}
                     value={codexDefaultSettings.sandboxMode ?? ""}
                     onChange={(v: string) => {
@@ -527,7 +527,7 @@ export function DefaultConfigPanel() {
                   <Select
                     size="small"
                     aria-label="Codex approval_policy"
-                    popupClassName="app-default-config-dropdown--compact"
+                    classNames={{ popup: { root: "app-default-config-dropdown--compact" } }}
                     disabled={codexDefaultSettings.loading || codexDefaultSettings.saving}
                     value={codexDefaultSettings.approvalPolicy ?? ""}
                     onChange={(v: string) => {
@@ -567,7 +567,7 @@ export function DefaultConfigPanel() {
                   <Select
                     size="small"
                     aria-label="OpenCode 权限模式"
-                    popupClassName="app-default-config-dropdown--compact"
+                    classNames={{ popup: { root: "app-default-config-dropdown--compact" } }}
                     disabled={opencodeDefaultSettings.loading || opencodeDefaultSettings.saving}
                     value={opencodeDefaultSettings.mode}
                     onChange={(v: string) => {

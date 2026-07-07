@@ -114,7 +114,7 @@ function PendingWarnings({ insights }: { insights: SessionInsightsResult }) {
       <ul className="app-session-feedback-loop__warnings-list">
         {warnings.map((w) => (
           <li key={w.id}>
-            <Tag bordered={false} color={w.severity === "critical" ? "error" : "warning"}>
+            <Tag variant="filled" color={w.severity === "critical" ? "error" : "warning"}>
               {w.severity === "critical" ? "严重" : "警告"}
             </Tag>
             <span>{w.title}</span>
@@ -144,8 +144,7 @@ function DispatchStatusList({ anchorSessionId }: { anchorSessionId: string }) {
           <div key={rec.dispatchId} className="app-session-feedback-loop__dispatch-row">
             {rec.status === "running" ? <LoadingOutlined spin /> : null}
             <Tag
-              bordered={false}
-              color={
+                variant="filled" color={
                 rec.status === "completed" ? "success" : rec.status === "failed" ? "error" : "processing"
               }
             >
@@ -217,7 +216,7 @@ function StructuredActionsBlock({
       <ul className="app-session-feedback-loop__structured-actions-list">
         {actions.map((action) => (
           <li key={action.id}>
-            <Tag bordered={false}>{kindLabel[action.kind]}</Tag>
+            <Tag variant="filled">{kindLabel[action.kind]}</Tag>
             <span>{action.label}</span>
           </li>
         ))}
@@ -252,12 +251,12 @@ function CycleCard({
     <div className="app-session-feedback-loop__cycle">
       <div className="app-session-feedback-loop__cycle-head">
         <Text strong>循环 {cycle.cycleIndex}</Text>
-        <Tag bordered={false} color={comparison.improved ? "success" : "default"}>
+        <Tag variant="filled" color={comparison.improved ? "success" : "default"}>
           {comparison.summary}
         </Tag>
         <Text style={{ color: scoreColor }}>{comparison.overallScore.toFixed(1)}</Text>
         {cycle.after?.scopedTurnCount != null ? (
-          <Tag bordered={false} className="app-session-feedback-loop__scope-tag">
+          <Tag variant="filled" className="app-session-feedback-loop__scope-tag">
             增量 {cycle.after.scopedTurnFrom}–{cycle.after.scopedTurnTo} 轮
           </Tag>
         ) : null}
@@ -441,8 +440,7 @@ export const SessionFeedbackLoopPanel = memo(function SessionFeedbackLoopPanel({
           </Text>
         </div>
         <Tag
-          bordered={false}
-          className={`app-session-feedback-loop__phase app-session-feedback-loop__phase--${state.phase}`}
+            variant="filled" className={`app-session-feedback-loop__phase app-session-feedback-loop__phase--${state.phase}`}
         >
           {phaseLabel}
           {state.currentCycleIndex > 0 ? ` · ${state.currentCycleIndex}/${state.maxCycles}` : ""}
@@ -514,7 +512,7 @@ export const SessionFeedbackLoopPanel = memo(function SessionFeedbackLoopPanel({
             <HistoryOutlined />
             <Text type="secondary">本仓库历史闭环（{historyRecords.length}）</Text>
             {historyComparison.average != null && historyComparison.delta != null ? (
-              <Tag bordered={false} color={historyComparison.delta >= 0 ? "success" : "default"}>
+              <Tag variant="filled" color={historyComparison.delta >= 0 ? "success" : "default"}>
                 较均 {historyComparison.delta >= 0 ? "+" : ""}
                 {historyComparison.delta.toFixed(1)}（均 {historyComparison.average.toFixed(1)}）
               </Tag>
@@ -541,7 +539,7 @@ export const SessionFeedbackLoopPanel = memo(function SessionFeedbackLoopPanel({
               沉淀习惯
             </Text>
             {injectHabitsToSystemPrompt ? (
-              <Tag bordered={false} color="processing">
+              <Tag variant="filled" color="processing">
                 已启用 System Prompt 注入（新会话 spawn 生效）
               </Tag>
             ) : null}

@@ -287,8 +287,7 @@ export function LeftSidebarQuickActionsPopover({
                         <span className="app-left-sidebar-quick-actions-popover__row-label">{item.label}</span>
                         <span className="app-left-sidebar-quick-actions-popover__row-target">{item.target}</span>
                         <Tag
-                          bordered={false}
-                          className="app-left-sidebar-quick-actions-popover__scope-tag"
+                          variant="filled" className="app-left-sidebar-quick-actions-popover__scope-tag"
                           title={resolveScopeLabel(item)}
                         >
                           {resolveScopeLabel(item)}

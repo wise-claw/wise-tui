@@ -127,11 +127,10 @@ export const ClaudeChatSessionFeatureToolbar = memo(function ClaudeChatSessionFe
 
   return (
     <div className="app-claude-session-feature-panel" role="toolbar" aria-label="会话功能面板">
-      {showAnyLeft ? (
-      <div className="app-claude-session-feature-panel__left">
+      <div className="app-claude-session-feature-panel__left" style={{ display: showAnyLeft ? undefined : 'none' }}>
         <div className="app-claude-session-history-tools" role="toolbar" aria-label="历史会话与历史消息">
           <div className="app-claude-session-tool-group app-claude-session-tool-group--compact">
-            {showFeaturePanelHistorySessions ? (
+            <div style={{ display: showFeaturePanelHistorySessions ? undefined : 'none' }}>
             <Popover
               trigger="click"
               placement="bottomLeft"
@@ -263,9 +262,9 @@ export const ClaudeChatSessionFeatureToolbar = memo(function ClaudeChatSessionFe
                 </button>
               </HoverHint>
             </Popover>
-            ) : null}
+            </div>
 
-            {showFeaturePanelHistoryMessages ? (
+            <div style={{ display: showFeaturePanelHistoryMessages ? undefined : 'none' }}>
             <Popover
               trigger="click"
               placement="bottomLeft"
@@ -333,14 +332,12 @@ export const ClaudeChatSessionFeatureToolbar = memo(function ClaudeChatSessionFe
                 </button>
               </HoverHint>
             </Popover>
-            ) : null}
+            </div>
           </div>
         </div>
       </div>
-      ) : null}
 
-      {showFeaturePanelScheduledTasks ? (
-      <div className="app-claude-session-feature-panel__right">
+      <div className="app-claude-session-feature-panel__right" style={{ display: showFeaturePanelScheduledTasks ? undefined : 'none' }}>
         <div
           className="app-claude-session-tools app-claude-session-tool-group app-claude-session-tool-group--compact"
           role="toolbar"
@@ -360,7 +357,6 @@ export const ClaudeChatSessionFeatureToolbar = memo(function ClaudeChatSessionFe
           </HoverHint>
         </div>
       </div>
-      ) : null}
     </div>
   );
 });

@@ -100,7 +100,7 @@ export function McpOneClickInstallModal({ open, onClose, mcp, repositoryPath, on
       onOk={() => void submit()}
       onCancel={onClose}
       confirmLoading={submitting}
-      destroyOnClose
+      destroyOnHidden
       width={420}
       wrapClassName="app-mcp-add-modal"
     >

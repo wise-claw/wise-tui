@@ -598,6 +598,28 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
     }
   }, [activeSessionId, pendingCollapseNotificationForSessionId]);
 
+  /**
+   * 多屏模式下 multiPaneGrid 需要非 null 的 activeRepository。
+   * 当 chatContextRepository 不可用时（页面刷新后 activeRepository 尚未加载），
+   * 从 extraPanes 的 resolvedPaneRepositories 中取第一个非空仓库作为 fallback，
+   * 确保多屏 grid 始终能渲染，第二屏会话/仓库在其 slot 数据中自行管理。
+   * ⚠️ 必须放在所有提前 return 之前，保持 hook 调用顺序一致。
+   */
+  const multiPaneActiveRepository: Repository | undefined = useMemo(() => {
+    if (chatContextRepository) return chatContextRepository;
+    if (paneCount <= 1) return undefined;
+    for (const repo of resolvedPaneRepositories) {
+      if (repo) return repo;
+    }
+    for (const slot of extraPanes) {
+      if (slot.repositoryId != null && repositories) {
+        const repo = repositories.find((r) => r.id === slot.repositoryId);
+        if (repo) return repo;
+      }
+    }
+    return undefined;
+  }, [chatContextRepository, paneCount, resolvedPaneRepositories, extraPanes, repositories]);
+
   if (!activeSession) {
     return (
       <SessionEmptyState
@@ -615,11 +637,11 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
 
   return (
     <Suspense fallback={<WorkspaceViewportLoading />}>
-      {paneCount > 1 && chatContextRepository ? (
+      {paneCount > 1 && multiPaneActiveRepository ? (
         <ClaudeMultiPaneGridLazy
           paneCount={paneCount}
           activeSession={activeSession}
-          activeRepository={chatContextRepository}
+          activeRepository={multiPaneActiveRepository}
           extraPanes={extraPanes}
           resolvedPaneSessions={resolvedPaneSessions}
           resolvedPaneRepositories={resolvedPaneRepositories}

@@ -291,7 +291,7 @@ export function GitFlowPanel({ repositoryPath, onFlowOperationDone }: GitFlowPan
         onCancel={closeModal}
         okText={isFinish ? "完成" : "开始"}
         cancelText="取消"
-        destroyOnClose
+        destroyOnHidden
         width={380}
         centered
       >

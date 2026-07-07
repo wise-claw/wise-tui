@@ -361,7 +361,7 @@ function HistorySessionPopoverListRow({
   return (
     <>
       <div className="app-monitor-panel__history-popover-item-head">
-        <Tag bordered={false} color={model.statusColor} className="app-monitor-panel__history-popover-status-tag">
+        <Tag variant="filled" color={model.statusColor} className="app-monitor-panel__history-popover-status-tag">
           {model.statusLabel}
         </Tag>
         {showTerminalLabel && model.terminalLabel ? (

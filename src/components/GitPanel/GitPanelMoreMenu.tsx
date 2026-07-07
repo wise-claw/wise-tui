@@ -273,7 +273,7 @@ export function GitPanelMoreMenu({
         onCancel={closeFlowModal}
         okText={isFinish ? "完成" : "开始"}
         cancelText="取消"
-        destroyOnClose
+        destroyOnHidden
         width={380}
         centered
       >

@@ -83,6 +83,8 @@ interface UseMainLayoutModesOptions {
   updateSessionModel?: (sessionId: string, model: string) => void;
   /** AppImpl 多屏布局持久化 hydration 完成后为 true。 */
   paneLayoutHydrated?: boolean;
+  /** AppImpl tabs 会话数据加载 hydration 完成后为 true。未完成时不清除槽位 sessionId。 */
+  tabsHydrated?: boolean;
 }
 
 function sessionsIdSetFingerprint(sessions: readonly ClaudeSession[]): string {
@@ -122,6 +124,7 @@ export function useMainLayoutModes({
   primaryPaneRuntimeOverride = null,
   updateSessionModel,
   paneLayoutHydrated = false,
+  tabsHydrated = false,
 }: UseMainLayoutModesOptions) {
   const [rightCollapsed, setRightCollapsed] = useState(RIGHT_PANEL_DEFAULT_COLLAPSED_FALLBACK);
   const [rightPanelDefaultCollapsed, setRightPanelDefaultCollapsed] = useState(
@@ -723,13 +726,50 @@ export function useMainLayoutModes({
     })();
   }, [paneLayoutHydrated]);
 
-  // 清理已不存在的 session 引用（勿依赖 sessions 数组引用，流式时每帧是新对象）
+  // session.id 迁移（临时 tab id → claudeSessionId）时同步更新 extraPanes 引用。
+  // 必须同步写 extraPanesLatestRef：setSessions 通过 rAF 异步 publish structure 变更，
+  // useSyncExternalStore 的 sync 更新可能先于 setExtraPanes(React setState) 渲染提交，
+  // 下方“清理已不存在的 session 引用”effect 若只读 React state 会看到旧 sessionId 而误清
+  // companion slot —— handleSessionTabIdMigrated 的 setExtraPanes 此时还未提交，其 updater
+  // 检查 slot.sessionId===fromTabId 不成立而跳过，slot.sessionId 被永久置 null，刷新后第二屏无法恢复。
+  // 同步写 ref 让该 effect 立即读到迁移后的新 id。
+  const markSessionTabMigrated = useCallback(
+    (fromTabId: string, toClaudeSessionId: string) => {
+      const prev = extraPanesLatestRef.current;
+      let changed = false;
+      const next = prev.map((slot) => {
+        if (slot.sessionId === fromTabId) {
+          changed = true;
+          return { ...slot, sessionId: toClaudeSessionId };
+        }
+        return slot;
+      });
+      if (changed) {
+        extraPanesLatestRef.current = next;
+        setExtraPanes(next);
+      }
+    },
+    [setExtraPanes],
+  );
+
+  // 清理已不存在的 session 引用（勿依赖 sessions 数组引用，流式时每帧是新对象）。
+  // 若 slot.sessionId 不在 sessions 但 ref 已有迁移写入（markSessionTabMigrated 同步更新），
+  // 用 ref 的新 sessionId 校验：迁移后的 id 在 sessions 则保留，避免迁移瞬态误清 companion slot。
   useEffect(() => {
+    // tabs 未加载完成时不清理，避免启动阶段 companion sessionId（已从布局持久化恢复但
+    // tabs 会话数据尚未加载）因不在 sessions 中被误清。AppImpl 的 orphaned recovery effect
+    // 在 tabsHydrated 后负责此处遗留的清理。
+    if (!tabsHydrated) return;
     const sessionIds = new Set(sessionsLatestRef.current.map((s) => s.id));
+    const refSlots = extraPanesLatestRef.current;
     setExtraPanes((prev) => {
       let changed = false;
-      const cleaned = prev.map((slot) => {
+      const cleaned = prev.map((slot, i) => {
         if (slot.sessionId && !sessionIds.has(slot.sessionId)) {
+          const refSessionId = refSlots[i]?.sessionId;
+          if (refSessionId && refSessionId !== slot.sessionId && sessionIds.has(refSessionId)) {
+            return { ...slot, sessionId: refSessionId };
+          }
           changed = true;
           return { ...slot, sessionId: null };
         }
@@ -737,7 +777,7 @@ export function useMainLayoutModes({
       });
       return changed ? cleaned : prev;
     });
-  }, [sessionsIdFingerprint, setExtraPanes]);
+  }, [sessionsIdFingerprint, setExtraPanes, tabsHydrated]);
 
   // 持久化恢复或异常状态下，将 extraPanes 长度与 paneCount 对齐
   useEffect(() => {
@@ -840,5 +880,6 @@ export function useMainLayoutModes({
     mainLayoutRightWidthPx,
     setMainLayoutLeftWidthPx,
     setMainLayoutRightWidthPx,
+    markSessionTabMigrated,
   };
 }

@@ -962,20 +962,17 @@ export default function App() {
   const purgeWorkflowWorkerSessionBindingsRef = useRef<(sessionIds: ReadonlySet<string>) => void>(() => {});
   /** 在 `sessionsLatestRef` 就绪后每帧赋值：DB 迁移 workflow 会话引用 + 刷新任务列表（见 `handleSessionTabIdMigrated`）。 */
   const postSessionTabMigrationRef = useRef<(fromTabId: string, toClaudeSessionId: string) => void>(() => {});
+  /**
+   * 同步更新 extraPanesLatestRef 的 session.id 迁移函数（由 useMainLayoutModes 提供，在下方解构）。
+   * 用 ref 桥接，使 handleSessionTabIdMigrated 可以在 useMainLayoutModes 之前定义而无 TDZ。
+   */
+  const markSessionTabMigratedRef = useRef<(fromTabId: string, toClaudeSessionId: string) => void>(() => {});
 
   const handleSessionTabIdMigrated = useCallback(
     (fromTabId: string, toClaudeSessionId: string) => {
-      setExtraPanes((prev) => {
-        let changed = false;
-        const next = prev.map((slot) => {
-          if (slot.sessionId === fromTabId) {
-            changed = true;
-            return { ...slot, sessionId: toClaudeSessionId };
-          }
-          return slot;
-        });
-        return changed ? next : prev;
-      });
+      // 走 markSessionTabMigrated：同步写 extraPanesLatestRef，避免 effect 727
+      // （清理已不存在的 session 引用）在迁移瞬态误清 companion slot。
+      markSessionTabMigratedRef.current(fromTabId, toClaudeSessionId);
       migrateRepositoryMainSessionBindingTabIds(fromTabId, toClaudeSessionId);
       void migratePromptContextSessionKey(fromTabId, toClaudeSessionId);
       moveWorkflowAutomationSessionIdRef.current(fromTabId, toClaudeSessionId);
@@ -2284,6 +2281,7 @@ export default function App() {
     setMainLayoutLeftWidthPx,
     setMainLayoutRightWidthPx,
     paneChangeInFlight,
+    markSessionTabMigrated,
   } = useMainLayoutModes({
     activeRepository: activeRepository ?? undefined,
     activeProject,
@@ -2303,9 +2301,33 @@ export default function App() {
     setPaneCount,
     setExtraPanes,
     paneLayoutHydrated,
+    tabsHydrated,
     primaryPaneRuntimeOverride,
     updateSessionModel,
   });
+
+  // 桥接 handleSessionTabIdMigrated（定义在上方）到 useMainLayoutModes 的 markSessionTabMigrated。
+  markSessionTabMigratedRef.current = markSessionTabMigrated;
+
+  // 恢复：清除多屏槽位指向已不存在会话的 orphaned sessionId
+  const paneSessionRecoveryDoneRef = useRef(false);
+  useEffect(() => {
+    if (!paneLayoutHydrated || !tabsHydrated) return;
+    if (paneSessionRecoveryDoneRef.current) return;
+    paneSessionRecoveryDoneRef.current = true;
+    const sessionIds = new Set(sessions.map((s) => s.id));
+    let changed = false;
+    const updated = extraPanes.map((slot) => {
+      if (slot.sessionId && !sessionIds.has(slot.sessionId)) {
+        changed = true;
+        return { ...slot, sessionId: null };
+      }
+      return slot;
+    });
+    if (changed) {
+      setExtraPanes(updated);
+    }
+  }, [paneLayoutHydrated, tabsHydrated, sessions, extraPanes, setExtraPanes]);
 
   const repoPanelPlacementDefault = useRepoPanelPlacementDefault();
   const [repositoryRepoPanelNode, setRepositoryRepoPanelNode] = useState<ReactNode | null>(null);

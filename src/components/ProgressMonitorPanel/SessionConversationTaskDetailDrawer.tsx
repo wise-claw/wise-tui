@@ -160,8 +160,7 @@ const SessionConversationTaskDetailBody = memo(function SessionConversationTaskD
         {task.source === "feedback_loop" && task.feedbackLoopComparisonScore != null ? (
           <div className="app-monitor-panel__subagent-detail-hint app-monitor-panel__subagent-detail-hint--score">
             <Tag
-              bordered={false}
-              color={task.feedbackLoopComparisonScore > 2 ? "success" : task.feedbackLoopComparisonScore < -2 ? "error" : "default"}
+            variant="filled" color={task.feedbackLoopComparisonScore > 2 ? "success" : task.feedbackLoopComparisonScore < -2 ? "error" : "default"}
             >
               闭环比对得分 {task.feedbackLoopComparisonScore >= 0 ? "+" : ""}
               {task.feedbackLoopComparisonScore.toFixed(1)}

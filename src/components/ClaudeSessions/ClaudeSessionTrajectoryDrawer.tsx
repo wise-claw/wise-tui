@@ -177,7 +177,7 @@ export function ClaudeSessionTrajectoryDrawer({
         title="工作轨迹 · 序列视图"
         placement="right"
         size={800}
-        destroyOnClose
+        destroyOnHidden
         open={open}
         onClose={onClose}
         extra={
@@ -243,7 +243,7 @@ export function ClaudeSessionTrajectoryDrawer({
           setSubagentOpen(false);
           setSubagentPart(null);
         }}
-        destroyOnClose
+        destroyOnHidden
       >
         {subagentPart && subagentInfo ? (
           <div className="app-session-trajectory-subagent">

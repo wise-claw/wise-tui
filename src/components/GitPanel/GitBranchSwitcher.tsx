@@ -250,7 +250,7 @@ export function GitBranchSwitcher({
                 showSearch
                 optionFilterProp="label"
                 popupMatchSelectWidth={false}
-                popupClassName="app-claude-branch-popover__select-dropdown"
+                classNames={{ popup: { root: "app-claude-branch-popover__select-dropdown" } }}
               />
               <Button
                 size="small"

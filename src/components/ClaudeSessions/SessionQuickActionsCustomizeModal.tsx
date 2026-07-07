@@ -90,17 +90,17 @@ export function SessionQuickActionsCustomizeModal({
               <span className="app-session-quick-customize-modal__label" title={meta.label}>
                 {meta.label}
                 {isAssistant && item.id.startsWith("custom:") ? (
-                  <Tag className="app-session-quick-customize-modal__tag" bordered={false}>
+                  <Tag className="app-session-quick-customize-modal__tag" variant="filled">
                     自定义
                   </Tag>
                 ) : null}
                 {isAssistant && item.id.startsWith("ext-") ? (
-                  <Tag className="app-session-quick-customize-modal__tag" bordered={false}>
+                  <Tag className="app-session-quick-customize-modal__tag" variant="filled">
                     扩展
                   </Tag>
                 ) : null}
                 {!available ? (
-                  <Tag className="app-session-quick-customize-modal__tag" bordered={false}>
+                  <Tag className="app-session-quick-customize-modal__tag" variant="filled">
                     不可用
                   </Tag>
                 ) : null}

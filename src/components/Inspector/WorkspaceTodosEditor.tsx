@@ -104,7 +104,7 @@ const TodoRow = memo(function TodoRow({
         ) : null}
       </div>
       {showScopeTag ? (
-        <Tag bordered={false} className="app-workspace-todos-panel__scope-tag">
+        <Tag variant="filled" className="app-workspace-todos-panel__scope-tag">
           {item.scope === "project" ? "工作区" : "仓库"}
         </Tag>
       ) : null}
