@@ -6,6 +6,7 @@ import {
   LinkOutlined,
   LoadingOutlined,
   SettingOutlined,
+  ThunderboltOutlined,
   UserOutlined,
 } from "@ant-design/icons";
 import { Dropdown, type MenuProps } from "antd";
@@ -55,6 +56,8 @@ function actionMenuIcon(id: SessionQuickActionId, assistant?: AssistantEntry): R
         return <ApartmentOutlined />;
       case "run_script":
         return <CodeOutlined />;
+      case "dispatch_direct":
+        return <ThunderboltOutlined />;
       default:
         break;
     }

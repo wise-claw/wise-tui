@@ -1746,7 +1746,6 @@ export default function App() {
         sessions,
         repositoryMainBindings: repositoryMainSessionBindings,
         executeSession: handleComposerExecute,
-        openConversation: openBuiltinAssistant,
         message,
       });
     },
@@ -1754,7 +1753,6 @@ export default function App() {
       activeRepositoryId,
       handleComposerExecute,
       message,
-      openBuiltinAssistant,
       repositories,
       repositoryMainSessionBindings,
       sessions,

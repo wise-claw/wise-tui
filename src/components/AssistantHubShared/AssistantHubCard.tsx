@@ -76,11 +76,9 @@ export function AssistantHubCard({
       {assistant.description ? (
         <p className="cockpit-hub__card-desc">{assistant.description}</p>
       ) : null}
-      {entryKind !== "conversation" || workflows.length > 0 || skills.length > 0 || mcps.length > 0 ? (
+      {workflows.length > 0 || skills.length > 0 || mcps.length > 0 ? (
         <div className="cockpit-hub__card-capabilities" aria-label={`${assistant.name} 默认能力`}>
-          {entryKind !== "conversation" ? (
-            <Tag color="gold">{assistantEntryKindLabel(entryKind)}</Tag>
-          ) : null}
+          <Tag color="gold">{assistantEntryKindLabel(entryKind)}</Tag>
           {workflows.slice(0, 4).map((workflow) => (
             <Tag key={workflow.id} color="blue">
               内置编排 · {workflow.label}

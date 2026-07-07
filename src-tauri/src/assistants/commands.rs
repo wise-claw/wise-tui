@@ -60,7 +60,8 @@ pub struct AssistantEntry {
 }
 
 fn is_default_entry_kind(kind: &str) -> bool {
-    kind == "conversation"
+    // 「对话助手」形态已下线；builtin/extension 列表填充用的默认值改为「立即执行」。
+    kind == "dispatch_direct"
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -126,7 +127,7 @@ fn builtin_to_entry(bundle: &BuiltinAssistantBundle) -> AssistantEntry {
                 source_path: None,
             })
             .collect(),
-        entry_kind: "conversation".to_string(),
+        entry_kind: "dispatch_direct".to_string(),
         entry_url: String::new(),
         entry_workflow_id: None,
         entry_script: String::new(),
@@ -263,7 +264,7 @@ pub fn assistants_list(
             default_workflows: Vec::new(),
             default_skills: Vec::new(),
             default_mcps: Vec::new(),
-            entry_kind: "conversation".to_string(),
+            entry_kind: "dispatch_direct".to_string(),
             entry_url: String::new(),
             entry_workflow_id: None,
             entry_script: String::new(),

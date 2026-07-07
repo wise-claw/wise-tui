@@ -27,7 +27,6 @@ export interface ActivateAssistantTemplateInput {
       "targetType" | "targetEmployeeName" | "targetWorkflowId" | "targetWorkflowName"
     >,
   ) => Promise<boolean>;
-  openConversation: (assistantId: string) => void;
   message: MessageInstance;
 }
 
@@ -35,11 +34,6 @@ export async function activateAssistantTemplate(
   input: ActivateAssistantTemplateInput,
 ): Promise<void> {
   const kind = resolveAssistantEntryKind(input.assistant);
-
-  if (kind === "conversation") {
-    input.openConversation(input.assistant.id);
-    return;
-  }
 
   if (kind === "open_link") {
     const url = input.assistant.entryUrl?.trim() ?? "";
@@ -79,17 +73,7 @@ export async function activateAssistantTemplate(
     return;
   }
 
-  const workflowId = input.assistant.entryWorkflowId?.trim() ?? "";
-  if (!workflowId) {
-    input.message.error("未配置工作流");
-    return;
-  }
-  const workflow = input.workflowTemplates.find((item) => item.id === workflowId);
-  if (!workflow) {
-    input.message.error("所选工作流不存在");
-    return;
-  }
-
+  // dispatch_direct / run_workflow 共用前置：解析仓库绑定主会话
   const mainOwnerPick = resolveMainOwnerAgentNameForRepositoryPath(input.repositories, repoPath);
   const mainSessionId = resolveBoundMainSessionId(
     repoPath,
@@ -120,6 +104,29 @@ export async function activateAssistantTemplate(
   }
   if (!outbound.trim()) {
     input.message.error("工作流提示词组装结果为空");
+    return;
+  }
+
+  if (kind === "dispatch_direct") {
+    // 立即执行：跳过 workflow 入队，直接 executeSession 立即起 Claude Code。
+    const ok = await input.executeSession(mainSessionId, outbound);
+    if (ok) {
+      input.message.success("已立即执行助手模板");
+    } else {
+      input.message.warning("立即执行未启动（可能受并发限制或主会话忙碌）");
+    }
+    return;
+  }
+
+  // run_workflow：按所选工作流入队，由 leader worker 拉起。
+  const workflowId = input.assistant.entryWorkflowId?.trim() ?? "";
+  if (!workflowId) {
+    input.message.error("未配置工作流");
+    return;
+  }
+  const workflow = input.workflowTemplates.find((item) => item.id === workflowId);
+  if (!workflow) {
+    input.message.error("所选工作流不存在");
     return;
   }
 

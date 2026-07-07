@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from "bun:test";
 import type { AssistantEntry } from "../types/assistant";
+import type { ClaudeSession, Repository } from "../types";
 
 const openExternalUrlMock = mock(async () => undefined);
 const runShellCommandMock = mock(async () => ({ stdout: "", stderr: "", exit_code: 0 }));
@@ -29,7 +30,7 @@ function customAssistant(partial: Partial<AssistantEntry>): AssistantEntry {
     avatarColor: null,
     engineId: "claude",
     model: null,
-    systemPrompt: "",
+    systemPrompt: "system",
     customId: "test",
     createdAt: "",
     updatedAt: "",
@@ -55,6 +56,31 @@ function messageStub() {
   };
 }
 
+function repoBinding(repositoryPath: string): {
+  repositories: Repository[];
+  sessions: ClaudeSession[];
+  repositoryMainBindings: Record<string, string>;
+} {
+  return {
+    repositories: [
+      {
+        id: "repo:a",
+        path: repositoryPath,
+        name: "A",
+        repositoryType: "git",
+      } as unknown as Repository,
+    ],
+    sessions: [
+      {
+        id: "session:main",
+        repositoryPath,
+        title: "main",
+      } as unknown as ClaudeSession,
+    ],
+    repositoryMainBindings: { [repositoryPath]: "session:main" },
+  };
+}
+
 beforeEach(() => {
   openExternalUrlMock.mockReset();
   runShellCommandMock.mockReset();
@@ -65,21 +91,57 @@ beforeEach(() => {
 });
 
 describe("activateAssistantTemplate", () => {
-  test("opens conversation via openConversation", async () => {
-    const openConversation = mock(() => undefined);
-    const { message } = messageStub();
+  test("dispatch_direct invokes executeSession immediately with built prompt", async () => {
+    const executeSession = mock(async () => true);
+    const { message, calls } = messageStub();
+    const binding = repoBinding("/repo/a");
     await activateAssistantTemplate({
-      assistant: customAssistant({}),
+      assistant: customAssistant({ entryKind: "dispatch_direct" }),
+      repositoryPath: "/repo/a",
+      workflowTemplates: [],
+      ...binding,
+      executeSession,
+      message,
+    });
+    expect(executeSession).toHaveBeenCalledTimes(1);
+    const [sessionId, prompt] = executeSession.mock.calls[0] ?? [];
+    expect(sessionId).toBe("session:main");
+    expect(prompt).toBe("outbound prompt");
+    expect(calls[0]?.type).toBe("success");
+  });
+
+  test("dispatch_direct requires repository", async () => {
+    const executeSession = mock(async () => true);
+    const { message, calls } = messageStub();
+    await activateAssistantTemplate({
+      assistant: customAssistant({ entryKind: "dispatch_direct" }),
       repositoryPath: null,
       workflowTemplates: [],
       repositories: [],
       sessions: [],
       repositoryMainBindings: {},
-      executeSession: mock(async () => true),
-      openConversation,
+      executeSession,
       message,
     });
-    expect(openConversation).toHaveBeenCalledWith("custom:test");
+    expect(calls[0]?.type).toBe("warning");
+    expect(executeSession).not.toHaveBeenCalled();
+  });
+
+  test("dispatch_direct needs main session binding", async () => {
+    const executeSession = mock(async () => true);
+    const { message, calls } = messageStub();
+    await activateAssistantTemplate({
+      assistant: customAssistant({ entryKind: "dispatch_direct" }),
+      repositoryPath: "/repo/a",
+      workflowTemplates: [],
+      repositories: [],
+      sessions: [],
+      repositoryMainBindings: {},
+      executeSession,
+      message,
+    });
+    expect(calls[0]?.type).toBe("warning");
+    expect(executeSession).not.toHaveBeenCalled();
   });
 
   test("opens external link for open_link templates", async () => {
@@ -92,7 +154,6 @@ describe("activateAssistantTemplate", () => {
       sessions: [],
       repositoryMainBindings: {},
       executeSession: mock(async () => true),
-      openConversation: mock(() => undefined),
       message,
     });
     expect(openExternalUrlMock).toHaveBeenCalledWith("https://example.com");
@@ -108,7 +169,6 @@ describe("activateAssistantTemplate", () => {
       sessions: [],
       repositoryMainBindings: {},
       executeSession: mock(async () => true),
-      openConversation: mock(() => undefined),
       message,
     });
     expect(calls[0]?.type).toBe("warning");
@@ -125,7 +185,6 @@ describe("activateAssistantTemplate", () => {
       sessions: [],
       repositoryMainBindings: {},
       executeSession: mock(async () => true),
-      openConversation: mock(() => undefined),
       message,
     });
     expect(runShellCommandMock).toHaveBeenCalledWith("/repo/a", "echo hi");

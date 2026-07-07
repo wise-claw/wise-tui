@@ -16,7 +16,6 @@ import type { AssistantEntry, AssistantEntryKind, CustomAssistantInput } from ".
 import type { WorkflowTemplateItem } from "../../types";
 import {
   ASSISTANT_ENTRY_KIND_OPTIONS,
-  isAssistantConversationEntry,
   resolveAssistantEntryKind,
 } from "../../utils/assistantTemplateEntry";
 import {
@@ -85,7 +84,7 @@ export function AssistantsPanel({
   const [skillBundle, setSkillBundle] = useState<AssistantRuntimeBundle>(EMPTY_RUNTIME_BUNDLE);
   const [mcpBundle, setMcpBundle] = useState<AssistantRuntimeBundle>(EMPTY_RUNTIME_BUNDLE);
   const [bundleLoading, setBundleLoading] = useState(false);
-  const watchedEntryKind = Form.useWatch("entryKind", form) ?? "conversation";
+  const watchedEntryKind = Form.useWatch("entryKind", form) ?? "dispatch_direct";
 
   const settingsAssistant = useMemo(
     () => list.find((a) => a.id === settingsAssistantId) ?? null,
@@ -153,7 +152,7 @@ export function AssistantsPanel({
       id: undefined,
       name: "",
       description: "",
-      entryKind: "conversation",
+      entryKind: "dispatch_direct",
       engineId: "claude",
       systemPrompt: "",
       model: undefined,
@@ -191,13 +190,13 @@ export function AssistantsPanel({
   const handleSave = useCallback(async () => {
     try {
       const v = await form.validateFields();
-      const entryKind = v.entryKind ?? "conversation";
+      const entryKind = v.entryKind ?? "dispatch_direct";
       setSaving(true);
       const input: CustomAssistantInput = {
         id: v.id,
         name: v.name.trim(),
         description: (v.description ?? "").trim(),
-        engineId: entryKind === "conversation" ? v.engineId.trim() : "claude",
+        engineId: entryKind === "dispatch_direct" ? v.engineId.trim() : "claude",
         systemPrompt: (v.systemPrompt ?? "").trim(),
         model: v.model?.trim() ? v.model.trim() : null,
         entryKind,
@@ -206,7 +205,7 @@ export function AssistantsPanel({
         entryScript: (v.entryScript ?? "").trim(),
       };
       const saved = await saveCustomAssistant(input);
-      if (entryKind === "conversation") {
+      if (entryKind === "dispatch_direct") {
         await saveAssistantRuntimeOverrides({
           assistantId: saved.id,
           scope: "assistant",
@@ -345,22 +344,24 @@ export function AssistantsPanel({
                 : "此类别暂无助手"
           }
           resolveEngineStatus={(assistant) =>
-            isAssistantConversationEntry(assistant)
+            resolveAssistantEntryKind(assistant) === "dispatch_direct"
               ? resolveAssistantEngineBinding(assistant, agentEngineIndex)
               : undefined
           }
           renderCardActions={(assistant) => {
             const entryKind = resolveAssistantEntryKind(assistant);
             const needsProject =
-              entryKind === "conversation" &&
+              entryKind === "dispatch_direct" &&
               resolveAssistantKind(assistant) === "workflow-orchestration" &&
               !activeProjectId;
             const needsRepository =
-              (entryKind === "run_workflow" || entryKind === "run_script") &&
+              (entryKind === "run_workflow" ||
+                entryKind === "run_script" ||
+                entryKind === "dispatch_direct") &&
               !activeRepositoryPath?.trim();
             const disabled = needsProject || needsRepository;
             const disabledHint = needsProject
-              ? "请先在左栏选择工作区后再打开编排助手"
+              ? "请先在左栏选择工作区后再执行助手模板"
               : needsRepository
                 ? "请先在左栏选择仓库后再执行"
                 : undefined;
@@ -423,7 +424,7 @@ export function AssistantsPanel({
               }))}
             />
           </Form.Item>
-          {watchedEntryKind === "conversation" ? (
+          {watchedEntryKind === "dispatch_direct" ? (
             <>
               <Form.Item
                 name="engineId"

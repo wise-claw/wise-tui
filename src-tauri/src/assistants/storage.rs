@@ -49,7 +49,7 @@ pub struct CustomAssistantInput {
 }
 
 fn default_entry_kind() -> String {
-    "conversation".to_string()
+    "dispatch_direct".to_string()
 }
 
 pub fn list(conn: &Connection) -> Result<Vec<CustomAssistantRow>, String> {
@@ -84,7 +84,8 @@ pub fn get_by_id(conn: &Connection, id: &str) -> Result<Option<CustomAssistantRo
 
 fn normalize_entry_kind(raw: &str) -> Result<&'static str, String> {
     match raw.trim() {
-        "conversation" | "" => Ok("conversation"),
+        // 「对话助手」形态已下线：legacy 值或缺省一律折叠为「立即执行」。
+        "conversation" | "dispatch_direct" | "" => Ok("dispatch_direct"),
         "open_link" => Ok("open_link"),
         "run_workflow" => Ok("run_workflow"),
         "run_script" => Ok("run_script"),
@@ -97,7 +98,7 @@ pub fn upsert(conn: &Connection, input: &CustomAssistantInput) -> Result<CustomA
         return Err("name must not be empty".to_string());
     }
     let entry_kind = normalize_entry_kind(&input.entry_kind)?;
-    if input.engine_id.trim().is_empty() && entry_kind == "conversation" {
+    if input.engine_id.trim().is_empty() && entry_kind == "dispatch_direct" {
         return Err("engineId must not be empty".to_string());
     }
     if entry_kind == "open_link" {
@@ -217,11 +218,35 @@ mod tests {
             engine_id: engine.to_string(),
             system_prompt: "You are helpful.".to_string(),
             model: None,
-            entry_kind: "conversation".to_string(),
+            // 「对话助手」形态已下线：默认入口类型跟随 builtin/extension
+            // fallback 一致，采用「立即执行」(dispatch_direct)。
+            entry_kind: "dispatch_direct".to_string(),
             entry_url: String::new(),
             entry_workflow_id: None,
             entry_script: String::new(),
         }
+    }
+
+    #[test]
+    fn upsert_dispatch_direct_requires_engine() {
+        let conn = open_in_memory();
+        let mut bad = input("dispatch", "");
+        bad.engine_id = "".to_string();
+        assert!(upsert(&conn, &bad).is_err());
+        let good = input("dispatch", "claude");
+        let row = upsert(&conn, &good).unwrap();
+        assert_eq!(row.entry_kind, "dispatch_direct");
+    }
+
+    #[test]
+    fn legacy_conversation_kind_is_normalized_to_dispatch_direct() {
+        let conn = open_in_memory();
+        let mut legacy = input("legacy", "claude");
+        // 旧持久化数据中残留的 conversation 在写入路径上会被归一化为
+        // dispatch_direct，向前兼容而无需数据迁移。
+        legacy.entry_kind = "conversation".to_string();
+        let row = upsert(&conn, &legacy).unwrap();
+        assert_eq!(row.entry_kind, "dispatch_direct");
     }
 
     #[test]
