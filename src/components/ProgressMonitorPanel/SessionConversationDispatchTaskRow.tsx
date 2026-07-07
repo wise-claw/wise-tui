@@ -17,7 +17,11 @@ function resolveDispatchRowResultPreview(item: SessionConversationTaskItem): str
 }
 
 function resolveDispatchRowDisplayPreview(item: SessionConversationTaskItem): string {
-  if (item.status === "running") return "执行中…";
+  if (item.status === "running") {
+    const promptPreview = item.previewText.replace(/\s+/g, " ").trim();
+    if (promptPreview && promptPreview !== "执行中…") return promptPreview;
+    return item.label.replace(/\s+/g, " ").trim();
+  }
   const resultPreview = resolveDispatchRowResultPreview(item);
   if (resultPreview) return resultPreview;
   return item.label.replace(/\s+/g, " ").trim();

@@ -12,7 +12,7 @@ import { flushSync } from "react-dom";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import { safeUnlisten } from "./utils/safeTauriUnlisten";
-import { message } from "antd";
+import { App as AntdApp, message } from "antd";
 import type {
   ClaudeSession,
   EmployeeItem,
@@ -312,6 +312,9 @@ export default function App() {
    * 从 `viewMode` 派生这些布尔，AppImpl 不再依赖 legacy 别名。
    */
   const viewMode = useViewMode();
+  // 顶层拿 antd App context：run_script 失败时通过 modal 弹出可滚动的完整 stderr/stdout，
+  // 比 message.error 顶部 toast（一行）更适合排查长输出脚本（如 bun test）。
+  const { modal: appModal } = AntdApp.useApp();
   useMacTerminalDetectionBootstrap();
   const [lastAuthorPane, setLastAuthorPane] = useState(() => readAuthorPaneFromStorage());
   const [assistantInitialTarget, setAssistantInitialTarget] = useState<OpenAssistantDetail | null>(null);
@@ -1747,12 +1750,17 @@ export default function App() {
         sessions,
         repositoryMainBindings: repositoryMainSessionBindings,
         executeSession: handleComposerExecute,
+        directExecuteSession: (sessionId, prompt) => executeSession(sessionId, prompt),
+        createSession,
         message,
+        modal: appModal,
       });
     },
     [
       activeRepositoryId,
       activeSessionId,
+      appModal,
+      executeSession,
       handleComposerExecute,
       message,
       repositories,

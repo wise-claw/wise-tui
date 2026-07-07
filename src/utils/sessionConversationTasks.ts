@@ -466,7 +466,7 @@ export function buildExecutionEnvironmentConversationTasks(input: {
       const promptBody = item.previewText?.replace(/\s+/g, " ").trim();
       const preview =
         status === "running"
-          ? "执行中…"
+          ? truncate(promptBody || "执行中…")
           : assistantPreview || truncate(promptBody || "已完成");
       const label =
         promptBody.length > 0

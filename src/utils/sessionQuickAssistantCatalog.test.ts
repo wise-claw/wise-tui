@@ -48,6 +48,41 @@ describe("sessionQuickAssistantCatalog", () => {
     expect(catalog.meta["custom:immediate"]?.label).toBe("立即执行助手");
   });
 
+  test("run_workflow custom assistants also appear in catalog", () => {
+    const catalog = buildSessionQuickActionCatalog([
+      assistant({
+        id: "custom:workflow-runner",
+        name: "工作流派发助手",
+        customId: "workflow-runner",
+        entryKind: "run_workflow",
+      }),
+    ]);
+    expect(catalog.order).toContain("custom:workflow-runner");
+    expect(catalog.meta["custom:workflow-runner"]?.label).toBe("工作流派发助手");
+    expect(catalog.meta["custom:workflow-runner"]?.pillLabel).toBe("工作流派发");
+  });
+
+  test("run_script and open_link custom assistants also appear in catalog", () => {
+    const catalog = buildSessionQuickActionCatalog([
+      assistant({
+        id: "custom:script-runner",
+        name: "脚本执行助手",
+        customId: "script-runner",
+        entryKind: "run_script",
+      }),
+      assistant({
+        id: "custom:link-opener",
+        name: "链接打开助手",
+        customId: "link-opener",
+        entryKind: "open_link",
+      }),
+    ]);
+    expect(catalog.order).toContain("custom:script-runner");
+    expect(catalog.order).toContain("custom:link-opener");
+    expect(catalog.meta["custom:script-runner"]?.label).toBe("脚本执行助手");
+    expect(catalog.meta["custom:link-opener"]?.label).toBe("链接打开助手");
+  });
+
   test("new assistant templates default visible in overflow menu", () => {
     expect(defaultQuickActionItemForId("custom:writer")).toEqual({
       visible: true,
