@@ -501,6 +501,120 @@ export function removeOrphanPipeLines(text: string): string {
 }
 
 /**
+ * 把「pipe 表头行 + 1 行非 pipe 短文本 + 多行 pipe 数据行」中的非 pipe 短文本
+ * 移出表格块，前后补空行，让 GFM 能正常识别为完整表格。
+ *
+ * 典型来源：模型把 PR 编号 / 备注等纯文本塞在表头与数据行之间，导致整段
+ * 被 GFM 当作段落渲染、`|` 原文裸显。
+ */
+export function recoverSplitPipeTableBlocks(text: string): string {
+  const lines = normalizePipeChars(text).split("\n");
+  const out: string[] = [];
+  let i = 0;
+
+  while (i < lines.length) {
+    const line = lines[i]!;
+    if (!PIPE_TABLE_ROW_RE.test(line)) {
+      out.push(line);
+      i += 1;
+      continue;
+    }
+
+    // 先收集「紧跟表头之后」的连续 pipe 行（含空行）
+    const headBlock: string[] = [line];
+    let j = i + 1;
+    while (j < lines.length) {
+      const current = lines[j]!.trim();
+      if (!current) {
+        const peek = j + 1;
+        if (peek < lines.length && PIPE_TABLE_ROW_RE.test(lines[peek]!.trim())) {
+          headBlock.push(lines[j]!);
+          j += 1;
+          continue;
+        }
+        break;
+      }
+      if (PIPE_TABLE_ROW_RE.test(current)) {
+        headBlock.push(current);
+        j += 1;
+        continue;
+      }
+      break;
+    }
+
+    // headBlock 至少要 ≥1 行 pipe 且 headBlock[0] 是表头
+    if (headBlock.length === 0) {
+      out.push(line);
+      i += 1;
+      continue;
+    }
+
+    // 表头只有 1 行：检查 j 之后是否紧跟「1 行非 pipe 短文本 + 多行 pipe 数据」
+    if (headBlock.length === 1 && j < lines.length) {
+      const middleRaw = lines[j]!;
+      const middleTrim = middleRaw.trim();
+      // 短文本判定：≤80 字符、不含 `|`、不含 ```、不含 # 标题前缀
+      const looksLikeShortInterruption =
+        middleTrim.length > 0 &&
+        middleTrim.length <= 80 &&
+        !middleTrim.includes("|") &&
+        !middleTrim.startsWith("```") &&
+        !/^#{1,6}\s/.test(middleTrim) &&
+        !PIPE_TABLE_SEPARATOR_RE.test(middleTrim);
+      if (looksLikeShortInterruption) {
+        const tailStart = j + 1;
+        // tail 必须有 ≥1 行 pipe 数据
+        let k = tailStart;
+        let tailPipeCount = 0;
+        while (k < lines.length) {
+          const cur = lines[k]!.trim();
+          if (!cur) {
+            const peek = k + 1;
+            if (peek < lines.length && PIPE_TABLE_ROW_RE.test(lines[peek]!.trim())) {
+              k = peek;
+              continue;
+            }
+            break;
+          }
+          if (PIPE_TABLE_ROW_RE.test(cur)) {
+            tailPipeCount += 1;
+            k += 1;
+            continue;
+          }
+          break;
+        }
+        if (tailPipeCount >= 1) {
+          // 表头 + 分隔行 + tail 数据连续（让 GFM 识别成完整表格），
+          // 短文本作为表格下方 caption，前后空行隔开。
+          const headerCols = countPipeColumns(headBlock[0]!);
+          out.push(headBlock[0]!);
+          if (headerCols >= 2 && !PIPE_TABLE_SEPARATOR_RE.test(headBlock[0]!)) {
+            out.push(buildSeparatorRow(headerCols));
+          } else {
+            out.push(...headBlock.slice(1));
+          }
+          // tail 数据
+          for (let t = tailStart; t < k; t += 1) {
+            out.push(lines[t]!);
+          }
+          // 短文本作为 caption，前后空行
+          out.push("");
+          out.push(middleRaw);
+          i = k;
+          continue;
+        }
+      }
+    }
+
+    // 默认：原样写出 headBlock，i 推进
+    out.push(...headBlock);
+    i = j;
+  }
+
+  return out.join("\n");
+}
+
+/**
  * 为缺少 `|---|---|` 的 pipe 表格补分隔行（GLM / Codex 等常省略）。
  * 仅处理连续 2 行及以上的 pipe 行块。
  */
@@ -638,6 +752,7 @@ export function normalizeMarkdownForDisplay(
   markdown = wrapBareShellCommandLines(markdown);
   markdown = ensureBlankLineBeforePipeTables(markdown);
   markdown = removeOrphanPipeLines(markdown);
+  markdown = recoverSplitPipeTableBlocks(markdown);
   markdown = normalizeTableSeparatorRows(markdown);
   markdown = alignPipeTableDataRowsToHeader(markdown);
   return normalizePipeTables(markdown);

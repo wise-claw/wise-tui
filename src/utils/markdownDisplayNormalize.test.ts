@@ -8,6 +8,7 @@ import {
   normalizeInlineMarkdownStructures,
   normalizePipeTables,
   normalizeTableSeparatorRows,
+  recoverSplitPipeTableBlocks,
   removeOrphanPipeLines,
 } from "./markdownDisplayNormalize";
 import { prepareMarkdownForDisplay } from "./markdownRenderPipeline";
@@ -148,6 +149,68 @@ describe("normalizePipeTables", () => {
   test("does not touch single pipe row", () => {
     const input = "| only one row |";
     expect(normalizePipeTables(input)).toBe(input);
+  });
+});
+
+describe("recoverSplitPipeTableBlocks", () => {
+  test("moves single short non-pipe line between header and data rows out of the table", () => {
+    const input = [
+      "| ID | TITLE | CREATOR | URL |",
+      "435528714",
+      "| 2738 | feat-fh | 许事 | https://x.com |",
+    ].join("\n");
+    const out = recoverSplitPipeTableBlocks(input);
+    const lines = out.split("\n");
+    // 表头 + 分隔行 + 数据行（连续），短文本以 caption 形式移到表后并前后空行
+    expect(lines[0]).toBe("| ID | TITLE | CREATOR | URL |");
+    expect(lines[1]).toBe("| --- | --- | --- | --- |");
+    expect(lines[2]).toBe("| 2738 | feat-fh | 许事 | https://x.com |");
+    expect(lines[3]).toBe("");
+    expect(lines[4]).toBe("435528714");
+  });
+
+  test("renders recovered PR table as <table> with one body row", async () => {
+    const { parseMarkdownSourceToHtml } = await import("./markdownRenderPipeline");
+    const input = [
+      "| ID | TITLE | CREATOR | URL |",
+      "435528714",
+      "| 2738 | feat-fh | 许事 | https://x.com |",
+    ].join("\n");
+    const html = parseMarkdownSourceToHtml(input, { streaming: false });
+    expect(html).toContain("<table");
+    expect(html).toContain("<td>2738</td>");
+    expect(html).toContain("<td>feat-fh</td>");
+    expect(html).toContain("<p>435528714</p>");
+  });
+
+  test("leaves continuous pipe tables unchanged", () => {
+    const input = [
+      "| ID | TITLE |",
+      "| --- | --- |",
+      "| 1 | a |",
+    ].join("\n");
+    expect(recoverSplitPipeTableBlocks(input)).toBe(input);
+  });
+
+  test("does not move long non-pipe interruptions (>80 chars)", () => {
+    const input = [
+      "| ID | TITLE |",
+      "x".repeat(120),
+      "| 1 | a |",
+    ].join("\n");
+    const out = recoverSplitPipeTableBlocks(input);
+    // 短文本判定失败，函数应回退到原样输出
+    expect(out).toBe(input);
+  });
+
+  test("does not move interruption containing a pipe character", () => {
+    const input = [
+      "| ID | TITLE |",
+      "435528714 | 备注",
+      "| 1 | a |",
+    ].join("\n");
+    const out = recoverSplitPipeTableBlocks(input);
+    expect(out).toBe(input);
   });
 });
 

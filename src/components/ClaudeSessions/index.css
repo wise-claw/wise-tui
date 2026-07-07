@@ -4392,6 +4392,24 @@
   color: var(--ant-color-text);
 }
 
+/* 主会话助手普通 text part（未被识别为 summary/long-prose 时）的 p/ul/li 基础呼吸感。
+   比 chat-prose/summary 的 0.65em/0.35em 更紧凑，避免与 summary/long-prose 重叠覆盖。 */
+.app-claude-messages .app-claude-message--assistant .app-message-part--text .app-markdown p {
+  margin: 0 0 0.45em;
+}
+.app-claude-messages .app-claude-message--assistant .app-message-part--text .app-markdown p:last-child {
+  margin-bottom: 0;
+}
+.app-claude-messages .app-claude-message--assistant .app-message-part--text .app-markdown ul,
+.app-claude-messages .app-claude-message--assistant .app-message-part--text .app-markdown ol {
+  margin: 0.25em 0 0.55em;
+  padding-left: 1.35em;
+}
+.app-claude-messages .app-claude-message--assistant .app-message-part--text .app-markdown li {
+  margin: 0.2em 0;
+  padding-left: 0.12em;
+}
+
 .app-message-part {
   border-radius: 8px; /* Elegant modern rounding */
   overflow: hidden;
