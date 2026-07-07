@@ -13,10 +13,10 @@ function normalizePipeChars(text: string): string {
 }
 
 /** 形如 `| a | b |` 的数据行（含首尾竖线）。 */
-const PIPE_TABLE_ROW_RE = /^\s*\|.+\|\s*$/;
+export const PIPE_TABLE_ROW_RE = /^\s*\|.+\|\s*$/;
 
 /** GFM 表格分隔行。 */
-const PIPE_TABLE_SEPARATOR_RE = /^\s*\|[\s:|\-]+\|\s*$/;
+export const PIPE_TABLE_SEPARATOR_RE = /^\s*\|[\s:|\-]+\|\s*$/;
 
 import { findHtmlDocumentStartIndex } from "./richMessageHtml";
 

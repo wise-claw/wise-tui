@@ -6,6 +6,10 @@ import {
   shouldRenderFencedBlockAsMermaid,
   wrapMermaidBlocksInMarkdown,
 } from "./mermaidBlock";
+import {
+  PIPE_TABLE_ROW_RE,
+  PIPE_TABLE_SEPARATOR_RE,
+} from "./markdownDisplayNormalize";
 
 marked.use({ gfm: true, breaks: true });
 
@@ -279,6 +283,47 @@ function extractCodeBlockLanguage(code: Element | null): string {
 const ENHANCE_RECURSE_MAX_DEPTH = 4;
 
 /** 流式输出中补全未闭合围栏，避免 marked 把后续正文吞进 code block。 */
+function buildStreamingPipeTablePlaceholder(text: string): string | null {
+  // 扫到非围栏段末段若以单行 `| ... |` 结尾、且段内尚无分隔行或第二行数据，
+  // 说明流式只把表头吐出来就被节流了。补一行占位分隔行，让 remark-gfm 至少
+  // 把表头识别成表格（哪怕列宽暂时错位），避免整段回退成段落、`|` 原文裸显。
+  const lines = text.split("\n");
+  if (lines.length === 0) return null;
+
+  let fenceOpen = false;
+  let lastBlock: { start: number; rows: string[] } | null = null;
+
+  for (let i = 0; i < lines.length; i += 1) {
+    const line = lines[i]!;
+    if (line.trimStart().startsWith("```")) {
+      fenceOpen = !fenceOpen;
+      lastBlock = null;
+      continue;
+    }
+    if (fenceOpen) continue;
+    if (PIPE_TABLE_ROW_RE.test(line)) {
+      lastBlock = lastBlock && lastBlock.start === i - 1
+        ? { start: lastBlock.start, rows: [...lastBlock.rows, line] }
+        : { start: i, rows: [line] };
+    } else if (line.trim() === "") {
+      // 允许空行分隔但要求连续 pipe 行
+    } else {
+      lastBlock = null;
+    }
+  }
+
+  if (!lastBlock) return null;
+  if (lastBlock.rows.length >= 2) return null; // 已有 ≥2 行，remark-gfm 自行识别
+  const header = lastBlock.rows[0]!;
+  if (PIPE_TABLE_SEPARATOR_RE.test(header.trim())) return null;
+
+  const cells = header.trim().slice(1, -1).split("|").map((c) => c.trim());
+  const columnCount = cells.filter((c) => c.length > 0).length;
+  if (columnCount < 2) return null;
+  return `|${Array(columnCount).fill(" --- ").join("|")}|`;
+}
+
+/** 流式输出中补全未闭合围栏，避免 marked 把后续正文吞进 code block。 */
 export function stabilizeStreamingMarkdown(text: string): string {
   const source = text.trimEnd();
   if (!source) return source;
@@ -290,12 +335,21 @@ export function stabilizeStreamingMarkdown(text: string): string {
   }
 
   // 单行内联代码若奇数个反引号，补一个闭合（避免破坏段落解析）。
+  // 同时：末段若已开启 pipe 表格但还没有分隔行 / 数据行，补一行占位分隔行，
+  // 避免 remark-gfm 把表头回退成段落，原文 `| ... |` 因此裸显给用户。
   const lines = stabilized.split("\n");
   const lastLine = lines[lines.length - 1] ?? "";
   if (lastLine && !lastLine.trimStart().startsWith("```")) {
     const inlineTicks = (lastLine.match(/(?<!`)`(?!`)/g) ?? []).length;
     if (inlineTicks % 2 === 1) {
       stabilized += "`";
+    }
+    const fenceOpenCount = (stabilized.match(/```/g) ?? []).length;
+    if (fenceOpenCount % 2 === 0) {
+      const placeholder = buildStreamingPipeTablePlaceholder(stabilized);
+      if (placeholder) {
+        stabilized += `\n${placeholder}`;
+      }
     }
   }
 

@@ -40,6 +40,27 @@ describe("stabilizeStreamingMarkdown", () => {
     const input = "```js\nconst x = 1;\n```";
     expect(stabilizeStreamingMarkdown(input)).toBe(input);
   });
+
+  test("appends placeholder separator when pipe-table header is streaming-only", () => {
+    // 流式中断在 pipe 表头一行（未到分隔行 / 数据行）时，stabilize 应补占位
+    // 分隔行，避免 remark-gfm 回退成段落、`|` 原文裸显。
+    const input = "下面是结果：\n\n| 指标 | 数量 | 备注 |";
+    const stabilized = stabilizeStreamingMarkdown(input);
+    const lines = stabilized.split("\n");
+    expect(lines.at(-1)).toBe("| --- | --- | --- |");
+
+    const html = parseMarkdownSourceToHtml(input, { streaming: true });
+    expect(html).toContain("<table");
+    expect(html).not.toMatch(/\| 指标 \| 数量 \| 备注 \|/);
+  });
+
+  test("does not touch fence-internal pipe lines", () => {
+    // fence 内的 `| a |` 是普通字符，不应被识别成 pipe 表头而补占位。
+    const input = "```bash\n| a | b |\necho ok";
+    const stabilized = stabilizeStreamingMarkdown(input);
+    expect(stabilized.split("\n").at(-1)).not.toBe("| --- | --- |");
+    expect(stabilized.endsWith("```")).toBe(true);
+  });
 });
 
 describe("parseMarkdownSourceToHtml", () => {

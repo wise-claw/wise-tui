@@ -9,7 +9,7 @@ import { findHtmlDocumentStartIndex } from "../utils/richMessageHtml";
 
 const STREAMING_MIN_REBUILD_MS = 200;
 const STREAMING_SHORT_TEXT_FAST_PATH_LIMIT = 600;
-const MARKDOWN_STRUCTURE_HINT_RE = /[<|`#>*\-\uFF5C]|\]\(|!\[|^\s*\d+\.\s/m;
+const MARKDOWN_STRUCTURE_HINT_RE = /[<|`#>*\-\|\uFF5C]|\]\(|!\[|^\s*\d+\.\s/m;
 
 function shouldBypassStreamingRebuildThrottle(text: string): boolean {
   if (findHtmlDocumentStartIndex(text) !== null) return true;
