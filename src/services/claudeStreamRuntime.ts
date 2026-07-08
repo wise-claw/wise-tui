@@ -45,7 +45,6 @@ import {
   resolveExpectedTurnNonceForTab,
   shouldApplyClaudeTurnComplete,
 } from "../utils/claudeTurnCompleteGate";
-import { preservesWorkerWiseTabId } from "../utils/sessionExecuteResolve";
 
 type SetSessions = (updater: (prev: ClaudeSession[]) => ClaudeSession[]) => void;
 type SetActiveSessionId = (updater: (prev: string | null) => string | null) => void;
@@ -166,7 +165,6 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     lastUserSendNonceRef,
     assistantStreamTextByTabRef,
     setSessions,
-    setActiveSessionId,
     ingestAskUserQuestionFromMessageParts,
     ingestStreamAssistText,
     ingestTodosFromSessionMessages,
@@ -176,7 +174,6 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     resolveTabIdForClaudeStream,
     resolveTabIdFromCompletePayload,
     resolveSuccessFromCompletePayload,
-    onSessionTabIdMigrated,
     onClaudeSessionIdAssigned,
     reloadTranscriptFromDisk,
     expectedTurnNonceByTabIdRef,
@@ -251,7 +248,6 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     dedupedParts: MessagePart[],
     isInit: boolean,
     realSessionId: string | null,
-    opts: { syncStreamingTargetRefOnInit: boolean },
   ): SessionListUpdater {
     return (prev) =>
       prev.map((s) => {
@@ -260,17 +256,10 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
         if (isInit && realSessionId) {
           sessionIdMapRef.current.set(tid, realSessionId);
           onClaudeSessionIdAssigned?.(tid, realSessionId);
-          const preserveWiseTabId =
-            isTerminalWorkerWiseTab(updated) || preservesWorkerWiseTabId(updated);
-          if (preserveWiseTabId) {
-            updated = { ...updated, claudeSessionId: realSessionId };
-          } else {
-            updated = { ...updated, id: realSessionId, claudeSessionId: realSessionId };
-            if (opts.syncStreamingTargetRefOnInit) {
-              streamingTargetIdRef.current = realSessionId;
-            }
-            setActiveSessionId((aid) => (aid === tid ? realSessionId : aid));
-          }
+          // 普通会话也保留 wise tab id（session.id 不变），仅更新 claudeSessionId。
+          // 避免首发会话 session.id 从临时 tabId 迁移到 realSessionId 引发左栏重渲染
+          // 与 key={session.id} 聊天区 remount（致输入框失焦）。worker 会话一直走此路径。
+          updated = { ...updated, claudeSessionId: realSessionId };
         }
         if (dedupedParts.length > 0 && !isInit) {
           const { toolResults, streamParts } = partitionStreamMessageParts(dedupedParts);
@@ -347,7 +336,6 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
   function handleOutputForSendTab(
     stableTabId: string,
     payload: unknown,
-    opts?: { syncStreamingTargetRefOnInit?: boolean },
   ) {
     const line = typeof payload === "string" ? payload : JSON.stringify(payload);
     const parsed = safeJsonParse(line);
@@ -359,15 +347,12 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     }
     if (!tid) return;
     onStreamActivity?.(tid);
-    applyOutputLine(tid, line, {
-      syncStreamingTargetRefOnInit: opts?.syncStreamingTargetRefOnInit ?? false,
-    }, parsed);
+    applyOutputLine(tid, line, parsed);
   }
 
   function applyOutputLine(
     tid: string,
     line: string,
-    opts: { syncStreamingTargetRefOnInit: boolean },
     parsed: unknown,
   ) {
     const hidden = isDocumentHidden();
@@ -514,32 +499,19 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
       deferredStreamTabIds.add(tid);
     } else if (mustPublishInit) {
       flushPendingStreamSessionUpdatesSync();
-      setSessions(buildStreamSessionUpdater(tid, dedupedParts, isInit, realSessionId, opts));
+      setSessions(buildStreamSessionUpdater(tid, dedupedParts, isInit, realSessionId));
     } else if (hasStreamUiUpdate) {
       enqueueStreamSessionUpdate(
-        buildStreamSessionUpdater(tid, dedupedParts, false, null, opts),
+        buildStreamSessionUpdater(tid, dedupedParts, false, null),
       );
       scheduleTryFinalizePendingOneshotComplete(tid);
     }
 
     if (isInit && realSessionId) {
-      const sessionForTid =
-        sessionsRef.current.find((s) => s.id === tid || s.claudeSessionId === tid) ?? null;
-      const preserveWiseTabId =
-        sessionForTid != null &&
-        (isTerminalWorkerWiseTab(sessionForTid) || preservesWorkerWiseTabId(sessionForTid));
+      // session.id 不迁移：assistBuffer key 已是 tid（=session.id）无需迁移；
+      // onSessionTabIdMigrated 不再调用，binding/extraPanes/composerRefocus 等下游迁移均不需要。
+      // migrateSessionKey 保留（与 worker 一致）：bucket 搬迁后 init 后 ingestion 在 tid 重建。
       migrateSessionKey(tid, realSessionId);
-      const buf = assistantStreamTextByTabRef.current.get(tid);
-      if (buf !== undefined) {
-        assistantStreamTextByTabRef.current.delete(tid);
-        assistantStreamTextByTabRef.current.set(
-          preserveWiseTabId ? tid : realSessionId,
-          capAssistantStreamBufferText(buf),
-        );
-      }
-      if (!preserveWiseTabId) {
-        onSessionTabIdMigrated?.(tid, realSessionId);
-      }
     }
   }
 
@@ -556,11 +528,11 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
       const tid = resolveTabIdForClaudeStream(sessionsRef.current, lineSid, null);
       if (!tid) return;
       onStreamActivity?.(tid);
-      applyOutputLine(tid, line, { syncStreamingTargetRefOnInit: false }, parsed);
+      applyOutputLine(tid, line, parsed);
       return;
     }
     // 单屏：与 invocation 路径共用 tab 映射，`system.init` 后 tab id 会变为 Claude session_id，旧 ref 须经 sessionIdMap 解析。
-    handleOutputForSendTab(refTid, payload, { syncStreamingTargetRefOnInit: true });
+    handleOutputForSendTab(refTid, payload);
   }
 
   function clearAssistBufferKeysForTab(session: ClaudeSession | undefined, tid: string) {
