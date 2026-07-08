@@ -166,6 +166,7 @@ import {
 } from "../utils/sessionExecuteResolve";
 import { createClaudeStreamRuntime } from "../services/claudeStreamRuntime";
 import { setBackgroundContextCompactInFlight } from "../stores/backgroundContextCompactStore";
+import { migrateComposerRefocus } from "../stores/composerRefocusStore";
 import { stopClaudeMainSession } from "../services/stopClaudeMainSession";
 import { publishRunningClaudeSessionIds } from "../stores/claudeRunningSessionsRegistryStore";
 import { getSystemResourceSnapshot } from "../services/systemResource";
@@ -2821,6 +2822,9 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       },
       onSessionTabIdMigrated: (fromTabId, toClaudeSessionId) => {
         applySessionTabIdMigration(fromTabId, toClaudeSessionId);
+        // 普通会话首次发送时 session.id 从临时 tabId 迁到 realSessionId：把待聚焦请求一并迁移，
+        // 否则 key={session.id} remount 后新 ComposerRegion 用 realSessionId consume 不到旧 tabId 的请求。
+        migrateComposerRefocus(fromTabId, toClaudeSessionId);
       },
       reloadTranscriptFromDisk,
       expectedTurnNonceByTabIdRef,

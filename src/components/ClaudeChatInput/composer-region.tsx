@@ -3021,16 +3021,21 @@ function ComposerInner({
    * 跨越「发送导致 ClaudeChat 瞬时卸载/重挂」边界：旧编辑器 microtask 聚焦会落空，
    * 此 effect 在新编辑器 semiEditorReady 后或重渲染后 consume 并聚焦。
    * 权限/追问 dock 待处理时让出焦点；已聚焦则不重复抢。
+   *
+   * consume 只读不删（见 composerRefocusStore）：普通会话首次发送时本 effect 会在旧 tabId
+   * 上先触发（早于 session.id 迁移约 100ms+），若 consume 删除请求，migrate 拿不到请求、
+   * remount 后新编辑器失焦。故 chrome/已聚焦分支直接 return 留请求，由 migrate 移到
+   * realSessionId 后供新编辑器 consume；未聚焦分支 consume 命中则聚焦。
    */
   useEffect(() => {
     if (!semiEditorReady) return;
     if (!composerRefocusSignal) return;
     if (showQuestionChromeRef.current || showPermissionChromeRef.current) {
-      consumeComposerRefocus(session.id);
+      // 权限/追问待处理时让出焦点；请求留待迁移后新编辑器处理（consume 只读不删）
       return;
     }
     if (isProseMirrorFocused(shellRef.current)) {
-      consumeComposerRefocus(session.id);
+      // 已聚焦不重复抢；请求留待迁移后新编辑器处理（consume 只读不删）
       return;
     }
     if (consumeComposerRefocus(session.id)) {
