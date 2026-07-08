@@ -84,7 +84,11 @@ import {
   startRepositoryRunCommand,
   stopRepositoryRunCommand,
 } from "./stores/repositoryRunCommandRuntimeStore";
+import {
+  markExecutionEnvironmentDispatchItemExited,
+} from "./stores/executionEnvironmentDispatchStore";
 import { useMacTerminalDetectionBootstrap } from "./hooks/useMacTerminalDetectionBootstrap";
+import { useBackgroundScriptRuntimeSync } from "./hooks/useBackgroundScriptRuntimeSync";
 import type { ScheduledTasksOverlayTarget } from "./components/RepositoryScheduledTasksModal";
 import { activateAssistantTemplate } from "./services/assistantTemplateActivation";
 import type { AssistantEntry } from "./types/assistant";
@@ -107,6 +111,7 @@ import {
 } from "./utils/multiPaneLayoutStorage";
 import { isWiseAppFocused } from "./utils/isWiseAppFocused";
 import { wiseMascotShow } from "./services/wiseMascot";
+import { closeTerminalSession } from "./services/terminal";
 import { initGlobalAtMentionShortcutRouting } from "./services/globalScreenshotHotkey";
 import {
   loadAtMentionShortcutByTargetFromStore,
@@ -316,6 +321,7 @@ export default function App() {
   // 比 message.error 顶部 toast（一行）更适合排查长输出脚本（如 bun test）。
   const { modal: appModal } = AntdApp.useApp();
   useMacTerminalDetectionBootstrap();
+  useBackgroundScriptRuntimeSync();
   const [lastAuthorPane, setLastAuthorPane] = useState(() => readAuthorPaneFromStorage());
   const [assistantInitialTarget, setAssistantInitialTarget] = useState<OpenAssistantDetail | null>(null);
   const [assistantOpenRequestKey, setAssistantOpenRequestKey] = useState(0);
@@ -1370,6 +1376,25 @@ export default function App() {
         if (!key) return;
         handleCancelOmcDirectBatchInvocation(key);
         void message.info("已请求结束后台任务");
+        return;
+      }
+      // 后台 PTY 脚本：直接调 closeTerminalSession 让后端 killer.kill，
+      // 并标 store exited。不走 stopSessionConversationTask/cancelSession
+      // （那是 Claude host session，对 PTY 子进程无效）。
+      if (item.source === "background_script") {
+        const wid = item.workspaceId?.trim();
+        const tid = item.terminalId?.trim();
+        if (!wid || !tid) {
+          void message.warning("后台脚本终端信息缺失，无法结束");
+          return;
+        }
+        markExecutionEnvironmentDispatchItemExited({
+          workerSessionId: tid,
+          killedByUser: true,
+          exitMessage: "已手动结束",
+        });
+        void closeTerminalSession(wid, tid).catch(() => undefined);
+        void message.info("已请求结束后台脚本");
         return;
       }
       if (stopSessionConversationTask(item)) {

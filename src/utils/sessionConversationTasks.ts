@@ -557,14 +557,69 @@ export function buildFeedbackLoopConversationTasks(input: {
   return out.sort((a, b) => b.updatedAt - a.updatedAt);
 }
 
-/** 左栏「任务派发」：执行环境 + 反馈神经网派发历史，按更新时间倒序。 */
+/**
+ * 把 dispatch store 中的「后台 PTY 脚本」条目翻译成运行面板 task item。
+ * 仅挑选带 `terminalId` 的 dispatch item（与执行环境派发复用同一 store，但通过
+ * terminalId 区分通道，避免误把 worker Claude session 渲染成脚本任务）。
+ */
+export function buildBackgroundScriptConversationTasks(input: {
+  anchorSession: ClaudeSession | null | undefined;
+  dispatchRecords: readonly ExecutionEnvironmentDispatchRecord[];
+}): SessionConversationTaskItem[] {
+  const anchor = input.anchorSession;
+  if (!anchor) return [];
+  const anchorId = anchor.id.trim();
+  const out: SessionConversationTaskItem[] = [];
+  for (const batch of input.dispatchRecords) {
+    if (batch.anchorSessionId !== anchorId) continue;
+    for (const item of batch.items) {
+      if (!item.terminalId?.trim() || !item.workspaceId?.trim()) continue;
+      // 已退出且超过窗口时由 filterSessionDispatchTaskItems 剔除；这里只按 exitCode/killedByUser 翻译状态
+      const status: SessionConversationTaskItem["status"] =
+        item.killedByUser || (item.exitCode != null && item.exitCode !== 0)
+          ? "failed"
+          : item.exitCode === 0
+            ? "completed"
+            : "running";
+      const labelSource = item.label?.trim() || item.previewText?.trim() || "后台脚本";
+      const label = truncate(labelSource, 48);
+      out.push({
+        key: `bg-script:${item.batchId}:${item.workerSessionId}`,
+        label,
+        subtitle: item.pid != null ? `pid ${item.pid}` : "脚本",
+        status,
+        previewText: truncate(item.previewText?.trim() || labelSource || "执行中…", 120),
+        updatedAt: item.updatedAt > 0 ? item.updatedAt : batch.createdAt,
+        source: "background_script",
+        sessionId: item.workerSessionId,
+        repositoryPath: item.cwd || batch.repositoryPath || anchor.repositoryPath,
+        dispatchBatchId: item.batchId,
+        cancellable: status === "running",
+        cancelMode: status === "running" ? "session" : undefined,
+        workspaceId: item.workspaceId,
+        terminalId: item.terminalId,
+        cwd: item.cwd,
+        pid: item.pid,
+      });
+    }
+  }
+  return out.sort((a, b) => b.updatedAt - a.updatedAt);
+}
+
+/** 左栏「任务派发」：执行环境 + 反馈神经网派发 + 后台 PTY 脚本，按更新时间倒序。 */
 export function filterSessionDispatchTaskItems(
   items: readonly SessionConversationTaskItem[],
   sinceMs?: number,
 ): SessionConversationTaskItem[] {
   return [...items]
     .filter((item) => {
-      if (item.source !== "execution_environment" && item.source !== "feedback_loop") return false;
+      if (
+        item.source !== "execution_environment" &&
+        item.source !== "feedback_loop" &&
+        item.source !== "background_script"
+      ) {
+        return false;
+      }
       if (sinceMs == null) return true;
       return item.updatedAt >= sinceMs;
     })
@@ -851,6 +906,15 @@ export function buildSessionConversationTasks(input: {
     }
   }
 
+  if (input.executionEnvironmentRecords?.length) {
+    for (const item of buildBackgroundScriptConversationTasks({
+      anchorSession: session,
+      dispatchRecords: input.executionEnvironmentRecords,
+    })) {
+      upsert(item);
+    }
+  }
+
   for (const snap of input.bundleSnapshots ?? []) {
     const status = snapshotStatus(snap);
     if (status !== "running" && turnStartedAt > 0 && snap.updatedAt < turnStartedAt) {
@@ -900,6 +964,11 @@ export function canStopSessionConversationTask(
   if (handlers.onStopSessionConversationTask) return true;
   if (item.cancelMode === "invocation") {
     return Boolean(item.invocationKey?.trim() && handlers.onCancelOmcDirectBatchInvocation);
+  }
+  // 后台 PTY 脚本：需要 terminalId + workspaceId，且不依赖 cancelSession
+  // （cancelSession 只针对 Claude host session，对 PTY 子进程无效）。
+  if (item.source === "background_script") {
+    return Boolean(item.terminalId?.trim() && item.workspaceId?.trim());
   }
   return Boolean(item.sessionId?.trim() && handlers.onCancelSession);
 }

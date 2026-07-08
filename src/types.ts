@@ -202,7 +202,13 @@ export interface SessionConversationTaskItem {
   status: "running" | "completed" | "failed";
   previewText: string;
   updatedAt: number;
-  source: "message_tool" | "invocation_stream" | "background_snapshot" | "execution_environment" | "feedback_loop";
+  source:
+    | "message_tool"
+    | "invocation_stream"
+    | "background_snapshot"
+    | "execution_environment"
+    | "feedback_loop"
+    | "background_script";
   /** 执行环境派发批次 id */
   dispatchBatchId?: string;
   /** 批次内序号（从 1 起） */
@@ -219,6 +225,14 @@ export interface SessionConversationTaskItem {
   cancelMode?: "session" | "invocation";
   /** 反馈神经网闭环比对综合得分（派发任务详情用） */
   feedbackLoopComparisonScore?: number;
+  /** 后台 PTY 脚本终端 workspaceId（assistant-script 用 repoPath） */
+  workspaceId?: string;
+  /** 后台 PTY 脚本终端 id（assistant-script:<id>:<ts>） */
+  terminalId?: string;
+  /** 后台 PTY 脚本 cwd */
+  cwd?: string;
+  /** 后台 PTY 脚本子进程 pid */
+  pid?: number;
 }
 
 export interface MonitorStats {

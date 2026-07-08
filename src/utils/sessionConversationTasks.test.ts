@@ -1,6 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ClaudeSession } from "../types";
 import {
+  buildBackgroundScriptConversationTasks,
   buildFeedbackLoopConversationTasks,
   buildSessionConversationTasks,
   buildConversationTaskDetailMessages,
@@ -875,5 +876,251 @@ describe("executionEnvironmentWorkerSessionsFingerprint", () => {
     expect(executionEnvironmentWorkerSessionsFingerprint([short])).toBe(
       executionEnvironmentWorkerSessionsFingerprint([longer]),
     );
+  });
+});
+
+describe("buildBackgroundScriptConversationTasks", () => {
+  function anchorSession() {
+    return session({ id: "main-bg", repositoryPath: "/repo/a" });
+  }
+
+  function bgRecord(itemOverrides: Partial<{
+    label: string;
+    previewText: string;
+    workspaceId: string;
+    terminalId: string;
+    pid: number;
+    exitCode: number | undefined;
+    killedByUser: boolean | undefined;
+  }> = {}) {
+    return {
+      batchId: "bg-script:aid",
+      anchorSessionId: "main-bg",
+      repositoryPath: "/repo/a",
+      executionEngine: "claude" as const,
+      createdAt: 100,
+      items: [
+        {
+          key: "exec-env:bg-script:aid:assistant-script:aid:1",
+          batchId: "bg-script:aid",
+          anchorSessionId: "main-bg",
+          workerSessionId: "assistant-script:aid:1",
+          label: itemOverrides.label ?? "执行脚本·测试",
+          previewText: itemOverrides.previewText ?? "echo hi",
+          batchIndex: 1,
+          sessionCount: 1,
+          updatedAt: 200,
+          workspaceId: itemOverrides.workspaceId ?? "/repo/a",
+          terminalId: itemOverrides.terminalId ?? "assistant-script:aid:1",
+          cwd: itemOverrides.workspaceId ?? "/repo/a",
+          pid: itemOverrides.pid ?? 4242,
+          exitCode: itemOverrides.exitCode,
+          killedByUser: itemOverrides.killedByUser,
+        },
+      ],
+    };
+  }
+
+  test("terminalId+workspaceId 齐备 → source=background_script / running / cancellable=true", () => {
+    const items = buildBackgroundScriptConversationTasks({
+      anchorSession: anchorSession(),
+      dispatchRecords: [bgRecord()],
+    });
+    expect(items).toHaveLength(1);
+    expect(items[0]?.source).toBe("background_script");
+    expect(items[0]?.status).toBe("running");
+    expect(items[0]?.cancellable).toBe(true);
+    expect(items[0]?.cancelMode).toBe("session");
+    expect(items[0]?.terminalId).toBe("assistant-script:aid:1");
+    expect(items[0]?.workspaceId).toBe("/repo/a");
+    expect(items[0]?.pid).toBe(4242);
+    expect(items[0]?.subtitle).toBe("pid 4242");
+  });
+
+  test("terminalId 缺失 → 丢弃", () => {
+    const items = buildBackgroundScriptConversationTasks({
+      anchorSession: anchorSession(),
+      dispatchRecords: [bgRecord({ terminalId: "" })],
+    });
+    expect(items).toHaveLength(0);
+  });
+
+  test("workspaceId 缺失 → 丢弃", () => {
+    const items = buildBackgroundScriptConversationTasks({
+      anchorSession: anchorSession(),
+      dispatchRecords: [bgRecord({ workspaceId: "" })],
+    });
+    expect(items).toHaveLength(0);
+  });
+
+  test("exitCode=0 → status=completed / cancellable=false", () => {
+    const items = buildBackgroundScriptConversationTasks({
+      anchorSession: anchorSession(),
+      dispatchRecords: [bgRecord({ exitCode: 0 })],
+    });
+    expect(items[0]?.status).toBe("completed");
+    expect(items[0]?.cancellable).toBe(false);
+    expect(items[0]?.cancelMode).toBeUndefined();
+  });
+
+  test("exitCode=137 → status=failed / cancellable=false", () => {
+    const items = buildBackgroundScriptConversationTasks({
+      anchorSession: anchorSession(),
+      dispatchRecords: [bgRecord({ exitCode: 137 })],
+    });
+    expect(items[0]?.status).toBe("failed");
+    expect(items[0]?.cancellable).toBe(false);
+  });
+
+  test("killedByUser:true → status=failed", () => {
+    const items = buildBackgroundScriptConversationTasks({
+      anchorSession: anchorSession(),
+      dispatchRecords: [bgRecord({ killedByUser: true, exitCode: 0 })],
+    });
+    expect(items[0]?.status).toBe("failed");
+  });
+
+  test("anchor 不匹配 → 全部丢弃", () => {
+    const items = buildBackgroundScriptConversationTasks({
+      anchorSession: anchorSession(),
+      dispatchRecords: [
+        {
+          ...bgRecord(),
+          anchorSessionId: "another-anchor",
+        },
+      ],
+    });
+    expect(items).toHaveLength(0);
+  });
+
+  test("buildSessionConversationTasks 合并 background_script + execution_environment", () => {
+    const anchor = anchorSession();
+    const worker = session({
+      id: "worker-1",
+      repositoryName: "demo/执行环境:claude:任务",
+      status: "running",
+      messages: [{ id: 1, role: "user", content: "你好", timestamp: 1 }],
+    });
+    const items = buildSessionConversationTasks({
+      session: anchor,
+      allSessions: [anchor, worker],
+      executionEnvironmentRecords: [
+        {
+          batchId: "ee-1",
+          anchorSessionId: "main-bg",
+          repositoryPath: "/repo/a",
+          executionEngine: "claude" as const,
+          createdAt: 100,
+          items: [
+            {
+              key: "exec-env:ee-1:worker-1",
+              batchId: "ee-1",
+              anchorSessionId: "main-bg",
+              workerSessionId: "worker-1",
+              label: "任务",
+              previewText: "你好",
+              batchIndex: 1,
+              sessionCount: 1,
+              updatedAt: 300,
+            },
+          ],
+        },
+        bgRecord({ previewText: "echo hi", pid: 99 }),
+      ],
+    });
+    const sources = items.map((it) => it.source).sort();
+    expect(sources.includes("background_script")).toBe(true);
+    expect(sources.includes("execution_environment")).toBe(true);
+  });
+});
+
+describe("filterSessionDispatchTaskItems background_script 支持", () => {
+  test("sinceMs 内 background_script 保留；超出剔除；non-whitelist 剔除", () => {
+    const items = [
+      {
+        key: "bg-old",
+        label: "旧脚本",
+        status: "completed",
+        previewText: "",
+        updatedAt: 100,
+        source: "background_script",
+      },
+      {
+        key: "bg-new",
+        label: "新脚本",
+        status: "running",
+        previewText: "",
+        updatedAt: 500,
+        source: "background_script",
+      },
+      {
+        key: "msg-new",
+        label: "工具",
+        status: "running",
+        previewText: "",
+        updatedAt: 600,
+        source: "message_tool",
+      },
+    ];
+    const filtered = filterSessionDispatchTaskItems(items, 200);
+    expect(filtered).toHaveLength(1);
+    expect(filtered[0]?.key).toBe("bg-new");
+  });
+});
+
+describe("canStopSessionConversationTask background_script 完备判断", () => {
+  test("source=background_script + terminalId/workspaceId 齐备 → true（不依赖 onCancelSession）", () => {
+    const ok = canStopSessionConversationTask(
+      {
+        key: "k",
+        label: "",
+        status: "running",
+        previewText: "",
+        updatedAt: 1,
+        source: "background_script",
+        cancellable: true,
+        cancelMode: "session",
+        terminalId: "assistant-script:aid:1",
+        workspaceId: "/repo/a",
+      },
+      {},
+    );
+    expect(ok).toBe(true);
+  });
+
+  test("source=background_script 但 terminalId 缺失 → false", () => {
+    const ok = canStopSessionConversationTask(
+      {
+        key: "k",
+        label: "",
+        status: "running",
+        previewText: "",
+        updatedAt: 1,
+        source: "background_script",
+        cancellable: true,
+        cancelMode: "session",
+        workspaceId: "/repo/a",
+      },
+      {},
+    );
+    expect(ok).toBe(false);
+  });
+
+  test("source=background_script 但 workspaceId 缺失 → false", () => {
+    const ok = canStopSessionConversationTask(
+      {
+        key: "k",
+        label: "",
+        status: "running",
+        previewText: "",
+        updatedAt: 1,
+        source: "background_script",
+        cancellable: true,
+        cancelMode: "session",
+        terminalId: "assistant-script:aid:1",
+      },
+      {},
+    );
+    expect(ok).toBe(false);
   });
 });

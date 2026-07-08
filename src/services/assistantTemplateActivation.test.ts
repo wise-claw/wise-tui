@@ -4,7 +4,18 @@ import type { ClaudeSession, Repository } from "../types";
 
 const openExternalUrlMock = mock(async () => undefined);
 const runShellCommandMock = mock(async () => ({ stdout: "", stderr: "", exit_code: 0 }));
-const spawnShellCommandMock = mock(async () => ({ pid: 4242 }));
+const openBackgroundScriptMock = mock(async (workspaceId: string, terminalId: string) => ({
+  workspaceId,
+  terminalId,
+  title: "执行脚本·测试",
+  source: "background-script" as const,
+  status: "running" as const,
+  cwd: "/repo/a",
+  cols: 80,
+  rows: 24,
+  cursor: 0,
+  pid: 4242,
+}));
 const buildClaudeOutgoingPromptMock = mock(async () => "outbound prompt");
 
 mock.module("./openExternal", () => ({
@@ -14,7 +25,7 @@ mock.module("./openExternal", () => ({
 
 mock.module("./terminal", () => ({
   runShellCommand: runShellCommandMock,
-  spawnShellCommand: spawnShellCommandMock,
+  openBackgroundScript: openBackgroundScriptMock,
 }));
 
 mock.module("./claudeComposerPrompt", () => ({
@@ -123,11 +134,24 @@ function repoBinding(repositoryPath: string): {
 beforeEach(() => {
   openExternalUrlMock.mockReset();
   runShellCommandMock.mockReset();
-  spawnShellCommandMock.mockReset();
+  openBackgroundScriptMock.mockReset();
   buildClaudeOutgoingPromptMock.mockReset();
   openExternalUrlMock.mockResolvedValue(undefined);
   runShellCommandMock.mockResolvedValue({ stdout: "ok", stderr: "", exit_code: 0 });
-  spawnShellCommandMock.mockResolvedValue({ pid: 4242 });
+  openBackgroundScriptMock.mockImplementation(
+    async (workspaceId: string, terminalId: string) => ({
+      workspaceId,
+      terminalId,
+      title: "执行脚本·测试",
+      source: "background-script",
+      status: "running",
+      cwd: workspaceId,
+      cols: 80,
+      rows: 24,
+      cursor: 0,
+      pid: 4242,
+    }),
+  );
   buildClaudeOutgoingPromptMock.mockResolvedValue("outbound prompt");
 });
 
@@ -214,11 +238,11 @@ describe("activateAssistantTemplate", () => {
       message,
     });
     expect(calls[0]?.type).toBe("warning");
-    expect(spawnShellCommandMock).not.toHaveBeenCalled();
+    expect(openBackgroundScriptMock).not.toHaveBeenCalled();
     expect(runShellCommandMock).not.toHaveBeenCalled();
   });
 
-  test("spawns script in background with repository cwd (fire-and-forget)", async () => {
+  test("spawns script in background via PTY (fire-and-forget)", async () => {
     const { message, calls } = messageStub();
     await activateAssistantTemplate({
       assistant: customAssistant({ entryKind: "run_script", entryScript: "echo hi" }),
@@ -230,20 +254,30 @@ describe("activateAssistantTemplate", () => {
       executeSession: mock(async () => true),
       message,
     });
-    // 走后台 spawn 路径，不再调用同步的 run_shell_command
-    expect(spawnShellCommandMock).toHaveBeenCalledWith("/repo/a", "echo hi");
+    // 走 PTY 后台脚本路径（openBackgroundScript），不再调用 fire-and-forget 的 spawn_shell_command。
+    expect(openBackgroundScriptMock).toHaveBeenCalledTimes(1);
+    const [cwd, terminalId, , command, title] = openBackgroundScriptMock.mock.calls[0] ?? [];
+    expect(cwd).toBe("/repo/a");
+    expect(typeof terminalId).toBe("string");
+    expect((terminalId as string).startsWith("assistant-script:custom:test:")).toBe(true);
+    expect(command).toBe("echo hi");
+    // title 形如 "执行脚本·测试"；不强制具体后缀，只要非空且非纯空白
+    expect(typeof title).toBe("string");
+    expect((title as string).trim().length).toBeGreaterThan(0);
     expect(runShellCommandMock).not.toHaveBeenCalled();
-    // 成功提示带上 pid
+    // 成功提示带上 pid + terminalId 前缀
     const success = calls.find((c) => c.type === "success");
     expect(success?.text).toContain("脚本已后台启动");
-    expect(success?.text).toContain("4242");
-    // 没有 error/warning，也没有 modal 调用（fire-and-forget 不接 stdout/stderr）
+    expect(success?.text).toContain("pid 4242");
+    expect(success?.text).toContain("assistant-script:custom:test:".slice(0, 20));
     expect(calls.some((c) => c.type === "error" || c.type === "warning")).toBe(false);
   });
 
-  test("run_script spawn failure surfaces error via message (no modal)", async () => {
-    // 复现：后端 spawn 阶段失败（命令找不到、路径无效等）
-    spawnShellCommandMock.mockRejectedValueOnce(new Error("仓库路径不存在或不是目录：/repo/missing"));
+  test("run_script PTY spawn failure surfaces error via message (no modal)", async () => {
+    // 复现：后端 PTY 启动失败（路径无效、PTY 不可用等）
+    openBackgroundScriptMock.mockRejectedValueOnce(
+      new Error("仓库路径不存在或不是目录：/repo/missing"),
+    );
     const stub = messageStub();
     await activateAssistantTemplate({
       assistant: customAssistant({
@@ -259,7 +293,7 @@ describe("activateAssistantTemplate", () => {
       message: stub.message,
       modal: stub.modal,
     });
-    // 后台 spawn 失败只在 message.error 给提示，不再弹 modal/notification
+    // PTY 启动失败只在 message.error 给提示，不再弹 modal/notification
     const errCall = stub.calls.find((c) => c.type === "error");
     expect(errCall?.text).toContain("仓库路径不存在或不是目录");
     expect(stub.modalCalls).toHaveLength(0);
@@ -362,7 +396,7 @@ describe("activateAssistantTemplate", () => {
   });
 
   test("run_script empty script content surfaces error and skips spawn", async () => {
-    // entryScript 为空时直接报错，不发起后台 spawn。
+    // entryScript 为空时直接报错，不发起后台 PTY 启动。
     const stub = messageStub();
     await activateAssistantTemplate({
       assistant: customAssistant({ entryKind: "run_script", entryScript: "" }),
@@ -375,7 +409,35 @@ describe("activateAssistantTemplate", () => {
       message: stub.message,
     });
     expect(stub.calls.some((c) => c.type === "error" && c.text.includes("脚本内容为空"))).toBe(true);
-    expect(spawnShellCommandMock).not.toHaveBeenCalled();
+    expect(openBackgroundScriptMock).not.toHaveBeenCalled();
     expect(runShellCommandMock).not.toHaveBeenCalled();
+  });
+
+  test("run_script background PTY 还顺手注册了 dispatch item，存进 executionEnvironmentDispatchStore", async () => {
+    const { message, calls } = messageStub();
+    const binding = repoBinding("/repo/a");
+    await activateAssistantTemplate({
+      assistant: customAssistant({
+        id: "custom:bg",
+        entryKind: "run_script",
+        entryScript: "echo hi",
+        name: "后台助手",
+      }),
+      repositoryPath: "/repo/a",
+      workflowTemplates: [],
+      ...binding,
+      executeSession: mock(async () => true),
+      message,
+    });
+    const records = getExecutionEnvironmentDispatchesSnapshotForAnchor("session:main");
+    const items = records.flatMap((row) => row.items);
+    const item = items.find((it) => (it.terminalId ?? "").startsWith("assistant-script:custom:bg:"));
+    expect(item).toBeDefined();
+    expect(item?.workspaceId).toBe("/repo/a");
+    expect(item?.cwd).toBe("/repo/a");
+    expect(item?.pid).toBe(4242);
+    expect((item?.batchId ?? "").startsWith("bg-script:custom:bg:")).toBe(true);
+    expect((item?.label ?? "").includes("执行脚本·")).toBe(true);
+    expect(calls.some((c) => c.type === "success" && c.text.includes("pid 4242"))).toBe(true);
   });
 });

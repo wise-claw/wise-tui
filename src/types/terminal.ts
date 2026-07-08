@@ -1,4 +1,4 @@
-export type TerminalSessionSource = "user" | "agent";
+export type TerminalSessionSource = "user" | "agent" | "background-script";
 
 export type TerminalSessionStatus = "running" | "exited";
 
@@ -12,6 +12,11 @@ export type TerminalSessionInfo = {
   cols: number;
   rows: number;
   cursor: number;
+  /**
+   * 后台任务子进程 pid，仅 source="background-script" 时有值；
+   * 交互终端（user/agent）始终为 0。前端用来在运行面板展示进程号。
+   */
+  pid?: number;
 };
 
 export type TerminalAttachResponse = {

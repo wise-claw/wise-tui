@@ -126,6 +126,27 @@ export async function openAgentTerminalSession(
   });
 }
 
+/**
+ * 后台脚本入口：复用 PTY 体系跑一次性 `zsh -c <command>`，
+ * 输出走 terminal-output/exit 事件，前端复用 ghostty-web 渲染。
+ * 返回的 `info.pid` 可在运行面板展示；不要据此判断脚本是否完成（监听 terminal-exit）。
+ */
+export async function openBackgroundScript(
+  workspaceId: string,
+  terminalId: string,
+  cwd: string,
+  command: string,
+  title?: string,
+): Promise<TerminalSessionInfo> {
+  return invoke<TerminalSessionInfo>("terminal_open_background_script", {
+    workspaceId,
+    terminalId,
+    cwd,
+    command,
+    title,
+  });
+}
+
 export async function closeTerminalSession(
   workspaceId: string,
   terminalId: string,

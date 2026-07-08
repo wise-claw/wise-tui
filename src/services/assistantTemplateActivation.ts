@@ -5,7 +5,7 @@ import type { AssistantEntry } from "../types/assistant";
 import type { ClaudeSession, PendingExecutionTask, Repository, WorkflowTemplateItem } from "../types";
 import { buildClaudeOutgoingPrompt } from "./claudeComposerPrompt";
 import { openExternalUrl, isSafeExternalHref } from "./openExternal";
-import { spawnShellCommand } from "./terminal";
+import { openBackgroundScript } from "./terminal";
 import { resolveAssistantEntryKind } from "../utils/assistantTemplateEntry";
 import { repositoryFolderBasename } from "../utils/repositoryType";
 import { resolveExecutionEnvironmentDispatchAnchorSessionId } from "../utils/executionEnvironmentDispatchAnchor";
@@ -17,6 +17,13 @@ import {
 } from "../utils/repositoryMainSessionBinding";
 
 const DEFAULT_WORKFLOW_PROMPT = "按助手模板配置执行工作流。";
+
+/** 把脚本内容压成单行预览，长度受限；保留末尾 \n 截断语义。 */
+function truncateScriptPreview(script: string, max: number): string {
+  const flat = script.replace(/\s+/g, " ").trim();
+  if (flat.length <= max) return flat;
+  return `${flat.slice(0, max)}…`;
+}
 
 export interface ActivateAssistantTemplateInput {
   assistant: AssistantEntry;
@@ -99,12 +106,48 @@ export async function activateAssistantTemplate(
       return;
     }
     try {
-      // 后台通过 shell 启动执行：fire-and-forget，不接管 stdout/stderr，
-      // 适合 dev server / watcher 等长期任务；脚本完成/失败不再弹 modal/notification。
-      // 失败只可能发生在 spawn 阶段（命令不存在、仓库路径无效等），
-      // 进程启动后用户需自行观察终端/日志。
-      const { pid } = await spawnShellCommand(repoPath, script);
-      input.message.success(`脚本已后台启动（pid ${pid}）`);
+      // 后台通过 shell 启动执行：走 PTY 体系（`terminal_open_background_script`），
+      // 输出走 terminal-output / terminal-exit 事件，前端可复用 ghostty-web
+      // 终端渲染来查看/kill。失败只可能发生在 spawn 阶段（路径无效、PTY 不可用等），
+      // 进程启动后用户需自行观察终端输出。
+      const terminalId = `assistant-script:${input.assistant.id}:${Date.now().toString(36)}`;
+      const info = await openBackgroundScript(
+        // 当前 PTY session key 用 `repositoryPath` 兜底当 workspaceId：
+        // 后端不强校验具体值（每个 tab 只需要唯一稳定 key），后续接入运行面板后
+        // 会切换到实际 repository.id。
+        repoPath,
+        terminalId,
+        repoPath,
+        script,
+        `执行脚本·${input.assistant.name?.trim() || "助手模板"}`,
+      );
+      // 注册到 dispatch store，运行面板「派发」一栏会显示这条后台脚本，
+      // 支持结束（kill PTY 子进程）。anchor 解析复用 dispatch helper：
+      // 多 pane / 多仓库场景下以当前主会话为锚，回退到 repoPath。
+      const anchorSessionId =
+        resolveExecutionEnvironmentDispatchAnchorSessionId({
+          activeSessionId: input.preferredSessionId ?? null,
+          sessions: input.sessions,
+          repositoryMainSessionBindings: input.repositoryMainBindings,
+          repositories: input.repositories,
+        }) ?? repoPath;
+      const batchId = `bg-script:${input.assistant.id}:${terminalId.split(":").pop() ?? Date.now().toString(36)}`;
+      upsertExecutionEnvironmentDispatchItem({
+        batchId,
+        anchorSessionId,
+        workerSessionId: terminalId,
+        label: `执行脚本·${input.assistant.name?.trim() || "助手模板"}`,
+        previewText: truncateScriptPreview(script, 240),
+        batchIndex: 1,
+        sessionCount: 1,
+        workspaceId: repoPath,
+        terminalId: info.terminalId,
+        cwd: repoPath,
+        pid: info.pid,
+      });
+      input.message.success(
+        `脚本已后台启动（pid ${info.pid}，终端 ${info.terminalId.slice(0, 24)}…）`,
+      );
     } catch (error) {
       input.message.error(error instanceof Error ? error.message : String(error));
     }

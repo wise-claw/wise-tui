@@ -404,6 +404,7 @@ pub fn run() {
             project_relative_files::append_wise_relative_file,
             openspec_bootstrap::bootstrap_openspec_if_missing,
             claude_commands::terminal::terminal_open,
+            claude_commands::terminal::terminal_open_background_script,
             claude_commands::terminal::terminal_attach,
             claude_commands::terminal::terminal_list,
             claude_commands::terminal::terminal_get,

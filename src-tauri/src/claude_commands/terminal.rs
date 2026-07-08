@@ -36,6 +36,11 @@ pub(crate) struct TerminalSessionInfo {
     pub cols: u16,
     pub rows: u16,
     pub cursor: usize,
+    /// 后台任务子进程 pid；交互终端（openTerminalSession）始终为 0。
+    /// 助手模板「执行脚本」走 PTY 后即可通过此字段向运行面板展示 pid，
+    /// 退出事件触发后仍可保留供排障追溯。
+    #[serde(default)]
+    pub pid: u32,
 }
 
 #[derive(Serialize)]
@@ -95,6 +100,7 @@ fn apply_embedded_terminal_shell_env(cmd: &mut CommandBuilder) {
 fn normalize_terminal_source(source: Option<String>) -> String {
     match source.as_deref() {
         Some("agent") => "agent".to_string(),
+        Some("background-script") => "background-script".to_string(),
         _ => "user".to_string(),
     }
 }
@@ -185,6 +191,105 @@ impl TerminalManager {
         }
     }
 
+    /// 把 reader 线程逻辑（utf-8 切分、flush、emit、wait、清理会话）抽出来，
+    /// 让 `open`（交互终端）和 `open_background_script`（后台脚本）共用一份实现。
+    /// 进程退出后自动从 manager 中移除 session 并把 status 标为 "exited"，
+    /// 调用方不再需要手动处理清理。reader 持有 PTY reader 直到 EOF/错误，
+    /// child 在 read 结束后 wait 拿到 exit code。
+    fn spawn_pty_reader_thread(
+        reader: Box<dyn Read + Send>,
+        mut child: Box<dyn portable_pty::Child + Send + Sync>,
+        workspace_id: String,
+        terminal_id: String,
+        session_key: String,
+        app: tauri::AppHandle,
+    ) {
+        std::thread::spawn(move || {
+            let mut reader = reader;
+            let mut buf = [0u8; 4096];
+            let mut carry = Vec::new();
+            let mut pending = String::new();
+            let mut last_flush = Instant::now();
+            let mut exit_reason: Option<String> = None;
+
+            let flush_pending = |pending: &mut String, last_flush: &mut Instant| {
+                if pending.is_empty() {
+                    return;
+                }
+                let chunk = pending.as_str();
+                if let Some(manager) = app.try_state::<Mutex<TerminalManager>>() {
+                    if let Ok(mut guard) = manager.lock() {
+                        guard.append_output_for_key(&session_key, chunk);
+                    }
+                }
+                let _ = app.emit(
+                    "terminal-output",
+                    serde_json::json!({
+                        "workspaceId": workspace_id,
+                        "terminalId": terminal_id,
+                        "data": chunk,
+                    }),
+                );
+                pending.clear();
+                *last_flush = Instant::now();
+            };
+
+            loop {
+                match reader.read(&mut buf) {
+                    Ok(0) => break,
+                    Ok(n) => {
+                        carry.extend_from_slice(&buf[..n]);
+                        for text in drain_valid_utf8_chunks(&mut carry) {
+                            pending.push_str(&text);
+                        }
+                        if pending.len() >= TERMINAL_EMIT_FLUSH_BYTES
+                            || last_flush.elapsed() >= TERMINAL_EMIT_FLUSH_INTERVAL
+                            || pending.len() >= TERMINAL_PENDING_HARD_CAP
+                        {
+                            flush_pending(&mut pending, &mut last_flush);
+                        }
+                    }
+                    Err(err) => match err.kind() {
+                        ErrorKind::Interrupted | ErrorKind::WouldBlock => continue,
+                        _ => {
+                            exit_reason = Some(err.to_string());
+                            break;
+                        }
+                    },
+                }
+            }
+            if !carry.is_empty() {
+                pending.push_str(&String::from_utf8_lossy(&carry));
+            }
+            flush_pending(&mut pending, &mut last_flush);
+
+            let exit_code = child
+                .wait()
+                .ok()
+                .map(|status| status.exit_code())
+                .unwrap_or(0);
+
+            let _ = app.emit(
+                "terminal-exit",
+                serde_json::json!({
+                    "workspaceId": workspace_id,
+                    "terminalId": terminal_id,
+                    "exitCode": exit_code,
+                    "reason": exit_reason,
+                }),
+            );
+
+            if let Some(manager) = app.try_state::<Mutex<TerminalManager>>() {
+                if let Ok(mut guard) = manager.lock() {
+                    if let Some(mut session) = guard.sessions.remove(&session_key) {
+                        session.info.status = "exited".to_string();
+                        let _ = session.killer.kill();
+                    }
+                }
+            }
+        });
+    }
+
     fn open(
         &mut self,
         workspace_id: String,
@@ -242,7 +347,7 @@ impl TerminalManager {
             .map_err(|e| format!("Failed to spawn shell: {}", e))?;
 
         let master = pair.master;
-        let mut reader = master
+        let reader = master
             .try_clone_reader()
             .map_err(|e| format!("Failed to clone PTY reader: {}", e))?;
 
@@ -254,93 +359,17 @@ impl TerminalManager {
 
         let workspace_clone = workspace_id.clone();
         let terminal_clone = terminal_id.clone();
-        let session_key = key.clone();
+        let session_key_clone = key.clone();
         let app_clone = app.clone();
 
-        std::thread::spawn(move || {
-            let mut child = child;
-            let mut buf = [0u8; 4096];
-            let mut carry = Vec::new();
-            let mut pending = String::new();
-            let mut last_flush = Instant::now();
-            let mut exit_reason: Option<String> = None;
-
-            let flush_pending = |pending: &mut String, last_flush: &mut Instant| {
-                if pending.is_empty() {
-                    return;
-                }
-                let chunk = pending.as_str();
-                if let Some(manager) = app_clone.try_state::<Mutex<TerminalManager>>() {
-                    if let Ok(mut guard) = manager.lock() {
-                        guard.append_output_for_key(&session_key, chunk);
-                    }
-                }
-                let _ = app_clone.emit(
-                    "terminal-output",
-                    serde_json::json!({
-                        "workspaceId": workspace_clone,
-                        "terminalId": terminal_clone,
-                        "data": chunk,
-                    }),
-                );
-                pending.clear();
-                *last_flush = Instant::now();
-            };
-
-            loop {
-                match reader.read(&mut buf) {
-                    Ok(0) => break,
-                    Ok(n) => {
-                        carry.extend_from_slice(&buf[..n]);
-                        for text in drain_valid_utf8_chunks(&mut carry) {
-                            pending.push_str(&text);
-                        }
-                        if pending.len() >= TERMINAL_EMIT_FLUSH_BYTES
-                            || last_flush.elapsed() >= TERMINAL_EMIT_FLUSH_INTERVAL
-                            || pending.len() >= TERMINAL_PENDING_HARD_CAP
-                        {
-                            flush_pending(&mut pending, &mut last_flush);
-                        }
-                    }
-                    Err(err) => match err.kind() {
-                        ErrorKind::Interrupted | ErrorKind::WouldBlock => continue,
-                        _ => {
-                            exit_reason = Some(err.to_string());
-                            break;
-                        }
-                    },
-                }
-            }
-            if !carry.is_empty() {
-                pending.push_str(&String::from_utf8_lossy(&carry));
-            }
-            flush_pending(&mut pending, &mut last_flush);
-
-            let exit_code = child
-                .wait()
-                .ok()
-                .map(|status| status.exit_code())
-                .unwrap_or(0);
-
-            let _ = app_clone.emit(
-                "terminal-exit",
-                serde_json::json!({
-                    "workspaceId": workspace_clone,
-                    "terminalId": terminal_clone,
-                    "exitCode": exit_code,
-                    "reason": exit_reason,
-                }),
-            );
-
-            if let Some(manager) = app_clone.try_state::<Mutex<TerminalManager>>() {
-                if let Ok(mut guard) = manager.lock() {
-                    if let Some(mut session) = guard.sessions.remove(&session_key) {
-                        session.info.status = "exited".to_string();
-                        let _ = session.killer.kill();
-                    }
-                }
-            }
-        });
+        Self::spawn_pty_reader_thread(
+            reader,
+            child,
+            workspace_clone,
+            terminal_clone,
+            session_key_clone,
+            app_clone,
+        );
 
         let info = TerminalSessionInfo {
             workspace_id: workspace_id.clone(),
@@ -352,6 +381,7 @@ impl TerminalManager {
             cols: safe_cols,
             rows: safe_rows,
             cursor: 0,
+            pid: 0,
         };
 
         let _ = app.emit(
@@ -365,6 +395,7 @@ impl TerminalManager {
                 "cols": safe_cols,
                 "rows": safe_rows,
                 "cursor": 0,
+                "pid": 0u32,
             }),
         );
 
@@ -381,6 +412,159 @@ impl TerminalManager {
         );
 
         Ok(())
+    }
+
+    /// 在 cwd 下用 `zsh -c <command>` 通过 PTY 启动一次性后台脚本。
+    /// 与 `open` 不同：
+    /// - 不登录、不交互（没有 `-il`），命令结束即会话退出。
+    /// - 不暴露 writer，前端无法再往 PTY 写数据（只是观察 + kill）。
+    /// - `pid` 字段写入 session info，便于运行面板展示。
+    /// - session 出错（PTY 打开失败、spawn 失败）时整个 session 都不入 manager，
+    ///   调用方拿到的就是一个干净错误。
+    fn open_background_script(
+        &mut self,
+        workspace_id: String,
+        terminal_id: String,
+        cwd: String,
+        command: String,
+        title: Option<String>,
+        app: &tauri::AppHandle,
+    ) -> Result<TerminalSessionInfo, String> {
+        let trimmed_cwd = cwd.trim();
+        if trimmed_cwd.is_empty() {
+            return Err("仓库路径为空".to_string());
+        }
+        if !std::path::Path::new(trimmed_cwd).is_dir() {
+            return Err(format!("仓库路径不存在或不是目录：{trimmed_cwd}"));
+        }
+
+        let key = session_key(&workspace_id, &terminal_id);
+        if self.sessions.contains_key(&key) {
+            return Err(format!("Terminal session already exists: {}", key));
+        }
+
+        // 后台脚本：cols/rows 给 80x24 默认；前端 attach 时再按当前可视尺寸 resize。
+        let safe_cols: u16 = 80;
+        let safe_rows: u16 = 24;
+        let title = title
+            .filter(|value| !value.trim().is_empty())
+            .unwrap_or_else(|| "后台脚本".to_string());
+        let source = "background-script".to_string();
+
+        let pair = self
+            .pty_system
+            .openpty(PtySize {
+                rows: safe_rows,
+                cols: safe_cols,
+                pixel_width: 0,
+                pixel_height: 0,
+            })
+            .map_err(|e| format!("Failed to open PTY: {}", e))?;
+
+        let mut cmd = if cfg!(windows) {
+            // Windows 暂不支持后台脚本（脚本语义强依赖 zsh），直接报错。
+            return Err("后台脚本当前仅支持 macOS/Linux".to_string());
+        } else {
+            let mut zsh = CommandBuilder::new("zsh");
+            zsh.arg("-c");
+            zsh.arg(&command);
+            // 不传 -il：避免启动 .zshrc / oh-my-zsh 让简单命令卡顿；同时抑制 p10k 提示噪音。
+            apply_embedded_terminal_shell_env(&mut zsh);
+            zsh
+        };
+        cmd.cwd(trimmed_cwd);
+        let path_merged = merge_path_env(&claude_path_search_prefixes());
+        cmd.env("PATH", path_merged);
+
+        let child = pair
+            .slave
+            .spawn_command(cmd)
+            .map_err(|e| format!("Failed to spawn background script: {}", e))?;
+        let pid = child.process_id().unwrap_or(0);
+
+        let master = pair.master;
+        let reader = master
+            .try_clone_reader()
+            .map_err(|e| format!("Failed to clone PTY reader: {}", e))?;
+
+        let killer = child.clone_killer();
+
+        let info = TerminalSessionInfo {
+            workspace_id: workspace_id.clone(),
+            terminal_id: terminal_id.clone(),
+            title: title.clone(),
+            source: source.clone(),
+            status: "running".to_string(),
+            cwd: trimmed_cwd.to_string(),
+            cols: safe_cols,
+            rows: safe_rows,
+            cursor: 0,
+            pid,
+        };
+
+        let _ = app.emit(
+            "terminal-created",
+            serde_json::json!({
+                "workspaceId": workspace_id,
+                "terminalId": terminal_id,
+                "title": title,
+                "source": source,
+                "cwd": trimmed_cwd,
+                "cols": safe_cols,
+                "rows": safe_rows,
+                "cursor": 0,
+                "pid": pid,
+            }),
+        );
+
+        let workspace_clone = workspace_id.clone();
+        let terminal_clone = terminal_id.clone();
+        let session_key_clone = key.clone();
+        let app_clone = app.clone();
+        Self::spawn_pty_reader_thread(
+            reader,
+            child,
+            workspace_clone,
+            terminal_clone,
+            session_key_clone,
+            app_clone,
+        );
+
+        self.sessions.insert(
+            key.clone(),
+            TerminalSession {
+                info,
+                master,
+                // 后台脚本不接管 stdin：writer 用一个丢弃 sink 实现 take_writer 接口，
+                // 前端不会调用 terminal_write 写它。
+                writer: Box::new(std::io::sink()),
+                killer,
+                output_buffer: String::new(),
+                buffer_start_cursor: 0,
+            },
+        );
+
+        // 取出 info 给前端（不能 move，借用后再 insert 会失败，所以上面先 clone 进 sessions）
+        let info = self
+            .sessions
+            .get(&key)
+            .map(|s| s.info.clone())
+            .unwrap_or_else(|| {
+                // 极端情况下 insert 后拿不到（理论不会发生），构造一个等价副本。
+                TerminalSessionInfo {
+                    workspace_id,
+                    terminal_id,
+                    title,
+                    source,
+                    status: "running".to_string(),
+                    cwd: trimmed_cwd.to_string(),
+                    cols: safe_cols,
+                    rows: safe_rows,
+                    cursor: 0,
+                    pid,
+                }
+            });
+        Ok(info)
     }
 
     fn attach(
@@ -433,6 +617,13 @@ impl TerminalManager {
             .ok_or_else(|| format!("Terminal session not found: {}", key))?;
         if session.info.status == "exited" {
             return Err(format!("Terminal session exited: {}", key));
+        }
+        // 后台脚本是 fire-and-forget，前端不应写 stdin；显式拒绝避免误导。
+        if session.info.source == "background-script" {
+            return Err(format!(
+                "Terminal session {} 是后台脚本，不能写入 stdin",
+                key
+            ));
         }
         let bytes = data.as_bytes();
         let mut attempt: u32 = 0;
@@ -522,6 +713,25 @@ pub(crate) fn terminal_open(
         source,
         &app,
     )
+}
+
+/// 后台脚本入口：用 PTY 跑一次性 `zsh -c <command>`，返回包含 pid 的 session info。
+/// 与 `terminal_open` 的差异：cols/rows 由后端默认 80x24（无前端交互）；不接管 stdin；
+/// session info 里 `pid` 字段有值，便于运行面板展示。
+#[tauri::command]
+pub(crate) fn terminal_open_background_script(
+    manager: tauri::State<std::sync::Mutex<TerminalManager>>,
+    app: tauri::AppHandle,
+    workspace_id: String,
+    terminal_id: String,
+    cwd: String,
+    command: String,
+    title: Option<String>,
+) -> Result<TerminalSessionInfo, String> {
+    manager
+        .lock()
+        .map_err(|e| e.to_string())?
+        .open_background_script(workspace_id, terminal_id, cwd, command, title, &app)
 }
 
 #[tauri::command]
@@ -684,6 +894,7 @@ mod tests {
                 cols: 80,
                 rows: 24,
                 cursor: 0,
+                pid: 0,
             },
             master: panic_master_placeholder(),
             writer: panic_writer_placeholder(),

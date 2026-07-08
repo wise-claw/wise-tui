@@ -23,6 +23,18 @@ export interface ExecutionEnvironmentDispatchItem {
   batchIndex: number;
   sessionCount: number;
   updatedAt: number;
+  /** 后台 PTY 脚本终端 workspaceId（assistant-script 用 repoPath） */
+  workspaceId?: string;
+  /** 后台 PTY 脚本终端 id */
+  terminalId?: string;
+  /** 后台 PTY 脚本 cwd */
+  cwd?: string;
+  /** 后台 PTY 脚本子进程 pid */
+  pid?: number;
+  /** 后台 PTY 脚本是否已退出（exit code） */
+  exitCode?: number;
+  /** 后台 PTY 脚本是否已被用户手动 kill */
+  killedByUser?: boolean;
 }
 
 type Listener = () => void;
@@ -102,6 +114,12 @@ function digestAnchorRecords(records: readonly ExecutionEnvironmentDispatchRecor
           String(item.batchIndex),
           String(item.sessionCount),
           String(item.updatedAt),
+          item.workspaceId ?? "",
+          item.terminalId ?? "",
+          item.cwd ?? "",
+          String(item.pid ?? 0),
+          item.exitCode == null ? "" : String(item.exitCode),
+          item.killedByUser ? "1" : "",
         ].join("|"),
       );
     }
@@ -341,6 +359,70 @@ export function registerExecutionEnvironmentBatch(input: {
   const prev = batchIdsByAnchor.get(anchorSessionId) ?? [];
   setAnchorBatchIds(anchorSessionId, [batchId, ...prev.filter((id) => id !== batchId)]);
   publishAnchor(anchorSessionId);
+}
+
+/**
+ * 把 dispatch item 标为已退出。`workerSessionId` 即对应 assistant-script:<id>:<ts>
+ * 或其它 worker 终端 id；用 `exitCode`/`killedByUser` 标记结局，更新 `previewText`
+ * 与 `updatedAt`，触发 anchor snapshot 重算。找不到 batch/item 时静默返回。
+ */
+export function markExecutionEnvironmentDispatchItemExited(input: {
+  workerSessionId: string;
+  exitCode?: number;
+  killedByUser?: boolean;
+  exitMessage?: string;
+}): void {
+  const workerId = input.workerSessionId.trim();
+  if (!workerId) return;
+  let touched: string | null = null;
+  for (const record of recordsByBatch.values()) {
+    const idx = record.items.findIndex((it) => it.workerSessionId === workerId);
+    if (idx < 0) continue;
+    const prev = record.items[idx]!;
+    const nextPreview =
+      input.exitMessage?.trim() ||
+      (input.killedByUser
+        ? "已手动结束"
+        : input.exitCode == null
+          ? prev.previewText
+          : input.exitCode === 0
+            ? "已完成"
+            : `已退出（code ${input.exitCode}）`);
+    record.items = record.items.map((it, i) =>
+      i === idx
+        ? {
+            ...it,
+            exitCode: input.exitCode ?? it.exitCode,
+            killedByUser: input.killedByUser ?? it.killedByUser,
+            previewText: nextPreview,
+            updatedAt: Date.now(),
+          }
+        : it,
+    );
+    touched = record.anchorSessionId;
+    break;
+  }
+  if (touched) publishAnchor(touched);
+}
+
+/**
+ * 移除一条 dispatch item（不再在运行面板展示）。用于已退出且超过窗口的条目，
+ * 或用户手动 kill 后希望立即清理的 ghost 行。
+ */
+export function removeExecutionEnvironmentDispatchItem(input: {
+  workerSessionId: string;
+}): void {
+  const workerId = input.workerSessionId.trim();
+  if (!workerId) return;
+  let touched: string | null = null;
+  for (const record of recordsByBatch.values()) {
+    const idx = record.items.findIndex((it) => it.workerSessionId === workerId);
+    if (idx < 0) continue;
+    record.items = record.items.filter((_, i) => i !== idx);
+    touched = record.anchorSessionId;
+    break;
+  }
+  if (touched) publishAnchor(touched);
 }
 
 export function sessionStatusToConversationTaskStatus(
