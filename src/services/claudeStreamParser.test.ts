@@ -327,7 +327,7 @@ describe("extractSystemErrorMessageFromStreamLine", () => {
       extractSystemErrorMessageFromStreamLine(
         JSON.stringify({ type: "system", message: "rate limit exceeded" }),
       ),
-    ).toBe("Claude 系统错误: rate limit exceeded");
+    ).toBe("Claude 系统错误: 请求频率超限，请稍后重试（rate limit exceeded）");
   });
 });
 

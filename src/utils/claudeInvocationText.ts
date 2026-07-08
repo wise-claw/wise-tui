@@ -1,4 +1,5 @@
 import { extractResultErrorMessageFromStreamLine } from "../services/claudeStreamParser";
+import { humanizeClaudeError } from "./humanizeClaudeError";
 
 function safeJsonParse(line: string): unknown {
   try {
@@ -109,7 +110,7 @@ function extractStreamSystemErrorPreview(line: string): string | null {
           ? json.error.trim()
           : "";
     if (msg && !isIgnorableClaudeStreamSystemErrorDetail(msg)) {
-      return `Claude 系统错误: ${msg}`;
+      return `Claude 系统错误: ${humanizeClaudeError(msg)}`;
     }
     return null;
   } catch {
@@ -119,14 +120,14 @@ function extractStreamSystemErrorPreview(line: string): string | null {
 
 function extractResultLineErrorMessage(line: string): string | null {
   const primary = extractResultErrorMessageFromStreamLine(line);
-  if (primary) return primary;
+  if (primary) return humanizeClaudeError(primary);
   try {
     const p = JSON.parse(line) as Record<string, unknown>;
     if (p.type !== "result") return null;
     const sub = typeof p.subtype === "string" ? p.subtype : "";
     if (sub.includes("error")) {
       const r = typeof p.result === "string" ? p.result.trim() : "";
-      if (r) return r;
+      if (r) return humanizeClaudeError(r);
     }
   } catch {
     return null;

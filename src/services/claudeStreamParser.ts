@@ -1,5 +1,6 @@
 import type { MessagePart, ToolUsePart, ToolUseDiagnostics } from "../types";
 import { unwrapClaudeStreamLineRoot } from "../notifications/streamIngest";
+import { humanizeClaudeError } from "../utils/humanizeClaudeError";
 
 /**
  * 流式行安全 JSON 解析：失败返回 null。
@@ -426,7 +427,7 @@ export function formatClaudeResultErrorForSessionUi(raw: string): string {
   if (validation?.kind === "write-missing-file_path") {
     return "Claude 工具调用未通过 schema 校验：Write 工具缺少 file_path 字段（模型产物截断或上游 schema 被改写）。建议：直接重新发送该消息；如反复出现，检查 ~/.claude/settings.json 中是否注入了改写 Write 工具的 MCP server / 插件 / --append-system-prompt。";
   }
-  return `Claude 轮次失败: ${trimmed}`;
+  return `Claude 轮次失败: ${humanizeClaudeError(trimmed)}`;
 }
 
 /** Claude Code 注入的重试/纠错文案（常出现在 user 行或混进 assistant text）。 */
@@ -490,7 +491,7 @@ export function extractSystemErrorMessageFromParsed(obj: unknown): string | null
         ? json.error.trim()
         : "";
   if (msg && !isIgnorableClaudeStreamSystemErrorDetail(msg)) {
-    return `Claude 系统错误: ${msg}`;
+    return `Claude 系统错误: ${humanizeClaudeError(msg)}`;
   }
   return null;
 }
