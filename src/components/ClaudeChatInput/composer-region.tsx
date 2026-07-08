@@ -263,6 +263,9 @@ interface ComposerInnerProps {
   onOpenExecutionEnvironment?: () => void;
   /** `retractLastUserTurn`：Esc 撤回刚发时从 transcript 去掉本轮 user/assistant 并杀进程 */
   onCancel: (opts?: { retractLastUserTurn?: boolean }) => void;
+  /** 强制允许在会话占用中发送（跳过 busy guard 与入队分支），用于运行面板详情 drawer
+   *  「继续会话」场景：worker 常处 running，发送应直落 onExecute 而非静默吞或入队。 */
+  allowSendWhileBusy?: boolean;
   todos: TodoItem[];
   questionRequest: QuestionRequest | null;
   /** 同一会话内排在当前题之后的 AskUserQuestion 数量 */
@@ -582,6 +585,7 @@ function ComposerInner({
   onExecute,
   onSessionModelChange,
   onSessionConnectionKindChange,
+  allowSendWhileBusy,
   sessionExecutionEngine = "claude",
   codexAvailable = true,
   cursorAvailable = true,
@@ -1791,7 +1795,7 @@ function ComposerInner({
         return;
       }
 
-      if (isSessionBusy && !onEnqueueAsPendingTask) {
+      if (isSessionBusy && !onEnqueueAsPendingTask && !allowSendWhileBusy) {
         return;
       }
 
@@ -1852,7 +1856,7 @@ function ComposerInner({
         return Object.keys(options).length > 0 ? options : undefined;
       };
 
-      if (isSessionBusy) {
+      if (isSessionBusy && !allowSendWhileBusy) {
         const enqueueAsPendingTask = onEnqueueAsPendingTask;
         if (!enqueueAsPendingTask) return;
 
@@ -2209,6 +2213,7 @@ function ComposerInner({
     },
     [
       isSessionBusy,
+      allowSendWhileBusy,
       prompt,
       contextItems,
       images,
@@ -3282,6 +3287,9 @@ export interface ComposerRegionProps {
   onOpenExecutionEnvironment?: () => void;
   /** `retractLastUserTurn`：Esc 撤回刚发时从 transcript 去掉本轮 user/assistant 并杀进程 */
   onCancel: (opts?: { retractLastUserTurn?: boolean }) => void;
+  /** 强制允许在会话占用中发送（跳过 busy guard 与入队分支），用于运行面板详情 drawer
+   *  「继续会话」场景：worker 常处 running，发送应直落 onExecute 而非静默吞或入队。 */
+  allowSendWhileBusy?: boolean;
   todos: TodoItem[];
   questionRequest: QuestionRequest | null;
   /** 同一会话内排在当前题之后的 AskUserQuestion 数量 */

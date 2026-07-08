@@ -717,6 +717,12 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
           onClearRevertItems={() => onClearRevertItems(activeSession.id)}
           onSendFollowup={(id) => onSendFollowup(activeSession.id, id)}
           onRestoreRevert={(id) => onRestoreRevert(activeSession.id, id)}
+          onRespondToPermissionAt={onRespondToPermission}
+          onToggleTodoAt={onToggleTodo}
+          onClearFollowupsAt={onClearFollowups}
+          onClearRevertItemsAt={onClearRevertItems}
+          onSendFollowupAt={onSendFollowup}
+          onRestoreRevertAt={onRestoreRevert}
           onOpenWorkflowConfig={onOpenWorkflowConfig}
           employees={employees}
           mentionEmployees={mentionEmployees}

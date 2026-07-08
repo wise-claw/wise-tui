@@ -1701,7 +1701,7 @@
 .app-monitor-panel__subagent-detail-drawer-body.ant-drawer-body .app-monitor-panel__history-session-drawer-inner {
   flex: 1 1 auto;
   min-height: 0;
-  max-height: min(calc(100vh - 88px), 720px);
+  max-height: 100vh;
 }
 
 .app-monitor-panel__subagent-detail {
@@ -2213,7 +2213,7 @@
   flex-direction: column;
   flex: 1;
   min-height: 0;
-  max-height: min(calc(100vh - 88px), 720px);
+  max-height: 100vh;
 }
 
 .app-monitor-panel__history-drawer-context {

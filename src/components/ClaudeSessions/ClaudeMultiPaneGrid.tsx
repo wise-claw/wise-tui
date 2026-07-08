@@ -348,6 +348,12 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
         onClearRevertItems={() => shared.onClearRevertItems(sessionId)}
         onSendFollowup={(id) => shared.onSendFollowup(sessionId, id)}
         onRestoreRevert={(id) => shared.onRestoreRevert(sessionId, id)}
+        onRespondToPermissionAt={shared.onRespondToPermission}
+        onToggleTodoAt={shared.onToggleTodo}
+        onClearFollowupsAt={shared.onClearFollowups}
+        onClearRevertItemsAt={shared.onClearRevertItems}
+        onSendFollowupAt={shared.onSendFollowup}
+        onRestoreRevertAt={shared.onRestoreRevert}
         onOpenWorkflowConfig={shared.onOpenWorkflowConfig}
         employees={shared.employees}
         mentionEmployees={shared.mentionEmployees}
@@ -656,6 +662,12 @@ const MultiPaneExtraPaneCell = memo(
             onClearRevertItems={() => shared.onClearRevertItems(sessionId)}
             onSendFollowup={(id) => shared.onSendFollowup(sessionId, id)}
             onRestoreRevert={(id) => shared.onRestoreRevert(sessionId, id)}
+            onRespondToPermissionAt={shared.onRespondToPermission}
+            onToggleTodoAt={shared.onToggleTodo}
+            onClearFollowupsAt={shared.onClearFollowups}
+            onClearRevertItemsAt={shared.onClearRevertItems}
+            onSendFollowupAt={shared.onSendFollowup}
+            onRestoreRevertAt={shared.onRestoreRevert}
             onOpenWorkflowConfig={shared.onOpenWorkflowConfig}
             employees={shared.employees}
             mentionEmployees={shared.mentionEmployees}

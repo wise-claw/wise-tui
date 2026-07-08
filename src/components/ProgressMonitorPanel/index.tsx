@@ -240,6 +240,18 @@ export interface ProgressMonitorPanelProps {
   onResumeSession?: import("./MonitorDrawerSessionComposer").MonitorDrawerResumeSessionFn;
   /** 派发 / 执行会话抽屉打开前：从 tabs / 磁盘回退解析 worker */
   onPrepareSessionForMonitorDrawer?: import("./MonitorDrawerSessionComposer").MonitorDrawerPrepareSessionFn;
+  /** 详情 drawer 复用主输入框后：控制请求（提问/权限/todos/追问/撤回）按 worker sessionId 回流 */
+  onRespondToQuestion?: (sessionId: string, answers: string[], customAnswer?: string) => void;
+  onDismissQuestion?: (sessionId: string) => void;
+  onRespondToPermission?: (
+    sessionId: string,
+    response: "allow_once" | "allow_always" | "deny",
+  ) => void;
+  onToggleTodo?: (sessionId: string, todoId: string) => void;
+  onSendFollowup?: (sessionId: string, id: string) => void;
+  onRestoreRevert?: (sessionId: string, itemId: string) => void;
+  onClearFollowups?: (sessionId: string) => void;
+  onClearRevertItems?: (sessionId: string) => void;
   repositoryMainBindings?: Record<string, string>;
   repositories?: Repository[];
   sectionCollapsed?: boolean;
@@ -1136,6 +1148,14 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
   onRefreshHistorySessions,
   onResumeSession,
   onPrepareSessionForMonitorDrawer,
+  onRespondToQuestion,
+  onDismissQuestion,
+  onRespondToPermission,
+  onToggleTodo,
+  onSendFollowup,
+  onRestoreRevert,
+  onClearFollowups,
+  onClearRevertItems,
   repositoryMainBindings = {},
   repositories = [],
   sectionCollapsed = false,
@@ -1857,6 +1877,14 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
           onResumeSession={onResumeSession}
           onReloadFullDiskTranscript={onReloadFullDiskTranscript}
           onPrepareSessionForMonitorDrawer={onPrepareSessionForMonitorDrawer}
+          onRespondToQuestion={onRespondToQuestion}
+          onDismissQuestion={onDismissQuestion}
+          onRespondToPermission={onRespondToPermission}
+          onToggleTodo={onToggleTodo}
+          onSendFollowup={onSendFollowup}
+          onRestoreRevert={onRestoreRevert}
+          onClearFollowups={onClearFollowups}
+          onClearRevertItems={onClearRevertItems}
         />
       ) : null}
 

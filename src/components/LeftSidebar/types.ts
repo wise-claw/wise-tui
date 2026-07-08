@@ -192,6 +192,18 @@ export interface LeftSidebarProps {
   onCreateTerminalEmployeeSession?: (employeeId: string) => string | null | Promise<string | null>;
   onResumeSession?: import("../ProgressMonitorPanel/MonitorDrawerSessionComposer").MonitorDrawerResumeSessionFn;
   onPrepareSessionForMonitorDrawer?: import("../ProgressMonitorPanel/MonitorDrawerSessionComposer").MonitorDrawerPrepareSessionFn;
+  /** 详情 drawer 复用主输入框后：控制请求（提问/权限/todos/追问/撤回）按 worker sessionId 回流 */
+  onRespondToQuestion?: (sessionId: string, answers: string[], customAnswer?: string) => void;
+  onDismissQuestion?: (sessionId: string) => void;
+  onRespondToPermission?: (
+    sessionId: string,
+    response: "allow_once" | "allow_always" | "deny",
+  ) => void;
+  onToggleTodo?: (sessionId: string, todoId: string) => void;
+  onSendFollowup?: (sessionId: string, id: string) => void;
+  onRestoreRevert?: (sessionId: string, itemId: string) => void;
+  onClearFollowups?: (sessionId: string) => void;
+  onClearRevertItems?: (sessionId: string) => void;
   activeRepositoryPath?: string;
   activeRepositoryName?: string;
   onOpenActiveRepositoryFile?: (path: string, options?: GitPanelOpenFileOptions) => void;

@@ -212,6 +212,14 @@ export function LeftSidebar({
   onCreateTerminalEmployeeSession,
   onResumeSession,
   onPrepareSessionForMonitorDrawer,
+  onRespondToQuestion,
+  onDismissQuestion,
+  onRespondToPermission,
+  onToggleTodo,
+  onSendFollowup,
+  onRestoreRevert,
+  onClearFollowups,
+  onClearRevertItems,
   activeRepositoryPath,
   activeRepositoryName,
   onOpenActiveRepositoryFile,
@@ -1288,6 +1296,14 @@ export function LeftSidebar({
             onCreateTerminalEmployeeSession={onCreateTerminalEmployeeSession}
             onResumeSession={onResumeSession}
             onPrepareSessionForMonitorDrawer={onPrepareSessionForMonitorDrawer}
+            onRespondToQuestion={onRespondToQuestion}
+            onDismissQuestion={onDismissQuestion}
+            onRespondToPermission={onRespondToPermission}
+            onToggleTodo={onToggleTodo}
+            onSendFollowup={onSendFollowup}
+            onRestoreRevert={onRestoreRevert}
+            onClearFollowups={onClearFollowups}
+            onClearRevertItems={onClearRevertItems}
             repositoryMainSessionBindings={repositoryMainSessionBindings}
             repositories={repositories}
             monitorSessionsFingerprint={monitorSessionsFingerprint}

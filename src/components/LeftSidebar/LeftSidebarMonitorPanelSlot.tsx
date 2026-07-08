@@ -48,6 +48,14 @@ export type LeftSidebarMonitorPanelSlotProps = {
   onCreateTerminalEmployeeSession?: LeftSidebarProps["onCreateTerminalEmployeeSession"];
   onResumeSession?: LeftSidebarProps["onResumeSession"];
   onPrepareSessionForMonitorDrawer?: LeftSidebarProps["onPrepareSessionForMonitorDrawer"];
+  onRespondToQuestion?: LeftSidebarProps["onRespondToQuestion"];
+  onDismissQuestion?: LeftSidebarProps["onDismissQuestion"];
+  onRespondToPermission?: LeftSidebarProps["onRespondToPermission"];
+  onToggleTodo?: LeftSidebarProps["onToggleTodo"];
+  onSendFollowup?: LeftSidebarProps["onSendFollowup"];
+  onRestoreRevert?: LeftSidebarProps["onRestoreRevert"];
+  onClearFollowups?: LeftSidebarProps["onClearFollowups"];
+  onClearRevertItems?: LeftSidebarProps["onClearRevertItems"];
   repositoryMainSessionBindings: LeftSidebarProps["repositoryMainSessionBindings"];
   repositories: LeftSidebarProps["repositories"];
   /** 由 LeftSidebar useMemo 预计算，避免 memo 比较时重复扫描 sessions。 */
@@ -152,6 +160,14 @@ export const LeftSidebarMonitorPanelSlot = memo(function LeftSidebarMonitorPanel
   onCreateTerminalEmployeeSession,
   onResumeSession,
   onPrepareSessionForMonitorDrawer,
+  onRespondToQuestion,
+  onDismissQuestion,
+  onRespondToPermission,
+  onToggleTodo,
+  onSendFollowup,
+  onRestoreRevert,
+  onClearFollowups,
+  onClearRevertItems,
   repositoryMainSessionBindings,
   repositories,
   executionEnvironmentDispatchHistoryDays,
@@ -224,6 +240,14 @@ export const LeftSidebarMonitorPanelSlot = memo(function LeftSidebarMonitorPanel
         onCreateTerminalEmployeeSession={onCreateTerminalEmployeeSession}
         onResumeSession={onResumeSession}
         onPrepareSessionForMonitorDrawer={onPrepareSessionForMonitorDrawer}
+        onRespondToQuestion={onRespondToQuestion}
+        onDismissQuestion={onDismissQuestion}
+        onRespondToPermission={onRespondToPermission}
+        onToggleTodo={onToggleTodo}
+        onSendFollowup={onSendFollowup}
+        onRestoreRevert={onRestoreRevert}
+        onClearFollowups={onClearFollowups}
+        onClearRevertItems={onClearRevertItems}
         repositoryMainBindings={repositoryMainSessionBindings}
         repositories={repositories}
       />

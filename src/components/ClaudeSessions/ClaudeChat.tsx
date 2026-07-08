@@ -226,6 +226,16 @@ interface Props {
   onClearRevertItems: () => void;
   onSendFollowup: (id: string) => void;
   onRestoreRevert: (id: string) => void | Promise<void>;
+  /** 详情 drawer 复用主输入框后：按 worker sessionId 路由的控制请求回调（execution_environment worker ≠ 当前会话）。 */
+  onRespondToPermissionAt?: (
+    sessionId: string,
+    response: "allow_once" | "allow_always" | "deny",
+  ) => void;
+  onToggleTodoAt?: (sessionId: string, todoId: string) => void;
+  onClearFollowupsAt?: (sessionId: string) => void;
+  onClearRevertItemsAt?: (sessionId: string) => void;
+  onSendFollowupAt?: (sessionId: string, id: string) => void;
+  onRestoreRevertAt?: (sessionId: string, itemId: string) => void | Promise<void>;
   onOpenWorkflowConfig?: () => void;
   employees?: EmployeeItem[];
   mentionEmployees?: EmployeeItem[];
@@ -373,6 +383,12 @@ export function ClaudeChatInner({
   onClearRevertItems,
   onSendFollowup,
   onRestoreRevert,
+  onRespondToPermissionAt,
+  onToggleTodoAt,
+  onClearFollowupsAt,
+  onClearRevertItemsAt,
+  onSendFollowupAt,
+  onRestoreRevertAt,
   onOpenWorkflowConfig,
   employees = [],
   mentionEmployees = [],
@@ -1934,6 +1950,14 @@ export function ClaudeChatInner({
           onCancelSession={onCancelSessionById}
           onReloadFullDiskTranscript={onReloadFullDiskTranscript}
           onPrepareSessionForMonitorDrawer={onPrepareSessionForMonitorDrawer}
+          onRespondToQuestion={respondQuestionAt}
+          onDismissQuestion={dismissQuestionAt}
+          onRespondToPermission={onRespondToPermissionAt}
+          onToggleTodo={onToggleTodoAt}
+          onSendFollowup={onSendFollowupAt}
+          onRestoreRevert={onRestoreRevertAt}
+          onClearFollowups={onClearFollowupsAt}
+          onClearRevertItems={onClearRevertItemsAt}
           onResumeSession={
             onResumeSessionFromMonitorDrawer ??
             (async (input) => {

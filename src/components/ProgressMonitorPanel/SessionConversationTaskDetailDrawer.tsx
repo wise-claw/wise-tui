@@ -1,6 +1,8 @@
-import { Button, Drawer, Empty, Tag } from "antd";
-import { memo, useEffect, useMemo, useRef } from "react";
+import { Button, Drawer, Empty, Spin, Tag } from "antd";
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef } from "react";
 import type { ClaudeSession, SessionConversationTaskItem } from "../../types";
+import { useDockSlice } from "../../hooks/useDockSlice";
+import type { ComposerRegionProps } from "../ClaudeChatInput";
 import {
   buildSessionConversationTaskDetailSession,
   canStopSessionConversationTask,
@@ -17,13 +19,17 @@ import { resolveMonitorSessionRepoShortLabel } from "./monitorSessionDisplay";
 import { ClaudeVirtualMessageList } from "../ClaudeSessions/ClaudeVirtualMessageList";
 import { HistorySessionDrawerContextBar } from "./historySessionDrawerChrome";
 import {
-  MonitorDrawerSessionComposer,
   type MonitorDrawerPrepareSessionFn,
   type MonitorDrawerResumeSessionFn,
 } from "./MonitorDrawerSessionComposer";
 import { SubagentStatusIndicator } from "./SubagentStatusIndicator";
 import "../ClaudeSessions/index.css";
 import "./index.css";
+
+/** drawer 内复用主会话输入框（app-claude-input-area），按需加载避免拖大运行面板 chunk。 */
+const ComposerRegionLazy = lazy(() =>
+  import("../ClaudeChatInput").then((module) => ({ default: module.ComposerRegion })),
+);
 
 export interface SessionConversationTaskDetailTarget {
   task: SessionConversationTaskItem;
@@ -119,6 +125,15 @@ const SessionConversationTaskDetailBody = memo(function SessionConversationTaskD
   resumeComposerSession,
   resumeContext,
   onResumeSession,
+  onRespondToQuestion,
+  onDismissQuestion,
+  onRespondToPermission,
+  onToggleTodo,
+  onSendFollowup,
+  onRestoreRevert,
+  onClearFollowups,
+  onClearRevertItems,
+  onCancelSession,
 }: {
   task: SessionConversationTaskItem;
   session: ClaudeSession;
@@ -131,8 +146,50 @@ const SessionConversationTaskDetailBody = memo(function SessionConversationTaskD
     taskLabel?: string;
   } | undefined;
   onResumeSession?: MonitorDrawerResumeSessionFn;
+  onRespondToQuestion?: (sessionId: string, answers: string[], customAnswer?: string) => void;
+  onDismissQuestion?: (sessionId: string) => void;
+  onRespondToPermission?: (
+    sessionId: string,
+    response: "allow_once" | "allow_always" | "deny",
+  ) => void;
+  onToggleTodo?: (sessionId: string, todoId: string) => void;
+  onSendFollowup?: (sessionId: string, id: string) => void;
+  onRestoreRevert?: (sessionId: string, itemId: string) => void;
+  onClearFollowups?: (sessionId: string) => void;
+  onClearRevertItems?: (sessionId: string) => void;
+  onCancelSession?: (sessionId: string) => void;
 }) {
   const messagesScrollRef = useRef<HTMLDivElement>(null);
+  const workerId = resumeComposerSession?.id?.trim() || "";
+  const dockSlice = useDockSlice(workerId || null);
+
+  const handleExecute = useCallback<NonNullable<ComposerRegionProps["onExecute"]>>(
+    (sessionId, prompt, _consumePending, _dispatchTarget, _executeOptions) => {
+      if (!onResumeSession) return;
+      void onResumeSession({
+        sessionId,
+        prompt,
+        repositoryPath: resumeContext?.repositoryPath ?? session.repositoryPath,
+        repositoryDisplayName: resumeContext?.repositoryDisplayName ?? session.repositoryName,
+        taskLabel: resumeContext?.taskLabel,
+      });
+    },
+    [
+      onResumeSession,
+      resumeContext?.repositoryPath,
+      resumeContext?.repositoryDisplayName,
+      resumeContext?.taskLabel,
+      session.repositoryPath,
+      session.repositoryName,
+    ],
+  );
+
+  // drawer 场景暂不支持切模型：worker 模型由派发时决定，这里保持 no-op。
+  const handleSessionModelChange = useCallback(() => {}, []);
+
+  const handleCancel = useCallback<NonNullable<ComposerRegionProps["onCancel"]>>(() => {
+    if (workerId) onCancelSession?.(workerId);
+  }, [onCancelSession, workerId]);
 
   return (
     <div className="app-monitor-panel__subagent-detail">
@@ -192,11 +249,62 @@ const SessionConversationTaskDetailBody = memo(function SessionConversationTaskD
             </div>
           )}
         </div>
-        <MonitorDrawerSessionComposer
-          session={resumeComposerSession}
-          onResumeSession={onResumeSession}
-          resumeContext={resumeContext}
-        />
+        {onResumeSession && resumeComposerSession ? (
+          <div className="app-monitor-panel__drawer-composer">
+            <Suspense
+              fallback={
+                <div
+                  className="app-claude-composer-tray__loading"
+                  aria-busy="true"
+                  aria-label="输入区加载中"
+                >
+                  <Spin size="small" />
+                </div>
+              }
+            >
+              <ComposerRegionLazy
+                session={resumeComposerSession}
+                draftBucketKey={`monitor-drawer:${task.key}`}
+                onExecute={handleExecute}
+                onSessionModelChange={handleSessionModelChange}
+                onCancel={handleCancel}
+                allowSendWhileBusy
+                compactFooterChrome
+                todos={dockSlice.todos}
+                questionRequest={dockSlice.questionRequest}
+                questionRequestStatus={dockSlice.questionRequestStatus}
+                questionRequestError={dockSlice.questionRequestError}
+                permissionRequest={dockSlice.permissionRequest}
+                permissionRequestStatus={dockSlice.permissionRequestStatus}
+                permissionRequestError={dockSlice.permissionRequestError}
+                followupItems={dockSlice.followupItems}
+                revertItems={dockSlice.revertItems}
+                respondQuestionAt={
+                  onRespondToQuestion ?? ((_sid: string, _answers: string[]) => {})
+                }
+                dismissQuestionAt={onDismissQuestion ?? ((_sid: string) => {})}
+                onRespondToPermission={(response) => {
+                  if (workerId) void onRespondToPermission?.(workerId, response);
+                }}
+                onToggleTodo={(todoId) => {
+                  if (workerId) void onToggleTodo?.(workerId, todoId);
+                }}
+                onSendFollowup={(id) => {
+                  if (workerId) void onSendFollowup?.(workerId, id);
+                }}
+                onRestoreRevert={(id) => {
+                  if (workerId) void onRestoreRevert?.(workerId, id);
+                }}
+                onClearFollowups={() => {
+                  if (workerId) void onClearFollowups?.(workerId);
+                }}
+                onClearRevertItems={() => {
+                  if (workerId) void onClearRevertItems?.(workerId);
+                }}
+              />
+            </Suspense>
+          </div>
+        ) : null}
       </div>
     </div>
   );
@@ -214,6 +322,14 @@ function SessionConversationTaskDetailDrawerInner({
   onResumeSession,
   onReloadFullDiskTranscript,
   onPrepareSessionForMonitorDrawer,
+  onRespondToQuestion,
+  onDismissQuestion,
+  onRespondToPermission,
+  onToggleTodo,
+  onSendFollowup,
+  onRestoreRevert,
+  onClearFollowups,
+  onClearRevertItems,
 }: {
   target: SessionConversationTaskDetailTarget | null;
   sessions: readonly ClaudeSession[];
@@ -226,6 +342,17 @@ function SessionConversationTaskDetailDrawerInner({
   onResumeSession?: MonitorDrawerResumeSessionFn;
   onReloadFullDiskTranscript?: (sessionKey: string) => void | Promise<void>;
   onPrepareSessionForMonitorDrawer?: MonitorDrawerPrepareSessionFn;
+  onRespondToQuestion?: (sessionId: string, answers: string[], customAnswer?: string) => void;
+  onDismissQuestion?: (sessionId: string) => void;
+  onRespondToPermission?: (
+    sessionId: string,
+    response: "allow_once" | "allow_always" | "deny",
+  ) => void;
+  onToggleTodo?: (sessionId: string, todoId: string) => void;
+  onSendFollowup?: (sessionId: string, id: string) => void;
+  onRestoreRevert?: (sessionId: string, itemId: string) => void;
+  onClearFollowups?: (sessionId: string) => void;
+  onClearRevertItems?: (sessionId: string) => void;
 }) {
   const width = Math.min(760, typeof window !== "undefined" ? window.innerWidth - 40 : 760);
   const sessionsRef = useRef(sessions);
@@ -399,6 +526,15 @@ function SessionConversationTaskDetailDrawerInner({
           resumeComposerSession={resumeComposerSession}
           resumeContext={resumeContext}
           onResumeSession={onResumeSession}
+          onRespondToQuestion={onRespondToQuestion}
+          onDismissQuestion={onDismissQuestion}
+          onRespondToPermission={onRespondToPermission}
+          onToggleTodo={onToggleTodo}
+          onSendFollowup={onSendFollowup}
+          onRestoreRevert={onRestoreRevert}
+          onClearFollowups={onClearFollowups}
+          onClearRevertItems={onClearRevertItems}
+          onCancelSession={onCancelSession}
         />
       )}
     </Drawer>
