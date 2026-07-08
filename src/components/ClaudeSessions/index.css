@@ -3735,7 +3735,11 @@
 /* 组间距：wrapper 不命中 .app-claude-message 相邻选择器 */
 .app-claude-messages-virtual-row {
   width: 100%;
-  max-width: 100%;
+  /* 阅读宽度上限：超宽窗格下消息列居中、限制单行文本长度，提升可读性；
+     多屏窄窗格（< 960px）不生效，不影响现有布局。 */
+  max-width: 960px;
+  margin-left: auto;
+  margin-right: auto;
   box-sizing: border-box;
   /* 不用 layout/paint contain：在 flex 子项上会算成极窄宽度，中文会逐字竖排 */
 }
@@ -4061,15 +4065,35 @@
 }
 
 .app-system-message--error {
-  /* 错误态不上边框/底色，仅通过文字色与下行空行让原文读起来被注意到 */
+  /* 与工具失败的红描边 + error-bg 风格对齐，让系统级错误在对话流中显眼可识别 */
+  display: flex;
+  align-items: flex-start;
+  gap: 6px;
   color: var(--ant-color-error);
   font-weight: 500;
+  background: var(--ant-color-error-bg);
+  border-left: 2px solid var(--ant-color-error-border);
+  border-radius: 0 6px 6px 0;
+  padding: 6px 10px;
+}
+
+.app-system-message__icon {
+  flex-shrink: 0;
+  margin-top: 2px;
+  display: inline-flex;
+  align-items: center;
+  color: var(--ant-color-error);
 }
 
 .app-system-message-md.app-markdown {
   font-size: 12px;
   line-height: 1.55;
   color: var(--ant-color-text-secondary);
+}
+
+/* 错误态下 Markdown 文本跟随 error 色（覆盖 .app-system-message-md 的 secondary） */
+.app-system-message--error .app-system-message-md.app-markdown {
+  color: var(--ant-color-error);
 }
 
 /* 注：以下样式段（JSON 卡片 + 折叠栏 + Markdown 子节点细节）在裸展示方案下
@@ -5217,9 +5241,11 @@ button.app-message-part-header:disabled:hover {
   flex: 1 1 auto;
   min-width: 0;
   max-width: 100%;
-  white-space: pre-wrap;
-  word-break: break-word;
-  overflow-wrap: anywhere;
+  /* 折叠态单行截断：长命令/参数不换行撑高工具卡，悬浮 title 看全文；
+     展开态由 .app-message-part--expanded 规则放开为多行完整显示。 */
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
   font-family: 'SF Mono', 'Fira Code', 'Consolas', monospace;
   font-size: 11px;
   line-height: 1.4;

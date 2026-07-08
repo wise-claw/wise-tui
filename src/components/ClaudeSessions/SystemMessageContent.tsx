@@ -25,6 +25,27 @@ function hardenMarkdownOutsideCodeFences(md: string): string {
     .join("");
 }
 
+/** 系统级错误图标：与工具失败的红描边/chip 风格对齐，让失败在对话流中显眼可识别。 */
+function SystemErrorIcon() {
+  return (
+    <svg
+      width="14"
+      height="14"
+      viewBox="0 0 20 20"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.5"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M10 3.5 18 16.5 2 16.5 Z" />
+      <path d="M10 8.5 V12" />
+      <path d="M10 14.6h.01" />
+    </svg>
+  );
+}
+
 /**
  * 系统消息裸展示：不再套用外层卡片 / 工具栏，仅保留一个轻量状态 className，
  * 用于在消息气泡上做错误着色。复制 / 展开 / 格式徽标等装饰交给消息行操作菜单。
@@ -37,6 +58,11 @@ export function SystemMessageContent({ text }: { text: string }) {
 
   return (
     <div className={`app-system-message${error ? " app-system-message--error" : ""}`}>
+      {error ? (
+        <span className="app-system-message__icon">
+          <SystemErrorIcon />
+        </span>
+      ) : null}
       <Markdown
         text={hardenMarkdownOutsideCodeFences(normalizedText)}
         streaming={false}

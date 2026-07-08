@@ -42,6 +42,57 @@ describe("shouldShowListEndThinkingHint", () => {
       ),
     ).toBe(false);
   });
+
+  test("hides when last assistant is streaming non-empty reasoning (preview already indicates thinking)", () => {
+    expect(
+      shouldShowListEndThinkingHint(
+        [
+          msg({ id: 1, role: "user", content: "hi" }),
+          msg({
+            id: 2,
+            role: "assistant",
+            parts: [{ type: "reasoning", text: "让我想想这个问题" }],
+          }),
+        ],
+        "running",
+      ),
+    ).toBe(false);
+  });
+
+  test("shows when last assistant reasoning is blank (just started, no preview yet)", () => {
+    expect(
+      shouldShowListEndThinkingHint(
+        [
+          msg({ id: 1, role: "user", content: "hi" }),
+          msg({
+            id: 2,
+            role: "assistant",
+            parts: [{ type: "reasoning", text: "   " }],
+          }),
+        ],
+        "running",
+      ),
+    ).toBe(true);
+  });
+
+  test("shows when last assistant's final renderable part is text (not reasoning)", () => {
+    expect(
+      shouldShowListEndThinkingHint(
+        [
+          msg({ id: 1, role: "user", content: "hi" }),
+          msg({
+            id: 2,
+            role: "assistant",
+            parts: [
+              { type: "reasoning", text: "思考完毕" },
+              { type: "text", text: "答案是" },
+            ],
+          }),
+        ],
+        "running",
+      ),
+    ).toBe(true);
+  });
 });
 
 describe("buildChatMessageListRows", () => {

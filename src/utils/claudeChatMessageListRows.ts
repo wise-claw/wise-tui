@@ -7,6 +7,7 @@ import {
   getMessageSenderGroupKey,
   hasRenderableChatMessageBody,
   indexOfPreviousRenderableMessage,
+  isRenderableMessagePart,
   isToolOnlyUserMessage,
 } from "./claudeChatMessageDisplay";
 import { sessionHadRecentClaudeTurnFailureNotice } from "./claudeSessionTurnFailure";
@@ -43,7 +44,21 @@ export function shouldShowListEndThinkingHint(
   // 长驻子进程仍 alive 但本轮已失败落盘时，勿再展示「正在思考」。
   if (sessionHadRecentClaudeTurnFailureNotice(messages)) return false;
   const last = messages[messages.length - 1]!;
-  return last.role === "user" || last.role === "assistant";
+  if (last.role !== "user" && last.role !== "assistant") return false;
+  // 末条 assistant 正在流式输出 reasoning（已有内容）时，reasoning 卡片本身已是明确的
+  // 「正在思考」指示，底部不再叠加 thinking-hint，避免视觉重复。reasoning 为空（刚启动）
+  // 时仍展示底部 hint，确保用户能看到思考中状态。
+  if (last.role === "assistant") {
+    const parts = last.parts;
+    if (Array.isArray(parts) && parts.length > 0) {
+      const renderable = parts.filter(isRenderableMessagePart);
+      const lastPart = renderable[renderable.length - 1];
+      if (lastPart && lastPart.type === "reasoning" && lastPart.text.trim().length > 0) {
+        return false;
+      }
+    }
+  }
+  return true;
 }
 
 export interface ChatMessageListRowsBuildOptions {
