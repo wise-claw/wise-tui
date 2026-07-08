@@ -41,6 +41,7 @@ import {
   type SessionConversationTaskDetailTarget,
 } from "../ProgressMonitorPanel/SessionConversationTaskDetailDrawer";
 import { useExecutionEnvironmentDispatchTasksForChat } from "../../hooks/useExecutionEnvironmentDispatchTasksForChat";
+import { createMainLaneDispatchGate } from "../../hooks/mainLaneDispatchGate";
 import {
   ClaudeChatSessionFeaturePanel,
   type RefreshHistorySessionsScope,
@@ -590,6 +591,16 @@ export function ClaudeChatInner({
   /** 各执行体车道独立出队（主会话 / 终端 / 团队），互不争用全局门闸 */
   const pendingQueueDispatchInFlightLanesRef = useRef<Set<string>>(new Set());
 
+  /**
+   * main lane 派发握手门闸：记录「已派发但 session.status 尚未翻 running」的窗口。
+   * 解决 race：onExecute 同步翻 store status=running，但 React 重渲染到本组件闭包
+   * 是异步的；finally 的微任务 flush 跑时 `isMainIdle` 闭包可能仍为 true，导致
+   * canDispatchHead 把队列里剩余 main 任务一次性派完。gate 持有期间 canDispatchHead
+   * 返回 false，等 status effect（idle->running）或 5s 兜底释放后才允许下一条。
+   * inFlight set 防 onExecute 重入；gate 防「status 翻转传播延迟」--两者正交。
+   */
+  const mainLaneDispatchGateRef = useRef(createMainLaneDispatchGate());
+
   const wasRunningRef = useRef(session.status === "running");
   const deferredSendNextRef = useRef(false);
   const deferredQueueHydratedRef = useRef(false);
@@ -603,6 +614,11 @@ export function ClaudeChatInner({
         return;
       }
       pendingQueueDispatchInFlightLanesRef.current.add(laneKey);
+      // main lane 打点：进入「已派但 status 未翻 running」窗口，gate 持有期间
+      // canDispatchHead 返回 false，阻止 finally 微任务 flush 把后续 main 任务一次性派完。
+      if (laneKey === "main") {
+        mainLaneDispatchGateRef.current.markDispatched(task.id);
+      }
       const {
         id,
         promptText,
@@ -634,11 +650,19 @@ export function ClaudeChatInner({
           );
           if (started === false) {
             // 并发门闸：`executeSession` 内已 `onClaudeSpawnBlocked`，此处不再重复 toast
+            // 未真正派发 -> status 不会翻 running，gate 不能等 status effect 释放，立即手动释放。
+            if (laneKey === "main") {
+              mainLaneDispatchGateRef.current.release();
+            }
             return;
           }
           removeTask(id);
         } catch (error) {
           console.error("Failed to dispatch pending task, requeueing:", error);
+          // onExecute 抛错 -> status 不会翻 running，gate 立即释放，避免 hold 死锁接力。
+          if (laneKey === "main") {
+            mainLaneDispatchGateRef.current.release();
+          }
           addTask({
             promptText,
             executorLabel,
@@ -685,8 +709,20 @@ export function ClaudeChatInner({
     } else if (!prev && active) {
       clearIdlePendingDispatchTimer();
       idlePendingDispatchHoldUntilRef.current = 0;
+      // status 已翻 running：派发握手完成，释放 main lane gate。
+      // 之后 m1 跑完（running->idle）时 canDispatchHead 才会对 m2 返回 true，实现接力。
+      mainLaneDispatchGateRef.current.releaseIfMatchesActive(active);
     }
   }, [session.status, clearIdlePendingDispatchTimer]);
+
+  // 5s 兜底：onExecute 既不翻 status 也不抛错的极端故障下，status effect 不会释放 gate。
+  // 每 1s 轮询 releaseIfExpired，到点强制释放，避免 main lane 永久卡死接力。
+  useEffect(() => {
+    const timer = setInterval(() => {
+      mainLaneDispatchGateRef.current.releaseIfExpired(Date.now());
+    }, 1000);
+    return () => clearInterval(timer);
+  }, []);
 
   const handleComposerExecute = useCallback(
     (
@@ -801,6 +837,10 @@ export function ClaudeChatInner({
       if (!task) return false;
       const targetType = task.targetType ?? "main";
       if (targetType === "main") {
+        // gate 持有期间（已派但 status 未翻 running）禁止派发下一条 main，
+        // 阻止 finally 微任务 flush 在 status 翻转传播延迟窗口内一次性出栈。
+        // ref.current 读取总取最新值，绕开 React 重渲染闭包时序。
+        if (!mainLaneDispatchGateRef.current.canDispatch()) return false;
         return isMainIdle;
       }
       if (targetType === "employee") {
@@ -811,7 +851,7 @@ export function ClaudeChatInner({
       }
       return true;
     },
-    [isMainIdle, isEmployeeIdle, isTeamIdle],
+    [isMainIdle, isEmployeeIdle, isTeamIdle, mainLaneDispatchGateRef],
   );
 
   const flushPendingLaneDispatchesRef = useRef<() => void>(() => {});

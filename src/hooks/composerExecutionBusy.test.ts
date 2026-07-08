@@ -44,17 +44,7 @@ describe("computeComposerExecutionBusy", () => {
     ).toEqual({ isBusy: true, source: "compact" });
   });
 
-  test("status=idle + pending=0 + compact=false + resident=true 命中 resident（streaming 长驻）", () => {
-    expect(
-      computeComposerExecutionBusy({
-        ...baseInput,
-        sessionStatus: "idle",
-        streamingResident: true,
-      }),
-    ).toEqual({ isBusy: true, source: "resident" });
-  });
-
-  test("status=completed/cancelled/error/无状态 + 无任何信号 → none", () => {
+  test("status=completed/cancelled/error/无状态 + 无任何信号 -> none", () => {
     expect(
       computeComposerExecutionBusy({ ...baseInput, sessionStatus: "completed" }),
     ).toEqual({ isBusy: false, source: "none" });
@@ -69,7 +59,7 @@ describe("computeComposerExecutionBusy", () => {
     ).toEqual({ isBusy: false, source: "none" });
   });
 
-  test("优先级：status=running + compact=true + pending=3 → source=status", () => {
+  test("优先级：status=running + compact=true + pending=3 -> source=status", () => {
     expect(
       computeComposerExecutionBusy({
         ...baseInput,
@@ -80,31 +70,29 @@ describe("computeComposerExecutionBusy", () => {
     ).toEqual({ isBusy: true, source: "status" });
   });
 
-  test("优先级：compact=true + pending=2 + resident=true → source=compact", () => {
+  test("优先级：compact=true + pending=2 -> source=compact", () => {
     expect(
       computeComposerExecutionBusy({
         ...baseInput,
         sessionStatus: "idle",
         backgroundContextCompactInFlight: true,
         pendingExecutionTaskCount: 2,
-        streamingResident: true,
       }),
     ).toEqual({ isBusy: true, source: "compact" });
   });
 
-  test("优先级：status=idle + compact=false + pending=2 + resident=true → source=pending（覆盖队首接力）", () => {
+  test("优先级：status=idle + compact=false + pending=2 -> source=pending（覆盖队首接力）", () => {
     expect(
       computeComposerExecutionBusy({
         ...baseInput,
         sessionStatus: "idle",
         backgroundContextCompactInFlight: false,
         pendingExecutionTaskCount: 2,
-        streamingResident: true,
       }),
     ).toEqual({ isBusy: true, source: "pending" });
   });
 
-  test("边界：status=completed + compact=true → source=compact（status 已结束但压缩 turn 仍在跑）", () => {
+  test("边界：status=completed + compact=true -> source=compact（status 已结束但压缩 turn 仍在跑）", () => {
     expect(
       computeComposerExecutionBusy({
         ...baseInput,
@@ -112,26 +100,6 @@ describe("computeComposerExecutionBusy", () => {
         backgroundContextCompactInFlight: true,
       }),
     ).toEqual({ isBusy: true, source: "compact" });
-  });
-
-  test("streamingResident=undefined 不触发 resident 分支", () => {
-    expect(
-      computeComposerExecutionBusy({
-        ...baseInput,
-        sessionStatus: "idle",
-        streamingResident: undefined,
-      }),
-    ).toEqual({ isBusy: false, source: "none" });
-  });
-
-  test("streamingResident=false 显式不命中 resident", () => {
-    expect(
-      computeComposerExecutionBusy({
-        ...baseInput,
-        sessionStatus: "idle",
-        streamingResident: false,
-      }),
-    ).toEqual({ isBusy: false, source: "none" });
   });
 });
 

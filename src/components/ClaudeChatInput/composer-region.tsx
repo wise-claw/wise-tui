@@ -1037,16 +1037,15 @@ function ComposerInner({
 
   /** 主会话占用中：后续发送应入队，避免 Semi「生成中」拦截或重复 spawn */
   const backgroundContextCompactInFlight = useBackgroundContextCompactInFlight(session.id);
-  /** 把「是否正在执行」收敛为单源信号：session.status / 后台压缩 in-flight / pending 队列 / 长驻 streaming。
-   *  旧表达式 `isSessionEngineActive && !backgroundContextCompactInFlight` 漏判 pending 接力与 streaming
-   *  翻 idle 的瞬时窗口，导致「结束」按钮在执行态消失。详见 src/hooks/composerExecutionBusy.ts。 */
+  /** 把「是否正在执行」收敛为单源信号：session.status / 后台压缩 in-flight / pending 队列。
+   *  不再注入 streamingResident：claudeSessionId 一旦建立永不清空，会让 complete 后 busy 永久 true、
+   *  独立「结束」按钮不消失。另：AIChatInput 的 generating 也不能绑 isSessionBusy--Semi handleSend 在
+   *  generating=true 时拦截 Enter，running/pending 期间无法入队；故 generating 固定 false。
+   *  详见 src/hooks/composerExecutionBusy.ts。 */
   const composerBusy = useComposerExecutionBusy({
     sessionStatus: session.status,
     backgroundContextCompactInFlight,
     pendingExecutionTaskCount,
-    /** 长驻 streaming 占位：claude engine + 已建立流式子进程（claudeSessionId 非空）即视为子进程仍存活。 */
-    streamingResident:
-      sessionExecutionEngine === "claude" && Boolean(session.claudeSessionId?.trim()),
   });
   const isSessionBusy = composerBusy.isBusy;
   const isSessionBusyRef = useRef(isSessionBusy);
@@ -3113,7 +3112,12 @@ function ComposerInner({
                   renderConfigureArea={renderSemiComposerConfigureArea}
                   renderActionArea={renderSemiComposerActionArea}
                   clearContentOnGenerating={false}
-                  generating={isSessionBusy}
+                  generating={
+                    // 固定 false：Semi foundation.handleSend 在 generating=true 时直接 return，会拦截 Enter，
+                    // 导致 running/pending/compact 期间无法把新消息入队（排队接力）。
+                    // 停止入口改由独立「结束」按钮（shouldShowStopButton）承担；onStopGenerate 仅作语义占位。
+                    false
+                  }
                   onStopGenerate={() => _onCancel()}
                   canSend={canSendComposer}
                   onMessageSend={(msg) => {

@@ -28,7 +28,6 @@ function makeHarness(): Harness {
       sessionStatus: "idle",
       backgroundContextCompactInFlight: false,
       pendingExecutionTaskCount: 0,
-      streamingResident: false,
     };
     const busy = useComposerExecutionBusy({ ...base, ...override });
     useLayoutEffect(() => {
@@ -97,6 +96,27 @@ describe("useComposerExecutionBusy sticky 行为", () => {
     harness.set({ sessionStatus: "idle", pendingExecutionTaskCount: 0 });
     expect(harness.latest.isBusy).toBe(true);
     expect(harness.latest.source).toBe("pending");
+    harness.unmount();
+  });
+
+  test("sticky 窗口结束后释放 busy=false 并触发重渲染", async () => {
+    const harness = makeHarness();
+    harness.set({ sessionStatus: "running" });
+    expect(harness.latest).toEqual({ isBusy: true, source: "status" });
+
+    harness.set({ sessionStatus: "idle" });
+    // sticky 窗口内仍维持 busy=true
+    expect(harness.latest.isBusy).toBe(true);
+
+    // 等过 STICKY_RELEASE_MS：release timer 主动触发重渲染，isBusy 翻 false（按钮应消失）。
+    // 回归「点两次才响应」：ref 变更不触发渲染时，按钮会卡在显示态直到下一次外部渲染。
+    await act(async () => {
+      await new Promise((r) =>
+        setTimeout(r, COMPOSER_EXECUTION_BUSY_STICKY_RELEASE_MS + 50),
+      );
+    });
+    expect(harness.latest.isBusy).toBe(false);
+    expect(harness.latest.source).toBe("none");
     harness.unmount();
   });
 });

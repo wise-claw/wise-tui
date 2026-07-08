@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   computeComposerExecutionBusy,
   type ComposerBusyResult,
@@ -10,7 +10,6 @@ export interface ComposerExecutionBusyHookInput {
   sessionStatus: string | undefined;
   backgroundContextCompactInFlight: boolean;
   pendingExecutionTaskCount: number;
-  streamingResident?: boolean;
 }
 
 /** 后台压缩 turn finally 翻 false 与 session.status 翻 idle 之间的瞬时窗口，
@@ -35,20 +34,21 @@ export function useComposerExecutionBusy(
         sessionStatus: input.sessionStatus,
         backgroundContextCompactInFlight: input.backgroundContextCompactInFlight,
         pendingExecutionTaskCount: input.pendingExecutionTaskCount,
-        streamingResident: input.streamingResident,
       }),
     [
       input.sessionStatus,
       input.backgroundContextCompactInFlight,
       input.pendingExecutionTaskCount,
-      input.streamingResident,
     ],
   );
 
   /** sticky busy：进入立即 true；离开需等待 STICKY_RELEASE_MS 才允许 false。
-   *  使用 ref + effect 而不是 useState，避免防抖期间 React 树触发额外渲染。 */
+   *  用 ref 在渲染期同步进入态（避免 busy->idle 瞬切漏防抖），但 release timer 到点时
+   *  必须主动触发一次重渲染--ref 变更本身不触发渲染，否则「结束」按钮在 sticky 窗口
+   *  结束后不会自动消失，要等下一次外部重渲染（如再次点击）才更新，造成「点两次才响应」。 */
   const stickyBusyRef = useRef(raw.isBusy);
   const stickySourceRef = useRef<ComposerBusyResult["source"]>(raw.source);
+  const [, forceStickyRelease] = useState(0);
 
   useEffect(() => {
     if (raw.isBusy) {
@@ -57,6 +57,8 @@ export function useComposerExecutionBusy(
     const timer = setTimeout(() => {
       stickyBusyRef.current = false;
       stickySourceRef.current = raw.source;
+      // ref 变更不触发渲染：主动 force 一次，让依赖 isBusy 的「结束」按钮立即消失。
+      forceStickyRelease((v) => v + 1);
     }, COMPOSER_EXECUTION_BUSY_STICKY_RELEASE_MS);
     return () => clearTimeout(timer);
   }, [raw.isBusy, raw.source]);
