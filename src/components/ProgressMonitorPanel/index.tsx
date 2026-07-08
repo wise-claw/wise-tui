@@ -126,11 +126,17 @@ function MonitorPanelCompactScrollBody({
 function MonitorPanelHeadConfigActions({
   onOpenEmployeeConfig,
   onOpenWorkflowConfig,
+  runningExecutionCount,
+  showRunningBadge,
 }: {
   onOpenEmployeeConfig?: () => void;
   onOpenWorkflowConfig?: () => void;
+  runningExecutionCount?: number;
+  showRunningBadge?: boolean;
 }) {
-  if (!onOpenEmployeeConfig && !onOpenWorkflowConfig) {
+  const hasRunningBadge =
+    showRunningBadge && !!runningExecutionCount && runningExecutionCount > 0;
+  if (!onOpenEmployeeConfig && !onOpenWorkflowConfig && !hasRunningBadge) {
     return null;
   }
   return (
@@ -158,6 +164,18 @@ function MonitorPanelHeadConfigActions({
           <DeploymentUnitOutlined aria-hidden />
           <span className="app-monitor-panel__head-config-label">工作流</span>
         </button>
+      ) : null}
+      {hasRunningBadge ? (
+        <span
+          className="app-monitor-panel__head-running-badge"
+          title={`运行面板有 ${runningExecutionCount} 项正在执行`}
+          aria-label={`运行面板有 ${runningExecutionCount} 项正在执行`}
+        >
+          <span className="app-monitor-panel__head-running-badge-spinner" aria-hidden />
+          <span className="app-monitor-panel__head-running-badge-count">
+            {runningExecutionCount}
+          </span>
+        </span>
       ) : null}
     </div>
   );
@@ -1524,6 +1542,26 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
   const useCompactUnifiedList =
     isCompactSidebarPanel && compactFlatRows.length > 0 && !useCompactVirtual;
 
+  // 运行面板折叠时头部徽标用：统计当前正在执行的项总数
+  // （终端员工对话中 + 执行环境派发任务运行中 + 工作流运行中，与列表里显示运行标识的项一致）。
+  const runningExecutionCount = useMemo(() => {
+    const employeeRunning = employeeItems.filter(
+      (item) =>
+        item.status === "in_progress" ||
+        employeeTerminalConversationStatusById.get(item.employeeId) === "running",
+    ).length;
+    const dispatchRunning = executionEnvironmentDispatchTaskItems.filter(
+      (item) => item.status === "running",
+    ).length;
+    const teamRunning = teamItems.filter((item) => item.status === "in_progress").length;
+    return employeeRunning + dispatchRunning + teamRunning;
+  }, [
+    employeeItems,
+    employeeTerminalConversationStatusById,
+    executionEnvironmentDispatchTaskItems,
+    teamItems,
+  ]);
+
   const renderDispatchTaskRow = useCallback(
     (item: SessionConversationTaskItem) => (
       <SessionConversationDispatchTaskRow
@@ -1849,6 +1887,8 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
           <MonitorPanelHeadConfigActions
             onOpenEmployeeConfig={onOpenEmployeeConfig}
             onOpenWorkflowConfig={onOpenWorkflowConfig}
+            runningExecutionCount={runningExecutionCount}
+            showRunningBadge={sectionCollapsed}
           />
         </div>
         <div className="app-monitor-panel__head-end" onClick={(e) => e.stopPropagation()}>

@@ -533,6 +533,44 @@
   white-space: nowrap;
 }
 
+/* 运行面板折叠时头部「正在执行」徽标：紧随配置工作流按钮，复用 success 色与 spinner 旋转动画。
+   注意：刻意不沿用 __status-spinner-svg，避免被折叠态 animation-play-state: paused 规则冻结。 */
+.app-monitor-panel__head-running-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 3px;
+  height: 18px;
+  margin-left: 2px;
+  padding: 0 6px;
+  border-radius: 9px;
+  background: color-mix(in srgb, var(--ant-color-success) 14%, transparent);
+  color: var(--ant-color-success);
+  font-size: 11px;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+
+.app-monitor-panel__head-running-badge-spinner {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 1.5px solid color-mix(in srgb, var(--ant-color-success) 30%, transparent);
+  border-top-color: var(--ant-color-success);
+  animation: app-monitor-panel-spinner-rotate 0.72s linear infinite;
+  will-change: transform;
+}
+
+.app-monitor-panel__head-running-badge-count {
+  letter-spacing: 0.1px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-monitor-panel__head-running-badge-spinner {
+    animation: none;
+  }
+}
+
 .app-monitor-panel__section-collapse-btn {
   display: inline-flex;
   align-items: center;
