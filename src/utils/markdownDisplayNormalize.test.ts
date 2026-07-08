@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  breakCollapsedPipeTableOnLine,
   containsStreamingHtmlMarkup,
   htmlDocumentToMarkdown,
   llmHtmlFragmentToMarkdown,
@@ -211,6 +212,105 @@ describe("recoverSplitPipeTableBlocks", () => {
     ].join("\n");
     const out = recoverSplitPipeTableBlocks(input);
     expect(out).toBe(input);
+  });
+});
+
+describe("breakCollapsedPipeTableOnLine", () => {
+  // 用户原样本：表头 + ASCII ----+----+ 分隔 + 数据行（数据行无前导 |），整段塌成 1 行
+  const COLLAPSED_SAMPLE =
+    "| IID | TITLE | CREATOR | URL ------------+------+---------+---------+--------------------------------------------------------------------- 435540123 | 2747 | feat-fh | 铮睿 | https://code.alipay.com/ant-party/ant-party-web/pull_requests/2747";
+
+  test("splits a collapsed single-line pipe table into header / separator / data", () => {
+    const out = breakCollapsedPipeTableOnLine(COLLAPSED_SAMPLE);
+    const lines = out.split("\n");
+    expect(lines.length).toBeGreaterThanOrEqual(3);
+    // 表头被识别为 4 列（原始样本表头漏了末 `|`,所以只断言含 4 个标题词）
+    expect(lines[0]).toContain("IID");
+    expect(lines[0]).toContain("TITLE");
+    expect(lines[0]).toContain("CREATOR");
+    expect(lines[0]).toContain("URL");
+    // 分隔行由 buildSeparatorRow 复算：表头 4 列是 canonical（GFM 要求 sep
+    // 列数 = header 列数），数据行 5 列中的末两列被合并进末格。
+    expect(lines[1]).toBe("| --- | --- | --- | --- |");
+    // 数据行被补上前导 `|`,末两列合并到 URL 末格
+    expect(lines[2]).toContain("| 435540123 |");
+    expect(lines[2]).toContain("| 2747 |");
+    expect(lines[2]).toContain("feat-fh");
+    expect(lines[2]).toContain("铮睿");
+    expect(lines[2]).toContain("https://code.alipay.com/ant-party/ant-party-web/pull_requests/2747");
+  });
+
+  test("renders the collapsed sample end-to-end as a 4-column GFM table", async () => {
+    const { parseMarkdownSourceToHtml } = await import("./markdownRenderPipeline");
+    const html = parseMarkdownSourceToHtml(COLLAPSED_SAMPLE, { streaming: false });
+    expect(html).toContain("<table");
+    expect(html).toContain("<th>IID</th>");
+    expect(html).toContain("<th>TITLE</th>");
+    expect(html).toContain("<th>CREATOR</th>");
+    expect(html).toContain("<th>URL</th>");
+    expect(html).toContain("<td>feat-fh</td>");
+    // 末列合并了「铮睿, URL」（URL 部分被 marked 渲染成 <a>），不拆开
+    expect(html).toContain("铮睿,");
+    expect(html).toContain("https://code.alipay.com/ant-party/ant-party-web/pull_requests/2747");
+  });
+
+  test("pads data row missing leading pipe (435540123 | 2747 | ...)", () => {
+    // 表头 `| a | b |` = 2 列；数据 `1 | x | y |` 在补前导 `|` 后为 3 列。
+    // headerCols=2 是 canonical，dataCols=3 多 1 列被合并到末格（`, ` join），
+    // 数据行末格变成 `x, y`，分隔行保持 2 列。
+    const out = breakCollapsedPipeTableOnLine(
+      "| a | b | ----+---+ 1 | x | y |",
+    );
+    const lines = out.split("\n");
+    expect(lines[0]).toBe("| a | b |");
+    expect(lines[1]).toBe("| --- | --- |");
+    // dataChunk 被补前导 `|`,首列 `1` 正确成为表的第一格
+    expect(lines[2].trimStart().startsWith("|")).toBe(true);
+    expect(lines[2]).toContain("| 1 | x, y |");
+  });
+
+  test("leaves a well-formed 4-row GFM table unchanged (no regression)", () => {
+    const input = [
+      "| ID | TITLE |",
+      "| --- | --- |",
+      "| 1 | a |",
+      "| 2 | b |",
+    ].join("\n");
+    // 合规 GFM 表不应被 breakCollapsedPipeTableOnLine 改动（line 仍以 `|` 开头
+    // 但不含 -+{3,} 簇外加 pipe；含 `---` 但 anchor 检测会在表头行/数据行先失败）
+    // 关键断言：表内容与原文等价,且最终仍渲染为 <table>
+    const out = normalizeInlineMarkdownStructures(input);
+    expect(out).toContain("| ID | TITLE |");
+    expect(out).toContain("| --- | --- |");
+    expect(out).toContain("| 1 | a |");
+    expect(out).toContain("| 2 | b |");
+    // 行数应保持 4 行（不插入额外的 ---- 行）
+    expect(out.split("\n").length).toBe(4);
+  });
+
+  test("preserves preceding paragraph when a collapsed table follows it", () => {
+    const raw = `以下是本周 PR 列表：\n${COLLAPSED_SAMPLE}`;
+    const out = normalizeInlineMarkdownStructures(raw);
+    expect(out.startsWith("以下是本周 PR 列表：\n")).toBe(true);
+    expect(out).toContain("IID");
+    expect(out).toContain("TITLE");
+    expect(out).toContain("CREATOR");
+    expect(out).toContain("URL");
+    expect(out).toContain("| --- | --- | --- | --- |");
+  });
+
+  test("does not split shell-style `| foo + bar |` (single +, not 3+ consecutive)", () => {
+    const out = breakCollapsedPipeTableOnLine("| shell hint: foo + bar |");
+    expect(out).toBe("| shell hint: foo + bar |");
+    // 整行仍只有 1 个 `|`,不应被改成多行
+    expect(out.split("\n").length).toBe(1);
+  });
+
+  test("streaming path also produces <table> for the collapsed sample", async () => {
+    const { parseMarkdownSourceToHtml } = await import("./markdownRenderPipeline");
+    const html = parseMarkdownSourceToHtml(COLLAPSED_SAMPLE, { streaming: true });
+    expect(html).toContain("<table");
+    expect(html).toContain("<th>IID</th>");
   });
 });
 

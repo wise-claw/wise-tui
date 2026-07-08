@@ -15,8 +15,12 @@ function normalizePipeChars(text: string): string {
 /** 形如 `| a | b |` 的数据行（含首尾竖线）。 */
 export const PIPE_TABLE_ROW_RE = /^\s*\|.+\|\s*$/;
 
-/** GFM 表格分隔行。 */
-export const PIPE_TABLE_SEPARATOR_RE = /^\s*\|[\s:|\-]+\|\s*$/;
+/**
+ * GFM 表格分隔行。允许 ASCII `+----+` 风格(用 `+` 而非 `|`)分隔段,
+ * 配合 `breakCollapsedPipeTableOnLine` 把"塌成一行"的 pipe 表还原成多行。
+ * 注意:塌行修复内部用 `/[-+]{3,}/` 做严格锚点,这里仅扩字符集。
+ */
+export const PIPE_TABLE_SEPARATOR_RE = /^\s*\|[\s:|\-+]+\|\s*$/;
 
 import { findHtmlDocumentStartIndex } from "./richMessageHtml";
 
@@ -241,8 +245,89 @@ function breakPrefixBeforeInlinePipeTable(line: string): string {
   return `${prefix}\n\n${tablePart}`;
 }
 
+/**
+ * ASCII 分隔簇(≥3 个连续 `-` 或 `+`)——用于"塌成一行"的 pipe table 锚点。
+ * 比 `PIPE_TABLE_SEPARATOR_RE` 更严,避免 `| foo + bar |` 这种 C++ / shell
+ * 注释式短行被误判。
+ */
+const COLLAPSED_PIPE_TABLE_ANCHOR_RE = /[-+]{3,}/;
+
+/**
+ * 检测并拆开"整段塌成一行"的 pipe table:表头行 + ASCII `+----+` 分隔行 +
+ * 数据行全部紧贴在一起,中间无 `\n`,导致 marked-gfm 无法识别成表格。
+ *
+ * 拆法:以第一个 ASCII 分隔簇为锚点,把行切成 headerChunk / sepCluster /
+ * dataChunk,给 dataChunk 补前导 `|`,并按表头列数对齐数据行(溢出列合并到末列),
+ * 输出规范的「表头 + 分隔行 + 数据」三行 GFM 表格,让 marked-gfm 正确识别。
+ *
+ * 失败回退:不满足任一前置条件时原样返回输入,不做修改。
+ */
+export function breakCollapsedPipeTableOnLine(line: string): string {
+  if (!line.includes("|")) return line;
+  if (!COLLAPSED_PIPE_TABLE_ANCHOR_RE.test(line)) return line;
+  if (!line.trim().startsWith("|")) return line;
+
+  const anchorMatch = COLLAPSED_PIPE_TABLE_ANCHOR_RE.exec(line);
+  if (!anchorMatch) return line;
+  const anchorIndex = anchorMatch.index;
+
+  // headerChunk 保留到锚点开始处;trim 掉尾部空格
+  let headerChunk = line.slice(0, anchorIndex).trimEnd();
+  let dataChunk = line.slice(anchorIndex + anchorMatch[0].length);
+  // 表头常以裸文本结尾（模型漏了末 `|`），给 headerChunk 补末 `|`，让 marked
+  // 能正确把表头识别为 header row 并按 cell 数对齐分隔行。
+  if (headerChunk && !headerChunk.endsWith("|")) {
+    headerChunk = `${headerChunk} |`;
+  }
+  // 数据行常以裸数字/文字起首（模型漏了 `|`），给 dataChunk 补前导 `|`。
+  if (dataChunk) {
+    dataChunk = dataChunk.trimStart();
+    if (!dataChunk.startsWith("|")) {
+      dataChunk = `| ${dataChunk}`;
+    }
+  }
+
+  const headerCols = countPipeColumns(headerChunk);
+  const dataCols = countPipeColumns(dataChunk);
+  if (headerCols < 2 && dataCols < 2) return line;
+
+  // 防误伤：纯分隔行（`| --- | --- | --- |`）虽然命中 [-+]{3,} 簇，但锚点
+  // 前只有 `| ` / ` ---` 等纯分隔片段，headerCols 计算虽 ≥2 却全是 `---` /
+  // `+++` 的占位、不是真实表头文本。需要锚点前存在「非 `-` / `+` 字符」的
+  // 真表头内容，才走拆行；否则原样返回让其他 pass（如 normalizeTableSeparatorRows）处理。
+  const headerBeforeAnchor = line.slice(0, anchorIndex);
+  const hasRealHeaderText = /[^\s|:\-+]/.test(headerBeforeAnchor);
+  if (!hasRealHeaderText) return line;
+
+  // 列宽以表头为准（GFM 要求 sep 列数 = header 列数），表头常见漏末 `|`，
+  // 所以 headerCols 经常比数据少；数据行若多出列，把溢出列合并到末列。
+  const columns = headerCols >= 2 ? headerCols : dataCols;
+  const sepRow = buildSeparatorRow(columns);
+
+  let dataRow = dataChunk;
+  if (dataCols > columns) {
+    const cells = dataChunk
+      .trim()
+      .replace(/^\|/, "")
+      .replace(/\|$/, "")
+      .split("|")
+      .map((c) => c.trim());
+    const kept = cells.slice(0, columns - 1);
+    const merged = cells.slice(columns - 1).join(", ");
+    dataRow = `| ${[...kept, merged].join(" | ")} |`;
+  } else if (!dataRow.endsWith("|")) {
+    // 数据行通常漏掉末 `|`,这里补上,让 marked 把整行识别为单行 pipe row。
+    dataRow = `${dataRow.trimEnd()} |`;
+  }
+
+  return `${headerChunk}\n${sepRow}\n${dataRow}`.trimEnd();
+}
+
 function splitInlinePipeRowsOnLine(line: string): string {
   if (!line.includes("|")) return line;
+  // 分隔行（`---` / `+++` / `---:` 之类的列对齐线）不参与行内切分，
+  // 否则 `| --- | --- |` 内部的 `|\s+\|` 会被替换成多行，破坏表格结构。
+  if (PIPE_TABLE_SEPARATOR_RE.test(line.trim())) return line;
   const withRowBreaks = /\|\s+\|/.test(line) ? line.replace(/\|\s+\|/g, "|\n|") : line;
   return breakPrefixBeforeInlinePipeTable(withRowBreaks);
 }
@@ -259,6 +344,7 @@ export function normalizeInlineMarkdownStructures(text: string): string {
   s = breakInlineCodeFences(s);
   return s
     .split("\n")
+    .map((line) => breakCollapsedPipeTableOnLine(line))
     .map((line) => splitTrailingContentAfterTableRow(splitInlinePipeRowsOnLine(line)))
     .join("\n");
 }
