@@ -102,6 +102,12 @@ import { useComposerSpeechLevelMeter } from "../../hooks/useComposerSpeechLevelM
 import { useComposerSpeechPipeline } from "../../hooks/useComposerSpeechPipeline";
 import { useComposerSpeechPreferences } from "../../hooks/useComposerSpeechPreferences";
 import {
+  useComposerExecutionBusy,
+} from "../../hooks/useComposerExecutionBusy";
+import {
+  shouldShowStopButton,
+} from "../../hooks/composerExecutionBusy";
+import {
   downloadComposerSherpaModels,
   cancelComposerSherpaDownloadModels,
   getComposerSherpaSpeechCapabilities,
@@ -1031,8 +1037,18 @@ function ComposerInner({
 
   /** 主会话占用中：后续发送应入队，避免 Semi「生成中」拦截或重复 spawn */
   const backgroundContextCompactInFlight = useBackgroundContextCompactInFlight(session.id);
-  const isSessionEngineActive = session.status === "running" || session.status === "connecting";
-  const isSessionBusy = isSessionEngineActive && !backgroundContextCompactInFlight;
+  /** 把「是否正在执行」收敛为单源信号：session.status / 后台压缩 in-flight / pending 队列 / 长驻 streaming。
+   *  旧表达式 `isSessionEngineActive && !backgroundContextCompactInFlight` 漏判 pending 接力与 streaming
+   *  翻 idle 的瞬时窗口，导致「结束」按钮在执行态消失。详见 src/hooks/composerExecutionBusy.ts。 */
+  const composerBusy = useComposerExecutionBusy({
+    sessionStatus: session.status,
+    backgroundContextCompactInFlight,
+    pendingExecutionTaskCount,
+    /** 长驻 streaming 占位：claude engine + 已建立流式子进程（claudeSessionId 非空）即视为子进程仍存活。 */
+    streamingResident:
+      sessionExecutionEngine === "claude" && Boolean(session.claudeSessionId?.trim()),
+  });
+  const isSessionBusy = composerBusy.isBusy;
   const isSessionBusyRef = useRef(isSessionBusy);
   isSessionBusyRef.current = isSessionBusy;
   const onCancelRef = useRef(_onCancel);
@@ -2786,7 +2802,7 @@ function ComposerInner({
             onBreakdownOpen={() => void ensureBreakdown()}
           />
         ) : null}
-        {isSessionBusy ? (
+        {shouldShowStopButton(composerBusy, Boolean(_onCancel)) ? (
           <HoverHint title="结束当前运行" placement="top">
             <Button
               type="text"
@@ -2808,6 +2824,7 @@ function ComposerInner({
     breakdown,
     backgroundContextCompactInFlight,
     composerFooterChrome,
+    composerBusy,
     contextBreakdownLoading,
     dualPaneRepositoryPicker,
     ensureBreakdown,
@@ -3096,7 +3113,7 @@ function ComposerInner({
                   renderConfigureArea={renderSemiComposerConfigureArea}
                   renderActionArea={renderSemiComposerActionArea}
                   clearContentOnGenerating={false}
-                  generating={false}
+                  generating={isSessionBusy}
                   onStopGenerate={() => _onCancel()}
                   canSend={canSendComposer}
                   onMessageSend={(msg) => {
