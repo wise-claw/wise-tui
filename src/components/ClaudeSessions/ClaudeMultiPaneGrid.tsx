@@ -50,7 +50,7 @@ import { runPaneCreateTask } from "./paneCreateLoading";
 import type { RefreshHistorySessionsScope } from "./ClaudeChat";
 import type { PaneAuxLayout, ResolvePaneAuxLayout } from "./paneAuxLayout";
 import { Topbar, type PaneTopbarSharedProps } from "./Topbar";
-import { useCenterView } from "./claudeChatHelpers";
+import { CenterViewControlContext, useCenterView } from "./claudeChatHelpers";
 
 const TWO_PANE_MIN_WIDTH_PX = MAIN_LAYOUT_MULTI_PANE_MIN_WIDTH_PX;
 
@@ -302,6 +302,7 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
           centerSwitcherVisible={centerSwitcherVisible}
         />
       ) : null}
+      <CenterViewControlContext.Provider value={setCenterView}>
       <ClaudeSessionChatWithDock
         key={sessionId}
         session={session}
@@ -384,6 +385,7 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
         paneRuntimeOverride={shared.primaryPaneRuntimeOverride}
         onUpdatePaneRuntimeOverride={shared.onUpdatePaneRuntimeOverride}
       />
+      </CenterViewControlContext.Provider>
     </div>
   );
 }, (prev, next) =>
@@ -608,6 +610,7 @@ const MultiPaneExtraPaneCell = memo(
               centerSwitcherVisible={centerSwitcherVisible}
             />
           ) : null}
+          <CenterViewControlContext.Provider value={setCenterView}>
           <ClaudeSessionChatWithDock
             key={sessionId}
             session={paneSession}
@@ -694,6 +697,7 @@ const MultiPaneExtraPaneCell = memo(
             paneRuntimeOverride={paneSlotRuntimeOverride(slot)}
             onUpdatePaneRuntimeOverride={shared.onUpdatePaneRuntimeOverride}
           />
+          </CenterViewControlContext.Provider>
         </div>
       );
     }

@@ -9,6 +9,7 @@ import {
   rememberChatScrollBeforeFileOpen,
 } from "../../stores/claudeChatMessageScrollBridge";
 import { useChatRepositoryPath } from "./chatRepositoryContext";
+import { useCenterViewControl } from "./claudeChatHelpers";
 import "./markdownCodeHighlight.css";
 
 function HighlightedCodeLine({
@@ -54,6 +55,7 @@ export const ToolFileEditCard = memo(
     streaming?: boolean;
   }) {
     const repositoryPath = useChatRepositoryPath();
+    const requestCenterView = useCenterViewControl();
     const canOpenFile = useMemo(() => {
       if (!repositoryPath) return false;
       return relativePathInRepository(repositoryPath, preview.filePath) != null;
@@ -76,8 +78,11 @@ export const ToolFileEditCard = memo(
         }
         getClaudeChatMessageScrollBridge().pauseFollowForMessageNavigation();
         dispatchOpenRepositoryFile({ repositoryPath, relativePath });
+        // 切到「文件」视图：若编辑器已开且当前在「消息」，显式切到「文件」；
+        // 编辑器未开时此设置无害（消息 pane 在无编辑器时仍显示，见 ClaudeChat 渲染守卫）。
+        requestCenterView?.("files");
       },
-      [preview.filePath, repositoryPath],
+      [preview.filePath, repositoryPath, requestCenterView],
     );
 
     const statsLabel = useMemo(() => {

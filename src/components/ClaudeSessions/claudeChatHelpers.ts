@@ -11,7 +11,7 @@ import {
   messageTextLooksLikeOmcDispatch,
   parseOmcSlashCommandFromUserText,
 } from "../../utils/omcUserMessageText";
-import { useEffect, useState, type ReactNode } from "react";
+import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
 import { buildConventionalCommitFallback } from "../../utils/conventionalCommitMessage";
 import { isDisplayNoiseUserMessageText } from "../../utils/claudeChatMessageDisplay";
 import type { CenterView } from "./ClaudeChat";
@@ -39,6 +39,23 @@ export function useCenterView(
     setCenterView,
     visible: !hideMessages && Boolean(panelBelowMessages),
   };
+}
+
+/**
+ * 中栏「消息/文件」视图切换命令通道。由持有 `setCenterView` 的 pane 组件
+ * （单屏 `AppWorkspaceLayout` / 多屏 `ClaudeMultiPaneGrid` 的 primary、extra）
+ * 提供，供消息列表深处（如 `ToolFileEditCard`）在用户点击「变更文件」时显式
+ * 请求切到「文件」视图。
+ *
+ * Provider value 即 `useState` 的 `setCenterView`（引用恒定），不触发消费组件
+ * 额外重渲染；context 穿透各层 memo 比较器，故无需把手写比较器改成识别它。
+ * 与 `useCenterView` 的 effect 正交：effect 处理编辑器挂载/卸载的自动切换，
+ * 本通道处理「编辑器已开、用户在消息视图」时点击变更文件显式切到文件视图。
+ */
+export const CenterViewControlContext = createContext<((view: CenterView) => void) | null>(null);
+
+export function useCenterViewControl(): ((view: CenterView) => void) | null {
+  return useContext(CenterViewControlContext);
 }
 
 export type NotificationInboxRow = {

@@ -68,7 +68,7 @@ import {
   areLeftSidebarPropsEqual,
 } from "./LeftSidebar/leftSidebarPropsEqual";
 import { claudeSessionsShellPropsEqual } from "./ClaudeSessions/claudeSessionsPropsEqual";
-import { useCenterView } from "./ClaudeSessions/claudeChatHelpers";
+import { CenterViewControlContext, useCenterView } from "./ClaudeSessions/claudeChatHelpers";
 import type { CenterView } from "./ClaudeSessions/ClaudeChat";
 import { WorkspaceFileTreeRail } from "./WorkspaceFileTreeRail";
 import type { WorkspaceFileTreeRailContext } from "./WorkspaceFileTreeRail/types";
@@ -1644,6 +1644,7 @@ export function AppWorkspaceLayout({
                     >
                       <ErrorBoundary type="local" fallbackTitle="智能对话会话模块出错">
                         <Suspense fallback={<WorkspaceViewportLoading />}>
+                          <CenterViewControlContext.Provider value={setCenterView}>
                           <ConnectedClaudeSessions
                             claudeSessionsProps={claudeSessionsPropsWithHeader}
                             centerView={centerView}
@@ -1651,6 +1652,7 @@ export function AppWorkspaceLayout({
                             centerAuxPanelsNodeByPane={centerAuxPanelsNodeByPane}
                             centerAuxPanelsNodeByPaneVersion={centerAuxPanelsNodeByPaneVersion}
                           />
+                          </CenterViewControlContext.Provider>
                         </Suspense>
                       </ErrorBoundary>
                     </div>

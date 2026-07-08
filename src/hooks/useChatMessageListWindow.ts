@@ -84,13 +84,35 @@ export function useChatMessageListWindow({
   );
   const [visibleCount, setVisibleCount] = useState(initialVisible);
   const loadLockedRef = useRef(false);
+  // loadMoreOlder 视口保持的 rAF handle + 锁复位兜底定时器。rAF 在窗口不可见时会被浏览器暂停，
+  // 此时 loadLockedRef 卡在 true，后续点击（按钮或滚到顶）全被守卫静默拦截--表现「点击加载更早
+  // 消息完全无反应、N 不变」，且自持续直到切会话或 rAF 恢复。定时器兜底强制复位锁；rAF 正常
+  // 执行时清除定时器，无副作用。
+  const loadMoreRafRef = useRef(0);
+  const loadMoreUnlockTimerRef = useRef(0);
   const prevRowsLengthRef = useRef(rows.length);
 
   useEffect(() => {
     setVisibleCount(initialVisible);
     loadLockedRef.current = false;
+    if (loadMoreRafRef.current !== 0) {
+      window.cancelAnimationFrame(loadMoreRafRef.current);
+      loadMoreRafRef.current = 0;
+    }
+    if (loadMoreUnlockTimerRef.current !== 0) {
+      window.clearTimeout(loadMoreUnlockTimerRef.current);
+      loadMoreUnlockTimerRef.current = 0;
+    }
     prevRowsLengthRef.current = rows.length;
   }, [initialVisible, listResetKey]);
+
+  // 卸载时清理视口保持 rAF 与兜底定时器，避免回调在组件销毁后操作已分离 DOM 或复位陈旧 ref。
+  useEffect(() => {
+    return () => {
+      if (loadMoreRafRef.current !== 0) window.cancelAnimationFrame(loadMoreRafRef.current);
+      if (loadMoreUnlockTimerRef.current !== 0) window.clearTimeout(loadMoreUnlockTimerRef.current);
+    };
+  }, []);
 
   const slice = sliceChatMessageListRows(rows, visibleCount);
   const rowsLengthRef = useRef(rows.length);
@@ -155,12 +177,31 @@ export function useChatMessageListWindow({
 
     setVisibleCount((current) => nextChatMessageVisibleCount(current, rows.length, loadStep, maxVisible));
 
-    requestAnimationFrame(() => {
+    // 清除上一次未完成的视口保持回调，防止叠加。
+    if (loadMoreRafRef.current !== 0) window.cancelAnimationFrame(loadMoreRafRef.current);
+    if (loadMoreUnlockTimerRef.current !== 0) window.clearTimeout(loadMoreUnlockTimerRef.current);
+    loadMoreRafRef.current = window.requestAnimationFrame(() => {
+      loadMoreRafRef.current = 0;
+      if (loadMoreUnlockTimerRef.current !== 0) {
+        window.clearTimeout(loadMoreUnlockTimerRef.current);
+        loadMoreUnlockTimerRef.current = 0;
+      }
       if (sc) {
         sc.scrollTop = prevScrollTop + (sc.scrollHeight - prevScrollHeight);
       }
       loadLockedRef.current = false;
     });
+    // rAF 兜底：窗口不可见等场景 rAF 被暂停时，loadLockedRef 卡在 true 会让后续点击全被守卫
+    // 静默拦截（「点击加载完全无反应」）。超时强制复位锁并取消 pending rAF（避免恢复后用陈旧的
+    // prevScrollTop/Height 错乱视口）；rAF 正常执行时已清除本定时器，不会重复触发。
+    loadMoreUnlockTimerRef.current = window.setTimeout(() => {
+      loadMoreUnlockTimerRef.current = 0;
+      if (loadMoreRafRef.current !== 0) {
+        window.cancelAnimationFrame(loadMoreRafRef.current);
+        loadMoreRafRef.current = 0;
+      }
+      loadLockedRef.current = false;
+    }, 300);
   }, [loadStep, maxVisible, rows.length, scrollContainerRef, slice.hiddenRowCount, slice.windowActive]);
 
   useEffect(() => {
