@@ -75,6 +75,12 @@ import {
   subscribeComposerInteraction,
 } from "../../stores/composerInteractionGate";
 import {
+  requestComposerRefocus,
+  consumeComposerRefocus,
+  subscribeComposerRefocus,
+  getComposerRefocusSnapshot,
+} from "../../stores/composerRefocusStore";
+import {
   isMainThreadCongested,
   subscribeMainThreadCongestion,
 } from "../../stores/mainThreadCongestionStore";
@@ -652,6 +658,9 @@ function ComposerInner({
   const composerResettingRef = useRef(false);
   const cursorRef = useRef(0);
   const dragOverLoggedRef = useRef(false);
+  /** 权限/追问 dock 是否待处理：发送后重聚焦 effect 据此让出焦点给弹窗。值在渲染体回填。 */
+  const showQuestionChromeRef = useRef(false);
+  const showPermissionChromeRef = useRef(false);
   const { target: atMentionDefaultTarget, save: saveAtMentionDefaultTarget } =
     useAtMentionDefaultTarget();
   const { bindings: atMentionShortcutBindings } = useAtMentionShortcuts();
@@ -1303,6 +1312,12 @@ function ComposerInner({
     isComposerInteractionActive,
     () => false,
   );
+  /** 本会话「发送后待重新聚焦」信号：>0 表示有待聚焦请求（跨瞬时卸载/重挂存活）。 */
+  const composerRefocusSignal = useSyncExternalStore(
+    subscribeComposerRefocus,
+    useCallback(() => getComposerRefocusSnapshot(session.id), [session.id]),
+    () => 0,
+  );
   const sessionMetricsFingerprint = sessionContextRefreshFingerprint(session, {
     congested: congested || composerInteractionActive,
   });
@@ -1714,14 +1729,27 @@ function ComposerInner({
           () => {
             // Tiptap 真正清干净后释放 resetting 标记
             composerResettingRef.current = false;
+            // setContent("") 会丢焦点：必须在清空完成后重新聚焦输入框尾端，
+            // 让用户发送后可立即继续连续输入，无需再点击聚焦。
+            // （microtask 里的 focus 会先于此异步回调执行，被随后的 setContent 失焦覆盖，
+            //   故真正的 refocus 必须放在 setContent 完成后的 onSuccess 内，与
+            //   restoreComposerSurface/applyStarterPrompt 等路径一致。）
+            aiChatRef.current?.focusEditor?.("end");
           },
           () => {
             // editor 未就绪、setContent("") 放弃时也必须释放 resetting，否则
             // applySemiContentChange 会永久吞掉所有回流 -> 打字无反应（只能靠会话切换兜底）。
             composerResettingRef.current = false;
+            // 放弃路径同样尝试 refocus：editor 可能此时已就绪，聚焦后即可继续输入。
+            aiChatRef.current?.focusEditor?.("end");
           },
         );
         queueMicrotask(() => aiChatRef.current?.focusEditor?.("end"));
+        // 下一帧再聚焦一次兜底：setContent("") 重建 ProseMirror DOM 后，同步/microtask 阶段的
+        // focus 可能未“粘”住；且紧随其后的消息追加会触发原生 scroll，而 ensureScrollContainerFocus
+        // 仅在编辑器无焦点时才会抢焦点。rAF 在浏览器完成布局后再聚焦，让焦点稳定落在输入框尾端，
+        // 用户发送后可立即连续输入，无需再点击聚焦。
+        requestAnimationFrame(() => aiChatRef.current?.focusEditor?.("end"));
         void clearPromptContextSessionKey(draftBucketKey);
       };
 
@@ -2175,6 +2203,8 @@ function ComposerInner({
       onExecute(session.id, dispatchPromptText, consumePending, dispatchTargetForExecute, executeOptions);
       } finally {
         composerSendInFlightRef.current = false;
+        // 请求发送后重新聚焦输入框：跨瞬时卸载/重挂与重渲染，由 semiEditorReady effect 兜底聚焦。
+        requestComposerRefocus(session.id);
       }
     },
     [
@@ -2986,8 +3016,36 @@ function ComposerInner({
     });
   }, [session.id]);
 
+  /**
+   * 发送后重新聚焦输入框，支持连续输入。请求由 handleSend 的 finally 写入 store，
+   * 跨越「发送导致 ClaudeChat 瞬时卸载/重挂」边界：旧编辑器 microtask 聚焦会落空，
+   * 此 effect 在新编辑器 semiEditorReady 后或重渲染后 consume 并聚焦。
+   * 权限/追问 dock 待处理时让出焦点；已聚焦则不重复抢。
+   */
+  useEffect(() => {
+    if (!semiEditorReady) return;
+    if (!composerRefocusSignal) return;
+    if (showQuestionChromeRef.current || showPermissionChromeRef.current) {
+      consumeComposerRefocus(session.id);
+      return;
+    }
+    if (isProseMirrorFocused(shellRef.current)) {
+      consumeComposerRefocus(session.id);
+      return;
+    }
+    if (consumeComposerRefocus(session.id)) {
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          aiChatRef.current?.focusEditor?.("end");
+        });
+      });
+    }
+  }, [semiEditorReady, composerRefocusSignal, session.id]);
+
   const showQuestionChrome = Boolean(useAggregatedQuestionDock || questionRequest);
   const showPermissionChrome = Boolean(permissionRequest);
+  showQuestionChromeRef.current = showQuestionChrome;
+  showPermissionChromeRef.current = showPermissionChrome;
 
   return (
     <div
