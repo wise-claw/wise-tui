@@ -1568,14 +1568,11 @@ async fn bootstrap_streaming_session_stdin(
 
 /// 自动应答 CLI 的 `initialize` control，避免仅开 stdin 时首包卡死。
 async fn maybe_ack_control_initialize(
-    line: &str,
+    v: &serde_json::Value,
     pending_stdin_by_spawn: &Arc<TokioMutex<HashMap<u64, tokio::process::ChildStdin>>>,
     spawn_id: u64,
 ) {
-    let v: serde_json::Value = match serde_json::from_str(line) {
-        Ok(v) => v,
-        Err(_) => return,
-    };
+    // 调用方已解析整行 JSON，此处直接复用，避免每行二次 from_str。
     let req = match v.get("type").and_then(|t| t.as_str()) {
         Some("sdk_control_request") | Some("control_request") => v.get("request"),
         _ => return,
@@ -1807,10 +1804,10 @@ async fn spawn_claude_process(
         let active_suppress_shared = suppress_shared_stdout;
 
         while let Ok(Some(line)) = lines.next_line().await {
-            maybe_ack_control_initialize(&line, &pending_stdin_by_spawn_clone, spawn_id).await;
-            // 每行只解析一次 JSON；下方 oneshot 路径复用同一解析结果，避免二次 from_str。
+            // 每行只解析一次 JSON；maybe_ack 与下方逻辑复用同一解析结果，避免二次 from_str。
             let parsed_line_json: Option<serde_json::Value> = serde_json::from_str(&line).ok();
             if let Some(json) = parsed_line_json.as_ref() {
+                maybe_ack_control_initialize(json, &pending_stdin_by_spawn_clone, spawn_id).await;
                 let line_sid = extract_claude_session_id_from_stream_json(&json);
                 let line_type = json.get("type").and_then(|v| v.as_str());
                 let line_subtype = json.get("subtype").and_then(|v| v.as_str());
@@ -1959,13 +1956,13 @@ async fn spawn_claude_process(
             loop {
                 match lines.next_line().await {
                     Ok(Some(line)) => {
-                        maybe_ack_control_initialize(
-                            &line,
-                            &pending_stdin_by_spawn_clone,
-                            spawn_id,
-                        )
-                        .await;
                         if let Ok(json) = serde_json::from_str::<serde_json::Value>(&line) {
+                            maybe_ack_control_initialize(
+                                &json,
+                                &pending_stdin_by_spawn_clone,
+                                spawn_id,
+                            )
+                            .await;
                             if let Some(turn_ok) = streaming_turn_success_from_result(&json) {
                                 let sid_for_turn = real_session_id.as_deref().unwrap_or("unknown");
                                 let turn_verdict = extract_structured_verdict_candidate(&json);

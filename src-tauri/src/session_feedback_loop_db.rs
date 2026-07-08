@@ -63,8 +63,13 @@ impl WiseDb {
         &self,
         records: &[PatchEffectivenessRecordDto],
     ) -> Result<u32, String> {
-        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
-        insert_patch_batch(&g, records)
+        // 包单事务批量写入：原逐条 INSERT 各自隐式事务（N 次 WAL fsync），改一次提交。
+        // 失败时整体 rollback（原子批量语义，避免脏数据）。
+        let mut g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        let tx = g.transaction().map_err(|e| e.to_string())?;
+        let count = insert_patch_batch(&tx, records)?;
+        tx.commit().map_err(|e| e.to_string())?;
+        Ok(count)
     }
 
     pub fn list_session_feedback_patch_effectiveness(

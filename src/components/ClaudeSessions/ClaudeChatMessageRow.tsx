@@ -65,6 +65,11 @@ function ClaudeChatMessageRowInner({
   sessionsForDispatchLookup,
 }: Props) {
   const copyText = useChatMessageCopyText(msg, sessionsForDispatchLookup);
+  // timestamp 为消息创建时的原始值、流式期不变；memo 避免每 token 调用 Intl toLocaleString。
+  const timeTitle = useMemo(
+    () => new Date(msg.timestamp).toLocaleString("zh-CN"),
+    [msg.timestamp],
+  );
   const systemPlainText = useMemo(
     () => (msg.role === "system" ? systemMessagePlainText(msg) : ""),
     [msg],
@@ -94,7 +99,9 @@ function ClaudeChatMessageRowInner({
   }
 
   function renderChatBody() {
-    const orphanMarkdown = msg.role === "assistant" ? assistantOrphanMarkdownText(msg) : "";
+    // orphan Markdown 检测用于「完成后 content/parts 不同步」场景；流式期 parts 正在生成、跳过以避免每 token 跑遍历+正则。
+    const orphanMarkdown =
+      msg.role === "assistant" && !streamingThisBubble ? assistantOrphanMarkdownText(msg) : "";
     if (msg.parts && msg.parts.length > 0) {
       return (
         <>
@@ -153,10 +160,7 @@ function ClaudeChatMessageRowInner({
                 sessionsForDispatchLookup={sessionsForDispatchLookup}
               />
             </div>
-            <span
-              className="app-claude-message-time"
-              title={new Date(msg.timestamp).toLocaleString("zh-CN")}
-            >
+            <span className="app-claude-message-time" title={timeTitle}>
               {formatChatMessageListTime(msg.timestamp)}
             </span>
           </div>

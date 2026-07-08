@@ -19,8 +19,10 @@ export function looksLikeAssistantCompletionSummary(text: string): boolean {
 }
 
 /** 主会话中长段 Markdown（含 ## 标题、**小节**、多段列表等），用于增强排版与卡片容器。 */
-export function looksLikeLongFormChatMarkdown(text: string): boolean {
-  if (looksLikeStructuredMarkdownSummary(text)) return true;
+export function looksLikeLongFormChatMarkdown(text: string, isSummary?: boolean): boolean {
+  // 允许调用方复用已计算的 isSummary，避免 chatAssistantTextPartClassNames 内重复跑 4 正则。
+  const summary = isSummary ?? looksLikeStructuredMarkdownSummary(text);
+  if (summary) return true;
 
   const t = text.trim();
   if (!t) return false;
@@ -42,7 +44,7 @@ export function chatAssistantTextPartClassNames(text: string): {
   markdownClassName?: string;
 } {
   const isSummary = looksLikeStructuredMarkdownSummary(text);
-  const isLongProse = looksLikeLongFormChatMarkdown(text);
+  const isLongProse = looksLikeLongFormChatMarkdown(text, isSummary);
   let partClassName = "app-message-part app-message-part--text";
   if (isSummary) {
     partClassName += " app-message-part--completion-summary";

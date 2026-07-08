@@ -1040,6 +1040,15 @@ export function ClaudeChatInner({
     [isMainIdle, isEmployeeIdle, isTeamIdle, workflowGraphStatusByWorkflowId],
   );
 
+  // 队列派发态按 task.id 预计算，避免每次 render 内联 Object.fromEntries 产生新引用触发下游重渲染。
+  const taskDispatchStateById = useMemo(
+    () =>
+      Object.fromEntries(
+        pendingTasks.map((task) => [task.id, getPendingTaskDispatchState(task)]),
+      ),
+    [pendingTasks, getPendingTaskDispatchState],
+  );
+
   const handleSendNextFromQueue = useCallback(() => {
     if (pendingTasks.length === 0) {
       message.warning("队列为空");
@@ -1793,9 +1802,7 @@ export function ClaudeChatInner({
             geminiAvailable={geminiAvailable}
             opencodeAvailable={opencodeAvailable}
             deferredSendQueued={deferredSendQueued}
-            taskDispatchStateById={Object.fromEntries(
-              pendingTasks.map((task) => [task.id, getPendingTaskDispatchState(task)]),
-            )}
+            taskDispatchStateById={taskDispatchStateById}
             onPin={pinTask}
             onRemove={removeTask}
             onUpdate={updateTask}
@@ -1900,7 +1907,7 @@ export function ClaudeChatInner({
               projectRoleTagOptions={projectRoleTagOptions}
               projectRepositoryMentionOptions={projectRepositoryMentionOptions}
               hideEmployeesInAtMode={hideEmployeesInAtMode}
-              onEnqueueAsPendingTask={(payload) => addTask(payload)}
+              onEnqueueAsPendingTask={addTask}
               onTrackSendFlow={appendSessionSendTrace}
               onAppendSystemMessage={onAppendSystemMessage}
               onAppendUserMessage={onAppendUserMessage}
