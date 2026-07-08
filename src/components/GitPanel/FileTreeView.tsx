@@ -1,6 +1,6 @@
 import { memo, useMemo } from "react";
 import { Button, Space } from "antd";
-import { MinusOutlined, PlusOutlined } from "@ant-design/icons";
+import { MinusOutlined, PlusOutlined, VerticalAlignBottomOutlined, VerticalAlignTopOutlined } from "@ant-design/icons";
 import type { GitFileStatus } from "../../types";
 import { buildFileTree } from "./fileTree";
 import { ExplorerTreeChevron, ExplorerTreeFolderIcon } from "./explorerTreeChrome";
@@ -15,6 +15,7 @@ interface FileTreeNodeProps {
   section: "staged" | "unstaged";
   expandedDirs: Set<string>;
   onToggleDir: (path: string) => void;
+  onToggleDirRecursive?: (path: string, subDirPaths: readonly string[]) => void;
   onStage?: (path: string) => void;
   onUnstage?: (path: string) => void;
   onDiscard?: (path: string) => void | Promise<void>;
@@ -27,6 +28,7 @@ function FileTreeNodeComponent({
   section,
   expandedDirs,
   onToggleDir,
+  onToggleDirRecursive,
   onStage,
   onUnstage,
   onDiscard,
@@ -36,6 +38,20 @@ function FileTreeNodeComponent({
   const isExpanded = expandedDirs.has(node.path);
 
   if (node.isDir) {
+    // 递归收集该目录下所有子目录 path（含自身），用于「展开/收起子树」
+    const subDirPaths: string[] = [node.path];
+    const collect = (n: FileTreeNode) => {
+      if (n.children) {
+        for (const c of n.children) {
+          if (c.isDir) {
+            subDirPaths.push(c.path);
+            collect(c);
+          }
+        }
+      }
+    };
+    collect(node);
+
     return (
       <>
         <div
@@ -59,6 +75,23 @@ function FileTreeNodeComponent({
           >{node.name}</span>
           <span className="git-tree-node-meta">
             <Space size={0} className="git-tree-node-actions">
+              <Button
+                type="text"
+                size="small"
+                title={isExpanded ? "收起目录（含子目录）" : "展开目录（含子目录）"}
+                aria-label={isExpanded ? `收起目录 ${node.name}（含子目录）` : `展开目录 ${node.name}（含子目录）`}
+                aria-expanded={isExpanded}
+                icon={isExpanded ? <VerticalAlignTopOutlined /> : <VerticalAlignBottomOutlined />}
+                className="git-tree-node-toggle-dir"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  if (onToggleDirRecursive) {
+                    onToggleDirRecursive(node.path, subDirPaths);
+                  } else {
+                    onToggleDir(node.path);
+                  }
+                }}
+              />
               {section === "unstaged" && onStage ? (
                 <Button
                   type="text"
@@ -119,6 +152,7 @@ function FileTreeNodeComponent({
                 section={section}
                 expandedDirs={expandedDirs}
                 onToggleDir={onToggleDir}
+                onToggleDirRecursive={onToggleDirRecursive}
                 onStage={onStage}
                 onUnstage={onUnstage}
                 onDiscard={onDiscard}
@@ -158,6 +192,7 @@ interface FileTreeViewProps {
   section: "staged" | "unstaged";
   expandedDirs: Set<string>;
   onToggleDir: (path: string) => void;
+  onToggleDirRecursive?: (path: string, subDirPaths: readonly string[]) => void;
   onStage?: (path: string) => void;
   onUnstage?: (path: string) => void;
   onDiscard?: (path: string) => void | Promise<void>;
@@ -169,6 +204,7 @@ export function FileTreeView({
   section,
   expandedDirs,
   onToggleDir,
+  onToggleDirRecursive,
   onStage,
   onUnstage,
   onDiscard,
@@ -185,6 +221,7 @@ export function FileTreeView({
           section={section}
           expandedDirs={expandedDirs}
           onToggleDir={onToggleDir}
+          onToggleDirRecursive={onToggleDirRecursive}
           onStage={onStage}
           onUnstage={onUnstage}
           onDiscard={onDiscard}

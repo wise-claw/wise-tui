@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
+import { useDiffModeExpandedDirs } from "./useDiffModeExpandedDirs";
 import { HoverHint } from "../shared/HoverHint";
 import { Button, Input, message, Popconfirm, Space, Typography } from "antd";
 import {
@@ -65,8 +66,6 @@ function DiffModeInner({
 }: DiffModeProps) {
   const [commitMsg, setCommitMsg] = useState("");
   const [unstagedViewMode, setUnstagedViewMode] = useState<UnstagedViewMode>("tree");
-  const [expandedDirs, setExpandedDirs] = useState<Set<string>>(new Set());
-  const [treeAllExpanded, setTreeAllExpanded] = useState(false);
   const [stagedCollapsed, setStagedCollapsed] = useState(false);
   const [aiSummaryLoading, setAiSummaryLoading] = useState(false);
   const [pushPreparing, setPushPreparing] = useState(false);
@@ -131,35 +130,22 @@ function DiffModeInner({
     return dirs;
   }, [status.staged, status.unstaged, useTreeView]);
 
-  const handleExpandAll = useCallback(() => {
-    setExpandedDirs(new Set(treeDirPaths));
-    setTreeAllExpanded(true);
-  }, [treeDirPaths]);
-
-  const handleCollapseAll = useCallback(() => {
-    setExpandedDirs(new Set());
-    setTreeAllExpanded(false);
-  }, []);
+  const {
+    expandedDirs,
+    toggleDir: handleToggleDir,
+    toggleDirRecursive: handleToggleDirRecursive,
+    expandAll: handleExpandAll,
+    collapseAll: handleCollapseAll,
+    isTreeAllExpanded: treeAllExpanded,
+  } = useDiffModeExpandedDirs(repositoryPath, treeDirPaths);
 
   const handleToggleTree = useCallback(() => {
     if (treeAllExpanded) {
       handleCollapseAll();
     } else {
-      handleExpandAll();
+      handleExpandAll(treeDirPaths);
     }
-  }, [treeAllExpanded, handleCollapseAll, handleExpandAll]);
-
-  const handleToggleDir = useCallback((dirPath: string) => {
-    setExpandedDirs((prev) => {
-      const next = new Set(prev);
-      if (next.has(dirPath)) {
-        next.delete(dirPath);
-      } else {
-        next.add(dirPath);
-      }
-      return next;
-    });
-  }, []);
+  }, [treeAllExpanded, handleCollapseAll, handleExpandAll, treeDirPaths]);
 
   const generateCommitMessageByAi = useCallback(async (): Promise<{ message: string; aiFailed: boolean }> => {
     const fallback = buildCommitDraftFromStatus(status);
@@ -521,6 +507,7 @@ function DiffModeInner({
                 section="staged"
                 expandedDirs={expandedDirs}
                 onToggleDir={handleToggleDir}
+                onToggleDirRecursive={handleToggleDirRecursive}
                 onUnstage={onUnstage}
                 onOpenFile={onOpenFile}
               />
@@ -591,6 +578,7 @@ function DiffModeInner({
               section="unstaged"
               expandedDirs={expandedDirs}
               onToggleDir={handleToggleDir}
+              onToggleDirRecursive={handleToggleDirRecursive}
               onStage={onStage}
               onDiscard={onDiscard}
               onOpenFile={onOpenFile}
