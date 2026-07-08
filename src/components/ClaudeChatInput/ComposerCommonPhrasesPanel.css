@@ -38,19 +38,20 @@
 .app-composer-common-phrases-panel__default {
   display: flex;
   flex-direction: column;
-  gap: 4px;
-  padding-bottom: 2px;
+  gap: 2px;
+  padding-bottom: 4px;
   border-bottom: 1px solid var(--ant-color-border-secondary);
 }
 
-.app-composer-common-phrases-panel__default-head {
+.app-composer-common-phrases-panel__default-head-row {
   display: flex;
-  flex-direction: column;
-  align-items: flex-start;
-  gap: 1px;
+  flex-direction: row;
+  align-items: center;
+  gap: 8px;
 }
 
 .app-composer-common-phrases-panel__default-title {
+  flex-shrink: 0;
   font-size: 11px;
   font-weight: 600;
   color: var(--ant-color-text);
@@ -59,15 +60,44 @@
 }
 
 .app-composer-common-phrases-panel__default-hint {
-  font-size: 10px;
-  line-height: 1.25;
+  font-size: 9px;
+  line-height: 1.2;
   color: var(--ant-color-text-quaternary);
 }
 
-.app-composer-common-phrases-panel__default .app-composer-default-instruction-field .ant-select-selector {
-  min-height: 28px !important;
+.app-composer-common-phrases-panel__default .app-composer-default-instruction-field {
+  flex: 1;
+  min-width: 0;
+}
+
+/* AutoComplete 默认 middle=32px，弹窗里切到 size="small" 走 24px 分支，
+   再把 .ant-select-sm 进一步压到 22px 以适配紧凑弹窗。 */
+.app-composer-common-phrases-panel__default .app-composer-default-instruction-field .ant-select.ant-select-sm {
+  min-height: 22px !important;
+  height: 22px !important;
+  font-size: 11px !important;
+}
+
+.app-composer-common-phrases-panel__default .app-composer-default-instruction-field .ant-select.ant-select-sm .ant-select-selector {
+  min-height: 22px !important;
+  height: 22px !important;
   padding-block: 0 !important;
-  font-size: 12px !important;
+  font-size: 11px !important;
+}
+
+.app-composer-common-phrases-panel__default .app-composer-default-instruction-field .ant-select.ant-select-sm .ant-select-selection-search-input {
+  height: 22px !important;
+  min-height: 0 !important;
+  padding: 0 !important;
+  font-size: 11px !important;
+  line-height: 22px !important;
+}
+
+.app-composer-common-phrases-panel__hint-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
 }
 
 .app-composer-common-phrases-panel__hint {
@@ -90,7 +120,7 @@
   padding: 0;
   display: flex;
   flex-direction: column;
-  max-height: min(260px, 42vh);
+  max-height: min(360px, 58vh);
   overflow-y: auto;
   border: 1px solid var(--ant-color-border-secondary);
   border-radius: 6px;
@@ -100,8 +130,8 @@
 .app-composer-common-phrases-panel__item {
   display: flex;
   align-items: center;
-  gap: 8px;
-  padding: 6px 8px;
+  gap: 6px;
+  padding: 4px 8px;
   border-bottom: 1px solid var(--ant-color-border-secondary);
 }
 
@@ -115,7 +145,7 @@
   display: flex;
   flex-direction: column;
   align-items: flex-start;
-  gap: 2px;
+  gap: 1px;
   margin: 0;
   padding: 0;
   border: none;
@@ -145,7 +175,7 @@
 .app-composer-common-phrases-panel__item-action {
   flex-shrink: 0;
   font-size: 9px;
-  line-height: 16px;
+  line-height: 14px;
   padding: 0 5px;
   border-radius: 3px;
   color: var(--ant-color-text-quaternary);
@@ -155,10 +185,10 @@
 .app-composer-common-phrases-panel__item-title {
   flex-shrink: 0;
   max-width: 88px;
-  font-size: 12px;
+  font-size: 11px;
   font-weight: 600;
   color: var(--ant-color-text);
-  line-height: 1.25;
+  line-height: 1.2;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -168,7 +198,7 @@
   display: block;
   width: 100%;
   font-size: 10px;
-  line-height: 1.35;
+  line-height: 1.2;
   color: var(--ant-color-text-quaternary);
   overflow: hidden;
   text-overflow: ellipsis;
@@ -182,7 +212,7 @@
   border: 1px solid var(--ant-color-border-secondary);
   background: var(--ant-color-fill-quaternary);
   font-size: 9px;
-  line-height: 14px;
+  line-height: 12px;
   color: var(--ant-color-text-quaternary);
   font-family: inherit;
 }
@@ -190,9 +220,9 @@
 .app-composer-common-phrases-panel__item-side {
   display: flex;
   flex-shrink: 0;
-  flex-direction: column;
-  align-items: flex-end;
-  justify-content: center;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-end;
   gap: 4px;
 }
 
@@ -217,13 +247,6 @@
   margin: 0;
 }
 
-.app-composer-common-phrases-panel__item-actions {
-  display: flex;
-  flex-shrink: 0;
-  align-items: center;
-  gap: 0;
-}
-
 .app-composer-common-phrases-panel__item-edit.ant-btn,
 .app-composer-common-phrases-panel__item-delete.ant-btn {
   height: 22px !important;
@@ -232,14 +255,12 @@
   line-height: 22px !important;
 }
 
-.app-composer-common-phrases-panel__footer {
-  padding-top: 2px;
-}
-
 .app-composer-common-phrases-panel__add.ant-btn {
-  height: 28px !important;
-  font-size: 12px !important;
-  padding-block: 0 !important;
+  flex-shrink: 0;
+  height: 22px !important;
+  padding-inline: 8px !important;
+  font-size: 11px !important;
+  line-height: 22px !important;
   letter-spacing: normal;
   white-space: nowrap;
 }

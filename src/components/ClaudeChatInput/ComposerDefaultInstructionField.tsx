@@ -40,6 +40,7 @@ export function ComposerDefaultInstructionField({
   placeholder = "选择或输入 /autopilot",
   onChange,
   onCommit,
+  compact = false,
 }: {
   value: string;
   disabled?: boolean;
@@ -48,6 +49,12 @@ export function ComposerDefaultInstructionField({
   placeholder?: string;
   onChange: (next: string) => void;
   onCommit?: (next: string) => void | Promise<void>;
+  /**
+   * 弹窗等紧凑场景：把 AutoComplete 渲染为 AntD `size="small"`，
+   * 走主题 `--ant-control-height-sm` (24px) + `.ant-select-sm` 的样式分支，
+   * 避免全局 32px 默认 + 内联 style 覆盖 CSS 的争抢。
+   */
+  compact?: boolean;
 }) {
   const [catalogLoading, setCatalogLoading] = useState(false);
   const [catalogSnapshot, setCatalogSnapshot] = useState<SlashCatalogSnapshot | null>(null);
@@ -116,6 +123,7 @@ export function ComposerDefaultInstructionField({
       className="app-composer-default-instruction-field"
       value={value}
       disabled={disabled || loading || catalogLoading}
+      size={compact ? "small" : "middle"}
       options={autoCompleteOptions}
       placeholder={placeholder}
       allowClear

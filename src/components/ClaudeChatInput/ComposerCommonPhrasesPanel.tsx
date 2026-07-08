@@ -210,26 +210,38 @@ export function ComposerCommonPhrasesPanel({
       </div>
       {hideDefaultInstruction ? null : (
         <section className="app-composer-common-phrases-panel__default" aria-label="主会话默认指令">
-          <div className="app-composer-common-phrases-panel__default-head">
+          <div className="app-composer-common-phrases-panel__default-head-row">
             <span className="app-composer-common-phrases-panel__default-title">默认指令</span>
-            <span className="app-composer-common-phrases-panel__default-hint">
-              自动前缀；已有 / 命令不追加；@终端优先终端默认
-            </span>
+            <ComposerDefaultInstructionField
+              value={defaultDraft}
+              disabled={defaultBusy}
+              loading={defaultBusy}
+              repositoryPath={repositoryPath}
+              placeholder="选择或输入 /autopilot"
+              onChange={setDefaultDraft}
+              onCommit={saveDefaultInstruction}
+              compact
+            />
           </div>
-          <ComposerDefaultInstructionField
-            value={defaultDraft}
-            disabled={defaultBusy}
-            loading={defaultBusy}
-            repositoryPath={repositoryPath}
-            placeholder="选择或输入 /autopilot"
-            onChange={setDefaultDraft}
-            onCommit={saveDefaultInstruction}
-          />
+          <span className="app-composer-common-phrases-panel__default-hint">
+            自动前缀；已有 / 命令不追加；@终端优先终端默认
+          </span>
         </section>
       )}
-      <p className="app-composer-common-phrases-panel__hint">点击编辑；快捷栏按触发方式发送或填入</p>
+      <div className="app-composer-common-phrases-panel__hint-row">
+        <p className="app-composer-common-phrases-panel__hint">点击编辑；快捷栏按触发方式发送或填入</p>
+        <Button
+          type="dashed"
+          size="small"
+          className="app-composer-common-phrases-panel__add"
+          disabled={busy || phrases.length >= MAX_COMPOSER_COMMON_PHRASES}
+          onClick={openCreate}
+        >
+          新增
+        </Button>
+      </div>
       {phrases.length === 0 ? (
-        <p className="app-composer-common-phrases-panel__empty">暂无常用语，点击下方新增。</p>
+        <p className="app-composer-common-phrases-panel__empty">暂无常用语，点击上方新增。</p>
       ) : (
         <ul className="app-composer-common-phrases-panel__list">
           {phrases.map((phrase) => {
@@ -271,54 +283,41 @@ export function ComposerCommonPhrasesPanel({
                       onChange={(checked) => void setPhraseShowInQuickBar(phrase.id, checked)}
                     />
                   </label>
-                  <div className="app-composer-common-phrases-panel__item-actions">
+                  <Button
+                    type="link"
+                    size="small"
+                    className="app-composer-common-phrases-panel__item-edit"
+                    disabled={busy}
+                    onClick={() => openEdit(phrase)}
+                  >
+                    编辑
+                  </Button>
+                  <Popconfirm
+                    title="删除这条常用语？"
+                    okText="删除"
+                    cancelText="取消"
+                    okButtonProps={{ danger: true, size: "small" }}
+                    cancelButtonProps={{ size: "small" }}
+                    disabled={busy}
+                    onConfirm={() => void removePhraseById(phrase.id)}
+                  >
                     <Button
                       type="link"
                       size="small"
-                      className="app-composer-common-phrases-panel__item-edit"
+                      danger
+                      className="app-composer-common-phrases-panel__item-delete"
                       disabled={busy}
-                      onClick={() => openEdit(phrase)}
+                      onClick={(event) => event.stopPropagation()}
                     >
-                      编辑
+                      删除
                     </Button>
-                    <Popconfirm
-                      title="删除这条常用语？"
-                      okText="删除"
-                      cancelText="取消"
-                      okButtonProps={{ danger: true, size: "small" }}
-                      cancelButtonProps={{ size: "small" }}
-                      disabled={busy}
-                      onConfirm={() => void removePhraseById(phrase.id)}
-                    >
-                      <Button
-                        type="link"
-                        size="small"
-                        danger
-                        className="app-composer-common-phrases-panel__item-delete"
-                        disabled={busy}
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        删除
-                      </Button>
-                    </Popconfirm>
-                  </div>
+                  </Popconfirm>
                 </div>
               </li>
             );
           })}
         </ul>
       )}
-      <div className="app-composer-common-phrases-panel__footer">
-        <Button
-          type="dashed"
-          block
-          className="app-composer-common-phrases-panel__add"
-          disabled={busy || phrases.length >= MAX_COMPOSER_COMMON_PHRASES}
-          onClick={openCreate}
-        >
-          新增
-        </Button>
-      </div>
 
       <ComposerCommonPhraseEditModal
         open={editOpen}
