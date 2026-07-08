@@ -490,7 +490,7 @@ export const Topbar = memo(function Topbar({
         {onSearch && (
           <TopbarBtn
             icon={<IconSearch />}
-            label="搜索：⌘F 文件名 · ⌘⇧F 文件内容 · ⌘K 切换"
+            label="搜索：⌘F 文件名 · ⌘⇧F/⌘J 文件内容 · ⌘K 切换"
             onClick={onSearch}
           />
         )}

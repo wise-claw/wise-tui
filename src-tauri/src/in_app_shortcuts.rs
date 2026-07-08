@@ -3,6 +3,7 @@
 //!
 //! - `filename` / `content`：统一为 Ctrl+F / Ctrl+Shift+F（macOS 也用 CONTROL 而非 SUPER），
 //!   避免占用 ⌘F / ⌘⇧F，让 Monaco 编辑器在聚焦时能正常触发自身内查找。
+//! - `content_alt`：⌘J / Ctrl+J，文件内容搜索的并列快捷键（与 `content` 同效）。
 //! - `new_session`：⌘N / Ctrl+N，新建会话；刻意做成「应用内」，避免在别的 App 里误触。
 //!
 //! 双重保险：
@@ -40,6 +41,7 @@ fn main_window_focused(app: &AppHandle) -> bool {
 struct InAppSearchShortcutState {
     filename: Shortcut,
     content: Shortcut,
+    content_alt: Shortcut,
     new_session: Shortcut,
     registered: bool,
 }
@@ -56,9 +58,17 @@ impl InAppSearchShortcutState {
         #[cfg(not(target_os = "macos"))]
         let new_session_mods = Modifiers::CONTROL;
 
+        // 文件内容搜索的并列快捷键 ⌘J / Ctrl+J（与 content 同效）：
+        // macOS 用 SUPER(⌘) 与 new_session 一致；⌘J 不与 Monaco 内查找(⌘F)冲突。
+        #[cfg(target_os = "macos")]
+        let content_alt_mods = Modifiers::SUPER;
+        #[cfg(not(target_os = "macos"))]
+        let content_alt_mods = Modifiers::CONTROL;
+
         Self {
             filename: Shortcut::new(Some(filename_mods), Code::KeyF),
             content: Shortcut::new(Some(content_mods), Code::KeyF),
+            content_alt: Shortcut::new(Some(content_alt_mods), Code::KeyJ),
             new_session: Shortcut::new(Some(new_session_mods), Code::KeyN),
             registered: false,
         }
@@ -85,9 +95,11 @@ pub fn register_search_shortcuts(app: &AppHandle) -> Result<(), String> {
         }
         let filename = state.filename.clone();
         let content = state.content.clone();
+        let content_alt = state.content_alt.clone();
         let new_session = state.new_session.clone();
         let app_for_filename = app.clone();
         let app_for_content = app.clone();
+        let app_for_content_alt = app.clone();
         let app_for_new_session = app.clone();
 
         app.global_shortcut()
@@ -113,6 +125,17 @@ pub fn register_search_shortcuts(app: &AppHandle) -> Result<(), String> {
                 let _ = app_for_content.emit("global-open-content-search", ());
             })
             .map_err(|e| e.to_string())?;
+
+        // content_alt (⌘J/Ctrl+J) 与 content 同效：用 let _ = 防御，注册失败（如被 @提及快捷键占用）不中断其他快捷键。
+        let _ = app.global_shortcut().on_shortcut(content_alt, move |_app, _shortcut, event| {
+            if event.state() != ShortcutState::Pressed {
+                return;
+            }
+            if !main_window_focused(&app_for_content_alt) {
+                return;
+            }
+            let _ = app_for_content_alt.emit("global-open-content-search", ());
+        });
 
         app.global_shortcut()
             .on_shortcut(new_session, move |_app, _shortcut, event| {
@@ -140,6 +163,7 @@ pub fn unregister_search_shortcuts(app: &AppHandle) -> Result<(), String> {
         }
         let filename = state.filename.clone();
         let content = state.content.clone();
+        let content_alt = state.content_alt.clone();
         let new_session = state.new_session.clone();
         app.global_shortcut()
             .unregister(filename)
@@ -147,6 +171,8 @@ pub fn unregister_search_shortcuts(app: &AppHandle) -> Result<(), String> {
         app.global_shortcut()
             .unregister(content)
             .map_err(|e| e.to_string())?;
+        // content_alt 注册时可能已失败（被占用），注销也防御性忽略错误。
+        let _ = app.global_shortcut().unregister(content_alt);
         app.global_shortcut()
             .unregister(new_session)
             .map_err(|e| e.to_string())?;

@@ -59,6 +59,10 @@ export const APP_SHORTCUT_GROUPS: AppShortcutGroup[] = [
         description: "Wise 主窗口聚焦时打开全局搜索（文件内容模式）。",
       },
       {
+        keys: "⌘J · Ctrl+J",
+        description: "文件内容搜索的并列快捷键（与 ⌘⇧F 同效）。",
+      },
+      {
         keys: "⌘⇧M · Ctrl+Shift+M",
         description: "显示 Wise 浮窗助手。",
       },
