@@ -42,6 +42,7 @@ import {
 } from "../ProgressMonitorPanel/SessionConversationTaskDetailDrawer";
 import { useExecutionEnvironmentDispatchTasksForChat } from "../../hooks/useExecutionEnvironmentDispatchTasksForChat";
 import { createMainLaneDispatchGate } from "../../hooks/mainLaneDispatchGate";
+import { createDispatchFailureTracker } from "../../hooks/dispatchFailureTracker";
 import {
   ClaudeChatSessionFeaturePanel,
   type RefreshHistorySessionsScope,
@@ -601,6 +602,14 @@ export function ClaudeChatInner({
    */
   const mainLaneDispatchGateRef = useRef(createMainLaneDispatchGate());
 
+  /**
+   * 派发失败追踪：catch 路径按 fingerprint 累加失败次数，达上限 drop（避免无限重入循环 +
+   * 队列重复增长：原 task 派发时未 removeTask，抛错时仍在队列，若再 addTask 会新增重复条目）。
+   * 未达上限则退避（setTimeout 延迟 addTask）重入队。与 inFlight set / gate 正交：
+   * 后两者防「同一帧重入 / status 翻转延迟」，本追踪器防「持续抛错的无限重派」。
+   */
+  const dispatchFailureTrackerRef = useRef(createDispatchFailureTracker());
+
   const wasRunningRef = useRef(session.status === "running");
   const deferredSendNextRef = useRef(false);
   const deferredQueueHydratedRef = useRef(false);
@@ -629,6 +638,8 @@ export function ClaudeChatInner({
         executorLabel,
         executeBubbleOptions,
       } = task;
+      // 失败追踪 fingerprint：相同目标 + 相同 prompt 的连续失败累加，达上限 drop。
+      const failureFp = `${targetType ?? "main"}|${targetEmployeeName ?? ""}|${targetWorkflowId ?? ""}|${promptText}`;
       logWorkflowTrace("queue.dispatch.consume", {
         sessionId: session.id,
         taskId: id,
@@ -639,6 +650,7 @@ export function ClaudeChatInner({
         targetWorkflowName: targetWorkflowName ?? "",
       });
       void (async () => {
+        let suppressFinalFlush = false;
         try {
           const started = await Promise.resolve(
             onExecute(
@@ -657,24 +669,44 @@ export function ClaudeChatInner({
             return;
           }
           removeTask(id);
+          dispatchFailureTrackerRef.current.onSuccess(failureFp);
         } catch (error) {
-          console.error("Failed to dispatch pending task, requeueing:", error);
+          console.error("Failed to dispatch pending task:", error);
           // onExecute 抛错 -> status 不会翻 running，gate 立即释放，避免 hold 死锁接力。
           if (laneKey === "main") {
             mainLaneDispatchGateRef.current.release();
           }
-          addTask({
-            promptText,
-            executorLabel,
-            targetType,
-            targetEmployeeName,
-            targetWorkflowId,
-            targetWorkflowName,
-          });
-          void message.error("任务分发失败，已重新加入待办队列。");
+          // 抑制 finally 的 microtask flush：removeTask 的 setTasks 是异步渲染，finally
+          // microtask 跑时 pendingTasksRef 仍是旧快照（含本 task），而 gate 已 release ->
+          // canDispatchHead 会判定可派发 -> 立即重派，绕过下方退避。退避重入队改由
+          // setTimeout 内的 flush 驱动；drop 后其它 lane 靠 pendingTasks 变化触发的
+          // gate key effect flush 推进，不会卡死。
+          suppressFinalFlush = true;
+          // 原 task 在派发时未 removeTask（仅在 success 路径移除），抛错时仍在队列。
+          // 必须先 removeTask 去重，否则 addTask 会新增重复条目导致队列爆炸增长。
+          removeTask(id);
+          const outcome = dispatchFailureTrackerRef.current.onFailure(failureFp);
+          if (outcome.action === "drop") {
+            void message.error(`任务连续分发失败 ${outcome.count} 次，已从队列移除，请检查执行环境后重试。`);
+            return;
+          }
+          // 退避重入队：延迟 addTask + flush，避免立即重派形成紧循环。
+          window.setTimeout(() => {
+            addTask({
+              promptText,
+              executorLabel,
+              targetType,
+              targetEmployeeName,
+              targetWorkflowId,
+              targetWorkflowName,
+            });
+            queueMicrotask(() => flushPendingLaneDispatchesRef.current());
+          }, outcome.backoffMs);
         } finally {
           pendingQueueDispatchInFlightLanesRef.current.delete(laneKey);
-          queueMicrotask(() => flushPendingLaneDispatchesRef.current());
+          if (!suppressFinalFlush) {
+            queueMicrotask(() => flushPendingLaneDispatchesRef.current());
+          }
         }
       })();
     },
@@ -1073,6 +1105,8 @@ export function ClaudeChatInner({
   useEffect(() => {
     deferredQueueHydratedRef.current = false;
     lastPendingFlushGateKeyRef.current = "";
+    // 会话切换：清空派发失败计数，避免新会话的同指纹任务被旧计数误判 drop。
+    dispatchFailureTrackerRef.current.clear();
     const sid = session.id;
     const rp = session.repositoryPath;
     let cancelled = false;

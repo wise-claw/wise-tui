@@ -455,6 +455,8 @@ const SEMI_COMPOSER_TOKEN_HIGHLIGHT_EXTENSIONS = composerTokenHighlightExtension
 
 type ScheduleSafeAiChatSetContentOptions = {
   isEditorFocused?: () => boolean;
+  /** editor 在帧上限内始终未就绪时调用：让调用方释放因 onAfterSet 未触发而卡住的 ref。 */
+  onGiveUp?: () => void;
 };
 
 function readSemiEditorPlain(
@@ -508,7 +510,11 @@ function scheduleSafeAiChatSetContent(
   const tick = (): void => {
     if (attempt()) return;
     frames += 1;
-    if (frames >= SAFE_AI_CHAT_SET_CONTENT_MAX_FRAMES) return;
+    if (frames >= SAFE_AI_CHAT_SET_CONTENT_MAX_FRAMES) {
+      // editor 始终未就绪：onAfterSet 不会触发，通知调用方释放因 pending/setting 卡住的 ref。
+      options?.onGiveUp?.();
+      return;
+    }
     requestAnimationFrame(tick);
   };
   requestAnimationFrame(tick);
@@ -756,7 +762,7 @@ function ComposerInner({
   }, []);
 
   const scheduleComposerSetContent = useCallback(
-    (plain: string, onAfterSet?: () => void) => {
+    (plain: string, onAfterSet?: () => void, onGiveUp?: () => void) => {
       const normalized = normalizeComposerEditorPlain(plain);
       pendingSetContentRef.current += 1;
       // 立刻把 canSend 钉为 false（异步写入完成前 React 与 Tiptap 不一致）
@@ -764,21 +770,33 @@ function ComposerInner({
         canSendComposerRef.current = false;
         setCanSendComposer(false);
       }
+      // settle：成功与放弃都必须执行（归零 pending，否则 syncCanSendComposer 永远把 canSend 钉 false）。
+      const settle = () => {
+        pendingSetContentRef.current = Math.max(0, pendingSetContentRef.current - 1);
+        syncCanSendComposer(readSemiEditorPlain(aiChatRef.current?.getEditor?.()));
+      };
       scheduleSafeAiChatSetContent(
         () => aiChatRef.current,
         normalized,
         () => {
           const actual = readSemiEditorPlain(aiChatRef.current?.getEditor?.());
           if (actual) lastEditorPlainRef.current = actual;
-          onAfterSet?.();
-          pendingSetContentRef.current = Math.max(0, pendingSetContentRef.current - 1);
+          settle();
           // setContent 完成后兜底算一次 canSend：Tiptap 的 onContentChange 可能在 pending 期间
           // 已被 applySemiContentChange 的 skip 节流分支（skipContentSyncRemainingRef>0 且 plain===lastEditor）
           // 吞掉，导致 React 端 canSend 永远不翻转。"粘贴后按钮一直灰"就是这条路径。
-          // pendingSetContentRef 已在上一行归零，syncCanSendComposer 不会再被钉 false 短路。
-          syncCanSendComposer(actual);
+          // settle 已归零 pendingSetContentRef 并 syncCanSendComposer(actual 等价)。
+          onAfterSet?.();
         },
-        { isEditorFocused: () => isProseMirrorFocused(shellRef.current) },
+        {
+          isEditorFocused: () => isProseMirrorFocused(shellRef.current),
+          // editor 始终未就绪（48 帧耗尽）：onAfterSet 不会触发，必须 settle 归零 pending，
+          // 并通知调用方释放其它「必须执行」的清理（如 composerResettingRef）。
+          onGiveUp: () => {
+            settle();
+            onGiveUp?.();
+          },
+        },
       );
     },
     [syncCanSendComposer],
@@ -1691,10 +1709,18 @@ function ComposerInner({
           reset();
           setImages([]);
         });
-        scheduleComposerSetContent("", () => {
-          // Tiptap 真正清干净后释放 resetting 标记
-          composerResettingRef.current = false;
-        });
+        scheduleComposerSetContent(
+          "",
+          () => {
+            // Tiptap 真正清干净后释放 resetting 标记
+            composerResettingRef.current = false;
+          },
+          () => {
+            // editor 未就绪、setContent("") 放弃时也必须释放 resetting，否则
+            // applySemiContentChange 会永久吞掉所有回流 -> 打字无反应（只能靠会话切换兜底）。
+            composerResettingRef.current = false;
+          },
+        );
         queueMicrotask(() => aiChatRef.current?.focusEditor?.("end"));
         void clearPromptContextSessionKey(draftBucketKey);
       };

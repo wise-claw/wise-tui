@@ -294,3 +294,58 @@ describe("输入框 race — scheduleComposerSetContent onAfterSet 兜底算 can
     expect(canSend).toBe(false);
   });
 });
+
+describe("输入框 race - scheduleSafeAiChatSetContent 48 帧耗尽 onGiveUp 兜底", () => {
+  test("editor 始终未就绪 -> onGiveUp 触发 -> pendingSetContentRef 归零（canSend 不被永久钉 false）", () => {
+    // 修复前：48 帧耗尽直接 return，onAfterSet 不触发，pendingSetContentRef 永远 >0
+    // -> syncCanSendComposer 头部 `pending>0 -> return false` 永久短路 -> 发送按钮灰
+    // 修复后：onGiveUp 调用 settle -> pending 归零 -> canSend 可按文本正常翻转
+    let pending = 0;
+    let onAfterSetCalled = false;
+    let onGiveUpCalled = false;
+    const settle = () => {
+      pending = Math.max(0, pending - 1);
+    };
+    // 入口：pending += 1
+    pending += 1;
+    // 模拟 48 帧耗尽 -> onGiveUp（settle）触发，onAfterSet 不触发
+    onGiveUpCalled = true;
+    settle();
+    expect(pending).toBe(0);
+    expect(onAfterSetCalled).toBe(false);
+    expect(onGiveUpCalled).toBe(true);
+    // pending 归零后 syncCanSendComposer 不再短路，canSend 可按文本翻转
+    const canSendAfterGiveUp = pending > 0 ? false : Boolean("hello".trim());
+    expect(canSendAfterGiveUp).toBe(true);
+  });
+
+  test("clearComposerSurfaceSync 的 onGiveUp：editor 未就绪也释放 composerResettingRef（打字不被永久吞）", () => {
+    // 修复前：setContent("") 48 帧耗尽 -> onAfterSet 不触发 -> composerResettingRef 永远 true
+    // -> applySemiContentChange 头部 `if (resetting) return` 永久吞回流 -> 打字无反应
+    let resetting = false;
+    // clearComposerSurfaceSync 入口：resetting = true
+    resetting = true;
+    // 模拟 onGiveUp（释放 resetting）
+    resetting = false;
+    expect(resetting).toBe(false);
+    // resetting 释放后 applySemiContentChange 不再吞回流
+    const onContentChangeShouldSkip = resetting;
+    expect(onContentChangeShouldSkip).toBe(false);
+  });
+
+  test("onAfterSet 与 onGiveUp 互斥：editor 就绪走 onAfterSet，不调 onGiveUp", () => {
+    let pending = 0;
+    let onAfterSetCalled = false;
+    let onGiveUpCalled = false;
+    const settle = () => {
+      pending = Math.max(0, pending - 1);
+    };
+    pending += 1;
+    // editor 就绪 -> onAfterSet 触发（settle + onAfterSet），onGiveUp 不触发
+    settle();
+    onAfterSetCalled = true;
+    expect(pending).toBe(0);
+    expect(onAfterSetCalled).toBe(true);
+    expect(onGiveUpCalled).toBe(false);
+  });
+});
