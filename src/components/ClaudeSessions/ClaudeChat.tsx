@@ -1177,6 +1177,23 @@ export function ClaudeChatInner({
     };
   }, [session.id, session.repositoryPath]);
 
+  // 会话切换 reset：取代旧 key={activeSession.id} 的整棵 remount。
+  // 仅清"按会话生命周期绑定、不应跨会话残留"的瞬态量。
+  // 不动：composer draft（carryDraft 语义依赖）、sessionOwnerHints（来自 localStorage 的全局提示）、
+  //      notificationPanelCollapsed（由 initialNotificationPanelCollapsed prop 驱动）、
+  //      messages（来自 session.messages props，自身随 session 切换重渲染）、
+  //      dispatchFailureTracker/deferredSendHydrated（紧邻的 1130-1178 effect 已重置）。
+  useEffect(() => {
+    setNotificationRows([]);
+    setNotificationLoading(false);
+    setNotificationBubbleEnterIds(new Set());
+    setNotificationBadgePulse(false);
+    setNotificationTitleCountPulse(false);
+    setReturnMainSessionId(null);
+    sessionNotificationSeenIdsRef.current = new Set();
+    prevSessionUnreadCountRef.current = 0;
+  }, [session.id]);
+
   useEffect(() => {
     const running = session.status === "running";
     const prevWasRunning = wasRunningRef.current;
@@ -1807,6 +1824,7 @@ export function ClaudeChatInner({
       {showPendingTaskQueue ? (
         <div className="app-pending-task-queue-anchor">
           <PendingTaskQueuePanel
+            sessionId={session.id}
             sessionStatus={session.status}
             tasks={pendingTasks}
             repositoryPath={session.repositoryPath}

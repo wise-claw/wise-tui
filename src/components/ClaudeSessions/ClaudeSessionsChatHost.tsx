@@ -666,7 +666,10 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
         />
       ) : (
         <ClaudeSessionChatWithDockLazy
-          key={activeSession.id}
+          // 不再用 key={activeSession.id} 触发整棵 remount：
+          // session 切换的瞬态量复位由 ClaudeChat 内部 [session.id] reset effect 接管，
+          // 避免 unmount+remount 拖动运行面板 / git panel / app-claude-session-feature-panel /
+          // app-session-quick-actions 闪一下。
           session={activeSession}
           activeSessionId={activeSession.id}
           sessions={sessions}

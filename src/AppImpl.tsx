@@ -1313,7 +1313,11 @@ export default function App() {
         repositories,
         workspaceMode: resolveWorkspaceMode({ activeProjectId, projects }),
       });
-      if (repo && !keepProjectFocus) {
+      // 同 repo 重复跳转时短路：避免对同一个 repo.id 二次触发 setActiveRepositoryWithOwner
+      // 内部的 activeProjectId/activeRepositoryId/activeWorkspaceFocus 4-setter 链，
+      // 进而避免 useCallback 闭包重生成、jumpToSessionWithRepositoryRef 重写以及 git 面板
+      // (useRepositoryFilesExplorer/useRepositoryExplorerGitStatus/GitRepoSection) 的级联 reconcile。
+      if (repo && !keepProjectFocus && repo.id !== activeRepositoryId) {
         setActiveRepositoryWithOwner(repo.id);
       }
       switchSession(canonicalId);
@@ -2599,9 +2603,15 @@ export default function App() {
 
   /** 手动「新建会话」：始终创建新标签并绑定为仓库主会话。 */
   async function handleManualNewRepositorySession(repository: Repository): Promise<void> {
+    // 注意：这里只切 viewMode，不在这里翻 activeRepositoryId。
+    // activeRepositoryId 的设置推迟到 jumpToSessionWithRepository 内部完成：
+    //   1) 避免对同一个 repo.id 二次触发 setActiveRepositoryWithOwner 的 4-setter 链
+    //      (activeProjectId/activeRepositoryId/activeWorkspaceFocus + schedulePersistActiveProjectId)；
+    //   2) 避免 useCallback 闭包因 activeRepositoryId 依赖变化重生成，触发下游消费者级联 reconcile；
+    //   3) createAndBindRepositoryMainSession 走 repository 入参解析路径与 owner project，
+    //      不依赖 await 期间的 activeRepositoryId，延迟翻转安全。
     startTransition(() => {
       viewMode.enter({ kind: "chat" });
-      setActiveRepositoryWithOwner(repository.id);
     });
     const id = await createAndBindRepositoryMainSession(
       repository,

@@ -377,6 +377,33 @@ export function useClaudeChatSessionFeaturePanel(input: UseClaudeChatSessionFeat
     const sessionTraceStorageKey = getSessionTraceStorageKey(session.id, session.repositoryPath);
     const tracePersistTimerRef = useRef<number | null>(null);
 
+    // 会话切换 reset：取代旧 ClaudeSessionChatWithDockLazy key={activeSession.id} 的整棵 remount。
+    // hook 内的 7 个 useState（popover 状态、搜索词、refreshing、trace drawer、traces 列表）
+    // 会跨 session 残留，导致新 session 进入时突然弹出/消失弹窗、loading 圈不消失、trace 数据
+    // 显示旧会话内容，进而让"运行面板看起来闪一下"。
+    useEffect(() => {
+      return () => {
+        // cleanup 跑在 session.id 变化引起的 next render 之前，等价于在新 mount 时清零。
+        setHistoryPopoverOpen(false);
+        setUserQuestionsPopoverOpen(false);
+        setHistorySearchText("");
+        setHistoryVisibleCount(FEATURE_SESSION_LIST_PAGE_SIZE);
+        setHistorySessionsRefreshing(false);
+        setSessionTraceDrawerOpen(false);
+        setSessionSendTraces([]);
+        historyPopoverCloseGuardRef.current = false;
+        historyLoadMoreLockedRef.current = false;
+        if (historyLoadMoreRafRef.current !== null) {
+          window.cancelAnimationFrame(historyLoadMoreRafRef.current);
+          historyLoadMoreRafRef.current = null;
+        }
+        if (tracePersistTimerRef.current != null) {
+          window.clearTimeout(tracePersistTimerRef.current);
+          tracePersistTimerRef.current = null;
+        }
+      };
+    }, [session.id]);
+
     useEffect(() => {
       if (!sessionTraceDrawerOpen) {
         setSessionSendTraces([]);

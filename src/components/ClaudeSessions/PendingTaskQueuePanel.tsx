@@ -58,6 +58,10 @@ function IconExpandList() {
 // ── Types ──
 
 interface Props {
+  /** 当前会话 id：仅用于驱动本地 UI 瞬态量（listCollapsed/editing/editText）在切会话时复位。
+   * 注意：`tasks` prop 在 session.id 切换时已由 usePendingTaskQueue 自动清空，但 listCollapsed 等
+   * 本地 useState 不随 props 变化自动归零——会跨 session 残留导致"运行面板闪一下"。 */
+  sessionId: string;
   sessionStatus: "idle" | "connecting" | "running" | "completed" | "cancelled" | "error";
   tasks: PendingExecutionTask[];
   repositoryPath?: string;
@@ -94,6 +98,7 @@ interface Props {
 // ── Main ──
 
 export function PendingTaskQueuePanel({
+  sessionId,
   sessionStatus,
   tasks,
   repositoryPath,
@@ -116,6 +121,18 @@ export function PendingTaskQueuePanel({
   const prevTaskCountRef = useRef(tasks.length);
   const [editing, setEditing] = useState<PendingExecutionTask | null>(null);
   const [editText, setEditText] = useState("");
+
+  // 会话切换 reset：取代旧 ClaudeSessionChatWithDockLazy key={activeSession.id} 的整棵 remount。
+  // 这里的 3 个 useState（listCollapsed/editing/editText）会跨 session 残留：
+  //   - listCollapsed=true 旧 session 折叠 → 新 session 加载 tasks 后 useEffect([tasks.length])
+  //     自动展开 → 视觉"运行面板闪一下"。
+  //   - editing/editText 旧 session 的 Modal 文本可能在新 session 短暂残留。
+  useEffect(() => {
+    setListCollapsed(false);
+    setEditing(null);
+    setEditText("");
+    prevTaskCountRef.current = 0;
+  }, [sessionId]);
 
   const isRunning = sessionStatus === "running";
 
