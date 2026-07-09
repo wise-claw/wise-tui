@@ -18,6 +18,7 @@ import {
   createRepositoryFile,
   deleteRepositoryEntry,
   listRepositoryExplorerChildren,
+  renameRepositoryEntry,
   searchRepositoryFiles,
   type RepositoryExplorerEntry,
 } from "../../services/repositoryFiles";
@@ -73,7 +74,12 @@ import {
   INITIAL_REPOSITORY_EXPLORER_EXPAND_STATE,
   reduceRepositoryExplorerExpandState,
 } from "./repositoryExplorerExpandState";
-import type { ExplorerContextMenuState, ExplorerInlineCreateState, RepositoryFileTreeNode } from "./types";
+import type {
+  ExplorerContextMenuState,
+  ExplorerInlineCreateState,
+  ExplorerInlineRenameState,
+  RepositoryFileTreeNode,
+} from "./types";
 
 export type ExplorerChildrenLoadOptions = {
   force?: boolean;
@@ -162,6 +168,7 @@ export function useRepositoryFilesExplorer({
   const [selected, setSelected] = useState<{ path: string; isDir: boolean } | null>(null);
   const [inlineCreate, setInlineCreate] = useState<ExplorerInlineCreateState | null>(null);
   const [inlineRowKey, setInlineRowKey] = useState(0);
+  const [inlineRename, setInlineRename] = useState<ExplorerInlineRenameState | null>(null);
   const [explorerCtx, setExplorerCtx] = useState<ExplorerContextMenuState | null>(null);
   const [deletePop, setDeletePop] = useState<{
     x: number;
@@ -461,6 +468,9 @@ export function useRepositoryFilesExplorer({
       setPendingLoadDirs(new Set());
       changedDirKeysRef.current.clear();
       prevTreeRef.current = [];
+      setInlineRename(null);
+      setInlineCreate(null);
+      setExplorerCtx(null);
       return;
     }
     setLoadError(null);
@@ -470,6 +480,10 @@ export function useRepositoryFilesExplorer({
     setPendingLoadDirs(new Set());
     changedDirKeysRef.current.clear();
     prevTreeRef.current = [];
+    // 仓库变更：旧 inline 行对应路径不再存在，必须清掉避免悬挂 row。
+    setInlineRename(null);
+    setInlineCreate(null);
+    setExplorerCtx(null);
     const generation = explorerScanGenerationRef.current;
 
     const cachedRoot = getCachedRepositoryExplorerRootChildren(path);
@@ -486,6 +500,7 @@ export function useRepositoryFilesExplorer({
       dispatchExpand({ type: "replace", dirs: restoredExpanded });
       setSelected(null);
       setInlineCreate(null);
+      setInlineRename(null);
       setDeletePop(null);
       setIsRefreshing(false);
       setLoading(false);
@@ -666,7 +681,8 @@ export function useRepositoryFilesExplorer({
   }, []);
 
   const handleExplorerContextMenu = useCallback((event: MouseEvent<HTMLDivElement>) => {
-    if ((event.target as HTMLElement).closest("[data-repo-inline-create]")) {
+    const target = event.target as HTMLElement;
+    if (target.closest("[data-repo-inline-create], [data-repo-inline-rename]")) {
       return;
     }
     const row = (event.target as HTMLElement).closest("[data-repo-path]");
@@ -796,6 +812,22 @@ export function useRepositoryFilesExplorer({
     [expandAncestorsForDir, onClearExplorerSearch, search],
   );
 
+  /**
+   * 启动行内重命名：右击菜单或后续 F2 入口调用；先清掉其他 inline 状态避免冲突。
+   * 必须在 `explorerContextMenuItems` 之前声明：其 useMemo 闭包内同步引用本标识符（依赖数组
+   * 也是按 ES 严格模式求值），否则会触发 `Cannot access 'startInlineRename' before initialization`
+   * TDZ。
+   */
+  const startInlineRename = useCallback((path: string, isDir: boolean) => {
+    if (!path) return;
+    const slash = path.lastIndexOf("/");
+    const originalName = slash >= 0 ? path.slice(slash + 1) : path;
+    if (!originalName) return;
+    setInlineCreate(null);
+    setExplorerCtx(null);
+    setInlineRename({ path, isDir, originalName, value: originalName });
+  }, []);
+
   const explorerContextMenuItems = useMemo((): MenuProps["items"] => {
     const snap = explorerCtx;
     if (!snap) {
@@ -837,6 +869,22 @@ export function useRepositoryFilesExplorer({
       },
     });
 
+    const copyText = async (label: string, value: string) => {
+      close();
+      try {
+        await navigator.clipboard.writeText(value);
+        message.success(`${label}已复制`);
+      } catch {
+        message.error("复制失败");
+      }
+    };
+    // 名称取路径末尾段；根目录点击时 snap.path 为空，回退到完整相对路径或仓库名。
+    const entryName =
+      snap.path.split("/").filter(Boolean).pop() ||
+      snap.path ||
+      repositoryPath.split(/[/\\]/).filter(Boolean).pop() ||
+      "";
+
     const standardItems: NonNullable<MenuProps["items"]> = [
       ...captureItems,
       {
@@ -853,6 +901,40 @@ export function useRepositoryFilesExplorer({
         onClick: () => {
           close();
           openInlineCreate("folder", targetForCreate);
+        },
+      },
+      { type: "divider" },
+      {
+        key: "rename",
+        label: "重命名",
+        disabled: !snap.path,
+        onClick: () => {
+          close();
+          startInlineRename(snap.path, snap.isDir);
+        },
+      },
+      { type: "divider" },
+      {
+        key: "copy-name",
+        label: "复制名称",
+        disabled: !entryName,
+        onClick: () => {
+          void copyText("名称", entryName);
+        },
+      },
+      {
+        key: "copy-relpath",
+        label: "复制相对路径",
+        disabled: !snap.path,
+        onClick: () => {
+          void copyText("相对路径", snap.path);
+        },
+      },
+      {
+        key: "copy-abspath",
+        label: "复制绝对路径",
+        onClick: () => {
+          void copyText("绝对路径", abs);
         },
       },
       { type: "divider" },
@@ -905,11 +987,79 @@ export function useRepositoryFilesExplorer({
       { type: "divider" },
       ...standardItems,
     ];
-  }, [explorerCtx, repositoryPath, openInlineCreate]);
+  }, [explorerCtx, repositoryPath, openInlineCreate, startInlineRename]);
 
   const cancelInlineCreate = useCallback(() => {
     setInlineCreate(null);
+    setInlineRename(null);
   }, []);
+
+  /**
+   * 提交重命名：调后端 rename_repository_entry。
+   * 成功 → 清状态、刷新父目录缓存、把选中态迁到新路径；
+   * 失败 → 保持 inlineRename 行（保留用户输入），弹错提示。
+   */
+  const commitInlineRename = useCallback(
+    async (nextValue: string) => {
+      const cur = inlineRename;
+      if (!cur) return;
+      const trimmed = nextValue.trim();
+      if (!trimmed) {
+        setInlineRename(null);
+        return;
+      }
+      if (trimmed === cur.originalName) {
+        // 与原名相同：不触发后端请求，保留 inline 行让用户继续修改。
+        return;
+      }
+      if (
+        trimmed.includes("..") ||
+        trimmed.includes("/") ||
+        trimmed.includes("\\") ||
+        trimmed.startsWith(".")
+      ) {
+        message.warning("名称不合法");
+        return;
+      }
+      const parentDir = cur.path.includes("/")
+        ? cur.path.slice(0, cur.path.lastIndexOf("/"))
+        : "";
+      const newRelative = parentDir ? `${parentDir}/${trimmed}` : trimmed;
+      try {
+        await renameRepositoryEntry(repositoryPath, cur.path, newRelative);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        message.error(`重命名失败：${msg}`);
+        return;
+      }
+      setInlineRename(null);
+      // 原子 rename 后，原路径已不存在；丢掉父目录缓存并强制重读，避免 delete+create 双流程竞态。
+      setLoadedChildrenByDir((prev) => {
+        const next = new Map(prev);
+        next.delete(parentDir);
+        return next;
+      });
+      // 文件夹重命名：旧路径子树缓存需整体丢弃。
+      if (cur.isDir) {
+        dispatchExpand({ type: "pruneSubtree", rootPath: cur.path });
+      }
+      await loadChildrenForDir(parentDir, { force: true });
+      // 保留展开态：若用户已展开被重命名的目录，迁移其路径并刷新对应目录缓存。
+      if (cur.isDir && expandedDirsRef.current.has(cur.path)) {
+        dispatchExpand({ type: "renameDir", fromPath: cur.path, toPath: newRelative });
+        await loadChildrenForDir(newRelative, { force: true });
+      }
+      setSelected({ path: newRelative, isDir: cur.isDir });
+    },
+    [inlineRename, loadChildrenForDir, repositoryPath],
+  );
+
+  const handleInlineRenameCommit = useCallback(
+    (value: string) => {
+      void commitInlineRename(value);
+    },
+    [commitInlineRename],
+  );
 
   const handleToolbarNewFile = useCallback(() => {
     openInlineCreate("file", explorerTargetDirForCreate(selected));
@@ -1022,6 +1172,10 @@ export function useRepositoryFilesExplorer({
     clearSelection,
     handleInlineCommit,
     cancelInlineCreate,
+    inlineRename,
+    startInlineRename,
+    commitInlineRename,
+    handleInlineRenameCommit,
   };
 }
 

@@ -117,3 +117,22 @@ export async function deleteRepositoryEntry(
     relativePath,
   });
 }
+
+/**
+ * Rename or move a file or directory within the repository root.
+ *
+ * Both paths must be relative to `repositoryRoot`. The destination parent
+ * directory must already exist (rename does not auto-create parents); the
+ * destination itself must NOT exist. Cross-directory renames are allowed.
+ */
+export async function renameRepositoryEntry(
+  repositoryRoot: string,
+  oldRelativePath: string,
+  newRelativePath: string,
+): Promise<void> {
+  await invoke<void>("rename_repository_entry", {
+    root: repositoryRoot,
+    oldRelativePath,
+    newRelativePath,
+  });
+}

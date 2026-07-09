@@ -126,12 +126,14 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
         expandedDirs: explorer.expandedDirs,
         loadingDirKeys: explorer.loadingDirKeys,
         inlineCreate: explorer.inlineCreate,
+        inlineRename: explorer.inlineRename,
       }),
     [
       explorer.filteredTree,
       explorer.expandedDirs,
       explorer.loadingDirKeys,
       explorer.inlineCreate,
+      explorer.inlineRename,
       explorer.childrenMapRevision,
     ],
   );
@@ -276,9 +278,11 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
           hoverPath={pointerHoverPath}
           loadingDirKeys={explorer.loadingDirKeys}
           inlineCreate={explorer.inlineCreate}
+          inlineRename={explorer.inlineRename}
           onInlineValueChange={explorer.handleInlineValueChange}
           onInlineCommit={explorer.handleInlineCommit}
           onInlineCancel={explorer.cancelInlineCreate}
+          onInlineRenameCommit={explorer.handleInlineRenameCommit}
           gitStatusRevision={explorerDecorations.generation}
           editorDirtyRevision={explorerDecorations.editorDirtyRevision}
         />

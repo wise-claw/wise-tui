@@ -718,6 +718,58 @@ pub(crate) fn delete_repository_entry(root: String, relative_path: String) -> Re
     Ok(())
 }
 
+/// Rename/move a file or directory within the repository root.
+///
+/// Both source and destination are validated via `safe_join_repository_root`,
+/// which rejects absolute paths and `..` traversal. The source must exist; the
+/// destination must NOT exist (avoids silent overwrite of unrelated entries).
+/// Cross-directory renames are supported (the new parent must already exist).
+#[tauri::command]
+pub(crate) fn rename_repository_entry(
+    root: String,
+    old_relative_path: String,
+    new_relative_path: String,
+) -> Result<(), String> {
+    let root_pb = PathBuf::from(&root);
+    if !root_pb.is_dir() {
+        return Err("仓库根目录无效".into());
+    }
+    let base = root_pb
+        .canonicalize()
+        .map_err(|e| format!("解析仓库路径失败: {e}"))?;
+    let src = safe_join_repository_root(&base, &old_relative_path)?;
+    let dst = safe_join_repository_root(&base, &new_relative_path)?;
+    // 同源/同目标（仅大小写等价的同路径）应视作无效，避免静默 no-op。
+    if src == dst {
+        return Err("新路径与原路径相同".into());
+    }
+    if !src.exists() {
+        return Err("源路径不存在".into());
+    }
+    if dst.exists() {
+        return Err("目标已存在".into());
+    }
+    // 校验拼接后路径仍位于仓库根下（dst 尚未存在，故不能用 canonicalize 的 assert_resolved_*；
+    // safe_join_repository_root 已禁止 `..` 与绝对路径，starts_with 边界检查足够）。
+    assert_joined_path_under_repo(&base, &src)?;
+    assert_joined_path_under_repo(&base, &dst)?;
+    // 目标父目录必须存在：rename 不会自动创建父目录，避免误把空文件散落到拼错的路径下。
+    let dst_parent = dst
+        .parent()
+        .ok_or_else(|| "无效的目标路径".to_string())?;
+    if !dst_parent.exists() {
+        return Err(format!(
+            "目标父目录不存在：{}",
+            new_relative_path
+                .rsplit_once('/')
+                .map(|(p, _)| p)
+                .unwrap_or("")
+        ));
+    }
+    fs::rename(&src, &dst).map_err(|e| format!("重命名失败: {e}"))?;
+    Ok(())
+}
+
 #[cfg(test)]
 mod repository_search_tests {
     use super::*;
@@ -906,6 +958,156 @@ mod explorer_children_tests {
         fs::create_dir_all(root.join(".cursor/commands")).unwrap();
         let joined = explorer_join_dir(&root, ".cursor/commands").unwrap();
         assert!(assert_joined_path_under_repo(&root, &joined).is_ok());
+        let _ = fs::remove_dir_all(&root);
+    }
+}
+
+#[cfg(test)]
+mod rename_repository_entry_tests {
+    use super::*;
+
+    fn unique_root(suffix: &str) -> PathBuf {
+        let pid = std::process::id();
+        let nanos = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map(|d| d.as_nanos())
+            .unwrap_or(0);
+        // macOS 上 `temp_dir()` 经常返回 `/var/folders/...` 等不带 `/tmp` 链接的目录；
+        // 命令内部对 root 做 `canonicalize()`（解析 symlink），所以测试也以 canonicalize 后的路径
+        // 创建/操作文件，避免 `/tmp -> /private/tmp` 之类导致 `src.canonicalize()` 找不到文件。
+        let raw = std::env::temp_dir().join(format!("wise-rename-{suffix}-{pid}-{nanos}"));
+        std::fs::create_dir_all(&raw).expect("create unique_root");
+        raw.canonicalize().expect("canonicalize unique_root")
+    }
+
+    #[test]
+    fn renames_file_within_repo() {
+        let root = unique_root("file-ok");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("old.txt"), "hi").unwrap();
+        rename_repository_entry(
+            root.to_string_lossy().to_string(),
+            "old.txt".into(),
+            "new.txt".into(),
+        )
+        .expect("rename");
+        assert!(root.join("new.txt").exists());
+        assert!(!root.join("old.txt").exists());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn rename_into_subdirectory_when_parent_exists() {
+        let root = unique_root("file-move");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("sub")).unwrap();
+        fs::write(root.join("a.txt"), "x").unwrap();
+        rename_repository_entry(
+            root.to_string_lossy().to_string(),
+            "a.txt".into(),
+            "sub/a.txt".into(),
+        )
+        .expect("rename into sub");
+        assert!(root.join("sub").join("a.txt").exists());
+        assert!(!root.join("a.txt").exists());
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn rename_rejects_destination_already_exists() {
+        let root = unique_root("dst-exists");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("a.txt"), "1").unwrap();
+        fs::write(root.join("b.txt"), "2").unwrap();
+        let err = rename_repository_entry(
+            root.to_string_lossy().to_string(),
+            "a.txt".into(),
+            "b.txt".into(),
+        )
+        .unwrap_err();
+        assert!(err.contains("目标已存在"), "got: {err}");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn rename_rejects_parent_dir_traversal() {
+        let root = unique_root("escape");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let err = rename_repository_entry(
+            root.to_string_lossy().to_string(),
+            "../escape.txt".into(),
+            "x.txt".into(),
+        )
+        .unwrap_err();
+        assert!(err.contains(".."), "got: {err}");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn rename_rejects_nonexistent_source() {
+        let root = unique_root("missing");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        let err = rename_repository_entry(
+            root.to_string_lossy().to_string(),
+            "nope.txt".into(),
+            "x.txt".into(),
+        )
+        .unwrap_err();
+        assert!(err.contains("源路径不存在"), "got: {err}");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn rename_rejects_same_path() {
+        let root = unique_root("same");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("same.txt"), "x").unwrap();
+        let err = rename_repository_entry(
+            root.to_string_lossy().to_string(),
+            "same.txt".into(),
+            "same.txt".into(),
+        )
+        .unwrap_err();
+        assert!(err.contains("新路径与原路径相同"), "got: {err}");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn rename_rejects_missing_destination_parent() {
+        let root = unique_root("missing-parent");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(&root).unwrap();
+        fs::write(root.join("a.txt"), "x").unwrap();
+        let err = rename_repository_entry(
+            root.to_string_lossy().to_string(),
+            "a.txt".into(),
+            "does-not-exist/a.txt".into(),
+        )
+        .unwrap_err();
+        assert!(err.contains("目标父目录不存在"), "got: {err}");
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn rename_directory_recursively() {
+        let root = unique_root("dir");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("old_dir/sub")).unwrap();
+        fs::write(root.join("old_dir/file.txt"), "x").unwrap();
+        rename_repository_entry(
+            root.to_string_lossy().to_string(),
+            "old_dir".into(),
+            "new_dir".into(),
+        )
+        .expect("rename dir");
+        assert!(root.join("new_dir").join("sub").is_dir());
+        assert!(root.join("new_dir").join("file.txt").is_file());
+        assert!(!root.join("old_dir").exists());
         let _ = fs::remove_dir_all(&root);
     }
 }

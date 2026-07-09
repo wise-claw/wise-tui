@@ -15,7 +15,8 @@ export type RepositoryExplorerExpandAction =
   | { type: "replace"; dirs: Set<string> }
   | { type: "collapseAll" }
   | { type: "expandAncestors"; parentDir: string }
-  | { type: "pruneSubtree"; rootPath: string };
+  | { type: "pruneSubtree"; rootPath: string }
+  | { type: "renameDir"; fromPath: string; toPath: string };
 
 export function mergeExpandedAncestorDirs(prev: Set<string>, parentDir: string): Set<string> {
   if (!parentDir) {
@@ -40,6 +41,32 @@ export function pruneExpandedSubtree(prev: Set<string>, rootPath: string): Set<s
     next.add(entry);
   }
   return next;
+}
+
+/**
+ * 把展开表里 `fromPath` 及其后代迁移到 `toPath`，用于目录重命名后保留展开态。
+ * 仅当 `fromPath` 或其后代存在时才有意义；不存在的 key 直接跳过。
+ */
+export function migrateExpandedDir(prev: Set<string>, fromPath: string, toPath: string): Set<string> {
+  if (!fromPath || fromPath === toPath) {
+    return prev;
+  }
+  let changed = false;
+  const next = new Set<string>();
+  for (const entry of prev) {
+    if (entry === fromPath) {
+      next.add(toPath);
+      changed = true;
+      continue;
+    }
+    if (entry.startsWith(`${fromPath}/`)) {
+      next.add(`${toPath}${entry.slice(fromPath.length)}`);
+      changed = true;
+      continue;
+    }
+    next.add(entry);
+  }
+  return changed ? next : prev;
 }
 
 export function reduceRepositoryExplorerExpandState(
@@ -76,6 +103,13 @@ export function reduceRepositoryExplorerExpandState(
         return state;
       }
       return { dirs, epoch: state.epoch + 1, lastPath: action.rootPath };
+    }
+    case "renameDir": {
+      const dirs = migrateExpandedDir(state.dirs, action.fromPath, action.toPath);
+      if (dirs === state.dirs) {
+        return state;
+      }
+      return { dirs, epoch: state.epoch + 1, lastPath: action.toPath };
     }
     default:
       return state;

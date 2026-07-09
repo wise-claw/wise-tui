@@ -1,5 +1,9 @@
 import { explorerDirKey } from "./repositoryExplorerDirKey";
-import type { ExplorerInlineCreateState, RepositoryFileTreeNode } from "./types";
+import type {
+  ExplorerInlineCreateState,
+  ExplorerInlineRenameState,
+  RepositoryFileTreeNode,
+} from "./types";
 
 export type FlatRepositoryTreeRow =
   | {
@@ -33,6 +37,13 @@ export type FlatRepositoryTreeRow =
       depth: number;
       parentPath: string;
       inline: ExplorerInlineCreateState;
+    }
+  | {
+      kind: "inline-rename";
+      key: string;
+      depth: number;
+      parentPath: string;
+      inline: ExplorerInlineRenameState;
     };
 
 export function flattenRepositoryTreeRows(input: {
@@ -40,11 +51,28 @@ export function flattenRepositoryTreeRows(input: {
   expandedDirs: ReadonlySet<string>;
   loadingDirKeys: ReadonlySet<string>;
   inlineCreate: ExplorerInlineCreateState | null;
+  inlineRename?: ExplorerInlineRenameState | null;
 }): FlatRepositoryTreeRow[] {
   const rows: FlatRepositoryTreeRow[] = [];
+  const inlineRename = input.inlineRename ?? null;
 
   const walk = (nodes: readonly RepositoryFileTreeNode[], depth: number): void => {
     for (const node of nodes) {
+      // 行内重命名命中：将原 dir/file row 替换为 inline-rename，避免与原节点同时存在造成重复 key。
+      if (inlineRename && inlineRename.path === node.path) {
+        const parentPath = node.path.includes("/")
+          ? node.path.slice(0, node.path.lastIndexOf("/"))
+          : "";
+        rows.push({
+          kind: "inline-rename",
+          key: `${node.path}::rename`,
+          depth,
+          parentPath,
+          inline: inlineRename,
+        });
+        continue;
+      }
+
       if (!node.isDir) {
         rows.push({ kind: "file", key: node.path, node, depth });
         continue;

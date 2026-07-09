@@ -44,3 +44,14 @@ export interface ExplorerInlineCreateState {
   parentDir: string;
   value: string;
 }
+
+/**
+ * 行内重命名状态。被替换的原节点以 `path` 标识，新值用 `value` 缓冲（提交时再回写后端）。
+ * `originalName` 始终是后端的初始名，供提交时构造目标相对路径。
+ */
+export interface ExplorerInlineRenameState {
+  path: string;
+  isDir: boolean;
+  originalName: string;
+  value: string;
+}

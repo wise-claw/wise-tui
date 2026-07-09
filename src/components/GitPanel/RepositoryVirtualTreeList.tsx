@@ -1,6 +1,7 @@
 import { memo, useSyncExternalStore, type RefObject } from "react";
 import { useVirtualListVisibleRange } from "../../hooks/useVirtualListVisibleRange";
 import { ExplorerInlineCreateRow } from "./ExplorerInlineCreateRow";
+import { ExplorerInlineRenameRow } from "./ExplorerInlineRenameRow";
 import { RepositoryTreeDirRow } from "./RepositoryTreeDirRow";
 import { RepositoryTreeFileNode } from "./RepositoryTreeFileNode";
 import { repositoryTreeDepthIndentPx, REPOSITORY_TREE_ROW_HEIGHT_PX } from "./repositoryTreeLayout";
@@ -9,7 +10,7 @@ import {
   subscribeMainThreadCongestion,
 } from "../../stores/mainThreadCongestionStore";
 import type { FlatRepositoryTreeRow } from "./repositoryTreeFlatten";
-import type { ExplorerInlineCreateState } from "./types";
+import type { ExplorerInlineCreateState, ExplorerInlineRenameState } from "./types";
 
 const OVERSCAN_ROWS = 16;
 const OVERSCAN_ROWS_CONGESTED = 6;
@@ -40,9 +41,11 @@ export interface RepositoryVirtualTreeListProps {
   hoverPath: string | null;
   loadingDirKeys: ReadonlySet<string>;
   inlineCreate: ExplorerInlineCreateState | null;
+  inlineRename: ExplorerInlineRenameState | null;
   onInlineValueChange: (value: string) => void;
   onInlineCommit: () => void;
   onInlineCancel: () => void;
+  onInlineRenameCommit: (value: string) => void;
   rowHeight?: number;
   gitStatusRevision: number;
   editorDirtyRevision: number;
@@ -55,9 +58,11 @@ function RepositoryVirtualTreeListInner({
   hoverPath,
   loadingDirKeys: _loadingDirKeys,
   inlineCreate: _inlineCreate,
+  inlineRename: _inlineRename,
   onInlineValueChange,
   onInlineCommit,
   onInlineCancel,
+  onInlineRenameCommit,
   rowHeight = REPOSITORY_TREE_ROW_HEIGHT_PX,
   gitStatusRevision,
   editorDirtyRevision,
@@ -134,6 +139,15 @@ function RepositoryVirtualTreeListInner({
                   value={row.inline.value}
                   onChange={onInlineValueChange}
                   onCommit={onInlineCommit}
+                  onCancel={onInlineCancel}
+                />
+              ) : null}
+              {row.kind === "inline-rename" ? (
+                <ExplorerInlineRenameRow
+                  depth={row.depth}
+                  kind={row.inline.isDir ? "folder" : "file"}
+                  initialValue={row.inline.value}
+                  onCommit={onInlineRenameCommit}
                   onCancel={onInlineCancel}
                 />
               ) : null}

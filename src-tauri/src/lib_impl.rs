@@ -394,6 +394,7 @@ pub fn run() {
             repository_files::create_repository_file,
             repository_files::create_repository_directory,
             repository_files::delete_repository_entry,
+            repository_files::rename_repository_entry,
             project_relative_files::detect_workspace_sdd_signals,
             project_relative_files::read_project_relative_file,
             project_relative_files::read_project_relative_file_base64,
