@@ -5,6 +5,7 @@ import {
   appendAssistantStreamParts,
   applyToolResultPartsToSession,
   capAssistantStreamBufferText,
+  computeAssistantStreamBufferText,
   partitionStreamMessageParts,
   reconcileResultFullTextParts,
 } from "./claudeStreamAssembler";
@@ -29,6 +30,7 @@ import { ingestClaudeStreamLineForHubParsed } from "../notifications/streamInges
 import {
   appendAssistantPreviewTextMessage,
   appendSystemMessageBySessionOrClaudeId,
+  extractLastAssistantPlainText,
   extractLatestAssistantPlainText,
   finalizeSessionAfterComplete,
 } from "./claudeSessionState";
@@ -496,17 +498,33 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
 
     if (!hidden) {
       const prevAssist = assistantStreamTextByTabRef.current.get(tid) ?? "";
-      let nextAssist = prevAssist;
-      for (const part of dedupedParts) {
-        if (part.type === "text" && part.text) {
-          ingestStreamAssistText(tid, part.text);
-          nextAssist += part.text;
-        } else if (part.type === "reasoning" && part.text) {
-          nextAssist += part.text;
-        }
-      }
+      // reasoning 不入缓冲：该缓冲唯一用途是 complete 时作为 previewRaw 的 fromRef 源（验收/通知/
+      // 兜底均需纯 text 正文）。混入思考会让 previewRaw 三源取最长时被思考文本污染（思考常比正文长），
+      // appendAssistantPreviewTextMessage 会把思考当正文追加 -> 刷新走磁盘态（reasoning 独立 part
+      // 不混入 text）才收敛。思考已独立进末条 reasoning part，无需进此缓冲。
+      const incomingText = dedupedParts
+        .filter((p): p is Extract<MessagePart, { type: "text" }> => p.type === "text")
+        .map((p) => p.text)
+        .join("");
+      // result 事件给整轮权威文本：覆盖缓冲对齐权威，避免与 delta 累积翻倍（详见纯函数注释）。
+      const nextAssist = computeAssistantStreamBufferText(
+        prevAssist,
+        incomingText,
+        isResultFullText === true,
+      );
       if (nextAssist !== prevAssist) {
         assistantStreamTextByTabRef.current.set(tid, capAssistantStreamBufferText(nextAssist));
+      }
+      // dock 线索解析（todos/followups 等，hub 内部按 content 去重幂等）：
+      // result 事件整轮文本完整解析（确保跨片段 dock 线索不丢）；delta 事件增量解析每个 text part。
+      if (isResultFullText === true) {
+        if (incomingText) ingestStreamAssistText(tid, incomingText);
+      } else {
+        for (const part of dedupedParts) {
+          if (part.type === "text" && part.text) {
+            ingestStreamAssistText(tid, part.text);
+          }
+        }
       }
     }
 
@@ -690,12 +708,12 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
       session?.claudeSessionId?.trim() ? (buf.get(session.claudeSessionId.trim()) ?? "").trim() : "",
     ];
     const fromRef = chunks.reduce((best, cur) => (cur.length > best.length ? cur : best), "");
-    const fromMessages = extractLatestAssistantPlainText(session).trim();
+    const fromMessages = extractLastAssistantPlainText(session).trim();
     const structuredVerdict = extractStructuredVerdictFromCompletePayload(payload);
     flushPendingStreamSessionUpdatesSync();
     const sessionAfterFlush =
       sessionsRef.current.find((s) => s.id === tid || s.claudeSessionId === tid) ?? session;
-    const fromAfterFlush = extractLatestAssistantPlainText(sessionAfterFlush).trim();
+    const fromAfterFlush = extractLastAssistantPlainText(sessionAfterFlush).trim();
     // 流式缓冲与 messages 偶发不同步时，取最长正文兜底，避免验收解析拿不到回复。
     const previewRaw = [fromRef, fromMessages, fromAfterFlush].reduce(
       (best, cur) => (cur.length > best.length ? cur : best),

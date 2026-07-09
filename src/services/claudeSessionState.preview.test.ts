@@ -4,6 +4,8 @@ import {
   appendAssistantPreviewTextMessage,
   assistantMessageVisiblePlainText,
   beginSessionTurnWithUserPrompt,
+  extractLastAssistantPlainText,
+  extractLatestAssistantPlainText,
   resolveNoReplyFailureMessage,
   setSessionRunningWithUserPrompt,
 } from "./claudeSessionState";
@@ -213,6 +215,40 @@ describe("appendAssistantPreviewTextMessage", () => {
     // 末条 parts 仍是原 intro + tool_use（未被改写）
     expect(last?.parts.some((p) => p.type === "text" && p.text === intro)).toBe(true);
   });
+
+  test("does not append previewRaw to tool-only last assistant when earlier assistant exists (avoid cross-bubble duplication)", () => {
+    // 本轮 error turn 重试：前条 assistant 有 intro text，末条 assistant 纯工具无 text。
+    // previewRaw 取整轮流式缓冲（含前条 intro）。追加到末条会致 intro 在末条重复 -> 跳过，
+    // 依赖 complete 后磁盘重载落盘规范结构。
+    const intro = "我先分析一下";
+    const base = {
+      ...session([
+        { role: "user", content: "做任务", timestamp: 1 },
+        {
+          role: "assistant",
+          content: intro,
+          timestamp: 2,
+          parts: [
+            { type: "text", text: intro },
+            { type: "tool_use", id: "t1", name: "bash", input: {}, status: "completed" },
+          ],
+        },
+        {
+          role: "assistant",
+          content: "",
+          timestamp: 3,
+          parts: [{ type: "tool_use", id: "t2", name: "bash", input: {}, status: "completed" }],
+        },
+      ]),
+      status: "completed" as const,
+    };
+    const previewRaw = intro; // 整轮缓冲含前条 intro
+    const next = appendAssistantPreviewTextMessage([base], "tab-1", previewRaw);
+    const last = next[0]?.messages[2];
+    // 末条不追加 intro（已在更早的 assistant 气泡里）
+    expect(last?.parts.some((p) => p.type === "text" && p.text === intro)).toBe(false);
+    expect(last?.parts).toHaveLength(1); // 仍是原 tool_use
+  });
 });
 
 describe("setSessionRunningWithUserPrompt", () => {
@@ -306,5 +342,50 @@ describe("assistantMessageVisiblePlainText", () => {
       timestamp: 1,
     };
     expect(assistantMessageVisiblePlainText(msg)).toBe("");
+  });
+});
+
+describe("extractLastAssistantPlainText", () => {
+  test("returns last assistant text without falling back to earlier assistant", () => {
+    // 末条 assistant 无可见 text（纯工具）时，不回溯到更早的 assistant（防跨轮正文污染：
+    // complete 时 previewRaw 不应取上一轮正文追加到本轮末条）。
+    const base = session([
+      { role: "user", content: "做任务", timestamp: 1 },
+      {
+        role: "assistant",
+        content: "上一轮回复",
+        timestamp: 2,
+        parts: [{ type: "text", text: "上一轮回复" }],
+      },
+      { role: "user", content: "继续", timestamp: 3 },
+      {
+        role: "assistant",
+        content: "",
+        timestamp: 4,
+        parts: [{ type: "tool_use", id: "t1", name: "bash", input: {}, status: "completed" }],
+      },
+    ]);
+    // extractLastAssistantPlainText 只看末条 assistant（纯工具无 text）-> 空
+    expect(extractLastAssistantPlainText(base)).toBe("");
+    // 对比 extractLatestAssistantPlainText 回溯到上一轮
+    expect(extractLatestAssistantPlainText(base)).toBe("上一轮回复");
+  });
+
+  test("returns last assistant text when it has visible text", () => {
+    const base = session([
+      { role: "user", content: "做任务", timestamp: 1 },
+      {
+        role: "assistant",
+        content: "本轮回复",
+        timestamp: 2,
+        parts: [{ type: "text", text: "本轮回复" }],
+      },
+    ]);
+    expect(extractLastAssistantPlainText(base)).toBe("本轮回复");
+  });
+
+  test("returns empty when no assistant exists", () => {
+    const base = session([{ role: "user", content: "你好", timestamp: 1 }]);
+    expect(extractLastAssistantPlainText(base)).toBe("");
   });
 });

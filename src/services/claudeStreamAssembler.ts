@@ -123,6 +123,29 @@ export function capAssistantStreamBufferText(buffer: string): string {
 }
 
 /**
+ * 计算下一轮流式助手缓冲文本（complete 时 previewRaw 的 fromRef 源）。
+ *
+ * - result 事件（isResultFullText=true）：result 给的是整轮权威最终文本，直接覆盖缓冲对齐权威。
+ *   若用追加（prevAssist + text），缓冲已含 delta 累积的 intro/总结，再追加整轮文本会翻倍 ->
+ *   complete 时 fromRef 取此缓冲、previewRaw 取最长拿到翻倍文本 -> notifyCompletion 通知内容翻倍。
+ *   text 为空时保持 prevAssist（result 无文本，不覆盖）。
+ * - delta 事件（isResultFullText=false）：增量追加 prevAssist + text。
+ *
+ * `text` 由调用方从 parts 过滤拼接（reasoning 不入缓冲，调用方已排除）。返回未截断文本，
+ * 由调用方 {@link capAssistantStreamBufferText} 截断。
+ */
+export function computeAssistantStreamBufferText(
+  prevAssist: string,
+  text: string,
+  isResultFullText: boolean,
+): string {
+  if (isResultFullText) {
+    return text || prevAssist;
+  }
+  return prevAssist + text;
+}
+
+/**
  * 合并相邻 text 片段，按前缀包含关系去重避免拼接翻倍。对称处理两个方向：
  *
  * - incoming 是 existing 的扩展（以 existing 开头或相等）：用 incoming 替换。result 全文、
@@ -219,9 +242,10 @@ export function isToolResultUpdatePart(part: MessagePart): part is ToolUsePart {
  * 对齐磁盘态 [intro, tool_use, 总结]；末尾是 text 时合并，content 仍正确）。完全相同/子集/不连续时
  * 返回空（跳过，依赖 delta 已覆盖或 complete 后磁盘重载）。末条无 text 时原样返回兜底防闪空。
  *
- * 范围限定：existingText 取现有 text parts 无分隔拼接，resultText 含段间分隔；多 text block（如
- * [intro, tool_use, 总结] 两块均已被 delta 流过）时二者前缀匹配失败走 disjoint->[]，此时两块已在、
- * 无内容丢失，reconcile 无尾巴回收收益。尾巴回收仅对「单 text block 且 delta 只流了前缀」有效。
+ * 范围说明：existingText 与 resultText 均以段间分隔 "\n\n" 拼接 text parts，对齐渲染与 result 整轮
+ * 文本的段间分隔。多 text block（如 [intro, tool_use, 总结]）时仍可前缀对齐：delta 流过 intro + 总结
+ * (部分) 时 existingText = "intro\n\n总结(部分)"，resultText = "intro\n\n总结(完整)"，超集命中 ->
+ * 回收总结尾巴。仅当 result 与 delta 内容真正分歧（不连续）时才走 disjoint->[] 保守跳过。
  *
  * 缓冲累积（assistantStreamTextByTabRef）与 complete 的 previewRaw 不受影响。
  */
@@ -235,14 +259,18 @@ export function reconcileResultFullTextParts(opts: {
   if (!lastAssistantHasText) {
     return resultParts;
   }
+  // text parts 之间用段间分隔 "\n\n" 拼接，对齐 result 整轮文本的段间分隔：流式态 text part
+  // 之间隔着 tool_use/reasoning block，渲染与 result 整轮文本均以 \n\n 分段。无分隔拼接会让
+  // 多 text block（intro + tool_use + 总结）前缀匹配失败走 disjoint，致总结尾巴丢失
+  // （流式缺尾巴、刷新磁盘态有尾巴 -> 实时与刷新不一致）。
   const existingText = existingParts
     .filter((p): p is Extract<MessagePart, { type: "text" }> => p.type === "text")
     .map((p) => p.text)
-    .join("");
+    .join("\n\n");
   const resultText = resultParts
     .filter((p): p is Extract<MessagePart, { type: "text" }> => p.type === "text")
     .map((p) => p.text)
-    .join("");
+    .join("\n\n");
   if (!resultText) {
     return [];
   }
@@ -253,10 +281,18 @@ export function reconcileResultFullTextParts(opts: {
   if (resultText === existingText) {
     return [];
   }
-  // result 是现有超集（delta 流了前缀，result 含尾巴）：返回尾巴，由 mergeAssistantParts 追加到末尾
+  // result 是现有超集（delta 流了前缀，result 含尾巴）：返回尾巴，由 mergeAssistantParts 追加到末尾。
+  // tail 前导空白是否保留取决于它将落位的 part 类型（mergeAssistantParts 按 existingParts 末条类型判定，
+  // 此处 existingParts 与之同源、result 事件前已 sync flush 待应用 delta、ref 已更新，二者末条类型一致）：
+  //   - 末条是 text：tail 合并进现有 text part，前导换行是段内分隔，保留；
+  //   - 末条是 tool_use/reasoning 等：tail 新增 text part，渲染 join("\n\n") 已加段间分隔，
+  //     tail 前导换行多余会致「tool_use 后 \n\n + tail 前导 \n\n」双重换行，裁掉。
   if (resultText.startsWith(existingText)) {
     const tail = resultText.slice(existingText.length);
-    return tail.trim() ? [{ type: "text", text: tail }] : [];
+    if (!tail.trim()) return [];
+    const lastExisting = existingParts[existingParts.length - 1];
+    const tailText = lastExisting?.type === "text" ? tail : tail.replace(/^\s+/, "");
+    return tailText ? [{ type: "text", text: tailText }] : [];
   }
   // 现有已含 result（result 是现有子集，如 delta 流得比 result 更长）：跳过
   if (existingText.startsWith(resultText)) {

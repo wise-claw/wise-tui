@@ -3,6 +3,7 @@ import type { ClaudeMessage, ClaudeSession } from "../types";
 import {
   appendAssistantStreamParts,
   applyToolResultPartsToMessages,
+  computeAssistantStreamBufferText,
   foldToolResultUserMessagesIntoAssistant,
   mergeAssistantParts,
   mergeTextPartsByContainment,
@@ -52,9 +53,10 @@ describe("reconcileResultFullTextParts", () => {
     ).toEqual([]);
   });
 
-  test("returns tail when result is superset of existing (delta streamed prefix, result has tail)", () => {
-    // delta 只流了 intro，result = intro + 总结 -> 返回尾巴，由 mergeAssistantParts 追加到末条末尾
-    // （末尾是 tool_use 时新增 text part 在工具后，对齐磁盘态 [intro, tool_use, 总结]）
+  test("returns tail with leading whitespace stripped when last part is tool_use (avoid double separator)", () => {
+    // delta 只流了 intro，result = intro + 总结，末条是 tool_use -> tail 由 mergeAssistantParts 新增 text part
+    // （在工具后），渲染 join("\n\n") 已在 tool_use 与新 text 间加段间分隔。tail 前导 \n\n 若保留会致
+    // 「tool_use 后 \n\n + tail 前导 \n\n」双重换行，故裁掉前导空白，对齐磁盘态 [intro, tool_use, 总结]。
     expect(
       reconcileResultFullTextParts({
         resultParts: [{ type: "text", text: "intro\n\n总结" }],
@@ -64,7 +66,68 @@ describe("reconcileResultFullTextParts", () => {
         ],
         lastAssistantHasText: true,
       }),
+    ).toEqual([{ type: "text", text: "总结" }]);
+  });
+
+  test("preserves tail leading whitespace when last part is text (intra-paragraph separator)", () => {
+    // 末条是 text：tail 由 mergeAssistantParts 合并进现有 text part（mergeTextPartsByContainment 拼接），
+    // 前导换行是段内分隔，保留以避免 intro 与总结粘连成 "intro总结"。
+    expect(
+      reconcileResultFullTextParts({
+        resultParts: [{ type: "text", text: "intro\n\n总结" }],
+        existingParts: [{ type: "text", text: "intro" }],
+        lastAssistantHasText: true,
+      }),
     ).toEqual([{ type: "text", text: "\n\n总结" }]);
+  });
+
+  test("recovers tail across multiple text blocks when delta streamed partial summary", () => {
+    // 多 text block（intro + tool_use + 总结）：delta 流过 intro + 总结(部分)，result = intro + 总结(完整)。
+    // existingText 用 \n\n 拼接对齐 resultText 段间分隔，超集命中 -> 回收总结尾巴（由 mergeAssistantParts
+    // 合并进末条总结 part）。无分隔拼接会让前缀匹配失败走 disjoint 丢失尾巴（流式缺尾、刷新磁盘态
+    // 有尾 -> 实时与刷新不一致）。
+    expect(
+      reconcileResultFullTextParts({
+        resultParts: [{ type: "text", text: "intro\n\n总结完整段" }],
+        existingParts: [
+          { type: "text", text: "intro" },
+          { type: "tool_use", id: "t1", name: "bash", input: {}, status: "completed" },
+          { type: "text", text: "总结" },
+        ],
+        lastAssistantHasText: true,
+      }),
+    ).toEqual([{ type: "text", text: "完整段" }]);
+  });
+
+  test("returns empty when multiple text blocks fully streamed and result matches (separator-aware)", () => {
+    // 多 text block 已被 delta 流完整：existingText = "intro\n\n总结" 对齐 resultText，完全相同 -> []
+    // （此前无分隔拼接走 disjoint，现走完全相同路径，语义更精确）。
+    expect(
+      reconcileResultFullTextParts({
+        resultParts: [{ type: "text", text: "intro\n\n总结" }],
+        existingParts: [
+          { type: "text", text: "intro" },
+          { type: "tool_use", id: "t1", name: "bash", input: {}, status: "completed" },
+          { type: "text", text: "总结" },
+        ],
+        lastAssistantHasText: true,
+      }),
+    ).toEqual([]);
+  });
+
+  test("strips tail leading whitespace when last part is reasoning (avoid double separator)", () => {
+    // 末条是 reasoning：tail 新增 text part（渲染 join("\n\n") 已在 reasoning 与新 text 间加分隔），
+    // 裁掉前导空白避免双重换行，与 tool_use 末条同理。
+    expect(
+      reconcileResultFullTextParts({
+        resultParts: [{ type: "text", text: "intro\n\n总结" }],
+        existingParts: [
+          { type: "text", text: "intro" },
+          { type: "reasoning", text: "思考" },
+        ],
+        lastAssistantHasText: true,
+      }),
+    ).toEqual([{ type: "text", text: "总结" }]);
   });
 
   test("returns empty when existing already contains result (result is subset)", () => {
@@ -108,6 +171,33 @@ describe("reconcileResultFullTextParts", () => {
         lastAssistantHasText: true,
       }),
     ).toEqual([]);
+  });
+});
+
+describe("computeAssistantStreamBufferText", () => {
+  test("appends incoming text for delta events", () => {
+    // delta 事件：增量追加 prevAssist + text
+    expect(computeAssistantStreamBufferText("intro", "总结", false)).toBe("intro总结");
+  });
+
+  test("overwrites buffer with result full text (avoid doubling)", () => {
+    // result 事件：缓冲此前已累积 delta 流过的 intro+总结，result 整轮文本覆盖而非追加，
+    // 避免缓冲翻倍 -> complete 时 fromRef/previewRaw 翻倍 -> notifyCompletion 通知内容翻倍。
+    expect(computeAssistantStreamBufferText("intro总结", "intro\n\n总结", true)).toBe("intro\n\n总结");
+  });
+
+  test("preserves prevAssist when result text is empty", () => {
+    // result 无文本（如纯工具回合 result 无 result 字段）：保持 prevAssist，不覆盖为空
+    expect(computeAssistantStreamBufferText("intro", "", true)).toBe("intro");
+  });
+
+  test("overwrites even when result text equals prevAssist (idempotent align)", () => {
+    // result 文本与缓冲相同（delta 已流完整轮）：覆盖为相同值，幂等对齐权威
+    expect(computeAssistantStreamBufferText("intro\n\n总结", "intro\n\n总结", true)).toBe("intro\n\n总结");
+  });
+
+  test("delta with empty text keeps buffer unchanged", () => {
+    expect(computeAssistantStreamBufferText("intro", "", false)).toBe("intro");
   });
 });
 

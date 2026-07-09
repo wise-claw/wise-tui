@@ -55,6 +55,28 @@ export function extractLatestAssistantPlainText(session: ClaudeSession | undefin
 }
 
 /**
+ * 会话中**最后一条** assistant 消息的可见正文（不回溯更早的 assistant）。
+ *
+ * 与 {@link extractLatestAssistantPlainText} 的区别：后者在末条 assistant 无可见 text 时回溯到
+ * 更早的 assistant（用于钉钉通知/团队验收等「取最近有正文的回复」场景）。本函数专用于回合
+ * complete 时的 previewRaw 计算：末条 assistant 是本轮最终回复，无 text 即本轮无文字回复，
+ * 不应拿上一轮正文污染--否则 previewRaw 三源取最长时被上一轮正文占据，
+ * {@link appendAssistantPreviewTextMessage} 会把它追加到本轮末条 -> 跨轮重复，刷新走磁盘态才收敛。
+ */
+export function extractLastAssistantPlainText(session: ClaudeSession | undefined): string {
+  if (!session) {
+    return "";
+  }
+  for (let i = session.messages.length - 1; i >= 0; i -= 1) {
+    const msg = session.messages[i];
+    if (msg.role === "assistant") {
+      return assistantMessageVisiblePlainText(msg);
+    }
+  }
+  return "";
+}
+
+/**
  * 最近一条助手消息里，**最后一个 tool_use 之后**的可见 `text` 段落（多段以双换行拼接）。
  * 可用于只关心「工具执行之后」结论文本的场景（与 Claude Code 侧栏「最终结论文本」对齐）。
  * 若本条无 `tool_use`，返回本条合并可见正文；若**有 tool 但其后无 text**，返回空串（由钉钉解析层对整条正文做尾部摘要，避免把工具前的长分析发满钉钉）。
@@ -199,6 +221,19 @@ export function appendAssistantPreviewTextMessage(
         .map((p) => p.text);
       if (existingTexts.some((t) => t.trim().length > 0 && trimmed.includes(t.trim()))) {
         return session;
+      }
+      // 末条 assistant 无 text part（纯工具回合）但会话内已有更早的 assistant 气泡时，previewRaw
+      // 取自整轮流式缓冲（含前条 intro）而非纯本轮总结。追加会致前条文本在末条重复 -> 跳过，
+      // 依赖 complete 后磁盘重载落盘规范结构。末条 tool_only 无 text 说明本轮无文字 delta（有则
+      // appendAssistantStreamParts 已 merge 进末条），previewRaw 若非空必是前条/跨轮回溯，不应兜底。
+      // 仅当无任何更早 assistant（首轮兜底防闪空）时才追加。
+      if (existingTexts.every((t) => t.trim().length === 0)) {
+        const hasEarlierAssistant = messages
+          .slice(0, -1)
+          .some((m) => m.role === "assistant");
+        if (hasEarlierAssistant) {
+          return session;
+        }
       }
       const nextParts = [...parts, { type: "text" as const, text: trimmed }];
       messages[messages.length - 1] = {
