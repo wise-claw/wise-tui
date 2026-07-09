@@ -9,6 +9,46 @@ import {
 } from "../utils/monacoGitModifiedLineDecorations";
 import { shouldDeferNonCriticalUiWork } from "../utils/uiWorkDefer";
 
+/**
+ * `scheduleRefresh` 内 raf 回调每帧轮询：是否允许执行本次 gutter 装饰刷新。
+ *
+ * 设计上必须满足"不应静默丢弃"：当主线程拥塞或 composer 正在交互时，gutter 装饰
+ * 的 diff 计算可推迟到下个空闲帧，但仍要排到队里，不能整段 return 不调度。
+ * 唯一允许「现在执行」的硬条件是 `hasFocus || !shouldDefer`：
+ *   - 失焦但非 defer → 立即跑（编辑区不在前台但用户可能仍在打字/改文档）
+ *   - 失焦 + defer → 推迟，等状态恢复
+ *   - 聚焦 + defer → 立即跑（用户当前正看着编辑器，装饰延迟会很明显）
+ *
+ * 抽出为纯函数便于单测覆盖（React 端到端测试需要 happy-dom + react-test-renderer + fake raf，
+ * 成本高；纯函数断言能把"不在 defer 静默丢"这个不变量锁住）。
+ */
+export function shouldRunDecorationRefreshNow(
+  shouldDefer: boolean,
+  hasFocus: boolean,
+): boolean {
+  return hasFocus || !shouldDefer;
+}
+
+/**
+ * `refreshFromEditor` 在 baseline vs current 比对后的下一步决策：
+ * - `local`：当前内容 ≠ baseline（本地有未保存改动），用 baseline 对比画 modified/added。
+ * - `clean`：当前内容 === baseline（本地干净），先清掉本地装饰，再异步读 HEAD 比对。
+ * - `skip`：模型不存在（编辑器卸载中），不操作。
+ */
+export type DirtyDiffRefreshAction =
+  | { kind: "skip" }
+  | { kind: "local"; baseline: string; current: string }
+  | { kind: "clean"; current: string };
+
+export function pickDirtyDiffRefreshAction(
+  args: { baseline: string; current: string | null },
+): DirtyDiffRefreshAction {
+  const { baseline, current } = args;
+  if (current == null) return { kind: "skip" };
+  if (current !== baseline) return { kind: "local", baseline, current };
+  return { kind: "clean", current };
+}
+
 function applyLineChangeDecorations(
   editor: MonacoEditorNamespace.IStandaloneCodeEditor,
   monaco: typeof Monaco,
@@ -68,10 +108,13 @@ export function useMonacoGitModifiedLineDecorations(args: {
     const refreshFromEditor = () => {
       if (cancelled) return;
       const model = editor.getModel();
-      if (!model) return;
-      const current = model.getValue();
-      if (current !== baseline) {
-        applyLineChangeDecorations(editor, monaco, baseline, current, decorationRef);
+      const action = pickDirtyDiffRefreshAction({
+        baseline,
+        current: model ? model.getValue() : null,
+      });
+      if (action.kind === "skip") return;
+      if (action.kind === "local") {
+        applyLineChangeDecorations(editor, monaco, action.baseline, action.current, decorationRef);
         return;
       }
       decorationRef.current?.clear();
@@ -96,13 +139,26 @@ export function useMonacoGitModifiedLineDecorations(args: {
       }
     };
 
+    // 编辑器失焦 + 主线程拥塞/composer 交互中时，整段直接 return 会让 gutter 装饰
+    // 在用户切回编辑器前完全不刷新，表现为「+/- 行数有时不自动更新」。
+    // 这里的回调本身已经走 raf 节流 + 轻量 diff，无理由在 defer 期间静默丢弃：
+    // 改成「raf 内若仍 defer 则再排一帧」，拥塞/composer 结束后自然消费掉积压的 last。
+    // 决策收敛到 shouldRunDecorationRefreshNow 纯函数，便于单测断言"不静默丢"。
     const scheduleRefresh = () => {
-      if (shouldDeferNonCriticalUiWork() && !editor.hasTextFocus()) return;
       if (rafId) window.cancelAnimationFrame(rafId);
-      rafId = window.requestAnimationFrame(() => {
+      const tick = () => {
+        if (cancelled) {
+          rafId = 0;
+          return;
+        }
+        if (!shouldRunDecorationRefreshNow(shouldDeferNonCriticalUiWork(), editor.hasTextFocus())) {
+          rafId = window.requestAnimationFrame(tick);
+          return;
+        }
         rafId = 0;
         refreshFromEditor();
-      });
+      };
+      rafId = window.requestAnimationFrame(tick);
     };
 
     const contentListener = editor.onDidChangeModelContent(scheduleRefresh);
