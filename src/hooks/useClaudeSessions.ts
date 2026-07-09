@@ -134,7 +134,10 @@ import {
   shouldIngestWiseNotificationForClaudeTurnComplete,
 } from "../utils/claudeTurnNotificationBody";
 import { getWorkflowFacade } from "../services/workflow";
-import { resolveEffectiveAutoApproveMode } from "../services/autoApproveSettings";
+import {
+  resolveEffectiveAutoApproveMode,
+  subscribeAutoApproveSettings,
+} from "../services/autoApproveSettings";
 import {
   decidePermissionAutoApprove,
   decideQuestionAutoApprove,
@@ -5068,10 +5071,15 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
     // 首次挂载尝试一次（处理已经在 hub 里的 pending request）。
     tryHandle();
-    const unsubscribe = notificationHub.subscribe(tryHandle);
+    const unsubscribeHub = notificationHub.subscribe(tryHandle);
+    // 订阅全局 / 仓库级 auto-approve 设置变更：mode 切换后立即重跑 tryHandle，
+    // 让「旧 pending request 在切到更高 mode 时被自动放行」。
+    // 不加这个订阅，已存在的 pending request 会一直停在 dock 里等用户手动应答。
+    const unsubscribeSettings = subscribeAutoApproveSettings(tryHandle);
     return () => {
       disposed = true;
-      unsubscribe();
+      unsubscribeHub();
+      unsubscribeSettings();
     };
   }, [respondToPermission, respondToQuestion]);
 
