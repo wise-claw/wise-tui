@@ -972,6 +972,95 @@ function toolPartDisplayEqual(
 
 // ── Message Parts ──
 
+/**
+ * 把相邻 `text` parts 合并为单个 `merged_text` 组渲染；`reasoning` / `tool_use` / 无可渲染文本不参与合并。
+ *
+ * 实时多 block（`extractPartsFromParsed` 数组 content）与磁盘回放（`blocksToParts`）都会把同一段
+ * 助手正文拆成多个 text part。两个相邻 text part 之间只靠 `.app-message-part + .app-message-part { margin-top: 3px }`
+ * 隔出 3px——视觉上无法区分段间空行。把相邻 text part 合并为单 `<Markdown>`，由 ReactMarkdown 把
+ * `"\n\n"` 解析成 `<p>`、`app-markdown--chat-prose` 给到 0.65em 段间距，与磁盘 long-prose 视觉一致。
+ *
+ * 规则：
+ * - 相邻 `text` parts 顺序合并，文本间以 `"\n\n"` 拼接（与 `assistantMessagePostToolTextParts` 对齐）。
+ * - `reasoning` 与 `text` **不合并**（`ReasoningPartDisplay` 有专门样式与折叠行为，不能混入）。
+ * - `tool_use` / 非可见 part 是天然分段边界。
+ * - 空段或全 trim 空白段过滤掉，避免 memo 抖动 / 视觉空行。
+ */
+export type PartRenderGroup =
+  | { type: "single"; part: MessagePart; originalIndex: number }
+  | {
+      type: "merged_text";
+      parts: MessagePart[];
+      firstOriginalIndex: number;
+      lastOriginalIndex: number;
+      /** 拼接后供 `<Markdown>` 渲染的纯文本（已带段间 `\n\n`，已 trim 去重） */
+      joinedText: string;
+    }
+  | { type: "tool_group"; parts: { part: ToolUsePart; originalIndex: number }[] };
+
+export function buildMergedTextGroups(visibleParts: readonly MessagePart[]): PartRenderGroup[] {
+  const out: PartRenderGroup[] = [];
+  for (let i = 0; i < visibleParts.length; i += 1) {
+    const part = visibleParts[i]!;
+    if (part.type === "tool_use") {
+      const lastGroup = out[out.length - 1];
+      if (lastGroup && lastGroup.type === "tool_group") {
+        lastGroup.parts.push({ part, originalIndex: i });
+      } else {
+        out.push({ type: "tool_group", parts: [{ part, originalIndex: i }] });
+      }
+      continue;
+    }
+    if (part.type === "text") {
+      // 收集连续 text parts（跳过中间的 reasoning——reasoning 不与 text 合并，仍按单独段插入）
+      const run: MessagePart[] = [part];
+      const runIndices: number[] = [i];
+      let j = i + 1;
+      while (j < visibleParts.length) {
+        const next = visibleParts[j]!;
+        if (next.type === "text") {
+          run.push(next);
+          runIndices.push(j);
+          j += 1;
+          continue;
+        }
+        break;
+      }
+      // 计算本 run 的拼接文本（多 part 时 `\n\n` 分隔）；单 part 时 joinedText == trimmed。
+      const joinedText = run
+        .map((p, k) => {
+          const t = (p as TextPart).text;
+          // 首 part 允许保留首部空白（中间不应有人为缩进），其余 part 头尾 trim 再拼。
+          if (k === 0) return k === run.length - 1 ? t.trim() : t.trimEnd();
+          return k === run.length - 1 ? t.trim() : t.trim();
+        })
+        .filter((s) => s.length > 0)
+        .join("\n\n");
+      if (joinedText.length === 0) {
+        // 全空段：跳过（不渲染，避免空 markdown card）
+        i = j - 1;
+        continue;
+      }
+      if (run.length === 1) {
+        out.push({ type: "single", part, originalIndex: i });
+      } else {
+        out.push({
+          type: "merged_text",
+          parts: run,
+          firstOriginalIndex: runIndices[0]!,
+          lastOriginalIndex: runIndices[runIndices.length - 1]!,
+          joinedText,
+        });
+      }
+      i = j - 1;
+      continue;
+    }
+    // reasoning / 其它不可渲染 part：单条 single 段
+    out.push({ type: "single", part, originalIndex: i });
+  }
+  return out;
+}
+
 function messagePartsDisplayEqual(
   prev: Readonly<{ parts: MessagePart[]; streaming: boolean; inlinePendingHint?: boolean }>,
   next: Readonly<{ parts: MessagePart[]; streaming: boolean; inlinePendingHint?: boolean }>,
@@ -999,46 +1088,55 @@ export const MessagePartsDisplay = memo(function MessagePartsDisplay({
   const visibleParts = parts.filter(isRenderableMessagePart);
   if (visibleParts.length === 0) return null;
 
-  const lastIdx = visibleParts.length - 1;
+  const groups = buildMergedTextGroups(visibleParts);
+  if (groups.length === 0) return null;
 
-  type RenderGroup =
-    | { type: "single"; part: MessagePart; originalIndex: number }
-    | { type: "tool_group"; parts: { part: ToolUsePart; originalIndex: number }[] };
-
-  const groups: RenderGroup[] = [];
-  visibleParts.forEach((part, i) => {
-    if (part.type === "tool_use") {
-      const lastGroup = groups[groups.length - 1];
-      if (lastGroup && lastGroup.type === "tool_group") {
-        lastGroup.parts.push({ part, originalIndex: i });
-      } else {
-        groups.push({ type: "tool_group", parts: [{ part, originalIndex: i }] });
-      }
-    } else {
-      groups.push({ type: "single", part, originalIndex: i });
-    }
-  });
+  const lastOriginalIdx = visibleParts.length - 1;
+  // "末段是否含原 parts 末条" 用于 inlinePendingHint：合并段里只要 lastOriginalIndex === lastOriginalIdx，就视为末段。
+  const lastGroup = groups[groups.length - 1];
 
   return (
     <div className="app-message-parts">
       {groups.map((group, groupIdx) => {
         if (group.type === "tool_group") {
+          // 仅工具组：bottom hint 由最后 inlinePendingHint 行决定。
           return <ToolGroupDisplay key={`tool-group-${groupIdx}`} parts={group.parts} />;
-        } else {
-          const { part, originalIndex } = group;
-          const key = `${part.type}-${originalIndex}`;
-          const hintHere = streaming && inlinePendingHint && originalIndex === lastIdx;
-          switch (part.type) {
-            case "text":
-              return <TextPartDisplay key={key} part={part} streaming={streaming} showPendingHint={hintHere} />;
-            case "reasoning":
-              return <ReasoningPartDisplay key={key} part={part} streaming={streaming} showPendingHint={hintHere} />;
-            default:
-              return null;
-          }
+        }
+        if (group.type === "merged_text") {
+          // 多 text part 合并为单段：复用 TextPartDisplay，content 用 joinedText（已带段间 \n\n）。
+          // hintHere 判定改为「该段是否覆盖到 parts 末条」——对合并段同样成立（视觉上的最后一段文字块）。
+          const hintHere =
+            streaming && inlinePendingHint && group.lastOriginalIndex === lastOriginalIdx;
+          const mergedPart: TextPart = { type: "text", text: group.joinedText };
+          return (
+            <TextPartDisplay
+              key={`merged-text-${group.firstOriginalIndex}-${group.lastOriginalIndex}`}
+              part={mergedPart}
+              streaming={streaming}
+              showPendingHint={hintHere}
+            />
+          );
+        }
+        // type === "single"
+        const { part, originalIndex } = group;
+        const key = `${part.type}-${originalIndex}`;
+        const hintHere =
+          streaming && inlinePendingHint && originalIndex === lastOriginalIdx;
+        switch (part.type) {
+          case "text":
+            return <TextPartDisplay key={key} part={part} streaming={streaming} showPendingHint={hintHere} />;
+          case "reasoning":
+            return <ReasoningPartDisplay key={key} part={part} streaming={streaming} showPendingHint={hintHere} />;
+          default:
+            return null;
         }
       })}
-      {streaming && inlinePendingHint && visibleParts[lastIdx]?.type === "tool_use" && <StreamingReplyHint />}
+      {streaming &&
+        inlinePendingHint &&
+        lastGroup?.type === "tool_group" &&
+        lastGroup.parts[lastGroup.parts.length - 1]?.originalIndex === lastOriginalIdx && (
+          <StreamingReplyHint />
+        )}
     </div>
   );
 }, messagePartsDisplayEqual);

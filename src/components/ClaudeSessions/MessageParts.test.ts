@@ -1,12 +1,14 @@
 import { describe, expect, test } from "bun:test";
-import type { ToolUsePart } from "../../types";
+import type { MessagePart, TextPart, ToolUsePart, ReasoningPart } from "../../types";
 import {
   shouldRenderOutputAsMarkdown,
   getToolDisplayInfo,
   shouldShowToolOutputBody,
   getToolInputParamRows,
   parseMcpToolName,
+  buildMergedTextGroups,
 } from "./MessageParts";
+import { isRenderableMessagePart } from "../../utils/claudeChatMessageDisplay";
 
 describe("shouldRenderOutputAsMarkdown", () => {
   const buildPart = (name: string, output: string): ToolUsePart => ({
@@ -237,5 +239,219 @@ describe("getToolDisplayInfo fallback", () => {
     const info = getToolDisplayInfo(part);
     expect(info.label).toBe("工具结果");
     expect(info.subtitle).toBe("Done");
+  });
+});
+
+describe("buildMergedTextGroups", () => {
+  function text(t: string): TextPart {
+    return { type: "text", text: t };
+  }
+  function reason(t: string): ReasoningPart {
+    return { type: "reasoning", text: t };
+  }
+  function bashTool(id: string): ToolUsePart {
+    return {
+      type: "tool_use",
+      id,
+      name: "bash",
+      input: { command: "ls" },
+      output: "ok",
+      status: "completed",
+    };
+  }
+
+  test("keeps single text part as is (no merge)", () => {
+    const visible: MessagePart[] = [text("单独一段")];
+    const groups = buildMergedTextGroups(visible);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.type).toBe("single");
+    if (groups[0]!.type === "single") {
+      expect(groups[0]!.originalIndex).toBe(0);
+    }
+  });
+
+  test("merges adjacent text parts with \\n\\n separator", () => {
+    // 实时流式多 block（typical [intro text, tool_use, summary text] 在工具前为单 part、工具后单 part）
+    // 与磁盘回放的多 part 形态一致：合并为一段 + 段间分隔。
+    const visible: MessagePart[] = [text("intro 段一"), text("intro 段二")];
+    const groups = buildMergedTextGroups(visible);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.type).toBe("merged_text");
+    if (groups[0]!.type === "merged_text") {
+      expect(groups[0]!.joinedText).toBe("intro 段一\n\nintro 段二");
+      expect(groups[0]!.firstOriginalIndex).toBe(0);
+      expect(groups[0]!.lastOriginalIndex).toBe(1);
+    }
+  });
+
+  test("does not split merged_text across tool_use boundary", () => {
+    // 关键回归：[intro text, tool_use, summary text] 三段 -> 3 组（不是 2 组）
+    const visible: MessagePart[] = [
+      text("intro"),
+      bashTool("t1"),
+      text("summary"),
+    ];
+    const groups = buildMergedTextGroups(visible);
+    expect(groups).toHaveLength(3);
+    expect(groups.map((g) => g.type)).toEqual([
+      "single",
+      "tool_group",
+      "single",
+    ]);
+    expect(groups[0]!.type).toBe("single");
+    if (groups[0]!.type === "single") {
+      expect(groups[0]!.originalIndex).toBe(0);
+    }
+    expect(groups[1]!.type).toBe("tool_group");
+    if (groups[1]!.type === "tool_group") {
+      expect(groups[1]!.parts).toHaveLength(1);
+      expect(groups[1]!.parts[0]!.originalIndex).toBe(1);
+    }
+    expect(groups[2]!.type).toBe("single");
+    if (groups[2]!.type === "single") {
+      expect(groups[2]!.originalIndex).toBe(2);
+    }
+  });
+
+  test("merges multiple consecutive tool_use parts into one tool_group", () => {
+    const visible: MessagePart[] = [
+      bashTool("t1"),
+      bashTool("t2"),
+      bashTool("t3"),
+    ];
+    const groups = buildMergedTextGroups(visible);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.type).toBe("tool_group");
+    if (groups[0]!.type === "tool_group") {
+      expect(groups[0]!.parts.map((p) => p.part.id)).toEqual(["t1", "t2", "t3"]);
+      expect(groups[0]!.parts.map((p) => p.originalIndex)).toEqual([0, 1, 2]);
+    }
+  });
+
+  test("does not merge reasoning with text (special-cases reasoning parts)", () => {
+    // reasoning 有专门折叠样式，不能与 text 混渲 -> 拆 reasoning 为单独段
+    const visible: MessagePart[] = [
+      text("前"),
+      reason("思考中"),
+      text("后"),
+    ];
+    const groups = buildMergedTextGroups(visible);
+    expect(groups).toHaveLength(3);
+    expect(groups.map((g) => g.type)).toEqual(["single", "single", "single"]);
+    expect(groups[0]!.type).toBe("single");
+    expect(groups[2]!.type).toBe("single");
+    if (groups[0]!.type === "single") {
+      expect(groups[0]!.originalIndex).toBe(0);
+    }
+    if (groups[2]!.type === "single") {
+      expect(groups[2]!.originalIndex).toBe(2);
+    }
+  });
+
+  test("merges two consecutive text parts split only by a blank-only text part into one segment", () => {
+    // 实际场景：含空白 text part 应被 trim 后过滤，因此不阻断合并
+    const visible: MessagePart[] = [
+      text("第一段"),
+      text("   "),
+      text("第二段"),
+    ];
+    const groups = buildMergedTextGroups(visible);
+    // 空白段被过滤；剩两条 text 合并
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.type).toBe("merged_text");
+    if (groups[0]!.type === "merged_text") {
+      expect(groups[0]!.joinedText).toBe("第一段\n\n第二段");
+      // 因空白 part 被剔除，lastOriginalIndex 是原 parts 末条索引（2）
+      expect(groups[0]!.lastOriginalIndex).toBe(2);
+    }
+  });
+
+  test("strips leading whitespace of subsequent text parts before joining", () => {
+    // 模型产物偶尔会以换行开始（如 \n\n 开头），合并时不应让前段尾随空白 + 后段前导空白形成四换行
+    const visible: MessagePart[] = [text("intro  "), text("\n\n 总结")];
+    const groups = buildMergedTextGroups(visible);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.type).toBe("merged_text");
+    if (groups[0]!.type === "merged_text") {
+      // 首段 trimEnd 去尾随空白；后段 trim 去前导空白；拼接为单一 \n\n
+      expect(groups[0]!.joinedText).toBe("intro\n\n总结");
+    }
+  });
+
+  test("filters out trailing whitespace-only merged segments (no empty card)", () => {
+    // 全 trim 空段：例如流式中段 text part 整体为空，不应渲染一个空 markdown card
+    const visible: MessagePart[] = [text("   ")];
+    const groups = buildMergedTextGroups(visible);
+    expect(groups).toHaveLength(0);
+  });
+
+  test("preserves tool_group ordering with merged_text run around it", () => {
+    const visible: MessagePart[] = [
+      text("pre-1"),
+      text("pre-2"),
+      bashTool("t1"),
+      text("post-1"),
+      text("post-2"),
+    ];
+    const groups = buildMergedTextGroups(visible);
+    expect(groups).toHaveLength(3);
+    expect(groups.map((g) => g.type)).toEqual([
+      "merged_text",
+      "tool_group",
+      "merged_text",
+    ]);
+    if (groups[0]!.type === "merged_text") {
+      expect(groups[0]!.joinedText).toBe("pre-1\n\npre-2");
+    }
+    if (groups[2]!.type === "merged_text") {
+      expect(groups[2]!.joinedText).toBe("post-1\n\npost-2");
+    }
+  });
+
+  test("does not merge reasoning even when sandwiched between text runs", () => {
+    // text + reasoning + text 必须是 3 段，不允许 reasoning 与两侧 text 合并
+    const visible: MessagePart[] = [
+      text("head"),
+      reason("thinking"),
+      text("tail"),
+    ];
+    const groups = buildMergedTextGroups(visible);
+    expect(groups).toHaveLength(3);
+    expect(groups.map((g) => g.type)).toEqual(["single", "single", "single"]);
+    if (groups[0]!.type === "single") {
+      expect((groups[0]!.part as TextPart).text).toBe("head");
+    }
+    if (groups[1]!.type === "single") {
+      expect((groups[1]!.part as ReasoningPart).text).toBe("thinking");
+    }
+    if (groups[2]!.type === "single") {
+      expect((groups[2]!.part as TextPart).text).toBe("tail");
+    }
+  });
+});
+
+describe("buildMergedTextGroups with isRenderableMessagePart filter", () => {
+  test("after filtering invisible tool_use names (e.g. AskUserQuestion), merges adjacent text parts", () => {
+    // AskUserQuestion tool_use 被 isRenderableMessagePart 过滤（`claudeChatMessageDisplay.ts` 的工具分支），
+    // 视图中只剩前后两条 text part -> 合并为单段；避免 dock + list 双卡片。
+    const text1: TextPart = { type: "text", text: "分析步骤" };
+    const invisibleTool: ToolUsePart = {
+      type: "tool_use",
+      id: "ask1",
+      name: "AskUserQuestion",
+      input: { question: "选哪个？" },
+      status: "completed",
+    };
+    const text2: TextPart = { type: "text", text: "我的回答" };
+    const parts: MessagePart[] = [text1, invisibleTool, text2];
+    const visible = parts.filter(isRenderableMessagePart);
+    // sanity: invisibleTool 应当被过滤掉
+    expect(visible).toHaveLength(2);
+    const groups = buildMergedTextGroups(visible);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.type).toBe("merged_text");
+    if (groups[0]!.type === "merged_text") {
+      expect(groups[0]!.joinedText).toBe("分析步骤\n\n我的回答");
+    }
   });
 });
