@@ -585,8 +585,14 @@ export function useRepositoryFilesExplorer({
 
   useEffect(() => {
     const path = repositoryPath.trim();
-    const q = deferredSearchQuery;
-    if (!path || !q || q.length < MIN_EXPLORER_SEARCH_QUERY_LEN) {
+    // 抹掉所有前导 `/`，让 `/core/index` / `///core/index` 与 `core/index` 等价；
+    // 抹完后长度不足（输入仅 `/` 或纯空白）则按未输入处理。
+    const normalizedQuery = deferredSearchQuery.replace(/^\/+/, "");
+    if (
+      !path ||
+      !normalizedQuery ||
+      normalizedQuery.length < MIN_EXPLORER_SEARCH_QUERY_LEN
+    ) {
       setSearchResultRows([]);
       setSearchPending(false);
       return;
@@ -595,7 +601,7 @@ export function useRepositoryFilesExplorer({
     setSearchPending(true);
     void (async () => {
       try {
-        const entries = await searchRepositoryFiles(path, q);
+        const entries = await searchRepositoryFiles(path, normalizedQuery);
         if (cancelled) {
           return;
         }

@@ -231,7 +231,7 @@ export function SlashPopover({
     let cancelled = false;
     setFileLoading(true);
 
-    const token = query;
+    const token = query.replace(/^\/+/, "");
     const delayMs = token.length === 0 ? 0 : 50;
 
     const timer = window.setTimeout(async () => {

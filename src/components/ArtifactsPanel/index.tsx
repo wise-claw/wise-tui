@@ -151,7 +151,7 @@ export function ArtifactsPanel({ repositories, activeRepositoryId, onOpenReposit
     setLoading(true);
     try {
       const [matched, entries] = await Promise.all([
-        searchRepositoryFiles(root, query.trim()),
+        searchRepositoryFiles(root, query.trim().replace(/^\/+/, "")),
         listRepositoryExplorerEntries(root),
       ]);
       const previewable = entries.filter((entry) => !entry.isDir && isPreviewablePath(entry.path)).map((entry) => entry.path);

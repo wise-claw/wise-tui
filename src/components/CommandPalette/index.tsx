@@ -268,7 +268,10 @@ export const CommandPalette = memo(function CommandPalette({
       return;
     }
     const q = query.trim();
-    if (!q) {
+    // 抹掉所有前导 `/`，把 `/core/index` / `///core/index` 都退化为 `core/index`，
+    // 与仓库相对路径表达方式对齐；抹完后为空（仅 `/` / 纯空白）则按空查询短路。
+    const normalizedQuery = q.replace(/^\/+/, "");
+    if (!normalizedQuery) {
       setResults([]);
       setLoading(false);
       return;
@@ -282,7 +285,11 @@ export const CommandPalette = memo(function CommandPalette({
       if (cancelled) return;
       try {
         if (searchMode === "filename") {
-          const entries = await searchRepositoryFiles(repositoryPath, q, scopeDir || undefined);
+          const entries = await searchRepositoryFiles(
+            repositoryPath,
+            normalizedQuery,
+            scopeDir || undefined,
+          );
           if (cancelled || requestId !== searchRequestIdRef.current) return;
           setResults(
             entries.map((entry) => ({
@@ -294,7 +301,7 @@ export const CommandPalette = memo(function CommandPalette({
         } else {
           const matches = await searchRepositoryFileContents(
             repositoryPath,
-            q,
+            normalizedQuery,
             scopeDir || undefined,
           );
           if (cancelled || requestId !== searchRequestIdRef.current) return;
@@ -354,9 +361,13 @@ export const CommandPalette = memo(function CommandPalette({
   ]);
 
   const placeholder =
-    searchMode === "filename" ? "输入文件名" : "搜索文件内容";
+    searchMode === "filename"
+      ? "输入文件名或路径，如 core/index"
+      : "搜索文件内容";
   const emptyHint =
-    searchMode === "filename" ? "输入文件名搜索" : "输入关键词搜索文件内容";
+    searchMode === "filename"
+      ? "输入文件名或路径搜索，支持多级目录如 /core/index"
+      : "输入关键词搜索文件内容";
   const dialogLabel = searchMode === "filename" ? "文件搜索" : "文件内容搜索";
 
   if (!open) return null;

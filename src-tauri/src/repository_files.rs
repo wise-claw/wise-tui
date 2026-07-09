@@ -125,7 +125,12 @@ pub(crate) fn search_repository_files(
         return Err(format!("搜索目录不存在或不是目录：{rel}"));
     }
 
-    let q = query.trim().to_lowercase();
+    // 规范化查询串：trim 空白 + 小写 + 去掉所有前导 `/`，把 `/core/index` / `///core/index`
+    // 当作 `core/index` 处理，与仓库相对路径（前缀统一为 `dir/...`，不以 `/` 开头）对齐。
+    let q = query
+        .trim()
+        .trim_start_matches('/')
+        .to_lowercase();
     let mut scanned: usize = 0;
 
     let walker = WalkDir::new(&search_root)
@@ -796,6 +801,77 @@ mod repository_search_tests {
         assert!(
             results.iter().any(|entry| !entry.is_dir && entry.path == "src/components/App.tsx"),
             "expected file match: {results:?}",
+        );
+
+        let _ = fs::remove_dir_all(&root);
+    }
+
+    #[test]
+    fn search_repository_files_strips_leading_slash_for_multi_level_paths() {
+        let root = std::env::temp_dir().join("wise-repo-search-leading-slash-test");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(root.join("src/core")).unwrap();
+        fs::create_dir_all(root.join("docs")).unwrap();
+        fs::write(root.join("src/core/index.ts"), "export const core = true;").unwrap();
+        fs::write(root.join("src/core/util.ts"), "export const util = true;").unwrap();
+        fs::write(root.join("docs/notes.md"), "core stuff").unwrap();
+
+        // 带前导斜杠的多级路径 `/core/index` 应当与 `core/index` 命中相同结果集。
+        let with_slash = search_repository_files(
+            root.to_string_lossy().to_string(),
+            "/core/index".into(),
+            None,
+        )
+        .expect("leading-slash search");
+        let without_slash = search_repository_files(
+            root.to_string_lossy().to_string(),
+            "core/index".into(),
+            None,
+        )
+        .expect("plain search");
+
+        let with_paths: Vec<&str> = with_slash.iter().map(|e| e.path.as_str()).collect();
+        let without_paths: Vec<&str> = without_slash.iter().map(|e| e.path.as_str()).collect();
+        assert_eq!(
+            with_paths, without_paths,
+            "leading slash must not change results"
+        );
+        assert!(
+            with_slash
+                .iter()
+                .any(|entry| !entry.is_dir && entry.path == "src/core/index.ts"),
+            "expected multi-level match: {with_slash:?}",
+        );
+        // docs/notes.md 包含 `core` 但不含 `core/index`，不应被命中。
+        assert!(
+            !with_slash.iter().any(|entry| entry.path == "docs/notes.md"),
+            "docs/notes.md must not match /core/index: {with_slash:?}",
+        );
+
+        // 多余的前导斜杠也应被全部吃掉。
+        let extra_slashes = search_repository_files(
+            root.to_string_lossy().to_string(),
+            "///core".into(),
+            None,
+        )
+        .expect("extra-slashes search");
+        assert!(
+            extra_slashes
+                .iter()
+                .any(|entry| entry.path == "src/core"),
+            "expected src/core directory match: {extra_slashes:?}",
+        );
+
+        // 只有 `/` 的查询应被视作空查询，退化为列目录而非返回空。
+        let only_slash = search_repository_files(
+            root.to_string_lossy().to_string(),
+            "/".into(),
+            None,
+        )
+        .expect("only-slash search");
+        assert!(
+            !only_slash.is_empty(),
+            "/ alone must behave as empty query and list root contents"
         );
 
         let _ = fs::remove_dir_all(&root);
