@@ -16,6 +16,7 @@ import {
   resolveChatMessageCopyText,
   resolveChatMessageComposerInsertPayload,
   resolveChatMessageComposerInsertText,
+  userMessagePlainTextForDisplay,
 } from "./claudeChatMessageDisplay";
 
 describe("isAssistantDisplayNoiseText", () => {
@@ -457,5 +458,111 @@ describe("isDisplayNoiseUserMessageText", () => {
     expect(isDisplayNoiseUserMessageText(" /help  ")).toBe(false);
     expect(isDisplayNoiseUserMessageText("")).toBe(false);
     expect(isDisplayNoiseUserMessageText("   ")).toBe(false);
+  });
+});
+
+describe("userMessagePlainTextForDisplay — tool_result 防护", () => {
+  // 复盘：用户上报的 JSONL 形态——单条 user 消息只含一个 tool_result 块，且无匹配 tool_use
+  // （orphan）。修复前 `msg.content` 被 stdout 污染，下游 `UserMessageDisplayBody` 把 stdout
+  // 表格当成用户输入正文展示。修复后必须返回空，让 MessagePartsDisplay 走 ToolUsePartDisplay。
+  test("纯 tool_use parts 的 user 消息返回空字符串", () => {
+    const stdoutTable = [
+      "      #     | IID  |  TITLE  | CREATOR | URL",
+      "------------+------+---------+---------+----",
+      "  435576195 | 2756 | feat-fh | 铮睿    | https://example/pr/2756",
+    ].join("\n");
+    const msg: ClaudeMessage = {
+      id: 1,
+      role: "user",
+      content: "",
+      parts: [
+        {
+          type: "tool_use",
+          id: "call_function_ubbktg42s6tw_1",
+          name: "",
+          input: {},
+          output: stdoutTable,
+          status: "completed",
+        },
+      ],
+      timestamp: 0,
+    };
+    expect(userMessagePlainTextForDisplay(msg)).toBe("");
+  });
+
+  test("即使 msg.content 被旧数据污染，纯 tool_use parts 仍返回空", () => {
+    // 防御性：若历史持久化数据里 `content` 仍残留 stdout 文本，只要 parts 判定为
+    // isToolOnlyUserMessage，就必须短路返回空，不再 fallback 到污染的 content。
+    const msg: ClaudeMessage = {
+      id: 1,
+      role: "user",
+      content: "      #     | IID  |  TITLE  | CREATOR | URL  ...",
+      parts: [
+        {
+          type: "tool_use",
+          id: "t1",
+          name: "",
+          input: {},
+          output: "      #     | IID  |  TITLE  | CREATOR | URL  ...",
+          status: "completed",
+        },
+      ],
+      timestamp: 0,
+    };
+    expect(userMessagePlainTextForDisplay(msg)).toBe("");
+  });
+
+  test("is_error=true 的 tool_result 同样短路返回空", () => {
+    const msg: ClaudeMessage = {
+      id: 1,
+      role: "user",
+      content: "",
+      parts: [
+        {
+          type: "tool_use",
+          id: "t1",
+          name: "",
+          input: {},
+          output: "",
+          error: "<tool_use_error>InputValidationError</tool_use_error>",
+          status: "error",
+        },
+      ],
+      timestamp: 0,
+    };
+    expect(userMessagePlainTextForDisplay(msg)).toBe("");
+  });
+
+  test("正常 user 文本消息不受影响", () => {
+    const msg: ClaudeMessage = {
+      id: 1,
+      role: "user",
+      content: "帮我看下这个按钮",
+      parts: [{ type: "text", text: "帮我看下这个按钮" }],
+      timestamp: 0,
+    };
+    expect(userMessagePlainTextForDisplay(msg)).toBe("帮我看下这个按钮");
+  });
+
+  test("混合 text + tool_result parts 的 user 消息返回 text 部分", () => {
+    // 边界：content 数组里 text 块 + tool_result 块共存（罕见但合法）。
+    const msg: ClaudeMessage = {
+      id: 1,
+      role: "user",
+      content: "看下这个 PR",
+      parts: [
+        { type: "text", text: "看下这个 PR" },
+        {
+          type: "tool_use",
+          id: "t1",
+          name: "",
+          input: {},
+          output: "PR #2756 status: open",
+          status: "completed",
+        },
+      ],
+      timestamp: 0,
+    };
+    expect(userMessagePlainTextForDisplay(msg)).toBe("看下这个 PR");
   });
 });

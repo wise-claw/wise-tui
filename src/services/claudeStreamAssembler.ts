@@ -269,13 +269,13 @@ export function foldToolResultUserMessagesIntoAssistant(messages: readonly Claud
     result = applied.messages;
     const orphans = updates.filter((update) => !applied.matchedIds.has(update.id));
     if (orphans.length === 0) continue;
+    // 孤儿 user 消息：`content` 留空，避免 stdout 表格被下游当成用户正文渲染。
+    // 工具结果输出仍存于 `parts[*].output` / `parts[*].error`，由 MessagePartsDisplay
+    // 通过 ToolUsePartDisplay 渲染（带 "工具结果" / "失败" 标签）。
     result.push({
       ...msg,
       parts: orphans,
-      content: orphans
-        .map((part) => part.output?.trim() || part.error?.trim() || "")
-        .filter(Boolean)
-        .join("\n\n"),
+      content: "",
     });
   }
   return result;

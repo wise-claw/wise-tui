@@ -168,6 +168,10 @@ export function indexOfPreviousRenderableMessage(
 /** 用户气泡的纯文本（用于 sticky 摘要等）。 */
 
 export function userMessagePlainTextForDisplay(msg: ClaudeMessage): string {
+  // 纯 tool_use parts 的 user 消息（典型场景：JSONL 回放时 orphan tool_result / stream 路径
+  // 折叠失败的工具结果）。直接返回空，避免任何路径把 stdout / error 文本当成用户正文渲染——
+  // 这类消息的展示由 MessagePartsDisplay 走 ToolUsePartDisplay 承担（带 "工具结果" / "失败" 标签）。
+  if (isToolOnlyUserMessage(msg)) return "";
   const fromParts = msg.parts
     ?.filter((p): p is { type: "text"; text: string } => p.type === "text" && typeof p.text === "string")
     .map((p) => p.text)

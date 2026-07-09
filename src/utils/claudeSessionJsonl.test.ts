@@ -205,6 +205,134 @@ describe("parseClaudeSessionJsonlLines — tool_result fold into assistant tool_
       id: "toolu_orphan",
       output: "orphan output",
     });
+    // 关键：孤儿 user 消息的 `content` 不能再承载 stdout，避免下游把它当用户正文渲染。
+    expect(messages[0]?.content).toBe("");
+  });
+
+  test("does not pollute content when user message contains only tool_result block", () => {
+    // 复盘：用户上报的 JSONL 形态——单条 user 消息只含一个 tool_result 块，
+    // 且该 tool_use_id 在前一条 assistant 里找不到匹配（历史 session 丢失了
+    // 对应 tool_use）。修复前 content 字段会被填入 stdout；修复后必须留空。
+    const stdoutTable = [
+      "      #     | IID  |  TITLE  | CREATOR | URL",
+      "------------+------+---------+---------+----",
+      "  435576195 | 2756 | feat-fh | 铮睿    | https://example/pr/2756",
+    ].join("\n");
+    const userLine = JSON.stringify({
+      type: "user",
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "call_function_ubbktg42s6tw_1",
+            content: stdoutTable,
+            is_error: false,
+          },
+        ],
+      },
+      timestamp: 1,
+    });
+
+    const messages = parseClaudeSessionJsonlLines([userLine]);
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.role).toBe("user");
+    expect(messages[0]?.content).toBe("");
+    expect(messages[0]?.parts).toHaveLength(1);
+    // 关键：tool_result 解析后 stdout 的实质内容必须保留到 part.output
+    // （前导空白会被解析侧 .trim() 剥掉，是历史行为，不是本修复目标）。
+    const part0 = messages[0]?.parts[0] as { output?: string };
+    expect(part0).toMatchObject({
+      type: "tool_use",
+      id: "call_function_ubbktg42s6tw_1",
+      status: "completed",
+    });
+    expect(part0.output).toContain("#     | IID  |  TITLE");
+    expect(part0.output).toContain("435576195 | 2756 | feat-fh | 铮睿");
+  });
+
+  test("preserves user text content when user message mixes text + tool_result blocks", () => {
+    // 边界：content 数组里 text 块 + tool_result 块共存（罕见但合法，例如用户
+    // 文本提问附带一个工具结果引用），`content` 必须取 text 块 join，tool_result
+    // 仍落到 parts 由 ToolUsePartDisplay 渲染。
+    const userLine = JSON.stringify({
+      type: "user",
+      message: {
+        role: "user",
+        content: [
+          { type: "text", text: "看下这个 PR" },
+          {
+            type: "tool_result",
+            tool_use_id: "toolu_mix_1",
+            content: "PR #2756 status: open",
+          },
+        ],
+      },
+      timestamp: 1,
+    });
+
+    const messages = parseClaudeSessionJsonlLines([userLine]);
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.content).toBe("看下这个 PR");
+    expect(messages[0]?.parts).toHaveLength(2);
+    expect(messages[0]?.parts[0]).toMatchObject({ type: "text", text: "看下这个 PR" });
+    expect(messages[0]?.parts[1]).toMatchObject({
+      type: "tool_use",
+      id: "toolu_mix_1",
+      output: "PR #2756 status: open",
+    });
+  });
+
+  test("marks tool_result part status as error when is_error is true", () => {
+    // 边界：tool_result.is_error=true 时，ToolUsePart.status 必须是 error，error 字段带原文。
+    const userLine = JSON.stringify({
+      type: "user",
+      message: {
+        role: "user",
+        content: [
+          {
+            type: "tool_result",
+            tool_use_id: "toolu_err_1",
+            content: "<tool_use_error>InputValidationError: Write failed ... file_path is missing</tool_use_error>",
+            is_error: true,
+          },
+        ],
+      },
+      timestamp: 1,
+    });
+
+    const messages = parseClaudeSessionJsonlLines([userLine]);
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.content).toBe("");
+    const part = messages[0]?.parts[0];
+    expect(part).toMatchObject({
+      type: "tool_use",
+      id: "toolu_err_1",
+      status: "error",
+    });
+    expect((part as { error?: string }).error).toContain("InputValidationError");
+  });
+
+  test("truncates oversized tool_result output for parts but still leaves content empty", () => {
+    // 边界：超长 stdout 在解析侧被截到 4000 字符，但 user 消息 content 字段
+    // 必须仍然为空（不要再回到「拿 stdout 当 user content」的反模式）。
+    const oversized = "x".repeat(8_000);
+    const userLine = JSON.stringify({
+      type: "user",
+      message: {
+        role: "user",
+        content: [
+          { type: "tool_result", tool_use_id: "toolu_big", content: oversized },
+        ],
+      },
+      timestamp: 1,
+    });
+
+    const messages = parseClaudeSessionJsonlLines([userLine]);
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.content).toBe("");
+    const part = messages[0]?.parts[0] as { output?: string };
+    expect(part.output?.length).toBeLessThanOrEqual(4_001); // 4000 + "…"
   });
 });
 

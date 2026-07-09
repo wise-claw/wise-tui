@@ -1,8 +1,12 @@
 import type { ClaudeMessage, ClaudeSession } from "../types";
+import { isToolOnlyUserMessage } from "./claudeChatMessageDisplay";
 
 /** 单条用户消息的完整可读正文（含 `parts` 内 text，与主栏逻辑一致） */
 export function userMessagePlainText(msg: ClaudeMessage): string {
   if (msg.role !== "user") return "";
+  // 纯 tool_use parts 的 user 消息（orphan tool_result / 折叠失败场景）不应被视作
+  // OMC 派发 payload——它们的 stdout / error 文本不应触发「发现派发正文」等下游逻辑。
+  if (isToolOnlyUserMessage(msg)) return "";
   const fromParts =
     msg.parts
       ?.filter((part): part is { type: "text"; text: string } => part.type === "text" && typeof part.text === "string")

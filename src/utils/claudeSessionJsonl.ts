@@ -157,15 +157,30 @@ export function parseClaudeSessionJsonlLines(lines: string[]): ClaudeMessage[] {
           }
           if (toolParts.length > 0) {
             idCounter += 1;
-            const contentJoin = toolParts
-              .filter((p): p is ToolUsePart => p.type === "tool_use")
-              .map((p) => p.output ?? "")
-              .join("\n\n");
+            // user 消息里若混有 text 块，则把 text 作为正文填进 `content` 并保留 text part；
+            // 若只剩 tool_result，`content` 留空 + parts 仅含 tool_use，让
+            // `userMessagePlainTextForDisplay` 与 `MessagePartsDisplay` 走「纯工具结果」分支，
+            // 避免 stdout 表格被当成用户输入正文渲染（参见 claudeSessionJsonl.test.ts
+            // 的孤儿 tool_result 用例）。
+            const textBlocks = blocks.filter((c) => c.type === "text");
+            const textJoin = textBlocks
+              .map((c) => (typeof c.text === "string" ? c.text : ""))
+              .join("")
+              .trim();
+            const allParts: MessagePart[] = [
+              ...textBlocks.map(
+                (c): TextPart => ({
+                  type: "text",
+                  text: typeof c.text === "string" ? c.text : "",
+                }),
+              ),
+              ...toolParts,
+            ];
             messages.push({
               id: idCounter,
               role: "user",
-              content: contentJoin,
-              parts: toolParts,
+              content: textJoin,
+              parts: allParts,
               timestamp: parseTimestamp(row.timestamp),
             });
           }
