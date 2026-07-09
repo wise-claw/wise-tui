@@ -170,6 +170,15 @@ describe("extractPartsFromStreamLine", () => {
     ).toEqual([{ type: "text", text: "让我 check files" }]);
   });
 
+  test("REGRESSION: preserves paragraph breaks (\\n\\n) in normal assistant text", () => {
+    // 普通助手回复（无 CLI 注入文案）的 \n\n 段落分隔必须原样保留，
+    // 否则实时流式文本会被压成单空格、段落粘连（刷新磁盘态不经此函数反而清晰）。
+    const normal = "第一段结论。\n\n第二段分析。\n\n- 列表项一\n- 列表项二";
+    expect(stripClaudeHarnessInjectedStreamText(normal)).toBe(normal);
+    const multiBlank = "para one\n\n\n\npara two";
+    expect(stripClaudeHarnessInjectedStreamText(multiBlank)).toBe(multiBlank);
+  });
+
   test("parses content_block_delta text_delta and thinking_delta", () => {
     expect(
       extractPartsFromStreamLine(

@@ -94,9 +94,11 @@ const TextPartDisplay = memo(function TextPartDisplay({
   const text = usePacedText(part.text, streaming);
   // 流式期 text 每 token 变化，但 class 仅在结构边界（summary / 长文）变化。
   // 按长度桶缓存：同桶内复用上一次结果，跳过 7+ 正则；跨桶或流式结束(streaming 转 false)时重算，保证最终 class 正确。
-  const classBucket = streaming ? Math.floor(text.length / 1024) : text.length;
+  // 桶粒度 256：早于 1024 提前 4 倍触发 chat-prose 判定，避免流式期「末段粘连」——见
+  // `looksLikeLongFormChatMarkdown` 的 streamingShortOk 分支（多段形态早挂 long-prose）。
+  const classBucket = streaming ? Math.floor(text.length / 256) : text.length;
   const { partClassName, markdownClassName } = useMemo(
-    () => chatAssistantTextPartClassNames(text),
+    () => chatAssistantTextPartClassNames(text, streaming),
     // 依赖 classBucket 而非 text：同桶跳过重算；text 仅在 factory 内使用。
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [classBucket, streaming],

@@ -169,6 +169,58 @@ describe("looksLikeLongFormChatMarkdown", () => {
   test("ignores short plain replies", () => {
     expect(looksLikeLongFormChatMarkdown("好的，我来处理。")).toBe(false);
   });
+
+  // 回归："多个说明点 + 末尾段"形态（旧实现只数无序列表 + 段间 ≥5 双重落空，
+  // 流式态不挂 chat-prose → 0.45em；磁盘态 0.65em，视觉差距被感知为「最后几段集中到一起」）。
+  test("REGRESSION: numbered list + trailing paragraph triggers long-prose (multi 步骤 + 总结)", () => {
+    expect(
+      looksLikeLongFormChatMarkdown(
+        "下面是步骤：\n\n1. 打开 IDE\n2. 选择项目\n3. 点击运行\n\n如果失败请重试。",
+      ),
+    ).toBe(true);
+  });
+
+  test("REGRESSION: numbered list + bullet list + trailing paragraph triggers long-prose", () => {
+    expect(
+      looksLikeLongFormChatMarkdown(
+        "下面是详细步骤：\n\n1. 打开文件\n2. 选择内容\n3. 复制\n4. 粘贴到新位置\n5. 保存\n\n关键点：\n- 注意编码\n- 注意换行\n- 注意权限",
+      ),
+    ).toBe(true);
+  });
+
+  test("REGRESSION: 6-item ordered list + intro + outro triggers long-prose (典型「操作流程」)", () => {
+    expect(
+      looksLikeLongFormChatMarkdown(
+        "操作流程：\n\n1. 打开应用\n2. 点击菜单\n3. 选择导出\n4. 保存文件\n\n注意保存路径。",
+      ),
+    ).toBe(true);
+  });
+
+  test("REGRESSION: short plain list (only ordered items, no \\\\n\\\\n) still does NOT trigger long-prose", () => {
+    // 单段多列表项 + 无段间空行 = 不应挂 chat-prose（避免把短单段拉成卡片）
+    expect(looksLikeLongFormChatMarkdown("1. 第一步\n2. 第二步\n3. 第三步")).toBe(false);
+  });
+
+  // 流式期早触发：text 累积 < 720 字时，磁盘态规则几乎全 false；流式态若已出现 ≥2 段就提前挂 chat-prose，
+  // 消除「末段粘连」（4px vs 0.65em 视觉断崖）。单段不挂，避免短回复误挂卡片。
+  test("STREAMING: ≥2 paragraphs triggers long-prose even when text < 720 chars", () => {
+    expect(looksLikeLongFormChatMarkdown("第一步说明\n\n第二步说明", false, true)).toBe(true);
+  });
+
+  test("STREAMING: single paragraph short reply does NOT trigger long-prose", () => {
+    expect(looksLikeLongFormChatMarkdown("好的，我来处理。", false, true)).toBe(false);
+  });
+
+  test("STREAMING: single-paragraph multi-list (no \\\\n\\\\n) does NOT trigger long-prose", () => {
+    // 短单段列表不应挂卡片（与磁盘态已有的 case 对齐）
+    expect(looksLikeLongFormChatMarkdown("1. 第一步\n2. 第二步\n3. 第三步", false, true)).toBe(false);
+  });
+
+  test("DISK: ≥2 paragraphs without streamingShortOk does NOT auto-trigger long-prose (字节级等价)", () => {
+    // 磁盘 JSONL 装配路径不传 streamingShortOk，行为必须与改动前完全一致——「短两段」文本不应挂卡片。
+    expect(looksLikeLongFormChatMarkdown("第一步说明\n\n第二步说明", false, false)).toBe(false);
+    expect(looksLikeLongFormChatMarkdown("第一步说明\n\n第二步说明", false)).toBe(false);
+  });
 });
 
 describe("chatAssistantTextPartClassNames", () => {
@@ -192,6 +244,36 @@ describe("chatAssistantTextPartClassNames", () => {
     ].join("\n");
     const { partClassName } = chatAssistantTextPartClassNames(text);
     expect(partClassName).toContain("app-message-part--long-prose");
+  });
+
+  // 流式期早触发：text 累积 < 720 字且含 ≥2 段时，streaming=true 立即挂 long-prose 卡片 + chat-prose，
+  // 消除「末段粘连」；streaming=false（磁盘态）行为字节级等价。
+  test("STREAMING: short 2-paragraph reply gets long-prose card", () => {
+    const { partClassName, markdownClassName } = chatAssistantTextPartClassNames(
+      "第一步说明\n\n第二步说明",
+      true,
+    );
+    expect(partClassName).toContain("app-message-part--long-prose");
+    expect(markdownClassName).toBe("app-markdown--chat-prose");
+  });
+
+  test("DISK: short 2-paragraph reply does NOT get long-prose card (字节级等价)", () => {
+    const { partClassName, markdownClassName } = chatAssistantTextPartClassNames(
+      "第一步说明\n\n第二步说明",
+      false,
+    );
+    expect(partClassName).not.toContain("app-message-part--long-prose");
+    expect(markdownClassName).toBeUndefined();
+  });
+
+  test("STREAMING: single-paragraph short reply stays plain (no card)", () => {
+    const { partClassName, markdownClassName } = chatAssistantTextPartClassNames(
+      "好的，我来处理。",
+      true,
+    );
+    expect(partClassName).not.toContain("app-message-part--long-prose");
+    expect(partClassName).not.toContain("app-message-part--completion-summary");
+    expect(markdownClassName).toBeUndefined();
   });
 });
 

@@ -19,7 +19,11 @@ export function looksLikeAssistantCompletionSummary(text: string): boolean {
 }
 
 /** 主会话中长段 Markdown（含 ## 标题、**小节**、多段列表等），用于增强排版与卡片容器。 */
-export function looksLikeLongFormChatMarkdown(text: string, isSummary?: boolean): boolean {
+export function looksLikeLongFormChatMarkdown(
+  text: string,
+  isSummary?: boolean,
+  streamingShortOk?: boolean,
+): boolean {
   // 允许调用方复用已计算的 isSummary，避免 chatAssistantTextPartClassNames 内重复跑 4 正则。
   const summary = isSummary ?? looksLikeStructuredMarkdownSummary(text);
   if (summary) return true;
@@ -29,22 +33,39 @@ export function looksLikeLongFormChatMarkdown(text: string, isSummary?: boolean)
 
   const markdownHeadings = (t.match(/^#{1,6}\s+/gm) ?? []).length;
   const boldSectionHeaders = (t.match(/^\*\*[^*\n]{2,64}\*\*\s*$/gm) ?? []).length;
-  const listItems = (t.match(/^[\s]*[-*+]\s+/gm) ?? []).length;
+  // 计数必须把无序列表（-/* /+）和有序列表（1. / 2. …）都算进去——历史上只统计无序列表，
+  // 致 "1. 打开 IDE\n2. 选择菜单\n3. 点击按钮\n\n…后段说明" 这类典型"多说明点"形态不挂 chat-prose，
+  // 流式态段间距 0.45em 与磁盘态 0.65em 视觉差距大，被用户感知为「最后几段集中到一起」。
+  const unorderedListItems = (t.match(/^[\s]*[-*+]\s+/gm) ?? []).length;
+  const orderedListItems = (t.match(/^\s*\d+\.\s+/gm) ?? []).length;
+  const listItems = unorderedListItems + orderedListItems;
   const paragraphs = t.split(/\n\s*\n/).filter((block) => block.trim()).length;
 
   if ((markdownHeadings >= 1 || boldSectionHeaders >= 2) && listItems >= 2) return true;
   if (boldSectionHeaders >= 2 && paragraphs >= 3) return true;
   if (paragraphs >= 5) return true;
   if (listItems >= 5) return true;
+  // 短"多说明点"形态：≥3 个列表项 + ≥2 段（说明 + 总结），典型如「1./2./3. 步骤 + 末尾总结」。
+  // 旧实现因只数无序列表 + 段间 ≥5 双重落空，致这一形态始终回退到 0.45em 段间距。
+  if (listItems >= 3 && paragraphs >= 2) return true;
+  // 流式期早触发：text 累计 < 720 字时按上述规则几乎全 false，挂不上 chat-prose → 段间距 4px，
+  // 与磁盘 JSONL 一次性加载整段命中 chat-prose 后的 0.65em 段间距差 4×，被用户感知为「最后几段集中到一起」。
+  // 仅当流式期（streamingShortOk=true）且已出现 ≥2 段（含说明 + 末尾总结）时才早挂 long-prose 卡片，
+  // 单段短回复（"好的，我来处理。" / "1. 步骤一\n2. 步骤二"）不会因新分支误挂卡片。
+  // 磁盘态调用方不传 streamingShortOk → 此分支永不命中，行为字节级等价。
+  if (streamingShortOk === true && paragraphs >= 2) return true;
   return t.length >= 720;
 }
 
-export function chatAssistantTextPartClassNames(text: string): {
+export function chatAssistantTextPartClassNames(
+  text: string,
+  streaming?: boolean,
+): {
   partClassName: string;
   markdownClassName?: string;
 } {
   const isSummary = looksLikeStructuredMarkdownSummary(text);
-  const isLongProse = looksLikeLongFormChatMarkdown(text, isSummary);
+  const isLongProse = looksLikeLongFormChatMarkdown(text, isSummary, streaming);
   let partClassName = "app-message-part app-message-part--text";
   if (isSummary) {
     partClassName += " app-message-part--completion-summary";

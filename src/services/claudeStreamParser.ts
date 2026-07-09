@@ -442,11 +442,19 @@ export function isClaudeHarnessInjectedStreamText(text: string): boolean {
 
 /** 从流式 text 块中剥离 CLI 注入文案，避免与模型正文拼成乱句。 */
 export function stripClaudeHarnessInjectedStreamText(text: string): string {
-  return text
-    .replace(/Your tool call was malformed and could not be parsed\.?\s*(Please retry\.?)?/gi, "")
-    .replace(/The model's tool call could not be parsed[^.\n]*(?:\([^)]*\))?\.?/gi, "")
-    .replace(/\s{2,}/g, " ")
-    .trim();
+  const afterMalformed = text.replace(
+    /Your tool call was malformed and could not be parsed\.?\s*(Please retry\.?)?/gi,
+    "",
+  );
+  const afterParsed = afterMalformed.replace(
+    /The model's tool call could not be parsed[^.\n]*(?:\([^)]*\))?\.?/gi,
+    "",
+  );
+  // 仅当确实剔除了 CLI 注入文案时才压缩多空白（含段落分隔 \n\n）。否则原样返回，
+  // 保留正常助手回复的 \n\n 段落分隔——无条件压缩会把实时流式文本段落压成单空格，
+  // 导致「实时接收段落粘连、刷新磁盘态（不经过此函数）段落清晰」的渲染分歧。
+  if (afterParsed === text) return text;
+  return afterParsed.replace(/\s{2,}/g, " ").trim();
 }
 
 /** Claude stream-json 中占位/无信息量的 system error 文案，不应写入会话 UI。 */
