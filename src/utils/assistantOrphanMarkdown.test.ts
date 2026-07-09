@@ -221,6 +221,27 @@ describe("looksLikeLongFormChatMarkdown", () => {
     expect(looksLikeLongFormChatMarkdown("第一步说明\n\n第二步说明", false, false)).toBe(false);
     expect(looksLikeLongFormChatMarkdown("第一步说明\n\n第二步说明", false)).toBe(false);
   });
+
+  // 组合：summary 优先于 streamingShortOk 早触发——带"已完成/改动总结"语境的即使短两段也是 summary
+  test("STREAMING: summary path beats streamingShortOk early-trigger", () => {
+    // "已完成！\n\n## 改动总结" = summary=true（looksLikeStructuredMarkdownSummary）
+    // streamingShortOk 早触发分支在 summary 之后，不会拦截；最终走 summary 分支
+    expect(looksLikeLongFormChatMarkdown("已完成！\n\n## 改动总结", false, true)).toBe(true);
+  });
+
+  // 边界：段数刚到 2 vs 不到 2 的临界
+  test("STREAMING: paragraphs boundary 2 (1 -> false, 2 -> true, 3 -> true)", () => {
+    // 1 段（即便长）不挂；2 段挂；3 段挂
+    expect(looksLikeLongFormChatMarkdown("一段很长的文字内容".repeat(20), false, true)).toBe(false);
+    expect(looksLikeLongFormChatMarkdown("第一段\n\n第二段", false, true)).toBe(true);
+    expect(looksLikeLongFormChatMarkdown("第一段\n\n第二段\n\n第三段", false, true)).toBe(true);
+  });
+
+  // 边界：段间分隔 \n\n 但被 stripClaudeHarnessInjectedStreamText 压平后的形态——这种修复由调用方负责
+  test("STREAMING: 多空白折叠后的段数仍按 \\n\\n 切割", () => {
+    // "para1\n\n\n\npara2" 的 split(/\n\s*\n/) 会得到 ["para1", "para2"] 两个段（多换行折叠）
+    expect(looksLikeLongFormChatMarkdown("para1\n\n\n\npara2", false, true)).toBe(true);
+  });
 });
 
 describe("chatAssistantTextPartClassNames", () => {
@@ -274,6 +295,109 @@ describe("chatAssistantTextPartClassNames", () => {
     expect(partClassName).not.toContain("app-message-part--long-prose");
     expect(partClassName).not.toContain("app-message-part--completion-summary");
     expect(markdownClassName).toBeUndefined();
+  });
+
+  // 边界：summary 优先于 long-prose / streaming 早触发——带"已完成/改动总结"语境的即使短文本也是 summary 卡片
+  test("summary priority over long-prose: structured summary card wins regardless of streaming", () => {
+    const summaryText = "已完成！\n\n## 改动总结";
+    // 磁盘态
+    const disk = chatAssistantTextPartClassNames(summaryText, false);
+    expect(disk.partClassName).toContain("app-message-part--completion-summary");
+    expect(disk.partClassName).not.toContain("app-message-part--long-prose");
+    // 流式态
+    const stream = chatAssistantTextPartClassNames(summaryText, true);
+    expect(stream.partClassName).toContain("app-message-part--completion-summary");
+    expect(stream.partClassName).not.toContain("app-message-part--long-prose");
+  });
+
+  // 边界：纯 5+ 列表项（无段间空行）—— 磁盘态兜底 ≥5 listItems 应挂 long-prose；流式态单段形态不挂
+  test("5+ list items single paragraph: both disk and streaming get long-prose (listItems >= 5 wins over streamingShortOk)", () => {
+    const text5list = "- 1\n- 2\n- 3\n- 4\n- 5";
+    // listItems >= 5 是全局规则，磁盘态与流式态都命中；streamingShortOk 早触发分支不"吃掉"该全局规则
+    const disk = chatAssistantTextPartClassNames(text5list, false);
+    expect(disk.partClassName).toContain("app-message-part--long-prose");
+    expect(disk.markdownClassName).toBe("app-markdown--chat-prose");
+    const stream = chatAssistantTextPartClassNames(text5list, true);
+    expect(stream.partClassName).toContain("app-message-part--long-prose");
+    expect(stream.markdownClassName).toBe("app-markdown--chat-prose");
+  });
+
+  // 边界：混合 markdown 形态（## 标题 + 列表 + 段落）—— 两种模式都挂 long-prose
+  test("mixed ## heading + list + paragraph: both disk and streaming get long-prose", () => {
+    const mixed = "## 步骤\n\n1. 第一步\n2. 第二步\n\n注意事项：\n\n- 小心编码";
+    const disk = chatAssistantTextPartClassNames(mixed, false);
+    expect(disk.partClassName).toContain("app-message-part--long-prose");
+    const stream = chatAssistantTextPartClassNames(mixed, true);
+    expect(stream.partClassName).toContain("app-message-part--long-prose");
+  });
+
+  // 边界：极长单段（> 720 字符）—— 兜底规则在两种模式都挂 long-prose
+  test("very long single paragraph (>720 chars): both modes get long-prose via length fallback", () => {
+    const long = "这是很长很长的单段文字" + "x".repeat(800);
+    const disk = chatAssistantTextPartClassNames(long, false);
+    expect(disk.partClassName).toContain("app-message-part--long-prose");
+    const stream = chatAssistantTextPartClassNames(long, true);
+    expect(stream.partClassName).toContain("app-message-part--long-prose");
+  });
+
+  // 边界：空字符串 —— 不会抛异常，className 是基础 text part
+  test("empty text: returns base text part without long-prose/completion-summary", () => {
+    const { partClassName, markdownClassName } = chatAssistantTextPartClassNames("", false);
+    expect(partClassName).toBe("app-message-part app-message-part--text");
+    expect(markdownClassName).toBeUndefined();
+    const stream = chatAssistantTextPartClassNames("", true);
+    expect(stream.partClassName).toBe("app-message-part app-message-part--text");
+    expect(stream.markdownClassName).toBeUndefined();
+  });
+
+  // 边界：纯空白 —— 不会挂卡片
+  test("whitespace-only text: no card", () => {
+    const { partClassName } = chatAssistantTextPartClassNames("   \n\n   ", false);
+    expect(partClassName).toBe("app-message-part app-message-part--text");
+    const stream = chatAssistantTextPartClassNames("   \n\n   ", true);
+    expect(stream.partClassName).toBe("app-message-part app-message-part--text");
+  });
+
+  // 字节级等价（磁盘态）：不传 streaming / 传 undefined / 传 false 三种调用结果完全相同
+  test("DISK byte-equivalence: undefined / omitted / false / absent streaming arg all identical", () => {
+    const samples = [
+      "好的，我来处理。",
+      "1. 第一步\n2. 第二步\n3. 第三步",
+      "## 标题\n\n一段内容",
+      "第一步说明\n\n第二步说明",
+      "a".repeat(800),
+    ];
+    for (const text of samples) {
+      const omitted = chatAssistantTextPartClassNames(text);
+      const undef = chatAssistantTextPartClassNames(text, undefined);
+      const falseArg = chatAssistantTextPartClassNames(text, false);
+      expect(undef.partClassName).toBe(omitted.partClassName);
+      expect(undef.markdownClassName).toBe(omitted.markdownClassName);
+      expect(falseArg.partClassName).toBe(omitted.partClassName);
+      expect(falseArg.markdownClassName).toBe(omitted.markdownClassName);
+    }
+  });
+
+  // 磁盘态多形态：heading+list、bold+list、bold+headings+paragraphs —— 字节级稳定
+  test("DISK byte-equivalence: multiple markdown shapes return stable long-prose classification", () => {
+    // 三个按现有规则命中 long-prose（非 summary）的形态：纯稳定性 + 长 prose className 字节级锁定
+    const samples = [
+      // heading + 有序列表 + outro（避免 summary 关键词）：heading+listItems>=2 命中
+      "## 步骤\n\n1. a\n2. b\n\n注意事项",
+      // bold ×2 + 列表 + 段：boldSectionHeaders=2 + paragraphs=3 命中
+      "**A 节**\n\n- 1\n- 2\n\n**B 节**\n\n- 3\n- 4",
+      // 极长单段（>=720 字符）：兜底规则命中
+      "a".repeat(800),
+    ];
+    for (const text of samples) {
+      const a = chatAssistantTextPartClassNames(text);
+      const b = chatAssistantTextPartClassNames(text);
+      expect(a.partClassName).toBe(b.partClassName);
+      expect(a.markdownClassName).toBe(b.markdownClassName);
+      expect(a.partClassName).toContain("app-message-part--long-prose");
+      expect(a.partClassName).not.toContain("app-message-part--completion-summary");
+      expect(a.markdownClassName).toBe("app-markdown--chat-prose");
+    }
   });
 });
 

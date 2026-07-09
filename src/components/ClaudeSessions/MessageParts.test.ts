@@ -428,6 +428,135 @@ describe("buildMergedTextGroups", () => {
       expect((groups[2]!.part as TextPart).text).toBe("tail");
     }
   });
+
+  test("returns empty array for empty input (caller renders null)", () => {
+    expect(buildMergedTextGroups([])).toEqual([]);
+  });
+
+  test("single text part stays as single, not merged_text (TextPartDisplay path)", () => {
+    // 单 part 永远走 single 分支——merged_text 强制要求多 part；确保 chat-prose
+    // 仍然按单 part 的 text 触发，不被合并逻辑吃掉。
+    const visible: MessagePart[] = [text("只有一段文字")];
+    const groups = buildMergedTextGroups(visible);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.type).toBe("single");
+    if (groups[0]!.type === "single") {
+      expect(groups[0]!.originalIndex).toBe(0);
+      expect((groups[0]!.part as TextPart).text).toBe("只有一段文字");
+    }
+  });
+
+  test("single text part preserves originalIndex even when part text has trailing whitespace", () => {
+    // 单 part 走 trimmed text，但 type 仍是 single（避免误合并路径）
+    const visible: MessagePart[] = [text("  内容  ")];
+    const groups = buildMergedTextGroups(visible);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.type).toBe("single");
+    if (groups[0]!.type === "single") {
+      expect(groups[0]!.originalIndex).toBe(0);
+    }
+  });
+
+  test("text + reasoning + 2 text parts: reasoning 隔断两侧合并为独立 merged_text", () => {
+    // [t1, reasoning, t2, t3] -> [single(t1), single(reasoning), merged_text(t2,t3)]
+    // 关键是 reasoning 不与 text 合并，但 reasoning 之后的 t2 + t3 仍合并。
+    const visible: MessagePart[] = [
+      text("前置段"),
+      reason("思考中"),
+      text("后置一段"),
+      text("后置二段"),
+    ];
+    const groups = buildMergedTextGroups(visible);
+    expect(groups).toHaveLength(3);
+    expect(groups.map((g) => g.type)).toEqual(["single", "single", "merged_text"]);
+    if (groups[2]!.type === "merged_text") {
+      expect(groups[2]!.joinedText).toBe("后置一段\n\n后置二段");
+      expect(groups[2]!.firstOriginalIndex).toBe(2);
+      expect(groups[2]!.lastOriginalIndex).toBe(3);
+    }
+  });
+
+  test("two text parts + reasoning + single trailing text: 4 groups, no cross-reason merging", () => {
+    // [t1, t2, reasoning, t3] -> [merged_text(t1,t2), single(reasoning), single(t3)]
+    const visible: MessagePart[] = [
+      text("第一段"),
+      text("第二段"),
+      reason("思考"),
+      text("末尾段"),
+    ];
+    const groups = buildMergedTextGroups(visible);
+    expect(groups).toHaveLength(3);
+    expect(groups.map((g) => g.type)).toEqual(["merged_text", "single", "single"]);
+    if (groups[0]!.type === "merged_text") {
+      expect(groups[0]!.joinedText).toBe("第一段\n\n第二段");
+      expect(groups[0]!.firstOriginalIndex).toBe(0);
+      expect(groups[0]!.lastOriginalIndex).toBe(1);
+    }
+  });
+
+  test("merges 5 consecutive text parts and preserves first/last originalIndex across trimmed empties", () => {
+    // 长 run 边界：5 个 text part + 中间夹杂空白段，验证 firstOriginalIndex / lastOriginalIndex 跨剔除空段正确
+    const visible: MessagePart[] = [
+      text("一"),
+      text("  "),
+      text("二"),
+      text("三"),
+      text("   "),
+      text("四"),
+      text("五"),
+    ];
+    const groups = buildMergedTextGroups(visible);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.type).toBe("merged_text");
+    if (groups[0]!.type === "merged_text") {
+      // 空白 part 被剔除；其余 trim 后用 \n\n 拼接
+      expect(groups[0]!.joinedText).toBe("一\n\n二\n\n三\n\n四\n\n五");
+      // firstOriginalIndex 是首个非空 text part 的原始索引
+      expect(groups[0]!.firstOriginalIndex).toBe(0);
+      // lastOriginalIndex 是合并 run 中最后一个 text part 的原始索引（即 "五" 的索引 6）
+      expect(groups[0]!.lastOriginalIndex).toBe(6);
+    }
+  });
+
+  test("trailing reasoning after merged text: reasoning 不合并，单独一段", () => {
+    // [t1, t2, reasoning] -> [merged_text(t1,t2), single(reasoning)]
+    const visible: MessagePart[] = [
+      text("第一段"),
+      text("第二段"),
+      reason("尾部思考"),
+    ];
+    const groups = buildMergedTextGroups(visible);
+    expect(groups).toHaveLength(2);
+    expect(groups.map((g) => g.type)).toEqual(["merged_text", "single"]);
+    if (groups[1]!.type === "single") {
+      expect((groups[1]!.part as ReasoningPart).text).toBe("尾部思考");
+      expect(groups[1]!.originalIndex).toBe(2);
+    }
+  });
+
+  test("all parts filtered to whitespace-only text returns empty array (no empty card)", () => {
+    // 全空 parts（实际很少见，但 buildMergedTextGroups 应鲁棒）
+    const visible: MessagePart[] = [text(""), text("   "), text("\n\n")];
+    const groups = buildMergedTextGroups(visible);
+    expect(groups).toEqual([]);
+  });
+
+  test("three text parts where middle is whitespace-only get merged with trimmed middle dropped", () => {
+    // [t1, whitespace, t2] -> 1 个 merged_text (t1 + t2)，lastOriginalIndex 是 t2 的原始索引
+    const visible: MessagePart[] = [
+      text("a"),
+      text("   \n\n  "),
+      text("b"),
+    ];
+    const groups = buildMergedTextGroups(visible);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.type).toBe("merged_text");
+    if (groups[0]!.type === "merged_text") {
+      expect(groups[0]!.joinedText).toBe("a\n\nb");
+      expect(groups[0]!.firstOriginalIndex).toBe(0);
+      expect(groups[0]!.lastOriginalIndex).toBe(2);
+    }
+  });
 });
 
 describe("buildMergedTextGroups with isRenderableMessagePart filter", () => {
