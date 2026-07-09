@@ -25,8 +25,12 @@ interface Props {
   onReloadTab: (relativePath: string) => void;
   onSave: () => void;
   onTabContentChange: (relativePath: string, content: string) => void;
+  /**
+   * md 预览状态按 `${rootPath}::${relativePath}` 持久化（与 `useRepositoryFileEditor` 内
+   * `previewKey` 键空间一致）。多 pane 跨 rootPath 同名相对路径互不覆盖。
+   */
   mdPreviewByPath: Record<string, boolean>;
-  onMdPreviewTabChange: (relativePath: string, value: boolean) => void;
+  onMdPreviewTabChange: (rootPath: string, relativePath: string, value: boolean) => void;
   /** Ctrl/Cmd+Click import/export 路径时导航打开目标文件。 */
   onNavigateToFile?: (relativePath: string) => void;
   /** 在文件树中定位到指定文件（顶栏按钮 / tab 右键触发）。 */
@@ -267,9 +271,9 @@ export function RepositoryFileEditorPanel({
               dark={dark}
               repositoryPath={repositoryPath}
               activeSessionId={activeSessionId}
-              mdPreviewRequested={mdPreviewByPath[tab.relativePath] ?? false}
+              mdPreviewRequested={mdPreviewByPath[`${tab.rootPath}::${tab.relativePath}`] ?? false}
               onMdPreviewRequestedChange={(value) =>
-                onMdPreviewTabChange(tab.relativePath, value)
+                onMdPreviewTabChange(tab.rootPath, tab.relativePath, value)
               }
               onTabContentChange={handleTabContentChange}
               onCloseTab={onCloseTab}

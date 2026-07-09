@@ -174,16 +174,8 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
    */
   const [mdPreviewByPath, setMdPreviewByPath] = useState<Record<string, boolean>>({});
   const setEditorTabMdPreview = useCallback((rootPath: string, relativePath: string, value: boolean) => {
-    const key = previewKey(rootPath, relativePath);
-    setMdPreviewByPath((prev) => {
-      if (value) {
-        return prev[key] === true ? prev : { ...prev, [key]: true };
-      }
-      if (prev[key] === undefined) return prev;
-      const next = { ...prev };
-      delete next[key];
-      return next;
-    });
+    // 真值/删除/幂等等行为收敛到纯函数 reducer，便于不依赖 React 渲染的单测覆盖键空间。
+    setMdPreviewByPath((prev) => mdPreviewReducer(prev, { rootPath, relativePath, value }));
   }, []);
   const fileEditorTabsRef = useRef<Map<number, FileEditorTab[]>>(new Map());
   fileEditorTabsRef.current = fileEditorTabsByPane;
@@ -1314,4 +1306,28 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
     setFileEditorActivePath,
     updateFileEditorTabContent,
   };
+}
+
+/**
+ * md 文件预览状态的纯函数 reducer。
+ *
+ * 键空间约定：`previewKey(rootPath, relativePath) = ${rootPath}::${relativePath}`。
+ * 真值/幂等/删除行为与 hook 内 `setEditorTabMdPreview` 1:1 对应，但作为不依赖 React 渲染
+ * 的纯函数导出，便于单测直接覆盖写入/删除/跨 rootPath 同 relativePath 不互覆盖等键空间语义。
+ *
+ * - `value === true`：写入该 key。同 key 二次写 true 引用不变，保留 useState 合并稳定性。
+ * - `value === false`：删除该 key。不存在的 key 上写 false 引用不变。
+ */
+export function mdPreviewReducer(
+  prev: Record<string, boolean>,
+  args: { rootPath: string; relativePath: string; value: boolean },
+): Record<string, boolean> {
+  const key = previewKey(args.rootPath, args.relativePath);
+  if (args.value) {
+    return prev[key] === true ? prev : { ...prev, [key]: true };
+  }
+  if (prev[key] === undefined) return prev;
+  const next = { ...prev };
+  delete next[key];
+  return next;
 }

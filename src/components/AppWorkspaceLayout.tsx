@@ -179,8 +179,13 @@ interface RepositoryFileEditorPanelContextValue {
   activeSessionId: string | null;
   dirty: boolean;
   editorVisible: boolean;
+  /**
+   * md 预览状态按 `${rootPath}::${relativePath}` 键空间持久化（详见 hook 内 `previewKey`
+   * 与新导出的 `mdPreviewReducer`）。setter 必须带 rootPath 一起传，避免 wrapper 用 active
+   * tab 的 rootPath 替代表达时与被点击 tab 实际 rootPath 不一致。
+   */
   mdPreviewByPath: Record<string, boolean>;
-  setEditorTabMdPreview: (relativePath: string, value: boolean) => void;
+  setEditorTabMdPreview: (rootPath: string, relativePath: string, value: boolean) => void;
   onActivePathChange: (path: string) => void;
   onClosePanel: () => void;
   onCloseTab: (relativePath: string, event?: ReactMouseEvent) => void;
@@ -312,9 +317,9 @@ function PaneEditorHost({
       dirty: editorDirty,
       editorVisible: true,
       mdPreviewByPath,
-      setEditorTabMdPreview: (relativePath, value) => {
-        // hook 阶段 1 改为 (rootPath, relativePath, value)；按当前 tab 的 rootPath 注入。
-        const rootPath = activeTab?.rootPath ?? repositoryPath ?? "";
+      setEditorTabMdPreview: (rootPath, relativePath, value) => {
+        // Panel 调用方已经持有 tab 的根路径（多 pane 跨 rootPath 时不会借由 active tab 替代表达），
+        // 这里薄透传即可。键空间 = `${rootPath}::${relativePath}`，由 hook 内 `previewKey` 负责拼装。
         setEditorTabMdPreview(rootPath, relativePath, value);
       },
       onActivePathChange: (path) => {
