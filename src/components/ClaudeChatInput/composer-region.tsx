@@ -784,21 +784,26 @@ function ComposerInner({
         setCanSendComposer(false);
       }
       // settle：成功与放弃都必须执行（归零 pending，否则 syncCanSendComposer 永远把 canSend 钉 false）。
+      // 入参 `plain` 是调用方期望写入 Tiptap 的目标文本；Tiptap 实际读出的 `actual` 可能因行尾空格
+      // 修复、零宽字符规范化等丢字符（粘贴后即触发"按钮变灰"的根因），故 canSend 必须基于 plain 兜底，
+      // 不能完全依赖 actual。
       const settle = () => {
         pendingSetContentRef.current = Math.max(0, pendingSetContentRef.current - 1);
-        syncCanSendComposer(readSemiEditorPlain(aiChatRef.current?.getEditor?.()));
+        syncCanSendComposer(plain);
       };
       scheduleSafeAiChatSetContent(
         () => aiChatRef.current,
         normalized,
         () => {
           const actual = readSemiEditorPlain(aiChatRef.current?.getEditor?.());
-          if (actual) lastEditorPlainRef.current = actual;
+          // lastEditorPlainRef 仍记录 Tiptap 实际 doc：键入/回车从 Tiptap 读，避免读到过期 React 值。
+          // actual 为空时（清空场景）保留 plain，让下一帧 onContentChange 重新同步。
+          if (actual || !normalized) lastEditorPlainRef.current = actual;
           settle();
-          // setContent 完成后兜底算一次 canSend：Tiptap 的 onContentChange 可能在 pending 期间
-          // 已被 applySemiContentChange 的 skip 节流分支（skipContentSyncRemainingRef>0 且 plain===lastEditor）
-          // 吞掉，导致 React 端 canSend 永远不翻转。"粘贴后按钮一直灰"就是这条路径。
-          // settle 已归零 pendingSetContentRef 并 syncCanSendComposer(actual 等价)。
+          // 兜底二次 sync：粘贴 + 嵌套 schedule 后，Tiptap 的 onContentChange 可能命中
+          // applySemiContentChange 的 skip 节流分支 → 主路径的 syncCanSendComposer 跳过 → canSend
+          // 翻 true 失败。settle 收尾用 plain 再算一次。
+          syncCanSendComposer(plain);
           onAfterSet?.();
         },
         {
@@ -998,6 +1003,11 @@ function ComposerInner({
         skipContentSyncRemainingRef.current = 0;
       } else {
         skipContentSyncRemainingRef.current -= 1;
+        // 节流分支：阻止 React prompt 被回流污染，但 canSend 仍须基于 Tiptap 真实 plain 重算——
+        // 否则 paste 等非键盘触发的 onContentChange 走完 skip 分支后 React 端 canSend 永远不翻转。
+        // syncCanSendComposer 内部 `pending>0 → false` 护栏仍生效（嵌套 schedule 时不会把
+        // pending 中的 canSend 强行翻 true）。
+        syncCanSendComposer(plain);
         return;
       }
     }
