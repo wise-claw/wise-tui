@@ -68,7 +68,13 @@ describe("resolveEmployeeTerminalConversationStatus", () => {
       status: "completed",
       messages: [
         { id: 1, role: "user", content: "run", timestamp: 10 },
-        { id: 2, role: "assistant", content: "done", timestamp: 20 },
+        {
+          id: 2,
+          role: "assistant",
+          content: "done",
+          timestamp: 20,
+          parts: [{ type: "text", text: "done" }],
+        },
       ],
     });
     const status = resolveEmployeeTerminalConversationStatus({
@@ -121,7 +127,13 @@ describe("buildEmployeeTerminalConversationStatusById", () => {
           status: "completed",
           messages: [
             { id: 1, role: "user", content: "a", timestamp: 1 },
-            { id: 2, role: "assistant", content: "b", timestamp: 2 },
+            {
+              id: 2,
+              role: "assistant",
+              content: "b",
+              timestamp: 2,
+              parts: [{ type: "text", text: "b" }],
+            },
           ],
         }),
       ],
@@ -160,7 +172,13 @@ describe("resolveEmployeeTerminalLastMessagePreview", () => {
       status: "completed",
       messages: [
         { id: 1, role: "user", content: "run css", timestamp: 1 },
-        { id: 2, role: "assistant", content: "全部完成。改动总结如下。", timestamp: 2 },
+        {
+          id: 2,
+          role: "assistant",
+          content: "全部完成。改动总结如下。",
+          timestamp: 2,
+          parts: [{ type: "text", text: "全部完成。改动总结如下。" }],
+        },
       ],
     });
     const preview = resolveEmployeeTerminalLastMessagePreview({
@@ -203,7 +221,13 @@ describe("buildEmployeeTerminalLastMessagePreviewById", () => {
           status: "completed",
           messages: [
             { id: 1, role: "user", content: "a", timestamp: 1 },
-            { id: 2, role: "assistant", content: "终端01 已完成", timestamp: 2 },
+            {
+              id: 2,
+              role: "assistant",
+              content: "终端01 已完成",
+              timestamp: 2,
+              parts: [{ type: "text", text: "终端01 已完成" }],
+            },
           ],
         }),
       ],

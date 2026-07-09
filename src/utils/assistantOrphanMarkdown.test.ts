@@ -35,7 +35,9 @@ describe("assistantOrphanMarkdownText", () => {
     expect(assistantOrphanMarkdownText(msg)).toBe(summary);
   });
 
-  test("returns full content when parts only contain tools", () => {
+  test("returns empty when parts only contain tools (partial guard)", () => {
+    // partial 守卫：parts 没有任何 text part（仅 tool_use）时，content 可能是磁盘快照
+    // 的整段总结，但 partial 状态下不应把它拆为 orphan 渲染。
     const msg: ClaudeMessage = {
       id: 1,
       role: "assistant",
@@ -43,7 +45,48 @@ describe("assistantOrphanMarkdownText", () => {
       parts: [{ type: "tool_use", id: "t1", name: "Edit", input: {}, status: "completed" }],
       timestamp: 1,
     };
-    expect(assistantOrphanMarkdownText(msg)).toBe("已完成！\n\n## 总结");
+    expect(assistantOrphanMarkdownText(msg)).toBe("");
+  });
+
+  test("skips orphan extraction when parts has no text part (partial guard)", () => {
+    // partial 守卫：content 已含完整总结、parts 还在加载中（没有任何 text part），
+    // 不应把 content 拆为 orphan 渲染，否则 partial 文本会被提前展示成 final。
+    const msg: ClaudeMessage = {
+      id: 1,
+      role: "assistant",
+      content: "## 改动总结\n已完成所有改动",
+      parts: [],
+      timestamp: 1,
+    };
+    expect(assistantOrphanMarkdownText(msg)).toBe("");
+  });
+
+  test("skips orphan extraction when parts only has reasoning/tool_use (partial guard)", () => {
+    // partial 状态：content 是磁盘快照的整段总结，parts 仅有 reasoning/tool_use，
+    // 没有 text part 时也不应拆 orphan。
+    const msg: ClaudeMessage = {
+      id: 1,
+      role: "assistant",
+      content: "## 改动总结\n已完成所有改动",
+      parts: [
+        { type: "reasoning", text: "思考中…" },
+        { type: "tool_use", id: "t1", name: "Edit", input: {}, status: "completed" },
+      ],
+      timestamp: 1,
+    };
+    expect(assistantOrphanMarkdownText(msg)).toBe("");
+  });
+
+  test("extracts orphan tail when parts already has some text part", () => {
+    // parts 已经开始加载（有 text part），content 末尾多出来一段才视为 orphan。
+    const msg: ClaudeMessage = {
+      id: 1,
+      role: "assistant",
+      content: "先说明\n\n## 总结\n完成",
+      parts: [{ type: "text", text: "先说明" }],
+      timestamp: 1,
+    };
+    expect(assistantOrphanMarkdownText(msg)).toBe("## 总结\n完成");
   });
 });
 

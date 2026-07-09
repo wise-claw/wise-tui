@@ -471,7 +471,13 @@ describe("buildSessionConversationTasks", () => {
       messages: [
         { id: 1, role: "user", content: "@Claude Code 你好", timestamp: 1 },
         { id: 2, role: "system", content: "Claude Hook 启动中", timestamp: 2 },
-        { id: 3, role: "assistant", content: "你好！有什么可以帮你的吗？", timestamp: 3 },
+        {
+          id: 3,
+          role: "assistant",
+          content: "你好！有什么可以帮你的吗？",
+          timestamp: 3,
+          parts: [{ type: "text", text: "你好！有什么可以帮你的吗？" }],
+        },
       ],
     });
     const items = buildSessionConversationTasks({
@@ -541,7 +547,13 @@ describe("buildSessionConversationTasks", () => {
         { id: 1, role: "user", content: "第一轮", timestamp: 1 },
         { id: 2, role: "system", content: "Claude Hook 启动中", timestamp: 2 },
         { id: 3, role: "user", content: "第二轮", timestamp: 3 },
-        { id: 4, role: "assistant", content: "第二轮已成功", timestamp: 4 },
+        {
+          id: 4,
+          role: "assistant",
+          content: "第二轮已成功",
+          timestamp: 4,
+          parts: [{ type: "text", text: "第二轮已成功" }],
+        },
       ],
     });
     expect(resolveExecutionEnvironmentWorkerConversationTaskStatus(worker)).toBe("completed");
@@ -555,7 +567,13 @@ describe("buildSessionConversationTasks", () => {
       status: "completed",
       messages: [
         { id: 1, role: "user", content: "你好 Claude", timestamp: 1 },
-        { id: 2, role: "assistant", content: "全部完成。三个区域现在统一以 10px 左侧内边距对齐。", timestamp: 2 },
+        {
+          id: 2,
+          role: "assistant",
+          content: "全部完成。三个区域现在统一以 10px 左侧内边距对齐。",
+          timestamp: 2,
+          parts: [{ type: "text", text: "全部完成。三个区域现在统一以 10px 左侧内边距对齐。" }],
+        },
       ],
     });
     const items = buildSessionConversationTasks({
@@ -594,9 +612,21 @@ describe("resolveWorkerDispatchTurnLastAssistantPreview", () => {
     const worker = session({
       messages: [
         { id: 1, role: "user", content: "第一轮", timestamp: 1 },
-        { id: 2, role: "assistant", content: "旧回复", timestamp: 2 },
+        {
+          id: 2,
+          role: "assistant",
+          content: "旧回复",
+          timestamp: 2,
+          parts: [{ type: "text", text: "旧回复" }],
+        },
         { id: 3, role: "user", content: "第二轮", timestamp: 3 },
-        { id: 4, role: "assistant", content: "最终摘要", timestamp: 4 },
+        {
+          id: 4,
+          role: "assistant",
+          content: "最终摘要",
+          timestamp: 4,
+          parts: [{ type: "text", text: "最终摘要" }],
+        },
       ],
     });
     expect(resolveWorkerDispatchTurnLastAssistantPreview(worker)).toBe("最终摘要");

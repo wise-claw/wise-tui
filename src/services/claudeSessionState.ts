@@ -6,22 +6,34 @@ import { CLAUDE_NO_VISIBLE_REPLY_FAILURE_HINT } from "../utils/claudeTurnComplet
 import { isClaudeTurnWaitControlError } from "../utils/claudeTurnCompleteWaiter";
 import { isMainSessionContextSeedMessage } from "./terminalDispatchContext";
 
-/** 单条助手气泡：取 `parts` 中**最后一条** `type === "text"` 的可见内容；若无则退回 `content`。 */
+/**
+ * 单条助手气泡的「已可见」纯文本。
+ *
+ * 只拼接 `parts` 里 `type === "text"` 的可见段落；不再退回 `msg.content`。
+ *
+ * 原因：磁盘分批加载或流式中段，`parts` 只会反映**已到达**的部分，`content` 常常是
+ * 完整文本的快照（含工具前分析 / 工具结果 / 总结整段）。partial 时若退回 content，
+ * 下游「是否有可见正文」判定会过早命中，把 partial 文本当成完成态使用：
+ *   - `appendAssistantPreviewTextMessage` 会跳过兜底
+ *   - `latestTurnHasVisibleAssistantContent` 会误判本轮已有正文
+ *   - `extractLatestAssistantPlainText` 会把 partial 文本当作 `previewRaw` / 通知 body
+ *
+ * 完整正文由 `MessagePartsDisplay` 按 parts 逐段渲染保证，content 兜底反而成为污染入口。
+ * 极端兜底（content 兜底）已删除：partial 状态下「暂无 parts 文本」返回空串更安全。
+ */
 export function assistantMessageVisiblePlainText(msg: ClaudeMessage): string {
   if (msg.role !== "assistant") {
     return "";
   }
   const parts = msg.parts ?? [];
-  for (let i = parts.length - 1; i >= 0; i -= 1) {
-    const p = parts[i];
+  const chunks: string[] = [];
+  for (const p of parts) {
     if (p?.type === "text" && typeof p.text === "string") {
       const t = p.text.trim();
-      if (t.length > 0) {
-        return t;
-      }
+      if (t.length > 0) chunks.push(t);
     }
   }
-  return msg.content.trim();
+  return chunks.join("\n\n").trim();
 }
 
 /** 会话中最近一条助手可见文本（与 App 侧验收解析同源，供完成回调兜底）。 */
@@ -134,7 +146,16 @@ function createAssistantTextMessage(text: string) {
   };
 }
 
-/** complete 前流式缓冲已有正文但 messages 未落盘时，补一条助手气泡避免 UI 闪一下后变空。 */
+/**
+ * complete 前流式缓冲已有正文但 messages 未落盘时，补一条助手气泡避免 UI 闪一下后变空。
+ *
+ * Partial 守卫：会话仍在流式（`running` / `connecting`）时，整轮 preview 仍是 partial
+ * 文本，若此时补 bubble 会把尚未完整的内容提前渲染成 final summary。Complete 路径（`finalizeSessionAfterComplete`
+ * 之后状态变 `idle` / `completed`）才允许介入。
+ *
+ * 上游 `claudeStreamRuntime` 已经在 uiSuccess / complete 时刻调用，但若 caller 在流式中段误调
+ * （如外部重放历史事件），此守卫保证不会被部分文本污染。
+ */
 export function appendAssistantPreviewTextMessage(
   sessions: ClaudeSession[],
   targetId: string,
@@ -145,6 +166,8 @@ export function appendAssistantPreviewTextMessage(
   const matches = buildCrossTabTargetMatcher(sessions, targetId);
   return sessions.map((session) => {
     if (!matches(session)) return session;
+    // Partial 守卫：流式状态时 preview 是未完成的部分缓冲，不补气泡。
+    if (session.status === "running" || session.status === "connecting") return session;
     const messages = [...session.messages];
     const last = messages[messages.length - 1];
     if (last?.role !== "assistant") {

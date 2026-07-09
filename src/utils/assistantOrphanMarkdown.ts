@@ -129,7 +129,16 @@ export function cliToolOutputForExpandedBody(part: ToolUsePart): string {
   return output;
 }
 
-/** `parts` 未覆盖、仅落在 `content` 上的助手 Markdown 正文（常见于 result 与 tool 同批或落盘不同步）。 */
+/**
+ * `parts` 未覆盖、仅落在 `content` 上的助手 Markdown 正文（常见于 result 与 tool 同批或落盘不同步）。
+ *
+ * Partial 守卫：当 parts 没有任何 text part 时，content 通常是磁盘快照的整段完整正文，
+ * 而 parts 还在加载中（流式中段 / 分批磁盘加载）。此时**不能**把 content 整段当作 orphan
+ * 渲染，否则 partial 文本会被当成最终总结展示，触发「获取部分消息就当文本」的污染。
+ *
+ * 仅当 parts **至少有一条 text part**（说明 parts 已经开始加载），且与 content 长度
+ * 不一致时，才把 content 末尾多出来的段落拆作 orphan。
+ */
 export function assistantOrphanMarkdownText(msg: ClaudeMessage): string {
   if (msg.role !== "assistant") return "";
   const parts = msg.parts ?? [];
@@ -148,6 +157,9 @@ export function assistantOrphanMarkdownText(msg: ClaudeMessage): string {
     .filter((p): p is Extract<MessagePart, { type: "text" }> => p.type === "text")
     .map((p) => p.text.trim())
     .filter(Boolean);
+  // Partial 守卫：parts 还没有任何 text part 时（典型 partial 状态），不拆 orphan，
+  // 避免把磁盘快照的整段 content 提前渲染成"总结"。
+  if (partTexts.length === 0) return "";
   const joinedParts = partTexts.join("\n\n").trim();
   if (!joinedParts) return content;
   if (content === joinedParts) return "";

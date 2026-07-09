@@ -231,13 +231,23 @@ describe("resolveTerminalWorkerMessagesAfterDiskLoad", () => {
       status: "completed",
       messages: [
         { role: "user", content: "第一轮", timestamp: 1 },
-        { role: "assistant", content: "回复一", timestamp: 2 },
+        {
+          role: "assistant",
+          content: "回复一",
+          timestamp: 2,
+          parts: [{ type: "text", text: "回复一" }],
+        },
         { role: "user", content: "你好", timestamp: 3 },
       ],
     });
     const merged = resolveTerminalWorkerMessagesAfterDiskLoad(session, [
       { role: "user", content: "你好", timestamp: 3 },
-      { role: "assistant", content: "你好！", timestamp: 4 },
+      {
+        role: "assistant",
+        content: "你好！",
+        timestamp: 4,
+        parts: [{ type: "text", text: "你好！" }],
+      },
     ]);
     expect(merged).toHaveLength(4);
     expect(merged?.[0]?.content).toBe("第一轮");

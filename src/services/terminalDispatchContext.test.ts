@@ -42,7 +42,12 @@ describe("terminalDispatchContext", () => {
   test("formatMainSessionContextForCli renders labeled transcript", () => {
     const text = formatMainSessionContextForCli([
       { role: "user", content: "问题一", timestamp: 1 },
-      { role: "assistant", content: "回答一", timestamp: 2 },
+      {
+        role: "assistant",
+        content: "回答一",
+        timestamp: 2,
+        parts: [{ type: "text", text: "回答一" }],
+      },
     ]);
     expect(text).toContain("用户：问题一");
     expect(text).toContain("助手：回答一");
@@ -52,7 +57,12 @@ describe("terminalDispatchContext", () => {
     const built = buildTerminalDispatchWithMainContext(
       mainSession([
         { role: "user", content: "问题一", timestamp: 1 },
-        { role: "assistant", content: "回答一", timestamp: 2 },
+        {
+          role: "assistant",
+          content: "回答一",
+          timestamp: 2,
+          parts: [{ type: "text", text: "回答一" }],
+        },
       ]),
       "我上面提了几个问题",
     );
@@ -64,7 +74,12 @@ describe("terminalDispatchContext", () => {
   test("buildMainSessionContextSeedMessages mirrors main session turns for worker UI", () => {
     const seed = buildMainSessionContextSeedMessages([
       { role: "user", content: "你好", timestamp: 1 },
-      { role: "assistant", content: "你好！", timestamp: 2 },
+      {
+        role: "assistant",
+        content: "你好！",
+        timestamp: 2,
+        parts: [{ type: "text", text: "你好！" }],
+      },
     ]);
     expect(seed[0]?.content).toContain(MAIN_SESSION_CONTEXT_MARKER);
     expect(seed[1]?.role).toBe("user");

@@ -141,7 +141,13 @@ describe("monitorSessionsTerminalStatusFingerprint", () => {
       status: "completed",
       messages: [
         { id: "u1", role: "user", content: "go", timestamp: 1 },
-        { id: "a1", role: "assistant", content: "x".repeat(50), timestamp: 2 },
+        {
+          id: "a1",
+          role: "assistant",
+          content: "x".repeat(50),
+          timestamp: 2,
+          parts: [{ type: "text", text: "x".repeat(50) }],
+        },
       ],
     });
     const longer = session({
@@ -149,7 +155,13 @@ describe("monitorSessionsTerminalStatusFingerprint", () => {
       status: "completed",
       messages: [
         { id: "u1", role: "user", content: "go", timestamp: 1 },
-        { id: "a1", role: "assistant", content: "x".repeat(200), timestamp: 2 },
+        {
+          id: "a1",
+          role: "assistant",
+          content: "x".repeat(200),
+          timestamp: 2,
+          parts: [{ type: "text", text: "x".repeat(200) }],
+        },
       ],
     });
     expect(monitorSessionsTerminalStatusFingerprint([short])).not.toBe(
