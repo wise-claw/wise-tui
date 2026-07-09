@@ -249,7 +249,7 @@ export function extractCursorAgentIdFromCompletePayload(payload: unknown): strin
   return trimmed.length > 0 ? trimmed : null;
 }
 
-export function extractPartsFromParsed(obj: unknown): { parts: MessagePart[]; isInit: boolean; sessionId: string | null } {
+export function extractPartsFromParsed(obj: unknown): { parts: MessagePart[]; isInit: boolean; sessionId: string | null; isResultFullText?: boolean } {
   try {
     const json = unwrapClaudeStreamLineRoot(
       asNonArrayRecord(obj) ?? EMPTY_RECORD,
@@ -288,7 +288,9 @@ export function extractPartsFromParsed(obj: unknown): { parts: MessagePart[]; is
             ? json.output
             : "";
       if (resultText.trim()) {
-        return { parts: [{ type: "text", text: resultText }], isInit: false, sessionId: null };
+        // result 事件的 json.result 是整轮最终文本（delta 已增量累积过），标记为权威全文：
+        // 上游 runtime 据此跳过与 delta 累积末尾 text part 的拼接，避免正文翻倍（同段重复）。
+        return { parts: [{ type: "text", text: resultText }], isInit: false, sessionId: null, isResultFullText: true };
       }
     }
 
@@ -386,7 +388,7 @@ export function extractPartsFromParsed(obj: unknown): { parts: MessagePart[]; is
 }
 
 /** 向后兼容薄包装：解析一次后转发到 {@link extractPartsFromParsed}。 */
-export function extractPartsFromStreamLine(line: string): { parts: MessagePart[]; isInit: boolean; sessionId: string | null } {
+export function extractPartsFromStreamLine(line: string): { parts: MessagePart[]; isInit: boolean; sessionId: string | null; isResultFullText?: boolean } {
   return extractPartsFromParsed(safeJsonParse(line));
 }
 

@@ -122,13 +122,35 @@ export function capAssistantStreamBufferText(buffer: string): string {
   return `…[已省略流式缓冲前 ${String(omitted)} 字]\n\n${tail}`;
 }
 
+/**
+ * 合并相邻 text 片段，按前缀包含关系去重避免拼接翻倍。对称处理两个方向：
+ *
+ * - incoming 是 existing 的扩展（以 existing 开头或相等）：用 incoming 替换。result 全文、
+ *   thinking 全量重放等累积超集场景。
+ * - incoming 是 existing 的严格前缀（existing 以 incoming 开头）：保留 existing 丢弃 incoming。
+ *   倒序重放/截断重发场景（理论边界；正常 delta 增量是 existing 的接续，无前缀关系）。
+ *
+ * 正常 text_delta/thinking_delta 增量片段与 existing 无前缀关系，走拼接分支不受影响。
+ */
+export function mergeTextPartsByContainment(existing: string, incoming: string): string {
+  if (existing.length > 0) {
+    if (incoming === existing || incoming.startsWith(existing)) {
+      return incoming;
+    }
+    if (existing.startsWith(incoming)) {
+      return existing;
+    }
+  }
+  return existing + incoming;
+}
+
 export function mergeAssistantParts(existingParts: MessagePart[], incomingParts: MessagePart[]): MessagePart[] {
   const merged = [...existingParts];
   for (const part of incomingParts) {
     if (part.type === "text") {
       const lastText = merged[merged.length - 1];
       if (lastText?.type === "text") {
-        merged[merged.length - 1] = { ...lastText, text: lastText.text + part.text };
+        merged[merged.length - 1] = { ...lastText, text: mergeTextPartsByContainment(lastText.text, part.text) };
       } else {
         merged.push(part);
       }
@@ -148,7 +170,12 @@ export function mergeAssistantParts(existingParts: MessagePart[], incomingParts:
 
     const lastReason = merged[merged.length - 1];
     if (lastReason?.type === "reasoning") {
-      merged[merged.length - 1] = { ...lastReason, text: lastReason.text + part.text };
+      // 与 text 分支对称：thinking 全量重发/重放时 incoming 可能以 existing 开头或相等，
+      // 直接拼接会致思考翻倍。用 containment 合并避免重复，正常 thinking_delta 增量走拼接。
+      merged[merged.length - 1] = {
+        ...lastReason,
+        text: mergeTextPartsByContainment(lastReason.text, part.text),
+      };
     } else {
       merged.push(part);
     }
@@ -178,6 +205,65 @@ export function isToolResultUpdatePart(part: MessagePart): part is ToolUsePart {
     Boolean(part.output?.trim()) ||
     Boolean(part.error?.trim())
   );
+}
+
+/**
+ * result 事件整段文本与末条 assistant 现有 text parts 的权威对齐。
+ *
+ * result 事件的 `json.result` 是整轮最终文本，delta（text_delta）已增量累积进末条 text part。
+ * 直接把 result 整段经 {@link mergeAssistantParts} 拼接会正文翻倍；简单跳过又会丢失 delta 未流的尾巴
+ * （长驻会话 complete 后不磁盘重载，尾巴丢失会留存到手动刷新）。
+ *
+ * 以 result 为权威做前缀对齐：result 是现有 text 拼接的超集时，把「尾巴」作为新 text part 返回
+ * （{@link appendAssistantStreamParts} 会把它放到末条末尾--末尾是 tool_use 时新增 text part 在工具后，
+ * 对齐磁盘态 [intro, tool_use, 总结]；末尾是 text 时合并，content 仍正确）。完全相同/子集/不连续时
+ * 返回空（跳过，依赖 delta 已覆盖或 complete 后磁盘重载）。末条无 text 时原样返回兜底防闪空。
+ *
+ * 范围限定：existingText 取现有 text parts 无分隔拼接，resultText 含段间分隔；多 text block（如
+ * [intro, tool_use, 总结] 两块均已被 delta 流过）时二者前缀匹配失败走 disjoint->[]，此时两块已在、
+ * 无内容丢失，reconcile 无尾巴回收收益。尾巴回收仅对「单 text block 且 delta 只流了前缀」有效。
+ *
+ * 缓冲累积（assistantStreamTextByTabRef）与 complete 的 previewRaw 不受影响。
+ */
+export function reconcileResultFullTextParts(opts: {
+  resultParts: MessagePart[];
+  existingParts: MessagePart[];
+  lastAssistantHasText: boolean;
+}): MessagePart[] {
+  const { resultParts, existingParts, lastAssistantHasText } = opts;
+  // 末条无可见 text：result 早于 delta 到达等，原样注入兜底防闪空
+  if (!lastAssistantHasText) {
+    return resultParts;
+  }
+  const existingText = existingParts
+    .filter((p): p is Extract<MessagePart, { type: "text" }> => p.type === "text")
+    .map((p) => p.text)
+    .join("");
+  const resultText = resultParts
+    .filter((p): p is Extract<MessagePart, { type: "text" }> => p.type === "text")
+    .map((p) => p.text)
+    .join("");
+  if (!resultText) {
+    return [];
+  }
+  if (!existingText) {
+    return resultParts;
+  }
+  // result 与现有完全相同：delta 已覆盖，跳过避免翻倍
+  if (resultText === existingText) {
+    return [];
+  }
+  // result 是现有超集（delta 流了前缀，result 含尾巴）：返回尾巴，由 mergeAssistantParts 追加到末尾
+  if (resultText.startsWith(existingText)) {
+    const tail = resultText.slice(existingText.length);
+    return tail.trim() ? [{ type: "text", text: tail }] : [];
+  }
+  // 现有已含 result（result 是现有子集，如 delta 流得比 result 更长）：跳过
+  if (existingText.startsWith(resultText)) {
+    return [];
+  }
+  // 不连续（result 与 delta 分歧）：保守跳过，依赖 complete 后磁盘重载落盘规范文本
+  return [];
 }
 
 export function partitionStreamMessageParts(parts: MessagePart[]): {

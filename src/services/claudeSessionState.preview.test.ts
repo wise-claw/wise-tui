@@ -162,6 +162,57 @@ describe("appendAssistantPreviewTextMessage", () => {
     // content 不被改写为整轮
     expect(last?.content).toBe(summary);
   });
+
+  test("does not create duplicate assistant bubble when last message is non-assistant but assistant exists", () => {
+    // 末条为非 assistant（如 tool_result 的 user 消息），但会话内已有 assistant 气泡时，
+    // 安全网不应新建第二个 assistant 气泡（否则出现重复助手气泡，刷新后才收敛）。
+    const base = {
+      ...session([
+        { role: "user", content: "做任务", timestamp: 1 },
+        {
+          role: "assistant",
+          content: "已有回复",
+          timestamp: 2,
+          parts: [{ type: "text", text: "已有回复" }],
+        },
+        { role: "user", content: "继续", timestamp: 3 },
+      ]),
+      status: "completed" as const,
+    };
+    const next = appendAssistantPreviewTextMessage([base], "tab-1", "总结");
+    // 末条非 assistant 但已有 assistant -> 不新建第二个 assistant 气泡
+    expect(next[0]?.messages.filter((m) => m.role === "assistant")).toHaveLength(1);
+  });
+
+  test("does not append full-turn previewRaw when it contains existing intro text (avoid intro duplication)", () => {
+    // 末条 assistant 有工具但无工具后总结（existingPostTool 为空）时，previewRaw 取整轮流式缓冲
+    // （intro + 总结）。若 previewRaw 含末条已有 text part（如工具前引导语），说明它是整轮而非
+    // 纯总结，追加会致引导语重复、思考混入总结 -> 跳过，依赖 complete 后磁盘重载落盘规范总结。
+    const intro = "我先分析一下现状";
+    const summary = "## 改动总结\n已完成。";
+    const base = {
+      ...session([
+        { role: "user", content: "做任务", timestamp: 1 },
+        {
+          role: "assistant",
+          content: intro,
+          timestamp: 2,
+          parts: [
+            { type: "text", text: intro },
+            { type: "tool_use", id: "t1", name: "bash", input: {}, status: "completed" },
+          ],
+        },
+      ]),
+      status: "completed" as const,
+    };
+    const fullTurnPreview = `${intro}\n${summary}`;
+    const next = appendAssistantPreviewTextMessage([base], "tab-1", fullTurnPreview);
+    const last = next[0]?.messages[1];
+    // 不追加被整轮污染的 text part
+    expect(last?.parts.some((p) => p.type === "text" && p.text === fullTurnPreview)).toBe(false);
+    // 末条 parts 仍是原 intro + tool_use（未被改写）
+    expect(last?.parts.some((p) => p.type === "text" && p.text === intro)).toBe(true);
+  });
 });
 
 describe("setSessionRunningWithUserPrompt", () => {

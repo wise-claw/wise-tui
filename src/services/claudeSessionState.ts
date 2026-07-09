@@ -171,6 +171,9 @@ export function appendAssistantPreviewTextMessage(
     const messages = [...session.messages];
     const last = messages[messages.length - 1];
     if (last?.role !== "assistant") {
+      // 末条非 assistant（如 tool_result orphan / system）：若已存在 assistant 消息则不新建，
+      // 避免与已有气泡重复（complete 后磁盘重载会重建规范结构）；无任何 assistant 时才补兜底避免闪空。
+      if (messages.some((m) => m.role === "assistant")) return session;
       return {
         ...session,
         messages: [...messages, createAssistantTextMessage(trimmed)],
@@ -187,8 +190,16 @@ export function appendAssistantPreviewTextMessage(
     // 覆盖总结 part（previewRaw 取整轮缓冲，含 intro/引导语，会污染总结并致引导语重复）。
     if (existingPostTool.length > 0) return session;
     if (hasTools) {
-      // 走到这里 existingPostTool 必为空：末条 assistant 有工具但无工具后总结，
-      // 流式缓冲的正文未落进 parts，补一条 post-tool text part 兜底避免闪空。
+      // 走到这里 existingPostTool 必为空：末条 assistant 有工具但无工具后总结。
+      // previewRaw 取整轮流式缓冲（可能含 intro/reasoning）：若它包含末条已有 text part（如工具前
+      // 引导语），说明 previewRaw 是整轮而非纯总结，追加会致引导语重复、思考混入总结 -> 跳过，
+      // 依赖 complete 后磁盘重载落盘规范总结。previewRaw 为纯总结（不含已有 text）时仍追加兜底。
+      const existingTexts = parts
+        .filter((p): p is Extract<typeof p, { type: "text" }> => p.type === "text")
+        .map((p) => p.text);
+      if (existingTexts.some((t) => t.trim().length > 0 && trimmed.includes(t.trim()))) {
+        return session;
+      }
       const nextParts = [...parts, { type: "text" as const, text: trimmed }];
       messages[messages.length - 1] = {
         ...last,

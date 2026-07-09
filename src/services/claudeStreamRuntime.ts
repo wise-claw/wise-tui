@@ -6,6 +6,7 @@ import {
   applyToolResultPartsToSession,
   capAssistantStreamBufferText,
   partitionStreamMessageParts,
+  reconcileResultFullTextParts,
 } from "./claudeStreamAssembler";
 import {
   extractCodexResumeSessionIdFromParsed,
@@ -274,6 +275,22 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
         return updated;
       });
   }
+  /** 末条 assistant 是否已有可见 text part（用于 result 全文跳过注入判定）。 */
+  function lastAssistantHasVisibleTextPart(tid: string): boolean {
+    const s = sessionsRef.current.find((it) => it.id === tid || it.claudeSessionId === tid);
+    if (!s) return false;
+    const last = s.messages[s.messages.length - 1];
+    if (!last || last.role !== "assistant") return false;
+    return (last.parts ?? []).some((p) => p.type === "text" && p.text.trim().length > 0);
+  }
+  /** 末条 assistant 的当前 parts（用于 result 全文与现有 text 前缀对齐）。 */
+  function lastAssistantParts(tid: string): MessagePart[] {
+    const s = sessionsRef.current.find((it) => it.id === tid || it.claudeSessionId === tid);
+    if (!s) return [];
+    const last = s.messages[s.messages.length - 1];
+    if (!last || last.role !== "assistant") return [];
+    return last.parts ?? [];
+  }
   function pushDeferred<T>(arr: T[], item: T): void {
     if (arr.length >= DEFERRED_MAX) arr.shift();
     arr.push(item);
@@ -454,7 +471,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
       );
       onClaudeSessionIdAssigned?.(tid, cursorAgentId);
     }
-    const { parts, isInit, sessionId: realSessionId } = extractPartsFromParsed(parsed);
+    const { parts, isInit, sessionId: realSessionId, isResultFullText } = extractPartsFromParsed(parsed);
     const sanitizedParts: MessagePart[] = parts.flatMap((part): MessagePart[] => {
       if (part.type !== "text") return [part];
       const cleaned = stripClaudeHarnessInjectedStreamText(part.text);
@@ -495,14 +512,32 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
 
     const hasStreamUiUpdate = dedupedParts.length > 0 && !isInit;
     const mustPublishInit = Boolean(isInit && realSessionId);
+    // result 全文 reconcile 依赖末条 assistant「已流」text parts 的前缀对齐。text_delta 走 rAF 异步 flush
+    // （enqueueStreamSessionUpdate -> schedulePendingStreamSessionFlush），result 事件到达时最后一批
+    // delta 的 updater 可能仍在 pendingStreamSessionUpdaters 未 flush，sessionsRef.current 滞后 -> existingText
+    // 缺尾 -> tail 误算成「已流过的文本」，随后该 delta updater 与 tail updater 都 flush -> 该段翻倍。
+    // streaming-resident 无磁盘重载，翻倍持续；手动刷新走磁盘态（正确）即「实时乱、刷新后规整」。
+    // 先同步 flush 待应用 delta，让 ref 反映真实已流内容再 reconcile。
+    if (isResultFullText === true) {
+      flushPendingStreamSessionUpdatesSync();
+    }
+    const effectiveParts =
+      isResultFullText === true
+        ? reconcileResultFullTextParts({
+            resultParts: dedupedParts,
+            existingParts: lastAssistantParts(tid),
+            lastAssistantHasText: lastAssistantHasVisibleTextPart(tid),
+          })
+        : dedupedParts;
+    const hasEffectiveUpdate = effectiveParts.length > 0 && !isInit;
     if (hidden && hasStreamUiUpdate && !mustPublishInit) {
       deferredStreamTabIds.add(tid);
     } else if (mustPublishInit) {
       flushPendingStreamSessionUpdatesSync();
-      setSessions(buildStreamSessionUpdater(tid, dedupedParts, isInit, realSessionId));
-    } else if (hasStreamUiUpdate) {
+      setSessions(buildStreamSessionUpdater(tid, effectiveParts, isInit, realSessionId));
+    } else if (hasEffectiveUpdate) {
       enqueueStreamSessionUpdate(
-        buildStreamSessionUpdater(tid, dedupedParts, false, null),
+        buildStreamSessionUpdater(tid, effectiveParts, false, null),
       );
       scheduleTryFinalizePendingOneshotComplete(tid);
     }
