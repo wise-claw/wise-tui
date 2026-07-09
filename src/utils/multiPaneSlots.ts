@@ -160,3 +160,36 @@ export function planNextPaneSlotPlacement(
   const slotIndex = findFirstEmptyExtraPaneIndex(nextExtraPanes) ?? 0;
   return { nextPaneCount, nextExtraPanes, slotIndex };
 }
+
+/**
+ * 多屏下「侧栏/顶栏选仓库/工作区」的目标 pane slot 解析。
+ *
+ * 设计动机：开多个窗格后，每个窗格选中的工作区、仓库不要相互干扰。
+ * - 单屏（paneCount === 1）：调用方应回退到 setActiveXxxId 全局写入，保持原行为。
+ * - 多屏 + `focusedPaneIndex` 落在 Pane 0（= 0）或未聚焦（= null）：
+ *   Pane 0 暂未引入 per-pane 槽，**仍回退到全局写入**（由调用方处理），返回值表示「未路由到
+ *   extra pane slot」，避免污染已绑定的 extra pane。
+ * - 多屏 + `focusedPaneIndex >= 1`：解析到 `extraPanes[focusedPaneIndex - 1]`，由调用方把
+ *   选择落到该 slot（改 slot.repositoryId 或新建 pane 会话）。
+ *
+ * 与 [[multipane-setactiverepo-pollution]] 记录的 `openRepositoryFileByEvent` 护栏同形：
+ * 用「单屏早退 / 多屏路由到 per-pane」两段式守卫避免写全局活动仓库/工作区时污染其他屏的视图。
+ */
+export type FocusedPaneTarget =
+  | { kind: "primary" } // Pane 0：调用方应保留现有"写全局"语义
+  | { kind: "extra"; slotIndex: number; slot: PaneSlot } // 命中 extra pane slot
+  | { kind: "none" }; // paneCount === 1 或 focusedPaneIndex 越界/未聚焦
+
+export function resolveFocusedPaneTargetSlot(
+  paneCount: PaneCount,
+  focusedPaneIndex: number | null | undefined,
+  extraPanes: readonly PaneSlot[],
+): FocusedPaneTarget {
+  if (paneCount <= 1) return { kind: "none" };
+  if (focusedPaneIndex == null || focusedPaneIndex <= 0) return { kind: "primary" };
+  const slotIndex = focusedPaneIndex - 1;
+  if (slotIndex >= extraPanes.length) return { kind: "primary" };
+  const slot = extraPanes[slotIndex];
+  if (!slot) return { kind: "primary" };
+  return { kind: "extra", slotIndex, slot };
+}

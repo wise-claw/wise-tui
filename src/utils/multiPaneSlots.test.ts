@@ -8,6 +8,7 @@ import {
   normalizeExtraPanesToPaneCount,
   planNextPaneSlotPlacement,
   rebindPaneSlotPreservingRuntime,
+  resolveFocusedPaneTargetSlot,
 } from "./multiPaneSlots";
 
 function slot(partial: Partial<PaneSlot> & { slotId: string }): PaneSlot {
@@ -158,5 +159,55 @@ describe("multiPaneSlots", () => {
     const next = rebindPaneSlotPreservingRuntime(pane, "new", null);
     expect(next.executionEngine).toBe("claude");
     expect(next.claudeProxyRoute).toBe("auto");
+  });
+});
+
+describe("resolveFocusedPaneTargetSlot", () => {
+  // 多屏下侧栏/顶栏选仓库/工作区 → 路由到当前聚焦 pane，避免污染全局 activeRepositoryId。
+  // 单屏维持"写全局"语义；多屏 Pane 0（无 per-pane 槽）暂回退到全局；extra pane 命中 slot。
+  const extras: PaneSlot[] = [
+    slot({ slotId: "pane-extra-1", sessionId: "s1", repositoryId: 100 }),
+    slot({ slotId: "pane-extra-2", sessionId: null, repositoryId: null }),
+  ];
+
+  test("单屏返回 none，调用方写全局", () => {
+    expect(resolveFocusedPaneTargetSlot(1, 0, extras)).toEqual({ kind: "none" });
+    expect(resolveFocusedPaneTargetSlot(1, 2, extras)).toEqual({ kind: "none" });
+    expect(resolveFocusedPaneTargetSlot(1, null, extras)).toEqual({ kind: "none" });
+  });
+
+  test("多屏但未聚焦 → primary 兜底（写全局，不污染 extra slot）", () => {
+    expect(resolveFocusedPaneTargetSlot(2, null, extras)).toEqual({ kind: "primary" });
+    expect(resolveFocusedPaneTargetSlot(4, undefined, extras)).toEqual({ kind: "primary" });
+  });
+
+  test("多屏聚焦 Pane 0 → primary 兜底（当前 Pane 0 仍走全局）", () => {
+    expect(resolveFocusedPaneTargetSlot(2, 0, extras)).toEqual({ kind: "primary" });
+    expect(resolveFocusedPaneTargetSlot(8, 0, extras)).toEqual({ kind: "primary" });
+  });
+
+  test("多屏聚焦 extra pane 1 → 命中 extras[0]", () => {
+    expect(resolveFocusedPaneTargetSlot(2, 1, extras)).toEqual({
+      kind: "extra",
+      slotIndex: 0,
+      slot: extras[0],
+    });
+  });
+
+  test("多屏聚焦 extra pane 2 → 命中 extras[1]", () => {
+    expect(resolveFocusedPaneTargetSlot(2, 2, extras)).toEqual({
+      kind: "extra",
+      slotIndex: 1,
+      slot: extras[1],
+    });
+  });
+
+  test("多屏聚焦 pane 索引越界（> extraPanes.length）→ primary 兜底", () => {
+    // paneCount 已升到 8 但 extraPanes 还没跟上（hydrate 瞬态或异常）。
+    expect(resolveFocusedPaneTargetSlot(8, 5, extras)).toEqual({ kind: "primary" });
+  });
+
+  test("多屏聚焦但 extras 槽位为空数组 → primary 兜底", () => {
+    expect(resolveFocusedPaneTargetSlot(2, 1, [])).toEqual({ kind: "primary" });
   });
 });

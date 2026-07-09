@@ -99,6 +99,7 @@ import {
 } from "./components/AuthorPanel/authorPaneStorage";
 import { WISE_UI_EVENT_NAVIGATE, type WiseUiNavigationDetail } from "./constants/wiseUiNavigationEvents";
 import { requestClaudePluginHubTab } from "./stores/claudePluginHubNavStore";
+import { getActivePaneIndex } from "./stores/activePaneIndexStore";
 import { reloadAppWindow } from "./services/window";
 import {
   getCurrentMainWorkspaceWindowLabel,
@@ -151,6 +152,7 @@ import {
 } from "./services/atMentionDispatch";
 import { resolveProjectMainSessionAnchor } from "./utils/projectSessionAnchor";
 import { resolveChatTopbarContext, resolveProjectExplorerOpenPath, resolveScheduledTasksRepository, shouldKeepProjectFocusWhenSwitchingSession } from "./utils/workspaceSelectionState";
+import { resolveFocusedPaneTargetSlot } from "./utils/multiPaneSlots";
 import { resolveWorkspaceRootPath } from "./utils/projectSessionAnchor";
 import { resolveSidebarSelectionTarget } from "./utils/sidebarSelectionTarget";
 import {
@@ -2673,6 +2675,56 @@ export default function App() {
 
   const sidebarSelectionEpochRef = useRef(0);
 
+  /**
+   * 多屏下侧栏/顶栏选仓库/工作区时，把选择路由到当前聚焦 pane（Pane 0 暂 fall back 到全局，
+   * 待 Pane 0 per-pane 槽落地后再切到 primaryPaneActiveContext）。
+   *
+   * 与 [[multipane-setactiverepo-pollution]] 记录的 `openRepositoryFileByEvent` 护栏同形：
+   * 单屏维持"切全局"原行为；多屏下"切换全局活动仓库/工作区"会污染左栏选中态、文件树、
+   * 其他屏的左栏基线视图，所以改成"路由到当前活动 pane"。
+   *
+   * @returns true 表示已路由到 per-pane（写入器应跳过全局 setActiveXxxId），
+   *          false 表示未路由（fall through，由调用方按单屏语义写全局）。
+   */
+  const tryRouteSidebarSelectionToFocusedPane = useCallback(
+    (kind: "repository" | "project", id: number | string): boolean => {
+      const target = resolveFocusedPaneTargetSlot(
+        paneCountRef.current,
+        getActivePaneIndex(),
+        extraPanes,
+      );
+      if (target.kind === "extra") {
+        if (kind === "repository") {
+          void handlePaneRepositorySelect(target.slotIndex, Number(id));
+        } else {
+          void handlePaneProjectNewSession(target.slotIndex, String(id), projects);
+        }
+        return true;
+      }
+      // kind === "none" 或 "primary"：调用方按单屏语义或 Pane 0 fallback 写全局。
+      return false;
+    },
+    [extraPanes, handlePaneProjectNewSession, handlePaneRepositorySelect, projects],
+  );
+
+  /**
+   * 顶栏 / ClaudeSessionsChatHost.handleSwitchToSession 的"切到新仓库"副作用包装：
+   * 多屏下路由到当前聚焦 pane；单屏维持原行为（写全局 activeRepositoryId）。
+   * 与 tryRouteSidebarSelectionToFocusedPane 的差别：本函数对单屏始终 fall through 到
+   * `setActiveRepositoryId`，而 helper 在单屏时早退 —— 这是为了让 ChatHost 内的
+   * `handleSwitchToSession` 在 paneCount>1 时不再把全局 active 仓库跟 pane 会话强行对齐。
+   */
+  const handlePickedActiveRepositoryForCurrentPane = useCallback(
+    (repositoryId: number) => {
+      if (paneCountRef.current === 1) {
+        setActiveRepositoryId(repositoryId);
+        return;
+      }
+      tryRouteSidebarSelectionToFocusedPane("repository", repositoryId);
+    },
+    [setActiveRepositoryId, tryRouteSidebarSelectionToFocusedPane],
+  );
+
   const handleSidebarRepositorySelectLeavingMcpHub = useCallback(
     (repositoryId: number | null) => {
       if (repositoryId == null) {
@@ -2690,6 +2742,13 @@ export default function App() {
       }
       prefetchGitStatus(repository.path);
       const leavingOverlay = viewMode.isCockpit || viewMode.isAuthor || viewMode.isInspect;
+      // 多屏下把选择路由到当前聚焦 pane（避免污染全局 active 仓库/工作区）。
+      // tryRouteSidebarSelectionToFocusedPane 在路由成功时返回 true；此时跳过 setActiveXxxId、
+      // viewMode 切换、ensureRepositoryMainSession 这一系列围绕"全局活动仓库"的副作用，
+      // 由 handlePaneRepositorySelect 内部独立建 pane 会话。
+      if (!leavingOverlay && tryRouteSidebarSelectionToFocusedPane("repository", repositoryId)) {
+        return;
+      }
       // 选工作区时会把 activeRepositoryId 设为首个成员仓且 focus=project；点同一仓仍需切到 repository 焦点。
       if (
         !leavingOverlay &&
@@ -2723,6 +2782,7 @@ export default function App() {
       handleSidebarRepositorySelect,
       repositories,
       setActiveRepositoryWithOwner,
+      tryRouteSidebarSelectionToFocusedPane,
       viewMode,
     ],
   );
@@ -2823,6 +2883,10 @@ export default function App() {
         return;
       }
       const leavingOverlay = viewMode.isAuthor || viewMode.isInspect || viewMode.isCockpit;
+      // 多屏下把选择路由到当前聚焦 pane（避免污染全局 active 工作区）。
+      if (!leavingOverlay && tryRouteSidebarSelectionToFocusedPane("project", projectId)) {
+        return;
+      }
       if (
         !leavingOverlay &&
         viewMode.isChat &&
@@ -2854,6 +2918,7 @@ export default function App() {
       activeWorkspaceFocus,
       projects,
       setActiveProjectId,
+      tryRouteSidebarSelectionToFocusedPane,
       viewMode,
     ],
   );
@@ -3769,7 +3834,7 @@ export default function App() {
         activeProject,
         projects,
         activeWorkspaceFocus,
-        onSelectRepository: setActiveRepositoryId,
+        onSelectRepository: handlePickedActiveRepositoryForCurrentPane,
         onUpdateSessionModel: updateSessionModel,
         onUpdateSessionConnectionKind: updateSessionConnectionKind,
         onUpdateRepositoryExecutionEngine: handleUpdateRepositoryExecutionEngine,
