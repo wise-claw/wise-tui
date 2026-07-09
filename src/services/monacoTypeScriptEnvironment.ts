@@ -77,6 +77,12 @@ const MODEL_SOURCE_EXTENSIONS = new Set([
   "json",
 ]);
 const RESOLVABLE_SOURCE_EXTENSIONS = Array.from(MODEL_SOURCE_EXTENSIONS).map((extension) => `.${extension}`);
+/**
+ * 仅这四种源码后缀适用 `index.<ext>` 目录入口兜底。
+ * 语义：index 文件约定只在 ts/tsx/js/jsx 中作为目录入口存在，json 与 d.ts
+ * 没有目录入口语义（type 包走 @types/*），生成 index 候选只会浪费存在性探针。
+ */
+export const RESOLVABLE_INDEX_EXTENSIONS = [".ts", ".tsx", ".js", ".jsx"] as const;
 const COMMON_AMBIENT_MODULES = ["react/jsx-runtime"];
 const VITE_CLIENT_AMBIENT_TYPES = [
   "declare module '*.css';",
@@ -508,7 +514,99 @@ export function resolveMonacoRepositoryRelativeImportCandidates(fromRelativePath
 
   const candidates = [
     ...RESOLVABLE_SOURCE_EXTENSIONS.map((extension) => `${rawTarget}${extension}`),
-    ...RESOLVABLE_SOURCE_EXTENSIONS.map((extension) => `${rawTarget}/index${extension}`),
+    ...RESOLVABLE_INDEX_EXTENSIONS.map((extension) => `${rawTarget}/index${extension}`),
+  ];
+  return Array.from(new Set(candidates));
+}
+
+const SCOPE_PACKAGE_RE = /^@[\w-]+(?:\/[\w.-]+)+$/;
+
+function isScopePackageSpecifierImpl(specifier: string): boolean {
+  // 形如 "@scope/pkg" 或 "@scope/pkg/sub/path"（含子路径）。
+  // `fromDir/@scope/pkg` 拼出来的 rawTarget 以 "@" 开头但内部含 "/"，
+  // 这里用 SCOPE_PACKAGE_RE 二次过滤。
+  return SCOPE_PACKAGE_RE.test(specifier.trim());
+}
+
+export const isScopePackageSpecifier = isScopePackageSpecifierImpl;
+
+/**
+ * 为 npm scope 包（`@scope/pkg[/subpath]`）生成仓库内候选。
+ *
+ * 命中规则：
+ *   - `node_modules/@scope/pkg[/subpath]<ext>` 优先；
+ *   - `node_modules/@scope/pkg[/subpath]/index.<ext>` 仅当主路径无扩展时追加；
+ *
+ * 不读 package.json（避免异步依赖引入 onMouseDown 的额外 IPC）；
+ * 实际项目里 scope 包的入口文件以 `.js` / `.d.ts` 居多，扩展名兜底已覆盖绝大多数场景。
+ */
+export function resolveScopePackageCandidates(specifier: string): string[] {
+  const token = specifier.trim();
+  if (!SCOPE_PACKAGE_RE.test(token)) return [];
+  const normalized = normalizeRepositoryRelativePath(token);
+  if (!normalized) return [];
+  // rawTarget 始终位于 node_modules/<scope>/<pkg> 下，统一加前缀。
+  const rawTarget = `node_modules/${normalized}`;
+  const ext = getPathExtension(rawTarget);
+  if (ext.length > 0) {
+    const candidates = MODEL_SOURCE_EXTENSIONS.has(ext) ? [rawTarget] : [];
+    if (["js", "mjs", "cjs"].includes(ext)) {
+      const withoutExt = rawTarget.slice(0, -(ext.length + 1));
+      candidates.push(
+        ...["ts", "tsx", "mts", "cts", "d.ts"].map((sourceExt) => `${withoutExt}.${sourceExt}`),
+      );
+    }
+    return Array.from(new Set(candidates));
+  }
+  return Array.from(
+    new Set([
+      ...RESOLVABLE_SOURCE_EXTENSIONS.map((extension) => `${rawTarget}${extension}`),
+      ...RESOLVABLE_INDEX_EXTENSIONS.map((extension) => `${rawTarget}/index${extension}`),
+    ]),
+  );
+}
+
+/**
+ * 为「裸路径点击」生成候选列表。
+ *
+ * 与 `resolveMonacoRepositoryRelativeImportCandidates` 的差异：
+ * - 不要求 rawToken 来自引号内 import/export；
+ * - 以 `@` 开头的路径不再被当作 scope 包名，而是仓库相对路径（仓库内少见但语法上等价）；
+ * - 不带 `./`/`../` 前缀且不是 `@` 开头的路径（如 `src/foo`）被视作仓库根相对，
+ *   不再做 fromDir 拼接，与 import/export 引号逻辑保持差异。
+ *
+ * 后缀候选集与 index 兜底范围与 import/export 路径完全一致。
+ */
+export function resolvePathClickCandidates(fromRelativePath: string, rawToken: string): string[] {
+  const token = rawToken.trim();
+  if (!token) return [];
+
+  const fromDir = dirname(normalizeRepositoryRelativePath(fromRelativePath));
+  const isAbsoluteStyle = !token.startsWith("./") && !token.startsWith("../") && !token.startsWith("@");
+  const baseTarget = isAbsoluteStyle
+    ? normalizeRepositoryRelativePath(token)
+    : normalizeRepositoryRelativePath(`${fromDir}/${token}`);
+
+  if (!baseTarget) return [];
+
+  const ext = getPathExtension(baseTarget);
+  if (ext.length > 0) {
+    const candidates: string[] = [];
+    if (MODEL_SOURCE_EXTENSIONS.has(ext)) candidates.push(baseTarget);
+    if (["js", "mjs", "cjs"].includes(ext)) {
+      const withoutExt = baseTarget.slice(0, -(ext.length + 1));
+      candidates.push(
+        ...["ts", "tsx", "mts", "cts", "d.ts"].map((sourceExt) => `${withoutExt}.${sourceExt}`),
+      );
+    }
+    // 命中具体后缀的引用，目录兜底意义不大（如 `./foo.ts` 不该再探 `foo.ts/index.*`），
+    // 这里不再追加 index 候选。
+    return Array.from(new Set(candidates));
+  }
+
+  const candidates = [
+    ...RESOLVABLE_SOURCE_EXTENSIONS.map((extension) => `${baseTarget}${extension}`),
+    ...RESOLVABLE_INDEX_EXTENSIONS.map((extension) => `${baseTarget}/index${extension}`),
   ];
   return Array.from(new Set(candidates));
 }

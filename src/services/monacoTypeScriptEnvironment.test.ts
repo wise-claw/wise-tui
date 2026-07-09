@@ -3,8 +3,12 @@ import {
   applyWiseTypeScriptDefaults,
   buildMonacoLargeModuleStub,
   extractMonacoTypeScriptModuleSpecifiers,
+  isScopePackageSpecifier,
   resolveImportSpecifierToRelativePath,
   resolveMonacoRepositoryRelativeImportCandidates,
+  resolvePathClickCandidates,
+  resolveScopePackageCandidates,
+  RESOLVABLE_INDEX_EXTENSIONS,
   WISE_MONACO_TS_IGNORED_DIAGNOSTIC_CODES,
   type MonacoCompilerOptions,
   type MonacoLanguageDefaults,
@@ -67,6 +71,80 @@ describe("Monaco TypeScript repository import helpers", () => {
       "../constants/directBatchInvocationLog",
       "./legacy",
     ]);
+  });
+
+  test("./dir 只在 ts/tsx/js/jsx 上做 index 兜底，不生成 index.json/index.d.ts", () => {
+    const candidates = resolveMonacoRepositoryRelativeImportCandidates("src/App.tsx", "./dir");
+    for (const ext of RESOLVABLE_INDEX_EXTENSIONS) {
+      expect(candidates).toContain(`src/dir/index${ext}`);
+    }
+    expect(candidates).not.toContain("src/dir/index.json");
+    expect(candidates).not.toContain("src/dir/index.d.ts");
+  });
+
+  test("./path 命中所有源码后缀自身候选", () => {
+    const candidates = resolveMonacoRepositoryRelativeImportCandidates("src/App.tsx", "./path");
+    expect(candidates).toEqual(
+      expect.arrayContaining([
+        "src/path.ts",
+        "src/path.tsx",
+        "src/path.js",
+        "src/path.jsx",
+        "src/path.json",
+        "src/path.d.ts",
+      ]),
+    );
+  });
+
+  test("./pkg.json 自身候选不被 .ts 替代", () => {
+    expect(
+      resolveMonacoRepositoryRelativeImportCandidates("src/A.ts", "./pkg.json"),
+    ).toEqual(expect.arrayContaining(["src/pkg.json"]));
+  });
+});
+
+describe("resolvePathClickCandidates — 裸路径点击", () => {
+  test("@utils/foo 字面视作仓库相对路径（fromDir 拼接）", () => {
+    expect(
+      resolvePathClickCandidates("src/App.tsx", "@utils/foo"),
+    ).toEqual(expect.arrayContaining(["src/@utils/foo.ts", "src/@utils/foo/index.tsx"]));
+  });
+
+  test("./relative 走 fromDir 拼接", () => {
+    expect(
+      resolvePathClickCandidates("src/services/a.ts", "../lib/security-config"),
+    ).toEqual(
+      expect.arrayContaining([
+        "src/lib/security-config.ts",
+        "src/lib/security-config.tsx",
+        "src/lib/security-config/index.ts",
+      ]),
+    );
+    expect(
+      resolvePathClickCandidates("src/services/a.ts", "../lib/security-config"),
+    ).not.toContain("src/lib/security-config/index.json");
+  });
+
+  test("src/foo（绝对裸路径）视作仓库根相对，不拼接 fromDir", () => {
+    expect(
+      resolvePathClickCandidates("src/services/a.ts", "src/foo/bar"),
+    ).toEqual(expect.arrayContaining(["src/foo/bar.ts", "src/foo/bar/index.tsx"]));
+    // 不应出现 src/services/src/foo/bar 这样的拼接过深路径
+    expect(
+      resolvePathClickCandidates("src/services/a.ts", "src/foo/bar"),
+    ).not.toContain("src/services/src/foo/bar.ts");
+  });
+
+  test("./pkg.json 命中自身且不被 .ts 替代", () => {
+    expect(
+      resolvePathClickCandidates("src/A.ts", "./pkg.json"),
+    ).toEqual(expect.arrayContaining(["src/pkg.json"]));
+  });
+
+  test("./pkg.ts 命中自身但不展开 index.*", () => {
+    const candidates = resolvePathClickCandidates("src/A.ts", "./pkg.ts");
+    expect(candidates).toContain("src/pkg.ts");
+    expect(candidates).not.toContain("src/pkg.ts/index.ts");
   });
 });
 
@@ -178,5 +256,59 @@ describe("applyWiseTypeScriptDefaults", () => {
     expect(compiler.strict).toBe(true); // 合并新值
     expect(compiler.jsx).toBe(4);
     expect(defaults.snapshot.eagerModelSync).toBe(true);
+  });
+});
+
+describe("isScopePackageSpecifier", () => {
+  test("识别 @scope/pkg", () => {
+    expect(isScopePackageSpecifier("@tauri-apps/api")).toBe(true);
+  });
+  test("识别 @scope/pkg/sub/path", () => {
+    expect(isScopePackageSpecifier("@tauri-apps/api/core")).toBe(true);
+  });
+  test("不识别裸 @scope", () => {
+    expect(isScopePackageSpecifier("@tauri-apps")).toBe(false);
+  });
+  test("不识别普通相对路径", () => {
+    expect(isScopePackageSpecifier("./foo")).toBe(false);
+    expect(isScopePackageSpecifier("../foo")).toBe(false);
+  });
+  test("不识别非 scope 名", () => {
+    expect(isScopePackageSpecifier("lodash")).toBe(false);
+  });
+});
+
+describe("resolveScopePackageCandidates — npm scope 包", () => {
+  test("@tauri-apps/api/core 生成 node_modules 候选", () => {
+    const candidates = resolveScopePackageCandidates("@tauri-apps/api/core");
+    expect(candidates).toEqual(
+      expect.arrayContaining([
+        "node_modules/@tauri-apps/api/core.ts",
+        "node_modules/@tauri-apps/api/core.tsx",
+        "node_modules/@tauri-apps/api/core.js",
+        "node_modules/@tauri-apps/api/core.jsx",
+        "node_modules/@tauri-apps/api/core.d.ts",
+        "node_modules/@tauri-apps/api/core/index.ts",
+        "node_modules/@tauri-apps/api/core/index.tsx",
+        "node_modules/@tauri-apps/api/core/index.js",
+        "node_modules/@tauri-apps/api/core/index.jsx",
+      ]),
+    );
+    // 不应生成 index.json / index.d.ts 兜底
+    expect(candidates).not.toContain("node_modules/@tauri-apps/api/core/index.json");
+    expect(candidates).not.toContain("node_modules/@tauri-apps/api/core/index.d.ts");
+  });
+
+  test("@tauri-apps/api/core.d.ts 带扩展名命中自身且不被 .ts 替代", () => {
+    const candidates = resolveScopePackageCandidates("@tauri-apps/api/core.d.ts");
+    expect(candidates).toContain("node_modules/@tauri-apps/api/core.d.ts");
+    // 不应再追加 src/.../core.ts 之类
+    expect(candidates).toEqual(["node_modules/@tauri-apps/api/core.d.ts"]);
+  });
+
+  test("非 scope 包返回空", () => {
+    expect(resolveScopePackageCandidates("./foo")).toEqual([]);
+    expect(resolveScopePackageCandidates("lodash")).toEqual([]);
+    expect(resolveScopePackageCandidates("@scope")).toEqual([]);
   });
 });
