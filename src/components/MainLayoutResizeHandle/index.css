@@ -1,6 +1,12 @@
+/* 主三栏分隔条：
+ * - 容器自身 8px 宽（透明），命中区域大；
+ * - 中间 1px 分隔线（::after），常态浅色，hover/active 加深；
+ * - 拖动时通过 .app-main-layout-resize-handle--dragging 锁定 grabbing 光标。
+ */
 .app-main-layout-resize-handle {
   flex-shrink: 0;
-  width: var(--app-main-layout-resize-hit, 1px);
+  /* 命中宽度常驻 8px，比 1px 直观很多，但仍保留极薄视觉。 */
+  width: var(--app-main-layout-resize-hit, 8px);
   align-self: stretch;
   cursor: col-resize;
   touch-action: none;
@@ -9,7 +15,18 @@
   position: relative;
   z-index: 2;
   opacity: 1;
+  /* 拖动期视觉无过渡，避免 60Hz pointermove 期间叠加 transition 抖动。 */
   transition: opacity var(--app-layout-rail-duration, 0.32s) var(--app-layout-rail-easing, cubic-bezier(0.33, 1, 0.68, 1));
+}
+
+/* 命中更宽的不可见扩展：让窄屏 / 触控屏也能稳定抓中。
+ * 不接收事件，仅用于占据命中区域。 */
+.app-main-layout-resize-handle::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: transparent;
+  pointer-events: none;
 }
 
 .app-main-layout-resize-handle::after {
@@ -23,9 +40,30 @@
   background: var(--ant-color-split);
   opacity: 0.85;
   pointer-events: none;
+  transition: background-color 120ms ease, opacity 120ms ease, width 120ms ease;
 }
 
 .app-main-layout-resize-handle:hover::after {
   background: var(--ant-color-primary);
   opacity: 1;
+  /* hover 时视觉上稍微变粗，更"邀请"用户来拖。 */
+  width: 2px;
+}
+
+.app-main-layout-resize-handle:active,
+.app-main-layout-resize-handle--dragging {
+  cursor: grabbing;
+}
+
+.app-main-layout-resize-handle--dragging::after {
+  background: var(--ant-color-primary);
+  opacity: 1;
+  width: 2px;
+}
+
+/* 拖动期间给 body 强制 grabbing 光标，避免拖出 handle 区域后丢失反馈。 */
+body.app-main-layout-resizing,
+body.app-main-layout-resizing * {
+  cursor: grabbing !important;
+  user-select: none !important;
 }
