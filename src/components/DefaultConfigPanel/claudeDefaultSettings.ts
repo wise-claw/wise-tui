@@ -4,13 +4,8 @@
  * 由后端合并进 FCC 认证 settings 文件后经单一 `--settings` 注入。
  */
 
-import {
-  ULTRACODE_CLAUDE_EFFORT_LEVEL,
-  type UltracodeClaudeEffortLevel,
-} from "../../constants/ultracodeEffort";
-
 /** 占位示例。 */
-export const CLAUDE_DEFAULT_SETTINGS_PLACEHOLDER = `{"ultracode": true, "effortLevel": "ultracode"}`;
+export const CLAUDE_DEFAULT_SETTINGS_PLACEHOLDER = `{"ultracode": true}`;
 
 /** `--permission-mode` 合法取值（对齐 claude code CLI）。 */
 export const CLAUDE_PERMISSION_MODES = [
@@ -90,10 +85,10 @@ export function toggleUltracodeInSettings(text: string, enabled: boolean): strin
   const obj = parseClaudeDefaultSettings(text) ?? {};
   if (enabled) {
     obj["ultracode"] = true;
-    obj["effortLevel"] = ULTRACODE_CLAUDE_EFFORT_LEVEL satisfies UltracodeClaudeEffortLevel;
   } else {
     delete obj["ultracode"];
-    if (obj["effortLevel"] === ULTRACODE_CLAUDE_EFFORT_LEVEL) {
+    // 旧版开关曾误写入 effortLevel: "ultracode"（schema 不接受），关闭时一并清理。
+    if (obj["effortLevel"] === "ultracode") {
       delete obj["effortLevel"];
     }
   }

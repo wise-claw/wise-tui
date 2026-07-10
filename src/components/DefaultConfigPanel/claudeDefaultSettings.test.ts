@@ -55,7 +55,6 @@ describe("toggleUltracodeInSettings", () => {
   test("开启：空文本变成 ultracode 对象", () => {
     expect(JSON.parse(toggleUltracodeInSettings("", true))).toEqual({
       ultracode: true,
-      effortLevel: "ultracode",
     });
   });
 
@@ -64,7 +63,6 @@ describe("toggleUltracodeInSettings", () => {
     expect(JSON.parse(result)).toEqual({
       permissions: { allow: ["Bash"] },
       ultracode: true,
-      effortLevel: "ultracode",
     });
   });
 
@@ -96,13 +94,12 @@ describe("toggleUltracodeInSettings", () => {
   test("对非法文本开启按空对象处理", () => {
     expect(JSON.parse(toggleUltracodeInSettings("invalid", true))).toEqual({
       ultracode: true,
-      effortLevel: "ultracode",
     });
   });
 
   test("已开启再开启幂等", () => {
     const result = toggleUltracodeInSettings('{"ultracode": true}', true);
-    expect(JSON.parse(result)).toEqual({ ultracode: true, effortLevel: "ultracode" });
+    expect(JSON.parse(result)).toEqual({ ultracode: true });
   });
 });
 
