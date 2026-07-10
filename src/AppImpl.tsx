@@ -3960,6 +3960,9 @@ export default function App() {
           setSearchRepositoryPathOverride(undefined);
         },
         repositoryPath: searchRepositoryPathOverride ?? activeRepository?.path,
+        repositoryId: searchRepositoryPathOverride
+          ? (repositories.find((r) => r.path === searchRepositoryPathOverride)?.id ?? null)
+          : (activeRepository?.id ?? null),
         searchMode,
         initialScopeDir: searchInitialScopeDir,
         onSearchModeChange: setSearchMode,

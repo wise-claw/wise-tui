@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState, memo } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
 import { Input, Spin, TreeSelect, message } from "antd";
 import { FolderOutlined, SearchOutlined } from "@ant-design/icons";
 import { ExplorerTreeFileIcon } from "../GitPanel/explorerTreeChrome";
@@ -15,6 +15,7 @@ import {
   type ContentFileGroup,
 } from "./groupContentMatchesByFile";
 import { commandPalettePropsEqual } from "./commandPalettePropsEqual";
+import { getSearchHistoryStore, useSearchHistory } from "../../stores/searchHistoryStore";
 import "./index.css";
 
 export type CommandPaletteSearchMode = "filename" | "content";
@@ -27,6 +28,8 @@ interface Props {
   open: boolean;
   onClose: () => void;
   repositoryPath: string | undefined;
+  /** 当前仓库 id，用于按仓库隔离搜索历史；null/undefined 时禁用历史记录。 */
+  repositoryId?: number | null;
   searchMode: CommandPaletteSearchMode;
   onSearchModeChange: (mode: CommandPaletteSearchMode) => void;
   /** 文件树右键"在此搜索"预置的搜索范围（仓库相对目录）；undefined=整个仓库。 */
@@ -165,6 +168,7 @@ export const CommandPalette = memo(function CommandPalette({
   open,
   onClose,
   repositoryPath,
+  repositoryId,
   searchMode,
   onSearchModeChange,
   initialScopeDir,
@@ -184,6 +188,23 @@ export const CommandPalette = memo(function CommandPalette({
   resultsRef.current = results;
   const activeIndexRef = useRef(activeIndex);
   activeIndexRef.current = activeIndex;
+
+  // 最近打开文件历史：按仓库隔离，query 为空时在结果区展示最近打开的文件，点击/Enter 直接打开。
+  const searchHistoryStore = useMemo(
+    () => getSearchHistoryStore(repositoryId ?? null),
+    [repositoryId],
+  );
+  const history = useSearchHistory(repositoryId ?? null, searchMode);
+  // 打开文件时记录到最近文件历史（path 规范化与去重在数据层完成）。
+  const recordSearchHistory = useCallback(
+    (path: string, line?: number | null) => {
+      if (repositoryId == null) return;
+      void searchHistoryStore.add(searchMode, path, line);
+    },
+    [searchHistoryStore, searchMode, repositoryId],
+  );
+  // 无结果且无 query 时展示历史列表（footer 与键盘导航共用该判定）。
+  const showingHistory = results.length === 0 && !query && history.length > 0;
 
   const loadScopeChildren = useCallback(
     async (parentDir: string): Promise<ScopeTreeNode[]> => {
@@ -237,28 +258,32 @@ export const CommandPalette = memo(function CommandPalette({
     (item: SearchResult) => {
       if (!repositoryPath) return;
       if (item.kind === "content-file") {
+        recordSearchHistory(item.path, item.hits[0]?.line);
         openContentFileInApp(item.path, item.hits[0]?.line);
         return;
       }
+      recordSearchHistory(item.path);
       onClose();
       onOpenInApp(item.path);
     },
-    [repositoryPath, onClose, onOpenInApp, openContentFileInApp],
+    [repositoryPath, onClose, onOpenInApp, openContentFileInApp, recordSearchHistory],
   );
 
   const openSearchResultExternal = useCallback(
     (item: SearchResult) => {
       if (!repositoryPath) return;
       if (item.kind === "content-file") {
+        recordSearchHistory(item.path, item.hits[0]?.line);
         openContentFileExternal(item.path, item.hits[0]?.line);
         return;
       }
+      recordSearchHistory(item.path);
       onClose();
       void openRepositoryFileWithStoredPreference(repositoryPath, item.path).catch((e) => {
         message.error(e instanceof Error ? e.message : String(e));
       });
     },
-    [repositoryPath, onClose, openContentFileExternal],
+    [repositoryPath, onClose, openContentFileExternal, recordSearchHistory],
   );
 
   useEffect(() => {
@@ -350,6 +375,9 @@ export const CommandPalette = memo(function CommandPalette({
   useEffect(() => {
     if (!open) return;
 
+    // 无结果且无 query 时展示搜索历史，键盘导航 / Enter 在历史与结果间共用 activeIndex。
+    const listLen = results.length > 0 ? results.length : showingHistory ? history.length : 0;
+
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === "Escape") {
         e.preventDefault();
@@ -358,18 +386,27 @@ export const CommandPalette = memo(function CommandPalette({
       }
       if (e.key === "ArrowDown") {
         e.preventDefault();
-        setActiveIndex((i) => Math.min(i + 1, results.length - 1));
+        setActiveIndex((i) => (listLen > 0 ? Math.min(i + 1, listLen - 1) : 0));
       } else if (e.key === "ArrowUp") {
         e.preventDefault();
-        setActiveIndex((i) => Math.max(i - 1, 0));
+        setActiveIndex((i) => (listLen > 0 ? Math.max(i - 1, 0) : 0));
       } else if (e.key === "Enter") {
-        const item = results[activeIndex];
-        if (item && repositoryPath) {
-          e.preventDefault();
-          if (e.shiftKey) {
-            openSearchResultExternal(item);
-          } else {
-            openSearchResultInApp(item);
+        if (results.length > 0) {
+          const item = results[activeIndex];
+          if (item && repositoryPath) {
+            e.preventDefault();
+            if (e.shiftKey) {
+              openSearchResultExternal(item);
+            } else {
+              openSearchResultInApp(item);
+            }
+          }
+        } else if (showingHistory) {
+          const entry = history[activeIndex];
+          if (entry) {
+            e.preventDefault();
+            // 直接打开该最近文件（content 模式带行号定位）。
+            openContentFileInApp(entry.path, entry.line ?? undefined);
           }
         }
       }
@@ -381,10 +418,13 @@ export const CommandPalette = memo(function CommandPalette({
     open,
     results,
     activeIndex,
+    history,
+    showingHistory,
     onClose,
     repositoryPath,
     openSearchResultInApp,
     openSearchResultExternal,
+    openContentFileInApp,
   ]);
 
   const placeholder =
@@ -493,6 +533,7 @@ export const CommandPalette = memo(function CommandPalette({
                             className="app-command-palette-item-preview-row"
                             onClick={(event) => {
                               event.stopPropagation();
+                              recordSearchHistory(item.path, hit.line);
                               openContentFileInApp(item.path, hit.line);
                             }}
                           >
@@ -532,11 +573,67 @@ export const CommandPalette = memo(function CommandPalette({
           <div className="app-command-palette-empty">
             {searchMode === "filename" ? "没有找到文件" : "没有找到匹配内容"}
           </div>
+        ) : history.length > 0 ? (
+          <div className="app-command-palette-list app-command-palette-history">
+            <div className="app-command-palette-history-title">最近打开的文件</div>
+            {history.map((entry, index) => {
+              const parts = splitFilePath(entry.path);
+              return (
+                <div
+                  key={`${entry.path}-${entry.timestamp}`}
+                  className={`app-command-palette-item app-command-palette-history-item${index === activeIndex ? " app-command-palette-item--active" : ""}`}
+                  onClick={() => {
+                    openContentFileInApp(entry.path, entry.line ?? undefined);
+                  }}
+                  onMouseEnter={() => setActiveIndex(index)}
+                >
+                  <span className="app-command-palette-history-info">
+                    <ExplorerTreeFileIcon
+                      fileName={parts.name}
+                      className="app-command-palette-item-file-icon"
+                    />
+                    <span className="app-command-palette-history-name">{parts.name}</span>
+                    {parts.dir ? (
+                      <span className="app-command-palette-history-dir">{parts.dir}</span>
+                    ) : null}
+                    {typeof entry.line === "number" ? (
+                      <span className="app-command-palette-history-line">:{entry.line}</span>
+                    ) : null}
+                  </span>
+                  <button
+                    type="button"
+                    className="app-command-palette-history-remove"
+                    aria-label="删除该记录"
+                    title="删除"
+                    onClick={(event) => {
+                      event.stopPropagation();
+                      void searchHistoryStore.remove(searchMode, entry.path);
+                      setActiveIndex(0);
+                    }}
+                  >
+                    ×
+                  </button>
+                </div>
+              );
+            })}
+          </div>
         ) : (
           <div className="app-command-palette-empty">{emptyHint}</div>
         )}
         <div className="app-command-palette-footer">
-          <CommandPaletteShortcutHints />
+          {showingHistory ? (
+            <button
+              type="button"
+              className="app-command-palette-footer-action"
+              onClick={() => {
+                void searchHistoryStore.clear(searchMode);
+              }}
+            >
+              清空历史
+            </button>
+          ) : (
+            <CommandPaletteShortcutHints />
+          )}
           <span className="app-command-palette-footer-count">
             {loading && query ? "搜索中…" : formatSearchResultCount(results)}
           </span>
