@@ -30,6 +30,7 @@ import {
 } from "../utils/monacoLargeFile";
 import { safeUnlisten } from "../utils/safeTauriUnlisten";
 import { setRepositoryEditorDirtyPaths } from "../stores/repositoryEditorDirtyPathsStore";
+import { requestPaneCenterView } from "../stores/paneCenterViewControlStore";
 import { refreshGitRepositoryUi } from "../services/gitRepositoryUiRefresh";
 
 /** 外部变更触发磁盘重读的合并节流间隔（毫秒）。git-changed、窗口聚焦、轮询共用。 */
@@ -837,6 +838,11 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
         void openRepositoryExternalFile(relativePath, opts);
         return;
       }
+      // 以下分支都会在编辑器打开内容（普通 tab / commit diff / git changes），
+      // 切到「文件」视图。binary / external 已提前 return；editorVisible 未翻转时
+      // ClaudeChat 渲染守卫仍显示消息视图，无空白。paneIndex 为目标 pane（hook 由
+      // 对应 PaneEditorHost 持有，恒等于文件实际显示的 pane）。
+      requestPaneCenterView(paneIndex, "files");
       if (opts?.fromCommitCompare) {
         void loadCommitCompareDiffFile(
           relativePath,
@@ -856,7 +862,7 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
       }
       void loadEditorFile(relativePath, opts);
     },
-    [paneIndex, loadEditorFile, loadCommitCompareDiffFile, loadCommitDiffFile, loadGitDiffFile, openRepositoryBinaryPreview, openRepositoryExternalFile],
+    [paneIndex, loadEditorFile, loadCommitCompareDiffFile, loadCommitDiffFile, loadGitDiffFile, openRepositoryBinaryPreview, openRepositoryExternalFile, requestPaneCenterView],
   );
 
   const closeFileEditorPanel = useCallback(() => {

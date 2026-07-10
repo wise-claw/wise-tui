@@ -69,6 +69,7 @@ import {
 } from "./LeftSidebar/leftSidebarPropsEqual";
 import { claudeSessionsShellPropsEqual } from "./ClaudeSessions/claudeSessionsPropsEqual";
 import { CenterViewControlContext, useCenterView } from "./ClaudeSessions/claudeChatHelpers";
+import { registerPaneCenterViewSetter } from "../stores/paneCenterViewControlStore";
 import type { CenterView } from "./ClaudeSessions/ClaudeChat";
 import { WorkspaceFileTreeRail } from "./WorkspaceFileTreeRail";
 import type { WorkspaceFileTreeRailContext } from "./WorkspaceFileTreeRail/types";
@@ -1038,6 +1039,17 @@ export function AppWorkspaceLayout({
     primaryPanelBelowMessages,
     false, // 单屏 primary 的 hideMessages 恒为 false
   );
+
+  // 单屏下把 pane 0 的 setCenterView 注册到跨层控制通道，供
+  // useRepositoryFileEditor.openRepositoryFile 在打开文件时请求切到「文件」视图。
+  // 多屏（paneCount>1）跳过：pane 0 由 MultiPanePrimaryCell 注册，且此处 setCenterView
+  // 是「死 setter」（Provider 被 pane cell 遮蔽、Topbar 不渲染），注册会抢占 pane 0。
+  // 依赖须含 paneCount，否则单/多屏切换时门控不重算。
+  useEffect(() => {
+    if ((claudeSessionsProps.paneCount ?? 1) > 1) return;
+    registerPaneCenterViewSetter(0, setCenterView);
+    return () => registerPaneCenterViewSetter(0, null);
+  }, [claudeSessionsProps.paneCount, setCenterView]);
 
   /** 多 pane 下要 mount 的 PaneEditorHost 配置列表。
    *  pane 0 = primary（active 仓库）；pane 1..N-1 = extra panes。

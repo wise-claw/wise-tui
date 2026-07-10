@@ -31,6 +31,7 @@ import { claudeChatPropsEqual } from "./claudeChatPropsEqual";
 import { getClaudeChatMessageScrollBridge } from "../../stores/claudeChatMessageScrollBridge";
 import { ClaudeChatQuickActionsChrome } from "./ClaudeChatQuickActionsChrome";
 import { composerRegionChunk } from "./ClaudeChatComposerTray";
+import type { CenterView } from "../../stores/paneCenterViewControlStore";
 
 const ClaudeChatComposerTrayLazy = lazy(() =>
   import("./ClaudeChatComposerTray").then((module) => ({ default: module.ClaudeChatComposerTray })),
@@ -147,7 +148,7 @@ const POST_CLAUDE_IDLE_PENDING_DISPATCH_DELAY_MS = 500;
  * 中栏主区视图切换：消息列表 / 文件编辑器。
  * 有编辑器时由顶栏 Segmented 切换，当前视图占满整个主区（而非上下分屏，避免每个框过矮）。
  */
-export type CenterView = "messages" | "files";
+export type { CenterView };
 
 export type { RefreshHistorySessionsScope } from "./ClaudeChatSessionFeaturePanel";
 

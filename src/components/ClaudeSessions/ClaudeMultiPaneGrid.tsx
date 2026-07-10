@@ -51,6 +51,7 @@ import type { RefreshHistorySessionsScope } from "./ClaudeChat";
 import type { PaneAuxLayout, ResolvePaneAuxLayout } from "./paneAuxLayout";
 import { Topbar, type PaneTopbarSharedProps } from "./Topbar";
 import { CenterViewControlContext, useCenterView } from "./claudeChatHelpers";
+import { registerPaneCenterViewSetter } from "../../stores/paneCenterViewControlStore";
 
 const TWO_PANE_MIN_WIDTH_PX = MAIN_LAYOUT_MULTI_PANE_MIN_WIDTH_PX;
 
@@ -283,6 +284,12 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
     paneAuxLayout.panelBelowMessages,
     paneAuxLayout.hideMessages,
   );
+
+  // 把 pane 0 的 setCenterView 注册到跨层控制通道，供打开文件时切到「文件」视图。
+  useEffect(() => {
+    registerPaneCenterViewSetter(0, setCenterView);
+    return () => registerPaneCenterViewSetter(0, null);
+  }, [setCenterView]);
 
   return (
     <div
@@ -517,6 +524,12 @@ const MultiPaneExtraPaneCell = memo(
       paneAuxLayout.panelBelowMessages,
       hidePaneMessages,
     );
+
+    // 把本 extra pane 的 setCenterView 注册到跨层控制通道，供打开文件时切到「文件」视图。
+    useEffect(() => {
+      registerPaneCenterViewSetter(paneIdx, setCenterView);
+      return () => registerPaneCenterViewSetter(paneIdx, null);
+    }, [paneIdx, setCenterView]);
     const companionMessageListWindow = useMemo(
       () => resolveCompanionMessageListWindow(paneCount),
       [paneCount],

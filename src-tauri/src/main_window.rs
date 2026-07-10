@@ -124,7 +124,10 @@ pub fn open_main_workspace_window(
     let title = initial_window_title(app, repository_id);
     let mut builder = WebviewWindowBuilder::new(app, &label, WebviewUrl::App(route.into()))
         .title(title)
-        .inner_size(1060.0, 700.0);
+        .inner_size(1060.0, 700.0)
+        // 与主窗口 tauri.conf.json 的 `dragDropEnabled:false` 对齐：禁用 Tauri 原生拖拽拦截，
+        // 否则辅助窗口内 webview 的 HTML5 dragover/drop 事件会被抑制，文件树/系统文件拖到会话输入框均无法放入。
+        .disable_drag_drop_handler();
 
     #[cfg(target_os = "macos")]
     {
