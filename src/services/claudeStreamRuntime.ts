@@ -8,6 +8,7 @@ import {
   computeAssistantStreamBufferText,
   partitionStreamMessageParts,
   reconcileResultFullTextParts,
+  type MergeAssistantPartsOptions,
 } from "./claudeStreamAssembler";
 import {
   extractCodexResumeSessionIdFromParsed,
@@ -200,6 +201,27 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
   type SessionListUpdater = (prev: ClaudeSession[]) => ClaudeSession[];
   const pendingStreamSessionUpdaters: SessionListUpdater[] = [];
   let streamSessionFlushRaf: number | null = null;
+  /** content_block_start 与下一 delta 分行到达时，暂存 merge 边界标记。 */
+  const pendingMergeOptionsByTabRef = new Map<string, MergeAssistantPartsOptions>();
+
+  function takePendingMergeOptions(tid: string): MergeAssistantPartsOptions | undefined {
+    const pending = pendingMergeOptionsByTabRef.get(tid);
+    if (!pending) return undefined;
+    pendingMergeOptionsByTabRef.delete(tid);
+    return pending;
+  }
+
+  function stashPendingMergeOptions(
+    tid: string,
+    flags: Pick<MergeAssistantPartsOptions, "startNewTextBlock" | "startNewReasoningBlock">,
+  ): void {
+    if (!flags.startNewTextBlock && !flags.startNewReasoningBlock) return;
+    const prev = pendingMergeOptionsByTabRef.get(tid) ?? {};
+    pendingMergeOptionsByTabRef.set(tid, {
+      startNewTextBlock: prev.startNewTextBlock || flags.startNewTextBlock,
+      startNewReasoningBlock: prev.startNewReasoningBlock || flags.startNewReasoningBlock,
+    });
+  }
 
   function applyPendingStreamSessionUpdates(
     prev: ClaudeSession[],
@@ -251,6 +273,7 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
     dedupedParts: MessagePart[],
     isInit: boolean,
     realSessionId: string | null,
+    mergeOptions?: MergeAssistantPartsOptions,
   ): SessionListUpdater {
     return (prev) =>
       prev.map((s) => {
@@ -264,13 +287,14 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
           // 与 key={session.id} 聊天区 remount（致输入框失焦）。worker 会话一直走此路径。
           updated = { ...updated, claudeSessionId: realSessionId };
         }
+        const effectiveMergeOptions = mergeOptions ?? takePendingMergeOptions(tid);
         if (dedupedParts.length > 0 && !isInit) {
           const { toolResults, streamParts } = partitionStreamMessageParts(dedupedParts);
           if (toolResults.length > 0) {
             updated = applyToolResultPartsToSession(updated, toolResults);
           }
           if (streamParts.length > 0) {
-            updated = appendAssistantStreamParts(updated, streamParts);
+            updated = appendAssistantStreamParts(updated, streamParts, effectiveMergeOptions);
           }
           ingestTodosFromSessionMessages(tid, updated.messages);
         }
@@ -473,7 +497,17 @@ export function createClaudeStreamRuntime(deps: RuntimeDeps) {
       );
       onClaudeSessionIdAssigned?.(tid, cursorAgentId);
     }
-    const { parts, isInit, sessionId: realSessionId, isResultFullText } = extractPartsFromParsed(parsed);
+    const {
+      parts,
+      isInit,
+      sessionId: realSessionId,
+      isResultFullText,
+      startNewTextBlock,
+      startNewReasoningBlock,
+    } = extractPartsFromParsed(parsed);
+    if (startNewTextBlock || startNewReasoningBlock) {
+      stashPendingMergeOptions(tid, { startNewTextBlock, startNewReasoningBlock });
+    }
     const sanitizedParts: MessagePart[] = parts.flatMap((part): MessagePart[] => {
       if (part.type !== "text") return [part];
       const cleaned = stripClaudeHarnessInjectedStreamText(part.text);

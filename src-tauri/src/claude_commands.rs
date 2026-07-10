@@ -144,6 +144,9 @@ pub(crate) struct ClaudeSpawnCliExtras {
     /// 例如 `user,project` 或 `none`（透传 `--setting-sources`）。
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub setting_sources: Option<String>,
+    /// Claude Code `--effort`（low/medium/high/xhigh/max/ultracode）。
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub effort: Option<String>,
 }
 
 fn apply_claude_spawn_cli_extras(cmd: &mut tokio::process::Command, extras: &ClaudeSpawnCliExtras) {
@@ -195,6 +198,20 @@ fn apply_claude_spawn_cli_extras(cmd: &mut tokio::process::Command, extras: &Cla
         .filter(|s| !s.is_empty())
     {
         cmd.arg("--setting-sources").arg(v);
+    }
+    if let Some(v) = extras
+        .effort
+        .as_deref()
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+    {
+        let normalized = v.to_ascii_lowercase();
+        if matches!(
+            normalized.as_str(),
+            "low" | "medium" | "high" | "xhigh" | "max" | "ultracode"
+        ) {
+            cmd.arg("--effort").arg(normalized);
+        }
     }
 }
 

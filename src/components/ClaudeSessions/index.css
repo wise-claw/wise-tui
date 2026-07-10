@@ -6805,6 +6805,52 @@ button.app-message-part-header:disabled:hover {
   opacity: 0.75;
 }
 
+/* Per-session ultracode (OMC 多代理编排) 模式 chip — 与 connection-kind chip 同尺寸，
+   使用紫色色系以与 Claude connection-kind 的绿色形成视觉区分。 */
+.app-ultracode-chip-btn {
+  display: inline-flex;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
+  cursor: pointer;
+  font: inherit;
+  line-height: inherit;
+}
+
+.app-ultracode-chip-btn:focus-visible {
+  outline: 2px solid var(--ant-color-purple, #722ed1);
+  outline-offset: 2px;
+  border-radius: 4px;
+}
+
+.app-ultracode-chip {
+  display: inline-flex;
+  align-items: center;
+  flex-shrink: 0;
+  padding: 0 6px;
+  height: 18px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: 0.02em;
+  color: var(--ant-color-purple, #722ed1);
+  background: var(--ant-color-purple-bg, color-mix(in srgb, #722ed1 8%, transparent));
+  border: 1px solid color-mix(in srgb, #722ed1 35%, var(--ant-color-border-secondary));
+  user-select: none;
+}
+
+.app-ultracode-chip--interactive {
+  cursor: pointer;
+}
+
+.app-ultracode-chip--interactive:hover {
+  color: #fff;
+  background: var(--ant-color-purple, #722ed1);
+  border-color: var(--ant-color-purple, #722ed1);
+}
+
 /* Custom premium execution engine dropdown styling */
 .app-claude-connection-kind-dropdown-container {
   background: var(--app-workspace-glass-bg, var(--ant-color-bg-elevated)) !important;

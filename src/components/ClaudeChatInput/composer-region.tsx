@@ -98,6 +98,11 @@ import { ContextCompactProgressRing } from "./ContextCompactProgressRing";
 import { useContextBreakdown } from "../../hooks/useContextBreakdown";
 import { ComposerVoiceSettingsPanel } from "./ComposerVoiceSettingsPanel";
 import { ComposerRuntimeSettingsTrigger } from "./ComposerRuntimeSettingsTrigger";
+import { UltracodeChip } from "./UltracodeChip";
+import {
+  isSessionUltracodeActive,
+  isTabUltracodeOverride,
+} from "../../constants/claudeConnection";
 import { ComposerModelPicker } from "./ComposerModelPicker";
 import {
   ComposerVoiceDictationBubble,
@@ -143,7 +148,9 @@ import {
   executeComposerLocalSlashCommand,
   composerLocalSlashPendingMessage,
   parseComposerLocalSlashCommand,
+  resolveUltracodeToggleDecision,
 } from "../../services/composerLocalSlashCommand";
+import type { ComposerLocalSlashCommand } from "../../utils/composerLocalSlashCommand";
 import { isComposerLocalSlashEligible } from "../../utils/composerLocalSlashCommand";
 import {
   resolveComposerSendDefaultInstructionApplied,
@@ -254,6 +261,18 @@ interface ComposerInnerProps {
   ) => void;
   onSessionModelChange: (model: string) => void;
   onSessionConnectionKindChange?: (kind: ClaudeSessionConnectionKind) => void;
+  /**
+   * Per-session ultracode setter（composer 顶层 prop）：
+   * - `null` → 清除 override（回到 follow global）；
+   * - `boolean` → 显式覆盖。
+   * 不存在时 composer 不显示 ultracode chip 与不响应 `/ultracode` 拦截。
+   */
+  onUpdateSessionUltracode?: (next: boolean | null) => void;
+  /**
+   * 全局 ultracode 状态；由顶层注入以避免在 composer 内重复读 store。
+   * 未提供时回退到 `false`。
+   */
+  globalUltracodeEnabled?: boolean;
   sessionExecutionEngine?: SessionExecutionEngine;
   codexAvailable?: boolean;
   cursorAvailable?: boolean;
@@ -585,6 +604,8 @@ function ComposerInner({
   onExecute,
   onSessionModelChange,
   onSessionConnectionKindChange,
+  onUpdateSessionUltracode,
+  globalUltracodeEnabled = false,
   allowSendWhileBusy,
   sessionExecutionEngine = "claude",
   codexAvailable = true,
@@ -1777,6 +1798,34 @@ function ComposerInner({
           codeSelectionRefCount: codeSelectionRefs.length,
         })
       ) {
+        // `/ultracode` 命令由本地拦截：先写 per-session override，再决定是否回投 prompt。
+        // 与 connectionKind 不同的是 ultracode 不影响已 spawn 的回合，无需关子进程。
+        if (localSlashCommand.kind === "ultracode" && onUpdateSessionUltracode) {
+          const ultracodeCommand = localSlashCommand as ComposerLocalSlashCommand & {
+            kind: "ultracode";
+          };
+          const decision = resolveUltracodeToggleDecision({
+            command: ultracodeCommand,
+            session,
+            globalUltracodeEnabled,
+          });
+          clearComposerSurfaceSync(logicalSnap.trim());
+          onUpdateSessionUltracode(decision.next);
+          // 显式携带 prompt 时（`/ultracode <text>`），按正常 send 链路把 prompt 发出去；
+          // 否则只是 toggle，不再 send。
+          if (decision.prompt && decision.prompt.trim()) {
+            // 复用底层 prompt 上下文，绕过本地清空：先 append user bubble 再走主链路。
+            onAppendUserMessage?.(session.id, decision.prompt);
+            // 立即滚到底，避免 toggle 后等下条 user 消息渲染才滚。
+            // 与主链路一致：用 queueMicrotask + rAF 兜底聚焦。
+            const followUpPrompt = decision.prompt;
+            queueMicrotask(() => {
+              onExecute(session.id, followUpPrompt);
+            });
+            return;
+          }
+          return;
+        }
         const userText = logicalSnap.trim();
         clearComposerSurfaceSync(userText);
         onAppendUserMessage?.(session.id, userText);
@@ -2971,6 +3020,23 @@ function ComposerInner({
             iconOnly={compactFooterChrome || composerFooterChrome.composerFooterTriggerDisplayMode === "icon"}
           />
         ) : null}
+        {/* Per-session ultracode chip：仅在 Claude 引擎且实际激活时渲染。点击关闭（清除 override 或写 false）。 */}
+        {sessionExecutionEngine === "claude" && onUpdateSessionUltracode ? (
+          <UltracodeChip
+            active={isSessionUltracodeActive(session, globalUltracodeEnabled)}
+            hasTabOverride={isTabUltracodeOverride(session)}
+            onToggle={() => {
+              // 当前若为 per-session 显式 true → 切到 false（清除全局也关掉）。
+              // 当前若为 follow global true → 切到 per-session false（保留全局但本会话显式关）。
+              // 当前若为 follow global false 且 override 未设 → chip 不会渲染（active=false）。
+              const sessionOverrideOn = isTabUltracodeOverride(session)
+                ? session.ultracodeEnabled === true
+                : false;
+              onUpdateSessionUltracode(sessionOverrideOn ? null : false);
+            }}
+            disabled={isSessionBusy}
+          />
+        ) : null}
         {menuItem}
       </div>
     ),
@@ -3004,6 +3070,8 @@ function ComposerInner({
       paneRuntimeOverride,
       onUpdatePaneRuntimeOverride,
       compactFooterChrome,
+      onUpdateSessionUltracode,
+      globalUltracodeEnabled,
     ],
   );
 
@@ -3288,6 +3356,15 @@ export interface ComposerRegionProps {
   ) => void;
   onSessionModelChange: (model: string) => void;
   onSessionConnectionKindChange?: (kind: ClaudeSessionConnectionKind) => void;
+  /**
+   * Per-session ultracode setter（composer-region 顶层 prop）。
+   * 与 connectionKind 一致：单标签临时覆盖，per-session false beats global true。
+   */
+  onUpdateSessionUltracode?: (sessionId: string, next: boolean | null) => void;
+  /**
+   * 全局 ultracode 状态；由顶层 hook 读 store 注入，避免每个 composer 都自己读 app_settings。
+   */
+  globalUltracodeEnabled?: boolean;
   sessionExecutionEngine?: SessionExecutionEngine;
   codexAvailable?: boolean;
   cursorAvailable?: boolean;
@@ -3375,10 +3452,22 @@ export interface ComposerRegionProps {
   compactFooterChrome?: boolean;
 }
 
-export function ComposerRegion({ session, draftBucketKey, ...rest }: ComposerRegionProps) {
+export function ComposerRegion({ session, draftBucketKey, onUpdateSessionUltracode, ...rest }: ComposerRegionProps) {
+  // 将顶层 `(sessionId, next) => void` 签名的 setter 适配为 Inner 期望的 `(next) => void`；
+  // Inner 通过 session.id 直接访问当前 session，因此顶层传 sessionId 的形式更对称于 connectionKind。
+  const boundUpdateSessionUltracode = useCallback(
+    (next: boolean | null) => {
+      onUpdateSessionUltracode?.(session.id, next);
+    },
+    [onUpdateSessionUltracode, session.id],
+  );
   return (
     <PromptProvider sessionId={session.id} draftBucketKey={draftBucketKey}>
-      <ComposerInner session={session} {...rest} />
+      <ComposerInner
+        session={session}
+        onUpdateSessionUltracode={onUpdateSessionUltracode ? boundUpdateSessionUltracode : undefined}
+        {...rest}
+      />
     </PromptProvider>
   );
 }

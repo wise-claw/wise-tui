@@ -53,7 +53,10 @@ describe("isUltracodeEnabledInSettings", () => {
 
 describe("toggleUltracodeInSettings", () => {
   test("开启：空文本变成 ultracode 对象", () => {
-    expect(JSON.parse(toggleUltracodeInSettings("", true))).toEqual({ ultracode: true });
+    expect(JSON.parse(toggleUltracodeInSettings("", true))).toEqual({
+      ultracode: true,
+      effortLevel: "ultracode",
+    });
   });
 
   test("开启：保留其它键", () => {
@@ -61,6 +64,7 @@ describe("toggleUltracodeInSettings", () => {
     expect(JSON.parse(result)).toEqual({
       permissions: { allow: ["Bash"] },
       ultracode: true,
+      effortLevel: "ultracode",
     });
   });
 
@@ -69,17 +73,36 @@ describe("toggleUltracodeInSettings", () => {
     expect(JSON.parse(result)).toEqual({ foo: 1 });
   });
 
+  test("关闭：移除 ultracode 同步移除 effortLevel ultracode", () => {
+    const result = toggleUltracodeInSettings(
+      '{"ultracode": true, "effortLevel": "ultracode", "foo": 1}',
+      false,
+    );
+    expect(JSON.parse(result)).toEqual({ foo: 1 });
+  });
+
+  test("关闭：保留用户自定义 effortLevel（非 ultracode）", () => {
+    const result = toggleUltracodeInSettings(
+      '{"ultracode": true, "effortLevel": "high", "foo": 1}',
+      false,
+    );
+    expect(JSON.parse(result)).toEqual({ effortLevel: "high", foo: 1 });
+  });
+
   test("关闭后剩空对象返回空串", () => {
     expect(toggleUltracodeInSettings('{"ultracode": true}', false)).toBe("");
   });
 
   test("对非法文本开启按空对象处理", () => {
-    expect(JSON.parse(toggleUltracodeInSettings("invalid", true))).toEqual({ ultracode: true });
+    expect(JSON.parse(toggleUltracodeInSettings("invalid", true))).toEqual({
+      ultracode: true,
+      effortLevel: "ultracode",
+    });
   });
 
   test("已开启再开启幂等", () => {
     const result = toggleUltracodeInSettings('{"ultracode": true}', true);
-    expect(JSON.parse(result)).toEqual({ ultracode: true });
+    expect(JSON.parse(result)).toEqual({ ultracode: true, effortLevel: "ultracode" });
   });
 });
 

@@ -121,6 +121,13 @@ export interface UseClaudeSessionsReturn {
     sessionId: string,
     kind: ClaudeSessionConnectionKind,
   ) => Promise<void>;
+  /**
+   * Per-session ultracode 切换：
+   * - `next === null` 清除 override（回到 follow global）；
+   * - `next === boolean` 显式覆盖（per-session false beats global true）。
+   * 不影响已 spawn 的回合——下次 spawn 读新值。
+   */
+  updateSessionUltracodeOverride: (sessionId: string, next: boolean | null) => void;
   /** 返回 false 表示未启动（例如并发门闸拦截）；其余路径为 true（含已安排重试的暂不可见会话）。 */
   executeSession: (sessionId: string, prompt: string, opts?: ClaudeComposerExecuteBubbleOptions) => boolean;
   executeTerminalSession: (

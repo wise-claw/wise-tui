@@ -4,8 +4,13 @@
  * 由后端合并进 FCC 认证 settings 文件后经单一 `--settings` 注入。
  */
 
+import {
+  ULTRACODE_CLAUDE_EFFORT_LEVEL,
+  type UltracodeClaudeEffortLevel,
+} from "../../constants/ultracodeEffort";
+
 /** 占位示例。 */
-export const CLAUDE_DEFAULT_SETTINGS_PLACEHOLDER = `{"ultracode": true}`;
+export const CLAUDE_DEFAULT_SETTINGS_PLACEHOLDER = `{"ultracode": true, "effortLevel": "ultracode"}`;
 
 /** `--permission-mode` 合法取值（对齐 claude code CLI）。 */
 export const CLAUDE_PERMISSION_MODES = [
@@ -85,8 +90,12 @@ export function toggleUltracodeInSettings(text: string, enabled: boolean): strin
   const obj = parseClaudeDefaultSettings(text) ?? {};
   if (enabled) {
     obj["ultracode"] = true;
+    obj["effortLevel"] = ULTRACODE_CLAUDE_EFFORT_LEVEL satisfies UltracodeClaudeEffortLevel;
   } else {
     delete obj["ultracode"];
+    if (obj["effortLevel"] === ULTRACODE_CLAUDE_EFFORT_LEVEL) {
+      delete obj["effortLevel"];
+    }
   }
   if (Object.keys(obj).length === 0) return "";
   return JSON.stringify(obj, null, 2);

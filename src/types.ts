@@ -805,6 +805,12 @@ export interface ClaudeSession {
    * 落盘到 tabs.json，重启后恢复。
    */
   isSide?: boolean;
+  /**
+   * Per-session ultracode override：null/undefined = 跟随全局 `claudeDefaultSettings.ultracodeEnabled`；
+   * true/false = 显式覆盖本会话。优先级高于全局（per-session false beats global true）。
+   * 落盘到 tabs.json，重启后恢复。runtime 不影响已 spawn 的回合——下次 spawn 读新值。
+   */
+  ultracodeEnabled?: boolean;
 }
 
 /** One session row from `list_claude_disk_sessions` (Claude Code on-disk index). */

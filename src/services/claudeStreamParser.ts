@@ -2,6 +2,17 @@ import type { MessagePart, ToolUsePart, ToolUseDiagnostics } from "../types";
 import { unwrapClaudeStreamLineRoot } from "../notifications/streamIngest";
 import { humanizeClaudeError } from "../utils/humanizeClaudeError";
 
+export type ExtractPartsFromParsedResult = {
+  parts: MessagePart[];
+  isInit: boolean;
+  sessionId: string | null;
+  isResultFullText?: boolean;
+  /** content_block_start(text) 后首个 delta 应另起 text part。 */
+  startNewTextBlock?: boolean;
+  /** content_block_start(thinking) 后首个 delta 应另起 reasoning part。 */
+  startNewReasoningBlock?: boolean;
+};
+
 /**
  * 流式行安全 JSON 解析：失败返回 null。
  * 与各 `*FromStreamLine` 旧实现里 `try { JSON.parse } catch { return 默认 }` 的兜底语义一致，
@@ -249,7 +260,7 @@ export function extractCursorAgentIdFromCompletePayload(payload: unknown): strin
   return trimmed.length > 0 ? trimmed : null;
 }
 
-export function extractPartsFromParsed(obj: unknown): { parts: MessagePart[]; isInit: boolean; sessionId: string | null; isResultFullText?: boolean } {
+export function extractPartsFromParsed(obj: unknown): ExtractPartsFromParsedResult {
   try {
     const json = unwrapClaudeStreamLineRoot(
       asNonArrayRecord(obj) ?? EMPTY_RECORD,
@@ -262,7 +273,7 @@ export function extractPartsFromParsed(obj: unknown): { parts: MessagePart[]; is
       result?: string;
       output?: string;
       delta?: { text?: string };
-      content_block?: { text?: string };
+      content_block?: { type?: string; text?: string; thinking?: string };
       text?: string;
     };
 
@@ -273,6 +284,18 @@ export function extractPartsFromParsed(obj: unknown): { parts: MessagePart[]; is
         isInit: true,
         sessionId: typeof sidRaw === "string" && sidRaw.trim().length > 0 ? sidRaw.trim() : null,
       };
+    }
+
+    // SDK stream-json：新 content block 开始 —— 下一 delta 应另起 part，对齐 JSONL 多 block 结构。
+    if (json.type === "content_block_start") {
+      const blockType = typeof json.content_block?.type === "string" ? json.content_block.type : "";
+      if (blockType === "text") {
+        return { parts: [], isInit: false, sessionId: null, startNewTextBlock: true };
+      }
+      if (blockType === "thinking") {
+        return { parts: [], isInit: false, sessionId: null, startNewReasoningBlock: true };
+      }
+      return { parts: [], isInit: false, sessionId: null };
     }
 
     // Some Claude Code versions emit final text on a `result` event.

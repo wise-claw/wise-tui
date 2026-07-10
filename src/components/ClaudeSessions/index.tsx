@@ -70,6 +70,8 @@ export interface ClaudeSessionsProps {
     sessionId: string,
     kind: import("../../constants/claudeConnection").ClaudeSessionConnectionKind,
   ) => void | Promise<void>;
+  /** Per-session ultracode setter；顶层 (sessionId, next) 签名，per-session false beats global true。 */
+  onUpdateSessionUltracode?: (sessionId: string, next: boolean | null) => void;
   onUpdateRepositoryExecutionEngine?: (
     repositoryId: number,
     engine: import("../../types").SessionExecutionEngine,
@@ -256,6 +258,7 @@ function ClaudeSessionsShell({
   onSelectRepository,
   onUpdateSessionModel,
   onUpdateSessionConnectionKind,
+  onUpdateSessionUltracode,
   onUpdateRepositoryExecutionEngine,
   onUpdateEmployeeExecutionEngine,
   codexAvailable = true,
@@ -708,6 +711,7 @@ function ClaudeSessionsShell({
           onSelectRepository={onSelectRepository}
           onUpdateSessionModel={onUpdateSessionModel}
           onUpdateSessionConnectionKind={onUpdateSessionConnectionKind}
+          onUpdateSessionUltracode={onUpdateSessionUltracode}
           onUpdateRepositoryExecutionEngine={onUpdateRepositoryExecutionEngine}
           onUpdateEmployeeExecutionEngine={onUpdateEmployeeExecutionEngine}
           codexAvailable={codexAvailable}

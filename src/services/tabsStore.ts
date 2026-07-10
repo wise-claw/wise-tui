@@ -21,7 +21,7 @@ function isTauriIpcAlive(): boolean {
   );
 }
 
-function normalizePersistedSession(raw: unknown): ClaudeSession {
+export function normalizePersistedSession(raw: unknown): ClaudeSession {
   const v = raw as Record<string, unknown>;
   const out = { ...v } as Record<string, unknown>;
   delete out.projectPath;
@@ -31,6 +31,11 @@ function normalizePersistedSession(raw: unknown): ClaudeSession {
   out.repositoryName = (typeof v.repositoryName === "string" && v.repositoryName) || String(v.projectName ?? "");
   if (v.connectionKind === "streaming" || v.connectionKind === "oneshot") {
     out.connectionKind = v.connectionKind;
+  }
+  // `ultracodeEnabled` 必须是 boolean（per-session override）；脏值（字符串/null/对象）一律清除，
+  // 避免运行时 `typeof !== "boolean"` 的额外分支污染。
+  if (typeof v.ultracodeEnabled !== "boolean") {
+    delete out.ultracodeEnabled;
   }
   const session = out as unknown as ClaudeSession;
   if (Array.isArray(session.messages) && session.messages.length > 0) {

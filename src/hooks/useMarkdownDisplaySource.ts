@@ -28,6 +28,8 @@ const COLLAPSED_PIPE_TABLE_FAST_PATH_GUARD = /[-+]{3,}/;
 function streamingShortTextFastPath(text: string): boolean {
   if (text.length >= STREAMING_SHORT_TEXT_FAST_PATH_LIMIT) return false;
   if (COLLAPSED_PIPE_TABLE_FAST_PATH_GUARD.test(text)) return false;
+  // 多段纯文本也需完整 normalize，与磁盘态段间距/列表结构对齐。
+  if (text.split(/\n\s*\n/).filter((block) => block.trim()).length >= 2) return false;
   return !MARKDOWN_STRUCTURE_HINT_RE.test(text);
 }
 

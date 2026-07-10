@@ -1,5 +1,6 @@
 import type { ClaudeMessage, MessagePart, TextPart, ToolUseDiagnostics, ToolUsePart } from "../types";
 import { foldToolResultUserMessagesIntoAssistant } from "../services/claudeStreamAssembler";
+import { assistantTextJoinedFromParts } from "./assistantTextParts";
 import { normalizeClaudeUserMessageForDisplay, extractCommandNameBlock } from "./userMessageImportantInput";
 
 function parseTimestamp(v: unknown): number {
@@ -234,10 +235,7 @@ export function parseClaudeSessionJsonlLines(lines: string[]): ClaudeMessage[] {
       if (!msg || msg.role !== "assistant") continue;
       const parts = blocksToParts(msg.content);
       if (parts.length === 0) continue;
-      const textContent = parts
-        .filter((p): p is TextPart => p.type === "text")
-        .map((p) => p.text)
-        .join("");
+      const textContent = assistantTextJoinedFromParts(parts);
       idCounter += 1;
       messages.push({
         id: idCounter,

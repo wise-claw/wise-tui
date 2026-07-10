@@ -100,6 +100,8 @@ export interface ClaudeSessionsChatHostProps {
     sessionId: string,
     kind: import("../../constants/claudeConnection").ClaudeSessionConnectionKind,
   ) => void | Promise<void>;
+  /** Per-session ultracode setter（顶层 (sessionId, next) 签名）。 */
+  onUpdateSessionUltracode?: (sessionId: string, next: boolean | null) => void;
   onUpdateRepositoryExecutionEngine?: (
     repositoryId: number,
     engine: import("../../types").SessionExecutionEngine,
@@ -235,6 +237,7 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
   onSelectRepository,
   onUpdateSessionModel,
   onUpdateSessionConnectionKind,
+  onUpdateSessionUltracode,
   onUpdateRepositoryExecutionEngine,
   onUpdateEmployeeExecutionEngine,
   codexAvailable = true,
@@ -533,6 +536,7 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
     onDispatchExecutionEnvironment,
     onUpdateSessionModel,
     onUpdateSessionConnectionKind,
+    onUpdateSessionUltracode,
     onUpdateRepositoryExecutionEngine,
     onUpdateEmployeeExecutionEngine,
     codexAvailable,
@@ -699,6 +703,7 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
           onSessionConnectionKindChange={(kind) =>
             void onUpdateSessionConnectionKind(activeSession.id, kind)
           }
+          onUpdateSessionUltracode={onUpdateSessionUltracode}
           onUpdateRepositoryExecutionEngine={onUpdateRepositoryExecutionEngine}
           onUpdateEmployeeExecutionEngine={onUpdateEmployeeExecutionEngine}
           codexAvailable={codexAvailable}

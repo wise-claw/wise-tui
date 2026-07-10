@@ -7,6 +7,10 @@ import {
   looksLikeStructuredMarkdownSummary,
   cliToolOutputForExpandedBody,
 } from "../../utils/assistantOrphanMarkdown";
+import {
+  countAssistantTextParagraphs,
+  joinAssistantTextPartBodies,
+} from "../../utils/assistantTextParts";
 import { reasoningPreviewOverflows } from "../../utils/reasoningPreviewOverflows";
 import { isSkillToolPart, skillToolDisplayName } from "../../utils/skillToolPart";
 import { LinkifiedPre } from "./LinkifiedPre";
@@ -92,11 +96,14 @@ const TextPartDisplay = memo(function TextPartDisplay({
   showPendingHint: boolean;
 }) {
   const text = usePacedText(part.text, streaming);
-  // 流式期 text 每 token 变化，但 class 仅在结构边界（summary / 长文）变化。
-  // 按长度桶缓存：同桶内复用上一次结果，跳过 7+ 正则；跨桶或流式结束(streaming 转 false)时重算，保证最终 class 正确。
-  // 桶粒度 256：早于 1024 提前 4 倍触发 chat-prose 判定，避免流式期「末段粘连」——见
-  // `looksLikeLongFormChatMarkdown` 的 streamingShortOk 分支（多段形态早挂 long-prose）。
-  const classBucket = streaming ? Math.floor(text.length / 256) : text.length;
+  // 流式期 text 每 token 变化，但 class 仅在结构边界（summary / 长文 / 新段落）变化。
+  // 桶 = 长度分档 + 段数：第二段一出现就重算 chat-prose，避免末段仍用 0.45em 紧凑间距。
+  const paragraphCount = countAssistantTextParagraphs(text);
+  const listItemCount = (text.match(/^[\s]*[-*+]\s+/gm) ?? []).length
+    + (text.match(/^\s*\d+\.\s+/gm) ?? []).length;
+  const classBucket = streaming
+    ? `${Math.floor(text.length / 256)}:${paragraphCount}:${listItemCount >= 3 ? "list" : ""}`
+    : text.length;
   const { partClassName, markdownClassName } = useMemo(
     () => chatAssistantTextPartClassNames(text, streaming),
     // 依赖 classBucket 而非 text：同桶跳过重算；text 仅在 factory 内使用。
@@ -1029,15 +1036,9 @@ export function buildMergedTextGroups(visibleParts: readonly MessagePart[]): Par
         break;
       }
       // 计算本 run 的拼接文本（多 part 时 `\n\n` 分隔）；单 part 时 joinedText == trimmed。
-      const joinedText = run
-        .map((p, k) => {
-          const t = (p as TextPart).text;
-          // 首 part 允许保留首部空白（中间不应有人为缩进），其余 part 头尾 trim 再拼。
-          if (k === 0) return k === run.length - 1 ? t.trim() : t.trimEnd();
-          return k === run.length - 1 ? t.trim() : t.trim();
-        })
-        .filter((s) => s.length > 0)
-        .join("\n\n");
+      const joinedText = joinAssistantTextPartBodies(
+        run.map((p) => (p as TextPart).text),
+      );
       if (joinedText.length === 0) {
         // 全空段：跳过（不渲染，避免空 markdown card）
         i = j - 1;

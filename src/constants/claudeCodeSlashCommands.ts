@@ -122,6 +122,11 @@ export const CLAUDE_BUILTIN_SLASH_COMMANDS: readonly ClaudeBuiltinSlashCommand[]
   { label: "theme", description: "切换配色主题（含 auto 与无障碍主题）" },
   { label: "todos", description: "查看/管理可执行任务列表" },
   { label: "tui", description: "切换 default/fullscreen 渲染并保留对话" },
+  {
+    label: "ultracode",
+    description:
+      "Wise 拦截：切换本会话的 OMC ultracode 模式（per-session override；/ultracode off 关闭；/ultracode <prompt> 启用并直接发送）",
+  },
   { label: "ultraplan", description: "在 ultraplan 云端起草计划后回传执行" },
   { label: "ultrareview", description: "云端多 Agent 深度代码审查" },
   { label: "upgrade", description: "打开升级订阅页面" },

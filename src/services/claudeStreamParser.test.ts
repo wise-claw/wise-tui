@@ -199,6 +199,41 @@ describe("extractPartsFromStreamLine", () => {
     ).toEqual([{ type: "reasoning", text: "planning" }]);
   });
 
+  test("content_block_start(text) signals new text block boundary", () => {
+    expect(
+      extractPartsFromStreamLine(
+        JSON.stringify({
+          type: "stream_event",
+          event: {
+            type: "content_block_start",
+            content_block: { type: "text", text: "" },
+          },
+        }),
+      ),
+    ).toEqual({
+      parts: [],
+      isInit: false,
+      sessionId: null,
+      startNewTextBlock: true,
+    });
+  });
+
+  test("content_block_start(thinking) signals new reasoning block boundary", () => {
+    expect(
+      extractPartsFromStreamLine(
+        JSON.stringify({
+          type: "content_block_start",
+          content_block: { type: "thinking", thinking: "" },
+        }),
+      ),
+    ).toEqual({
+      parts: [],
+      isInit: false,
+      sessionId: null,
+      startNewReasoningBlock: true,
+    });
+  });
+
   test("returns an empty parse result for malformed JSON", () => {
     expect(extractPartsFromStreamLine("{not-json")).toEqual({
       parts: [],

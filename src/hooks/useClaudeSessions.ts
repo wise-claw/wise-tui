@@ -57,6 +57,7 @@ import { resolveCursorResumeAgentId } from "../utils/cursorAgentId";
 import {
   loadDefaultClaudeConnectionKind,
   applyTabConnectionKindOverride,
+  applyTabUltracodeOverride,
   normalizeClaudeConnectionKind,
   resolveSessionConnectionKind,
   sessionUsesStreamingConnection,
@@ -3276,6 +3277,33 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     [detachClaudeInvocationsForSessionKey],
   );
 
+  /**
+   * Per-session ultracode 切换 setter。
+   * - `next === null`：清除 override（回到 follow global）；
+   * - `next === boolean`：显式覆盖（per-session false beats global true）。
+   *
+   * 与 `updateSessionConnectionKind` 的差异：ultracode 不影响流式子进程句柄/磁盘会话 id，
+   * 因此无需 close streaming session；仅修改 store，下次 spawn 读新值。
+   */
+  const updateSessionUltracodeOverride = useCallback(
+    (sessionId: string, next: boolean | null) => {
+      setSessions((prev) => {
+        let changed = false;
+        const nextSessions = prev.map((s) => {
+          if (s.id !== sessionId) return s;
+          const updated = applyTabUltracodeOverride(s, next);
+          if (updated === s) return s;
+          changed = true;
+          return updated;
+        });
+        if (!changed) return prev;
+        sessionsRef.current = nextSessions;
+        return nextSessions;
+      });
+    },
+    [],
+  );
+
   // Create a session without executing Claude (idle state); model from Claude Code settings.json
   const createSession = useCallback(
     async (
@@ -5223,6 +5251,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     createSession,
     updateSessionModel,
     updateSessionConnectionKind,
+    updateSessionUltracodeOverride,
     executeSession,
     executeTerminalSession,
     resumeSessionFromMonitorDrawer,

@@ -196,7 +196,13 @@ const LOCAL_PROXY_CLAUDE_TOOL_COMPAT_ENV: &[(&str, &str)] = &[
 
 pub(crate) fn apply_local_proxy_claude_tool_compat_env(env: &mut HashMap<String, String>) {
     for (key, value) in LOCAL_PROXY_CLAUDE_TOOL_COMPAT_ENV {
-        env.insert((*key).to_string(), (*value).to_string());
+        if *key == "CLAUDE_CODE_EFFORT_LEVEL" {
+            // 用户/会话已显式设置 effort（如 ultracode / xhigh）时不降级为 medium。
+            env.entry((*key).to_string())
+                .or_insert_with(|| (*value).to_string());
+        } else {
+            env.insert((*key).to_string(), (*value).to_string());
+        }
     }
 }
 
@@ -205,7 +211,13 @@ pub(crate) fn apply_local_proxy_claude_tool_compat_json_env(
     env_obj: &mut serde_json::Map<String, serde_json::Value>,
 ) {
     for (key, value) in LOCAL_PROXY_CLAUDE_TOOL_COMPAT_ENV {
-        env_obj.insert(key.to_string(), serde_json::Value::String(value.to_string()));
+        if *key == "CLAUDE_CODE_EFFORT_LEVEL" {
+            env_obj
+                .entry(key.to_string())
+                .or_insert_with(|| serde_json::Value::String(value.to_string()));
+        } else {
+            env_obj.insert(key.to_string(), serde_json::Value::String(value.to_string()));
+        }
     }
 }
 
@@ -345,6 +357,7 @@ fn build_claude_spawn_settings_payload(
     let mut payload: serde_json::Map<String, serde_json::Value> = user_settings
         .and_then(|v| v.as_object().map(|m| m.clone()))
         .unwrap_or_default();
+    enrich_ultracode_effort_in_spawn_settings(&mut payload);
     if !env.is_empty() {
         // 用户若把 `env` 设成非对象（不合理但需防御），用 FCC env 覆盖。
         if !payload
@@ -363,6 +376,34 @@ fn build_claude_spawn_settings_payload(
         }
     }
     serde_json::Value::Object(payload)
+}
+
+/// `ultracode: true` 时补齐 effort 档位，对齐 Claude Code `/effort ultracode`。
+fn enrich_ultracode_effort_in_spawn_settings(payload: &mut serde_json::Map<String, serde_json::Value>) {
+    let ultracode = payload
+        .get("ultracode")
+        .and_then(|v| v.as_bool())
+        .unwrap_or(false);
+    if !ultracode {
+        return;
+    }
+    payload
+        .entry("effortLevel".to_string())
+        .or_insert_with(|| serde_json::Value::String("ultracode".to_string()));
+    if !payload
+        .get("env")
+        .map_or(false, |v| v.is_object())
+    {
+        payload.insert(
+            "env".to_string(),
+            serde_json::Value::Object(serde_json::Map::new()),
+        );
+    }
+    if let Some(env_map) = payload.get_mut("env").and_then(|v| v.as_object_mut()) {
+        env_map
+            .entry("CLAUDE_CODE_EFFORT_LEVEL".to_string())
+            .or_insert_with(|| serde_json::Value::String("ultracode".to_string()));
+    }
 }
 
 /// 对齐终端 CLI 的 FCC / free-claude-code 认证：`--settings` + 子进程 `env`，并清理 `~/.claude.json` 中冲突项。
@@ -460,6 +501,42 @@ mod tests {
         assert_eq!(
             env_obj.get("FOO"),
             Some(&serde_json::Value::String("bar".to_string()))
+        );
+        assert_eq!(
+            obj.get("effortLevel"),
+            Some(&serde_json::Value::String("ultracode".to_string()))
+        );
+    }
+
+    #[test]
+    fn build_spawn_settings_payload_enriches_ultracode_effort_when_missing() {
+        let user = serde_json::json!({ "ultracode": true });
+        let payload = build_claude_spawn_settings_payload(&HashMap::new(), Some(&user));
+        let obj = payload.as_object().expect("payload should be object");
+        assert_eq!(
+            obj.get("effortLevel"),
+            Some(&serde_json::Value::String("ultracode".to_string()))
+        );
+        let env_obj = obj
+            .get("env")
+            .and_then(|v| v.as_object())
+            .expect("env should be object");
+        assert_eq!(
+            env_obj.get("CLAUDE_CODE_EFFORT_LEVEL"),
+            Some(&serde_json::Value::String("ultracode".to_string()))
+        );
+    }
+
+    #[test]
+    fn local_proxy_tool_compat_does_not_downgrade_existing_effort_env() {
+        let mut env = HashMap::from([(
+            "CLAUDE_CODE_EFFORT_LEVEL".to_string(),
+            "ultracode".to_string(),
+        )]);
+        apply_local_proxy_claude_tool_compat_env(&mut env);
+        assert_eq!(
+            env.get("CLAUDE_CODE_EFFORT_LEVEL").map(String::as_str),
+            Some("ultracode")
         );
     }
 

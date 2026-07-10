@@ -1,4 +1,5 @@
 import type { ClaudeMessage, MessagePart, ToolUsePart } from "../types";
+import { joinAssistantTextPartBodies } from "./assistantTextParts";
 
 const CLI_TOOL_NAMES = new Set(["bash", "exec", "run_command"]);
 
@@ -118,7 +119,7 @@ export function assistantMessagePostToolTextParts(parts: MessagePart[]): string 
       if (t) texts.push(t);
     }
   }
-  return texts.join("\n\n").trim();
+  return joinAssistantTextPartBodies(texts);
 }
 
 function isCliToolPart(part: ToolUsePart): boolean {

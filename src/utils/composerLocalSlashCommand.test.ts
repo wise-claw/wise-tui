@@ -140,6 +140,38 @@ describe("parseComposerLocalSlashCommand", () => {
     expect(parseComposerLocalSlashCommand("请执行 /plugin install x")).toBeNull();
     expect(parseComposerLocalSlashCommand("/unknown-cmd")).toBeNull();
   });
+
+  test("parses /ultracode 三种语义", () => {
+    // 纯 toggle
+    expect(parseComposerLocalSlashCommand("/ultracode")).toEqual({
+      kind: "ultracode",
+      raw: "/ultracode",
+      ultracodePrompt: null,
+    });
+    // 显式 off
+    expect(parseComposerLocalSlashCommand("/ultracode off")).toEqual({
+      kind: "ultracode",
+      raw: "/ultracode off",
+      ultracodePrompt: "",
+    });
+    // 启用 + 携带 prompt
+    expect(parseComposerLocalSlashCommand("/ultracode 帮我调研 X 的性能瓶颈")).toEqual({
+      kind: "ultracode",
+      raw: "/ultracode 帮我调研 X 的性能瓶颈",
+      ultracodePrompt: "帮我调研 X 的性能瓶颈",
+    });
+    // 大小写不敏感（命令名 / 关键字）
+    expect(parseComposerLocalSlashCommand("/UltraCode")?.kind).toBe("ultracode");
+    expect(parseComposerLocalSlashCommand("/ultracode OFF")?.ultracodePrompt).toBe("");
+  });
+
+  test("ultracode typo 与相似前缀不误判", () => {
+    // 拼错前缀 → 走原生 slash 兜底（返回 null，不进入本地拦截）
+    expect(parseComposerLocalSlashCommand("/ultracodex")).toBeNull();
+    expect(parseComposerLocalSlashCommand("/ultra")).toBeNull();
+    // 嵌入行内的 /ultracode 不算命令（要求整行）
+    expect(parseComposerLocalSlashCommand("请执行 /ultracode")).toBeNull();
+  });
 });
 
 describe("isComposerLocalSlashEligible", () => {
@@ -189,5 +221,64 @@ describe("resolveComposerPluginInstallRef", () => {
 
   test("throws for unknown shorthand", () => {
     expect(() => resolveComposerPluginInstallRef("not-a-real-plugin")).toThrow(/未找到插件/);
+  });
+});
+
+// resolveUltracodeToggleDecision 的完整测试放在服务层；此处只覆盖显式分支的接口契约。
+import { resolveUltracodeToggleDecision } from "../services/composerLocalSlashCommand";
+
+describe("resolveUltracodeToggleDecision", () => {
+  test("显式 off → next=false", () => {
+    const decision = resolveUltracodeToggleDecision({
+      command: { kind: "ultracode", raw: "/ultracode off", ultracodePrompt: "" },
+      session: { ultracodeEnabled: undefined },
+      globalUltracodeEnabled: true,
+    });
+    expect(decision).toEqual({ next: false, prompt: null });
+  });
+
+  test("携带 prompt → next=true + prompt", () => {
+    const decision = resolveUltracodeToggleDecision({
+      command: { kind: "ultracode", raw: "/ultracode 调研 X", ultracodePrompt: "调研 X" },
+      session: { ultracodeEnabled: false },
+      globalUltracodeEnabled: false,
+    });
+    expect(decision).toEqual({ next: true, prompt: "调研 X" });
+  });
+
+  test("纯 toggle：当前 override=true → 切到 null（清除）", () => {
+    const decision = resolveUltracodeToggleDecision({
+      command: { kind: "ultracode", raw: "/ultracode", ultracodePrompt: null },
+      session: { ultracodeEnabled: true },
+      globalUltracodeEnabled: false,
+    });
+    expect(decision).toEqual({ next: null, prompt: null });
+  });
+
+  test("纯 toggle：当前 override=false → 切到 true", () => {
+    const decision = resolveUltracodeToggleDecision({
+      command: { kind: "ultracode", raw: "/ultracode", ultracodePrompt: null },
+      session: { ultracodeEnabled: false },
+      globalUltracodeEnabled: true,
+    });
+    expect(decision).toEqual({ next: true, prompt: null });
+  });
+
+  test("纯 toggle：override 未设、global=true → 切到 null（无法在本会话关掉全局）", () => {
+    const decision = resolveUltracodeToggleDecision({
+      command: { kind: "ultracode", raw: "/ultracode", ultracodePrompt: null },
+      session: { ultracodeEnabled: undefined },
+      globalUltracodeEnabled: true,
+    });
+    expect(decision).toEqual({ next: null, prompt: null });
+  });
+
+  test("纯 toggle：override 未设、global=false → 切到 true", () => {
+    const decision = resolveUltracodeToggleDecision({
+      command: { kind: "ultracode", raw: "/ultracode", ultracodePrompt: null },
+      session: null,
+      globalUltracodeEnabled: false,
+    });
+    expect(decision).toEqual({ next: true, prompt: null });
   });
 });

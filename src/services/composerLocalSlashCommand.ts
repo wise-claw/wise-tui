@@ -323,6 +323,44 @@ function formatSessionStatus(session: ClaudeSession): string {
     .join("\n");
 }
 
+/**
+ * 解析 `/ultracode` 命令对应的 per-session 切换动作。
+ *
+ * 优先级由调用方维护：
+ *   - explicitFollowUp（`ultracodePrompt` 非空字符串）→ 写 true
+ *   - explicitOff（`ultracodePrompt === ""`）            → 写 false
+ *   - 纯 toggle（`ultracodePrompt === null`）            → 按当前态反转：
+ *       - 当前为 true（override 或全局）→ 清除 override，回到 follow global
+ *       - 当前为 false                 → 写 true
+ *
+ * 当 `globalUltracodeEnabled` 为 true 但 override 未设时，"toggle 后剥 undef"
+ * 行为等价于"无视觉变化"——这是预期：用户意图是关掉本会话的 ultracode，
+ * 但全局态下 per-session 无法表达"显式关闭全局"，只能回到 follow global。
+ * 如需"本会话显式关闭全局 ultracode"，应输入 `/ultracode off`。
+ */
+export function resolveUltracodeToggleDecision(input: {
+  command: ComposerLocalSlashCommand & { kind: "ultracode" };
+  session: Pick<ClaudeSession, "ultracodeEnabled"> | null | undefined;
+  globalUltracodeEnabled: boolean;
+}): { next: boolean | null; prompt: string | null } {
+  const { command, session, globalUltracodeEnabled } = input;
+  const prompt = command.ultracodePrompt;
+  if (prompt !== undefined && prompt !== null) {
+    if (prompt === "") {
+      return { next: false, prompt: null };
+    }
+    return { next: true, prompt };
+  }
+  const currentlyActive =
+    typeof session?.ultracodeEnabled === "boolean"
+      ? session.ultracodeEnabled
+      : globalUltracodeEnabled;
+  return {
+    next: currentlyActive ? null : true,
+    prompt: null,
+  };
+}
+
 async function formatContextUsage(
   session: ClaudeSession,
   detailed: boolean,
@@ -404,6 +442,8 @@ function pendingLabelFor(command: ComposerLocalSlashCommand): string {
         "请在 Wise 顶栏「默认配置」中管理 Claude 连接、模型、FCC 与相关设置。",
         "插件：创作 → 插件市场；MCP：创作 → MCP；Skills：创作 → Skills Hub。",
       ].join("\n");
+    case "ultracode":
+      return ""; // 由 caller 同步写 store，无需 spinner 文案
     default:
       return "正在处理命令…";
   }

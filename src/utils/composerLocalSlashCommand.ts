@@ -41,6 +41,7 @@ export type ComposerLocalSlashKind =
   | "agents"
   | "status"
   | "models"
+  | "ultracode"
   | "redirect";
 
 export interface ComposerLocalSlashCommand {
@@ -52,6 +53,13 @@ export interface ComposerLocalSlashCommand {
   redirectMessage?: string;
   /** kind === "context" 时是否展开分类明细 */
   contextDetailed?: boolean;
+  /**
+   * kind === "ultracode" 时的 follow-up 语义：
+   * - `undefined` / `null` → 纯 toggle（无附言）
+   * - `""` → 显式关闭（`/ultracode off`）
+   * - 其它字符串 → 启用 ultracode 并作为 prompt 投递（`/ultracode <text>`）
+   */
+  ultracodePrompt?: string | null;
 }
 
 const PLUGIN_SLASH_RE = /^\/plugin(?:\s+(.+))?$/i;
@@ -307,6 +315,23 @@ export function parseComposerLocalSlashCommand(text: string): ComposerLocalSlash
     return { kind: "models", raw: trimmed };
   }
 
+  // `/ultracode` 与 `/ultracode off` 与 `/ultracode <text>`。
+  // 解析规则（与 OMC 关键字语义一致）：
+  //   `/ultracode`             → ultracodePrompt = undefined（纯 toggle）
+  //   `/ultracode off`         → ultracodePrompt = ""     （显式关闭）
+  //   `/ultracode <其它文本>`   → ultracodePrompt = 文本  （启用并把文本作为 prompt 投递）
+  // typo（如 `/ultracodex`）不会匹配，进入原生 slash 兜底。
+  if (head === "ultracode") {
+    const after = trimmed.replace(/^\/ultracode\s*/i, "");
+    if (after === "") {
+      return { kind: "ultracode", raw: trimmed, ultracodePrompt: null };
+    }
+    if (/^off\b/i.test(after)) {
+      return { kind: "ultracode", raw: trimmed, ultracodePrompt: "" };
+    }
+    return { kind: "ultracode", raw: trimmed, ultracodePrompt: after };
+  }
+
   for (const entry of TUI_SLASH_REDIRECTS) {
     if (entry.test(trimmed)) {
       return redirectCommand(trimmed, entry.message);
@@ -362,6 +387,9 @@ export const COMPOSER_LOCAL_SLASH_HELP = [
   "• /reload-plugins — 刷新插件市场缓存",
   "• /reload-skills — 重新扫描 Skills 目录",
   "• /model、/models — 打开模型切换面板",
+  "• /ultracode — 切换当前会话的 ultracode 模式（per-session override 优先于全局）",
+  "  /ultracode off         关闭本会话的 ultracode",
+  "  /ultracode <文本>     启用 ultracode 并把文本作为 prompt 发送",
   "• /config、/settings — Wise 配置入口说明",
   "• /help — 显示本帮助",
   "",

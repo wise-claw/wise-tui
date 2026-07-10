@@ -24,12 +24,32 @@ mock.module("./assistantPromptLayers", () => ({
   })),
 }));
 
+// ultracode 全局开关默认关闭；按测试需要可 override。
+let mockedGlobalUltracodeRaw: string | null = '{"ultracode": false}';
+mock.module("./appSettingsStore", () => ({
+  getAppSetting: mock(async () => mockedGlobalUltracodeRaw),
+  setAppSetting: mock(async () => undefined),
+  WISE_CLAUDE_DEFAULT_SETTINGS_KEY: "wise.claudeDefaultSettings.v1",
+}));
+
+// 反馈神经网默认关闭，避免影响 appendSystemPrompt 断言。
+mock.module("./wiseDefaultConfigStore", () => ({
+  loadSessionFeedbackLoopSettingsFromStore: mock(async () => ({
+    enabled: false,
+    injectHabitsToSystemPrompt: false,
+    injectGlobalRules: false,
+    globalRules: [],
+  })),
+}));
+
 import {
   buildClaudeSpawnExtrasFromAssistantRuntime,
   claudeAllowedToolsFromRuntimeTools,
   claudeSpawnExtrasForNativeSlashCommand,
   compactClaudeSpawnCliExtras,
+  resolveClaudeSpawnExtrasForSession,
 } from "./claudeSpawnExtras";
+import { ULTRACODE_SYSTEM_PROMPT_BLOCK } from "../constants/ultracodeSystemPrompt";
 
 describe("claudeSpawnExtras", () => {
   test("claudeAllowedToolsFromRuntimeTools joins tool names", () => {
@@ -72,5 +92,61 @@ describe("claudeSpawnExtras", () => {
         addDirs: ["/extra"],
       }),
     ).toEqual({ addDirs: ["/extra"] });
+  });
+
+  describe("resolveClaudeSpawnExtrasForSession ultracode merging", () => {
+    const baseSession = {
+      id: "s1",
+      repositoryPath: "/repo/a",
+      repositoryName: "repo",
+    };
+    const baseParams = {
+      session: baseSession,
+      projects: [],
+      repositories: [],
+      preferredProjectId: null,
+      activeAssistantId: null,
+    };
+
+    test("全局关闭 + 未设 override → 不注入", async () => {
+      mockedGlobalUltracodeRaw = '{"ultracode": false}';
+      const extras = await resolveClaudeSpawnExtrasForSession(baseParams);
+      // 仅 assistant runtime 注入；ultracode 不追加
+      if (extras?.appendSystemPrompt) {
+        expect(extras.appendSystemPrompt).not.toContain(ULTRACODE_SYSTEM_PROMPT_BLOCK);
+      }
+    });
+
+    test("全局开启 → 注入 ultracode block", async () => {
+      mockedGlobalUltracodeRaw = '{"ultracode": true}';
+      const extras = await resolveClaudeSpawnExtrasForSession(baseParams);
+      expect(extras?.appendSystemPrompt).toContain(ULTRACODE_SYSTEM_PROMPT_BLOCK);
+      expect(extras?.effort).toBe("max");
+    });
+
+    test("per-session true beats global false → 注入", async () => {
+      mockedGlobalUltracodeRaw = '{"ultracode": false}';
+      const extras = await resolveClaudeSpawnExtrasForSession({
+        ...baseParams,
+        session: { ...baseSession, ultracodeEnabled: true },
+      });
+      expect(extras?.appendSystemPrompt).toContain(ULTRACODE_SYSTEM_PROMPT_BLOCK);
+      expect(extras?.effort).toBe("max");
+    });
+
+    test("per-session false beats global true → 不注入", async () => {
+      mockedGlobalUltracodeRaw = '{"ultracode": true}';
+      const extras = await resolveClaudeSpawnExtrasForSession({
+        ...baseParams,
+        session: { ...baseSession, ultracodeEnabled: false },
+      });
+      expect(extras?.appendSystemPrompt ?? "").not.toContain(ULTRACODE_SYSTEM_PROMPT_BLOCK);
+    });
+
+    test("全局 JSON 读取失败时按关闭处理", async () => {
+      mockedGlobalUltracodeRaw = "{not-json}";
+      const extras = await resolveClaudeSpawnExtrasForSession(baseParams);
+      expect(extras?.appendSystemPrompt ?? "").not.toContain(ULTRACODE_SYSTEM_PROMPT_BLOCK);
+    });
   });
 });

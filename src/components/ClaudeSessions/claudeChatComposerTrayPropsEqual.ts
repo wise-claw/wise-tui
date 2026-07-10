@@ -17,6 +17,7 @@ function sessionComposerTrayKey(session: ClaudeSession): string {
     sessionChatChromeStructureKey(session),
     session.model?.trim() ?? "",
     session.connectionKind ?? "",
+    session.ultracodeEnabled === undefined ? "" : String(session.ultracodeEnabled),
     session.repositoryPath ?? "",
   ].join("\n");
 }
@@ -59,12 +60,14 @@ export function claudeChatComposerTrayPropsEqual(
   if (prev.employeesForDispatchRoute !== next.employeesForDispatchRoute) return false;
   if (prev.draftBucketKey !== next.draftBucketKey) return false;
   if (prev.compactFooterChrome !== next.compactFooterChrome) return false;
+  if (prev.globalUltracodeEnabled !== next.globalUltracodeEnabled) return false;
 
   const callbackKeys = [
     "onExecute",
     "onDispatchExecutionEnvironment",
     "onSessionModelChange",
     "onSessionConnectionKindChange",
+    "onUpdateSessionUltracode",
     "onOpenExecutionEnvironment",
     "onSessionExecutionEngineChange",
     "onUpdatePaneRuntimeOverride",

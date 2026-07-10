@@ -1,5 +1,9 @@
 import type { ClaudeMessage, ClaudeSession, MessagePart } from "../types";
 import { isToolOnlyUserMessage } from "../utils/claudeChatMessageDisplay";
+import {
+  assistantTextJoinedFromParts,
+  shouldStartNewAssistantTextPart,
+} from "../utils/assistantTextParts";
 type ToolUsePart = Extract<MessagePart, { type: "tool_use" }>;
 
 /** 单轮助手消息中 text+reasoning 合计上限，避免流式拼接撑爆主线程内存 */
@@ -167,13 +171,45 @@ export function mergeTextPartsByContainment(existing: string, incoming: string):
   return existing + incoming;
 }
 
-export function mergeAssistantParts(existingParts: MessagePart[], incomingParts: MessagePart[]): MessagePart[] {
+export type MergeAssistantPartsOptions = {
+  /** content_block_start(text) 后首个 delta：另起 text part，对齐 JSONL 多 block。 */
+  startNewTextBlock?: boolean;
+  /** content_block_start(thinking) 后首个 delta：另起 reasoning part。 */
+  startNewReasoningBlock?: boolean;
+};
+
+export function mergeAssistantParts(
+  existingParts: MessagePart[],
+  incomingParts: MessagePart[],
+  options?: MergeAssistantPartsOptions,
+): MessagePart[] {
   const merged = [...existingParts];
+  const incomingTextPartCount = incomingParts.filter((part) => part.type === "text").length;
+  const multiTextIncomingBatch = incomingTextPartCount > 1;
+  let incomingTextOrdinal = 0;
+  let startNewTextBlock = options?.startNewTextBlock === true;
+  let startNewReasoningBlock = options?.startNewReasoningBlock === true;
+
   for (const part of incomingParts) {
     if (part.type === "text") {
+      incomingTextOrdinal += 1;
+      // assistant 快照一次携带多个 text block（常见于 tool 后总结 + 说明点），磁盘 JSONL
+      // 会保留为独立 part，渲染层 buildMergedTextGroups 以 \n\n 拼接。流式 merge 若用
+      // mergeTextPartsByContainment 直接拼接，会把末段/列表压成一段（刷新后段落才清晰）。
       const lastText = merged[merged.length - 1];
-      if (lastText?.type === "text") {
-        merged[merged.length - 1] = { ...lastText, text: mergeTextPartsByContainment(lastText.text, part.text) };
+      const keepSeparateTextBlock =
+        startNewTextBlock
+        || (multiTextIncomingBatch && incomingTextOrdinal > 1)
+        || (lastText?.type === "text"
+          && shouldStartNewAssistantTextPart(lastText.text, part.text));
+      if (startNewTextBlock) startNewTextBlock = false;
+      if (keepSeparateTextBlock) {
+        merged.push(part);
+      } else if (lastText?.type === "text") {
+        merged[merged.length - 1] = {
+          ...lastText,
+          text: mergeTextPartsByContainment(lastText.text, part.text),
+        };
       } else {
         merged.push(part);
       }
@@ -192,7 +228,10 @@ export function mergeAssistantParts(existingParts: MessagePart[], incomingParts:
     }
 
     const lastReason = merged[merged.length - 1];
-    if (lastReason?.type === "reasoning") {
+    if (startNewReasoningBlock) {
+      startNewReasoningBlock = false;
+      merged.push(part);
+    } else if (lastReason?.type === "reasoning") {
       // 与 text 分支对称：thinking 全量重发/重放时 incoming 可能以 existing 开头或相等，
       // 直接拼接会致思考翻倍。用 containment 合并避免重复，正常 thinking_delta 增量走拼接。
       merged[merged.length - 1] = {
@@ -207,7 +246,7 @@ export function mergeAssistantParts(existingParts: MessagePart[], incomingParts:
 }
 
 function textContentFromParts(parts: MessagePart[]): string {
-  return parts.filter((p) => p.type === "text").map((p) => p.text).join("");
+  return assistantTextJoinedFromParts(parts);
 }
 
 function buildAssistantMessage(parts: MessagePart[]): ClaudeMessage {
@@ -263,14 +302,8 @@ export function reconcileResultFullTextParts(opts: {
   // 之间隔着 tool_use/reasoning block，渲染与 result 整轮文本均以 \n\n 分段。无分隔拼接会让
   // 多 text block（intro + tool_use + 总结）前缀匹配失败走 disjoint，致总结尾巴丢失
   // （流式缺尾巴、刷新磁盘态有尾巴 -> 实时与刷新不一致）。
-  const existingText = existingParts
-    .filter((p): p is Extract<MessagePart, { type: "text" }> => p.type === "text")
-    .map((p) => p.text)
-    .join("\n\n");
-  const resultText = resultParts
-    .filter((p): p is Extract<MessagePart, { type: "text" }> => p.type === "text")
-    .map((p) => p.text)
-    .join("\n\n");
+  const existingText = assistantTextJoinedFromParts(existingParts);
+  const resultText = assistantTextJoinedFromParts(resultParts);
   if (!resultText) {
     return [];
   }
@@ -343,11 +376,7 @@ function assistantMessageWithMergedToolParts(
     return mergeToolUseWithUpdate(part, update);
   });
   if (!touched) return null;
-  const textContent = nextParts
-    .filter((p): p is Extract<MessagePart, { type: "text" }> => p.type === "text")
-    .map((p) => p.text)
-    .join("");
-  return { ...message, parts: nextParts, content: textContent };
+  return { ...message, parts: nextParts, content: assistantTextJoinedFromParts(nextParts) };
 }
 
 /** 将 tool_result 更新合并进已有 assistant 消息里对应的 tool_use（按 id）。 */
@@ -412,12 +441,16 @@ export function applyToolResultPartsToSession(session: ClaudeSession, parts: Mes
   return { ...session, messages };
 }
 
-export function appendAssistantStreamParts(session: ClaudeSession, parts: MessagePart[]): ClaudeSession {
+export function appendAssistantStreamParts(
+  session: ClaudeSession,
+  parts: MessagePart[],
+  mergeOptions?: MergeAssistantPartsOptions,
+): ClaudeSession {
   if (parts.length === 0) return session;
   const lastMsg = session.messages[session.messages.length - 1];
   let nextMessages: ClaudeSession["messages"];
   if (lastMsg?.role === "assistant") {
-    const mergedParts = mergeAssistantParts(lastMsg.parts, parts);
+    const mergedParts = mergeAssistantParts(lastMsg.parts, parts, mergeOptions);
     const merged: ClaudeMessage = {
       ...lastMsg,
       parts: mergedParts,

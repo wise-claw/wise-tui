@@ -246,6 +246,48 @@ describe("mergeAssistantParts text containment", () => {
     );
     expect((merged[0] as { text: string }).text).toBe("你好世界");
   });
+
+  test("keeps multiple text blocks from one assistant snapshot as separate parts", () => {
+    const merged = mergeAssistantParts(
+      [{ type: "tool_use", id: "t1", name: "Read", input: {}, status: "completed" }],
+      [
+        { type: "text", text: "## 总结\n\n已完成。" },
+        { type: "text", text: "- 改动一\n- 改动二" },
+      ],
+    );
+    const texts = merged
+      .filter((p): p is Extract<typeof p, { type: "text" }> => p.type === "text")
+      .map((p) => p.text);
+    expect(texts).toEqual(["## 总结\n\n已完成。", "- 改动一\n- 改动二"]);
+  });
+
+  test("multi-text assistant snapshot without prior parts stays separate", () => {
+    const merged = mergeAssistantParts([], [
+      { type: "text", text: "第一段" },
+      { type: "text", text: "第二段" },
+    ]);
+    expect(merged).toHaveLength(2);
+    expect(merged.map((p) => p.type)).toEqual(["text", "text"]);
+  });
+
+  test("startNewTextBlock option keeps next delta as separate part", () => {
+    const merged = mergeAssistantParts(
+      [{ type: "text", text: "第一段。" }],
+      [{ type: "text", text: "## 总结" }],
+      { startNewTextBlock: true },
+    );
+    expect(merged).toHaveLength(2);
+    expect((merged[0] as { text: string }).text).toBe("第一段。");
+    expect((merged[1] as { text: string }).text).toBe("## 总结");
+  });
+
+  test("heuristic splits markdown summary after completed sentence", () => {
+    const merged = mergeAssistantParts(
+      [{ type: "text", text: "工具执行完毕。" }],
+      [{ type: "text", text: "## 改动总结" }],
+    );
+    expect(merged).toHaveLength(2);
+  });
 });
 
 describe("mergeAssistantParts reasoning containment", () => {

@@ -13,6 +13,7 @@ import {
   type PointerEvent,
 } from "react";
 import { runWhenIdle } from "../../utils/deferIdle";
+import { loadGlobalUltracodeEnabled } from "../../services/claudeSpawnExtras";
 import { prefetchModule } from "../../utils/prefetchModule";
 import type {
   ClaudeComposerExecuteBubbleOptions,
@@ -188,6 +189,13 @@ interface Props {
   }) => void | Promise<void>;
   onSessionModelChange: (model: string) => void;
   onSessionConnectionKindChange?: (kind: ClaudeSessionConnectionKind) => void;
+  /**
+   * Per-session ultracode setter（顶层 `(sessionId, next)` 签名，与 connectionKind 对称）。
+   * 多屏下每屏各自 toggle 自己的 session。
+   */
+  onUpdateSessionUltracode?: (sessionId: string, next: boolean | null) => void;
+  /** 全局 ultracode 状态，注入 composer 避免重复读 store。 */
+  globalUltracodeEnabled?: boolean;
   onUpdateRepositoryExecutionEngine?: (
     repositoryId: number,
     engine: SessionExecutionEngine,
@@ -354,6 +362,8 @@ export function ClaudeChatInner({
   onDispatchExecutionEnvironment,
   onSessionModelChange,
   onSessionConnectionKindChange,
+  onUpdateSessionUltracode,
+  globalUltracodeEnabled,
   onUpdateRepositoryExecutionEngine,
   onUpdateEmployeeExecutionEngine,
   codexAvailable = true,
@@ -1246,6 +1256,22 @@ export function ClaudeChatInner({
   }, []);
 
   const [fullTranscriptLoading, setFullTranscriptLoading] = useState(false);
+  // 一次性读全局 ultracode 状态供 composer chip 展示；仅在挂载时读一次，
+  // 全局开关变更不会立刻反映到 chip（与「下次 spawn 才生效」的语义一致）。
+  const [globalUltracodeEnabledState, setGlobalUltracodeEnabled] = useState<boolean | undefined>(
+    globalUltracodeEnabled,
+  );
+  useEffect(() => {
+    if (globalUltracodeEnabledState !== undefined) return;
+    let cancelled = false;
+    void loadGlobalUltracodeEnabled().then((v) => {
+      if (!cancelled) setGlobalUltracodeEnabled(v);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [globalUltracodeEnabledState]);
+  const resolvedGlobalUltracodeEnabled = globalUltracodeEnabled ?? globalUltracodeEnabledState ?? false;
 
   const [notificationRows, setNotificationRows] = useState<WiseInboundMessageRow[]>([]);
   const [notificationLoading, setNotificationLoading] = useState(false);
@@ -1905,6 +1931,8 @@ export function ClaudeChatInner({
               onDispatchExecutionEnvironment={onDispatchExecutionEnvironment}
               onSessionModelChange={onSessionModelChange}
               onSessionConnectionKindChange={onSessionConnectionKindChange}
+              onUpdateSessionUltracode={onUpdateSessionUltracode}
+              globalUltracodeEnabled={resolvedGlobalUltracodeEnabled}
               sessionExecutionEngine={sessionExecutionEngine}
               codexAvailable={codexAvailable}
               cursorAvailable={cursorAvailable}

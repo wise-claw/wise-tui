@@ -11,6 +11,11 @@ import {
 } from "./sessionFeedbackLoopSystemPrompt";
 import { buildFeedbackGlobalRulesSystemPromptBlock } from "../utils/sessionFeedbackGlobalRules";
 import { loadSessionFeedbackLoopSettingsFromStore } from "./wiseDefaultConfigStore";
+import { getAppSetting, WISE_CLAUDE_DEFAULT_SETTINGS_KEY } from "./appSettingsStore";
+import { isSessionUltracodeActive } from "../constants/claudeConnection";
+import { ULTRACODE_SPAWN_CLI_EFFORT } from "../constants/ultracodeEffort";
+import { ULTRACODE_SYSTEM_PROMPT_BLOCK } from "../constants/ultracodeSystemPrompt";
+import { isUltracodeEnabledInSettings } from "../components/DefaultConfigPanel/claudeDefaultSettings";
 import type { ClaudeSession } from "../types";
 import { resolveSessionProjectRepository } from "../utils/claudeConcurrencyGate";
 import type { ProjectItem, Repository } from "../types";
@@ -24,6 +29,8 @@ export interface ClaudeSpawnCliExtras {
   mcpConfigPath?: string;
   strictMcpConfig?: boolean;
   settingSources?: string;
+  /** Claude Code `--effort`（如 ultracode / xhigh）；per-session ultracode 时注入。 */
+  effort?: string;
 }
 
 function isNonEmptyString(v: unknown): v is string {
@@ -46,6 +53,7 @@ export function compactClaudeSpawnCliExtras(
   if (isNonEmptyString(extras.mcpConfigPath)) out.mcpConfigPath = extras.mcpConfigPath.trim();
   if (extras.strictMcpConfig === true) out.strictMcpConfig = true;
   if (isNonEmptyString(extras.settingSources)) out.settingSources = extras.settingSources.trim();
+  if (isNonEmptyString(extras.effort)) out.effort = extras.effort.trim();
   return Object.keys(out).length > 0 ? out : null;
 }
 
@@ -176,12 +184,50 @@ async function mergeFeedbackLoopGlobalRulesIntoSpawnExtras(
 }
 
 /**
+ * 从 `app_settings` 读全局 `claudeDefaultSettings` 文本快照（不一定已保存，仅用于本次 spawn 决策）。
+ * 读取失败时返回空串，与「全局 ultracode 关闭」等价。
+ */
+export async function loadGlobalUltracodeEnabled(): Promise<boolean> {
+  try {
+    const raw = await getAppSetting(WISE_CLAUDE_DEFAULT_SETTINGS_KEY);
+    return isUltracodeEnabledInSettings(raw ?? "");
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Per-session ultracode 合并：当 `isSessionUltracodeActive(session, globalEnabled)` 为 true 时，
+ * 把 `ULTRACODE_SYSTEM_PROMPT_BLOCK` 追加到 `appendSystemPrompt`。
+ *
+ * 优先级：per-session false beats global true（per-session 永远赢），
+ * 由 `isSessionUltracodeActive` 集中处理；本函数仅做副作用合并。
+ */
+async function mergeUltracodeIntoSpawnExtras(
+  base: ClaudeSpawnCliExtras | null,
+  session: Pick<ClaudeSession, "ultracodeEnabled">,
+  globalEnabled: boolean,
+): Promise<ClaudeSpawnCliExtras | null> {
+  if (!isSessionUltracodeActive(session, globalEnabled)) return base;
+  if (!ULTRACODE_SYSTEM_PROMPT_BLOCK) return base;
+  return compactClaudeSpawnCliExtras({
+    ...(base ?? {}),
+    effort: ULTRACODE_SPAWN_CLI_EFFORT,
+    appendSystemPrompt: mergeAppendSystemPromptParts(
+      base?.appendSystemPrompt,
+      ULTRACODE_SYSTEM_PROMPT_BLOCK,
+    ),
+  });
+}
+
+/**
  * 主会话 spawn：按 Cockpit 当前助手 + 会话归属项目/仓库解析 CLI 扩展；
  * 反馈神经网开启且启用注入时，将仓库/会话习惯追加到 `--append-system-prompt`；
- * 全局规则（跨仓库）在 injectGlobalRules 开启时一并注入。
+ * 全局规则（跨仓库）在 injectGlobalRules 开启时一并注入；
+ * ultracode（OMC 多代理编排模式）按 per-session override > 全局开关的优先级注入 system-prompt 块。
  */
 export async function resolveClaudeSpawnExtrasForSession(params: {
-  session: Pick<ClaudeSession, "id" | "repositoryPath" | "repositoryName">;
+  session: Pick<ClaudeSession, "id" | "repositoryPath" | "repositoryName" | "ultracodeEnabled">;
   projects: ProjectItem[];
   repositories: Repository[];
   preferredProjectId: string | null;
@@ -205,5 +251,7 @@ export async function resolveClaudeSpawnExtrasForSession(params: {
   }
   let result = await mergeFeedbackLoopHabitsIntoSpawnExtras(base, params.session);
   result = await mergeFeedbackLoopGlobalRulesIntoSpawnExtras(result);
+  const globalUltracodeEnabled = await loadGlobalUltracodeEnabled();
+  result = await mergeUltracodeIntoSpawnExtras(result, params.session, globalUltracodeEnabled);
   return result;
 }
