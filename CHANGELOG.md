@@ -2,6 +2,121 @@
 
 本项目所有重要变更将记录于此文件。
 
+## [1.3.0] - 2026-07-10
+
+1.3.0 围绕"Ultracode 多代理模式落地、多屏隔离能力成型、外部终端与运行面板体验打磨、Claude 流式装配稳定性"四条主线推进。核心亮点包括：**每条 Claude 会话可独立切换 Ultracode 工作模式（`/ultracode` slash 命令 + composer 紫色 chip）**、**多屏 per-pane 顶栏与按仓库隔离的常用语**、**外部终端按钮右键配置运行指令**、以及 Claude 流式长文段间污染（P0–P9 result 权威对齐 / 段间压缩 / 重复气泡）等十余处稳定性修复。
+
+本版本涵盖 83 个提交（v1.2.1..HEAD），覆盖前端 30+ 文件、Tauri 后端零改动（沿用现有 `--settings` 顶层 `ultracode` 透传路径）。
+
+### ✨ 新功能
+
+#### Ultracode 多代理工作模式
+- **每条 Claude 会话可独立切换 Ultracode 模式**：在 composer 内输入 `/ultracode` 即可为本会话开启或关闭 Ultracode 工作模式（per-session override 优先级高于全局默认）；启用时自动向 Claude 注入 OMC ultracode 工作流 system-prompt（explore → design → parallel verification → synthesis），composer header 出现紫色 `ultracode` chip，1 击关闭。
+- **三种 slash 语法**：
+  - `/ultracode` — 纯切换本会话状态（启用/跟随全局）
+  - `/ultracode off` — 显式关闭（覆盖全局 on 状态）
+  - `/ultracode <prompt>` — 启用本会话并把 `<prompt>` 作为用户消息直接发送
+- **优先级规则**：per-session `false` beats global `true`，per-session `true` beats global `false`；状态落盘到 `tabs.json`，重启后恢复。
+
+#### 多屏 per-pane 顶栏与隔离
+- **每个 pane 拥有独立顶栏**：primary pane 含窗口级按钮（新建会话、文件搜索、设置等），extra pane 仅保留仓库级按钮，避免按钮冗余与状态串扰。
+- **Composer 常用语按仓库隔离**：每个 pane 的快捷栏按当前仓库优先，全局兜底；首次编辑时复制全局条目到当前仓库，避免破坏全局配置；存储键升级为 `wise.composer.commonPhrasesByRepo.v1`，按 `repositoryId` 分桶。
+- **修复多屏下跨 pane 文件路由串读 bug** 共 4 处：第二屏文件搜索透传 `fileRootPath` 避免读到第一屏仓库；primary pane 打开文件不再误卸 extra pane 的编辑器节点；`loadEditorFile` existing 分支校验 `rootPath` 避免跨仓库同名文件串内容；避免 stale target 串 pane。
+
+#### 外部终端可配置运行指令
+- **外部终端按钮右键配置运行指令**：左键沿用「运行」按钮已配置的指令直接打开终端；右键弹出精简 popover 配置，与「运行」按钮共享同一份 `localStorage`（key: `terminal-run-command`），配置修改实时同步两侧。
+- **macOS 新实例强制参数**：Ghostty / Kitty / Alacritty / WezTerm 等终端必须用 `open -na <App> --args <cmd>` 强制开新实例才能接收 `--args`；修复后 CLI 派发自动追加 `-n` 标志。
+- **IPC 参数命名修正**：修复 `macos_open_terminal_with_command` 入参命名与 Python 侧不一致导致的参数丢失问题。
+
+#### 助手模板与会话快捷操作
+- **会话级快捷操作支持左栏弹窗编辑**：从仓库级提升到会话级，归属标签展示具体工作区或仓库名并超长省略，新增可点击图标触发弹窗。
+- **助手模板激活逻辑收敛到 store + hook**：UI 事件源单一来源；模板激活路径与会话快捷操作布局完善。
+- **新增工作区快捷操作添加图标**：标题旁 SVG + 图标 → `WorkspaceQuickActionAddModal`；scope 校验 / pickFolder / retain-scope 复用。
+
+#### 文件 / 编辑器体验升级
+- **文件树支持内联重命名**：直接在树上 F2 / 双击重命名，无需打开文件编辑器。
+- **编辑器顶栏新增按钮、tab 右键菜单支持「在文件树中定位文件」**：快速跳转文件在树中的位置。
+- **新增 ⌘J / Ctrl+J 文件内容搜索快捷键**：与文件搜索并列，编辑器内跨文件搜文本更顺手。
+- **文件打开时与消息列表可共存切换**：通过顶栏 Segmented 在「消息」与「文件」间切换（收起侧边栏图标右边），centerView 状态提升到 pane 层 hook；ClaudeChat 与文件编辑器互不卸载。
+
+#### 运行面板与 Composer
+- **运行面板详情抽屉复用主输入框并按 worker 路由控制请求**：减少 UI 重复，避免 worker 错位。
+- **运行面板折叠时头部显示正在执行数量徽标**：不用展开面板也能知道当前有多少任务在跑。
+- **同一运行报错仅派发一次自动修复**：避免重复弹窗与重复任务。
+- **主会话顶栏展示最近发送的消息并支持一键复制**：常用 prompt 一键复用。
+
+#### 应用内快捷键扩展
+- **新增 ⌘J / Ctrl+J 文件内容搜索**（如上）。
+- **扩展应用内快捷键支持工作区操作**：批量注册新快捷键到快捷键系统。
+- **新增新建会话时迁移旧会话输入框草稿**：避免切换 tab 草稿丢失。
+
+### ⚡ 性能优化
+- **流式装配期间减少重复解析与正则计算**：把会话/工具相关热路径上的解析/正则收敛到模块级缓存或纯函数 helper，避免每次 chunk 到达都跑一次昂贵计算。
+- **Claude 流式 JSONL 装配任务事件索引**：补齐 Claude 流与会话 JSONL 装配单测，回查任务事件 O(1) 定位。
+- **Monaco Git 变更行装饰 hook 单测补齐**：装饰计算移出渲染路径，编辑器滚动更流畅。
+
+### 🐛 问题修复
+
+#### Claude 流式装配稳定性
+- **流式长文段间压缩 bug 修复**：实时接收长文段落粘连、刷新磁盘态才规整的根因=段间距 4× 落差 + chat-prose 触发滞后 + 流式段落剥离无条件压平；三层根因同步修复（`chat-prose` 早触发 + 流式段落保护 + 磁盘态字节级等价对齐）。
+- **合并相邻 text part 渲染**：消除长文段落粘连的最后一段断崖。
+- **修复 Claude 流式消息正文翻倍与 result 文本重复装配**：根因是流式与磁盘重载两套 parts 装配路径分歧；P0–P9 result 权威对齐 reconcile + P5 stale-ref 跨帧竞态 reconcile 前 sync flush + containment 对称守卫 + P1 前缀包含去重 + P2 兜底加固 + P6 tail 前导空白双重换行 + P7 complete 路径 previewRaw 三源污染 + P8 缓冲 result 事件翻倍 + P9 reconcile 多块 disjoint。
+- **修复首发会话 id 迁移致重挂后输入框失焦**：consume 只读不删 + `onSessionTabIdMigrated` 调 `migrateComposerRefocus` 迁到 realSessionId。
+
+#### Composer 派发稳定性
+- **修复 composer 队列 main lane 同帧重复派发**：根因 = `onExecute` 同步翻 store + React 重渲染异步；修法 = `mainLaneDispatchGate` 显式记录「已派但 status 未翻 active」窗口，5s timeout 兜底。
+- **增强 composer 派发稳定性避免失败循环与重置 ref 卡死**：`dispatchFailureTracker`（max3 / 2s 线性退避 / drop）+ `suppressFinalFlush` 防旧 ref 重派绕过退避；`onGiveUp` 兜底 settle。
+- **修复同一帧 setContent 48 帧耗尽 onAfterSet 不调致 pending/resetting ref 永久卡死**（canSend 灰 + 打字吞）：`onGiveUp` 兜底 settle。
+- **防止 ClaudeChat 瞬时卸载导致本地状态丢失**：`panelBelowMessages` 卸载陷阱修复，需提升到 hook 层的本地 `useState` 全部迁移。
+- **发送消息后重新聚焦输入框支持连续输入**：Semi handleSend 在 canSend=false 静默 return + React/Tiptap rAF 窗口；`pendingSetContentRef` + `composerResettingRef` + onMessageSend 优先 React prompt + onAfterSet 兜底算 canSend 四处加固。
+- **将 Claude 错误文案友好化为中文并附原文**：英文透传（Overloaded / rate_limit / 529 / ECONNRESET 等）转中文 + 附原文；`humanizeClaudeError` 纯模块接入 `claudeStreamParser`（系统错误 / 轮次失败兜底）+ `claudeInvocationText`（副本）；不接入 MessageParts `part.error`（工具错误误伤）。
+
+#### 路由 / 焦点 / 视觉
+- **修复 monaco 跨 pane model 共享 bug**：两屏各自 README.md 内容串读 + 关闭联动根因 = 非 TS 文件 `editorPath` 缺 rootPath 哈希，@monaco-editor/react 按 path 复用同一 model；修为 `monacoUriForRepositoryPath(tab.relativePath, tab.rootPath)`。
+- **修复多屏 splitter drag 不收敛**：用户拖 splitter 改 pane 尺寸时画面不停抖动；本轮最小加固（ratio 0.0005 同值跳过）+ 静态检查全过。
+- **修复 Git 树节点箭头悬停时被隐藏的问题**：CSS 规则多余闭合括号断行与问号类选择器未转义导致 hover 失效。
+- **修复 AuthorPanelTabs / DefaultConfigPanel 样式问题**：包括左栏会话 tab 滚动、配置项布局、antd notification 降级链路补全。
+- **修复外部终端 popover 保存只弹一次提示**：popover 保存逻辑修正。
+
+### 🧹 重构与精简
+- **Claude 会话 hook 状态隔离梳理**：把会话级 hook 与全局 hook 拆分，避免 effect 互相污染。
+- **拆分仓库文件编辑器 hook 与面板**：文件编辑器相关 hook 与面板组件从 ClaudeChat 中独立成模块。
+- **收敛命令面板与文件树弹出层状态隔离**：把命令面板、文件树、消息列表三处弹出层状态统一管理。
+- **抽离 ClaudeChat 会话特性面板状态**：状态归属清晰。
+- **收敛 diff 模式展开目录状态到 hook**：diff mode 展开目录状态从组件级提升到 hook。
+- **收敛 composer 执行态忙碌判定**：从散布在三处的判定集中到一处 helper。
+- **收敛常用语面板与默认指令字段展示逻辑**：两处展示入口合并。
+- **收敛 markdown 展示源归一化逻辑**：markdown 渲染管线与归一化逻辑抽离成纯函数。
+- **收敛终端派发与助手模板激活逻辑**：两处 store 事件合并。
+- **收敛助手 UI 事件至 store**：UI 事件源单一来源。
+- **移除冗余右栏与检查器模块**：合并到默认配置存储。
+- **`tabsStore.normalizePersistedSession` 导出**：外部可显式调用持久化校验；增加 `ultracodeEnabled` boolean 防御。
+
+### 🧪 测试
+- **加固流式段落粘连修复的边界与磁盘字节级等价覆盖**：参数化 `looksLikeLongFormChatMarkdown` 多种段落形态，确保磁盘态与流式态字节级等价。
+- **补齐 Claude 流与会话 JSONL 装配单测**：覆盖 P0–P9 result 权威对齐 + 缓冲 result 翻倍 + reconcile 多块 disjoint。
+- **补齐 Claude 流与会话 JSONL 工具单测**：覆盖工具调用工具名解析、参数边界、错误码。
+- **补齐 Monaco Git 变更行装饰 hook 单测**：装饰计算函数纯函数化。
+- **补齐多屏槽位工具函数单测**：per-pane 槽位增删改查覆盖。
+- **补齐 Claude 会话状态与孤儿 markdown 单测**：orphan markdown 工具函数覆盖。
+- **补充 Monaco TS 环境与导入导航单测**：TS 环境模块解析覆盖。
+- **补充 composer 区域竞态回归测试**：send 时序加固 + main lane 派发。
+- **完善助手模板激活与会话任务目录测试**：模板激活路径 + 任务目录写入。
+
+### 📦 升级说明
+- **存储键新增**：`wise.composer.commonPhrasesByRepo.v1`（按 `repositoryId` 分桶）。老用户首次编辑常用语时自动从全局键复制条目到当前仓库，无感升级。
+- **`tabs.json` 新增字段**：`ClaudeSession.ultracodeEnabled?: boolean`。`normalizePersistedSession` 对非 boolean 值静默剥除，老数据无影响。
+- **Tauri 配置文件**：升级后 desktop bundle 元数据（`productName` / `identifier` 不变，仅 `version` 升级到 `1.3.0`）。
+- **无 IPC / Tauri command 改动**：本次 83 条 commit 仅涉及前端；后端依赖 `build_claude_spawn_settings_payload` 顶层键透传，已支持 `ultracode` 字段。
+- **手动验证清单**（`bun run tauri:dev`）：
+  1. 全局 ultracode=false → 新会话发问 → 流式响应无 chip；
+  2. 输入 `/ultracode` → composer 顶部出现紫色 `ultracode` chip；
+  3. 输入 `/ultracode 帮我调研 X` → chip 出现 + `<prompt>` 作为用户消息正常发送；
+  4. 输入 `/ultracode off` → chip 消失，per-session override 写 false；
+  5. 全局 ultracode=true + per-session override=false → 不注入 ultracode（per-session 优先）；
+  6. 关闭并重开 app → per-session override 状态从 `tabs.json` 恢复；
+  7. 多屏：每个 pane 独立 toggle，互不污染。
+
 ## [1.2.1] - 2026-06-30
 
 1.2.1 聚焦语音听写体验收尾与一项 dev 构建回归修复。核心改动包括：**手动模式段尾停顿时长改为弹窗可配（默认 1s）**、**移除录音转需求功能**及其偏好开关，以及修复导致 `Importing a module script failed` 的 4 处 TS 错误（流水线解构未导出字段、未使用变量、`ComposerSpeechEngine` 枚举不匹配比较）。
