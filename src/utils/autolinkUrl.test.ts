@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { HTTP_URL_BODY_RE, normalizeAutolinkUrl } from "./autolinkUrl";
+import { HTTP_URL_BODY_RE, normalizeAutolinkUrl, plainTextToLinkedHtml } from "./autolinkUrl";
 
 describe("normalizeAutolinkUrl", () => {
   test("strips trailing CJK and fullwidth period after path", () => {
@@ -21,6 +21,21 @@ describe("normalizeAutolinkUrl", () => {
     expect(normalizeAutolinkUrl("https://example.com/a/b?q=1&x=2")).toBe(
       "https://example.com/a/b?q=1&x=2",
     );
+  });
+});
+
+describe("plainTextToLinkedHtml", () => {
+  test("wraps http(s) URLs in clickable anchors", () => {
+    const html = plainTextToLinkedHtml("链接: https://code.alipay.com/ant-party/ant-party-web/pull_requests/2758");
+    expect(html).toContain('href="https://code.alipay.com/ant-party/ant-party-web/pull_requests/2758"');
+    expect(html).toContain('class="app-markdown-link"');
+    expect(html).toContain("链接:");
+  });
+
+  test("escapes HTML before linkifying", () => {
+    const html = plainTextToLinkedHtml("<script>https://example.com</script>");
+    expect(html).not.toContain("<script>");
+    expect(html).toContain("&lt;script&gt;");
   });
 });
 

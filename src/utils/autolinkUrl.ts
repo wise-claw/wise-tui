@@ -53,3 +53,29 @@ export function isValidHttpUrl(url: string): boolean {
     return false;
   }
 }
+
+function escapeHtmlPlain(text: string): string {
+  return text
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#39;");
+}
+
+/** 对已 HTML 转义的纯文本片段做 http(s) 自动链接（供 pre / 代码围栏复用）。 */
+export function linkifyEscapedPlain(escaped: string): string {
+  HTTP_URL_BODY_RE.lastIndex = 0;
+  return escaped.replace(HTTP_URL_BODY_RE, (raw) => {
+    const href = normalizeAutolinkUrl(raw);
+    if (!isValidHttpUrl(href)) return raw;
+    const suffix = raw.slice(href.length);
+    const link = `<a href="${escapeHtmlPlain(href)}" rel="noopener noreferrer" class="app-markdown-link">${escapeHtmlPlain(href)}</a>`;
+    return suffix ? `${link}${escapeHtmlPlain(suffix)}` : link;
+  });
+}
+
+/** 纯文本 → 转义 + 可点击 http(s) 链接的 HTML。 */
+export function plainTextToLinkedHtml(text: string): string {
+  return linkifyEscapedPlain(escapeHtmlPlain(text));
+}

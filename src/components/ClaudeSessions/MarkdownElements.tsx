@@ -1,10 +1,11 @@
-import { memo, useCallback, useLayoutEffect, useMemo, useRef, useState, type ComponentPropsWithoutRef, type ReactNode } from "react";
+import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, type ComponentPropsWithoutRef, type ReactNode } from "react";
 import { message } from "antd";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
-import { isSafeExternalHref, openExternalUrl } from "../../services/openExternal";
+import { attachExternalLinkDelegation, isSafeExternalHref, openExternalUrl } from "../../services/openExternal";
+import { plainTextToLinkedHtml } from "../../utils/autolinkUrl";
 import { highlightMarkdownCode, formatMarkdownCodeLanguageLabel } from "../../utils/markdownCodeHighlight";
-import { planFencedBlockDisplay, prepareMarkdownForDisplay } from "../../utils/markdownRenderPipeline";
+import { isProseFenceLanguage, planFencedBlockDisplay, prepareMarkdownForDisplay } from "../../utils/markdownRenderPipeline";
 import { renderMermaidInContainer } from "../../utils/mermaidRender";
 import "./markdownCodeHighlight.css";
 
@@ -93,10 +94,22 @@ const MarkdownFencedCodeBlock = memo(function MarkdownFencedCodeBlock({
   wrapperClassName?: string;
 }) {
   const [wrap, setWrap] = useState(false);
+  const preRef = useRef<HTMLPreElement>(null);
+  const isProseFence = isProseFenceLanguage(lang);
   const highlighted = useMemo(() => {
-    if (streaming || !text.trim()) return null;
+    if (streaming || !text.trim() || isProseFence) return null;
     return highlightMarkdownCode(text, lang);
-  }, [lang, streaming, text]);
+  }, [isProseFence, lang, streaming, text]);
+  const linkifiedHtml = useMemo(() => {
+    if (streaming || !isProseFence || !text.trim()) return null;
+    return plainTextToLinkedHtml(text);
+  }, [isProseFence, streaming, text]);
+
+  useEffect(() => {
+    const el = preRef.current;
+    if (!el || streaming || !linkifiedHtml) return;
+    return attachExternalLinkDelegation(el);
+  }, [linkifiedHtml, streaming]);
 
   const codeClassName = highlighted?.resolvedLang
     ? `hljs language-${highlighted.resolvedLang}`
@@ -125,8 +138,13 @@ const MarkdownFencedCodeBlock = memo(function MarkdownFencedCodeBlock({
           <MarkdownCopyButton text={text} variant="head" />
         </div>
       </div>
-      <pre {...preProps}>
-        {highlighted ? (
+      <pre ref={preRef} {...preProps}>
+        {linkifiedHtml ? (
+          <code
+            className={`${className || "hljs"} app-markdown-code--prose-linkified`}
+            dangerouslySetInnerHTML={{ __html: linkifiedHtml }}
+          />
+        ) : highlighted ? (
           <code className={codeClassName} dangerouslySetInnerHTML={{ __html: highlighted.html }} />
         ) : (
           <code className={className}>{codeChildren}</code>
