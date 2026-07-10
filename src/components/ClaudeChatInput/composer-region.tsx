@@ -98,11 +98,6 @@ import { ContextCompactProgressRing } from "./ContextCompactProgressRing";
 import { useContextBreakdown } from "../../hooks/useContextBreakdown";
 import { ComposerVoiceSettingsPanel } from "./ComposerVoiceSettingsPanel";
 import { ComposerRuntimeSettingsTrigger } from "./ComposerRuntimeSettingsTrigger";
-import { UltracodeChip } from "./UltracodeChip";
-import {
-  isSessionUltracodeActive,
-  isTabUltracodeOverride,
-} from "../../constants/claudeConnection";
 import { ComposerModelPicker } from "./ComposerModelPicker";
 import {
   ComposerVoiceDictationBubble,
@@ -265,7 +260,7 @@ interface ComposerInnerProps {
    * Per-session ultracode setter（composer 顶层 prop）：
    * - `null` → 清除 override（回到 follow global）；
    * - `boolean` → 显式覆盖。
-   * 不存在时 composer 不显示 ultracode chip 与不响应 `/ultracode` 拦截。
+   * 不存在时 composer 不响应 `/ultracode` 拦截。
    */
   onUpdateSessionUltracode?: (next: boolean | null) => void;
   /**
@@ -3020,23 +3015,6 @@ function ComposerInner({
             iconOnly={compactFooterChrome || composerFooterChrome.composerFooterTriggerDisplayMode === "icon"}
           />
         ) : null}
-        {/* Per-session ultracode chip：仅在 Claude 引擎且实际激活时渲染。点击关闭（清除 override 或写 false）。 */}
-        {sessionExecutionEngine === "claude" && onUpdateSessionUltracode ? (
-          <UltracodeChip
-            active={isSessionUltracodeActive(session, globalUltracodeEnabled)}
-            hasTabOverride={isTabUltracodeOverride(session)}
-            onToggle={() => {
-              // 当前若为 per-session 显式 true → 切到 false（清除全局也关掉）。
-              // 当前若为 follow global true → 切到 per-session false（保留全局但本会话显式关）。
-              // 当前若为 follow global false 且 override 未设 → chip 不会渲染（active=false）。
-              const sessionOverrideOn = isTabUltracodeOverride(session)
-                ? session.ultracodeEnabled === true
-                : false;
-              onUpdateSessionUltracode(sessionOverrideOn ? null : false);
-            }}
-            disabled={isSessionBusy}
-          />
-        ) : null}
         {menuItem}
       </div>
     ),
@@ -3070,8 +3048,6 @@ function ComposerInner({
       paneRuntimeOverride,
       onUpdatePaneRuntimeOverride,
       compactFooterChrome,
-      onUpdateSessionUltracode,
-      globalUltracodeEnabled,
     ],
   );
 
