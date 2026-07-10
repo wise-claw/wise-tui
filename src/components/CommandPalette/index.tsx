@@ -1,14 +1,19 @@
 import { useCallback, useEffect, useRef, useState, memo } from "react";
 import { Input, Spin, TreeSelect, message } from "antd";
-import { FileOutlined, FolderOutlined, SearchOutlined } from "@ant-design/icons";
+import { FolderOutlined, SearchOutlined } from "@ant-design/icons";
+import { ExplorerTreeFileIcon } from "../GitPanel/explorerTreeChrome";
 import { openRepositoryFileWithStoredPreference } from "../../services/openWorkspaceWithPreference";
 import {
   listRepositoryExplorerChildren,
   searchRepositoryFileContents,
   searchRepositoryFiles,
-  type RepositoryFileContentMatch,
 } from "../../services/repositoryFiles";
 import { highlightMatchSegments } from "./highlightMatch";
+import {
+  countContentFileGroupHits,
+  groupContentMatchesByFile,
+  type ContentFileGroup,
+} from "./groupContentMatchesByFile";
 import { commandPalettePropsEqual } from "./commandPalettePropsEqual";
 import "./index.css";
 
@@ -30,23 +35,16 @@ interface Props {
   onOpenInApp: (relativePath: string, options?: { line?: number | null }) => void;
 }
 
+/** content 模式每个文件最多展示的匹配预览行数。 */
+const MAX_CONTENT_HITS_PER_FILE = 12;
+
 interface FilenameResult {
   kind: "filename";
   path: string;
   display: string;
 }
 
-interface ContentResult {
-  kind: "content";
-  path: string;
-  line: number;
-  preview: string;
-  matchStart?: number | null;
-  matchEnd?: number | null;
-  display: string;
-}
-
-type SearchResult = FilenameResult | ContentResult;
+type SearchResult = FilenameResult | ContentFileGroup;
 
 const SEARCH_MODE_TABS: { mode: CommandPaletteSearchMode; label: string }[] = [
   { mode: "filename", label: "文件名" },
@@ -103,16 +101,17 @@ function splitFilePath(filePath: string): { name: string; dir: string } {
   return { name: normalized.slice(idx + 1), dir: normalized.slice(0, idx) };
 }
 
-function toContentResults(matches: RepositoryFileContentMatch[]): ContentResult[] {
-  return matches.map((match) => ({
-    kind: "content" as const,
-    path: match.path,
-    line: match.line,
-    preview: match.preview,
-    matchStart: match.matchStart ?? null,
-    matchEnd: match.matchEnd ?? null,
-    display: `${match.path}:${match.line}`,
-  }));
+function formatSearchResultCount(results: SearchResult[]): string {
+  if (results.length === 0) return "";
+  const contentGroups = results.filter((item): item is ContentFileGroup => item.kind === "content-file");
+  if (contentGroups.length !== results.length) {
+    return `${results.length} 项结果`;
+  }
+  const hitCount = countContentFileGroupHits(contentGroups);
+  if (hitCount === contentGroups.length) {
+    return `${contentGroups.length} 个文件`;
+  }
+  return `${contentGroups.length} 个文件 · ${hitCount} 处匹配`;
 }
 
 /** 目录范围选择树节点（仅目录，懒加载子目录）。 */
@@ -209,29 +208,57 @@ export const CommandPalette = memo(function CommandPalette({
     [loadScopeChildren],
   );
 
-  const openSearchResultInApp = useCallback(
-    (item: SearchResult) => {
+  const openContentFileInApp = useCallback(
+    (path: string, line?: number) => {
       if (!repositoryPath) return;
       onClose();
-      onOpenInApp(item.path, item.kind === "content" ? { line: item.line } : undefined);
+      onOpenInApp(path, line != null ? { line } : undefined);
     },
     [repositoryPath, onClose, onOpenInApp],
   );
 
-  const openSearchResultExternal = useCallback(
-    (item: SearchResult) => {
+  const openContentFileExternal = useCallback(
+    (path: string, line?: number) => {
       if (!repositoryPath) return;
       onClose();
       void openRepositoryFileWithStoredPreference(
         repositoryPath,
-        item.path,
+        path,
         undefined,
-        item.kind === "content" ? { line: item.line } : undefined,
+        line != null ? { line } : undefined,
       ).catch((e) => {
         message.error(e instanceof Error ? e.message : String(e));
       });
     },
     [repositoryPath, onClose],
+  );
+
+  const openSearchResultInApp = useCallback(
+    (item: SearchResult) => {
+      if (!repositoryPath) return;
+      if (item.kind === "content-file") {
+        openContentFileInApp(item.path, item.hits[0]?.line);
+        return;
+      }
+      onClose();
+      onOpenInApp(item.path);
+    },
+    [repositoryPath, onClose, onOpenInApp, openContentFileInApp],
+  );
+
+  const openSearchResultExternal = useCallback(
+    (item: SearchResult) => {
+      if (!repositoryPath) return;
+      if (item.kind === "content-file") {
+        openContentFileExternal(item.path, item.hits[0]?.line);
+        return;
+      }
+      onClose();
+      void openRepositoryFileWithStoredPreference(repositoryPath, item.path).catch((e) => {
+        message.error(e instanceof Error ? e.message : String(e));
+      });
+    },
+    [repositoryPath, onClose, openContentFileExternal],
   );
 
   useEffect(() => {
@@ -305,7 +332,7 @@ export const CommandPalette = memo(function CommandPalette({
             scopeDir || undefined,
           );
           if (cancelled || requestId !== searchRequestIdRef.current) return;
-          setResults(toContentResults(matches));
+          setResults(groupContentMatchesByFile(matches));
         }
       } catch {
         if (!cancelled && requestId === searchRequestIdRef.current) setResults([]);
@@ -424,44 +451,82 @@ export const CommandPalette = memo(function CommandPalette({
           </div>
         ) : results.length > 0 ? (
           <div className="app-command-palette-list">
-            {results.map((item, index) => (
+            {results.map((item, index) => {
+              const isContentFile = item.kind === "content-file";
+              const fileParts = isContentFile ? splitFilePath(item.path) : null;
+              const visibleHits = isContentFile ? item.hits.slice(0, MAX_CONTENT_HITS_PER_FILE) : [];
+              const overflowHitCount = isContentFile
+                ? Math.max(0, item.hits.length - visibleHits.length)
+                : 0;
+              return (
               <div
-                key={item.kind === "content" ? `${item.path}:${item.line}` : item.path}
-                className={`app-command-palette-item ${index === activeIndex ? "app-command-palette-item--active" : ""}`}
+                key={isContentFile ? item.path : item.path}
+                className={`app-command-palette-item${isContentFile ? " app-command-palette-item--content" : ""} ${index === activeIndex ? "app-command-palette-item--active" : ""}`}
                 onClick={() => {
                   openSearchResultInApp(item);
                 }}
                 onMouseEnter={() => setActiveIndex(index)}
               >
-                  {item.kind === "content" ? (
+                  {isContentFile && fileParts ? (
                     <div className="app-command-palette-item-content">
                       <div className="app-command-palette-item-head">
-                        <FileOutlined className="app-command-palette-item-icon" />
-                        <span className="app-command-palette-item-path">
-                          <span className="app-command-palette-item-name">{splitFilePath(item.path).name}</span>
-                          <span className="app-command-palette-item-dir"> &mdash; {splitFilePath(item.path).dir}</span>
-                          <span className="app-command-palette-item-line">:{item.line}</span>
+                        <div className="app-command-palette-item-head-left">
+                          <ExplorerTreeFileIcon
+                            fileName={fileParts.name}
+                            className="app-command-palette-item-file-icon"
+                          />
+                          <span className="app-command-palette-item-name">{fileParts.name}</span>
+                        </div>
+                        <span className="app-command-palette-item-head-right">
+                          {fileParts.dir ? (
+                            <span className="app-command-palette-item-dir">{fileParts.dir}</span>
+                          ) : null}
+                          {item.hits.length > 1 ? (
+                            <span className="app-command-palette-item-hit-count">{item.hits.length} 处</span>
+                          ) : null}
                         </span>
                       </div>
-                      {item.preview ? (
-                        <div className="app-command-palette-item-preview">
-                          <PreviewWithHighlight
-                            preview={item.preview}
-                            matchStart={item.matchStart}
-                            matchEnd={item.matchEnd}
-                            query={query}
-                          />
-                        </div>
-                      ) : null}
+                      <div className="app-command-palette-item-hits">
+                        {visibleHits.map((hit) => (
+                          <div
+                            key={hit.line}
+                            className="app-command-palette-item-preview-row"
+                            onClick={(event) => {
+                              event.stopPropagation();
+                              openContentFileInApp(item.path, hit.line);
+                            }}
+                          >
+                            <span className="app-command-palette-item-preview-line">:{hit.line}</span>
+                            <span className="app-command-palette-item-preview-text">
+                              <PreviewWithHighlight
+                                preview={hit.preview}
+                                matchStart={hit.matchStart}
+                                matchEnd={hit.matchEnd}
+                                query={query}
+                              />
+                            </span>
+                          </div>
+                        ))}
+                        {overflowHitCount > 0 ? (
+                          <div className="app-command-palette-item-preview-more">
+                            还有 {overflowHitCount} 处匹配未显示
+                          </div>
+                        ) : null}
+                      </div>
                     </div>
-                  ) : (
+                  ) : item.kind === "filename" ? (
                     <span className="app-command-palette-item-label">
+                      <ExplorerTreeFileIcon
+                        fileName={splitFilePath(item.path).name}
+                        className="app-command-palette-item-file-icon"
+                      />
                       <span className="app-command-palette-item-name">{splitFilePath(item.path).name}</span>
                       {splitFilePath(item.path).dir ? <span className="app-command-palette-item-dir"> &mdash; {splitFilePath(item.path).dir}</span> : null}
                     </span>
-                  )}
+                  ) : null}
               </div>
-            ))}
+            );
+            })}
           </div>
         ) : query ? (
           <div className="app-command-palette-empty">
@@ -473,7 +538,7 @@ export const CommandPalette = memo(function CommandPalette({
         <div className="app-command-palette-footer">
           <CommandPaletteShortcutHints />
           <span className="app-command-palette-footer-count">
-            {loading && query ? "搜索中…" : results.length > 0 ? `${results.length} 项结果` : ""}
+            {loading && query ? "搜索中…" : formatSearchResultCount(results)}
           </span>
         </div>
       </div>

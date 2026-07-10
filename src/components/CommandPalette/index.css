@@ -18,7 +18,7 @@
 .app-command-palette {
   display: flex;
   flex-direction: column;
-  width: 560px;
+  width: 600px;
   max-height: 420px;
   background: var(--ant-color-bg-container);
   border-radius: 8px;
@@ -49,7 +49,7 @@
 .app-command-palette-tab {
   position: relative;
   margin: 0;
-  padding: 7px 12px;
+  padding: 6px 12px;
   border: none;
   border-bottom: 2px solid transparent;
   border-radius: 0;
@@ -57,7 +57,7 @@
   cursor: pointer;
   font-size: 13px;
   font-weight: 400;
-  line-height: 1.25;
+  line-height: 1.2;
   color: var(--ant-color-text-secondary);
   transition:
     color 0.15s ease,
@@ -93,7 +93,7 @@
   min-width: 160px;
   max-width: 260px;
   align-self: center;
-  margin: 4px 0;
+  margin: 2px 0;
 }
 
 .app-command-palette-scope .ant-select {
@@ -106,7 +106,7 @@
 }
 
 .app-command-palette-input {
-  padding: 5px 12px;
+  padding: 4px 12px;
   border-bottom: 1px solid var(--ant-color-border-secondary);
   font-size: 13px;
   background: var(--ant-color-bg-container);
@@ -130,7 +130,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 16px;
+  padding: 12px;
   color: var(--ant-color-text-tertiary);
 }
 
@@ -141,44 +141,6 @@
   padding: 2px 0;
 }
 
-.app-command-palette-item-content {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
-}
-
-.app-command-palette-item-head {
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  min-width: 0;
-}
-
-.app-command-palette-item-icon {
-  flex-shrink: 0;
-  color: var(--ant-color-text-tertiary);
-  font-size: 11px;
-}
-
-.app-command-palette-item-path {
-  overflow: hidden;
-  display: flex;
-  align-items: baseline;
-  gap: 0;
-  min-width: 0;
-  font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
-}
-
-.app-command-palette-item-preview {
-  padding-left: 17px;
-  font-size: 11px;
-  color: var(--ant-color-text-secondary);
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
 .app-command-palette-item {
   padding: 4px 12px;
   cursor: pointer;
@@ -186,7 +148,10 @@
   color: var(--ant-color-text);
   transition: background 0.12s;
   user-select: none;
-  font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
+}
+
+.app-command-palette-item--content {
+  padding: 6px 12px;
 }
 
 .app-command-palette-item:hover,
@@ -198,14 +163,189 @@
   border-left: 2px solid var(--ant-color-primary);
 }
 
+.app-command-palette-item-content {
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  min-width: 0;
+}
+
+.app-command-palette-item-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  min-width: 0;
+  line-height: 1.3;
+  font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
+}
+
+.app-command-palette-item-head-left {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  min-width: 0;
+  flex: 0 1 auto;
+}
+
+.app-command-palette-item-icon {
+  flex-shrink: 0;
+  color: var(--ant-color-text-description);
+  font-size: 12px;
+  line-height: 1;
+}
+
+/* 与仓库文件树一致的扩展名图标（codicon + Seti 配色） */
+.app-command-palette-item-file-icon.explorer-tree-file-icon {
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  line-height: 1;
+}
+
+.app-command-palette .explorer-tree-file-icon--react {
+  color: color-mix(in srgb, #149eca 88%, var(--ant-color-text-secondary));
+}
+
+.app-command-palette .explorer-tree-file-icon--react .explorer-tree-react-icon {
+  display: block;
+  width: 16px;
+  height: 16px;
+}
+
+.app-command-palette .explorer-tree-file-icon--docker {
+  color: #2496ed;
+}
+
+.app-command-palette .explorer-tree-file-icon--ts {
+  color: #3178c6;
+}
+
+.app-command-palette .explorer-tree-file-icon--js,
+.app-command-palette .explorer-tree-file-icon--json {
+  color: #cb9f17;
+}
+
+.app-command-palette .explorer-tree-file-icon--markdown {
+  color: #519aba;
+}
+
+.app-command-palette .explorer-tree-file-icon--media {
+  color: #7e57c2;
+}
+
+.app-command-palette .explorer-tree-file-icon--zip {
+  color: #d4a574;
+}
+
+.app-command-palette .explorer-tree-file-icon--pdf {
+  color: #e53935;
+}
+
+.app-command-palette .explorer-tree-file-icon--generic,
+.app-command-palette .explorer-tree-file-icon--plain,
+.app-command-palette .explorer-tree-file-icon--lock {
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-command-palette-item--active .explorer-tree-file-icon--generic,
+.app-command-palette-item--active .explorer-tree-file-icon--plain,
+.app-command-palette-item--active .explorer-tree-file-icon--lock {
+  color: var(--ant-color-primary);
+}
+
+.app-command-palette-item-head-right {
+  display: flex;
+  align-items: baseline;
+  gap: 0;
+  min-width: 0;
+  flex: 0 1 58%;
+  justify-content: flex-end;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-command-palette-item-hit-count {
+  flex-shrink: 0;
+  margin-left: 6px;
+  padding: 0 5px;
+  font-size: 10px;
+  font-weight: 500;
+  line-height: 16px;
+  color: var(--ant-color-text-description);
+  background: var(--ant-color-fill-tertiary);
+  border-radius: 10px;
+  font-variant-numeric: tabular-nums;
+}
+
+.app-command-palette-item-hits {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin-left: 22px;
+}
+
+.app-command-palette-item-preview-row {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  min-width: 0;
+  padding: 3px 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ant-color-text);
+  background: var(--ant-color-fill-quaternary);
+  border-radius: 4px;
+  cursor: pointer;
+  font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
+}
+
+.app-command-palette-item-preview-row:hover {
+  background: var(--ant-color-fill-content);
+}
+
+.app-command-palette-item--active .app-command-palette-item-preview-row {
+  background: var(--ant-color-bg-container);
+  box-shadow: inset 0 0 0 1px var(--ant-color-border-secondary);
+}
+
+.app-command-palette-item-preview-line {
+  flex-shrink: 0;
+  color: var(--ant-color-text-description);
+  font-size: 11px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+}
+
+.app-command-palette-item-preview-text {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-command-palette-item-preview-more {
+  padding: 0 8px;
+  font-size: 11px;
+  line-height: 1.35;
+  color: var(--ant-color-text-tertiary);
+}
+
 .app-command-palette-item-label {
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
   display: flex;
-  align-items: baseline;
-  gap: 0;
+  align-items: center;
+  gap: 6px;
   min-width: 0;
+  font-family: var(--font-mono, ui-monospace, "SF Mono", Menlo, monospace);
 }
 
 .app-command-palette-item-name {
@@ -214,25 +354,31 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-weight: 600;
+  font-size: 13px;
+  color: var(--ant-color-text);
 }
 
 .app-command-palette-item-dir {
-  flex-shrink: 0;
-  color: var(--ant-color-text-tertiary);
+  flex-shrink: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ant-color-text-description);
   font-weight: 400;
   font-size: 11px;
-  white-space: nowrap;
 }
 
 .app-command-palette-item-line {
   flex-shrink: 0;
-  color: var(--ant-color-text-quaternary, var(--ant-color-text-tertiary));
-  font-weight: 400;
+  color: var(--ant-color-text-description);
+  font-weight: 500;
   font-size: 11px;
+  font-variant-numeric: tabular-nums;
 }
 
 .app-command-palette-empty {
-  padding: 16px;
+  padding: 12px;
   text-align: center;
   color: var(--ant-color-text-tertiary);
   font-size: 12px;
@@ -245,7 +391,7 @@
   align-items: center;
   justify-content: space-between;
   gap: 8px;
-  padding: 4px 12px;
+  padding: 3px 10px;
   border-top: 1px solid var(--ant-color-border-secondary);
   background: var(--ant-color-fill-quaternary);
   flex: 0 0 auto;
@@ -254,7 +400,7 @@
 .app-command-palette-shortcuts {
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
   flex-shrink: 0;
   pointer-events: none;
   user-select: none;
@@ -263,44 +409,44 @@
 .app-command-palette-shortcut {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
+  gap: 3px;
   white-space: nowrap;
 }
 
 .app-command-palette-shortcut__keys {
   display: inline-block;
   min-width: 1.2em;
-  padding: 0 4px;
+  padding: 0 3px;
   font-size: 10px;
   font-weight: 500;
-  line-height: 16px;
+  line-height: 15px;
   font-family: inherit;
   text-align: center;
   color: var(--ant-color-text-secondary);
   background: var(--ant-color-bg-container);
   border: 1px solid var(--ant-color-border-secondary);
-  border-radius: 4px;
+  border-radius: 3px;
 }
 
 .app-command-palette-shortcut__label {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--ant-color-text-tertiary);
 }
 
 .app-command-palette-footer-count {
-  font-size: 11px;
+  font-size: 10px;
   color: var(--ant-color-text-tertiary);
   white-space: nowrap;
 }
 
-.app-command-palette-item-preview mark {
-  background: color-mix(in srgb, var(--ant-color-primary) 22%, var(--ant-color-bg-container));
+.app-command-palette-item-preview-row mark {
+  background: color-mix(in srgb, var(--ant-color-primary) 24%, transparent);
   color: var(--ant-color-primary, #1677ff);
   border-radius: 2px;
-  padding: 0 2px;
+  padding: 0 1px;
   font-weight: 600;
 }
 
-.app-command-palette-item--active .app-command-palette-item-preview mark {
-  background: color-mix(in srgb, var(--ant-color-primary) 32%, var(--ant-color-bg-container));
+.app-command-palette-item--active .app-command-palette-item-preview-row mark {
+  background: color-mix(in srgb, var(--ant-color-primary) 32%, transparent);
 }
