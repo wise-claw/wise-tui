@@ -80,12 +80,26 @@ export function gitStatusSnapshotEqual(
   for (let i = 0; i < prev.staged.length; i += 1) {
     const a = prev.staged[i]!;
     const b = next.staged[i]!;
-    if (a.path !== b.path || a.status !== b.status) return false;
+    if (
+      a.path !== b.path ||
+      a.status !== b.status ||
+      a.additions !== b.additions ||
+      a.deletions !== b.deletions
+    ) {
+      return false;
+    }
   }
   for (let i = 0; i < prev.unstaged.length; i += 1) {
     const a = prev.unstaged[i]!;
     const b = next.unstaged[i]!;
-    if (a.path !== b.path || a.status !== b.status) return false;
+    if (
+      a.path !== b.path ||
+      a.status !== b.status ||
+      a.additions !== b.additions ||
+      a.deletions !== b.deletions
+    ) {
+      return false;
+    }
   }
   return true;
 }

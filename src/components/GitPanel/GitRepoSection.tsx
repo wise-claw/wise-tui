@@ -23,6 +23,7 @@ import { openRepositoryRemoteInBrowser } from "../../services/openRepositoryRemo
 import { aiCommitPullPushRepository, commitPullPushRepository, isGitMergeConflictError } from "../../services/gitCommitPullPush";
 import { refreshGitRepositoryStats } from "../../stores/gitRepositoryStatsStore";
 import { refreshGitRepositoryExplorerStatus } from "../../stores/gitRepositoryExplorerStatusStore";
+import { WISE_GIT_REPOSITORY_STATUS_REFRESH, type GitRepositoryStatusRefreshDetail } from "../../constants/gitUiEvents";
 import type { GitStatusResponse } from "../../types";
 import { normalizeConventionalCommitMessage } from "../../utils/conventionalCommitMessage";
 import { DiffMode } from "./DiffMode";
@@ -422,6 +423,18 @@ function GitRepoSectionInner({
       safeUnlistenPromise(unlisten);
     };
   }, [loadStatus, registerRefresh, repositoryPath, silentRefreshForRegistry]);
+
+  useEffect(() => {
+    const onPanelRefresh = (event: Event) => {
+      const path = (event as CustomEvent<GitRepositoryStatusRefreshDetail>).detail?.path?.trim();
+      if (path && path !== repositoryPath) return;
+      void loadStatus({ silent: true });
+    };
+    window.addEventListener(WISE_GIT_REPOSITORY_STATUS_REFRESH, onPanelRefresh);
+    return () => {
+      window.removeEventListener(WISE_GIT_REPOSITORY_STATUS_REFRESH, onPanelRefresh);
+    };
+  }, [loadStatus, repositoryPath]);
 
   const runAction = useCallback(
     async (action: string, fn: () => Promise<void>) => {

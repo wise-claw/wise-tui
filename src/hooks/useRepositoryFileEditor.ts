@@ -30,7 +30,7 @@ import {
 } from "../utils/monacoLargeFile";
 import { safeUnlisten } from "../utils/safeTauriUnlisten";
 import { setRepositoryEditorDirtyPaths } from "../stores/repositoryEditorDirtyPathsStore";
-import { refreshGitRepositoryExplorerStatus } from "../stores/gitRepositoryExplorerStatusStore";
+import { refreshGitRepositoryUi } from "../services/gitRepositoryUiRefresh";
 
 /** 外部变更触发磁盘重读的合并节流间隔（毫秒）。git-changed、窗口聚焦、轮询共用。 */
 const EDITOR_EXTERNAL_REFRESH_THROTTLE_MS = 300;
@@ -978,7 +978,7 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
             : t,
         ),
       );
-      refreshGitRepositoryExplorerStatus(rootPath);
+      refreshGitRepositoryUi(rootPath);
     } catch (error) {
       console.error("Failed to save file:", error);
       message.error(`保存失败：${fileEditorActivePath}`);

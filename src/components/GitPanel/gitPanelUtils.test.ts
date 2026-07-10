@@ -36,6 +36,27 @@ describe("gitStatusSnapshotEqual", () => {
       }),
     ).toBe(false);
   });
+
+  it("detects per-file line stat changes for the same path and status", () => {
+    const status: GitStatusResponse = {
+      staged: [],
+      unstaged: [{ path: "a.ts", status: "M", additions: 1, deletions: 0 }],
+      branch: "main",
+      additions: 1,
+      deletions: 0,
+      ahead: 0,
+      behind: 0,
+      upstream: null,
+    };
+    expect(
+      gitStatusSnapshotEqual(status, {
+        ...status,
+        unstaged: [{ path: "a.ts", status: "M", additions: 3, deletions: 1 }],
+        additions: 3,
+        deletions: 1,
+      }),
+    ).toBe(false);
+  });
 });
 
 describe("gitStatusHeaderSnapshotEqual", () => {

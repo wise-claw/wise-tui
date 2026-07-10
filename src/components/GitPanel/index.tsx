@@ -23,6 +23,7 @@ import { aiCommitPullPushRepository, commitPullPushRepository, isGitMergeConflic
 import { openRepositoryRemoteInBrowser } from "../../services/openRepositoryRemote";
 import { refreshGitRepositoryStats } from "../../stores/gitRepositoryStatsStore";
 import { refreshGitRepositoryExplorerStatus } from "../../stores/gitRepositoryExplorerStatusStore";
+import { WISE_GIT_REPOSITORY_STATUS_REFRESH, type GitRepositoryStatusRefreshDetail } from "../../constants/gitUiEvents";
 import type { GitStatusResponse } from "../../types";
 import { normalizeConventionalCommitMessage } from "../../utils/conventionalCommitMessage";
 import { runGitSyncAction, type GitSyncActionKind } from "./gitSyncActionRunner";
@@ -136,6 +137,7 @@ function GitSingleRepoPanel({
   const watcherRefreshTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const syncOpsInFlightRef = useRef(0);
   const pendingSilentRefreshRef = useRef(false);
+  const pendingSilentStatusRefreshRef = useRef(false);
   const statusRef = useRef<GitStatusResponse | null>(null);
   const statusLoadInFlightRef = useRef<Promise<void> | null>(null);
   const lastStatusLoadedAtRef = useRef(0);
@@ -152,15 +154,19 @@ function GitSingleRepoPanel({
     [onOpenFile, repositoryPath],
   );
 
-  const loadStatus = useCallback(async (opts?: { silent?: boolean }) => {
+  const loadStatus = useCallback(async (opts?: { silent?: boolean; force?: boolean }) => {
     if (!repositoryPath) return;
     const silent = opts?.silent ?? false;
+    const force = opts?.force ?? false;
     if (silent) {
       if (statusLoadInFlightRef.current) {
-        await statusLoadInFlightRef.current;
+        pendingSilentStatusRefreshRef.current = true;
         return;
       }
-      if (Date.now() - lastStatusLoadedAtRef.current < STATUS_SILENT_MIN_INTERVAL_MS) {
+      if (
+        !force &&
+        Date.now() - lastStatusLoadedAtRef.current < STATUS_SILENT_MIN_INTERVAL_MS
+      ) {
         return;
       }
     } else if (statusLoadInFlightRef.current) {
@@ -172,7 +178,7 @@ function GitSingleRepoPanel({
         setLoading((prev) => ({ ...prev, status: true }));
       }
       try {
-        const warm = consumeWarmGitStatus(repositoryPath);
+        const warm = silent ? null : consumeWarmGitStatus(repositoryPath);
         const result = warm ? await warm : await gitStatus(repositoryPath);
         const apply = () => {
           if (gitStatusSnapshotEqual(statusRef.current, result)) {
@@ -216,6 +222,10 @@ function GitSingleRepoPanel({
     } finally {
       if (statusLoadInFlightRef.current === run) {
         statusLoadInFlightRef.current = null;
+      }
+      if (pendingSilentStatusRefreshRef.current) {
+        pendingSilentStatusRefreshRef.current = false;
+        void loadStatus({ silent: true });
       }
     }
   }, [repositoryPath]);
@@ -288,6 +298,19 @@ function GitSingleRepoPanel({
       }
       safeUnlistenPromise(unlisten);
       void stopGitWatcher().catch(() => { });
+    };
+  }, [repositoryPath, loadStatus]);
+
+  useEffect(() => {
+    if (!repositoryPath) return;
+    const onPanelRefresh = (event: Event) => {
+      const path = (event as CustomEvent<GitRepositoryStatusRefreshDetail>).detail?.path?.trim();
+      if (path && path !== repositoryPath) return;
+      void loadStatus({ silent: true, force: true });
+    };
+    window.addEventListener(WISE_GIT_REPOSITORY_STATUS_REFRESH, onPanelRefresh);
+    return () => {
+      window.removeEventListener(WISE_GIT_REPOSITORY_STATUS_REFRESH, onPanelRefresh);
     };
   }, [repositoryPath, loadStatus]);
 
