@@ -1,5 +1,5 @@
 import { DeleteOutlined, EditOutlined, PlusOutlined } from "@ant-design/icons";
-import { Button, Checkbox, Input, Segmented, Spin, Tag, Typography } from "antd";
+import { Button, Checkbox, Input, Spin, Typography } from "antd";
 import type { InputRef } from "antd";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useWorkspaceTodos } from "../../hooks/useWorkspaceTodos";
@@ -7,21 +7,14 @@ import {
   createWorkspaceTodoItem,
   formatWorkspaceTodoDueLabel,
   isWorkspaceTodoOverdue,
-  type WorkspaceTodoDisplayItem,
-  type WorkspaceTodoScope,
+  type WorkspaceTodoItem,
 } from "../../types/workspaceTodos";
-import { scopeItemsFromDisplay } from "../../utils/workspaceTodoDisplayItems";
 import "./WorkspaceTodosPanel.css";
 
 export type WorkspaceTodosController = ReturnType<typeof useWorkspaceTodos>;
 
 export interface WorkspaceTodosEditorProps {
-  projectId: string | null;
-  repositoryId: number | null;
   todos?: WorkspaceTodosController;
-  /** 无当前工作区/仓库时的占位文案 */
-  emptyScopeHint?: string;
-  showScopeTag?: boolean;
   showCompletedToggle?: boolean;
   showCompleted?: boolean;
   onShowCompletedChange?: (next: boolean) => void;
@@ -30,17 +23,15 @@ export interface WorkspaceTodosEditorProps {
 }
 
 interface TodoRowProps {
-  item: WorkspaceTodoDisplayItem;
-  showScopeTag: boolean;
-  onToggle: (item: WorkspaceTodoDisplayItem) => void;
-  onTitleChange: (item: WorkspaceTodoDisplayItem, title: string) => void;
-  onDelete: (item: WorkspaceTodoDisplayItem) => void;
+  item: WorkspaceTodoItem;
+  onToggle: (item: WorkspaceTodoItem) => void;
+  onTitleChange: (item: WorkspaceTodoItem, title: string) => void;
+  onDelete: (item: WorkspaceTodoItem) => void;
 }
 
 function todoRowPropsEqual(prev: TodoRowProps, next: TodoRowProps): boolean {
   return (
     prev.item === next.item &&
-    prev.showScopeTag === next.showScopeTag &&
     prev.onToggle === next.onToggle &&
     prev.onTitleChange === next.onTitleChange &&
     prev.onDelete === next.onDelete
@@ -49,7 +40,6 @@ function todoRowPropsEqual(prev: TodoRowProps, next: TodoRowProps): boolean {
 
 const TodoRow = memo(function TodoRow({
   item,
-  showScopeTag,
   onToggle,
   onTitleChange,
   onDelete,
@@ -68,13 +58,9 @@ const TodoRow = memo(function TodoRow({
     if (next !== item.title) onTitleChange(item, next);
   };
 
-  const gridClass = showScopeTag
-    ? "app-workspace-todos-panel__row"
-    : "app-workspace-todos-panel__row app-workspace-todos-panel__row--no-scope";
-
   return (
     <li
-      className={`${gridClass}${editing ? " app-workspace-todos-panel__row--editing" : ""}${item.completed ? " app-workspace-todos-panel__row--done" : ""}${overdue ? " app-workspace-todos-panel__row--overdue" : ""}`}
+      className={`app-workspace-todos-panel__row app-workspace-todos-panel__row--no-scope${editing ? " app-workspace-todos-panel__row--editing" : ""}${item.completed ? " app-workspace-todos-panel__row--done" : ""}${overdue ? " app-workspace-todos-panel__row--overdue" : ""}`}
     >
       <Checkbox
         className="app-workspace-todos-panel__check"
@@ -103,11 +89,6 @@ const TodoRow = memo(function TodoRow({
           <span className="app-workspace-todos-panel__due">{formatWorkspaceTodoDueLabel(item.dueAt)}</span>
         ) : null}
       </div>
-      {showScopeTag ? (
-        <Tag variant="filled" className="app-workspace-todos-panel__scope-tag">
-          {item.scope === "project" ? "工作区" : "仓库"}
-        </Tag>
-      ) : null}
       <div className="app-workspace-todos-panel__row-actions">
         {!editing ? (
           <Button
@@ -136,27 +117,23 @@ const TodoRow = memo(function TodoRow({
 
 interface WorkspaceTodosComposerProps {
   disabled: boolean;
-  scopeOptions: Array<{ label: string; value: WorkspaceTodoScope }>;
-  defaultScope: WorkspaceTodoScope;
   focusAddToken: number;
-  onAdd: (title: string, scope: WorkspaceTodoScope) => void;
+  onAdd: (title: string) => void;
 }
 
 interface WorkspaceTodosListProps {
-  activeItems: WorkspaceTodoDisplayItem[];
-  completedItems: WorkspaceTodoDisplayItem[];
+  activeItems: WorkspaceTodoItem[];
+  completedItems: WorkspaceTodoItem[];
   showCompleted: boolean;
-  showScopeTag: boolean;
-  onToggle: (item: WorkspaceTodoDisplayItem) => void;
-  onTitleChange: (item: WorkspaceTodoDisplayItem, title: string) => void;
-  onDelete: (item: WorkspaceTodoDisplayItem) => void;
+  onToggle: (item: WorkspaceTodoItem) => void;
+  onTitleChange: (item: WorkspaceTodoItem, title: string) => void;
+  onDelete: (item: WorkspaceTodoItem) => void;
 }
 
 const WorkspaceTodosList = memo(function WorkspaceTodosList({
   activeItems,
   completedItems,
   showCompleted,
-  showScopeTag,
   onToggle,
   onTitleChange,
   onDelete,
@@ -170,9 +147,8 @@ const WorkspaceTodosList = memo(function WorkspaceTodosList({
       ) : null}
       {activeItems.map((item) => (
         <TodoRow
-          key={`${item.scope}:${item.id}`}
+          key={item.id}
           item={item}
-          showScopeTag={showScopeTag}
           onToggle={onToggle}
           onTitleChange={onTitleChange}
           onDelete={onDelete}
@@ -181,9 +157,8 @@ const WorkspaceTodosList = memo(function WorkspaceTodosList({
       {showCompleted
         ? completedItems.map((item) => (
             <TodoRow
-              key={`${item.scope}:${item.id}`}
+              key={item.id}
               item={item}
-              showScopeTag={showScopeTag}
               onToggle={onToggle}
               onTitleChange={onTitleChange}
               onDelete={onDelete}
@@ -196,18 +171,11 @@ const WorkspaceTodosList = memo(function WorkspaceTodosList({
 
 const WorkspaceTodosComposer = memo(function WorkspaceTodosComposer({
   disabled,
-  scopeOptions,
-  defaultScope,
   focusAddToken,
   onAdd,
 }: WorkspaceTodosComposerProps) {
-  const [newScope, setNewScope] = useState<WorkspaceTodoScope>(defaultScope);
   const [draftTitle, setDraftTitle] = useState("");
   const addInputRef = useRef<InputRef>(null);
-
-  useEffect(() => {
-    setNewScope(defaultScope);
-  }, [defaultScope]);
 
   useEffect(() => {
     if (!focusAddToken || disabled) return;
@@ -215,30 +183,19 @@ const WorkspaceTodosComposer = memo(function WorkspaceTodosComposer({
     return () => window.clearTimeout(timer);
   }, [disabled, focusAddToken]);
 
-  const resolvedScope = scopeOptions.length > 1 ? newScope : (scopeOptions[0]?.value ?? defaultScope);
-
   const commit = useCallback(
     (refocus: boolean) => {
       const title = draftTitle.trim();
       if (!title || disabled) return;
-      onAdd(title, resolvedScope);
+      onAdd(title);
       setDraftTitle("");
       if (refocus) addInputRef.current?.focus();
     },
-    [disabled, draftTitle, onAdd, resolvedScope],
+    [disabled, draftTitle, onAdd],
   );
 
   return (
     <div className="app-workspace-todos-panel__composer">
-      {scopeOptions.length > 1 ? (
-        <Segmented
-          size="small"
-          className="app-workspace-todos-panel__scope-pick"
-          value={newScope}
-          options={scopeOptions}
-          onChange={(value) => setNewScope(value as WorkspaceTodoScope)}
-        />
-      ) : null}
       <Input
         ref={addInputRef}
         size="small"
@@ -266,83 +223,58 @@ const WorkspaceTodosComposer = memo(function WorkspaceTodosComposer({
 });
 
 export const WorkspaceTodosEditor = memo(function WorkspaceTodosEditor({
-  projectId,
-  repositoryId,
   todos: todosProp,
-  emptyScopeHint = "请先在左侧选择工作区或仓库",
-  showScopeTag: showScopeTagProp,
   showCompletedToggle = true,
   showCompleted: showCompletedProp,
   onShowCompletedChange,
   focusAddToken = 0,
 }: WorkspaceTodosEditorProps) {
-  const todosInternal = useWorkspaceTodos({
-    projectId,
-    repositoryId,
-    enabled: todosProp == null,
-  });
+  const todosInternal = useWorkspaceTodos({ enabled: todosProp == null });
   const todos = todosProp ?? todosInternal;
-  const displayItemsRef = useRef(todos.displayItems);
-  const setItemsForScopeRef = useRef(todos.setItemsForScope);
-  displayItemsRef.current = todos.displayItems;
-  setItemsForScopeRef.current = todos.setItemsForScope;
+  const itemsRef = useRef(todos.items);
+  const setItemsRef = useRef(todos.setItems);
+  itemsRef.current = todos.items;
+  setItemsRef.current = todos.setItems;
 
   const [showCompletedInternal, setShowCompletedInternal] = useState(false);
   const showCompleted = showCompletedProp ?? showCompletedInternal;
   const setShowCompleted = onShowCompletedChange ?? setShowCompletedInternal;
 
-  const allowProjectScope = Boolean(projectId?.trim());
-  const allowRepositoryScope = repositoryId != null;
-  const defaultNewScope: WorkspaceTodoScope = allowRepositoryScope ? "repository" : "project";
-  const showScopeTag =
-    showScopeTagProp ?? (allowProjectScope && allowRepositoryScope);
-
-  const newScopeOptions = useMemo(
-    () =>
-      [
-        allowProjectScope ? { label: "工作区", value: "project" as const } : null,
-        allowRepositoryScope ? { label: "仓库", value: "repository" as const } : null,
-      ].filter((row): row is { label: string; value: WorkspaceTodoScope } => row != null),
-    [allowProjectScope, allowRepositoryScope],
-  );
-
   const { activeItems, completedItems } = useMemo(() => {
-    const active: WorkspaceTodoDisplayItem[] = [];
-    const completed: WorkspaceTodoDisplayItem[] = [];
-    for (const item of todos.displayItems) {
+    const active: WorkspaceTodoItem[] = [];
+    const completed: WorkspaceTodoItem[] = [];
+    for (const item of todos.items) {
       if (item.completed) completed.push(item);
       else active.push(item);
     }
     return { activeItems: active, completedItems: completed };
-  }, [todos.displayItems]);
+  }, [todos.items]);
 
-  const addTodo = useCallback((title: string, scope: WorkspaceTodoScope) => {
+  const addTodo = useCallback((title: string) => {
     const item = createWorkspaceTodoItem(title);
-    const scopeRows = scopeItemsFromDisplay(displayItemsRef.current, scope);
-    setItemsForScopeRef.current(scope, [...scopeRows, item]);
+    setItemsRef.current([...itemsRef.current, item]);
   }, []);
 
-  const toggleTodo = useCallback((item: WorkspaceTodoDisplayItem) => {
+  const toggleTodo = useCallback((item: WorkspaceTodoItem) => {
     const now = Date.now();
-    const scopeRows = scopeItemsFromDisplay(displayItemsRef.current, item.scope).map((row) =>
-      row.id === item.id ? { ...row, completed: !row.completed, updatedAt: now } : row,
+    setItemsRef.current(
+      itemsRef.current.map((row) =>
+        row.id === item.id ? { ...row, completed: !row.completed, updatedAt: now } : row,
+      ),
     );
-    setItemsForScopeRef.current(item.scope, scopeRows);
   }, []);
 
-  const updateTitle = useCallback((item: WorkspaceTodoDisplayItem, title: string) => {
+  const updateTitle = useCallback((item: WorkspaceTodoItem, title: string) => {
     const now = Date.now();
-    const scopeRows = scopeItemsFromDisplay(displayItemsRef.current, item.scope).map((row) =>
-      row.id === item.id ? { ...row, title, updatedAt: now } : row,
+    setItemsRef.current(
+      itemsRef.current.map((row) =>
+        row.id === item.id ? { ...row, title, updatedAt: now } : row,
+      ),
     );
-    setItemsForScopeRef.current(item.scope, scopeRows);
   }, []);
 
-  const deleteTodo = useCallback((item: WorkspaceTodoDisplayItem) => {
-    const scopeRows = scopeItemsFromDisplay(displayItemsRef.current, item.scope).filter(
-      (row) => row.id !== item.id,
-    );
-    setItemsForScopeRef.current(item.scope, scopeRows);
+  const deleteTodo = useCallback((item: WorkspaceTodoItem) => {
+    setItemsRef.current(itemsRef.current.filter((row) => row.id !== item.id));
   }, []);
 
   const completedToggle =
@@ -367,14 +299,6 @@ export const WorkspaceTodosEditor = memo(function WorkspaceTodosEditor({
     );
   }
 
-  if (!todos.hasScope) {
-    return (
-      <div className="app-workspace-todos-panel__list-empty">
-        <Typography.Text type="secondary">{emptyScopeHint}</Typography.Text>
-      </div>
-    );
-  }
-
   return (
     <>
       {completedToggle}
@@ -382,7 +306,6 @@ export const WorkspaceTodosEditor = memo(function WorkspaceTodosEditor({
         activeItems={activeItems}
         completedItems={completedItems}
         showCompleted={showCompleted}
-        showScopeTag={showScopeTag}
         onToggle={toggleTodo}
         onTitleChange={updateTitle}
         onDelete={deleteTodo}
@@ -390,8 +313,6 @@ export const WorkspaceTodosEditor = memo(function WorkspaceTodosEditor({
 
       <WorkspaceTodosComposer
         disabled={!todos.hasScope}
-        scopeOptions={newScopeOptions}
-        defaultScope={defaultNewScope}
         focusAddToken={focusAddToken}
         onAdd={addTodo}
       />

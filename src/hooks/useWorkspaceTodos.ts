@@ -1,17 +1,13 @@
 import { message } from "antd";
 import { startTransition, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type {
-  WorkspaceTodoDisplayItem,
-  WorkspaceTodoItem,
-  WorkspaceTodoScope,
-} from "../types/workspaceTodos";
-import { dispatchWorkspaceTodosChanged, WISE_WORKSPACE_TODOS_CHANGED } from "../constants/workspaceTodosEvents";
-import { reconcileWorkspaceTodoDisplayItems } from "../utils/workspaceTodoDisplayItems";
+import type { WorkspaceTodoItem } from "../types/workspaceTodos";
 import {
-  loadProjectWorkspaceTodos,
-  loadRepositoryWorkspaceTodos,
-  saveProjectWorkspaceTodos,
-  saveRepositoryWorkspaceTodos,
+  dispatchWorkspaceTodosChanged,
+  WISE_WORKSPACE_TODOS_CHANGED,
+} from "../constants/workspaceTodosEvents";
+import {
+  loadGlobalWorkspaceTodos,
+  saveGlobalWorkspaceTodos,
 } from "../services/workspaceTodosStore";
 
 const PERSIST_DEBOUNCE_MS = 480;
@@ -20,73 +16,39 @@ function persistErrorText(error: unknown): string {
   return error instanceof Error ? error.message : "待办事项保存失败";
 }
 
-export function shouldRefreshWorkspaceTodosOnChanged(
-  detail: { projectId?: string | null; repositoryId?: number | null } | undefined,
-  projectId: string | null,
-  repositoryId: number | null,
-): boolean {
-  if (!detail) return false;
-  const pid = projectId?.trim() ?? null;
-  if (detail.projectId != null && detail.projectId === pid) return true;
-  return detail.repositoryId != null && repositoryId != null && detail.repositoryId === repositoryId;
-}
-
 export function shouldReloadWorkspaceTodosOnChanged(
   detail:
     | {
-        projectId?: string | null;
-        repositoryId?: number | null;
         incompleteCount?: number;
         reloadItems?: boolean;
       }
     | undefined,
-  projectId: string | null,
-  repositoryId: number | null,
 ): boolean {
-  if (!shouldRefreshWorkspaceTodosOnChanged(detail, projectId, repositoryId)) return false;
-  if (detail?.reloadItems === false) return false;
-  if (detail?.reloadItems === true) return true;
-  if (typeof detail?.incompleteCount === "number") return false;
+  if (!detail) return false;
+  if (detail.reloadItems === false) return false;
+  if (detail.reloadItems === true) return true;
+  if (typeof detail.incompleteCount === "number") return false;
   return true;
 }
 
 export interface UseWorkspaceTodosInput {
-  projectId: string | null;
-  repositoryId: number | null;
   /** 为 false 时不加载/持久化（编辑器已由父级注入 todos 时使用） */
   enabled?: boolean;
 }
 
-export function useWorkspaceTodos({
-  projectId,
-  repositoryId,
-  enabled = true,
-}: UseWorkspaceTodosInput) {
-  const [projectItems, setProjectItems] = useState<WorkspaceTodoItem[]>([]);
-  const [repositoryItems, setRepositoryItems] = useState<WorkspaceTodoItem[]>([]);
+export function useWorkspaceTodos({ enabled = true }: UseWorkspaceTodosInput = {}) {
+  const [items, setInternalItems] = useState<WorkspaceTodoItem[]>([]);
   const [loading, setLoading] = useState(true);
 
-  const projectItemsRef = useRef(projectItems);
-  const repositoryItemsRef = useRef(repositoryItems);
-  const persistTimersRef = useRef<{
-    project: ReturnType<typeof setTimeout> | null;
-    repository: ReturnType<typeof setTimeout> | null;
-  }>({ project: null, repository: null });
-  const pendingPersistItemsRef = useRef<{
-    project: WorkspaceTodoItem[] | null;
-    repository: WorkspaceTodoItem[] | null;
-  }>({ project: null, repository: null });
-
-  projectItemsRef.current = projectItems;
-  repositoryItemsRef.current = repositoryItems;
+  const persistTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const pendingPersistItemsRef = useRef<WorkspaceTodoItem[] | null>(null);
 
   const loadGenerationRef = useRef(0);
   const refreshDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const refresh = useCallback(async () => {
     if (!enabled) {
-      setProjectItems([]);
-      setRepositoryItems([]);
+      setInternalItems([]);
       setLoading(false);
       return;
     }
@@ -94,23 +56,15 @@ export function useWorkspaceTodos({
     loadGenerationRef.current = generation;
     setLoading(true);
     try {
-      const [projectPayload, repositoryPayload] = await Promise.all([
-        projectId?.trim()
-          ? loadProjectWorkspaceTodos(projectId)
-          : Promise.resolve({ version: 1 as const, items: [] }),
-        repositoryId != null
-          ? loadRepositoryWorkspaceTodos(repositoryId)
-          : Promise.resolve({ version: 1 as const, items: [] }),
-      ]);
+      const payload = await loadGlobalWorkspaceTodos();
       if (generation !== loadGenerationRef.current) return;
-      setProjectItems(projectPayload.items);
-      setRepositoryItems(repositoryPayload.items);
+      setInternalItems(payload.items);
     } catch (error) {
       if (generation === loadGenerationRef.current) message.error(persistErrorText(error));
     } finally {
       if (generation === loadGenerationRef.current) setLoading(false);
     }
-  }, [enabled, projectId, repositoryId]);
+  }, [enabled]);
 
   useEffect(() => {
     void refresh();
@@ -124,13 +78,11 @@ export function useWorkspaceTodos({
     const onChanged = (event: Event) => {
       const detail = (
         event as CustomEvent<{
-          projectId?: string | null;
-          repositoryId?: number | null;
           incompleteCount?: number;
           reloadItems?: boolean;
         }>
       ).detail;
-      if (!shouldReloadWorkspaceTodosOnChanged(detail, projectId, repositoryId)) return;
+      if (!shouldReloadWorkspaceTodosOnChanged(detail)) return;
       if (refreshDebounceRef.current) clearTimeout(refreshDebounceRef.current);
       refreshDebounceRef.current = setTimeout(() => {
         refreshDebounceRef.current = null;
@@ -143,151 +95,71 @@ export function useWorkspaceTodos({
       refreshDebounceRef.current = null;
       window.removeEventListener(WISE_WORKSPACE_TODOS_CHANGED, onChanged);
     };
-  }, [enabled, projectId, repositoryId, refresh]);
+  }, [enabled, refresh]);
 
-  const displayItemsPrevRef = useRef<WorkspaceTodoDisplayItem[]>([]);
+  const flushPersist = useCallback(async (itemsToSave: WorkspaceTodoItem[]) => {
+    if (persistTimerRef.current) {
+      clearTimeout(persistTimerRef.current);
+      persistTimerRef.current = null;
+    }
+    pendingPersistItemsRef.current = null;
+    if (!enabled) return false;
+    try {
+      await saveGlobalWorkspaceTodos(itemsToSave);
+      return true;
+    } catch (error) {
+      message.error(persistErrorText(error));
+      return false;
+    }
+  }, [enabled]);
 
-  const displayItems = useMemo(() => {
-    const next = reconcileWorkspaceTodoDisplayItems(
-      displayItemsPrevRef.current,
-      projectId,
-      repositoryId,
-      projectItems,
-      repositoryItems,
-    );
-    displayItemsPrevRef.current = next;
-    return next;
-  }, [projectId, repositoryId, projectItems, repositoryItems]);
-
-  const clearPendingPersist = useCallback((scope: WorkspaceTodoScope) => {
-    pendingPersistItemsRef.current[scope] = null;
-  }, []);
-
-  const flushPersist = useCallback(
-    async (scope: WorkspaceTodoScope, items: WorkspaceTodoItem[]) => {
-      const timers = persistTimersRef.current;
-      if (scope === "project") {
-        if (timers.project) clearTimeout(timers.project);
-        timers.project = null;
-        clearPendingPersist("project");
-        const pid = projectId?.trim();
-        if (!pid) return false;
-        try {
-          await saveProjectWorkspaceTodos(pid, items);
-          return true;
-        } catch (error) {
-          message.error(persistErrorText(error));
-          return false;
-        }
-      }
-      if (timers.repository) clearTimeout(timers.repository);
-      timers.repository = null;
-      clearPendingPersist("repository");
-      if (repositoryId == null) return false;
-      try {
-        await saveRepositoryWorkspaceTodos(repositoryId, items);
-        return true;
-      } catch (error) {
-        message.error(persistErrorText(error));
-        return false;
-      }
-    },
-    [clearPendingPersist, projectId, repositoryId],
-  );
-
-  const schedulePersist = useCallback(
-    (scope: WorkspaceTodoScope, items: WorkspaceTodoItem[]) => {
-      const timers = persistTimersRef.current;
-      pendingPersistItemsRef.current[scope] = items;
-      const run = () => {
-        void flushPersist(scope, items);
-      };
-      if (scope === "project") {
-        if (timers.project) clearTimeout(timers.project);
-        timers.project = setTimeout(() => {
-          timers.project = null;
-          run();
-        }, PERSIST_DEBOUNCE_MS);
-        return;
-      }
-      if (timers.repository) clearTimeout(timers.repository);
-      timers.repository = setTimeout(() => {
-        timers.repository = null;
-        run();
-      }, PERSIST_DEBOUNCE_MS);
-    },
-    [flushPersist],
-  );
+  const schedulePersist = useCallback((itemsToSave: WorkspaceTodoItem[]) => {
+    pendingPersistItemsRef.current = itemsToSave;
+    if (persistTimerRef.current) clearTimeout(persistTimerRef.current);
+    persistTimerRef.current = setTimeout(() => {
+      persistTimerRef.current = null;
+      const pending = pendingPersistItemsRef.current;
+      if (pending) void flushPersist(pending);
+    }, PERSIST_DEBOUNCE_MS);
+  }, [flushPersist]);
 
   useEffect(() => {
     if (!enabled) return;
     return () => {
-      const timers = persistTimersRef.current;
-      const pending = pendingPersistItemsRef.current;
-      if (timers.project) {
-        clearTimeout(timers.project);
-        timers.project = null;
-        if (pending.project) {
-          void flushPersist("project", pending.project);
-        }
-      }
-      if (timers.repository) {
-        clearTimeout(timers.repository);
-        timers.repository = null;
-        if (pending.repository) {
-          void flushPersist("repository", pending.repository);
+      if (persistTimerRef.current) {
+        clearTimeout(persistTimerRef.current);
+        persistTimerRef.current = null;
+        if (pendingPersistItemsRef.current) {
+          void flushPersist(pendingPersistItemsRef.current);
         }
       }
     };
   }, [enabled, flushPersist]);
 
-  const setItemsForScope = useCallback(
-    (scope: WorkspaceTodoScope, items: WorkspaceTodoItem[]) => {
+  const setItems = useCallback(
+    (next: WorkspaceTodoItem[]) => {
       if (!enabled) return;
-      const incompleteCount = items.reduce((n, item) => (item.completed ? n : n + 1), 0);
-      if (scope === "project") {
-        startTransition(() => {
-          setProjectItems(items);
-        });
-        schedulePersist("project", items);
-        const pid = projectId?.trim();
-        if (pid) {
-          dispatchWorkspaceTodosChanged({
-            projectId: pid,
-            repositoryId: null,
-            incompleteCount,
-            reloadItems: false,
-          });
-        }
-        return;
-      }
+      const incompleteCount = next.reduce((n, item) => (item.completed ? n : n + 1), 0);
       startTransition(() => {
-        setRepositoryItems(items);
+        setInternalItems(next);
       });
-      schedulePersist("repository", items);
-      if (repositoryId != null) {
-        dispatchWorkspaceTodosChanged({
-          projectId: null,
-          repositoryId,
-          incompleteCount,
-          reloadItems: false,
-        });
-      }
+      schedulePersist(next);
+      dispatchWorkspaceTodosChanged({
+        incompleteCount,
+        reloadItems: false,
+      });
     },
-    [enabled, projectId, repositoryId, schedulePersist],
+    [enabled, schedulePersist],
   );
-
-  const hasScope =
-    enabled && (Boolean(projectId?.trim()) || repositoryId != null);
 
   return useMemo(
     () => ({
       loading,
-      hasScope,
-      displayItems,
-      setItemsForScope,
+      hasScope: enabled,
+      items,
+      setItems,
       refresh,
     }),
-    [loading, hasScope, displayItems, setItemsForScope, refresh],
+    [loading, items, setItems, refresh],
   );
 }

@@ -62,6 +62,7 @@ const MIGRATION_043: &str = include_str!("../migrations/043_drop_trellis_mission
 const MIGRATION_044: &str = include_str!("../migrations/044_session_feedback_loop.sql");
 const MIGRATION_045: &str = include_str!("../migrations/045_task_events_index.sql");
 const MIGRATION_046: &str = include_str!("../migrations/046_tasks_workflow_index.sql");
+const MIGRATION_047: &str = include_str!("../migrations/047_workspace_todos_global_scope.sql");
 const PLATFORM_SPLIT_PROMPT_SEED_JSON: &str =
     include_str!("../migrations/005_platform_split_prompt_seed.json");
 
@@ -259,6 +260,14 @@ const MIGRATIONS: &[Migration] = &[
     Migration {
         name: "046_tasks_workflow_index",
         action: MigrationAction::Sql(MIGRATION_046),
+    },
+    Migration {
+        name: "047_workspace_todos_global_scope",
+        action: MigrationAction::Sql(MIGRATION_047),
+    },
+    Migration {
+        name: "048_workspace_todos_global_seed",
+        action: MigrationAction::Seed(crate::workspace_inspector_db::seed_migrate_workspace_todos_to_global),
     },
 ];
 
@@ -1841,6 +1850,8 @@ mod tests {
                 "044_session_feedback_loop",
                 "045_task_events_index",
                 "046_tasks_workflow_index",
+                "047_workspace_todos_global_scope",
+                "048_workspace_todos_global_seed",
             ]
         );
     }

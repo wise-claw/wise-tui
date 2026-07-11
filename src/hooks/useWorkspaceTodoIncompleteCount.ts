@@ -1,26 +1,22 @@
 import { useCallback, useSyncExternalStore } from "react";
 import {
-  getWorkspaceTodoIncompleteCount,
-  subscribeWorkspaceTodoCountsForScope,
+  getWorkspaceTodoCountsSnapshot,
+  subscribeWorkspaceTodoCounts,
 } from "../stores/workspaceTodoCountsStore";
 
-export function useWorkspaceTodoIncompleteCount(
-  scope: "project" | "repository",
-  projectId: string | null,
-  repositoryId: number | null,
-  enabled = true,
-): number {
+/** 全局待办未完成数；不区分工作区/仓库。 */
+export function useWorkspaceTodoIncompleteCount(enabled = true): number {
   const subscribe = useCallback(
     (listener: () => void) => {
       if (!enabled) return () => {};
-      return subscribeWorkspaceTodoCountsForScope(scope, projectId, repositoryId, listener);
+      return subscribeWorkspaceTodoCounts(listener);
     },
-    [enabled, projectId, repositoryId, scope],
+    [enabled],
   );
 
   const getSnapshot = useCallback(
-    () => (enabled ? getWorkspaceTodoIncompleteCount(scope, projectId, repositoryId) : 0),
-    [enabled, projectId, repositoryId, scope],
+    () => (enabled ? getWorkspaceTodoCountsSnapshot() : 0),
+    [enabled],
   );
 
   return useSyncExternalStore(subscribe, getSnapshot, () => 0);

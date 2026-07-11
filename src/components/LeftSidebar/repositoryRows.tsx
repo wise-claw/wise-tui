@@ -52,9 +52,7 @@ import { RunningMainSessionDot } from "./RunningMainSessionDot";
 import { RepositorySddStackBadge } from "./RepositorySddStackBadge";
 import { WorkspaceTodosPopoverContent } from "./WorkspaceTodosPopoverContent";
 
-function workspaceTodosPopoverTitle(projectId: string | null, repositoryId: number | null): string {
-  if (repositoryId != null) return "仓库待办事项";
-  if (projectId?.trim()) return "工作区待办事项";
+function workspaceTodosPopoverTitle(): string {
   return "待办事项";
 }
 
@@ -372,8 +370,6 @@ export const OpenInTerminalAction = memo(function OpenInTerminalAction({
 
 export function SidebarWorkspaceRemindersAction({
   variant = "repo",
-  projectId,
-  repositoryId,
   enabled = true,
 }: {
   variant?: "repo" | "project";
@@ -383,19 +379,13 @@ export function SidebarWorkspaceRemindersAction({
   enabled?: boolean;
 }) {
   const [popoverOpen, setPopoverOpen] = useState(false);
-  const incompleteCount = useWorkspaceTodoIncompleteCount(
-    variant === "project" ? "project" : "repository",
-    projectId,
-    repositoryId,
-    enabled,
-  );
+  const incompleteCount = useWorkspaceTodoIncompleteCount(enabled);
 
   if (!enabled || incompleteCount <= 0) return null;
 
   const badgeLabel = incompleteCount > 99 ? "99+" : String(incompleteCount);
-  const scopeLabel = variant === "project" ? "工作区" : "仓库";
-  const tooltip = `${scopeLabel}待办事项：${incompleteCount} 条未完成`;
-  const popoverTitle = workspaceTodosPopoverTitle(projectId, repositoryId);
+  const tooltip = `待办事项：${incompleteCount} 条未完成`;
+  const popoverTitle = workspaceTodosPopoverTitle();
 
   return (
     <Popover
@@ -410,11 +400,7 @@ export function SidebarWorkspaceRemindersAction({
       title={popoverTitle}
       content={
         popoverOpen ? (
-          <WorkspaceTodosPopoverContent
-            projectId={projectId}
-            repositoryId={repositoryId}
-            title={popoverTitle}
-          />
+          <WorkspaceTodosPopoverContent title={popoverTitle} />
         ) : null
       }
     >
@@ -697,10 +683,7 @@ function RepositoryRowInner({
               if (key === "add-workspace-todo") {
                 if (!workspaceTodosEnabled) return;
                 onRepositorySelect(repository.id);
-                openWorkspaceTodosFromSidebarMenu({
-                  projectId: project.id,
-                  repositoryId: repository.id,
-                });
+                openWorkspaceTodosFromSidebarMenu();
                 return;
               }
               if (key === "finder") onOpenInFinder(repository);
@@ -974,10 +957,7 @@ function FloatingRepositoryRowInner({
               if (key === "add-workspace-todo") {
                 if (!workspaceTodosEnabled) return;
                 onRepositorySelect(repository.id);
-                openWorkspaceTodosFromSidebarMenu({
-                  projectId: null,
-                  repositoryId: repository.id,
-                });
+                openWorkspaceTodosFromSidebarMenu();
                 return;
               }
               if (key === "finder") onOpenInFinder(repository);

@@ -4,7 +4,6 @@ import { projectRepositoryListPropsEqual } from "./projectRepositoryListPropsEqu
 
 export type LeftSidebarWorkspaceListSlotEqualProps = ProjectRepositoryListEqualProps & {
   showLeftSidebarWorkspaceList: boolean;
-  globalWorkspaceTodoAddOpen: boolean;
   sessionsStructureKey: string;
   repositoryMainSessionBindings: Record<string, string>;
   claudeProcessFingerprint: string;
@@ -17,7 +16,6 @@ export function leftSidebarWorkspaceListSlotPropsEqual(
   next: LeftSidebarWorkspaceListSlotEqualProps,
 ): boolean {
   if (prev.showLeftSidebarWorkspaceList !== next.showLeftSidebarWorkspaceList) return false;
-  if (prev.globalWorkspaceTodoAddOpen !== next.globalWorkspaceTodoAddOpen) return false;
   if (prev.sessionsStructureKey !== next.sessionsStructureKey) return false;
   if (prev.repositoryMainSessionBindings !== next.repositoryMainSessionBindings) return false;
   if (prev.claudeProcessFingerprint !== next.claudeProcessFingerprint) return false;

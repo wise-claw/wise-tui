@@ -28,7 +28,7 @@ export const WorkspaceInspectorWorkspaceCards = memo(function WorkspaceInspector
         <WorkspaceQuickActionsPanel projectId={projectId} repositoryId={repositoryId} />
       ) : null}
       {panels.showWorkspaceTodosPanel ? (
-        <WorkspaceTodosPanel projectId={projectId} repositoryId={repositoryId} />
+        <WorkspaceTodosPanel />
       ) : null}
     </>
   );

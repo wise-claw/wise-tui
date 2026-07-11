@@ -5,7 +5,6 @@ import type { ReconcileProjectMode } from "../../constants/reconcileProjectMode"
 import type { WorkspaceFocus } from "../../utils/workspaceMode";
 import { resolveScheduledTasksRepository } from "../../utils/workspaceSelectionState";
 import { ProjectRepositoryList } from "./ProjectRepositoryList";
-import { SidebarGlobalWorkspaceTodoAddModal } from "./SidebarGlobalWorkspaceTodoAddModal";
 import { SidebarWorkspaceTodoAddModal } from "./SidebarWorkspaceTodoAddModal";
 import { useProjectRepositorySidebarState } from "./useProjectRepositorySidebarState";
 import { useSidebarScheduledTasksMap } from "./useSidebarScheduledTasksMap";
@@ -21,8 +20,6 @@ import {
 export type LeftSidebarWorkspaceListSlotProps = {
   showLeftSidebarWorkspaceList: boolean;
   workspaceTodosEnabled: boolean;
-  globalWorkspaceTodoAddOpen: boolean;
-  onCloseGlobalWorkspaceTodoAdd: () => void;
   projects: Workspace[];
   repositories: Repository[];
   floatingRepositories: StandaloneRepo[];
@@ -177,16 +174,6 @@ function LeftSidebarWorkspaceListSlotInner(props: LeftSidebarWorkspaceListSlotPr
   return (
     <>
       <SidebarWorkspaceTodoAddModal enabled={props.workspaceTodosEnabled} />
-      <SidebarGlobalWorkspaceTodoAddModal
-        enabled={props.workspaceTodosEnabled}
-        open={props.globalWorkspaceTodoAddOpen}
-        onClose={props.onCloseGlobalWorkspaceTodoAdd}
-        projects={props.projects}
-        repositoriesById={projectRepositoryState.repositoriesById}
-        floatingRepositories={props.floatingRepositories}
-        activeProjectId={props.activeProjectId}
-        activeRepositoryId={props.activeRepositoryId}
-      />
       {props.showLeftSidebarWorkspaceList ? (
         <ProjectRepositoryList
           projects={props.projects}
@@ -283,7 +270,6 @@ export const LeftSidebarWorkspaceListSlot = memo(
     }
     return (
       prev.showLeftSidebarWorkspaceList === next.showLeftSidebarWorkspaceList &&
-      prev.globalWorkspaceTodoAddOpen === next.globalWorkspaceTodoAddOpen &&
       prev.activeProjectId === next.activeProjectId &&
       prev.activeWorkspaceFocus === next.activeWorkspaceFocus &&
       prev.activeRepositoryId === next.activeRepositoryId &&

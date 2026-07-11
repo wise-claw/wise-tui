@@ -62,38 +62,11 @@ function normalizeTodosPayload(
   return raw;
 }
 
-export async function listProjectWorkspaceTodosDb(projectId: string): Promise<WorkspaceTodosPayloadV1> {
-  const id = projectId.trim();
-  if (!id) return { version: 1, items: [] };
-  const payload = await invoke<WorkspaceTodosPayloadV1>("list_project_workspace_todos", {
-    projectId: id,
-  });
+export async function listGlobalWorkspaceTodosDb(): Promise<WorkspaceTodosPayloadV1> {
+  const payload = await invoke<WorkspaceTodosPayloadV1>("list_global_workspace_todos");
   return normalizeTodosPayload(payload);
 }
 
-export async function saveProjectWorkspaceTodosDb(
-  projectId: string,
-  items: WorkspaceTodoItem[],
-): Promise<void> {
-  const id = projectId.trim();
-  if (!id) return;
-  await invoke("save_project_workspace_todos", { projectId: id, items });
-}
-
-export async function listRepositoryWorkspaceTodosDb(
-  repositoryId: number,
-): Promise<WorkspaceTodosPayloadV1> {
-  if (!Number.isFinite(repositoryId)) return { version: 1, items: [] };
-  const payload = await invoke<WorkspaceTodosPayloadV1>("list_repository_workspace_todos", {
-    repositoryId,
-  });
-  return normalizeTodosPayload(payload);
-}
-
-export async function saveRepositoryWorkspaceTodosDb(
-  repositoryId: number,
-  items: WorkspaceTodoItem[],
-): Promise<void> {
-  if (!Number.isFinite(repositoryId)) return;
-  await invoke("save_repository_workspace_todos", { repositoryId, items });
+export async function saveGlobalWorkspaceTodosDb(items: WorkspaceTodoItem[]): Promise<void> {
+  await invoke("save_global_workspace_todos", { items });
 }

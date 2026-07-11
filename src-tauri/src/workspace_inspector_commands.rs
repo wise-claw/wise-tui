@@ -71,3 +71,18 @@ pub(crate) fn save_repository_workspace_todos(
 ) -> Result<(), String> {
     db.save_repository_workspace_todos(repository_id, items)
 }
+
+#[tauri::command]
+pub(crate) fn list_global_workspace_todos(
+    db: tauri::State<'_, WiseDb>,
+) -> Result<WorkspaceTodosPayloadDto, String> {
+    db.list_global_workspace_todos()
+}
+
+#[tauri::command]
+pub(crate) fn save_global_workspace_todos(
+    db: tauri::State<'_, WiseDb>,
+    items: Vec<WorkspaceTodoItemDto>,
+) -> Result<(), String> {
+    db.save_global_workspace_todos(items)
+}

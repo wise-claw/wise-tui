@@ -117,3 +117,35 @@ export function normalizeComposerCommonPhrases(raw: unknown): ComposerCommonPhra
   }
   return out;
 }
+
+/**
+ * 合并全局 + 仓库级常用语用于展示（「全局 + 仓库合并」作用域语义）：
+ * - 顺序：全局在前，仓库级在后（「通用 + 本仓库特有」）。
+ * - chord 冲突：仓库级优先，全局中与仓库级同 chord 的条目剥离 chord（条目保留，仍可点击发送，仅失去快捷键）。
+ * - id 冲突：全局与仓库级是独立 id 空间，调用方渲染 React key 时需用 `source:id` 区分，避免潜在 key 撞车。
+ * - 上限：合并后截断到 MAX_COMPOSER_COMMON_PHRASES（截掉仓库级尾部，优先保留全局全部）。
+ */
+export function mergeComposerCommonPhrases(
+  global: readonly ComposerCommonPhrase[],
+  repo: readonly ComposerCommonPhrase[],
+): ComposerCommonPhrase[] {
+  const repoChords = new Set<string>();
+  for (const phrase of repo) {
+    const chord = phrase.chord?.trim();
+    if (chord) repoChords.add(chord);
+  }
+  const merged: ComposerCommonPhrase[] = [];
+  for (const phrase of global) {
+    const chord = phrase.chord?.trim();
+    if (chord && repoChords.has(chord)) {
+      const { chord: _removed, ...rest } = phrase;
+      merged.push(rest);
+    } else {
+      merged.push({ ...phrase });
+    }
+  }
+  for (const phrase of repo) {
+    merged.push({ ...phrase });
+  }
+  return merged.slice(0, MAX_COMPOSER_COMMON_PHRASES);
+}

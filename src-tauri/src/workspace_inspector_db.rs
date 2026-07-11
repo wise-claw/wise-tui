@@ -9,6 +9,9 @@ const QUICK_ACTIONS_PROJECT_PREFIX: &str = "wise.workspaceQuickActions.project:"
 const QUICK_ACTIONS_REPOSITORY_PREFIX: &str = "wise.workspaceQuickActions.repository:";
 const KEY_SUFFIX: &str = ".v1";
 
+/// 全局待办事项的固定 scope_id（scope_kind = 'global'，不绑定工作区/仓库）。
+pub const GLOBAL_TODO_SCOPE_ID: &str = "_global_";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct WorkspaceQuickActionItemDto {
@@ -394,6 +397,73 @@ pub fn seed_migrate_workspace_inspector_from_app_settings(conn: &Connection) -> 
     Ok(())
 }
 
+/// 把现有 project/repository 待办合并迁移到 global 作用域（幂等）。
+///
+/// 仅当 global 作用域尚无数据时执行；旧 project/repository 行保留不动
+/// （UI 已切换为全局读写，旧数据仅作留档，符合「不删数据」规则）。
+/// 跨作用域 id 冲突时保留最新 updatedAt（createWorkspaceTodoId 为 UUID，冲突概率极低）。
+pub fn seed_migrate_workspace_todos_to_global(conn: &Connection) -> Result<(), String> {
+    let global_count: i64 = conn
+        .query_row(
+            "SELECT COUNT(*) FROM workspace_todos WHERE scope_kind = 'global' AND scope_id = ?1",
+            params![GLOBAL_TODO_SCOPE_ID],
+            |row| row.get(0),
+        )
+        .map_err(|e| e.to_string())?;
+    if global_count > 0 {
+        return Ok(());
+    }
+
+    let mut stmt = conn
+        .prepare(
+            "SELECT id, title, completed, due_at, notes, sort_order, created_at, updated_at
+             FROM workspace_todos
+             WHERE scope_kind IN ('project', 'repository')
+             ORDER BY updated_at ASC",
+        )
+        .map_err(|e| e.to_string())?;
+    let rows = stmt
+        .query_map([], |row| {
+            let completed_int: i64 = row.get(2)?;
+            Ok(WorkspaceTodoItemDto {
+                id: row.get(0)?,
+                title: row.get(1)?,
+                completed: completed_int != 0,
+                due_at: row.get(3)?,
+                notes: row.get(4)?,
+                sort_order: row.get(5)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
+            })
+        })
+        .map_err(|e| e.to_string())?;
+
+    let mut by_id: std::collections::HashMap<String, WorkspaceTodoItemDto> =
+        std::collections::HashMap::new();
+    for row in rows {
+        let item = match row {
+            Ok(dto) => dto,
+            Err(e) => return Err(e.to_string()),
+        };
+        if let Some(normalized) = normalize_todo_item(item) {
+            match by_id.get(&normalized.id) {
+                Some(existing) if existing.updated_at >= normalized.updated_at => continue,
+                _ => {
+                    by_id.insert(normalized.id.clone(), normalized);
+                }
+            }
+        }
+    }
+
+    if by_id.is_empty() {
+        return Ok(());
+    }
+
+    let merged: Vec<WorkspaceTodoItemDto> = by_id.into_values().collect();
+    replace_todos_conn(conn, "global", GLOBAL_TODO_SCOPE_ID, &dedupe_todos(merged))?;
+    Ok(())
+}
+
 /// 修复旧库未成功执行 035 迁移时缺少 `pinned_to_topbar` 列的问题。
 pub fn ensure_workspace_quick_actions_pinned_column(conn: &Connection) -> Result<(), String> {
     let mut stmt = conn
@@ -555,6 +625,23 @@ impl WiseDb {
             .collect();
         let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
         replace_todos_conn(&g, "repository", &scope_id, &dedupe_todos(normalized))
+    }
+
+    pub fn list_global_workspace_todos(&self) -> Result<WorkspaceTodosPayloadDto, String> {
+        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        list_todos_conn(&g, "global", GLOBAL_TODO_SCOPE_ID)
+    }
+
+    pub fn save_global_workspace_todos(
+        &self,
+        items: Vec<WorkspaceTodoItemDto>,
+    ) -> Result<(), String> {
+        let normalized: Vec<WorkspaceTodoItemDto> = items
+            .into_iter()
+            .filter_map(normalize_todo_item)
+            .collect();
+        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        replace_todos_conn(&g, "global", GLOBAL_TODO_SCOPE_ID, &dedupe_todos(normalized))
     }
 
     #[allow(dead_code)]

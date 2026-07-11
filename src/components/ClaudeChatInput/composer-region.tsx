@@ -685,7 +685,8 @@ function ComposerInner({
     useAtMentionDefaultTarget();
   const { bindings: atMentionShortcutBindings } = useAtMentionShortcuts();
   const {
-    phrases: composerCommonPhrases,
+    editablePhrases: composerEditablePhrases,
+    globalPhrases: composerGlobalPhrases,
     bindings: composerCommonPhraseBindings,
     loading: composerCommonPhrasesLoading,
     saving: composerCommonPhrasesSaving,
@@ -2971,7 +2972,8 @@ function ComposerInner({
         {/* 右栏紧凑模式：跳过常用语 trigger。仍受全局 composerFooterChrome 控制以保持中栏一致。 */}
         {!compactFooterChrome && composerFooterChrome.showComposerFooterCommonPhrases ? (
           <ComposerCommonPhrasesManageTrigger
-            phrases={composerCommonPhrases}
+            phrases={composerEditablePhrases}
+            globalPhrases={composerGlobalPhrases}
             loading={composerCommonPhrasesLoading}
             saving={composerCommonPhrasesSaving}
             onPersist={persistComposerCommonPhrases}
@@ -3034,7 +3036,8 @@ function ComposerInner({
       session,
       sessionExecutionEngine,
       model,
-      composerCommonPhrases,
+      composerEditablePhrases,
+      composerGlobalPhrases,
       composerCommonPhrasesLoading,
       composerCommonPhrasesSaving,
       persistComposerCommonPhrases,

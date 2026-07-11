@@ -223,12 +223,7 @@ function ProjectRepositoryListInner({
   );
 
   const [headerTodosPopoverOpen, setHeaderTodosPopoverOpen] = useState(false);
-  const headerTodoCount = useWorkspaceTodoIncompleteCount(
-    "project",
-    activeProjectId,
-    null,
-    workspaceTodosEnabled && Boolean(activeProjectId?.trim()),
-  );
+  const headerTodoCount = useWorkspaceTodoIncompleteCount(workspaceTodosEnabled);
 
   const runCommandRowPinnedMap = useRepositoryRunCommandRowPinnedMap();
 
@@ -283,14 +278,10 @@ function ProjectRepositoryListInner({
                 getPopupContainer={() => document.body}
                 rootClassName="app-left-sidebar-workspace-todos-popover"
                 styles={{ root: { zIndex: 1200 } }}
-                title="工作区待办事项"
+                title="待办事项"
                 content={
                   headerTodosPopoverOpen ? (
-                    <WorkspaceTodosPopoverContent
-                      projectId={activeProjectId}
-                      repositoryId={null}
-                      title="工作区待办事项"
-                    />
+                    <WorkspaceTodosPopoverContent title="待办事项" />
                   ) : null
                 }
               >
@@ -301,14 +292,14 @@ function ProjectRepositoryListInner({
                   <DeferredHoverTooltip
                     title={
                       headerTodoCount > 0
-                        ? `工作区待办事项：${headerTodoCount} 条未完成`
-                        : "工作区待办事项"
+                        ? `待办事项：${headerTodoCount} 条未完成`
+                        : "待办事项"
                     }
                   >
                     <button
                       type="button"
                       className="app-repository-header-btn"
-                      aria-label="工作区待办事项"
+                      aria-label="待办事项"
                       aria-expanded={headerTodosPopoverOpen}
                     >
                       <span className="app-repository-action-icon-wrap">
@@ -826,10 +817,7 @@ function ProjectRow({
               if (key === "add-workspace-todo") {
                 if (!workspaceTodosEnabled) return;
                 onProjectSelect(project.id);
-                openWorkspaceTodosFromSidebarMenu({
-                  projectId: project.id,
-                  repositoryId: null,
-                });
+                openWorkspaceTodosFromSidebarMenu();
                 return;
               }
               if (key === "pin") onTogglePinProject(project.id);

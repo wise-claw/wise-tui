@@ -2,6 +2,8 @@ import { describe, expect, test } from "bun:test";
 import {
   buildComposerCommonPhraseTooltipTitle,
   filterComposerCommonPhrasesForQuickBar,
+  MAX_COMPOSER_COMMON_PHRASES,
+  mergeComposerCommonPhrases,
   normalizeComposerCommonPhrases,
   resolveComposerCommonPhraseShowInQuickBar,
   truncateComposerCommonPhraseText,
@@ -57,5 +59,62 @@ describe("normalizeComposerCommonPhrases", () => {
     expect(items[0]?.action).toBe("send");
     expect(items[1]?.action).toBe("insert");
     expect(items[2]?.action).toBe("send");
+  });
+});
+
+describe("mergeComposerCommonPhrases", () => {
+  test("both empty returns empty", () => {
+    expect(mergeComposerCommonPhrases([], [])).toEqual([]);
+  });
+
+  test("global only / repo only pass through", () => {
+    const g = [{ id: "g1", title: "g", text: "gt", action: "send" as const }];
+    const r = [{ id: "r1", title: "r", text: "rt", action: "send" as const }];
+    expect(mergeComposerCommonPhrases(g, []).map((p) => p.id)).toEqual(["g1"]);
+    expect(mergeComposerCommonPhrases([], r).map((p) => p.id)).toEqual(["r1"]);
+  });
+
+  test("global first then repo", () => {
+    const g = [{ id: "g1", title: "g", text: "gt", action: "send" as const }];
+    const r = [{ id: "r1", title: "r", text: "rt", action: "send" as const }];
+    expect(mergeComposerCommonPhrases(g, r).map((p) => p.id)).toEqual(["g1", "r1"]);
+  });
+
+  test("repo chord wins; global same chord stripped (item kept)", () => {
+    const g = [
+      { id: "g1", title: "g", text: "gt", action: "send" as const, chord: "Mod+KeyK" },
+    ];
+    const r = [
+      { id: "r1", title: "r", text: "rt", action: "send" as const, chord: "Mod+KeyK" },
+    ];
+    const merged = mergeComposerCommonPhrases(g, r);
+    expect(merged.map((p) => p.id)).toEqual(["g1", "r1"]);
+    expect(merged[0]?.chord).toBeUndefined();
+    expect(merged[1]?.chord).toBe("Mod+KeyK");
+  });
+
+  test("non-conflicting chords both kept", () => {
+    const g = [
+      { id: "g1", title: "g", text: "gt", action: "send" as const, chord: "Mod+KeyA" },
+    ];
+    const r = [
+      { id: "r1", title: "r", text: "rt", action: "send" as const, chord: "Mod+KeyB" },
+    ];
+    const merged = mergeComposerCommonPhrases(g, r);
+    expect(merged[0]?.chord).toBe("Mod+KeyA");
+    expect(merged[1]?.chord).toBe("Mod+KeyB");
+  });
+
+  test("truncates to MAX, keeping all global first", () => {
+    const g = Array.from({ length: MAX_COMPOSER_COMMON_PHRASES }, (_, i) => ({
+      id: `g${i}`,
+      title: "g",
+      text: "gt",
+      action: "send" as const,
+    }));
+    const r = [{ id: "r1", title: "r", text: "rt", action: "send" as const }];
+    const merged = mergeComposerCommonPhrases(g, r);
+    expect(merged).toHaveLength(MAX_COMPOSER_COMMON_PHRASES);
+    expect(merged.every((p) => p.id.startsWith("g"))).toBe(true);
   });
 });

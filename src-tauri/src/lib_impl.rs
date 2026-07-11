@@ -313,6 +313,8 @@ pub fn run() {
             workspace_inspector_commands::save_project_workspace_todos,
             workspace_inspector_commands::list_repository_workspace_todos,
             workspace_inspector_commands::save_repository_workspace_todos,
+            workspace_inspector_commands::list_global_workspace_todos,
+            workspace_inspector_commands::save_global_workspace_todos,
             execution_environment_dispatch_commands::upsert_execution_environment_dispatch_batch,
             execution_environment_dispatch_commands::upsert_execution_environment_dispatch_item,
             execution_environment_dispatch_commands::list_execution_environment_dispatches_for_anchor,

@@ -1,5 +1,3 @@
-export type WorkspaceTodoScope = "project" | "repository";
-
 export interface WorkspaceTodoItem {
   id: string;
   title: string;
@@ -15,10 +13,6 @@ export interface WorkspaceTodosPayloadV1 {
   version: 1;
   items: WorkspaceTodoItem[];
 }
-
-export type WorkspaceTodoDisplayItem = WorkspaceTodoItem & {
-  scope: WorkspaceTodoScope;
-};
 
 export function createWorkspaceTodoId(): string {
   if (typeof crypto !== "undefined" && "randomUUID" in crypto) {

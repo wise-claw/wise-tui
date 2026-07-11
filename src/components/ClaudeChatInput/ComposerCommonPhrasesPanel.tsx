@@ -50,12 +50,10 @@ function scopeHintFor(
 ): { title: string; hint?: string } {
   const name = repositoryBasename(repositoryPath);
   switch (scope) {
-    case "repository":
-      return { title: name ? `当前仓库：${name}` : "当前仓库常用语" };
-    case "fallback-global":
+    case "merged":
       return {
-        title: name ? `当前仓库：${name}（未自定义）` : "当前仓库未自定义",
-        hint: "当前显示全局常用语，编辑将创建该仓库独立配置。",
+        title: name ? `全局 + 当前仓库：${name}` : "全局 + 当前仓库常用语",
+        hint: "全局条目只读，下方可编辑当前仓库独立常用语。",
       };
     case "global":
     default:
@@ -65,6 +63,7 @@ function scopeHintFor(
 
 export function ComposerCommonPhrasesPanel({
   phrases,
+  globalPhrases,
   loading,
   saving,
   onPersist,
@@ -76,7 +75,10 @@ export function ComposerCommonPhrasesPanel({
   hideDefaultInstruction = false,
   repositoryPath,
 }: {
+  /** 可编辑列表：scope=global 时为全局，scope=merged 时为当前仓库级。 */
   phrases: readonly ComposerCommonPhrase[];
+  /** 只读全局列表：仅 scope=merged 时作为叠加展示源。 */
+  globalPhrases?: readonly ComposerCommonPhrase[];
   loading: boolean;
   saving: boolean;
   onPersist: (next: ComposerCommonPhrase[]) => Promise<void>;
@@ -92,6 +94,8 @@ export function ComposerCommonPhrasesPanel({
   const defaultBusy = (defaultInstructionLoading ?? false) || (defaultInstructionSaving ?? false);
   const [defaultDraft, setDefaultDraft] = useState(defaultInstruction ?? "");
   const scopeHint = scopeHintFor(scope, repositoryPath);
+  const readOnlyPhrases = globalPhrases ?? [];
+  const isMerged = scope === "merged" && readOnlyPhrases.length > 0;
 
   useEffect(() => {
     setDefaultDraft(defaultInstruction ?? "");
@@ -228,8 +232,59 @@ export function ComposerCommonPhrasesPanel({
           </span>
         </section>
       )}
+      {isMerged ? (
+        <section
+          className="app-composer-common-phrases-panel__global"
+          aria-label="全局常用语（只读）"
+        >
+          <div className="app-composer-common-phrases-panel__global-head">
+            <span className="app-composer-common-phrases-panel__global-title">
+              全局常用语（所有仓库共享）
+            </span>
+            <span className="app-composer-common-phrases-panel__global-hint">
+              在 左栏默认配置 &gt; 全局常用语 编辑
+            </span>
+          </div>
+          <ul className="app-composer-common-phrases-panel__list app-composer-common-phrases-panel__list--readonly">
+            {readOnlyPhrases.map((phrase) => {
+              const keys = phrase.chord ? formatChordForDisplay(phrase.chord) : "";
+              const actionLabel =
+                COMPOSER_COMMON_PHRASE_ACTION_LABELS[resolveComposerCommonPhraseAction(phrase)];
+              return (
+                <li
+                  key={`global:${phrase.id}`}
+                  className="app-composer-common-phrases-panel__item app-composer-common-phrases-panel__item--readonly"
+                >
+                  <div className="app-composer-common-phrases-panel__item-main">
+                    <span className="app-composer-common-phrases-panel__item-head">
+                      <span className="app-composer-common-phrases-panel__item-title">
+                        {phrase.title}
+                      </span>
+                      <span
+                        className="app-composer-common-phrases-panel__item-action"
+                        title={actionLabel}
+                      >
+                        {actionLabel === "直接发送" ? "发送" : "填入"}
+                      </span>
+                      {keys ? (
+                        <kbd className="app-composer-common-phrases-panel__item-keys">{keys}</kbd>
+                      ) : null}
+                    </span>
+                    <span className="app-composer-common-phrases-panel__item-preview">
+                      {previewText(phrase.text, 36)}
+                    </span>
+                  </div>
+                  <span className="app-composer-common-phrases-panel__item-readonly-badge">全局</span>
+                </li>
+              );
+            })}
+          </ul>
+        </section>
+      ) : null}
       <div className="app-composer-common-phrases-panel__hint-row">
-        <p className="app-composer-common-phrases-panel__hint">点击编辑；快捷栏按触发方式发送或填入</p>
+        <p className="app-composer-common-phrases-panel__hint">
+          {isMerged ? "当前仓库独立常用语：点击编辑" : "点击编辑；快捷栏按触发方式发送或填入"}
+        </p>
         <Button
           type="dashed"
           size="small"
@@ -241,7 +296,9 @@ export function ComposerCommonPhrasesPanel({
         </Button>
       </div>
       {phrases.length === 0 ? (
-        <p className="app-composer-common-phrases-panel__empty">暂无常用语，点击上方新增。</p>
+        <p className="app-composer-common-phrases-panel__empty">
+          {isMerged ? "当前仓库暂无独立常用语，点击上方新增。" : "暂无常用语，点击上方新增。"}
+        </p>
       ) : (
         <ul className="app-composer-common-phrases-panel__list">
           {phrases.map((phrase) => {
@@ -249,7 +306,7 @@ export function ComposerCommonPhrasesPanel({
             const actionLabel =
               COMPOSER_COMMON_PHRASE_ACTION_LABELS[resolveComposerCommonPhraseAction(phrase)];
             return (
-              <li key={phrase.id} className="app-composer-common-phrases-panel__item">
+              <li key={`editable:${phrase.id}`} className="app-composer-common-phrases-panel__item">
                 <button
                   type="button"
                   className="app-composer-common-phrases-panel__item-main"

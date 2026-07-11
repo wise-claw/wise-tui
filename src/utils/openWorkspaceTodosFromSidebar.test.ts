@@ -15,13 +15,10 @@ describe("openWorkspaceTodosFromSidebarMenu", () => {
     } as Window;
 
     try {
-      openWorkspaceTodosFromSidebarMenu({ projectId: "eco", repositoryId: null });
+      openWorkspaceTodosFromSidebarMenu();
       expect(captured).toHaveLength(1);
       expect(captured[0]?.surface).toBe("modal");
-      expect(captured[0]?.projectId).toBe("eco");
-      expect(captured[0]?.repositoryId).toBeNull();
       expect(captured[0]?.focusAdd).toBe(true);
-      expect((captured[0] as { type?: string }).type).toBeUndefined();
       expect(WISE_WORKSPACE_TODOS_OPEN).toBe("wise:workspace-todos-open");
     } finally {
       g.window = prevWindow;

@@ -4,19 +4,13 @@ export const WISE_WORKSPACE_TODOS_OPEN = "wise:workspace-todos-open";
 export type WorkspaceTodosOpenSurface = "popover" | "modal";
 
 export interface WorkspaceTodosOpenDetail {
-  projectId: string | null;
-  repositoryId: number | null;
   focusAdd?: boolean;
   /** 侧栏「更多」菜单用 modal；待办徽章用 popover */
   surface?: WorkspaceTodosOpenSurface;
-  /** 优先用 data-workspace-todos-anchor 解析锚点（菜单打开待办） */
-  anchorKey?: string | null;
   anchorEl?: HTMLElement | null;
 }
 
 export function dispatchWorkspaceTodosChanged(detail?: {
-  projectId?: string | null;
-  repositoryId?: number | null;
   /** 已知未完成条数时可直接更新角标，跳过 IPC 重载 */
   incompleteCount?: number;
   /** 为 false 时列表保持本地乐观状态；为 true 时从持久化层重载（如侧栏弹窗已写入）。 */

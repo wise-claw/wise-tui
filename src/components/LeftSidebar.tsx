@@ -84,6 +84,7 @@ import { useProjectSddModeModalController } from "./LeftSidebar/useProjectSddMod
 import { useRepositorySddModeModalController } from "./LeftSidebar/useRepositorySddModeModalController";
 import { useRepositoryIconBadgeModalController } from "./LeftSidebar/useRepositoryIconBadgeModalController";
 import { useWorkspaceTodoCountsBootstrap } from "../hooks/useWorkspaceTodoCountsBootstrap";
+import { openWorkspaceTodosFromSidebarMenu } from "../utils/openWorkspaceTodosFromSidebar";
 import { useWorkspaceInspectorPanelsDefault } from "../hooks/useWorkspaceInspectorPanelsDefault";
 import { useClaudeProcessWorkspaceLabelCache } from "../hooks/useClaudeProcessWorkspaceLabelCache";
 import { useSystemResourceSessions } from "./LeftSidebar/useSystemResourceSessions";
@@ -310,7 +311,6 @@ export function LeftSidebar({
   );
 
   const [createProjectOpen, setCreateProjectOpen] = useState(false);
-  const [globalWorkspaceTodoAddOpen, setGlobalWorkspaceTodoAddOpen] = useState(false);
   const [createProjectRootPath, setCreateProjectRootPath] = useState("");
   const [createProjectSubmitting, setCreateProjectSubmitting] = useState(false);
   const [workspaceBootstrapSelection, setWorkspaceBootstrapSelection] = useState(
@@ -503,7 +503,7 @@ export function LeftSidebar({
     onUpdateProjectSddMode,
   });
   const { showWorkspaceTodosPanel: workspaceTodosEnabled } = useWorkspaceInspectorPanelsDefault();
-  useWorkspaceTodoCountsBootstrap(projects, floatingRepositories, workspaceTodosEnabled);
+  useWorkspaceTodoCountsBootstrap(workspaceTodosEnabled);
   const openScheduledTasksForRepository = useCallback(
     (repository: Repository) => {
       onOpenScheduledTasksForRepositoryProp?.(repository);
@@ -1128,8 +1128,6 @@ export function LeftSidebar({
         <LeftSidebarWorkspaceListSlot
           showLeftSidebarWorkspaceList={showLeftSidebarWorkspaceList}
           workspaceTodosEnabled={workspaceTodosEnabled}
-          globalWorkspaceTodoAddOpen={globalWorkspaceTodoAddOpen}
-          onCloseGlobalWorkspaceTodoAdd={() => setGlobalWorkspaceTodoAddOpen(false)}
           projects={projects}
           repositories={repositories}
           floatingRepositories={floatingRepositories}
@@ -1246,7 +1244,7 @@ export function LeftSidebar({
             console.error(err);
           }}
           onOpenGlobalWorkspaceTodoAdd={
-            workspaceTodosEnabled ? () => setGlobalWorkspaceTodoAddOpen(true) : undefined
+            workspaceTodosEnabled ? () => openWorkspaceTodosFromSidebarMenu({ focusAdd: true }) : undefined
           }
           onOpenScheduledTasksForRepository={openScheduledTasksForRepository}
           onOpenScheduledTasksForProject={onOpenScheduledTasksForProjectProp}

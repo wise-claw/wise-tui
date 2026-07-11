@@ -3,6 +3,7 @@ import { useCallback, useMemo, useSyncExternalStore } from "react";
 import {
   createComposerCommonPhraseId,
   MAX_COMPOSER_COMMON_PHRASES,
+  mergeComposerCommonPhrases,
   resolveComposerCommonPhraseAction,
   type ComposerCommonPhrase,
   type ComposerCommonPhraseAction,
@@ -25,8 +26,8 @@ export interface ComposerCommonPhraseBinding {
   displayKeys: string;
 }
 
-/** 当前展示的常用语来自哪一层，供 UI 提示。 */
-export type ComposerCommonPhrasesScopeLabel = "global" | "repository" | "fallback-global";
+/** 当前展示的常用语来自哪一层，供 UI 提示。merged=全局+仓库合并（仓库 scope 存在时）。 */
+export type ComposerCommonPhrasesScopeLabel = "global" | "merged";
 
 function buildBindings(phrases: readonly ComposerCommonPhrase[]): ComposerCommonPhraseBinding[] {
   const out: ComposerCommonPhraseBinding[] = [];
@@ -47,12 +48,10 @@ function buildBindings(phrases: readonly ComposerCommonPhrase[]): ComposerCommon
 
 export interface UseComposerCommonPhrasesOptions {
   /**
-   * 当前会话所属仓库 id。提供时启用「仓库优先 + 全局兜底」：
-   * - 仓库有自己的配置 → 只显示仓库的（scope="repository"）。
-   * - 仓库无配置 → 回退显示全局的（scope="fallback-global"，只读引用，不写入仓库）。
-   * - 首次在该仓库编辑（add/update/remove/persist）时，以当前 effective phrases（可能是全局副本）
-   *   为起点写入仓库 scope，之后该仓库独立。
-   * 不提供（undefined/null）→ 全局（scope="global"，向后兼容）。
+   * 当前会话所属仓库 id。提供时启用「全局 + 仓库合并」：
+   * - effective = 全局 + 仓库级合并（全局在前，chord 冲突时仓库级优先、全局剥离 chord）。
+   * - 全局条目只读，编辑（add/update/remove/persist）只作用于仓库级（scope="merged"）。
+   * 不提供（undefined/null）→ 仅全局，可编辑（scope="global"，向后兼容）。
    */
   repositoryId?: number | null;
 }
@@ -66,7 +65,7 @@ export function useComposerCommonPhrases({
   );
   const globalStore = useMemo(() => getComposerCommonPhrasesStore({}), []);
 
-  // 订阅当前 scope 与全局 scope：fallback 场景需要全局变化时同步刷新。
+  // 订阅当前 scope 与全局 scope：合并场景需要全局变化时同步刷新。
   useSyncExternalStore(repoStore.subscribe, repoStore.getSnapshot, repoStore.getSnapshot);
   useSyncExternalStore(globalStore.subscribe, globalStore.getSnapshot, globalStore.getSnapshot);
 
@@ -76,13 +75,14 @@ export function useComposerCommonPhrases({
   const saving = repoStore.getSaving() || globalStore.getSaving();
 
   const hasRepositoryScope = repoStore.repositoryId != null;
-  const useRepositoryPhrases = hasRepositoryScope && repoPhrases.length > 0;
-  const effectivePhrases = useRepositoryPhrases ? repoPhrases : globalPhrases;
-  const scope: ComposerCommonPhrasesScopeLabel = !hasRepositoryScope
-    ? "global"
-    : useRepositoryPhrases
-      ? "repository"
-      : "fallback-global";
+  // 「全局 + 仓库合并」：仓库 scope 存在时，effective = 全局 + 仓库级合并（全局在前，
+  // chord 冲突时仓库级优先、全局剥离 chord）；否则 effective = 全局。
+  const effectivePhrases = hasRepositoryScope
+    ? mergeComposerCommonPhrases(globalPhrases, repoPhrases)
+    : globalPhrases;
+  // 可编辑源：仓库 scope 存在时为仓库级（全局只读），否则为全局（向后兼容无仓库场景）。
+  const editablePhrases = hasRepositoryScope ? repoPhrases : globalPhrases;
+  const scope: ComposerCommonPhrasesScopeLabel = hasRepositoryScope ? "merged" : "global";
 
   const bindings = useMemo(() => buildBindings(effectivePhrases), [effectivePhrases]);
 
@@ -93,8 +93,8 @@ export function useComposerCommonPhrases({
     }
   }, [repoStore, globalStore, hasRepositoryScope]);
 
-  // persist 写入当前 scope：有 repositoryId → 仓库 scope（首次写入以 effective 为起点）；
-  // 否则 → 全局 scope。
+  // persist 写入当前 scope：有 repositoryId → 仓库 scope；否则 → 全局 scope。
+  // 合并模式下编辑只作用于仓库级，全局通过 GlobalComposerCommonPhrasesManager 管理。
   const persist = useCallback(
     async (next: ComposerCommonPhrase[]) => {
       await repoStore.persist(next);
@@ -103,7 +103,7 @@ export function useComposerCommonPhrases({
   );
 
   const addPhrase = useCallback(async () => {
-    if (effectivePhrases.length >= MAX_COMPOSER_COMMON_PHRASES) {
+    if (editablePhrases.length >= MAX_COMPOSER_COMMON_PHRASES) {
       message.warning(`最多 ${MAX_COMPOSER_COMMON_PHRASES} 条常用语`);
       return;
     }
@@ -112,15 +112,15 @@ export function useComposerCommonPhrases({
       title: "新常用语",
       text: "请填写要发送的正文",
     };
-    await persist([...effectivePhrases, draft]);
-  }, [persist, effectivePhrases]);
+    await persist([...editablePhrases, draft]);
+  }, [persist, editablePhrases]);
 
   const updatePhrase = useCallback(
     async (
       id: string,
       patch: Partial<Pick<ComposerCommonPhrase, "title" | "text" | "chord" | "action">>,
     ) => {
-      const next = effectivePhrases.map((phrase) => {
+      const next = editablePhrases.map((phrase) => {
         if (phrase.id !== id) return phrase;
         const updated = { ...phrase, ...patch };
         if (patch.chord !== undefined) {
@@ -135,18 +135,22 @@ export function useComposerCommonPhrases({
       });
       await persist(next);
     },
-    [persist, effectivePhrases],
+    [persist, editablePhrases],
   );
 
   const removePhrase = useCallback(
     async (id: string) => {
-      await persist(effectivePhrases.filter((phrase) => phrase.id !== id));
+      await persist(editablePhrases.filter((phrase) => phrase.id !== id));
     },
-    [persist, effectivePhrases],
+    [persist, editablePhrases],
   );
 
   return {
     phrases: effectivePhrases,
+    /** 可编辑源：仓库 scope 存在时为仓库级，否则为全局。add/update/remove 作用于此。 */
+    editablePhrases,
+    /** 全局常用语（仓库 scope 存在时为只读叠加源）。 */
+    globalPhrases,
     bindings,
     loading,
     saving,
@@ -155,7 +159,7 @@ export function useComposerCommonPhrases({
     updatePhrase,
     removePhrase,
     persist,
-    /** 当前展示来源：global / repository / fallback-global。 */
+    /** 当前展示来源：global / merged。 */
     scope,
     /** 是否绑定了仓库 scope（用于 UI 决定是否显示仓库提示）。 */
     hasRepositoryScope,

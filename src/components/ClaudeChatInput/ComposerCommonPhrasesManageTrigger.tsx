@@ -8,6 +8,7 @@ import "./ComposerCommonPhrasesManageTrigger.css";
 
 export function ComposerCommonPhrasesManageTrigger({
   phrases,
+  globalPhrases,
   loading,
   saving,
   onPersist,
@@ -18,7 +19,10 @@ export function ComposerCommonPhrasesManageTrigger({
   onDefaultInstructionSave,
   repositoryPath,
 }: {
+  /** 可编辑列表：scope=global 时为全局，scope=merged 时为当前仓库级。 */
   phrases: readonly ComposerCommonPhrase[];
+  /** 只读全局列表：仅 scope=merged 时作为叠加展示源。 */
+  globalPhrases?: readonly ComposerCommonPhrase[];
   loading: boolean;
   saving: boolean;
   onPersist: (next: ComposerCommonPhrase[]) => Promise<void>;
@@ -30,6 +34,9 @@ export function ComposerCommonPhrasesManageTrigger({
   repositoryPath?: string | null;
 }) {
   const [open, setOpen] = useState(false);
+  // badge 计数：merged 时为全局 + 仓库级合计（用户实际看到的条数），否则为可编辑列表长度。
+  const totalCount =
+    scope === "merged" ? phrases.length + (globalPhrases?.length ?? 0) : phrases.length;
 
   return (
     <Popover
@@ -47,6 +54,7 @@ export function ComposerCommonPhrasesManageTrigger({
         >
           <ComposerCommonPhrasesPanel
             phrases={phrases}
+            globalPhrases={globalPhrases}
             loading={loading}
             saving={saving}
             onPersist={onPersist}
@@ -71,9 +79,9 @@ export function ComposerCommonPhrasesManageTrigger({
           onClick={(event) => event.stopPropagation()}
         >
           <span className="app-composer-common-phrases-trigger__label">常用语</span>
-          {phrases.length > 0 ? (
+          {totalCount > 0 ? (
             <span className="app-composer-common-phrases-trigger__count" aria-hidden>
-              {phrases.length}
+              {totalCount}
             </span>
           ) : null}
         </button>

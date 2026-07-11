@@ -5,21 +5,15 @@ import { InspectorCollapsibleSection } from "./InspectorCollapsibleSection";
 import { WorkspaceTodosEditor } from "./WorkspaceTodosEditor";
 import "./WorkspaceTodosPanel.css";
 
-export interface WorkspaceTodosPanelProps {
-  projectId: string | null;
-  repositoryId: number | null;
-}
+export interface WorkspaceTodosPanelProps {}
 
-export const WorkspaceTodosPanel = memo(function WorkspaceTodosPanel({
-  projectId,
-  repositoryId,
-}: WorkspaceTodosPanelProps) {
-  const todos = useWorkspaceTodos({ projectId, repositoryId });
+export const WorkspaceTodosPanel = memo(function WorkspaceTodosPanel() {
+  const todos = useWorkspaceTodos();
   const [showCompleted, setShowCompleted] = useState(false);
 
   const completedCount = useMemo(
-    () => todos.displayItems.filter((item) => item.completed).length,
-    [todos.displayItems],
+    () => todos.items.filter((item) => item.completed).length,
+    [todos.items],
   );
 
   return (
@@ -45,8 +39,6 @@ export const WorkspaceTodosPanel = memo(function WorkspaceTodosPanel({
     >
       <div className="app-workspace-todos-panel__body">
         <WorkspaceTodosEditor
-          projectId={projectId}
-          repositoryId={repositoryId}
           todos={todos}
           showCompleted={showCompleted}
           onShowCompletedChange={setShowCompleted}
