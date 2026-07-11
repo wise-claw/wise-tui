@@ -5,6 +5,7 @@ import { message } from "antd";
 import type { ClaudeSession, ProjectItem, Repository } from "../types";
 import type { PaneRuntimeOverride } from "../types/paneRuntimeOverride";
 import {
+  readCurrentMonitorLogicalWidth,
   readMainWindowInnerSize,
   restoreMainWindowInnerSnapshot,
   setMainWindowLogicalInnerSize,
@@ -14,6 +15,7 @@ import {
 import {
   columnCountForPaneCount,
   computeMinLogicalCenterWidthForPaneCount,
+  computeMultiPaneTargetWindowWidth,
   computeRestoreMultiPaneLogicalWidth,
   MAIN_LAYOUT_MULTI_PANE_EXPAND_BUFFER_PX,
   MAIN_LAYOUT_MULTI_PANE_UNIT_PX,
@@ -281,13 +283,30 @@ export function useMainLayoutModes({
       // 等布局帧后调整窗口宽度
       await waitLayoutFrames(2);
       if (colDelta > 0 && typeof window !== "undefined") {
-        // 增加列数：扩展窗口
+        // 增加列数：扩展窗口（屏幕感知——屏幕不够时压到屏幕上限，窗口内分屏）
         const expandPx = colDelta * MAIN_LAYOUT_MULTI_PANE_UNIT_PX;
+        const idealWidth = window.innerWidth + expandPx;
+        let monitorWidth: number | null = null;
         try {
-          await setMainWindowLogicalInnerSize(window.innerWidth + expandPx, window.innerHeight);
-          multiPaneAccumulatedDeltaRef.current += expandPx;
+          monitorWidth = await readCurrentMonitorLogicalWidth();
         } catch {
-          /* 浏览器 dev / 非 Tauri */
+          /* 非 Tauri：回退到不 clamp */
+        }
+        const { targetWidth, clampedByMonitor } = computeMultiPaneTargetWindowWidth({
+          currentInnerWidth: window.innerWidth,
+          idealWidth,
+          monitorLogicalWidth: monitorWidth,
+        });
+        if (targetWidth > window.innerWidth) {
+          try {
+            await setMainWindowLogicalInnerSize(targetWidth, window.innerHeight);
+            multiPaneAccumulatedDeltaRef.current += targetWidth - window.innerWidth;
+          } catch {
+            /* 浏览器 dev / 非 Tauri */
+          }
+        }
+        if (clampedByMonitor) {
+          message.info("屏幕宽度有限，已在当前窗口内分屏");
         }
       } else if (colDelta < 0 && typeof window !== "undefined") {
         // 减少列数：收缩窗口
@@ -703,7 +722,18 @@ export function useMainLayoutModes({
         await waitLayoutFrames(2);
         if (typeof window === "undefined") return;
         const currentWidth = window.innerWidth;
-        const targetWidth = computeRestoreMultiPaneLogicalWidth(restoredCount, currentWidth);
+        let restoreMonitorWidth: number | null = null;
+        try {
+          restoreMonitorWidth = await readCurrentMonitorLogicalWidth();
+        } catch {
+          /* 非 Tauri：回退到不 clamp */
+        }
+        const targetWidth = computeRestoreMultiPaneLogicalWidth(
+          restoredCount,
+          currentWidth,
+          undefined,
+          restoreMonitorWidth,
+        );
         if (targetWidth != null) {
           try {
             await setMainWindowLogicalInnerSize(targetWidth, window.innerHeight);

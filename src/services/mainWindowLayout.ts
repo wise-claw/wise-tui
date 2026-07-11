@@ -1,6 +1,7 @@
 import { LogicalSize, PhysicalSize } from "@tauri-apps/api/dpi";
-import { getCurrentWindow } from "@tauri-apps/api/window";
+import { currentMonitor, getCurrentWindow } from "@tauri-apps/api/window";
 import {
+  clampMinWindowWidthToMonitor,
   computeMainWindowMinLogicalWidth,
   computeDualPaneTargetCenterLogical,
   computeMultiPaneTargetCenterLogical,
@@ -36,6 +37,22 @@ export async function readMainWindowInnerSize(): Promise<{ width: number; height
 }
 
 /**
+ * 读取当前窗口所在屏幕的逻辑宽度（物理尺寸 / scaleFactor）。
+ * 非 Tauri 或取不到时返回 null，由调用方回退到不 clamp 的原行为。
+ */
+export async function readCurrentMonitorLogicalWidth(): Promise<number | null> {
+  try {
+    const monitor = await currentMonitor();
+    if (!monitor) return null;
+    const scaleFactor = monitor.scaleFactor || 1;
+    const logicalWidth = monitor.size.width / scaleFactor;
+    return Number.isFinite(logicalWidth) && logicalWidth > 0 ? logicalWidth : null;
+  } catch {
+    return null;
+  }
+}
+
+/**
  * 设置主窗口内尺寸（物理像素）。
  */
 export async function setMainWindowInnerSize(width: number, height: number): Promise<void> {
@@ -51,7 +68,7 @@ export async function setMainWindowLogicalInnerSize(width: number, height: numbe
   await win.setSize(new LogicalSize(Math.round(width), Math.round(height)));
 }
 
-/** 按当前三栏布局同步主窗口逻辑最小尺寸（仅宽度由布局决定）。 */
+/** 按当前三栏布局同步主窗口逻辑最小尺寸（宽度由布局决定，并 clamp 到屏幕可用宽度内）。 */
 export async function syncMainWindowMinLogicalSize(options: {
   paneCount: PaneCount;
   leftCollapsed: boolean;
@@ -59,7 +76,11 @@ export async function syncMainWindowMinLogicalSize(options: {
   leftWidthPx: number;
   rightWidthPx: number;
 }): Promise<void> {
-  const minWidth = computeMainWindowMinLogicalWidth(options);
+  const theoreticalMin = computeMainWindowMinLogicalWidth(options);
+  // 多屏时理论最小宽度可能超过屏幕（如 8 屏需 2253px），clamp 到屏幕可用宽度，
+  // 保证用户总能把窗口缩回屏幕内（pane 随之变窄，优于窗口超出屏幕且被 OS 锁死缩不回）。
+  const monitorWidth = await readCurrentMonitorLogicalWidth();
+  const minWidth = clampMinWindowWidthToMonitor(theoreticalMin, monitorWidth);
   try {
     await getCurrentWindow().setMinSize(new LogicalSize(minWidth, 480));
   } catch {

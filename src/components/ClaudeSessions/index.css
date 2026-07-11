@@ -81,10 +81,8 @@
   background: var(--app-multi-pane-divider);
 }
 
-/* 双屏：列宽由 JS 像素控制，避免 fr + min-width 与分隔条错位 */
-.app-claude-sessions__multi-panes--two-pane .app-claude-sessions__pane {
-  min-width: 0;
-}
+/* 双屏列宽由 JS 像素控制（formatTwoPaneSplitGridTemplateColumnsPx），避免 fr + min-width 与分隔条错位；
+   min-width 统一在 .__pane 上设为 0，故此处不再需要覆盖。 */
 
 .app-claude-sessions__two-pane-resizer {
   position: absolute;
@@ -112,7 +110,9 @@
 }
 
 .app-claude-sessions__pane {
-  min-width: var(--app-multi-pane-min-width);
+  /* min-width:0 让 grid minmax(0,1fr) 真正生效，屏幕不够时 pane 自动变窄而非撑破容器超出屏幕；
+     理想最小宽度 420px 仍由 splitter clamp（TWO_PANE_MIN_WIDTH_PX）与窗口扩展逻辑守护。 */
+  min-width: 0;
   min-height: 0;
   display: flex;
   flex-direction: column;

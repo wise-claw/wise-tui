@@ -182,8 +182,8 @@ export const PANE_COUNT_CYCLE_ORDER: readonly PaneCount[] = [1, 2, 4, 6, 8] as c
 /** 多屏模式下每个窗格的最小宽度（与 CSS --app-multi-pane-min-width 一致）。 */
 export const MAIN_LAYOUT_MULTI_PANE_MIN_WIDTH_PX = 420;
 
-/** 窗格之间的分隔间距（CSS grid gap）。 */
-export const MAIN_LAYOUT_MULTI_PANE_GAP_PX = 1;
+/** 窗格之间的分隔间距（与 `index.css` 中 `.app-claude-sessions__multi-panes` 的 `gap: 2px` 一致）。 */
+export const MAIN_LAYOUT_MULTI_PANE_GAP_PX = 2;
 
 /** 每增加一列时窗口宽度增量（min-width + gap）。 */
 export const MAIN_LAYOUT_MULTI_PANE_UNIT_PX =
@@ -203,6 +203,51 @@ export function paneGridDimensions(count: PaneCount): { rows: number; cols: numb
 export function computeMinLogicalCenterWidthForPaneCount(count: PaneCount): number {
   const { cols } = paneGridDimensions(count);
   return MAIN_LAYOUT_MULTI_PANE_MIN_WIDTH_PX * cols + MAIN_LAYOUT_MULTI_PANE_GAP_PX * Math.max(0, cols - 1);
+}
+
+/**
+ * 窗口宽度距屏幕边缘的留白：窗口阴影/边框/DPI 抖动，避免多屏扩展时窗口恰好顶满或超出屏幕。
+ * 用于把目标窗口宽度与 OS 级最小尺寸都 clamp 到屏幕可用宽度内。
+ */
+export const MAIN_LAYOUT_MONITOR_WIDTH_MARGIN_PX = 16;
+
+/**
+ * 多屏切换时把「理想窗口宽度」clamp 到屏幕可用宽度内。
+ *
+ * - `idealWidth` 由调用方按 `currentInnerWidth + colDelta × UNIT` 算出（每列 +MIN_WIDTH+GAP）。
+ * - 屏幕够宽（`idealWidth ≤ maxByMonitor`）时按理想值扩展，`clampedByMonitor=false`。
+ * - 屏幕不够时压到屏幕上限（不小于当前窗口宽度，即只扩不缩），`clampedByMonitor=true`，
+ *   pane 在窗口内分屏自动变窄，但窗口不会超出屏幕。
+ * - `monitorLogicalWidth` 为 null（非 Tauri / 取不到）时不 clamp，回退到原行为。
+ */
+export function computeMultiPaneTargetWindowWidth(options: {
+  currentInnerWidth: number;
+  idealWidth: number;
+  monitorLogicalWidth: number | null;
+}): { targetWidth: number; clampedByMonitor: boolean } {
+  const { currentInnerWidth, idealWidth, monitorLogicalWidth } = options;
+  if (monitorLogicalWidth == null) {
+    return { targetWidth: Math.max(currentInnerWidth, idealWidth), clampedByMonitor: false };
+  }
+  const maxByMonitor = Math.max(320, monitorLogicalWidth - MAIN_LAYOUT_MONITOR_WIDTH_MARGIN_PX);
+  if (idealWidth <= maxByMonitor) {
+    return { targetWidth: Math.max(currentInnerWidth, idealWidth), clampedByMonitor: false };
+  }
+  return { targetWidth: Math.max(currentInnerWidth, maxByMonitor), clampedByMonitor: true };
+}
+
+/**
+ * 把理论最小窗口宽度 clamp 到屏幕可用宽度内，保证用户总能把窗口缩回屏幕。
+ * `monitorLogicalWidth` 为 null 时原样返回（非 Tauri 回退）。
+ */
+export function clampMinWindowWidthToMonitor(
+  minWidth: number,
+  monitorLogicalWidth: number | null,
+  marginPx: number = MAIN_LAYOUT_MONITOR_WIDTH_MARGIN_PX,
+): number {
+  if (monitorLogicalWidth == null) return minWidth;
+  const maxByMonitor = Math.max(320, monitorLogicalWidth - marginPx);
+  return Math.min(minWidth, maxByMonitor);
 }
 
 /** 开启多屏后主内容区目标逻辑宽度：取当前中栏宽度与最小宽度的较大值。 */
@@ -287,6 +332,7 @@ export function computeRestoreMultiPaneLogicalWidth(
   paneCount: PaneCount,
   currentInnerWidth: number,
   sideGutterPx: number = MAIN_LAYOUT_MULTI_PANE_RESTORE_SIDE_GUTTER_PX,
+  monitorLogicalWidth: number | null = null,
 ): number | null {
   if (paneCount <= 1) return null;
   const minCenter = computeMinLogicalCenterWidthForPaneCount(paneCount);
@@ -294,7 +340,10 @@ export function computeRestoreMultiPaneLogicalWidth(
   const expandPx = Math.max(0, (cols - 1) * MAIN_LAYOUT_MULTI_PANE_UNIT_PX);
   const neededWidth = minCenter + sideGutterPx;
   if (expandPx <= 0 || currentInnerWidth >= neededWidth) return null;
-  return Math.max(neededWidth, currentInnerWidth + expandPx);
+  const target = Math.max(neededWidth, currentInnerWidth + expandPx);
+  if (monitorLogicalWidth == null) return target;
+  const maxByMonitor = Math.max(320, monitorLogicalWidth - MAIN_LAYOUT_MONITOR_WIDTH_MARGIN_PX);
+  return Math.min(target, maxByMonitor);
 }
 
 // ── Dual-pane aliases (backward compat) ──
