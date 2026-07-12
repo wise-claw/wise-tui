@@ -480,6 +480,9 @@ type ScheduleSafeAiChatSetContentOptions = {
   isEditorFocused?: () => boolean;
   /** editor 在帧上限内始终未就绪时调用：让调用方释放因 onAfterSet 未触发而卡住的 ref。 */
   onGiveUp?: () => void;
+  /** 会话切换等场景令在途 rAF tick 提前作废：stale 时直接 return（不调 onGiveUp / settle，
+   *  会话切换 effect 已清理 ref 与 pending），不再 setContent。 */
+  isStale?: () => boolean;
 };
 
 function readSemiEditorPlain(
@@ -531,6 +534,12 @@ function scheduleSafeAiChatSetContent(
   if (attempt()) return;
   let frames = 0;
   const tick = (): void => {
+    // 会话切换后旧 session 的在途 rAF 仍会回调：stale 时直接退出，避免把旧 prompt 写进新 session 编辑器。
+    // 不调 onGiveUp / settle：会话切换 effect 已归零 pendingSetContentRef 并清理 composerResettingRef 等
+    // 调用方 ref；此处 settle 反而会把新 session 刚 schedule 的 pending 计数错误归零，致新会话 canSend 提前翻 true。
+    if (options?.isStale?.()) {
+      return;
+    }
     if (attempt()) return;
     frames += 1;
     if (frames >= SAFE_AI_CHAT_SET_CONTENT_MAX_FRAMES) {
@@ -671,6 +680,8 @@ function ComposerInner({
   const ignoreNextContentSyncRef = useRef(false);
   const skipContentSyncRemainingRef = useRef(0);
   const composerSendInFlightRef = useRef(false);
+  /** 会话切换 generation token：每次切换 bump，在途 rAF setContent tick 据此判 stale 提前作废。 */
+  const composerSessionGenerationRef = useRef(0);
   /** 正在异步写入 Tiptap 的 setContent 任务数：>0 时 React 与 Tiptap 不一致，syncCanSendComposer 必须把 canSend 钉为 false，
    *  避免 Semi Foundation.handleSend 在 Tiptap 仍空时按 props.canSend=true 静默吞 Enter。 */
   const pendingSetContentRef = useRef(0);
@@ -800,6 +811,8 @@ function ComposerInner({
         canSendComposerRef.current = false;
         setCanSendComposer(false);
       }
+      // 捕获本次派发的 generation：会话切换会 bump generation，在途 rAF tick 据此判 stale 提前作废。
+      const myGen = composerSessionGenerationRef.current;
       // settle：成功与放弃都必须执行（归零 pending，否则 syncCanSendComposer 永远把 canSend 钉 false）。
       // 入参 `plain` 是调用方期望写入 Tiptap 的目标文本；Tiptap 实际读出的 `actual` 可能因行尾空格
       // 修复、零宽字符规范化等丢字符（粘贴后即触发"按钮变灰"的根因），故 canSend 必须基于 plain 兜底，
@@ -831,6 +844,10 @@ function ComposerInner({
             settle();
             onGiveUp?.();
           },
+          // 会话切换 bump generation 后，旧 session 的在途 rAF tick 判定 stale 直接 return：
+          // 避免把旧 prompt 写进新 session 编辑器。不调 onGiveUp / settle（会话切换 effect 已归零
+          // pendingSetContentRef 并清理 composerResettingRef 等），否则会误清新 session 的 pending 计数。
+          isStale: () => composerSessionGenerationRef.current !== myGen,
         },
       );
     },
@@ -901,6 +918,12 @@ function ComposerInner({
     // 避免新会话在 onContentChange 仍被 resetting 误吞，或被 stale pending 卡住 canSend。
     pendingSetContentRef.current = 0;
     composerResettingRef.current = false;
+    // 释放发送在途标记：旧会话发送链路若未走完 finally（如切换发生在 onExecute await 中），
+    // composerSendInFlightRef 会残留 true 致新会话 Enter 被吞；此处兜底归零。
+    composerSendInFlightRef.current = false;
+    // bump generation：旧会话在途的 rAF setContent tick 会判定 stale 直接 return（不调 onGiveUp /
+    // settle，因上方已归零 pendingSetContentRef 并清理 composerResettingRef），不再把旧 prompt 写进新会话编辑器。
+    composerSessionGenerationRef.current += 1;
   }, [session.id, draftBucketKey]);
 
   /** 会话输入区：Tab 仅用于 @ / 补全，不触发浏览器默认焦点切换（底栏按钮等） */

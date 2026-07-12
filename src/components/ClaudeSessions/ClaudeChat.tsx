@@ -688,11 +688,18 @@ export function ClaudeChatInner({
             ),
           );
           if (started === false) {
-            // 并发门闸：`executeSession` 内已 `onClaudeSpawnBlocked`，此处不再重复 toast
-            // 未真正派发 -> status 不会翻 running，gate 不能等 status effect 释放，立即手动释放。
+            // 未真正派发（并发阻塞 / session 尚未 hydrate / gemini 不支持 / bootstrap 超限等）。
+            // `executeSession` 内已 `onClaudeSpawnBlocked` 提示，此处不重复 toast。
+            // status 不会翻 running，gate 不能等 status effect 释放，立即手动释放。
+            // 抑制 finally 的 microtask flush：立即重派会撞同一门闸形成紧循环；且历史上 dedup
+            // 假命中曾致任务被当成功移除而丢失（已由 dedup 记录后移到 spawn 门闸后修复）。
+            // task 留队列，靠 pendingDispatchGateKey effect（含 repoRunningSessionsFingerprint /
+            // session.status / pendingTasksFingerprint）在并发释放 / session hydration / 引擎切换
+            // 等条件变化时重新 flush 推进；gemini 等真终态则永久留队列由用户切引擎后推进。
             if (laneKey === "main") {
               mainLaneDispatchGateRef.current.release();
             }
+            suppressFinalFlush = true;
             return;
           }
           removeTask(id);
@@ -1143,6 +1150,10 @@ export function ClaudeChatInner({
     lastPendingFlushGateKeyRef.current = "";
     // 会话切换：清空派发失败计数，避免新会话的同指纹任务被旧计数误判 drop。
     dispatchFailureTrackerRef.current.clear();
+    // 释放 main lane 派发门闸：旧 session 派发若走 started===false 抑制 flush 路径已手动
+    // release，此处为兜底；若切换发生在派发进行中（onExecute 未返回）或异常态，避免 gate
+    // 残留 held 致新 session 的 main lane 派发被 canDispatchHead 卡死。
+    mainLaneDispatchGateRef.current.release();
     const sid = session.id;
     const rp = session.repositoryPath;
     let cancelled = false;

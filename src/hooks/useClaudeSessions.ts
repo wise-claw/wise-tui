@@ -3472,14 +3472,14 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
       const trimmedPrompt = prompt.trim();
       if (trimmedPrompt) {
+        // dedup 检查：同 session 同 prompt 900ms 内视为已派发，跳过重复 spawn。
+        // 写入已后移到 spawn 门闸通过后（commitSessions 后），避免并发阻塞 / session 未 hydrate
+        // / gemini 不支持等「未真正派发」路径污染 dedup 表，致重派时 dedup 假命中 return true
+        // 被上层当成功移除而丢任务（C1 修复）。
         const recent = recentExecutePromptBySessionRef.current.get(tabSessionId);
         if (recent && recent.prompt === trimmedPrompt && Date.now() - recent.at < 900) {
           return true;
         }
-        recentExecutePromptBySessionRef.current.set(tabSessionId, {
-          prompt: trimmedPrompt,
-          at: Date.now(),
-        });
       }
 
       const forceFreshClaudeSession = opts?.terminalFreshTurn === true;
@@ -3531,13 +3531,19 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       }
       if (executionEngine === "gemini") {
         const engineTitle = SESSION_EXECUTION_ENGINE_LABELS[executionEngine].title;
-        commitSessions((prev) =>
-          appendSystemMessageBySessionId(
-            prev,
-            tabSessionId,
-            `[系统] ${engineTitle} 主会话派发即将支持，请暂时切换 Claude Code、Codex CLI、OpenCode 或 Cursor SDK。`,
-          ),
-        );
+        const geminiNotice = `[系统] ${engineTitle} 主会话派发即将支持，请暂时切换 Claude Code、Codex CLI、OpenCode 或 Cursor SDK。`;
+        commitSessions((prev) => {
+          // task 留队列后，外部 flush 可能重派命中同一 gemini 终态分支：去重避免重复追加系统提示。
+          const target = prev.find((s) => s.id === tabSessionId);
+          const alreadyNotified = target?.messages?.some(
+            (m) =>
+              m.role === "system" &&
+              typeof m.content === "string" &&
+              m.content.includes(engineTitle),
+          );
+          if (alreadyNotified) return prev;
+          return appendSystemMessageBySessionId(prev, tabSessionId, geminiNotice);
+        });
         return false;
       }
       commitSessions((prev) => {
@@ -3582,6 +3588,15 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           defaultInstructionApplied,
         );
       });
+      // dedup 写入：commitSessions 已 setSessionRunning，确认进入 spawn 流程后才记录。
+      // 至此后所有 return true 路径（bootstrap 重试 / 成功 spawn）都已真正派发；
+      // 并发阻塞 / gemini / session 未 hydrate 等 return false 路径不会到此，dedup 表不被污染。
+      if (trimmedPrompt) {
+        recentExecutePromptBySessionRef.current.set(tabSessionId, {
+          prompt: trimmedPrompt,
+          at: Date.now(),
+        });
+      }
       // 首轮已启动但尚未收到 stream-json 的 session_id 时，避免再 spawn 第二个进程。
       // 用户气泡须在上面的 commit 中先落盘，否则 bootstrap 等待会直接 return 导致「发送了但不见」。
       // 终端派发强制新回合时已主动取消旧进程并重置为 idle，不得在此阻塞。

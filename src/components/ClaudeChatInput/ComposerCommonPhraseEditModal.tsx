@@ -50,7 +50,6 @@ export function ComposerCommonPhraseEditModal({
       centered
       destroyOnHidden
       maskClosable={!saving}
-      zIndex={1100}
       className="app-composer-common-phrase-edit-modal"
       onCancel={onCancel}
       footer={
