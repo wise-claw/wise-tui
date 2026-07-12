@@ -830,6 +830,14 @@ function ComposerInner({
           // actual 为空时（清空场景）保留 plain，让下一帧 onContentChange 重新同步。
           if (actual || !normalized) lastEditorPlainRef.current = actual;
           settle();
+          // 主动归零 ignoreNextContentSyncRef：setContent 完成（或 shouldSkipStaleComposerSetContent
+          // 判定 skip 未实际写入）后，防回流使命已结束。正常路径下 onContentChange 已在 setContent
+          // 同步栈内消耗过它；但若回流被 composerResettingRef 拦截（clearComposerSurfaceSync 清空
+          // 发送），或 setContent 被 skip（setPlainAndCursor / @补全插入等，editor 已有目标内容未触发
+          // onContentChange），它不会被被动消耗而残留 -> 吞掉下一次用户 paste/输入的单次
+          // onContentChange -> canSend 不翻（按钮灰）或漏发 paste 内容。在此统一归零，所有调用方
+          // 自动受益，无需逐个设值点处理。
+          ignoreNextContentSyncRef.current = false;
           // 兜底二次 sync：粘贴 + 嵌套 schedule 后，Tiptap 的 onContentChange 可能命中
           // applySemiContentChange 的 skip 节流分支 → 主路径的 syncCanSendComposer 跳过 → canSend
           // 翻 true 失败。settle 收尾用 plain 再算一次。
@@ -842,6 +850,8 @@ function ComposerInner({
           // 并通知调用方释放其它「必须执行」的清理（如 composerResettingRef）。
           onGiveUp: () => {
             settle();
+            // 与 onAfterSet 一致主动归零 ignoreNextContentSyncRef，防 editor 未就绪放弃时残留。
+            ignoreNextContentSyncRef.current = false;
             onGiveUp?.();
           },
           // 会话切换 bump generation 后，旧 session 的在途 rAF tick 判定 stale 直接 return：
@@ -918,6 +928,9 @@ function ComposerInner({
     // 避免新会话在 onContentChange 仍被 resetting 误吞，或被 stale pending 卡住 canSend。
     pendingSetContentRef.current = 0;
     composerResettingRef.current = false;
+    // 归零 ignoreNextContentSyncRef：旧会话 clearComposerSurfaceSync 等路径可能残留它
+    // （resetting 守卫拦截回流致 ignoreNext 未被消耗），不归零会吞掉新会话首次 paste/输入。
+    ignoreNextContentSyncRef.current = false;
     // 释放发送在途标记：旧会话发送链路若未走完 finally（如切换发生在 onExecute await 中），
     // composerSendInFlightRef 会残留 true 致新会话 Enter 被吞；此处兜底归零。
     composerSendInFlightRef.current = false;
@@ -1783,6 +1796,8 @@ function ComposerInner({
           () => {
             // Tiptap 真正清干净后释放 resetting 标记
             composerResettingRef.current = false;
+            // ignoreNextContentSyncRef 由 scheduleComposerSetContent 的 onAfterSet 统一归零
+            // （回流被 resetting 拦截致 ignoreNext 未被被动消耗，需主动归零防残留吞下次输入）。
             // setContent("") 会丢焦点：必须在清空完成后重新聚焦输入框尾端，
             // 让用户发送后可立即继续连续输入，无需再点击聚焦。
             // （microtask 里的 focus 会先于此异步回调执行，被随后的 setContent 失焦覆盖，
@@ -1794,6 +1809,7 @@ function ComposerInner({
             // editor 未就绪、setContent("") 放弃时也必须释放 resetting，否则
             // applySemiContentChange 会永久吞掉所有回流 -> 打字无反应（只能靠会话切换兜底）。
             composerResettingRef.current = false;
+            // ignoreNextContentSyncRef 由 scheduleComposerSetContent 的 onGiveUp 统一归零。
             // 放弃路径同样尝试 refocus：editor 可能此时已就绪，聚焦后即可继续输入。
             aiChatRef.current?.focusEditor?.("end");
           },
