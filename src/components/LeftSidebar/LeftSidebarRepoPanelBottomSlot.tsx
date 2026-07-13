@@ -1,10 +1,11 @@
-import { memo, Suspense, useMemo, type ReactNode } from "react";
+import { memo, Suspense, useCallback, useMemo, type ReactNode } from "react";
 import { Spin } from "antd";
 import { lazy } from "react";
 import type { GitPanelOpenFileOptions } from "../GitPanel/types";
 import type { GitPanelWorkspaceSelectorProps } from "../GitPanel/GitPanelWorkspaceSelector";
 import type { GitPanelRepositoryEntry } from "../../utils/workspaceRepositoryTreeSelect";
 import type { WorkspaceRepositoryTreeSelection } from "../../utils/workspaceRepositoryTreeSelect";
+import { useRepoPanelSplitHeightPx } from "../../hooks/useRepoPanelSplitHeightPx";
 import { ActiveRepositoryFilesPanel } from "./ActiveRepositoryFilesPanel";
 import { LeftSidebarBottomTabPanes } from "./LeftSidebarBottomTabPanes";
 import { LeftSidebarBottomTabSwitcher } from "./LeftSidebarBottomTabSwitcher";
@@ -75,6 +76,60 @@ function LeftSidebarRepoPanelBottomSlotInner({
   filesExplorerSectionCollapsed,
   onFilesExplorerSectionCollapsedChange,
 }: LeftSidebarRepoPanelBottomSlotProps) {
+  // 同栏上下分栏时 Git 面板的高度（持久化到 default config store）。
+  const { heightPx, setHeightPx, save: saveSplitHeight, loading: splitHeightLoading } =
+    useRepoPanelSplitHeightPx();
+
+  const onSplitHeightChange = useCallback(
+    (next: number) => {
+      setHeightPx(next);
+    },
+    [setHeightPx],
+  );
+
+  const onSplitHeightCommit = useCallback(
+    (committed: number) => {
+      void saveSplitHeight(committed);
+    },
+    [saveSplitHeight],
+  );
+
+  // split 模式下文件树自动撑满，Git 面板走 inline height。
+  // 拖动期间频繁 setHeightPx → heightPx 高频变化 → 这里只构造新对象给 memo 子组件。
+  // 但 LeftSidebarBottomTabPanes 对 style 不做深度 equal — 因此只在 isSplit 时构造对象，频繁更新只会让 memo 失效 → 高频本身不可避免。
+  const gitPaneStyle = useMemo(
+    () =>
+      repoPanelRenderState.showGitOnLeft &&
+      repoPanelRenderState.showFilesOnLeft &&
+      bottomTabPanelsReady
+        ? {
+            height: heightPx,
+            minHeight: 0,
+            flex: "0 0 auto",
+          }
+        : undefined,
+    [
+      bottomTabPanelsReady,
+      heightPx,
+      repoPanelRenderState.showFilesOnLeft,
+      repoPanelRenderState.showGitOnLeft,
+    ],
+  );
+
+  const filesPaneStyle = useMemo(
+    () =>
+      repoPanelRenderState.showGitOnLeft &&
+      repoPanelRenderState.showFilesOnLeft &&
+      bottomTabPanelsReady
+        ? { minHeight: 0, flex: "1 1 0" }
+        : undefined,
+    [
+      bottomTabPanelsReady,
+      repoPanelRenderState.showFilesOnLeft,
+      repoPanelRenderState.showGitOnLeft,
+    ],
+  );
+
   const leftTabSwitcherPrefix: ReactNode = repoPanelRenderState.leftTabMode ? (
     <LeftSidebarBottomTabSwitcher activeTab={leftBottomTab} onChange={onLeftBottomTabChange} />
   ) : null;
@@ -149,9 +204,14 @@ function LeftSidebarRepoPanelBottomSlotInner({
       <LeftSidebarBottomTabPanes
         showGit={repoPanelRenderState.showGitOnLeft}
         showFiles={repoPanelRenderState.showFilesOnLeft}
-        panelsReady={bottomTabPanelsReady}
+        panelsReady={bottomTabPanelsReady && !splitHeightLoading}
         gitPane={leftSidebarGitBottomPane}
         filesPane={leftSidebarFilesBottomPane}
+        splitGitHeightPx={heightPx}
+        gitPaneStyle={gitPaneStyle}
+        filesPaneStyle={filesPaneStyle}
+        onSplitHeightChange={onSplitHeightChange}
+        onSplitHeightCommit={onSplitHeightCommit}
       />
     </div>
   );

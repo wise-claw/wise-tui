@@ -10,8 +10,8 @@ export function useTopbarChromeDefaultSetting() {
   const [showFccTopbar, setShowFccTopbar] = useState(false);
   const [showFccTrafficTopbar, setShowFccTrafficTopbar] = useState(false);
   const [showOpencodeProxyTopbar, setShowOpencodeProxyTopbar] = useState(false);
-  const [showSessionDataLinkTopbar, setShowSessionDataLinkTopbar] = useState(false);
-  const [showSessionFeedbackLoopTopbar, setShowSessionFeedbackLoopTopbar] = useState(false);
+  const [showSessionDataLinkTopbar, setShowSessionDataLinkTopbar] = useState(true);
+  const [showSessionFeedbackLoopTopbar, setShowSessionFeedbackLoopTopbar] = useState(true);
   const [showRemoteEntryTopbar, setShowRemoteEntryTopbar] = useState(true);
   const [showTopbarRepositoryName, setShowTopbarRepositoryName] = useState(false);
   const [showTopbarOpenInTerminal, setShowTopbarOpenInTerminal] = useState(true);

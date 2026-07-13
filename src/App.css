@@ -2332,14 +2332,26 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   pointer-events: none;
 }
 
-/* Git / 文件树同栏上下分栏时，两个面板之间显示分隔线 */
-.app-left-sidebar-bottom-tab-content--split > .app-left-sidebar-bottom-tab-pane + .app-left-sidebar-bottom-tab-pane {
+/* Git / 文件树同栏上下分栏时，两个面板之间显示分隔线（已被 resize handle 自身分隔线取代，保留兜底） */
+.app-left-sidebar-bottom-tab-content--split > .app-left-sidebar-bottom-tab-pane + .app-left-sidebar-bottom-tab-pane:not(.app-repo-panel-split-handle-buffer) {
   border-top: 1px solid var(--ant-color-border-secondary);
 }
 
-/* 分栏模式：Git 面板在底部，最高 230px */
+/* 分栏模式：Git 面板在底部，高度由 JS inline style 控制（持久化在 wiseDefaultConfigStore）。
+ * 仅去掉 max-height 兜底，让 inline style 生效；flex 由 panes 父组件透传。 */
 .app-left-sidebar-bottom-tab-content--split > .app-left-sidebar-bottom-tab-pane:last-child {
-  max-height: 230px;
+  max-height: none;
+}
+
+/* 上文 panes 透传 inline height/flex 时，内部 Git panel 仍要保持 flex column + 滚动。 */
+.app-left-sidebar-bottom-tab-content--split > .app-left-sidebar-bottom-tab-pane[style*="height"] {
+  flex: 0 0 auto;
+}
+
+/* split 模式占位节点，避免「相邻兄弟 +」被偶发插入的 handle DOM 影响布局。 */
+.app-left-sidebar-bottom-tab-content--split .app-repo-panel-split-handle-buffer {
+  flex-shrink: 0;
+  min-height: 0;
 }
 
 .app-left-sidebar-repo-panel-header {

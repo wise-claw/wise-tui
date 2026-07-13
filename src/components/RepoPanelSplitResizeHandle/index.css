@@ -1,0 +1,65 @@
+/* 文件树 / Git 面板同栏上下分栏的分隔条：
+ * - 容器自身 5px 高（命中区），中间 1px 分隔线，hover/active 加深。
+ * - 拖动期通过 .app-repo-panel-split-resize-handle--dragging 锁定 grabbing 光标。
+ */
+.app-repo-panel-split-resize-handle {
+  flex-shrink: 0;
+  width: 100%;
+  /* 命中高度常驻 5px，比 1px 直观很多，但视觉上仍保留极薄分隔线。 */
+  height: var(--app-repo-panel-split-resize-hit, 5px);
+  cursor: row-resize;
+  touch-action: none;
+  user-select: none;
+  background: transparent;
+  position: relative;
+  z-index: 2;
+  opacity: 1;
+  /* 拖动期视觉无过渡，避免 60Hz pointermove 期间叠加 transition 抖动。 */
+  transition: opacity var(--app-layout-rail-duration, 0.32s) var(--app-layout-rail-easing, cubic-bezier(0.33, 1, 0.68, 1));
+}
+
+.app-repo-panel-split-resize-handle::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: transparent;
+  pointer-events: none;
+}
+
+.app-repo-panel-split-resize-handle::after {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 50%;
+  height: 1px;
+  transform: translateY(-50%);
+  background: var(--ant-color-split);
+  opacity: 0.85;
+  pointer-events: none;
+  transition: background-color 120ms ease, opacity 120ms ease, height 120ms ease;
+}
+
+.app-repo-panel-split-resize-handle:hover::after {
+  background: var(--ant-color-primary);
+  opacity: 1;
+  height: 2px;
+}
+
+.app-repo-panel-split-resize-handle:active,
+.app-repo-panel-split-resize-handle--dragging {
+  cursor: grabbing;
+}
+
+.app-repo-panel-split-resize-handle--dragging::after {
+  background: var(--ant-color-primary);
+  opacity: 1;
+  height: 2px;
+}
+
+/* 拖动期间给 body 强制 grabbing 光标，避免拖出 handle 区域后丢失反馈。 */
+body.app-repo-panel-split-resizing,
+body.app-repo-panel-split-resizing * {
+  cursor: grabbing !important;
+  user-select: none !important;
+}

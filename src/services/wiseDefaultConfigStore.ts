@@ -28,6 +28,10 @@ import {
   MONITOR_PANEL_VISIBLE_ROWS_DEFAULT,
   normalizeMonitorPanelVisibleRows,
 } from "../constants/monitorPanelLayout";
+import {
+  REPO_PANEL_SPLIT_HEIGHT_DEFAULT_PX,
+  clampRepoPanelSplitHeightPx,
+} from "../constants/repoPanelLayout";
 import { normalizeFeedbackLoopMaxCycles } from "../utils/sessionFeedbackLoop";
 import {
   normalizeFeedbackGlobalRules,
@@ -89,6 +93,7 @@ export const WISE_FILE_TREE_OPEN_IN_NEW_PANE_CHANGED = "wise:file-tree-open-in-n
 
 export const WISE_REPO_PANEL_PLACEMENT_CHANGED = "wise:repo-panel-placement-changed";
 export const WISE_REPO_PANEL_SPLIT_MODE_CHANGED = "wise:repo-panel-split-mode-changed";
+export const WISE_REPO_PANEL_SPLIT_HEIGHT_CHANGED = "wise:repo-panel-split-height-changed";
 
 export const WISE_OPEN_IN_TERMINAL_SHORTCUT_CHANGED = "wise:open-in-terminal-shortcut-changed";
 
@@ -218,6 +223,8 @@ export interface WiseDefaultConfigV1 {
   filesPanelPlacement: MonitorPanelPlacement;
   /** Git 与文件树同栏时上下分栏展示（而非 Tab 切换）。 */
   repoPanelSplitMode: boolean;
+  /** Split 模式下 Git 面板高度（px）；由拖动把手调整并持久化。 */
+  repoPanelSplitHeightPx: number;
   /** 在仓库列表中「打开终端」的快捷键 chord（如 Mod+Shift+T）；空=未设置。 */
   openInTerminalShortcut: string;
   /** 在仓库列表中「打开编辑器」的快捷键 chord（如 Mod+Shift+E）；空=未设置。 */
@@ -292,6 +299,7 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   gitPanelPlacement: "left",
   filesPanelPlacement: "left",
   repoPanelSplitMode: false,
+  repoPanelSplitHeightPx: REPO_PANEL_SPLIT_HEIGHT_DEFAULT_PX,
   sessionFeedbackLoopEnabled: false,
   sessionFeedbackLoopMaxCycles: 3,
   sessionFeedbackLoopAutoStart: false,
@@ -513,6 +521,10 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
         typeof parsed.repoPanelSplitMode === "boolean"
           ? parsed.repoPanelSplitMode
           : DEFAULT_CONFIG.repoPanelSplitMode,
+      repoPanelSplitHeightPx:
+        typeof parsed.repoPanelSplitHeightPx === "number" && Number.isFinite(parsed.repoPanelSplitHeightPx)
+          ? clampRepoPanelSplitHeightPx(parsed.repoPanelSplitHeightPx)
+          : REPO_PANEL_SPLIT_HEIGHT_DEFAULT_PX,
       sessionFeedbackLoopEnabled:
         parsed.sessionFeedbackLoopEnabled === undefined
           ? DEFAULT_CONFIG.sessionFeedbackLoopEnabled
@@ -742,6 +754,7 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     gitPanelPlacement: DEFAULT_CONFIG.gitPanelPlacement,
     filesPanelPlacement: DEFAULT_CONFIG.filesPanelPlacement,
     repoPanelSplitMode: DEFAULT_CONFIG.repoPanelSplitMode,
+    repoPanelSplitHeightPx: DEFAULT_CONFIG.repoPanelSplitHeightPx,
     sessionFeedbackLoopEnabled: DEFAULT_CONFIG.sessionFeedbackLoopEnabled,
     sessionFeedbackLoopMaxCycles: DEFAULT_CONFIG.sessionFeedbackLoopMaxCycles,
     sessionFeedbackLoopAutoStart: DEFAULT_CONFIG.sessionFeedbackLoopAutoStart,
@@ -857,6 +870,15 @@ function dispatchRepoPanelSplitModeChanged(splitMode: boolean): void {
   );
 }
 
+function dispatchRepoPanelSplitHeightChanged(heightPx: number): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(WISE_REPO_PANEL_SPLIT_HEIGHT_CHANGED, {
+      detail: { repoPanelSplitHeightPx: heightPx },
+    }),
+  );
+}
+
 function dispatchOpenInTerminalShortcutChanged(chord: string): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(
@@ -950,6 +972,7 @@ export async function saveWiseDefaultConfig(
       | "gitPanelPlacement"
       | "filesPanelPlacement"
       | "repoPanelSplitMode"
+      | "repoPanelSplitHeightPx"
       | "sessionFeedbackLoopEnabled"
       | "sessionFeedbackLoopMaxCycles"
       | "sessionFeedbackLoopAutoStart"
@@ -1043,6 +1066,8 @@ export async function saveWiseDefaultConfig(
     filesPanelPlacement: patch.filesPanelPlacement ?? current.filesPanelPlacement,
     repoPanelSplitMode:
       patch.repoPanelSplitMode ?? current.repoPanelSplitMode,
+    repoPanelSplitHeightPx:
+      patch.repoPanelSplitHeightPx ?? current.repoPanelSplitHeightPx,
     sessionFeedbackLoopEnabled:
       patch.sessionFeedbackLoopEnabled ?? current.sessionFeedbackLoopEnabled,
     sessionFeedbackLoopMaxCycles:
@@ -1230,6 +1255,9 @@ export async function saveWiseDefaultConfig(
   }
   if (patch.repoPanelSplitMode !== undefined) {
     next.repoPanelSplitMode = normalizeBoolean(patch.repoPanelSplitMode);
+  }
+  if (patch.repoPanelSplitHeightPx !== undefined) {
+    next.repoPanelSplitHeightPx = clampRepoPanelSplitHeightPx(patch.repoPanelSplitHeightPx);
   }
   if (patch.sessionFeedbackLoopEnabled !== undefined) {
     next.sessionFeedbackLoopEnabled = normalizeBoolean(
@@ -1821,6 +1849,16 @@ export async function loadRepoPanelSplitModeFromStore(): Promise<boolean> {
 export async function saveRepoPanelSplitModeToStore(splitMode: boolean): Promise<void> {
   await saveWiseDefaultConfig({ repoPanelSplitMode: splitMode });
   dispatchRepoPanelSplitModeChanged(splitMode);
+}
+
+export async function loadRepoPanelSplitHeightFromStore(): Promise<number> {
+  return (await loadWiseDefaultConfig()).repoPanelSplitHeightPx;
+}
+
+export async function saveRepoPanelSplitHeightToStore(heightPx: number): Promise<void> {
+  const clamped = clampRepoPanelSplitHeightPx(heightPx);
+  await saveWiseDefaultConfig({ repoPanelSplitHeightPx: clamped });
+  dispatchRepoPanelSplitHeightChanged(clamped);
 }
 
 export async function loadDefaultClaudeConnectionKindFromStore(): Promise<ClaudeSessionConnectionKind> {
