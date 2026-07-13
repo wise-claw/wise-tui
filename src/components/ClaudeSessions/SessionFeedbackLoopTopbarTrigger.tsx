@@ -64,7 +64,6 @@ export function SessionFeedbackLoopTopbarTrigger({
 }: SessionFeedbackLoopTopbarTriggerProps) {
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen ?? internalOpen;
-  const disabled = !mainSession;
 
   const setOpen = useCallback(
     (next: boolean) => {
@@ -85,9 +84,8 @@ export function SessionFeedbackLoopTopbarTrigger({
   });
 
   const handleClick = useCallback(() => {
-    if (!mainSession) return;
     setOpen(true);
-  }, [mainSession, setOpen]);
+  }, [setOpen]);
 
   const dispatchPrompt = useCallback(
     async (prompt: string, kind: FeedbackLoopDispatchKind, cycleIndex?: number) => {
@@ -103,9 +101,9 @@ export function SessionFeedbackLoopTopbarTrigger({
   );
 
   const loopActive = isFeedbackLoopPhaseActive(workspace.loop.state.phase);
-  const tooltipTitle = disabled
-    ? "当前项目/仓库暂无主会话"
-    : `反馈神经网 · 主会话：${mainSession.repositoryName.trim() || "未命名"}${loopActive ? "（运行中）" : ""}`;
+  const tooltipTitle = mainSession
+    ? `反馈神经网 · 主会话：${mainSession.repositoryName.trim() || "未命名"}${loopActive ? "（运行中）" : ""}`
+    : "反馈神经网（尚未关联主会话）";
 
   return (
     <>
@@ -118,12 +116,10 @@ export function SessionFeedbackLoopTopbarTrigger({
             className={
               "app-topbar-btn app-session-feedback-loop-topbar-btn" +
               (open ? " active" : "") +
-              (disabled ? " disabled" : "") +
               (loopActive ? " app-session-feedback-loop-topbar-btn--running" : "")
             }
             aria-label="反馈神经网"
             aria-expanded={open}
-            disabled={disabled}
             onClick={handleClick}
           >
             <IconSessionFeedbackLoop />

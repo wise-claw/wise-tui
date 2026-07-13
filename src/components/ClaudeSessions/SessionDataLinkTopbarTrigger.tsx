@@ -53,7 +53,6 @@ export function SessionDataLinkTopbarTrigger({
   const [internalOpen, setInternalOpen] = useState(false);
   const open = controlledOpen ?? internalOpen;
   const [initialViewMode, setInitialViewMode] = useState<SessionDataLinkOpenView>("list");
-  const disabled = !mainSession;
 
   const setOpen = useCallback(
     (next: boolean) => {
@@ -75,14 +74,11 @@ export function SessionDataLinkTopbarTrigger({
   }, [uiSnap.sessionDataLinkOpenNonce, uiSnap.sessionDataLinkInitialView, mainSession, setOpen]);
 
   const handleClick = useCallback(() => {
-    if (!mainSession) return;
     setInitialViewMode("list");
     setOpen(true);
-  }, [mainSession, setOpen]);
+  }, [setOpen]);
 
-  const tooltipTitle = disabled
-    ? "当前项目/仓库暂无主会话"
-    : `全链路分析 · 主会话：${mainSession.repositoryName.trim() || "未命名"}`;
+  const tooltipTitle = `全链路分析${mainSession ? ` · 主会话：${mainSession.repositoryName.trim() || "未命名"}` : "（尚未关联主会话）"}`;
 
   return (
     <>
@@ -92,12 +88,9 @@ export function SessionDataLinkTopbarTrigger({
         <HoverHint title={tooltipTitle} open={open ? false : undefined}>
           <button
             type="button"
-            className={
-              "app-topbar-btn app-session-data-link-topbar-btn" + (open ? " active" : "") + (disabled ? " disabled" : "")
-            }
+            className={"app-topbar-btn app-session-data-link-topbar-btn" + (open ? " active" : "")}
             aria-label="全链路分析"
             aria-expanded={open}
-            disabled={disabled}
             onClick={handleClick}
           >
             <IconSessionDataLink />

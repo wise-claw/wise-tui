@@ -65,14 +65,12 @@ export const ClaudeChatSessionTopbarOverflow = memo(function ClaudeChatSessionTo
       items.push({
         key: "sessionDataLink",
         label: "全链路分析",
-        disabled: !mainSessionForDataLink,
       });
     }
     if (!topbarChrome.showSessionFeedbackLoopTopbar) {
       items.push({
         key: "sessionFeedbackLoop",
         label: "反馈神经网",
-        disabled: !mainSessionForDataLink,
       });
     }
     return items;
@@ -105,7 +103,6 @@ export const ClaudeChatSessionTopbarOverflow = memo(function ClaudeChatSessionTo
             domEvent.stopPropagation();
             setMenuOpen(false);
             const panel = key as SessionTopbarOverflowPanel;
-            if (panel === "sessionDataLink" && !mainSessionForDataLink) return;
             setActivePanel(panel);
           },
         }}
