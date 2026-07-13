@@ -119,3 +119,66 @@ describe("notificationHub memory caps", () => {
     notificationHub.removeSession(sessionId);
   });
 });
+
+describe("notificationHub setPermissionRequest idempotency", () => {
+  test("同 id 已 answered 不被流增量复活", () => {
+    const sid = `idem-answered-${Date.now()}`;
+    const reqId = `idem-req-${Date.now()}`;
+    notificationHub.setPermissionRequest(sid, {
+      id: reqId,
+      tool: "ExitPlanMode",
+      description: "退出规划模式",
+    });
+    notificationHub.markRequestAnswered(reqId);
+    expect(notificationHub.getRequestLifecycle(reqId)?.status).toBe("answered");
+
+    // 流推 plan 内容增量：description 不变但 toolInput 增多，5 字段短路不一定触发，
+    // 但 lifecycle 已 answered + 同 id 守卫必须挡住重新写入。
+    notificationHub.setPermissionRequest(sid, {
+      id: reqId,
+      tool: "ExitPlanMode",
+      description: "退出规划模式",
+      toolInput: { plan: "incremental delta" },
+    });
+    expect(notificationHub.getRequestLifecycle(reqId)?.status).toBe("answered");
+    notificationHub.removeSession(sid);
+  });
+
+  test("同 id 已 expired 不被复活", () => {
+    const sid = `idem-expired-${Date.now()}`;
+    const reqId = `idem-expired-req-${Date.now()}`;
+    notificationHub.setPermissionRequest(sid, {
+      id: reqId,
+      tool: "Bash",
+      description: "run echo",
+    });
+    notificationHub.invalidateControlRequestsForSession(sid, "进程已结束", "expire_keep_visible");
+    expect(notificationHub.getRequestLifecycle(reqId)?.status).toBe("expired");
+
+    notificationHub.setPermissionRequest(sid, {
+      id: reqId,
+      tool: "Bash",
+      description: "run echo",
+    });
+    expect(notificationHub.getRequestLifecycle(reqId)?.status).toBe("expired");
+    notificationHub.removeSession(sid);
+  });
+
+  test("不同 id 仍允许建立新的 pending lifecycle", () => {
+    const sid = `idem-different-${Date.now()}`;
+    notificationHub.setPermissionRequest(sid, {
+      id: "first-req",
+      tool: "Bash",
+      description: "x",
+    });
+    notificationHub.markRequestAnswered("first-req");
+
+    notificationHub.setPermissionRequest(sid, {
+      id: "second-req",
+      tool: "Bash",
+      description: "y",
+    });
+    expect(notificationHub.getRequestLifecycle("second-req")?.status).toBe("pending");
+    notificationHub.removeSession(sid);
+  });
+});

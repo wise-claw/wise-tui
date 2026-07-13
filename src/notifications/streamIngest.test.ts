@@ -1,5 +1,5 @@
 import { describe, expect, it } from "bun:test";
-import { buildPermissionStdinLine, ingestClaudeStreamLineForHub } from "./streamIngest";
+import { buildPermissionStdinLine, ingestClaudeStreamLineForHub, ingestPendingPermissionsFromSessionMessages } from "./streamIngest";
 import { notificationHub } from "./hub";
 
 describe("ingestClaudeStreamLineForHub can_use_tool", () => {
@@ -71,5 +71,96 @@ describe("buildPermissionStdinLine", () => {
       response: { response: { toolUseID?: string } };
     };
     expect(parsed.response.response.toolUseID).toBe("toolu_abc");
+  });
+});
+
+describe("ingestPendingPermissionsFromSessionMessages lifecycle guard", () => {
+  it("lifecycle 已 answered 时不复活 dock", () => {
+    const sid = `tf-answered-${Date.now()}`;
+    const reqId = `tf-req-${Date.now()}`;
+    notificationHub.setPermissionRequest(sid, {
+      id: reqId,
+      tool: "ExitPlanMode",
+      description: "退出规划模式",
+    });
+    notificationHub.markRequestAnswered(reqId);
+    notificationHub.clearPermission(sid);
+
+    // transcript 重放：仍带同 id 的 ExitPlanMode 不应复活 dock
+    const messages = [
+      {
+        role: "assistant" as const,
+        parts: [
+          {
+            type: "tool_use" as const,
+            id: reqId,
+            name: "ExitPlanMode",
+            input: { plan: "..." },
+            status: "running" as const,
+          },
+        ],
+      },
+    ];
+    ingestPendingPermissionsFromSessionMessages(sid, messages);
+    expect(notificationHub.getDockSlice(sid).permissionRequest).toBeNull();
+    expect(notificationHub.getRequestLifecycle(reqId)?.status).toBe("answered");
+    notificationHub.removeSession(sid);
+  });
+
+  it("lifecycle 已 answered 时不复活 dock（expired 后 clearPermission 落为 answered 路径）", () => {
+    const sid = `tf-expired-${Date.now()}`;
+    const reqId = `tf-expired-req-${Date.now()}`;
+    notificationHub.setPermissionRequest(sid, {
+      id: reqId,
+      tool: "ExitPlanMode",
+      description: "退出规划模式",
+    });
+    notificationHub.invalidateControlRequestsForSession(sid, "退出", "expire_keep_visible");
+    // clearPermission 把 lifecycle 落为 answered（系统既有行为），仍然是非 pending。
+    notificationHub.clearPermission(sid);
+    expect(notificationHub.getRequestLifecycle(reqId)?.status).toBe("answered");
+
+    const messages = [
+      {
+        role: "assistant" as const,
+        parts: [
+          {
+            type: "tool_use" as const,
+            id: reqId,
+            name: "ExitPlanMode",
+            input: {},
+            status: "running" as const,
+          },
+        ],
+      },
+    ];
+    ingestPendingPermissionsFromSessionMessages(sid, messages);
+    expect(notificationHub.getDockSlice(sid).permissionRequest).toBeNull();
+    // 仍保持 answered（转录回放不会复活 / 不会降级回 expired）
+    expect(notificationHub.getRequestLifecycle(reqId)?.status).toBe("answered");
+    notificationHub.removeSession(sid);
+  });
+
+  it("lifecycle 不存在时正常写入新 pr", () => {
+    const sid = `tf-new-${Date.now()}`;
+    const reqId = `tf-new-req-${Date.now()}`;
+    const messages = [
+      {
+        role: "assistant" as const,
+        parts: [
+          {
+            type: "tool_use" as const,
+            id: reqId,
+            name: "ExitPlanMode",
+            input: {},
+            status: "running" as const,
+          },
+        ],
+      },
+    ];
+    ingestPendingPermissionsFromSessionMessages(sid, messages);
+    expect(notificationHub.getDockSlice(sid).permissionRequest?.id).toBe(reqId);
+    expect(notificationHub.getRequestLifecycle(reqId)?.status).toBe("pending");
+    notificationHub.removeSession(sid);
   });
 });

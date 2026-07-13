@@ -391,6 +391,13 @@ export function ingestPendingPermissionsFromSessionMessages(
   if (slice.permissionRequest) return;
   const pending = extractPendingExitPlanModeFromMessages(messages);
   if (!pending) return;
+  // 兜底路径：lifecycle 已被 answered（自动批准成功）/ expired / failed，禁止 transcript
+  // 重写复活，否则用户已应答后还会再被旧消息顶到 dock。
+  // setPermissionRequest 内已有同 id + lc.status !== "pending" 的守卫，但 transcript
+  // 路径里 lifecycle 与 bucket 可能错位（bucket 已 null 但 lifecycle 仍 answered），这里
+  // 在写入前多一层明确检查。
+  const lc = notificationHub.getRequestLifecycle(pending.id);
+  if (lc && lc.status !== "pending") return;
   notificationHub.setPermissionRequest(sessionId, pending);
 }
 

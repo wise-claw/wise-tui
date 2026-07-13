@@ -3160,6 +3160,10 @@ export default function App() {
     let unlistenFilename: (() => void) | undefined;
     let unlistenContent: (() => void) | undefined;
     void listen("global-open-filename-search", (event) => {
+      // 后端通过 Focused 守卫控制是否 emit，但 Tauri 的 emit 会广播到所有 webview；
+      // 多主窗口并存时必须再叠加「本 webview 拥有系统焦点」的兜底，让非聚焦窗口静默忽略。
+      // 与 handleGlobalKey 的 Cmd/Ctrl+K 行为对齐。
+      if (!isWiseAppFocused()) return;
       const scopeDir = (event.payload as { scopeDir?: string } | undefined)?.scopeDir;
       // Ctrl+F 打开 Wise 文件名搜索（macOS 也用 Control 而非 Cmd）：
       // ⌘F 留给 Monaco 编辑器自身的内查找；带目录范围（文件树右键"在此搜索"）
@@ -3171,6 +3175,8 @@ export default function App() {
       })
       .catch(() => undefined);
     void listen("global-open-content-search", (event) => {
+      // 同上：多窗口下仅当前聚焦窗口响应内容搜索（与文件搜索对称）。
+      if (!isWiseAppFocused()) return;
       const scopeDir = (event.payload as { scopeDir?: string } | undefined)?.scopeDir;
       openContentSearchPalette(scopeDir);
     })
@@ -3188,6 +3194,8 @@ export default function App() {
   useEffect(() => {
     let unlisten: (() => void) | undefined;
     void listen("global-create-new-session", () => {
+      // 多窗口下：仅当前聚焦窗口触发新建会话，避免另一窗口被动弹窗/创建。
+      if (!isWiseAppFocused()) return;
       const repoId = activeRepositoryIdLatestRef.current;
       if (repoId == null) {
         message.warning("请先选择一个仓库");

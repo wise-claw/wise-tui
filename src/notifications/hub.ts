@@ -735,6 +735,19 @@ class NotificationHub {
     const b = this.getOrCreate(sessionId);
     if (p) {
       const merged = mergePermissionRequestUpdate(b.permissionRequest, p);
+      const lc = this.requestLifecycles.get(merged.id);
+
+      // 同 id 已是 answered / expired / failed：
+      //   - 拒绝把 lifecycle 降级回 pending（避免「自动批准成功后」被流里
+      //     后续增量 plan / 二次 control_request 复活 dock）。
+      //   - 不再覆盖桶内容，避免 docked 状态被早期快照翻回导致 render 抖动。
+      // 跨 id 的新请求仍按新事件重写（典型：用户新对话触发了不同的工具请求）。
+      // 注意：仅当桶中已有同 id 时才抑制；首写入时 lc 不存在或为 pending，
+      // 走原有 upsertRequestLifecycle(..., "pending") 路径正常建立新请求。
+      if (lc && lc.status !== "pending" && b.permissionRequest?.id === merged.id) {
+        return;
+      }
+
       if (
         b.permissionRequest &&
         b.permissionRequest.id === merged.id &&
