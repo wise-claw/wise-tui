@@ -1,6 +1,7 @@
 import {
   CloseCircleOutlined,
   CloudDownloadOutlined,
+  CloudSyncOutlined,
   DeleteOutlined,
   EditOutlined,
   KeyOutlined,
@@ -10,12 +11,13 @@ import {
   SearchOutlined,
   ThunderboltOutlined,
 } from "@ant-design/icons";
-import { Alert, Button, Empty, Form, Input, Modal, Popconfirm, Space, Tag, Typography, message } from "antd";
+import { Alert, Button, Empty, Form, Input, Modal, Popconfirm, Space, Tag, Tooltip, Typography, message } from "antd";
 import { HoverHint } from "../shared/HoverHint";
 import { CopyFeedbackIcon } from "../shared/CopyFeedbackIcon";
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import {
+  checkAllBuiltinAgentUpdates,
   deleteCustomAgent,
   installBuiltinAgent,
   listAgents,
@@ -32,6 +34,7 @@ import {
   canUpdateBuiltinAgent,
   deriveAgentRegistryStats,
   describeAgentRuntime,
+  describeVersionStatus,
   filterAgents,
   formatDetectedAt,
   getAgentKindLabel,
@@ -41,11 +44,17 @@ import {
   getBuiltinUpdateCommand,
   isBuiltinInstallableAgent,
   isBuiltinUninstallableAgent,
+  isUpToDateBuiltinAgent,
   getEmptyDescription,
   type AgentRegistryFilter,
   type BuiltinInstallableKind,
   type BuiltinUninstallableKind,
 } from "./agentRegistryPresentation";
+import {
+  getAgentRegistrySnapshot,
+  selectUpgradableCount,
+  subscribeAgentRegistry,
+} from "../../stores/agentRegistryStore";
 import {
   AuthorPanelEmptyShell,
   AuthorPanelHubTab,
@@ -80,8 +89,20 @@ export function AgentRegistrySection() {
   const [updatingId, setUpdatingId] = useState<string | null>(null);
   const [uninstallingId, setUninstallingId] = useState<string | null>(null);
   const [cursorModalOpen, setCursorModalOpen] = useState(false);
+  const [checkingUpdates, setCheckingUpdates] = useState(false);
+  // 用 ref 持有「正在检查」标志位,避免 handleCheckUpdates 因 state 变化
+  // 产生新闭包引用,进而导致启动 useEffect 重复触发(表现为按钮一直转)。
+  const checkingUpdatesRef = useRef(false);
   const [form] = Form.useForm<CustomAgentFormValues>();
   const aliveRef = useRef(true);
+
+  // 订阅 latest 版本信息,触发卡片 metadata 重渲染。
+  const registrySnap = useSyncExternalStore(
+    subscribeAgentRegistry,
+    getAgentRegistrySnapshot,
+    getAgentRegistrySnapshot,
+  );
+  const upgradableCount = selectUpgradableCount(registrySnap);
 
   const reload = useCallback(async (force = false) => {
     setLoading(true);
@@ -96,13 +117,32 @@ export function AgentRegistrySection() {
     }
   }, []);
 
+  const handleCheckUpdates = useCallback(async (force = false) => {
+    if (checkingUpdatesRef.current) return;
+    checkingUpdatesRef.current = true;
+    setCheckingUpdates(true);
+    try {
+      await checkAllBuiltinAgentUpdates(force);
+    } catch (e) {
+      // 启动时或网络挂掉时静默,避免每次开面板都弹错;手动按按钮时也只提示一次。
+      if (force) {
+        message.error(e instanceof Error ? e.message : String(e));
+      }
+    } finally {
+      checkingUpdatesRef.current = false;
+      if (aliveRef.current) setCheckingUpdates(false);
+    }
+  }, []);
+
   useEffect(() => {
     aliveRef.current = true;
     void reload(false);
+    // 启动静默检查一次最新版本(force=false 走后端 5min 缓存)。
+    void handleCheckUpdates(false);
     return () => {
       aliveRef.current = false;
     };
-  }, [reload]);
+  }, [reload, handleCheckUpdates]);
 
   const openCreateModal = useCallback(() => {
     setEditingAgent(null);
@@ -282,6 +322,17 @@ export function AgentRegistrySection() {
           <Button type="primary" size="small" className="app-agent-registry-btn-add" icon={<PlusOutlined />} onClick={openCreateModal}>
             新增预留入口
           </Button>
+          <Tooltip title={upgradableCount > 0 ? `当前 ${upgradableCount} 个运行入口可更新` : "检查 npm 上的最新版本"}>
+            <Button
+              size="small"
+              className="app-agent-registry-btn-check-updates"
+              icon={<CloudSyncOutlined />}
+              loading={checkingUpdates}
+              onClick={() => void handleCheckUpdates(true)}
+            >
+              {upgradableCount > 0 ? `检查全部更新 · ${upgradableCount} 项可更新` : "检查全部更新"}
+            </Button>
+          </Tooltip>
           <Button size="small" className="app-agent-registry-btn-reload" icon={<ReloadOutlined />} loading={loading} onClick={() => void reload(true)}>
             重新探测
           </Button>
@@ -367,6 +418,7 @@ export function AgentRegistrySection() {
               <AgentRegistryRow
                 key={agent.id}
                 agent={agent}
+                latest={registrySnap.latestByKind.get(agent.id)}
                 busy={loading}
                 installing={installingId === agent.id}
                 updating={updatingId === agent.id}
@@ -456,6 +508,7 @@ export function AgentRegistrySection() {
 
 interface AgentRegistryRowProps {
   agent: DetectedAgent;
+  latest?: import("../../types/detectedAgent").LatestVersionInfo;
   busy: boolean;
   installing: boolean;
   updating: boolean;
@@ -470,6 +523,7 @@ interface AgentRegistryRowProps {
 
 function AgentRegistryRow({
   agent,
+  latest,
   busy,
   installing,
   updating,
@@ -482,6 +536,7 @@ function AgentRegistryRow({
   onConfigureCursor,
 }: AgentRegistryRowProps) {
   const pathText = getAgentPathLabel(agent);
+  const versionStatus = describeVersionStatus(agent.installedVersion, latest);
 
   const { copied, copy } = useCopyToClipboard();
 
@@ -545,6 +600,15 @@ function AgentRegistryRow({
       <div className="app-agent-registry-card__runtime-desc">
         {describeAgentRuntime(agent)}
       </div>
+
+      {/* 版本 metadata 行:本机已装版本 + npm 最新版本(若已知)。 */}
+      {versionStatus ? (
+        <div
+          className={`app-agent-registry-card__version app-agent-registry-card__version--${versionStatus.tone}`}
+        >
+          <span className="app-agent-registry-card__version-text">{versionStatus.text}</span>
+        </div>
+      ) : null}
 
       {/* 底部 actions 和时间戳 */}
       <div className="app-agent-registry-card__footer">
@@ -616,14 +680,20 @@ function AgentRegistryRow({
         ) : isBuiltinUninstallableAgent(agent) && canUninstallBuiltinAgent(agent) ? (
           <Space size={4} className="app-agent-registry-card__actions">
             {isBuiltinInstallableAgent(agent) && canUpdateBuiltinAgent(agent) ? (
-              <HoverHint title={getBuiltinUpdateCommand(agent.kind)}>
+              <HoverHint
+                title={
+                  isUpToDateBuiltinAgent(latest)
+                    ? "已是最新版本"
+                    : getBuiltinUpdateCommand(agent.kind)
+                }
+              >
                 <Button
                   size="small"
                   type="primary"
                   ghost
                   icon={<SyncOutlined />}
                   loading={updating}
-                  disabled={busy || updating || uninstalling}
+                  disabled={busy || updating || uninstalling || isUpToDateBuiltinAgent(latest)}
                   onClick={() => onUpdate(agent)}
                 >
                   一键更新

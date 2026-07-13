@@ -1,9 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
-import { publishAgentRegistry } from "../stores/agentRegistryStore";
+import { publishAgentRegistry, publishLatestVersions } from "../stores/agentRegistryStore";
 import type {
   CustomAgentInput,
   DetectedAgent,
   DetectedAgentKind,
+  LatestVersionInfo,
   ProbeResult,
 } from "../types/detectedAgent";
 
@@ -64,4 +65,33 @@ function normalizeCustomAgentInput(input: CustomAgentInput): Record<string, unkn
     args: input.args,
     env: input.env,
   };
+}
+
+/**
+ * 查询单个 kind 的最新版本(5min 后端缓存)。
+ * cursor / custom 返回 `manual=true + latest=undefined`,由调用方按 manual 提示「手动更新」。
+ */
+export async function checkBuiltinAgentLatest(
+  kind: string,
+): Promise<LatestVersionInfo> {
+  try {
+    return await invoke<LatestVersionInfo>("agent_registry_check_latest", { kind });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(msg);
+  }
+}
+
+/** 批量查询所有内置 kind + cursor + custom agents 的最新版本,同步 publish 到 store。 */
+export async function checkAllBuiltinAgentUpdates(
+  force = false,
+): Promise<LatestVersionInfo[]> {
+  try {
+    const list = await invoke<LatestVersionInfo[]>("agent_registry_check_updates", { force });
+    publishLatestVersions(list);
+    return list;
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    throw new Error(msg);
+  }
 }

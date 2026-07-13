@@ -1244,6 +1244,45 @@
   line-height: 1.4;
 }
 
+/* 卡片中部版本 metadata 行 */
+.app-agent-registry-card__version {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 6px;
+  border-radius: 3px;
+  font-family: var(--app-font-monospace, "SF Mono", Menlo, Consolas, monospace);
+  font-size: 10.5px;
+  line-height: 1.4;
+  align-self: flex-start;
+  background: var(--ant-color-fill-tertiary);
+  color: var(--ant-color-text-secondary);
+}
+
+.app-agent-registry-card__version--upgradable {
+  background: rgba(245, 154, 35, 0.12);
+  color: #d48806;
+}
+
+.app-agent-registry-card__version--current {
+  background: rgba(82, 196, 26, 0.12);
+  color: #389e0d;
+}
+
+.app-agent-registry-card__version--manual {
+  background: var(--ant-color-fill-tertiary);
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-agent-registry-card__version--unknown {
+  background: rgba(245, 34, 45, 0.08);
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-agent-registry-card__version-text {
+  white-space: nowrap;
+}
+
 /* 卡片底部 */
 .app-agent-registry-card__footer {
   display: flex;

@@ -14,6 +14,7 @@ type SharedFields = {
   binaryPath?: string;
   detectedAt: string;
   failureReason?: string;
+  installedVersion?: string;
 };
 
 type KindFields = {
@@ -44,6 +45,17 @@ export interface ProbeResult {
   ok: boolean;
   error?: string;
   resolvedPath?: string;
+  version?: string;
+}
+
+/** 后端 `agent_registry_check_latest` / `agent_registry_check_updates` 的返回结构。 */
+export interface LatestVersionInfo {
+  kind: string;
+  installed?: string;
+  latest?: string;
+  upgradable: boolean;
+  manual: boolean;
+  checkedAt: number;
 }
 
 export function isAgentKind<K extends DetectedAgentKind>(

@@ -1,4 +1,4 @@
-import { isAgentKind, type DetectedAgent, type DetectedAgentKind } from "../../types/detectedAgent";
+import { isAgentKind, type DetectedAgent, type DetectedAgentKind, type LatestVersionInfo } from "../../types/detectedAgent";
 
 export type BuiltinInstallableKind = Exclude<DetectedAgentKind, "custom" | "cursor">;
 export type BuiltinUninstallableKind = Exclude<DetectedAgentKind, "custom">;
@@ -148,4 +148,59 @@ function buildAgentSearchText(agent: DetectedAgent): string {
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
+}
+
+// ──────────────────── 版本展示 ────────────────────
+
+export type VersionStatusTone = "neutral" | "upgradable" | "current" | "manual" | "checking" | "unknown";
+
+export interface VersionStatusBadge {
+  /** 主文本,如 "v1.2.3" / "v1.2.3 → v1.4.0 可更新" / "已是最新" / "手动更新"。 */
+  text: string;
+  /** 描述最新版本号(若有,用于在 metadata 行右侧次级展示)。 */
+  latestHint?: string;
+  tone: VersionStatusTone;
+}
+
+/**
+ * 合成卡片底部版本 metadata 的展示文案。
+ *
+ * - installed 为空(本机未探测到)→ 不展示,返回 `null`(由调用方隐藏整行)。
+ * - latest 为 manual → 显示「手动更新」。
+ * - latest 查询失败 / latest 为 null → 显示「查询失败」+ installed。
+ * - installed === latest → 显示「v{installed} · 已是最新」。
+ * - installed !== latest → 显示「v{installed} → v{latest} 可更新」。
+ */
+export function describeVersionStatus(
+  installedVersion: string | undefined,
+  latest: LatestVersionInfo | undefined,
+): VersionStatusBadge | null {
+  if (!installedVersion) return null;
+  if (!latest) {
+    return { text: `v${installedVersion}`, tone: "neutral" };
+  }
+  if (latest.manual) {
+    return { text: `v${installedVersion} · 手动更新`, tone: "manual" };
+  }
+  if (!latest.latest) {
+    return { text: `v${installedVersion} · 查询失败`, tone: "unknown" };
+  }
+  if (latest.installed && latest.installed === latest.latest) {
+    return { text: `v${installedVersion} · 已是最新`, tone: "current" };
+  }
+  return {
+    text: `v${installedVersion} → v${latest.latest} 可更新`,
+    latestHint: `v${latest.latest}`,
+    tone: "upgradable",
+  };
+}
+
+/** 当前是否无可更新 — 用于把「一键更新」按钮置灰。 */
+export function isUpToDateBuiltinAgent(
+  latest: LatestVersionInfo | undefined,
+): boolean {
+  if (!latest) return false;
+  if (latest.manual) return true;
+  if (!latest.upgradable) return true;
+  return false;
 }

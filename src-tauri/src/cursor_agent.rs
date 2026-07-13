@@ -369,6 +369,7 @@ pub async fn probe_cursor_registry(db: &Mutex<Connection>, probe: &dyn Probe) ->
                     .unwrap_or_else(|| "未找到 bun，无法运行 Cursor SDK bridge".to_string()),
             ),
             resolved_path: None,
+            version: None,
         };
     }
 
@@ -377,6 +378,7 @@ pub async fn probe_cursor_registry(db: &Mutex<Connection>, probe: &dyn Probe) ->
             ok: false,
             error: Some("未配置 Cursor API Key（设置或 CURSOR_API_KEY 环境变量）".to_string()),
             resolved_path: bun.resolved_path,
+            version: None,
         };
     }
 
@@ -384,6 +386,7 @@ pub async fn probe_cursor_registry(db: &Mutex<Connection>, probe: &dyn Probe) ->
         ok: true,
         error: None,
         resolved_path: bun.resolved_path,
+        version: None,
     }
 }
 
@@ -1212,6 +1215,7 @@ mod tests {
                         Some("bun unavailable".to_string())
                     },
                     resolved_path: Some("/mock/bun".to_string()),
+                    version: None,
                 }
             })
         }

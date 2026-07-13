@@ -27,6 +27,8 @@ pub struct SyntheticAgent {
     pub detected_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub failure_reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub installed_version: Option<String>,
     pub command: String,
 }
 
@@ -42,6 +44,8 @@ pub struct CustomAgent {
     pub detected_at: String,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub failure_reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub installed_version: Option<String>,
     pub command: String,
     pub args: Vec<String>,
     pub env: HashMap<String, String>,
@@ -79,6 +83,9 @@ pub struct ProbeResult {
     pub error: Option<String>,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub resolved_path: Option<String>,
+    /// 探测成功时跑 `<binary> --version` 取到的首行版本号(可选,失败为 None)。
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version: Option<String>,
 }
 
 pub trait Probe: Send + Sync {
@@ -406,6 +413,7 @@ async fn probe_builtin(
                         fallback_command
                     )),
                     resolved_path: None,
+                    version: None,
                 }
             }
         }
@@ -418,6 +426,7 @@ async fn probe_builtin(
                     .unwrap_or_else(|| "binary not found on PATH".to_string())
             )),
             resolved_path: None,
+            version: None,
         },
     }
 }
@@ -433,6 +442,7 @@ async fn probe_codex_builtin(probe: &dyn Probe, env: &HashMap<String, String>) -
             ok: true,
             error: None,
             resolved_path: Some(path),
+            version: None,
         },
         Err(fallback_error) => ProbeResult {
             ok: false,
@@ -444,6 +454,7 @@ async fn probe_codex_builtin(probe: &dyn Probe, env: &HashMap<String, String>) -
                 fallback_error
             )),
             resolved_path: first.resolved_path,
+            version: None,
         },
     }
 }
@@ -465,6 +476,7 @@ fn synthetic_agent(kind: &str, name: &str, command: &str, result: ProbeResult) -
                     .unwrap_or_else(|| "binary not found on PATH".to_string()),
             )
         },
+        installed_version: result.version,
         command: command.to_string(),
     }
 }
@@ -486,6 +498,7 @@ fn custom_agent(record: CustomAgentRecord, result: ProbeResult) -> CustomAgent {
                     .unwrap_or_else(|| "binary not found on PATH".to_string()),
             )
         },
+        installed_version: result.version,
         command: record.command,
         args: record.args,
         env: record.env,
@@ -499,6 +512,7 @@ async fn resolve_command(command: &str, env: &HashMap<String, String>) -> ProbeR
             ok: false,
             error: Some("command is required".to_string()),
             resolved_path: None,
+            version: None,
         };
     }
 
@@ -509,12 +523,14 @@ async fn resolve_command(command: &str, env: &HashMap<String, String>) -> ProbeR
                 ok: true,
                 error: None,
                 resolved_path: Some(path.to_string_lossy().to_string()),
+                version: probe_binary_version(Path::new(trimmed)).await,
             };
         }
         return ProbeResult {
             ok: false,
             error: Some("binary path does not exist".to_string()),
             resolved_path: None,
+            version: None,
         };
     }
 
@@ -538,10 +554,12 @@ async fn resolve_command(command: &str, env: &HashMap<String, String>) -> ProbeR
             match path {
                 Some(path) => {
                     if is_runnable_binary(Path::new(&path)) {
+                        let version = probe_binary_version(Path::new(&path)).await;
                         ProbeResult {
                             ok: true,
                             error: None,
                             resolved_path: Some(path),
+                            version,
                         }
                     } else if Path::new(&path).is_symlink() {
                         ProbeResult {
@@ -550,12 +568,14 @@ async fn resolve_command(command: &str, env: &HashMap<String, String>) -> ProbeR
                                 "binary symlink is broken: {path}（请删除后重新安装）"
                             )),
                             resolved_path: Some(path),
+                            version: None,
                         }
                     } else {
                         ProbeResult {
                             ok: false,
                             error: Some(format!("binary not executable or missing: {path}")),
                             resolved_path: Some(path),
+                            version: None,
                         }
                     }
                 }
@@ -563,6 +583,7 @@ async fn resolve_command(command: &str, env: &HashMap<String, String>) -> ProbeR
                     ok: false,
                     error: Some("resolver returned no path".to_string()),
                     resolved_path: None,
+                    version: None,
                 },
             }
         }
@@ -576,18 +597,38 @@ async fn resolve_command(command: &str, env: &HashMap<String, String>) -> ProbeR
                     stderr
                 }),
                 resolved_path: None,
+                version: None,
             }
         }
         Ok(Err(error)) => ProbeResult {
             ok: false,
             error: Some(error.to_string()),
             resolved_path: None,
+            version: None,
         },
         Err(_) => ProbeResult {
             ok: false,
             error: Some("probe timed out after 2s".to_string()),
             resolved_path: None,
+            version: None,
         },
+    }
+}
+
+/// 探测成功后跑 `<binary> --version` 取首行作为版本号;失败/超时(1.5s)回 None。
+/// 注意:对路径形式的 binary 直接执行;对命令名形式通过 `which/where` 解析过的绝对路径执行。
+async fn probe_binary_version(bin: &Path) -> Option<String> {
+    let mut cmd = tokio::process::Command::new(bin);
+    cmd.kill_on_drop(true);
+    cmd.arg("--version");
+    match tokio::time::timeout(Duration::from_millis(1500), cmd.output()).await {
+        Ok(Ok(out)) if out.status.success() => String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .next()
+            .map(str::trim)
+            .filter(|s| !s.is_empty())
+            .map(str::to_string),
+        _ => None,
     }
 }
 
@@ -1235,6 +1276,200 @@ pub async fn agent_registry_delete_custom(
     Ok(())
 }
 
+// ──────────────────── npm latest 版本查询 + 缓存 ────────────────────
+//
+// 设计要点:
+// - cursor 走 SDK bridge 不查 npm,直接返回 `manual = true` + `latest = None`。
+// - custom agents 同理标 `manual = true`。
+// - 内置 4 个 kind(claude/codex/gemini/opencode)命中 npm registry `dist-tags.latest`。
+// - 缓存 5min TTL,模块级 `OnceLock<RwLock<HashMap<kind, (checked_at, info)>>>`,
+//   不依赖 `app.manage(...)`,无新增状态注入。
+// - `installed` 实时从 registry snapshot 取(避免用户刚装/更新完还显示旧值)。
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct LatestVersionInfo {
+    /// "claude" | "codex" | "gemini" | "opencode" | "cursor" | "custom:<id>"
+    pub kind: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub installed: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub latest: Option<String>,
+    pub upgradable: bool,
+    /// cursor / custom 走非 npm 渠道,UI 提示「手动更新」且不调 update_builtin。
+    pub manual: bool,
+    /// 查询 unix 秒;前端可用于「N 分钟前查询」之类的提示。
+    pub checked_at: i64,
+}
+
+const LATEST_TTL_SECS: i64 = 300;
+
+static LATEST_CACHE: OnceLock<RwLock<HashMap<String, (i64, LatestVersionInfo)>>> =
+    OnceLock::new();
+
+fn latest_cache() -> &'static RwLock<HashMap<String, (i64, LatestVersionInfo)>> {
+    LATEST_CACHE.get_or_init(|| RwLock::new(HashMap::new()))
+}
+
+/// 从 snapshot 取对应 kind 的已安装版本号。custom 用 id 去掉 `custom:` 前缀后比较。
+fn installed_version_from_snapshot(
+    snapshot: &[DetectedAgent],
+    kind: &str,
+) -> Option<String> {
+    if let Some(stripped) = kind.strip_prefix("custom:") {
+        for agent in snapshot {
+            if let DetectedAgent::Custom(c) = agent {
+                if c.id == format!("custom:{stripped}") {
+                    return c.installed_version.clone();
+                }
+            }
+        }
+        return None;
+    }
+    for agent in snapshot {
+        match (agent, kind) {
+            (DetectedAgent::Claude(a), "claude")
+            | (DetectedAgent::Codex(a), "codex")
+            | (DetectedAgent::Gemini(a), "gemini")
+            | (DetectedAgent::OpenCode(a), "opencode")
+            | (DetectedAgent::Cursor(a), "cursor") => return a.installed_version.clone(),
+            _ => {}
+        }
+    }
+    None
+}
+
+fn npm_registry_url(package: &str) -> String {
+    format!("https://registry.npmjs.org/{package}/latest")
+}
+
+fn npm_http_client() -> reqwest::Client {
+    reqwest::Client::builder()
+        .timeout(Duration::from_secs(10))
+        .user_agent("wise-tui")
+        .build()
+        .unwrap_or_else(|_| reqwest::Client::new())
+}
+
+/// 查 npm dist-tags.latest;返回 `Some(version)` 或 `None`(网络失败 / 解析失败)。
+async fn fetch_npm_latest(package: &str) -> Option<String> {
+    let resp = npm_http_client().get(npm_registry_url(package)).send().await.ok()?;
+    if !resp.status().is_success() {
+        return None;
+    }
+    let body: serde_json::Value = resp.json().await.ok()?;
+    body.get("version")
+        .and_then(|v| v.as_str())
+        .map(str::to_string)
+}
+
+/// 内部分发:cursor/custom 走 manual 分支,内置 kind 走 npm 查询并写缓存。
+async fn check_latest_inner(
+    kind: &str,
+    installed: Option<String>,
+    force: bool,
+) -> LatestVersionInfo {
+    let now = chrono::Utc::now().timestamp();
+
+    if kind == "cursor" || kind.starts_with("custom:") {
+        return LatestVersionInfo {
+            kind: kind.to_string(),
+            installed,
+            latest: None,
+            upgradable: false,
+            manual: true,
+            checked_at: now,
+        };
+    }
+
+    // 缓存命中且未过期 → 直接复用,但 installed 字段用最新的(避免 update 后旧值)
+    if !force {
+        if let Ok(guard) = latest_cache().read() {
+            if let Some((checked_at, cached)) = guard.get(kind).cloned() {
+                if now - checked_at < LATEST_TTL_SECS {
+                    let mut info = cached;
+                    info.installed = installed.or(info.installed);
+                    info.checked_at = now;
+                    return info;
+                }
+            }
+        }
+    }
+
+    let spec = match parse_builtin_install_kind(kind) {
+        Ok(s) => s,
+        Err(_) => {
+            return LatestVersionInfo {
+                kind: kind.to_string(),
+                installed,
+                latest: None,
+                upgradable: false,
+                manual: true,
+                checked_at: now,
+            };
+        }
+    };
+
+    let latest = fetch_npm_latest(spec.npm_package).await;
+    let upgradable = match (&installed, &latest) {
+        (Some(i), Some(l)) => i != l,
+        _ => false,
+    };
+    let info = LatestVersionInfo {
+        kind: kind.to_string(),
+        installed,
+        latest,
+        upgradable,
+        manual: false,
+        checked_at: now,
+    };
+
+    if let Ok(mut guard) = latest_cache().write() {
+        guard.insert(kind.to_string(), (now, info.clone()));
+    }
+    info
+}
+
+#[tauri::command]
+pub async fn agent_registry_check_latest(
+    kind: String,
+    registry: tauri::State<'_, AgentRegistry>,
+) -> Result<LatestVersionInfo, String> {
+    let snapshot = registry.snapshot()?;
+    let installed = installed_version_from_snapshot(&snapshot, &kind);
+    Ok(check_latest_inner(&kind, installed, false).await)
+}
+
+#[tauri::command]
+pub async fn agent_registry_check_updates(
+    force: bool,
+    registry: tauri::State<'_, AgentRegistry>,
+) -> Result<Vec<LatestVersionInfo>, String> {
+    let snapshot = registry.snapshot()?;
+    let mut kinds: Vec<String> = vec![
+        "claude".to_string(),
+        "codex".to_string(),
+        "gemini".to_string(),
+        "opencode".to_string(),
+        "cursor".to_string(),
+    ];
+    for agent in &snapshot {
+        if let DetectedAgent::Custom(_) = agent {
+            // CustomAgent.id 形如 "custom:<rowid>"
+            let id = agent.id();
+            if !kinds.iter().any(|k| k == &id) {
+                kinds.push(id.to_string());
+            }
+        }
+    }
+    let mut out = Vec::with_capacity(kinds.len());
+    for kind in kinds {
+        let installed = installed_version_from_snapshot(&snapshot, &kind);
+        out.push(check_latest_inner(&kind, installed, force).await);
+    }
+    Ok(out)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1296,12 +1531,14 @@ mod tests {
                         ok: true,
                         error: None,
                         resolved_path: Some(format!("/mock/{command}")),
+                        version: None,
                     }
                 } else {
                     ProbeResult {
                         ok: false,
                         error: Some(format!("{command} unavailable")),
                         resolved_path: None,
+                        version: None,
                     }
                 }
             })
@@ -1324,6 +1561,7 @@ mod tests {
             binary_path: Some(format!("/mock/{command}")),
             detected_at: "2026-05-17T00:00:00.000Z".to_string(),
             failure_reason: None,
+            installed_version: None,
             command: command.to_string(),
         }
     }
@@ -1337,6 +1575,7 @@ mod tests {
             binary_path: Some("/mock/custom".to_string()),
             detected_at: "2026-05-17T00:00:00.000Z".to_string(),
             failure_reason: None,
+            installed_version: None,
             command: "custom".to_string(),
             args: Vec::new(),
             env: HashMap::new(),
@@ -1554,5 +1793,56 @@ mod tests {
                 DetectedAgent::Custom(_) => panic!("no custom rows expected"),
             }
         }
+    }
+
+    #[test]
+    fn latest_info_serializes_camel_case() {
+        let info = LatestVersionInfo {
+            kind: "claude".to_string(),
+            installed: Some("1.0.0".to_string()),
+            latest: Some("1.2.0".to_string()),
+            upgradable: true,
+            manual: false,
+            checked_at: 1_700_000_000,
+        };
+        let json = serde_json::to_string(&info).expect("serialize");
+        assert!(json.contains("\"checkedAt\":1700000000"), "json was {json}");
+        assert!(json.contains("\"upgradable\":true"), "json was {json}");
+        assert!(json.contains("\"latest\":\"1.2.0\""), "json was {json}");
+        assert!(!json.contains("\"checked_at\""), "json was {json}");
+    }
+
+    #[tokio::test]
+    async fn cursor_check_latest_inner_returns_manual() {
+        let info = check_latest_inner("cursor", Some("0.5.0".to_string()), false).await;
+        assert_eq!(info.kind, "cursor");
+        assert!(info.manual, "cursor must be marked manual");
+        assert!(info.latest.is_none(), "cursor should not query npm");
+        assert!(!info.upgradable);
+    }
+
+    #[tokio::test]
+    async fn custom_check_latest_inner_returns_manual() {
+        let info = check_latest_inner("custom:abc", Some("0.1.0".to_string()), false).await;
+        assert_eq!(info.kind, "custom:abc");
+        assert!(info.manual);
+        assert!(info.latest.is_none());
+    }
+
+    #[test]
+    fn installed_version_picks_claude_from_snapshot() {
+        let snapshot = vec![DetectedAgent::Claude(sample_synthetic(
+            "claude", "claude", "claude",
+        ))];
+        let mut agent = match &snapshot[0] {
+            DetectedAgent::Claude(a) => a.clone(),
+            _ => unreachable!(),
+        };
+        agent.installed_version = Some("2.1.3".to_string());
+        let snapshot = vec![DetectedAgent::Claude(agent)];
+        let v = installed_version_from_snapshot(&snapshot, "claude");
+        assert_eq!(v.as_deref(), Some("2.1.3"));
+        let v = installed_version_from_snapshot(&snapshot, "codex");
+        assert!(v.is_none(), "codex not in snapshot, must return None");
     }
 }
