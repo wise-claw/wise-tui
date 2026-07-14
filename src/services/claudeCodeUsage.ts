@@ -81,7 +81,7 @@ export interface ClaudeLineEditsSnapshotResponse {
 }
 
 export interface ClaudeCodeUsageSnapshotOptions {
-  /** 限定仓库绝对路径；省略则统计本机全部 Claude Code JSONL。 */
+  /** 限定仓库绝对路径；省略则统计本机全部 Claude / Cursor / OpenCode / Codex 落盘数据。 */
   projectPath?: string | null;
 }
 
@@ -116,7 +116,8 @@ export function invalidateClaudeCodeUsageSnapshotCache(projectPath?: string | nu
   lineEditsSnapshotCache.delete(key);
 }
 
-/** 异步：在 Rust 侧 `spawn_blocking` 中扫描磁盘，一次返回日/周/月三套聚合，避免切换粒度时重复 IO。 */
+/** 异步：在 Rust 侧 `spawn_blocking` 中扫描磁盘，一次返回日/周/月三套聚合，避免切换粒度时重复 IO。
+ *  数据源：Claude Code JSONL + Codex sessions + OpenCode DB。 */
 export async function getClaudeCodeUsageSnapshot(
   options?: ClaudeCodeUsageSnapshotOptions,
 ): Promise<ClaudeUsageSnapshotResponse | null> {
@@ -136,7 +137,7 @@ export async function getClaudeCodeUsageSnapshot(
   return value;
 }
 
-/** 异步：扫描 JSONL 中 Edit / Write 等工具调用，返回近一年代码编辑量热力图数据。 */
+/** 异步：扫描 Claude / Cursor / OpenCode / Codex 编辑记录，返回近一年代码编辑量热力图数据。 */
 export async function getClaudeCodeLineEditsSnapshot(
   options?: ClaudeCodeUsageSnapshotOptions,
 ): Promise<ClaudeLineEditsSnapshotResponse | null> {

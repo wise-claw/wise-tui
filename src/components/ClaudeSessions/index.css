@@ -3813,6 +3813,13 @@
   contain-intrinsic-size: auto 72px;
 }
 
+/* 流式增高气泡必须持续绘制：content-visibility:auto 会在尺寸快速变化时跳过绘制，造成贴底跟随时卡顿/闪断。 */
+.app-claude-message--streaming,
+.app-claude-messages-virtual-row--streaming .app-claude-message {
+  content-visibility: visible;
+  contain-intrinsic-size: none;
+}
+
 /* 新发送者一组：仅留白区隔，无顶部分隔线 */
 .app-claude-messages > .app-claude-message + .app-claude-message:not(.app-claude-message--merged) {
   margin-top: 14px; /* 不同发送者/消息组之间的呼吸空间 */

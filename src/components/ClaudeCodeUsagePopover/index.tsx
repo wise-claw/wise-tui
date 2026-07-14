@@ -180,8 +180,8 @@ export function ClaudeCodeUsageHeaderBtn({ repositoryPath }: Props) {
         </div>
       }
     >
-      <HoverHint title="Claude Code 用量（Token + 代码编辑量）" open={open ? false : undefined}>
-        <button type="button" className="app-left-sidebar-topbar-btn" aria-label="Claude Code 用量统计">
+      <HoverHint title="AI 用量（Token + 代码编辑量）" open={open ? false : undefined}>
+        <button type="button" className="app-left-sidebar-topbar-btn" aria-label="AI 用量统计">
           <IconClaudeUsage />
         </button>
       </HoverHint>

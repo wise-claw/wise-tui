@@ -1,5 +1,6 @@
-//! 从本机 Claude Code 项目 JSONL 汇总 AI 代码编辑量（Edit / Write / MultiEdit 等工具调用）。
-//! 与 `claude_code_usage` 共用扫描路径，独立命令以便按需加载。
+//! 从本机 Claude Code 项目 JSONL 汇总 AI 代码编辑量（Edit / Write / MultiEdit 等工具调用），
+//! 并合并 Cursor Composer / OpenCode / Codex 编辑量（见 `ai_usage_multi_source`）。
+//! 与 `claude_code_usage` 共用 Claude 扫描路径，独立命令以便按需加载。
 
 use chrono::{Datelike, Duration, Local, NaiveDate, TimeZone, Utc, Weekday};
 use rayon::prelude::*;
@@ -10,6 +11,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
+use crate::ai_usage_multi_source;
 use crate::claude_commands::disk_sessions::encoded_claude_project_dir;
 
 const MAX_JSONL_FILES: usize = 5000;
@@ -544,29 +546,6 @@ fn compute_streaks(daily: &HashMap<String, DayAcc>, anchor: NaiveDate, span_days
 
 fn build_snapshot_inner(project_path_filter: Option<&str>) -> Result<ClaudeLineEditsSnapshotResponse, String> {
     let bases = claude_code_base_dirs();
-    if bases.is_empty() {
-        return Ok(ClaudeLineEditsSnapshotResponse {
-            total_lines_edited: 0,
-            total_lines_added: 0,
-            total_lines_removed: 0,
-            total_diff_count: 0,
-            days: vec![],
-            last_7_days: None,
-            last_30_days: None,
-            most_active_month: None,
-            most_active_day: None,
-            longest_streak_days: 0,
-            current_streak_days: 0,
-            scanned_files: 0,
-            data_roots: vec![],
-            hint: Some(
-                "未找到 Claude Code 数据目录（~/.config/claude/projects 或 ~/.claude/projects）。"
-                    .into(),
-            ),
-            events_parsed: 0,
-        });
-    }
-
     let encoded_project = project_path_filter
         .map(str::trim)
         .filter(|s| !s.is_empty())
@@ -598,13 +577,27 @@ fn build_snapshot_inner(project_path_filter: Option<&str>) -> Result<ClaudeLineE
     let min_day = anchor - Duration::days(HEATMAP_DAYS);
     let heatmap_start = monday_of_week(min_day);
 
-    let merged = files
-        .par_iter()
-        .map(|fp| scan_one_jsonl(fp, heatmap_start))
-        .reduce(FileScanAcc::default, FileScanAcc::merge);
+    let mut merged = if files.is_empty() {
+        FileScanAcc::default()
+    } else {
+        files
+            .par_iter()
+            .map(|fp| scan_one_jsonl(fp, heatmap_start))
+            .reduce(FileScanAcc::default, FileScanAcc::merge)
+    };
 
+    let (extra_edits, extra_meta) =
+        ai_usage_multi_source::scan_extra_edit_sources(heatmap_start, project_path_filter);
+    for (day, acc) in extra_edits {
+        merged.daily.entry(day).or_default().merge(&DayAcc {
+            lines: acc.lines_edited(),
+            diffs: acc.diffs,
+            lines_added: acc.lines_added,
+            lines_removed: acc.lines_removed,
+        });
+    }
+    let events = merged.events.saturating_add(extra_meta.events);
     let daily = merged.daily;
-    let events = merged.events;
 
     let days = fill_day_window(anchor, HEATMAP_DAYS, &daily);
     let total_lines_edited: u64 = days.iter().map(|d| d.lines_edited).sum();
@@ -615,22 +608,34 @@ fn build_snapshot_inner(project_path_filter: Option<&str>) -> Result<ClaudeLineE
     let (longest_streak_days, current_streak_days) =
         compute_streaks(&daily, anchor, HEATMAP_DAYS);
 
-    let scope_hint = encoded_project.as_ref().map(|_| {
-        format!(
-            "仅统计当前仓库 JSONL（{}）",
+    let scope_hint = if encoded_project.is_some() {
+        Some(format!(
+            "仅统计当前仓库（Claude / Cursor / OpenCode / Codex）：{}",
             project_path_filter.unwrap_or("").trim()
-        )
-    });
+        ))
+    } else {
+        Some("合计 Claude Code + Cursor Composer + OpenCode + Codex".into())
+    };
     let hint = if events == 0 {
         Some(if encoded_project.is_some() {
-            "该仓库暂无 Claude Code 编辑工具调用记录。".into()
+            "该仓库暂无 AI 代码编辑记录（Claude / Cursor / OpenCode / Codex）。".into()
         } else {
-            "未解析到 Edit / Write 等文件编辑工具调用。请确认本机已有 Claude Code 会话 JSONL。"
+            "未解析到文件编辑记录。请确认本机已有 Claude、Cursor、OpenCode 或 Codex 编辑活动。"
                 .into()
         })
     } else {
         scope_hint
     };
+
+    let mut data_roots: Vec<String> = bases
+        .iter()
+        .map(|p| p.to_string_lossy().into_owned())
+        .collect();
+    for root in extra_meta.data_roots {
+        if !data_roots.iter().any(|x| x == &root) {
+            data_roots.push(root);
+        }
+    }
 
     let last_7_days = window_summary(&days, 7);
     let last_30_days = window_summary(&days, 30);
@@ -646,11 +651,8 @@ fn build_snapshot_inner(project_path_filter: Option<&str>) -> Result<ClaudeLineE
         most_active_day: compute_most_active_day(&daily),
         longest_streak_days,
         current_streak_days,
-        scanned_files: files.len() as u32,
-        data_roots: bases
-            .iter()
-            .map(|p| p.to_string_lossy().into_owned())
-            .collect(),
+        scanned_files: files.len() as u32 + extra_meta.scanned_files,
+        data_roots,
         hint,
         events_parsed: events,
     })

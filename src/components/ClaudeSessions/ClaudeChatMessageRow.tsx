@@ -142,7 +142,7 @@ function ClaudeChatMessageRowInner({
   return (
     <div
       data-message-id={String(msg.id)}
-      className={`app-claude-message app-claude-message--${msg.role}${toolUser ? " app-claude-message--tool-user" : ""}${mergedWithPrevious ? " app-claude-message--merged" : ""}`}
+      className={`app-claude-message app-claude-message--${msg.role}${toolUser ? " app-claude-message--tool-user" : ""}${mergedWithPrevious ? " app-claude-message--merged" : ""}${streamingThisBubble ? " app-claude-message--streaming" : ""}`}
     >
       <div className="app-claude-message-avatar" aria-hidden={mergedWithPrevious ? true : undefined}>
         {toolUser ? "具" : msg.role === "user" ? "我" : msg.role === "assistant" ? "C" : "S"}

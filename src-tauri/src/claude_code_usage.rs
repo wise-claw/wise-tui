@@ -1,4 +1,5 @@
-//! 从本机 Claude Code 项目 JSONL 汇总用量（路径与字段对齐 [ccusage](https://github.com/ryoppippi/ccusage)）。
+//! 从本机 Claude Code 项目 JSONL 汇总用量（路径与字段对齐 [ccusage](https://github.com/ryoppippi/ccusage)），
+//! 并合并 Codex / OpenCode 等其它引擎落盘数据（见 `ai_usage_multi_source`）。
 //! 性能：并行按文件扫描、行级字符串预筛、仅保留最近 `RETENTION_DAYS` 的日历日；命令异步 `spawn_blocking` 避免阻塞运行时。
 
 use chrono::{Datelike, Duration, Local, NaiveDate, TimeZone, Utc, Weekday};
@@ -10,6 +11,7 @@ use std::fs::File;
 use std::io::{BufRead, BufReader};
 use std::path::{Path, PathBuf};
 
+use crate::ai_usage_multi_source;
 use crate::claude_commands::disk_sessions::encoded_claude_project_dir;
 
 const MAX_JSONL_FILES: usize = 5000;
@@ -485,22 +487,6 @@ fn build_series_payload(
 
 fn build_snapshot_inner(project_path_filter: Option<&str>) -> Result<ClaudeUsageSnapshotResponse, String> {
     let bases = claude_code_base_dirs();
-    if bases.is_empty() {
-        let empty = || build_series_payload(vec![], String::new());
-        return Ok(ClaudeUsageSnapshotResponse {
-            day: empty(),
-            week: empty(),
-            month: empty(),
-            scanned_files: 0,
-            data_roots: vec![],
-            hint: Some(
-                "未找到 Claude Code 数据目录（~/.config/claude/projects 或 ~/.claude/projects）。"
-                    .into(),
-            ),
-            events_parsed: 0,
-        });
-    }
-
     let encoded_project = project_path_filter
         .map(str::trim)
         .filter(|s| !s.is_empty())
@@ -532,13 +518,29 @@ fn build_snapshot_inner(project_path_filter: Option<&str>) -> Result<ClaudeUsage
     let anchor = Local::now().date_naive();
     let min_day = anchor - Duration::days(RETENTION_DAYS);
 
-    let merged = files
-        .par_iter()
-        .map(|fp| scan_one_jsonl(fp, min_day))
-        .reduce(FileScanAcc::default, FileScanAcc::merge);
+    let mut merged = if files.is_empty() {
+        FileScanAcc::default()
+    } else {
+        files
+            .par_iter()
+            .map(|fp| scan_one_jsonl(fp, min_day))
+            .reduce(FileScanAcc::default, FileScanAcc::merge)
+    };
 
+    let (extra_tokens, extra_meta) =
+        ai_usage_multi_source::scan_extra_token_sources(min_day, project_path_filter);
+    for (day, acc) in extra_tokens {
+        merged.daily.entry(day).or_default().merge(&Acc {
+            input: acc.input,
+            output: acc.output,
+            cache_create: acc.cache_create,
+            cache_read: acc.cache_read,
+            cost_sum: acc.cost_sum,
+            cost_entries: acc.cost_entries,
+        });
+    }
+    let lines_ok = merged.lines_ok.saturating_add(extra_meta.events);
     let daily = merged.daily;
-    let lines_ok = merged.lines_ok;
 
     let day_buckets = {
         let rows = fill_day_window(anchor, 30, &daily);
@@ -577,38 +579,44 @@ fn build_snapshot_inner(project_path_filter: Option<&str>) -> Result<ClaudeUsage
     let month = build_series_payload(month_buckets, "近半年".into());
 
     let cost_entries_day = series_totals(&day.buckets).total_cost_entries;
-    let scope_hint = encoded_project.as_ref().map(|_| {
-        format!(
-            "仅统计当前仓库 JSONL（{}）",
+    let scope_hint = if encoded_project.is_some() {
+        Some(format!(
+            "仅统计当前仓库（Claude / Codex / OpenCode）：{}",
             project_path_filter.unwrap_or("").trim()
-        )
-    });
+        ))
+    } else {
+        Some("合计 Claude Code + Codex + OpenCode（Cursor token 无本地落盘，未计入）".into())
+    };
     let hint = if lines_ok == 0 {
         Some(if encoded_project.is_some() {
-            "该仓库暂无 Claude Code 会话 JSONL，或未解析到 assistant 用量行。".into()
+            "该仓库暂无 Claude / Codex / OpenCode 用量记录。".into()
         } else {
-            "未解析到 assistant 用量行。请确认本机已用 Claude Code 产生会话 JSONL。".into()
+            "未解析到用量数据。请确认本机已有 Claude Code、Codex 或 OpenCode 会话记录。".into()
         })
     } else if cost_entries_day == 0 {
         Some(format!(
-            "{}{}",
-            scope_hint.as_deref().map(|s| format!("{s} · ")).unwrap_or_default(),
-            "当前 JSONL 无 costUSD 字段；费用为 0。完整费用估算可使用终端：npx ccusage@latest（本面板仅统计近半年）。"
+            "{} · 费用字段缺失处记为 0；Claude 可用终端 `npx ccusage@latest` 估算。",
+            scope_hint.as_deref().unwrap_or("多引擎合计")
         ))
     } else {
         scope_hint
     };
 
-    let data_roots: Vec<String> = bases
+    let mut data_roots: Vec<String> = bases
         .iter()
         .map(|p| p.to_string_lossy().into_owned())
         .collect();
+    for root in extra_meta.data_roots {
+        if !data_roots.iter().any(|x| x == &root) {
+            data_roots.push(root);
+        }
+    }
 
     Ok(ClaudeUsageSnapshotResponse {
         day,
         week,
         month,
-        scanned_files: files.len() as u32,
+        scanned_files: files.len() as u32 + extra_meta.scanned_files,
         data_roots,
         hint,
         events_parsed: lines_ok,

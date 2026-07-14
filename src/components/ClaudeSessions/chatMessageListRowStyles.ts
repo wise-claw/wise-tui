@@ -8,5 +8,8 @@ export function chatMessageListRowClassName(row: ChatMessageListRow, index: numb
   if (row.kind === "message" && row.mergedWithPrevious) {
     parts.push("app-claude-messages-virtual-row--merged");
   }
+  if (row.kind === "message" && row.streamingThisBubble) {
+    parts.push("app-claude-messages-virtual-row--streaming");
+  }
   return parts.join(" ");
 }

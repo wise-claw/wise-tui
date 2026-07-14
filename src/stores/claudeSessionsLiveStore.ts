@@ -13,6 +13,7 @@ import {
 } from "./chromePanelHoverStore";
 import { isComposerInteractionActive } from "./composerInteractionGate";
 import { isMainThreadCongested } from "./mainThreadCongestionStore";
+import { getClaudeChatUserPausedFollow } from "./claudeChatMessageScrollBridge";
 
 let sessionsSnapshot: ClaudeSession[] = [];
 let structureKey = "";
@@ -36,6 +37,10 @@ function liveFlushMinIntervalMs(): number {
   if (isFileTreeScrollActive()) return 200;
   if (isWorkspacePriorityReliefActive()) return 195;
   if (isSidePanelPriorityReliefActive()) return 180;
+  // 消息列表正在贴底跟随时加快 flush，降低「字顿一下才出来」的体感延迟。
+  if (!getClaudeChatUserPausedFollow()) {
+    return 48;
+  }
   return 100;
 }
 

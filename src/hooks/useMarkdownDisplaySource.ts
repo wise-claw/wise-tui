@@ -1,4 +1,4 @@
-import { useDeferredValue, useMemo, useRef } from "react";
+import { useDeferredValue, useMemo, useRef, useSyncExternalStore } from "react";
 import {
   coerceMarkdownSourceText,
   prepareMarkdownForDisplay,
@@ -6,8 +6,14 @@ import {
 } from "../utils/markdownRenderPipeline";
 import { containsStreamingHtmlMarkup } from "../utils/markdownDisplayNormalize";
 import { findHtmlDocumentStartIndex } from "../utils/richMessageHtml";
+import {
+  isMainThreadCongested,
+  subscribeMainThreadCongestion,
+} from "../stores/mainThreadCongestionStore";
 
-const STREAMING_MIN_REBUILD_MS = 200;
+/** 流式 Markdown 重建最短间隔：偏短以提升贴底展示流畅度；拥堵时仍由 defer 路径让步。 */
+const STREAMING_MIN_REBUILD_MS = 100;
+const STREAMING_MIN_REBUILD_CONGESTED_MS = 220;
 const STREAMING_SHORT_TEXT_FAST_PATH_LIMIT = 600;
 const MARKDOWN_STRUCTURE_HINT_RE = /[<|`#>*\-\|\uFF5C]|\]\(|!\[|^\s*\d+\.\s/m;
 
@@ -33,11 +39,22 @@ function streamingShortTextFastPath(text: string): boolean {
   return !MARKDOWN_STRUCTURE_HINT_RE.test(text);
 }
 
+function subscribeCongestionAlways(onStoreChange: () => void): () => void {
+  return subscribeMainThreadCongestion(onStoreChange);
+}
+
 /** 构建聊天 Markdown 展示源码（预处理后交给 ReactMarkdown）。 */
 export function useMarkdownDisplaySource(text: string, streaming: boolean): string {
   const safeText = coerceMarkdownSourceText(text);
+  const congested = useSyncExternalStore(
+    subscribeCongestionAlways,
+    isMainThreadCongested,
+    () => false,
+  );
   const deferredText = useDeferredValue(safeText);
-  const renderText = streaming ? deferredText : safeText;
+  // 流式默认即时渲染，避免 useDeferredValue 叠 thrrottle 造成「顿一下才出字」；
+  // 仅主线程拥堵时改走 deferred，优先保证滚动/输入响应。
+  const renderText = streaming && congested ? deferredText : safeText;
   const stabilizedText = useMemo(
     () => (streaming ? stabilizeStreamingMarkdown(renderText) : renderText),
     [renderText, streaming],
@@ -69,11 +86,12 @@ export function useMarkdownDisplaySource(text: string, streaming: boolean): stri
 
     const prev = lastBuiltRef.current;
     const now = performance.now();
+    const rebuildMinMs = congested ? STREAMING_MIN_REBUILD_CONGESTED_MS : STREAMING_MIN_REBUILD_MS;
     const withinThrottle =
       prev.text
       && stabilizedText.startsWith(prev.text)
       && prev.source
-      && now - prev.at < STREAMING_MIN_REBUILD_MS
+      && now - prev.at < rebuildMinMs
       && !shouldBypassStreamingRebuildThrottle(stabilizedText);
     if (withinThrottle) {
       return prev.source;
@@ -86,5 +104,5 @@ export function useMarkdownDisplaySource(text: string, streaming: boolean): stri
     const source = prepareMarkdownForDisplay(stabilizedText, { streaming: true });
     lastBuiltRef.current = { text: stabilizedText, source, at: now };
     return source;
-  }, [stabilizedText, streaming]);
+  }, [stabilizedText, streaming, congested]);
 }

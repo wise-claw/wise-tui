@@ -1,6 +1,7 @@
 mod app_state_commands;
 mod agent_registry;
 mod assistants;
+mod ai_usage_multi_source;
 mod claude_code_line_edits;
 mod claude_code_usage;
 mod claude_commands;
