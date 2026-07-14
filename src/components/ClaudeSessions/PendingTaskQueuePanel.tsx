@@ -335,10 +335,11 @@ export function PendingTaskQueuePanel({
         onOk={saveEdit}
         onCancel={() => setEditing(null)}
         okText="保存"
-        keyboard={false}
+        keyboard
         destroyOnHidden
         width={640}
         className="app-pending-task-queue-edit-modal"
+        mask={{ closable: true }}
       >
         <div className="app-pending-task-queue-edit">
           <label className="app-pending-task-queue-edit__label">由谁执行</label>

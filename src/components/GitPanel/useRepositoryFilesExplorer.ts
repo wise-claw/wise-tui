@@ -25,6 +25,7 @@ import {
 import { openInFinder, openWorkspaceIn } from "../../services/repository";
 import { joinRepositoryAbsolutePath } from "../../utils/repositoryPreviewBinary";
 import { useDebouncedValue } from "../../hooks/useDebouncedValue";
+import { useBusyTimeout } from "../../hooks/useBusyTimeout";
 import {
   clearPendingExplorerReveal,
   consumePendingExplorerReveal,
@@ -149,6 +150,11 @@ export function useRepositoryFilesExplorer({
   const [loading, setLoading] = useState(false);
   const [isRefreshing, setIsRefreshing] = useState(false);
   const [loadError, setLoadError] = useState<string | null>(null);
+  useBusyTimeout(loading || isRefreshing, () => {
+    setLoading(false);
+    setIsRefreshing(false);
+    setLoadError((prev) => prev ?? "加载仓库文件超时，请重试");
+  });
   const [loadedRepositoryPath, setLoadedRepositoryPath] = useState(repositoryPath);
   const [loadedChildrenByDir, setLoadedChildrenByDir] = useState<
     Map<string, RepositoryExplorerEntry[]>

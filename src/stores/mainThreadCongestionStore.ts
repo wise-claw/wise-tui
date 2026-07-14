@@ -6,10 +6,13 @@ let congestedUntilMs = 0;
 let lastFrameAt = 0;
 let probeRaf = 0;
 let probeStarted = false;
+let longTaskObserver: PerformanceObserver | null = null;
 const listeners = new Set<() => void>();
 
 /** 单帧耗时超过此值视为卡顿（约 20fps）。 */
 const SLOW_FRAME_MS = 48;
+/** Long Task 超过此值也视为卡顿。 */
+const LONG_TASK_MS = 50;
 /** 最后一帧慢速后保持拥塞标记的时长。 */
 const CONGESTION_HOLD_MS = 650;
 
@@ -25,12 +28,16 @@ function setCongested(next: boolean): void {
   notify();
 }
 
+function markCongested(now = performance.now()): void {
+  congestedUntilMs = now + CONGESTION_HOLD_MS;
+  setCongested(true);
+}
+
 function probeFrame(now: number): void {
   if (lastFrameAt > 0) {
     const delta = now - lastFrameAt;
     if (delta > SLOW_FRAME_MS) {
-      congestedUntilMs = now + CONGESTION_HOLD_MS;
-      setCongested(true);
+      markCongested(now);
     } else if (congested && now >= congestedUntilMs) {
       setCongested(false);
     }
@@ -39,12 +46,30 @@ function probeFrame(now: number): void {
   probeRaf = requestAnimationFrame(probeFrame);
 }
 
+function ensureLongTaskObserver(): void {
+  if (longTaskObserver || typeof PerformanceObserver === "undefined") return;
+  try {
+    longTaskObserver = new PerformanceObserver((list) => {
+      for (const entry of list.getEntries()) {
+        if (entry.duration >= LONG_TASK_MS) {
+          markCongested(performance.now());
+          break;
+        }
+      }
+    });
+    longTaskObserver.observe({ type: "longtask", buffered: true });
+  } catch {
+    longTaskObserver = null;
+  }
+}
+
 congestionCheckRef.current = isMainThreadCongested;
 
 /** 启动全局帧探测（幂等，首屏后调用一次即可）。 */
 export function ensureMainThreadCongestionProbe(): void {
   if (probeStarted || typeof window === "undefined") return;
   probeStarted = true;
+  ensureLongTaskObserver();
   probeRaf = requestAnimationFrame(probeFrame);
 }
 
@@ -68,6 +93,10 @@ export function resetMainThreadCongestionStoreForTests(): void {
   if (probeRaf) {
     cancelAnimationFrame(probeRaf);
     probeRaf = 0;
+  }
+  if (longTaskObserver) {
+    longTaskObserver.disconnect();
+    longTaskObserver = null;
   }
   probeStarted = false;
   listeners.clear();

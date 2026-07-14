@@ -1,4 +1,6 @@
 import { invoke } from "@tauri-apps/api/core";
+import { trackAsyncOperation } from "../stores/operationWatchdogStore";
+import { SKILLS_DETECT_TIMEOUT_MS, SKILLS_SCAN_TIMEOUT_MS } from "../utils/ipcTimeouts";
 
 export type SkillSource = "builtin" | "custom" | "extension";
 
@@ -38,11 +40,19 @@ export interface ImportedSkill {
 }
 
 export async function detectExternalSkillPaths(): Promise<DetectedExternalPath[]> {
-  return invoke<DetectedExternalPath[]>("skills_detect_external_paths");
+  return trackAsyncOperation(
+    "探测技能目录",
+    invoke<DetectedExternalPath[]>("skills_detect_external_paths"),
+    SKILLS_DETECT_TIMEOUT_MS,
+  );
 }
 
 export async function scanSkillPath(path: string): Promise<ScannedSkill[]> {
-  return invoke<ScannedSkill[]>("skills_scan_path", { arg: { path } });
+  return trackAsyncOperation(
+    "扫描技能",
+    invoke<ScannedSkill[]>("skills_scan_path", { arg: { path } }),
+    SKILLS_SCAN_TIMEOUT_MS,
+  );
 }
 
 export async function readSkillInstruction(id: string, sourcePath: string): Promise<SkillInstruction> {

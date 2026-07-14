@@ -76,7 +76,12 @@ import { tryOpenWorkspaceInDefaultTerminal } from "./services/openWorkspaceWithT
 import type { CommandPaletteSearchMode } from "./components/CommandPalette";
 import { LazyAppWorkspaceLayout } from "./components/AppWorkspaceLayout.lazy";
 import { AppWorkspaceLayoutShell } from "./components/AppWorkspaceLayoutShell";
+import { OperationStuckBanner } from "./components/OperationStuckBanner";
 import { RepositoryRunCommandModal } from "./components/RunCommand";
+import {
+  dismissStuckOperations,
+  getStuckOperationsSnapshot,
+} from "./stores/operationWatchdogStore";
 import { openRepositoryRunCommandModal } from "./stores/repositoryRunCommandModalStore";
 import {
   pruneRepositoryRunCommandRuntime,
@@ -3239,6 +3244,15 @@ export default function App() {
     function handleGlobalKey(e: KeyboardEvent) {
       if (!isWiseAppFocused()) return;
       const mod = e.metaKey || e.ctrlKey;
+      // Escape：若有看门狗标记的卡住操作，优先解除 UI 阻塞（遮罩/确认旋钮），再走默认行为。
+      if (!mod && !e.shiftKey && !e.altKey && e.key === "Escape") {
+        if (getStuckOperationsSnapshot().length > 0) {
+          e.preventDefault();
+          dismissStuckOperations();
+          message.warning("已尝试解除卡住的操作遮罩，可继续使用；后台任务可能仍在执行");
+          return;
+        }
+      }
       // Control+`（物理 Backquote）：切换终端面板；仅用 Ctrl、不含 ⌘，与 macOS Control 一致
       if (e.ctrlKey && !e.metaKey && !e.shiftKey && !e.altKey && (e.code === "Backquote" || e.key === "`")) {
         e.preventDefault();
@@ -3414,6 +3428,7 @@ export default function App() {
 
   return (
     <>
+    <OperationStuckBanner />
     <Suspense
       fallback={<AppWorkspaceLayoutShell />}
     >

@@ -1,4 +1,10 @@
 import { invoke } from "@tauri-apps/api/core";
+import { trackAsyncOperation } from "../stores/operationWatchdogStore";
+import {
+  REPO_EXPLORER_LIST_TIMEOUT_MS,
+  REPO_EXPLORER_SEARCH_TIMEOUT_MS,
+  REPO_FILE_MUTATION_TIMEOUT_MS,
+} from "../utils/ipcTimeouts";
 
 export interface RepositoryExplorerEntry {
   path: string;
@@ -26,11 +32,15 @@ export async function searchRepositoryFiles(
   relativeDir?: string,
 ): Promise<RepositoryExplorerEntry[]> {
   try {
-    return await invoke<RepositoryExplorerEntry[]>("search_repository_files", {
-      root: repositoryRoot,
-      query,
-      relativeDir: relativeDir ? relativeDir : null,
-    });
+    return await trackAsyncOperation(
+      "搜索仓库文件",
+      invoke<RepositoryExplorerEntry[]>("search_repository_files", {
+        root: repositoryRoot,
+        query,
+        relativeDir: relativeDir ? relativeDir : null,
+      }),
+      REPO_EXPLORER_SEARCH_TIMEOUT_MS,
+    );
   } catch {
     return [];
   }
@@ -47,11 +57,15 @@ export async function searchRepositoryFileContents(
   relativeDir?: string,
 ): Promise<RepositoryFileContentMatch[]> {
   try {
-    return await invoke<RepositoryFileContentMatch[]>("search_repository_file_contents", {
-      root: repositoryRoot,
-      query,
-      relativeDir: relativeDir ? relativeDir : null,
-    });
+    return await trackAsyncOperation(
+      "搜索仓库内容",
+      invoke<RepositoryFileContentMatch[]>("search_repository_file_contents", {
+        root: repositoryRoot,
+        query,
+        relativeDir: relativeDir ? relativeDir : null,
+      }),
+      REPO_EXPLORER_SEARCH_TIMEOUT_MS,
+    );
   } catch {
     return [];
   }
@@ -63,9 +77,13 @@ export async function searchRepositoryFileContents(
 export async function listRepositoryExplorerEntries(
   repositoryRoot: string,
 ): Promise<RepositoryExplorerEntry[]> {
-  return invoke<RepositoryExplorerEntry[]>("list_repository_explorer_entries", {
-    root: repositoryRoot,
-  });
+  return trackAsyncOperation(
+    "列出仓库文件",
+    invoke<RepositoryExplorerEntry[]>("list_repository_explorer_entries", {
+      root: repositoryRoot,
+    }),
+    REPO_EXPLORER_LIST_TIMEOUT_MS,
+  );
 }
 
 /** List one directory level for lazy file-tree expansion (`relativeDir` empty = repo root). */
@@ -73,10 +91,14 @@ export async function listRepositoryExplorerChildren(
   repositoryRoot: string,
   relativeDir = "",
 ): Promise<RepositoryExplorerEntry[]> {
-  return invoke<RepositoryExplorerEntry[]>("list_repository_explorer_children", {
-    root: repositoryRoot,
-    relativeDir,
-  });
+  return trackAsyncOperation(
+    "加载目录",
+    invoke<RepositoryExplorerEntry[]>("list_repository_explorer_children", {
+      root: repositoryRoot,
+      relativeDir,
+    }),
+    REPO_EXPLORER_LIST_TIMEOUT_MS,
+  );
 }
 
 /**
@@ -86,10 +108,14 @@ export async function createRepositoryFile(
   repositoryRoot: string,
   relativePath: string,
 ): Promise<void> {
-  await invoke<void>("create_repository_file", {
-    root: repositoryRoot,
-    relativePath,
-  });
+  await trackAsyncOperation(
+    "创建文件",
+    invoke<void>("create_repository_file", {
+      root: repositoryRoot,
+      relativePath,
+    }),
+    REPO_FILE_MUTATION_TIMEOUT_MS,
+  );
 }
 
 /**
@@ -99,10 +125,14 @@ export async function createRepositoryDirectory(
   repositoryRoot: string,
   relativePath: string,
 ): Promise<void> {
-  await invoke<void>("create_repository_directory", {
-    root: repositoryRoot,
-    relativePath,
-  });
+  await trackAsyncOperation(
+    "创建目录",
+    invoke<void>("create_repository_directory", {
+      root: repositoryRoot,
+      relativePath,
+    }),
+    REPO_FILE_MUTATION_TIMEOUT_MS,
+  );
 }
 
 /**
@@ -112,10 +142,14 @@ export async function deleteRepositoryEntry(
   repositoryRoot: string,
   relativePath: string,
 ): Promise<void> {
-  await invoke<void>("delete_repository_entry", {
-    root: repositoryRoot,
-    relativePath,
-  });
+  await trackAsyncOperation(
+    "删除路径",
+    invoke<void>("delete_repository_entry", {
+      root: repositoryRoot,
+      relativePath,
+    }),
+    REPO_FILE_MUTATION_TIMEOUT_MS,
+  );
 }
 
 /**
@@ -130,9 +164,13 @@ export async function renameRepositoryEntry(
   oldRelativePath: string,
   newRelativePath: string,
 ): Promise<void> {
-  await invoke<void>("rename_repository_entry", {
-    root: repositoryRoot,
-    oldRelativePath,
-    newRelativePath,
-  });
+  await trackAsyncOperation(
+    "重命名路径",
+    invoke<void>("rename_repository_entry", {
+      root: repositoryRoot,
+      oldRelativePath,
+      newRelativePath,
+    }),
+    REPO_FILE_MUTATION_TIMEOUT_MS,
+  );
 }
