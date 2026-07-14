@@ -319,16 +319,17 @@ export function useComposerSpeechPipeline({
   /**
    * 发送前等待在途整理完成，确保输入框里是整理后的文本。
    * 返回 true 表示确有在途整理被等待（其结果可能已插入输入框，调用方应改读刷新后的内容）。
+   *
+   * 无在途 promise 时同步返回 `false`（不经 `async`/`await`），避免 Enter 发送路径
+   * 仅因一次空 await 就推迟输入框清空与派发。
    */
-  const flushPendingSpeechForSend = useCallback(async (): Promise<boolean> => {
+  const flushPendingSpeechForSend = useCallback((): boolean | Promise<boolean> => {
     const pending = processingPromiseRef.current;
     if (!pending) return false;
-    try {
-      await pending;
-    } catch {
-      /* 已在 finally 处理 */
-    }
-    return true;
+    return pending.then(
+      () => true,
+      () => true,
+    );
   }, []);
 
   /** 发送清空输入框时复位听写段状态（旧 baseline 机制已移除，仅做复位）。 */

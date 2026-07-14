@@ -40,6 +40,8 @@ export type ExecutionEnvironmentDispatchDeps = {
     opts?: { userBubblePrompt?: string; defaultInstructionApplied?: string },
   ) => boolean;
   appendSystemMessage: (sessionId: string, text: string) => void;
+  /** 测试可注入；默认 `loadDefaultInstructionResolveContext`。 */
+  loadInstructionResolveContext?: typeof loadDefaultInstructionResolveContext;
 };
 
 function resolveEngineAvailability(deps: ExecutionEnvironmentDispatchDeps) {
@@ -104,11 +106,19 @@ export async function dispatchExecutionEnvironmentFromMainSession(
     input.userBubblePrompt?.trim() || input.prompt.trim(),
   );
   const defaultInstructionApplied = input.defaultInstructionApplied?.trim() || "";
-  const resolveContext = await loadDefaultInstructionResolveContext(mainSession.repositoryPath);
-  const resolvedDefaultInstruction = defaultInstructionApplied
-    ? resolveComposerDefaultInstructionOutbound(defaultInstructionApplied, resolveContext)
-    : "";
-  const workerPrompt = resolvedDefaultInstruction
+  // 无默认指令时跳过 slash catalog IPC：否则每次 @Claude Code 派发都多一轮等待。
+  let resolvedDefaultInstruction = "";
+  let resolveContext: Awaited<ReturnType<typeof loadDefaultInstructionResolveContext>> | null = null;
+  if (defaultInstructionApplied) {
+    const loadContext =
+      deps.loadInstructionResolveContext ?? loadDefaultInstructionResolveContext;
+    resolveContext = await loadContext(mainSession.repositoryPath);
+    resolvedDefaultInstruction = resolveComposerDefaultInstructionOutbound(
+      defaultInstructionApplied,
+      resolveContext,
+    );
+  }
+  const workerPrompt = resolvedDefaultInstruction && resolveContext
     ? applyComposerDefaultInstruction(plan.cleanedPrompt, resolvedDefaultInstruction, resolveContext)
     : plan.cleanedPrompt;
   const preview = workerPrompt.slice(0, 72);
@@ -153,25 +163,41 @@ export async function dispatchExecutionEnvironmentFromMainSession(
   let started = 0;
   let blocked = 0;
 
-  for (let i = 0; i < plan.sessionCount; i += 1) {
+  const workerSpecs = Array.from({ length: plan.sessionCount }, (_, i) => {
     const label = plan.sessionCount > 1 ? `任务 ${i + 1}` : "任务";
-    const workerName = buildExecutionEnvironmentWorkerRepositoryName(
-      displayBase,
+    return {
+      index: i,
       label,
-      plan.executionEngine,
-    );
-    const workerTabId = await deps.createSession(mainSession.repositoryPath, workerName, {
-      skipActivate: true,
-      connectionKind: "oneshot",
-    });
+      workerName: buildExecutionEnvironmentWorkerRepositoryName(
+        displayBase,
+        label,
+        plan.executionEngine,
+      ),
+    };
+  });
+
+  // 并行建 worker 会话，避免「清空输入框 → 首路执行」之间串行等待 N 次 createSession。
+  const workerTabIds = await Promise.all(
+    workerSpecs.map((spec) =>
+      deps.createSession(mainSession.repositoryPath, spec.workerName, {
+        skipActivate: true,
+        connectionKind: "oneshot",
+      }),
+    ),
+  );
+
+  for (let i = 0; i < workerSpecs.length; i += 1) {
+    const spec = workerSpecs[i]!;
+    const workerTabId = workerTabIds[i]!;
+    const batchIndex = i + 1;
 
     upsertExecutionEnvironmentDispatchItem({
       batchId,
       anchorSessionId: mainSession.id,
       workerSessionId: workerTabId,
-      label,
+      label: spec.label,
       previewText: preview,
-      batchIndex: i + 1,
+      batchIndex,
       sessionCount: plan.sessionCount,
     });
     void persistExecutionEnvironmentDispatchItem({
@@ -179,9 +205,9 @@ export async function dispatchExecutionEnvironmentFromMainSession(
       batchId,
       anchorSessionId: mainSession.id,
       workerSessionId: workerTabId,
-      label,
+      label: spec.label,
       previewText: preview,
-      batchIndex: i + 1,
+      batchIndex,
       sessionCount: plan.sessionCount,
       updatedAtMs: Date.now(),
     }).catch(() => {
@@ -200,9 +226,9 @@ export async function dispatchExecutionEnvironmentFromMainSession(
         batchId,
         anchorSessionId: mainSession.id,
         workerSessionId: workerTabId,
-        label,
+        label: spec.label,
         previewText: failPreview,
-        batchIndex: i + 1,
+        batchIndex,
         sessionCount: plan.sessionCount,
       });
       void persistExecutionEnvironmentDispatchItem({
@@ -210,9 +236,9 @@ export async function dispatchExecutionEnvironmentFromMainSession(
         batchId,
         anchorSessionId: mainSession.id,
         workerSessionId: workerTabId,
-        label,
+        label: spec.label,
         previewText: failPreview,
-        batchIndex: i + 1,
+        batchIndex,
         sessionCount: plan.sessionCount,
         updatedAtMs: Date.now(),
       }).catch(() => {});

@@ -1725,9 +1725,10 @@ function ComposerInner({
       if (composerSendInFlightRef.current) return;
       composerSendInFlightRef.current = true;
       try {
-      // 语音听写：发送前等待在途「整理」完成，确保发送的是整理后的文本（REQ2）。
-      // 若整理在等待期间把文本插入了输入框，则改用刷新后的权威内容（避免发送旧快照、丢失刚整理的语音）。
-      const speechFlushed = await flushPendingSpeechForSend();
+      // 语音听写：仅在确有在途「整理」时才 await，避免无语音场景因空 async 推迟清空/派发。
+      const speechFlushResult = flushPendingSpeechForSend();
+      const speechFlushed =
+        typeof speechFlushResult === "boolean" ? speechFlushResult : await speechFlushResult;
       const postFlushPlain = speechFlushed
         ? plainSurfaceRef.current?.getPlain() ?? lastEditorPlainRef.current
         : "";
@@ -1894,6 +1895,86 @@ function ComposerInner({
       }
 
       clearComposerSurfaceSync(logicalSnap.trim());
+
+      // @Claude Code / @Codex 等执行环境派发：跳过完整 outbound 构建与默认指令无关等待，
+      // 清空后立刻开火，缩短「输入框还停着 → 派发才开始」的体感延迟。
+      const execPlanImmediate =
+        onDispatchExecutionEnvironment != null
+          ? parseExecutionEnvironmentDispatch(logicalSnap)
+          : null;
+      if (execPlanImmediate && onDispatchExecutionEnvironment) {
+        const defaultInstructionPrefixForExec = resolveComposerSendDefaultInstructionPrefix(
+          logicalSnap,
+          composerDefaultInstruction,
+          "main",
+          "",
+        );
+        let appliedDefaultInstruction = "";
+        let userBubblePrompt = logicalSnap;
+        try {
+          if (defaultInstructionPrefixForExec.trim() || imagesSnap.length > 0 || contextSnap.length > 0) {
+            let instructionResolveContext: DefaultInstructionResolveContext | undefined;
+            if (defaultInstructionPrefixForExec.trim()) {
+              instructionResolveContext = await loadDefaultInstructionResolveContext(
+                session.repositoryPath,
+              );
+              appliedDefaultInstruction = resolveComposerSendDefaultInstructionApplied(
+                logicalSnap,
+                composerDefaultInstruction,
+                "main",
+                instructionResolveContext,
+                "",
+              );
+            }
+            if (imagesSnap.length > 0 || contextSnap.length > 0) {
+              const payload = await buildClaudeComposerSendPayload({
+                prompt: promptSnap,
+                contextItems: contextSnap,
+                images: imagesSnap,
+                repositoryPath: session.repositoryPath,
+                userBubbleMain: logicalSnap,
+                defaultInstructionPrefix: defaultInstructionPrefixForExec,
+                defaultInstructionResolveContext: instructionResolveContext,
+              });
+              userBubblePrompt = payload.userBubblePrompt;
+              rollbackDraft.images = attachDiskPathsToComposerImages(
+                imagesSnap,
+                payload.imageDiskPaths,
+              ).map((img) => ({ ...img }));
+            }
+          }
+        } catch {
+          restoreComposerDraft(rollbackDraft);
+          return;
+        }
+        onTrackSendFlow?.({
+          sessionId: session.id,
+          composerText: logicalSnap.trim(),
+          outboundText: execPlanImmediate.cleanedPrompt,
+          nodes: [
+            {
+              label: "点击确认发送",
+              timestamp: Date.now(),
+              detail: "用户点击发送按钮或按下 Enter 触发发送。",
+            },
+            {
+              label: "执行环境派发",
+              timestamp: Date.now(),
+              detail: `${SESSION_EXECUTION_ENGINE_LABELS[execPlanImmediate.executionEngine].short} · 并发 ${execPlanImmediate.sessionCount} 路`,
+            },
+          ],
+        });
+        recordMissionMessage(logicalSnap);
+        lastSentDraftRef.current = null;
+        postSendEscUndoRef.current = rollbackDraft;
+        finalizeTranscriptBaselineAfterSend();
+        void onDispatchExecutionEnvironment({
+          prompt: logicalSnap,
+          userBubblePrompt,
+          ...(appliedDefaultInstruction ? { defaultInstructionApplied: appliedDefaultInstruction } : {}),
+        });
+        return;
+      }
 
       const inferredDispatchTarget = inferPendingQueueTargetFromPrompt(
         promptSnap,
