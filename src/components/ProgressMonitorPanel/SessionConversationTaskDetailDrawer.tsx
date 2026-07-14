@@ -1,8 +1,9 @@
 import { Button, Drawer, Empty, Spin, Tag } from "antd";
-import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef } from "react";
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { ClaudeSession, SessionConversationTaskItem } from "../../types";
 import { useDockSlice } from "../../hooks/useDockSlice";
 import type { ComposerRegionProps } from "../ClaudeChatInput";
+import { composerRegionChunk } from "../ClaudeSessions/ClaudeChatComposerTray";
 import {
   buildSessionConversationTaskDetailSession,
   canStopSessionConversationTask,
@@ -23,13 +24,17 @@ import {
   type MonitorDrawerResumeSessionFn,
 } from "./MonitorDrawerSessionComposer";
 import { SubagentStatusIndicator } from "./SubagentStatusIndicator";
+import { useClaudeSessionsLiveSnapshot } from "../../stores/claudeSessionsLiveStore";
+import { prefetchSessionConversationTaskDetailDrawer } from "./prefetchSessionConversationTaskDetailDrawer";
 import "../ClaudeSessions/index.css";
 import "./index.css";
 
-/** drawer 内复用主会话输入框（app-claude-input-area），按需加载避免拖大运行面板 chunk。 */
+/** 与主会话输入区共用同一 chunk；打开前预热可避免首点懒加载等待。 */
 const ComposerRegionLazy = lazy(() =>
-  import("../ClaudeChatInput").then((module) => ({ default: module.ComposerRegion })),
+  composerRegionChunk.then((module) => ({ default: module.ComposerRegion })),
 );
+
+export { prefetchSessionConversationTaskDetailDrawer } from "./prefetchSessionConversationTaskDetailDrawer";
 
 export interface SessionConversationTaskDetailTarget {
   task: SessionConversationTaskItem;
@@ -124,6 +129,7 @@ const SessionConversationTaskDetailBody = memo(function SessionConversationTaskD
   transcriptSession,
   resumeComposerSession,
   resumeContext,
+  mountComposer,
   onResumeSession,
   onRespondToQuestion,
   onDismissQuestion,
@@ -145,6 +151,8 @@ const SessionConversationTaskDetailBody = memo(function SessionConversationTaskD
     repositoryDisplayName?: string;
     taskLabel?: string;
   } | undefined;
+  /** 抽屉壳先绘制后再挂载 Tiptap 输入区，缩短首开可见延迟。 */
+  mountComposer: boolean;
   onResumeSession?: MonitorDrawerResumeSessionFn;
   onRespondToQuestion?: (sessionId: string, answers: string[], customAnswer?: string) => void;
   onDismissQuestion?: (sessionId: string) => void;
@@ -251,58 +259,68 @@ const SessionConversationTaskDetailBody = memo(function SessionConversationTaskD
         </div>
         {onResumeSession && resumeComposerSession ? (
           <div className="app-monitor-panel__drawer-composer">
-            <Suspense
-              fallback={
-                <div
-                  className="app-claude-composer-tray__loading"
-                  aria-busy="true"
-                  aria-label="输入区加载中"
-                >
-                  <Spin size="small" />
-                </div>
-              }
-            >
-              <ComposerRegionLazy
-                session={resumeComposerSession}
-                draftBucketKey={`monitor-drawer:${task.key}`}
-                onExecute={handleExecute}
-                onSessionModelChange={handleSessionModelChange}
-                onCancel={handleCancel}
-                allowSendWhileBusy
-                compactFooterChrome
-                todos={dockSlice.todos}
-                questionRequest={dockSlice.questionRequest}
-                questionRequestStatus={dockSlice.questionRequestStatus}
-                questionRequestError={dockSlice.questionRequestError}
-                permissionRequest={dockSlice.permissionRequest}
-                permissionRequestStatus={dockSlice.permissionRequestStatus}
-                permissionRequestError={dockSlice.permissionRequestError}
-                followupItems={dockSlice.followupItems}
-                revertItems={dockSlice.revertItems}
-                respondQuestionAt={
-                  onRespondToQuestion ?? ((_sid: string, _answers: string[]) => {})
+            {mountComposer ? (
+              <Suspense
+                fallback={
+                  <div
+                    className="app-claude-composer-tray__loading"
+                    aria-busy="true"
+                    aria-label="输入区加载中"
+                  >
+                    <Spin size="small" />
+                  </div>
                 }
-                dismissQuestionAt={onDismissQuestion ?? ((_sid: string) => {})}
-                onRespondToPermission={(response) => {
-                  if (workerId) void onRespondToPermission?.(workerId, response);
-                }}
-                onToggleTodo={(todoId) => {
-                  if (workerId) void onToggleTodo?.(workerId, todoId);
-                }}
-                onSendFollowup={(id) => {
-                  if (workerId) void onSendFollowup?.(workerId, id);
-                }}
-                onRestoreRevert={(id) => {
-                  if (workerId) void onRestoreRevert?.(workerId, id);
-                }}
-                onClearFollowups={() => {
-                  if (workerId) void onClearFollowups?.(workerId);
-                }}
-                onClearRevertItems={() => {
-                  if (workerId) void onClearRevertItems?.(workerId);
-                }}
-              />
-            </Suspense>
+              >
+                <ComposerRegionLazy
+                  session={resumeComposerSession}
+                  draftBucketKey={`monitor-drawer:${task.key}`}
+                  onExecute={handleExecute}
+                  onSessionModelChange={handleSessionModelChange}
+                  onCancel={handleCancel}
+                  allowSendWhileBusy
+                  compactFooterChrome
+                  todos={dockSlice.todos}
+                  questionRequest={dockSlice.questionRequest}
+                  questionRequestStatus={dockSlice.questionRequestStatus}
+                  questionRequestError={dockSlice.questionRequestError}
+                  permissionRequest={dockSlice.permissionRequest}
+                  permissionRequestStatus={dockSlice.permissionRequestStatus}
+                  permissionRequestError={dockSlice.permissionRequestError}
+                  followupItems={dockSlice.followupItems}
+                  revertItems={dockSlice.revertItems}
+                  respondQuestionAt={
+                    onRespondToQuestion ?? ((_sid: string, _answers: string[]) => {})
+                  }
+                  dismissQuestionAt={onDismissQuestion ?? ((_sid: string) => {})}
+                  onRespondToPermission={(response) => {
+                    if (workerId) void onRespondToPermission?.(workerId, response);
+                  }}
+                  onToggleTodo={(todoId) => {
+                    if (workerId) void onToggleTodo?.(workerId, todoId);
+                  }}
+                  onSendFollowup={(id) => {
+                    if (workerId) void onSendFollowup?.(workerId, id);
+                  }}
+                  onRestoreRevert={(id) => {
+                    if (workerId) void onRestoreRevert?.(workerId, id);
+                  }}
+                  onClearFollowups={() => {
+                    if (workerId) void onClearFollowups?.(workerId);
+                  }}
+                  onClearRevertItems={() => {
+                    if (workerId) void onClearRevertItems?.(workerId);
+                  }}
+                />
+              </Suspense>
+            ) : (
+              <div
+                className="app-claude-composer-tray__loading"
+                aria-busy="true"
+                aria-label="输入区加载中"
+              >
+                <Spin size="small" />
+              </div>
+            )}
           </div>
         ) : null}
       </div>
@@ -312,7 +330,7 @@ const SessionConversationTaskDetailBody = memo(function SessionConversationTaskD
 
 function SessionConversationTaskDetailDrawerInner({
   target,
-  sessions,
+  sessions: sessionsProp,
   sessionConversationTaskItems,
   onClose,
   onStopTask,
@@ -354,10 +372,16 @@ function SessionConversationTaskDetailDrawerInner({
   onClearFollowups?: (sessionId: string) => void;
   onClearRevertItems?: (sessionId: string) => void;
 }) {
+  const open = target !== null;
+  // 抽屉自行订阅 live sessions，避免打开时把整个运行面板拖进 live 订阅重绘。
+  const liveSessions = useClaudeSessionsLiveSnapshot(open);
+  const sessions = open && liveSessions.length > 0 ? liveSessions : sessionsProp;
+
   const width = Math.min(760, typeof window !== "undefined" ? window.innerWidth - 40 : 760);
   const sessionsRef = useRef(sessions);
   sessionsRef.current = sessions;
   const hydrateInFlightRef = useRef(false);
+  const [mountComposer, setMountComposer] = useState(false);
 
   const task = useMemo(() => {
     if (!target?.task) return null;
@@ -381,6 +405,27 @@ function SessionConversationTaskDetailDrawerInner({
   useEffect(() => {
     hydrateInFlightRef.current = false;
   }, [openTaskKey]);
+
+  useEffect(() => {
+    if (!open) {
+      setMountComposer(false);
+      return;
+    }
+    prefetchSessionConversationTaskDetailDrawer();
+    let cancelled = false;
+    let outerRaf = 0;
+    let innerRaf = 0;
+    outerRaf = window.requestAnimationFrame(() => {
+      innerRaf = window.requestAnimationFrame(() => {
+        if (!cancelled) setMountComposer(true);
+      });
+    });
+    return () => {
+      cancelled = true;
+      window.cancelAnimationFrame(outerRaf);
+      window.cancelAnimationFrame(innerRaf);
+    };
+  }, [open, openTaskKey]);
 
   useEffect(() => {
     if (!openTaskKey || !task) {
@@ -488,7 +533,7 @@ function SessionConversationTaskDetailDrawerInner({
       }
       placement="right"
       size={width}
-      open={target !== null}
+      open={open}
       onClose={onClose}
       destroyOnHidden
       classNames={{
@@ -525,6 +570,7 @@ function SessionConversationTaskDetailDrawerInner({
           transcriptSession={transcriptSession}
           resumeComposerSession={resumeComposerSession}
           resumeContext={resumeContext}
+          mountComposer={mountComposer}
           onResumeSession={onResumeSession}
           onRespondToQuestion={onRespondToQuestion}
           onDismissQuestion={onDismissQuestion}

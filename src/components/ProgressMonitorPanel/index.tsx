@@ -86,6 +86,7 @@ import {
   MONITOR_VIRTUALIZE_MIN_ROWS,
   MonitorPanelVirtualRows,
 } from "./MonitorPanelVirtualRows";
+import { prefetchSessionConversationTaskDetailDrawer } from "./prefetchSessionConversationTaskDetailDrawer";
 import {
   SessionConversationTaskDetailDrawer,
   type SessionConversationTaskDetailTarget,
@@ -1166,6 +1167,11 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
   const isCompactSidebarPanel = compactSidebarScrollRootRef != null;
   const setSectionCollapsed = onSectionCollapsedChange;
 
+  useEffect(() => {
+    if (sectionCollapsed) return;
+    prefetchSessionConversationTaskDetailDrawer();
+  }, [sectionCollapsed]);
+
   const [employeeHistoryPopoverId, setEmployeeHistoryPopoverId] = useState<string | null>(null);
   const [teamHistoryPopoverId, setTeamHistoryPopoverId] = useState<string | null>(null);
   const [employeeHistorySearch, setEmployeeHistorySearch] = useState("");
@@ -1278,9 +1284,9 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
     return map;
   }, [employeeHistorySessionsByName, teamItems]);
 
+  // 派发详情 drawer 自行订阅 live sessions，勿因打开派发项把整面板拖进 live 重绘。
   const needsLiveTranscriptSessions =
     _historyDrawerSessionIdProp != null ||
-    sessionConversationTaskDetailTarget != null ||
     repositorySubagentDetailTarget != null ||
     omcDirectBatchDetailSnapshot != null;
   const liveTranscriptSessions = useClaudeSessionsLiveSnapshot(needsLiveTranscriptSessions);
@@ -1368,6 +1374,7 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
 
   const openSessionConversationTaskDetail = useCallback(
     (item: SessionConversationTaskItem) => {
+      prefetchSessionConversationTaskDetailDrawer();
       if (item.invocationKey && item.sessionId && item.repositoryPath) {
         const inv = omcDirectBatchInvocationsLive.find((row) => row.invocationKey === item.invocationKey);
         setSessionConversationTaskDetailTarget(null);
@@ -1864,29 +1871,27 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
         onOpenInMainSessionBackground={onOpenOmcBatchInvocationDetail ? handleOmcBatchInvocationSelect : undefined}
       />
 
-      {sessionConversationTaskDetailTarget ? (
-        <SessionConversationTaskDetailDrawer
-          target={sessionConversationTaskDetailTarget}
-          sessions={sessionsForHistoryTranscript}
-          sessionConversationTaskItems={sessionConversationTaskItems ?? []}
-          onClose={() => setSessionConversationTaskDetailTarget(null)}
-          onStopTask={stopSessionConversationTask}
-          onCancelSession={onCancelSession}
-          onCancelOmcDirectBatchInvocation={onCancelOmcDirectBatchInvocation}
-          onStopSessionConversationTask={onStopSessionConversationTask}
-          onResumeSession={onResumeSession}
-          onReloadFullDiskTranscript={onReloadFullDiskTranscript}
-          onPrepareSessionForMonitorDrawer={onPrepareSessionForMonitorDrawer}
-          onRespondToQuestion={onRespondToQuestion}
-          onDismissQuestion={onDismissQuestion}
-          onRespondToPermission={onRespondToPermission}
-          onToggleTodo={onToggleTodo}
-          onSendFollowup={onSendFollowup}
-          onRestoreRevert={onRestoreRevert}
-          onClearFollowups={onClearFollowups}
-          onClearRevertItems={onClearRevertItems}
-        />
-      ) : null}
+      <SessionConversationTaskDetailDrawer
+        target={sessionConversationTaskDetailTarget}
+        sessions={transcriptSourceSessions ?? sessions}
+        sessionConversationTaskItems={sessionConversationTaskItems ?? []}
+        onClose={() => setSessionConversationTaskDetailTarget(null)}
+        onStopTask={stopSessionConversationTask}
+        onCancelSession={onCancelSession}
+        onCancelOmcDirectBatchInvocation={onCancelOmcDirectBatchInvocation}
+        onStopSessionConversationTask={onStopSessionConversationTask}
+        onResumeSession={onResumeSession}
+        onReloadFullDiskTranscript={onReloadFullDiskTranscript}
+        onPrepareSessionForMonitorDrawer={onPrepareSessionForMonitorDrawer}
+        onRespondToQuestion={onRespondToQuestion}
+        onDismissQuestion={onDismissQuestion}
+        onRespondToPermission={onRespondToPermission}
+        onToggleTodo={onToggleTodo}
+        onSendFollowup={onSendFollowup}
+        onRestoreRevert={onRestoreRevert}
+        onClearFollowups={onClearFollowups}
+        onClearRevertItems={onClearRevertItems}
+      />
 
       <RepositorySubagentDetailDrawer
         target={repositorySubagentDetailTarget}

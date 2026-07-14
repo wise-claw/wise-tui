@@ -3,10 +3,7 @@ import { memo } from "react";
 import type { SessionConversationTaskItem } from "../../types";
 import { SubagentStatusIndicator, type SubagentStatusVisual } from "./SubagentStatusIndicator";
 import { formatExecutionEnvironmentDispatchSavedTime } from "../../utils/sessionConversationTasks";
-
-function MonitorItemTypeTag({ label }: { label: string }) {
-  return <span className="app-monitor-panel__item-type-tag">{label}</span>;
-}
+import { prefetchSessionConversationTaskDetailDrawer } from "./prefetchSessionConversationTaskDetailDrawer";
 
 function resolveDispatchRowResultPreview(item: SessionConversationTaskItem): string {
   if (item.status === "running") return "";
@@ -51,19 +48,10 @@ export const SessionConversationDispatchTaskRow = memo(function SessionConversat
           type="button"
           className="app-monitor-panel__item-row-hit app-monitor-panel__item-row-hit--dispatch"
           title={rowTitle}
+          onPointerEnter={prefetchSessionConversationTaskDetailDrawer}
+          onPointerDown={prefetchSessionConversationTaskDetailDrawer}
           onClick={() => onOpenDetail(item)}
         >
-          <span className="app-monitor-panel__dispatch-row-lead">
-            <MonitorItemTypeTag label={item.source === "feedback_loop" ? "神经网" : "派发"} />
-            {item.subtitle ? (
-              <span
-                className="app-monitor-panel__session-task-meta app-monitor-panel__session-task-engine"
-                title={item.subtitle}
-              >
-                {item.subtitle}
-              </span>
-            ) : null}
-          </span>
           {displayPreview ? (
             <span
               className={`app-monitor-panel__session-task-preview${

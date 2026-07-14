@@ -10,6 +10,7 @@ import {
   filterSessionDispatchTaskItems,
 } from "../../utils/sessionConversationTasks";
 import { SessionConversationDispatchTaskRow } from "../ProgressMonitorPanel/SessionConversationDispatchTaskRow";
+import { prefetchSessionConversationTaskDetailDrawer } from "../ProgressMonitorPanel/prefetchSessionConversationTaskDetailDrawer";
 import {
   SessionConversationTaskDetailDrawer,
   type SessionConversationTaskDetailTarget,
@@ -55,6 +56,7 @@ export function SessionConversationTasksPanel({
   const [detailTarget, setDetailTarget] = useState<SessionConversationTaskDetailTarget | null>(null);
 
   const openDetail = useCallback((item: SessionConversationTaskItem) => {
+    prefetchSessionConversationTaskDetailDrawer();
     setDetailTarget({ task: item });
   }, []);
 
@@ -102,19 +104,17 @@ export function SessionConversationTasksPanel({
         </div>
       </div>
 
-      {detailTarget ? (
-        <SessionConversationTaskDetailDrawer
-          target={detailTarget}
-          sessions={sessions}
-          sessionConversationTaskItems={dispatchTaskItems}
-          onClose={() => setDetailTarget(null)}
-          onStopTask={onStopSessionConversationTask}
-          onStopSessionConversationTask={onStopSessionConversationTask}
-          onResumeSession={onResumeSession}
-          onReloadFullDiskTranscript={onReloadFullDiskTranscript}
-          onPrepareSessionForMonitorDrawer={onPrepareSessionForMonitorDrawer}
-        />
-      ) : null}
+      <SessionConversationTaskDetailDrawer
+        target={detailTarget}
+        sessions={sessions}
+        sessionConversationTaskItems={dispatchTaskItems}
+        onClose={() => setDetailTarget(null)}
+        onStopTask={onStopSessionConversationTask}
+        onStopSessionConversationTask={onStopSessionConversationTask}
+        onResumeSession={onResumeSession}
+        onReloadFullDiskTranscript={onReloadFullDiskTranscript}
+        onPrepareSessionForMonitorDrawer={onPrepareSessionForMonitorDrawer}
+      />
     </div>
   );
 }

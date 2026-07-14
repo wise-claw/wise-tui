@@ -38,6 +38,7 @@ const ClaudeChatComposerTrayLazy = lazy(() =>
 );
 import { ClaudeChatNotificationDock } from "./ClaudeChatNotificationDock";
 import { ClaudeChatSessionOwnerBar } from "./ClaudeChatSessionOwnerBar";
+import { prefetchSessionConversationTaskDetailDrawer } from "../ProgressMonitorPanel/prefetchSessionConversationTaskDetailDrawer";
 import {
   SessionConversationTaskDetailDrawer,
   type SessionConversationTaskDetailTarget,
@@ -461,6 +462,7 @@ export function ClaudeChatInner({
     useState<SessionConversationTaskDetailTarget | null>(null);
 
   const openSessionConversationTaskDetail = useCallback((task: SessionConversationTaskItem) => {
+    prefetchSessionConversationTaskDetailDrawer();
     setSessionConversationTaskDetailTarget({ task });
   }, []);
 
@@ -1997,8 +1999,7 @@ export function ClaudeChatInner({
         </div>
       </div>
 
-      {sessionConversationTaskDetailTarget ? (
-        <SessionConversationTaskDetailDrawer
+      <SessionConversationTaskDetailDrawer
           target={sessionConversationTaskDetailTarget}
           sessions={allSessionsForHistory ?? sessions}
           sessionConversationTaskItems={executionEnvironmentTaskItems}
@@ -2026,7 +2027,6 @@ export function ClaudeChatInner({
             })
           }
         />
-      ) : null}
     </div>
   );
 }

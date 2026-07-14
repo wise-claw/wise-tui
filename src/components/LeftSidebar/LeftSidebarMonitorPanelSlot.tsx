@@ -258,4 +258,7 @@ export const LeftSidebarMonitorPanelSlot = memo(function LeftSidebarMonitorPanel
 /** 左栏挂载后预加载运行面板，避免首次展开 Suspense 卡顿。 */
 export function preloadLeftSidebarMonitorPanel(): void {
   prefetchModule(() => import("../ProgressMonitorPanel"), "ProgressMonitorPanel");
+  void import("../ProgressMonitorPanel/prefetchSessionConversationTaskDetailDrawer").then((mod) => {
+    mod.prefetchSessionConversationTaskDetailDrawer();
+  });
 }
