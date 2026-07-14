@@ -1,7 +1,5 @@
 import { App as AntdApp, Layout } from "antd";
 import {
-  lazy,
-  Suspense,
   startTransition,
   useCallback,
   useEffect,
@@ -97,9 +95,6 @@ import { useChromePanelHoverHandlers } from "../hooks/useChromePanelHoverHandler
 import { useMonitorSidebarFingerprints } from "../hooks/useMonitorSessionsForOverview";
 import "./GitPanel/index.css";
 import "./LeftSidebar/leftSidebarListPerformance.css";
-const AppSettingsModalLazy = lazy(() =>
-  import("./AppSettingsModal").then((module) => ({ default: module.AppSettingsModal })),
-);
 
 const gitPanelChunk = import("./GitPanel");
 
@@ -321,7 +316,6 @@ export function LeftSidebar({
   /** 待升格为新项目的游离 repo（菜单触发后弹出输入项目名 modal）。 */
   const [promotingFloatingRepo, setPromotingFloatingRepo] = useState<Repository | null>(null);
   const [promotingFloatingRepoName, setPromotingFloatingRepoName] = useState("");
-  const [appSettingsOpen, setAppSettingsOpen] = useState(false);
   const [repositoryFileTreeSearch, setRepositoryFileTreeSearch] = useState("");
   /** 左下 Git/文件 Tab 目录选择器上下文：仅切换面板目录，不联动全局工作区/会话。 */
   const [repoPanelTreeSelection, setRepoPanelTreeSelection] =
@@ -1428,11 +1422,6 @@ export function LeftSidebar({
         onCancel={projectSddModeModal.cancel}
         onSubmit={() => void projectSddModeModal.submit()}
       />
-      {appSettingsOpen ? (
-        <Suspense fallback={null}>
-          <AppSettingsModalLazy open onClose={() => setAppSettingsOpen(false)} />
-        </Suspense>
-      ) : null}
     </Layout.Sider>
   );
 }

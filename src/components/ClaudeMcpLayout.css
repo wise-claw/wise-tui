@@ -292,16 +292,6 @@
   background: var(--ant-color-fill-tertiary);
 }
 
-.app-status-popover-tabs .app-tab-extra-mcp-btn.ant-btn.ant-btn-text {
-  font-size: 11px;
-  min-height: 22px;
-  padding: 0 6px;
-}
-
-.app-status-popover-tabs .app-tab-extra-mcp-btn.ant-btn.ant-btn-text .anticon {
-  font-size: 12px;
-}
-
 /* ── 添加 MCP 弹窗：窄版、紧凑间距 ── */
 
 .app-mcp-add-modal .ant-modal {

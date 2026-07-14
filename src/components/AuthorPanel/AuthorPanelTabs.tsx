@@ -15,7 +15,6 @@ import {
   ThunderboltOutlined,
   ToolOutlined,
   UserOutlined,
-  BugOutlined,
 } from "@ant-design/icons";
 import type { ReactNode } from "react";
 import type { AuthorPane } from "../../types/viewMode";
@@ -65,12 +64,6 @@ export const AUTHOR_TAB_GROUPS: Array<{ title: string; items: AuthorTabDefinitio
     title: "生态",
     items: [
       { key: "engine-registry", label: "执行环境", description: "本机 CLI 与 Cursor SDK 可编程引擎", icon: <ThunderboltOutlined /> },
-      {
-        key: "cursor-sdk-diagnostic",
-        label: "Cursor SDK 诊断",
-        description: "SDK 就绪探测、仓库读写与 Agent 写盘自检",
-        icon: <BugOutlined />,
-      },
     ],
   },
   {

@@ -1,7 +1,6 @@
 /* ─────────────────────────────────────────────────────────
    HubCard — shared visual primitives for settings hub panels.
-   Matches the AppSettingsModal preview demo. AntD-aligned;
-   palette pulls from Ant CSS variables so dark theme inherits.
+   Ant Design–aligned; palette pulls from Ant CSS variables so dark theme inherits.
    ───────────────────────────────────────────────────────── */
 
 .app-hub {

@@ -177,12 +177,7 @@ export function CursorSdkConfigModal({ open, onClose, onSaved }: CursorSdkConfig
                 默认<strong>不</strong>加载目标仓库 project 设置层，以免沙箱/钩子禁用写盘。需本机已执行{" "}
                 <Typography.Text code>bun install</Typography.Text> 的 Wise 目录（或{" "}
                 <Typography.Text code>WISE_CURSOR_SDK_ROOT</Typography.Text>
-                ）。macOS 请为 Wise 开启「完全磁盘访问权限」。写盘异常请用{" "}
-                <Typography.Link href="/demo.html" style={{ fontSize: 12 }}>
-                  /demo.html
-                </Typography.Link>
-                {" "}
-                诊断（不依赖 Agent 自述）。
+                ）。macOS 请为 Wise 开启「完全磁盘访问权限」。写盘或 SDK 异常时，可在「执行环境」中重新探测 Status。
               </Typography.Paragraph>
             ),
           },

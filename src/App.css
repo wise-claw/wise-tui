@@ -2723,7 +2723,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   overflow: visible;
 }
 
-/* 仅左栏：与 ProjectList 组件中的 .app-repository-list 区分，避免全局 flex 互相覆盖 */
+/* 仅左栏：避免全局 .app-repository-list flex 互相覆盖 */
 .app-left-sidebar .app-repository-list {
   padding: 0 !important;
 }

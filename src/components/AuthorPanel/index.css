@@ -1,4 +1,4 @@
-/* 工作台配置：左栏导航 + 右侧标题与内容（对齐 Cursor / AppSettingsModal 布局） */
+/* 工作台配置：左栏导航 + 右侧标题与内容 */
 .author-panel {
   display: flex;
   flex-direction: column;

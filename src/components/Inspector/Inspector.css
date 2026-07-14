@@ -463,8 +463,7 @@
   backdrop-filter: none !important;
 }
 
-.app-chat-inspector .app-monitor-panel__section,
-.app-chat-inspector .app-completed-task-panel {
+.app-chat-inspector .app-monitor-panel__section {
   padding-left: 12px;
   padding-right: 12px;
 }

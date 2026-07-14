@@ -21,8 +21,7 @@ import {
  * - subscribe 在 request 后被通知；consume 只读不通知。
  * - 竞态回归：旧编辑器提前 consume 不阻止 migrate 把请求迁到新 id。
  *
- * 时间通过 setComposerRefocusNowForTests 注入，避免 setSystemTime 污染全局时钟
- * 影响其它依赖真实时间的测试（如 withMinLoadingDuration）。
+ * 时间通过 setComposerRefocusNowForTests 注入，避免 setSystemTime 污染全局时钟。
  */
 
 describe("composerRefocusStore", () => {

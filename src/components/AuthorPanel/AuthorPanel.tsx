@@ -28,7 +28,6 @@ import { WorkflowConfigModal } from "../WorkflowConfigModal";
 import { AUTHOR_TABS, type AuthorPane } from "./AuthorPanelTabs";
 import { writeAuthorPaneToStorage } from "./authorPaneStorage";
 import { AuthorPanelPageShell } from "./AuthorPanelPageShell";
-import { CursorSdkDiagnosticTab } from "./tabs/CursorSdkDiagnosticTab";
 import { WorkspacesTab } from "./tabs/WorkspacesTab";
 import "./index.css";
 
@@ -46,7 +45,6 @@ const PANELS_WITH_OWN_SHELL = new Set<AuthorPane>([
   "automation",
   "artifacts",
   "engine-registry",
-  "cursor-sdk-diagnostic",
 ]);
 
 type EmployeeConfigProps = ComponentProps<typeof EmployeeConfigModal>;
@@ -203,17 +201,6 @@ export function AuthorPanel({
         return <AssistantsPanel {...assistantsPanelProps} />;
       case "engine-registry":
         return <AgentRegistrySection />;
-      case "cursor-sdk-diagnostic":
-        return (
-          <AuthorPanelPageShell
-            icon={activeTab.icon}
-            title={activeTab.label}
-            subtitle={activeTab.description}
-            className="author-panel-page--cursor-sdk-diagnostic"
-          >
-            <CursorSdkDiagnosticTab repositoryPath={repositoryPath} />
-          </AuthorPanelPageShell>
-        );
       case "automation":
         return automationPanelProps ? (
           <AutomationPanel {...automationPanelProps} onClose={onBack} />
