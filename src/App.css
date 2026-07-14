@@ -2044,11 +2044,13 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   height: 14px;
 }
 
-/* 项目列表按内容高度，不撑满空白；多项目时封顶并内部滚动，剩余高度给文件树 */
+/* 项目列表按内容高度；多项目时按配置可见行数封顶并内部滚动，剩余高度给文件树 */
 .app-left-sidebar-project-and-files > .app-repository-list {
   flex: 0 1 auto;
   align-self: stretch;
-  max-height: min(42%, 300px);
+  max-height: calc(
+    var(--workspace-list-row-height, 24px) * var(--workspace-list-max-visible-rows, 8)
+  );
   min-height: 0;
   padding: 0 !important;
   overflow-y: auto;

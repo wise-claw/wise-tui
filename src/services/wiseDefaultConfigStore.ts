@@ -29,6 +29,10 @@ import {
   normalizeMonitorPanelVisibleRows,
 } from "../constants/monitorPanelLayout";
 import {
+  WORKSPACE_LIST_VISIBLE_ROWS_DEFAULT,
+  normalizeWorkspaceListVisibleRows,
+} from "../constants/workspaceListLayout";
+import {
   REPO_PANEL_SPLIT_HEIGHT_DEFAULT_PX,
   clampRepoPanelSplitHeightPx,
 } from "../constants/repoPanelLayout";
@@ -68,6 +72,8 @@ export const WISE_LEFT_SIDEBAR_HUB_QUICK_ENTRIES_CHANGED = "wise:left-sidebar-hu
 export const WISE_LEFT_SIDEBAR_MONITOR_PANEL_CHANGED = "wise:left-sidebar-monitor-panel-changed";
 
 export const WISE_LEFT_SIDEBAR_WORKSPACE_LIST_CHANGED = "wise:left-sidebar-workspace-list-changed";
+
+export const WISE_WORKSPACE_LIST_VISIBLE_ROWS_CHANGED = "wise:workspace-list-visible-rows-changed";
 
 export const WISE_LEFT_SIDEBAR_REPOSITORY_ICON_BADGES_CHANGED =
   "wise:left-sidebar-repository-icon-badges-changed";
@@ -179,6 +185,8 @@ export interface WiseDefaultConfigV1 {
   showLeftSidebarMonitorPanel: boolean;
   /** 左栏工作区与仓库树是否显示；默认显示。 */
   showLeftSidebarWorkspaceList: boolean;
+  /** 左栏工作区树内容区默认可见行数（与文件树并存时封顶高度）。 */
+  workspaceListVisibleRows: number;
   /** 左栏工作区列表中是否显示仓库圆形角标；默认隐藏。 */
   showRepositoryIconBadgesInWorkspaceList: boolean;
   /** 运行面板默认栏位；默认左栏。 */
@@ -277,6 +285,7 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   leftSidebarHubQuickEntries: [...DEFAULT_LEFT_SIDEBAR_HUB_QUICK_ENTRIES],
   showLeftSidebarMonitorPanel: true,
   showLeftSidebarWorkspaceList: true,
+  workspaceListVisibleRows: WORKSPACE_LIST_VISIBLE_ROWS_DEFAULT,
   showRepositoryIconBadgesInWorkspaceList: false,
   monitorPanelPlacement: "left",
   monitorPanelVisibleRows: MONITOR_PANEL_VISIBLE_ROWS_DEFAULT,
@@ -411,6 +420,10 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
               parsed.showLeftSidebarWorkspaceList,
               DEFAULT_CONFIG.showLeftSidebarWorkspaceList,
             ),
+      workspaceListVisibleRows:
+        parsed.workspaceListVisibleRows === undefined
+          ? DEFAULT_CONFIG.workspaceListVisibleRows
+          : normalizeWorkspaceListVisibleRows(parsed.workspaceListVisibleRows),
       showRepositoryIconBadgesInWorkspaceList:
         parsed.showRepositoryIconBadgesInWorkspaceList === undefined
           ? DEFAULT_CONFIG.showRepositoryIconBadgesInWorkspaceList
@@ -732,6 +745,7 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     leftSidebarHubQuickEntries: [...DEFAULT_LEFT_SIDEBAR_HUB_QUICK_ENTRIES],
     showLeftSidebarMonitorPanel: DEFAULT_CONFIG.showLeftSidebarMonitorPanel,
     showLeftSidebarWorkspaceList: DEFAULT_CONFIG.showLeftSidebarWorkspaceList,
+    workspaceListVisibleRows: DEFAULT_CONFIG.workspaceListVisibleRows,
     showRepositoryIconBadgesInWorkspaceList: DEFAULT_CONFIG.showRepositoryIconBadgesInWorkspaceList,
     monitorPanelPlacement: DEFAULT_CONFIG.monitorPanelPlacement,
     monitorPanelVisibleRows: DEFAULT_CONFIG.monitorPanelVisibleRows,
@@ -829,6 +843,15 @@ function dispatchMonitorPanelVisibleRowsChanged(visibleRows: number): void {
   window.dispatchEvent(
     new CustomEvent(WISE_MONITOR_PANEL_VISIBLE_ROWS_CHANGED, {
       detail: { monitorPanelVisibleRows: visibleRows },
+    }),
+  );
+}
+
+function dispatchWorkspaceListVisibleRowsChanged(visibleRows: number): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(WISE_WORKSPACE_LIST_VISIBLE_ROWS_CHANGED, {
+      detail: { workspaceListVisibleRows: visibleRows },
     }),
   );
 }
@@ -947,6 +970,7 @@ export async function saveWiseDefaultConfig(
       | "leftSidebarHubQuickEntries"
       | "showLeftSidebarMonitorPanel"
       | "showLeftSidebarWorkspaceList"
+      | "workspaceListVisibleRows"
       | "showRepositoryIconBadgesInWorkspaceList"
       | "monitorPanelPlacement"
       | "monitorPanelVisibleRows"
@@ -1016,6 +1040,7 @@ export async function saveWiseDefaultConfig(
       patch.showLeftSidebarMonitorPanel ?? current.showLeftSidebarMonitorPanel,
     showLeftSidebarWorkspaceList:
       patch.showLeftSidebarWorkspaceList ?? current.showLeftSidebarWorkspaceList,
+    workspaceListVisibleRows: patch.workspaceListVisibleRows ?? current.workspaceListVisibleRows,
     showRepositoryIconBadgesInWorkspaceList:
       patch.showRepositoryIconBadgesInWorkspaceList ?? current.showRepositoryIconBadgesInWorkspaceList,
     monitorPanelPlacement: patch.monitorPanelPlacement ?? current.monitorPanelPlacement,
@@ -1167,6 +1192,9 @@ export async function saveWiseDefaultConfig(
   }
   if (patch.showLeftSidebarWorkspaceList !== undefined) {
     next.showLeftSidebarWorkspaceList = normalizeBoolean(patch.showLeftSidebarWorkspaceList);
+  }
+  if (patch.workspaceListVisibleRows !== undefined) {
+    next.workspaceListVisibleRows = normalizeWorkspaceListVisibleRows(patch.workspaceListVisibleRows);
   }
   if (patch.showRepositoryIconBadgesInWorkspaceList !== undefined) {
     next.showRepositoryIconBadgesInWorkspaceList = normalizeBoolean(
@@ -1415,6 +1443,12 @@ export async function saveWiseDefaultConfig(
     next.showLeftSidebarWorkspaceList !== current.showLeftSidebarWorkspaceList
   ) {
     dispatchLeftSidebarWorkspaceListChanged(next.showLeftSidebarWorkspaceList);
+  }
+  if (
+    patch.workspaceListVisibleRows !== undefined &&
+    next.workspaceListVisibleRows !== current.workspaceListVisibleRows
+  ) {
+    dispatchWorkspaceListVisibleRowsChanged(next.workspaceListVisibleRows);
   }
   if (
     patch.showRepositoryIconBadgesInWorkspaceList !== undefined &&
@@ -1766,6 +1800,26 @@ export async function loadLeftSidebarWorkspaceListVisibleFromStore(): Promise<bo
 
 export async function saveLeftSidebarWorkspaceListVisibleToStore(visible: boolean): Promise<void> {
   await saveWiseDefaultConfig({ showLeftSidebarWorkspaceList: visible });
+}
+
+export async function loadWorkspaceListVisibleRowsFromStore(): Promise<number> {
+  return (await loadWiseDefaultConfig()).workspaceListVisibleRows;
+}
+
+export async function saveWorkspaceListVisibleRowsToStore(visibleRows: number): Promise<void> {
+  const normalized = normalizeWorkspaceListVisibleRows(visibleRows);
+  await saveWiseDefaultConfig({ workspaceListVisibleRows: normalized });
+}
+
+export async function loadLeftSidebarWorkspaceListDefaultFromStore(): Promise<{
+  visible: boolean;
+  visibleRows: number;
+}> {
+  const config = await loadWiseDefaultConfig();
+  return {
+    visible: config.showLeftSidebarWorkspaceList,
+    visibleRows: config.workspaceListVisibleRows,
+  };
 }
 
 export async function loadRepositoryIconBadgesVisibleInWorkspaceListFromStore(): Promise<boolean> {

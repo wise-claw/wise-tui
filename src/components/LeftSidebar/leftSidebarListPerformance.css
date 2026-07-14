@@ -102,16 +102,7 @@
   font-weight: 400;
 }
 
-.app-left-sidebar-scroll-region--scrolling .app-repository-item:hover .app-repository-action,
-.app-repository-list--scrolling .app-repository-item:hover .app-repository-action {
-  opacity: 0;
-  pointer-events: none;
-}
-
-.app-left-sidebar-scroll-region--scrolling .app-repository-item,
-.app-repository-list--scrolling .app-repository-item {
-  pointer-events: none;
-}
+/* 滚动中勿隐藏快捷按钮 / 展开图标 / 子仓库：可见行数封顶后滚动更频繁，空白闪烁明显。 */
 
 .app-left-sidebar-scroll-region--scrolling .app-repository-row,
 .app-repository-list--scrolling .app-repository-row {
@@ -119,35 +110,16 @@
   contain: layout style;
 }
 
-/* 滚动中：展开的工作区行恢复 content-visibility，并跳过子仓库列表绘制 */
 .app-left-sidebar-scroll-region--scrolling .app-repository-row:has(.app-repository-sessions),
 .app-repository-list--scrolling .app-repository-row:has(.app-repository-sessions) {
-  content-visibility: auto;
-  contain-intrinsic-size: auto 28px;
+  content-visibility: visible;
+  contain-intrinsic-size: auto;
 }
 
 .app-left-sidebar-scroll-region--scrolling .app-repository-sessions,
 .app-repository-list--scrolling .app-repository-sessions {
-  content-visibility: hidden;
-  contain-intrinsic-size: 0;
-  contain: layout style paint;
-}
-
-/* 滚动中：工作区行内快捷操作按钮 DOM 多，统一隐藏减轻合成 */
-.app-left-sidebar-scroll-region--scrolling .app-repository-row-actions,
-.app-repository-list--scrolling .app-repository-row-actions {
-  visibility: hidden;
-  pointer-events: none;
-}
-
-.app-left-sidebar-scroll-region--scrolling .app-repository-item:hover .app-repository-icon--folder,
-.app-repository-list--scrolling .app-repository-item:hover .app-repository-icon--folder {
-  opacity: 1 !important;
-}
-
-.app-left-sidebar-scroll-region--scrolling .app-repository-item:hover .app-repository-icon--expand,
-.app-repository-list--scrolling .app-repository-item:hover .app-repository-icon--expand {
-  opacity: 0 !important;
+  content-visibility: visible;
+  contain: layout style;
 }
 
 .app-left-sidebar-scroll-region--scrolling .app-repository-main-session-running-dot,

@@ -10,6 +10,7 @@ import {
   SESSION_EXECUTION_ENGINES,
 } from "../../constants/sessionExecutionEngine";
 import { MONITOR_PANEL_VISIBLE_ROWS_OPTIONS } from "../../constants/monitorPanelLayout";
+import { WORKSPACE_LIST_VISIBLE_ROWS_OPTIONS } from "../../constants/workspaceListLayout";
 import { LEFT_SIDEBAR_HUB_QUICK_ENTRY_LABELS } from "../../constants/leftSidebarHubQuickEntries";
 import type { LeftSidebarHubQuickEntryId } from "../../constants/leftSidebarHubQuickEntries";
 import { useClaudeConnectionModeSetting } from "../ClaudeConfigDirPanel/useClaudeConnectionModeSetting";
@@ -667,21 +668,47 @@ export function DefaultConfigPanel() {
         <>
           <DefaultConfigRow
             title="工作区树"
-            hint="仓库 / 工作区"
-            detail="左栏工作区与仓库树；隐藏后仍可用目录选择器切换"
+            hint="显隐 · 行数"
+            detail="左栏工作区与仓库树；与文件树并存时按可见行数限制高度"
             control={
-              <DefaultConfigOptionPick<"hidden" | "visible">
-                aria-label="左栏工作区默认显示"
-                disabled={leftSidebarWorkspaceList.loading || leftSidebarWorkspaceList.saving}
-                value={leftSidebarWorkspaceList.visible ? "visible" : "hidden"}
-                options={[
-                  { label: "显示", value: "visible" },
-                  { label: "隐藏", value: "hidden" },
-                ]}
-                onChange={(value) => {
-                  void leftSidebarWorkspaceList.saveVisible(value === "visible");
-                }}
-              />
+              <div className="app-default-config-row__control--monitor">
+                <div className="app-default-config-monitor-panel__field">
+                  <span className="app-default-config-monitor-panel__field-label">显示</span>
+                  <DefaultConfigOptionPick<"hidden" | "visible">
+                    aria-label="左栏工作区默认显示"
+                    disabled={leftSidebarWorkspaceList.loading || leftSidebarWorkspaceList.saving}
+                    value={leftSidebarWorkspaceList.visible ? "visible" : "hidden"}
+                    options={[
+                      { label: "显示", value: "visible" },
+                      { label: "隐藏", value: "hidden" },
+                    ]}
+                    onChange={(value) => {
+                      void leftSidebarWorkspaceList.saveVisible(value === "visible");
+                    }}
+                  />
+                </div>
+                <div className="app-default-config-monitor-panel__field app-default-config-monitor-panel__field--rows">
+                  <span className="app-default-config-monitor-panel__field-label">行数</span>
+                  <Select
+                    size="small"
+                    className="app-default-config-monitor-panel__rows-select"
+                    aria-label="工作区树可见行数"
+                    disabled={
+                      leftSidebarWorkspaceList.loading ||
+                      leftSidebarWorkspaceList.saving ||
+                      !leftSidebarWorkspaceList.visible
+                    }
+                    value={leftSidebarWorkspaceList.visibleRows}
+                    options={WORKSPACE_LIST_VISIBLE_ROWS_OPTIONS.map((rows) => ({
+                      value: rows,
+                      label: `${rows}`,
+                    }))}
+                    onChange={(value) => {
+                      void leftSidebarWorkspaceList.saveVisibleRows(value);
+                    }}
+                  />
+                </div>
+              </div>
             }
           />
 

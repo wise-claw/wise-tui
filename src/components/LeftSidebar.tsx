@@ -6,6 +6,7 @@ import {
   useMemo,
   useRef,
   useState,
+  type CSSProperties,
 } from "react";
 import type { ProjectItem, Repository } from "../types";
 import { repositoryFolderBasename } from "../utils/repositoryType";
@@ -29,7 +30,9 @@ import {
   type ExplorerFocusRequestedDetail,
 } from "../constants/explorerUiEvents";
 import { MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX } from "../constants/mainLayoutWidths";
+import { WORKSPACE_LIST_ROW_HEIGHT_PX } from "../constants/workspaceListLayout";
 import { DEFAULT_WORKSPACE_BOOTSTRAP_SELECTION } from "../constants/workspaceBootstrapAddons";
+import { useWorkspaceListVisibleRows } from "../hooks/useWorkspaceListVisibleRows";
 import { stopClaudeMainSession } from "../services/stopClaudeMainSession";
 import {
   projectMainSessionBindingKey,
@@ -349,6 +352,7 @@ export function LeftSidebar({
     sessions,
     showLeftSidebarMonitorPanel,
   );
+  const workspaceListVisibleRows = useWorkspaceListVisibleRows();
 
   useEffect(() => {
     if (!showLeftSidebarMonitorPanel) {
@@ -1117,6 +1121,12 @@ export function LeftSidebar({
         }
         data-monitor-panel-section-collapsed={
           showLeftSidebarMonitorPanel && monitorPanelSectionCollapsed ? "true" : undefined
+        }
+        style={
+          {
+            "--workspace-list-row-height": `${WORKSPACE_LIST_ROW_HEIGHT_PX}px`,
+            "--workspace-list-max-visible-rows": workspaceListVisibleRows,
+          } as CSSProperties
         }
       >
         <LeftSidebarWorkspaceListSlot
