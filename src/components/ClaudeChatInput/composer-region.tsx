@@ -34,6 +34,7 @@ import { PromptProvider, clearPromptContextSessionKey, usePrompt } from "./promp
 import type { TriggerInfo } from "./slash-trigger";
 import type { ComposerPlainSurface } from "./slash-popover";
 import {
+  buildComposerAtPathMentionsInsertion,
   contentsToPlain,
   detectAtSlashTrigger,
   ensureSpaceAfterAtInsert,
@@ -679,6 +680,8 @@ function ComposerInner({
   const lastEditorPlainRef = useRef("");
   const ignoreNextContentSyncRef = useRef(false);
   const skipContentSyncRemainingRef = useRef(0);
+  /** 文件树/附件程序化插入 @路径后：吞掉当次 onContentChange 的 at-trigger，避免打开文件搜索面板。 */
+  const suppressAtTriggerAfterMentionInsertRef = useRef(false);
   const composerSendInFlightRef = useRef(false);
   /** 会话切换 generation token：每次切换 bump，在途 rAF setContent tick 据此判 stale 提前作废。 */
   const composerSessionGenerationRef = useRef(0);
@@ -1080,19 +1083,25 @@ function ComposerInner({
     lastEditorPlainRef.current = plain;
     syncCanSendComposer(plain);
     debouncedPromptSyncRef.current(plain, c);
-    const detected = detectAtSlashTrigger(plain, c);
-    setTrigger((prev) => {
-      if (!detected) {
-        if (prev.mode === null && prev.query === "") return prev;
-        return { mode: null, query: "", rect: null };
-      }
-      if (prev.mode === detected.mode && prev.query === detected.query) return prev;
-      return {
-        mode: detected.mode,
-        query: detected.query,
-        rect: resolveAtSlashTriggerAnchorRect(aiChatRef.current, shellRef.current, plain, c),
-      };
-    });
+    if (suppressAtTriggerAfterMentionInsertRef.current) {
+      setTrigger((prev) =>
+        prev.mode === null && prev.query === "" ? prev : { mode: null, query: "", rect: null },
+      );
+    } else {
+      const detected = detectAtSlashTrigger(plain, c);
+      setTrigger((prev) => {
+        if (!detected) {
+          if (prev.mode === null && prev.query === "") return prev;
+          return { mode: null, query: "", rect: null };
+        }
+        if (prev.mode === detected.mode && prev.query === detected.query) return prev;
+        return {
+          mode: detected.mode,
+          query: detected.query,
+          rect: resolveAtSlashTriggerAnchorRect(aiChatRef.current, shellRef.current, plain, c),
+        };
+      });
+    }
     if (plain.endsWith(" ")) {
       queueMicrotask(() => {
         repairTiptapTrailingSpaceIfNeeded(aiChatRef.current, plain);
@@ -2468,6 +2477,59 @@ function ComposerInner({
     }
   }, []);
 
+  /**
+   * 文件树 / 系统文件名插入 `@路径`：优先 Tiptap 增量 insertContent，避免整篇 setContent；
+   * 并压制 @ 触发，防止尾随空格被 Semi 吞掉后打开全仓文件搜索面板导致卡顿。
+   */
+  const insertAtPathMentions = useCallback((relativePaths: readonly string[]) => {
+    const surface = plainSurfaceRef.current;
+    if (!surface || relativePaths.length === 0) return;
+
+    surface.focus();
+    const plain = surface.getPlain();
+    const cur = surface.getCursor();
+    const built = buildComposerAtPathMentionsInsertion(plain, cur, relativePaths);
+    if (!built) return;
+
+    const ed = aiChatRef.current?.getEditor?.() as
+      | {
+          chain?: () => {
+            focus: (pos?: string) => { insertContent: (v: string) => { run: () => void } };
+          };
+        }
+      | undefined;
+
+    suppressAtTriggerAfterMentionInsertRef.current = true;
+    setTrigger({ mode: null, query: "", rect: null });
+
+    if (ed?.chain) {
+      try {
+        ed.chain().focus().insertContent(built.insertion).run();
+        const actual =
+          readSemiEditorPlain(aiChatRef.current?.getEditor?.()) || built.nextPlain;
+        lastEditorPlainRef.current = actual;
+        cursorRef.current = built.nextCursor;
+        syncCanSendComposer(actual);
+        // React prompt 由 insertContent → onContentChange 防抖回流；此处避免立刻 set 触发整树重渲。
+        queueMicrotask(() => {
+          repairTiptapTrailingSpaceIfNeeded(aiChatRef.current, built.nextPlain);
+          focusComposerAtPlainOffset(aiChatRef.current, built.nextCursor);
+          suppressAtTriggerAfterMentionInsertRef.current = false;
+          setTrigger({ mode: null, query: "", rect: null });
+        });
+        return;
+      } catch {
+        /* fall through to setPlainAndCursor */
+      }
+    }
+
+    surface.setPlainAndCursor(built.nextPlain, built.nextCursor);
+    queueMicrotask(() => {
+      suppressAtTriggerAfterMentionInsertRef.current = false;
+      setTrigger({ mode: null, query: "", rect: null });
+    });
+  }, [syncCanSendComposer]);
+
   /** 从系统/Finder 拖入的文件：图片进缩略图，其它文件插入 @ 药丸（与附件按钮一致） */
   const handleNativeFilesDropped = useCallback(
     (files: File[]) => {
@@ -2480,50 +2542,37 @@ function ComposerInner({
         fileCount: files.length,
         files: files.map((f) => ({ name: f.name, type: f.type, size: f.size })),
       });
+      const mentionNames: string[] = [];
       for (const file of files) {
         if (isImageFile(file)) {
           logClaudeDrop("handleNativeFilesDropped.branch", { name: file.name, branch: "image_thumbnail" });
           addImageFilesFromList([file]);
         } else {
           logClaudeDrop("handleNativeFilesDropped.branch", { name: file.name, branch: "mention_insert" });
-          surface.focus();
-          let plain = surface.getPlain();
-          let cur = surface.getCursor();
-          let r = insertPlainAt(plain, cur, `@${file.name}`);
-          r = ensureSpaceAfterAtInsert(r.plain, r.cursor);
-          surface.setPlainAndCursor(r.plain, r.cursor);
+          mentionNames.push(file.name);
         }
       }
+      if (mentionNames.length > 0) {
+        insertAtPathMentions(mentionNames);
+      }
     },
-    [addImageFilesFromList],
+    [addImageFilesFromList, insertAtPathMentions],
   );
 
   /** 右栏「开发文件」树拖入：插入 `@仓库相对路径`（与系统文件拖入非图片行为一致）。 */
-  const handleRepositoryPathsDropped = useCallback((paths: string[]) => {
-    const surface = plainSurfaceRef.current;
-    if (!surface || paths.length === 0) {
-      return;
-    }
-    surface.focus();
-    let plain = surface.getPlain();
-    let cur = surface.getCursor();
-    for (const rel of paths) {
-      const t = rel.trim();
-      if (!t) continue;
-      let r = insertPlainAt(plain, cur, `@${t}`);
-      r = ensureSpaceAfterAtInsert(r.plain, r.cursor);
-      plain = r.plain;
-      cur = r.cursor;
-    }
-    surface.setPlainAndCursor(plain, cur);
-  }, []);
+  const handleRepositoryPathsDropped = useCallback(
+    (paths: string[]) => {
+      insertAtPathMentions(paths);
+    },
+    [insertAtPathMentions],
+  );
 
   const handleInputAreaDragOver = useCallback(
     (e: React.DragEvent) => {
       if (!isComposerFileLikeDrag(e)) return;
       e.preventDefault();
       e.dataTransfer.dropEffect = "copy";
-      setDragOverNativeFiles(true);
+      setDragOverNativeFiles((prev) => (prev ? prev : true));
       if (!dragOverLoggedRef.current) {
         dragOverLoggedRef.current = true;
         logClaudeDrop("inputArea.dragOver.first", {
@@ -2631,23 +2680,20 @@ function ComposerInner({
     input.accept = "*/*";
     input.onchange = () => {
       if (!input.files) return;
+      const mentionNames: string[] = [];
       Array.from(input.files).forEach((file) => {
         if (isImageFile(file)) {
           addImageFilesFromList([file]);
         } else {
-          const s = plainSurfaceRef.current;
-          if (s) {
-            const plain = s.getPlain();
-            const cur = s.getCursor();
-            let r = insertPlainAt(plain, cur, `@${file.name}`);
-            r = ensureSpaceAfterAtInsert(r.plain, r.cursor);
-            s.setPlainAndCursor(r.plain, r.cursor);
-          }
+          mentionNames.push(file.name);
         }
       });
+      if (mentionNames.length > 0) {
+        insertAtPathMentions(mentionNames);
+      }
     };
     input.click();
-  }, [addImageFilesFromList]);
+  }, [addImageFilesFromList, insertAtPathMentions]);
 
   const handleFileAttachRef = useRef(handleFileAttach);
   useEffect(() => {

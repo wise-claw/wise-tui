@@ -36,12 +36,29 @@ interface SlashTriggerMatch {
   slashIndexOnLine: number;
 }
 
-/** 行内 `/` 触发：当前行仅一个 `/`（排除 URL/path），query 可含空格以支持 `/plugin install`。 */
+/** 行内 `/` 触发：当前行仅一个「非 @ 提及内」的 `/`（排除 URL/path），query 可含空格以支持 `/plugin install`。 */
 function matchInlineSlashTrigger(currentLine: string): SlashTriggerMatch | null {
-  if ((currentLine.match(/\//g) ?? []).length !== 1) return null;
+  // @ 提及内的路径分隔符（如 `@src/App.tsx`）不算 slash 命令。
+  let inAtMention = false;
+  let slashIndexOnLine = -1;
+  let slashCount = 0;
+  for (let i = 0; i < currentLine.length; i += 1) {
+    const ch = currentLine[i]!;
+    if (ch === "@" || ch === "＠") {
+      inAtMention = true;
+      continue;
+    }
+    if (inAtMention) {
+      if (ch === " " || ch === "\t") inAtMention = false;
+      continue;
+    }
+    if (ch === "/") {
+      slashCount += 1;
+      if (slashIndexOnLine < 0) slashIndexOnLine = i;
+    }
+  }
+  if (slashCount !== 1 || slashIndexOnLine < 0) return null;
 
-  const slashIndexOnLine = currentLine.indexOf("/");
-  if (slashIndexOnLine < 0) return null;
   if (slashIndexOnLine > 0 && currentLine[slashIndexOnLine - 1] === ":") return null;
 
   return {
@@ -150,6 +167,40 @@ export function ensureSpaceAfterAtInsert(plain: string, cursor: number): { plain
     }
   }
   return { plain, cursor: c };
+}
+
+/**
+ * 把若干仓库相对路径拼成一次插入块（含与前后文隔离的空格）。
+ * 用于文件树拖入 / 附件：避免逐次 setContent，并保证提及后有空格以免误开 @ 文件搜索面板。
+ */
+export function buildComposerAtPathMentionsInsertion(
+  plain: string,
+  cursor: number,
+  relativePaths: readonly string[],
+): { insertion: string; nextPlain: string; nextCursor: number } | null {
+  const tokens: string[] = [];
+  for (const raw of relativePaths) {
+    const t = raw.trim();
+    if (t) tokens.push(`@${t}`);
+  }
+  if (tokens.length === 0) return null;
+
+  const c = Math.max(0, Math.min(cursor, plain.length));
+  let insertion = tokens.join(" ");
+  if (c > 0 && /\S/.test(plain[c - 1]!) && !/^\s/.test(insertion)) {
+    insertion = ` ${insertion}`;
+  }
+
+  let next = insertPlainAt(plain, c, insertion);
+  next = ensureSpaceAfterAtInsert(next.plain, next.cursor);
+  const insertedLen = next.plain.length - plain.length;
+  if (insertedLen <= 0) return null;
+
+  return {
+    insertion: next.plain.slice(c, c + insertedLen),
+    nextPlain: next.plain,
+    nextCursor: next.cursor,
+  };
 }
 
 export function replaceSlashCommandLine(

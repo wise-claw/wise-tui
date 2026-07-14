@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  buildComposerAtPathMentionsInsertion,
   detectAtSlashTrigger,
   replaceSlashCommandLine,
   reportAtSlashTriggerFromPlain,
@@ -50,6 +51,19 @@ describe("reportAtSlashTriggerFromPlain", () => {
     expect(collectTrigger("path/to/file", 13)).toEqual({
       mode: null,
       query: "",
+      rect: null,
+    });
+  });
+
+  test("does not treat @ file path slash as slash command", () => {
+    expect(collectTrigger("@src/App.tsx ", 13)).toEqual({
+      mode: null,
+      query: "",
+      rect: null,
+    });
+    expect(collectTrigger("@src/App.tsx /compact", 21)).toEqual({
+      mode: "slash",
+      query: "compact",
       rect: null,
     });
   });
@@ -122,5 +136,31 @@ describe("replaceSlashCommandLine", () => {
       plain: "/plugin install oh-my-claudecode@omc ",
       cursor: 37,
     });
+  });
+});
+
+describe("buildComposerAtPathMentionsInsertion", () => {
+  test("inserts @path with trailing space so @ trigger stays closed", () => {
+    const built = buildComposerAtPathMentionsInsertion("", 0, ["src/App.tsx"]);
+    expect(built).toEqual({
+      insertion: "@src/App.tsx ",
+      nextPlain: "@src/App.tsx ",
+      nextCursor: 13,
+    });
+    expect(detectAtSlashTrigger(built!.nextPlain, built!.nextCursor)).toBeNull();
+  });
+
+  test("batches multiple paths and adds leading space after existing text", () => {
+    const built = buildComposerAtPathMentionsInsertion("please", 6, ["a.ts", "b/dir"]);
+    expect(built).toEqual({
+      insertion: " @a.ts @b/dir ",
+      nextPlain: "please @a.ts @b/dir ",
+      nextCursor: 20,
+    });
+    expect(detectAtSlashTrigger(built!.nextPlain, built!.nextCursor)).toBeNull();
+  });
+
+  test("returns null for empty paths", () => {
+    expect(buildComposerAtPathMentionsInsertion("x", 1, ["  ", ""])).toBeNull();
   });
 });
