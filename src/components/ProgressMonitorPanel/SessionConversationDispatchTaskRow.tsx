@@ -42,16 +42,22 @@ export const SessionConversationDispatchTaskRow = memo(function SessionConversat
   const rowTitle = [item.label, item.subtitle, displayPreview, savedTime].filter(Boolean).join(" · ");
 
   return (
-    <div className="app-monitor-panel__session-task-row app-monitor-panel__item">
+    <div
+      className="app-monitor-panel__session-task-row app-monitor-panel__item"
+      role="button"
+      tabIndex={0}
+      title={rowTitle}
+      onPointerEnter={prefetchSessionConversationTaskDetailDrawer}
+      onPointerDown={prefetchSessionConversationTaskDetailDrawer}
+      onClick={() => onOpenDetail(item)}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        onOpenDetail(item);
+      }}
+    >
       <div className="app-monitor-panel__item-row app-monitor-panel__item-row--dispatch">
-        <button
-          type="button"
-          className="app-monitor-panel__item-row-hit app-monitor-panel__item-row-hit--dispatch"
-          title={rowTitle}
-          onPointerEnter={prefetchSessionConversationTaskDetailDrawer}
-          onPointerDown={prefetchSessionConversationTaskDetailDrawer}
-          onClick={() => onOpenDetail(item)}
-        >
+        <div className="app-monitor-panel__item-row-hit app-monitor-panel__item-row-hit--dispatch">
           {displayPreview ? (
             <span
               className={`app-monitor-panel__session-task-preview${
@@ -67,8 +73,12 @@ export const SessionConversationDispatchTaskRow = memo(function SessionConversat
               {savedTime}
             </span>
           ) : null}
-        </button>
-        <span className="app-monitor-panel__item-actions app-monitor-panel__session-task-actions">
+        </div>
+        <span
+          className="app-monitor-panel__item-actions app-monitor-panel__session-task-actions"
+          onClick={(event) => event.stopPropagation()}
+          onKeyDown={(event) => event.stopPropagation()}
+        >
           {showStop ? (
             <button
               type="button"

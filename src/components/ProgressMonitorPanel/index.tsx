@@ -1003,14 +1003,20 @@ const TerminalEmployeeMonitorRow = memo(function TerminalEmployeeMonitorRow({
   const isOmcWorker = item.employeeId === "omc-worker";
 
   return (
-    <div className="app-monitor-panel__item app-monitor-panel__item--terminal-row">
+    <div
+      className="app-monitor-panel__item app-monitor-panel__item--terminal-row"
+      role="button"
+      tabIndex={0}
+      title={`打开 ${item.name} 最新会话记录`}
+      onClick={() => onActivateRow(item)}
+      onKeyDown={(event) => {
+        if (event.key !== "Enter" && event.key !== " ") return;
+        event.preventDefault();
+        onActivateRow(item);
+      }}
+    >
       <div className="app-monitor-panel__item-row app-monitor-panel__item-row--terminal">
-        <button
-          type="button"
-          className="app-monitor-panel__item-row-hit app-monitor-panel__item-row-hit--terminal"
-          title={`打开 ${item.name} 最新会话记录`}
-          onClick={() => onActivateRow(item)}
-        >
+        <div className="app-monitor-panel__item-row-hit app-monitor-panel__item-row-hit--terminal">
           <span className="app-monitor-panel__item-name-wrap">
             <MonitorItemTypeTag label={isOmcWorker ? "OMC" : "终端"} />
             <span className="app-monitor-panel__item-name">{item.name}</span>
@@ -1020,8 +1026,12 @@ const TerminalEmployeeMonitorRow = memo(function TerminalEmployeeMonitorRow({
               {lastMessagePreview}
             </span>
           ) : null}
-        </button>
-        <span className="app-monitor-panel__item-actions">
+        </div>
+        <span
+          className="app-monitor-panel__item-actions"
+          onClick={(event) => event.stopPropagation()}
+          onKeyDown={(event) => event.stopPropagation()}
+        >
           <SubagentStatusIndicator status={conversationStatus} visual={statusVisual} />
           {terminalInProgress ? (
             <button
@@ -1727,7 +1737,14 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
         <div
           key={item.workflowId}
           className={`app-monitor-panel__item ${activeTarget?.type === "team" && activeTarget.workflowId === item.workflowId ? "app-monitor-panel__item--active" : ""}`}
+          role="button"
+          tabIndex={0}
           onClick={() => onOpenTeamDetail?.(item.workflowId)}
+          onKeyDown={(event) => {
+            if (event.key !== "Enter" && event.key !== " ") return;
+            event.preventDefault();
+            onOpenTeamDetail?.(item.workflowId);
+          }}
         >
           <div className="app-monitor-panel__item-row">
             <span className="app-monitor-panel__item-name-wrap">
@@ -1740,7 +1757,11 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
               </span>
               {statusText(item.status)}
             </span>
-            <span className="app-monitor-panel__item-actions">
+            <span
+              className="app-monitor-panel__item-actions"
+              onClick={(event) => event.stopPropagation()}
+              onKeyDown={(event) => event.stopPropagation()}
+            >
               {item.status === "in_progress" ? (
                 <button
                   type="button"

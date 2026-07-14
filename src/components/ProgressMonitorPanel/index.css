@@ -933,7 +933,6 @@
   border: none;
   background: transparent;
   text-align: left;
-  cursor: pointer;
   color: inherit;
   font: inherit;
   overflow: hidden;
@@ -965,7 +964,7 @@
   min-height: 0;
 }
 
-.app-monitor-panel__item-row-hit:focus-visible {
+.app-monitor-panel__item[role="button"]:focus-visible {
   outline: 2px solid var(--ant-color-primary-border);
   outline-offset: 1px;
   border-radius: 2px;
