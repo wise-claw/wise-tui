@@ -1,8 +1,6 @@
 import type { ClaudeSession } from "../../types";
 import { formatClaudeModelLabel } from "../../utils/claudeModel";
-import { stripRedundantRepoBracketPrefix } from "../../utils/sessionRepositoryDisplay";
-
-// ── SVG Icons ──
+import { getSessionPreview } from "./claudeChatHelpers";
 
 function IconClose() {
   return (
@@ -13,8 +11,6 @@ function IconClose() {
   );
 }
 
-// ── ClaudeSessionTab ──
-
 interface Props {
   session: ClaudeSession;
   isActive: boolean;
@@ -23,16 +19,7 @@ interface Props {
 }
 
 export function ClaudeSessionTab({ session, isActive, onClick, onClose }: Props) {
-  const repo = session.repositoryName ?? "";
-  const firstUserMsg = session.messages.find((m) => m.role === "user");
-  const fromDisk = session.diskPreview?.trim();
-  const rawSource = firstUserMsg
-    ? stripRedundantRepoBracketPrefix(firstUserMsg.content, repo)
-    : fromDisk
-      ? stripRedundantRepoBracketPrefix(fromDisk, repo)
-      : "新会话";
-  const raw = rawSource.trim() || "新会话";
-  const preview = raw.length > 40 ? `${raw.slice(0, 40)}...` : raw;
+  const preview = getSessionPreview(session);
 
   const statusDot = session.status === "running"
     ? "app-claude-tab-status--running"

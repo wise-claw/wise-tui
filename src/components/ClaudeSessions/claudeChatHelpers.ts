@@ -297,18 +297,21 @@ export function getLatestDispatchedTeamName(session: ClaudeSession): string | nu
   return null;
 }
 
+/** 会话列表 / Cursor 风格短标题：单行、折叠空白、超长省略。 */
+export const SESSION_LIST_TITLE_MAX = 42;
+
 export function getSessionPreview(session: ClaudeSession): string {
   const repo = session.repositoryName ?? "";
   const firstUserMsg = session.messages.find((m) => m.role === "user");
   if (firstUserMsg) {
-    const line = truncateSingleLine(stripRedundantRepoBracketPrefix(firstUserMsg.content, repo), 28);
+    const line = truncateSingleLine(stripRedundantRepoBracketPrefix(firstUserMsg.content, repo), SESSION_LIST_TITLE_MAX);
     if (line.trim()) {
       return line;
     }
   }
   const fromDisk = session.diskPreview?.trim();
   if (fromDisk) {
-    const line = truncateSingleLine(stripRedundantRepoBracketPrefix(fromDisk, repo), 28);
+    const line = truncateSingleLine(stripRedundantRepoBracketPrefix(fromDisk, repo), SESSION_LIST_TITLE_MAX);
     if (line.trim()) {
       return line;
     }
@@ -323,6 +326,11 @@ export function buildAiCommitSummary(status: GitStatusResponse): string {
 export function truncateSingleLine(value: string, maxLength: number): string {
   const singleLine = value.replace(/\s+/g, " ").trim();
   return singleLine.length > maxLength ? `${singleLine.slice(0, maxLength)}...` : singleLine;
+}
+
+/** 列表行展示用：悬停/复制仍可用原文，列表只显示短标题。 */
+export function formatSessionListTitle(value: string, maxLength: number = SESSION_LIST_TITLE_MAX): string {
+  return truncateSingleLine(value, maxLength);
 }
 
 export function formatShortQuestionTime(ms: number): string {
