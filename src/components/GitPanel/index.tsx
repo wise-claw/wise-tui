@@ -34,10 +34,7 @@ import { GitSyncActions } from "./GitSyncActions";
 import { InitMode } from "./InitMode";
 import { hasUnstagedFilesUnderDirectory, GIT_WATCHER_REFRESH_MS, gitStatusSnapshotEqual } from "./gitPanelUtils";
 import { GitMultiRepoPanel } from "./GitMultiRepoPanel";
-import type { GitPanelRepositoryEntry, WorkspaceRepositoryTreeSelection } from "../../utils/workspaceRepositoryTreeSelect";
-import { GitPanelWorkspaceSelector } from "./GitPanelWorkspaceSelector";
-import type { ProjectItem, Repository } from "../../types";
-import type { WorkspaceFocus } from "../../utils/workspaceMode";
+import type { GitPanelRepositoryEntry } from "../../utils/workspaceRepositoryTreeSelect";
 import type { GitPanelOpenFileOptions } from "./types";
 import "./index.css";
 
@@ -49,22 +46,9 @@ interface Props {
   repositoryName: string | undefined;
   /** 多仓库模式：一次展示工作区内全部 Git 仓库（≥2 时启用）。 */
   repositoryEntries?: GitPanelRepositoryEntry[];
-  /** 多仓库模式标题（通常为工作区名）。 */
-  multiRepoContextTitle?: string;
   onOpenFile?: (path: string, options?: GitPanelOpenFileOptions) => void;
-  /** 左栏整合头部：Tab 切换等，渲染在上下文选择器左侧 */
+  /** 左栏整合头部：Tab 切换等 */
   headerPrefix?: ReactNode;
-  projects?: ProjectItem[];
-  repositories?: Repository[];
-  activeProjectId?: string | null;
-  activeRepositoryId?: number | null;
-  activeWorkspaceFocus?: WorkspaceFocus;
-  onRepositorySelect?: (repositoryId: number) => void;
-  onProjectSelect?: (projectId: string) => void;
-  /** 仅切换 Git 面板目录，不联动全局工作区。 */
-  directoryOnly?: boolean;
-  treeSelection?: WorkspaceRepositoryTreeSelection | null;
-  onOpenFileTreeSession?: (target: WorkspaceRepositoryTreeSelection) => void;
   /** 多仓 Git 面板是否 lazy 挂载各仓库区块（侧栏需配合 scrollRoot，见 GitMultiRepoPanel）。 */
   lazyMount?: boolean;
 }
@@ -74,20 +58,9 @@ export function GitPanel(props: Props) {
     return (
       <GitMultiRepoPanel
         repositoryEntries={props.repositoryEntries!}
-        contextTitle={props.multiRepoContextTitle}
         headerPrefix={props.headerPrefix}
         onOpenFile={props.onOpenFile}
-        projects={props.projects}
-        repositories={props.repositories}
-        activeProjectId={props.activeProjectId}
-        activeRepositoryId={props.activeRepositoryId}
-        activeWorkspaceFocus={props.activeWorkspaceFocus}
         activeRepositoryPath={props.repositoryPath}
-        onRepositorySelect={props.onRepositorySelect}
-        onProjectSelect={props.onProjectSelect}
-        directoryOnly={props.directoryOnly}
-        treeSelection={props.treeSelection}
-        onOpenFileTreeSession={props.onOpenFileTreeSession}
         lazyMount={props.lazyMount}
       />
     );
@@ -101,16 +74,6 @@ function GitSingleRepoPanel({
   repositoryEntries: _repositoryEntries = [],
   onOpenFile,
   headerPrefix,
-  projects = [],
-  repositories = [],
-  activeProjectId = null,
-  activeRepositoryId = null,
-  activeWorkspaceFocus = "repository",
-  onRepositorySelect,
-  onProjectSelect,
-  directoryOnly,
-  treeSelection = null,
-  onOpenFileTreeSession,
 }: Props) {
   const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
   const [status, setStatus] = useState<GitStatusResponse | null>(null);
@@ -542,25 +505,6 @@ function GitSingleRepoPanel({
       <div className={`git-panel-loading-bar ${showPanelLoadingBar ? "git-panel-loading-bar--active" : ""}`} />
       <div className="git-panel-header">
         {headerPrefix ? <div className="git-panel-header-prefix">{headerPrefix}</div> : null}
-        <div className="git-panel-header-left">
-          {onRepositorySelect && repositoryPath ? (
-            <GitPanelWorkspaceSelector
-              projects={projects}
-              repositories={repositories}
-              activeProjectId={activeProjectId}
-              activeRepositoryId={activeRepositoryId}
-              activeWorkspaceFocus={activeWorkspaceFocus}
-              activeRepositoryPath={repositoryPath}
-              onRepositorySelect={onRepositorySelect}
-              onProjectSelect={onProjectSelect}
-              directoryOnly={directoryOnly}
-              treeSelection={treeSelection}
-              onOpenFileTreeSession={onOpenFileTreeSession}
-            />
-          ) : (
-            <span className="git-panel-title">GIT</span>
-          )}
-        </div>
         <div className="git-panel-header-right">
           {status ? (
             <GitSyncActions

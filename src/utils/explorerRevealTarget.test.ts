@@ -44,7 +44,6 @@ describe("explorerRevealTarget", () => {
 
   it("uses workspace rail when it is the only visible file tree", () => {
     localStorage.setItem("wise.leftPanel.bottomTab", "git");
-    localStorage.setItem("wise.leftPanel.filesExplorerCollapsed", "0");
 
     expect(resolveVisibleExplorerRevealTarget(baseInput)).toBeNull();
     expect(
@@ -57,7 +56,6 @@ describe("explorerRevealTarget", () => {
 
   it("defaults to left sidebar instead of opening workspace rail when files live on the left", () => {
     localStorage.setItem("wise.leftPanel.bottomTab", "git");
-    localStorage.setItem("wise.leftPanel.filesExplorerCollapsed", "0");
 
     expect(resolveExplorerRevealTargetForOpen(baseInput)).toBe("left-sidebar");
   });

@@ -1906,13 +1906,8 @@
   border-right: 1px solid var(--ant-color-border-secondary);
 }
 
-.git-files-explorer-workspace-selector {
-  flex: 1 1 0;
-  min-width: 0;
-}
-
-.git-files-explorer-workspace-selector .git-panel-workspace-selector {
-  width: 100%;
+.git-files-explorer-bar .git-files-explorer-actions {
+  margin-left: auto;
 }
 
 .git-files-explorer-section-collapse {
@@ -1946,7 +1941,7 @@
   stroke: currentColor;
 }
 
-.git-files-mode--context-header-hidden .git-files-explorer-bar {
+.git-files-mode--context-header-hidden .git-files-explorer-bar-prefix {
   display: none;
 }
 

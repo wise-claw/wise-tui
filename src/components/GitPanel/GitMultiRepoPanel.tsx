@@ -8,55 +8,30 @@ import { safeUnlistenPromise } from "../../utils/safeTauriUnlisten";
 import { startGitWatcher, stopGitWatcher } from "../../services/git";
 import { openRepositoryRemoteInBrowser } from "../../services/openRepositoryRemote";
 import { message } from "antd";
-import type { GitPanelRepositoryEntry, WorkspaceRepositoryTreeSelection } from "../../utils/workspaceRepositoryTreeSelect";
+import type { GitPanelRepositoryEntry } from "../../utils/workspaceRepositoryTreeSelect";
 import {
   GIT_MULTI_REPO_LOAD_STAGGER_MS,
   GIT_MULTI_REPO_WATCHER_REFRESH_MS,
   GIT_MULTI_REPO_WATCHER_RESTART_MS,
 } from "./gitPanelUtils";
-import { GitPanelWorkspaceSelector } from "./GitPanelWorkspaceSelector";
 import { GitMultiRepoLazySection } from "./GitMultiRepoLazySection";
 import { GitRepoSection } from "./GitRepoSection";
 import { GitWorkspaceCommitPush } from "./GitWorkspaceCommitPush";
 import type { GitPanelOpenFileOptions } from "./types";
-import type { ProjectItem, Repository } from "../../types";
-import type { WorkspaceFocus } from "../../utils/workspaceMode";
 
 interface Props {
   repositoryEntries: GitPanelRepositoryEntry[];
-  contextTitle?: string;
   headerPrefix?: ReactNode;
   onOpenFile?: (path: string, options?: GitPanelOpenFileOptions) => void;
-  projects?: ProjectItem[];
-  repositories?: Repository[];
-  activeProjectId?: string | null;
-  activeRepositoryId?: number | null;
-  activeWorkspaceFocus?: WorkspaceFocus;
   activeRepositoryPath?: string;
-  onRepositorySelect?: (repositoryId: number) => void;
-  onProjectSelect?: (projectId: string) => void;
-  directoryOnly?: boolean;
-  treeSelection?: WorkspaceRepositoryTreeSelection | null;
-  onOpenFileTreeSession?: (target: WorkspaceRepositoryTreeSelection) => void;
   lazyMount?: boolean;
 }
 
 export function GitMultiRepoPanel({
   repositoryEntries,
-  contextTitle = "变更",
   headerPrefix,
   onOpenFile,
-  projects = [],
-  repositories = [],
-  activeProjectId = null,
-  activeRepositoryId = null,
-  activeWorkspaceFocus = "repository",
   activeRepositoryPath = "",
-  onRepositorySelect,
-  onProjectSelect,
-  directoryOnly,
-  treeSelection = null,
-  onOpenFileTreeSession,
   lazyMount = true,
 }: Props) {
   const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
@@ -238,23 +213,6 @@ export function GitMultiRepoPanel({
       <div className="git-panel-header">
         {headerPrefix ? <div className="git-panel-header-prefix">{headerPrefix}</div> : null}
         <div className="git-panel-header-left">
-          {onRepositorySelect && activeRepositoryPath ? (
-            <GitPanelWorkspaceSelector
-              projects={projects}
-              repositories={repositories}
-              activeProjectId={activeProjectId}
-              activeRepositoryId={activeRepositoryId}
-              activeWorkspaceFocus={activeWorkspaceFocus}
-              activeRepositoryPath={activeRepositoryPath}
-              onRepositorySelect={onRepositorySelect}
-              onProjectSelect={onProjectSelect}
-              directoryOnly={directoryOnly}
-              treeSelection={treeSelection}
-              onOpenFileTreeSession={onOpenFileTreeSession}
-            />
-          ) : (
-            <span className="git-panel-title">{contextTitle}</span>
-          )}
           <span className="git-panel-multi-count">{repositoryEntries.length} 个仓库</span>
         </div>
         <div className="git-panel-header-right">
@@ -263,6 +221,7 @@ export function GitMultiRepoPanel({
             onAfterSync={refreshAllRepositories}
           />
           <GitPanelMoreMenu
+            repositoryPath={activeRepositoryPath.trim() || repositoryEntries[0]?.path}
             historyActive={historyDrawerOpen}
             onOpenHistory={() =>
               openHistoryForRepository(activeRepositoryPath.trim() || repositoryEntries[0]?.path || "")

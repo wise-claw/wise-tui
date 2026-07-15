@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Button, Dropdown, Input, message, Modal } from "antd";
 import type { MenuProps } from "antd";
 import {
@@ -26,11 +26,18 @@ import type { GitFlowInfo } from "../../types";
 /** 更多菜单项标识 */
 export type MoreMenuItemId = "history" | "browser" | "git-flow";
 
+/** 默认全部提到工具栏，不再收进「更多」 */
+const DEFAULT_INLINE_KEYS: ReadonlySet<MoreMenuItemId> = new Set([
+  "history",
+  "browser",
+  "git-flow",
+]);
+
 interface GitPanelMoreMenuProps {
   /** 仓库路径，传入则启用 Git Flow 功能 */
   repositoryPath?: string;
-  /** 默认配置：哪些项展示在外部（header 按钮），其余在「更多」里面 */
-  showInlineKeys?: Set<MoreMenuItemId>;
+  /** 展示在外部（header 按钮）的项；默认全部外放 */
+  showInlineKeys?: ReadonlySet<MoreMenuItemId>;
   historyActive?: boolean;
   onOpenHistory?: () => void;
   onOpenInBrowser?: () => void;
@@ -42,7 +49,7 @@ type FlowAction = "feature" | "release" | "hotfix";
 
 export function GitPanelMoreMenu({
   repositoryPath,
-  showInlineKeys,
+  showInlineKeys = DEFAULT_INLINE_KEYS,
   historyActive = false,
   onOpenHistory,
   onOpenInBrowser,
@@ -61,6 +68,7 @@ export function GitPanelMoreMenu({
   } | null>(null);
 
   const loadFlowPromiseRef = useRef<Promise<void> | null>(null);
+  const inlineKeys = showInlineKeys;
 
   const loadFlowInfo = useCallback(async () => {
     if (!repositoryPath) return;
@@ -138,11 +146,19 @@ export function GitPanelMoreMenu({
     }
   }, [flowModal, closeFlowModal, onFlowOperationDone, repositoryPath]);
 
-  // — 构建 menu items —
+  const flowSubmenuItems = useMemo(
+    () =>
+      repositoryPath
+        ? buildFlowSubmenuItems(flowInfo, flowLoading, actionLoading, handleFlowInit, openFlowModal)
+        : [],
+    [repositoryPath, flowInfo, flowLoading, actionLoading, handleFlowInit, openFlowModal],
+  );
+
+  // — 「更多」里只保留尚未外放的项 —
   const menuItems = useMemo((): MenuProps["items"] => {
     const items: MenuProps["items"] = [];
 
-    if (onOpenHistory) {
+    if (onOpenHistory && !inlineKeys.has("history")) {
       items.push({
         key: "history",
         label: "提交历史",
@@ -151,7 +167,7 @@ export function GitPanelMoreMenu({
         onClick: onOpenHistory,
       });
     }
-    if (onOpenInBrowser) {
+    if (onOpenInBrowser && !inlineKeys.has("browser")) {
       items.push({
         key: "browser",
         label: "在浏览器中打开仓库",
@@ -161,73 +177,102 @@ export function GitPanelMoreMenu({
       });
     }
 
-    // Git Flow 子菜单（仅仓库路径存在时）
-    if (repositoryPath) {
-      const hasFlow = showInlineKeys?.has("git-flow");
-      if (!hasFlow && items.length > 0) {
+    if (repositoryPath && !inlineKeys.has("git-flow") && (flowSubmenuItems?.length ?? 0) > 0) {
+      if (items.length > 0) {
         items.push({ type: "divider" });
       }
-      const flowItems = buildFlowSubmenuItems(
-        flowInfo, flowLoading, actionLoading,
-        handleFlowInit, openFlowModal,
-      );
-      if (flowItems && flowItems.length > 0) {
-        items.push({
-          key: "git-flow",
-          label: "Git Flow",
-          icon: <ApartmentOutlined />,
-          popupClassName: "git-flow-dropdown-menu",
-          children: flowItems,
-        });
-      }
+      items.push({
+        key: "git-flow",
+        label: "Git Flow",
+        icon: <ApartmentOutlined />,
+        popupClassName: "git-flow-dropdown-menu",
+        children: flowSubmenuItems,
+      });
     }
 
     return items;
   }, [
-    onOpenHistory, historyActive, onOpenInBrowser, openingBrowser,
-    repositoryPath, showInlineKeys, flowInfo, flowLoading, actionLoading,
-    handleFlowInit, openFlowModal,
+    onOpenHistory,
+    historyActive,
+    onOpenInBrowser,
+    openingBrowser,
+    repositoryPath,
+    inlineKeys,
+    flowSubmenuItems,
   ]);
 
   // — 外部 inline 按钮 —
   const inlineItems = useMemo(() => {
-    const btns: { key: MoreMenuItemId; el: React.ReactNode }[] = [];
-    for (const key of showInlineKeys ?? []) {
-      if (key === "history" && onOpenHistory) {
-        btns.push({
-          key,
-          el: (
+    const btns: { key: MoreMenuItemId; el: ReactNode }[] = [];
+    if (inlineKeys.has("history") && onOpenHistory) {
+      btns.push({
+        key: "history",
+        el: (
+          <Button
+            key="inline-history"
+            type="text"
+            size="small"
+            title="提交历史"
+            aria-label="提交历史"
+            className={`git-panel-more-btn${historyActive ? " git-panel-more-btn--active" : ""}`}
+            icon={<HistoryOutlined />}
+            onClick={onOpenHistory}
+          />
+        ),
+      });
+    }
+    if (inlineKeys.has("browser") && onOpenInBrowser) {
+      btns.push({
+        key: "browser",
+        el: (
+          <Button
+            key="inline-browser"
+            type="text"
+            size="small"
+            title="在浏览器中打开仓库"
+            aria-label="在浏览器中打开仓库"
+            className="git-panel-more-btn"
+            icon={<GlobalOutlined />}
+            loading={openingBrowser}
+            disabled={openingBrowser}
+            onClick={onOpenInBrowser}
+          />
+        ),
+      });
+    }
+    if (inlineKeys.has("git-flow") && repositoryPath && (flowSubmenuItems?.length ?? 0) > 0) {
+      btns.push({
+        key: "git-flow",
+        el: (
+          <Dropdown
+            key="inline-git-flow"
+            menu={{ items: flowSubmenuItems, className: "git-flow-dropdown-menu" }}
+            classNames={{ root: "git-panel-more-menu-dropdown" }}
+            trigger={["click"]}
+          >
             <Button
-              key="inline-history"
-              type="text"
-              size="small"
-              title="提交历史"
-              className={`git-panel-more-btn${historyActive ? " git-panel-more-btn--active" : ""}`}
-              icon={<HistoryOutlined />}
-              onClick={onOpenHistory}
-            />
-          ),
-        });
-      }
-      if (key === "git-flow" && repositoryPath) {
-        btns.push({
-          key,
-          el: (
-            <Button
-              key="inline-git-flow"
               type="text"
               size="small"
               title="Git Flow"
-              className="git-panel-more-btn"
+              aria-label="Git Flow"
+              className="git-panel-more-btn git-flow-trigger-btn"
               icon={<ApartmentOutlined />}
               aria-haspopup="menu"
             />
-          ),
-        });
-      }
+          </Dropdown>
+        ),
+      });
     }
     return btns;
-  }, [showInlineKeys, historyActive, onOpenHistory, repositoryPath]);
+  }, [
+    inlineKeys,
+    historyActive,
+    onOpenHistory,
+    onOpenInBrowser,
+    openingBrowser,
+    repositoryPath,
+    flowSubmenuItems,
+  ]);
 
   const showDropdown = (menuItems?.length ?? 0) > 0;
 
@@ -258,7 +303,7 @@ export function GitPanelMoreMenu({
           <Button
             type="text"
             size="small"
-            className={`git-panel-more-btn${historyActive ? " git-panel-more-btn--active" : ""}`}
+            className="git-panel-more-btn"
             icon={<MoreOutlined />}
             aria-label="更多 Git 操作"
             aria-haspopup="menu"

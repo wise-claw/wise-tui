@@ -54,8 +54,6 @@ import { LeftSidebarTopbar } from "./LeftSidebar/LeftSidebarTopbar";
 import { LeftSidebarHubQuickEntries } from "./LeftSidebar/LeftSidebarHubQuickEntries";
 import type { GitPanelOpenFileOptions } from "./GitPanel/types";
 import {
-  readLeftFilesExplorerCollapsedFromStorage,
-  writeLeftFilesExplorerCollapsedToStorage,
   readLeftWorkspaceListCollapsedFromStorage,
   writeLeftWorkspaceListCollapsedToStorage,
   readLeftMonitorPanelCollapsedFromStorage,
@@ -70,7 +68,6 @@ import { RepositorySddModeModal } from "./LeftSidebar/RepositorySddModeModal";
 import { RepositoryIconBadgeModal } from "./LeftSidebar/RepositoryIconBadgeModal";
 import { WorkspaceSddModeModal } from "./LeftSidebar/WorkspaceSddModeModal";
 import { LeftSidebarWorkspaceListSlot } from "./LeftSidebar/LeftSidebarWorkspaceListSlot";
-import { useSidebarRepositoryActiveSessionCounts } from "../hooks/useSidebarRepositoryActiveSessionCounts";
 import {
   buildClaudeProcessFingerprint,
   buildClaudeRegistryRunningFingerprint,
@@ -320,14 +317,11 @@ export function LeftSidebar({
   const [promotingFloatingRepo, setPromotingFloatingRepo] = useState<Repository | null>(null);
   const [promotingFloatingRepoName, setPromotingFloatingRepoName] = useState("");
   const [repositoryFileTreeSearch, setRepositoryFileTreeSearch] = useState("");
-  /** 左下 Git/文件 Tab 目录选择器上下文：仅切换面板目录，不联动全局工作区/会话。 */
+  /** 左下 Git/文件 Tab 目录上下文：仅切换面板目录，不联动全局工作区/会话。 */
   const [repoPanelTreeSelection, setRepoPanelTreeSelection] =
     useState<WorkspaceRepositoryTreeSelection | null>(null);
   const lastSyncedGlobalSelectionKeyRef = useRef<string | null>(null);
   const sessionsLatestRef = sessionsLiveRef;
-  const [filesExplorerSectionCollapsed, setFilesExplorerSectionCollapsed] = useState(
-    readLeftFilesExplorerCollapsedFromStorage,
-  );
   const [workspaceListSectionCollapsed, setWorkspaceListSectionCollapsed] = useState(
     readLeftWorkspaceListCollapsedFromStorage,
   );
@@ -374,7 +368,6 @@ export function LeftSidebar({
       cancelClaudeCodeToolsPrefetch();
     };
   }, []);
-  const expandedFilesPanelOnMountRef = useRef(false);
   const restoreWorkspaceListVisibilityRef = useRef(false);
   const claudeProcessLabelCache = useClaudeProcessWorkspaceLabelCache();
   const systemResourceSessions = useSystemResourceSessions({
@@ -387,11 +380,6 @@ export function LeftSidebar({
     () => buildClaudeProcessFingerprint(systemResourceSessions.systemSummary.claudeProcesses),
     [systemResourceSessions.systemSummary.claudeProcesses],
   );
-  const workspaceSelectorActiveSessionCounts = useSidebarRepositoryActiveSessionCounts({
-    repositories,
-    sessionsRef: sessionsLiveRef,
-    sessionsStructureKey,
-  });
   const claudeRegistryRunningFingerprint = useMemo(
     () => buildClaudeRegistryRunningFingerprint(systemResourceSessions.claudeRegistryRunningIds),
     [systemResourceSessions.claudeRegistryRunningIds],
@@ -523,11 +511,6 @@ export function LeftSidebar({
     [onCreateRepositoryTask],
   );
 
-  const handleFilesExplorerSectionCollapsedChange = useCallback((next: boolean) => {
-    setFilesExplorerSectionCollapsed(next);
-    writeLeftFilesExplorerCollapsedToStorage(next);
-  }, []);
-
   const handleWorkspaceListSectionCollapsedChange = useCallback((next: boolean) => {
     setWorkspaceListSectionCollapsed(next);
     writeLeftWorkspaceListCollapsedToStorage(next);
@@ -562,32 +545,12 @@ export function LeftSidebar({
     writeLeftMonitorPanelCollapsedToStorage(next);
   }, []);
 
-  const handleLeftBottomTabChange = useCallback(
-    (tab: LeftBottomTab) => {
-      startTransition(() => {
-        setLeftBottomTab(tab);
-        writeLeftBottomTabToStorage(tab);
-        if (tab === "files" && filesExplorerSectionCollapsed) {
-          handleFilesExplorerSectionCollapsedChange(false);
-        }
-      });
-    },
-    [filesExplorerSectionCollapsed, handleFilesExplorerSectionCollapsedChange],
-  );
-
-  useEffect(() => {
-    if (expandedFilesPanelOnMountRef.current) return;
-    const needsFiles =
-      repoPanelRenderState.showFilesOnLeft || repoPanelRenderState.showFilesOnRight;
-    if (!needsFiles || !filesExplorerSectionCollapsed) return;
-    expandedFilesPanelOnMountRef.current = true;
-    handleFilesExplorerSectionCollapsedChange(false);
-  }, [
-    repoPanelRenderState.showFilesOnLeft,
-    repoPanelRenderState.showFilesOnRight,
-    filesExplorerSectionCollapsed,
-    handleFilesExplorerSectionCollapsedChange,
-  ]);
+  const handleLeftBottomTabChange = useCallback((tab: LeftBottomTab) => {
+    startTransition(() => {
+      setLeftBottomTab(tab);
+      writeLeftBottomTabToStorage(tab);
+    });
+  }, []);
 
   useEffect(() => {
     if (typeof window === "undefined") {
@@ -601,16 +564,13 @@ export function LeftSidebar({
       startTransition(() => {
         setLeftBottomTab("files");
         writeLeftBottomTabToStorage("files");
-        if (filesExplorerSectionCollapsed) {
-          handleFilesExplorerSectionCollapsedChange(false);
-        }
       });
     };
     window.addEventListener(WISE_EXPLORER_FOCUS_REQUESTED, onFocusRequested);
     return () => {
       window.removeEventListener(WISE_EXPLORER_FOCUS_REQUESTED, onFocusRequested);
     };
-  }, [filesExplorerSectionCollapsed, handleFilesExplorerSectionCollapsedChange]);
+  }, []);
 
   const globalWorkspaceTreeSelection = useMemo(
     () =>
@@ -876,15 +836,6 @@ export function LeftSidebar({
     ],
   );
 
-  const gitPanelContextTitle = useMemo(() => {
-    if (repoPanelTreeView?.label.trim()) return repoPanelTreeView.label.trim();
-    if (repoPanelTreeSelection?.kind === "project") {
-      const project = projects.find((item) => item.id === repoPanelTreeSelection.projectId);
-      return project?.name?.trim() || "变更";
-    }
-    return "变更";
-  }, [repoPanelTreeSelection, repoPanelTreeView?.label, projects]);
-
   /**
    * 侧栏工作区/仓库点击需要立即驱动左下 Git/文件树目录同步，
    * 不能仅依赖全局 active* 变化（同 key 点击时不会触发）。
@@ -913,48 +864,6 @@ export function LeftSidebar({
       onRepositorySelect(repositoryId);
     },
     [onRepositorySelect, repositories],
-  );
-
-  const handleOpenFileTreeSession = useCallback(
-    (target: WorkspaceRepositoryTreeSelection) => {
-      if (target.kind === "project") {
-        handleProjectSelectAndSyncRepoPanel(target.projectId);
-      } else {
-        handleRepositorySelectAndSyncRepoPanel(target.repositoryId);
-      }
-    },
-    [handleProjectSelectAndSyncRepoPanel, handleRepositorySelectAndSyncRepoPanel],
-  );
-
-  const repoPanelWorkspaceSelectorProps = useMemo(
-    () => ({
-      projects,
-      repositories,
-      activeSessionCountsByRepositoryId: workspaceSelectorActiveSessionCounts,
-      directoryOnly: true as const,
-      treeSelection: repoPanelTreeSelection,
-      activeProjectId: repoPanelTreeView?.activeProjectId ?? activeProjectId,
-      activeRepositoryId: repoPanelTreeView?.activeRepositoryId ?? activeRepositoryId,
-      activeWorkspaceFocus: repoPanelTreeView?.activeWorkspaceFocus ?? activeWorkspaceFocus,
-      onRepositorySelect: (repositoryId: number) => {
-        setRepoPanelTreeSelection({ kind: "repository", repositoryId });
-      },
-      onProjectSelect: (projectId: string) => {
-        setRepoPanelTreeSelection({ kind: "project", projectId });
-      },
-      onOpenFileTreeSession: handleOpenFileTreeSession,
-    }),
-    [
-      projects,
-      repositories,
-      workspaceSelectorActiveSessionCounts,
-      repoPanelTreeSelection,
-      repoPanelTreeView,
-      activeProjectId,
-      activeRepositoryId,
-      activeWorkspaceFocus,
-      handleOpenFileTreeSession,
-    ],
   );
 
   useEffect(() => {
@@ -1056,7 +965,6 @@ export function LeftSidebar({
     onWorkspaceFileTreeRailContextChange({
       repositoryPath: effectiveRepoPanelPath,
       repositoryName: repoPanelRepositoryName,
-      workspaceSelector: repoPanelWorkspaceSelectorProps,
       onOpenFile: handleOpenExplorerFile,
     });
     return () => {
@@ -1068,7 +976,6 @@ export function LeftSidebar({
     onWorkspaceFileTreeRailContextChange,
     projects.length,
     repoPanelRepositoryName,
-    repoPanelWorkspaceSelectorProps,
     repositories.length,
   ]);
 
@@ -1113,9 +1020,6 @@ export function LeftSidebar({
       <div
         className="app-left-sidebar-project-and-files"
         data-has-files-explorer={showRepoPanel ? "true" : "false"}
-        data-files-explorer-section-collapsed={
-          showRepoPanel && filesExplorerSectionCollapsed ? "true" : undefined
-        }
         data-workspace-list-section-collapsed={
           showRepoPanel && workspaceListEffectivelyCollapsed ? "true" : undefined
         }
@@ -1269,14 +1173,9 @@ export function LeftSidebar({
           effectiveRepoPanelPath={effectiveRepoPanelPath}
           repoPanelRepositoryName={repoPanelRepositoryName}
           gitPanelRepositoryEntries={gitPanelRepositoryEntries}
-          gitPanelContextTitle={gitPanelContextTitle}
-          repoPanelTreeSelection={repoPanelTreeSelection}
-          repoPanelWorkspaceSelectorProps={repoPanelWorkspaceSelectorProps}
           handleOpenExplorerFile={handleOpenExplorerFile}
           repositoryFileTreeSearch={repositoryFileTreeSearch}
           onRepositoryFileTreeSearchChange={setRepositoryFileTreeSearch}
-          filesExplorerSectionCollapsed={filesExplorerSectionCollapsed}
-          onFilesExplorerSectionCollapsedChange={handleFilesExplorerSectionCollapsedChange}
         />
 
         {monitorPanelMounted ? (

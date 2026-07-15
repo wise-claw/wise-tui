@@ -1,7 +1,6 @@
 import { memo, useEffect, useRef, useState, type ReactNode } from "react";
 import { RepositoryFilesExplorer } from "../GitPanel/RepositoryFilesExplorer";
 import type { GitPanelOpenFileOptions } from "../GitPanel/types";
-import type { GitPanelWorkspaceSelectorProps } from "../GitPanel/GitPanelWorkspaceSelector";
 
 import type { ExplorerRevealTarget } from "../../utils/explorerRevealTarget";
 
@@ -20,10 +19,7 @@ interface ActiveRepositoryFilesPanelProps {
   search: string;
   onSearchChange: (value: string) => void;
   onOpenFile?: (path: string, options?: GitPanelOpenFileOptions) => void;
-  sectionCollapsed: boolean;
-  onSectionCollapsedChange?: (collapsed: boolean) => void;
   headerPrefix?: ReactNode;
-  workspaceSelector?: Omit<GitPanelWorkspaceSelectorProps, "activeRepositoryPath">;
   /** 右栏 Inspector 内嵌时使用独立布局 class。 */
   variant?: "left-sidebar" | "right-rail" | "workspace-rail";
 }
@@ -34,10 +30,7 @@ export const ActiveRepositoryFilesPanel = memo(function ActiveRepositoryFilesPan
   search,
   onSearchChange,
   onOpenFile,
-  sectionCollapsed,
-  onSectionCollapsedChange,
   headerPrefix,
-  workspaceSelector,
   variant = "left-sidebar",
 }: ActiveRepositoryFilesPanelProps) {
   // 多 panel 并存时（split 模式可达 3 个 explorer 实例），用 IntersectionObserver
@@ -65,10 +58,8 @@ export const ActiveRepositoryFilesPanel = memo(function ActiveRepositoryFilesPan
     variant === "workspace-rail"
       ? "app-workspace-file-tree-rail-panel"
       : variant === "right-rail"
-        ? "app-right-panel-files-explorer" +
-          (sectionCollapsed ? " app-right-panel-files-explorer--section-collapsed" : "")
-        : "app-left-sidebar-files-explorer" +
-          (sectionCollapsed ? " app-left-sidebar-files-explorer--section-collapsed" : "");
+        ? "app-right-panel-files-explorer"
+        : "app-left-sidebar-files-explorer";
 
   return (
     <div ref={rootRef} className={rootClassName}>
@@ -91,16 +82,11 @@ export const ActiveRepositoryFilesPanel = memo(function ActiveRepositoryFilesPan
             "资源管理器"
           }
           search={search}
-          showSearchField={variant === "workspace-rail" ? true : !sectionCollapsed}
+          showSearchField
           onSearchChange={onSearchChange}
           onOpenFile={onOpenFile}
           onClearExplorerSearch={() => onSearchChange("")}
-          sectionCollapsed={sectionCollapsed}
-          onSectionCollapsedChange={
-            variant === "workspace-rail" ? undefined : onSectionCollapsedChange
-          }
           hideContextHeader={variant === "workspace-rail"}
-          workspaceSelector={workspaceSelector}
           explorerRevealTarget={EXPLORER_REVEAL_TARGET_BY_VARIANT[variant]}
         />
       </div>

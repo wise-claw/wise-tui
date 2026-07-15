@@ -5,12 +5,9 @@ import {
   ExclamationCircleOutlined,
   FileAddOutlined,
   FolderAddOutlined,
-  FolderOpenOutlined,
   MinusSquareOutlined,
   ReloadOutlined,
 } from "@ant-design/icons";
-import { ExpandIcon } from "../LeftSidebar/SidebarIcons";
-import { GitPanelWorkspaceSelector, type GitPanelWorkspaceSelectorProps } from "./GitPanelWorkspaceSelector";
 import { ExplorerInlineCreateRow } from "./ExplorerInlineCreateRow";
 import { ExplorerSearchResultList } from "./ExplorerSearchResultList";
 import { RepositoryExplorerTreeActionsProvider } from "./RepositoryExplorerTreeActionsContext";
@@ -29,24 +26,17 @@ import { LEFT_SIDEBAR_SCROLLING_CLASS } from "../../constants/leftSidebarScrollP
 import { formatRepositoryExplorerLoadError } from "../../utils/repositoryPathAccessibility";
 import type { ExplorerRevealTarget } from "../../utils/explorerRevealTarget";
 
-type WorkspaceSelectorProps = Omit<GitPanelWorkspaceSelectorProps, "activeRepositoryPath">;
-
 export interface RepositoryFilesExplorerProps {
   repositoryPath: string;
   repositoryLabel: string;
   search: string;
   onOpenFile?: (path: string, options?: GitPanelOpenFileOptions) => void;
   onClearExplorerSearch?: () => void;
-  /** Similar to the right Claude Code section: collapse to a title bar and click the repository name to expand. */
-  sectionCollapsed?: boolean;
-  onSectionCollapsedChange?: (collapsed: boolean) => void;
   /** 在仓库标题栏与文件树之间显示搜索框（左栏文件 Tab） */
   showSearchField?: boolean;
   onSearchChange?: (value: string) => void;
-  /** 左栏整合头部：Tab 切换等，渲染在仓库标题左侧 */
+  /** 左栏整合头部：Tab 切换等 */
   headerPrefix?: ReactNode;
-  /** 与 Git 面板一致的工作区 / 仓库选择器 */
-  workspaceSelector?: WorkspaceSelectorProps;
   /** 外层栏已展示仓库切换器时，隐藏文件树内标题栏 */
   hideContextHeader?: boolean;
   /** 多实例文件树并存时，用于搜索/外链打开后只定位到对应实例。 */
@@ -60,16 +50,13 @@ export interface RepositoryFilesExplorerProps {
 
 export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
   repositoryPath,
-  repositoryLabel,
+  repositoryLabel: _repositoryLabel,
   search,
   onOpenFile,
   onClearExplorerSearch,
-  sectionCollapsed = false,
-  onSectionCollapsedChange,
   showSearchField = false,
   onSearchChange,
   headerPrefix,
-  workspaceSelector,
   hideContextHeader = false,
   explorerRevealTarget,
   active = true,
@@ -207,7 +194,6 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
       </div>
     );
   }
-  const setSectionCollapsed = onSectionCollapsedChange;
   const switchingRepositoryTree = explorer.treeStale && !explorer.hasRootLoaded;
 
   const treeBody = explorer.loadError ? (
@@ -290,7 +276,7 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
     </div>
   );
 
-  const toolbarInSearchRow = Boolean(showSearchField && onSearchChange);
+  const showSearchRow = Boolean(showSearchField && onSearchChange);
   const explorerToolbarActions = (
     <span className="git-files-explorer-actions">
       <HoverHint title="新建文件">
@@ -332,56 +318,21 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
     </span>
   );
 
-  const sectionCollapseButton =
-    setSectionCollapsed != null ? (
-      <HoverHint
-        title={sectionCollapsed ? "展开文件树" : "收起文件树"}
-       
-      >
-        <button
-          type="button"
-          className="git-files-explorer-section-collapse"
-          aria-expanded={!sectionCollapsed}
-          aria-label={sectionCollapsed ? "展开文件树" : "收起文件树"}
-          onClick={() => setSectionCollapsed(!sectionCollapsed)}
-        >
-          <ExpandIcon expanded={!sectionCollapsed} />
-        </button>
-      </HoverHint>
-    ) : null;
-
   return (
     <RepositoryExplorerGitStatusProvider value={explorerDecorations}>
     <div
       className={
         "git-files-mode" +
-        (sectionCollapsed ? " git-files-mode--section-collapsed" : "") +
         (hideContextHeader ? " git-files-mode--context-header-hidden" : "")
       }
     >
-      {!hideContextHeader ? (
       <div className="git-files-explorer-bar">
-        {headerPrefix ? <div className="git-files-explorer-bar-prefix">{headerPrefix}</div> : null}
-        {workspaceSelector ? (
-          <div className="git-files-explorer-workspace-selector">
-            <GitPanelWorkspaceSelector
-              {...workspaceSelector}
-              activeRepositoryPath={repositoryPath}
-            />
-          </div>
-        ) : (
-          <span className="git-files-explorer-title" title={repositoryPath}>
-            <span className="git-files-explorer-title-icon-wrap" aria-hidden>
-              <FolderOpenOutlined />
-            </span>
-            <span className="git-files-explorer-title-text">{repositoryLabel || "资源管理器"}</span>
-          </span>
-        )}
-        {sectionCollapseButton}
-        {!sectionCollapsed && !toolbarInSearchRow ? explorerToolbarActions : null}
+        {!hideContextHeader && headerPrefix ? (
+          <div className="git-files-explorer-bar-prefix">{headerPrefix}</div>
+        ) : null}
+        {explorerToolbarActions}
       </div>
-      ) : null}
-      {!sectionCollapsed && toolbarInSearchRow ? (
+      {showSearchRow ? (
         <div className="git-files-explorer-search">
           <Input
             className="git-files-explorer-search-field"
@@ -391,10 +342,8 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
             value={search}
             onChange={(e) => onSearchChange?.(e.target.value)}
           />
-          {explorerToolbarActions}
         </div>
       ) : null}
-      {!sectionCollapsed ? (
       <div
         ref={scrollRegionRef}
         className={`git-files-explorer-scroll-region${
@@ -424,8 +373,7 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
           </>
         )}
       </div>
-      ) : null}
-      {!sectionCollapsed && explorer.explorerCtx ? (
+      {explorer.explorerCtx ? (
         <>
           <div
             className="git-files-ctx-backdrop"
@@ -446,7 +394,7 @@ export const RepositoryFilesExplorer = memo(function RepositoryFilesExplorer({
           />
         </>
       ) : null}
-      {!sectionCollapsed && explorer.deletePop ? (
+      {explorer.deletePop ? (
         <Popconfirm
           open
           title="确认删除"

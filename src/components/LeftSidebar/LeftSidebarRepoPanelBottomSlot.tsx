@@ -2,9 +2,7 @@ import { memo, Suspense, useCallback, useMemo, type ReactNode } from "react";
 import { Spin } from "antd";
 import { lazy } from "react";
 import type { GitPanelOpenFileOptions } from "../GitPanel/types";
-import type { GitPanelWorkspaceSelectorProps } from "../GitPanel/GitPanelWorkspaceSelector";
 import type { GitPanelRepositoryEntry } from "../../utils/workspaceRepositoryTreeSelect";
-import type { WorkspaceRepositoryTreeSelection } from "../../utils/workspaceRepositoryTreeSelect";
 import { useRepoPanelSplitHeightPx } from "../../hooks/useRepoPanelSplitHeightPx";
 import { ActiveRepositoryFilesPanel } from "./ActiveRepositoryFilesPanel";
 import { LeftSidebarBottomTabPanes } from "./LeftSidebarBottomTabPanes";
@@ -29,14 +27,9 @@ export type LeftSidebarRepoPanelBottomSlotProps = {
   effectiveRepoPanelPath: string;
   repoPanelRepositoryName: string;
   gitPanelRepositoryEntries: GitPanelRepositoryEntry[];
-  gitPanelContextTitle: string;
-  repoPanelTreeSelection: WorkspaceRepositoryTreeSelection | null;
-  repoPanelWorkspaceSelectorProps: Omit<GitPanelWorkspaceSelectorProps, "activeRepositoryPath">;
   handleOpenExplorerFile: (relativePath: string, options?: GitPanelOpenFileOptions) => void;
   repositoryFileTreeSearch: string;
   onRepositoryFileTreeSearchChange: (value: string) => void;
-  filesExplorerSectionCollapsed: boolean;
-  onFilesExplorerSectionCollapsedChange: (collapsed: boolean) => void;
 };
 
 function toEqualProps(
@@ -46,15 +39,12 @@ function toEqualProps(
     effectiveRepoPanelPath: props.effectiveRepoPanelPath,
     repoPanelRepositoryName: props.repoPanelRepositoryName,
     repositoryFileTreeSearch: props.repositoryFileTreeSearch,
-    filesExplorerSectionCollapsed: props.filesExplorerSectionCollapsed,
     workspaceListEffectivelyCollapsed: props.workspaceListEffectivelyCollapsed,
     leftBottomTab: props.leftBottomTab,
     bottomTabPanelsReady: props.bottomTabPanelsReady,
     showGitOnLeft: props.repoPanelRenderState.showGitOnLeft,
     showFilesOnLeft: props.repoPanelRenderState.showFilesOnLeft,
     gitPanelRepositoryEntries: props.gitPanelRepositoryEntries,
-    gitPanelContextTitle: props.gitPanelContextTitle,
-    repoPanelTreeSelection: props.repoPanelTreeSelection,
   };
 }
 
@@ -67,14 +57,9 @@ function LeftSidebarRepoPanelBottomSlotInner({
   effectiveRepoPanelPath,
   repoPanelRepositoryName,
   gitPanelRepositoryEntries,
-  gitPanelContextTitle,
-  repoPanelTreeSelection,
-  repoPanelWorkspaceSelectorProps,
   handleOpenExplorerFile,
   repositoryFileTreeSearch,
   onRepositoryFileTreeSearchChange,
-  filesExplorerSectionCollapsed,
-  onFilesExplorerSectionCollapsedChange,
 }: LeftSidebarRepoPanelBottomSlotProps) {
   // 同栏上下分栏时 Git 面板的高度（持久化到 default config store）。
   const { heightPx, setHeightPx, save: saveSplitHeight, loading: splitHeightLoading } =
@@ -148,23 +133,17 @@ function LeftSidebarRepoPanelBottomSlotInner({
           repositoryPath={effectiveRepoPanelPath}
           repositoryName={repoPanelRepositoryName}
           repositoryEntries={gitPanelRepositoryEntries}
-          multiRepoContextTitle={gitPanelContextTitle}
           onOpenFile={handleOpenExplorerFile}
           lazyMount
-          treeSelection={repoPanelTreeSelection}
-          {...repoPanelWorkspaceSelectorProps}
         />
       </Suspense>
     ),
     [
       effectiveRepoPanelPath,
-      gitPanelContextTitle,
       gitPanelRepositoryEntries,
       handleOpenExplorerFile,
       leftTabSwitcherPrefix,
       repoPanelRepositoryName,
-      repoPanelTreeSelection,
-      repoPanelWorkspaceSelectorProps,
     ],
   );
 
@@ -177,20 +156,14 @@ function LeftSidebarRepoPanelBottomSlotInner({
         search={repositoryFileTreeSearch}
         onSearchChange={onRepositoryFileTreeSearchChange}
         onOpenFile={handleOpenExplorerFile}
-        sectionCollapsed={filesExplorerSectionCollapsed}
-        onSectionCollapsedChange={onFilesExplorerSectionCollapsedChange}
-        workspaceSelector={repoPanelWorkspaceSelectorProps}
       />
     ),
     [
       effectiveRepoPanelPath,
-      filesExplorerSectionCollapsed,
       handleOpenExplorerFile,
       leftTabSwitcherPrefix,
-      onFilesExplorerSectionCollapsedChange,
       onRepositoryFileTreeSearchChange,
       repoPanelRepositoryName,
-      repoPanelWorkspaceSelectorProps,
       repositoryFileTreeSearch,
     ],
   );

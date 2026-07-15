@@ -719,6 +719,7 @@ function GitRepoSectionInner({
             />
           ) : null}
           <GitPanelMoreMenu
+            repositoryPath={repositoryPath}
             onOpenHistory={onOpenHistory}
             onOpenInBrowser={handleOpenRemoteInBrowser}
             openingBrowser={openingRemote}

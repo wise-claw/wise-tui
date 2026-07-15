@@ -1,8 +1,5 @@
 import { deriveRepoPanelRenderState } from "../components/LeftSidebar/repoPanelPlacement";
-import {
-  readLeftBottomTabFromStorage,
-  readLeftFilesExplorerCollapsedFromStorage,
-} from "../components/LeftSidebar/sidebarStorage";
+import { readLeftBottomTabFromStorage } from "../components/LeftSidebar/sidebarStorage";
 import type { MonitorPanelPlacement } from "../services/wiseDefaultConfigStore";
 
 export type ExplorerRevealTarget = "workspace-rail" | "left-sidebar" | "right-rail";
@@ -31,7 +28,6 @@ export function resolveVisibleExplorerRevealTarget(
   input: ResolveExplorerRevealTargetInput,
 ): ExplorerRevealTarget | null {
   const leftBottomTab = readLeftBottomTabFromStorage();
-  const filesSectionCollapsed = readLeftFilesExplorerCollapsedFromStorage();
   const renderState = deriveRepoPanelRenderState(
     input.gitPanelPlacement,
     input.filesPanelPlacement,
@@ -42,11 +38,9 @@ export function resolveVisibleExplorerRevealTarget(
   const leftFilesVisible =
     !input.leftSidebarCollapsed &&
     !input.leftSidebarParked &&
-    renderState.showFilesOnLeft &&
-    !filesSectionCollapsed;
+    renderState.showFilesOnLeft;
 
-  const rightFilesVisible =
-    input.rightRailAvailable && renderState.showFilesOnRight && !filesSectionCollapsed;
+  const rightFilesVisible = input.rightRailAvailable && renderState.showFilesOnRight;
 
   if (leftFilesVisible) {
     return "left-sidebar";

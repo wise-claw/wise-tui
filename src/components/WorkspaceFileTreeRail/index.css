@@ -22,6 +22,14 @@
   background: var(--ant-color-bg-container);
 }
 
+.app-workspace-file-tree-rail__title {
+  flex: 1 1 0;
+  min-width: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--ant-color-text);
+}
+
 @media (display-mode: window-controls-overlay) {
   .app-workspace-file-tree-rail--mac-titlebar-inset .app-workspace-file-tree-rail__header {
     padding-left: max(14px, calc(env(titlebar-area-x, 0px) + env(titlebar-area-width, 0px) + 12px));
@@ -30,41 +38,6 @@
 
 html.app-host-macos-chrome .app-workspace-file-tree-rail--mac-titlebar-inset .app-workspace-file-tree-rail__header {
   padding-left: max(84px, calc(env(titlebar-area-x, 0px) + env(titlebar-area-width, 0px) + 8px));
-}
-
-.app-workspace-file-tree-rail__selector {
-  flex: 1 1 0;
-  min-width: 0;
-}
-
-.app-workspace-file-tree-rail__selector .git-panel-workspace-selector {
-  width: 100%;
-  min-width: 0;
-}
-
-.app-workspace-file-tree-rail__selector .git-panel-workspace-selector__trigger {
-  width: 100%;
-  max-width: 100%;
-  min-width: 0;
-  padding: 2px 6px;
-  border: none;
-  background: transparent;
-  font-size: 12px;
-  font-weight: 600;
-}
-
-.app-workspace-file-tree-rail__selector .git-panel-workspace-selector__trigger:hover {
-  background: color-mix(in srgb, var(--ant-color-text) 6%, transparent);
-}
-
-.app-workspace-file-tree-rail__selector .git-panel-workspace-selector__trigger-text {
-  font-weight: 600;
-  text-transform: none;
-}
-
-.app-workspace-file-tree-rail__selector .git-panel-workspace-selector__popover,
-.git-panel-workspace-selector__popover {
-  min-width: 280px;
 }
 
 .app-workspace-file-tree-rail-panel.git-files-mode--context-header-hidden .git-files-explorer-search {

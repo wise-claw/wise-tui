@@ -1,6 +1,5 @@
 import { CloseOutlined } from "@ant-design/icons";
 import { memo, useCallback, useEffect, useState } from "react";
-import { GitPanelWorkspaceSelector } from "../GitPanel/GitPanelWorkspaceSelector";
 import { ActiveRepositoryFilesPanel } from "../LeftSidebar/ActiveRepositoryFilesPanel";
 import { HoverHint } from "../shared/HoverHint";
 import type { WorkspaceFileTreeRailContext } from "./types";
@@ -18,7 +17,6 @@ export const WorkspaceFileTreeRail = memo(function WorkspaceFileTreeRail({
   macTitlebarInset = false,
   repositoryPath = "",
   repositoryName,
-  workspaceSelector,
   onOpenFile,
   onClose,
 }: WorkspaceFileTreeRailProps) {
@@ -46,12 +44,7 @@ export const WorkspaceFileTreeRail = memo(function WorkspaceFileTreeRail({
       aria-label="文件树"
     >
       <header className="app-workspace-file-tree-rail__header">
-        <div className="app-workspace-file-tree-rail__selector">
-          <GitPanelWorkspaceSelector
-            {...workspaceSelector}
-            activeRepositoryPath={trimmedRepositoryPath}
-          />
-        </div>
+        <span className="app-workspace-file-tree-rail__title">文件树</span>
         <HoverHint title="关闭文件树">
           <button
             type="button"
@@ -71,7 +64,6 @@ export const WorkspaceFileTreeRail = memo(function WorkspaceFileTreeRail({
             search={search}
             onSearchChange={setSearch}
             onOpenFile={handleOpenFile}
-            sectionCollapsed={false}
             variant="workspace-rail"
           />
         ) : (
