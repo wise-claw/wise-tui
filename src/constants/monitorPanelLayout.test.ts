@@ -9,7 +9,7 @@ import {
 describe("monitorPanelLayout", () => {
   test("normalizeMonitorPanelVisibleRows clamps out-of-range values", () => {
     expect(normalizeMonitorPanelVisibleRows(99)).toBe(12);
-    expect(normalizeMonitorPanelVisibleRows(1)).toBe(3);
+    expect(normalizeMonitorPanelVisibleRows(1)).toBe(2);
     expect(normalizeMonitorPanelVisibleRows("8")).toBe(8);
     expect(normalizeMonitorPanelVisibleRows(undefined)).toBe(MONITOR_PANEL_VISIBLE_ROWS_DEFAULT);
   });

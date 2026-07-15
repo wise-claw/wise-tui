@@ -2003,7 +2003,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 }
 
 /* ── Project List with Sessions（紧凑；项目/仓库选择态分层，无左侧竖条） ── */
-/* 列本身不滚动：仅「工作区列表」「Git/文件」「运行面板(内容溢出时)」各自滚动，避免在运行面板上滚带动整列重绘 */
+/* 列本身不滚动：自上而下「工作区列表 → Git/文件 → 运行面板」；各自滚动，避免在运行面板上滚带动整列重绘 */
 .app-left-sidebar-project-and-files {
   flex: 1;
   min-height: 0;
@@ -2048,10 +2048,11 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 .app-left-sidebar-project-and-files > .app-repository-list {
   flex: 0 1 auto;
   align-self: stretch;
-  max-height: calc(
-    var(--workspace-list-row-height, 24px) * var(--workspace-list-max-visible-rows, 8)
+  min-height: var(--workspace-list-min-height, 50px);
+  max-height: max(
+    var(--workspace-list-min-height, 50px),
+    calc(var(--workspace-list-row-height, 24px) * var(--workspace-list-max-visible-rows, 8))
   );
-  min-height: 0;
   padding: 0 !important;
   overflow-y: auto;
 }

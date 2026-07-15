@@ -4,11 +4,11 @@ export const MONITOR_PANEL_ROW_HEIGHT_PX = 22;
 /** 运行面板标题栏占用高度（用于计算可视区域 max-height）。 */
 export const MONITOR_PANEL_HEAD_HEIGHT_PX = 24;
 
-export const MONITOR_PANEL_VISIBLE_ROWS_MIN = 3;
+export const MONITOR_PANEL_VISIBLE_ROWS_MIN = 2;
 export const MONITOR_PANEL_VISIBLE_ROWS_MAX = 12;
 export const MONITOR_PANEL_VISIBLE_ROWS_DEFAULT = 8;
 
-export const MONITOR_PANEL_VISIBLE_ROWS_OPTIONS = [4, 5, 6, 7, 8, 9, 10, 12] as const;
+export const MONITOR_PANEL_VISIBLE_ROWS_OPTIONS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 12] as const;
 
 export type MonitorPanelVisibleRows = (typeof MONITOR_PANEL_VISIBLE_ROWS_OPTIONS)[number];
 

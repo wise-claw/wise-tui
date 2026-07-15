@@ -22,7 +22,12 @@ export function useProjectRepositorySidebarState({
   activeWorkspaceFocus = "repository",
   onMoveRepositoryToProject,
 }: UseProjectRepositorySidebarStateInput) {
-  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(new Set());
+  /** 工作区内容默认全部展开；用户手动收起后不会被列表刷新强行打开。 */
+  const [expandedProjects, setExpandedProjects] = useState<Set<string>>(
+    () => new Set(projects.map((project) => project.id)),
+  );
+  /** 已见过的工作区 id；仅对「新出现」的 id 自动展开，保留用户折叠态。 */
+  const knownProjectIdsRef = useRef<Set<string> | null>(null);
   const repoSidebarDragRef = useRef<{ sourceProjectId: string; repositoryId: number } | null>(null);
   const [projectDropTargetId, setProjectDropTargetId] = useState<string | null>(null);
 
@@ -73,11 +78,30 @@ export function useProjectRepositorySidebarState({
   );
 
   useEffect(() => {
-    const valid = new Set(projectIdsKey.length > 0 ? projectIdsKey.split(",") : []);
+    const ids = projectIdsKey.length > 0 ? projectIdsKey.split(",") : [];
+    const valid = new Set(ids);
+    const known = knownProjectIdsRef.current;
+    // 首次同步 / 异步加载完成后：把当前全部工作区视为「新出现」并展开。
+    const newlyAdded = known === null ? ids : ids.filter((id) => !known.has(id));
+    knownProjectIdsRef.current = valid;
+
     setExpandedProjects((prev) => {
-      const next = new Set(Array.from(prev).filter((id) => valid.has(id)));
-      if (next.size === prev.size && [...next].every((id) => prev.has(id))) return prev;
-      return next;
+      let changed = false;
+      const next = new Set<string>();
+      for (const id of prev) {
+        if (valid.has(id)) {
+          next.add(id);
+        } else {
+          changed = true;
+        }
+      }
+      for (const id of newlyAdded) {
+        if (!next.has(id)) {
+          next.add(id);
+          changed = true;
+        }
+      }
+      return changed ? next : prev;
     });
   }, [projectIdsKey]);
 

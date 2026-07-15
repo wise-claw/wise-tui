@@ -1878,9 +1878,9 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
   const shouldShowSessionConversationTasks = showSessionConversationTasks;
 
   const panelHasListContent =
-    shouldShowSessionConversationTasks ||
     employeeItems.length > 0 ||
-    teamItems.length > 0;
+    teamItems.length > 0 ||
+    executionEnvironmentDispatchTaskItems.length > 0;
 
   const monitorDrawers = (
     <>
@@ -1978,7 +1978,7 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
       >
       {!panelHasListContent ? (
         <div className="app-monitor-panel__empty app-monitor-panel__empty--with-action">
-          <span>暂无终端</span>
+          <span>暂无数据</span>
           {onOpenEmployeeConfig ? (
             <button
               type="button"
@@ -2039,21 +2039,19 @@ export const ProgressMonitorPanel = memo(function ProgressMonitorPanel({
       ) : null}
 
       {!isCompactSidebarPanel && shouldShowSessionConversationTasks ? (
-        <div
-          className={`app-monitor-panel__section app-monitor-panel__section--session-tasks${
-            executionEnvironmentDispatchTaskItems.length === 0
-              ? " app-monitor-panel__section--session-tasks-empty"
-              : ""
-          }`}
-        >
-          {executionEnvironmentDispatchTaskItems.length > 0 ? (
+        executionEnvironmentDispatchTaskItems.length > 0 ? (
+          <div className="app-monitor-panel__section app-monitor-panel__section--session-tasks">
             <div className="app-monitor-panel__session-tasks-list" aria-label="当前会话派发任务">
               {executionEnvironmentDispatchTaskItems.map((item) => renderDispatchTaskRow(item))}
             </div>
-          ) : (
-            <div className="app-monitor-panel__session-tasks-empty-hint">近 {executionEnvironmentDispatchHistoryDays ?? 1} 天暂无执行环境派发记录</div>
-          )}
-        </div>
+          </div>
+        ) : panelHasListContent ? (
+          <div className="app-monitor-panel__section app-monitor-panel__section--session-tasks app-monitor-panel__section--session-tasks-empty">
+            <div className="app-monitor-panel__session-tasks-empty-hint">
+              近 {executionEnvironmentDispatchHistoryDays ?? 1} 天暂无执行环境派发记录
+            </div>
+          </div>
+        ) : null
       ) : null}
 
       {!isCompactSidebarPanel && teamItems.length > 0 ? (

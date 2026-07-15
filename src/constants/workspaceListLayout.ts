@@ -1,11 +1,11 @@
 /** 左栏工作区树：单行高度（与 `--app-sidebar-list-row-min-height` 一致）。 */
 export const WORKSPACE_LIST_ROW_HEIGHT_PX = 24;
 
-export const WORKSPACE_LIST_VISIBLE_ROWS_MIN = 3;
+export const WORKSPACE_LIST_VISIBLE_ROWS_MIN = 2;
 export const WORKSPACE_LIST_VISIBLE_ROWS_MAX = 12;
 export const WORKSPACE_LIST_VISIBLE_ROWS_DEFAULT = 8;
 
-export const WORKSPACE_LIST_VISIBLE_ROWS_OPTIONS = [4, 5, 6, 7, 8, 9, 10, 12] as const;
+export const WORKSPACE_LIST_VISIBLE_ROWS_OPTIONS = [2, 3, 4, 5, 6, 7, 8, 9, 10, 12] as const;
 
 export type WorkspaceListVisibleRows = (typeof WORKSPACE_LIST_VISIBLE_ROWS_OPTIONS)[number];
 

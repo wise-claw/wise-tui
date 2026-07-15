@@ -1258,6 +1258,27 @@ export function LeftSidebar({
           onStopRepositoryMainSession={handleStopRepositoryMainSession}
         />
 
+        <LeftSidebarRepoPanelBottomSlot
+          showLeftRepoPanel={showLeftRepoPanel}
+          showLeftSidebarWorkspaceList={showLeftSidebarWorkspaceList}
+          repoPanelRenderState={repoPanelRenderState}
+          workspaceListEffectivelyCollapsed={workspaceListEffectivelyCollapsed}
+          leftBottomTab={leftBottomTab}
+          onLeftBottomTabChange={handleLeftBottomTabChange}
+          bottomTabPanelsReady={bottomTabPanelsReady}
+          effectiveRepoPanelPath={effectiveRepoPanelPath}
+          repoPanelRepositoryName={repoPanelRepositoryName}
+          gitPanelRepositoryEntries={gitPanelRepositoryEntries}
+          gitPanelContextTitle={gitPanelContextTitle}
+          repoPanelTreeSelection={repoPanelTreeSelection}
+          repoPanelWorkspaceSelectorProps={repoPanelWorkspaceSelectorProps}
+          handleOpenExplorerFile={handleOpenExplorerFile}
+          repositoryFileTreeSearch={repositoryFileTreeSearch}
+          onRepositoryFileTreeSearchChange={setRepositoryFileTreeSearch}
+          filesExplorerSectionCollapsed={filesExplorerSectionCollapsed}
+          onFilesExplorerSectionCollapsedChange={handleFilesExplorerSectionCollapsedChange}
+        />
+
         {monitorPanelMounted ? (
           <LeftSidebarMonitorPanelSlot
             visible={showLeftSidebarMonitorPanel}
@@ -1312,27 +1333,6 @@ export function LeftSidebar({
             transcriptSessionsFingerprint={transcriptSessionsFingerprint}
           />
         ) : null}
-
-        <LeftSidebarRepoPanelBottomSlot
-          showLeftRepoPanel={showLeftRepoPanel}
-          showLeftSidebarWorkspaceList={showLeftSidebarWorkspaceList}
-          repoPanelRenderState={repoPanelRenderState}
-          workspaceListEffectivelyCollapsed={workspaceListEffectivelyCollapsed}
-          leftBottomTab={leftBottomTab}
-          onLeftBottomTabChange={handleLeftBottomTabChange}
-          bottomTabPanelsReady={bottomTabPanelsReady}
-          effectiveRepoPanelPath={effectiveRepoPanelPath}
-          repoPanelRepositoryName={repoPanelRepositoryName}
-          gitPanelRepositoryEntries={gitPanelRepositoryEntries}
-          gitPanelContextTitle={gitPanelContextTitle}
-          repoPanelTreeSelection={repoPanelTreeSelection}
-          repoPanelWorkspaceSelectorProps={repoPanelWorkspaceSelectorProps}
-          handleOpenExplorerFile={handleOpenExplorerFile}
-          repositoryFileTreeSearch={repositoryFileTreeSearch}
-          onRepositoryFileTreeSearchChange={setRepositoryFileTreeSearch}
-          filesExplorerSectionCollapsed={filesExplorerSectionCollapsed}
-          onFilesExplorerSectionCollapsedChange={handleFilesExplorerSectionCollapsedChange}
-        />
       </div>
 
 
