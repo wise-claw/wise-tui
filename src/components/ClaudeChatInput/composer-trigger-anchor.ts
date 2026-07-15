@@ -139,16 +139,71 @@ export function getComposerEditorCaretRectAtPlainOffset(
 
 const SLASH_POPOVER_WIDTH_PX = 480;
 
-/** 相对 `positionRoot`（composer shell）的 absolute 定位，避免 fixed + 祖先 contain 导致 left 偏移。 */
+export type SlashPopoverViewport = {
+  width: number;
+  height: number;
+};
+
+/**
+ * Portal 宿主须仍处在 Ant Design css-var 作用域内（勿挂到裸 `document.body`，
+ * 否则 `--ant-color-*` 失效，弹层背景会变成透明）。
+ * 同时选尽量靠上的节点，避免落在会话区 overflow/contain / Monaco 裁切层里。
+ */
+export function resolveSlashPopoverPortalRoot(anchor: HTMLElement | null): HTMLElement {
+  if (typeof document === "undefined") {
+    throw new Error("resolveSlashPopoverPortalRoot requires document");
+  }
+  const fromAnchor =
+    anchor?.closest<HTMLElement>(".ant-app") ??
+    anchor?.closest<HTMLElement>("[class*='css-var-']") ??
+    null;
+  return (
+    fromAnchor ??
+    document.querySelector<HTMLElement>(".ant-app") ??
+    document.querySelector<HTMLElement>("[class*='css-var-']") ??
+    document.getElementById("root") ??
+    document.body
+  );
+}
+
+/** 从仍持有 Ant token 的节点读取不透明底色，写入 portal 节点作硬兜底。 */
+export function resolveSlashPopoverOpaqueBackground(from: HTMLElement | null): string {
+  if (!from || typeof getComputedStyle !== "function") {
+    return "#ffffff";
+  }
+  const cs = getComputedStyle(from);
+  const token = cs.getPropertyValue("--ant-color-bg-container").trim();
+  if (token) return token;
+  const solid = cs.backgroundColor?.trim();
+  if (solid && solid !== "transparent" && solid !== "rgba(0, 0, 0, 0)") {
+    return solid;
+  }
+  return "#ffffff";
+}
+
+/**
+ * `position: fixed` 的视口坐标。
+ * 与 `resolveSlashPopoverPortalRoot` 搭配：避开会话区 overflow，同时保住主题变量。
+ * 水平方向优先夹在 composer shell 内，再夹入视口。
+ */
 export function computeSlashPopoverPlacement(
   positionRoot: HTMLElement,
   caretRect: DOMRect,
   popoverWidth = SLASH_POPOVER_WIDTH_PX,
+  viewport?: SlashPopoverViewport,
 ): { left: number; bottom: number } {
   const root = positionRoot.getBoundingClientRect();
-  let left = caretRect.left - root.left;
-  const maxLeft = Math.max(0, root.width - popoverWidth);
-  left = Math.min(Math.max(0, left), maxLeft);
-  const bottom = root.bottom - caretRect.top + 4;
+  const vw =
+    viewport?.width ??
+    (typeof window !== "undefined" ? window.innerWidth : Math.max(root.right, popoverWidth));
+  const vh =
+    viewport?.height ??
+    (typeof window !== "undefined" ? window.innerHeight : Math.max(root.bottom, 1));
+
+  const maxInRoot = root.left + Math.max(0, root.width - popoverWidth);
+  let left = Math.min(Math.max(root.left, caretRect.left), maxInRoot);
+  left = Math.min(Math.max(0, left), Math.max(0, vw - popoverWidth));
+
+  const bottom = vh - caretRect.top + 4;
   return { left, bottom };
 }

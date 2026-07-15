@@ -7274,13 +7274,18 @@ button.app-message-part-header:disabled:hover {
 /* Slash popover */
 
 .app-claude-slash-popover {
-  position: absolute;
-  background: var(--ant-color-bg-elevated);
+  /* 定位由 inline fixed 负责；底色另有 shell 解析后的实色 inline 兜底 */
+  position: fixed;
+  background-color: #ffffff;
+  background-color: var(--ant-color-bg-container, #ffffff);
   border: 1px solid var(--ant-color-border-secondary);
   border-radius: 8px;
   box-shadow: var(--ant-box-shadow-secondary);
   padding: 4px;
   pointer-events: auto;
+  z-index: 1200;
+  opacity: 1;
+  isolation: isolate;
 }
 
 .app-claude-slash-popover-item-wrap {

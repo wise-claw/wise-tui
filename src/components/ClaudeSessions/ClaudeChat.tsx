@@ -581,7 +581,8 @@ export function ClaudeChatInner({
       if (ae instanceof Element) {
         if (ae.closest(".ant-modal-wrap") || ae.closest(".ant-image-preview-root")) return;
       }
-      if (root.querySelector(".app-claude-slash-popover")) return;
+      // slash/@ 弹层 portal 到 body，不在 chat 子树内
+      if (document.querySelector(".app-claude-slash-popover")) return;
 
       // Esc 落在 Monaco 编辑器或 milkdown 富文本上时，让编辑器自己处理
       // （关闭查找、多光标归一、浮层收起等），不要再冒泡为「取消会话」。

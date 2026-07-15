@@ -971,7 +971,14 @@ pub(crate) async fn git_pull(path: String) -> Result<(), String> {
 }
 
 fn git_pull_blocking(path: String) -> Result<(), String> {
-    open_repo(&path)?;
+    let repo = open_repo(&path)?;
+    // 新本地分支尚未设置 upstream 时，plain `git pull` 会失败且提示不友好。
+    if !branch_has_upstream(&repo) {
+        return Err(
+            "当前分支未设置上游（upstream）。请先推送以发布分支，或手动设置跟踪分支后重试。"
+                .to_string(),
+        );
+    }
     run_git_command(&path, &["pull", "--no-rebase"], "Pull")
 }
 

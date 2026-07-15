@@ -1,9 +1,18 @@
 import { describe, expect, mock, test } from "bun:test";
+import { Window } from "happy-dom";
 import {
   computeSlashPopoverPlacement,
   focusComposerAtPlainOffset,
   plainOffsetToProseMirrorPos,
+  resolveSlashPopoverOpaqueBackground,
+  resolveSlashPopoverPortalRoot,
 } from "./composer-trigger-anchor";
+
+const domWindow = new Window({ url: "https://wise.local/" });
+globalThis.window = domWindow as unknown as Window & typeof globalThis.window;
+globalThis.document = domWindow.document as unknown as Document;
+globalThis.HTMLElement = domWindow.HTMLElement as unknown as typeof HTMLElement;
+globalThis.getComputedStyle = domWindow.getComputedStyle.bind(domWindow) as typeof getComputedStyle;
 
 describe("plainOffsetToProseMirrorPos", () => {
   test("offset 0 maps before first plain character, not document head", () => {
@@ -48,8 +57,40 @@ describe("focusComposerAtPlainOffset", () => {
   });
 });
 
+describe("resolveSlashPopoverPortalRoot", () => {
+  test("prefers ant-app ancestor so css-var tokens remain in scope", () => {
+    const antApp = document.createElement("div");
+    antApp.className = "ant-app css-var-root";
+    const anchor = document.createElement("div");
+    antApp.appendChild(anchor);
+    document.body.appendChild(antApp);
+    try {
+      expect(resolveSlashPopoverPortalRoot(anchor)).toBe(antApp);
+    } finally {
+      antApp.remove();
+    }
+  });
+});
+
+describe("resolveSlashPopoverOpaqueBackground", () => {
+  test("reads --ant-color-bg-container from themed node", () => {
+    const host = document.createElement("div");
+    host.style.setProperty("--ant-color-bg-container", "rgb(250, 250, 250)");
+    document.body.appendChild(host);
+    try {
+      expect(resolveSlashPopoverOpaqueBackground(host)).toBe("rgb(250, 250, 250)");
+    } finally {
+      host.remove();
+    }
+  });
+
+  test("falls back to white when no token", () => {
+    expect(resolveSlashPopoverOpaqueBackground(null)).toBe("#ffffff");
+  });
+});
+
 describe("computeSlashPopoverPlacement", () => {
-  test("left is caret minus position root", () => {
+  test("returns fixed viewport coords clamped to composer shell", () => {
     const root = {
       getBoundingClientRect: () =>
         ({
@@ -69,6 +110,35 @@ describe("computeSlashPopoverPlacement", () => {
       width: 0,
       height: 20,
     } as DOMRect;
-    expect(computeSlashPopoverPlacement(root, caret)).toEqual({ left: 18, bottom: 54 });
+    expect(computeSlashPopoverPlacement(root, caret, 480, { width: 1200, height: 800 })).toEqual({
+      left: 118,
+      bottom: 554,
+    });
+  });
+
+  test("clamps left into viewport when shell is wider than viewport remainder", () => {
+    const root = {
+      getBoundingClientRect: () =>
+        ({
+          left: 50,
+          top: 100,
+          right: 850,
+          bottom: 200,
+          width: 800,
+          height: 100,
+        }) as DOMRect,
+    } as HTMLElement;
+    const caret = {
+      left: 700,
+      top: 160,
+      right: 700,
+      bottom: 180,
+      width: 0,
+      height: 20,
+    } as DOMRect;
+    expect(computeSlashPopoverPlacement(root, caret, 480, { width: 900, height: 600 })).toEqual({
+      left: 370,
+      bottom: 444,
+    });
   });
 });

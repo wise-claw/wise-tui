@@ -81,28 +81,12 @@
   transition: none !important;
 }
 
-.app-left-sidebar-scroll-region--scrolling .app-repository-item:hover,
-.app-repository-list--scrolling .app-repository-item:hover {
+.app-left-sidebar-scroll-region--scrolling .app-repository-item:hover:not(.app-repository-item--project-active):not(.app-repository-item--repo-active),
+.app-repository-list--scrolling .app-repository-item:hover:not(.app-repository-item--project-active):not(.app-repository-item--repo-active) {
   background: transparent !important;
 }
 
-/* 滚动中：选中工作区行带 color-mix + 粗体，展开子仓时重绘面积极大，改用最轻背景 */
-.app-left-sidebar-scroll-region--scrolling .app-repository-item--project-active,
-.app-repository-list--scrolling .app-repository-item--project-active,
-.app-left-sidebar-scroll-region--scrolling .app-repository-item--repo-active,
-.app-repository-list--scrolling .app-repository-item--repo-active {
-  background: transparent !important;
-  box-shadow: none !important;
-}
-
-.app-left-sidebar-scroll-region--scrolling .app-repository-item--project-active .app-repository-name,
-.app-repository-list--scrolling .app-repository-item--project-active .app-repository-name,
-.app-left-sidebar-scroll-region--scrolling .app-repository-item--repo-active .app-repository-name,
-.app-repository-list--scrolling .app-repository-item--repo-active .app-repository-name {
-  font-weight: 400;
-}
-
-/* 滚动中勿隐藏快捷按钮 / 展开图标 / 子仓库：可见行数封顶后滚动更频繁，空白闪烁明显。 */
+/* 滚动中勿清选中行高亮 / 勿隐藏快捷按钮与子仓库；只关动画减轻合成。 */
 
 .app-left-sidebar-scroll-region--scrolling .app-repository-row,
 .app-repository-list--scrolling .app-repository-row {

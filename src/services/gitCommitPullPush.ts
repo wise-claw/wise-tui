@@ -16,8 +16,23 @@ export function hasUnpushedCommits(status: GitStatusResponse): boolean {
   return (status.ahead ?? 0) > 0;
 }
 
+/** 当前分支是否已配置 upstream（无上游时 ahead/behind 不可用，pull 也会失败）。 */
+export function hasUpstreamTracking(status: Pick<GitStatusResponse, "upstream">): boolean {
+  return Boolean(status.upstream?.trim());
+}
+
+/**
+ * 本地已有分支名、但尚未关联远程跟踪分支：需要 `git push -u` 发布。
+ * 常见于本机 `checkout -b` 新建分支后首次推送。
+ */
+export function needsPublishBranch(
+  status: Pick<GitStatusResponse, "upstream" | "branch">,
+): boolean {
+  return Boolean(status.branch?.trim()) && !hasUpstreamTracking(status);
+}
+
 export function needsGitSyncWork(status: GitStatusResponse): boolean {
-  return hasWorkingTreeChanges(status) || hasUnpushedCommits(status);
+  return hasWorkingTreeChanges(status) || hasUnpushedCommits(status) || needsPublishBranch(status);
 }
 
 export function needsGitSyncWorkFromSummary(summary: GitStatusSummaryResponse): boolean {
@@ -56,7 +71,8 @@ export async function commitPullPushRepository(
   const status = await gitStatus(path);
   const hasChanges = hasWorkingTreeChanges(status);
   const hasAhead = hasUnpushedCommits(status);
-  if (!hasChanges && !hasAhead) {
+  const publishBranch = needsPublishBranch(status);
+  if (!hasChanges && !hasAhead && !publishBranch) {
     return "noop";
   }
 
@@ -69,8 +85,11 @@ export async function commitPullPushRepository(
     await gitCommit(path, trimmed);
   }
 
-  hooks?.onPhase?.("拉取");
-  await gitPull(path);
+  // 新本地分支尚无 upstream 时 `git pull` 会失败；此时无可拉取内容，直接进入 push -u。
+  if (hasUpstreamTracking(status)) {
+    hooks?.onPhase?.("拉取");
+    await gitPull(path);
+  }
   hooks?.onPhase?.("推送");
   await gitPush(path);
   return hasChanges ? "committed_and_pushed" : "pushed_only";

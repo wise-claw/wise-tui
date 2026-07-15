@@ -1,4 +1,5 @@
 import React, { useState, useEffect, useCallback, useMemo } from "react";
+import { createPortal } from "react-dom";
 import { Spin } from "antd";
 import { searchRepositoryFiles } from "../../services/repositoryFiles";
 import { loadSlashCatalog } from "../../services/slashCatalogCache";
@@ -32,7 +33,11 @@ import {
   hasExecutionEnvironmentMention,
   stripExecutionEnvironmentMention,
 } from "../../utils/executionEnvironmentDispatch";
-import { computeSlashPopoverPlacement } from "./composer-trigger-anchor";
+import {
+  computeSlashPopoverPlacement,
+  resolveSlashPopoverOpaqueBackground,
+  resolveSlashPopoverPortalRoot,
+} from "./composer-trigger-anchor";
 import { ExplorerTreeFileIcon, ExplorerTreeFolderIcon } from "../GitPanel/explorerTreeChrome";
 
 export type { SlashOption };
@@ -451,6 +456,7 @@ export function SlashPopover({
   }, [mode, options, optionsFingerprint, selectedIndex, handleSelect, onDismiss, surfaceRef]);
 
   if (!mode) return null;
+  if (typeof document === "undefined") return null;
 
   const positionRoot = surfaceRef.current?.anchorEl();
   const caretRect =
@@ -461,16 +467,26 @@ export function SlashPopover({
       : null;
   if (!placement) return null;
 
+  const portalRoot = resolveSlashPopoverPortalRoot(positionRoot ?? null);
+  // 实色底：从仍在 Ant css-var 作用域内的 shell 解析后写入，避免 portal 丢变量后背景透明
+  const opaqueBackground = resolveSlashPopoverOpaqueBackground(positionRoot ?? null);
+
   const popoverBaseStyle: React.CSSProperties = {
-    position: "absolute",
+    position: "fixed",
     left: `${placement.left}px`,
     bottom: `${placement.bottom}px`,
-    zIndex: 1000,
+    zIndex: 1200,
     width: "480px",
+    background: opaqueBackground,
+    backgroundColor: opaqueBackground,
+    opacity: 1,
+    border: "1px solid var(--ant-color-border-secondary)",
+    borderRadius: "8px",
+    boxShadow: "var(--ant-box-shadow-secondary)",
   };
 
   if (mode === "at" && fileLoading && options.length === 0) {
-    return (
+    return createPortal(
       <div
         className="app-claude-slash-popover"
         style={{
@@ -482,12 +498,13 @@ export function SlashPopover({
         }}
       >
         <Spin size="small" />
-      </div>
+      </div>,
+      portalRoot,
     );
   }
 
   if (mode === "slash" && slashCatalogLoading && options.length === 0) {
-    return (
+    return createPortal(
       <div
         className="app-claude-slash-popover"
         style={{
@@ -499,23 +516,20 @@ export function SlashPopover({
         }}
       >
         <Spin size="small" />
-      </div>
+      </div>,
+      portalRoot,
     );
   }
 
   if (options.length === 0) return null;
 
-  return (
+  return createPortal(
     <div
       className="app-claude-slash-popover"
       style={{
         ...popoverBaseStyle,
         maxHeight: "400px",
         overflowY: "auto",
-        background: "var(--ant-color-bg-elevated)",
-        border: "1px solid var(--ant-color-border-secondary)",
-        borderRadius: "8px",
-        boxShadow: "var(--ant-box-shadow-secondary)",
         padding: "4px",
       }}
     >
@@ -620,7 +634,8 @@ export function SlashPopover({
           );
         })
       )}
-    </div>
+    </div>,
+    portalRoot,
   );
 }
 
