@@ -38,6 +38,11 @@ import "@milkdown/theme-nord/style.css";
 import "@milkdown/crepe/theme/common/style.css";
 import "@milkdown/crepe/theme/nord.css";
 import { annotateCrepeToolbarButtons } from "../../utils/crepeToolbarTitles";
+import {
+  isTaskListItemActive,
+  toggleTaskListItemChecked,
+  wrapTaskListItem,
+} from "./milkdownTaskListCommands";
 import { sameResolvedAnchorRanges } from "../../utils/anchorStability";
 import { collectResolvedAnchorRanges, computeAnchorLayouts, sameAnchorLayouts, type AnchorLayout } from "./anchorLayout";
 import {
@@ -205,6 +210,9 @@ export interface MilkdownEditorHandle {
   wrapBlockquote: () => void;
   wrapBulletList: () => void;
   wrapOrderedList: () => void;
+  wrapTaskList: () => void;
+  toggleTaskListItemChecked: () => boolean;
+  isTaskListItemActive: () => boolean;
   wrapHeading: (level: number) => void;
   createCodeBlock: () => void;
   insertHr: () => void;
@@ -322,6 +330,21 @@ const MilkdownCommandBridge = forwardRef<MilkdownEditorHandle>((_props, ref) => 
         ctx.get(commandsCtx).call(wrapInOrderedListCommand.key);
       }));
     },
+    wrapTaskList: () => {
+      runCommand((editor) => wrapTaskListItem(editor));
+    },
+    toggleTaskListItemChecked: () => {
+      let toggled = false;
+      runCommand((editor) => {
+        toggled = toggleTaskListItemChecked(editor);
+      });
+      return toggled;
+    },
+    isTaskListItemActive: () => {
+      const editor = getInstance();
+      if (!editor) return false;
+      return isTaskListItemActive(editor);
+    },
     wrapHeading: (level: number) => {
       runCommand((editor) => editor.action((ctx) => {
         ctx.get(commandsCtx).call(wrapInHeadingCommand.key, level);
@@ -377,6 +400,7 @@ export function MilkdownViewer({ text }: Props) {
 export const MilkdownEditor = forwardRef<MilkdownEditorHandle, MilkdownEditorProps>(({
   text,
   onChange,
+  readonly = false,
   floatingToolbar = true,
   taskAnchors,
   selectedRequirementAnchorKey = null,
@@ -726,10 +750,12 @@ export const MilkdownEditor = forwardRef<MilkdownEditorHandle, MilkdownEditorPro
   }, []);
 
   useEffect(() => {
-    function handleUndoRedoShortcut(event: KeyboardEvent) {
+    function handleEditorShortcut(event: KeyboardEvent) {
+      if (!isEditorFocused()) return;
       const mod = event.metaKey || event.ctrlKey;
-      if (!mod || !isEditorFocused()) return;
+      if (!mod) return;
       const key = event.key.toLowerCase();
+
       if (key === "z" && event.shiftKey) {
         if (runHistoryCommand("redo")) {
           event.preventDefault();
@@ -746,14 +772,30 @@ export const MilkdownEditor = forwardRef<MilkdownEditorHandle, MilkdownEditorPro
         if (runHistoryCommand("redo")) {
           event.preventDefault();
         }
+        return;
+      }
+
+      if (readonly) return;
+
+      if (key === "t" && event.shiftKey && !event.altKey) {
+        runCommand((editor) => wrapTaskListItem(editor));
+        event.preventDefault();
+        return;
+      }
+
+      if (key === "enter" && !event.shiftKey) {
+        const crepe = crepeRef.current;
+        if (crepe && toggleTaskListItemChecked(crepe.editor)) {
+          event.preventDefault();
+        }
       }
     }
 
-    document.addEventListener("keydown", handleUndoRedoShortcut, { capture: true });
+    document.addEventListener("keydown", handleEditorShortcut, { capture: true });
     return () => {
-      document.removeEventListener("keydown", handleUndoRedoShortcut, { capture: true });
+      document.removeEventListener("keydown", handleEditorShortcut, { capture: true });
     };
-  }, [isEditorFocused, runHistoryCommand]);
+  }, [isEditorFocused, readonly, runCommand, runHistoryCommand]);
 
   useImperativeHandle(ref, () => ({
     getSelectedMarkdown: (): string | null => {
@@ -847,6 +889,17 @@ export const MilkdownEditor = forwardRef<MilkdownEditorHandle, MilkdownEditorPro
     wrapOrderedList: () => runCommand((editor) => editor.action((ctx) => {
       ctx.get(commandsCtx).call(wrapInOrderedListCommand.key);
     })),
+    wrapTaskList: () => runCommand((editor) => wrapTaskListItem(editor)),
+    toggleTaskListItemChecked: () => {
+      const crepe = crepeRef.current;
+      if (!crepe) return false;
+      return toggleTaskListItemChecked(crepe.editor);
+    },
+    isTaskListItemActive: () => {
+      const crepe = crepeRef.current;
+      if (!crepe) return false;
+      return isTaskListItemActive(crepe.editor);
+    },
     wrapHeading: (level: number) => runCommand((editor) => editor.action((ctx) => {
       ctx.get(commandsCtx).call(wrapInHeadingCommand.key, level);
     })),

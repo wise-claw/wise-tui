@@ -1,0 +1,28 @@
+.app-workspace-memo-panel__body {
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 10px 12px;
+}
+
+.app-workspace-memo-panel__editor-wrap {
+  display: flex;
+  flex-direction: column;
+  min-height: 200px;
+}
+
+.app-workspace-memo-panel__body .app-milkdown-anchor-host {
+  min-height: 160px;
+}
+
+.app-workspace-memo-panel__save-status {
+  font-size: 11px;
+  line-height: 1;
+  color: var(--ant-color-text-tertiary);
+  white-space: nowrap;
+  padding: 0 4px;
+}
+
+.app-workspace-memo-panel__save-status--error {
+  color: var(--ant-color-error);
+}

@@ -190,6 +190,8 @@ export interface TopbarProps {
   onCenterViewChange?: (view: CenterView) => void;
   /** 是否显示中栏「消息/文件」切换器（有编辑器且消息列表未隐藏时）。 */
   centerSwitcherVisible?: boolean;
+  /** 切换器第二项文案（打开文件为「文件」，打开备忘录为「备忘录」）。 */
+  centerSwitcherFilesLabel?: string;
 }
 
 /**
@@ -213,6 +215,7 @@ export type PaneTopbarSharedProps = Omit<
   | "centerView"
   | "onCenterViewChange"
   | "centerSwitcherVisible"
+  | "centerSwitcherFilesLabel"
 > & {
   /** 按指定仓库路径打开搜索面板（per-pane 搜索按钮，作用于该 pane 仓库）。 */
   onSearchForRepository?: (repositoryPath: string) => void;
@@ -243,6 +246,7 @@ export const Topbar = memo(function Topbar({
   centerView = "messages",
   onCenterViewChange,
   centerSwitcherVisible = false,
+  centerSwitcherFilesLabel = "文件",
 }: TopbarProps) {
   const topbarChrome = useWiseTopbarChromeVisibility();
   const [selectedOpenAppId, setSelectedOpenAppId] = useState<string>(() => {
@@ -324,7 +328,7 @@ export const Topbar = memo(function Topbar({
                 onChange={(value) => onCenterViewChange(value as CenterView)}
                 options={[
                   { label: "消息", value: "messages" },
-                  { label: "文件", value: "files" },
+                  { label: centerSwitcherFilesLabel, value: "files" },
                 ]}
               />
             ) : null}

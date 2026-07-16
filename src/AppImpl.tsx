@@ -164,6 +164,7 @@ import {
   findOwnerProjectForRepositoryId,
   isMultiRepoProject,
   resolveWorkspaceMode,
+  shouldSidebarRepositorySelectOnlyUpdateFocus,
 } from "./utils/workspaceMode";
 import { employeeInProjectScope, shouldHideEmployeeUi } from "./utils/projectRepositoryRoles";
 import { buildProjectRoleTagOptions, buildProjectRepositoryMentionOptions } from "./utils/projectRoleTagOptions";
@@ -2388,12 +2389,13 @@ export default function App() {
 
   /** 多仓工作区内点仓库行：仅切换展示会话，不更新 per-repo 主会话绑定。 */
   function switchRepositoryDisplaySession(repository: Repository): string | null {
+    const sessionsNow = sessionsLatestRef.current;
     const target = resolveSidebarSelectionTarget({ repository });
     const mainOwnerPick = resolveMainOwnerAgentNameForRepositoryPath(repositories, target.path);
     const boundId = resolveBoundMainSessionId(
       target.path,
       repositoryMainSessionBindings,
-      sessions,
+      sessionsNow,
       mainOwnerPick,
     );
     if (boundId) {
@@ -2401,7 +2403,7 @@ export default function App() {
       return boundId;
     }
     const latestForRepo = pickSessionForRepositorySidebarSelect(
-      sessions,
+      sessionsNow,
       target.path,
       sessionOwnerHintsRef.current,
       { mainOwnerAgentName: mainOwnerPick },
@@ -2536,6 +2538,10 @@ export default function App() {
       startTransition(() => {
         viewMode.enter({ kind: "chat" });
       });
+    }
+    // 多仓工作区内点成员仓：只更新侧栏/文件树焦点；有已绑定会话则切展示，禁止新建空壳。
+    if (shouldSidebarRepositorySelectOnlyUpdateFocus(repository, projects)) {
+      return switchRepositoryDisplaySession(repository);
     }
     return ensureRepositoryMainSession(repository);
   }
@@ -2788,12 +2794,19 @@ export default function App() {
       if (sidebarSelectionEpochRef.current !== selectionEpoch) {
         return;
       }
+      // 多仓工作区内点成员仓：只更新高亮/文件树；有展示会话则切换，禁止 ensure 新建空壳，
+      // 否则切走时内存回收会清空原文，切回看到的是无 claudeSessionId 的空标签。
+      if (shouldSidebarRepositorySelectOnlyUpdateFocus(repository, projects)) {
+        switchRepositoryDisplaySession(repository);
+        return;
+      }
       scheduleSidebarMainSessionEnsure(() => ensureRepositoryMainSession(repository));
     },
     [
       activeRepositoryId,
       activeWorkspaceFocus,
       handleSidebarRepositorySelect,
+      projects,
       repositories,
       setActiveRepositoryWithOwner,
       tryRouteSidebarSelectionToFocusedPane,

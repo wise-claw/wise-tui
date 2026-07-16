@@ -1,6 +1,6 @@
 import { CheckOutlined, CloudSyncOutlined, PlusOutlined } from "@ant-design/icons";
 import { Button, Collapse, Empty, Input, Modal, Space, Switch, Typography, message } from "antd";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useMemo, useState } from "react";
 import {
   applyClaudeModelProfile,
   createClaudeModelProfile,

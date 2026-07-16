@@ -4,6 +4,10 @@ import { Popover, Typography } from "antd";
 import { DeferredHoverTooltip } from "../shared/DeferredHoverTooltip";
 import { useWorkspaceTodoIncompleteCount } from "../../hooks/useWorkspaceTodoIncompleteCount";
 import { WorkspaceTodosPopoverContent } from "./WorkspaceTodosPopoverContent";
+import {
+  toggleWorkspaceMemoPanel,
+  useWorkspaceMemoPanelOpen,
+} from "../../stores/workspaceMemoPanelStore";
 import { LEFT_SIDEBAR_SCROLLING_CLASS } from "../../constants/leftSidebarScrollPerformance";
 import { useScrollEndClass } from "../../hooks/useScrollEndClass";
 import { useRepositoryRunCommandRowPinnedMap } from "../../hooks/useRepositoryRunCommandRowPinned";
@@ -27,6 +31,7 @@ import {
   MoreIcon,
   PlusIcon,
   ProjectIcon,
+  WorkspaceMemoIcon,
   WorkspaceRemindersIcon,
 } from "./SidebarIcons";
 import {
@@ -223,6 +228,7 @@ function ProjectRepositoryListInner({
   );
 
   const [headerTodosPopoverOpen, setHeaderTodosPopoverOpen] = useState(false);
+  const headerMemoOpen = useWorkspaceMemoPanelOpen();
   const headerTodoCount = useWorkspaceTodoIncompleteCount(workspaceTodosEnabled);
 
   const runCommandRowPinnedMap = useRepositoryRunCommandRowPinnedMap();
@@ -267,6 +273,17 @@ function ProjectRepositoryListInner({
           className="app-repository-header-actions"
           onClick={(e) => { e.stopPropagation(); }}
         >
+          <DeferredHoverTooltip title="备忘录">
+            <button
+              type="button"
+              className={`app-repository-header-btn${headerMemoOpen ? " app-repository-header-btn--active" : ""}`}
+              aria-label="备忘录"
+              aria-pressed={headerMemoOpen}
+              onClick={() => toggleWorkspaceMemoPanel()}
+            >
+              <WorkspaceMemoIcon />
+            </button>
+          </DeferredHoverTooltip>
           {workspaceTodosEnabled ? (
             activeProjectId?.trim() ? (
               <Popover

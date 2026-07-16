@@ -193,11 +193,69 @@
   display: block;
   max-width: 100%;
   height: auto;
-  cursor: zoom-in;
+  margin-left: 0;
+  margin-right: auto;
+}
+
+.app-milkdown-viewer .milkdown-image-block {
+  position: relative;
+}
+
+.app-milkdown-viewer .milkdown-image-block > .image-wrapper {
+  margin: 0;
+  margin-right: auto;
+  width: fit-content;
+  max-width: 100%;
+}
+
+.app-milkdown-viewer .milkdown-image-block .image-wrapper {
+  justify-content: flex-start;
+  align-items: flex-start;
+}
+
+.app-milkdown-viewer .milkdown-image-block > .caption-input {
+  text-align: left;
+  margin-left: 0;
+  margin-right: auto;
+}
+
+/* Crepe 默认 cover 会裁切；拖拽改高时按等比显示 */
+.app-milkdown-viewer .milkdown-image-block > .image-wrapper img {
+  object-fit: contain;
+  width: auto;
+  max-width: 100%;
 }
 
 .app-milkdown-viewer .milkdown-image-block img[data-type="image-block"] {
-  cursor: zoom-in;
+  cursor: default;
+}
+
+/*
+ * 拖拽改大小：底部手柄铺满图片宽度，加大可点区域；
+ * 悬停/选中时显示，不常驻 +/- 按钮。
+ */
+.app-milkdown-viewer .milkdown-image-block > .image-wrapper > .image-resize-handle {
+  left: 0 !important;
+  right: 0 !important;
+  bottom: -3px !important;
+  transform: none !important;
+  width: 100% !important;
+  max-width: none !important;
+  height: 8px !important;
+  border-radius: 4px;
+  background: var(--ant-color-primary);
+  opacity: 0;
+  cursor: ns-resize !important;
+  transition: opacity 0.15s ease;
+}
+
+.app-milkdown-viewer .milkdown-image-block:hover > .image-wrapper .image-resize-handle,
+.app-milkdown-viewer .milkdown-image-block.selected > .image-wrapper .image-resize-handle {
+  opacity: 0.85;
+}
+
+.app-milkdown-viewer .milkdown-image-block > .image-wrapper > .image-resize-handle:hover {
+  opacity: 1 !important;
 }
 
 .app-milkdown-image-preview-backdrop {
@@ -251,11 +309,7 @@
   user-select: none;
 }
 
-.milkdown .milkdown-image-block .image-resize-handle {
-  border-radius: 2px;
-  background: var(--ant-color-primary, #1677ff);
-  opacity: 0.85;
-}
+/* 全局 Crepe 主题会写手柄样式；可见性由上方 hover/selected 规则控制 */
 
 .milkdown .milkdown-list-item-block li .label-wrapper {
   height: 24px;

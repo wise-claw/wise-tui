@@ -1,7 +1,7 @@
 use crate::wise_db::WiseDb;
 use crate::workspace_inspector_db::{
-    WorkspaceQuickActionItemDto, WorkspaceQuickActionsPayloadDto, WorkspaceTodoItemDto,
-    WorkspaceTodosPayloadDto,
+    WorkspaceGlobalMemoDto, WorkspaceQuickActionItemDto, WorkspaceQuickActionsPayloadDto,
+    WorkspaceTodoItemDto, WorkspaceTodosPayloadDto,
 };
 
 #[tauri::command]
@@ -85,4 +85,19 @@ pub(crate) fn save_global_workspace_todos(
     items: Vec<WorkspaceTodoItemDto>,
 ) -> Result<(), String> {
     db.save_global_workspace_todos(items)
+}
+
+#[tauri::command]
+pub(crate) fn get_workspace_global_memo(
+    db: tauri::State<'_, WiseDb>,
+) -> Result<WorkspaceGlobalMemoDto, String> {
+    db.get_workspace_global_memo()
+}
+
+#[tauri::command]
+pub(crate) fn save_workspace_global_memo(
+    db: tauri::State<'_, WiseDb>,
+    body_markdown: String,
+) -> Result<WorkspaceGlobalMemoDto, String> {
+    db.save_workspace_global_memo(body_markdown)
 }

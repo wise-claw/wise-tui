@@ -864,6 +864,11 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   background: var(--ant-color-fill);
 }
 
+.app-repository-header-btn--active {
+  color: var(--ant-color-primary);
+  background: color-mix(in srgb, var(--ant-color-primary) 12%, transparent);
+}
+
 .app-repository-header-btn svg {
   width: 15px;
   height: 15px;

@@ -52,6 +52,7 @@ import type { PaneAuxLayout, ResolvePaneAuxLayout } from "./paneAuxLayout";
 import { Topbar, type PaneTopbarSharedProps } from "./Topbar";
 import { CenterViewControlContext, useCenterView } from "./claudeChatHelpers";
 import { registerPaneCenterViewSetter } from "../../stores/paneCenterViewControlStore";
+import { useWorkspaceMemoPanelOpen } from "../../stores/workspaceMemoPanelStore";
 
 const TWO_PANE_MIN_WIDTH_PX = MAIN_LAYOUT_MULTI_PANE_MIN_WIDTH_PX;
 
@@ -284,6 +285,7 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
     paneAuxLayout.panelBelowMessages,
     paneAuxLayout.hideMessages,
   );
+  const memoOpen = useWorkspaceMemoPanelOpen();
 
   // 把 pane 0 的 setCenterView 注册到跨层控制通道，供打开文件时切到「文件」视图。
   useEffect(() => {
@@ -309,6 +311,7 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
           centerView={centerView}
           onCenterViewChange={setCenterView}
           centerSwitcherVisible={centerSwitcherVisible}
+          centerSwitcherFilesLabel={memoOpen ? "备忘录" : "文件"}
         />
       ) : null}
       <CenterViewControlContext.Provider value={setCenterView}>

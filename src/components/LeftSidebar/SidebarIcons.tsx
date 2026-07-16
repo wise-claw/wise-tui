@@ -94,6 +94,22 @@ export function WorkspaceRemindersIcon() {
   );
 }
 
+/** 侧栏快捷入口：全局备忘录 */
+export function WorkspaceMemoIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <path
+        d="M4.25 2.75h6.2L12.75 5.1v8.15a1 1 0 0 1-1 1H4.25a1 1 0 0 1-1-1V3.75a1 1 0 0 1 1-1z"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinejoin="round"
+      />
+      <path d="M10.2 2.85v2.4h2.35" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+      <path d="M5.5 8.25h5M5.5 10.75h3.5" stroke="currentColor" strokeWidth="1.2" strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function ChatIcon() {
   return (
     <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>

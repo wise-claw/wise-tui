@@ -1,7 +1,7 @@
-//! 右栏 Inspector：快捷操作与待办事项的 SQLite 持久化。
+//! 右栏 Inspector：快捷操作、待办事项与全局备忘录的 SQLite 持久化。
 
 use crate::wise_db::WiseDb;
-use rusqlite::{params, Connection};
+use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use std::collections::HashSet;
 
@@ -11,6 +11,11 @@ const KEY_SUFFIX: &str = ".v1";
 
 /// 全局待办事项的固定 scope_id（scope_kind = 'global'，不绑定工作区/仓库）。
 pub const GLOBAL_TODO_SCOPE_ID: &str = "_global_";
+
+/// 全局备忘录单行主键。
+const GLOBAL_MEMO_ID: &str = "default";
+/// 备忘录 Markdown 体积上限（约 512 KiB），防止异常写入撑爆库。
+const GLOBAL_MEMO_MAX_BYTES: usize = 512 * 1024;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -54,6 +59,13 @@ pub struct WorkspaceTodoItemDto {
 pub struct WorkspaceTodosPayloadDto {
     pub version: i32,
     pub items: Vec<WorkspaceTodoItemDto>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct WorkspaceGlobalMemoDto {
+    pub body_markdown: String,
+    pub updated_at: i64,
 }
 
 #[derive(Debug, Deserialize)]
@@ -280,6 +292,26 @@ fn replace_todos_conn(
         .map_err(|e| e.to_string())?;
     }
     Ok(())
+}
+
+fn get_workspace_global_memo_conn(conn: &Connection) -> Result<WorkspaceGlobalMemoDto, String> {
+    let row = conn
+        .query_row(
+            "SELECT body_markdown, updated_at FROM workspace_global_memo WHERE id = ?1",
+            params![GLOBAL_MEMO_ID],
+            |row| {
+                Ok(WorkspaceGlobalMemoDto {
+                    body_markdown: row.get(0)?,
+                    updated_at: row.get(1)?,
+                })
+            },
+        )
+        .optional()
+        .map_err(|e| e.to_string())?;
+    Ok(row.unwrap_or(WorkspaceGlobalMemoDto {
+        body_markdown: String::new(),
+        updated_at: 0,
+    }))
 }
 
 fn list_todos_conn(
@@ -644,6 +676,38 @@ impl WiseDb {
         replace_todos_conn(&g, "global", GLOBAL_TODO_SCOPE_ID, &dedupe_todos(normalized))
     }
 
+    pub fn get_workspace_global_memo(&self) -> Result<WorkspaceGlobalMemoDto, String> {
+        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        get_workspace_global_memo_conn(&g)
+    }
+
+    pub fn save_workspace_global_memo(
+        &self,
+        body_markdown: String,
+    ) -> Result<WorkspaceGlobalMemoDto, String> {
+        if body_markdown.len() > GLOBAL_MEMO_MAX_BYTES {
+            return Err(format!(
+                "备忘录内容过长（最多 {} 字节）",
+                GLOBAL_MEMO_MAX_BYTES
+            ));
+        }
+        let updated_at = crate::wise_db::unix_now_ms();
+        let g = self.0.lock().map_err(|_| "db lock poisoned".to_string())?;
+        g.execute(
+            "INSERT INTO workspace_global_memo (id, body_markdown, updated_at)
+             VALUES (?1, ?2, ?3)
+             ON CONFLICT(id) DO UPDATE SET
+               body_markdown = excluded.body_markdown,
+               updated_at = excluded.updated_at",
+            params![GLOBAL_MEMO_ID, body_markdown, updated_at],
+        )
+        .map_err(|e| e.to_string())?;
+        Ok(WorkspaceGlobalMemoDto {
+            body_markdown,
+            updated_at,
+        })
+    }
+
     #[allow(dead_code)]
     pub fn delete_project_workspace_inspector_data(&self, project_id: &str) -> Result<(), String> {
         let id = project_id.trim();
@@ -694,9 +758,36 @@ mod tests {
             .expect("todos schema applies");
         conn.execute_batch(include_str!("../migrations/035_workspace_quick_actions_pinned.sql"))
             .expect("pinned schema applies");
+        conn.execute_batch(
+            "CREATE TABLE IF NOT EXISTS app_settings (
+               key TEXT PRIMARY KEY NOT NULL,
+               value TEXT NOT NULL
+             );",
+        )
+        .expect("app_settings stub");
         conn.execute_batch(include_str!("../migrations/042_drop_workspace_memos.sql"))
             .expect("drop memos schema applies");
+        conn.execute_batch(include_str!("../migrations/049_workspace_global_memo.sql"))
+            .expect("global memo schema applies");
         conn
+    }
+
+    #[test]
+    fn global_memo_round_trip() {
+        let conn = open_with_migrations();
+        let empty = get_workspace_global_memo_conn(&conn).expect("load empty");
+        assert_eq!(empty.body_markdown, "");
+        assert_eq!(empty.updated_at, 0);
+
+        let updated_at = 1_700_000_000_000i64;
+        conn.execute(
+            "INSERT INTO workspace_global_memo (id, body_markdown, updated_at) VALUES (?1, ?2, ?3)",
+            params![GLOBAL_MEMO_ID, "# hello\n\nworld", updated_at],
+        )
+        .expect("insert");
+        let loaded = get_workspace_global_memo_conn(&conn).expect("load");
+        assert_eq!(loaded.body_markdown, "# hello\n\nworld");
+        assert_eq!(loaded.updated_at, updated_at);
     }
 
     #[test]

@@ -70,3 +70,30 @@ export async function listGlobalWorkspaceTodosDb(): Promise<WorkspaceTodosPayloa
 export async function saveGlobalWorkspaceTodosDb(items: WorkspaceTodoItem[]): Promise<void> {
   await invoke("save_global_workspace_todos", { items });
 }
+
+export interface WorkspaceGlobalMemoV1 {
+  bodyMarkdown: string;
+  updatedAt: number;
+}
+
+function normalizeGlobalMemo(raw: WorkspaceGlobalMemoV1 | null | undefined): WorkspaceGlobalMemoV1 {
+  if (!raw || typeof raw !== "object") {
+    return { bodyMarkdown: "", updatedAt: 0 };
+  }
+  return {
+    bodyMarkdown: typeof raw.bodyMarkdown === "string" ? raw.bodyMarkdown : "",
+    updatedAt: typeof raw.updatedAt === "number" && Number.isFinite(raw.updatedAt) ? raw.updatedAt : 0,
+  };
+}
+
+export async function getWorkspaceGlobalMemoDb(): Promise<WorkspaceGlobalMemoV1> {
+  const payload = await invoke<WorkspaceGlobalMemoV1>("get_workspace_global_memo");
+  return normalizeGlobalMemo(payload);
+}
+
+export async function saveWorkspaceGlobalMemoDb(bodyMarkdown: string): Promise<WorkspaceGlobalMemoV1> {
+  const payload = await invoke<WorkspaceGlobalMemoV1>("save_workspace_global_memo", {
+    bodyMarkdown: typeof bodyMarkdown === "string" ? bodyMarkdown : "",
+  });
+  return normalizeGlobalMemo(payload);
+}

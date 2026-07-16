@@ -70,7 +70,9 @@ import {
 import { claudeSessionsShellPropsEqual } from "./ClaudeSessions/claudeSessionsPropsEqual";
 import { CenterViewControlContext, useCenterView } from "./ClaudeSessions/claudeChatHelpers";
 import { registerPaneCenterViewSetter } from "../stores/paneCenterViewControlStore";
+import { useWorkspaceMemoPanelOpen } from "../stores/workspaceMemoPanelStore";
 import type { CenterView } from "./ClaudeSessions/ClaudeChat";
+import { WORKSPACE_MEMO_PANEL_NODE } from "./WorkspaceMemoPanel";
 import { WorkspaceFileTreeRail } from "./WorkspaceFileTreeRail";
 import type { WorkspaceFileTreeRailContext } from "./WorkspaceFileTreeRail/types";
 import { WorkspaceViewportLoading } from "./WorkspaceViewportLoading";
@@ -508,6 +510,7 @@ const ConnectedClaudeSessions = memo(function ConnectedClaudeSessions({
   centerAuxPanelsNodeByPaneVersion,
   centerView,
 }: ConnectedClaudeSessionsProps) {
+  const memoOpen = useWorkspaceMemoPanelOpen();
   const resolvePaneAuxLayout = useCallback(
     (paneIndex: number): PaneAuxLayout => {
       // 多 pane 下各 pane 独立判断自己是否挂文件编辑器。
@@ -515,7 +518,11 @@ const ConnectedClaudeSessions = memo(function ConnectedClaudeSessions({
       // 「消息」与「文件」视图间互斥切换，当前视图占满整个主区，无需关文件即可查看消息。
       // 离屏 pane 的性能护栏由 deferHeavySubtree 在下游保留
       // （hidePaneMessages = hideMessages || deferHeavySubtree）。
-      const panel = centerAuxPanelsNodeByPane.get(paneIndex);
+      // 全局备忘录优先占 pane 0 的同一 slot（与打开文件一致）。
+      const panel =
+        paneIndex === 0 && memoOpen
+          ? WORKSPACE_MEMO_PANEL_NODE
+          : centerAuxPanelsNodeByPane.get(paneIndex);
       if (panel == null) {
         return { hideMessages: false, hideSessionTools: false };
       }
@@ -525,7 +532,7 @@ const ConnectedClaudeSessions = memo(function ConnectedClaudeSessions({
         hideSessionTools: false,
       };
     },
-    [centerAuxPanelsNodeByPane],
+    [centerAuxPanelsNodeByPane, memoOpen],
   );
 
   const primaryAux = resolvePaneAuxLayout(0);
@@ -1033,8 +1040,12 @@ export function AppWorkspaceLayout({
   // `<LazyTopbar>`）与 ClaudeSessions 内的 ClaudeChat 共享同一份 centerView。多屏（paneCount>1）
   // 不渲染全局 Topbar，各 pane 在 ClaudeMultiPaneGrid 内独立 useCenterView；此处 primary 的
   // panelBelowMessages 取自 `centerAuxPanelsNodeByPane.get(0)`，与 ConnectedClaudeSessions 的
-  // resolvePaneAuxLayout(0) 同源。放在 centerAuxPanelsNodeByPane 定义之后以避开 TDZ。
-  const primaryPanelBelowMessages = centerAuxPanelsNodeByPane.get(0);
+  // resolvePaneAuxLayout(0) 同源（备忘录打开时优先占同一 slot）。放在
+  // centerAuxPanelsNodeByPane 定义之后以避开 TDZ。
+  const memoOpen = useWorkspaceMemoPanelOpen();
+  const primaryPanelBelowMessages = memoOpen
+    ? WORKSPACE_MEMO_PANEL_NODE
+    : centerAuxPanelsNodeByPane.get(0);
   const { centerView, setCenterView, visible: centerSwitcherVisible } = useCenterView(
     primaryPanelBelowMessages,
     false, // 单屏 primary 的 hideMessages 恒为 false
@@ -1645,6 +1656,7 @@ export function AppWorkspaceLayout({
                           centerView={centerView}
                           onCenterViewChange={setCenterView}
                           centerSwitcherVisible={centerSwitcherVisible}
+                          centerSwitcherFilesLabel={memoOpen ? "备忘录" : "文件"}
                         />
                       </Suspense>
                     ) : null}
