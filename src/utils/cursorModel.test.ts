@@ -13,7 +13,10 @@ describe("isCursorSdkModelId", () => {
     expect(isCursorSdkModelId("default")).toBe(true);
     expect(isCursorSdkModelId("composer-2.5")).toBe(true);
     expect(isCursorSdkModelId("claude-opus-4-8")).toBe(true);
+    expect(isCursorSdkModelId("sonnet-4")).toBe(true);
+    expect(isCursorSdkModelId("sonnet-4-thinking")).toBe(true);
     expect(isCursorSdkModelId("gpt-5.1")).toBe(true);
+    expect(isCursorSdkModelId("gpt-5.5-medium")).toBe(true);
     expect(isCursorSdkModelId("kimi-k2.5")).toBe(true);
   });
 

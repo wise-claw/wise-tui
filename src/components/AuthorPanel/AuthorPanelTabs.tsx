@@ -63,7 +63,7 @@ export const AUTHOR_TAB_GROUPS: Array<{ title: string; items: AuthorTabDefinitio
   {
     title: "生态",
     items: [
-      { key: "engine-registry", label: "执行环境", description: "本机 CLI 与 Cursor SDK 可编程引擎", icon: <ThunderboltOutlined /> },
+      { key: "engine-registry", label: "执行环境", description: "本机 CLI（含 Cursor Agent）", icon: <ThunderboltOutlined /> },
     ],
   },
   {

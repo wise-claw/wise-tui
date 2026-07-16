@@ -15,9 +15,9 @@ export const SESSION_EXECUTION_ENGINE_LABELS: Record<
     description: "OpenAI Codex CLI（codex exec）",
   },
   cursor: {
-    title: "Cursor SDK",
+    title: "Cursor CLI",
     short: "Cursor",
-    description: "Cursor SDK Local Agent（可编程引擎）",
+    description: "Cursor Agent CLI（agent -p）",
   },
   gemini: {
     title: "Gemini CLI",

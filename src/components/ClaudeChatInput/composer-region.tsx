@@ -174,6 +174,7 @@ import { promptToLogicalPlainString } from "../../utils/serializeClaudePrompt";
 import { getWiseRepositoryFileDragPaths, isWiseRepositoryFileDrag } from "../../utils/repositoryFileDrag";
 import { formatClaudeModelLabel } from "../../utils/claudeModel";
 import { formatCursorModelLabel } from "../../utils/cursorModel";
+import { formatOpencodeModelLabel } from "../../utils/opencodeModel";
 import { inferPendingQueueTargetFromPrompt } from "../../utils/pendingQueueExecutor";
 import { SESSION_EXECUTION_ENGINE_LABELS } from "../../constants/sessionExecutionEngine";
 import { parseExecutionEnvironmentDispatch } from "../../utils/executionEnvironmentDispatch";
@@ -723,9 +724,11 @@ function ComposerInner({
   const [dragOverNativeFiles, setDragOverNativeFiles] = useState(false);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const isCursorEngine = sessionExecutionEngine === "cursor";
+  const isOpencodeEngine = sessionExecutionEngine === "opencode";
+  const isSelectOnlyEngine = isCursorEngine || isOpencodeEngine;
   const [model, setModel] = useState(() => session.model?.trim() || "sonnet");
   const [profileStoreRevision, setProfileStoreRevision] = useState(0);
-  const profileEngineForPicker: ModelProfileEngine | null = isCursorEngine
+  const profileEngineForPicker: ModelProfileEngine | null = isSelectOnlyEngine
     ? null
     : sessionExecutionEngine === "codex"
       ? "codex"
@@ -1125,8 +1128,10 @@ function ComposerInner({
       );
       if (fromActive) return fromActive;
     }
-    return isCursorEngine ? formatCursorModelLabel(model) : formatClaudeModelLabel(model);
-  }, [isCursorEngine, model, profileEngineForPicker, profileStoreRevision]);
+    if (isCursorEngine) return formatCursorModelLabel(model);
+    if (isOpencodeEngine) return formatOpencodeModelLabel(model);
+    return formatClaudeModelLabel(model);
+  }, [isCursorEngine, isOpencodeEngine, model, profileEngineForPicker, profileStoreRevision]);
 
   const handleComposerModelChange = useCallback(
     (nextModel: string) => {

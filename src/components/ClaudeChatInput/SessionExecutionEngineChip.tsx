@@ -108,7 +108,7 @@ export function buildSessionExecutionEngineMenuItems({
                 <span className="app-claude-connection-kind-menu-item__badge app-claude-connection-kind-menu-item__badge--codex">本地</span>
               ) : null}
               {key === "cursor" ? (
-                <span className="app-claude-connection-kind-menu-item__badge app-claude-connection-kind-menu-item__badge--cursor">SDK</span>
+                <span className="app-claude-connection-kind-menu-item__badge app-claude-connection-kind-menu-item__badge--cursor">CLI</span>
               ) : null}
               {(key === "gemini" || key === "opencode") ? (
                 <span className="app-claude-connection-kind-menu-item__badge app-claude-connection-kind-menu-item__badge--codex">本地</span>
@@ -206,7 +206,7 @@ export function SessionExecutionEngineChip({
 
   const chipTooltip = !engineReady
     ? engine === "cursor"
-      ? "Cursor SDK 未就绪；请在配置中心配置 API Key"
+      ? "Cursor CLI 未就绪；请安装 agent 并 login / 配置 API Key"
       : engine === "gemini"
         ? "未检测到 Gemini CLI；可在下拉菜单中点击「探测」"
         : engine === "opencode"

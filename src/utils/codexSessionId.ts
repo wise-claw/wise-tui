@@ -1,5 +1,5 @@
 import type { ClaudeSession } from "../types";
-import { isLikelyCursorAgentId } from "./cursorAgentId";
+import { isLikelyCursorSdkAgentId } from "./cursorAgentId";
 
 const CODEX_RESUME_UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
@@ -8,7 +8,8 @@ const CODEX_RESUME_UUID_RE =
 export function isLikelyCodexResumeId(id: string | null | undefined): boolean {
   const trimmed = id?.trim() ?? "";
   if (!trimmed) return false;
-  if (isLikelyCursorAgentId(trimmed)) return false;
+  // 仅排除旧 Cursor SDK / Cloud id；CLI UUID 与 Codex UUID 同形，由执行引擎上下文区分。
+  if (isLikelyCursorSdkAgentId(trimmed)) return false;
   if (CODEX_RESUME_UUID_RE.test(trimmed)) return true;
   return /^[a-zA-Z][a-zA-Z0-9._-]{2,127}$/.test(trimmed);
 }

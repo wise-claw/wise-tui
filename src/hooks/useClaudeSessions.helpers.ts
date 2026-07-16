@@ -256,7 +256,7 @@ export function sessionHasVisibleStreamProgress(session: ClaudeSession): boolean
       return m.content.trim().length > 0 || (m.parts?.length ?? 0) > 0;
     }
     if (m.role === "system" && m.content.trim().length > 0) {
-      if (m.content.trim() === "Cursor SDK 执行中…") return false;
+      if (m.content.trim() === "Cursor CLI 执行中…" || m.content.trim() === "Cursor SDK 执行中…") return false;
       return true;
     }
     return false;

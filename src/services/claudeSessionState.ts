@@ -634,7 +634,7 @@ export function resolveNoReplyFailureMessage(
 ): string {
   if (cancelled) return "消息已撤销";
   if (executionEngine === "cursor") {
-    return "Cursor SDK 本轮未产出可见回复。请检查 API Key、网络与模型（推荐 Auto 或 composer-2.5），或在工作台配置 → 执行环境中重新探测。";
+    return "Cursor CLI 本轮未产出可见回复。请检查 API Key / `agent login`、网络与模型，或在工作台配置 → 执行环境中重新探测。";
   }
   if (executionEngine === "codex") {
     return "Codex 本轮未产出可见回复。请检查 API Key 与 Codex CLI 配置。";

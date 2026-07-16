@@ -746,7 +746,7 @@ export interface ClaudeComposerExecuteBubbleOptions {
   userBubblePrompt?: string;
   /** 气泡旁展示：发送时自动前缀的默认斜杠指令。 */
   defaultInstructionApplied?: string;
-  /** Cursor SDK 附图（已落盘绝对路径）；仅 executionEngine=cursor 时使用。 */
+  /** Cursor CLI 附图（已落盘绝对路径）；仅 executionEngine=cursor 时使用。 */
   cursorAttachments?: Array<{ path: string; mimeType?: string }>;
 }
 

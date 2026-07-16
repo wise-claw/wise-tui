@@ -1,5 +1,18 @@
 import { invoke } from "@tauri-apps/api/core";
 
+export interface OpencodeModelListItem {
+  id: string;
+  displayName: string;
+}
+
+export async function listOpencodeModels(): Promise<OpencodeModelListItem[]> {
+  try {
+    return await invoke<OpencodeModelListItem[]>("opencode_list_models");
+  } catch {
+    return [];
+  }
+}
+
 export async function executeOpencodeCode(
   repositoryPath: string,
   prompt: string,

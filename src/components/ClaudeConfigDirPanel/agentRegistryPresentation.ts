@@ -99,7 +99,7 @@ export function getAgentKindLabel(kind: DetectedAgent["kind"]): string {
     case "opencode":
       return "OpenCode";
     case "cursor":
-      return "Cursor SDK";
+      return "Cursor CLI";
     case "custom":
       return "自定义";
   }
@@ -121,7 +121,7 @@ export function describeAgentRuntime(agent: DetectedAgent): string {
     agent.kind === "claude"
       ? "当前主运行时"
       : agent.kind === "cursor"
-        ? "Cursor SDK 可编程引擎"
+        ? "Cursor Agent CLI"
         : "未来运行入口预留";
   return `自动探测 · ${agent.command} · ${runtimeScope} · ${agent.available ? "本机命令就绪" : "等待本机命令就绪"}`;
 }

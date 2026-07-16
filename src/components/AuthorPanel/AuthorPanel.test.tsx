@@ -308,7 +308,6 @@ describe("AuthorPanel", () => {
       "Hooks",
       "插件市场",
       "执行环境",
-      "Cursor SDK 诊断",
       "默认配置",
       "数据清理",
       "自动批准",

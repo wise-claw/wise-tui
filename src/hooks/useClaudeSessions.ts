@@ -528,7 +528,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         }
         const stallMessage =
           engine === "cursor"
-            ? "Cursor SDK 长时间无可见输出。请点「结束」后重试，或检查 API Key 与网络连接。"
+            ? "Cursor CLI 长时间无可见输出。请点「结束」后重试，或检查 API Key / agent login 与网络连接。"
             : engine === "codex"
               ? "Codex 子进程长时间无可见输出。请点「结束」后重试。"
               : "Claude 子进程长时间无可见输出。请点「结束」后重试；若反复出现，可暂时关闭 Cockpit 助手 MCP 或在终端用 stream-json 自检。";
@@ -996,10 +996,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         repositoryPath,
         prompt,
         modelArg,
-        contextExecutionEngine,
         opencodeResumeSessionId,
         forceNewClaudeConversation,
       } = params;
+      // Composer 选择的模型优先；上下文引擎在 invoke 入口已固定为 opencode。
+      void params.contextExecutionEngine;
       if (!streamRuntimeRef.current) {
         const deadline = Date.now() + CLAUDE_STREAM_RUNTIME_READY_WAIT_MS;
         while (!streamRuntimeRef.current && Date.now() < deadline) {
@@ -1037,7 +1038,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       const invocationKey = detach ? inv : undefined;
       const opencodeModel = resolveOpencodeExecModelId({
         sessionModel: modelArg,
-        contextExecutionEngine,
+        contextExecutionEngine: "opencode",
         store: getCachedModelProfileStore(),
       });
       const opencodeModelLabel = opencodeModel?.trim() || "默认";
@@ -1103,7 +1104,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       streamingTargetIdRef.current = tabSessionId;
       scheduleStreamStallTimer(tabSessionId);
       commitSessions((prev) =>
-        appendSystemMessageBySessionId(prev, tabSessionId, "Cursor SDK 执行中…"),
+        appendSystemMessageBySessionId(prev, tabSessionId, "Cursor CLI 执行中…"),
       );
       const rt = streamRuntimeRef.current;
       let detach: (() => void) | null = null;
@@ -1370,20 +1371,18 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         return;
       }
       if (engine === "opencode") {
-        const contextExecutionEngine =
-          params.codexContextExecutionEngine ??
-          (session && resolver ? resolver(session) : "claude");
         const opencodeResumeSessionId =
           params.forceNewClaudeConversation || !session
             ? null
             : resolveOpencodeResumeSessionId(session, params.tabSessionId, sessionIdMapRef.current);
+        // OpenCode 路径：上下文引擎固定为 opencode，避免误用 Claude 档案模型。
         await runOpencodeOneshotWithInvocation({
           tabSessionId: params.tabSessionId,
           turnNonce: params.turnNonce,
           repositoryPath: params.repositoryPath,
           prompt: params.prompt,
           modelArg: params.modelArg,
-          contextExecutionEngine,
+          contextExecutionEngine: "opencode",
           opencodeResumeSessionId,
           forceNewClaudeConversation: params.forceNewClaudeConversation,
         });
@@ -3531,7 +3530,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       }
       if (executionEngine === "gemini") {
         const engineTitle = SESSION_EXECUTION_ENGINE_LABELS[executionEngine].title;
-        const geminiNotice = `[系统] ${engineTitle} 主会话派发即将支持，请暂时切换 Claude Code、Codex CLI、OpenCode 或 Cursor SDK。`;
+        const geminiNotice = `[系统] ${engineTitle} 主会话派发即将支持，请暂时切换 Claude Code、Codex CLI、OpenCode 或 Cursor CLI。`;
         commitSessions((prev) => {
           // task 留队列后，外部 flush 可能重派命中同一 gemini 终态分支：去重避免重复追加系统提示。
           const target = prev.find((s) => s.id === tabSessionId);
@@ -3634,10 +3633,17 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       lastUserSendNonceRef.current = streamTurnSeqRef.current;
       assistantStreamTextByTabRef.current.set(tabSessionId, "");
 
-      const modelArg = resolveClaudeExecModelId({
-        sessionModel: spawnSession.model,
-        store: getCachedModelProfileStore(),
-      });
+      const spawnEngine = resolveSessionExecutionEngine(spawnSession);
+      // OpenCode / Cursor：Composer 只选模型，必须以 session.model 为准。
+      // 不可走 resolveClaudeExecModelId（会优先 Claude 档案，覆盖会话选择）。
+      const sessionModelTrimmed = spawnSession.model?.trim() || undefined;
+      const modelArg =
+        spawnEngine === "opencode" || spawnEngine === "cursor" || spawnEngine === "codex"
+          ? sessionModelTrimmed
+          : resolveClaudeExecModelId({
+              sessionModel: spawnSession.model,
+              store: getCachedModelProfileStore(),
+            });
 
       if (terminalFreshTeardown) {
         expectedTurnNonceByTabIdRef.current.delete(tabSessionId);
@@ -3674,7 +3680,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         forceNewClaudeConversation: forceFreshClaudeSession,
         cursorAttachments: opts?.cursorAttachments,
         codexContextExecutionEngine,
-        engine: resolveSessionExecutionEngine(spawnSession),
+        engine: spawnEngine,
         autoFailoverEnabled: isCachedModelProfileAutoFailoverEnabled(),
         triedProfileIds: [],
       };

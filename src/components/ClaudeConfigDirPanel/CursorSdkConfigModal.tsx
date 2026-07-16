@@ -50,8 +50,11 @@ export function CursorSdkConfigModal({ open, onClose, onSaved }: CursorSdkConfig
   const handleSave = useCallback(async () => {
     try {
       const values = await form.validateFields();
+      const key = values.apiKey?.trim() ?? "";
       setSaving(true);
-      await setCursorApiKey(values.apiKey);
+      if (key) {
+        await setCursorApiKey(key);
+      }
       await probeCursorAgent();
       if (!aliveRef.current) return;
       await loadStatus();
@@ -69,8 +72,7 @@ export function CursorSdkConfigModal({ open, onClose, onSaved }: CursorSdkConfig
       const next = await probeCursorAgent();
       if (!aliveRef.current) return;
       setStatus(next);
-      if (next.available) {
-      } else {
+      if (!next.available) {
         message.warning(describeCursorAgentStatus(next));
       }
       await onSaved?.();
@@ -98,32 +100,15 @@ export function CursorSdkConfigModal({ open, onClose, onSaved }: CursorSdkConfig
 
   const statusLines: Array<{ label: string; ok: boolean }> = status
     ? [
-        { label: "Bun", ok: status.bunAvailable },
-        { label: "Bridge 脚本", ok: status.bridgeAvailable },
-        { label: "@cursor/sdk", ok: status.sdkAvailable },
-        ...(status.sdkPackageInstalled != null
-          ? [{ label: "SDK 依赖目录", ok: status.sdkPackageInstalled }]
-          : []),
+        { label: "agent CLI", ok: status.cliAvailable },
+        { label: "已认证", ok: status.authenticated === true || status.available },
         { label: "API Key", ok: status.apiKeyConfigured },
-        ...(status.apiKeyValid != null ? [{ label: "Key 校验", ok: status.apiKeyValid }] : []),
-        ...(status.filesystemAccessOk != null
-          ? [{ label: "子进程文件读写", ok: status.filesystemAccessOk }]
-          : []),
-        ...(status.repositoryReadOk != null
-          ? [{ label: "目标仓库可读", ok: status.repositoryReadOk }]
-          : []),
-        ...(status.repositoryWriteOk != null
-          ? [{ label: "目标仓库可写", ok: status.repositoryWriteOk }]
-          : []),
-        ...(status.toolsAvailable != null
-          ? [{ label: "本地读盘/搜索工具", ok: status.toolsAvailable }]
-          : []),
       ]
     : [];
 
   return (
     <Modal
-      title="配置 Cursor SDK"
+      title="配置 Cursor CLI"
       open={open}
       onCancel={onClose}
       destroyOnHidden
@@ -147,7 +132,19 @@ export function CursorSdkConfigModal({ open, onClose, onSaved }: CursorSdkConfig
       ]}
     >
       <Typography.Text type="secondary" style={{ display: "block", marginBottom: 8, fontSize: 12, lineHeight: 1.45 }}>
-        通过 Bun sidecar 运行 Local Agent。请在{" "}
+        通过本机{" "}
+        <Typography.Text code style={{ fontSize: 12 }}>
+          agent
+        </Typography.Text>{" "}
+        CLI（非交互{" "}
+        <Typography.Text code style={{ fontSize: 12 }}>
+          -p
+        </Typography.Text>
+        ）执行。可先运行{" "}
+        <Typography.Text code style={{ fontSize: 12 }}>
+          agent login
+        </Typography.Text>
+        ，或在{" "}
         <Typography.Link
           href="https://cursor.com/cn/dashboard/api?section=user-keys#user-api-keys"
           target="_blank"
@@ -158,7 +155,11 @@ export function CursorSdkConfigModal({ open, onClose, onSaved }: CursorSdkConfig
           <LinkOutlined style={{ marginInlineStart: 2, fontSize: 11 }} />
         </Typography.Link>
         {" "}
-        创建 User API Key，保存在 Wise 数据库（非 localStorage）。
+        创建 Key 保存在 Wise 数据库。安装：{" "}
+        <Typography.Link href="https://cursor.com/cn/docs/cli/overview" target="_blank" rel="noreferrer" style={{ fontSize: 12 }}>
+          Cursor CLI 文档
+        </Typography.Link>
+        。
       </Typography.Text>
 
       <Collapse
@@ -174,10 +175,21 @@ export function CursorSdkConfigModal({ open, onClose, onSaved }: CursorSdkConfig
                 type="secondary"
                 style={{ marginBottom: 0, fontSize: 12, lineHeight: 1.45 }}
               >
-                默认<strong>不</strong>加载目标仓库 project 设置层，以免沙箱/钩子禁用写盘。需本机已执行{" "}
-                <Typography.Text code>bun install</Typography.Text> 的 Wise 目录（或{" "}
-                <Typography.Text code>WISE_CURSOR_SDK_ROOT</Typography.Text>
-                ）。macOS 请为 Wise 开启「完全磁盘访问权限」。写盘或 SDK 异常时，可在「执行环境」中重新探测 Status。
+                需已安装 Cursor Agent CLI（
+                <Typography.Text code>curl https://cursor.com/install -fsS | bash</Typography.Text>
+                ）。可用{" "}
+                <Typography.Text code>WISE_CURSOR_AGENT_BIN</Typography.Text>{" "}
+                指定二进制路径。无头执行使用{" "}
+                <Typography.Text code>--force --sandbox disabled --approve-mcps</Typography.Text>
+                。macOS 请为 Wise 开启「完全磁盘访问权限」。
+                {status?.cliPath ? (
+                  <>
+                    {" "}
+                    当前路径：
+                    <Typography.Text code>{status.cliPath}</Typography.Text>
+                    {status.cliVersion ? `（${status.cliVersion}）` : null}
+                  </>
+                ) : null}
               </Typography.Paragraph>
             ),
           },
@@ -187,13 +199,13 @@ export function CursorSdkConfigModal({ open, onClose, onSaved }: CursorSdkConfig
       <Form form={form} layout="vertical" size="small" style={{ marginBottom: 8 }}>
         <Form.Item
           name="apiKey"
-          label="Cursor API Key"
+          label="Cursor API Key（可选，也可用 agent login）"
           style={{ marginBottom: 0 }}
-          rules={[{ required: true, message: "请输入 Cursor API Key" }]}
+          rules={[]}
         >
           <Input.Password
             prefix={<KeyOutlined />}
-            placeholder="cursor_..."
+            placeholder="cursor_...（可留空）"
             autoComplete="off"
           />
         </Form.Item>
@@ -201,12 +213,12 @@ export function CursorSdkConfigModal({ open, onClose, onSaved }: CursorSdkConfig
 
       {status ? (
         <Alert
-          type={status.available ? "success" : status.apiKeyConfigured ? "warning" : "info"}
+          type={status.available ? "success" : status.cliAvailable ? "warning" : "info"}
           showIcon
           style={{ marginTop: 8, padding: "6px 10px" }}
           title={
             <span style={{ fontSize: 13 }}>
-              {status.available ? "Cursor SDK 已就绪" : "Cursor SDK 待配置"}
+              {status.available ? "Cursor CLI 已就绪" : "Cursor CLI 待配置"}
             </span>
           }
           description={
@@ -238,7 +250,7 @@ export function CursorSdkConfigModal({ open, onClose, onSaved }: CursorSdkConfig
       {loadingStatus ? (
         <Typography.Text type="secondary" style={{ display: "block", marginTop: 8, fontSize: 12 }}>
           <ReloadOutlined spin style={{ marginInlineEnd: 4 }} />
-          正在读取 Cursor SDK 状态…
+          正在读取 Cursor CLI 状态…
         </Typography.Text>
       ) : null}
     </Modal>

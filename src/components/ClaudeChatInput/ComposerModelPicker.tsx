@@ -1,8 +1,9 @@
-import { Dropdown, Spin, type MenuProps } from "antd";
+import { Dropdown, Input, Spin, type MenuProps } from "antd";
 import { HoverHint } from "../shared/HoverHint";
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { getClaudeModelPickerOptions } from "../../services/claude";
 import { listCursorModels, type CursorModelListItem } from "../../services/cursorAgent";
+import { listOpencodeModels, type OpencodeModelListItem } from "../../services/opencode";
 import {
   getClaudeModelProfileStore,
   WISE_CLAUDE_USER_SETTINGS_CHANGED,
@@ -35,6 +36,13 @@ import {
   formatCursorModelLabel,
   isCursorSdkModelId,
 } from "../../utils/cursorModel";
+import {
+  OPENCODE_DEFAULT_MODEL,
+  buildOpencodeModelPickerOptions,
+  formatOpencodeModelLabel,
+  isOpencodeModelId,
+  matchesOpencodeModelPickerFilter,
+} from "../../utils/opencodeModel";
 import {
   normalizeSessionExecutionEngine,
   type SessionExecutionEngine,
@@ -164,22 +172,26 @@ export function ComposerModelPicker({
     sessionExecutionEngineProp ?? "claude",
   );
   const isCursorEngine = sessionExecutionEngine === "cursor";
-  const profileEngine: ModelProfileEngine | null = isCursorEngine
+  const isOpencodeEngine = sessionExecutionEngine === "opencode";
+  /** Cursor / OpenCode：Composer 只选模型，不打开档案配置面板。 */
+  const isSelectOnlyEngine = isCursorEngine || isOpencodeEngine;
+  const profileEngine: ModelProfileEngine | null = isSelectOnlyEngine
     ? null
     : sessionExecutionEngine === "codex"
       ? "codex"
-      : sessionExecutionEngine === "opencode"
-        ? "opencode"
-        : "claude";
+      : "claude";
 
   const [claudePicker, setClaudePicker] = useState<
     Awaited<ReturnType<typeof getClaudeModelPickerOptions>> | null
   >(null);
   const [cursorModels, setCursorModels] = useState<CursorModelListItem[] | null>(null);
+  const [opencodeModels, setOpencodeModels] = useState<OpencodeModelListItem[] | null>(null);
   const [profileStoreRevision, setProfileStoreRevision] = useState(0);
   const [panelOpen, setPanelOpen] = useState(false);
   const [panelMounted, setPanelMounted] = useState(false);
-  const [cursorMenuOpen, setCursorMenuOpen] = useState(false);
+  const [selectOnlyMenuOpen, setSelectOnlyMenuOpen] = useState(false);
+  const [selectOnlyFilter, setSelectOnlyFilter] = useState("");
+  const selectOnlyFilterInputRef = useRef<HTMLInputElement | null>(null);
   const modelRef = useRef(model);
   modelRef.current = model;
 
@@ -199,8 +211,12 @@ export function ComposerModelPicker({
       void listCursorModels().then(setCursorModels);
       return;
     }
+    if (isOpencodeEngine) {
+      void listOpencodeModels().then(setOpencodeModels);
+      return;
+    }
     void getClaudeModelPickerOptions(session.repositoryPath).then(setClaudePicker);
-  }, [isCursorEngine, session.repositoryPath]);
+  }, [isCursorEngine, isOpencodeEngine, session.repositoryPath]);
 
   useEffect(() => {
     refreshClaudeModelPicker();
@@ -215,6 +231,16 @@ export function ComposerModelPicker({
         : CURSOR_SDK_DEFAULT_MODEL;
     syncModelIfNeeded(nextModel);
   }, [isCursorEngine, session.id, session.model, cursorModels, syncModelIfNeeded]);
+
+  useEffect(() => {
+    if (!isOpencodeEngine) return;
+    const fromSession = session.model?.trim();
+    const nextModel =
+      fromSession && isOpencodeModelId(fromSession, opencodeModels ?? undefined)
+        ? fromSession
+        : OPENCODE_DEFAULT_MODEL;
+    syncModelIfNeeded(nextModel);
+  }, [isOpencodeEngine, session.id, session.model, opencodeModels, syncModelIfNeeded]);
 
   useEffect(() => {
     void getClaudeModelProfileStore()
@@ -232,7 +258,7 @@ export function ComposerModelPicker({
         seedModelProfileStoreCache(detail.storeSnapshot);
         setProfileStoreRevision((n) => n + 1);
       }
-      if (!isCursorEngine) {
+      if (!isSelectOnlyEngine) {
         const fromProfile = detail?.effectiveModel?.trim();
         if (fromProfile) {
           syncModelIfNeeded(fromProfile);
@@ -244,22 +270,26 @@ export function ComposerModelPicker({
     };
     window.addEventListener(WISE_CLAUDE_USER_SETTINGS_CHANGED, onSettingsChanged);
     return () => window.removeEventListener(WISE_CLAUDE_USER_SETTINGS_CHANGED, onSettingsChanged);
-  }, [isCursorEngine, syncModelIfNeeded, refreshClaudeModelPicker]);
+  }, [isSelectOnlyEngine, syncModelIfNeeded, refreshClaudeModelPicker]);
 
   useEffect(() => {
     const onOpenModelPicker = () => {
+      if (isSelectOnlyEngine) {
+        setSelectOnlyMenuOpen(true);
+        return;
+      }
       setPanelOpen(true);
       setPanelMounted(true);
       void claudeModelTopbarPanelChunk;
     };
     window.addEventListener(WISE_OPEN_MODEL_PICKER, onOpenModelPicker);
     return () => window.removeEventListener(WISE_OPEN_MODEL_PICKER, onOpenModelPicker);
-  }, []);
+  }, [isSelectOnlyEngine]);
 
   const claudeSettingsModel = claudePicker?.defaultModel?.trim() || null;
 
   useEffect(() => {
-    if (isCursorEngine) return;
+    if (isSelectOnlyEngine) return;
     const fromProfile = profileEngine
       ? resolveEffectiveModelForProfileEngine(
           profileEngine,
@@ -274,56 +304,114 @@ export function ComposerModelPicker({
     session.id,
     session.model,
     claudeSettingsModel,
-    isCursorEngine,
+    isSelectOnlyEngine,
     profileEngine,
     profileStoreRevision,
     syncModelIfNeeded,
   ]);
 
-  const cursorModelOptions = useMemo(() => {
-    if (!isCursorEngine) return [];
-    const opts: { value: string; label: string }[] = [];
-    const seen = new Set<string>();
-    const push = (value: string, label?: string) => {
-      const v = value.trim();
-      if (!v || seen.has(v)) return;
-      seen.add(v);
-      opts.push({ value: v, label: label ?? formatCursorModelLabel(v) });
-    };
-    if (cursorModels && cursorModels.length > 0) {
-      for (const item of buildCursorModelPickerOptions(cursorModels)) {
-        push(item.value, item.label);
+  const selectOnlyModelOptions = useMemo(() => {
+    if (isCursorEngine) {
+      const opts: { value: string; label: string }[] = [];
+      const seen = new Set<string>();
+      const push = (value: string, label?: string) => {
+        const v = value.trim();
+        if (!v || seen.has(v)) return;
+        seen.add(v);
+        opts.push({ value: v, label: label ?? formatCursorModelLabel(v) });
+      };
+      if (cursorModels && cursorModels.length > 0) {
+        for (const item of buildCursorModelPickerOptions(cursorModels)) {
+          push(item.value, item.label);
+        }
+      } else {
+        push(CURSOR_SDK_DEFAULT_MODEL);
+        push("composer-2.5");
       }
-    } else {
-      push(CURSOR_SDK_DEFAULT_MODEL);
-      push("composer-2.5");
+      const sessionModel = session.model?.trim();
+      if (sessionModel && isCursorSdkModelId(sessionModel, cursorModels ?? undefined)) {
+        push(sessionModel);
+      }
+      const currentModel = model.trim();
+      if (currentModel && isCursorSdkModelId(currentModel, cursorModels ?? undefined)) {
+        push(currentModel);
+      }
+      if (opts.length === 0) push(CURSOR_SDK_DEFAULT_MODEL);
+      return opts;
     }
-    const sessionModel = session.model?.trim();
-    if (sessionModel && isCursorSdkModelId(sessionModel, cursorModels ?? undefined)) {
-      push(sessionModel);
+    if (isOpencodeEngine) {
+      const opts = buildOpencodeModelPickerOptions(opencodeModels ?? []);
+      const seen = new Set(opts.map((o) => o.value));
+      const push = (value: string, displayName?: string | null) => {
+        const v = value.trim();
+        if (!v || seen.has(v)) return;
+        seen.add(v);
+        opts.push({ value: v, label: formatOpencodeModelLabel(v, displayName) });
+      };
+      const sessionModel = session.model?.trim();
+      if (sessionModel && isOpencodeModelId(sessionModel, opencodeModels ?? undefined)) {
+        const known = opencodeModels?.find((item) => item.id === sessionModel);
+        push(sessionModel, known?.displayName);
+      }
+      const currentModel = model.trim();
+      if (currentModel && isOpencodeModelId(currentModel, opencodeModels ?? undefined)) {
+        const known = opencodeModels?.find((item) => item.id === currentModel);
+        push(currentModel, known?.displayName);
+      }
+      return opts;
     }
-    const currentModel = model.trim();
-    if (currentModel && isCursorSdkModelId(currentModel, cursorModels ?? undefined)) {
-      push(currentModel);
-    }
-    if (opts.length === 0) push(CURSOR_SDK_DEFAULT_MODEL);
-    return opts;
-  }, [isCursorEngine, cursorModels, session.model, model]);
+    return [];
+  }, [
+    isCursorEngine,
+    isOpencodeEngine,
+    cursorModels,
+    opencodeModels,
+    session.model,
+    model,
+  ]);
 
-  const cursorMenuItems: MenuProps["items"] = useMemo(
-    () =>
-      cursorModelOptions.map((option) => ({
-        key: option.value,
-        label: (
-          <ComposerModelPickerMenuLabel
-            company=""
-            modelName={option.label}
-            title={option.label}
-          />
-        ),
-      })),
-    [cursorModelOptions],
-  );
+  const selectOnlyMenuItems: MenuProps["items"] = useMemo(() => {
+    const filtered = selectOnlyModelOptions.filter((option) =>
+      matchesOpencodeModelPickerFilter(selectOnlyFilter, option),
+    );
+    if (filtered.length === 0) {
+      return [
+        {
+          key: "__no_match__",
+          disabled: true,
+          label: (
+            <ComposerModelPickerMenuLabel
+              company=""
+              modelName="无匹配模型"
+              title="无匹配模型"
+            />
+          ),
+        },
+      ];
+    }
+    return filtered.map((option) => ({
+      key: option.value,
+      label: (
+        <ComposerModelPickerMenuLabel
+          company=""
+          modelName={option.label}
+          title={option.value === option.label ? option.label : `${option.label}（${option.value}）`}
+        />
+      ),
+    }));
+  }, [selectOnlyModelOptions, selectOnlyFilter]);
+
+  const handleSelectOnlyMenuOpenChange = useCallback((open: boolean) => {
+    setSelectOnlyMenuOpen(open);
+    if (!open) {
+      setSelectOnlyFilter("");
+      return;
+    }
+    // 打开后聚焦搜索框，便于立刻过滤长列表。
+    window.requestAnimationFrame(() => {
+      selectOnlyFilterInputRef.current?.focus({ preventScroll: true });
+    });
+  }, []);
 
   const modelDisplayLabel = useMemo(() => {
     if (profileEngine) {
@@ -333,11 +421,11 @@ export function ComposerModelPicker({
       );
       if (fromActive) return fromActive;
     }
-    if (isCursorEngine) {
-      return cursorModelOptions.find((o) => o.value === model)?.label ?? model;
+    if (isSelectOnlyEngine) {
+      return selectOnlyModelOptions.find((o) => o.value === model)?.label ?? model;
     }
     return model;
-  }, [cursorModelOptions, model, profileEngine, profileStoreRevision, isCursorEngine]);
+  }, [selectOnlyModelOptions, model, profileEngine, profileStoreRevision, isSelectOnlyEngine]);
 
   const modelDisplayTitle = formatModelProfileDropdownPartsTitle(
     splitFlatModelDropdownLabel(modelDisplayLabel),
@@ -389,13 +477,14 @@ export function ComposerModelPicker({
     }
   }, []);
 
-  const handleCursorMenuClick = useCallback(
+  const handleSelectOnlyMenuClick = useCallback(
     ({ key }: { key: string }) => {
-      if (typeof key !== "string") return;
+      if (typeof key !== "string" || key === "__no_match__") return;
       if (key !== model) {
         onModelChange(key);
       }
-      setCursorMenuOpen(false);
+      setSelectOnlyMenuOpen(false);
+      setSelectOnlyFilter("");
     },
     [model, onModelChange],
   );
@@ -404,34 +493,66 @@ export function ComposerModelPicker({
     <ModelPickerTriggerButton
       modelBarParts={modelBarParts}
       modelBarTitle={modelBarTitle}
-      expanded={isCursorEngine ? cursorMenuOpen : panelOpen}
+      expanded={isSelectOnlyEngine ? selectOnlyMenuOpen : panelOpen}
       disabled={disabled}
       iconOnly={iconOnly}
     />
   );
 
-  if (isCursorEngine) {
+  if (isSelectOnlyEngine) {
+    const hintTitle = isCursorEngine ? "切换 Cursor 模型" : "切换 OpenCode 模型";
+    const filterPlaceholder = isCursorEngine ? "过滤 Cursor 模型…" : "过滤 OpenCode 模型…";
     return (
       <div className="app-composer-model-picker">
         <div className="app-composer-model-picker__row">
           <Dropdown
             classNames={{ root: "app-composer-model-picker-dropdown-overlay" }}
             popupRender={(menu) => (
-              <div className="app-composer-model-picker-dropdown-container">{menu}</div>
+              <div
+                className="app-composer-model-picker-dropdown-container app-composer-model-picker-dropdown-container--filterable"
+                onMouseDown={stopSemiComposerPointerBubble}
+              >
+                <div
+                  className="app-composer-model-picker-dropdown-filter"
+                  onMouseDown={stopSemiComposerPointerBubble}
+                  onClick={stopSemiComposerPointerBubble}
+                >
+                  <Input
+                    ref={(node) => {
+                      selectOnlyFilterInputRef.current = node?.input ?? null;
+                    }}
+                    size="small"
+                    allowClear
+                    value={selectOnlyFilter}
+                    placeholder={filterPlaceholder}
+                    aria-label={filterPlaceholder}
+                    onChange={(event) => setSelectOnlyFilter(event.target.value)}
+                    onKeyDown={(event) => {
+                      // 阻止上下键被外层 Semi 编辑器抢走；Enter 选中当前高亮项由菜单自身处理。
+                      event.stopPropagation();
+                      if (event.key === "Escape") {
+                        event.preventDefault();
+                        handleSelectOnlyMenuOpenChange(false);
+                      }
+                    }}
+                  />
+                </div>
+                <div className="app-composer-model-picker-dropdown-menu-scroll">{menu}</div>
+              </div>
             )}
             menu={{
-              items: cursorMenuItems,
+              items: selectOnlyMenuItems,
               selectable: true,
               selectedKeys: [model],
-              onClick: handleCursorMenuClick,
+              onClick: handleSelectOnlyMenuClick,
             }}
             trigger={["click"]}
             placement="topRight"
             disabled={disabled}
-            open={cursorMenuOpen}
-            onOpenChange={setCursorMenuOpen}
+            open={selectOnlyMenuOpen}
+            onOpenChange={handleSelectOnlyMenuOpenChange}
           >
-            <HoverHint title="切换 Cursor 模型" placement="top" open={cursorMenuOpen ? false : undefined}>
+            <HoverHint title={hintTitle} placement="top" open={selectOnlyMenuOpen ? false : undefined}>
               <span
                 className="app-composer-model-picker__trigger-wrap"
                 onMouseDown={stopSemiComposerPointerBubble}

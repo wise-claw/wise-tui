@@ -423,6 +423,7 @@ pub fn run() {
             claude_commands::execute_claude_code,
             codex_commands::execute_codex_code,
             opencode_commands::execute_opencode_code,
+            opencode_commands::opencode_list_models,
             claude_commands::resume_claude_code,
             claude_commands::spawn_streaming_session,
             claude_commands::send_user_message_to_session,

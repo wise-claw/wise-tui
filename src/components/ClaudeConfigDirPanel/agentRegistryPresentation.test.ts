@@ -86,11 +86,11 @@ describe("agent registry presentation helpers", () => {
     expect(
       canInstallBuiltinAgent({
         id: "cursor",
-        name: "Cursor SDK",
+        name: "Cursor CLI",
         kind: "cursor",
         available: false,
         backend: "cursor",
-        command: "cursor-sdk",
+        command: "agent",
         detectedAt: "2026-05-17T00:00:00.000Z",
         failureReason: "未配置 Cursor API Key",
       }),
@@ -103,7 +103,7 @@ describe("agent registry presentation helpers", () => {
     expect(getAgentKindLabel("codex")).toBe("Codex");
     expect(getAgentKindLabel("gemini")).toBe("Gemini");
     expect(getAgentKindLabel("opencode")).toBe("OpenCode");
-    expect(getAgentKindLabel("cursor")).toBe("Cursor SDK");
+    expect(getAgentKindLabel("cursor")).toBe("Cursor CLI");
     expect(getAgentKindLabel("custom")).toBe("自定义");
     expect(getBuiltinInstallCommand("opencode")).toBe("npm install -g opencode-ai@latest");
     expect(getAgentPathLabel(agents[0])).toBe("/usr/local/bin/claude");
@@ -117,11 +117,11 @@ describe("agent registry presentation helpers", () => {
     expect(
       canUninstallBuiltinAgent({
         id: "cursor",
-        name: "Cursor SDK",
+        name: "Cursor CLI",
         kind: "cursor",
         available: true,
         backend: "cursor",
-        command: "cursor-sdk",
+        command: "agent",
         detectedAt: "2026-05-17T00:00:00.000Z",
       }),
     ).toBe(true);

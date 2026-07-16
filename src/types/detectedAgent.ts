@@ -22,7 +22,7 @@ type KindFields = {
   codex: { command: "codex" };
   gemini: { command: "gemini" };
   opencode: { command: "opencode" };
-  cursor: { command: "cursor-sdk" };
+  cursor: { command: "agent" };
   custom: {
     command: string;
     args: string[];

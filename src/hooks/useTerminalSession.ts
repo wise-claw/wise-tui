@@ -68,7 +68,7 @@ const TERMINAL_RESIZE_DEBOUNCE_MS = 100;
 const TERMINAL_SCROLLBACK = 10_000;
 
 /** 嵌入式终端字号（略大于编辑器侧栏，提升浅色主题可读性）。 */
-const TERMINAL_FONT_SIZE = 14;
+const TERMINAL_FONT_SIZE = 12;
 
 /** 等待 container ref 挂载的最大帧数（约 2s @60Hz）。 */
 const MAX_CONTAINER_WAIT_FRAMES = 120;

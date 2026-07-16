@@ -282,7 +282,7 @@ describe("activateAssistantTemplate", () => {
     await activateAssistantTemplate({
       assistant: customAssistant({
         entryKind: "run_script",
-        entryScript: "bun test scripts/cursor-sdk-bridge.stderr.test.ts",
+        entryScript: "bun test src/utils/cursorAgentId.test.ts",
       }),
       repositoryPath: "/repo/missing",
       workflowTemplates: [],

@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1781789853336,
+  "lastScanned": 1784179210869,
   "projectRoot": "/Users/sjl/Documents/github/wise-tui",
   "techStack": {
     "languages": [
@@ -49,7 +49,7 @@
     "scripts": {
       "postinstall": "bun run scripts/patch-crepe-slash-menu.mjs && bun run scripts/patch-antd-modal-confirm-mask-closable.mjs && bun run scripts/patch-antd-scroll-into-view-if-needed.mjs && bun run scripts/patch-ghostty-ghost-cursor.mjs && bun run scripts/patch-ghostty-selection-scale.mjs && bun run scripts/patch-ghostty-keyboard-protocol.mjs",
       "dev": "vite",
-      "build": "tsc && vite build",
+      "build": "tsc -p tsconfig.app.json && vite build",
       "test": "bun test",
       "preview": "vite preview",
       "tauri:dev": "tauri dev",
@@ -60,8 +60,8 @@
     }
   },
   "conventions": {
-    "namingStyle": "camelCase",
-    "importStyle": "ES modules",
+    "namingStyle": null,
+    "importStyle": null,
     "testPattern": null,
     "fileOrganization": "type-based"
   },
@@ -69,6 +69,7 @@
     "isMonorepo": false,
     "workspaces": [],
     "mainDirectories": [
+      "docs",
       "examples",
       "public",
       "scripts",
@@ -85,23 +86,42 @@
       "path": "design",
       "purpose": null,
       "fileCount": 1,
-      "lastAccessed": 1781789853329,
+      "lastAccessed": 1784179210863,
       "keyFiles": [
         "product-ux-engineering-audit-2026-05-14.md"
       ]
+    },
+    "dist": {
+      "path": "dist",
+      "purpose": "Distribution/build output",
+      "fileCount": 4,
+      "lastAccessed": 1784179210863,
+      "keyFiles": [
+        "index.html",
+        "mascot.html",
+        "tauri.svg",
+        "vite.svg"
+      ]
+    },
+    "docs": {
+      "path": "docs",
+      "purpose": "Documentation",
+      "fileCount": 0,
+      "lastAccessed": 1784179210865,
+      "keyFiles": []
     },
     "examples": {
       "path": "examples",
       "purpose": "Example code",
       "fileCount": 0,
-      "lastAccessed": 1781789853330,
+      "lastAccessed": 1784179210865,
       "keyFiles": []
     },
     "extras": {
       "path": "extras",
       "purpose": null,
       "fileCount": 1,
-      "lastAccessed": 1781789853332,
+      "lastAccessed": 1784179210865,
       "keyFiles": [
         "check-prd-split-evolution.mjs"
       ]
@@ -110,7 +130,7 @@
       "path": "imgs",
       "purpose": null,
       "fileCount": 6,
-      "lastAccessed": 1781789853332,
+      "lastAccessed": 1784179210865,
       "keyFiles": [
         "add-execution-env.gif",
         "add-workspace.gif",
@@ -122,10 +142,9 @@
     "public": {
       "path": "public",
       "purpose": "Public files",
-      "fileCount": 3,
-      "lastAccessed": 1781789853332,
+      "fileCount": 2,
+      "lastAccessed": 1784179210865,
       "keyFiles": [
-        "demo.html",
         "tauri.svg",
         "vite.svg"
       ]
@@ -133,21 +152,21 @@
     "scripts": {
       "path": "scripts",
       "purpose": "Build/utility scripts",
-      "fileCount": 25,
-      "lastAccessed": 1781789853332,
+      "fileCount": 10,
+      "lastAccessed": 1784179210865,
       "keyFiles": [
+        "_tmp_sim_stream.mts",
         "build-claude-settings-schema-zh.mjs",
-        "cursor-sdk-bridge.stderr.test.ts",
-        "cursor-sdk-bridge.ts",
-        "cursorSdkAgentWriteProbe.ts",
-        "cursorSdkExecutePreamble.ts"
+        "emit-platform-split-prompt-seed.ts",
+        "generate-dmg-background.py",
+        "patch-antd-modal-confirm-mask-closable.mjs"
       ]
     },
     "src": {
       "path": "src",
       "purpose": "Source code",
       "fileCount": 9,
-      "lastAccessed": 1781789853332,
+      "lastAccessed": 1784179210865,
       "keyFiles": [
         "App.css",
         "App.tsx",
@@ -160,7 +179,7 @@
       "path": "src-tauri",
       "purpose": null,
       "fileCount": 7,
-      "lastAccessed": 1781789853332,
+      "lastAccessed": 1784179210865,
       "keyFiles": [
         "Cargo.lock",
         "Cargo.toml",
@@ -169,11 +188,31 @@
         "build.rs"
       ]
     },
+    "dist/assets": {
+      "path": "dist/assets",
+      "purpose": "Static assets",
+      "fileCount": 279,
+      "lastAccessed": 1784179210866,
+      "keyFiles": [
+        "ActiveRepositoryFilesPanel-DRp_1EmD.js",
+        "ApartmentOutlined-CJyeaKbK.js",
+        "ApiOutlined-C5WlXs1W.js"
+      ]
+    },
+    "src/__tests__": {
+      "path": "src/__tests__",
+      "purpose": "Test files",
+      "fileCount": 1,
+      "lastAccessed": 1784179210867,
+      "keyFiles": [
+        "codexProviderPresets.test.ts"
+      ]
+    },
     "src/assets": {
       "path": "src/assets",
       "purpose": "Static assets",
       "fileCount": 1,
-      "lastAccessed": 1781789853333,
+      "lastAccessed": 1784179210867,
       "keyFiles": [
         "react.svg"
       ]
@@ -181,8 +220,8 @@
     "src/components": {
       "path": "src/components",
       "purpose": "UI components",
-      "fileCount": 23,
-      "lastAccessed": 1781789853333,
+      "fileCount": 25,
+      "lastAccessed": 1784179210867,
       "keyFiles": [
         "AppWorkspaceLayout.lazy.ts",
         "AppWorkspaceLayout.tsx",
@@ -193,7 +232,7 @@
       "path": "src/data",
       "purpose": "Data files",
       "fileCount": 5,
-      "lastAccessed": 1781789853333,
+      "lastAccessed": 1784179210867,
       "keyFiles": [
         "claude-code-settings.schema.en.json",
         "claude-code-settings.schema.json",
@@ -201,307 +240,6 @@
       ]
     }
   },
-  "hotPaths": [
-    {
-      "path": "src/components/PrdTaskSplitPanel/index.tsx",
-      "accessCount": 114,
-      "lastAccessed": 1778520324732,
-      "type": "file"
-    },
-    {
-      "path": "src/AppImpl.tsx",
-      "accessCount": 103,
-      "lastAccessed": 1781698221117,
-      "type": "file"
-    },
-    {
-      "path": "src/components/EmployeeConfigModal/index.tsx",
-      "accessCount": 54,
-      "lastAccessed": 1778590833631,
-      "type": "file"
-    },
-    {
-      "path": "src/types.ts",
-      "accessCount": 26,
-      "lastAccessed": 1781688333938,
-      "type": "file"
-    },
-    {
-      "path": "src/components/AppWorkspaceLayout.tsx",
-      "accessCount": 23,
-      "lastAccessed": 1778630105765,
-      "type": "directory"
-    },
-    {
-      "path": "src/components/LeftSidebar.tsx",
-      "accessCount": 20,
-      "lastAccessed": 1778630183552,
-      "type": "file"
-    },
-    {
-      "path": "src/components/ClaudeSessions/WorkflowTaskTimeline.tsx",
-      "accessCount": 10,
-      "lastAccessed": 1778204362362,
-      "type": "file"
-    },
-    {
-      "path": ".trellis/tasks/05-12-pass-2-architecture-split-decompose-prdtasksplitpanel/prd.md",
-      "accessCount": 8,
-      "lastAccessed": 1778520394906,
-      "type": "file"
-    },
-    {
-      "path": "src/components/PrdTaskSplitPanel/TaskCard.tsx",
-      "accessCount": 6,
-      "lastAccessed": 1778519520427,
-      "type": "file"
-    },
-    {
-      "path": "src-tauri/src/lib_impl.rs",
-      "accessCount": 5,
-      "lastAccessed": 1778590177499,
-      "type": "file"
-    },
-    {
-      "path": "src-tauri/src/trellis_bridge.rs",
-      "accessCount": 3,
-      "lastAccessed": 1778513525010,
-      "type": "file"
-    },
-    {
-      "path": "src/services/trellisTaskMapping.test.ts",
-      "accessCount": 3,
-      "lastAccessed": 1778513525413,
-      "type": "file"
-    },
-    {
-      "path": ".trellis/tasks/05-11-audit-architecture-split/task.json",
-      "accessCount": 3,
-      "lastAccessed": 1778515278993,
-      "type": "file"
-    },
-    {
-      "path": "src/components/PrdTaskSplitPanel/SplitPromptWizardModal.tsx",
-      "accessCount": 3,
-      "lastAccessed": 1778517605533,
-      "type": "file"
-    },
-    {
-      "path": "src/components/PrdTaskSplitPanel/helpers.ts",
-      "accessCount": 3,
-      "lastAccessed": 1778519875690,
-      "type": "directory"
-    },
-    {
-      "path": "src/components/PrdTaskSplitPanel/helpers.test.ts",
-      "accessCount": 3,
-      "lastAccessed": 1778520061276,
-      "type": "file"
-    },
-    {
-      "path": ".trellis/tasks/05-12-pass-2-architecture-split-decompose-prdtasksplitpanel/task.json",
-      "accessCount": 3,
-      "lastAccessed": 1778520417806,
-      "type": "file"
-    },
-    {
-      "path": "src/services/workflowGraphRuntime.ts",
-      "accessCount": 3,
-      "lastAccessed": 1778588123883,
-      "type": "file"
-    },
-    {
-      "path": "src/App.tsx",
-      "accessCount": 3,
-      "lastAccessed": 1778588922117,
-      "type": "file"
-    },
-    {
-      "path": "vite.config.ts",
-      "accessCount": 2,
-      "lastAccessed": 1778204367069,
-      "type": "file"
-    },
-    {
-      "path": "src/services/trellisTaskMapping.ts",
-      "accessCount": 2,
-      "lastAccessed": 1778513388689,
-      "type": "file"
-    },
-    {
-      "path": ".trellis/tasks/05-12-pass-2-architecture-split-decompose-prdtasksplitpanel/implement.jsonl",
-      "accessCount": 2,
-      "lastAccessed": 1778516343709,
-      "type": "file"
-    },
-    {
-      "path": ".trellis/tasks/05-12-pass-2-architecture-split-decompose-prdtasksplitpanel/check.jsonl",
-      "accessCount": 2,
-      "lastAccessed": 1778516343816,
-      "type": "file"
-    },
-    {
-      "path": "src/components/PrdTaskSplitPanel/RuntimePromptEditModal.tsx",
-      "accessCount": 2,
-      "lastAccessed": 1778517363731,
-      "type": "file"
-    },
-    {
-      "path": "src/services/prdDraftStore.ts",
-      "accessCount": 2,
-      "lastAccessed": 1778517883561,
-      "type": "directory"
-    },
-    {
-      "path": "src/components/PrdTaskSplitPanel/RequirementBoardHeader.tsx",
-      "accessCount": 2,
-      "lastAccessed": 1778517903435,
-      "type": "file"
-    },
-    {
-      "path": "src/components/PrdTaskSplitPanel/TaskAiPopoverContent.tsx",
-      "accessCount": 2,
-      "lastAccessed": 1778518474074,
-      "type": "file"
-    },
-    {
-      "path": "src/components/PrdTaskSplitPanel/TaskApiSpecEditor.tsx",
-      "accessCount": 2,
-      "lastAccessed": 1778518881150,
-      "type": "file"
-    },
-    {
-      "path": "src/components/WorkflowDesigner/index.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1778203807062,
-      "type": "file"
-    },
-    {
-      "path": "src/components/WorkflowDesigner/nodes/TaskNode.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1778203825160,
-      "type": "file"
-    },
-    {
-      "path": "src/components/WorkflowDesigner/nodes/EndNode.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1778203828730,
-      "type": "file"
-    },
-    {
-      "path": "src/components/WorkflowDesigner/nodes/StartNode.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1778203832314,
-      "type": "file"
-    },
-    {
-      "path": "src/components/WorkflowDesigner/nodes/ApprovalNode.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1778203834796,
-      "type": "file"
-    },
-    {
-      "path": "src/components/WorkflowDesigner/edges/WorkflowEdge.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1778203837322,
-      "type": "file"
-    },
-    {
-      "path": "src/components/WorkflowRuntimeViewer/index.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1778203866785,
-      "type": "file"
-    },
-    {
-      "path": ".trellis/tasks/05-11-wise-trellis-p4-spec-feedback/prd.md",
-      "accessCount": 1,
-      "lastAccessed": 1778513179178,
-      "type": "file"
-    },
-    {
-      "path": "src/services/trellisSpecBridge.ts",
-      "accessCount": 1,
-      "lastAccessed": 1778513388828,
-      "type": "file"
-    },
-    {
-      "path": "src/components/PrdTaskSplitPanel/types.ts",
-      "accessCount": 1,
-      "lastAccessed": 1778516502630,
-      "type": "file"
-    },
-    {
-      "path": "src/components/PrdTaskSplitPanel/UnmetConditionsQuestionIcon.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1778516502741,
-      "type": "file"
-    },
-    {
-      "path": "src/components/PrdTaskSplitPanel/SplitRuntimeMessageRow.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1778516502847,
-      "type": "file"
-    },
-    {
-      "path": "src/components/PrdTaskSplitPanel/TaskAnchorPopoverBody.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1778516502955,
-      "type": "file"
-    },
-    {
-      "path": "src/components/PrdTaskSplitPanel/SplitRuntimeMessages.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1778516900830,
-      "type": "file"
-    },
-    {
-      "path": "src/components/PrdTaskSplitPanel/RequirementNameModal.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1778516900942,
-      "type": "file"
-    },
-    {
-      "path": "src/services/splitPromptBundle.ts",
-      "accessCount": 1,
-      "lastAccessed": 1778517341310,
-      "type": "directory"
-    },
-    {
-      "path": "src/components/PrdTaskSplitPanel/RequirementBoardActions.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1778517778555,
-      "type": "file"
-    },
-    {
-      "path": "src/components/MilkdownViewer",
-      "accessCount": 1,
-      "lastAccessed": 1778518044622,
-      "type": "directory"
-    },
-    {
-      "path": "src/components/PrdTaskSplitPanel/anchorReconcile.ts",
-      "accessCount": 1,
-      "lastAccessed": 1778518091613,
-      "type": "file"
-    },
-    {
-      "path": "src/components/PrdTaskSplitPanel/anchorReconcile.test.ts",
-      "accessCount": 1,
-      "lastAccessed": 1778518117398,
-      "type": "file"
-    },
-    {
-      "path": "src/components/PrdTaskSplitPanel/SplitQualityStrip.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1778519663795,
-      "type": "file"
-    },
-    {
-      "path": "src/components/PrdTaskSplitPanel/TaskBoardHeader.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1778519663907,
-      "type": "file"
-    }
-  ],
+  "hotPaths": [],
   "userDirectives": []
 }

@@ -54,15 +54,6 @@
       "icons/icon.ico"
     ],
     "resources": [
-      "../scripts/cursor-sdk-bridge.ts",
-      "../scripts/cursorSdkModel.ts",
-      "../scripts/cursorSdkImages.ts",
-      "../scripts/cursorSdkStream.ts",
-      "../scripts/cursorSdkStderrFilter.ts",
-      "../scripts/cursorSdkProbe.ts",
-      "../scripts/cursorSdkRepositoryFiles.ts",
-      "../scripts/cursorSdkAgentWriteProbe.ts",
-      "../scripts/cursorSdkExecutePreamble.ts",
       "resources/skills/officecli-docx/SKILL.md",
       "resources/skills/officecli-pptx/SKILL.md",
       "../examples/wise-extensions/hello-world"

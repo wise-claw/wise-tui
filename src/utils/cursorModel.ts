@@ -5,18 +5,24 @@ const LOCAL_MODEL_ALIAS_TO_ID: Record<string, string> = {
   default: "composer-2.5",
 };
 
-/** Cursor Local SDK 常见模型 id 前缀（与 `Cursor.models.list()` 返回集一致）。 */
+/** Cursor CLI 常见模型 id 前缀（与 `agent --list-models` / `--model` 对齐）。 */
 const CURSOR_SDK_MODEL_PREFIXES = [
   "composer-",
   "claude-",
+  "sonnet-",
+  "opus-",
+  "haiku-",
   "gpt-",
+  "o1",
+  "o3",
+  "o4",
   "gemini-",
   "grok-",
   "kimi-",
 ] as const;
 
 /**
- * 第三方 Claude 代理模型（火山 glm、百炼 qwen 等）——不能传给 Cursor SDK。
+ * 第三方 Claude 代理模型（火山 glm、百炼 qwen 等）——不能传给 Cursor CLI。
  * 注意：`kimi-k2.5` 等 Cursor 自有模型不在此列。
  */
 const NON_CURSOR_SDK_PROVIDER_RE =
@@ -45,7 +51,11 @@ export function isCursorSdkModelId(
   }
 
   if (NON_CURSOR_SDK_PROVIDER_RE.test(trimmed)) return false;
-  return CURSOR_SDK_MODEL_PREFIXES.some((prefix) => normalized.startsWith(prefix));
+  return CURSOR_SDK_MODEL_PREFIXES.some((prefix) => {
+    if (prefix.endsWith("-")) return normalized.startsWith(prefix);
+    // o1 / o3 / o4：精确前缀或后接 `-`
+    return normalized === prefix || normalized.startsWith(`${prefix}-`);
+  });
 }
 
 /** 将 Composer / session.model 解析为 Cursor Local Agent 可用的 model id。 */

@@ -31,11 +31,11 @@ const codexMissing = {
 
 const cursorReady = {
   id: "cursor",
-  name: "Cursor SDK",
+  name: "Cursor CLI",
   kind: "cursor",
   available: true,
   backend: "cursor",
-  command: "cursor-sdk",
+  command: "agent",
   detectedAt: "2026-05-24T00:00:00.000Z",
 } satisfies DetectedAgent<"cursor">;
 

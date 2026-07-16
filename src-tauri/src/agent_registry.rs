@@ -345,8 +345,8 @@ async fn detect_builtin_agents(probe: &dyn Probe, db: &Mutex<Connection>) -> Vec
         )),
         DetectedAgent::Cursor(synthetic_agent(
             "cursor",
-            "Cursor SDK",
-            "cursor-sdk",
+            "Cursor CLI",
+            "agent",
             cursor,
         )),
     ]
@@ -1132,7 +1132,8 @@ fn parse_builtin_uninstall_kind(kind: &str) -> Result<BuiltinInstallSpec, String
     match kind.trim().to_lowercase().as_str() {
         "claude" | "codex" | "gemini" | "opencode" => parse_builtin_install_kind(kind),
         "cursor" => Ok(BuiltinInstallSpec {
-            npm_package: "@cursor/sdk",
+            // Cursor CLI 非 npm；卸载仅清除 Wise 侧 API Key。
+            npm_package: "cursor-agent-cli",
         }),
         "" => Err("kind is required".to_string()),
         other => Err(format!("不支持一键卸载的运行入口：{other}")),
@@ -1622,7 +1623,7 @@ mod tests {
         assert_eq!(
             parse_builtin_uninstall_kind("cursor").expect("cursor"),
             BuiltinInstallSpec {
-                npm_package: "@cursor/sdk",
+                npm_package: "cursor-agent-cli",
             }
         );
         assert_eq!(

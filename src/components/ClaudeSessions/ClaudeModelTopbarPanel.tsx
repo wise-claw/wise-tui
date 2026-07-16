@@ -62,6 +62,7 @@ import {
   OPENCODE_PROFILE_TEMPLATES,
   findOpencodeProfileTemplate,
 } from "../../utils/opencodeProfileTemplates";
+import { extractOpencodeModelOptionsFromSettingsJson } from "../../utils/opencodeModel";
 import "./ClaudeModelTopbarTrigger.css";
 
 /** 高于模型切换 Popover/Dropdown（1200），保证编辑/新增 Modal 叠在其上 */
@@ -85,29 +86,10 @@ interface Props {
 function extractOpencodeModelOptions(
   settingsJson: string,
 ): { label: string; value: string }[] {
-  try {
-    const trimmed = settingsJson.trim();
-    if (!trimmed) return [];
-    const root = JSON.parse(trimmed) as Record<string, unknown>;
-    const provider = root.provider;
-    if (!provider || typeof provider !== "object" || Array.isArray(provider)) {
-      return [];
-    }
-    const result: { label: string; value: string }[] = [];
-    for (const [id, entry] of Object.entries(provider as Record<string, unknown>)) {
-      const e = entry as Record<string, unknown>;
-      const models = e.models;
-      if (models && typeof models === "object" && !Array.isArray(models)) {
-        for (const modelName of Object.keys(models as Record<string, unknown>)) {
-          const path = `${id}/${modelName}`;
-          result.push({ label: path, value: path });
-        }
-      }
-    }
-    return result;
-  } catch {
-    return [];
-  }
+  return extractOpencodeModelOptionsFromSettingsJson(settingsJson).map((item) => ({
+    label: item.displayName || item.id,
+    value: item.id,
+  }));
 }
 
 function validateSettingsJson(text: string, engine: ModelProfileEngine): string | null {

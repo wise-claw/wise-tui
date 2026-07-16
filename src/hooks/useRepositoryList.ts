@@ -664,6 +664,10 @@ export function useRepositoryList() {
 
   const handleUpdateRepositoryExecutionEngine = useCallback(
     async (repositoryId: number, executionEngine: SessionExecutionEngine) => {
+      // 乐观更新：切换后立即发送时 spawn 解析读 repositoriesLatestRef，不能等 IPC。
+      setRepositories((prev) =>
+        prev.map((r) => (r.id === repositoryId ? { ...r, executionEngine } : r)),
+      );
       const updated = await updateRepositoryExecutionEngine(repositoryId, executionEngine);
       setRepositories((prev) => prev.map((r) => (r.id === repositoryId ? updated : r)));
     },

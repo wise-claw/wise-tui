@@ -433,10 +433,12 @@ export default function App() {
         if (cancelled) return;
         setPaneCount(restoredPaneCount);
         setExtraPanes(restoredExtraPanes);
-        if (parsed.primaryPaneRuntime && typeof parsed.primaryPaneRuntime === "object") {
+        if (restoredPaneCount > 1 && parsed.primaryPaneRuntime && typeof parsed.primaryPaneRuntime === "object") {
           setPrimaryPaneRuntimeOverride(
             mergePaneRuntimeOverride(null, parsed.primaryPaneRuntime as PaneRuntimeOverride),
           );
+        } else {
+          setPrimaryPaneRuntimeOverride(null);
         }
       } catch {
         void deleteAppSetting(storageKey);
@@ -882,6 +884,9 @@ export default function App() {
     async (employeeId: string, engine: import("./types").SessionExecutionEngine) => {
       const row = employees.find((e) => e.id === employeeId);
       if (!row) return;
+      setEmployees((prev) =>
+        prev.map((e) => (e.id === employeeId ? { ...e, executionEngine: engine } : e)),
+      );
       await updateEmployee({
         employeeId,
         name: row.name,
@@ -891,9 +896,6 @@ export default function App() {
         projectIds: row.projectIds,
         executionEngine: engine,
       });
-      setEmployees((prev) =>
-        prev.map((e) => (e.id === employeeId ? { ...e, executionEngine: engine } : e)),
-      );
     },
     [employees],
   );
@@ -1214,6 +1216,8 @@ export default function App() {
   extraPanesLatestRef.current = extraPanes;
   const primaryPaneRuntimeOverrideLatestRef = useRef(primaryPaneRuntimeOverride);
   primaryPaneRuntimeOverrideLatestRef.current = primaryPaneRuntimeOverride;
+  const paneCountLatestRef = useRef(paneCount);
+  paneCountLatestRef.current = paneCount;
   const activeRepositoryIdLatestRef = useRef(activeRepositoryId);
   activeRepositoryIdLatestRef.current = activeRepositoryId;
   const activeProjectIdLatestRef = useRef(activeProjectId);
@@ -1248,11 +1252,14 @@ export default function App() {
             sessionRepositoryName: activeSession.repositoryName,
           })
         : null;
+      // 单屏时 Composer 改的是仓库/员工 executionEngine；多屏 override 不得覆盖，
+      // 否则残留的 primaryPaneRuntime（含从多屏收起后未清除的持久化值）会导致 UI 已切换但 spawn 仍走旧引擎。
+      const multiPane = paneCountLatestRef.current > 1;
       return {
         activeSessionId: activeId || null,
         chatContextRepository,
-        primaryPaneRuntime: primaryPaneRuntimeOverrideLatestRef.current,
-        extraPanes: extraPanesLatestRef.current,
+        primaryPaneRuntime: multiPane ? primaryPaneRuntimeOverrideLatestRef.current : null,
+        extraPanes: multiPane ? extraPanesLatestRef.current : [],
       };
     };
 
@@ -2170,6 +2177,7 @@ export default function App() {
     paneLayoutHydrated,
     tabsHydrated,
     primaryPaneRuntimeOverride,
+    setPrimaryPaneRuntimeOverride,
     updateSessionModel,
   });
 

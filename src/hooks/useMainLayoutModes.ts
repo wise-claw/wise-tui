@@ -75,6 +75,8 @@ interface UseMainLayoutModesOptions {
   setExtraPanes: (panes: PaneSlot[] | ((prev: PaneSlot[]) => PaneSlot[])) => void;
   /** 主窗格（Pane 0）运行时覆盖；新建额外窗格会话时默认继承。 */
   primaryPaneRuntimeOverride?: PaneRuntimeOverride | null;
+  /** 收起多屏时清除主窗格 override，避免单屏 spawn 仍命中旧引擎。 */
+  setPrimaryPaneRuntimeOverride?: (value: PaneRuntimeOverride | null) => void;
   /** 新建额外窗格会话后同步主会话模型。 */
   updateSessionModel?: (sessionId: string, model: string) => void;
   /** AppImpl 多屏布局持久化 hydration 完成后为 true。 */
@@ -118,6 +120,7 @@ export function useMainLayoutModes({
   setPaneCount,
   setExtraPanes,
   primaryPaneRuntimeOverride = null,
+  setPrimaryPaneRuntimeOverride,
   updateSessionModel,
   paneLayoutHydrated = false,
   tabsHydrated = false,
@@ -232,6 +235,8 @@ export function useMainLayoutModes({
       if (targetCount === 1) {
         setPaneCount(1);
         setExtraPanes([]);
+        // 单屏 Composer 走仓库 executionEngine；清除窗格覆盖避免下次 spawn 仍命中旧 override。
+        setPrimaryPaneRuntimeOverride?.(null);
         const accumulated = multiPaneAccumulatedDeltaRef.current;
         multiPaneAccumulatedDeltaRef.current = 0;
         await waitLayoutFrames(1);
@@ -329,7 +334,7 @@ export function useMainLayoutModes({
         setPaneChangeInFlight(false);
       }
     },
-    [multiPaneLayoutReady, setExtraPanes, setPaneCount],
+    [multiPaneLayoutReady, setExtraPanes, setPaneCount, setPrimaryPaneRuntimeOverride],
   );
 
   /** 单屏下为首个额外窗格写入 session 并切到双屏（复用 handleChangePaneCount 与 in-flight 锁）。 */

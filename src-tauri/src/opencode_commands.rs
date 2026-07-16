@@ -1,9 +1,11 @@
 //! OpenCode CLI execution (`opencode run --format json`) for Wise main / member sessions.
 
 use crate::claude_commands::{ClaudeProcessState, ClaudeSessionRegistry};
-use crate::claude_model_profiles::ensure_active_opencode_profile_applied;
 use crate::opencode_binary::{
     apply_opencode_child_env, find_opencode_binary, opencode_merged_path_env,
+};
+use crate::opencode_config_dir::{
+    effective_opencode_model_from_disk, list_opencode_models_from_config,
 };
 use crate::opencode_stream_adapter::{
     opencode_session_clear_line, OpencodeStdoutMap, OpencodeStdoutMapper,
@@ -18,6 +20,7 @@ use tauri::{AppHandle, Emitter, Manager};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::Mutex as TokioMutex;
+use tokio::time::{timeout, Duration};
 use uuid::Uuid;
 
 #[derive(Clone, Serialize)]
@@ -95,10 +98,14 @@ struct OpencodeRuntimeContext {
 fn normalize_opencode_model(raw: Option<&str>) -> Option<String> {
     let trimmed = raw?.trim();
     if trimmed.is_empty() {
-        None
-    } else {
-        Some(trimmed.to_string())
+        return None;
     }
+    // Composer「Auto」：不传 `-m`，由 OpenCode 本机配置决定。
+    let lower = trimmed.to_ascii_lowercase();
+    if lower == "auto" || lower == "default" {
+        return None;
+    }
+    Some(trimmed.to_string())
 }
 
 fn should_pass_opencode_model_flag(model: &str) -> bool {
@@ -494,6 +501,123 @@ fn attach_opencode_child_io(
     Ok(())
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct OpencodeModelListItem {
+    pub id: String,
+    pub display_name: String,
+}
+
+fn strip_ansi_codes(input: &str) -> String {
+    let mut out = String::with_capacity(input.len());
+    let mut chars = input.chars().peekable();
+    while let Some(c) = chars.next() {
+        if c == '\u{1b}' {
+            if chars.peek() == Some(&'[') {
+                chars.next();
+                while let Some(n) = chars.next() {
+                    if n.is_ascii_alphabetic() {
+                        break;
+                    }
+                }
+            }
+            continue;
+        }
+        out.push(c);
+    }
+    out
+}
+
+fn parse_opencode_models_cli_output(stdout: &str) -> Vec<OpencodeModelListItem> {
+    let cleaned = strip_ansi_codes(stdout);
+    let mut out = Vec::new();
+    let mut seen = std::collections::BTreeSet::new();
+    for line in cleaned.lines() {
+        let t = line.trim();
+        if t.is_empty()
+            || t.starts_with("Error")
+            || t.starts_with("Unknown")
+            || t.starts_with("Commands:")
+            || t.starts_with("Options:")
+        {
+            continue;
+        }
+        // Typical: `provider/model` or `provider/model  Display Name`
+        let mut parts = t.split_whitespace();
+        let Some(id) = parts.next() else {
+            continue;
+        };
+        if !id.contains('/') && !id.contains('-') {
+            continue;
+        }
+        if id.starts_with('-') || id.starts_with('┌') || id.starts_with('│') {
+            continue;
+        }
+        if !seen.insert(id.to_string()) {
+            continue;
+        }
+        let rest = parts.collect::<Vec<_>>().join(" ");
+        let display_name = if rest.is_empty() {
+            id.to_string()
+        } else {
+            rest
+        };
+        out.push(OpencodeModelListItem {
+            id: id.to_string(),
+            display_name,
+        });
+    }
+    out
+}
+
+async fn try_list_opencode_models_via_cli() -> Vec<OpencodeModelListItem> {
+    let Ok(bin) = find_opencode_binary() else {
+        return Vec::new();
+    };
+    let path_env = opencode_merged_path_env();
+    let mut cmd = Command::new(&bin);
+    apply_opencode_child_env(&mut cmd, &path_env);
+    cmd.arg("models");
+    cmd.stdin(Stdio::null());
+    cmd.stdout(Stdio::piped());
+    cmd.stderr(Stdio::piped());
+    let Ok(output) = timeout(Duration::from_secs(12), cmd.output()).await else {
+        return Vec::new();
+    };
+    let Ok(output) = output else {
+        return Vec::new();
+    };
+    parse_opencode_models_cli_output(&String::from_utf8_lossy(&output.stdout))
+}
+
+/// 列出 OpenCode 可选模型：优先 `opencode models`，并合并 `opencode.json` 中的本地配置。
+#[tauri::command]
+pub async fn opencode_list_models() -> Result<Vec<OpencodeModelListItem>, String> {
+    let mut out = try_list_opencode_models_via_cli().await;
+    let mut seen: std::collections::BTreeSet<String> =
+        out.iter().map(|item| item.id.clone()).collect();
+
+    for (id, display_name) in list_opencode_models_from_config() {
+        if seen.insert(id.clone()) {
+            out.push(OpencodeModelListItem { id, display_name });
+        }
+    }
+
+    if let Some(disk) = effective_opencode_model_from_disk() {
+        if seen.insert(disk.clone()) {
+            out.insert(
+                0,
+                OpencodeModelListItem {
+                    id: disk.clone(),
+                    display_name: disk,
+                },
+            );
+        }
+    }
+
+    Ok(out)
+}
+
 #[tauri::command]
 pub(crate) async fn execute_opencode_code(
     app: tauri::AppHandle,
@@ -506,7 +630,8 @@ pub(crate) async fn execute_opencode_code(
     opencode_resume_session_id: Option<String>,
     force_new_session: Option<bool>,
 ) -> Result<(), String> {
-    ensure_active_opencode_profile_applied(&db)?;
+    // Composer 只选模型：不再每次把 Wise OpenCode 档案写回磁盘（配置留在 OpenCode 本机）。
+    // `-m` 由前端会话选择传入；Auto / 空则省略，走本机 opencode.json。
     let exec_model = normalize_opencode_model(model.as_deref());
 
     validate_opencode_project_path(&project_path)?;
@@ -784,5 +909,44 @@ mod tests {
         let d = build_opencode_failure_diagnostic(&[], None);
         assert!(d.contains("未捕获到错误输出"));
         assert!(d.contains("provider 凭据"));
+    }
+
+    #[test]
+    fn auto_model_omits_m_flag() {
+        assert_eq!(normalize_opencode_model(Some("auto")), None);
+        assert_eq!(normalize_opencode_model(Some("DEFAULT")), None);
+        assert_eq!(normalize_opencode_model(Some("  ")), None);
+        assert_eq!(
+            normalize_opencode_model(Some("anthropic/claude-haiku-4-5")).as_deref(),
+            Some("anthropic/claude-haiku-4-5")
+        );
+
+        let mut cmd = Command::new("opencode");
+        configure_opencode_run_command(
+            &mut cmd,
+            "hello",
+            None,
+            "/tmp/repo",
+            None,
+            false,
+            true,
+        );
+        let args: Vec<String> = cmd
+            .as_std()
+            .get_args()
+            .map(|s| s.to_string_lossy().into_owned())
+            .collect();
+        assert!(!args.iter().any(|a| a == "-m"));
+    }
+
+    #[test]
+    fn parses_opencode_models_cli_lines() {
+        let items = parse_opencode_models_cli_output(
+            "anthropic/claude-sonnet-4\nopenai/gpt-5  GPT-5\nCommands:\nbogus\n",
+        );
+        assert_eq!(items.len(), 2);
+        assert_eq!(items[0].id, "anthropic/claude-sonnet-4");
+        assert_eq!(items[1].id, "openai/gpt-5");
+        assert_eq!(items[1].display_name, "GPT-5");
     }
 }

@@ -225,6 +225,54 @@ pub fn read_opencode_user_settings_pretty() -> String {
     }
 }
 
+/// 从 `opencode.json` 提取可选模型（顶层 `model` + `provider.*.models`）。
+pub fn list_opencode_models_from_config() -> Vec<(String, String)> {
+    let config = read_opencode_config_json();
+    let mut out: Vec<(String, String)> = Vec::new();
+    let mut seen = std::collections::BTreeSet::new();
+
+    let mut push = |id: String, display: String| {
+        let trimmed = id.trim().to_string();
+        if trimmed.is_empty() || !seen.insert(trimmed.clone()) {
+            return;
+        }
+        let label = {
+            let d = display.trim();
+            if d.is_empty() {
+                trimmed.clone()
+            } else {
+                d.to_string()
+            }
+        };
+        out.push((trimmed, label));
+    };
+
+    if let Some(model) = read_effective_opencode_model(&config) {
+        push(model.clone(), model);
+    }
+
+    if let Some(provider) = config.get("provider").and_then(Value::as_object) {
+        for (provider_id, entry) in provider {
+            let Some(models) = entry.get("models").and_then(Value::as_object) else {
+                continue;
+            };
+            for (model_name, meta) in models {
+                let id = format!("{provider_id}/{model_name}");
+                let display = meta
+                    .get("name")
+                    .and_then(Value::as_str)
+                    .map(str::trim)
+                    .filter(|s| !s.is_empty())
+                    .unwrap_or(model_name)
+                    .to_string();
+                push(id, display);
+            }
+        }
+    }
+
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

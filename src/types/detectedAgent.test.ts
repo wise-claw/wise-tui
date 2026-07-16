@@ -39,10 +39,10 @@ const samples = {
   cursor: {
     ...base,
     id: "cursor",
-    name: "Cursor SDK",
+    name: "Cursor CLI",
     backend: "cursor",
     kind: "cursor",
-    command: "cursor-sdk",
+    command: "agent",
   },
   custom: {
     ...base,

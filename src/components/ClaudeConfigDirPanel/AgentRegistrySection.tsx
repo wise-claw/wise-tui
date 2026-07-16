@@ -307,7 +307,7 @@ export function AgentRegistrySection() {
       className="app-agent-registry-section"
       icon={<ThunderboltOutlined />}
       title="执行环境"
-      subtitle="本机 CLI 与 Cursor SDK 可编程引擎探测"
+      subtitle="本机 CLI（含 Cursor Agent）探测"
       actions={
         <Space size={8} wrap>
           <Input

@@ -4,16 +4,11 @@ export const CURSOR_API_KEY_SETTING = "cursor_sdk.api_key";
 
 export interface CursorAgentStatus {
   available: boolean;
-  bunAvailable: boolean;
-  bridgeAvailable: boolean;
-  sdkAvailable: boolean;
+  cliAvailable: boolean;
   apiKeyConfigured: boolean;
-  apiKeyValid?: boolean;
-  toolsAvailable?: boolean;
-  filesystemAccessOk?: boolean;
-  repositoryReadOk?: boolean;
-  repositoryWriteOk?: boolean;
-  sdkPackageInstalled?: boolean;
+  authenticated?: boolean;
+  cliVersion?: string;
+  cliPath?: string;
   failureReason?: string;
 }
 
@@ -72,31 +67,16 @@ export async function deleteCursorApiKeySetting(): Promise<void> {
 
 export function describeCursorAgentStatus(status: CursorAgentStatus): string {
   if (status.available) {
-    return "Cursor SDK 已就绪（Local Agent）";
+    return "Cursor CLI 已就绪";
   }
-  if (!status.bunAvailable) {
-    return "需要 Bun 才能运行 Cursor SDK bridge";
+  if (!status.cliAvailable) {
+    return status.failureReason ?? "未找到 Cursor Agent CLI（agent）";
   }
-  if (!status.bridgeAvailable) {
-    return "未找到 cursor-sdk-bridge.ts";
+  if (status.authenticated === false) {
+    return status.failureReason ?? "请运行 agent login，或在设置中配置 API Key";
   }
-  if (!status.sdkAvailable) {
-    return "项目未安装 @cursor/sdk";
+  if (!status.apiKeyConfigured && status.authenticated !== true) {
+    return "请运行 agent login，或在设置中配置 Cursor API Key";
   }
-  if (!status.apiKeyConfigured) {
-    return "请在设置中配置 Cursor API Key";
-  }
-  if (status.apiKeyValid === false) {
-    return status.failureReason ?? "Cursor API Key 校验失败";
-  }
-  if (status.sdkPackageInstalled === false) {
-    return status.failureReason ?? "未找到 @cursor/sdk 依赖目录";
-  }
-  if (status.repositoryWriteOk === false) {
-    return status.failureReason ?? "无法在目标仓库写入文件";
-  }
-  if (status.toolsAvailable === false) {
-    return status.failureReason ?? "本地文件/搜索工具不可用";
-  }
-  return status.failureReason ?? "Cursor SDK 暂不可用";
+  return status.failureReason ?? "Cursor CLI 暂不可用";
 }

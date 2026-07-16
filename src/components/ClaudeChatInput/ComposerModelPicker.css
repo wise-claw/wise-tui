@@ -155,6 +155,35 @@
     inset 0 1px 0 rgba(255, 255, 255, 0.08);
 }
 
+.app-composer-model-picker-dropdown-container--filterable {
+  display: flex;
+  flex-direction: column;
+  width: min(90vw, 260px);
+  min-width: 188px;
+  max-width: min(90vw, 260px);
+  max-height: min(320px, 48vh);
+  overflow: hidden;
+}
+
+.app-composer-model-picker-dropdown-filter {
+  flex: 0 0 auto;
+  padding: 6px 6px 4px;
+  border-bottom: 1px solid var(--ant-color-border-secondary);
+}
+
+.app-composer-model-picker-dropdown-filter .ant-input-affix-wrapper,
+.app-composer-model-picker-dropdown-filter .ant-input {
+  font-size: 11px;
+}
+
+.app-composer-model-picker-dropdown-menu-scroll {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior: contain;
+}
+
 .app-composer-model-picker-dropdown-container .ant-dropdown-menu {
   width: 100%;
   min-width: 0;
