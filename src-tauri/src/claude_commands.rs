@@ -4,7 +4,7 @@ use std::fs;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Mutex;
+use std::sync::{Mutex, OnceLock};
 use tauri::Emitter;
 use tauri::Manager;
 
@@ -417,7 +417,15 @@ impl ClaudeSessionRegistry {
 }
 
 /// Extra PATH segments so `which` / subprocesses find `claude` when the GUI app inherits a minimal PATH (e.g. Tauri `.app`).
+static CLAUDE_PATH_SEARCH_PREFIXES: OnceLock<Vec<PathBuf>> = OnceLock::new();
+
 pub(crate) fn claude_path_search_prefixes() -> Vec<PathBuf> {
+    CLAUDE_PATH_SEARCH_PREFIXES
+        .get_or_init(claude_path_search_prefixes_uncached)
+        .clone()
+}
+
+fn claude_path_search_prefixes_uncached() -> Vec<PathBuf> {
     let mut v: Vec<PathBuf> = Vec::new();
     #[cfg(not(windows))]
     {

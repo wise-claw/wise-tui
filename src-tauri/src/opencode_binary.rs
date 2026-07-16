@@ -1,6 +1,9 @@
 //! Resolve `opencode` CLI binary paths for GUI apps with a minimal inherited PATH.
 
 use std::path::Path;
+use std::sync::OnceLock;
+
+static CACHED_OPENCODE_BIN: OnceLock<String> = OnceLock::new();
 
 pub(crate) fn opencode_binary_candidates() -> Vec<String> {
     let out: Vec<String> = crate::claude_commands::claude_path_search_prefixes()
@@ -65,6 +68,18 @@ pub(crate) fn find_opencode_binary() -> Result<String, String> {
         }
     }
 
+    if let Some(cached) = CACHED_OPENCODE_BIN.get() {
+        if Path::new(cached).is_file() {
+            return Ok(cached.clone());
+        }
+    }
+
+    let resolved = find_opencode_binary_uncached()?;
+    let _ = CACHED_OPENCODE_BIN.set(resolved.clone());
+    Ok(resolved)
+}
+
+fn find_opencode_binary_uncached() -> Result<String, String> {
     for candidate in opencode_binary_candidates() {
         if Path::new(&candidate).is_file() {
             return Ok(candidate);

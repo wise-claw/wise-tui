@@ -35,7 +35,6 @@ import {
 import { executeCodexCode } from "../services/codex";
 import { executeOpencodeCode } from "../services/opencode";
 import { executeCursorCode } from "../services/cursorAgentExecution";
-import { buildCursorMcpServersForSpawn } from "../services/cursorMcpConfig";
 import {
   buildCursorUserBubblePrompt,
   type CursorSdkAttachment,
@@ -1129,8 +1128,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       }
       const invocationKey = detach ? inv : undefined;
       const resolvedModel = resolveCursorLocalModelId(modelArg ?? CURSOR_SDK_DEFAULT_MODEL);
-      const spawnExtras = await resolveSpawnExtrasForClaudePrompt(tabSessionId, prompt);
-      const mcpServers = await buildCursorMcpServersForSpawn({ spawnExtras });
+      // Cursor CLI 自行读取工作区/用户 mcp.json（--approve-mcps）；勿在 invoke 前组装 MCP（可达数秒且 Rust 侧已丢弃）。
       try {
         await executeCursorCode(
           repositoryPath,
@@ -1140,7 +1138,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           tabSessionId,
           cursorAgentId ?? undefined,
           resolveTrellisContextId(tabSessionId),
-          mcpServers,
+          undefined,
           cursorAttachments,
         );
       } catch (e) {
@@ -1148,7 +1146,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         throw e;
       }
     },
-    [commitSessions, keepInvocationStreamAfterTurnComplete, resolveSpawnExtrasForClaudePrompt, resolveTrellisContextId, scheduleStreamStallTimer],
+    [commitSessions, keepInvocationStreamAfterTurnComplete, resolveTrellisContextId, scheduleStreamStallTimer],
   );
 
   const runClaudeStreamingWithInvocation = useCallback(

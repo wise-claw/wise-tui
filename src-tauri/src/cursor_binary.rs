@@ -1,6 +1,9 @@
 //! Resolve Cursor Agent CLI (`agent`) binary paths for GUI apps with a minimal inherited PATH.
 
 use std::path::Path;
+use std::sync::OnceLock;
+
+static CACHED_CURSOR_AGENT_BIN: OnceLock<String> = OnceLock::new();
 
 /// Enumerate likely `agent` paths (GUI apps often lack Homebrew/`~/.local/bin` on PATH).
 pub(crate) fn cursor_agent_binary_candidates() -> Vec<String> {
@@ -73,6 +76,18 @@ pub(crate) fn find_cursor_agent_binary() -> Result<String, String> {
         }
     }
 
+    if let Some(cached) = CACHED_CURSOR_AGENT_BIN.get() {
+        if Path::new(cached).is_file() {
+            return Ok(cached.clone());
+        }
+    }
+
+    let resolved = find_cursor_agent_binary_uncached()?;
+    let _ = CACHED_CURSOR_AGENT_BIN.set(resolved.clone());
+    Ok(resolved)
+}
+
+fn find_cursor_agent_binary_uncached() -> Result<String, String> {
     for candidate in cursor_agent_binary_candidates() {
         if Path::new(&candidate).is_file() {
             return Ok(candidate);

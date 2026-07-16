@@ -581,7 +581,8 @@ async fn try_list_opencode_models_via_cli() -> Vec<OpencodeModelListItem> {
     cmd.stdin(Stdio::null());
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
-    let Ok(output) = timeout(Duration::from_secs(12), cmd.output()).await else {
+    // 列表失败时应快速回退到 opencode.json，避免拖慢 Composer 打开。
+    let Ok(output) = timeout(Duration::from_secs(4), cmd.output()).await else {
         return Vec::new();
     };
     let Ok(output) = output else {
@@ -590,12 +591,11 @@ async fn try_list_opencode_models_via_cli() -> Vec<OpencodeModelListItem> {
     parse_opencode_models_cli_output(&String::from_utf8_lossy(&output.stdout))
 }
 
-/// 列出 OpenCode 可选模型：优先 `opencode models`，并合并 `opencode.json` 中的本地配置。
+/// 列出 OpenCode 可选模型：优先本地 `opencode.json`，CLI 仅作补充（避免每次卡住数秒）。
 #[tauri::command]
 pub async fn opencode_list_models() -> Result<Vec<OpencodeModelListItem>, String> {
-    let mut out = try_list_opencode_models_via_cli().await;
-    let mut seen: std::collections::BTreeSet<String> =
-        out.iter().map(|item| item.id.clone()).collect();
+    let mut out = Vec::new();
+    let mut seen = std::collections::BTreeSet::new();
 
     for (id, display_name) in list_opencode_models_from_config() {
         if seen.insert(id.clone()) {
@@ -612,6 +612,15 @@ pub async fn opencode_list_models() -> Result<Vec<OpencodeModelListItem>, String
                     display_name: disk,
                 },
             );
+        }
+    }
+
+    // 配置已够用时跳过 CLI；否则短超时拉取一次。
+    if out.len() < 2 {
+        for item in try_list_opencode_models_via_cli().await {
+            if seen.insert(item.id.clone()) {
+                out.push(item);
+            }
         }
     }
 

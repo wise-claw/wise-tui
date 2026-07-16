@@ -577,7 +577,9 @@ fn resolve_profile_model_id(profile: &ClaudeModelProfile) -> Result<String, Stri
         .ok_or_else(|| "档案中未找到模型 ID（请检查 env.ANTHROPIC_MODEL 等）".to_string())
 }
 
-/// 在 spawn `opencode run` 前将 Wise 当前激活的 OpenCode 档案写入 `~/.config/opencode`。
+/// 将 Wise 当前激活的 OpenCode 档案写入 `~/.config/opencode`。
+/// Composer 选择路径不再每次调用（配置留在 OpenCode 本机）；显式「应用档案」仍走 `apply_profile_to_disk`。
+#[allow(dead_code)]
 pub(crate) fn ensure_active_opencode_profile_applied(db: &WiseDb) -> Result<(), String> {
     let store = load_store(db);
     let active_id = match store.active_opencode_profile_id.as_deref() {

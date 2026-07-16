@@ -929,7 +929,7 @@ pub async fn cursor_agent_list_models(
     let api_key = load_cursor_api_key(&db.0);
     let mut from_cli: Vec<CursorModelListItem> = Vec::new();
 
-    // Prefer account-scoped `models`, then flat `--list-models`.
+    // Prefer account-scoped `models`；已有结果则跳过第二次 CLI，避免串行双探测。
     for args in [&["models"][..], &["--list-models"][..]] {
         match run_cursor_cli_capture(args, api_key.as_deref(), None).await {
             Ok((_code, stdout, stderr)) => {
@@ -941,6 +941,7 @@ pub async fn cursor_agent_list_models(
                 let parsed = parse_models_list_output(&combined);
                 if !parsed.is_empty() {
                     from_cli = merge_cursor_model_lists(from_cli, parsed);
+                    break;
                 }
             }
             Err(_) => continue,
