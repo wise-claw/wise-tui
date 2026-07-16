@@ -149,7 +149,8 @@ export function ComposerRuntimeSettingsTrigger({
     !showPaneRuntimePresets &&
     (codexAvailable || cursorAvailable || geminiAvailable || opencodeAvailable) &&
     Boolean(onEngineChange);
-  const showConnection = effectiveEngine === "claude" && Boolean(onConnectionKindChange);
+  // Claude Code 统一走长驻会话（全局默认 streaming）；Composer 执行环境菜单不再展示连接方式切换。
+  const showConnection = false;
 
   const resolvedConnectionKind = resolveSessionConnectionKind(connectionKind, defaultConnectionKind);
   const hasConnectionOverride = isTabConnectionKindOverride(connectionKind);
@@ -158,7 +159,6 @@ export function ComposerRuntimeSettingsTrigger({
     effectiveEngine === "cursor" ||
     effectiveEngine === "gemini" ||
     effectiveEngine === "opencode" ||
-    hasConnectionOverride ||
     (showPaneRuntimePresets &&
       (activePanePreset === "claude-proxy" ||
         activePanePreset === "codex" ||

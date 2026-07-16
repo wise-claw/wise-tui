@@ -96,7 +96,7 @@ export function ClaudeModelTopbarTrigger({ variant = "chat" }: Props) {
       }
     >
       {isSidebar ? (
-        <HoverHint title="模型切换（Claude / Codex / OpenCode）" open={open ? false : undefined}>
+        <HoverHint title="模型切换" open={open ? false : undefined}>
           <button
             type="button"
             className={btnClass}
@@ -108,7 +108,7 @@ export function ClaudeModelTopbarTrigger({ variant = "chat" }: Props) {
           </button>
         </HoverHint>
       ) : (
-        <HoverHint title="模型切换（Claude / Codex / OpenCode）" open={open ? false : undefined}>
+        <HoverHint title="模型切换" open={open ? false : undefined}>
           <button
             type="button"
             className={btnClass}

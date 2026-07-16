@@ -1,6 +1,6 @@
 import { CheckOutlined, CloudSyncOutlined, PlusOutlined } from "@ant-design/icons";
-import { Button, Collapse, Empty, Input, Modal, Segmented, Space, Switch, Typography, message } from "antd";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { Button, Collapse, Empty, Input, Modal, Space, Switch, Typography, message } from "antd";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import {
   applyClaudeModelProfile,
   createClaudeModelProfile,
@@ -77,7 +77,7 @@ interface Props {
   store: ClaudeModelProfileStoreView | null;
   setStore: React.Dispatch<React.SetStateAction<ClaudeModelProfileStoreView | null>>;
   loading: boolean;
-  /** Composer 等入口打开时，优先展示与会话一致的引擎 Tab */
+  /** Composer 入口：与当前会话执行环境对齐的引擎（不再提供 Tab 切换）。 */
   preferredEngine?: ModelProfileEngine;
   onApplied?: () => void;
 }
@@ -125,29 +125,8 @@ export function ClaudeModelTopbarPanel({
   preferredEngine,
   onApplied,
 }: Props) {
-  const [panelEngine, setPanelEngine] = useState<ModelProfileEngine>(
-    preferredEngine ?? "claude",
-  );
-  const engineInitializedRef = useRef(false);
-
-  useEffect(() => {
-    if (preferredEngine) {
-      setPanelEngine(preferredEngine);
-      engineInitializedRef.current = true;
-    }
-  }, [preferredEngine]);
-
-  useEffect(() => {
-    if (engineInitializedRef.current || !store) return;
-    const engines: ModelProfileEngine[] = ["claude", "codex", "opencode"];
-    for (const engine of engines) {
-      if (resolveActiveModelProfileId(engine, store)) {
-        setPanelEngine(engine);
-        break;
-      }
-    }
-    engineInitializedRef.current = true;
-  }, [store]);
+  // 跟随会话执行环境；无 preferredEngine 时默认 Claude（如遗留顶栏入口）。
+  const panelEngine: ModelProfileEngine = preferredEngine ?? "claude";
 
   const [addOpen, setAddOpen] = useState(false);
   const [addCompany, setAddCompany] = useState("");
@@ -357,7 +336,6 @@ export function ClaudeModelTopbarPanel({
       try {
         const next = await applyClaudeModelProfile(profileId);
         setStore(next);
-        setPanelEngine(appliedEngine);
         const effective =
           resolveEffectiveModelForProfileEngine(appliedEngine, next)?.trim() || null;
         dispatchModelProfileStoreChanged(next, {
@@ -658,32 +636,25 @@ export function ClaudeModelTopbarPanel({
     <div className="app-claude-model-topbar-panel">
       <header className="app-claude-model-topbar-panel__head">
         <div className="app-claude-model-topbar-panel__head-row">
-          <Typography.Text className="app-claude-model-topbar-panel__title">模型切换</Typography.Text>
-          <Button
-            type="link"
-            size="small"
-            className="app-claude-model-topbar-panel__sync"
-            icon={<CloudSyncOutlined />}
-            loading={syncingCcSwitch}
-            onClick={() => void handleSyncFromCcSwitch()}
-          >
-            从 CC Switch 同步
-          </Button>
+          <Typography.Text className="app-claude-model-topbar-panel__title">
+            模型切换 · {engineLabel}
+          </Typography.Text>
+          {panelEngine === "claude" ? (
+            <Button
+              type="link"
+              size="small"
+              className="app-claude-model-topbar-panel__sync"
+              icon={<CloudSyncOutlined />}
+              loading={syncingCcSwitch}
+              onClick={() => void handleSyncFromCcSwitch()}
+            >
+              从 CC Switch 同步
+            </Button>
+          ) : null}
         </div>
         <Typography.Text type="secondary" className="app-claude-model-topbar-panel__effective">
           当前：{currentDisplayLabel}
         </Typography.Text>
-        <Segmented
-          size="small"
-          className="app-claude-model-topbar-panel__engine-tabs"
-          value={panelEngine}
-          options={[
-            { label: "Claude", value: "claude" },
-            { label: "Codex", value: "codex" },
-            { label: "OpenCode", value: "opencode" },
-          ]}
-          onChange={(value) => setPanelEngine(value as ModelProfileEngine)}
-        />
         <div className="app-claude-model-topbar-panel__failover-row">
           <Switch
             size="small"
