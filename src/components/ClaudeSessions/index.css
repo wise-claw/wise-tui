@@ -4805,6 +4805,82 @@
   gap: 0;
   margin: 0;
   width: 100%;
+  padding: 0;
+  border-radius: 0;
+  border: none;
+  background: transparent;
+  box-sizing: border-box;
+}
+
+/* Cursor 风格：默认一行灰色摘要，展开后才露出工具详情 */
+.app-message-parts__tool-group--compact {
+  gap: 4px;
+}
+
+.app-message-parts__tool-group-summary {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  margin: 0;
+  padding: 1px 0;
+  border: none;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  font: inherit;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-message-parts__tool-group-summary:hover {
+  color: var(--ant-color-text-secondary);
+}
+
+.app-message-parts__tool-group-summary__text {
+  display: inline-flex;
+  align-items: baseline;
+  flex-wrap: wrap;
+  gap: 6px;
+  min-width: 0;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.app-message-parts__tool-group-summary__label {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-message-parts__tool-group-summary__diff {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 4px;
+  flex-shrink: 0;
+  font-variant-numeric: tabular-nums;
+  font-weight: 500;
+}
+
+.app-message-parts__tool-group-summary__add {
+  color: var(--ant-color-success);
+}
+
+.app-message-parts__tool-group-summary__remove {
+  color: var(--ant-color-error);
+}
+
+.app-message-parts__tool-group-summary__chevron {
+  flex-shrink: 0;
+  display: inline-flex;
+  opacity: 0.55;
+}
+
+.app-message-parts__tool-group-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  width: 100%;
   padding: 2px 4px 3px;
   border-radius: 6px;
   border: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 62%, transparent);
@@ -4812,71 +4888,51 @@
   box-sizing: border-box;
 }
 
-/* 仅展示编辑 diff 卡片时去掉工具链外框，避免「框中框」 */
-.app-claude-messages .app-message-parts__tool-group--edit-cards-only {
-  gap: 6px;
-  padding: 0;
-  border: none;
-  border-radius: 0;
-  background: transparent;
-}
-
-.app-claude-messages .app-message-parts__tool-group--edit-cards-only .app-message-part--tool + .app-message-part--tool {
-  border-top: none;
-}
-
-.app-claude-messages .app-message-parts__tool-group--edit-cards-only .app-tool-edit-card {
-  margin: 0;
-}
-
-.app-message-parts__tool-group-label {
-  font-size: 10px;
-  font-weight: 600;
-  line-height: 1.2;
-  letter-spacing: 0.02em;
-  color: var(--ant-color-text-quaternary);
-  padding: 0;
-}
-
-.app-message-parts__tool-group-head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 0 2px 4px;
-}
-
-.app-message-parts__tool-group-error {
-  color: var(--ant-color-error);
-  font-weight: 600;
-}
-
-.app-message-parts__tool-group-actions {
+.app-message-part-reasoning-summary {
   display: inline-flex;
   align-items: center;
-  gap: 4px;
-  flex-shrink: 0;
-}
-
-.app-message-parts__tool-group-action {
+  gap: 6px;
+  max-width: 100%;
+  margin: 0;
+  padding: 1px 0;
   border: none;
   background: transparent;
-  padding: 0 4px;
-  font-size: 10px;
-  line-height: 1.2;
-  color: var(--ant-color-text-tertiary);
+  text-align: left;
   cursor: pointer;
-  border-radius: 4px;
+  font: inherit;
+  color: var(--ant-color-text-tertiary);
 }
 
-.app-message-parts__tool-group-action:hover:not(:disabled) {
+.app-message-part-reasoning-summary:hover:not(:disabled) {
   color: var(--ant-color-text-secondary);
-  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 70%, transparent);
 }
 
-.app-message-parts__tool-group-action:disabled {
-  opacity: 0.45;
+.app-message-part-reasoning-summary:disabled {
   cursor: default;
+  opacity: 0.7;
+}
+
+.app-message-part-reasoning-summary__label {
+  display: inline-flex;
+  align-items: baseline;
+  gap: 6px;
+  font-size: 12px;
+  line-height: 1.45;
+}
+
+.app-message-part-reasoning-summary__meta {
+  font-size: 11px;
+  color: var(--ant-color-text-quaternary);
+}
+
+.app-message-part-reasoning-summary__chevron {
+  display: inline-flex;
+  opacity: 0.55;
+}
+
+.app-message-part-reasoning-compact-body {
+  margin-top: 4px;
+  padding-left: 2px;
 }
 
 .app-message-parts__tool-group .app-message-part--tool {

@@ -240,6 +240,31 @@
       ]
     }
   },
-  "hotPaths": [],
+  "hotPaths": [
+    {
+      "path": "package.json",
+      "accessCount": 1,
+      "lastAccessed": 1784327904736,
+      "type": "file"
+    },
+    {
+      "path": "src-tauri/capabilities/default.json",
+      "accessCount": 1,
+      "lastAccessed": 1784327910920,
+      "type": "file"
+    },
+    {
+      "path": "src/App.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1784327910972,
+      "type": "file"
+    },
+    {
+      "path": "src-tauri/tauri.conf.json",
+      "accessCount": 1,
+      "lastAccessed": 1784327911027,
+      "type": "file"
+    }
+  ],
   "userDirectives": []
 }

@@ -1,4 +1,4 @@
-import { memo, useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import type { MessagePart, TextPart, ToolUsePart, ReasoningPart } from "../../types";
 import { isRenderableMessagePart } from "../../utils/claudeChatMessageDisplay";
@@ -11,7 +11,6 @@ import {
   countAssistantTextParagraphs,
   joinAssistantTextPartBodies,
 } from "../../utils/assistantTextParts";
-import { reasoningPreviewOverflows } from "../../utils/reasoningPreviewOverflows";
 import { isSkillToolPart, skillToolDisplayName } from "../../utils/skillToolPart";
 import { LinkifiedPre } from "./LinkifiedPre";
 import { Markdown, StreamingReplyHint, usePacedText } from "./Markdown";
@@ -22,6 +21,7 @@ import {
   isFileEditToolName,
   isToolEditNoiseOutput,
 } from "../../utils/toolFileEditPreview";
+import { buildToolGroupActivitySummary } from "../../utils/toolGroupActivitySummary";
 
 // ── SVG Icons ──
 
@@ -146,130 +146,54 @@ const ReasoningPartDisplay = memo(function ReasoningPartDisplay({
   showPendingHint: boolean;
 }) {
   const [expanded, setExpanded] = useState(false);
-  const [overflows, setOverflows] = useState(false);
-  const bodyRef = useRef<HTMLDivElement>(null);
   const text = usePacedText(part.text, streaming);
-
-  useLayoutEffect(() => {
-    if (expanded) {
-      setOverflows((prev) => (prev ? false : prev));
-      return;
-    }
-    const el = bodyRef.current;
-    if (!el) return;
-
-    let rafId = 0;
-    const measure = () => {
-      const nextOverflows = reasoningPreviewOverflows(el, text);
-      setOverflows((prev) => (prev === nextOverflows ? prev : nextOverflows));
-    };
-    const scheduleMeasure = () => {
-      if (rafId) cancelAnimationFrame(rafId);
-      rafId = requestAnimationFrame(measure);
-    };
-
-    scheduleMeasure();
-    const row = el.querySelector<HTMLElement>(".app-message-part-reasoning-inline-row");
-    const observer =
-      typeof ResizeObserver !== "undefined" ? new ResizeObserver(scheduleMeasure) : null;
-    observer?.observe(el);
-    if (row) observer?.observe(row);
-    const host = el.querySelector<HTMLElement>(".app-message-part-reasoning-inline-row .app-markdown-host");
-    if (host) observer?.observe(host);
-    return () => {
-      if (rafId) cancelAnimationFrame(rafId);
-      observer?.disconnect();
-    };
-  }, [expanded, text]);
-
-  const canToggle = overflows || expanded;
   const charCount = part.text.trim().length;
-  const { onPointerDown, consumeHadTextSelection, resetPointerGuard } = useClickAfterSelectionGuard();
-  const handleToggle = useCallback(() => {
-    setExpanded((prev) => !prev);
-  }, []);
-  const handleToggleClick = useCallback(
-    (event: React.MouseEvent<HTMLButtonElement>) => {
-      if (!canToggle) return;
-      if (consumeHadTextSelection()) return;
-      event.stopPropagation();
-      handleToggle();
-    },
-    [canToggle, consumeHadTextSelection, handleToggle],
-  );
-  const handleRowClick = useCallback(
-    (event: React.MouseEvent<HTMLDivElement>) => {
-      if (!canToggle) return;
-      if (consumeHadTextSelection()) return;
-      const target = event.target;
-      if (target instanceof Element && target.closest("a, button")) return;
-      handleToggle();
-    },
-    [canToggle, consumeHadTextSelection, handleToggle],
-  );
+  const hasBody = text.trim().length > 0;
+  // Cursor 风格：默认只显示一行「思考了」；展开后才看正文。
+  const canToggle = hasBody || streaming;
+  const { onPointerDown, consumeHadTextSelection } = useClickAfterSelectionGuard();
 
   return (
     <div
-      className={`app-message-part app-message-part--reasoning${
+      className={`app-message-part app-message-part--reasoning app-message-part--reasoning-compact${
         expanded ? " app-message-part--reasoning-expanded" : ""
       }`}
     >
-      <div
-        className="app-message-part-reasoning-shell"
-      >
-        <div
-          className={`app-message-part-reasoning-collapsible${
-            expanded ? " app-message-part-reasoning-collapsible--expanded" : ""
-          }`}
+      <div className="app-message-part-reasoning-shell">
+        <button
+          type="button"
+          className="app-message-part-reasoning-summary"
+          aria-expanded={expanded}
+          disabled={!canToggle}
+          onPointerDown={canToggle ? onPointerDown : undefined}
+          onClick={() => {
+            if (!canToggle) return;
+            if (consumeHadTextSelection()) return;
+            setExpanded((prev) => !prev);
+          }}
         >
-          <div
-            className={`app-message-part-reasoning-collapsible__row${
-              canToggle ? " app-message-part-reasoning-collapsible__row--clickable" : ""
-            }`}
-            onPointerDown={canToggle ? onPointerDown : undefined}
-            onPointerLeave={canToggle ? resetPointerGuard : undefined}
-            onPointerCancel={canToggle ? resetPointerGuard : undefined}
-            onClick={canToggle ? handleRowClick : undefined}
-          >
-            <div
-              ref={bodyRef}
-              className="app-message-part-reasoning-collapsible__body"
-            >
-              <div className="app-message-part-reasoning-inline-row">
-                <span className="app-message-part-reasoning-label">
-                  <span className="app-message-part-reasoning-label__icon" aria-hidden>
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5">
-                      <path d="M9.5 2A5.5 5.5 0 0 0 4 7.5c0 1.9.96 3.58 2.42 4.56L6 18h12l-.42-5.94A5.49 5.49 0 0 0 20 7.5 5.5 5.5 0 0 0 14.5 2h-5Z" />
-                      <path d="M9 18v2M15 18v2" />
-                    </svg>
-                  </span>
-                  <span className="app-message-part-reasoning-label__text">思考过程</span>
-                  {!expanded && canToggle && charCount > 0 ? (
-                    <span className="app-message-part-reasoning-label__count">{charCount} 字</span>
-                  ) : null}
-                </span>
-                <Markdown
-                  text={text}
-                  streaming={streaming}
-                  showPendingHint={false}
-                  className="app-message-part--reasoning-content"
-                />
-              </div>
-            </div>
-            {canToggle ? (
-              <button
-                type="button"
-                className="app-message-part-reasoning-collapsible__toggle"
-                aria-label={expanded ? "收起" : "展开"}
-                aria-expanded={expanded}
-                onPointerDown={onPointerDown}
-                onClick={handleToggleClick}
-              >
-                <ChevronIcon expanded={expanded} />
-              </button>
+          <span className="app-message-part-reasoning-summary__label">
+            {streaming && !expanded ? "思考中" : "思考了"}
+            {!expanded && charCount > 0 ? (
+              <span className="app-message-part-reasoning-summary__meta">{charCount} 字</span>
             ) : null}
+          </span>
+          {canToggle ? (
+            <span className="app-message-part-reasoning-summary__chevron" aria-hidden>
+              <ChevronIcon expanded={expanded} />
+            </span>
+          ) : null}
+        </button>
+        {expanded && hasBody ? (
+          <div className="app-message-part-reasoning-compact-body">
+            <Markdown
+              text={text}
+              streaming={streaming}
+              showPendingHint={false}
+              className="app-message-part--reasoning-content"
+            />
           </div>
-        </div>
+        ) : null}
         {showPendingHint ? <StreamingReplyHint /> : null}
       </div>
     </div>
@@ -857,36 +781,20 @@ function hasExpandableToolBody(
   return false;
 }
 
-function isCompactEditPreviewPart(part: ToolUsePart): boolean {
-  const editPreview = extractToolFileEditPreview(part);
-  if (!editPreview) return false;
-  const isErrorState = part.status === "error" || Boolean(part.error?.trim());
-  if (isErrorState) return false;
-  return !hasExpandableToolBody(part, getToolDisplayInfo(part), editPreview);
-}
-
 const ToolGroupDisplay = memo(function ToolGroupDisplay({
   parts,
 }: {
   parts: { part: ToolUsePart; originalIndex: number }[];
 }) {
-  const multiTools = parts.length > 1;
+  const toolParts = useMemo(() => parts.map(({ part }) => part), [parts]);
+  const summary = useMemo(() => buildToolGroupActivitySummary(toolParts), [toolParts]);
   const keys = useMemo(
     () => parts.map(({ part, originalIndex }) => toolPartStableKey(part, originalIndex)),
     [parts],
   );
-  const expandableKeys = useMemo(
-    () =>
-      parts
-        .filter(({ part }) => hasExpandableToolBody(part))
-        .map(({ part, originalIndex }) => toolPartStableKey(part, originalIndex)),
-    [parts],
-  );
-  const editCardsOnly = useMemo(
-    () => parts.length > 0 && parts.every(({ part }) => isCompactEditPreviewPart(part)),
-    [parts],
-  );
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [expandedMap, setExpandedMap] = useState<Record<string, boolean>>({});
+  const { onPointerDown, consumeHadTextSelection } = useClickAfterSelectionGuard();
 
   useEffect(() => {
     setExpandedMap((prev) => {
@@ -898,74 +806,56 @@ const ToolGroupDisplay = memo(function ToolGroupDisplay({
     });
   }, [keys]);
 
-  const errorCount = useMemo(
-    () => parts.filter(({ part }) => part.status === "error" || Boolean(part.error?.trim())).length,
-    [parts],
-  );
-  const anyExpanded = expandableKeys.some((key) => expandedMap[key]);
-  const anyCollapsed = expandableKeys.some((key) => !expandedMap[key]);
-
-  const expandAll = useCallback(() => {
-    setExpandedMap((prev) => {
-      const next = { ...prev };
-      for (const key of expandableKeys) next[key] = true;
-      return next;
-    });
-  }, [expandableKeys]);
-
-  const collapseAll = useCallback(() => {
-    setExpandedMap((prev) => {
-      const next = { ...prev };
-      for (const key of expandableKeys) next[key] = false;
-      return next;
-    });
-  }, [expandableKeys]);
-
   return (
     <div
-      className={`app-message-parts__tool-group${multiTools ? " app-message-parts__tool-group--multi" : ""}${editCardsOnly ? " app-message-parts__tool-group--edit-cards-only" : ""}`}
+      className={`app-message-parts__tool-group app-message-parts__tool-group--compact${
+        detailsOpen ? " app-message-parts__tool-group--details-open" : ""
+      }`}
     >
-      {multiTools ? (
-        <div className="app-message-parts__tool-group-head">
-          <span className="app-message-parts__tool-group-label">
-            工具链 · {parts.length}
-            {errorCount > 0 ? (
-              <span className="app-message-parts__tool-group-error"> · {errorCount} 失败</span>
-            ) : null}
-          </span>
-          {expandableKeys.length > 0 ? (
-            <div className="app-message-parts__tool-group-actions">
-              <button
-                type="button"
-                className="app-message-parts__tool-group-action"
-                disabled={!anyCollapsed}
-                onClick={expandAll}
-              >
-                全部展开
-              </button>
-              <button
-                type="button"
-                className="app-message-parts__tool-group-action"
-                disabled={!anyExpanded}
-                onClick={collapseAll}
-              >
-                全部收起
-              </button>
-            </div>
+      <button
+        type="button"
+        className="app-message-parts__tool-group-summary"
+        aria-expanded={detailsOpen}
+        onPointerDown={onPointerDown}
+        onClick={() => {
+          if (consumeHadTextSelection()) return;
+          setDetailsOpen((prev) => !prev);
+        }}
+      >
+        <span className="app-message-parts__tool-group-summary__text">
+          <span className="app-message-parts__tool-group-summary__label">{summary.label}</span>
+          {summary.addedLines > 0 || summary.removedLines > 0 ? (
+            <span className="app-message-parts__tool-group-summary__diff" aria-hidden>
+              {summary.addedLines > 0 ? (
+                <span className="app-message-parts__tool-group-summary__add">+{summary.addedLines}</span>
+              ) : null}
+              {summary.removedLines > 0 ? (
+                <span className="app-message-parts__tool-group-summary__remove">
+                  -{summary.removedLines}
+                </span>
+              ) : null}
+            </span>
           ) : null}
+        </span>
+        <span className="app-message-parts__tool-group-summary__chevron" aria-hidden>
+          <ChevronIcon expanded={detailsOpen} />
+        </span>
+      </button>
+      {detailsOpen ? (
+        <div className="app-message-parts__tool-group-details">
+          {parts.map(({ part, originalIndex }) => {
+            const key = toolPartStableKey(part, originalIndex);
+            return (
+              <ToolUsePartDisplay
+                key={key}
+                part={part}
+                expanded={expandedMap[key] ?? false}
+                onExpandedChange={(next) => setExpandedMap((prev) => ({ ...prev, [key]: next }))}
+              />
+            );
+          })}
         </div>
       ) : null}
-      {parts.map(({ part, originalIndex }) => {
-        const key = toolPartStableKey(part, originalIndex);
-        return (
-          <ToolUsePartDisplay
-            key={key}
-            part={part}
-            expanded={expandedMap[key] ?? false}
-            onExpandedChange={(next) => setExpandedMap((prev) => ({ ...prev, [key]: next }))}
-          />
-        );
-      })}
     </div>
   );
 });
