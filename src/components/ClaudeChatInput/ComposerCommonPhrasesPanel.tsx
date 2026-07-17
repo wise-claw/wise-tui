@@ -8,11 +8,16 @@ import {
   resolveComposerCommonPhraseShowInQuickBar,
   type ComposerCommonPhrase,
 } from "../../constants/composerCommonPhrase";
-import type { ComposerCommonPhrasesScopeLabel } from "../../hooks/useComposerCommonPhrases";
+import {
+  useComposerCommonPhrases,
+  type ComposerCommonPhrasesScopeLabel,
+} from "../../hooks/useComposerCommonPhrases";
 import { formatChordForDisplay } from "../../utils/atMentionShortcutChord";
 import { ComposerCommonPhraseEditModal } from "./ComposerCommonPhraseEditModal";
 import { ComposerDefaultInstructionField } from "./ComposerDefaultInstructionField";
 import "./ComposerCommonPhrasesPanel.css";
+
+type PhraseEditTarget = "local" | "global";
 
 function buildNormalizedPhrase(draft: ComposerCommonPhrase): ComposerCommonPhrase | null {
   const text = draft.text.trim();
@@ -37,28 +42,103 @@ function previewText(text: string, max = 28): string {
   return `${trimmed.slice(0, max)}…`;
 }
 
-// 仓库目录名仅用于 scope 提示展示，不参与任何存储/匹配。
-function repositoryBasename(path?: string | null): string {
-  if (!path) return "";
-  const parts = path.replace(/\\/g, "/").split("/").filter(Boolean);
-  return parts[parts.length - 1] ?? "";
-}
-
-function scopeHintFor(
-  scope: ComposerCommonPhrasesScopeLabel,
-  repositoryPath?: string | null,
-): { title: string; hint?: string } {
-  const name = repositoryBasename(repositoryPath);
-  switch (scope) {
-    case "merged":
-      return {
-        title: name ? `全局 + 当前仓库：${name}` : "全局 + 当前仓库常用语",
-        hint: "全局条目只读，下方可编辑当前仓库独立常用语。",
-      };
-    case "global":
-    default:
-      return { title: "全局常用语" };
+function EditablePhraseList({
+  phrases,
+  busy,
+  idPrefix,
+  emptyText,
+  onOpenEdit,
+  onRemove,
+  onSetShowInQuickBar,
+}: {
+  phrases: readonly ComposerCommonPhrase[];
+  busy: boolean;
+  idPrefix: string;
+  emptyText: string;
+  onOpenEdit: (phrase: ComposerCommonPhrase) => void;
+  onRemove: (id: string) => void;
+  onSetShowInQuickBar: (id: string, showInQuickBar: boolean) => void;
+}) {
+  if (phrases.length === 0) {
+    return <p className="app-composer-common-phrases-panel__empty">{emptyText}</p>;
   }
+
+  return (
+    <ul className="app-composer-common-phrases-panel__list">
+      {phrases.map((phrase) => {
+        const keys = phrase.chord ? formatChordForDisplay(phrase.chord) : "";
+        const actionLabel =
+          COMPOSER_COMMON_PHRASE_ACTION_LABELS[resolveComposerCommonPhraseAction(phrase)];
+        return (
+          <li key={`${idPrefix}:${phrase.id}`} className="app-composer-common-phrases-panel__item">
+            <button
+              type="button"
+              className="app-composer-common-phrases-panel__item-main"
+              disabled={busy}
+              onClick={() => onOpenEdit(phrase)}
+            >
+              <span className="app-composer-common-phrases-panel__item-head">
+                <span className="app-composer-common-phrases-panel__item-title">{phrase.title}</span>
+                <span className="app-composer-common-phrases-panel__item-action" title={actionLabel}>
+                  {actionLabel === "直接发送" ? "发送" : "填入"}
+                </span>
+                {keys ? (
+                  <kbd className="app-composer-common-phrases-panel__item-keys">{keys}</kbd>
+                ) : null}
+              </span>
+              <span className="app-composer-common-phrases-panel__item-preview">
+                {previewText(phrase.text, 36)}
+              </span>
+            </button>
+            <div className="app-composer-common-phrases-panel__item-side">
+              <label
+                className="app-composer-common-phrases-panel__item-quick"
+                title="在会话快捷操作栏显示名称"
+                onClick={(event) => event.stopPropagation()}
+              >
+                <span className="app-composer-common-phrases-panel__item-quick-label">快捷栏</span>
+                <Switch
+                  size="small"
+                  disabled={busy}
+                  checked={resolveComposerCommonPhraseShowInQuickBar(phrase)}
+                  onChange={(checked) => onSetShowInQuickBar(phrase.id, checked)}
+                />
+              </label>
+              <Button
+                type="link"
+                size="small"
+                className="app-composer-common-phrases-panel__item-edit"
+                disabled={busy}
+                onClick={() => onOpenEdit(phrase)}
+              >
+                编辑
+              </Button>
+              <Popconfirm
+                title="删除这条常用语？"
+                okText="删除"
+                cancelText="取消"
+                okButtonProps={{ danger: true, size: "small" }}
+                cancelButtonProps={{ size: "small" }}
+                disabled={busy}
+                onConfirm={() => onRemove(phrase.id)}
+              >
+                <Button
+                  type="link"
+                  size="small"
+                  danger
+                  className="app-composer-common-phrases-panel__item-delete"
+                  disabled={busy}
+                  onClick={(event) => event.stopPropagation()}
+                >
+                  删除
+                </Button>
+              </Popconfirm>
+            </div>
+          </li>
+        );
+      })}
+    </ul>
+  );
 }
 
 export function ComposerCommonPhrasesPanel({
@@ -77,7 +157,7 @@ export function ComposerCommonPhrasesPanel({
 }: {
   /** 可编辑列表：scope=global 时为全局，scope=merged 时为当前仓库级。 */
   phrases: readonly ComposerCommonPhrase[];
-  /** 只读全局列表：仅 scope=merged 时作为叠加展示源。 */
+  /** 全局列表：仅 scope=merged 时展示并可在此直接编辑。 */
   globalPhrases?: readonly ComposerCommonPhrase[];
   loading: boolean;
   saving: boolean;
@@ -90,12 +170,15 @@ export function ComposerCommonPhrasesPanel({
   hideDefaultInstruction?: boolean;
   repositoryPath?: string | null;
 }) {
-  const busy = loading || saving;
+  const isMerged = scope === "merged";
+  // 合并模式下全局条目直接在此编辑，写入全局 scope。
+  const globalScope = useComposerCommonPhrases({});
+  const editableGlobalPhrases = globalPhrases ?? globalScope.phrases;
+  const localBusy = loading || saving;
+  const globalBusy = globalScope.loading || globalScope.saving;
+
   const defaultBusy = (defaultInstructionLoading ?? false) || (defaultInstructionSaving ?? false);
   const [defaultDraft, setDefaultDraft] = useState(defaultInstruction ?? "");
-  const scopeHint = scopeHintFor(scope, repositoryPath);
-  const readOnlyPhrases = globalPhrases ?? [];
-  const isMerged = scope === "merged" && readOnlyPhrases.length > 0;
 
   useEffect(() => {
     setDefaultDraft(defaultInstruction ?? "");
@@ -111,36 +194,48 @@ export function ComposerCommonPhrasesPanel({
     },
     [defaultDraft, defaultInstruction, onDefaultInstructionSave],
   );
+
   const [editOpen, setEditOpen] = useState(false);
   const [editMode, setEditMode] = useState<"create" | "edit">("create");
+  const [editTarget, setEditTarget] = useState<PhraseEditTarget>("local");
   const [editDraft, setEditDraft] = useState<ComposerCommonPhrase | null>(null);
 
-  const openCreate = useCallback(() => {
-    if (phrases.length >= MAX_COMPOSER_COMMON_PHRASES) {
-      message.warning(`最多 ${MAX_COMPOSER_COMMON_PHRASES} 条常用语`);
-      return;
-    }
-    setEditMode("create");
-    setEditDraft({
-      id: createComposerCommonPhraseId(),
-      title: "新常用语",
-      text: "",
-      action: "send",
-    });
-    setEditOpen(true);
-  }, [phrases.length]);
+  const targetPhrases = editTarget === "global" ? editableGlobalPhrases : phrases;
+  const targetPersist = editTarget === "global" ? globalScope.persist : onPersist;
+  const targetSaving = editTarget === "global" ? globalScope.saving : saving;
 
-  const openEdit = useCallback((phrase: ComposerCommonPhrase) => {
+  const openCreate = useCallback(
+    (target: PhraseEditTarget) => {
+      const list = target === "global" ? editableGlobalPhrases : phrases;
+      if (list.length >= MAX_COMPOSER_COMMON_PHRASES) {
+        message.warning(`最多 ${MAX_COMPOSER_COMMON_PHRASES} 条常用语`);
+        return;
+      }
+      setEditTarget(target);
+      setEditMode("create");
+      setEditDraft({
+        id: createComposerCommonPhraseId(),
+        title: "新常用语",
+        text: "",
+        action: "send",
+      });
+      setEditOpen(true);
+    },
+    [editableGlobalPhrases, phrases],
+  );
+
+  const openEdit = useCallback((target: PhraseEditTarget, phrase: ComposerCommonPhrase) => {
+    setEditTarget(target);
     setEditMode("edit");
     setEditDraft({ ...phrase });
     setEditOpen(true);
   }, []);
 
   const closeEdit = useCallback(() => {
-    if (saving) return;
+    if (targetSaving) return;
     setEditOpen(false);
     setEditDraft(null);
-  }, [saving]);
+  }, [targetSaving]);
 
   const patchDraft = useCallback(
     (
@@ -163,32 +258,43 @@ export function ComposerCommonPhrasesPanel({
 
     const next =
       editMode === "create"
-        ? [...phrases, normalized]
-        : phrases.map((phrase) => (phrase.id === normalized.id ? normalized : phrase));
-    await onPersist(next);
+        ? [...targetPhrases, normalized]
+        : targetPhrases.map((phrase) => (phrase.id === normalized.id ? normalized : phrase));
+    await targetPersist(next);
     setEditOpen(false);
     setEditDraft(null);
-  }, [editDraft, editMode, onPersist, phrases]);
+  }, [editDraft, editMode, targetPersist, targetPhrases]);
 
   const removePhraseById = useCallback(
-    async (id: string) => {
-      await onPersist(phrases.filter((phrase) => phrase.id !== id));
-      if (editDraft?.id === id) {
+    async (target: PhraseEditTarget, id: string) => {
+      const list = target === "global" ? editableGlobalPhrases : phrases;
+      const persist = target === "global" ? globalScope.persist : onPersist;
+      await persist(list.filter((phrase) => phrase.id !== id));
+      if (editDraft?.id === id && editTarget === target) {
         setEditOpen(false);
         setEditDraft(null);
       }
     },
-    [editDraft?.id, onPersist, phrases],
+    [
+      editDraft?.id,
+      editTarget,
+      editableGlobalPhrases,
+      globalScope.persist,
+      onPersist,
+      phrases,
+    ],
   );
 
   const handleDelete = useCallback(async () => {
     if (!editDraft || editMode !== "edit") return;
-    await removePhraseById(editDraft.id);
-  }, [editDraft, editMode, removePhraseById]);
+    await removePhraseById(editTarget, editDraft.id);
+  }, [editDraft, editMode, editTarget, removePhraseById]);
 
   const setPhraseShowInQuickBar = useCallback(
-    async (id: string, showInQuickBar: boolean) => {
-      const next = phrases.map((phrase) => {
+    async (target: PhraseEditTarget, id: string, showInQuickBar: boolean) => {
+      const list = target === "global" ? editableGlobalPhrases : phrases;
+      const persist = target === "global" ? globalScope.persist : onPersist;
+      const next = list.map((phrase) => {
         if (phrase.id !== id) return phrase;
         if (showInQuickBar) {
           const { showInQuickBar: _removed, ...rest } = phrase;
@@ -196,22 +302,13 @@ export function ComposerCommonPhrasesPanel({
         }
         return { ...phrase, showInQuickBar: false as const };
       });
-      await onPersist(next);
+      await persist(next);
     },
-    [onPersist, phrases],
+    [editableGlobalPhrases, globalScope.persist, onPersist, phrases],
   );
 
   return (
     <div className="app-composer-common-phrases-panel">
-      <div
-        className={`app-composer-common-phrases-panel__scope app-composer-common-phrases-panel__scope--${scope}`}
-        role="status"
-      >
-        <span className="app-composer-common-phrases-panel__scope-title">{scopeHint.title}</span>
-        {scopeHint.hint ? (
-          <span className="app-composer-common-phrases-panel__scope-hint">{scopeHint.hint}</span>
-        ) : null}
-      </div>
       {hideDefaultInstruction ? null : (
         <section className="app-composer-common-phrases-panel__default" aria-label="主会话默认指令">
           <div className="app-composer-common-phrases-panel__default-head-row">
@@ -233,52 +330,30 @@ export function ComposerCommonPhrasesPanel({
         </section>
       )}
       {isMerged ? (
-        <section
-          className="app-composer-common-phrases-panel__global"
-          aria-label="全局常用语（只读）"
-        >
-          <div className="app-composer-common-phrases-panel__global-head">
-            <span className="app-composer-common-phrases-panel__global-title">
-              全局常用语（所有仓库共享）
-            </span>
-            <span className="app-composer-common-phrases-panel__global-hint">
-              在 左栏默认配置 &gt; 全局常用语 编辑
-            </span>
+        <section className="app-composer-common-phrases-panel__global" aria-label="全局常用语">
+          <div className="app-composer-common-phrases-panel__hint-row">
+            <p className="app-composer-common-phrases-panel__hint">
+              全局常用语（所有仓库共享）：点击编辑
+            </p>
+            <Button
+              type="dashed"
+              size="small"
+              className="app-composer-common-phrases-panel__add"
+              disabled={globalBusy || editableGlobalPhrases.length >= MAX_COMPOSER_COMMON_PHRASES}
+              onClick={() => openCreate("global")}
+            >
+              新增
+            </Button>
           </div>
-          <ul className="app-composer-common-phrases-panel__list app-composer-common-phrases-panel__list--readonly">
-            {readOnlyPhrases.map((phrase) => {
-              const keys = phrase.chord ? formatChordForDisplay(phrase.chord) : "";
-              const actionLabel =
-                COMPOSER_COMMON_PHRASE_ACTION_LABELS[resolveComposerCommonPhraseAction(phrase)];
-              return (
-                <li
-                  key={`global:${phrase.id}`}
-                  className="app-composer-common-phrases-panel__item app-composer-common-phrases-panel__item--readonly"
-                >
-                  <div className="app-composer-common-phrases-panel__item-main">
-                    <span className="app-composer-common-phrases-panel__item-head">
-                      <span className="app-composer-common-phrases-panel__item-title">
-                        {phrase.title}
-                      </span>
-                      <span
-                        className="app-composer-common-phrases-panel__item-action"
-                        title={actionLabel}
-                      >
-                        {actionLabel === "直接发送" ? "发送" : "填入"}
-                      </span>
-                      {keys ? (
-                        <kbd className="app-composer-common-phrases-panel__item-keys">{keys}</kbd>
-                      ) : null}
-                    </span>
-                    <span className="app-composer-common-phrases-panel__item-preview">
-                      {previewText(phrase.text, 36)}
-                    </span>
-                  </div>
-                  <span className="app-composer-common-phrases-panel__item-readonly-badge">全局</span>
-                </li>
-              );
-            })}
-          </ul>
+          <EditablePhraseList
+            phrases={editableGlobalPhrases}
+            busy={globalBusy}
+            idPrefix="global"
+            emptyText="暂无全局常用语，点击上方新增（所有仓库共享）。"
+            onOpenEdit={(phrase) => openEdit("global", phrase)}
+            onRemove={(id) => void removePhraseById("global", id)}
+            onSetShowInQuickBar={(id, show) => void setPhraseShowInQuickBar("global", id, show)}
+          />
         </section>
       ) : null}
       <div className="app-composer-common-phrases-panel__hint-row">
@@ -289,98 +364,29 @@ export function ComposerCommonPhrasesPanel({
           type="dashed"
           size="small"
           className="app-composer-common-phrases-panel__add"
-          disabled={busy || phrases.length >= MAX_COMPOSER_COMMON_PHRASES}
-          onClick={openCreate}
+          disabled={localBusy || phrases.length >= MAX_COMPOSER_COMMON_PHRASES}
+          onClick={() => openCreate("local")}
         >
           新增
         </Button>
       </div>
-      {phrases.length === 0 ? (
-        <p className="app-composer-common-phrases-panel__empty">
-          {isMerged ? "当前仓库暂无独立常用语，点击上方新增。" : "暂无常用语，点击上方新增。"}
-        </p>
-      ) : (
-        <ul className="app-composer-common-phrases-panel__list">
-          {phrases.map((phrase) => {
-            const keys = phrase.chord ? formatChordForDisplay(phrase.chord) : "";
-            const actionLabel =
-              COMPOSER_COMMON_PHRASE_ACTION_LABELS[resolveComposerCommonPhraseAction(phrase)];
-            return (
-              <li key={`editable:${phrase.id}`} className="app-composer-common-phrases-panel__item">
-                <button
-                  type="button"
-                  className="app-composer-common-phrases-panel__item-main"
-                  disabled={busy}
-                  onClick={() => openEdit(phrase)}
-                >
-                  <span className="app-composer-common-phrases-panel__item-head">
-                    <span className="app-composer-common-phrases-panel__item-title">{phrase.title}</span>
-                    <span className="app-composer-common-phrases-panel__item-action" title={actionLabel}>
-                      {actionLabel === "直接发送" ? "发送" : "填入"}
-                    </span>
-                    {keys ? (
-                      <kbd className="app-composer-common-phrases-panel__item-keys">{keys}</kbd>
-                    ) : null}
-                  </span>
-                  <span className="app-composer-common-phrases-panel__item-preview">
-                    {previewText(phrase.text, 36)}
-                  </span>
-                </button>
-                <div className="app-composer-common-phrases-panel__item-side">
-                  <label
-                    className="app-composer-common-phrases-panel__item-quick"
-                    title="在会话快捷操作栏显示名称"
-                    onClick={(event) => event.stopPropagation()}
-                  >
-                    <span className="app-composer-common-phrases-panel__item-quick-label">快捷栏</span>
-                    <Switch
-                      size="small"
-                      disabled={busy}
-                      checked={resolveComposerCommonPhraseShowInQuickBar(phrase)}
-                      onChange={(checked) => void setPhraseShowInQuickBar(phrase.id, checked)}
-                    />
-                  </label>
-                  <Button
-                    type="link"
-                    size="small"
-                    className="app-composer-common-phrases-panel__item-edit"
-                    disabled={busy}
-                    onClick={() => openEdit(phrase)}
-                  >
-                    编辑
-                  </Button>
-                  <Popconfirm
-                    title="删除这条常用语？"
-                    okText="删除"
-                    cancelText="取消"
-                    okButtonProps={{ danger: true, size: "small" }}
-                    cancelButtonProps={{ size: "small" }}
-                    disabled={busy}
-                    onConfirm={() => void removePhraseById(phrase.id)}
-                  >
-                    <Button
-                      type="link"
-                      size="small"
-                      danger
-                      className="app-composer-common-phrases-panel__item-delete"
-                      disabled={busy}
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      删除
-                    </Button>
-                  </Popconfirm>
-                </div>
-              </li>
-            );
-          })}
-        </ul>
-      )}
+      <EditablePhraseList
+        phrases={phrases}
+        busy={localBusy}
+        idPrefix="local"
+        emptyText={
+          isMerged ? "当前仓库暂无独立常用语，点击上方新增。" : "暂无常用语，点击上方新增。"
+        }
+        onOpenEdit={(phrase) => openEdit("local", phrase)}
+        onRemove={(id) => void removePhraseById("local", id)}
+        onSetShowInQuickBar={(id, show) => void setPhraseShowInQuickBar("local", id, show)}
+      />
 
       <ComposerCommonPhraseEditModal
         open={editOpen}
         mode={editMode}
         draft={editDraft}
-        saving={saving}
+        saving={targetSaving}
         onDraftChange={patchDraft}
         onCancel={closeEdit}
         onSave={() => void handleSave()}

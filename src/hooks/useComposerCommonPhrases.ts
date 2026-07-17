@@ -50,7 +50,7 @@ export interface UseComposerCommonPhrasesOptions {
   /**
    * 当前会话所属仓库 id。提供时启用「全局 + 仓库合并」：
    * - effective = 全局 + 仓库级合并（全局在前，chord 冲突时仓库级优先、全局剥离 chord）。
-   * - 全局条目只读，编辑（add/update/remove/persist）只作用于仓库级（scope="merged"）。
+   * - 默认 persist/add/update/remove 只作用于仓库级；全局条目由面板内直接编辑全局 scope。
    * 不提供（undefined/null）→ 仅全局，可编辑（scope="global"，向后兼容）。
    */
   repositoryId?: number | null;
@@ -80,7 +80,8 @@ export function useComposerCommonPhrases({
   const effectivePhrases = hasRepositoryScope
     ? mergeComposerCommonPhrases(globalPhrases, repoPhrases)
     : globalPhrases;
-  // 可编辑源：仓库 scope 存在时为仓库级（全局只读），否则为全局（向后兼容无仓库场景）。
+  // 默认可编辑源：仓库 scope 存在时为仓库级，否则为全局（向后兼容无仓库场景）。
+  // 合并模式下全局条目由面板另行写入 global store，不走本 hook 的 add/update/remove。
   const editablePhrases = hasRepositoryScope ? repoPhrases : globalPhrases;
   const scope: ComposerCommonPhrasesScopeLabel = hasRepositoryScope ? "merged" : "global";
 
@@ -94,7 +95,7 @@ export function useComposerCommonPhrases({
   }, [repoStore, globalStore, hasRepositoryScope]);
 
   // persist 写入当前 scope：有 repositoryId → 仓库 scope；否则 → 全局 scope。
-  // 合并模式下编辑只作用于仓库级，全局通过 GlobalComposerCommonPhrasesManager 管理。
+  // 合并模式下本 hook 的 persist 只作用于仓库级；全局由面板写入 global store。
   const persist = useCallback(
     async (next: ComposerCommonPhrase[]) => {
       await repoStore.persist(next);
@@ -147,9 +148,9 @@ export function useComposerCommonPhrases({
 
   return {
     phrases: effectivePhrases,
-    /** 可编辑源：仓库 scope 存在时为仓库级，否则为全局。add/update/remove 作用于此。 */
+    /** 默认可编辑源：仓库 scope 存在时为仓库级，否则为全局。本 hook 的 add/update/remove 作用于此。 */
     editablePhrases,
-    /** 全局常用语（仓库 scope 存在时为只读叠加源）。 */
+    /** 全局常用语（仓库 scope 存在时由面板直接编辑全局 store）。 */
     globalPhrases,
     bindings,
     loading,

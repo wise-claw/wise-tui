@@ -21,7 +21,7 @@ export function ComposerCommonPhrasesManageTrigger({
 }: {
   /** 可编辑列表：scope=global 时为全局，scope=merged 时为当前仓库级。 */
   phrases: readonly ComposerCommonPhrase[];
-  /** 只读全局列表：仅 scope=merged 时作为叠加展示源。 */
+  /** 全局列表：仅 scope=merged 时展示，可在面板内直接编辑。 */
   globalPhrases?: readonly ComposerCommonPhrase[];
   loading: boolean;
   saving: boolean;

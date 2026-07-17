@@ -29,7 +29,6 @@ import { useFeaturePanelChromeDefaultSetting } from "./useFeaturePanelChromeDefa
 import { useDefaultTerminalSetting } from "./useDefaultTerminalSetting";
 import { useClaudeDefaultSettingsSetting } from "./useClaudeDefaultSettingsSetting";
 import { ClaudeSettingsJsonEditor } from "../ClaudeSessions/ClaudeSettingsJsonEditor";
-import { GlobalComposerCommonPhrasesManager } from "../ClaudeChatInput/GlobalComposerCommonPhrasesManager";
 import { useCodexDefaultSettingsSetting } from "./useCodexDefaultSettingsSetting";
 import { useOpencodeDefaultSettingsSetting } from "./useOpencodeDefaultSettingsSetting";
 import { OPENCODE_PERMISSION_PLACEHOLDER } from "./opencodeDefaultSettings";
@@ -1005,12 +1004,6 @@ export function DefaultConfigPanel() {
                 }}
               />
             }
-          />
-
-          <DefaultConfigRow
-            title="全局常用语"
-            hint="无仓库独立配置时回落使用"
-            control={<GlobalComposerCommonPhrasesManager />}
           />
         </>
       ),
