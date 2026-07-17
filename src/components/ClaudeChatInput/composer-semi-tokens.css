@@ -28,9 +28,9 @@
   min-width: 0;
 }
 
-/* 会话输入：略小于 Semi 默认 14px，与消息区 13px 更接近 */
+/* 会话输入：与消息区 13px 正文基准对齐 */
 .app-claude-semi-chat-input-wrap .semi-aiChatInput-editor-content .tiptap {
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: var(--app-semi-ai-chat-editor-line-px);
   min-height: calc(
     var(--app-semi-ai-chat-editor-min-lines) * var(--app-semi-ai-chat-editor-line-px)
@@ -38,12 +38,12 @@
 }
 
 .app-claude-semi-chat-input-wrap .semi-aiChatInput-editor-content .tiptap .node-inputSlot {
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 18px;
 }
 
 .app-claude-semi-chat-input-wrap .semi-aiChatInput-editor-content .tiptap .select-slot {
-  font-size: 12.5px;
+  font-size: 13px;
   line-height: 18px;
 }
 

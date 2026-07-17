@@ -229,7 +229,7 @@ export function WorkspaceMemoPanel() {
             >
               <span
                 className={`app-file-editor-tab-label${
-                  dirty && saveStatus !== "saved" ? " app-file-editor-tab-label--dirty" : ""
+                  dirty ? " app-file-editor-tab-label--dirty" : ""
                 }`}
               >
                 备忘录

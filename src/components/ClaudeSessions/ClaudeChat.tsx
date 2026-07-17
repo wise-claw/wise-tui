@@ -210,6 +210,7 @@ interface Props {
   cursorAvailable?: boolean;
   geminiAvailable?: boolean;
   opencodeAvailable?: boolean;
+  qoderAvailable?: boolean;
   onOpenExecutionEnvironment?: () => void;
   onCancel: (opts?: { retractLastUserTurn?: boolean }) => void;
   /** 取消任意标签会话（如执行环境 worker） */
@@ -372,6 +373,7 @@ export function ClaudeChatInner({
   cursorAvailable = true,
   geminiAvailable = false,
   opencodeAvailable = false,
+  qoderAvailable = false,
   onOpenExecutionEnvironment,
   onCancel,
   onCancelSessionById,
@@ -1876,6 +1878,7 @@ export function ClaudeChatInner({
             cursorAvailable={cursorAvailable}
             geminiAvailable={geminiAvailable}
             opencodeAvailable={opencodeAvailable}
+            qoderAvailable={qoderAvailable}
             deferredSendQueued={deferredSendQueued}
             taskDispatchStateById={taskDispatchStateById}
             onPin={pinTask}
@@ -1953,6 +1956,7 @@ export function ClaudeChatInner({
               cursorAvailable={cursorAvailable}
               geminiAvailable={geminiAvailable}
               opencodeAvailable={opencodeAvailable}
+              qoderAvailable={qoderAvailable}
               onOpenExecutionEnvironment={onOpenExecutionEnvironment}
               onSessionExecutionEngineChange={handleSessionExecutionEngineChange}
               paneIndex={paneIndex}

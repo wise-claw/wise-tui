@@ -275,6 +275,7 @@ interface ComposerInnerProps {
   cursorAvailable?: boolean;
   geminiAvailable?: boolean;
   opencodeAvailable?: boolean;
+  qoderAvailable?: boolean;
   onSessionExecutionEngineChange?: (engine: SessionExecutionEngine) => void;
   onOpenExecutionEnvironment?: () => void;
   /** `retractLastUserTurn`：Esc 撤回刚发时从 transcript 去掉本轮 user/assistant 并杀进程 */
@@ -618,6 +619,7 @@ function ComposerInner({
   cursorAvailable = true,
   geminiAvailable = false,
   opencodeAvailable = false,
+  qoderAvailable = false,
   onSessionExecutionEngineChange,
   onOpenExecutionEnvironment,
   onCancel: _onCancel,
@@ -3163,6 +3165,7 @@ function ComposerInner({
             cursorAvailable={cursorAvailable}
             geminiAvailable={geminiAvailable}
             opencodeAvailable={opencodeAvailable}
+            qoderAvailable={qoderAvailable}
             disabled={isSessionBusy}
             onEngineChange={paneCount > 1 ? undefined : onSessionExecutionEngineChange}
             onOpenExecutionEnvironment={onOpenExecutionEnvironment}
@@ -3201,6 +3204,7 @@ function ComposerInner({
       cursorAvailable,
       geminiAvailable,
       opencodeAvailable,
+      qoderAvailable,
       onSessionExecutionEngineChange,
       onOpenExecutionEnvironment,
       handleComposerModelChange,
@@ -3418,6 +3422,7 @@ function ComposerInner({
                 cursorAvailable={cursorAvailable}
                 geminiAvailable={geminiAvailable}
                 opencodeAvailable={opencodeAvailable}
+                qoderAvailable={qoderAvailable}
                 atMentionDefaultTarget={atMentionDefaultTarget}
                 onAtMentionDefaultTargetChange={(next) => void saveAtMentionDefaultTarget(next)}
               />
@@ -3520,6 +3525,7 @@ export interface ComposerRegionProps {
   cursorAvailable?: boolean;
   geminiAvailable?: boolean;
   opencodeAvailable?: boolean;
+  qoderAvailable?: boolean;
   onSessionExecutionEngineChange?: (engine: SessionExecutionEngine) => void;
   onOpenExecutionEnvironment?: () => void;
   /** `retractLastUserTurn`：Esc 撤回刚发时从 transcript 去掉本轮 user/assistant 并杀进程 */

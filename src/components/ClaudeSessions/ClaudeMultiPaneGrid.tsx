@@ -176,6 +176,7 @@ export interface MultiPaneSharedChatProps {
   cursorAvailable: boolean;
   geminiAvailable: boolean;
   opencodeAvailable: boolean;
+  qoderAvailable: boolean;
   onOpenExecutionEnvironment?: () => void;
   onCancelSession: (sessionId: string, opts?: { retractLastUserTurn?: boolean }) => void;
   onRespondToQuestion: (sessionId: string, answers: string[], customAnswer?: string) => void;
@@ -346,6 +347,7 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
         cursorAvailable={shared.cursorAvailable}
         geminiAvailable={shared.geminiAvailable}
         opencodeAvailable={shared.opencodeAvailable}
+        qoderAvailable={shared.qoderAvailable}
         onOpenExecutionEnvironment={shared.onOpenExecutionEnvironment}
         onCancel={onCancel}
         onCancelSessionById={shared.onCancelSession}
@@ -667,6 +669,7 @@ const MultiPaneExtraPaneCell = memo(
         cursorAvailable={shared.cursorAvailable}
         geminiAvailable={shared.geminiAvailable}
         opencodeAvailable={shared.opencodeAvailable}
+        qoderAvailable={shared.qoderAvailable}
             onOpenExecutionEnvironment={shared.onOpenExecutionEnvironment}
             onCancel={(opts) => shared.onCancelSession(sessionId, opts)}
             onCancelSessionById={shared.onCancelSession}

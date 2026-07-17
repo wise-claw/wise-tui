@@ -90,7 +90,7 @@ pub struct AssistantContribution {
     pub name: String,
     #[serde(default)]
     pub description: Option<String>,
-    /// References a detected execution engine: claude / codex / gemini / opencode /
+    /// References a detected execution engine: claude / codex / gemini / opencode / qoder /
     /// or a `custom:<id>` slug. Wise does not validate at manifest load
     /// time (engine availability changes at runtime); panels surface
     /// "engine unavailable" lazily.

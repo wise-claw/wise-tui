@@ -56,6 +56,7 @@ import { useAgentRegistryCodexAvailable } from "./hooks/useAgentRegistryCodexAva
 import { useAgentRegistryCursorAvailable } from "./hooks/useAgentRegistryCursorAvailable";
 import { useAgentRegistryGeminiAvailable } from "./hooks/useAgentRegistryGeminiAvailable";
 import { useAgentRegistryOpencodeAvailable } from "./hooks/useAgentRegistryOpencodeAvailable";
+import { useAgentRegistryQoderAvailable } from "./hooks/useAgentRegistryQoderAvailable";
 import {
   authorView,
   cockpitView,
@@ -880,6 +881,7 @@ export default function App() {
   const cursorAvailable = useAgentRegistryCursorAvailable();
   const geminiAvailable = useAgentRegistryGeminiAvailable();
   const opencodeAvailable = useAgentRegistryOpencodeAvailable();
+  const qoderAvailable = useAgentRegistryQoderAvailable();
 
   const handleUpdateEmployeeExecutionEngine = useCallback(
     async (employeeId: string, engine: import("./types").SessionExecutionEngine) => {
@@ -1500,6 +1502,7 @@ export default function App() {
           cursorAvailable,
           geminiAvailable,
           opencodeAvailable,
+          qoderAvailable,
           createSession,
           executeSession: (workerTabId, prompt, opts) => executeSession(workerTabId, prompt, opts),
           appendSystemMessage,
@@ -1518,6 +1521,7 @@ export default function App() {
       cursorAvailable,
       geminiAvailable,
       opencodeAvailable,
+      qoderAvailable,
       createSession,
       executeSession,
       appendSystemMessage,
@@ -3889,6 +3893,7 @@ export default function App() {
         cursorAvailable,
         geminiAvailable,
         opencodeAvailable,
+        qoderAvailable,
         onOpenExecutionEnvironment: handleOpenExecutionEnvironment,
         onExecuteSession: handleComposerExecute,
         onResumeSessionFromMonitorDrawer: resumeSessionFromMonitorDrawer,

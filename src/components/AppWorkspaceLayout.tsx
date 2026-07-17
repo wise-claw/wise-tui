@@ -1566,6 +1566,21 @@ export function AppWorkspaceLayout({
             tooltip={{ unique: true }}
             theme={{
               algorithm,
+              /**
+               * 全局设计基线：统一字体、字号、行高、圆角，让 AntD 组件与自定义
+               * 面板向 13px 正文基准收敛，减少「AntD 14px vs 面板 10-11px」的割裂感。
+               * 单点配置即可级联到所有 AntD 组件。
+               */
+              token: {
+                fontFamily:
+                  '-apple-system, BlinkMacSystemFont, "SF Pro SC", "SF Pro Text", "PingFang SC", "Helvetica Neue", "Microsoft YaHei", "Segoe UI", Arial, sans-serif',
+                fontSize: 13,
+                lineHeight: 1.55,
+                borderRadius: 8,
+                borderRadiusLG: 10,
+                borderRadiusSM: 6,
+                wireframe: false,
+              },
               /** MCP/技能等叠层局部 z-index 较高，避免 Message 被盖住看不见 */
               components: {
                 Message: { zIndexPopup: 20000 },

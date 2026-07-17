@@ -1,7 +1,8 @@
 use crate::{
     agent_registry, app_state_commands, assistants, at_mention_shortcuts, cc_switch_import,
     in_app_shortcuts,
-    claude_code_line_edits, claude_code_usage, claude_commands, codex_commands, opencode_commands, claude_config_dir,
+    claude_code_line_edits, claude_code_usage, claude_commands, codex_commands, opencode_commands,
+    qoder_commands, claude_config_dir,
     claude_llm_proxy, claude_model_profiles,
     cursor_agent, fcc_traces, free_claude_code, opencode_go_proxy,
     cua_driver, dingtalk_enterprise_bot, dingtalk_stream_gateway, extensions, git_commands,
@@ -426,6 +427,8 @@ pub fn run() {
             codex_commands::execute_codex_code,
             opencode_commands::execute_opencode_code,
             opencode_commands::opencode_list_models,
+            qoder_commands::execute_qoder_code,
+            qoder_commands::qoder_list_models,
             claude_commands::resume_claude_code,
             claude_commands::spawn_streaming_session,
             claude_commands::send_user_message_to_session,

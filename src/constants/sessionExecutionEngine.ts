@@ -1,4 +1,10 @@
-export type SessionExecutionEngine = "claude" | "codex" | "cursor" | "gemini" | "opencode";
+export type SessionExecutionEngine =
+  | "claude"
+  | "codex"
+  | "cursor"
+  | "gemini"
+  | "opencode"
+  | "qoder";
 
 export const SESSION_EXECUTION_ENGINE_LABELS: Record<
   SessionExecutionEngine,
@@ -29,6 +35,11 @@ export const SESSION_EXECUTION_ENGINE_LABELS: Record<
     short: "OpenCode",
     description: "OpenCode CLI（opencode）",
   },
+  qoder: {
+    title: "Qoder CLI",
+    short: "Qoder",
+    description: "Qoder CLI（qodercli -p）",
+  },
 };
 
 export const SESSION_EXECUTION_ENGINES = [
@@ -37,6 +48,7 @@ export const SESSION_EXECUTION_ENGINES = [
   "cursor",
   "gemini",
   "opencode",
+  "qoder",
 ] as const satisfies readonly SessionExecutionEngine[];
 
 export function normalizeSessionExecutionEngine(
@@ -47,6 +59,7 @@ export function normalizeSessionExecutionEngine(
   if (normalized === "cursor") return "cursor";
   if (normalized === "gemini") return "gemini";
   if (normalized === "opencode") return "opencode";
+  if (normalized === "qoder") return "qoder";
   return "claude";
 }
 
@@ -56,6 +69,7 @@ export function isSessionExecutionEngine(value: string): value is SessionExecuti
     value === "codex" ||
     value === "cursor" ||
     value === "gemini" ||
-    value === "opencode"
+    value === "opencode" ||
+    value === "qoder"
   );
 }

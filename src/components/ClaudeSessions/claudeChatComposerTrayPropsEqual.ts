@@ -37,6 +37,7 @@ export function claudeChatComposerTrayPropsEqual(
   if (prev.cursorAvailable !== next.cursorAvailable) return false;
   if (prev.geminiAvailable !== next.geminiAvailable) return false;
   if (prev.opencodeAvailable !== next.opencodeAvailable) return false;
+  if (prev.qoderAvailable !== next.qoderAvailable) return false;
   if (prev.hideEmployeesInAtMode !== next.hideEmployeesInAtMode) return false;
   if (prev.paneIndex !== next.paneIndex) return false;
   if (prev.paneCount !== next.paneCount) return false;

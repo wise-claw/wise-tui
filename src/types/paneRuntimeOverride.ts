@@ -2,7 +2,7 @@ import type { SessionExecutionEngine } from "../constants/sessionExecutionEngine
 import { SESSION_EXECUTION_ENGINE_LABELS } from "../constants/sessionExecutionEngine";
 
 /** 多屏窗格预设已覆盖 Claude / Codex，其余引擎在弹窗中单独列出。 */
-export const PANE_EXTRA_EXECUTION_ENGINES = ["cursor", "gemini", "opencode"] as const satisfies readonly SessionExecutionEngine[];
+export const PANE_EXTRA_EXECUTION_ENGINES = ["cursor", "gemini", "opencode", "qoder"] as const satisfies readonly SessionExecutionEngine[];
 
 /** 多屏窗格当前实际生效的执行引擎（含 Cursor / Gemini / OpenCode 等覆盖）。 */
 export function resolvePaneEffectiveEngine(

@@ -74,6 +74,8 @@ export function getBuiltinInstallCommand(kind: BuiltinInstallableKind): string {
       return "npm install -g @google/gemini-cli";
     case "opencode":
       return "npm install -g opencode-ai@latest";
+    case "qoder":
+      return "npm install -g @qoder-ai/qodercli";
   }
 }
 
@@ -98,6 +100,8 @@ export function getAgentKindLabel(kind: DetectedAgent["kind"]): string {
       return "Gemini";
     case "opencode":
       return "OpenCode";
+    case "qoder":
+      return "Qoder CLI";
     case "cursor":
       return "Cursor CLI";
     case "custom":

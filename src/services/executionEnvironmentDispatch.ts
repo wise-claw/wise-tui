@@ -29,6 +29,7 @@ export type ExecutionEnvironmentDispatchDeps = {
   cursorAvailable?: boolean;
   geminiAvailable?: boolean;
   opencodeAvailable?: boolean;
+  qoderAvailable?: boolean;
   createSession: (
     repositoryPath: string,
     repositoryName: string,
@@ -50,6 +51,7 @@ function resolveEngineAvailability(deps: ExecutionEnvironmentDispatchDeps) {
     cursorAvailable: deps.cursorAvailable ?? true,
     geminiAvailable: deps.geminiAvailable ?? false,
     opencodeAvailable: deps.opencodeAvailable ?? false,
+    qoderAvailable: deps.qoderAvailable ?? false,
   };
 }
 

@@ -349,5 +349,6 @@ describe("buildSessionEmptyChatPrompt", () => {
     expect(buildSessionEmptyChatPrompt("codex")).toBe("发送消息开始与 Codex CLI 对话");
     expect(buildSessionEmptyChatPrompt("gemini")).toBe("发送消息开始与 Gemini CLI 对话");
     expect(buildSessionEmptyChatPrompt("opencode")).toBe("发送消息开始与 OpenCode 对话");
+    expect(buildSessionEmptyChatPrompt("qoder")).toBe("发送消息开始与 Qoder CLI 对话");
   });
 });

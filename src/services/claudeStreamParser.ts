@@ -182,6 +182,7 @@ function extractPartsFromStreamDelta(delta: unknown): MessagePart[] {
  */
 const CODEX_SESSION_ID_FIELDS = ["sessionId", "session_id"] as const;
 const OPENCODE_SESSION_ID_FIELDS = ["sessionId", "session_id"] as const;
+const QODER_SESSION_ID_FIELDS = ["sessionId", "session_id"] as const;
 const CURSOR_AGENT_ID_FIELDS = ["agentId", "agent_id"] as const;
 
 export function extractCodexResumeSessionIdFromParsed(obj: unknown): string | null {
@@ -198,6 +199,14 @@ export function extractOpencodeResumeSessionIdFromParsed(obj: unknown): string |
 
 export function shouldClearOpencodeResumeSessionFromParsed(obj: unknown): boolean {
   return shouldClearExternalAgentIdFromParsed(obj, "opencode_session", OPENCODE_SESSION_ID_FIELDS);
+}
+
+export function extractQoderResumeSessionIdFromParsed(obj: unknown): string | null {
+  return extractExternalAgentIdFromParsed(obj, "qoder_session", QODER_SESSION_ID_FIELDS);
+}
+
+export function shouldClearQoderResumeSessionFromParsed(obj: unknown): boolean {
+  return shouldClearExternalAgentIdFromParsed(obj, "qoder_session", QODER_SESSION_ID_FIELDS);
 }
 
 export function extractCursorAgentIdFromParsed(obj: unknown): string | null {
@@ -245,6 +254,14 @@ export function extractOpencodeResumeSessionIdFromStreamLine(line: string): stri
 
 export function shouldClearOpencodeResumeSessionFromStreamLine(line: string): boolean {
   return shouldClearOpencodeResumeSessionFromParsed(safeJsonParse(line));
+}
+
+export function extractQoderResumeSessionIdFromStreamLine(line: string): string | null {
+  return extractQoderResumeSessionIdFromParsed(safeJsonParse(line));
+}
+
+export function shouldClearQoderResumeSessionFromStreamLine(line: string): boolean {
+  return shouldClearQoderResumeSessionFromParsed(safeJsonParse(line));
 }
 
 export function extractCursorAgentIdFromStreamLine(line: string): string | null {

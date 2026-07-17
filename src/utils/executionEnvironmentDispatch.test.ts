@@ -52,6 +52,12 @@ describe("parseExecutionEnvironmentDispatch", () => {
     expect(plan?.cleanedPrompt).toBe("重构模块");
   });
 
+  test("parses @Qoder CLI mention", () => {
+    const plan = parseExecutionEnvironmentDispatch("@Qoder CLI 重构模块");
+    expect(plan?.executionEngine).toBe("qoder");
+    expect(plan?.cleanedPrompt).toBe("重构模块");
+  });
+
   test("parses numeric batch session count", () => {
     const plan = parseExecutionEnvironmentDispatch("@Claude Code 起5个会话来执行这批接口测试");
     expect(plan?.sessionCount).toBe(5);
@@ -92,6 +98,14 @@ describe("execution environment worker repository name", () => {
     });
   });
 
+  test("encodes qoder engine in worker tab name", () => {
+    const name = buildExecutionEnvironmentWorkerRepositoryName("demo", "任务 3", "qoder");
+    expect(parseExecutionEnvironmentWorkerRepositoryName(name)).toEqual({
+      engine: "qoder",
+      label: "任务 3",
+    });
+  });
+
   test("legacy worker tab without engine defaults to claude", () => {
     expect(parseExecutionEnvironmentWorkerRepositoryName("demo/执行环境:任务 1")).toEqual({
       engine: "claude",
@@ -111,13 +125,14 @@ describe("listExecutionEnvironmentEngineMentionOptions", () => {
     expect(rows).toHaveLength(2);
   });
 
-  test("includes gemini and opencode when available", () => {
+  test("includes gemini, opencode, and qoder when available", () => {
     const rows = listExecutionEnvironmentEngineMentionOptions({
       codexAvailable: true,
       cursorAvailable: false,
       geminiAvailable: true,
       opencodeAvailable: true,
+      qoderAvailable: true,
     });
-    expect(rows.map((r) => r.engine)).toEqual(["claude", "codex", "gemini", "opencode"]);
+    expect(rows.map((r) => r.engine)).toEqual(["claude", "codex", "gemini", "opencode", "qoder"]);
   });
 });

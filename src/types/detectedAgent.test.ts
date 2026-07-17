@@ -36,6 +36,14 @@ const samples = {
     kind: "opencode",
     command: "opencode",
   },
+  qoder: {
+    ...base,
+    id: "qoder",
+    name: "Qoder CLI",
+    backend: "qoder",
+    kind: "qoder",
+    command: "qodercli",
+  },
   cursor: {
     ...base,
     id: "cursor",

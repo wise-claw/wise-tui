@@ -20,6 +20,7 @@ import {
 
 function executionEngineFromDispatchMeta(meta: DispatchRecordMeta): SessionExecutionEngine {
   const label = `${meta.engineName ?? ""} ${meta.targetName ?? ""}`.trim();
+  if (label.includes(SESSION_EXECUTION_ENGINE_LABELS.qoder.title)) return "qoder";
   if (label.includes(SESSION_EXECUTION_ENGINE_LABELS.opencode.title)) return "opencode";
   if (label.includes(SESSION_EXECUTION_ENGINE_LABELS.gemini.title)) return "gemini";
   if (label.includes(SESSION_EXECUTION_ENGINE_LABELS.codex.title)) return "codex";

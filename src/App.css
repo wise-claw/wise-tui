@@ -35,22 +35,31 @@
   --mission-glow: 0 0 16px var(--mission-accent-glow), 0 0 2px var(--mission-accent-border);
   --app-column-topbar-min-height: 36px;
   --app-column-topbar-padding-y: 4px;
+  /* ── 统一排版尺度（温和上调：正文 13 / 次要 12 / 标签 11 / 徽标 10）── */
+  --wise-font-size-2xs: 10px;   /* 徽标、计数等最小字号地板 */
+  --wise-font-size-xs: 11px;    /* 小标签、类型 tag */
+  --wise-font-size-sm: 12px;    /* 次要信息 */
+  --wise-font-size-base: 13px;  /* 正文基准 */
+  --wise-font-size-lg: 15px;    /* 区块/小标题 */
+  --wise-font-size-xl: 17px;    /* 标题 */
+  --wise-line-height-base: 1.55;
+  --wise-line-height-tight: 1.35;
   /* 三栏：中栏通栏实心 + 左右弱半透明毛玻璃 */
-  --app-workspace-stage-bg: color-mix(in srgb, var(--ant-color-bg-container) 97%, transparent);
-  --app-workspace-glass-blur: blur(25px) saturate(140%);
-  --app-workspace-glass-base: color-mix(in srgb, var(--ant-color-bg-container) 91%, transparent);
+  --app-workspace-stage-bg: color-mix(in srgb, var(--ant-color-bg-container) 99%, transparent);
+  --app-workspace-glass-blur: blur(18px) saturate(120%);
+  --app-workspace-glass-base: color-mix(in srgb, var(--ant-color-bg-container) 95%, transparent);
   --app-workspace-glass-border: color-mix(in srgb, var(--ant-color-border-secondary) 45%, transparent);
   --app-workspace-glass-inset-glow: inset 0 1px 1px 0 color-mix(in srgb, #ffffff 16%, transparent), inset 0 -1px 0px 0 color-mix(in srgb, #ffffff 6%, transparent);
   --app-workspace-glass-shadow: 0 8px 32px 0 color-mix(in srgb, var(--ant-color-text) 5%, transparent);
   --app-workspace-active-glow: 0 0 12px 0 color-mix(in srgb, var(--ant-color-primary) 22%, transparent), inset 0 1px 1px 0 color-mix(in srgb, #ffffff 18%, transparent);
   --app-workspace-rail-left-tint: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--ant-color-primary-bg) 18%, transparent) 0%,
+    color-mix(in srgb, var(--ant-color-primary-bg) 10%, transparent) 0%,
     transparent 48%
   );
   --app-workspace-rail-right-tint: linear-gradient(
     180deg,
-    color-mix(in srgb, var(--ant-color-fill-tertiary) 22%, transparent) 0%,
+    color-mix(in srgb, var(--ant-color-fill-tertiary) 12%, transparent) 0%,
     transparent 45%
   );
   /* 左/右栏收起展开：统一时长与缓动 */
@@ -384,9 +393,9 @@ body {
 
 /* ── Ant Design：全局缩小 Tooltip（含 Popconfirm 等；仅复杂 HoverHint 回退时使用）── */
 .ant-tooltip-container {
-  font-size: 11px !important;
-  line-height: 1.4 !important;
-  padding: 2px 8px !important;
+  font-size: var(--wise-font-size-sm, 12px) !important;
+  line-height: 1.45 !important;
+  padding: 3px 8px !important;
   min-height: 0 !important;
   max-width: 220px !important;
 }

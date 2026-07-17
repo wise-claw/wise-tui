@@ -74,6 +74,7 @@ fn normalize_execution_engine(raw: Option<String>) -> String {
         Some("cursor") => "cursor".to_string(),
         Some("gemini") => "gemini".to_string(),
         Some("opencode") => "opencode".to_string(),
+        Some("qoder") => "qoder".to_string(),
         _ => "claude".to_string(),
     }
 }

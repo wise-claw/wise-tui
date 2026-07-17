@@ -271,7 +271,7 @@ export function AssistantsPanel({
   );
 
   const engineOptions = useMemo(() => {
-    const builtins = ["claude", "codex", "gemini", "opencode", "cursor"];
+    const builtins = ["claude", "codex", "gemini", "opencode", "qoder", "cursor"];
     const customAgents = agents.filter((a) => a.kind === "custom");
     const opts = builtins.map((id) => {
       const detectedHit = agentEngineIndex.get(id);

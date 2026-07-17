@@ -15,6 +15,7 @@ interface PickerSectionProps {
   cursorAvailable?: boolean;
   geminiAvailable?: boolean;
   opencodeAvailable?: boolean;
+  qoderAvailable?: boolean;
   onEngineChange?: (engine: SessionExecutionEngine) => void;
   onOpenExecutionEnvironment?: () => void;
 }
@@ -30,11 +31,13 @@ function isEngineAvailable(
   cursorAvailable: boolean,
   geminiAvailable: boolean,
   opencodeAvailable: boolean,
+  qoderAvailable: boolean,
 ): boolean {
   if (key === "codex") return codexAvailable;
   if (key === "cursor") return cursorAvailable;
   if (key === "gemini") return geminiAvailable;
   if (key === "opencode") return opencodeAvailable;
+  if (key === "qoder") return qoderAvailable;
   return true;
 }
 
@@ -53,6 +56,7 @@ export function buildSessionExecutionEngineMenuItems({
   cursorAvailable = true,
   geminiAvailable = false,
   opencodeAvailable = false,
+  qoderAvailable = false,
   engines,
 }: PickerSectionProps & {
   engines?: readonly SessionExecutionEngine[];
@@ -62,7 +66,7 @@ export function buildSessionExecutionEngineMenuItems({
     .filter((key) => {
       // 只显示已探测到或已安装的引擎
       if (key === "claude") return true; // Claude 始终可用
-      return isEngineAvailable(key, codexAvailable, cursorAvailable, geminiAvailable, opencodeAvailable);
+      return isEngineAvailable(key, codexAvailable, cursorAvailable, geminiAvailable, opencodeAvailable, qoderAvailable);
     })
     .map((key) => {
     const itemMeta = SESSION_EXECUTION_ENGINE_LABELS[key];
@@ -110,7 +114,7 @@ export function buildSessionExecutionEngineMenuItems({
               {key === "cursor" ? (
                 <span className="app-claude-connection-kind-menu-item__badge app-claude-connection-kind-menu-item__badge--cursor">CLI</span>
               ) : null}
-              {(key === "gemini" || key === "opencode") ? (
+              {(key === "gemini" || key === "opencode" || key === "qoder") ? (
                 <span className="app-claude-connection-kind-menu-item__badge app-claude-connection-kind-menu-item__badge--codex">本地</span>
               ) : null}
             </div>
@@ -137,6 +141,7 @@ export function SessionExecutionEnginePickerSection({
   cursorAvailable = true,
   geminiAvailable = false,
   opencodeAvailable = false,
+  qoderAvailable = false,
   onEngineChange,
   onOpenExecutionEnvironment,
 }: PickerSectionProps) {
@@ -148,8 +153,9 @@ export function SessionExecutionEnginePickerSection({
         cursorAvailable,
         geminiAvailable,
         opencodeAvailable,
+        qoderAvailable,
       }),
-    [codexAvailable, cursorAvailable, geminiAvailable, opencodeAvailable, engine],
+    [codexAvailable, cursorAvailable, geminiAvailable, opencodeAvailable, qoderAvailable, engine],
   );
 
   return (
@@ -176,6 +182,7 @@ export function SessionExecutionEngineChip({
   cursorAvailable = true,
   geminiAvailable = false,
   opencodeAvailable = false,
+  qoderAvailable = false,
   onEngineChange,
   onOpenExecutionEnvironment,
   disabled = false,
@@ -190,6 +197,7 @@ export function SessionExecutionEngineChip({
     cursorAvailable,
     geminiAvailable,
     opencodeAvailable,
+    qoderAvailable,
   );
 
   const menuItems = useMemo(
@@ -200,8 +208,9 @@ export function SessionExecutionEngineChip({
         cursorAvailable,
         geminiAvailable,
         opencodeAvailable,
+        qoderAvailable,
       }),
-    [codexAvailable, cursorAvailable, geminiAvailable, opencodeAvailable, engine],
+    [codexAvailable, cursorAvailable, geminiAvailable, opencodeAvailable, qoderAvailable, engine],
   );
 
   const chipTooltip = !engineReady
@@ -211,7 +220,9 @@ export function SessionExecutionEngineChip({
         ? "未检测到 Gemini CLI；可在下拉菜单中点击「探测」"
         : engine === "opencode"
           ? "未检测到 OpenCode；可在下拉菜单中点击「探测」"
-          : "未检测到 Codex CLI；可在下拉菜单中点击「探测」"
+          : engine === "qoder"
+            ? "未检测到 Qoder CLI；可在下拉菜单中点击「探测」"
+            : "未检测到 Codex CLI；可在下拉菜单中点击「探测」"
     : `执行引擎：${meta.title}；点击切换`;
 
   const chip = (

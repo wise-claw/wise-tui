@@ -117,6 +117,7 @@ export interface ComposerPlainEditSurfaceProps {
   cursorAvailable?: boolean;
   geminiAvailable?: boolean;
   opencodeAvailable?: boolean;
+  qoderAvailable?: boolean;
   placeholder?: string;
   className?: string;
   autoFocus?: boolean;
@@ -132,6 +133,7 @@ export function ComposerPlainEditSurface({
   cursorAvailable = true,
   geminiAvailable = false,
   opencodeAvailable = false,
+  qoderAvailable = false,
   placeholder = "@ 终端/工作流/文件，/ 命令，Shift+Enter 换行",
   className = "",
   autoFocus = false,
@@ -302,6 +304,7 @@ export function ComposerPlainEditSurface({
           cursorAvailable={cursorAvailable}
           geminiAvailable={geminiAvailable}
           opencodeAvailable={opencodeAvailable}
+          qoderAvailable={qoderAvailable}
           atMentionDefaultTarget={atMentionDefaultTarget}
           onAtMentionDefaultTargetChange={(next) => void saveAtMentionDefaultTarget(next)}
         />

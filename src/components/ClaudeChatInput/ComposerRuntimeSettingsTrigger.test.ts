@@ -10,10 +10,11 @@ describe("composer runtime settings menu items", () => {
       cursorAvailable: true,
       geminiAvailable: true,
       opencodeAvailable: true,
+      qoderAvailable: true,
     });
     const connectionItems = buildConnectionKindMenuItems("streaming", "streaming");
 
-    expect(engineItems).toHaveLength(5);
+    expect(engineItems).toHaveLength(6);
     expect(connectionItems).toHaveLength(2);
     expect(engineItems?.[0]?.key).toBe("claude");
     expect(connectionItems?.[1]?.key).toBe("streaming");

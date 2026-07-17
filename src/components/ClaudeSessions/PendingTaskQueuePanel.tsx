@@ -72,6 +72,7 @@ interface Props {
   cursorAvailable?: boolean;
   geminiAvailable?: boolean;
   opencodeAvailable?: boolean;
+  qoderAvailable?: boolean;
   /** 已预约在本轮 Claude 结束后自动发送队首 */
   deferredSendQueued?: boolean;
   onPin: (id: string) => void;
@@ -109,6 +110,7 @@ export function PendingTaskQueuePanel({
   cursorAvailable = true,
   geminiAvailable = false,
   opencodeAvailable = false,
+  qoderAvailable = false,
   deferredSendQueued = false,
   onPin,
   onRemove,
@@ -357,6 +359,7 @@ export function PendingTaskQueuePanel({
               cursorAvailable={cursorAvailable}
               geminiAvailable={geminiAvailable}
               opencodeAvailable={opencodeAvailable}
+              qoderAvailable={qoderAvailable}
               autoFocus
               className="app-pending-task-queue-edit-composer"
             />

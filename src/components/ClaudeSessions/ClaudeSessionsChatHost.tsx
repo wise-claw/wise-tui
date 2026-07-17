@@ -114,6 +114,7 @@ export interface ClaudeSessionsChatHostProps {
   cursorAvailable?: boolean;
   geminiAvailable?: boolean;
   opencodeAvailable?: boolean;
+  qoderAvailable?: boolean;
   onOpenExecutionEnvironment?: () => void;
   onExecuteSession: (
     sessionId: string,
@@ -244,6 +245,7 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
   cursorAvailable = true,
   geminiAvailable = false,
   opencodeAvailable = false,
+  qoderAvailable = false,
   onOpenExecutionEnvironment,
   onExecuteSession,
   onResumeSessionFromMonitorDrawer,
@@ -543,6 +545,7 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
     cursorAvailable,
     geminiAvailable,
     opencodeAvailable,
+    qoderAvailable,
     onOpenExecutionEnvironment,
     onCancelSession,
     onRespondToQuestion,
@@ -710,6 +713,7 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
           cursorAvailable={cursorAvailable}
           geminiAvailable={geminiAvailable}
           opencodeAvailable={opencodeAvailable}
+          qoderAvailable={qoderAvailable}
           onOpenExecutionEnvironment={onOpenExecutionEnvironment}
           onCancel={(opts) => onCancelSession(activeSession.id, opts)}
           onCancelSessionById={onCancelSession}

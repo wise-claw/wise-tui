@@ -34,6 +34,7 @@ import {
 } from "../services/claude";
 import { executeCodexCode } from "../services/codex";
 import { executeOpencodeCode } from "../services/opencode";
+import { executeQoderCode } from "../services/qoder";
 import { executeCursorCode } from "../services/cursorAgentExecution";
 import {
   buildCursorUserBubblePrompt,
@@ -46,6 +47,8 @@ import { resolveCodexContextExecutionEngine, resolveCodexExecModelId } from "../
 import { resolveCodexResumeSessionId } from "../utils/codexSessionId";
 import { resolveOpencodeExecModelId } from "../utils/opencodeModel";
 import { resolveOpencodeResumeSessionId } from "../utils/opencodeSessionId";
+import { resolveQoderResumeSessionId } from "../utils/qoderSessionId";
+import { formatQoderModelLabel, resolveQoderExecModelId } from "../utils/qoderModel";
 import { getCachedModelProfileStore } from "../stores/modelProfileStoreCache";
 import {
   WISE_CLAUDE_USER_SETTINGS_CHANGED,
@@ -1068,6 +1071,89 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     [commitSessions, keepInvocationStreamAfterTurnComplete, resolveTrellisContextId],
   );
 
+  const runQoderOneshotWithInvocation = useCallback(
+    async (params: {
+      tabSessionId: string;
+      turnNonce: number;
+      repositoryPath: string;
+      prompt: string;
+      modelArg: string | undefined;
+      qoderResumeSessionId?: string | null;
+      forceNewClaudeConversation?: boolean;
+    }) => {
+      const {
+        tabSessionId,
+        turnNonce,
+        repositoryPath,
+        prompt,
+        modelArg,
+        qoderResumeSessionId,
+        forceNewClaudeConversation,
+      } = params;
+      if (!streamRuntimeRef.current) {
+        const deadline = Date.now() + CLAUDE_STREAM_RUNTIME_READY_WAIT_MS;
+        while (!streamRuntimeRef.current && Date.now() < deadline) {
+          await new Promise<void>((r) => {
+            window.setTimeout(r, CLAUDE_STREAM_RUNTIME_READY_POLL_MS);
+          });
+        }
+        if (!streamRuntimeRef.current) {
+          message.error("流式引擎尚未就绪或初始化超时，请稍后重试发送。");
+          throw new Error("Claude stream runtime not ready");
+        }
+      }
+      notificationHub.invalidateControlRequestsForSession(tabSessionId, "已发起新一轮对话");
+      const rt = streamRuntimeRef.current;
+      let detach: (() => void) | null = null;
+      const inv = crypto.randomUUID();
+      if (rt) {
+        try {
+          detach = await attachClaudeInvocationStream(
+            inv,
+            tabSessionId,
+            rt,
+            turnNonce,
+            () => {
+              claudeInvocationInflightRef.current.delete(inv);
+            },
+            (tabId, bound) => expectedTurnNonceByTabIdRef.current.get(tabId) ?? bound,
+            keepInvocationStreamAfterTurnComplete,
+          );
+          claudeInvocationInflightRef.current.set(inv, { tabId: tabSessionId, detach });
+        } catch {
+          detach = null;
+        }
+      }
+      const invocationKey = detach ? inv : undefined;
+      const qoderModel = resolveQoderExecModelId(modelArg);
+      const qoderModelLabel = formatQoderModelLabel(modelArg?.trim() || "auto");
+      const resumeLabel = qoderResumeSessionId?.trim() ? "续接会话" : "新会话";
+      commitSessions((prev) =>
+        appendSystemMessageBySessionId(
+          prev,
+          tabSessionId,
+          `Qoder CLI 执行中（${resumeLabel}，模型：${qoderModelLabel}）…`,
+        ),
+      );
+      try {
+        await executeQoderCode(
+          repositoryPath,
+          prompt,
+          qoderModel,
+          invocationKey,
+          tabSessionId,
+          resolveTrellisContextId(tabSessionId),
+          qoderResumeSessionId ?? undefined,
+          forceNewClaudeConversation === true,
+        );
+      } catch (e) {
+        detach?.();
+        throw e;
+      }
+    },
+    [commitSessions, keepInvocationStreamAfterTurnComplete, resolveTrellisContextId],
+  );
+
   const runCursorOneshotWithInvocation = useCallback(
     async (params: {
       tabSessionId: string;
@@ -1386,13 +1472,36 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         });
         return;
       }
+      if (engine === "qoder") {
+        const qoderResumeSessionId =
+          params.forceNewClaudeConversation || !session
+            ? null
+            : resolveQoderResumeSessionId(session, params.tabSessionId, sessionIdMapRef.current);
+        await runQoderOneshotWithInvocation({
+          tabSessionId: params.tabSessionId,
+          turnNonce: params.turnNonce,
+          repositoryPath: params.repositoryPath,
+          prompt: params.prompt,
+          modelArg: params.modelArg,
+          qoderResumeSessionId,
+          forceNewClaudeConversation: params.forceNewClaudeConversation,
+        });
+        return;
+      }
       if (sessionUsesStreamingConnection(session, defaultConnectionKindRef.current)) {
         await runClaudeStreamingWithInvocation(params);
       } else {
         await runClaudeOneshotWithInvocation(params);
       }
     },
-    [runClaudeStreamingWithInvocation, runClaudeOneshotWithInvocation, runCodexOneshotWithInvocation, runCursorOneshotWithInvocation, runOpencodeOneshotWithInvocation],
+    [
+      runClaudeStreamingWithInvocation,
+      runClaudeOneshotWithInvocation,
+      runCodexOneshotWithInvocation,
+      runCursorOneshotWithInvocation,
+      runOpencodeOneshotWithInvocation,
+      runQoderOneshotWithInvocation,
+    ],
   );
 
   const pruneLiveSessionSidecars = useCallback((liveSessions: readonly ClaudeSession[]) => {
@@ -2115,6 +2224,27 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         });
         return;
       }
+      if (resolver?.(session) === "qoder") {
+        if (params.forceNewClaudeConversation) {
+          setSessions((prev) =>
+            prev.map((s) => (s.id === tabSessionId ? { ...s, claudeSessionId: null } : s)),
+          );
+          sessionIdMapRef.current.delete(tabSessionId);
+        }
+        const qoderResumeSessionId = params.forceNewClaudeConversation
+          ? null
+          : resolveQoderResumeSessionId(session, tabSessionId, sessionIdMapRef.current);
+        await runQoderOneshotWithInvocation({
+          tabSessionId,
+          turnNonce: params.turnNonce,
+          repositoryPath,
+          prompt,
+          modelArg: params.modelArg,
+          qoderResumeSessionId,
+          forceNewClaudeConversation: params.forceNewClaudeConversation,
+        });
+        return;
+      }
 
       const runOnce = async (outbound: string) => {
         const cc = params.forceNewClaudeConversation
@@ -2213,6 +2343,8 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       reloadTranscriptFromDisk,
       runCodexOneshotWithInvocation,
       runCursorOneshotWithInvocation,
+      runOpencodeOneshotWithInvocation,
+      runQoderOneshotWithInvocation,
       runCompactTurnAndWait,
     ],
   );
@@ -3509,7 +3641,8 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       const skipClaudeSidBootstrapWait =
         executionEngine === "cursor" ||
         executionEngine === "codex" ||
-        executionEngine === "opencode";
+        executionEngine === "opencode" ||
+        executionEngine === "qoder";
       const bubblePrompt = opts?.userBubblePrompt?.trim()
         ? opts.userBubblePrompt
         : opts?.cursorAttachments && opts.cursorAttachments.length > 0
@@ -3528,7 +3661,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       }
       if (executionEngine === "gemini") {
         const engineTitle = SESSION_EXECUTION_ENGINE_LABELS[executionEngine].title;
-        const geminiNotice = `[系统] ${engineTitle} 主会话派发即将支持，请暂时切换 Claude Code、Codex CLI、OpenCode 或 Cursor CLI。`;
+        const geminiNotice = `[系统] ${engineTitle} 主会话派发即将支持，请暂时切换 Claude Code、Codex CLI、OpenCode、Qoder CLI 或 Cursor CLI。`;
         commitSessions((prev) => {
           // task 留队列后，外部 flush 可能重派命中同一 gemini 终态分支：去重避免重复追加系统提示。
           const target = prev.find((s) => s.id === tabSessionId);
@@ -3636,7 +3769,10 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       // 不可走 resolveClaudeExecModelId（会优先 Claude 档案，覆盖会话选择）。
       const sessionModelTrimmed = spawnSession.model?.trim() || undefined;
       const modelArg =
-        spawnEngine === "opencode" || spawnEngine === "cursor" || spawnEngine === "codex"
+        spawnEngine === "opencode" ||
+        spawnEngine === "cursor" ||
+        spawnEngine === "codex" ||
+        spawnEngine === "qoder"
           ? sessionModelTrimmed
           : resolveClaudeExecModelId({
               sessionModel: spawnSession.model,

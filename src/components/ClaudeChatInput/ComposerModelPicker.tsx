@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState, type Mouse
 import { getClaudeModelPickerOptions } from "../../services/claude";
 import { listCursorModels, type CursorModelListItem } from "../../services/cursorAgent";
 import { listOpencodeModels, type OpencodeModelListItem } from "../../services/opencode";
+import { listQoderModels, type QoderModelListItem } from "../../services/qoder";
 import {
   getClaudeModelProfileStore,
   WISE_CLAUDE_USER_SETTINGS_CHANGED,
@@ -43,6 +44,13 @@ import {
   isOpencodeModelId,
   matchesOpencodeModelPickerFilter,
 } from "../../utils/opencodeModel";
+import {
+  QODER_DEFAULT_MODEL,
+  buildQoderModelPickerOptions,
+  formatQoderModelLabel,
+  isQoderModelId,
+  matchesQoderModelPickerFilter,
+} from "../../utils/qoderModel";
 import {
   normalizeSessionExecutionEngine,
   type SessionExecutionEngine,
@@ -173,8 +181,9 @@ export function ComposerModelPicker({
   );
   const isCursorEngine = sessionExecutionEngine === "cursor";
   const isOpencodeEngine = sessionExecutionEngine === "opencode";
-  /** Cursor / OpenCode：Composer 只选模型，不打开档案配置面板。 */
-  const isSelectOnlyEngine = isCursorEngine || isOpencodeEngine;
+  const isQoderEngine = sessionExecutionEngine === "qoder";
+  /** Cursor / OpenCode / Qoder：Composer 只选模型，不打开档案配置面板。 */
+  const isSelectOnlyEngine = isCursorEngine || isOpencodeEngine || isQoderEngine;
   const profileEngine: ModelProfileEngine | null = isSelectOnlyEngine
     ? null
     : sessionExecutionEngine === "codex"
@@ -186,6 +195,7 @@ export function ComposerModelPicker({
   >(null);
   const [cursorModels, setCursorModels] = useState<CursorModelListItem[] | null>(null);
   const [opencodeModels, setOpencodeModels] = useState<OpencodeModelListItem[] | null>(null);
+  const [qoderModels, setQoderModels] = useState<QoderModelListItem[] | null>(null);
   const [profileStoreRevision, setProfileStoreRevision] = useState(0);
   const [panelOpen, setPanelOpen] = useState(false);
   const [panelMounted, setPanelMounted] = useState(false);
@@ -215,8 +225,12 @@ export function ComposerModelPicker({
       void listOpencodeModels().then(setOpencodeModels);
       return;
     }
+    if (isQoderEngine) {
+      void listQoderModels().then(setQoderModels);
+      return;
+    }
     void getClaudeModelPickerOptions(session.repositoryPath).then(setClaudePicker);
-  }, [isCursorEngine, isOpencodeEngine, session.repositoryPath]);
+  }, [isCursorEngine, isOpencodeEngine, isQoderEngine, session.repositoryPath]);
 
   useEffect(() => {
     refreshClaudeModelPicker();
@@ -241,6 +255,16 @@ export function ComposerModelPicker({
         : OPENCODE_DEFAULT_MODEL;
     syncModelIfNeeded(nextModel);
   }, [isOpencodeEngine, session.id, session.model, opencodeModels, syncModelIfNeeded]);
+
+  useEffect(() => {
+    if (!isQoderEngine) return;
+    const fromSession = session.model?.trim();
+    const nextModel =
+      fromSession && isQoderModelId(fromSession, qoderModels ?? undefined)
+        ? fromSession
+        : QODER_DEFAULT_MODEL;
+    syncModelIfNeeded(nextModel);
+  }, [isQoderEngine, session.id, session.model, qoderModels, syncModelIfNeeded]);
 
   useEffect(() => {
     void getClaudeModelProfileStore()
@@ -360,19 +384,43 @@ export function ComposerModelPicker({
       }
       return opts;
     }
+    if (isQoderEngine) {
+      const opts = buildQoderModelPickerOptions(qoderModels ?? []);
+      const seen = new Set(opts.map((o) => o.value));
+      const push = (value: string, displayName?: string | null) => {
+        const v = value.trim();
+        if (!v || seen.has(v)) return;
+        seen.add(v);
+        opts.push({ value: v, label: formatQoderModelLabel(v, displayName) });
+      };
+      const sessionModel = session.model?.trim();
+      if (sessionModel && isQoderModelId(sessionModel, qoderModels ?? undefined)) {
+        const known = qoderModels?.find((item) => item.id === sessionModel);
+        push(sessionModel, known?.displayName);
+      }
+      const currentModel = model.trim();
+      if (currentModel && isQoderModelId(currentModel, qoderModels ?? undefined)) {
+        const known = qoderModels?.find((item) => item.id === currentModel);
+        push(currentModel, known?.displayName);
+      }
+      return opts;
+    }
     return [];
   }, [
     isCursorEngine,
     isOpencodeEngine,
+    isQoderEngine,
     cursorModels,
     opencodeModels,
+    qoderModels,
     session.model,
     model,
   ]);
 
   const selectOnlyMenuItems: MenuProps["items"] = useMemo(() => {
+    const filterFn = isQoderEngine ? matchesQoderModelPickerFilter : matchesOpencodeModelPickerFilter;
     const filtered = selectOnlyModelOptions.filter((option) =>
-      matchesOpencodeModelPickerFilter(selectOnlyFilter, option),
+      filterFn(selectOnlyFilter, option),
     );
     if (filtered.length === 0) {
       return [
@@ -399,7 +447,7 @@ export function ComposerModelPicker({
         />
       ),
     }));
-  }, [selectOnlyModelOptions, selectOnlyFilter]);
+  }, [selectOnlyModelOptions, selectOnlyFilter, isQoderEngine]);
 
   const handleSelectOnlyMenuOpenChange = useCallback((open: boolean) => {
     setSelectOnlyMenuOpen(open);
@@ -500,8 +548,16 @@ export function ComposerModelPicker({
   );
 
   if (isSelectOnlyEngine) {
-    const hintTitle = isCursorEngine ? "切换 Cursor 模型" : "切换 OpenCode 模型";
-    const filterPlaceholder = isCursorEngine ? "过滤 Cursor 模型…" : "过滤 OpenCode 模型…";
+    const hintTitle = isCursorEngine
+      ? "切换 Cursor 模型"
+      : isQoderEngine
+        ? "切换 Qoder 模型"
+        : "切换 OpenCode 模型";
+    const filterPlaceholder = isCursorEngine
+      ? "过滤 Cursor 模型…"
+      : isQoderEngine
+        ? "过滤 Qoder 模型…"
+        : "过滤 OpenCode 模型…";
     return (
       <div className="app-composer-model-picker">
         <div className="app-composer-model-picker__row">

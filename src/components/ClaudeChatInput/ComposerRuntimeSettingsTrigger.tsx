@@ -39,6 +39,7 @@ interface Props {
   cursorAvailable?: boolean;
   geminiAvailable?: boolean;
   opencodeAvailable?: boolean;
+  qoderAvailable?: boolean;
   onEngineChange?: (engine: SessionExecutionEngine) => void;
   onOpenExecutionEnvironment?: () => void;
   connectionKind?: ClaudeSessionConnectionKind | null;
@@ -98,6 +99,7 @@ export function ComposerRuntimeSettingsTrigger({
   cursorAvailable = true,
   geminiAvailable = false,
   opencodeAvailable = false,
+  qoderAvailable = false,
   onEngineChange,
   onOpenExecutionEnvironment,
   connectionKind,
@@ -144,10 +146,10 @@ export function ComposerRuntimeSettingsTrigger({
 
   const showExtraPaneEngines =
     showPaneRuntimePresets &&
-    (codexAvailable || cursorAvailable || geminiAvailable || opencodeAvailable);
+    (codexAvailable || cursorAvailable || geminiAvailable || opencodeAvailable || qoderAvailable);
   const showEngine =
     !showPaneRuntimePresets &&
-    (codexAvailable || cursorAvailable || geminiAvailable || opencodeAvailable) &&
+    (codexAvailable || cursorAvailable || geminiAvailable || opencodeAvailable || qoderAvailable) &&
     Boolean(onEngineChange);
   // Claude Code 统一走长驻会话（全局默认 streaming）；Composer 执行环境菜单不再展示连接方式切换。
   const showConnection = false;
@@ -159,6 +161,7 @@ export function ComposerRuntimeSettingsTrigger({
     effectiveEngine === "cursor" ||
     effectiveEngine === "gemini" ||
     effectiveEngine === "opencode" ||
+    effectiveEngine === "qoder" ||
     (showPaneRuntimePresets &&
       (activePanePreset === "claude-proxy" ||
         activePanePreset === "codex" ||
@@ -206,6 +209,7 @@ export function ComposerRuntimeSettingsTrigger({
           cursorAvailable,
           geminiAvailable,
           opencodeAvailable,
+          qoderAvailable,
           engines: PANE_EXTRA_EXECUTION_ENGINES,
         });
         if (extraEngineItems?.length) {
@@ -222,6 +226,7 @@ export function ComposerRuntimeSettingsTrigger({
         cursorAvailable,
         geminiAvailable,
         opencodeAvailable,
+        qoderAvailable,
       });
       if (engineItems?.length) {
         items.push(...engineItems);
@@ -253,6 +258,7 @@ export function ComposerRuntimeSettingsTrigger({
     effectiveEngine,
     geminiAvailable,
     opencodeAvailable,
+    qoderAvailable,
     defaultConnectionKind,
     engine,
     inferredPanePreset,

@@ -642,6 +642,9 @@ export function resolveNoReplyFailureMessage(
   if (executionEngine === "opencode") {
     return "OpenCode 本轮未产出可见回复。请检查 provider 凭据、模型配置与 OpenCode CLI。";
   }
+  if (executionEngine === "qoder") {
+    return "Qoder CLI 本轮未产出可见回复。请检查凭据、模型配置与 Qoder CLI。";
+  }
   return "Claude 未成功完成本轮请求（未产出可见回复）。请检查 Hook 配置与 Claude CLI 权限。";
 }
 

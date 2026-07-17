@@ -58,6 +58,7 @@ pub enum DetectedAgent {
     Codex(SyntheticAgent),
     Gemini(SyntheticAgent),
     OpenCode(SyntheticAgent),
+    Qoder(SyntheticAgent),
     Cursor(SyntheticAgent),
     Custom(CustomAgent),
 }
@@ -263,6 +264,7 @@ impl DetectedAgent {
             | DetectedAgent::Codex(agent)
             | DetectedAgent::Gemini(agent)
             | DetectedAgent::OpenCode(agent)
+            | DetectedAgent::Qoder(agent)
             | DetectedAgent::Cursor(agent) => &agent.id,
             DetectedAgent::Custom(agent) => &agent.id,
         }
@@ -274,6 +276,7 @@ impl DetectedAgent {
             | DetectedAgent::Codex(agent)
             | DetectedAgent::Gemini(agent)
             | DetectedAgent::OpenCode(agent)
+            | DetectedAgent::Qoder(agent)
             | DetectedAgent::Cursor(agent) => &agent.name,
             DetectedAgent::Custom(agent) => &agent.name,
         }
@@ -285,6 +288,7 @@ impl DetectedAgent {
             | DetectedAgent::Codex(agent)
             | DetectedAgent::Gemini(agent)
             | DetectedAgent::OpenCode(agent)
+            | DetectedAgent::Qoder(agent)
             | DetectedAgent::Cursor(agent) => agent.available,
             DetectedAgent::Custom(agent) => agent.available,
         }
@@ -296,6 +300,7 @@ impl DetectedAgent {
             | DetectedAgent::Codex(agent)
             | DetectedAgent::Gemini(agent)
             | DetectedAgent::OpenCode(agent)
+            | DetectedAgent::Qoder(agent)
             | DetectedAgent::Cursor(agent) => &agent.backend,
             DetectedAgent::Custom(agent) => &agent.backend,
         }
@@ -326,11 +331,12 @@ fn deduplicate_agents(agents: Vec<DetectedAgent>) -> Vec<DetectedAgent> {
 
 async fn detect_builtin_agents(probe: &dyn Probe, db: &Mutex<Connection>) -> Vec<DetectedAgent> {
     let empty_env = HashMap::new();
-    let (claude, codex, gemini, opencode, cursor) = tokio::join!(
+    let (claude, codex, gemini, opencode, qoder, cursor) = tokio::join!(
         probe_builtin("claude", probe, &empty_env),
         probe_builtin("codex", probe, &empty_env),
         probe_builtin("gemini", probe, &empty_env),
         probe_builtin("opencode", probe, &empty_env),
+        probe_builtin("qodercli", probe, &empty_env),
         crate::cursor_agent::probe_cursor_registry(db, probe),
     );
     vec![
@@ -343,6 +349,7 @@ async fn detect_builtin_agents(probe: &dyn Probe, db: &Mutex<Connection>) -> Vec
             "opencode",
             opencode,
         )),
+        DetectedAgent::Qoder(synthetic_agent("qoder", "Qoder CLI", "qodercli", qoder)),
         DetectedAgent::Cursor(synthetic_agent(
             "cursor",
             "Cursor CLI",
@@ -660,6 +667,7 @@ fn builtin_command_name(kind: &str) -> Option<&'static str> {
         "codex" => Some("codex"),
         "gemini" => Some("gemini"),
         "opencode" => Some("opencode"),
+        "qoder" => Some("qodercli"),
         _ => None,
     }
 }
@@ -932,6 +940,9 @@ fn parse_builtin_install_kind(kind: &str) -> Result<BuiltinInstallSpec, String> 
         "opencode" => Ok(BuiltinInstallSpec {
             npm_package: "opencode-ai",
         }),
+        "qoder" => Ok(BuiltinInstallSpec {
+            npm_package: "@qoder-ai/qodercli",
+        }),
         "" => Err("kind is required".to_string()),
         other => Err(format!("不支持一键安装的运行入口：{other}")),
     }
@@ -1130,7 +1141,7 @@ pub async fn agent_registry_update_builtin(
 
 fn parse_builtin_uninstall_kind(kind: &str) -> Result<BuiltinInstallSpec, String> {
     match kind.trim().to_lowercase().as_str() {
-        "claude" | "codex" | "gemini" | "opencode" => parse_builtin_install_kind(kind),
+        "claude" | "codex" | "gemini" | "opencode" | "qoder" => parse_builtin_install_kind(kind),
         "cursor" => Ok(BuiltinInstallSpec {
             // Cursor CLI 非 npm；卸载仅清除 Wise 侧 API Key。
             npm_package: "cursor-agent-cli",
@@ -1333,6 +1344,7 @@ fn installed_version_from_snapshot(
             | (DetectedAgent::Codex(a), "codex")
             | (DetectedAgent::Gemini(a), "gemini")
             | (DetectedAgent::OpenCode(a), "opencode")
+            | (DetectedAgent::Qoder(a), "qoder")
             | (DetectedAgent::Cursor(a), "cursor") => return a.installed_version.clone(),
             _ => {}
         }
@@ -1452,6 +1464,7 @@ pub async fn agent_registry_check_updates(
         "codex".to_string(),
         "gemini".to_string(),
         "opencode".to_string(),
+        "qoder".to_string(),
         "cursor".to_string(),
     ];
     for agent in &snapshot {
@@ -1607,6 +1620,12 @@ mod tests {
             parse_builtin_install_kind("opencode").expect("opencode"),
             BuiltinInstallSpec {
                 npm_package: "opencode-ai",
+            }
+        );
+        assert_eq!(
+            parse_builtin_install_kind("qoder").expect("qoder"),
+            BuiltinInstallSpec {
+                npm_package: "@qoder-ai/qodercli",
             }
         );
     }
@@ -1780,15 +1799,21 @@ mod tests {
             .await
             .expect("refresh succeeds");
 
-        assert_eq!(agents.len(), 5);
+        assert_eq!(agents.len(), 6);
         for agent in agents {
             match agent {
                 DetectedAgent::Claude(agent)
                 | DetectedAgent::Codex(agent)
                 | DetectedAgent::Gemini(agent)
                 | DetectedAgent::OpenCode(agent)
+                | DetectedAgent::Qoder(agent)
                 | DetectedAgent::Cursor(agent) => {
-                    assert!(!agent.available);
+                    assert!(
+                        !agent.available,
+                        "{} unexpectedly available (path={:?})",
+                        agent.id,
+                        agent.binary_path
+                    );
                     assert!(agent.failure_reason.is_some());
                 }
                 DetectedAgent::Custom(_) => panic!("no custom rows expected"),

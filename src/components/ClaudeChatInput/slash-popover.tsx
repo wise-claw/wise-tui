@@ -71,6 +71,7 @@ interface SlashPopoverProps {
   cursorAvailable?: boolean;
   geminiAvailable?: boolean;
   opencodeAvailable?: boolean;
+  qoderAvailable?: boolean;
   /** @ 空查询打开时默认高亮项（配置中心可改）。 */
   atMentionDefaultTarget?: AtMentionDefaultTarget;
   /** 在菜单内将执行环境 / 终端设为 @ 默认。 */
@@ -153,6 +154,7 @@ export function SlashPopover({
   cursorAvailable = true,
   geminiAvailable = false,
   opencodeAvailable = false,
+  qoderAvailable = false,
   atMentionDefaultTarget = DEFAULT_AT_MENTION_DEFAULT_TARGET,
   onAtMentionDefaultTargetChange,
 }: SlashPopoverProps) {
@@ -326,6 +328,7 @@ export function SlashPopover({
       cursorAvailable,
       geminiAvailable,
       opencodeAvailable,
+      qoderAvailable,
     );
   }, [
     mode,
@@ -342,6 +345,7 @@ export function SlashPopover({
     cursorAvailable,
     geminiAvailable,
     opencodeAvailable,
+    qoderAvailable,
   ]);
 
   const slashOptionsTruncated = mode === "slash" && slashFiltered.truncated;

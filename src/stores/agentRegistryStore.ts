@@ -69,6 +69,11 @@ export function selectOpencodeAvailable(snap: AgentRegistryStoreSnapshot): boole
   return snap.agents.some((agent) => isAgentKind(agent, "opencode") && agent.available);
 }
 
+export function selectQoderAvailable(snap: AgentRegistryStoreSnapshot): boolean {
+  if (!snap.loaded) return false;
+  return snap.agents.some((agent) => isAgentKind(agent, "qoder") && agent.available);
+}
+
 export function selectLatestForKind(
   snap: AgentRegistryStoreSnapshot,
   kind: string,
