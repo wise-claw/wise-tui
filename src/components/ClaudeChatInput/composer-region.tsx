@@ -3014,11 +3014,29 @@ function ComposerInner({
             className="app-claude-dual-pane-repo-picker"
             classNames={{ popup: { root: "app-claude-dual-pane-repo-picker-dropdown" } }}
             popupMatchSelectWidth={false}
+            listHeight={280}
+            listItemHeight={22}
             showSearch
             treeNodeFilterProp="title"
+            treeDefaultExpandAll
             title="右侧执行会话目标（工作区 / 仓库）"
             aria-label="选择工作区或仓库"
             value={dualPaneRepositoryPicker.valueKey}
+            treeTitleRender={(node) => {
+              const raw = String(node.value ?? "");
+              const isWorkspace = raw.startsWith("project:") || raw === "__standalone__";
+              return (
+                <span
+                  className={
+                    isWorkspace
+                      ? "app-claude-dual-pane-repo-picker__label app-claude-dual-pane-repo-picker__label--workspace"
+                      : "app-claude-dual-pane-repo-picker__label"
+                  }
+                >
+                  {String(node.title ?? "")}
+                </span>
+              );
+            }}
             treeData={(() => {
               const repositories = dualPaneRepositoryPicker.repositories ?? [];
               const projects = dualPaneRepositoryPicker.projects ?? [];

@@ -36,8 +36,10 @@ import {
   assignSessionToNormalizedExtraPanes,
   extraPanesLayoutFingerprint,
   findFirstEmptyExtraPaneIndex,
+  isPaneSlotEmpty,
   planNextPaneSlotPlacement,
   isSessionBoundInPanes,
+  listEmptyExtraPaneIndices,
   normalizeExtraPanesToPaneCount,
   rebindPaneSlotPreservingRuntime,
 } from "../utils/multiPaneSlots";
@@ -45,7 +47,10 @@ import { resolveWorkspaceRootPath } from "../utils/projectSessionAnchor";
 import type { WorkspaceFocus } from "../utils/workspaceMode";
 import {
   canEnterMultiPaneLayout,
+  resolveChatContextRepository,
+  WORKSPACE_SCOPED_VIRTUAL_REPOSITORY_ID,
 } from "../utils/workspaceSelectionState";
+import { getClaudeSessionSnapshot } from "../stores/claudeSessionsLiveStore";
 
 /** 多屏切换 in-flight 超时：防止 Tauri resize 挂起导致后续操作永久无响应。 */
 const PANE_CHANGE_IN_FLIGHT_TIMEOUT_MS = 8000;
@@ -234,6 +239,7 @@ export function useMainLayoutModes({
       // 关闭多屏 → 恢复到单屏快照
       if (targetCount === 1) {
         setPaneCount(1);
+        extraPanesLatestRef.current = [];
         setExtraPanes([]);
         // 单屏 Composer 走仓库 executionEngine；清除窗格覆盖避免下次 spawn 仍命中旧 override。
         setPrimaryPaneRuntimeOverride?.(null);
@@ -280,9 +286,79 @@ export function useMainLayoutModes({
       const newCols = columnCountForPaneCount(targetCount);
       const colDelta = newCols - oldCols;
 
-      // 调整 extraPanes 数组长度
-      setExtraPanes((prev) => normalizeExtraPanesToPaneCount(targetCount, prev, createPaneSlot));
-
+      // 对齐 extraPanes；扩屏时为空槽直接新建隔离执行会话，省去「新建执行会话」空态一步。
+      let nextExtraPanes = normalizeExtraPanesToPaneCount(
+        targetCount,
+        extraPanesLatestRef.current,
+        createPaneSlot,
+      );
+      if (targetCount > currentPaneCount) {
+        const emptyIndices = listEmptyExtraPaneIndices(nextExtraPanes);
+        if (emptyIndices.length > 0) {
+          const defaultRepo = resolveChatContextRepository({
+            activeRepository,
+            activeProject,
+            activeWorkspaceFocus,
+            repositories,
+            sessionRepositoryPath: activeSessionRepositoryPath,
+          });
+          const createPath = defaultRepo?.path?.trim() ?? "";
+          if (createPath && defaultRepo) {
+            const repoIdForSlot =
+              defaultRepo.id === WORKSPACE_SCOPED_VIRTUAL_REPOSITORY_ID ||
+              activeRepository?.id === defaultRepo.id
+                ? null
+                : defaultRepo.id;
+            const displayName = repositorySessionTabDisplayName(defaultRepo);
+            const created = await Promise.all(
+              emptyIndices.map(async (slotIndex) => {
+                try {
+                  const sessionId = await createSession(createPath, displayName, {
+                    skipActivate: true,
+                  });
+                  inheritMainSessionModel(sessionId);
+                  return { slotIndex, sessionId } as const;
+                } catch (error) {
+                  console.error("Failed to auto-create pane session on expand:", error);
+                  return { slotIndex, sessionId: null } as const;
+                }
+              }),
+            );
+            let failed = 0;
+            const filled = nextExtraPanes.map((slot) => ({ ...slot }));
+            for (const { slotIndex, sessionId } of created) {
+              if (!sessionId) {
+                failed += 1;
+                continue;
+              }
+              const slot = filled[slotIndex];
+              if (!slot || !isPaneSlotEmpty(slot)) continue;
+              if (
+                isSessionBoundInPanes(
+                  sessionId,
+                  activeSessionIdLatestRef.current,
+                  filled,
+                  slotIndex,
+                )
+              ) {
+                failed += 1;
+                continue;
+              }
+              filled[slotIndex] = bindCompanionSessionToSlot(slot, sessionId, repoIdForSlot);
+            }
+            nextExtraPanes = filled;
+            if (failed > 0) {
+              message.error(
+                failed === emptyIndices.length
+                  ? "新建窗格执行会话失败"
+                  : "部分窗格执行会话创建失败",
+              );
+            }
+          }
+        }
+      }
+      extraPanesLatestRef.current = nextExtraPanes;
+      setExtraPanes(nextExtraPanes);
       setPaneCount(targetCount);
 
       // 等布局帧后调整窗口宽度
@@ -334,16 +410,31 @@ export function useMainLayoutModes({
         setPaneChangeInFlight(false);
       }
     },
-    [multiPaneLayoutReady, setExtraPanes, setPaneCount, setPrimaryPaneRuntimeOverride],
+    [
+      activeProject,
+      activeRepository,
+      activeSessionRepositoryPath,
+      activeWorkspaceFocus,
+      bindCompanionSessionToSlot,
+      createSession,
+      inheritMainSessionModel,
+      multiPaneLayoutReady,
+      repositories,
+      setExtraPanes,
+      setPaneCount,
+      setPrimaryPaneRuntimeOverride,
+    ],
   );
 
   /** 单屏下为首个额外窗格写入 session 并切到双屏（复用 handleChangePaneCount 与 in-flight 锁）。 */
   const promoteToDualPaneWithSession = useCallback(
     async (sessionId: string, repositoryId?: number | null): Promise<boolean> => {
-      setExtraPanes(() => {
-        const slot = createPaneSlot();
-        return [bindCompanionSessionToSlot(slot, sessionId, repositoryId ?? null)];
-      });
+      const next = [
+        bindCompanionSessionToSlot(createPaneSlot(), sessionId, repositoryId ?? null),
+      ];
+      // 同步写 ref，避免紧接着的 handleChangePaneCount 读到旧空槽并再自动新建一份会话。
+      extraPanesLatestRef.current = next;
+      setExtraPanes(next);
       return handleChangePaneCount(2);
     },
     [bindCompanionSessionToSlot, handleChangePaneCount, setExtraPanes],
@@ -797,6 +888,11 @@ export function useMainLayoutModes({
           const refSessionId = refSlots[i]?.sessionId;
           if (refSessionId && refSessionId !== slot.sessionId && sessionIds.has(refSessionId)) {
             return { ...slot, sessionId: refSessionId };
+          }
+          // skipActivate 伴生会话可能已在 live store，但 React sessions 仍在 startTransition 中：
+          // 此时切焦点触发 fingerprint 更新不应误清槽位，否则第二屏会空白回空态。
+          if (getClaudeSessionSnapshot(slot.sessionId)) {
+            return slot;
           }
           changed = true;
           return { ...slot, sessionId: null };

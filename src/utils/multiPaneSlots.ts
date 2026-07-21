@@ -12,6 +12,16 @@ export function isPaneSlotEmpty(slot: PaneSlot): boolean {
   return !slot.sessionId?.trim();
 }
 
+/** 空额外窗格下标（扩屏后批量自动新建执行会话用）。 */
+export function listEmptyExtraPaneIndices(extraPanes: readonly PaneSlot[]): number[] {
+  const indices: number[] = [];
+  for (let i = 0; i < extraPanes.length; i += 1) {
+    const slot = extraPanes[i];
+    if (slot && isPaneSlotEmpty(slot)) indices.push(i);
+  }
+  return indices;
+}
+
 /** 会话是否已被主窗格或其它额外窗格占用。 */
 export function isSessionBoundInPanes(
   sessionId: string,

@@ -126,6 +126,17 @@
   contain-intrinsic-size: auto 480px;
 }
 
+/* 双屏两格始终在视口内：关掉 content-visibility，避免失焦后 WebView 跳过绘制变成空白 */
+.app-claude-sessions__multi-panes--two-pane .app-claude-sessions__pane {
+  content-visibility: visible;
+  contain-intrinsic-size: none;
+}
+
+/* 当前聚焦的窗格也必须持续绘制（4+ 屏点回该格时不应先空白再恢复） */
+.app-claude-sessions__pane:focus-within {
+  content-visibility: visible;
+}
+
 .app-claude-sessions__pane > .app-claude-chat {
   flex: 1 1 0;
   min-height: 0;
@@ -290,6 +301,47 @@
 .app-claude-session-empty__repo-select {
   width: 100%;
   max-width: 320px;
+}
+
+/* 空态工作区/仓库 TreeSelect：收紧行高与箭头间距 */
+.app-claude-session-empty__repo-select-dropdown.ant-select-dropdown {
+  padding: 4px;
+  border-radius: 8px;
+}
+
+.app-claude-session-empty__repo-select-dropdown .ant-select-tree {
+  font-size: 12px;
+}
+
+.app-claude-session-empty__repo-select-dropdown .ant-select-tree-treenode {
+  align-items: center;
+  padding: 0 !important;
+  margin: 0 !important;
+  border-radius: 4px;
+}
+
+.app-claude-session-empty__repo-select-dropdown .ant-select-tree-indent-unit {
+  width: 12px;
+}
+
+.app-claude-session-empty__repo-select-dropdown .ant-select-tree-switcher {
+  flex: none;
+  width: 16px;
+  height: 26px;
+  margin-inline-end: 2px !important;
+  line-height: 26px;
+  align-self: center !important;
+}
+
+.app-claude-session-empty__repo-select-dropdown .ant-select-tree-switcher::before {
+  width: 16px;
+  height: 26px;
+}
+
+.app-claude-session-empty__repo-select-dropdown .ant-select-tree-node-content-wrapper {
+  min-height: 26px !important;
+  line-height: 26px !important;
+  padding-inline: 2px 4px !important;
 }
 
 .app-claude-session-empty__repo-node {

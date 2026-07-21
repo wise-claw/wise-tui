@@ -4,6 +4,7 @@ import {
   assignSessionToNormalizedExtraPanes,
   findFirstEmptyExtraPaneIndex,
   isSessionBoundInPanes,
+  listEmptyExtraPaneIndices,
   minPaneCountForOccupiedExtras,
   normalizeExtraPanesToPaneCount,
   planNextPaneSlotPlacement,
@@ -59,6 +60,17 @@ describe("multiPaneSlots", () => {
     const truncated = normalizeExtraPanesToPaneCount(2, slots, () => slot({ slotId: "x" }));
     expect(truncated).toHaveLength(1);
     expect(truncated[0]?.sessionId).toBe("s1");
+  });
+
+  test("listEmptyExtraPaneIndices returns empty companion slots only", () => {
+    const extras: PaneSlot[] = [
+      slot({ slotId: "a", sessionId: "s1" }),
+      slot({ slotId: "b" }),
+      slot({ slotId: "c", sessionId: "  " }),
+      slot({ slotId: "d", sessionId: "s2" }),
+    ];
+    expect(listEmptyExtraPaneIndices(extras)).toEqual([1, 2]);
+    expect(listEmptyExtraPaneIndices([])).toEqual([]);
   });
 
   test("isSessionBoundInPanes detects active and extra pane collisions", () => {

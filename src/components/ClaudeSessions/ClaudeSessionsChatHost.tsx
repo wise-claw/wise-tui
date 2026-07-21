@@ -26,6 +26,7 @@ import { prefetchNewSessionSurface } from "./prefetchNewSessionSurface";
 import { WorkspaceViewportLoading } from "../WorkspaceViewportLoading";
 import type { ResolvePaneAuxLayout } from "./paneAuxLayout";
 import { claudeSessionsChatHostPropsEqual } from "./claudeSessionsChatHostPropsEqual";
+import { getClaudeSessionSnapshot } from "../../stores/claudeSessionsLiveStore";
 
 const ClaudeMultiPaneGridLazy = lazy(() =>
   import("./ClaudeMultiPaneGrid").then((module) => ({ default: module.ClaudeMultiPaneGrid })),
@@ -325,14 +326,17 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
 
   const resolvedPaneSessions = useMemo(() => {
     return extraPanes.map((slot) => {
-      if (!slot.sessionId) return null;
-      return sessionById.get(slot.sessionId) ?? null;
+      const sessionId = slot.sessionId?.trim();
+      if (!sessionId) return null;
+      // skipActivate 新建伴生会话会先 publish 到 live store，再 startTransition 写入 React sessions。
+      // 若只查 incomingSessions，扩屏瞬间会把已绑定槽位误判为空 → 第二屏空白。
+      return sessionById.get(sessionId) ?? getClaudeSessionSnapshot(sessionId);
     });
   }, [extraPanes, sessionById]);
 
   const resolvedPaneRepositories = useMemo(() => {
     const repoList = repositories ?? [];
-    return extraPanes.map((slot) => {
+    return extraPanes.map((slot, index) => {
       // 1. slot 已显式绑定仓库：直接用绑定的仓库。
       if (slot.repositoryId != null) {
         return repoList.find((r) => r.id === slot.repositoryId) ?? null;
@@ -341,7 +345,10 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
       //    新建 pane session 时 assignSessionToNormalizedExtraPanes 会写入 repositoryId，
       //    通常走步骤 1 命中；此处作为 session 已存在但 repositoryId 尚未持久化的兜底。
       if (slot.sessionId) {
-        const paneSession = sessionById.get(slot.sessionId);
+        const paneSession =
+          sessionById.get(slot.sessionId) ??
+          resolvedPaneSessions[index] ??
+          getClaudeSessionSnapshot(slot.sessionId);
         if (paneSession) {
           const repo = resolveRepositoryForSession({
             session: paneSession,
@@ -361,6 +368,7 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
     incomingSessions,
     repositories,
     repositoryMainBindings,
+    resolvedPaneSessions,
     sessionById,
   ]);
 

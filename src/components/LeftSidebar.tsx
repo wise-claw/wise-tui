@@ -1161,22 +1161,6 @@ export function LeftSidebar({
           onStopRepositoryMainSession={handleStopRepositoryMainSession}
         />
 
-        <LeftSidebarRepoPanelBottomSlot
-          showLeftRepoPanel={showLeftRepoPanel}
-          showLeftSidebarWorkspaceList={showLeftSidebarWorkspaceList}
-          repoPanelRenderState={repoPanelRenderState}
-          workspaceListEffectivelyCollapsed={workspaceListEffectivelyCollapsed}
-          leftBottomTab={leftBottomTab}
-          onLeftBottomTabChange={handleLeftBottomTabChange}
-          bottomTabPanelsReady={bottomTabPanelsReady}
-          effectiveRepoPanelPath={effectiveRepoPanelPath}
-          repoPanelRepositoryName={repoPanelRepositoryName}
-          gitPanelRepositoryEntries={gitPanelRepositoryEntries}
-          handleOpenExplorerFile={handleOpenExplorerFile}
-          repositoryFileTreeSearch={repositoryFileTreeSearch}
-          onRepositoryFileTreeSearchChange={setRepositoryFileTreeSearch}
-        />
-
         {monitorPanelMounted ? (
           <LeftSidebarMonitorPanelSlot
             visible={showLeftSidebarMonitorPanel}
@@ -1231,6 +1215,22 @@ export function LeftSidebar({
             transcriptSessionsFingerprint={transcriptSessionsFingerprint}
           />
         ) : null}
+
+        <LeftSidebarRepoPanelBottomSlot
+          showLeftRepoPanel={showLeftRepoPanel}
+          showLeftSidebarWorkspaceList={showLeftSidebarWorkspaceList}
+          repoPanelRenderState={repoPanelRenderState}
+          workspaceListEffectivelyCollapsed={workspaceListEffectivelyCollapsed}
+          leftBottomTab={leftBottomTab}
+          onLeftBottomTabChange={handleLeftBottomTabChange}
+          bottomTabPanelsReady={bottomTabPanelsReady}
+          effectiveRepoPanelPath={effectiveRepoPanelPath}
+          repoPanelRepositoryName={repoPanelRepositoryName}
+          gitPanelRepositoryEntries={gitPanelRepositoryEntries}
+          handleOpenExplorerFile={handleOpenExplorerFile}
+          repositoryFileTreeSearch={repositoryFileTreeSearch}
+          onRepositoryFileTreeSearchChange={setRepositoryFileTreeSearch}
+        />
       </div>
 
 

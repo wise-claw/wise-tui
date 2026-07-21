@@ -181,7 +181,7 @@ import { dispatchSessionFeedbackLoopAnalysis } from "./services/sessionFeedbackL
 import type { FeedbackLoopDispatchKind } from "./utils/sessionFeedbackLoopDispatch";
 import { createFreshTerminalWorkerTab, isTerminalWorkerWiseTab } from "./services/terminalDispatch";
 import { resolveExecutionEnvironmentDispatchAnchorSessionId } from "./utils/executionEnvironmentDispatchAnchor";
-import { subscribeClaudeSessionsStructure, getClaudeSessionsStructureKey } from "./stores/claudeSessionsLiveStore";
+import { subscribeClaudeSessionsStructure, getClaudeSessionsStructureKey, getClaudeSessionSnapshot } from "./stores/claudeSessionsLiveStore";
 import { useMonitorSessionsForOverview } from "./hooks/useMonitorSessionsForOverview";
 import { useLeftSidebarHubQuickEntries } from "./hooks/useLeftSidebarHubQuickEntries";
 import { useMonitorPanelDefault } from "./hooks/useMonitorPanelDefault";
@@ -2198,6 +2198,10 @@ export default function App() {
     let changed = false;
     const updated = extraPanes.map((slot) => {
       if (slot.sessionId && !sessionIds.has(slot.sessionId)) {
+        // 伴生会话可能已在 live store、尚未并入 React sessions：保留槽位，避免第二屏被清空。
+        if (getClaudeSessionSnapshot(slot.sessionId)) {
+          return slot;
+        }
         changed = true;
         return { ...slot, sessionId: null };
       }

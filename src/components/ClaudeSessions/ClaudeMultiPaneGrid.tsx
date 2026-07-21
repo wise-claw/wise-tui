@@ -765,6 +765,7 @@ const MultiPaneExtraPaneCell = memo(
                 treeNodeFilterProp="title"
                 popupMatchSelectWidth={false}
                 listHeight={320}
+                listItemHeight={26}
                 onOpenChange={(open) => onPickerOpenChange(paneIdx, open)}
                 classNames={{ popup: { root: "app-claude-session-empty__repo-select-dropdown" } }}
                 treeTitleRender={(node) => {
