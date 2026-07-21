@@ -6,7 +6,7 @@ import { App as AntdApp, Popover } from "antd";
 import { DeferredHoverTooltip } from "../shared/DeferredHoverTooltip";
 import { openWorkspaceTodosFromSidebarMenu } from "../../utils/openWorkspaceTodosFromSidebar";
 import { workspaceTodosAnchorKey } from "../../utils/workspaceTodosAnchorKey";
-import type { Repository, StandaloneRepo, TaskMode, Workspace } from "../../types";
+import type { Repository, StandaloneRepo, Workspace } from "../../types";
 import { repositoryFolderBasename } from "../../utils/repositoryType";
 import type { WorkspaceFocus } from "../../utils/workspaceMode";
 import { parseOpenAppConfigureMenuKey, repositoryEditorOpenMenuLabel, resolveEffectiveOpenAppId } from "../../utils/openAppScope";
@@ -32,7 +32,6 @@ import {
 } from "./sidebarMoreMenuItems";
 import { SidebarMoreMenuDropdown } from "./SidebarMoreMenuDropdown";
 import {
-  ChatIcon,
   ExecutableTasksIcon,
   MoreIcon,
   OpenInEditorIcon,
@@ -165,28 +164,6 @@ function RepositoryRunCommandRowActions({
     </DeferredHoverTooltip>
   );
 }
-
-export const RepositoryConversationAction = memo(function RepositoryConversationAction({
-  onOpen,
-}: {
-  onOpen: () => void;
-}) {
-  return (
-    <DeferredHoverTooltip title="打开仓库对话">
-      <button
-        type="button"
-        className="app-repository-action app-repository-action--task app-repository-action--primary app-repository-action--chat"
-        aria-label="打开对话"
-        onClick={(e) => {
-          e.stopPropagation();
-          onOpen();
-        }}
-      >
-        <ChatIcon />
-      </button>
-    </DeferredHoverTooltip>
-  );
-});
 
 export const SidebarScheduledTasksAction = memo(function SidebarScheduledTasksAction({
   totalCount,
@@ -461,7 +438,6 @@ function repositoryRowPropsEqual(
   if (prev.requirementUnsplitCount !== next.requirementUnsplitCount) return false;
   if (prev.executableTaskCount !== next.executableTaskCount) return false;
   if (prev.workspaceTodosEnabled !== next.workspaceTodosEnabled) return false;
-  if (prev.hideChatAction !== next.hideChatAction) return false;
   if (prev.mainSessionRunning !== next.mainSessionRunning) return false;
   if (prev.pinnedRunCommandRowActions !== next.pinnedRunCommandRowActions) return false;
   if (prev.repositoryReorder !== next.repositoryReorder) return false;
@@ -474,7 +450,6 @@ function RepositoryRowInner({
   showRepositoryIconBadgesInWorkspaceList = false,
   isActiveRepository,
   onRepositorySelect,
-  onOpenTaskMode,
   onDetachFromProject,
   onOpenInFinder,
   onOpenInTerminal,
@@ -487,7 +462,6 @@ function RepositoryRowInner({
   onConfigureRepositoryMainSessionRun,
   onNewPaneSession,
   repositoryReorder,
-  hideChatAction = false,
   trellisReady = false,
   scheduledTasksTotalCount = 0,
   scheduledTasksEnabledCount = 0,
@@ -508,7 +482,6 @@ function RepositoryRowInner({
   showRepositoryIconBadgesInWorkspaceList?: boolean;
   isActiveRepository: boolean;
   onRepositorySelect: (id: number | null) => void;
-  onOpenTaskMode: (repository: Repository, mode: TaskMode) => void;
   onDetachFromProject: (projectId: string, repositoryId: number) => void;
   onOpenInFinder: (repository: Repository) => void;
   onOpenInTerminal?: (repository: Repository) => void;
@@ -521,7 +494,6 @@ function RepositoryRowInner({
   onConfigureRepositoryMainSessionRun?: (repository: Repository) => void;
   onNewPaneSession?: (repository: Repository) => void;
   repositoryReorder?: RepositoryReorderUi;
-  hideChatAction?: boolean;
   trellisReady?: boolean;
   scheduledTasksTotalCount?: number;
   scheduledTasksEnabledCount?: number;
@@ -649,9 +621,6 @@ function RepositoryRowInner({
               onStopRepositoryRunCommand ? () => onStopRepositoryRunCommand(repository) : undefined
             }
           />
-          {hideChatAction ? null : (
-            <RepositoryConversationAction onOpen={() => onOpenTaskMode(repository, "chat")} />
-          )}
           {workspaceTrellisEnabled && onOpenRequirements ? (
             <SidebarRequirementAction
               unsplitCount={requirementUnsplitCount}
@@ -775,7 +744,6 @@ function FloatingRepositoryRowInner({
   isActiveRepository,
   joinableProjects,
   onRepositorySelect,
-  onOpenTaskMode,
   onOpenInFinder,
   onOpenInTerminal,
   onOpenRepositoryInBrowser,
@@ -809,7 +777,6 @@ function FloatingRepositoryRowInner({
   isActiveRepository: boolean;
   joinableProjects: Workspace[];
   onRepositorySelect: (id: number | null) => void;
-  onOpenTaskMode: (repository: Repository, mode: TaskMode) => void;
   onOpenInFinder: (repository: Repository) => void;
   onOpenInTerminal?: (repository: Repository) => void;
   onOpenRepositoryInBrowser: (repository: Repository) => void;
@@ -925,7 +892,6 @@ function FloatingRepositoryRowInner({
               onStopRepositoryRunCommand ? () => onStopRepositoryRunCommand(repository) : undefined
             }
           />
-          <RepositoryConversationAction onOpen={() => onOpenTaskMode(repository, "chat")} />
           {trellisEnabled && onOpenRequirements ? (
             <SidebarRequirementAction
               unsplitCount={requirementUnsplitCount}
@@ -1018,7 +984,6 @@ export function ProjectRepositoryRows({
   activeWorkspaceFocus = "repository",
   showRepositoryIconBadgesInWorkspaceList = false,
   onRepositorySelect,
-  onCreateRepositoryTask,
   onDetachRepositoryFromProject,
   onOpenInFinder,
   onOpenInTerminal,
@@ -1034,7 +999,6 @@ export function ProjectRepositoryRows({
   onNewPaneSession,
   repoSidebarDragRef,
   onRepoSidebarDragEnd,
-  hideChatAction = false,
   repositoryTrellisReadyById = {},
   scheduledTasksByRepoId = {},
   requirementUnsplitByRepoId = {},
@@ -1055,7 +1019,6 @@ export function ProjectRepositoryRows({
   activeWorkspaceFocus?: WorkspaceFocus;
   showRepositoryIconBadgesInWorkspaceList?: boolean;
   onRepositorySelect: (id: number | null) => void;
-  onCreateRepositoryTask: (repository: Repository, mode: TaskMode) => void;
   onDetachRepositoryFromProject: (projectId: string, repositoryId: number) => void;
   onOpenInFinder: (repository: Repository) => void;
   onOpenInTerminal?: (repository: Repository) => void;
@@ -1071,7 +1034,6 @@ export function ProjectRepositoryRows({
   onNewPaneSession?: (repository: Repository) => void;
   repoSidebarDragRef: React.MutableRefObject<{ sourceProjectId: string; repositoryId: number } | null>;
   onRepoSidebarDragEnd: () => void;
-  hideChatAction?: boolean;
   repositoryTrellisReadyById?: Record<number, boolean>;
   scheduledTasksByRepoId?: Record<number, { total: number; enabled: number }>;
   requirementUnsplitByRepoId?: Record<number, number>;
@@ -1124,7 +1086,6 @@ export function ProjectRepositoryRows({
               repository.id === activeRepositoryId && activeWorkspaceFocus === "repository"
             }
             onRepositorySelect={onRepositorySelect}
-            onOpenTaskMode={onCreateRepositoryTask}
             onDetachFromProject={onDetachRepositoryFromProject}
             onOpenInFinder={onOpenInFinder}
             onOpenInTerminal={onOpenInTerminal}
@@ -1137,7 +1098,6 @@ export function ProjectRepositoryRows({
             onConfigureRepositoryMainSessionRun={onConfigureRepositoryMainSessionRun}
             onNewPaneSession={onNewPaneSession}
             repositoryReorder={reorderUi}
-            hideChatAction={hideChatAction}
             trellisReady={repositoryTrellisReadyById[repository.id] === true}
             scheduledTasksTotalCount={scheduledTasksByRepoId[repository.id]?.total ?? 0}
             scheduledTasksEnabledCount={scheduledTasksByRepoId[repository.id]?.enabled ?? 0}

@@ -1096,7 +1096,6 @@ export function LeftSidebar({
           }}
           onOpenPromptsProject={onOpenPromptsProject}
           onCreateProjectTask={onCreateProjectTask}
-          onCreateRepositoryTask={onCreateRepositoryTask}
           onOpenWorkspaceRequirements={onOpenWorkspaceRequirements}
           onOpenRepositoryRequirements={
             onOpenRepositoryRequirementsProp ?? ((repository) => onCreateRepositoryTask(repository, "split"))

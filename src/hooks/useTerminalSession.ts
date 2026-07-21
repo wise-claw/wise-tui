@@ -22,19 +22,18 @@ import {
 } from "../utils/terminalSanitize";
 import {
   configureGhosttyInputSurface,
+  forceTerminalFullRedraw,
   forceTerminalRemeasureAndFit,
   observeTerminalTheme,
   readTerminalThemeFromContainer,
-  reconcileTerminalCanvasFit,
   registerTerminalLinkProviders,
   TERMINAL_BLANK_RECOVERY_DELAYS_MS,
   terminalBufferLooksEmpty,
   terminalNeedsBlankRecovery,
-  waitForTerminalContainerLayout,
+  waitForTerminalContainerStableLayout,
 } from "../utils/terminalTheme";
 import { terminalWriter } from "../utils/terminalWriter";
 import { shouldIgnoreTerminalError } from "../utils/terminalErrors";
-import { shouldDeferNonCriticalUiWork } from "../utils/uiWorkDefer";
 
 export type TerminalStatus = "idle" | "connecting" | "ready" | "error";
 
@@ -201,7 +200,7 @@ export function useTerminalSession({
       setStatus("connecting");
       setMessage("正在连接终端…");
 
-      await waitForTerminalContainerLayout(container);
+      await waitForTerminalContainerStableLayout(container);
       if (cancelled) return () => undefined;
 
       const ghosttyModule = await loadGhosttyModule();
@@ -240,11 +239,11 @@ export function useTerminalSession({
 
       let outputFlushRaf = 0;
       const scheduleTerminalOutputFlush = () => {
-        if (!shouldDeferNonCriticalUiWork()) {
-          outputWriter?.flush();
+        // 终端输出必须及时上屏；勿跟拥塞/composer 闸门推迟，否则易出现「乱码待 Enter 才刷新」。
+        if (outputFlushRaf) {
           return;
         }
-        if (outputFlushRaf) return;
+        // 同帧多包合并进一次 flush；始终在下一帧写出，不因主线程拥塞跳过。
         outputFlushRaf = requestAnimationFrame(() => {
           outputFlushRaf = 0;
           outputWriter?.flush();
@@ -312,10 +311,15 @@ export function useTerminalSession({
           outputWriter?.push(replay);
           outputWriter?.flush(resolve);
         });
+        forceTerminalFullRedraw(terminal);
         return true;
       };
 
-      const scheduleBlankRecoveryRefit = (attempt = 0) => {
+      /**
+       * 就绪后多阶段 settle：纠正抖动尺寸、补全量重绘；空白时再 replay。
+       * 不限于 blank：错列宽折行也要靠后续 resize(SIGWINCH)+重绘恢复。
+       */
+      const scheduleLayoutSettleRefit = (attempt = 0) => {
         const delay = TERMINAL_BLANK_RECOVERY_DELAYS_MS[attempt];
         if (delay === undefined) return;
 
@@ -329,26 +333,31 @@ export function useTerminalSession({
             return;
           }
           void (async () => {
-            if (!terminalNeedsBlankRecovery(container, terminal)) {
-              return;
-            }
             try {
+              const prevCols = terminal.cols;
+              const prevRows = terminal.rows;
               fitTerminalToContainer();
               syncTerminalDimensions();
               if (terminalBufferLooksEmpty(terminal)) {
                 await replayAttachOutput(ATTACH_REPLAY_CURSOR);
                 fitTerminalToContainer();
                 syncTerminalDimensions();
+              } else {
+                forceTerminalFullRedraw(terminal);
               }
-              if (
-                terminalNeedsBlankRecovery(container, terminal) &&
-                attempt + 1 < TERMINAL_BLANK_RECOVERY_DELAYS_MS.length
-              ) {
-                scheduleBlankRecoveryRefit(attempt + 1);
+              const dimsChanged =
+                terminal.cols !== prevCols || terminal.rows !== prevRows;
+              const needsMore =
+                attempt + 1 < TERMINAL_BLANK_RECOVERY_DELAYS_MS.length &&
+                (dimsChanged ||
+                  attempt < 2 ||
+                  terminalNeedsBlankRecovery(container, terminal));
+              if (needsMore) {
+                scheduleLayoutSettleRefit(attempt + 1);
               }
             } catch {
               if (attempt + 1 < TERMINAL_BLANK_RECOVERY_DELAYS_MS.length) {
-                scheduleBlankRecoveryRefit(attempt + 1);
+                scheduleLayoutSettleRefit(attempt + 1);
               }
             }
           })();
@@ -372,7 +381,7 @@ export function useTerminalSession({
           terminal.focus();
           persistSurfaceSnapshot(terminal);
           blankRecoveryGenerationRef.current += 1;
-          scheduleBlankRecoveryRefit(0);
+          scheduleLayoutSettleRefit(0);
         } catch {
           // ignore finalize errors
         }
@@ -424,7 +433,7 @@ export function useTerminalSession({
             }
             persistSurfaceSnapshot(term);
             blankRecoveryGenerationRef.current += 1;
-            scheduleBlankRecoveryRefit(0);
+            scheduleLayoutSettleRefit(0);
           } catch {
             // ignore
           }
@@ -433,7 +442,7 @@ export function useTerminalSession({
 
       const fitAndOpen = async () => {
         if (cancelled) return;
-        await waitForTerminalContainerLayout(container);
+        await waitForTerminalContainerStableLayout(container);
         if (cancelled) return;
         try {
           fitTerminalToContainer();
@@ -526,8 +535,7 @@ export function useTerminalSession({
           const term2 = terminalRef.current;
           if (!fit2 || !term2) return;
           try {
-            fit2.fit();
-            reconcileTerminalCanvasFit(term2, container);
+            forceTerminalRemeasureAndFit(term2, fit2, container);
             const nextCols = clampTerminalDim(term2.cols);
             const nextRows = clampTerminalDim(term2.rows);
             void resizeTerminalSession(

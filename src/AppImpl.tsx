@@ -77,7 +77,6 @@ import { tryOpenWorkspaceInDefaultTerminal } from "./services/openWorkspaceWithT
 import type { CommandPaletteSearchMode } from "./components/CommandPalette";
 import { LazyAppWorkspaceLayout } from "./components/AppWorkspaceLayout.lazy";
 import { AppWorkspaceLayoutShell } from "./components/AppWorkspaceLayoutShell";
-import { OperationStuckBanner } from "./components/OperationStuckBanner";
 import { RepositoryRunCommandModal } from "./components/RunCommand";
 import {
   dismissStuckOperations,
@@ -3453,7 +3452,6 @@ export default function App() {
 
   return (
     <>
-    <OperationStuckBanner />
     <Suspense
       fallback={<AppWorkspaceLayoutShell />}
     >
@@ -3479,13 +3477,7 @@ export default function App() {
         activeWorkspaceFocus,
         repositories,
         activeRepositoryId,
-        authorDisabled: !activeProjectId && activeRepositoryId != null,
-        authorDisabledTooltip: "Standalone Repo 不支持 Author 配置；升格为 Workspace 后启用",
         onOpenAuthor: (pane?: AuthorPane) => {
-          if (!activeProjectId && activeRepositoryId != null) {
-            message.warning("Standalone Repo 不支持 Author 配置；升格为 Workspace 后启用");
-            return;
-          }
           enterAuthorPane(pane ?? lastAuthorPane);
         },
         leftSidebarHubQuickEntryIds: leftSidebarHubQuickEntries.enabledEntryIds,

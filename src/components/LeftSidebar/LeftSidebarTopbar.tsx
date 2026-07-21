@@ -20,7 +20,7 @@ interface LeftSidebarTopbarProps {
 
 export function LeftSidebarTopbar({
   authorDisabled = false,
-  authorTooltip = "单仓不支持工作台配置；升格为工作区后启用",
+  authorTooltip = "工作台配置",
   activeRepositoryPath,
   activeRepositoryId = null,
   fileTreeRailOpen = false,

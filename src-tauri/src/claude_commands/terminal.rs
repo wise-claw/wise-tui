@@ -340,6 +340,9 @@ impl TerminalManager {
         cmd.cwd(&cwd);
         let path_merged = merge_path_env(&claude_path_search_prefixes());
         cmd.env("PATH", path_merged);
+        // 显式同步 COLUMNS/LINES，避免部分 shell/theme 在 TIOCGWINSZ 就绪前用默认 80 折行导致画面乱。
+        cmd.env("COLUMNS", safe_cols.to_string());
+        cmd.env("LINES", safe_rows.to_string());
 
         let child = pair
             .slave

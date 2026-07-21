@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1784301027162,
+  "lastScanned": 1784618557050,
   "projectRoot": "/Users/sjl/Documents/github/wise-tui",
   "techStack": {
     "languages": [
@@ -86,7 +86,7 @@
       "path": "design",
       "purpose": null,
       "fileCount": 1,
-      "lastAccessed": 1784301027156,
+      "lastAccessed": 1784618557043,
       "keyFiles": [
         "product-ux-engineering-audit-2026-05-14.md"
       ]
@@ -95,7 +95,7 @@
       "path": "dist",
       "purpose": "Distribution/build output",
       "fileCount": 4,
-      "lastAccessed": 1784301027157,
+      "lastAccessed": 1784618557044,
       "keyFiles": [
         "index.html",
         "mascot.html",
@@ -107,21 +107,21 @@
       "path": "docs",
       "purpose": "Documentation",
       "fileCount": 0,
-      "lastAccessed": 1784301027157,
+      "lastAccessed": 1784618557045,
       "keyFiles": []
     },
     "examples": {
       "path": "examples",
       "purpose": "Example code",
       "fileCount": 0,
-      "lastAccessed": 1784301027158,
+      "lastAccessed": 1784618557046,
       "keyFiles": []
     },
     "extras": {
       "path": "extras",
       "purpose": null,
       "fileCount": 1,
-      "lastAccessed": 1784301027158,
+      "lastAccessed": 1784618557046,
       "keyFiles": [
         "check-prd-split-evolution.mjs"
       ]
@@ -130,7 +130,7 @@
       "path": "imgs",
       "purpose": null,
       "fileCount": 6,
-      "lastAccessed": 1784301027158,
+      "lastAccessed": 1784618557046,
       "keyFiles": [
         "add-execution-env.gif",
         "add-workspace.gif",
@@ -143,7 +143,7 @@
       "path": "public",
       "purpose": "Public files",
       "fileCount": 2,
-      "lastAccessed": 1784301027158,
+      "lastAccessed": 1784618557046,
       "keyFiles": [
         "tauri.svg",
         "vite.svg"
@@ -153,7 +153,7 @@
       "path": "scripts",
       "purpose": "Build/utility scripts",
       "fileCount": 10,
-      "lastAccessed": 1784301027158,
+      "lastAccessed": 1784618557046,
       "keyFiles": [
         "_tmp_sim_stream.mts",
         "build-claude-settings-schema-zh.mjs",
@@ -166,7 +166,7 @@
       "path": "src",
       "purpose": "Source code",
       "fileCount": 9,
-      "lastAccessed": 1784301027158,
+      "lastAccessed": 1784618557046,
       "keyFiles": [
         "App.css",
         "App.tsx",
@@ -179,7 +179,7 @@
       "path": "src-tauri",
       "purpose": null,
       "fileCount": 7,
-      "lastAccessed": 1784301027158,
+      "lastAccessed": 1784618557046,
       "keyFiles": [
         "Cargo.lock",
         "Cargo.toml",
@@ -191,19 +191,19 @@
     "dist/assets": {
       "path": "dist/assets",
       "purpose": "Static assets",
-      "fileCount": 278,
-      "lastAccessed": 1784301027159,
+      "fileCount": 279,
+      "lastAccessed": 1784618557049,
       "keyFiles": [
-        "ActiveRepositoryFilesPanel-D94MRGfX.js",
-        "ApartmentOutlined-pEEnN_cw.js",
-        "ApiOutlined-CTYvoSdX.js"
+        "ActiveRepositoryFilesPanel-C1pSZgy7.js",
+        "ApartmentOutlined-CJuX6z29.js",
+        "ApiOutlined-BwGLRGkl.js"
       ]
     },
     "src/__tests__": {
       "path": "src/__tests__",
       "purpose": "Test files",
       "fileCount": 1,
-      "lastAccessed": 1784301027159,
+      "lastAccessed": 1784618557049,
       "keyFiles": [
         "codexProviderPresets.test.ts"
       ]
@@ -212,7 +212,7 @@
       "path": "src/assets",
       "purpose": "Static assets",
       "fileCount": 1,
-      "lastAccessed": 1784301027159,
+      "lastAccessed": 1784618557049,
       "keyFiles": [
         "react.svg"
       ]
@@ -220,8 +220,8 @@
     "src/components": {
       "path": "src/components",
       "purpose": "UI components",
-      "fileCount": 25,
-      "lastAccessed": 1784301027159,
+      "fileCount": 23,
+      "lastAccessed": 1784618557049,
       "keyFiles": [
         "AppWorkspaceLayout.lazy.ts",
         "AppWorkspaceLayout.tsx",
@@ -232,7 +232,7 @@
       "path": "src/data",
       "purpose": "Data files",
       "fileCount": 5,
-      "lastAccessed": 1784301027159,
+      "lastAccessed": 1784618557049,
       "keyFiles": [
         "claude-code-settings.schema.en.json",
         "claude-code-settings.schema.json",

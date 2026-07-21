@@ -172,7 +172,7 @@
 
 .app-command-palette-item-head {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 12px;
   min-width: 0;
@@ -182,10 +182,11 @@
 
 .app-command-palette-item-head-left {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 6px;
   min-width: 0;
-  flex: 0 1 auto;
+  /* 优先占满文件名所需宽度；路径侧先收缩 */
+  flex: 1 1 auto;
 }
 
 .app-command-palette-item-icon {
@@ -205,6 +206,7 @@
   justify-content: center;
   font-size: 16px;
   line-height: 1;
+  margin-top: 1px;
 }
 
 .app-command-palette .explorer-tree-file-icon--react {
@@ -263,11 +265,12 @@
   align-items: baseline;
   gap: 0;
   min-width: 0;
-  flex: 0 1 58%;
+  flex: 0 1 36%;
   justify-content: flex-end;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  padding-top: 2px;
 }
 
 .app-command-palette-item-hit-count {
@@ -349,10 +352,11 @@
 }
 
 .app-command-palette-item-name {
-  flex-shrink: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  flex: 0 1 auto;
+  min-width: 0;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
   font-weight: 600;
   font-size: 13px;
   color: var(--ant-color-text);

@@ -49,7 +49,6 @@ export type LeftSidebarWorkspaceListSlotProps = {
   onDeleteProject: (project: Workspace) => void;
   onOpenPromptsProject?: (project: Workspace) => void;
   onCreateProjectTask: (project: Workspace, mode: TaskMode) => void;
-  onCreateRepositoryTask: (repository: Repository, mode: TaskMode) => void;
   onOpenWorkspaceRequirements?: (project: Workspace) => void;
   onOpenRepositoryRequirements?: (repository: Repository) => void;
   onOpenInFinder: (repository: Repository) => void;
@@ -201,7 +200,6 @@ function LeftSidebarWorkspaceListSlotInner(props: LeftSidebarWorkspaceListSlotPr
           onDeleteProject={props.onDeleteProject}
           onOpenPromptsProject={props.onOpenPromptsProject}
           onCreateProjectTask={props.onCreateProjectTask}
-          onCreateRepositoryTask={props.onCreateRepositoryTask}
           onOpenWorkspaceRequirements={props.onOpenWorkspaceRequirements}
           onOpenRepositoryRequirements={props.onOpenRepositoryRequirements}
           onOpenInFinder={props.onOpenInFinder}

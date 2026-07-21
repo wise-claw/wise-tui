@@ -97,14 +97,42 @@ export function reconcileTerminalCanvasFit(
 /** 终端 canvas 至少需要的布局尺寸，避免 1px 容器导致 fit 失败。 */
 const MIN_TERMINAL_LAYOUT_PX = 32;
 
-/** 空白屏恢复：多阶段延迟（ms），逐级重试 remeasure + fit。 */
-export const TERMINAL_BLANK_RECOVERY_DELAYS_MS = [80, 200, 420, 800] as const;
+/** 空白屏 / 布局 settle：多阶段延迟（ms），逐级重试 remeasure + fit + 全量重绘。 */
+export const TERMINAL_BLANK_RECOVERY_DELAYS_MS = [50, 120, 280, 520, 900] as const;
+
+/** @deprecated 使用 {@link TERMINAL_BLANK_RECOVERY_DELAYS_MS} */
+export const TERMINAL_LAYOUT_SETTLE_DELAYS_MS = TERMINAL_BLANK_RECOVERY_DELAYS_MS;
 
 function terminalLayoutReady(container: HTMLElement): boolean {
   return (
     container.clientWidth >= MIN_TERMINAL_LAYOUT_PX &&
     container.clientHeight >= MIN_TERMINAL_LAYOUT_PX
   );
+}
+
+/**
+ * 强制 ghostty canvas 全量重绘。
+ * attach/replay/fit 后 dirty 区可能不完整，表现为「画面乱、按 Enter 才正常」。
+ */
+export function forceTerminalFullRedraw(terminal: Terminal): void {
+  const renderer = terminal.renderer as
+    | {
+        render?: (
+          buffer: unknown,
+          forceAll?: boolean,
+          viewportY?: number,
+          scrollbackProvider?: unknown,
+          scrollbarOpacity?: number,
+        ) => void;
+      }
+    | undefined;
+  const wasmTerm = terminal.wasmTerm;
+  if (!renderer?.render || !wasmTerm) return;
+  try {
+    renderer.render(wasmTerm, true, terminal.getViewportY(), terminal);
+  } catch {
+    // ignore renderer errors during dispose / not-open
+  }
 }
 
 /** 判断终端 buffer 是否尚无可见字符（仅有光标）。 */
@@ -154,7 +182,7 @@ export function terminalSurfaceLooksBlank(
   return terminal.cols < 2 || terminal.rows < 2;
 }
 
-/** remeasure 字体后 fit，用于空白屏恢复与面板重新可见时。 */
+/** remeasure 字体后 fit，并强制全量重绘。 */
 export function forceTerminalRemeasureAndFit(
   terminal: Terminal,
   fitAddon: FitAddon,
@@ -165,6 +193,7 @@ export function forceTerminalRemeasureAndFit(
   )?.remeasureFont?.();
   fitAddon.fit();
   reconcileTerminalCanvasFit(terminal, container);
+  forceTerminalFullRedraw(terminal);
 }
 
 /**
@@ -209,6 +238,46 @@ export function waitForTerminalContainerLayout(
     };
     requestAnimationFrame(poll);
   });
+}
+
+/**
+ * 等待容器尺寸连续若干帧不变，再打开/fit PTY。
+ * 面板刚展开时宽高常抖动；过早 open 会导致 shell 用错误 COLUMNS 折行，需按 Enter 才恢复。
+ */
+export async function waitForTerminalContainerStableLayout(
+  container: HTMLElement,
+  options?: { timeoutMs?: number; stableFrames?: number },
+): Promise<void> {
+  const timeoutMs = options?.timeoutMs ?? 5000;
+  const stableFrames = Math.max(1, options?.stableFrames ?? 3);
+  await waitForTerminalContainerLayout(container, timeoutMs);
+
+  const deadline = Date.now() + timeoutMs;
+  let lastW = container.clientWidth;
+  let lastH = container.clientHeight;
+  let stableCount = 0;
+
+  while (Date.now() < deadline) {
+    await new Promise<void>((resolve) => {
+      requestAnimationFrame(() => resolve());
+    });
+    const nextW = container.clientWidth;
+    const nextH = container.clientHeight;
+    if (
+      nextW === lastW &&
+      nextH === lastH &&
+      terminalLayoutReady(container)
+    ) {
+      stableCount += 1;
+      if (stableCount >= stableFrames) {
+        return;
+      }
+      continue;
+    }
+    stableCount = 0;
+    lastW = nextW;
+    lastH = nextH;
+  }
 }
 
 function parseCssColorLuminance(color: string): number | null {

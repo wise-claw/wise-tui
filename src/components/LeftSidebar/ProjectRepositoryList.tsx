@@ -20,7 +20,7 @@ import {
   sumProjectScheduledTasksTotal,
   type SidebarScheduledTasksSummary,
 } from "./useSidebarScheduledTasksMap";
-import { resolveWorkspaceMode, type WorkspaceFocus } from "../../utils/workspaceMode";
+import { type WorkspaceFocus } from "../../utils/workspaceMode";
 import { parseOpenAppConfigureMenuKey } from "../../utils/openAppScope";
 import { buildProjectMoreMenuItems } from "./sidebarMoreMenuItems";
 import { SidebarMoreMenuDropdown } from "./SidebarMoreMenuDropdown";
@@ -82,7 +82,6 @@ export interface ProjectRepositoryListProps {
   onDeleteProject: (project: Workspace) => void;
   onOpenPromptsProject?: (project: Workspace) => void;
   onCreateProjectTask: (project: Workspace, mode: TaskMode) => void;
-  onCreateRepositoryTask: (repository: Repository, mode: TaskMode) => void;
   onOpenWorkspaceRequirements?: (project: Workspace) => void;
   onOpenRepositoryRequirements?: (repository: Repository) => void;
   onOpenInFinder: (repository: Repository) => void;
@@ -162,7 +161,6 @@ function ProjectRepositoryListInner({
   onDeleteProject,
   onOpenPromptsProject,
   onCreateProjectTask,
-  onCreateRepositoryTask,
   onOpenWorkspaceRequirements,
   onOpenInFinder,
   onOpenProjectInFinder,
@@ -408,7 +406,6 @@ function ProjectRepositoryListInner({
                 isActiveRepository={repository.id === activeRepositoryId && !activeProjectId}
                 joinableProjects={projects}
                 onRepositorySelect={onRepositorySelect}
-                onOpenTaskMode={onCreateRepositoryTask}
                 onOpenInFinder={onOpenInFinder}
                 onOpenInTerminal={onOpenInTerminal}
                 onOpenRepositoryInBrowser={onOpenRepositoryInBrowser}
@@ -471,7 +468,6 @@ function ProjectRepositoryListInner({
             onOpenPromptsProject={onOpenPromptsProject}
             onAddRepositoryToProject={onAddRepositoryToProjectClick}
             onCreateProjectTask={onCreateProjectTask}
-            onCreateRepositoryTask={onCreateRepositoryTask}
             onOpenWorkspaceRequirements={onOpenWorkspaceRequirements}
             onReconcileProject={onReconcileProject}
             onOpenInFinder={onOpenInFinder}
@@ -553,7 +549,6 @@ interface ProjectRowProps {
   onOpenPromptsProject?: (project: Workspace) => void;
   onAddRepositoryToProject?: (projectId: Workspace["id"]) => void;
   onCreateProjectTask: (project: Workspace, mode: TaskMode) => void;
-  onCreateRepositoryTask: (repository: Repository, mode: TaskMode) => void;
   onOpenWorkspaceRequirements?: (project: Workspace) => void;
   onOpenRepositoryRequirements?: (repository: Repository) => void;
   onReconcileProject?: (projectId: string, mode: ReconcileProjectMode) => void | Promise<void>;
@@ -623,7 +618,6 @@ function ProjectRow({
   onDeleteProject,
   onAddRepositoryToProject,
   onCreateProjectTask,
-  onCreateRepositoryTask,
   onOpenWorkspaceRequirements,
   onReconcileProject,
   onOpenInFinder,
@@ -886,7 +880,6 @@ function ProjectRow({
             activeRepositoryId={activeRepositoryId}
             activeWorkspaceFocus={activeWorkspaceFocus}
             onRepositorySelect={onRepositorySelect}
-            onCreateRepositoryTask={onCreateRepositoryTask}
             onDetachRepositoryFromProject={onDetachRepositoryFromProject}
             onOpenInFinder={onOpenInFinder}
             onOpenInTerminal={onOpenInTerminal}
@@ -903,12 +896,6 @@ function ProjectRow({
             onNewPaneSession={onNewPaneSessionForRepository}
             repoSidebarDragRef={repoSidebarDragRef}
             onRepoSidebarDragEnd={onClearRepoSidebarDrag}
-            hideChatAction={
-              resolveWorkspaceMode({
-                activeProjectId: project.id,
-                projects: [project],
-              }) === "multi_repo"
-            }
             repositoryTrellisReadyById={repositoryTrellisReadyById}
             scheduledTasksByRepoId={scheduledTasksByRepoId}
             requirementUnsplitByRepoId={requirementUnsplitByRepoId}
