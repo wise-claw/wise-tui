@@ -5,7 +5,7 @@ import {
   PlusOutlined,
   ThunderboltOutlined,
 } from "@ant-design/icons";
-import type { MouseEvent as ReactMouseEvent, ReactNode } from "react";
+import { useEffect, useRef, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import type { TerminalContextTab } from "../../hooks/useTerminalContext";
 import { HoverHint } from "../shared/HoverHint";
 import "./index.css";
@@ -34,6 +34,12 @@ function terminalTabLabel(tab: TerminalContextTab): string {
   return tab.source === "agent" ? "Agent" : "终端";
 }
 
+function isCloseTerminalShortcut(event: KeyboardEvent): boolean {
+  const mod = event.metaKey || event.ctrlKey;
+  if (!mod || event.shiftKey || event.altKey) return false;
+  return event.key === "w" || event.key === "W" || event.code === "KeyW";
+}
+
 export function TerminalDock({
   isOpen,
   layout = "dock",
@@ -51,14 +57,40 @@ export function TerminalDock({
   onLaunchClaudeAutoMode,
   claudeAutoModeDisabled = false,
 }: TerminalDockProps) {
+  const panelRef = useRef<HTMLElement | null>(null);
+
+  // ⌘W / Ctrl+W：焦点在终端面板内时关闭当前终端标签（与文件编辑器 tab 关闭一致）。
+  // 使用 capture，避免 Ctrl+W 先被终端输入当成「删词」发给 PTY。
+  useEffect(() => {
+    if (!isOpen) return;
+    function handleCloseTabShortcut(event: KeyboardEvent) {
+      if (!isCloseTerminalShortcut(event)) return;
+      const panel = panelRef.current;
+      const target = event.target;
+      if (!panel || !(target instanceof Node) || !panel.contains(target)) return;
+      if (!activeTerminalId) return;
+
+      event.preventDefault();
+      event.stopPropagation();
+      onCloseTerminal(activeTerminalId);
+    }
+    window.addEventListener("keydown", handleCloseTabShortcut, { capture: true });
+    return () => window.removeEventListener("keydown", handleCloseTabShortcut, { capture: true });
+  }, [activeTerminalId, isOpen, onCloseTerminal]);
+
   if (!isOpen) {
     return null;
   }
 
   const centerLayout = layout === "center" || fullscreen;
+  const closeTabShortcutLabel =
+    typeof navigator !== "undefined" && /Mac|iPhone|iPad/i.test(navigator.platform)
+      ? "⌘W"
+      : "Ctrl+W";
 
   return (
     <section
+      ref={panelRef}
       className={`terminal-panel${centerLayout ? " terminal-panel--fullscreen" : ""}${
         layout === "center" ? " terminal-panel--center" : ""
       }`}
@@ -93,7 +125,8 @@ export function TerminalDock({
                     <span
                       className="terminal-tab__close"
                       role="button"
-                      aria-label={`关闭 ${terminalTabLabel(tab)}`}
+                      aria-label={`关闭 ${terminalTabLabel(tab)}（${closeTabShortcutLabel}）`}
+                      title={`关闭（${closeTabShortcutLabel}）`}
                       onClick={(event) => {
                         event.stopPropagation();
                         onCloseTerminal(tab.id);
@@ -156,7 +189,13 @@ export function TerminalDock({
               </button>
             </HoverHint>
           ) : null}
-          <HoverHint title="关闭全部终端（结束会话）">
+          <HoverHint
+            title={
+              onClosePanel
+                ? "关闭全部终端（结束会话）"
+                : `关闭当前终端（${closeTabShortcutLabel}）`
+            }
+          >
             <button
               className="terminal-header-icon-btn terminal-header-close"
               type="button"

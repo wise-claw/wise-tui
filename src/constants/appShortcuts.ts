@@ -47,6 +47,10 @@ export const APP_SHORTCUT_GROUPS: AppShortcutGroup[] = [
         description: "打开或关闭终端面板（反引号键，数字 1 左侧；须用 Control，不是 ⌘）。",
       },
       {
+        keys: "⌘W · Ctrl+W",
+        description: "焦点在终端面板内时：关闭当前终端标签；仅剩一个时同时关闭面板。",
+      },
+      {
         keys: "⌘F · Ctrl+F",
         description: "Wise 主窗口聚焦时打开全局搜索（文件名模式）。",
       },
