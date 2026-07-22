@@ -1782,8 +1782,8 @@
   min-height: 0;
   min-width: 0;
   overflow: hidden;
-  /* 隔离消息区子树的布局/绘制，降低多屏 WebKit compositing 递归深度 */
-  contain: content;
+  /* 仅 paint 隔离；layout contain 易导致消息区百分比宽度循环塌缩 */
+  contain: paint;
 }
 
 .app-claude-chat-main {
@@ -3695,8 +3695,9 @@
   /* 与 .app-claude-chat 一致：flex 子项默认可收缩为 0，否则内部 overflow 无法获得稳定滚动视口 */
   min-height: 0;
   overflow-x: hidden;
-  /* 强化滚动容器的绘制隔离，减少多屏 compositing 递归 */
-  contain: content;
+  /* 勿用 contain:layout/content：与子项 width/max-width:100% 叠加时，WKWebView
+     可能把百分比算成循环依赖 → 可用宽度塌成中文 min-content（一字一行）。 */
+  contain: paint;
   overflow-y: auto;
   padding: 12px 12px 16px;
   /* 滚动容器用块级流式布局：避免 column flex 把视口剩余高度算进 scrollHeight，贴底时顶栏被顶出、底部留白 */
@@ -3971,10 +3972,10 @@
 }
 
 .app-claude-message-body {
-  /* 在 grid 的 minmax(0,1fr) 列内铺满；勿设 width:0 / flex-basis:0%（曾导致一字竖排） */
+  /* grid 子项默认 stretch 铺满 1fr 列；勿设 max-width:100%（不定宽度下可循环塌成 0） */
   min-width: 0;
-  max-width: 100%;
-  width: 100%;
+  max-width: none;
+  width: auto;
   position: relative;
   overflow-wrap: break-word;
   word-break: normal;
@@ -3982,8 +3983,8 @@
 
 .app-claude-message-content {
   min-width: 0;
-  max-width: 100%;
-  width: 100%;
+  max-width: none;
+  width: auto;
   box-sizing: border-box;
   user-select: text;
   overflow-wrap: break-word;
@@ -4750,13 +4751,13 @@
 }
 
 .app-claude-messages .app-message-part-reasoning-inline-row .app-markdown-host {
-  flex: 1 1 auto;
+  flex: 1 1 0%;
   min-width: 0;
   max-width: none;
   width: auto;
   overflow: hidden;
-  display: flex;
-  align-items: flex-start;
+  /* 必须是 block：display:flex 时子项 .app-markdown 的 min-width:auto = 中文一字宽 */
+  display: block;
   line-height: var(--app-reasoning-line-height);
 }
 
@@ -4837,9 +4838,9 @@
   .app-message-part-reasoning-inline-row
   .app-markdown-host {
   display: block;
-  width: 100%;
+  width: auto;
   min-width: 0;
-  max-width: 100%;
+  max-width: none;
   overflow: visible;
   white-space: normal;
 }
@@ -4854,9 +4855,9 @@
   .app-markdown
   p {
   display: block;
-  width: 100%;
+  width: auto;
   min-width: 0;
-  max-width: 100%;
+  max-width: none;
   overflow: visible;
   text-overflow: clip;
   white-space: normal;
@@ -5540,13 +5541,12 @@ button.app-message-part-header:disabled:hover {
 }
 
 .app-message-part-reasoning-inline-row .app-markdown-host {
-  flex: 1 1 auto;
+  flex: 1 1 0%;
   min-width: 0;
   max-width: none;
   width: auto;
   overflow: hidden;
-  display: flex;
-  align-items: flex-start;
+  display: block;
   line-height: var(--app-reasoning-line-height, 1.45);
 }
 
@@ -5581,9 +5581,9 @@ button.app-message-part-header:disabled:hover {
 
 .app-message-part-reasoning-collapsible--expanded .app-message-part-reasoning-inline-row .app-markdown-host {
   display: block;
-  width: 100%;
+  width: auto;
   min-width: 0;
-  max-width: 100%;
+  max-width: none;
   overflow: visible;
   white-space: normal;
 }
@@ -5591,9 +5591,9 @@ button.app-message-part-header:disabled:hover {
 .app-message-part-reasoning-collapsible--expanded .app-message-part-reasoning-inline-row .app-markdown,
 .app-message-part-reasoning-collapsible--expanded .app-message-part-reasoning-inline-row .app-markdown p {
   display: block;
-  width: 100%;
+  width: auto;
   min-width: 0;
-  max-width: 100%;
+  max-width: none;
   overflow: visible;
   text-overflow: clip;
   white-space: normal;
@@ -6149,18 +6149,20 @@ button.app-message-part-header:disabled:hover {
 
 .app-markdown-host {
   min-width: 0;
-  max-width: 100%;
-  width: 100%;
+  max-width: none;
+  width: auto;
   box-sizing: border-box;
+  display: block;
 }
 
-/* 主会话助手正文：强制占满消息列，禁止因 min-content 塌成一字一行 */
+/* 主会话助手正文：铺满 grid 正文列；禁止 flex 子项 min-content 塌成一字一行 */
 .app-claude-messages .app-claude-message--assistant .app-message-part--text,
 .app-claude-messages .app-claude-message--assistant .app-message-parts,
 .app-claude-messages .app-claude-message--assistant .app-markdown-host,
 .app-claude-messages .app-claude-message--assistant .app-markdown {
-  width: 100%;
-  max-width: 100%;
+  display: block;
+  width: auto;
+  max-width: none;
   min-width: 0;
   box-sizing: border-box;
   overflow-wrap: break-word;
@@ -6266,8 +6268,9 @@ button.app-message-part-header:disabled:hover {
   line-height: 1.5;
   color: var(--ant-color-text);
   min-width: 0;
-  max-width: 100%;
-  width: 100%;
+  max-width: none;
+  width: auto;
+  display: block;
   overflow-wrap: break-word;
   word-break: normal;
 }
@@ -9644,8 +9647,8 @@ button.app-message-part-header:disabled:hover {
    排除工具结果行（--user + --tool-user）。 */
 .app-claude-message--user:not(.app-claude-message--tool-user) .app-claude-message-body {
   min-width: 0;
-  max-width: 100%;
-  width: 100%;
+  max-width: none;
+  width: auto;
 }
 
 .app-claude-message--user:not(.app-claude-message--tool-user) .app-claude-message-content {
