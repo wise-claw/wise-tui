@@ -4,6 +4,7 @@ use portable_pty::{ChildKiller, CommandBuilder, NativePtySystem, PtySize, PtySys
 use serde::Serialize;
 use std::collections::HashMap;
 use std::io::{ErrorKind, Read, Write};
+use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::{Emitter, Manager};
@@ -18,7 +19,7 @@ use frame::{serialize_frame, TerminalFrameDto};
 
 /// PTY reader 线程上限：触发 emit 的字节阈值（保留每次 emit 较小，防止单条 IPC payload 巨大）。
 const TERMINAL_EMIT_FLUSH_BYTES: usize = 16 * 1024;
-/// PTY reader 线程上限：触发 emit 的时间阈值（避免低速输出时延迟过高）。
+/// 空闲 flush 间隔：阻塞 read 本身不会“过一会儿再醒”，必须用超时等待才能在交互提示符后及时刷出画面。
 const TERMINAL_EMIT_FLUSH_INTERVAL: Duration = Duration::from_millis(16);
 /// pending 文本硬上限：防止前端阻塞时 reader 端无限增长 (~1 MiB 已经远超单帧渲染需要)。
 const TERMINAL_PENDING_HARD_CAP: usize = 1024 * 1024;
@@ -59,6 +60,35 @@ pub(crate) struct TerminalAttachResponse {
     pub replay: String,
     /// alacritty_terminal 可视网格快照，供内置终端 Canvas 渲染。
     pub frame: TerminalFrameDto,
+}
+
+/// 是否应立刻把 pending/dirty 刷到前端。
+///
+/// `reader_idle` 表示当前没有更多可读字节（recv 超时 / 即将回到阻塞 wait）。
+/// 旧逻辑只在下一次 `read()` 成功时检查时间窗，交互 shell 打印完提示符后会一直卡住，
+/// 直到用户再按键产生输出——M2 上更容易踩中这个时序。
+fn should_flush_terminal_output(
+    pending_len: usize,
+    dirty: bool,
+    last_flush_elapsed: Duration,
+    reader_idle: bool,
+) -> bool {
+    if pending_len == 0 && !dirty {
+        return false;
+    }
+    if pending_len >= TERMINAL_EMIT_FLUSH_BYTES || pending_len >= TERMINAL_PENDING_HARD_CAP {
+        return true;
+    }
+    if reader_idle {
+        return true;
+    }
+    last_flush_elapsed >= TERMINAL_EMIT_FLUSH_INTERVAL
+}
+
+enum PtyReaderEvent {
+    Bytes(Vec<u8>),
+    Error(String),
+    Eof,
 }
 
 /// Split PTY byte stream on UTF-8 boundaries so text consumers never receive torn
@@ -341,8 +371,38 @@ impl TerminalManager {
         emulator: Arc<Mutex<EmulatorState>>,
     ) {
         std::thread::spawn(move || {
-            let mut reader = reader;
-            let mut buf = [0u8; 4096];
+            // 阻塞 read 与超时 flush 拆成两段：读线程只管灌字节，处理线程用
+            // recv_timeout 在 shell 安静后仍能把最后一帧刷出去。
+            let (tx, rx) = mpsc::sync_channel::<PtyReaderEvent>(64);
+            std::thread::spawn(move || {
+                let mut reader = reader;
+                let mut buf = [0u8; 4096];
+                loop {
+                    match reader.read(&mut buf) {
+                        Ok(0) => {
+                            let _ = tx.send(PtyReaderEvent::Eof);
+                            break;
+                        }
+                        Ok(n) => {
+                            if tx.send(PtyReaderEvent::Bytes(buf[..n].to_vec())).is_err() {
+                                break;
+                            }
+                        }
+                        Err(err) => match err.kind() {
+                            ErrorKind::Interrupted => continue,
+                            ErrorKind::WouldBlock => {
+                                std::thread::sleep(Duration::from_millis(1));
+                                continue;
+                            }
+                            _ => {
+                                let _ = tx.send(PtyReaderEvent::Error(err.to_string()));
+                                break;
+                            }
+                        },
+                    }
+                }
+            });
+
             let mut carry = Vec::new();
             let mut pending = String::new();
             let mut last_flush = Instant::now();
@@ -396,32 +456,41 @@ impl TerminalManager {
             };
 
             loop {
-                match reader.read(&mut buf) {
-                    Ok(0) => break,
-                    Ok(n) => {
-                        let bytes = &buf[..n];
+                match rx.recv_timeout(TERMINAL_EMIT_FLUSH_INTERVAL) {
+                    Ok(PtyReaderEvent::Bytes(bytes)) => {
                         if let Ok(mut emu) = emulator.lock() {
-                            emu.advance(bytes);
+                            emu.advance(&bytes);
                         }
                         dirty = true;
-                        carry.extend_from_slice(bytes);
+                        carry.extend_from_slice(&bytes);
                         for text in drain_valid_utf8_chunks(&mut carry) {
                             pending.push_str(&text);
                         }
-                        if pending.len() >= TERMINAL_EMIT_FLUSH_BYTES
-                            || last_flush.elapsed() >= TERMINAL_EMIT_FLUSH_INTERVAL
-                            || pending.len() >= TERMINAL_PENDING_HARD_CAP
-                        {
+                        if should_flush_terminal_output(
+                            pending.len(),
+                            dirty,
+                            last_flush.elapsed(),
+                            false,
+                        ) {
                             flush_pending(&mut pending, &mut last_flush, &mut dirty, &emulator);
                         }
                     }
-                    Err(err) => match err.kind() {
-                        ErrorKind::Interrupted | ErrorKind::WouldBlock => continue,
-                        _ => {
-                            exit_reason = Some(err.to_string());
-                            break;
+                    Ok(PtyReaderEvent::Error(message)) => {
+                        exit_reason = Some(message);
+                        break;
+                    }
+                    Ok(PtyReaderEvent::Eof) => break,
+                    Err(RecvTimeoutError::Timeout) => {
+                        if should_flush_terminal_output(
+                            pending.len(),
+                            dirty,
+                            last_flush.elapsed(),
+                            true,
+                        ) {
+                            flush_pending(&mut pending, &mut last_flush, &mut dirty, &emulator);
                         }
-                    },
+                    }
+                    Err(RecvTimeoutError::Disconnected) => break,
                 }
             }
             if !carry.is_empty() {
@@ -1051,6 +1120,49 @@ mod tests {
         let chunks = drain_valid_utf8_chunks(&mut carry);
         assert_eq!(chunks, vec!["a".to_string()]);
         assert!(carry.is_empty());
+    }
+
+    #[test]
+    fn flush_on_reader_idle_even_inside_time_window() {
+        // 旧 bug：小段输出落在 16ms 内后阻塞 read，画面卡住直到下一次按键。
+        assert!(should_flush_terminal_output(
+            32,
+            true,
+            Duration::from_millis(1),
+            true,
+        ));
+    }
+
+    #[test]
+    fn flush_batches_while_reader_busy_inside_time_window() {
+        assert!(!should_flush_terminal_output(
+            32,
+            true,
+            Duration::from_millis(1),
+            false,
+        ));
+        assert!(should_flush_terminal_output(
+            TERMINAL_EMIT_FLUSH_BYTES,
+            true,
+            Duration::from_millis(1),
+            false,
+        ));
+        assert!(should_flush_terminal_output(
+            32,
+            true,
+            TERMINAL_EMIT_FLUSH_INTERVAL,
+            false,
+        ));
+    }
+
+    #[test]
+    fn flush_skips_when_nothing_pending() {
+        assert!(!should_flush_terminal_output(
+            0,
+            false,
+            TERMINAL_EMIT_FLUSH_INTERVAL,
+            true,
+        ));
     }
 
     #[test]
