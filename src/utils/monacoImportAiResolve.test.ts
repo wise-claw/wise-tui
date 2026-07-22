@@ -11,17 +11,20 @@ import {
 } from "./monacoImportAiResolve";
 
 describe("buildImportNavigationSearchQuery", () => {
-  test("相对路径取末段并去掉扩展名", () => {
+  test("相对路径：有后缀取末段，无后缀保留路径段", () => {
     expect(buildImportNavigationSearchQuery("../lib/security-config.ts")).toBe("security-config");
-    expect(buildImportNavigationSearchQuery("./foo/bar")).toBe("bar");
+    expect(buildImportNavigationSearchQuery("./foo/bar")).toBe("foo/bar");
   });
 
-  test("去掉 @ 前缀", () => {
-    expect(buildImportNavigationSearchQuery("@utils/repositoryType")).toBe("repositoryType");
+  test("去掉 @ 前缀后保留路径段", () => {
+    expect(buildImportNavigationSearchQuery("@utils/repositoryType")).toBe("utils/repositoryType");
+    expect(buildImportNavigationSearchQuery("@/api/system/user")).toBe("api/system/user");
   });
 
-  test("仓库根相对路径", () => {
-    expect(buildImportNavigationSearchQuery("src/components/ClaudeChat")).toBe("ClaudeChat");
+  test("仓库根相对多段路径保留整段", () => {
+    expect(buildImportNavigationSearchQuery("src/components/ClaudeChat")).toBe(
+      "src/components/ClaudeChat",
+    );
   });
 
   test("空串", () => {
@@ -32,10 +35,16 @@ describe("buildImportNavigationSearchQuery", () => {
     expect(buildImportNavigationSearchQuery("PayAppService")).toBe("PayAppService");
   });
 
-  test("…/index.tsx 用父目录名作查询", () => {
+  test("…/index.tsx 用目录相对路径作查询", () => {
     expect(
       buildImportNavigationSearchQuery("pages/ProjectManagement/ProjectDetail/index.tsx"),
-    ).toBe("ProjectDetail");
+    ).toBe("pages/ProjectManagement/ProjectDetail");
+  });
+
+  test("多段无后缀路径保留整段以便命中 index", () => {
+    expect(buildImportNavigationSearchQuery("pages/ProjectManagement/ProjectDetail")).toBe(
+      "pages/ProjectManagement/ProjectDetail",
+    );
   });
 });
 
@@ -97,6 +106,16 @@ describe("pickExactBasenameSearchHit", () => {
         { path: "pages/ProjectManagement/ProjectDetail/ProjectDetailCtrl.ts", isDir: false },
       ]),
     ).toBe("pages/ProjectManagement/ProjectDetail/index.tsx");
+  });
+
+  test("路径型查询命中 src/pages/…/index.tsx", () => {
+    expect(
+      pickExactBasenameSearchHit("pages/ProjectManagement/ProjectDetail", [
+        { path: "src/pages/ProjectManagement/ProjectDetail/index.tsx", isDir: false },
+        { path: "src/pages/ProjectManagement/ProjectDetail/ProjectDetailCtrl.ts", isDir: false },
+        { path: "src/pages/ProjectManagement/ProjectDetail", isDir: true },
+      ]),
+    ).toBe("src/pages/ProjectManagement/ProjectDetail/index.tsx");
   });
 
   test("多个同名则不直跳", () => {

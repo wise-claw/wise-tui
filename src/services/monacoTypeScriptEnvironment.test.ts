@@ -135,13 +135,14 @@ describe("resolvePathClickCandidates — 裸路径点击", () => {
     ).not.toContain("src/services/src/foo/bar.ts");
   });
 
-  test("路由目录路径优先 index.tsx（pages/.../ProjectDetail）", () => {
+  test("路由目录路径优先 index.tsx，并补 src/ 前缀", () => {
     const candidates = resolvePathClickCandidates(
       "src/routes.ts",
       "pages/ProjectManagement/ProjectDetail",
     );
-    expect(candidates[0]).toBe("pages/ProjectManagement/ProjectDetail/index.ts");
-    expect(candidates[1]).toBe("pages/ProjectManagement/ProjectDetail/index.tsx");
+    expect(candidates[0]).toBe("src/pages/ProjectManagement/ProjectDetail/index.tsx");
+    expect(candidates).toContain("src/pages/ProjectManagement/ProjectDetail/index.ts");
+    expect(candidates).toContain("pages/ProjectManagement/ProjectDetail/index.tsx");
     expect(candidates).toContain("pages/ProjectManagement/ProjectDetail.tsx");
   });
 
@@ -151,7 +152,10 @@ describe("resolvePathClickCandidates — 裸路径点击", () => {
         "src/routes.ts",
         "pages/ProjectManagement/ProjectDetail/index.tsx",
       ),
-    ).toEqual(["pages/ProjectManagement/ProjectDetail/index.tsx"]);
+    ).toEqual([
+      "src/pages/ProjectManagement/ProjectDetail/index.tsx",
+      "pages/ProjectManagement/ProjectDetail/index.tsx",
+    ]);
   });
 
   test("./pkg.json 命中自身且不被 .ts 替代", () => {

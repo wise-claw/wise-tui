@@ -182,18 +182,23 @@ export function findNavigableTypeIdentifierLinks(
   return result;
 }
 
-/** 从点击到的 specifier 抽出适合 `searchRepositoryFiles` 的短查询（文件名主干）。 */
+/** 从点击到的 specifier 抽出适合 `searchRepositoryFiles` 的查询。 */
 export function buildImportNavigationSearchQuery(specifier: string): string {
   let token = specifier.trim().replace(/^["']|["']$/g, "");
   if (!token) return "";
   token = token.replace(/^(\.\.?\/)+/, "");
+  token = token.replace(/^[@~#]\//, "");
   token = token.replace(/^@+/, "");
   const parts = token.split(/[\\/]/).filter(Boolean);
   if (parts.length === 0) return "";
   const last = parts[parts.length - 1]!;
-  // …/ProjectDetail/index.tsx → 用父目录名搜索，便于命中目录入口
+  // …/ProjectDetail/index.tsx → 用目录相对路径搜索，才能命中 index.tsx（文件名不含目录名）
   if (/^index\.(?:tsx?|jsx?|mjs|cjs|vue)$/i.test(last) && parts.length >= 2) {
-    return parts[parts.length - 2]!;
+    return parts.slice(0, -1).join("/");
+  }
+  // 多段无后缀路径（路由 root: pages/Foo/Bar）→ 整段路径，匹配 src/pages/Foo/Bar/index.tsx
+  if (parts.length >= 2 && !SOURCE_BASENAME_EXT_RE.test(last)) {
+    return parts.join("/");
   }
   const withoutExt = last.replace(SOURCE_BASENAME_EXT_RE, "");
   return (withoutExt || last).trim();
@@ -203,7 +208,37 @@ function fileStem(fileName: string): string {
   return fileName.replace(SOURCE_BASENAME_EXT_RE, "");
 }
 
-/** 在搜索命中中挑「文件名主干完全一致」的唯一文件，可跳过 LLM。 */
+const INDEX_ENTRY_RE = /^index\.(tsx?|jsx?|mjs|cjs|vue)$/i;
+
+/** 路径型查询：命中 `…/<needle>/index.*` 或 `…/<needle>.*`。 */
+function pickPathSuffixSearchHit(needle: string, filePaths: readonly string[]): string | null {
+  if (!needle.includes("/")) return null;
+
+  const indexHits = filePaths.filter((path) => {
+    const lower = path.toLowerCase();
+    const parts = lower.split("/").filter(Boolean);
+    if (parts.length < 2) return false;
+    const file = parts[parts.length - 1]!;
+    if (!INDEX_ENTRY_RE.test(file)) return false;
+    const dirPath = parts.slice(0, -1).join("/");
+    return dirPath === needle || dirPath.endsWith(`/${needle}`);
+  });
+  const uniqueIndex = Array.from(new Set(indexHits));
+  if (uniqueIndex.length === 1) return uniqueIndex[0]!;
+  // 多个 index 时优先 .tsx
+  const tsxOnly = uniqueIndex.filter((p) => p.toLowerCase().endsWith("/index.tsx"));
+  if (tsxOnly.length === 1) return tsxOnly[0]!;
+
+  const fileHits = filePaths.filter((path) => {
+    const lower = path.toLowerCase();
+    const withoutExt = lower.replace(SOURCE_BASENAME_EXT_RE, "");
+    return withoutExt === needle || withoutExt.endsWith(`/${needle}`);
+  });
+  const uniqueFile = Array.from(new Set(fileHits));
+  return uniqueFile.length === 1 ? uniqueFile[0]! : null;
+}
+
+/** 在搜索命中中挑「文件名主干完全一致」或「路径后缀 + index」的唯一文件，可跳过 LLM。 */
 export function pickExactBasenameSearchHit(
   query: string,
   hits: readonly { path: string; isDir: boolean }[],
@@ -214,6 +249,9 @@ export function pickExactBasenameSearchHit(
   const filePaths = hits
     .filter((hit) => !hit.isDir)
     .map((hit) => hit.path.replace(/\\/g, "/").replace(/^\/+/, ""));
+
+  const pathSuffix = pickPathSuffixSearchHit(needle, filePaths);
+  if (pathSuffix) return pathSuffix;
 
   const stemMatches = filePaths.filter((path) => {
     const base = path.split("/").pop() ?? "";
@@ -230,10 +268,12 @@ export function pickExactBasenameSearchHit(
     const file = parts[parts.length - 1]!;
     const parent = parts[parts.length - 2]!;
     if (parent.toLowerCase() !== needle) return false;
-    return /^index\.(tsx?|jsx?|mjs|cjs|vue)$/i.test(file);
+    return INDEX_ENTRY_RE.test(file);
   });
   const uniqueIndex = Array.from(new Set(indexDirMatches));
-  return uniqueIndex.length === 1 ? uniqueIndex[0]! : null;
+  if (uniqueIndex.length === 1) return uniqueIndex[0]!;
+  const tsxOnly = uniqueIndex.filter((p) => p.toLowerCase().endsWith("/index.tsx"));
+  return tsxOnly.length === 1 ? tsxOnly[0]! : null;
 }
 
 /** 截断并去重搜索命中，供 AI 选择。 */

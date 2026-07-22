@@ -570,6 +570,9 @@ export function resolveScopePackageCandidates(specifier: string): string[] {
   );
 }
 
+/** 路由/页面目录点击：优先 React/TSX 入口，再试 ts/js/vue。 */
+const PATH_CLICK_INDEX_EXTENSIONS = [".tsx", ".ts", ".jsx", ".js", ".vue"] as const;
+
 /**
  * 为「裸路径点击」生成候选列表。
  *
@@ -580,43 +583,58 @@ export function resolveScopePackageCandidates(specifier: string): string[] {
  *   不再做 fromDir 拼接，与 import/export 引号逻辑保持差异。
  *
  * 无扩展名且含 `/` 的路径（路由 root、页面目录等）优先尝试 `index.tsx` / `index.ts`，
- * 再试「同名文件」扩展名，避免先探测一堆不存在的 `Foo.ts` 才落到目录入口。
+ * 并额外尝试 `src/` 前缀（常见于 `root: 'pages/...'` 实际落在 `src/pages/...`）。
  */
 export function resolvePathClickCandidates(fromRelativePath: string, rawToken: string): string[] {
   const token = rawToken.trim();
   if (!token) return [];
 
-  const fromDir = dirname(normalizeRepositoryRelativePath(fromRelativePath));
+  const fromRelative = normalizeRepositoryRelativePath(fromRelativePath);
+  const fromDir = dirname(fromRelative);
   const isAbsoluteStyle = !token.startsWith("./") && !token.startsWith("../") && !token.startsWith("@");
-  const baseTarget = isAbsoluteStyle
-    ? normalizeRepositoryRelativePath(token)
-    : normalizeRepositoryRelativePath(`${fromDir}/${token}`);
 
-  if (!baseTarget) return [];
-
-  const ext = getPathExtension(baseTarget);
-  if (ext.length > 0) {
-    const candidates: string[] = [];
-    if (MODEL_SOURCE_EXTENSIONS.has(ext)) candidates.push(baseTarget);
-    if (["js", "mjs", "cjs"].includes(ext)) {
-      const withoutExt = baseTarget.slice(0, -(ext.length + 1));
-      candidates.push(
-        ...["ts", "tsx", "mts", "cts", "d.ts"].map((sourceExt) => `${withoutExt}.${sourceExt}`),
-      );
+  const baseTargets: string[] = [];
+  if (isAbsoluteStyle) {
+    const asRoot = normalizeRepositoryRelativePath(token);
+    if (asRoot) baseTargets.push(asRoot);
+    // 当前文件在 src/ 下，或路径本身未带 src/：补一条 src/ 候选（路由 root 常见）
+    if (asRoot && !asRoot.startsWith("src/")) {
+      const underSrc = normalizeRepositoryRelativePath(`src/${asRoot}`);
+      if (underSrc) {
+        if (fromRelative === "src" || fromRelative.startsWith("src/")) {
+          baseTargets.unshift(underSrc);
+        } else {
+          baseTargets.push(underSrc);
+        }
+      }
     }
-    // 命中具体后缀的引用，目录兜底意义不大（如 `./foo.ts` 不该再探 `foo.ts/index.*`），
-    // 这里不再追加 index 候选。
-    return Array.from(new Set(candidates));
+  } else {
+    const joined = normalizeRepositoryRelativePath(`${fromDir}/${token}`);
+    if (joined) baseTargets.push(joined);
   }
 
-  const fileCandidates = RESOLVABLE_SOURCE_EXTENSIONS.map((extension) => `${baseTarget}${extension}`);
-  const indexCandidates = RESOLVABLE_INDEX_EXTENSIONS.map((extension) => `${baseTarget}/index${extension}`);
-  // 多段路径更像目录（pages/Foo/Bar）→ index 优先；单段仍先试同名文件。
-  const preferIndex = baseTarget.includes("/");
-  const candidates = preferIndex
-    ? [...indexCandidates, ...fileCandidates]
-    : [...fileCandidates, ...indexCandidates];
-  return Array.from(new Set(candidates));
+  if (baseTargets.length === 0) return [];
+
+  const out: string[] = [];
+  for (const baseTarget of baseTargets) {
+    const ext = getPathExtension(baseTarget);
+    if (ext.length > 0) {
+      if (MODEL_SOURCE_EXTENSIONS.has(ext)) out.push(baseTarget);
+      if (["js", "mjs", "cjs"].includes(ext)) {
+        const withoutExt = baseTarget.slice(0, -(ext.length + 1));
+        out.push(
+          ...["ts", "tsx", "mts", "cts", "d.ts"].map((sourceExt) => `${withoutExt}.${sourceExt}`),
+        );
+      }
+      continue;
+    }
+
+    const fileCandidates = RESOLVABLE_SOURCE_EXTENSIONS.map((extension) => `${baseTarget}${extension}`);
+    const indexCandidates = PATH_CLICK_INDEX_EXTENSIONS.map((extension) => `${baseTarget}/index${extension}`);
+    const preferIndex = baseTarget.includes("/");
+    out.push(...(preferIndex ? [...indexCandidates, ...fileCandidates] : [...fileCandidates, ...indexCandidates]));
+  }
+  return Array.from(new Set(out));
 }
 
 async function readProjectFileIfExists(repositoryPath: string, relativePath: string): Promise<string | null> {
