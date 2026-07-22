@@ -1,12 +1,20 @@
+mod frame;
+
 use portable_pty::{ChildKiller, CommandBuilder, NativePtySystem, PtySize, PtySystem};
 use serde::Serialize;
 use std::collections::HashMap;
 use std::io::{ErrorKind, Read, Write};
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 use tauri::{Emitter, Manager};
 
+use alacritty_terminal::event::{Event as AlacrittyEvent, EventListener, WindowSize};
+use alacritty_terminal::term::test::TermSize;
+use alacritty_terminal::term::{Config as TermConfig, Term};
+use alacritty_terminal::vte::ansi::{self, Rgb};
+
 use super::{claude_path_search_prefixes, merge_path_env};
+use frame::{serialize_frame, TerminalFrameDto};
 
 /// PTY reader 线程上限：触发 emit 的字节阈值（保留每次 emit 较小，防止单条 IPC payload 巨大）。
 const TERMINAL_EMIT_FLUSH_BYTES: usize = 16 * 1024;
@@ -47,11 +55,14 @@ pub(crate) struct TerminalSessionInfo {
 #[serde(rename_all = "camelCase")]
 pub(crate) struct TerminalAttachResponse {
     pub cursor: usize,
+    /// 原始字节文本重放（运行面板 / URL 检测等仍依赖纯文本）。
     pub replay: String,
+    /// alacritty_terminal 可视网格快照，供内置终端 Canvas 渲染。
+    pub frame: TerminalFrameDto,
 }
 
-/// Split PTY byte stream on UTF-8 boundaries so the web terminal never receives torn
-/// multibyte sequences (which corrupt alternate-screen TUIs like Claude Code).
+/// Split PTY byte stream on UTF-8 boundaries so text consumers never receive torn
+/// multibyte sequences.
 fn drain_valid_utf8_chunks(carry: &mut Vec<u8>) -> Vec<String> {
     let mut chunks = Vec::new();
     loop {
@@ -114,12 +125,9 @@ fn replay_output(
     buffer_start_cursor: usize,
     stream_cursor: usize,
     client_cursor: usize,
-) -> TerminalAttachResponse {
+) -> (usize, String) {
     if client_cursor >= stream_cursor {
-        return TerminalAttachResponse {
-            cursor: stream_cursor,
-            replay: String::new(),
-        };
+        return (stream_cursor, String::new());
     }
     let offset = if client_cursor < buffer_start_cursor {
         0
@@ -131,19 +139,130 @@ fn replay_output(
     } else {
         output_buffer[offset..].to_string()
     };
-    TerminalAttachResponse {
-        cursor: stream_cursor,
-        replay,
+    (stream_cursor, replay)
+}
+
+fn default_indexed_rgb(index: usize) -> Rgb {
+    match index {
+        0 => Rgb { r: 0, g: 0, b: 0 },
+        1 => Rgb { r: 205, g: 49, b: 49 },
+        2 => Rgb { r: 13, g: 188, b: 121 },
+        3 => Rgb { r: 229, g: 229, b: 16 },
+        4 => Rgb { r: 36, g: 114, b: 200 },
+        5 => Rgb { r: 188, g: 63, b: 188 },
+        6 => Rgb { r: 17, g: 168, b: 205 },
+        7 => Rgb { r: 229, g: 229, b: 229 },
+        8 => Rgb { r: 102, g: 102, b: 102 },
+        9 => Rgb { r: 241, g: 76, b: 76 },
+        10 => Rgb { r: 35, g: 209, b: 139 },
+        11 => Rgb { r: 245, g: 245, b: 67 },
+        12 => Rgb { r: 59, g: 142, b: 234 },
+        13 => Rgb { r: 214, g: 112, b: 214 },
+        14 => Rgb { r: 41, g: 184, b: 219 },
+        15 => Rgb { r: 255, g: 255, b: 255 },
+        256 | 267 => Rgb { r: 0xd4, g: 0xd4, b: 0xd4 }, // foreground
+        257 | 268 => Rgb { r: 0x1e, g: 0x1e, b: 0x1e }, // background
+        258 => Rgb { r: 0xae, g: 0xaf, b: 0xad },       // cursor
+        _ => Rgb { r: 0xd4, g: 0xd4, b: 0xd4 },
+    }
+}
+
+#[derive(Clone)]
+struct EventProxy {
+    writer: Arc<Mutex<Box<dyn Write + Send>>>,
+    cols: Arc<Mutex<u16>>,
+    rows: Arc<Mutex<u16>>,
+}
+
+impl EventListener for EventProxy {
+    fn send_event(&self, event: AlacrittyEvent) {
+        match event {
+            AlacrittyEvent::PtyWrite(data) => {
+                if let Ok(mut writer) = self.writer.lock() {
+                    let _ = writer.write_all(data.as_bytes());
+                    let _ = writer.flush();
+                }
+            }
+            AlacrittyEvent::ColorRequest(index, format) => {
+                let rgb = default_indexed_rgb(index);
+                let seq = format(rgb);
+                if let Ok(mut writer) = self.writer.lock() {
+                    let _ = writer.write_all(seq.as_bytes());
+                    let _ = writer.flush();
+                }
+            }
+            AlacrittyEvent::TextAreaSizeRequest(format) => {
+                let cols = self.cols.lock().map(|g| *g).unwrap_or(80);
+                let rows = self.rows.lock().map(|g| *g).unwrap_or(24);
+                let seq = format(WindowSize {
+                    num_lines: rows,
+                    num_cols: cols,
+                    cell_width: 1,
+                    cell_height: 1,
+                });
+                if let Ok(mut writer) = self.writer.lock() {
+                    let _ = writer.write_all(seq.as_bytes());
+                    let _ = writer.flush();
+                }
+            }
+            AlacrittyEvent::ClipboardLoad(_, format) => {
+                let seq = format("");
+                if let Ok(mut writer) = self.writer.lock() {
+                    let _ = writer.write_all(seq.as_bytes());
+                    let _ = writer.flush();
+                }
+            }
+            _ => {}
+        }
+    }
+}
+
+struct EmulatorState {
+    term: Term<EventProxy>,
+    parser: ansi::Processor,
+}
+
+impl EmulatorState {
+    fn new(cols: u16, rows: u16, proxy: EventProxy) -> Self {
+        let size = TermSize::new(cols as usize, rows as usize);
+        let config = TermConfig {
+            scrolling_history: 10_000,
+            ..TermConfig::default()
+        };
+        let term = Term::new(config, &size, proxy);
+        Self {
+            term,
+            parser: ansi::Processor::new(),
+        }
+    }
+
+    fn advance(&mut self, bytes: &[u8]) {
+        if bytes.is_empty() {
+            return;
+        }
+        self.parser.advance(&mut self.term, bytes);
+    }
+
+    fn resize(&mut self, cols: u16, rows: u16) {
+        self.term
+            .resize(TermSize::new(cols as usize, rows as usize));
+    }
+
+    fn frame(&self) -> TerminalFrameDto {
+        serialize_frame(&self.term)
     }
 }
 
 struct TerminalSession {
     info: TerminalSessionInfo,
     master: Box<dyn portable_pty::MasterPty + Send>,
-    writer: Box<dyn Write + Send>,
+    writer: Arc<Mutex<Box<dyn Write + Send>>>,
     killer: Box<dyn ChildKiller + Send + Sync>,
     output_buffer: String,
     buffer_start_cursor: usize,
+    emulator: Arc<Mutex<EmulatorState>>,
+    size_cols: Arc<Mutex<u16>>,
+    size_rows: Arc<Mutex<u16>>,
 }
 
 impl TerminalSession {
@@ -162,13 +281,32 @@ impl TerminalSession {
         }
     }
 
-    fn replay_from(&self, client_cursor: usize) -> TerminalAttachResponse {
-        replay_output(
+    fn attach_from(&self, client_cursor: usize) -> TerminalAttachResponse {
+        let (cursor, replay) = replay_output(
             &self.output_buffer,
             self.buffer_start_cursor,
             self.info.cursor,
             client_cursor,
-        )
+        );
+        let frame = self
+            .emulator
+            .lock()
+            .map(|emu| emu.frame())
+            .unwrap_or_else(|_| TerminalFrameDto {
+                cols: self.info.cols,
+                rows: self.info.rows,
+                cursor: frame::TerminalCursorDto {
+                    col: 0,
+                    row: 0,
+                    visible: true,
+                },
+                lines: vec![],
+            });
+        TerminalAttachResponse {
+            cursor,
+            replay,
+            frame,
+        }
     }
 }
 
@@ -191,11 +329,8 @@ impl TerminalManager {
         }
     }
 
-    /// 把 reader 线程逻辑（utf-8 切分、flush、emit、wait、清理会话）抽出来，
+    /// 把 reader 线程逻辑（utf-8 切分、VT 解析、flush、emit、wait、清理会话）抽出来，
     /// 让 `open`（交互终端）和 `open_background_script`（后台脚本）共用一份实现。
-    /// 进程退出后自动从 manager 中移除 session 并把 status 标为 "exited"，
-    /// 调用方不再需要手动处理清理。reader 持有 PTY reader 直到 EOF/错误，
-    /// child 在 read 结束后 wait 拿到 exit code。
     fn spawn_pty_reader_thread(
         reader: Box<dyn Read + Send>,
         mut child: Box<dyn portable_pty::Child + Send + Sync>,
@@ -203,6 +338,7 @@ impl TerminalManager {
         terminal_id: String,
         session_key: String,
         app: tauri::AppHandle,
+        emulator: Arc<Mutex<EmulatorState>>,
     ) {
         std::thread::spawn(move || {
             let mut reader = reader;
@@ -210,27 +346,52 @@ impl TerminalManager {
             let mut carry = Vec::new();
             let mut pending = String::new();
             let mut last_flush = Instant::now();
+            let mut dirty = false;
             let mut exit_reason: Option<String> = None;
 
-            let flush_pending = |pending: &mut String, last_flush: &mut Instant| {
-                if pending.is_empty() {
-                    return;
-                }
-                let chunk = pending.as_str();
-                if let Some(manager) = app.try_state::<Mutex<TerminalManager>>() {
-                    if let Ok(mut guard) = manager.lock() {
-                        guard.append_output_for_key(&session_key, chunk);
-                    }
-                }
+            let emit_frame = |emulator: &Arc<Mutex<EmulatorState>>| {
+                let frame = match emulator.lock() {
+                    Ok(emu) => emu.frame(),
+                    Err(_) => return,
+                };
                 let _ = app.emit(
-                    "terminal-output",
+                    "terminal-frame",
                     serde_json::json!({
                         "workspaceId": workspace_id,
                         "terminalId": terminal_id,
-                        "data": chunk,
+                        "frame": frame,
                     }),
                 );
-                pending.clear();
+            };
+
+            let flush_pending = |pending: &mut String,
+                                 last_flush: &mut Instant,
+                                 dirty: &mut bool,
+                                 emulator: &Arc<Mutex<EmulatorState>>| {
+                if pending.is_empty() && !*dirty {
+                    return;
+                }
+                if !pending.is_empty() {
+                    let chunk = pending.as_str();
+                    if let Some(manager) = app.try_state::<Mutex<TerminalManager>>() {
+                        if let Ok(mut guard) = manager.lock() {
+                            guard.append_output_for_key(&session_key, chunk);
+                        }
+                    }
+                    let _ = app.emit(
+                        "terminal-output",
+                        serde_json::json!({
+                            "workspaceId": workspace_id,
+                            "terminalId": terminal_id,
+                            "data": chunk,
+                        }),
+                    );
+                    pending.clear();
+                }
+                if *dirty {
+                    emit_frame(emulator);
+                    *dirty = false;
+                }
                 *last_flush = Instant::now();
             };
 
@@ -238,7 +399,12 @@ impl TerminalManager {
                 match reader.read(&mut buf) {
                     Ok(0) => break,
                     Ok(n) => {
-                        carry.extend_from_slice(&buf[..n]);
+                        let bytes = &buf[..n];
+                        if let Ok(mut emu) = emulator.lock() {
+                            emu.advance(bytes);
+                        }
+                        dirty = true;
+                        carry.extend_from_slice(bytes);
                         for text in drain_valid_utf8_chunks(&mut carry) {
                             pending.push_str(&text);
                         }
@@ -246,7 +412,7 @@ impl TerminalManager {
                             || last_flush.elapsed() >= TERMINAL_EMIT_FLUSH_INTERVAL
                             || pending.len() >= TERMINAL_PENDING_HARD_CAP
                         {
-                            flush_pending(&mut pending, &mut last_flush);
+                            flush_pending(&mut pending, &mut last_flush, &mut dirty, &emulator);
                         }
                     }
                     Err(err) => match err.kind() {
@@ -261,7 +427,7 @@ impl TerminalManager {
             if !carry.is_empty() {
                 pending.push_str(&String::from_utf8_lossy(&carry));
             }
-            flush_pending(&mut pending, &mut last_flush);
+            flush_pending(&mut pending, &mut last_flush, &mut dirty, &emulator);
 
             let exit_code = child
                 .wait()
@@ -288,6 +454,22 @@ impl TerminalManager {
                 }
             }
         });
+    }
+
+    fn create_emulator(
+        cols: u16,
+        rows: u16,
+        writer: Arc<Mutex<Box<dyn Write + Send>>>,
+    ) -> (Arc<Mutex<EmulatorState>>, Arc<Mutex<u16>>, Arc<Mutex<u16>>) {
+        let size_cols = Arc::new(Mutex::new(cols));
+        let size_rows = Arc::new(Mutex::new(rows));
+        let proxy = EventProxy {
+            writer,
+            cols: size_cols.clone(),
+            rows: size_rows.clone(),
+        };
+        let emulator = Arc::new(Mutex::new(EmulatorState::new(cols, rows, proxy)));
+        (emulator, size_cols, size_rows)
     }
 
     fn open(
@@ -354,16 +536,21 @@ impl TerminalManager {
             .try_clone_reader()
             .map_err(|e| format!("Failed to clone PTY reader: {}", e))?;
 
-        let writer = master
-            .take_writer()
-            .map_err(|e| format!("Failed to get PTY writer: {}", e))?;
+        let writer = Arc::new(Mutex::new(
+            master
+                .take_writer()
+                .map_err(|e| format!("Failed to get PTY writer: {}", e))?,
+        ));
 
         let killer = child.clone_killer();
+        let (emulator, size_cols, size_rows) =
+            Self::create_emulator(safe_cols, safe_rows, writer.clone());
 
         let workspace_clone = workspace_id.clone();
         let terminal_clone = terminal_id.clone();
         let session_key_clone = key.clone();
         let app_clone = app.clone();
+        let emulator_clone = emulator.clone();
 
         Self::spawn_pty_reader_thread(
             reader,
@@ -372,6 +559,7 @@ impl TerminalManager {
             terminal_clone,
             session_key_clone,
             app_clone,
+            emulator_clone,
         );
 
         let info = TerminalSessionInfo {
@@ -411,6 +599,9 @@ impl TerminalManager {
                 killer,
                 output_buffer: String::new(),
                 buffer_start_cursor: 0,
+                emulator,
+                size_cols,
+                size_rows,
             },
         );
 
@@ -418,12 +609,6 @@ impl TerminalManager {
     }
 
     /// 在 cwd 下用 `zsh -c <command>` 通过 PTY 启动一次性后台脚本。
-    /// 与 `open` 不同：
-    /// - 不登录、不交互（没有 `-il`），命令结束即会话退出。
-    /// - 不暴露 writer，前端无法再往 PTY 写数据（只是观察 + kill）。
-    /// - `pid` 字段写入 session info，便于运行面板展示。
-    /// - session 出错（PTY 打开失败、spawn 失败）时整个 session 都不入 manager，
-    ///   调用方拿到的就是一个干净错误。
     fn open_background_script(
         &mut self,
         workspace_id: String,
@@ -446,7 +631,6 @@ impl TerminalManager {
             return Err(format!("Terminal session already exists: {}", key));
         }
 
-        // 后台脚本：cols/rows 给 80x24 默认；前端 attach 时再按当前可视尺寸 resize。
         let safe_cols: u16 = 80;
         let safe_rows: u16 = 24;
         let title = title
@@ -465,13 +649,11 @@ impl TerminalManager {
             .map_err(|e| format!("Failed to open PTY: {}", e))?;
 
         let mut cmd = if cfg!(windows) {
-            // Windows 暂不支持后台脚本（脚本语义强依赖 zsh），直接报错。
             return Err("后台脚本当前仅支持 macOS/Linux".to_string());
         } else {
             let mut zsh = CommandBuilder::new("zsh");
             zsh.arg("-c");
             zsh.arg(&command);
-            // 不传 -il：避免启动 .zshrc / oh-my-zsh 让简单命令卡顿；同时抑制 p10k 提示噪音。
             apply_embedded_terminal_shell_env(&mut zsh);
             zsh
         };
@@ -491,6 +673,11 @@ impl TerminalManager {
             .map_err(|e| format!("Failed to clone PTY reader: {}", e))?;
 
         let killer = child.clone_killer();
+        // 后台脚本不接管 stdin：writer 用 sink，前端不会调用 terminal_write。
+        let writer: Arc<Mutex<Box<dyn Write + Send>>> =
+            Arc::new(Mutex::new(Box::new(std::io::sink())));
+        let (emulator, size_cols, size_rows) =
+            Self::create_emulator(safe_cols, safe_rows, writer.clone());
 
         let info = TerminalSessionInfo {
             workspace_id: workspace_id.clone(),
@@ -524,6 +711,7 @@ impl TerminalManager {
         let terminal_clone = terminal_id.clone();
         let session_key_clone = key.clone();
         let app_clone = app.clone();
+        let emulator_clone = emulator.clone();
         Self::spawn_pty_reader_thread(
             reader,
             child,
@@ -531,6 +719,7 @@ impl TerminalManager {
             terminal_clone,
             session_key_clone,
             app_clone,
+            emulator_clone,
         );
 
         self.sessions.insert(
@@ -538,34 +727,31 @@ impl TerminalManager {
             TerminalSession {
                 info,
                 master,
-                // 后台脚本不接管 stdin：writer 用一个丢弃 sink 实现 take_writer 接口，
-                // 前端不会调用 terminal_write 写它。
-                writer: Box::new(std::io::sink()),
+                writer,
                 killer,
                 output_buffer: String::new(),
                 buffer_start_cursor: 0,
+                emulator,
+                size_cols,
+                size_rows,
             },
         );
 
-        // 取出 info 给前端（不能 move，借用后再 insert 会失败，所以上面先 clone 进 sessions）
         let info = self
             .sessions
             .get(&key)
             .map(|s| s.info.clone())
-            .unwrap_or_else(|| {
-                // 极端情况下 insert 后拿不到（理论不会发生），构造一个等价副本。
-                TerminalSessionInfo {
-                    workspace_id,
-                    terminal_id,
-                    title,
-                    source,
-                    status: "running".to_string(),
-                    cwd: trimmed_cwd.to_string(),
-                    cols: safe_cols,
-                    rows: safe_rows,
-                    cursor: 0,
-                    pid,
-                }
+            .unwrap_or_else(|| TerminalSessionInfo {
+                workspace_id,
+                terminal_id,
+                title,
+                source,
+                status: "running".to_string(),
+                cwd: trimmed_cwd.to_string(),
+                cols: safe_cols,
+                rows: safe_rows,
+                cursor: 0,
+                pid,
             });
         Ok(info)
     }
@@ -581,7 +767,7 @@ impl TerminalManager {
             .sessions
             .get(&key)
             .ok_or_else(|| format!("Terminal session not found: {}", key))?;
-        Ok(session.replay_from(cursor))
+        Ok(session.attach_from(cursor))
     }
 
     fn list(&self, workspace_id: &str) -> Vec<TerminalSessionInfo> {
@@ -621,7 +807,6 @@ impl TerminalManager {
         if session.info.status == "exited" {
             return Err(format!("Terminal session exited: {}", key));
         }
-        // 后台脚本是 fire-and-forget，前端不应写 stdin；显式拒绝避免误导。
         if session.info.source == "background-script" {
             return Err(format!(
                 "Terminal session {} 是后台脚本，不能写入 stdin",
@@ -630,8 +815,12 @@ impl TerminalManager {
         }
         let bytes = data.as_bytes();
         let mut attempt: u32 = 0;
+        let mut writer = session
+            .writer
+            .lock()
+            .map_err(|e| format!("Failed to lock PTY writer: {}", e))?;
         loop {
-            match session.writer.write_all(bytes) {
+            match writer.write_all(bytes) {
                 Ok(()) => break,
                 Err(err) => {
                     let kind = err.kind();
@@ -646,8 +835,7 @@ impl TerminalManager {
                 }
             }
         }
-        session
-            .writer
+        writer
             .flush()
             .map_err(|e| format!("Failed to flush PTY: {}", e))
     }
@@ -671,6 +859,15 @@ impl TerminalManager {
         let safe_rows = rows.clamp(TERMINAL_DIM_MIN, TERMINAL_DIM_MAX);
         session.info.cols = safe_cols;
         session.info.rows = safe_rows;
+        if let Ok(mut cols_guard) = session.size_cols.lock() {
+            *cols_guard = safe_cols;
+        }
+        if let Ok(mut rows_guard) = session.size_rows.lock() {
+            *rows_guard = safe_rows;
+        }
+        if let Ok(mut emu) = session.emulator.lock() {
+            emu.resize(safe_cols, safe_rows);
+        }
         session
             .master
             .resize(PtySize {
@@ -719,8 +916,6 @@ pub(crate) fn terminal_open(
 }
 
 /// 后台脚本入口：用 PTY 跑一次性 `zsh -c <command>`，返回包含 pid 的 session info。
-/// 与 `terminal_open` 的差异：cols/rows 由后端默认 80x24（无前端交互）；不接管 stdin；
-/// session info 里 `pid` 字段有值，便于运行面板展示。
 #[tauri::command]
 pub(crate) fn terminal_open_background_script(
     manager: tauri::State<std::sync::Mutex<TerminalManager>>,
@@ -873,19 +1068,23 @@ mod tests {
 
     #[test]
     fn replay_from_returns_suffix_after_client_cursor() {
-        let attach = replay_output("abcdef", 0, 6, 2);
-        assert_eq!(attach.cursor, 6);
-        assert_eq!(attach.replay, "cdef");
+        let (cursor, replay) = replay_output("abcdef", 0, 6, 2);
+        assert_eq!(cursor, 6);
+        assert_eq!(replay, "cdef");
     }
 
     #[test]
     fn replay_from_honors_buffer_start_cursor() {
-        let attach = replay_output("cdef", 2, 6, 1);
-        assert_eq!(attach.replay, "cdef");
+        let (_cursor, replay) = replay_output("cdef", 2, 6, 1);
+        assert_eq!(replay, "cdef");
     }
 
     #[test]
     fn append_output_trims_buffer_when_exceeding_cap() {
+        let writer: Arc<Mutex<Box<dyn Write + Send>>> =
+            Arc::new(Mutex::new(Box::new(std::io::sink())));
+        let (emulator, size_cols, size_rows) =
+            TerminalManager::create_emulator(80, 24, writer.clone());
         let mut session = TerminalSession {
             info: TerminalSessionInfo {
                 workspace_id: "0".to_string(),
@@ -900,10 +1099,13 @@ mod tests {
                 pid: 0,
             },
             master: panic_master_placeholder(),
-            writer: panic_writer_placeholder(),
+            writer,
             killer: panic_killer_placeholder(),
             output_buffer: String::new(),
             buffer_start_cursor: 0,
+            emulator,
+            size_cols,
+            size_rows,
         };
         let chunk = "a".repeat(TERMINAL_BUFFER_TRIM_CHUNK);
         for _ in 0..20 {
@@ -942,19 +1144,6 @@ mod tests {
             }
             fn tty_name(&self) -> Option<std::path::PathBuf> {
                 None
-            }
-        }
-        Box::new(Unreachable)
-    }
-
-    fn panic_writer_placeholder() -> Box<dyn Write + Send> {
-        struct Unreachable;
-        impl Write for Unreachable {
-            fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
-                Ok(buf.len())
-            }
-            fn flush(&mut self) -> std::io::Result<()> {
-                Ok(())
             }
         }
         Box::new(Unreachable)

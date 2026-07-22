@@ -165,8 +165,11 @@ export function TerminalPanel({
   const terminalPanelNode = (
     <TerminalPanelSurface
       containerRef={terminalState.containerRef}
+      canvasRef={terminalState.canvasRef}
+      inputRef={terminalState.inputRef}
       status={terminalState.status}
       message={terminalState.message}
+      onSurfacePointerDown={terminalState.focusInput}
     />
   );
 

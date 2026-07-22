@@ -19,9 +19,34 @@ export type TerminalSessionInfo = {
   pid?: number;
 };
 
+export type TerminalCellRun = {
+  text: string;
+  fg: string;
+  bg: string;
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean;
+  dim?: boolean;
+  strike?: boolean;
+};
+
+export type TerminalFrame = {
+  cols: number;
+  rows: number;
+  cursor: {
+    col: number;
+    row: number;
+    visible: boolean;
+  };
+  lines: TerminalCellRun[][];
+};
+
 export type TerminalAttachResponse = {
   cursor: number;
+  /** 原始文本重放（运行面板等文本消费者）。 */
   replay: string;
+  /** alacritty_terminal 可视网格，供内置终端 Canvas 渲染。 */
+  frame: TerminalFrame;
 };
 
 /** 面板收起或切换 tab 时缓存的终端画面状态，用于重挂载后恢复。 */

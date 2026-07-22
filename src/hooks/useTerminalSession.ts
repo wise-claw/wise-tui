@@ -1,12 +1,11 @@
 // @refresh reset
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { RefObject } from "react";
-import type { FitAddon, Terminal } from "ghostty-web";
 import type { Repository } from "../types";
-import type { TerminalSurfaceSnapshot } from "../types/terminal";
+import type { TerminalFrame, TerminalSurfaceSnapshot } from "../types/terminal";
 import {
   subscribeTerminalExit,
-  subscribeTerminalOutput,
+  subscribeTerminalFrame,
 } from "../services/events";
 import {
   attachTerminalSession,
@@ -15,24 +14,13 @@ import {
   resizeTerminalSession,
   writeTerminalSession,
 } from "../services/terminal";
-import { loadGhosttyModule } from "../utils/ghosttyLoader";
 import {
-  resetTerminalKeyboardProtocol,
-  sanitizeTerminalPtyOutput,
-} from "../utils/terminalSanitize";
-import {
-  configureGhosttyInputSurface,
-  forceTerminalFullRedraw,
-  forceTerminalRemeasureAndFit,
-  observeTerminalTheme,
-  readTerminalThemeFromContainer,
-  registerTerminalLinkProviders,
-  TERMINAL_BLANK_RECOVERY_DELAYS_MS,
-  terminalBufferLooksEmpty,
-  terminalNeedsBlankRecovery,
-  waitForTerminalContainerStableLayout,
-} from "../utils/terminalTheme";
-import { terminalWriter } from "../utils/terminalWriter";
+  encodeTerminalKey,
+  measureTerminalMetrics,
+  readTerminalBackground,
+  renderTerminalFrame,
+  TERMINAL_FONT_SIZE,
+} from "../utils/alacrittyTerminalCanvas";
 import { shouldIgnoreTerminalError } from "../utils/terminalErrors";
 
 export type TerminalStatus = "idle" | "connecting" | "ready" | "error";
@@ -41,6 +29,9 @@ export type TerminalSessionState = {
   status: TerminalStatus;
   message: string;
   containerRef: RefObject<HTMLDivElement | null>;
+  canvasRef: RefObject<HTMLCanvasElement | null>;
+  inputRef: RefObject<HTMLTextAreaElement | null>;
+  focusInput: () => void;
   cleanupTerminalSession: (repositoryId: number, terminalId: string) => void;
 };
 
@@ -56,26 +47,35 @@ interface UseTerminalSessionOptions {
   onSessionExit?: (repositoryId: number, terminalId: string) => void;
 }
 
-/** 与后端 TERMINAL_DIM_MIN/MAX 保持一致：clamp 维度防止 0 或异常巨大值进入 IPC。 */
 const TERMINAL_DIM_MIN = 1;
 const TERMINAL_DIM_MAX = 1024;
-
-/** 调整频率限制，防止拖拽分隔条时高频 resize 把后端压垮。 */
 const TERMINAL_RESIZE_DEBOUNCE_MS = 100;
-
-/** 与 OpenCode Desktop 对齐的 scrollback 上限。 */
-const TERMINAL_SCROLLBACK = 10_000;
-
-/** 嵌入式终端字号（略大于编辑器侧栏，提升浅色主题可读性）。 */
-const TERMINAL_FONT_SIZE = 12;
-
-/** 等待 container ref 挂载的最大帧数（约 2s @60Hz）。 */
 const MAX_CONTAINER_WAIT_FRAMES = 120;
 
 const clampTerminalDim = (n: number) => {
   if (!Number.isFinite(n)) return TERMINAL_DIM_MIN;
   return Math.max(TERMINAL_DIM_MIN, Math.min(TERMINAL_DIM_MAX, Math.floor(n)));
 };
+
+async function waitForStableLayout(container: HTMLElement): Promise<void> {
+  const deadline = Date.now() + 5000;
+  let lastW = -1;
+  let lastH = -1;
+  let stable = 0;
+  while (Date.now() < deadline) {
+    const w = container.clientWidth;
+    const h = container.clientHeight;
+    if (w > 8 && h > 8 && w === lastW && h === lastH) {
+      stable += 1;
+      if (stable >= 3) return;
+    } else {
+      stable = 0;
+      lastW = w;
+      lastH = h;
+    }
+    await new Promise<void>((resolve) => requestAnimationFrame(() => resolve()));
+  }
+}
 
 export function useTerminalSession({
   activeRepository,
@@ -88,8 +88,8 @@ export function useTerminalSession({
   onSessionExit,
 }: UseTerminalSessionOptions): TerminalSessionState {
   const containerRef = useRef<HTMLDivElement | null>(null);
-  const terminalRef = useRef<Terminal | null>(null);
-  const fitAddonRef = useRef<FitAddon | null>(null);
+  const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const inputRef = useRef<HTMLTextAreaElement | null>(null);
   const [status, setStatus] = useState<TerminalStatus>("idle");
   const [message, setMessage] = useState("");
 
@@ -102,6 +102,20 @@ export function useTerminalSession({
   useEffect(() => {
     onSurfaceSnapshotRef.current = onSurfaceSnapshot;
   }, [onSurfaceSnapshot]);
+
+  const focusInput = useCallback(() => {
+    const input = inputRef.current;
+    if (!input) return;
+    try {
+      input.focus({ preventScroll: true });
+    } catch {
+      try {
+        input.focus();
+      } catch {
+        // ignore
+      }
+    }
+  }, []);
 
   const cleanupTerminalSession = useCallback(
     (repositoryId: number, terminalId: string) => {
@@ -118,8 +132,6 @@ export function useTerminalSession({
 
   const repositoryId = activeRepository?.id ?? null;
   const cwd = activeRepository?.path ?? null;
-  const initialCursorRef = useRef(surfaceSnapshot?.cursor ?? 0);
-  const initialScrollYRef = useRef(surfaceSnapshot?.scrollY);
   const initialSizeRef = useRef(
     surfaceSnapshot?.cols && surfaceSnapshot?.rows
       ? { cols: surfaceSnapshot.cols, rows: surfaceSnapshot.rows }
@@ -127,8 +139,6 @@ export function useTerminalSession({
   );
 
   useEffect(() => {
-    initialCursorRef.current = surfaceSnapshot?.cursor ?? 0;
-    initialScrollYRef.current = surfaceSnapshot?.scrollY;
     initialSizeRef.current =
       surfaceSnapshot?.cols && surfaceSnapshot?.rows
         ? { cols: surfaceSnapshot.cols, rows: surfaceSnapshot.rows }
@@ -137,15 +147,8 @@ export function useTerminalSession({
 
   useEffect(() => {
     if (focusRequestVersion <= 0) return;
-    const term = terminalRef.current;
-    if (!term) return;
-    try {
-      term.focus();
-      term.textarea?.focus();
-    } catch {
-      // ignore
-    }
-  }, [focusRequestVersion]);
+    focusInput();
+  }, [focusRequestVersion, focusInput]);
 
   useEffect(() => {
     if (repositoryId === null || !activeTerminalId || !cwd || !isVisible) {
@@ -159,7 +162,9 @@ export function useTerminalSession({
 
     const startSession = () => {
       const container = containerRef.current;
-      if (!container) {
+      const canvas = canvasRef.current;
+      const input = inputRef.current;
+      if (!container || !canvas || !input) {
         if (containerWaitFrames >= MAX_CONTAINER_WAIT_FRAMES) {
           return;
         }
@@ -172,456 +177,263 @@ export function useTerminalSession({
 
       const terminalId = activeTerminalId;
       const workspaceId = repositoryId.toString();
-      /** 每次挂载新 ghostty 实例必须从 0 重放；snapshot.cursor 仅用于持久化。 */
-      const ATTACH_REPLAY_CURSOR = 0;
-
-      const theme = readTerminalThemeFromContainer(container);
-
-      let outputWriter: ReturnType<typeof terminalWriter> | undefined;
-      let streamCursor = ATTACH_REPLAY_CURSOR;
       let sessionEnded = false;
+      let latestFrame: TerminalFrame | null = null;
+      let resizeDebounceTimer: number | null = null;
+      let paintRaf = 0;
 
-    const fitAndOpenRafRef: { current: number | null } = { current: null };
-    const resizeDebounceTimerRef: { current: number | null } = { current: null };
-    const visibleRefitTimerRef: { current: number | null } = { current: null };
-    const blankRecoveryTimerRef: { current: number | null } = { current: null };
-    const blankRecoveryGenerationRef: { current: number } = { current: 0 };
+      const metricsRef = {
+        current: measureTerminalMetrics(container, TERMINAL_FONT_SIZE),
+      };
 
-    const persistSurfaceSnapshot = (term: Terminal) => {
-      onSurfaceSnapshotRef.current?.({
-        cols: term.cols,
-        rows: term.rows,
-        scrollY: term.getViewportY(),
-        cursor: streamCursor,
-      });
-    };
-
-    const bootstrap = async () => {
-      setStatus("connecting");
-      setMessage("正在连接终端…");
-
-      await waitForTerminalContainerStableLayout(container);
-      if (cancelled) return () => undefined;
-
-      const ghosttyModule = await loadGhosttyModule();
-      if (cancelled) return () => undefined;
-
-      const terminal = new ghosttyModule.Terminal({
-        cursorBlink: false,
-        convertEol: false,
-        scrollback: TERMINAL_SCROLLBACK,
-        fontFamily: 'Menlo, Monaco, "Courier New", monospace',
-        fontSize: TERMINAL_FONT_SIZE,
-        ghostty: ghosttyModule.ghostty,
-        theme,
-        cols: initialSizeRef.current?.cols,
-        rows: initialSizeRef.current?.rows,
-      });
-      const fitAddon = new ghosttyModule.FitAddon();
-      terminal.loadAddon(fitAddon);
-      terminal.open(container);
-      const unregisterInputSurface = configureGhosttyInputSurface(terminal);
-      if (cancelled) {
-        terminal.dispose();
-        return () => undefined;
-      }
-
-      terminalRef.current = terminal;
-      fitAddonRef.current = fitAddon;
-
-      outputWriter = terminalWriter((data, done) => {
-        try {
-          terminal.write(data, done);
-        } catch {
-          done?.();
-        }
-      });
-
-      let outputFlushRaf = 0;
-      const scheduleTerminalOutputFlush = () => {
-        // 终端输出必须及时上屏；勿跟拥塞/composer 闸门推迟，否则易出现「乱码待 Enter 才刷新」。
-        if (outputFlushRaf) {
-          return;
-        }
-        // 同帧多包合并进一次 flush；始终在下一帧写出，不因主线程拥塞跳过。
-        outputFlushRaf = requestAnimationFrame(() => {
-          outputFlushRaf = 0;
-          outputWriter?.flush();
+      const persistSnapshot = (frame: TerminalFrame | null) => {
+        onSurfaceSnapshotRef.current?.({
+          cols: frame?.cols ?? metricsRef.current.cols,
+          rows: frame?.rows ?? metricsRef.current.rows,
+          cursor: 0,
         });
       };
 
-      const outputUnsubscribe = subscribeTerminalOutput((event) => {
-        if (event.workspaceId === workspaceId && event.terminalId === terminalId) {
-          const sanitized = sanitizeTerminalPtyOutput(event.data);
-          if (!sanitized) return;
-          outputWriter?.push(sanitized);
-          streamCursor += event.data.length;
-          scheduleTerminalOutputFlush();
-        }
-      });
-
-      const exitUnsubscribe = subscribeTerminalExit((event) => {
-        if (event.workspaceId === workspaceId && event.terminalId === terminalId) {
-          sessionEnded = true;
-          outputWriter?.clear();
-          if (event.reason) {
-            try {
-              terminal.write(
-                `\r\n\x1b[31m[终端已断开] ${event.reason}\x1b[0m\r\n`,
-              );
-            } catch {
-              // 忽略写入失败：终端可能已被 dispose
-            }
-          }
-          onSessionExitRef.current?.(repositoryId, terminalId);
-        }
-      });
-
-      const enableCursorBlink = () => {
-        try {
-          terminal.options.cursorBlink = true;
-        } catch {
-          // ignore
-        }
+      const paint = () => {
+        if (!latestFrame) return;
+        const liveCanvas = canvasRef.current;
+        const liveContainer = containerRef.current;
+        if (!liveCanvas || !liveContainer) return;
+        renderTerminalFrame(
+          liveCanvas,
+          latestFrame,
+          metricsRef.current,
+          readTerminalBackground(liveContainer),
+        );
       };
 
-      const fitTerminalToContainer = () => {
-        forceTerminalRemeasureAndFit(terminal, fitAddon, container);
+      const schedulePaint = () => {
+        if (paintRaf) return;
+        paintRaf = requestAnimationFrame(() => {
+          paintRaf = 0;
+          paint();
+        });
       };
 
-      const syncTerminalDimensions = () => {
-        const nextCols = clampTerminalDim(terminal.cols);
-        const nextRows = clampTerminalDim(terminal.rows);
-        void resizeTerminalSession(workspaceId, terminalId, nextCols, nextRows).catch(
+      const applyFrame = (frame: TerminalFrame) => {
+        latestFrame = frame;
+        schedulePaint();
+        persistSnapshot(frame);
+      };
+
+      const syncResize = () => {
+        const liveContainer = containerRef.current;
+        if (!liveContainer) return { cols: 80, rows: 24 };
+        metricsRef.current = measureTerminalMetrics(
+          liveContainer,
+          TERMINAL_FONT_SIZE,
+        );
+        const cols = clampTerminalDim(
+          initialSizeRef.current?.cols ?? metricsRef.current.cols,
+        );
+        const rows = clampTerminalDim(
+          initialSizeRef.current?.rows ?? metricsRef.current.rows,
+        );
+        initialSizeRef.current = undefined;
+        void resizeTerminalSession(workspaceId, terminalId, cols, rows).catch(
           () => undefined,
         );
+        persistSnapshot(latestFrame);
+        return { cols, rows };
       };
 
-      const replayAttachOutput = async (clientCursor = ATTACH_REPLAY_CURSOR) => {
-        const attach = await attachTerminalSession(
-          workspaceId,
-          terminalId,
-          clientCursor,
-        );
-        if (cancelled) return false;
-        streamCursor = attach.cursor;
-        const replay = sanitizeTerminalPtyOutput(attach.replay);
-        if (!replay) return false;
-        await new Promise<void>((resolve) => {
-          outputWriter?.push(replay);
-          outputWriter?.flush(resolve);
+      const bootstrap = async () => {
+        setStatus("connecting");
+        setMessage("正在连接终端…");
+        await waitForStableLayout(container);
+        if (cancelled) return () => undefined;
+
+        if (typeof document !== "undefined" && document.fonts) {
+          await document.fonts.ready;
+        }
+        if (cancelled) return () => undefined;
+
+        const frameUnsub = subscribeTerminalFrame((event) => {
+          if (
+            event.workspaceId === workspaceId &&
+            event.terminalId === terminalId
+          ) {
+            applyFrame(event.frame);
+          }
         });
-        forceTerminalFullRedraw(terminal);
-        return true;
-      };
 
-      /**
-       * 就绪后多阶段 settle：纠正抖动尺寸、补全量重绘；空白时再 replay。
-       * 不限于 blank：错列宽折行也要靠后续 resize(SIGWINCH)+重绘恢复。
-       */
-      const scheduleLayoutSettleRefit = (attempt = 0) => {
-        const delay = TERMINAL_BLANK_RECOVERY_DELAYS_MS[attempt];
-        if (delay === undefined) return;
-
-        const generation = blankRecoveryGenerationRef.current;
-        if (blankRecoveryTimerRef.current !== null) {
-          window.clearTimeout(blankRecoveryTimerRef.current);
-        }
-        blankRecoveryTimerRef.current = window.setTimeout(() => {
-          blankRecoveryTimerRef.current = null;
-          if (cancelled || sessionEnded || generation !== blankRecoveryGenerationRef.current) {
-            return;
-          }
-          void (async () => {
-            try {
-              const prevCols = terminal.cols;
-              const prevRows = terminal.rows;
-              fitTerminalToContainer();
-              syncTerminalDimensions();
-              if (terminalBufferLooksEmpty(terminal)) {
-                await replayAttachOutput(ATTACH_REPLAY_CURSOR);
-                fitTerminalToContainer();
-                syncTerminalDimensions();
-              } else {
-                forceTerminalFullRedraw(terminal);
-              }
-              const dimsChanged =
-                terminal.cols !== prevCols || terminal.rows !== prevRows;
-              const needsMore =
-                attempt + 1 < TERMINAL_BLANK_RECOVERY_DELAYS_MS.length &&
-                (dimsChanged ||
-                  attempt < 2 ||
-                  terminalNeedsBlankRecovery(container, terminal));
-              if (needsMore) {
-                scheduleLayoutSettleRefit(attempt + 1);
-              }
-            } catch {
-              if (attempt + 1 < TERMINAL_BLANK_RECOVERY_DELAYS_MS.length) {
-                scheduleLayoutSettleRefit(attempt + 1);
-              }
-            }
-          })();
-        }, delay);
-      };
-
-      const finalizeSessionReady = () => {
-        if (cancelled) return;
-        setStatus("ready");
-        setMessage("");
-        try {
-          fitTerminalToContainer();
-          syncTerminalDimensions();
-          if (initialScrollYRef.current !== undefined) {
-            terminal.scrollToLine(initialScrollYRef.current);
-          }
-          enableCursorBlink();
-          if (outputWriter) {
-            resetTerminalKeyboardProtocol(outputWriter);
-          }
-          terminal.focus();
-          persistSurfaceSnapshot(terminal);
-          blankRecoveryGenerationRef.current += 1;
-          scheduleLayoutSettleRefit(0);
-        } catch {
-          // ignore finalize errors
-        }
-      };
-
-      const unregisterLinks = registerTerminalLinkProviders(terminal);
-      const unsubscribeTheme = observeTerminalTheme(container, () => {
-        try {
-          terminal.options.theme = readTerminalThemeFromContainer(container);
-        } catch {
-          // ignore runtime theme update errors
-        }
-      });
-
-      const dataDisposable = terminal.onData((data) => {
-        if (sessionEnded) return;
-        void writeTerminalSession(workspaceId, terminalId, data).catch((error) => {
-          if (shouldIgnoreTerminalError(error)) {
+        const exitUnsub = subscribeTerminalExit((event) => {
+          if (
+            event.workspaceId === workspaceId &&
+            event.terminalId === terminalId
+          ) {
             sessionEnded = true;
-            return;
+            onSessionExitRef.current?.(repositoryId, terminalId);
           }
-          console.warn("write terminal session failed", error);
-          setStatus((prev) => (prev === "ready" ? "error" : prev));
-          setMessage(error instanceof Error ? error.message : "终端写入失败");
         });
-      });
 
-      const scheduleVisibleRefit = () => {
-        if (visibleRefitTimerRef.current !== null) {
-          window.clearTimeout(visibleRefitTimerRef.current);
-        }
-        visibleRefitTimerRef.current = window.setTimeout(() => {
-          visibleRefitTimerRef.current = null;
-          if (cancelled || sessionEnded) return;
-          try {
-            fitTerminalToContainer();
-            const term = terminalRef.current;
-            if (!term) return;
-            const nextCols = clampTerminalDim(term.cols);
-            const nextRows = clampTerminalDim(term.rows);
+        const writeData = (data: string) => {
+          if (sessionEnded || !data) return;
+          void writeTerminalSession(workspaceId, terminalId, data).catch(
+            (error) => {
+              if (shouldIgnoreTerminalError(error)) {
+                sessionEnded = true;
+                return;
+              }
+              console.warn("write terminal session failed", error);
+              setStatus((prev) => (prev === "ready" ? "error" : prev));
+              setMessage(
+                error instanceof Error ? error.message : "终端写入失败",
+              );
+            },
+          );
+        };
+
+        const onKeyDown = (event: KeyboardEvent) => {
+          if (event.isComposing || event.key === "Process") return;
+          const encoded = encodeTerminalKey(event);
+          if (encoded == null) return;
+          event.preventDefault();
+          event.stopPropagation();
+          writeData(encoded);
+        };
+
+        const onPaste = (event: ClipboardEvent) => {
+          const text = event.clipboardData?.getData("text");
+          if (!text) return;
+          event.preventDefault();
+          writeData(text.replace(/\r?\n/g, "\r"));
+        };
+
+        // 防止 textarea 自己堆积字符；内容一律走 PTY。
+        const onInput = () => {
+          if (input.value) input.value = "";
+        };
+
+        input.addEventListener("keydown", onKeyDown);
+        input.addEventListener("paste", onPaste);
+        input.addEventListener("input", onInput);
+
+        const resizeObserver = new ResizeObserver(() => {
+          if (resizeDebounceTimer !== null) {
+            window.clearTimeout(resizeDebounceTimer);
+          }
+          resizeDebounceTimer = window.setTimeout(() => {
+            resizeDebounceTimer = null;
+            if (cancelled || sessionEnded) return;
+            const liveContainer = containerRef.current;
+            if (!liveContainer) return;
+            metricsRef.current = measureTerminalMetrics(
+              liveContainer,
+              TERMINAL_FONT_SIZE,
+            );
+            const cols = clampTerminalDim(metricsRef.current.cols);
+            const rows = clampTerminalDim(metricsRef.current.rows);
             void resizeTerminalSession(
               workspaceId,
               terminalId,
-              nextCols,
-              nextRows,
-            ).catch(() => undefined);
-            if (outputWriter) {
-              resetTerminalKeyboardProtocol(outputWriter);
-            }
-            persistSurfaceSnapshot(term);
-            blankRecoveryGenerationRef.current += 1;
-            scheduleLayoutSettleRefit(0);
-          } catch {
-            // ignore
-          }
-        }, 80);
-      };
-
-      const fitAndOpen = async () => {
-        if (cancelled) return;
-        await waitForTerminalContainerStableLayout(container);
-        if (cancelled) return;
-        try {
-          fitTerminalToContainer();
-        } catch {
-          // 容器尚未可见时忽略
-        }
-        const cols = clampTerminalDim(terminal.cols || 80);
-        const rows = clampTerminalDim(terminal.rows || 24);
-
-        let needsOpen = false;
-        try {
-          const didReplay = await replayAttachOutput(ATTACH_REPLAY_CURSOR);
-          if (cancelled) return;
-          if (didReplay) {
-            fitTerminalToContainer();
-          }
-        } catch (error) {
-          const message = error instanceof Error ? error.message : String(error);
-          if (message.toLowerCase().includes("terminal session not found")) {
-            needsOpen = true;
-          } else if (!shouldIgnoreTerminalError(error)) {
-            if (cancelled) return;
-            setStatus("error");
-            setMessage(message || "终端连接失败");
-            return;
-          } else {
-            needsOpen = true;
-          }
-        }
-
-        if (!needsOpen) {
-          if (cancelled) return;
-          finalizeSessionReady();
-          return;
-        }
-
-        void openTerminalSession(workspaceId, terminalId, cols, rows, cwd, {
-          source: "user",
-        })
-          .then(() => {
-            if (cancelled) return;
-            finalizeSessionReady();
-          })
-          .catch((error) => {
-            if (cancelled) return;
-            if (!shouldIgnoreTerminalError(error)) {
-              console.warn("open terminal session failed", error);
-            }
-            setStatus("error");
-            setMessage(error instanceof Error ? error.message : "终端启动失败");
-          });
-      };
-
-      if (typeof document !== "undefined" && document.fonts) {
-        await document.fonts.ready;
-      }
-      if (cancelled) return;
-
-      try {
-        (
-          terminal.renderer as { remeasureFont?: () => void } | undefined
-        )?.remeasureFont?.();
-        fitTerminalToContainer();
-      } catch {
-        // ignore font remeasure errors
-      }
-
-      const raf1 = requestAnimationFrame(() => {
-        const raf2 = requestAnimationFrame(() => {
-          const raf3 = requestAnimationFrame(() => {
-            void fitAndOpen();
-          });
-          fitAndOpenRafRef.current = raf3;
-        });
-        fitAndOpenRafRef.current = raf2;
-      });
-      fitAndOpenRafRef.current = raf1;
-
-      fitAddon.observeResize();
-      const resizeObserver = new ResizeObserver(() => {
-        const fit = fitAddonRef.current;
-        const term = terminalRef.current;
-        if (!fit || !term) return;
-        if (resizeDebounceTimerRef.current !== null) {
-          window.clearTimeout(resizeDebounceTimerRef.current);
-        }
-        resizeDebounceTimerRef.current = window.setTimeout(() => {
-          resizeDebounceTimerRef.current = null;
-          const fit2 = fitAddonRef.current;
-          const term2 = terminalRef.current;
-          if (!fit2 || !term2) return;
-          try {
-            forceTerminalRemeasureAndFit(term2, fit2, container);
-            const nextCols = clampTerminalDim(term2.cols);
-            const nextRows = clampTerminalDim(term2.rows);
-            void resizeTerminalSession(
-              workspaceId,
-              terminalId,
-              nextCols,
-              nextRows,
+              cols,
+              rows,
             ).catch((error) => {
               if (!shouldIgnoreTerminalError(error)) {
                 console.warn("resize terminal session failed", error);
               }
             });
-            persistSurfaceSnapshot(term2);
-          } catch {
-            // ignore fit 失败
-          }
-        }, TERMINAL_RESIZE_DEBOUNCE_MS);
-      });
-      resizeObserver.observe(container);
-      const layoutParent = container.closest(".terminal-body") ?? container.parentElement;
-      if (layoutParent instanceof HTMLElement && layoutParent !== container) {
-        resizeObserver.observe(layoutParent);
-      }
+            schedulePaint();
+            persistSnapshot(latestFrame);
+          }, TERMINAL_RESIZE_DEBOUNCE_MS);
+        });
+        resizeObserver.observe(container);
 
-      const handleVisibilityChange = () => {
-        if (document.visibilityState === "visible") {
-          scheduleVisibleRefit();
-        }
-      };
-      document.addEventListener("visibilitychange", handleVisibilityChange);
+        const finalizeReady = () => {
+          if (cancelled) return;
+          setStatus("ready");
+          setMessage("");
+          syncResize();
+          // status 更新后等一帧再 focus，确保 React 托管的 textarea 仍在。
+          requestAnimationFrame(() => {
+            if (!cancelled) focusInput();
+          });
+        };
 
-      const intersectionObserver =
-        typeof IntersectionObserver !== "undefined"
-          ? new IntersectionObserver((entries) => {
-              if (entries.some((entry) => entry.isIntersecting)) {
-                scheduleVisibleRefit();
-              }
-            })
-          : null;
-      intersectionObserver?.observe(container);
-
-      return () => {
-        intersectionObserver?.disconnect();
-        document.removeEventListener("visibilitychange", handleVisibilityChange);
-        cancelled = true;
-        cancelAnimationFrame(raf1);
-        if (fitAndOpenRafRef.current !== null) {
-          cancelAnimationFrame(fitAndOpenRafRef.current);
-        }
-        if (resizeDebounceTimerRef.current !== null) {
-          window.clearTimeout(resizeDebounceTimerRef.current);
-          resizeDebounceTimerRef.current = null;
-        }
-        if (visibleRefitTimerRef.current !== null) {
-          window.clearTimeout(visibleRefitTimerRef.current);
-          visibleRefitTimerRef.current = null;
-        }
-        if (blankRecoveryTimerRef.current !== null) {
-          window.clearTimeout(blankRecoveryTimerRef.current);
-          blankRecoveryTimerRef.current = null;
-        }
-        blankRecoveryGenerationRef.current += 1;
-        if (outputFlushRaf) {
-          cancelAnimationFrame(outputFlushRaf);
-          outputFlushRaf = 0;
-        }
-        resizeObserver.disconnect();
-        unregisterLinks();
-        unregisterInputSurface();
-        unsubscribeTheme();
-        dataDisposable.dispose();
-        outputUnsubscribe();
-        exitUnsubscribe();
         try {
-          persistSurfaceSnapshot(terminal);
-          terminal.dispose();
-        } catch {
-          // ignore dispose 错误
+          const attach = await attachTerminalSession(workspaceId, terminalId, 0);
+          if (cancelled) return () => undefined;
+          applyFrame(attach.frame);
+          finalizeReady();
+        } catch (error) {
+          const errMessage =
+            error instanceof Error ? error.message : String(error);
+          const missing = errMessage
+            .toLowerCase()
+            .includes("terminal session not found");
+          if (!missing && !shouldIgnoreTerminalError(error)) {
+            if (cancelled) return () => undefined;
+            setStatus("error");
+            setMessage(errMessage || "终端连接失败");
+          } else {
+            const liveContainer = containerRef.current ?? container;
+            metricsRef.current = measureTerminalMetrics(
+              liveContainer,
+              TERMINAL_FONT_SIZE,
+            );
+            const cols = clampTerminalDim(
+              initialSizeRef.current?.cols ?? metricsRef.current.cols,
+            );
+            const rows = clampTerminalDim(
+              initialSizeRef.current?.rows ?? metricsRef.current.rows,
+            );
+            try {
+              await openTerminalSession(workspaceId, terminalId, cols, rows, cwd, {
+                source: "user",
+              });
+              if (cancelled) return () => undefined;
+              try {
+                const attach = await attachTerminalSession(
+                  workspaceId,
+                  terminalId,
+                  0,
+                );
+                if (!cancelled) applyFrame(attach.frame);
+              } catch {
+                // 首帧可等 terminal-frame 事件
+              }
+              finalizeReady();
+            } catch (openError) {
+              if (cancelled) return () => undefined;
+              if (!shouldIgnoreTerminalError(openError)) {
+                console.warn("open terminal session failed", openError);
+              }
+              setStatus("error");
+              setMessage(
+                openError instanceof Error
+                  ? openError.message
+                  : "终端启动失败",
+              );
+            }
+          }
         }
-        terminalRef.current = null;
-        fitAddonRef.current = null;
-        if (closeOnUnmount) {
-          cleanupTerminalSession(repositoryId, terminalId);
-        }
+
+        return () => {
+          cancelled = true;
+          if (resizeDebounceTimer !== null) {
+            window.clearTimeout(resizeDebounceTimer);
+          }
+          if (paintRaf) {
+            cancelAnimationFrame(paintRaf);
+          }
+          resizeObserver.disconnect();
+          input.removeEventListener("keydown", onKeyDown);
+          input.removeEventListener("paste", onPaste);
+          input.removeEventListener("input", onInput);
+          frameUnsub();
+          exitUnsub();
+          persistSnapshot(latestFrame);
+          if (closeOnUnmount) {
+            cleanupTerminalSession(repositoryId, terminalId);
+          }
+        };
       };
-    };
 
       void bootstrap().then((dispose) => {
         cleanup = dispose;
@@ -644,12 +456,16 @@ export function useTerminalSession({
     isVisible,
     cleanupTerminalSession,
     closeOnUnmount,
+    focusInput,
   ]);
 
   return {
     status,
     message,
     containerRef,
+    canvasRef,
+    inputRef,
+    focusInput,
     cleanupTerminalSession,
   };
 }

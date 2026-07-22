@@ -128,7 +128,7 @@ export async function openAgentTerminalSession(
 
 /**
  * 后台脚本入口：复用 PTY 体系跑一次性 `zsh -c <command>`，
- * 输出走 terminal-output/exit 事件，前端复用 ghostty-web 渲染。
+ * 输出走 terminal-output/exit 事件；交互面板另订阅 terminal-frame（alacritty_terminal 网格）。
  * 返回的 `info.pid` 可在运行面板展示；不要据此判断脚本是否完成（监听 terminal-exit）。
  */
 export async function openBackgroundScript(

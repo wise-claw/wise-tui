@@ -107,7 +107,7 @@ export async function activateAssistantTemplate(
     }
     try {
       // 后台通过 shell 启动执行：走 PTY 体系（`terminal_open_background_script`），
-      // 输出走 terminal-output / terminal-exit 事件，前端可复用 ghostty-web
+      // 输出走 terminal-output / terminal-exit 事件；内置面板渲染走 terminal-frame
       // 终端渲染来查看/kill。失败只可能发生在 spawn 阶段（路径无效、PTY 不可用等），
       // 进程启动后用户需自行观察终端输出。
       const terminalId = `assistant-script:${input.assistant.id}:${Date.now().toString(36)}`;

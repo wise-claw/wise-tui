@@ -1,4 +1,5 @@
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import type { TerminalFrame } from "../types/terminal";
 import { safeUnlisten } from "../utils/safeTauriUnlisten";
 
 // ── Event Hub ──
@@ -93,10 +94,17 @@ export type TerminalCreatedEvent = {
   cursor: number;
 };
 
+export type TerminalFrameEvent = {
+  workspaceId: string;
+  terminalId: string;
+  frame: TerminalFrame;
+};
+
 const terminalOutputHub = createEventHub<TerminalOutputEvent>("terminal-output");
 const terminalExitHub = createEventHub<TerminalExitEvent>("terminal-exit");
 const terminalCreatedHub =
   createEventHub<TerminalCreatedEvent>("terminal-created");
+const terminalFrameHub = createEventHub<TerminalFrameEvent>("terminal-frame");
 
 export function subscribeTerminalOutput(
   onEvent: (event: TerminalOutputEvent) => void,
@@ -117,4 +125,11 @@ export function subscribeTerminalCreated(
   options?: EventHubOptions,
 ): () => void {
   return terminalCreatedHub.subscribe(onEvent, options);
+}
+
+export function subscribeTerminalFrame(
+  onEvent: (event: TerminalFrameEvent) => void,
+  options?: EventHubOptions,
+): () => void {
+  return terminalFrameHub.subscribe(onEvent, options);
 }

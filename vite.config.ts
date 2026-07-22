@@ -88,9 +88,6 @@ export default defineConfig(async () => ({
           if (id.includes("@antv/x6")) {
             return "x6-vendor";
           }
-          if (id.includes("ghostty-web") || id.includes("/ghostty-web/")) {
-            return "terminal-vendor";
-          }
           if (
             id.includes("node_modules/antd/") ||
             id.includes("/rc-") ||

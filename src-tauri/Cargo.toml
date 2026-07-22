@@ -68,6 +68,7 @@ sherpa-onnx = "1.13.2"
 tar = "0.4"
 bzip2 = "0.4"
 flate2 = "1"
+alacritty_terminal = { version = "0.25", features = ["serde"] }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 block2 = "0.6"

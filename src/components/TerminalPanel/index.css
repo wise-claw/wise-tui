@@ -1,12 +1,15 @@
 .terminal-panel {
   border-top: 1px solid var(--ant-color-border-secondary);
-  background: var(--ant-color-bg-container);
+  background: var(--terminal-background);
   display: flex;
   flex-direction: column;
   height: var(--terminal-panel-height, 220px);
   -webkit-app-region: no-drag;
-  --terminal-background: var(--ant-color-bg-container);
-  --terminal-selection: rgba(24, 144, 255, 0.22);
+  /* 内置终端固定深色主题，不跟 Ant 浅色容器色走，避免浅灰字落在白底上。 */
+  --terminal-background: #1e1e1e;
+  --terminal-foreground: #d4d4d4;
+  --terminal-cursor: #aeafad;
+  --terminal-selection: rgba(38, 79, 120, 0.55);
 }
 
 .terminal-panel--fullscreen {
@@ -55,7 +58,9 @@
   font-size: 12px;
   font-weight: 500;
   line-height: 1.2;
-  border-bottom: 1px solid var(--ant-color-border-secondary);
+  color: rgba(255, 255, 255, 0.75);
+  background: #252526;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
 }
 
 .terminal-header-left {
@@ -85,7 +90,7 @@
   border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
-  color: var(--ant-color-text-secondary);
+  color: rgba(255, 255, 255, 0.55);
   font-size: 11px;
   line-height: 1;
   cursor: pointer;
@@ -93,13 +98,13 @@
 }
 
 .terminal-tab--active {
-  color: var(--ant-color-text);
-  border-color: var(--ant-color-border-secondary);
-  background: var(--ant-color-fill-quaternary);
+  color: rgba(255, 255, 255, 0.92);
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .terminal-tab--agent {
-  color: var(--ant-color-primary);
+  color: #4fc1ff;
 }
 
 .terminal-tab--add {
@@ -128,7 +133,7 @@
 
 .terminal-tab__close:hover {
   opacity: 1;
-  background: var(--ant-color-fill-secondary);
+  background: rgba(255, 255, 255, 0.12);
 }
 
 .terminal-header-title {
@@ -143,10 +148,10 @@
   height: 20px;
   margin: 0;
   padding: 0 6px;
-  border: 1px solid var(--ant-color-border-secondary);
+  border: 1px solid rgba(255, 255, 255, 0.14);
   border-radius: 4px;
   background: transparent;
-  color: var(--ant-color-text-secondary);
+  color: rgba(255, 255, 255, 0.7);
   font-size: 11px;
   font-weight: 500;
   line-height: 1;
@@ -154,9 +159,9 @@
 }
 
 .terminal-header-action:hover:not(:disabled) {
-  color: var(--ant-color-text);
-  border-color: var(--ant-color-border);
-  background: var(--ant-color-fill-quaternary);
+  color: rgba(255, 255, 255, 0.92);
+  border-color: rgba(255, 255, 255, 0.28);
+  background: rgba(255, 255, 255, 0.08);
 }
 
 .terminal-header-action:disabled {
@@ -185,7 +190,7 @@
   margin: 0;
   border: none;
   background: transparent;
-  color: var(--ant-color-text-tertiary);
+  color: rgba(255, 255, 255, 0.45);
   font-size: 12px;
   line-height: 1;
   cursor: pointer;
@@ -193,7 +198,7 @@
 }
 
 .terminal-header-icon-btn:hover {
-  color: var(--ant-color-text);
+  color: rgba(255, 255, 255, 0.92);
 }
 
 .terminal-header-close {
@@ -206,7 +211,7 @@
   margin: 0;
   border: none;
   background: transparent;
-  color: var(--ant-color-text-tertiary);
+  color: rgba(255, 255, 255, 0.45);
   font-size: 14px;
   line-height: 1;
   cursor: pointer;
@@ -214,7 +219,7 @@
 }
 
 .terminal-header-close:hover {
-  color: var(--ant-color-text);
+  color: rgba(255, 255, 255, 0.92);
 }
 
 .terminal-body {
@@ -240,6 +245,7 @@
 }
 
 .terminal-surface {
+  position: relative;
   flex: 1;
   min-height: 0;
   border-radius: 0;
@@ -250,7 +256,6 @@
   cursor: text;
   padding: 0 0 0 6px;
   caret-color: transparent;
-  /* ghostty 在容器上设了 contenteditable；必须禁用浏览器原生选区，否则会与 canvas 高亮错位。 */
   user-select: none;
   -webkit-user-select: none;
 }
@@ -260,29 +265,33 @@
   background: transparent;
 }
 
-/* contenteditable 占位 <br> 会把 canvas 顶出一块空白 */
-.terminal-surface > br {
-  display: none !important;
-}
-
-/* ghostty-web 自行设置 canvas 像素尺寸；勿用 100% 拉伸，否则末行会被裁切。 */
-.terminal-surface canvas {
+.terminal-canvas {
   display: block;
   background: var(--terminal-background) !important;
   user-select: none;
   -webkit-user-select: none;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  pointer-events: none;
 }
 
-/* ghostty-web 用 1×1 textarea（左上角）承接键盘输入；必须完全隐藏插入符。 */
-.terminal-surface textarea {
+/* 铺满表面承接焦点与键盘；对齐 xterm 隐藏 textarea 策略。 */
+.terminal-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  border: none;
+  outline: none;
+  resize: none;
+  padding: 0;
+  margin: 0;
+  overflow: hidden;
   caret-color: transparent !important;
   color: transparent !important;
   background: transparent !important;
-  border: none !important;
-  outline: none !important;
-  opacity: 0 !important;
+  z-index: 1;
 }
 
 .terminal-overlay {
@@ -292,7 +301,7 @@
   align-items: center;
   justify-content: center;
   border-radius: 10px;
-  color: var(--ant-color-text-secondary);
+  color: rgba(255, 255, 255, 0.7);
   pointer-events: none;
   text-align: center;
   font-size: 12px;
@@ -301,8 +310,8 @@
 
 .terminal-status {
   max-width: 280px;
-  background: var(--ant-color-fill-quaternary);
-  border: 1px solid var(--ant-color-border-secondary);
+  background: rgba(255, 255, 255, 0.06);
+  border: 1px solid rgba(255, 255, 255, 0.12);
   border-radius: 10px;
   padding: 8px 12px;
 }
