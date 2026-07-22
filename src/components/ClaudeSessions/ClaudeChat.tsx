@@ -1798,6 +1798,11 @@ export function ClaudeChatInner({
     }
   }, [session.id]);
 
+  const messagesPaneVisible =
+    !hideMessages && (!panelBelowMessages || centerView === "messages");
+  const filesPaneVisible =
+    Boolean(panelBelowMessages) && (hideMessages || centerView === "files");
+
   return (
     <div
       ref={chatRootRef}
@@ -1826,9 +1831,10 @@ export function ClaudeChatInner({
         <div className="app-claude-chat-main">
 
       <div
-        className={`app-claude-chat-center-pane${
-          !hideMessages && (!panelBelowMessages || centerView === "messages") ? "" : " is-hidden"
-        }`}
+        className={`app-claude-chat-center-pane${messagesPaneVisible ? "" : " is-hidden"}`}
+        // keep-alive 隐藏时用 inert 移出键盘焦点（visibility:hidden 仍可能进 Tab 序）
+        inert={messagesPaneVisible ? undefined : true}
+        aria-hidden={messagesPaneVisible ? undefined : true}
       >
         {!hideMessages ? (
           <ClaudeChatMessagesLiveHost
@@ -1856,9 +1862,9 @@ export function ClaudeChatInner({
       </div>
       {panelBelowMessages ? (
         <div
-          className={`app-claude-chat-center-pane${
-            hideMessages || centerView === "files" ? "" : " is-hidden"
-          }`}
+          className={`app-claude-chat-center-pane${filesPaneVisible ? "" : " is-hidden"}`}
+          inert={filesPaneVisible ? undefined : true}
+          aria-hidden={filesPaneVisible ? undefined : true}
         >
           {panelBelowMessages}
         </div>

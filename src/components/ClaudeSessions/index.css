@@ -1785,6 +1785,8 @@
 }
 
 .app-claude-chat-main {
+  /* relative：隐藏中栏 pane 用 absolute inset 占位，切回时仍有正确尺寸 */
+  position: relative;
   display: flex;
   flex-direction: column;
   flex: 1 1 0;
@@ -1794,7 +1796,10 @@
   contain: layout style;
 }
 
-/* 消息 / 文件视图：各自占满主区剩余高度，互斥显示（is-hidden 隐藏但保留挂载以保状态） */
+/* 消息 / 文件（终端）视图：互斥显示，但 keep-alive 保留挂载与尺寸。
+ * 勿用 display:none——隐藏后 clientWidth/Height 归零，会导致：
+ * 1) 消息虚拟列表 / content-visibility 切回后空白；
+ * 2) 终端 ResizeObserver 把 PTY 缩成 1×1，切回像「内容被重置」。 */
 .app-claude-chat-center-pane {
   flex: 1 1 0;
   min-height: 0;
@@ -1803,7 +1808,13 @@
   flex-direction: column;
 }
 .app-claude-chat-center-pane.is-hidden {
-  display: none;
+  position: absolute;
+  inset: 0;
+  visibility: hidden;
+  pointer-events: none;
+  z-index: 0;
+  /* 脱离 flex 流，让可见 pane 独占主区高度；自身仍按 inset 保持实尺寸 */
+  flex: none;
 }
 
 /* 消息区与底部（快捷条 + 输入）的分界 */

@@ -19,8 +19,8 @@ import type { CenterView } from "./ClaudeChat";
 /**
  * 中栏「消息/文件」视图切换状态：有编辑器时默认「文件」，无编辑器回「消息」。
  * 状态提升到 pane 组件 / 会话壳层，供顶栏 Segmented 与 ClaudeChat 共享同一份视图。
- * panelBelowMessages 是稳定的 bridge 元素，identity 仅在 editorVisible 翻转时变化，
- * 故该 effect 精确地在「打开/关闭文件」时触发，同 pane 内切换文件不打断当前视图。
+ * effect 只依赖「下方面板有无」布尔，不依赖 ReactNode identity：终端/文件节点
+ * 重渲换引用时不应把用户已选的「消息」视图强行拽回「文件/终端」。
  */
 export function useCenterView(
   panelBelowMessages: ReactNode,
@@ -31,13 +31,14 @@ export function useCenterView(
   visible: boolean;
 } {
   const [centerView, setCenterView] = useState<CenterView>("messages");
+  const hasPanelBelowMessages = Boolean(panelBelowMessages);
   useEffect(() => {
-    setCenterView(panelBelowMessages ? "files" : "messages");
-  }, [panelBelowMessages]);
+    setCenterView(hasPanelBelowMessages ? "files" : "messages");
+  }, [hasPanelBelowMessages]);
   return {
     centerView,
     setCenterView,
-    visible: !hideMessages && Boolean(panelBelowMessages),
+    visible: !hideMessages && hasPanelBelowMessages,
   };
 }
 

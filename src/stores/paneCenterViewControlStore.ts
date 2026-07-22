@@ -1,12 +1,10 @@
 /**
  * 中栏「消息/文件」视图（CenterView）的 per-pane 控制通道。
  *
- * 背景：`useCenterView`（claudeChatHelpers）的 effect 仅在 `panelBelowMessages`
- * identity 变化时切换视图；而 `panelBelowMessages` 是稳定的 `PaneEditorPanelBridge`
- * 元素（只随 editorVisible / dark / paneIndex 变化，见 AppWorkspaceLayout 的 bridge
- * effect）。因此「编辑器已挂载、用户从消息视图再次打开/切换文件」时 identity 不变，
- * effect 不触发，视图不会切回「文件」——这是「消息/文件 tab 同显时点文件树/git 打开
- * 文件不切到文件 tab」的根因。
+ * 背景：`useCenterView`（claudeChatHelpers）的 effect 仅在「下方面板有无」布尔翻转时
+ * 自动切视图；同为挂载态时 ReactNode identity 变化不会打断用户当前的「消息」视图。
+ * 因此「编辑器已挂载、用户从消息视图再次打开/切换文件」时不会自动切回「文件」——
+ * 这是「消息/文件 tab 同显时点文件树/git 打开文件不切到文件 tab」的根因。
  *
  * 本 store 提供跨层命令通道：持有 `setCenterView` 的 pane 组件（单屏
  * `AppWorkspaceLayout` / 多屏 `ClaudeMultiPaneGrid` 各 pane cell）mount 时注册

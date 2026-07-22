@@ -323,6 +323,10 @@ export function useTerminalSession({
             if (cancelled || sessionEnded) return;
             const liveContainer = containerRef.current;
             if (!liveContainer) return;
+            // 中栏 tab 隐藏或布局未就绪时尺寸会归零；勿把 PTY 缩成 1×1，否则切回像内容被清空。
+            if (liveContainer.clientWidth < 8 || liveContainer.clientHeight < 8) {
+              return;
+            }
             metricsRef.current = measureTerminalMetrics(
               liveContainer,
               TERMINAL_FONT_SIZE,
