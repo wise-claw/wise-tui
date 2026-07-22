@@ -14,9 +14,9 @@ export interface ImportNavigationAiPromptInput {
   candidates: readonly string[];
 }
 
-/** 常见源码后缀：用于文件名主干比对（含 Java/Kotlin 等）。 */
+/** 常见源码后缀：用于文件名主干比对（含 Java/Kotlin/Vue 等）。 */
 const SOURCE_BASENAME_EXT_RE =
-  /\.(?:d\.)?(?:tsx?|jsx?|mts|cts|mjs|cjs|java|kt|kts|cs|go|rs|py|rb|php|scala|groovy|swift)$/i;
+  /\.(?:d\.)?(?:tsx?|jsx?|mts|cts|mjs|cjs|vue|java|kt|kts|cs|go|rs|py|rb|php|scala|groovy|swift)$/i;
 
 /** 明显不应作为「类型跳转」的关键字（小写比对）。 */
 const NON_NAVIGABLE_KEYWORDS = new Set([
@@ -191,6 +191,10 @@ export function buildImportNavigationSearchQuery(specifier: string): string {
   const parts = token.split(/[\\/]/).filter(Boolean);
   if (parts.length === 0) return "";
   const last = parts[parts.length - 1]!;
+  // …/ProjectDetail/index.tsx → 用父目录名搜索，便于命中目录入口
+  if (/^index\.(?:tsx?|jsx?|mjs|cjs|vue)$/i.test(last) && parts.length >= 2) {
+    return parts[parts.length - 2]!;
+  }
   const withoutExt = last.replace(SOURCE_BASENAME_EXT_RE, "");
   return (withoutExt || last).trim();
 }
@@ -206,16 +210,30 @@ export function pickExactBasenameSearchHit(
 ): string | null {
   const needle = query.trim().toLowerCase();
   if (!needle) return null;
-  const matches = hits
+
+  const filePaths = hits
     .filter((hit) => !hit.isDir)
-    .map((hit) => hit.path.replace(/\\/g, "/").replace(/^\/+/, ""))
-    .filter((path) => {
-      const base = path.split("/").pop() ?? "";
-      const stem = fileStem(base);
-      return stem.toLowerCase() === needle || base.toLowerCase() === needle;
-    });
-  const unique = Array.from(new Set(matches));
-  return unique.length === 1 ? unique[0]! : null;
+    .map((hit) => hit.path.replace(/\\/g, "/").replace(/^\/+/, ""));
+
+  const stemMatches = filePaths.filter((path) => {
+    const base = path.split("/").pop() ?? "";
+    const stem = fileStem(base);
+    return stem.toLowerCase() === needle || base.toLowerCase() === needle;
+  });
+  const uniqueStem = Array.from(new Set(stemMatches));
+  if (uniqueStem.length === 1) return uniqueStem[0]!;
+
+  // 目录入口：…/ProjectDetail/index.tsx 在查询 ProjectDetail 时应视为精确命中
+  const indexDirMatches = filePaths.filter((path) => {
+    const parts = path.split("/").filter(Boolean);
+    if (parts.length < 2) return false;
+    const file = parts[parts.length - 1]!;
+    const parent = parts[parts.length - 2]!;
+    if (parent.toLowerCase() !== needle) return false;
+    return /^index\.(tsx?|jsx?|mjs|cjs|vue)$/i.test(file);
+  });
+  const uniqueIndex = Array.from(new Set(indexDirMatches));
+  return uniqueIndex.length === 1 ? uniqueIndex[0]! : null;
 }
 
 /** 截断并去重搜索命中，供 AI 选择。 */

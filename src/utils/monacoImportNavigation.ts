@@ -122,13 +122,17 @@ export interface LoosePathLink {
 type ClickableLink = (ImportLink & { kind: "import" }) | (LoosePathLink & { kind: "loose" });
 
 /**
- * 匹配 import/export from 以及 side-effect import 的 specifier 路径。
+ * 匹配 import/export from、side-effect import，以及动态 import()/require() 的路径。
  * 分组：
  *   1: 引号字符（" 或 '）
  *   2: specifier 内容（不含引号）
  */
 const IMPORT_SPECIFIER_RE =
   /\b(?:import|export)\s+(?:type\s+)?(?:[^'"]*?\s+from\s*)?(["'])([^"']+?)\1/g;
+
+/** 动态 import('...') / require("...") */
+const DYNAMIC_IMPORT_SPECIFIER_RE =
+  /\b(?:import|require)\s*\(\s*(["'])([^"']+)\1\s*\)/g;
 
 /**
  * 从文本中 offset 计算出 Monaco 的 {line, column}。
@@ -145,30 +149,39 @@ function offsetToPosition(text: string, offset: number): { line: number; column:
   return { line, column: offset - lastNewline + 1 };
 }
 
+function pushImportLink(result: ImportLink[], text: string, match: RegExpExecArray): void {
+  const quote = match[1]!;
+  const specifier = match[2]!;
+  const matchStr = match[0];
+  const specInMatch = matchStr.indexOf(quote + specifier + quote);
+  if (specInMatch < 0) return;
+  const specOffset = match.index + specInMatch + quote.length;
+  const specEnd = specOffset + specifier.length;
+  result.push({
+    range: {
+      startLineNumber: offsetToPosition(text, specOffset).line,
+      startColumn: offsetToPosition(text, specOffset).column,
+      endLineNumber: offsetToPosition(text, specEnd).line,
+      endColumn: offsetToPosition(text, specEnd).column,
+    },
+    specifier,
+  });
+}
+
 /**
- * 扫描文本，找出所有 import/export 路径字符串的位置与内容。
+ * 扫描文本，找出所有 import/export / 动态 import() 路径字符串的位置与内容。
+ * 导出供单测；生产路径同样走此函数。
  */
-function findImportLinks(text: string): ImportLink[] {
+export function findImportLinks(text: string): ImportLink[] {
   const result: ImportLink[] = [];
   let match: RegExpExecArray | null;
+  IMPORT_SPECIFIER_RE.lastIndex = 0;
   while ((match = IMPORT_SPECIFIER_RE.exec(text)) !== null) {
-    const quote = match[1]!;
-    const specifier = match[2]!;
-    const matchStr = match[0];
-    // specifier 在 matchStr 中的起始位置
-    const specInMatch = matchStr.indexOf(quote + specifier + quote);
-    const specOffset = match.index + specInMatch + quote.length;
-    const specEnd = specOffset + specifier.length;
-
-    result.push({
-      range: {
-        startLineNumber: offsetToPosition(text, specOffset).line,
-        startColumn: offsetToPosition(text, specOffset).column,
-        endLineNumber: offsetToPosition(text, specEnd).line,
-        endColumn: offsetToPosition(text, specEnd).column,
-      },
-      specifier,
-    });
+    pushImportLink(result, text, match);
+  }
+  DYNAMIC_IMPORT_SPECIFIER_RE.lastIndex = 0;
+  while ((match = DYNAMIC_IMPORT_SPECIFIER_RE.exec(text)) !== null) {
+    pushImportLink(result, text, match);
   }
   return result;
 }
@@ -209,10 +222,9 @@ const URL_PREFIX_RE = /^(?:https?:|file:|monaco:)/i;
 // 在 findLoosePathLinks 内对匹配项做整段跳过。
 const URL_INLINE_RE =
   /(?:https?:\/\/|file:\/\/|monaco:\/\/)[^\s"'<>)}\]]+/g;
-// import/export/require 整句：从 `import`/`require` 关键字起，到下一行/下一个分号为止，
-// 整段不再做 loose path 命中（该范围由 findImportLinks 接管）。
+// import/export/require 整句（含动态 import()/require()）：由 findImportLinks 接管，loose 不再命中。
 const IMPORT_STATEMENT_RE =
-  /\b(?:import|require)\s[^;]*?["'][^"']+["'][^;]*;?/g;
+  /\b(?:import|require)\s*(?:\(\s*["'][^"']+["']\s*\)|[^;]*?["'][^"']+["'][^;]*;?)/g;
 // `from "x"` / `from 'x'`：上一句排除 loose path 的最稳判别。
 
 /**

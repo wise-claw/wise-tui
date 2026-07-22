@@ -75,6 +75,7 @@ const MODEL_SOURCE_EXTENSIONS = new Set([
   "cjs",
   "d.ts",
   "json",
+  "vue",
 ]);
 const RESOLVABLE_SOURCE_EXTENSIONS = Array.from(MODEL_SOURCE_EXTENSIONS).map((extension) => `.${extension}`);
 /**
@@ -512,10 +513,13 @@ export function resolveMonacoRepositoryRelativeImportCandidates(fromRelativePath
     return Array.from(new Set(candidates));
   }
 
-  const candidates = [
-    ...RESOLVABLE_SOURCE_EXTENSIONS.map((extension) => `${rawTarget}${extension}`),
-    ...RESOLVABLE_INDEX_EXTENSIONS.map((extension) => `${rawTarget}/index${extension}`),
-  ];
+  const fileCandidates = RESOLVABLE_SOURCE_EXTENSIONS.map((extension) => `${rawTarget}${extension}`);
+  const indexCandidates = RESOLVABLE_INDEX_EXTENSIONS.map((extension) => `${rawTarget}/index${extension}`);
+  // 相对 import 的多段路径同样优先目录入口（如 ./ProjectDetail → index.tsx）
+  const preferIndex = rawTarget.includes("/") || specifier.includes("/");
+  const candidates = preferIndex
+    ? [...indexCandidates, ...fileCandidates]
+    : [...fileCandidates, ...indexCandidates];
   return Array.from(new Set(candidates));
 }
 
@@ -575,7 +579,8 @@ export function resolveScopePackageCandidates(specifier: string): string[] {
  * - 不带 `./`/`../` 前缀且不是 `@` 开头的路径（如 `src/foo`）被视作仓库根相对，
  *   不再做 fromDir 拼接，与 import/export 引号逻辑保持差异。
  *
- * 后缀候选集与 index 兜底范围与 import/export 路径完全一致。
+ * 无扩展名且含 `/` 的路径（路由 root、页面目录等）优先尝试 `index.tsx` / `index.ts`，
+ * 再试「同名文件」扩展名，避免先探测一堆不存在的 `Foo.ts` 才落到目录入口。
  */
 export function resolvePathClickCandidates(fromRelativePath: string, rawToken: string): string[] {
   const token = rawToken.trim();
@@ -604,10 +609,13 @@ export function resolvePathClickCandidates(fromRelativePath: string, rawToken: s
     return Array.from(new Set(candidates));
   }
 
-  const candidates = [
-    ...RESOLVABLE_SOURCE_EXTENSIONS.map((extension) => `${baseTarget}${extension}`),
-    ...RESOLVABLE_INDEX_EXTENSIONS.map((extension) => `${baseTarget}/index${extension}`),
-  ];
+  const fileCandidates = RESOLVABLE_SOURCE_EXTENSIONS.map((extension) => `${baseTarget}${extension}`);
+  const indexCandidates = RESOLVABLE_INDEX_EXTENSIONS.map((extension) => `${baseTarget}/index${extension}`);
+  // 多段路径更像目录（pages/Foo/Bar）→ index 优先；单段仍先试同名文件。
+  const preferIndex = baseTarget.includes("/");
+  const candidates = preferIndex
+    ? [...indexCandidates, ...fileCandidates]
+    : [...fileCandidates, ...indexCandidates];
   return Array.from(new Set(candidates));
 }
 

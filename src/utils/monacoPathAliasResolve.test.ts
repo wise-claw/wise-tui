@@ -40,12 +40,20 @@ describe("applyTsconfigPathMappings / resolvePathAliasImportCandidates", () => {
     expect(candidates).toContain("src/api/system/user/index.ts");
   });
 
-  test("读取 tsconfig paths", () => {
+  test("读取 tsconfig paths 并保留默认兜底", () => {
     const candidates = resolvePathAliasImportCandidates("@/api/ai/chat/conversation", {
       paths: { "@/*": ["src/*"] },
     });
     expect(candidates).toContain("src/api/ai/chat/conversation.ts");
-    expect(candidates).not.toContain("api/ai/chat/conversation.ts");
+    // tsconfig 命中后仍附带默认 `@/` → 无 src/ 前缀兜底，避免映射与真实目录不一致
+    expect(candidates).toContain("api/ai/chat/conversation.ts");
+  });
+
+  test("动态 import 的 @/…/*.vue 解析到 src/views 与 views/", () => {
+    const candidates = resolvePathAliasImportCandidates("@/views/Profile/Index.vue");
+    expect(candidates).toContain("src/views/Profile/Index.vue");
+    expect(candidates).toContain("views/Profile/Index.vue");
+    expect(candidates).toContain("src/views/Profile/index.vue");
   });
 });
 

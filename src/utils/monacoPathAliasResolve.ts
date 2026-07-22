@@ -109,6 +109,20 @@ export function expandAliasPathCandidates(basePaths: readonly string[]): string[
         const without = normalized.slice(0, -(ext.length + 1));
         out.push(`${without}.ts`, `${without}.tsx`, `${without}.mts`, `${without}.cts`, `${without}.d.ts`);
       }
+      // Vue 文件名首字母大小写兜底：Index.vue ↔ index.vue
+      if (ext === "vue") {
+        const parts = normalized.split("/");
+        const file = parts[parts.length - 1]!;
+        if (file.length > 4) {
+          const flipped =
+            file[0] === file[0]!.toUpperCase()
+              ? `${file[0]!.toLowerCase()}${file.slice(1)}`
+              : `${file[0]!.toUpperCase()}${file.slice(1)}`;
+          const dir = parts.slice(0, -1).join("/");
+          const flippedPath = dir ? `${dir}/${flipped}` : flipped;
+          if (flippedPath !== normalized) out.push(flippedPath);
+        }
+      }
       continue;
     }
     for (const e of extensions) {
@@ -122,7 +136,7 @@ export function expandAliasPathCandidates(basePaths: readonly string[]): string[
 }
 
 /**
- * 综合：tsconfig paths → 默认 `@/` → 扩展名展开。
+ * 综合：tsconfig paths → 默认 `@/` 兜底（两者合并，避免 tsconfig 映射与真实目录不一致时跳转失败）。
  */
 export function resolvePathAliasImportCandidates(
   specifier: string,
@@ -135,8 +149,8 @@ export function resolvePathAliasImportCandidates(
   if (!token) return [];
 
   const fromTsconfig = applyTsconfigPathMappings(token, options?.paths, options?.baseUrl ?? ".");
-  const bases =
-    fromTsconfig.length > 0 ? fromTsconfig : isTsPathAliasSpecifier(token) ? resolveDefaultPathAliasBases(token) : [];
+  const defaults = isTsPathAliasSpecifier(token) ? resolveDefaultPathAliasBases(token) : [];
+  const bases = Array.from(new Set([...fromTsconfig, ...defaults]));
   if (bases.length === 0) return [];
   return expandAliasPathCandidates(bases);
 }

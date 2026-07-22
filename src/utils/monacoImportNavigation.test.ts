@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { findLoosePathLinks } from "./monacoImportNavigation";
+import { findImportLinks, findLoosePathLinks } from "./monacoImportNavigation";
 
 describe("findLoosePathLinks — 裸路径/@ 路径识别", () => {
   test("识别 @<path> 形式的 mention", () => {
@@ -55,6 +55,13 @@ describe("findLoosePathLinks — 裸路径/@ 路径识别", () => {
     expect(links.map((l) => l.specifier)).not.toContain("./foo.ts");
   });
 
+  test("不识别动态 import() 里的引号路径（交给 findImportLinks）", () => {
+    const links = findLoosePathLinks(
+      "component: () => import('@/views/Profile/Index.vue'),",
+    );
+    expect(links.map((l) => l.specifier)).not.toContain("@/views/Profile/Index.vue");
+  });
+
   test("不识别邮箱", () => {
     const links = findLoosePathLinks("mail me at user.name@example.com please");
     expect(links).toEqual([]);
@@ -77,5 +84,21 @@ describe("findLoosePathLinks — 裸路径/@ 路径识别", () => {
     expect(links).toContainEqual(expect.objectContaining({ specifier: "@utils/three" }));
     const threeLink = links.find((l) => l.specifier === "@utils/three");
     expect(threeLink?.range.startLineNumber).toBe(4);
+  });
+});
+
+describe("findImportLinks — 静态 / 动态 import", () => {
+  test("识别动态 import('@/….vue')", () => {
+    const links = findImportLinks(
+      "component: () => import('@/views/Profile/Index.vue'),",
+    );
+    expect(links).toContainEqual(
+      expect.objectContaining({ specifier: "@/views/Profile/Index.vue" }),
+    );
+  });
+
+  test("识别静态 from 路径", () => {
+    const links = findImportLinks('import x from "./foo.ts";');
+    expect(links).toContainEqual(expect.objectContaining({ specifier: "./foo.ts" }));
   });
 });

@@ -31,6 +31,12 @@ describe("buildImportNavigationSearchQuery", () => {
   test("Java 类名保持原样", () => {
     expect(buildImportNavigationSearchQuery("PayAppService")).toBe("PayAppService");
   });
+
+  test("…/index.tsx 用父目录名作查询", () => {
+    expect(
+      buildImportNavigationSearchQuery("pages/ProjectManagement/ProjectDetail/index.tsx"),
+    ).toBe("ProjectDetail");
+  });
 });
 
 describe("findNavigableTypeIdentifierLinks", () => {
@@ -81,6 +87,16 @@ describe("pickExactBasenameSearchHit", () => {
         { path: "yudao-module-pay/.../PayAppServiceImpl.java", isDir: false },
       ]),
     ).toBe("yudao-module-pay/.../PayAppService.java");
+  });
+
+  test("目录入口 index.tsx 按父目录名命中", () => {
+    expect(
+      pickExactBasenameSearchHit("ProjectDetail", [
+        { path: "pages/ProjectManagement/ProjectDetail/index.tsx", isDir: false },
+        { path: "pages/ProjectManagement/ProjectDetail/index.less", isDir: false },
+        { path: "pages/ProjectManagement/ProjectDetail/ProjectDetailCtrl.ts", isDir: false },
+      ]),
+    ).toBe("pages/ProjectManagement/ProjectDetail/index.tsx");
   });
 
   test("多个同名则不直跳", () => {
