@@ -94,10 +94,14 @@ export function expandAliasPathCandidates(basePaths: readonly string[]): string[
     ".mjs",
     ".cjs",
     ".vue",
+    ".css",
+    ".less",
+    ".scss",
+    ".sass",
     ".json",
     ".d.ts",
   ];
-  const indexExtensions = [".ts", ".tsx", ".js", ".jsx", ".vue", ".mjs", ".cjs"];
+  const indexExtensions = [".ts", ".tsx", ".js", ".jsx", ".vue", ".mjs", ".cjs", ".css", ".less", ".scss"];
   const out: string[] = [];
   for (const base of basePaths) {
     const normalized = normalizeRelative(base);

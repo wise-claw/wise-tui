@@ -844,7 +844,7 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
       // 切到「文件」视图。binary / external 已提前 return；editorVisible 未翻转时
       // ClaudeChat 渲染守卫仍显示消息视图，无空白。paneIndex 为目标 pane（hook 由
       // 对应 PaneEditorHost 持有，恒等于文件实际显示的 pane）。
-      // 备忘录占 pane 0；终端按 hostPaneIndex 挂屏。打开文件时只收起同屏遮挡物。
+      // 备忘录占 pane 0；各屏终端独立。打开文件时只收起同屏遮挡物。
       if (paneIndex === 0) {
         closeWorkspaceMemoPanel();
       }

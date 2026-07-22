@@ -2,9 +2,11 @@ import { describe, expect, test, beforeEach } from "bun:test";
 import {
   clampTerminalCenterPanelHost,
   closeTerminalCenterPanel,
+  closeTerminalCenterPanelOnPane,
   collapseTerminalCenterPanel,
   collapseTerminalCenterPanelOnPane,
   getTerminalCenterPanelState,
+  isTerminalCenterPanelVisibleOnPane,
   openTerminalCenterPanel,
   toggleTerminalCenterPanel,
 } from "./terminalCenterPanelStore";
@@ -28,36 +30,53 @@ describe("terminalCenterPanelStore", () => {
 
   test("open makes panel visible on target pane", () => {
     openTerminalCenterPanel(2);
-    expect(getTerminalCenterPanelState()).toEqual({
+    expect(isTerminalCenterPanelVisibleOnPane(2)).toBe(true);
+    expect(getTerminalCenterPanelState()).toMatchObject({
       mounted: true,
       collapsed: false,
       hostPaneIndex: 2,
       visible: true,
+      visiblePaneIndexes: [2],
     });
   });
 
-  test("toggle on same pane collapses; toggle on other pane moves host", () => {
+  test("toggle on same pane collapses; other pane stays independent", () => {
     toggleTerminalCenterPanel(1);
-    expect(getTerminalCenterPanelState().hostPaneIndex).toBe(1);
-    expect(getTerminalCenterPanelState().visible).toBe(true);
+    expect(isTerminalCenterPanelVisibleOnPane(1)).toBe(true);
 
     toggleTerminalCenterPanel(1);
-    expect(getTerminalCenterPanelState().visible).toBe(false);
+    expect(isTerminalCenterPanelVisibleOnPane(1)).toBe(false);
     expect(getTerminalCenterPanelState().mounted).toBe(true);
 
     toggleTerminalCenterPanel(0);
-    expect(getTerminalCenterPanelState()).toMatchObject({
-      visible: true,
-      hostPaneIndex: 0,
-    });
+    expect(isTerminalCenterPanelVisibleOnPane(0)).toBe(true);
+    // 收起的屏 1 仍挂载，但不应被屏 0 打开清掉
+    expect(getTerminalCenterPanelState().mountedPaneIndexes).toContain(1);
+    expect(getTerminalCenterPanelState().visiblePaneIndexes).toEqual([0]);
+  });
+
+  test("opening second pane keeps first pane terminal open", () => {
+    openTerminalCenterPanel(0);
+    openTerminalCenterPanel(1);
+    expect(getTerminalCenterPanelState().visiblePaneIndexes).toEqual([0, 1]);
+    expect(isTerminalCenterPanelVisibleOnPane(0)).toBe(true);
+    expect(isTerminalCenterPanelVisibleOnPane(1)).toBe(true);
   });
 
   test("collapseTerminalCenterPanelOnPane only affects matching host", () => {
+    openTerminalCenterPanel(0);
     openTerminalCenterPanel(1);
     collapseTerminalCenterPanelOnPane(0);
-    expect(getTerminalCenterPanelState().visible).toBe(true);
-    collapseTerminalCenterPanelOnPane(1);
-    expect(getTerminalCenterPanelState().visible).toBe(false);
+    expect(isTerminalCenterPanelVisibleOnPane(0)).toBe(false);
+    expect(isTerminalCenterPanelVisibleOnPane(1)).toBe(true);
+  });
+
+  test("closeTerminalCenterPanelOnPane only removes that pane", () => {
+    openTerminalCenterPanel(0);
+    openTerminalCenterPanel(1);
+    closeTerminalCenterPanelOnPane(1);
+    expect(isTerminalCenterPanelVisibleOnPane(0)).toBe(true);
+    expect(getTerminalCenterPanelState().mountedPaneIndexes).toEqual([0]);
   });
 
   test("open on pane 0 closes memo; open memo collapses pane-0 terminal only", () => {
@@ -66,31 +85,32 @@ describe("terminalCenterPanelStore", () => {
 
     openTerminalCenterPanel(0);
     expect(getWorkspaceMemoPanelOpen()).toBe(false);
-    expect(getTerminalCenterPanelState().visible).toBe(true);
+    expect(isTerminalCenterPanelVisibleOnPane(0)).toBe(true);
 
     openTerminalCenterPanel(1);
     openWorkspaceMemoPanel();
     expect(getWorkspaceMemoPanelOpen()).toBe(true);
-    expect(getTerminalCenterPanelState()).toMatchObject({
-      visible: true,
-      hostPaneIndex: 1,
-    });
+    expect(isTerminalCenterPanelVisibleOnPane(1)).toBe(true);
+    expect(isTerminalCenterPanelVisibleOnPane(0)).toBe(false);
   });
 
-  test("clampTerminalCenterPanelHost pulls host back into range", () => {
+  test("clampTerminalCenterPanelHost drops out-of-range panes", () => {
+    openTerminalCenterPanel(0);
     openTerminalCenterPanel(3);
     clampTerminalCenterPanelHost(2);
-    expect(getTerminalCenterPanelState().hostPaneIndex).toBe(0);
+    expect(isTerminalCenterPanelVisibleOnPane(3)).toBe(false);
+    expect(isTerminalCenterPanelVisibleOnPane(0)).toBe(true);
   });
 
   test("collapse keeps mounted but hides", () => {
     openTerminalCenterPanel(0);
     collapseTerminalCenterPanel();
-    expect(getTerminalCenterPanelState()).toEqual({
+    expect(getTerminalCenterPanelState()).toMatchObject({
       mounted: true,
       collapsed: true,
-      hostPaneIndex: 0,
       visible: false,
+      mountedPaneIndexes: [0],
+      visiblePaneIndexes: [],
     });
   });
 });

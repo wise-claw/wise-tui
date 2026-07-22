@@ -514,6 +514,12 @@ const ConnectedClaudeSessions = memo(function ConnectedClaudeSessions({
 }: ConnectedClaudeSessionsProps) {
   const memoOpen = useWorkspaceMemoPanelOpen();
   const terminalCenter = useTerminalCenterPanelState();
+  // resolvePaneAuxLayout 被 shell memo 的 skipFunctions 忽略；终端/备忘录开闭必须 bump 版本号，
+  // 否则第二屏及以后收不到最新 panelBelowMessages（按钮亮了但面板不挂）。
+  const auxLayoutVersion =
+    ((centerAuxPanelsNodeByPaneVersion & 0xffff) << 16) |
+    ((memoOpen ? 1 : 0) << 15) |
+    (terminalCenter.revision & 0x7fff);
   const resolvePaneAuxLayout = useCallback(
     (paneIndex: number): PaneAuxLayout => {
       // 多 pane 下各 pane 独立判断自己是否挂文件编辑器。
@@ -522,11 +528,11 @@ const ConnectedClaudeSessions = memo(function ConnectedClaudeSessions({
       // 离屏 pane 的性能护栏由 deferHeavySubtree 在下游保留
       // （hidePaneMessages = hideMessages || deferHeavySubtree）。
       // 全局备忘录优先占 pane 0 的同一 slot（与打开文件一致）；
-      // 内置终端挂在 hostPaneIndex 对应屏（ClaudeSessions 会把 sentinel 换成真实 TerminalPanel）。
+      // 内置终端按屏独立挂载（ClaudeSessions 会把 sentinel 换成真实 TerminalPanel）。
       const panel =
         paneIndex === 0 && memoOpen
           ? WORKSPACE_MEMO_PANEL_NODE
-          : paneIndex === terminalCenter.hostPaneIndex && terminalCenter.visible
+          : terminalCenter.visiblePaneIndexes.includes(paneIndex)
             ? TERMINAL_CENTER_SLOT_SENTINEL
             : centerAuxPanelsNodeByPane.get(paneIndex);
       if (panel == null) {
@@ -538,7 +544,7 @@ const ConnectedClaudeSessions = memo(function ConnectedClaudeSessions({
         hideSessionTools: false,
       };
     },
-    [centerAuxPanelsNodeByPane, memoOpen, terminalCenter.hostPaneIndex, terminalCenter.visible],
+    [centerAuxPanelsNodeByPane, memoOpen, terminalCenter.visiblePaneIndexes],
   );
 
   const primaryAux = resolvePaneAuxLayout(0);
@@ -550,7 +556,7 @@ const ConnectedClaudeSessions = memo(function ConnectedClaudeSessions({
         hideSessionTools={primaryAux.hideSessionTools}
         panelBelowMessages={primaryAux.panelBelowMessages}
         resolvePaneAuxLayout={resolvePaneAuxLayout}
-        centerAuxPanelsNodeByPaneVersion={centerAuxPanelsNodeByPaneVersion}
+        centerAuxPanelsNodeByPaneVersion={auxLayoutVersion}
         centerView={centerView}
         hideTopbar={true}
       />
@@ -1052,7 +1058,7 @@ export function AppWorkspaceLayout({
   const terminalCenter = useTerminalCenterPanelState();
   const primaryPanelBelowMessages = memoOpen
     ? WORKSPACE_MEMO_PANEL_NODE
-    : terminalCenter.visible && terminalCenter.hostPaneIndex === 0
+    : terminalCenter.visiblePaneIndexes.includes(0)
       ? TERMINAL_CENTER_SLOT_SENTINEL
       : centerAuxPanelsNodeByPane.get(0);
   const { centerView, setCenterView, visible: centerSwitcherVisible } = useCenterView(
@@ -1061,7 +1067,7 @@ export function AppWorkspaceLayout({
   );
   const centerSwitcherFilesLabel = memoOpen
     ? "备忘录"
-    : terminalCenter.visible && terminalCenter.hostPaneIndex === 0
+    : terminalCenter.visiblePaneIndexes.includes(0)
       ? "终端"
       : "文件";
 

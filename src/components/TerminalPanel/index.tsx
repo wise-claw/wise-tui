@@ -24,6 +24,11 @@ interface Props {
   layout?: "center" | "dock";
   fullscreen?: boolean;
   onToggleFullscreen?: () => void;
+  /**
+   * PTY workspaceId。多屏各自独立终端时按屏区分（如 `pane-0`），
+   * 避免 terminal-created 事件串台。默认 `"0"`。
+   */
+  workspaceId?: string;
 }
 
 export function TerminalPanel({
@@ -37,6 +42,7 @@ export function TerminalPanel({
   layout = "dock",
   fullscreen = false,
   onToggleFullscreen,
+  workspaceId = TERMINAL_WORKSPACE_ID,
 }: Props) {
   const { message } = App.useApp();
   const {
@@ -49,7 +55,7 @@ export function TerminalPanel({
     setActiveTerminal,
     rememberSurfaceSnapshot,
     getSurfaceSnapshot,
-  } = useTerminalContext({ workspaceId: TERMINAL_WORKSPACE_ID });
+  } = useTerminalContext({ workspaceId });
   const [focusRequestVersion, setFocusRequestVersion] = useState(0);
   const closeTriggeredByButtonRef = useRef(false);
   const soleTerminalIdRef = useRef<string | null>(null);
@@ -153,14 +159,14 @@ export function TerminalPanel({
     }
     try {
       await writeTerminalSession(
-        TERMINAL_WORKSPACE_ID,
+        workspaceId,
         terminalId,
         buildClaudeAutoModeTerminalInput(),
       );
     } catch (error) {
       message.error(error instanceof Error ? error.message : "无法在终端中启动 Claude");
     }
-  }, [activeTerminalId, ensureTerminal, message, terminalState.status]);
+  }, [activeTerminalId, ensureTerminal, message, terminalState.status, workspaceId]);
 
   const terminalPanelNode = (
     <TerminalPanelSurface

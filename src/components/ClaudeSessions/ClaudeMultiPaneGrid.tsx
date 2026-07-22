@@ -10,10 +10,12 @@ import type {
   WorkflowTemplateItem,
   SessionConversationTaskItem,
 } from "../../types";
-import { Button, Empty, message, TreeSelect } from "antd";
+import { Button, Empty, message, Spin, TreeSelect } from "antd";
 import { LoadingOutlined } from "@ant-design/icons";
 import {
+  lazy,
   memo,
+  Suspense,
   useCallback,
   useEffect,
   useMemo,
@@ -54,11 +56,67 @@ import { CenterViewControlContext, useCenterView } from "./claudeChatHelpers";
 import { registerPaneCenterViewSetter } from "../../stores/paneCenterViewControlStore";
 import { useWorkspaceMemoPanelOpen } from "../../stores/workspaceMemoPanelStore";
 import {
+  closeTerminalCenterPanelOnPane,
+  collapseTerminalCenterPanelOnPane,
   toggleTerminalCenterPanel,
   useTerminalCenterPanelState,
 } from "../../stores/terminalCenterPanelStore";
 
+const TerminalPanelLazy = lazy(() =>
+  import("../TerminalPanel").then((module) => ({ default: module.TerminalPanel })),
+);
+
 const TWO_PANE_MIN_WIDTH_PX = MAIN_LAYOUT_MULTI_PANE_MIN_WIDTH_PX;
+
+/**
+ * 多屏终端必须在 pane cell 内直接订阅 store 并挂载面板。
+ * 不能只靠上层 resolvePaneAuxLayout 下发：shell memo 会跳过函数 prop，
+ * 导致按钮已亮（cell 订了 store）但 panelBelowMessages 仍是旧值。
+ */
+function usePaneLocalTerminalPanel(
+  paneIndex: number,
+  repository: Repository | null | undefined,
+): {
+  terminalVisible: boolean;
+  terminalMounted: boolean;
+  terminalPanel: ReactNode | null;
+} {
+  const terminalCenter = useTerminalCenterPanelState();
+  const terminalVisible = terminalCenter.visiblePaneIndexes.includes(paneIndex);
+  const terminalMounted = terminalCenter.mountedPaneIndexes.includes(paneIndex);
+  const repoPath = repository?.path;
+  const repoName = repository?.name;
+  const repoBranch = repository?.branch;
+  const terminalPanel = useMemo(() => {
+    if (!terminalVisible || !repoPath || !repoName) return null;
+    return (
+      <Suspense
+        fallback={
+          <div
+            className="app-claude-sessions-terminal-lazy-fallback"
+            role="status"
+            aria-label="终端加载中"
+          >
+            <Spin size="small" />
+          </div>
+        }
+      >
+        <TerminalPanelLazy
+          workspaceId={`pane-${paneIndex}`}
+          repositoryPath={repoPath}
+          repositoryName={repoName}
+          branch={repoBranch}
+          dirty={false}
+          collapsed={false}
+          layout="center"
+          onCollapse={() => collapseTerminalCenterPanelOnPane(paneIndex)}
+          onClose={() => closeTerminalCenterPanelOnPane(paneIndex)}
+        />
+      </Suspense>
+    );
+  }, [paneIndex, repoBranch, repoName, repoPath, terminalVisible]);
+  return { terminalVisible, terminalMounted, terminalPanel };
+}
 
 interface PaneRepoTreeNode {
   title: string;
@@ -286,15 +344,21 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
     [shared, sessionId],
   );
 
+  const memoOpen = useWorkspaceMemoPanelOpen();
+  const { terminalVisible, terminalMounted, terminalPanel } = usePaneLocalTerminalPanel(
+    0,
+    activeRepository,
+  );
+  // 备忘录占 pane 0 时优先；否则本屏终端由 cell 本地挂载（不依赖上层 layout 下发）。
+  const panelBelowMessages =
+    memoOpen || !terminalPanel ? paneAuxLayout.panelBelowMessages : terminalPanel;
   const { centerView, setCenterView, visible: centerSwitcherVisible } = useCenterView(
-    paneAuxLayout.panelBelowMessages,
+    panelBelowMessages,
     paneAuxLayout.hideMessages,
   );
-  const memoOpen = useWorkspaceMemoPanelOpen();
-  const terminalCenter = useTerminalCenterPanelState();
   const centerSwitcherFilesLabel = memoOpen
     ? "备忘录"
-    : terminalCenter.visible && terminalCenter.hostPaneIndex === 0
+    : terminalVisible
       ? "终端"
       : "文件";
   const handleToggleTerminalOnPrimary = useCallback(() => {
@@ -324,6 +388,8 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
           mainSessionForDataLink={session}
           onSearch={() => shared.paneTopbarShared?.onSearchForRepository?.(activeRepository.path)}
           onToggleTerminal={handleToggleTerminalOnPrimary}
+          terminalPanelMounted={terminalMounted}
+          terminalCollapsed={!terminalVisible}
           centerView={centerView}
           onCenterViewChange={setCenterView}
           centerSwitcherVisible={centerSwitcherVisible}
@@ -396,7 +462,7 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
         workflowGraphsByWorkflowId={shared.workflowGraphsByWorkflowId}
         workflowGraphStatusByWorkflowId={shared.workflowGraphStatusByWorkflowId}
             onOpenTaskDetail={shared.onOpenTaskDetail}
-            panelBelowMessages={paneAuxLayout.panelBelowMessages}
+            panelBelowMessages={panelBelowMessages}
             hideMessages={paneAuxLayout.hideMessages}
             hideSessionTools={paneAuxLayout.hideSessionTools}
             centerView={centerView}
@@ -540,16 +606,17 @@ const MultiPaneExtraPaneCell = memo(
       hasQuestionRequest: Boolean(offscreenDock.questionRequest),
     });
     const hidePaneMessages = paneAuxLayout.hideMessages || deferHeavySubtree;
+    const absolutePaneIndex = paneIdx + 1;
+    const { terminalVisible, terminalMounted, terminalPanel } = usePaneLocalTerminalPanel(
+      absolutePaneIndex,
+      resolvedRepo,
+    );
+    const panelBelowMessages = terminalPanel ?? paneAuxLayout.panelBelowMessages;
     const { centerView, setCenterView, visible: centerSwitcherVisible } = useCenterView(
-      paneAuxLayout.panelBelowMessages,
+      panelBelowMessages,
       hidePaneMessages,
     );
-    const terminalCenter = useTerminalCenterPanelState();
-    const absolutePaneIndex = paneIdx + 1;
-    const centerSwitcherFilesLabel =
-      terminalCenter.visible && terminalCenter.hostPaneIndex === absolutePaneIndex
-        ? "终端"
-        : "文件";
+    const centerSwitcherFilesLabel = terminalVisible ? "终端" : "文件";
     const handleToggleTerminalOnPane = useCallback(() => {
       markPaneActive(absolutePaneIndex);
       toggleTerminalCenterPanel(absolutePaneIndex);
@@ -649,6 +716,8 @@ const MultiPaneExtraPaneCell = memo(
               // 但保留内置终端：挂到本屏中栏，cwd 跟随本屏仓库。
               onToggleSidebar={undefined}
               onToggleTerminal={handleToggleTerminalOnPane}
+              terminalPanelMounted={terminalMounted}
+              terminalCollapsed={!terminalVisible}
               onChangePaneCount={undefined}
               onOpenRemoteChannels={undefined}
               activeRepository={resolvedRepo}
@@ -730,7 +799,7 @@ const MultiPaneExtraPaneCell = memo(
             workflowGraphsByWorkflowId={shared.workflowGraphsByWorkflowId}
             workflowGraphStatusByWorkflowId={shared.workflowGraphStatusByWorkflowId}
             onOpenTaskDetail={shared.onOpenTaskDetail}
-            panelBelowMessages={paneAuxLayout.panelBelowMessages}
+            panelBelowMessages={panelBelowMessages}
             hideMessages={hidePaneMessages}
             hideSessionTools={paneAuxLayout.hideSessionTools}
             centerView={centerView}
@@ -764,10 +833,10 @@ const MultiPaneExtraPaneCell = memo(
       );
     }
 
-    if (paneAuxLayout.panelBelowMessages) {
+    if (panelBelowMessages) {
       return (
         <div className="app-claude-sessions__pane app-claude-sessions__pane--file-only">
-          {paneAuxLayout.panelBelowMessages}
+          {panelBelowMessages}
         </div>
       );
     }

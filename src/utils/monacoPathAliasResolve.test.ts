@@ -37,7 +37,9 @@ describe("applyTsconfigPathMappings / resolvePathAliasImportCandidates", () => {
     const candidates = resolvePathAliasImportCandidates("@/api/system/user");
     expect(candidates).toContain("src/api/system/user.ts");
     expect(candidates).toContain("src/api/system/user.vue");
+    expect(candidates).toContain("src/api/system/user.less");
     expect(candidates).toContain("src/api/system/user/index.ts");
+    expect(candidates).toContain("src/api/system/user/index.less");
   });
 
   test("读取 tsconfig paths 并保留默认兜底", () => {

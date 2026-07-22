@@ -169,6 +169,21 @@ describe("resolvePathClickCandidates — 裸路径点击", () => {
     expect(candidates).toContain("src/pkg.ts");
     expect(candidates).not.toContain("src/pkg.ts/index.ts");
   });
+
+  test("样式后缀 less/scss/sass/css 可作为点击目标", () => {
+    expect(
+      resolvePathClickCandidates("src/pages/A.tsx", "./index.less"),
+    ).toEqual(expect.arrayContaining(["src/pages/index.less"]));
+    expect(
+      resolvePathClickCandidates("src/a.ts", "styles/theme.scss"),
+    ).toEqual(expect.arrayContaining(["styles/theme.scss", "src/styles/theme.scss"]));
+    expect(
+      resolvePathClickCandidates("src/a.ts", "assets/main.css"),
+    ).toContain("src/assets/main.css");
+    expect(
+      resolvePathClickCandidates("src/a.ts", "./vars.sass"),
+    ).toContain("src/vars.sass");
+  });
 });
 
 /**

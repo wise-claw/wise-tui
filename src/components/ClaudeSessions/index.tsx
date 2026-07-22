@@ -28,7 +28,11 @@ import {
 } from "../../stores/claudeSessionsLiveStore";
 import { WORKSPACE_MEMO_PANEL_NODE } from "../WorkspaceMemoPanel";
 import { TERMINAL_CENTER_SLOT_SENTINEL } from "../TerminalPanel/terminalCenterSlot";
-import { useTerminalCenterPanelState } from "../../stores/terminalCenterPanelStore";
+import {
+  closeTerminalCenterPanelOnPane,
+  collapseTerminalCenterPanelOnPane,
+  useTerminalCenterPanelState,
+} from "../../stores/terminalCenterPanelStore";
 import { ClaudeSessionsChatHost } from "./ClaudeSessionsChatHost";
 import { Topbar, type PaneTopbarSharedProps } from "./Topbar";
 export { Topbar, type TopbarProps, type PaneTopbarSharedProps } from "./Topbar";
@@ -662,89 +666,99 @@ function ClaudeSessionsShell({
 
   const terminalCenter = useTerminalCenterPanelState();
 
-  const terminalHostRepository = useMemo(() => {
-    const host = terminalCenter.hostPaneIndex;
-    if (host <= 0) return chatContextRepository;
-    const slot = extraPanes[host - 1];
-    if (!slot) return chatContextRepository;
-    const repoList = repositories ?? [];
-    if (slot.repositoryId != null) {
-      return repoList.find((repo) => repo.id === slot.repositoryId) ?? chatContextRepository;
-    }
-    if (slot.sessionId) {
-      const paneSession =
-        sessionById.get(slot.sessionId) ?? getClaudeSessionSnapshot(slot.sessionId);
-      if (paneSession) {
-        return (
-          resolveRepositoryForSession({
-            session: paneSession,
-            repositories: repoList,
-            bindings: repositoryMainBindings,
-            sessions: incomingSessions,
-          }) ?? chatContextRepository
-        );
+  const resolveTerminalRepositoryForPane = useCallback(
+    (paneIndex: number) => {
+      if (paneIndex <= 0) return chatContextRepository;
+      const slot = extraPanes[paneIndex - 1];
+      if (!slot) return chatContextRepository;
+      const repoList = repositories ?? [];
+      if (slot.repositoryId != null) {
+        return repoList.find((repo) => repo.id === slot.repositoryId) ?? chatContextRepository;
       }
-    }
-    return chatContextRepository;
-  }, [
-    chatContextRepository,
-    extraPanes,
-    incomingSessions,
-    repositories,
-    repositoryMainBindings,
-    sessionById,
-    terminalCenter.hostPaneIndex,
-  ]);
-
-  const terminalTakesCenterSlot =
-    terminalCenter.visible && Boolean(terminalHostRepository) && Boolean(onToggleTerminal);
-
-  const terminalPanelNode = useMemo(() => {
-    if (!terminalHostRepository || !onToggleTerminal) return null;
-    return (
-      <Suspense
-        fallback={
-          <div className="app-claude-sessions-terminal-lazy-fallback" role="status" aria-label="终端加载中">
-            <Spin size="small" />
-          </div>
+      if (slot.sessionId) {
+        const paneSession =
+          sessionById.get(slot.sessionId) ?? getClaudeSessionSnapshot(slot.sessionId);
+        if (paneSession) {
+          return (
+            resolveRepositoryForSession({
+              session: paneSession,
+              repositories: repoList,
+              bindings: repositoryMainBindings,
+              sessions: incomingSessions,
+            }) ?? chatContextRepository
+          );
         }
-      >
-        <TerminalPanelLazy
-          repositoryPath={terminalHostRepository.path}
-          repositoryName={terminalHostRepository.name}
-          branch={terminalHostRepository.branch}
-          dirty={false}
-          collapsed={false}
-          layout="center"
-          onCollapse={onCollapseTerminal ?? onToggleTerminal}
-          onClose={onCloseTerminalPanel ?? onToggleTerminal}
-        />
-      </Suspense>
-    );
+      }
+      return chatContextRepository;
+    },
+    [
+      chatContextRepository,
+      extraPanes,
+      incomingSessions,
+      repositories,
+      repositoryMainBindings,
+      sessionById,
+    ],
+  );
+
+  const terminalPanelByPane = useMemo(() => {
+    const map = new Map<number, React.ReactNode>();
+    if (!onToggleTerminal) return map;
+    for (const paneIndex of terminalCenter.mountedPaneIndexes) {
+      const repo = resolveTerminalRepositoryForPane(paneIndex);
+      if (!repo) continue;
+      const collapsed = !terminalCenter.visiblePaneIndexes.includes(paneIndex);
+      map.set(
+        paneIndex,
+        <Suspense
+          key={`terminal-pane-${paneIndex}`}
+          fallback={
+            collapsed ? null : (
+              <div
+                className="app-claude-sessions-terminal-lazy-fallback"
+                role="status"
+                aria-label="终端加载中"
+              >
+                <Spin size="small" />
+              </div>
+            )
+          }
+        >
+          <TerminalPanelLazy
+            workspaceId={`pane-${paneIndex}`}
+            repositoryPath={repo.path}
+            repositoryName={repo.name}
+            branch={repo.branch}
+            dirty={false}
+            collapsed={collapsed}
+            layout="center"
+            onCollapse={() => collapseTerminalCenterPanelOnPane(paneIndex)}
+            onClose={() => closeTerminalCenterPanelOnPane(paneIndex)}
+          />
+        </Suspense>,
+      );
+    }
+    return map;
   }, [
-    onCloseTerminalPanel,
-    onCollapseTerminal,
     onToggleTerminal,
-    terminalHostRepository,
+    resolveTerminalRepositoryForPane,
+    terminalCenter.mountedPaneIndexes,
+    terminalCenter.visiblePaneIndexes,
   ]);
 
   const resolveCenterPanel = useCallback(
     (incoming: ReactNode | undefined, paneIndex: number): ReactNode | undefined => {
-      // 备忘录优先占 pane 0；终端挂在 hostPaneIndex 对应屏；再回落文件编辑器。
+      // 备忘录优先占 pane 0；各屏独立终端；再回落文件编辑器。
       if (incoming === WORKSPACE_MEMO_PANEL_NODE) return incoming;
-      if (
-        terminalTakesCenterSlot &&
-        terminalPanelNode &&
-        paneIndex === terminalCenter.hostPaneIndex
-      ) {
-        return terminalPanelNode;
+      if (terminalCenter.visiblePaneIndexes.includes(paneIndex)) {
+        return terminalPanelByPane.get(paneIndex) ?? undefined;
       }
       if (incoming === TERMINAL_CENTER_SLOT_SENTINEL) {
-        return terminalPanelNode ?? undefined;
+        return terminalPanelByPane.get(paneIndex) ?? undefined;
       }
       return incoming;
     },
-    [terminalCenter.hostPaneIndex, terminalPanelNode, terminalTakesCenterSlot],
+    [terminalCenter.visiblePaneIndexes, terminalPanelByPane],
   );
 
   const effectivePanelBelowMessages = resolveCenterPanel(panelBelowMessages, 0);
@@ -774,14 +788,12 @@ function ClaudeSessionsShell({
 
   /**
    * ChatHost / MultiPaneGrid 的 memo 会跳过函数 prop（`resolvePaneAuxLayout`）。
-   * 文件编辑器用 `centerAuxPanelsNodeByPaneVersion` 驱动重渲；终端开/关/换屏必须同样
-   * bump 一个可比较的 number，否则第二屏及以后收不到最新 panelBelowMessages。
+   * 文件编辑器用 `centerAuxPanelsNodeByPaneVersion` 驱动重渲；终端开/关必须同样
+   * bump 一个可比较的 number，否则各屏收不到最新 panelBelowMessages。
    */
-  const terminalCenterLayoutVersion = terminalCenter.visible
-    ? terminalCenter.hostPaneIndex + 1
-    : 0;
+  const terminalCenterLayoutVersion = terminalCenter.revision & 0xff;
   const centerAuxLayoutVersionForHost =
-    ((centerAuxPanelsNodeByPaneVersion ?? 0) << 8) | (terminalCenterLayoutVersion & 0xff);
+    ((centerAuxPanelsNodeByPaneVersion ?? 0) << 8) | terminalCenterLayoutVersion;
 
   return (
     <div className="app-claude-sessions">
@@ -918,28 +930,17 @@ function ClaudeSessionsShell({
       </div>
 
       {/* 收起时保留挂载以维持 PTY；打开时改由 panelBelowMessages（与文件同一中栏区域）承载 */}
-      {terminalPanelMounted &&
-      terminalCollapsed &&
-      terminalHostRepository &&
-      onToggleTerminal ? (
-        <div
-          className="app-claude-sessions-terminal-host app-claude-sessions-terminal-host--collapsed"
-          aria-hidden
-        >
-          <Suspense fallback={null}>
-            <TerminalPanelLazy
-              repositoryPath={terminalHostRepository.path}
-              repositoryName={terminalHostRepository.name}
-              branch={terminalHostRepository.branch}
-              dirty={false}
-              collapsed
-              layout="center"
-              onCollapse={onCollapseTerminal ?? onToggleTerminal}
-              onClose={onCloseTerminalPanel ?? onToggleTerminal}
-            />
-          </Suspense>
-        </div>
-      ) : null}
+      {Array.from(terminalPanelByPane.entries())
+        .filter(([paneIndex]) => !terminalCenter.visiblePaneIndexes.includes(paneIndex))
+        .map(([paneIndex, node]) => (
+          <div
+            key={`terminal-keepalive-${paneIndex}`}
+            className="app-claude-sessions-terminal-host app-claude-sessions-terminal-host--hidden"
+            aria-hidden
+          >
+            {node}
+          </div>
+        ))}
     </div>
   );
 }

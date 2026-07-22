@@ -14,9 +14,9 @@ export interface ImportNavigationAiPromptInput {
   candidates: readonly string[];
 }
 
-/** 常见源码后缀：用于文件名主干比对（含 Java/Kotlin/Vue 等）。 */
+/** 常见源码后缀：用于文件名主干比对（含 Java/Kotlin/Vue/样式等）。 */
 const SOURCE_BASENAME_EXT_RE =
-  /\.(?:d\.)?(?:tsx?|jsx?|mts|cts|mjs|cjs|vue|java|kt|kts|cs|go|rs|py|rb|php|scala|groovy|swift)$/i;
+  /\.(?:d\.)?(?:tsx?|jsx?|mts|cts|mjs|cjs|vue|css|less|scss|sass|java|kt|kts|cs|go|rs|py|rb|php|scala|groovy|swift)$/i;
 
 /** 明显不应作为「类型跳转」的关键字（小写比对）。 */
 const NON_NAVIGABLE_KEYWORDS = new Set([

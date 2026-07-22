@@ -183,7 +183,9 @@ import { createFreshTerminalWorkerTab, isTerminalWorkerWiseTab } from "./service
 import {
   clampTerminalCenterPanelHost,
   closeTerminalCenterPanel,
+  closeTerminalCenterPanelOnPane,
   collapseTerminalCenterPanel,
+  collapseTerminalCenterPanelOnPane,
   toggleTerminalCenterPanel,
   useTerminalCenterPanelState,
 } from "./stores/terminalCenterPanelStore";
@@ -360,11 +362,22 @@ export default function App() {
   }, []);
 
   const handleCloseTerminalPanel = useCallback(() => {
-    closeTerminalCenterPanel();
+    // 快捷键 / 全局关闭：只关当前活动屏；无活动屏时关全部。
+    const active = getActivePaneIndex();
+    if (active == null) {
+      closeTerminalCenterPanel();
+      return;
+    }
+    closeTerminalCenterPanelOnPane(active);
   }, []);
 
   const handleCollapseTerminal = useCallback(() => {
-    collapseTerminalCenterPanel();
+    const active = getActivePaneIndex();
+    if (active == null) {
+      collapseTerminalCenterPanel();
+      return;
+    }
+    collapseTerminalCenterPanelOnPane(active);
   }, []);
   /** 中栏多屏模式屏数：1=单屏（关闭），2/4/6/8=多屏。 */
   const [paneCount, setPaneCount] = useState<PaneCount>(1);

@@ -76,6 +76,10 @@ const MODEL_SOURCE_EXTENSIONS = new Set([
   "d.ts",
   "json",
   "vue",
+  "css",
+  "less",
+  "scss",
+  "sass",
 ]);
 const RESOLVABLE_SOURCE_EXTENSIONS = Array.from(MODEL_SOURCE_EXTENSIONS).map((extension) => `.${extension}`);
 /**
