@@ -396,13 +396,12 @@
 }
 
 .app-claude-sessions-terminal-lazy-fallback {
-  flex-shrink: 0;
+  flex: 1 1 0;
+  min-height: 0;
   display: flex;
   align-items: center;
   justify-content: center;
-  min-height: 120px;
   background: var(--ant-color-bg-container);
-  border-top: 1px solid var(--ant-color-border-secondary);
 }
 
 .app-claude-sessions-terminal-host--collapsed {
@@ -480,23 +479,29 @@
 
 /* 顶栏「消息/文件」切换器：紧凑纯文字胶囊，融入玻璃顶栏。
    外层 fill-content 淡灰胶囊提供分组感；thumb 用 bg-container 白底 + 微阴影浮起；
-   item 18px 高、4px 圆角、5px 横向内边距，未选中 secondary、选中 text + 500。 */
+   item 18px 高、4px 圆角、窄横向内边距，未选中 secondary、选中 text + 500。 */
 .app-topbar-center-switcher.ant-segmented {
   flex-shrink: 0;
   margin-left: 4px;
-  padding: 2px;
+  padding: 1px;
   background: var(--ant-color-fill-content);
   border-radius: 6px;
 }
 .app-topbar-center-switcher.ant-segmented .ant-segmented-item {
   min-height: 18px;
   height: 18px;
-  padding: 0 5px;
+  min-width: 0;
+  padding: 0;
   border-radius: 4px;
   font-size: 12px;
   line-height: 18px;
   color: var(--ant-color-text-secondary);
   transition: color 0.15s ease;
+}
+.app-topbar-center-switcher.ant-segmented .ant-segmented-item-label {
+  min-height: 18px;
+  padding: 0 6px;
+  line-height: 18px;
 }
 .app-topbar-center-switcher.ant-segmented
   .ant-segmented-item:not(.ant-segmented-item-selected):hover {

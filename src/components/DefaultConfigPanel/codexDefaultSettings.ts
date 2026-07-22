@@ -2,8 +2,9 @@
  * codex 启动默认沙箱/审批设置的纯逻辑工具：解析、序列化、「取消沙箱限制」开关。
  *
  * 与 Rust 侧 `CodexDefaultSettings`（camelCase serde）对应：用户配置作为 JSON 对象，
- * 由后端 `execute_codex_code` 读取后经 `-s <sandboxMode>` / `-c approval_policy=<approvalPolicy>`
- * 注入 `codex exec` fresh 会话（resume 不注入，沿用原会话）。
+ * 由后端 `execute_codex_code` 读取后注入 `codex exec`：
+ * - fresh：`-s <sandboxMode>` + 可选 `-c approval_policy=…`
+ * - resume：`-c sandbox_mode=…`（resume 无 `-s`，必须覆盖以免旧 read-only 会话写不了）
  */
 
 /** sandbox_mode 取值。 */

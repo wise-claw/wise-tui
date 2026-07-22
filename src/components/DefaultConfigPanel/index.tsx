@@ -491,7 +491,7 @@ export function DefaultConfigPanel() {
           <DefaultConfigRow
             title="Codex 沙箱/审批"
             hint="默认配置"
-            detail="codex exec 新会话注入 -s sandbox_mode 与 -c approval_policy；resume 沿用原会话。留空=workspace-write（现状）"
+            detail="新会话 -s sandbox_mode；续接用 -c 覆盖沙箱（避免旧 read-only 会话写不了）。留空=workspace-write"
             control={
               <div className="app-default-config-cli-settings__actions app-default-config-cli-settings__actions--compact">
                 <span className="app-default-config-cli-settings__toggle">

@@ -53,6 +53,10 @@ import { Topbar, type PaneTopbarSharedProps } from "./Topbar";
 import { CenterViewControlContext, useCenterView } from "./claudeChatHelpers";
 import { registerPaneCenterViewSetter } from "../../stores/paneCenterViewControlStore";
 import { useWorkspaceMemoPanelOpen } from "../../stores/workspaceMemoPanelStore";
+import {
+  toggleTerminalCenterPanel,
+  useTerminalCenterPanelState,
+} from "../../stores/terminalCenterPanelStore";
 
 const TWO_PANE_MIN_WIDTH_PX = MAIN_LAYOUT_MULTI_PANE_MIN_WIDTH_PX;
 
@@ -287,6 +291,16 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
     paneAuxLayout.hideMessages,
   );
   const memoOpen = useWorkspaceMemoPanelOpen();
+  const terminalCenter = useTerminalCenterPanelState();
+  const centerSwitcherFilesLabel = memoOpen
+    ? "备忘录"
+    : terminalCenter.visible && terminalCenter.hostPaneIndex === 0
+      ? "终端"
+      : "文件";
+  const handleToggleTerminalOnPrimary = useCallback(() => {
+    markPaneActive(0);
+    toggleTerminalCenterPanel(0);
+  }, []);
 
   // 把 pane 0 的 setCenterView 注册到跨层控制通道，供打开文件时切到「文件」视图。
   useEffect(() => {
@@ -309,10 +323,11 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
           activeWorkspaceFocus={shared.activeWorkspaceFocus ?? "repository"}
           mainSessionForDataLink={session}
           onSearch={() => shared.paneTopbarShared?.onSearchForRepository?.(activeRepository.path)}
+          onToggleTerminal={handleToggleTerminalOnPrimary}
           centerView={centerView}
           onCenterViewChange={setCenterView}
           centerSwitcherVisible={centerSwitcherVisible}
-          centerSwitcherFilesLabel={memoOpen ? "备忘录" : "文件"}
+          centerSwitcherFilesLabel={centerSwitcherFilesLabel}
         />
       ) : null}
       <CenterViewControlContext.Provider value={setCenterView}>
@@ -529,12 +544,23 @@ const MultiPaneExtraPaneCell = memo(
       paneAuxLayout.panelBelowMessages,
       hidePaneMessages,
     );
+    const terminalCenter = useTerminalCenterPanelState();
+    const absolutePaneIndex = paneIdx + 1;
+    const centerSwitcherFilesLabel =
+      terminalCenter.visible && terminalCenter.hostPaneIndex === absolutePaneIndex
+        ? "终端"
+        : "文件";
+    const handleToggleTerminalOnPane = useCallback(() => {
+      markPaneActive(absolutePaneIndex);
+      toggleTerminalCenterPanel(absolutePaneIndex);
+    }, [absolutePaneIndex]);
 
     // 把本 extra pane 的 setCenterView 注册到跨层控制通道，供打开文件时切到「文件」视图。
+    // 必须用绝对 pane 索引（slot 0 → pane 1），与 PaneEditorHost / markPaneActive 对齐。
     useEffect(() => {
-      registerPaneCenterViewSetter(paneIdx, setCenterView);
-      return () => registerPaneCenterViewSetter(paneIdx, null);
-    }, [paneIdx, setCenterView]);
+      registerPaneCenterViewSetter(absolutePaneIndex, setCenterView);
+      return () => registerPaneCenterViewSetter(absolutePaneIndex, null);
+    }, [absolutePaneIndex, setCenterView]);
     const companionMessageListWindow = useMemo(
       () => resolveCompanionMessageListWindow(paneCount),
       [paneCount],
@@ -619,10 +645,10 @@ const MultiPaneExtraPaneCell = memo(
           {shared.paneTopbarShared ? (
             <Topbar
               {...shared.paneTopbarShared}
-              // extra pane 不渲染窗口级按钮（侧栏 / 内置终端 / 多屏切换 / RemoteEntry）。
-              // 置 undefined 时 Topbar 内 `onXxx && (...)` 判定为假即不渲染。
+              // extra pane 不渲染窗口级按钮（侧栏 / 多屏切换 / RemoteEntry），
+              // 但保留内置终端：挂到本屏中栏，cwd 跟随本屏仓库。
               onToggleSidebar={undefined}
-              onToggleTerminal={undefined}
+              onToggleTerminal={handleToggleTerminalOnPane}
               onChangePaneCount={undefined}
               onOpenRemoteChannels={undefined}
               activeRepository={resolvedRepo}
@@ -635,6 +661,7 @@ const MultiPaneExtraPaneCell = memo(
               centerView={centerView}
               onCenterViewChange={setCenterView}
               centerSwitcherVisible={centerSwitcherVisible}
+              centerSwitcherFilesLabel={centerSwitcherFilesLabel}
             />
           ) : null}
           <CenterViewControlContext.Provider value={setCenterView}>

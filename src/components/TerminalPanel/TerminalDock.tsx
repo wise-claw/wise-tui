@@ -12,6 +12,8 @@ import "./index.css";
 
 type TerminalDockProps = {
   isOpen: boolean;
+  /** center：填满中栏；dock：底部固定高度。 */
+  layout?: "center" | "dock";
   terminals: TerminalContextTab[];
   activeTerminalId: string | null;
   onSelectTerminal: (terminalId: string) => void;
@@ -34,6 +36,7 @@ function terminalTabLabel(tab: TerminalContextTab): string {
 
 export function TerminalDock({
   isOpen,
+  layout = "dock",
   terminals,
   activeTerminalId,
   onSelectTerminal,
@@ -52,11 +55,15 @@ export function TerminalDock({
     return null;
   }
 
+  const centerLayout = layout === "center" || fullscreen;
+
   return (
     <section
-      className={`terminal-panel${fullscreen ? " terminal-panel--fullscreen" : ""}`}
+      className={`terminal-panel${centerLayout ? " terminal-panel--fullscreen" : ""}${
+        layout === "center" ? " terminal-panel--center" : ""
+      }`}
     >
-      {!fullscreen && onResizeStart ? (
+      {!centerLayout && onResizeStart ? (
         <div
           className="terminal-panel-resizer"
           role="separator"

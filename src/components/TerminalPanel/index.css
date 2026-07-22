@@ -15,6 +15,13 @@
   height: auto;
 }
 
+.terminal-panel--center {
+  border-top: none;
+  height: 100%;
+  min-height: 0;
+  flex: 1 1 0;
+}
+
 .terminal-panel-resizer {
   height: 6px;
   cursor: row-resize;

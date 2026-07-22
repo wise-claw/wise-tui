@@ -155,11 +155,28 @@ fn append_codex_exec_shared_args(cmd: &mut Command, model: Option<&str>) {
     }
 }
 
+fn resolve_codex_sandbox_mode(settings: Option<&CodexDefaultSettings>) -> &str {
+    settings
+        .and_then(|s| s.sandbox_mode.as_deref())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+        .unwrap_or(WISE_CODEX_EXEC_SANDBOX)
+}
+
+fn resolve_codex_approval_policy(settings: Option<&CodexDefaultSettings>) -> Option<&str> {
+    settings
+        .and_then(|s| s.approval_policy.as_deref())
+        .map(str::trim)
+        .filter(|s| !s.is_empty())
+}
+
 /// `codex exec [OPTIONS] [PROMPT]` — supports sandbox + color flags.
 ///
 /// fresh 会话按默认设置注入沙箱/审批：`-s <sandbox_mode>`（缺省 `workspace-write`）
-/// + `-c approval_policy=<v>`（仅当显式配置时）。resume 子命令不接受这些 flag，
-/// 见 `append_codex_exec_resume_args`（resume 完全不注入，沿用原会话配置）。
+/// + `-c approval_policy=<v>`（仅当显式配置时）。
+///
+/// resume 不接受 `-s`，但接受 `-c`：必须注入 `sandbox_mode`，否则早期以 read-only
+/// 创建的会话会在续接时永久写不了文件。
 fn append_codex_exec_fresh_args(
     cmd: &mut Command,
     model: Option<&str>,
@@ -168,11 +185,8 @@ fn append_codex_exec_fresh_args(
 ) {
     cmd.arg("--color").arg("never");
     append_codex_exec_shared_args(cmd, model);
-    let sandbox_mode = settings
-        .and_then(|s| s.sandbox_mode.as_deref())
-        .unwrap_or(WISE_CODEX_EXEC_SANDBOX);
-    cmd.arg("-s").arg(sandbox_mode);
-    if let Some(policy) = settings.and_then(|s| s.approval_policy.as_deref()) {
+    cmd.arg("-s").arg(resolve_codex_sandbox_mode(settings));
+    if let Some(policy) = resolve_codex_approval_policy(settings) {
         cmd.arg("-c").arg(format!("approval_policy={policy}"));
     }
     if !project_path.trim().is_empty() {
@@ -180,9 +194,19 @@ fn append_codex_exec_fresh_args(
     }
 }
 
-/// `codex exec resume [OPTIONS] [SESSION_ID] [PROMPT]` — options must precede id/prompt; no `-s`/`--color`.
-fn append_codex_exec_resume_args(cmd: &mut Command, model: Option<&str>) {
+/// `codex exec resume [OPTIONS] [SESSION_ID] [PROMPT]` — options must precede id/prompt；无 `-s`/`--color`。
+fn append_codex_exec_resume_args(
+    cmd: &mut Command,
+    model: Option<&str>,
+    settings: Option<&CodexDefaultSettings>,
+) {
     append_codex_exec_shared_args(cmd, model);
+    // resume 无 `-s`：用 `-c sandbox_mode=…` 覆盖会话内可能残留的 read-only。
+    cmd.arg("-c")
+        .arg(format!("sandbox_mode={}", resolve_codex_sandbox_mode(settings)));
+    if let Some(policy) = resolve_codex_approval_policy(settings) {
+        cmd.arg("-c").arg(format!("approval_policy={policy}"));
+    }
 }
 
 fn configure_codex_exec_command(
@@ -198,7 +222,7 @@ fn configure_codex_exec_command(
     if !force_new_session {
         if let Some(resume_id) = resume_session_id {
             cmd.arg("resume");
-            append_codex_exec_resume_args(cmd, model);
+            append_codex_exec_resume_args(cmd, model, settings);
             cmd.arg(resume_id);
             cmd.arg(prompt);
             return;
@@ -765,6 +789,8 @@ mod tests {
                 "resume".to_string(),
                 "--json".to_string(),
                 "--skip-git-repo-check".to_string(),
+                "-c".to_string(),
+                format!("sandbox_mode={WISE_CODEX_EXEC_SANDBOX}"),
                 "0199a213-81c0-7800-8aa1-bbab2a035a53".to_string(),
                 "continue".to_string(),
             ]
@@ -845,8 +871,8 @@ mod tests {
     }
 
     #[test]
-    fn resume_exec_ignores_default_settings() {
-        // resume 子命令不接受 -s/-c：即使配置了 settings 也不应注入，沿用原会话。
+    fn resume_exec_injects_sandbox_via_config_override() {
+        // resume 不接受 `-s`，但必须用 `-c sandbox_mode=…` 覆盖旧会话的 read-only。
         let settings = CodexDefaultSettings {
             sandbox_mode: Some("danger-full-access".to_string()),
             approval_policy: Some("never".to_string()),
@@ -867,8 +893,36 @@ mod tests {
             .map(|s| s.to_string_lossy().into_owned())
             .collect();
         assert!(!args.contains(&"-s".to_string()));
-        assert!(!args.contains(&"-c".to_string()));
         assert!(args.contains(&"resume".to_string()));
+        assert!(args
+            .windows(2)
+            .any(|w| w[0] == "-c" && w[1] == "sandbox_mode=danger-full-access"));
+        assert!(args
+            .windows(2)
+            .any(|w| w[0] == "-c" && w[1] == "approval_policy=never"));
+    }
+
+    #[test]
+    fn resume_exec_defaults_workspace_write_without_settings() {
+        let mut cmd = Command::new("codex");
+        configure_codex_exec_command(
+            &mut cmd,
+            "continue",
+            None,
+            "/tmp/repo",
+            Some("0199a213-81c0-7800-8aa1-bbab2a035a53"),
+            false,
+            None,
+        );
+        let args: Vec<String> = cmd
+            .as_std()
+            .get_args()
+            .map(|s| s.to_string_lossy().into_owned())
+            .collect();
+        assert!(args
+            .windows(2)
+            .any(|w| w[0] == "-c" && w[1] == format!("sandbox_mode={WISE_CODEX_EXEC_SANDBOX}")));
+        assert!(!args.iter().any(|a| a.starts_with("approval_policy=")));
     }
 
     #[test]

@@ -180,6 +180,13 @@ import { dispatchExecutionEnvironmentFromMainSession } from "./services/executio
 import { dispatchSessionFeedbackLoopAnalysis } from "./services/sessionFeedbackLoopDispatch";
 import type { FeedbackLoopDispatchKind } from "./utils/sessionFeedbackLoopDispatch";
 import { createFreshTerminalWorkerTab, isTerminalWorkerWiseTab } from "./services/terminalDispatch";
+import {
+  clampTerminalCenterPanelHost,
+  closeTerminalCenterPanel,
+  collapseTerminalCenterPanel,
+  toggleTerminalCenterPanel,
+  useTerminalCenterPanelState,
+} from "./stores/terminalCenterPanelStore";
 import { resolveExecutionEnvironmentDispatchAnchorSessionId } from "./utils/executionEnvironmentDispatchAnchor";
 import { subscribeClaudeSessionsStructure, getClaudeSessionsStructureKey, getClaudeSessionSnapshot } from "./stores/claudeSessionsLiveStore";
 import { useMonitorSessionsForOverview } from "./hooks/useMonitorSessionsForOverview";
@@ -343,30 +350,28 @@ export default function App() {
   const [projectSplitTemplate, setProjectSplitTemplate] = useState("");
   const [dark, _setDark] = useState(false);
   const [collapsed, setCollapsed] = useState(false);
-  const [terminalCollapsed, setTerminalCollapsed] = useState(true);
-  const [terminalPanelMounted, setTerminalPanelMounted] = useState(false);
+  const {
+    mounted: terminalPanelMounted,
+    collapsed: terminalCollapsed,
+  } = useTerminalCenterPanelState();
 
   const handleToggleTerminal = useCallback(() => {
-    if (!terminalPanelMounted) {
-      setTerminalPanelMounted(true);
-      setTerminalCollapsed(false);
-      return;
-    }
-    setTerminalCollapsed((collapsed) => !collapsed);
-  }, [terminalPanelMounted]);
+    toggleTerminalCenterPanel(getActivePaneIndex() ?? 0);
+  }, []);
 
   const handleCloseTerminalPanel = useCallback(() => {
-    setTerminalPanelMounted(false);
-    setTerminalCollapsed(true);
+    closeTerminalCenterPanel();
   }, []);
 
   const handleCollapseTerminal = useCallback(() => {
-    if (terminalPanelMounted) {
-      setTerminalCollapsed(true);
-    }
-  }, [terminalPanelMounted]);
+    collapseTerminalCenterPanel();
+  }, []);
   /** 中栏多屏模式屏数：1=单屏（关闭），2/4/6/8=多屏。 */
   const [paneCount, setPaneCount] = useState<PaneCount>(1);
+
+  useEffect(() => {
+    clampTerminalCenterPanelHost(paneCount);
+  }, [paneCount]);
   /** paneCount 的 ref：供 openRepositoryFileByEvent 等回调在多屏下避免污染全局 active。 */
   const paneCountRef = useRef(paneCount);
   paneCountRef.current = paneCount;

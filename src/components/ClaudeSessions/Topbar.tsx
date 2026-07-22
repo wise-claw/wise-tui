@@ -190,7 +190,7 @@ export interface TopbarProps {
   onCenterViewChange?: (view: CenterView) => void;
   /** 是否显示中栏「消息/文件」切换器（有编辑器且消息列表未隐藏时）。 */
   centerSwitcherVisible?: boolean;
-  /** 切换器第二项文案（打开文件为「文件」，打开备忘录为「备忘录」）。 */
+  /** 切换器第二项文案（打开文件为「文件」，打开备忘录为「备忘录」，打开终端为「终端」）。 */
   centerSwitcherFilesLabel?: string;
 }
 
@@ -201,8 +201,8 @@ export interface TopbarProps {
  * （primary 用主会话仓库；extra 用 `resolvedRepo` 与 `paneSession`）。
  *
  * - primary pane：直接展开 shared 字段并补全 per-pane 字段。
- * - extra pane：展开后将窗口级回调（onToggleSidebar / onToggleTerminal / onChangePaneCount /
- *   onOpenRemoteChannels）显式置 undefined。
+ * - extra pane：展开后将窗口级回调（onToggleSidebar / onChangePaneCount /
+ *   onOpenRemoteChannels）显式置 undefined；内置终端保留并挂到该屏。
  */
 export type PaneTopbarSharedProps = Omit<
   TopbarProps,

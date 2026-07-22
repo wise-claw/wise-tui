@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from "react";
 import { requestPaneCenterView } from "./paneCenterViewControlStore";
+import { collapseTerminalCenterPanelOnPane } from "./terminalCenterPanelStore";
 
 /**
  * 全局备忘录中栏面板开关（与打开文件同一 slot：`panelBelowMessages` + CenterView「files」）。
@@ -31,6 +32,8 @@ export function subscribeWorkspaceMemoPanel(listener: () => void): () => void {
 }
 
 export function openWorkspaceMemoPanel(): void {
+  // 备忘录占 pane 0：仅收起挂在 pane 0 的终端，其它屏终端不受影响。
+  collapseTerminalCenterPanelOnPane(0);
   if (open) {
     requestPaneCenterView(0, "files");
     return;

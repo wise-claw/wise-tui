@@ -20,6 +20,8 @@ interface Props {
   collapsed?: boolean;
   onCollapse: () => void;
   onClose: () => void;
+  /** center：占满中栏消息区（与文件同 slot）；dock：底部抽屉（兼容旧布局）。 */
+  layout?: "center" | "dock";
   fullscreen?: boolean;
   onToggleFullscreen?: () => void;
 }
@@ -32,6 +34,7 @@ export function TerminalPanel({
   collapsed = false,
   onCollapse,
   onClose,
+  layout = "dock",
   fullscreen = false,
   onToggleFullscreen,
 }: Props) {
@@ -170,6 +173,7 @@ export function TerminalPanel({
   return (
     <TerminalDock
       isOpen={true}
+      layout={layout}
       terminals={terminals}
       activeTerminalId={activeTerminalId}
       onSelectTerminal={setActiveTerminal}
@@ -181,8 +185,8 @@ export function TerminalPanel({
       onClosePanel={handleClosePanel}
       onCollapse={handleCollapseTerminal}
       terminalNode={terminalPanelNode}
-      fullscreen={fullscreen}
-      onToggleFullscreen={onToggleFullscreen}
+      fullscreen={layout === "center" ? true : fullscreen}
+      onToggleFullscreen={layout === "center" ? undefined : onToggleFullscreen}
       onLaunchClaudeAutoMode={() => void launchClaudeAutoMode()}
       claudeAutoModeDisabled={terminalState.status !== "ready"}
     />
