@@ -3713,11 +3713,12 @@
   box-shadow: inset 0 -1px 0 0 var(--ant-color-split);
 }
 
-/* 可读列居中：子项用 width:min + margin:auto（width:100%+max-width 在 WKWebView 下不可靠） */
+/* 组间距：wrapper 不命中 .app-claude-message 相邻选择器。
+   勿用 width:min(100%, Npx)：WKWebView 在 contain/flex 下可能把不定百分比当 0，
+   整列塌成中文 min-content（一字一行）。 */
 .app-claude-messages-virtual-row {
-  width: min(100%, 960px);
-  margin-left: auto;
-  margin-right: auto;
+  width: 100%;
+  max-width: 100%;
   box-sizing: border-box;
   /* 不用 layout/paint contain：在 flex 子项上会算成极窄宽度，中文会逐字竖排 */
 }
@@ -3867,10 +3868,11 @@
 }
 
 .app-claude-message {
-  display: flex;
-  /* 头像贴顶；首行正文与头像同一水平带（勿对整块内容垂直居中） */
-  align-items: flex-start;
-  gap: 10px; /* Snugger Slack-like spacing */
+  /* grid + minmax(0,1fr) 比 flex+basis:0% 更能锁住正文列宽，避免中文一字一行 */
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr);
+  column-gap: 10px;
+  align-items: start;
   width: 100%;
   max-width: 100%;
   box-sizing: border-box;
@@ -3941,7 +3943,7 @@
 
 /* 助手回复：缩小与 C 标识间距 */
 .app-claude-message--assistant {
-  gap: 6px;
+  column-gap: 6px;
 }
 
 .app-claude-messages .app-claude-message--assistant .app-message-parts > :first-child,
@@ -3969,19 +3971,23 @@
 }
 
 .app-claude-message-body {
-  /* flex-basis 0% + min-width:0 即可在行内收缩；勿再设 width:0——与 content-visibility
-     size containment 叠加时可用宽度会塌成中文 min-content，出现一字一行。 */
-  flex: 1 1 0%;
+  /* 在 grid 的 minmax(0,1fr) 列内铺满；勿设 width:0 / flex-basis:0%（曾导致一字竖排） */
   min-width: 0;
   max-width: 100%;
+  width: 100%;
   position: relative;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .app-claude-message-content {
   min-width: 0;
   max-width: 100%;
   width: 100%;
+  box-sizing: border-box;
   user-select: text;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .app-claude-message-header {
@@ -6145,6 +6151,20 @@ button.app-message-part-header:disabled:hover {
   min-width: 0;
   max-width: 100%;
   width: 100%;
+  box-sizing: border-box;
+}
+
+/* 主会话助手正文：强制占满消息列，禁止因 min-content 塌成一字一行 */
+.app-claude-messages .app-claude-message--assistant .app-message-part--text,
+.app-claude-messages .app-claude-message--assistant .app-message-parts,
+.app-claude-messages .app-claude-message--assistant .app-markdown-host,
+.app-claude-messages .app-claude-message--assistant .app-markdown {
+  width: 100%;
+  max-width: 100%;
+  min-width: 0;
+  box-sizing: border-box;
+  overflow-wrap: break-word;
+  word-break: normal;
 }
 
 .app-markdown-streaming-hint {
@@ -9623,9 +9643,9 @@ button.app-message-part-header:disabled:hover {
 /* 用户消息：与助手同一行宽，时间叠在右侧；不再用左侧色条区分（头像已够）。
    排除工具结果行（--user + --tool-user）。 */
 .app-claude-message--user:not(.app-claude-message--tool-user) .app-claude-message-body {
-  flex: 1 1 0%;
   min-width: 0;
   max-width: 100%;
+  width: 100%;
 }
 
 .app-claude-message--user:not(.app-claude-message--tool-user) .app-claude-message-content {
