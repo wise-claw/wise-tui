@@ -35,6 +35,23 @@ function isTeamAutoDriverLatestUserSession(session: ClaudeSession): boolean {
   return TEAM_AUTO_DRIVER_PREFIXES.some((prefix) => t.startsWith(prefix));
 }
 
+/** 侧栏/启动恢复用：有正文、磁盘 id 或预览的会话优先于空壳新标签。 */
+export function sessionHasRecoverableChatHistory(session: ClaudeSession): boolean {
+  if ((session.messages?.length ?? 0) > 0) return true;
+  if (session.claudeSessionId?.trim()) return true;
+  if (session.diskPreview?.trim()) return true;
+  return false;
+}
+
+function sessionActivityScore(session: ClaudeSession): number {
+  const ts = session.messages[session.messages.length - 1]?.timestamp ?? session.createdAt;
+  let score = Number.isFinite(ts) ? ts : 0;
+  if ((session.messages?.length ?? 0) > 0) score += 1_000_000_000_000;
+  else if (session.claudeSessionId?.trim()) score += 100_000_000_000;
+  else if (session.diskPreview?.trim()) score += 10_000_000_000;
+  return score;
+}
+
 /** 侧栏点仓库名时要尽量避开：团队 owner 标记、或最新用户消息为团队自动调度前缀的会话。 */
 function shouldDeprioritizeForRepositoryMainFocus(
   session: ClaudeSession,
@@ -54,11 +71,11 @@ export interface PickSessionForRepositorySidebarOptions {
 
 function pickBestByLatestActivity(pool: ClaudeSession[]): ClaudeSession | null {
   let best: ClaudeSession | null = null;
-  let bestTs = -Infinity;
+  let bestScore = -Infinity;
   for (const s of pool) {
-    const ts = s.messages[s.messages.length - 1]?.timestamp ?? s.createdAt;
-    if (ts > bestTs) {
-      bestTs = ts;
+    const score = sessionActivityScore(s);
+    if (score > bestScore) {
+      bestScore = score;
       best = s;
     }
   }

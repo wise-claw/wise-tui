@@ -249,8 +249,20 @@
     },
     {
       "path": "package.json",
-      "accessCount": 1,
-      "lastAccessed": 1784327904736,
+      "accessCount": 2,
+      "lastAccessed": 1784731564707,
+      "type": "file"
+    },
+    {
+      "path": "src-tauri/tauri.conf.json",
+      "accessCount": 2,
+      "lastAccessed": 1784731564928,
+      "type": "file"
+    },
+    {
+      "path": "src/App.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1784731583436,
       "type": "file"
     },
     {
@@ -260,15 +272,15 @@
       "type": "file"
     },
     {
-      "path": "src/App.tsx",
+      "path": "src-tauri/src/lib.rs",
       "accessCount": 1,
-      "lastAccessed": 1784327910972,
+      "lastAccessed": 1784731576566,
       "type": "file"
     },
     {
-      "path": "src-tauri/tauri.conf.json",
+      "path": "README.md",
       "accessCount": 1,
-      "lastAccessed": 1784327911027,
+      "lastAccessed": 1784731583023,
       "type": "file"
     }
   ],

@@ -42,4 +42,67 @@ describe("pickSessionForRepositorySidebarSelect", () => {
     });
     expect(picked?.id).toBe("human");
   });
+
+  it("prefers recoverable history over newer empty shell tabs", () => {
+    const path = "/p/myrepo";
+    const emptyShell: ClaudeSession = {
+      id: "session_new_empty",
+      claudeSessionId: null,
+      repositoryPath: path,
+      repositoryName: "myrepo",
+      model: "sonnet",
+      status: "idle",
+      messages: [],
+      createdAt: 9_000,
+      pendingPrompt: "",
+    };
+    const withDisk: ClaudeSession = {
+      id: "uuid-old",
+      claudeSessionId: "uuid-old",
+      repositoryPath: path,
+      repositoryName: "myrepo",
+      model: "sonnet",
+      status: "idle",
+      messages: [],
+      createdAt: 100,
+      pendingPrompt: "",
+      diskPreview: "上次对话预览",
+    };
+    const withMessages = sess("with-msg", path, "myrepo", 200);
+    const picked = pickSessionForRepositorySidebarSelect(
+      [emptyShell, withDisk, withMessages],
+      path,
+      {},
+    );
+    expect(picked?.id).toBe("with-msg");
+  });
+
+  it("prefers disk-backed empty transcript over brand-new empty shell", () => {
+    const path = "/p/myrepo";
+    const emptyShell: ClaudeSession = {
+      id: "session_new_empty",
+      claudeSessionId: null,
+      repositoryPath: path,
+      repositoryName: "myrepo",
+      model: "sonnet",
+      status: "idle",
+      messages: [],
+      createdAt: 9_000,
+      pendingPrompt: "",
+    };
+    const withDisk: ClaudeSession = {
+      id: "uuid-old",
+      claudeSessionId: "uuid-old",
+      repositoryPath: path,
+      repositoryName: "myrepo",
+      model: "sonnet",
+      status: "idle",
+      messages: [],
+      createdAt: 100,
+      pendingPrompt: "",
+      diskPreview: "可从磁盘恢复",
+    };
+    const picked = pickSessionForRepositorySidebarSelect([emptyShell, withDisk], path, {});
+    expect(picked?.id).toBe("uuid-old");
+  });
 });

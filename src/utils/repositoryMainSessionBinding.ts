@@ -150,6 +150,17 @@ export function resolveBoundMainSessionId(
   if (!bound) return null;
   const s = resolveSessionFromBindingValue(bound, sessions);
   if (!s) return null;
+  // 绑定若指向「刚 create 的空壳 Wise 临时 id」（无正文/无磁盘 id），视为失效，
+  // 让侧栏 pick 回落到有历史的会话。避免 ensureMainSession 反复激活空标签。
+  // 注意：不要误伤合法的新建空会话（非 session_<ts>_ 形态）或已有 claudeSessionId 的标签。
+  const isWiseTempEmptyShell =
+    /^session_\d+_/i.test(s.id) &&
+    (s.messages?.length ?? 0) === 0 &&
+    !s.claudeSessionId?.trim() &&
+    !s.diskPreview?.trim();
+  if (isWiseTempEmptyShell) {
+    return null;
+  }
   if (isProjectMainSessionBindingKey(key)) {
     if (extractBoundEmployeeNameFromDisplay(s.repositoryName ?? "")) {
       return null;

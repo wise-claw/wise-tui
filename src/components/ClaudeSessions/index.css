@@ -1764,6 +1764,8 @@
   overflow-anchor: none;
   /* 由 ClaudeChat ResizeObserver 写入，供快捷条与后台摘要 dock 的 bottom 联动 */
   --app-composer-tray-h: 200px;
+  /* 会话功能顶栏高度：供绝对定位的 owner 标题垂直居中 */
+  --app-session-feature-panel-height: 32px;
 }
 
 /*
@@ -2235,9 +2237,10 @@
   justify-content: space-between;
   gap: 6px;
   width: 100%;
-  min-height: 32px;
+  height: var(--app-session-feature-panel-height, 32px);
+  min-height: var(--app-session-feature-panel-height, 32px);
   box-sizing: border-box;
-  padding: 4px 12px;
+  padding: 0 12px;
   background: color-mix(in srgb, var(--ant-color-bg-container) 45%, transparent) !important;
   backdrop-filter: var(--app-workspace-glass-blur) !important;
   -webkit-backdrop-filter: var(--app-workspace-glass-blur) !important;
@@ -3695,7 +3698,7 @@
   /* 强化滚动容器的绘制隔离，减少多屏 compositing 递归 */
   contain: content;
   overflow-y: auto;
-  padding: 12px 12px 16px; /* Sniper-snug layout padding */
+  padding: 12px 12px 16px;
   /* 滚动容器用块级流式布局：避免 column flex 把视口剩余高度算进 scrollHeight，贴底时顶栏被顶出、底部留白 */
   display: block;
   background: var(--ant-color-bg-container);
@@ -3708,6 +3711,15 @@
   scroll-behavior: auto;
   /* 与底部输入区交界（固定在消息视口底缘，不随内容滚动） */
   box-shadow: inset 0 -1px 0 0 var(--ant-color-split);
+}
+
+/* 可读列居中：子项用 width:min + margin:auto（width:100%+max-width 在 WKWebView 下不可靠） */
+.app-claude-messages-virtual-row {
+  width: min(100%, 960px);
+  margin-left: auto;
+  margin-right: auto;
+  box-sizing: border-box;
+  /* 不用 layout/paint contain：在 flex 子项上会算成极窄宽度，中文会逐字竖排 */
 }
 
 .app-claude-messages-empty {
@@ -3801,17 +3813,6 @@
 }
 
 /* 组间距：wrapper 不命中 .app-claude-message 相邻选择器 */
-.app-claude-messages-virtual-row {
-  width: 100%;
-  /* 阅读宽度上限：超宽窗格下消息列居中、限制单行文本长度，提升可读性；
-     多屏窄窗格（< 960px）不生效，不影响现有布局。 */
-  max-width: 960px;
-  margin-left: auto;
-  margin-right: auto;
-  box-sizing: border-box;
-  /* 不用 layout/paint contain：在 flex 子项上会算成极窄宽度，中文会逐字竖排 */
-}
-
 .app-claude-messages-virtual-row--group-start {
   padding-top: 14px;
 }
@@ -3867,6 +3868,7 @@
 
 .app-claude-message {
   display: flex;
+  /* 头像贴顶；首行正文与头像同一水平带（勿对整块内容垂直居中） */
   align-items: flex-start;
   gap: 10px; /* Snugger Slack-like spacing */
   width: 100%;
@@ -3877,19 +3879,17 @@
   border: none;
   box-shadow: none;
   position: relative;
-  content-visibility: auto;
-  /* 必须给出 inline 固有宽度：仅 `auto 72px` 时 WebView 可能按中文 min-content（一字宽）做 size containment，
-     再叠加 .app-claude-message-body 的 flex 收缩，正文会一字一行竖排。 */
-  contain-intrinsic-inline-size: 100%;
-  contain-intrinsic-block-size: auto 72px;
+  /* 消息列表已窗口化；勿再开 content-visibility:auto。
+     它与 body 的 flex 收缩叠加时，WebView 会出现一字竖排，或整段气泡近似零高度（刷新后像“对话没了”）。 */
+  content-visibility: visible;
+  contain-intrinsic-size: none;
 }
 
-/* 流式增高气泡必须持续绘制：content-visibility:auto 会在尺寸快速变化时跳过绘制，造成贴底跟随时卡顿/闪断。 */
+/* 流式行保持强制可见（与上相同，显式写出以免其它规则覆盖）。 */
 .app-claude-message--streaming,
 .app-claude-messages-virtual-row--streaming .app-claude-message {
   content-visibility: visible;
-  contain-intrinsic-inline-size: none;
-  contain-intrinsic-block-size: none;
+  contain-intrinsic-size: none;
 }
 
 /* 新发送者一组：仅留白区隔，无顶部分隔线 */
@@ -3918,10 +3918,10 @@
   font-size: 11px;
   font-weight: 600;
   flex-shrink: 0;
+  align-self: flex-start;
   background: var(--ant-color-fill);
   color: var(--ant-color-text);
-  /* 与单行正文高度协调，顶部微下沉让字符视觉居中 */
-  margin-top: 1px;
+  margin-top: 0;
 }
 
 .app-claude-message--user .app-claude-message-avatar {
@@ -3939,7 +3939,7 @@
   color: #fff;
 }
 
-/* 助手回复：内容贴近左侧 C 标识（缩小列间距、首块顶对齐）；放大头像后留 6px 呼吸 */
+/* 助手回复：缩小与 C 标识间距 */
 .app-claude-message--assistant {
   gap: 6px;
 }
@@ -4015,6 +4015,7 @@
   top: 0;
   right: 0;
   z-index: 2;
+  height: 22px;
   padding: 0;
   gap: 0;
   border-radius: 3px;
@@ -4119,6 +4120,27 @@
   color: var(--ant-color-text-tertiary);
   font-variant-numeric: tabular-nums;
   flex-shrink: 0;
+}
+
+/* 叠在正文右上角，不占文档流；高度与头像/首行一致以便上下对齐 */
+.app-claude-message-time--overlay {
+  position: absolute;
+  top: 0;
+  right: 0;
+  z-index: 1;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  line-height: 1;
+  pointer-events: none;
+}
+
+.app-claude-message:not(.app-claude-message--merged) .app-claude-message-content {
+  padding-right: 44px;
+}
+
+.app-claude-message:not(.app-claude-message--merged) .app-claude-message-floating-actions {
+  right: 40px;
 }
 
 .app-claude-message-text {
@@ -4525,7 +4547,7 @@
   color: var(--ant-color-text);
 }
 
-/* 主会话消息列表：正文无边框气泡，靠发送者与排版区分 */
+/* 主会话：首行行盒高度对齐 22px 头像，保证「第一行 ↔ 头部」上下对齐 */
 .app-claude-messages .app-message-part--text {
   display: block;
   width: 100%;
@@ -4535,6 +4557,17 @@
   border-radius: 0;
   background: transparent;
   box-sizing: border-box;
+  line-height: 22px;
+}
+
+.app-claude-messages .app-message-part--text .app-markdown > :first-child,
+.app-claude-messages .app-claude-user-message-display .app-message-part--text .app-markdown-host:first-child {
+  margin-top: 0;
+}
+
+.app-claude-messages .app-message-part--text .app-markdown p:first-child {
+  margin-top: 0;
+  line-height: 22px;
 }
 
 /* 用户消息：无框纯文本左对齐 */
@@ -8100,15 +8133,16 @@ button.app-message-part-header:disabled:hover {
 
 .app-session-owner-panel {
   position: absolute;
-  top: 0;
+  /* 与 .app-claude-session-feature-panel 同高居中（该面板为 chat 首子节点） */
+  top: calc(var(--app-session-feature-panel-height, 32px) / 2);
   left: 50%;
-  transform: translateX(-50%);
+  transform: translate(-50%, -50%);
   z-index: 12;
   box-sizing: border-box;
   width: max-content;
   max-width: calc(100% - 24px);
   margin: 0;
-  padding: 4px 12px;
+  padding: 0 12px;
   border-radius: 10px;
   display: flex;
   align-items: center;
@@ -9586,14 +9620,22 @@ button.app-message-part-header:disabled:hover {
   border-radius: 6px;
 }
 
-/* 角色：用户消息微弱区分（适度增强，保持扁平、不做气泡/右对齐）。
-   排除工具结果行（同时带 --user 与 --tool-user），其内容是工具卡而非用户输入。 */
+/* 用户消息：与助手同一行宽，时间叠在右侧；不再用左侧色条区分（头像已够）。
+   排除工具结果行（--user + --tool-user）。 */
+.app-claude-message--user:not(.app-claude-message--tool-user) .app-claude-message-body {
+  flex: 1 1 0%;
+  min-width: 0;
+  max-width: 100%;
+}
+
 .app-claude-message--user:not(.app-claude-message--tool-user) .app-claude-message-content {
   box-sizing: border-box;
-  border-left: 2px solid color-mix(in srgb, var(--ant-color-primary) 45%, transparent);
-  padding-left: 10px;
-  background: color-mix(in srgb, var(--ant-color-primary-bg) 22%, transparent);
-  border-radius: 0 6px 6px 0;
+  width: 100%;
+  max-width: 100%;
+  border-left: none;
+  padding-left: 0;
+  background: transparent;
+  border-radius: 0;
 }
 
 /* 合并行：保留发送者纵列身份靠 3px margin-top。

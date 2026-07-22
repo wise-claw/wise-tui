@@ -105,34 +105,22 @@ function ClaudeSessionMonitorMessageRowInner({
         {toolUser ? "具" : msg.role === "user" ? "我" : msg.role === "assistant" ? "C" : "S"}
       </div>
       <div className="app-claude-message-body">
-        {mergedWithPrevious ? (
-          <ChatMessageRowActions
-            sessionId={sessionId}
-            msg={msg}
-            copyText={copyText}
-            toolUser={toolUser}
-            sessionsForDispatchLookup={sessionsForDispatchLookup}
-            floating
-          />
-        ) : (
-          <div className="app-claude-message-header">
-            <div className="app-claude-message-header-leading">
-              <span className="app-claude-message-sender">
-                {toolUser ? "工具" : msg.role === "user" ? "我" : msg.role === "assistant" ? "Claude" : "系统"}
-              </span>
-              <ChatMessageRowActions
-                sessionId={sessionId}
-                msg={msg}
-                copyText={copyText}
-                toolUser={toolUser}
-                sessionsForDispatchLookup={sessionsForDispatchLookup}
-              />
-            </div>
-            <span className="app-claude-message-time" title={new Date(msg.timestamp).toLocaleString("zh-CN")}>
-              {formatChatMessageListTime(msg.timestamp)}
-            </span>
-          </div>
-        )}
+        {!mergedWithPrevious ? (
+          <span
+            className="app-claude-message-time app-claude-message-time--overlay"
+            title={new Date(msg.timestamp).toLocaleString("zh-CN")}
+          >
+            {formatChatMessageListTime(msg.timestamp)}
+          </span>
+        ) : null}
+        <ChatMessageRowActions
+          sessionId={sessionId}
+          msg={msg}
+          copyText={copyText}
+          toolUser={toolUser}
+          sessionsForDispatchLookup={sessionsForDispatchLookup}
+          floating
+        />
         <div className="app-claude-message-content">{visibleBody}</div>
       </div>
     </div>

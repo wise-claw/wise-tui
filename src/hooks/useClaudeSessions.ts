@@ -241,6 +241,7 @@ import {
   markClaudeRegistryBootstrapWarmup,
   mergeRepositoryDiskSessions,
   collectDiskMergeTabIdMigrations,
+  mergePersistedTabsWithLocalBackup,
   modelsForRepositoryPaths,
   persistTrellisContextBindings,
   persistWorkflowBindings,
@@ -2589,17 +2590,22 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           if (backupRaw) {
             const backup = JSON.parse(backupRaw);
             if (backup?.sessions?.length) {
-
               if (!data) {
                 data = backup;
               } else {
-                const existingIds = new Set(data.sessions.map((x: ClaudeSession) => x.id));
-                for (const bs of backup.sessions as ClaudeSession[]) {
-                  if (!existingIds.has(bs.id)) {
-                    (data.sessions as ClaudeSession[]).push(bs);
-                    existingIds.add(bs.id);
-                  }
-                }
+                const merged = mergePersistedTabsWithLocalBackup(
+                  data.sessions as ClaudeSession[],
+                  backup.sessions as ClaudeSession[],
+                  typeof backup.activeSessionId === "string" ? backup.activeSessionId : null,
+                );
+                data = {
+                  ...data,
+                  sessions: merged.sessions,
+                  activeSessionId:
+                    data.activeSessionId ??
+                    merged.activeSessionId ??
+                    (typeof backup.activeSessionId === "string" ? backup.activeSessionId : null),
+                };
               }
             }
           }
@@ -3514,20 +3520,15 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       }
 
       // 新创建会话同步落盘 localStorage，弥补 debounce 取消 + beforeunload 不可靠的双重缺口。
-      // 后续 if (!opts.skipActivate) 路径还会走 setSessions → 触发 debounced save（450ms），
-      // 但此处立即写入确保即使立即刷新也不丢失。
-      console.warn("[debug] createSession: writing localStorage backup", {
-        sessionId: id,
-        totalSessions: sessionsRef.current.length,
-        sessionIds: sessionsRef.current.map(s => s.id),
-        isCompanion: Boolean(opts?.skipActivate),
-      });
+      // skipActivate（伴生窗格）不得改写备份里的 activeSessionId，否则刷新会落到空壳新标签。
       try {
         localStorage.setItem(
           TABS_BACKUP_KEY,
           JSON.stringify({
             version: 1,
-            activeSessionId: id,
+            activeSessionId: opts?.skipActivate
+              ? (activeSessionIdRef.current ?? id)
+              : id,
             sessions: sessionsRef.current.map((ses) => {
               const {
                 diskTranscriptPartial: _omitPartial,

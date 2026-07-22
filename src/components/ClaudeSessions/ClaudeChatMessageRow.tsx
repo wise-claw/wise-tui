@@ -124,16 +124,7 @@ function ClaudeChatMessageRowInner({
     return renderChatBody();
   }
 
-  // 非合并行（一组的首条）统一展示发送者标签 + 时间戳，便于扫读对话轮次；
-  // 合并行（与上一条同发送者）仅保留浮动操作，纵向成组。
-  const showHeader = !mergedWithPrevious;
-  const senderLabel = toolUser
-    ? "工具"
-    : msg.role === "user"
-      ? "我"
-      : msg.role === "assistant"
-        ? "Claude"
-        : "系统";
+  // 发送者已由头像区分；时间与操作浮动叠放，正文贴齐头像顶部，避免空出一行。
   const visibleBody = msg.role === "system" ? renderSystemBody() : renderNonSystemContent();
   if (!visibleBody || !hasRenderableChatMessageBody(msg)) {
     return null;
@@ -148,32 +139,19 @@ function ClaudeChatMessageRowInner({
         {toolUser ? "具" : msg.role === "user" ? "我" : msg.role === "assistant" ? "C" : "S"}
       </div>
       <div className="app-claude-message-body">
-        {showHeader ? (
-          <div className="app-claude-message-header">
-            <div className="app-claude-message-header-leading">
-              <span className="app-claude-message-sender">{senderLabel}</span>
-              <ChatMessageRowActions
-                sessionId={sessionId}
-                msg={msg}
-                copyText={copyText}
-                toolUser={toolUser}
-                sessionsForDispatchLookup={sessionsForDispatchLookup}
-              />
-            </div>
-            <span className="app-claude-message-time" title={timeTitle}>
-              {formatChatMessageListTime(msg.timestamp)}
-            </span>
-          </div>
-        ) : (
-          <ChatMessageRowActions
-            sessionId={sessionId}
-            msg={msg}
-            copyText={copyText}
-            toolUser={toolUser}
-            sessionsForDispatchLookup={sessionsForDispatchLookup}
-            floating
-          />
-        )}
+        {!mergedWithPrevious ? (
+          <span className="app-claude-message-time app-claude-message-time--overlay" title={timeTitle}>
+            {formatChatMessageListTime(msg.timestamp)}
+          </span>
+        ) : null}
+        <ChatMessageRowActions
+          sessionId={sessionId}
+          msg={msg}
+          copyText={copyText}
+          toolUser={toolUser}
+          sessionsForDispatchLookup={sessionsForDispatchLookup}
+          floating
+        />
         <div className="app-claude-message-content">{visibleBody}</div>
       </div>
     </div>

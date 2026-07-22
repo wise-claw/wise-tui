@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"ls /Users/sjl/Documents/github/wise-tui/src/services/ /Users/sjl/Documents/github/wise-tui/src/hooks/ /Users/sjl/Documents/github/wise-tui/src/features/ 2>/dev/null\",\"description\":\"List se...",
+  "error": "Exit code 1\n/Users/sjl/Documents/github/wise-tui/src/hooks/:\nclaudeChatSessionFeaturePanelHelpers.ts\ncollectClaudeSessionSidecarIds.test.ts\ncomposerExecutionBusy.test.ts\ncomposerExecutionBusy.ts\ndispatchFailureTracker.test.ts\ndispatchFailureTracker.ts\nmainLaneDispatchGate.test.ts\nmainLaneDispatchGate.ts\nmergeRepositoryDiskSessions.test.ts\npruneGhostRepositorySessions.test.ts\npruneRepoDiskIndexSessions.test.ts\nuseAgentRegistryCodexAvailable.ts\nuseAgentRegistryCursorAvailable.ts\nuseAgentRegistryGe...",
+  "timestamp": "2026-07-22T14:46:15.675Z",
+  "retry_count": 1
+}

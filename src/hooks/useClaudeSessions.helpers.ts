@@ -573,3 +573,49 @@ export function collectDiskMergeTabIdMigrations(
   }
   return migrations;
 }
+
+/**
+ * 合并 `tabs.json` 与 beforeunload 写入的 localStorage 备份。
+ * 同 id 会话优先保留消息更多的一侧，避免刷新时空 tabs 覆盖掉备份里的正文。
+ */
+export function mergePersistedTabsWithLocalBackup(
+  primarySessions: readonly ClaudeSession[],
+  backupSessions: readonly ClaudeSession[],
+  backupActiveSessionId?: string | null,
+): { sessions: ClaudeSession[]; activeSessionId: string | null | undefined } {
+  if (backupSessions.length === 0) {
+    return { sessions: primarySessions as ClaudeSession[], activeSessionId: undefined };
+  }
+  if (primarySessions.length === 0) {
+    return {
+      sessions: backupSessions as ClaudeSession[],
+      activeSessionId: backupActiveSessionId,
+    };
+  }
+
+  const backupById = new Map(backupSessions.map((session) => [session.id, session]));
+  const merged = primarySessions.map((session) => {
+    const backup = backupById.get(session.id);
+    if (!backup) return session;
+    const primaryLen = session.messages?.length ?? 0;
+    const backupLen = backup.messages?.length ?? 0;
+    if (backupLen <= primaryLen) return session;
+    return {
+      ...session,
+      messages: backup.messages,
+      claudeSessionId: session.claudeSessionId?.trim()
+        ? session.claudeSessionId
+        : backup.claudeSessionId,
+      diskPreview: session.diskPreview || backup.diskPreview,
+    };
+  });
+
+  const primaryIds = new Set(primarySessions.map((session) => session.id));
+  for (const backup of backupSessions) {
+    if (!primaryIds.has(backup.id)) {
+      merged.push(backup);
+    }
+  }
+
+  return { sessions: merged, activeSessionId: undefined };
+}

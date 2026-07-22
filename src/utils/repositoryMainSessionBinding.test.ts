@@ -176,6 +176,18 @@ describe("binding value as claudeSessionId", () => {
     expect(resolveBoundMainSessionId("/work/hr/vocs-web", bindings, [tab], null)).toBe("tab-1");
   });
 
+  it("ignores bound Wise temp empty shell without disk id", () => {
+    const emptyShell: ClaudeSession = {
+      ...tab,
+      id: "session_1784729811836_syq8vt",
+      claudeSessionId: null,
+      messages: [],
+      diskPreview: undefined,
+    };
+    const bindings = { "/work/hr/vocs-web": emptyShell.id };
+    expect(resolveBoundMainSessionId("/work/hr/vocs-web", bindings, [emptyShell], null)).toBeNull();
+  });
+
   it("resolveRepositoryByClaudeSessionId uses binding when tab is missing", () => {
     const bindings = { "/work/hr/vocs-web": "claude-sid-abc" };
     expect(
