@@ -1,5 +1,7 @@
 import type { editor, IRange } from "monaco-editor";
 import type { languages } from "monaco-editor";
+import { resolveImportPathWithAiFallbackUi } from "../services/monacoImportAiResolve";
+import { loadRepositoryTypeScriptProfile } from "../services/monacoRepositoryTypeScriptConfig";
 import {
   isScopePackageSpecifier,
   resolveMonacoRepositoryRelativeImportCandidates,
@@ -7,6 +9,16 @@ import {
   resolveScopePackageCandidates,
 } from "../services/monacoTypeScriptEnvironment";
 import { readProjectRelativeFile } from "../services/projectRelativeFiles";
+import {
+  extractIdentifierAtColumn,
+  findNavigableTypeIdentifierLinks,
+  isNavigableTypeIdentifier,
+} from "./monacoImportAiResolve";
+import {
+  findImportSpecifierForBinding,
+  isTsPathAliasSpecifier,
+  resolvePathAliasImportCandidates,
+} from "./monacoPathAliasResolve";
 
 interface ImportNavigationOptions {
   repositoryPath: string;
@@ -14,19 +26,87 @@ interface ImportNavigationOptions {
   fromRelativePath: string;
   /** 导航到目标文件。 */
   onNavigate: (relativePath: string) => void;
+  /**
+   * 规则候选全部不存在时是否启用搜索 / AI 兜底（默认 true）。
+   * 单测或无 Claude CLI 环境可关掉。
+   */
+  enableAiFallback?: boolean;
 }
 
 /** Monaco 运行时实例的部分类型，用于注册 link provider 与事件。 */
 interface MonacoRuntime {
   languages: {
     registerLinkProvider(
-      languageSelector: readonly string[],
+      languageSelector: string | readonly string[],
       provider: languages.LinkProvider,
     ): { dispose(): void };
   };
   editor: {
-    MouseTargetType: { CONTENT_TEXT: number };
+    MouseTargetType?: { CONTENT_TEXT?: number; CONTENT_EMPTY?: number };
   };
+}
+
+/** Monaco MouseTargetType.CONTENT_TEXT 稳定值；运行时枚举缺失时作兜底。 */
+const MONACO_CONTENT_TEXT = 6;
+const MONACO_CONTENT_EMPTY = 7;
+
+interface PathAliasConfig {
+  paths?: Record<string, string[] | undefined> | null;
+  baseUrl?: string;
+}
+
+function buildSpecifierCandidates(
+  fromRelativePath: string,
+  specifier: string,
+  aliasConfig: PathAliasConfig | null,
+): string[] {
+  const alias = resolvePathAliasImportCandidates(specifier, {
+    paths: aliasConfig?.paths,
+    baseUrl: aliasConfig?.baseUrl,
+  });
+
+  if (isTsPathAliasSpecifier(specifier)) {
+    return Array.from(
+      new Set([
+        ...alias,
+        ...resolveMonacoRepositoryRelativeImportCandidates(fromRelativePath, specifier),
+      ]),
+    );
+  }
+
+  if (isScopePackageSpecifier(specifier)) {
+    return Array.from(
+      new Set([
+        ...resolveScopePackageCandidates(specifier),
+        ...alias,
+        ...resolveMonacoRepositoryRelativeImportCandidates(fromRelativePath, specifier),
+      ]),
+    );
+  }
+
+  return Array.from(
+    new Set([
+      ...alias,
+      ...resolveMonacoRepositoryRelativeImportCandidates(fromRelativePath, specifier),
+    ]),
+  );
+}
+
+async function tryNavigateCandidates(
+  repositoryPath: string,
+  candidates: string[],
+  onNavigate: (relativePath: string) => void,
+): Promise<boolean> {
+  for (const candidate of candidates) {
+    try {
+      await readProjectRelativeFile(repositoryPath, candidate);
+      onNavigate(candidate);
+      return true;
+    } catch {
+      continue;
+    }
+  }
+  return false;
 }
 
 interface ImportLink {
@@ -212,6 +292,10 @@ function hitTestAll(
  * - 通过 `LinkProvider` 让 import/export from 的路径字符串在按住 Ctrl/Cmd
  *   时显示下划线与手型光标。
  * - 监听 `onMouseDown` 在 Ctrl/Cmd+Click 时解析 specifier 并打开目标文件。
+ * - 支持 Vite/tsconfig 别名（如 `@/api/system/user` → `src/api/system/user.ts`）。
+ * - 点击 import 绑定名（`UserApi` / `ChatConversationApi`）会跟随同行 `from` 路径跳转。
+ * - 路径规则失败时：仓库搜索 +（多候选时）`runClaudeQuick` AI 兜底。
+ * - 未点中路径/绑定时：若光标在 PascalCase 类型名上，按符号名搜索跳转。
  *
  * 返回一个 `IDisposable`，组件卸载时应调用 `dispose()` 清理。
  */
@@ -221,12 +305,79 @@ export function registerImportNavigation(
   options: ImportNavigationOptions,
 ): { dispose: () => void } {
   const disposables: { dispose: () => void }[] = [];
-  const { repositoryPath, fromRelativePath, onNavigate } = options;
+  const { repositoryPath, fromRelativePath, onNavigate, enableAiFallback = true } = options;
+  let aiFallbackInFlight = false;
+  let aliasConfig: PathAliasConfig | null = null;
 
-  // ── LinkProvider ──
-  const linkProviderDisposable = monaco.languages.registerLinkProvider(
-    ["typescript", "javascript"],
-    {
+  // 预热 tsconfig paths（失败则仅用默认 @/ → src/）
+  void loadRepositoryTypeScriptProfile(repositoryPath)
+    .then((profile) => {
+      const compilerOptions = profile.compilerOptions ?? {};
+      const pathsRaw = compilerOptions.paths;
+      const paths =
+        pathsRaw && typeof pathsRaw === "object" && !Array.isArray(pathsRaw)
+          ? (pathsRaw as Record<string, string[] | undefined>)
+          : null;
+      const baseUrl =
+        typeof compilerOptions.baseUrl === "string" && compilerOptions.baseUrl.trim()
+          ? compilerOptions.baseUrl.trim()
+          : ".";
+      aliasConfig = { paths, baseUrl };
+    })
+    .catch(() => {
+      aliasConfig = null;
+    });
+
+  const runSearchOrAiNavigate = async (args: {
+    specifier: string;
+    kind: "import" | "loose" | "symbol";
+    lineContext: string;
+  }) => {
+    if (!enableAiFallback || aiFallbackInFlight) return;
+    aiFallbackInFlight = true;
+    try {
+      const resolved = await resolveImportPathWithAiFallbackUi({
+        repositoryPath,
+        fromRelativePath,
+        specifier: args.specifier,
+        kind: args.kind,
+        lineContext: args.lineContext,
+      });
+      if (resolved) onNavigate(resolved);
+    } finally {
+      aiFallbackInFlight = false;
+    }
+  };
+
+  const navigateBySpecifier = async (specifier: string, lineContext: string, kind: "import" | "loose") => {
+    const candidates =
+      kind === "import"
+        ? buildSpecifierCandidates(fromRelativePath, specifier, aliasConfig)
+        : isTsPathAliasSpecifier(specifier)
+          ? buildSpecifierCandidates(fromRelativePath, specifier, aliasConfig)
+          : resolvePathClickCandidates(fromRelativePath, specifier);
+
+    const ok = await tryNavigateCandidates(repositoryPath, candidates, onNavigate);
+    if (ok) return;
+    await runSearchOrAiNavigate({ specifier, kind, lineContext });
+  };
+
+  // ── LinkProvider（路径 + PascalCase 类型名，Cmd/Ctrl 悬停显示下划线）──
+  try {
+    const languageId = editor.getModel()?.getLanguageId() ?? "plaintext";
+    const languageIds = Array.from(
+      new Set([
+        languageId,
+        "typescript",
+        "javascript",
+        "html",
+        "java",
+        "kotlin",
+        "csharp",
+        "plaintext",
+      ]),
+    );
+    const linkProviderDisposable = monaco.languages.registerLinkProvider(languageIds, {
       provideLinks: (model) => {
         const currentUri = editor.getModel()?.uri;
         if (!currentUri || model.uri.toString() !== currentUri.toString()) {
@@ -235,71 +386,83 @@ export function registerImportNavigation(
         const text = model.getValue();
         const importLinks = findImportLinks(text);
         const looseLinks = findLoosePathLinks(text);
-        const links = [...importLinks, ...looseLinks].map((item) => ({
-          range: item.range,
-          // 不设 url —— 由 onMouseDown 处理导航
-        }));
+        const typeLinks = findNavigableTypeIdentifierLinks(text);
+        const links = [
+          ...importLinks.map((item) => ({ range: item.range })),
+          ...looseLinks.map((item) => ({ range: item.range })),
+          ...typeLinks.map((item) => ({ range: item.range })),
+        ];
         return { links };
       },
-    },
-  );
-  disposables.push(linkProviderDisposable);
+    });
+    disposables.push(linkProviderDisposable);
+  } catch {
+    // 语言未注册等情况下仍保留 mouseDown 导航
+  }
 
   // ── Ctrl/Cmd+Click 导航 ──
   const mouseDownDisposable = editor.onMouseDown((event) => {
     // 只响应 Ctrl/Cmd+Click
     if (!event.event.ctrlKey && !event.event.metaKey) return;
     if (!repositoryPath) return;
+    if (!event.event.leftButton) return;
 
     const target = event.target;
-    if (target.type !== monaco.editor.MouseTargetType.CONTENT_TEXT) return;
-
-    const range = target.range;
-    if (!range) return;
+    const contentText =
+      monaco.editor.MouseTargetType?.CONTENT_TEXT ?? MONACO_CONTENT_TEXT;
+    const contentEmpty =
+      monaco.editor.MouseTargetType?.CONTENT_EMPTY ?? MONACO_CONTENT_EMPTY;
+    // 放宽：只要点在正文区域（含 CONTENT_EMPTY 行尾），且能拿到 position
+    if (target.type !== contentText && target.type !== contentEmpty) return;
 
     const model = editor.getModel();
     if (!model) return;
 
+    const position =
+      target.position ??
+      (target.range
+        ? { lineNumber: target.range.startLineNumber, column: target.range.startColumn }
+        : null);
+    if (!position) return;
+
     const text = model.getValue();
     const importLinks = findImportLinks(text);
     const looseLinks = findLoosePathLinks(text);
-    const hit = hitTestAll(importLinks, looseLinks, range.startLineNumber, range.startColumn);
-    if (!hit) return;
+    const hit = hitTestAll(importLinks, looseLinks, position.lineNumber, position.column);
+    const lineContext = model.getLineContent(position.lineNumber);
+
+    if (hit) {
+      event.event.preventDefault();
+      event.event.stopPropagation();
+      void navigateBySpecifier(hit.specifier, lineContext, hit.kind);
+      return;
+    }
+
+    // 路径未命中：先看是否点在 import 绑定名上（UserApi / dateFormatter 等）→ 跟 from 路径走
+    const wordAtPos = model.getWordAtPosition(position);
+    const fromWordApi = wordAtPos?.word?.trim() ?? "";
+    const fromLine = extractIdentifierAtColumn(lineContext, position.column);
+    const word = fromWordApi || fromLine?.word || "";
+    if (!word) return;
+
+    const bindingSpecifier = findImportSpecifierForBinding(lineContext, word);
+    if (bindingSpecifier) {
+      event.event.preventDefault();
+      event.event.stopPropagation();
+      void navigateBySpecifier(bindingSpecifier, lineContext, "import");
+      return;
+    }
+
+    // 否则仅 PascalCase 类型名走符号搜索（如 PayAppService）
+    if (!isNavigableTypeIdentifier(word)) return;
 
     event.event.preventDefault();
     event.event.stopPropagation();
-
-    const candidates = (() => {
-      if (hit.kind === "import") {
-        const repoRelative = resolveMonacoRepositoryRelativeImportCandidates(
-          fromRelativePath,
-          hit.specifier,
-        );
-        // npm scope 包（`@scope/pkg[/subpath]`）：先尝试仓库内 npm 模块真实路径，
-        // 失败后再退化到 fromDir 拼接的相对路径（兼容 monorepo alias 等罕见配置）。
-        if (isScopePackageSpecifier(hit.specifier)) {
-          return [
-            ...resolveScopePackageCandidates(hit.specifier),
-            ...repoRelative,
-          ];
-        }
-        return repoRelative;
-      }
-      return resolvePathClickCandidates(fromRelativePath, hit.specifier);
-    })();
-
-    // 依次尝试候选路径，找到第一个存在的文件
-    void (async () => {
-      for (const candidate of candidates) {
-        try {
-          await readProjectRelativeFile(repositoryPath, candidate);
-          onNavigate(candidate);
-          return;
-        } catch {
-          continue;
-        }
-      }
-    })();
+    void runSearchOrAiNavigate({
+      specifier: word,
+      kind: "symbol",
+      lineContext,
+    });
   });
   disposables.push(mouseDownDisposable);
 
