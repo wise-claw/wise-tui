@@ -3878,14 +3878,18 @@
   box-shadow: none;
   position: relative;
   content-visibility: auto;
-  contain-intrinsic-size: auto 72px;
+  /* 必须给出 inline 固有宽度：仅 `auto 72px` 时 WebView 可能按中文 min-content（一字宽）做 size containment，
+     再叠加 .app-claude-message-body 的 flex 收缩，正文会一字一行竖排。 */
+  contain-intrinsic-inline-size: 100%;
+  contain-intrinsic-block-size: auto 72px;
 }
 
 /* 流式增高气泡必须持续绘制：content-visibility:auto 会在尺寸快速变化时跳过绘制，造成贴底跟随时卡顿/闪断。 */
 .app-claude-message--streaming,
 .app-claude-messages-virtual-row--streaming .app-claude-message {
   content-visibility: visible;
-  contain-intrinsic-size: none;
+  contain-intrinsic-inline-size: none;
+  contain-intrinsic-block-size: none;
 }
 
 /* 新发送者一组：仅留白区隔，无顶部分隔线 */
@@ -3965,9 +3969,10 @@
 }
 
 .app-claude-message-body {
-  flex: 1 1 auto;
+  /* flex-basis 0% + min-width:0 即可在行内收缩；勿再设 width:0——与 content-visibility
+     size containment 叠加时可用宽度会塌成中文 min-content，出现一字一行。 */
+  flex: 1 1 0%;
   min-width: 0;
-  width: 0;
   max-width: 100%;
   position: relative;
 }
@@ -4792,6 +4797,10 @@
   .app-message-part-reasoning-collapsible--expanded
   .app-message-part-reasoning-inline-row
   .app-markdown-host {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   overflow: visible;
   white-space: normal;
 }
@@ -4799,9 +4808,16 @@
 .app-claude-messages
   .app-message-part-reasoning-collapsible--expanded
   .app-message-part-reasoning-inline-row
+  .app-markdown,
+.app-claude-messages
+  .app-message-part-reasoning-collapsible--expanded
+  .app-message-part-reasoning-inline-row
   .app-markdown
   p {
   display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   overflow: visible;
   text-overflow: clip;
   white-space: normal;
@@ -4860,7 +4876,10 @@
 .app-claude-messages .app-message-part-reasoning-inline-row .app-markdown {
   margin: 0;
   padding: 0;
-  width: auto;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
   color: var(--app-reasoning-content-color, var(--ant-color-text-secondary));
   font-size: var(--app-reasoning-font-size, 11px);
   line-height: var(--app-reasoning-line-height, 1.45);
@@ -5001,6 +5020,10 @@
 .app-message-part-reasoning-compact-body {
   margin-top: 4px;
   padding-left: 2px;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .app-message-parts__tool-group .app-message-part--tool {
@@ -5518,6 +5541,10 @@ button.app-message-part-header:disabled:hover {
 }
 
 .app-message-part-reasoning-collapsible--expanded .app-message-part-reasoning-inline-row .app-markdown-host {
+  display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   overflow: visible;
   white-space: normal;
 }
@@ -5525,6 +5552,9 @@ button.app-message-part-header:disabled:hover {
 .app-message-part-reasoning-collapsible--expanded .app-message-part-reasoning-inline-row .app-markdown,
 .app-message-part-reasoning-collapsible--expanded .app-message-part-reasoning-inline-row .app-markdown p {
   display: block;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
   overflow: visible;
   text-overflow: clip;
   white-space: normal;
@@ -5629,7 +5659,10 @@ button.app-message-part-header:disabled:hover {
 .app-message-part-reasoning-inline-row .app-markdown {
   margin: 0;
   padding: 0;
-  width: auto;
+  width: 100%;
+  min-width: 0;
+  max-width: 100%;
+  box-sizing: border-box;
   color: var(--app-reasoning-content-color, var(--ant-color-text-secondary));
   font-size: var(--app-reasoning-font-size, 11px);
   line-height: var(--app-reasoning-line-height, 1.45);
