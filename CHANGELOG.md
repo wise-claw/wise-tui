@@ -2,6 +2,127 @@
 
 本项目所有重要变更将记录于此文件。
 
+## [1.4.0] - 2026-07-22
+
+1.4.0 围绕"终端与多窗格布局全面重构、Qoder / Cursor / OpenCode 三引擎生态整合、操作卡顿与派发稳定性兜底、Markdown 编辑器与工作区体验增强"四条主线推进。核心亮点包括：**终端渲染引擎由 ghostty 切换为 alacritty 并按职责拆分模块**、**终端面板支持中栏显示并完善多窗格布局配置**、**Qoder 二进制与流式命令全链路集成**、**新增工作区全局备忘录与 Milkdown 语法工具栏屑**、**工作区待办新增全局作用域**、**引入操作卡顿看门狗与 IPC 超时兜底机制**，以及 Markdown 行级编辑热力图、Agent 注册表扫描、多源 AI 用量聚合等可观测性增强。
+
+本版本涵盖 33 个提交（v1.3.0..HEAD），覆盖前端与 Tauri 后端共 90+ 文件，含两次数据库迁移（047 工作区待办全局作用域、049 工作区全局备忘录）。
+
+### ✨ 新功能
+
+#### 终端与多窗格布局全面重构
+- **终端渲染引擎由 ghostty 切换为 alacritty**：移除 ghostty 相关 patch 脚本（ghost-cursor / keyboard-protocol / selection-scale），Cargo 依赖切到 alacritty_terminal，渲染管线按 frame.rs / mod.rs 拆分，关注点分离。
+- **终端面板支持工作区中栏显示**：新增 `terminalCenterPanelStore` 与 `terminalCenterSlot.tsx`，可让终端在工作区中央栏渲染,与中栏消息列表/文件编辑器三选一。
+- **多窗格布局模式与主题样式重构**：抽出 `useMainLayoutModes` 集中管理多窗格布局模式与宽度 clamp；`multiPaneSlots` 工具函数拆分主窗格/额外窗格槽位计算,新增单测覆盖。
+- **多屏窗格宽度按屏幕可用宽度 clamp 防止超出锁死**：扩展窗口/minSize 必须 clamp 到屏幕可用宽度,避免超出屏幕且 OS 锁死缩不回；`pane CSS min-width` 须 0 让 `minmax(0,1fr)` 生效；GAP 常量与 CSS `gap:2px` 须一致。
+
+#### Qoder / Cursor / OpenCode 三引擎整合
+- **集成 Qoder 二进制与流式命令模块**：新增 `qoder_binary.rs` / `qoder_commands.rs` / `qoder_stream_adapter.rs` 后端模块（约 1005 行），前端会话执行引擎 chip 与 Composer 模型选择器接入 Qoder；Composer 新增 session execution engine 切换支持。
+- **重构 Cursor SDK 集成并切换到独立 cursor_binary 模块**：原 `scripts/cursor-sdk-bridge.*` 一系列外部脚本与桥接逻辑（bridge / probe / images / model / repositoryFiles / stderrFilter / stream）全部下放后端 `cursor_binary.rs` 与 `cursor_agent.rs`，逻辑归一处。
+- **拆分 cursor / opencode 二进制模块并精简模型配置与会话 hook**：`cursor_binary.rs` / `opencode_binary.rs` 作为薄包装,统一会话 hook 与模型配置入口。
+- **精简 Claude 模型顶栏面板与运行时设置触发器**：`ClaudeModelTopbarPanel` 与 `ComposerRuntimeSettingsTrigger` 收敛冗余状态与派生计算。
+
+#### Markdown 编辑器与工作区体验增强
+- **新增工作区全局备忘录与 Milkdown 语法工具栏屑**：新增 `WorkspaceMemoPanel` 组件（289 行）+ `workspaceMemoPanelStore`，左栏快捷入口与工作区级持久化；Milkdown 编辑器新增 `MilkdownSyntaxToolbar`（190 行）与任务列表命令模块，行内语法按钮与列表项工具栏屑可视。
+- **工作区待办新增全局作用域并精简计数与弹窗逻辑**：迁移 047 新增 `workspace_todos_global_scope`，工作区可承载跨仓库全局待办；统一计数与弹窗逻辑，移除 `SidebarGlobalWorkspaceTodoAddModal` 独立入口并精简 `WorkspaceTodosEditor` 159 行。
+- **统一常用语管理面板并移除独立全局入口**：合并 `GlobalComposerCommonPhrasesManager` 与 `ComposerCommonPhrasesPanel` 到单一面板,统一配置入口。
+- **新增工作区列表布局配置与可见行数自适应**：默认配置面板新增工作区列表布局设置项；`useWorkspaceListVisibleRows` 自适应可见行数。
+- **优化左栏状态管理与面板布局配置**：`useProjectRepositorySidebarState` 收敛仓库/项目维度状态，新增 106 行单测覆盖。
+- **新增仓库面板分栏拖拽手柄与高度持久化**：`RepoPanelSplitResizeHandle` 组件（179 行）+ `useRepoPanelSplitHeightPx` hook + `useWiseTopbarChromeVisibility` 配合；HTML5 拖拽 + 高度落库到默认配置 store；288 行单测覆盖拖拽/释放/边界。
+
+#### 操作卡顿与稳定性兜底
+- **引入操作卡顿看门狗与超时兜底机制**：新增 `operationWatchdogStore`（152 行）+ `useBusyTimeout` hook + `OperationStuckBanner` 浮层；IPC 接入 `ipcTimeouts` / `promiseWithTimeout` 超时包装；当主线程拥塞或 IPC 卡住超阈值时浮层兜底引导用户操作；移除旧 `OperationStuckBanner` 重构后的精简版。
+- **增强执行环境派发与语音流水线稳定性**：`executionEnvironmentDispatch` 重构派发失败重试 + dispatchFailureTracker 退避；`useComposerSpeechPipeline` 静音/清空/历史拖入三处隐患加固；新增 92 行单测覆盖。
+- **派发任务占位与运行面板重复修复**：rehydrate 占位 item 与真实 worker 共存致运行面板重复,store 三处写入加 prune 修复。
+- **会话切换在途写入与派发门闸残留致任务丢失修复**：`composer-region` + `ClaudeChat` + `useClaudeSessions` 三处协同,会话切换时主动 flush 在途写入并清派发门闸残留。
+
+#### 可观测性与 Agent 生态
+- **新增 Agent 注册表扫描与展示支持**：后端 `agent_registry.rs` 290 行扫描本地 Agent；前端 `agentRegistryPresentation` 57 行展示规则；`AgentRegistrySection` 80 行配置 UI。
+- **新增多源 AI 用量聚合与消息列表样式兜底**：后端 `ai_usage_multi_source.rs` 909 行聚合多源用量；`claude_code_line_edits` 86 行新增行级编辑快照；`ClaudeCodeUsagePopover` 用量展示更新；消息列表新增样式兜底规则防溢出。
+- **优化触发器锚点与 Git 提交流水线**：`composer-trigger-anchor` 65 行优化锚点定位;`gitCommitPullPush` 27 行完善提交流水线;新增 178 行单测覆盖。
+
+#### Composer / 消息 / 多屏增强
+- **优化会话任务详情抽屉预取与分发行渲染**：`SessionConversationTaskDetailDrawer` 158 行优化抽屉预取与分发;`prefetchSessionConversationTaskDetailDrawer` 工具函数复用。
+- **优化 Claude 会话与历史抽屉交互体验**：`ClaudeSessionTab` 收敛历史切换交互;`historySessionDrawerChrome` 完善抽屉 chrome 与空态。
+- **优化 ClaudeChatInput 纯文本工具与区域渲染**：`composer-plain-utils` 59 行抽取纯文本工具;`composer-region` 142 行区域渲染加固。
+- **抽取工具分组活动摘要工具并精简消息部件渲染**：`toolGroupActivitySummary` 162 行工具函数,`MessageParts` 284 行精简到更聚焦的渲染。
+
+#### 顶栏 / 配置 / 快捷键
+- **顶栏会话相关触发器可见性默认值与配置对齐**：`SessionDataLinkTopbarTrigger` / `SessionFeedbackLoopTopbarTrigger` 默认值与 `wiseDefaultConfigStore` 对齐,避免老用户被归零或挂载闪烁。
+
+### ⚡ 性能优化
+- **终端渲染模块拆分后管线更轻量**：`terminal/frame.rs` 与 `terminal/mod.rs` 分离后渲染路径更聚焦,`useTerminalSession` 736 行瘦身后聚焦会话编排。
+- **常用语面板合并与消息部件精简**：`ComposerCommonPhrasesPanel` 396 行精简 + `MessageParts` 284 行精简,减少无效重渲染与冗余 DOM。
+- **左栏仓库列表性能 CSS 收敛**：`leftSidebarListPerformance.css` 精简渲染路径,与 `useProjectRepositorySidebarState` 协同降低首屏成本。
+
+### 🐛 问题修复
+
+#### 派发与权限生命周期
+- **派发任务占位与运行面板重复**（如上）。
+- **会话切换在途写入与派发门闸残留致任务丢失**（如上）。
+- **统一归零 ignoreNextContentSyncRef 防残留吞下次粘贴**：清空发送 ignoreNext 残留,发送后粘贴单条内容按钮不再变灰,composer-region-races 147 行单测覆盖。
+- **权限请求已应答时防止被降回 pending**：`hub.setPermissionRequest` 加 `same id + non-pending` 早返回守卫;`streamIngest` 兜底重放加 lifecycle 检查;183 行单测覆盖。
+
+#### 多屏 / 视图控制
+- **多屏窗格宽度按屏幕可用宽度 clamp 防止超出锁死**（如上）。
+- **顶栏会话相关触发器可见性默认值与配置对齐**（如上）。
+
+### 🧹 重构与精简
+- **终端渲染引擎 ghostty → alacritty 切换**（如上）。
+- **Cursor SDK 集成下放后端并切换到独立 cursor_binary 模块**（如上）。
+- **拆分 cursor / opencode 二进制模块**（如上）。
+- **精简 Claude 模型顶栏面板与运行时设置触发器**（如上）。
+- **统一常用语管理面板并移除独立全局入口**（如上）。
+- **抽取工具分组活动摘要工具并精简消息部件渲染**（如上）。
+- **提取多窗格布局模式与主题样式重构**（如上）。
+- **清理已下线作者面板与状态弹窗等冗余模块**：`AuthorPanel` / `AuthorPanelTabs` / `CursorSdkDiagnosticPanel` / `AppSettingsModal` / `CompletedTaskPanel` 等已下线模块整体清理,删除约 700+ 行遗留代码。
+- **重构终端主题与侧栏样式并移除操作卡顿横幅**：精简 `LeftSidebar` / `SidebarIcons` / `ProjectRepositoryList` / `repositoryRows` 冗余样式。
+- **完善终端中栏显示与多窗格视图控制**：`ClaudeChat` / `claudeChatHelpers` / `useTerminalSession` / `paneCenterViewControlStore` 协同,中栏视图控制逻辑收敛。
+
+### 🧪 测试
+- **补齐 Composer 区域竞态回归测试**：composer-region-races 147 行单测覆盖清空发送 / ignoreNext 残留 / 派发门闸残留 / setContent 异步回流。
+- **补齐派发失败重试与语音流水线单测**：executionEnvironmentDispatch 92 行单测覆盖派发失败重试 + 退避 + 语音静音/清空/历史拖入三处隐患。
+- **补齐左栏仓库/项目状态管理单测**：useProjectRepositorySidebarState 106 行单测覆盖仓库/项目维度状态切换。
+- **补齐仓库面板拖拽手柄单测**：RepoPanelSplitResizeHandle 288 行单测覆盖拖拽开始/拖拽中/释放/边界 clamp。
+- **补齐工具分组活动摘要单测**：toolGroupActivitySummary 64 行单测覆盖工具分组与活动摘要纯函数。
+- **补齐 Composer 常用语合并单测**：composerCommonPhrase 59 行单测覆盖常用语合并与冲突规则。
+- **补齐权限请求生命周期单测**：hub.lifecycle 63 行 + streamIngest 93 行覆盖权限请求已应答时被降回 pending 的回放与守卫。
+- **补齐多屏槽位工具函数单测**：mainLayoutWidths.multiPane 111 行单测覆盖多屏宽度 clamp 与槽位计算。
+- **补齐 composer 触发器锚点单测**：composer-trigger-anchor 74 行单测覆盖触发器锚点定位与 Git 流水线分支。
+- **补齐 Git 提交流水线单测**：gitCommitPullPush 104 行单测覆盖 Git 提交/推送/取消。
+- **补齐终端中栏 store 单测**：terminalCenterPanelStore 96 行单测覆盖中栏切换与持久化。
+- **补齐工作区列表布局常量单测**：workspaceListLayout 21 行单测覆盖列表布局默认值与归一化。
+- **补齐 Agent 注册表 store 单测**：agentRegistryStore 98 行单测覆盖注册表扫描/展示/格式化。
+- **补齐聊天消息列表样式兜底单测**：chatMessageListRowStyles 33 行单测覆盖长文/代码块样式兜底。
+- **补齐 Claude Chat helpers 单测**：claudeChatHelpers 3 行新增测试覆盖会话切换/历史抽屉工具函数。
+- **补齐 Composer 纯文本工具单测**：composer-plain-utils 40 行单测覆盖纯文本工具函数。
+- **补齐 Composer 运行时设置触发器单测**：ComposerRuntimeSettingsTrigger 3 行新增测试覆盖运行时设置触发。
+- **补齐 Agent 注册表展示单测**：agentRegistryPresentation 2 行新增测试覆盖展示规则。
+- **补齐 dismissStuckOverlays 单测**：dismissStuckOverlays 8 行单测覆盖卡顿浮层关闭。
+- **补齐操作看门狗 store 单测**：operationWatchdogStore 49 行单测覆盖卡顿超时阈值与浮层触发。
+- **补齐多窗格槽位单测**：multiPaneSlots 12 行单测覆盖主窗格/额外窗格槽位工具函数。
+- **补齐 monitorPanelLayout 单测**：monitorPanelLayout 2 行新增测试覆盖监控面板布局。
+- **补齐 Composer 常用语常量单测**：composerCommonPhrase.test 59 行覆盖合并与默认值。
+- **补齐 Cursor SDK stderr 单测移除**：原 `cursor-sdk-bridge.stderr.test.ts` 39 行与 bridge 整体下放后端随之移除。
+
+### 🗃 数据库迁移
+- `047_workspace_todos_global_scope.sql` — 工作区待办全局作用域。
+- `049_workspace_global_memo.sql` — 工作区全局备忘录。
+
+### 📦 升级说明
+- **存储键新增**：`wise.defaultConfig.workspaceMemoPanelVisible` / `wise.defaultConfig.leftSidebarWorkspaceListLayout` 等若干默认配置键,沿用现有 `wiseDefaultConfigStore` 无感升级。
+- **`workspace_inspector` 表新增列**：workspace_global_memo / workspace_todos_global_scope（迁移 047、049）;老数据库自动迁移,无需手动操作。
+- **后端模块重组**：原 `scripts/cursor-sdk-bridge.*` 系列脚本下放后端 `cursor_binary.rs`;外部运行时不再依赖 TS 桥接脚本,可执行性更稳。
+- **终端渲染切换**：ghostty → alacritty,3 个 patch 脚本移除;升级后首次启动终端面板会自动用 alacritty 后端,无外部配置变更。
+- **手动验证清单**（`bun run tauri:dev`）：
+  1. 多窗格：拖窗格分隔条,确认尺寸在屏幕可用宽度内不溢出；
+  2. 终端中栏：把终端面板拖到工作区中央栏,确认渲染正常并能切换消息/文件/终端三视图；
+  3. 工作区全局备忘录：在工作区列表选「全局备忘录」入口,创建/编辑/删除一条,关闭重开 app 数据应保留；
+  4. 工作区全局待办：在工作区列表入口创建全局待办,跨仓库应可见；
+  5. Qoder 引擎：composer 顶栏切换到 Qoder 引擎,确认二进制扫描、会话派发、流式响应正常；
+  6. 仓库面板拖拽手柄：拖仓库面板下方分隔条,松手后高度应保留,重开 app 应恢复；
+  7. 操作卡顿看门狗：故意构造一次长 IPC 调用,确认卡顿浮层可正常弹出并可关闭。
+
 ## [1.3.0] - 2026-07-10
 
 1.3.0 围绕"Ultracode 多代理模式落地、多屏隔离能力成型、外部终端与运行面板体验打磨、Claude 流式装配稳定性"四条主线推进。核心亮点包括：**每条 Claude 会话可独立切换 Ultracode 工作模式（`/ultracode` slash 命令 + composer 紫色 chip）**、**多屏 per-pane 顶栏与按仓库隔离的常用语**、**外部终端按钮右键配置运行指令**、以及 Claude 流式长文段间污染（P0–P9 result 权威对齐 / 段间压缩 / 重复气泡）等十余处稳定性修复。

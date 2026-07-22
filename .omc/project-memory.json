@@ -242,6 +242,12 @@
   },
   "hotPaths": [
     {
+      "path": "CHANGELOG.md",
+      "accessCount": 7,
+      "lastAccessed": 1784709630141,
+      "type": "file"
+    },
+    {
       "path": "package.json",
       "accessCount": 1,
       "lastAccessed": 1784327904736,
