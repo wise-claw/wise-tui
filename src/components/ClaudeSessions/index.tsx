@@ -320,8 +320,6 @@ function ClaudeSessionsShell({
   onNewPaneSession,
   onToggleSidebar,
   onToggleTerminal,
-  onCollapseTerminal,
-  onCloseTerminalPanel,
   onSearch,
   collapsed,
   terminalCollapsed,
