@@ -270,7 +270,20 @@ describe("mergeAssistantParts text containment", () => {
     expect(merged.map((p) => p.type)).toEqual(["text", "text"]);
   });
 
-  test("startNewTextBlock option keeps next delta as separate part", () => {
+  test("startNewTextBlock after tool keeps next delta as separate part", () => {
+    const merged = mergeAssistantParts(
+      [
+        { type: "text", text: "先读文件。" },
+        { type: "tool_use", id: "t1", name: "Read", input: {}, status: "completed" },
+      ],
+      [{ type: "text", text: "## 总结" }],
+      { startNewTextBlock: true },
+    );
+    expect(merged).toHaveLength(3);
+    expect((merged[2] as { text: string }).text).toBe("## 总结");
+  });
+
+  test("startNewTextBlock with paragraph heuristic still splits", () => {
     const merged = mergeAssistantParts(
       [{ type: "text", text: "第一段。" }],
       [{ type: "text", text: "## 总结" }],
@@ -279,6 +292,25 @@ describe("mergeAssistantParts text containment", () => {
     expect(merged).toHaveLength(2);
     expect((merged[0] as { text: string }).text).toBe("第一段。");
     expect((merged[1] as { text: string }).text).toBe("## 总结");
+  });
+
+  test("spurious startNewTextBlock mid-text concatenates token fragments", () => {
+    let parts = mergeAssistantParts([], [{ type: "text", text: "Inc" }], {
+      startNewTextBlock: true,
+    });
+    parts = mergeAssistantParts(parts, [{ type: "text", text: "ubation" }], {
+      startNewTextBlock: true,
+    });
+    parts = mergeAssistantParts(parts, [{ type: "text", text: "党" }], {
+      startNewTextBlock: true,
+    });
+    parts = mergeAssistantParts(parts, [{ type: "text", text: "费" }], {
+      startNewTextBlock: true,
+    });
+    const texts = parts
+      .filter((p): p is Extract<typeof p, { type: "text" }> => p.type === "text")
+      .map((p) => p.text);
+    expect(texts).toEqual(["Incubation党费"]);
   });
 
   test("heuristic splits markdown summary after completed sentence", () => {

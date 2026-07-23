@@ -3,17 +3,34 @@ import type { MessagePart } from "../types";
 import {
   assistantTextJoinedFromParts,
   countAssistantTextParagraphs,
+  isLikelyStreamTextFragment,
   joinAssistantTextPartBodies,
   shouldStartNewAssistantTextPart,
 } from "./assistantTextParts";
 
 describe("joinAssistantTextPartBodies", () => {
-  test("joins multiple bodies with paragraph separator", () => {
-    expect(joinAssistantTextPartBodies(["第一段", "第二段"])).toBe("第一段\n\n第二段");
+  test("joins phrase-like bodies with paragraph separator", () => {
+    expect(joinAssistantTextPartBodies(["intro 段一", "intro 段二"])).toBe("intro 段一\n\nintro 段二");
+  });
+
+  test("concatenates stream token fragments instead of stacking lines", () => {
+    expect(joinAssistantTextPartBodies(["Inc", "ubation"])).toBe("Incubation");
+    expect(joinAssistantTextPartBodies(["党", "费", "申", "请"])).toBe("党费申请");
   });
 
   test("trims inter-part whitespace like buildMergedTextGroups", () => {
     expect(joinAssistantTextPartBodies(["intro  ", "\n\n  总结"])).toBe("intro\n\n总结");
+  });
+});
+
+describe("isLikelyStreamTextFragment", () => {
+  test("detects latin and CJK stream shards", () => {
+    expect(isLikelyStreamTextFragment("Inc", "ubation")).toBe(true);
+    expect(isLikelyStreamTextFragment("党", "费")).toBe(true);
+  });
+
+  test("keeps phrase paragraphs separate", () => {
+    expect(isLikelyStreamTextFragment("intro 段一", "intro 段二")).toBe(false);
   });
 });
 

@@ -2,6 +2,7 @@ import type { ClaudeMessage, ClaudeSession, MessagePart } from "../types";
 import { isToolOnlyUserMessage } from "../utils/claudeChatMessageDisplay";
 import {
   assistantTextJoinedFromParts,
+  isLikelyStreamTextFragment,
   shouldStartNewAssistantTextPart,
 } from "../utils/assistantTextParts";
 type ToolUsePart = Extract<MessagePart, { type: "tool_use" }>;
@@ -196,16 +197,26 @@ export function mergeAssistantParts(
       // assistant 快照一次携带多个 text block（常见于 tool 后总结 + 说明点），磁盘 JSONL
       // 会保留为独立 part，渲染层 buildMergedTextGroups 以 \n\n 拼接。流式 merge 若用
       // mergeTextPartsByContainment 直接拼接，会把末段/列表压成一段（刷新后段落才清晰）。
-      const lastText = merged[merged.length - 1];
-      const keepSeparateTextBlock =
-        startNewTextBlock
-        || (multiTextIncomingBatch && incomingTextOrdinal > 1)
-        || (lastText?.type === "text"
-          && shouldStartNewAssistantTextPart(lastText.text, part.text));
+      const last = merged[merged.length - 1];
+      const lastText = last?.type === "text" ? last : undefined;
+      const heuristicNew =
+        lastText !== undefined
+        && shouldStartNewAssistantTextPart(lastText.text, part.text);
+      // content_block_start 只在「上一段不是 text」（tool/reasoning 后）或启发式段落边界时另起 part。
+      // 若每个 token 前都误发 content_block_start，旧逻辑会一词一个 part，渲染再以 \n\n 拼接成竖排。
+      const blockBoundaryNew =
+        startNewTextBlock && (lastText === undefined || heuristicNew);
+      const multiSnapshotNew =
+        multiTextIncomingBatch
+        && incomingTextOrdinal > 1
+        && (lastText === undefined
+          || heuristicNew
+          || !isLikelyStreamTextFragment(lastText.text, part.text));
+      const keepSeparateTextBlock = blockBoundaryNew || multiSnapshotNew || heuristicNew;
       if (startNewTextBlock) startNewTextBlock = false;
       if (keepSeparateTextBlock) {
         merged.push(part);
-      } else if (lastText?.type === "text") {
+      } else if (lastText) {
         merged[merged.length - 1] = {
           ...lastText,
           text: mergeTextPartsByContainment(lastText.text, part.text),

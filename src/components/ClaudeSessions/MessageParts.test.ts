@@ -386,12 +386,13 @@ describe("buildMergedTextGroups", () => {
   });
 
   test("preserves tool_group ordering with merged_text run around it", () => {
+    // 用带空格的短语作段，避免被 isLikelyStreamTextFragment 当成拉丁 BPE 碎片无分隔拼接
     const visible: MessagePart[] = [
-      text("pre-1"),
-      text("pre-2"),
+      text("pre one"),
+      text("pre two"),
       bashTool("t1"),
-      text("post-1"),
-      text("post-2"),
+      text("post one"),
+      text("post two"),
     ];
     const groups = buildMergedTextGroups(visible);
     expect(groups).toHaveLength(3);
@@ -401,10 +402,10 @@ describe("buildMergedTextGroups", () => {
       "merged_text",
     ]);
     if (groups[0]!.type === "merged_text") {
-      expect(groups[0]!.joinedText).toBe("pre-1\n\npre-2");
+      expect(groups[0]!.joinedText).toBe("pre one\n\npre two");
     }
     if (groups[2]!.type === "merged_text") {
-      expect(groups[2]!.joinedText).toBe("post-1\n\npost-2");
+      expect(groups[2]!.joinedText).toBe("post one\n\npost two");
     }
   });
 
@@ -495,7 +496,8 @@ describe("buildMergedTextGroups", () => {
   });
 
   test("merges 5 consecutive text parts and preserves first/last originalIndex across trimmed empties", () => {
-    // 长 run 边界：5 个 text part + 中间夹杂空白段，验证 firstOriginalIndex / lastOriginalIndex 跨剔除空段正确
+    // 长 run 边界：5 个 text part + 中间夹杂空白段，验证 firstOriginalIndex / lastOriginalIndex 跨剔除空段正确。
+    // 单汉字相邻会被识别为流式碎片并无分隔拼接（避免一词一行竖排）。
     const visible: MessagePart[] = [
       text("一"),
       text("  "),
@@ -509,11 +511,8 @@ describe("buildMergedTextGroups", () => {
     expect(groups).toHaveLength(1);
     expect(groups[0]!.type).toBe("merged_text");
     if (groups[0]!.type === "merged_text") {
-      // 空白 part 被剔除；其余 trim 后用 \n\n 拼接
-      expect(groups[0]!.joinedText).toBe("一\n\n二\n\n三\n\n四\n\n五");
-      // firstOriginalIndex 是首个非空 text part 的原始索引
+      expect(groups[0]!.joinedText).toBe("一二三四五");
       expect(groups[0]!.firstOriginalIndex).toBe(0);
-      // lastOriginalIndex 是合并 run 中最后一个 text part 的原始索引（即 "五" 的索引 6）
       expect(groups[0]!.lastOriginalIndex).toBe(6);
     }
   });
@@ -542,17 +541,18 @@ describe("buildMergedTextGroups", () => {
   });
 
   test("three text parts where middle is whitespace-only get merged with trimmed middle dropped", () => {
-    // [t1, whitespace, t2] -> 1 个 merged_text (t1 + t2)，lastOriginalIndex 是 t2 的原始索引
+    // [t1, whitespace, t2] -> 1 个 merged_text (t1 + t2)，lastOriginalIndex 是 t2 的原始索引。
+    // 单字母 a/b 会被当成拉丁碎片拼接；这里用带空格短语验证段间仍走 \n\n。
     const visible: MessagePart[] = [
-      text("a"),
+      text("alpha 段"),
       text("   \n\n  "),
-      text("b"),
+      text("beta 段"),
     ];
     const groups = buildMergedTextGroups(visible);
     expect(groups).toHaveLength(1);
     expect(groups[0]!.type).toBe("merged_text");
     if (groups[0]!.type === "merged_text") {
-      expect(groups[0]!.joinedText).toBe("a\n\nb");
+      expect(groups[0]!.joinedText).toBe("alpha 段\n\nbeta 段");
       expect(groups[0]!.firstOriginalIndex).toBe(0);
       expect(groups[0]!.lastOriginalIndex).toBe(2);
     }
