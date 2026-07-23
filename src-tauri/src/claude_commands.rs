@@ -2350,8 +2350,13 @@ pub(crate) async fn cancel_claude_execution(
         m.remove(sid)
     };
     if let Some(arc) = killed_oneshot {
+        {
+            let mut by_inv = process_state.active_child_by_invocation_key.lock().await;
+            by_inv.retain(|_, v| !Arc::ptr_eq(v, &arc));
+        }
         let mut slot = arc.lock().await;
         if let Some(ref mut proc) = *slot {
+            let _ = proc.start_kill();
             let _ = proc.kill().await;
         }
         *slot = None;
@@ -2361,15 +2366,20 @@ pub(crate) async fn cancel_claude_execution(
             .await
             .remove(sid);
     } else {
-        let mut global_child = process_state.current_process.lock().await;
-        if global_child.is_some() {
-            process_state.claude_stdin_by_session.lock().await.clear();
-            process_state.pending_stdin_by_spawn_id.lock().await.clear();
-            *process_state.current_session_id.lock().await = None;
-            if let Some(ref mut proc) = *global_child {
-                let _ = proc.kill().await;
+        // 仅当全局槽位确属该 session 时才杀，避免 Codex/Cursor 用错 id 误杀 Claude 长驻进程。
+        let current_sid = process_state.current_session_id.lock().await.clone();
+        if current_sid.as_deref() == Some(sid) {
+            let mut global_child = process_state.current_process.lock().await;
+            if global_child.is_some() {
+                process_state.claude_stdin_by_session.lock().await.clear();
+                process_state.pending_stdin_by_spawn_id.lock().await.clear();
+                *process_state.current_session_id.lock().await = None;
+                if let Some(ref mut proc) = *global_child {
+                    let _ = proc.start_kill();
+                    let _ = proc.kill().await;
+                }
+                *global_child = None;
             }
-            *global_child = None;
         } else {
             process_state
                 .claude_stdin_by_session
@@ -2416,8 +2426,14 @@ pub(crate) async fn cancel_claude_invocation(
         m.remove(inv)
     };
     if let Some(arc) = killed {
+        // 同步摘掉 session 槽，避免 cancel_claude_execution 再对已死句柄空转。
+        {
+            let mut by_session = process_state.active_child_by_claude_session.lock().await;
+            by_session.retain(|_, v| !Arc::ptr_eq(v, &arc));
+        }
         let mut slot = arc.lock().await;
         if let Some(ref mut proc) = *slot {
+            let _ = proc.start_kill();
             let _ = proc.kill().await;
         }
         *slot = None;

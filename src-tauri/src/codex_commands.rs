@@ -1,5 +1,6 @@
 //! OpenAI Codex CLI execution (`codex exec`) for Wise main / member sessions.
 
+use crate::child_slot_wait::wait_child_slot_exit_status;
 use crate::claude_commands::{ClaudeProcessState, ClaudeSessionRegistry};
 use crate::claude_model_profiles::ensure_active_codex_profile_applied;
 use crate::codex_binary::{apply_codex_child_env, codex_merged_path_env, find_codex_binary};
@@ -429,13 +430,8 @@ fn attach_codex_child_io(
     };
 
     tokio::spawn(async move {
-        let exit_status = {
-            let mut slot = wait_child.lock().await;
-            match slot.as_mut() {
-                Some(child) => child.wait().await.ok(),
-                None => None,
-            }
-        };
+        // 不可在持有 wait_child 锁时 await child.wait：否则 cancel_* 无法抢锁 kill。
+        let exit_status = wait_child_slot_exit_status(&wait_child).await;
 
         if let Some(inv) = invocation_key_wait.as_deref().filter(|s| !s.is_empty()) {
             active_child_by_invocation.lock().await.remove(inv);
@@ -667,6 +663,11 @@ pub(crate) async fn execute_codex_code(
             .lock()
             .await
             .insert(inv.to_string(), wait_child.clone());
+        process_state
+            .invocation_tab_session_by_key
+            .lock()
+            .await
+            .insert(inv.to_string(), runtime.session_id.clone());
     }
     if !runtime.session_id.is_empty() {
         process_state

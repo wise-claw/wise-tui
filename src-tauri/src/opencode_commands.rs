@@ -1,5 +1,6 @@
 //! OpenCode CLI execution (`opencode run --format json`) for Wise main / member sessions.
 
+use crate::child_slot_wait::wait_child_slot_exit_status;
 use crate::claude_commands::{ClaudeProcessState, ClaudeSessionRegistry};
 use crate::opencode_binary::{
     apply_opencode_child_env, find_opencode_binary, opencode_merged_path_env,
@@ -396,10 +397,9 @@ fn attach_opencode_child_io(
     let wait_child_wait = wait_child.clone();
     let stdout_error_reader = stdout_error_message.clone();
     tokio::spawn(async move {
-        let mut success = false;
-        if let Some(mut child) = wait_child_wait.lock().await.take() {
-            success = child.wait().await.map(|s| s.success()).unwrap_or(false);
-        }
+        // 不可 take()+wait 持锁：cancel 会拿不到 Child；改为可打断轮询。
+        let exit_status = wait_child_slot_exit_status(&wait_child_wait).await;
+        let success = exit_status.map(|s| s.success()).unwrap_or(false);
 
         let stdout_err = stdout_error_reader.lock().await.clone();
         let lines = stderr_lines.lock().await.clone();
@@ -713,6 +713,11 @@ pub(crate) async fn execute_opencode_code(
             .lock()
             .await
             .insert(inv.to_string(), wait_child.clone());
+        process_state
+            .invocation_tab_session_by_key
+            .lock()
+            .await
+            .insert(inv.to_string(), runtime.session_id.clone());
     }
     if !runtime.session_id.is_empty() {
         process_state

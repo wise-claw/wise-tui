@@ -12,6 +12,7 @@ use crate::cursor_disk::{
 use crate::cursor_stream_adapter::{map_cursor_cli_stdout_line, CursorCliStdoutMap};
 
 use crate::agent_registry::{Probe, ProbeResult};
+use crate::child_slot_wait::{wait_child_slot, WaitChildSlotOutcome};
 use crate::claude_commands::{ClaudeProcessState, ClaudeSessionRegistry};
 use crate::wise_db;
 use rusqlite::{params, Connection};
@@ -1237,26 +1238,29 @@ pub(crate) async fn execute_cursor_code(
     let disk_session_id_wait = session_id.clone();
 
     tokio::spawn(async move {
-        let exit_status = {
-            let mut slot = wait_child.lock().await;
-            match slot.as_mut() {
-                Some(child) => match timeout(CURSOR_EXECUTE_TIMEOUT, child.wait()).await {
-                    Ok(status) => status.ok(),
-                    Err(_) => {
-                        let _ = child.kill().await;
-                        emit_cursor_stdout_line(
-                            &app_wait,
-                            &session_id_wait,
-                            &cursor_assistant_stream_line(
-                                "[cursor-cli] 执行超时。请点「结束」后重试，并检查 API Key / `agent login`、网络与模型选择。",
-                            ),
-                            invocation_key_wait.as_deref(),
-                        );
-                        stream_success_wait.store(false, Ordering::SeqCst);
-                        None
+        // 不可在持有 wait_child 锁时 await child.wait：否则「结束」无法抢锁 kill。
+        let wait_outcome = wait_child_slot(&wait_child, Some(CURSOR_EXECUTE_TIMEOUT)).await;
+        let exit_status = match wait_outcome {
+            WaitChildSlotOutcome::Exited(status) => Some(status),
+            WaitChildSlotOutcome::Cleared => None,
+            WaitChildSlotOutcome::TimedOut => {
+                {
+                    let mut slot = wait_child.lock().await;
+                    if let Some(ref mut proc) = *slot {
+                        let _ = proc.kill().await;
                     }
-                },
-                None => None,
+                    *slot = None;
+                }
+                emit_cursor_stdout_line(
+                    &app_wait,
+                    &session_id_wait,
+                    &cursor_assistant_stream_line(
+                        "[cursor-cli] 执行超时。请点「结束」后重试，并检查 API Key / `agent login`、网络与模型选择。",
+                    ),
+                    invocation_key_wait.as_deref(),
+                );
+                stream_success_wait.store(false, Ordering::SeqCst);
+                None
             }
         };
 

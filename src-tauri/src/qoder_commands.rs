@@ -1,5 +1,6 @@
 //! Qoder CLI execution (`qodercli -p … --output-format=stream-json`) for Wise sessions.
 
+use crate::child_slot_wait::wait_child_slot_exit_status;
 use crate::claude_commands::{ClaudeProcessState, ClaudeSessionRegistry};
 use crate::qoder_binary::{apply_qoder_child_env, find_qoder_binary, qoder_merged_path_env};
 use crate::qoder_stream_adapter::{
@@ -321,13 +322,8 @@ fn attach_qoder_child_io(
     let active_child_by_invocation = ctx.active_child_by_invocation_key.clone();
     let active_child_by_session = ctx.active_child_by_claude_session.clone();
     tokio::spawn(async move {
-        let exit_status = {
-            let mut slot = wait_child_wait.lock().await;
-            match slot.as_mut() {
-                Some(child) => child.wait().await.ok(),
-                None => None,
-            }
-        };
+        // 不可在持有 wait_child 锁时 await child.wait：否则 cancel_* 无法抢锁 kill。
+        let exit_status = wait_child_slot_exit_status(&wait_child_wait).await;
 
         if let Some(inv) = invocation_key_wait.as_deref().filter(|s| !s.is_empty()) {
             active_child_by_invocation.lock().await.remove(inv);
@@ -499,6 +495,11 @@ pub(crate) async fn execute_qoder_code(
             .lock()
             .await
             .insert(inv.to_string(), wait_child.clone());
+        process_state
+            .invocation_tab_session_by_key
+            .lock()
+            .await
+            .insert(inv.to_string(), runtime.session_id.clone());
     }
     if !runtime.session_id.is_empty() {
         process_state
