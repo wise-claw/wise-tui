@@ -6,7 +6,6 @@ const gitStageAll = mock(async (_path: string) => undefined);
 const gitCommit = mock(async (_path: string, _message: string) => "abc");
 const gitPull = mock(async (_path: string) => undefined);
 const gitPush = mock(async (_path: string) => undefined);
-
 mock.module("./git", () => ({
   gitStatus,
   gitStageAll,
@@ -16,6 +15,7 @@ mock.module("./git", () => ({
 }));
 
 const {
+  aiCommitPullPushRepository,
   commitPullPushRepository,
   hasUnpushedCommits,
   hasUpstreamTracking,
@@ -146,5 +146,67 @@ describe("commitPullPushRepository new local branch", () => {
     expect(gitCommit).toHaveBeenCalledTimes(0);
     expect(gitPull).toHaveBeenCalledTimes(1);
     expect(gitPush).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("aiCommitPullPushRepository execution engine", () => {
+  beforeEach(() => {
+    gitStatus.mockReset();
+    gitStageAll.mockReset();
+    gitCommit.mockReset();
+    gitPull.mockReset();
+    gitPush.mockReset();
+    gitStageAll.mockImplementation(async () => undefined);
+    gitCommit.mockImplementation(async () => "abc");
+    gitPull.mockImplementation(async () => undefined);
+    gitPush.mockImplementation(async () => undefined);
+  });
+
+  it("passes selected executionEngine to oneshot wait", async () => {
+    gitStatus.mockImplementation(async () =>
+      makeStatus({
+        upstream: "origin/master",
+        unstaged: [{ path: "a.ts", status: "M", additions: 1, deletions: 0 }],
+      }),
+    );
+    const invokeEngine = mock(async (params: { executionEngine?: string; model?: string }) => {
+      expect(params.executionEngine).toBe("codex");
+      expect(params.model).toBeUndefined();
+      return { success: false, outputLines: [], errorLines: [] };
+    });
+
+    await aiCommitPullPushRepository("/repo", {
+      executionEngine: "codex",
+      invokeEngine: invokeEngine as never,
+    });
+
+    expect(invokeEngine).toHaveBeenCalledTimes(1);
+  });
+
+  it("uses AI text when oneshot succeeds", async () => {
+    gitStatus.mockImplementation(async () =>
+      makeStatus({
+        upstream: "origin/master",
+        unstaged: [{ path: "a.ts", status: "M", additions: 1, deletions: 0 }],
+      }),
+    );
+    const invokeEngine = mock(async () => ({
+      success: true,
+      outputLines: [
+        JSON.stringify({
+          type: "result",
+          result: "fix: 润色提交信息",
+        }),
+      ],
+      errorLines: [],
+    }));
+
+    await aiCommitPullPushRepository("/repo", {
+      executionEngine: "claude",
+      invokeEngine: invokeEngine as never,
+    });
+
+    expect(invokeEngine).toHaveBeenCalledTimes(1);
+    expect(gitCommit.mock.calls[0]?.[1]).toBe("fix: 润色提交信息");
   });
 });

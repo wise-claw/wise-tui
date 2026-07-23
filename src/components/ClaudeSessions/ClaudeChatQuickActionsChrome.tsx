@@ -1,14 +1,15 @@
 import { CloudUploadOutlined } from "@ant-design/icons";
 import { Spin, message } from "antd";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { useGitRepositoryStats } from "../../hooks/useGitRepositoryStats";
-import { gitStatus } from "../../services/git";
-import { aiCommitPullPushRepository, isGitMergeConflictError } from "../../services/gitCommitPullPush";
-import { refreshGitRepositoryStats } from "../../stores/gitRepositoryStatsStore";
+import type { SessionExecutionEngine } from "../../constants/sessionExecutionEngine";
 import { EXECUTION_ENVIRONMENT_ENGINE_MENTION_NAMES } from "../../constants/executionEnvironmentDispatch";
 import { filterComposerCommonPhrasesForQuickBar } from "../../constants/composerCommonPhrase";
 import { dispatchApplyComposerCommonPhrase } from "../../constants/composerCommonPhraseEvents";
 import { useComposerCommonPhrases } from "../../hooks/useComposerCommonPhrases";
+import { useGitRepositoryStats } from "../../hooks/useGitRepositoryStats";
+import { gitStatus } from "../../services/git";
+import { aiCommitPullPushRepository, isGitMergeConflictError } from "../../services/gitCommitPullPush";
+import { refreshGitRepositoryStats } from "../../stores/gitRepositoryStatsStore";
 import { ComposerCommonPhrasesBar } from "../ClaudeChatInput/ComposerCommonPhrasesBar";
 import { SessionQuickActionsBar } from "./SessionQuickActionsBar";
 
@@ -17,6 +18,8 @@ export interface ClaudeChatQuickActionsChromeProps {
   gitRepositoryPath: string;
   /** 当前会话所属仓库 id；提供时常用语走「仓库优先 + 全局兜底」，多屏下各 pane 显示各自仓库的。 */
   repositoryId?: number | null;
+  /** 当前会话执行引擎；AI 润色提交信息走该引擎。 */
+  executionEngine?: SessionExecutionEngine;
   onCreateNewSession?: () => void;
   creatingNewSession?: boolean;
   onOpenBuiltinAssistant?: (assistantId: string) => void;
@@ -34,6 +37,7 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
   sessionId,
   gitRepositoryPath,
   repositoryId,
+  executionEngine,
   onCreateNewSession,
   creatingNewSession = false,
   onOpenBuiltinAssistant,
@@ -124,6 +128,7 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
       // AI 生成提交信息 + 暂存 + 提交 + 拉取 + 推送（一体化，phase 由 service 经 onPhase 推进）
       const outcome = await aiCommitPullPushRepository(repoPath, {
         onPhase: setPushSubmitPhase,
+        executionEngine,
       });
       if (outcome === "noop") {
         message.info("当前没有可提交的改动，也没有待推送的提交");
@@ -190,7 +195,7 @@ export const ClaudeChatQuickActionsChrome = memo(function ClaudeChatQuickActions
       setPushSubmitting(false);
       setPushSubmitPhase("");
     }
-  }, [gitRepositoryPath, onDispatchExecutionEnvironment]);
+  }, [executionEngine, gitRepositoryPath, onDispatchExecutionEnvironment]);
 
   const ahead = stats.ahead ?? 0;
   const behind = stats.behind ?? 0;

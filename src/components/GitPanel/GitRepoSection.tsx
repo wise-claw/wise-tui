@@ -20,10 +20,11 @@ import {
   gitUnstageAll,
 } from "../../services/git";
 import { openRepositoryRemoteInBrowser } from "../../services/openRepositoryRemote";
+import type { SessionExecutionEngine } from "../../constants/sessionExecutionEngine";
+import { WISE_GIT_REPOSITORY_STATUS_REFRESH, type GitRepositoryStatusRefreshDetail } from "../../constants/gitUiEvents";
 import { aiCommitPullPushRepository, commitPullPushRepository, isGitMergeConflictError } from "../../services/gitCommitPullPush";
 import { refreshGitRepositoryStats } from "../../stores/gitRepositoryStatsStore";
 import { refreshGitRepositoryExplorerStatus } from "../../stores/gitRepositoryExplorerStatusStore";
-import { WISE_GIT_REPOSITORY_STATUS_REFRESH, type GitRepositoryStatusRefreshDetail } from "../../constants/gitUiEvents";
 import type { GitStatusResponse } from "../../types";
 import { normalizeConventionalCommitMessage } from "../../utils/conventionalCommitMessage";
 import { DiffMode } from "./DiffMode";
@@ -44,6 +45,7 @@ export interface GitRepoSectionEntry {
   repositoryId: number;
   path: string;
   name: string;
+  executionEngine?: SessionExecutionEngine;
 }
 
 interface Props {
@@ -600,7 +602,9 @@ function GitRepoSectionInner({
     runGitSync(
       "push",
       async () => {
-        const outcome = await aiCommitPullPushRepository(repositoryPath);
+        const outcome = await aiCommitPullPushRepository(repositoryPath, {
+          executionEngine: entry.executionEngine,
+        });
         if (outcome === "noop") {
           message.info("当前没有可提交的改动，也没有待推送的提交");
         } else {
@@ -615,7 +619,7 @@ function GitRepoSectionInner({
         }
       },
     );
-  }, [repositoryPath, runGitSync]);
+  }, [entry.executionEngine, repositoryPath, runGitSync]);
 
   const handlePull = useCallback(() => {
     if (!repositoryPath) return;
@@ -745,6 +749,7 @@ function GitRepoSectionInner({
             status && (
               <DiffMode
                 repositoryPath={repositoryPath}
+                executionEngine={entry.executionEngine}
                 status={status}
                 loading={loading}
                 errors={errors}

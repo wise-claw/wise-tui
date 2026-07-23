@@ -12,7 +12,9 @@ import {
   VerticalAlignBottomOutlined,
   VerticalAlignTopOutlined,
 } from "@ant-design/icons";
-import { executeClaudeCodeAndWait, getClaudeConfigModel, cancelClaudeInvocation } from "../../services/claude";
+import type { SessionExecutionEngine } from "../../constants/sessionExecutionEngine";
+import { cancelClaudeInvocation, getClaudeConfigModel } from "../../services/claude";
+import { executeSessionEngineAndWait } from "../../services/sessionEngineInvocation";
 import type { GitFileStatus, GitStatusResponse } from "../../types";
 import { extractClaudeInvocationFinalText } from "../../utils/claudeInvocationText";
 import {
@@ -33,6 +35,8 @@ const { Text } = Typography;
 
 interface DiffModeProps {
   repositoryPath: string;
+  /** 仓库默认执行引擎；AI 生成提交信息时使用。 */
+  executionEngine?: SessionExecutionEngine;
   status: GitStatusResponse;
   loading: Record<string, boolean>;
   errors: Record<string, string>;
@@ -50,6 +54,7 @@ interface DiffModeProps {
 
 function DiffModeInner({
   repositoryPath,
+  executionEngine,
   status,
   loading,
   errors,
@@ -163,8 +168,10 @@ function DiffModeInner({
         ? `${filesPreview}\n- ... 另有 ${allFiles.length - previewLimit} 个文件未列出`
         : filesPreview;
     try {
-      const model = await getClaudeConfigModel(repositoryPath);
-      const result = await executeClaudeCodeAndWait({
+      const engine = executionEngine ?? "claude";
+      const model = engine === "claude" ? await getClaudeConfigModel(repositoryPath) : undefined;
+      const result = await executeSessionEngineAndWait({
+        executionEngine: engine,
         repositoryPath,
         prompt: [
           ...conventionalCommitPromptLines(),
@@ -180,7 +187,6 @@ function DiffModeInner({
           .join("\n"),
         model: model ?? undefined,
         timeoutMs: 45_000,
-        connectionMode: "oneshot",
         onInvocationKey: (invocationKey) => {
           aiInvocationKeyRef.current = invocationKey;
         },
@@ -199,7 +205,7 @@ function DiffModeInner({
     } catch {
       return { message: fallback, aiFailed: true };
     }
-  }, [ahead, repositoryPath, status]);
+  }, [ahead, executionEngine, repositoryPath, status]);
 
   const handleGenerateCommitByAi = useCallback(async () => {
     if (aiSummaryLoading) return;

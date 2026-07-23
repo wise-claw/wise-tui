@@ -1,3 +1,5 @@
+import type { SessionExecutionEngine } from "../constants/sessionExecutionEngine";
+import { normalizeSessionExecutionEngine } from "../constants/sessionExecutionEngine";
 import type { ProjectItem, Repository } from "../types";
 import { repositoryFolderBasename } from "./repositoryType";
 import { resolveProjectMainSessionAnchor } from "./projectSessionAnchor";
@@ -90,6 +92,8 @@ export interface GitPanelRepositoryEntry {
   repositoryId: number;
   path: string;
   name: string;
+  /** 仓库默认执行引擎；Git 面板 AI 润色提交信息时使用。 */
+  executionEngine?: SessionExecutionEngine;
 }
 
 /**
@@ -125,6 +129,7 @@ export function resolveGitPanelRepositoryEntries(input: {
         repositoryId: repo.id,
         path: repo.path.trim(),
         name: repositoryDisplayName(repo),
+        executionEngine: normalizeSessionExecutionEngine(repo.executionEngine),
       }));
   }
 
@@ -136,6 +141,7 @@ export function resolveGitPanelRepositoryEntries(input: {
           repositoryId: repo.id,
           path: repo.path.trim(),
           name: repositoryDisplayName(repo),
+          executionEngine: normalizeSessionExecutionEngine(repo.executionEngine),
         },
       ];
     }
@@ -144,11 +150,16 @@ export function resolveGitPanelRepositoryEntries(input: {
 
   const trimmedFallback = fallbackPath.trim();
   if (trimmedFallback) {
+    const fallbackRepo =
+      fallbackRepositoryId != null
+        ? repoById.get(fallbackRepositoryId)
+        : repositories.find((item) => item.path.trim() === trimmedFallback);
     return [
       {
         repositoryId: fallbackRepositoryId ?? -1,
         path: trimmedFallback,
         name: fallbackName.trim() || repositoryFolderBasename({ path: trimmedFallback, name: "" }),
+        executionEngine: normalizeSessionExecutionEngine(fallbackRepo?.executionEngine),
       },
     ];
   }

@@ -159,8 +159,18 @@ describe("workspaceRepositoryTreeSelect", () => {
         repositories: [repo, repo2],
       }),
     ).toEqual([
-      { repositoryId: 1, path: "/eco/eco-ai-web", name: "eco-ai-web" },
-      { repositoryId: 2, path: "/eco/eco-ai", name: "eco-ai" },
+      {
+        repositoryId: 1,
+        path: "/eco/eco-ai-web",
+        name: "eco-ai-web",
+        executionEngine: "claude",
+      },
+      {
+        repositoryId: 2,
+        path: "/eco/eco-ai",
+        name: "eco-ai",
+        executionEngine: "claude",
+      },
     ]);
     expect(
       resolveGitPanelRepositoryEntries({
@@ -168,13 +178,44 @@ describe("workspaceRepositoryTreeSelect", () => {
         projects: [multiRepoProject],
         repositories: [repo, repo2],
       }),
-    ).toEqual([{ repositoryId: 1, path: "/eco/eco-ai-web", name: "eco-ai-web" }]);
+    ).toEqual([
+      {
+        repositoryId: 1,
+        path: "/eco/eco-ai-web",
+        name: "eco-ai-web",
+        executionEngine: "claude",
+      },
+    ]);
     expect(
       resolveGitPanelRepositoryEntries({
         treeSelection: { kind: "project", projectId: "p1" },
         projects: [project, multiRepoProject],
         repositories: [repo, repo2],
       }),
-    ).toEqual([{ repositoryId: 1, path: "/eco/eco-ai-web", name: "eco-ai-web" }]);
+    ).toEqual([
+      {
+        repositoryId: 1,
+        path: "/eco/eco-ai-web",
+        name: "eco-ai-web",
+        executionEngine: "claude",
+      },
+    ]);
+  });
+
+  test("resolveGitPanelRepositoryEntries carries repository executionEngine", () => {
+    expect(
+      resolveGitPanelRepositoryEntries({
+        treeSelection: { kind: "repository", repositoryId: 2 },
+        projects: [multiRepoProject],
+        repositories: [repo, { ...repo2, executionEngine: "codex" }],
+      }),
+    ).toEqual([
+      {
+        repositoryId: 2,
+        path: "/eco/eco-ai",
+        name: "eco-ai",
+        executionEngine: "codex",
+      },
+    ]);
   });
 });

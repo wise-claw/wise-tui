@@ -15,7 +15,10 @@ export type LeftSidebarRepoPanelBottomSlotEqualProps = {
 function repositoryEntriesFingerprint(entries: GitPanelRepositoryEntry[]): string {
   if (entries.length === 0) return "";
   return entries
-    .map((entry) => `${entry.repositoryId}:${entry.path}:${entry.name}`)
+    .map(
+      (entry) =>
+        `${entry.repositoryId}:${entry.path}:${entry.name}:${entry.executionEngine ?? ""}`,
+    )
     .join("|");
 }
 

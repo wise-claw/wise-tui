@@ -1,12 +1,15 @@
+import type { SessionExecutionEngine } from "../constants/sessionExecutionEngine";
+import { normalizeSessionExecutionEngine } from "../constants/sessionExecutionEngine";
 import type { GitStatusResponse, GitStatusSummaryResponse } from "../types";
-import { executeClaudeCodeAndWait, getClaudeConfigModel } from "./claude";
-import { gitCommit, gitPull, gitPush, gitStageAll, gitStatus } from "./git";
 import { extractClaudeInvocationFinalText } from "../utils/claudeInvocationText";
 import {
   buildConventionalCommitFallback,
   conventionalCommitPromptLines,
   normalizeConventionalCommitMessage,
 } from "../utils/conventionalCommitMessage";
+import { getClaudeConfigModel } from "./claude";
+import { gitCommit, gitPull, gitPush, gitStageAll, gitStatus } from "./git";
+import { executeSessionEngineAndWait } from "./sessionEngineInvocation";
 
 export function hasWorkingTreeChanges(status: GitStatusResponse): boolean {
   return status.staged.length > 0 || status.unstaged.length > 0;
@@ -97,6 +100,13 @@ export async function commitPullPushRepository(
 
 export interface AiCommitPullPushHooks {
   onPhase?: (phase: string) => void;
+  /**
+   * 当前会话/仓库选中的执行引擎。AI 润色走该引擎 oneshot；
+   * 未传或 Gemini 等不支持时回退规则生成（不阻断推送）。
+   */
+  executionEngine?: SessionExecutionEngine | null;
+  /** 测试可注入；默认 `executeSessionEngineAndWait`。 */
+  invokeEngine?: typeof executeSessionEngineAndWait;
 }
 
 /**
@@ -111,6 +121,7 @@ export async function aiCommitPullPushRepository(
   hooks?: AiCommitPullPushHooks,
 ): Promise<GitCommitPullPushOutcome> {
   const onPhase = hooks?.onPhase;
+  const executionEngine = normalizeSessionExecutionEngine(hooks?.executionEngine);
 
   onPhase?.("读取变更");
   const status = await gitStatus(path);
@@ -133,14 +144,17 @@ export async function aiCommitPullPushRepository(
       "文件清单：",
       changedFileLines || "- 无",
     ].join("\n");
-    const configuredModel = await getClaudeConfigModel(path);
+    // Claude 才读仓库配置模型；其它引擎交给各自 CLI 默认，避免把 ANTHROPIC_MODEL 误传给 Codex 等。
+    const configuredModel =
+      executionEngine === "claude" ? await getClaudeConfigModel(path) : undefined;
 
-    const result = await executeClaudeCodeAndWait({
+    const invokeEngine = hooks?.invokeEngine ?? executeSessionEngineAndWait;
+    const result = await invokeEngine({
+      executionEngine,
       repositoryPath: path,
       prompt,
       model: configuredModel ?? undefined,
       timeoutMs: 20_000,
-      connectionMode: "oneshot",
     });
     if (result.success) {
       const cleaned = extractClaudeInvocationFinalText(result.outputLines);

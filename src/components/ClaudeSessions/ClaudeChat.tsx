@@ -1922,6 +1922,7 @@ export function ClaudeChatInner({
             sessionId={session.id}
             gitRepositoryPath={gitRepositoryPath}
             repositoryId={sessionRepository?.id ?? null}
+            executionEngine={sessionExecutionEngine}
             onCreateNewSession={onCreateNewSession}
             creatingNewSession={creatingNewSession}
             onOpenBuiltinAssistant={onOpenBuiltinAssistant}

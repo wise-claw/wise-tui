@@ -19,11 +19,13 @@ import {
   stopGitWatcher,
 } from "../../services/git";
 import { consumeWarmGitStatus } from "../../services/gitStatusWarmCache";
+import type { SessionExecutionEngine } from "../../constants/sessionExecutionEngine";
+import { normalizeSessionExecutionEngine } from "../../constants/sessionExecutionEngine";
+import { WISE_GIT_REPOSITORY_STATUS_REFRESH, type GitRepositoryStatusRefreshDetail } from "../../constants/gitUiEvents";
 import { aiCommitPullPushRepository, commitPullPushRepository, isGitMergeConflictError } from "../../services/gitCommitPullPush";
 import { openRepositoryRemoteInBrowser } from "../../services/openRepositoryRemote";
 import { refreshGitRepositoryStats } from "../../stores/gitRepositoryStatsStore";
 import { refreshGitRepositoryExplorerStatus } from "../../stores/gitRepositoryExplorerStatusStore";
-import { WISE_GIT_REPOSITORY_STATUS_REFRESH, type GitRepositoryStatusRefreshDetail } from "../../constants/gitUiEvents";
 import type { GitStatusResponse } from "../../types";
 import { normalizeConventionalCommitMessage } from "../../utils/conventionalCommitMessage";
 import { runGitSyncAction, type GitSyncActionKind } from "./gitSyncActionRunner";
@@ -71,10 +73,17 @@ export function GitPanel(props: Props) {
 function GitSingleRepoPanel({
   repositoryPath,
   repositoryName: _repositoryName,
-  repositoryEntries: _repositoryEntries = [],
+  repositoryEntries = [],
   onOpenFile,
   headerPrefix,
 }: Props) {
+  const pathKey = repositoryPath?.trim() ?? "";
+  const matchedEntry = pathKey
+    ? repositoryEntries.find((entry) => entry.path.trim() === pathKey)
+    : undefined;
+  const executionEngine: SessionExecutionEngine | undefined = matchedEntry?.executionEngine
+    ? normalizeSessionExecutionEngine(matchedEntry.executionEngine)
+    : undefined;
   const [historyDrawerOpen, setHistoryDrawerOpen] = useState(false);
   const [status, setStatus] = useState<GitStatusResponse | null>(null);
   const [errors, setErrors] = useState<Record<string, string>>({});
@@ -433,7 +442,9 @@ function GitSingleRepoPanel({
     runGitSync(
       "push",
       async () => {
-        const outcome = await aiCommitPullPushRepository(repositoryPath);
+        const outcome = await aiCommitPullPushRepository(repositoryPath, {
+          executionEngine,
+        });
         if (outcome === "noop") {
           message.info("当前没有可提交的改动，也没有待推送的提交");
         } else {
@@ -448,7 +459,7 @@ function GitSingleRepoPanel({
         }
       },
     );
-  }, [repositoryPath, runGitSync]);
+  }, [executionEngine, repositoryPath, runGitSync]);
 
   const handlePull = useCallback(() => {
     if (!repositoryPath) return;
@@ -543,6 +554,7 @@ function GitSingleRepoPanel({
           status && (
             <DiffMode
               repositoryPath={repositoryPath}
+              executionEngine={executionEngine}
               status={status}
               loading={loading}
               errors={errors}
