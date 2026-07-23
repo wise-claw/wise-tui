@@ -20,7 +20,7 @@ interface Props {
   collapsed?: boolean;
   onCollapse: () => void;
   onClose: () => void;
-  /** center：占满中栏消息区（与文件同 slot）；dock：底部抽屉（兼容旧布局）。 */
+  /** center：占满中栏消息区（与文件同 slot）。dock 仅作历史兼容，默认不再使用。 */
   layout?: "center" | "dock";
   fullscreen?: boolean;
   onToggleFullscreen?: () => void;
@@ -39,7 +39,7 @@ export function TerminalPanel({
   collapsed = false,
   onCollapse,
   onClose,
-  layout = "dock",
+  layout = "center",
   fullscreen = false,
   onToggleFullscreen,
   workspaceId = TERMINAL_WORKSPACE_ID,

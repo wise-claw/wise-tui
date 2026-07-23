@@ -12,7 +12,7 @@ import "./index.css";
 
 type TerminalDockProps = {
   isOpen: boolean;
-  /** center：填满中栏；dock：底部固定高度。 */
+  /** center：填满中栏；dock：底部固定高度（历史兼容，产品路径应走 center）。 */
   layout?: "center" | "dock";
   terminals: TerminalContextTab[];
   activeTerminalId: string | null;

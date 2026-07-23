@@ -927,13 +927,14 @@ function ClaudeSessionsShell({
       ) : null}
       </div>
 
-      {/* 收起时保留挂载以维持 PTY；打开时改由 panelBelowMessages（与文件同一中栏区域）承载 */}
+      {/* 收起时保留挂载以维持 PTY；打开时改由 panelBelowMessages（与文件同一中栏区域）承载。
+          --hidden/--collapsed 必须 display:none，否则会在会话列底部露出 dock 高度的终端条。 */}
       {Array.from(terminalPanelByPane.entries())
         .filter(([paneIndex]) => !terminalCenter.visiblePaneIndexes.includes(paneIndex))
         .map(([paneIndex, node]) => (
           <div
             key={`terminal-keepalive-${paneIndex}`}
-            className="app-claude-sessions-terminal-host app-claude-sessions-terminal-host--hidden"
+            className="app-claude-sessions-terminal-host app-claude-sessions-terminal-host--collapsed app-claude-sessions-terminal-host--hidden"
             aria-hidden
           >
             {node}

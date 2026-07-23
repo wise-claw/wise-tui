@@ -404,7 +404,9 @@
   background: var(--ant-color-bg-container);
 }
 
-.app-claude-sessions-terminal-host--collapsed {
+/* 收起保活：保持 React 挂载以维持 PTY，但不得占用布局（否则会在会话区底部露出 dock）。 */
+.app-claude-sessions-terminal-host--collapsed,
+.app-claude-sessions-terminal-host--hidden {
   display: none;
 }
 
