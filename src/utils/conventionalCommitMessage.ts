@@ -1,4 +1,4 @@
-import type { GitStatusResponse } from "../types";
+import type { ClaudeSession, GitStatusResponse } from "../types";
 
 export const CONVENTIONAL_COMMIT_TYPES = [
   "feat",
@@ -10,6 +10,10 @@ export const CONVENTIONAL_COMMIT_TYPES = [
 ] as const;
 
 export type ConventionalCommitType = (typeof CONVENTIONAL_COMMIT_TYPES)[number];
+
+/** AI 润色提交信息时写入 Claude 的首行提示（历史会话据此识别并隐藏）。 */
+export const CONVENTIONAL_COMMIT_PROMPT_HEAD =
+  "你是资深工程师，请基于以下 git 改动生成符合 Conventional Commits 规范的提交信息。";
 
 const TYPE_ALIASES: Record<string, ConventionalCommitType> = {
   fixed: "fix",
@@ -30,7 +34,7 @@ const HAS_CJK_RE = /[\u3400-\u9fff]/;
 
 export function conventionalCommitPromptLines(): string[] {
   return [
-    "你是资深工程师，请基于以下 git 改动生成符合 Conventional Commits 规范的提交信息。",
+    CONVENTIONAL_COMMIT_PROMPT_HEAD,
     "要求：",
     "1) 仅输出一行，格式为 type: 中文摘要；",
     "2) type 仅允许 feat、fix、refactor、docs、chore、test（不要用 fixed）；",
@@ -39,6 +43,31 @@ export function conventionalCommitPromptLines(): string[] {
     "5) 不要使用 markdown 标题或代码块，不要解释生成过程。",
     "示例：fix: 阻止文件上传超时",
   ];
+}
+
+/** 文本是否为 AI 提交信息生成 prompt（含磁盘 preview 截断前缀）。 */
+export function isConventionalCommitPromptText(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  return (
+    trimmed.startsWith(CONVENTIONAL_COMMIT_PROMPT_HEAD)
+    || trimmed.startsWith("你是资深工程师，请基于以下 git 改动")
+  );
+}
+
+/**
+ * Git 面板 / 一键推送触发的 oneshot 会话：不应出现在「历史会话」列表。
+ * 依据首条用户消息或磁盘 preview 是否匹配提交信息 prompt。
+ */
+export function isConventionalCommitPromptHistorySession(
+  session: Pick<ClaudeSession, "messages" | "diskPreview">,
+): boolean {
+  const firstUser = session.messages.find((message) => message.role === "user");
+  if (firstUser && isConventionalCommitPromptText(firstUser.content)) {
+    return true;
+  }
+  const diskPreview = session.diskPreview?.trim();
+  return Boolean(diskPreview && isConventionalCommitPromptText(diskPreview));
 }
 
 function stripCodeFences(raw: string): string {

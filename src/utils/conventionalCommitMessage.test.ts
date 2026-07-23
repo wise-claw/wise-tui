@@ -2,6 +2,9 @@ import { describe, expect, it } from "bun:test";
 import type { GitStatusResponse } from "../types";
 import {
   buildConventionalCommitFallback,
+  CONVENTIONAL_COMMIT_PROMPT_HEAD,
+  isConventionalCommitPromptHistorySession,
+  isConventionalCommitPromptText,
   normalizeConventionalCommitMessage,
 } from "./conventionalCommitMessage";
 
@@ -47,5 +50,49 @@ describe("conventionalCommitMessage", () => {
     expect(message.startsWith("feat: 更新Git 面板")).toBe(true);
     expect(message.includes("涉及文件")).toBe(false);
     expect(message.includes("update")).toBe(false);
+  });
+
+  it("detects conventional commit prompt text and truncated disk preview", () => {
+    expect(isConventionalCommitPromptText(CONVENTIONAL_COMMIT_PROMPT_HEAD)).toBe(true);
+    expect(
+      isConventionalCommitPromptText(`${CONVENTIONAL_COMMIT_PROMPT_HEAD}\n要求：\n1) 仅输出一行`),
+    ).toBe(true);
+    expect(isConventionalCommitPromptText("你是资深工程师，请基于以下 git 改动生成...")).toBe(true);
+    expect(isConventionalCommitPromptText("将1.3.0到现在的功能梳理一下")).toBe(false);
+  });
+
+  it("detects history sessions created by AI commit prompt", () => {
+    expect(
+      isConventionalCommitPromptHistorySession({
+        messages: [
+          {
+            id: 1,
+            role: "user",
+            content: `${CONVENTIONAL_COMMIT_PROMPT_HEAD}\n要求：`,
+            parts: [{ type: "text", text: CONVENTIONAL_COMMIT_PROMPT_HEAD }],
+            timestamp: 1,
+          },
+        ],
+      }),
+    ).toBe(true);
+    expect(
+      isConventionalCommitPromptHistorySession({
+        messages: [],
+        diskPreview: "你是资深工程师，请基于以下 git 改动生成符合 Conventional Commits 规范的提交信息。",
+      }),
+    ).toBe(true);
+    expect(
+      isConventionalCommitPromptHistorySession({
+        messages: [
+          {
+            id: 1,
+            role: "user",
+            content: "将1.3.0到现在的功能梳理一下",
+            parts: [{ type: "text", text: "将1.3.0到现在的功能梳理一下" }],
+            timestamp: 1,
+          },
+        ],
+      }),
+    ).toBe(false);
   });
 });

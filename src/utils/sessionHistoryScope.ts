@@ -1,5 +1,6 @@
 import type { ClaudeDiskSessionItem, ClaudeSession, ProjectItem, Repository } from "../types";
 import { listClaudeDiskSessions } from "../services/claudeDisk";
+import { isConventionalCommitPromptHistorySession } from "./conventionalCommitMessage";
 import { pathIsAccessibleDirectoryCached } from "./pathAccessibilityCache";
 import { filterSessionsForWorkspace } from "./projectSessionPanelFilter";
 import { resolveProjectMainSessionAnchor } from "./projectSessionAnchor";
@@ -11,6 +12,11 @@ import {
   resolveBoundMainSessionId,
   sessionMatchesRepositoryScope,
 } from "./repositoryMainSessionBinding";
+
+/** 工具型 oneshot（如 AI 生成 commit message）不进入历史会话列表。 */
+function excludeUtilityHistorySessions(sessions: ClaudeSession[]): ClaudeSession[] {
+  return sessions.filter((session) => !isConventionalCommitPromptHistorySession(session));
+}
 
 export function normalizeSessionRepositoryPath(path: string): string {
   return normalizeRepositoryPathKey(path) || path.trim();
@@ -72,7 +78,7 @@ export function listSessionsForHistoryScope(
       activeRepositoryId: input.activeRepositoryId ?? null,
     });
     if (input.activeWorkspaceFocus !== "project") {
-      return filtered;
+      return excludeUtilityHistorySessions(filtered);
     }
     const boundId = resolveBoundMainSessionId(
       projectMainSessionBindingKey(input.activeProject.id),
@@ -81,12 +87,14 @@ export function listSessionsForHistoryScope(
       null,
     );
     if (!boundId || filtered.some((session) => session.id === boundId)) {
-      return filtered;
+      return excludeUtilityHistorySessions(filtered);
     }
     const bound = sessions.find((session) => session.id === boundId);
-    return bound ? [...filtered, bound] : filtered;
+    return excludeUtilityHistorySessions(bound ? [...filtered, bound] : filtered);
   }
-  return listSessionsForRepositoryPath(sessions, input.repositoryScopePath);
+  return excludeUtilityHistorySessions(
+    listSessionsForRepositoryPath(sessions, input.repositoryScopePath),
+  );
 }
 
 /** 磁盘扫描路径：工作区焦点扫项目 anchor，仓库焦点扫当前 scope。 */

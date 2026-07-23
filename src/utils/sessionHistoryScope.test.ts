@@ -1,5 +1,6 @@
 import { describe, expect, it } from "bun:test";
 import type { ClaudeSession, ProjectItem, Repository } from "../types";
+import { CONVENTIONAL_COMMIT_PROMPT_HEAD } from "./conventionalCommitMessage";
 import {
   collectRepositoryPathListingCandidates,
   dedupeClaudeSessionsByIdentity,
@@ -192,5 +193,43 @@ describe("sessionHistoryScope", () => {
         workspaceMode: "multi_repo",
       }),
     ).toBe("/work/ai-research");
+  });
+
+  it("listSessionsForHistoryScope hides AI conventional-commit prompt sessions", () => {
+    const sessions = [
+      session({
+        id: "ai-commit",
+        messages: [
+          {
+            id: 1,
+            role: "user",
+            content: `${CONVENTIONAL_COMMIT_PROMPT_HEAD}\n要求：`,
+            parts: [{ type: "text", text: CONVENTIONAL_COMMIT_PROMPT_HEAD }],
+            timestamp: 1,
+          },
+        ],
+      }),
+      session({
+        id: "disk-ai-commit",
+        messages: [],
+        diskPreview: CONVENTIONAL_COMMIT_PROMPT_HEAD,
+      }),
+      session({
+        id: "real",
+        messages: [
+          {
+            id: 2,
+            role: "user",
+            content: "将1.3.0到现在的功能梳理一下",
+            parts: [{ type: "text", text: "将1.3.0到现在的功能梳理一下" }],
+            timestamp: 2,
+          },
+        ],
+      }),
+    ];
+    const scoped = listSessionsForHistoryScope(sessions, {
+      repositoryScopePath: "/work/repo",
+    });
+    expect(scoped.map((s) => s.id)).toEqual(["real"]);
   });
 });
