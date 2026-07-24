@@ -3,7 +3,7 @@ import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Button, Popover, Typography } from "antd";
 import { DeferredHoverTooltip } from "../shared/DeferredHoverTooltip";
 import { useWorkspaceTodoIncompleteCount } from "../../hooks/useWorkspaceTodoIncompleteCount";
-import { useWorkspaceTodos } from "../../hooks/useWorkspaceTodos";
+import { useWorkspaceTodoCompletedCount } from "../../hooks/useWorkspaceTodoCompletedCount";
 import { WorkspaceTodosPopoverContent } from "./WorkspaceTodosPopoverContent";
 import {
   toggleWorkspaceMemoPanel,
@@ -230,11 +230,7 @@ function ProjectRepositoryListInner({
   const [headerTodosShowCompleted, setHeaderTodosShowCompleted] = useState(false);
   const headerMemoOpen = useWorkspaceMemoPanelOpen();
   const headerTodoCount = useWorkspaceTodoIncompleteCount(workspaceTodosEnabled);
-  const todos = useWorkspaceTodos({ enabled: workspaceTodosEnabled });
-  const headerCompletedCount = useMemo(
-    () => todos.items.filter((item) => item.completed).length,
-    [todos.items],
-  );
+  const headerCompletedCount = useWorkspaceTodoCompletedCount(workspaceTodosEnabled);
 
   const runCommandRowPinnedMap = useRepositoryRunCommandRowPinnedMap();
 
@@ -293,7 +289,10 @@ function ProjectRepositoryListInner({
             activeProjectId?.trim() ? (
               <Popover
                 open={headerTodosPopoverOpen}
-                onOpenChange={setHeaderTodosPopoverOpen}
+                onOpenChange={(open) => {
+                  setHeaderTodosPopoverOpen(open);
+                  if (!open) setHeaderTodosShowCompleted(false);
+                }}
                 trigger="click"
                 placement="rightTop"
                 destroyOnHidden

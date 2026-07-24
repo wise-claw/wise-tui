@@ -1,6 +1,7 @@
 import { memo, useState } from "react";
 import { getKnownOpenAppIcon } from "../OpenAppMenu/openAppIcons";
 import { useWorkspaceTodoIncompleteCount } from "../../hooks/useWorkspaceTodoIncompleteCount";
+import { useWorkspaceTodoCompletedCount } from "../../hooks/useWorkspaceTodoCompletedCount";
 import { UserOutlined } from "@ant-design/icons";
 import { App as AntdApp, Button, Popover } from "antd";
 import { DeferredHoverTooltip } from "../shared/DeferredHoverTooltip";
@@ -358,6 +359,7 @@ export function SidebarWorkspaceRemindersAction({
   const [popoverOpen, setPopoverOpen] = useState(false);
   const [showCompleted, setShowCompleted] = useState(false);
   const incompleteCount = useWorkspaceTodoIncompleteCount(enabled);
+  const completedCount = useWorkspaceTodoCompletedCount(enabled);
 
   if (!enabled || incompleteCount <= 0) return null;
 
@@ -368,7 +370,10 @@ export function SidebarWorkspaceRemindersAction({
   return (
     <Popover
       open={popoverOpen}
-      onOpenChange={setPopoverOpen}
+      onOpenChange={(open) => {
+        setPopoverOpen(open);
+        if (!open) setShowCompleted(false);
+      }}
       trigger="click"
       placement="rightTop"
       destroyOnHidden
@@ -388,7 +393,7 @@ export function SidebarWorkspaceRemindersAction({
                 setShowCompleted((v) => !v);
               }}
             >
-              {showCompleted ? "隐藏已完成" : `已完成 ${incompleteCount}`}
+              {showCompleted ? "\u9690\u85cf\u5df2\u5b8c\u6210" : `\u5df2\u5b8c\u6210 ${completedCount}`}
             </Button>
           ) : null}
         </div>
