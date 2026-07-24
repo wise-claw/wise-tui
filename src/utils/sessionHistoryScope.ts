@@ -12,10 +12,15 @@ import {
   resolveBoundMainSessionId,
   sessionMatchesRepositoryScope,
 } from "./repositoryMainSessionBinding";
+import { isSessionFeedbackLoopHistorySession } from "./sessionFeedbackLoopDispatch";
 
-/** 工具型 oneshot（如 AI 生成 commit message）不进入历史会话列表。 */
+/** 工具型 oneshot（AI commit / 反馈神经网）不进入历史会话列表。 */
 function excludeUtilityHistorySessions(sessions: ClaudeSession[]): ClaudeSession[] {
-  return sessions.filter((session) => !isConventionalCommitPromptHistorySession(session));
+  return sessions.filter(
+    (session) =>
+      !isConventionalCommitPromptHistorySession(session) &&
+      !isSessionFeedbackLoopHistorySession(session),
+  );
 }
 
 export function normalizeSessionRepositoryPath(path: string): string {

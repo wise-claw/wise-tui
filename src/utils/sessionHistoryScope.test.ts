@@ -232,4 +232,60 @@ describe("sessionHistoryScope", () => {
     });
     expect(scoped.map((s) => s.id)).toEqual(["real"]);
   });
+
+  it("listSessionsForHistoryScope hides session-feedback-loop oneshot sessions", () => {
+    const sessions = [
+      session({
+        id: "fb-repo-marker",
+        repositoryName: "wise/神经网:优化-1",
+        messages: [
+          {
+            id: 1,
+            role: "user",
+            content: "随便写点",
+            parts: [{ type: "text", text: "随便写点" }],
+            timestamp: 1,
+          },
+        ],
+      }),
+      session({
+        id: "fb-prompt",
+        messages: [
+          {
+            id: 2,
+            role: "user",
+            content: "你是 Wise **会话反馈神经网** 的优化节点。\n\n请分析",
+            parts: [
+              {
+                type: "text",
+                text: "你是 Wise **会话反馈神经网** 的优化节点。",
+              },
+            ],
+            timestamp: 2,
+          },
+        ],
+      }),
+      session({
+        id: "fb-disk",
+        messages: [],
+        diskPreview: "你是 Wise **会话反馈神经网** 的总结节点。",
+      }),
+      session({
+        id: "real",
+        messages: [
+          {
+            id: 3,
+            role: "user",
+            content: "继续实现终端滚动",
+            parts: [{ type: "text", text: "继续实现终端滚动" }],
+            timestamp: 3,
+          },
+        ],
+      }),
+    ];
+    const scoped = listSessionsForHistoryScope(sessions, {
+      repositoryScopePath: "/work/repo",
+    });
+    expect(scoped.map((s) => s.id)).toEqual(["real"]);
+  });
 });

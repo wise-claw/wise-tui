@@ -57,3 +57,32 @@ export function buildFeedbackLoopWorkerUserBubble(prompt: string): string {
   if (firstLine.length <= 96) return firstLine;
   return `${firstLine.slice(0, 93)}…`;
 }
+
+/** 神经网 oneshot prompt 正文特征（历史会话列表据此隐藏）。 */
+export const SESSION_FEEDBACK_LOOP_PROMPT_MARKER = "会话反馈神经网";
+
+export function isSessionFeedbackLoopPromptText(text: string): boolean {
+  const trimmed = text.trim();
+  if (!trimmed) return false;
+  return trimmed.includes(SESSION_FEEDBACK_LOOP_PROMPT_MARKER);
+}
+
+/**
+ * 反馈神经网派发的 oneshot 会话：不应出现在「历史会话」列表。
+ * 依据 worker 仓库名标记，或首条用户消息 / 磁盘 preview 是否含神经网 prompt。
+ */
+export function isSessionFeedbackLoopHistorySession(session: {
+  messages: ReadonlyArray<{ role: string; content: string }>;
+  diskPreview?: string | null;
+  repositoryName?: string | null;
+}): boolean {
+  if (isFeedbackLoopWorkerRepositoryName(session.repositoryName ?? "")) {
+    return true;
+  }
+  const firstUser = session.messages.find((message) => message.role === "user");
+  if (firstUser && isSessionFeedbackLoopPromptText(firstUser.content)) {
+    return true;
+  }
+  const diskPreview = session.diskPreview?.trim();
+  return Boolean(diskPreview && isSessionFeedbackLoopPromptText(diskPreview));
+}

@@ -3,6 +3,8 @@ import {
   buildFeedbackLoopWorkerRepositoryName,
   buildFeedbackLoopWorkerUserBubble,
   isFeedbackLoopWorkerRepositoryName,
+  isSessionFeedbackLoopHistorySession,
+  isSessionFeedbackLoopPromptText,
   parseFeedbackLoopWorkerRepositoryName,
 } from "./sessionFeedbackLoopDispatch";
 
@@ -34,5 +36,41 @@ describe("sessionFeedbackLoopDispatch", () => {
     const bubble = buildFeedbackLoopWorkerUserBubble(long);
     expect(bubble.length).toBeLessThanOrEqual(96);
     expect(bubble.startsWith("你是 Wise")).toBe(true);
+  });
+
+  test("isSessionFeedbackLoopHistorySession matches marker / prompt / preview", () => {
+    expect(
+      isSessionFeedbackLoopHistorySession({
+        repositoryName: "wise/神经网:习惯",
+        messages: [],
+      }),
+    ).toBe(true);
+    expect(
+      isSessionFeedbackLoopPromptText("你是 Wise **会话反馈神经网** 的优化节点。"),
+    ).toBe(true);
+    expect(
+      isSessionFeedbackLoopHistorySession({
+        repositoryName: "wise",
+        messages: [
+          {
+            role: "user",
+            content: "你是 Wise **会话反馈神经网** 的总结节点。",
+          },
+        ],
+      }),
+    ).toBe(true);
+    expect(
+      isSessionFeedbackLoopHistorySession({
+        repositoryName: "wise",
+        messages: [],
+        diskPreview: "你是 Wise **会话反馈神经网** 的习惯沉淀节点。",
+      }),
+    ).toBe(true);
+    expect(
+      isSessionFeedbackLoopHistorySession({
+        repositoryName: "wise",
+        messages: [{ role: "user", content: "正常聊天" }],
+      }),
+    ).toBe(false);
   });
 });
