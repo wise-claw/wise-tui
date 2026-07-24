@@ -13,6 +13,7 @@ import {
   type WheelEvent,
 } from "react";
 import { commandsCtx, defaultValueCtx, Editor, editorViewCtx, editorViewOptionsCtx, rootCtx } from "@milkdown/kit/core";
+import { uploadConfig } from "@milkdown/kit/plugin/upload";
 import { getMarkdown } from "@milkdown/utils";
 import {
   commonmark,
@@ -576,6 +577,35 @@ export const MilkdownEditor = forwardRef<MilkdownEditorHandle, MilkdownEditorPro
         await crepe.destroy().catch(() => undefined);
         return;
       }
+      // 配置 upload handler：粘贴/拖入图片时直接转 base64，避免临时 blob URL
+      crepe.editor.action((ctx) => {
+        ctx.update(uploadConfig.key, (prev) => ({
+          ...prev,
+          uploader: async (files, schema) => {
+            const imageFiles: File[] = [];
+            for (let i = 0; i < files.length; i++) {
+              const file = files.item(i);
+              if (file && file.type.startsWith("image/")) imageFiles.push(file);
+            }
+            const nodes = await Promise.all(
+              imageFiles.map(async (file) => {
+                const buffer = await file.arrayBuffer();
+                const bytes = new Uint8Array(buffer);
+                let binary = "";
+                for (let j = 0; j < bytes.length; j++) {
+                  binary += String.fromCharCode(bytes[j]);
+                }
+                const base64 = btoa(binary);
+                const src = `data:${file.type};base64,${base64}`;
+                const nodeType = schema.nodes["image-block"] ?? schema.nodes["image"];
+                if (!nodeType) return null;
+                return nodeType.createAndFill({ src })!;
+              }),
+            );
+            return nodes.filter(Boolean);
+          },
+        }));
+      });
       crepeRef.current = crepe;
       setCrepeReadyGeneration((g) => g + 1);
       requestAnimationFrame(() => {
