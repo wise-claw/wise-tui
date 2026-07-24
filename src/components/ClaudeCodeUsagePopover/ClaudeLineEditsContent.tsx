@@ -1,6 +1,9 @@
 import { Popover, Spin, Typography } from "antd";
-import { useMemo } from "react";
-import type { ClaudeLineEditsSnapshotResponse } from "../../services/claudeCodeUsage";
+import { useEffect, useMemo, useState } from "react";
+import type {
+  ClaudeLineEditsDayBucket,
+  ClaudeLineEditsSnapshotResponse,
+} from "../../services/claudeCodeUsage";
 import {
   buildLineEditsHeatmapWeeks,
   formatHeatmapDateLabel,
@@ -41,6 +44,11 @@ export interface ClaudeLineEditsContentProps {
   snapshotLoading: boolean;
   snapshotError: string | null;
   onRefresh: () => void;
+  /**
+   * 弹窗刚打开时为 true：默认聚焦当天「合计行」展示今日行数；hover 任意 heatmap cell 切换到该日。
+   * 关闭后下次打开再激活。
+   */
+  focusTodayOnOpen?: boolean;
 }
 
 function LineEditsCellPopoverContent({
@@ -70,11 +78,30 @@ export function ClaudeLineEditsContent({
   snapshotLoading,
   snapshotError,
   onRefresh,
+  focusTodayOnOpen = false,
 }: ClaudeLineEditsContentProps) {
   const { weeks, monthLabels } = useMemo(
     () => buildLineEditsHeatmapWeeks(snapshot?.days ?? []),
     [snapshot?.days],
   );
+
+  // hover 任意 heatmap cell 时记录被聚焦的日期；首次进入且未 hover 则取 days[] 末项（即今天）。
+  const [hoveredDate, setHoveredDate] = useState<string | null>(null);
+  useEffect(() => {
+    setHoveredDate(null);
+  }, [snapshot]);
+  const focusedDay = useMemo<ClaudeLineEditsDayBucket | null>(() => {
+    const days = snapshot?.days ?? [];
+    if (days.length === 0) return null;
+    if (hoveredDate) {
+      const hit = days.find((d) => d.date === hoveredDate);
+      if (hit) return hit;
+    }
+    if (focusTodayOnOpen) {
+      return days[days.length - 1] ?? null;
+    }
+    return null;
+  }, [snapshot?.days, hoveredDate, focusTodayOnOpen]);
 
   const maxLines = useMemo(() => {
     let m = 0;
@@ -88,14 +115,22 @@ export function ClaudeLineEditsContent({
   const totalAdded = snapshot?.totalLinesAdded ?? 0;
   const totalRemoved = snapshot?.totalLinesRemoved ?? 0;
 
+  // 首次进入时 head 区域的「总数」展示：focused 命中今天则用当天数据并 caption 切到「当天」；
+  // hover 时回到「近一年」总计，让 head 维持「近一年」语义不变。
+  const headFromFocused = focusTodayOnOpen && !hoveredDate && focusedDay != null;
+  const headLines = headFromFocused ? focusedDay!.linesEdited : totalLines;
+  const headAdded = headFromFocused ? focusedDay!.linesAdded : totalAdded;
+  const headRemoved = headFromFocused ? focusedDay!.linesRemoved : totalRemoved;
+  const headCaption = headFromFocused ? "当天" : "AI 代码编辑量";
+
   return (
     <div className="app-cc-line-edits">
       <div className="app-cc-line-edits-head">
         <div>
-          <div className="app-cc-line-edits-title">AI 代码编辑量</div>
-          <div className="app-cc-line-edits-total">{formatLinesEdited(totalLines)}</div>
+          <div className="app-cc-line-edits-title">{headCaption}</div>
+          <div className="app-cc-line-edits-total">{formatLinesEdited(headLines)}</div>
         </div>
-        <LineEditsSplitBars added={totalAdded} removed={totalRemoved} />
+        <LineEditsSplitBars added={headAdded} removed={headRemoved} />
       </div>
 
       {snapshotLoading ? (
@@ -126,7 +161,10 @@ export function ClaudeLineEditsContent({
                   </div>
                 ))}
               </div>
-              <div className="app-cc-line-edits-heatmap-cols">
+              <div
+                className="app-cc-line-edits-heatmap-cols"
+                onMouseLeave={() => setHoveredDate(null)}
+              >
                 {weeks.map((week) => (
                   <div
                     key={week.key}
@@ -153,6 +191,7 @@ export function ClaudeLineEditsContent({
                         );
                       }
                       const level = heatmapLevel(cell.linesEdited, maxLines);
+                      const isFocused = focusedDay?.date === cell.date;
                       return (
                         <Popover
                           key={cell.date}
@@ -162,6 +201,10 @@ export function ClaudeLineEditsContent({
                           destroyOnHidden
                           overlayClassName="app-cc-line-edits-cell-popover-overlay"
                           getPopupContainer={() => document.body}
+                          onOpenChange={(open) => {
+                            if (open) setHoveredDate(cell.date);
+                            else setHoveredDate((prev) => (prev === cell.date ? null : prev));
+                          }}
                           content={
                             <LineEditsCellPopoverContent
                               date={cell.date}
@@ -171,7 +214,7 @@ export function ClaudeLineEditsContent({
                           }
                         >
                           <div
-                            className={`app-cc-line-edits-heatmap-cell app-cc-line-edits-heatmap-cell--l${level}`}
+                            className={`app-cc-line-edits-heatmap-cell app-cc-line-edits-heatmap-cell--l${level}${isFocused ? " app-cc-line-edits-heatmap-cell--focused" : ""}`}
                             aria-label={formatHeatmapDateLabel(cell.date)}
                           />
                         </Popover>
@@ -193,6 +236,27 @@ export function ClaudeLineEditsContent({
           </div>
 
           <div className="app-cc-line-edits-stats">
+            <div
+              className={`app-cc-line-edits-stat${focusedDay ? " app-cc-line-edits-stat--focused" : ""}`}
+            >
+              <div className="app-cc-line-edits-stat-label">
+                {focusedDay && hoveredDate ? formatHeatmapDateLabel(focusedDay.date).slice(0, 5) : "当天"}
+              </div>
+              <div className="app-cc-line-edits-stat-value">
+                {focusedDay ? (
+                  <>
+                    {formatLinesEdited(focusedDay.linesEdited)} 行 · {formatLinesEdited(focusedDay.diffCount)} 次
+                    <div className="app-cc-line-edits-stat-sub">
+                      <span className="app-cc-line-edits-summary--add">+{formatLinesEdited(focusedDay.linesAdded)}</span>
+                      <span className="app-cc-line-edits-summary-sep"> / </span>
+                      <span className="app-cc-line-edits-summary--remove">−{formatLinesEdited(focusedDay.linesRemoved)}</span>
+                    </div>
+                  </>
+                ) : (
+                  "—"
+                )}
+              </div>
+            </div>
             <div className="app-cc-line-edits-stat">
               <div className="app-cc-line-edits-stat-label">最活跃月份</div>
               <div className="app-cc-line-edits-stat-value">{snapshot?.mostActiveMonth ?? "—"}</div>
@@ -231,21 +295,41 @@ export function ClaudeLineEditsContent({
                 ) : "—"}
               </div>
             </div>
-            <div className="app-cc-line-edits-stat">
-              <div className="app-cc-line-edits-stat-label">最长连续</div>
-              <div className="app-cc-line-edits-stat-value">{snapshot?.longestStreakDays ?? 0} 天</div>
-            </div>
-            <div className="app-cc-line-edits-stat">
-              <div className="app-cc-line-edits-stat-label">当前连续</div>
-              <div className="app-cc-line-edits-stat-value">{snapshot?.currentStreakDays ?? 0} 天</div>
-            </div>
           </div>
 
           <div className="app-cc-line-edits-summary">
-            合计（近一年）：{formatLinesEdited(totalLines)} 行 · {formatLinesEdited(snapshot?.totalDiffCount ?? 0)} 次编辑
-            （<span className="app-cc-line-edits-summary--add">+{formatLinesEdited(totalAdded)}</span>
-            <span className="app-cc-line-edits-summary-sep"> / </span>
-            <span className="app-cc-line-edits-summary--remove">−{formatLinesEdited(totalRemoved)}</span>）
+            {(() => {
+              // 合计行 caption + 数据：focused 单日 → 该日数据；首次进入 → 当天数据；否则 → 近一年合计。
+              if (focusedDay && hoveredDate) {
+                const dateLabel = formatHeatmapDateLabel(focusedDay.date).slice(0, 5);
+                return (
+                  <>
+                    合计（{dateLabel}）：{formatLinesEdited(focusedDay.linesEdited)} 行 · {formatLinesEdited(focusedDay.diffCount)} 次编辑
+                    （<span className="app-cc-line-edits-summary--add">+{formatLinesEdited(focusedDay.linesAdded)}</span>
+                    <span className="app-cc-line-edits-summary-sep"> / </span>
+                    <span className="app-cc-line-edits-summary--remove">−{formatLinesEdited(focusedDay.linesRemoved)}</span>）
+                  </>
+                );
+              }
+              if (headFromFocused && focusedDay) {
+                return (
+                  <>
+                    合计（当天）：{formatLinesEdited(focusedDay.linesEdited)} 行 · {formatLinesEdited(focusedDay.diffCount)} 次编辑
+                    （<span className="app-cc-line-edits-summary--add">+{formatLinesEdited(focusedDay.linesAdded)}</span>
+                    <span className="app-cc-line-edits-summary-sep"> / </span>
+                    <span className="app-cc-line-edits-summary--remove">−{formatLinesEdited(focusedDay.linesRemoved)}</span>）
+                  </>
+                );
+              }
+              return (
+                <>
+                  合计（近一年）：{formatLinesEdited(totalLines)} 行 · {formatLinesEdited(snapshot?.totalDiffCount ?? 0)} 次编辑
+                  （<span className="app-cc-line-edits-summary--add">+{formatLinesEdited(totalAdded)}</span>
+                  <span className="app-cc-line-edits-summary-sep"> / </span>
+                  <span className="app-cc-line-edits-summary--remove">−{formatLinesEdited(totalRemoved)}</span>）
+                </>
+              );
+            })()}
           </div>
 
           {snapshot?.hint ? <div className="app-cc-usage-hint">{snapshot.hint}</div> : null}

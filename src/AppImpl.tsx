@@ -684,10 +684,6 @@ export default function App() {
     const onNavigate = (event: Event) => {
       const detail = (event as CustomEvent<WiseUiNavigationDetail>).detail;
       if (!detail || detail.kind !== "author") return;
-      if (!activeProjectId && activeRepositoryId != null) {
-        message.warning("Standalone Repo 不支持 Author 配置；升格为 Workspace 后启用");
-        return;
-      }
       if (detail.pane === "claude-plugins") {
         const tab = detail.query?.tab;
         if (tab === "installed" || tab === "catalog") {
@@ -698,7 +694,7 @@ export default function App() {
     };
     window.addEventListener(WISE_UI_EVENT_NAVIGATE, onNavigate);
     return () => window.removeEventListener(WISE_UI_EVENT_NAVIGATE, onNavigate);
-  }, [activeProjectId, activeRepositoryId, enterAuthorPane]);
+  }, [enterAuthorPane]);
 
   const dockQueryAppliedRef = useRef(false);
 
@@ -750,12 +746,8 @@ export default function App() {
   }, [activeRepositoryId, repositories]);
 
   const handleOpenExecutionEnvironment = useCallback(() => {
-    if (!activeProjectId && activeRepositoryId != null) {
-      message.warning("Standalone Repo 不支持 Author 配置；升格为 Workspace 后启用");
-      return;
-    }
     enterAuthorPane("engine-registry");
-  }, [activeProjectId, activeRepositoryId, enterAuthorPane]);
+  }, [enterAuthorPane]);
 
   const openRepositoryRunCommandConfigure = useCallback((repository: Pick<Repository, "id" | "path">) => {
     openRepositoryRunCommandModal({
@@ -1773,19 +1765,11 @@ export default function App() {
     enterCockpit(cockpitView("automation"));
   }, [enterCockpit]);
   const openAssistantsFromSidebar = useCallback(() => {
-    if (!activeProjectId && activeRepositoryId != null) {
-      message.warning("Standalone Repo 不支持工作台配置；升格为 Workspace 后启用");
-      return;
-    }
     enterAuthorPane("assistants");
-  }, [activeProjectId, activeRepositoryId, enterAuthorPane]);
+  }, [enterAuthorPane]);
   const openClaudePluginsFromSidebar = useCallback(() => {
-    if (!activeProjectId && activeRepositoryId != null) {
-      message.warning("Standalone Repo 不支持工作台配置；升格为 Workspace 后启用");
-      return;
-    }
     enterAuthorPane("claude-plugins");
-  }, [activeProjectId, activeRepositoryId, enterAuthorPane]);
+  }, [enterAuthorPane]);
   const leftSidebarHubQuickEntries = useLeftSidebarHubQuickEntries();
   const showLeftSidebarWorkspaceList = useLeftSidebarWorkspaceListDefault();
   const showRepositoryIconBadgesInWorkspaceList = useLeftSidebarRepositoryIconBadgesDefault();

@@ -610,6 +610,16 @@
   margin-bottom: 2px;
 }
 
+.app-cc-line-edits-stat--focused .app-cc-line-edits-stat-label {
+  color: var(--ant-color-primary);
+  font-weight: 500;
+}
+
+.app-cc-line-edits-heatmap-cell--focused {
+  outline: 1px solid var(--ant-color-primary);
+  outline-offset: -1px;
+}
+
 .app-cc-line-edits-stat-value {
   font-size: 11px;
   color: var(--ant-color-text);

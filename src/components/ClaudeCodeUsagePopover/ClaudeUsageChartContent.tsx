@@ -154,6 +154,12 @@ export interface ClaudeUsageChartContentProps {
   snapshotError: string | null;
   onRefresh: () => void;
   compact?: boolean;
+  /**
+   * 弹窗刚打开时为 true：默认聚焦最末一根柱（当天），summary/formula 行展示当日数据；
+   * hover 任意柱时切换到 hover 桶，鼠标离开后保持当前聚焦（不再回落聚合）。
+   * 关闭后下次打开再激活。
+   */
+  focusTodayOnOpen?: boolean;
 }
 
 const GRANULARITY_OPTIONS = [
@@ -284,11 +290,22 @@ export function ClaudeUsageChartContent({
   snapshotError,
   onRefresh,
   compact = false,
+  focusTodayOnOpen = false,
 }: ClaudeUsageChartContentProps) {
   const [hoveredBucket, setHoveredBucket] = useState<ClaudeUsageBucket | null>(null);
   const series = useMemo(() => pickSeries(snapshot, granularity), [snapshot, granularity]);
-
   const buckets: ClaudeUsageBucket[] = series?.buckets ?? [];
+
+  // 「聚焦桶」= hover 桶优先；否则取系列末桶（当天），仅首次进入激活。
+  // 用户首次打开时 summary/formula 默认展示当天，hover 任意桶切到该桶，鼠标离开后保持当前聚焦。
+  const focusBucket = useMemo<ClaudeUsageBucket | null>(() => {
+    if (hoveredBucket) return hoveredBucket;
+    if (!focusTodayOnOpen) return null;
+    if (buckets.length === 0) return null;
+    const last = buckets[buckets.length - 1];
+    return last ?? null;
+  }, [hoveredBucket, focusTodayOnOpen, buckets]);
+
   const maxTok = useMemo(() => {
     let m = 0;
     for (const b of buckets) {
@@ -299,21 +316,28 @@ export function ClaudeUsageChartContent({
 
   useEffect(() => {
     setHoveredBucket(null);
-  }, [granularity, series?.periodCaption]);
+  }, [granularity]);
 
   const summaryView = useMemo((): UsageSummaryView | null => {
-    if (hoveredBucket) return buildBucketSummaryView(hoveredBucket, granularity);
+    if (focusBucket) {
+      const view = buildBucketSummaryView(focusBucket, granularity);
+      // 首次进入 + 没有 hover 时，聚焦当天 = 整段「合计」的局部视角，caption 收口为「合计（当天）」。
+      if (!hoveredBucket && focusTodayOnOpen) {
+        return { ...view, caption: "合计（当天）" };
+      }
+      return view;
+    }
     if (series) return buildSeriesSummaryView(series);
     return null;
-  }, [granularity, hoveredBucket, series]);
+  }, [granularity, focusBucket, hoveredBucket, focusTodayOnOpen]);
 
   const formulaView = useMemo(() => {
-    if (hoveredBucket && hasCacheInputActivity(hoveredBucket)) {
+    if (focusBucket && hasCacheInputActivity(focusBucket)) {
       return {
-        cacheRead: hoveredBucket.cacheReadTokens,
-        input: hoveredBucket.inputTokens,
-        cacheCreate: hoveredBucket.cacheCreationTokens,
-        hitRate: hoveredBucket.cacheHitRate,
+        cacheRead: focusBucket.cacheReadTokens,
+        input: focusBucket.inputTokens,
+        cacheCreate: focusBucket.cacheCreationTokens,
+        hitRate: focusBucket.cacheHitRate,
       };
     }
     if (series && seriesHasCacheInput(series)) {
@@ -325,7 +349,7 @@ export function ClaudeUsageChartContent({
       };
     }
     return null;
-  }, [hoveredBucket, series]);
+  }, [focusBucket, series]);
 
   return (
     <div className={`app-cc-usage-popover${compact ? " app-cc-usage-popover--compact" : ""}`}>
@@ -348,7 +372,7 @@ export function ClaudeUsageChartContent({
           <div className="app-cc-usage-chart" onMouseLeave={() => setHoveredBucket(null)}>
             {buckets.map((b) => {
               const h = Math.max(2, Math.round((b.totalTokens / maxTok) * 100));
-              const isActive = hoveredBucket?.sortKey === b.sortKey;
+              const isActive = focusBucket?.sortKey === b.sortKey;
               return (
                 <div
                   key={b.sortKey}

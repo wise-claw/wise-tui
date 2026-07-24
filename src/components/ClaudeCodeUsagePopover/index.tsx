@@ -50,6 +50,9 @@ export function ClaudeCodeUsageHeaderBtn({ repositoryPath }: Props) {
   const [scope, setScope] = useState<UsageScope>("global");
   const [view, setView] = useState<UsageView>("tokens");
   const [granularity, setGranularity] = useState<ClaudeUsageGranularity>("day");
+  /** 弹窗刚打开时为 true：首次进入 Token 用量时默认聚焦当天（末桶），合计行展示当日；
+   * hover 任意桶切换到该桶；切粒度/视图/范围后保持当前 flag，由下次关闭重置。 */
+  const [focusTodayOnOpen, setFocusTodayOnOpen] = useState(false);
   const [snapshot, setSnapshot] = useState<ClaudeUsageSnapshotResponse | null>(null);
   const [lineEditsSnapshot, setLineEditsSnapshot] = useState<ClaudeLineEditsSnapshotResponse | null>(null);
   const [snapshotLoading, setSnapshotLoading] = useState(false);
@@ -64,6 +67,7 @@ export function ClaudeCodeUsageHeaderBtn({ repositoryPath }: Props) {
   useEffect(() => {
     if (uiSnap.usagePopoverOpenNonce === lastOpenNonce.current) return;
     lastOpenNonce.current = uiSnap.usagePopoverOpenNonce;
+    setFocusTodayOnOpen(true);
     setOpen(true);
   }, [uiSnap.usagePopoverOpenNonce]);
 
@@ -135,10 +139,14 @@ export function ClaudeCodeUsageHeaderBtn({ repositoryPath }: Props) {
         if (!next) {
           setView("tokens");
           setGranularity("day");
+          setFocusTodayOnOpen(false);
           setSnapshot(null);
           setLineEditsSnapshot(null);
           setSnapshotError(null);
           setLineEditsError(null);
+        } else if (!focusTodayOnOpen) {
+          // 打开瞬间激活「聚焦当天」视图；用户切粒度/视图/范围后保持当前 flag，由下次关闭重置。
+          setFocusTodayOnOpen(true);
         }
       }}
       trigger="click"
@@ -168,6 +176,7 @@ export function ClaudeCodeUsageHeaderBtn({ repositoryPath }: Props) {
               snapshotLoading={snapshotLoading}
               snapshotError={snapshotError}
               onRefresh={handleRefresh}
+              focusTodayOnOpen={focusTodayOnOpen}
             />
           ) : (
             <ClaudeLineEditsContent
@@ -175,6 +184,7 @@ export function ClaudeCodeUsageHeaderBtn({ repositoryPath }: Props) {
               snapshotLoading={lineEditsLoading}
               snapshotError={lineEditsError}
               onRefresh={handleRefresh}
+              focusTodayOnOpen={focusTodayOnOpen}
             />
           )}
         </div>

@@ -1,0 +1,7 @@
+{
+  "tool_name": "mcp__plugin_oh-my-claudecode_t__lsp_diagnostics",
+  "tool_input_preview": "{\"file\":\"/Users/sjl/Documents/github/wise-tui/src/components/ClaudeCodeUsagePopover/ClaudeUsageChartContent.tsx\"}",
+  "error": "Language server 'typescript-language-server' not found.\nInstall with: npm install -g typescript-language-server typescript",
+  "timestamp": "2026-07-24T01:28:19.545Z",
+  "retry_count": 2
+}
