@@ -58,7 +58,7 @@
   align-items: center;
   gap: 0;
   min-width: 0;
-  min-height: 26px;
+  min-height: 22px;
 }
 
 .app-left-sidebar-quick-actions-popover__row-main {
@@ -70,7 +70,7 @@
   border: none;
   background: transparent;
   text-align: left;
-  padding: 2px 4px 2px 8px;
+  padding: 1px 4px 1px 8px;
   cursor: pointer;
   color: inherit;
   line-height: 1.2;
