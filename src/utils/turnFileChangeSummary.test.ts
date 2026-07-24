@@ -52,6 +52,51 @@ describe("collectTurnFileChanges", () => {
     ).toEqual([]);
   });
 
+  test("skips running tools and null input without throwing", () => {
+    expect(
+      collectTurnFileChanges([
+        msg({
+          id: 1,
+          role: "assistant",
+          parts: [
+            {
+              id: "w-null",
+              type: "tool_use",
+              name: "Write",
+              status: "running",
+              input: null as unknown as Record<string, unknown>,
+              output: "",
+            },
+            writePart("/repo/ok.ts", "done", "w-ok"),
+          ],
+        }),
+      ]),
+    ).toEqual([
+      expect.objectContaining({ fileName: "ok.ts" }),
+    ]);
+  });
+
+  test("ignores incomplete edit tools even when status is completed with empty input", () => {
+    expect(
+      collectTurnFileChanges([
+        msg({
+          id: 1,
+          role: "assistant",
+          parts: [
+            {
+              id: "w-empty",
+              type: "tool_use",
+              name: "Write",
+              status: "completed",
+              input: null as unknown as Record<string, unknown>,
+              output: "",
+            },
+          ],
+        }),
+      ]),
+    ).toEqual([]);
+  });
+
   test("merges same path edits and sums line counts", () => {
     const files = collectTurnFileChanges([
       msg({

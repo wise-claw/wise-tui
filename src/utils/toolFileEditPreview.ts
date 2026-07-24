@@ -145,7 +145,10 @@ function linesFromApplyPatch(command: string): PatchDiffLine[] {
 
 export function extractToolFileEditPreview(part: ToolUsePart): ToolFileEditPreview | null {
   if (!isFileEditToolName(part.name)) return null;
-  const input = part.input as Record<string, unknown>;
+  // 流式中断 / 未完成的 tool_use 常见 input 为 null/undefined；不可直接下标访问。
+  const rawInput = part.input;
+  if (!rawInput || typeof rawInput !== "object" || Array.isArray(rawInput)) return null;
+  const input = rawInput as Record<string, unknown>;
   const filePath = pickInputString(input, ["file_path", "path", "target_file"]);
   if (!filePath) return null;
 

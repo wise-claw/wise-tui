@@ -189,6 +189,40 @@ describe("buildChatMessageListRows", () => {
     });
   });
 
+  test("idle rebuild survives interrupted Write with null input", () => {
+    const messages = [
+      msg({ id: 1, role: "user", content: "edit", timestamp: 10 }),
+      msg({
+        id: 2,
+        role: "assistant",
+        content: "partial",
+        timestamp: 11,
+        parts: [
+          {
+            type: "tool_use",
+            id: "w-null",
+            name: "Write",
+            status: "running",
+            input: null as unknown as Record<string, unknown>,
+            output: "",
+          },
+          { type: "text", text: "partial" },
+        ],
+      }),
+    ];
+    expect(() =>
+      buildChatMessageListRows(messages, {
+        sessionStatus: "idle",
+        showListEndThinkingHint: false,
+      }),
+    ).not.toThrow();
+    const rows = buildChatMessageListRows(messages, {
+      sessionStatus: "idle",
+      showListEndThinkingHint: false,
+    });
+    expect(rows.map((r) => r.kind)).toEqual(["message", "message"]);
+  });
+
   test("appends files-changed-summary after idle turn with file edits", () => {
     const messages = [
       msg({ id: 1, role: "user", content: "edit", timestamp: 10 }),

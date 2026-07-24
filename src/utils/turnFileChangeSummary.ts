@@ -42,6 +42,8 @@ export function collectTurnFileChanges(
     if (!Array.isArray(parts)) continue;
     for (const part of parts) {
       if (part.type !== "tool_use") continue;
+      // 仅统计已完成编辑；running/error 或 input 未到齐时不计入总结。
+      if (part.status !== "completed") continue;
       const preview = extractToolFileEditPreview(part);
       if (!preview) continue;
       const key = normalizeFilePathKey(preview.filePath);

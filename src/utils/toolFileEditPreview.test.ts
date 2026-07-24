@@ -90,6 +90,33 @@ describe("extractToolFileEditPreview", () => {
       ),
     ).toBeNull();
   });
+
+  test("returns null when input is null/undefined/non-object (streaming interrupt)", () => {
+    expect(
+      extractToolFileEditPreview(
+        buildPart({
+          name: "Write",
+          input: null as unknown as Record<string, unknown>,
+        }),
+      ),
+    ).toBeNull();
+    expect(
+      extractToolFileEditPreview(
+        buildPart({
+          name: "Edit",
+          input: undefined as unknown as Record<string, unknown>,
+        }),
+      ),
+    ).toBeNull();
+    expect(
+      extractToolFileEditPreview(
+        buildPart({
+          name: "Write",
+          input: "not-an-object" as unknown as Record<string, unknown>,
+        }),
+      ),
+    ).toBeNull();
+  });
 });
 
 describe("relativePathInRepository", () => {
