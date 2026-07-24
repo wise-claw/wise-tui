@@ -5,7 +5,6 @@ import { message } from "antd";
 import type { ClaudeSession, ProjectItem, Repository } from "../types";
 import type { PaneRuntimeOverride } from "../types/paneRuntimeOverride";
 import {
-  readCurrentMonitorLogicalWidth,
   readMainWindowInnerSize,
   restoreMainWindowInnerSnapshot,
   setMainWindowLogicalInnerSize,
@@ -13,16 +12,11 @@ import {
   waitLayoutFrames,
 } from "../services/mainWindowLayout";
 import {
-  columnCountForPaneCount,
-  computeMinLogicalCenterWidthForPaneCount,
-  computeMultiPaneTargetWindowWidth,
-  computeRestoreMultiPaneLogicalWidth,
-  MAIN_LAYOUT_MULTI_PANE_EXPAND_BUFFER_PX,
-  MAIN_LAYOUT_MULTI_PANE_UNIT_PX,
   nextPaneCountInCycle,
   type PaneCount,
   type PaneSlot,
 } from "../constants/mainLayoutWidths";
+import { isWiseAppFocused } from "../utils/isWiseAppFocused";
 import {
   longestCommonRepositoryPathPrefix,
   resolveProjectMainSessionAnchor,
@@ -216,7 +210,7 @@ export function useMainLayoutModes({
     [],
   );
 
-  /** 切换到指定屏数，每次切换都会自适应调整窗口宽度。成功返回 true。 */
+  /** 切换到指定屏数；保持当前窗口宽度不变，仅在窗口内分屏。成功返回 true。 */
   const handleChangePaneCount = useCallback(
     async (targetCount: PaneCount): Promise<boolean> => {
       if (paneChangeInFlightRef.current) {
@@ -267,7 +261,7 @@ export function useMainLayoutModes({
         return true;
       }
 
-      // 从单屏进入多屏：先快照窗口尺寸
+      // 从单屏进入多屏：先快照窗口尺寸（关闭多屏时用于恢复；切换屏数本身不改窗口宽度）
       if (currentPaneCount === 1) {
         if (!multiPaneLayoutReady()) {
           message.warning("请先选择工作区或仓库");
@@ -280,11 +274,6 @@ export function useMainLayoutModes({
           singlePaneWindowSnapshotRef.current = null;
         }
       }
-
-      // 计算列数变化量（用于窗口宽度增减）
-      const oldCols = columnCountForPaneCount(currentPaneCount);
-      const newCols = columnCountForPaneCount(targetCount);
-      const colDelta = newCols - oldCols;
 
       // 对齐 extraPanes；扩屏时为空槽直接新建隔离执行会话，省去「新建执行会话」空态一步。
       let nextExtraPanes = normalizeExtraPanesToPaneCount(
@@ -360,49 +349,7 @@ export function useMainLayoutModes({
       extraPanesLatestRef.current = nextExtraPanes;
       setExtraPanes(nextExtraPanes);
       setPaneCount(targetCount);
-
-      // 等布局帧后调整窗口宽度
-      await waitLayoutFrames(2);
-      if (colDelta > 0 && typeof window !== "undefined") {
-        // 增加列数：扩展窗口（屏幕感知——屏幕不够时压到屏幕上限，窗口内分屏）
-        const expandPx = colDelta * MAIN_LAYOUT_MULTI_PANE_UNIT_PX;
-        const idealWidth = window.innerWidth + expandPx;
-        let monitorWidth: number | null = null;
-        try {
-          monitorWidth = await readCurrentMonitorLogicalWidth();
-        } catch {
-          /* 非 Tauri：回退到不 clamp */
-        }
-        const { targetWidth, clampedByMonitor } = computeMultiPaneTargetWindowWidth({
-          currentInnerWidth: window.innerWidth,
-          idealWidth,
-          monitorLogicalWidth: monitorWidth,
-        });
-        if (targetWidth > window.innerWidth) {
-          try {
-            await setMainWindowLogicalInnerSize(targetWidth, window.innerHeight);
-            multiPaneAccumulatedDeltaRef.current += targetWidth - window.innerWidth;
-          } catch {
-            /* 浏览器 dev / 非 Tauri */
-          }
-        }
-        if (clampedByMonitor) {
-          message.info("屏幕宽度有限，已在当前窗口内分屏");
-        }
-      } else if (colDelta < 0 && typeof window !== "undefined") {
-        // 减少列数：收缩窗口
-        const shrinkPx = Math.abs(colDelta) * MAIN_LAYOUT_MULTI_PANE_UNIT_PX;
-        try {
-          const nextW = Math.max(
-            computeMinLogicalCenterWidthForPaneCount(targetCount) + MAIN_LAYOUT_MULTI_PANE_EXPAND_BUFFER_PX + 600,
-            window.innerWidth - shrinkPx,
-          );
-          await setMainWindowLogicalInnerSize(nextW, window.innerHeight);
-          multiPaneAccumulatedDeltaRef.current = Math.max(0, multiPaneAccumulatedDeltaRef.current - shrinkPx);
-        } catch {
-          /* 浏览器 dev / 非 Tauri */
-        }
-      }
+      // 不调整原生窗口宽度：多屏在当前窗口内分栏，pane 随宽度自动变窄。
       return true;
       } finally {
         window.clearTimeout(timeoutId);
@@ -451,6 +398,24 @@ export function useMainLayoutModes({
 
   const handleCyclePaneCountRef = useRef(handleCyclePaneCount);
   handleCyclePaneCountRef.current = handleCyclePaneCount;
+
+  /** Alt+Shift+K 关闭多屏（回到 1 屏）。 */
+  const handleCloseMultiPane = useCallback(() => {
+    if (paneCountRef.current <= 1) return;
+    void handleChangePaneCount(1);
+  }, [handleChangePaneCount]);
+
+  const handleCloseMultiPaneRef = useRef(handleCloseMultiPane);
+  handleCloseMultiPaneRef.current = handleCloseMultiPane;
+
+  /** ⌥⇧K 与全局 ⌥K 同帧竞态时，关闭优先，短暂抑制循环切换。 */
+  const suppressCycleUntilMsRef = useRef(0);
+  const preferCloseMultiPane = useCallback(() => {
+    suppressCycleUntilMsRef.current = performance.now() + 250;
+    handleCloseMultiPaneRef.current();
+  }, []);
+  const preferCloseMultiPaneRef = useRef(preferCloseMultiPane);
+  preferCloseMultiPaneRef.current = preferCloseMultiPane;
 
   /** 为指定窗格选择仓库：始终新建隔离执行会话（不复用主会话绑定）。 */
   const handlePaneRepositorySelect = useCallback(
@@ -794,7 +759,7 @@ export function useMainLayoutModes({
     ],
   );
 
-  // 持久化恢复多屏后补一次窗口扩宽，避免 min-width 挤压导致启动卡顿
+  // 持久化恢复多屏：只记录当前窗口快照供关闭多屏时使用，不自动扩宽窗口。
   useEffect(() => {
     if (!paneLayoutHydrated) return;
     if (multiPaneRestoreExpandDoneRef.current) return;
@@ -803,44 +768,11 @@ export function useMainLayoutModes({
     if (restoredCount <= 1) return;
 
     void (async () => {
-      if (paneChangeInFlightRef.current) return;
-      paneChangeInFlightRef.current = true;
-      const timeoutId = window.setTimeout(() => {
-        paneChangeInFlightRef.current = false;
-      }, PANE_CHANGE_IN_FLIGHT_TIMEOUT_MS);
+      multiPaneAccumulatedDeltaRef.current = 0;
       try {
-        multiPaneAccumulatedDeltaRef.current = 0;
-        try {
-          singlePaneWindowSnapshotRef.current = await readMainWindowInnerSize();
-        } catch {
-          singlePaneWindowSnapshotRef.current = null;
-        }
-        await waitLayoutFrames(2);
-        if (typeof window === "undefined") return;
-        const currentWidth = window.innerWidth;
-        let restoreMonitorWidth: number | null = null;
-        try {
-          restoreMonitorWidth = await readCurrentMonitorLogicalWidth();
-        } catch {
-          /* 非 Tauri：回退到不 clamp */
-        }
-        const targetWidth = computeRestoreMultiPaneLogicalWidth(
-          restoredCount,
-          currentWidth,
-          undefined,
-          restoreMonitorWidth,
-        );
-        if (targetWidth != null) {
-          try {
-            await setMainWindowLogicalInnerSize(targetWidth, window.innerHeight);
-            multiPaneAccumulatedDeltaRef.current += Math.max(0, targetWidth - currentWidth);
-          } catch {
-            /* 浏览器 dev / 非 Tauri */
-          }
-        }
-      } finally {
-        window.clearTimeout(timeoutId);
-        paneChangeInFlightRef.current = false;
+        singlePaneWindowSnapshotRef.current = await readMainWindowInnerSize();
+      } catch {
+        singlePaneWindowSnapshotRef.current = null;
       }
     })();
   }, [paneLayoutHydrated]);
@@ -919,9 +851,17 @@ export function useMainLayoutModes({
   useEffect(() => {
     let unlistenMultiPane: (() => void) | undefined;
     let unlistenLegacyDualPane: (() => void) | undefined;
+    let unlistenCloseMultiPane: (() => void) | undefined;
     let cancelled = false;
     const onCycleMultiPane = () => {
+      // 多开主窗时仅当前聚焦窗口响应（与搜索/新建会话快捷键一致）。
+      if (!isWiseAppFocused()) return;
+      if (performance.now() < suppressCycleUntilMsRef.current) return;
       handleCyclePaneCountRef.current();
+    };
+    const onCloseMultiPane = () => {
+      if (!isWiseAppFocused()) return;
+      preferCloseMultiPaneRef.current();
     };
     void listen("global-cycle-multi-pane", onCycleMultiPane)
       .then((fn) => {
@@ -940,11 +880,35 @@ export function useMainLayoutModes({
       .catch(() => {
         /* non-Tauri / event unavailable */
       });
+    void listen("global-close-multi-pane", onCloseMultiPane)
+      .then((fn) => {
+        if (!cancelled) unlistenCloseMultiPane = fn;
+        else safeUnlisten(fn);
+      })
+      .catch(() => {
+        /* non-Tauri / event unavailable */
+      });
     return () => {
       cancelled = true;
       safeUnlisten(unlistenMultiPane);
       safeUnlisten(unlistenLegacyDualPane);
+      safeUnlisten(unlistenCloseMultiPane);
     };
+  }, []);
+
+  // 窗口内 ⌥⇧K：精确修饰键关闭多屏（不依赖全局快捷键是否误匹配 ⌥K）。
+  useEffect(() => {
+    const onKeyDown = (e: KeyboardEvent) => {
+      if (e.defaultPrevented) return;
+      if (!isWiseAppFocused()) return;
+      if (!(e.altKey && e.shiftKey && !e.metaKey && !e.ctrlKey)) return;
+      if (e.code !== "KeyK" && e.key !== "K" && e.key !== "k") return;
+      e.preventDefault();
+      e.stopPropagation();
+      preferCloseMultiPaneRef.current();
+    };
+    window.addEventListener("keydown", onKeyDown, true);
+    return () => window.removeEventListener("keydown", onKeyDown, true);
   }, []);
 
   return {
@@ -957,6 +921,7 @@ export function useMainLayoutModes({
     handleChangePaneCount,
     paneChangeInFlight,
     handleCyclePaneCount,
+    handleCloseMultiPane,
     mainLayoutContentRef,
     mainLayoutLeftWidthPx,
     mainLayoutRightWidthPx,

@@ -5,6 +5,7 @@
 //!   避免占用 ⌘F / ⌘⇧F，让 Monaco 编辑器在聚焦时能正常触发自身内查找。
 //! - `content_alt`：⌘J / Ctrl+J，文件内容搜索的并列快捷键（与 `content` 同效）。
 //! - `new_session`：⌘N / Ctrl+N，新建会话；刻意做成「应用内」，避免在别的 App 里误触。
+//! - `close_multi_pane`：⌥⇧K / Alt+Shift+K，关闭多屏回到单屏；仅主窗聚焦时生效。
 //!
 //! 双重保险：
 //! 1. 主窗口 `Focused` 事件驱动注册/注销（见 `set_main_window_search_shortcuts_active`）。
@@ -43,6 +44,7 @@ struct InAppSearchShortcutState {
     content: Shortcut,
     content_alt: Shortcut,
     new_session: Shortcut,
+    close_multi_pane: Shortcut,
     registered: bool,
 }
 
@@ -70,6 +72,7 @@ impl InAppSearchShortcutState {
             content: Shortcut::new(Some(content_mods), Code::KeyF),
             content_alt: Shortcut::new(Some(content_alt_mods), Code::KeyJ),
             new_session: Shortcut::new(Some(new_session_mods), Code::KeyN),
+            close_multi_pane: Shortcut::new(Some(Modifiers::ALT | Modifiers::SHIFT), Code::KeyK),
             registered: false,
         }
     }
@@ -97,10 +100,12 @@ pub fn register_search_shortcuts(app: &AppHandle) -> Result<(), String> {
         let content = state.content.clone();
         let content_alt = state.content_alt.clone();
         let new_session = state.new_session.clone();
+        let close_multi_pane = state.close_multi_pane.clone();
         let app_for_filename = app.clone();
         let app_for_content = app.clone();
         let app_for_content_alt = app.clone();
         let app_for_new_session = app.clone();
+        let app_for_close_multi_pane = app.clone();
 
         app.global_shortcut()
             .on_shortcut(filename, move |_app, _shortcut, event| {
@@ -151,6 +156,22 @@ pub fn register_search_shortcuts(app: &AppHandle) -> Result<(), String> {
             })
             .map_err(|e| e.to_string())?;
 
+        app.global_shortcut()
+            .on_shortcut(close_multi_pane, move |_app, _shortcut, event| {
+                if event.state() != ShortcutState::Pressed {
+                    return;
+                }
+                if !main_window_focused(&app_for_close_multi_pane) {
+                    return;
+                }
+                crate::main_window::emit_to_focused_main_workspace_window(
+                    &app_for_close_multi_pane,
+                    "global-close-multi-pane",
+                    (),
+                );
+            })
+            .map_err(|e| e.to_string())?;
+
         state.registered = true;
         Ok(())
     })
@@ -165,6 +186,7 @@ pub fn unregister_search_shortcuts(app: &AppHandle) -> Result<(), String> {
         let content = state.content.clone();
         let content_alt = state.content_alt.clone();
         let new_session = state.new_session.clone();
+        let close_multi_pane = state.close_multi_pane.clone();
         app.global_shortcut()
             .unregister(filename)
             .map_err(|e| e.to_string())?;
@@ -175,6 +197,9 @@ pub fn unregister_search_shortcuts(app: &AppHandle) -> Result<(), String> {
         let _ = app.global_shortcut().unregister(content_alt);
         app.global_shortcut()
             .unregister(new_session)
+            .map_err(|e| e.to_string())?;
+        app.global_shortcut()
+            .unregister(close_multi_pane)
             .map_err(|e| e.to_string())?;
         state.registered = false;
         Ok(())

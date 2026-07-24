@@ -42,8 +42,7 @@ describe("computeMainWindowMinLogicalWidth", () => {
     ).toBe(MAIN_LAYOUT_CENTER_MIN_WIDTH_WHILE_RESIZE_PX);
   });
 
-  test("multi-pane uses grid minimum center width", () => {
-    const minCenter = computeMinLogicalCenterWidthForPaneCount(4);
+  test("multi-pane keeps the same center minimum as single pane (no window grow on switch)", () => {
     expect(
       computeMainWindowMinLogicalWidth({
         paneCount: 4,
@@ -54,10 +53,17 @@ describe("computeMainWindowMinLogicalWidth", () => {
       }),
     ).toBe(
       MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX +
-        minCenter +
+        MAIN_LAYOUT_CENTER_MIN_WIDTH_WHILE_RESIZE_PX +
         MAIN_LAYOUT_RIGHT_SIDER_WIDTH_PX +
         MAIN_LAYOUT_RESIZE_HANDLE_PX * 2,
     );
+    expect(
+      computeMainWindowMinLogicalWidth({
+        paneCount: 8,
+        leftCollapsed: true,
+        rightCollapsed: true,
+      }),
+    ).toBe(MAIN_LAYOUT_CENTER_MIN_WIDTH_WHILE_RESIZE_PX);
   });
 });
 

@@ -2,7 +2,7 @@
 
 use std::fs;
 
-use tauri::{AppHandle, Manager, WebviewUrl, WebviewWindowBuilder};
+use tauri::{AppHandle, Emitter, Manager, WebviewUrl, WebviewWindowBuilder};
 
 use crate::app_state_commands::load_repositories;
 use crate::wise_db::WiseDb;
@@ -103,6 +103,19 @@ pub fn resolve_main_workspace_window_for_focus(app: &AppHandle) -> Option<tauri:
 pub fn focus_main_workspace_window(app: &AppHandle) -> Result<(), String> {
     let win = resolve_main_workspace_window_for_focus(app).ok_or_else(|| "未找到 Wise 主窗口".to_string())?;
     focus_window(&win)
+}
+
+/// 仅向当前应接收快捷键的主工作区窗口派发事件（避免多开窗口全部响应）。
+pub fn emit_to_focused_main_workspace_window<S: serde::Serialize + Clone>(
+    app: &AppHandle,
+    event: &str,
+    payload: S,
+) {
+    if let Some(win) = resolve_main_workspace_window_for_focus(app) {
+        let _ = win.emit(event, payload);
+        return;
+    }
+    let _ = app.emit(event, payload);
 }
 
 pub fn open_main_workspace_window(

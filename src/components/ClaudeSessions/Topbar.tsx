@@ -575,7 +575,7 @@ export const Topbar = memo(function Topbar({
                 paneChangeInFlight
                   ? "正在切换多屏布局…"
                   : paneCount > 1
-                    ? `${paneCount}屏模式（⌥K 切换）`
+                    ? `${paneCount}屏模式（⌥K 切换 · ⌥⇧K 关闭）`
                     : "多屏：打开多个隔离并行窗格（快捷键 ⌥K）"
               }
             >

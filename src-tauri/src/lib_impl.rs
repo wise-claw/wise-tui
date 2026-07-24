@@ -27,6 +27,18 @@ const MENU_ID_OPEN_WEBVIEW_DEVTOOLS: &str = "wise/open-webview-devtools";
 const MENU_ID_CLOSE_WEBVIEW_DEVTOOLS: &str = "wise/close-webview-devtools";
 #[cfg(desktop)]
 const MENU_ID_NEW_MAIN_WINDOW: &str = "wise/new-main-window";
+
+/// ⌥K 回调里检测 Shift：按住 Shift 时不切换多屏，留给应用内 ⌥⇧K 关闭。
+#[cfg(target_os = "macos")]
+fn shortcut_shift_down() -> bool {
+    use objc2_app_kit::{NSEvent, NSEventModifierFlags};
+    NSEvent::modifierFlags_class().contains(NSEventModifierFlags::Shift)
+}
+
+#[cfg(all(desktop, not(target_os = "macos")))]
+fn shortcut_shift_down() -> bool {
+    false
+}
 #[cfg(desktop)]
 const MENU_ID_CLOSE_MAIN_WINDOW: &str = "wise/close-main-window";
 
@@ -74,17 +86,27 @@ pub fn run() {
                 })
                 .map_err(|e| e.to_string())?;
 
-            // ⌥K / Alt+K：置顶主窗口并切换双栏（与中栏按钮一致）
+            // ⌥K / Alt+K：置顶主窗口并循环切换多屏（1→2→4→6→8→1）。
+            // 若同时按住 Shift，交给应用内 ⌥⇧K（关闭多屏），避免两键都走进「开多屏」。
             let toggle_dual_pane_shortcut = Shortcut::new(Some(Modifiers::ALT), Code::KeyK);
             app.global_shortcut()
                 .on_shortcut(toggle_dual_pane_shortcut, |_app, _shortcut, event| {
-                    if event.state() == ShortcutState::Pressed {
-                        let _ = wise_mascot::wise_main_window_focus(_app.clone());
-                        let _ = _app.emit("global-cycle-multi-pane", ());
+                    if event.state() != ShortcutState::Pressed {
+                        return;
                     }
+                    if shortcut_shift_down() {
+                        return;
+                    }
+                    let _ = wise_mascot::wise_main_window_focus(_app.clone());
+                    main_window::emit_to_focused_main_workspace_window(
+                        _app,
+                        "global-cycle-multi-pane",
+                        (),
+                    );
                 })
                 .map_err(|e| e.to_string())?;
 
+            // ⌥⇧K / Alt+Shift+K：关闭多屏（应用内，见 `in_app_shortcuts`）。
             // ⌘N / Ctrl+N：新建会话（应用内，见 `in_app_shortcuts`）。
             // 这里不再常驻注册，由主窗口 focused/unfocused 时动态开关，避免在别的 App 里误触。
 

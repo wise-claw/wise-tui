@@ -27,13 +27,17 @@ export const APP_SHORTCUT_GROUPS: AppShortcutGroup[] = [
       },
       {
         keys: "⌥K · Alt+K",
-        description: "置顶主窗口，并切换双栏布局。",
+        description: "置顶主窗口，并循环切换多屏布局（1→2→4→6→8→1）。",
       },
     ],
   },
   {
     title: "应用内",
     rows: [
+      {
+        keys: "⌥⇧K · Alt+Shift+K",
+        description: "主窗口内关闭多屏（回到单屏）；与 ⌥K 区分，按住 Shift 时不会切换多屏。",
+      },
       {
         keys: "⌘N · Ctrl+N",
         description: "为当前仓库新建一个对话会话。",

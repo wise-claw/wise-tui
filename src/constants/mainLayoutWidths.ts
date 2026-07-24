@@ -281,7 +281,12 @@ export function computeMinLogicalInnerWidthForMultiPaneLayout(
   return left + center + right + handleGutter;
 }
 
-/** 主窗口逻辑最小宽度：左/右栏当前宽度（收起为 0）+ 中栏最小宽度 + 拖动手柄。 */
+/**
+ * 主窗口逻辑最小宽度：左/右栏当前宽度（收起为 0）+ 中栏最小宽度 + 拖动手柄。
+ *
+ * 中栏下限固定为单屏 resize 最小值，不随多屏列数抬升——否则 `setMinSize` 会在切换多屏时
+ * 把原生窗口撑宽。多屏网格在当前窗口内分栏变窄（CSS `min-width: 0`）。
+ */
 export function computeMainWindowMinLogicalWidth(options: {
   paneCount: PaneCount;
   leftCollapsed: boolean;
@@ -289,7 +294,7 @@ export function computeMainWindowMinLogicalWidth(options: {
   leftWidthPx?: number;
   rightWidthPx?: number;
 }): number {
-  const paneCount = options.paneCount <= 1 ? 1 : options.paneCount;
+  void options.paneCount;
   const left = options.leftCollapsed
     ? 0
     : (options.leftWidthPx ?? MAIN_LAYOUT_LEFT_SIDER_WIDTH_PX);
@@ -299,11 +304,7 @@ export function computeMainWindowMinLogicalWidth(options: {
   const handleGutter =
     (!options.leftCollapsed ? MAIN_LAYOUT_RESIZE_HANDLE_PX : 0) +
     (!options.rightCollapsed ? MAIN_LAYOUT_RESIZE_HANDLE_PX : 0);
-  const center =
-    paneCount <= 1
-      ? MAIN_LAYOUT_CENTER_MIN_WIDTH_WHILE_RESIZE_PX
-      : computeMinLogicalCenterWidthForPaneCount(paneCount);
-  return left + center + right + handleGutter;
+  return left + MAIN_LAYOUT_CENTER_MIN_WIDTH_WHILE_RESIZE_PX + right + handleGutter;
 }
 
 /** 根据当前屏数计算下一个循环屏数（Alt+K）。 */
@@ -317,7 +318,7 @@ export function isPaneCount(value: unknown): value is PaneCount {
   return value === 1 || value === 2 || value === 4 || value === 6 || value === 8;
 }
 
-/** 多屏网格列数（用于窗口宽度增减）。 */
+/** 多屏网格列数。 */
 export function columnCountForPaneCount(count: PaneCount): number {
   return paneGridDimensions(count).cols;
 }
