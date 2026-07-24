@@ -73,46 +73,126 @@ fn rgb_hex(rgb: Rgb) -> String {
     format!("#{:02x}{:02x}{:02x}", rgb.r, rgb.g, rgb.b)
 }
 
-/// xterm 256-color defaults when the terminal has not overridden the palette entry.
-fn named_rgb(named: NamedColor) -> Rgb {
-    match named {
-        NamedColor::Black | NamedColor::DimBlack => Rgb { r: 0, g: 0, b: 0 },
-        NamedColor::Red | NamedColor::DimRed => Rgb { r: 205, g: 49, b: 49 },
-        NamedColor::Green | NamedColor::DimGreen => Rgb { r: 13, g: 188, b: 121 },
-        NamedColor::Yellow | NamedColor::DimYellow => Rgb { r: 229, g: 229, b: 16 },
-        NamedColor::Blue | NamedColor::DimBlue => Rgb { r: 36, g: 114, b: 200 },
-        NamedColor::Magenta | NamedColor::DimMagenta => Rgb { r: 188, g: 63, b: 188 },
-        NamedColor::Cyan | NamedColor::DimCyan => Rgb { r: 17, g: 168, b: 205 },
-        NamedColor::White | NamedColor::DimWhite => Rgb { r: 229, g: 229, b: 229 },
-        NamedColor::BrightBlack => Rgb { r: 102, g: 102, b: 102 },
-        NamedColor::BrightRed => Rgb { r: 241, g: 76, b: 76 },
-        NamedColor::BrightGreen => Rgb { r: 35, g: 209, b: 139 },
-        NamedColor::BrightYellow => Rgb { r: 245, g: 245, b: 67 },
-        NamedColor::BrightBlue => Rgb { r: 59, g: 142, b: 234 },
-        NamedColor::BrightMagenta => Rgb { r: 214, g: 112, b: 214 },
-        NamedColor::BrightCyan => Rgb { r: 41, g: 184, b: 219 },
-        NamedColor::BrightWhite => Rgb { r: 255, g: 255, b: 255 },
-        NamedColor::Foreground | NamedColor::BrightForeground | NamedColor::DimForeground => {
-            Rgb {
-                r: 0xd4,
-                g: 0xd4,
-                b: 0xd4,
-            }
-        }
-        NamedColor::Background => Rgb {
-            r: 0x1e,
-            g: 0x1e,
-            b: 0x1e,
-        },
-        NamedColor::Cursor => Rgb {
-            r: 0xae,
-            g: 0xaf,
-            b: 0xad,
-        },
+/// Wise 内置终端调色板（Catppuccin Mocha 取向）。
+/// 与前端 `alacrittyTerminalCanvas.ts` / `TerminalPanel/index.css` 的 `--terminal-*` 保持同步。
+pub(crate) fn theme_foreground() -> Rgb {
+    Rgb {
+        r: 0xcd,
+        g: 0xd6,
+        b: 0xf4,
     }
 }
 
-fn indexed_rgb(index: u8) -> Rgb {
+pub(crate) fn theme_background() -> Rgb {
+    Rgb {
+        r: 0x1e,
+        g: 0x1e,
+        b: 0x2e,
+    }
+}
+
+pub(crate) fn theme_cursor() -> Rgb {
+    Rgb {
+        r: 0xf5,
+        g: 0xe0,
+        b: 0xdc,
+    }
+}
+
+/// xterm 256-color / named color defaults when the terminal has not overridden the palette entry.
+pub(crate) fn named_rgb(named: NamedColor) -> Rgb {
+    match named {
+        // 避免纯黑：作背景时更像「抬升面」，作前景时也不至于彻底消失。
+        NamedColor::Black | NamedColor::DimBlack => Rgb {
+            r: 0x45,
+            g: 0x47,
+            b: 0x5a,
+        },
+        NamedColor::Red | NamedColor::DimRed => Rgb {
+            r: 0xf3,
+            g: 0x8b,
+            b: 0xa8,
+        },
+        NamedColor::Green | NamedColor::DimGreen => Rgb {
+            r: 0xa6,
+            g: 0xe3,
+            b: 0xa1,
+        },
+        NamedColor::Yellow | NamedColor::DimYellow => Rgb {
+            r: 0xf9,
+            g: 0xe2,
+            b: 0xaf,
+        },
+        NamedColor::Blue | NamedColor::DimBlue => Rgb {
+            r: 0x89,
+            g: 0xb4,
+            b: 0xfa,
+        },
+        NamedColor::Magenta | NamedColor::DimMagenta => Rgb {
+            r: 0xcb,
+            g: 0xa6,
+            b: 0xf7,
+        },
+        NamedColor::Cyan | NamedColor::DimCyan => Rgb {
+            r: 0x94,
+            g: 0xe2,
+            b: 0xd5,
+        },
+        NamedColor::White | NamedColor::DimWhite => Rgb {
+            r: 0xba,
+            g: 0xc2,
+            b: 0xde,
+        },
+        NamedColor::BrightBlack => Rgb {
+            r: 0x58,
+            g: 0x5b,
+            b: 0x70,
+        },
+        NamedColor::BrightRed => Rgb {
+            r: 0xf3,
+            g: 0x8b,
+            b: 0xa8,
+        },
+        NamedColor::BrightGreen => Rgb {
+            r: 0xa6,
+            g: 0xe3,
+            b: 0xa1,
+        },
+        NamedColor::BrightYellow => Rgb {
+            r: 0xf9,
+            g: 0xe2,
+            b: 0xaf,
+        },
+        NamedColor::BrightBlue => Rgb {
+            r: 0x89,
+            g: 0xb4,
+            b: 0xfa,
+        },
+        NamedColor::BrightMagenta => Rgb {
+            r: 0xf5,
+            g: 0xc2,
+            b: 0xe7,
+        },
+        NamedColor::BrightCyan => Rgb {
+            r: 0x94,
+            g: 0xe2,
+            b: 0xd5,
+        },
+        NamedColor::BrightWhite => Rgb {
+            r: 0xa6,
+            g: 0xad,
+            b: 0xc8,
+        },
+        NamedColor::Foreground | NamedColor::BrightForeground | NamedColor::DimForeground => {
+            theme_foreground()
+        }
+        NamedColor::Background => theme_background(),
+        NamedColor::Cursor => theme_cursor(),
+    }
+}
+
+/// OSC / ColorRequest 用的索引色（含 256/257/258 前景/背景/光标）。
+pub(crate) fn default_indexed_rgb(index: usize) -> Rgb {
     match index {
         0..=15 => named_rgb(match index {
             0 => NamedColor::Black,
@@ -132,6 +212,16 @@ fn indexed_rgb(index: u8) -> Rgb {
             14 => NamedColor::BrightCyan,
             _ => NamedColor::BrightWhite,
         }),
+        256 | 267 => theme_foreground(),
+        257 | 268 => theme_background(),
+        258 => theme_cursor(),
+        _ => theme_foreground(),
+    }
+}
+
+fn indexed_rgb(index: u8) -> Rgb {
+    match index {
+        0..=15 => default_indexed_rgb(index as usize),
         16..=231 => {
             let i = index - 16;
             let r = i / 36;
@@ -275,9 +365,18 @@ pub(crate) fn serialize_frame<T: EventListener>(term: &Term<T>) -> TerminalFrame
     }
 
     let cursor_point = content.cursor.point;
-    let cursor_row = (cursor_point.line.0 + display_offset).clamp(0, rows as i32 - 1) as u16;
+    // 滚动进历史时，光标常在视口外；勿 clamp，否则会钉在视口底/顶误显。
+    let cursor_screen_row = cursor_point.line.0 + display_offset;
+    let cursor_in_viewport =
+        cursor_screen_row >= 0 && cursor_screen_row < rows as i32;
     let cursor_col = (cursor_point.column.0 as u16).min(cols.saturating_sub(1));
-    let cursor_visible = content.mode.contains(TermMode::SHOW_CURSOR);
+    let cursor_row = if cursor_in_viewport {
+        cursor_screen_row as u16
+    } else {
+        0
+    };
+    let cursor_visible =
+        content.mode.contains(TermMode::SHOW_CURSOR) && cursor_in_viewport;
 
     TerminalFrameDto {
         cols,
@@ -322,5 +421,48 @@ mod tests {
             .map(|run| run.text.as_str())
             .collect::<String>();
         assert!(first.starts_with("hi"), "got {first:?}");
+    }
+
+    #[test]
+    fn serialize_frame_hides_cursor_when_scrolled_into_history() {
+        use alacritty_terminal::grid::Scroll;
+        use alacritty_terminal::term::Config as TermConfig;
+
+        let size = TermSize::new(40, 8);
+        let config = TermConfig {
+            scrolling_history: 10_000,
+            ..TermConfig::default()
+        };
+        let mut term = Term::new(config, &size, VoidListener);
+        let mut parser: ansi::Processor = ansi::Processor::new();
+        let mut payload = String::new();
+        for i in 0..40 {
+            payload.push_str(&format!("line-{i}\r\n"));
+        }
+        parser.advance(&mut term, payload.as_bytes());
+
+        let live = serialize_frame(&term);
+        assert!(live.cursor.visible, "live viewport should show cursor");
+
+        term.scroll_display(Scroll::Delta(5));
+        let scrolled = serialize_frame(&term);
+        assert!(
+            !scrolled.cursor.visible,
+            "scrolled history should hide out-of-viewport cursor"
+        );
+    }
+
+    #[test]
+    fn theme_palette_matches_frontend_hex() {
+        let fg = theme_foreground();
+        let bg = theme_background();
+        let cursor = theme_cursor();
+        assert_eq!(rgb_hex(fg), "#cdd6f4");
+        assert_eq!(rgb_hex(bg), "#1e1e2e");
+        assert_eq!(rgb_hex(cursor), "#f5e0dc");
+        assert_eq!(rgb_hex(named_rgb(NamedColor::Green)), "#a6e3a1");
+        assert_eq!(rgb_hex(named_rgb(NamedColor::Blue)), "#89b4fa");
+        assert_eq!(rgb_hex(default_indexed_rgb(257)), "#1e1e2e");
+        assert_eq!(rgb_hex(default_indexed_rgb(2)), "#a6e3a1");
     }
 }

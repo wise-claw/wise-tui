@@ -1,6 +1,7 @@
 import { invoke } from "@tauri-apps/api/core";
 import type {
   TerminalAttachResponse,
+  TerminalFrame,
   TerminalSessionInfo,
   TerminalSessionSource,
 } from "../types/terminal";
@@ -101,6 +102,19 @@ export async function writeTerminalSession(
   data: string,
 ): Promise<void> {
   return invoke("terminal_write", { workspaceId, terminalId, data });
+}
+
+/** 滚动历史视口：`deltaLines > 0` 看更旧，`< 0` 看更新。返回最新网格帧。 */
+export async function scrollTerminalSession(
+  workspaceId: string,
+  terminalId: string,
+  deltaLines: number,
+): Promise<TerminalFrame> {
+  return invoke<TerminalFrame>("terminal_scroll", {
+    workspaceId,
+    terminalId,
+    deltaLines,
+  });
 }
 
 export async function resizeTerminalSession(

@@ -1,15 +1,18 @@
 .terminal-panel {
-  border-top: 1px solid var(--ant-color-border-secondary);
+  border-top: 1px solid rgba(205, 214, 244, 0.08);
   background: var(--terminal-background);
   display: flex;
   flex-direction: column;
   height: var(--terminal-panel-height, 220px);
   -webkit-app-region: no-drag;
-  /* 内置终端固定深色主题，不跟 Ant 浅色容器色走，避免浅灰字落在白底上。 */
-  --terminal-background: #1e1e1e;
-  --terminal-foreground: #d4d4d4;
-  --terminal-cursor: #aeafad;
-  --terminal-selection: rgba(38, 79, 120, 0.55);
+  /* 内置终端固定深色主题（Catppuccin Mocha 取向），不跟 Ant 浅色容器色走。 */
+  --terminal-background: #1e1e2e;
+  --terminal-foreground: #cdd6f4;
+  --terminal-cursor: #f5e0dc;
+  --terminal-selection: rgba(137, 180, 250, 0.35);
+  --terminal-header-bg: #181825;
+  --terminal-header-fg: rgba(205, 214, 244, 0.78);
+  --terminal-border: rgba(205, 214, 244, 0.1);
 }
 
 .terminal-panel--fullscreen {
@@ -39,12 +42,13 @@
   right: 0;
   top: 0;
   height: 1px;
-  background: var(--ant-color-border);
-  opacity: 0.4;
+  background: var(--terminal-border);
+  opacity: 0.9;
 }
 
 .terminal-panel-resizer:hover::after {
-  opacity: 0.9;
+  background: color-mix(in srgb, #89b4fa 70%, transparent);
+  opacity: 1;
 }
 
 .terminal-header {
@@ -53,14 +57,14 @@
   justify-content: space-between;
   gap: 8px;
   flex-shrink: 0;
-  min-height: 24px;
-  padding: 2px 8px;
+  min-height: 28px;
+  padding: 3px 10px;
   font-size: 12px;
   font-weight: 500;
   line-height: 1.2;
-  color: rgba(255, 255, 255, 0.75);
-  background: #252526;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--terminal-header-fg);
+  background: var(--terminal-header-bg);
+  border-bottom: 1px solid var(--terminal-border);
 }
 
 .terminal-header-left {
@@ -90,7 +94,7 @@
   border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
-  color: rgba(255, 255, 255, 0.55);
+  color: rgba(205, 214, 244, 0.55);
   font-size: 11px;
   line-height: 1;
   cursor: pointer;
@@ -98,13 +102,13 @@
 }
 
 .terminal-tab--active {
-  color: rgba(255, 255, 255, 0.92);
-  border-color: rgba(255, 255, 255, 0.12);
-  background: rgba(255, 255, 255, 0.08);
+  color: rgba(205, 214, 244, 0.95);
+  border-color: rgba(137, 180, 250, 0.28);
+  background: rgba(137, 180, 250, 0.12);
 }
 
 .terminal-tab--agent {
-  color: #4fc1ff;
+  color: #89b4fa;
 }
 
 .terminal-tab--add {
@@ -133,7 +137,7 @@
 
 .terminal-tab__close:hover {
   opacity: 1;
-  background: rgba(255, 255, 255, 0.12);
+  background: rgba(205, 214, 244, 0.12);
 }
 
 .terminal-header-title {
@@ -148,10 +152,10 @@
   height: 20px;
   margin: 0;
   padding: 0 6px;
-  border: 1px solid rgba(255, 255, 255, 0.14);
+  border: 1px solid rgba(205, 214, 244, 0.16);
   border-radius: 4px;
   background: transparent;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(205, 214, 244, 0.72);
   font-size: 11px;
   font-weight: 500;
   line-height: 1;
@@ -159,9 +163,9 @@
 }
 
 .terminal-header-action:hover:not(:disabled) {
-  color: rgba(255, 255, 255, 0.92);
-  border-color: rgba(255, 255, 255, 0.28);
-  background: rgba(255, 255, 255, 0.08);
+  color: rgba(205, 214, 244, 0.95);
+  border-color: rgba(137, 180, 250, 0.4);
+  background: rgba(137, 180, 250, 0.12);
 }
 
 .terminal-header-action:disabled {
@@ -171,6 +175,113 @@
 
 .terminal-header-action-label {
   line-height: 1;
+}
+
+.terminal-quick-commands {
+  width: min(280px, 80vw);
+  max-height: min(280px, 50vh);
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.terminal-quick-commands__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  font-size: 12px;
+  font-weight: 600;
+  line-height: 1.2;
+  color: rgba(0, 0, 0, 0.78);
+}
+
+.terminal-quick-commands__body {
+  overflow: auto;
+  min-height: 0;
+}
+
+.terminal-quick-commands__empty {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2px;
+  padding: 2px 0 4px;
+  font-size: 11px;
+}
+
+.terminal-quick-commands__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+}
+
+.terminal-quick-commands__row {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  min-width: 0;
+  min-height: 26px;
+}
+
+.terminal-quick-commands__row-main {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: baseline;
+  gap: 6px;
+  margin: 0;
+  padding: 3px 6px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  line-height: 1.25;
+}
+
+.terminal-quick-commands__row-main:hover:not(:disabled) {
+  background: rgba(0, 0, 0, 0.04);
+}
+
+.terminal-quick-commands__row-main:disabled {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
+.terminal-quick-commands__row-label {
+  flex-shrink: 0;
+  max-width: 42%;
+  font-size: 12px;
+  font-weight: 500;
+  color: rgba(0, 0, 0, 0.88);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.terminal-quick-commands__row-cmd {
+  flex: 1;
+  min-width: 0;
+  font-size: 11px;
+  color: rgba(0, 0, 0, 0.45);
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.terminal-quick-commands__delete {
+  flex-shrink: 0;
+  width: 22px !important;
+  height: 22px !important;
+  min-width: 22px !important;
+  padding: 0 !important;
+  font-size: 11px;
 }
 
 .terminal-header-actions {
@@ -190,7 +301,7 @@
   margin: 0;
   border: none;
   background: transparent;
-  color: rgba(255, 255, 255, 0.45);
+  color: rgba(205, 214, 244, 0.45);
   font-size: 12px;
   line-height: 1;
   cursor: pointer;
@@ -198,7 +309,7 @@
 }
 
 .terminal-header-icon-btn:hover {
-  color: rgba(255, 255, 255, 0.92);
+  color: rgba(205, 214, 244, 0.95);
 }
 
 .terminal-header-close {
@@ -211,7 +322,7 @@
   margin: 0;
   border: none;
   background: transparent;
-  color: rgba(255, 255, 255, 0.45);
+  color: rgba(205, 214, 244, 0.45);
   font-size: 14px;
   line-height: 1;
   cursor: pointer;
@@ -219,7 +330,7 @@
 }
 
 .terminal-header-close:hover {
-  color: rgba(255, 255, 255, 0.92);
+  color: rgba(205, 214, 244, 0.95);
 }
 
 .terminal-body {
@@ -251,10 +362,10 @@
   border-radius: 0;
   overflow: hidden;
   background: var(--terminal-background);
-  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  border-top: 1px solid var(--terminal-border);
   box-sizing: border-box;
   cursor: text;
-  padding: 0 0 0 6px;
+  padding: 4px 0 4px 8px;
   caret-color: transparent;
   user-select: none;
   -webkit-user-select: none;
@@ -292,6 +403,11 @@
   color: transparent !important;
   background: transparent !important;
   z-index: 1;
+  cursor: text;
+  /* 允许拖选；禁止浏览器原生文本选中干扰 canvas 选区。 */
+  user-select: none;
+  -webkit-user-select: none;
+  touch-action: none;
 }
 
 .terminal-overlay {
@@ -301,7 +417,7 @@
   align-items: center;
   justify-content: center;
   border-radius: 10px;
-  color: rgba(255, 255, 255, 0.7);
+  color: rgba(205, 214, 244, 0.72);
   pointer-events: none;
   text-align: center;
   font-size: 12px;
@@ -310,8 +426,9 @@
 
 .terminal-status {
   max-width: 280px;
-  background: rgba(255, 255, 255, 0.06);
-  border: 1px solid rgba(255, 255, 255, 0.12);
+  background: rgba(24, 24, 37, 0.92);
+  border: 1px solid var(--terminal-border);
   border-radius: 10px;
   padding: 8px 12px;
+  color: var(--terminal-foreground);
 }

@@ -64,6 +64,7 @@ const MIGRATION_045: &str = include_str!("../migrations/045_task_events_index.sq
 const MIGRATION_046: &str = include_str!("../migrations/046_tasks_workflow_index.sql");
 const MIGRATION_047: &str = include_str!("../migrations/047_workspace_todos_global_scope.sql");
 const MIGRATION_049: &str = include_str!("../migrations/049_workspace_global_memo.sql");
+const MIGRATION_050: &str = include_str!("../migrations/050_terminal_quick_commands.sql");
 const PLATFORM_SPLIT_PROMPT_SEED_JSON: &str =
     include_str!("../migrations/005_platform_split_prompt_seed.json");
 
@@ -273,6 +274,16 @@ const MIGRATIONS: &[Migration] = &[
     Migration {
         name: "049_workspace_global_memo",
         action: MigrationAction::Sql(MIGRATION_049),
+    },
+    Migration {
+        name: "050_terminal_quick_commands",
+        action: MigrationAction::Sql(MIGRATION_050),
+    },
+    Migration {
+        name: "051_terminal_quick_commands_seed",
+        action: MigrationAction::Seed(
+            crate::terminal_quick_commands_db::seed_migrate_terminal_quick_commands_from_app_settings,
+        ),
     },
 ];
 
@@ -1858,6 +1869,8 @@ mod tests {
                 "047_workspace_todos_global_scope",
                 "048_workspace_todos_global_seed",
                 "049_workspace_global_memo",
+                "050_terminal_quick_commands",
+                "051_terminal_quick_commands_seed",
             ]
         );
     }

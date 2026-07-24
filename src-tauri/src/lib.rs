@@ -73,6 +73,8 @@ mod execution_environment_dispatch_commands;
 mod execution_environment_dispatch_db;
 mod session_feedback_loop_commands;
 mod session_feedback_loop_db;
+mod terminal_quick_commands_commands;
+mod terminal_quick_commands_db;
 
 pub(crate) use claude_commands::validate_claude_skill_name;
 pub use lib_impl::run;

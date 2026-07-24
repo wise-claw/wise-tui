@@ -10,12 +10,13 @@ use std::time::{Duration, Instant};
 use tauri::{Emitter, Manager};
 
 use alacritty_terminal::event::{Event as AlacrittyEvent, EventListener, WindowSize};
+use alacritty_terminal::grid::Scroll;
 use alacritty_terminal::term::test::TermSize;
 use alacritty_terminal::term::{Config as TermConfig, Term};
-use alacritty_terminal::vte::ansi::{self, Rgb};
+use alacritty_terminal::vte::ansi;
 
 use super::{claude_path_search_prefixes, merge_path_env};
-use frame::{serialize_frame, TerminalFrameDto};
+use frame::{default_indexed_rgb, serialize_frame, TerminalFrameDto};
 
 /// PTY reader 线程上限：触发 emit 的字节阈值（保留每次 emit 较小，防止单条 IPC payload 巨大）。
 const TERMINAL_EMIT_FLUSH_BYTES: usize = 16 * 1024;
@@ -134,6 +135,10 @@ fn apply_embedded_terminal_shell_env(cmd: &mut CommandBuilder) {
     cmd.env("COLORTERM", "truecolor");
     cmd.env("TERM_PROGRAM", "Wise");
     cmd.env("WISE_TERMINAL", "1");
+    // 让 macOS `ls`、部分 CLI 默认走彩色输出（GUI 子进程常缺 TTY 色判定）。
+    cmd.env("CLICOLOR", "1");
+    cmd.env("CLICOLOR_FORCE", "1");
+    cmd.env("FORCE_COLOR", "1");
     cmd.env("POWERLEVEL9K_INSTANT_PROMPT", "off");
     cmd.env("PROMPT_EOL_MARK", "");
 }
@@ -170,31 +175,6 @@ fn replay_output(
         output_buffer[offset..].to_string()
     };
     (stream_cursor, replay)
-}
-
-fn default_indexed_rgb(index: usize) -> Rgb {
-    match index {
-        0 => Rgb { r: 0, g: 0, b: 0 },
-        1 => Rgb { r: 205, g: 49, b: 49 },
-        2 => Rgb { r: 13, g: 188, b: 121 },
-        3 => Rgb { r: 229, g: 229, b: 16 },
-        4 => Rgb { r: 36, g: 114, b: 200 },
-        5 => Rgb { r: 188, g: 63, b: 188 },
-        6 => Rgb { r: 17, g: 168, b: 205 },
-        7 => Rgb { r: 229, g: 229, b: 229 },
-        8 => Rgb { r: 102, g: 102, b: 102 },
-        9 => Rgb { r: 241, g: 76, b: 76 },
-        10 => Rgb { r: 35, g: 209, b: 139 },
-        11 => Rgb { r: 245, g: 245, b: 67 },
-        12 => Rgb { r: 59, g: 142, b: 234 },
-        13 => Rgb { r: 214, g: 112, b: 214 },
-        14 => Rgb { r: 41, g: 184, b: 219 },
-        15 => Rgb { r: 255, g: 255, b: 255 },
-        256 | 267 => Rgb { r: 0xd4, g: 0xd4, b: 0xd4 }, // foreground
-        257 | 268 => Rgb { r: 0x1e, g: 0x1e, b: 0x1e }, // background
-        258 => Rgb { r: 0xae, g: 0xaf, b: 0xad },       // cursor
-        _ => Rgb { r: 0xd4, g: 0xd4, b: 0xd4 },
-    }
 }
 
 #[derive(Clone)]
@@ -276,6 +256,14 @@ impl EmulatorState {
     fn resize(&mut self, cols: u16, rows: u16) {
         self.term
             .resize(TermSize::new(cols as usize, rows as usize));
+    }
+
+    fn scroll_display(&mut self, scroll: Scroll) {
+        self.term.scroll_display(scroll);
+    }
+
+    fn display_offset(&self) -> usize {
+        self.term.grid().display_offset()
     }
 
     fn frame(&self) -> TerminalFrameDto {
@@ -867,7 +855,13 @@ impl TerminalManager {
         Ok(())
     }
 
-    fn write(&mut self, workspace_id: &str, terminal_id: &str, data: &str) -> Result<(), String> {
+    fn write(
+        &mut self,
+        workspace_id: &str,
+        terminal_id: &str,
+        data: &str,
+        app: &tauri::AppHandle,
+    ) -> Result<(), String> {
         let key = session_key(workspace_id, terminal_id);
         let session = self
             .sessions
@@ -882,6 +876,29 @@ impl TerminalManager {
                 key
             ));
         }
+
+        // 键入时回到实时底部，与常见终端行为一致。
+        let mut snapped_to_bottom = false;
+        if let Ok(mut emu) = session.emulator.lock() {
+            if emu.display_offset() != 0 {
+                emu.scroll_display(Scroll::Bottom);
+                snapped_to_bottom = true;
+            }
+        }
+        if snapped_to_bottom {
+            if let Ok(emu) = session.emulator.lock() {
+                let frame = emu.frame();
+                let _ = app.emit(
+                    "terminal-frame",
+                    serde_json::json!({
+                        "workspaceId": workspace_id,
+                        "terminalId": terminal_id,
+                        "frame": frame,
+                    }),
+                );
+            }
+        }
+
         let bytes = data.as_bytes();
         let mut attempt: u32 = 0;
         let mut writer = session
@@ -907,6 +924,43 @@ impl TerminalManager {
         writer
             .flush()
             .map_err(|e| format!("Failed to flush PTY: {}", e))
+    }
+
+    /// 滚动历史视口：`delta_lines > 0` 看更旧内容，`< 0` 看更新内容。
+    fn scroll(
+        &mut self,
+        workspace_id: &str,
+        terminal_id: &str,
+        delta_lines: i32,
+        app: &tauri::AppHandle,
+    ) -> Result<TerminalFrameDto, String> {
+        let key = session_key(workspace_id, terminal_id);
+        let session = self
+            .sessions
+            .get_mut(&key)
+            .ok_or_else(|| format!("Terminal session not found: {}", key))?;
+        if session.info.status == "exited" {
+            return Err(format!("Terminal session exited: {}", key));
+        }
+        let frame = {
+            let mut emu = session
+                .emulator
+                .lock()
+                .map_err(|_| "emulator lock poisoned".to_string())?;
+            if delta_lines != 0 {
+                emu.scroll_display(Scroll::Delta(delta_lines));
+            }
+            emu.frame()
+        };
+        let _ = app.emit(
+            "terminal-frame",
+            serde_json::json!({
+                "workspaceId": workspace_id,
+                "terminalId": terminal_id,
+                "frame": frame,
+            }),
+        );
+        Ok(frame)
     }
 
     fn resize(
@@ -1053,6 +1107,7 @@ pub(crate) fn terminal_update_title(
 #[tauri::command]
 pub(crate) fn terminal_write(
     manager: tauri::State<std::sync::Mutex<TerminalManager>>,
+    app: tauri::AppHandle,
     workspace_id: String,
     terminal_id: String,
     data: String,
@@ -1060,7 +1115,23 @@ pub(crate) fn terminal_write(
     manager
         .lock()
         .map_err(|e| e.to_string())?
-        .write(&workspace_id, &terminal_id, &data)
+        .write(&workspace_id, &terminal_id, &data, &app)
+}
+
+#[tauri::command]
+pub(crate) fn terminal_scroll(
+    manager: tauri::State<std::sync::Mutex<TerminalManager>>,
+    app: tauri::AppHandle,
+    workspace_id: String,
+    terminal_id: String,
+    delta_lines: i32,
+) -> Result<TerminalFrameDto, String> {
+    manager.lock().map_err(|e| e.to_string())?.scroll(
+        &workspace_id,
+        &terminal_id,
+        delta_lines,
+        &app,
+    )
 }
 
 #[tauri::command]
@@ -1226,6 +1297,29 @@ mod tests {
         assert!(session.output_buffer.len() <= TERMINAL_BUFFER_MAX);
         assert!(session.buffer_start_cursor > 0);
         assert_eq!(session.info.cursor, chunk.len() * 20);
+    }
+
+    #[test]
+    fn scroll_display_delta_moves_viewport_into_history() {
+        let writer: Arc<Mutex<Box<dyn Write + Send>>> =
+            Arc::new(Mutex::new(Box::new(std::io::sink())));
+        let (emulator, _cols, _rows) = TerminalManager::create_emulator(40, 8, writer);
+        {
+            let mut emu = emulator.lock().expect("lock");
+            // 写入超过可视行数，形成可滚动历史。
+            let mut payload = String::new();
+            for i in 0..40 {
+                payload.push_str(&format!("line-{i}\r\n"));
+            }
+            emu.advance(payload.as_bytes());
+            assert_eq!(emu.display_offset(), 0);
+            emu.scroll_display(Scroll::Delta(5));
+            assert_eq!(emu.display_offset(), 5);
+            emu.scroll_display(Scroll::Delta(-2));
+            assert_eq!(emu.display_offset(), 3);
+            emu.scroll_display(Scroll::Bottom);
+            assert_eq!(emu.display_offset(), 0);
+        }
     }
 
     fn panic_master_placeholder() -> Box<dyn portable_pty::MasterPty + Send> {

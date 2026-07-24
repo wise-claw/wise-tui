@@ -13,6 +13,7 @@ use crate::{
     workspace_inspector_commands,
     execution_environment_dispatch_commands,
     session_feedback_loop_commands,
+    terminal_quick_commands_commands,
 };
 #[cfg(target_os = "macos")]
 use crate::macos_terminal_detect;
@@ -327,6 +328,8 @@ pub fn run() {
             session_feedback_loop_commands::insert_session_feedback_patch_effectiveness_batch,
             session_feedback_loop_commands::list_session_feedback_patch_effectiveness,
             session_feedback_loop_commands::attach_session_feedback_patch_scores,
+            terminal_quick_commands_commands::list_terminal_quick_commands,
+            terminal_quick_commands_commands::save_terminal_quick_commands,
             app_state_commands::workflow_run_commands::get_workflow_run,
             app_state_commands::workflow_run_commands::set_workflow_run,
             app_state_commands::workflow_run_commands::list_workflow_runs,
@@ -416,6 +419,7 @@ pub fn run() {
             claude_commands::terminal::terminal_get,
             claude_commands::terminal::terminal_update_title,
             claude_commands::terminal::terminal_write,
+            claude_commands::terminal::terminal_scroll,
             claude_commands::terminal::terminal_resize,
             claude_commands::terminal::terminal_close,
             claude_llm_proxy::list_claude_llm_proxy_records,

@@ -5,7 +5,7 @@ import { useTerminalContext } from "../../hooks/useTerminalContext";
 import { useTerminalSession } from "../../hooks/useTerminalSession";
 import type { Repository } from "../../types";
 import { writeTerminalSession } from "../../services/terminal";
-import { buildClaudeAutoModeTerminalInput } from "../../utils/terminalClaudeAutoMode";
+import { buildTerminalQuickCommandInput } from "../../constants/terminalQuickCommands";
 import { TerminalDock } from "./TerminalDock";
 import { TerminalPanel as TerminalPanelSurface } from "./TerminalPanel";
 import "./index.css";
@@ -63,7 +63,7 @@ export function TerminalPanel({
     terminals.length === 1 ? (terminals[0]?.id ?? null) : null;
 
   const handleSessionExit = useCallback(
-    (_repositoryId: number, terminalId: string) => {
+    (_sessionWorkspaceId: string, terminalId: string) => {
       if (
         soleTerminalIdRef.current === terminalId &&
         !closeTriggeredByButtonRef.current
@@ -120,6 +120,7 @@ export function TerminalPanel({
   ]);
 
   const terminalState = useTerminalSession({
+    workspaceId,
     activeRepository,
     activeTerminalId,
     isVisible: !collapsed,
@@ -131,6 +132,9 @@ export function TerminalPanel({
       rememberSurfaceSnapshot(activeTerminalId, snapshot);
     },
     onSessionExit: handleSessionExit,
+    onCopySuccess: () => {
+      message.success("已复制", 1.2);
+    },
   });
 
   useEffect(() => {
@@ -147,26 +151,31 @@ export function TerminalPanel({
     ensureTerminal();
   }, [ensureTerminal]);
 
-  const launchClaudeAutoMode = useCallback(async () => {
-    const terminalId = activeTerminalId ?? ensureTerminal();
-    if (!terminalId) {
-      message.warning("终端尚未就绪");
-      return;
-    }
-    if (terminalState.status !== "ready") {
-      message.warning("请等待终端连接完成后再启动 Claude");
-      return;
-    }
-    try {
-      await writeTerminalSession(
-        workspaceId,
-        terminalId,
-        buildClaudeAutoModeTerminalInput(),
-      );
-    } catch (error) {
-      message.error(error instanceof Error ? error.message : "无法在终端中启动 Claude");
-    }
-  }, [activeTerminalId, ensureTerminal, message, terminalState.status, workspaceId]);
+  const runQuickCommand = useCallback(
+    async (command: string) => {
+      const terminalId = activeTerminalId ?? ensureTerminal();
+      if (!terminalId) {
+        message.warning("终端尚未就绪");
+        return;
+      }
+      if (terminalState.status !== "ready") {
+        message.warning("请等待终端连接完成后再运行指令");
+        return;
+      }
+      try {
+        await writeTerminalSession(
+          workspaceId,
+          terminalId,
+          buildTerminalQuickCommandInput(command),
+        );
+      } catch (error) {
+        message.error(
+          error instanceof Error ? error.message : "无法在终端中运行指令",
+        );
+      }
+    },
+    [activeTerminalId, ensureTerminal, message, terminalState.status, workspaceId],
+  );
 
   const terminalPanelNode = (
     <TerminalPanelSurface
@@ -196,8 +205,8 @@ export function TerminalPanel({
       terminalNode={terminalPanelNode}
       fullscreen={layout === "center" ? true : fullscreen}
       onToggleFullscreen={layout === "center" ? undefined : onToggleFullscreen}
-      onLaunchClaudeAutoMode={() => void launchClaudeAutoMode()}
-      claudeAutoModeDisabled={terminalState.status !== "ready"}
+      onRunQuickCommand={(command) => void runQuickCommand(command)}
+      quickCommandsDisabled={terminalState.status !== "ready"}
     />
   );
 }

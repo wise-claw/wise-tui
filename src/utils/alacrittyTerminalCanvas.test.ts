@@ -1,5 +1,11 @@
 import { describe, expect, test } from "bun:test";
-import { encodeTerminalKey } from "./alacrittyTerminalCanvas";
+import {
+  encodeTerminalKey,
+  TERMINAL_DEFAULT_BACKGROUND,
+  TERMINAL_DEFAULT_CURSOR,
+  TERMINAL_DEFAULT_FOREGROUND,
+  wheelDeltaToScrollLines,
+} from "./alacrittyTerminalCanvas";
 
 function keyEvent(partial: Partial<KeyboardEvent> & { key: string }): KeyboardEvent {
   return {
@@ -25,5 +31,24 @@ describe("encodeTerminalKey", () => {
 
   test("ignores meta shortcuts", () => {
     expect(encodeTerminalKey(keyEvent({ key: "c", metaKey: true }))).toBeNull();
+  });
+});
+
+describe("terminal theme constants", () => {
+  test("matches Catppuccin Mocha hex used by Rust palette", () => {
+    expect(TERMINAL_DEFAULT_BACKGROUND).toBe("#1e1e2e");
+    expect(TERMINAL_DEFAULT_FOREGROUND).toBe("#cdd6f4");
+    expect(TERMINAL_DEFAULT_CURSOR).toBe("#f5e0dc");
+  });
+});
+
+describe("wheelDeltaToScrollLines", () => {
+  test("pixel mode inverts browser deltaY", () => {
+    expect(wheelDeltaToScrollLines({ deltaY: -30, deltaMode: 0 }, 15)).toBe(2);
+    expect(wheelDeltaToScrollLines({ deltaY: 30, deltaMode: 0 }, 15)).toBe(-2);
+  });
+
+  test("line mode uses cell height", () => {
+    expect(wheelDeltaToScrollLines({ deltaY: -3, deltaMode: 1 }, 15)).toBe(3);
   });
 });

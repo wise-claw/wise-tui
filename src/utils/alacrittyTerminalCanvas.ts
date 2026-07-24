@@ -1,12 +1,20 @@
 import type { TerminalCellRun, TerminalFrame } from "../types/terminal";
+import {
+  normalizeTerminalSelection,
+  terminalSelectionIsEmpty,
+  type TerminalSelectionRange,
+} from "./terminalSelection";
 
-const FONT_FAMILY = 'Menlo, Monaco, "Courier New", monospace';
-export const TERMINAL_FONT_SIZE = 12;
-export const TERMINAL_LINE_HEIGHT = 1.25;
-/** 与 CSS `--terminal-background` / Rust NamedColor::Background 对齐。 */
-export const TERMINAL_DEFAULT_BACKGROUND = "#1e1e1e";
-export const TERMINAL_DEFAULT_FOREGROUND = "#d4d4d4";
-export const TERMINAL_DEFAULT_CURSOR = "#aeafad";
+const FONT_FAMILY =
+  '"JetBrainsMono Nerd Font Mono", "JetBrainsMono Nerd Font", "MesloLGS NF", "Hack Nerd Font Mono", "SF Mono", Menlo, Monaco, "Courier New", monospace';
+export const TERMINAL_FONT_SIZE = 13;
+export const TERMINAL_LINE_HEIGHT = 1.35;
+/** 与 CSS `--terminal-background` / Rust `theme_background` 对齐（Catppuccin Mocha）。 */
+export const TERMINAL_DEFAULT_BACKGROUND = "#1e1e2e";
+export const TERMINAL_DEFAULT_FOREGROUND = "#cdd6f4";
+export const TERMINAL_DEFAULT_CURSOR = "#f5e0dc";
+/** 与 CSS `--terminal-selection` 对齐。 */
+export const TERMINAL_DEFAULT_SELECTION = "rgba(137, 180, 250, 0.38)";
 
 export type TerminalMetrics = {
   cellWidth: number;
@@ -44,11 +52,33 @@ function paintBackground(
   ctx.fillRect(0, 0, width, height);
 }
 
+function paintSelectionOverlay(
+  ctx: CanvasRenderingContext2D,
+  frame: TerminalFrame,
+  metrics: Pick<TerminalMetrics, "cellWidth" | "cellHeight">,
+  selection: TerminalSelectionRange | null | undefined,
+): void {
+  if (!selection || terminalSelectionIsEmpty(selection)) return;
+  const norm = normalizeTerminalSelection(selection);
+  ctx.fillStyle = TERMINAL_DEFAULT_SELECTION;
+  for (let row = norm.start.row; row <= norm.end.row; row += 1) {
+    if (row < 0 || row >= frame.rows) continue;
+    const startCol = row === norm.start.row ? norm.start.col : 0;
+    const endCol = row === norm.end.row ? norm.end.col : frame.cols - 1;
+    if (endCol < startCol) continue;
+    const x = startCol * metrics.cellWidth;
+    const y = row * metrics.cellHeight;
+    const width = (endCol - startCol + 1) * metrics.cellWidth;
+    ctx.fillRect(x, y, width, metrics.cellHeight);
+  }
+}
+
 export function renderTerminalFrame(
   canvas: HTMLCanvasElement,
   frame: TerminalFrame,
   metrics: Pick<TerminalMetrics, "cellWidth" | "cellHeight">,
   background: string,
+  selection?: TerminalSelectionRange | null,
 ): void {
   const dpr = Math.max(1, window.devicePixelRatio || 1);
   const width = Math.max(1, Math.floor(frame.cols * metrics.cellWidth));
@@ -75,6 +105,8 @@ export function renderTerminalFrame(
       col += run.text.length;
     }
   }
+
+  paintSelectionOverlay(ctx, frame, metrics, selection);
 
   if (frame.cursor.visible) {
     const x = frame.cursor.col * metrics.cellWidth;
@@ -195,6 +227,30 @@ export function encodeTerminalKey(event: KeyboardEvent): string | null {
     return key;
   }
   return null;
+}
+
+/**
+ * 浏览器滚轮 delta → alacritty `Scroll::Delta` 行数。
+ * 向上滚（看更旧历史）为正；向下滚为负。
+ */
+export function wheelDeltaToScrollLines(
+  event: Pick<WheelEvent, "deltaY" | "deltaMode">,
+  cellHeight: number,
+): number {
+  const linePx = Math.max(1, cellHeight);
+  let pixels = event.deltaY;
+  if (event.deltaMode === 1) {
+    // DOM_DELTA_LINE
+    pixels = event.deltaY * linePx;
+  } else if (event.deltaMode === 2) {
+    // DOM_DELTA_PAGE
+    pixels = event.deltaY * linePx * 24;
+  }
+  const lines = Math.round(pixels / linePx);
+  if (lines === 0 && Math.abs(pixels) >= 1) {
+    return pixels < 0 ? 1 : -1;
+  }
+  return -lines;
 }
 
 export function readTerminalBackground(container: HTMLElement): string {

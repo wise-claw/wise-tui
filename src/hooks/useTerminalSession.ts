@@ -12,6 +12,7 @@ import {
   closeTerminalSession,
   openTerminalSession,
   resizeTerminalSession,
+  scrollTerminalSession,
   writeTerminalSession,
 } from "../services/terminal";
 import {
@@ -20,8 +21,18 @@ import {
   readTerminalBackground,
   renderTerminalFrame,
   TERMINAL_FONT_SIZE,
+  wheelDeltaToScrollLines,
 } from "../utils/alacrittyTerminalCanvas";
 import { shouldIgnoreTerminalError } from "../utils/terminalErrors";
+import {
+  expandTerminalSelectionToAll,
+  expandTerminalSelectionToLine,
+  expandTerminalSelectionToWord,
+  extractTerminalSelectionText,
+  terminalPointFromOffset,
+  terminalSelectionIsEmpty,
+  type TerminalSelectionRange,
+} from "../utils/terminalSelection";
 
 export type TerminalStatus = "idle" | "connecting" | "ready" | "error";
 
@@ -32,10 +43,12 @@ export type TerminalSessionState = {
   canvasRef: RefObject<HTMLCanvasElement | null>;
   inputRef: RefObject<HTMLTextAreaElement | null>;
   focusInput: () => void;
-  cleanupTerminalSession: (repositoryId: number, terminalId: string) => void;
+  cleanupTerminalSession: (workspaceId: string, terminalId: string) => void;
 };
 
 interface UseTerminalSessionOptions {
+  /** PTY 命名空间，须与 `useTerminalContext({ workspaceId })` / `writeTerminalSession` 一致。 */
+  workspaceId: string;
   activeRepository: Repository | null;
   activeTerminalId: string | null;
   isVisible: boolean;
@@ -44,7 +57,9 @@ interface UseTerminalSessionOptions {
   onSurfaceSnapshot?: (snapshot: TerminalSurfaceSnapshot) => void;
   /** 卸载 UI 时是否结束后端 PTY；tab 切换时应为 false。 */
   closeOnUnmount?: boolean;
-  onSessionExit?: (repositoryId: number, terminalId: string) => void;
+  onSessionExit?: (workspaceId: string, terminalId: string) => void;
+  /** 终端选区写入剪贴板成功时回调（用于 toast）。 */
+  onCopySuccess?: () => void;
 }
 
 const TERMINAL_DIM_MIN = 1;
@@ -78,6 +93,7 @@ async function waitForStableLayout(container: HTMLElement): Promise<void> {
 }
 
 export function useTerminalSession({
+  workspaceId,
   activeRepository,
   activeTerminalId,
   isVisible,
@@ -86,6 +102,7 @@ export function useTerminalSession({
   onSurfaceSnapshot,
   closeOnUnmount = false,
   onSessionExit,
+  onCopySuccess,
 }: UseTerminalSessionOptions): TerminalSessionState {
   const containerRef = useRef<HTMLDivElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
@@ -103,6 +120,11 @@ export function useTerminalSession({
     onSurfaceSnapshotRef.current = onSurfaceSnapshot;
   }, [onSurfaceSnapshot]);
 
+  const onCopySuccessRef = useRef(onCopySuccess);
+  useEffect(() => {
+    onCopySuccessRef.current = onCopySuccess;
+  }, [onCopySuccess]);
+
   const focusInput = useCallback(() => {
     const input = inputRef.current;
     if (!input) return;
@@ -118,8 +140,8 @@ export function useTerminalSession({
   }, []);
 
   const cleanupTerminalSession = useCallback(
-    (repositoryId: number, terminalId: string) => {
-      void closeTerminalSession(repositoryId.toString(), terminalId).catch(
+    (sessionWorkspaceId: string, terminalId: string) => {
+      void closeTerminalSession(sessionWorkspaceId, terminalId).catch(
         (error) => {
           if (!shouldIgnoreTerminalError(error)) {
             console.warn("close terminal session failed", error);
@@ -130,7 +152,6 @@ export function useTerminalSession({
     [],
   );
 
-  const repositoryId = activeRepository?.id ?? null;
   const cwd = activeRepository?.path ?? null;
   const initialSizeRef = useRef(
     surfaceSnapshot?.cols && surfaceSnapshot?.rows
@@ -151,7 +172,7 @@ export function useTerminalSession({
   }, [focusRequestVersion, focusInput]);
 
   useEffect(() => {
-    if (repositoryId === null || !activeTerminalId || !cwd || !isVisible) {
+    if (!workspaceId || !activeTerminalId || !cwd || !isVisible) {
       return;
     }
 
@@ -176,9 +197,14 @@ export function useTerminalSession({
       }
 
       const terminalId = activeTerminalId;
-      const workspaceId = repositoryId.toString();
       let sessionEnded = false;
       let latestFrame: TerminalFrame | null = null;
+      let selectionRange: TerminalSelectionRange | null = null;
+      let selecting = false;
+      let selectionAnchor: { col: number; row: number } | null = null;
+      let selectionDragged = false;
+      let lastClickAt = 0;
+      let clickCount = 0;
       let resizeDebounceTimer: number | null = null;
       let paintRaf = 0;
 
@@ -204,6 +230,7 @@ export function useTerminalSession({
           latestFrame,
           metricsRef.current,
           readTerminalBackground(liveContainer),
+          selectionRange,
         );
       };
 
@@ -215,8 +242,64 @@ export function useTerminalSession({
         });
       };
 
+      const setSelection = (next: TerminalSelectionRange | null) => {
+        selectionRange = next;
+        schedulePaint();
+      };
+
+      const clearSelection = () => {
+        if (!selectionRange) return;
+        selectionRange = null;
+        schedulePaint();
+      };
+
+      const pointFromClient = (clientX: number, clientY: number) => {
+        const liveCanvas = canvasRef.current;
+        const frame = latestFrame;
+        if (!liveCanvas || !frame) return null;
+        const rect = liveCanvas.getBoundingClientRect();
+        return terminalPointFromOffset(
+          clientX - rect.left,
+          clientY - rect.top,
+          metricsRef.current,
+          { cols: frame.cols, rows: frame.rows },
+        );
+      };
+
+      const copySelection = async (): Promise<boolean> => {
+        if (!latestFrame || terminalSelectionIsEmpty(selectionRange)) return false;
+        const text = extractTerminalSelectionText(latestFrame, selectionRange);
+        if (!text) return false;
+        try {
+          await navigator.clipboard.writeText(text);
+          onCopySuccessRef.current?.();
+          return true;
+        } catch (error) {
+          console.warn("copy terminal selection failed", error);
+          return false;
+        }
+      };
+
+      /** 选中完成后写入剪贴板（拖选 / 双击 / 三击 / 全选）。 */
+      const copySelectionAfterSelect = () => {
+        void copySelection();
+      };
+
       const applyFrame = (frame: TerminalFrame) => {
         latestFrame = frame;
+        // 尺寸变化时钳制选区，避免悬空高亮。
+        if (selectionRange) {
+          selectionRange = {
+            start: {
+              col: Math.min(selectionRange.start.col, Math.max(0, frame.cols - 1)),
+              row: Math.min(selectionRange.start.row, Math.max(0, frame.rows - 1)),
+            },
+            end: {
+              col: Math.min(selectionRange.end.col, Math.max(0, frame.cols - 1)),
+              row: Math.min(selectionRange.end.row, Math.max(0, frame.rows - 1)),
+            },
+          };
+        }
         schedulePaint();
         persistSnapshot(frame);
       };
@@ -268,12 +351,13 @@ export function useTerminalSession({
             event.terminalId === terminalId
           ) {
             sessionEnded = true;
-            onSessionExitRef.current?.(repositoryId, terminalId);
+            onSessionExitRef.current?.(workspaceId, terminalId);
           }
         });
 
         const writeData = (data: string) => {
           if (sessionEnded || !data) return;
+          clearSelection();
           void writeTerminalSession(workspaceId, terminalId, data).catch(
             (error) => {
               if (shouldIgnoreTerminalError(error)) {
@@ -289,8 +373,93 @@ export function useTerminalSession({
           );
         };
 
+        let wheelAccum = 0;
+        let scrollRaf = 0;
+        let pendingScrollDelta = 0;
+
+        const flushScroll = () => {
+          scrollRaf = 0;
+          const delta = pendingScrollDelta;
+          pendingScrollDelta = 0;
+          if (sessionEnded || delta === 0) return;
+          void scrollTerminalSession(workspaceId, terminalId, delta)
+            .then((frame) => {
+              if (!cancelled && !sessionEnded) applyFrame(frame);
+            })
+            .catch((error) => {
+              if (!shouldIgnoreTerminalError(error)) {
+                console.warn("scroll terminal session failed", error);
+              }
+            });
+        };
+
+        const queueScroll = (deltaLines: number) => {
+          if (sessionEnded || deltaLines === 0) return;
+          pendingScrollDelta += deltaLines;
+          if (scrollRaf) return;
+          scrollRaf = requestAnimationFrame(flushScroll);
+        };
+
+        const onWheel = (event: WheelEvent) => {
+          if (sessionEnded) return;
+          event.preventDefault();
+          event.stopPropagation();
+          const cellHeight = Math.max(1, metricsRef.current.cellHeight);
+          wheelAccum += wheelDeltaToScrollLines(event, cellHeight);
+          const lines = Math.trunc(wheelAccum);
+          if (lines === 0) return;
+          wheelAccum -= lines;
+          queueScroll(lines);
+        };
+
         const onKeyDown = (event: KeyboardEvent) => {
           if (event.isComposing || event.key === "Process") return;
+
+          const key = event.key.toLowerCase();
+          const hasSel = !terminalSelectionIsEmpty(selectionRange);
+
+          // Shift+PageUp/PageDown：滚动历史（无 Shift 仍发给 PTY，供 less/vim）。
+          if (
+            (event.key === "PageUp" || event.key === "PageDown") &&
+            event.shiftKey &&
+            !event.metaKey &&
+            !event.ctrlKey &&
+            !event.altKey
+          ) {
+            event.preventDefault();
+            event.stopPropagation();
+            const page = Math.max(1, metricsRef.current.rows - 1);
+            queueScroll(event.key === "PageUp" ? page : -page);
+            return;
+          }
+
+          // Cmd+C（macOS）/ Ctrl+Shift+C：复制选区；Cmd+C 无选区时不发往 PTY。
+          // Ctrl+C（无 Shift）始终走 encodeTerminalKey → SIGINT。
+          if (
+            key === "c" &&
+            !event.altKey &&
+            (event.metaKey || (event.ctrlKey && event.shiftKey))
+          ) {
+            event.preventDefault();
+            event.stopPropagation();
+            if (hasSel) void copySelection();
+            return;
+          }
+
+          if (
+            key === "a" &&
+            !event.altKey &&
+            (event.metaKey || (event.ctrlKey && event.shiftKey))
+          ) {
+            if (latestFrame) {
+              event.preventDefault();
+              event.stopPropagation();
+              setSelection(expandTerminalSelectionToAll(latestFrame));
+              copySelectionAfterSelect();
+              return;
+            }
+          }
+
           const encoded = encodeTerminalKey(event);
           if (encoded == null) return;
           event.preventDefault();
@@ -310,9 +479,101 @@ export function useTerminalSession({
           if (input.value) input.value = "";
         };
 
+        const onPointerDown = (event: PointerEvent) => {
+          if (event.button !== 0) return;
+          focusInput();
+          const point = pointFromClient(event.clientX, event.clientY);
+          if (!point || !latestFrame) return;
+
+          const now = Date.now();
+          if (now - lastClickAt <= 400) {
+            clickCount += 1;
+          } else {
+            clickCount = 1;
+          }
+          lastClickAt = now;
+
+          if (clickCount >= 3) {
+            setSelection(expandTerminalSelectionToLine(latestFrame, point));
+            selecting = false;
+            selectionAnchor = null;
+            copySelectionAfterSelect();
+            event.preventDefault();
+            return;
+          }
+          if (clickCount === 2) {
+            setSelection(expandTerminalSelectionToWord(latestFrame, point));
+            selecting = false;
+            selectionAnchor = null;
+            copySelectionAfterSelect();
+            event.preventDefault();
+            return;
+          }
+
+          selecting = true;
+          selectionDragged = false;
+          selectionAnchor = point;
+          setSelection({ start: point, end: point });
+          try {
+            input.setPointerCapture(event.pointerId);
+          } catch {
+            // ignore
+          }
+          event.preventDefault();
+        };
+
+        const onPointerMove = (event: PointerEvent) => {
+          if (!selecting || !selectionAnchor) return;
+          const point = pointFromClient(event.clientX, event.clientY);
+          if (!point) return;
+          if (
+            point.col !== selectionAnchor.col ||
+            point.row !== selectionAnchor.row
+          ) {
+            selectionDragged = true;
+          }
+          setSelection({ start: selectionAnchor, end: point });
+          event.preventDefault();
+        };
+
+        const onPointerUp = (event: PointerEvent) => {
+          if (!selecting) return;
+          selecting = false;
+          selectionAnchor = null;
+          try {
+            if (input.hasPointerCapture(event.pointerId)) {
+              input.releasePointerCapture(event.pointerId);
+            }
+          } catch {
+            // ignore
+          }
+          // 单击未拖拽：清空选区，避免残留单格高亮挡住继续输入。
+          if (!selectionDragged) {
+            clearSelection();
+          } else {
+            // 拖选结束：有有效选区则立即复制。
+            copySelectionAfterSelect();
+          }
+          selectionDragged = false;
+        };
+
+        const onCopy = (event: ClipboardEvent) => {
+          if (!latestFrame || terminalSelectionIsEmpty(selectionRange)) return;
+          const text = extractTerminalSelectionText(latestFrame, selectionRange);
+          if (!text) return;
+          event.preventDefault();
+          event.clipboardData?.setData("text/plain", text);
+        };
+
         input.addEventListener("keydown", onKeyDown);
         input.addEventListener("paste", onPaste);
         input.addEventListener("input", onInput);
+        input.addEventListener("pointerdown", onPointerDown);
+        input.addEventListener("pointermove", onPointerMove);
+        input.addEventListener("pointerup", onPointerUp);
+        input.addEventListener("pointercancel", onPointerUp);
+        input.addEventListener("copy", onCopy);
+        input.addEventListener("wheel", onWheel, { passive: false });
 
         const resizeObserver = new ResizeObserver(() => {
           if (resizeDebounceTimer !== null) {
@@ -426,15 +687,24 @@ export function useTerminalSession({
           if (paintRaf) {
             cancelAnimationFrame(paintRaf);
           }
+          if (scrollRaf) {
+            cancelAnimationFrame(scrollRaf);
+          }
           resizeObserver.disconnect();
           input.removeEventListener("keydown", onKeyDown);
           input.removeEventListener("paste", onPaste);
           input.removeEventListener("input", onInput);
+          input.removeEventListener("pointerdown", onPointerDown);
+          input.removeEventListener("pointermove", onPointerMove);
+          input.removeEventListener("pointerup", onPointerUp);
+          input.removeEventListener("pointercancel", onPointerUp);
+          input.removeEventListener("copy", onCopy);
+          input.removeEventListener("wheel", onWheel);
           frameUnsub();
           exitUnsub();
           persistSnapshot(latestFrame);
           if (closeOnUnmount) {
-            cleanupTerminalSession(repositoryId, terminalId);
+            cleanupTerminalSession(workspaceId, terminalId);
           }
         };
       };
@@ -454,7 +724,7 @@ export function useTerminalSession({
       cleanup?.();
     };
   }, [
-    repositoryId,
+    workspaceId,
     cwd,
     activeTerminalId,
     isVisible,

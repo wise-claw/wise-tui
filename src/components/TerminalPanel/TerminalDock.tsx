@@ -3,11 +3,11 @@ import {
   FullscreenOutlined,
   MinusOutlined,
   PlusOutlined,
-  ThunderboltOutlined,
 } from "@ant-design/icons";
 import { useEffect, useRef, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import type { TerminalContextTab } from "../../hooks/useTerminalContext";
 import { HoverHint } from "../shared/HoverHint";
+import { TerminalQuickCommandsMenu } from "./TerminalQuickCommandsMenu";
 import "./index.css";
 
 type TerminalDockProps = {
@@ -25,8 +25,8 @@ type TerminalDockProps = {
   terminalNode: ReactNode;
   fullscreen?: boolean;
   onToggleFullscreen?: () => void;
-  onLaunchClaudeAutoMode?: () => void;
-  claudeAutoModeDisabled?: boolean;
+  onRunQuickCommand?: (command: string) => void;
+  quickCommandsDisabled?: boolean;
 };
 
 function terminalTabLabel(tab: TerminalContextTab): string {
@@ -54,8 +54,8 @@ export function TerminalDock({
   terminalNode,
   fullscreen = false,
   onToggleFullscreen,
-  onLaunchClaudeAutoMode,
-  claudeAutoModeDisabled = false,
+  onRunQuickCommand,
+  quickCommandsDisabled = false,
 }: TerminalDockProps) {
   const panelRef = useRef<HTMLElement | null>(null);
 
@@ -149,19 +149,11 @@ export function TerminalDock({
               </button>
             </HoverHint>
           </div>
-          {onLaunchClaudeAutoMode ? (
-            <HoverHint title="在终端中以 Auto 权限模式启动 Claude Code">
-              <button
-                className="terminal-header-action"
-                type="button"
-                disabled={claudeAutoModeDisabled}
-                aria-label="以 Auto 模式打开 Claude"
-                onClick={onLaunchClaudeAutoMode}
-              >
-                <ThunderboltOutlined />
-                <span className="terminal-header-action-label">Auto 模式</span>
-              </button>
-            </HoverHint>
+          {onRunQuickCommand ? (
+            <TerminalQuickCommandsMenu
+              disabled={quickCommandsDisabled}
+              onRun={onRunQuickCommand}
+            />
           ) : null}
         </div>
         <div className="terminal-header-actions">
