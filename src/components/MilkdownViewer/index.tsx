@@ -599,10 +599,10 @@ export const MilkdownEditor = forwardRef<MilkdownEditorHandle, MilkdownEditorPro
                 const src = `data:${file.type};base64,${base64}`;
                 const nodeType = schema.nodes["image-block"] ?? schema.nodes["image"];
                 if (!nodeType) return null;
-                return nodeType.createAndFill({ src })!;
+                return nodeType.createAndFill({ src });
               }),
             );
-            return nodes.filter(Boolean);
+            return nodes.filter((node): node is NonNullable<typeof node> => node != null);
           },
         }));
       });
