@@ -69,7 +69,7 @@ import {
 } from "./LeftSidebar/leftSidebarPropsEqual";
 import { claudeSessionsShellPropsEqual } from "./ClaudeSessions/claudeSessionsPropsEqual";
 import { CenterViewControlContext, useCenterView } from "./ClaudeSessions/claudeChatHelpers";
-import { registerPaneCenterViewSetter } from "../stores/paneCenterViewControlStore";
+import { registerPaneCenterViewSetter, syncPaneCenterView } from "../stores/paneCenterViewControlStore";
 import { useWorkspaceMemoPanelOpen } from "../stores/workspaceMemoPanelStore";
 import { useTerminalCenterPanelState } from "../stores/terminalCenterPanelStore";
 import type { CenterView } from "./ClaudeSessions/ClaudeChat";
@@ -1110,6 +1110,12 @@ export function AppWorkspaceLayout({
     registerPaneCenterViewSetter(0, requestCenterView);
     return () => registerPaneCenterViewSetter(0, null);
   }, [claudeSessionsProps.paneCount, requestCenterView]);
+
+  // 同步当前 centerView，供终端快捷键判断「已在终端视图则收起，否则切过去」。
+  useEffect(() => {
+    if ((claudeSessionsProps.paneCount ?? 1) > 1) return;
+    syncPaneCenterView(0, centerView);
+  }, [centerView, claudeSessionsProps.paneCount]);
 
   /** 多 pane 下要 mount 的 PaneEditorHost 配置列表。
    *  pane 0 = primary（active 仓库）；pane 1..N-1 = extra panes。

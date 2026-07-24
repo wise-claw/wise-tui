@@ -179,6 +179,8 @@ export interface ClaudeSessionsChatHostProps {
   workflowGraphStatusByWorkflowId?: Record<string, string>;
   onOpenTaskDetail?: (taskId: string) => void;
   panelBelowMessages?: React.ReactNode;
+  /** 内置终端节点；与 panelBelowMessages 在 DOM 中并存，由 centerView 互斥显隐。 */
+  panelBelowTerminal?: React.ReactNode;
   /** 中栏当前视图（由顶栏切换器控制）：单屏路径透传给 ClaudeChat；多屏各 pane 自持。 */
   centerView?: CenterView;
   hideMessages?: boolean;
@@ -291,6 +293,7 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
   workflowGraphStatusByWorkflowId = {},
   onOpenTaskDetail,
   panelBelowMessages,
+  panelBelowTerminal,
   centerView,
   hideMessages = false,
   hideSessionTools = false,
@@ -756,6 +759,7 @@ export const ClaudeSessionsChatHost = memo(function ClaudeSessionsChatHost({
           workflowGraphStatusByWorkflowId={workflowGraphStatusByWorkflowId}
           onOpenTaskDetail={onOpenTaskDetail}
           panelBelowMessages={panelBelowMessages}
+          panelBelowTerminal={panelBelowTerminal}
           centerView={centerView}
           hideMessages={hideMessages}
           hideSessionTools={hideSessionTools}

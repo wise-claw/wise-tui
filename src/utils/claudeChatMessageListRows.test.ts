@@ -188,6 +188,43 @@ describe("buildChatMessageListRows", () => {
       output: "Updated task #3 status",
     });
   });
+
+  test("appends files-changed-summary after idle turn with file edits", () => {
+    const messages = [
+      msg({ id: 1, role: "user", content: "edit", timestamp: 10 }),
+      msg({
+        id: 2,
+        role: "assistant",
+        content: "done",
+        timestamp: 11,
+        parts: [
+          {
+            type: "tool_use",
+            id: "w1",
+            name: "Write",
+            status: "completed",
+            input: { file_path: "/repo/a.ts", content: "x\ny" },
+            output: "",
+          },
+          { type: "text", text: "done" },
+        ],
+      }),
+    ];
+    const idleRows = buildChatMessageListRows(messages, {
+      sessionStatus: "idle",
+      showListEndThinkingHint: false,
+    });
+    expect(idleRows.map((r) => r.kind)).toEqual(["message", "message", "files-changed-summary"]);
+    expect(idleRows[2]!.kind === "files-changed-summary" && idleRows[2]!.files[0]!.fileName).toBe(
+      "a.ts",
+    );
+
+    const runningRows = buildChatMessageListRows(messages, {
+      sessionStatus: "running",
+      showListEndThinkingHint: false,
+    });
+    expect(runningRows.map((r) => r.kind)).toEqual(["message", "message"]);
+  });
 });
 
 describe("tryPatchChatMessageListRowsTail", () => {

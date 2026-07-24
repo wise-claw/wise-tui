@@ -5,6 +5,7 @@ import type { ChatMessageListRow } from "../../utils/claudeChatMessageListRows";
 import { ClaudeChatMessageRow } from "./ClaudeChatMessageRow";
 import { ClaudeSessionMonitorMessageRow } from "./ClaudeSessionMonitorMessageRow";
 import { StreamingReplyHint } from "./Markdown";
+import { TurnFilesChangedSummaryCard } from "./TurnFilesChangedSummaryCard";
 
 interface Props {
   row: ChatMessageListRow;
@@ -33,6 +34,10 @@ function ChatMessageListRowContentInner({
         <StreamingReplyHint />
       </div>
     );
+  }
+  if (row.kind === "files-changed-summary") {
+    if (listVariant === "monitor") return null;
+    return <TurnFilesChangedSummaryCard files={row.files} />;
   }
   if (listVariant === "monitor") {
     return (
@@ -79,6 +84,10 @@ function rowContentEqual(prev: Readonly<Props>, next: Readonly<Props>): boolean 
   if (prev.row.kind === "thinking-hint" || next.row.kind === "thinking-hint") {
     return prev.row.kind === "thinking-hint" && next.row.kind === "thinking-hint";
   }
+  if (prev.row.kind === "files-changed-summary" && next.row.kind === "files-changed-summary") {
+    return prev.row.key === next.row.key && prev.row.files === next.row.files;
+  }
+  if (prev.row.kind !== "message" || next.row.kind !== "message") return false;
   return (
     prev.row.msg === next.row.msg &&
     prev.row.streamingThisBubble === next.row.streamingThisBubble &&

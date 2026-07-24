@@ -1,5 +1,8 @@
 import { useSyncExternalStore } from "react";
-import { requestPaneCenterView } from "./paneCenterViewControlStore";
+import {
+  getPaneCenterView,
+  requestPaneCenterView,
+} from "./paneCenterViewControlStore";
 import { closeWorkspaceMemoPanel } from "./workspaceMemoPanelStore";
 
 /**
@@ -203,11 +206,17 @@ export function closeTerminalCenterPanelOnPane(paneIndex: number): void {
 
 /**
  * @param paneIndex 目标屏；省略时默认 0。
+ * 已可见时：若当前不在终端视图则切到终端（快捷键从消息/文件回到终端）；
+ * 已在终端视图则收起。未可见时打开并切到终端。
  */
 export function toggleTerminalCenterPanel(paneIndex?: number): void {
   const target = normalizePaneIndex(paneIndex ?? 0);
   if (isPaneVisible(paneFlags.get(target))) {
-    collapseTerminalCenterPanelOnPane(target);
+    if (getPaneCenterView(target) === "terminal") {
+      collapseTerminalCenterPanelOnPane(target);
+      return;
+    }
+    requestPaneCenterView(target, "terminal");
     return;
   }
   openTerminalCenterPanel(target);

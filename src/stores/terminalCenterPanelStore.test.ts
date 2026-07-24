@@ -1,5 +1,9 @@
 import { describe, expect, test, beforeEach } from "bun:test";
 import {
+  getPaneCenterView,
+  syncPaneCenterView,
+} from "./paneCenterViewControlStore";
+import {
   clampTerminalCenterPanelHost,
   closeTerminalCenterPanel,
   closeTerminalCenterPanelOnPane,
@@ -53,6 +57,17 @@ describe("terminalCenterPanelStore", () => {
     // 收起的屏 1 仍挂载，但不应被屏 0 打开清掉
     expect(getTerminalCenterPanelState().mountedPaneIndexes).toContain(1);
     expect(getTerminalCenterPanelState().visiblePaneIndexes).toEqual([0]);
+  });
+
+  test("toggle while terminal visible but centerView is messages focuses terminal instead of collapsing", () => {
+    openTerminalCenterPanel(0);
+    expect(isTerminalCenterPanelVisibleOnPane(0)).toBe(true);
+    // 用户切到消息 tab
+    syncPaneCenterView(0, "messages");
+    toggleTerminalCenterPanel(0);
+    // 仍可见，且视图请求切回 terminal（不收起）
+    expect(isTerminalCenterPanelVisibleOnPane(0)).toBe(true);
+    expect(getPaneCenterView(0)).toBe("terminal");
   });
 
   test("opening second pane keeps first pane terminal open", () => {

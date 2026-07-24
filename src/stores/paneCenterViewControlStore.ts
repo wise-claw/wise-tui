@@ -37,6 +37,13 @@ export type CenterView = "messages" | "files" | "terminal";
 type CenterViewSetter = (view: CenterView) => void;
 
 const setters = new Map<number, CenterViewSetter>();
+/** 各 pane 最近一次已知的 centerView（request / sync），供终端快捷键判断「已在终端则收起」。 */
+const currentViews = new Map<number, CenterView>();
+
+function normalizePaneIndex(paneIndex: number): number {
+  if (!Number.isFinite(paneIndex) || paneIndex < 0) return 0;
+  return Math.floor(paneIndex);
+}
 
 /**
  * 注册某 pane 的 centerView setter。setter 为 null 时注销（pane 卸载或单/多屏切换）。
@@ -44,11 +51,22 @@ const setters = new Map<number, CenterViewSetter>();
  * setup 执行，不会出现死 setter 残留。
  */
 export function registerPaneCenterViewSetter(paneIndex: number, setter: CenterViewSetter | null): void {
+  const index = normalizePaneIndex(paneIndex);
   if (setter) {
-    setters.set(paneIndex, setter);
+    setters.set(index, setter);
   } else {
-    setters.delete(paneIndex);
+    setters.delete(index);
+    currentViews.delete(index);
   }
+}
+
+/** 同步 pane 当前 centerView（顶栏 Segmented / effect 回退时调用）。 */
+export function syncPaneCenterView(paneIndex: number, view: CenterView): void {
+  currentViews.set(normalizePaneIndex(paneIndex), view);
+}
+
+export function getPaneCenterView(paneIndex: number): CenterView | null {
+  return currentViews.get(normalizePaneIndex(paneIndex)) ?? null;
 }
 
 /**
@@ -57,5 +75,7 @@ export function registerPaneCenterViewSetter(paneIndex: number, setter: CenterVi
  * 会自动切到「文件」，故无需重试。
  */
 export function requestPaneCenterView(paneIndex: number, view: CenterView): void {
-  setters.get(paneIndex)?.(view);
+  const index = normalizePaneIndex(paneIndex);
+  currentViews.set(index, view);
+  setters.get(index)?.(view);
 }

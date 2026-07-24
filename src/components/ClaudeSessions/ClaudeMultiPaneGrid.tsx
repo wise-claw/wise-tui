@@ -53,7 +53,7 @@ import type { RefreshHistorySessionsScope } from "./ClaudeChat";
 import type { PaneAuxLayout, ResolvePaneAuxLayout } from "./paneAuxLayout";
 import { Topbar, type PaneTopbarSharedProps } from "./Topbar";
 import { CenterViewControlContext, useCenterView } from "./claudeChatHelpers";
-import { registerPaneCenterViewSetter } from "../../stores/paneCenterViewControlStore";
+import { registerPaneCenterViewSetter, syncPaneCenterView } from "../../stores/paneCenterViewControlStore";
 import { useWorkspaceMemoPanelOpen } from "../../stores/workspaceMemoPanelStore";
 import {
   closeTerminalCenterPanelOnPane,
@@ -387,6 +387,10 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
     return () => registerPaneCenterViewSetter(0, null);
   }, [requestCenterView]);
 
+  useEffect(() => {
+    syncPaneCenterView(0, centerView);
+  }, [centerView]);
+
   return (
     <div
       className="app-claude-sessions__pane"
@@ -659,6 +663,10 @@ const MultiPaneExtraPaneCell = memo(
       registerPaneCenterViewSetter(absolutePaneIndex, requestCenterView);
       return () => registerPaneCenterViewSetter(absolutePaneIndex, null);
     }, [absolutePaneIndex, requestCenterView]);
+
+    useEffect(() => {
+      syncPaneCenterView(absolutePaneIndex, centerView);
+    }, [absolutePaneIndex, centerView]);
     const companionMessageListWindow = useMemo(
       () => resolveCompanionMessageListWindow(paneCount),
       [paneCount],

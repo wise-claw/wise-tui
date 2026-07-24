@@ -11,6 +11,10 @@ import {
   isToolOnlyUserMessage,
 } from "./claudeChatMessageDisplay";
 import { sessionHadRecentClaudeTurnFailureNotice } from "./claudeSessionTurnFailure";
+import {
+  buildTurnFileChangeSummaryPlacements,
+  type TurnFileChangeEntry,
+} from "./turnFileChangeSummary";
 
 export type ChatMessageListMessageRow = {
   kind: "message";
@@ -27,7 +31,16 @@ export type ChatMessageListThinkingRow = {
   key: "thinking-hint";
 };
 
-export type ChatMessageListRow = ChatMessageListMessageRow | ChatMessageListThinkingRow;
+export type ChatMessageListFilesChangedRow = {
+  kind: "files-changed-summary";
+  key: string;
+  files: TurnFileChangeEntry[];
+};
+
+export type ChatMessageListRow =
+  | ChatMessageListMessageRow
+  | ChatMessageListThinkingRow
+  | ChatMessageListFilesChangedRow;
 
 /**
  * thinking-hint 行常量：引用稳定，供 ChatMessageListVirtualBody 的 element 缓存命中，
@@ -105,6 +118,43 @@ export interface ChatMessageListRowsBuildResult {
   folded: ClaudeMessage[];
 }
 
+function appendFilesChangedSummaryRows(
+  rows: ChatMessageListRow[],
+  foldedMessages: readonly ClaudeMessage[],
+  sessionStatus: ClaudeSession["status"],
+): void {
+  const placements = buildTurnFileChangeSummaryPlacements(foldedMessages, sessionStatus);
+  if (placements.length === 0) return;
+
+  const byAfterIndex = new Map<number, typeof placements>();
+  for (const placement of placements) {
+    const list = byAfterIndex.get(placement.afterOriginalIndex) ?? [];
+    list.push(placement);
+    byAfterIndex.set(placement.afterOriginalIndex, list);
+  }
+
+  // 从后往前插入，避免下标漂移；同一 afterIndex 保持 placements 原序。
+  const sortedAfterIndexes = Array.from(byAfterIndex.keys()).sort((a, b) => b - a);
+  for (const afterIndex of sortedAfterIndexes) {
+    const list = byAfterIndex.get(afterIndex)!;
+    let insertAt = -1;
+    for (let i = 0; i < rows.length; i += 1) {
+      const row = rows[i]!;
+      if (row.kind === "message" && row.originalIndex === afterIndex) {
+        insertAt = i + 1;
+        break;
+      }
+    }
+    if (insertAt < 0) continue;
+    const summaryRows: ChatMessageListFilesChangedRow[] = list.map((p) => ({
+      kind: "files-changed-summary",
+      key: p.key,
+      files: p.files,
+    }));
+    rows.splice(insertAt, 0, ...summaryRows);
+  }
+}
+
 export function buildChatMessageListRowsWithFolded(
   messages: readonly ClaudeMessage[],
   options: ChatMessageListRowsBuildOptions,
@@ -116,6 +166,8 @@ export function buildChatMessageListRowsWithFolded(
     const row = buildSingleChatMessageListRow(foldedMessages, originalIndex, options);
     if (row) rows.push(row);
   }
+
+  appendFilesChangedSummaryRows(rows, foldedMessages, options.sessionStatus);
 
   if (options.showListEndThinkingHint) {
     rows.push(THINKING_HINT_ROW);
@@ -181,22 +233,41 @@ export function tryPatchChatMessageListRowsTail(
   }
 
   const lastMessageIndex = nextFolded.length - 1;
-  const prefixRows: ChatMessageListMessageRow[] = [];
+  const prefixRows: ChatMessageListRow[] = [];
+  let passedLastMessageSlot = false;
   for (const row of prevRows) {
-    if (row.kind !== "message") continue;
-    if (row.originalIndex === lastMessageIndex) continue;
-    if (row.msg !== nextFolded[row.originalIndex]) return null;
-    prefixRows.push(row);
+    if (row.kind === "thinking-hint") continue;
+    if (row.kind === "message") {
+      if (row.originalIndex === lastMessageIndex) {
+        passedLastMessageSlot = true;
+        continue;
+      }
+      // 末条槽位之后仍出现「前缀 message」→ fold 结构变了（如 tool_result 被吸收），回退全量。
+      if (passedLastMessageSlot) return null;
+      if (row.originalIndex >= nextFolded.length) return null;
+      if (row.msg !== nextFolded[row.originalIndex]) return null;
+      prefixRows.push(row);
+      continue;
+    }
+    if (row.kind === "files-changed-summary") {
+      // 保留已完成轮次的修改总结（位于末条 message 之前）。
+      if (passedLastMessageSlot) continue;
+      prefixRows.push(row);
+      continue;
+    }
   }
 
   let renderableBeforeLast = 0;
   for (let i = 0; i < lastMessageIndex; i += 1) {
     if (hasRenderableChatMessageBody(nextFolded[i]!)) renderableBeforeLast += 1;
   }
-  if (prefixRows.length !== renderableBeforeLast) return null;
+  const prefixMessageCount = prefixRows.filter((row) => row.kind === "message").length;
+  if (prefixMessageCount !== renderableBeforeLast) return null;
 
   const lastRow = buildSingleChatMessageListRow(nextFolded, lastMessageIndex, options);
   const nextRows: ChatMessageListRow[] = lastRow ? [...prefixRows, lastRow] : [...prefixRows];
+  // 流式 tail-patch 不重算末轮 files-changed；仅当 status 变 idle 时全量重建会补上。
+  // 历史轮次摘要已在 prefixRows 中保留。
   if (options.showListEndThinkingHint) {
     nextRows.push(THINKING_HINT_ROW);
   }

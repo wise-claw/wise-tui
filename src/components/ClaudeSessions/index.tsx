@@ -759,6 +759,10 @@ function ClaudeSessionsShell({
   );
 
   const effectivePanelBelowMessages = resolveCenterPanel(panelBelowMessages, 0);
+  const effectivePanelBelowTerminal = resolveCenterPanel(
+    resolvePaneAuxLayout?.(0)?.panelBelowTerminal,
+    0,
+  );
 
   const resolvePaneAuxLayoutWithTerminal = useCallback<ResolvePaneAuxLayout>(
     (paneIndex) => {
@@ -772,6 +776,7 @@ function ClaudeSessionsShell({
       return {
         ...base,
         panelBelowMessages: resolveCenterPanel(base.panelBelowMessages, paneIndex),
+        panelBelowTerminal: resolveCenterPanel(base.panelBelowTerminal, paneIndex),
       };
     },
     [
@@ -897,6 +902,7 @@ function ClaudeSessionsShell({
           workflowGraphStatusByWorkflowId={workflowGraphStatusByWorkflowId}
           onOpenTaskDetail={onOpenTaskDetail}
           panelBelowMessages={effectivePanelBelowMessages}
+          panelBelowTerminal={effectivePanelBelowTerminal}
           centerView={centerView}
           hideMessages={hideMessages}
           hideSessionTools={hideSessionTools}
