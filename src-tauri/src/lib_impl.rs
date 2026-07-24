@@ -42,6 +42,64 @@ fn shortcut_shift_down() -> bool {
 #[cfg(desktop)]
 const MENU_ID_CLOSE_MAIN_WINDOW: &str = "wise/close-main-window";
 
+/// 去掉 `Menu::default()` 里系统 Close Window（macOS 硬绑定 ⌘W）。
+/// 应用内 ⌘W 留给终端/编辑器标签关闭；关窗仍可通过「窗口 → 关闭窗口」点选。
+#[cfg(desktop)]
+fn strip_system_close_window_menu_items<R: tauri::Runtime>(
+    menu: &tauri::menu::Menu<R>,
+) -> tauri::Result<()> {
+    use tauri::menu::MenuItemKind;
+
+    fn is_close_window_label(text: &str) -> bool {
+        let normalized = text.replace('&', "");
+        normalized.eq_ignore_ascii_case("Close Window")
+            || normalized.eq_ignore_ascii_case("Close")
+    }
+
+    let mut empty_submenus = Vec::new();
+    for top in menu.items()? {
+        let MenuItemKind::Submenu(sub) = top else {
+            continue;
+        };
+        let children = sub.items()?;
+        let mut remove_close = Vec::new();
+        let mut remove_sep_before = Vec::new();
+        for (idx, child) in children.iter().enumerate() {
+            let MenuItemKind::Predefined(item) = child else {
+                continue;
+            };
+            let Ok(text) = item.text() else {
+                continue;
+            };
+            if !is_close_window_label(&text) {
+                continue;
+            }
+            remove_close.push(item.clone());
+            if idx > 0 {
+                if let MenuItemKind::Predefined(prev) = &children[idx - 1] {
+                    // Window 菜单里 Close 前通常有一条分隔线；一并去掉，避免尾部分隔。
+                    if prev.text().ok().as_deref() == Some("") {
+                        remove_sep_before.push(prev.clone());
+                    }
+                }
+            }
+        }
+        for item in remove_sep_before {
+            let _ = sub.remove(&item);
+        }
+        for item in remove_close {
+            let _ = sub.remove(&item);
+        }
+        if sub.items()?.is_empty() {
+            empty_submenus.push(sub);
+        }
+    }
+    for sub in empty_submenus {
+        let _ = menu.remove(&sub);
+    }
+    Ok(())
+}
+
 // ── App Entry ──
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -189,6 +247,8 @@ pub fn run() {
             })
             .menu(|app| {
                 let menu = Menu::default(app)?;
+                // 去掉系统 Close Window 的 ⌘W，避免抢占终端/编辑器标签关闭快捷键。
+                strip_system_close_window_menu_items(&menu)?;
                 let open_console = MenuItem::with_id(
                     app,
                     MENU_ID_OPEN_WEBVIEW_DEVTOOLS,
@@ -210,12 +270,13 @@ pub fn run() {
                     true,
                     Some("Shift+CmdOrCtrl+N"),
                 )?;
+                // 关窗不绑定 ⌘W（留给应用内标签关闭）；菜单点选仍可用。
                 let close_window = MenuItem::with_id(
                     app,
                     MENU_ID_CLOSE_MAIN_WINDOW,
                     "关闭窗口",
                     true,
-                    Some("CmdOrCtrl+W"),
+                    None::<&str>,
                 )?;
                 let window_menu = Submenu::with_items(
                     app,
