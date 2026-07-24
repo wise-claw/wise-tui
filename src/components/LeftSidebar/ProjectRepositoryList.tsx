@@ -1,8 +1,9 @@
 import type { MutableRefObject } from "react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { Popover, Typography } from "antd";
+import { Button, Popover, Typography } from "antd";
 import { DeferredHoverTooltip } from "../shared/DeferredHoverTooltip";
 import { useWorkspaceTodoIncompleteCount } from "../../hooks/useWorkspaceTodoIncompleteCount";
+import { useWorkspaceTodos } from "../../hooks/useWorkspaceTodos";
 import { WorkspaceTodosPopoverContent } from "./WorkspaceTodosPopoverContent";
 import {
   toggleWorkspaceMemoPanel,
@@ -226,8 +227,14 @@ function ProjectRepositoryListInner({
   );
 
   const [headerTodosPopoverOpen, setHeaderTodosPopoverOpen] = useState(false);
+  const [headerTodosShowCompleted, setHeaderTodosShowCompleted] = useState(false);
   const headerMemoOpen = useWorkspaceMemoPanelOpen();
   const headerTodoCount = useWorkspaceTodoIncompleteCount(workspaceTodosEnabled);
+  const todos = useWorkspaceTodos({ enabled: workspaceTodosEnabled });
+  const headerCompletedCount = useMemo(
+    () => todos.items.filter((item) => item.completed).length,
+    [todos.items],
+  );
 
   const runCommandRowPinnedMap = useRepositoryRunCommandRowPinnedMap();
 
@@ -293,10 +300,31 @@ function ProjectRepositoryListInner({
                 getPopupContainer={() => document.body}
                 rootClassName="app-left-sidebar-workspace-todos-popover"
                 styles={{ root: { zIndex: 1200 } }}
-                title="待办事项"
+                title={
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span>待办事项</span>
+                    {headerTodoCount > 0 ? (
+                      <Button
+                        type="link"
+                        size="small"
+                        style={{ padding: '0 4px', fontSize: 12, lineHeight: '22px' }}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setHeaderTodosShowCompleted((v) => !v);
+                        }}
+                      >
+                        {headerTodosShowCompleted ? "隐藏已完成" : `已完成 ${headerCompletedCount}`}
+                      </Button>
+                    ) : null}
+                  </div>
+                }
                 content={
                   headerTodosPopoverOpen ? (
-                    <WorkspaceTodosPopoverContent title="待办事项" />
+                    <WorkspaceTodosPopoverContent
+                      title="待办事项"
+                      showCompleted={headerTodosShowCompleted}
+                      onShowCompletedChange={setHeaderTodosShowCompleted}
+                    />
                   ) : null
                 }
               >

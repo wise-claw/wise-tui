@@ -5,12 +5,6 @@
   min-height: 0;
 }
 
-.app-workspace-todos-popover .app-workspace-todos-editor__done-toggle {
-  display: flex;
-  justify-content: flex-end;
-  padding: 2px 6px 0;
-}
-
 .app-workspace-todos-popover .app-workspace-todos-panel__list {
   max-height: min(240px, 40vh);
   overflow-x: hidden;

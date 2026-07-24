@@ -4,11 +4,15 @@ import "./WorkspaceTodosPopoverContent.css";
 export interface WorkspaceTodosPopoverContentProps {
   title: string;
   focusAddToken?: number;
+  showCompleted?: boolean;
+  onShowCompletedChange?: (next: boolean) => void;
 }
 
 export function WorkspaceTodosPopoverContent({
   title,
   focusAddToken = 0,
+  showCompleted,
+  onShowCompletedChange,
 }: WorkspaceTodosPopoverContentProps) {
   return (
     <div
@@ -17,7 +21,12 @@ export function WorkspaceTodosPopoverContent({
       onMouseDown={(e) => e.stopPropagation()}
       onClick={(e) => e.stopPropagation()}
     >
-      <WorkspaceTodosEditor focusAddToken={focusAddToken} />
+      <WorkspaceTodosEditor
+        focusAddToken={focusAddToken}
+        showCompleted={showCompleted}
+        onShowCompletedChange={onShowCompletedChange}
+        showCompletedToggle={false}
+      />
     </div>
   );
 }

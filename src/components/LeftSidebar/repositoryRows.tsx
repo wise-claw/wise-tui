@@ -2,7 +2,7 @@ import { memo, useState } from "react";
 import { getKnownOpenAppIcon } from "../OpenAppMenu/openAppIcons";
 import { useWorkspaceTodoIncompleteCount } from "../../hooks/useWorkspaceTodoIncompleteCount";
 import { UserOutlined } from "@ant-design/icons";
-import { App as AntdApp, Popover } from "antd";
+import { App as AntdApp, Button, Popover } from "antd";
 import { DeferredHoverTooltip } from "../shared/DeferredHoverTooltip";
 import { openWorkspaceTodosFromSidebarMenu } from "../../utils/openWorkspaceTodosFromSidebar";
 import { workspaceTodosAnchorKey } from "../../utils/workspaceTodosAnchorKey";
@@ -356,6 +356,7 @@ export function SidebarWorkspaceRemindersAction({
   enabled?: boolean;
 }) {
   const [popoverOpen, setPopoverOpen] = useState(false);
+  const [showCompleted, setShowCompleted] = useState(false);
   const incompleteCount = useWorkspaceTodoIncompleteCount(enabled);
 
   if (!enabled || incompleteCount <= 0) return null;
@@ -374,10 +375,31 @@ export function SidebarWorkspaceRemindersAction({
       getPopupContainer={() => document.body}
       rootClassName="app-left-sidebar-workspace-todos-popover"
       styles={{ root: { zIndex: 1200 } }}
-      title={popoverTitle}
+      title={
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <span>{popoverTitle}</span>
+          {incompleteCount > 0 ? (
+            <Button
+              type="link"
+              size="small"
+              style={{ padding: '0 4px', fontSize: 12, lineHeight: '22px' }}
+              onClick={(e) => {
+                e.stopPropagation();
+                setShowCompleted((v) => !v);
+              }}
+            >
+              {showCompleted ? "隐藏已完成" : `已完成 ${incompleteCount}`}
+            </Button>
+          ) : null}
+        </div>
+      }
       content={
         popoverOpen ? (
-          <WorkspaceTodosPopoverContent title={popoverTitle} />
+          <WorkspaceTodosPopoverContent
+            title={popoverTitle}
+            showCompleted={showCompleted}
+            onShowCompletedChange={setShowCompleted}
+          />
         ) : null
       }
     >
