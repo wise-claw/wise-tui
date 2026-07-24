@@ -746,17 +746,16 @@ function ClaudeSessionsShell({
 
   const resolveCenterPanel = useCallback(
     (incoming: ReactNode | undefined, paneIndex: number): ReactNode | undefined => {
-      // 备忘录优先占 pane 0；各屏独立终端；再回落文件编辑器。
+      // 备忘录优先占 pane 0；sentinel 占位时替换为真实终端；其余（如文件编辑器）原样保留，
+      // 终端与文件编辑器各自在独立 slot（panelBelowMessages / panelBelowTerminal）中并存，
+      // 由 centerView 互斥显隐——避免终端打开时把文件 tab 内容挤掉。
       if (incoming === WORKSPACE_MEMO_PANEL_NODE) return incoming;
-      if (terminalCenter.visiblePaneIndexes.includes(paneIndex)) {
-        return terminalPanelByPane.get(paneIndex) ?? undefined;
-      }
       if (incoming === TERMINAL_CENTER_SLOT_SENTINEL) {
         return terminalPanelByPane.get(paneIndex) ?? undefined;
       }
       return incoming;
     },
-    [terminalCenter.visiblePaneIndexes, terminalPanelByPane],
+    [terminalPanelByPane],
   );
 
   const effectivePanelBelowMessages = resolveCenterPanel(panelBelowMessages, 0);

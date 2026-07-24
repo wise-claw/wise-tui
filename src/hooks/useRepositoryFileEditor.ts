@@ -491,7 +491,7 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
         updatePaneActivePath(paneIndex, (cur) => {
           if (cur !== relativePath) return cur;
           if (nextTabs.length === 0) return null;
-          return nextTabs[idx]?.relativePath ?? nextTabs[idx - 1]!.relativePath;
+          return nextTabs[0]!.relativePath;
         });
         return nextTabs;
       });

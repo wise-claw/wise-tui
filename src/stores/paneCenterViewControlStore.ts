@@ -6,22 +6,33 @@
  * 因此「编辑器已挂载、用户从消息视图再次打开/切换文件」时不会自动切回「文件」——
  * 这是「消息/文件 tab 同显时点文件树/git 打开文件不切到文件 tab」的根因。
  *
- * 本 store 提供跨层命令通道：持有 `setCenterView` 的 pane 组件（单屏
+ * 三态语义：
+ * - "messages"：消息列表占中栏（默认；无 editor 也无 terminal 时唯一选项）。
+ * - "files"：editor 占中栏；`panelBelowMessages` 有节点时可选。
+ * - "terminal"：内置终端占中栏；`panelBelowTerminal` 有节点时可选。
+ *
+ * editor 与 terminal 是两个独立 slot（`panelBelowMessages` / `panelBelowTerminal`），
+ * DOM 中并存、由 `is-hidden` 互斥显示——避免「打开终端时把文件 tab 挤掉」的回归。
+ *
+ * 本 store 提供跨层命令通道：持有 `requestCenterView` 的 pane 组件（单屏
  * `AppWorkspaceLayout` / 多屏 `ClaudeMultiPaneGrid` 各 pane cell）mount 时注册
  * setter；`useRepositoryFileEditor.openRepositoryFile` 在打开编辑器内容时按 `paneIndex`
- * 请求切到「文件」视图。用模块级单例（参考 `activePaneIndexStore`），绕开
- * `PaneEditorHost` 运行在 `CenterViewControlContext.Provider` 外、无法经 context 拿到
- * setter 的限制。
+ * 请求切到「文件」视图；`openTerminalCenterPanel` 请求切到「终端」视图。用模块级
+ * 单例（参考 `activePaneIndexStore`），绕开 `PaneEditorHost` 运行在
+ * `CenterViewControlContext.Provider` 外、无法经 context 拿到 setter 的限制。
  *
- * 安全性：「切到 files 但编辑器未挂载」无害——ClaudeChat 渲染守卫在
- * `panelBelowMessages` 为空时仍显示消息视图，不会空白。
+ * 注册的必须是 `requestCenterView`（非顶栏 `setCenterView`）：后者会置位 userChosen
+ * 闩；若 editor 尚未挂载，fallback 会把视图打回 messages 且再也无法自动跟随。
+ *
+ * 安全性：「切到 files 但编辑器未挂载」/「切到 terminal 但终端未挂载」均无害——
+ * ClaudeChat 渲染守卫在对应 panel 为空时仍显示消息视图，不会空白。
  *
  * 单/多屏切换：单屏由 `AppWorkspaceLayout` 注册 pane 0（门控 paneCount<=1）；多屏由
  * `MultiPanePrimaryCell`（pane 0）/ `MultiPaneExtraPaneCell`（pane>=1）注册。多屏下
  * `AppWorkspaceLayout` 的 `useCenterView` 是「死 setter」（其 Provider 被 pane cell 内
  * Provider 遮蔽、Topbar 不渲染），故必须门控跳过，否则会抢占 pane 0。
  */
-export type CenterView = "messages" | "files";
+export type CenterView = "messages" | "files" | "terminal";
 
 type CenterViewSetter = (view: CenterView) => void;
 

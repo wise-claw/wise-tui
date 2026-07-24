@@ -11,34 +11,116 @@ import {
   messageTextLooksLikeOmcDispatch,
   parseOmcSlashCommandFromUserText,
 } from "../../utils/omcUserMessageText";
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { buildConventionalCommitFallback } from "../../utils/conventionalCommitMessage";
 import { isDisplayNoiseUserMessageText } from "../../utils/claudeChatMessageDisplay";
 import type { CenterView } from "./ClaudeChat";
 
 /**
- * 中栏「消息/文件」视图切换状态：有编辑器时默认「文件」，无编辑器回「消息」。
- * 状态提升到 pane 组件 / 会话壳层，供顶栏 Segmented 与 ClaudeChat 共享同一份视图。
- * effect 只依赖「下方面板有无」布尔，不依赖 ReactNode identity：终端/文件节点
- * 重渲换引用时不应把用户已选的「消息」视图强行拽回「文件/终端」。
+ * 中栏视图在 slot 有无变化后的解析结果（纯函数，供 useCenterView 与单测共用）。
+ *
+ * - `pending`：程序化切到某视图但目标 panel 尚未挂载时的挂起目标。
+ * - fallback 在 pending 匹配期间不得把视图打回 messages（打开文件竞态）。
+ */
+export function resolveCenterViewAfterSlotChange(input: {
+  centerView: CenterView;
+  hasFiles: boolean;
+  hasTerminal: boolean;
+  userChosen: boolean;
+  pending: CenterView | null;
+}): { centerView: CenterView; pending: CenterView | null } {
+  let pending = input.pending;
+  if (pending === "files" && input.hasFiles) pending = null;
+  else if (pending === "terminal" && input.hasTerminal) pending = null;
+
+  let centerView = input.centerView;
+  if (centerView === "files" && !input.hasFiles) {
+    if (pending !== "files") {
+      centerView = input.hasTerminal ? "terminal" : "messages";
+    }
+  } else if (centerView === "terminal" && !input.hasTerminal) {
+    if (pending !== "terminal") {
+      centerView = input.hasFiles ? "files" : "messages";
+    }
+  }
+
+  // 冷启动跟随：仅 messages 且无用户闩、无 pending 时。
+  if (
+    !input.userChosen &&
+    pending == null &&
+    centerView === "messages"
+  ) {
+    if (input.hasFiles) centerView = "files";
+    else if (input.hasTerminal) centerView = "terminal";
+  }
+
+  return { centerView, pending };
+}
+
+/**
+ * 中栏「消息/文件/终端」视图切换状态：有编辑器时默认「文件」，无编辑器但有
+ * 终端时默认「终端」，都没有回「消息」。状态提升到 pane 组件 / 会话壳层，供顶栏
+ * Segmented 与 ClaudeChat 共享同一份视图。effect 只依赖「下方面板有无」布尔，
+ * 不依赖 ReactNode identity：终端/文件节点重渲换引用时不应把用户已选的视图
+ * 强行拽回其它项。
+ *
+ * editor 与 terminal 是两个独立 slot（`panelBelowMessages` / `panelBelowTerminal`），
+ * DOM 中并存；effect 仅在「某 slot 卸载」时把视图回退到另一个可用 slot 或 messages。
+ *
+ * 两套 setter：
+ * - `setCenterView`：顶栏 Segmented 用户点击；置位 userChosen，阻止 slot 抖动拽回。
+ * - `requestCenterView`：打开文件/终端等程序化导航；写入 pending，避免
+ *   「先切到 files、editor 尚未挂上 → fallback 打回 messages → userChosen 挡住自动跟随」
+ *   的竞态（表现为点 git/文件树打开文件后仍停在消息 tab）。
  */
 export function useCenterView(
   panelBelowMessages: ReactNode,
+  panelBelowTerminal: ReactNode,
   hideMessages: boolean,
 ): {
   centerView: CenterView;
   setCenterView: (view: CenterView) => void;
+  requestCenterView: (view: CenterView) => void;
   visible: boolean;
 } {
-  const [centerView, setCenterView] = useState<CenterView>("messages");
-  const hasPanelBelowMessages = Boolean(panelBelowMessages);
+  const [centerView, setCenterViewRaw] = useState<CenterView>("messages");
+  // 用户从未在顶栏 Segmented 显式选过视图时，才允许 effect 在 slot 变化时自动跟随；
+  // 一旦用户点过任何视图（包括「消息」），就不再被 effect 强行拽回 files/terminal，
+  // 避免「打开 git diff → 切到消息 → 立刻被 effect 拽回文件视图」的回归。
+  const userChosenViewRef = useRef(false);
+  // 程序化切视图时目标 panel 可能尚未挂载；fallback 不得在 pending 期间打回 messages。
+  const pendingProgrammaticViewRef = useRef<CenterView | null>(null);
+  const hasFiles = Boolean(panelBelowMessages);
+  const hasTerminal = Boolean(panelBelowTerminal);
+  const setCenterView = useCallback((view: CenterView) => {
+    userChosenViewRef.current = true;
+    pendingProgrammaticViewRef.current = null;
+    setCenterViewRaw(view);
+  }, []);
+  const requestCenterView = useCallback((view: CenterView) => {
+    // 打开文件/终端是强意图：清掉「停在消息」的用户闩，并挂起 pending 防 fallback 竞态。
+    userChosenViewRef.current = false;
+    pendingProgrammaticViewRef.current = view;
+    setCenterViewRaw(view);
+  }, []);
   useEffect(() => {
-    setCenterView(hasPanelBelowMessages ? "files" : "messages");
-  }, [hasPanelBelowMessages]);
+    const next = resolveCenterViewAfterSlotChange({
+      centerView,
+      hasFiles,
+      hasTerminal,
+      userChosen: userChosenViewRef.current,
+      pending: pendingProgrammaticViewRef.current,
+    });
+    pendingProgrammaticViewRef.current = next.pending;
+    if (next.centerView !== centerView) {
+      setCenterViewRaw(next.centerView);
+    }
+  }, [centerView, hasFiles, hasTerminal]);
   return {
     centerView,
     setCenterView,
-    visible: !hideMessages && hasPanelBelowMessages,
+    requestCenterView,
+    visible: !hideMessages && (hasFiles || hasTerminal),
   };
 }
 

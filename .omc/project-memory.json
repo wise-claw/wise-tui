@@ -42,8 +42,8 @@
     "runtime": null
   },
   "build": {
-    "buildCommand": "bunx tsc --noEmit -p tsconfig.json 2>&1 | grep -E \"ClaudeLineEdits\" | head -10; echo \"---exit:$?---\"",
-    "testCommand": "bun test 2>&1 | tail -8",
+    "buildCommand": "bunx tsc --noEmit -p tsconfig.json 2>&1 | grep -E \"error TS\" | head -10; echo \"---root-exit:$?---\"",
+    "testCommand": "bun test src/stores/terminalCenterPanelStore.test.ts 2>&1 | tail -15",
     "lintCommand": null,
     "devCommand": "npm run dev",
     "scripts": {
@@ -242,6 +242,24 @@
   },
   "hotPaths": [
     {
+      "path": "src/components/AppWorkspaceLayout.tsx",
+      "accessCount": 52,
+      "lastAccessed": 1784863425004,
+      "type": "file"
+    },
+    {
+      "path": "src/components/ClaudeSessions/ClaudeMultiPaneGrid.tsx",
+      "accessCount": 23,
+      "lastAccessed": 1784863330298,
+      "type": "file"
+    },
+    {
+      "path": "src/components/ClaudeSessions/ClaudeChat.tsx",
+      "accessCount": 16,
+      "lastAccessed": 1784861372356,
+      "type": "file"
+    },
+    {
       "path": "src/components/ClaudeCodeUsagePopover/ClaudeLineEditsContent.tsx",
       "accessCount": 12,
       "lastAccessed": 1784857590218,
@@ -260,9 +278,51 @@
       "type": "file"
     },
     {
+      "path": "src/components/ClaudeSessions/Topbar.tsx",
+      "accessCount": 10,
+      "lastAccessed": 1784863041528,
+      "type": "file"
+    },
+    {
+      "path": "src/components/ClaudeSessions/index.tsx",
+      "accessCount": 10,
+      "lastAccessed": 1784863343721,
+      "type": "file"
+    },
+    {
       "path": "src/components/ClaudeCodeUsagePopover/ClaudeUsageChartContent.tsx",
       "accessCount": 9,
       "lastAccessed": 1784856695789,
+      "type": "file"
+    },
+    {
+      "path": "src/components/ClaudeSessions/claudeChatHelpers.ts",
+      "accessCount": 6,
+      "lastAccessed": 1784863082507,
+      "type": "file"
+    },
+    {
+      "path": "src/components/ClaudeSessions/index.css",
+      "accessCount": 5,
+      "lastAccessed": 1784861240248,
+      "type": "file"
+    },
+    {
+      "path": "src/components/GitDiffMonacoPane.tsx",
+      "accessCount": 5,
+      "lastAccessed": 1784861379604,
+      "type": "file"
+    },
+    {
+      "path": "src/components/RepositoryFileEditorTabSurface.tsx",
+      "accessCount": 4,
+      "lastAccessed": 1784861380632,
+      "type": "file"
+    },
+    {
+      "path": "src/stores/paneCenterViewControlStore.ts",
+      "accessCount": 4,
+      "lastAccessed": 1784862965324,
       "type": "file"
     },
     {
@@ -272,9 +332,33 @@
       "type": "file"
     },
     {
+      "path": "src/stores/terminalCenterPanelStore.ts",
+      "accessCount": 3,
+      "lastAccessed": 1784860781323,
+      "type": "file"
+    },
+    {
+      "path": "src/components/ClaudeSessions/paneAuxLayout.ts",
+      "accessCount": 3,
+      "lastAccessed": 1784862986225,
+      "type": "file"
+    },
+    {
       "path": "src/components/ClaudeCodeUsagePopover/index.css",
       "accessCount": 2,
       "lastAccessed": 1784857349081,
+      "type": "file"
+    },
+    {
+      "path": "src/components/TerminalPanel/terminalCenterSlot.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1784860560153,
+      "type": "file"
+    },
+    {
+      "path": "src/components/RepositoryFileEditorPanel.tsx",
+      "accessCount": 2,
+      "lastAccessed": 1784861238111,
       "type": "file"
     },
     {
@@ -293,6 +377,30 @@
       "path": "src/stores/claudeUsageUiStore.ts",
       "accessCount": 1,
       "lastAccessed": 1784856544850,
+      "type": "file"
+    },
+    {
+      "path": "src/App.css",
+      "accessCount": 1,
+      "lastAccessed": 1784860949086,
+      "type": "file"
+    },
+    {
+      "path": "src/utils/toolGroupActivitySummary.ts",
+      "accessCount": 1,
+      "lastAccessed": 1784861098617,
+      "type": "file"
+    },
+    {
+      "path": "src/hooks/useRepositoryFileEditor.ts",
+      "accessCount": 1,
+      "lastAccessed": 1784861221268,
+      "type": "file"
+    },
+    {
+      "path": "src/stores/terminalCenterPanelStore.test.ts",
+      "accessCount": 1,
+      "lastAccessed": 1784861568621,
       "type": "file"
     }
   ],

@@ -493,6 +493,8 @@ interface ConnectedClaudeSessionsProps {
   centerAuxPanelsNodeByPaneVersion: number;
   /** 单屏中栏「消息/文件」视图值（由 layout 壳层提升持有，透传给 ClaudeSessions）。 */
   centerView?: CenterView;
+  /** 全局备忘录面板是否打开（由 layout 壳层持有；影响 pane 0 的 editor slot）。 */
+  memoOpen: boolean;
 }
 
 function connectedClaudeSessionsPropsEqual(
@@ -502,6 +504,7 @@ function connectedClaudeSessionsPropsEqual(
   if (prev.mainLayoutContentRef !== next.mainLayoutContentRef) return false;
   if (prev.centerAuxPanelsNodeByPaneVersion !== next.centerAuxPanelsNodeByPaneVersion) return false;
   if (prev.centerView !== next.centerView) return false;
+  if (prev.memoOpen !== next.memoOpen) return false;
   return claudeSessionsShellPropsEqual(prev.claudeSessionsProps, next.claudeSessionsProps);
 }
 
@@ -511,8 +514,8 @@ const ConnectedClaudeSessions = memo(function ConnectedClaudeSessions({
   centerAuxPanelsNodeByPane,
   centerAuxPanelsNodeByPaneVersion,
   centerView,
+  memoOpen,
 }: ConnectedClaudeSessionsProps) {
-  const memoOpen = useWorkspaceMemoPanelOpen();
   const terminalCenter = useTerminalCenterPanelState();
   // resolvePaneAuxLayout 被 shell memo 的 skipFunctions 忽略；终端/备忘录开闭必须 bump 版本号，
   // 否则第二屏及以后收不到最新 panelBelowMessages（按钮亮了但面板不挂）。
@@ -528,18 +531,21 @@ const ConnectedClaudeSessions = memo(function ConnectedClaudeSessions({
       // 离屏 pane 的性能护栏由 deferHeavySubtree 在下游保留
       // （hidePaneMessages = hideMessages || deferHeavySubtree）。
       // 全局备忘录优先占 pane 0 的同一 slot（与打开文件一致）；
-      // 内置终端按屏独立挂载（ClaudeSessions 会把 sentinel 换成真实 TerminalPanel）。
+      // editor 与 terminal 是两个独立 slot（DOM 并存，靠 centerView 显隐），
+      // 不再让 terminal 抢占 editor 的 ReactNode。
       const panel =
         paneIndex === 0 && memoOpen
           ? WORKSPACE_MEMO_PANEL_NODE
-          : terminalCenter.visiblePaneIndexes.includes(paneIndex)
-            ? TERMINAL_CENTER_SLOT_SENTINEL
-            : centerAuxPanelsNodeByPane.get(paneIndex);
-      if (panel == null) {
+          : centerAuxPanelsNodeByPane.get(paneIndex);
+      const terminalPanel = terminalCenter.visiblePaneIndexes.includes(paneIndex)
+        ? TERMINAL_CENTER_SLOT_SENTINEL
+        : null;
+      if (panel == null && terminalPanel == null) {
         return { hideMessages: false, hideSessionTools: false };
       }
       return {
         panelBelowMessages: panel,
+        panelBelowTerminal: terminalPanel,
         hideMessages: false,
         hideSessionTools: false,
       };
@@ -1056,31 +1062,54 @@ export function AppWorkspaceLayout({
   // centerAuxPanelsNodeByPane 定义之后以避开 TDZ。
   const memoOpen = useWorkspaceMemoPanelOpen();
   const terminalCenter = useTerminalCenterPanelState();
+  // 三态切换（消息 / 文件 / 终端）：editor 与 terminal 是两个独立 slot，
+  // DOM 中并存，由 `centerView` 互斥显隐——避免打开终端时把文件 tab 挤掉。
+  // memo（备忘录）独占 pane 0 的 editor slot（与打开文件行为一致）。
   const primaryPanelBelowMessages = memoOpen
     ? WORKSPACE_MEMO_PANEL_NODE
-    : terminalCenter.visiblePaneIndexes.includes(0)
-      ? TERMINAL_CENTER_SLOT_SENTINEL
-      : centerAuxPanelsNodeByPane.get(0);
-  const { centerView, setCenterView, visible: centerSwitcherVisible } = useCenterView(
+    : centerAuxPanelsNodeByPane.get(0);
+  const primaryPanelBelowTerminal = terminalCenter.visiblePaneIndexes.includes(0)
+    ? TERMINAL_CENTER_SLOT_SENTINEL
+    : null;
+  const {
+    centerView,
+    setCenterView,
+    requestCenterView,
+    visible: centerSwitcherVisible,
+  } = useCenterView(
     primaryPanelBelowMessages,
+    primaryPanelBelowTerminal,
     false, // 单屏 primary 的 hideMessages 恒为 false
   );
-  const centerSwitcherFilesLabel = memoOpen
-    ? "备忘录"
-    : terminalCenter.visiblePaneIndexes.includes(0)
-      ? "终端"
-      : "文件";
+  // 三态 Segmented 选项：消息恒有；文件当 editor（或 memo）可见；终端当 pane 0 终端可见。
+  const layoutLevelCenterSwitcherOptions = useMemo<Array<{ label: string; value: CenterView }>>(
+    () => {
+      const opts: Array<{ label: string; value: CenterView }> = [
+        { label: "消息", value: "messages" },
+      ];
+      if (primaryPanelBelowMessages) {
+        opts.push({ label: memoOpen ? "备忘录" : "文件", value: "files" });
+      }
+      if (primaryPanelBelowTerminal) {
+        opts.push({ label: "终端", value: "terminal" });
+      }
+      return opts;
+    },
+    [primaryPanelBelowMessages, primaryPanelBelowTerminal, memoOpen],
+  );
 
-  // 单屏下把 pane 0 的 setCenterView 注册到跨层控制通道，供
+  // 单屏下把 pane 0 的 requestCenterView 注册到跨层控制通道，供
   // useRepositoryFileEditor.openRepositoryFile 在打开文件时请求切到「文件」视图。
-  // 多屏（paneCount>1）跳过：pane 0 由 MultiPanePrimaryCell 注册，且此处 setCenterView
+  // 必须用 requestCenterView（非 setCenterView）：后者会置位 userChosen 闩，
+  // 若 editor 尚未挂载会被 fallback 打回 messages 且再也跟不过来。
+  // 多屏（paneCount>1）跳过：pane 0 由 MultiPanePrimaryCell 注册，且此处 hook
   // 是「死 setter」（Provider 被 pane cell 遮蔽、Topbar 不渲染），注册会抢占 pane 0。
   // 依赖须含 paneCount，否则单/多屏切换时门控不重算。
   useEffect(() => {
     if ((claudeSessionsProps.paneCount ?? 1) > 1) return;
-    registerPaneCenterViewSetter(0, setCenterView);
+    registerPaneCenterViewSetter(0, requestCenterView);
     return () => registerPaneCenterViewSetter(0, null);
-  }, [claudeSessionsProps.paneCount, setCenterView]);
+  }, [claudeSessionsProps.paneCount, requestCenterView]);
 
   /** 多 pane 下要 mount 的 PaneEditorHost 配置列表。
    *  pane 0 = primary（active 仓库）；pane 1..N-1 = extra panes。
@@ -1691,7 +1720,7 @@ export function AppWorkspaceLayout({
                           centerView={centerView}
                           onCenterViewChange={setCenterView}
                           centerSwitcherVisible={centerSwitcherVisible}
-                          centerSwitcherFilesLabel={centerSwitcherFilesLabel}
+                          centerSwitcherOptions={layoutLevelCenterSwitcherOptions}
                         />
                       </Suspense>
                     ) : null}
@@ -1708,13 +1737,14 @@ export function AppWorkspaceLayout({
                     >
                       <ErrorBoundary type="local" fallbackTitle="智能对话会话模块出错">
                         <Suspense fallback={<WorkspaceViewportLoading />}>
-                          <CenterViewControlContext.Provider value={setCenterView}>
+                          <CenterViewControlContext.Provider value={requestCenterView}>
                           <ConnectedClaudeSessions
                             claudeSessionsProps={claudeSessionsPropsWithHeader}
                             centerView={centerView}
                             mainLayoutContentRef={mainLayoutContentRef}
                             centerAuxPanelsNodeByPane={centerAuxPanelsNodeByPane}
                             centerAuxPanelsNodeByPaneVersion={centerAuxPanelsNodeByPaneVersion}
+                            memoOpen={memoOpen}
                           />
                           </CenterViewControlContext.Provider>
                         </Suspense>

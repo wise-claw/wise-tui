@@ -273,6 +273,23 @@ export function RepositoryFileEditorTabSurface({
     contentInjectionCancelRef.current = null;
     monacoMountGuardRef.current?.dispose();
     monacoMountGuardRef.current = null;
+    // 显式 dispose Monaco editor 与其持有的 model，避免 keep-alive 驱逐后
+    // TS worker / 模型 URI 注册表持续占用——切到消息视图（files pane 卸载）
+    // 触发的 unmount 路径上同等清理由 React 卸载 cleanup 负责，此处专管
+    // LRU 驱逐路径。
+    const editor = editorRef.current;
+    if (editor) {
+      try {
+        editor.getModel()?.dispose();
+      } catch {
+        /* model 可能与其它 pane 共享，不在此处强释放 */
+      }
+      try {
+        editor.dispose();
+      } catch {
+        /* editor 已 dispose 忽略 */
+      }
+    }
     editorRef.current = null;
     monacoRef.current = null;
     lastInjectedContentVersionRef.current = null;

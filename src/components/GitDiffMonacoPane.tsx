@@ -83,6 +83,23 @@ export function GitDiffMonacoPane({
       modifiedListenerRef.current = null;
       trackpadGuardRef.current?.dispose();
       trackpadGuardRef.current = null;
+      // 切到消息视图或 tab 关闭/重打开时 panels 容器 unmount，DiffEditor 与其
+      // 持有的 original/modified model 必须显式 dispose，否则会持续占用 TS
+      // worker / 模型 URI 注册表，跨多次会话累积。
+      const diffEditor = diffEditorRef.current;
+      if (diffEditor) {
+        try {
+          diffEditor.getOriginalEditor().getModel()?.dispose();
+        } catch {
+          /* model 可能已被共享引用，本组件 dispose 时不能动；忽略 */
+        }
+        try {
+          diffEditor.getModifiedEditor().getModel()?.dispose();
+        } catch {
+          /* 同上 */
+        }
+        diffEditor.dispose();
+      }
       diffEditorRef.current = null;
     };
   }, [relativePath]);

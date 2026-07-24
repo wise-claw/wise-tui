@@ -61,6 +61,9 @@ import {
   toggleTerminalCenterPanel,
   useTerminalCenterPanelState,
 } from "../../stores/terminalCenterPanelStore";
+import { TERMINAL_CENTER_SLOT_SENTINEL } from "../TerminalPanel/terminalCenterSlot";
+import { WORKSPACE_MEMO_PANEL_NODE } from "../WorkspaceMemoPanel";
+import type { CenterView } from "./ClaudeChat";
 
 const TerminalPanelLazy = lazy(() =>
   import("../TerminalPanel").then((module) => ({ default: module.TerminalPanel })),
@@ -349,28 +352,40 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
     0,
     activeRepository,
   );
-  // 备忘录占 pane 0 时优先；否则本屏终端由 cell 本地挂载（不依赖上层 layout 下发）。
-  const panelBelowMessages =
-    memoOpen || !terminalPanel ? paneAuxLayout.panelBelowMessages : terminalPanel;
-  const { centerView, setCenterView, visible: centerSwitcherVisible } = useCenterView(
+  // editor / memo / terminal 是三个独立 slot，DOM 中并存，由 centerView 三态互斥显隐。
+  // 不再让 terminal 抢占 editor 的 panelBelowMessages（避免打开终端时把文件 tab 挤掉）。
+  const panelBelowMessages = memoOpen ? WORKSPACE_MEMO_PANEL_NODE : paneAuxLayout.panelBelowMessages;
+  // 用 terminalMounted 布尔值作为 useCenterView 的信号（避免 ReactNode identity 变化触发自动切换），
+  // 用 terminalPanel（实际终端面板）作为渲染内容（替代 sentinel 隐藏 div）。
+  const {
+    centerView,
+    setCenterView,
+    requestCenterView,
+    visible: centerSwitcherVisible,
+  } = useCenterView(
     panelBelowMessages,
+    terminalMounted ? TERMINAL_CENTER_SLOT_SENTINEL : null,
     paneAuxLayout.hideMessages,
   );
-  const centerSwitcherFilesLabel = memoOpen
-    ? "备忘录"
-    : terminalVisible
-      ? "终端"
-      : "文件";
+  const centerSwitcherOptions: Array<{ label: string; value: CenterView }> = [
+    { label: "消息", value: "messages" },
+  ];
+  if (panelBelowMessages) {
+    centerSwitcherOptions.push({ label: memoOpen ? "备忘录" : "文件", value: "files" });
+  }
+  if (terminalMounted) {
+    centerSwitcherOptions.push({ label: "终端", value: "terminal" });
+  }
   const handleToggleTerminalOnPrimary = useCallback(() => {
     markPaneActive(0);
     toggleTerminalCenterPanel(0);
   }, []);
 
-  // 把 pane 0 的 setCenterView 注册到跨层控制通道，供打开文件时切到「文件」视图。
+  // 把 pane 0 的 requestCenterView 注册到跨层控制通道，供打开文件时切到「文件」视图。
   useEffect(() => {
-    registerPaneCenterViewSetter(0, setCenterView);
+    registerPaneCenterViewSetter(0, requestCenterView);
     return () => registerPaneCenterViewSetter(0, null);
-  }, [setCenterView]);
+  }, [requestCenterView]);
 
   return (
     <div
@@ -393,10 +408,10 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
           centerView={centerView}
           onCenterViewChange={setCenterView}
           centerSwitcherVisible={centerSwitcherVisible}
-          centerSwitcherFilesLabel={centerSwitcherFilesLabel}
+          centerSwitcherOptions={centerSwitcherOptions}
         />
       ) : null}
-      <CenterViewControlContext.Provider value={setCenterView}>
+      <CenterViewControlContext.Provider value={requestCenterView}>
       <ClaudeSessionChatWithDock
         key={sessionId}
         session={session}
@@ -463,6 +478,7 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
         workflowGraphStatusByWorkflowId={shared.workflowGraphStatusByWorkflowId}
             onOpenTaskDetail={shared.onOpenTaskDetail}
             panelBelowMessages={panelBelowMessages}
+            panelBelowTerminal={terminalPanel}
             hideMessages={paneAuxLayout.hideMessages}
             hideSessionTools={paneAuxLayout.hideSessionTools}
             centerView={centerView}
@@ -611,23 +627,38 @@ const MultiPaneExtraPaneCell = memo(
       absolutePaneIndex,
       resolvedRepo,
     );
-    const panelBelowMessages = terminalPanel ?? paneAuxLayout.panelBelowMessages;
-    const { centerView, setCenterView, visible: centerSwitcherVisible } = useCenterView(
+    // editor / terminal 是两个独立 slot，DOM 中并存，由 centerView 三态互斥显隐。
+    const panelBelowMessages = paneAuxLayout.panelBelowMessages;
+    const {
+      centerView,
+      setCenterView,
+      requestCenterView,
+      visible: centerSwitcherVisible,
+    } = useCenterView(
       panelBelowMessages,
+      terminalMounted ? TERMINAL_CENTER_SLOT_SENTINEL : null,
       hidePaneMessages,
     );
-    const centerSwitcherFilesLabel = terminalVisible ? "终端" : "文件";
+    const centerSwitcherOptions: Array<{ label: string; value: CenterView }> = [
+      { label: "消息", value: "messages" },
+    ];
+    if (panelBelowMessages) {
+      centerSwitcherOptions.push({ label: "文件", value: "files" });
+    }
+    if (terminalMounted) {
+      centerSwitcherOptions.push({ label: "终端", value: "terminal" });
+    }
     const handleToggleTerminalOnPane = useCallback(() => {
       markPaneActive(absolutePaneIndex);
       toggleTerminalCenterPanel(absolutePaneIndex);
     }, [absolutePaneIndex]);
 
-    // 把本 extra pane 的 setCenterView 注册到跨层控制通道，供打开文件时切到「文件」视图。
+    // 把本 extra pane 的 requestCenterView 注册到跨层控制通道，供打开文件时切到「文件」视图。
     // 必须用绝对 pane 索引（slot 0 → pane 1），与 PaneEditorHost / markPaneActive 对齐。
     useEffect(() => {
-      registerPaneCenterViewSetter(absolutePaneIndex, setCenterView);
+      registerPaneCenterViewSetter(absolutePaneIndex, requestCenterView);
       return () => registerPaneCenterViewSetter(absolutePaneIndex, null);
-    }, [absolutePaneIndex, setCenterView]);
+    }, [absolutePaneIndex, requestCenterView]);
     const companionMessageListWindow = useMemo(
       () => resolveCompanionMessageListWindow(paneCount),
       [paneCount],
@@ -730,10 +761,10 @@ const MultiPaneExtraPaneCell = memo(
               centerView={centerView}
               onCenterViewChange={setCenterView}
               centerSwitcherVisible={centerSwitcherVisible}
-              centerSwitcherFilesLabel={centerSwitcherFilesLabel}
+              centerSwitcherOptions={centerSwitcherOptions}
             />
           ) : null}
-          <CenterViewControlContext.Provider value={setCenterView}>
+          <CenterViewControlContext.Provider value={requestCenterView}>
           <ClaudeSessionChatWithDock
             key={sessionId}
             session={paneSession}
@@ -800,6 +831,7 @@ const MultiPaneExtraPaneCell = memo(
             workflowGraphStatusByWorkflowId={shared.workflowGraphStatusByWorkflowId}
             onOpenTaskDetail={shared.onOpenTaskDetail}
             panelBelowMessages={panelBelowMessages}
+            panelBelowTerminal={terminalPanel}
             hideMessages={hidePaneMessages}
             hideSessionTools={paneAuxLayout.hideSessionTools}
             centerView={centerView}

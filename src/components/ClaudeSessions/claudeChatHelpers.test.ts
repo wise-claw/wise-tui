@@ -12,6 +12,7 @@ import {
   getLatestUserPlainText,
   getSessionPreview,
   normalizeSplitTaskListFlowStatus,
+  resolveCenterViewAfterSlotChange,
   sameLogicalClaudeSession,
   sessionRepoPathKey,
   splitTaskListBinaryLabel,
@@ -109,5 +110,73 @@ describe("claudeChatHelpers", () => {
     expect(truncateSingleLine("line1\nline2\nline3 more text", 20)).toBe("line1 line2 line3 mo...");
     expect(buildAiCommitSummary(status)).toBe("feat: 更新 a.ts 相关变更");
     expect(formatShortQuestionTime(1)).toBeTruthy();
+  });
+
+  test("resolveCenterViewAfterSlotChange keeps pending files until editor mounts", () => {
+    // 打开文件：先 request files，editor 尚未挂上 → 不得打回 messages。
+    const pendingOpen = resolveCenterViewAfterSlotChange({
+      centerView: "files",
+      hasFiles: false,
+      hasTerminal: false,
+      userChosen: false,
+      pending: "files",
+    });
+    expect(pendingOpen).toEqual({ centerView: "files", pending: "files" });
+
+    // editor 挂上后清 pending。
+    const mounted = resolveCenterViewAfterSlotChange({
+      centerView: "files",
+      hasFiles: true,
+      hasTerminal: false,
+      userChosen: false,
+      pending: "files",
+    });
+    expect(mounted).toEqual({ centerView: "files", pending: null });
+  });
+
+  test("resolveCenterViewAfterSlotChange falls back when files close without pending", () => {
+    expect(
+      resolveCenterViewAfterSlotChange({
+        centerView: "files",
+        hasFiles: false,
+        hasTerminal: false,
+        userChosen: true,
+        pending: null,
+      }),
+    ).toEqual({ centerView: "messages", pending: null });
+
+    expect(
+      resolveCenterViewAfterSlotChange({
+        centerView: "files",
+        hasFiles: false,
+        hasTerminal: true,
+        userChosen: true,
+        pending: null,
+      }),
+    ).toEqual({ centerView: "terminal", pending: null });
+  });
+
+  test("resolveCenterViewAfterSlotChange does not yank user off messages when files already open", () => {
+    expect(
+      resolveCenterViewAfterSlotChange({
+        centerView: "messages",
+        hasFiles: true,
+        hasTerminal: false,
+        userChosen: true,
+        pending: null,
+      }),
+    ).toEqual({ centerView: "messages", pending: null });
+  });
+
+  test("resolveCenterViewAfterSlotChange cold-starts to files when no user choice", () => {
+    expect(
+      resolveCenterViewAfterSlotChange({
+        centerView: "messages",
+        hasFiles: true,
+        hasTerminal: false,
+        userChosen: false,
+        pending: null,
+      }),
+    ).toEqual({ centerView: "files", pending: null });
   });
 });

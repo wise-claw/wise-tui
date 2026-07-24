@@ -262,6 +262,8 @@ interface Props {
   workflowGraphStatusByWorkflowId?: Record<string, string>;
   onOpenTaskDetail?: (taskId: string) => void;
   panelBelowMessages?: React.ReactNode;
+  /** 内置终端节点；与 panelBelowMessages 在 DOM 中并存，由 centerView 互斥显隐。 */
+  panelBelowTerminal?: React.ReactNode;
   hideMessages?: boolean;
   hideSessionTools?: boolean;
   /** 中栏当前视图（由顶栏切换器控制）：messages=消息列表，files=文件编辑器。无编辑器时忽略。 */
@@ -416,6 +418,7 @@ export function ClaudeChatInner({
   workflowGraphStatusByWorkflowId = {},
   onOpenTaskDetail,
   panelBelowMessages,
+  panelBelowTerminal,
   hideMessages = false,
   hideSessionTools = false,
   centerView = "messages",
@@ -1799,9 +1802,13 @@ export function ClaudeChatInner({
   }, [session.id]);
 
   const messagesPaneVisible =
-    !hideMessages && (!panelBelowMessages || centerView === "messages");
+    !hideMessages &&
+    (!panelBelowMessages || centerView === "messages") &&
+    (!panelBelowTerminal || centerView === "messages");
   const filesPaneVisible =
     Boolean(panelBelowMessages) && (hideMessages || centerView === "files");
+  const terminalPaneVisible =
+    Boolean(panelBelowTerminal) && (hideMessages || centerView === "terminal");
 
   return (
     <div
@@ -1843,7 +1850,8 @@ export function ClaudeChatInner({
             hideMessagesScroll={
               hideMessages ||
               deferHeavySubtree ||
-              (Boolean(panelBelowMessages) && centerView === "files")
+              (Boolean(panelBelowMessages) && centerView === "files") ||
+              (Boolean(panelBelowTerminal) && centerView === "terminal")
             }
             fullTranscriptLoading={fullTranscriptLoading}
             onReloadFullDiskTranscript={onReloadFullDiskTranscript}
@@ -1860,13 +1868,26 @@ export function ClaudeChatInner({
           />
         ) : null}
       </div>
-      {panelBelowMessages ? (
+      {/*
+       * files pane：centerView !== "files" 时直接 unmount，强制 git diff Monaco 等
+       * 重型编辑器随 Segmented 切走被卸载，杜绝 keep-alive 模式下 `is-hidden`
+       * 视觉未完全遮蔽带来的"切到消息时 diff 仍可见"回归。`panelBelowMessages`
+       * slot 来自 `PaneEditorHost` 常驻的 `useRepositoryFileEditor`，tabs /
+       * activePath / dirty 等 hook 状态在切回时按 keep-alive 设计恢复，
+       * 激活 tab 的 Monaco 通过 `everActivated` 路径重 mount，缩放计算由
+       * `runWhenIdle` + `shouldDeferMonacoEditorMount` 兜底。terminal pane
+       * 仍走 `is-hidden`（PTY 不能 display:none）。
+       */}
+      {panelBelowMessages && filesPaneVisible ? (
+        <div className="app-claude-chat-center-pane">{panelBelowMessages}</div>
+      ) : null}
+      {panelBelowTerminal ? (
         <div
-          className={`app-claude-chat-center-pane${filesPaneVisible ? "" : " is-hidden"}`}
-          inert={filesPaneVisible ? undefined : true}
-          aria-hidden={filesPaneVisible ? undefined : true}
+          className={`app-claude-chat-center-pane${terminalPaneVisible ? "" : " is-hidden"}`}
+          inert={terminalPaneVisible ? undefined : true}
+          aria-hidden={terminalPaneVisible ? undefined : true}
         >
-          {panelBelowMessages}
+          {panelBelowTerminal}
         </div>
       ) : null}
 

@@ -110,7 +110,7 @@ export function useTerminalTabs({
           if (prevActive !== terminalId) {
             return prevActive;
           }
-          return nextTabs.length > 0 ? nextTabs[nextTabs.length - 1].id : null;
+          return nextTabs.length > 0 ? nextTabs[0].id : null;
         });
         return nextTabs;
       });

@@ -154,13 +154,13 @@ export function openTerminalCenterPanel(paneIndex: number = 0): void {
   if (isPaneVisible(prev)) {
     lastHostPaneIndex = target;
     syncSnapshot();
-    requestPaneCenterView(target, "files");
+    requestPaneCenterView(target, "terminal");
     return;
   }
   paneFlags.set(target, { mounted: true, collapsed: false });
   lastHostPaneIndex = target;
   emit();
-  requestPaneCenterView(target, "files");
+  requestPaneCenterView(target, "terminal");
 }
 
 /** 收起所有可见终端（保留挂载以维持 PTY）。 */

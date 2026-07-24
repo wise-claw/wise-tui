@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"grep -n \\\"from \\\\\\\"\\\\\\\\./TerminalPanel/terminalCenterSlot\\\\\\\\\\\"\\\\|from '\\\\\\\\./TerminalPanel/terminalCenterSlot'\\\\|from \\\\\\\"\\\\\\\\.\\\\\\\\./TerminalPanel/terminalCenterSlot\\\\\\\\\\\"\\\\|from '\\\\\\\\.\\\\...",
+  "error": "Exit code 2\nugrep: warning: \\\\./TerminalPanel/terminalCenterSlot|from: No such file or directory\nugrep: warning: \"\\.\\./TerminalPanel/terminalCenterSlot\\\\|from '\\.\\./TerminalPanel/terminalCenterSlot': No such file or directory\n12:} from \"../../types\";\n13:import { Button, Empty, message, Spin, TreeSelect } from \"antd\";\n14:import { LoadingOutlined } from \"@ant-design/icons\";\n28:} from \"react\";\n29:import type { ClaudeSessionConnectionKind } from \"../../constants/claudeConnection\";\n30:import type { S...",
+  "timestamp": "2026-07-24T03:19:50.994Z",
+  "retry_count": 1
+}

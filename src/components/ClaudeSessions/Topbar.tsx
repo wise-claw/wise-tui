@@ -184,14 +184,17 @@ export interface TopbarProps {
   onChangePaneCount?: (count: PaneCount) => void;
   /** 打开创作台「远程入口」配置页 */
   onOpenRemoteChannels?: () => void;
-  /** 中栏「消息/文件」切换器当前视图（有编辑器时显示）。 */
+  /** 中栏「消息/文件/终端」切换器当前视图。 */
   centerView?: CenterView;
   /** 切换器变化回调。 */
   onCenterViewChange?: (view: CenterView) => void;
-  /** 是否显示中栏「消息/文件」切换器（有编辑器且消息列表未隐藏时）。 */
+  /** 是否显示中栏切换器（有 editor/terminal 任一可见且消息列表未隐藏时）。 */
   centerSwitcherVisible?: boolean;
-  /** 切换器第二项文案（打开文件为「文件」，打开备忘录为「备忘录」，打开终端为「终端」）。 */
-  centerSwitcherFilesLabel?: string;
+  /**
+   * 切换器可选项列表（按可见的 panel 动态生成：消息恒在；文件当 editor 可见；
+   * 终端当 terminal 可见）。空数组时隐藏切换器。
+   */
+  centerSwitcherOptions?: Array<{ label: string; value: CenterView }>;
 }
 
 /**
@@ -215,7 +218,7 @@ export type PaneTopbarSharedProps = Omit<
   | "centerView"
   | "onCenterViewChange"
   | "centerSwitcherVisible"
-  | "centerSwitcherFilesLabel"
+  | "centerSwitcherOptions"
 > & {
   /** 按指定仓库路径打开搜索面板（per-pane 搜索按钮，作用于该 pane 仓库）。 */
   onSearchForRepository?: (repositoryPath: string) => void;
@@ -246,7 +249,7 @@ export const Topbar = memo(function Topbar({
   centerView = "messages",
   onCenterViewChange,
   centerSwitcherVisible = false,
-  centerSwitcherFilesLabel = "文件",
+  centerSwitcherOptions = [],
 }: TopbarProps) {
   const topbarChrome = useWiseTopbarChromeVisibility();
   const [selectedOpenAppId, setSelectedOpenAppId] = useState<string>(() => {
@@ -320,16 +323,13 @@ export const Topbar = memo(function Topbar({
                 onClick={onToggleSidebar}
               />
             ) : null}
-            {centerSwitcherVisible && onCenterViewChange ? (
+            {centerSwitcherVisible && onCenterViewChange && centerSwitcherOptions.length > 0 ? (
               <Segmented
                 className="app-topbar-center-switcher"
                 size="small"
                 value={centerView}
                 onChange={(value) => onCenterViewChange(value as CenterView)}
-                options={[
-                  { label: "消息", value: "messages" },
-                  { label: centerSwitcherFilesLabel, value: "files" },
-                ]}
+                options={centerSwitcherOptions}
               />
             ) : null}
             {showRepoTitle ? (
