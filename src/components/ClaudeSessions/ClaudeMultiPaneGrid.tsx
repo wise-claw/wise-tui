@@ -55,9 +55,10 @@ import { Topbar, type PaneTopbarSharedProps } from "./Topbar";
 import { CenterViewControlContext, useCenterView } from "./claudeChatHelpers";
 import { registerPaneCenterViewSetter, syncPaneCenterView } from "../../stores/paneCenterViewControlStore";
 import { useWorkspaceMemoPanelOpen } from "../../stores/workspaceMemoPanelStore";
-import {
+  import {
   closeTerminalCenterPanelOnPane,
   collapseTerminalCenterPanelOnPane,
+  openTerminalCenterPanel,
   toggleTerminalCenterPanel,
   useTerminalCenterPanelState,
 } from "../../stores/terminalCenterPanelStore";
@@ -90,18 +91,23 @@ function usePaneLocalTerminalPanel(
   const repoPath = repository?.path;
   const repoName = repository?.name;
   const repoBranch = repository?.branch;
+  // 必须在 mounted（含收起保活）时保留面板节点：打开文件会 collapse 终端，
+  // 若此处因 !visible 返回 null，Segmented「终端」仍可选（hasTerminal 看 mounted），
+  // ClaudeChat 会把 messages/files/terminal 三栏全隐 → 中栏白屏。
   const terminalPanel = useMemo(() => {
-    if (!terminalVisible || !repoPath || !repoName) return null;
+    if (!terminalMounted || !repoPath || !repoName) return null;
     return (
       <Suspense
         fallback={
-          <div
-            className="app-claude-sessions-terminal-lazy-fallback"
-            role="status"
-            aria-label="终端加载中"
-          >
-            <Spin size="small" />
-          </div>
+          terminalVisible ? (
+            <div
+              className="app-claude-sessions-terminal-lazy-fallback"
+              role="status"
+              aria-label="终端加载中"
+            >
+              <Spin size="small" />
+            </div>
+          ) : null
         }
       >
         <TerminalPanelLazy
@@ -110,14 +116,14 @@ function usePaneLocalTerminalPanel(
           repositoryName={repoName}
           branch={repoBranch}
           dirty={false}
-          collapsed={false}
+          collapsed={!terminalVisible}
           layout="center"
           onCollapse={() => collapseTerminalCenterPanelOnPane(paneIndex)}
           onClose={() => closeTerminalCenterPanelOnPane(paneIndex)}
         />
       </Suspense>
     );
-  }, [paneIndex, repoBranch, repoName, repoPath, terminalVisible]);
+  }, [paneIndex, repoBranch, repoName, repoPath, terminalMounted, terminalVisible]);
   return { terminalVisible, terminalMounted, terminalPanel };
 }
 
@@ -376,6 +382,17 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
   if (terminalMounted) {
     centerSwitcherOptions.push({ label: "终端", value: "terminal" });
   }
+  const handleCenterViewChange = useCallback(
+    (view: CenterView) => {
+      // 打开文件会 collapse 终端；Segmented 切回「终端」时必须先恢复可见，
+      // 否则 panel 虽保活但 collapsed=true，画面仍空白。
+      if (view === "terminal") {
+        openTerminalCenterPanel(0);
+      }
+      setCenterView(view);
+    },
+    [setCenterView],
+  );
   const handleToggleTerminalOnPrimary = useCallback(() => {
     markPaneActive(0);
     toggleTerminalCenterPanel(0);
@@ -410,7 +427,7 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
           terminalPanelMounted={terminalMounted}
           terminalCollapsed={!terminalVisible}
           centerView={centerView}
-          onCenterViewChange={setCenterView}
+          onCenterViewChange={handleCenterViewChange}
           centerSwitcherVisible={centerSwitcherVisible}
           centerSwitcherOptions={centerSwitcherOptions}
         />
@@ -652,6 +669,15 @@ const MultiPaneExtraPaneCell = memo(
     if (terminalMounted) {
       centerSwitcherOptions.push({ label: "终端", value: "terminal" });
     }
+    const handleCenterViewChange = useCallback(
+      (view: CenterView) => {
+        if (view === "terminal") {
+          openTerminalCenterPanel(absolutePaneIndex);
+        }
+        setCenterView(view);
+      },
+      [absolutePaneIndex, setCenterView],
+    );
     const handleToggleTerminalOnPane = useCallback(() => {
       markPaneActive(absolutePaneIndex);
       toggleTerminalCenterPanel(absolutePaneIndex);
@@ -767,7 +793,7 @@ const MultiPaneExtraPaneCell = memo(
               mainSessionForDataLink={paneSession}
               onSearch={() => shared.paneTopbarShared?.onSearchForRepository?.(resolvedRepo?.path ?? "")}
               centerView={centerView}
-              onCenterViewChange={setCenterView}
+              onCenterViewChange={handleCenterViewChange}
               centerSwitcherVisible={centerSwitcherVisible}
               centerSwitcherOptions={centerSwitcherOptions}
             />

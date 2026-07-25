@@ -94,7 +94,7 @@ describe("terminalCenterPanelStore", () => {
     expect(getTerminalCenterPanelState().mountedPaneIndexes).toEqual([0]);
   });
 
-  test("open on pane 0 closes memo; open memo collapses pane-0 terminal only", () => {
+  test("open on pane 0 closes memo; open memo does not collapse terminal (independent slots)", () => {
     openWorkspaceMemoPanel();
     expect(getWorkspaceMemoPanelOpen()).toBe(true);
 
@@ -105,8 +105,21 @@ describe("terminalCenterPanelStore", () => {
     openTerminalCenterPanel(1);
     openWorkspaceMemoPanel();
     expect(getWorkspaceMemoPanelOpen()).toBe(true);
+    // 备忘录与终端独立 slot，打开备忘录不再收起任一屏终端
     expect(isTerminalCenterPanelVisibleOnPane(1)).toBe(true);
+    expect(isTerminalCenterPanelVisibleOnPane(0)).toBe(true);
+  });
+
+  test("re-openTerminal after collapse restores visibility for centerView switch", () => {
+    openTerminalCenterPanel(0);
+    collapseTerminalCenterPanelOnPane(0);
     expect(isTerminalCenterPanelVisibleOnPane(0)).toBe(false);
+    expect(getTerminalCenterPanelState().mountedPaneIndexes).toEqual([0]);
+
+    // Segmented 切回「终端」走 openTerminalCenterPanel：应恢复可见并请求 terminal 视图
+    openTerminalCenterPanel(0);
+    expect(isTerminalCenterPanelVisibleOnPane(0)).toBe(true);
+    expect(getPaneCenterView(0)).toBe("terminal");
   });
 
   test("clampTerminalCenterPanelHost drops out-of-range panes", () => {

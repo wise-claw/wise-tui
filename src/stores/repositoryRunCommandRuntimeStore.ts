@@ -6,15 +6,18 @@ import type { Repository } from "../types";
 import type { RunCommandOutputLine, RepositoryRunStatus } from "../hooks/useRepositoryRunCommand";
 import {
   REPOSITORY_RUNNER_TERMINAL_ID,
-  RUN_ERROR_REGEX,
+  buildRunErrorAutoFixPrompt,
   buildRunErrorFingerprint,
   buildRunErrorMonitorDedupKey,
   decideRunErrorMonitorStep,
   detectRunUrlFromLogText,
+  lineHasRunLogIssue,
   normalizeRunOpenUrl,
   readRunAutoOpenPageEnabled,
   repositoryRunCommandStorageKeys,
   shouldSkipRunErrorMonitorSend,
+  summarizeRunLogIssueKinds,
+  collectRunLogIssues,
 } from "../utils/repositoryRunCommand";
 
 type RepoRuntimeState = {
@@ -219,7 +222,7 @@ function appendRunOutputPreview(repositoryId: number, internals: RepoRuntimeInte
   internals.runChunkBuffer = parts.pop() ?? "";
   const nextLines = parts.map((line) => line.trim()).filter(Boolean);
   if (nextLines.length === 0) return;
-  const mapped = nextLines.map((line) => ({ text: line, isError: RUN_ERROR_REGEX.test(line) }));
+  const mapped = nextLines.map((line) => ({ text: line, isError: lineHasRunLogIssue(line) }));
   const state = getOrCreateRepoState(repositoryId);
   patchRepoState(repositoryId, {
     outputPreview: [...state.outputPreview, ...mapped].slice(-8),
@@ -275,7 +278,8 @@ function handleRepositoryRunnerTerminalOutput(repositoryId: number, data: string
     }
   }
 
-  const isErrorChunk = RUN_ERROR_REGEX.test(data) && internals.runErrorMonitorEnabled;
+  const chunkIssues = collectRunLogIssues(data);
+  const isErrorChunk = chunkIssues.length > 0 && internals.runErrorMonitorEnabled;
   if (!isErrorChunk) {
     // 非报错输出：等日志稳定再派发（保留原 idle 语义，给偶发报错留缓冲）
     armAutoFixDispatch(repositoryId, internals, true);
@@ -290,20 +294,23 @@ function handleRepositoryRunnerTerminalOutput(repositoryId: number, data: string
     fingerprint,
     loopCount: internals.loopCount,
   });
+  const kindSummary = summarizeRunLogIssueKinds(chunkIssues);
   if (decision.action === "arm-dispatch") {
     internals.errorDetected = true;
     globalOnRequestConfigure?.({ id: repositoryId, path: internals.runCwd });
-    patchRepoState(repositoryId, { statusHint: "检测到报错，等待自动处理..." });
+    patchRepoState(repositoryId, {
+      statusHint: `检测到${kindSummary}，等待自动处理...`,
+    });
     // 报错输出不重置派发倒计时，避免循环报错持续输出导致首次派发永不触发
     armAutoFixDispatch(repositoryId, internals, false);
   } else if (decision.action === "report-loop") {
     internals.loopCount = decision.loopCount;
     patchRepoState(repositoryId, {
-      statusHint: `循环报错(第 ${decision.loopCount} 次),AI 已尝试,建议人工介入`,
+      statusHint: `循环${kindSummary}(第 ${decision.loopCount} 次),AI 已尝试,建议人工介入`,
     });
   } else {
     patchRepoState(repositoryId, {
-      statusHint: "检测到新报错,本次运行 AI 已介入,建议人工介入",
+      statusHint: `检测到新的${kindSummary},本次运行 AI 已介入,建议人工介入`,
     });
   }
 }
@@ -334,12 +341,7 @@ function fireAutoFixDispatch(repositoryId: number, internals: RepoRuntimeInterna
   }
   internals.dispatchedFingerprint = internals.lastErrorFingerprint;
   internals.loopCount = 1;
-  const prompt = [
-    "请根据以下运行报错日志定位问题并直接给出修复方案，然后在仓库内执行修复。",
-    `运行命令：${command || "(未记录)"}`,
-    "最近日志：",
-    tail || "(无)",
-  ].join("\n\n");
+  const prompt = buildRunErrorAutoFixPrompt({ command, tailText: tail });
   globalOnAutoFixRunError(prompt);
   patchRepoState(repositoryId, { statusHint: "已交给 Claude Code 自动修复" });
   message.info("检测到报错，已自动交给 Claude Code 处理。");
@@ -371,7 +373,7 @@ function ensureTerminalListeners(): void {
       patchRepoState(repositoryId, {
         outputPreview: [
           ...state.outputPreview,
-          { text: remain, isError: RUN_ERROR_REGEX.test(remain) },
+          { text: remain, isError: lineHasRunLogIssue(remain) },
         ].slice(-8),
       });
     }

@@ -1801,14 +1801,27 @@ export function ClaudeChatInner({
     }
   }, [session.id]);
 
+  // 防御：centerView 指向某 slot 但对应 panel 已卸挂时，不得三栏全隐成白屏
+  // （典型：终端被 collapse 后 Segmented 仍停在 terminal）。
+  const effectiveCenterView: CenterView =
+    centerView === "terminal" && !panelBelowTerminal
+      ? panelBelowMessages
+        ? "files"
+        : "messages"
+      : centerView === "files" && !panelBelowMessages
+        ? panelBelowTerminal
+          ? "terminal"
+          : "messages"
+        : centerView;
+
   const messagesPaneVisible =
     !hideMessages &&
-    (!panelBelowMessages || centerView === "messages") &&
-    (!panelBelowTerminal || centerView === "messages");
+    (!panelBelowMessages || effectiveCenterView === "messages") &&
+    (!panelBelowTerminal || effectiveCenterView === "messages");
   const filesPaneVisible =
-    Boolean(panelBelowMessages) && (hideMessages || centerView === "files");
+    Boolean(panelBelowMessages) && (hideMessages || effectiveCenterView === "files");
   const terminalPaneVisible =
-    Boolean(panelBelowTerminal) && (hideMessages || centerView === "terminal");
+    Boolean(panelBelowTerminal) && (hideMessages || effectiveCenterView === "terminal");
 
   return (
     <div
@@ -1850,8 +1863,8 @@ export function ClaudeChatInner({
             hideMessagesScroll={
               hideMessages ||
               deferHeavySubtree ||
-              (Boolean(panelBelowMessages) && centerView === "files") ||
-              (Boolean(panelBelowTerminal) && centerView === "terminal")
+              (Boolean(panelBelowMessages) && effectiveCenterView === "files") ||
+              (Boolean(panelBelowTerminal) && effectiveCenterView === "terminal")
             }
             fullTranscriptLoading={fullTranscriptLoading}
             onReloadFullDiskTranscript={onReloadFullDiskTranscript}

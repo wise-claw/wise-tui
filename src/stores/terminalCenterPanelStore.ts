@@ -6,7 +6,8 @@ import {
 import { closeWorkspaceMemoPanel } from "./workspaceMemoPanelStore";
 
 /**
- * 内置终端中栏面板开关（与打开文件同一 slot：`panelBelowMessages` + CenterView「files」）。
+ * 内置终端中栏面板开关（独立 slot：`panelBelowTerminal` + CenterView「terminal」）。
+ * 与文件编辑器（`panelBelowMessages`）并存，由 centerView 互斥显隐。
  * 多屏下每屏各自独立：第二屏打开终端不会关掉第一屏的。
  */
 

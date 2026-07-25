@@ -71,7 +71,7 @@ import { claudeSessionsShellPropsEqual } from "./ClaudeSessions/claudeSessionsPr
 import { CenterViewControlContext, useCenterView } from "./ClaudeSessions/claudeChatHelpers";
 import { registerPaneCenterViewSetter, syncPaneCenterView } from "../stores/paneCenterViewControlStore";
 import { useWorkspaceMemoPanelOpen } from "../stores/workspaceMemoPanelStore";
-import { useTerminalCenterPanelState } from "../stores/terminalCenterPanelStore";
+import { openTerminalCenterPanel, useTerminalCenterPanelState } from "../stores/terminalCenterPanelStore";
 import type { CenterView } from "./ClaudeSessions/ClaudeChat";
 import { WORKSPACE_MEMO_PANEL_NODE } from "./WorkspaceMemoPanel";
 import { TERMINAL_CENTER_SLOT_SENTINEL } from "./TerminalPanel/terminalCenterSlot";
@@ -537,7 +537,7 @@ const ConnectedClaudeSessions = memo(function ConnectedClaudeSessions({
         paneIndex === 0 && memoOpen
           ? WORKSPACE_MEMO_PANEL_NODE
           : centerAuxPanelsNodeByPane.get(paneIndex);
-      const terminalPanel = terminalCenter.visiblePaneIndexes.includes(paneIndex)
+      const terminalPanel = terminalCenter.mountedPaneIndexes.includes(paneIndex)
         ? TERMINAL_CENTER_SLOT_SENTINEL
         : null;
       if (panel == null && terminalPanel == null) {
@@ -550,7 +550,7 @@ const ConnectedClaudeSessions = memo(function ConnectedClaudeSessions({
         hideSessionTools: false,
       };
     },
-    [centerAuxPanelsNodeByPane, memoOpen, terminalCenter.visiblePaneIndexes],
+    [centerAuxPanelsNodeByPane, memoOpen, terminalCenter.mountedPaneIndexes],
   );
 
   const primaryAux = resolvePaneAuxLayout(0);
@@ -1065,10 +1065,12 @@ export function AppWorkspaceLayout({
   // 三态切换（消息 / 文件 / 终端）：editor 与 terminal 是两个独立 slot，
   // DOM 中并存，由 `centerView` 互斥显隐——避免打开终端时把文件 tab 挤掉。
   // memo（备忘录）独占 pane 0 的 editor slot（与打开文件行为一致）。
+  // 终端用 mounted（含收起保活）作为 slot 信号，与多屏一致；收起时仍保留
+  // Segmented「终端」入口，点选时由 handleCenterViewChange uncollapse。
   const primaryPanelBelowMessages = memoOpen
     ? WORKSPACE_MEMO_PANEL_NODE
     : centerAuxPanelsNodeByPane.get(0);
-  const primaryPanelBelowTerminal = terminalCenter.visiblePaneIndexes.includes(0)
+  const primaryPanelBelowTerminal = terminalCenter.mountedPaneIndexes.includes(0)
     ? TERMINAL_CENTER_SLOT_SENTINEL
     : null;
   const {
@@ -1081,7 +1083,16 @@ export function AppWorkspaceLayout({
     primaryPanelBelowTerminal,
     false, // 单屏 primary 的 hideMessages 恒为 false
   );
-  // 三态 Segmented 选项：消息恒有；文件当 editor（或 memo）可见；终端当 pane 0 终端可见。
+  const handleCenterViewChange = useCallback(
+    (view: CenterView) => {
+      if (view === "terminal") {
+        openTerminalCenterPanel(0);
+      }
+      setCenterView(view);
+    },
+    [setCenterView],
+  );
+  // 三态 Segmented 选项：消息恒有；文件当 editor（或 memo）可见；终端当 pane 0 终端已挂载。
   const layoutLevelCenterSwitcherOptions = useMemo<Array<{ label: string; value: CenterView }>>(
     () => {
       const opts: Array<{ label: string; value: CenterView }> = [
@@ -1724,7 +1735,7 @@ export function AppWorkspaceLayout({
                         <LazyTopbar
                           {...topbarProps}
                           centerView={centerView}
-                          onCenterViewChange={setCenterView}
+                          onCenterViewChange={handleCenterViewChange}
                           centerSwitcherVisible={centerSwitcherVisible}
                           centerSwitcherOptions={layoutLevelCenterSwitcherOptions}
                         />

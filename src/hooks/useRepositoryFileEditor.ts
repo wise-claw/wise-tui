@@ -38,7 +38,6 @@ import {
 import { safeUnlisten } from "../utils/safeTauriUnlisten";
 import { setRepositoryEditorDirtyPaths } from "../stores/repositoryEditorDirtyPathsStore";
 import { requestPaneCenterView } from "../stores/paneCenterViewControlStore";
-import { collapseTerminalCenterPanelOnPane } from "../stores/terminalCenterPanelStore";
 import { closeWorkspaceMemoPanel } from "../stores/workspaceMemoPanelStore";
 import { refreshGitRepositoryUi } from "../services/gitRepositoryUiRefresh";
 
@@ -980,11 +979,11 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
       // 切到「文件」视图。binary / external 已提前 return；editorVisible 未翻转时
       // ClaudeChat 渲染守卫仍显示消息视图，无空白。paneIndex 为目标 pane（hook 由
       // 对应 PaneEditorHost 持有，恒等于文件实际显示的 pane）。
-      // 备忘录占 pane 0；各屏终端独立。打开文件时只收起同屏遮挡物。
+      // 备忘录与终端已是独立 slot（panelBelowMessages / panelBelowTerminal），
+      // 不再 collapse 终端——否则 Segmented「终端」仍可选但面板被收起，中栏白屏。
       if (paneIndex === 0) {
         closeWorkspaceMemoPanel();
       }
-      collapseTerminalCenterPanelOnPane(paneIndex);
       requestPaneCenterView(paneIndex, "files");
       if (opts?.fromCommitCompare) {
         void loadCommitCompareDiffFile(
