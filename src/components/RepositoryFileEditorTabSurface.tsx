@@ -559,7 +559,9 @@ function RepositoryFileEditorTabSurface({
         ) : null}
         {mdPreview && isActive ? (
           <div className="app-file-editor-md-preview">
-            <MarkdownBody source={tab.content} rehypePlugins={[rehypeRaw]} />
+            <div className="app-markdown app-markdown--file-doc">
+              <MarkdownBody source={tab.content} rehypePlugins={[rehypeRaw]} />
+            </div>
           </div>
         ) : everActivated ? (
           !monacoSurfaceReady ? (
