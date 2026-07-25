@@ -18,6 +18,7 @@ import {
   shouldDeferMonacoEditorMount,
   shouldEnableMonacoGitLineDecorations,
   shouldInjectMonacoContentAfterMount,
+  resolveDiffEditorContentStrategy,
   resolveDiffEditorMountContent,
   shouldSkipMonacoTypeScriptModelSync,
   shouldSyncMonacoTypeScriptDependencies,
@@ -110,7 +111,11 @@ describe("monacoLargeFile", () => {
     expect(maxMonacoContentLength("abc", "abcdef")).toBe(6);
   });
 
-  test("resolveDiffEditorMountContent empties huge bodies for post-mount inject", () => {
+  test("resolveDiffEditorMountContent / strategy covers controlled·frozen·inject", () => {
+    expect(resolveDiffEditorContentStrategy(0)).toBe("controlled");
+    expect(resolveDiffEditorContentStrategy(MONACO_LARGE_FILE_CHAR_THRESHOLD)).toBe("frozen");
+    expect(resolveDiffEditorContentStrategy(MONACO_HUGE_FILE_CHAR_THRESHOLD)).toBe("inject");
+
     const left = "L".repeat(MONACO_HUGE_FILE_CHAR_THRESHOLD);
     const right = "R".repeat(100);
     const huge = resolveDiffEditorMountContent({
@@ -118,14 +123,34 @@ describe("monacoLargeFile", () => {
       modified: right,
       contentLength: maxMonacoContentLength(left, right),
     });
-    expect(huge).toEqual({ original: "", modified: "", injectAfterMount: true });
+    expect(huge).toEqual({
+      original: "",
+      modified: "",
+      strategy: "inject",
+      injectAfterMount: true,
+    });
+
+    const largeBody = "x".repeat(MONACO_LARGE_FILE_CHAR_THRESHOLD);
+    const large = resolveDiffEditorMountContent({
+      original: largeBody,
+      modified: "y",
+      contentLength: largeBody.length,
+    });
+    expect(large.strategy).toBe("frozen");
+    expect(large.injectAfterMount).toBe(false);
+    expect(large.original).toBe(largeBody);
 
     const small = resolveDiffEditorMountContent({
       original: "a",
       modified: "b",
       contentLength: 1,
     });
-    expect(small).toEqual({ original: "a", modified: "b", injectAfterMount: false });
+    expect(small).toEqual({
+      original: "a",
+      modified: "b",
+      strategy: "controlled",
+      injectAfterMount: false,
+    });
   });
 
   test("tsx/jsx 文件开启语义高亮以支持 JSX 标签着色", () => {

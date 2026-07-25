@@ -63,20 +63,43 @@ export function shouldInjectMonacoContentAfterMount(contentLength: number): bool
 }
 
 /**
- * DiffEditor 的 original/modified 为受控 props，huge 时挂载即 createModel(全文) 会卡主线程。
- * 与普通编辑器一致：huge 先空串挂载，onMount 后再 idle 注入。
+ * DiffEditor 正文同步策略：
+ * - controlled：小文件，original/modified 随 props 受控更新
+ * - frozen：large，挂载时快照后冻结 props，避免编辑/父级重渲触发反复 setValue
+ * - inject：huge，空串挂载后再 idle 注入（对齐普通编辑器）
+ */
+export type DiffEditorContentStrategy = "controlled" | "frozen" | "inject";
+
+export function resolveDiffEditorContentStrategy(
+  contentLength: number,
+): DiffEditorContentStrategy {
+  if (contentLength >= MONACO_HUGE_FILE_CHAR_THRESHOLD) return "inject";
+  if (contentLength >= MONACO_LARGE_FILE_CHAR_THRESHOLD) return "frozen";
+  return "controlled";
+}
+
+/**
+ * DiffEditor 的 original/modified 为受控 props。
+ * huge → 空串 + inject；large/small 仍返回实参，由调用方决定是否冻结。
  */
 export function resolveDiffEditorMountContent(args: {
   original: string;
   modified: string;
   contentLength: number;
-}): { original: string; modified: string; injectAfterMount: boolean } {
-  if (shouldInjectMonacoContentAfterMount(args.contentLength)) {
-    return { original: "", modified: "", injectAfterMount: true };
+}): {
+  original: string;
+  modified: string;
+  strategy: DiffEditorContentStrategy;
+  injectAfterMount: boolean;
+} {
+  const strategy = resolveDiffEditorContentStrategy(args.contentLength);
+  if (strategy === "inject") {
+    return { original: "", modified: "", strategy, injectAfterMount: true };
   }
   return {
     original: args.original,
     modified: args.modified,
+    strategy,
     injectAfterMount: false,
   };
 }

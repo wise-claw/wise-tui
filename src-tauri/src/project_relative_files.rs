@@ -11,26 +11,44 @@ const MAX_BINARY_PREVIEW_BYTES: u64 = 45 * 1024 * 1024;
 /// 仓库文件编辑器可读/可写的 UTF-8 正文上限（与前端 Monaco 大文件路径对齐）。
 const MAX_EDITOR_FILE_BYTES: u64 = 4 * 1024 * 1024;
 
-/// 单槽缓存：编辑器轮询/连读几乎总是同一仓库，避免每次 IPC 都 canonicalize 根目录。
-static PROJECT_BASE_CACHE: Mutex<Option<(String, PathBuf)>> = Mutex::new(None);
+/// 多仓库 LRU：编辑器轮询常跨 pane/工作区命中少数几个根路径。
+const PROJECT_BASE_CACHE_CAPACITY: usize = 8;
+/// entries[0] = 最近使用。
+static PROJECT_BASE_CACHE: Mutex<Vec<(String, PathBuf)>> = Mutex::new(Vec::new());
+
+fn project_base_cache_get(cache: &mut Vec<(String, PathBuf)>, key: &str) -> Option<PathBuf> {
+    let idx = cache.iter().position(|(raw, _)| raw == key)?;
+    let entry = cache.remove(idx);
+    let canon = entry.1.clone();
+    cache.insert(0, entry);
+    Some(canon)
+}
+
+fn project_base_cache_put(cache: &mut Vec<(String, PathBuf)>, key: String, value: PathBuf) {
+    if let Some(idx) = cache.iter().position(|(raw, _)| raw == &key) {
+        cache.remove(idx);
+    }
+    cache.insert(0, (key, value));
+    while cache.len() > PROJECT_BASE_CACHE_CAPACITY {
+        cache.pop();
+    }
+}
 
 fn canonicalize_project_dir(project_path: &str) -> Result<PathBuf, String> {
     let project = PathBuf::from(project_path);
     if !project.is_dir() {
         return Err("仓库路径无效或不是目录".into());
     }
-    if let Ok(guard) = PROJECT_BASE_CACHE.lock() {
-        if let Some((ref raw, ref canon)) = *guard {
-            if raw == project_path {
-                return Ok(canon.clone());
-            }
+    if let Ok(mut guard) = PROJECT_BASE_CACHE.lock() {
+        if let Some(cached) = project_base_cache_get(&mut guard, project_path) {
+            return Ok(cached);
         }
     }
     let base = project
         .canonicalize()
         .map_err(|e| format!("解析仓库路径失败: {e}"))?;
     if let Ok(mut guard) = PROJECT_BASE_CACHE.lock() {
-        *guard = Some((project_path.to_string(), base.clone()));
+        project_base_cache_put(&mut guard, project_path.to_string(), base.clone());
     }
     Ok(base)
 }
@@ -417,11 +435,13 @@ pub(crate) fn append_wise_relative_file(relative_path: String, payload: String) 
 #[cfg(test)]
 mod tests {
     use super::{
-        canonicalize_project_dir, editor_file_too_large, resolve_project_relative_regular_file,
-        MAX_EDITOR_FILE_BYTES, PROJECT_BASE_CACHE,
+        canonicalize_project_dir, editor_file_too_large, project_base_cache_get,
+        project_base_cache_put, resolve_project_relative_regular_file, MAX_EDITOR_FILE_BYTES,
+        PROJECT_BASE_CACHE, PROJECT_BASE_CACHE_CAPACITY,
     };
     use std::fs;
     use std::io::Write;
+    use std::path::PathBuf;
 
     #[test]
     fn editor_file_size_gate_allows_at_limit() {
@@ -431,16 +451,47 @@ mod tests {
     }
 
     #[test]
-    fn canonicalize_project_dir_reuses_single_slot_cache() {
+    fn canonicalize_project_dir_reuses_lru_cache() {
         let dir = tempfile::tempdir().expect("tempdir");
         let path = dir.path().to_string_lossy().to_string();
         let first = canonicalize_project_dir(&path).expect("canon");
         let second = canonicalize_project_dir(&path).expect("canon again");
         assert_eq!(first, second);
         let cached = PROJECT_BASE_CACHE.lock().expect("cache lock");
-        let (raw, canon) = cached.as_ref().expect("cache filled");
-        assert_eq!(raw, &path);
-        assert_eq!(canon, &first);
+        assert!(
+            cached
+                .iter()
+                .any(|(raw, canon)| raw == &path && canon == &first),
+            "expected path in LRU cache"
+        );
+    }
+
+    #[test]
+    fn project_base_cache_evicts_least_recently_used() {
+        let mut cache: Vec<(String, PathBuf)> = Vec::new();
+        for i in 0..PROJECT_BASE_CACHE_CAPACITY {
+            project_base_cache_put(
+                &mut cache,
+                format!("/repo/{i}"),
+                PathBuf::from(format!("/canon/{i}")),
+            );
+        }
+        assert_eq!(cache.len(), PROJECT_BASE_CACHE_CAPACITY);
+        // 访问最老的一条，使其变为 MRU
+        let oldest_key = format!("/repo/0");
+        let hit = project_base_cache_get(&mut cache, &oldest_key).expect("hit oldest");
+        assert_eq!(hit, PathBuf::from("/canon/0"));
+        assert_eq!(cache[0].0, oldest_key);
+        // 再插入一条，应淘汰原先第二老（repo/1），保留刚访问的 repo/0
+        project_base_cache_put(
+            &mut cache,
+            "/repo/new".into(),
+            PathBuf::from("/canon/new"),
+        );
+        assert_eq!(cache.len(), PROJECT_BASE_CACHE_CAPACITY);
+        assert!(cache.iter().any(|(k, _)| k == "/repo/0"));
+        assert!(cache.iter().any(|(k, _)| k == "/repo/new"));
+        assert!(!cache.iter().any(|(k, _)| k == "/repo/1"));
     }
 
     #[test]

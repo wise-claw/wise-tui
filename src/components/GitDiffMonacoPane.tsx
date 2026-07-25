@@ -72,12 +72,37 @@ export function GitDiffMonacoPane({
 
   const diffContentLength = maxMonacoContentLength(original, modified);
   const hugeDiff = diffContentLength >= MONACO_HUGE_FILE_CHAR_THRESHOLD;
-  // huge：受控 props 固定空串，避免 DiffEditor createModel/setValue 灌入全文；onMount 再注入。
   const mountContent = resolveDiffEditorMountContent({
     original,
     modified,
     contentLength: diffContentLength,
   });
+  // large：按 path/readOnly 快照冻结受控 props，避免 onChange→父重渲→DiffEditor 再 setValue。
+  // inject/controlled 不读此快照（inject 传空；controlled 跟 live props）。
+  const frozenContentRef = useRef({
+    relativePath,
+    readOnly,
+    original,
+    modified,
+  });
+  if (
+    frozenContentRef.current.relativePath !== relativePath ||
+    frozenContentRef.current.readOnly !== readOnly
+  ) {
+    frozenContentRef.current = { relativePath, readOnly, original, modified };
+  }
+  const editorOriginal =
+    mountContent.strategy === "inject"
+      ? ""
+      : mountContent.strategy === "frozen"
+        ? frozenContentRef.current.original
+        : original;
+  const editorModified =
+    mountContent.strategy === "inject"
+      ? ""
+      : mountContent.strategy === "frozen"
+        ? frozenContentRef.current.modified
+        : modified;
   const diffEditorOptions = useMemo(
     () => resolveWiseMonacoEditorOptionsFromLength(diffContentLength, relativePath),
     [diffContentLength, relativePath],
@@ -190,8 +215,8 @@ export function GitDiffMonacoPane({
             height="100%"
             className="app-file-editor-monaco app-file-editor-monaco--diff"
             theme={dark ? "vs-dark" : "vs"}
-            original={mountContent.original}
-            modified={mountContent.modified}
+            original={editorOriginal}
+            modified={editorModified}
             language={language}
             originalModelPath={`wise-diff-left:${relativePath}`}
             modifiedModelPath={`wise-diff-right:${relativePath}`}
