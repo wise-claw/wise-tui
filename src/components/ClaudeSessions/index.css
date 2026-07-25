@@ -1157,29 +1157,38 @@
 
 .app-run-command-popover__dock-row {
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   justify-content: space-between;
   gap: 8px;
   min-height: 20px;
+  min-width: 0;
 }
 
 .app-run-command-popover__dock-label {
+  flex-shrink: 0;
   font-size: 11px;
   font-weight: 500;
   color: var(--ant-color-text-tertiary);
   line-height: 1.2;
+  padding-top: 2px;
 }
 
 .app-run-command-popover__status-badge {
   display: inline-flex;
   align-items: center;
-  padding: 0 6px;
-  height: 16px;
+  flex: 1 1 auto;
+  min-width: 0;
+  max-width: 100%;
+  padding: 2px 6px;
+  min-height: 16px;
   border-radius: 4px;
   font-size: 10px;
-  line-height: 1.2;
+  line-height: 1.35;
   font-weight: 500;
-  white-space: nowrap;
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  text-align: left;
 }
 
 .app-run-command-popover__status-badge--idle {
@@ -1260,7 +1269,7 @@
   border-radius: 4px;
   background: var(--ant-color-fill-quaternary);
   padding: 4px 6px;
-  max-height: 60px;
+  max-height: 180px;
   overflow: auto;
 }
 

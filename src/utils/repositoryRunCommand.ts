@@ -56,11 +56,35 @@ const RUN_LOG_HTTP_STATUS_TEXT_REGEX =
 const RUN_LOG_HTTP_STATUS_FIELD_REGEX =
   /\b(?:status(?:Code)?|code)\s*[:=]\s*([45]\d{2})\b/i;
 const RUN_LOG_NETWORK_ERROR_REGEX =
-  /\b(?:ECONNREFUSED|ENOTFOUND|ETIMEDOUT|ECONNRESET|EPIPE|EHOSTUNREACH|ERR_CONNECTION|ERR_NETWORK|fetch failed|network error|socket hang up|connect\s+econnrefused|api\s*(?:error|failed))\b/i;
+  /\b(?:ECONNREFUSED|ENOTFOUND|ETIMEDOUT|ECONNRESET|EPIPE|EHOSTUNREACH|ERR_CONNECTION\w*|ERR_NETWORK\w*|net::ERR_\w+|fetch failed|network error|socket hang up|connect\s+econnrefused|api\s*(?:error|failed))\b/i;
 const RUN_LOG_NETWORK_CJK_REGEX = /请求失败|接口(?:请求)?(?:失败|错误|超时)/;
+
+/** Vite / webpack / Next Fast Refresh 等热更新与编译抖动噪声。 */
+const RUN_LOG_HMR_NOISE_REGEX =
+  /(?:\[hmr\]|\bhmr\b|hot[- ]?update|hot-update\.js(?:on)?|fast\s*refresh|webpack-hmr|\[vite\].*(?:hmr|hot updated|connected)|performing full reload|\bfull reload\b|turbopack.*(?:hmr|update)|webpack.*hot)/i;
+
+/** 开发服务器常态输出：编译中/已编译/就绪等，不应当作需 AI 修复的问题。 */
+const RUN_LOG_DEV_SERVER_NOISE_REGEX =
+  /(?:^|\s)(?:✓|✔|○|●)?\s*(?:compiled|compiling|ready|done)\b.*(?:modules?|ms)?\b|^\s*(?:compiled|compiling)\b|^\s*ready\s+in\s+\d+|watching for file changes|restarting ['`].+['`]|server (?:restarted|ready)|local:\s+https?:\/\//i;
+
+/** 页面卸载 / 无意义 promise rejection 等良性噪音。 */
+const RUN_LOG_BENIGN_NOISE_REGEX =
+  /uncaught\s*\(in\s*promise\):\s*event\b|resizeobserver\s+loop|script error\.?/i;
 
 function stripAnsi(text: string): string {
   return text.replace(/\u001b\[[0-9;]*[A-Za-z]/g, "");
+}
+
+/**
+ * 运行日志 / 页面监控共用：热更新、编译抖动、良性噪音不进入 AI 自动修复。
+ */
+export function isRunLogIgnorableNoise(text: string): boolean {
+  const line = stripAnsi(String(text ?? "")).trim();
+  if (!line) return true;
+  if (RUN_LOG_HMR_NOISE_REGEX.test(line)) return true;
+  if (RUN_LOG_DEV_SERVER_NOISE_REGEX.test(line)) return true;
+  if (RUN_LOG_BENIGN_NOISE_REGEX.test(line)) return true;
+  return false;
 }
 
 function normalizeLogLines(text: string): string[] {
@@ -79,6 +103,7 @@ function normalizeLogLines(text: string): string[] {
 export function detectRunLogIssue(line: string): RunLogIssue | null {
   const text = stripAnsi(line).trim();
   if (!text) return null;
+  if (isRunLogIgnorableNoise(text)) return null;
 
   // 先识别成功请求日志并跳过，避免 `/auth/error` 这类路径触发 error 词误报。
   if (RUN_LOG_HTTP_SUCCESS_REGEX.test(text)) {
@@ -183,19 +208,26 @@ export type RunErrorMonitorDecision =
  *
  * - 未派发过：排程首次派发。
  * - 已派发且指纹匹配：同一报错循环，仅递增计数并提示，不再派发。
- * - 已派发但指纹不同：本次运行 AI 已介入，仅提示，不再派发。
+ * - 已派发但指纹不同：
+ *   - `continuous`：允许再次排程派发（页面监控连续处理）。
+ *   - 默认：本次运行 AI 已介入，仅提示，不再派发。
  */
 export function decideRunErrorMonitorStep(input: {
   autoFixSent: boolean;
   dispatchedFingerprint: string | null;
   fingerprint: string;
   loopCount: number;
+  /** 新指纹在首次派发后是否继续排程（页面监控）。 */
+  continuous?: boolean;
 }): RunErrorMonitorDecision {
   if (!input.autoFixSent) {
     return { action: "arm-dispatch" };
   }
   if (isSameRunErrorFingerprint(input.dispatchedFingerprint, input.fingerprint)) {
     return { action: "report-loop", loopCount: input.loopCount + 1 };
+  }
+  if (input.continuous) {
+    return { action: "arm-dispatch" };
   }
   return { action: "report-new-after-dispatch" };
 }

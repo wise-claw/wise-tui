@@ -75,6 +75,8 @@ mod session_feedback_loop_commands;
 mod session_feedback_loop_db;
 mod terminal_quick_commands_commands;
 mod terminal_quick_commands_db;
+mod chrome_devtools_monitor;
+mod chrome_page_monitor_bridge;
 
 pub(crate) use claude_commands::validate_claude_skill_name;
 pub use lib_impl::run;

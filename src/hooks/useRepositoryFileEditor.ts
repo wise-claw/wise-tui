@@ -55,6 +55,18 @@ const EDITOR_LARGE_CONTENT_RELEASE_DELAY_MS = 500;
 const EMPTY_TABS: FileEditorTab[] = [];
 const EMPTY_RELEASED_CONTENT = "";
 
+/**
+ * Tauri IPC 桥是否可用。内联在本文件，避免 HMR 时新增 named import 未就绪
+ * 导致 WKWebView「Can't find variable」。不依赖 `@tauri-apps/api` 的 isTauri()。
+ */
+function isEditorTauriIpcAlive(): boolean {
+  return (
+    typeof window !== "undefined" &&
+    typeof (window as unknown as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__ !==
+      "undefined"
+  );
+}
+
 export interface FileEditorTab {
   relativePath: string;
   rootPath: string;
@@ -1484,6 +1496,7 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
   useEffect(() => {
     let unlisten: (() => void) | null = null;
     let cancelled = false;
+    if (!isEditorTauriIpcAlive()) return;
     void listen<{ path?: string }>("git-changed", (event) => {
       const repoPath = event.payload?.path?.trim() ?? "";
       refreshOpenEditorTabsFromDisk({ repoPath, trigger: "git-changed" });
@@ -1508,21 +1521,30 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
   useEffect(() => {
     let unlisten: (() => void) | null = null;
     let cancelled = false;
-    void getCurrentWindow()
-      .onFocusChanged(({ payload: focused }) => {
-        if (!focused) return;
-        refreshOpenEditorTabsFromDisk({ trigger: "focus" });
-      })
-      .then((fn) => {
-        if (cancelled) {
-          safeUnlisten(fn);
-          return;
-        }
-        unlisten = fn;
-      })
-      .catch(() => {
-        /* 非 Tauri 测试环境忽略 */
-      });
+    // getCurrentWindow() 会同步读取 window.__TAURI_INTERNALS__.metadata；非 Tauri / CDP 监控
+    // 环境下该对象为 undefined，会**同步**抛错（发生在 Promise 创建前，.catch() 无法兜底），
+    // 未捕获时冒泡触发 React ErrorBoundary。故先做环境守卫。
+    if (!isEditorTauriIpcAlive()) return;
+    try {
+      void getCurrentWindow()
+        .onFocusChanged(({ payload: focused }) => {
+          if (!focused) return;
+          refreshOpenEditorTabsFromDisk({ trigger: "focus" });
+        })
+        .then((fn) => {
+          if (cancelled) {
+            safeUnlisten(fn);
+            return;
+          }
+          unlisten = fn;
+        })
+        .catch(() => {
+          /* 非 Tauri 测试环境忽略 */
+        });
+    } catch {
+      /* 同步抛错（IPC 桥缺失）时忽略 */
+      return;
+    }
     return () => {
       cancelled = true;
       safeUnlisten(unlisten);

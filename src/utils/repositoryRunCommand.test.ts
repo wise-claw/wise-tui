@@ -5,6 +5,7 @@ import {
   collectRunLogIssues,
   decideRunErrorMonitorStep,
   detectRunLogIssue,
+  isRunLogIgnorableNoise,
   isSameRunErrorFingerprint,
   lineHasRunLogIssue,
   summarizeRunLogIssueKinds,
@@ -20,9 +21,7 @@ describe("detectRunLogIssue", () => {
   });
 
   test("detects warnings and alerts", () => {
-    expect(detectRunLogIssue("warn: Fast Refresh had to perform a full reload")?.kind).toBe(
-      "warning",
-    );
+    expect(detectRunLogIssue("warn: something odd")?.kind).toBe("warning");
     expect(detectRunLogIssue("\u26A0 Warning: Extra attributes from the server")?.kind).toBe(
       "warning",
     );
@@ -30,6 +29,8 @@ describe("detectRunLogIssue", () => {
     expect(detectRunLogIssue("\u544A\u8B66\uFF1A\u5185\u5B58\u5360\u7528\u8FC7\u9AD8")?.kind).toBe(
       "warning",
     );
+    // Fast Refresh / HMR ????????
+    expect(detectRunLogIssue("warn: Fast Refresh had to perform a full reload")).toBeNull();
   });
 
   test("detects HTTP and API request failures", () => {
@@ -48,6 +49,8 @@ describe("detectRunLogIssue", () => {
     expect(detectRunLogIssue("GET /api/users 200 in 12ms")).toBeNull();
     expect(detectRunLogIssue("\u2713 Compiled in 39ms (253 modules)")).toBeNull();
     expect(detectRunLogIssue("all good here")).toBeNull();
+    expect(detectRunLogIssue("[vite] hot updated /src/app/page.tsx")).toBeNull();
+    expect(detectRunLogIssue("Fast Refresh had to perform a full reload")).toBeNull();
   });
 
   test("does not false-positive on successful paths containing error", () => {
@@ -178,6 +181,30 @@ describe("decideRunErrorMonitorStep", () => {
     ).toEqual({ action: "report-new-after-dispatch" });
   });
 
+  test("continuous mode re-arms on different fingerprint after dispatch", () => {
+    expect(
+      decideRunErrorMonitorStep({
+        autoFixSent: true,
+        dispatchedFingerprint: "fp",
+        fingerprint: "other",
+        loopCount: 1,
+        continuous: true,
+      }),
+    ).toEqual({ action: "arm-dispatch" });
+  });
+
+  test("continuous mode still reports loop on same fingerprint", () => {
+    expect(
+      decideRunErrorMonitorStep({
+        autoFixSent: true,
+        dispatchedFingerprint: "fp",
+        fingerprint: "fp",
+        loopCount: 2,
+        continuous: true,
+      }),
+    ).toEqual({ action: "report-loop", loopCount: 3 });
+  });
+
   test("null dispatched fingerprint is not treated as loop", () => {
     expect(
       decideRunErrorMonitorStep({
@@ -194,5 +221,15 @@ describe("lineHasRunLogIssue", () => {
   test("matches detectRunLogIssue presence", () => {
     expect(lineHasRunLogIssue("ERROR x")).toBe(true);
     expect(lineHasRunLogIssue("GET / 200")).toBe(false);
+    expect(lineHasRunLogIssue("Fast Refresh had to perform a full reload")).toBe(false);
+  });
+});
+
+describe("isRunLogIgnorableNoise", () => {
+  test("filters HMR and compile chatter", () => {
+    expect(isRunLogIgnorableNoise("[vite] hot updated /src/app/layout.tsx")).toBe(true);
+    expect(isRunLogIgnorableNoise("Fast Refresh had to perform a full reload")).toBe(true);
+    expect(isRunLogIgnorableNoise("Compiled in 39ms (253 modules)")).toBe(true);
+    expect(isRunLogIgnorableNoise("TypeError: boom")).toBe(false);
   });
 });

@@ -178,6 +178,8 @@ import { useExecutionEnvironmentDispatchWorkerTranscriptPreload } from "./hooks/
 import { useSessionConversationTasks } from "./hooks/useSessionConversationTasks";
 import { dispatchExecutionEnvironmentFromMainSession } from "./services/executionEnvironmentDispatch";
 import { dispatchSessionFeedbackLoopAnalysis } from "./services/sessionFeedbackLoopDispatch";
+import { dispatchRuntimeAutoFix } from "./services/runtimeAutoFixDispatch";
+import { usePageMonitorAutoFixReload } from "./hooks/usePageMonitorAutoFixReload";
 import type { FeedbackLoopDispatchKind } from "./utils/sessionFeedbackLoopDispatch";
 import { createFreshTerminalWorkerTab, isTerminalWorkerWiseTab } from "./services/terminalDispatch";
 import {
@@ -1556,6 +1558,25 @@ export default function App() {
     [createSession, executeSession],
   );
 
+  const handleDispatchRuntimeAutoFix = useCallback(
+    async (input: {
+      anchorSessionId: string;
+      prompt: string;
+      source: "page-monitor" | "run-command";
+      pageMonitorSessionId?: string;
+    }) => {
+      return dispatchRuntimeAutoFix(
+        {
+          getSessions: () => sessionsLatestRef.current,
+          createSession,
+          executeSession: (workerTabId, prompt) => executeSession(workerTabId, prompt),
+        },
+        input,
+      );
+    },
+    [createSession, executeSession],
+  );
+
   useScheduledClaudeTaskRunner({
     repositoriesRef: repositoriesLatestRef,
     sessionsRef: sessionsLatestRef,
@@ -1563,6 +1584,10 @@ export default function App() {
     employeesRef: employeesLatestRef,
     workflowTemplatesRef: workflowTemplatesLatestRef,
     executeRef: handleComposerExecuteRef,
+  });
+
+  usePageMonitorAutoFixReload({
+    getSessions: () => sessionsLatestRef.current,
   });
 
   beforeSpawnClaudeRef.current = (session) =>
@@ -3476,6 +3501,7 @@ export default function App() {
       onLeftWidthChange={setMainLayoutLeftWidthPx}
       onRightWidthChange={setMainLayoutRightWidthPx}
       onOpenRemoteChannels={onOpenRemoteChannels}
+      onDispatchRuntimeAutoFix={handleDispatchRuntimeAutoFix}
       activeRepositoryPath={fileEditorRootPath}
       leftSidebarProps={{
         projects,

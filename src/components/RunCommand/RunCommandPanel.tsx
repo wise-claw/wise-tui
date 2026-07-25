@@ -269,7 +269,10 @@ export function RunCommandPanel({
               checked={runErrorMonitorEnabled}
               onChange={setRunErrorMonitorEnabled}
             />
-            <span className="app-run-command-popover__option-text" title="监控终端错误、告警与接口请求失败，并自动交给 AI 修复">
+            <span
+              className="app-run-command-popover__option-text"
+              title="监控运行指令终端日志中的错误/告警/接口失败，并自动交给 AI 修复。页面监控请用顶栏「页面监控」。"
+            >
               AI 报错监控
             </span>
           </div>

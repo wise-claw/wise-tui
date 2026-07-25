@@ -1,25 +1,9 @@
-import { invoke, isTauri } from "@tauri-apps/api/core";
+import { invoke } from "@tauri-apps/api/core";
 import type { ClaudeSession, PersistedTabsState } from "../types";
 import { foldToolResultUserMessagesIntoAssistant } from "./claudeStreamAssembler";
 import { normalizeSessionRepositoryPath } from "../utils/sessionHistoryScope";
 import { getCurrentMainWorkspaceWindowLabel } from "./mainWindow";
-
-/**
- * `visibilitychange` / `beforeunload` 在 webview 关闭/刷新时可能晚于 IPC 桥销毁，
- * 此时继续 `invoke` 会让 fetch 走到已被 Tauri runtime 收回的 ACL 路由，抛
- * "Fetch API cannot load ipc://... due to access control checks"。
- * 直接检查底层 `__TAURI_INTERNALS__`，比 `isTauri()` 更精准（它只判断注入标识，不反映运行时存活）。
- */
-function isTauriIpcAlive(): boolean {
-  if (!isTauri()) return false;
-  // Tauri 2.x 把内部 invoke / metadata 挂在 window.__TAURI_INTERNALS__ 上；
-  // webview 销毁 / IPC 桥关闭时该对象会被设为 undefined。
-  return (
-    typeof window !== "undefined" &&
-    typeof (window as unknown as { __TAURI_INTERNALS__?: object }).__TAURI_INTERNALS__ !==
-      "undefined"
-  );
-}
+import { isTauriIpcAlive } from "../utils/tauriEnv";
 
 export function normalizePersistedSession(raw: unknown): ClaudeSession {
   const v = raw as Record<string, unknown>;

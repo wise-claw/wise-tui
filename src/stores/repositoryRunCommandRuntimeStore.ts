@@ -40,6 +40,8 @@ type RepoRuntimeInternals = {
   autoOpenedRunUrl: boolean;
   errorDetected: boolean;
   autoFixSent: boolean;
+  autoFixInFlight: boolean;
+  lastDispatchAt: number;
   dispatchedFingerprint: string | null;
   lastErrorFingerprint: string | null;
   loopCount: number;
@@ -61,7 +63,9 @@ const EMPTY_RUNNING_BY_REPOSITORY_ID: Record<number, boolean> = {};
 let runningByRepositoryIdSnapshot: Record<number, boolean> = EMPTY_RUNNING_BY_REPOSITORY_ID;
 let runningByRepositoryIdCacheKey = "";
 
-let globalOnAutoFixRunError: ((prompt: string) => void) | undefined;
+let globalOnAutoFixRunError:
+  | ((prompt: string) => void | boolean | Promise<void | boolean>)
+  | undefined;
 let globalOnRequestConfigure: ((repository: Pick<Repository, "id" | "path">) => void) | undefined;
 let terminalListenersReady = false;
 let terminalOutputUnlisten: (() => void) | null = null;
@@ -189,6 +193,8 @@ function getOrCreateInternals(repositoryId: number, runCwd: string): RepoRuntime
       autoOpenedRunUrl: false,
       errorDetected: false,
       autoFixSent: false,
+      autoFixInFlight: false,
+      lastDispatchAt: 0,
       dispatchedFingerprint: null,
       lastErrorFingerprint: null,
       loopCount: 0,
@@ -252,7 +258,13 @@ function refreshInternalsFromStorage(internals: RepoRuntimeInternals, runCwd: st
   internals.runAutoOpenPageEnabled = readRunAutoOpenPageEnabled(runAutoOpenKey);
 }
 
-const RUN_ERROR_MONITOR_DISPATCH_DELAY_MS = 5000;
+const RUN_ERROR_MONITOR_DISPATCH_DELAY_MS = 8_000;
+/** 同一仓库两次成功指派的最短间隔，避免热更新 / 编译抖动连发。 */
+const RUN_ERROR_MONITOR_MIN_INTERVAL_MS = 90_000;
+
+function openRunPage(_repositoryId: number, _internals: RepoRuntimeInternals, url: string): void {
+  void openExternalUrl(url);
+}
 
 function handleRepositoryRunnerTerminalOutput(repositoryId: number, data: string): void {
   const internals = repoInternalsById.get(repositoryId);
@@ -268,7 +280,7 @@ function handleRepositoryRunnerTerminalOutput(repositoryId: number, data: string
       clearAutoOpenFallbackTimer(internals);
       const preferred = normalizeRunOpenUrl(internals.runPreferredUrl);
       const urlToOpen = preferred ?? detected;
-      void openExternalUrl(urlToOpen);
+      openRunPage(repositoryId, internals, urlToOpen);
       patchRepoState(repositoryId, {
         detectedUrl: detected,
         statusHint: `已自动打开地址：${urlToOpen}`,
@@ -279,7 +291,9 @@ function handleRepositoryRunnerTerminalOutput(repositoryId: number, data: string
   }
 
   const chunkIssues = collectRunLogIssues(data);
-  const isErrorChunk = chunkIssues.length > 0 && internals.runErrorMonitorEnabled;
+  // 仅 error / http 触发自动修复；纯 warning（含过滤前残留）不当作派发条件。
+  const actionableIssues = chunkIssues.filter((issue) => issue.kind !== "warning");
+  const isErrorChunk = actionableIssues.length > 0 && internals.runErrorMonitorEnabled;
   if (!isErrorChunk) {
     // 非报错输出：等日志稳定再派发（保留原 idle 语义，给偶发报错留缓冲）
     armAutoFixDispatch(repositoryId, internals, true);
@@ -294,9 +308,28 @@ function handleRepositoryRunnerTerminalOutput(repositoryId: number, data: string
     fingerprint,
     loopCount: internals.loopCount,
   });
-  const kindSummary = summarizeRunLogIssueKinds(chunkIssues);
+  const kindSummary = summarizeRunLogIssueKinds(actionableIssues);
   if (decision.action === "arm-dispatch") {
     internals.errorDetected = true;
+    if (internals.autoFixInFlight) {
+      patchRepoState(repositoryId, {
+        statusHint: `检测到${kindSummary}，修复任务进行中，已合并等待…`,
+      });
+      return;
+    }
+    const now = Date.now();
+    if (
+      internals.lastDispatchAt > 0 &&
+      now - internals.lastDispatchAt < RUN_ERROR_MONITOR_MIN_INTERVAL_MS
+    ) {
+      const remainSec = Math.ceil(
+        (RUN_ERROR_MONITOR_MIN_INTERVAL_MS - (now - internals.lastDispatchAt)) / 1000,
+      );
+      patchRepoState(repositoryId, {
+        statusHint: `检测到${kindSummary}，自动修复冷却中（约 ${remainSec}s）`,
+      });
+      return;
+    }
     globalOnRequestConfigure?.({ id: repositoryId, path: internals.runCwd });
     patchRepoState(repositoryId, {
       statusHint: `检测到${kindSummary}，等待自动处理...`,
@@ -306,11 +339,11 @@ function handleRepositoryRunnerTerminalOutput(repositoryId: number, data: string
   } else if (decision.action === "report-loop") {
     internals.loopCount = decision.loopCount;
     patchRepoState(repositoryId, {
-      statusHint: `循环${kindSummary}(第 ${decision.loopCount} 次),AI 已尝试,建议人工介入`,
+      statusHint: `循环${kindSummary}(第 ${decision.loopCount} 次)，AI 已尝试，建议人工介入`,
     });
   } else {
     patchRepoState(repositoryId, {
-      statusHint: `检测到新的${kindSummary},本次运行 AI 已介入,建议人工介入`,
+      statusHint: `检测到新的${kindSummary}，本次运行 AI 已介入，建议人工介入`,
     });
   }
 }
@@ -323,28 +356,70 @@ function armAutoFixDispatch(
   if (reset) clearIdleTimer(internals);
   if (internals.idleTimer != null) return;
   internals.idleTimer = window.setTimeout(() => {
-    fireAutoFixDispatch(repositoryId, internals);
+    void fireAutoFixDispatch(repositoryId, internals);
   }, RUN_ERROR_MONITOR_DISPATCH_DELAY_MS);
 }
 
-function fireAutoFixDispatch(repositoryId: number, internals: RepoRuntimeInternals): void {
+async function fireAutoFixDispatch(
+  repositoryId: number,
+  internals: RepoRuntimeInternals,
+): Promise<void> {
   internals.idleTimer = null;
   if (!internals.errorDetected || internals.autoFixSent) return;
+  if (internals.autoFixInFlight) return;
+  if (!globalOnAutoFixRunError) {
+    patchRepoState(repositoryId, { statusHint: "自动修复未就绪：指派通道不可用" });
+    return;
+  }
+  const now = Date.now();
+  if (
+    internals.lastDispatchAt > 0 &&
+    now - internals.lastDispatchAt < RUN_ERROR_MONITOR_MIN_INTERVAL_MS
+  ) {
+    const remainSec = Math.ceil(
+      (RUN_ERROR_MONITOR_MIN_INTERVAL_MS - (now - internals.lastDispatchAt)) / 1000,
+    );
+    patchRepoState(repositoryId, {
+      statusHint: `自动修复冷却中（约 ${remainSec}s 后再处理）`,
+    });
+    return;
+  }
   internals.autoFixSent = true;
-  if (!globalOnAutoFixRunError) return;
+  internals.autoFixInFlight = true;
   const command = internals.runCommand.trim();
   const tail = internals.runLogTail;
   const dedupKey = buildRunErrorMonitorDedupKey(internals.runCwd, command, tail);
-  if (shouldSkipRunErrorMonitorSend(dedupKey, Date.now())) {
+  if (shouldSkipRunErrorMonitorSend(dedupKey, now)) {
+    internals.autoFixSent = false;
+    internals.autoFixInFlight = false;
     patchRepoState(repositoryId, { statusHint: "检测到重复报错，已跳过重复发送" });
     return;
   }
   internals.dispatchedFingerprint = internals.lastErrorFingerprint;
   internals.loopCount = 1;
   const prompt = buildRunErrorAutoFixPrompt({ command, tailText: tail });
-  globalOnAutoFixRunError(prompt);
-  patchRepoState(repositoryId, { statusHint: "已交给 Claude Code 自动修复" });
-  message.info("检测到报错，已自动交给 Claude Code 处理。");
+  try {
+    const started = await Promise.resolve(globalOnAutoFixRunError(prompt));
+    if (started === false) {
+      internals.autoFixSent = false;
+      internals.dispatchedFingerprint = null;
+      internals.loopCount = 0;
+      patchRepoState(repositoryId, { statusHint: "自动修复指派未启动，请检查会话是否可用后重试" });
+      message.warning("运行指令自动修复未启动：会话可能忙碌、未就绪或已达并发上限。");
+      return;
+    }
+    internals.lastDispatchAt = Date.now();
+    patchRepoState(repositoryId, { statusHint: "已指派独立会话自动修复（不占用主窗口）" });
+  } catch (error) {
+    internals.autoFixSent = false;
+    internals.dispatchedFingerprint = null;
+    internals.loopCount = 0;
+    const msgText = error instanceof Error ? error.message : String(error);
+    patchRepoState(repositoryId, { statusHint: `自动修复派发失败：${msgText}` });
+    message.error(`运行指令自动修复派发失败：${msgText}`);
+  } finally {
+    internals.autoFixInFlight = false;
+  }
 }
 
 function ensureTerminalListeners(): void {
@@ -437,6 +512,8 @@ export function disposeTerminalListeners(): void {
   terminalOutputUnlisten = null;
   terminalExitUnlisten?.();
   terminalExitUnlisten = null;
+  chromeIssueUnlisten?.();
+  chromeIssueUnlisten = null;
   terminalListenersReady = false;
 }
 
@@ -462,7 +539,7 @@ export function pruneRepositoryRunCommandRuntime(liveRepositoryIds: ReadonlySet<
 }
 
 export function setRepositoryRunCommandAutoFixHandler(
-  handler: ((prompt: string) => void) | undefined,
+  handler: ((prompt: string) => void | boolean | Promise<void | boolean>) | undefined,
 ): void {
   globalOnAutoFixRunError = handler;
 }
@@ -518,6 +595,8 @@ export async function startRepositoryRunCommand(input: {
     );
     internals.errorDetected = false;
     internals.autoFixSent = false;
+    internals.autoFixInFlight = false;
+    internals.lastDispatchAt = 0;
     internals.dispatchedFingerprint = null;
     internals.lastErrorFingerprint = null;
     internals.loopCount = 0;
@@ -540,8 +619,10 @@ export async function startRepositoryRunCommand(input: {
         if (internals.autoOpenedRunUrl) return;
         const fallbackUrl = resolveOpenUrl(internals, getOrCreateRepoState(repository.id).detectedUrl);
         internals.autoOpenedRunUrl = true;
-        void openExternalUrl(fallbackUrl);
-        patchRepoState(repository.id, { statusHint: `已自动打开地址：${fallbackUrl}` });
+        openRunPage(repository.id, internals, fallbackUrl);
+        patchRepoState(repository.id, {
+          statusHint: `已自动打开地址：${fallbackUrl}`,
+        });
       }, 4500);
     } else {
       patchRepoState(repository.id, { statusHint: "运行中（未开启自动打开页面）" });

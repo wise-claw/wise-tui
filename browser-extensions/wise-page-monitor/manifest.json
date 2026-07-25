@@ -1,0 +1,26 @@
+{
+  "manifest_version": 3,
+  "name": "Wise 页面监控",
+  "version": "0.1.0",
+  "description": "将日常 Chrome 标签的页面异常 / console / 网络错误转发到 Wise 页面监控与 AI 自动修复。",
+  "permissions": ["debugger", "tabs", "storage", "alarms"],
+  "host_permissions": ["http://127.0.0.1/*", "http://localhost/*"],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Wise 页面监控",
+    "default_popup": "popup.html",
+    "default_icon": {
+      "16": "icons/icon16.png",
+      "48": "icons/icon48.png",
+      "128": "icons/icon128.png"
+    }
+  },
+  "icons": {
+    "16": "icons/icon16.png",
+    "48": "icons/icon48.png",
+    "128": "icons/icon128.png"
+  }
+}

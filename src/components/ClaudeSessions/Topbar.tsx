@@ -22,6 +22,7 @@ import { ClaudeChatSessionTopbarOverflow } from "./ClaudeChatSessionTopbarOverfl
 import { DEFAULT_OPEN_APP_ID } from "../OpenAppMenu/constants";
 import { getOpenAppPreferenceSync, hydrateOpenAppPreference } from "../../services/openAppPreference";
 import { useRepositoryRunCommand } from "../../hooks/useRepositoryRunCommand";
+import { PageMonitorTopbarTrigger } from "../ChromeDevtoolsMonitor";
 import { resolveChatTopbarContext } from "../../utils/workspaceSelectionState";
 import type { WorkspaceFocus } from "../../utils/workspaceMode";
 import { PANE_COUNT_OPTIONS, isPaneCount, type PaneCount } from "../../constants/mainLayoutWidths";
@@ -176,7 +177,7 @@ export interface TopbarProps {
   fileTreeRailOpen?: boolean;
   terminalCollapsed?: boolean;
   terminalPanelMounted?: boolean;
-  onAutoFixRunError?: (prompt: string) => void | Promise<void>;
+  onAutoFixRunError?: (prompt: string) => void | boolean | Promise<void | boolean>;
   /** 多屏模式屏数 */
   paneCount?: PaneCount;
   /** 多屏切换进行中 */
@@ -498,6 +499,12 @@ export const Topbar = memo(function Topbar({
             onClick={onSearch}
           />
         )}
+        {topbarToolsReady ? (
+          <PageMonitorTopbarTrigger
+            repositoryId={contextRepository?.id}
+            repositoryPath={topbarOpenPath}
+          />
+        ) : null}
         <Popover
           trigger={[]}
           placement="bottomRight"

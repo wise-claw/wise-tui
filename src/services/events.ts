@@ -106,6 +106,18 @@ const terminalCreatedHub =
   createEventHub<TerminalCreatedEvent>("terminal-created");
 const terminalFrameHub = createEventHub<TerminalFrameEvent>("terminal-frame");
 
+export type ChromeDevtoolsIssueEvent = {
+  sessionId: string;
+  kind: string;
+  message: string;
+  url?: string | null;
+  method?: string | null;
+  status?: number | null;
+};
+
+const chromeDevtoolsIssueHub =
+  createEventHub<ChromeDevtoolsIssueEvent>("chrome-devtools-issue");
+
 export function subscribeTerminalOutput(
   onEvent: (event: TerminalOutputEvent) => void,
   options?: EventHubOptions,
@@ -132,4 +144,11 @@ export function subscribeTerminalFrame(
   options?: EventHubOptions,
 ): () => void {
   return terminalFrameHub.subscribe(onEvent, options);
+}
+
+export function subscribeChromeDevtoolsIssue(
+  onEvent: (event: ChromeDevtoolsIssueEvent) => void,
+  options?: EventHubOptions,
+): () => void {
+  return chromeDevtoolsIssueHub.subscribe(onEvent, options);
 }

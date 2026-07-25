@@ -72,6 +72,10 @@ import { CenterViewControlContext, useCenterView } from "./ClaudeSessions/claude
 import { registerPaneCenterViewSetter, syncPaneCenterView } from "../stores/paneCenterViewControlStore";
 import { useWorkspaceMemoPanelOpen } from "../stores/workspaceMemoPanelStore";
 import { openTerminalCenterPanel, useTerminalCenterPanelState } from "../stores/terminalCenterPanelStore";
+import {
+  setRepositoryRunCommandAutoFixHandler,
+} from "../stores/repositoryRunCommandRuntimeStore";
+import { setPageMonitorAutoFixHandler } from "../stores/chromeDevtoolsMonitorRuntimeStore";
 import type { CenterView } from "./ClaudeSessions/ClaudeChat";
 import { WORKSPACE_MEMO_PANEL_NODE } from "./WorkspaceMemoPanel";
 import { TERMINAL_CENTER_SLOT_SENTINEL } from "./TerminalPanel/terminalCenterSlot";
@@ -690,6 +694,16 @@ export interface AppWorkspaceLayoutProps {
   sessionsStructureKey: string;
   /** 顶栏「远程」区跳转创作台远程入口 */
   onOpenRemoteChannels?: () => void;
+  /**
+   * 运行指令 / 页面监控 AI 自动修复指派：创建独立 worker，不切换主会话。
+   * 未提供时回退为切主会话执行（兼容旧路径）。
+   */
+  onDispatchRuntimeAutoFix?: (input: {
+    anchorSessionId: string;
+    prompt: string;
+    source: "page-monitor" | "run-command";
+    pageMonitorSessionId?: string;
+  }) => Promise<boolean>;
   /** Cockpit 主屏空态：用户没有任何 Workspace / Standalone Repo 时引导创建。 */
   cockpitEmpty: boolean;
   cockpitOnboardingProps: CockpitOnboardingProps;
@@ -749,6 +763,7 @@ export function AppWorkspaceLayout({
   claudeSessionsProps,
   sessionsStructureKey,
   onOpenRemoteChannels,
+  onDispatchRuntimeAutoFix,
   cockpitEmpty,
   cockpitOnboardingProps,
   workspaceWelcomeFullscreen = false,
@@ -847,6 +862,60 @@ export function AppWorkspaceLayout({
     [mainSessionForDataLink?.id],
   );
 
+  /** 页面监控 AI 自动修复：指派独立 worker，不占用主窗口。 */
+  const onAutoFixPageMonitor = useMemo(
+    () =>
+      mainSessionForDataLink
+        ? async (prompt: string, meta: { sessionId: string }) => {
+            const anchorSessionId = mainSessionForDataLink.id;
+            if (onDispatchRuntimeAutoFix) {
+              return onDispatchRuntimeAutoFix({
+                anchorSessionId,
+                prompt,
+                source: "page-monitor",
+                pageMonitorSessionId: meta.sessionId,
+              });
+            }
+            const props = claudeSessionsPropsRef.current;
+            props.onSwitchSession(anchorSessionId);
+            const started = await props.onExecuteSession(anchorSessionId, prompt);
+            return started !== false;
+          }
+        : undefined,
+    [mainSessionForDataLink?.id, onDispatchRuntimeAutoFix],
+  );
+
+  /** 运行指令报错监控 AI 自动修复：同样指派独立 worker。 */
+  const onAutoFixRunError = useMemo(
+    () =>
+      mainSessionForDataLink
+        ? async (prompt: string) => {
+            const anchorSessionId = mainSessionForDataLink.id;
+            if (onDispatchRuntimeAutoFix) {
+              return onDispatchRuntimeAutoFix({
+                anchorSessionId,
+                prompt,
+                source: "run-command",
+              });
+            }
+            const props = claudeSessionsPropsRef.current;
+            props.onSwitchSession(anchorSessionId);
+            const started = await props.onExecuteSession(anchorSessionId, prompt);
+            return started !== false;
+          }
+        : undefined,
+    [mainSessionForDataLink?.id, onDispatchRuntimeAutoFix],
+  );
+
+  useEffect(() => {
+    setRepositoryRunCommandAutoFixHandler(onAutoFixRunError);
+    setPageMonitorAutoFixHandler(onAutoFixPageMonitor);
+    return () => {
+      setRepositoryRunCommandAutoFixHandler(undefined);
+      setPageMonitorAutoFixHandler(undefined);
+    };
+  }, [onAutoFixRunError, onAutoFixPageMonitor]);
+
   // 1 屏下顶部 Topbar 的 props（跨整宽，覆盖中栏 + 右栏）。多屏（paneCount>1）不再渲染
   // 全局 Topbar，由 `ClaudeMultiPaneGrid` 每个 pane 内部的 `<Topbar>` 自管
   // （窗口级控件只在 primary pane；仓库级按钮每个 pane 都有，作用于各自仓库）。
@@ -866,6 +935,10 @@ export function AppWorkspaceLayout({
       paneChangeInFlight: claudeSessionsProps.paneChangeInFlight,
       onChangePaneCount: claudeSessionsPropsRef.current.onChangePaneCount,
       onOpenRemoteChannels,
+      onAutoFixRunError,
+      onSessionInsightsAiAnalysis,
+      onDispatchSessionFeedbackLoop: claudeSessionsPropsRef.current.onDispatchSessionFeedbackLoop,
+      getClaudeSessions: getClaudeSessionsForTopbar,
     }),
     [
       claudeSessionsProps.activeProject,
@@ -878,6 +951,9 @@ export function AppWorkspaceLayout({
       claudeSessionsProps.paneCount,
       claudeSessionsProps.paneChangeInFlight,
       onOpenRemoteChannels,
+      onAutoFixRunError,
+      onSessionInsightsAiAnalysis,
+      getClaudeSessionsForTopbar,
     ],
   );
 
@@ -888,7 +964,7 @@ export function AppWorkspaceLayout({
    *  单源 `useMemo` 引用稳定，避免 `ConnectedClaudeSessions` 必重渲。 */
   const paneTopbarShared = useMemo<PaneTopbarSharedProps>(
     () => ({
-      onAutoFixRunError: claudeSessionsPropsRef.current.onAutoFixRunError,
+      onAutoFixRunError,
       paneCount: claudeSessionsProps.paneCount ?? 1,
       paneChangeInFlight: claudeSessionsPropsRef.current.paneChangeInFlight,
       onChangePaneCount: claudeSessionsPropsRef.current.onChangePaneCount,
@@ -908,12 +984,14 @@ export function AppWorkspaceLayout({
     [
       claudeSessionsProps.paneCount,
       claudeSessionsProps.paneChangeInFlight,
+      onAutoFixRunError,
       onSessionInsightsAiAnalysis,
       claudeSessionsProps.collapsed,
       showWorkspaceFileTreeRail,
       claudeSessionsProps.terminalCollapsed,
       claudeSessionsProps.terminalPanelMounted,
       onOpenRemoteChannels,
+      getClaudeSessionsForTopbar,
     ],
   );
 

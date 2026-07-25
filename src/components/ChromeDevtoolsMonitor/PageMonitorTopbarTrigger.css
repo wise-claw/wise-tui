@@ -1,0 +1,58 @@
+.app-page-monitor-topbar-btn {
+  position: relative;
+}
+
+.app-page-monitor-topbar-btn__badge {
+  position: absolute;
+  top: 3px;
+  right: 3px;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ant-color-success);
+  box-shadow: 0 0 0 1px var(--ant-color-bg-container);
+}
+
+.app-page-monitor-popover__content {
+  --app-run-popover-label-w: 52px;
+  width: 360px;
+}
+
+.app-page-monitor-popover__mode-row {
+  align-items: flex-start;
+}
+
+.app-page-monitor-popover__mode-row .app-run-command-popover__profile-switch {
+  flex-wrap: wrap;
+  row-gap: 4px;
+}
+
+.app-page-monitor-popover__attach-hint {
+  margin: 0 0 0 calc(var(--app-run-popover-label-w) + 8px);
+  padding: 0;
+  font-size: 10px;
+  line-height: 1.35;
+  color: var(--ant-color-text-tertiary);
+  word-break: break-all;
+}
+
+.app-page-monitor-popover__ext-hint p {
+  margin: 0 0 4px;
+}
+
+.app-page-monitor-popover__link-btn {
+  appearance: none;
+  border: 0;
+  padding: 0;
+  background: transparent;
+  color: var(--ant-color-primary);
+  font-size: 10px;
+  line-height: 1.35;
+  cursor: pointer;
+  text-align: left;
+}
+
+.app-page-monitor-popover__link-btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

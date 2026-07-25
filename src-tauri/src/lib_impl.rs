@@ -1,6 +1,6 @@
 use crate::{
     agent_registry, app_state_commands, assistants, at_mention_shortcuts, cc_switch_import,
-    in_app_shortcuts,
+    chrome_devtools_monitor, in_app_shortcuts,
     claude_code_line_edits, claude_code_usage, claude_commands, codex_commands, opencode_commands,
     qoder_commands, claude_config_dir,
     claude_llm_proxy, claude_model_profiles,
@@ -211,7 +211,8 @@ pub fn run() {
         .manage(Mutex::new(workspace_commands::GitWatcherState::new()))
         .manage(Mutex::new(claude_commands::TerminalManager::new()))
         .manage(claude_commands::ClaudeProcessState::default())
-        .manage(claude_commands::ClaudeSessionRegistry::new());
+        .manage(claude_commands::ClaudeSessionRegistry::new())
+        .manage(chrome_devtools_monitor::ChromeDevtoolsMonitorState::default());
     #[cfg(target_os = "macos")]
     let builder = builder.manage(crate::macos_speech_stream::MacosStreamingSpeechState::default());
     let builder = builder.manage(crate::sherpa_sensevoice::SherpaSenseVoiceState::default());
@@ -428,6 +429,12 @@ pub fn run() {
             workspace_commands::macos_open_terminal_with_command,
             #[cfg(target_os = "macos")]
             macos_terminal_detect::macos_detect_terminals,
+            chrome_devtools_monitor::chrome_devtools_monitor_start,
+            chrome_devtools_monitor::chrome_devtools_monitor_stop,
+            chrome_devtools_monitor::chrome_devtools_monitor_reload,
+            chrome_devtools_monitor::chrome_page_monitor_bridge_status,
+            chrome_devtools_monitor::chrome_page_monitor_extension_dir,
+            chrome_devtools_monitor::chrome_page_monitor_open_extension_dir,
             git_commands::git_status,
             git_commands::git_status_summary,
             git_commands::git_stage,

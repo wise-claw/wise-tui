@@ -3719,19 +3719,14 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           defaultInstructionApplied,
         );
       });
-      // dedup 写入：commitSessions 已 setSessionRunning，确认进入 spawn 流程后才记录。
-      // 至此后所有 return true 路径（bootstrap 重试 / 成功 spawn）都已真正派发；
-      // 并发阻塞 / gemini / session 未 hydrate 等 return false 路径不会到此，dedup 表不被污染。
-      if (trimmedPrompt) {
-        recentExecutePromptBySessionRef.current.set(tabSessionId, {
-          prompt: trimmedPrompt,
-          at: Date.now(),
-        });
-      }
       // 首轮已启动但尚未收到 stream-json 的 session_id 时，避免再 spawn 第二个进程。
       // 用户气泡须在上面的 commit 中先落盘，否则 bootstrap 等待会直接 return 导致「发送了但不见」。
       // 终端派发强制新回合时已主动取消旧进程并重置为 idle，不得在此阻塞。
       // Cursor/Codex oneshot 不使用 Claude session_id，不得在此等待。
+      //
+      // 重要：此处尚未真正 spawn。不得写入 recentExecutePrompt dedup——否则 80ms 重试会在
+      // 900ms 窗内被假命中 return true，用户气泡已落盘却永久不再 spawn（页面监控 / 运行指令
+      // 自动修复表现为「消息已发出但没有处理」）。
       if (
         !claudeSid &&
         liveSession.status === "running" &&
@@ -3758,6 +3753,15 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           return false;
         }
         return true;
+      }
+
+      // dedup 写入：已通过 bootstrap 等待，即将进入真正 spawn。
+      // 并发阻塞 / gemini / session 未 hydrate 等 return false 路径不会到此，dedup 表不被污染。
+      if (trimmedPrompt) {
+        recentExecutePromptBySessionRef.current.set(tabSessionId, {
+          prompt: trimmedPrompt,
+          at: Date.now(),
+        });
       }
 
       streamingTargetIdRef.current = tabSessionId;

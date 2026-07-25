@@ -1,4 +1,5 @@
 import { invoke } from "@tauri-apps/api/core";
+import { isTauriIpcAlive } from "../utils/tauriEnv";
 
 /** 用户配置的 Claude 启动默认 `--settings` JSON（原始字符串）。Rust 侧 `CLAUDE_DEFAULT_SETTINGS_KEY` 须与此一致。 */
 export const WISE_CLAUDE_DEFAULT_SETTINGS_KEY = "wise.claudeDefaultSettings.v1";
@@ -12,6 +13,8 @@ export const WISE_OPENCODE_DEFAULT_SETTINGS_KEY = "wise.opencodeDefaultSettings.
 export async function getAppSetting(key: string): Promise<string | null> {
   const normalized = key.trim();
   if (!normalized) return null;
+  // 非 Tauri / IPC 桥已销毁环境（如纯浏览器 CDP 监控）下 invoke 会同步抛错，直接短路。
+  if (!isTauriIpcAlive()) return null;
   try {
     const value = await invoke<string | null>("get_app_setting", { key: normalized });
     return value ?? null;
@@ -23,12 +26,15 @@ export async function getAppSetting(key: string): Promise<string | null> {
 export async function setAppSetting(key: string, value: string): Promise<void> {
   const normalized = key.trim();
   if (!normalized) return;
+  // 非 Tauri / IPC 桥已销毁环境下 invoke 会同步抛错，冒泡为 Unhandled Rejection；此处静默跳过。
+  if (!isTauriIpcAlive()) return;
   await invoke("set_app_setting", { key: normalized, value });
 }
 
 export async function deleteAppSetting(key: string): Promise<void> {
   const normalized = key.trim();
   if (!normalized) return;
+  if (!isTauriIpcAlive()) return;
   await invoke("delete_app_setting", { key: normalized });
 }
 
@@ -38,6 +44,9 @@ export async function getAppSettingsBatch(
 ): Promise<Record<string, string | null>> {
   const normalized = [...new Set(keys.map((key) => key.trim()).filter(Boolean))];
   if (normalized.length === 0) return {};
+  if (!isTauriIpcAlive()) {
+    return Object.fromEntries(normalized.map((key) => [key, null]));
+  }
   try {
     const raw = await invoke<Record<string, string | null>>("get_app_settings_batch", {
       keys: normalized,

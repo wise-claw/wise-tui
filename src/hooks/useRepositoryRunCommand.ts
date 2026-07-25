@@ -35,7 +35,7 @@ const IDLE_REPOSITORY_RUN_RUNTIME = {
 export type UseRepositoryRunCommandOptions = {
   repository: Pick<Repository, "id"> | null;
   runCwd: string;
-  onAutoFixRunError?: (prompt: string) => void;
+  onAutoFixRunError?: (prompt: string) => void | boolean | Promise<void | boolean>;
   /** 需要用户先填写/保存指令时打开外层 Popover/Modal */
   onRequestOpenPanel?: () => void;
   /** 成功下发运行命令后（顶栏 Popover 会关闭） */

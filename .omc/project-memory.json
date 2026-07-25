@@ -43,7 +43,7 @@
   },
   "build": {
     "buildCommand": "bunx tsc --noEmit -p tsconfig.json 2>&1 | grep -E \"error TS\" | head -20",
-    "testCommand": "npm test",
+    "testCommand": "bun test src/services/tabsStore 2>&1 | tail -20; echo \"---appSettings---\"; bun test 2>&1 | grep -iE \"appSettings|tauriEnv\" | head",
     "lintCommand": null,
     "devCommand": "npm run dev",
     "scripts": {
@@ -242,9 +242,27 @@
   },
   "hotPaths": [
     {
+      "path": "src/hooks/useRepositoryFileEditor.ts",
+      "accessCount": 7,
+      "lastAccessed": 1784991556099,
+      "type": "file"
+    },
+    {
       "path": "src/AppImpl.tsx",
       "accessCount": 4,
       "lastAccessed": 1784963443251,
+      "type": "file"
+    },
+    {
+      "path": "src/services/tabsStore.ts",
+      "accessCount": 4,
+      "lastAccessed": 1784991454639,
+      "type": "file"
+    },
+    {
+      "path": "src/services/appSettingsStore.ts",
+      "accessCount": 3,
+      "lastAccessed": 1784991487416,
       "type": "file"
     },
     {
@@ -299,6 +317,12 @@
       "path": "src/constants/executionEnvironmentDispatch.ts",
       "accessCount": 1,
       "lastAccessed": 1784962802613,
+      "type": "file"
+    },
+    {
+      "path": "src/utils/tauriEnv.ts",
+      "accessCount": 1,
+      "lastAccessed": 1784991434459,
       "type": "file"
     }
   ],

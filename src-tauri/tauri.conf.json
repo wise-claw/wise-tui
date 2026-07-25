@@ -56,7 +56,8 @@
     "resources": [
       "resources/skills/officecli-docx/SKILL.md",
       "resources/skills/officecli-pptx/SKILL.md",
-      "../examples/wise-extensions/hello-world"
+      "../examples/wise-extensions/hello-world",
+      "../browser-extensions/wise-page-monitor"
     ],
     "macOS": {
       "entitlements": "./Entitlements.plist",

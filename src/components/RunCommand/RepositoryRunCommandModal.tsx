@@ -12,7 +12,7 @@ import "./repositoryRunCommandModal.css";
 
 export type RepositoryRunCommandModalProps = {
   repositories: Repository[];
-  onAutoFixRunError?: (prompt: string) => void;
+  onAutoFixRunError?: (prompt: string) => void | boolean | Promise<void | boolean>;
 };
 
 export function RepositoryRunCommandModal({

@@ -143,7 +143,7 @@ export interface ClaudeSessionsProps {
   onSendFollowup: (sessionId: string, id: string) => void;
   onRestoreRevert: (sessionId: string, itemId: string) => void | Promise<void>;
   /** 终端运行报错自动修复：创建独立 Claude 会话处理（非主会话） */
-  onAutoFixRunError?: (prompt: string) => void | Promise<void>;
+  onAutoFixRunError?: (prompt: string) => void | boolean | Promise<void | boolean>;
   /** 多屏模式屏数：1=单屏，2/4/6/8=多屏 */
   paneCount?: PaneCount;
   /** 多屏切换进行中，用于切换按钮 loading/disabled 反馈 */
