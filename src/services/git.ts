@@ -100,6 +100,17 @@ export async function gitShowRevision(repositoryPath: string, revisionPath: stri
   }
 }
 
+/**
+ * 编辑器 / Diff 专用 `git show`：超大文件与其它错误向上抛出（不吞成空串），
+ * 便于前端提示「超过 4MB」并关闭失败的 tab。
+ */
+export async function gitShowRevisionForEditor(
+  repositoryPath: string,
+  revisionPath: string,
+): Promise<string> {
+  return invoke<string>("git_show_revision", { repositoryPath, revisionPath });
+}
+
 export async function gitDiscard(path: string, filePath: string): Promise<void> {
   return invoke("git_discard", { path, filePath });
 }

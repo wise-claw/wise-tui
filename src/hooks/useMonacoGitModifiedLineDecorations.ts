@@ -8,6 +8,7 @@ import {
   monacoLineChangeOverviewColor,
 } from "../utils/monacoGitModifiedLineDecorations";
 import { shouldDeferNonCriticalUiWork } from "../utils/uiWorkDefer";
+import { shouldEnableMonacoGitLineDecorations } from "../utils/monacoLargeFile";
 
 /**
  * `scheduleRefresh` 内 raf 回调每帧轮询：是否允许执行本次 gutter 装饰刷新。
@@ -96,6 +97,10 @@ export function useMonacoGitModifiedLineDecorations(args: {
 
     const { editor, monaco, repositoryPath, relativePath, baselineContent, enabled } = args;
     if (!enabled || !editor || !monaco || !relativePath?.trim() || baselineContent == null) {
+      return;
+    }
+    // 双保险：调用方未关 enabled 时仍跳过大文件全量 diff。
+    if (!shouldEnableMonacoGitLineDecorations(baselineContent.length)) {
       return;
     }
 

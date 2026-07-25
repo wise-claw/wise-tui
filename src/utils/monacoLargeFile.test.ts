@@ -10,10 +10,15 @@ import {
   MONACO_LARGE_FILE_CHAR_THRESHOLD,
   MONACO_MEDIUM_FILE_CHAR_THRESHOLD,
   monacoEditorOptionsBucket,
+  EDITOR_FILE_MAX_BYTES,
+  isEditorFileContentTooLarge,
   resolveFileEditorKeepAliveLimit,
+  resolveMonacoEditorLanguage,
   resolveWiseMonacoEditorOptions,
   shouldDeferMonacoEditorMount,
+  shouldEnableMonacoGitLineDecorations,
   shouldInjectMonacoContentAfterMount,
+  resolveDiffEditorMountContent,
   shouldSkipMonacoTypeScriptModelSync,
   shouldSyncMonacoTypeScriptDependencies,
 } from "./monacoLargeFile";
@@ -72,6 +77,26 @@ describe("monacoLargeFile", () => {
     );
   });
 
+  test("disables git gutter decorations for large files", () => {
+    expect(shouldEnableMonacoGitLineDecorations(MONACO_LARGE_FILE_CHAR_THRESHOLD - 1)).toBe(true);
+    expect(shouldEnableMonacoGitLineDecorations(MONACO_LARGE_FILE_CHAR_THRESHOLD)).toBe(false);
+  });
+
+  test("isEditorFileContentTooLarge matches 4MiB product gate", () => {
+    expect(isEditorFileContentTooLarge("a".repeat(EDITOR_FILE_MAX_BYTES))).toBe(false);
+    expect(isEditorFileContentTooLarge("a".repeat(EDITOR_FILE_MAX_BYTES + 1))).toBe(true);
+  });
+
+  test("resolveMonacoEditorLanguage forces plaintext for huge files", () => {
+    expect(resolveMonacoEditorLanguage("typescript", MONACO_HUGE_FILE_CHAR_THRESHOLD - 1)).toBe(
+      "typescript",
+    );
+    expect(resolveMonacoEditorLanguage("typescript", MONACO_HUGE_FILE_CHAR_THRESHOLD)).toBe(
+      "plaintext",
+    );
+    expect(resolveMonacoEditorLanguage("json", MONACO_LARGE_FILE_CHAR_THRESHOLD)).toBe("json");
+  });
+
   test("turns off highlight features for medium files", () => {
     const medium = resolveWiseMonacoEditorOptions("x".repeat(MONACO_MEDIUM_FILE_CHAR_THRESHOLD));
     // 中等文件保留正常编辑体验，仅关闭出现/选区高亮。
@@ -83,6 +108,24 @@ describe("monacoLargeFile", () => {
 
   test("maxMonacoContentLength picks the largest body", () => {
     expect(maxMonacoContentLength("abc", "abcdef")).toBe(6);
+  });
+
+  test("resolveDiffEditorMountContent empties huge bodies for post-mount inject", () => {
+    const left = "L".repeat(MONACO_HUGE_FILE_CHAR_THRESHOLD);
+    const right = "R".repeat(100);
+    const huge = resolveDiffEditorMountContent({
+      original: left,
+      modified: right,
+      contentLength: maxMonacoContentLength(left, right),
+    });
+    expect(huge).toEqual({ original: "", modified: "", injectAfterMount: true });
+
+    const small = resolveDiffEditorMountContent({
+      original: "a",
+      modified: "b",
+      contentLength: 1,
+    });
+    expect(small).toEqual({ original: "a", modified: "b", injectAfterMount: false });
   });
 
   test("tsx/jsx 文件开启语义高亮以支持 JSX 标签着色", () => {

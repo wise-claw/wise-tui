@@ -3,6 +3,7 @@ import { RepositoryFilesExplorer } from "../GitPanel/RepositoryFilesExplorer";
 import type { GitPanelOpenFileOptions } from "../GitPanel/types";
 
 import type { ExplorerRevealTarget } from "../../utils/explorerRevealTarget";
+import { preloadMonacoEditor } from "../../utils/preloadMonacoEditor";
 
 const EXPLORER_REVEAL_TARGET_BY_VARIANT: Record<
   NonNullable<ActiveRepositoryFilesPanelProps["variant"]>,
@@ -54,6 +55,12 @@ export const ActiveRepositoryFilesPanel = memo(function ActiveRepositoryFilesPan
     return () => observer.disconnect();
   }, []);
 
+  // 文件树可见时预热 Monaco chunk，缩短首次打开仓库文件的冷启动。
+  useEffect(() => {
+    if (!visible) return;
+    preloadMonacoEditor();
+  }, [visible]);
+
   const rootClassName =
     variant === "workspace-rail"
       ? "app-workspace-file-tree-rail-panel"
@@ -62,7 +69,13 @@ export const ActiveRepositoryFilesPanel = memo(function ActiveRepositoryFilesPan
         : "app-left-sidebar-files-explorer";
 
   return (
-    <div ref={rootRef} className={rootClassName}>
+    <div
+      ref={rootRef}
+      className={rootClassName}
+      onMouseEnter={() => {
+        preloadMonacoEditor();
+      }}
+    >
       <div
         className={
           variant === "workspace-rail"

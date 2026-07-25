@@ -11,6 +11,12 @@ export async function readProjectRelativeFile(repositoryPath: string, relativePa
 export interface ProjectRelativeFileText {
   content: string;
   byteLen: number;
+  mtimeMs: number;
+}
+
+export interface ProjectRelativeFileStat {
+  byteLen: number;
+  mtimeMs: number;
 }
 
 /**
@@ -25,6 +31,26 @@ export async function readProjectRelativeFileForEditor(
     projectPath: repositoryPath,
     relativePath,
   });
+}
+
+/** 轻量 stat（mtime/size），供轮询跳过未变更文件的全文重读。 */
+export async function statProjectRelativeFile(
+  repositoryPath: string,
+  relativePath: string,
+): Promise<ProjectRelativeFileStat> {
+  return invoke<ProjectRelativeFileStat>("stat_project_relative_file", {
+    projectPath: repositoryPath,
+    relativePath,
+  });
+}
+
+export function editorDiskStatUnchanged(
+  prev: ProjectRelativeFileStat | null | undefined,
+  next: ProjectRelativeFileStat,
+): boolean {
+  return (
+    prev != null && prev.mtimeMs === next.mtimeMs && prev.byteLen === next.byteLen
+  );
 }
 
 /** 是否为编辑器封顶读拒绝（文件过大）。 */

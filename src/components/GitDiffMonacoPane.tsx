@@ -5,11 +5,15 @@ import type { editor as MonacoEditorNamespace } from "monaco-editor";
 import { configureWiseMonacoTypeScript } from "../services/monacoTypeScriptEnvironment";
 import { installMonacoTrackpadSelectionGuard } from "../utils/monacoTrackpadSelectionGuard";
 import {
+  isMonacoLargeFileContent,
   maxMonacoContentLength,
   MONACO_HUGE_FILE_CHAR_THRESHOLD,
+  MONACO_LARGE_FILE_CHANGE_DEBOUNCE_MS,
+  resolveDiffEditorMountContent,
   resolveWiseMonacoEditorOptionsFromLength,
   shouldDeferMonacoEditorMount,
 } from "../utils/monacoLargeFile";
+import { scheduleMonacoLargeFileContentInjection } from "../utils/monacoLargeFileContentInjection";
 import { runWhenIdle } from "../utils/deferIdle";
 import { resolveMonacoIdleDeferTimeoutMs } from "../utils/uiWorkDefer";
 import { MonacoSelectionChatToolbar } from "./MonacoSelectionChatToolbar";
@@ -44,9 +48,18 @@ export function GitDiffMonacoPane({
 }: Props) {
   const modifiedListenerRef = useRef<{ dispose: () => void } | null>(null);
   const trackpadGuardRef = useRef<{ dispose: () => void } | null>(null);
+  const contentInjectionCancelRef = useRef<(() => void) | null>(null);
   const diffEditorRef = useRef<MonacoEditorNamespace.IStandaloneDiffEditor | null>(null);
+  const modifiedChangeTimerRef = useRef<number | null>(null);
   const onModifiedChangeRef = useRef(onModifiedChange);
   onModifiedChangeRef.current = onModifiedChange;
+  const originalRef = useRef(original);
+  const modifiedRef = useRef(modified);
+  originalRef.current = original;
+  modifiedRef.current = modified;
+  const largeDiff = isMonacoLargeFileContent(modified) || isMonacoLargeFileContent(original);
+  const largeDiffRef = useRef(largeDiff);
+  largeDiffRef.current = largeDiff;
   const [monacoApi, setMonacoApi] = useState<typeof Monaco | null>(null);
   const [diffEditors, setDiffEditors] = useState<{
     original: MonacoEditorNamespace.IStandaloneCodeEditor;
@@ -59,6 +72,12 @@ export function GitDiffMonacoPane({
 
   const diffContentLength = maxMonacoContentLength(original, modified);
   const hugeDiff = diffContentLength >= MONACO_HUGE_FILE_CHAR_THRESHOLD;
+  // huge：受控 props 固定空串，避免 DiffEditor createModel/setValue 灌入全文；onMount 再注入。
+  const mountContent = resolveDiffEditorMountContent({
+    original,
+    modified,
+    contentLength: diffContentLength,
+  });
   const diffEditorOptions = useMemo(
     () => resolveWiseMonacoEditorOptionsFromLength(diffContentLength, relativePath),
     [diffContentLength, relativePath],
@@ -81,6 +100,12 @@ export function GitDiffMonacoPane({
   useEffect(() => {
     setDiffEditors(null);
     return () => {
+      if (modifiedChangeTimerRef.current != null) {
+        window.clearTimeout(modifiedChangeTimerRef.current);
+        modifiedChangeTimerRef.current = null;
+      }
+      contentInjectionCancelRef.current?.();
+      contentInjectionCancelRef.current = null;
       modifiedListenerRef.current?.dispose();
       modifiedListenerRef.current = null;
       trackpadGuardRef.current?.dispose();
@@ -161,12 +186,12 @@ export function GitDiffMonacoPane({
             sessionId={activeSessionId}
           />
           <DiffEditor
-            key={readOnly ? "wise-git-diff-ro" : "wise-git-diff-rw"}
+            key={`${relativePath}:${readOnly ? "ro" : "rw"}`}
             height="100%"
             className="app-file-editor-monaco app-file-editor-monaco--diff"
             theme={dark ? "vs-dark" : "vs"}
-            original={original}
-            modified={modified}
+            original={mountContent.original}
+            modified={mountContent.modified}
             language={language}
             originalModelPath={`wise-diff-left:${relativePath}`}
             modifiedModelPath={`wise-diff-right:${relativePath}`}
@@ -178,6 +203,8 @@ export function GitDiffMonacoPane({
               modifiedListenerRef.current?.dispose();
               modifiedListenerRef.current = null;
               trackpadGuardRef.current?.dispose();
+              contentInjectionCancelRef.current?.();
+              contentInjectionCancelRef.current = null;
               diffEditorRef.current = diffEditor;
               const originalEditor = diffEditor.getOriginalEditor();
               const modifiedEditor = diffEditor.getModifiedEditor();
@@ -195,9 +222,47 @@ export function GitDiffMonacoPane({
                   }
                 },
               };
+
+              if (mountContent.injectAfterMount) {
+                const left = originalRef.current;
+                const right = modifiedRef.current;
+                const cancelLeft = scheduleMonacoLargeFileContentInjection(
+                  originalEditor,
+                  left,
+                  undefined,
+                  resolveMonacoIdleDeferTimeoutMs(96),
+                );
+                const cancelRight = scheduleMonacoLargeFileContentInjection(
+                  modifiedEditor,
+                  right,
+                  () => {
+                    diffEditor.layout();
+                  },
+                  resolveMonacoIdleDeferTimeoutMs(96),
+                );
+                contentInjectionCancelRef.current = () => {
+                  cancelLeft();
+                  cancelRight();
+                };
+              }
+
               if (!readOnly) {
-                modifiedListenerRef.current = modifiedEditor.onDidChangeModelContent(() => {
+                // large/huge：getValue() 全量拷贝进 React 成本高，与普通编辑器共用防抖。
+                const flushModified = () => {
                   onModifiedChangeRef.current(modifiedEditor.getValue());
+                };
+                modifiedListenerRef.current = modifiedEditor.onDidChangeModelContent(() => {
+                  if (!largeDiffRef.current) {
+                    flushModified();
+                    return;
+                  }
+                  if (modifiedChangeTimerRef.current != null) {
+                    window.clearTimeout(modifiedChangeTimerRef.current);
+                  }
+                  modifiedChangeTimerRef.current = window.setTimeout(() => {
+                    modifiedChangeTimerRef.current = null;
+                    flushModified();
+                  }, MONACO_LARGE_FILE_CHANGE_DEBOUNCE_MS);
                 });
               }
             }}

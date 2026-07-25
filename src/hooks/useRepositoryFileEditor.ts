@@ -4,13 +4,15 @@ import { message, Modal } from "antd";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { GitPanelOpenFileOptions } from "../components/GitPanel/types";
-import { gitShowRevision } from "../services/git";
+import { gitShowRevisionForEditor } from "../services/git";
 import {
+  editorDiskStatUnchanged,
   isEditorFileTooLargeError,
-  readProjectRelativeFile,
   readProjectRelativeFileBase64,
   readProjectRelativeFileForEditor,
+  statProjectRelativeFile,
   writeProjectRelativeFile,
+  type ProjectRelativeFileStat,
 } from "../services/projectRelativeFiles";
 import { base64ToArrayBuffer, joinRepositoryAbsolutePath } from "../utils/repositoryPreviewBinary";
 import { openInFinder } from "../services/repository";
@@ -27,6 +29,7 @@ import {
 } from "../utils/repositoryFilePreview";
 import { toUiErrorMessage } from "../utils/appErrorMessage";
 import {
+  isEditorFileContentTooLarge,
   isMonacoHugeFileContent,
   isMonacoLargeFileContent,
   MONACO_LARGE_FILE_CHANGE_DEBOUNCE_MS,
@@ -47,7 +50,10 @@ const EDITOR_EXTERNAL_REFRESH_THROTTLE_MS = 300;
  * 轮询，确保外部修改（含多仓库、子工作区 tab）最终被刷新。
  */
 const EDITOR_FOREGROUND_POLL_MS = 4000;
+/** 离开 huge tab 后延迟释放正文，避免快速来回切换时反复重读。 */
+const EDITOR_HUGE_CONTENT_RELEASE_DELAY_MS = 500;
 const EMPTY_TABS: FileEditorTab[] = [];
+const EMPTY_RELEASED_CONTENT = "";
 
 export interface FileEditorTab {
   relativePath: string;
@@ -70,6 +76,13 @@ export interface FileEditorTab {
   externalDeleted?: boolean;
   /** 外部内容替换计数；自增时驱动大文件（非受控）编辑器重新注入内容。 */
   contentVersion?: number;
+  /** 打开/刷新时记录的磁盘指纹，供轮询先比 mtime/size 再决定是否全文重读。 */
+  diskStat?: ProjectRelativeFileStat;
+  /**
+   * 非活跃 huge 且干净时释放 content/originalContent 以省内存。
+   * 再次激活时按 diskStat/路径重读；为 true 时正文为空串不代表文件为空。
+   */
+  contentReleased?: boolean;
 }
 
 /**
@@ -82,7 +95,7 @@ export interface FileEditorTab {
  * - clear-external-flag：磁盘又变回与 originalContent 一致，清除旧标记。
  */
 export type EditorTabRefreshDecision =
-  | { kind: "skip"; reason: "loading" | "diff" | "saving" }
+  | { kind: "skip"; reason: "loading" | "diff" | "saving" | "released" }
   | { kind: "unchanged" }
   | { kind: "reload-clean"; disk: string }
   | { kind: "mark-external-changed" }
@@ -101,6 +114,8 @@ export function planEditorTabRefresh(args: {
   if (tab.loading) return { kind: "skip", reason: "loading" };
   if (tab.diffOriginal !== undefined) return { kind: "skip", reason: "diff" };
   if (isSaving) return { kind: "skip", reason: "saving" };
+  // 正文已释放：originalContent 为空，不能走普通对比；由 fingerprint 路径或激活重读处理。
+  if (tab.contentReleased) return { kind: "skip", reason: "released" };
   if (diskContent === null) return { kind: "external-deleted" };
   if (diskContent === tab.originalContent) {
     if (tab.externalChanged || tab.externalDeleted) {
@@ -137,13 +152,43 @@ export function mergeEditorRefreshScope(
  * Panel tab 点与 hook 内多处 dirty 统计共用，避免大文件每次 render O(n) 双扫。
  */
 export function isFileEditorTabDirty(
-  tab: Pick<FileEditorTab, "content" | "originalContent">,
+  tab: Pick<FileEditorTab, "content" | "originalContent" | "contentReleased">,
   pending?: string,
 ): boolean {
+  if (tab.contentReleased) return false;
   const effective = pending ?? tab.content;
   if (effective === tab.originalContent) return false;
   if (effective.length !== tab.originalContent.length) return true;
   return effective !== tab.originalContent;
+}
+
+/** Diff 两侧正文二次闸门：任一侧超限则抛出，与编辑器封顶读错误文案对齐。 */
+export function assertEditorDiffPayloadWithinLimit(left: string, right: string): void {
+  if (isEditorFileContentTooLarge(left) || isEditorFileContentTooLarge(right)) {
+    throw new Error("文件超过 4MB 编辑器上限，请用系统应用打开");
+  }
+}
+
+/**
+ * 是否应释放非活跃 huge tab 的正文（仅干净、非 diff、未释放）。
+ * 抽出便于单测，避免在 React effect 里堆叠条件。
+ */
+export function shouldReleaseInactiveHugeTabContent(args: {
+  tab: Pick<
+    FileEditorTab,
+    "content" | "originalContent" | "contentReleased" | "diffOriginal" | "loading"
+  >;
+  isActive: boolean;
+  pending?: string;
+}): boolean {
+  const { tab, isActive, pending } = args;
+  if (isActive) return false;
+  if (tab.contentReleased) return false;
+  if (tab.loading) return false;
+  if (tab.diffOriginal !== undefined) return false;
+  if (!isMonacoHugeFileContent(tab.content)) return false;
+  if (isFileEditorTabDirty(tab, pending)) return false;
+  return true;
 }
 
 interface UseRepositoryFileEditorOptions {
@@ -242,6 +287,8 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** 待执行刷新的范围：undefined=无，null=全量，string=限定仓库。节流期间合并保留最宽意图。 */
   const pendingRefreshScopeRef = useRef<string | null | undefined>(undefined);
+  /** 节流窗口内是否出现过 focus/git-changed（要求全文重读，禁止降级为仅 stat）。 */
+  const pendingRefreshFullReadRef = useRef(false);
 
   const flushPendingTabContent = useCallback(
     (relativePath?: string) => {
@@ -335,7 +382,13 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
   );
 
   const applyLoadedEditorContent = useCallback(
-    (relativePath: string, rootPath: string, body: string, focusLine?: number | null) => {
+    (
+      relativePath: string,
+      rootPath: string,
+      body: string,
+      focusLine?: number | null,
+      diskStat?: ProjectRelativeFileStat,
+    ) => {
       // content 与 originalContent 共用同一字符串引用，避免干净 tab 双份拷贝。
       const apply = () => {
         updatePaneTabs(paneIndex, (prev) =>
@@ -348,6 +401,8 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
                   originalContent: body,
                   loading: false,
                   focusLine: focusLine ?? t.focusLine ?? null,
+                  diskStat,
+                  contentReleased: false,
                 }
               : t,
           ),
@@ -531,7 +586,14 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
       // 命中既有 tab 时仍需校验 rootPath：跨多 pane / dispatcher 降级到错 host 路径下，
       // 可能存在「同 relativePath 但 rootPath 来自另一仓库」的旧 tab。
       // 旧实现直接沿用旧 content，表现为打开「错的仓库」的文件 —— 这是 bug 5-4 真根因。
-      if (existing && existing.rootPath === rootPath && !existing.loading && existing.diffOriginal === undefined) {
+      // contentReleased：正文已腾空，不能只聚焦，必须走下方重读。
+      if (
+        existing &&
+        existing.rootPath === rootPath &&
+        !existing.loading &&
+        existing.diffOriginal === undefined &&
+        !existing.contentReleased
+      ) {
         updatePaneTabs(paneIndex, (prev) =>
           prev.map((tab) =>
             tab.relativePath === relativePath
@@ -567,8 +629,11 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
       updatePaneActivePath(paneIndex, () => relativePath);
 
       try {
-        const { content: body } = await readProjectRelativeFileForEditor(rootPath, relativePath);
-        applyLoadedEditorContent(relativePath, rootPath, body, options?.line ?? null);
+        const loaded = await readProjectRelativeFileForEditor(rootPath, relativePath);
+        applyLoadedEditorContent(relativePath, rootPath, loaded.content, options?.line ?? null, {
+          byteLen: loaded.byteLen,
+          mtimeMs: loaded.mtimeMs,
+        });
       } catch (error) {
         console.error("Failed to read file:", error);
         const absPath = joinRepositoryAbsolutePath(rootPath, relativePath);
@@ -638,12 +703,21 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
         let left = "";
         let right = "";
         if (section === "unstaged") {
-          left = await gitShowRevision(rootPath, `:${norm}`);
-          right = await readProjectRelativeFile(rootPath, relativePath);
+          const [indexLeft, loaded] = await Promise.all([
+            gitShowRevisionForEditor(rootPath, `:${norm}`),
+            readProjectRelativeFileForEditor(rootPath, relativePath),
+          ]);
+          left = indexLeft;
+          right = loaded.content;
         } else {
-          left = await gitShowRevision(rootPath, `HEAD:${norm}`);
-          right = await gitShowRevision(rootPath, `:${norm}`);
+          const [headLeft, indexRight] = await Promise.all([
+            gitShowRevisionForEditor(rootPath, `HEAD:${norm}`),
+            gitShowRevisionForEditor(rootPath, `:${norm}`),
+          ]);
+          left = headLeft;
+          right = indexRight;
         }
+        assertEditorDiffPayloadWithinLimit(left, right);
         if (loadGeneration !== gitDiffLoadGenerationRef.current) {
           return;
         }
@@ -675,7 +749,11 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
           return;
         }
         console.error("Failed to load git diff:", error);
-        message.error(`无法加载 diff：${relativePath}`);
+        message.error(
+          isEditorFileTooLargeError(error)
+            ? `Diff 文件过大（超过 4MB）：${relativePath}`
+            : `无法加载 diff：${relativePath}`,
+        );
         updatePaneTabs(paneIndex, (prev) => {
           const nextTabs = prev.filter((t) => t.relativePath !== relativePath);
           updatePaneActivePath(paneIndex, (cur) => {
@@ -733,8 +811,11 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
       updatePaneActivePath(paneIndex, () => relativePath);
 
       try {
-        const left = await gitShowRevision(rootPath, `${sha}^:${norm}`);
-        const right = await gitShowRevision(rootPath, `${sha}:${norm}`);
+        const [left, right] = await Promise.all([
+          gitShowRevisionForEditor(rootPath, `${sha}^:${norm}`),
+          gitShowRevisionForEditor(rootPath, `${sha}:${norm}`),
+        ]);
+        assertEditorDiffPayloadWithinLimit(left, right);
         if (loadGeneration !== gitDiffLoadGenerationRef.current) {
           return;
         }
@@ -766,7 +847,11 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
           return;
         }
         console.error("Failed to load commit diff:", error);
-        message.error(`无法加载提交 diff：${relativePath}`);
+        message.error(
+          isEditorFileTooLargeError(error)
+            ? `Diff 文件过大（超过 4MB）：${relativePath}`
+            : `无法加载提交 diff：${relativePath}`,
+        );
         updatePaneTabs(paneIndex, (prev) => {
           const nextTabs = prev.filter((t) => t.relativePath !== relativePath);
           updatePaneActivePath(paneIndex, (cur) => {
@@ -825,8 +910,11 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
       updatePaneActivePath(paneIndex, () => relativePath);
 
       try {
-        const left = await gitShowRevision(rootPath, `${baseSha}:${norm}`);
-        const right = await gitShowRevision(rootPath, `${headSha}:${norm}`);
+        const [left, right] = await Promise.all([
+          gitShowRevisionForEditor(rootPath, `${baseSha}:${norm}`),
+          gitShowRevisionForEditor(rootPath, `${headSha}:${norm}`),
+        ]);
+        assertEditorDiffPayloadWithinLimit(left, right);
         if (loadGeneration !== gitDiffLoadGenerationRef.current) {
           return;
         }
@@ -858,7 +946,11 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
           return;
         }
         console.error("Failed to load commit compare diff:", error);
-        message.error(`无法加载对比 diff：${relativePath}`);
+        message.error(
+          isEditorFileTooLargeError(error)
+            ? `Diff 文件过大（超过 4MB）：${relativePath}`
+            : `无法加载对比 diff：${relativePath}`,
+        );
         updatePaneTabs(paneIndex, (prev) => {
           const nextTabs = prev.filter((t) => t.relativePath !== relativePath);
           updatePaneActivePath(paneIndex, (cur) => {
@@ -1057,7 +1149,7 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
 
   /** 用磁盘内容覆盖一个干净 tab 的内容（含大文件 startTransition、contentVersion 自增）。 */
   const applyExternalDiskContent = useCallback(
-    (relativePath: string, disk: string) => {
+    (relativePath: string, disk: string, diskStat?: ProjectRelativeFileStat) => {
       discardTabPendingContent(relativePath);
       const apply = () => {
         updatePaneTabs(paneIndex, (prev) =>
@@ -1070,7 +1162,9 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
                   loading: false,
                   externalChanged: false,
                   externalDeleted: false,
+                  contentReleased: false,
                   contentVersion: (t.contentVersion ?? 0) + 1,
+                  diskStat: diskStat ?? t.diskStat,
                 }
               : t,
           ),
@@ -1107,6 +1201,10 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
         pendingRefreshScopeRef.current,
         incomingScope,
       );
+      // focus/git-changed 要求全文重读；节流窗口内若混入 poll，不得降级为仅 stat。
+      if (opts?.trigger !== "poll") {
+        pendingRefreshFullReadRef.current = true;
+      }
       if (refreshTimerRef.current != null) {
         clearTimeout(refreshTimerRef.current);
       }
@@ -1114,6 +1212,8 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
         refreshTimerRef.current = null;
         const scheduledScope = pendingRefreshScopeRef.current;
         pendingRefreshScopeRef.current = undefined;
+        const allowStatFirst = !pendingRefreshFullReadRef.current;
+        pendingRefreshFullReadRef.current = false;
         if (scheduledScope === undefined) return;
         const generation = ++refreshGenerationRef.current;
         const repoPath = scheduledScope ?? "";
@@ -1127,26 +1227,126 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
         if (snapshot.length === 0) return;
         void Promise.allSettled(
           snapshot.map(async (tab) => {
+            const activePath = fileEditorActivePathRef.current.get(paneIndex) ?? null;
+            const releasedInactive =
+              Boolean(tab.contentReleased) && tab.relativePath !== activePath;
             try {
-              const { content: disk } = await readProjectRelativeFileForEditor(
+              // 已释放正文的非活跃 huge tab：只维护 diskStat，绝不把正文重新灌进内存。
+              if (releasedInactive) {
+                const stat = await statProjectRelativeFile(tab.rootPath, tab.relativePath);
+                if (editorDiskStatUnchanged(tab.diskStat, stat)) {
+                  return {
+                    tab,
+                    disk: null,
+                    oversized: false as const,
+                    skipped: true as const,
+                    fingerprintOnly: false as const,
+                    diskStat: stat,
+                    missing: false as const,
+                  };
+                }
+                return {
+                  tab,
+                  disk: null,
+                  oversized: false as const,
+                  skipped: false as const,
+                  fingerprintOnly: true as const,
+                  diskStat: stat,
+                  missing: false as const,
+                };
+              }
+              // 纯 poll：先轻量 stat；mtime/size 未变则跳过全文 IPC（尤其惠及 large/huge）。
+              if (allowStatFirst) {
+                const stat = await statProjectRelativeFile(tab.rootPath, tab.relativePath);
+                if (editorDiskStatUnchanged(tab.diskStat, stat)) {
+                  return {
+                    tab,
+                    disk: null,
+                    oversized: false as const,
+                    skipped: true as const,
+                    fingerprintOnly: false as const,
+                    diskStat: stat,
+                    missing: false as const,
+                  };
+                }
+              }
+              const loaded = await readProjectRelativeFileForEditor(
                 tab.rootPath,
                 tab.relativePath,
               );
-              return { tab, disk, oversized: false as const };
+              return {
+                tab,
+                disk: loaded.content,
+                oversized: false as const,
+                skipped: false as const,
+                fingerprintOnly: false as const,
+                diskStat: { byteLen: loaded.byteLen, mtimeMs: loaded.mtimeMs },
+                missing: false as const,
+              };
             } catch (error) {
               // 文件长大超过编辑器上限：保留当前内容，不误标删除。
               if (isEditorFileTooLargeError(error)) {
-                return { tab, disk: null, oversized: true as const };
+                return {
+                  tab,
+                  disk: null,
+                  oversized: true as const,
+                  skipped: false as const,
+                  fingerprintOnly: false as const,
+                  diskStat: undefined,
+                  missing: false as const,
+                };
               }
-              return { tab, disk: null, oversized: false as const };
+              return {
+                tab,
+                disk: null,
+                oversized: false as const,
+                skipped: false as const,
+                fingerprintOnly: false as const,
+                diskStat: undefined,
+                missing: releasedInactive,
+              };
             }
           }),
         ).then((results) => {
           if (generation !== refreshGenerationRef.current) return;
           for (const result of results) {
             if (result.status !== "fulfilled") continue;
-            const { tab, disk, oversized } = result.value;
-            if (oversized) continue;
+            const { tab, disk, oversized, skipped, diskStat, fingerprintOnly, missing } =
+              result.value;
+            if (oversized || skipped) continue;
+            // apply 前再次校验：tab 可能已被关闭或切换为 diff 视图。
+            const current = fileEditorTabsRef.current
+              .get(paneIndex)
+              ?.find((t) => t.relativePath === tab.relativePath);
+            if (!current || current.loading || current.diffOriginal !== undefined) continue;
+            if (savingPathsRef.current.has(tab.relativePath)) continue;
+
+            if (fingerprintOnly && diskStat) {
+              if (!editorDiskStatUnchanged(current.diskStat, diskStat)) {
+                updatePaneTabs(paneIndex, (prev) =>
+                  prev.map((t) =>
+                    t.relativePath === tab.relativePath ? { ...t, diskStat } : t,
+                  ),
+                );
+              }
+              continue;
+            }
+
+            // 已释放且非活跃：stat 失败视为外部删除（不走 plan，避免空 original 误判）。
+            // 若结果到达时 tab 已重新激活并灌回正文，丢弃该过期 missing，避免误标删除。
+            if (missing) {
+              if (current.contentReleased) {
+                updatePaneTabs(paneIndex, (prev) =>
+                  prev.map((t) =>
+                    t.relativePath === tab.relativePath
+                      ? { ...t, externalDeleted: true, externalChanged: false }
+                      : t,
+                  ),
+                );
+              }
+              continue;
+            }
+
             const pending = pendingTabContentRef.current.get(
               pendingKey(paneIndex, tab.relativePath),
             );
@@ -1158,17 +1358,19 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
               isSaving: savingPathsRef.current.has(tab.relativePath),
             });
             if (decision.kind === "skip") continue;
-            // apply 前再次校验：tab 可能已被关闭或切换为 diff 视图。
-            const current = fileEditorTabsRef.current
-              .get(paneIndex)
-              ?.find((t) => t.relativePath === tab.relativePath);
-            if (!current || current.loading || current.diffOriginal !== undefined) continue;
-            if (savingPathsRef.current.has(tab.relativePath)) continue;
             switch (decision.kind) {
               case "unchanged":
+                // 内容未变但可能缺 fingerprint：补齐 diskStat 供后续轮询短路。
+                if (diskStat && !current.diskStat) {
+                  updatePaneTabs(paneIndex, (prev) =>
+                    prev.map((t) =>
+                      t.relativePath === tab.relativePath ? { ...t, diskStat } : t,
+                    ),
+                  );
+                }
                 continue;
               case "reload-clean":
-                applyExternalDiskContent(tab.relativePath, decision.disk);
+                applyExternalDiskContent(tab.relativePath, decision.disk, diskStat);
                 continue;
               case "mark-external-changed":
                 updatePaneTabs(paneIndex, (prev) =>
@@ -1207,7 +1409,7 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
     [applyExternalDiskContent, paneIndex, updatePaneTabs],
   );
 
-  /** 用户点「重新加载」：强制用磁盘内容覆盖（即使 tab 脏）。 */
+  /** 用户点「重新加载」：强制用磁盘内容覆盖（即使 tab 脏）。也用于 contentReleased 再激活灌回。 */
   const reloadEditorTabFromDisk = useCallback(
     async (relativePath: string) => {
       const tab = fileEditorTabsRef.current
@@ -1219,25 +1421,57 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
         missingFileRootMessage();
         return;
       }
+      const rehydratingReleased = Boolean(tab.contentReleased);
+      if (rehydratingReleased) {
+        updatePaneTabs(paneIndex, (prev) =>
+          prev.map((t) =>
+            t.relativePath === relativePath ? { ...t, loading: true } : t,
+          ),
+        );
+      }
       try {
-        const { content: disk } = await readProjectRelativeFileForEditor(rootPath, relativePath);
+        const loaded = await readProjectRelativeFileForEditor(rootPath, relativePath);
         const current = fileEditorTabsRef.current
           .get(paneIndex)
           ?.find((t) => t.relativePath === relativePath);
-        if (!current || current.loading || current.diffOriginal !== undefined) return;
-        applyExternalDiskContent(relativePath, disk);
+        // 再激活灌回时 loading=true 是预期态，仍允许写入；其它路径保持原守卫。
+        if (
+          !current ||
+          current.diffOriginal !== undefined ||
+          (current.loading && !rehydratingReleased)
+        ) {
+          return;
+        }
+        applyExternalDiskContent(relativePath, loaded.content, {
+          byteLen: loaded.byteLen,
+          mtimeMs: loaded.mtimeMs,
+        });
       } catch (error) {
         console.error("Failed to reload file from disk:", error);
         if (isEditorFileTooLargeError(error)) {
           const absPath = joinRepositoryAbsolutePath(rootPath, relativePath);
           void openInFinder(absPath).catch(() => undefined);
           message.error(`文件过大（超过 4MB），已用系统应用打开：${relativePath}`);
+          if (rehydratingReleased) {
+            updatePaneTabs(paneIndex, (prev) =>
+              prev.map((t) =>
+                t.relativePath === relativePath
+                  ? { ...t, loading: false, contentReleased: true }
+                  : t,
+              ),
+            );
+          }
           return;
         }
         updatePaneTabs(paneIndex, (prev) =>
           prev.map((t) =>
             t.relativePath === relativePath
-              ? { ...t, externalDeleted: true, externalChanged: false }
+              ? {
+                  ...t,
+                  loading: false,
+                  externalDeleted: true,
+                  externalChanged: false,
+                }
               : t,
           ),
         );
@@ -1339,6 +1573,64 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
   );
 
   /**
+   * 非活跃、干净的 huge tab：延迟释放正文，仅保留 diskStat / 元数据。
+   * 再次激活时由 setFileEditorActivePath / loadEditorFile 重读。
+   */
+  useEffect(() => {
+    const activePath = fileEditorActivePath;
+    const timer = window.setTimeout(() => {
+      const tabs = fileEditorTabsRef.current.get(paneIndex) ?? [];
+      const toRelease: string[] = [];
+      for (const tab of tabs) {
+        const pending = pendingTabContentRef.current.get(
+          pendingKey(paneIndex, tab.relativePath),
+        );
+        if (
+          shouldReleaseInactiveHugeTabContent({
+            tab,
+            isActive: tab.relativePath === activePath,
+            pending,
+          })
+        ) {
+          toRelease.push(tab.relativePath);
+        }
+      }
+      if (toRelease.length === 0) return;
+      for (const relativePath of toRelease) {
+        discardTabPendingContent(relativePath);
+      }
+      updatePaneTabs(paneIndex, (prev) => {
+        let changed = false;
+        const next = prev.map((tab) => {
+          if (!toRelease.includes(tab.relativePath)) return tab;
+          // 再次确认仍符合释放条件（延迟窗口内可能又被激活/弄脏）。
+          const pending = pendingTabContentRef.current.get(
+            pendingKey(paneIndex, tab.relativePath),
+          );
+          if (
+            !shouldReleaseInactiveHugeTabContent({
+              tab,
+              isActive: tab.relativePath === (fileEditorActivePathRef.current.get(paneIndex) ?? null),
+              pending,
+            })
+          ) {
+            return tab;
+          }
+          changed = true;
+          return {
+            ...tab,
+            content: EMPTY_RELEASED_CONTENT,
+            originalContent: EMPTY_RELEASED_CONTENT,
+            contentReleased: true,
+          };
+        });
+        return changed ? next : prev;
+      });
+    }, EDITOR_HUGE_CONTENT_RELEASE_DELAY_MS);
+    return () => window.clearTimeout(timer);
+  }, [discardTabPendingContent, fileEditorActivePath, fileEditorTabs, paneIndex, updatePaneTabs]);
+
+  /**
    * per-pane 化后：layout 端持有一份"按 paneIndex 取 setter 闭包"的 map
    * （见 `AppWorkspaceLayout` 的 `paneProviderMap`）。这里的 setter 只改
    * 当前 hook 实例的 pane，保持原签名以便 layout 直接接入。
@@ -1352,8 +1644,14 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
   const setFileEditorActivePath = useCallback(
     (path: string | null) => {
       updatePaneActivePath(paneIndex, () => path);
+      if (!path) return;
+      const tab = fileEditorTabsRef.current
+        .get(paneIndex)
+        ?.find((t) => t.relativePath === path);
+      if (!tab?.contentReleased || tab.loading) return;
+      void reloadEditorTabFromDisk(path);
     },
-    [paneIndex, updatePaneActivePath],
+    [paneIndex, reloadEditorTabFromDisk, updatePaneActivePath],
   );
 
   return {

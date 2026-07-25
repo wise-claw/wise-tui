@@ -1027,6 +1027,9 @@ pub(crate) fn git_discard_all(path: String) -> Result<(), String> {
         .map_err(|e| e.to_string())
 }
 
+/// 与 `project_relative_files::MAX_EDITOR_FILE_BYTES` 对齐：编辑器/Diff 不接收超大 blob。
+const MAX_GIT_SHOW_REVISION_BYTES: usize = 4 * 1024 * 1024;
+
 #[tauri::command]
 pub(crate) fn git_show_revision(
     repository_path: String,
@@ -1041,6 +1044,9 @@ pub(crate) fn git_show_revision(
         .map_err(|e| format!("git show failed to start: {}", e))?;
 
     if output.status.success() {
+        if output.stdout.len() > MAX_GIT_SHOW_REVISION_BYTES {
+            return Err("文件超过 4MB 编辑器上限，请用系统应用打开".into());
+        }
         return String::from_utf8(output.stdout).map_err(|e| e.to_string());
     }
     let stderr = String::from_utf8_lossy(&output.stderr).to_string();

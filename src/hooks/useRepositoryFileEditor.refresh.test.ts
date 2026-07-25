@@ -1,10 +1,17 @@
 import { describe, expect, test } from "bun:test";
 import {
+  assertEditorDiffPayloadWithinLimit,
   isFileEditorTabDirty,
   mergeEditorRefreshScope,
   planEditorTabRefresh,
+  shouldReleaseInactiveHugeTabContent,
   type FileEditorTab,
 } from "./useRepositoryFileEditor";
+import {
+  EDITOR_FILE_MAX_BYTES,
+  MONACO_HUGE_FILE_CHAR_THRESHOLD,
+} from "../utils/monacoLargeFile";
+import { editorDiskStatUnchanged } from "../services/projectRelativeFiles";
 
 /** 构造一个普通（非 diff）已加载完成的 tab 工厂。 */
 function makeTab(overrides: Partial<FileEditorTab> = {}): FileEditorTab {
@@ -129,6 +136,71 @@ describe("planEditorTabRefresh", () => {
     });
     expect(decision).toEqual({ kind: "reload-clean", disk: "changed" });
   });
+
+  test("正文已释放的 tab 跳过普通对比（避免空 original 误判）", () => {
+    const tab = makeTab({
+      content: "",
+      originalContent: "",
+      contentReleased: true,
+    });
+    const decision = planEditorTabRefresh({
+      tab,
+      effectiveContent: "",
+      diskContent: "disk-body",
+      isSaving: false,
+    });
+    expect(decision).toEqual({ kind: "skip", reason: "released" });
+  });
+});
+
+describe("shouldReleaseInactiveHugeTabContent", () => {
+  const huge = "x".repeat(MONACO_HUGE_FILE_CHAR_THRESHOLD);
+
+  test("非活跃、干净、huge → 应释放", () => {
+    const tab = makeTab({ content: huge, originalContent: huge });
+    expect(
+      shouldReleaseInactiveHugeTabContent({ tab, isActive: false }),
+    ).toBe(true);
+  });
+
+  test("活跃 tab 不释放", () => {
+    const tab = makeTab({ content: huge, originalContent: huge });
+    expect(
+      shouldReleaseInactiveHugeTabContent({ tab, isActive: true }),
+    ).toBe(false);
+  });
+
+  test("脏 tab / 已释放 / diff / 非 huge 不释放", () => {
+    expect(
+      shouldReleaseInactiveHugeTabContent({
+        tab: makeTab({ content: huge, originalContent: huge }),
+        isActive: false,
+        pending: `${huge}!`,
+      }),
+    ).toBe(false);
+    expect(
+      shouldReleaseInactiveHugeTabContent({
+        tab: makeTab({
+          content: "",
+          originalContent: "",
+          contentReleased: true,
+        }),
+        isActive: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldReleaseInactiveHugeTabContent({
+        tab: makeTab({ content: huge, originalContent: huge, diffOriginal: "base" }),
+        isActive: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldReleaseInactiveHugeTabContent({
+        tab: makeTab({ content: "small", originalContent: "small" }),
+        isActive: false,
+      }),
+    ).toBe(false);
+  });
 });
 
 describe("mergeEditorRefreshScope", () => {
@@ -173,5 +245,40 @@ describe("isFileEditorTabDirty", () => {
     const tab = makeTab({ content: "original", originalContent: "original" });
     expect(isFileEditorTabDirty(tab, "changed")).toBe(true);
     expect(isFileEditorTabDirty(tab, "original")).toBe(false);
+  });
+
+  test("contentReleased 视为干净", () => {
+    const tab = makeTab({
+      content: "",
+      originalContent: "",
+      contentReleased: true,
+    });
+    expect(isFileEditorTabDirty(tab)).toBe(false);
+    expect(isFileEditorTabDirty(tab, "stale-pending")).toBe(false);
+  });
+});
+
+describe("assertEditorDiffPayloadWithinLimit", () => {
+  test("两侧均未超限时不抛", () => {
+    expect(() => assertEditorDiffPayloadWithinLimit("a", "b")).not.toThrow();
+  });
+
+  test("任一侧超限时抛出编辑器上限错误", () => {
+    const huge = "x".repeat(EDITOR_FILE_MAX_BYTES + 1);
+    expect(() => assertEditorDiffPayloadWithinLimit(huge, "ok")).toThrow(/4MB/);
+    expect(() => assertEditorDiffPayloadWithinLimit("ok", huge)).toThrow(/4MB/);
+  });
+});
+
+describe("editorDiskStatUnchanged", () => {
+  test("无既往 fingerprint 视为已变（需全文读）", () => {
+    expect(editorDiskStatUnchanged(undefined, { mtimeMs: 1, byteLen: 10 })).toBe(false);
+  });
+
+  test("mtime 与 size 均相同视为未变", () => {
+    const stat = { mtimeMs: 100, byteLen: 2048 };
+    expect(editorDiskStatUnchanged(stat, { ...stat })).toBe(true);
+    expect(editorDiskStatUnchanged(stat, { mtimeMs: 101, byteLen: 2048 })).toBe(false);
+    expect(editorDiskStatUnchanged(stat, { mtimeMs: 100, byteLen: 2049 })).toBe(false);
   });
 });

@@ -16,6 +16,12 @@ export const MONACO_HUGE_FILE_CHAR_THRESHOLD = 512 * 1024;
 /** 超大文件 onChange 合并写入 React 状态的间隔（毫秒）。 */
 export const MONACO_LARGE_FILE_CHANGE_DEBOUNCE_MS = 180;
 
+/**
+ * 编辑器可读/可写正文上限（字节，与 Tauri `MAX_EDITOR_FILE_BYTES` 对齐）。
+ * 前端对已拿到的字符串用 `length` 作近似二次闸门（源码多为 ASCII，偏差可接受）。
+ */
+export const EDITOR_FILE_MAX_BYTES = 4 * 1024 * 1024;
+
 /** 小/中文件 keep-alive 上限。 */
 export const FILE_EDITOR_KEEP_ALIVE_LIMIT_DEFAULT = 8;
 /** large 文件 keep-alive 上限。 */
@@ -54,6 +60,50 @@ export function shouldDeferMonacoEditorMount(contentLength: number): boolean {
 
 export function shouldInjectMonacoContentAfterMount(contentLength: number): boolean {
   return contentLength >= MONACO_HUGE_FILE_CHAR_THRESHOLD;
+}
+
+/**
+ * DiffEditor 的 original/modified 为受控 props，huge 时挂载即 createModel(全文) 会卡主线程。
+ * 与普通编辑器一致：huge 先空串挂载，onMount 后再 idle 注入。
+ */
+export function resolveDiffEditorMountContent(args: {
+  original: string;
+  modified: string;
+  contentLength: number;
+}): { original: string; modified: string; injectAfterMount: boolean } {
+  if (shouldInjectMonacoContentAfterMount(args.contentLength)) {
+    return { original: "", modified: "", injectAfterMount: true };
+  }
+  return {
+    original: args.original,
+    modified: args.modified,
+    injectAfterMount: false,
+  };
+}
+
+/**
+ * 是否启用 Git 行 gutter 装饰。
+ * large/huge 上 `diffLines` + `getValue()` 全量比对会卡主线程，直接关闭。
+ */
+export function shouldEnableMonacoGitLineDecorations(contentLength: number): boolean {
+  return contentLength < MONACO_LARGE_FILE_CHAR_THRESHOLD;
+}
+
+/** 已拿到的正文是否超过编辑器产品上限（近似用 string.length）。 */
+export function isEditorFileContentTooLarge(content: string): boolean {
+  return content.length > EDITOR_FILE_MAX_BYTES;
+}
+
+/**
+ * 超大文件强制 plaintext，避免拉起 TS/JSON 等 language worker 拖慢首开。
+ * large 及以下保留路径推断语言（语法着色仍有价值，且 large 已关 TS model sync）。
+ */
+export function resolveMonacoEditorLanguage(
+  baseLanguage: string,
+  contentLength: number,
+): string {
+  if (contentLength >= MONACO_HUGE_FILE_CHAR_THRESHOLD) return "plaintext";
+  return baseLanguage;
 }
 
 /**

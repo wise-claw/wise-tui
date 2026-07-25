@@ -20,8 +20,10 @@ import {
   isMonacoLargeFileContent,
   monacoEditorOptionsBucket,
   MONACO_LARGE_FILE_CHAR_THRESHOLD,
+  resolveMonacoEditorLanguage,
   resolveWiseMonacoEditorOptionsFromLength,
   shouldDeferMonacoEditorMount,
+  shouldEnableMonacoGitLineDecorations,
   shouldInjectMonacoContentAfterMount,
   shouldSyncMonacoTypeScriptDependencies,
 } from "../utils/monacoLargeFile";
@@ -33,6 +35,8 @@ import { useGitRepositoryExplorerStatus } from "../hooks/useGitRepositoryExplore
 import { useMonacoGitModifiedLineDecorations } from "../hooks/useMonacoGitModifiedLineDecorations";
 import { MarkdownBody } from "./ClaudeSessions/MarkdownElements";
 import rehypeRaw from "rehype-raw";
+
+const EMPTY_TS_SOURCES: { relativePath: string; content: string }[] = [];
 
 const MonacoEditor = lazy(() => import("@monaco-editor/react"));
 
@@ -162,7 +166,15 @@ function RepositoryFileEditorTabSurface({
   const contentInjectionCancelRef = useRef<(() => void) | null>(null);
   const lastInjectedContentVersionRef = useRef<number | null>(null);
 
-  const language = monacoLanguageFromRepositoryPath(tab.relativePath);
+  const contentLength = tab.content.length;
+  const optionsBucket = monacoEditorOptionsBucket(contentLength);
+  // medium 文件（50KB-128KB）仅关闭高亮特性，仍走受控 value 路径，
+  // 不进入大文件的 defaultValue/延后注入流程。
+  const largeFile = optionsBucket === "large" || optionsBucket === "huge";
+  const hugeFile = optionsBucket === "huge";
+  const baseLanguage = monacoLanguageFromRepositoryPath(tab.relativePath);
+  // huge：plaintext 避免拉起 TS/JSON worker；large 保留语法着色。
+  const language = resolveMonacoEditorLanguage(baseLanguage, contentLength);
   // 多 pane 下同 relativePath 但不同仓库的文件（典型：两屏各自打开 README.md）必须落到不同
   // Monaco model。@monaco-editor/react 按 `path` 取/建 model：若两屏 path 相同，会复用同一
   // model，导致两屏互相 setValue 覆盖内容（最后写者赢），且关闭一屏时 dispose 共享 model
@@ -172,23 +184,15 @@ function RepositoryFileEditorTabSurface({
   const editorPath = isTypeScriptLikeRepositoryPath(tab.relativePath)
     ? monacoUriForRepositoryPath(tab.relativePath, repositoryPath)
     : monacoUriForRepositoryPath(tab.relativePath, tab.rootPath || repositoryPath);
-  const typeScriptSources = useMemo(
-    () =>
-      tab.diffOriginal === undefined
-        ? [{ relativePath: tab.relativePath, content: tab.content }]
-        : [],
-    [tab.content, tab.diffOriginal, tab.relativePath],
-  );
-  const contentLength = tab.content.length;
-  const optionsBucket = monacoEditorOptionsBucket(contentLength);
+  // large/huge：不把 content 塞进 TS sync（且依赖稳定为空数组，避免按键重跑 effect）。
+  const typeScriptSources = useMemo(() => {
+    if (tab.diffOriginal !== undefined || largeFile) return EMPTY_TS_SOURCES;
+    return [{ relativePath: tab.relativePath, content: tab.content }];
+  }, [largeFile, tab.content, tab.diffOriginal, tab.relativePath]);
   const editorOptions = useMemo(
     () => resolveWiseMonacoEditorOptionsFromLength(contentLength, tab.relativePath),
     [optionsBucket, tab.relativePath],
   );
-  // medium 文件（50KB-128KB）仅关闭高亮特性，仍走受控 value 路径，
-  // 不进入大文件的 defaultValue/延后注入流程。
-  const largeFile = optionsBucket === "large" || optionsBucket === "huge";
-  const hugeFile = optionsBucket === "huge";
 
   const isMdFile = useMemo(
     () => tab.relativePath.endsWith(".md") || tab.relativePath.endsWith(".mdx"),
@@ -231,7 +235,11 @@ function RepositoryFileEditorTabSurface({
       isActive &&
         tab.diffOriginal === undefined &&
         !tab.gitCommitSha &&
-        !tab.gitCommitCompare,
+        !tab.gitCommitCompare &&
+        // large/huge：全量 diffLines + getValue 会卡主线程，关闭 gutter。
+        shouldEnableMonacoGitLineDecorations(
+          Math.max(tab.content.length, tab.originalContent.length),
+        ),
     ),
   });
 
@@ -289,7 +297,7 @@ function RepositoryFileEditorTabSurface({
   }, [everActivated, contentLength, hugeFile, tab.diffOriginal, tab.relativePath]);
 
   useEffect(() => {
-    if (!isActive) return;
+    if (!isActive || largeFile) return;
     const monaco = monacoRef.current;
     if (
       !monaco ||
@@ -307,10 +315,10 @@ function RepositoryFileEditorTabSurface({
           sourceFiles: typeScriptSources,
         });
       },
-      { timeoutMs: resolveMonacoIdleDeferTimeoutMs(isMonacoLargeFileContent(tab.content) ? 4000 : 1200) },
+      { timeoutMs: resolveMonacoIdleDeferTimeoutMs(1200) },
     );
     return cancel;
-  }, [isActive, repositoryPath, tab.content, tab.relativePath, typeScriptSources]);
+  }, [isActive, largeFile, repositoryPath, tab.content, tab.relativePath, typeScriptSources]);
 
   useEffect(
     () => () => {
@@ -580,7 +588,12 @@ function RepositoryFileEditorTabSurface({
                     : { value: tab.content })}
                 beforeMount={(monaco) => {
                   configureWiseMonacoTypeScript(monaco);
-                  if (repositoryPath && isTypeScriptLikeRepositoryPath(tab.relativePath)) {
+                  // large/huge：跳过 tsconfig/types 扫描，显著缩短首开。
+                  if (
+                    repositoryPath &&
+                    isTypeScriptLikeRepositoryPath(tab.relativePath) &&
+                    shouldSyncMonacoTypeScriptDependencies(tab.content)
+                  ) {
                     void ensureRepositoryTypeScriptEnvironment(monaco, repositoryPath);
                   }
                 }}
