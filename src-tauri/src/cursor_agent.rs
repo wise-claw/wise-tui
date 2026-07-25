@@ -350,7 +350,7 @@ pub async fn build_cursor_agent_status(
     };
 
     let mut failure_reason = None;
-    let mut authenticated: Option<bool>;
+    let authenticated: Option<bool>;
     let mut cli_version = None;
 
     match run_cursor_cli_capture(&["about"], api_key.as_deref(), None).await {
