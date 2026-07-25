@@ -512,8 +512,6 @@ export function disposeTerminalListeners(): void {
   terminalOutputUnlisten = null;
   terminalExitUnlisten?.();
   terminalExitUnlisten = null;
-  chromeIssueUnlisten?.();
-  chromeIssueUnlisten = null;
   terminalListenersReady = false;
 }
 

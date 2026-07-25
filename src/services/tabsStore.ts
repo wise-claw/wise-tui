@@ -29,7 +29,6 @@ export function normalizePersistedSession(raw: unknown): ClaudeSession {
 }
 
 export async function loadSessionTabsState(): Promise<PersistedTabsState | null> {
-  if (!isTauri()) return null;
   if (!isTauriIpcAlive()) return null;
   try {
     const windowLabel = getCurrentMainWorkspaceWindowLabel();
@@ -48,7 +47,6 @@ export async function loadSessionTabsState(): Promise<PersistedTabsState | null>
 }
 
 export async function saveSessionTabsState(state: PersistedTabsState): Promise<void> {
-  if (!isTauri()) return;
   if (!isTauriIpcAlive()) return;
   try {
     const windowLabel = getCurrentMainWorkspaceWindowLabel();
