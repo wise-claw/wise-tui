@@ -8,6 +8,7 @@ import {
   GIT_STAGE_TIMEOUT_MS,
   GIT_STATUS_TIMEOUT_MS,
 } from "./gitOperationTimeouts";
+import { createGitShowRevisionCache } from "./gitShowRevisionCache";
 import {
   WORKFLOW_UI_EVENT_REPO_WORKTREES_MAY_HAVE_CHANGED,
   type RepoWorktreesMayHaveChangedDetail,
@@ -91,10 +92,24 @@ export async function gitFetch(path: string): Promise<void> {
   return trackAsyncOperation("拉取远程", invoke("git_fetch", { path }), GIT_FETCH_TIMEOUT_MS);
 }
 
+/** gutter / Diff 连读同一 revision 时复用；短 TTL 避免长期脏读。 */
+const gitShowRevisionCache = createGitShowRevisionCache({ ttlMs: 2500, maxEntries: 48 });
+
+async function invokeGitShowRevision(
+  repositoryPath: string,
+  revisionPath: string,
+): Promise<string> {
+  const cached = gitShowRevisionCache.get(repositoryPath, revisionPath);
+  if (cached !== undefined) return cached;
+  const value = await invoke<string>("git_show_revision", { repositoryPath, revisionPath });
+  gitShowRevisionCache.set(repositoryPath, revisionPath, value);
+  return value;
+}
+
 /** `git show` 指定版本路径（如 `HEAD:foo/bar`、`:foo/bar` 索引）；非桌面或失败时返回空串。 */
 export async function gitShowRevision(repositoryPath: string, revisionPath: string): Promise<string> {
   try {
-    return await invoke<string>("git_show_revision", { repositoryPath, revisionPath });
+    return await invokeGitShowRevision(repositoryPath, revisionPath);
   } catch {
     return "";
   }
@@ -108,7 +123,12 @@ export async function gitShowRevisionForEditor(
   repositoryPath: string,
   revisionPath: string,
 ): Promise<string> {
-  return invoke<string>("git_show_revision", { repositoryPath, revisionPath });
+  return invokeGitShowRevision(repositoryPath, revisionPath);
+}
+
+/** 测试 / git-changed 后可清空短缓存。 */
+export function clearGitShowRevisionCache(): void {
+  gitShowRevisionCache.clear();
 }
 
 export async function gitDiscard(path: string, filePath: string): Promise<void> {

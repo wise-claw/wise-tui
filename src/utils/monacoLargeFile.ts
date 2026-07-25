@@ -46,6 +46,21 @@ export function isMonacoHugeFileContent(content: string): boolean {
   return content.length >= MONACO_HUGE_FILE_CHAR_THRESHOLD;
 }
 
+/** medium 及以上：走 defaultValue / 防抖写入，避免每键受控重渲。 */
+export function shouldUseMonacoDefaultValuePath(contentLength: number): boolean {
+  return contentLength >= MONACO_MEDIUM_FILE_CHAR_THRESHOLD;
+}
+
+/** medium 及以上：onChange 合并进 React 状态。 */
+export function shouldDebounceMonacoEditorContentChange(contentLength: number): boolean {
+  return contentLength >= MONACO_MEDIUM_FILE_CHAR_THRESHOLD;
+}
+
+/** large/huge Diff 用 inline，避免双栏 diff 算法拖垮主线程。 */
+export function shouldRenderDiffSideBySide(contentLength: number): boolean {
+  return contentLength < MONACO_LARGE_FILE_CHAR_THRESHOLD;
+}
+
 export function shouldSyncMonacoTypeScriptDependencies(content: string): boolean {
   return content.length < MONACO_LARGE_FILE_CHAR_THRESHOLD;
 }
@@ -74,7 +89,8 @@ export function resolveDiffEditorContentStrategy(
   contentLength: number,
 ): DiffEditorContentStrategy {
   if (contentLength >= MONACO_HUGE_FILE_CHAR_THRESHOLD) return "inject";
-  if (contentLength >= MONACO_LARGE_FILE_CHAR_THRESHOLD) return "frozen";
+  // medium/large：冻结受控 props，避免编辑时反复 setValue。
+  if (contentLength >= MONACO_MEDIUM_FILE_CHAR_THRESHOLD) return "frozen";
   return "controlled";
 }
 
@@ -105,11 +121,46 @@ export function resolveDiffEditorMountContent(args: {
 }
 
 /**
+ * 按当前打开 tabs 中最大 content.length 决定 Monaco keep-alive 上限：
+ * huge→1、large→2、其余→8。
+ */
+export function resolveFileEditorKeepAliveLimit(maxContentLength: number): number {
+  if (maxContentLength >= MONACO_HUGE_FILE_CHAR_THRESHOLD) {
+    return FILE_EDITOR_KEEP_ALIVE_LIMIT_HUGE;
+  }
+  if (maxContentLength >= MONACO_LARGE_FILE_CHAR_THRESHOLD) {
+    return FILE_EDITOR_KEEP_ALIVE_LIMIT_LARGE;
+  }
+  return FILE_EDITOR_KEEP_ALIVE_LIMIT_DEFAULT;
+}
+
+/**
+ * 估算 tab 正文规模，供 keep-alive 上限使用。
+ * contentReleased 后 content 为空，需回退 diskStat.byteLen，避免上限从 huge 回弹到 8。
+ * byteLen 为字节近似；多字节 UTF-8 略偏大，keep-alive 更紧，可接受。
+ */
+export function estimateFileEditorTabContentLength(tab: {
+  content: string;
+  diffOriginal?: string;
+  diskStat?: { byteLen: number };
+}): number {
+  let max = tab.content.length;
+  if (tab.diffOriginal !== undefined && tab.diffOriginal.length > max) {
+    max = tab.diffOriginal.length;
+  }
+  const diskBytes = tab.diskStat?.byteLen;
+  if (typeof diskBytes === "number" && diskBytes > max) {
+    max = diskBytes;
+  }
+  return max;
+}
+
+/**
  * 是否启用 Git 行 gutter 装饰。
- * large/huge 上 `diffLines` + `getValue()` 全量比对会卡主线程，直接关闭。
+ * medium 及以上全量 `diffLines` + `getValue()` 会卡主线程，直接关闭。
  */
 export function shouldEnableMonacoGitLineDecorations(contentLength: number): boolean {
-  return contentLength < MONACO_LARGE_FILE_CHAR_THRESHOLD;
+  return contentLength < MONACO_MEDIUM_FILE_CHAR_THRESHOLD;
 }
 
 /** 已拿到的正文是否超过编辑器产品上限（近似用 string.length）。 */
@@ -127,20 +178,6 @@ export function resolveMonacoEditorLanguage(
 ): string {
   if (contentLength >= MONACO_HUGE_FILE_CHAR_THRESHOLD) return "plaintext";
   return baseLanguage;
-}
-
-/**
- * 按当前打开 tabs 中最大 content.length 决定 Monaco keep-alive 上限：
- * huge→1、large→2、其余→8。
- */
-export function resolveFileEditorKeepAliveLimit(maxContentLength: number): number {
-  if (maxContentLength >= MONACO_HUGE_FILE_CHAR_THRESHOLD) {
-    return FILE_EDITOR_KEEP_ALIVE_LIMIT_HUGE;
-  }
-  if (maxContentLength >= MONACO_LARGE_FILE_CHAR_THRESHOLD) {
-    return FILE_EDITOR_KEEP_ALIVE_LIMIT_LARGE;
-  }
-  return FILE_EDITOR_KEEP_ALIVE_LIMIT_DEFAULT;
 }
 
 export function resolveWiseMonacoEditorOptions(

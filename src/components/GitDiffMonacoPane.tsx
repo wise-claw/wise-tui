@@ -5,13 +5,13 @@ import type { editor as MonacoEditorNamespace } from "monaco-editor";
 import { configureWiseMonacoTypeScript } from "../services/monacoTypeScriptEnvironment";
 import { installMonacoTrackpadSelectionGuard } from "../utils/monacoTrackpadSelectionGuard";
 import {
-  isMonacoLargeFileContent,
   maxMonacoContentLength,
-  MONACO_HUGE_FILE_CHAR_THRESHOLD,
   MONACO_LARGE_FILE_CHANGE_DEBOUNCE_MS,
   resolveDiffEditorMountContent,
   resolveWiseMonacoEditorOptionsFromLength,
+  shouldDebounceMonacoEditorContentChange,
   shouldDeferMonacoEditorMount,
+  shouldRenderDiffSideBySide,
 } from "../utils/monacoLargeFile";
 import { scheduleMonacoLargeFileContentInjection } from "../utils/monacoLargeFileContentInjection";
 import { runWhenIdle } from "../utils/deferIdle";
@@ -57,9 +57,11 @@ export function GitDiffMonacoPane({
   const modifiedRef = useRef(modified);
   originalRef.current = original;
   modifiedRef.current = modified;
-  const largeDiff = isMonacoLargeFileContent(modified) || isMonacoLargeFileContent(original);
-  const largeDiffRef = useRef(largeDiff);
-  largeDiffRef.current = largeDiff;
+  const debounceDiffChange =
+    shouldDebounceMonacoEditorContentChange(modified.length) ||
+    shouldDebounceMonacoEditorContentChange(original.length);
+  const debounceDiffChangeRef = useRef(debounceDiffChange);
+  debounceDiffChangeRef.current = debounceDiffChange;
   const [monacoApi, setMonacoApi] = useState<typeof Monaco | null>(null);
   const [diffEditors, setDiffEditors] = useState<{
     original: MonacoEditorNamespace.IStandaloneCodeEditor;
@@ -71,13 +73,12 @@ export function GitDiffMonacoPane({
   );
 
   const diffContentLength = maxMonacoContentLength(original, modified);
-  const hugeDiff = diffContentLength >= MONACO_HUGE_FILE_CHAR_THRESHOLD;
   const mountContent = resolveDiffEditorMountContent({
     original,
     modified,
     contentLength: diffContentLength,
   });
-  // large：按 path/readOnly 快照冻结受控 props，避免 onChange→父重渲→DiffEditor 再 setValue。
+  // medium/large：按 path/readOnly 快照冻结受控 props，避免 onChange→父重渲→DiffEditor 再 setValue。
   // inject/controlled 不读此快照（inject 传空；controlled 跟 live props）。
   const frozenContentRef = useRef({
     relativePath,
@@ -103,6 +104,7 @@ export function GitDiffMonacoPane({
       : mountContent.strategy === "frozen"
         ? frozenContentRef.current.modified
         : modified;
+  const renderSideBySide = shouldRenderDiffSideBySide(diffContentLength);
   const diffEditorOptions = useMemo(
     () => resolveWiseMonacoEditorOptionsFromLength(diffContentLength, relativePath),
     [diffContentLength, relativePath],
@@ -277,7 +279,7 @@ export function GitDiffMonacoPane({
                   onModifiedChangeRef.current(modifiedEditor.getValue());
                 };
                 modifiedListenerRef.current = modifiedEditor.onDidChangeModelContent(() => {
-                  if (!largeDiffRef.current) {
+                  if (!debounceDiffChangeRef.current) {
                     flushModified();
                     return;
                   }
@@ -294,8 +296,8 @@ export function GitDiffMonacoPane({
             options={{
               ...diffEditorOptions,
               readOnly,
-              // 超大文件双栏 Diff 内存与布局开销过高，降级为 inline。
-              renderSideBySide: !hugeDiff,
+              // large/huge 双栏 Diff 内存与布局开销过高，降级为 inline。
+              renderSideBySide,
             }}
           />
         </>

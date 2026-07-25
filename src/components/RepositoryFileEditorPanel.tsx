@@ -7,7 +7,10 @@ import {
   isFileEditorTabDirty,
   type FileEditorTab,
 } from "../hooks/useRepositoryFileEditor";
-import { resolveFileEditorKeepAliveLimit } from "../utils/monacoLargeFile";
+import {
+  estimateFileEditorTabContentLength,
+  resolveFileEditorKeepAliveLimit,
+} from "../utils/monacoLargeFile";
 
 interface Props {
   activePath: string | null;
@@ -60,10 +63,8 @@ export function RepositoryFileEditorPanel({
   const keepAliveLimit = useMemo(() => {
     let maxLen = 0;
     for (const tab of tabs) {
-      if (tab.content.length > maxLen) maxLen = tab.content.length;
-      if (tab.diffOriginal !== undefined && tab.diffOriginal.length > maxLen) {
-        maxLen = tab.diffOriginal.length;
-      }
+      const len = estimateFileEditorTabContentLength(tab);
+      if (len > maxLen) maxLen = len;
     }
     return resolveFileEditorKeepAliveLimit(maxLen);
   }, [tabs]);
@@ -173,6 +174,33 @@ export function RepositoryFileEditorPanel({
     [onRevealInExplorer],
   );
 
+  /** 切 tab 防抖 reveal：快速连点时只跟最后一次，避免与 Monaco 显隐抢主线程。 */
+  const revealTabTimerRef = useRef<number | null>(null);
+  useEffect(
+    () => () => {
+      if (revealTabTimerRef.current != null) {
+        window.clearTimeout(revealTabTimerRef.current);
+        revealTabTimerRef.current = null;
+      }
+    },
+    [],
+  );
+  const scheduleRevealTab = useCallback(
+    (tab: FileEditorTab) => {
+      if (!onRevealInExplorer || !tab.rootPath) return;
+      if (revealTabTimerRef.current != null) {
+        window.clearTimeout(revealTabTimerRef.current);
+      }
+      const rootPath = tab.rootPath;
+      const relativePath = tab.relativePath;
+      revealTabTimerRef.current = window.setTimeout(() => {
+        revealTabTimerRef.current = null;
+        onRevealInExplorer(rootPath, relativePath);
+      }, 140);
+    },
+    [onRevealInExplorer],
+  );
+
   const buildTabContextMenuItems = useCallback(
     (tab: FileEditorTab): MenuProps["items"] => {
       return [
@@ -187,15 +215,13 @@ export function RepositoryFileEditorPanel({
     [onRevealInExplorer, revealTab],
   );
 
-  /** 切换 tab 时让文件树跟随定位：切激活路径 + 触发 reveal（展开父目录链并滚动高亮）。
-   *  revealFileInExplorer 会按当前布局算 revealTarget，文件树不可见时把侧栏切到文件 Tab
-   *  并展开 section，再 reveal；可见时 requestExplorerFocus 为 no-op。 */
+  /** 切换 tab：立即切激活路径；文件树定位防抖，避免连切时展开/滚动挤占首帧。 */
   const handleActivateTab = useCallback(
     (tab: FileEditorTab) => {
       onActivePathChange(tab.relativePath);
-      revealTab(tab);
+      scheduleRevealTab(tab);
     },
-    [onActivePathChange, revealTab],
+    [onActivePathChange, scheduleRevealTab],
   );
 
   return (

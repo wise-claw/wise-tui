@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  estimateFileEditorTabContentLength,
   FILE_EDITOR_KEEP_ALIVE_LIMIT_DEFAULT,
   FILE_EDITOR_KEEP_ALIVE_LIMIT_HUGE,
   FILE_EDITOR_KEEP_ALIVE_LIMIT_LARGE,
@@ -20,8 +21,11 @@ import {
   shouldInjectMonacoContentAfterMount,
   resolveDiffEditorContentStrategy,
   resolveDiffEditorMountContent,
+  shouldDebounceMonacoEditorContentChange,
+  shouldRenderDiffSideBySide,
   shouldSkipMonacoTypeScriptModelSync,
   shouldSyncMonacoTypeScriptDependencies,
+  shouldUseMonacoDefaultValuePath,
 } from "./monacoLargeFile";
 import {
   shouldEnableMonacoSemanticHighlighting,
@@ -78,9 +82,26 @@ describe("monacoLargeFile", () => {
     );
   });
 
-  test("disables git gutter decorations for large files", () => {
-    expect(shouldEnableMonacoGitLineDecorations(MONACO_LARGE_FILE_CHAR_THRESHOLD - 1)).toBe(true);
+  test("disables git gutter decorations for medium+ files", () => {
+    expect(shouldEnableMonacoGitLineDecorations(MONACO_MEDIUM_FILE_CHAR_THRESHOLD - 1)).toBe(true);
+    expect(shouldEnableMonacoGitLineDecorations(MONACO_MEDIUM_FILE_CHAR_THRESHOLD)).toBe(false);
     expect(shouldEnableMonacoGitLineDecorations(MONACO_LARGE_FILE_CHAR_THRESHOLD)).toBe(false);
+  });
+
+  test("estimateFileEditorTabContentLength falls back to diskStat after content release", () => {
+    expect(
+      estimateFileEditorTabContentLength({
+        content: "",
+        diskStat: { byteLen: MONACO_HUGE_FILE_CHAR_THRESHOLD },
+      }),
+    ).toBe(MONACO_HUGE_FILE_CHAR_THRESHOLD);
+    expect(
+      estimateFileEditorTabContentLength({
+        content: "abc",
+        diffOriginal: "x".repeat(100),
+        diskStat: { byteLen: 10 },
+      }),
+    ).toBe(100);
   });
 
   test("isEditorFileContentTooLarge matches 4MiB product gate", () => {
@@ -113,8 +134,15 @@ describe("monacoLargeFile", () => {
 
   test("resolveDiffEditorMountContent / strategy covers controlled·frozen·inject", () => {
     expect(resolveDiffEditorContentStrategy(0)).toBe("controlled");
+    expect(resolveDiffEditorContentStrategy(MONACO_MEDIUM_FILE_CHAR_THRESHOLD)).toBe("frozen");
     expect(resolveDiffEditorContentStrategy(MONACO_LARGE_FILE_CHAR_THRESHOLD)).toBe("frozen");
     expect(resolveDiffEditorContentStrategy(MONACO_HUGE_FILE_CHAR_THRESHOLD)).toBe("inject");
+
+    expect(shouldUseMonacoDefaultValuePath(MONACO_MEDIUM_FILE_CHAR_THRESHOLD - 1)).toBe(false);
+    expect(shouldUseMonacoDefaultValuePath(MONACO_MEDIUM_FILE_CHAR_THRESHOLD)).toBe(true);
+    expect(shouldDebounceMonacoEditorContentChange(MONACO_MEDIUM_FILE_CHAR_THRESHOLD)).toBe(true);
+    expect(shouldRenderDiffSideBySide(MONACO_LARGE_FILE_CHAR_THRESHOLD - 1)).toBe(true);
+    expect(shouldRenderDiffSideBySide(MONACO_LARGE_FILE_CHAR_THRESHOLD)).toBe(false);
 
     const left = "L".repeat(MONACO_HUGE_FILE_CHAR_THRESHOLD);
     const right = "R".repeat(100);

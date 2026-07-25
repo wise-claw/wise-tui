@@ -4,12 +4,13 @@ import {
   isFileEditorTabDirty,
   mergeEditorRefreshScope,
   planEditorTabRefresh,
-  shouldReleaseInactiveHugeTabContent,
+  shouldReleaseInactiveLargeTabContent,
   type FileEditorTab,
 } from "./useRepositoryFileEditor";
 import {
   EDITOR_FILE_MAX_BYTES,
   MONACO_HUGE_FILE_CHAR_THRESHOLD,
+  MONACO_LARGE_FILE_CHAR_THRESHOLD,
 } from "../utils/monacoLargeFile";
 import { editorDiskStatUnchanged } from "../services/projectRelativeFiles";
 
@@ -153,33 +154,42 @@ describe("planEditorTabRefresh", () => {
   });
 });
 
-describe("shouldReleaseInactiveHugeTabContent", () => {
+describe("shouldReleaseInactiveLargeTabContent", () => {
+  const large = "x".repeat(MONACO_LARGE_FILE_CHAR_THRESHOLD);
   const huge = "x".repeat(MONACO_HUGE_FILE_CHAR_THRESHOLD);
 
-  test("非活跃、干净、huge → 应释放", () => {
-    const tab = makeTab({ content: huge, originalContent: huge });
+  test("非活跃、干净、large/huge → 应释放", () => {
     expect(
-      shouldReleaseInactiveHugeTabContent({ tab, isActive: false }),
+      shouldReleaseInactiveLargeTabContent({
+        tab: makeTab({ content: large, originalContent: large }),
+        isActive: false,
+      }),
+    ).toBe(true);
+    expect(
+      shouldReleaseInactiveLargeTabContent({
+        tab: makeTab({ content: huge, originalContent: huge }),
+        isActive: false,
+      }),
     ).toBe(true);
   });
 
   test("活跃 tab 不释放", () => {
-    const tab = makeTab({ content: huge, originalContent: huge });
+    const tab = makeTab({ content: large, originalContent: large });
     expect(
-      shouldReleaseInactiveHugeTabContent({ tab, isActive: true }),
+      shouldReleaseInactiveLargeTabContent({ tab, isActive: true }),
     ).toBe(false);
   });
 
-  test("脏 tab / 已释放 / diff / 非 huge 不释放", () => {
+  test("脏 tab / 已释放 / diff / 非 large 不释放", () => {
     expect(
-      shouldReleaseInactiveHugeTabContent({
-        tab: makeTab({ content: huge, originalContent: huge }),
+      shouldReleaseInactiveLargeTabContent({
+        tab: makeTab({ content: large, originalContent: large }),
         isActive: false,
-        pending: `${huge}!`,
+        pending: `${large}!`,
       }),
     ).toBe(false);
     expect(
-      shouldReleaseInactiveHugeTabContent({
+      shouldReleaseInactiveLargeTabContent({
         tab: makeTab({
           content: "",
           originalContent: "",
@@ -189,13 +199,13 @@ describe("shouldReleaseInactiveHugeTabContent", () => {
       }),
     ).toBe(false);
     expect(
-      shouldReleaseInactiveHugeTabContent({
-        tab: makeTab({ content: huge, originalContent: huge, diffOriginal: "base" }),
+      shouldReleaseInactiveLargeTabContent({
+        tab: makeTab({ content: large, originalContent: large, diffOriginal: "base" }),
         isActive: false,
       }),
     ).toBe(false);
     expect(
-      shouldReleaseInactiveHugeTabContent({
+      shouldReleaseInactiveLargeTabContent({
         tab: makeTab({ content: "small", originalContent: "small" }),
         isActive: false,
       }),

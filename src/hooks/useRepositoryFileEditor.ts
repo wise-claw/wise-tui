@@ -4,7 +4,7 @@ import { message, Modal } from "antd";
 import { listen } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { GitPanelOpenFileOptions } from "../components/GitPanel/types";
-import { gitShowRevisionForEditor } from "../services/git";
+import { clearGitShowRevisionCache, gitShowRevisionForEditor } from "../services/git";
 import {
   editorDiskStatUnchanged,
   isEditorFileTooLargeError,
@@ -33,6 +33,7 @@ import {
   isMonacoHugeFileContent,
   isMonacoLargeFileContent,
   MONACO_LARGE_FILE_CHANGE_DEBOUNCE_MS,
+  shouldDebounceMonacoEditorContentChange,
 } from "../utils/monacoLargeFile";
 import { safeUnlisten } from "../utils/safeTauriUnlisten";
 import { setRepositoryEditorDirtyPaths } from "../stores/repositoryEditorDirtyPathsStore";
@@ -50,8 +51,8 @@ const EDITOR_EXTERNAL_REFRESH_THROTTLE_MS = 300;
  * 轮询，确保外部修改（含多仓库、子工作区 tab）最终被刷新。
  */
 const EDITOR_FOREGROUND_POLL_MS = 4000;
-/** 离开 huge tab 后延迟释放正文，避免快速来回切换时反复重读。 */
-const EDITOR_HUGE_CONTENT_RELEASE_DELAY_MS = 500;
+/** 离开 large+ tab 后延迟释放正文，避免快速来回切换时反复重读。 */
+const EDITOR_LARGE_CONTENT_RELEASE_DELAY_MS = 500;
 const EMPTY_TABS: FileEditorTab[] = [];
 const EMPTY_RELEASED_CONTENT = "";
 
@@ -79,7 +80,7 @@ export interface FileEditorTab {
   /** 打开/刷新时记录的磁盘指纹，供轮询先比 mtime/size 再决定是否全文重读。 */
   diskStat?: ProjectRelativeFileStat;
   /**
-   * 非活跃 huge 且干净时释放 content/originalContent 以省内存。
+   * 非活跃 large+ 且干净时释放 content/originalContent 以省内存。
    * 再次激活时按 diskStat/路径重读；为 true 时正文为空串不代表文件为空。
    */
   contentReleased?: boolean;
@@ -170,10 +171,10 @@ export function assertEditorDiffPayloadWithinLimit(left: string, right: string):
 }
 
 /**
- * 是否应释放非活跃 huge tab 的正文（仅干净、非 diff、未释放）。
+ * 是否应释放非活跃 large+ tab 的正文（仅干净、非 diff、未释放）。
  * 抽出便于单测，避免在 React effect 里堆叠条件。
  */
-export function shouldReleaseInactiveHugeTabContent(args: {
+export function shouldReleaseInactiveLargeTabContent(args: {
   tab: Pick<
     FileEditorTab,
     "content" | "originalContent" | "contentReleased" | "diffOriginal" | "loading"
@@ -186,10 +187,13 @@ export function shouldReleaseInactiveHugeTabContent(args: {
   if (tab.contentReleased) return false;
   if (tab.loading) return false;
   if (tab.diffOriginal !== undefined) return false;
-  if (!isMonacoHugeFileContent(tab.content)) return false;
+  if (!isMonacoLargeFileContent(tab.content)) return false;
   if (isFileEditorTabDirty(tab, pending)) return false;
   return true;
 }
+
+/** @deprecated 使用 shouldReleaseInactiveLargeTabContent */
+export const shouldReleaseInactiveHugeTabContent = shouldReleaseInactiveLargeTabContent;
 
 interface UseRepositoryFileEditorOptions {
   repositoryPath: string | null | undefined;
@@ -287,8 +291,6 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
   const refreshTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** 待执行刷新的范围：undefined=无，null=全量，string=限定仓库。节流期间合并保留最宽意图。 */
   const pendingRefreshScopeRef = useRef<string | null | undefined>(undefined);
-  /** 节流窗口内是否出现过 focus/git-changed（要求全文重读，禁止降级为仅 stat）。 */
-  const pendingRefreshFullReadRef = useRef(false);
 
   const flushPendingTabContent = useCallback(
     (relativePath?: string) => {
@@ -333,7 +335,7 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
   const updateFileEditorTabContent = useCallback(
     (relativePath: string, content: string) => {
       const fullKey = pendingKey(paneIndex, relativePath);
-      if (!isMonacoLargeFileContent(content)) {
+      if (!shouldDebounceMonacoEditorContentChange(content.length)) {
         pendingTabContentRef.current.delete(fullKey);
         const timer = tabContentDebounceRef.current.get(fullKey);
         if (timer != null) {
@@ -1197,14 +1199,16 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
       // 后到的限定刷新不会降级已排队的全量；不同限定仓库升级为全量，避免多仓库漏刷。
       const incomingScope =
         opts?.trigger === "git-changed" ? opts.repoPath?.trim() || null : null;
+      // git-changed 后丢掉短缓存，避免 gutter/Diff 读到旧 HEAD blob。
+      if (opts?.trigger === "git-changed") {
+        clearGitShowRevisionCache();
+      }
       pendingRefreshScopeRef.current = mergeEditorRefreshScope(
         pendingRefreshScopeRef.current,
         incomingScope,
       );
-      // focus/git-changed 要求全文重读；节流窗口内若混入 poll，不得降级为仅 stat。
-      if (opts?.trigger !== "poll") {
-        pendingRefreshFullReadRef.current = true;
-      }
+      // 一律先 stat：mtime/size 未变则跳过全文 IPC（focus/git-changed/poll 同策略）。
+      // 无 diskStat 或 fingerprint 变化时仍会全文重读。
       if (refreshTimerRef.current != null) {
         clearTimeout(refreshTimerRef.current);
       }
@@ -1212,8 +1216,6 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
         refreshTimerRef.current = null;
         const scheduledScope = pendingRefreshScopeRef.current;
         pendingRefreshScopeRef.current = undefined;
-        const allowStatFirst = !pendingRefreshFullReadRef.current;
-        pendingRefreshFullReadRef.current = false;
         if (scheduledScope === undefined) return;
         const generation = ++refreshGenerationRef.current;
         const repoPath = scheduledScope ?? "";
@@ -1231,7 +1233,7 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
             const releasedInactive =
               Boolean(tab.contentReleased) && tab.relativePath !== activePath;
             try {
-              // 已释放正文的非活跃 huge tab：只维护 diskStat，绝不把正文重新灌进内存。
+              // 已释放正文的非活跃 large+ tab：只维护 diskStat，绝不把正文重新灌进内存。
               if (releasedInactive) {
                 const stat = await statProjectRelativeFile(tab.rootPath, tab.relativePath);
                 if (editorDiskStatUnchanged(tab.diskStat, stat)) {
@@ -1255,20 +1257,18 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
                   missing: false as const,
                 };
               }
-              // 纯 poll：先轻量 stat；mtime/size 未变则跳过全文 IPC（尤其惠及 large/huge）。
-              if (allowStatFirst) {
-                const stat = await statProjectRelativeFile(tab.rootPath, tab.relativePath);
-                if (editorDiskStatUnchanged(tab.diskStat, stat)) {
-                  return {
-                    tab,
-                    disk: null,
-                    oversized: false as const,
-                    skipped: true as const,
-                    fingerprintOnly: false as const,
-                    diskStat: stat,
-                    missing: false as const,
-                  };
-                }
+              // 先轻量 stat；mtime/size 未变则跳过全文 IPC（尤其惠及 large/huge）。
+              const stat = await statProjectRelativeFile(tab.rootPath, tab.relativePath);
+              if (editorDiskStatUnchanged(tab.diskStat, stat)) {
+                return {
+                  tab,
+                  disk: null,
+                  oversized: false as const,
+                  skipped: true as const,
+                  fingerprintOnly: false as const,
+                  diskStat: stat,
+                  missing: false as const,
+                };
               }
               const loaded = await readProjectRelativeFileForEditor(
                 tab.rootPath,
@@ -1573,7 +1573,7 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
   );
 
   /**
-   * 非活跃、干净的 huge tab：延迟释放正文，仅保留 diskStat / 元数据。
+   * 非活跃、干净的 large+ tab：延迟释放正文，仅保留 diskStat / 元数据。
    * 再次激活时由 setFileEditorActivePath / loadEditorFile 重读。
    */
   useEffect(() => {
@@ -1586,7 +1586,7 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
           pendingKey(paneIndex, tab.relativePath),
         );
         if (
-          shouldReleaseInactiveHugeTabContent({
+          shouldReleaseInactiveLargeTabContent({
             tab,
             isActive: tab.relativePath === activePath,
             pending,
@@ -1608,7 +1608,7 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
             pendingKey(paneIndex, tab.relativePath),
           );
           if (
-            !shouldReleaseInactiveHugeTabContent({
+            !shouldReleaseInactiveLargeTabContent({
               tab,
               isActive: tab.relativePath === (fileEditorActivePathRef.current.get(paneIndex) ?? null),
               pending,
@@ -1626,7 +1626,7 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
         });
         return changed ? next : prev;
       });
-    }, EDITOR_HUGE_CONTENT_RELEASE_DELAY_MS);
+    }, EDITOR_LARGE_CONTENT_RELEASE_DELAY_MS);
     return () => window.clearTimeout(timer);
   }, [discardTabPendingContent, fileEditorActivePath, fileEditorTabs, paneIndex, updatePaneTabs]);
 

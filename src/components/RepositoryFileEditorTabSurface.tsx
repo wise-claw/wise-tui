@@ -17,7 +17,6 @@ import {
 } from "../services/monacoTypeScriptEnvironment";
 import { installMonacoTrackpadSelectionGuard } from "../utils/monacoTrackpadSelectionGuard";
 import {
-  isMonacoLargeFileContent,
   monacoEditorOptionsBucket,
   MONACO_LARGE_FILE_CHAR_THRESHOLD,
   resolveMonacoEditorLanguage,
@@ -26,6 +25,7 @@ import {
   shouldEnableMonacoGitLineDecorations,
   shouldInjectMonacoContentAfterMount,
   shouldSyncMonacoTypeScriptDependencies,
+  shouldUseMonacoDefaultValuePath,
 } from "../utils/monacoLargeFile";
 import { scheduleMonacoLargeFileContentInjection } from "../utils/monacoLargeFileContentInjection";
 import { runWhenIdle } from "../utils/deferIdle";
@@ -35,8 +35,6 @@ import { useGitRepositoryExplorerStatus } from "../hooks/useGitRepositoryExplore
 import { useMonacoGitModifiedLineDecorations } from "../hooks/useMonacoGitModifiedLineDecorations";
 import { MarkdownBody } from "./ClaudeSessions/MarkdownElements";
 import rehypeRaw from "rehype-raw";
-
-const EMPTY_TS_SOURCES: { relativePath: string; content: string }[] = [];
 
 const MonacoEditor = lazy(() => import("@monaco-editor/react"));
 
@@ -61,8 +59,8 @@ export interface RepositoryFileEditorTabSurfaceProps {
 }
 
 /**
- * 非活跃 large/huge tab：忽略 content 引用抖动（由 contentVersion 驱动注入）；
- * 活跃 tab 仍跟 content，保证受控编辑路径及时同步。
+ * 非活跃 medium+ tab：忽略 content 引用抖动（由 contentVersion 驱动注入）；
+ * 活跃小文件仍跟 content，保证受控编辑路径及时同步。
  */
 export function repositoryFileEditorTabSurfacePropsEqual(
   prev: RepositoryFileEditorTabSurfaceProps,
@@ -102,11 +100,11 @@ export function repositoryFileEditorTabSurfacePropsEqual(
   ) {
     return false;
   }
-  const largeInactive =
+  const defaultValueInactive =
     !next.isActive &&
-    (a.content.length >= MONACO_LARGE_FILE_CHAR_THRESHOLD ||
-      b.content.length >= MONACO_LARGE_FILE_CHAR_THRESHOLD);
-  if (largeInactive) {
+    (shouldUseMonacoDefaultValuePath(a.content.length) ||
+      shouldUseMonacoDefaultValuePath(b.content.length));
+  if (defaultValueInactive) {
     return a.content.length === b.content.length;
   }
   return a.content === b.content;
@@ -168,8 +166,8 @@ function RepositoryFileEditorTabSurface({
 
   const contentLength = tab.content.length;
   const optionsBucket = monacoEditorOptionsBucket(contentLength);
-  // medium 文件（50KB-128KB）仅关闭高亮特性，仍走受控 value 路径，
-  // 不进入大文件的 defaultValue/延后注入流程。
+  // medium+：defaultValue + contentVersion 注入；small 仍受控 value。
+  const defaultValuePath = shouldUseMonacoDefaultValuePath(contentLength);
   const largeFile = optionsBucket === "large" || optionsBucket === "huge";
   const hugeFile = optionsBucket === "huge";
   const baseLanguage = monacoLanguageFromRepositoryPath(tab.relativePath);
@@ -184,11 +182,6 @@ function RepositoryFileEditorTabSurface({
   const editorPath = isTypeScriptLikeRepositoryPath(tab.relativePath)
     ? monacoUriForRepositoryPath(tab.relativePath, repositoryPath)
     : monacoUriForRepositoryPath(tab.relativePath, tab.rootPath || repositoryPath);
-  // large/huge：不把 content 塞进 TS sync（且依赖稳定为空数组，避免按键重跑 effect）。
-  const typeScriptSources = useMemo(() => {
-    if (tab.diffOriginal !== undefined || largeFile) return EMPTY_TS_SOURCES;
-    return [{ relativePath: tab.relativePath, content: tab.content }];
-  }, [largeFile, tab.content, tab.diffOriginal, tab.relativePath]);
   const editorOptions = useMemo(
     () => resolveWiseMonacoEditorOptionsFromLength(contentLength, tab.relativePath),
     [optionsBucket, tab.relativePath],
@@ -248,8 +241,8 @@ function RepositoryFileEditorTabSurface({
       lastInjectedContentVersionRef.current = null;
       return;
     }
-    if (!largeFile) {
-      // 非大文件走受控 value，无需注入；同步标记避免文件大小越过阈值时漏注入。
+    if (!defaultValuePath) {
+      // 小文件走受控 value，无需注入；同步标记避免越过阈值时漏注入。
       lastInjectedContentVersionRef.current = tab.contentVersion ?? 0;
       return;
     }
@@ -273,7 +266,7 @@ function RepositoryFileEditorTabSurface({
       },
       injectTimeoutMs,
     );
-  }, [largeFile, hugeFile, tab.contentVersion, tab.diffOriginal, monacoEditorSurface]);
+  }, [defaultValuePath, hugeFile, tab.contentVersion, tab.diffOriginal, monacoEditorSurface]);
 
   useEffect(() => {
     // keep-alive：已挂载过的编辑器不再因内容长度变化重新 defer/卸载，
@@ -296,29 +289,36 @@ function RepositoryFileEditorTabSurface({
     });
   }, [everActivated, contentLength, hugeFile, tab.diffOriginal, tab.relativePath]);
 
+  // TS 依赖图：仅在激活/换文件/外部 contentVersion 时同步，不跟每键 content。
+  // 当前文件正文已由 Monaco model 持有；这里主要拉 import 依赖。
   useEffect(() => {
-    if (!isActive || largeFile) return;
+    if (!isActive || largeFile || tab.diffOriginal !== undefined) return;
     const monaco = monacoRef.current;
-    if (
-      !monaco ||
-      !repositoryPath ||
-      !isTypeScriptLikeRepositoryPath(tab.relativePath) ||
-      !shouldSyncMonacoTypeScriptDependencies(tab.content)
-    ) {
+    if (!monaco || !repositoryPath || !isTypeScriptLikeRepositoryPath(tab.relativePath)) {
       return;
     }
     const cancel = runWhenIdle(
       () => {
+        const current = tabRef.current;
+        if (!shouldSyncMonacoTypeScriptDependencies(current.content)) return;
         void syncMonacoRepositoryTypeScriptModels({
           monaco,
           repositoryPath,
-          sourceFiles: typeScriptSources,
+          sourceFiles: [{ relativePath: current.relativePath, content: current.content }],
         });
       },
       { timeoutMs: resolveMonacoIdleDeferTimeoutMs(1200) },
     );
     return cancel;
-  }, [isActive, largeFile, repositoryPath, tab.content, tab.relativePath, typeScriptSources]);
+  }, [
+    isActive,
+    largeFile,
+    repositoryPath,
+    tab.relativePath,
+    tab.contentVersion,
+    tab.diffOriginal,
+    monacoEditorSurface,
+  ]);
 
   useEffect(
     () => () => {
@@ -418,8 +418,8 @@ function RepositoryFileEditorTabSurface({
         lastInjectedContentVersionRef.current = currentTab.contentVersion ?? 0;
         return;
       }
-      if (isMonacoLargeFileContent(currentTab.content)) {
-        // large 文件挂载由 defaultValue 提供当前内容，标记 version 已同步，
+      if (shouldUseMonacoDefaultValuePath(currentTab.content.length)) {
+        // medium/large 挂载由 defaultValue 提供当前内容，标记 version 已同步，
         // 后续外部刷新（contentVersion 自增）再由注入 effect 接管。
         lastInjectedContentVersionRef.current = currentTab.contentVersion ?? 0;
         runWhenIdle(reveal, { timeoutMs: 400 });
@@ -583,7 +583,7 @@ function RepositoryFileEditorTabSurface({
                 language={language}
                 {...(hugeFile
                   ? { defaultValue: "" }
-                  : largeFile
+                  : defaultValuePath
                     ? { defaultValue: tab.content }
                     : { value: tab.content })}
                 beforeMount={(monaco) => {

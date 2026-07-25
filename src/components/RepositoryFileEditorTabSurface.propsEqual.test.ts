@@ -4,7 +4,7 @@ import {
   type RepositoryFileEditorTabSurfaceProps,
 } from "./RepositoryFileEditorTabSurface";
 import type { FileEditorTab } from "../hooks/useRepositoryFileEditor";
-import { MONACO_LARGE_FILE_CHAR_THRESHOLD } from "../utils/monacoLargeFile";
+import { MONACO_MEDIUM_FILE_CHAR_THRESHOLD } from "../utils/monacoLargeFile";
 
 function makeTab(overrides: Partial<FileEditorTab> = {}): FileEditorTab {
   return {
@@ -38,15 +38,15 @@ function makeProps(
 }
 
 describe("repositoryFileEditorTabSurfacePropsEqual", () => {
-  test("非活跃大文件忽略 content 引用变化（同 length）", () => {
-    const large = "x".repeat(MONACO_LARGE_FILE_CHAR_THRESHOLD);
+  test("非活跃 medium+ 文件忽略 content 引用变化（同 length）", () => {
+    const medium = "x".repeat(MONACO_MEDIUM_FILE_CHAR_THRESHOLD);
     const prev = makeProps({
       isActive: false,
-      tab: makeTab({ content: large, originalContent: large, contentVersion: 1 }),
+      tab: makeTab({ content: medium, originalContent: medium, contentVersion: 1 }),
     });
     const next = makeProps({
       isActive: false,
-      tab: makeTab({ content: large.slice(), originalContent: large, contentVersion: 1 }),
+      tab: makeTab({ content: medium.slice(), originalContent: medium, contentVersion: 1 }),
       onTabContentChange: prev.onTabContentChange,
       onCloseTab: prev.onCloseTab,
       onReloadTab: prev.onReloadTab,
@@ -56,14 +56,14 @@ describe("repositoryFileEditorTabSurfacePropsEqual", () => {
   });
 
   test("contentVersion 变化仍触发更新", () => {
-    const large = "x".repeat(MONACO_LARGE_FILE_CHAR_THRESHOLD);
+    const medium = "x".repeat(MONACO_MEDIUM_FILE_CHAR_THRESHOLD);
     const prev = makeProps({
       isActive: false,
-      tab: makeTab({ content: large, originalContent: large, contentVersion: 1 }),
+      tab: makeTab({ content: medium, originalContent: medium, contentVersion: 1 }),
     });
     const next = makeProps({
       isActive: false,
-      tab: makeTab({ content: large, originalContent: large, contentVersion: 2 }),
+      tab: makeTab({ content: medium, originalContent: medium, contentVersion: 2 }),
       onTabContentChange: prev.onTabContentChange,
       onCloseTab: prev.onCloseTab,
       onReloadTab: prev.onReloadTab,
