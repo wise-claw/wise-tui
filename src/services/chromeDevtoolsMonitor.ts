@@ -153,9 +153,14 @@ export async function getChromePageMonitorExtensionDir(): Promise<string> {
   return invoke("chrome_page_monitor_extension_dir");
 }
 
-/** Opens the unpacked extension folder via backend opener (bypasses frontend path allowlist). */
+/** Copy the app-bundled extension into Downloads and reveal that folder. */
+export async function downloadChromePageMonitorExtension(): Promise<string> {
+  return invoke("chrome_page_monitor_download_extension");
+}
+
+/** @deprecated Prefer {@link downloadChromePageMonitorExtension}. */
 export async function openChromePageMonitorExtensionDir(): Promise<void> {
-  await invoke("chrome_page_monitor_open_extension_dir");
+  await downloadChromePageMonitorExtension();
 }
 
 export async function stopChromeDevtoolsMonitor(sessionId: string): Promise<void> {

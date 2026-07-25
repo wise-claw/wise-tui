@@ -434,6 +434,7 @@ pub fn run() {
             chrome_devtools_monitor::chrome_devtools_monitor_reload,
             chrome_devtools_monitor::chrome_page_monitor_bridge_status,
             chrome_devtools_monitor::chrome_page_monitor_extension_dir,
+            chrome_devtools_monitor::chrome_page_monitor_download_extension,
             chrome_devtools_monitor::chrome_page_monitor_open_extension_dir,
             git_commands::git_status,
             git_commands::git_status_summary,

@@ -46,7 +46,16 @@ struct RunningBridge {
     port: u16,
     active: Arc<Mutex<Option<(String, String)>>>,
     reload_token: Arc<Mutex<u64>>,
+    /// Held open while the bridge runs; sending/dropping triggers graceful shutdown.
     shutdown_tx: Option<oneshot::Sender<()>>,
+}
+
+impl Drop for RunningBridge {
+    fn drop(&mut self) {
+        if let Some(tx) = self.shutdown_tx.take() {
+            let _ = tx.send(());
+        }
+    }
 }
 
 static BRIDGE: Mutex<Option<RunningBridge>> = Mutex::new(None);
@@ -359,35 +368,147 @@ pub fn active_monitor_snapshot() -> ActiveMonitorSnapshot {
     }
 }
 
-/// Resolve the unpacked Chrome extension directory (dev repo or bundled resource).
+const EXTENSION_DIR_NAME: &str = "wise-page-monitor";
+
+/// Resolve the *source* unpacked Chrome extension (bundled resource, then dev tree).
+/// User-facing load path must go through [`download_extension`] — never open the repo copy.
 pub fn resolve_extension_dir(app: &AppHandle) -> Result<std::path::PathBuf, String> {
     // 1) Bundled resource (packaged app)
     if let Ok(resource) = app.path().resource_dir() {
-        let bundled = resource.join("browser-extensions/wise-page-monitor");
+        let bundled = resource.join("browser-extensions").join(EXTENSION_DIR_NAME);
         if bundled.join("manifest.json").is_file() {
             return Ok(bundled);
         }
-        let alt = resource.join("wise-page-monitor");
+        let alt = resource.join(EXTENSION_DIR_NAME);
         if alt.join("manifest.json").is_file() {
             return Ok(alt);
         }
     }
 
-    // 2) Dev: repo-relative from CARGO_MANIFEST_DIR / cwd
+    // 2) Dev: repo-relative from CARGO_MANIFEST_DIR / cwd (source only)
     let candidates = [
         std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("../browser-extensions/wise-page-monitor"),
+            .join("../browser-extensions")
+            .join(EXTENSION_DIR_NAME),
         std::env::current_dir()
             .unwrap_or_default()
-            .join("browser-extensions/wise-page-monitor"),
+            .join("browser-extensions")
+            .join(EXTENSION_DIR_NAME),
         std::env::current_dir()
             .unwrap_or_default()
-            .join("../browser-extensions/wise-page-monitor"),
+            .join("../browser-extensions")
+            .join(EXTENSION_DIR_NAME),
     ];
     for path in candidates {
         if path.join("manifest.json").is_file() {
             return path.canonicalize().or(Ok(path));
         }
     }
-    Err("未找到 Chrome 扩展目录 browser-extensions/wise-page-monitor".into())
+    Err("未找到 Chrome 扩展资源 browser-extensions/wise-page-monitor".into())
+}
+
+fn extension_download_dest() -> Result<std::path::PathBuf, String> {
+    let downloads = dirs::download_dir()
+        .or_else(|| dirs::home_dir().map(|h| h.join("Downloads")))
+        .ok_or_else(|| "无法解析下载目录".to_string())?;
+    Ok(downloads.join(EXTENSION_DIR_NAME))
+}
+
+fn should_skip_extension_entry(name: &std::ffi::OsStr) -> bool {
+    let Some(s) = name.to_str() else {
+        return true;
+    };
+    matches!(s, "README.md" | ".DS_Store" | ".git" | ".gitignore")
+}
+
+fn copy_extension_dir(source: &std::path::Path, dest: &std::path::Path) -> Result<(), String> {
+    if !source.is_dir() {
+        return Err(format!("{} 不是目录", source.display()));
+    }
+    if dest.exists() {
+        std::fs::remove_dir_all(dest).map_err(|e| format!("清理旧扩展目录失败：{e}"))?;
+    }
+    std::fs::create_dir_all(dest).map_err(|e| format!("创建下载目录失败：{e}"))?;
+    for entry in std::fs::read_dir(source).map_err(|e| e.to_string())? {
+        let entry = entry.map_err(|e| e.to_string())?;
+        let name = entry.file_name();
+        if should_skip_extension_entry(&name) {
+            continue;
+        }
+        let ft = entry.file_type().map_err(|e| e.to_string())?;
+        if ft.is_symlink() {
+            continue;
+        }
+        let s = entry.path();
+        let d = dest.join(&name);
+        if ft.is_dir() {
+            copy_extension_dir(&s, &d)?;
+        } else if ft.is_file() {
+            if let Some(parent) = d.parent() {
+                std::fs::create_dir_all(parent).map_err(|e| e.to_string())?;
+            }
+            std::fs::copy(&s, &d).map_err(|e| format!("复制 {} 失败：{e}", s.display()))?;
+        }
+    }
+    Ok(())
+}
+
+/// Copy the app-bundled extension into the user Downloads folder for Chrome「加载已解压扩展」.
+/// Returns the destination path (never the repo / resource path).
+pub fn download_extension(app: &AppHandle) -> Result<std::path::PathBuf, String> {
+    let source = resolve_extension_dir(app)?;
+    let dest = extension_download_dest()?;
+    // Avoid copying onto itself if Downloads somehow points at the source.
+    let same = match (source.canonicalize(), dest.canonicalize()) {
+        (Ok(a), Ok(b)) => a == b,
+        _ => false,
+    };
+    if same {
+        return Ok(dest);
+    }
+    copy_extension_dir(&source, &dest)?;
+    if !dest.join("manifest.json").is_file() {
+        return Err("扩展下载不完整：缺少 manifest.json".into());
+    }
+    Ok(dest)
+}
+
+#[cfg(test)]
+mod extension_export_tests {
+    use super::{copy_extension_dir, should_skip_extension_entry};
+    use std::ffi::OsStr;
+    use std::fs;
+    use std::path::PathBuf;
+
+    #[test]
+    fn skips_readme_and_junk() {
+        assert!(should_skip_extension_entry(OsStr::new("README.md")));
+        assert!(should_skip_extension_entry(OsStr::new(".DS_Store")));
+        assert!(!should_skip_extension_entry(OsStr::new("manifest.json")));
+    }
+
+    #[test]
+    fn copy_extension_dir_writes_manifest() {
+        let root = std::env::temp_dir().join(format!(
+            "wise-page-monitor-export-{}",
+            std::process::id()
+        ));
+        let source = root.join("src");
+        let dest = root.join("out");
+        let _ = fs::remove_dir_all(&root);
+        fs::create_dir_all(source.join("icons")).unwrap();
+        fs::write(source.join("manifest.json"), r#"{"manifest_version":3}"#).unwrap();
+        fs::write(source.join("README.md"), "skip me").unwrap();
+        fs::write(source.join("background.js"), "// ok").unwrap();
+        fs::write(source.join("icons").join("icon16.png"), b"png").unwrap();
+
+        copy_extension_dir(&source, &dest).unwrap();
+        assert!(dest.join("manifest.json").is_file());
+        assert!(dest.join("background.js").is_file());
+        assert!(dest.join("icons").join("icon16.png").is_file());
+        assert!(!dest.join("README.md").exists());
+
+        let _ = fs::remove_dir_all(&root);
+        let _: PathBuf = root;
+    }
 }

@@ -4,7 +4,7 @@ import {
   DEFAULT_PAGE_MONITOR_DEBUG_PORT,
   normalizePageMonitorChromeMode,
   normalizePageMonitorDebugPort,
-  openChromePageMonitorExtensionDir,
+  downloadChromePageMonitorExtension,
   type PageMonitorChromeMode,
 } from "../services/chromeDevtoolsMonitor";
 import {
@@ -196,12 +196,13 @@ export function useChromeDevtoolsMonitor(input: {
     });
   }, [autoFixEnabled, chromeMode, resolveDebugPort, resolveUrl, sessionId]);
 
-  const openExtensionDir = useCallback(async () => {
+  const downloadExtension = useCallback(async () => {
     try {
-      await openChromePageMonitorExtensionDir();
+      const dest = await downloadChromePageMonitorExtension();
+      message.success(`扩展已下载到：${dest}`);
     } catch (error) {
       const msgText = error instanceof Error ? error.message : String(error);
-      message.error(`无法打开扩展目录：${msgText}`);
+      message.error(`无法下载扩展：${msgText}`);
     }
   }, []);
 
@@ -232,6 +233,8 @@ export function useChromeDevtoolsMonitor(input: {
     start,
     stop,
     toggle,
-    openExtensionDir,
+    downloadExtension,
+    /** @deprecated Prefer {@link downloadExtension}. */
+    openExtensionDir: downloadExtension,
   };
 }

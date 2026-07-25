@@ -813,15 +813,22 @@ pub fn chrome_page_monitor_extension_dir(app: AppHandle) -> Result<String, Strin
         .map(|p| p.display().to_string())
 }
 
-/// Opens the unpacked Chrome extension folder in Finder.
-/// Uses backend opener (not limited by frontend `opener:allow-open-path` scope).
+/// Export the app-bundled Chrome extension into `~/Downloads/wise-page-monitor`
+/// and reveal that folder. Never opens the repo source tree.
 #[tauri::command]
-pub fn chrome_page_monitor_open_extension_dir(app: AppHandle) -> Result<(), String> {
-    let dir = crate::chrome_page_monitor_bridge::resolve_extension_dir(&app)?;
-    let path = dir.to_string_lossy().to_string();
+pub fn chrome_page_monitor_download_extension(app: AppHandle) -> Result<String, String> {
+    let dest = crate::chrome_page_monitor_bridge::download_extension(&app)?;
+    let path = dest.to_string_lossy().to_string();
     app.opener()
         .open_path(&path, None::<String>)
-        .map_err(|e| format!("打开扩展目录失败：{e}"))
+        .map_err(|e| format!("扩展已下载到 {path}，但打开目录失败：{e}"))?;
+    Ok(path)
+}
+
+/// Compatibility wrapper: same as [`chrome_page_monitor_download_extension`].
+#[tauri::command]
+pub fn chrome_page_monitor_open_extension_dir(app: AppHandle) -> Result<(), String> {
+    chrome_page_monitor_download_extension(app).map(|_| ())
 }
 
 #[cfg(test)]

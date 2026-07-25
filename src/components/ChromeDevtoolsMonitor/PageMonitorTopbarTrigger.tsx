@@ -94,7 +94,7 @@ export function PageMonitorTopbarTrigger({
           saveUrl={monitor.saveUrl}
           start={monitor.start}
           stop={monitor.stop}
-          openExtensionDir={monitor.openExtensionDir}
+          downloadExtension={monitor.downloadExtension}
           onClose={() => handleOpenChange(false)}
           disabled={disabled}
         />

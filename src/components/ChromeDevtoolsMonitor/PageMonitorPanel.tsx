@@ -19,7 +19,7 @@ export type PageMonitorPanelProps = {
   saveUrl: () => boolean;
   start: () => void | Promise<void>;
   stop: () => void | Promise<void>;
-  openExtensionDir?: () => void | Promise<void>;
+  downloadExtension?: () => void | Promise<void>;
   onClose: () => void;
   disabled?: boolean;
 };
@@ -39,7 +39,7 @@ export function PageMonitorPanel({
   saveUrl,
   start,
   stop,
-  openExtensionDir,
+  downloadExtension,
   onClose,
   disabled = false,
 }: PageMonitorPanelProps) {
@@ -167,16 +167,16 @@ export function PageMonitorPanel({
         {extensionMode ? (
           <div className="app-page-monitor-popover__attach-hint app-page-monitor-popover__ext-hint">
             <p>
-              chrome://extensions → 开发者模式 → 加载已解压扩展。页顶可能出现「正在调试」提示，属正常。
+              先下载扩展，再在 chrome://extensions → 开发者模式 →「加载已解压扩展」选择下载目录。页顶可能出现「正在调试」提示，属正常。
             </p>
-            {openExtensionDir ? (
+            {downloadExtension ? (
               <button
                 type="button"
                 className="app-page-monitor-popover__link-btn"
                 disabled={disabled}
-                onClick={() => void openExtensionDir()}
+                onClick={() => void downloadExtension()}
               >
-                打开扩展目录
+                下载扩展
               </button>
             ) : null}
           </div>
