@@ -6,6 +6,8 @@ use std::path::{Component, Path, PathBuf};
 
 const MAX_LIST_DIR_ENTRIES: usize = 200;
 const MAX_BINARY_PREVIEW_BYTES: u64 = 45 * 1024 * 1024;
+/// 仓库文件编辑器可读/可写的 UTF-8 正文上限（与前端 Monaco 大文件路径对齐）。
+const MAX_EDITOR_FILE_BYTES: u64 = 4 * 1024 * 1024;
 
 fn safe_join_under_project(project: &Path, relative_path: &str) -> Result<PathBuf, String> {
     let rel = relative_path.trim();
@@ -78,6 +80,17 @@ pub(crate) fn detect_workspace_sdd_signals(repo_path: String) -> Result<Workspac
     })
 }
 
+#[derive(Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct ProjectRelativeFileText {
+    pub content: String,
+    pub byte_len: u64,
+}
+
+fn editor_file_too_large(byte_len: u64) -> bool {
+    byte_len > MAX_EDITOR_FILE_BYTES
+}
+
 #[tauri::command]
 pub(crate) fn read_project_relative_file(
     project_path: String,
@@ -102,6 +115,38 @@ pub(crate) fn read_project_relative_file(
         return Err("路径越界".into());
     }
     fs::read_to_string(&canon).map_err(|e| format!("读取文件失败: {e}"))
+}
+
+/// 仓库文件编辑器专用读取：超过 4MiB 拒绝打开，避免多 MB 正文整包 IPC。
+#[tauri::command]
+pub(crate) fn read_project_relative_file_for_editor(
+    project_path: String,
+    relative_path: String,
+) -> Result<ProjectRelativeFileText, String> {
+    let project = PathBuf::from(&project_path);
+    if !project.is_dir() {
+        return Err("仓库路径无效或不是目录".into());
+    }
+    let base = project
+        .canonicalize()
+        .map_err(|e| format!("解析仓库路径失败: {e}"))?;
+    let candidate = safe_join_under_project(&base, relative_path.trim())?;
+    let meta = fs::metadata(&candidate).map_err(|e| format!("文件不存在或无法访问: {e}"))?;
+    if !meta.is_file() {
+        return Err("目标不是普通文件".into());
+    }
+    let byte_len = meta.len();
+    if editor_file_too_large(byte_len) {
+        return Err("文件超过 4MB 编辑器上限，请用系统应用打开".into());
+    }
+    let canon = candidate
+        .canonicalize()
+        .map_err(|e| format!("解析文件路径失败: {e}"))?;
+    if !canon.starts_with(&base) {
+        return Err("路径越界".into());
+    }
+    let content = fs::read_to_string(&canon).map_err(|e| format!("读取文件失败: {e}"))?;
+    Ok(ProjectRelativeFileText { content, byte_len })
 }
 
 #[tauri::command]
@@ -190,8 +235,8 @@ pub(crate) fn write_project_relative_file(
     if rel.is_empty() {
         return Err("相对路径不能为空".into());
     }
-    if payload.len() > 512 * 1024 {
-        return Err("写入内容超过 512KB 限制".into());
+    if payload.len() as u64 > MAX_EDITOR_FILE_BYTES {
+        return Err("写入内容超过 4MB 限制".into());
     }
     let project = PathBuf::from(&project_path);
     if !project.is_dir() {
@@ -349,4 +394,16 @@ pub(crate) fn append_wise_relative_file(relative_path: String, payload: String) 
         return Err("路径越界".into());
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{editor_file_too_large, MAX_EDITOR_FILE_BYTES};
+
+    #[test]
+    fn editor_file_size_gate_allows_at_limit() {
+        assert!(!editor_file_too_large(MAX_EDITOR_FILE_BYTES));
+        assert!(!editor_file_too_large(0));
+        assert!(editor_file_too_large(MAX_EDITOR_FILE_BYTES + 1));
+    }
 }

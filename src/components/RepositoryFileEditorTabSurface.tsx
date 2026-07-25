@@ -1,4 +1,4 @@
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { lazy, memo, Suspense, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { IDisposable } from "monaco-editor";
 import { Button, Spin } from "antd";
 import { ReloadOutlined, WarningOutlined, EyeOutlined, EditOutlined } from "@ant-design/icons";
@@ -19,6 +19,7 @@ import { installMonacoTrackpadSelectionGuard } from "../utils/monacoTrackpadSele
 import {
   isMonacoLargeFileContent,
   monacoEditorOptionsBucket,
+  MONACO_LARGE_FILE_CHAR_THRESHOLD,
   resolveWiseMonacoEditorOptionsFromLength,
   shouldDeferMonacoEditorMount,
   shouldInjectMonacoContentAfterMount,
@@ -55,6 +56,58 @@ export interface RepositoryFileEditorTabSurfaceProps {
   onNavigateToFile?: (relativePath: string) => void;
 }
 
+/**
+ * 非活跃 large/huge tab：忽略 content 引用抖动（由 contentVersion 驱动注入）；
+ * 活跃 tab 仍跟 content，保证受控编辑路径及时同步。
+ */
+export function repositoryFileEditorTabSurfacePropsEqual(
+  prev: RepositoryFileEditorTabSurfaceProps,
+  next: RepositoryFileEditorTabSurfaceProps,
+): boolean {
+  if (
+    prev.isActive !== next.isActive ||
+    prev.dark !== next.dark ||
+    prev.repositoryPath !== next.repositoryPath ||
+    prev.activeSessionId !== next.activeSessionId ||
+    prev.keepAlive !== next.keepAlive ||
+    prev.mdPreviewRequested !== next.mdPreviewRequested ||
+    prev.onTabContentChange !== next.onTabContentChange ||
+    prev.onCloseTab !== next.onCloseTab ||
+    prev.onReloadTab !== next.onReloadTab ||
+    prev.onMdPreviewRequestedChange !== next.onMdPreviewRequestedChange ||
+    prev.onNavigateToFile !== next.onNavigateToFile
+  ) {
+    return false;
+  }
+  const a = prev.tab;
+  const b = next.tab;
+  if (
+    a.relativePath !== b.relativePath ||
+    a.rootPath !== b.rootPath ||
+    a.loading !== b.loading ||
+    a.focusLine !== b.focusLine ||
+    a.gitDiffSection !== b.gitDiffSection ||
+    a.gitCommitSha !== b.gitCommitSha ||
+    a.externalChanged !== b.externalChanged ||
+    a.externalDeleted !== b.externalDeleted ||
+    (a.contentVersion ?? 0) !== (b.contentVersion ?? 0) ||
+    a.diffOriginal !== b.diffOriginal ||
+    a.gitCommitCompare?.baseSha !== b.gitCommitCompare?.baseSha ||
+    a.gitCommitCompare?.headSha !== b.gitCommitCompare?.headSha ||
+    a.originalContent !== b.originalContent
+  ) {
+    return false;
+  }
+  const largeInactive =
+    !next.isActive &&
+    (a.content.length >= MONACO_LARGE_FILE_CHAR_THRESHOLD ||
+      b.content.length >= MONACO_LARGE_FILE_CHAR_THRESHOLD);
+  if (largeInactive) {
+    return a.content.length === b.content.length;
+  }
+  return a.content === b.content;
+}
+
 function normalizeEditorLine(value: number | null | undefined): number | null {
   if (typeof value !== "number" || !Number.isFinite(value)) return null;
   const line = Math.floor(value);
@@ -88,7 +141,7 @@ function revealEditorLineFocus(
   lastAppliedFocusRef.current = focusKey;
 }
 
-export function RepositoryFileEditorTabSurface({
+function RepositoryFileEditorTabSurface({
   tab,
   isActive,
   dark,
@@ -141,7 +194,9 @@ export function RepositoryFileEditorTabSurface({
     () => tab.relativePath.endsWith(".md") || tab.relativePath.endsWith(".mdx"),
     [tab.relativePath],
   );
-  const mdPreview = isMdFile && mdPreviewRequested;
+  // 大文件全量 Markdown + rehypeRaw 会卡死主线程，禁止预览。
+  const mdPreviewBlocked = isMdFile && contentLength >= MONACO_LARGE_FILE_CHAR_THRESHOLD;
+  const mdPreview = isMdFile && mdPreviewRequested && !mdPreviewBlocked;
 
   const [monacoSurfaceReady, setMonacoSurfaceReady] = useState(true);
   const [monacoEditorSurface, setMonacoEditorSurface] = useState<{
@@ -197,16 +252,20 @@ export function RepositoryFileEditorTabSurface({
     const version = tab.contentVersion ?? 0;
     if (version === lastInjectedContentVersionRef.current) return;
     lastInjectedContentVersionRef.current = version;
+    // 读 tabRef：避免把 tab.content 列入依赖，防抖 flush 时反复 setValue。
+    const content = tabRef.current.content;
     const view = editor.saveViewState();
     contentInjectionCancelRef.current?.();
+    const injectTimeoutMs = resolveMonacoIdleDeferTimeoutMs(hugeFile ? 96 : 0);
     contentInjectionCancelRef.current = scheduleMonacoLargeFileContentInjection(
       editor,
-      tab.content,
+      content,
       () => {
         if (view) editor.restoreViewState(view);
       },
+      injectTimeoutMs,
     );
-  }, [largeFile, tab.contentVersion, tab.content, tab.diffOriginal, monacoEditorSurface]);
+  }, [largeFile, hugeFile, tab.contentVersion, tab.diffOriginal, monacoEditorSurface]);
 
   useEffect(() => {
     // keep-alive：已挂载过的编辑器不再因内容长度变化重新 defer/卸载，
@@ -471,10 +530,23 @@ export function RepositoryFileEditorTabSurface({
               type={mdPreview ? "primary" : "default"}
               size="small"
               icon={<EyeOutlined />}
-              onClick={() => onMdPreviewRequestedChange(true)}
+              disabled={mdPreviewBlocked}
+              title={mdPreviewBlocked ? "文件较大，预览已禁用" : undefined}
+              onClick={() => {
+                if (mdPreviewBlocked) return;
+                onMdPreviewRequestedChange(true);
+              }}
             >
               预览
             </Button>
+          </div>
+        ) : null}
+        {mdPreviewBlocked && isActive && mdPreviewRequested ? (
+          <div className="app-file-editor-external-banner" role="status">
+            <WarningOutlined />
+            <span className="app-file-editor-external-banner-text">
+              文件较大，Markdown 预览已禁用，请使用编辑模式。
+            </span>
           </div>
         ) : null}
         {mdPreview && isActive ? (
@@ -531,3 +603,11 @@ export function RepositoryFileEditorTabSurface({
     </div>
   );
 }
+
+export const MemoRepositoryFileEditorTabSurface = memo(
+  RepositoryFileEditorTabSurface,
+  repositoryFileEditorTabSurfacePropsEqual,
+);
+
+/** 非 memo 导出，便于测试与局部直接引用。 */
+export { RepositoryFileEditorTabSurface };

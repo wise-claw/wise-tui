@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  isFileEditorTabDirty,
   mergeEditorRefreshScope,
   planEditorTabRefresh,
   type FileEditorTab,
@@ -153,5 +154,24 @@ describe("mergeEditorRefreshScope", () => {
 
   test("不同仓库 -> 升级全量（避免多仓库漏刷）", () => {
     expect(mergeEditorRefreshScope("repoA", "repoB")).toBeNull();
+  });
+});
+
+describe("isFileEditorTabDirty", () => {
+  test("同一引用视为干净", () => {
+    const body = "same";
+    const tab = makeTab({ content: body, originalContent: body });
+    expect(isFileEditorTabDirty(tab)).toBe(false);
+  });
+
+  test("length 不同直接判定脏", () => {
+    const tab = makeTab({ content: "ab", originalContent: "a" });
+    expect(isFileEditorTabDirty(tab)).toBe(true);
+  });
+
+  test("pending 覆盖 content 参与判定", () => {
+    const tab = makeTab({ content: "original", originalContent: "original" });
+    expect(isFileEditorTabDirty(tab, "changed")).toBe(true);
+    expect(isFileEditorTabDirty(tab, "original")).toBe(false);
   });
 });

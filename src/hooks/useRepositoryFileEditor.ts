@@ -6,8 +6,10 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import type { GitPanelOpenFileOptions } from "../components/GitPanel/types";
 import { gitShowRevision } from "../services/git";
 import {
+  isEditorFileTooLargeError,
   readProjectRelativeFile,
   readProjectRelativeFileBase64,
+  readProjectRelativeFileForEditor,
   writeProjectRelativeFile,
 } from "../services/projectRelativeFiles";
 import { base64ToArrayBuffer, joinRepositoryAbsolutePath } from "../utils/repositoryPreviewBinary";
@@ -25,6 +27,7 @@ import {
 } from "../utils/repositoryFilePreview";
 import { toUiErrorMessage } from "../utils/appErrorMessage";
 import {
+  isMonacoHugeFileContent,
   isMonacoLargeFileContent,
   MONACO_LARGE_FILE_CHANGE_DEBOUNCE_MS,
 } from "../utils/monacoLargeFile";
@@ -127,6 +130,20 @@ export function mergeEditorRefreshScope(
   if (prev === undefined) return incoming;
   if (prev === null || incoming === null) return null;
   return prev === incoming ? prev : null;
+}
+
+/**
+ * 廉价 dirty 判定：先引用相等，再比 length，最后才全量字符串比较。
+ * Panel tab 点与 hook 内多处 dirty 统计共用，避免大文件每次 render O(n) 双扫。
+ */
+export function isFileEditorTabDirty(
+  tab: Pick<FileEditorTab, "content" | "originalContent">,
+  pending?: string,
+): boolean {
+  const effective = pending ?? tab.content;
+  if (effective === tab.originalContent) return false;
+  if (effective.length !== tab.originalContent.length) return true;
+  return effective !== tab.originalContent;
 }
 
 interface UseRepositoryFileEditorOptions {
@@ -319,6 +336,7 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
 
   const applyLoadedEditorContent = useCallback(
     (relativePath: string, rootPath: string, body: string, focusLine?: number | null) => {
+      // content 与 originalContent 共用同一字符串引用，避免干净 tab 双份拷贝。
       const apply = () => {
         updatePaneTabs(paneIndex, (prev) =>
           prev.map((t) =>
@@ -351,10 +369,10 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
   );
   const editorDirty = useMemo(() => {
     if (!activeFileEditorTab) return false;
-    const effectiveContent =
-      pendingTabContentRef.current.get(pendingKey(paneIndex, activeFileEditorTab.relativePath)) ??
-      activeFileEditorTab.content;
-    return effectiveContent !== activeFileEditorTab.originalContent;
+    const pending = pendingTabContentRef.current.get(
+      pendingKey(paneIndex, activeFileEditorTab.relativePath),
+    );
+    return isFileEditorTabDirty(activeFileEditorTab, pending);
   }, [activeFileEditorTab, contentSyncVersion, paneIndex]);
 
   useEffect(() => {
@@ -366,9 +384,8 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
     const dirtyPaths = new Set<string>();
     const tabs = fileEditorTabsRef.current.get(paneIndex) ?? [];
     for (const tab of tabs) {
-      const effectiveContent =
-        pendingTabContentRef.current.get(pendingKey(paneIndex, tab.relativePath)) ?? tab.content;
-      if (effectiveContent !== tab.originalContent) {
+      const pending = pendingTabContentRef.current.get(pendingKey(paneIndex, tab.relativePath));
+      if (isFileEditorTabDirty(tab, pending)) {
         dirtyPaths.add(tab.relativePath);
       }
     }
@@ -550,13 +567,17 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
       updatePaneActivePath(paneIndex, () => relativePath);
 
       try {
-        const body = await readProjectRelativeFile(rootPath, relativePath);
+        const { content: body } = await readProjectRelativeFileForEditor(rootPath, relativePath);
         applyLoadedEditorContent(relativePath, rootPath, body, options?.line ?? null);
       } catch (error) {
         console.error("Failed to read file:", error);
-        message.error(`读取文件失败：${relativePath}`);
         const absPath = joinRepositoryAbsolutePath(rootPath, relativePath);
         void openInFinder(absPath).catch(() => undefined);
+        message.error(
+          isEditorFileTooLargeError(error)
+            ? `文件过大（超过 4MB），已用系统应用打开：${relativePath}`
+            : `读取文件失败：${relativePath}`,
+        );
         updatePaneTabs(paneIndex, (prev) => {
           const nextTabs = prev.filter((t) => t.relativePath !== relativePath);
           updatePaneActivePath(paneIndex, (cur) => {
@@ -626,22 +647,29 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
         if (loadGeneration !== gitDiffLoadGenerationRef.current) {
           return;
         }
-        updatePaneTabs(paneIndex, (prev) =>
-          prev.map((t) =>
-            t.relativePath === relativePath
-              ? {
-                  relativePath,
-                  rootPath,
-                  content: right,
-                  originalContent: right,
-                  loading: false,
-                  focusLine: null,
-                  diffOriginal: left,
-                  gitDiffSection: section,
-                }
-              : t,
-          ),
-        );
+        const applyDiff = () => {
+          updatePaneTabs(paneIndex, (prev) =>
+            prev.map((t) =>
+              t.relativePath === relativePath
+                ? {
+                    relativePath,
+                    rootPath,
+                    content: right,
+                    originalContent: right,
+                    loading: false,
+                    focusLine: null,
+                    diffOriginal: left,
+                    gitDiffSection: section,
+                  }
+                : t,
+            ),
+          );
+        };
+        if (isMonacoHugeFileContent(right) || isMonacoHugeFileContent(left)) {
+          startTransition(applyDiff);
+        } else {
+          applyDiff();
+        }
       } catch (error) {
         if (loadGeneration !== gitDiffLoadGenerationRef.current) {
           return;
@@ -710,22 +738,29 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
         if (loadGeneration !== gitDiffLoadGenerationRef.current) {
           return;
         }
-        updatePaneTabs(paneIndex, (prev) =>
-          prev.map((t) =>
-            t.relativePath === relativePath
-              ? {
-                  relativePath,
-                  rootPath,
-                  content: right,
-                  originalContent: right,
-                  loading: false,
-                  focusLine: null,
-                  diffOriginal: left,
-                  gitCommitSha: sha,
-                }
-              : t,
-          ),
-        );
+        const applyDiff = () => {
+          updatePaneTabs(paneIndex, (prev) =>
+            prev.map((t) =>
+              t.relativePath === relativePath
+                ? {
+                    relativePath,
+                    rootPath,
+                    content: right,
+                    originalContent: right,
+                    loading: false,
+                    focusLine: null,
+                    diffOriginal: left,
+                    gitCommitSha: sha,
+                  }
+                : t,
+            ),
+          );
+        };
+        if (isMonacoHugeFileContent(right) || isMonacoHugeFileContent(left)) {
+          startTransition(applyDiff);
+        } else {
+          applyDiff();
+        }
       } catch (error) {
         if (loadGeneration !== gitDiffLoadGenerationRef.current) {
           return;
@@ -795,22 +830,29 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
         if (loadGeneration !== gitDiffLoadGenerationRef.current) {
           return;
         }
-        updatePaneTabs(paneIndex, (prev) =>
-          prev.map((t) =>
-            t.relativePath === relativePath
-              ? {
-                  relativePath,
-                  rootPath,
-                  content: right,
-                  originalContent: right,
-                  loading: false,
-                  focusLine: null,
-                  diffOriginal: left,
-                  gitCommitCompare: { baseSha, headSha },
-                }
-              : t,
-          ),
-        );
+        const applyDiff = () => {
+          updatePaneTabs(paneIndex, (prev) =>
+            prev.map((t) =>
+              t.relativePath === relativePath
+                ? {
+                    relativePath,
+                    rootPath,
+                    content: right,
+                    originalContent: right,
+                    loading: false,
+                    focusLine: null,
+                    diffOriginal: left,
+                    gitCommitCompare: { baseSha, headSha },
+                  }
+                : t,
+            ),
+          );
+        };
+        if (isMonacoHugeFileContent(right) || isMonacoHugeFileContent(left)) {
+          startTransition(applyDiff);
+        } else {
+          applyDiff();
+        }
       } catch (error) {
         if (loadGeneration !== gitDiffLoadGenerationRef.current) {
           return;
@@ -876,9 +918,8 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
     // per-pane: dirtyCount 与 clearAll 只清当前 pane。
     const ownTabs = fileEditorTabsRef.current.get(paneIndex) ?? [];
     const dirtyCount = ownTabs.filter((t) => {
-      const effectiveContent =
-        pendingTabContentRef.current.get(pendingKey(paneIndex, t.relativePath)) ?? t.content;
-      return effectiveContent !== t.originalContent;
+      const pending = pendingTabContentRef.current.get(pendingKey(paneIndex, t.relativePath));
+      return isFileEditorTabDirty(t, pending);
     }).length;
     const clearAll = () => {
       updatePaneTabs(paneIndex, () => []);
@@ -924,9 +965,8 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
       if (!tab) {
         return;
       }
-      const effectiveContent =
-        pendingTabContentRef.current.get(pendingKey(paneIndex, relativePath)) ?? tab.content;
-      if (effectiveContent !== tab.originalContent) {
+      const pending = pendingTabContentRef.current.get(pendingKey(paneIndex, relativePath));
+      if (isFileEditorTabDirty(tab, pending)) {
         Modal.confirm({
           title: "关闭文件标签？",
           content: `「${relativePath}」有未保存修改，关闭后将丢失。`,
@@ -1088,19 +1128,29 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
         void Promise.allSettled(
           snapshot.map(async (tab) => {
             try {
-              const disk = await readProjectRelativeFile(tab.rootPath, tab.relativePath);
-              return { tab, disk: disk as string };
-            } catch {
-              return { tab, disk: null };
+              const { content: disk } = await readProjectRelativeFileForEditor(
+                tab.rootPath,
+                tab.relativePath,
+              );
+              return { tab, disk, oversized: false as const };
+            } catch (error) {
+              // 文件长大超过编辑器上限：保留当前内容，不误标删除。
+              if (isEditorFileTooLargeError(error)) {
+                return { tab, disk: null, oversized: true as const };
+              }
+              return { tab, disk: null, oversized: false as const };
             }
           }),
         ).then((results) => {
           if (generation !== refreshGenerationRef.current) return;
           for (const result of results) {
             if (result.status !== "fulfilled") continue;
-            const { tab, disk } = result.value;
-            const effectiveContent =
-              pendingTabContentRef.current.get(pendingKey(paneIndex, tab.relativePath)) ?? tab.content;
+            const { tab, disk, oversized } = result.value;
+            if (oversized) continue;
+            const pending = pendingTabContentRef.current.get(
+              pendingKey(paneIndex, tab.relativePath),
+            );
+            const effectiveContent = pending ?? tab.content;
             const decision = planEditorTabRefresh({
               tab,
               effectiveContent,
@@ -1170,7 +1220,7 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
         return;
       }
       try {
-        const disk = await readProjectRelativeFile(rootPath, relativePath);
+        const { content: disk } = await readProjectRelativeFileForEditor(rootPath, relativePath);
         const current = fileEditorTabsRef.current
           .get(paneIndex)
           ?.find((t) => t.relativePath === relativePath);
@@ -1178,6 +1228,12 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
         applyExternalDiskContent(relativePath, disk);
       } catch (error) {
         console.error("Failed to reload file from disk:", error);
+        if (isEditorFileTooLargeError(error)) {
+          const absPath = joinRepositoryAbsolutePath(rootPath, relativePath);
+          void openInFinder(absPath).catch(() => undefined);
+          message.error(`文件过大（超过 4MB），已用系统应用打开：${relativePath}`);
+          return;
+        }
         updatePaneTabs(paneIndex, (prev) =>
           prev.map((t) =>
             t.relativePath === relativePath

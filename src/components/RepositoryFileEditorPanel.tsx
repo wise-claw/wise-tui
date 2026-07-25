@@ -1,15 +1,13 @@
-import { useCallback, useEffect, useRef, useState, type MouseEvent } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, type MouseEvent } from "react";
 import { AimOutlined, CloseOutlined } from "@ant-design/icons";
 import { Button, Dropdown, Spin, type MenuProps } from "antd";
-import { RepositoryFileEditorTabSurface } from "./RepositoryFileEditorTabSurface";
+import { MemoRepositoryFileEditorTabSurface } from "./RepositoryFileEditorTabSurface";
 import { HoverHint } from "./shared/HoverHint";
-import type { FileEditorTab } from "../hooks/useRepositoryFileEditor";
-
-/**
- * keep-alive 保留的 Monaco 实例上限。超出时最久未活跃的 tab 被逐出（卸载编辑器），
- * 平衡切换流畅度与内存/TS worker 项目图规模。
- */
-const FILE_EDITOR_KEEP_ALIVE_LIMIT = 8;
+import {
+  isFileEditorTabDirty,
+  type FileEditorTab,
+} from "../hooks/useRepositoryFileEditor";
+import { resolveFileEditorKeepAliveLimit } from "../utils/monacoLargeFile";
 
 interface Props {
   activePath: string | null;
@@ -59,19 +57,40 @@ export function RepositoryFileEditorPanel({
   const panelRef = useRef<HTMLDivElement | null>(null);
   const activeTab = tabs.find((tab) => tab.relativePath === activePath) ?? null;
 
+  const keepAliveLimit = useMemo(() => {
+    let maxLen = 0;
+    for (const tab of tabs) {
+      if (tab.content.length > maxLen) maxLen = tab.content.length;
+      if (tab.diffOriginal !== undefined && tab.diffOriginal.length > maxLen) {
+        maxLen = tab.diffOriginal.length;
+      }
+    }
+    return resolveFileEditorKeepAliveLimit(maxLen);
+  }, [tabs]);
+
   // LRU：活跃路径前插并截断至上限，决定哪些 tab 的 Monaco 实例保留（keep-alive）。
   // 切换 tab 时被逐出的 surface 收到 keepAlive=false，执行与卸载等价的清理。
+  // 上限随打开文件大小自适应（huge→1、large→2、其余→8）。
   const [keepAlivePaths, setKeepAlivePaths] = useState<string[]>([]);
   useEffect(() => {
     if (!activePath) return;
     setKeepAlivePaths((prev) => {
       const next = [activePath, ...prev.filter((path) => path !== activePath)];
-      if (next.length > FILE_EDITOR_KEEP_ALIVE_LIMIT) {
-        next.length = FILE_EDITOR_KEEP_ALIVE_LIMIT;
+      if (next.length > keepAliveLimit) {
+        next.length = keepAliveLimit;
       }
       return next;
     });
-  }, [activePath]);
+  }, [activePath, keepAliveLimit]);
+
+  // tabs 关闭后从 keep-alive 列表剔除，避免陈旧 path 占位。
+  useEffect(() => {
+    const open = new Set(tabs.map((t) => t.relativePath));
+    setKeepAlivePaths((prev) => {
+      const next = prev.filter((path) => open.has(path));
+      return next.length === prev.length ? prev : next;
+    });
+  }, [tabs]);
 
   const canSaveActiveTab = Boolean(
     activeTab?.relativePath &&
@@ -186,7 +205,7 @@ export function RepositoryFileEditorPanel({
           <div className="app-file-editor-tabs-scroll" role="tablist" aria-label="已打开文件">
             {tabs.map((tab) => {
               const isActive = tab.relativePath === activePath;
-              const tabDirty = tab.content !== tab.originalContent;
+              const tabDirty = isFileEditorTabDirty(tab);
               const label = tab.relativePath.split(/[/\\]/).pop() ?? tab.relativePath;
               return (
                 <Dropdown
@@ -264,7 +283,7 @@ export function RepositoryFileEditorPanel({
         {tabs
           .filter((tab) => !tab.loading)
           .map((tab) => (
-            <RepositoryFileEditorTabSurface
+            <MemoRepositoryFileEditorTabSurface
               key={tab.relativePath}
               tab={tab}
               isActive={tab.relativePath === activePath}

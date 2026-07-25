@@ -16,6 +16,13 @@ export const MONACO_HUGE_FILE_CHAR_THRESHOLD = 512 * 1024;
 /** 超大文件 onChange 合并写入 React 状态的间隔（毫秒）。 */
 export const MONACO_LARGE_FILE_CHANGE_DEBOUNCE_MS = 180;
 
+/** 小/中文件 keep-alive 上限。 */
+export const FILE_EDITOR_KEEP_ALIVE_LIMIT_DEFAULT = 8;
+/** large 文件 keep-alive 上限。 */
+export const FILE_EDITOR_KEEP_ALIVE_LIMIT_LARGE = 2;
+/** huge 文件 keep-alive 上限（仅活跃实例）。 */
+export const FILE_EDITOR_KEEP_ALIVE_LIMIT_HUGE = 1;
+
 export type MonacoEditorOptionsBucket = "small" | "medium" | "large" | "huge";
 
 export function monacoEditorOptionsBucket(length: number): MonacoEditorOptionsBucket {
@@ -47,6 +54,20 @@ export function shouldDeferMonacoEditorMount(contentLength: number): boolean {
 
 export function shouldInjectMonacoContentAfterMount(contentLength: number): boolean {
   return contentLength >= MONACO_HUGE_FILE_CHAR_THRESHOLD;
+}
+
+/**
+ * 按当前打开 tabs 中最大 content.length 决定 Monaco keep-alive 上限：
+ * huge→1、large→2、其余→8。
+ */
+export function resolveFileEditorKeepAliveLimit(maxContentLength: number): number {
+  if (maxContentLength >= MONACO_HUGE_FILE_CHAR_THRESHOLD) {
+    return FILE_EDITOR_KEEP_ALIVE_LIMIT_HUGE;
+  }
+  if (maxContentLength >= MONACO_LARGE_FILE_CHAR_THRESHOLD) {
+    return FILE_EDITOR_KEEP_ALIVE_LIMIT_LARGE;
+  }
+  return FILE_EDITOR_KEEP_ALIVE_LIMIT_DEFAULT;
 }
 
 export function resolveWiseMonacoEditorOptions(
@@ -90,10 +111,32 @@ export function resolveWiseMonacoEditorOptionsFromLength(
     colorDecorators: false,
     renderValidationDecorations: "off",
     largeFileOptimizations: true,
+    links: false,
+    quickSuggestions: false,
+    suggestOnTriggerCharacters: false,
+    parameterHints: { enabled: false },
+    hover: { enabled: false },
+    renderLineHighlight: "none",
+    matchBrackets: "never",
+    bracketPairColorization: { enabled: false },
+    unicodeHighlight: {
+      ambiguousCharacters: false,
+      invisibleCharacters: false,
+      nonBasicASCII: false,
+    },
+    guides: {
+      indentation: false,
+      bracketPairs: false,
+      bracketPairsHorizontal: false,
+      highlightActiveIndentation: false,
+      highlightActiveBracketPair: false,
+    },
+    smoothScrolling: false,
     ...(huge
       ? {
           folding: false,
-          stopRenderingLineAfter: 10000,
+          stopRenderingLineAfter: 5000,
+          renderWhitespace: "none" as const,
         }
       : {
           folding: true,

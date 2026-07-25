@@ -5,6 +5,7 @@ export function scheduleMonacoLargeFileContentInjection(
   editor: MonacoEditorNamespace.IStandaloneCodeEditor,
   content: string,
   onReady?: () => void,
+  timeoutMs = 0,
 ): () => void {
   return runWhenIdle(
     () => {
@@ -15,6 +16,6 @@ export function scheduleMonacoLargeFileContentInjection(
       }
       onReady?.();
     },
-    { timeoutMs: 0 },
+    { timeoutMs },
   );
 }

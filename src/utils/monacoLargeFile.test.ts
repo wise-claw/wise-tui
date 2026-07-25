@@ -1,5 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import {
+  FILE_EDITOR_KEEP_ALIVE_LIMIT_DEFAULT,
+  FILE_EDITOR_KEEP_ALIVE_LIMIT_HUGE,
+  FILE_EDITOR_KEEP_ALIVE_LIMIT_LARGE,
   isMonacoHugeFileContent,
   isMonacoLargeFileContent,
   maxMonacoContentLength,
@@ -7,6 +10,7 @@ import {
   MONACO_LARGE_FILE_CHAR_THRESHOLD,
   MONACO_MEDIUM_FILE_CHAR_THRESHOLD,
   monacoEditorOptionsBucket,
+  resolveFileEditorKeepAliveLimit,
   resolveWiseMonacoEditorOptions,
   shouldDeferMonacoEditorMount,
   shouldInjectMonacoContentAfterMount,
@@ -41,12 +45,31 @@ describe("monacoLargeFile", () => {
     expect(large.wordWrap).toBe("off");
     expect(large.largeFileOptimizations).toBe(true);
     expect(large.occurrencesHighlight).toBe("off");
+    expect(large.links).toBe(false);
+    expect(large.quickSuggestions).toBe(false);
+    expect(large.hover).toEqual({ enabled: false });
+    expect(large.smoothScrolling).toBe(false);
+    expect(large.renderLineHighlight).toBe("none");
   });
 
   test("applies stricter limits for huge files", () => {
     const huge = resolveWiseMonacoEditorOptions("x".repeat(MONACO_HUGE_FILE_CHAR_THRESHOLD));
     expect(huge.folding).toBe(false);
-    expect(huge.stopRenderingLineAfter).toBe(10000);
+    expect(huge.stopRenderingLineAfter).toBe(5000);
+    expect(huge.renderWhitespace).toBe("none");
+  });
+
+  test("resolveFileEditorKeepAliveLimit scales with content size", () => {
+    expect(resolveFileEditorKeepAliveLimit(0)).toBe(FILE_EDITOR_KEEP_ALIVE_LIMIT_DEFAULT);
+    expect(resolveFileEditorKeepAliveLimit(MONACO_LARGE_FILE_CHAR_THRESHOLD - 1)).toBe(
+      FILE_EDITOR_KEEP_ALIVE_LIMIT_DEFAULT,
+    );
+    expect(resolveFileEditorKeepAliveLimit(MONACO_LARGE_FILE_CHAR_THRESHOLD)).toBe(
+      FILE_EDITOR_KEEP_ALIVE_LIMIT_LARGE,
+    );
+    expect(resolveFileEditorKeepAliveLimit(MONACO_HUGE_FILE_CHAR_THRESHOLD)).toBe(
+      FILE_EDITOR_KEEP_ALIVE_LIMIT_HUGE,
+    );
   });
 
   test("turns off highlight features for medium files", () => {

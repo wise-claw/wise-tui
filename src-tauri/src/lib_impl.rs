@@ -488,6 +488,7 @@ pub fn run() {
             repository_files::rename_repository_entry,
             project_relative_files::detect_workspace_sdd_signals,
             project_relative_files::read_project_relative_file,
+            project_relative_files::read_project_relative_file_for_editor,
             project_relative_files::read_project_relative_file_base64,
             project_relative_files::list_project_relative_directory,
             project_relative_files::write_project_relative_file,

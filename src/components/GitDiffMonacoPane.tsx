@@ -6,6 +6,7 @@ import { configureWiseMonacoTypeScript } from "../services/monacoTypeScriptEnvir
 import { installMonacoTrackpadSelectionGuard } from "../utils/monacoTrackpadSelectionGuard";
 import {
   maxMonacoContentLength,
+  MONACO_HUGE_FILE_CHAR_THRESHOLD,
   resolveWiseMonacoEditorOptionsFromLength,
   shouldDeferMonacoEditorMount,
 } from "../utils/monacoLargeFile";
@@ -57,6 +58,7 @@ export function GitDiffMonacoPane({
   );
 
   const diffContentLength = maxMonacoContentLength(original, modified);
+  const hugeDiff = diffContentLength >= MONACO_HUGE_FILE_CHAR_THRESHOLD;
   const diffEditorOptions = useMemo(
     () => resolveWiseMonacoEditorOptionsFromLength(diffContentLength, relativePath),
     [diffContentLength, relativePath],
@@ -202,7 +204,8 @@ export function GitDiffMonacoPane({
             options={{
               ...diffEditorOptions,
               readOnly,
-              renderSideBySide: true,
+              // 超大文件双栏 Diff 内存与布局开销过高，降级为 inline。
+              renderSideBySide: !hugeDiff,
             }}
           />
         </>
