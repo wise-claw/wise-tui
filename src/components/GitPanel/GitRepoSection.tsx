@@ -664,6 +664,15 @@ function GitRepoSectionInner({
       });
   }, [openingRemote, repositoryPath]);
 
+  const handleDismissError = useCallback((key: string) => {
+    setErrors((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }, []);
+
   const isMissingRepo = errors.status?.includes("Failed to open git repo");
   const changeCount =
     (status?.staged.length ?? headerSnapshot?.stagedCount ?? 0) +
@@ -771,6 +780,7 @@ function GitRepoSectionInner({
                 onCommitAndPush={handleCommitAndPush}
                 onOpenFile={handleOpenRepoFile}
                 onBranchChanged={() => void loadStatus({ silent: true })}
+                onDismissError={handleDismissError}
               />
             )
           )}

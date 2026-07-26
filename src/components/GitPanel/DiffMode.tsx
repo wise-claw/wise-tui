@@ -59,6 +59,8 @@ interface DiffModeProps {
   onCommitAndPush: (msg: string) => void;
   onOpenFile?: (path: string, options?: GitPanelOpenFileOptions) => void;
   onBranchChanged?: () => void;
+  /** 用户主动关闭某个 error banner；key 与 errors 字典的键一致（如 "commit"）。 */
+  onDismissError?: (key: string) => void;
 }
 
 function DiffModeInner({
@@ -77,6 +79,7 @@ function DiffModeInner({
   onCommitAndPush,
   onOpenFile,
   onBranchChanged,
+  onDismissError,
 }: DiffModeProps) {
   const [commitMsg, setCommitMsg] = useState("");
   const [unstagedViewMode, setUnstagedViewMode] = useState<UnstagedViewMode>("tree");
@@ -452,8 +455,9 @@ function DiffModeInner({
           <Button
             type="text"
             size="small"
+            aria-label="关闭错误提示"
             icon={<span style={{ fontSize: 14 }}>&times;</span>}
-            onClick={() => { }}
+            onClick={() => onDismissError?.("commit")}
           />
         </div>
       )}

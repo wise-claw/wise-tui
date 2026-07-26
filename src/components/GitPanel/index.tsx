@@ -504,6 +504,15 @@ function GitSingleRepoPanel({
       });
   }, [openingRemote, repositoryPath]);
 
+  const handleDismissError = useCallback((key: string) => {
+    setErrors((prev) => {
+      if (!prev[key]) return prev;
+      const next = { ...prev };
+      delete next[key];
+      return next;
+    });
+  }, []);
+
   const isMissingRepo = errors.status?.includes("Failed to open git repo");
   const showPanelLoadingBar = Object.entries(loading).some(
     ([key, busy]) => busy && key !== "push" && key !== "pull" && key !== "fetch" && key !== "commitAndPush",
@@ -576,6 +585,7 @@ function GitSingleRepoPanel({
               onCommitAndPush={handleCommitAndPush}
               onOpenFile={handleOpenRepoFile}
               onBranchChanged={() => void loadStatus({ silent: true })}
+              onDismissError={handleDismissError}
             />
           )
         )}
