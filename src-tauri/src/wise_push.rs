@@ -78,6 +78,8 @@ async fn one_ws_session(app: &AppHandle, url: &str, token: Option<&str>) -> Resu
                 conversation_id: frame.conversation_id,
                 body: truncate_chars(&frame.body, 8000),
                 server_msg_id: frame.message_id,
+                source: None,
+                title: None,
             };
             let app2 = app.clone();
             let _ = tokio::task::spawn_blocking(move || {

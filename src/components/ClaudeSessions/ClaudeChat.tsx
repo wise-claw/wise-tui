@@ -1508,6 +1508,10 @@ export function ClaudeChatInner({
   );
 
   const sessionUnreadCount = sessionUnreadNotificationRows.length;
+  const sessionUnreadCountRef = useRef(sessionUnreadCount);
+  useEffect(() => {
+    sessionUnreadCountRef.current = sessionUnreadCount;
+  }, [sessionUnreadCount]);
 
   useEffect(() => {
     sessionNotificationSeenIdsRef.current.clear();
@@ -1777,13 +1781,18 @@ export function ClaudeChatInner({
     })();
 
     function handleOpenSessionNotificationPanel(event: Event) {
-      const custom = event as CustomEvent<{ conversationId?: string }>;
+      const custom = event as CustomEvent<{ conversationId?: string; any?: boolean }>;
       const conversationId = custom.detail?.conversationId;
-      if (typeof conversationId !== "string" || !conversationId.trim()) {
-        return;
-      }
-      const s = sessionForNotificationPanelRef.current;
-      if (!notificationConversationInSessionInboxScope(conversationId, s, sessionsForNotificationMatchRef.current)) {
+      if (!custom.detail?.any) {
+        if (typeof conversationId !== "string" || !conversationId.trim()) {
+          return;
+        }
+        const s = sessionForNotificationPanelRef.current;
+        if (!notificationConversationInSessionInboxScope(conversationId, s, sessionsForNotificationMatchRef.current)) {
+          return;
+        }
+      } else if (sessionUnreadCountRef.current <= 0) {
+        // 任意展开模式：本会话无未读时不抢着展开，让有未读的会话负责显示。
         return;
       }
       setNotificationPanelCollapsed(false);

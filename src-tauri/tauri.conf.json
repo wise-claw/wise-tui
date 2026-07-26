@@ -23,10 +23,10 @@
       },
       {
         "label": "mascot",
-        "title": "Wise Mascot",
+        "title": "Wise Pet",
         "url": "mascot.html",
-        "width": 200,
-        "height": 240,
+        "width": 110,
+        "height": 130,
         "resizable": false,
         "decorations": false,
         "transparent": true,

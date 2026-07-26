@@ -42,8 +42,8 @@
     "runtime": null
   },
   "build": {
-    "buildCommand": "bunx tsc --noEmit -p tsconfig.json 2>&1 | grep -E \"error TS\" | head -20",
-    "testCommand": "bun test src/services/tabsStore 2>&1 | tail -20; echo \"---appSettings---\"; bun test 2>&1 | grep -iE \"appSettings|tauriEnv\" | head",
+    "buildCommand": "PATH=\"/Users/sjl/.cargo/bin:$PATH\" bunx tsc --noEmit -p tsconfig.json 2>&1 | tail -10; echo \"---exit=$?---\"",
+    "testCommand": "bun test src/services/codeReview 2>&1 | tail -10",
     "lintCommand": null,
     "devCommand": "npm run dev",
     "scripts": {
@@ -242,15 +242,57 @@
   },
   "hotPaths": [
     {
+      "path": "src/mascot.tsx",
+      "accessCount": 28,
+      "lastAccessed": 1785029446695,
+      "type": "file"
+    },
+    {
+      "path": "src/mascot.css",
+      "accessCount": 13,
+      "lastAccessed": 1785029440302,
+      "type": "file"
+    },
+    {
+      "path": "src-tauri/src/wise_mascot.rs",
+      "accessCount": 11,
+      "lastAccessed": 1785029316041,
+      "type": "file"
+    },
+    {
       "path": "src/hooks/useRepositoryFileEditor.ts",
+      "accessCount": 9,
+      "lastAccessed": 1785024547431,
+      "type": "file"
+    },
+    {
+      "path": "src/hooks/useClaudeSessions.ts",
+      "accessCount": 8,
+      "lastAccessed": 1785028697424,
+      "type": "file"
+    },
+    {
+      "path": "src/components/ClaudeSessions/ClaudeChat.tsx",
+      "accessCount": 8,
+      "lastAccessed": 1785028886256,
+      "type": "file"
+    },
+    {
+      "path": "src/services/wiseMascot.ts",
+      "accessCount": 8,
+      "lastAccessed": 1785029300681,
+      "type": "file"
+    },
+    {
+      "path": "src-tauri/tauri.conf.json",
       "accessCount": 7,
-      "lastAccessed": 1784991556099,
+      "lastAccessed": 1785029356037,
       "type": "file"
     },
     {
       "path": "src/AppImpl.tsx",
-      "accessCount": 4,
-      "lastAccessed": 1784963443251,
+      "accessCount": 6,
+      "lastAccessed": 1785024537843,
       "type": "file"
     },
     {
@@ -260,9 +302,33 @@
       "type": "file"
     },
     {
+      "path": "src/components/MascotPet/WisePetSprite.tsx",
+      "accessCount": 4,
+      "lastAccessed": 1785028631482,
+      "type": "file"
+    },
+    {
+      "path": "src/services/codeReview/codeReviewNotification.ts",
+      "accessCount": 4,
+      "lastAccessed": 1785028699128,
+      "type": "file"
+    },
+    {
+      "path": "src/components/DingTalkEnterpriseBotPopoverBody.tsx",
+      "accessCount": 4,
+      "lastAccessed": 1785028700286,
+      "type": "file"
+    },
+    {
       "path": "src/services/appSettingsStore.ts",
       "accessCount": 3,
       "lastAccessed": 1784991487416,
+      "type": "file"
+    },
+    {
+      "path": "src-tauri/src/dingtalk_stream_gateway.rs",
+      "accessCount": 3,
+      "lastAccessed": 1785028505506,
       "type": "file"
     },
     {
@@ -275,6 +341,24 @@
       "path": "src-tauri/src/cursor_agent.rs",
       "accessCount": 2,
       "lastAccessed": 1784963747368,
+      "type": "file"
+    },
+    {
+      "path": "src-tauri/src/wise_push.rs",
+      "accessCount": 2,
+      "lastAccessed": 1785028491241,
+      "type": "file"
+    },
+    {
+      "path": "src-tauri/src/lib_impl.rs",
+      "accessCount": 2,
+      "lastAccessed": 1785029316350,
+      "type": "file"
+    },
+    {
+      "path": "src-tauri/src/main_window.rs",
+      "accessCount": 2,
+      "lastAccessed": 1785029338686,
       "type": "file"
     },
     {
@@ -323,6 +407,138 @@
       "path": "src/utils/tauriEnv.ts",
       "accessCount": 1,
       "lastAccessed": 1784991434459,
+      "type": "file"
+    },
+    {
+      "path": "src-tauri/src/code_review_commands.rs",
+      "accessCount": 1,
+      "lastAccessed": 1785024524794,
+      "type": "file"
+    },
+    {
+      "path": "src/components/CodeReviewPanel/CodeReviewDrawer.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1785024524875,
+      "type": "file"
+    },
+    {
+      "path": "src/components/CodeReviewPanel/codeReviewDrawer.css",
+      "accessCount": 1,
+      "lastAccessed": 1785024525082,
+      "type": "file"
+    },
+    {
+      "path": "src/components/CodeReviewPanel/index.ts",
+      "accessCount": 1,
+      "lastAccessed": 1785024525252,
+      "type": "file"
+    },
+    {
+      "path": "src/hooks/useCodeReviewFixDispatch.ts",
+      "accessCount": 1,
+      "lastAccessed": 1785024525549,
+      "type": "file"
+    },
+    {
+      "path": "src/services/codeReview/codeReviewIpc.ts",
+      "accessCount": 1,
+      "lastAccessed": 1785024526084,
+      "type": "file"
+    },
+    {
+      "path": "src/services/codeReview/index.ts",
+      "accessCount": 1,
+      "lastAccessed": 1785024526136,
+      "type": "file"
+    },
+    {
+      "path": "src/services/codeReview/parseCodeReviewResult.test.ts",
+      "accessCount": 1,
+      "lastAccessed": 1785024526337,
+      "type": "file"
+    },
+    {
+      "path": "src/services/codeReview/parseCodeReviewResult.ts",
+      "accessCount": 1,
+      "lastAccessed": 1785024526509,
+      "type": "file"
+    },
+    {
+      "path": "src/services/codeReview/runCodeReview.ts",
+      "accessCount": 1,
+      "lastAccessed": 1785024526849,
+      "type": "file"
+    },
+    {
+      "path": "src/types/codeReview.ts",
+      "accessCount": 1,
+      "lastAccessed": 1785024527026,
+      "type": "file"
+    },
+    {
+      "path": "src-tauri/src/wise_paths.rs",
+      "accessCount": 1,
+      "lastAccessed": 1785024530890,
+      "type": "file"
+    },
+    {
+      "path": "src/services/sessionEngineInvocation.ts",
+      "accessCount": 1,
+      "lastAccessed": 1785024531108,
+      "type": "file"
+    },
+    {
+      "path": "src/utils/claudeInvocationText.ts",
+      "accessCount": 1,
+      "lastAccessed": 1785024531323,
+      "type": "file"
+    },
+    {
+      "path": "src/constants/sessionExecutionEngine.ts",
+      "accessCount": 1,
+      "lastAccessed": 1785024538154,
+      "type": "file"
+    },
+    {
+      "path": "src/components/AppWorkspaceLayout.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1785024553054,
+      "type": "file"
+    },
+    {
+      "path": "src/utils/safeTauriUnlisten.ts",
+      "accessCount": 1,
+      "lastAccessed": 1785027906725,
+      "type": "file"
+    },
+    {
+      "path": "mascot.html",
+      "accessCount": 1,
+      "lastAccessed": 1785027978302,
+      "type": "file"
+    },
+    {
+      "path": "src-tauri/src/wise_db.rs",
+      "accessCount": 1,
+      "lastAccessed": 1785028059105,
+      "type": "file"
+    },
+    {
+      "path": "src-tauri/capabilities/default.json",
+      "accessCount": 1,
+      "lastAccessed": 1785028180306,
+      "type": "file"
+    },
+    {
+      "path": "src-tauri/migrations/002_mascot_prefs_toast.sql",
+      "accessCount": 1,
+      "lastAccessed": 1785028305927,
+      "type": "file"
+    },
+    {
+      "path": "src/components/ClaudeSessions/Topbar.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1785029391002,
       "type": "file"
     }
   ],

@@ -1,5 +1,37 @@
 import { invoke } from "@tauri-apps/api/core";
+import { emit } from "@tauri-apps/api/event";
 import { SESSION_NOTIFICATION_UI_EVENT_OPEN_PANEL } from "../constants/workflowUiEvents";
+
+export type WiseNotificationSource =
+  | "claude"
+  | "dingtalk"
+  | "code-review"
+  | "permission"
+  | "unknown";
+
+export type WisePetState = "idle" | "working" | "permission";
+
+/**
+ * 通知入库 + 表情联动：调用方一行调用即可同时入库并通知 mascot 窗口切到对应表情。
+ * 来源为 `permission` 时切 permission 状态（举手+感叹号），其他带源通知切 working。
+ */
+export async function wiseNotificationIngestWithPet(
+  payload: {
+    conversationId: string;
+    body: string;
+    serverMsgId?: string | null;
+    source?: WiseNotificationSource | null;
+    title?: string | null;
+  },
+  options?: WiseNotificationIngestOptions,
+): Promise<number> {
+  const total = await wiseNotificationIngest(payload, options);
+  const nextState: WisePetState = payload.source === "permission" ? "permission" : "working";
+  void emit("wise-mascot-state", { state: nextState }).catch(() => {
+    /* mascot 窗口未启动时 emit 会失败，不影响主流程 */
+  });
+  return total;
+}
 
 export async function wiseMascotShow(): Promise<void> {
   return invoke("wise_mascot_show");
@@ -30,6 +62,10 @@ export async function wiseNotificationIngest(
     conversationId: string;
     body: string;
     serverMsgId?: string | null;
+    /** 来源（claude/dingtalk/code-review/permission），不传则视为 unknown。 */
+    source?: WiseNotificationSource | null;
+    /** 真实标题（会话名/仓库名/权限项），用于气泡头部展示。 */
+    title?: string | null;
   },
   options?: WiseNotificationIngestOptions,
 ): Promise<number> {
@@ -38,6 +74,8 @@ export async function wiseNotificationIngest(
       conversationId: payload.conversationId,
       body: payload.body,
       serverMsgId: payload.serverMsgId ?? null,
+      source: payload.source ?? null,
+      title: payload.title ?? null,
     },
   });
   if (options?.requestOpenSessionNotificationPanel === true && typeof window !== "undefined") {

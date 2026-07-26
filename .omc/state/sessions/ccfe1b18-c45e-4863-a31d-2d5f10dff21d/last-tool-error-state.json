@@ -1,0 +1,7 @@
+{
+  "tool_name": "Bash",
+  "tool_input_preview": "{\"command\":\"grep -n \\\"data-tauri-drag-region\\\" /Users/sjl/Documents/github/wise-tui/mascot.html /Users/sjl/Documents/github/wise-tui/src/mascot.html 2>/dev/null; echo \\\"----\\\"; ls /Users/sjl/Documents...",
+  "error": "Exit code 1\n----\n/Users/sjl/Documents/github/wise-tui/mascot.html",
+  "timestamp": "2026-07-26T01:28:57.962Z",
+  "retry_count": 1
+}

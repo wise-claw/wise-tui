@@ -2,7 +2,7 @@ import { openCodeReviewDrawer } from "../../constants/workflowUiEvents";
 import type { CodeReviewRun } from "../../types/codeReview";
 import { countCodeReviewFindingSeverities } from "../../stores/codeReviewFindingsStore";
 import { getCodeReviewFindingsSnapshot } from "../../stores/codeReviewFindingsStore";
-import { wiseNotificationIngest } from "../wiseMascot";
+import { wiseNotificationIngest, wiseNotificationIngestWithPet } from "../wiseMascot";
 
 export const CODE_REVIEW_NOTIFICATION_CONVERSATION_PREFIX = "wise:code-review:";
 
@@ -121,10 +121,12 @@ export async function ingestCodeReviewNotification(
   const repositoryPath = run.repositoryPath.trim();
   if (!repositoryPath) return false;
   try {
-    await wiseNotificationIngest({
+    await wiseNotificationIngestWithPet({
       conversationId: buildCodeReviewNotificationConversationId(repositoryPath),
       body: buildCodeReviewNotificationBody(run),
       serverMsgId: `code-review:${run.id}`,
+      source: "code-review",
+      title: repositoryPath.split(/[\\/]/).filter(Boolean).pop() || repositoryPath,
     });
     return true;
   } catch {

@@ -1,4 +1,4 @@
-/* 桌面小人：透明外框 + 毛玻璃卡片，与 macOS 视觉协调 */
+/* 桌面宠物：透明外框，无阴影，sprite 直接浮在桌面上。 */
 
 html,
 body,
@@ -13,10 +13,9 @@ body,
   position: relative;
   height: 100%;
   box-sizing: border-box;
-  padding: 10px;
+  padding: 6px;
   display: flex;
-  flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
   justify-content: center;
   font-family:
     system-ui,
@@ -30,225 +29,214 @@ body,
   user-select: none;
 }
 
-/* ── 毛玻璃主卡片 ── */
-.app-mascot-card {
-  width: 100%;
-  max-width: 168px;
-  padding: 14px 12px 12px;
-  border-radius: 18px;
-  background: rgba(255, 255, 255, 0.58);
-  -webkit-backdrop-filter: blur(22px) saturate(1.35);
-  backdrop-filter: blur(22px) saturate(1.35);
-  border: 1px solid rgba(255, 255, 255, 0.65);
-  box-shadow:
-    0 0 0 0.5px rgba(0, 0, 0, 0.04) inset,
-    0 1px 2px rgba(0, 0, 0, 0.06),
-    0 12px 32px rgba(15, 23, 42, 0.12);
+/*
+ * 拖拽 shell：覆盖整个 root 区域，承载 Tauri drag region。
+ * 不设 pointer-events: none（否则 -webkit-app-region: drag 失效），
+ * 但通过 z-index 把交互按钮浮在上面，点击自然穿透到按钮层、不落到底层 shell，
+ * 从根本上消除「拖动结束后 click 是否派发到按钮」的不确定性。
+ */
+.app-mascot-pet-drag-shell {
+  position: absolute;
+  inset: 0;
+  z-index: 0;
 }
 
-@media (prefers-color-scheme: dark) {
-  .app-mascot-card {
-    background: rgba(34, 36, 42, 0.62);
-    border-color: rgba(255, 255, 255, 0.12);
-    box-shadow:
-      0 0 0 0.5px rgba(255, 255, 255, 0.06) inset,
-      0 1px 2px rgba(0, 0, 0, 0.35),
-      0 16px 40px rgba(0, 0, 0, 0.45);
-  }
-}
-
-.app-mascot-drag {
+.app-mascot-pet {
+  position: relative;
+  z-index: 1;
+  margin: 0;
+  padding: 0;
+  border: none;
+  background: transparent;
   cursor: grab;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+  appearance: none;
+  -webkit-appearance: none;
+  display: block;
 }
 
-.app-mascot-drag:active {
+.app-mascot-pet:active {
   cursor: grabbing;
 }
 
-/* 外圈微光，突出头像 */
-.app-mascot-avatar-wrap {
-  padding: 3px;
-  border-radius: 50%;
-  background: linear-gradient(145deg, rgba(255, 255, 255, 0.55), rgba(120, 160, 255, 0.25));
-  box-shadow: 0 2px 8px rgba(30, 58, 138, 0.15);
+.app-mascot-pet:focus-visible {
+  outline: 2px solid rgba(74, 163, 240, 0.7);
+  outline-offset: 2px;
+  border-radius: 12px;
 }
 
-@media (prefers-color-scheme: dark) {
-  .app-mascot-avatar-wrap {
-    background: linear-gradient(145deg, rgba(255, 255, 255, 0.12), rgba(80, 120, 220, 0.2));
-    box-shadow: 0 2px 12px rgba(0, 0, 0, 0.4);
-  }
-}
-
-.app-mascot-avatar {
-  width: 76px;
-  height: 76px;
-  border-radius: 50%;
-  position: relative;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: linear-gradient(155deg, #5b8cff 0%, #3d6ef0 42%, #1e4bb8 100%);
-  color: #fff;
-  box-shadow:
-    inset 0 1px 0 rgba(255, 255, 255, 0.35),
-    inset 0 -2px 6px rgba(0, 20, 80, 0.25),
-    0 6px 16px rgba(30, 64, 175, 0.35);
-}
-
-.app-mascot-avatar-letter {
-  font-size: 30px;
-  font-weight: 700;
-  letter-spacing: -0.02em;
-  text-shadow: 0 1px 2px rgba(0, 20, 60, 0.35);
+.app-mascot-pet-sprite {
+  display: block;
+  line-height: 0;
+  pointer-events: none;
 }
 
 .app-mascot-badge {
   position: absolute;
-  top: -2px;
+  top: 0;
   right: -2px;
-  min-width: 22px;
-  height: 22px;
-  padding: 0 6px;
+  min-width: 18px;
+  height: 18px;
+  padding: 0 4px;
   border-radius: 999px;
-  background: linear-gradient(180deg, #ff6b6b, #e02424);
+  background: linear-gradient(180deg, #ff9a3d, #f97316);
   color: #fff;
-  font-size: 11px;
+  font-size: 10px;
   font-weight: 700;
   font-variant-numeric: tabular-nums;
-  line-height: 22px;
+  line-height: 18px;
   text-align: center;
-  border: 2px solid rgba(255, 255, 255, 0.95);
-  box-shadow: 0 2px 8px rgba(180, 0, 0, 0.35);
-}
-
-@media (prefers-color-scheme: dark) {
-  .app-mascot-badge {
-    border-color: rgba(40, 42, 48, 0.95);
-  }
-}
-
-/* ── 操作按钮：三等分栅格 ── */
-.app-mascot-actions {
-  display: grid;
-  grid-template-columns: 1fr 1fr 1fr;
-  gap: 6px;
-  margin-top: 12px;
-  width: 100%;
-}
-
-.app-mascot-btn {
-  margin: 0;
-  font: inherit;
-  font-size: 11px;
-  font-weight: 600;
-  letter-spacing: 0.02em;
-  padding: 7px 4px;
-  border-radius: 10px;
-  border: none;
+  border: 2px solid #ffffff;
+  box-shadow: 0 1px 4px rgba(194, 85, 8, 0.35);
+  pointer-events: auto;
   cursor: pointer;
-  color: rgba(15, 23, 42, 0.88);
-  background: rgba(15, 23, 42, 0.06);
+  font-family: inherit;
   transition:
-    background 0.15s ease,
-    color 0.15s ease,
-    transform 0.12s ease;
+    transform 0.16s ease,
+    box-shadow 0.16s ease;
+  animation: app-mascot-badge-pop 0.32s cubic-bezier(0.22, 1.4, 0.36, 1);
 }
 
-.app-mascot-btn:hover {
-  background: rgba(15, 23, 42, 0.1);
+.app-mascot-badge:hover {
+  transform: scale(1.1);
+  box-shadow: 0 2px 8px rgba(194, 85, 8, 0.5);
 }
 
-.app-mascot-btn:active {
-  transform: scale(0.96);
+.app-mascot-badge:active {
+  transform: scale(0.95);
 }
 
-.app-mascot-btn:focus-visible {
-  outline: 2px solid rgba(59, 130, 246, 0.55);
+.app-mascot-badge:focus-visible {
+  outline: 2px solid rgba(74, 163, 240, 0.85);
   outline-offset: 2px;
 }
 
-.app-mascot-btn--primary {
-  color: #fff;
-  background: linear-gradient(180deg, #4f7dff, #2f5ae6);
-  box-shadow: 0 1px 3px rgba(30, 64, 175, 0.35);
-}
-
-.app-mascot-btn--primary:hover {
-  background: linear-gradient(180deg, #5d88ff, #3a63ea);
-}
-
-.app-mascot-btn--primary:active {
-  transform: scale(0.96);
+.app-mascot-menu {
+  position: absolute;
+  top: 100px;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 20;
+  min-width: 118px;
+  padding: 4px;
+  border-radius: 12px;
+  background: rgba(255, 255, 255, 0.94);
+  border: 1px solid rgba(15, 23, 42, 0.08);
+  box-shadow:
+    0 1px 2px rgba(15, 23, 42, 0.06),
+    0 12px 28px rgba(15, 23, 42, 0.16);
+  backdrop-filter: blur(14px);
+  -webkit-backdrop-filter: blur(14px);
 }
 
 @media (prefers-color-scheme: dark) {
-  .app-mascot-btn {
-    color: rgba(248, 250, 252, 0.92);
-    background: rgba(255, 255, 255, 0.08);
-  }
-
-  .app-mascot-btn:hover {
-    background: rgba(255, 255, 255, 0.14);
-  }
-
-  .app-mascot-btn--primary {
-    color: #fff;
-    background: linear-gradient(180deg, #4d7af8, #2d52c9);
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
-  }
-
-  .app-mascot-btn--primary:hover {
-    background: linear-gradient(180deg, #5c86fa, #365dce);
+  .app-mascot-menu {
+    background: rgba(28, 30, 36, 0.94);
+    border-color: rgba(255, 255, 255, 0.1);
+    box-shadow:
+      0 1px 2px rgba(0, 0, 0, 0.35),
+      0 14px 32px rgba(0, 0, 0, 0.45);
   }
 }
 
-/* ── 气泡通知 ── */
-.app-mascot-toast {
-  position: absolute;
-  left: 50%;
-  bottom: calc(100% - 6px);
-  transform: translateX(-50%);
-  width: min(220px, calc(100vw - 16px));
-  padding: 10px 12px;
-  border-radius: 12px;
-  background: rgba(22, 24, 30, 0.88);
-  -webkit-backdrop-filter: blur(16px);
-  backdrop-filter: blur(16px);
-  color: #e4e7ec;
+.app-mascot-menu-item {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 8px 10px;
+  border: none;
+  border-radius: 8px;
+  background: transparent;
+  color: rgba(15, 23, 42, 0.92);
+  font: inherit;
   font-size: 12px;
-  line-height: 1.45;
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  box-shadow:
-    0 0 0 0.5px rgba(0, 0, 0, 0.2) inset,
-    0 8px 28px rgba(0, 0, 0, 0.4);
-  pointer-events: none;
-  animation: app-mascot-toast-in 0.22s cubic-bezier(0.22, 1, 0.36, 1);
-  z-index: 10;
-}
-
-.app-mascot-toast-title {
   font-weight: 600;
-  margin-bottom: 4px;
-  color: #fff;
-  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
 }
 
-.app-mascot-toast-body {
-  opacity: 0.92;
-  word-break: break-word;
+.app-mascot-menu-item:hover {
+  background: rgba(59, 130, 246, 0.12);
 }
 
-@keyframes app-mascot-toast-in {
+@media (prefers-color-scheme: dark) {
+  .app-mascot-menu-item {
+    color: rgba(248, 250, 252, 0.94);
+  }
+
+  .app-mascot-menu-item:hover {
+    background: rgba(96, 165, 250, 0.18);
+  }
+}
+
+/* Sprite 内部 CSS 动画：呼吸 / 头部摆动 / 举手。
+   眨眼 working 旋转等用 SVG <animate>，避免 transform 抢 CSS keyframes。 */
+
+@keyframes wise-pet-breath {
+  0%, 100% {
+    transform: translateY(0) scale(1);
+  }
+  50% {
+    transform: translateY(-1.5px) scale(1.012);
+  }
+}
+
+@keyframes wise-pet-head-tilt {
+  0%, 100% {
+    transform: rotate(0deg) translateY(0);
+  }
+  25% {
+    transform: rotate(-2deg) translateY(-0.4px);
+  }
+  50% {
+    transform: rotate(0deg) translateY(0);
+  }
+  75% {
+    transform: rotate(2deg) translateY(-0.4px);
+  }
+}
+
+@keyframes wise-pet-blink {
+  0%, 88%, 96%, 100% {
+    transform: scaleY(1);
+  }
+  92% {
+    transform: scaleY(0.1);
+  }
+}
+
+@keyframes wise-pet-arm-left {
+  0%, 100% {
+    transform: rotate(-22deg);
+  }
+  50% {
+    transform: rotate(-6deg);
+  }
+}
+
+@keyframes wise-pet-arm-right {
+  0%, 100% {
+    transform: rotate(22deg);
+  }
+  50% {
+    transform: rotate(6deg);
+  }
+}
+
+@keyframes app-mascot-badge-pop {
   from {
+    transform: scale(0.4);
     opacity: 0;
-    transform: translateX(-50%) translateY(8px) scale(0.98);
   }
   to {
+    transform: scale(1);
     opacity: 1;
-    transform: translateX(-50%) translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-mascot-pet,
+  .app-mascot-badge,
+  .app-mascot-pet-sprite * {
+    animation: none !important;
   }
 }

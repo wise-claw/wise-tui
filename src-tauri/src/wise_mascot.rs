@@ -14,12 +14,20 @@ pub struct IngestInboundPayload {
     pub conversation_id: String,
     pub body: String,
     pub server_msg_id: Option<String>,
+    /// 来源自报（`claude` / `dingtalk` / `code-review` / `permission` / `unknown`），仅用于气泡 UI，不入库。
+    #[serde(default)]
+    pub source: Option<String>,
+    /// 真实标题（会话名 / 仓库名 / 权限项），透传到 toast 渲染；缺省时按 source 兜底。
+    #[serde(default)]
+    pub title: Option<String>,
 }
 
 /// 短防抖：短时间多次 ingest 只弹出最后一次预览的气泡（尾沿合并）。
 pub struct WiseToastMerge {
     toast_ticket: AtomicU64,
     pending_preview: Mutex<String>,
+    pending_source: Mutex<String>,
+    pending_title: Mutex<Option<String>>,
 }
 
 impl Default for WiseToastMerge {
@@ -27,22 +35,35 @@ impl Default for WiseToastMerge {
         Self {
             toast_ticket: AtomicU64::new(0),
             pending_preview: Mutex::new(String::new()),
+            pending_source: Mutex::new("unknown".to_string()),
+            pending_title: Mutex::new(None),
         }
     }
 }
 
 impl WiseToastMerge {
-    pub fn schedule_toast(&self, app: AppHandle, merge_ms: u64, preview: String) {
+    pub fn schedule_toast(&self, app: AppHandle, merge_ms: u64, preview: String, source: String, title: Option<String>) {
+        let title_for_emit = title.clone().unwrap_or_else(|| default_title_for_source(&source));
+        let payload = serde_json::json!({
+            "title": title_for_emit,
+            "body": preview,
+            "source": source,
+        });
         if merge_ms == 0 {
-            let _ = app.emit(
-                "wise-toast",
-                &serde_json::json!({ "title": "新消息", "body": preview }),
-            );
+            let _ = app.emit("wise-toast", &payload);
             return;
         }
         {
             let mut p = self.pending_preview.lock().unwrap();
             *p = preview;
+        }
+        {
+            let mut s = self.pending_source.lock().unwrap();
+            *s = source;
+        }
+        {
+            let mut t_guard = self.pending_title.lock().unwrap();
+            *t_guard = title;
         }
         let ms = merge_ms.max(40);
         let my = self.toast_ticket.fetch_add(1, Ordering::SeqCst) + 1;
@@ -56,11 +77,26 @@ impl WiseToastMerge {
                 return;
             }
             let body = merge.pending_preview.lock().unwrap().clone();
-            let _ = app2.emit(
-                "wise-toast",
-                &serde_json::json!({ "title": "新消息", "body": body }),
-            );
+            let src = merge.pending_source.lock().unwrap().clone();
+            let title = merge.pending_title.lock().unwrap().clone();
+            let payload = serde_json::json!({
+                "title": title.unwrap_or_else(|| default_title_for_source(&src)),
+                "body": body,
+                "source": src,
+            });
+            let _ = app2.emit("wise-toast", &payload);
         });
+    }
+}
+
+/// 按来源给标题一个本地化兜底；真正的会话标题由调用方提供，缺省时不要硬编码「新消息」。
+fn default_title_for_source(source: &str) -> String {
+    match source {
+        "claude" => "Claude".to_string(),
+        "dingtalk" => "钉钉".to_string(),
+        "code-review" => "代码审查".to_string(),
+        "permission" => "权限请求".to_string(),
+        _ => "消息".to_string(),
     }
 }
 
@@ -169,7 +205,9 @@ pub(crate) fn process_inbound_ingest(
     if inserted && !automation_emitted && !db.mascot_dnd_active()? {
         let merge_ms = db.mascot_toast_merge_ms()?;
         let preview: String = preview_src.chars().take(120).collect();
-        merge.schedule_toast(app.clone(), merge_ms, preview);
+        let source = payload.source.clone().unwrap_or_else(|| "unknown".to_string());
+        let title = payload.title.clone();
+        merge.schedule_toast(app.clone(), merge_ms, preview, source, title);
     }
     Ok(total)
 }

@@ -93,7 +93,7 @@ import {
 import { runWhenIdle } from "../utils/deferIdle";
 import { readVisiblePollIntervalMs, startAdaptiveInterval } from "../utils/adaptivePoll";
 import { isCurrentPrimaryMainWorkspaceWindowSync } from "../services/mainWindow";
-import { wiseNotificationIngest } from "../services/wiseMascot";
+import { wiseNotificationIngest, wiseNotificationIngestWithPet } from "../services/wiseMascot";
 import {
   buildQuestionFallbackUserPrompt,
   buildQuestionResumeUserPrompt,
@@ -1669,10 +1669,12 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       const prefix = notificationBodyPrefixInRepositoryContext(s.repositoryName ?? "");
       if (slice.permissionRequest) {
         const pr = slice.permissionRequest;
-        void wiseNotificationIngest({
+        void wiseNotificationIngestWithPet({
           conversationId: conv,
           body: `${prefix}权限待确认: ${pr.tool}`,
           serverMsgId: `hub-pending-perm:${s.id}:${pr.id}`,
+          source: "permission",
+          title: pr.tool,
         }).catch(() => {
           /* 通知失败不影响 Hub */
         });
@@ -2890,7 +2892,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           session?.claudeSessionId ?? mappedCanonical ?? session?.id ?? tid;
         const prefix = notificationBodyPrefixInRepositoryContext(session?.repositoryName ?? "");
         if (!success) {
-          void wiseNotificationIngest({
+          void wiseNotificationIngestWithPet({
             conversationId,
             body: buildClaudeTurnCompleteNotificationBody({
               prefix,
@@ -2899,13 +2901,15 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
               session: session ?? null,
             }),
             serverMsgId: `complete-err-${nonce}`,
+            source: "claude",
+            title: session?.repositoryName ?? session?.id ?? "Claude",
           }).catch(() => {
             /* 通知失败不影响会话 UI */
           });
           return;
         }
         const trimmed = previewRaw.trim();
-        void wiseNotificationIngest({
+        void wiseNotificationIngestWithPet({
           conversationId,
           body: buildClaudeTurnCompleteNotificationBody({
             prefix,
@@ -2914,6 +2918,8 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
             session: session ?? null,
           }),
           serverMsgId: `complete-${nonce}`,
+          source: "claude",
+          title: session?.repositoryName ?? session?.id ?? "Claude",
         }).catch(() => {
           /* 通知失败不影响会话 UI */
         });

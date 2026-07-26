@@ -543,6 +543,8 @@ fn dispatch_dingtalk_automation_ingest(
         conversation_id,
         body,
         server_msg_id: msg_id,
+        source: Some("dingtalk".to_string()),
+        title: Some("钉钉".to_string()),
     };
     tokio::task::spawn_blocking(move || {
         match (app.try_state::<WiseDb>(), app.try_state::<WiseToastMerge>()) {

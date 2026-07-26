@@ -9,7 +9,7 @@ import {
   type DingTalkEnterpriseBotStoredConfig,
 } from "../services/dingtalkEnterpriseBot";
 import { WISE_AUTOMATION_MARKER_DINGTALK_V1 } from "../constants/dingtalkWiseAutomation";
-import { wiseNotificationIngest, wisePushStart, wisePushStop } from "../services/wiseMascot";
+import { wiseNotificationIngest, wiseNotificationIngestWithPet, wisePushStart, wisePushStop } from "../services/wiseMascot";
 import "./DingTalkEnterpriseBotPopoverBody.css";
 
 const DOC_CREATE = "https://open.dingtalk.com/document/orgapp/the-creation-and-installation-of-the-application-robot-in-the.md";
@@ -183,10 +183,12 @@ export function DingTalkEnterpriseBotPopoverBody({
         typeof globalThis.crypto?.randomUUID === "function"
           ? `dingtalk-debug-${globalThis.crypto.randomUUID()}`
           : `dingtalk-debug-${Date.now()}`;
-      await wiseNotificationIngest({
+      await wiseNotificationIngestWithPet({
         conversationId: "dingtalk-e2e-debug",
         body,
         serverMsgId: sid,
+        source: "dingtalk",
+        title: "钉钉联调",
       });
     } catch (e) {
       message.error(e instanceof Error ? e.message : String(e));
