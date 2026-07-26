@@ -8,21 +8,31 @@
  */
 export type WisePetState = "idle" | "working" | "permission";
 
+/**
+ * 拖动方向：-1 向左移动 / 0 静止 / +1 向右移动。
+ * Sprite 内部按方向调整眼睛朝向、手臂/腿的步态（见 .wise-pet-dir-left/right 修饰）。
+ */
+export type WisePetDirection = -1 | 0 | 1;
+
 export function WisePetSprite({
   className,
   state = "idle",
+  direction = 0,
 }: {
   className?: string;
   state?: WisePetState;
+  direction?: WisePetDirection;
 }) {
   const isWorking = state === "working";
   const isPermission = state === "permission";
   const blinkId = "wise-pet-blink";
   const breathId = "wise-pet-breath";
+  const dirClass =
+    direction < 0 ? "wise-pet-dir-left" : direction > 0 ? "wise-pet-dir-right" : "";
 
   return (
     <svg
-      className={className}
+      className={`${className ?? ""} ${dirClass}`.trim()}
       viewBox="0 0 80 96"
       width="80"
       height="96"
@@ -54,8 +64,8 @@ export function WisePetSprite({
       <g transform={`translate(40 52) scale(1) translate(-40 -52)`}>
         <g style={{ transformOrigin: "40px 56px", animation: `${breathId} 3.2s ease-in-out infinite` }}>
           {/* 脚 */}
-          <rect x="22" y="80" width="10" height="11" rx="4" fill="#3d91df" />
-          <rect x="48" y="80" width="10" height="11" rx="4" fill="#3d91df" />
+          <rect className="wise-pet-foot-l" x="22" y="80" width="10" height="11" rx="4" fill="#3d91df" />
+          <rect className="wise-pet-foot-r" x="48" y="80" width="10" height="11" rx="4" fill="#3d91df" />
 
           {/* 身体 */}
           <rect x="10" y="50" width="60" height="34" rx="14" fill="url(#wise-pet-body)" />
@@ -96,7 +106,7 @@ export function WisePetSprite({
             <rect x="22" y="22" width="36" height="22" rx="8" fill="url(#wise-pet-screen)" />
 
             {/* 眼睛组：眨眼通过整组 opacity 切换实现；working 时眼睛本身旋转 */}
-            <g style={{ transformOrigin: "32px 33px", animation: `${blinkId} 4.4s steps(1, end) infinite` }}>
+            <g className="wise-pet-eyes" style={{ transformOrigin: "32px 33px", animation: `${blinkId} 4.4s steps(1, end) infinite` }}>
               {isWorking ? (
                 <>
                   {/* 旋转光圈（仅 working） */}
@@ -157,10 +167,10 @@ export function WisePetSprite({
 
           {/* 手臂：permission 举起（独立 g 旋转，不与呼吸同步） */}
           <g transform="translate(0 0)">
-            <g style={{ transformOrigin: "8px 60px", animation: isPermission ? "wise-pet-arm-left 0.7s ease-in-out infinite" : "none" }}>
+            <g className="wise-pet-arm-l" style={{ transformOrigin: "8px 60px", animation: isPermission ? "wise-pet-arm-left 0.7s ease-in-out infinite" : "none" }}>
               <rect x="2" y="56" width="11" height="8" rx="4" fill="#4aa3f0" />
             </g>
-            <g style={{ transformOrigin: "72px 60px", animation: isPermission ? "wise-pet-arm-right 0.7s ease-in-out infinite" : "none" }}>
+            <g className="wise-pet-arm-r" style={{ transformOrigin: "72px 60px", animation: isPermission ? "wise-pet-arm-right 0.7s ease-in-out infinite" : "none" }}>
               <rect x="67" y="56" width="11" height="8" rx="4" fill="#4aa3f0" />
             </g>
           </g>

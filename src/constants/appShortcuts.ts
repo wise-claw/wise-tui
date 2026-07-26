@@ -29,6 +29,10 @@ export const APP_SHORTCUT_GROUPS: AppShortcutGroup[] = [
         keys: "⌥K · Alt+K",
         description: "置顶主窗口，并循环切换多屏布局（1→2→4→6→8→1）。",
       },
+      {
+        keys: "⌥M · Alt+M",
+        description: "切换桌面宠物：当前可见则隐藏，当前隐藏则显示（替代右键无响应场景）。",
+      },
     ],
   },
   {

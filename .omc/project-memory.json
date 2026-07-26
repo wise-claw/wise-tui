@@ -42,8 +42,8 @@
     "runtime": null
   },
   "build": {
-    "buildCommand": "PATH=\"/Users/sjl/.cargo/bin:$PATH\" bunx tsc --noEmit -p tsconfig.json 2>&1 | tail -15; echo \"---exit=$?---\"",
-    "testCommand": "bun test src/services/codeReview 2>&1 | tail -5",
+    "buildCommand": "PATH=\"/Users/sjl/.cargo/bin:$PATH\" bunx tsc --noEmit -p /Users/sjl/Documents/github/wise-tui/tsconfig.json 2>&1 | tail -20; echo \"---tsc-exit=$?---\"",
+    "testCommand": "bun test /Users/sjl/Documents/github/wise-tui/src/services/codeReview 2>&1 | tail -6; echo \"---test-exit=$?---\"",
     "lintCommand": null,
     "devCommand": "npm run dev",
     "scripts": {
@@ -243,20 +243,26 @@
   "hotPaths": [
     {
       "path": "src/mascot.tsx",
-      "accessCount": 29,
-      "lastAccessed": 1785029579952,
+      "accessCount": 41,
+      "lastAccessed": 1785030776276,
       "type": "file"
     },
     {
       "path": "src/mascot.css",
-      "accessCount": 13,
-      "lastAccessed": 1785029440302,
+      "accessCount": 22,
+      "lastAccessed": 1785030820864,
       "type": "file"
     },
     {
       "path": "src-tauri/src/wise_mascot.rs",
+      "accessCount": 13,
+      "lastAccessed": 1785030525959,
+      "type": "file"
+    },
+    {
+      "path": "src/components/MascotPet/WisePetSprite.tsx",
       "accessCount": 11,
-      "lastAccessed": 1785029316041,
+      "lastAccessed": 1785030831599,
       "type": "file"
     },
     {
@@ -269,6 +275,12 @@
       "path": "src/hooks/useRepositoryFileEditor.ts",
       "accessCount": 9,
       "lastAccessed": 1785024547431,
+      "type": "file"
+    },
+    {
+      "path": "src-tauri/src/lib_impl.rs",
+      "accessCount": 9,
+      "lastAccessed": 1785030301829,
       "type": "file"
     },
     {
@@ -285,8 +297,8 @@
     },
     {
       "path": "src-tauri/tauri.conf.json",
-      "accessCount": 7,
-      "lastAccessed": 1785029356037,
+      "accessCount": 8,
+      "lastAccessed": 1785030069032,
       "type": "file"
     },
     {
@@ -311,12 +323,6 @@
       "path": "src/services/tabsStore.ts",
       "accessCount": 4,
       "lastAccessed": 1784991454639,
-      "type": "file"
-    },
-    {
-      "path": "src/components/MascotPet/WisePetSprite.tsx",
-      "accessCount": 4,
-      "lastAccessed": 1785028631482,
       "type": "file"
     },
     {
@@ -347,12 +353,6 @@
       "path": "src-tauri/src/wise_push.rs",
       "accessCount": 2,
       "lastAccessed": 1785028491241,
-      "type": "file"
-    },
-    {
-      "path": "src-tauri/src/lib_impl.rs",
-      "accessCount": 2,
-      "lastAccessed": 1785029316350,
       "type": "file"
     },
     {

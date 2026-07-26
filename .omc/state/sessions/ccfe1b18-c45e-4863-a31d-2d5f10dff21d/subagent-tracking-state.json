@@ -89,10 +89,73 @@
       "status": "completed",
       "completed_at": "2026-07-26T01:30:52.606Z",
       "duration_ms": 0
+    },
+    {
+      "agent_id": "a45de4bf9ac622bf6",
+      "agent_type": "unknown",
+      "started_at": "2026-07-26T01:38:56.518Z",
+      "parent_mode": "none",
+      "status": "completed",
+      "completed_at": "2026-07-26T01:38:56.518Z",
+      "duration_ms": 0
+    },
+    {
+      "agent_id": "adb01f22698e6e883",
+      "agent_type": "unknown",
+      "started_at": "2026-07-26T01:42:31.085Z",
+      "parent_mode": "none",
+      "status": "completed",
+      "completed_at": "2026-07-26T01:42:31.085Z",
+      "duration_ms": 0
+    },
+    {
+      "agent_id": "a351761120f456a3e",
+      "agent_type": "unknown",
+      "started_at": "2026-07-26T01:45:22.996Z",
+      "parent_mode": "none",
+      "status": "completed",
+      "completed_at": "2026-07-26T01:45:22.996Z",
+      "duration_ms": 0
+    },
+    {
+      "agent_id": "a4c2808be63c50fa4",
+      "agent_type": "unknown",
+      "started_at": "2026-07-26T01:45:49.962Z",
+      "parent_mode": "none",
+      "status": "completed",
+      "completed_at": "2026-07-26T01:45:49.962Z",
+      "duration_ms": 0
+    },
+    {
+      "agent_id": "ab28f9adf57771d5f",
+      "agent_type": "unknown",
+      "started_at": "2026-07-26T01:45:50.218Z",
+      "parent_mode": "none",
+      "status": "completed",
+      "completed_at": "2026-07-26T01:45:50.218Z",
+      "duration_ms": 0
+    },
+    {
+      "agent_id": "af14cfe4b26619f31",
+      "agent_type": "unknown",
+      "started_at": "2026-07-26T01:47:48.998Z",
+      "parent_mode": "none",
+      "status": "completed",
+      "completed_at": "2026-07-26T01:47:48.998Z",
+      "duration_ms": 0
+    },
+    {
+      "agent_id": "a2e0f3318250e0dbd",
+      "agent_type": "unknown",
+      "started_at": "2026-07-26T01:49:21.349Z",
+      "parent_mode": "none",
+      "status": "completed",
+      "completed_at": "2026-07-26T01:49:21.349Z",
+      "duration_ms": 0
     }
   ],
   "total_spawned": 2,
-  "total_completed": 10,
+  "total_completed": 17,
   "total_failed": 0,
-  "last_updated": "2026-07-26T01:30:52.708Z"
+  "last_updated": "2026-07-26T01:49:21.451Z"
 }

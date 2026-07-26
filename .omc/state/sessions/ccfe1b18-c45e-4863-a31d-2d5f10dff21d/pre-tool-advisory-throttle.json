@@ -2,15 +2,15 @@
   "version": 1,
   "entries": {
     "445ed27a3872b681d98190bae61ccb84954e1bc4e140df5370be958dee776b3a": {
-      "last_emitted_at_ms": 1785029415287,
+      "last_emitted_at_ms": 1785030532432,
       "message": "Verify changes work after editing. Test functionality before marking complete."
     },
     "79a93d4a2f8f50b95f852280616242fee1855dc99a3c75211917f55e72e95fae": {
-      "last_emitted_at_ms": 1785029370029,
+      "last_emitted_at_ms": 1785030519134,
       "message": "Use parallel execution for independent tasks. Use run_in_background for long operations (npm install, builds, tests)."
     },
     "466399dafa2d20f60587180bad0a07358eb7f2bce724df0ff682f038ad33f5ad": {
-      "last_emitted_at_ms": 1785029338567,
+      "last_emitted_at_ms": 1785030511116,
       "message": "Read multiple files in parallel when possible for faster analysis."
     },
     "8335feb4e8d40444cc1443a2e6965f922352535f1ef8e09ab440fe3b372087dc": {
@@ -22,5 +22,5 @@
       "message": "Spawning agent: Explore (inherit) | Task: 查 toast 链路与 sprite 资源替代"
     }
   },
-  "updated_at": "2026-07-26T01:30:15.287Z"
+  "updated_at": "2026-07-26T01:48:52.432Z"
 }

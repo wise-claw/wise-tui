@@ -240,3 +240,92 @@ body,
     animation: none !important;
   }
 }
+
+/* ---- 拖动反馈：跳一下 ---- */
+@keyframes app-mascot-pet-hop {
+  0% { transform: translateY(0); }
+  35% { transform: translateY(-8px) scaleY(1.04); }
+  70% { transform: translateY(-2px); }
+  100% { transform: translateY(0); }
+}
+
+.app-mascot-pet.is-hopping {
+  animation: app-mascot-pet-hop 0.24s cubic-bezier(0.22, 1.4, 0.36, 1) 1;
+}
+
+/* ---- 拖动反馈：方向（左 / 右） ---- */
+/* Sprite 内部的眼睛/手/脚根据方向切换动画，模拟走路姿态。
+   用 !important 覆盖 wise-pet-blink / idle 时的无动画状态；
+   仅在 .wise-pet-dir-left / .wise-pet-dir-right 作用域下生效。 */
+
+@keyframes wise-pet-eyes-look-left {
+  from { transform: translateX(0); }
+  to   { transform: translateX(-2.4px); }
+}
+@keyframes wise-pet-eyes-look-right {
+  from { transform: translateX(0); }
+  to   { transform: translateX(2.4px); }
+}
+
+@keyframes wise-pet-arm-l-walk {
+  from { transform: rotate(-18deg); }
+  to   { transform: rotate(-6deg); }
+}
+@keyframes wise-pet-arm-r-walk {
+  from { transform: rotate(18deg); }
+  to   { transform: rotate(6deg); }
+}
+@keyframes wise-pet-foot-l-walk {
+  from { transform: translateY(0); }
+  to   { transform: translateY(-2.5px); }
+}
+@keyframes wise-pet-foot-r-walk {
+  from { transform: translateY(-2.5px); }
+  to   { transform: translateY(0); }
+}
+
+.wise-pet-dir-left .wise-pet-eyes,
+.wise-pet-dir-right .wise-pet-eyes {
+  animation-name: wise-pet-eyes-look-left, wise-pet-blink;
+  animation-duration: 0.45s, 4.4s;
+  animation-timing-function: ease-in-out, steps(1, end);
+  animation-iteration-count: infinite, infinite;
+  animation-direction: alternate, normal;
+}
+.wise-pet-dir-right .wise-pet-eyes {
+  animation-name: wise-pet-eyes-look-right, wise-pet-blink;
+}
+
+.wise-pet-dir-left .wise-pet-arm-l,
+.wise-pet-dir-right .wise-pet-arm-l {
+  animation: wise-pet-arm-l-walk 0.45s ease-in-out infinite alternate;
+  transform-origin: 8px 60px;
+}
+.wise-pet-dir-right .wise-pet-arm-l {
+  animation-name: wise-pet-arm-r-walk;
+}
+.wise-pet-dir-left .wise-pet-arm-r,
+.wise-pet-dir-right .wise-pet-arm-r {
+  animation: wise-pet-arm-r-walk 0.45s ease-in-out infinite alternate;
+  transform-origin: 72px 60px;
+}
+.wise-pet-dir-right .wise-pet-arm-r {
+  animation-name: wise-pet-arm-l-walk;
+}
+
+.wise-pet-dir-left .wise-pet-foot-l,
+.wise-pet-dir-right .wise-pet-foot-l {
+  animation: wise-pet-foot-l-walk 0.45s ease-in-out infinite alternate;
+  transform-origin: center bottom;
+}
+.wise-pet-dir-right .wise-pet-foot-l {
+  animation-name: wise-pet-foot-r-walk;
+}
+.wise-pet-dir-left .wise-pet-foot-r,
+.wise-pet-dir-right .wise-pet-foot-r {
+  animation: wise-pet-foot-r-walk 0.45s ease-in-out infinite alternate;
+  transform-origin: center bottom;
+}
+.wise-pet-dir-right .wise-pet-foot-r {
+  animation-name: wise-pet-foot-l-walk;
+}

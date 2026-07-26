@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState, type MouseEvent as ReactMouse
 import { createRoot } from "react-dom/client";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { getCurrentWindow } from "@tauri-apps/api/window";
-import { WisePetSprite, type WisePetState } from "./components/MascotPet/WisePetSprite";
+import { WisePetSprite, type WisePetDirection, type WisePetState } from "./components/MascotPet/WisePetSprite";
 import {
   wiseMainWindowFocus,
   wiseMascotHide,
@@ -24,8 +24,17 @@ function MascotApp() {
   const [total, setTotal] = useState(0);
   const [petState, setPetState] = useState<WisePetState>("idle");
   const [menuOpen, setMenuOpen] = useState(false);
+  // 拖动方向 -1/0/+1 与「跳一下」一次性标记：见 onMoved 内的注释
+  const [dragDir, setDragDir] = useState<WisePetDirection>(0);
+  const [hopping, setHopping] = useState(false);
   const moveTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const rootRef = useRef<HTMLDivElement | null>(null);
+  // 上次 onMoved 派发时的窗口位置；用于在两次事件之间算 dx。
+  // 注意 `onMoved` 在按下瞬间就会派发初始 pos，所以「首次 onMoved」相当于"开始拖动"——
+  // 此时没有有效 `lastPos` 可减，hop 标记的判定放到 onMoved 内做：上次 timer 已超时即视为新拖动。
+  const lastPosRef = useRef<{ x: number; y: number } | null>(null);
+  const hopTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const dirTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const refreshTotal = useCallback(async () => {
     try {
@@ -81,8 +90,45 @@ function MascotApp() {
 
       const win = getCurrentWindow();
       const u3 = await win.onMoved(({ payload: pos }) => {
+        // 1) 计算水平方向：根据上一次记录的窗口 x 算 dx。
+        //    首帧 (lastPosRef 为 null) 不算方向；只在持续移动时翻 dragDir。
+        const last = lastPosRef.current;
+        lastPosRef.current = { x: pos.x, y: pos.y };
+        if (last) {
+          const dx = pos.x - last.x;
+          // 3px 阈值内视为抖动静止，保持上一次方向不变。
+          if (dx > 3) setDragDir(1);
+          else if (dx < -3) setDragDir(-1);
+        }
+
+        // 2) 「选中跳一下」：moveTimer 是上次保存位置的 280ms 静默定时器。
+        //    若本次 onMoved 到来时 timer 还在跑 → 同一段拖动的中段，不重复 hop。
+        //    若 timer 已 fire 且被清掉 → 已停下，再次按下触发新一轮 hop。
+        //    用单次 toggle 让 CSS animation 重置（className 变化重置 keyframes）。
+        if (!moveTimer.current) {
+          setHopping(false);
+          // 下一帧再加 class，强制重启动画
+          requestAnimationFrame(() => {
+            setHopping(true);
+          });
+        }
+        if (hopTimerRef.current) clearTimeout(hopTimerRef.current);
+        hopTimerRef.current = setTimeout(() => {
+          setHopping(false);
+          hopTimerRef.current = null;
+        }, 240);
+
+        // 3) 静默后归零方向（与 moveTimer 共用 280ms 静默窗口）。
+        if (dirTimerRef.current) clearTimeout(dirTimerRef.current);
+        dirTimerRef.current = setTimeout(() => {
+          setDragDir(0);
+          dirTimerRef.current = null;
+        }, 280);
+
+        // 4) 保存位置 debounce（既有逻辑）。
         if (moveTimer.current) clearTimeout(moveTimer.current);
         moveTimer.current = setTimeout(() => {
+          moveTimer.current = null;
           void wiseMascotSavePosition(pos.x, pos.y);
         }, 280);
       });
@@ -96,6 +142,8 @@ function MascotApp() {
     return () => {
       cancelled = true;
       if (moveTimer.current) clearTimeout(moveTimer.current);
+      if (hopTimerRef.current) clearTimeout(hopTimerRef.current);
+      if (dirTimerRef.current) clearTimeout(dirTimerRef.current);
       for (const u of unsubs) {
         safeUnlisten(u);
       }
@@ -143,6 +191,27 @@ function MascotApp() {
     setMenuOpen((open) => !open);
   };
 
+  /**
+   * 兜底右键捕获：React 合成事件依赖 button 冒泡，但 macOS WKWebView 在
+   * `transparent: true` 无边框窗口里，落在 sprite 内 SVG 子元素上的右键
+   * 不一定会触发外层 button 的 onContextMenu。直接在 window 层监听原生
+   * `contextmenu`，配合 `event.target` 判断是否命中宠物区域，绕开 React 事件冒泡，
+   * 命中即打开菜单并 preventDefault 阻止 webview 原生菜单弹出。
+   */
+  useEffect(() => {
+    const onContextMenu = (event: MouseEvent) => {
+      const root = rootRef.current;
+      if (!root) return;
+      const target = event.target;
+      if (!(target instanceof Node) || !root.contains(target)) return;
+      event.preventDefault();
+      event.stopPropagation();
+      setMenuOpen((open) => !open);
+    };
+    window.addEventListener("contextmenu", onContextMenu);
+    return () => window.removeEventListener("contextmenu", onContextMenu);
+  }, []);
+
   const handleMarkRead = () => {
     setMenuOpen(false);
     void wiseNotificationMarkAllRead().then(() => {
@@ -173,14 +242,14 @@ function MascotApp() {
       <div className="app-mascot-pet-drag-shell" data-tauri-drag-region aria-hidden />
       <button
         type="button"
-        className="app-mascot-pet"
+        className={`app-mascot-pet${hopping ? " is-hopping" : ""}`}
         title="拖动移动 · 点击回主窗口 · 右键更多"
         aria-label={total > 0 ? `Wise 宠物，${total} 条未读` : "Wise 宠物"}
         onClick={handlePetClick}
         onContextMenu={handlePetContextMenu}
       >
         <span className="app-mascot-pet-sprite">
-          <WisePetSprite state={petState} />
+          <WisePetSprite state={petState} direction={dragDir} />
         </span>
         {total > 0 ? (
           <button

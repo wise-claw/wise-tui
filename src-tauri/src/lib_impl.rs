@@ -9,6 +9,7 @@ use crate::{
     main_window, mcp, my_extensions,
     openspec_bootstrap, project_relative_files, remote_channels, repository_files, skills, skills_sh, system_resource,
     composer_image_gc, wise_data_cleanup, wise_db, wise_mascot, wise_paths, wise_push,
+    wise_db::WiseDb,
     workspace_commands,
     workspace_inspector_commands,
     execution_environment_dispatch_commands,
@@ -161,6 +162,35 @@ pub fn run() {
                         "global-cycle-multi-pane",
                         (),
                     );
+                })
+                .map_err(|e| e.to_string())?;
+
+            // ⌥M / Alt+M：切换桌面宠物的可见性。
+            // 用户曾反馈右键菜单在 macOS WKWebView transparent 窗口中不稳定，
+            // 给一个常驻全局快捷键作为冗余开关；面板见 `src/constants/appShortcuts.ts`。
+            let toggle_mascot_shortcut = Shortcut::new(Some(Modifiers::ALT), Code::KeyM);
+            app.global_shortcut()
+                .on_shortcut(toggle_mascot_shortcut, |app_handle, _shortcut, event| {
+                    if event.state() != ShortcutState::Pressed {
+                        return;
+                    }
+                    let Some(win) = app_handle.get_webview_window("mascot") else {
+                        return;
+                    };
+                    match win.is_visible() {
+                        Ok(true) => {
+                            let _ = wise_mascot::wise_mascot_hide(
+                                app_handle.clone(),
+                                app_handle.state::<WiseDb>(),
+                            );
+                        }
+                        _ => {
+                            let _ = wise_mascot::wise_mascot_show(
+                                app_handle.clone(),
+                                app_handle.state::<WiseDb>(),
+                            );
+                        }
+                    }
                 })
                 .map_err(|e| e.to_string())?;
 
