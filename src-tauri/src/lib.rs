@@ -34,6 +34,7 @@ mod dingtalk_stream_gateway;
 pub mod extensions;
 mod my_extensions;
 mod git_commands;
+mod code_review_commands;
 #[cfg(target_os = "macos")]
 mod macos_microphone;
 #[cfg(target_os = "macos")]
