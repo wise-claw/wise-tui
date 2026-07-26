@@ -2,7 +2,7 @@ import { openCodeReviewDrawer } from "../../constants/workflowUiEvents";
 import type { CodeReviewRun } from "../../types/codeReview";
 import { countCodeReviewFindingSeverities } from "../../stores/codeReviewFindingsStore";
 import { getCodeReviewFindingsSnapshot } from "../../stores/codeReviewFindingsStore";
-import { wiseNotificationIngest, wiseNotificationIngestWithPet } from "../wiseMascot";
+import { wiseNotificationIngestWithPet } from "../wiseMascot";
 
 export const CODE_REVIEW_NOTIFICATION_CONVERSATION_PREFIX = "wise:code-review:";
 

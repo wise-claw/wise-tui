@@ -9,7 +9,7 @@ import {
   type DingTalkEnterpriseBotStoredConfig,
 } from "../services/dingtalkEnterpriseBot";
 import { WISE_AUTOMATION_MARKER_DINGTALK_V1 } from "../constants/dingtalkWiseAutomation";
-import { wiseNotificationIngest, wiseNotificationIngestWithPet, wisePushStart, wisePushStop } from "../services/wiseMascot";
+import { wiseNotificationIngestWithPet, wisePushStart, wisePushStop } from "../services/wiseMascot";
 import "./DingTalkEnterpriseBotPopoverBody.css";
 
 const DOC_CREATE = "https://open.dingtalk.com/document/orgapp/the-creation-and-installation-of-the-application-robot-in-the.md";

@@ -114,7 +114,7 @@ function MascotApp() {
     return () => window.removeEventListener("pointerdown", onPointerDown);
   }, [menuOpen]);
 
-  const handlePetClick = (event: ReactMouseEvent<HTMLButtonElement>) => {
+  const handlePetClick = () => {
     // 拖拽事件由独立的 `app-mascot-pet-drag-shell` 在 OS 层拦截，不会落到此按钮；
     // 此处仅响应真正命中 sprite 的鼠标点击 → 安全 focus 主窗。
     setMenuOpen(false);

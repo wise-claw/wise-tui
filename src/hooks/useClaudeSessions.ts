@@ -93,7 +93,7 @@ import {
 import { runWhenIdle } from "../utils/deferIdle";
 import { readVisiblePollIntervalMs, startAdaptiveInterval } from "../utils/adaptivePoll";
 import { isCurrentPrimaryMainWorkspaceWindowSync } from "../services/mainWindow";
-import { wiseNotificationIngest, wiseNotificationIngestWithPet } from "../services/wiseMascot";
+import { wiseNotificationIngestWithPet } from "../services/wiseMascot";
 import {
   buildQuestionFallbackUserPrompt,
   buildQuestionResumeUserPrompt,

@@ -42,8 +42,8 @@
     "runtime": null
   },
   "build": {
-    "buildCommand": "PATH=\"/Users/sjl/.cargo/bin:$PATH\" bunx tsc --noEmit -p tsconfig.json 2>&1 | tail -10; echo \"---exit=$?---\"",
-    "testCommand": "bun test src/services/codeReview 2>&1 | tail -10",
+    "buildCommand": "PATH=\"/Users/sjl/.cargo/bin:$PATH\" bunx tsc --noEmit -p tsconfig.json 2>&1 | tail -15; echo \"---exit=$?---\"",
+    "testCommand": "bun test src/services/codeReview 2>&1 | tail -5",
     "lintCommand": null,
     "devCommand": "npm run dev",
     "scripts": {
@@ -243,8 +243,8 @@
   "hotPaths": [
     {
       "path": "src/mascot.tsx",
-      "accessCount": 28,
-      "lastAccessed": 1785029446695,
+      "accessCount": 29,
+      "lastAccessed": 1785029579952,
       "type": "file"
     },
     {
@@ -260,15 +260,15 @@
       "type": "file"
     },
     {
-      "path": "src/hooks/useRepositoryFileEditor.ts",
-      "accessCount": 9,
-      "lastAccessed": 1785024547431,
+      "path": "src/hooks/useClaudeSessions.ts",
+      "accessCount": 10,
+      "lastAccessed": 1785029597939,
       "type": "file"
     },
     {
-      "path": "src/hooks/useClaudeSessions.ts",
-      "accessCount": 8,
-      "lastAccessed": 1785028697424,
+      "path": "src/hooks/useRepositoryFileEditor.ts",
+      "accessCount": 9,
+      "lastAccessed": 1785024547431,
       "type": "file"
     },
     {
@@ -296,6 +296,18 @@
       "type": "file"
     },
     {
+      "path": "src/components/DingTalkEnterpriseBotPopoverBody.tsx",
+      "accessCount": 6,
+      "lastAccessed": 1785029587206,
+      "type": "file"
+    },
+    {
+      "path": "src/services/codeReview/codeReviewNotification.ts",
+      "accessCount": 6,
+      "lastAccessed": 1785029603226,
+      "type": "file"
+    },
+    {
       "path": "src/services/tabsStore.ts",
       "accessCount": 4,
       "lastAccessed": 1784991454639,
@@ -305,18 +317,6 @@
       "path": "src/components/MascotPet/WisePetSprite.tsx",
       "accessCount": 4,
       "lastAccessed": 1785028631482,
-      "type": "file"
-    },
-    {
-      "path": "src/services/codeReview/codeReviewNotification.ts",
-      "accessCount": 4,
-      "lastAccessed": 1785028699128,
-      "type": "file"
-    },
-    {
-      "path": "src/components/DingTalkEnterpriseBotPopoverBody.tsx",
-      "accessCount": 4,
-      "lastAccessed": 1785028700286,
       "type": "file"
     },
     {
