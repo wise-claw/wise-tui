@@ -1,13 +1,15 @@
 import {
+  BugOutlined,
   CheckCircleOutlined,
   CloseOutlined,
   FieldTimeOutlined,
   PlayCircleOutlined,
   ReloadOutlined,
 } from "@ant-design/icons";
-import { Button, Empty, Select } from "antd";
+import { Button, Empty, Select, message } from "antd";
 import { HoverHint } from "../shared/HoverHint";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { openCodeReviewDrawer } from "../../constants/workflowUiEvents";
 import type { EmployeeItem, Repository, RepositoryScheduledClaudeTask, WorkflowGraph, WorkflowTemplateItem } from "../../types";
 import { readRepositoryScheduledClaudeTasks } from "../../services/repositoryScheduledClaudeTasksStore";
 import { AuthorPanelPageShell } from "../AuthorPanel/AuthorPanelPageShell";
@@ -150,7 +152,7 @@ export function AutomationPanel({
       className="app-automation-panel"
       icon={<FieldTimeOutlined />}
       title="定时自动化"
-      subtitle="Cron、Mission 和会话续跑"
+      subtitle="Cron、Mission、会话续跑与推送前代码审查"
       actions={
         <>
         <Select
@@ -165,6 +167,27 @@ export function AutomationPanel({
         />
         <Button size="small" icon={<ReloadOutlined />} loading={loading} onClick={() => void refresh()}>
           刷新
+        </Button>
+        <Button
+          size="small"
+          icon={<BugOutlined />}
+          disabled={!selectedRepository?.path?.trim()}
+          onClick={() => {
+            const path = selectedRepository?.path?.trim() ?? "";
+            if (!path) {
+              message.warning("请先选择仓库");
+              return;
+            }
+            openCodeReviewDrawer({
+              repositoryPath: path,
+              repositoryName: selectedRepository?.name,
+              executionEngine: selectedRepository?.executionEngine,
+              autoStart: true,
+              initialScope: "uncommitted",
+            });
+          }}
+        >
+          代码审查
         </Button>
         <Button
           size="small"

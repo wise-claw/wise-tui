@@ -3,6 +3,7 @@ import { Button, Dropdown, Input, message, Modal } from "antd";
 import type { MenuProps } from "antd";
 import {
   ApartmentOutlined,
+  AuditOutlined,
   BranchesOutlined,
   BugOutlined,
   GlobalOutlined,
@@ -11,6 +12,8 @@ import {
   NodeIndexOutlined,
   RocketOutlined,
 } from "@ant-design/icons";
+import type { SessionExecutionEngine } from "../../constants/sessionExecutionEngine";
+import { openCodeReviewDrawer } from "../../constants/workflowUiEvents";
 import {
   gitFlowFeatureFinish,
   gitFlowFeatureStart,
@@ -24,9 +27,9 @@ import {
 import type { GitFlowInfo } from "../../types";
 
 /** 更多菜单项标识 */
-export type MoreMenuItemId = "history" | "browser" | "git-flow";
+export type MoreMenuItemId = "history" | "browser" | "git-flow" | "code-review";
 
-/** 默认全部提到工具栏，不再收进「更多」 */
+/** 默认提到工具栏的项；「代码审查」留在更多菜单 */
 const DEFAULT_INLINE_KEYS: ReadonlySet<MoreMenuItemId> = new Set([
   "history",
   "browser",
@@ -36,6 +39,8 @@ const DEFAULT_INLINE_KEYS: ReadonlySet<MoreMenuItemId> = new Set([
 interface GitPanelMoreMenuProps {
   /** 仓库路径，传入则启用 Git Flow 功能 */
   repositoryPath?: string;
+  repositoryName?: string;
+  executionEngine?: SessionExecutionEngine | string | null;
   /** 展示在外部（header 按钮）的项；默认全部外放 */
   showInlineKeys?: ReadonlySet<MoreMenuItemId>;
   historyActive?: boolean;
@@ -43,18 +48,23 @@ interface GitPanelMoreMenuProps {
   onOpenInBrowser?: () => void;
   openingBrowser?: boolean;
   onFlowOperationDone?: () => void;
+  /** 覆盖默认的代码审查入口（默认打开全局 CodeReviewHost） */
+  onOpenCodeReview?: () => void;
 }
 
 type FlowAction = "feature" | "release" | "hotfix";
 
 export function GitPanelMoreMenu({
   repositoryPath,
+  repositoryName,
+  executionEngine,
   showInlineKeys = DEFAULT_INLINE_KEYS,
   historyActive = false,
   onOpenHistory,
   onOpenInBrowser,
   openingBrowser = false,
   onFlowOperationDone,
+  onOpenCodeReview,
 }: GitPanelMoreMenuProps) {
   // — Git Flow state —
   const [flowInfo, setFlowInfo] = useState<GitFlowInfo | null>(null);
@@ -154,6 +164,22 @@ export function GitPanelMoreMenu({
     [repositoryPath, flowInfo, flowLoading, actionLoading, handleFlowInit, openFlowModal],
   );
 
+  const handleOpenCodeReview = useCallback(() => {
+    if (onOpenCodeReview) {
+      onOpenCodeReview();
+      return;
+    }
+    const path = repositoryPath?.trim();
+    if (!path) return;
+    openCodeReviewDrawer({
+      repositoryPath: path,
+      repositoryName,
+      executionEngine,
+      autoStart: false,
+      initialScope: "uncommitted",
+    });
+  }, [executionEngine, onOpenCodeReview, repositoryName, repositoryPath]);
+
   // — 「更多」里只保留尚未外放的项 —
   const menuItems = useMemo((): MenuProps["items"] => {
     const items: MenuProps["items"] = [];
@@ -174,6 +200,18 @@ export function GitPanelMoreMenu({
         icon: <GlobalOutlined />,
         disabled: openingBrowser,
         onClick: onOpenInBrowser,
+      });
+    }
+
+    if (repositoryPath?.trim() && !inlineKeys.has("code-review")) {
+      if (items.length > 0) {
+        items.push({ type: "divider" });
+      }
+      items.push({
+        key: "code-review",
+        label: "代码审查",
+        icon: <AuditOutlined />,
+        onClick: handleOpenCodeReview,
       });
     }
 
@@ -199,6 +237,7 @@ export function GitPanelMoreMenu({
     repositoryPath,
     inlineKeys,
     flowSubmenuItems,
+    handleOpenCodeReview,
   ]);
 
   // — 外部 inline 按钮 —
@@ -263,6 +302,23 @@ export function GitPanelMoreMenu({
         ),
       });
     }
+    if (inlineKeys.has("code-review") && repositoryPath?.trim()) {
+      btns.push({
+        key: "code-review",
+        el: (
+          <Button
+            key="inline-code-review"
+            type="text"
+            size="small"
+            title="代码审查"
+            aria-label="代码审查"
+            className="git-panel-more-btn"
+            icon={<AuditOutlined />}
+            onClick={handleOpenCodeReview}
+          />
+        ),
+      });
+    }
     return btns;
   }, [
     inlineKeys,
@@ -272,6 +328,7 @@ export function GitPanelMoreMenu({
     openingBrowser,
     repositoryPath,
     flowSubmenuItems,
+    handleOpenCodeReview,
   ]);
 
   const showDropdown = (menuItems?.length ?? 0) > 0;

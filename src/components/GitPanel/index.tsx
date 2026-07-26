@@ -23,6 +23,7 @@ import type { SessionExecutionEngine } from "../../constants/sessionExecutionEng
 import { normalizeSessionExecutionEngine } from "../../constants/sessionExecutionEngine";
 import { WISE_GIT_REPOSITORY_STATUS_REFRESH, type GitRepositoryStatusRefreshDetail } from "../../constants/gitUiEvents";
 import { aiCommitPullPushRepository, commitPullPushRepository, isGitMergeConflictError } from "../../services/gitCommitPullPush";
+import { maybeAutoCodeReviewAfterCommit } from "../../services/codeReview";
 import { openRepositoryRemoteInBrowser } from "../../services/openRepositoryRemote";
 import { refreshGitRepositoryStats } from "../../stores/gitRepositoryStatsStore";
 import { refreshGitRepositoryExplorerStatus } from "../../stores/gitRepositoryExplorerStatusStore";
@@ -72,7 +73,7 @@ export function GitPanel(props: Props) {
 
 function GitSingleRepoPanel({
   repositoryPath,
-  repositoryName: _repositoryName,
+  repositoryName,
   repositoryEntries = [],
   onOpenFile,
   headerPrefix,
@@ -382,8 +383,13 @@ function GitSingleRepoPanel({
           throw new Error("没有可提交的改动");
         }
         await gitCommit(repositoryPath, trimmed);
+        void maybeAutoCodeReviewAfterCommit({
+          repositoryPath,
+          repositoryName: repositoryName ?? undefined,
+          executionEngine,
+        });
       }),
-    [repositoryPath, runAction],
+    [executionEngine, repositoryName, repositoryPath, runAction],
   );
 
   const handleCommitAndPush = useCallback(
@@ -528,6 +534,8 @@ function GitSingleRepoPanel({
           ) : null}
           <GitPanelMoreMenu
             repositoryPath={repositoryPath}
+            repositoryName={repositoryName}
+            executionEngine={executionEngine}
             historyActive={historyDrawerOpen}
             onOpenHistory={() => setHistoryDrawerOpen(true)}
             onOpenInBrowser={handleOpenRemoteInBrowser}

@@ -23,6 +23,7 @@ import { openRepositoryRemoteInBrowser } from "../../services/openRepositoryRemo
 import type { SessionExecutionEngine } from "../../constants/sessionExecutionEngine";
 import { WISE_GIT_REPOSITORY_STATUS_REFRESH, type GitRepositoryStatusRefreshDetail } from "../../constants/gitUiEvents";
 import { aiCommitPullPushRepository, commitPullPushRepository, isGitMergeConflictError } from "../../services/gitCommitPullPush";
+import { maybeAutoCodeReviewAfterCommit } from "../../services/codeReview";
 import { refreshGitRepositoryStats } from "../../stores/gitRepositoryStatsStore";
 import { refreshGitRepositoryExplorerStatus } from "../../stores/gitRepositoryExplorerStatusStore";
 import type { GitStatusResponse } from "../../types";
@@ -534,8 +535,13 @@ function GitRepoSectionInner({
           throw new Error("没有可提交的改动");
         }
         await gitCommit(repositoryPath, trimmed);
+        void maybeAutoCodeReviewAfterCommit({
+          repositoryPath,
+          repositoryName: entry.name,
+          executionEngine: entry.executionEngine,
+        });
       }),
-    [repositoryPath, runAction],
+    [entry.executionEngine, entry.name, repositoryPath, runAction],
   );
 
   const handleCommitAndPush = useCallback(
@@ -724,6 +730,8 @@ function GitRepoSectionInner({
           ) : null}
           <GitPanelMoreMenu
             repositoryPath={repositoryPath}
+            repositoryName={entry.name}
+            executionEngine={entry.executionEngine}
             onOpenHistory={onOpenHistory}
             onOpenInBrowser={handleOpenRemoteInBrowser}
             openingBrowser={openingRemote}

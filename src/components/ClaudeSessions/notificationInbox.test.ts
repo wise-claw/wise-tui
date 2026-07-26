@@ -23,4 +23,18 @@ describe("notificationInbox", () => {
     expect(notificationConversationInSessionInboxScope("disk-a", current, all)).toBe(true);
     expect(notificationRowInSessionInboxScope({ conversationId: "disk-a", readAt: null }, current, all)).toBe(true);
   });
+
+  test("includes code-review notifications for the same repository", () => {
+    const current = sess("a", "/repo");
+    const all = [current];
+    const conversationId = `wise:code-review:${encodeURIComponent("/repo")}`;
+    expect(notificationConversationInSessionInboxScope(conversationId, current, all)).toBe(true);
+    expect(
+      notificationConversationInSessionInboxScope(
+        `wise:code-review:${encodeURIComponent("/other")}`,
+        current,
+        all,
+      ),
+    ).toBe(false);
+  });
 });

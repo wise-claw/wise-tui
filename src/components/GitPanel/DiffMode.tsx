@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState, memo } from "react";
 import { useDiffModeExpandedDirs } from "./useDiffModeExpandedDirs";
 import { HoverHint } from "../shared/HoverHint";
-import { Button, Input, message, Popconfirm, Space, Typography } from "antd";
+import { Badge, Button, Input, Modal, message, notification, Popconfirm, Space, Typography } from "antd";
 import {
   ApartmentOutlined,
+  BugOutlined,
   CheckOutlined,
   CloudUploadOutlined,
   MinusOutlined,
@@ -21,6 +22,14 @@ import {
   conventionalCommitPromptLines,
   normalizeConventionalCommitMessage,
 } from "../../utils/conventionalCommitMessage";
+import { openCodeReviewDrawer } from "../../constants/workflowUiEvents";
+import { useCodeReviewFindingsSnapshot } from "../../hooks/useCodeReviewFindingsSnapshot";
+import {
+  buildCodeReviewToastContent,
+  evaluatePrePushCodeReview,
+  probeCodeReviewFindingsFreshness,
+} from "../../services/codeReview";
+import { countCodeReviewFindingSeverities } from "../../stores/codeReviewFindingsStore";
 import { buildFileTree } from "./fileTree";
 import { FileRow } from "./FileRow";
 import { FileTreeView } from "./FileTreeView";
@@ -85,6 +94,39 @@ function DiffModeInner({
   const hasChanges = hasStaged || hasUnstaged;
   const ahead = status.ahead ?? 0;
   hasChangesRef.current = hasChanges;
+  const canStartCodeReview = hasChanges || ahead > 0;
+  const codeReviewSnapshot = useCodeReviewFindingsSnapshot(repositoryPath);
+  const codeReviewBadgeCount = useMemo(() => {
+    if (!codeReviewSnapshot) return 0;
+    return countCodeReviewFindingSeverities(codeReviewSnapshot.findings).highOrCritical;
+  }, [codeReviewSnapshot]);
+  const codeReviewStale = Boolean(codeReviewSnapshot?.stale);
+  const codeReviewStatusKey = useMemo(() => {
+    const paths = [
+      ...status.staged.map((file) => `s:${file.path}`),
+      ...status.unstaged.map((file) => `u:${file.path}`),
+    ].join("|");
+    return `${ahead}:${paths}`;
+  }, [ahead, status.staged, status.unstaged]);
+
+  useEffect(() => {
+    if (!codeReviewSnapshot?.run.diffFingerprint) return;
+    const scope = hasChanges ? "uncommitted" : "branch";
+    const timer = window.setTimeout(() => {
+      void probeCodeReviewFindingsFreshness({
+        repositoryPath,
+        scope,
+      });
+    }, 1200);
+    return () => window.clearTimeout(timer);
+  }, [
+    codeReviewSnapshot?.run.diffFingerprint,
+    codeReviewSnapshot?.runId,
+    codeReviewStatusKey,
+    hasChanges,
+    repositoryPath,
+  ]);
+
   const canCommit = commitMsg.trim().length > 0 && hasChanges && !loading.commit && !loading.commitAndPush;
   const canPush =
     (hasChanges || ahead > 0) &&
@@ -293,19 +335,113 @@ function DiffModeInner({
         commitSubmitLockRef.current = false;
         return;
       }
+
+      setPushPreparing(true);
+      try {
+        const decision = await evaluatePrePushCodeReview({
+          repositoryPath,
+          hasUncommittedChanges: hasChangesRef.current,
+          executionEngine,
+          onInvocationKey: (key) => {
+            aiInvocationKeyRef.current = key;
+          },
+        });
+        if (aiGenerationCancelledRef.current) {
+          commitSubmitLockRef.current = false;
+          return;
+        }
+        if (decision.action === "abort") {
+          message.error(decision.reason);
+          if (decision.run) {
+            openCodeReviewDrawer({
+              repositoryPath,
+              executionEngine,
+              autoStart: false,
+              initialScope: hasChangesRef.current ? "uncommitted" : "branch",
+              seededRun: decision.run,
+            });
+          }
+          commitSubmitLockRef.current = false;
+          return;
+        }
+        if (decision.action === "confirm") {
+          const confirmed = await new Promise<boolean>((resolve) => {
+            Modal.confirm({
+              title: "推送前审查发现高危问题",
+              content: decision.reason,
+              okText: "仍要推送",
+              cancelText: "查看详情",
+              onOk: () => resolve(true),
+              onCancel: () => resolve(false),
+            });
+          });
+          if (!confirmed) {
+            openCodeReviewDrawer({
+              repositoryPath,
+              executionEngine,
+              autoStart: false,
+              initialScope: hasChangesRef.current ? "uncommitted" : "branch",
+              seededRun: decision.run,
+            });
+            commitSubmitLockRef.current = false;
+            return;
+          }
+        }
+        if (decision.action === "continue" && decision.run) {
+          const toast = buildCodeReviewToastContent(decision.run, { context: "pre-push" });
+          if (toast.actionable) {
+            const seededRun = decision.run;
+            const notificationKey = `code-review-pre-push-${seededRun.id}`;
+            notification.open({
+              key: notificationKey,
+              type: toast.level,
+              message: toast.title,
+              description: toast.description,
+              duration: 6,
+              btn: (
+                <Button
+                  size="small"
+                  type="primary"
+                  onClick={() => {
+                    notification.destroy(notificationKey);
+                    openCodeReviewDrawer({
+                      repositoryPath,
+                      executionEngine,
+                      autoStart: false,
+                      initialScope: hasChangesRef.current ? "uncommitted" : "branch",
+                      seededRun,
+                    });
+                  }}
+                >
+                  查看详情
+                </Button>
+              ),
+            });
+          }
+        }
+      } finally {
+        if (!aiGenerationCancelledRef.current) {
+          setPushPreparing(false);
+        }
+        aiInvocationKeyRef.current = null;
+      }
+
       onCommitAndPush(trimmed);
       setCommitMsg("");
     } catch {
       commitSubmitLockRef.current = false;
+      setPushPreparing(false);
     }
   }, [
     ahead,
     aiSummaryLoading,
+    executionEngine,
     generateCommitMessageByAi,
     loading.commit,
     loading.commitAndPush,
     onCommitAndPush,
     pushPreparing,
+    repositoryPath,
   ]);
 
   return (
@@ -351,6 +487,46 @@ function DiffModeInner({
               autoSize={{ minRows: 1, maxRows: 2 }}
             />
             <div className="git-commit-card__footer">
+              <Badge
+                count={
+                  codeReviewStale
+                    ? "过期"
+                    : codeReviewBadgeCount > 0
+                      ? codeReviewBadgeCount
+                      : 0
+                }
+                size="small"
+                overflowCount={99}
+                color={codeReviewStale ? "#fa8c16" : "#ff4d4f"}
+                offset={[-2, 2]}
+              >
+                <Button
+                  type="text"
+                  size="small"
+                  className="git-ai-summary-btn"
+                  title={
+                    codeReviewStale
+                      ? "工作区已变，审查结果可能过期 — 点击查看并重新审查"
+                      : codeReviewBadgeCount > 0
+                        ? `AI 审查变更（当前 ${codeReviewBadgeCount} 项高危未清）`
+                        : "AI 审查变更（对标 Cursor /review）：未提交或相对主干"
+                  }
+                  icon={<BugOutlined />}
+                  onMouseDown={(event) => event.preventDefault()}
+                  onClick={() => {
+                    openCodeReviewDrawer({
+                      repositoryPath,
+                      executionEngine,
+                      autoStart: codeReviewStale || !(codeReviewSnapshot?.findings.length),
+                      initialScope: hasChanges ? "uncommitted" : "branch",
+                      seededRun: codeReviewStale ? null : codeReviewSnapshot?.run ?? null,
+                    });
+                  }}
+                  disabled={aiSummaryLoading || loading.commitAndPush || !canStartCodeReview}
+                >
+                  AI 审查
+                </Button>
+              </Badge>
               <Button
                 type="text"
                 size="small"
@@ -384,7 +560,7 @@ function DiffModeInner({
                   type="text"
                   size="small"
                   className="git-push-btn"
-                  title="AI 生成提交信息并提交、拉取、推送"
+                  title="AI 生成提交信息并提交、拉取、推送（可开启推送前审查）"
                   disabled={!canPush}
                   icon={<CloudUploadOutlined />}
                   onMouseDown={(event) => event.preventDefault()}
@@ -596,6 +772,7 @@ function DiffModeInner({
       )}
         </div>
       ) : null}
+
     </div>
   );
 }

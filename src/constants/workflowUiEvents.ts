@@ -234,3 +234,71 @@ export interface OpenBackgroundInvocationDrawerDetail {
   /** 打开后默认选中的后台 invocation */
   preferredInvocationKey?: string;
 }
+
+/** Code Review「在会话中修复」：创建/激活会话并执行修复提示词 */
+export const WISE_UI_EVENT_CODE_REVIEW_FIX = "wise:code-review-fix";
+
+export interface CodeReviewFixDetail {
+  repositoryPath: string;
+  repositoryName?: string;
+  prompt: string;
+}
+
+export function requestCodeReviewFix(detail: CodeReviewFixDetail): void {
+  const repositoryPath = detail.repositoryPath.trim();
+  const prompt = detail.prompt.trim();
+  if (!repositoryPath || !prompt) return;
+  window.dispatchEvent(
+    new CustomEvent<CodeReviewFixDetail>(WISE_UI_EVENT_CODE_REVIEW_FIX, {
+      detail: {
+        repositoryPath,
+        repositoryName: detail.repositoryName?.trim() || undefined,
+        prompt,
+      },
+    }),
+  );
+}
+
+/** 打开全局代码审查抽屉（Git / Automation / 推送门闸共用） */
+export const WISE_UI_EVENT_OPEN_CODE_REVIEW = "wise:open-code-review";
+
+export type CodeReviewFocusFinding = {
+  path: string;
+  line?: number | null;
+};
+
+export interface OpenCodeReviewDetail {
+  repositoryPath: string;
+  repositoryName?: string;
+  executionEngine?: string | null;
+  autoStart?: boolean;
+  initialScope?: "uncommitted" | "branch";
+  /** 已有审查结果（例如推送门闸刚跑完） */
+  seededRun?: import("../types/codeReview").CodeReviewRun | null;
+  /** 打开后滚动并高亮对应 finding（编辑器 glyph 点击） */
+  focusFinding?: CodeReviewFocusFinding | null;
+}
+
+export function openCodeReviewDrawer(detail: OpenCodeReviewDetail): void {
+  const repositoryPath = detail.repositoryPath.trim();
+  if (!repositoryPath) return;
+  const focusPath = detail.focusFinding?.path?.trim() ?? "";
+  window.dispatchEvent(
+    new CustomEvent<OpenCodeReviewDetail>(WISE_UI_EVENT_OPEN_CODE_REVIEW, {
+      detail: {
+        repositoryPath,
+        repositoryName: detail.repositoryName?.trim() || undefined,
+        executionEngine: detail.executionEngine,
+        autoStart: detail.autoStart,
+        initialScope: detail.initialScope,
+        seededRun: detail.seededRun ?? null,
+        focusFinding: focusPath
+          ? {
+              path: focusPath,
+              line: detail.focusFinding?.line ?? null,
+            }
+          : null,
+      },
+    }),
+  );
+}

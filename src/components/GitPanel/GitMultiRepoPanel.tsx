@@ -208,6 +208,12 @@ export function GitMultiRepoPanel({
       });
   }, [activeRepositoryPath, openingRemote, repositoryEntries]);
 
+  const activePathKey = activeRepositoryPath.trim();
+  const moreMenuRepository =
+    (activePathKey
+      ? repositoryEntries.find((entry) => entry.path.trim() === activePathKey)
+      : undefined) ?? repositoryEntries[0];
+
   return (
     <div className="app-git-panel app-git-panel--multi">
       <div className="git-panel-header">
@@ -221,10 +227,12 @@ export function GitMultiRepoPanel({
             onAfterSync={refreshAllRepositories}
           />
           <GitPanelMoreMenu
-            repositoryPath={activeRepositoryPath.trim() || repositoryEntries[0]?.path}
+            repositoryPath={moreMenuRepository?.path}
+            repositoryName={moreMenuRepository?.name}
+            executionEngine={moreMenuRepository?.executionEngine}
             historyActive={historyDrawerOpen}
             onOpenHistory={() =>
-              openHistoryForRepository(activeRepositoryPath.trim() || repositoryEntries[0]?.path || "")
+              openHistoryForRepository(moreMenuRepository?.path || "")
             }
             onOpenInBrowser={handleOpenActiveRepoInBrowser}
             openingBrowser={openingRemote}

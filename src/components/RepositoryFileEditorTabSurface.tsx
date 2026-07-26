@@ -32,6 +32,7 @@ import { runWhenIdle } from "../utils/deferIdle";
 import { resolveMonacoIdleDeferTimeoutMs } from "../utils/uiWorkDefer";
 import { MonacoSelectionChatToolbar } from "./MonacoSelectionChatToolbar";
 import { useGitRepositoryExplorerStatus } from "../hooks/useGitRepositoryExplorerStatus";
+import { useMonacoCodeReviewFindingDecorations } from "../hooks/useMonacoCodeReviewFindingDecorations";
 import { useMonacoGitModifiedLineDecorations } from "../hooks/useMonacoGitModifiedLineDecorations";
 import { MarkdownBody } from "./ClaudeSessions/MarkdownElements";
 import rehypeRaw from "rehype-raw";
@@ -234,6 +235,14 @@ function RepositoryFileEditorTabSurface({
           Math.max(tab.content.length, tab.originalContent.length),
         ),
     ),
+  });
+
+  useMonacoCodeReviewFindingDecorations({
+    editor: isActive ? (monacoEditorSurface?.editor ?? null) : null,
+    monaco: isActive ? (monacoEditorSurface?.monaco ?? null) : null,
+    repositoryPath: tab.rootPath || repositoryPath,
+    relativePath: tab.relativePath,
+    enabled: Boolean(isActive && tab.diffOriginal === undefined),
   });
 
   useEffect(() => {
@@ -465,6 +474,7 @@ function RepositoryFileEditorTabSurface({
         {everActivated ? (
           <GitDiffMonacoPane
             isActive={isActive}
+            repositoryPath={tab.rootPath || repositoryPath}
             relativePath={tab.relativePath}
             original={tab.diffOriginal}
             modified={tab.content}

@@ -1,0 +1,242 @@
+.code-review-drawer .ant-drawer-body {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 12px;
+}
+
+.code-review-drawer__toolbar {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.code-review-drawer__setting-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.code-review-drawer__history-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.code-review-drawer__history-item {
+  width: 100%;
+  text-align: left;
+  border: 1px solid var(--ant-color-border-secondary, #f0f0f0);
+  border-radius: 8px;
+  padding: 10px;
+  background: var(--ant-color-bg-container, #fff);
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.code-review-drawer__history-item:hover {
+  border-color: var(--ant-color-primary, #1677ff);
+}
+
+.code-review-drawer__history-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: var(--ant-color-text-secondary, #595959);
+}
+
+.code-review-drawer__history-summary {
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.code-review-drawer__hint {
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.code-review-drawer__stale {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  background: rgba(250, 140, 22, 0.08);
+  border: 1px solid rgba(250, 140, 22, 0.35);
+}
+
+.code-review-drawer__loading,
+.code-review-drawer__error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+}
+
+.code-review-drawer__error {
+  color: var(--ant-color-error, #ff4d4f);
+}
+
+.code-review-drawer__summary {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.code-review-drawer__counts {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+}
+
+.code-review-drawer__count-btn {
+  border: 1px solid var(--ant-color-border-secondary, #f0f0f0);
+  background: var(--ant-color-bg-container, #fff);
+  border-radius: 999px;
+  padding: 2px 8px;
+  font-size: 12px;
+  line-height: 1.4;
+  color: var(--ant-color-text-secondary, #595959);
+  cursor: pointer;
+}
+
+.code-review-drawer__count-btn:hover,
+.code-review-drawer__count-btn.is-active {
+  border-color: var(--ant-color-primary, #1677ff);
+  color: var(--ant-color-primary, #1677ff);
+}
+
+.code-review-drawer__count-btn--critical.is-active {
+  border-color: #c41d7f;
+  color: #c41d7f;
+}
+
+.code-review-drawer__count-btn--high.is-active {
+  border-color: #ff4d4f;
+  color: #ff4d4f;
+}
+
+.code-review-drawer__count-btn--medium.is-active {
+  border-color: #fa8c16;
+  color: #fa8c16;
+}
+
+.code-review-drawer__nav {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.code-review-drawer__nav-label {
+  font-size: 12px;
+}
+
+.code-review-drawer__file-collapse {
+  background: transparent;
+}
+
+.code-review-drawer__file-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 100%;
+  overflow: hidden;
+}
+
+.code-review-drawer__file-path {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 12px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  max-width: 280px;
+}
+
+.code-review-drawer__truncated {
+  font-size: 12px;
+}
+
+.code-review-drawer__list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.code-review-drawer__item {
+  border: 1px solid var(--ant-color-border-secondary, #f0f0f0);
+  border-radius: 8px;
+  padding: 10px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: var(--ant-color-bg-container, #fff);
+}
+
+.code-review-drawer__item--focused {
+  border-color: var(--ant-color-primary, #1677ff);
+  box-shadow: 0 0 0 1px var(--ant-color-primary, #1677ff);
+}
+
+.code-review-drawer__item-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 6px;
+}
+
+.code-review-drawer__loc {
+  border: 0;
+  background: transparent;
+  color: var(--ant-color-primary, #1677ff);
+  cursor: pointer;
+  padding: 0;
+  font-size: 12px;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
+
+.code-review-drawer__loc:hover {
+  text-decoration: underline;
+}
+
+.code-review-drawer__title {
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.code-review-drawer__detail,
+.code-review-drawer__fix {
+  font-size: 12px;
+  color: var(--ant-color-text-secondary, #595959);
+  line-height: 1.45;
+  white-space: pre-wrap;
+}
+
+.code-review-drawer__actions {
+  display: flex;
+  gap: 8px;
+  margin-top: 2px;
+}
+
+.code-review-drawer__questions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12px;
+}
+
+.code-review-drawer__questions ul {
+  margin: 0;
+  padding-left: 18px;
+}

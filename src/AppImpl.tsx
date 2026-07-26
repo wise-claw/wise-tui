@@ -258,6 +258,8 @@ import {
 import { useMainLayoutModes } from "./hooks/useMainLayoutModes";
 import type { ReconcileProjectMode } from "./constants/reconcileProjectMode";
 import { useDingTalkAutomationInbound } from "./hooks/useDingTalkAutomationInbound";
+import { useCodeReviewFixDispatch } from "./hooks/useCodeReviewFixDispatch";
+import { CodeReviewHost } from "./components/CodeReviewPanel";
 import { useOmcPluginInstalled } from "./hooks/useOmcPluginInstalled";
 import { useOmcRuntime } from "./hooks/useOmcRuntime";
 import { useWorkflowTeamAutomation } from "./hooks/useWorkflowTeamAutomation";
@@ -1385,6 +1387,8 @@ export default function App() {
     sessions,
   });
   moveDingTalkAutomationPendingSessionIdRef.current = moveDingTalkAutomationPendingSessionId;
+
+  useCodeReviewFixDispatch({ createSession, executeSession });
 
   const {
     getOmcMonitorStopSnapshot,
@@ -4115,6 +4119,30 @@ export default function App() {
     />
     </Suspense>
     <RepositoryRunCommandModal repositories={repositories} />
+    <CodeReviewHost
+      defaultRepositoryPath={activeRepository?.path ?? null}
+      defaultRepositoryName={activeRepository?.name ?? null}
+      defaultExecutionEngine={activeRepository?.executionEngine ?? null}
+      onOpenFile={(relativePath, options) => {
+        const repoPath =
+          options?.repositoryPath?.trim() ||
+          options?.fileRootPath?.trim() ||
+          activeRepository?.path?.trim() ||
+          "";
+        const repo =
+          repositories.find((item) => item.path === repoPath) ?? activeRepository ?? null;
+        if (!repo || !repoPath) {
+          message.warning("请先选择仓库");
+          return;
+        }
+        openRepositoryFileByEvent({
+          repositoryId: repo.id,
+          repositoryPath: repo.path,
+          relativePath,
+          line: options?.line ?? null,
+        });
+      }}
+    />
     </>
   );
 }

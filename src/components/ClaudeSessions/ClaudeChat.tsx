@@ -61,6 +61,7 @@ import {
   wiseNotificationMarkRead,
   type WiseInboundMessageRow,
 } from "../../services/wiseMascot";
+import { openCodeReviewFromNotification } from "../../services/codeReview/codeReviewNotification";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
 import { safeUnlisten } from "../../utils/safeTauriUnlisten";
 import {
@@ -1628,6 +1629,20 @@ export function ClaudeChatInner({
     (row: WiseInboundMessageRow) => {
       const conversationId = row.conversationId.trim();
       if (!conversationId) {
+        return;
+      }
+      if (openCodeReviewFromNotification({ conversationId, body: row.body })) {
+        if (!row.readAt) {
+          const readStamp = new Date().toISOString();
+          setNotificationRows((prev) =>
+            prev.map((r) => (r.id === row.id ? { ...r, readAt: readStamp } : r)),
+          );
+          void wiseNotificationMarkRead(row.id).catch(() => {
+            setNotificationRows((prev) =>
+              prev.map((r) => (r.id === row.id ? { ...r, readAt: null } : r)),
+            );
+          });
+        }
         return;
       }
       const targetSession = sessions.find(

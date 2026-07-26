@@ -16,6 +16,7 @@ import {
 import { scheduleMonacoLargeFileContentInjection } from "../utils/monacoLargeFileContentInjection";
 import { runWhenIdle } from "../utils/deferIdle";
 import { resolveMonacoIdleDeferTimeoutMs } from "../utils/uiWorkDefer";
+import { useMonacoCodeReviewFindingDecorations } from "../hooks/useMonacoCodeReviewFindingDecorations";
 import { MonacoSelectionChatToolbar } from "./MonacoSelectionChatToolbar";
 
 const DiffEditor = lazy(() =>
@@ -24,6 +25,8 @@ const DiffEditor = lazy(() =>
 
 interface Props {
   relativePath: string;
+  /** 用于叠加 Code Review findings（改动侧）。 */
+  repositoryPath?: string | null;
   original: string;
   modified: string;
   language: string;
@@ -37,6 +40,7 @@ interface Props {
 
 export function GitDiffMonacoPane({
   relativePath,
+  repositoryPath = null,
   original,
   modified,
   language,
@@ -190,6 +194,14 @@ export function GitDiffMonacoPane({
     });
     return () => window.cancelAnimationFrame(frame);
   }, [isActive]);
+
+  useMonacoCodeReviewFindingDecorations({
+    editor: isActive ? (diffEditors?.modified ?? null) : null,
+    monaco: isActive ? monacoApi : null,
+    repositoryPath,
+    relativePath,
+    enabled: Boolean(isActive && repositoryPath),
+  });
 
   return (
     <Suspense

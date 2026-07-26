@@ -6,6 +6,10 @@ import type {
   TaskItem,
 } from "../../types";
 import { repositoryPathsMatch } from "../../utils/repositoryMainSessionBinding";
+import {
+  isCodeReviewNotificationConversationId,
+  parseCodeReviewNotificationRepositoryPath,
+} from "../../services/codeReview/codeReviewNotification";
 import { stripRedundantRepoBracketPrefix } from "../../utils/sessionRepositoryDisplay";
 import {
   messageTextLooksLikeOmcDispatch,
@@ -247,6 +251,10 @@ export function notificationConversationInSessionInboxScope(
 ): boolean {
   const c = conversationId.trim();
   if (!c) return false;
+  if (isCodeReviewNotificationConversationId(c)) {
+    const repo = parseCodeReviewNotificationRepositoryPath(c);
+    return Boolean(repo && repositoryPathsMatch(repo, sess.repositoryPath));
+  }
   const owner = allSessions.find((s) => s.id === c || (s.claudeSessionId?.trim() && s.claudeSessionId.trim() === c));
   if (owner) {
     return repositoryPathsMatch(owner.repositoryPath, sess.repositoryPath);

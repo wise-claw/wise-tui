@@ -744,7 +744,7 @@ export function useRepositoryFileEditor({ repositoryPath, paneIndex }: UseReposi
                     content: right,
                     originalContent: right,
                     loading: false,
-                    focusLine: null,
+                    focusLine: options?.line ?? null,
                     diffOriginal: left,
                     gitDiffSection: section,
                   }
