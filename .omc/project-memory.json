@@ -42,8 +42,8 @@
     "runtime": null
   },
   "build": {
-    "buildCommand": "PATH=\"/Users/sjl/.cargo/bin:$PATH\" bunx tsc --noEmit -p /Users/sjl/Documents/github/wise-tui/tsconfig.json 2>&1 | tail -40",
-    "testCommand": "bun test src/components/GitPanel 2>&1 | tail -20",
+    "buildCommand": "PATH=\"/Users/sjl/.cargo/bin:$PATH\" bunx tsc --noEmit -p /Users/sjl/Documents/github/wise-tui/tsconfig.json 2>&1 | tail -10",
+    "testCommand": "bun test src/components/ChromeDevtoolsMonitor 2>&1 | tail -10",
     "lintCommand": null,
     "devCommand": "npm run dev",
     "scripts": {

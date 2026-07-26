@@ -91,6 +91,21 @@ export function PageMonitorPanel({
             <button
               type="button"
               className={
+                "app-run-command-popover__profile-chip" +
+                (chromeMode === "extension" ? " is-active" : "")
+              }
+              disabled={inputsDisabled}
+              onClick={() => setChromeMode("extension")}
+              title="通过已安装的 Wise 扩展监控日常 Chrome 标签"
+            >
+              Chrome 扩展
+            </button>
+            <span className="app-run-command-popover__profile-chip-sep" aria-hidden>
+              /
+            </span>
+            <button
+              type="button"
+              className={
                 "app-run-command-popover__profile-chip" + (chromeMode === "launch" ? " is-active" : "")
               }
               disabled={inputsDisabled}
@@ -111,21 +126,6 @@ export function PageMonitorPanel({
               title="附着已用 --remote-debugging-port 启动的 Chrome"
             >
               附着已有
-            </button>
-            <span className="app-run-command-popover__profile-chip-sep" aria-hidden>
-              /
-            </span>
-            <button
-              type="button"
-              className={
-                "app-run-command-popover__profile-chip" +
-                (chromeMode === "extension" ? " is-active" : "")
-              }
-              disabled={inputsDisabled}
-              onClick={() => setChromeMode("extension")}
-              title="通过已安装的 Wise 扩展监控日常 Chrome 标签"
-            >
-              Chrome 扩展
             </button>
           </div>
         </div>
