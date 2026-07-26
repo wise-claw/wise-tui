@@ -18,6 +18,8 @@ export const WISE_MONACO_EDITOR_OPTIONS: WiseMonacoEditorConstructionOptions = {
   stickyScroll: { enabled: false },
   fontSize: 13,
   lineNumbers: "on",
+  /** Code Review findings / git dirty-diff glyphs. */
+  glyphMargin: true,
   wordWrap: "on",
   tabSize: 2,
   scrollBeyondLastLine: false,
