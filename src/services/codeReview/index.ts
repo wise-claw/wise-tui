@@ -49,6 +49,7 @@ export {
   DEFAULT_CODE_REVIEW_SETTINGS,
   WISE_CODE_REVIEW_SETTINGS_CHANGED,
   WISE_CODE_REVIEW_SETTINGS_KEY,
+  describeCodeReviewSettingsSummary,
   isBlockingCodeReviewRecommendation,
   loadCodeReviewSettings,
   normalizeCodeReviewSettings,

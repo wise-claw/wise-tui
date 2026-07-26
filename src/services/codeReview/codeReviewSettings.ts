@@ -86,6 +86,21 @@ export async function saveCodeReviewSettings(
   return next;
 }
 
+/** 抽屉里的一行摘要，便于用户判断是否需要去配置中心调整。 */
+export function describeCodeReviewSettingsSummary(settings: CodeReviewSettingsV1): string {
+  const prePush =
+    settings.prePushMode === "block"
+      ? "推送前阻断"
+      : settings.prePushMode === "warn"
+        ? "推送前确认"
+        : "推送前不审查";
+  const parts = [prePush];
+  if (settings.reuseIdenticalDiff) parts.push("复用相同 diff");
+  if (settings.autoReviewAfterCommit) parts.push("提交后自动审查");
+  if (settings.staleFindingsPolicy === "clear") parts.push("过期即清除标注");
+  return parts.join(" · ");
+}
+
 export function isBlockingCodeReviewRecommendation(
   recommendation: string,
   findings: ReadonlyArray<{ severity: string; confidence: string }>,

@@ -48,7 +48,8 @@ export type AuthorPane =
   | "sandbox"
   | "defaults"
   | "data-cleanup"
-  | "auto-approve";
+  | "auto-approve"
+  | "code-review";
 
 export const DEFAULT_AUTHOR_PANE: AuthorPane = "agents";
 

@@ -59,8 +59,12 @@ mock.module("../../services/splitPromptLayersStore", () => ({
 }));
 
 mock.module("../../services/appSettingsStore", () => ({
+  WISE_CLAUDE_DEFAULT_SETTINGS_KEY: "wise.claudeDefaultSettings.v1",
+  WISE_CODEX_DEFAULT_SETTINGS_KEY: "wise.codexDefaultSettings.v1",
+  WISE_OPENCODE_DEFAULT_SETTINGS_KEY: "wise.opencodeDefaultSettings.v1",
   getAppSetting: mock(async () => null),
   getAppSettingJson: mock(async () => null),
+  getAppSettingsBatch: mock(async () => ({})),
   setAppSetting: mock(async () => undefined),
   setAppSettingJson: mock(async () => undefined),
   deleteAppSetting: mock(async () => undefined),
@@ -171,6 +175,9 @@ mock.module("../../services/agentRegistry", () => ({
     detectedAt: "2026-05-17T00:00:00.000Z",
   })),
   testCustomAgent: mock(async () => ({ ok: true, resolvedPath: "/usr/local/bin/test-agent" })),
+  getAgent: mock(async () => null),
+  checkBuiltinAgentLatest: mock(async () => null),
+  checkAllBuiltinAgentUpdates: mock(async () => ({})),
 }));
 
 const { AuthorPanel } = await import("./AuthorPanel");
@@ -297,7 +304,6 @@ describe("AuthorPanel", () => {
     const { props } = buildProps();
     const html = renderAuthorPanel(props);
     for (const label of [
-      "工作区",
       "终端",
       "工作流",
       "我的扩展",
@@ -311,6 +317,7 @@ describe("AuthorPanel", () => {
       "默认配置",
       "数据清理",
       "自动批准",
+      "代码审查",
       "定时自动化",
       "远程入口",
       "快捷键",

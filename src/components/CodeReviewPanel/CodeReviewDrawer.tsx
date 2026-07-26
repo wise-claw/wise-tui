@@ -1,4 +1,4 @@
-import { Button, Collapse, Drawer, Dropdown, Empty, Segmented, Select, Space, Switch, Tag, Typography, message } from "antd";
+import { Button, Collapse, Drawer, Dropdown, Empty, Segmented, Space, Tag, Typography, message } from "antd";
 import {
   BugOutlined,
   ClearOutlined,
@@ -7,6 +7,7 @@ import {
   ExportOutlined,
   HistoryOutlined,
   LoadingOutlined,
+  SettingOutlined,
   StopOutlined,
   ToolOutlined,
   UpOutlined,
@@ -28,17 +29,17 @@ import {
   filterCodeReviewFindingEntries,
   findCodeReviewEntryIndex,
   groupCodeReviewFindingsByFile,
+  describeCodeReviewSettingsSummary,
   ingestCodeReviewNotification,
   listCodeReviewRuns,
   loadCodeReviewSettings,
   runCodeReview,
-  saveCodeReviewSettings,
   type CodeReviewExportFilter,
   type CodeReviewFileSetDelta,
-  type CodeReviewPrePushMode,
+  type CodeReviewSettingsV1,
   type CodeReviewSeverityFilter,
-  type CodeReviewStaleFindingsPolicy,
 } from "../../services/codeReview";
+import { dispatchWiseUiNavigation } from "../../services/wiseUiNavigation";
 import { useCodeReviewFindingsSnapshot } from "../../hooks/useCodeReviewFindingsSnapshot";
 import {
   clearCodeReviewFindings,
@@ -142,11 +143,7 @@ export function CodeReviewDrawer({
   const [truncated, setTruncated] = useState(false);
   const [history, setHistory] = useState<CodeReviewRun[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [prePushMode, setPrePushMode] = useState<CodeReviewPrePushMode>("off");
-  const [reuseIdenticalDiff, setReuseIdenticalDiff] = useState(true);
-  const [autoReviewAfterCommit, setAutoReviewAfterCommit] = useState(false);
-  const [staleFindingsPolicy, setStaleFindingsPolicy] =
-    useState<CodeReviewStaleFindingsPolicy>("dim");
+  const [settings, setSettings] = useState<CodeReviewSettingsV1 | null>(null);
   const [reused, setReused] = useState(false);
   const [incremental, setIncremental] = useState<CodeReviewFileSetDelta | null>(null);
   const [activeFocusKey, setActiveFocusKey] = useState<string | null>(null);
@@ -187,12 +184,7 @@ export function CodeReviewDrawer({
     setIncremental(null);
     setSeverityFilter("ALL");
     setActiveFocusKey(null);
-    void loadCodeReviewSettings().then((settings) => {
-      setPrePushMode(settings.prePushMode);
-      setReuseIdenticalDiff(settings.reuseIdenticalDiff);
-      setAutoReviewAfterCommit(settings.autoReviewAfterCommit);
-      setStaleFindingsPolicy(settings.staleFindingsPolicy);
-    });
+    void loadCodeReviewSettings().then(setSettings);
     void refreshHistory();
     if (seededRun) {
       setRun(seededRun);
@@ -456,56 +448,14 @@ export function CodeReviewDrawer({
     });
   }, [highFindings, repositoryName, repositoryPath]);
 
-  const handlePrePushModeChange = useCallback(async (value: CodeReviewPrePushMode) => {
-    setPrePushMode(value);
-    try {
-      await saveCodeReviewSettings({ prePushMode: value });
-      message.success(
-        value === "off"
-          ? "已关闭推送前审查"
-          : value === "warn"
-            ? "推送前若有高危问题将确认"
-            : "推送前若有高危问题将阻断",
-      );
-    } catch {
-      message.error("保存审查设置失败");
-    }
-  }, []);
+  const settingsSummary = settings
+    ? describeCodeReviewSettingsSummary(settings)
+    : "读取审查设置中…";
 
-  const handleReuseIdenticalDiffChange = useCallback(async (checked: boolean) => {
-    setReuseIdenticalDiff(checked);
-    try {
-      await saveCodeReviewSettings({ reuseIdenticalDiff: checked });
-      message.success(checked ? "相同 diff 将复用上次结果" : "每次审查都会重新执行");
-    } catch {
-      message.error("保存审查设置失败");
-    }
-  }, []);
-
-  const handleAutoReviewAfterCommitChange = useCallback(async (checked: boolean) => {
-    setAutoReviewAfterCommit(checked);
-    try {
-      await saveCodeReviewSettings({ autoReviewAfterCommit: checked });
-      message.success(checked ? "提交成功后将自动审查相对主干" : "已关闭提交后自动审查");
-    } catch {
-      message.error("保存审查设置失败");
-    }
-  }, []);
-
-  const handleStaleFindingsPolicyChange = useCallback(
-    async (value: CodeReviewStaleFindingsPolicy) => {
-      setStaleFindingsPolicy(value);
-      try {
-        await saveCodeReviewSettings({ staleFindingsPolicy: value });
-        message.success(
-          value === "clear" ? "结果过期后将自动清除编辑器标注" : "结果过期后仅淡化标注",
-        );
-      } catch {
-        message.error("保存审查设置失败");
-      }
-    },
-    [],
-  );
+  const handleOpenSettings = useCallback(() => {
+    dispatchWiseUiNavigation({ kind: "author", pane: "code-review" });
+    onClose();
+  }, [onClose]);
 
   const handleClearFindings = useCallback(() => {
     const path = repositoryPath.trim();
@@ -705,47 +655,10 @@ export function CodeReviewDrawer({
               ]}
             />
             <div className="code-review-drawer__setting-row">
-              <Text type="secondary">推送前审查</Text>
-              <Select
-                size="small"
-                value={prePushMode}
-                style={{ minWidth: 140 }}
-                onChange={(value) => void handlePrePushModeChange(value)}
-                options={[
-                  { value: "off", label: "关闭" },
-                  { value: "warn", label: "有高危时确认" },
-                  { value: "block", label: "有高危时阻断" },
-                ]}
-              />
-            </div>
-            <div className="code-review-drawer__setting-row">
-              <Text type="secondary">复用相同 diff</Text>
-              <Switch
-                size="small"
-                checked={reuseIdenticalDiff}
-                onChange={(checked) => void handleReuseIdenticalDiffChange(checked)}
-              />
-            </div>
-            <div className="code-review-drawer__setting-row">
-              <Text type="secondary">提交后自动审查</Text>
-              <Switch
-                size="small"
-                checked={autoReviewAfterCommit}
-                onChange={(checked) => void handleAutoReviewAfterCommitChange(checked)}
-              />
-            </div>
-            <div className="code-review-drawer__setting-row">
-              <Text type="secondary">结果过期时</Text>
-              <Select
-                size="small"
-                value={staleFindingsPolicy}
-                style={{ minWidth: 140 }}
-                onChange={(value) => void handleStaleFindingsPolicyChange(value)}
-                options={[
-                  { value: "dim", label: "淡化标注" },
-                  { value: "clear", label: "自动清除标注" },
-                ]}
-              />
+              <Text type="secondary">{settingsSummary}</Text>
+              <Button size="small" type="link" icon={<SettingOutlined />} onClick={handleOpenSettings}>
+                审查设置
+              </Button>
             </div>
           </>
         ) : null}

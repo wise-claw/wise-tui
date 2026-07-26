@@ -1,5 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import {
+  DEFAULT_CODE_REVIEW_SETTINGS,
+  describeCodeReviewSettingsSummary,
   isBlockingCodeReviewRecommendation,
   normalizeCodeReviewSettings,
 } from "./codeReviewSettings";
@@ -29,6 +31,24 @@ describe("normalizeCodeReviewSettings", () => {
     expect(next.reuseIdenticalDiff).toBe(false);
     expect(next.autoReviewAfterCommit).toBe(true);
     expect(next.staleFindingsPolicy).toBe("clear");
+  });
+});
+
+describe("describeCodeReviewSettingsSummary", () => {
+  test("summarizes defaults", () => {
+    expect(describeCodeReviewSettingsSummary(DEFAULT_CODE_REVIEW_SETTINGS)).toBe(
+      "推送前不审查 · 复用相同 diff",
+    );
+  });
+
+  test("lists every enabled policy", () => {
+    const summary = describeCodeReviewSettingsSummary({
+      ...DEFAULT_CODE_REVIEW_SETTINGS,
+      prePushMode: "block",
+      autoReviewAfterCommit: true,
+      staleFindingsPolicy: "clear",
+    });
+    expect(summary).toBe("推送前阻断 · 复用相同 diff · 提交后自动审查 · 过期即清除标注");
   });
 });
 

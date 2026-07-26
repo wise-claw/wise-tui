@@ -13,6 +13,7 @@ import { AutomationPanel } from "../AutomationPanel";
 import { ChannelsPanel } from "../ChannelsPanel";
 import { ClaudeHooksConfigPanel, type ClaudeHooksConfigPanelHandle } from "../ClaudeHooksConfigPanel";
 import { AutoApprovePanel } from "../AutoApprovePanel";
+import { CodeReviewSettingsPanel } from "../CodeReviewSettingsPanel";
 import { DataCleanupPanel } from "../DataCleanupPanel";
 import { DefaultConfigPanel } from "../DefaultConfigPanel";
 import { AgentRegistrySection } from "../ClaudeConfigDirPanel/AgentRegistrySection";
@@ -188,6 +189,8 @@ export function AuthorPanel({
         return <DataCleanupPanel />;
       case "auto-approve":
         return <AutoApprovePanel />;
+      case "code-review":
+        return <CodeReviewSettingsPanel />;
       case "my-extensions":
         return (
           <MyExtensionsPanel
