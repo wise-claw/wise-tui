@@ -94,7 +94,8 @@ import { FollowupDock } from "./dock/followup-dock";
 
 import { RevertDock } from "./dock/revert-dock";
 import { addToHistory, promptLength, navigatePromptHistory, canNavigateHistoryAtCursor } from "./prompt-history";
-import { Button, message, Popover, Tabs, Tag, TreeSelect } from "antd";
+import { Button, message, Popover, Select, Tabs, Tag } from "antd";
+import { buildWorkspaceRepositoryFlatSelectOptions } from "../../utils/workspaceRepositoryTreeSelect";
 import { ContextCompactProgressRing } from "./ContextCompactProgressRing";
 import { useContextBreakdown } from "../../hooks/useContextBreakdown";
 import { ComposerVoiceSettingsPanel } from "./ComposerVoiceSettingsPanel";
@@ -3008,79 +3009,44 @@ function ComposerInner({
           </Popover>
         ) : null}
         {dualPaneRepositoryPicker ? (
-          <TreeSelect
+          <Select
             size="small"
             variant="borderless"
             className="app-claude-dual-pane-repo-picker"
             classNames={{ popup: { root: "app-claude-dual-pane-repo-picker-dropdown" } }}
             popupMatchSelectWidth={false}
             listHeight={280}
-            listItemHeight={22}
             showSearch
-            treeNodeFilterProp="title"
-            treeDefaultExpandAll
-            title="右侧执行会话目标（工作区 / 仓库）"
-            aria-label="选择工作区或仓库"
+            optionFilterProp="label"
+            title="右侧执行会话目标（仓库）"
+            aria-label="选择仓库"
             value={dualPaneRepositoryPicker.valueKey}
-            treeTitleRender={(node) => {
-              const raw = String(node.value ?? "");
-              const isWorkspace = raw.startsWith("project:") || raw === "__standalone__";
-              return (
-                <span
-                  className={
-                    isWorkspace
-                      ? "app-claude-dual-pane-repo-picker__label app-claude-dual-pane-repo-picker__label--workspace"
-                      : "app-claude-dual-pane-repo-picker__label"
-                  }
-                >
-                  {String(node.title ?? "")}
-                </span>
-              );
-            }}
-            treeData={(() => {
+            options={(() => {
               const repositories = dualPaneRepositoryPicker.repositories ?? [];
               const projects = dualPaneRepositoryPicker.projects ?? [];
-              if (!projects.length) {
-                return repositories.map((repo) => ({
-                  title: repo.name || repo.path,
-                  value: `repo:${repo.id}`,
-                }));
-              }
-              const repoById = new Map(repositories.map((repo) => [repo.id, repo] as const));
-              const assignedRepoIds = new Set<number>();
-              const tree: Array<{
-                title: string;
-                value: string;
-                selectable?: boolean;
-                children?: Array<{ title: string; value: string }>;
-              }> = [];
-              for (const project of projects) {
-                const children: Array<{ title: string; value: string }> = [];
-                for (const repoId of project.repositoryIds ?? []) {
-                  const repo = repoById.get(repoId);
-                  if (!repo) continue;
-                  children.push({ title: repo.name || repo.path, value: `repo:${repo.id}` });
-                  assignedRepoIds.add(repo.id);
+              const includeProjects = Boolean(dualPaneRepositoryPicker.onSelectProjectId);
+              const flat = buildWorkspaceRepositoryFlatSelectOptions(projects, repositories, {
+                includeProjects,
+              });
+              const valueKey = dualPaneRepositoryPicker.valueKey;
+              if (
+                valueKey.startsWith("project:") &&
+                !flat.some((item) => item.value === valueKey)
+              ) {
+                const projectId = valueKey.slice("project:".length);
+                const project = projects.find((item) => item.id === projectId);
+                if (project) {
+                  flat.unshift({
+                    value: valueKey,
+                    label: project.name?.trim() || "未命名工作区",
+                    kind: "project",
+                  });
                 }
-                tree.push({
-                  title: project.name || "未命名工作区",
-                  value: `project:${project.id}`,
-                  selectable: true,
-                  children,
-                });
               }
-              const standalone = repositories
-                .filter((repo) => !assignedRepoIds.has(repo.id))
-                .map((repo) => ({ title: repo.name || repo.path, value: `repo:${repo.id}` }));
-              if (standalone.length > 0) {
-                tree.push({
-                  title: "独立仓库",
-                  value: "__standalone__",
-                  selectable: false,
-                  children: standalone,
-                });
-              }
-              return tree;
+              return flat.map((item) => ({
+                value: item.value,
+                label: item.label,
+              }));
             })()}
             onChange={(value) => {
               const raw = String(value ?? "");
@@ -3092,7 +3058,7 @@ function ComposerInner({
                 dualPaneRepositoryPicker.onSelectProjectId?.(raw.slice(8));
               }
             }}
-            placeholder="工作区 / 仓库"
+            placeholder="选择仓库"
           />
         ) : null}
         {composerFooterChrome.showComposerFooterContextRing ? (

@@ -1,0 +1,7 @@
+{
+  "tool_name": "Read",
+  "tool_input_preview": "{\"file_path\":\"/Users/sjl/Documents/github/wise-tui/MEMORY.md\"}",
+  "error": "File does not exist. Note: your current working directory is /Users/sjl/Documents/github/wise-tui.",
+  "timestamp": "2026-07-26T14:57:44.884Z",
+  "retry_count": 1
+}

@@ -1,5 +1,15 @@
 import { memo, type RefObject, useCallback, useEffect, useState } from "react";
-import type { ClaudeHostProcess, ClaudeSession, Repository, StandaloneRepo, TaskMode, Workspace } from "../../types";
+import type {
+  ClaudeHostProcess,
+  ClaudeSession,
+  EmployeeMonitorItem,
+  Repository,
+  SessionConversationTaskItem,
+  StandaloneRepo,
+  TaskMode,
+  TeamMonitorItem,
+  Workspace,
+} from "../../types";
 import type { ProjectItem } from "../../types";
 import type { ReconcileProjectMode } from "../../constants/reconcileProjectMode";
 import type { WorkspaceFocus } from "../../utils/workspaceMode";
@@ -23,6 +33,7 @@ export type LeftSidebarWorkspaceListSlotProps = {
   projects: Workspace[];
   repositories: Repository[];
   floatingRepositories: StandaloneRepo[];
+  workspaceRepositoryOrder?: readonly number[];
   activeProjectId: string | null;
   activeWorkspaceFocus: WorkspaceFocus;
   activeRepositoryId: number | null;
@@ -69,11 +80,14 @@ export type LeftSidebarWorkspaceListSlotProps = {
   onConfigureRepositoryOpenApp?: (repository: Repository, openAppId: string | null) => void;
   onConfigureProjectOpenApp?: (project: Workspace, openAppId: string | null) => void;
   onNewPaneSessionForRepository?: (repository: Repository) => void;
+  onOpenSplitSessionForRepository?: (repository: Repository) => void;
   onNewPaneSessionForProject?: (project: Workspace) => void;
+  onOpenSplitSessionForProject?: (project: Workspace) => void;
   onPromoteFloatingRepository?: (repository: StandaloneRepo) => void;
   onRemoveFloatingRepository: (repository: StandaloneRepo) => void;
   onDetachRepositoryFromProject: (projectId: string, repositoryId: number) => void;
   onReorderRepositoriesInProject?: (projectId: string, repositoryIds: number[]) => void | Promise<void>;
+  onReorderWorkspaceRepositories?: (repositoryIds: number[]) => void | Promise<void>;
   onMoveRepositoryError: (message: string, err: unknown) => void;
   onOpenGlobalWorkspaceTodoAdd?: () => void;
   onOpenScheduledTasksForRepository?: (repository: Repository) => void;
@@ -82,6 +96,32 @@ export type LeftSidebarWorkspaceListSlotProps = {
   onOpenExecutableTasksForRepository?: (repository: Repository) => void;
   onStopProjectMainSession?: (projectId: string) => void;
   onStopRepositoryMainSession?: (repository: Repository) => void;
+  /** 合并运行面板：会话与运行项 */
+  workspaceSessions?: ReadonlyArray<ClaudeSession>;
+  activeSessionId?: string | null;
+  showWorkspaceRunItems?: boolean;
+  employeeMonitorItems?: ReadonlyArray<EmployeeMonitorItem>;
+  sessionConversationTaskItems?: ReadonlyArray<SessionConversationTaskItem>;
+  teamMonitorItems?: ReadonlyArray<TeamMonitorItem>;
+  onSelectSession?: (sessionId: string) => void;
+  onRestoreHistorySessionAsMain?: (sessionId: string) => void | Promise<void>;
+  onArchiveSession?: (sessionId: string) => void;
+  onHistoryDrawerSessionIdChange?: (sessionId: string | null) => void;
+  onRefreshHistorySessions?: (scope: {
+    repositoryPath: string;
+    repositoryName: string;
+  }) => void | Promise<void>;
+  onStopEmployeeMonitor?: (employeeId: string) => void;
+  onStopTeamMonitor?: (workflowId: string) => void;
+  onOpenTeamMonitorDetail?: (workflowId: string) => void;
+  onCancelSessionFromMonitor?: (sessionId: string) => void;
+  onOpenOmcBatchInvocationDetail?: (input: {
+    sessionId: string;
+    repositoryPath: string;
+    invocationKey: string;
+  }) => void;
+  onCancelOmcDirectBatchInvocation?: (invocationKey: string) => void;
+  onStopSessionConversationTask?: (item: SessionConversationTaskItem) => void;
 };
 
 function LeftSidebarWorkspaceListSlotInner(props: LeftSidebarWorkspaceListSlotProps) {
@@ -178,12 +218,14 @@ function LeftSidebarWorkspaceListSlotInner(props: LeftSidebarWorkspaceListSlotPr
           projects={props.projects}
           repositoriesById={projectRepositoryState.repositoriesById}
           floatingRepositories={props.floatingRepositories}
+          workspaceRepositoryOrder={props.workspaceRepositoryOrder}
           activeProjectId={props.activeProjectId}
           activeWorkspaceFocus={props.activeWorkspaceFocus}
           activeRepositoryId={props.activeRepositoryId}
           showRepositoryIconBadgesInWorkspaceList={props.showRepositoryIconBadgesInWorkspaceList}
           pinnedProjectIds={props.pinnedProjectIds}
           expandedProjects={projectRepositoryState.expandedProjects}
+          expandedRepositoryIds={projectRepositoryState.expandedRepositoryIds}
           projectDropTargetId={projectRepositoryState.projectDropTargetId}
           repoSidebarDragRef={projectRepositoryState.repoSidebarDragRef}
           onProjectSelect={props.onProjectSelect}
@@ -195,6 +237,7 @@ function LeftSidebarWorkspaceListSlotInner(props: LeftSidebarWorkspaceListSlotPr
           projectTrellisReadyById={projectTrellisReadyById}
           repositoryTrellisReadyById={repositoryTrellisReadyById}
           onToggleProjectExpand={projectRepositoryState.toggleProjectExpand}
+          onToggleRepositoryExpand={projectRepositoryState.toggleRepositoryExpand}
           onTogglePinProject={props.onTogglePinProject}
           onRenameProject={props.onRenameProject}
           onDeleteProject={props.onDeleteProject}
@@ -220,12 +263,15 @@ function LeftSidebarWorkspaceListSlotInner(props: LeftSidebarWorkspaceListSlotPr
           onConfigureRepositoryOpenApp={props.onConfigureRepositoryOpenApp}
           onConfigureProjectOpenApp={props.onConfigureProjectOpenApp}
           onNewPaneSessionForRepository={props.onNewPaneSessionForRepository}
+          onOpenSplitSessionForRepository={props.onOpenSplitSessionForRepository}
           onNewPaneSessionForProject={props.onNewPaneSessionForProject}
+          onOpenSplitSessionForProject={props.onOpenSplitSessionForProject}
           onPromoteFloatingRepository={props.onPromoteFloatingRepository}
           onJoinFloatingRepository={undefined}
           onRemoveFloatingRepository={props.onRemoveFloatingRepository}
           onDetachRepositoryFromProject={props.onDetachRepositoryFromProject}
           onReorderRepositoriesInProject={props.onReorderRepositoriesInProject}
+          onReorderWorkspaceRepositories={props.onReorderWorkspaceRepositories}
           onMoveRepositoryToProject={undefined}
           onMoveRepositoryToProjectWithExpand={projectRepositoryState.moveRepositoryWithExpand}
           onProjectDropTargetChange={projectRepositoryState.setProjectDropTargetId}
@@ -248,6 +294,24 @@ function LeftSidebarWorkspaceListSlotInner(props: LeftSidebarWorkspaceListSlotPr
           onStopRepositoryMainSession={props.onStopRepositoryMainSession}
           sectionCollapsed={props.sectionCollapsed}
           onSectionCollapsedChange={props.onSectionCollapsedChange}
+          workspaceSessions={props.workspaceSessions}
+          activeSessionId={props.activeSessionId}
+          showWorkspaceRunItems={props.showWorkspaceRunItems}
+          employeeMonitorItems={props.employeeMonitorItems}
+          sessionConversationTaskItems={props.sessionConversationTaskItems}
+          teamMonitorItems={props.teamMonitorItems}
+          onSelectSession={props.onSelectSession}
+          onRestoreHistorySessionAsMain={props.onRestoreHistorySessionAsMain}
+          onArchiveSession={props.onArchiveSession}
+          onHistoryDrawerSessionIdChange={props.onHistoryDrawerSessionIdChange}
+          onRefreshHistorySessions={props.onRefreshHistorySessions}
+          onStopEmployeeMonitor={props.onStopEmployeeMonitor}
+          onStopTeamMonitor={props.onStopTeamMonitor}
+          onOpenTeamMonitorDetail={props.onOpenTeamMonitorDetail}
+          onCancelSessionFromMonitor={props.onCancelSessionFromMonitor}
+          onOpenOmcBatchInvocationDetail={props.onOpenOmcBatchInvocationDetail}
+          onCancelOmcDirectBatchInvocation={props.onCancelOmcDirectBatchInvocation}
+          onStopSessionConversationTask={props.onStopSessionConversationTask}
         />
       ) : null}
     </>
@@ -261,8 +325,13 @@ export const LeftSidebarWorkspaceListSlot = memo(
       prev.projects !== next.projects ||
       prev.repositories !== next.repositories ||
       prev.floatingRepositories !== next.floatingRepositories ||
+      prev.workspaceRepositoryOrder !== next.workspaceRepositoryOrder ||
       prev.pinnedProjectIds !== next.pinnedProjectIds ||
-      prev.workspaceTodosEnabled !== next.workspaceTodosEnabled
+      prev.workspaceTodosEnabled !== next.workspaceTodosEnabled ||
+      prev.workspaceSessions !== next.workspaceSessions ||
+      prev.employeeMonitorItems !== next.employeeMonitorItems ||
+      prev.sessionConversationTaskItems !== next.sessionConversationTaskItems ||
+      prev.teamMonitorItems !== next.teamMonitorItems
     ) {
       return false;
     }
@@ -276,7 +345,9 @@ export const LeftSidebarWorkspaceListSlot = memo(
       prev.sessionsStructureKey === next.sessionsStructureKey &&
       prev.repositoryMainSessionBindings === next.repositoryMainSessionBindings &&
       prev.claudeProcessFingerprint === next.claudeProcessFingerprint &&
-      prev.claudeRegistryRunningFingerprint === next.claudeRegistryRunningFingerprint
+      prev.claudeRegistryRunningFingerprint === next.claudeRegistryRunningFingerprint &&
+      prev.activeSessionId === next.activeSessionId &&
+      prev.showWorkspaceRunItems === next.showWorkspaceRunItems
     );
   },
 );

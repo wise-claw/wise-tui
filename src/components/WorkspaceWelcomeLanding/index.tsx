@@ -75,43 +75,21 @@ export function WorkspaceWelcomeLanding({
           </ul>
         </header>
 
-        <p className="app-workspace-welcome-landing__cta-label">选择一种方式开始</p>
+        <p className="app-workspace-welcome-landing__cta-label">添加仓库开始</p>
 
         <div className="app-workspace-welcome-landing__cards">
           <button
             type="button"
             className="app-workspace-welcome-landing__card app-workspace-welcome-landing__card--primary"
-            onClick={onAddWorkspace}
-          >
-            <span className="app-workspace-welcome-landing__card-icon" aria-hidden>
-              <AppstoreAddOutlined />
-            </span>
-            <span className="app-workspace-welcome-landing__card-body">
-              <span className="app-workspace-welcome-landing__card-title">添加工作区</span>
-              <span className="app-workspace-welcome-landing__card-desc">
-                多仓工作区 + Wise 规范，统筹需求拆分、任务编排与团队 Agent 并发。
-              </span>
-              <div className="app-workspace-welcome-landing__card-tags">
-                <span className="app-workspace-welcome-landing__card-tag">多仓 Hub</span>
-                <span className="app-workspace-welcome-landing__card-tag">团队 Agent</span>
-                <span className="app-workspace-welcome-landing__card-tag">Wise 规范</span>
-              </div>
-            </span>
-            <RightOutlined className="app-workspace-welcome-landing__card-arrow" aria-hidden />
-          </button>
-
-          <button
-            type="button"
-            className="app-workspace-welcome-landing__card"
             onClick={onAddStandaloneRepo}
           >
-            <span className="app-workspace-welcome-landing__card-icon app-workspace-welcome-landing__card-icon--muted" aria-hidden>
+            <span className="app-workspace-welcome-landing__card-icon" aria-hidden>
               <FolderAddOutlined />
             </span>
             <span className="app-workspace-welcome-landing__card-body">
-              <span className="app-workspace-welcome-landing__card-title">单仓</span>
+              <span className="app-workspace-welcome-landing__card-title">添加仓库</span>
               <span className="app-workspace-welcome-landing__card-desc">
-                登记本地仓库，直达 Claude Code 执行会话，适合单点试验与快速开工。
+                仓库即工作区：登记本地 Git 仓库，直达会话、运行与文件树。
               </span>
               <div className="app-workspace-welcome-landing__card-tags">
                 <span className="app-workspace-welcome-landing__card-tag">Git 仓库</span>
@@ -121,10 +99,32 @@ export function WorkspaceWelcomeLanding({
             </span>
             <RightOutlined className="app-workspace-welcome-landing__card-arrow" aria-hidden />
           </button>
+
+          <button
+            type="button"
+            className="app-workspace-welcome-landing__card"
+            onClick={onAddWorkspace}
+          >
+            <span className="app-workspace-welcome-landing__card-icon app-workspace-welcome-landing__card-icon--muted" aria-hidden>
+              <AppstoreAddOutlined />
+            </span>
+            <span className="app-workspace-welcome-landing__card-body">
+              <span className="app-workspace-welcome-landing__card-title">多仓编排（高级）</span>
+              <span className="app-workspace-welcome-landing__card-desc">
+                可选：为多仓 Trellis 编排创建 Project；日常侧栏仍以仓库为工作区入口。
+              </span>
+              <div className="app-workspace-welcome-landing__card-tags">
+                <span className="app-workspace-welcome-landing__card-tag">多仓 Hub</span>
+                <span className="app-workspace-welcome-landing__card-tag">团队 Agent</span>
+                <span className="app-workspace-welcome-landing__card-tag">Wise 规范</span>
+              </div>
+            </span>
+            <RightOutlined className="app-workspace-welcome-landing__card-arrow" aria-hidden />
+          </button>
         </div>
 
         <p className="app-workspace-welcome-landing__footnote">
-          已有目录？选上面任一入口即可；之后也可在侧栏随时新建或关联。
+          已有目录？添加仓库即可；之后也可在侧栏随时添加。
         </p>
       </div>
     </div>

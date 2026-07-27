@@ -405,7 +405,7 @@ describe("AuthorPanel", () => {
     const { props } = buildProps({ pane: "defaults" });
     const html = renderAuthorPanel(props);
     expect(html).toContain("会话处理方式");
-    expect(html).toContain("运行面板");
+    expect(html).toContain("运行项");
     expect(html).toContain("左栏");
     expect(html).toContain("右栏");
     expect(html).toContain("右侧面板");

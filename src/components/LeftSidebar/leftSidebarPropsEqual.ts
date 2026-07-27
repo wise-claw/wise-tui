@@ -119,6 +119,11 @@ export function areLeftSidebarContentPropsEqual(
   if (prev.projects !== next.projects) return false;
   if (prev.repositories !== next.repositories) return false;
   if (prev.floatingRepositories !== next.floatingRepositories) return false;
+  if (prev.workspaceRepositoryOrder !== next.workspaceRepositoryOrder) {
+    const a = prev.workspaceRepositoryOrder ?? [];
+    const b = next.workspaceRepositoryOrder ?? [];
+    if (a.length !== b.length || a.some((id, i) => id !== b[i])) return false;
+  }
   if (prev.repositoryMainSessionBindings !== next.repositoryMainSessionBindings) return false;
   if (prev.pinnedProjectIds !== next.pinnedProjectIds) return false;
   if (prev.leftSidebarHubQuickEntryIds !== next.leftSidebarHubQuickEntryIds) return false;

@@ -31,10 +31,68 @@ export function ExpandIcon({ expanded }: { expanded: boolean }) {
   );
 }
 
+/** 仓库工作区展开控件：收起=合上文件夹，展开=打开文件夹。 */
+export function FolderExpandIcon({ expanded }: { expanded: boolean }) {
+  if (expanded) {
+    return (
+      <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+        <path
+          d="M2 4.25h4.1l1.1 1.1H14v1.15l-1.35 5.35H3.35L2 6.5V4.25z"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          strokeLinejoin="round"
+        />
+        <path
+          d="M2 6.5h12.1"
+          stroke="currentColor"
+          strokeWidth="1.2"
+          strokeLinecap="round"
+        />
+      </svg>
+    );
+  }
+  return (
+    <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <path
+        d="M2.25 4.25h4.2l1.15 1.2H13.75v6.3H2.25V4.25z"
+        stroke="currentColor"
+        strokeWidth="1.2"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 export function PlusIcon() {
   return (
     <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg">
       <path d="M8 3v10M3 8h10" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" />
+    </svg>
+  );
+}
+
+/** 分屏打开会话：双栏窗格示意。 */
+export function SplitPaneIcon() {
+  return (
+    <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
+      <rect
+        x="2.25"
+        y="2.5"
+        width="5"
+        height="11"
+        rx="1.2"
+        stroke="currentColor"
+        strokeWidth="1.2"
+      />
+      <rect
+        x="8.75"
+        y="2.5"
+        width="5"
+        height="11"
+        rx="1.2"
+        stroke="currentColor"
+        strokeWidth="1.2"
+      />
     </svg>
   );
 }

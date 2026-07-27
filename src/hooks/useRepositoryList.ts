@@ -50,6 +50,12 @@ import {
   parsePinnedProjectIdsFromSetting,
   sortProjectsByPinOrder,
 } from "../utils/projectPinOrder";
+import {
+  WORKSPACE_REPOSITORY_ORDER_STORAGE_KEY,
+  normalizeWorkspaceRepositoryOrder,
+  parseWorkspaceRepositoryOrderFromSetting,
+} from "../utils/workspaceRepositoryOrder";
+import { repositoryFolderBasename } from "../utils/repositoryType";
 import type { WorkspaceFocus } from "../utils/workspaceMode";
 import {
   WORKSPACE_LAST_SELECTION_STORAGE_KEY,
@@ -94,6 +100,7 @@ export function useRepositoryList() {
   const [activeRepositoryId, setActiveRepositoryId] = useState<number | null>(null);
   const [projects, setProjects] = useState<ProjectItem[]>([]);
   const [pinnedProjectIds, setPinnedProjectIds] = useState<string[]>([]);
+  const [workspaceRepositoryOrder, setWorkspaceRepositoryOrder] = useState<number[]>([]);
   const [activeProjectId, setActiveProjectId] = useState<string | null>(null);
   const [activeWorkspaceFocus, setActiveWorkspaceFocus] = useState<WorkspaceFocus>("repository");
   const [loading, setLoading] = useState(true);
@@ -136,6 +143,7 @@ export function useRepositoryList() {
             : WORKSPACE_LAST_SELECTION_STORAGE_KEY;
         const settingsKeys = [
           PINNED_PROJECT_IDS_STORAGE_KEY,
+          WORKSPACE_REPOSITORY_ORDER_STORAGE_KEY,
           selectionStorageKey,
           ...(isPrimary ? [WORKSPACE_LAST_SESSION_REPO_ID_STORAGE_KEY] : []),
         ];
@@ -145,6 +153,7 @@ export function useRepositoryList() {
           getAppSettingsBatch(settingsKeys),
         ]);
         const rawPins = settingsBatch[PINNED_PROJECT_IDS_STORAGE_KEY] ?? null;
+        const rawWorkspaceOrder = settingsBatch[WORKSPACE_REPOSITORY_ORDER_STORAGE_KEY] ?? null;
         const rawLastSelection = settingsBatch[selectionStorageKey] ?? null;
         const rawLastSessionRepoId = isPrimary
           ? settingsBatch[WORKSPACE_LAST_SESSION_REPO_ID_STORAGE_KEY] ?? null
@@ -194,6 +203,23 @@ export function useRepositoryList() {
         }
         const sortedProjects = sortProjectsByPinOrder(projectList, pins);
 
+        const orderDirty = parseWorkspaceRepositoryOrderFromSetting(rawWorkspaceOrder);
+        const basenameById = new Map(
+          repositoryList.map((repo) => [repo.id, repositoryFolderBasename(repo)] as const),
+        );
+        const workspaceOrder = normalizeWorkspaceRepositoryOrder(
+          orderDirty,
+          repositoryList.map((repo) => repo.id),
+          basenameById,
+        );
+        if (workspaceOrder.length !== orderDirty.length || workspaceOrder.some((id, i) => id !== orderDirty[i])) {
+          if (workspaceOrder.length > 0) {
+            void setAppSetting(WORKSPACE_REPOSITORY_ORDER_STORAGE_KEY, JSON.stringify(workspaceOrder));
+          } else if (orderDirty.length > 0) {
+            void deleteAppSetting(WORKSPACE_REPOSITORY_ORDER_STORAGE_KEY);
+          }
+        }
+
         const parsedLastSessionRepoId = parseLastSessionRepoId(rawLastSessionRepoId);
         const parsedLastSelection = parseWorkspaceLastSelection(rawLastSelection);
         const startup = resolveStartupSelection({
@@ -208,6 +234,7 @@ export function useRepositoryList() {
 
         setRepositories(repositoryList);
         setPinnedProjectIds(pins);
+        setWorkspaceRepositoryOrder(workspaceOrder);
         setProjects(sortedProjects);
         setActiveWorkspaceFocus(startup.workspaceFocus);
         setActiveProjectId(startup.projectId);
@@ -656,6 +683,12 @@ export function useRepositoryList() {
     );
   }, []);
 
+  const handleReorderWorkspaceRepositories = useCallback((repositoryIds: number[]) => {
+    const next = repositoryIds.filter((id, index, all) => Number.isInteger(id) && id > 0 && all.indexOf(id) === index);
+    setWorkspaceRepositoryOrder(next);
+    void setAppSetting(WORKSPACE_REPOSITORY_ORDER_STORAGE_KEY, JSON.stringify(next));
+  }, []);
+
   /** 将仓库从其它项目移入目标项目（目标项目已有该仓库时仅解除其它项目关联） */
   const handleUpdateRepositoryMainOwnerAgent = useCallback(async (repositoryId: number, mainOwnerAgentName: string | null) => {
     const updated = await updateRepositoryMainOwnerAgent(repositoryId, mainOwnerAgentName);
@@ -736,6 +769,7 @@ export function useRepositoryList() {
     repositories,
     projects,
     pinnedProjectIds,
+    workspaceRepositoryOrder,
     activeProject,
     activeProjectId,
     projectRepositories,
@@ -762,6 +796,7 @@ export function useRepositoryList() {
     handleUpdateRepositorySddMode,
     handleUpdateRepositoryIconBadge,
     handleReorderRepositoriesInProject,
+    handleReorderWorkspaceRepositories,
     handleMoveRepositoryToProject,
     handleReconcileProjectWorkspace,
     handleUpdateRepositoryMainOwnerAgent,

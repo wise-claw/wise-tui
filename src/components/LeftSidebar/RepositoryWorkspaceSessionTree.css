@@ -1,0 +1,198 @@
+.app-workspace-session-tree {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0 0 4px;
+}
+
+.app-workspace-session-tree__empty {
+  padding: 4px 10px 6px 28px;
+  font-size: var(--app-sidebar-list-secondary-size, 11px);
+  line-height: 1.4;
+  color: var(--ant-color-text-quaternary);
+}
+
+.app-workspace-session-tree__row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  min-height: 24px;
+  margin: 0;
+  padding: 3px 10px 3px 28px;
+  border: none;
+  border-radius: 4px;
+  background: transparent;
+  color: var(--ant-color-text-secondary);
+  font: inherit;
+  font-size: var(--app-sidebar-list-secondary-size, 11px);
+  line-height: 1.35;
+  text-align: left;
+  cursor: pointer;
+}
+
+.app-workspace-session-tree__row:hover {
+  background: var(--ant-color-fill-tertiary);
+  color: var(--ant-color-text);
+}
+
+.app-workspace-session-tree__row--active {
+  background: color-mix(in srgb, var(--ant-color-primary) 16%, transparent);
+  color: var(--ant-color-text);
+  font-weight: 500;
+}
+
+.app-workspace-session-tree__row--active .app-workspace-session-tree__title {
+  color: var(--ant-color-text);
+}
+
+.app-workspace-session-tree__row--active .app-workspace-session-tree__time {
+  color: var(--ant-color-text-secondary);
+}
+
+.app-workspace-session-tree__kind {
+  flex: 0 0 auto;
+  padding: 0 5px;
+  border-radius: 3px;
+  background: var(--ant-color-fill-quaternary);
+  font-size: 11px;
+  line-height: 17px;
+  color: var(--ant-color-text-tertiary);
+}
+
+.app-workspace-session-tree__kind[data-kind="terminal"] {
+  color: var(--ant-color-info);
+}
+
+.app-workspace-session-tree__kind[data-kind="dispatch"] {
+  color: var(--ant-color-warning);
+}
+
+.app-workspace-session-tree__kind[data-kind="workflow"] {
+  color: var(--ant-color-success);
+}
+
+.app-workspace-session-tree__title {
+  flex: 1 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.app-workspace-session-tree__dot {
+  flex: 0 0 auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ant-color-success);
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--ant-color-success) 22%, transparent);
+}
+
+.app-workspace-session-tree__meta {
+  flex: 0 0 auto;
+  display: grid;
+  grid-template-areas: "stack";
+  align-items: center;
+  justify-items: end;
+  min-height: 16px;
+}
+
+.app-workspace-session-tree__time {
+  grid-area: stack;
+  color: var(--ant-color-text-quaternary);
+  font-size: 12px;
+  font-variant-numeric: tabular-nums;
+}
+
+.app-workspace-session-tree__stop {
+  flex: 0 0 auto;
+  padding: 0 4px;
+  border-radius: 3px;
+  color: var(--ant-color-error);
+  font-size: 12px;
+  line-height: 16px;
+}
+
+.app-workspace-session-tree__stop:hover {
+  background: var(--ant-color-error-bg);
+}
+
+.app-workspace-session-tree__archive {
+  grid-area: stack;
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  padding: 0 4px;
+  border-radius: 3px;
+  color: var(--ant-color-text-tertiary);
+  font-size: 12px;
+  line-height: 16px;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.app-workspace-session-tree__row:hover .app-workspace-session-tree__time {
+  visibility: hidden;
+}
+
+.app-workspace-session-tree__row:hover .app-workspace-session-tree__archive {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.app-workspace-session-tree__archive:hover {
+  color: var(--ant-color-text);
+  background: var(--ant-color-fill-tertiary);
+}
+
+.app-workspace-session-tree__more {
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 3px 10px 5px 28px;
+  border: none;
+  background: transparent;
+  color: var(--ant-color-text-tertiary);
+  font: inherit;
+  font-size: var(--app-sidebar-list-secondary-size, 11px);
+  text-align: left;
+  cursor: pointer;
+}
+
+.app-workspace-session-tree__more:hover {
+  color: var(--ant-color-primary);
+}
+
+.app-repository-new-session-btn {
+  flex: 0 0 auto;
+  opacity: 0;
+  margin-left: 0;
+  width: 16px !important;
+  min-width: 16px !important;
+  height: 16px !important;
+}
+
+.app-repository-new-session-btn svg {
+  width: 12px !important;
+  height: 12px !important;
+}
+
+/* + 与分屏图标贴紧 */
+.app-repository-name-block .app-repository-new-session-btn + .app-repository-new-session-btn {
+  margin-left: -2px;
+}
+
+.app-repository-item--repo .app-repository-name-block {
+  gap: 2px;
+}
+
+.app-repository-item--repo:hover .app-repository-new-session-btn,
+.app-repository-item--repo-active .app-repository-new-session-btn {
+  opacity: 1;
+}
+
+.app-repository-item--repo:hover .app-repository-split-session-btn,
+.app-repository-item--repo-active .app-repository-split-session-btn {
+  opacity: 1;
+}

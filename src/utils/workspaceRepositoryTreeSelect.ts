@@ -222,6 +222,55 @@ export function buildWorkspaceRepositoryTreeData(
   return tree;
 }
 
+/** 底栏等工作区选择器：扁平仓库列表（不以 Project 树展示）。 */
+export interface WorkspaceRepositoryFlatOption {
+  value: string;
+  label: string;
+  kind: "project" | "repo";
+}
+
+export function buildWorkspaceRepositoryFlatSelectOptions(
+  projects: readonly ProjectItem[],
+  repositories: readonly Repository[],
+  options?: { includeProjects?: boolean },
+): WorkspaceRepositoryFlatOption[] {
+  const includeProjects = options?.includeProjects === true;
+  const repoById = new Map(repositories.map((repo) => [repo.id, repo] as const));
+  const assignedRepoIds = new Set<number>();
+  const out: WorkspaceRepositoryFlatOption[] = [];
+
+  for (const project of projects) {
+    if (includeProjects) {
+      out.push({
+        value: `project:${project.id}`,
+        label: project.name?.trim() || "未命名工作区",
+        kind: "project",
+      });
+    }
+    for (const repoId of project.repositoryIds ?? []) {
+      const repo = repoById.get(repoId);
+      if (!repo) continue;
+      out.push({
+        value: `repo:${repo.id}`,
+        label: repositoryDisplayName(repo),
+        kind: "repo",
+      });
+      assignedRepoIds.add(repoId);
+    }
+  }
+
+  for (const repo of repositories) {
+    if (assignedRepoIds.has(repo.id)) continue;
+    out.push({
+      value: `repo:${repo.id}`,
+      label: repositoryDisplayName(repo),
+      kind: "repo",
+    });
+  }
+
+  return out;
+}
+
 export type WorkspaceRepositoryTreeSelection =
   | { kind: "repository"; repositoryId: number }
   | { kind: "project"; projectId: string };

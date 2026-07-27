@@ -5,12 +5,14 @@ export type ProjectRepositoryListEqualProps = Pick<
   ProjectRepositoryListProps,
   | "projects"
   | "floatingRepositories"
+  | "workspaceRepositoryOrder"
   | "activeProjectId"
   | "activeWorkspaceFocus"
   | "activeRepositoryId"
   | "showRepositoryIconBadgesInWorkspaceList"
   | "pinnedProjectIds"
   | "expandedProjects"
+  | "expandedRepositoryIds"
   | "projectDropTargetId"
   | "projectTrellisReadyById"
   | "repositoryTrellisReadyById"
@@ -23,6 +25,12 @@ export type ProjectRepositoryListEqualProps = Pick<
   | "runningMainSessionByProjectId"
   | "runningMainSessionByRepositoryId"
   | "sectionCollapsed"
+  | "workspaceSessions"
+  | "activeSessionId"
+  | "showWorkspaceRunItems"
+  | "employeeMonitorItems"
+  | "sessionConversationTaskItems"
+  | "teamMonitorItems"
 > & {
   repositoriesById: Map<number, Repository>;
 };
@@ -30,6 +38,11 @@ export type ProjectRepositoryListEqualProps = Pick<
 function expandedProjectsFingerprint(expandedProjects: Set<string>): string {
   if (expandedProjects.size === 0) return "";
   return [...expandedProjects].sort().join("\n");
+}
+
+function expandedRepositoryIdsFingerprint(expanded: Set<number> | undefined): string {
+  if (!expanded || expanded.size === 0) return "";
+  return [...expanded].sort((a, b) => a - b).join("\n");
 }
 
 function repositoriesByIdFingerprint(repositoriesById: Map<number, Repository>): string {
@@ -104,6 +117,11 @@ export function projectRepositoryListPropsEqual(
   if (prev === next) return true;
   if (prev.projects !== next.projects) return false;
   if (prev.floatingRepositories !== next.floatingRepositories) return false;
+  if (prev.workspaceRepositoryOrder !== next.workspaceRepositoryOrder) {
+    const a = prev.workspaceRepositoryOrder ?? [];
+    const b = next.workspaceRepositoryOrder ?? [];
+    if (a.length !== b.length || a.some((id, i) => id !== b[i])) return false;
+  }
   if (prev.activeProjectId !== next.activeProjectId) return false;
   if (prev.activeWorkspaceFocus !== next.activeWorkspaceFocus) return false;
   if (prev.activeRepositoryId !== next.activeRepositoryId) return false;
@@ -120,6 +138,18 @@ export function projectRepositoryListPropsEqual(
   ) {
     return false;
   }
+  if (
+    expandedRepositoryIdsFingerprint(prev.expandedRepositoryIds) !==
+    expandedRepositoryIdsFingerprint(next.expandedRepositoryIds)
+  ) {
+    return false;
+  }
+  if (prev.activeSessionId !== next.activeSessionId) return false;
+  if (prev.showWorkspaceRunItems !== next.showWorkspaceRunItems) return false;
+  if (prev.workspaceSessions !== next.workspaceSessions) return false;
+  if (prev.employeeMonitorItems !== next.employeeMonitorItems) return false;
+  if (prev.sessionConversationTaskItems !== next.sessionConversationTaskItems) return false;
+  if (prev.teamMonitorItems !== next.teamMonitorItems) return false;
   if (
     repositoriesByIdFingerprint(prev.repositoriesById) !==
     repositoriesByIdFingerprint(next.repositoriesById)

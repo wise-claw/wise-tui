@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import type { ProjectItem, Repository } from "../types";
 import {
   buildWorkspaceRepositoryTreeData,
+  buildWorkspaceRepositoryFlatSelectOptions,
   findProjectOwningRepository,
   formatWorkspaceRepositoryContextLabel,
   globalWorkspaceToTreeSelection,
@@ -65,6 +66,18 @@ describe("workspaceRepositoryTreeSelect", () => {
     expect(tree[0]?.selectable).toBe(true);
     expect(tree[0]?.children?.[0]?.value).toBe("repo:1");
     expect(tree[1]?.title).toBe("独立仓库");
+  });
+
+  test("builds flat select options without project tree nesting", () => {
+    const floating: Repository = { ...repo, id: 99, name: "solo" };
+    const flat = buildWorkspaceRepositoryFlatSelectOptions([project], [repo, floating]);
+    expect(flat.map((item) => item.value)).toEqual(["repo:1", "repo:99"]);
+    expect(flat.every((item) => item.kind === "repo")).toBe(true);
+
+    const withProjects = buildWorkspaceRepositoryFlatSelectOptions([project], [repo], {
+      includeProjects: true,
+    });
+    expect(withProjects.map((item) => item.value)).toEqual(["project:p1", "repo:1"]);
   });
 
   test("parses repository and project tree values", () => {

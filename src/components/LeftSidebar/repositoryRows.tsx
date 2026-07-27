@@ -1,4 +1,4 @@
-import { memo, useState } from "react";
+import { memo, useState, type ReactNode } from "react";
 import { getKnownOpenAppIcon } from "../OpenAppMenu/openAppIcons";
 import { useWorkspaceTodoIncompleteCount } from "../../hooks/useWorkspaceTodoIncompleteCount";
 import { useWorkspaceTodoCompletedCount } from "../../hooks/useWorkspaceTodoCompletedCount";
@@ -14,6 +14,7 @@ import { parseOpenAppConfigureMenuKey, repositoryEditorOpenMenuLabel, resolveEff
 import { repositoryTerminalOpenAppIcon, repositoryTerminalOpenMenuLabel } from "../../utils/repositoryTerminalOpenMenu";
 import { reorderRepositoryIdsForDrop } from "./repositoryReorder";
 import { prefetchGitStatus } from "../../services/gitStatusWarmCache";
+import { FLAT_WORKSPACE_DRAG_SOURCE_ID } from "../../utils/workspaceRepositoryOrder";
 
 export interface RepositoryReorderUi {
   dragHandleEnabled: boolean;
@@ -34,9 +35,12 @@ import {
 import { SidebarMoreMenuDropdown } from "./SidebarMoreMenuDropdown";
 import {
   ExecutableTasksIcon,
+  FolderExpandIcon,
   MoreIcon,
   OpenInEditorIcon,
   OpenInTerminalIcon,
+  PlusIcon,
+  SplitPaneIcon,
   RepositorySidebarIcon,
   RepoDragHandleIcon,
   ScheduledTasksIcon,
@@ -488,6 +492,7 @@ function RepositoryRowInner({
   onConfigureSddMode,
   onConfigureRepositoryMainSessionRun,
   onNewPaneSession,
+  onOpenSplitSession,
   repositoryReorder,
   trellisReady = false,
   scheduledTasksTotalCount = 0,
@@ -520,6 +525,7 @@ function RepositoryRowInner({
   onConfigureSddMode?: (repository: Repository) => void;
   onConfigureRepositoryMainSessionRun?: (repository: Repository) => void;
   onNewPaneSession?: (repository: Repository) => void;
+  onOpenSplitSession?: (repository: Repository) => void;
   repositoryReorder?: RepositoryReorderUi;
   trellisReady?: boolean;
   scheduledTasksTotalCount?: number;
@@ -550,6 +556,7 @@ function RepositoryRowInner({
     runCommandRunning,
     runRowPinned: pinnedRunCommandRowActions,
     onNewPaneSession: Boolean(onNewPaneSession),
+    onOpenSplitSession: Boolean(onOpenSplitSession),
     onOpenRepositoryInTerminal: Boolean(onOpenInTerminal),
     onOpenScheduledTasks: Boolean(onOpenScheduledTasks),
     onOpenRequirements: Boolean(onOpenRequirements),
@@ -633,6 +640,36 @@ function RepositoryRowInner({
               onStop={onStopMainSession}
             />
           ) : null}
+          {onNewPaneSession ? (
+            <DeferredHoverTooltip title="新建会话">
+              <button
+                type="button"
+                className="app-repository-header-btn app-repository-new-session-btn"
+                aria-label="新建会话"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onNewPaneSession(repository);
+                }}
+              >
+                <PlusIcon />
+              </button>
+            </DeferredHoverTooltip>
+          ) : null}
+          {onOpenSplitSession ? (
+            <DeferredHoverTooltip title="分屏打开会话">
+              <button
+                type="button"
+                className="app-repository-header-btn app-repository-new-session-btn app-repository-split-session-btn"
+                aria-label="分屏打开会话"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenSplitSession(repository);
+                }}
+              >
+                <SplitPaneIcon />
+              </button>
+            </DeferredHoverTooltip>
+          ) : null}
         </span>
         <div
           className="app-repository-row-actions"
@@ -695,6 +732,7 @@ function RepositoryRowInner({
               if (key === "run-stop") onStopRepositoryRunCommand?.(repository);
               if (key === "run-row-pin") void toggleRepositoryRunCommandRowPinned(repository.id);
               if (key === "new-session") onNewPaneSession?.(repository);
+              if (key === "open-split-session") onOpenSplitSession?.(repository);
               if (key === "scheduled-tasks") onOpenScheduledTasks?.(repository);
               if (key === "requirements" && workspaceTrellisEnabled) onOpenRequirements?.(repository);
               if (key === "executable-tasks" && workspaceTrellisEnabled) onOpenExecutableTasks?.(repository);
@@ -762,6 +800,9 @@ function floatingRepositoryRowPropsEqual(
   if (prev.workspaceTodosEnabled !== next.workspaceTodosEnabled) return false;
   if (prev.mainSessionRunning !== next.mainSessionRunning) return false;
   if (prev.pinnedRunCommandRowActions !== next.pinnedRunCommandRowActions) return false;
+  if (prev.expanded !== next.expanded) return false;
+  if (prev.children !== next.children) return false;
+  if (prev.repositoryReorder !== next.repositoryReorder) return false;
   return true;
 }
 
@@ -781,6 +822,7 @@ function FloatingRepositoryRowInner({
   onConfigureSddMode,
   onConfigureRepositoryMainSessionRun,
   onNewPaneSession,
+  onOpenSplitSession,
   onPromoteToNewProject,
   onJoinExistingProject,
   onRemove,
@@ -798,6 +840,10 @@ function FloatingRepositoryRowInner({
   mainSessionRunning = false,
   onStopMainSession,
   pinnedRunCommandRowActions = false,
+  expanded = false,
+  onToggleExpand,
+  repositoryReorder,
+  children,
 }: {
   repository: StandaloneRepo;
   showRepositoryIconBadgesInWorkspaceList?: boolean;
@@ -814,6 +860,7 @@ function FloatingRepositoryRowInner({
   onConfigureSddMode?: (repository: Repository) => void;
   onConfigureRepositoryMainSessionRun?: (repository: Repository) => void;
   onNewPaneSession?: (repository: Repository) => void;
+  onOpenSplitSession?: (repository: Repository) => void;
   onPromoteToNewProject?: (repository: StandaloneRepo) => void;
   onJoinExistingProject?: (repository: StandaloneRepo, projectId: string) => void;
   onRemove: (repository: StandaloneRepo) => void;
@@ -831,6 +878,11 @@ function FloatingRepositoryRowInner({
   mainSessionRunning?: boolean;
   onStopMainSession?: () => void;
   pinnedRunCommandRowActions?: boolean;
+  /** 仓库即工作区：展开显示会话/运行子树 */
+  expanded?: boolean;
+  onToggleExpand?: () => void;
+  repositoryReorder?: RepositoryReorderUi;
+  children?: ReactNode;
 }) {
   const runCommandRunning = useIsRepositoryRunCommandRunning(repository.id);
   const hasMainOwner = Boolean(repository.mainOwnerAgentName?.trim());
@@ -849,6 +901,7 @@ function FloatingRepositoryRowInner({
     runCommandRunning,
     runRowPinned: pinnedRunCommandRowActions,
     onNewPaneSession: Boolean(onNewPaneSession),
+    onOpenSplitSession: Boolean(onOpenSplitSession),
     onOpenRepositoryInTerminal: Boolean(onOpenInTerminal),
     onOpenScheduledTasks: Boolean(onOpenScheduledTasks),
     onOpenRequirements: Boolean(onOpenRequirements),
@@ -858,10 +911,43 @@ function FloatingRepositoryRowInner({
     repositoryOpenAppId: repository.openAppId,
   });
 
+  const dropRowClass =
+    repositoryReorder?.rowReorderEnabled && repositoryReorder.dropHint?.anchorRepositoryId === repository.id
+      ? repositoryReorder.dropHint.placement === "before"
+        ? " app-repository-row--drop-before"
+        : " app-repository-row--drop-after"
+      : "";
+  const rowDragEnabled = Boolean(repositoryReorder?.dragHandleEnabled);
+
   return (
-    <div className="app-repository-row">
+    <div
+      className={`app-repository-row${dropRowClass}${rowDragEnabled ? " app-repository-row--draggable" : ""}`}
+      onDragOver={rowDragEnabled ? repositoryReorder?.onDragOverRow : undefined}
+      onDragLeave={rowDragEnabled ? repositoryReorder?.onDragLeaveRow : undefined}
+      onDrop={rowDragEnabled ? repositoryReorder?.onDropRow : undefined}
+    >
       <div
         className={`app-repository-item app-repository-item--repo${showActiveRepository ? " app-repository-item--repo-active" : ""}`}
+        draggable={rowDragEnabled}
+        onDragStart={
+          rowDragEnabled
+            ? (e) => {
+                const target = e.target as HTMLElement | null;
+                if (
+                  target?.closest(".app-repository-row-actions") ||
+                  target?.closest(".app-repository-expand") ||
+                  target?.closest(".app-repository-header-btn") ||
+                  target?.closest("button") ||
+                  target?.closest("a")
+                ) {
+                  e.preventDefault();
+                  return;
+                }
+                repositoryReorder?.onDragStartHandle(e);
+              }
+            : undefined
+        }
+        onDragEnd={rowDragEnabled ? repositoryReorder?.onDragEndHandle : undefined}
         onPointerEnter={() => {
           prefetchGitStatus(repository.path);
         }}
@@ -869,13 +955,32 @@ function FloatingRepositoryRowInner({
           const target = e.target as HTMLElement | null;
           if (
             target?.closest(".app-repository-row-actions") ||
-            target?.closest(".app-repository-row-running-status")
+            target?.closest(".app-repository-row-running-status") ||
+            target?.closest(".app-repository-expand") ||
+            target?.closest(".app-repository-header-btn")
           ) {
             return;
           }
           onRepositorySelect(repository.id);
+          // 选中即展开会话列表；已展开时不因选中而收起。
+          if (!expanded && onToggleExpand) {
+            onToggleExpand();
+          }
         }}
       >
+        {onToggleExpand ? (
+          <span
+            className="app-repository-expand"
+            onClick={(e) => {
+              e.stopPropagation();
+              onToggleExpand();
+            }}
+            aria-expanded={expanded}
+            aria-label={expanded ? "收起会话列表" : "展开会话列表"}
+          >
+            <FolderExpandIcon expanded={expanded} />
+          </span>
+        ) : null}
         {showRepositoryIconBadgesInWorkspaceList ? (
           <span className="app-repository-icon-wrap">
             <span className="app-repository-icon app-repository-icon--folder">
@@ -903,6 +1008,36 @@ function FloatingRepositoryRowInner({
               stopTitle="结束长驻会话"
               onStop={onStopMainSession}
             />
+          ) : null}
+          {onNewPaneSession ? (
+            <DeferredHoverTooltip title="新建会话">
+              <button
+                type="button"
+                className="app-repository-header-btn app-repository-new-session-btn"
+                aria-label="新建会话"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onNewPaneSession(repository);
+                }}
+              >
+                <PlusIcon />
+              </button>
+            </DeferredHoverTooltip>
+          ) : null}
+          {onOpenSplitSession ? (
+            <DeferredHoverTooltip title="分屏打开会话">
+              <button
+                type="button"
+                className="app-repository-header-btn app-repository-new-session-btn app-repository-split-session-btn"
+                aria-label="分屏打开会话"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onOpenSplitSession(repository);
+                }}
+              >
+                <SplitPaneIcon />
+              </button>
+            </DeferredHoverTooltip>
           ) : null}
         </span>
         <div
@@ -965,6 +1100,7 @@ function FloatingRepositoryRowInner({
               if (key === "run-stop") onStopRepositoryRunCommand?.(repository);
               if (key === "run-row-pin") void toggleRepositoryRunCommandRowPinned(repository.id);
               if (key === "new-session") onNewPaneSession?.(repository);
+              if (key === "open-split-session") onOpenSplitSession?.(repository);
               if (key === "scheduled-tasks") onOpenScheduledTasks?.(repository);
               if (key === "requirements" && trellisEnabled) onOpenRequirements?.(repository);
               if (key === "executable-tasks" && trellisEnabled) onOpenExecutableTasks?.(repository);
@@ -998,6 +1134,7 @@ function FloatingRepositoryRowInner({
           </SidebarMoreMenuDropdown>
         </div>
       </div>
+      {expanded && children ? children : null}
     </div>
   );
 }
@@ -1024,6 +1161,7 @@ export function ProjectRepositoryRows({
   onConfigureRepositoryIconBadge,
   onConfigureRepositoryMainSessionRun,
   onNewPaneSession,
+  onOpenSplitSession,
   repoSidebarDragRef,
   onRepoSidebarDragEnd,
   repositoryTrellisReadyById = {},
@@ -1059,6 +1197,7 @@ export function ProjectRepositoryRows({
   onConfigureRepositoryIconBadge?: (repository: Repository) => void;
   onConfigureRepositoryMainSessionRun?: (repository: Repository) => void;
   onNewPaneSession?: (repository: Repository) => void;
+  onOpenSplitSession?: (repository: Repository) => void;
   repoSidebarDragRef: React.MutableRefObject<{ sourceProjectId: string; repositoryId: number } | null>;
   onRepoSidebarDragEnd: () => void;
   repositoryTrellisReadyById?: Record<number, boolean>;
@@ -1124,6 +1263,7 @@ export function ProjectRepositoryRows({
             onConfigureRepositoryIconBadge={onConfigureRepositoryIconBadge}
             onConfigureRepositoryMainSessionRun={onConfigureRepositoryMainSessionRun}
             onNewPaneSession={onNewPaneSession}
+            onOpenSplitSession={onOpenSplitSession}
             repositoryReorder={reorderUi}
             trellisReady={repositoryTrellisReadyById[repository.id] === true}
             scheduledTasksTotalCount={scheduledTasksByRepoId[repository.id]?.total ?? 0}
@@ -1251,6 +1391,85 @@ function buildRepositoryReorderUi({
           console.error(err);
         });
       }
+    },
+  };
+}
+
+export function buildFlatWorkspaceReorderUi({
+  repository,
+  flatRepositories,
+  rowReorderEnabled,
+  dropHint,
+  setDropHint,
+  repoSidebarDragRef,
+  onRepoSidebarDragEnd,
+  onReorderWorkspaceRepositories,
+  messageError,
+}: {
+  repository: Repository;
+  flatRepositories: readonly Repository[];
+  rowReorderEnabled: boolean;
+  dropHint: RepositoryReorderUi["dropHint"];
+  setDropHint: React.Dispatch<React.SetStateAction<RepositoryReorderUi["dropHint"]>>;
+  repoSidebarDragRef: React.MutableRefObject<{ sourceProjectId: string; repositoryId: number } | null>;
+  onRepoSidebarDragEnd?: () => void;
+  onReorderWorkspaceRepositories?: (repositoryIds: number[]) => void | Promise<void>;
+  messageError: (content: string) => void;
+}): RepositoryReorderUi {
+  return {
+    dragHandleEnabled: rowReorderEnabled,
+    rowReorderEnabled,
+    dropHint,
+    foreignDropRowId: null,
+    onDragStartHandle: (e) => {
+      repoSidebarDragRef.current = {
+        sourceProjectId: FLAT_WORKSPACE_DRAG_SOURCE_ID,
+        repositoryId: repository.id,
+      };
+      e.dataTransfer.setData("text/plain", String(repository.id));
+      e.dataTransfer.effectAllowed = "move";
+      setDropHint(null);
+    },
+    onDragEndHandle: () => {
+      repoSidebarDragRef.current = null;
+      setDropHint(null);
+      onRepoSidebarDragEnd?.();
+    },
+    onDragOverRow: (e) => {
+      const dragged = repoSidebarDragRef.current;
+      if (!dragged || dragged.sourceProjectId !== FLAT_WORKSPACE_DRAG_SOURCE_ID || !rowReorderEnabled) {
+        return;
+      }
+      e.preventDefault();
+      e.dataTransfer.dropEffect = "move";
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const placement = e.clientY < rect.top + rect.height / 2 ? "before" : "after";
+      setDropHint({ anchorRepositoryId: repository.id, placement });
+    },
+    onDragLeaveRow: (e) => {
+      const related = e.relatedTarget as Node | null;
+      if (related && (e.currentTarget as HTMLElement).contains(related)) return;
+      setDropHint((prev) => (prev?.anchorRepositoryId === repository.id ? null : prev));
+    },
+    onDropRow: (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      const dragged = repoSidebarDragRef.current;
+      repoSidebarDragRef.current = null;
+      setDropHint(null);
+      onRepoSidebarDragEnd?.();
+      if (!dragged || dragged.sourceProjectId !== FLAT_WORKSPACE_DRAG_SOURCE_ID) return;
+      if (!rowReorderEnabled || !onReorderWorkspaceRepositories) return;
+      const rect = (e.currentTarget as HTMLElement).getBoundingClientRect();
+      const placement = e.clientY < rect.top + rect.height / 2 ? "before" : "after";
+      const baseOrder = flatRepositories.map((repo) => repo.id);
+      const next = reorderRepositoryIdsForDrop(baseOrder, dragged.repositoryId, repository.id, placement);
+      const unchanged = next.every((id, index) => id === baseOrder[index]);
+      if (unchanged) return;
+      void Promise.resolve(onReorderWorkspaceRepositories(next)).catch((err: unknown) => {
+        messageError("调整工作区顺序失败");
+        console.error(err);
+      });
     },
   };
 }

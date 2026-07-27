@@ -3058,6 +3058,14 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   margin-bottom: 0;
 }
 
+.app-repository-row--draggable > .app-repository-item--repo {
+  cursor: grab;
+}
+
+.app-repository-row--draggable > .app-repository-item--repo:active {
+  cursor: grabbing;
+}
+
 .app-repository-drag-handle {
   width: 12px;
   height: 18px;
@@ -3446,6 +3454,18 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   border-radius: 0 !important;
 }
 
+/* 展开且已有活跃会话时：弱化仓库行，突出会话高亮 */
+.app-repository-row:has(.app-workspace-session-tree__row--active)
+  .app-repository-item--repo.app-repository-item--repo-active {
+  background: transparent !important;
+}
+
+.app-repository-row:has(.app-workspace-session-tree__row--active)
+  .app-repository-item--repo.app-repository-item--repo-active
+  .app-repository-name {
+  font-weight: 500;
+}
+
 .app-repository-item--repo.app-repository-item--repo-active:hover {
   background: color-mix(in srgb, var(--ant-color-text) 12%, transparent) !important;
 }
@@ -3503,6 +3523,17 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 .app-repository-expand svg {
   width: 10px;
   height: 10px;
+}
+
+.app-repository-item--repo > .app-repository-expand {
+  width: 18px;
+  height: 18px;
+  border-radius: 5px;
+}
+
+.app-repository-item--repo > .app-repository-expand svg {
+  width: 16px;
+  height: 16px;
 }
 
 .app-repository-icon {

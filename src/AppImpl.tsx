@@ -216,6 +216,7 @@ import {
   pickProjectMainSessionForSidebarSelect,
   pickSessionForRepositorySidebarSelect,
 } from "./utils/claudeSessionSelection";
+import { pickFirstWorkspaceSidebarHistorySession } from "./utils/repositoryWorkspaceTree";
 import {
   isOmcBatchHistoryStubSessionId,
   clearPersistedOmcBatchHistory,
@@ -673,6 +674,7 @@ export default function App() {
     handleUpdateRepositorySddMode,
     handleUpdateRepositoryIconBadge,
     handleReorderRepositoriesInProject,
+    handleReorderWorkspaceRepositories,
     handleReconcileProjectWorkspace,
     handleUpdateRepositoryMainOwnerAgent,
     handleUpdateRepositoryExecutionEngine,
@@ -681,6 +683,7 @@ export default function App() {
     pinnedProjectIds,
     togglePinProject,
     floatingRepositories,
+    workspaceRepositoryOrder,
     standaloneRepos,
   } = useRepositoryList();
 
@@ -1368,6 +1371,28 @@ export default function App() {
   const jumpToSessionWithRepositoryRef = useRef(jumpToSessionWithRepository);
   jumpToSessionWithRepositoryRef.current = jumpToSessionWithRepository;
 
+  /** 侧栏会话列表「归档」：关闭标签（保留磁盘历史），若归档的是当前会话则切到同仓列表下一项。 */
+  const handleArchiveWorkspaceSession = useCallback(
+    (sessionId: string) => {
+      const sid = sessionId.trim();
+      if (!sid) return;
+      const sessionsNow = sessionsLatestRef.current;
+      const target = sessionsNow.find((item) => item.id === sid);
+      const repoPath = target?.repositoryPath?.trim() ?? "";
+      const wasActive = (activeSessionIdLatestRef.current?.trim() ?? "") === sid;
+      handleCloseSession(sid);
+      if (!wasActive || !repoPath) return;
+      const next = pickFirstWorkspaceSidebarHistorySession(
+        sessionsNow.filter((item) => item.id !== sid),
+        repoPath,
+      );
+      if (next) {
+        jumpToSessionWithRepositoryRef.current(next.id);
+      }
+    },
+    [handleCloseSession],
+  );
+
   const bindRepositoryMainSessionRef = useRef(bindRepositoryMainSession);
   bindRepositoryMainSessionRef.current = bindRepositoryMainSession;
 
@@ -1804,6 +1829,9 @@ export default function App() {
   const showRepositoryIconBadgesInWorkspaceList = useLeftSidebarRepositoryIconBadgesDefault();
   const showMonitorOnLeft =
     monitorPanelDefault.visible && monitorPanelDefault.placement === "left";
+  // 工作区树合并运行项后：用「显示」开关控制子树运行项；独立左栏面板仅在关闭工作区树且栏位=左时出现。
+  const showLeftSidebarMonitorPanelMerged =
+    showLeftSidebarWorkspaceList ? monitorPanelDefault.visible : showMonitorOnLeft;
   const openBuiltinAssistant = useCallback((assistantId: string) => {
     const trimmed = assistantId.trim();
     if (!trimmed) return;
@@ -2245,34 +2273,6 @@ export default function App() {
 
   const repoPanelPlacementDefault = useRepoPanelPlacementDefault();
 
-  const handleNewPaneSessionForRepository = useCallback(
-    (repository: Repository) => {
-      void handleNewPaneSessionInNextSlot(repository, repository.path);
-    },
-    [handleNewPaneSessionInNextSlot],
-  );
-
-  const handleNewPaneSessionForProject = useCallback(
-    (project: ProjectItem) => {
-      const rootPath = resolveWorkspaceRootPath({
-        scope: "project",
-        project,
-        repositories,
-        projects,
-      });
-      if (!rootPath) {
-        message.warning("无法解析工作区目录，请先配置工作区根目录或关联仓库");
-        return;
-      }
-      if (project.repositoryIds.length === 0) {
-        message.warning("该工作区下暂无仓库，请先关联仓库");
-        return;
-      }
-      void handleNewPaneProjectSessionInNextSlot(project);
-    },
-    [handleNewPaneProjectSessionInNextSlot, message, projects, repositories],
-  );
-
   const handleOpenHistorySessionInInspector = useCallback(
     (sessionId: string) => {
       const sid = sessionId.trim();
@@ -2425,10 +2425,16 @@ export default function App() {
     [switchSession],
   );
 
-  /** 多仓工作区内点仓库行：仅切换展示会话，不更新 per-repo 主会话绑定。 */
+  /** 侧栏选中工作区：激活会话列表第一项（与侧栏展示顺序一致），并绑定为主会话。 */
   function switchRepositoryDisplaySession(repository: Repository): string | null {
     const sessionsNow = sessionsLatestRef.current;
     const target = resolveSidebarSelectionTarget({ repository });
+    const first = pickFirstWorkspaceSidebarHistorySession(sessionsNow, target.path);
+    if (first) {
+      switchSessionIfNeeded(first.id);
+      return first.id;
+    }
+    // 列表为空时回退旧挑选逻辑（主 Owner / 最近可恢复会话），避免 ensure 前误建空壳。
     const mainOwnerPick = resolveMainOwnerAgentNameForRepositoryPath(repositories, target.path);
     const boundId = resolveBoundMainSessionId(
       target.path,
@@ -2808,12 +2814,18 @@ export default function App() {
         return;
       }
       // 选工作区时会把 activeRepositoryId 设为首个成员仓且 focus=project；点同一仓仍需切到 repository 焦点。
+      // 已选中同一仓时仍切到列表第一项会话并高亮，避免只亮仓库行、会话未选中。
       if (
         !leavingOverlay &&
         viewMode.isChat &&
         activeRepositoryId === repositoryId &&
         activeWorkspaceFocus !== "project"
       ) {
+        if (shouldSidebarRepositorySelectOnlyUpdateFocus(repository, projects)) {
+          switchRepositoryDisplaySession(repository);
+          return;
+        }
+        scheduleSidebarMainSessionEnsure(() => ensureRepositoryMainSession(repository));
         return;
       }
       const selectionEpoch = ++sidebarSelectionEpochRef.current;
@@ -3517,7 +3529,7 @@ export default function App() {
           enterAuthorPane(pane ?? lastAuthorPane);
         },
         leftSidebarHubQuickEntryIds: leftSidebarHubQuickEntries.enabledEntryIds,
-        showLeftSidebarMonitorPanel: showMonitorOnLeft,
+        showLeftSidebarMonitorPanel: showLeftSidebarMonitorPanelMerged,
         showLeftSidebarWorkspaceList,
         showRepositoryIconBadgesInWorkspaceList,
         mcpHubActive:
@@ -3551,6 +3563,7 @@ export default function App() {
         },
         onPromoteFloatingRepositoryToProject: handlePromoteFloatingRepositoryToProject,
         floatingRepositories,
+        workspaceRepositoryOrder,
         onRemoveRepository: handleRemoveRepositoryWithSessionCleanup,
         onDetachRepositoryFromProject: handleDetachRepositoryFromProjectWithSessionCleanup,
         onUpdateRepositorySddMode: handleUpdateRepositorySddMode,
@@ -3560,9 +3573,18 @@ export default function App() {
         },
         onUpdateRepositoryOpenAppId: handleUpdateRepositoryOpenAppId,
         onUpdateProjectOpenAppId: handleUpdateProjectOpenAppId,
-        onNewPaneSessionForRepository: handleNewPaneSessionForRepository,
-        onNewPaneSessionForProject: handleNewPaneSessionForProject,
+        // 与输入框「新建会话」同路径：当前屏新建主会话标签，不新开多屏空槽。
+        onNewPaneSessionForRepository: handleManualNewRepositorySession,
+        onNewPaneSessionForProject: handleManualNewProjectSession,
+        // 「分屏打开会话」：新建隔离执行会话并占用下一空窗格（单屏时自动升为双屏）。
+        onOpenSplitSessionForRepository: (repository) => {
+          void handleNewPaneSessionInNextSlot(repository);
+        },
+        onOpenSplitSessionForProject: (project) => {
+          void handleNewPaneProjectSessionInNextSlot(project);
+        },
         onReorderRepositoriesInProject: handleReorderRepositoriesInProject,
+        onReorderWorkspaceRepositories: handleReorderWorkspaceRepositories,
         onRepositorySelect: handleSidebarRepositorySelectLeavingMcpHub,
         onOpenInFinder: handleOpenInFinder,
         onOpenProjectInFinder: handleOpenProjectInFinder,
@@ -3640,6 +3662,7 @@ export default function App() {
         historyDrawerSessionId: inspectorHistorySessionId,
         onHistoryDrawerSessionIdChange: setInspectorHistorySessionId,
         onRestoreHistorySessionAsMain: handleRestoreHistorySessionAsMain,
+        onArchiveWorkspaceSession: handleArchiveWorkspaceSession,
         onCreateTerminalEmployeeSession: handleCreateTerminalEmployeeSession,
         onResumeSession: resumeSessionFromMonitorDrawer,
         onPrepareSessionForMonitorDrawer: ensureSessionForMonitorDrawer,

@@ -56,6 +56,7 @@ function repositoryOpenMenuItems(input: {
   onOpenInTerminal?: boolean;
   includeBrowser?: boolean;
   onNewPaneSession?: boolean;
+  onOpenSplitSession?: boolean;
   scopeOpenAppId?: string | null;
 }): MenuItem[] {
   const {
@@ -65,6 +66,7 @@ function repositoryOpenMenuItems(input: {
     onOpenInTerminal = false,
     includeBrowser = false,
     onNewPaneSession = false,
+    onOpenSplitSession = false,
     scopeOpenAppId,
   } = input;
   const showTerminalOpen = onOpenInTerminal && showRepositoryTerminalOpenMenuItem();
@@ -74,7 +76,8 @@ function repositoryOpenMenuItems(input: {
     onOpenInEditor ? { key: "editor", label: repositoryEditorOpenMenuLabel(scopeOpenAppId) } : null,
     showTerminalOpen ? { key: "open-terminal", label: repositoryTerminalOpenMenuLabel() } : null,
     includeBrowser ? { key: "browser", label: "打开 Git 仓库" } : null,
-    onNewPaneSession ? { key: "new-session", label: "新开会话" } : null,
+    onNewPaneSession ? { key: "new-session", label: "新建会话" } : null,
+    onOpenSplitSession ? { key: "open-split-session", label: "分屏打开会话" } : null,
   ]);
 }
 
@@ -188,6 +191,7 @@ export interface BuildProjectMoreMenuItemsInput {
   onOpenProjectDirectory?: boolean;
   onConfigureSddMode?: boolean;
   onNewPaneSession?: boolean;
+  onOpenSplitSession?: boolean;
   onOpenScheduledTasksForProject?: boolean;
   onOpenExecutableTasksForProject?: boolean;
   onReconcileProject?: boolean;
@@ -205,6 +209,7 @@ export function buildProjectMoreMenuItems(input: BuildProjectMoreMenuItemsInput)
     onOpenProjectDirectory,
     onConfigureSddMode,
     onNewPaneSession,
+    onOpenSplitSession,
     onOpenScheduledTasksForProject,
     onOpenExecutableTasksForProject,
     onReconcileProject,
@@ -230,8 +235,11 @@ export function buildProjectMoreMenuItems(input: BuildProjectMoreMenuItemsInput)
           scopeOpenAppId: projectOpenAppId,
         }),
       ),
-      onNewPaneSession
-        ? sidebarMenuSection([{ key: "new-session", label: "新开会话" }])
+      onNewPaneSession || onOpenSplitSession
+        ? sidebarMenuSection([
+            onNewPaneSession ? { key: "new-session", label: "新建会话" } : null,
+            onOpenSplitSession ? { key: "open-split-session", label: "分屏打开会话" } : null,
+          ])
         : null,
       sidebarMenuSection([
         openAppConfigureMenuItem(projectOpenAppId),
@@ -276,6 +284,7 @@ export interface BuildProjectRepositoryMoreMenuItemsInput {
   runCommandRunning?: boolean;
   runRowPinned?: boolean;
   onNewPaneSession?: boolean;
+  onOpenSplitSession?: boolean;
   onOpenScheduledTasks?: boolean;
   onOpenRequirements?: boolean;
   onOpenExecutableTasks?: boolean;
@@ -298,6 +307,7 @@ export function buildProjectRepositoryMoreMenuItems(
     runCommandRunning = false,
     runRowPinned = false,
     onNewPaneSession,
+    onOpenSplitSession,
     onOpenScheduledTasks,
     onOpenRequirements,
     onOpenExecutableTasks,
@@ -310,10 +320,16 @@ export function buildProjectRepositoryMoreMenuItems(
     onOpenInTerminal: Boolean(onOpenRepositoryInTerminal),
     includeBrowser: true,
     onNewPaneSession: Boolean(onNewPaneSession),
+    onOpenSplitSession: Boolean(onOpenSplitSession),
     scopeOpenAppId: repositoryOpenAppId,
   });
-  const sessionItems = openItems.filter((item) => item != null && item.key === "new-session");
-  const accessItems = openItems.filter((item) => item != null && item.key !== "new-session");
+  const sessionKeys = new Set(["new-session", "open-split-session"]);
+  const sessionItems = openItems.filter(
+    (item) => item != null && typeof item === "object" && "key" in item && sessionKeys.has(String(item.key)),
+  );
+  const accessItems = openItems.filter(
+    (item) => item != null && typeof item === "object" && "key" in item && !sessionKeys.has(String(item.key)),
+  );
 
   return sidebarMenuWithSectionsAndDanger(
     [
@@ -358,6 +374,7 @@ export interface BuildFloatingRepositoryMoreMenuItemsInput {
   runCommandRunning?: boolean;
   runRowPinned?: boolean;
   onNewPaneSession?: boolean;
+  onOpenSplitSession?: boolean;
   onOpenScheduledTasks?: boolean;
   onOpenRequirements?: boolean;
   onOpenExecutableTasks?: boolean;
@@ -379,6 +396,7 @@ export function buildFloatingRepositoryMoreMenuItems(
     onOpenRepositoryMainOwner,
     onConfigureSddMode,
     onNewPaneSession,
+    onOpenSplitSession,
     onOpenScheduledTasks,
     onOpenRequirements,
     onOpenExecutableTasks,
@@ -396,10 +414,16 @@ export function buildFloatingRepositoryMoreMenuItems(
     onOpenInTerminal: Boolean(onOpenRepositoryInTerminal),
     includeBrowser: true,
     onNewPaneSession: Boolean(onNewPaneSession),
+    onOpenSplitSession: Boolean(onOpenSplitSession),
     scopeOpenAppId: repositoryOpenAppId,
   });
-  const sessionItems = openItems.filter((item) => item != null && item.key === "new-session");
-  const accessItems = openItems.filter((item) => item != null && item.key !== "new-session");
+  const sessionKeys = new Set(["new-session", "open-split-session"]);
+  const sessionItems = openItems.filter(
+    (item) => item != null && typeof item === "object" && "key" in item && sessionKeys.has(String(item.key)),
+  );
+  const accessItems = openItems.filter(
+    (item) => item != null && typeof item === "object" && "key" in item && !sessionKeys.has(String(item.key)),
+  );
 
   const joinChildren: MenuItem[] = joinableProjects.map((project) => ({
     key: `join-${project.id}`,

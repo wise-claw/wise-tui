@@ -4,8 +4,8 @@ export const REPOSITORY_TREE_DEPTH_INDENT_PX = 16;
 /** 与 `.repo-tree-node-arrow { width: 24px }` 一致。 */
 export const REPOSITORY_TREE_CHEVRON_COLUMN_PX = 24;
 
-/** 与 `.repo-tree-node { min-height: 26px }` 一致，供虚拟列表窗口计算。 */
-export const REPOSITORY_TREE_ROW_HEIGHT_PX = 26;
+/** 与 `.repo-tree-node { min-height: 28px }` 一致，供虚拟列表窗口计算。 */
+export const REPOSITORY_TREE_ROW_HEIGHT_PX = 28;
 
 export function repositoryTreeDepthIndentPx(depth: number): number {
   return Math.max(0, depth) * REPOSITORY_TREE_DEPTH_INDENT_PX;

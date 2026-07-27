@@ -3860,8 +3860,7 @@
   pointer-events: none !important;
 }
 
-.app-claude-messages--scrolling .app-markdown-streaming-hint__pulse,
-.app-claude-messages--scrolling .app-markdown-streaming-hint__dots i {
+.app-claude-messages--scrolling .app-status-text-shimmer {
   animation-play-state: paused;
 }
 
@@ -4950,20 +4949,62 @@
   box-sizing: border-box;
 }
 
-/* Cursor 风格：默认一行灰色摘要，展开后才露出工具详情 */
+/* Cursor 风格：默认灰色摘要行，展开后才露出工具详情 */
 .app-message-parts__tool-group--compact {
-  gap: 4px;
+  gap: 0;
+}
+
+/* 连续工具摘要栈：滚动时 sticky 互相覆盖；超出预览行数时可内滚 */
+.app-message-parts__tool-group--stack {
+  --app-tool-group-row-height: 22px;
+  --app-tool-group-stack-rows: 5;
+  position: relative;
+}
+
+.app-message-parts__tool-group--stack-scroll {
+  max-height: calc(var(--app-tool-group-row-height) * var(--app-tool-group-stack-rows));
+  overflow-y: auto;
+  overflow-x: hidden;
+  overscroll-behavior: contain;
+  /* 顶部/底部淡出，强化滚动覆盖感 */
+  -webkit-mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 10px,
+    #000 calc(100% - 10px),
+    transparent 100%
+  );
+  mask-image: linear-gradient(
+    to bottom,
+    transparent 0,
+    #000 10px,
+    #000 calc(100% - 10px),
+    transparent 100%
+  );
+}
+
+.app-message-parts__tool-group--stack-scroll.app-message-parts__tool-group--details-open {
+  max-height: none;
+  -webkit-mask-image: none;
+  mask-image: none;
 }
 
 .app-message-parts__tool-group-summary {
+  position: sticky;
+  top: 0;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   max-width: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  min-height: var(--app-tool-group-row-height, 22px);
   margin: 0;
   padding: 1px 0;
   border: none;
-  background: transparent;
+  /* 不透明底：后一行盖住前一行（Cursor 滚动覆盖） */
+  background: var(--ant-color-bg-container);
+  box-shadow: 0 -6px 8px -6px var(--ant-color-bg-container);
   text-align: left;
   cursor: pointer;
   font: inherit;
@@ -4989,6 +5030,47 @@
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+}
+
+/* 执行中 / 生成中：从左到右光波划过 */
+.app-status-text-shimmer {
+  color: transparent;
+  background-image: linear-gradient(
+    90deg,
+    var(--ant-color-text-tertiary) 0%,
+    var(--ant-color-text-tertiary) 36%,
+    color-mix(in srgb, var(--ant-color-text) 88%, #fff) 50%,
+    var(--ant-color-text-tertiary) 64%,
+    var(--ant-color-text-tertiary) 100%
+  );
+  background-size: 220% 100%;
+  background-position: 100% 0;
+  -webkit-background-clip: text;
+  background-clip: text;
+  animation: app-status-text-shimmer 1.7s linear infinite;
+}
+
+@keyframes app-status-text-shimmer {
+  0% {
+    background-position: 100% 0;
+  }
+  100% {
+    background-position: -100% 0;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-status-text-shimmer {
+    color: var(--ant-color-text-tertiary);
+    background-image: none;
+    -webkit-background-clip: border-box;
+    background-clip: border-box;
+    animation: none;
+  }
+}
+
+.app-claude-messages--scrolling .app-status-text-shimmer {
+  animation-play-state: paused;
 }
 
 .app-message-parts__tool-group-summary__diff {
@@ -5020,6 +5102,7 @@
   gap: 0;
   width: 100%;
   padding: 2px 4px 3px;
+  margin: 0 0 4px;
   border-radius: 6px;
   border: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 62%, transparent);
   background: color-mix(in srgb, var(--ant-color-fill-quaternary) 38%, transparent);
@@ -6183,15 +6266,15 @@ button.app-message-part-header:disabled:hover {
 .app-markdown-streaming-hint {
   display: inline-flex;
   align-items: center;
-  gap: 5px;
+  gap: 0;
   margin-top: 4px;
-  padding: 2px 8px 2px 6px;
-  border-radius: 999px;
-  font-size: 11px;
-  line-height: 1.2;
-  color: color-mix(in srgb, var(--ant-color-text-secondary) 88%, var(--ant-color-text-tertiary));
-  background: color-mix(in srgb, var(--ant-color-fill-quaternary) 90%, var(--ant-color-primary-bg));
-  border: 1px solid color-mix(in srgb, var(--ant-color-border-secondary) 86%, var(--ant-color-primary-border));
+  padding: 1px 0;
+  border-radius: 0;
+  font-size: 12px;
+  line-height: 1.45;
+  color: var(--ant-color-text-tertiary);
+  background: transparent;
+  border: none;
   box-shadow: none;
   animation: app-markdown-hint-in 0.28s ease-out both;
 }
@@ -6207,71 +6290,9 @@ button.app-message-part-header:disabled:hover {
   }
 }
 
-.app-markdown-streaming-hint__pulse {
-  width: 7px;
-  height: 7px;
-  border-radius: 50%;
-  flex-shrink: 0;
-  background: color-mix(in srgb, var(--ant-color-primary) 70%, var(--ant-color-text-tertiary));
-  box-shadow: none;
-  animation: app-markdown-pulse-ring 2s ease-out infinite;
-}
-
-@keyframes app-markdown-pulse-ring {
-  0% {
-    transform: scale(0.96);
-    opacity: 0.72;
-  }
-  70% {
-    transform: scale(1);
-    opacity: 0.95;
-  }
-  100% {
-    transform: scale(0.96);
-    opacity: 0.72;
-  }
-}
-
 .app-markdown-streaming-hint__label {
-  font-weight: 460;
+  font-weight: 400;
   letter-spacing: 0.01em;
-}
-
-.app-markdown-streaming-hint__dots {
-  display: inline-flex;
-  align-items: center;
-  gap: 2px;
-  margin-left: 1px;
-}
-
-.app-markdown-streaming-hint__dots i {
-  display: block;
-  width: 3px;
-  height: 3px;
-  border-radius: 50%;
-  background: color-mix(in srgb, var(--ant-color-primary) 72%, var(--ant-color-text-tertiary));
-  opacity: 0.4;
-  animation: app-markdown-dot-wave 1.1s ease-in-out infinite;
-}
-
-.app-markdown-streaming-hint__dots i:nth-child(2) {
-  animation-delay: 0.15s;
-}
-
-.app-markdown-streaming-hint__dots i:nth-child(3) {
-  animation-delay: 0.3s;
-}
-
-@keyframes app-markdown-dot-wave {
-  0%,
-  100% {
-    opacity: 0.4;
-    transform: translateY(0);
-  }
-  40% {
-    opacity: 0.8;
-    transform: translateY(-1px);
-  }
 }
 
 .app-markdown {

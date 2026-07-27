@@ -115,7 +115,7 @@ export function useMainLayoutModes({
   repositories,
   repositoryMainSessionBindings: _repositoryMainSessionBindings,
   sessions,
-  setActiveRepositoryId,
+  setActiveRepositoryId: _setActiveRepositoryId,
   setPaneCount,
   setExtraPanes,
   primaryPaneRuntimeOverride = null,
@@ -641,18 +641,13 @@ export function useMainLayoutModes({
     ],
   );
 
-  /** 侧栏「新开会话」：按多屏规则占用下一空窗格并创建执行会话。 */
+  /** 侧栏「分屏打开会话」：新建隔离会话并占用下一空窗格；主屏与左栏当前仓库保持不变。 */
   const handleNewPaneSessionInNextSlot = useCallback(
     async (repository: Repository, sessionPath?: string) => {
       const path = (sessionPath ?? repository.path).trim();
       if (!path) {
         message.warning("仓库路径为空");
         return;
-      }
-      // 多屏下不切全局 active：各 pane 自管仓库，避免第二屏新开会话污染 primary pane /
-      // 左栏 / 文件树。单屏仍保留"新开会话切到该仓库"语义。
-      if (paneCountRef.current === 1) {
-        setActiveRepositoryId(repository.id);
       }
       try {
         const sessionId = await createSession(path, repositorySessionTabDisplayName(repository), {
@@ -703,21 +698,13 @@ export function useMainLayoutModes({
       handleChangePaneCount,
       inheritMainSessionModel,
       promoteToDualPaneWithSession,
-      setActiveRepositoryId,
       setExtraPanes,
     ],
   );
 
-  /** 工作区侧栏「新开会话」：在工作区根目录创建会话并占用下一窗格。 */
+  /** 工作区侧栏「分屏打开会话」：在工作区根目录创建会话并占用下一窗格；主屏仓库保持不变。 */
   const handleNewPaneProjectSessionInNextSlot = useCallback(
     async (project: ProjectItem) => {
-      const anchorRepo = project.repositoryIds
-        .map((repositoryId) => repositories.find((item) => item.id === repositoryId))
-        .find((item): item is Repository => Boolean(item));
-      // 多屏下不切全局 active：避免工作区新窗格污染 primary pane / 左栏 / 文件树。
-      if (anchorRepo && paneCountRef.current === 1) {
-        setActiveRepositoryId(anchorRepo.id);
-      }
       const plan = planNextPaneSlotPlacement({
         paneCount: paneCountRef.current,
         extraPanes: extraPanesLatestRef.current,
@@ -755,7 +742,6 @@ export function useMainLayoutModes({
       multiPaneLayoutReady,
       projects,
       repositories,
-      setActiveRepositoryId,
     ],
   );
 

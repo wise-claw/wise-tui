@@ -138,6 +138,7 @@ export function LeftSidebar({
   onAddRepositoryToProject,
   onPromoteFloatingRepositoryToProject,
   floatingRepositories = [],
+  workspaceRepositoryOrder = [],
   onRemoveRepository,
   onDetachRepositoryFromProject,
   onUpdateRepositorySddMode,
@@ -146,8 +147,11 @@ export function LeftSidebar({
   onUpdateRepositoryOpenAppId,
   onUpdateProjectOpenAppId,
   onNewPaneSessionForRepository,
+  onOpenSplitSessionForRepository,
   onNewPaneSessionForProject,
+  onOpenSplitSessionForProject,
   onReorderRepositoriesInProject,
+  onReorderWorkspaceRepositories,
   onMoveRepositoryToProject,
   onRepositorySelect,
   onOpenInFinder,
@@ -205,6 +209,7 @@ export function LeftSidebar({
   historyDrawerSessionId,
   onHistoryDrawerSessionIdChange,
   onRestoreHistorySessionAsMain,
+  onArchiveWorkspaceSession,
   onCreateTerminalEmployeeSession,
   onResumeSession,
   onPrepareSessionForMonitorDrawer,
@@ -1039,6 +1044,7 @@ export function LeftSidebar({
           projects={projects}
           repositories={repositories}
           floatingRepositories={floatingRepositories}
+          workspaceRepositoryOrder={workspaceRepositoryOrder}
           activeProjectId={activeProjectId}
           activeWorkspaceFocus={activeWorkspaceFocus}
           activeRepositoryId={activeRepositoryId}
@@ -1124,7 +1130,9 @@ export function LeftSidebar({
             onUpdateProjectOpenAppId ? handleConfigureProjectOpenApp : undefined
           }
           onNewPaneSessionForRepository={onNewPaneSessionForRepository}
+          onOpenSplitSessionForRepository={onOpenSplitSessionForRepository}
           onNewPaneSessionForProject={onNewPaneSessionForProject}
+          onOpenSplitSessionForProject={onOpenSplitSessionForProject}
           onPromoteFloatingRepository={
             onPromoteFloatingRepositoryToProject
               ? (repo) => {
@@ -1146,6 +1154,7 @@ export function LeftSidebar({
           }}
           onDetachRepositoryFromProject={onDetachRepositoryFromProject}
           onReorderRepositoriesInProject={onReorderRepositoriesInProject}
+          onReorderWorkspaceRepositories={onReorderWorkspaceRepositories}
           onMoveRepositoryError={(text, err) => {
             message.error(text);
             console.error(err);
@@ -1159,9 +1168,28 @@ export function LeftSidebar({
           onOpenExecutableTasksForRepository={openExecutableTasksForRepository}
           onStopProjectMainSession={handleStopProjectMainSession}
           onStopRepositoryMainSession={handleStopRepositoryMainSession}
+          workspaceSessions={monitorPanelSessions ?? sessions}
+          activeSessionId={activeSessionId}
+          showWorkspaceRunItems={showLeftSidebarMonitorPanel}
+          employeeMonitorItems={employeeMonitorItems}
+          sessionConversationTaskItems={sessionConversationTaskItems}
+          teamMonitorItems={teamMonitorItems}
+          onSelectSession={_onSelectSession}
+          onRestoreHistorySessionAsMain={onRestoreHistorySessionAsMain}
+          onArchiveSession={onArchiveWorkspaceSession}
+          onHistoryDrawerSessionIdChange={onHistoryDrawerSessionIdChange}
+          onRefreshHistorySessions={onRefreshHistorySessions}
+          onStopEmployeeMonitor={onStopEmployeeMonitor}
+          onStopTeamMonitor={onStopTeamMonitor}
+          onOpenTeamMonitorDetail={onOpenTeamMonitorDetail}
+          onCancelSessionFromMonitor={onCancelSessionFromMonitor}
+          onOpenOmcBatchInvocationDetail={onOpenOmcBatchInvocationDetail}
+          onCancelOmcDirectBatchInvocation={onCancelOmcDirectBatchInvocation}
+          onStopSessionConversationTask={onStopSessionConversationTask}
         />
 
-        {monitorPanelMounted ? (
+        {/* 工作区列表已合并运行项；仅在关闭工作区列表时保留独立运行面板区块 */}
+        {monitorPanelMounted && !showLeftSidebarWorkspaceList ? (
           <LeftSidebarMonitorPanelSlot
             visible={showLeftSidebarMonitorPanel}
             monitorPanelSectionCollapsed={monitorPanelSectionCollapsed}

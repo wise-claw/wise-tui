@@ -11,14 +11,8 @@ export { buildMarkdownDisplayHtml, clearMarkdownDisplayHtmlCache, prepareMarkdow
 
 export function StreamingReplyHint() {
   return (
-    <div className="app-markdown-streaming-hint" role="status" aria-live="polite" aria-label="正在生成回复">
-      <span className="app-markdown-streaming-hint__pulse" aria-hidden />
-      <span className="app-markdown-streaming-hint__label">正在思考</span>
-      <span className="app-markdown-streaming-hint__dots" aria-hidden>
-        <i />
-        <i />
-        <i />
-      </span>
+    <div className="app-markdown-streaming-hint" role="status" aria-live="polite" aria-label="生成中">
+      <span className="app-markdown-streaming-hint__label app-status-text-shimmer">生成中</span>
     </div>
   );
 }

@@ -37,7 +37,7 @@ export const GIT_MULTI_REPO_LAZY_UNMOUNT_MS = 900;
 export const GIT_MULTI_REPO_WATCHER_RESTART_MS = 180;
 
 /** 虚拟列表行高（px），需与 `.git-file-row` 一致。 */
-export const GIT_PANEL_FILE_ROW_HEIGHT = 28;
+export const GIT_PANEL_FILE_ROW_HEIGHT = 30;
 
 export function shouldUseGitVirtualFileList(fileCount: number): boolean {
   return fileCount > GIT_PANEL_VIRTUAL_LIST_THRESHOLD;

@@ -15,7 +15,7 @@ describe("workspaceListLayout", () => {
   });
 
   test("workspaceListContentMaxHeightPx scales by row height", () => {
-    expect(workspaceListContentMaxHeightPx(5)).toBe(24 * 5);
+    expect(workspaceListContentMaxHeightPx(5)).toBe(28 * 5);
     expect(clampWorkspaceListVisibleRows(5)).toBe(5);
   });
 });

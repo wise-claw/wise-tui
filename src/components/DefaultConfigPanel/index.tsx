@@ -668,7 +668,7 @@ export function DefaultConfigPanel() {
           <DefaultConfigRow
             title="工作区树"
             hint="显隐 · 行数"
-            detail="左栏工作区与仓库树；与文件树并存时按可见行数限制高度"
+            detail="左栏仓库工作区列表（展开显示会话与运行项）；与文件树并存时按可见行数限制高度"
             control={
               <div className="app-default-config-row__control--monitor">
                 <div className="app-default-config-monitor-panel__field">
@@ -777,15 +777,15 @@ export function DefaultConfigPanel() {
         </>
       ),
     },
-    // 运行面板：显隐、栏位、行数。
+    // 运行项：显隐控制仓库子树中的终端/派发/工作流；栏位/行数保留兼容独立面板。
     {
       key: "monitor",
-      title: "运行面板",
+      title: "运行项",
       content: (
         <DefaultConfigRow
           title="终端 / 派发 / 工作流"
           hint="显隐 · 栏位 · 行数"
-          detail="终端、派发与工作流合并列表；按可见行数限制高度"
+          detail="默认嵌在左栏仓库工作区展开子树中；关闭工作区树时仍可单独显示运行面板"
           control={
             <div className="app-default-config-row__control--monitor">
               <div className="app-default-config-monitor-panel__field">

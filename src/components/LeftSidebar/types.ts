@@ -94,6 +94,7 @@ export interface LeftSidebarProps {
     projectName: string,
   ) => void | Promise<void>;
   floatingRepositories?: Repository[];
+  workspaceRepositoryOrder?: readonly number[];
   onRemoveRepository?: (repository: Repository) => void | Promise<void>;
   onDetachRepositoryFromProject: (projectId: string, repositoryId: number) => void;
   onUpdateRepositorySddMode?: (repositoryId: number, sddMode: SddMode) => void | Promise<void>;
@@ -105,8 +106,11 @@ export interface LeftSidebarProps {
   onUpdateRepositoryOpenAppId?: (repositoryId: number, openAppId: string | null) => void | Promise<void>;
   onUpdateProjectOpenAppId?: (projectId: string, openAppId: string | null) => void | Promise<void>;
   onNewPaneSessionForRepository?: (repository: Repository) => void;
+  onOpenSplitSessionForRepository?: (repository: Repository) => void;
   onNewPaneSessionForProject?: (project: ProjectItem) => void;
+  onOpenSplitSessionForProject?: (project: ProjectItem) => void;
   onReorderRepositoriesInProject?: (projectId: string, repositoryIds: number[]) => void | Promise<void>;
+  onReorderWorkspaceRepositories?: (repositoryIds: number[]) => void | Promise<void>;
   onMoveRepositoryToProject?: (targetProjectId: string, repositoryId: number) => void | Promise<void>;
   onRepositorySelect: (id: number | null) => void;
   onOpenInFinder: (repository: Repository) => void;
@@ -147,6 +151,7 @@ export interface LeftSidebarProps {
   onSelectSession: (sessionId: string) => void;
   /** 当前对话内的子代理 / 后台任务执行态（左栏 Git 模块下方展示） */
   sessionConversationTaskItems?: readonly SessionConversationTaskItem[];
+  onArchiveWorkspaceSession?: (sessionId: string) => void;
   onStopSessionConversationTask?: (item: SessionConversationTaskItem) => void;
   /** 任务派发历史查询天数（1/3/5/7） */
   executionEnvironmentDispatchHistoryDays?: import("../../constants/executionEnvironmentDispatch").ExecutionEnvironmentDispatchHistoryDays;

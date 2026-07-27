@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1784962731366,
+  "lastScanned": 1785163085958,
   "projectRoot": "/Users/sjl/Documents/github/wise-tui",
   "techStack": {
     "languages": [
@@ -42,8 +42,8 @@
     "runtime": null
   },
   "build": {
-    "buildCommand": "PATH=\"/Users/sjl/.cargo/bin:$PATH\" bunx tsc --noEmit -p /Users/sjl/Documents/github/wise-tui/tsconfig.json 2>&1 | tail -10",
-    "testCommand": "bun test src/components/ChromeDevtoolsMonitor 2>&1 | tail -10",
+    "buildCommand": "npm run build",
+    "testCommand": "npm test",
     "lintCommand": null,
     "devCommand": "npm run dev",
     "scripts": {
@@ -82,11 +82,18 @@
   },
   "customNotes": [],
   "directoryMap": {
+    "browser-extensions": {
+      "path": "browser-extensions",
+      "purpose": null,
+      "fileCount": 1,
+      "lastAccessed": 1785163085948,
+      "keyFiles": []
+    },
     "design": {
       "path": "design",
       "purpose": null,
       "fileCount": 1,
-      "lastAccessed": 1784962731355,
+      "lastAccessed": 1785163085950,
       "keyFiles": [
         "product-ux-engineering-audit-2026-05-14.md"
       ]
@@ -95,7 +102,7 @@
       "path": "dist",
       "purpose": "Distribution/build output",
       "fileCount": 4,
-      "lastAccessed": 1784962731355,
+      "lastAccessed": 1785163085950,
       "keyFiles": [
         "index.html",
         "mascot.html",
@@ -107,21 +114,21 @@
       "path": "docs",
       "purpose": "Documentation",
       "fileCount": 0,
-      "lastAccessed": 1784962731357,
+      "lastAccessed": 1785163085950,
       "keyFiles": []
     },
     "examples": {
       "path": "examples",
       "purpose": "Example code",
       "fileCount": 0,
-      "lastAccessed": 1784962731357,
+      "lastAccessed": 1785163085950,
       "keyFiles": []
     },
     "extras": {
       "path": "extras",
       "purpose": null,
       "fileCount": 1,
-      "lastAccessed": 1784962731357,
+      "lastAccessed": 1785163085950,
       "keyFiles": [
         "check-prd-split-evolution.mjs"
       ]
@@ -130,7 +137,7 @@
       "path": "imgs",
       "purpose": null,
       "fileCount": 6,
-      "lastAccessed": 1784962731357,
+      "lastAccessed": 1785163085950,
       "keyFiles": [
         "add-execution-env.gif",
         "add-workspace.gif",
@@ -143,7 +150,7 @@
       "path": "public",
       "purpose": "Public files",
       "fileCount": 2,
-      "lastAccessed": 1784962731357,
+      "lastAccessed": 1785163085950,
       "keyFiles": [
         "tauri.svg",
         "vite.svg"
@@ -153,7 +160,7 @@
       "path": "scripts",
       "purpose": "Build/utility scripts",
       "fileCount": 7,
-      "lastAccessed": 1784962731357,
+      "lastAccessed": 1785163085950,
       "keyFiles": [
         "_tmp_sim_stream.mts",
         "build-claude-settings-schema-zh.mjs",
@@ -166,7 +173,7 @@
       "path": "src",
       "purpose": "Source code",
       "fileCount": 9,
-      "lastAccessed": 1784962731357,
+      "lastAccessed": 1785163085950,
       "keyFiles": [
         "App.css",
         "App.tsx",
@@ -179,7 +186,7 @@
       "path": "src-tauri",
       "purpose": null,
       "fileCount": 7,
-      "lastAccessed": 1784962731358,
+      "lastAccessed": 1785163085951,
       "keyFiles": [
         "Cargo.lock",
         "Cargo.toml",
@@ -191,19 +198,19 @@
     "dist/assets": {
       "path": "dist/assets",
       "purpose": "Static assets",
-      "fileCount": 284,
-      "lastAccessed": 1784962731358,
+      "fileCount": 291,
+      "lastAccessed": 1785163085951,
       "keyFiles": [
-        "ActiveRepositoryFilesPanel-CXEU2w6M.js",
-        "ApartmentOutlined-2hh88o3v.js",
-        "ApiOutlined-BdNC3HSY.js"
+        "ActiveRepositoryFilesPanel-ZGbyMi8C.js",
+        "ApiOutlined-CLF5fsFu.js",
+        "AppImpl-BFUkRRGl.css"
       ]
     },
     "src/__tests__": {
       "path": "src/__tests__",
       "purpose": "Test files",
       "fileCount": 1,
-      "lastAccessed": 1784962731359,
+      "lastAccessed": 1785163085952,
       "keyFiles": [
         "codexProviderPresets.test.ts"
       ]
@@ -212,7 +219,7 @@
       "path": "src/assets",
       "purpose": "Static assets",
       "fileCount": 1,
-      "lastAccessed": 1784962731359,
+      "lastAccessed": 1785163085952,
       "keyFiles": [
         "react.svg"
       ]
@@ -220,8 +227,8 @@
     "src/components": {
       "path": "src/components",
       "purpose": "UI components",
-      "fileCount": 23,
-      "lastAccessed": 1784962731359,
+      "fileCount": 24,
+      "lastAccessed": 1785163085952,
       "keyFiles": [
         "AppWorkspaceLayout.lazy.ts",
         "AppWorkspaceLayout.tsx",
@@ -232,7 +239,7 @@
       "path": "src/data",
       "purpose": "Data files",
       "fileCount": 5,
-      "lastAccessed": 1784962731359,
+      "lastAccessed": 1785163085952,
       "keyFiles": [
         "claude-code-settings.schema.en.json",
         "claude-code-settings.schema.json",
@@ -242,303 +249,27 @@
   },
   "hotPaths": [
     {
-      "path": "src/mascot.tsx",
-      "accessCount": 41,
-      "lastAccessed": 1785030776276,
-      "type": "file"
-    },
-    {
-      "path": "src/mascot.css",
-      "accessCount": 22,
-      "lastAccessed": 1785030820864,
-      "type": "file"
-    },
-    {
-      "path": "src-tauri/src/wise_mascot.rs",
-      "accessCount": 13,
-      "lastAccessed": 1785030525959,
-      "type": "file"
-    },
-    {
-      "path": "src/components/MascotPet/WisePetSprite.tsx",
-      "accessCount": 11,
-      "lastAccessed": 1785030831599,
-      "type": "file"
-    },
-    {
-      "path": "src/hooks/useClaudeSessions.ts",
-      "accessCount": 10,
-      "lastAccessed": 1785029597939,
-      "type": "file"
-    },
-    {
-      "path": "src/hooks/useRepositoryFileEditor.ts",
-      "accessCount": 9,
-      "lastAccessed": 1785024547431,
-      "type": "file"
-    },
-    {
-      "path": "src-tauri/src/lib_impl.rs",
-      "accessCount": 9,
-      "lastAccessed": 1785030301829,
-      "type": "file"
-    },
-    {
-      "path": "src/components/ClaudeSessions/ClaudeChat.tsx",
-      "accessCount": 8,
-      "lastAccessed": 1785028886256,
-      "type": "file"
-    },
-    {
-      "path": "src/services/wiseMascot.ts",
-      "accessCount": 8,
-      "lastAccessed": 1785029300681,
-      "type": "file"
-    },
-    {
-      "path": "src-tauri/tauri.conf.json",
-      "accessCount": 8,
-      "lastAccessed": 1785030069032,
-      "type": "file"
-    },
-    {
-      "path": "src/AppImpl.tsx",
-      "accessCount": 6,
-      "lastAccessed": 1785024537843,
-      "type": "file"
-    },
-    {
-      "path": "src/components/DingTalkEnterpriseBotPopoverBody.tsx",
-      "accessCount": 6,
-      "lastAccessed": 1785029587206,
-      "type": "file"
-    },
-    {
-      "path": "src/services/codeReview/codeReviewNotification.ts",
-      "accessCount": 6,
-      "lastAccessed": 1785029603226,
-      "type": "file"
-    },
-    {
-      "path": "src/services/tabsStore.ts",
-      "accessCount": 4,
-      "lastAccessed": 1784991454639,
-      "type": "file"
-    },
-    {
-      "path": "src/services/appSettingsStore.ts",
+      "path": "src/components/GitPanel/DiffMode.tsx",
       "accessCount": 3,
-      "lastAccessed": 1784991487416,
+      "lastAccessed": 1785167722772,
       "type": "file"
     },
     {
-      "path": "src-tauri/src/dingtalk_stream_gateway.rs",
-      "accessCount": 3,
-      "lastAccessed": 1785028505506,
-      "type": "file"
-    },
-    {
-      "path": "src/components/ProgressMonitorPanel/index.tsx",
-      "accessCount": 2,
-      "lastAccessed": 1784962778854,
-      "type": "file"
-    },
-    {
-      "path": "src-tauri/src/cursor_agent.rs",
-      "accessCount": 2,
-      "lastAccessed": 1784963747368,
-      "type": "file"
-    },
-    {
-      "path": "src-tauri/src/wise_push.rs",
-      "accessCount": 2,
-      "lastAccessed": 1785028491241,
-      "type": "file"
-    },
-    {
-      "path": "src-tauri/src/main_window.rs",
-      "accessCount": 2,
-      "lastAccessed": 1785029338686,
-      "type": "file"
-    },
-    {
-      "path": "src/components/ProgressMonitorPanel/ExecutionEnvironmentDispatchHistoryDaysDropdown.tsx",
+      "path": "src/components/LeftSidebar/SidebarIcons.tsx",
       "accessCount": 1,
-      "lastAccessed": 1784962766797,
+      "lastAccessed": 1785167296756,
       "type": "file"
     },
     {
-      "path": "src/components/LeftSidebar/SessionConversationTasksPanel.tsx",
+      "path": "src/components/GitPanel/index.css",
       "accessCount": 1,
-      "lastAccessed": 1784962772518,
+      "lastAccessed": 1785167299802,
       "type": "file"
     },
     {
-      "path": "src/stores/executionEnvironmentDispatchStore.ts",
+      "path": "src/components/LeftSidebar/RepositoryWorkspaceSessionTree.tsx",
       "accessCount": 1,
-      "lastAccessed": 1784962772839,
-      "type": "file"
-    },
-    {
-      "path": "src/hooks/useExecutionEnvironmentDispatchHistoryDays.ts",
-      "accessCount": 1,
-      "lastAccessed": 1784962791074,
-      "type": "file"
-    },
-    {
-      "path": "src/services/wiseDefaultConfigStore.ts",
-      "accessCount": 1,
-      "lastAccessed": 1784962797264,
-      "type": "file"
-    },
-    {
-      "path": "src/components/DefaultConfigPanel/index.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1784962797672,
-      "type": "file"
-    },
-    {
-      "path": "src/constants/executionEnvironmentDispatch.ts",
-      "accessCount": 1,
-      "lastAccessed": 1784962802613,
-      "type": "file"
-    },
-    {
-      "path": "src/utils/tauriEnv.ts",
-      "accessCount": 1,
-      "lastAccessed": 1784991434459,
-      "type": "file"
-    },
-    {
-      "path": "src-tauri/src/code_review_commands.rs",
-      "accessCount": 1,
-      "lastAccessed": 1785024524794,
-      "type": "file"
-    },
-    {
-      "path": "src/components/CodeReviewPanel/CodeReviewDrawer.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1785024524875,
-      "type": "file"
-    },
-    {
-      "path": "src/components/CodeReviewPanel/codeReviewDrawer.css",
-      "accessCount": 1,
-      "lastAccessed": 1785024525082,
-      "type": "file"
-    },
-    {
-      "path": "src/components/CodeReviewPanel/index.ts",
-      "accessCount": 1,
-      "lastAccessed": 1785024525252,
-      "type": "file"
-    },
-    {
-      "path": "src/hooks/useCodeReviewFixDispatch.ts",
-      "accessCount": 1,
-      "lastAccessed": 1785024525549,
-      "type": "file"
-    },
-    {
-      "path": "src/services/codeReview/codeReviewIpc.ts",
-      "accessCount": 1,
-      "lastAccessed": 1785024526084,
-      "type": "file"
-    },
-    {
-      "path": "src/services/codeReview/index.ts",
-      "accessCount": 1,
-      "lastAccessed": 1785024526136,
-      "type": "file"
-    },
-    {
-      "path": "src/services/codeReview/parseCodeReviewResult.test.ts",
-      "accessCount": 1,
-      "lastAccessed": 1785024526337,
-      "type": "file"
-    },
-    {
-      "path": "src/services/codeReview/parseCodeReviewResult.ts",
-      "accessCount": 1,
-      "lastAccessed": 1785024526509,
-      "type": "file"
-    },
-    {
-      "path": "src/services/codeReview/runCodeReview.ts",
-      "accessCount": 1,
-      "lastAccessed": 1785024526849,
-      "type": "file"
-    },
-    {
-      "path": "src/types/codeReview.ts",
-      "accessCount": 1,
-      "lastAccessed": 1785024527026,
-      "type": "file"
-    },
-    {
-      "path": "src-tauri/src/wise_paths.rs",
-      "accessCount": 1,
-      "lastAccessed": 1785024530890,
-      "type": "file"
-    },
-    {
-      "path": "src/services/sessionEngineInvocation.ts",
-      "accessCount": 1,
-      "lastAccessed": 1785024531108,
-      "type": "file"
-    },
-    {
-      "path": "src/utils/claudeInvocationText.ts",
-      "accessCount": 1,
-      "lastAccessed": 1785024531323,
-      "type": "file"
-    },
-    {
-      "path": "src/constants/sessionExecutionEngine.ts",
-      "accessCount": 1,
-      "lastAccessed": 1785024538154,
-      "type": "file"
-    },
-    {
-      "path": "src/components/AppWorkspaceLayout.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1785024553054,
-      "type": "file"
-    },
-    {
-      "path": "src/utils/safeTauriUnlisten.ts",
-      "accessCount": 1,
-      "lastAccessed": 1785027906725,
-      "type": "file"
-    },
-    {
-      "path": "mascot.html",
-      "accessCount": 1,
-      "lastAccessed": 1785027978302,
-      "type": "file"
-    },
-    {
-      "path": "src-tauri/src/wise_db.rs",
-      "accessCount": 1,
-      "lastAccessed": 1785028059105,
-      "type": "file"
-    },
-    {
-      "path": "src-tauri/capabilities/default.json",
-      "accessCount": 1,
-      "lastAccessed": 1785028180306,
-      "type": "file"
-    },
-    {
-      "path": "src-tauri/migrations/002_mascot_prefs_toast.sql",
-      "accessCount": 1,
-      "lastAccessed": 1785028305927,
-      "type": "file"
-    },
-    {
-      "path": "src/components/ClaudeSessions/Topbar.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1785029391002,
+      "lastAccessed": 1785167321296,
       "type": "file"
     }
   ],
