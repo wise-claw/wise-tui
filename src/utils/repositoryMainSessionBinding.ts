@@ -115,6 +115,32 @@ export function isRepositoryMainSessionTab(
   return !employeeName;
 }
 
+/**
+ * 手动「新建会话」时可复用的空白主会话：同仓、无消息、空草稿、非运行中、非侧会话。
+ * 若已有此类「新会话」，应切换过去而不是再开一条。
+ */
+export function findReusableEmptyMainSession(
+  sessions: readonly ClaudeSession[],
+  repositoryPath: string,
+  mainOwnerAgentName?: string | null,
+): ClaudeSession | null {
+  const pathKey = normalizeRepositoryPathKey(repositoryPath);
+  if (!pathKey) return null;
+  let best: ClaudeSession | null = null;
+  for (const session of sessions) {
+    if (session.isSide) continue;
+    if (session.status === "running" || session.status === "connecting") continue;
+    if (session.messages.length > 0) continue;
+    if (session.pendingPrompt?.trim()) continue;
+    if (session.diskPreview?.trim()) continue;
+    if (!isRepositoryMainSessionTab(session, pathKey, mainOwnerAgentName)) continue;
+    if (!best || session.createdAt > best.createdAt) {
+      best = session;
+    }
+  }
+  return best;
+}
+
 export function resolveMainOwnerAgentNameForRepositoryPath(
   repositories: Repository[],
   repositoryPath: string,

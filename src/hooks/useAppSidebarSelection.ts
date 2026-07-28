@@ -30,6 +30,7 @@ import {
 import { pickFirstWorkspaceSidebarHistorySession } from "../utils/repositoryWorkspaceTree";
 import {
   isSessionBoundAsRepositoryMain,
+  findReusableEmptyMainSession,
   projectMainSessionBindingKey,
   resolveBoundMainSessionId,
   resolveMainOwnerAgentNameForRepositoryPath,
@@ -221,6 +222,21 @@ export function useAppSidebarSelection({
     opts?: { carryDraft?: boolean },
   ): Promise<string> {
     const target = resolveSidebarSelectionTarget({ repository });
+    const ownerName = resolveMainOwnerAgentNameForRepositoryPath(repositories, target.path);
+    const reusable = findReusableEmptyMainSession(
+      sessionsLatestRef.current,
+      target.path,
+      ownerName,
+    );
+    if (reusable) {
+      const carryDraftFromId = opts?.carryDraft ? priorActiveId ?? undefined : undefined;
+      if (carryDraftFromId && carryDraftFromId !== reusable.id) {
+        await migratePromptContextSessionKey(carryDraftFromId, reusable.id);
+      }
+      switchSessionIfNeeded(reusable.id);
+      void bindRepositoryMainSession(target.path, reusable.id);
+      return reusable.id;
+    }
     const carryDraftFromId = opts?.carryDraft ? priorActiveId ?? undefined : undefined;
     const id = await createSession(target.path, target.displayName, {
       immediateActivate: true,
@@ -247,6 +263,16 @@ export function useAppSidebarSelection({
     if (!anchor.path) {
       message.warning("该 Workspace 缺少根目录，请先配置 rootPath");
       return null;
+    }
+    const reusable = findReusableEmptyMainSession(sessionsLatestRef.current, anchor.path, null);
+    if (reusable) {
+      const carryDraftFromId = opts?.carryDraft ? priorActiveId ?? undefined : undefined;
+      if (carryDraftFromId && carryDraftFromId !== reusable.id) {
+        await migratePromptContextSessionKey(carryDraftFromId, reusable.id);
+      }
+      switchSessionIfNeeded(reusable.id);
+      void bindRepositoryMainSession(projectMainSessionBindingKey(project.id), reusable.id);
+      return reusable.id;
     }
     const carryDraftFromId = opts?.carryDraft ? priorActiveId ?? undefined : undefined;
     const id = await createSession(anchor.path, anchor.displayName, {
@@ -447,15 +473,27 @@ export function useAppSidebarSelection({
   }
 
   async function handleManualNewRepositorySession(repository: Repository): Promise<void> {
-    startTransition(() => {
-      viewMode.enter({ kind: "chat" });
-    });
-    const id = await createAndBindRepositoryMainSession(
-      repository,
-      activeSessionIdLatestRef.current,
-      { carryDraft: true },
-    );
-    jumpToSessionWithRepository(id);
+    const target = resolveSidebarSelectionTarget({ repository });
+    const flightKey = `manual-new-repo:${target.path}`;
+    if (ensureSessionInFlightRef.current === flightKey) {
+      return;
+    }
+    ensureSessionInFlightRef.current = flightKey;
+    try {
+      startTransition(() => {
+        viewMode.enter({ kind: "chat" });
+      });
+      const id = await createAndBindRepositoryMainSession(
+        repository,
+        activeSessionIdLatestRef.current,
+        { carryDraft: true },
+      );
+      jumpToSessionWithRepository(id);
+    } finally {
+      if (ensureSessionInFlightRef.current === flightKey) {
+        ensureSessionInFlightRef.current = null;
+      }
+    }
   }
 
   async function handleManualNewProjectSession(project: ProjectItem): Promise<void> {
@@ -468,25 +506,36 @@ export function useAppSidebarSelection({
       message.warning("该 Workspace 缺少根目录，请先配置 rootPath");
       return;
     }
-    const isStandaloneTrellisProject = project.id.startsWith("repo:");
-    startTransition(() => {
-      viewMode.enter({ kind: "chat" });
-      if (repos[0]) {
-        if (isStandaloneTrellisProject) {
-          setActiveRepositoryWithOwner(repos[0].id);
-        } else {
+    const flightKey = `manual-new-project:${project.id}:${anchor.path}`;
+    if (ensureSessionInFlightRef.current === flightKey) {
+      return;
+    }
+    ensureSessionInFlightRef.current = flightKey;
+    try {
+      const isStandaloneTrellisProject = project.id.startsWith("repo:");
+      startTransition(() => {
+        viewMode.enter({ kind: "chat" });
+        if (repos[0]) {
+          if (isStandaloneTrellisProject) {
+            setActiveRepositoryWithOwner(repos[0].id);
+          } else {
+            setActiveProjectId(project.id);
+            setActiveRepositoryId(repos[0].id);
+          }
+        } else if (!isStandaloneTrellisProject) {
           setActiveProjectId(project.id);
-          setActiveRepositoryId(repos[0].id);
         }
-      } else if (!isStandaloneTrellisProject) {
-        setActiveProjectId(project.id);
+      });
+      const id = await createAndBindProjectMainSession(project, activeSessionIdLatestRef.current, {
+        carryDraft: true,
+      });
+      if (id) {
+        jumpToSessionWithRepository(id);
       }
-    });
-    const id = await createAndBindProjectMainSession(project, activeSessionIdLatestRef.current, {
-      carryDraft: true,
-    });
-    if (id) {
-      jumpToSessionWithRepository(id);
+    } finally {
+      if (ensureSessionInFlightRef.current === flightKey) {
+        ensureSessionInFlightRef.current = null;
+      }
     }
   }
 

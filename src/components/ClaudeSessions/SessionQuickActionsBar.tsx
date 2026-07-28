@@ -109,12 +109,17 @@ export const SessionQuickActionsBar = memo(function SessionQuickActionsBar({
   const invokeCreateNewSession = useCallback(() => {
     if (creatingNewSession || createInvokeLockRef.current) return;
     createInvokeLockRef.current = true;
-    queueMicrotask(() => {
-      createInvokeLockRef.current = false;
-    });
     prefetchNewSessionSurface();
     onCreateNewSession?.();
+    // Lock until parent reports creatingNewSession, or briefly if sync no-op.
+    // Do NOT unlock on microtask — pointerdown+click would double-fire create.
   }, [creatingNewSession, onCreateNewSession]);
+
+  useEffect(() => {
+    if (!creatingNewSession) {
+      createInvokeLockRef.current = false;
+    }
+  }, [creatingNewSession]);
 
   const handleNewSessionPointerDown = useCallback(
     (event: ReactPointerEvent<HTMLButtonElement>) => {
@@ -124,10 +129,6 @@ export const SessionQuickActionsBar = memo(function SessionQuickActionsBar({
     },
     [creatingNewSession, invokeCreateNewSession],
   );
-
-  const handleNewSessionClick = useCallback(() => {
-    invokeCreateNewSession();
-  }, [invokeCreateNewSession]);
 
   const renderPill = (id: SessionQuickActionId): ReactNode => {
     const meta = resolveSessionQuickActionMeta(id, catalog);
@@ -145,7 +146,6 @@ export const SessionQuickActionsBar = memo(function SessionQuickActionsBar({
           onMouseEnter={prefetchNewSessionSurface}
           onFocus={prefetchNewSessionSurface}
           onPointerDown={handleNewSessionPointerDown}
-          onClick={handleNewSessionClick}
         >
           <span className="app-session-quick-pill__icon app-session-quick-pill__icon--blue" aria-hidden>
             {creatingNewSession ? <LoadingOutlined spin /> : <CommentOutlined />}

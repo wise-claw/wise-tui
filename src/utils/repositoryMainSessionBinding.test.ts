@@ -2,6 +2,7 @@ import { describe, expect, it } from "bun:test";
 import type { ClaudeSession, Repository } from "../types";
 import {
   isRepositoryMainSessionTab,
+  findReusableEmptyMainSession,
   projectMainSessionBindingKey,
   parseRepositorySideSessionBindings,
   repositoryPathsMatch,
@@ -13,7 +14,7 @@ import {
   resolveMainOwnerAgentNameForRepositoryPath,
 } from "./repositoryMainSessionBinding";
 
-function session(path: string, repositoryName: string): ClaudeSession {
+function session(path: string, repositoryName: string, overrides: Partial<ClaudeSession> = {}): ClaudeSession {
   return {
     id: "s1",
     claudeSessionId: null,
@@ -24,6 +25,7 @@ function session(path: string, repositoryName: string): ClaudeSession {
     messages: [],
     createdAt: 1,
     pendingPrompt: "",
+    ...overrides,
   };
 }
 
@@ -251,5 +253,36 @@ describe("parseRepositorySideSessionBindings", () => {
     expect(parsed["C:/work/repo"]).toBe("side-2");
     expect(parsed["/work/empty"]).toBeUndefined();
     expect(parsed["/work/bad"]).toBeUndefined();
+  });
+});
+
+describe("findReusableEmptyMainSession", () => {
+  const path = "/work/wise-tui";
+
+  it("returns newest empty idle main session for the repository", () => {
+    const older = session(path, "wise-tui", { id: "old", createdAt: 1 });
+    const newer = session(path, "wise-tui", { id: "new", createdAt: 9 });
+    expect(findReusableEmptyMainSession([older, newer], path)?.id).toBe("new");
+  });
+
+  it("skips sessions that already have messages, draft, disk preview, or are running", () => {
+    const used = session(path, "wise-tui", {
+      id: "used",
+      messages: [{ id: 1, role: "user", content: "hi", timestamp: "1" }],
+    });
+    const draft = session(path, "wise-tui", { id: "draft", pendingPrompt: "wip" });
+    const disk = session(path, "wise-tui", { id: "disk", diskPreview: "hello" });
+    const running = session(path, "wise-tui", { id: "run", status: "running" });
+    const empty = session(path, "wise-tui", { id: "empty", createdAt: 2 });
+    expect(
+      findReusableEmptyMainSession([used, draft, disk, running, empty], path)?.id,
+    ).toBe("empty");
+  });
+
+  it("skips employee / side sessions", () => {
+    const employee = session(path, "wise-tui/员工:ex", { id: "emp" });
+    const side = session(path, "wise-tui", { id: "side", isSide: true });
+    const empty = session(path, "wise-tui", { id: "empty" });
+    expect(findReusableEmptyMainSession([employee, side, empty], path)?.id).toBe("empty");
   });
 });
