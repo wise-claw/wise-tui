@@ -18,6 +18,36 @@ describe("joinAssistantTextPartBodies", () => {
     expect(joinAssistantTextPartBodies(["党", "费", "申", "请"])).toBe("党费申请");
   });
 
+  test("does not cascade paragraph breaks after CJK-to-latin transition", () => {
+    expect(
+      joinAssistantTextPartBodies([
+        "党",
+        "费",
+        "申",
+        "请",
+        "源",
+        "页",
+        "与",
+        "目",
+        "标",
+        "Inc",
+        "ubation",
+        "Fund",
+        "Detail",
+      ]),
+    ).toBe("党费申请源页与目标 Incubation Fund Detail");
+  });
+
+  test("joins longer CJK shards without poisoning later tokens", () => {
+    expect(joinAssistantTextPartBodies(["党", "费申请", "源页", "与目标"])).toBe("党费申请源页与目标");
+  });
+
+  test("keeps phrase paragraphs separate even when followed by latin shards", () => {
+    expect(joinAssistantTextPartBodies(["看一下源页结构", "下一步再改"])).toBe(
+      "看一下源页结构\n\n下一步再改",
+    );
+  });
+
   test("trims inter-part whitespace like buildMergedTextGroups", () => {
     expect(joinAssistantTextPartBodies(["intro  ", "\n\n  总结"])).toBe("intro\n\n总结");
   });
@@ -27,10 +57,21 @@ describe("isLikelyStreamTextFragment", () => {
   test("detects latin and CJK stream shards", () => {
     expect(isLikelyStreamTextFragment("Inc", "ubation")).toBe(true);
     expect(isLikelyStreamTextFragment("党", "费")).toBe(true);
+    expect(isLikelyStreamTextFragment("党", "费申请")).toBe(true);
+  });
+
+  test("detects CJK to latin mid-sentence shards", () => {
+    expect(isLikelyStreamTextFragment("目标", "Inc")).toBe(true);
+    expect(isLikelyStreamTextFragment("Incubation", "详情")).toBe(false);
   });
 
   test("keeps phrase paragraphs separate", () => {
     expect(isLikelyStreamTextFragment("intro 段一", "intro 段二")).toBe(false);
+  });
+
+  test("ignores whitespace already present earlier in prev when checking boundary", () => {
+    // 累积串含空格时仍应按接合处判定（供相邻段比较路径）
+    expect(isLikelyStreamTextFragment("看一下 目标", "页")).toBe(true);
   });
 });
 

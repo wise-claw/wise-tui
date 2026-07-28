@@ -4369,8 +4369,9 @@
   flex-direction: column;
   gap: 0;
   min-width: 0;
-  max-width: 100%;
-  width: 100%;
+  /* 与 message-body 一致：避免 100% 在 WKWebView 下百分比宽度循环塌缩 */
+  max-width: none;
+  width: auto;
 }
 
 .app-claude-messages .app-message-parts {
@@ -4564,11 +4565,14 @@
   color: var(--ant-color-text);
 }
 
-/* 主会话：首行行盒高度对齐 22px 头像，保证「第一行 ↔ 头部」上下对齐 */
+/* 主会话：首行行盒高度对齐 22px 头像，保证「第一行 ↔ 头部」上下对齐。
+   勿用 width/max-width:100%：WKWebView（含 M 系列）在 flex/grid 不定宽下
+   可能把百分比算成循环依赖，首段正文塌成中文 min-content（一字一行）。 */
 .app-claude-messages .app-message-part--text {
   display: block;
-  width: 100%;
-  max-width: 100%;
+  width: auto;
+  max-width: none;
+  min-width: 0;
   padding: 0;
   border: none;
   border-radius: 0;
@@ -4587,11 +4591,12 @@
   line-height: 22px;
 }
 
-/* 用户消息：无框纯文本左对齐 */
+/* 用户消息：无框纯文本左对齐（同助手：避免 100% 宽度在 WKWebView 塌缩） */
 .app-claude-messages .app-claude-message--user .app-message-part--text {
   display: block;
-  width: 100%;
-  max-width: 100%;
+  width: auto;
+  max-width: none;
+  min-width: 0;
   padding: 0;
   border: none;
   border-radius: 0;
