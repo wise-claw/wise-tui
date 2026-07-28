@@ -127,7 +127,8 @@
 
 .app-left-sidebar-scroll-region--scrolling .app-monitor-panel__subagent-status-svg--spin,
 .app-left-sidebar-scroll-region--scrolling .app-monitor-panel__subagent-status-svg--pulse,
-.app-left-sidebar-scroll-region--scrolling .app-monitor-panel__status-spinner-svg {
+.app-left-sidebar-scroll-region--scrolling .app-monitor-panel__status-spinner-svg,
+.app-left-sidebar-scroll-region--scrolling .app-workspace-session-status__svg--spin {
   animation-play-state: paused;
 }
 

@@ -14,6 +14,7 @@ import {
   formatWorkspaceSidebarRelativeTime,
   workspaceSidebarSessionUpdatedAt,
 } from "../../utils/repositoryWorkspaceTree";
+import { WorkspaceSessionRowStatusSlot } from "./WorkspaceSessionRowStatus";
 import "./RepositoryWorkspaceSessionTree.css";
 
 export type RepositoryWorkspaceSessionTreeProps = {
@@ -134,13 +135,13 @@ function RepositoryWorkspaceSessionTreeInner(props: RepositoryWorkspaceSessionTr
                 }
               }}
             >
+              <WorkspaceSessionRowStatusSlot liveStatus={item.status} />
               <span className="app-workspace-session-tree__kind" data-kind="terminal">
                 终端
               </span>
               <span className="app-workspace-session-tree__title" title={item.name}>
                 {item.name}
               </span>
-              {running ? <span className="app-workspace-session-tree__dot" aria-label="运行中" /> : null}
               <span className="app-workspace-session-tree__time">
                 {formatWorkspaceSidebarRelativeTime(item.updatedAt)}
               </span>
@@ -194,13 +195,13 @@ function RepositoryWorkspaceSessionTreeInner(props: RepositoryWorkspaceSessionTr
                 if (sid) props.onHistoryDrawerSessionIdChange?.(sid);
               }}
             >
+              <WorkspaceSessionRowStatusSlot liveStatus={item.status} />
               <span className="app-workspace-session-tree__kind" data-kind="dispatch">
                 派发
               </span>
               <span className="app-workspace-session-tree__title" title={item.label}>
                 {item.label}
               </span>
-              {running ? <span className="app-workspace-session-tree__dot" aria-label="运行中" /> : null}
               <span className="app-workspace-session-tree__time">
                 {formatWorkspaceSidebarRelativeTime(item.updatedAt)}
               </span>
@@ -247,13 +248,13 @@ function RepositoryWorkspaceSessionTreeInner(props: RepositoryWorkspaceSessionTr
               className={`app-workspace-session-tree__row${running ? " app-workspace-session-tree__row--running" : ""}`}
               onClick={() => props.onOpenTeamMonitorDetail?.(item.workflowId)}
             >
+              <WorkspaceSessionRowStatusSlot liveStatus={item.status} />
               <span className="app-workspace-session-tree__kind" data-kind="workflow">
                 工作流
               </span>
               <span className="app-workspace-session-tree__title" title={item.workflowName}>
                 {item.workflowName}
               </span>
-              {running ? <span className="app-workspace-session-tree__dot" aria-label="运行中" /> : null}
               <span className="app-workspace-session-tree__time">
                 {formatWorkspaceSidebarRelativeTime(item.updatedAt)}
               </span>
@@ -293,10 +294,10 @@ function RepositoryWorkspaceSessionTreeInner(props: RepositoryWorkspaceSessionTr
             className={`app-workspace-session-tree__row${isActive ? " app-workspace-session-tree__row--active" : ""}${running ? " app-workspace-session-tree__row--running" : ""}`}
             onClick={() => activateSession(session.id, props)}
           >
+            <WorkspaceSessionRowStatusSlot liveStatus={session.status} />
             <span className="app-workspace-session-tree__title" title={title}>
               {title}
             </span>
-            {running ? <span className="app-workspace-session-tree__dot" aria-label="运行中" /> : null}
             <span className="app-workspace-session-tree__meta">
               <span className="app-workspace-session-tree__time">
                 {formatWorkspaceSidebarRelativeTime(updatedAt)}
