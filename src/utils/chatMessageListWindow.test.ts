@@ -122,6 +122,17 @@ describe("findChatMessageRowIndexByMessageId", () => {
     expect(findChatMessageRowIndexByMessageId(rows, 42)).toBe(1);
     expect(findChatMessageRowIndexByMessageId(rows, 99)).toBe(-1);
   });
+
+  test("finds coalesced member message id", () => {
+    const coalesced: ChatMessageListRow = {
+      ...msgRow(2, "2:1"),
+      memberMessageIds: [2, 3, 4],
+      originalIndexes: [1, 2, 3],
+    };
+    const rows = [msgRow(1), coalesced];
+    expect(findChatMessageRowIndexByMessageId(rows, 3)).toBe(1);
+    expect(findChatMessageRowIndexByMessageId(rows, 4)).toBe(1);
+  });
 });
 
 describe("resolveWindowSizing", () => {

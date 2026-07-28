@@ -11,8 +11,8 @@ export { buildMarkdownDisplayHtml, clearMarkdownDisplayHtmlCache, prepareMarkdow
 
 export function StreamingReplyHint() {
   return (
-    <div className="app-markdown-streaming-hint" role="status" aria-live="polite" aria-label="生成中">
-      <span className="app-markdown-streaming-hint__label app-status-text-shimmer">生成中</span>
+    <div className="app-markdown-streaming-hint" role="status" aria-live="polite" aria-label="思考中">
+      <span className="app-markdown-streaming-hint__label app-status-text-shimmer">思考中</span>
     </div>
   );
 }
@@ -29,11 +29,11 @@ export function Markdown({ text, streaming, showPendingHint, className }: Props)
   const isStreaming = Boolean(streaming);
   const showHint = showPendingHint ?? isStreaming;
   const containerRef = useRef<HTMLDivElement>(null);
-  const displaySource = useMarkdownDisplaySource(safeText, isStreaming);
+  const { source: displaySource, plain: streamingPlain } = useMarkdownDisplaySource(safeText, isStreaming);
 
   useLayoutEffect(() => {
     const container = containerRef.current;
-    if (!container || isStreaming || !displaySource) return;
+    if (!container || isStreaming || !displaySource || streamingPlain) return;
 
     let cancelled = false;
     void renderMermaidInContainer(container).finally(() => {
@@ -43,7 +43,7 @@ export function Markdown({ text, streaming, showPendingHint, className }: Props)
     return () => {
       cancelled = true;
     };
-  }, [displaySource, isStreaming]);
+  }, [displaySource, isStreaming, streamingPlain]);
 
   useEffect(() => {
     const container = containerRef.current;
@@ -67,7 +67,13 @@ export function Markdown({ text, streaming, showPendingHint, className }: Props)
       className={`app-markdown-host${showHint ? " app-markdown-host--streaming" : ""}${isContinuation ? " app-markdown-host--continuation" : ""}`}
     >
       <div ref={containerRef} className={`app-markdown ${className ?? ""}`} suppressHydrationWarning>
-        {displaySource ? <MarkdownBody source={displaySource} streaming={isStreaming} /> : null}
+        {displaySource ? (
+          streamingPlain ? (
+            <pre className="app-markdown-streaming-plain">{displaySource}</pre>
+          ) : (
+            <MarkdownBody source={displaySource} streaming={isStreaming} />
+          )
+        ) : null}
       </div>
       {showHint && <StreamingReplyHint />}
     </div>

@@ -12,6 +12,7 @@ import {
   isDisplayNoiseUserMessageText,
   isRenderableMessagePart,
   isSystemMessageDisplayNoiseText,
+  isToolActivityOnlyMessage,
   parseDispatchRecord,
   resolveChatMessageCopyText,
   resolveChatMessageComposerInsertPayload,
@@ -234,6 +235,67 @@ describe("isRenderableMessagePart", () => {
         status: "running",
       }),
     ).toBe(true);
+  });
+});
+
+describe("isToolActivityOnlyMessage", () => {
+  test("true when every renderable part is tool_use", () => {
+    expect(
+      isToolActivityOnlyMessage({
+        id: 1,
+        role: "assistant",
+        content: "",
+        timestamp: 0,
+        parts: [
+          {
+            type: "tool_use",
+            id: "t1",
+            name: "Read",
+            input: { file_path: "a.ts" },
+            status: "completed",
+          },
+        ],
+      }),
+    ).toBe(true);
+  });
+
+  test("false when text or reasoning is visible", () => {
+    expect(
+      isToolActivityOnlyMessage({
+        id: 2,
+        role: "assistant",
+        content: "",
+        timestamp: 0,
+        parts: [
+          {
+            type: "tool_use",
+            id: "t1",
+            name: "Read",
+            input: { file_path: "a.ts" },
+            status: "completed",
+          },
+          { type: "text", text: "说明" },
+        ],
+      }),
+    ).toBe(false);
+    expect(
+      isToolActivityOnlyMessage({
+        id: 3,
+        role: "assistant",
+        content: "",
+        timestamp: 0,
+        parts: [
+          { type: "reasoning", text: "想一下" },
+          {
+            type: "tool_use",
+            id: "t1",
+            name: "Bash",
+            input: { command: "ls" },
+            status: "completed",
+          },
+        ],
+      }),
+    ).toBe(false);
   });
 });
 

@@ -259,6 +259,118 @@ describe("buildChatMessageListRows", () => {
     });
     expect(runningRows.map((r) => r.kind)).toEqual(["message", "message"]);
   });
+
+  test("coalesces consecutive tool-only assistant rows into one tool group row", () => {
+    const messages = [
+      msg({ id: 1, role: "user", content: "look" }),
+      msg({
+        id: 2,
+        role: "assistant",
+        parts: [
+          {
+            type: "tool_use",
+            id: "r1",
+            name: "Read",
+            status: "completed",
+            input: { file_path: "/repo/a.tsx" },
+            output: "a",
+          },
+        ],
+      }),
+      msg({
+        id: 3,
+        role: "assistant",
+        parts: [
+          {
+            type: "tool_use",
+            id: "r2",
+            name: "Read",
+            status: "completed",
+            input: { file_path: "/repo/b.tsx" },
+            output: "b",
+          },
+        ],
+      }),
+      msg({
+        id: 4,
+        role: "assistant",
+        parts: [
+          {
+            type: "tool_use",
+            id: "b1",
+            name: "Bash",
+            status: "completed",
+            input: { command: "ls" },
+            output: "ok",
+          },
+        ],
+      }),
+      msg({
+        id: 5,
+        role: "assistant",
+        parts: [{ type: "text", text: "看到了这些文件" }],
+      }),
+    ];
+    const rows = buildChatMessageListRows(messages, {
+      sessionStatus: "idle",
+      showListEndThinkingHint: false,
+    });
+    expect(rows.map((r) => r.kind)).toEqual(["message", "message", "message"]);
+    expect(rows[1]!.kind === "message" && rows[1]!.msg.id).toBe(2);
+    expect(rows[1]!.kind === "message" && rows[1]!.memberMessageIds).toEqual([2, 3, 4]);
+    expect(rows[1]!.kind === "message" && rows[1]!.originalIndexes).toEqual([1, 2, 3]);
+    expect(
+      rows[1]!.kind === "message" &&
+        rows[1]!.msg.parts.filter((p) => p.type === "tool_use").map((p) => (p as { id: string }).id),
+    ).toEqual(["r1", "r2", "b1"]);
+    expect(rows[2]!.kind === "message" && rows[2]!.msg.id).toBe(5);
+  });
+
+  test("does not coalesce tool rows across assistant text", () => {
+    const messages = [
+      msg({
+        id: 1,
+        role: "assistant",
+        parts: [
+          {
+            type: "tool_use",
+            id: "r1",
+            name: "Read",
+            status: "completed",
+            input: { file_path: "/repo/a.tsx" },
+            output: "a",
+          },
+        ],
+      }),
+      msg({
+        id: 2,
+        role: "assistant",
+        parts: [{ type: "text", text: "中间说明" }],
+      }),
+      msg({
+        id: 3,
+        role: "assistant",
+        parts: [
+          {
+            type: "tool_use",
+            id: "r2",
+            name: "Read",
+            status: "completed",
+            input: { file_path: "/repo/b.tsx" },
+            output: "b",
+          },
+        ],
+      }),
+    ];
+    const rows = buildChatMessageListRows(messages, {
+      sessionStatus: "idle",
+      showListEndThinkingHint: false,
+    });
+    expect(rows).toHaveLength(3);
+    expect(rows.map((r) => (r.kind === "message" ? r.msg.id : r.kind))).toEqual([1, 2, 3]);
+    expect(rows[0]!.kind === "message" && rows[0]!.memberMessageIds).toBeUndefined();
+    expect(rows[2]!.kind === "message" && rows[2]!.memberMessageIds).toBeUndefined();
+  });
 });
 
 describe("tryPatchChatMessageListRowsTail", () => {
@@ -457,6 +569,68 @@ describe("tryPatchChatMessageListRowsTail", () => {
         initialRows,
         options,
         prevFolded,
+      ),
+    ).toBeNull();
+  });
+
+  test("returns null when last message is already inside a coalesced tool activity group", () => {
+    const prevMessages = [
+      msg({
+        id: 1,
+        role: "assistant",
+        parts: [
+          {
+            type: "tool_use",
+            id: "r1",
+            name: "Read",
+            status: "completed",
+            input: { file_path: "/repo/a.tsx" },
+            output: "a",
+          },
+        ],
+      }),
+      msg({
+        id: 2,
+        role: "assistant",
+        parts: [
+          {
+            type: "tool_use",
+            id: "r2",
+            name: "Read",
+            status: "running",
+            input: { file_path: "/repo/b.tsx" },
+          },
+        ],
+      }),
+    ];
+    const nextMessages = [
+      prevMessages[0]!,
+      msg({
+        id: 2,
+        role: "assistant",
+        parts: [
+          {
+            type: "tool_use",
+            id: "r2",
+            name: "Read",
+            status: "completed",
+            input: { file_path: "/repo/b.tsx" },
+            output: "b",
+          },
+        ],
+      }),
+    ];
+    const options = { sessionStatus: "running" as const, showListEndThinkingHint: false };
+    const initialRows = buildChatMessageListRows(prevMessages, options);
+    expect(initialRows).toHaveLength(1);
+    expect(initialRows[0]!.kind === "message" && initialRows[0]!.memberMessageIds).toEqual([1, 2]);
+    expect(
+      tryPatchChatMessageListRowsTail(
+        prevMessages,
+        nextMessages,
+        initialRows,
+        options,
+        foldToolResultUserMessagesIntoAssistant(prevMessages),
       ),
     ).toBeNull();
   });

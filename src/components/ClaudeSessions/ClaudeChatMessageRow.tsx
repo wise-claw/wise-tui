@@ -1,6 +1,6 @@
 import { memo, useMemo, type ReactNode } from "react";
 import type { ClaudeMessage, ClaudeSession, SessionConversationTaskItem } from "../../types";
-import type { DispatchRecordMeta } from "../../utils/claudeChatMessageDisplay";
+import type { DispatchRecordMeta, SessionDispatchLookup } from "../../utils/claudeChatMessageDisplay";
 import { MessagePartsDisplay } from "./MessageParts";
 import { Markdown } from "./Markdown";
 import { SystemMessageContent } from "./SystemMessageContent";
@@ -28,7 +28,7 @@ interface Props {
   onOpenTaskDetail?: (taskId: string) => void;
   onOpenHistorySessionInInspector?: (sessionId: string) => void;
   onOpenSessionConversationTaskDetail?: (task: SessionConversationTaskItem) => void;
-  sessionsForDispatchLookup?: readonly ClaudeSession[];
+  sessionsForDispatchLookup?: SessionDispatchLookup;
 }
 
 function renderAssistantMarkdownPart(

@@ -1,6 +1,9 @@
 import { memo, useMemo } from "react";
-import type { ClaudeMessage, ClaudeSession } from "../../types";
-import { resolveChatMessageComposerInsertPayload } from "../../utils/claudeChatMessageDisplay";
+import type { ClaudeMessage } from "../../types";
+import {
+  resolveChatMessageComposerInsertPayload,
+  type SessionDispatchLookup,
+} from "../../utils/claudeChatMessageDisplay";
 import { ChatMessageCopyButton } from "./ChatMessageCopyButton";
 import { ChatMessageInsertComposerButton } from "./ChatMessageInsertComposerButton";
 
@@ -9,7 +12,7 @@ interface Props {
   msg: ClaudeMessage;
   copyText: string;
   toolUser: boolean;
-  sessionsForDispatchLookup?: readonly ClaudeSession[];
+  sessionsForDispatchLookup?: SessionDispatchLookup;
   /** 无 sender 行时按钮浮在气泡右上角 */
   floating?: boolean;
 }

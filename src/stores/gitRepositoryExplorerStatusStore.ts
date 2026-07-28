@@ -10,6 +10,11 @@ import { gitStatus } from "../services/git";
 import { consumeWarmGitStatus } from "../services/gitStatusWarmCache";
 import { startAdaptiveInterval } from "../utils/adaptivePoll";
 import { safeUnlisten } from "../utils/safeTauriUnlisten";
+import {
+  applyGitRepositoryStatsEmpty,
+  applyGitRepositoryStatsFromStatus,
+  registerGitRepositoryStatsExplorerBridge,
+} from "./gitRepositoryStatsStore";
 
 const VISIBLE_POLL_INTERVAL_MS = 10000;
 const HIDDEN_POLL_INTERVAL_MS = 30000;
@@ -52,6 +57,12 @@ async function refreshPath(pathKey: string): Promise<void> {
   try {
     const warm = consumeWarmGitStatus(pathKey);
     const status = warm ? await warm : await gitStatus(pathKey);
+    applyGitRepositoryStatsFromStatus(pathKey, {
+      additions: status.additions,
+      deletions: status.deletions,
+      ahead: status.ahead,
+      behind: status.behind,
+    });
     const nextIndex = buildExplorerGitStatusIndex(status);
     if (explorerGitStatusIndexEqual(entry.index, nextIndex)) {
       return;
@@ -60,6 +71,7 @@ async function refreshPath(pathKey: string): Promise<void> {
     entry.generation += 1;
     publish(pathKey);
   } catch {
+    applyGitRepositoryStatsEmpty(pathKey);
     if (
       entry.index.fileStatusByPath.size === 0 &&
       entry.index.dirsWithChanges.size === 0
@@ -196,6 +208,11 @@ export function refreshGitRepositoryExplorerStatus(path: string): void {
   if (!pathKey) return;
   void refreshPath(pathKey);
 }
+
+registerGitRepositoryStatsExplorerBridge({
+  refresh: refreshGitRepositoryExplorerStatus,
+  subscribe: subscribeGitRepositoryExplorerStatus,
+});
 
 /** @internal test helper */
 export function resetGitRepositoryExplorerStatusStoreForTests(): void {

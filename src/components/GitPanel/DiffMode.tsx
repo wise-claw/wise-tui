@@ -515,7 +515,6 @@ function DiffModeInner({
                         ? `AI 审查变更（当前 ${codeReviewBadgeCount} 项高危未清）`
                         : "AI 审查变更（对标 Cursor /review）：未提交或相对主干"
                   }
-                  icon={<BugOutlined />}
                   onMouseDown={(event) => event.preventDefault()}
                   onClick={() => {
                     openCodeReviewDrawer({

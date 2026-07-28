@@ -10,12 +10,13 @@ import { useScrollEndClass } from "../../hooks/useScrollEndClass";
 import { ChatMessageListVirtualBody } from "./ChatMessageListVirtualBody";
 import { ChatRepositoryProvider } from "./chatRepositoryContext";
 import "./index.css";
+import type { SessionDispatchLookup } from "../../utils/claudeChatMessageDisplay";
 
 interface Props {
   session: ClaudeSession;
   onOpenTaskDetail?: (taskId: string) => void;
   onOpenHistorySessionInInspector?: (sessionId: string) => void;
-  sessionsForDispatchLookup?: readonly ClaudeSession[];
+  sessionsForDispatchLookup?: SessionDispatchLookup;
   /** @deprecated 虚拟列表按条数阈值自动启用，该开关保留仅为兼容旧调用方 */
   showAllMessages?: boolean;
   /** 绑定到消息滚动容器，供父组件在内容增高时 `scrollTop = scrollHeight` */

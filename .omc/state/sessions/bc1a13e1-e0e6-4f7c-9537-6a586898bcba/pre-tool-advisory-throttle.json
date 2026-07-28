@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "entries": {
+    "445ed27a3872b681d98190bae61ccb84954e1bc4e140df5370be958dee776b3a": {
+      "last_emitted_at_ms": 1785196073577,
+      "message": "Verify changes work after editing. Test functionality before marking complete."
+    },
+    "79a93d4a2f8f50b95f852280616242fee1855dc99a3c75211917f55e72e95fae": {
+      "last_emitted_at_ms": 1785196039681,
+      "message": "Use parallel execution for independent tasks. Use run_in_background for long operations (npm install, builds, tests)."
+    },
+    "d1f491002bfaa36cd141f2099df6ccbd8639910a71bf79ecde72d524d657f4d2": {
+      "last_emitted_at_ms": 1785196035162,
+      "message": "Spawning agent: Explore (inherit) | Task: 快速搜 hover 样式"
+    },
+    "8d15e66a58c221129775061b21ab5fa34906248bc179eaebca647442b4a20414": {
+      "last_emitted_at_ms": 1785196030970,
+      "message": "Spawning agent: Explore (inherit) | Task: 定位侧栏 hover 图标"
+    },
+    "466399dafa2d20f60587180bad0a07358eb7f2bce724df0ff682f038ad33f5ad": {
+      "last_emitted_at_ms": 1785196023177,
+      "message": "Read multiple files in parallel when possible for faster analysis."
+    }
+  },
+  "updated_at": "2026-07-27T23:47:53.577Z"
+}

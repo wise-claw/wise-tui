@@ -175,7 +175,11 @@ import { setBackgroundContextCompactInFlight } from "../stores/backgroundContext
 import { migrateComposerRefocus } from "../stores/composerRefocusStore";
 import { stopClaudeMainSession } from "../services/stopClaudeMainSession";
 import { publishRunningClaudeSessionIds } from "../stores/claudeRunningSessionsRegistryStore";
-import { getSystemResourceSnapshot } from "../services/systemResource";
+import {
+  getSystemResourceClaudeProcesses,
+  refreshSystemResourceSnapshotStore,
+  subscribeSystemResourceSnapshot,
+} from "../stores/systemResourceSnapshotStore";
 import {
   buildContextOverflowFailureHint,
   buildContextOverflowRetrySystemMessage,
@@ -220,6 +224,8 @@ import {
   submitQuestionViaStdin,
   shouldPreferQuestionStdinControl,
 } from "./useClaudeSessions.qa";
+import { createClaudeEngineHandlers } from "./useClaudeSessions.engines";
+import { createSessionActionHandlers } from "./useClaudeSessions.sessionActions";
 
 import {
   CLAUDE_STREAM_RUNTIME_READY_POLL_MS,
@@ -755,753 +761,40 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     [resolveSpawnExtrasForTab],
   );
 
-  const runClaudeOneshotWithInvocation = useCallback(
-    async (params: {
-      tabSessionId: string;
-      turnNonce: number;
-      invokeConc:
-        | { concurrencyScopeKey: string; concurrencyLimit: number }
-        | null
-        | undefined;
-      repositoryPath: string;
-      prompt: string;
-      modelArg: string | undefined;
-      resumeClaudeSid: string | null;
-    }) => {
-      const {
-        tabSessionId,
-        turnNonce,
-        invokeConc,
-        repositoryPath,
-        prompt,
-        modelArg,
-        resumeClaudeSid,
-      } = params;
-      if (!streamRuntimeRef.current) {
-        const deadline = Date.now() + CLAUDE_STREAM_RUNTIME_READY_WAIT_MS;
-        while (!streamRuntimeRef.current && Date.now() < deadline) {
-          await new Promise<void>((r) => {
-            window.setTimeout(r, CLAUDE_STREAM_RUNTIME_READY_POLL_MS);
-          });
-        }
-        if (!streamRuntimeRef.current) {
-          message.error("流式引擎尚未就绪或初始化超时，请稍后重试发送。");
-          throw new Error("Claude stream runtime not ready");
-        }
-      }
-      // 新一轮子进程会替换或清空 stdin 映射；上一轮的 AskUserQuestion / 权限弹窗再提交必败
-      notificationHub.invalidateControlRequestsForSession(tabSessionId, "已发起新一轮对话");
-      const mappedTab = sessionIdMapRef.current.get(tabSessionId);
-      if (mappedTab && mappedTab !== tabSessionId) {
-        notificationHub.invalidateControlRequestsForSession(mappedTab, "已发起新一轮对话");
-      }
-      const rt = streamRuntimeRef.current;
-      let detach: (() => void) | null = null;
-      const inv = crypto.randomUUID();
-      if (rt) {
-        detachClaudeInvocationStreamsForTab(tabSessionId);
-        try {
-          detach = await attachClaudeInvocationStream(
-            inv,
-            tabSessionId,
-            rt,
-            turnNonce,
-            () => {
-              claudeInvocationInflightRef.current.delete(inv);
-            },
-            (tabId, bound) => expectedTurnNonceByTabIdRef.current.get(tabId) ?? bound,
-            keepInvocationStreamAfterTurnComplete,
-          );
-          claudeInvocationInflightRef.current.set(inv, { tabId: tabSessionId, detach });
-        } catch {
-          detach = null;
-        }
-      }
-      // 仅当 invocation 监听已挂载时才传 key：Rust 会抑制共享 stdout；监听失败时必须不传 key，否则前端收不到流式行。
-      const invocationKey = detach ? inv : undefined;
-      if (rt && !detach) {
-        message.warning("本会话流式监听未建立，已退回全局通道；若多标签同时跑 Claude，输出可能短暂串屏。");
-      }
-      const sk = invokeConc?.concurrencyScopeKey;
-      const lim = invokeConc?.concurrencyLimit;
-      const cliExtras = await resolveSpawnExtrasForClaudePrompt(tabSessionId, prompt);
-      const spawnSession =
-        sessionsRef.current.find((s) => s.id === tabSessionId) ?? null;
-      const proxyBypassResolver = claudeSessionsOptionsRef.current?.resolveClaudeProxyBypassRef?.current;
-      const anthropicProxyBypass =
-        spawnSession && proxyBypassResolver ? proxyBypassResolver(spawnSession) : false;
-      try {
-        if (resumeClaudeSid) {
-          try {
-            await resumeClaudeCode(
-              repositoryPath,
-              resumeClaudeSid,
-              prompt,
-              modelArg,
-              invocationKey,
-              "oneshot",
-              sk,
-              lim,
-              resolveTrellisContextId(tabSessionId, resumeClaudeSid),
-              cliExtras,
-              anthropicProxyBypass,
-            );
-          } catch (resumeError) {
-            if (!isClaudeConversationMissingError(resumeError)) {
-              throw resumeError;
-            }
-            // Claude 侧会话可能已被清理；自动回退到新会话启动，避免用户手动重发。
-            await executeClaudeCode(
-              repositoryPath,
-              prompt,
-              modelArg,
-              invocationKey,
-              "oneshot",
-              sk,
-              lim,
-              undefined,
-              resolveTrellisContextId(tabSessionId),
-              cliExtras,
-              anthropicProxyBypass,
-            );
-          }
-        } else {
-          await executeClaudeCode(
-            repositoryPath,
-            prompt,
-            modelArg,
-            invocationKey,
-            "oneshot",
-            sk,
-            lim,
-            undefined,
-            resolveTrellisContextId(tabSessionId),
-            cliExtras,
-            anthropicProxyBypass,
-          );
-        }
-      } catch (e) {
-        detach?.();
-        throw e;
-      }
-    },
+  const {
+    runClaudeOneshotWithInvocation,
+    runCodexOneshotWithInvocation,
+    runOpencodeOneshotWithInvocation,
+    runQoderOneshotWithInvocation,
+    runCursorOneshotWithInvocation,
+    runClaudeStreamingWithInvocation,
+    invokeClaudeTurn,
+  } = useMemo(
+    () =>
+      createClaudeEngineHandlers({
+        streamRuntimeRef,
+        sessionIdMapRef,
+        sessionsRef,
+        claudeInvocationInflightRef,
+        expectedTurnNonceByTabIdRef,
+        streamingProcessByTabRef,
+        streamingTargetIdRef,
+        defaultConnectionKindRef,
+        claudeSessionsOptionsRef,
+        detachClaudeInvocationStreamsForTab,
+        keepInvocationStreamAfterTurnComplete,
+        resolveTrellisContextId,
+        resolveSpawnExtrasForClaudePrompt,
+        commitSessions,
+        scheduleStreamStallTimer,
+      }),
     [
       detachClaudeInvocationStreamsForTab,
       keepInvocationStreamAfterTurnComplete,
       resolveTrellisContextId,
       resolveSpawnExtrasForClaudePrompt,
-    ],
-  );
-
-  const runCodexOneshotWithInvocation = useCallback(
-    async (params: {
-      tabSessionId: string;
-      turnNonce: number;
-      repositoryPath: string;
-      prompt: string;
-      modelArg: string | undefined;
-      contextExecutionEngine: SessionExecutionEngine;
-      codexResumeSessionId?: string | null;
-      forceNewClaudeConversation?: boolean;
-    }) => {
-      const {
-        tabSessionId,
-        turnNonce,
-        repositoryPath,
-        prompt,
-        modelArg,
-        contextExecutionEngine,
-        codexResumeSessionId,
-        forceNewClaudeConversation,
-      } = params;
-      if (!streamRuntimeRef.current) {
-        const deadline = Date.now() + CLAUDE_STREAM_RUNTIME_READY_WAIT_MS;
-        while (!streamRuntimeRef.current && Date.now() < deadline) {
-          await new Promise<void>((r) => {
-            window.setTimeout(r, CLAUDE_STREAM_RUNTIME_READY_POLL_MS);
-          });
-        }
-        if (!streamRuntimeRef.current) {
-          message.error("流式引擎尚未就绪或初始化超时，请稍后重试发送。");
-          throw new Error("Claude stream runtime not ready");
-        }
-      }
-      notificationHub.invalidateControlRequestsForSession(tabSessionId, "已发起新一轮对话");
-      const rt = streamRuntimeRef.current;
-      let detach: (() => void) | null = null;
-      const inv = crypto.randomUUID();
-      if (rt) {
-        try {
-          detach = await attachClaudeInvocationStream(
-            inv,
-            tabSessionId,
-            rt,
-            turnNonce,
-            () => {
-              claudeInvocationInflightRef.current.delete(inv);
-            },
-            (tabId, bound) => expectedTurnNonceByTabIdRef.current.get(tabId) ?? bound,
-            keepInvocationStreamAfterTurnComplete,
-          );
-          claudeInvocationInflightRef.current.set(inv, { tabId: tabSessionId, detach });
-        } catch {
-          detach = null;
-        }
-      }
-      const invocationKey = detach ? inv : undefined;
-      const codexModel = resolveCodexExecModelId({
-        sessionModel: modelArg,
-        contextExecutionEngine,
-        store: getCachedModelProfileStore(),
-      });
-      const codexModelLabel = codexModel?.trim() || "默认";
-      const resumeLabel = codexResumeSessionId?.trim() ? "续接会话" : "新会话";
-      commitSessions((prev) =>
-        appendSystemMessageBySessionId(
-          prev,
-          tabSessionId,
-          `Codex 执行中（${resumeLabel}，模型：${codexModelLabel}）…`,
-        ),
-      );
-      try {
-        await executeCodexCode(
-          repositoryPath,
-          prompt,
-          codexModel,
-          invocationKey,
-          tabSessionId,
-          resolveTrellisContextId(tabSessionId),
-          codexResumeSessionId ?? undefined,
-          forceNewClaudeConversation === true,
-        );
-      } catch (e) {
-        detach?.();
-        throw e;
-      }
-    },
-    [commitSessions, keepInvocationStreamAfterTurnComplete, resolveTrellisContextId],
-  );
-
-  const runOpencodeOneshotWithInvocation = useCallback(
-    async (params: {
-      tabSessionId: string;
-      turnNonce: number;
-      repositoryPath: string;
-      prompt: string;
-      modelArg: string | undefined;
-      contextExecutionEngine: SessionExecutionEngine;
-      opencodeResumeSessionId?: string | null;
-      forceNewClaudeConversation?: boolean;
-    }) => {
-      const {
-        tabSessionId,
-        turnNonce,
-        repositoryPath,
-        prompt,
-        modelArg,
-        opencodeResumeSessionId,
-        forceNewClaudeConversation,
-      } = params;
-      // Composer 选择的模型优先；上下文引擎在 invoke 入口已固定为 opencode。
-      void params.contextExecutionEngine;
-      if (!streamRuntimeRef.current) {
-        const deadline = Date.now() + CLAUDE_STREAM_RUNTIME_READY_WAIT_MS;
-        while (!streamRuntimeRef.current && Date.now() < deadline) {
-          await new Promise<void>((r) => {
-            window.setTimeout(r, CLAUDE_STREAM_RUNTIME_READY_POLL_MS);
-          });
-        }
-        if (!streamRuntimeRef.current) {
-          message.error("流式引擎尚未就绪或初始化超时，请稍后重试发送。");
-          throw new Error("Claude stream runtime not ready");
-        }
-      }
-      notificationHub.invalidateControlRequestsForSession(tabSessionId, "已发起新一轮对话");
-      const rt = streamRuntimeRef.current;
-      let detach: (() => void) | null = null;
-      const inv = crypto.randomUUID();
-      if (rt) {
-        try {
-          detach = await attachClaudeInvocationStream(
-            inv,
-            tabSessionId,
-            rt,
-            turnNonce,
-            () => {
-              claudeInvocationInflightRef.current.delete(inv);
-            },
-            (tabId, bound) => expectedTurnNonceByTabIdRef.current.get(tabId) ?? bound,
-            keepInvocationStreamAfterTurnComplete,
-          );
-          claudeInvocationInflightRef.current.set(inv, { tabId: tabSessionId, detach });
-        } catch {
-          detach = null;
-        }
-      }
-      const invocationKey = detach ? inv : undefined;
-      const opencodeModel = resolveOpencodeExecModelId({
-        sessionModel: modelArg,
-        contextExecutionEngine: "opencode",
-        store: getCachedModelProfileStore(),
-      });
-      const opencodeModelLabel = opencodeModel?.trim() || "默认";
-      const resumeLabel = opencodeResumeSessionId?.trim() ? "续接会话" : "新会话";
-      commitSessions((prev) =>
-        appendSystemMessageBySessionId(
-          prev,
-          tabSessionId,
-          `OpenCode 执行中（${resumeLabel}，模型：${opencodeModelLabel}）…`,
-        ),
-      );
-      try {
-        await executeOpencodeCode(
-          repositoryPath,
-          prompt,
-          opencodeModel,
-          invocationKey,
-          tabSessionId,
-          resolveTrellisContextId(tabSessionId),
-          opencodeResumeSessionId ?? undefined,
-          forceNewClaudeConversation === true,
-        );
-      } catch (e) {
-        detach?.();
-        throw e;
-      }
-    },
-    [commitSessions, keepInvocationStreamAfterTurnComplete, resolveTrellisContextId],
-  );
-
-  const runQoderOneshotWithInvocation = useCallback(
-    async (params: {
-      tabSessionId: string;
-      turnNonce: number;
-      repositoryPath: string;
-      prompt: string;
-      modelArg: string | undefined;
-      qoderResumeSessionId?: string | null;
-      forceNewClaudeConversation?: boolean;
-    }) => {
-      const {
-        tabSessionId,
-        turnNonce,
-        repositoryPath,
-        prompt,
-        modelArg,
-        qoderResumeSessionId,
-        forceNewClaudeConversation,
-      } = params;
-      if (!streamRuntimeRef.current) {
-        const deadline = Date.now() + CLAUDE_STREAM_RUNTIME_READY_WAIT_MS;
-        while (!streamRuntimeRef.current && Date.now() < deadline) {
-          await new Promise<void>((r) => {
-            window.setTimeout(r, CLAUDE_STREAM_RUNTIME_READY_POLL_MS);
-          });
-        }
-        if (!streamRuntimeRef.current) {
-          message.error("流式引擎尚未就绪或初始化超时，请稍后重试发送。");
-          throw new Error("Claude stream runtime not ready");
-        }
-      }
-      notificationHub.invalidateControlRequestsForSession(tabSessionId, "已发起新一轮对话");
-      const rt = streamRuntimeRef.current;
-      let detach: (() => void) | null = null;
-      const inv = crypto.randomUUID();
-      if (rt) {
-        try {
-          detach = await attachClaudeInvocationStream(
-            inv,
-            tabSessionId,
-            rt,
-            turnNonce,
-            () => {
-              claudeInvocationInflightRef.current.delete(inv);
-            },
-            (tabId, bound) => expectedTurnNonceByTabIdRef.current.get(tabId) ?? bound,
-            keepInvocationStreamAfterTurnComplete,
-          );
-          claudeInvocationInflightRef.current.set(inv, { tabId: tabSessionId, detach });
-        } catch {
-          detach = null;
-        }
-      }
-      const invocationKey = detach ? inv : undefined;
-      const qoderModel = resolveQoderExecModelId(modelArg);
-      const qoderModelLabel = formatQoderModelLabel(modelArg?.trim() || "auto");
-      const resumeLabel = qoderResumeSessionId?.trim() ? "续接会话" : "新会话";
-      commitSessions((prev) =>
-        appendSystemMessageBySessionId(
-          prev,
-          tabSessionId,
-          `Qoder CLI 执行中（${resumeLabel}，模型：${qoderModelLabel}）…`,
-        ),
-      );
-      try {
-        await executeQoderCode(
-          repositoryPath,
-          prompt,
-          qoderModel,
-          invocationKey,
-          tabSessionId,
-          resolveTrellisContextId(tabSessionId),
-          qoderResumeSessionId ?? undefined,
-          forceNewClaudeConversation === true,
-        );
-      } catch (e) {
-        detach?.();
-        throw e;
-      }
-    },
-    [commitSessions, keepInvocationStreamAfterTurnComplete, resolveTrellisContextId],
-  );
-
-  const runCursorOneshotWithInvocation = useCallback(
-    async (params: {
-      tabSessionId: string;
-      turnNonce: number;
-      repositoryPath: string;
-      prompt: string;
-      modelArg: string | undefined;
-      cursorAgentId: string | null;
-      cursorAttachments?: CursorSdkAttachment[];
-    }) => {
-      const {
-        tabSessionId,
-        turnNonce,
-        repositoryPath,
-        prompt,
-        modelArg,
-        cursorAgentId,
-        cursorAttachments,
-      } = params;
-      if (!streamRuntimeRef.current) {
-        const deadline = Date.now() + CLAUDE_STREAM_RUNTIME_READY_WAIT_MS;
-        while (!streamRuntimeRef.current && Date.now() < deadline) {
-          await new Promise<void>((r) => {
-            window.setTimeout(r, CLAUDE_STREAM_RUNTIME_READY_POLL_MS);
-          });
-        }
-        if (!streamRuntimeRef.current) {
-          message.error("流式引擎尚未就绪或初始化超时，请稍后重试发送。");
-          throw new Error("Claude stream runtime not ready");
-        }
-      }
-      notificationHub.invalidateControlRequestsForSession(tabSessionId, "已发起新一轮对话");
-      streamingTargetIdRef.current = tabSessionId;
-      scheduleStreamStallTimer(tabSessionId);
-      commitSessions((prev) =>
-        appendSystemMessageBySessionId(prev, tabSessionId, "Cursor CLI 执行中…"),
-      );
-      const rt = streamRuntimeRef.current;
-      let detach: (() => void) | null = null;
-      const inv = crypto.randomUUID();
-      if (rt) {
-        try {
-          detach = await attachClaudeInvocationStream(
-            inv,
-            tabSessionId,
-            rt,
-            turnNonce,
-            () => {
-              claudeInvocationInflightRef.current.delete(inv);
-            },
-            (tabId, bound) => expectedTurnNonceByTabIdRef.current.get(tabId) ?? bound,
-            keepInvocationStreamAfterTurnComplete,
-          );
-          claudeInvocationInflightRef.current.set(inv, { tabId: tabSessionId, detach });
-        } catch {
-          detach = null;
-        }
-      }
-      const invocationKey = detach ? inv : undefined;
-      const resolvedModel = resolveCursorLocalModelId(modelArg ?? CURSOR_SDK_DEFAULT_MODEL);
-      // Cursor CLI 自行读取工作区/用户 mcp.json（--approve-mcps）；勿在 invoke 前组装 MCP（可达数秒且 Rust 侧已丢弃）。
-      try {
-        await executeCursorCode(
-          repositoryPath,
-          prompt,
-          resolvedModel,
-          invocationKey,
-          tabSessionId,
-          cursorAgentId ?? undefined,
-          resolveTrellisContextId(tabSessionId),
-          undefined,
-          cursorAttachments,
-        );
-      } catch (e) {
-        detach?.();
-        throw e;
-      }
-    },
-    [commitSessions, keepInvocationStreamAfterTurnComplete, resolveTrellisContextId, scheduleStreamStallTimer],
-  );
-
-  const runClaudeStreamingWithInvocation = useCallback(
-    async (params: {
-      tabSessionId: string;
-      turnNonce: number;
-      invokeConc:
-        | { concurrencyScopeKey: string; concurrencyLimit: number }
-        | null
-        | undefined;
-      repositoryPath: string;
-      prompt: string;
-      modelArg: string | undefined;
-      resumeClaudeSid: string | null;
-    }) => {
-      const {
-        tabSessionId,
-        turnNonce,
-        invokeConc,
-        repositoryPath,
-        prompt,
-        modelArg,
-        resumeClaudeSid,
-      } = params;
-
-      if (!streamRuntimeRef.current) {
-        const deadline = Date.now() + CLAUDE_STREAM_RUNTIME_READY_WAIT_MS;
-        while (!streamRuntimeRef.current && Date.now() < deadline) {
-          await new Promise<void>((r) => {
-            window.setTimeout(r, CLAUDE_STREAM_RUNTIME_READY_POLL_MS);
-          });
-        }
-        if (!streamRuntimeRef.current) {
-          message.error("流式引擎尚未就绪或初始化超时，请稍后重试发送。");
-          throw new Error("Claude stream runtime not ready");
-        }
-      }
-
-      notificationHub.invalidateControlRequestsForSession(tabSessionId, "已发起新一轮对话");
-      const mappedTab = sessionIdMapRef.current.get(tabSessionId);
-      if (mappedTab && mappedTab !== tabSessionId) {
-        notificationHub.invalidateControlRequestsForSession(mappedTab, "已发起新一轮对话");
-      }
-
-      const liveSid =
-        sessionsRef.current.find((s) => s.id === tabSessionId)?.claudeSessionId?.trim() ??
-        sessionIdMapRef.current.get(tabSessionId)?.trim() ??
-        resumeClaudeSid?.trim() ??
-        null;
-
-      const entry = streamingProcessByTabRef.current.get(tabSessionId);
-      const isFollowUp = Boolean(
-        entry && liveSid && entry.claudeSessionId?.trim() === liveSid,
-      );
-
-      if (isFollowUp && liveSid) {
-        const rt = streamRuntimeRef.current;
-        let detachFollowUp: (() => void) | null = null;
-        const followInv = crypto.randomUUID();
-        if (rt) {
-          try {
-            detachFollowUp = await attachClaudeSessionStreamForTurn(
-              liveSid,
-              tabSessionId,
-              rt,
-              turnNonce,
-              () => {
-                claudeInvocationInflightRef.current.delete(followInv);
-              },
-              (tabId, bound) => expectedTurnNonceByTabIdRef.current.get(tabId) ?? bound,
-              (tabId) => {
-                if (!streamingProcessByTabRef.current.has(tabId)) return false;
-                const session = sessionsRef.current.find((s) => s.id === tabId);
-                return Boolean(
-                  session && sessionUsesStreamingConnection(session, defaultConnectionKindRef.current),
-                );
-              },
-            );
-            claudeInvocationInflightRef.current.set(followInv, {
-              tabId: tabSessionId,
-              detach: detachFollowUp,
-            });
-          } catch {
-            detachFollowUp = null;
-          }
-        }
-        try {
-          await sendStreamingUserMessage(liveSid, prompt);
-          return;
-        } catch (err) {
-          detachFollowUp?.();
-          claudeInvocationInflightRef.current.delete(followInv);
-          const errText = err instanceof Error ? err.message : String(err);
-          const stdinGone =
-            errText.includes("没有可写 stdin") || errText.includes("stdin");
-          const conversationMissing = isClaudeConversationMissingError(err);
-          if (!stdinGone && !conversationMissing) {
-            streamingProcessByTabRef.current.delete(tabSessionId);
-            throw err;
-          }
-          // 长驻子进程可能已退出，或 Claude 侧会话已清理（No conversation found）；
-          // 回退为新一轮 spawn，避免用户手动重发。
-        }
-      }
-
-      if (liveSid) {
-        await closeStreamingSession(liveSid).catch(() => {
-          /* 旧进程可能已退出 */
-        });
-      }
-      streamingProcessByTabRef.current.delete(tabSessionId);
-
-      const rt = streamRuntimeRef.current;
-      let detach: (() => void) | null = null;
-      const inv = crypto.randomUUID();
-      if (rt) {
-        try {
-          detach = await attachClaudeInvocationStream(
-            inv,
-            tabSessionId,
-            rt,
-            turnNonce,
-            () => {
-              claudeInvocationInflightRef.current.delete(inv);
-            },
-            (tabId, bound) => expectedTurnNonceByTabIdRef.current.get(tabId) ?? bound,
-            keepInvocationStreamAfterTurnComplete,
-          );
-          claudeInvocationInflightRef.current.set(inv, { tabId: tabSessionId, detach });
-        } catch {
-          detach = null;
-        }
-      }
-      const invocationKey = detach ? inv : undefined;
-      if (rt && !detach) {
-        message.warning("本会话流式监听未建立，已退回全局通道；若多标签同时跑 Claude，输出可能短暂串屏。");
-      }
-
-      const sk = invokeConc?.concurrencyScopeKey;
-      const lim = invokeConc?.concurrencyLimit;
-      const cliExtras = await resolveSpawnExtrasForClaudePrompt(tabSessionId, prompt);
-
-      try {
-        await spawnStreamingSession({
-          repositoryPath,
-          initialPrompt: prompt,
-          model: modelArg,
-          sessionIdToResume: liveSid,
-          invocationKey,
-          concurrencyScopeKey: sk,
-          concurrencyLimit: lim,
-          trellisContextId: resolveTrellisContextId(tabSessionId, liveSid),
-          cliExtras,
-        });
-        streamingProcessByTabRef.current.set(tabSessionId, {
-          claudeSessionId: liveSid,
-        });
-      } catch (e) {
-        detach?.();
-        streamingProcessByTabRef.current.delete(tabSessionId);
-        throw e;
-      }
-    },
-    [keepInvocationStreamAfterTurnComplete, resolveTrellisContextId, resolveSpawnExtrasForClaudePrompt],
-  );
-
-  const invokeClaudeTurn = useCallback(
-    async (params: {
-      tabSessionId: string;
-      turnNonce: number;
-      invokeConc:
-        | { concurrencyScopeKey: string; concurrencyLimit: number }
-        | null
-        | undefined;
-      repositoryPath: string;
-      prompt: string;
-      modelArg: string | undefined;
-      resumeClaudeSid: string | null;
-      cursorAttachments?: CursorSdkAttachment[];
-      codexContextExecutionEngine?: SessionExecutionEngine;
-      forceNewClaudeConversation?: boolean;
-    }) => {
-      const session = sessionsRef.current.find((s) => s.id === params.tabSessionId);
-      const resolver = claudeSessionsOptionsRef.current?.resolveExecutionEngineRef?.current;
-      const engine: SessionExecutionEngine =
-        session && resolver ? resolver(session) : "claude";
-      if (engine === "codex") {
-        const contextExecutionEngine =
-          params.codexContextExecutionEngine ??
-          (session && resolver ? resolver(session) : "claude");
-        const codexResumeSessionId =
-          params.forceNewClaudeConversation || !session
-            ? null
-            : resolveCodexResumeSessionId(session, params.tabSessionId, sessionIdMapRef.current);
-        await runCodexOneshotWithInvocation({
-          tabSessionId: params.tabSessionId,
-          turnNonce: params.turnNonce,
-          repositoryPath: params.repositoryPath,
-          prompt: params.prompt,
-          modelArg: params.modelArg,
-          contextExecutionEngine,
-          codexResumeSessionId,
-          forceNewClaudeConversation: params.forceNewClaudeConversation,
-        });
-        return;
-      }
-      if (engine === "cursor") {
-        const cursorAgentId = session
-          ? resolveCursorResumeAgentId(session, params.tabSessionId, sessionIdMapRef.current)
-          : null;
-        await runCursorOneshotWithInvocation({
-          tabSessionId: params.tabSessionId,
-          turnNonce: params.turnNonce,
-          repositoryPath: params.repositoryPath,
-          prompt: params.prompt,
-          modelArg: params.modelArg,
-          cursorAgentId,
-          cursorAttachments: params.cursorAttachments,
-        });
-        return;
-      }
-      if (engine === "opencode") {
-        const opencodeResumeSessionId =
-          params.forceNewClaudeConversation || !session
-            ? null
-            : resolveOpencodeResumeSessionId(session, params.tabSessionId, sessionIdMapRef.current);
-        // OpenCode 路径：上下文引擎固定为 opencode，避免误用 Claude 档案模型。
-        await runOpencodeOneshotWithInvocation({
-          tabSessionId: params.tabSessionId,
-          turnNonce: params.turnNonce,
-          repositoryPath: params.repositoryPath,
-          prompt: params.prompt,
-          modelArg: params.modelArg,
-          contextExecutionEngine: "opencode",
-          opencodeResumeSessionId,
-          forceNewClaudeConversation: params.forceNewClaudeConversation,
-        });
-        return;
-      }
-      if (engine === "qoder") {
-        const qoderResumeSessionId =
-          params.forceNewClaudeConversation || !session
-            ? null
-            : resolveQoderResumeSessionId(session, params.tabSessionId, sessionIdMapRef.current);
-        await runQoderOneshotWithInvocation({
-          tabSessionId: params.tabSessionId,
-          turnNonce: params.turnNonce,
-          repositoryPath: params.repositoryPath,
-          prompt: params.prompt,
-          modelArg: params.modelArg,
-          qoderResumeSessionId,
-          forceNewClaudeConversation: params.forceNewClaudeConversation,
-        });
-        return;
-      }
-      if (sessionUsesStreamingConnection(session, defaultConnectionKindRef.current)) {
-        await runClaudeStreamingWithInvocation(params);
-      } else {
-        await runClaudeOneshotWithInvocation(params);
-      }
-    },
-    [
-      runClaudeStreamingWithInvocation,
-      runClaudeOneshotWithInvocation,
-      runCodexOneshotWithInvocation,
-      runCursorOneshotWithInvocation,
-      runOpencodeOneshotWithInvocation,
-      runQoderOneshotWithInvocation,
+      commitSessions,
+      scheduleStreamStallTimer,
     ],
   );
 
@@ -3266,7 +2559,9 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     let cancelled = false;
     let timer: number | null = null;
     let cancelIdle: (() => void) | null = null;
-    const registryPollTickRef = { value: 0 };
+    const unsubscribeSnapshot = subscribeSystemResourceSnapshot(() => {
+      /* store drives its own poll; this subscription keeps the singleton alive */
+    });
 
     const scheduleTimer = () => {
       if (timer != null) window.clearInterval(timer);
@@ -3284,26 +2579,15 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
     const tick = async () => {
       try {
-        registryPollTickRef.value += 1;
-        const includeHostSnapshot = registryPollTickRef.value % 5 === 1;
-        const listPromise = listRunningClaudeSessions();
-        const snapshotPromise = includeHostSnapshot ? getSystemResourceSnapshot() : Promise.resolve(null);
-        const [listResult, snapshotResult] = await Promise.allSettled([listPromise, snapshotPromise]);
+        const list = await listRunningClaudeSessions();
         if (cancelled) return;
-        if (listResult.status !== "fulfilled") return;
-        const list = listResult.value;
-        const claudeProcesses =
-          snapshotResult.status === "fulfilled" && snapshotResult.value
-            ? snapshotResult.value.claudeProcesses ?? []
-            : [];
-        if (includeHostSnapshot) {
-          hydrateStreamingProcessRegistryFromHost(
-            sessionsRef.current,
-            claudeProcesses,
-            streamingProcessByTabRef.current,
-            defaultConnectionKindRef.current,
-          );
-        }
+        const claudeProcesses = [...getSystemResourceClaudeProcesses()];
+        hydrateStreamingProcessRegistryFromHost(
+          sessionsRef.current,
+          claudeProcesses,
+          streamingProcessByTabRef.current,
+          defaultConnectionKindRef.current,
+        );
         const knownIds = new Set(
           list.map((item) => item.session_id.trim()).filter((id) => id.length > 0),
         );
@@ -3358,6 +2642,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       cancelled = true;
       if (timer != null) window.clearInterval(timer);
       if (cancelIdle) cancelIdle();
+      unsubscribeSnapshot();
       document.removeEventListener("visibilitychange", onVisibilityChange);
       window.removeEventListener("resize", onWindowResize);
     };
@@ -3580,330 +2865,59 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   }, []);
 
   // 首条：`executeClaudeCode`；同一会话后续：`resumeClaudeCode`（均 oneshot，多会话并行；`startedRef` 永久挡住会导致「完成后无法再发」）
-  const executeSession = useCallback(
-    (
-      sessionId: string,
-      prompt: string,
-      opts?: SessionExecuteOpts,
-    ): boolean => {
-      const session = resolveSessionForExecuteKey(
-        sessionsRef.current,
-        sessionId,
-        sessionIdMapRef.current,
-      );
-      const tabSessionId = session?.id ?? sessionId;
-      if (!session) {
-        const retried = executeSessionRetryCountRef.current.get(sessionId) ?? 0;
-        if (retried < 8) {
-          executeSessionRetryCountRef.current.set(sessionId, retried + 1);
-          window.setTimeout(() => {
-            executeSession(sessionId, prompt, opts);
-          }, 40);
-        } else {
-          executeSessionRetryCountRef.current.delete(sessionId);
-        }
-        return false;
-      }
-      executeSessionRetryCountRef.current.delete(sessionId);
-
-      const trimmedPrompt = prompt.trim();
-      if (trimmedPrompt) {
-        // dedup 检查：同 session 同 prompt 900ms 内视为已派发，跳过重复 spawn。
-        // 写入已后移到 spawn 门闸通过后（commitSessions 后），避免并发阻塞 / session 未 hydrate
-        // / gemini 不支持等「未真正派发」路径污染 dedup 表，致重派时 dedup 假命中 return true
-        // 被上层当成功移除而丢任务（C1 修复）。
-        const recent = recentExecutePromptBySessionRef.current.get(tabSessionId);
-        if (recent && recent.prompt === trimmedPrompt && Date.now() - recent.at < 900) {
-          return true;
-        }
-      }
-
-      const forceFreshClaudeSession = opts?.terminalFreshTurn === true;
-      let terminalFreshTeardown: { cancelSessionIds: Set<string>; wasActive: boolean } | null =
-        null;
-      if (forceFreshClaudeSession) {
-        sessionIdMapRef.current.delete(tabSessionId);
-        const staleClaudeSid = session.claudeSessionId?.trim();
-        const cancelSessionIds = new Set<string>();
-        if (staleClaudeSid) cancelSessionIds.add(staleClaudeSid);
-        const wasActive =
-          session.status === "running" ||
-          session.status === "connecting" ||
-          streamingProcessByTabRef.current.has(tabSessionId);
-        // 勿 cancelClaudeExecution(tabSessionId)：Rust 会对 Wise tab id 发 success=false complete，误判为本轮失败。
-        if (cancelSessionIds.size > 0 || wasActive) {
-          terminalFreshTeardown = { cancelSessionIds, wasActive };
-          streamingProcessByTabRef.current.delete(tabSessionId);
-        }
-      }
-      const claudeSidRaw =
-        session.claudeSessionId ?? sessionIdMapRef.current.get(tabSessionId) ?? null;
-      const claudeSid = forceFreshClaudeSession ? null : claudeSidRaw;
-
-      const liveSession =
-        sessionsRef.current.find((s) => s.id === tabSessionId) ?? session;
-      const engineResolver = claudeSessionsOptionsRef.current?.resolveExecutionEngineRef?.current;
-      const executionEngine: SessionExecutionEngine =
-        engineResolver && liveSession ? engineResolver(liveSession) : "claude";
-      const skipClaudeSidBootstrapWait =
-        executionEngine === "cursor" ||
-        executionEngine === "codex" ||
-        executionEngine === "opencode" ||
-        executionEngine === "qoder";
-      const bubblePrompt = opts?.userBubblePrompt?.trim()
-        ? opts.userBubblePrompt
-        : opts?.cursorAttachments && opts.cursorAttachments.length > 0
-          ? buildCursorUserBubblePrompt(prompt, opts.cursorAttachments)
-          : prompt;
-      const defaultInstructionApplied = opts?.defaultInstructionApplied?.trim() || undefined;
-      const spawnSession =
-        sessionsRef.current.find((s) => s.id === tabSessionId) ?? liveSession;
-      const checker = claudeSessionsOptionsRef.current?.beforeSpawnClaudeRef?.current;
-      if (checker) {
-        const gate = checker(spawnSession);
-        if (!gate.ok) {
-          claudeSessionsOptionsRef.current?.onClaudeSpawnBlocked?.(gate.message);
-          return false;
-        }
-      }
-      if (executionEngine === "gemini") {
-        const engineTitle = SESSION_EXECUTION_ENGINE_LABELS[executionEngine].title;
-        const geminiNotice = `[系统] ${engineTitle} 主会话派发即将支持，请暂时切换 Claude Code、Codex CLI、OpenCode、Qoder CLI 或 Cursor CLI。`;
-        commitSessions((prev) => {
-          // task 留队列后，外部 flush 可能重派命中同一 gemini 终态分支：去重避免重复追加系统提示。
-          const target = prev.find((s) => s.id === tabSessionId);
-          const alreadyNotified = target?.messages?.some(
-            (m) =>
-              m.role === "system" &&
-              typeof m.content === "string" &&
-              m.content.includes(engineTitle),
-          );
-          if (alreadyNotified) return prev;
-          return appendSystemMessageBySessionId(prev, tabSessionId, geminiNotice);
-        });
-        return false;
-      }
-      commitSessions((prev) => {
-        if (
-          opts?.replaceUserBubbleAtIndex !== undefined &&
-          Number.isFinite(opts.replaceUserBubbleAtIndex)
-        ) {
-          return setSessionRunningReplacingUserBubbleAtIndex(
-            prev,
-            tabSessionId,
-            opts.replaceUserBubbleAtIndex,
-            bubblePrompt,
-            defaultInstructionApplied,
-          );
-        }
-        if (opts?.replaceLastUserBubble) {
-          return setSessionRunningReplacingLastUserBubble(
-            prev,
-            tabSessionId,
-            bubblePrompt,
-            defaultInstructionApplied,
-          );
-        }
-        if (opts?.replaceFirstUserBubble) {
-          return setSessionRunningReplacingFirstUserBubble(
-            prev,
-            tabSessionId,
-            bubblePrompt,
-            defaultInstructionApplied,
-          );
-        }
-        if (forceFreshClaudeSession) {
-          return beginSessionTurnWithUserPrompt(prev, tabSessionId, bubblePrompt, {
-            forceFreshClaudeSession: true,
-            defaultInstructionApplied,
-          });
-        }
-        return setSessionRunningWithUserPrompt(
-          prev,
-          tabSessionId,
-          bubblePrompt,
-          defaultInstructionApplied,
-        );
-      });
-      // 首轮已启动但尚未收到 stream-json 的 session_id 时，避免再 spawn 第二个进程。
-      // 用户气泡须在上面的 commit 中先落盘，否则 bootstrap 等待会直接 return 导致「发送了但不见」。
-      // 终端派发强制新回合时已主动取消旧进程并重置为 idle，不得在此阻塞。
-      // Cursor/Codex oneshot 不使用 Claude session_id，不得在此等待。
-      //
-      // 重要：此处尚未真正 spawn。不得写入 recentExecutePrompt dedup——否则 80ms 重试会在
-      // 900ms 窗内被假命中 return true，用户气泡已落盘却永久不再 spawn（页面监控 / 运行指令
-      // 自动修复表现为「消息已发出但没有处理」）。
-      if (
-        !claudeSid &&
-        liveSession.status === "running" &&
-        !forceFreshClaudeSession &&
-        !skipClaudeSidBootstrapWait
-      ) {
-        const retried = executeSessionRetryCountRef.current.get(sessionId) ?? 0;
-        if (retried < 20) {
-          executeSessionRetryCountRef.current.set(sessionId, retried + 1);
-          window.setTimeout(() => {
-            executeSession(sessionId, prompt, opts);
-          }, 80);
-        } else {
-          executeSessionRetryCountRef.current.delete(sessionId);
-          commitSessions((prev) =>
-            appendSystemMessageBySessionId(
-              prev.map((s) =>
-                s.id === tabSessionId ? { ...s, status: "error" as const } : s,
-              ),
-              tabSessionId,
-              "会话仍在启动中，请稍后再试或先停止当前执行。",
-            ),
-          );
-          return false;
-        }
-        return true;
-      }
-
-      // dedup 写入：已通过 bootstrap 等待，即将进入真正 spawn。
-      // 并发阻塞 / gemini / session 未 hydrate 等 return false 路径不会到此，dedup 表不被污染。
-      if (trimmedPrompt) {
-        recentExecutePromptBySessionRef.current.set(tabSessionId, {
-          prompt: trimmedPrompt,
-          at: Date.now(),
-        });
-      }
-
-      streamingTargetIdRef.current = tabSessionId;
-      streamTurnSeqRef.current += 1;
-      lastUserSendNonceRef.current = streamTurnSeqRef.current;
-      assistantStreamTextByTabRef.current.set(tabSessionId, "");
-
-      const spawnEngine = resolveSessionExecutionEngine(spawnSession);
-      // OpenCode / Cursor：Composer 只选模型，必须以 session.model 为准。
-      // 不可走 resolveClaudeExecModelId（会优先 Claude 档案，覆盖会话选择）。
-      const sessionModelTrimmed = spawnSession.model?.trim() || undefined;
-      const modelArg =
-        spawnEngine === "opencode" ||
-        spawnEngine === "cursor" ||
-        spawnEngine === "codex" ||
-        spawnEngine === "qoder"
-          ? sessionModelTrimmed
-          : resolveClaudeExecModelId({
-              sessionModel: spawnSession.model,
-              store: getCachedModelProfileStore(),
-            });
-
-      if (terminalFreshTeardown) {
-        expectedTurnNonceByTabIdRef.current.delete(tabSessionId);
-        for (const sid of terminalFreshTeardown.cancelSessionIds) {
-          expectedTurnNonceByTabIdRef.current.delete(sid);
-        }
-      } else {
-        expectedTurnNonceByTabIdRef.current.set(tabSessionId, lastUserSendNonceRef.current);
-      }
-      markClaudeRegistryBootstrapWarmup(registryBootstrapDeadlineByClaudeSidRef, claudeSid);
-      scheduleStreamStallTimer(tabSessionId);
-
-      const invokeConc =
-        claudeSessionsOptionsRef.current?.claudeConcurrencyInvokeContextRef?.current?.(session) ?? null;
-
-      const turnNonce = lastUserSendNonceRef.current;
-
-      const codexContextExecutionEngine = resolveCodexContextExecutionEngine({
-        tabSessionId,
-        terminalFreshTurn: forceFreshClaudeSession,
+  const {
+    executeSession,
+    executeTerminalSession,
+    sendMessageToSession,
+    sendMessage,
+    closeSession,
+    cancelSession,
+  } = useMemo(
+    () =>
+      createSessionActionHandlers({
+        sessionsRef,
+        sessionIdMapRef,
+        executeSessionRetryCountRef,
+        recentExecutePromptBySessionRef,
+        streamingProcessByTabRef,
+        streamingTargetIdRef,
+        streamTurnSeqRef,
+        lastUserSendNonceRef,
+        assistantStreamTextByTabRef,
+        expectedTurnNonceByTabIdRef,
+        registryBootstrapDeadlineByClaudeSidRef,
+        claudeInvocationInflightRef,
+        pendingTurnFailoverRef,
+        attemptTurnFailoverAndRetryRef,
+        claudeSessionsOptionsRef,
+        streamingSessionStreamDetachByTabRef,
+        diskLoadDoneRef,
+        diskTailLinesBySessionRef,
+        workflowRunBySessionRef,
+        deferredBackgroundCompactRef,
         activeSessionId,
-        sessions: sessionsRef.current,
-        resolveEngine: resolveSessionExecutionEngine,
-      });
-
-      pendingTurnFailoverRef.current = {
-        tabSessionId,
-        turnNonce,
-        invokeConc,
-        repositoryPath: spawnSession.repositoryPath,
-        prompt,
-        modelArg,
-        resumeClaudeSid: claudeSid,
-        forceNewClaudeConversation: forceFreshClaudeSession,
-        cursorAttachments: opts?.cursorAttachments,
-        codexContextExecutionEngine,
-        engine: spawnEngine,
-        autoFailoverEnabled: isCachedModelProfileAutoFailoverEnabled(),
-        triedProfileIds: [],
-      };
-
-      void (async () => {
-        try {
-          let effectiveTurnNonce = turnNonce;
-          if (terminalFreshTeardown) {
-            for (const [inv, meta] of [...claudeInvocationInflightRef.current.entries()]) {
-              if (meta.tabId !== tabSessionId) continue;
-              await cancelClaudeInvocation(inv).catch(() => {});
-              meta.detach();
-              claudeInvocationInflightRef.current.delete(inv);
-            }
-            for (const sid of terminalFreshTeardown.cancelSessionIds) {
-              await cancelClaudeExecution(sid).catch(() => {});
-              expectedTurnNonceByTabIdRef.current.delete(sid);
-            }
-            streamTurnSeqRef.current += 1;
-            effectiveTurnNonce = streamTurnSeqRef.current;
-            lastUserSendNonceRef.current = effectiveTurnNonce;
-            expectedTurnNonceByTabIdRef.current.set(tabSessionId, effectiveTurnNonce);
-            const pendingCtx = pendingTurnFailoverRef.current;
-            if (pendingCtx?.tabSessionId === tabSessionId) {
-              pendingTurnFailoverRef.current = { ...pendingCtx, turnNonce: effectiveTurnNonce };
-            }
-            await new Promise<void>((resolve) => {
-              window.setTimeout(resolve, 80);
-            });
-          }
-          await runClaudeTurnWithContextGuard({
-            tabSessionId,
-            turnNonce: effectiveTurnNonce,
-            invokeConc,
-            repositoryPath: spawnSession.repositoryPath,
-            prompt,
-            modelArg,
-            resumeClaudeSid: claudeSid,
-            forceNewClaudeConversation: forceFreshClaudeSession,
-            cursorAttachments: opts?.cursorAttachments,
-            codexContextExecutionEngine,
-          });
-        } catch (err) {
-          clearStreamStallTimer(tabSessionId);
-          const ctx = pendingTurnFailoverRef.current;
-          const errText = err instanceof Error ? err.message : String(err);
-          if (
-            ctx?.tabSessionId === tabSessionId &&
-            ctx.autoFailoverEnabled &&
-            isRetryableModelApiError(errText)
-          ) {
-            try {
-              const retried = await attemptTurnFailoverAndRetryRef.current(ctx, errText);
-              if (retried) return;
-            } catch {
-              /* fall through to error UI */
-            }
-          }
-          pendingTurnFailoverRef.current = null;
-          if (claudeSid?.trim()) {
-            registryBootstrapDeadlineByClaudeSidRef.current.delete(claudeSid.trim());
-          }
-          commitSessions((prev) =>
-            applyClaudeExecuteFailureNotice(prev, tabSessionId, err, {
-              hasClaudeSessionId: Boolean(claudeSid),
-            }),
-          );
-        }
-      })();
-      return true;
-    },
+        setActiveSessionId,
+        setSessions,
+        commitSessions,
+        clearStreamStallTimer,
+        scheduleStreamStallTimer,
+        resolveSessionExecutionEngine,
+        runClaudeTurnWithContextGuard,
+        cancelHostExecutionForTab,
+        detachClaudeInvocationsForSessionKey,
+        purgeStreamSidecarsForSession,
+      }),
     [
+      activeSessionId,
+      cancelHostExecutionForTab,
       clearStreamStallTimer,
       commitSessions,
+      detachClaudeInvocationsForSessionKey,
+      purgeStreamSidecarsForSession,
       resolveSessionExecutionEngine,
       runClaudeTurnWithContextGuard,
       scheduleStreamStallTimer,
-      activeSessionId,
+      setSessions,
     ],
   );
 
@@ -4092,23 +3106,6 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     };
   }, [commitSessions, reconnectClaudeSessionAfterModelSwitch]);
 
-  const executeTerminalSession = useCallback(
-    (
-      sessionId: string,
-      outboundPrompt: string,
-      bubbleOpts?: {
-        userBubblePrompt?: string;
-        defaultInstructionApplied?: string;
-      },
-    ): boolean =>
-      executeSession(sessionId, outboundPrompt, {
-        terminalFreshTurn: true,
-        userBubblePrompt: bubbleOpts?.userBubblePrompt,
-        defaultInstructionApplied: bubbleOpts?.defaultInstructionApplied,
-      }),
-    [executeSession],
-  );
-
   const ensureSessionForMonitorDrawer = useCallback(
     async (input: {
       sessionId: string;
@@ -4270,121 +3267,6 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     setSessions((prev) => appendUserMessageBySessionOrClaudeId(prev, sessionId, trimmed));
   }, []);
 
-  const sendMessageToSession = useCallback(
-    (
-      sessionId: string,
-      prompt: string,
-      opts?: ClaudeComposerExecuteBubbleOptions,
-    ): Promise<void> => {
-      const session = sessionsRef.current.find((s) => s.id === sessionId);
-      if (!session) return Promise.resolve();
-
-      const outboundPrompt = normalizeClaudeNativeSlashPrompt(prompt);
-
-      notificationHub.clearTodos(sessionId);
-      if (session.claudeSessionId && session.claudeSessionId !== sessionId) {
-        notificationHub.clearTodos(session.claudeSessionId);
-      }
-
-      const claudeSessionId =
-        session.claudeSessionId ?? sessionIdMapRef.current.get(sessionId) ?? null;
-
-      streamingTargetIdRef.current = sessionId;
-      streamTurnSeqRef.current += 1;
-      lastUserSendNonceRef.current = streamTurnSeqRef.current;
-      assistantStreamTextByTabRef.current.set(sessionId, "");
-
-      const checker = claudeSessionsOptionsRef.current?.beforeSpawnClaudeRef?.current;
-      if (checker) {
-        const gate = checker(session);
-        if (!gate.ok) {
-          claudeSessionsOptionsRef.current?.onClaudeSpawnBlocked?.(gate.message);
-          return Promise.resolve();
-        }
-      }
-
-      expectedTurnNonceByTabIdRef.current.set(sessionId, lastUserSendNonceRef.current);
-      markClaudeRegistryBootstrapWarmup(registryBootstrapDeadlineByClaudeSidRef, claudeSessionId);
-      setSessions((prev) =>
-        opts?.replaceUserBubbleAtIndex !== undefined && Number.isFinite(opts.replaceUserBubbleAtIndex)
-          ? setSessionRunningReplacingUserBubbleAtIndex(prev, sessionId, opts.replaceUserBubbleAtIndex, prompt)
-          : opts?.replaceLastUserBubble
-            ? setSessionRunningReplacingLastUserBubble(prev, sessionId, prompt)
-            : opts?.replaceFirstUserBubble
-              ? setSessionRunningReplacingFirstUserBubble(prev, sessionId, prompt)
-              : setSessionRunningWithUserPrompt(prev, sessionId, prompt),
-      );
-
-      const invokeConc =
-        claudeSessionsOptionsRef.current?.claudeConcurrencyInvokeContextRef?.current?.(session) ?? null;
-
-      const turnNonce = lastUserSendNonceRef.current;
-      const modelArg =
-        session.model.trim().length > 0 ? session.model : undefined;
-
-      const codexContextExecutionEngine = resolveCodexContextExecutionEngine({
-        tabSessionId: sessionId,
-        activeSessionId,
-        sessions: sessionsRef.current,
-        resolveEngine: resolveSessionExecutionEngine,
-      });
-
-      pendingTurnFailoverRef.current = {
-        tabSessionId: sessionId,
-        turnNonce,
-        invokeConc,
-        repositoryPath: session.repositoryPath,
-        prompt: outboundPrompt,
-        modelArg,
-        resumeClaudeSid: claudeSessionId,
-        codexContextExecutionEngine,
-        engine: resolveSessionExecutionEngine(session),
-        autoFailoverEnabled: isCachedModelProfileAutoFailoverEnabled(),
-        triedProfileIds: [],
-      };
-
-      return (async () => {
-        try {
-          await runClaudeTurnWithContextGuard({
-            tabSessionId: sessionId,
-            turnNonce,
-            invokeConc,
-            repositoryPath: session.repositoryPath,
-            prompt,
-            modelArg,
-            resumeClaudeSid: claudeSessionId,
-          });
-        } catch (err) {
-          const ctx = pendingTurnFailoverRef.current;
-          const errText = err instanceof Error ? err.message : String(err);
-          if (
-            ctx?.tabSessionId === sessionId &&
-            ctx.autoFailoverEnabled &&
-            isRetryableModelApiError(errText)
-          ) {
-            try {
-              const retried = await attemptTurnFailoverAndRetryRef.current(ctx, errText);
-              if (retried) return;
-            } catch {
-              /* fall through */
-            }
-          }
-          pendingTurnFailoverRef.current = null;
-          if (claudeSessionId?.trim()) {
-            registryBootstrapDeadlineByClaudeSidRef.current.delete(claudeSessionId.trim());
-          }
-          setSessions((prev) =>
-            applyClaudeExecuteFailureNotice(prev, sessionId, err, {
-              hasClaudeSessionId: Boolean(claudeSessionId),
-            }),
-          );
-          throw err;
-        }
-      })();
-    },
-    [resolveSessionExecutionEngine, runClaudeTurnWithContextGuard],
-  );
-
   const compactSessionHistory = useCallback(
     async (sessionId: string, prompt?: string) => {
       const session = sessionsRef.current.find((s) => s.id === sessionId);
@@ -4446,14 +3328,6 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     [invokeClaudeTurn, reloadTranscriptFromDisk],
   );
 
-  const sendMessage = useCallback(
-    (prompt: string) => {
-      if (!activeSessionId) return;
-      sendMessageToSession(activeSessionId, prompt);
-    },
-    [activeSessionId, sendMessageToSession],
-  );
-
   const releaseSessionHostProcess = useCallback(
     async (
       sessionId: string,
@@ -4481,7 +3355,9 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
 
       const snapshot = opts?.claudeProcesses
         ? { claudeProcesses: opts.claudeProcesses }
-        : await getSystemResourceSnapshot().catch(() => null);
+        : await refreshSystemResourceSnapshotStore()
+            .then(() => ({ claudeProcesses: [...getSystemResourceClaudeProcesses()] }))
+            .catch(() => null);
       try {
         await stopClaudeMainSession({
           session,
@@ -4520,41 +3396,6 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     [clearStreamStallTimer, commitSessions, detachClaudeInvocationsForSessionKey, purgeStreamSidecarsForSession],
   );
 
-  const closeSession = useCallback((sessionId: string) => {
-    const victim = sessionsRef.current.find((s) => s.id === sessionId);
-    if (victim && isTerminalWorkerWiseTab(victim)) {
-      clearTerminalDefaultWorkerTabIfMatch(sessionId);
-    }
-    purgeStreamSidecarsForSession(sessionId, victim?.claudeSessionId);
-    clearStreamStallTimer(sessionId);
-    detachClaudeInvocationsForSessionKey(sessionId);
-    const victimSid = victim?.claudeSessionId?.trim() ?? sessionIdMapRef.current.get(sessionId)?.trim();
-    if (victimSid) {
-      void closeStreamingSession(victimSid).catch(() => {
-        /* 进程可能已结束 */
-      });
-    }
-    streamingProcessByTabRef.current.delete(sessionId);
-    streamingSessionStreamDetachByTabRef.current.get(sessionId)?.();
-    streamingSessionStreamDetachByTabRef.current.delete(sessionId);
-    diskLoadDoneRef.current.delete(sessionId);
-    diskTailLinesBySessionRef.current.delete(sessionId);
-    notificationHub.removeSession(sessionId);
-    if (victim?.repositoryPath?.trim()) {
-      void clearInvocationSnapshotBundle(sessionId, victim.repositoryPath);
-    }
-    setSessions((prev) => prev.filter((s) => s.id !== sessionId));
-    setActiveSessionId((prev) => {
-      if (prev === sessionId) return null;
-      return prev;
-    });
-    executeSessionRetryCountRef.current.delete(sessionId);
-    workflowRunBySessionRef.current.delete(sessionId);
-    persistWorkflowBindings(workflowRunBySessionRef.current);
-    // 关 tab 时顺手清掉先发后压登记的 deferred，避免孤儿 entry 一直占着 map。
-    deferredBackgroundCompactRef.current.delete(sessionId);
-  }, [clearStreamStallTimer, detachClaudeInvocationsForSessionKey, purgeStreamSidecarsForSession]);
-
   const deleteSession = useCallback(
     async (sessionId: string) => {
       const target = sessionsRef.current.find((s) => s.id === sessionId);
@@ -4578,43 +3419,6 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   const switchSession = useCallback((sessionId: string) => {
     setActiveSessionId(sessionId);
   }, []);
-
-  const cancelSession = useCallback(
-    (sessionId: string, opts?: { retractLastUserTurn?: boolean }) => {
-      const session = sessionsRef.current.find((s) => s.id === sessionId);
-      const realSessionId =
-        session?.claudeSessionId ?? sessionIdMapRef.current.get(sessionId) ?? null;
-
-      expectedTurnNonceByTabIdRef.current.delete(sessionId);
-      if (realSessionId?.trim()) {
-        expectedTurnNonceByTabIdRef.current.delete(realSessionId.trim());
-      }
-      const refT = streamingTargetIdRef.current;
-      if (refT !== null && (refT === sessionId || refT === realSessionId?.trim())) {
-        streamingTargetIdRef.current = null;
-      }
-
-      void cancelHostExecutionForTab(sessionId, realSessionId);
-      void closeStreamingSession(realSessionId ?? sessionId).catch(() => {
-        /* 长驻进程可能已退出 */
-      });
-      streamingProcessByTabRef.current.delete(sessionId);
-      purgeStreamSidecarsForSession(sessionId, session?.claudeSessionId);
-      clearStreamStallTimer(sessionId);
-      setSessions((prev) => {
-        const next = prev.map((s) => {
-          if (s.id !== sessionId) return s;
-          if (opts?.retractLastUserTurn) {
-            return retractLastClaudeTurnFromSession(s);
-          }
-          return { ...s, status: "cancelled" as const };
-        });
-        if (opts?.retractLastUserTurn) return next;
-        return appendSystemMessageBySessionId(next, sessionId, "执行已取消");
-      });
-    },
-    [cancelHostExecutionForTab, clearStreamStallTimer, purgeStreamSidecarsForSession],
-  );
 
   const stopSessionConversationTask = useCallback((item: SessionConversationTaskItem): boolean => {
     if (item.status !== "running" || !item.cancellable) return false;
@@ -4715,14 +3519,13 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
    */
   const syncSessionStatusesWithHostRegistry = useCallback(async () => {
     try {
-      const [listResult, snapshotResult] = await Promise.allSettled([
+      const [listResult] = await Promise.allSettled([
         listRunningClaudeSessions(),
-        getSystemResourceSnapshot(),
+        refreshSystemResourceSnapshotStore(),
       ]);
       if (listResult.status !== "fulfilled") return;
       const list = listResult.value;
-      const claudeProcesses =
-        snapshotResult.status === "fulfilled" ? snapshotResult.value.claudeProcesses ?? [] : [];
+      const claudeProcesses = [...getSystemResourceClaudeProcesses()];
       hydrateStreamingProcessRegistryFromHost(
         sessionsRef.current,
         claudeProcesses,

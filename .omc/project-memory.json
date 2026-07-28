@@ -42,8 +42,8 @@
     "runtime": null
   },
   "build": {
-    "buildCommand": "npm run build",
-    "testCommand": "npm test",
+    "buildCommand": "bun run tsc --noEmit -p tsconfig.json 2>&1 | head -40",
+    "testCommand": "bun test src/components/LeftSidebar/ 2>&1 | tail -40",
     "lintCommand": null,
     "devCommand": "npm run dev",
     "scripts": {
@@ -249,9 +249,27 @@
   },
   "hotPaths": [
     {
+      "path": "src/components/LeftSidebar/repositoryRows.tsx",
+      "accessCount": 4,
+      "lastAccessed": 1785196078379,
+      "type": "file"
+    },
+    {
+      "path": "src/components/LeftSidebar/RepositoryWorkspaceSessionTree.css",
+      "accessCount": 4,
+      "lastAccessed": 1785196108041,
+      "type": "file"
+    },
+    {
       "path": "src/components/GitPanel/DiffMode.tsx",
       "accessCount": 3,
       "lastAccessed": 1785167722772,
+      "type": "file"
+    },
+    {
+      "path": "src/App.css",
+      "accessCount": 3,
+      "lastAccessed": 1785196087702,
       "type": "file"
     },
     {
@@ -270,6 +288,30 @@
       "path": "src/components/LeftSidebar/RepositoryWorkspaceSessionTree.tsx",
       "accessCount": 1,
       "lastAccessed": 1785167321296,
+      "type": "file"
+    },
+    {
+      "path": "src/components/LeftSidebar/LeftSidebarWorkspaceListSlot.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1785196051298,
+      "type": "file"
+    },
+    {
+      "path": "src/components/WorkspaceQuickActionsTopbarStrip.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1785196058174,
+      "type": "file"
+    },
+    {
+      "path": "src/components/WorkspaceQuickActionsTopbarStrip.css",
+      "accessCount": 1,
+      "lastAccessed": 1785196058380,
+      "type": "file"
+    },
+    {
+      "path": "src/components/LeftSidebar/ProjectRepositoryList.tsx",
+      "accessCount": 1,
+      "lastAccessed": 1785196064371,
       "type": "file"
     }
   ],

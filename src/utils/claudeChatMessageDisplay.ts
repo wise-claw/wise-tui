@@ -130,6 +130,18 @@ export function isRenderableMessagePart(part: MessagePart): boolean {
   }
 }
 
+/**
+ * 消息在列表中是否「仅工具活动」（无可展示正文/思考）。
+ * 连续此类消息可合并为一行 ToolGroup，避免多条「探索了 / 执行 / 编辑」摘要叠罗汉。
+ */
+export function isToolActivityOnlyMessage(msg: ClaudeMessage): boolean {
+  const parts = msg.parts;
+  if (!Array.isArray(parts) || parts.length === 0) return false;
+  const visible = parts.filter(isRenderableMessagePart);
+  if (visible.length === 0) return false;
+  return visible.every((part) => part.type === "tool_use");
+}
+
 /** 消息行是否应在主会话列表中渲染（无正文则整行跳过）。 */
 export function hasRenderableChatMessageBody(msg: ClaudeMessage): boolean {
   if (msg.role === "system") {
@@ -259,6 +271,25 @@ export function parseDispatchRecordDisplayTimeMs(time: string | undefined): numb
 
 const DISPATCH_CONTENT_PLACEHOLDER = "（无正文）";
 
+/**
+ * 派发记录回填用的会话查找面。
+ * 优先传稳定的 `(id) => session`（基于 ref），避免整表 `sessions` 引用变化打穿消息行 element cache。
+ * 仍兼容传入 `readonly ClaudeSession[]`（测试 / 旧调用方）。
+ */
+export type SessionDispatchLookup =
+  | readonly ClaudeSession[]
+  | ((sessionId: string) => ClaudeSession | undefined);
+
+export function resolveSessionFromDispatchLookup(
+  lookup: SessionDispatchLookup | undefined,
+  sessionId: string,
+): ClaudeSession | undefined {
+  const key = sessionId.trim();
+  if (!key || !lookup) return undefined;
+  if (typeof lookup === "function") return lookup(key);
+  return lookup.find((item) => item.id === key || item.claudeSessionId === key);
+}
+
 function normalizedDispatchContentForSentence(raw: string | undefined): string | undefined {
   const trimmed = raw?.trim();
   if (!trimmed || trimmed === DISPATCH_CONTENT_PLACEHOLDER) return undefined;
@@ -267,12 +298,12 @@ function normalizedDispatchContentForSentence(raw: string | undefined): string |
 
 /** 从终端 worker 会话首条可展示用户消息回填派发正文（兼容无「正文」字段的历史记录）。 */
 export function resolveDispatchContentFromWorkerSession(
-  sessions: readonly ClaudeSession[],
+  sessions: SessionDispatchLookup | undefined,
   workerSessionId: string,
 ): string | undefined {
   const key = workerSessionId.trim();
   if (!key) return undefined;
-  const worker = sessions.find((item) => item.id === key || item.claudeSessionId === key);
+  const worker = resolveSessionFromDispatchLookup(sessions, key);
   if (!worker) return undefined;
   const idx = indexOfFirstRenderableUserMessage(worker.messages);
   if (idx < 0) return undefined;
@@ -283,11 +314,11 @@ export function resolveDispatchContentFromWorkerSession(
 
 export function enrichDispatchRecordMeta(
   meta: DispatchRecordMeta,
-  sessions?: readonly ClaudeSession[],
+  sessions?: SessionDispatchLookup,
 ): DispatchRecordMeta {
   if (normalizedDispatchContentForSentence(meta.dispatchContent)) return meta;
   const workerId = meta.targetSessionId?.trim();
-  if (!workerId || !sessions?.length) return meta;
+  if (!workerId || !sessions) return meta;
   const fromWorker = resolveDispatchContentFromWorkerSession(sessions, workerId);
   if (!fromWorker) return meta;
   return { ...meta, dispatchContent: fromWorker };
@@ -352,7 +383,7 @@ export function chatMessagePlainTextForCopy(msg: ClaudeMessage): string {
 /** 系统消息复制/填入：派发记录取可执行正文，其余取原始系统文本。 */
 function resolveSystemSessionActionText(
   msg: ClaudeMessage,
-  sessions?: readonly ClaudeSession[],
+  sessions?: SessionDispatchLookup,
 ): string {
   const raw = systemMessagePlainText(msg).trim();
   const dispatch = parseDispatchRecord(raw);
@@ -366,7 +397,7 @@ function resolveSystemSessionActionText(
 /** 列表复制按钮使用的最终文本（终端/团队派发记录与填入输入框一致，取可执行正文）。 */
 export function resolveChatMessageCopyText(
   msg: ClaudeMessage,
-  sessions?: readonly ClaudeSession[],
+  sessions?: SessionDispatchLookup,
 ): string {
   if (msg.role === "system") {
     return resolveSystemSessionActionText(msg, sessions);
@@ -377,7 +408,7 @@ export function resolveChatMessageCopyText(
 /** 填入会话输入框的正文：用户消息取原文；系统派发记录同 {@link resolveChatMessageCopyText}。 */
 export function resolveChatMessageComposerInsertText(
   msg: ClaudeMessage,
-  sessions?: readonly ClaudeSession[],
+  sessions?: SessionDispatchLookup,
 ): string {
   const payload = resolveChatMessageComposerInsertPayload(msg, sessions);
   return payload?.composerMain ?? "";
@@ -394,7 +425,7 @@ export interface ChatMessageComposerInsertPayload {
 /** 消息行「填入输入框」：正文 + 从 `附图：@` 解析的落盘路径。 */
 export function resolveChatMessageComposerInsertPayload(
   msg: ClaudeMessage,
-  sessions?: readonly ClaudeSession[],
+  sessions?: SessionDispatchLookup,
 ): ChatMessageComposerInsertPayload | null {
   let fullText = "";
   if (msg.role === "user") {

@@ -1,6 +1,5 @@
 import {
   Suspense,
-  startTransition,
   useCallback,
   useEffect,
   useMemo,
@@ -34,7 +33,6 @@ import {
   repositoryTypeChineseLabel,
 } from "./utils/repositoryType";
 import { runWhenIdle } from "./utils/deferIdle";
-import { isSessionBoundAsRepositoryMain } from "./utils/repositoryMainSessionBinding";
 import {
   resolveClaudeProxyBypassForSessionSpawn,
   resolveEngineForSessionSpawn,
@@ -72,7 +70,6 @@ import { useClaudeSessions, type ClaudeTurnCompletePayload } from "./hooks/useCl
 import { useRepositoryList } from "./hooks/useRepositoryList";
 import { openRepositoryRemoteInBrowser } from "./services/openRepositoryRemote";
 import { openInFinder } from "./services/repository";
-import { prefetchGitStatus } from "./services/gitStatusWarmCache";
 import { tryOpenWorkspaceInDefaultTerminal } from "./services/openWorkspaceWithTerminalPreference";
 import type { CommandPaletteSearchMode } from "./components/CommandPalette";
 import { LazyAppWorkspaceLayout } from "./components/AppWorkspaceLayout.lazy";
@@ -147,24 +144,15 @@ import {
 } from "./services/workflowTasks";
 import { cancelClaudeInvocation, listClaudeSubagents } from "./services/claude";
 import {
-  releaseClaudeHostProcessesForProjectScope,
-  releaseClaudeHostProcessesForRepositoryScope,
-  type ReleaseWiseTabSessionContext,
-} from "./services/releaseClaudeHostProcessesForWorkspaceScope";
-import {
   dispatchAtMentionPromptToRepos,
   planAtMentionDispatch,
 } from "./services/atMentionDispatch";
 import { resolveProjectMainSessionAnchor } from "./utils/projectSessionAnchor";
-import { resolveChatTopbarContext, resolveProjectExplorerOpenPath, resolveScheduledTasksRepository, shouldKeepProjectFocusWhenSwitchingSession } from "./utils/workspaceSelectionState";
-import { resolveFocusedPaneTargetSlot } from "./utils/multiPaneSlots";
+import { resolveChatTopbarContext, resolveProjectExplorerOpenPath, resolveScheduledTasksRepository } from "./utils/workspaceSelectionState";
 import { resolveWorkspaceRootPath } from "./utils/projectSessionAnchor";
-import { resolveSidebarSelectionTarget } from "./utils/sidebarSelectionTarget";
 import {
   findOwnerProjectForRepositoryId,
   isMultiRepoProject,
-  resolveWorkspaceMode,
-  shouldSidebarRepositorySelectOnlyUpdateFocus,
 } from "./utils/workspaceMode";
 import { employeeInProjectScope, shouldHideEmployeeUi } from "./utils/projectRepositoryRoles";
 import { buildProjectRoleTagOptions, buildProjectRepositoryMentionOptions } from "./utils/projectRoleTagOptions";
@@ -213,30 +201,13 @@ import {
   resolveClaudeConcurrencyInvokeContext,
 } from "./utils/claudeConcurrencyGate";
 import {
-  pickProjectMainSessionForSidebarSelect,
-  pickSessionForRepositorySidebarSelect,
-} from "./utils/claudeSessionSelection";
-import { pickFirstWorkspaceSidebarHistorySession } from "./utils/repositoryWorkspaceTree";
-import {
-  isOmcBatchHistoryStubSessionId,
   clearPersistedOmcBatchHistory,
-  parseOmcBatchHistoryStubAnchorSessionId,
 } from "./utils/omcEmployeeBatchHistory";
 import { isOmcMonitorEmployeeRecord } from "./utils/omcMonitorEmployeeSession";
 import {
-  normalizeRepositoryPathKey as normalizeRepositoryPathForMatch,
-  parseRepositoryMainSessionBindings,
-  projectMainSessionBindingKey,
   repositoryPathsMatch,
-  REPOSITORY_MAIN_SESSION_BINDING_STORAGE_KEY,
-  resolveRepositoryForSession,
-  resolveBoundMainSessionId,
-  resolveMainOwnerAgentNameForRepositoryPath,
-  resolveSessionFromBindingValue,
-  isProjectMainSessionBindingKey,
   isProjectRootSessionDisplayName,
 } from "./utils/repositoryMainSessionBinding";
-import { loadSessionOwnerHints, WISE_SESSION_OWNER_HINTS_CHANGED_EVENT } from "./utils/sessionOwnerHints";
 import type { WorkflowGraphRuntimeState } from "./services/workflowGraphRuntime";
 import "./App.css";
 import { toUiErrorMessage } from "./utils/appErrorMessage";
@@ -257,6 +228,8 @@ import {
   extractRuntimeSnapshotsFromEvents,
 } from "./services/workflowGraphHelpers";
 import { useMainLayoutModes } from "./hooks/useMainLayoutModes";
+import { useAppSessionRouting } from "./hooks/useAppSessionRouting";
+import { useAppSidebarSelection } from "./hooks/useAppSidebarSelection";
 import type { ReconcileProjectMode } from "./constants/reconcileProjectMode";
 import { useDingTalkAutomationInbound } from "./hooks/useDingTalkAutomationInbound";
 import { useCodeReviewFixDispatch } from "./hooks/useCodeReviewFixDispatch";
@@ -316,15 +289,6 @@ function normalizePersistedExtraPanes(raw: unknown, paneCount: PaneCount): PaneS
     });
   }
   return out;
-}
-
-/** 侧栏选中后推迟主会话切换，让工作区/仓库高亮与 Git 面板先绘制。 */
-function scheduleSidebarMainSessionEnsure(work: () => Promise<string | null>): void {
-  queueMicrotask(() => {
-    startTransition(() => {
-      void work();
-    });
-  });
 }
 
 // ── App ──
@@ -785,63 +749,13 @@ export default function App() {
     [],
   );
 
-  const [repositoryMainSessionBindings, setRepositoryMainSessionBindings] = useState<Record<string, string>>({});
+  const migrateRepositoryMainSessionBindingTabIdsRef = useRef<
+    (fromTabId: string, toClaudeSessionId: string) => void
+  >(() => {});
+
   /** 从侧栏仓库打开员工配置：与需求面板相同的 Owner 表格式，但不写 project_prd。 */
   const [employeeConfigRepositoryOwnerScopeOnly, setEmployeeConfigRepositoryOwnerScopeOnly] = useState(false);
   const [employeeConfigInitialCreateEmployeeName, setEmployeeConfigInitialCreateEmployeeName] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      try {
-        const raw = await getAppSetting(REPOSITORY_MAIN_SESSION_BINDING_STORAGE_KEY);
-        if (cancelled) return;
-        const fromDisk = parseRepositoryMainSessionBindings(raw);
-        setRepositoryMainSessionBindings((current) => ({ ...fromDisk, ...current }));
-      } catch {
-        /* ignore */
-      }
-    })();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const handlePersistRepositoryMainOwnerAgent = useCallback(
-    async (repository: Repository, mainOwnerAgentName: string | null) => {
-      try {
-        await handleUpdateRepositoryMainOwnerAgent(repository.id, mainOwnerAgentName);
-        const key = normalizeRepositoryPathForMatch(repository.path);
-        setRepositoryMainSessionBindings((prev) => {
-          if (!(key in prev)) return prev;
-          const next = { ...prev };
-          delete next[key];
-          void setAppSetting(REPOSITORY_MAIN_SESSION_BINDING_STORAGE_KEY, JSON.stringify(next));
-          return next;
-        });
-      } catch (err) {
-        message.error(err instanceof Error ? err.message : String(err));
-        throw err;
-      }
-    },
-    [handleUpdateRepositoryMainOwnerAgent],
-  );
-
-  const migrateRepositoryMainSessionBindingTabIds = useCallback((fromTabId: string, toClaudeSessionId: string) => {
-    setRepositoryMainSessionBindings((prev) => {
-      let changed = false;
-      const next = { ...prev };
-      for (const [k, v] of Object.entries(prev)) {
-        if (v === fromTabId) {
-          next[k] = toClaudeSessionId;
-          changed = true;
-        }
-      }
-      if (!changed) return prev;
-      void setAppSetting(REPOSITORY_MAIN_SESSION_BINDING_STORAGE_KEY, JSON.stringify(next));
-      return next;
-    });
-  }, []);
 
   const [claudeConcurrencyLimitsMap, setClaudeConcurrencyLimitsMap] = useState<ClaudeConcurrencyLimitsMap>({});
 
@@ -968,14 +882,14 @@ export default function App() {
       // 走 markSessionTabMigrated：同步写 extraPanesLatestRef，避免 effect 727
       // （清理已不存在的 session 引用）在迁移瞬态误清 companion slot。
       markSessionTabMigratedRef.current(fromTabId, toClaudeSessionId);
-      migrateRepositoryMainSessionBindingTabIds(fromTabId, toClaudeSessionId);
+      migrateRepositoryMainSessionBindingTabIdsRef.current(fromTabId, toClaudeSessionId);
       void migratePromptContextSessionKey(fromTabId, toClaudeSessionId);
       moveWorkflowAutomationSessionIdRef.current(fromTabId, toClaudeSessionId);
       moveDingTalkAutomationPendingSessionIdRef.current(fromTabId, toClaudeSessionId);
       moveOmcRuntimeSessionIdRef.current(fromTabId, toClaudeSessionId);
       postSessionTabMigrationRef.current(fromTabId, toClaudeSessionId);
     },
-    [migrateRepositoryMainSessionBindingTabIds],
+    [],
   );
 
   const companionSessionIds = useMemo(() => {
@@ -1037,7 +951,6 @@ export default function App() {
     onSessionTabIdMigrated: handleSessionTabIdMigrated,
   });
 
-  const sessionsLatestRef = sessionsLiveRef;
   const sessionsStructureKey = useSyncExternalStore(
     isCurrentPrimaryMainWorkspaceWindowSync()
       ? subscribeClaudeSessionsStructure
@@ -1046,86 +959,56 @@ export default function App() {
     getClaudeSessionsStructureKey,
   );
 
-  const closeSessionsForRepositoryPath = useCallback(
-    (repositoryPath: string) => {
-      const related = sessionsLatestRef.current.filter((session) =>
-        repositoryPathsMatch(session.repositoryPath, repositoryPath),
-      );
-      for (const session of related) {
-        closeSession(session.id);
-      }
-    },
-    [closeSession],
-  );
+  const onCloseSessionWorkflowCleanup = useCallback((creatorIds: Set<string>) => {
+    const nextTasks = removeWorkflowTasksForSessionCreators(workflowTasksRef.current, creatorIds);
+    const liveTaskIds = collectLiveWorkflowTaskIds(nextTasks);
+    setWorkflowTasks(nextTasks);
+    commitWorkflowTaskEventsByTaskId((prev) => pruneRecordByTaskIds(prev, liveTaskIds));
+    commitWorkflowRuntimeSnapshotsByTaskId((prev) => pruneRecordByTaskIds(prev, liveTaskIds));
+    setTaskPendingEmployeesByTaskId((prev) => pruneRecordByTaskIds(prev, liveTaskIds));
+    setWorkflowRuntimeStateByTaskId((prev) => pruneRecordByTaskIds(prev, liveTaskIds));
+    purgeWorkflowWorkerSessionBindingsRef.current(creatorIds);
+  }, []);
 
-  const handleRemoveRepositoryWithSessionCleanup = useCallback(
-    async (repository: Repository) => {
-      closeSessionsForRepositoryPath(repository.path);
-      await handleRemoveRepository(repository);
-    },
-    [closeSessionsForRepositoryPath, handleRemoveRepository],
-  );
+  const {
+    repositoryMainSessionBindings,
+    repositoryMainBindingsLatestRef,
+    repositoriesLatestRef,
+    sessionsLatestRef,
+    activeSessionIdLatestRef,
+    releaseSessionHostProcessRef,
+    migrateRepositoryMainSessionBindingTabIds,
+    handlePersistRepositoryMainOwnerAgent,
+    bindRepositoryMainSession,
+    bindRepositoryMainSessionRef,
+    jumpToSessionWithRepository,
+    jumpToSessionWithRepositoryRef,
+    handleArchiveWorkspaceSession,
+    handleCloseSession,
+    handleDeleteHistorySession,
+    handleRemoveRepositoryWithSessionCleanup,
+    handleDetachRepositoryFromProjectWithSessionCleanup,
+  } = useAppSessionRouting({
+    repositories,
+    projects,
+    activeProjectId,
+    activeRepositoryId,
+    activeWorkspaceFocus,
+    activeSessionId,
+    sessions,
+    sessionsLiveRef,
+    setActiveRepositoryWithOwner,
+    handleUpdateRepositoryMainOwnerAgent,
+    handleRemoveRepository,
+    handleDetachRepositoryFromProject,
+    closeSession,
+    deleteSession,
+    switchSession,
+    releaseSessionHostProcess,
+    onCloseSessionWorkflowCleanup,
+  });
 
-  const handleDetachRepositoryFromProjectWithSessionCleanup = useCallback(
-    async (projectId: string, repositoryId: number) => {
-      const repository = repositories.find((item) => item.id === repositoryId);
-      if (repository) {
-        closeSessionsForRepositoryPath(repository.path);
-      }
-      await handleDetachRepositoryFromProject(projectId, repositoryId);
-    },
-    [closeSessionsForRepositoryPath, handleDetachRepositoryFromProject, repositories],
-  );
-
-  const repositoriesLatestRef = useRef(repositories);
-  repositoriesLatestRef.current = repositories;
-
-  const repositoryMainBindingsLatestRef = useRef(repositoryMainSessionBindings);
-  repositoryMainBindingsLatestRef.current = repositoryMainSessionBindings;
-
-  const releaseSessionHostProcessRef = useRef(releaseSessionHostProcess);
-  releaseSessionHostProcessRef.current = releaseSessionHostProcess;
-
-  const bindRepositoryMainSession = useCallback(
-    async (
-      repositoryPath: string,
-      sessionId: string,
-      opts?: { deferHostRelease?: boolean },
-    ) => {
-      const key = normalizeRepositoryPathForMatch(repositoryPath);
-      const nextId = sessionId.trim();
-      if (!nextId) {
-        return;
-      }
-      const prevRaw = repositoryMainBindingsLatestRef.current[key]?.trim();
-      if (prevRaw && prevRaw !== nextId && !opts?.deferHostRelease) {
-        const mainOwner = isProjectMainSessionBindingKey(key)
-          ? null
-          : resolveMainOwnerAgentNameForRepositoryPath(repositoriesLatestRef.current, key);
-        const prevTabId = resolveBoundMainSessionId(
-          key,
-          repositoryMainBindingsLatestRef.current,
-          sessionsLatestRef.current,
-          mainOwner,
-        );
-        const prevSession =
-          (prevTabId ? sessionsLatestRef.current.find((s) => s.id === prevTabId) : null) ??
-          resolveSessionFromBindingValue(prevRaw, sessionsLatestRef.current);
-        if (prevSession && prevSession.id !== nextId) {
-          window.setTimeout(() => {
-            void releaseSessionHostProcessRef.current(prevSession.id);
-          }, 0);
-        }
-      }
-      setRepositoryMainSessionBindings((prev) => {
-        if (prev[key] === nextId) return prev;
-        const next = { ...prev, [key]: nextId };
-        void setAppSetting(REPOSITORY_MAIN_SESSION_BINDING_STORAGE_KEY, JSON.stringify(next));
-        return next;
-      });
-    },
-    [],
-  );
+  migrateRepositoryMainSessionBindingTabIdsRef.current = migrateRepositoryMainSessionBindingTabIds;
 
   const employeesLatestRef = useRef(employees);
   employeesLatestRef.current = employees;
@@ -1176,60 +1059,6 @@ export default function App() {
       }
     })();
   };
-
-  const handleCloseSession = useCallback(
-    (sessionId: string) => {
-      const session = sessionsLatestRef.current.find((s) => s.id === sessionId);
-      const creatorIds = new Set<string>([sessionId]);
-      if (session?.claudeSessionId?.trim()) {
-        creatorIds.add(session.claudeSessionId.trim());
-      }
-      const nextTasks = removeWorkflowTasksForSessionCreators(workflowTasksRef.current, creatorIds);
-      const liveTaskIds = collectLiveWorkflowTaskIds(nextTasks);
-      setWorkflowTasks(nextTasks);
-      commitWorkflowTaskEventsByTaskId((prev) => pruneRecordByTaskIds(prev, liveTaskIds));
-      commitWorkflowRuntimeSnapshotsByTaskId((prev) => pruneRecordByTaskIds(prev, liveTaskIds));
-      setTaskPendingEmployeesByTaskId((prev) => pruneRecordByTaskIds(prev, liveTaskIds));
-      setWorkflowRuntimeStateByTaskId((prev) => pruneRecordByTaskIds(prev, liveTaskIds));
-      purgeWorkflowWorkerSessionBindingsRef.current(creatorIds);
-      if (session?.repositoryPath) {
-        const key = normalizeRepositoryPathForMatch(session.repositoryPath);
-        setRepositoryMainSessionBindings((prev) => {
-          if (prev[key] !== sessionId) return prev;
-          const next = { ...prev };
-          delete next[key];
-          void setAppSetting(REPOSITORY_MAIN_SESSION_BINDING_STORAGE_KEY, JSON.stringify(next));
-          return next;
-        });
-      }
-      closeSession(sessionId);
-    },
-    [closeSession],
-  );
-
-  /**
-   * 历史会话弹窗内删除某条会话：物理删除磁盘 jsonl（不可恢复），并清理与之绑定的主会话映射。
-   * `deleteSession` 内部对 running / connecting 状态会抛错，由调用方承接 toast。
-   */
-  const handleDeleteHistorySession = useCallback(
-    async (sessionId: string) => {
-      const session = sessionsLatestRef.current.find((s) => s.id === sessionId);
-      if (session?.repositoryPath) {
-        const key = normalizeRepositoryPathForMatch(session.repositoryPath);
-        setRepositoryMainSessionBindings((prev) => {
-          if (prev[key] !== sessionId) return prev;
-          const next = { ...prev };
-          delete next[key];
-          void setAppSetting(REPOSITORY_MAIN_SESSION_BINDING_STORAGE_KEY, JSON.stringify(next));
-          return next;
-        });
-      }
-      await deleteSession(sessionId);
-    },
-    [deleteSession],
-  );
-  const activeSessionIdLatestRef = useRef(activeSessionId);
-  activeSessionIdLatestRef.current = activeSessionId;
 
   const extraPanesLatestRef = useRef(extraPanes);
   extraPanesLatestRef.current = extraPanes;
@@ -1306,95 +1135,6 @@ export default function App() {
     // 闭包仅捕获稳定的 ref 与模块级函数，resolve 被调用时才读取最新 ref.current，
     // 故只需在挂载时赋值一次；避免流式期间每帧重新创建并赋值闭包。
   }, []);
-
-  /** 与 ClaudeSessions 内 handleSwitchToSession 对齐：先同步项目+仓库再切会话，否则 activeSession 会因 path 不一致为空。 */
-  const jumpToSessionWithRepository = useCallback(
-    (sessionId: string) => {
-      const sid = sessionId.trim();
-      if (!sid) return;
-      if (isOmcBatchHistoryStubSessionId(sid)) {
-        const anchor = parseOmcBatchHistoryStubAnchorSessionId(sid);
-        if (anchor) {
-          void message.info("此为批量 OMC 历史占位标签，正在跳转到发起该批次的主会话。");
-          jumpToSessionWithRepository(anchor);
-        }
-        return;
-      }
-      const target = sessionsLatestRef.current.find((item) => item.id === sid || item.claudeSessionId === sid);
-      const canonicalId = target?.id ?? sid;
-      const currentActive = activeSessionIdLatestRef.current?.trim() ?? "";
-      if (canonicalId === currentActive) {
-        return;
-      }
-      if (!target?.repositoryPath) {
-        switchSession(canonicalId);
-        return;
-      }
-      const repo = resolveRepositoryForSession({
-        session: target,
-        repositories,
-        bindings: repositoryMainSessionBindings,
-        sessions: sessionsLatestRef.current,
-        preferredRepositoryId: activeRepositoryId,
-      });
-      const activeProjectForJump = activeProjectId
-        ? projects.find((item) => item.id === activeProjectId) ?? null
-        : null;
-      const keepProjectFocus = shouldKeepProjectFocusWhenSwitchingSession({
-        session: target,
-        activeWorkspaceFocus,
-        activeProject: activeProjectForJump,
-        repositories,
-        workspaceMode: resolveWorkspaceMode({ activeProjectId, projects }),
-      });
-      // 同 repo 重复跳转时短路：避免对同一个 repo.id 二次触发 setActiveRepositoryWithOwner
-      // 内部的 activeProjectId/activeRepositoryId/activeWorkspaceFocus 4-setter 链，
-      // 进而避免 useCallback 闭包重生成、jumpToSessionWithRepositoryRef 重写以及 git 面板
-      // (useRepositoryFilesExplorer/useRepositoryExplorerGitStatus/GitRepoSection) 的级联 reconcile。
-      if (repo && !keepProjectFocus && repo.id !== activeRepositoryId) {
-        setActiveRepositoryWithOwner(repo.id);
-      }
-      switchSession(canonicalId);
-    },
-    [
-      activeProjectId,
-      activeRepositoryId,
-      activeWorkspaceFocus,
-      projects,
-      repositories,
-      repositoryMainSessionBindings,
-      setActiveRepositoryWithOwner,
-      switchSession,
-    ],
-  );
-
-  const jumpToSessionWithRepositoryRef = useRef(jumpToSessionWithRepository);
-  jumpToSessionWithRepositoryRef.current = jumpToSessionWithRepository;
-
-  /** 侧栏会话列表「归档」：关闭标签（保留磁盘历史），若归档的是当前会话则切到同仓列表下一项。 */
-  const handleArchiveWorkspaceSession = useCallback(
-    (sessionId: string) => {
-      const sid = sessionId.trim();
-      if (!sid) return;
-      const sessionsNow = sessionsLatestRef.current;
-      const target = sessionsNow.find((item) => item.id === sid);
-      const repoPath = target?.repositoryPath?.trim() ?? "";
-      const wasActive = (activeSessionIdLatestRef.current?.trim() ?? "") === sid;
-      handleCloseSession(sid);
-      if (!wasActive || !repoPath) return;
-      const next = pickFirstWorkspaceSidebarHistorySession(
-        sessionsNow.filter((item) => item.id !== sid),
-        repoPath,
-      );
-      if (next) {
-        jumpToSessionWithRepositoryRef.current(next.id);
-      }
-    },
-    [handleCloseSession],
-  );
-
-  const bindRepositoryMainSessionRef = useRef(bindRepositoryMainSession);
-  bindRepositoryMainSessionRef.current = bindRepositoryMainSession;
 
   const {
     flushDingTalkAutomationReplyForTurn,
@@ -2334,48 +2074,6 @@ export default function App() {
     [activeRepositoryId, createSession, closeSession, employeeMonitorItems],
   );
 
-  const canRestoreHistorySessionForDrawer = useCallback(
-    (sessionId: string) => {
-      const session = sessionsLatestRef.current.find((item) => item.id === sessionId);
-      if (!session) return false;
-      return !isSessionBoundAsRepositoryMain(
-        session,
-        repositoryMainBindingsLatestRef.current,
-        sessionsLatestRef.current,
-        repositories,
-      );
-    },
-    [repositories],
-  );
-
-  const handleRestoreHistorySessionAsMain = useCallback(
-    async (sessionId: string) => {
-      const sid = sessionId.trim();
-      if (!sid) return;
-      const target = sessionsLatestRef.current.find((item) => item.id === sid || item.claudeSessionId === sid);
-      if (!target) {
-        message.warning("未找到该会话");
-        return;
-      }
-      if (!target.repositoryPath?.trim()) {
-        message.warning("无法恢复：会话缺少仓库路径");
-        return;
-      }
-      viewMode.enter({ kind: "chat" });
-      await bindRepositoryMainSessionRef.current(target.repositoryPath, target.id);
-      jumpToSessionWithRepositoryRef.current(target.id);
-      if (target.claudeSessionId?.trim() || target.id.trim()) {
-        try {
-          await reloadFullDiskTranscript(target.id);
-        } catch {
-          /* 落盘略晚时不阻断恢复 */
-        }
-      }
-      setInspectorHistorySessionId(null);
-    },
-    [reloadFullDiskTranscript, viewMode],
-  );
-
   const resolveTaskListOmcInvokeConcurrency = useCallback(
     (sess: ClaudeSession) =>
       resolveClaudeConcurrencyInvokeContext({
@@ -2400,614 +2098,53 @@ export default function App() {
     [activeRepository?.name, refreshDiskSessionsForRepository],
   );
 
-  const sessionOwnerHintsRef = useRef(loadSessionOwnerHints());
-  useEffect(() => {
-    const onHintsUpdated = () => {
-      sessionOwnerHintsRef.current = loadSessionOwnerHints();
-    };
-    window.addEventListener(WISE_SESSION_OWNER_HINTS_CHANGED_EVENT, onHintsUpdated);
-    return () => {
-      window.removeEventListener(WISE_SESSION_OWNER_HINTS_CHANGED_EVENT, onHintsUpdated);
-    };
-  }, []);
-
-  const switchSessionIfNeeded = useCallback(
-    (sessionId: string) => {
-      const nextId = sessionId.trim();
-      if (!nextId) {
-        return;
-      }
-      if (activeSessionIdLatestRef.current?.trim() === nextId) {
-        return;
-      }
-      switchSession(nextId);
-    },
-    [switchSession],
-  );
-
-  /** 侧栏选中工作区：激活会话列表第一项（与侧栏展示顺序一致），并绑定为主会话。 */
-  function switchRepositoryDisplaySession(repository: Repository): string | null {
-    const sessionsNow = sessionsLatestRef.current;
-    const target = resolveSidebarSelectionTarget({ repository });
-    const first = pickFirstWorkspaceSidebarHistorySession(sessionsNow, target.path);
-    if (first) {
-      switchSessionIfNeeded(first.id);
-      return first.id;
-    }
-    // 列表为空时回退旧挑选逻辑（主 Owner / 最近可恢复会话），避免 ensure 前误建空壳。
-    const mainOwnerPick = resolveMainOwnerAgentNameForRepositoryPath(repositories, target.path);
-    const boundId = resolveBoundMainSessionId(
-      target.path,
-      repositoryMainSessionBindings,
-      sessionsNow,
-      mainOwnerPick,
-    );
-    if (boundId) {
-      switchSessionIfNeeded(boundId);
-      return boundId;
-    }
-    const latestForRepo = pickSessionForRepositorySidebarSelect(
-      sessionsNow,
-      target.path,
-      sessionOwnerHintsRef.current,
-      { mainOwnerAgentName: mainOwnerPick },
-    );
-    if (latestForRepo) {
-      switchSessionIfNeeded(latestForRepo.id);
-      return latestForRepo.id;
-    }
-    return null;
-  }
-
-  /** 绑定仓库主会话（不修改侧栏选中态）。 */
-  function bindRepositoryMainSessionTarget(repository: Repository): string | null {
-    const target = resolveSidebarSelectionTarget({ repository });
-    const sessionId = switchRepositoryDisplaySession(repository);
-    if (sessionId) {
-      void bindRepositoryMainSession(target.path, sessionId);
-    }
-    return sessionId;
-  }
-
-  const ensureSessionInFlightRef = useRef<string | null>(null);
-
-  async function createAndBindRepositoryMainSession(
-    repository: Repository,
-    priorActiveId: string | null | undefined,
-    opts?: { carryDraft?: boolean },
-  ): Promise<string> {
-    const target = resolveSidebarSelectionTarget({ repository });
-    // 手动「新建会话」时把旧会话输入框草稿迁移到新会话，避免新会话输入框显示为空。
-    // 必须在 createSession 内部 setActiveSessionId 之前完成（见 onBeforeActivate 钩子）。
-    const carryDraftFromId = opts?.carryDraft ? priorActiveId ?? undefined : undefined;
-    const id = await createSession(target.path, target.displayName, {
-      immediateActivate: true,
-      onBeforeActivate: carryDraftFromId
-        ? (newId) => migratePromptContextSessionKey(carryDraftFromId, newId)
-        : undefined,
-    });
-    void bindRepositoryMainSession(target.path, id, { deferHostRelease: true });
-    scheduleReleaseScopedClaudeHostsBeforeNewMain({
-      kind: "repository",
-      repositoryPath: target.path,
-      newSessionId: id,
-      priorActiveId,
-    });
-    return id;
-  }
-
-  async function createAndBindProjectMainSession(
-    project: ProjectItem,
-    priorActiveId: string | null | undefined,
-    opts?: { carryDraft?: boolean },
-  ): Promise<string | null> {
-    const anchor = resolveProjectMainSessionAnchor(project, repositories);
-    if (!anchor.path) {
-      message.warning("该 Workspace 缺少根目录，请先配置 rootPath");
-      return null;
-    }
-    const carryDraftFromId = opts?.carryDraft ? priorActiveId ?? undefined : undefined;
-    const id = await createSession(anchor.path, anchor.displayName, {
-      immediateActivate: true,
-      onBeforeActivate: carryDraftFromId
-        ? (newId) => migratePromptContextSessionKey(carryDraftFromId, newId)
-        : undefined,
-    });
-    void bindRepositoryMainSession(projectMainSessionBindingKey(project.id), id, {
-      deferHostRelease: true,
-    });
-    scheduleReleaseScopedClaudeHostsBeforeNewMain({
-      kind: "project",
-      project,
-      newSessionId: id,
-      priorActiveId,
-    });
-    return id;
-  }
-
-  /** 打开/恢复仓库主会话：先读绑定，再挑同路径最近会话；无可用会话时自动新建。 */
-  async function ensureRepositoryMainSession(repository: Repository): Promise<string | null> {
-    const target = resolveSidebarSelectionTarget({ repository });
-    const flightKey = `repo:${target.path}`;
-    if (ensureSessionInFlightRef.current === flightKey) {
-      return null;
-    }
-    const existing = bindRepositoryMainSessionTarget(repository);
-    if (existing) {
-      return existing;
-    }
-    ensureSessionInFlightRef.current = flightKey;
-    try {
-      return await createAndBindRepositoryMainSession(
-        repository,
-        activeSessionIdLatestRef.current,
-      );
-    } finally {
-      if (ensureSessionInFlightRef.current === flightKey) {
-        ensureSessionInFlightRef.current = null;
-      }
-    }
-  }
-
-  async function ensureProjectMainSession(project: ProjectItem): Promise<string | null> {
-    const anchor = resolveProjectMainSessionAnchor(project, repositories);
-    const flightKey = `project:${project.id}:${anchor.path ?? ""}`;
-    if (!anchor.path) {
-      message.warning("该 Workspace 缺少根目录，请先配置 rootPath");
-      return null;
-    }
-    if (ensureSessionInFlightRef.current === flightKey) {
-      return null;
-    }
-    const existing = bindProjectMainSessionTarget(project);
-    if (existing) {
-      return existing;
-    }
-    ensureSessionInFlightRef.current = flightKey;
-    try {
-      return await createAndBindProjectMainSession(project, activeSessionIdLatestRef.current);
-    } finally {
-      if (ensureSessionInFlightRef.current === flightKey) {
-        ensureSessionInFlightRef.current = null;
-      }
-    }
-  }
-
-  async function openRepositoryMainSession(
-    repository: Repository,
-    options?: { enterChat?: boolean },
-  ): Promise<string | null> {
-    setActiveRepositoryWithOwner(repository.id);
-    if (options?.enterChat ?? true) {
-      startTransition(() => {
-        viewMode.enter({ kind: "chat" });
-      });
-    }
-    // 多仓工作区内点成员仓：只更新侧栏/文件树焦点；有已绑定会话则切展示，禁止新建空壳。
-    if (shouldSidebarRepositorySelectOnlyUpdateFocus(repository, projects)) {
-      return switchRepositoryDisplaySession(repository);
-    }
-    return ensureRepositoryMainSession(repository);
-  }
-
-  /** 新建主会话前结束仍占着本机 Claude 的上一活动标签（含其它仓库，避免「数量」累加）。 */
-  async function releasePriorActiveSessionHostBeforeNewMain(
-    priorActiveId: string | null | undefined,
-    newSessionId: string,
-    alreadyReleasedTabIds?: ReadonlySet<string>,
-  ): Promise<void> {
-    const priorId = priorActiveId?.trim();
-    const nextId = newSessionId.trim();
-    if (!priorId || priorId === nextId) {
-      return;
-    }
-    if (alreadyReleasedTabIds?.has(priorId)) {
-      return;
-    }
-    const prior = sessionsLatestRef.current.find((s) => s.id === priorId);
-    if (!prior) {
-      return;
-    }
-    await releaseSessionHostProcessRef.current(prior.id);
-  }
-
-  /** 新建主会话前：结束目标仓库 / 项目范围内仍绑定的本机 Claude 进程，并收尾上一活动标签。 */
-  async function releaseScopedClaudeHostsBeforeNewMain(
-    params:
-      | {
-          kind: "repository";
-          repositoryPath: string;
-          newSessionId: string;
-          priorActiveId?: string | null;
-        }
-      | {
-          kind: "project";
-          project: ProjectItem;
-          newSessionId: string;
-          priorActiveId?: string | null;
-        },
-  ): Promise<void> {
-    const releaseOpts = {
-      sessions: sessionsLatestRef.current,
-      excludeSessionId: params.newSessionId,
-      releaseWiseTabSession: (sessionId: string, ctx?: ReleaseWiseTabSessionContext) =>
-        releaseSessionHostProcessRef.current(sessionId, ctx),
-      onCancelTabSession: (sessionId: string) => cancelSession(sessionId),
-    };
-    const releasedTabIds =
-      params.kind === "repository"
-        ? await releaseClaudeHostProcessesForRepositoryScope({
-            repositoryPath: params.repositoryPath,
-            ...releaseOpts,
-          })
-        : await releaseClaudeHostProcessesForProjectScope({
-            project: params.project,
-            repositories: repositoriesLatestRef.current,
-            ...releaseOpts,
-          });
-    await releasePriorActiveSessionHostBeforeNewMain(
-      params.priorActiveId,
-      params.newSessionId,
-      releasedTabIds,
-    );
-  }
-
-  function scheduleReleaseScopedClaudeHostsBeforeNewMain(
-    params: Parameters<typeof releaseScopedClaudeHostsBeforeNewMain>[0],
-  ): void {
-    const run = () => {
-      void releaseScopedClaudeHostsBeforeNewMain(params);
-    };
-    if (typeof requestAnimationFrame === "function") {
-      requestAnimationFrame(() => {
-        requestAnimationFrame(run);
-      });
-      return;
-    }
-    window.setTimeout(run, 0);
-  }
-
-  /** 手动「新建会话」：始终创建新标签并绑定为仓库主会话。 */
-  async function handleManualNewRepositorySession(repository: Repository): Promise<void> {
-    // 注意：这里只切 viewMode，不在这里翻 activeRepositoryId。
-    // activeRepositoryId 的设置推迟到 jumpToSessionWithRepository 内部完成：
-    //   1) 避免对同一个 repo.id 二次触发 setActiveRepositoryWithOwner 的 4-setter 链
-    //      (activeProjectId/activeRepositoryId/activeWorkspaceFocus + schedulePersistActiveProjectId)；
-    //   2) 避免 useCallback 闭包因 activeRepositoryId 依赖变化重生成，触发下游消费者级联 reconcile；
-    //   3) createAndBindRepositoryMainSession 走 repository 入参解析路径与 owner project，
-    //      不依赖 await 期间的 activeRepositoryId，延迟翻转安全。
-    startTransition(() => {
-      viewMode.enter({ kind: "chat" });
-    });
-    const id = await createAndBindRepositoryMainSession(
-      repository,
-      activeSessionIdLatestRef.current,
-      { carryDraft: true },
-    );
-    jumpToSessionWithRepository(id);
-  }
-
-  /** 手动为 Workspace 新建项目主会话标签。 */
-  async function handleManualNewProjectSession(project: ProjectItem): Promise<void> {
-    const byId = new Map(repositories.map((repo) => [repo.id, repo]));
-    const repos = project.repositoryIds
-      .map((id) => byId.get(id))
-      .filter((repo): repo is Repository => Boolean(repo));
-    const anchor = resolveProjectMainSessionAnchor(project, repositories);
-    if (!anchor.path) {
-      message.warning("该 Workspace 缺少根目录，请先配置 rootPath");
-      return;
-    }
-    const isStandaloneTrellisProject = project.id.startsWith("repo:");
-    startTransition(() => {
-      viewMode.enter({ kind: "chat" });
-      if (repos[0]) {
-        if (isStandaloneTrellisProject) {
-          setActiveRepositoryWithOwner(repos[0].id);
-        } else {
-          setActiveProjectId(project.id);
-          setActiveRepositoryId(repos[0].id);
-        }
-      } else if (!isStandaloneTrellisProject) {
-        setActiveProjectId(project.id);
-      }
-    });
-    const id = await createAndBindProjectMainSession(project, activeSessionIdLatestRef.current, {
-      carryDraft: true,
-    });
-    if (id) {
-      jumpToSessionWithRepository(id);
-    }
-  }
-
-  const handleSidebarRepositorySelect = useCallback(
-    (repositoryId: number | null) => {
-      if (repositoryId == null) {
-        setActiveRepositoryId(null);
-        return;
-      }
-      const repository = repositories.find((item) => item.id === repositoryId);
-      if (!repository) {
-        return;
-      }
-      void openRepositoryMainSession(repository, { enterChat: false });
-    },
-    [repositories, setActiveRepositoryId, setActiveRepositoryWithOwner],
-  );
-
-  const startupFirstProjectRepoSessionAppliedRef = useRef(false);
-
-  const sidebarSelectionEpochRef = useRef(0);
-
-  /**
-   * 多屏下侧栏/顶栏选仓库/工作区时，把选择路由到当前聚焦 pane（Pane 0 暂 fall back 到全局，
-   * 待 Pane 0 per-pane 槽落地后再切到 primaryPaneActiveContext）。
-   *
-   * 与 [[multipane-setactiverepo-pollution]] 记录的 `openRepositoryFileByEvent` 护栏同形：
-   * 单屏维持"切全局"原行为；多屏下"切换全局活动仓库/工作区"会污染左栏选中态、文件树、
-   * 其他屏的左栏基线视图，所以改成"路由到当前活动 pane"。
-   *
-   * @returns true 表示已路由到 per-pane（写入器应跳过全局 setActiveXxxId），
-   *          false 表示未路由（fall through，由调用方按单屏语义写全局）。
-   */
-  const tryRouteSidebarSelectionToFocusedPane = useCallback(
-    (kind: "repository" | "project", id: number | string): boolean => {
-      const target = resolveFocusedPaneTargetSlot(
-        paneCountRef.current,
-        getActivePaneIndex(),
-        extraPanes,
-      );
-      if (target.kind === "extra") {
-        if (kind === "repository") {
-          void handlePaneRepositorySelect(target.slotIndex, Number(id));
-        } else {
-          void handlePaneProjectNewSession(target.slotIndex, String(id), projects);
-        }
-        return true;
-      }
-      // kind === "none" 或 "primary"：调用方按单屏语义或 Pane 0 fallback 写全局。
-      return false;
-    },
-    [extraPanes, handlePaneProjectNewSession, handlePaneRepositorySelect, projects],
-  );
-
-  /**
-   * 顶栏 / ClaudeSessionsChatHost.handleSwitchToSession 的"切到新仓库"副作用包装：
-   * 多屏下路由到当前聚焦 pane；单屏维持原行为（写全局 activeRepositoryId）。
-   * 与 tryRouteSidebarSelectionToFocusedPane 的差别：本函数对单屏始终 fall through 到
-   * `setActiveRepositoryId`，而 helper 在单屏时早退 —— 这是为了让 ChatHost 内的
-   * `handleSwitchToSession` 在 paneCount>1 时不再把全局 active 仓库跟 pane 会话强行对齐。
-   */
-  const handlePickedActiveRepositoryForCurrentPane = useCallback(
-    (repositoryId: number) => {
-      if (paneCountRef.current === 1) {
-        setActiveRepositoryId(repositoryId);
-        return;
-      }
-      tryRouteSidebarSelectionToFocusedPane("repository", repositoryId);
-    },
-    [setActiveRepositoryId, tryRouteSidebarSelectionToFocusedPane],
-  );
-
-  const handleSidebarRepositorySelectLeavingMcpHub = useCallback(
-    (repositoryId: number | null) => {
-      if (repositoryId == null) {
-        startTransition(() => {
-          if (viewMode.isCockpit || viewMode.isAuthor || viewMode.isInspect) {
-            viewMode.back();
-          }
-        });
-        handleSidebarRepositorySelect(repositoryId);
-        return;
-      }
-      const repository = repositories.find((item) => item.id === repositoryId);
-      if (!repository) {
-        return;
-      }
-      prefetchGitStatus(repository.path);
-      const leavingOverlay = viewMode.isCockpit || viewMode.isAuthor || viewMode.isInspect;
-      // 多屏下把选择路由到当前聚焦 pane（避免污染全局 active 仓库/工作区）。
-      // tryRouteSidebarSelectionToFocusedPane 在路由成功时返回 true；此时跳过 setActiveXxxId、
-      // viewMode 切换、ensureRepositoryMainSession 这一系列围绕"全局活动仓库"的副作用，
-      // 由 handlePaneRepositorySelect 内部独立建 pane 会话。
-      if (!leavingOverlay && tryRouteSidebarSelectionToFocusedPane("repository", repositoryId)) {
-        return;
-      }
-      // 选工作区时会把 activeRepositoryId 设为首个成员仓且 focus=project；点同一仓仍需切到 repository 焦点。
-      // 已选中同一仓时仍切到列表第一项会话并高亮，避免只亮仓库行、会话未选中。
-      if (
-        !leavingOverlay &&
-        viewMode.isChat &&
-        activeRepositoryId === repositoryId &&
-        activeWorkspaceFocus !== "project"
-      ) {
-        if (shouldSidebarRepositorySelectOnlyUpdateFocus(repository, projects)) {
-          switchRepositoryDisplaySession(repository);
-          return;
-        }
-        scheduleSidebarMainSessionEnsure(() => ensureRepositoryMainSession(repository));
-        return;
-      }
-      const selectionEpoch = ++sidebarSelectionEpochRef.current;
-      // 旧实现使用 flushSync 同步提交 active id，会强制重渲染整棵 AppImpl
-      // (LeftSidebar + ChatHost 等)，造成点击瞬间的明显卡顿。
-      // ensureRepositoryMainSession 通过参数拿 repository，不读 active id state，
-      // 因此可以走默认批量更新；viewMode 切换继续走 transition。
-      setActiveRepositoryWithOwner(repository.id);
-      if (leavingOverlay) {
-        startTransition(() => viewMode.back());
-      } else if (!viewMode.isChat) {
-        startTransition(() => {
-          viewMode.enter({ kind: "chat" });
-        });
-      }
-      if (sidebarSelectionEpochRef.current !== selectionEpoch) {
-        return;
-      }
-      // 多仓工作区内点成员仓：只更新高亮/文件树；有展示会话则切换，禁止 ensure 新建空壳，
-      // 否则切走时内存回收会清空原文，切回看到的是无 claudeSessionId 的空标签。
-      if (shouldSidebarRepositorySelectOnlyUpdateFocus(repository, projects)) {
-        switchRepositoryDisplaySession(repository);
-        return;
-      }
-      scheduleSidebarMainSessionEnsure(() => ensureRepositoryMainSession(repository));
-    },
-    [
-      activeRepositoryId,
-      activeWorkspaceFocus,
-      handleSidebarRepositorySelect,
-      projects,
-      repositories,
-      setActiveRepositoryWithOwner,
-      tryRouteSidebarSelectionToFocusedPane,
-      viewMode,
-    ],
-  );
-
-  const bindProjectMainSessionTarget = useCallback(
-    (project: ProjectItem): string | null => {
-      const sessionsNow = sessionsLatestRef.current;
-      const anchor = resolveProjectMainSessionAnchor(project, repositories);
-      if (!anchor.path) {
-        message.warning("该 Workspace 缺少根目录，请先配置 rootPath");
-        return null;
-      }
-      const projectBindingKey = projectMainSessionBindingKey(project.id);
-      const boundId = resolveBoundMainSessionId(
-        projectBindingKey,
-        repositoryMainSessionBindings,
-        sessionsNow,
-        null,
-      );
-      if (boundId) {
-        switchSessionIfNeeded(boundId);
-        return boundId;
-      }
-      const latestForProject = pickProjectMainSessionForSidebarSelect(
-        sessionsNow,
-        anchor.path,
-        sessionOwnerHintsRef.current,
-      );
-      if (latestForProject) {
-        switchSessionIfNeeded(latestForProject.id);
-        void bindRepositoryMainSession(projectBindingKey, latestForProject.id);
-        return latestForProject.id;
-      }
-      return null;
-    },
-    [repositories, repositoryMainSessionBindings, sessionsStructureKey, switchSessionIfNeeded],
-  );
-
-  /**
-   * 进入应用：仓库与会话 hydrated 后恢复侧栏选中态对应的主会话。
-   * - 工作区焦点 → 项目主会话（不要求 activeRepositoryId）
-   * - 仓库焦点 → 仓库主会话（含多仓工作区内的 per-repo 路径）
-   */
-  useEffect(() => {
-    if (repositoryListLoading || !tabsHydrated) return;
-    if (startupFirstProjectRepoSessionAppliedRef.current) return;
-
-    if (activeWorkspaceFocus === "project" && activeProjectId) {
-      const startupProject = projects.find((p) => p.id === activeProjectId) ?? null;
-      if (!startupProject) return;
-      startupFirstProjectRepoSessionAppliedRef.current = true;
-      void ensureProjectMainSession(startupProject);
-      if (!viewMode.isChat) {
-        viewMode.enter({ kind: "chat" });
-      }
-      return;
-    }
-
-    if (activeRepositoryId == null) return;
-    if (!repositories.some((r) => r.id === activeRepositoryId)) return;
-    startupFirstProjectRepoSessionAppliedRef.current = true;
-    const startupRepo = repositories.find((r) => r.id === activeRepositoryId) ?? null;
-    const ownerProject = startupRepo
-      ? findOwnerProjectForRepositoryId(startupRepo.id, projects)
-      : null;
-    if (startupRepo && isMultiRepoProject(ownerProject, projects) && ownerProject) {
-      setActiveRepositoryWithOwner(startupRepo.id);
-      void ensureProjectMainSession(ownerProject);
-    } else if (startupRepo) {
-      void ensureRepositoryMainSession(startupRepo);
-    }
-    // P1: Standalone Repo 启动时自动进 chat（宪法 §6：Standalone Repo 不进 cockpit）
-    if (!ownerProject) {
-      viewMode.enter({ kind: "chat" });
-    }
-  }, [
+  const {
+    ensureRepositoryMainSession,
+    ensureProjectMainSession,
+    openRepositoryMainSession,
+    openProjectMainSession,
+    handleManualNewRepositorySession,
+    handleManualNewProjectSession,
+    handleSidebarRepositorySelectLeavingMcpHub,
+    handleProjectSelectLeavingMcpHub,
+    handlePickedActiveRepositoryForCurrentPane,
+    jumpToSessionLeavingMcpHub,
+    canRestoreHistorySessionForDrawer,
+    handleRestoreHistorySessionAsMain,
+  } = useAppSidebarSelection({
+    repositories,
+    projects,
     activeProjectId,
     activeRepositoryId,
     activeWorkspaceFocus,
-    projects,
-    repositories,
     repositoryListLoading,
-    setActiveRepositoryWithOwner,
     tabsHydrated,
+    sessionsStructureKey,
+    repositoryMainSessionBindings,
+    sessionsLatestRef,
+    repositoryMainBindingsLatestRef,
+    repositoriesLatestRef,
+    activeSessionIdLatestRef,
+    releaseSessionHostProcessRef,
+    bindRepositoryMainSession,
+    bindRepositoryMainSessionRef,
+    jumpToSessionWithRepository,
+    jumpToSessionWithRepositoryRef,
+    createSession,
+    switchSession,
+    cancelSession,
+    reloadFullDiskTranscript,
+    setActiveRepositoryId,
+    setActiveProjectId,
+    setActiveRepositoryWithOwner,
     viewMode,
-  ]);
-
-  const handleProjectSelectLeavingMcpHub = useCallback(
-    (projectId: string) => {
-      if (suppressProjectSelectToChatRef.current) {
-        return;
-      }
-      const project = projects.find((p) => p.id === projectId) ?? null;
-      if (!project) {
-        // Fallback：找不到匹配 project 时，让 React 按默认批量调度即可，
-        // 不需要 flushSync 同步阻塞点击线程。
-        setActiveProjectId(projectId);
-        return;
-      }
-      const leavingOverlay = viewMode.isAuthor || viewMode.isInspect || viewMode.isCockpit;
-      // 多屏下把选择路由到当前聚焦 pane（避免污染全局 active 工作区）。
-      if (!leavingOverlay && tryRouteSidebarSelectionToFocusedPane("project", projectId)) {
-        return;
-      }
-      if (
-        !leavingOverlay &&
-        viewMode.isChat &&
-        activeProjectId === projectId &&
-        activeWorkspaceFocus === "project"
-      ) {
-        return;
-      }
-      const selectionEpoch = ++sidebarSelectionEpochRef.current;
-      // 旧实现使用 flushSync 同步提交 active id 与 setAuthorTrellisProjectId，
-      // 会强制重渲染整棵 AppImpl (LeftSidebar + ChatHost 等)，造成点击瞬间的明显卡顿。
-      // ensureProjectMainSession 通过参数拿 project，不读 active id state，
-      // 因此可以走默认批量更新；viewMode 切换继续走 transition。
-      setActiveProjectId(projectId);
-      if (leavingOverlay) {
-        startTransition(() => viewMode.back());
-      } else if (!viewMode.isChat) {
-        startTransition(() => {
-          viewMode.enter({ kind: "chat" });
-        });
-      }
-      if (sidebarSelectionEpochRef.current !== selectionEpoch) {
-        return;
-      }
-      scheduleSidebarMainSessionEnsure(() => ensureProjectMainSession(project));
-    },
-    [
-      activeProjectId,
-      activeWorkspaceFocus,
-      projects,
-      setActiveProjectId,
-      tryRouteSidebarSelectionToFocusedPane,
-      viewMode,
-    ],
-  );
-
-  const jumpToSessionLeavingMcpHub = useCallback(
-    (sessionId: string) => {
-      // 跳转到具体会话 → 进 chat 子模式
-      viewMode.enter({ kind: "chat" });
-      jumpToSessionWithRepository(sessionId);
-    },
-    [jumpToSessionWithRepository, viewMode],
-  );
+    paneCountRef,
+    extraPanes,
+    handlePaneRepositorySelect,
+    handlePaneProjectNewSession,
+    suppressProjectSelectToChatRef,
+    onRestoreHistorySessionAsMainComplete: () => setInspectorHistorySessionId(null),
+  });
 
   async function handleCreateRepositoryTask(repository: Repository, mode: TaskMode) {
     if (mode === "chat") {
@@ -3096,34 +2233,6 @@ export default function App() {
         repoList: repoPaths,
       }),
     );
-  }
-
-  async function openProjectMainSession(project: ProjectItem): Promise<string | null> {
-    const byId = new Map(repositories.map((repo) => [repo.id, repo]));
-    const repos = project.repositoryIds
-      .map((id) => byId.get(id))
-      .filter((repo): repo is Repository => Boolean(repo));
-    const anchor = resolveProjectMainSessionAnchor(project, repositories);
-    if (!anchor.path) {
-      message.warning("该 Workspace 缺少根目录，请先配置 rootPath");
-      return null;
-    }
-    const isStandaloneTrellisProject = project.id.startsWith("repo:");
-    if (repos[0]) {
-      if (isStandaloneTrellisProject) {
-        setActiveRepositoryWithOwner(repos[0].id);
-      } else {
-        setActiveProjectId(project.id);
-        setActiveRepositoryId(repos[0].id);
-      }
-    } else if (!isStandaloneTrellisProject) {
-      setActiveProjectId(project.id);
-    }
-    startTransition(() => {
-      viewMode.enter({ kind: "chat" });
-    });
-
-    return ensureProjectMainSession(project);
   }
 
   function handleOpenInFinder(repository: Repository) {

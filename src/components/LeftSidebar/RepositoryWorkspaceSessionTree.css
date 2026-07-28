@@ -166,11 +166,12 @@
 
 .app-repository-new-session-btn {
   flex: 0 0 auto;
-  opacity: 0;
+  opacity: 0.55;
   margin-left: 0;
   width: 16px !important;
   min-width: 16px !important;
   height: 16px !important;
+  transition: opacity 0.15s ease, color 0.15s ease;
 }
 
 .app-repository-new-session-btn svg {

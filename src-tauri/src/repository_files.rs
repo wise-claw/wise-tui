@@ -101,11 +101,24 @@ fn sort_repository_search_results(entries: &mut [RepositoryExplorerEntry]) {
 }
 
 /// Fast in-process file/directory search for @ mentions (no shell spawn).
+///
+/// WalkDir 是纯同步 IO，放在 `spawn_blocking` 中执行以免阻塞 tokio 运行时。
 #[tauri::command]
-pub(crate) fn search_repository_files(
+pub(crate) async fn search_repository_files(
     root: String,
     query: String,
     relative_dir: Option<String>,
+) -> Result<Vec<RepositoryExplorerEntry>, String> {
+    let rel = relative_dir.unwrap_or_default();
+    tokio::task::spawn_blocking(move || search_repository_files_blocking(root, query, rel))
+        .await
+        .map_err(|e| format!("仓库文件搜索任务异常: {e}"))?
+}
+
+fn search_repository_files_blocking(
+    root: String,
+    query: String,
+    relative_dir: String,
 ) -> Result<Vec<RepositoryExplorerEntry>, String> {
     const MAX_RESULTS: usize = 50;
     const MAX_MATCH_COLLECT: usize = 150;
@@ -119,10 +132,9 @@ pub(crate) fn search_repository_files(
     // 搜索起始目录：仓库根 + relative_dir（空=整个仓库）。
     // explorer_join_dir 经 safe_join_repository_root 校验拒绝 `..`/绝对路径，并保证拼接结果在仓库根下。
     // `searchable_walk_entry` 仍按仓库根计算 rel，因此结果 path 始终相对仓库根，与打开/展示逻辑一致。
-    let rel = relative_dir.unwrap_or_default();
-    let search_root = explorer_join_dir(&root_path, &rel)?;
+    let search_root = explorer_join_dir(&root_path, &relative_dir)?;
     if !search_root.is_dir() {
-        return Err(format!("搜索目录不存在或不是目录：{rel}"));
+        return Err(format!("搜索目录不存在或不是目录：{relative_dir}"));
     }
 
     // 规范化查询串：trim 空白 + 小写 + 去掉所有前导 `/`，把 `/core/index` / `///core/index`
@@ -787,10 +799,10 @@ mod repository_search_tests {
         fs::create_dir_all(root.join("src/components")).unwrap();
         fs::write(root.join("src/components/App.tsx"), "export {}").unwrap();
 
-        let results = search_repository_files(
+        let results = search_repository_files_blocking(
             root.to_string_lossy().to_string(),
             "components".into(),
-            None,
+            String::new(),
         )
         .expect("search");
 
@@ -817,16 +829,16 @@ mod repository_search_tests {
         fs::write(root.join("docs/notes.md"), "core stuff").unwrap();
 
         // 带前导斜杠的多级路径 `/core/index` 应当与 `core/index` 命中相同结果集。
-        let with_slash = search_repository_files(
+        let with_slash = search_repository_files_blocking(
             root.to_string_lossy().to_string(),
             "/core/index".into(),
-            None,
+            String::new(),
         )
         .expect("leading-slash search");
-        let without_slash = search_repository_files(
+        let without_slash = search_repository_files_blocking(
             root.to_string_lossy().to_string(),
             "core/index".into(),
-            None,
+            String::new(),
         )
         .expect("plain search");
 
@@ -849,10 +861,10 @@ mod repository_search_tests {
         );
 
         // 多余的前导斜杠也应被全部吃掉。
-        let extra_slashes = search_repository_files(
+        let extra_slashes = search_repository_files_blocking(
             root.to_string_lossy().to_string(),
             "///core".into(),
-            None,
+            String::new(),
         )
         .expect("extra-slashes search");
         assert!(
@@ -863,10 +875,10 @@ mod repository_search_tests {
         );
 
         // 只有 `/` 的查询应被视作空查询，退化为列目录而非返回空。
-        let only_slash = search_repository_files(
+        let only_slash = search_repository_files_blocking(
             root.to_string_lossy().to_string(),
             "/".into(),
-            None,
+            String::new(),
         )
         .expect("only-slash search");
         assert!(
@@ -887,10 +899,10 @@ mod repository_search_tests {
         fs::write(root.join("docs/widget.md"), "# widget").unwrap();
 
         // 限定到 src/ 搜索 "widget"：只应命中 src/widget.ts，不命中 docs/widget.md。
-        let results = search_repository_files(
+        let results = search_repository_files_blocking(
             root.to_string_lossy().to_string(),
             "widget".into(),
-            Some("src".into()),
+            "src".into(),
         )
         .expect("scoped search");
 

@@ -1311,6 +1311,14 @@ export function ClaudeChatInner({
   sessionForNotificationPanelRef.current = session;
   const sessionsForNotificationMatchRef = useRef(sessions);
   sessionsForNotificationMatchRef.current = sessions;
+  /** 稳定查找面：引用不随整表 sessions 重建变化，避免消息行 element cache 被结构 tick 打穿。 */
+  const sessionsForDispatchLookup = useCallback((sessionId: string) => {
+    const key = sessionId.trim();
+    if (!key) return undefined;
+    return sessionsForNotificationMatchRef.current.find(
+      (item) => item.id === key || item.claudeSessionId === key,
+    );
+  }, []);
   /** 每实例固定（主栏 true / 多屏副窗 false）；用 ref 保持 effect deps 长度稳定，避免 HMR 改 deps 时报错。 */
   const enableSessionNotificationFeedRef = useRef(enableSessionNotificationFeed);
   enableSessionNotificationFeedRef.current = enableSessionNotificationFeed;
@@ -1896,7 +1904,7 @@ export function ClaudeChatInner({
             onOpenHistorySessionInInspector={onOpenHistorySessionInInspector}
             onOpenSessionConversationTaskDetail={openSessionConversationTaskDetail}
             resolveExecutionEnvironmentDispatchTask={resolveExecutionEnvironmentDispatchTask}
-            sessionsForDispatchLookup={sessions}
+            sessionsForDispatchLookup={sessionsForDispatchLookup}
             onFullTranscriptStart={handleFullTranscriptStart}
             onFullTranscriptEnd={handleFullTranscriptEnd}
             messageListProfile={messageListProfile}

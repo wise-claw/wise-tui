@@ -1,4 +1,4 @@
-import type { ClaudeMessage, ClaudeSession } from "../types";
+import type { ClaudeMessage, ClaudeSession, ToolUsePart } from "../types";
 import {
   foldToolResultUserMessagesIntoAssistant,
   isToolResultUpdatePart,
@@ -8,6 +8,7 @@ import {
   hasRenderableChatMessageBody,
   indexOfPreviousRenderableMessage,
   isRenderableMessagePart,
+  isToolActivityOnlyMessage,
   isToolOnlyUserMessage,
 } from "./claudeChatMessageDisplay";
 import { sessionHadRecentClaudeTurnFailureNotice } from "./claudeSessionTurnFailure";
@@ -20,6 +21,13 @@ export type ChatMessageListMessageRow = {
   kind: "message";
   key: string;
   originalIndex: number;
+  /**
+   * 连续「仅工具」消息合并后覆盖的 fold 下标（含 originalIndex）。
+   * 未合并时省略，等同 `[originalIndex]`。
+   */
+  originalIndexes?: number[];
+  /** 合并组内各消息 id（含 msg.id）；供 scroll-to-message 命中。 */
+  memberMessageIds?: number[];
   msg: ClaudeMessage;
   streamingThisBubble: boolean;
   mergedWithPrevious: boolean;
@@ -118,6 +126,70 @@ export interface ChatMessageListRowsBuildResult {
   folded: ClaudeMessage[];
 }
 
+function messageRowCoveredIndexes(row: ChatMessageListMessageRow): number[] {
+  return row.originalIndexes ?? [row.originalIndex];
+}
+
+function collectRenderableToolUseParts(msg: ClaudeMessage): ToolUsePart[] {
+  const parts = msg.parts;
+  if (!Array.isArray(parts) || parts.length === 0) return [];
+  return parts.filter(
+    (part): part is ToolUsePart => part.type === "tool_use" && isRenderableMessagePart(part),
+  );
+}
+
+/**
+ * 将连续、同发送者组的「仅工具活动」消息行合并为一行，内部 parts 拼成单个 ToolGroup 摘要。
+ * 正文/思考消息保持原位，作为合并边界。
+ */
+export function coalesceConsecutiveToolActivityRows(
+  rows: readonly ChatMessageListRow[],
+): ChatMessageListRow[] {
+  const out: ChatMessageListRow[] = [];
+  for (const row of rows) {
+    if (row.kind !== "message" || !isToolActivityOnlyMessage(row.msg)) {
+      out.push(row);
+      continue;
+    }
+
+    const prev = out[out.length - 1];
+    const canMerge =
+      prev !== undefined &&
+      prev.kind === "message" &&
+      isToolActivityOnlyMessage(prev.msg) &&
+      getMessageSenderGroupKey(prev.msg) === getMessageSenderGroupKey(row.msg);
+
+    if (!canMerge || prev.kind !== "message") {
+      out.push(row);
+      continue;
+    }
+
+    const prevIndexes = messageRowCoveredIndexes(prev);
+    const nextIndexes = messageRowCoveredIndexes(row);
+    const prevIds = prev.memberMessageIds ?? [prev.msg.id];
+    const nextIds = row.memberMessageIds ?? [row.msg.id];
+    const combinedParts = [
+      ...collectRenderableToolUseParts(prev.msg),
+      ...collectRenderableToolUseParts(row.msg),
+    ];
+
+    out[out.length - 1] = {
+      ...prev,
+      // 保持首条 key，合并增长时 element 缓存更稳。
+      originalIndexes: [...prevIndexes, ...nextIndexes],
+      memberMessageIds: [...prevIds, ...nextIds],
+      streamingThisBubble: prev.streamingThisBubble || row.streamingThisBubble,
+      toolUser: prev.toolUser && row.toolUser,
+      msg: {
+        ...prev.msg,
+        parts: combinedParts,
+        content: "",
+      },
+    };
+  }
+  return out;
+}
+
 function appendFilesChangedSummaryRows(
   rows: ChatMessageListRow[],
   foldedMessages: readonly ClaudeMessage[],
@@ -140,7 +212,7 @@ function appendFilesChangedSummaryRows(
     let insertAt = -1;
     for (let i = 0; i < rows.length; i += 1) {
       const row = rows[i]!;
-      if (row.kind === "message" && row.originalIndex === afterIndex) {
+      if (row.kind === "message" && messageRowCoveredIndexes(row).includes(afterIndex)) {
         insertAt = i + 1;
         break;
       }
@@ -167,13 +239,14 @@ export function buildChatMessageListRowsWithFolded(
     if (row) rows.push(row);
   }
 
-  appendFilesChangedSummaryRows(rows, foldedMessages, options.sessionStatus);
+  const coalesced = coalesceConsecutiveToolActivityRows(rows);
+  appendFilesChangedSummaryRows(coalesced, foldedMessages, options.sessionStatus);
 
   if (options.showListEndThinkingHint) {
-    rows.push(THINKING_HINT_ROW);
+    coalesced.push(THINKING_HINT_ROW);
   }
 
-  return { rows, folded: foldedMessages };
+  return { rows: coalesced, folded: foldedMessages };
 }
 
 export function buildChatMessageListRows(
@@ -238,14 +311,18 @@ export function tryPatchChatMessageListRowsTail(
   for (const row of prevRows) {
     if (row.kind === "thinking-hint") continue;
     if (row.kind === "message") {
-      if (row.originalIndex === lastMessageIndex) {
+      const covered = messageRowCoveredIndexes(row);
+      if (covered.includes(lastMessageIndex)) {
+        // 末条已并入工具活动组：tail-patch 无法无损拆出前缀成员，回退全量重建。
+        if (covered.length > 1) return null;
         passedLastMessageSlot = true;
         continue;
       }
       // 末条槽位之后仍出现「前缀 message」→ fold 结构变了（如 tool_result 被吸收），回退全量。
       if (passedLastMessageSlot) return null;
-      if (row.originalIndex >= nextFolded.length) return null;
-      if (row.msg !== nextFolded[row.originalIndex]) return null;
+      if (covered.some((idx) => idx >= nextFolded.length)) return null;
+      // 合并行的 msg 是合成对象，不能与 folded[originalIndex] 引用相等；前缀未变即可保留。
+      if (covered.length === 1 && row.msg !== nextFolded[row.originalIndex]) return null;
       prefixRows.push(row);
       continue;
     }
@@ -261,11 +338,16 @@ export function tryPatchChatMessageListRowsTail(
   for (let i = 0; i < lastMessageIndex; i += 1) {
     if (hasRenderableChatMessageBody(nextFolded[i]!)) renderableBeforeLast += 1;
   }
-  const prefixMessageCount = prefixRows.filter((row) => row.kind === "message").length;
+  const prefixMessageCount = prefixRows.reduce((count, row) => {
+    if (row.kind !== "message") return count;
+    return count + messageRowCoveredIndexes(row).length;
+  }, 0);
   if (prefixMessageCount !== renderableBeforeLast) return null;
 
   const lastRow = buildSingleChatMessageListRow(nextFolded, lastMessageIndex, options);
-  const nextRows: ChatMessageListRow[] = lastRow ? [...prefixRows, lastRow] : [...prefixRows];
+  const patched = lastRow ? [...prefixRows, lastRow] : [...prefixRows];
+  // 末条若为仅工具活动，与前缀末尾工具组再合并。
+  const nextRows = coalesceConsecutiveToolActivityRows(patched);
   // 流式 tail-patch 不重算末轮 files-changed；仅当 status 变 idle 时全量重建会补上。
   // 历史轮次摘要已在 prefixRows 中保留。
   if (options.showListEndThinkingHint) {

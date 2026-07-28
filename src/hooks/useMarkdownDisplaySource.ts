@@ -15,7 +15,11 @@ import {
 const STREAMING_MIN_REBUILD_MS = 100;
 const STREAMING_MIN_REBUILD_CONGESTED_MS = 220;
 const STREAMING_SHORT_TEXT_FAST_PATH_LIMIT = 600;
+/** 流式长文降级阈值：跳过 prepareMarkdownForDisplay + ReactMarkdown，改纯文本。 */
+const STREAMING_PLAIN_DEGRADE_CHARS = 1800;
 const MARKDOWN_STRUCTURE_HINT_RE = /[<|`#>*\-\|\uFF5C]|\]\(|!\[|^\s*\d+\.\s/m;
+/** 代码围栏 / 表格等重结构：流式期直接降级，避免每 tick 跑完整 pipeline。 */
+const STREAMING_HEAVY_STRUCTURE_RE = /```|\n\|.+\||^\|.+\|/m;
 
 function shouldBypassStreamingRebuildThrottle(text: string): boolean {
   if (findHtmlDocumentStartIndex(text) !== null) return true;
@@ -39,12 +43,23 @@ function streamingShortTextFastPath(text: string): boolean {
   return !MARKDOWN_STRUCTURE_HINT_RE.test(text);
 }
 
+function shouldDegradeStreamingToPlain(text: string): boolean {
+  if (text.length >= STREAMING_PLAIN_DEGRADE_CHARS) return true;
+  return STREAMING_HEAVY_STRUCTURE_RE.test(text);
+}
+
 function subscribeCongestionAlways(onStoreChange: () => void): () => void {
   return subscribeMainThreadCongestion(onStoreChange);
 }
 
+export type MarkdownDisplaySourceResult = {
+  source: string;
+  /** 流式降级：宿主应渲染纯文本，跳过 ReactMarkdown。 */
+  plain: boolean;
+};
+
 /** 构建聊天 Markdown 展示源码（预处理后交给 ReactMarkdown）。 */
-export function useMarkdownDisplaySource(text: string, streaming: boolean): string {
+export function useMarkdownDisplaySource(text: string, streaming: boolean): MarkdownDisplaySourceResult {
   const safeText = coerceMarkdownSourceText(text);
   const congested = useSyncExternalStore(
     subscribeCongestionAlways,
@@ -60,28 +75,29 @@ export function useMarkdownDisplaySource(text: string, streaming: boolean): stri
     [renderText, streaming],
   );
 
-  const lastBuiltRef = useRef<{ text: string; source: string; at: number }>({
+  const lastBuiltRef = useRef<{ text: string; source: string; plain: boolean; at: number }>({
     text: "",
     source: "",
+    plain: false,
     at: 0,
   });
   const wasStreamingRef = useRef(streaming);
 
   return useMemo(() => {
     if (wasStreamingRef.current && !streaming) {
-      lastBuiltRef.current = { text: "", source: "", at: 0 };
+      lastBuiltRef.current = { text: "", source: "", plain: false, at: 0 };
     }
     wasStreamingRef.current = streaming;
 
     if (!stabilizedText.trim()) {
-      lastBuiltRef.current = { text: "", source: "", at: performance.now() };
-      return "";
+      lastBuiltRef.current = { text: stabilizedText, source: "", plain: false, at: performance.now() };
+      return { source: "", plain: false };
     }
 
     if (!streaming) {
       const source = prepareMarkdownForDisplay(stabilizedText, { streaming: false });
-      lastBuiltRef.current = { text: stabilizedText, source, at: performance.now() };
-      return source;
+      lastBuiltRef.current = { text: stabilizedText, source, plain: false, at: performance.now() };
+      return { source, plain: false };
     }
 
     const prev = lastBuiltRef.current;
@@ -94,15 +110,20 @@ export function useMarkdownDisplaySource(text: string, streaming: boolean): stri
       && now - prev.at < rebuildMinMs
       && !shouldBypassStreamingRebuildThrottle(stabilizedText);
     if (withinThrottle) {
-      return prev.source;
+      return { source: prev.source, plain: prev.plain };
+    }
+
+    if (shouldDegradeStreamingToPlain(stabilizedText)) {
+      lastBuiltRef.current = { text: stabilizedText, source: stabilizedText, plain: true, at: now };
+      return { source: stabilizedText, plain: true };
     }
 
     if (streamingShortTextFastPath(stabilizedText)) {
-      return stabilizedText;
+      return { source: stabilizedText, plain: false };
     }
 
     const source = prepareMarkdownForDisplay(stabilizedText, { streaming: true });
-    lastBuiltRef.current = { text: stabilizedText, source, at: now };
-    return source;
+    lastBuiltRef.current = { text: stabilizedText, source, plain: false, at: now };
+    return { source, plain: false };
   }, [stabilizedText, streaming, congested]);
 }

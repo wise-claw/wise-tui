@@ -1,5 +1,8 @@
 use serde::Serialize;
+use std::collections::HashMap;
 use std::process::Command;
+use std::sync::Mutex;
+use std::time::{Duration, Instant};
 
 #[derive(Serialize, Clone)]
 #[serde(rename_all = "camelCase")]
@@ -22,6 +25,16 @@ pub struct SystemResourceSnapshot {
     claude_memory_bytes: u64,
     claude_processes: Vec<ClaudeHostProcess>,
 }
+
+/// Per-PID lsof enrichment cache (session_id + project_path). Avoids spawning lsof every poll tick.
+const LSOF_CACHE_TTL: Duration = Duration::from_secs(45);
+
+struct LsofCacheEntry {
+    at: Instant,
+    value: Option<(String, String)>,
+}
+
+static LSOF_CACHE: Mutex<Option<HashMap<u32, LsofCacheEntry>>> = Mutex::new(None);
 
 fn parse_kb_to_bytes(input: &str) -> Option<u64> {
     let v = input.trim().parse::<u64>().ok()?;
@@ -136,6 +149,49 @@ fn enrich_session_from_lsof(_pid: u32) -> Option<(String, String)> {
     None
 }
 
+/// Cached lsof enrichment. Skips spawn when a fresh cache entry exists for the PID.
+fn enrich_session_from_lsof_cached(pid: u32) -> Option<(String, String)> {
+    let now = Instant::now();
+    if let Ok(guard) = LSOF_CACHE.lock() {
+        if let Some(cache) = guard.as_ref() {
+            if let Some(entry) = cache.get(&pid) {
+                if now.duration_since(entry.at) < LSOF_CACHE_TTL {
+                    return entry.value.clone();
+                }
+            }
+        }
+    }
+
+    let value = enrich_session_from_lsof(pid);
+    if let Ok(mut guard) = LSOF_CACHE.lock() {
+        let cache = guard.get_or_insert_with(HashMap::new);
+        cache.insert(
+            pid,
+            LsofCacheEntry {
+                at: now,
+                value: value.clone(),
+            },
+        );
+        // Bound growth: drop entries older than 2× TTL.
+        cache.retain(|_, entry| now.duration_since(entry.at) < LSOF_CACHE_TTL * 2);
+    }
+    value
+}
+
+/// Read cached lsof enrichment without spawning a new process.
+fn peek_lsof_cache(pid: u32) -> Option<(String, String)> {
+    let now = Instant::now();
+    let Ok(guard) = LSOF_CACHE.lock() else {
+        return None;
+    };
+    let cache = guard.as_ref()?;
+    let entry = cache.get(&pid)?;
+    if now.duration_since(entry.at) >= LSOF_CACHE_TTL {
+        return None;
+    }
+    entry.value.clone()
+}
+
 struct RawClaudePsRow {
     pid: u32,
     memory_bytes: u64,
@@ -195,11 +251,15 @@ fn collect_claude_host_processes() -> Vec<ClaudeHostProcess> {
         let mut project_path = None;
         let mut session_source = session_id.as_ref().map(|_| "resume_arg".to_string());
 
-        if let Some((lsof_sid, path)) = enrich_session_from_lsof(row.pid) {
-            if session_id.is_none() {
+        if session_id.is_none() {
+            // Need session discovery: pay for lsof (cached).
+            if let Some((lsof_sid, path)) = enrich_session_from_lsof_cached(row.pid) {
                 session_id = Some(lsof_sid);
                 session_source = Some("lsof_jsonl".to_string());
+                project_path = Some(path);
             }
+        } else if let Some((_, path)) = peek_lsof_cache(row.pid) {
+            // Already have session from args — reuse cache for project path, never spawn.
             project_path = Some(path);
         }
 
@@ -315,8 +375,7 @@ pub fn kill_claude_host_process(pid: u32) -> Result<(), String> {
     }
 }
 
-#[tauri::command]
-pub fn get_system_resource_snapshot() -> SystemResourceSnapshot {
+fn get_system_resource_snapshot_blocking() -> SystemResourceSnapshot {
     let (system_total_bytes, system_used_bytes) = collect_system_memory_bytes();
     let app_memory_bytes = parse_ps_rss_kb_for_pid(std::process::id()).unwrap_or(0);
     let claude_processes = collect_claude_host_processes();
@@ -332,6 +391,20 @@ pub fn get_system_resource_snapshot() -> SystemResourceSnapshot {
         claude_memory_bytes,
         claude_processes,
     }
+}
+
+#[tauri::command]
+pub async fn get_system_resource_snapshot() -> SystemResourceSnapshot {
+    tokio::task::spawn_blocking(get_system_resource_snapshot_blocking)
+        .await
+        .unwrap_or_else(|_| SystemResourceSnapshot {
+            system_total_bytes: 0,
+            system_used_bytes: 0,
+            app_memory_bytes: 0,
+            claude_process_count: 0,
+            claude_memory_bytes: 0,
+            claude_processes: Vec::new(),
+        })
 }
 
 #[cfg(test)]

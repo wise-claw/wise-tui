@@ -12,7 +12,7 @@ import {
   useChatMessageListWindow,
 } from "../../hooks/useChatMessageListWindow";
 import type { ClaudeSession, SessionConversationTaskItem } from "../../types";
-import type { DispatchRecordMeta } from "../../utils/claudeChatMessageDisplay";
+import type { DispatchRecordMeta, SessionDispatchLookup } from "../../utils/claudeChatMessageDisplay";
 import type { ChatMessageListRow } from "../../utils/claudeChatMessageListRows";
 import { hasRenderableChatMessageBody } from "../../utils/claudeChatMessageDisplay";
 import { findChatMessageRowIndexByMessageId } from "../../utils/chatMessageListWindow";
@@ -38,7 +38,7 @@ interface Props {
   onOpenTaskDetail?: (taskId: string) => void;
   onOpenHistorySessionInInspector?: (sessionId: string) => void;
   onOpenSessionConversationTaskDetail?: (task: SessionConversationTaskItem) => void;
-  sessionsForDispatchLookup?: readonly ClaudeSession[];
+  sessionsForDispatchLookup?: SessionDispatchLookup;
   /** 自定义行渲染；提供时覆盖 listVariant 默认内容 */
   renderRow?: (row: ChatMessageListRow, index: number) => ReactNode;
   onNavigate?: () => void;
@@ -58,7 +58,7 @@ export interface RowElementCacheContext {
   onOpenTaskDetail?: (taskId: string) => void;
   onOpenHistorySessionInInspector?: (sessionId: string) => void;
   onOpenSessionConversationTaskDetail?: (task: SessionConversationTaskItem) => void;
-  sessionsForDispatchLookup?: readonly ClaudeSession[];
+  sessionsForDispatchLookup?: SessionDispatchLookup;
   renderRow?: (row: ChatMessageListRow, index: number) => ReactNode;
 }
 

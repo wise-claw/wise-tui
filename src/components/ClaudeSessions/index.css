@@ -4954,57 +4954,18 @@
   gap: 0;
 }
 
-/* 连续工具摘要栈：滚动时 sticky 互相覆盖；超出预览行数时可内滚 */
-.app-message-parts__tool-group--stack {
-  --app-tool-group-row-height: 22px;
-  --app-tool-group-stack-rows: 5;
-  position: relative;
-}
-
-.app-message-parts__tool-group--stack-scroll {
-  max-height: calc(var(--app-tool-group-row-height) * var(--app-tool-group-stack-rows));
-  overflow-y: auto;
-  overflow-x: hidden;
-  overscroll-behavior: contain;
-  /* 顶部/底部淡出，强化滚动覆盖感 */
-  -webkit-mask-image: linear-gradient(
-    to bottom,
-    transparent 0,
-    #000 10px,
-    #000 calc(100% - 10px),
-    transparent 100%
-  );
-  mask-image: linear-gradient(
-    to bottom,
-    transparent 0,
-    #000 10px,
-    #000 calc(100% - 10px),
-    transparent 100%
-  );
-}
-
-.app-message-parts__tool-group--stack-scroll.app-message-parts__tool-group--details-open {
-  max-height: none;
-  -webkit-mask-image: none;
-  mask-image: none;
-}
-
 .app-message-parts__tool-group-summary {
-  position: sticky;
-  top: 0;
   display: inline-flex;
   align-items: center;
   gap: 6px;
   max-width: 100%;
   width: 100%;
   box-sizing: border-box;
-  min-height: var(--app-tool-group-row-height, 22px);
+  min-height: 22px;
   margin: 0;
   padding: 1px 0;
   border: none;
-  /* 不透明底：后一行盖住前一行（Cursor 滚动覆盖） */
-  background: var(--ant-color-bg-container);
-  box-shadow: 0 -6px 8px -6px var(--ant-color-bg-container);
+  background: transparent;
   text-align: left;
   cursor: pointer;
   font: inherit;
@@ -5032,7 +4993,7 @@
   white-space: nowrap;
 }
 
-/* 执行中 / 生成中：从左到右光波划过 */
+/* 执行中 / 思考中：从左到右光波划过 */
 .app-status-text-shimmer {
   color: transparent;
   background-image: linear-gradient(
@@ -5051,6 +5012,7 @@
 }
 
 @keyframes app-status-text-shimmer {
+  /* 100% → -100%：高亮带从左扫到右 */
   0% {
     background-position: 100% 0;
   }

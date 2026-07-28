@@ -68,9 +68,11 @@ export function findChatMessageRowIndexByMessageId(
   messageId: string | number,
 ): number {
   const normalized = String(messageId);
-  return rows.findIndex(
-    (row) => row.kind === "message" && String(row.msg.id) === normalized,
-  );
+  return rows.findIndex((row) => {
+    if (row.kind !== "message") return false;
+    if (String(row.msg.id) === normalized) return true;
+    return row.memberMessageIds?.some((id) => String(id) === normalized) === true;
+  });
 }
 
 /**

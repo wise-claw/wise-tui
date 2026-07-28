@@ -1,4 +1,4 @@
-import { Fragment, memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { useCopyToClipboard } from "../../hooks/useCopyToClipboard";
 import type { MessagePart, TextPart, ToolUsePart, ReasoningPart } from "../../types";
 import { isRenderableMessagePart } from "../../utils/claudeChatMessageDisplay";
@@ -178,7 +178,7 @@ const ReasoningPartDisplay = memo(function ReasoningPartDisplay({
                 streaming && !expanded ? "app-status-text-shimmer" : undefined
               }
             >
-              {streaming && !expanded ? "生成中" : "思考了"}
+              {streaming && !expanded ? "思考中" : "思考了"}
             </span>
             {!expanded && charCount > 0 ? (
               <span className="app-message-part-reasoning-summary__meta">{charCount} 字</span>
@@ -573,10 +573,11 @@ function ToolUseOutputBody({ part, streaming }: { part: ToolUsePart; streaming: 
     );
   }
 
-  if (shouldRenderOutputAsMarkdown(part)) {
-    return <Markdown text={output} streaming={streaming} className="app-tool-output-markdown" />;
+  // Running tools: plain text only — avoid ReactMarkdown rebuild every output tick.
+  if (streaming || !shouldRenderOutputAsMarkdown(part)) {
+    return <LinkifiedPre text={output} streaming={streaming} className="app-tool-output" />;
   }
-  return <LinkifiedPre text={output} streaming={streaming} className="app-tool-output" />;
+  return <Markdown text={output} streaming={false} className="app-tool-output-markdown" />;
 }
 
 function messagePartContentEqual(a: MessagePart, b: MessagePart): boolean {
@@ -787,35 +788,22 @@ function hasExpandableToolBody(
   return false;
 }
 
-const TOOL_GROUP_STACK_PREVIEW_ROWS = 5;
-
 const ToolGroupDisplay = memo(function ToolGroupDisplay({
   parts,
 }: {
   parts: { part: ToolUsePart; originalIndex: number }[];
 }) {
+  const toolParts = useMemo(() => parts.map(({ part }) => part), [parts]);
+  const summary = useMemo(() => buildToolGroupActivitySummary(toolParts), [toolParts]);
   const keys = useMemo(
     () => parts.map(({ part, originalIndex }) => toolPartStableKey(part, originalIndex)),
     [parts],
   );
-  const rowSummaries = useMemo(
-    () => parts.map(({ part }) => buildToolGroupActivitySummary([part])),
-    [parts],
-  );
-  const [detailsOpenMap, setDetailsOpenMap] = useState<Record<string, boolean>>({});
+  const [detailsOpen, setDetailsOpen] = useState(false);
   const [expandedMap, setExpandedMap] = useState<Record<string, boolean>>({});
   const { onPointerDown, consumeHadTextSelection } = useClickAfterSelectionGuard();
-  const anyDetailsOpen = keys.some((key) => detailsOpenMap[key]);
-  const stackScroll = parts.length > TOOL_GROUP_STACK_PREVIEW_ROWS;
 
   useEffect(() => {
-    setDetailsOpenMap((prev) => {
-      const next: Record<string, boolean> = {};
-      for (const key of keys) {
-        next[key] = prev[key] ?? false;
-      }
-      return next;
-    });
     setExpandedMap((prev) => {
       const next: Record<string, boolean> = {};
       for (const key of keys) {
@@ -827,70 +815,66 @@ const ToolGroupDisplay = memo(function ToolGroupDisplay({
 
   return (
     <div
-      className={`app-message-parts__tool-group app-message-parts__tool-group--compact app-message-parts__tool-group--stack${
-        anyDetailsOpen ? " app-message-parts__tool-group--details-open" : ""
-      }${stackScroll ? " app-message-parts__tool-group--stack-scroll" : ""}`}
+      className={`app-message-parts__tool-group app-message-parts__tool-group--compact${
+        detailsOpen ? " app-message-parts__tool-group--details-open" : ""
+      }`}
     >
-      {parts.map(({ part, originalIndex }, index) => {
-        const key = keys[index] ?? toolPartStableKey(part, originalIndex);
-        const summary = rowSummaries[index] ?? buildToolGroupActivitySummary([part]);
-        const detailsOpen = detailsOpenMap[key] ?? false;
-        return (
-          <Fragment key={key}>
-            <button
-              type="button"
-              className={`app-message-parts__tool-group-summary${
-                summary.running ? " app-message-parts__tool-group-summary--running" : ""
-              }`}
-              style={{ zIndex: index + 1 }}
-              aria-expanded={detailsOpen}
-              onPointerDown={onPointerDown}
-              onClick={() => {
-                if (consumeHadTextSelection()) return;
-                setDetailsOpenMap((prev) => ({ ...prev, [key]: !prev[key] }));
-              }}
-            >
-              <span className="app-message-parts__tool-group-summary__text">
-                <span
-                  className={`app-message-parts__tool-group-summary__label${
-                    summary.running ? " app-status-text-shimmer" : ""
-                  }`}
-                >
-                  {summary.label}
+      <button
+        type="button"
+        className={`app-message-parts__tool-group-summary${
+          summary.running ? " app-message-parts__tool-group-summary--running" : ""
+        }`}
+        aria-expanded={detailsOpen}
+        onPointerDown={onPointerDown}
+        onClick={() => {
+          if (consumeHadTextSelection()) return;
+          setDetailsOpen((prev) => !prev);
+        }}
+      >
+        <span className="app-message-parts__tool-group-summary__text">
+          <span
+            className={`app-message-parts__tool-group-summary__label${
+              summary.running ? " app-status-text-shimmer" : ""
+            }`}
+          >
+            {summary.label}
+          </span>
+          {summary.addedLines > 0 || summary.removedLines > 0 ? (
+            <span className="app-message-parts__tool-group-summary__diff" aria-hidden>
+              {summary.addedLines > 0 ? (
+                <span className="app-message-parts__tool-group-summary__add">
+                  +{summary.addedLines}
                 </span>
-                {summary.addedLines > 0 || summary.removedLines > 0 ? (
-                  <span className="app-message-parts__tool-group-summary__diff" aria-hidden>
-                    {summary.addedLines > 0 ? (
-                      <span className="app-message-parts__tool-group-summary__add">
-                        +{summary.addedLines}
-                      </span>
-                    ) : null}
-                    {summary.removedLines > 0 ? (
-                      <span className="app-message-parts__tool-group-summary__remove">
-                        -{summary.removedLines}
-                      </span>
-                    ) : null}
-                  </span>
-                ) : null}
-              </span>
-              <span className="app-message-parts__tool-group-summary__chevron" aria-hidden>
-                <ChevronIcon expanded={detailsOpen} />
-              </span>
-            </button>
-            {detailsOpen ? (
-              <div className="app-message-parts__tool-group-details">
-                <ToolUsePartDisplay
-                  part={part}
-                  expanded={expandedMap[key] ?? false}
-                  onExpandedChange={(next) =>
-                    setExpandedMap((prev) => ({ ...prev, [key]: next }))
-                  }
-                />
-              </div>
-            ) : null}
-          </Fragment>
-        );
-      })}
+              ) : null}
+              {summary.removedLines > 0 ? (
+                <span className="app-message-parts__tool-group-summary__remove">
+                  -{summary.removedLines}
+                </span>
+              ) : null}
+            </span>
+          ) : null}
+        </span>
+        <span className="app-message-parts__tool-group-summary__chevron" aria-hidden>
+          <ChevronIcon expanded={detailsOpen} />
+        </span>
+      </button>
+      {detailsOpen ? (
+        <div className="app-message-parts__tool-group-details">
+          {parts.map(({ part, originalIndex }) => {
+            const key = toolPartStableKey(part, originalIndex);
+            return (
+              <ToolUsePartDisplay
+                key={key}
+                part={part}
+                expanded={expandedMap[key] ?? false}
+                onExpandedChange={(next) =>
+                  setExpandedMap((prev) => ({ ...prev, [key]: next }))
+                }
+              />
+            );
+          })}
+        </div>
+      ) : null}
     </div>
   );
 });
@@ -1006,7 +990,7 @@ function messagePartsDisplayEqual(
 export const MessagePartsDisplay = memo(function MessagePartsDisplay({
   parts,
   streaming,
-  /** 为 false 时不在各 part 内展示「生成中」（由消息列表底部统一展示） */
+  /** 为 false 时不在各 part 内展示「思考中」（由消息列表底部统一展示） */
   inlinePendingHint = true,
 }: {
   parts: MessagePart[];

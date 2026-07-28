@@ -1,6 +1,6 @@
 import { memo, useMemo } from "react";
-import type { ClaudeSession, SessionConversationTaskItem } from "../../types";
-import type { DispatchRecordMeta } from "../../utils/claudeChatMessageDisplay";
+import type { SessionConversationTaskItem } from "../../types";
+import type { DispatchRecordMeta, SessionDispatchLookup } from "../../utils/claudeChatMessageDisplay";
 import {
   enrichDispatchRecordMeta,
   formatDispatchRecordSentence,
@@ -8,7 +8,7 @@ import {
 
 interface Props {
   dispatch: DispatchRecordMeta;
-  sessionsForDispatchLookup?: readonly ClaudeSession[];
+  sessionsForDispatchLookup?: SessionDispatchLookup;
   resolveExecutionEnvironmentDispatchTask?: (meta: DispatchRecordMeta) => SessionConversationTaskItem | null;
   onOpenHistorySessionInInspector?: (sessionId: string) => void;
   onOpenTaskDetail?: (taskId: string) => void;

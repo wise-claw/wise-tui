@@ -74,10 +74,19 @@ describe("rowElementCacheHit", () => {
 
   test("misses when sessionsForDispatchLookup reference changes (structure tick)", () => {
     const row = msgRow(1);
-    const prevCtx = baseCtx({ sessionsForDispatchLookup: [] });
-    const nextCtx = baseCtx({ sessionsForDispatchLookup: [] });
+    const prevCtx = baseCtx({ sessionsForDispatchLookup: () => undefined });
+    const nextCtx = baseCtx({ sessionsForDispatchLookup: () => undefined });
     const cached = cachedEntry(row, 0, prevCtx);
     expect(rowElementCacheHit(cached, row, 0, nextCtx)).toBe(false);
+  });
+
+  test("hits when sessionsForDispatchLookup is the same stable getter (unrelated session tick)", () => {
+    const row = msgRow(1);
+    const getSession = () => undefined;
+    const prevCtx = baseCtx({ sessionsForDispatchLookup: getSession });
+    const nextCtx = baseCtx({ sessionsForDispatchLookup: getSession });
+    const cached = cachedEntry(row, 0, prevCtx);
+    expect(rowElementCacheHit(cached, row, 0, nextCtx)).toBe(true);
   });
 
   test("hits for thinking-hint row with stable reference (constant object)", () => {

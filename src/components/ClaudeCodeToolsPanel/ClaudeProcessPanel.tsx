@@ -1,10 +1,15 @@
 import { CloseOutlined } from "@ant-design/icons";
 import { Empty, message } from "antd";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useClaudeSessionsLiveSnapshot } from "../../stores/claudeSessionsLiveStore";
 import { cancelClaudeExecution, listRunningClaudeSessions } from "../../services/claude";
-import { getSystemResourceSnapshot, killClaudeHostProcess } from "../../services/systemResource";
+import { killClaudeHostProcess } from "../../services/systemResource";
 import { readVisiblePollIntervalMs } from "../../utils/adaptivePoll";
+import {
+  getSystemResourceSnapshotStoreSnapshot,
+  refreshSystemResourceSnapshotStore,
+  subscribeSystemResourceSnapshot,
+} from "../../stores/systemResourceSnapshotStore";
 import {
   buildHostClaudeProcessSession,
   buildRegistryOrphanClaudeSession,
@@ -33,32 +38,45 @@ interface ProcessItem {
 const POLL_VISIBLE_MS = 8000;
 const POLL_HIDDEN_MS = 22000;
 
+const noopSubscribe = () => () => {};
+const emptySnapshot = (): ReturnType<typeof getSystemResourceSnapshotStoreSnapshot> => ({
+  systemTotalBytes: 0,
+  systemUsedBytes: 0,
+  appMemoryBytes: 0,
+  claudeProcessCount: 0,
+  claudeMemoryBytes: 0,
+  claudeProcesses: [],
+});
+
 export function ClaudeProcessPanel({ active, listSearch, onCountChange }: Props) {
   const liveSessions = useClaudeSessionsLiveSnapshot(active);
-  const [hostProcesses, setHostProcesses] = useState<ClaudeHostProcess[]>([]);
+  const hostProcesses = useSyncExternalStore(
+    active ? subscribeSystemResourceSnapshot : noopSubscribe,
+    active ? getSystemResourceSnapshotStoreSnapshot : emptySnapshot,
+    emptySnapshot,
+  ).claudeProcesses;
   const [registrySessions, setRegistrySessions] = useState<ClaudeSessionInfo[]>([]);
   const [stoppingIds, setStoppingIds] = useState<Set<string>>(new Set());
 
-  const poll = useCallback(async () => {
+  const pollRegistry = useCallback(async () => {
     try {
-      const [snapshot, running] = await Promise.all([
-        getSystemResourceSnapshot(),
-        listRunningClaudeSessions(),
-      ]);
-      setHostProcesses(snapshot.claudeProcesses);
+      const running = await listRunningClaudeSessions();
       setRegistrySessions(running);
+      if (active) void refreshSystemResourceSnapshotStore();
     } catch {
       // noop
     }
-  }, []);
+  }, [active]);
 
   useEffect(() => {
     if (!active) return;
-    poll();
+    void pollRegistry();
     const ms = readVisiblePollIntervalMs(POLL_VISIBLE_MS, POLL_HIDDEN_MS);
-    const timer = setInterval(poll, ms);
+    const timer = setInterval(() => {
+      void pollRegistry();
+    }, ms);
     return () => clearInterval(timer);
-  }, [active, poll]);
+  }, [active, pollRegistry]);
 
   const hostPidMap = useMemo(() => {
     const map = new Map<string, ClaudeHostProcess>();

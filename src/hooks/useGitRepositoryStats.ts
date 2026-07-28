@@ -1,4 +1,6 @@
 import { useCallback, useSyncExternalStore } from "react";
+// Side-effect: registers the shared git_status → stats bridge.
+import "../stores/gitRepositoryExplorerStatusStore";
 import {
   getGitRepositoryStatsGeneration,
   getGitRepositoryStatsSnapshot,

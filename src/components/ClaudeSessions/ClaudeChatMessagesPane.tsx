@@ -10,7 +10,7 @@ import {
 import type { SessionExecutionEngine } from "../../constants/sessionExecutionEngine";
 import type { ClaudeSession, SessionConversationTaskItem } from "../../types";
 import { buildSessionEmptyChatPrompt } from "../../utils/sessionExecutionEngine";
-import type { DispatchRecordMeta } from "../../utils/claudeChatMessageDisplay";
+import type { DispatchRecordMeta, SessionDispatchLookup } from "../../utils/claudeChatMessageDisplay";
 import { CHAT_MESSAGES_SCROLLING_CLASS } from "../../constants/chatScrollPerformance";
 import {
   isClaudeChatSessionStreaming,
@@ -37,7 +37,7 @@ export interface ClaudeChatMessagesPaneProps {
   onOpenTaskDetail?: (taskId: string) => void;
   onOpenHistorySessionInInspector?: (sessionId: string) => void;
   onOpenSessionConversationTaskDetail?: (task: SessionConversationTaskItem) => void;
-  sessionsForDispatchLookup?: readonly ClaudeSession[];
+  sessionsForDispatchLookup?: SessionDispatchLookup;
   onMessagesBlur: (event: FocusEvent<HTMLDivElement>) => void;
   onNavigateMessage: () => void;
   onFullTranscriptStart: () => void;

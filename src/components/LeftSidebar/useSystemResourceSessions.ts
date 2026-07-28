@@ -1,9 +1,12 @@
-import { useEffect, useMemo, useRef, useState, type RefObject } from "react";
-import type { ClaudeHostProcess, ClaudeSession, ClaudeSessionInfo } from "../../types";
+import { useEffect, useMemo, useRef, useState, useSyncExternalStore, type RefObject } from "react";
+import type { ClaudeSession, ClaudeSessionInfo } from "../../types";
 import { listRunningClaudeSessions } from "../../services/claude";
 import { isClaudeSessionRunningInHostOrUi } from "../../services/claudeSessionState";
-import { getSystemResourceSnapshot } from "../../services/systemResource";
 import { readVisiblePollIntervalMs } from "../../utils/adaptivePoll";
+import {
+  getSystemResourceSnapshotStoreState,
+  subscribeSystemResourceSnapshot,
+} from "../../stores/systemResourceSnapshotStore";
 import {
   matchSessionByKeyword,
   normalizeSearchKeyword,
@@ -30,15 +33,13 @@ export function useSystemResourceSessions({
   onCancelSessionFromMonitor,
   onReloadFullDiskTranscript,
 }: UseSystemResourceSessionsInput) {
-  const [systemSummary, setSystemSummary] = useState({
-    systemTotalBytes: 0,
-    systemUsedBytes: 0,
-    appMemoryBytes: 0,
-    claudeProcessCount: 0,
-    claudeMemoryBytes: 0,
-    claudeProcesses: [] as ClaudeHostProcess[],
-  });
-  const [systemSummaryError, setSystemSummaryError] = useState(false);
+  const storeState = useSyncExternalStore(
+    subscribeSystemResourceSnapshot,
+    getSystemResourceSnapshotStoreState,
+    getSystemResourceSnapshotStoreState,
+  );
+  const systemSummary = storeState.snapshot;
+  const systemSummaryError = storeState.error;
   const [registryRunningClaude, setRegistryRunningClaude] = useState<ClaudeSessionInfo[]>([]);
   const [claudeCountPopoverOpen, setClaudeCountPopoverOpen] = useState(false);
   const [claudeSystemSessionSearch, setClaudeSystemSessionSearch] = useState("");
@@ -50,52 +51,13 @@ export function useSystemResourceSessions({
 
   useEffect(() => {
     let cancelled = false;
-    let tickCounter = 0;
+    let timer: number | null = null;
 
-    async function refreshSystemSummary() {
-      tickCounter += 1;
-      const detailOpen =
-        claudeCountPopoverOpenRef.current || systemSessionDrawerIdRef.current != null;
-      const includeSnapshot = detailOpen || tickCounter % 5 === 1;
-      const registryPromise = listRunningClaudeSessions();
-      const snapshotPromise = includeSnapshot
-        ? getSystemResourceSnapshot()
-        : Promise.resolve(null);
-      const [snapshotResult, registryResult] = await Promise.allSettled([
-        snapshotPromise,
-        registryPromise,
-      ]);
-      if (cancelled) return;
-      if (snapshotResult.status === "fulfilled" && snapshotResult.value) {
-        const snap = snapshotResult.value;
-        setSystemSummary((prev) => {
-          const next = {
-            ...snap,
-            claudeProcesses: snap.claudeProcesses ?? [],
-          };
-          if (
-            prev.systemTotalBytes === next.systemTotalBytes &&
-            prev.systemUsedBytes === next.systemUsedBytes &&
-            prev.appMemoryBytes === next.appMemoryBytes &&
-            prev.claudeProcessCount === next.claudeProcessCount &&
-            prev.claudeMemoryBytes === next.claudeMemoryBytes &&
-            prev.claudeProcesses.length === next.claudeProcesses.length &&
-            prev.claudeProcesses.every(
-              (proc, index) =>
-                proc.pid === next.claudeProcesses[index]?.pid &&
-                proc.sessionId === next.claudeProcesses[index]?.sessionId,
-            )
-          ) {
-            return prev;
-          }
-          return next;
-        });
-        setSystemSummaryError(false);
-      } else if (includeSnapshot && snapshotResult.status === "rejected") {
-        setSystemSummaryError(true);
-      }
-      if (registryResult.status === "fulfilled") {
-        const nextRunning = registryResult.value.filter((item) => item.status === "running");
+    async function refreshRegistry() {
+      try {
+        const list = await listRunningClaudeSessions();
+        if (cancelled) return;
+        const nextRunning = list.filter((item) => item.status === "running");
         setRegistryRunningClaude((prev) => {
           if (
             prev.length === nextRunning.length &&
@@ -105,26 +67,27 @@ export function useSystemResourceSessions({
           }
           return nextRunning;
         });
-      } else {
-        setRegistryRunningClaude((prev) => (prev.length === 0 ? prev : []));
+      } catch {
+        if (!cancelled) {
+          setRegistryRunningClaude((prev) => (prev.length === 0 ? prev : []));
+        }
       }
     }
 
-    void refreshSystemSummary();
-    let timer: number | null = null;
+    void refreshRegistry();
     const scheduleTimer = () => {
       if (timer != null) window.clearInterval(timer);
       const detailOpen =
         claudeCountPopoverOpenRef.current || systemSessionDrawerIdRef.current != null;
       timer = window.setInterval(() => {
         if (document.visibilityState !== "visible") return;
-        void refreshSystemSummary();
+        void refreshRegistry();
       }, readVisiblePollIntervalMs(detailOpen ? 8000 : 22000, detailOpen ? 20000 : 90000));
     };
     scheduleTimer();
     const onVisibilityChange = () => {
       if (document.visibilityState === "visible") {
-        void refreshSystemSummary();
+        void refreshRegistry();
         scheduleTimer();
       }
     };
