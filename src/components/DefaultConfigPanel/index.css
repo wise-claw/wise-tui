@@ -129,6 +129,11 @@
   flex: 0 1 60px;
 }
 
+.app-default-config-session-preview-select {
+  min-width: 88px;
+  width: 88px;
+}
+
 .app-default-config-hub-quick-checkboxes.ant-checkbox-group,
 .app-default-config-checkbox-grid.ant-checkbox-group {
   display: flex;

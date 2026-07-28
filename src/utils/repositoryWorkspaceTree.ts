@@ -10,9 +10,10 @@ import { repositoryPathsMatch } from "./repositoryMainSessionBinding";
 import { isSessionFeedbackLoopHistorySession } from "./sessionFeedbackLoopDispatch";
 import { listSessionsForRepositoryPath, dedupeClaudeSessionsByIdentity } from "./sessionHistoryScope";
 import { sortRepositoriesByWorkspaceOrder } from "./workspaceRepositoryOrder";
+import { WORKSPACE_SIDEBAR_ROW_PREVIEW_LIMIT_DEFAULT } from "../constants/workspaceSidebarLayout";
 
 /** 仓库展开子树默认展示行数（终端/派发/工作流 + 会话合计，不含 More）。 */
-export const WORKSPACE_SIDEBAR_ROW_PREVIEW_LIMIT = 5;
+export const WORKSPACE_SIDEBAR_ROW_PREVIEW_LIMIT = WORKSPACE_SIDEBAR_ROW_PREVIEW_LIMIT_DEFAULT;
 
 /** 侧栏「更多」每次追加的行数。 */
 export const WORKSPACE_SIDEBAR_ROW_MORE_STEP = 10;

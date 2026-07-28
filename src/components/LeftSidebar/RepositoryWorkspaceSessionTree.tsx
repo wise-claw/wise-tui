@@ -1,15 +1,15 @@
-import { memo, useMemo, useState } from "react";
+import { memo, useEffect, useMemo, useState } from "react";
 import type {
   ClaudeSession,
   EmployeeMonitorItem,
   SessionConversationTaskItem,
   TeamMonitorItem,
 } from "../../types";
+import { useWorkspaceSidebarRowPreviewLimit } from "../../hooks/useWorkspaceSidebarRowPreviewLimit";
 import { getSessionPreview } from "../ProgressMonitorPanel/historySessionDrawerChrome";
 import { canStopSessionConversationTask } from "../../utils/sessionConversationTasks";
 import {
   WORKSPACE_SIDEBAR_ROW_MORE_STEP,
-  WORKSPACE_SIDEBAR_ROW_PREVIEW_LIMIT,
   buildWorkspaceSidebarTreeRows,
   formatWorkspaceSidebarRelativeTime,
   workspaceSidebarSessionUpdatedAt,
@@ -74,7 +74,12 @@ function RepositoryWorkspaceSessionTreeInner(props: RepositoryWorkspaceSessionTr
     activeSessionId,
     showRunItems = true,
   } = props;
-  const [rowLimit, setRowLimit] = useState(WORKSPACE_SIDEBAR_ROW_PREVIEW_LIMIT);
+  const previewLimit = useWorkspaceSidebarRowPreviewLimit();
+  const [rowLimit, setRowLimit] = useState(previewLimit);
+
+  useEffect(() => {
+    setRowLimit(previewLimit);
+  }, [previewLimit, repositoryPath]);
 
   const allRows = useMemo(
     () =>

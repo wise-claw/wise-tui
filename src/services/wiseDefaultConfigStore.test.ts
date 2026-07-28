@@ -24,6 +24,7 @@ import {
   WISE_TOPBAR_CHROME_DEFAULT_CHANGED,
   WISE_COMPOSER_FOOTER_CHROME_DEFAULT_CHANGED,
   WISE_WORKSPACE_INSPECTOR_PANELS_CHANGED,
+  WISE_WORKSPACE_SIDEBAR_ROW_PREVIEW_LIMIT_CHANGED,
 } from "./wiseDefaultConfigStore";
 
 function installWindowLocalStorageStub(): Storage {
@@ -396,5 +397,41 @@ describe("wiseDefaultConfigStore", () => {
     });
     await saveWiseDefaultConfig({ showWorkspaceTodosPanel: false });
     expect(seen.at(-1)?.showWorkspaceTodosPanel).toBe(false);
+  });
+
+  test("load backfills missing workspace sidebar row preview limit with product default", async () => {
+    getAppSetting.mockImplementation(async (key: string) =>
+      key === WISE_DEFAULT_CONFIG_KEY
+        ? JSON.stringify({
+            version: 1,
+            connectionKind: "streaming",
+          })
+        : null,
+    );
+    const config = await loadWiseDefaultConfig();
+    expect(config.workspaceSidebarRowPreviewLimit).toBe(3);
+  });
+
+  test("save workspace sidebar row preview limit clamps and dispatches event", async () => {
+    getAppSetting.mockImplementation(async (key: string) => {
+      if (key === WISE_DEFAULT_CONFIG_ONESHOT_TO_STREAMING_MIGRATION_KEY) return "1";
+      if (key === WISE_DEFAULT_CONFIG_KEY) {
+        return JSON.stringify({
+          version: 1,
+          connectionKind: "streaming",
+          workspaceSidebarRowPreviewLimit: 3,
+        });
+      }
+      return null;
+    });
+    const seen: number[] = [];
+    window.addEventListener(WISE_WORKSPACE_SIDEBAR_ROW_PREVIEW_LIMIT_CHANGED, (e: Event) => {
+      const limit = (e as CustomEvent<{ workspaceSidebarRowPreviewLimit?: number }>).detail
+        ?.workspaceSidebarRowPreviewLimit;
+      if (typeof limit === "number") seen.push(limit);
+    });
+    const next = await saveWiseDefaultConfig({ workspaceSidebarRowPreviewLimit: 99 });
+    expect(next.workspaceSidebarRowPreviewLimit).toBe(10);
+    expect(seen).toEqual([10]);
   });
 });

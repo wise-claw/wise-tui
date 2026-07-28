@@ -33,6 +33,10 @@ import {
   normalizeWorkspaceListVisibleRows,
 } from "../constants/workspaceListLayout";
 import {
+  WORKSPACE_SIDEBAR_ROW_PREVIEW_LIMIT_DEFAULT,
+  normalizeWorkspaceSidebarRowPreviewLimit,
+} from "../constants/workspaceSidebarLayout";
+import {
   REPO_PANEL_SPLIT_HEIGHT_DEFAULT_PX,
   clampRepoPanelSplitHeightPx,
 } from "../constants/repoPanelLayout";
@@ -74,6 +78,9 @@ export const WISE_LEFT_SIDEBAR_MONITOR_PANEL_CHANGED = "wise:left-sidebar-monito
 export const WISE_LEFT_SIDEBAR_WORKSPACE_LIST_CHANGED = "wise:left-sidebar-workspace-list-changed";
 
 export const WISE_WORKSPACE_LIST_VISIBLE_ROWS_CHANGED = "wise:workspace-list-visible-rows-changed";
+
+export const WISE_WORKSPACE_SIDEBAR_ROW_PREVIEW_LIMIT_CHANGED =
+  "wise:workspace-sidebar-row-preview-limit-changed";
 
 export const WISE_LEFT_SIDEBAR_REPOSITORY_ICON_BADGES_CHANGED =
   "wise:left-sidebar-repository-icon-badges-changed";
@@ -187,6 +194,8 @@ export interface WiseDefaultConfigV1 {
   showLeftSidebarWorkspaceList: boolean;
   /** 左栏工作区树内容区默认可见行数（与文件树并存时封顶高度）。 */
   workspaceListVisibleRows: number;
+  /** 工作区展开子树默认展示行数（会话 + 运行项合计，不含 More）。 */
+  workspaceSidebarRowPreviewLimit: number;
   /** 左栏工作区列表中是否显示仓库圆形角标；默认隐藏。 */
   showRepositoryIconBadgesInWorkspaceList: boolean;
   /** 运行面板默认栏位；默认左栏。 */
@@ -286,6 +295,7 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   showLeftSidebarMonitorPanel: true,
   showLeftSidebarWorkspaceList: true,
   workspaceListVisibleRows: WORKSPACE_LIST_VISIBLE_ROWS_DEFAULT,
+  workspaceSidebarRowPreviewLimit: WORKSPACE_SIDEBAR_ROW_PREVIEW_LIMIT_DEFAULT,
   showRepositoryIconBadgesInWorkspaceList: false,
   monitorPanelPlacement: "left",
   monitorPanelVisibleRows: MONITOR_PANEL_VISIBLE_ROWS_DEFAULT,
@@ -424,6 +434,10 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
         parsed.workspaceListVisibleRows === undefined
           ? DEFAULT_CONFIG.workspaceListVisibleRows
           : normalizeWorkspaceListVisibleRows(parsed.workspaceListVisibleRows),
+      workspaceSidebarRowPreviewLimit:
+        parsed.workspaceSidebarRowPreviewLimit === undefined
+          ? DEFAULT_CONFIG.workspaceSidebarRowPreviewLimit
+          : normalizeWorkspaceSidebarRowPreviewLimit(parsed.workspaceSidebarRowPreviewLimit),
       showRepositoryIconBadgesInWorkspaceList:
         parsed.showRepositoryIconBadgesInWorkspaceList === undefined
           ? DEFAULT_CONFIG.showRepositoryIconBadgesInWorkspaceList
@@ -746,6 +760,7 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     showLeftSidebarMonitorPanel: DEFAULT_CONFIG.showLeftSidebarMonitorPanel,
     showLeftSidebarWorkspaceList: DEFAULT_CONFIG.showLeftSidebarWorkspaceList,
     workspaceListVisibleRows: DEFAULT_CONFIG.workspaceListVisibleRows,
+    workspaceSidebarRowPreviewLimit: DEFAULT_CONFIG.workspaceSidebarRowPreviewLimit,
     showRepositoryIconBadgesInWorkspaceList: DEFAULT_CONFIG.showRepositoryIconBadgesInWorkspaceList,
     monitorPanelPlacement: DEFAULT_CONFIG.monitorPanelPlacement,
     monitorPanelVisibleRows: DEFAULT_CONFIG.monitorPanelVisibleRows,
@@ -852,6 +867,15 @@ function dispatchWorkspaceListVisibleRowsChanged(visibleRows: number): void {
   window.dispatchEvent(
     new CustomEvent(WISE_WORKSPACE_LIST_VISIBLE_ROWS_CHANGED, {
       detail: { workspaceListVisibleRows: visibleRows },
+    }),
+  );
+}
+
+function dispatchWorkspaceSidebarRowPreviewLimitChanged(limit: number): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(WISE_WORKSPACE_SIDEBAR_ROW_PREVIEW_LIMIT_CHANGED, {
+      detail: { workspaceSidebarRowPreviewLimit: limit },
     }),
   );
 }
@@ -971,6 +995,7 @@ export async function saveWiseDefaultConfig(
       | "showLeftSidebarMonitorPanel"
       | "showLeftSidebarWorkspaceList"
       | "workspaceListVisibleRows"
+      | "workspaceSidebarRowPreviewLimit"
       | "showRepositoryIconBadgesInWorkspaceList"
       | "monitorPanelPlacement"
       | "monitorPanelVisibleRows"
@@ -1041,6 +1066,8 @@ export async function saveWiseDefaultConfig(
     showLeftSidebarWorkspaceList:
       patch.showLeftSidebarWorkspaceList ?? current.showLeftSidebarWorkspaceList,
     workspaceListVisibleRows: patch.workspaceListVisibleRows ?? current.workspaceListVisibleRows,
+    workspaceSidebarRowPreviewLimit:
+      patch.workspaceSidebarRowPreviewLimit ?? current.workspaceSidebarRowPreviewLimit,
     showRepositoryIconBadgesInWorkspaceList:
       patch.showRepositoryIconBadgesInWorkspaceList ?? current.showRepositoryIconBadgesInWorkspaceList,
     monitorPanelPlacement: patch.monitorPanelPlacement ?? current.monitorPanelPlacement,
@@ -1195,6 +1222,11 @@ export async function saveWiseDefaultConfig(
   }
   if (patch.workspaceListVisibleRows !== undefined) {
     next.workspaceListVisibleRows = normalizeWorkspaceListVisibleRows(patch.workspaceListVisibleRows);
+  }
+  if (patch.workspaceSidebarRowPreviewLimit !== undefined) {
+    next.workspaceSidebarRowPreviewLimit = normalizeWorkspaceSidebarRowPreviewLimit(
+      patch.workspaceSidebarRowPreviewLimit,
+    );
   }
   if (patch.showRepositoryIconBadgesInWorkspaceList !== undefined) {
     next.showRepositoryIconBadgesInWorkspaceList = normalizeBoolean(
@@ -1449,6 +1481,12 @@ export async function saveWiseDefaultConfig(
     next.workspaceListVisibleRows !== current.workspaceListVisibleRows
   ) {
     dispatchWorkspaceListVisibleRowsChanged(next.workspaceListVisibleRows);
+  }
+  if (
+    patch.workspaceSidebarRowPreviewLimit !== undefined &&
+    next.workspaceSidebarRowPreviewLimit !== current.workspaceSidebarRowPreviewLimit
+  ) {
+    dispatchWorkspaceSidebarRowPreviewLimitChanged(next.workspaceSidebarRowPreviewLimit);
   }
   if (
     patch.showRepositoryIconBadgesInWorkspaceList !== undefined &&
@@ -1809,6 +1847,15 @@ export async function loadWorkspaceListVisibleRowsFromStore(): Promise<number> {
 export async function saveWorkspaceListVisibleRowsToStore(visibleRows: number): Promise<void> {
   const normalized = normalizeWorkspaceListVisibleRows(visibleRows);
   await saveWiseDefaultConfig({ workspaceListVisibleRows: normalized });
+}
+
+export async function loadWorkspaceSidebarRowPreviewLimitFromStore(): Promise<number> {
+  return (await loadWiseDefaultConfig()).workspaceSidebarRowPreviewLimit;
+}
+
+export async function saveWorkspaceSidebarRowPreviewLimitToStore(limit: number): Promise<void> {
+  const normalized = normalizeWorkspaceSidebarRowPreviewLimit(limit);
+  await saveWiseDefaultConfig({ workspaceSidebarRowPreviewLimit: normalized });
 }
 
 export async function loadLeftSidebarWorkspaceListDefaultFromStore(): Promise<{

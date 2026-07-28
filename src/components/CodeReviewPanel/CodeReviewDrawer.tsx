@@ -175,15 +175,9 @@ export function CodeReviewDrawer({
 
   useEffect(() => {
     if (!open) {
-      autoStartedRef.current = false;
+      // 软关闭：不重置 autoStarted，避免再次打开时重复 autoStart
       return;
     }
-    setScope(initialScope);
-    setPane("review");
-    setReused(false);
-    setIncremental(null);
-    setSeverityFilter("ALL");
-    setActiveFocusKey(null);
     void loadCodeReviewSettings().then(setSettings);
     void refreshHistory();
     if (seededRun) {
@@ -193,8 +187,17 @@ export function CodeReviewDrawer({
       setIncremental(null);
       publishCodeReviewFindings(seededRun);
       onRunCompleted?.(seededRun);
+      return;
     }
-  }, [initialScope, onRunCompleted, open, refreshHistory, seededRun]);
+    // 后台仍在跑或已有结果：保留状态，勿被 reopen 冲掉
+    if (loading || run) return;
+    setScope(initialScope);
+    setPane("review");
+    setReused(false);
+    setIncremental(null);
+    setSeverityFilter("ALL");
+    setActiveFocusKey(null);
+  }, [initialScope, loading, onRunCompleted, open, refreshHistory, run, seededRun]);
 
   const cancelReview = useCallback(() => {
     cancelledRef.current = true;
@@ -205,6 +208,45 @@ export function CodeReviewDrawer({
     invocationKeyRef.current = null;
     setLoading(false);
   }, []);
+
+  /** 遮罩 / Esc / 标题栏 X：仅收起抽屉，审查继续在后台跑。 */
+  const handleDismiss = useCallback(() => {
+    if (loading) {
+      message.info("代码审查继续在后台运行");
+    }
+    onClose();
+  }, [loading, onClose]);
+
+  /** 显式「关闭」：取消进行中的审查并真正关掉。 */
+  const handleHardClose = useCallback(() => {
+    cancelReview();
+    setRun(null);
+    setError(null);
+    setTruncated(false);
+    setReused(false);
+    setIncremental(null);
+    setActiveFocusKey(null);
+    setSeverityFilter("ALL");
+    autoStartedRef.current = false;
+    onClose();
+  }, [cancelReview, onClose]);
+
+  // 切换仓库时结束上一仓库的后台审查
+  const prevRepositoryPathRef = useRef(repositoryPath);
+  useEffect(() => {
+    const prev = prevRepositoryPathRef.current;
+    if (prev === repositoryPath) return;
+    prevRepositoryPathRef.current = repositoryPath;
+    if (!prev.trim()) return;
+    cancelReview();
+    setRun(null);
+    setError(null);
+    setTruncated(false);
+    setReused(false);
+    setIncremental(null);
+    setActiveFocusKey(null);
+    autoStartedRef.current = false;
+  }, [cancelReview, repositoryPath]);
 
   const startReview = useCallback(
     async (opts?: { force?: boolean }) => {
@@ -278,12 +320,6 @@ export function CodeReviewDrawer({
     autoStartedRef.current = true;
     void startReview();
   }, [autoStart, open, seededRun, startReview]);
-
-  useEffect(() => {
-    if (!open) {
-      cancelReview();
-    }
-  }, [cancelReview, open]);
 
   useEffect(() => {
     if (!open || !run || !focusFinding?.path?.trim()) {
@@ -454,8 +490,8 @@ export function CodeReviewDrawer({
 
   const handleOpenSettings = useCallback(() => {
     dispatchWiseUiNavigation({ kind: "author", pane: "code-review" });
-    onClose();
-  }, [onClose]);
+    handleDismiss();
+  }, [handleDismiss]);
 
   const handleClearFindings = useCallback(() => {
     const path = repositoryPath.trim();
@@ -511,6 +547,7 @@ export function CodeReviewDrawer({
         <Space size={8}>
           <BugOutlined />
           <span>代码审查</span>
+          {loading ? <Tag color="processing">审查中</Tag> : null}
           {run ? (
             <Tag color={recommendationColor(run.recommendation)}>
               {recommendationLabel(run.recommendation)}
@@ -523,10 +560,7 @@ export function CodeReviewDrawer({
       placement="right"
       size={520}
       open={open}
-      onClose={() => {
-        cancelReview();
-        onClose();
-      }}
+      onClose={handleDismiss}
       destroyOnHidden
       className="code-review-drawer"
       extra={
@@ -622,6 +656,13 @@ export function CodeReviewDrawer({
               </Button>
             </>
           )}
+          <Button
+            size="small"
+            onClick={handleHardClose}
+            title="结束审查并关闭抽屉"
+          >
+            关闭
+          </Button>
         </Space>
       }
     >

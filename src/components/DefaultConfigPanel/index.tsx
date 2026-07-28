@@ -11,6 +11,7 @@ import {
 } from "../../constants/sessionExecutionEngine";
 import { MONITOR_PANEL_VISIBLE_ROWS_OPTIONS } from "../../constants/monitorPanelLayout";
 import { WORKSPACE_LIST_VISIBLE_ROWS_OPTIONS } from "../../constants/workspaceListLayout";
+import { WORKSPACE_SIDEBAR_ROW_PREVIEW_LIMIT_OPTIONS } from "../../constants/workspaceSidebarLayout";
 import { LEFT_SIDEBAR_HUB_QUICK_ENTRY_LABELS } from "../../constants/leftSidebarHubQuickEntries";
 import type { LeftSidebarHubQuickEntryId } from "../../constants/leftSidebarHubQuickEntries";
 import { useClaudeConnectionModeSetting } from "../ClaudeConfigDirPanel/useClaudeConnectionModeSetting";
@@ -20,6 +21,7 @@ import { DefaultConfigCheckboxGrid } from "./defaultConfigCheckboxGrid";
 import { useLeftSidebarHubQuickEntriesSetting } from "./useLeftSidebarHubQuickEntriesSetting";
 import { useMonitorPanelSetting } from "./useMonitorPanelSetting";
 import { useLeftSidebarWorkspaceListSetting } from "./useLeftSidebarWorkspaceListSetting";
+import { useWorkspaceSidebarRowPreviewLimitSetting } from "./useWorkspaceSidebarRowPreviewLimitSetting";
 import { useLeftSidebarRepositoryIconBadgesSetting } from "./useLeftSidebarRepositoryIconBadgesSetting";
 import { useExecutionEnvironmentDispatchHistoryDaysSetting } from "./useExecutionEnvironmentDispatchHistoryDaysSetting";
 import { EXECUTION_ENVIRONMENT_DISPATCH_HISTORY_DAY_OPTIONS } from "../../constants/executionEnvironmentDispatch";
@@ -78,6 +80,7 @@ export function DefaultConfigPanel() {
   const hubQuickEntries = useLeftSidebarHubQuickEntriesSetting();
   const monitorPanel = useMonitorPanelSetting();
   const leftSidebarWorkspaceList = useLeftSidebarWorkspaceListSetting();
+  const workspaceSidebarRowPreview = useWorkspaceSidebarRowPreviewLimitSetting();
   const leftSidebarRepositoryIconBadges = useLeftSidebarRepositoryIconBadgesSetting();
   const repoPanelPlacement = useRepoPanelPlacementSetting();
   const execEnvDispatchHistory = useExecutionEnvironmentDispatchHistoryDaysSetting();
@@ -708,6 +711,28 @@ export function DefaultConfigPanel() {
                   />
                 </div>
               </div>
+            }
+          />
+
+          <DefaultConfigRow
+            title="会话预览"
+            hint="展开默认条数"
+            detail="工作区展开后默认展示的会话与运行行数（终端 / 派发 / 工作流 + 会话）；超出可点 More 加载更多"
+            control={
+              <Select
+                size="small"
+                className="app-default-config-session-preview-select"
+                aria-label="工作区会话默认展示数量"
+                disabled={workspaceSidebarRowPreview.loading || workspaceSidebarRowPreview.saving}
+                value={workspaceSidebarRowPreview.previewLimit}
+                options={WORKSPACE_SIDEBAR_ROW_PREVIEW_LIMIT_OPTIONS.map((rows) => ({
+                  value: rows,
+                  label: `${rows} 条`,
+                }))}
+                onChange={(value) => {
+                  void workspaceSidebarRowPreview.savePreviewLimit(value);
+                }}
+              />
             }
           />
 
