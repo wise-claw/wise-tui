@@ -70,6 +70,23 @@ describe("terminalCenterPanelStore", () => {
     expect(getPaneCenterView(0)).toBe("terminal");
   });
 
+  test("toggle while on terminal collapses and leaves centerView so UI actually closes", () => {
+    openTerminalCenterPanel(0);
+    expect(getPaneCenterView(0)).toBe("terminal");
+    toggleTerminalCenterPanel(0);
+    expect(isTerminalCenterPanelVisibleOnPane(0)).toBe(false);
+    // 必须离开 terminal，否则保活节点仍占中栏，⌃` 再按像关不掉
+    expect(getPaneCenterView(0)).toBe("messages");
+  });
+
+  test("collapseTerminalCenterPanelOnPane leaves terminal centerView", () => {
+    openTerminalCenterPanel(0);
+    syncPaneCenterView(0, "terminal");
+    collapseTerminalCenterPanelOnPane(0);
+    expect(isTerminalCenterPanelVisibleOnPane(0)).toBe(false);
+    expect(getPaneCenterView(0)).toBe("messages");
+  });
+
   test("opening second pane keeps first pane terminal open", () => {
     openTerminalCenterPanel(0);
     openTerminalCenterPanel(1);

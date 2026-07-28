@@ -167,16 +167,31 @@ export function openTerminalCenterPanel(paneIndex: number = 0): void {
   requestPaneCenterView(target, "terminal");
 }
 
+/**
+ * 收起后若中栏仍停在 terminal，保活节点会继续占满中栏（⌃` 再按像关不掉）。
+ * 切回 messages；有文件时由 Segmented / 用户再进 files。
+ */
+function leaveTerminalCenterViewIfNeeded(paneIndex: number): void {
+  if (getPaneCenterView(paneIndex) === "terminal") {
+    requestPaneCenterView(paneIndex, "messages");
+  }
+}
+
 /** 收起所有可见终端（保留挂载以维持 PTY）。 */
 export function collapseTerminalCenterPanel(): void {
   let changed = false;
+  const leaveViews: number[] = [];
   for (const [index, flags] of paneFlags) {
     if (flags.mounted && !flags.collapsed) {
       paneFlags.set(index, { mounted: true, collapsed: true });
       changed = true;
+      leaveViews.push(index);
     }
   }
   if (changed) emit();
+  for (const index of leaveViews) {
+    leaveTerminalCenterViewIfNeeded(index);
+  }
 }
 
 /**
@@ -188,6 +203,7 @@ export function collapseTerminalCenterPanelOnPane(paneIndex: number): void {
   if (!isPaneVisible(prev)) return;
   paneFlags.set(target, { mounted: true, collapsed: true });
   emit();
+  leaveTerminalCenterViewIfNeeded(target);
 }
 
 /** 关闭所有屏上的终端面板（卸挂载）。 */
@@ -208,12 +224,14 @@ export function closeTerminalCenterPanelOnPane(paneIndex: number): void {
 /**
  * @param paneIndex 目标屏；省略时默认 0。
  * 已可见时：若当前不在终端视图则切到终端（快捷键从消息/文件回到终端）；
- * 已在终端视图则收起。未可见时打开并切到终端。
+ * 已在终端视图（或视图未知）则收起并离开 terminal 中栏。未可见时打开并切到终端。
  */
 export function toggleTerminalCenterPanel(paneIndex?: number): void {
   const target = normalizePaneIndex(paneIndex ?? 0);
   if (isPaneVisible(paneFlags.get(target))) {
-    if (getPaneCenterView(target) === "terminal") {
+    const view = getPaneCenterView(target);
+    // view == null：尚未 sync 时中栏通常已在展示终端，按「再按关闭」处理，避免只 focus 无法收起。
+    if (view === "terminal" || view == null) {
       collapseTerminalCenterPanelOnPane(target);
       return;
     }
