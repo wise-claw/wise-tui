@@ -9,9 +9,33 @@ import { MarkdownBody } from "./MarkdownElements";
 
 export { buildMarkdownDisplayHtml, clearMarkdownDisplayHtmlCache, prepareMarkdownForDisplay } from "../../utils/markdownRenderPipeline";
 
+/** 思考态指示图标：灯泡轮廓，用于「思考中」文案前。 */
+export function ThinkingHintIcon() {
+  return (
+    <svg
+      width="12"
+      height="12"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="1.6"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden
+    >
+      <path d="M9.5 2A5.5 5.5 0 0 0 4 7.5c0 1.9.96 3.58 2.42 4.56L6 18h12l-.42-5.94A5.49 5.49 0 0 0 20 7.5 5.5 5.5 0 0 0 14.5 2h-5Z" />
+      <path d="M9 18v1.5a1.5 1.5 0 0 0 1.5 1.5h3A1.5 1.5 0 0 0 15 19.5V18" />
+      <path d="M10 14h4" />
+    </svg>
+  );
+}
+
 export function StreamingReplyHint() {
   return (
     <div className="app-markdown-streaming-hint" role="status" aria-live="polite" aria-label="思考中">
+      <span className="app-markdown-streaming-hint__icon app-thinking-hint-icon--active" aria-hidden>
+        <ThinkingHintIcon />
+      </span>
       <span className="app-markdown-streaming-hint__label app-status-text-shimmer">思考中</span>
     </div>
   );

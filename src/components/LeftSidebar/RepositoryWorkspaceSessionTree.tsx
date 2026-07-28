@@ -10,14 +10,8 @@ import { canStopSessionConversationTask } from "../../utils/sessionConversationT
 import {
   WORKSPACE_SIDEBAR_ROW_MORE_STEP,
   WORKSPACE_SIDEBAR_ROW_PREVIEW_LIMIT,
-  filterDispatchTasksForRepository,
-  filterEmployeeMonitorForRepository,
-  filterTeamMonitorForRepository,
+  buildWorkspaceSidebarTreeRows,
   formatWorkspaceSidebarRelativeTime,
-  listWorkspaceSidebarHistorySessions,
-  sortDispatchTasksRunningFirst,
-  sortEmployeeMonitorRunningFirst,
-  sortTeamMonitorRunningFirst,
   workspaceSidebarSessionUpdatedAt,
 } from "../../utils/repositoryWorkspaceTree";
 import "./RepositoryWorkspaceSessionTree.css";
@@ -53,12 +47,6 @@ export type RepositoryWorkspaceSessionTreeProps = {
   onArchiveSession?: (sessionId: string) => void;
 };
 
-type WorkspaceTreeRow =
-  | { kind: "employee"; item: EmployeeMonitorItem }
-  | { kind: "dispatch"; item: SessionConversationTaskItem }
-  | { kind: "team"; item: TeamMonitorItem }
-  | { kind: "session"; item: ClaudeSession };
-
 function activateSession(
   sessionId: string,
   props: Pick<
@@ -87,40 +75,25 @@ function RepositoryWorkspaceSessionTreeInner(props: RepositoryWorkspaceSessionTr
   } = props;
   const [rowLimit, setRowLimit] = useState(WORKSPACE_SIDEBAR_ROW_PREVIEW_LIMIT);
 
-  const historySessions = useMemo(
-    () => listWorkspaceSidebarHistorySessions(sessions, repositoryPath),
-    [sessions, repositoryPath],
+  const allRows = useMemo(
+    () =>
+      buildWorkspaceSidebarTreeRows({
+        sessions,
+        repositoryPath,
+        showRunItems,
+        employeeMonitorItems: props.employeeMonitorItems,
+        sessionConversationTaskItems: props.sessionConversationTaskItems,
+        teamMonitorItems: props.teamMonitorItems,
+      }),
+    [
+      sessions,
+      repositoryPath,
+      showRunItems,
+      props.employeeMonitorItems,
+      props.sessionConversationTaskItems,
+      props.teamMonitorItems,
+    ],
   );
-
-  const employees = useMemo(() => {
-    if (!showRunItems || !props.employeeMonitorItems?.length) return [];
-    return sortEmployeeMonitorRunningFirst(
-      filterEmployeeMonitorForRepository(props.employeeMonitorItems, repositoryPath),
-    );
-  }, [showRunItems, props.employeeMonitorItems, repositoryPath]);
-
-  const dispatches = useMemo(() => {
-    if (!showRunItems || !props.sessionConversationTaskItems?.length) return [];
-    return sortDispatchTasksRunningFirst(
-      filterDispatchTasksForRepository(props.sessionConversationTaskItems, repositoryPath),
-    );
-  }, [showRunItems, props.sessionConversationTaskItems, repositoryPath]);
-
-  const teams = useMemo(() => {
-    if (!showRunItems || !props.teamMonitorItems?.length) return [];
-    return sortTeamMonitorRunningFirst(
-      filterTeamMonitorForRepository(props.teamMonitorItems, repositoryPath),
-    );
-  }, [showRunItems, props.teamMonitorItems, repositoryPath]);
-
-  const allRows = useMemo((): WorkspaceTreeRow[] => {
-    const rows: WorkspaceTreeRow[] = [];
-    for (const item of employees) rows.push({ kind: "employee", item });
-    for (const item of dispatches) rows.push({ kind: "dispatch", item });
-    for (const item of teams) rows.push({ kind: "team", item });
-    for (const item of historySessions) rows.push({ kind: "session", item });
-    return rows;
-  }, [employees, dispatches, teams, historySessions]);
 
   const visibleRows = allRows.slice(0, rowLimit);
   const hasMoreRows = allRows.length > rowLimit;

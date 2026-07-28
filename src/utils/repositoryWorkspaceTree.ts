@@ -101,50 +101,53 @@ export function filterTeamMonitorForRepository(
   });
 }
 
-function employeeIsRunning(item: EmployeeMonitorItem): boolean {
-  return item.status === "in_progress";
-}
+/** 侧栏展开子树行：终端 / 派发 / 工作流 / 会话，统一按时间混排（不置顶派发）。 */
+export type WorkspaceSidebarTreeRow =
+  | { kind: "employee"; item: EmployeeMonitorItem; updatedAt: number }
+  | { kind: "dispatch"; item: SessionConversationTaskItem; updatedAt: number }
+  | { kind: "team"; item: TeamMonitorItem; updatedAt: number }
+  | { kind: "session"; item: ClaudeSession; updatedAt: number };
 
-function dispatchIsRunning(item: SessionConversationTaskItem): boolean {
-  return item.status === "running";
-}
+export function buildWorkspaceSidebarTreeRows(input: {
+  sessions: ReadonlyArray<ClaudeSession>;
+  repositoryPath: string;
+  showRunItems?: boolean;
+  employeeMonitorItems?: ReadonlyArray<EmployeeMonitorItem>;
+  sessionConversationTaskItems?: ReadonlyArray<SessionConversationTaskItem>;
+  teamMonitorItems?: ReadonlyArray<TeamMonitorItem>;
+}): WorkspaceSidebarTreeRow[] {
+  const {
+    sessions,
+    repositoryPath,
+    showRunItems = true,
+    employeeMonitorItems,
+    sessionConversationTaskItems,
+    teamMonitorItems,
+  } = input;
 
-function teamIsRunning(item: TeamMonitorItem): boolean {
-  return item.status === "in_progress";
-}
+  const rows: WorkspaceSidebarTreeRow[] = [];
 
-/** 运行中项排前，其余按 updatedAt 倒序。 */
-export function sortEmployeeMonitorRunningFirst(
-  items: ReadonlyArray<EmployeeMonitorItem>,
-): EmployeeMonitorItem[] {
-  return [...items].sort((a, b) => {
-    const ar = employeeIsRunning(a) ? 1 : 0;
-    const br = employeeIsRunning(b) ? 1 : 0;
-    if (ar !== br) return br - ar;
-    return b.updatedAt - a.updatedAt;
-  });
-}
+  if (showRunItems) {
+    for (const item of filterEmployeeMonitorForRepository(employeeMonitorItems ?? [], repositoryPath)) {
+      rows.push({ kind: "employee", item, updatedAt: item.updatedAt });
+    }
+    for (const item of filterDispatchTasksForRepository(
+      sessionConversationTaskItems ?? [],
+      repositoryPath,
+    )) {
+      rows.push({ kind: "dispatch", item, updatedAt: item.updatedAt });
+    }
+    for (const item of filterTeamMonitorForRepository(teamMonitorItems ?? [], repositoryPath)) {
+      rows.push({ kind: "team", item, updatedAt: item.updatedAt });
+    }
+  }
 
-export function sortDispatchTasksRunningFirst(
-  items: ReadonlyArray<SessionConversationTaskItem>,
-): SessionConversationTaskItem[] {
-  return [...items].sort((a, b) => {
-    const ar = dispatchIsRunning(a) ? 1 : 0;
-    const br = dispatchIsRunning(b) ? 1 : 0;
-    if (ar !== br) return br - ar;
-    return b.updatedAt - a.updatedAt;
-  });
-}
+  for (const item of listWorkspaceSidebarHistorySessions(sessions, repositoryPath)) {
+    rows.push({ kind: "session", item, updatedAt: sessionUpdatedAtMs(item) });
+  }
 
-export function sortTeamMonitorRunningFirst(
-  items: ReadonlyArray<TeamMonitorItem>,
-): TeamMonitorItem[] {
-  return [...items].sort((a, b) => {
-    const ar = teamIsRunning(a) ? 1 : 0;
-    const br = teamIsRunning(b) ? 1 : 0;
-    if (ar !== br) return br - ar;
-    return b.updatedAt - a.updatedAt;
-  });
+  rows.sort((a, b) => b.updatedAt - a.updatedAt);
+  return rows;
 }
 
 /** Cursor 式紧凑相对时间：刚刚 / 5m / 2h / 1d。 */

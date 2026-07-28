@@ -7,6 +7,7 @@ import type {
   TeamMonitorItem,
 } from "../types";
 import {
+  buildWorkspaceSidebarTreeRows,
   collectFlatWorkspaceRepositories,
   filterDispatchTasksForRepository,
   filterEmployeeMonitorForRepository,
@@ -14,8 +15,6 @@ import {
   formatWorkspaceSidebarRelativeTime,
   listWorkspaceSidebarHistorySessions,
   pickFirstWorkspaceSidebarHistorySession,
-  sortDispatchTasksRunningFirst,
-  sortEmployeeMonitorRunningFirst,
 } from "./repositoryWorkspaceTree";
 
 function makeRepo(id: number, name: string, path: string): Repository {
@@ -144,49 +143,67 @@ describe("filter monitor items by repository", () => {
   });
 });
 
-describe("sort running first", () => {
-  test("employees running before idle", () => {
-    const items: EmployeeMonitorItem[] = [
+describe("buildWorkspaceSidebarTreeRows", () => {
+  test("mixes sessions and run items by updatedAt, newest first (dispatch not pinned)", () => {
+    const sessions = [
+      makeSession("sess-new", "/work/a", { createdAt: 300, content: "latest chat" }),
+      makeSession("sess-old", "/work/a", { createdAt: 50, content: "old chat" }),
+    ];
+    const dispatches: SessionConversationTaskItem[] = [
       {
-        employeeId: "idle",
-        name: "Idle",
-        agentType: "general",
-        status: "idle",
+        key: "dispatch-mid",
+        label: "派发任务",
+        status: "running",
         previewText: "",
-        updatedAt: 20,
+        updatedAt: 200,
+        source: "execution_environment",
+        repositoryPath: "/work/a",
       },
+    ];
+    const employees: EmployeeMonitorItem[] = [
       {
-        employeeId: "run",
-        name: "Run",
+        employeeId: "emp-old",
+        name: "终端",
         agentType: "general",
         status: "in_progress",
         previewText: "",
-        updatedAt: 10,
+        updatedAt: 100,
+        repositoryPath: "/work/a",
       },
     ];
-    expect(sortEmployeeMonitorRunningFirst(items).map((i) => i.employeeId)).toEqual(["run", "idle"]);
+
+    const rows = buildWorkspaceSidebarTreeRows({
+      sessions,
+      repositoryPath: "/work/a",
+      employeeMonitorItems: employees,
+      sessionConversationTaskItems: dispatches,
+    });
+
+    expect(rows.map((r) => r.kind)).toEqual(["session", "dispatch", "employee", "session"]);
+    expect(rows.map((r) => r.updatedAt)).toEqual([300, 200, 100, 50]);
+    expect(rows[0]!.kind === "session" && rows[0].item.id).toBe("sess-new");
+    expect(rows[1]!.kind === "dispatch" && rows[1].item.key).toBe("dispatch-mid");
   });
 
-  test("dispatches running before completed", () => {
-    const items: SessionConversationTaskItem[] = [
-      {
-        key: "done",
-        label: "done",
-        status: "completed",
-        previewText: "",
-        updatedAt: 30,
-        source: "execution_environment",
-      },
-      {
-        key: "run",
-        label: "run",
-        status: "running",
-        previewText: "",
-        updatedAt: 10,
-        source: "execution_environment",
-      },
-    ];
-    expect(sortDispatchTasksRunningFirst(items).map((i) => i.key)).toEqual(["run", "done"]);
+  test("hides run items when showRunItems is false", () => {
+    const rows = buildWorkspaceSidebarTreeRows({
+      sessions: [makeSession("s1", "/work/a", { createdAt: 10, content: "hi" })],
+      repositoryPath: "/work/a",
+      showRunItems: false,
+      sessionConversationTaskItems: [
+        {
+          key: "d1",
+          label: "派发",
+          status: "running",
+          previewText: "",
+          updatedAt: 999,
+          source: "execution_environment",
+          repositoryPath: "/work/a",
+        },
+      ],
+    });
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.kind).toBe("session");
   });
 });
 

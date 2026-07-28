@@ -5102,10 +5102,23 @@
 
 .app-message-part-reasoning-summary__label {
   display: inline-flex;
-  align-items: baseline;
+  align-items: center;
   gap: 6px;
   font-size: 12px;
   line-height: 1.45;
+}
+
+.app-message-part-reasoning-summary__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: color-mix(in srgb, #7c3aed 80%, var(--ant-color-primary));
+}
+
+.app-message-part-reasoning-summary__icon svg {
+  width: 12px;
+  height: 12px;
 }
 
 .app-message-part-reasoning-summary__meta {
@@ -6233,7 +6246,7 @@ button.app-message-part-header:disabled:hover {
 .app-markdown-streaming-hint {
   display: inline-flex;
   align-items: center;
-  gap: 0;
+  gap: 5px;
   margin-top: 4px;
   padding: 1px 0;
   border-radius: 0;
@@ -6244,6 +6257,55 @@ button.app-message-part-header:disabled:hover {
   border: none;
   box-shadow: none;
   animation: app-markdown-hint-in 0.28s ease-out both;
+}
+
+.app-markdown-streaming-hint__icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  color: color-mix(in srgb, #7c3aed 72%, var(--ant-color-text-tertiary));
+}
+
+.app-markdown-streaming-hint__icon svg {
+  width: 12px;
+  height: 12px;
+}
+
+/* 思考图标：柔和脉冲 + 淡紫光晕，与文字 shimmer 同拍 */
+.app-thinking-hint-icon--active {
+  animation: app-thinking-hint-icon-pulse 1.7s ease-in-out infinite;
+  transform-origin: center;
+  will-change: transform, opacity, filter;
+}
+
+@keyframes app-thinking-hint-icon-pulse {
+  0%,
+  100% {
+    opacity: 0.72;
+    transform: scale(1);
+    filter: drop-shadow(0 0 0 transparent);
+    color: color-mix(in srgb, #7c3aed 62%, var(--ant-color-text-tertiary));
+  }
+  50% {
+    opacity: 1;
+    transform: scale(1.12);
+    filter: drop-shadow(0 0 3px color-mix(in srgb, #7c3aed 55%, transparent));
+    color: color-mix(in srgb, #7c3aed 92%, #fff);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .app-thinking-hint-icon--active {
+    animation: none;
+    opacity: 1;
+    transform: none;
+    filter: none;
+  }
+}
+
+.app-claude-messages--scrolling .app-thinking-hint-icon--active {
+  animation-play-state: paused;
 }
 
 @keyframes app-markdown-hint-in {

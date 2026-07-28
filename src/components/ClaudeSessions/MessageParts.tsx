@@ -13,7 +13,7 @@ import {
 } from "../../utils/assistantTextParts";
 import { isSkillToolPart, skillToolDisplayName } from "../../utils/skillToolPart";
 import { LinkifiedPre } from "./LinkifiedPre";
-import { Markdown, StreamingReplyHint, usePacedText } from "./Markdown";
+import { Markdown, StreamingReplyHint, ThinkingHintIcon, usePacedText } from "./Markdown";
 import { ToolFileEditCard } from "./ToolFileEditCard";
 import { WORKFLOW_UI_EVENT_FOCUS_TASK_TOOL } from "../../constants/workflowUiEvents";
 import {
@@ -173,6 +173,14 @@ const ReasoningPartDisplay = memo(function ReasoningPartDisplay({
           }}
         >
           <span className="app-message-part-reasoning-summary__label">
+            <span
+              className={`app-message-part-reasoning-summary__icon${
+                streaming && !expanded ? " app-thinking-hint-icon--active" : ""
+              }`}
+              aria-hidden
+            >
+              <ThinkingHintIcon />
+            </span>
             <span
               className={
                 streaming && !expanded ? "app-status-text-shimmer" : undefined
