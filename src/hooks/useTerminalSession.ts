@@ -23,6 +23,10 @@ import {
   TERMINAL_FONT_SIZE,
   wheelDeltaToScrollLines,
 } from "../utils/alacrittyTerminalCanvas";
+import {
+  shouldIgnoreTerminalKeyDuringIme,
+  terminalTextFromCompositionEnd,
+} from "../utils/terminalImeInput";
 import { shouldIgnoreTerminalError } from "../utils/terminalErrors";
 import {
   expandTerminalSelectionToAll,
@@ -412,8 +416,10 @@ export function useTerminalSession({
           queueScroll(lines);
         };
 
+        let imeComposing = false;
+
         const onKeyDown = (event: KeyboardEvent) => {
-          if (event.isComposing || event.key === "Process") return;
+          if (shouldIgnoreTerminalKeyDuringIme(event) || imeComposing) return;
 
           const key = event.key.toLowerCase();
           const hasSel = !terminalSelectionIsEmpty(selectionRange);
@@ -474,8 +480,27 @@ export function useTerminalSession({
           writeData(text.replace(/\r?\n/g, "\r"));
         };
 
-        // 防止 textarea 自己堆积字符；内容一律走 PTY。
-        const onInput = () => {
+        const onCompositionStart = () => {
+          imeComposing = true;
+        };
+
+        const onCompositionEnd = (event: CompositionEvent) => {
+          imeComposing = false;
+          const text = terminalTextFromCompositionEnd(event);
+          if (text) writeData(text);
+          input.value = "";
+        };
+
+        const onCompositionCancel = () => {
+          imeComposing = false;
+          input.value = "";
+        };
+
+        // 组字期间保留 textarea 内容供 IME 候选；提交由 compositionend 写入 PTY。
+        // 非组字时清空，避免透明 textarea 堆积（ASCII 已由 keydown 写入）。
+        const onInput = (event: Event) => {
+          const inputEvent = event as InputEvent;
+          if (imeComposing || inputEvent.isComposing) return;
           if (input.value) input.value = "";
         };
 
@@ -567,6 +592,9 @@ export function useTerminalSession({
 
         input.addEventListener("keydown", onKeyDown);
         input.addEventListener("paste", onPaste);
+        input.addEventListener("compositionstart", onCompositionStart);
+        input.addEventListener("compositionend", onCompositionEnd);
+        input.addEventListener("compositioncancel", onCompositionCancel);
         input.addEventListener("input", onInput);
         input.addEventListener("pointerdown", onPointerDown);
         input.addEventListener("pointermove", onPointerMove);
@@ -693,6 +721,9 @@ export function useTerminalSession({
           resizeObserver.disconnect();
           input.removeEventListener("keydown", onKeyDown);
           input.removeEventListener("paste", onPaste);
+          input.removeEventListener("compositionstart", onCompositionStart);
+          input.removeEventListener("compositionend", onCompositionEnd);
+          input.removeEventListener("compositioncancel", onCompositionCancel);
           input.removeEventListener("input", onInput);
           input.removeEventListener("pointerdown", onPointerDown);
           input.removeEventListener("pointermove", onPointerMove);

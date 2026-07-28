@@ -177,7 +177,9 @@ function paintRun(
 
 /** Convert browser keyboard events into PTY byte sequences (xterm-ish). */
 export function encodeTerminalKey(event: KeyboardEvent): string | null {
-  if (event.isComposing) return null;
+  if (event.isComposing || event.key === "Process" || event.keyCode === 229) {
+    return null;
+  }
   const { key, ctrlKey, altKey, metaKey } = event;
   if (metaKey) return null;
 

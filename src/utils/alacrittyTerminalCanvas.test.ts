@@ -32,6 +32,30 @@ describe("encodeTerminalKey", () => {
   test("ignores meta shortcuts", () => {
     expect(encodeTerminalKey(keyEvent({ key: "c", metaKey: true }))).toBeNull();
   });
+
+  test("ignores IME composition keydowns", () => {
+    expect(encodeTerminalKey(keyEvent({ key: "c", isComposing: true }))).toBeNull();
+    expect(
+      encodeTerminalKey({
+        key: "c",
+        ctrlKey: false,
+        altKey: false,
+        metaKey: false,
+        isComposing: false,
+        keyCode: 229,
+      } as KeyboardEvent),
+    ).toBeNull();
+    expect(
+      encodeTerminalKey({
+        key: "Process",
+        ctrlKey: false,
+        altKey: false,
+        metaKey: false,
+        isComposing: false,
+        keyCode: 229,
+      } as KeyboardEvent),
+    ).toBeNull();
+  });
 });
 
 describe("terminal theme constants", () => {
