@@ -44,39 +44,49 @@ describe("terminalCenterPanelStore", () => {
     });
   });
 
-  test("toggle on same pane collapses; other pane stays independent", () => {
+  test("toggle on same pane unmounts; other pane stays independent", () => {
     toggleTerminalCenterPanel(1);
     expect(isTerminalCenterPanelVisibleOnPane(1)).toBe(true);
 
     toggleTerminalCenterPanel(1);
+    // ⌃` 关闭是卸挂载，不是 collapse 保活
     expect(isTerminalCenterPanelVisibleOnPane(1)).toBe(false);
-    expect(getTerminalCenterPanelState().mounted).toBe(true);
+    expect(getTerminalCenterPanelState().mountedPaneIndexes).not.toContain(1);
 
     toggleTerminalCenterPanel(0);
     expect(isTerminalCenterPanelVisibleOnPane(0)).toBe(true);
-    // 收起的屏 1 仍挂载，但不应被屏 0 打开清掉
-    expect(getTerminalCenterPanelState().mountedPaneIndexes).toContain(1);
     expect(getTerminalCenterPanelState().visiblePaneIndexes).toEqual([0]);
   });
 
-  test("toggle while terminal visible but centerView is messages focuses terminal instead of collapsing", () => {
+  test("toggle while terminal visible but centerView is messages unmounts terminal", () => {
     openTerminalCenterPanel(0);
     expect(isTerminalCenterPanelVisibleOnPane(0)).toBe(true);
-    // 用户切到消息 tab
     syncPaneCenterView(0, "messages");
     toggleTerminalCenterPanel(0);
-    // 仍可见，且视图请求切回 terminal（不收起）
-    expect(isTerminalCenterPanelVisibleOnPane(0)).toBe(true);
-    expect(getPaneCenterView(0)).toBe("terminal");
+    expect(isTerminalCenterPanelVisibleOnPane(0)).toBe(false);
+    expect(getTerminalCenterPanelState().mounted).toBe(false);
+    // 未强制改 centerView；UI 靠 hasTerminal=false 让 Segmented 去掉「终端」
+    expect(getPaneCenterView(0)).toBe("messages");
   });
 
-  test("toggle while on terminal collapses and leaves centerView so UI actually closes", () => {
+  test("toggle while on terminal unmounts so Segmented loses 终端 tab", () => {
     openTerminalCenterPanel(0);
     expect(getPaneCenterView(0)).toBe("terminal");
     toggleTerminalCenterPanel(0);
     expect(isTerminalCenterPanelVisibleOnPane(0)).toBe(false);
-    // 必须离开 terminal，否则保活节点仍占中栏，⌃` 再按像关不掉
-    expect(getPaneCenterView(0)).toBe("messages");
+    expect(getTerminalCenterPanelState().mounted).toBe(false);
+    // 不在 store 里强制切 messages（那会留下「消息|终端」像切 tab）；
+    // centerView 仍可为 terminal，由 useCenterView 在 hasTerminal=false 时 fallback
+    expect(getPaneCenterView(0)).toBe("terminal");
+  });
+
+  test("toggle while terminal visible but centerView is files unmounts without yanking to messages", () => {
+    openTerminalCenterPanel(0);
+    syncPaneCenterView(0, "files");
+    toggleTerminalCenterPanel(0);
+    expect(isTerminalCenterPanelVisibleOnPane(0)).toBe(false);
+    expect(getTerminalCenterPanelState().mounted).toBe(false);
+    expect(getPaneCenterView(0)).toBe("files");
   });
 
   test("collapseTerminalCenterPanelOnPane leaves terminal centerView", () => {

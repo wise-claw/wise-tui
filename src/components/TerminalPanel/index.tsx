@@ -125,7 +125,8 @@ export function TerminalPanel({
     activeTerminalId,
     isVisible: !collapsed,
     focusRequestVersion,
-    closeOnUnmount: false,
+    // 卸挂载即关闭（⌃` / 顶栏关闭）；collapse 保活不卸载本组件，PTY 仍在。
+    closeOnUnmount: true,
     surfaceSnapshot: getSurfaceSnapshot(activeTerminalId),
     onSurfaceSnapshot: (snapshot) => {
       if (!activeTerminalId) return;

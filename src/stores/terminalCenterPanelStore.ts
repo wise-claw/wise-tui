@@ -219,23 +219,20 @@ export function closeTerminalCenterPanelOnPane(paneIndex: number): void {
   if (!paneFlags.has(target)) return;
   paneFlags.delete(target);
   emit();
+  // 卸挂载后 hasTerminal=false；若仍停在 terminal，交给 useCenterView fallback
+  // （有文件回 files，否则 messages），不要在这里强制切到 messages——
+  // 否则 ⌃` 关闭会表现为「切到消息 tab」，且「终端」仍留在 Segmented。
 }
 
 /**
  * @param paneIndex 目标屏；省略时默认 0。
- * 已可见时：若当前不在终端视图则切到终端（快捷键从消息/文件回到终端）；
- * 已在终端视图（或视图未知）则收起并离开 terminal 中栏。未可见时打开并切到终端。
+ * ⌃` 纯开关：已可见则卸挂载关闭（去掉 Segmented「终端」）；未可见则打开。
+ * 不用 collapse：collapse 保活会留下「消息 | 终端」并切到消息，看起来像切 tab。
  */
 export function toggleTerminalCenterPanel(paneIndex?: number): void {
   const target = normalizePaneIndex(paneIndex ?? 0);
   if (isPaneVisible(paneFlags.get(target))) {
-    const view = getPaneCenterView(target);
-    // view == null：尚未 sync 时中栏通常已在展示终端，按「再按关闭」处理，避免只 focus 无法收起。
-    if (view === "terminal" || view == null) {
-      collapseTerminalCenterPanelOnPane(target);
-      return;
-    }
-    requestPaneCenterView(target, "terminal");
+    closeTerminalCenterPanelOnPane(target);
     return;
   }
   openTerminalCenterPanel(target);
