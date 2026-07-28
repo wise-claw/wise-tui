@@ -1,5 +1,5 @@
 import { memo, useMemo } from "react";
-import type { ClaudeMessage, ClaudeSession, SessionConversationTaskItem } from "../../types";
+import type { ClaudeMessage, SessionConversationTaskItem } from "../../types";
 import type { DispatchRecordMeta, SessionDispatchLookup } from "../../utils/claudeChatMessageDisplay";
 import { MessagePartsDisplay } from "./MessageParts";
 import { Markdown } from "./Markdown";

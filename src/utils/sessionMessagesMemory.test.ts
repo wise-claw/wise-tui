@@ -145,11 +145,11 @@ describe("sessionMessagesMemory", () => {
   });
 
   test("applySessionsMemoryCap clears idle sessions when global budget exceeded", () => {
-    const mkMessages = (n: number) =>
+    const mkMessages = (n: number, prefix: string) =>
       Array.from({ length: n }, (_, i) => ({
         id: i,
         role: "user" as const,
-        content: `m${i}`,
+        content: i === 0 ? `${prefix}-title` : `m${i}`,
         parts: [],
         timestamp: i,
       }));
@@ -161,7 +161,7 @@ describe("sessionMessagesMemory", () => {
         repositoryName: "r",
         model: "sonnet",
         status: "completed" as const,
-        messages: mkMessages(IN_MEMORY_SESSION_MESSAGES_MAX),
+        messages: mkMessages(IN_MEMORY_SESSION_MESSAGES_MAX, "active"),
         createdAt: 1,
         pendingPrompt: "",
       },
@@ -172,7 +172,7 @@ describe("sessionMessagesMemory", () => {
         repositoryName: "r",
         model: "sonnet",
         status: "completed" as const,
-        messages: mkMessages(IN_MEMORY_SESSION_MESSAGES_MAX),
+        messages: mkMessages(IN_MEMORY_SESSION_MESSAGES_MAX, "idle"),
         createdAt: 2,
         pendingPrompt: "",
       },
@@ -182,6 +182,34 @@ describe("sessionMessagesMemory", () => {
       globalMessagesBudget: IN_MEMORY_SESSION_MESSAGES_MAX,
     });
     expect(next.find((s) => s.id === "active")?.messages.length).toBe(IN_MEMORY_SESSION_MESSAGES_MAX);
-    expect(next.find((s) => s.id === "idle")?.messages.length).toBe(0);
+    const idle = next.find((s) => s.id === "idle");
+    expect(idle?.messages.length).toBe(0);
+    expect(idle?.diskPreview).toBe("idle-title");
+  });
+
+  test("applySessionsMemoryCap retains diskPreview when per-session cap drops first user message", () => {
+    const sessions = [
+      {
+        id: "a",
+        claudeSessionId: "a",
+        repositoryPath: "/r",
+        repositoryName: "r",
+        model: "sonnet",
+        status: "completed" as const,
+        messages: Array.from({ length: 200 }, (_, i) => ({
+          id: i,
+          role: "user" as const,
+          content: i === 0 ? "首条用户标题应被保留" : `m${i}`,
+          parts: [],
+          timestamp: i,
+        })),
+        createdAt: 1,
+        pendingPrompt: "",
+      },
+    ];
+    const next = applySessionsMemoryCap(sessions);
+    expect(next[0]?.messages.length).toBeLessThan(200);
+    expect(next[0]?.messages.some((m) => m.content === "首条用户标题应被保留")).toBe(false);
+    expect(next[0]?.diskPreview).toBe("首条用户标题应被保留");
   });
 });

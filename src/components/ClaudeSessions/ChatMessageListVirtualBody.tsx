@@ -11,7 +11,7 @@ import {
   useChatMessageListPendingScroll,
   useChatMessageListWindow,
 } from "../../hooks/useChatMessageListWindow";
-import type { ClaudeSession, SessionConversationTaskItem } from "../../types";
+import type { SessionConversationTaskItem } from "../../types";
 import type { DispatchRecordMeta, SessionDispatchLookup } from "../../utils/claudeChatMessageDisplay";
 import type { ChatMessageListRow } from "../../utils/claudeChatMessageListRows";
 import { hasRenderableChatMessageBody } from "../../utils/claudeChatMessageDisplay";

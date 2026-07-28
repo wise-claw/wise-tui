@@ -5,6 +5,7 @@ import {
 } from "../constants/claudeMessageListWindow";
 import type { ClaudeMessage, ClaudeSession, MessagePart } from "../types";
 import { parseClaudeSessionJsonlLines } from "./claudeSessionJsonl";
+import { retainSessionListPreviewOnMessageDrop } from "./sessionListPreview";
 
 export function capSessionMessagesForMemory(
   messages: ClaudeMessage[],
@@ -90,18 +91,36 @@ function computeSessionMemoryCap(
   }
   let messages = session.messages;
   let partial = session.diskTranscriptPartial ?? false;
+  let diskPreview = session.diskPreview;
   if (messages.length > max) {
+    // 截掉头部后 getSessionPreview 可能读不到首条用户消息；先锁进 diskPreview。
+    diskPreview = retainSessionListPreviewOnMessageDrop(session);
     messages = capSessionMessagesForMemory(messages, max);
     partial = true;
   }
   const trimmed = trimMessagePartsForMemory(messages);
-  if (trimmed === session.messages && messages === session.messages && !partial) return session;
+  if (
+    trimmed === session.messages &&
+    messages === session.messages &&
+    !partial &&
+    diskPreview === session.diskPreview
+  ) {
+    return session;
+  }
   if (trimmed === session.messages && messages === session.messages) {
-    return partial === session.diskTranscriptPartial ? session : { ...session, diskTranscriptPartial: partial };
+    if (partial === session.diskTranscriptPartial && diskPreview === session.diskPreview) {
+      return session;
+    }
+    return {
+      ...session,
+      diskTranscriptPartial: partial,
+      diskPreview,
+    };
   }
   return {
     ...session,
     messages: trimmed,
+    diskPreview,
     diskTranscriptPartial: partial || trimmed.length < session.messages.length,
   };
 }
@@ -171,6 +190,8 @@ function enforceGlobalMessagesBudget(
       dropIds.has(session.id)
         ? {
             ...session,
+            // 全局预算清空正文后，侧栏仍依赖 diskPreview 显示真实标题（否则回落「新会话」）。
+            diskPreview: retainSessionListPreviewOnMessageDrop(session),
             messages: [],
             diskTranscriptPartial:
               Boolean(session.claudeSessionId?.trim()) ||

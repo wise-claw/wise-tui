@@ -297,14 +297,20 @@ export function setSessionRunningWithUserPrompt(
               messages: session.messages.map((message, index, all) =>
                 index === all.length - 1 ? { ...message, defaultInstructionApplied: applied } : message,
               ),
+              diskPreview: session.diskPreview?.trim() || trimmed || session.diskPreview,
             }
-          : { ...session, status: "running" as const };
+          : {
+              ...session,
+              status: "running" as const,
+              diskPreview: session.diskPreview?.trim() || trimmed || session.diskPreview,
+            };
       }
     }
     return {
       ...session,
       status: "running",
       messages: [...session.messages, createUserTextMessage(trimmed, applied)],
+      diskPreview: session.diskPreview?.trim() || trimmed || session.diskPreview,
     };
   });
 }
@@ -336,11 +342,14 @@ export function beginSessionTurnWithUserPrompt(
         )
       : session.messages;
     const prepend = opts?.prependMessages ?? [];
+    const trimmedPrompt = prompt.trim();
     return {
       ...session,
       status: "running",
       claudeSessionId: opts?.forceFreshClaudeSession ? null : session.claudeSessionId,
       messages: [...priorMessages, ...prepend, createUserTextMessage(prompt, applied)],
+      // 首条用户正文锁进 diskPreview，内存淘汰后侧栏仍能显示真实标题。
+      diskPreview: session.diskPreview?.trim() || trimmedPrompt || session.diskPreview,
     };
   });
 }
@@ -375,15 +384,22 @@ export function setSessionRunningReplacingFirstUserBubble(
     if (session.id !== sessionId) return session;
     const messages = [...session.messages];
     const idx = messages.findIndex((m) => m.role === "user" && !isToolOnlyUserMessage(m));
+    const trimmedPrompt = prompt.trim();
     if (idx < 0) {
       return {
         ...session,
         status: "running",
         messages: [...messages, createUserTextMessage(prompt, applied)],
+        diskPreview: session.diskPreview?.trim() || trimmedPrompt || session.diskPreview,
       };
     }
     messages[idx] = patchUserBubbleMessage(messages[idx]!, prompt, applied);
-    return { ...session, status: "running", messages };
+    return {
+      ...session,
+      status: "running",
+      messages,
+      diskPreview: trimmedPrompt || session.diskPreview,
+    };
   });
 }
 

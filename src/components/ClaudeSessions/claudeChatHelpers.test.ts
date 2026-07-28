@@ -106,6 +106,8 @@ describe("claudeChatHelpers", () => {
     };
 
     expect(getSessionPreview(session)).toBe("Implement a very long feature title for pr...");
+    session.messages = [];
+    expect(getSessionPreview(session)).toBe("disk fallback");
     expect(truncateSingleLine(" a\n b ", 10)).toBe("a b");
     expect(truncateSingleLine("line1\nline2\nline3 more text", 20)).toBe("line1 line2 line3 mo...");
     expect(buildAiCommitSummary(status)).toBe("feat: 更新 a.ts 相关变更");

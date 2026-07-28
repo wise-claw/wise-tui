@@ -1,5 +1,6 @@
 import { Typography } from "antd";
 import type { ClaudeSession } from "../../types";
+import { resolveSessionListPreviewSource } from "../../utils/sessionListPreview";
 import { stripRedundantRepoBracketPrefix } from "../../utils/sessionRepositoryDisplay";
 import {
   formatSessionListTitle,
@@ -14,24 +15,12 @@ import {
 /** Cursor 风格：单行短标题，不展开完整消息正文。 */
 export function getSessionPreview(session: ClaudeSession): string {
   const repo = session.repositoryName ?? "";
-  for (let i = 0; i < session.messages.length; i += 1) {
-    const msg = session.messages[i];
-    if (msg.role !== "user") continue;
-    const text = stripRedundantRepoBracketPrefix(msg.content, repo).trim();
-    if (text) {
-      return formatSessionListTitle(text, SESSION_LIST_TITLE_MAX);
-    }
-  }
-  for (let i = session.messages.length - 1; i >= 0; i -= 1) {
-    const msg = session.messages[i];
-    if (msg.role !== "assistant") continue;
-    const text = msg.content.trim();
-    if (text) {
-      return formatSessionListTitle(text, SESSION_LIST_TITLE_MAX);
-    }
-  }
-  const fallback = session.diskPreview?.trim() || "新会话";
-  return formatSessionListTitle(fallback, SESSION_LIST_TITLE_MAX);
+  const source = resolveSessionListPreviewSource(session);
+  const fallback = source || "新会话";
+  return formatSessionListTitle(
+    stripRedundantRepoBracketPrefix(fallback, repo),
+    SESSION_LIST_TITLE_MAX,
+  );
 }
 
 export function historySessionStatusLabel(status: ClaudeSession["status"]): string {

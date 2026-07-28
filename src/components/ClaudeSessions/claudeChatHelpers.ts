@@ -18,6 +18,7 @@ import {
 import { createContext, useCallback, useContext, useEffect, useRef, useState, type ReactNode } from "react";
 import { buildConventionalCommitFallback } from "../../utils/conventionalCommitMessage";
 import { isDisplayNoiseUserMessageText } from "../../utils/claudeChatMessageDisplay";
+import { resolveSessionListPreviewSource } from "../../utils/sessionListPreview";
 import type { CenterView } from "./ClaudeChat";
 
 /**
@@ -393,21 +394,10 @@ export const SESSION_LIST_TITLE_MAX = 42;
 
 export function getSessionPreview(session: ClaudeSession): string {
   const repo = session.repositoryName ?? "";
-  const firstUserMsg = session.messages.find((m) => m.role === "user");
-  if (firstUserMsg) {
-    const line = truncateSingleLine(stripRedundantRepoBracketPrefix(firstUserMsg.content, repo), SESSION_LIST_TITLE_MAX);
-    if (line.trim()) {
-      return line;
-    }
-  }
-  const fromDisk = session.diskPreview?.trim();
-  if (fromDisk) {
-    const line = truncateSingleLine(stripRedundantRepoBracketPrefix(fromDisk, repo), SESSION_LIST_TITLE_MAX);
-    if (line.trim()) {
-      return line;
-    }
-  }
-  return "新会话";
+  const source = resolveSessionListPreviewSource(session);
+  if (!source) return "新会话";
+  const line = truncateSingleLine(stripRedundantRepoBracketPrefix(source, repo), SESSION_LIST_TITLE_MAX);
+  return line.trim() || "新会话";
 }
 
 export function buildAiCommitSummary(status: GitStatusResponse): string {

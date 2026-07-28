@@ -13,17 +13,12 @@ import { listen, UnlistenFn } from "@tauri-apps/api/event";
 import { safeUnlisten } from "../utils/safeTauriUnlisten";
 import { getCurrentWindow } from "@tauri-apps/api/window";
 import type {
-  ClaudeComposerExecuteBubbleOptions,
   ClaudeSession,
   QuestionRequest,
   SessionConversationTaskItem,
   SessionExecutionEngine,
 } from "../types";
-import { SESSION_EXECUTION_ENGINE_LABELS } from "../constants/sessionExecutionEngine";
 import {
-  executeClaudeCode,
-  resumeClaudeCode,
-  spawnStreamingSession,
   sendStreamingUserMessage,
   closeStreamingSession,
   cancelClaudeExecution,
@@ -32,23 +27,13 @@ import {
   submitClaudeStdinLine,
   listRunningClaudeSessions,
 } from "../services/claude";
-import { executeCodexCode } from "../services/codex";
-import { executeOpencodeCode } from "../services/opencode";
-import { executeQoderCode } from "../services/qoder";
-import { executeCursorCode } from "../services/cursorAgentExecution";
 import {
-  buildCursorUserBubblePrompt,
   type CursorSdkAttachment,
 } from "../services/cursorComposerPrompt";
-import { CURSOR_SDK_DEFAULT_MODEL } from "../constants/cursorSdk";
-import { resolveCursorLocalModelId } from "../utils/cursorModel";
 import { resolveClaudeExecModelId } from "../utils/claudeModel";
-import { resolveCodexContextExecutionEngine, resolveCodexExecModelId } from "../utils/codexModel";
 import { resolveCodexResumeSessionId } from "../utils/codexSessionId";
-import { resolveOpencodeExecModelId } from "../utils/opencodeModel";
 import { resolveOpencodeResumeSessionId } from "../utils/opencodeSessionId";
 import { resolveQoderResumeSessionId } from "../utils/qoderSessionId";
-import { formatQoderModelLabel, resolveQoderExecModelId } from "../utils/qoderModel";
 import { getCachedModelProfileStore } from "../stores/modelProfileStoreCache";
 import {
   WISE_CLAUDE_USER_SETTINGS_CHANGED,
@@ -71,12 +56,11 @@ import { claudeSpawnExtrasForNativeSlashCommand } from "../services/claudeSpawnE
 import { deleteClaudeDiskSession, loadClaudeSessionJsonl } from "../services/claudeDisk";
 import { loadCursorSessionJsonl } from "../services/cursorDisk";
 import {
-  clearInvocationSnapshotBundle,
   collectInvocationSnapshotMemoryKeys,
   pruneInvocationSnapshotMemory,
 } from "../services/backgroundInvocationSnapshot";
 import { normalizeRepositoryPathKey, repositoryPathsMatch } from "../utils/repositoryMainSessionBinding";
-import { isClaudeNativeSlashCommandText, normalizeClaudeNativeSlashPrompt } from "../utils/composerLocalSlashCommand";
+import { isClaudeNativeSlashCommandText } from "../utils/composerLocalSlashCommand";
 import { pathIsAccessibleDirectoryCached } from "../utils/pathAccessibilityCache";
 import {
   listClaudeDiskSessionsForRepositoryScope,
@@ -150,15 +134,10 @@ import {
   applyClaudeExecuteFailureNotice,
   appendUserMessageBySessionOrClaudeId,
   reconcileSessionStatusesWithRunningRegistry,
-  retractLastClaudeTurnFromSession,
-  setSessionRunningReplacingFirstUserBubble,
-  setSessionRunningReplacingLastUserBubble,
-  setSessionRunningReplacingUserBubbleAtIndex,
   setSessionRunningWithUserPrompt,
-  beginSessionTurnWithUserPrompt,
 } from "../services/claudeSessionState";
 import { markSessionToolUseStopped } from "../utils/sessionConversationTasks";
-import { isTerminalWorkerWiseTab, sanitizeTerminalWorkerTranscriptMessages, clearTerminalDefaultWorkerTabIfMatch, waitForTerminalWorkerTurnStarted } from "../services/terminalDispatch";
+import { isTerminalWorkerWiseTab, sanitizeTerminalWorkerTranscriptMessages, waitForTerminalWorkerTurnStarted } from "../services/terminalDispatch";
 import { isExecutionEnvironmentWorkerRepositoryName } from "../utils/executionEnvironmentDispatch";
 import { isFeedbackLoopWorkerRepositoryName } from "../utils/sessionFeedbackLoopDispatch";
 import {
@@ -168,7 +147,6 @@ import {
 import {
   findSessionForMonitorDrawerResume,
   materializeWorkerTabSession,
-  resolveSessionForExecuteKey,
 } from "../utils/sessionExecuteResolve";
 import { createClaudeStreamRuntime } from "../services/claudeStreamRuntime";
 import { setBackgroundContextCompactInFlight } from "../stores/backgroundContextCompactStore";
@@ -199,7 +177,6 @@ import {
   resolveModelProfileEngineForExecution,
 } from "../services/modelProfileFailover";
 import { isRetryableModelApiError } from "../utils/retryableModelApiError";
-import { isCachedModelProfileAutoFailoverEnabled } from "../stores/modelProfileStoreCache";
 import {
   applyDiskTranscriptTail as applyDiskTranscriptTailHelper,
   loadMoreTranscriptByKey,
@@ -228,8 +205,6 @@ import { createClaudeEngineHandlers } from "./useClaudeSessions.engines";
 import { createSessionActionHandlers } from "./useClaudeSessions.sessionActions";
 
 import {
-  CLAUDE_STREAM_RUNTIME_READY_POLL_MS,
-  CLAUDE_STREAM_RUNTIME_READY_WAIT_MS,
   CLAUDE_STREAM_STALL_HOOK_EXTEND_MS,
   CLAUDE_STREAM_STALL_MS,
   CODEX_STREAM_STALL_MS,
@@ -237,13 +212,11 @@ import {
   CURSOR_STREAM_STALL_MS,
   TRELLIS_CONTEXT_BINDING_STORAGE_KEY,
   WORKFLOW_BINDING_STORAGE_KEY,
-  attachClaudeInvocationStream,
   attachClaudeSessionStreamForTurn,
   shouldKeepClaudeInvocationStreamAfterTurnComplete,
   collectClaudeSessionSidecarIds,
   generateId,
   hydrateStreamingProcessRegistryFromHost,
-  isClaudeConversationMissingError,
   markClaudeRegistryBootstrapWarmup,
   mergeRepositoryDiskSessions,
   collectDiskMergeTabIdMigrations,
@@ -273,7 +246,6 @@ import {
 import { setSessionTranscriptHydrating } from "../stores/claudeTranscriptHydrationStore";
 import type {
   PendingTurnFailoverContext,
-  SessionExecuteOpts,
   UseClaudeSessionsOptions,
   UseClaudeSessionsReturn,
 } from "./useClaudeSessions.types";
@@ -762,12 +734,10 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   );
 
   const {
-    runClaudeOneshotWithInvocation,
     runCodexOneshotWithInvocation,
     runOpencodeOneshotWithInvocation,
     runQoderOneshotWithInvocation,
     runCursorOneshotWithInvocation,
-    runClaudeStreamingWithInvocation,
     invokeClaudeTurn,
   } = useMemo(
     () =>

@@ -14,6 +14,9 @@ import { sortRepositoriesByWorkspaceOrder } from "./workspaceRepositoryOrder";
 /** 仓库展开子树默认展示行数（终端/派发/工作流 + 会话合计，不含 More）。 */
 export const WORKSPACE_SIDEBAR_ROW_PREVIEW_LIMIT = 5;
 
+/** 侧栏「更多」每次追加的行数。 */
+export const WORKSPACE_SIDEBAR_ROW_MORE_STEP = 10;
+
 /** @deprecated 使用 WORKSPACE_SIDEBAR_ROW_PREVIEW_LIMIT */
 export const WORKSPACE_SIDEBAR_SESSION_PREVIEW_LIMIT = WORKSPACE_SIDEBAR_ROW_PREVIEW_LIMIT;
 

@@ -4,7 +4,6 @@ import { HoverHint } from "../shared/HoverHint";
 import { Badge, Button, Input, Modal, message, notification, Popconfirm, Space, Typography } from "antd";
 import {
   ApartmentOutlined,
-  BugOutlined,
   CheckOutlined,
   CloudUploadOutlined,
   MinusOutlined,

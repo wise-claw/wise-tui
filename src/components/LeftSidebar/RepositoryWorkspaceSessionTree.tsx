@@ -8,6 +8,7 @@ import type {
 import { getSessionPreview } from "../ProgressMonitorPanel/historySessionDrawerChrome";
 import { canStopSessionConversationTask } from "../../utils/sessionConversationTasks";
 import {
+  WORKSPACE_SIDEBAR_ROW_MORE_STEP,
   WORKSPACE_SIDEBAR_ROW_PREVIEW_LIMIT,
   filterDispatchTasksForRepository,
   filterEmployeeMonitorForRepository,
@@ -130,7 +131,7 @@ function RepositoryWorkspaceSessionTreeInner(props: RepositoryWorkspaceSessionTr
       repositoryPath,
       repositoryName,
     });
-    setRowLimit((prev) => Math.max(prev + 20, allRows.length));
+    setRowLimit((prev) => prev + WORKSPACE_SIDEBAR_ROW_MORE_STEP);
   };
 
   if (!hasAny) {
