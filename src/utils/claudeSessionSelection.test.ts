@@ -1,12 +1,16 @@
 import { describe, expect, it } from "bun:test";
 import type { ClaudeSession } from "../types";
-import { pickSessionForRepositorySidebarSelect } from "./claudeSessionSelection";
+import {
+  findSessionByTabOrClaudeId,
+  pickSessionForRepositorySidebarSelect,
+} from "./claudeSessionSelection";
 
 function sess(
   id: string,
   path: string,
   repositoryName: string,
   ts: number,
+  extra?: Partial<ClaudeSession>,
 ): ClaudeSession {
   return {
     id,
@@ -18,8 +22,26 @@ function sess(
     messages: [{ role: "user", content: "x", timestamp: ts }],
     createdAt: ts,
     pendingPrompt: "",
+    ...extra,
   };
 }
+
+describe("findSessionByTabOrClaudeId", () => {
+  it("prefers exact tab id over another session whose claudeSessionId equals that id", () => {
+    const crossWired: ClaudeSession[] = [
+      sess("other-tab", "/r", "r", 1, { claudeSessionId: "wise-tab" }),
+      sess("wise-tab", "/r", "r", 2, { claudeSessionId: "claude-a" }),
+    ];
+    expect(findSessionByTabOrClaudeId(crossWired, "wise-tab")?.id).toBe("wise-tab");
+  });
+
+  it("falls back to claudeSessionId when tab id missing", () => {
+    const sessions: ClaudeSession[] = [
+      sess("wise-tab", "/r", "r", 1, { claudeSessionId: "claude-a" }),
+    ];
+    expect(findSessionByTabOrClaudeId(sessions, "claude-a")?.id).toBe("wise-tab");
+  });
+});
 
 describe("pickSessionForRepositorySidebarSelect", () => {
   it("prefers configured main owner agent tab when present", () => {

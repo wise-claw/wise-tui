@@ -1,6 +1,6 @@
 {
   "version": "1.0.0",
-  "lastScanned": 1785163085958,
+  "lastScanned": 1785250491635,
   "projectRoot": "/Users/sjl/Documents/github/wise-tui",
   "techStack": {
     "languages": [
@@ -42,8 +42,8 @@
     "runtime": null
   },
   "build": {
-    "buildCommand": "bun run tsc --noEmit -p tsconfig.json 2>&1 | head -40",
-    "testCommand": "bun test src/components/LeftSidebar/ 2>&1 | tail -40",
+    "buildCommand": "npm run build",
+    "testCommand": "npm test",
     "lintCommand": null,
     "devCommand": "npm run dev",
     "scripts": {
@@ -86,14 +86,14 @@
       "path": "browser-extensions",
       "purpose": null,
       "fileCount": 1,
-      "lastAccessed": 1785163085948,
+      "lastAccessed": 1785250491627,
       "keyFiles": []
     },
     "design": {
       "path": "design",
       "purpose": null,
       "fileCount": 1,
-      "lastAccessed": 1785163085950,
+      "lastAccessed": 1785250491627,
       "keyFiles": [
         "product-ux-engineering-audit-2026-05-14.md"
       ]
@@ -102,7 +102,7 @@
       "path": "dist",
       "purpose": "Distribution/build output",
       "fileCount": 4,
-      "lastAccessed": 1785163085950,
+      "lastAccessed": 1785250491629,
       "keyFiles": [
         "index.html",
         "mascot.html",
@@ -114,21 +114,21 @@
       "path": "docs",
       "purpose": "Documentation",
       "fileCount": 0,
-      "lastAccessed": 1785163085950,
+      "lastAccessed": 1785250491629,
       "keyFiles": []
     },
     "examples": {
       "path": "examples",
       "purpose": "Example code",
       "fileCount": 0,
-      "lastAccessed": 1785163085950,
+      "lastAccessed": 1785250491629,
       "keyFiles": []
     },
     "extras": {
       "path": "extras",
       "purpose": null,
       "fileCount": 1,
-      "lastAccessed": 1785163085950,
+      "lastAccessed": 1785250491629,
       "keyFiles": [
         "check-prd-split-evolution.mjs"
       ]
@@ -137,7 +137,7 @@
       "path": "imgs",
       "purpose": null,
       "fileCount": 6,
-      "lastAccessed": 1785163085950,
+      "lastAccessed": 1785250491630,
       "keyFiles": [
         "add-execution-env.gif",
         "add-workspace.gif",
@@ -150,7 +150,7 @@
       "path": "public",
       "purpose": "Public files",
       "fileCount": 2,
-      "lastAccessed": 1785163085950,
+      "lastAccessed": 1785250491630,
       "keyFiles": [
         "tauri.svg",
         "vite.svg"
@@ -160,7 +160,7 @@
       "path": "scripts",
       "purpose": "Build/utility scripts",
       "fileCount": 7,
-      "lastAccessed": 1785163085950,
+      "lastAccessed": 1785250491630,
       "keyFiles": [
         "_tmp_sim_stream.mts",
         "build-claude-settings-schema-zh.mjs",
@@ -173,7 +173,7 @@
       "path": "src",
       "purpose": "Source code",
       "fileCount": 9,
-      "lastAccessed": 1785163085950,
+      "lastAccessed": 1785250491630,
       "keyFiles": [
         "App.css",
         "App.tsx",
@@ -186,7 +186,7 @@
       "path": "src-tauri",
       "purpose": null,
       "fileCount": 7,
-      "lastAccessed": 1785163085951,
+      "lastAccessed": 1785250491630,
       "keyFiles": [
         "Cargo.lock",
         "Cargo.toml",
@@ -198,19 +198,19 @@
     "dist/assets": {
       "path": "dist/assets",
       "purpose": "Static assets",
-      "fileCount": 291,
-      "lastAccessed": 1785163085951,
+      "fileCount": 292,
+      "lastAccessed": 1785250491632,
       "keyFiles": [
-        "ActiveRepositoryFilesPanel-ZGbyMi8C.js",
+        "ActiveRepositoryFilesPanel-CcqjG1wU.js",
         "ApiOutlined-CLF5fsFu.js",
-        "AppImpl-BFUkRRGl.css"
+        "AppImpl-VDvK5GS7.css"
       ]
     },
     "src/__tests__": {
       "path": "src/__tests__",
       "purpose": "Test files",
       "fileCount": 1,
-      "lastAccessed": 1785163085952,
+      "lastAccessed": 1785250491633,
       "keyFiles": [
         "codexProviderPresets.test.ts"
       ]
@@ -219,7 +219,7 @@
       "path": "src/assets",
       "purpose": "Static assets",
       "fileCount": 1,
-      "lastAccessed": 1785163085952,
+      "lastAccessed": 1785250491633,
       "keyFiles": [
         "react.svg"
       ]
@@ -228,7 +228,7 @@
       "path": "src/components",
       "purpose": "UI components",
       "fileCount": 24,
-      "lastAccessed": 1785163085952,
+      "lastAccessed": 1785250491633,
       "keyFiles": [
         "AppWorkspaceLayout.lazy.ts",
         "AppWorkspaceLayout.tsx",
@@ -239,7 +239,7 @@
       "path": "src/data",
       "purpose": "Data files",
       "fileCount": 5,
-      "lastAccessed": 1785163085952,
+      "lastAccessed": 1785250491633,
       "keyFiles": [
         "claude-code-settings.schema.en.json",
         "claude-code-settings.schema.json",
@@ -247,73 +247,6 @@
       ]
     }
   },
-  "hotPaths": [
-    {
-      "path": "src/components/LeftSidebar/repositoryRows.tsx",
-      "accessCount": 4,
-      "lastAccessed": 1785196078379,
-      "type": "file"
-    },
-    {
-      "path": "src/components/LeftSidebar/RepositoryWorkspaceSessionTree.css",
-      "accessCount": 4,
-      "lastAccessed": 1785196108041,
-      "type": "file"
-    },
-    {
-      "path": "src/components/GitPanel/DiffMode.tsx",
-      "accessCount": 3,
-      "lastAccessed": 1785167722772,
-      "type": "file"
-    },
-    {
-      "path": "src/App.css",
-      "accessCount": 3,
-      "lastAccessed": 1785196087702,
-      "type": "file"
-    },
-    {
-      "path": "src/components/LeftSidebar/SidebarIcons.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1785167296756,
-      "type": "file"
-    },
-    {
-      "path": "src/components/GitPanel/index.css",
-      "accessCount": 1,
-      "lastAccessed": 1785167299802,
-      "type": "file"
-    },
-    {
-      "path": "src/components/LeftSidebar/RepositoryWorkspaceSessionTree.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1785167321296,
-      "type": "file"
-    },
-    {
-      "path": "src/components/LeftSidebar/LeftSidebarWorkspaceListSlot.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1785196051298,
-      "type": "file"
-    },
-    {
-      "path": "src/components/WorkspaceQuickActionsTopbarStrip.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1785196058174,
-      "type": "file"
-    },
-    {
-      "path": "src/components/WorkspaceQuickActionsTopbarStrip.css",
-      "accessCount": 1,
-      "lastAccessed": 1785196058380,
-      "type": "file"
-    },
-    {
-      "path": "src/components/LeftSidebar/ProjectRepositoryList.tsx",
-      "accessCount": 1,
-      "lastAccessed": 1785196064371,
-      "type": "file"
-    }
-  ],
+  "hotPaths": [],
   "userDirectives": []
 }

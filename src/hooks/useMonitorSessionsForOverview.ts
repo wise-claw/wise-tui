@@ -209,10 +209,13 @@ export function useMonitorSidebarFingerprints(
 }
 
 /**
- * 向 useMonitorOverview 提供会话列表：始终读最新 ref，仅在监控相关指纹变化时触发重算。
+ * 向 useMonitorOverview / 工作区会话树提供会话列表：始终读最新 ref，仅在监控相关指纹变化时触发重算。
  * 避免主会话流式更新时周期性跑一遍巨型 useMonitorOverview。
  *
- * 传入 `sessionsLiveRef` 时从 live store 拉取，App 壳层 `subscribeLive: false` 下仍能保持监控同步。
+ * `enabled` 只控制轮询强度：为 false 时仍订阅 structure（含消息 hydration 0→N），
+ * 保证侧栏标题与中栏消息列表不会因监控面板未打开而冻结在旧快照。
+ *
+ * 传入 `sessionsLiveRef` 时从 live store 拉取，App 壳层 `subscribeLive: false` 下仍能保持同步。
  */
 export function useMonitorSessionsForOverview(
   sessions: ClaudeSession[] | RefObject<readonly ClaudeSession[]>,
@@ -232,8 +235,6 @@ export function useMonitorSessionsForOverview(
   latestRef.current = resolveLatest();
 
   useEffect(() => {
-    if (!enabled) return;
-
     const commitIfChanged = () => {
       latestRef.current = resolveLatest();
       const cheapKey = monitorSessionsCheapStatusKey(latestRef.current);
@@ -262,7 +263,8 @@ export function useMonitorSessionsForOverview(
     };
 
     commitIfChanged();
-    const disposePolling = attachMonitorFingerprintPolling(commitIfChanged);
+    // 监控打开时轮询；关闭时仍靠 structure 订阅对齐 hydration / 切会话。
+    const disposePolling = enabled ? attachMonitorFingerprintPolling(commitIfChanged) : () => {};
 
     const usesLiveRef = typeof sessions === "object" && sessions !== null && "current" in sessions;
     const unsubscribeStructure = usesLiveRef

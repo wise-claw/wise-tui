@@ -23,6 +23,7 @@ import {
   type WorkspaceFocus,
 } from "../utils/workspaceMode";
 import { shouldKeepProjectFocusWhenSwitchingSession } from "../utils/workspaceSelectionState";
+import { findSessionByTabOrClaudeId } from "../utils/claudeSessionSelection";
 
 interface UseAppSessionRoutingOptions {
   repositories: Repository[];
@@ -263,7 +264,7 @@ export function useAppSessionRouting({
         }
         return;
       }
-      const target = sessionsLatestRef.current.find((item) => item.id === sid || item.claudeSessionId === sid);
+      const target = findSessionByTabOrClaudeId(sessionsLatestRef.current, sid);
       const canonicalId = target?.id ?? sid;
       const currentActive = activeSessionIdLatestRef.current?.trim() ?? "";
       if (canonicalId === currentActive) {

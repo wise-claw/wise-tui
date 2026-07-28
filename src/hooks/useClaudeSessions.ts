@@ -144,6 +144,8 @@ import {
   resolveDiskTranscriptSessionKey,
   sessionHasDiskTranscript,
 } from "../utils/sessionExecutionEngine";
+import { findSessionByTabOrClaudeId } from "../utils/claudeSessionSelection";
+import { retainSessionListPreviewOnMessageDrop } from "../utils/sessionListPreview";
 import {
   findSessionForMonitorDrawerResume,
   materializeWorkerTabSession,
@@ -1690,7 +1692,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     (sessionKey: string, tailLines: number = CLAUDE_DISK_JSONL_TAIL_LINES_LAZY) => {
       const raw = sessionKey.trim();
       if (!raw) return;
-      const session = sessionsRef.current.find((x) => x.id === raw || x.claudeSessionId === raw);
+      const session = findSessionByTabOrClaudeId(sessionsRef.current, raw);
       if (!session) return;
       if (session.messages.length > 0) return;
       if (session.status === "running" || session.status === "connecting") return;
@@ -2454,6 +2456,8 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         diskLoadDoneRef.current.delete(s.id);
         return {
           ...s,
+          // 丢弃正文前锁住侧栏标题，避免未选中项回落「新会话」或与真实话题脱节。
+          diskPreview: retainSessionListPreviewOnMessageDrop(s),
           messages: [],
           diskTranscriptPartial: hasDisk || Boolean(s.claudeSessionId?.trim()),
           transcriptMemoryUnlimited: false,

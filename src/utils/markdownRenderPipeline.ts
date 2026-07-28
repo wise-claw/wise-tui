@@ -100,6 +100,17 @@ export function hasMarkdownStructureCues(text: string): boolean {
   return false;
 }
 
+/** ASCII/Unicode 目录树（应保持等宽 code，勿当 prose 重解析）。 */
+export function looksLikeDirectoryTree(text: string): boolean {
+  const lines = text
+    .split("\n")
+    .map((line) => line.trimEnd())
+    .filter((line) => line.trim().length > 0);
+  if (lines.length < 2) return false;
+  const treeHits = lines.filter((line) => /(?:├──|└──|│|┃|┣|┗)/.test(line)).length;
+  return treeHits >= 2 && treeHits / lines.length >= 0.35;
+}
+
 function isLikelyJsonLine(line: string): boolean {
   const t = line.trim();
   if (!t) return false;
@@ -250,6 +261,8 @@ export function planFencedBlockDisplay(text: string, lang: string): FencedBlockD
 export function shouldRenderFencedBlockAsMarkdown(codeText: string, lang: string): boolean {
   const body = codeText.trim();
   if (!body || !hasMarkdownStructureCues(body)) return false;
+  // 目录树常带行内 `# 注释`；若当 prose 解析会变成 h1 并拆碎树形对齐。
+  if (looksLikeDirectoryTree(body)) return false;
   if (isProseFenceLanguage(lang)) {
     return !looksLikeShellOrSourceCode(body);
   }

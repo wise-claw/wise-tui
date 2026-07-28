@@ -1,6 +1,7 @@
 import type { ClaudeSession, ProjectItem, Repository } from "../types";
 import { resolveProjectMainSessionAnchor } from "./projectSessionAnchor";
 import {
+  findSessionByTabOrClaudeId,
   pickProjectMainSessionForSidebarSelect,
   pickSessionForRepositorySidebarSelect,
 } from "./claudeSessionSelection";
@@ -26,15 +27,6 @@ export interface ResolveWorkspaceMainSessionInput {
   workspaceMode?: WorkspaceMode;
   /** 当前活动标签；绑定/侧栏 pick 未命中时，若归属本仓库/项目则作为主会话 */
   activeSessionId?: string | null;
-}
-
-function findSessionByTabOrClaudeId(
-  list: readonly ClaudeSession[],
-  sessionKey: string | null | undefined,
-): ClaudeSession | null {
-  const trimmed = sessionKey?.trim();
-  if (!trimmed) return null;
-  return list.find((session) => session.id === trimmed || session.claudeSessionId === trimmed) ?? null;
 }
 
 function pickBestProjectWorkspaceSession(

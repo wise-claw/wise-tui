@@ -70,6 +70,38 @@ describe("normalizeInlineMarkdownStructures", () => {
     expect(out).toBe(raw);
   });
 
+  test("does not split directory-tree inline hash comments into headings", () => {
+    const raw = [
+      "src/",
+      "├── app/                 # Next.js App Router",
+      "│   ├── (app)/           # 主应用",
+      "└── components/          # UI 组件",
+    ].join("\n");
+    const out = normalizeInlineMarkdownStructures(raw);
+    expect(out).toBe(raw);
+    expect(out).not.toMatch(/\n\n# Next\.js App Router/);
+  });
+
+  test("does not rewrite hash comments inside fenced directory trees", () => {
+    const raw = [
+      "目录：",
+      "```",
+      "src/",
+      "├── app/  # Next.js App Router",
+      "└── lib/  # 工具",
+      "```",
+    ].join("\n");
+    const out = normalizeInlineMarkdownStructures(raw);
+    expect(out).toContain("├── app/  # Next.js App Router");
+    expect(out).not.toMatch(/\n\n# Next\.js App Router/);
+  });
+
+  test("still splits prose-glued headings with a single space", () => {
+    const raw = "确认完毕。 ## 纠正如下";
+    const out = normalizeInlineMarkdownStructures(raw);
+    expect(out).toContain("确认完毕。\n\n## 纠正如下");
+  });
+
   test("renders heading + emphasis as h2 + paragraph after split", async () => {
     const { marked } = await import("marked");
     marked.use({ gfm: true, breaks: true });

@@ -5,6 +5,7 @@ import {
   coerceMarkdownSourceText,
   hasMarkdownStructureCues,
   isProseFenceLanguage,
+  looksLikeDirectoryTree,
   parseMarkdownSourceToHtml,
   planFencedBlockDisplay,
   renderRichMessageSourceToHtml,
@@ -159,6 +160,27 @@ describe("prose fenced blocks", () => {
     expect(hasMarkdownStructureCues(table)).toBe(true);
     expect(shouldRenderFencedBlockAsMarkdown(table, "**5**")).toBe(true);
     expect(shouldRenderFencedBlockAsMarkdown("$ npm install\n$ npm test", "bash")).toBe(false);
+  });
+
+  test("directory trees with hash comments stay as code, not prose headings", () => {
+    const tree = [
+      "src/",
+      "├── app/                 # Next.js App Router",
+      "│   ├── (app)/           # 主应用：资讯 / 工具",
+      "│   └── layout.tsx",
+      "├── components/          # UI 组件",
+      "└── types/",
+    ].join("\n");
+    const fenced = `\`\`\`\n${tree}\n\`\`\``;
+    expect(looksLikeDirectoryTree(tree)).toBe(true);
+    expect(shouldRenderFencedBlockAsMarkdown(tree, "")).toBe(false);
+    expect(planFencedBlockDisplay(tree, "").kind).toBe("code");
+
+    const html = parseMarkdownSourceToHtml(fenced);
+    expect(html).toContain("<pre>");
+    expect(html).not.toContain("app-markdown-prose-from-fence");
+    expect(html).not.toContain("app-markdown-h");
+    expect(html).toContain("# Next.js App Router");
   });
 
   test("shouldRenderFencedBlockAsMarkdown treats mislabeled json/bash fences as prose", () => {

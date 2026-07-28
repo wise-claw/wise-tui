@@ -1,4 +1,5 @@
 import type { ClaudeSession, ProjectItem, Repository } from "../types";
+import { findSessionByTabOrClaudeId } from "./claudeSessionSelection";
 import { sessionMatchesProjectWorkspaceFocus } from "./projectSessionPanelFilter";
 import { resolveRepositoryForSession } from "./repositoryMainSessionBinding";
 import { resolveWorkspaceMainSession } from "./resolveWorkspaceMainSession";
@@ -170,17 +171,6 @@ export interface ResolveClaudePanelActiveSessionInput {
   repositoryMainBindings: Record<string, string>;
   workspaceMainSession: ClaudeSession | null;
   workspaceMode?: WorkspaceMode;
-}
-
-function findSessionByTabOrClaudeId(
-  sessions: ReadonlyArray<ClaudeSession>,
-  sessionKey: string,
-): ClaudeSession | null {
-  const trimmed = sessionKey.trim();
-  if (!trimmed) return null;
-  return (
-    sessions.find((session) => session.id === trimmed || session.claudeSessionId === trimmed) ?? null
-  );
 }
 
 /**

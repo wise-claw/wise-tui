@@ -5113,7 +5113,7 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  color: color-mix(in srgb, #7c3aed 80%, var(--ant-color-primary));
+  color: currentColor;
 }
 
 .app-message-part-reasoning-summary__icon svg {
@@ -6264,7 +6264,7 @@ button.app-message-part-header:disabled:hover {
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  color: color-mix(in srgb, #7c3aed 72%, var(--ant-color-text-tertiary));
+  color: currentColor;
 }
 
 .app-markdown-streaming-hint__icon svg {
@@ -6272,40 +6272,8 @@ button.app-message-part-header:disabled:hover {
   height: 12px;
 }
 
-/* 思考图标：柔和脉冲 + 淡紫光晕，与文字 shimmer 同拍 */
 .app-thinking-hint-icon--active {
-  animation: app-thinking-hint-icon-pulse 1.7s ease-in-out infinite;
-  transform-origin: center;
-  will-change: transform, opacity, filter;
-}
-
-@keyframes app-thinking-hint-icon-pulse {
-  0%,
-  100% {
-    opacity: 0.72;
-    transform: scale(1);
-    filter: drop-shadow(0 0 0 transparent);
-    color: color-mix(in srgb, #7c3aed 62%, var(--ant-color-text-tertiary));
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.12);
-    filter: drop-shadow(0 0 3px color-mix(in srgb, #7c3aed 55%, transparent));
-    color: color-mix(in srgb, #7c3aed 92%, #fff);
-  }
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .app-thinking-hint-icon--active {
-    animation: none;
-    opacity: 1;
-    transform: none;
-    filter: none;
-  }
-}
-
-.app-claude-messages--scrolling .app-thinking-hint-icon--active {
-  animation-play-state: paused;
+  color: var(--ant-color-text-tertiary);
 }
 
 @keyframes app-markdown-hint-in {

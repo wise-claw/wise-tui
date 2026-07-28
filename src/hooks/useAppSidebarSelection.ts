@@ -24,6 +24,7 @@ import {
   type WorkspaceFocus,
 } from "../utils/workspaceMode";
 import {
+  findSessionByTabOrClaudeId,
   pickProjectMainSessionForSidebarSelect,
   pickSessionForRepositorySidebarSelect,
 } from "../utils/claudeSessionSelection";
@@ -795,7 +796,7 @@ export function useAppSidebarSelection({
     async (sessionId: string) => {
       const sid = sessionId.trim();
       if (!sid) return;
-      const target = sessionsLatestRef.current.find((item) => item.id === sid || item.claudeSessionId === sid);
+      const target = findSessionByTabOrClaudeId(sessionsLatestRef.current, sid);
       if (!target) {
         message.warning("未找到该会话");
         return;

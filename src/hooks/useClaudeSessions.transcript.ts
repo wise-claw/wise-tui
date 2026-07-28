@@ -12,9 +12,12 @@ import type { SessionExecutionEngine } from "../types";
 import {
   resolveDiskTranscriptSessionKey,
   sessionHasDiskTranscript,
+  usesWiseTabIdForDiskTranscript,
 } from "../utils/sessionExecutionEngine";
 import { assistantMessageVisiblePlainText } from "../services/claudeSessionState";
 import { userMessagePlainTextForDisplay, systemMessagePlainText } from "../utils/claudeChatMessageDisplay";
+import { findSessionByTabOrClaudeId } from "../utils/claudeSessionSelection";
+import { deriveSessionListPreviewFromMessages } from "../utils/sessionListPreview";
 
 type SetSessions = (updater: (prev: ClaudeSession[]) => ClaudeSession[]) => void;
 
@@ -30,7 +33,16 @@ export function resolveDiskTranscriptKeyCandidates(
   };
   push(resolveDiskTranscriptSessionKey(session, engine));
   push(session.claudeSessionId);
-  push(session.id);
+  const tabId = session.id?.trim();
+  const claudeId = session.claudeSessionId?.trim();
+  // Claude：仅当尚无 claudeSessionId、或 tab id 本身就是磁盘 session id 时才用 id 兜底，
+  // 避免把 Wise 本地 tab UUID 当成别的 jsonl 文件名误加载。
+  if (
+    tabId &&
+    (usesWiseTabIdForDiskTranscript(engine) || !claudeId || tabId === claudeId)
+  ) {
+    push(tabId);
+  }
   return out;
 }
 
@@ -293,7 +305,7 @@ export async function reloadFullDiskTranscriptByKey(params: {
 }): Promise<boolean> {
   const raw = params.sessionKey.trim();
   if (!raw) return false;
-  const session = params.sessions.find((x) => x.id === raw || x.claudeSessionId === raw);
+  const session = findSessionByTabOrClaudeId(params.sessions, raw);
   if (!session) return false;
   const tabId = session.id;
   const repositoryPath = session.repositoryPath?.trim();
@@ -340,9 +352,12 @@ export async function reloadFullDiskTranscriptByKey(params: {
                 ),
             )
           : nextMessages;
+      const previewFromMessages = deriveSessionListPreviewFromMessages(recoveredMessages);
       return {
         ...row,
         messages: recoveredMessages,
+        // 全量落盘后对齐侧栏标题，避免旧 diskPreview 与当前 messages 长期不一致。
+        diskPreview: previewFromMessages || row.diskPreview,
         diskTranscriptPartial,
         transcriptMemoryUnlimited: true,
         status: terminalDiskTranscriptRecoveredStatus(row.status, hasAssistant, isTerminalWorker),
@@ -387,12 +402,14 @@ export async function applyDiskTranscriptTail(params: {
     : sanitizedDisk;
   if (!nextMessages || nextMessages.length === 0) return false;
   params.diskTailLinesBySession.set(params.session.id, params.tailLines);
+  const previewFromMessages = deriveSessionListPreviewFromMessages(nextMessages);
   params.setSessions((prev) =>
     prev.map((row) =>
       row.id === params.session.id
         ? {
             ...row,
             messages: nextMessages,
+            diskPreview: previewFromMessages || row.diskPreview,
             diskTranscriptPartial,
             transcriptMemoryUnlimited: false,
           }
@@ -412,7 +429,7 @@ export async function loadMoreTranscriptByKey(params: {
 }): Promise<void> {
   const raw = params.sessionKey.trim();
   if (!raw) return;
-  const session = params.sessions.find((x) => x.id === raw || x.claudeSessionId === raw);
+  const session = findSessionByTabOrClaudeId(params.sessions, raw);
   if (!session) return;
   const engine = params.resolveSessionExecutionEngine(session);
   const hasDisk = sessionHasDiskTranscript(session, engine);

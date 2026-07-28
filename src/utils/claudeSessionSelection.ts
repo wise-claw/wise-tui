@@ -35,6 +35,22 @@ function isTeamAutoDriverLatestUserSession(session: ClaudeSession): boolean {
   return TEAM_AUTO_DRIVER_PREFIXES.some((prefix) => t.startsWith(prefix));
 }
 
+/**
+ * 按标签 id / Claude session id 查找会话：优先精确匹配 `id`，再回退 `claudeSessionId`。
+ * 避免 `id === x || claudeSessionId === x` 在数组中先命中「别人的 claudeSessionId == 我的 id」而串台。
+ */
+export function findSessionByTabOrClaudeId(
+  sessions: ReadonlyArray<ClaudeSession>,
+  sessionKey: string | null | undefined,
+): ClaudeSession | undefined {
+  const trimmed = sessionKey?.trim();
+  if (!trimmed) return undefined;
+  return (
+    sessions.find((session) => session.id === trimmed) ??
+    sessions.find((session) => session.claudeSessionId === trimmed)
+  );
+}
+
 /** 侧栏/启动恢复用：有正文、磁盘 id 或预览的会话优先于空壳新标签。 */
 export function sessionHasRecoverableChatHistory(session: ClaudeSession): boolean {
   if ((session.messages?.length ?? 0) > 0) return true;

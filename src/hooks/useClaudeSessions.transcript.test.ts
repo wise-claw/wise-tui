@@ -375,13 +375,28 @@ describe("reloadFullDiskTranscriptByKey terminal recovery", () => {
 });
 
 describe("resolveDiskTranscriptKeyCandidates", () => {
-  test("includes claude session id and tab id for claude engine", () => {
+  test("claude engine uses claude session id only when tab id differs", () => {
     expect(
       resolveDiskTranscriptKeyCandidates(
         { id: "wise-tab-1", claudeSessionId: "claude-sid-1" },
         "claude",
       ),
-    ).toEqual(["claude-sid-1", "wise-tab-1"]);
+    ).toEqual(["claude-sid-1"]);
+  });
+
+  test("claude engine keeps tab id when it equals disk session id", () => {
+    expect(
+      resolveDiskTranscriptKeyCandidates(
+        { id: "claude-sid-1", claudeSessionId: "claude-sid-1" },
+        "claude",
+      ),
+    ).toEqual(["claude-sid-1"]);
+  });
+
+  test("claude engine falls back to tab id when claudeSessionId missing", () => {
+    expect(
+      resolveDiskTranscriptKeyCandidates({ id: "wise-tab-1", claudeSessionId: null }, "claude"),
+    ).toEqual(["wise-tab-1"]);
   });
 
   test("uses tab id for cursor engine", () => {

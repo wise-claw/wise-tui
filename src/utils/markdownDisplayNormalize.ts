@@ -127,9 +127,22 @@ export function wrapBareShellCommandLines(text: string): string {
   return out.join("\n");
 }
 
-/** 行内混入的 `## 标题` / `` ```bash `` 前补空行。 */
+/** 目录树分支行（含行内 `# 注释` 时不得拆成 Markdown 标题）。 */
+const DIR_TREE_LINE_RE = /(?:├──|└──|│|┃|┣|┗)/;
+
+/**
+ * 行内混入的 `## 标题` 前补空行。
+ * - 跳过 ASCII/Unicode 目录树行（`├── path/    # 注释`）
+ * - 仅在「非 # 字符后最多一个空白」时拆分，避免把多空格对齐注释拆成标题
+ */
 function breakInlineMarkdownHeadings(text: string): string {
-  return text.replace(/([^\n#])(#{1,6}\s)/g, "$1\n\n$2");
+  return text
+    .split("\n")
+    .map((line) => {
+      if (DIR_TREE_LINE_RE.test(line)) return line;
+      return line.replace(/([^#\s])([ \t]?)(#{1,6}[ \t])/g, "$1\n\n$3");
+    })
+    .join("\n");
 }
 
 /**
