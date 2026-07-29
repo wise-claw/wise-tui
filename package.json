@@ -12,7 +12,7 @@
     "test": "bun test",
     "preview": "vite preview",
     "tauri:dev": "tauri dev",
-    "tauri:build": "tauri build",
+    "tauri:build": "bun run scripts/tauri-build.mjs",
     "tauri": "tauri",
     "icon:generate": "tauri icon ./app-icon.png",
     "emit:platform-split-prompt-seed": "bun run scripts/emit-platform-split-prompt-seed.ts"

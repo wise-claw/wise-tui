@@ -58,7 +58,8 @@ jobs:
         run: |
           set -euo pipefail
           if [ -z "${APPLE_CERTIFICATE:-}" ]; then
-            echo "::notice title=macOS 未签名::未设置 APPLE_CERTIFICATE，产物将不会用 Apple 证书签名；用户从网络下载时可能被 macOS 拦截。发布请在 Secrets 中配置证书并完成公证，或告知用户使用「移除隔离」命令（见 README）。"
+            echo "::notice title=macOS 未签名::未设置 APPLE_CERTIFICATE，将使用 ad-hoc（-）密封 .app（TCC 可记住文稿等授权）；用户从网络下载时仍可能被 Gatekeeper 拦截。正式发布请配置 Developer ID 并公证。"
+            echo "APPLE_SIGNING_IDENTITY=-" >> "$GITHUB_ENV"
             exit 0
           fi
           if [ -z "${APPLE_CERTIFICATE_PASSWORD:-}" ] || [ -z "${KEYCHAIN_PASSWORD:-}" ]; then

@@ -68,6 +68,8 @@ bun run tauri:build
 
 构建产物位于 `src-tauri/target/release/bundle/`。macOS 分发需 Developer ID 签名与公证；Windows 建议代码签名以减少 SmartScreen 警告。
 
+本地请用 `bun run tauri:build`（不要直接 `tauri build`）：未配置证书时会默认 `APPLE_SIGNING_IDENTITY=-`，对 `.app` 做正式 ad-hoc 密封。否则产物可能只有 linker 签名，macOS 会**每次启动**都弹「想访问文稿」等 TCC 授权。仓库若在「文稿 / 桌面 / 下载」下，首次仍会提示一次；点「允许」后应能记住（重新打包会因二进制变化再提示一次）。长期免打扰请安装 **Apple Development** 或 **Developer ID** 证书并设置 `APPLE_SIGNING_IDENTITY`。
+
 ### macOS DMG 分发说明
 
 从 GitHub Release、网盘或聊天工具下载的 DMG，拷贝到其他 Mac 上安装时，**有可能提示「已损坏」「无法打开」或「来自身份不明的开发者」**——多数情况下并非安装包真的损坏，而是 macOS **Gatekeeper** 对未签名/未公证应用附加了隔离（quarantine）校验。

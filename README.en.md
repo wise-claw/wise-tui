@@ -68,6 +68,8 @@ bun run tauri:build
 
 Bundles are emitted under `src-tauri/target/release/bundle/`. macOS distribution outside the App Store requires Developer ID signing and notarization; Windows builds benefit from code signing to reduce SmartScreen warnings.
 
+Use `bun run tauri:build` locally (not bare `tauri build`): when no certificate is configured it defaults to `APPLE_SIGNING_IDENTITY=-` so the `.app` is properly ad-hoc sealed. Without that, the bundle may keep only a linker signature and macOS can re-prompt for Documents (and similar) TCC access on **every launch**. Repos under Documents/Desktop/Downloads still need a one-time Allow; rebuilds change the binary hash and may prompt again. For stable grants across rebuilds, install an **Apple Development** or **Developer ID** certificate and set `APPLE_SIGNING_IDENTITY`.
+
 ### macOS DMG distribution notes
 
 When users download a DMG from GitHub Releases, cloud storage, or chat apps and install it on **another Mac**, they may see **“is damaged and can’t be opened”**, **“can’t be opened”**, or **“from an unidentified developer”**. In most cases the bundle is not actually corrupt — macOS **Gatekeeper** is blocking an unsigned or unnotarized app and applying **quarantine** checks.
