@@ -18,14 +18,18 @@ import {
 import {
   encodeTerminalKey,
   measureTerminalMetrics,
+  noteTerminalPaintDuration,
   readTerminalBackground,
   renderTerminalFrame,
+  resetTerminalPaintQuality,
   TERMINAL_FONT_SIZE,
   wheelDeltaToScrollLines,
 } from "../utils/alacrittyTerminalCanvas";
 import {
+  shouldDeferTerminalKeyToInput,
   shouldIgnoreTerminalKeyDuringIme,
   terminalTextFromCompositionEnd,
+  terminalTextFromNonImeInput,
 } from "../utils/terminalImeInput";
 import { shouldIgnoreTerminalError } from "../utils/terminalErrors";
 import {
@@ -203,6 +207,7 @@ export function useTerminalSession({
       const terminalId = activeTerminalId;
       let sessionEnded = false;
       let latestFrame: TerminalFrame | null = null;
+      resetTerminalPaintQuality();
       let selectionRange: TerminalSelectionRange | null = null;
       let selecting = false;
       let selectionAnchor: { col: number; row: number } | null = null;
@@ -215,6 +220,7 @@ export function useTerminalSession({
       const metricsRef = {
         current: measureTerminalMetrics(container, TERMINAL_FONT_SIZE),
       };
+      let cachedBackground = readTerminalBackground(container);
 
       const persistSnapshot = (frame: TerminalFrame | null) => {
         onSurfaceSnapshotRef.current?.({
@@ -226,16 +232,29 @@ export function useTerminalSession({
 
       const paint = () => {
         if (!latestFrame) return;
+        // 内存紧张时隐藏标签页仍可能收到 frame；跳过绘制减轻分配。
+        if (typeof document !== "undefined" && document.hidden) return;
         const liveCanvas = canvasRef.current;
         const liveContainer = containerRef.current;
         if (!liveCanvas || !liveContainer) return;
-        renderTerminalFrame(
-          liveCanvas,
-          latestFrame,
-          metricsRef.current,
-          readTerminalBackground(liveContainer),
-          selectionRange,
-        );
+        const startedAt =
+          typeof performance !== "undefined" ? performance.now() : 0;
+        try {
+          renderTerminalFrame(
+            liveCanvas,
+            latestFrame,
+            metricsRef.current,
+            cachedBackground,
+            selectionRange,
+          );
+          if (startedAt > 0) {
+            noteTerminalPaintDuration(performance.now() - startedAt);
+          }
+        } catch (error) {
+          // 内存不足时 canvas 分配/绘制可能失败，避免打断输入链路。
+          console.warn("render terminal frame failed", error);
+          noteTerminalPaintDuration(64);
+        }
       };
 
       const schedulePaint = () => {
@@ -315,6 +334,7 @@ export function useTerminalSession({
           liveContainer,
           TERMINAL_FONT_SIZE,
         );
+        cachedBackground = readTerminalBackground(liveContainer);
         const cols = clampTerminalDim(
           initialSizeRef.current?.cols ?? metricsRef.current.cols,
         );
@@ -466,6 +486,9 @@ export function useTerminalSession({
             }
           }
 
+          // ASCII 标点交给 insertText，避免 preventDefault 打断中文输入法全角转换。
+          if (shouldDeferTerminalKeyToInput(event)) return;
+
           const encoded = encodeTerminalKey(event);
           if (encoded == null) return;
           event.preventDefault();
@@ -497,11 +520,14 @@ export function useTerminalSession({
         };
 
         // 组字期间保留 textarea 内容供 IME 候选；提交由 compositionend 写入 PTY。
-        // 非组字时清空，避免透明 textarea 堆积（ASCII 已由 keydown 写入）。
+        // 非组字 insertText（含中文标点、以及 deferred 的 ASCII 标点）写入 PTY 后清空。
         const onInput = (event: Event) => {
           const inputEvent = event as InputEvent;
-          if (imeComposing || inputEvent.isComposing) return;
-          if (input.value) input.value = "";
+          const text = terminalTextFromNonImeInput(inputEvent, imeComposing);
+          if (text) writeData(text);
+          if (!imeComposing && !inputEvent.isComposing && input.value) {
+            input.value = "";
+          }
         };
 
         const onPointerDown = (event: PointerEvent) => {
@@ -603,6 +629,16 @@ export function useTerminalSession({
         input.addEventListener("copy", onCopy);
         input.addEventListener("wheel", onWheel, { passive: false });
 
+        // 内存压力下 WebView 可能回收 canvas backing store；回到前台时强制重绘。
+        const onVisibilityOrPageShow = () => {
+          if (cancelled || sessionEnded) return;
+          if (typeof document !== "undefined" && document.hidden) return;
+          schedulePaint();
+        };
+        document.addEventListener("visibilitychange", onVisibilityOrPageShow);
+        window.addEventListener("pageshow", onVisibilityOrPageShow);
+        window.addEventListener("focus", onVisibilityOrPageShow);
+
         const resizeObserver = new ResizeObserver(() => {
           if (resizeDebounceTimer !== null) {
             window.clearTimeout(resizeDebounceTimer);
@@ -620,6 +656,7 @@ export function useTerminalSession({
               liveContainer,
               TERMINAL_FONT_SIZE,
             );
+            cachedBackground = readTerminalBackground(liveContainer);
             const cols = clampTerminalDim(metricsRef.current.cols);
             const rows = clampTerminalDim(metricsRef.current.rows);
             void resizeTerminalSession(
@@ -719,6 +756,9 @@ export function useTerminalSession({
             cancelAnimationFrame(scrollRaf);
           }
           resizeObserver.disconnect();
+          document.removeEventListener("visibilitychange", onVisibilityOrPageShow);
+          window.removeEventListener("pageshow", onVisibilityOrPageShow);
+          window.removeEventListener("focus", onVisibilityOrPageShow);
           input.removeEventListener("keydown", onKeyDown);
           input.removeEventListener("paste", onPaste);
           input.removeEventListener("compositionstart", onCompositionStart);

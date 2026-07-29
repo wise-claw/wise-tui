@@ -143,7 +143,7 @@ const RequirementRow = memo(function RequirementRow({
           <Typography.Paragraph
             className="app-workspace-requirements-panel__desc"
             type="secondary"
-            ellipsis={{ rows: 2, expandable: false }}
+            ellipsis={{ rows: 1, expandable: false }}
           >
             {desc}
           </Typography.Paragraph>

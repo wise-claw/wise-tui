@@ -1,5 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import {
+  shouldDeferTerminalKeyToInput,
   shouldIgnoreTerminalKeyDuringIme,
   terminalTextFromCompositionEnd,
   terminalTextFromNonImeInput,
@@ -37,12 +38,71 @@ describe("terminalImeInput", () => {
     ).toBe(false);
   });
 
+  test("shouldDeferTerminalKeyToInput defers ASCII punctuation but not alnum", () => {
+    expect(
+      shouldDeferTerminalKeyToInput({
+        key: ",",
+        ctrlKey: false,
+        altKey: false,
+        metaKey: false,
+      }),
+    ).toBe(true);
+    expect(
+      shouldDeferTerminalKeyToInput({
+        key: ".",
+        ctrlKey: false,
+        altKey: false,
+        metaKey: false,
+      }),
+    ).toBe(true);
+    expect(
+      shouldDeferTerminalKeyToInput({
+        key: " ",
+        ctrlKey: false,
+        altKey: false,
+        metaKey: false,
+      }),
+    ).toBe(true);
+    expect(
+      shouldDeferTerminalKeyToInput({
+        key: "a",
+        ctrlKey: false,
+        altKey: false,
+        metaKey: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldDeferTerminalKeyToInput({
+        key: "7",
+        ctrlKey: false,
+        altKey: false,
+        metaKey: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldDeferTerminalKeyToInput({
+        key: "，",
+        ctrlKey: false,
+        altKey: false,
+        metaKey: false,
+      }),
+    ).toBe(false);
+    expect(
+      shouldDeferTerminalKeyToInput({
+        key: ",",
+        ctrlKey: true,
+        altKey: false,
+        metaKey: false,
+      }),
+    ).toBe(false);
+  });
+
   test("terminalTextFromCompositionEnd returns committed text", () => {
     expect(terminalTextFromCompositionEnd({ data: "除了" })).toBe("除了");
     expect(terminalTextFromCompositionEnd({ data: "" })).toBe("");
   });
 
-  test("terminalTextFromNonImeInput skips composition updates", () => {
+  test("terminalTextFromNonImeInput accepts Chinese punctuation insertText", () => {
     expect(
       terminalTextFromNonImeInput(
         { data: "cle", inputType: "insertCompositionText", isComposing: true },
@@ -61,5 +121,17 @@ describe("terminalImeInput", () => {
         false,
       ),
     ).toBe("x");
+    expect(
+      terminalTextFromNonImeInput(
+        { data: "，", inputType: "insertText", isComposing: false },
+        false,
+      ),
+    ).toBe("，");
+    expect(
+      terminalTextFromNonImeInput(
+        { data: "。", inputType: "insertText", isComposing: false },
+        false,
+      ),
+    ).toBe("。");
   });
 });

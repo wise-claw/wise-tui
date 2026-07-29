@@ -16,6 +16,17 @@ export const TERMINAL_DEFAULT_CURSOR = "#f5e0dc";
 /** 与 CSS `--terminal-selection` 对齐。 */
 export const TERMINAL_DEFAULT_SELECTION = "rgba(137, 180, 250, 0.38)";
 
+/**
+ * 终端 canvas 最大 DPR。Retina 用 2 保持清晰；绘制过慢时由自适应降到 1，
+ * 减轻低配/内存紧张时的整屏闪烁（见 noteTerminalPaintDuration）。
+ */
+export const TERMINAL_MAX_DEVICE_PIXEL_RATIO = 2;
+
+/** 自适应质量上限：正常为 MAX，卡顿时降为 1。 */
+let adaptiveMaxDevicePixelRatio = TERMINAL_MAX_DEVICE_PIXEL_RATIO;
+let slowPaintStreak = 0;
+let fastPaintStreak = 0;
+
 export type TerminalMetrics = {
   cellWidth: number;
   cellHeight: number;
@@ -23,12 +34,132 @@ export type TerminalMetrics = {
   rows: number;
 };
 
+type TerminalCanvasState = {
+  ctx: CanvasRenderingContext2D;
+  cssWidth: number;
+  cssHeight: number;
+  dpr: number;
+};
+
+const canvasStates = new WeakMap<HTMLCanvasElement, TerminalCanvasState>();
+
+/** 测量用共享 canvas，避免每次 measure 都新建。 */
+let measureCtx: CanvasRenderingContext2D | null | undefined;
+
+export function terminalDevicePixelRatio(
+  devicePixelRatio = typeof window !== "undefined" ? window.devicePixelRatio : 1,
+  maxRatio = adaptiveMaxDevicePixelRatio,
+): number {
+  const dpr = Number.isFinite(devicePixelRatio) ? devicePixelRatio : 1;
+  const cap = Math.min(
+    TERMINAL_MAX_DEVICE_PIXEL_RATIO,
+    Math.max(1, maxRatio),
+  );
+  return Math.min(Math.max(1, dpr), cap);
+}
+
+/** 根据单帧耗时调节 DPR：卡顿降清晰度，恢复后再升回。 */
+export function noteTerminalPaintDuration(elapsedMs: number): void {
+  if (!Number.isFinite(elapsedMs) || elapsedMs < 0) return;
+  if (elapsedMs >= 22) {
+    slowPaintStreak += 1;
+    fastPaintStreak = 0;
+    if (slowPaintStreak >= 2) {
+      adaptiveMaxDevicePixelRatio = 1;
+    }
+    return;
+  }
+  slowPaintStreak = 0;
+  if (elapsedMs <= 12) {
+    fastPaintStreak += 1;
+    if (
+      fastPaintStreak >= 8 &&
+      adaptiveMaxDevicePixelRatio < TERMINAL_MAX_DEVICE_PIXEL_RATIO
+    ) {
+      adaptiveMaxDevicePixelRatio = TERMINAL_MAX_DEVICE_PIXEL_RATIO;
+      fastPaintStreak = 0;
+    }
+  } else {
+    fastPaintStreak = 0;
+  }
+}
+
+/** 测试或会话重建时重置自适应质量。 */
+export function resetTerminalPaintQuality(): void {
+  adaptiveMaxDevicePixelRatio = TERMINAL_MAX_DEVICE_PIXEL_RATIO;
+  slowPaintStreak = 0;
+  fastPaintStreak = 0;
+}
+
+function get2dContext(
+  canvas: HTMLCanvasElement,
+): CanvasRenderingContext2D | null {
+  return canvas.getContext("2d");
+}
+
+/**
+ * 确保 canvas 像素尺寸匹配；若发生重置则立刻填背景色，避免黑帧。
+ * 内存压力下应尽量少触发（仅尺寸真变时），因赋值 width/height 会重分配显存。
+ */
+export function syncTerminalCanvasSize(
+  canvas: HTMLCanvasElement,
+  cssWidth: number,
+  cssHeight: number,
+  dpr: number,
+  background: string,
+): CanvasRenderingContext2D | null {
+  const pixelW = Math.max(1, Math.floor(cssWidth * dpr));
+  const pixelH = Math.max(1, Math.floor(cssHeight * dpr));
+  let state = canvasStates.get(canvas);
+
+  if (!state) {
+    const ctx = get2dContext(canvas);
+    if (!ctx) return null;
+    state = { ctx, cssWidth: 0, cssHeight: 0, dpr: 0 };
+    canvasStates.set(canvas, state);
+  }
+
+  const resized =
+    state.cssWidth !== cssWidth ||
+    state.cssHeight !== cssHeight ||
+    state.dpr !== dpr ||
+    canvas.width !== pixelW ||
+    canvas.height !== pixelH;
+
+  if (resized) {
+    try {
+      canvas.width = pixelW;
+      canvas.height = pixelH;
+    } catch {
+      // 内存不足时分配可能抛错；保持旧尺寸继续画。
+      return state.ctx;
+    }
+    if (canvas.style.width !== `${cssWidth}px`) {
+      canvas.style.width = `${cssWidth}px`;
+    }
+    if (canvas.style.height !== `${cssHeight}px`) {
+      canvas.style.height = `${cssHeight}px`;
+    }
+    state.cssWidth = cssWidth;
+    state.cssHeight = cssHeight;
+    state.dpr = dpr;
+    state.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    state.ctx.fillStyle = background;
+    state.ctx.fillRect(0, 0, cssWidth, cssHeight);
+  }
+
+  return state.ctx;
+}
+
 export function measureTerminalMetrics(
   container: HTMLElement,
   fontSize = TERMINAL_FONT_SIZE,
 ): TerminalMetrics {
-  const canvas = document.createElement("canvas");
-  const ctx = canvas.getContext("2d");
+  if (measureCtx === undefined) {
+    const canvas = document.createElement("canvas");
+    measureCtx = canvas.getContext("2d");
+  }
+  const ctx = measureCtx;
   if (!ctx) {
     return { cellWidth: 7.2, cellHeight: 15, cols: 80, rows: 24 };
   }
@@ -73,6 +204,17 @@ function paintSelectionOverlay(
   }
 }
 
+/**
+ * ASCII 可打印字符可用单次 fillText；CJK/控制符仍逐字画以保列对齐。
+ */
+export function terminalRunNeedsPerGlyphPaint(text: string): boolean {
+  for (let i = 0; i < text.length; i += 1) {
+    const code = text.charCodeAt(i);
+    if (code < 0x20 || code > 0x7e) return true;
+  }
+  return false;
+}
+
 export function renderTerminalFrame(
   canvas: HTMLCanvasElement,
   frame: TerminalFrame,
@@ -80,19 +222,12 @@ export function renderTerminalFrame(
   background: string,
   selection?: TerminalSelectionRange | null,
 ): void {
-  const dpr = Math.max(1, window.devicePixelRatio || 1);
+  const dpr = terminalDevicePixelRatio();
   const width = Math.max(1, Math.floor(frame.cols * metrics.cellWidth));
   const height = Math.max(1, Math.floor(frame.rows * metrics.cellHeight));
-  if (canvas.width !== Math.floor(width * dpr) || canvas.height !== Math.floor(height * dpr)) {
-    canvas.width = Math.floor(width * dpr);
-    canvas.height = Math.floor(height * dpr);
-    canvas.style.width = `${width}px`;
-    canvas.style.height = `${height}px`;
-  }
-
-  const ctx = canvas.getContext("2d");
+  const ctx = syncTerminalCanvasSize(canvas, width, height, dpr, background);
   if (!ctx) return;
-  ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+
   paintBackground(ctx, width, height, background);
   ctx.font = `${TERMINAL_FONT_SIZE}px ${FONT_FAMILY}`;
   ctx.textBaseline = "top";
@@ -152,10 +287,14 @@ function paintRun(
   ctx.font = font;
   ctx.globalAlpha = run.dim ? 0.7 : 1;
   ctx.fillStyle = run.fg || TERMINAL_DEFAULT_FOREGROUND;
-  // Monospace: draw char-by-char to keep columns aligned for CJK/wide glyphs.
-  for (let i = 0; i < run.text.length; i += 1) {
-    const ch = run.text[i]!;
-    ctx.fillText(ch, x + i * metrics.cellWidth, y + 1);
+  const textY = y + 1;
+  if (terminalRunNeedsPerGlyphPaint(run.text)) {
+    for (let i = 0; i < run.text.length; i += 1) {
+      const ch = run.text[i]!;
+      ctx.fillText(ch, x + i * metrics.cellWidth, textY);
+    }
+  } else {
+    ctx.fillText(run.text, x, textY);
   }
   if (run.underline || run.strike) {
     ctx.strokeStyle = run.fg || TERMINAL_DEFAULT_FOREGROUND;

@@ -76,6 +76,16 @@ function stripAnsi(text: string): string {
 }
 
 /**
+ * 规范化运行日志 chunk：去 ANSI；\r\n → \n；行内 \r 覆写只保留末段。
+ * 避免进度条把同一行拆成海量伪换行刷爆 UI。
+ */
+export function normalizeRunLogOutputChunk(chunk: string): string {
+  return stripAnsi(String(chunk ?? ""))
+    .replace(/\r\n/g, "\n")
+    .replace(/[^\n]*\r/g, "");
+}
+
+/**
  * 运行日志 / 页面监控共用：热更新、编译抖动、良性噪音不进入 AI 自动修复。
  */
 export function isRunLogIgnorableNoise(text: string): boolean {

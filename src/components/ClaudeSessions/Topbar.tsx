@@ -285,6 +285,8 @@ export const Topbar = memo(function Topbar({
     onAutoFixRunError,
     onRequestOpenPanel: () => setRunPopoverOpen(true),
     onRunStarted: () => setRunPopoverOpen(false),
+    // 弹层关闭时不订阅日志预览，避免后端刷屏拖垮顶栏。
+    observeRuntimeDetails: runPopoverOpen,
   });
 
   useEffect(() => {

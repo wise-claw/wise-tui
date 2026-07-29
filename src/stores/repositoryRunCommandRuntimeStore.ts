@@ -18,6 +18,7 @@ import {
   shouldSkipRunErrorMonitorSend,
   summarizeRunLogIssueKinds,
   collectRunLogIssues,
+  normalizeRunLogOutputChunk,
 } from "../utils/repositoryRunCommand";
 
 type RepoRuntimeState = {
@@ -39,6 +40,8 @@ type RepoRuntimeInternals = {
   autoOpenFallbackTimer: number | null;
   autoOpenedRunUrl: boolean;
   errorDetected: boolean;
+  /** 本次运行是否已请求打开配置面板（报错时只弹一次）。 */
+  configureRequested: boolean;
   autoFixSent: boolean;
   autoFixInFlight: boolean;
   lastDispatchAt: number;
@@ -72,6 +75,13 @@ let terminalOutputUnlisten: (() => void) | null = null;
 let terminalExitUnlisten: (() => void) | null = null;
 let hiddenPublishPending = false;
 let visibilityListenerReady = false;
+/** 待 rAF 合并通知的仓库 id；高频终端输出时避免每 chunk 同步打爆 React。 */
+const pendingNotifyRepoIds = new Set<number>();
+let notifyRafHandle: number | null = null;
+/** 报错监控 UI / 指纹计算节流：同一仓库连续错误流上限制主线程开销。 */
+const ERROR_MONITOR_UI_THROTTLE_MS = 500;
+const lastErrorMonitorUiAtByRepo = new Map<number, number>();
+const lastErrorFingerprintAtByRepo = new Map<number, number>();
 
 function refreshRunningByRepositoryIdSnapshot(): void {
   const activeIds: number[] = [];
@@ -150,19 +160,75 @@ function getOrCreateRepoState(repositoryId: number): RepoRuntimeState {
   return state;
 }
 
-function patchRepoState(repositoryId: number, patch: Partial<RepoRuntimeState>): void {
-  const prev = getOrCreateRepoState(repositoryId);
-  repoStateById.set(repositoryId, { ...prev, ...patch });
+function outputPreviewEqual(
+  a: RunCommandOutputLine[] | undefined,
+  b: RunCommandOutputLine[],
+): boolean {
+  if (!a) return b.length === 0;
+  if (a === b) return true;
+  if (a.length !== b.length) return false;
+  for (let i = 0; i < a.length; i += 1) {
+    if (a[i]!.text !== b[i]!.text || a[i]!.isError !== b[i]!.isError) return false;
+  }
+  return true;
+}
+
+function flushPendingRepoNotifies(): void {
+  notifyRafHandle = null;
+  if (pendingNotifyRepoIds.size === 0) return;
+  const ids = [...pendingNotifyRepoIds];
+  pendingNotifyRepoIds.clear();
+  for (const repositoryId of ids) {
+    notifyRepositoryRunCommandRuntime(repositoryId);
+  }
+}
+
+function scheduleRepoNotify(repositoryId: number): void {
   if (typeof document !== "undefined" && document.visibilityState !== "visible") {
     hiddenPublishPending = true;
     return;
   }
-  notifyRepositoryRunCommandRuntime(repositoryId);
+  pendingNotifyRepoIds.add(repositoryId);
+  if (notifyRafHandle != null) return;
+  if (typeof requestAnimationFrame === "function") {
+    notifyRafHandle = requestAnimationFrame(() => {
+      flushPendingRepoNotifies();
+    });
+    return;
+  }
+  flushPendingRepoNotifies();
+}
+
+function patchRepoState(repositoryId: number, patch: Partial<RepoRuntimeState>): void {
+  const prev = getOrCreateRepoState(repositoryId);
+  const next: RepoRuntimeState = {
+    status: patch.status ?? prev.status,
+    statusHint: patch.statusHint ?? prev.statusHint,
+    outputPreview: patch.outputPreview ?? prev.outputPreview,
+    detectedUrl: patch.detectedUrl !== undefined ? patch.detectedUrl : prev.detectedUrl,
+  };
+  if (
+    next.status === prev.status &&
+    next.statusHint === prev.statusHint &&
+    next.detectedUrl === prev.detectedUrl &&
+    outputPreviewEqual(prev.outputPreview, next.outputPreview)
+  ) {
+    return;
+  }
+  repoStateById.set(repositoryId, next);
+  scheduleRepoNotify(repositoryId);
 }
 
 function flushHiddenPublishIfNeeded(): void {
   if (!hiddenPublishPending) return;
   hiddenPublishPending = false;
+  if (notifyRafHandle != null) {
+    if (typeof cancelAnimationFrame === "function") {
+      cancelAnimationFrame(notifyRafHandle);
+    }
+    notifyRafHandle = null;
+  }
+  pendingNotifyRepoIds.clear();
   notifyAllRepositoryRunCommandRuntimeListeners();
 }
 
@@ -192,6 +258,7 @@ function getOrCreateInternals(repositoryId: number, runCwd: string): RepoRuntime
       autoOpenFallbackTimer: null,
       autoOpenedRunUrl: false,
       errorDetected: false,
+      configureRequested: false,
       autoFixSent: false,
       autoFixInFlight: false,
       lastDispatchAt: 0,
@@ -219,16 +286,14 @@ function clearAutoOpenFallbackTimer(internals: RepoRuntimeInternals): void {
 }
 
 function appendRunOutputPreview(repositoryId: number, internals: RepoRuntimeInternals, chunk: string): void {
-  const plain = chunk
-    .replace(/\u001b\[[0-9;]*[A-Za-z]/g, "")
-    .replace(/\r\n/g, "\n")
-    .replace(/\r/g, "\n");
+  // 进度条 / spinner 常用 \r 覆写同一行；把 \r 当换行会刷爆预览与 React 订阅。
+  const plain = normalizeRunLogOutputChunk(chunk);
   const mixed = `${internals.runChunkBuffer}${plain}`;
   const parts = mixed.split("\n");
   internals.runChunkBuffer = parts.pop() ?? "";
   const nextLines = parts.map((line) => line.trim()).filter(Boolean);
   if (nextLines.length === 0) return;
-  const mapped = nextLines.map((line) => ({ text: line, isError: lineHasRunLogIssue(line) }));
+  const mapped = nextLines.map((line) => ({ text: line.slice(0, 500), isError: lineHasRunLogIssue(line) }));
   const state = getOrCreateRepoState(repositoryId);
   patchRepoState(repositoryId, {
     outputPreview: [...state.outputPreview, ...mapped].slice(-8),
@@ -290,18 +355,30 @@ function handleRepositoryRunnerTerminalOutput(repositoryId: number, data: string
     }
   }
 
+  if (!internals.runErrorMonitorEnabled) {
+    // 监控关闭时仍保留 idle 派发语义（若此前已标记 errorDetected）。
+    armAutoFixDispatch(repositoryId, internals, true);
+    return;
+  }
+
   const chunkIssues = collectRunLogIssues(data);
   // 仅 error / http 触发自动修复；纯 warning（含过滤前残留）不当作派发条件。
   const actionableIssues = chunkIssues.filter((issue) => issue.kind !== "warning");
-  const isErrorChunk = actionableIssues.length > 0 && internals.runErrorMonitorEnabled;
-  if (!isErrorChunk) {
+  if (actionableIssues.length === 0) {
     // 非报错输出：等日志稳定再派发（保留原 idle 语义，给偶发报错留缓冲）
     armAutoFixDispatch(repositoryId, internals, true);
     return;
   }
 
-  const fingerprint = buildRunErrorFingerprint(nextTail);
-  internals.lastErrorFingerprint = fingerprint;
+  const now = Date.now();
+  const lastFpAt = lastErrorFingerprintAtByRepo.get(repositoryId) ?? 0;
+  const shouldRefreshFingerprint =
+    !internals.lastErrorFingerprint || now - lastFpAt >= ERROR_MONITOR_UI_THROTTLE_MS;
+  if (shouldRefreshFingerprint) {
+    internals.lastErrorFingerprint = buildRunErrorFingerprint(nextTail);
+    lastErrorFingerprintAtByRepo.set(repositoryId, now);
+  }
+  const fingerprint = internals.lastErrorFingerprint ?? "";
   const decision = decideRunErrorMonitorStep({
     autoFixSent: internals.autoFixSent,
     dispatchedFingerprint: internals.dispatchedFingerprint,
@@ -312,12 +389,13 @@ function handleRepositoryRunnerTerminalOutput(repositoryId: number, data: string
   if (decision.action === "arm-dispatch") {
     internals.errorDetected = true;
     if (internals.autoFixInFlight) {
-      patchRepoState(repositoryId, {
-        statusHint: `检测到${kindSummary}，修复任务进行中，已合并等待…`,
-      });
+      maybePatchErrorStatusHint(
+        repositoryId,
+        now,
+        `检测到${kindSummary}，修复任务进行中，已合并等待…`,
+      );
       return;
     }
-    const now = Date.now();
     if (
       internals.lastDispatchAt > 0 &&
       now - internals.lastDispatchAt < RUN_ERROR_MONITOR_MIN_INTERVAL_MS
@@ -325,27 +403,44 @@ function handleRepositoryRunnerTerminalOutput(repositoryId: number, data: string
       const remainSec = Math.ceil(
         (RUN_ERROR_MONITOR_MIN_INTERVAL_MS - (now - internals.lastDispatchAt)) / 1000,
       );
-      patchRepoState(repositoryId, {
-        statusHint: `检测到${kindSummary}，自动修复冷却中（约 ${remainSec}s）`,
-      });
+      maybePatchErrorStatusHint(
+        repositoryId,
+        now,
+        `检测到${kindSummary}，自动修复冷却中（约 ${remainSec}s）`,
+      );
       return;
     }
-    globalOnRequestConfigure?.({ id: repositoryId, path: internals.runCwd });
-    patchRepoState(repositoryId, {
-      statusHint: `检测到${kindSummary}，等待自动处理...`,
-    });
+    if (!internals.configureRequested) {
+      internals.configureRequested = true;
+      globalOnRequestConfigure?.({ id: repositoryId, path: internals.runCwd });
+    }
+    maybePatchErrorStatusHint(repositoryId, now, `检测到${kindSummary}，等待自动处理...`);
     // 报错输出不重置派发倒计时，避免循环报错持续输出导致首次派发永不触发
     armAutoFixDispatch(repositoryId, internals, false);
   } else if (decision.action === "report-loop") {
     internals.loopCount = decision.loopCount;
-    patchRepoState(repositoryId, {
-      statusHint: `循环${kindSummary}(第 ${decision.loopCount} 次)，AI 已尝试，建议人工介入`,
-    });
+    maybePatchErrorStatusHint(
+      repositoryId,
+      now,
+      `循环${kindSummary}(第 ${decision.loopCount} 次)，AI 已尝试，建议人工介入`,
+    );
   } else {
-    patchRepoState(repositoryId, {
-      statusHint: `检测到新的${kindSummary}，本次运行 AI 已介入，建议人工介入`,
-    });
+    maybePatchErrorStatusHint(
+      repositoryId,
+      now,
+      `检测到新的${kindSummary}，本次运行 AI 已介入，建议人工介入`,
+    );
   }
+}
+
+function maybePatchErrorStatusHint(repositoryId: number, now: number, statusHint: string): void {
+  const prev = getOrCreateRepoState(repositoryId);
+  if (prev.statusHint === statusHint) return;
+  const lastAt = lastErrorMonitorUiAtByRepo.get(repositoryId) ?? 0;
+  // 节流「第 N 次」等连续变化文案，避免每个报错 chunk 都打到 React。
+  if (now - lastAt < ERROR_MONITOR_UI_THROTTLE_MS) return;
+  lastErrorMonitorUiAtByRepo.set(repositoryId, now);
+  patchRepoState(repositoryId, { statusHint });
 }
 
 function armAutoFixDispatch(
@@ -395,6 +490,8 @@ async function fireAutoFixDispatch(
     patchRepoState(repositoryId, { statusHint: "检测到重复报错，已跳过重复发送" });
     return;
   }
+  // 派发前用完整日志尾刷新指纹，避免流式节流导致指纹落后。
+  internals.lastErrorFingerprint = buildRunErrorFingerprint(tail);
   internals.dispatchedFingerprint = internals.lastErrorFingerprint;
   internals.loopCount = 1;
   const prompt = buildRunErrorAutoFixPrompt({ command, tailText: tail });
@@ -453,6 +550,8 @@ function ensureTerminalListeners(): void {
       });
     }
     internals.runChunkBuffer = "";
+    lastErrorMonitorUiAtByRepo.delete(repositoryId);
+    lastErrorFingerprintAtByRepo.delete(repositoryId);
     repoInternalsById.delete(repositoryId);
     patchRepoState(repositoryId, {
       status: "idle",
@@ -592,6 +691,7 @@ export async function startRepositoryRunCommand(input: {
       },
     );
     internals.errorDetected = false;
+    internals.configureRequested = false;
     internals.autoFixSent = false;
     internals.autoFixInFlight = false;
     internals.lastDispatchAt = 0;
@@ -601,6 +701,8 @@ export async function startRepositoryRunCommand(input: {
     internals.autoOpenedRunUrl = false;
     internals.runLogTail = "";
     internals.runChunkBuffer = "";
+    lastErrorMonitorUiAtByRepo.delete(repository.id);
+    lastErrorFingerprintAtByRepo.delete(repository.id);
     clearIdleTimer(internals);
     clearAutoOpenFallbackTimer(internals);
     patchRepoState(repository.id, {

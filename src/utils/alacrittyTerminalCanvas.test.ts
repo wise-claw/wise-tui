@@ -1,9 +1,13 @@
 import { describe, expect, test } from "bun:test";
 import {
   encodeTerminalKey,
+  noteTerminalPaintDuration,
+  resetTerminalPaintQuality,
   TERMINAL_DEFAULT_BACKGROUND,
   TERMINAL_DEFAULT_CURSOR,
   TERMINAL_DEFAULT_FOREGROUND,
+  terminalDevicePixelRatio,
+  terminalRunNeedsPerGlyphPaint,
   wheelDeltaToScrollLines,
 } from "./alacrittyTerminalCanvas";
 
@@ -16,6 +20,34 @@ function keyEvent(partial: Partial<KeyboardEvent> & { key: string }): KeyboardEv
     isComposing: partial.isComposing ?? false,
   } as KeyboardEvent;
 }
+
+describe("terminalDevicePixelRatio", () => {
+  test("allows retina dpr up to 2 for sharpness", () => {
+    resetTerminalPaintQuality();
+    expect(terminalDevicePixelRatio(2)).toBe(2);
+    expect(terminalDevicePixelRatio(3)).toBe(2);
+    expect(terminalDevicePixelRatio(1)).toBe(1);
+    expect(terminalDevicePixelRatio(0.5)).toBe(1);
+  });
+
+  test("noteTerminalPaintDuration drops dpr after sustained jank", () => {
+    resetTerminalPaintQuality();
+    expect(terminalDevicePixelRatio(2)).toBe(2);
+    noteTerminalPaintDuration(30);
+    expect(terminalDevicePixelRatio(2)).toBe(2);
+    noteTerminalPaintDuration(30);
+    expect(terminalDevicePixelRatio(2)).toBe(1);
+  });
+});
+
+describe("terminalRunNeedsPerGlyphPaint", () => {
+  test("ASCII runs can batch; CJK needs per-glyph", () => {
+    expect(terminalRunNeedsPerGlyphPaint("hello")).toBe(false);
+    expect(terminalRunNeedsPerGlyphPaint("a b")).toBe(false);
+    expect(terminalRunNeedsPerGlyphPaint("你好")).toBe(true);
+    expect(terminalRunNeedsPerGlyphPaint("hi，")).toBe(true);
+  });
+});
 
 describe("encodeTerminalKey", () => {
   test("maps enter/backspace/arrows", () => {

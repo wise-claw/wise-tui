@@ -40,7 +40,44 @@ export type UseRepositoryRunCommandOptions = {
   onRequestOpenPanel?: () => void;
   /** 成功下发运行命令后（顶栏 Popover 会关闭） */
   onRunStarted?: () => void;
+  /**
+   * 为 false 时仅追踪 status（运行中/空闲），不因日志预览/提示文案触发重渲。
+   * 顶栏弹层关闭时应为 false，避免后端刷屏日志拖垮整栏。
+   */
+  observeRuntimeDetails?: boolean;
 };
+
+const EMPTY_OUTPUT_PREVIEW: RunCommandOutputLine[] = [];
+const statusOnlyRuntimeCache = new Map<
+  number,
+  {
+    status: RepositoryRunStatus;
+    statusHint: string;
+    outputPreview: RunCommandOutputLine[];
+    detectedUrl: string | null;
+  }
+>();
+
+function getStatusOnlyRuntimeSlice(repositoryId: number) {
+  const state = getRepositoryRunCommandState(repositoryId);
+  const cached = statusOnlyRuntimeCache.get(repositoryId);
+  if (cached && cached.status === state.status) {
+    return cached;
+  }
+  const next = {
+    status: state.status,
+    statusHint:
+      state.status === "running"
+        ? "运行中"
+        : state.status === "stopping"
+          ? "停止中..."
+          : "未运行",
+    outputPreview: EMPTY_OUTPUT_PREVIEW,
+    detectedUrl: null as string | null,
+  };
+  statusOnlyRuntimeCache.set(repositoryId, next);
+  return next;
+}
 
 function useLocalStorageBackedState(storageKey: string | null, fallback = "") {
   const [value, setValue] = useState(() =>
@@ -62,6 +99,7 @@ export function useRepositoryRunCommand({
   onAutoFixRunError: _onAutoFixRunError,
   onRequestOpenPanel,
   onRunStarted,
+  observeRuntimeDetails = true,
 }: UseRepositoryRunCommandOptions) {
   const repositoryId = repository?.id ?? null;
   const trimmedCwd = runCwd.trim();
@@ -80,8 +118,11 @@ export function useRepositoryRunCommand({
     if (repositoryId == null) {
       return IDLE_REPOSITORY_RUN_RUNTIME;
     }
+    if (!observeRuntimeDetails) {
+      return getStatusOnlyRuntimeSlice(repositoryId);
+    }
     return getRepositoryRunCommandState(repositoryId);
-  }, [repositoryId]);
+  }, [observeRuntimeDetails, repositoryId]);
 
   const runtime = useSyncExternalStore(subscribeRuntime, getRuntimeSlice, getRuntimeSlice);
 

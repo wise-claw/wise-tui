@@ -8,8 +8,25 @@ import {
   isRunLogIgnorableNoise,
   isSameRunErrorFingerprint,
   lineHasRunLogIssue,
+  normalizeRunLogOutputChunk,
   summarizeRunLogIssueKinds,
 } from "./repositoryRunCommand";
+
+describe("normalizeRunLogOutputChunk", () => {
+  test("keeps only the last CR-overwritten segment on a line", () => {
+    expect(normalizeRunLogOutputChunk("progress 10%\rprogress 20%\rprogress 100%\n")).toBe(
+      "progress 100%\n",
+    );
+  });
+
+  test("preserves CRLF as newline without inventing extra lines", () => {
+    expect(normalizeRunLogOutputChunk("a\r\nb\r\n")).toBe("a\nb\n");
+  });
+
+  test("strips ansi sequences", () => {
+    expect(normalizeRunLogOutputChunk("\u001b[31mred\u001b[0m\n")).toBe("red\n");
+  });
+});
 
 describe("detectRunLogIssue", () => {
   test("detects runtime errors and exceptions", () => {
