@@ -37,16 +37,35 @@ use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Child;
 use tokio::sync::Mutex as TokioMutex;
 use self::disk_sessions::claude_session_jsonl_exists;
+use crate::claude_events::{
+    invocation_event, session_event, CLAUDE_STREAM_EVENT_COMPLETE, CLAUDE_STREAM_EVENT_ERROR,
+    CLAUDE_STREAM_EVENT_OUTPUT,
+};
 
 // ── Claude Code Process Management ──
+
+/// 会话级 stdin 写入句柄。
+///
+/// map 外层锁只用于查表并克隆句柄，写入时改持会话级锁：
+/// - 任一会话 stdin 阻塞（子进程卡住 / 管道满）不再拖住其它会话的 stdin 与 control_response；
+/// - 同一会话连发多条消息天然串行，不会出现 stream-json 行交错。
+pub(crate) type ClaudeStdinHandle = Arc<TokioMutex<tokio::process::ChildStdin>>;
+
+/// 取出会话 stdin 句柄；仅在查表期间持有 map 锁。
+async fn lookup_stdin_handle<K: std::hash::Hash + Eq>(
+    map: &Arc<TokioMutex<HashMap<K, ClaudeStdinHandle>>>,
+    key: &K,
+) -> Option<ClaudeStdinHandle> {
+    map.lock().await.get(key).cloned()
+}
 
 /// Global state to track current Claude process (single slot)
 pub(crate) struct ClaudeProcessState {
     current_process: Arc<TokioMutex<Option<Child>>>,
     /// `stream-json` 控制协议：按 `session_id` 保存 stdin，实现会话级定向回包。
-    claude_stdin_by_session: Arc<TokioMutex<HashMap<String, tokio::process::ChildStdin>>>,
+    claude_stdin_by_session: Arc<TokioMutex<HashMap<String, ClaudeStdinHandle>>>,
     /// 在拿到 `system.init.session_id` 之前，按 spawn 序号挂 stdin（支持多进程并发首包 initialize）。
-    pending_stdin_by_spawn_id: Arc<TokioMutex<HashMap<u64, tokio::process::ChildStdin>>>,
+    pending_stdin_by_spawn_id: Arc<TokioMutex<HashMap<u64, ClaudeStdinHandle>>>,
     /// 当前可写 stdin 所属的 Claude session_id（用于前端定向回包校验）。
     current_session_id: Arc<TokioMutex<Option<String>>>,
     /// Oneshot 等「非 current_process 托管」子进程：按 Claude session_id 保存 wait 句柄，供 cancel / 同会话再次 resume 时 kill。
@@ -1431,16 +1450,17 @@ fn emit_claude_stdout_line(
     invocation_key: Option<&str>,
     suppress_shared_stdout: bool,
 ) {
+    let base = CLAUDE_STREAM_EVENT_OUTPUT;
     if connection_mode == ClaudeConnectionMode::Streaming && session_channel_sid_valid(sid) {
-        let _ = app.emit(&format!("claude-output:{}", sid), line);
+        let _ = app.emit(&session_event(base, sid), line);
     } else if !suppress_shared_stdout && session_channel_sid_valid(sid) {
-        let _ = app.emit(&format!("claude-output:{}", sid), line);
+        let _ = app.emit(&session_event(base, sid), line);
     }
     if !suppress_shared_stdout {
-        let _ = app.emit("claude-output", line);
+        let _ = app.emit(base, line);
     }
     if let Some(inv) = invocation_key {
-        let _ = app.emit(&format!("claude-output:invocation:{}", inv), line);
+        let _ = app.emit(&invocation_event(base, inv), line);
     }
 }
 
@@ -1452,16 +1472,17 @@ fn emit_claude_complete_payload(
     invocation_key: Option<&str>,
     suppress_shared_stdout: bool,
 ) {
+    let base = CLAUDE_STREAM_EVENT_COMPLETE;
     if connection_mode == ClaudeConnectionMode::Streaming && session_channel_sid_valid(sid) {
-        let _ = app.emit(&format!("claude-complete:{}", sid), payload);
+        let _ = app.emit(&session_event(base, sid), payload);
     } else if !suppress_shared_stdout && session_channel_sid_valid(sid) {
-        let _ = app.emit(&format!("claude-complete:{}", sid), payload);
+        let _ = app.emit(&session_event(base, sid), payload);
     }
     if !suppress_shared_stdout {
-        let _ = app.emit("claude-complete", payload);
+        let _ = app.emit(base, payload);
     }
     if let Some(inv) = invocation_key {
-        let _ = app.emit(&format!("claude-complete:invocation:{}", inv), payload);
+        let _ = app.emit(&invocation_event(base, inv), payload);
     }
 }
 
@@ -1512,7 +1533,7 @@ async fn try_write_initial_streaming_prompt_pending(
     spawn_id: u64,
     initial_prompt: &str,
     initial_sent: &mut bool,
-    pending_stdin_by_spawn: &Arc<TokioMutex<HashMap<u64, tokio::process::ChildStdin>>>,
+    pending_stdin_by_spawn: &Arc<TokioMutex<HashMap<u64, ClaudeStdinHandle>>>,
 ) {
     if *initial_sent {
         return;
@@ -1521,11 +1542,11 @@ async fn try_write_initial_streaming_prompt_pending(
     if prompt.is_empty() {
         return;
     }
-    let mut g = pending_stdin_by_spawn.lock().await;
-    let Some(sin) = g.get_mut(&spawn_id) else {
+    let Some(handle) = lookup_stdin_handle(pending_stdin_by_spawn, &spawn_id).await else {
         return;
     };
-    if write_streaming_user_message_to_stdin(sin, prompt).await.is_ok() {
+    let mut sin = handle.lock().await;
+    if write_streaming_user_message_to_stdin(&mut sin, prompt).await.is_ok() {
         *initial_sent = true;
     }
 }
@@ -1537,8 +1558,8 @@ async fn bootstrap_streaming_session_stdin(
     initial_prompt: Option<&str>,
     initial_sent: &mut bool,
     real_session_id: &mut Option<String>,
-    pending_stdin_by_spawn: &Arc<TokioMutex<HashMap<u64, tokio::process::ChildStdin>>>,
-    stdin_map_mtx: &Arc<TokioMutex<HashMap<String, tokio::process::ChildStdin>>>,
+    pending_stdin_by_spawn: &Arc<TokioMutex<HashMap<u64, ClaudeStdinHandle>>>,
+    stdin_map_mtx: &Arc<TokioMutex<HashMap<String, ClaudeStdinHandle>>>,
     active_child_by_session: &Arc<TokioMutex<HashMap<String, Arc<TokioMutex<Option<Child>>>>>>,
     wait_child_mutex: &Arc<TokioMutex<Option<Child>>>,
     registry: &ClaudeSessionRegistry,
@@ -1584,17 +1605,19 @@ async fn bootstrap_streaming_session_stdin(
     {
         return;
     }
-    if let Some(sin) = stdin_map_mtx.lock().await.get_mut(sid) {
-        if write_streaming_user_message_to_stdin(sin, initial).await.is_ok() {
-            *initial_sent = true;
-        }
+    let Some(handle) = lookup_stdin_handle(stdin_map_mtx, &sid.to_string()).await else {
+        return;
+    };
+    let mut sin = handle.lock().await;
+    if write_streaming_user_message_to_stdin(&mut sin, initial).await.is_ok() {
+        *initial_sent = true;
     }
 }
 
 /// 自动应答 CLI 的 `initialize` control，避免仅开 stdin 时首包卡死。
 async fn maybe_ack_control_initialize(
     v: &serde_json::Value,
-    pending_stdin_by_spawn: &Arc<TokioMutex<HashMap<u64, tokio::process::ChildStdin>>>,
+    pending_stdin_by_spawn: &Arc<TokioMutex<HashMap<u64, ClaudeStdinHandle>>>,
     spawn_id: u64,
 ) {
     // 调用方已解析整行 JSON，此处直接复用，避免每行二次 from_str。
@@ -1621,10 +1644,10 @@ async fn maybe_ack_control_initialize(
             "request_id": rid,
         }
     });
-    let mut g = pending_stdin_by_spawn.lock().await;
-    let Some(sin) = g.get_mut(&spawn_id) else {
+    let Some(handle) = lookup_stdin_handle(pending_stdin_by_spawn, &spawn_id).await else {
         return;
     };
+    let mut sin = handle.lock().await;
     use tokio::io::AsyncWriteExt;
     let payload = format!("{}\n", body);
     if sin.write_all(payload.as_bytes()).await.is_err() {
@@ -1763,7 +1786,7 @@ async fn spawn_claude_process(
         pending_stdin_by_spawn_mtx
             .lock()
             .await
-            .insert(spawn_id, sin);
+            .insert(spawn_id, Arc::new(TokioMutex::new(sin)));
         // 写入 stream-json 用户行（非占位 `\n`）：避免 Trellis Hook 阶段无 stdin 死锁。
         if connection_mode == ClaudeConnectionMode::Streaming
             || (connection_mode == ClaudeConnectionMode::Oneshot
@@ -2170,11 +2193,11 @@ async fn spawn_claude_process(
             }
             let sid = "unknown";
             if !suppress_shared_stderr {
-                let _ = app_stderr.emit(&format!("claude-error:{}", sid), &line);
-                let _ = app_stderr.emit("claude-error", &line);
+                let _ = app_stderr.emit(&session_event(CLAUDE_STREAM_EVENT_ERROR, sid), &line);
+                let _ = app_stderr.emit(CLAUDE_STREAM_EVENT_ERROR, &line);
             }
             if let Some(inv) = invocation_key_stderr.as_deref() {
-                let _ = app_stderr.emit(&format!("claude-error:invocation:{}", inv), &line);
+                let _ = app_stderr.emit(&invocation_event(CLAUDE_STREAM_EVENT_ERROR, inv), &line);
             }
         }
     });
@@ -2396,10 +2419,10 @@ pub(crate) async fn cancel_claude_execution(
         structured_verdict: None,
     };
     let _ = app.emit(
-        &format!("claude-complete:{}", session_id),
+        &session_event(CLAUDE_STREAM_EVENT_COMPLETE, &session_id),
         &complete_payload,
     );
-    let _ = app.emit("claude-complete", &complete_payload);
+    let _ = app.emit(CLAUDE_STREAM_EVENT_COMPLETE, &complete_payload);
 
     // Clean up registry
     registry.remove(&session_id);
@@ -2445,11 +2468,14 @@ pub(crate) async fn cancel_claude_invocation(
             structured_verdict: None,
         };
         let _ = app.emit(
-            &format!("claude-complete:invocation:{}", inv),
+            &invocation_event(CLAUDE_STREAM_EVENT_COMPLETE, inv),
             &complete_payload,
         );
         if let Some(sid) = tab_session_id {
-            let _ = app.emit(&format!("claude-complete:{}", sid), &complete_payload);
+            let _ = app.emit(
+                &session_event(CLAUDE_STREAM_EVENT_COMPLETE, &sid),
+                &complete_payload,
+            );
         }
         Ok(true)
     } else {
@@ -2490,20 +2516,23 @@ pub(crate) async fn claude_submit_stdin_line(
         return Err("未指定目标会话，且当前没有可响应会话".to_string());
     };
 
-    let mut stdin_map = process_state.claude_stdin_by_session.lock().await;
-    let Some(sin) = stdin_map.get_mut(&resolved_sid) else {
+    let Some(handle) =
+        lookup_stdin_handle(&process_state.claude_stdin_by_session, &resolved_sid).await
+    else {
         return Err(format!(
             "会话 {} 没有可写 stdin（可能已结束）",
             resolved_sid
         ));
     };
-    use tokio::io::AsyncWriteExt;
-    sin.write_all(line.as_bytes())
-        .await
-        .map_err(|e| e.to_string())?;
-    sin.write_all(b"\n").await.map_err(|e| e.to_string())?;
-    sin.flush().await.map_err(|e| e.to_string())?;
-    drop(stdin_map);
+    {
+        let mut sin = handle.lock().await;
+        use tokio::io::AsyncWriteExt;
+        sin.write_all(line.as_bytes())
+            .await
+            .map_err(|e| e.to_string())?;
+        sin.write_all(b"\n").await.map_err(|e| e.to_string())?;
+        sin.flush().await.map_err(|e| e.to_string())?;
+    }
     let registry = app.state::<ClaudeSessionRegistry>();
     registry.mark_running(&resolved_sid);
     Ok(())
@@ -2621,17 +2650,22 @@ pub(crate) async fn send_user_message_to_session(
     let registry = app.state::<ClaudeSessionRegistry>();
     registry.mark_running(&sid);
 
-    let mut stdin_map = process_state.claude_stdin_by_session.lock().await;
-    let Some(sin) = stdin_map.get_mut(&sid) else {
+    let Some(handle) = lookup_stdin_handle(&process_state.claude_stdin_by_session, &sid).await
+    else {
         return Err(format!(
             "Streaming 会话 {} 没有可写 stdin，可能子进程已结束。请重新发送以重启进程。",
             sid
         ));
     };
-    write_streaming_user_message_to_stdin(sin, &prompt).await
+    let mut sin = handle.lock().await;
+    write_streaming_user_message_to_stdin(&mut sin, &prompt).await
 }
 
-/// 关闭 streaming 会话：终止子进程并释放 stdin 映射。
+/// 关闭 streaming 会话：终止子进程、释放 stdin 映射，并广播终态。
+///
+/// 子进程被 kill 后 stdout reader 直接结束，不会再发 `type:result`，
+/// 因此必须在此显式 emit `claude-complete` 并摘除注册表条目，
+/// 否则前端会话会永远停在 running，`list_running_claude_sessions` 也会误报。
 #[tauri::command]
 pub(crate) async fn close_streaming_session(
     app: tauri::AppHandle,
@@ -2652,12 +2686,32 @@ pub(crate) async fn close_streaming_session(
         m.remove(&sid)
     };
     if let Some(arc) = killed {
+        {
+            let mut by_inv = process_state.active_child_by_invocation_key.lock().await;
+            by_inv.retain(|_, v| !Arc::ptr_eq(v, &arc));
+        }
         let mut slot = arc.lock().await;
         if let Some(ref mut proc) = *slot {
+            let _ = proc.start_kill();
             let _ = proc.kill().await;
         }
         *slot = None;
     }
+
+    let registry = app.state::<ClaudeSessionRegistry>();
+    registry.mark_completed(&sid, false);
+    let complete_payload = ClaudeCompletePayload {
+        session_id: sid.clone(),
+        success: false,
+        structured_verdict: None,
+    };
+    let _ = app.emit(
+        &session_event(CLAUDE_STREAM_EVENT_COMPLETE, &sid),
+        &complete_payload,
+    );
+    let _ = app.emit(CLAUDE_STREAM_EVENT_COMPLETE, &complete_payload);
+    registry.remove(&sid);
+
     Ok(())
 }
 

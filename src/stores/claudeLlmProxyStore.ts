@@ -9,6 +9,7 @@ import {
   type ClaudeLlmProxyRecord,
   type ClaudeLlmProxyStatus,
 } from "../services/claudeLlmProxy";
+import { claudeStreamEvent } from "../constants/claudeStreamEvents";
 import { safeUnlisten } from "../utils/safeTauriUnlisten";
 import { WISE_CLAUDE_USER_SETTINGS_CHANGED } from "../services/claudeModelProfiles";
 import { tryIngestStreamJsonLineForLlmProxy } from "../utils/streamJsonLlmProxyIngest";
@@ -77,7 +78,7 @@ async function ensureClaudeOutputIngestAttached(): Promise<void> {
   if (claudeOutputIngestPromise) return claudeOutputIngestPromise;
   claudeOutputIngestPromise = (async () => {
     try {
-      const next = await listen<string>("claude-output", (ev) => {
+      const next = await listen<string>(claudeStreamEvent("output"), (ev) => {
         const line = typeof ev.payload === "string" ? ev.payload : String(ev.payload ?? "");
         handleClaudeOutputLine(line);
       });

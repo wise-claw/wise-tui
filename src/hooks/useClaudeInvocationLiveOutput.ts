@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
 import { listen, type UnlistenFn } from "@tauri-apps/api/event";
+import { claudeInvocationStreamEvent } from "../constants/claudeStreamEvents";
 import { safeUnlisten } from "../utils/safeTauriUnlisten";
 import {
   DIRECT_BATCH_INVOCATION_STDERR_RETENTION_LINES,
@@ -86,7 +87,7 @@ export function useClaudeInvocationLiveOutput(
     void (async () => {
       try {
         const [uo, ue, uc] = await Promise.all([
-          listen<string>(`claude-output:invocation:${key}`, (ev) => {
+          listen<string>(claudeInvocationStreamEvent("output", key), (ev) => {
             const raw = String(ev.payload ?? "");
             const line =
               raw.length > MAX_LINE_CHARS ? `${raw.slice(0, MAX_LINE_CHARS)}…[truncated]` : raw;
@@ -97,7 +98,7 @@ export function useClaudeInvocationLiveOutput(
             }
             scheduleFlush();
           }),
-          listen<string>(`claude-error:invocation:${key}`, (ev) => {
+          listen<string>(claudeInvocationStreamEvent("error", key), (ev) => {
             const raw = String(ev.payload ?? "");
             const line =
               raw.length > MAX_LINE_CHARS ? `${raw.slice(0, MAX_LINE_CHARS)}…[truncated]` : raw;
@@ -108,7 +109,7 @@ export function useClaudeInvocationLiveOutput(
             }
             scheduleFlush();
           }),
-          listen<{ success?: boolean }>(`claude-complete:invocation:${key}`, () => {
+          listen<{ success?: boolean }>(claudeInvocationStreamEvent("complete", key), () => {
             setLocalComplete(true);
             scheduleFlush();
           }),

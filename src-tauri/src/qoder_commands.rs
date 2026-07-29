@@ -2,6 +2,9 @@
 
 use crate::child_slot_wait::wait_child_slot_exit_status;
 use crate::claude_commands::{ClaudeProcessState, ClaudeSessionRegistry};
+use crate::claude_events::{
+    emit_adapted_stream_payload, CLAUDE_STREAM_EVENT_COMPLETE, CLAUDE_STREAM_EVENT_OUTPUT,
+};
 use crate::qoder_binary::{apply_qoder_child_env, find_qoder_binary, qoder_merged_path_env};
 use crate::qoder_stream_adapter::{
     qoder_assistant_stream_line, qoder_init_stream_line, qoder_session_clear_line, QoderStdoutMap,
@@ -12,7 +15,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::process::Stdio;
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::Mutex as TokioMutex;
@@ -90,15 +93,7 @@ fn normalize_qoder_resume_session_id(raw: Option<&str>) -> Option<String> {
 }
 
 fn emit_qoder_stdout_line(app: &AppHandle, sid: &str, line: &str, invocation_key: Option<&str>) {
-    if !sid.is_empty() {
-        let _ = app.emit(&format!("claude-output:{}", sid), line);
-    }
-    if invocation_key.is_none() {
-        let _ = app.emit("claude-output", line);
-    }
-    if let Some(inv) = invocation_key {
-        let _ = app.emit(&format!("claude-output:invocation:{}", inv), line);
-    }
+    emit_adapted_stream_payload(app, CLAUDE_STREAM_EVENT_OUTPUT, sid, &line, invocation_key);
 }
 
 fn emit_qoder_complete(app: &AppHandle, sid: &str, success: bool, invocation_key: Option<&str>) {
@@ -106,15 +101,13 @@ fn emit_qoder_complete(app: &AppHandle, sid: &str, success: bool, invocation_key
         session_id: sid.to_string(),
         success,
     };
-    if !sid.is_empty() {
-        let _ = app.emit(&format!("claude-complete:{}", sid), &payload);
-    }
-    if invocation_key.is_none() {
-        let _ = app.emit("claude-complete", &payload);
-    }
-    if let Some(inv) = invocation_key {
-        let _ = app.emit(&format!("claude-complete:invocation:{}", inv), &payload);
-    }
+    emit_adapted_stream_payload(
+        app,
+        CLAUDE_STREAM_EVENT_COMPLETE,
+        sid,
+        &payload,
+        invocation_key,
+    );
 }
 
 fn configure_qoder_print_command(

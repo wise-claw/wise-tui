@@ -3,6 +3,7 @@ import {
   normalizeSessionExecutionEngine,
   type SessionExecutionEngine,
 } from "../constants/sessionExecutionEngine";
+import { claudeInvocationStreamEvents } from "../constants/claudeStreamEvents";
 import { resolveClaudeCompleteSuccess } from "../utils/resolveClaudeCompleteSuccess";
 import { safeUnlisten } from "../utils/safeTauriUnlisten";
 import {
@@ -43,7 +44,6 @@ async function spawnSessionEngineOneshot(input: {
         invocationKey,
         undefined,
         undefined,
-        undefined,
         true,
       );
       return;
@@ -58,7 +58,6 @@ async function spawnSessionEngineOneshot(input: {
         invocationKey,
         undefined,
         undefined,
-        undefined,
         true,
       );
       return;
@@ -68,7 +67,6 @@ async function spawnSessionEngineOneshot(input: {
         prompt,
         model,
         invocationKey,
-        undefined,
         undefined,
         undefined,
         true,
@@ -118,9 +116,11 @@ export async function executeSessionEngineAndWait(params: {
   const MAX_SINGLE_LINE_CHARS = 24_000;
   const timeoutMs = params.timeoutMs ?? 120_000;
 
-  const outputEvent = `claude-output:invocation:${invocationKey}`;
-  const errorEvent = `claude-error:invocation:${invocationKey}`;
-  const completeEvent = `claude-complete:invocation:${invocationKey}`;
+  const {
+    output: outputEvent,
+    error: errorEvent,
+    complete: completeEvent,
+  } = claudeInvocationStreamEvents(invocationKey);
 
   let resolveDone: ((value: ClaudeInvocationResult) => void) | null = null;
   const donePromise = new Promise<ClaudeInvocationResult>((resolve) => {

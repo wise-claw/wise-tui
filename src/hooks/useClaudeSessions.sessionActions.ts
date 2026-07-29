@@ -25,6 +25,7 @@ import {
   isTerminalWorkerWiseTab,
 } from "../services/terminalDispatch";
 import { getCachedModelProfileStore } from "../stores/modelProfileStoreCache";
+import { beginSessionTurn, endSessionTurn } from "../stores/sessionTurnStore";
 import type { CursorSdkAttachment } from "../services/cursorComposerPrompt";
 import type { SessionExecutionEngine } from "../types";
 import { resolveSessionForExecuteKey } from "../utils/sessionExecuteResolve";
@@ -219,6 +220,10 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
       });
       return false;
     }
+    // 轮次登记必须先于状态提交，且是同步的：待执行队列在 `onExecute` resolve 后的微任务里
+    // 判断能否派发下一条，那时 `session.status` 的重渲染尚未到达。登记之后所有 return false
+    // 与失败分支都要 `endSessionTurn(tabSessionId, turnToken)` 注销，否则该会话车道会卡住。
+    const turnToken = beginSessionTurn(tabSessionId);
     commitSessions((prev) => {
       if (opts?.replaceUserBubbleAtIndex !== undefined && Number.isFinite(opts.replaceUserBubbleAtIndex)) {
         return setSessionRunningReplacingUserBubbleAtIndex(
@@ -280,6 +285,7 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
         }, 80);
       } else {
         executeSessionRetryCountRef.current.delete(sessionId);
+        endSessionTurn(tabSessionId, turnToken);
         commitSessions((prev) =>
           appendSystemMessageBySessionId(
             prev.map((s) => (s.id === tabSessionId ? { ...s, status: "error" as const } : s)),
@@ -289,6 +295,7 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
         );
         return false;
       }
+      // 重试路径：本轮仍在推进（80ms 后重入 executeSession），轮次不注销。
       return true;
     }
 
@@ -419,6 +426,9 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
         if (claudeSid?.trim()) {
           registryBootstrapDeadlineByClaudeSidRef.current.delete(claudeSid.trim());
         }
+        // failover 重试已在上面 return，这里是本轮真正失败：立即放行该会话车道，
+        // 不必等状态渲染到 error。
+        endSessionTurn(tabSessionId, turnToken);
         commitSessions((prev) =>
           applyClaudeExecuteFailureNotice(prev, tabSessionId, err, {
             hasClaudeSessionId: Boolean(claudeSid),
@@ -587,6 +597,7 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
       return prev;
     });
     executeSessionRetryCountRef.current.delete(sessionId);
+    endSessionTurn(sessionId);
     workflowRunBySessionRef.current.delete(sessionId);
     persistWorkflowBindings(workflowRunBySessionRef.current);
     // 关 tab 时顺手清掉先发后压登记的 deferred，避免孤儿 entry 一直占着 map。
@@ -601,6 +612,9 @@ export function createSessionActionHandlers(deps: SessionActionHandlersDeps) {
     if (realSessionId?.trim()) {
       expectedTurnNonceByTabIdRef.current.delete(realSessionId.trim());
     }
+    // 取消是确定性终态：同步注销轮次，队列下一次 flush 立刻可派发，
+    // 不必等 cancelled 状态渲染出来。
+    endSessionTurn(sessionId);
     const refT = streamingTargetIdRef.current;
     if (refT !== null && (refT === sessionId || refT === realSessionId?.trim())) {
       streamingTargetIdRef.current = null;

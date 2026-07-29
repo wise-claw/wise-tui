@@ -54,7 +54,6 @@ export type ClaudeEngineHandlersDeps = {
   claudeSessionsOptionsRef: MutableRefObject<UseClaudeSessionsOptions | undefined>;
   detachClaudeInvocationStreamsForTab: (tabSessionId: string) => void;
   keepInvocationStreamAfterTurnComplete: (tabId: string) => boolean;
-  resolveTrellisContextId: (tabSessionId: string, claudeSessionId?: string | null) => string;
   resolveSpawnExtrasForClaudePrompt: (
     tabSessionId: string,
     prompt: string,
@@ -113,7 +112,6 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
     claudeSessionsOptionsRef,
     detachClaudeInvocationStreamsForTab,
     keepInvocationStreamAfterTurnComplete,
-    resolveTrellisContextId,
     resolveSpawnExtrasForClaudePrompt,
     commitSessions,
     scheduleStreamStallTimer,
@@ -182,7 +180,6 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
             "oneshot",
             sk,
             lim,
-            resolveTrellisContextId(tabSessionId, resumeClaudeSid),
             cliExtras,
             anthropicProxyBypass,
           );
@@ -200,7 +197,6 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
             sk,
             lim,
             undefined,
-            resolveTrellisContextId(tabSessionId),
             cliExtras,
             anthropicProxyBypass,
           );
@@ -215,7 +211,6 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
           sk,
           lim,
           undefined,
-          resolveTrellisContextId(tabSessionId),
           cliExtras,
           anthropicProxyBypass,
         );
@@ -291,7 +286,6 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
         codexModel,
         invocationKey,
         tabSessionId,
-        resolveTrellisContextId(tabSessionId),
         codexResumeSessionId ?? undefined,
         forceNewClaudeConversation === true,
       );
@@ -367,7 +361,6 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
         opencodeModel,
         invocationKey,
         tabSessionId,
-        resolveTrellisContextId(tabSessionId),
         opencodeResumeSessionId ?? undefined,
         forceNewClaudeConversation === true,
       );
@@ -436,7 +429,6 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
         qoderModel,
         invocationKey,
         tabSessionId,
-        resolveTrellisContextId(tabSessionId),
         qoderResumeSessionId ?? undefined,
         forceNewClaudeConversation === true,
       );
@@ -503,7 +495,6 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
         invocationKey,
         tabSessionId,
         cursorAgentId ?? undefined,
-        resolveTrellisContextId(tabSessionId),
         undefined,
         cursorAttachments,
       );
@@ -636,7 +627,6 @@ export function createClaudeEngineHandlers(deps: ClaudeEngineHandlersDeps) {
         invocationKey,
         concurrencyScopeKey: sk,
         concurrencyLimit: lim,
-        trellisContextId: resolveTrellisContextId(tabSessionId, liveSid),
         cliExtras,
       });
       streamingProcessByTabRef.current.set(tabSessionId, {

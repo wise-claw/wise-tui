@@ -14,6 +14,9 @@ use crate::cursor_stream_adapter::{map_cursor_cli_stdout_line, CursorCliStdoutMa
 use crate::agent_registry::{Probe, ProbeResult};
 use crate::child_slot_wait::{wait_child_slot, WaitChildSlotOutcome};
 use crate::claude_commands::{ClaudeProcessState, ClaudeSessionRegistry};
+use crate::claude_events::{
+    emit_adapted_stream_payload, CLAUDE_STREAM_EVENT_COMPLETE, CLAUDE_STREAM_EVENT_OUTPUT,
+};
 use crate::wise_db;
 use rusqlite::{params, Connection};
 use serde::{Deserialize, Serialize};
@@ -21,7 +24,7 @@ use std::path::{Path, PathBuf};
 use std::process::Stdio;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Mutex};
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::Command;
 use tokio::sync::Mutex as TokioMutex;
@@ -69,15 +72,7 @@ fn emit_cursor_stdout_line(
     line: &str,
     invocation_key: Option<&str>,
 ) {
-    if !sid.is_empty() {
-        let _ = app.emit(&format!("claude-output:{}", sid), line);
-    }
-    if invocation_key.is_none() {
-        let _ = app.emit("claude-output", line);
-    }
-    if let Some(inv) = invocation_key {
-        let _ = app.emit(&format!("claude-output:invocation:{}", inv), line);
-    }
+    emit_adapted_stream_payload(app, CLAUDE_STREAM_EVENT_OUTPUT, sid, &line, invocation_key);
 }
 
 fn emit_cursor_complete(
@@ -92,15 +87,13 @@ fn emit_cursor_complete(
         success,
         cursor_agent_id: cursor_agent_id.map(str::to_string),
     };
-    if !sid.is_empty() {
-        let _ = app.emit(&format!("claude-complete:{}", sid), &payload);
-    }
-    if invocation_key.is_none() {
-        let _ = app.emit("claude-complete", &payload);
-    }
-    if let Some(inv) = invocation_key {
-        let _ = app.emit(&format!("claude-complete:invocation:{}", inv), &payload);
-    }
+    emit_adapted_stream_payload(
+        app,
+        CLAUDE_STREAM_EVENT_COMPLETE,
+        sid,
+        &payload,
+        invocation_key,
+    );
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]

@@ -44,8 +44,8 @@ import {
   type SessionConversationTaskDetailTarget,
 } from "../ProgressMonitorPanel/SessionConversationTaskDetailDrawer";
 import { useExecutionEnvironmentDispatchTasksForChat } from "../../hooks/useExecutionEnvironmentDispatchTasksForChat";
-import { createMainLaneDispatchGate } from "../../hooks/mainLaneDispatchGate";
 import { createDispatchFailureTracker } from "../../hooks/dispatchFailureTracker";
+import { hasActiveSessionTurn, subscribeSessionTurns } from "../../stores/sessionTurnStore";
 import {
   ClaudeChatSessionFeaturePanel,
   type RefreshHistorySessionsScope,
@@ -643,16 +643,6 @@ export function ClaudeChatInner({
   const pendingQueueDispatchInFlightLanesRef = useRef<Set<string>>(new Set());
 
   /**
-   * main lane 派发握手门闸：记录「已派发但 session.status 尚未翻 running」的窗口。
-   * 解决 race：onExecute 同步翻 store status=running，但 React 重渲染到本组件闭包
-   * 是异步的；finally 的微任务 flush 跑时 `isMainIdle` 闭包可能仍为 true，导致
-   * canDispatchHead 把队列里剩余 main 任务一次性派完。gate 持有期间 canDispatchHead
-   * 返回 false，等 status effect（idle->running）或 5s 兜底释放后才允许下一条。
-   * inFlight set 防 onExecute 重入；gate 防「status 翻转传播延迟」--两者正交。
-   */
-  const mainLaneDispatchGateRef = useRef(createMainLaneDispatchGate());
-
-  /**
    * 派发失败追踪：catch 路径按 fingerprint 累加失败次数，达上限 drop（避免无限重入循环 +
    * 队列重复增长：原 task 派发时未 removeTask，抛错时仍在队列，若再 addTask 会新增重复条目）。
    * 未达上限则退避（setTimeout 延迟 addTask）重入队。与 inFlight set / gate 正交：
@@ -673,11 +663,6 @@ export function ClaudeChatInner({
         return;
       }
       pendingQueueDispatchInFlightLanesRef.current.add(laneKey);
-      // main lane 打点：进入「已派但 status 未翻 running」窗口，gate 持有期间
-      // canDispatchHead 返回 false，阻止 finally 微任务 flush 把后续 main 任务一次性派完。
-      if (laneKey === "main") {
-        mainLaneDispatchGateRef.current.markDispatched(task.id);
-      }
       const {
         id,
         promptText,
@@ -713,15 +698,12 @@ export function ClaudeChatInner({
           if (started === false) {
             // 未真正派发（并发阻塞 / session 尚未 hydrate / gemini 不支持 / bootstrap 超限等）。
             // `executeSession` 内已 `onClaudeSpawnBlocked` 提示，此处不重复 toast。
-            // status 不会翻 running，gate 不能等 status effect 释放，立即手动释放。
+            // 轮次由 `executeSession` 自己注销，此处无需额外释放。
             // 抑制 finally 的 microtask flush：立即重派会撞同一门闸形成紧循环；且历史上 dedup
             // 假命中曾致任务被当成功移除而丢失（已由 dedup 记录后移到 spawn 门闸后修复）。
             // task 留队列，靠 pendingDispatchGateKey effect（含 repoRunningSessionsFingerprint /
             // session.status / pendingTasksFingerprint）在并发释放 / session hydration / 引擎切换
             // 等条件变化时重新 flush 推进；gemini 等真终态则永久留队列由用户切引擎后推进。
-            if (laneKey === "main") {
-              mainLaneDispatchGateRef.current.release();
-            }
             suppressFinalFlush = true;
             return;
           }
@@ -729,12 +711,10 @@ export function ClaudeChatInner({
           dispatchFailureTrackerRef.current.onSuccess(failureFp);
         } catch (error) {
           console.error("Failed to dispatch pending task:", error);
-          // onExecute 抛错 -> status 不会翻 running，gate 立即释放，避免 hold 死锁接力。
-          if (laneKey === "main") {
-            mainLaneDispatchGateRef.current.release();
-          }
+          // 轮次由 `executeSession` 单点持有并在自身失败分支注销；此处不重复释放，
+          // 否则可能误杀用户在 await 期间手动发起的新轮次。
           // 抑制 finally 的 microtask flush：removeTask 的 setTasks 是异步渲染，finally
-          // microtask 跑时 pendingTasksRef 仍是旧快照（含本 task），而 gate 已 release ->
+          // microtask 跑时 pendingTasksRef 仍是旧快照（含本 task），而轮次已注销 ->
           // canDispatchHead 会判定可派发 -> 立即重派，绕过下方退避。退避重入队改由
           // setTimeout 内的 flush 驱动；drop 后其它 lane 靠 pendingTasks 变化触发的
           // gate key effect flush 推进，不会卡死。
@@ -798,20 +778,8 @@ export function ClaudeChatInner({
     } else if (!prev && active) {
       clearIdlePendingDispatchTimer();
       idlePendingDispatchHoldUntilRef.current = 0;
-      // status 已翻 running：派发握手完成，释放 main lane gate。
-      // 之后 m1 跑完（running->idle）时 canDispatchHead 才会对 m2 返回 true，实现接力。
-      mainLaneDispatchGateRef.current.releaseIfMatchesActive(active);
     }
   }, [session.status, clearIdlePendingDispatchTimer]);
-
-  // 5s 兜底：onExecute 既不翻 status 也不抛错的极端故障下，status effect 不会释放 gate。
-  // 每 1s 轮询 releaseIfExpired，到点强制释放，避免 main lane 永久卡死接力。
-  useEffect(() => {
-    const timer = setInterval(() => {
-      mainLaneDispatchGateRef.current.releaseIfExpired(Date.now());
-    }, 1000);
-    return () => clearInterval(timer);
-  }, []);
 
   const handleComposerExecute = useCallback(
     (
@@ -852,6 +820,16 @@ export function ClaudeChatInner({
   );
 
   const isMainIdle = session.status !== "running" && session.status !== "connecting";
+
+  /**
+   * 订阅本会话的轮次是否活跃，仅用于在轮次结束时唤醒队列 flush。
+   * 派发判定本身仍直接读 store（见 `canDispatchHead`），不依赖这个渲染值。
+   */
+  const mainLaneTurnActive = useSyncExternalStore(
+    subscribeSessionTurns,
+    () => hasActiveSessionTurn(session.id),
+    () => false,
+  );
 
   const omcDirectBatchPipelineBusy = useSyncExternalStore(
     subscribeOmcDirectBatchInvocations,
@@ -926,10 +904,10 @@ export function ClaudeChatInner({
       if (!task) return false;
       const targetType = task.targetType ?? "main";
       if (targetType === "main") {
-        // gate 持有期间（已派但 status 未翻 running）禁止派发下一条 main，
-        // 阻止 finally 微任务 flush 在 status 翻转传播延迟窗口内一次性出栈。
-        // ref.current 读取总取最新值，绕开 React 重渲染闭包时序。
-        if (!mainLaneDispatchGateRef.current.canDispatch()) return false;
+        // 已登记轮次意味着本会话正在跑或刚派发但状态尚未渲染；两种情况都不能再出队。
+        // 读的是模块级 store 而非渲染值，因此不受 React 重渲染时序影响。
+        if (hasActiveSessionTurn(session.id)) return false;
+        // 轮次之外的运行来源（磁盘恢复、外部 spawn、后台接管）只体现在 status 上。
         return isMainIdle;
       }
       if (targetType === "employee") {
@@ -940,7 +918,7 @@ export function ClaudeChatInner({
       }
       return true;
     },
-    [isMainIdle, isEmployeeIdle, isTeamIdle, mainLaneDispatchGateRef],
+    [isMainIdle, isEmployeeIdle, isTeamIdle, session.id],
   );
 
   const flushPendingLaneDispatchesRef = useRef<() => void>(() => {});
@@ -1051,6 +1029,7 @@ export function ClaudeChatInner({
     () =>
       [
         session.status,
+        mainLaneTurnActive ? "1" : "0",
         omcMonitorPipelineBusy ? "1" : "0",
         repoRunningSessionsFingerprint,
         workflowBusyFingerprint,
@@ -1059,6 +1038,7 @@ export function ClaudeChatInner({
       ].join("|"),
     [
       session.status,
+      mainLaneTurnActive,
       omcMonitorPipelineBusy,
       repoRunningSessionsFingerprint,
       workflowBusyFingerprint,
@@ -1173,10 +1153,7 @@ export function ClaudeChatInner({
     lastPendingFlushGateKeyRef.current = "";
     // 会话切换：清空派发失败计数，避免新会话的同指纹任务被旧计数误判 drop。
     dispatchFailureTrackerRef.current.clear();
-    // 释放 main lane 派发门闸：旧 session 派发若走 started===false 抑制 flush 路径已手动
-    // release，此处为兜底；若切换发生在派发进行中（onExecute 未返回）或异常态，避免 gate
-    // 残留 held 致新 session 的 main lane 派发被 canDispatchHead 卡死。
-    mainLaneDispatchGateRef.current.release();
+    // 轮次状态按 tabSessionId 隔离，切换会话不会继承上一个会话的门闸，无需在此重置。
     const sid = session.id;
     const rp = session.repositoryPath;
     let cancelled = false;

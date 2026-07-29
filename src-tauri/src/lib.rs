@@ -6,6 +6,7 @@ mod child_slot_wait;
 mod claude_code_line_edits;
 mod claude_code_usage;
 mod claude_commands;
+mod claude_events;
 mod codex_binary;
 mod codex_commands;
 mod codex_stream_adapter;

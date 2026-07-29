@@ -26,6 +26,7 @@ import {
   type OpenBackgroundInvocationDrawerDetail,
   type WorkflowInvocationStreamDetail,
 } from "../../constants/workflowUiEvents";
+import { claudeInvocationStreamEvent } from "../../constants/claudeStreamEvents";
 import {
   clearInvocationSnapshotBundle,
   mergeInvocationSnapshotIntoBundle,
@@ -297,7 +298,7 @@ function BackgroundInvocationDockInner({ session }: { session: ClaudeSession }) 
     (invocationKey: string) => {
       void (async () => {
         try {
-          const uo = await listen<string>(`claude-output:invocation:${invocationKey}`, (ev) => {
+          const uo = await listen<string>(claudeInvocationStreamEvent("output", invocationKey), (ev) => {
             const buf = buffersRef.current[invocationKey];
             if (!buf) return;
             const line = String(ev.payload ?? "");
@@ -306,7 +307,7 @@ function BackgroundInvocationDockInner({ session }: { session: ClaudeSession }) 
               buf.stdout.splice(0, buf.stdout.length - MAX_LINES_CAPTURE);
             }
           });
-          const ue = await listen<string>(`claude-error:invocation:${invocationKey}`, (ev) => {
+          const ue = await listen<string>(claudeInvocationStreamEvent("error", invocationKey), (ev) => {
             const buf = buffersRef.current[invocationKey];
             if (!buf) return;
             const line = String(ev.payload ?? "");

@@ -4,6 +4,10 @@ import type { ClaudeDiskSessionItem, ClaudeHostProcess, ClaudeSession } from "..
 import type { ClaudeSessionConnectionKind } from "../constants/claudeConnection";
 import { sessionUsesStreamingConnection } from "../constants/claudeConnection";
 import { MAX_REPO_DISK_INDEX_SESSIONS } from "../constants/claudeMessageListWindow";
+import {
+  claudeInvocationStreamEvent,
+  claudeSessionStreamEvent,
+} from "../constants/claudeStreamEvents";
 import { getClaudeConfigModel } from "../services/claude";
 import { setAppSetting } from "../services/appSettingsStore";
 import { isTerminalWorkerWiseTab } from "../services/terminalDispatch";
@@ -139,26 +143,26 @@ export async function attachClaudeInvocationStream(
   const attach = (event: string, handler: (payload: unknown) => void) =>
     listen(event, (e) => handler(e.payload));
   const pending = await Promise.all([
-    attach(`claude-output:invocation:${inv}`, (payload) => {
+    attach(claudeInvocationStreamEvent("output", inv), (payload) => {
       rt.handleOutputForSendTab(stableTabId, payload);
     }),
-    attach(`claude-error:invocation:${inv}`, (payload) => {
+    attach(claudeInvocationStreamEvent("error", inv), (payload) => {
       rt.handleErrorForSendTab(stableTabId, payload);
     }),
-    attach(`claude-complete:invocation:${inv}`, (payload) => {
+    attach(claudeInvocationStreamEvent("complete", inv), (payload) => {
       const nonce = resolveTurnNonce?.(stableTabId, turnNonce) ?? turnNonce;
       const applied = rt.handleCompleteForSendTab(stableTabId, payload, nonce);
       if (applied && !shouldKeepListeningAfterTurnComplete?.(stableTabId)) {
         cleanup();
       }
     }),
-    attach(`claude-output:${stableTabId}`, (payload) => {
+    attach(claudeSessionStreamEvent("output", stableTabId), (payload) => {
       rt.handleOutputForSendTab(stableTabId, payload);
     }),
-    attach(`claude-error:${stableTabId}`, (payload) => {
+    attach(claudeSessionStreamEvent("error", stableTabId), (payload) => {
       rt.handleErrorForSendTab(stableTabId, payload);
     }),
-    attach(`claude-complete:${stableTabId}`, (payload) => {
+    attach(claudeSessionStreamEvent("complete", stableTabId), (payload) => {
       const nonce = resolveTurnNonce?.(stableTabId, turnNonce) ?? turnNonce;
       const applied = rt.handleCompleteForSendTab(stableTabId, payload, nonce);
       if (applied && !shouldKeepListeningAfterTurnComplete?.(stableTabId)) {
@@ -202,13 +206,13 @@ export async function attachClaudeSessionStreamForTurn(
     onCleaned?.();
   };
   const [uo0, ue0, uc0] = await Promise.all([
-    listen(`claude-output:${sid}`, (e) => {
+    listen(claudeSessionStreamEvent("output", sid), (e) => {
       rt.handleOutputForSendTab(stableTabId, e.payload);
     }),
-    listen(`claude-error:${sid}`, (e) => {
+    listen(claudeSessionStreamEvent("error", sid), (e) => {
       rt.handleErrorForSendTab(stableTabId, e.payload);
     }),
-    listen(`claude-complete:${sid}`, (e) => {
+    listen(claudeSessionStreamEvent("complete", sid), (e) => {
       const nonce = resolveTurnNonce?.(stableTabId, turnNonce) ?? turnNonce;
       const applied = rt.handleCompleteForSendTab(stableTabId, e.payload, nonce);
       if (applied && !shouldKeepListeningAfterTurnComplete?.(stableTabId)) {
@@ -232,11 +236,6 @@ export function generateId() {
   return `session_${Date.now()}_${Math.random().toString(36).slice(2, 8)}`;
 }
 
-export function trellisContextIdForTab(tabSessionId: string): string {
-  return `wise_${tabSessionId}`;
-}
-
-export const TRELLIS_CONTEXT_BINDING_STORAGE_KEY = "wise.claudeTrellisContextBindings.v1";
 export const WORKFLOW_BINDING_STORAGE_KEY = "wise.workflow.sessionRunBindings.v1";
 export const CONTROL_REQUEST_EXPIRE_MS = 60 * 60 * 1000;
 export const CLAUDE_REGISTRY_BOOTSTRAP_WARMUP_MS = 60_000;
@@ -283,11 +282,6 @@ export function sessionHasHookSystemActivity(
 export function persistWorkflowBindings(map: Map<string, string>): void {
   const payload = Object.fromEntries(Array.from(map.entries()));
   void setAppSetting(WORKFLOW_BINDING_STORAGE_KEY, JSON.stringify(payload));
-}
-
-export function persistTrellisContextBindings(map: Map<string, string>): void {
-  const payload = Object.fromEntries(Array.from(map.entries()));
-  void setAppSetting(TRELLIS_CONTEXT_BINDING_STORAGE_KEY, JSON.stringify(payload));
 }
 
 export function markClaudeRegistryBootstrapWarmup(

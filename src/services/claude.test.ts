@@ -11,11 +11,11 @@ describe("claude service", () => {
     invoke.mockClear();
   });
 
-  test("passes Trellis context id to interactive Claude starts", async () => {
+  test("forwards interactive Claude starts with the spawn command payload", async () => {
     const { executeClaudeCode, resumeClaudeCode } = await import("./claude");
 
-    await executeClaudeCode("/repo", "hello", "sonnet", "inv-1", "oneshot", "scope", 2, false, " ctx-1 ");
-    await resumeClaudeCode("/repo", "sid-1", "continue", "sonnet", "inv-2", "oneshot", "scope", 2, "ctx-1");
+    await executeClaudeCode("/repo", "hello", "sonnet", "inv-1", "oneshot", "scope", 2, false);
+    await resumeClaudeCode("/repo", "sid-1", "continue", "sonnet", "inv-2", "oneshot", "scope", 2);
 
     expect(invoke).toHaveBeenCalledWith("execute_claude_code", {
       projectPath: "/repo",
@@ -26,8 +26,8 @@ describe("claude service", () => {
       concurrencyScopeKey: "scope",
       concurrencyLimit: 2,
       bare: false,
-      trellisContextId: "ctx-1",
       cliExtras: null,
+      anthropicProxyBypass: false,
     });
     expect(invoke).toHaveBeenCalledWith("resume_claude_code", {
       projectPath: "/repo",
@@ -38,8 +38,8 @@ describe("claude service", () => {
       connectionMode: "oneshot",
       concurrencyScopeKey: "scope",
       concurrencyLimit: 2,
-      trellisContextId: "ctx-1",
       cliExtras: null,
+      anthropicProxyBypass: false,
     });
   });
 
@@ -57,8 +57,8 @@ describe("claude service", () => {
       concurrencyScopeKey: undefined,
       concurrencyLimit: undefined,
       bare: true,
-      trellisContextId: null,
       cliExtras: null,
+      anthropicProxyBypass: false,
     });
   });
 });

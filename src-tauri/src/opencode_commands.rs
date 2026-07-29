@@ -2,6 +2,9 @@
 
 use crate::child_slot_wait::wait_child_slot_exit_status;
 use crate::claude_commands::{ClaudeProcessState, ClaudeSessionRegistry};
+use crate::claude_events::{
+    emit_adapted_stream_payload, CLAUDE_STREAM_EVENT_COMPLETE, CLAUDE_STREAM_EVENT_OUTPUT,
+};
 use crate::opencode_binary::{
     apply_opencode_child_env, find_opencode_binary, opencode_merged_path_env,
 };
@@ -17,7 +20,7 @@ use std::collections::HashMap;
 use std::path::Path;
 use std::process::Stdio;
 use std::sync::Arc;
-use tauri::{AppHandle, Emitter, Manager};
+use tauri::{AppHandle, Manager};
 use tokio::io::{AsyncBufReadExt, BufReader};
 use tokio::process::{Child, Command};
 use tokio::sync::Mutex as TokioMutex;
@@ -137,16 +140,7 @@ fn opencode_init_stream_line(session_id: &str) -> String {
 }
 
 fn emit_opencode_stdout_line(app: &AppHandle, sid: &str, line: &str, invocation_key: Option<&str>) {
-    if !sid.is_empty() {
-        let _ = app.emit(&format!("claude-output:{}", sid), line);
-    }
-    // 带 invocation_key（前端定向监听已建立）时抑制全局通道，避免多屏并行被全局 handleOutput 的单值兜底路由串屏。
-    if invocation_key.is_none() {
-        let _ = app.emit("claude-output", line);
-    }
-    if let Some(inv) = invocation_key {
-        let _ = app.emit(&format!("claude-output:invocation:{}", inv), line);
-    }
+    emit_adapted_stream_payload(app, CLAUDE_STREAM_EVENT_OUTPUT, sid, &line, invocation_key);
 }
 
 fn emit_opencode_complete(app: &AppHandle, sid: &str, success: bool, invocation_key: Option<&str>) {
@@ -154,16 +148,13 @@ fn emit_opencode_complete(app: &AppHandle, sid: &str, success: bool, invocation_
         session_id: sid.to_string(),
         success,
     };
-    if !sid.is_empty() {
-        let _ = app.emit(&format!("claude-complete:{}", sid), &payload);
-    }
-    // 同 emit_opencode_stdout_line：带 invocation_key 时抑制全局通道。
-    if invocation_key.is_none() {
-        let _ = app.emit("claude-complete", &payload);
-    }
-    if let Some(inv) = invocation_key {
-        let _ = app.emit(&format!("claude-complete:invocation:{}", inv), &payload);
-    }
+    emit_adapted_stream_payload(
+        app,
+        CLAUDE_STREAM_EVENT_COMPLETE,
+        sid,
+        &payload,
+        invocation_key,
+    );
 }
 
 fn normalize_opencode_resume_session_id(raw: Option<&str>) -> Option<String> {

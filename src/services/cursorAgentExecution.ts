@@ -9,11 +9,9 @@ export async function executeCursorCode(
   invocationKey?: string,
   tabSessionId?: string,
   cursorAgentId?: string,
-  trellisContextId?: string,
   mcpServers?: Record<string, CursorMcpServerConfig>,
   cursorAttachments?: CursorSdkAttachment[],
 ): Promise<void> {
-  const normalizedTrellisContextId = trellisContextId?.trim() || null;
   const normalizedCursorAgentId = cursorAgentId?.trim() || null;
   const normalizedMcpServers =
     mcpServers && Object.keys(mcpServers).length > 0 ? mcpServers : null;
@@ -28,6 +26,5 @@ export async function executeCursorCode(
     invocationKey,
     tabSessionId,
     cursorAgentId: normalizedCursorAgentId,
-    trellisContextId: normalizedTrellisContextId,
   });
 }

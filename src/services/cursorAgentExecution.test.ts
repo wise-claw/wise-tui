@@ -19,7 +19,6 @@ describe("cursorAgentExecution service", () => {
       "inv-1",
       "tab-1",
       "agent-1",
-      "ctx-1",
       { demo: { type: "stdio", command: "echo", args: [] } },
       [{ path: "/tmp/a.png", mimeType: "image/png" }],
     );
@@ -33,7 +32,6 @@ describe("cursorAgentExecution service", () => {
       invocationKey: "inv-1",
       tabSessionId: "tab-1",
       cursorAgentId: "agent-1",
-      trellisContextId: "ctx-1",
     });
   });
 });

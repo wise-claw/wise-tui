@@ -2,6 +2,7 @@ import { invoke } from "@tauri-apps/api/core";
 import { listen } from "@tauri-apps/api/event";
 import { safeUnlisten } from "../utils/safeTauriUnlisten";
 import { DIRECT_BATCH_INVOCATION_STDOUT_RETENTION_LINES } from "../constants/directBatchInvocationLog";
+import { claudeInvocationStreamEvents } from "../constants/claudeStreamEvents";
 import {
   extractInitSessionIdFromInvocationStdoutLines,
   parseStreamLineSessionId,
@@ -48,11 +49,9 @@ export async function executeClaudeCode(
   concurrencyLimit?: number,
   /** 为 true 时追加 `--bare`，减少 hooks/记忆等对编排子进程的粘连 */
   bare?: boolean,
-  trellisContextId?: string,
   cliExtras?: ClaudeSpawnCliExtras | null,
   anthropicProxyBypass?: boolean,
 ): Promise<void> {
-  const normalizedTrellisContextId = trellisContextId?.trim() || null;
   return invoke("execute_claude_code", {
     projectPath: repositoryPath,
     prompt,
@@ -62,7 +61,6 @@ export async function executeClaudeCode(
     concurrencyScopeKey,
     concurrencyLimit,
     bare: bare ?? false,
-    trellisContextId: normalizedTrellisContextId,
     cliExtras: compactClaudeSpawnCliExtras(cliExtras),
     anthropicProxyBypass: anthropicProxyBypass ?? false,
   });
@@ -223,9 +221,11 @@ export async function executeClaudeCodeAndWait(params: {
   const PROGRESS_EMIT_MS = 480;
   let lastProgressEmit = 0;
 
-  const outputEvent = `claude-output:invocation:${invocationKey}`;
-  const errorEvent = `claude-error:invocation:${invocationKey}`;
-  const completeEvent = `claude-complete:invocation:${invocationKey}`;
+  const {
+    output: outputEvent,
+    error: errorEvent,
+    complete: completeEvent,
+  } = claudeInvocationStreamEvents(invocationKey);
 
   let resolveDone: ((value: ClaudeInvocationResult) => void) | null = null;
   const donePromise = new Promise<ClaudeInvocationResult>((resolve) => {
@@ -552,10 +552,8 @@ export async function spawnStreamingSession(params: {
   invocationKey?: string;
   concurrencyScopeKey?: string;
   concurrencyLimit?: number;
-  trellisContextId?: string;
   cliExtras?: ClaudeSpawnCliExtras | null;
 }): Promise<void> {
-  const normalizedTrellisContextId = params.trellisContextId?.trim() || null;
   return invoke("spawn_streaming_session", {
     projectPath: params.repositoryPath,
     initialPrompt: params.initialPrompt,
@@ -564,7 +562,6 @@ export async function spawnStreamingSession(params: {
     invocationKey: params.invocationKey,
     concurrencyScopeKey: params.concurrencyScopeKey,
     concurrencyLimit: params.concurrencyLimit,
-    trellisContextId: normalizedTrellisContextId,
     cliExtras: compactClaudeSpawnCliExtras(params.cliExtras),
   });
 }
@@ -591,11 +588,9 @@ export async function resumeClaudeCode(
   connectionMode: ClaudeConnectionMode = "oneshot",
   concurrencyScopeKey?: string,
   concurrencyLimit?: number,
-  trellisContextId?: string,
   cliExtras?: ClaudeSpawnCliExtras | null,
   anthropicProxyBypass?: boolean,
 ): Promise<void> {
-  const normalizedTrellisContextId = trellisContextId?.trim() || null;
   return invoke("resume_claude_code", {
     projectPath: repositoryPath,
     sessionId,
@@ -605,7 +600,6 @@ export async function resumeClaudeCode(
     connectionMode,
     concurrencyScopeKey,
     concurrencyLimit,
-    trellisContextId: normalizedTrellisContextId,
     cliExtras: compactClaudeSpawnCliExtras(cliExtras),
     anthropicProxyBypass: anthropicProxyBypass ?? false,
   });

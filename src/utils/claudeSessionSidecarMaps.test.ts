@@ -20,7 +20,6 @@ function emptyMaps(): ClaudeSessionSidecarMaps {
     diskTailLinesBySession: new Map(),
     executeSessionRetryCount: new Map(),
     workflowRunBySession: new Map(),
-    trellisContextIdBySession: new Map(),
     streamStallHookExtendedByTab: new Set(),
     recentExecutePromptBySession: new Map(),
   };

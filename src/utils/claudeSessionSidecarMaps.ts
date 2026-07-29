@@ -13,7 +13,6 @@ export interface ClaudeSessionSidecarMaps {
   diskTailLinesBySession: Map<string, number>;
   executeSessionRetryCount: Map<string, number>;
   workflowRunBySession: Map<string, string>;
-  trellisContextIdBySession: Map<string, string>;
   streamStallHookExtendedByTab: Set<string>;
   recentExecutePromptBySession: Map<string, { prompt: string; at: number }>;
 }
@@ -63,9 +62,6 @@ export function pruneOrphanClaudeSessionSidecarMaps(
   }
   for (const key of [...maps.workflowRunBySession.keys()]) {
     if (deleteOrphanMapKey(maps.workflowRunBySession, key, liveKeys)) changed = true;
-  }
-  for (const key of [...maps.trellisContextIdBySession.keys()]) {
-    if (deleteOrphanMapKey(maps.trellisContextIdBySession, key, liveKeys)) changed = true;
   }
   for (const key of [...maps.recentExecutePromptBySession.keys()]) {
     if (deleteOrphanMapKey(maps.recentExecutePromptBySession, key, liveKeys)) changed = true;

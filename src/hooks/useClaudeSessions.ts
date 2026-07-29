@@ -74,6 +74,12 @@ import {
   IN_MEMORY_SESSION_MESSAGES_MAX,
   PERSIST_SESSION_MESSAGES_MAX,
 } from "../constants/claudeMessageListWindow";
+import { claudeStreamEvent } from "../constants/claudeStreamEvents";
+import {
+  getActiveSessionTurnIdsSnapshot,
+  observeSessionTurnStatus,
+  pruneSessionTurns,
+} from "../stores/sessionTurnStore";
 import { runWhenIdle } from "../utils/deferIdle";
 import { readVisiblePollIntervalMs, startAdaptiveInterval } from "../utils/adaptivePoll";
 import { isCurrentPrimaryMainWorkspaceWindowSync } from "../services/mainWindow";
@@ -212,7 +218,6 @@ import {
   CODEX_STREAM_STALL_MS,
   CONTROL_REQUEST_EXPIRE_MS,
   CURSOR_STREAM_STALL_MS,
-  TRELLIS_CONTEXT_BINDING_STORAGE_KEY,
   WORKFLOW_BINDING_STORAGE_KEY,
   attachClaudeSessionStreamForTurn,
   shouldKeepClaudeInvocationStreamAfterTurnComplete,
@@ -224,7 +229,6 @@ import {
   collectDiskMergeTabIdMigrations,
   mergePersistedTabsWithLocalBackup,
   modelsForRepositoryPaths,
-  persistTrellisContextBindings,
   persistWorkflowBindings,
   pruneClaudeRegistryBootstrapWarmup,
   pruneGhostRepositorySessions,
@@ -234,7 +238,6 @@ import {
   resolveTabIdFromCompletePayload,
   sessionHasHookSystemActivity,
   sessionHasVisibleStreamProgress,
-  trellisContextIdForTab,
   type ClaudeStreamRuntimeHandlers,
 } from "./useClaudeSessions.helpers";
 import {
@@ -345,7 +348,13 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     // 再用 id→session 索引 O(1) 查 prev，整体降到 O(n)，行为与原逻辑等价。
     const prevById = new Map<string, ClaudeSession>();
     for (const prevRow of prev) prevById.set(prevRow.id, prevRow);
+    // 状态提交是所有会话状态变化的唯一漏斗，因此也是推进轮次生命周期的唯一观察点：
+    // 无需渲染、无需轮询。只在存在活跃轮次时做这次遍历。
+    const activeTurnIds = getActiveSessionTurnIdsSnapshot();
     for (const row of capped) {
+      if (activeTurnIds.has(row.id)) {
+        observeSessionTurnStatus(row.id, row.status === "running" || row.status === "connecting");
+      }
       if (row.messages.length !== 0) continue;
       const prevRow = prevById.get(row.id);
       if (prevRow && prevRow.messages.length > 0) {
@@ -359,7 +368,6 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   const commitSessions = useCallback((updater: (prev: ClaudeSession[]) => ClaudeSession[]) => {
     setSessions(updater);
   }, [setSessions]);
-  const [trellisContextBindingsHydrated, setTrellisContextBindingsHydrated] = useState(false);
   const onClaudeTurnCompleteRef = useRef(options?.onClaudeTurnComplete);
   onClaudeTurnCompleteRef.current = options?.onClaudeTurnComplete;
   const onSessionTabIdMigratedRef = useRef(options?.onSessionTabIdMigrated);
@@ -430,7 +438,6 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
   /** 与每轮 execute / send 对齐，供 claude-complete 与 invocation 路径取 notify nonce。 */
   const streamTurnSeqRef = useRef(0);
   const expectedTurnNonceByTabIdRef = useRef<Map<string, number>>(new Map());
-  const trellisContextIdBySessionRef = useRef<Map<string, string>>(new Map());
   const defaultConnectionKindRef = useRef<ClaudeSessionConnectionKind>("oneshot");
   const streamStallTimerByTabRef = useRef<Map<string, number>>(new Map());
   /** 已对「Hook 进行中」放过一次 45s 宽限的标签 */
@@ -594,10 +601,6 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       sessionIdMapRef.current,
       victim?.claudeSessionId,
     );
-    for (const id of ids) {
-      trellisContextIdBySessionRef.current.delete(id);
-    }
-    persistTrellisContextBindings(trellisContextIdBySessionRef.current);
     for (const [inv, meta] of [...claudeInvocationInflightRef.current.entries()]) {
       if (ids.has(meta.tabId)) {
         meta.detach();
@@ -626,11 +629,6 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         nonceMap.delete(from);
         nonceMap.set(to, pendingNonce);
       }
-      const trellisContextId =
-        trellisContextIdBySessionRef.current.get(from) ?? trellisContextIdForTab(from);
-      trellisContextIdBySessionRef.current.set(from, trellisContextId);
-      trellisContextIdBySessionRef.current.set(to, trellisContextId);
-      persistTrellisContextBindings(trellisContextIdBySessionRef.current);
       migrateClaudeInvocationTabId(from, to);
       const streamingEntry = streamingProcessByTabRef.current.get(from);
       if (streamingEntry) {
@@ -645,22 +643,6 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     },
     [migrateClaudeInvocationTabId],
   );
-
-  const resolveTrellisContextId = useCallback((tabSessionId: string, claudeSessionId?: string | null): string => {
-    const existing =
-      trellisContextIdBySessionRef.current.get(tabSessionId) ??
-      (claudeSessionId ? trellisContextIdBySessionRef.current.get(claudeSessionId) : undefined);
-    if (existing) {
-      return existing;
-    }
-    const created = trellisContextIdForTab(tabSessionId);
-    trellisContextIdBySessionRef.current.set(tabSessionId, created);
-    if (claudeSessionId?.trim()) {
-      trellisContextIdBySessionRef.current.set(claudeSessionId.trim(), created);
-    }
-    persistTrellisContextBindings(trellisContextIdBySessionRef.current);
-    return created;
-  }, []);
 
   /** 整页刷新 / 离开前释放 invocation 监听（关标签仍走 `closeSession`）。 */
   const detachAllClaudeInvocationStreams = useCallback(() => {
@@ -755,7 +737,6 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         claudeSessionsOptionsRef,
         detachClaudeInvocationStreamsForTab,
         keepInvocationStreamAfterTurnComplete,
-        resolveTrellisContextId,
         resolveSpawnExtrasForClaudePrompt,
         commitSessions,
         scheduleStreamStallTimer,
@@ -763,7 +744,6 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     [
       detachClaudeInvocationStreamsForTab,
       keepInvocationStreamAfterTurnComplete,
-      resolveTrellisContextId,
       resolveSpawnExtrasForClaudePrompt,
       commitSessions,
       scheduleStreamStallTimer,
@@ -786,7 +766,6 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         diskTailLinesBySession: diskTailLinesBySessionRef.current,
         executeSessionRetryCount: executeSessionRetryCountRef.current,
         workflowRunBySession: workflowRunBySessionRef.current,
-        trellisContextIdBySession: trellisContextIdBySessionRef.current,
         streamStallHookExtendedByTab: streamStallHookExtendedByTabRef.current,
         recentExecutePromptBySession: recentExecutePromptBySessionRef.current,
       },
@@ -805,7 +784,11 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
         sidecarChanged = true;
       }
     }
-    notificationHub.pruneOrphanSessions(new Set(liveSessions.map((session) => session.id)));
+    const liveTabIds = new Set(liveSessions.map((session) => session.id));
+    if (pruneSessionTurns(liveTabIds)) {
+      sidecarChanged = true;
+    }
+    notificationHub.pruneOrphanSessions(liveTabIds);
     pruneInvocationSnapshotMemory(collectInvocationSnapshotMemoryKeys(liveSessions));
     return sidecarChanged;
   }, [clearStreamStallTimer]);
@@ -1805,46 +1788,10 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     };
   }, []);
 
-  useEffect(() => {
-    let cancelled = false;
-    void (async () => {
-      const raw = await getAppSetting(TRELLIS_CONTEXT_BINDING_STORAGE_KEY);
-      if (cancelled) return;
-      if (!raw) {
-        trellisContextIdBySessionRef.current = new Map();
-        return;
-      }
-      try {
-        const parsed = JSON.parse(raw) as Record<string, string>;
-        trellisContextIdBySessionRef.current = new Map(
-          Object.entries(parsed).filter((entry): entry is [string, string] => {
-            const [sessionId, contextId] = entry;
-            return (
-              typeof sessionId === "string" &&
-              sessionId.trim().length > 0 &&
-              typeof contextId === "string" &&
-              contextId.trim().length > 0
-            );
-          }),
-        );
-      } catch {
-        trellisContextIdBySessionRef.current = new Map();
-      }
-    })().finally(() => {
-      if (!cancelled) {
-        setTrellisContextBindingsHydrated(true);
-      }
-    });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
   /** localStorage 备份 key：在 beforeunload 中同步写入，供下次启动时合并恢复。 */
   const TABS_BACKUP_KEY = "wise.tabs.backup.v1";
 
   useEffect(() => {
-    if (!trellisContextBindingsHydrated) return;
     let cancelled = false;
     void (async () => {
       try {
@@ -1919,37 +1866,6 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
                 withModel.messages.length > PERSIST_SESSION_MESSAGES_MAX,
             };
           });
-          let trellisContextChanged = false;
-          const allowedTrellisSessionIds = new Set<string>();
-          for (const s of normalizedWithModels) {
-            allowedTrellisSessionIds.add(s.id);
-            if (s.claudeSessionId?.trim()) {
-              allowedTrellisSessionIds.add(s.claudeSessionId.trim());
-            }
-          }
-          for (const key of [...trellisContextIdBySessionRef.current.keys()]) {
-            if (!allowedTrellisSessionIds.has(key)) {
-              trellisContextIdBySessionRef.current.delete(key);
-              trellisContextChanged = true;
-            }
-          }
-          for (const s of normalizedWithModels) {
-            const contextId =
-              trellisContextIdBySessionRef.current.get(s.id) ??
-              (s.claudeSessionId ? trellisContextIdBySessionRef.current.get(s.claudeSessionId) : undefined) ??
-              trellisContextIdForTab(s.id);
-            if (trellisContextIdBySessionRef.current.get(s.id) !== contextId) {
-              trellisContextIdBySessionRef.current.set(s.id, contextId);
-              trellisContextChanged = true;
-            }
-            if (s.claudeSessionId?.trim() && trellisContextIdBySessionRef.current.get(s.claudeSessionId.trim()) !== contextId) {
-              trellisContextIdBySessionRef.current.set(s.claudeSessionId.trim(), contextId);
-              trellisContextChanged = true;
-            }
-          }
-          if (trellisContextChanged) {
-            persistTrellisContextBindings(trellisContextIdBySessionRef.current);
-          }
           const active =
             data.activeSessionId && normalizedWithModels.some((x) => x.id === data.activeSessionId)
               ? data.activeSessionId
@@ -1966,7 +1882,7 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     return () => {
       cancelled = true;
     };
-  }, [trellisContextBindingsHydrated]);
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -2249,9 +2165,9 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
     });
 
     void (async () => {
-      await attach("claude-output", runtime.handleOutput);
-      await attach("claude-complete", runtime.handleComplete);
-      await attach("claude-error", runtime.handleError);
+      await attach(claudeStreamEvent("output"), runtime.handleOutput);
+      await attach(claudeStreamEvent("complete"), runtime.handleComplete);
+      await attach(claudeStreamEvent("error"), runtime.handleError);
       if (cancelled) return;
       // 须在全局 listen 就绪后再暴露 runtime，否则首包 invoke 可能无人消费 `claude-output` / complete。
       streamRuntimeRef.current = runtime;
@@ -2774,9 +2690,6 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           setActiveSessionId(id);
         }
       });
-      trellisContextIdBySessionRef.current.set(id, trellisContextIdForTab(id));
-      persistTrellisContextBindings(trellisContextIdBySessionRef.current);
-
       // 多屏保留窗格模型时传入 initialModel，跳过异步读取全局档案/仓库默认模型，避免覆盖。
       if (!opts?.initialModel?.trim()) {
         void (async () => {
@@ -4091,7 +4004,6 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       const bindingsChanged = pruneLiveSessionSidecars(sessions);
       if (bindingsChanged) {
         persistWorkflowBindings(workflowRunBySessionRef.current);
-        persistTrellisContextBindings(trellisContextIdBySessionRef.current);
       }
       void saveSessionTabsState({
         version: 1,
@@ -4154,7 +4066,6 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
       const bindingsChanged = pruneLiveSessionSidecars(latestSessions);
       if (bindingsChanged) {
         persistWorkflowBindings(workflowRunBySessionRef.current);
-        persistTrellisContextBindings(trellisContextIdBySessionRef.current);
       }
       void saveSessionTabsState({
         version: 1,

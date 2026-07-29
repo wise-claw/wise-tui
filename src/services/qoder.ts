@@ -19,11 +19,9 @@ export async function executeQoderCode(
   model?: string,
   invocationKey?: string,
   tabSessionId?: string,
-  trellisContextId?: string,
   qoderResumeSessionId?: string,
   forceNewSession?: boolean,
 ): Promise<void> {
-  const normalizedTrellisContextId = trellisContextId?.trim() || null;
   const normalizedResumeId = qoderResumeSessionId?.trim() || null;
   return invoke("execute_qoder_code", {
     projectPath: repositoryPath,
@@ -31,7 +29,6 @@ export async function executeQoderCode(
     model,
     invocationKey,
     tabSessionId,
-    trellisContextId: normalizedTrellisContextId,
     qoderResumeSessionId: normalizedResumeId,
     forceNewSession: forceNewSession === true,
   });
