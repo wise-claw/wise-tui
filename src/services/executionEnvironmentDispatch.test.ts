@@ -29,6 +29,7 @@ describe("dispatchExecutionEnvironmentFromMainSession", () => {
       projectSkills: [],
     }));
     const createdNames: string[] = [];
+    const createdOpts: Array<{ connectionKind?: "oneshot" | "streaming" } | undefined> = [];
     const executed: string[] = [];
     const activated: string[] = [];
     const sessions = [stubSession("main")];
@@ -37,8 +38,9 @@ describe("dispatchExecutionEnvironmentFromMainSession", () => {
       {
         getSessions: () => sessions,
         loadInstructionResolveContext,
-        createSession: async (_path, name) => {
+        createSession: async (_path, name, opts) => {
           createdNames.push(name);
+          createdOpts.push(opts);
           const id = `worker-${createdNames.length}`;
           sessions.push(stubSession(id));
           return id;
@@ -61,8 +63,37 @@ describe("dispatchExecutionEnvironmentFromMainSession", () => {
     expect(ok).toBe(true);
     expect(loadInstructionResolveContext).not.toHaveBeenCalled();
     expect(createdNames).toHaveLength(2);
+    expect(createdOpts.every((opts) => opts?.connectionKind === "streaming")).toBe(true);
     expect(executed).toHaveLength(2);
     expect(activated).toEqual(["worker-1"]);
+  });
+
+  test("非 Claude 引擎仍用 oneshot worker", async () => {
+    const createdOpts: Array<{ connectionKind?: "oneshot" | "streaming" } | undefined> = [];
+    const sessions = [stubSession("main")];
+
+    const ok = await dispatchExecutionEnvironmentFromMainSession(
+      {
+        getSessions: () => sessions,
+        codexAvailable: true,
+        createSession: async (_path, _name, opts) => {
+          createdOpts.push(opts);
+          const id = `worker-${createdOpts.length}`;
+          sessions.push(stubSession(id));
+          return id;
+        },
+        executeSession: () => true,
+        appendSystemMessage: () => {},
+      },
+      {
+        mainSessionId: "main",
+        prompt: "@Codex CLI 修登录",
+      },
+    );
+
+    expect(ok).toBe(true);
+    expect(createdOpts).toHaveLength(1);
+    expect(createdOpts[0]?.connectionKind).toBe("oneshot");
   });
 
   test("有默认指令时才加载 resolve context", async () => {

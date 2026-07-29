@@ -9,6 +9,7 @@ import {
   persistExecutionEnvironmentDispatchItem,
 } from "./executionEnvironmentDispatchPersistence";
 import {
+  isClaudeCompatibleExecutionEngine,
   SESSION_EXECUTION_ENGINE_LABELS,
 } from "../constants/sessionExecutionEngine";
 import {
@@ -30,6 +31,7 @@ export type ExecutionEnvironmentDispatchDeps = {
   geminiAvailable?: boolean;
   opencodeAvailable?: boolean;
   qoderAvailable?: boolean;
+  cfuseAvailable?: boolean;
   createSession: (
     repositoryPath: string,
     repositoryName: string,
@@ -57,6 +59,7 @@ function resolveEngineAvailability(deps: ExecutionEnvironmentDispatchDeps) {
     geminiAvailable: deps.geminiAvailable ?? false,
     opencodeAvailable: deps.opencodeAvailable ?? false,
     qoderAvailable: deps.qoderAvailable ?? false,
+    cfuseAvailable: deps.cfuseAvailable ?? false,
   };
 }
 
@@ -76,7 +79,8 @@ function newBatchId(): string {
 }
 
 /**
- * 从主会话向执行环境派发一次性任务：按解析结果创建 N 个 worker 标签并各自 invoke。
+ * 从主会话向执行环境派发任务：按解析结果创建 N 个 worker 标签并各自 invoke。
+ * Claude 兼容引擎（claude / cfuse）走 streaming spawn；其余引擎仍用 oneshot。
  */
 export async function dispatchExecutionEnvironmentFromMainSession(
   deps: ExecutionEnvironmentDispatchDeps,
@@ -186,11 +190,15 @@ export async function dispatchExecutionEnvironmentFromMainSession(
 
   // 并行建 worker 会话，避免「清空输入框 → 首路执行」之间串行等待 N 次 createSession。
   // 先 skipActivate，全部启动后再切到首个 worker，避免并行创建时抢 activeSessionId。
+  // Claude Code：streaming（spawn_streaming_session）；Codex/Cursor 等仍 oneshot。
+  const workerConnectionKind = isClaudeCompatibleExecutionEngine(plan.executionEngine)
+    ? "streaming"
+    : "oneshot";
   const workerTabIds = await Promise.all(
     workerSpecs.map((spec) =>
       deps.createSession(mainSession.repositoryPath, spec.workerName, {
         skipActivate: true,
-        connectionKind: "oneshot",
+        connectionKind: workerConnectionKind,
       }),
     ),
   );
