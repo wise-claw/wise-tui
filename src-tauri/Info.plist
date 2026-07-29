@@ -26,11 +26,5 @@
 	<string>Wise 需要使用麦克风录制语音，并在设备端转为文字填入会话输入框。</string>
 	<key>NSSpeechRecognitionUsageDescription</key>
 	<string>Wise 需要在设备端将录音转为文字并填入会话输入框，音频不会用于其他用途。</string>
-	<key>NSDocumentsFolderUsageDescription</key>
-	<string>Wise 需要访问「文稿」中的本地仓库与工作区文件，以便打开项目、读取 Git 状态并运行会话。</string>
-	<key>NSDownloadsFolderUsageDescription</key>
-	<string>Wise 需要访问「下载」中的本地仓库与工作区文件，以便打开项目、读取 Git 状态并运行会话。</string>
-	<key>NSDesktopFolderUsageDescription</key>
-	<string>Wise 需要访问「桌面」中的本地仓库与工作区文件，以便打开项目、读取 Git 状态并运行会话。</string>
 </dict>
 </plist>
