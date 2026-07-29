@@ -56,7 +56,8 @@ export const APP_SHORTCUT_GROUPS: AppShortcutGroup[] = [
       },
       {
         keys: "⌘W · Ctrl+W",
-        description: "焦点在终端面板内时：关闭当前终端标签；仅剩一个时同时关闭面板。",
+        description:
+          "焦点在终端面板内时：关闭当前终端标签；仅剩一个时同时关闭面板。需求面板打开且未在编辑弹窗时：关闭需求面板。",
       },
       {
         keys: "⌘F · Ctrl+F",

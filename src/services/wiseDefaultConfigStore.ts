@@ -313,7 +313,7 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   showComposerFooterModelPicker: true,
   composerFooterTriggerDisplayMode: "full",
   showWorkspaceQuickActionsPanel: true,
-  showWorkspaceTodosPanel: true,
+  showWorkspaceTodosPanel: false,
   fileTreeOpenInNewPane: false,
   gitPanelPlacement: "left",
   filesPanelPlacement: "left",

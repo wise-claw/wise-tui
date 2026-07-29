@@ -71,17 +71,6 @@ describe("buildProjectMoreMenuItems", () => {
     expect(labels.some((label) => label.startsWith("["))).toBe(false);
     expect(dividerCount(items)).toBeGreaterThan(0);
     expect(labels).toContain("删除工作区");
-    expect(labels).toContain("添加待办事项");
-  });
-
-  test("omits add-workspace-todo when disabled", () => {
-    const labels = menuLabels(
-      buildProjectMoreMenuItems({
-        isPinned: false,
-        onAddWorkspaceTodo: false,
-        onOpenScheduledTasksForProject: true,
-      }),
-    );
     expect(labels).not.toContain("添加待办事项");
   });
 });
@@ -111,7 +100,7 @@ describe("buildProjectRepositoryMoreMenuItems", () => {
     expect(labels.some((label) => label.startsWith("["))).toBe(false);
     expect(dividerCount(items)).toBeGreaterThan(0);
     expect(labels).toContain("移出工作区");
-    expect(labels).toContain("添加待办事项");
+    expect(labels).not.toContain("添加待办事项");
   });
 
   test("repository editor label reflects scoped open app", () => {
@@ -177,16 +166,6 @@ describe("buildProjectRepositoryMoreMenuItems", () => {
     );
     expect(onLabels).toContain("✓ 仓库行显示运行按钮");
   });
-
-  test("omits add-workspace-todo when disabled", () => {
-    const labels = menuLabels(
-      buildProjectRepositoryMoreMenuItems({
-        onAddWorkspaceTodo: false,
-        onOpenScheduledTasks: true,
-      }),
-    );
-    expect(labels).not.toContain("添加待办事项");
-  });
 });
 
 describe("buildFloatingRepositoryMoreMenuItems", () => {
@@ -201,17 +180,6 @@ describe("buildFloatingRepositoryMoreMenuItems", () => {
     expect(labels).toContain("升格为工作区…");
     expect(labels).toContain("加入工作区");
     expect(labels).toContain("移除仓库");
-    expect(labels).toContain("添加待办事项");
-  });
-
-  test("omits add-workspace-todo when disabled", () => {
-    const labels = menuLabels(
-      buildFloatingRepositoryMoreMenuItems({
-        joinableProjects: [],
-        onAddWorkspaceTodo: false,
-        onOpenScheduledTasks: true,
-      }),
-    );
     expect(labels).not.toContain("添加待办事项");
   });
 });

@@ -9,12 +9,14 @@ import {
 } from "@ant-design/icons";
 import { App, Button, Spin, Typography } from "antd";
 import { HoverHint } from "../shared/HoverHint";
-import { useCallback, useState, type MouseEvent } from "react";
+import { useCallback, useMemo, useState, type MouseEvent } from "react";
 import { openExternalUrl } from "../../services/openExternal";
 import { openInFinder } from "../../services/repository";
 import { useWorkspaceQuickActions } from "../../hooks/useWorkspaceQuickActions";
 import {
+  collectWorkspaceQuickActionCategories,
   createWorkspaceQuickActionId,
+  normalizeWorkspaceQuickActionCategory,
   resolveWorkspaceQuickActionPinnedToTopbar,
   type WorkspaceQuickActionDisplayItem,
   type WorkspaceQuickActionItem,
@@ -39,6 +41,10 @@ export function WorkspaceQuickActionsPanel({
 }: WorkspaceQuickActionsPanelProps) {
   const { message, modal } = App.useApp();
   const quickActions = useWorkspaceQuickActions({ projectId, repositoryId });
+  const categoryOptions = useMemo(
+    () => collectWorkspaceQuickActionCategories(quickActions.displayItems),
+    [quickActions.displayItems],
+  );
   const [managing, setManaging] = useState(false);
   const [editState, setEditState] = useState<EditState | null>(null);
 
@@ -54,10 +60,16 @@ export function WorkspaceQuickActionsPanel({
     async (
       scope: WorkspaceQuickActionScope,
       scopeId: string,
-      input: { kind: WorkspaceQuickActionItem["kind"]; label: string; target: string },
+      input: {
+        kind: WorkspaceQuickActionItem["kind"];
+        label: string;
+        target: string;
+        category: string;
+      },
       existingId?: string,
     ) => {
       const now = Date.now();
+      const category = normalizeWorkspaceQuickActionCategory(input.category);
       let source = quickActions.readScopeItems(scope, scopeId);
       if (existingId && !source.some((row) => row.id === existingId)) {
         source = quickActions.displayItems
@@ -73,13 +85,18 @@ export function WorkspaceQuickActionsPanel({
           label: input.label,
           target: input.target,
           updatedAt: now,
+          ...(category ? { category } : { category: undefined }),
         };
+        if (!category) {
+          delete next[index].category;
+        }
       } else {
         next.unshift({
           id: createWorkspaceQuickActionId(),
           kind: input.kind,
           label: input.label,
           target: input.target,
+          ...(category ? { category } : {}),
           createdAt: now,
           updatedAt: now,
         });
@@ -203,6 +220,7 @@ export function WorkspaceQuickActionsPanel({
           defaultScope={defaultScope}
           activeProjectId={projectId}
           activeRepositoryId={repositoryId}
+          categoryOptions={categoryOptions}
           onClose={() => setEditState(null)}
           onSubmit={async (input) => {
             const existingId = editState?.mode === "edit" ? editState.item.id : undefined;

@@ -24,7 +24,6 @@ export type ProjectRowEqualProps = {
   requirementUnsplitByRepoId?: Record<number, number>;
   executableTasksByProjectId?: Record<string, number>;
   executableTasksByRepoId?: Record<number, number>;
-  workspaceTodosEnabled?: boolean;
   mainSessionRunning?: boolean;
   runningMainSessionByRepositoryId?: Record<number, boolean>;
   runCommandRowPinnedMap?: RepositoryRunCommandRowPinnedMap;
@@ -103,7 +102,6 @@ export function projectRowPropsEqual(
   if (prev.isPinned !== next.isPinned) return false;
   if (prev.expanded !== next.expanded) return false;
   if (prev.projectDropTargetId !== next.projectDropTargetId) return false;
-  if (prev.workspaceTodosEnabled !== next.workspaceTodosEnabled) return false;
   if (prev.mainSessionRunning !== next.mainSessionRunning) return false;
   if (
     (prev.projectTrellisReadyById?.[prev.project.id] ?? false) !==

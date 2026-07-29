@@ -96,7 +96,6 @@ function repositoryTaskMenuItems(input: {
   onOpenRequirements?: boolean;
   onOpenScheduledTasks?: boolean;
   onOpenExecutableTasks?: boolean;
-  onAddWorkspaceTodo?: boolean;
 }): MenuItem[] {
   const {
     trellisEnabled = false,
@@ -104,11 +103,9 @@ function repositoryTaskMenuItems(input: {
     onOpenRequirements = false,
     onOpenScheduledTasks = false,
     onOpenExecutableTasks = false,
-    onAddWorkspaceTodo = true,
   } = input;
 
   return compactItems([
-    onAddWorkspaceTodo ? { key: "add-workspace-todo", label: "添加待办事项" } : null,
     trellisEnabled && onOpenRequirements ? { key: "requirements", label: requirementsLabel } : null,
     onOpenScheduledTasks ? { key: "scheduled-tasks", label: "定时任务" } : null,
     trellisEnabled && onOpenExecutableTasks ? { key: "executable-tasks", label: "可执行任务" } : null,
@@ -186,7 +183,6 @@ export interface BuildProjectMoreMenuItemsInput {
   isPinned: boolean;
   trellisEnabled?: boolean;
   trellisReady?: boolean;
-  onAddWorkspaceTodo?: boolean;
   onAddRepositoryToProject?: boolean;
   onOpenProjectDirectory?: boolean;
   onConfigureSddMode?: boolean;
@@ -215,7 +211,6 @@ export function buildProjectMoreMenuItems(input: BuildProjectMoreMenuItemsInput)
     onReconcileProject,
     onOpenProjectInEditor,
     onOpenProjectInTerminal,
-    onAddWorkspaceTodo = true,
     projectOpenAppId,
   } = input;
 
@@ -263,7 +258,6 @@ export function buildProjectMoreMenuItems(input: BuildProjectMoreMenuItemsInput)
           onOpenRequirements: trellisEnabled,
           onOpenScheduledTasks: Boolean(onOpenScheduledTasksForProject),
           onOpenExecutableTasks: Boolean(onOpenExecutableTasksForProject),
-          onAddWorkspaceTodo,
         }),
       ),
     ],
@@ -272,7 +266,6 @@ export function buildProjectMoreMenuItems(input: BuildProjectMoreMenuItemsInput)
 }
 
 export interface BuildProjectRepositoryMoreMenuItemsInput {
-  onAddWorkspaceTodo?: boolean;
   trellisEnabled?: boolean;
   trellisReady?: boolean;
   trellisRootActionEnabled?: boolean;
@@ -312,7 +305,6 @@ export function buildProjectRepositoryMoreMenuItems(
     onOpenRequirements,
     onOpenExecutableTasks,
     onOpenRepositoryInTerminal,
-    onAddWorkspaceTodo = true,
     repositoryOpenAppId,
   } = input;
 
@@ -354,7 +346,6 @@ export function buildProjectRepositoryMoreMenuItems(
           onOpenRequirements,
           onOpenScheduledTasks: Boolean(onOpenScheduledTasks),
           onOpenExecutableTasks: Boolean(onOpenExecutableTasks),
-          onAddWorkspaceTodo,
         }),
       ),
     ],
@@ -363,7 +354,6 @@ export function buildProjectRepositoryMoreMenuItems(
 }
 
 export interface BuildFloatingRepositoryMoreMenuItemsInput {
-  onAddWorkspaceTodo?: boolean;
   joinableProjects: Workspace[];
   trellisEnabled?: boolean;
   trellisReady?: boolean;
@@ -406,7 +396,6 @@ export function buildFloatingRepositoryMoreMenuItems(
     onMainSessionRun,
     runCommandRunning = false,
     runRowPinned = false,
-    onAddWorkspaceTodo = true,
     repositoryOpenAppId,
   } = input;
 
@@ -454,7 +443,6 @@ export function buildFloatingRepositoryMoreMenuItems(
           onOpenRequirements,
           onOpenScheduledTasks: Boolean(onOpenScheduledTasks),
           onOpenExecutableTasks: Boolean(onOpenExecutableTasks),
-          onAddWorkspaceTodo,
         }),
       ),
       sidebarMenuSection([

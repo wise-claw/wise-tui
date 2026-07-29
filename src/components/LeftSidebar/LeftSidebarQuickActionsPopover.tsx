@@ -13,7 +13,10 @@ import { openExternalUrl } from "../../services/openExternal";
 import { openInFinder } from "../../services/repository";
 import { useWorkspaceQuickActions } from "../../hooks/useWorkspaceQuickActions";
 import {
+  collectWorkspaceQuickActionCategories,
   createWorkspaceQuickActionId,
+  groupWorkspaceQuickActionsByCategory,
+  normalizeWorkspaceQuickActionCategory,
   resolveWorkspaceQuickActionPinnedToTopbar,
   type WorkspaceQuickActionDisplayItem,
   type WorkspaceQuickActionItem,
@@ -63,6 +66,21 @@ export function LeftSidebarQuickActionsPopover({
     repositoryId,
     additionalRepositoryIds: allRepositoryIds,
   });
+  const groupedItems = useMemo(
+    () => groupWorkspaceQuickActionsByCategory(quickActions.displayItems),
+    [quickActions.displayItems],
+  );
+  // 仅有「未分类」一组时不展示分类标题，避免空分类占位显得突兀。
+  const showCategoryHeaders = useMemo(
+    () =>
+      groupedItems.length > 1 ||
+      groupedItems.some((group) => group.category.length > 0),
+    [groupedItems],
+  );
+  const categoryOptions = useMemo(
+    () => collectWorkspaceQuickActionCategories(quickActions.displayItems),
+    [quickActions.displayItems],
+  );
   const [open, setOpen] = useState(false);
   const [managing, setManaging] = useState(false);
   const [editState, setEditState] = useState<EditState | null>(null);
@@ -81,10 +99,16 @@ export function LeftSidebarQuickActionsPopover({
     async (
       scope: WorkspaceQuickActionScope,
       scopeId: string,
-      input: { kind: WorkspaceQuickActionItem["kind"]; label: string; target: string },
+      input: {
+        kind: WorkspaceQuickActionItem["kind"];
+        label: string;
+        target: string;
+        category: string;
+      },
       existingId?: string,
     ) => {
       const now = Date.now();
+      const category = normalizeWorkspaceQuickActionCategory(input.category);
       let source = quickActions.readScopeItems(scope, scopeId);
       if (existingId && !source.some((row) => row.id === existingId)) {
         // 兜底：旧实现下跨 scope 编辑，先用 displayItems 拿到同 scope 的其它条目
@@ -95,19 +119,25 @@ export function LeftSidebarQuickActionsPopover({
       const next = [...source];
       const index = existingId ? next.findIndex((row) => row.id === existingId) : -1;
       if (index >= 0) {
+        const current = next[index];
         next[index] = {
-          ...next[index],
+          ...current,
           kind: input.kind,
           label: input.label,
           target: input.target,
           updatedAt: now,
+          ...(category ? { category } : { category: undefined }),
         };
+        if (!category) {
+          delete next[index].category;
+        }
       } else {
         next.unshift({
           id: createWorkspaceQuickActionId(),
           kind: input.kind,
           label: input.label,
           target: input.target,
+          ...(category ? { category } : {}),
           createdAt: now,
           updatedAt: now,
         });
@@ -252,77 +282,117 @@ export function LeftSidebarQuickActionsPopover({
                 </Button>
               </div>
             ) : (
-              <ul
+              <div
                 className={
-                  managing
-                    ? "app-left-sidebar-quick-actions-popover__list app-left-sidebar-quick-actions-popover__list--managing"
-                    : "app-left-sidebar-quick-actions-popover__list"
+                  showCategoryHeaders
+                    ? "app-left-sidebar-quick-actions-popover__groups"
+                    : "app-left-sidebar-quick-actions-popover__groups app-left-sidebar-quick-actions-popover__groups--flat"
                 }
               >
-                {quickActions.displayItems.map((item) => {
-                  const itemScopeId = item.scopeId;
-                  const pinned = resolveWorkspaceQuickActionPinnedToTopbar(item);
-                  return (
-                    <li
-                      key={`${item.scope}:${item.id}`}
-                      className="app-left-sidebar-quick-actions-popover__card"
-                    >
-                      <button
-                        type="button"
-                        className="app-left-sidebar-quick-actions-popover__card-main"
-                        title={item.target}
-                        onClick={() => openItem(item)}
+                {groupedItems.map((group) => (
+                  <section
+                    key={group.category || "__uncategorized__"}
+                    className={
+                      showCategoryHeaders
+                        ? "app-left-sidebar-quick-actions-popover__group"
+                        : "app-left-sidebar-quick-actions-popover__group app-left-sidebar-quick-actions-popover__group--flat"
+                    }
+                    aria-label={showCategoryHeaders ? `分类 ${group.label}` : "快捷操作列表"}
+                  >
+                    {showCategoryHeaders ? (
+                      <header
+                        className="app-left-sidebar-quick-actions-popover__group-header"
+                        title={group.label}
                       >
-                        <span className="app-left-sidebar-quick-actions-popover__card-icon" aria-hidden>
-                          {item.kind === "link" ? <LinkOutlined /> : <FolderOpenOutlined />}
+                        <span className="app-left-sidebar-quick-actions-popover__group-name">
+                          {group.label}
                         </span>
-                        <span className="app-left-sidebar-quick-actions-popover__card-label">{item.label}</span>
-                      </button>
-                      <span className="app-left-sidebar-quick-actions-popover__card-actions">
-                        <Button
-                          type="text"
-                          size="small"
-                          icon={pinned ? <PushpinFilled /> : <PushpinOutlined />}
-                          aria-label={pinned ? "从顶栏移除" : "固定到顶栏"}
-                          className={
-                            pinned
-                              ? "app-left-sidebar-quick-actions-popover__pin-btn--active"
-                              : undefined
-                          }
-                          onClick={(event) => {
-                            stopRowActionEvent(event);
-                            if (!itemScopeId) return;
-                            void togglePinToTopbar(item, itemScopeId);
-                          }}
-                        />
-                        <Button
-                          type="text"
-                          size="small"
-                          icon={<EditOutlined />}
-                          aria-label="编辑"
-                          onClick={(event) => {
-                            stopRowActionEvent(event);
-                            if (!itemScopeId) return;
-                            setEditState({ mode: "edit", item, scope: item.scope, scopeId: itemScopeId });
-                          }}
-                        />
-                        <Button
-                          type="text"
-                          size="small"
-                          danger
-                          icon={<DeleteOutlined />}
-                          aria-label="删除"
-                          onClick={(event) => {
-                            stopRowActionEvent(event);
-                            if (!itemScopeId) return;
-                            removeItem(item, itemScopeId);
-                          }}
-                        />
-                      </span>
-                    </li>
-                  );
-                })}
-              </ul>
+                        <span className="app-left-sidebar-quick-actions-popover__group-count">
+                          {group.items.length}
+                        </span>
+                      </header>
+                    ) : null}
+                    <ul
+                      className={
+                        managing
+                          ? "app-left-sidebar-quick-actions-popover__list app-left-sidebar-quick-actions-popover__list--managing"
+                          : "app-left-sidebar-quick-actions-popover__list"
+                      }
+                    >
+                      {group.items.map((item) => {
+                        const itemScopeId = item.scopeId;
+                        const pinned = resolveWorkspaceQuickActionPinnedToTopbar(item);
+                        return (
+                          <li
+                            key={`${item.scope}:${item.id}`}
+                            className="app-left-sidebar-quick-actions-popover__card"
+                          >
+                            <button
+                              type="button"
+                              className="app-left-sidebar-quick-actions-popover__card-main"
+                              title={item.target}
+                              onClick={() => openItem(item)}
+                            >
+                              <span className="app-left-sidebar-quick-actions-popover__card-icon" aria-hidden>
+                                {item.kind === "link" ? <LinkOutlined /> : <FolderOpenOutlined />}
+                              </span>
+                              <span className="app-left-sidebar-quick-actions-popover__card-label">
+                                {item.label}
+                              </span>
+                            </button>
+                            <span className="app-left-sidebar-quick-actions-popover__card-actions">
+                              <Button
+                                type="text"
+                                size="small"
+                                icon={pinned ? <PushpinFilled /> : <PushpinOutlined />}
+                                aria-label={pinned ? "从顶栏移除" : "固定到顶栏"}
+                                className={
+                                  pinned
+                                    ? "app-left-sidebar-quick-actions-popover__pin-btn--active"
+                                    : undefined
+                                }
+                                onClick={(event) => {
+                                  stopRowActionEvent(event);
+                                  if (!itemScopeId) return;
+                                  void togglePinToTopbar(item, itemScopeId);
+                                }}
+                              />
+                              <Button
+                                type="text"
+                                size="small"
+                                icon={<EditOutlined />}
+                                aria-label="编辑"
+                                onClick={(event) => {
+                                  stopRowActionEvent(event);
+                                  if (!itemScopeId) return;
+                                  setEditState({
+                                    mode: "edit",
+                                    item,
+                                    scope: item.scope,
+                                    scopeId: itemScopeId,
+                                  });
+                                }}
+                              />
+                              <Button
+                                type="text"
+                                size="small"
+                                danger
+                                icon={<DeleteOutlined />}
+                                aria-label="删除"
+                                onClick={(event) => {
+                                  stopRowActionEvent(event);
+                                  if (!itemScopeId) return;
+                                  removeItem(item, itemScopeId);
+                                }}
+                              />
+                            </span>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  </section>
+                ))}
+              </div>
             )}
           </div>
           <WorkspaceQuickActionsEditModal
@@ -333,6 +403,7 @@ export function LeftSidebarQuickActionsPopover({
             initialScopeId={editState?.mode === "edit" ? editState.scopeId : null}
             activeProjectId={projectId}
             activeRepositoryId={repositoryId}
+            categoryOptions={categoryOptions}
             defaultScope={defaultScope}
             compact
             onClose={() => setEditState(null)}
@@ -358,9 +429,6 @@ export function LeftSidebarQuickActionsPopover({
           >
             <span className="app-repository-action-icon-wrap">
               <QuickActionsIcon />
-              {quickActions.displayItems.length > 0 ? (
-                <span className="app-left-sidebar-quick-actions-popover__badge" />
-              ) : null}
             </span>
           </button>
         </DeferredHoverTooltip>

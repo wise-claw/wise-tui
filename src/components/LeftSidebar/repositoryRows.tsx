@@ -1,12 +1,8 @@
 import { memo, useState, type ReactNode } from "react";
 import { getKnownOpenAppIcon } from "../OpenAppMenu/openAppIcons";
-import { useWorkspaceTodoIncompleteCount } from "../../hooks/useWorkspaceTodoIncompleteCount";
-import { useWorkspaceTodoCompletedCount } from "../../hooks/useWorkspaceTodoCompletedCount";
 import { UserOutlined } from "@ant-design/icons";
-import { App as AntdApp, Button, Popover } from "antd";
+import { App as AntdApp } from "antd";
 import { DeferredHoverTooltip } from "../shared/DeferredHoverTooltip";
-import { openWorkspaceTodosFromSidebarMenu } from "../../utils/openWorkspaceTodosFromSidebar";
-import { workspaceTodosAnchorKey } from "../../utils/workspaceTodosAnchorKey";
 import type { Repository, StandaloneRepo, Workspace } from "../../types";
 import { repositoryFolderBasename } from "../../utils/repositoryType";
 import type { WorkspaceFocus } from "../../utils/workspaceMode";
@@ -45,7 +41,6 @@ import {
   RepoDragHandleIcon,
   ScheduledTasksIcon,
   RequirementIcon,
-  WorkspaceRemindersIcon,
 } from "./SidebarIcons";
 import { useIsRepositoryRunCommandRunning } from "../../hooks/useIsRepositoryRunCommandRunning";
 import {
@@ -54,11 +49,6 @@ import {
 } from "../../services/repositoryRunCommandRowActionPreference";
 import { RunningMainSessionDot } from "./RunningMainSessionDot";
 import { RepositorySddStackBadge } from "./RepositorySddStackBadge";
-import { WorkspaceTodosPopoverContent } from "./WorkspaceTodosPopoverContent";
-
-function workspaceTodosPopoverTitle(): string {
-  return "待办事项";
-}
 
 function repositoryTrellisEntrypointsEnabled(repository: Repository, trellisReady: boolean): boolean {
   return repository.sddMode !== "off" && (trellisReady || repository.sddMode !== "project_owned");
@@ -350,92 +340,6 @@ export const OpenInTerminalAction = memo(function OpenInTerminalAction({
   );
 });
 
-export function SidebarWorkspaceRemindersAction({
-  variant = "repo",
-  enabled = true,
-}: {
-  variant?: "repo" | "project";
-  projectId: string | null;
-  repositoryId: number | null;
-  /** 默认配置关闭待办时隐藏侧栏徽章与 Popover。 */
-  enabled?: boolean;
-}) {
-  const [popoverOpen, setPopoverOpen] = useState(false);
-  const [showCompleted, setShowCompleted] = useState(false);
-  const incompleteCount = useWorkspaceTodoIncompleteCount(enabled);
-  const completedCount = useWorkspaceTodoCompletedCount(enabled);
-
-  if (!enabled || incompleteCount <= 0) return null;
-
-  const badgeLabel = incompleteCount > 99 ? "99+" : String(incompleteCount);
-  const tooltip = `待办事项：${incompleteCount} 条未完成`;
-  const popoverTitle = workspaceTodosPopoverTitle();
-
-  return (
-    <Popover
-      open={popoverOpen}
-      onOpenChange={(open) => {
-        setPopoverOpen(open);
-        if (!open) setShowCompleted(false);
-      }}
-      trigger="click"
-      placement="rightTop"
-      destroyOnHidden
-      getPopupContainer={() => document.body}
-      rootClassName="app-left-sidebar-workspace-todos-popover"
-      styles={{ root: { zIndex: 1200 } }}
-      title={
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-          <span>{popoverTitle}</span>
-          {incompleteCount > 0 ? (
-            <Button
-              type="link"
-              size="small"
-              style={{ padding: '0 4px', fontSize: 12, lineHeight: '22px' }}
-              onClick={(e) => {
-                e.stopPropagation();
-                setShowCompleted((v) => !v);
-              }}
-            >
-              {showCompleted ? "\u9690\u85cf\u5df2\u5b8c\u6210" : `\u5df2\u5b8c\u6210 ${completedCount}`}
-            </Button>
-          ) : null}
-        </div>
-      }
-      content={
-        popoverOpen ? (
-          <WorkspaceTodosPopoverContent
-            title={popoverTitle}
-            showCompleted={showCompleted}
-            onShowCompletedChange={setShowCompleted}
-          />
-        ) : null
-      }
-    >
-      <span
-        className="app-repository-action-popover-trigger"
-        onClick={(e) => e.stopPropagation()}
-      >
-        <DeferredHoverTooltip title={tooltip}>
-          <button
-            type="button"
-            className={`app-repository-action app-repository-action--task app-repository-action--primary app-repository-action--workspace-reminders${variant === "project" ? " app-repository-action--project-quick" : ""}`}
-            aria-label={tooltip}
-            aria-expanded={popoverOpen}
-          >
-            <span className="app-repository-action-icon-wrap">
-              <WorkspaceRemindersIcon />
-              <span className="app-repository-action-count-badge app-repository-action-count-badge--workspace-reminders">
-                {badgeLabel}
-              </span>
-            </span>
-          </button>
-        </DeferredHoverTooltip>
-      </span>
-    </Popover>
-  );
-}
-
 function repositoryRowPropsEqual(
   prev: Parameters<typeof RepositoryRowInner>[0],
   next: Parameters<typeof RepositoryRowInner>[0],
@@ -468,7 +372,6 @@ function repositoryRowPropsEqual(
   if (prev.scheduledTasksEnabledCount !== next.scheduledTasksEnabledCount) return false;
   if (prev.requirementUnsplitCount !== next.requirementUnsplitCount) return false;
   if (prev.executableTaskCount !== next.executableTaskCount) return false;
-  if (prev.workspaceTodosEnabled !== next.workspaceTodosEnabled) return false;
   if (prev.mainSessionRunning !== next.mainSessionRunning) return false;
   if (prev.pinnedRunCommandRowActions !== next.pinnedRunCommandRowActions) return false;
   if (prev.repositoryReorder !== next.repositoryReorder) return false;
@@ -499,7 +402,6 @@ function RepositoryRowInner({
   scheduledTasksEnabledCount = 0,
   requirementUnsplitCount = 0,
   executableTaskCount = 0,
-  workspaceTodosEnabled = true,
   onOpenScheduledTasks,
   onOpenRequirements,
   onOpenExecutableTasks,
@@ -532,7 +434,6 @@ function RepositoryRowInner({
   scheduledTasksEnabledCount?: number;
   requirementUnsplitCount?: number;
   executableTaskCount?: number;
-  workspaceTodosEnabled?: boolean;
   onOpenScheduledTasks?: (repository: Repository) => void;
   onOpenRequirements?: (repository: Repository) => void;
   onOpenExecutableTasks?: (repository: Repository) => void;
@@ -548,7 +449,6 @@ function RepositoryRowInner({
     trellisEnabled: workspaceTrellisEnabled,
     trellisReady,
     trellisRootActionEnabled: false,
-    onAddWorkspaceTodo: workspaceTodosEnabled,
     onOpenRepositoryMainOwner: Boolean(onOpenRepositoryMainOwner),
     onConfigureRepositoryIconBadge: Boolean(onConfigureRepositoryIconBadge),
     onConfigureSddMode: Boolean(onConfigureSddMode),
@@ -713,12 +613,6 @@ function RepositoryRowInner({
           <SidebarMoreMenuDropdown
             items={moreItems}
             onMenuClick={({ key }) => {
-              if (key === "add-workspace-todo") {
-                if (!workspaceTodosEnabled) return;
-                onRepositorySelect(repository.id);
-                openWorkspaceTodosFromSidebarMenu();
-                return;
-              }
               if (key === "finder") onOpenInFinder(repository);
               if (key === "editor") onOpenRepositoryInEditor(repository);
               if (key === "open-terminal") onOpenInTerminal?.(repository);
@@ -748,11 +642,6 @@ function RepositoryRowInner({
               type="button"
               className="app-repository-action app-repository-action--more"
               aria-label="仓库更多操作"
-              data-workspace-todos-anchor={
-                workspaceTodosEnabled
-                  ? workspaceTodosAnchorKey(null, repository.id) ?? undefined
-                  : undefined
-              }
               onClick={(e) => e.stopPropagation()}
             >
               <MoreIcon />
@@ -797,7 +686,6 @@ function floatingRepositoryRowPropsEqual(
   if (prev.scheduledTasksEnabledCount !== next.scheduledTasksEnabledCount) return false;
   if (prev.requirementUnsplitCount !== next.requirementUnsplitCount) return false;
   if (prev.executableTaskCount !== next.executableTaskCount) return false;
-  if (prev.workspaceTodosEnabled !== next.workspaceTodosEnabled) return false;
   if (prev.mainSessionRunning !== next.mainSessionRunning) return false;
   if (prev.pinnedRunCommandRowActions !== next.pinnedRunCommandRowActions) return false;
   if (prev.expanded !== next.expanded) return false;
@@ -831,7 +719,6 @@ function FloatingRepositoryRowInner({
   scheduledTasksEnabledCount = 0,
   requirementUnsplitCount = 0,
   executableTaskCount = 0,
-  workspaceTodosEnabled = true,
   onOpenScheduledTasks,
   onOpenRequirements,
   onOpenExecutableTasks,
@@ -869,7 +756,6 @@ function FloatingRepositoryRowInner({
   scheduledTasksEnabledCount?: number;
   requirementUnsplitCount?: number;
   executableTaskCount?: number;
-  workspaceTodosEnabled?: boolean;
   onOpenScheduledTasks?: (repository: Repository) => void;
   onOpenRequirements?: (repository: Repository) => void;
   onOpenExecutableTasks?: (repository: Repository) => void;
@@ -893,7 +779,6 @@ function FloatingRepositoryRowInner({
     joinableProjects,
     trellisEnabled,
     trellisReady,
-    onAddWorkspaceTodo: workspaceTodosEnabled,
     onOpenRepositoryMainOwner: Boolean(onOpenRepositoryMainOwner),
     onConfigureRepositoryIconBadge: Boolean(onConfigureRepositoryIconBadge),
     onConfigureSddMode: Boolean(onConfigureSddMode),
@@ -1082,12 +967,6 @@ function FloatingRepositoryRowInner({
           <SidebarMoreMenuDropdown
             items={moreItems}
             onMenuClick={({ key }) => {
-              if (key === "add-workspace-todo") {
-                if (!workspaceTodosEnabled) return;
-                onRepositorySelect(repository.id);
-                openWorkspaceTodosFromSidebarMenu();
-                return;
-              }
               if (key === "finder") onOpenInFinder(repository);
               if (key === "editor") onOpenRepositoryInEditor(repository);
               if (key === "open-terminal") onOpenInTerminal?.(repository);
@@ -1122,11 +1001,6 @@ function FloatingRepositoryRowInner({
               type="button"
               className="app-repository-action app-repository-action--more"
               aria-label="仓库更多操作"
-              data-workspace-todos-anchor={
-                workspaceTodosEnabled
-                  ? workspaceTodosAnchorKey(null, repository.id) ?? undefined
-                  : undefined
-              }
               onClick={(e) => e.stopPropagation()}
             >
               <MoreIcon />
@@ -1168,7 +1042,6 @@ export function ProjectRepositoryRows({
   scheduledTasksByRepoId = {},
   requirementUnsplitByRepoId = {},
   executableTasksByRepoId = {},
-  workspaceTodosEnabled = true,
   onOpenScheduledTasks,
   onOpenRepositoryRequirements,
   onOpenRepositoryExecutableTasks,
@@ -1204,7 +1077,6 @@ export function ProjectRepositoryRows({
   scheduledTasksByRepoId?: Record<number, { total: number; enabled: number }>;
   requirementUnsplitByRepoId?: Record<number, number>;
   executableTasksByRepoId?: Record<number, number>;
-  workspaceTodosEnabled?: boolean;
   onOpenScheduledTasks?: (repository: Repository) => void;
   onOpenRepositoryRequirements?: (repository: Repository) => void;
   onOpenRepositoryExecutableTasks?: (repository: Repository) => void;
@@ -1270,7 +1142,6 @@ export function ProjectRepositoryRows({
             scheduledTasksEnabledCount={scheduledTasksByRepoId[repository.id]?.enabled ?? 0}
             requirementUnsplitCount={requirementUnsplitByRepoId[repository.id] ?? 0}
             executableTaskCount={executableTasksByRepoId[repository.id] ?? 0}
-            workspaceTodosEnabled={workspaceTodosEnabled}
             onOpenScheduledTasks={onOpenScheduledTasks}
             onOpenRequirements={onOpenRepositoryRequirements}
             onOpenExecutableTasks={onOpenRepositoryExecutableTasks}

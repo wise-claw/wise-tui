@@ -1,10 +1,7 @@
 import type { MutableRefObject } from "react";
 import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { App as AntdApp, Button, Popover, Typography } from "antd";
+import { App as AntdApp, Typography } from "antd";
 import { DeferredHoverTooltip } from "../shared/DeferredHoverTooltip";
-import { useWorkspaceTodoIncompleteCount } from "../../hooks/useWorkspaceTodoIncompleteCount";
-import { useWorkspaceTodoCompletedCount } from "../../hooks/useWorkspaceTodoCompletedCount";
-import { WorkspaceTodosPopoverContent } from "./WorkspaceTodosPopoverContent";
 import {
   toggleWorkspaceMemoPanel,
   useWorkspaceMemoPanelOpen,
@@ -32,7 +29,6 @@ import {
   ExpandIcon,
   PlusIcon,
   WorkspaceMemoIcon,
-  WorkspaceRemindersIcon,
 } from "./SidebarIcons";
 import {
   FloatingRepositoryRow,
@@ -112,10 +108,6 @@ export interface ProjectRepositoryListProps {
   requirementUnsplitByRepoId?: Record<number, number>;
   executableTasksByProjectId?: Record<string, number>;
   executableTasksByRepoId?: Record<number, number>;
-  /** 默认配置关闭待办时隐藏侧栏菜单、徽章与 Popover。 */
-  workspaceTodosEnabled?: boolean;
-  /** 工作区标题栏：打开全局添加待办弹窗。 */
-  onOpenGlobalWorkspaceTodoAdd?: () => void;
   onOpenScheduledTasksForRepository?: (repository: Repository) => void;
   onOpenScheduledTasksForProject?: (project: Workspace) => void;
   onOpenExecutableTasksForProject?: (project: Workspace) => void;
@@ -190,8 +182,6 @@ function ProjectRepositoryListInner({
   scheduledTasksByRepoId = {},
   requirementUnsplitByRepoId = {},
   executableTasksByRepoId = {},
-  workspaceTodosEnabled = true,
-  onOpenGlobalWorkspaceTodoAdd,
   onOpenScheduledTasksForRepository,
   onOpenRepositoryRequirements,
   onOpenExecutableTasksForRepository,
@@ -232,11 +222,7 @@ function ProjectRepositoryListInner({
     },
   );
 
-  const [headerTodosPopoverOpen, setHeaderTodosPopoverOpen] = useState(false);
-  const [headerTodosShowCompleted, setHeaderTodosShowCompleted] = useState(false);
   const headerMemoOpen = useWorkspaceMemoPanelOpen();
-  const headerTodoCount = useWorkspaceTodoIncompleteCount(workspaceTodosEnabled);
-  const headerCompletedCount = useWorkspaceTodoCompletedCount(workspaceTodosEnabled);
 
   const runCommandRowPinnedMap = useRepositoryRunCommandRowPinnedMap();
   const { message } = AntdApp.useApp();
@@ -292,89 +278,6 @@ function ProjectRepositoryListInner({
               <WorkspaceMemoIcon />
             </button>
           </DeferredHoverTooltip>
-          {workspaceTodosEnabled ? (
-            activeProjectId?.trim() ? (
-              <Popover
-                open={headerTodosPopoverOpen}
-                onOpenChange={(open) => {
-                  setHeaderTodosPopoverOpen(open);
-                  if (!open) setHeaderTodosShowCompleted(false);
-                }}
-                trigger="click"
-                placement="rightTop"
-                destroyOnHidden
-                getPopupContainer={() => document.body}
-                rootClassName="app-left-sidebar-workspace-todos-popover"
-                styles={{ root: { zIndex: 1200 } }}
-                title={
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-                    <span>待办事项</span>
-                    {headerTodoCount > 0 ? (
-                      <Button
-                        type="link"
-                        size="small"
-                        style={{ padding: '0 4px', fontSize: 12, lineHeight: '22px' }}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          setHeaderTodosShowCompleted((v) => !v);
-                        }}
-                      >
-                        {headerTodosShowCompleted ? "隐藏已完成" : `已完成 ${headerCompletedCount}`}
-                      </Button>
-                    ) : null}
-                  </div>
-                }
-                content={
-                  headerTodosPopoverOpen ? (
-                    <WorkspaceTodosPopoverContent
-                      title="待办事项"
-                      showCompleted={headerTodosShowCompleted}
-                      onShowCompletedChange={setHeaderTodosShowCompleted}
-                    />
-                  ) : null
-                }
-              >
-                <span
-                  className="app-repository-action-popover-trigger"
-                  onClick={(e) => e.stopPropagation()}
-                >
-                  <DeferredHoverTooltip
-                    title={
-                      headerTodoCount > 0
-                        ? `待办事项：${headerTodoCount} 条未完成`
-                        : "待办事项"
-                    }
-                  >
-                    <button
-                      type="button"
-                      className="app-repository-header-btn"
-                      aria-label="待办事项"
-                      aria-expanded={headerTodosPopoverOpen}
-                    >
-                      <span className="app-repository-action-icon-wrap">
-                        <WorkspaceRemindersIcon />
-                        {headerTodoCount > 0 ? (
-                          <span className="app-repository-action-count-badge app-repository-action-count-badge--workspace-reminders">
-                            {headerTodoCount > 99 ? "99+" : String(headerTodoCount)}
-                          </span>
-                        ) : null}
-                      </span>
-                    </button>
-                  </DeferredHoverTooltip>
-                </span>
-              </Popover>
-            ) : onOpenGlobalWorkspaceTodoAdd ? (
-              <DeferredHoverTooltip title="添加待办事项">
-                <button
-                  className="app-repository-header-btn"
-                  aria-label="添加待办事项"
-                  onClick={onOpenGlobalWorkspaceTodoAdd}
-                >
-                  <WorkspaceRemindersIcon />
-                </button>
-              </DeferredHoverTooltip>
-            ) : null
-          ) : null}
           <LeftSidebarQuickActionsPopover
             projectId={activeProjectId}
             repositoryId={activeRepositoryId}
@@ -469,7 +372,6 @@ function ProjectRepositoryListInner({
               scheduledTasksEnabledCount={scheduledTasksByRepoId[repository.id]?.enabled ?? 0}
               requirementUnsplitCount={requirementUnsplitByRepoId[repository.id] ?? 0}
               executableTaskCount={executableTasksByRepoId[repository.id] ?? 0}
-              workspaceTodosEnabled={workspaceTodosEnabled}
               onOpenScheduledTasks={onOpenScheduledTasksForRepository}
               onOpenRequirements={onOpenRepositoryRequirements}
               onOpenExecutableTasks={onOpenExecutableTasksForRepository}

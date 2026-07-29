@@ -2,12 +2,20 @@ export type WorkspaceQuickActionKind = "link" | "directory";
 
 export type WorkspaceQuickActionScope = "project" | "repository";
 
+/** 未填写分类时的展示标签。 */
+export const WORKSPACE_QUICK_ACTION_UNCATEGORIZED_LABEL = "未分类";
+
+/** 分类名称最大长度。 */
+export const WORKSPACE_QUICK_ACTION_CATEGORY_MAX_LENGTH = 40;
+
 export interface WorkspaceQuickActionItem {
   id: string;
   kind: WorkspaceQuickActionKind;
   label: string;
   /** 外链 URL 或本地目录绝对路径 */
   target: string;
+  /** 用户自定义分类；空或缺省表示未分类。 */
+  category?: string;
   /** 固定到中栏顶栏「远程」之后展示 */
   pinnedToTopbar?: boolean;
   createdAt: number;
@@ -26,6 +34,15 @@ export type WorkspaceQuickActionDisplayItem = WorkspaceQuickActionItem & {
   scopeId: string;
 };
 
+/** 按用户自定义分类分组后的展示单元。 */
+export type WorkspaceQuickActionCategoryGroup = {
+  /** 归一化后的分类名；空字符串表示未分类。 */
+  category: string;
+  /** 展示用标题（空分类时为「未分类」）。 */
+  label: string;
+  items: WorkspaceQuickActionDisplayItem[];
+};
+
 export function resolveWorkspaceQuickActionPinnedToTopbar(
   item: Pick<WorkspaceQuickActionItem, "pinnedToTopbar">,
 ): boolean {
@@ -36,6 +53,57 @@ export function filterWorkspaceQuickActionsForTopbar(
   items: readonly WorkspaceQuickActionDisplayItem[],
 ): WorkspaceQuickActionDisplayItem[] {
   return items.filter((item) => resolveWorkspaceQuickActionPinnedToTopbar(item));
+}
+
+export function normalizeWorkspaceQuickActionCategory(raw: unknown): string {
+  if (typeof raw !== "string") return "";
+  return raw.trim().slice(0, WORKSPACE_QUICK_ACTION_CATEGORY_MAX_LENGTH);
+}
+
+export function resolveWorkspaceQuickActionCategoryLabel(
+  item: Pick<WorkspaceQuickActionItem, "category">,
+): string {
+  const category = normalizeWorkspaceQuickActionCategory(item.category);
+  return category || WORKSPACE_QUICK_ACTION_UNCATEGORIZED_LABEL;
+}
+
+/**
+ * 按用户自定义分类分组，保留条目在输入中的相对顺序，
+ * 分组顺序取各组首次出现的位置；未分类组始终排在最后。
+ */
+export function groupWorkspaceQuickActionsByCategory(
+  items: readonly WorkspaceQuickActionDisplayItem[],
+): WorkspaceQuickActionCategoryGroup[] {
+  const groups: WorkspaceQuickActionCategoryGroup[] = [];
+  const indexByCategory = new Map<string, number>();
+  let uncategorized: WorkspaceQuickActionCategoryGroup | null = null;
+
+  for (const item of items) {
+    const category = normalizeWorkspaceQuickActionCategory(item.category);
+    if (!category) {
+      if (!uncategorized) {
+        uncategorized = {
+          category: "",
+          label: WORKSPACE_QUICK_ACTION_UNCATEGORIZED_LABEL,
+          items: [],
+        };
+      }
+      uncategorized.items.push(item);
+      continue;
+    }
+    const existing = indexByCategory.get(category);
+    if (existing == null) {
+      indexByCategory.set(category, groups.length);
+      groups.push({ category, label: category, items: [item] });
+      continue;
+    }
+    groups[existing].items.push(item);
+  }
+
+  if (uncategorized && uncategorized.items.length > 0) {
+    groups.push(uncategorized);
+  }
+  return groups;
 }
 
 export function createWorkspaceQuickActionId(): string {
@@ -60,9 +128,11 @@ function normalizeItem(raw: unknown): WorkspaceQuickActionItem | null {
   const createdAt = typeof row.createdAt === "number" && Number.isFinite(row.createdAt) ? row.createdAt : Date.now();
   const updatedAt = typeof row.updatedAt === "number" && Number.isFinite(row.updatedAt) ? row.updatedAt : createdAt;
   const pinnedToTopbar = row.pinnedToTopbar === true ? true : undefined;
-  return pinnedToTopbar
-    ? { id, kind, label, target, pinnedToTopbar, createdAt, updatedAt }
-    : { id, kind, label, target, createdAt, updatedAt };
+  const category = normalizeWorkspaceQuickActionCategory(row.category);
+  const item: WorkspaceQuickActionItem = { id, kind, label, target, createdAt, updatedAt };
+  if (category) item.category = category;
+  if (pinnedToTopbar) item.pinnedToTopbar = true;
+  return item;
 }
 
 export function parseWorkspaceQuickActionsPayload(raw: string | null | undefined): WorkspaceQuickActionsPayloadV1 {
@@ -93,4 +163,20 @@ export function mergeWorkspaceQuickActionsPayload(
   items: WorkspaceQuickActionItem[],
 ): WorkspaceQuickActionsPayloadV1 {
   return { version: 1, items: [...items].sort((a, b) => b.updatedAt - a.updatedAt) };
+}
+
+/** 从现有条目收集去重后的分类名，供编辑表单联想。 */
+export function collectWorkspaceQuickActionCategories(
+  items: readonly Pick<WorkspaceQuickActionItem, "category">[],
+): string[] {
+  const seen = new Set<string>();
+  const out: string[] = [];
+  for (const item of items) {
+    const category = normalizeWorkspaceQuickActionCategory(item.category);
+    if (!category || seen.has(category)) continue;
+    seen.add(category);
+    out.push(category);
+  }
+  out.sort((a, b) => a.localeCompare(b, "zh-CN"));
+  return out;
 }

@@ -1,12 +1,14 @@
 import { FolderOpenOutlined, LinkOutlined } from "@ant-design/icons";
-import { App, Button, Form, Input, Modal, Segmented } from "antd";
-import { useEffect, useState } from "react";
+import { App, AutoComplete, Button, Form, Input, Modal, Segmented } from "antd";
+import { useEffect, useMemo, useState } from "react";
 import { isSafeExternalHref, openExternalUrl } from "../../services/openExternal";
 import { pathIsAccessibleDirectory, pickFolder } from "../../services/repository";
-import type {
-  WorkspaceQuickActionItem,
-  WorkspaceQuickActionKind,
-  WorkspaceQuickActionScope,
+import {
+  normalizeWorkspaceQuickActionCategory,
+  WORKSPACE_QUICK_ACTION_CATEGORY_MAX_LENGTH,
+  type WorkspaceQuickActionItem,
+  type WorkspaceQuickActionKind,
+  type WorkspaceQuickActionScope,
 } from "../../types/workspaceQuickActions";
 
 export interface WorkspaceQuickActionsEditModalProps {
@@ -20,12 +22,15 @@ export interface WorkspaceQuickActionsEditModalProps {
   activeProjectId: string | null;
   /** 当前激活的仓库 id；新建时优先归属仓库。 */
   activeRepositoryId: number | null;
+  /** 已有分类名，供输入联想。 */
+  categoryOptions?: string[];
   compact?: boolean;
   onClose: () => void;
   onSubmit: (input: {
     kind: WorkspaceQuickActionKind;
     label: string;
     target: string;
+    category: string;
     scope: WorkspaceQuickActionScope;
     scopeId: string;
   }) => void | Promise<void>;
@@ -65,6 +70,7 @@ export function WorkspaceQuickActionsEditModal({
   defaultScope,
   activeProjectId,
   activeRepositoryId,
+  categoryOptions,
   compact = false,
   onClose,
   onSubmit,
@@ -75,7 +81,17 @@ export function WorkspaceQuickActionsEditModal({
   const [scopeId, setScopeId] = useState<string>("");
   const [label, setLabel] = useState("");
   const [target, setTarget] = useState("");
+  const [category, setCategory] = useState("");
   const [submitting, setSubmitting] = useState(false);
+
+  const categorySelectOptions = useMemo(
+    () =>
+      (categoryOptions ?? [])
+        .map((value) => normalizeWorkspaceQuickActionCategory(value))
+        .filter(Boolean)
+        .map((value) => ({ value })),
+    [categoryOptions],
+  );
 
   useEffect(() => {
     if (!open) return;
@@ -92,6 +108,7 @@ export function WorkspaceQuickActionsEditModal({
     setScopeId(resolved?.scopeId ?? "");
     setLabel(initialItem?.label ?? "");
     setTarget(initialItem?.target ?? "");
+    setCategory(normalizeWorkspaceQuickActionCategory(initialItem?.category));
     setSubmitting(false);
   }, [
     open,
@@ -112,6 +129,7 @@ export function WorkspaceQuickActionsEditModal({
   async function handleOk() {
     const trimmedLabel = label.trim();
     const trimmedTarget = target.trim();
+    const trimmedCategory = normalizeWorkspaceQuickActionCategory(category);
     if (!scopeId) {
       message.warning("请先在左侧选择工作区或仓库");
       return;
@@ -141,6 +159,7 @@ export function WorkspaceQuickActionsEditModal({
         kind,
         label: trimmedLabel,
         target: trimmedTarget,
+        category: trimmedCategory,
         scope,
         scopeId,
       });
@@ -152,6 +171,24 @@ export function WorkspaceQuickActionsEditModal({
       setSubmitting(false);
     }
   }
+
+  const categoryField = (
+    <Form.Item label="分类" extra={compact ? undefined : "可选；用于弹窗分组展示，与仓库无关"}>
+      <AutoComplete
+        value={category}
+        options={categorySelectOptions}
+        placeholder="例如：文档、工具"
+        maxLength={WORKSPACE_QUICK_ACTION_CATEGORY_MAX_LENGTH}
+        allowClear
+        onChange={(value) => setCategory(typeof value === "string" ? value : "")}
+        filterOption={(inputValue, option) =>
+          String(option?.value ?? "")
+            .toLowerCase()
+            .includes(inputValue.trim().toLowerCase())
+        }
+      />
+    </Form.Item>
+  );
 
   return (
     <Modal
@@ -186,6 +223,7 @@ export function WorkspaceQuickActionsEditModal({
                 onChange={(value) => setKind(value as WorkspaceQuickActionKind)}
               />
             </Form.Item>
+            {categoryField}
             <Form.Item label="名称" required>
               <Input
                 value={label}
@@ -221,6 +259,7 @@ export function WorkspaceQuickActionsEditModal({
                 onChange={(value) => setKind(value as WorkspaceQuickActionKind)}
               />
             </Form.Item>
+            {categoryField}
             <Form.Item label="名称" required>
               <Input
                 value={label}

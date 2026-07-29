@@ -25,6 +25,8 @@ pub struct WorkspaceQuickActionItemDto {
     pub label: String,
     pub target: String,
     #[serde(default)]
+    pub category: String,
+    #[serde(default)]
     pub pinned_to_topbar: bool,
     pub created_at: i64,
     pub updated_at: i64,
@@ -81,6 +83,10 @@ fn normalize_quick_action_kind(raw: &str) -> Option<String> {
     }
 }
 
+fn normalize_quick_action_category(raw: &str) -> String {
+    raw.trim().chars().take(40).collect()
+}
+
 fn normalize_quick_action_item(raw: WorkspaceQuickActionItemDto) -> Option<WorkspaceQuickActionItemDto> {
     let id = raw.id.trim();
     let kind = normalize_quick_action_kind(&raw.kind)?;
@@ -104,6 +110,7 @@ fn normalize_quick_action_item(raw: WorkspaceQuickActionItemDto) -> Option<Works
         kind,
         label: label.to_string(),
         target: target.to_string(),
+        category: normalize_quick_action_category(&raw.category),
         pinned_to_topbar: raw.pinned_to_topbar,
         created_at,
         updated_at,
@@ -205,8 +212,8 @@ fn replace_quick_actions_conn(
     for item in items {
         conn.execute(
             "INSERT INTO workspace_quick_actions (
-                scope_kind, scope_id, id, kind, label, target, pinned_to_topbar, created_at, updated_at
-            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9)",
+                scope_kind, scope_id, id, kind, label, target, category, pinned_to_topbar, created_at, updated_at
+            ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?8, ?9, ?10)",
             params![
                 scope_kind,
                 scope_id,
@@ -214,6 +221,7 @@ fn replace_quick_actions_conn(
                 item.kind,
                 item.label,
                 item.target,
+                item.category,
                 if item.pinned_to_topbar { 1 } else { 0 },
                 item.created_at,
                 item.updated_at,
@@ -231,7 +239,7 @@ fn list_quick_actions_conn(
 ) -> Result<Vec<WorkspaceQuickActionItemDto>, String> {
     let mut stmt = conn
         .prepare(
-            "SELECT id, kind, label, target, pinned_to_topbar, created_at, updated_at
+            "SELECT id, kind, label, target, category, pinned_to_topbar, created_at, updated_at
              FROM workspace_quick_actions
              WHERE scope_kind = ?1 AND scope_id = ?2
              ORDER BY updated_at DESC",
@@ -239,15 +247,16 @@ fn list_quick_actions_conn(
         .map_err(|e| e.to_string())?;
     let rows = stmt
         .query_map(params![scope_kind, scope_id], |row| {
-            let pinned: i64 = row.get(4)?;
+            let pinned: i64 = row.get(5)?;
             Ok(WorkspaceQuickActionItemDto {
                 id: row.get(0)?,
                 kind: row.get(1)?,
                 label: row.get(2)?,
                 target: row.get(3)?,
+                category: row.get(4)?,
                 pinned_to_topbar: pinned != 0,
-                created_at: row.get(5)?,
-                updated_at: row.get(6)?,
+                created_at: row.get(6)?,
+                updated_at: row.get(7)?,
             })
         })
         .map_err(|e| e.to_string())?;
@@ -758,6 +767,8 @@ mod tests {
             .expect("todos schema applies");
         conn.execute_batch(include_str!("../migrations/035_workspace_quick_actions_pinned.sql"))
             .expect("pinned schema applies");
+        conn.execute_batch(include_str!("../migrations/052_workspace_quick_actions_category.sql"))
+            .expect("category schema applies");
         conn.execute_batch(
             "CREATE TABLE IF NOT EXISTS app_settings (
                key TEXT PRIMARY KEY NOT NULL,
@@ -817,6 +828,7 @@ mod tests {
             kind: "link".to_string(),
             label: "Docs".to_string(),
             target: "https://example.com".to_string(),
+            category: "文档".to_string(),
             pinned_to_topbar: false,
             created_at: 1,
             updated_at: 2,
@@ -825,6 +837,7 @@ mod tests {
         let loaded = list_quick_actions_conn(&conn, "project", "p1").expect("load");
         assert_eq!(loaded.len(), 1);
         assert_eq!(loaded[0].label, "Docs");
+        assert_eq!(loaded[0].category, "文档");
     }
 
     #[test]

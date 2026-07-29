@@ -9,7 +9,7 @@ import {
 export function useWorkspaceInspectorPanelsDefault(): WorkspaceInspectorPanelsDefaults {
   const [state, setState] = useState<WorkspaceInspectorPanelsDefaults>({
     showWorkspaceQuickActionsPanel: true,
-    showWorkspaceTodosPanel: true,
+    showWorkspaceTodosPanel: false,
   });
 
   const apply = useCallback((next: WorkspaceInspectorPanelsDefaults) => {

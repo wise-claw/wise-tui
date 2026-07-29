@@ -15,7 +15,6 @@ import type { ReconcileProjectMode } from "../../constants/reconcileProjectMode"
 import type { WorkspaceFocus } from "../../utils/workspaceMode";
 import { resolveScheduledTasksRepository } from "../../utils/workspaceSelectionState";
 import { ProjectRepositoryList } from "./ProjectRepositoryList";
-import { SidebarWorkspaceTodoAddModal } from "./SidebarWorkspaceTodoAddModal";
 import { useProjectRepositorySidebarState } from "./useProjectRepositorySidebarState";
 import { useSidebarScheduledTasksMap } from "./useSidebarScheduledTasksMap";
 import { useSidebarRunningMainSessionIndicators } from "./useSidebarRunningMainSessionIndicators";
@@ -29,7 +28,6 @@ import {
 
 export type LeftSidebarWorkspaceListSlotProps = {
   showLeftSidebarWorkspaceList: boolean;
-  workspaceTodosEnabled: boolean;
   projects: Workspace[];
   repositories: Repository[];
   floatingRepositories: StandaloneRepo[];
@@ -89,7 +87,6 @@ export type LeftSidebarWorkspaceListSlotProps = {
   onReorderRepositoriesInProject?: (projectId: string, repositoryIds: number[]) => void | Promise<void>;
   onReorderWorkspaceRepositories?: (repositoryIds: number[]) => void | Promise<void>;
   onMoveRepositoryError: (message: string, err: unknown) => void;
-  onOpenGlobalWorkspaceTodoAdd?: () => void;
   onOpenScheduledTasksForRepository?: (repository: Repository) => void;
   onOpenScheduledTasksForProject?: (project: Workspace) => void;
   onOpenExecutableTasksForProject?: (project: Workspace) => void;
@@ -212,7 +209,6 @@ function LeftSidebarWorkspaceListSlotInner(props: LeftSidebarWorkspaceListSlotPr
 
   return (
     <>
-      <SidebarWorkspaceTodoAddModal enabled={props.workspaceTodosEnabled} />
       {props.showLeftSidebarWorkspaceList ? (
         <ProjectRepositoryList
           projects={props.projects}
@@ -282,8 +278,6 @@ function LeftSidebarWorkspaceListSlotInner(props: LeftSidebarWorkspaceListSlotPr
           requirementUnsplitByRepoId={requirementUnsplitByRepoId}
           executableTasksByProjectId={executableTasksByProjectId}
           executableTasksByRepoId={executableTasksByRepoId}
-          workspaceTodosEnabled={props.workspaceTodosEnabled}
-          onOpenGlobalWorkspaceTodoAdd={props.onOpenGlobalWorkspaceTodoAdd}
           onOpenScheduledTasksForRepository={props.onOpenScheduledTasksForRepository}
           onOpenScheduledTasksForProject={openScheduledTasksForProject}
           onOpenExecutableTasksForProject={props.onOpenExecutableTasksForProject}
@@ -327,7 +321,6 @@ export const LeftSidebarWorkspaceListSlot = memo(
       prev.floatingRepositories !== next.floatingRepositories ||
       prev.workspaceRepositoryOrder !== next.workspaceRepositoryOrder ||
       prev.pinnedProjectIds !== next.pinnedProjectIds ||
-      prev.workspaceTodosEnabled !== next.workspaceTodosEnabled ||
       prev.workspaceSessions !== next.workspaceSessions ||
       prev.employeeMonitorItems !== next.employeeMonitorItems ||
       prev.sessionConversationTaskItems !== next.sessionConversationTaskItems ||

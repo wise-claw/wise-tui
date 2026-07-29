@@ -21,7 +21,6 @@ export type ProjectRepositoryListEqualProps = Pick<
   | "requirementUnsplitByRepoId"
   | "executableTasksByProjectId"
   | "executableTasksByRepoId"
-  | "workspaceTodosEnabled"
   | "runningMainSessionByProjectId"
   | "runningMainSessionByRepositoryId"
   | "sectionCollapsed"
@@ -130,7 +129,6 @@ export function projectRepositoryListPropsEqual(
   }
   if (prev.pinnedProjectIds !== next.pinnedProjectIds) return false;
   if (prev.projectDropTargetId !== next.projectDropTargetId) return false;
-  if (prev.workspaceTodosEnabled !== next.workspaceTodosEnabled) return false;
   if (prev.sectionCollapsed !== next.sectionCollapsed) return false;
   if (
     expandedProjectsFingerprint(prev.expandedProjects) !==

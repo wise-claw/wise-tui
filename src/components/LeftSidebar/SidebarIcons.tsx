@@ -370,11 +370,14 @@ export function OpenInTerminalIcon() {
   );
 }
 
-/** 左栏工作区标题栏：快捷操作（闪电符号） */
+/** 左栏工作区标题栏：快捷操作（磁贴入口） */
 export function QuickActionsIcon() {
   return (
     <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>
-      <path d="M9 2L4 9h3.5L7 14l5-7H8.5L9 2z" stroke="currentColor" strokeWidth="1.2" strokeLinejoin="round" />
+      <rect x="2.5" y="2.5" width="4.5" height="4.5" rx="1.1" stroke="currentColor" strokeWidth="1.2" />
+      <rect x="9" y="2.5" width="4.5" height="4.5" rx="1.1" stroke="currentColor" strokeWidth="1.2" />
+      <rect x="2.5" y="9" width="4.5" height="4.5" rx="1.1" stroke="currentColor" strokeWidth="1.2" />
+      <rect x="9" y="9" width="4.5" height="4.5" rx="1.1" stroke="currentColor" strokeWidth="1.2" />
     </svg>
   );
 }

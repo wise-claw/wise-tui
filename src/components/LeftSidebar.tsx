@@ -81,9 +81,6 @@ import { useRepositoryAssociateModalController } from "./LeftSidebar/useReposito
 import { useProjectSddModeModalController } from "./LeftSidebar/useProjectSddModeModalController";
 import { useRepositorySddModeModalController } from "./LeftSidebar/useRepositorySddModeModalController";
 import { useRepositoryIconBadgeModalController } from "./LeftSidebar/useRepositoryIconBadgeModalController";
-import { useWorkspaceTodoCountsBootstrap } from "../hooks/useWorkspaceTodoCountsBootstrap";
-import { openWorkspaceTodosFromSidebarMenu } from "../utils/openWorkspaceTodosFromSidebar";
-import { useWorkspaceInspectorPanelsDefault } from "../hooks/useWorkspaceInspectorPanelsDefault";
 import { useClaudeProcessWorkspaceLabelCache } from "../hooks/useClaudeProcessWorkspaceLabelCache";
 import { useSystemResourceSessions } from "./LeftSidebar/useSystemResourceSessions";
 import {
@@ -493,8 +490,6 @@ export function LeftSidebar({
     repositories,
     onUpdateProjectSddMode,
   });
-  const { showWorkspaceTodosPanel: workspaceTodosEnabled } = useWorkspaceInspectorPanelsDefault();
-  useWorkspaceTodoCountsBootstrap(workspaceTodosEnabled);
   const openScheduledTasksForRepository = useCallback(
     (repository: Repository) => {
       onOpenScheduledTasksForRepositoryProp?.(repository);
@@ -1040,7 +1035,6 @@ export function LeftSidebar({
       >
         <LeftSidebarWorkspaceListSlot
           showLeftSidebarWorkspaceList={showLeftSidebarWorkspaceList}
-          workspaceTodosEnabled={workspaceTodosEnabled}
           projects={projects}
           repositories={repositories}
           floatingRepositories={floatingRepositories}
@@ -1159,9 +1153,6 @@ export function LeftSidebar({
             message.error(text);
             console.error(err);
           }}
-          onOpenGlobalWorkspaceTodoAdd={
-            workspaceTodosEnabled ? () => openWorkspaceTodosFromSidebarMenu({ focusAdd: true }) : undefined
-          }
           onOpenScheduledTasksForRepository={openScheduledTasksForRepository}
           onOpenScheduledTasksForProject={onOpenScheduledTasksForProjectProp}
           onOpenExecutableTasksForProject={openExecutableTasksForProject}

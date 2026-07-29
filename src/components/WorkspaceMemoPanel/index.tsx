@@ -222,7 +222,6 @@ export function WorkspaceMemoPanel() {
   itemsRef.current = items;
   const draftBodyRef = useRef("");
   const editorRef = useRef<MilkdownEditorHandle | null>(null);
-  const panelRef = useRef<HTMLDivElement | null>(null);
 
   const persist = useCallback(async (next: WorkspaceRequirementItem[]) => {
     setSaving(true);
@@ -406,16 +405,17 @@ export function WorkspaceMemoPanel() {
     closeWorkspaceMemoPanel();
   }, []);
 
+  // ⌘W / Ctrl+W：需求面板打开时关闭（与文件/终端 tab 关闭一致）。
+  // 列表多为不可聚焦节点，不要求焦点在面板内；编辑弹窗打开或焦点在终端内时不抢键。
   useEffect(() => {
     function handleCloseShortcut(event: KeyboardEvent) {
       const mod = event.metaKey || event.ctrlKey;
       if (!mod || event.shiftKey || event.altKey) return;
       if (event.key !== "w" && event.key !== "W" && event.code !== "KeyW") return;
-
-      const panel = panelRef.current;
-      const target = event.target;
-      if (!panel || !(target instanceof Node) || !panel.contains(target)) return;
       if (editorOpen) return;
+
+      const target = event.target;
+      if (target instanceof Element && target.closest(".terminal-panel")) return;
 
       event.preventDefault();
       event.stopPropagation();
@@ -428,10 +428,13 @@ export function WorkspaceMemoPanel() {
   const openItems = items.filter((item) => item.status === "open");
   const doneItems = items.filter((item) => item.status === "done");
   const draftImageCount = countMarkdownImages(draftBody);
+  const closeShortcutLabel =
+    typeof navigator !== "undefined" && /Mac|iPhone|iPad/i.test(navigator.platform)
+      ? "⌘W"
+      : "Ctrl+W";
 
   return (
     <div
-      ref={panelRef}
       className="app-file-editor-panel app-workspace-memo-panel app-workspace-requirements-panel"
       aria-label="需求管理"
     >
@@ -453,7 +456,13 @@ export function WorkspaceMemoPanel() {
             <Button type="primary" size="small" icon={<PlusOutlined />} onClick={openCreate}>
               新增
             </Button>
-            <Button type="text" size="small" onClick={handleClose}>
+            <Button
+              type="text"
+              size="small"
+              onClick={handleClose}
+              title={`关闭（${closeShortcutLabel}）`}
+              aria-label={`关闭需求（${closeShortcutLabel}）`}
+            >
               关闭
             </Button>
           </div>

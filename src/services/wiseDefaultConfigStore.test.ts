@@ -95,7 +95,7 @@ describe("wiseDefaultConfigStore", () => {
     expect(config.showRepositoryIconBadgesInWorkspaceList).toBe(false);
     expect(config.monitorPanelPlacement).toBe("left");
     expect(config.showWorkspaceQuickActionsPanel).toBe(true);
-    expect(config.showWorkspaceTodosPanel).toBe(true);
+    expect(config.showWorkspaceTodosPanel).toBe(false);
     expect(config.showRemoteEntryTopbar).toBe(true);
     expect(config.showTopbarRepositoryName).toBe(false);
     expect(config.fileTreeOpenInNewPane).toBe(false);
@@ -374,7 +374,7 @@ describe("wiseDefaultConfigStore", () => {
     );
     const config = await loadWiseDefaultConfig();
     expect(config.showWorkspaceQuickActionsPanel).toBe(true);
-    expect(config.showWorkspaceTodosPanel).toBe(true);
+    expect(config.showWorkspaceTodosPanel).toBe(false);
     expect(config.showComposerFooterAttachButton).toBe(true);
     expect(config.showComposerFooterModelPicker).toBe(true);
   });
