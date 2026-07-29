@@ -35,10 +35,10 @@
 .app-workspace-quick-actions-panel__body {
   flex: 1 1 auto;
   min-height: 0;
-  max-height: 200px;
+  max-height: 180px;
   overflow-y: auto;
   overscroll-behavior: contain;
-  padding: 2px 0 4px;
+  padding: 4px;
 }
 
 .app-workspace-quick-actions-panel__loading {
@@ -73,87 +73,88 @@
   list-style: none;
   margin: 0;
   padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  gap: 4px;
 }
 
-.app-workspace-quick-actions-panel__row {
-  display: flex;
-  align-items: center;
-  gap: 0;
+.app-workspace-quick-actions-panel__card {
+  position: relative;
   min-width: 0;
-  min-height: 26px;
-}
-
-.app-workspace-quick-actions-panel__row-main {
-  flex: 1 1 0;
-  min-width: 0;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  border: none;
-  background: transparent;
-  text-align: left;
-  padding: 2px 4px 2px 8px;
-  cursor: pointer;
-  color: inherit;
-  line-height: 1.2;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 6px;
+  background: var(--ant-color-bg-container);
   overflow: hidden;
 }
 
-.app-workspace-quick-actions-panel__row-main:hover {
+.app-workspace-quick-actions-panel__card:hover {
+  border-color: var(--ant-color-border);
   background: var(--ant-color-fill-quaternary);
 }
 
-.app-workspace-quick-actions-panel__row-icon {
+.app-workspace-quick-actions-panel__card-main {
+  width: 100%;
+  min-width: 0;
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  gap: 4px;
+  border: none;
+  background: transparent;
+  text-align: left;
+  padding: 2px 5px;
+  cursor: pointer;
+  color: inherit;
+  line-height: 1.1;
+  min-height: 22px;
+}
+
+.app-workspace-quick-actions-panel__card-icon {
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
+  justify-content: center;
+  width: 12px;
+  height: 12px;
   color: var(--ant-color-text-secondary);
-  font-size: 12px;
-}
-
-.app-workspace-quick-actions-panel__row-label {
-  flex-shrink: 0;
-  max-width: 38%;
   font-size: 11px;
-  font-weight: 500;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
-.app-workspace-quick-actions-panel__row-target {
-  flex: 1 1 0;
+.app-workspace-quick-actions-panel__card-label {
+  width: 100%;
   min-width: 0;
   font-size: 10px;
-  color: var(--ant-color-text-tertiary);
+  font-weight: 500;
+  line-height: 14px;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
-.app-workspace-quick-actions-panel__scope-tag {
-  flex-shrink: 0;
-  margin: 0;
-  padding-inline: 4px;
-  font-size: 10px;
-  line-height: 16px;
-  min-height: 16px;
-}
-
-.app-workspace-quick-actions-panel__row-actions {
-  display: flex;
+.app-workspace-quick-actions-panel__card-actions {
+  position: absolute;
+  top: 1px;
+  right: 1px;
+  display: none;
   align-items: center;
-  flex-shrink: 0;
-  padding-right: 2px;
-  position: relative;
-  z-index: 1;
-  background: var(--ant-color-bg-container);
+  gap: 0;
+  padding: 0;
+  border-radius: 4px;
+  background: color-mix(in srgb, var(--ant-color-bg-container) 92%, transparent);
+  box-shadow: 0 0 0 1px var(--ant-color-border-secondary);
 }
 
-.app-workspace-quick-actions-panel__row-actions .ant-btn {
-  width: 22px;
-  height: 22px;
+.app-workspace-quick-actions-panel__card:hover .app-workspace-quick-actions-panel__card-actions,
+.app-workspace-quick-actions-panel__card:focus-within .app-workspace-quick-actions-panel__card-actions {
+  display: flex;
+}
+
+.app-workspace-quick-actions-panel__card-actions .ant-btn {
+  width: 16px;
+  height: 16px;
   padding: 0;
+  font-size: 9px;
 }
 
 .app-workspace-quick-actions-panel__pin-btn--active {
@@ -189,30 +190,6 @@
 
 .app-workspace-quick-actions-edit-modal--compact .ant-form-item {
   margin-bottom: 6px;
-}
-
-.app-workspace-quick-actions-edit-modal__scope-option {
-  display: inline-flex;
-  align-items: center;
-  gap: 6px;
-  max-width: 100%;
-}
-
-.app-workspace-quick-actions-edit-modal__scope-tag {
-  flex-shrink: 0;
-  font-size: 10px;
-  line-height: 14px;
-  padding: 0 5px;
-  border-radius: 3px;
-  background: var(--ant-color-fill-tertiary);
-  color: var(--ant-color-text-secondary);
-}
-
-.app-workspace-quick-actions-edit-modal__scope-name {
-  min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .app-workspace-quick-actions-edit-modal--compact .ant-form-item-label > label {

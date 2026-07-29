@@ -7,7 +7,7 @@ import {
   PushpinFilled,
   PushpinOutlined,
 } from "@ant-design/icons";
-import { App, Button, Spin, Tag, Typography } from "antd";
+import { App, Button, Spin, Typography } from "antd";
 import { HoverHint } from "../shared/HoverHint";
 import { useCallback, useState, type MouseEvent } from "react";
 import { openExternalUrl } from "../../services/openExternal";
@@ -20,7 +20,6 @@ import {
   type WorkspaceQuickActionItem,
   type WorkspaceQuickActionScope,
 } from "../../types/workspaceQuickActions";
-import type { Repository, Workspace } from "../../types";
 import { WorkspaceQuickActionsEditModal } from "./WorkspaceQuickActionsEditModal";
 import { InspectorCollapsibleSection } from "./InspectorCollapsibleSection";
 import "./WorkspaceQuickActionsPanel.css";
@@ -28,12 +27,6 @@ import "./WorkspaceQuickActionsPanel.css";
 export interface WorkspaceQuickActionsPanelProps {
   projectId: string | null;
   repositoryId: number | null;
-  /** 可选工作区集合；缺省时 Modal 仅允许选当前 scope。 */
-  workspaces?: Workspace[];
-  /** 工作区内仓库（按 id 索引）。 */
-  repositoriesById?: Map<number, Repository>;
-  /** 浮动仓库（未绑定工作区的仓库）。 */
-  floatingRepositories?: Repository[];
 }
 
 type EditState =
@@ -43,17 +36,13 @@ type EditState =
 export function WorkspaceQuickActionsPanel({
   projectId,
   repositoryId,
-  workspaces,
-  repositoriesById,
-  floatingRepositories,
 }: WorkspaceQuickActionsPanelProps) {
   const { message, modal } = App.useApp();
   const quickActions = useWorkspaceQuickActions({ projectId, repositoryId });
   const [editState, setEditState] = useState<EditState | null>(null);
 
-  const allowRepositoryScope = repositoryId != null || (repositoriesById?.size ?? 0) > 0;
   const defaultScope: WorkspaceQuickActionScope =
-    allowRepositoryScope && repositoryId != null ? "repository" : "project";
+    repositoryId != null ? "repository" : "project";
 
   const stopRowActionEvent = useCallback((event: MouseEvent<HTMLElement>) => {
     event.preventDefault();
@@ -201,21 +190,8 @@ export function WorkspaceQuickActionsPanel({
           defaultScope={defaultScope}
           activeProjectId={projectId}
           activeRepositoryId={repositoryId}
-          workspaces={workspaces}
-          repositoriesById={repositoriesById}
-          floatingRepositories={floatingRepositories}
           onClose={() => setEditState(null)}
           onSubmit={async (input) => {
-            if (editState?.mode === "edit" && editState.scope !== input.scope) {
-              const oldSource = quickActions.readScopeItems(editState.scope, editState.scopeId);
-              const without = oldSource.filter((row) => row.id !== editState.item.id);
-              const removedOk = await quickActions.flushPersist(
-                editState.scope,
-                without,
-                editState.scopeId,
-              );
-              if (!removedOk) throw new Error("快捷操作保存失败");
-            }
             const existingId = editState?.mode === "edit" ? editState.item.id : undefined;
             await upsertItem(input.scope, input.scopeId, input, existingId);
           }}
@@ -247,49 +223,35 @@ export function WorkspaceQuickActionsPanel({
           <ul className="app-workspace-quick-actions-panel__list">
             {quickActions.displayItems.map((item) => {
               const itemScopeId = item.scopeId;
+              const pinned = resolveWorkspaceQuickActionPinnedToTopbar(item);
               return (
-              <li key={`${item.scope}:${item.id}`} className="app-workspace-quick-actions-panel__row">
+              <li key={`${item.scope}:${item.id}`} className="app-workspace-quick-actions-panel__card">
                 <button
                   type="button"
-                  className="app-workspace-quick-actions-panel__row-main"
+                  className="app-workspace-quick-actions-panel__card-main"
                   title={item.target}
                   onClick={() => openItem(item)}
                 >
-                  <span className="app-workspace-quick-actions-panel__row-icon" aria-hidden>
+                  <span className="app-workspace-quick-actions-panel__card-icon" aria-hidden>
                     {item.kind === "link" ? <LinkOutlined /> : <FolderOpenOutlined />}
                   </span>
-                  <span className="app-workspace-quick-actions-panel__row-label">{item.label}</span>
-                  <span className="app-workspace-quick-actions-panel__row-target">{item.target}</span>
-                  <Tag variant="filled" className="app-workspace-quick-actions-panel__scope-tag">
-                    {item.scope === "project" ? "工作区" : "仓库"}
-                  </Tag>
+                  <span className="app-workspace-quick-actions-panel__card-label">{item.label}</span>
                 </button>
-                <span className="app-workspace-quick-actions-panel__row-actions">
+                <span className="app-workspace-quick-actions-panel__card-actions">
                   <HoverHint
                     title={
-                      resolveWorkspaceQuickActionPinnedToTopbar(item)
+                      pinned
                         ? "从顶栏移除"
                         : "固定到顶栏（远程后面）"
                     }
-
                   >
                     <Button
                       type="text"
                       size="small"
-                      icon={
-                        resolveWorkspaceQuickActionPinnedToTopbar(item) ? (
-                          <PushpinFilled />
-                        ) : (
-                          <PushpinOutlined />
-                        )
-                      }
-                      aria-label={
-                        resolveWorkspaceQuickActionPinnedToTopbar(item)
-                          ? "从顶栏移除"
-                          : "固定到顶栏"
-                      }
+                      icon={pinned ? <PushpinFilled /> : <PushpinOutlined />}
+                      aria-label={pinned ? "从顶栏移除" : "固定到顶栏"}
                       className={
-                        resolveWorkspaceQuickActionPinnedToTopbar(item)
+                        pinned
                           ? "app-workspace-quick-actions-panel__pin-btn--active"
                           : undefined
                       }

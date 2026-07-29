@@ -7,7 +7,7 @@ import {
   PushpinFilled,
   PushpinOutlined,
 } from "@ant-design/icons";
-import { App, Button, Popover, Spin, Tag, Typography } from "antd";
+import { App, Button, Popover, Spin, Typography } from "antd";
 import { useCallback, useMemo, useState, type MouseEvent } from "react";
 import { openExternalUrl } from "../../services/openExternal";
 import { openInFinder } from "../../services/repository";
@@ -17,6 +17,7 @@ import {
   resolveWorkspaceQuickActionPinnedToTopbar,
   type WorkspaceQuickActionDisplayItem,
   type WorkspaceQuickActionItem,
+  type WorkspaceQuickActionScope,
 } from "../../types/workspaceQuickActions";
 import type { Repository, Workspace } from "../../types";
 import { flushWorkspaceQuickActionsPersist } from "../../stores/workspaceQuickActionsRuntimeStore";
@@ -36,8 +37,6 @@ export interface LeftSidebarQuickActionsPopoverProps {
 type EditState =
   | { mode: "create" }
   | { mode: "edit"; item: WorkspaceQuickActionItem; scope: WorkspaceQuickActionScope; scopeId: string };
-
-type WorkspaceQuickActionScope = "project" | "repository";
 
 export function LeftSidebarQuickActionsPopover({
   projectId,
@@ -59,34 +58,6 @@ export function LeftSidebarQuickActionsPopover({
     }
     return [...ids];
   }, [repositoriesById, floatingRepositories]);
-  // 列表项归属标签展示具体工作区/仓库名称（找不到时回退为「工作区」/「仓库」）。
-  const workspaceNameById = useMemo(() => {
-    const map = new Map<string, string>();
-    for (const ws of workspaces) {
-      if (ws.id) map.set(ws.id, ws.name);
-    }
-    return map;
-  }, [workspaces]);
-  const repositoryNameById = useMemo(() => {
-    const map = new Map<number, string>();
-    for (const [id, repo] of repositoriesById) {
-      if (Number.isFinite(id) && id > 0) map.set(id, repo.name);
-    }
-    for (const repo of floatingRepositories) {
-      if (Number.isFinite(repo.id) && repo.id > 0) map.set(repo.id, repo.name);
-    }
-    return map;
-  }, [repositoriesById, floatingRepositories]);
-  const resolveScopeLabel = useCallback(
-    (item: WorkspaceQuickActionDisplayItem): string => {
-      if (item.scope === "project") {
-        return workspaceNameById.get(item.scopeId) ?? "工作区";
-      }
-      const repoId = Number(item.scopeId);
-      return repositoryNameById.get(repoId) ?? "仓库";
-    },
-    [workspaceNameById, repositoryNameById],
-  );
   const quickActions = useWorkspaceQuickActions({
     projectId,
     repositoryId,
@@ -273,27 +244,20 @@ export function LeftSidebarQuickActionsPopover({
                   return (
                     <li
                       key={`${item.scope}:${item.id}`}
-                      className="app-left-sidebar-quick-actions-popover__row"
+                      className="app-left-sidebar-quick-actions-popover__card"
                     >
                       <button
                         type="button"
-                        className="app-left-sidebar-quick-actions-popover__row-main"
+                        className="app-left-sidebar-quick-actions-popover__card-main"
                         title={item.target}
                         onClick={() => openItem(item)}
                       >
-                        <span className="app-left-sidebar-quick-actions-popover__row-icon" aria-hidden>
+                        <span className="app-left-sidebar-quick-actions-popover__card-icon" aria-hidden>
                           {item.kind === "link" ? <LinkOutlined /> : <FolderOpenOutlined />}
                         </span>
-                        <span className="app-left-sidebar-quick-actions-popover__row-label">{item.label}</span>
-                        <span className="app-left-sidebar-quick-actions-popover__row-target">{item.target}</span>
-                        <Tag
-                          variant="filled" className="app-left-sidebar-quick-actions-popover__scope-tag"
-                          title={resolveScopeLabel(item)}
-                        >
-                          {resolveScopeLabel(item)}
-                        </Tag>
+                        <span className="app-left-sidebar-quick-actions-popover__card-label">{item.label}</span>
                       </button>
-                      <span className="app-left-sidebar-quick-actions-popover__row-actions">
+                      <span className="app-left-sidebar-quick-actions-popover__card-actions">
                         <Button
                           type="text"
                           size="small"
@@ -348,23 +312,10 @@ export function LeftSidebarQuickActionsPopover({
             initialScopeId={editState?.mode === "edit" ? editState.scopeId : null}
             activeProjectId={projectId}
             activeRepositoryId={repositoryId}
-            workspaces={workspaces}
-            repositoriesById={repositoriesById}
-            floatingRepositories={floatingRepositories}
             defaultScope={defaultScope}
             compact
             onClose={() => setEditState(null)}
             onSubmit={async (input) => {
-              if (editState?.mode === "edit" && editState.scope !== input.scope) {
-                const oldSource = quickActions.readScopeItems(editState.scope, editState.scopeId);
-                const without = oldSource.filter((row) => row.id !== editState.item.id);
-                const removedOk = await flushWorkspaceQuickActionsPersist(
-                  editState.scope,
-                  editState.scopeId,
-                  without,
-                );
-                if (!removedOk) throw new Error("快捷操作保存失败");
-              }
               const existingId = editState?.mode === "edit" ? editState.item.id : undefined;
               await upsertItem(input.scope, input.scopeId, input, existingId);
             }}

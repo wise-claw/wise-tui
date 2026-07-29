@@ -280,7 +280,7 @@
   border: none;
   border-radius: 4px;
   background: transparent;
-  color: var(--ant-color-text-quaternary);
+  color: var(--ant-color-text-secondary);
   font: inherit;
   font-size: 10px;
   line-height: 16px;

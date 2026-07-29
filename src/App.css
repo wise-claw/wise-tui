@@ -691,6 +691,7 @@ body {
   z-index: 1200;
 }
 
+.app-left-sidebar-workspace-todos-popover .ant-popover-container,
 .app-left-sidebar-workspace-todos-popover .ant-popover-inner {
   padding: 0;
   overflow: hidden;
@@ -698,7 +699,7 @@ body {
 
 .app-left-sidebar-workspace-todos-popover .ant-popover-title {
   margin: 0;
-  padding: 8px 12px 6px;
+  padding: 4px 8px 3px;
   font-size: 12px;
   font-weight: 600;
   border-bottom: 1px solid var(--ant-color-split);

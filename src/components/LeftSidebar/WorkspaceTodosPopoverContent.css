@@ -10,21 +10,27 @@
   overflow-x: hidden;
   overflow-y: auto;
   overscroll-behavior: contain;
+  padding: 1px 0 0;
 }
 
 .app-workspace-todos-popover .app-workspace-todos-panel__row {
   grid-template-columns: 18px minmax(0, 1fr) auto;
+  padding: 0 4px 0 4px;
 }
 
 .app-workspace-todos-popover .app-workspace-todos-panel__row:not(.app-workspace-todos-panel__row--no-scope) {
   grid-template-columns: 18px minmax(0, 1fr) auto auto;
 }
 
+.app-workspace-todos-popover .app-workspace-todos-panel__composer {
+  padding: 3px 6px 4px;
+}
+
 .app-workspace-todos-popover .app-workspace-todos-panel__list-empty,
 .app-workspace-todos-popover .app-workspace-todos-panel__empty-hint {
-  padding: 8px 10px;
+  padding: 4px 6px;
 }
 
 .app-workspace-todos-popover .app-workspace-todos-panel__loading {
-  padding: 12px 0;
+  padding: 6px 0;
 }
