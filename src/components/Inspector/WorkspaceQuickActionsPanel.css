@@ -35,7 +35,7 @@
 .app-workspace-quick-actions-panel__body {
   flex: 1 1 auto;
   min-height: 0;
-  max-height: 180px;
+  max-height: 240px;
   overflow-y: auto;
   overscroll-behavior: contain;
   padding: 4px;
@@ -73,18 +73,20 @@
   list-style: none;
   margin: 0;
   padding: 0;
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(64px, 1fr));
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
   gap: 4px;
 }
 
 .app-workspace-quick-actions-panel__card {
   position: relative;
-  min-width: 0;
+  flex: 0 1 auto;
+  width: max-content;
+  max-width: 100%;
   border: 1px solid var(--ant-color-border-secondary);
-  border-radius: 6px;
+  border-radius: 4px;
   background: var(--ant-color-bg-container);
-  overflow: hidden;
 }
 
 .app-workspace-quick-actions-panel__card:hover {
@@ -94,20 +96,20 @@
 
 .app-workspace-quick-actions-panel__card-main {
   width: 100%;
-  min-width: 0;
-  display: flex;
+  display: inline-flex;
   flex-direction: row;
   align-items: center;
   justify-content: flex-start;
-  gap: 4px;
+  gap: 3px;
   border: none;
   background: transparent;
   text-align: left;
-  padding: 2px 5px;
+  padding: 1px 5px;
   cursor: pointer;
   color: inherit;
   line-height: 1.1;
-  min-height: 22px;
+  min-height: 18px;
+  box-sizing: border-box;
 }
 
 .app-workspace-quick-actions-panel__card-icon {
@@ -115,34 +117,31 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 12px;
-  height: 12px;
+  width: 11px;
+  height: 11px;
   color: var(--ant-color-text-secondary);
-  font-size: 11px;
+  font-size: 10px;
 }
 
 .app-workspace-quick-actions-panel__card-label {
-  width: 100%;
-  min-width: 0;
+  flex: 0 1 auto;
   font-size: 10px;
   font-weight: 500;
   line-height: 14px;
-  overflow: hidden;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .app-workspace-quick-actions-panel__card-actions {
   position: absolute;
-  top: 1px;
-  right: 1px;
+  inset: 0 0 0 auto;
   display: none;
   align-items: center;
   gap: 0;
-  padding: 0;
-  border-radius: 4px;
-  background: color-mix(in srgb, var(--ant-color-bg-container) 92%, transparent);
-  box-shadow: 0 0 0 1px var(--ant-color-border-secondary);
+  padding: 0 1px;
+  border-radius: 3px;
+  background: color-mix(in srgb, var(--ant-color-bg-container) 94%, transparent);
+  box-shadow: -6px 0 8px 0 color-mix(in srgb, var(--ant-color-bg-container) 90%, transparent);
+  z-index: 1;
 }
 
 .app-workspace-quick-actions-panel__card:hover .app-workspace-quick-actions-panel__card-actions,
@@ -151,8 +150,8 @@
 }
 
 .app-workspace-quick-actions-panel__card-actions .ant-btn {
-  width: 16px;
-  height: 16px;
+  width: 14px;
+  height: 14px;
   padding: 0;
   font-size: 9px;
 }
