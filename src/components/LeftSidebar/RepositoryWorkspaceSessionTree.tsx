@@ -55,12 +55,14 @@ function activateSession(
     "onSelectSession" | "onRestoreHistorySessionAsMain" | "onHistoryDrawerSessionIdChange"
   >,
 ) {
-  if (props.onRestoreHistorySessionAsMain) {
-    void props.onRestoreHistorySessionAsMain(sessionId);
-    return;
-  }
+  // 侧栏会话行：优先切到会话窗口（含执行环境 worker）。
+  // restore-as-main 仅作无 onSelectSession 时的兜底（会改主会话绑定，不适合 worker）。
   if (props.onSelectSession) {
     props.onSelectSession(sessionId);
+    return;
+  }
+  if (props.onRestoreHistorySessionAsMain) {
+    void props.onRestoreHistorySessionAsMain(sessionId);
     return;
   }
   props.onHistoryDrawerSessionIdChange?.(sessionId);
@@ -197,7 +199,13 @@ function RepositoryWorkspaceSessionTreeInner(props: RepositoryWorkspaceSessionTr
                   return;
                 }
                 const sid = item.sessionId?.trim();
-                if (sid) props.onHistoryDrawerSessionIdChange?.(sid);
+                if (!sid) return;
+                // 执行环境派发：打开会话窗口，不再进历史 drawer。
+                if (props.onSelectSession) {
+                  props.onSelectSession(sid);
+                  return;
+                }
+                props.onHistoryDrawerSessionIdChange?.(sid);
               }}
             >
               <WorkspaceSessionRowStatusSlot liveStatus={item.status} />

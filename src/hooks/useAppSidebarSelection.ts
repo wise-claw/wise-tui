@@ -39,6 +39,7 @@ import {
 import { loadSessionOwnerHints, WISE_SESSION_OWNER_HINTS_CHANGED_EVENT } from "../utils/sessionOwnerHints";
 import { resolveFocusedPaneTargetSlot } from "../utils/multiPaneSlots";
 import { getActivePaneIndex } from "../stores/activePaneIndexStore";
+import { requestPaneCenterView } from "../stores/paneCenterViewControlStore";
 import type { PaneCount, PaneSlot } from "../constants/mainLayoutWidths";
 import type { UseViewModeApi } from "./useViewMode";
 
@@ -745,6 +746,7 @@ export function useAppSidebarSelection({
   const jumpToSessionLeavingMcpHub = useCallback(
     (sessionId: string) => {
       viewMode.enter({ kind: "chat" });
+      requestPaneCenterView(0, "messages");
       jumpToSessionWithRepository(sessionId);
     },
     [jumpToSessionWithRepository, viewMode],

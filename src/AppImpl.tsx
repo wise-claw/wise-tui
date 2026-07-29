@@ -102,6 +102,7 @@ import {
 import { WISE_UI_EVENT_NAVIGATE, type WiseUiNavigationDetail } from "./constants/wiseUiNavigationEvents";
 import { requestClaudePluginHubTab } from "./stores/claudePluginHubNavStore";
 import { getActivePaneIndex } from "./stores/activePaneIndexStore";
+import { requestPaneCenterView } from "./stores/paneCenterViewControlStore";
 import { reloadAppWindow } from "./services/window";
 import {
   getCurrentMainWorkspaceWindowLabel,
@@ -1286,6 +1287,11 @@ export default function App() {
           createSession,
           executeSession: (workerTabId, prompt, opts) => executeSession(workerTabId, prompt, opts),
           appendSystemMessage,
+          activateWorkerSession: (workerSessionId) => {
+            viewMode.enter({ kind: "chat" });
+            requestPaneCenterView(0, "messages");
+            jumpToSessionWithRepository(workerSessionId);
+          },
         },
         {
           mainSessionId,
@@ -1305,6 +1311,8 @@ export default function App() {
       createSession,
       executeSession,
       appendSystemMessage,
+      jumpToSessionWithRepository,
+      viewMode,
     ],
   );
 
@@ -3063,7 +3071,7 @@ export default function App() {
         onSendMessage: handleSendMessageWithAtMention,
         onCancelSession: cancelSession,
         onCloseSession: handleCloseSession,
-        onSwitchSession: jumpToSessionWithRepository,
+        onSwitchSession: jumpToSessionLeavingMcpHub,
         onNewSession: handleManualNewRepositorySession,
         onNewProjectSession: handleManualNewProjectSession,
         onEnsureRepositorySession: (repository) => {

@@ -584,6 +584,15 @@ function ClaudeSessionsShell({
     if (activeSession) {
       return;
     }
+    // 侧栏刚点选的会话若在全量列表中，勿立刻回退主会话（panel 过滤偶发漏掉 worker 时会抢焦）。
+    if (
+      activeSessionId &&
+      incomingSessions.some(
+        (session) => session.id === activeSessionId || session.claudeSessionId === activeSessionId,
+      )
+    ) {
+      return;
+    }
 
     let cancelled = false;
     queueMicrotask(() => {
@@ -651,6 +660,7 @@ function ClaudeSessionsShell({
     activeProject,
     activeRepository,
     activeSession,
+    activeSessionId,
     activeWorkspaceFocus,
     incomingSessions,
     mainSessionForDataLink,

@@ -205,6 +205,21 @@ describe("buildWorkspaceSidebarTreeRows", () => {
     expect(rows).toHaveLength(1);
     expect(rows[0]!.kind).toBe("session");
   });
+
+  test("equal updatedAt keeps stable order by session id", () => {
+    const rows = buildWorkspaceSidebarTreeRows({
+      sessions: [
+        makeSession("sess-b", "/work/a", { createdAt: 100, content: "b" }),
+        makeSession("sess-a", "/work/a", { createdAt: 100, content: "a" }),
+      ],
+      repositoryPath: "/work/a",
+      showRunItems: false,
+    });
+    expect(rows.map((r) => (r.kind === "session" ? r.item.id : ""))).toEqual([
+      "sess-a",
+      "sess-b",
+    ]);
+  });
 });
 
 describe("formatWorkspaceSidebarRelativeTime", () => {

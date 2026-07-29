@@ -147,7 +147,28 @@ export function buildWorkspaceSidebarTreeRows(input: {
     rows.push({ kind: "session", item, updatedAt: sessionUpdatedAtMs(item) });
   }
 
-  rows.sort((a, b) => b.updatedAt - a.updatedAt);
+  rows.sort((a, b) => {
+    const byTime = b.updatedAt - a.updatedAt;
+    if (byTime !== 0) return byTime;
+    // 时间相同：稳定次键，避免点击/重渲时行序互换。
+    const aKey =
+      a.kind === "session"
+        ? a.item.id
+        : a.kind === "employee"
+          ? a.item.employeeId
+          : a.kind === "dispatch"
+            ? a.item.key
+            : a.item.workflowId;
+    const bKey =
+      b.kind === "session"
+        ? b.item.id
+        : b.kind === "employee"
+          ? b.item.employeeId
+          : b.kind === "dispatch"
+            ? b.item.key
+            : b.item.workflowId;
+    return aKey < bKey ? -1 : aKey > bKey ? 1 : 0;
+  });
   return rows;
 }
 

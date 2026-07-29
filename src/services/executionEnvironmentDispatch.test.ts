@@ -30,6 +30,7 @@ describe("dispatchExecutionEnvironmentFromMainSession", () => {
     }));
     const createdNames: string[] = [];
     const executed: string[] = [];
+    const activated: string[] = [];
     const sessions = [stubSession("main")];
 
     const ok = await dispatchExecutionEnvironmentFromMainSession(
@@ -47,6 +48,9 @@ describe("dispatchExecutionEnvironmentFromMainSession", () => {
           return true;
         },
         appendSystemMessage: () => {},
+        activateWorkerSession: (workerSessionId) => {
+          activated.push(workerSessionId);
+        },
       },
       {
         mainSessionId: "main",
@@ -58,6 +62,7 @@ describe("dispatchExecutionEnvironmentFromMainSession", () => {
     expect(loadInstructionResolveContext).not.toHaveBeenCalled();
     expect(createdNames).toHaveLength(2);
     expect(executed).toHaveLength(2);
+    expect(activated).toEqual(["worker-1"]);
   });
 
   test("有默认指令时才加载 resolve context", async () => {

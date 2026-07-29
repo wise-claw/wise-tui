@@ -2,9 +2,10 @@ import { useSyncExternalStore } from "react";
 import { requestPaneCenterView } from "./paneCenterViewControlStore";
 
 /**
- * 全局备忘录中栏面板开关（与打开文件同一 slot：`panelBelowMessages` + CenterView「files」）。
+ * 全局需求管理中栏面板开关（与打开文件同一 slot：`panelBelowMessages` + CenterView「files」）。
  * 侧栏入口与 layout 通过本 store 解耦，避免 prop 穿透。
- * 终端已是独立 slot，打开备忘录不再 collapse 终端。
+ * 终端已是独立 slot，打开需求面板不再 collapse 终端。
+ * 函数名保留 Memo 前缀以兼容既有调用方。
  */
 
 let open = false;

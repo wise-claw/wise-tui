@@ -7,6 +7,16 @@ export function normalizeMarkdownLineBreaks(text: string): string {
     .replace(/\u0085/g, "\n");
 }
 
+/**
+ * 将内联 HTML 换行标签转为 Markdown 换行。
+ * ReactMarkdown 默认转义内联 HTML；Codex / GLM 文档常混用 Markdown 与 `<br />`。
+ */
+export function normalizeInlineHtmlBreakTags(text: string): string {
+  return text
+    .replace(/<br\s*\/?>/gi, "\n")
+    .replace(/&lt;br\s*\/?&gt;/gi, "\n");
+}
+
 /** 全角竖线 → ASCII，便于 GFM 表格解析。 */
 function normalizePipeChars(text: string): string {
   return text.replace(/\uFF5C/g, "|");
@@ -854,5 +864,6 @@ export function normalizeMarkdownForDisplay(
   markdown = recoverSplitPipeTableBlocks(markdown);
   markdown = normalizeTableSeparatorRows(markdown);
   markdown = alignPipeTableDataRowsToHeader(markdown);
-  return normalizePipeTables(markdown);
+  markdown = normalizePipeTables(markdown);
+  return normalizeInlineHtmlBreakTags(markdown);
 }

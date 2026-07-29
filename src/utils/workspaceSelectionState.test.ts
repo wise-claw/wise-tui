@@ -296,6 +296,22 @@ describe("resolveClaudePanelActiveSession", () => {
     expect(resolved?.id).toBe("s-repo");
   });
 
+  test("repository focus opens execution-environment worker even if filtered out of panel sessions", () => {
+    const worker = session("s-worker", "/eco/web", "eco-ai-web/执行环境:claude:任务");
+    const resolved = resolveClaudePanelActiveSession({
+      sessions: [repoMain],
+      allSessions: [repoMain, worker],
+      activeSessionId: "s-worker",
+      activeWorkspaceFocus: "repository",
+      activeProject: eco,
+      activeRepository: repositories[0],
+      repositories,
+      repositoryMainBindings: {},
+      workspaceMainSession: null,
+    });
+    expect(resolved?.id).toBe("s-worker");
+  });
+
   test("repository focus returns undefined without active repository", () => {
     expect(
       resolveClaudePanelActiveSession({

@@ -377,7 +377,7 @@ const MultiPanePrimaryPane = memo(function MultiPanePrimaryPane({
     { label: "消息", value: "messages" },
   ];
   if (panelBelowMessages) {
-    centerSwitcherOptions.push({ label: memoOpen ? "备忘录" : "文件", value: "files" });
+    centerSwitcherOptions.push({ label: memoOpen ? "需求" : "文件", value: "files" });
   }
   if (terminalMounted) {
     centerSwitcherOptions.push({ label: "终端", value: "terminal" });

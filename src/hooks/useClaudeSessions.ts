@@ -2440,6 +2440,17 @@ export function useClaudeSessions(options?: UseClaudeSessionsOptions): UseClaude
           };
         }
         if (isTerminalWorkerWiseTab(s)) return s;
+        if (isExecutionEnvironmentWorkerRepositoryName(s.repositoryName ?? "")) {
+          // 执行环境 worker：侧栏可点开查看，勿在切走时清空正文（否则打开后空白、排序抖动）。
+          if (s.messages.length <= IN_MEMORY_SESSION_MESSAGES_MAX) return s;
+          changed = true;
+          return {
+            ...s,
+            messages: capSessionMessagesForMemory(s.messages),
+            diskTranscriptPartial: true,
+            diskPreview: retainSessionListPreviewOnMessageDrop(s),
+          };
+        }
         if (s.status === "running" || s.status === "connecting") {
           if (s.messages.length <= IN_MEMORY_SESSION_MESSAGES_MAX) return s;
           changed = true;

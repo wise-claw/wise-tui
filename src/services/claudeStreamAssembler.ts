@@ -443,6 +443,50 @@ export function foldToolResultUserMessagesIntoAssistant(messages: readonly Claud
   return result;
 }
 
+/**
+ * 将连续 assistant 消息合并为一条（对齐流式 `appendAssistantStreamParts`）。
+ *
+ * Cursor CLI `--stream-partial-output` 会把每个 text delta 落成独立 JSONL `assistant` 行；
+ * 若按行各建一条消息，UI 会把一行 Markdown 拆成多个气泡（`**` / 词片断裂）。
+ * 累积快照走 containment 去重，增量碎片走拼接。
+ */
+export function coalesceConsecutiveAssistantMessages(
+  messages: readonly ClaudeMessage[],
+): ClaudeMessage[] {
+  if (messages.length < 2) return messages as ClaudeMessage[];
+  const out: ClaudeMessage[] = [];
+  for (const msg of messages) {
+    if (msg.role !== "assistant") {
+      out.push(msg);
+      continue;
+    }
+    const last = out[out.length - 1];
+    if (last?.role !== "assistant") {
+      out.push(msg);
+      continue;
+    }
+    const mergedParts = mergeAssistantParts(
+      assistantPartsForCoalesce(last),
+      assistantPartsForCoalesce(msg),
+    );
+    out[out.length - 1] = {
+      ...last,
+      parts: mergedParts,
+      content: textContentFromParts(mergedParts),
+    };
+  }
+  return out;
+}
+
+/** 合并用 parts：优先 `parts`；仅有 `content` 的老消息回退为单 text part。 */
+function assistantPartsForCoalesce(msg: ClaudeMessage): MessagePart[] {
+  const parts = msg.parts ?? [];
+  if (parts.length > 0) return parts;
+  const text = msg.content?.trim() ?? "";
+  if (!text) return [];
+  return [{ type: "text", text: msg.content }];
+}
+
 /** 将 stream-json 中的 tool_result 合并进历史 assistant 消息里对应的 tool_use（按 id）。 */
 export function applyToolResultPartsToSession(session: ClaudeSession, parts: MessagePart[]): ClaudeSession {
   const updates = parts.filter(isToolResultUpdatePart);

@@ -1,8 +1,8 @@
 import { describe, expect, test } from "bun:test";
 import type { ClaudeMessage } from "../types";
-import { foldToolResultUserMessagesIntoAssistant } from "../services/claudeStreamAssembler";
 import {
   buildChatMessageListRows,
+  foldChatMessagesForList,
   shouldShowListEndThinkingHint,
   tryPatchChatMessageListRowsTail,
 } from "./claudeChatMessageListRows";
@@ -315,18 +315,20 @@ describe("buildChatMessageListRows", () => {
       sessionStatus: "idle",
       showListEndThinkingHint: false,
     });
-    expect(rows.map((r) => r.kind)).toEqual(["message", "message", "message"]);
+    // 连续 assistant（含工具 + 正文）先合并成一条消息，再渲染为单气泡。
+    expect(rows.map((r) => r.kind)).toEqual(["message", "message"]);
     expect(rows[1]!.kind === "message" && rows[1]!.msg.id).toBe(2);
-    expect(rows[1]!.kind === "message" && rows[1]!.memberMessageIds).toEqual([2, 3, 4]);
-    expect(rows[1]!.kind === "message" && rows[1]!.originalIndexes).toEqual([1, 2, 3]);
     expect(
       rows[1]!.kind === "message" &&
         rows[1]!.msg.parts.filter((p) => p.type === "tool_use").map((p) => (p as { id: string }).id),
     ).toEqual(["r1", "r2", "b1"]);
-    expect(rows[2]!.kind === "message" && rows[2]!.msg.id).toBe(5);
+    expect(
+      rows[1]!.kind === "message" &&
+        rows[1]!.msg.parts.some((p) => p.type === "text" && p.text === "看到了这些文件"),
+    ).toBe(true);
   });
 
-  test("does not coalesce tool rows across assistant text", () => {
+  test("keeps tool and text parts in one assistant bubble when fragmented across jsonl lines", () => {
     const messages = [
       msg({
         id: 1,
@@ -366,10 +368,28 @@ describe("buildChatMessageListRows", () => {
       sessionStatus: "idle",
       showListEndThinkingHint: false,
     });
-    expect(rows).toHaveLength(3);
-    expect(rows.map((r) => (r.kind === "message" ? r.msg.id : r.kind))).toEqual([1, 2, 3]);
-    expect(rows[0]!.kind === "message" && rows[0]!.memberMessageIds).toBeUndefined();
-    expect(rows[2]!.kind === "message" && rows[2]!.memberMessageIds).toBeUndefined();
+    expect(rows).toHaveLength(1);
+    expect(rows[0]!.kind === "message" && rows[0]!.msg.parts.map((p) => p.type)).toEqual([
+      "tool_use",
+      "text",
+      "tool_use",
+    ]);
+  });
+
+  test("coalesces consecutive assistant text fragments into one message row", () => {
+    const messages = [
+      msg({ id: 1, role: "user", content: "你好" }),
+      msg({ id: 2, role: "assistant", parts: [{ type: "text", text: "会话已初始化" }] }),
+      msg({ id: 3, role: "assistant", parts: [{ type: "text", text: "，当前状态如下：" }] }),
+      msg({ id: 4, role: "assistant", parts: [{ type: "text", text: "？例如" }] }),
+    ];
+    const rows = buildChatMessageListRows(messages, {
+      sessionStatus: "idle",
+      showListEndThinkingHint: false,
+    });
+    expect(rows.map((r) => r.kind)).toEqual(["message", "message"]);
+    expect(rows[1]!.kind === "message" && rows[1]!.msg.content).toContain("会话已初始化，当前状态如下：");
+    expect(rows[1]!.kind === "message" && rows[1]!.msg.content).toContain("？例如");
   });
 });
 
@@ -381,7 +401,7 @@ describe("tryPatchChatMessageListRowsTail", () => {
     ];
     const options = { sessionStatus: "running" as const, showListEndThinkingHint: true };
     const initialRows = buildChatMessageListRows(messages, options);
-    const prevFolded = foldToolResultUserMessagesIntoAssistant(messages);
+    const prevFolded = foldChatMessagesForList(messages);
     const nextMessages = [
       messages[0]!,
       msg({ id: 2, role: "assistant", content: "world!" }),
@@ -435,7 +455,7 @@ describe("tryPatchChatMessageListRowsTail", () => {
     ];
     const options = { sessionStatus: "idle" as const, showListEndThinkingHint: false };
     const initialRows = buildChatMessageListRows(messages, options);
-    const prevFolded = foldToolResultUserMessagesIntoAssistant(messages);
+    const prevFolded = foldChatMessagesForList(messages);
     const patched = tryPatchChatMessageListRowsTail(
       messages,
       messages,
@@ -451,18 +471,19 @@ describe("tryPatchChatMessageListRowsTail", () => {
 
   test("incremental fold reuses prefix folded refs and equals full fold", () => {
     // 前缀引用全相同、仅末条 assistant 内容变（流式典型场景）：走末条换尾增量快路径。
-    const prefix = [
-      msg({ id: 1, role: "user", content: "请帮我重构" }),
-      msg({ id: 2, role: "assistant", content: "好的，我先看一下" }),
+    // 注意：连续 assistant 会被 coalesce，故快路径用例保持「user + 单条 assistant」。
+    const userMsg = msg({ id: 1, role: "user", content: "请帮我重构" });
+    const prevMessages = [
+      userMsg,
+      msg({ id: 2, role: "assistant", content: "正在分析" }),
     ];
-    const prevMessages = [...prefix, msg({ id: 3, role: "assistant", content: "正在分析" })];
     const nextMessages = [
-      ...prefix,
-      msg({ id: 3, role: "assistant", content: "正在分析代码结构" }),
+      userMsg,
+      msg({ id: 2, role: "assistant", content: "正在分析代码结构" }),
     ];
     const options = { sessionStatus: "running" as const, showListEndThinkingHint: false };
     const initialRows = buildChatMessageListRows(prevMessages, options);
-    const prevFolded = foldToolResultUserMessagesIntoAssistant(prevMessages);
+    const prevFolded = foldChatMessagesForList(prevMessages);
     const nextLast = nextMessages[nextMessages.length - 1]!;
 
     const patched = tryPatchChatMessageListRowsTail(
@@ -476,15 +497,13 @@ describe("tryPatchChatMessageListRowsTail", () => {
 
     // 前缀 folded 引用复用（未重算 fold），末条换为 nextLast 引用。
     expect(patched!.folded[0]).toBe(prevFolded[0]);
-    expect(patched!.folded[1]).toBe(prevFolded[1]);
-    expect(patched!.folded[2]).toBe(nextLast);
+    expect(patched!.folded[1]).toBe(nextLast);
     // 增量结果与全量 fold 等价。
-    expect(patched!.folded).toEqual(foldToolResultUserMessagesIntoAssistant(nextMessages));
+    expect(patched!.folded).toEqual(foldChatMessagesForList(nextMessages));
     // 前缀 row 引用复用，末行重建。
     expect(patched!.rows[0]).toBe(initialRows[0]);
-    expect(patched!.rows[1]).toBe(initialRows[1]);
     expect(
-      patched!.rows[2]!.kind === "message" && patched!.rows[2]!.msg.content,
+      patched!.rows[1]!.kind === "message" && patched!.rows[1]!.msg.content,
     ).toBe("正在分析代码结构");
   });
 
@@ -506,7 +525,7 @@ describe("tryPatchChatMessageListRowsTail", () => {
       initialRows,
       options,
     );
-    const prevFolded = foldToolResultUserMessagesIntoAssistant(messages);
+    const prevFolded = foldChatMessagesForList(messages);
     const withPrevFolded = tryPatchChatMessageListRowsTail(
       messages,
       nextMessages,
@@ -520,9 +539,9 @@ describe("tryPatchChatMessageListRowsTail", () => {
     expect(withoutPrevFolded!.folded).toEqual(withPrevFolded!.folded);
   });
 
-  test("returns null when next last message is tool-result absorbed into prefix", () => {
-    // 末条变为 tool-only-user 且 tool_result 匹配前缀 assistant 的 tool_use：fold 将其吸收进前缀，
-    // nextFolded 比 prevFolded 短 → 前缀 row originalIndex 越界 → null（回退 build 兜底）。
+  test("returns null when next last message is tool-result absorbed into earlier assistant", () => {
+    // 中间夹 user 正文，避免连续 assistant 先被 coalesce；末条 tool_result 被 fold 进更早的 tool_use 后
+    // folded 变短，tail-patch 无法安全复用前缀 → null。
     const assistantToolUse = msg({
       id: 1,
       role: "assistant",
@@ -537,14 +556,17 @@ describe("tryPatchChatMessageListRowsTail", () => {
         },
       ],
     });
+    const waitUser = msg({ id: 2, role: "user", content: "等一下" });
     const prevMessages = [
       assistantToolUse,
-      msg({ id: 2, role: "assistant", content: "正在处理" }),
+      waitUser,
+      msg({ id: 3, role: "assistant", content: "正在处理" }),
     ];
     const nextMessages = [
       assistantToolUse,
+      waitUser,
       msg({
-        id: 3,
+        id: 4,
         role: "user",
         content: "Read result",
         parts: [
@@ -561,7 +583,7 @@ describe("tryPatchChatMessageListRowsTail", () => {
     ];
     const options = { sessionStatus: "running" as const, showListEndThinkingHint: false };
     const initialRows = buildChatMessageListRows(prevMessages, options);
-    const prevFolded = foldToolResultUserMessagesIntoAssistant(prevMessages);
+    const prevFolded = foldChatMessagesForList(prevMessages);
     expect(
       tryPatchChatMessageListRowsTail(
         prevMessages,
@@ -573,7 +595,7 @@ describe("tryPatchChatMessageListRowsTail", () => {
     ).toBeNull();
   });
 
-  test("returns null when last message is already inside a coalesced tool activity group", () => {
+  test("full-fold patches when consecutive tool-only assistants were message-coalesced", () => {
     const prevMessages = [
       msg({
         id: 1,
@@ -623,15 +645,23 @@ describe("tryPatchChatMessageListRowsTail", () => {
     const options = { sessionStatus: "running" as const, showListEndThinkingHint: false };
     const initialRows = buildChatMessageListRows(prevMessages, options);
     expect(initialRows).toHaveLength(1);
-    expect(initialRows[0]!.kind === "message" && initialRows[0]!.memberMessageIds).toEqual([1, 2]);
     expect(
-      tryPatchChatMessageListRowsTail(
-        prevMessages,
-        nextMessages,
-        initialRows,
-        options,
-        foldToolResultUserMessagesIntoAssistant(prevMessages),
+      initialRows[0]!.kind === "message" &&
+        initialRows[0]!.msg.parts.filter((p) => p.type === "tool_use").map((p) => (p as { id: string }).id),
+    ).toEqual(["r1", "r2"]);
+    const patched = tryPatchChatMessageListRowsTail(
+      prevMessages,
+      nextMessages,
+      initialRows,
+      options,
+      foldChatMessagesForList(prevMessages),
+    );
+    // 合并后的 folded 末条是合成对象，走全量 fold；结果仍应可用。
+    expect(patched).not.toBeNull();
+    expect(
+      patched!.folded[0]!.parts.some(
+        (p) => p.type === "tool_use" && p.id === "r2" && p.status === "completed",
       ),
-    ).toBeNull();
+    ).toBe(true);
   });
 });

@@ -152,7 +152,7 @@ export function WorkspaceRemindersIcon() {
   );
 }
 
-/** 侧栏快捷入口：全局备忘录 */
+/** 侧栏快捷入口：全局需求管理（原备忘录入口） */
 export function WorkspaceMemoIcon() {
   return (
     <svg viewBox="0 0 16 16" fill="none" xmlns="http://www.w3.org/2000/svg" aria-hidden>

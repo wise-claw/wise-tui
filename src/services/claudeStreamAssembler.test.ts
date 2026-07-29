@@ -3,6 +3,7 @@ import type { ClaudeMessage, ClaudeSession } from "../types";
 import {
   appendAssistantStreamParts,
   applyToolResultPartsToMessages,
+  coalesceConsecutiveAssistantMessages,
   computeAssistantStreamBufferText,
   foldToolResultUserMessagesIntoAssistant,
   mergeAssistantParts,
@@ -367,6 +368,72 @@ describe("appendAssistantStreamParts", () => {
     expect(next.messages).toHaveLength(2);
     expect(next.messages[1]?.role).toBe("assistant");
     expect(next.messages[1]?.content).toBe("你好！👋 有什么我可以帮你的？");
+  });
+});
+
+describe("coalesceConsecutiveAssistantMessages", () => {
+  test("merges cursor-style text deltas into one assistant message", () => {
+    const messages: ClaudeMessage[] = [
+      {
+        id: 1,
+        role: "user",
+        content: "你好",
+        timestamp: 1,
+        parts: [{ type: "text", text: "你好" }],
+      },
+      {
+        id: 2,
+        role: "assistant",
+        content: "会话",
+        timestamp: 2,
+        parts: [{ type: "text", text: "会话" }],
+      },
+      {
+        id: 3,
+        role: "assistant",
+        content: "已初始化",
+        timestamp: 3,
+        parts: [{ type: "text", text: "已初始化" }],
+      },
+      {
+        id: 4,
+        role: "assistant",
+        content: "？例如",
+        timestamp: 4,
+        parts: [{ type: "text", text: "？例如" }],
+      },
+    ];
+    const coalesced = coalesceConsecutiveAssistantMessages(messages);
+    expect(coalesced).toHaveLength(2);
+    expect(coalesced[1]?.role).toBe("assistant");
+    expect(coalesced[1]?.content).toBe("会话已初始化？例如");
+  });
+
+  test("does not merge across user messages", () => {
+    const messages: ClaudeMessage[] = [
+      {
+        id: 1,
+        role: "assistant",
+        content: "A",
+        timestamp: 1,
+        parts: [{ type: "text", text: "A" }],
+      },
+      {
+        id: 2,
+        role: "user",
+        content: "B",
+        timestamp: 2,
+        parts: [{ type: "text", text: "B" }],
+      },
+      {
+        id: 3,
+        role: "assistant",
+        content: "C",
+        timestamp: 3,
+        parts: [{ type: "text", text: "C" }],
+      },
+    ];
+    expect(coalesceConsecutiveAssistantMessages(messages)).toHaveLength(3);
   });
 });
 

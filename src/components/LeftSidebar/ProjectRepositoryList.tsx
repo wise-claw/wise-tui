@@ -281,11 +281,11 @@ function ProjectRepositoryListInner({
           className="app-repository-header-actions"
           onClick={(e) => { e.stopPropagation(); }}
         >
-          <DeferredHoverTooltip title="备忘录">
+          <DeferredHoverTooltip title="需求">
             <button
               type="button"
               className={`app-repository-header-btn${headerMemoOpen ? " app-repository-header-btn--active" : ""}`}
-              aria-label="备忘录"
+              aria-label="需求"
               aria-pressed={headerMemoOpen}
               onClick={() => toggleWorkspaceMemoPanel()}
             >

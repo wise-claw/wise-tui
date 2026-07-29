@@ -439,3 +439,63 @@ describe("parseClaudeSessionJsonlLines — uuid 去重", () => {
     expect(messages).toHaveLength(2);
   });
 });
+
+describe("parseClaudeSessionJsonlLines — Cursor 流式 assistant 碎片合并", () => {
+  test("连续无 uuid 的 assistant text delta 合并为一条消息", () => {
+    const lines = [
+      "会话已初始化",
+      "，当前状态如下：",
+      "\n\n**开发者身份**: `claude-agent`",
+      "\n\n**Git 状态**: 工作区干净",
+    ].map((text, i) =>
+      JSON.stringify({
+        type: "assistant",
+        message: { role: "assistant", content: [{ type: "text", text }] },
+        timestamp: i + 1,
+      }),
+    );
+
+    const messages = parseClaudeSessionJsonlLines(lines);
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.role).toBe("assistant");
+    expect(messages[0]?.content).toContain("会话已初始化，当前状态如下：");
+    expect(messages[0]?.content).toContain("**开发者身份**: `claude-agent`");
+    expect(messages[0]?.content).toContain("**Git 状态**: 工作区干净");
+  });
+
+  test("累积快照型 assistant 行按 containment 去重合并", () => {
+    const lines = ["你好", "你好，世界"].map((text, i) =>
+      JSON.stringify({
+        type: "assistant",
+        message: { role: "assistant", content: [{ type: "text", text }] },
+        timestamp: i + 1,
+      }),
+    );
+    const messages = parseClaudeSessionJsonlLines(lines);
+    expect(messages).toHaveLength(1);
+    expect(messages[0]?.content).toBe("你好，世界");
+  });
+
+  test("user 打断后的 assistant 不与上一轮合并", () => {
+    const lines = [
+      JSON.stringify({
+        type: "assistant",
+        message: { role: "assistant", content: [{ type: "text", text: "第一轮" }] },
+        timestamp: 1,
+      }),
+      JSON.stringify({
+        type: "user",
+        message: { role: "user", content: "继续" },
+        timestamp: 2,
+      }),
+      JSON.stringify({
+        type: "assistant",
+        message: { role: "assistant", content: [{ type: "text", text: "第二轮" }] },
+        timestamp: 3,
+      }),
+    ];
+    const messages = parseClaudeSessionJsonlLines(lines);
+    expect(messages).toHaveLength(3);
+    expect(messages.map((m) => m.content)).toEqual(["第一轮", "继续", "第二轮"]);
+  });
+});

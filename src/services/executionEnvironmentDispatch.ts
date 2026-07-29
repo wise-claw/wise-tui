@@ -41,6 +41,11 @@ export type ExecutionEnvironmentDispatchDeps = {
     opts?: { userBubblePrompt?: string; defaultInstructionApplied?: string },
   ) => boolean;
   appendSystemMessage: (sessionId: string, text: string) => void;
+  /**
+   * 派发成功后打开新建会话窗口（切到首个已启动的 worker）。
+   * 不传则保持后台跑、不切换当前主会话。
+   */
+  activateWorkerSession?: (workerSessionId: string) => void;
   /** 测试可注入；默认 `loadDefaultInstructionResolveContext`。 */
   loadInstructionResolveContext?: typeof loadDefaultInstructionResolveContext;
 };
@@ -164,6 +169,7 @@ export async function dispatchExecutionEnvironmentFromMainSession(
 
   let started = 0;
   let blocked = 0;
+  let firstStartedWorkerId: string | null = null;
 
   const workerSpecs = Array.from({ length: plan.sessionCount }, (_, i) => {
     const label = plan.sessionCount > 1 ? `任务 ${i + 1}` : "任务";
@@ -179,6 +185,7 @@ export async function dispatchExecutionEnvironmentFromMainSession(
   });
 
   // 并行建 worker 会话，避免「清空输入框 → 首路执行」之间串行等待 N 次 createSession。
+  // 先 skipActivate，全部启动后再切到首个 worker，避免并行创建时抢 activeSessionId。
   const workerTabIds = await Promise.all(
     workerSpecs.map((spec) =>
       deps.createSession(mainSession.repositoryPath, spec.workerName, {
@@ -246,6 +253,7 @@ export async function dispatchExecutionEnvironmentFromMainSession(
       }).catch(() => {});
       continue;
     }
+    if (!firstStartedWorkerId) firstStartedWorkerId = workerTabId;
     started += 1;
   }
 
@@ -255,6 +263,9 @@ export async function dispatchExecutionEnvironmentFromMainSession(
   }
   if (blocked > 0) {
     message.warning(`执行环境已启动 ${started} 路，${blocked} 路因并发限制未启动。`);
+  }
+  if (firstStartedWorkerId) {
+    deps.activateWorkerSession?.(firstStartedWorkerId);
   }
   return true;
 }

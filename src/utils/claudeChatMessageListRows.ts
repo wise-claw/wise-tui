@@ -1,5 +1,6 @@
 import type { ClaudeMessage, ClaudeSession, ToolUsePart } from "../types";
 import {
+  coalesceConsecutiveAssistantMessages,
   foldToolResultUserMessagesIntoAssistant,
   isToolResultUpdatePart,
 } from "../services/claudeStreamAssembler";
@@ -231,7 +232,8 @@ export function buildChatMessageListRowsWithFolded(
   messages: readonly ClaudeMessage[],
   options: ChatMessageListRowsBuildOptions,
 ): ChatMessageListRowsBuildResult {
-  const foldedMessages = foldToolResultUserMessagesIntoAssistant(messages);
+  // fold tool_result 后再合并连续 assistant，避免 Cursor 流式落盘碎片在内存态仍按多气泡渲染。
+  const foldedMessages = foldChatMessagesForList(messages);
   const rows: ChatMessageListRow[] = [];
 
   for (let originalIndex = 0; originalIndex < foldedMessages.length; originalIndex += 1) {
@@ -247,6 +249,15 @@ export function buildChatMessageListRowsWithFolded(
   }
 
   return { rows: coalesced, folded: foldedMessages };
+}
+
+/** tool_result fold + 连续 assistant 合并；列表构建与 tail-patch 共用。 */
+export function foldChatMessagesForList(
+  messages: readonly ClaudeMessage[],
+): ClaudeMessage[] {
+  return coalesceConsecutiveAssistantMessages(
+    foldToolResultUserMessagesIntoAssistant(messages),
+  );
 }
 
 export function buildChatMessageListRows(
@@ -273,7 +284,10 @@ export function tryPatchChatMessageListRowsTail(
   prevFolded?: readonly ClaudeMessage[],
 ): ChatMessageListRowsBuildResult | null {
   if (prevMessages === nextMessages) {
-    return { rows: [...prevRows], folded: prevFolded ? [...prevFolded] : foldToolResultUserMessagesIntoAssistant(prevMessages) };
+    return {
+      rows: [...prevRows],
+      folded: prevFolded ? [...prevFolded] : foldChatMessagesForList(prevMessages),
+    };
   }
   if (prevMessages.length === 0 || nextMessages.length === 0) return null;
   if (prevMessages.length !== nextMessages.length) return null;
@@ -283,13 +297,17 @@ export function tryPatchChatMessageListRowsTail(
   const prevLast = prevMessages[prevMessages.length - 1]!;
   const nextLast = nextMessages[nextMessages.length - 1]!;
   if (prevLast === nextLast) {
-    return { rows: [...prevRows], folded: prevFolded ? [...prevFolded] : foldToolResultUserMessagesIntoAssistant(prevMessages) };
+    return {
+      rows: [...prevRows],
+      folded: prevFolded ? [...prevFolded] : foldChatMessagesForList(prevMessages),
+    };
   }
 
   // 增量 fold：prev 末条被原样 push（prevFolded 末 === prevLast，精确判别 fold CASE A/B）且
   // next 末条也会被原样 push（非 tool-only，或 tool-only 无 tool_use result updates）时，
   // nextFolded = [...foldPrefix, nextLast]，foldPrefix = prevFolded.slice(0,-1) = fold(前缀)。
   // 否则回退全量 fold（末条 tool-only 有 updates 的合并/orphan 场景）。
+  // 若前缀已含连续 assistant 合并，prevFolded 末条是合成对象（!== prevLast），走全量路径。
   const prevLastPushedAsIs =
     prevFolded !== undefined &&
     prevFolded.length > 0 &&
@@ -299,10 +317,9 @@ export function tryPatchChatMessageListRowsTail(
     !(nextLast.parts ?? []).some((part) => part.type === "tool_use" && isToolResultUpdatePart(part));
   let nextFolded: ClaudeMessage[];
   if (prevLastPushedAsIs && nextLastPushedAsIs && prevFolded !== undefined) {
-    nextFolded = prevFolded.slice(0, -1);
-    nextFolded.push(nextLast);
+    nextFolded = coalesceConsecutiveAssistantMessages([...prevFolded.slice(0, -1), nextLast]);
   } else {
-    nextFolded = foldToolResultUserMessagesIntoAssistant(nextMessages);
+    nextFolded = foldChatMessagesForList(nextMessages);
   }
 
   const lastMessageIndex = nextFolded.length - 1;

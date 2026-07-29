@@ -1177,7 +1177,7 @@ export function AppWorkspaceLayout({
         { label: "消息", value: "messages" },
       ];
       if (primaryPanelBelowMessages) {
-        opts.push({ label: memoOpen ? "备忘录" : "文件", value: "files" });
+        opts.push({ label: memoOpen ? "需求" : "文件", value: "files" });
       }
       if (primaryPanelBelowTerminal) {
         opts.push({ label: "终端", value: "terminal" });

@@ -9,6 +9,12 @@ import {
   getLatestUserPlainText,
 } from "../components/ClaudeSessions/claudeChatHelpers";
 import type { RepositorySessionExecutionRow } from "../components/ClaudeSessions/ClaudeChatSessionFeatureShared";
+import {
+  extractExecutionEnvironmentLabelFromRepositoryName,
+  isExecutionEnvironmentWorkerRepositoryName,
+  parseExecutionEnvironmentWorkerRepositoryName,
+} from "../utils/executionEnvironmentDispatch";
+import { SESSION_EXECUTION_ENGINE_LABELS } from "../constants/sessionExecutionEngine";
 
 export function mapClaudeExecutionStatusLabel(status: ClaudeSession["status"]): string {
   if (status === "running") return "运行中";
@@ -79,6 +85,21 @@ export function resolveSessionOwnerInfo(input: {
       name: employeeName,
     };
   }
+
+  if (isExecutionEnvironmentWorkerRepositoryName(session.repositoryName ?? "")) {
+    const parsed = parseExecutionEnvironmentWorkerRepositoryName(session.repositoryName ?? "");
+    const engineTitle = parsed?.engine
+      ? SESSION_EXECUTION_ENGINE_LABELS[parsed.engine]?.title ?? parsed.engine
+      : "执行环境";
+    const label =
+      extractExecutionEnvironmentLabelFromRepositoryName(session.repositoryName ?? "") ?? "任务";
+    return {
+      type: "employee",
+      typeLabel: "执行环境",
+      name: `${engineTitle} · ${label}`,
+    };
+  }
+
   const omcCommand = extractOmcCommandFromUserPrompt(session);
   if (omcCommand) {
     return {

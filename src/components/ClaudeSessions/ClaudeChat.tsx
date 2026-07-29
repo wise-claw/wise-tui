@@ -69,6 +69,11 @@ import {
   writeDeferredSendNext,
 } from "../../services/pendingTaskQueueStore";
 import {
+  WISE_UI_EVENT_DISPATCH_REQUIREMENT_TO_EXEC_ENV,
+  prefixExecutionEnvironmentMention,
+  type DispatchRequirementToExecutionEnvironmentDetail,
+} from "../../constants/pendingTaskQueueEvents";
+import {
   WISE_PENDING_NOTIFICATION_SCROLL_STORAGE_KEY,
 } from "../../utils/claudeTurnNotificationBody";
 import type { SessionOwnerHint } from "../../utils/sessionOwnerHints";
@@ -467,10 +472,19 @@ export function ClaudeChatInner({
   const [sessionConversationTaskDetailTarget, setSessionConversationTaskDetailTarget] =
     useState<SessionConversationTaskDetailTarget | null>(null);
 
-  const openSessionConversationTaskDetail = useCallback((task: SessionConversationTaskItem) => {
-    prefetchSessionConversationTaskDetailDrawer();
-    setSessionConversationTaskDetailTarget({ task });
-  }, []);
+  const openSessionConversationTaskDetail = useCallback(
+    (task: SessionConversationTaskItem) => {
+      // 执行环境派发：直接打开新建会话窗口，不再弹详情 drawer。
+      const sid = task.sessionId?.trim();
+      if (task.source === "execution_environment" && sid && onSwitchSession) {
+        onSwitchSession(sid);
+        return;
+      }
+      prefetchSessionConversationTaskDetailDrawer();
+      setSessionConversationTaskDetailTarget({ task });
+    },
+    [onSwitchSession],
+  );
 
   const closeSessionConversationTaskDetail = useCallback(() => {
     setSessionConversationTaskDetailTarget(null);
@@ -1357,6 +1371,35 @@ export function ClaudeChatInner({
     }
     return resolveEngineForSession(session, repositories, employees, sessionRepository);
   }, [paneCount, paneRuntimeOverride?.executionEngine, session, repositories, employees, sessionRepository]);
+
+  // 中栏「需求」面板派发：走当前执行环境（@Claude Code / @Codex …），开 worker，不占主会话队列。
+  // 仅 pane 0 接收（需求 slot 也只挂在 pane 0）。
+  useEffect(() => {
+    if (paneIndex !== 0) return;
+    const onDispatchRequirement = (event: Event) => {
+      const detail = (event as CustomEvent<DispatchRequirementToExecutionEnvironmentDetail>).detail;
+      const promptText = typeof detail?.promptText === "string" ? detail.promptText.trim() : "";
+      if (!promptText) return;
+      if (!onDispatchExecutionEnvironment) {
+        message.warning("当前无法派发到执行环境");
+        return;
+      }
+      const promptWithMention = prefixExecutionEnvironmentMention(promptText, sessionExecutionEngine);
+      const userBubble =
+        typeof detail.userBubblePrompt === "string" && detail.userBubblePrompt.trim()
+          ? detail.userBubblePrompt.trim()
+          : promptText;
+      detail.onAccepted?.();
+      message.success("需求已派发到执行环境");
+      void onDispatchExecutionEnvironment({
+        prompt: promptWithMention,
+        userBubblePrompt: userBubble,
+      });
+    };
+    window.addEventListener(WISE_UI_EVENT_DISPATCH_REQUIREMENT_TO_EXEC_ENV, onDispatchRequirement);
+    return () =>
+      window.removeEventListener(WISE_UI_EVENT_DISPATCH_REQUIREMENT_TO_EXEC_ENV, onDispatchRequirement);
+  }, [paneIndex, onDispatchExecutionEnvironment, sessionExecutionEngine]);
 
   const handleSessionExecutionEngineChange = useCallback(
     (engine: SessionExecutionEngine) => {

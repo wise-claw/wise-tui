@@ -4,7 +4,10 @@ import {
   prepareMarkdownForDisplay,
   stabilizeStreamingMarkdown,
 } from "../utils/markdownRenderPipeline";
-import { containsStreamingHtmlMarkup } from "../utils/markdownDisplayNormalize";
+import {
+  containsStreamingHtmlMarkup,
+  normalizeInlineHtmlBreakTags,
+} from "../utils/markdownDisplayNormalize";
 import { findHtmlDocumentStartIndex } from "../utils/richMessageHtml";
 import {
   isMainThreadCongested,
@@ -114,12 +117,13 @@ export function useMarkdownDisplaySource(text: string, streaming: boolean): Mark
     }
 
     if (shouldDegradeStreamingToPlain(stabilizedText)) {
-      lastBuiltRef.current = { text: stabilizedText, source: stabilizedText, plain: true, at: now };
-      return { source: stabilizedText, plain: true };
+      const plainSource = normalizeInlineHtmlBreakTags(stabilizedText);
+      lastBuiltRef.current = { text: stabilizedText, source: plainSource, plain: true, at: now };
+      return { source: plainSource, plain: true };
     }
 
     if (streamingShortTextFastPath(stabilizedText)) {
-      return { source: stabilizedText, plain: false };
+      return { source: normalizeInlineHtmlBreakTags(stabilizedText), plain: false };
     }
 
     const source = prepareMarkdownForDisplay(stabilizedText, { streaming: true });

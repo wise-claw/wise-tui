@@ -1,5 +1,8 @@
 import type { ClaudeMessage, MessagePart, TextPart, ToolUseDiagnostics, ToolUsePart } from "../types";
-import { foldToolResultUserMessagesIntoAssistant } from "../services/claudeStreamAssembler";
+import {
+  coalesceConsecutiveAssistantMessages,
+  foldToolResultUserMessagesIntoAssistant,
+} from "../services/claudeStreamAssembler";
 import { assistantTextJoinedFromParts } from "./assistantTextParts";
 import { normalizeClaudeUserMessageForDisplay, extractCommandNameBlock } from "./userMessageImportantInput";
 
@@ -247,5 +250,7 @@ export function parseClaudeSessionJsonlLines(lines: string[]): ClaudeMessage[] {
     }
   }
 
-  return foldToolResultUserMessagesIntoAssistant(messages);
+  return coalesceConsecutiveAssistantMessages(
+    foldToolResultUserMessagesIntoAssistant(messages),
+  );
 }

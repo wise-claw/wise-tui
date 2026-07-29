@@ -1,33 +1,49 @@
-import { Button, Spin, message } from "antd";
+import {
+  DeleteOutlined,
+  EditOutlined,
+  PictureOutlined,
+  PlusOutlined,
+  SendOutlined,
+} from "@ant-design/icons";
+import { Button, Checkbox, Empty, Modal, Spin, Tag, Typography, message } from "antd";
+import { convertFileSrc } from "@tauri-apps/api/core";
 import {
   Suspense,
   lazy,
+  memo,
   useCallback,
   useEffect,
   useRef,
   useState,
   type RefObject,
 } from "react";
+import { dispatchRequirementToExecutionEnvironment } from "../../constants/pendingTaskQueueEvents";
+import {
+  buildRequirementDispatchPayload,
+  countMarkdownImages,
+  materializeRequirementBodyImages,
+  stripMarkdownImages,
+} from "../../services/workspaceRequirementDispatch";
+import { readComposerImageAsDataUrl } from "../../services/readComposerImage";
+import {
+  loadWorkspaceRequirements,
+  saveWorkspaceRequirements,
+} from "../../services/workspaceRequirementsStore";
+import { closeWorkspaceMemoPanel } from "../../stores/workspaceMemoPanelStore";
 import type { MilkdownEditorHandle } from "../MilkdownViewer";
 import { MilkdownSyntaxToolbar } from "../MilkdownViewer/MilkdownSyntaxToolbar";
 import {
-  getWorkspaceGlobalMemoDb,
-  saveWorkspaceGlobalMemoDb,
-} from "../../services/workspaceInspectorDb";
-import { closeWorkspaceMemoPanel } from "../../stores/workspaceMemoPanelStore";
-import { debounce } from "../../utils/debounce";
+  createWorkspaceRequirementItem,
+  deriveRequirementTitle,
+  type WorkspaceRequirementItem,
+} from "../../types/workspaceRequirements";
 import "./index.css";
 
 const MilkdownEditor = lazy(() =>
   import("../MilkdownViewer").then((module) => ({ default: module.MilkdownEditor })),
 );
 
-/** 停止输入后多久自动落库 */
-const AUTO_SAVE_DELAY_MS = 800;
-
-type SaveStatus = "idle" | "dirty" | "saving" | "saved" | "error";
-
-function MemoMilkdownEditor({
+function RequirementMilkdownEditor({
   editorRef,
   editorKey,
   initialBody,
@@ -39,7 +55,7 @@ function MemoMilkdownEditor({
   onChange: (markdown: string) => void;
 }) {
   return (
-    <div className="app-workspace-memo-panel__editor-wrap">
+    <div className="app-workspace-requirements-panel__editor-wrap">
       <MilkdownSyntaxToolbar editorRef={editorRef} />
       <MilkdownEditor
         ref={editorRef}
@@ -53,144 +69,342 @@ function MemoMilkdownEditor({
   );
 }
 
-function saveStatusLabel(status: SaveStatus): string {
-  switch (status) {
-    case "dirty":
-      return "有未保存更改";
-    case "saving":
-      return "自动保存中…";
-    case "saved":
-      return "已自动保存";
-    case "error":
-      return "自动保存失败";
-    default:
-      return "已与本地库同步";
+function previewText(item: WorkspaceRequirementItem): string {
+  const body = stripMarkdownImages(item.bodyMarkdown || item.description || "");
+  if (!body || body === item.title) return "";
+  return body.replace(/\s+/g, " ").trim();
+}
+
+function thumbSrc(path: string): string {
+  try {
+    return convertFileSrc(path);
+  } catch {
+    return path;
   }
 }
 
+interface RequirementRowProps {
+  item: WorkspaceRequirementItem;
+  dispatchingId: string | null;
+  onToggleDone: (item: WorkspaceRequirementItem) => void;
+  onEdit: (item: WorkspaceRequirementItem) => void;
+  onDelete: (item: WorkspaceRequirementItem) => void;
+  onDispatch: (item: WorkspaceRequirementItem) => void;
+}
+
+function requirementRowEqual(prev: RequirementRowProps, next: RequirementRowProps): boolean {
+  return (
+    prev.item === next.item &&
+    prev.dispatchingId === next.dispatchingId &&
+    prev.onToggleDone === next.onToggleDone &&
+    prev.onEdit === next.onEdit &&
+    prev.onDelete === next.onDelete &&
+    prev.onDispatch === next.onDispatch
+  );
+}
+
+const RequirementRow = memo(function RequirementRow({
+  item,
+  dispatchingId,
+  onToggleDone,
+  onEdit,
+  onDelete,
+  onDispatch,
+}: RequirementRowProps) {
+  const done = item.status === "done";
+  const dispatching = dispatchingId === item.id;
+  const thumbs = item.imagePaths.slice(0, 3);
+  const moreImages = Math.max(0, item.imagePaths.length - thumbs.length);
+  const desc = previewText(item);
+
+  return (
+    <li
+      className={`app-workspace-requirements-panel__row${done ? " app-workspace-requirements-panel__row--done" : ""}`}
+    >
+      <Checkbox
+        className="app-workspace-requirements-panel__check"
+        checked={done}
+        onChange={() => onToggleDone(item)}
+        aria-label={done ? "标记为未完成" : "标记为已完成"}
+      />
+      <div className="app-workspace-requirements-panel__row-main">
+        <div className="app-workspace-requirements-panel__title-line">
+          <span className="app-workspace-requirements-panel__title">{item.title}</span>
+          {item.imagePaths.length > 0 ? (
+            <Tag icon={<PictureOutlined />} className="app-workspace-requirements-panel__tag">
+              {item.imagePaths.length}
+            </Tag>
+          ) : null}
+          {item.lastDispatchedAt != null ? (
+            <Tag className="app-workspace-requirements-panel__tag">已派发</Tag>
+          ) : null}
+        </div>
+        {desc ? (
+          <Typography.Paragraph
+            className="app-workspace-requirements-panel__desc"
+            type="secondary"
+            ellipsis={{ rows: 2, expandable: false }}
+          >
+            {desc}
+          </Typography.Paragraph>
+        ) : null}
+        {thumbs.length > 0 ? (
+          <div className="app-workspace-requirements-panel__thumbs">
+            {thumbs.map((path) => (
+              <img key={path} src={thumbSrc(path)} alt="" className="app-workspace-requirements-panel__thumb" />
+            ))}
+            {moreImages > 0 ? (
+              <span className="app-workspace-requirements-panel__thumb-more">+{moreImages}</span>
+            ) : null}
+          </div>
+        ) : null}
+      </div>
+      <div className="app-workspace-requirements-panel__row-actions">
+        {!done ? (
+          <Button
+            type="text"
+            size="small"
+            icon={<SendOutlined />}
+            loading={dispatching}
+            aria-label="派发执行"
+            title="派发到当前执行环境（不占主会话）"
+            onClick={() => onDispatch(item)}
+          />
+        ) : null}
+        <Button
+          type="text"
+          size="small"
+          icon={<EditOutlined />}
+          aria-label="编辑需求"
+          title="编辑"
+          onClick={() => onEdit(item)}
+        />
+        <Button
+          type="text"
+          size="small"
+          danger
+          icon={<DeleteOutlined />}
+          aria-label="删除需求"
+          title="删除"
+          onClick={() => onDelete(item)}
+        />
+      </div>
+    </li>
+  );
+}, requirementRowEqual);
+
+async function hydrateMarkdownImagesForEditor(markdown: string): Promise<string> {
+  let next = markdown;
+  const paths = [...markdown.matchAll(/!\[[^\]]*\]\((\/[^)\s]+)\)/g)].map((m) => m[1]!.trim());
+  for (const path of paths) {
+    if (!path.startsWith("/")) continue;
+    const dataUrl = await readComposerImageAsDataUrl(path);
+    if (!dataUrl) continue;
+    next = next.split(`](${path})`).join(`](${dataUrl})`);
+  }
+  return next;
+}
+
 /**
- * 中栏备忘录面板：布局对齐 `RepositoryFileEditorPanel`（占 `panelBelowMessages`，与打开文件一致）。
- * 编辑后防抖自动落库；关闭/卸载时 flush 未落盘内容。
+ * 中栏需求管理：图文 Markdown 编辑；派发时落盘本地图片并以「文字 + @路径」入队。
  */
 export function WorkspaceMemoPanel() {
   const [loading, setLoading] = useState(true);
-  const [initialBody, setInitialBody] = useState("");
+  const [items, setItems] = useState<WorkspaceRequirementItem[]>([]);
+  const [editorOpen, setEditorOpen] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
+  const [draftBody, setDraftBody] = useState("");
   const [editorKey, setEditorKey] = useState(0);
-  const [saveStatus, setSaveStatus] = useState<SaveStatus>("idle");
-  const draftRef = useRef("");
-  const savedBodyRef = useRef("");
-  const editorRef = useRef<MilkdownEditorHandle | null>(null);
-  const saveInFlightRef = useRef(false);
-  const pendingAfterSaveRef = useRef(false);
+  const [saving, setSaving] = useState(false);
+  const [dispatchingId, setDispatchingId] = useState<string | null>(null);
   const mountedRef = useRef(true);
+  const itemsRef = useRef(items);
+  itemsRef.current = items;
+  const draftBodyRef = useRef("");
+  const editorRef = useRef<MilkdownEditorHandle | null>(null);
+  const panelRef = useRef<HTMLDivElement | null>(null);
 
-  const persist = useCallback(async (body: string, opts?: { silent?: boolean }) => {
-    if (body === savedBodyRef.current) {
-      if (mountedRef.current) setSaveStatus("idle");
-      return;
-    }
-    if (saveInFlightRef.current) {
-      pendingAfterSaveRef.current = true;
-      return;
-    }
-    saveInFlightRef.current = true;
-    if (mountedRef.current) setSaveStatus("saving");
+  const persist = useCallback(async (next: WorkspaceRequirementItem[]) => {
+    setSaving(true);
     try {
-      const saved = await saveWorkspaceGlobalMemoDb(body);
-      savedBodyRef.current = saved.bodyMarkdown;
-      if (draftRef.current === saved.bodyMarkdown || draftRef.current === body) {
-        // 保存期间若用户又改了，下面会再排一次
-      }
+      const saved = await saveWorkspaceRequirements(next);
       if (mountedRef.current) {
-        setSaveStatus(draftRef.current === savedBodyRef.current ? "saved" : "dirty");
-      }
-      if (!opts?.silent) {
-        message.success("备忘录已保存");
+        setItems(saved.items);
       }
     } catch (err) {
-      console.error("[WorkspaceMemo] save failed", err);
-      if (mountedRef.current) setSaveStatus("error");
-      if (!opts?.silent) {
-        message.error(err instanceof Error ? err.message : "保存备忘录失败");
-      } else {
-        message.error("备忘录自动保存失败");
-      }
+      console.error("[WorkspaceRequirements] save failed", err);
+      message.error(err instanceof Error ? err.message : "保存需求失败");
+      throw err;
     } finally {
-      saveInFlightRef.current = false;
-      if (pendingAfterSaveRef.current) {
-        pendingAfterSaveRef.current = false;
-        const next = draftRef.current;
-        if (next !== savedBodyRef.current) {
-          void persist(next, { silent: true });
-        }
-      }
+      if (mountedRef.current) setSaving(false);
     }
   }, []);
-
-  const autoSaveRef = useRef(
-    debounce((body: string) => {
-      void persist(body, { silent: true });
-    }, AUTO_SAVE_DELAY_MS),
-  );
 
   useEffect(() => {
     mountedRef.current = true;
-    const autoSave = autoSaveRef.current;
-    return () => {
-      // 先 flush 再标记卸载，确保末次内容能落盘（persist 不依赖 mounted）
-      autoSave.flush();
-      mountedRef.current = false;
-    };
-  }, []);
-
-  useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    void getWorkspaceGlobalMemoDb()
-      .then((memo) => {
+    void loadWorkspaceRequirements()
+      .then((payload) => {
         if (cancelled) return;
-        draftRef.current = memo.bodyMarkdown;
-        savedBodyRef.current = memo.bodyMarkdown;
-        setInitialBody(memo.bodyMarkdown);
-        setSaveStatus("idle");
-        setEditorKey((k) => k + 1);
+        setItems(payload.items);
       })
       .catch((err) => {
         if (cancelled) return;
-        console.error("[WorkspaceMemo] load failed", err);
-        message.error("加载备忘录失败");
+        console.error("[WorkspaceRequirements] load failed", err);
+        message.error("加载需求失败");
       })
       .finally(() => {
         if (!cancelled) setLoading(false);
       });
     return () => {
       cancelled = true;
+      mountedRef.current = false;
     };
   }, []);
 
-  const handleChange = useCallback((markdown: string) => {
-    draftRef.current = markdown;
-    if (markdown === savedBodyRef.current) {
-      autoSaveRef.current.cancel();
-      setSaveStatus("idle");
+  const openCreate = useCallback(() => {
+    setEditingId(null);
+    setDraftBody("");
+    draftBodyRef.current = "";
+    setEditorKey((k) => k + 1);
+    setEditorOpen(true);
+  }, []);
+
+  const openEdit = useCallback((item: WorkspaceRequirementItem) => {
+    const body = item.bodyMarkdown || item.description || item.title;
+    setEditingId(item.id);
+    setDraftBody(body);
+    draftBodyRef.current = body;
+    setEditorKey((k) => k + 1);
+    setEditorOpen(true);
+    void hydrateMarkdownImagesForEditor(body).then((hydrated) => {
+      if (!mountedRef.current) return;
+      if (draftBodyRef.current !== body) return;
+      setDraftBody(hydrated);
+      draftBodyRef.current = hydrated;
+      setEditorKey((k) => k + 1);
+    });
+  }, []);
+
+  const saveEditor = useCallback(async () => {
+    const rawBody = draftBodyRef.current.trim();
+    if (!rawBody) {
+      message.warning("请填写需求图文内容（可粘贴/拖入图片）");
       return;
     }
-    setSaveStatus("dirty");
-    autoSaveRef.current(markdown);
-  }, []);
+    setSaving(true);
+    try {
+      const materialized = await materializeRequirementBodyImages(rawBody);
+      if (!stripMarkdownImages(materialized.bodyMarkdown) && materialized.imagePaths.length === 0) {
+        message.warning("请填写文字或插入图片");
+        return;
+      }
+      const title = deriveRequirementTitle(materialized.bodyMarkdown);
+      const now = Date.now();
+      let next: WorkspaceRequirementItem[];
+      if (editingId) {
+        next = itemsRef.current.map((row) =>
+          row.id === editingId
+            ? {
+                ...row,
+                title,
+                bodyMarkdown: materialized.bodyMarkdown,
+                imagePaths: materialized.imagePaths,
+                updatedAt: now,
+              }
+            : row,
+        );
+      } else {
+        const created = createWorkspaceRequirementItem(materialized.bodyMarkdown, now);
+        created.title = title;
+        created.imagePaths = materialized.imagePaths;
+        next = [...itemsRef.current, created];
+      }
+      await persist(next);
+      setEditorOpen(false);
+      setEditingId(null);
+    } catch (err) {
+      console.error("[WorkspaceRequirements] editor save failed", err);
+      message.error(err instanceof Error ? err.message : "保存需求失败");
+    } finally {
+      if (mountedRef.current) setSaving(false);
+    }
+  }, [editingId, persist]);
 
-  const handleSaveNow = useCallback(() => {
-    autoSaveRef.current.cancel();
-    void persist(draftRef.current, { silent: false });
-  }, [persist]);
+  const handleToggleDone = useCallback(
+    async (item: WorkspaceRequirementItem) => {
+      const next = itemsRef.current.map((row) =>
+        row.id === item.id
+          ? {
+              ...row,
+              status: (row.status === "done" ? "open" : "done") as WorkspaceRequirementItem["status"],
+              updatedAt: Date.now(),
+            }
+          : row,
+      );
+      await persist(next);
+    },
+    [persist],
+  );
+
+  const handleDelete = useCallback(
+    (item: WorkspaceRequirementItem) => {
+      Modal.confirm({
+        title: "删除该需求？",
+        content: item.title,
+        okText: "删除",
+        okType: "danger",
+        cancelText: "取消",
+        autoFocusButton: "cancel",
+        onOk: async () => {
+          await persist(itemsRef.current.filter((row) => row.id !== item.id));
+        },
+      });
+    },
+    [persist],
+  );
+
+  const handleDispatch = useCallback(
+    async (item: WorkspaceRequirementItem) => {
+      setDispatchingId(item.id);
+      try {
+        const payload = await buildRequirementDispatchPayload(item);
+        const accepted = dispatchRequirementToExecutionEnvironment({
+          promptText: payload.promptText,
+          userBubblePrompt: payload.executeBubbleOptions?.userBubblePrompt ?? payload.promptText,
+          source: "workspace-requirement",
+        });
+        if (!accepted) {
+          message.warning("当前没有可用主会话，无法派发到执行环境");
+          return;
+        }
+        const now = Date.now();
+        const next = itemsRef.current.map((row) =>
+          row.id === item.id
+            ? {
+                ...row,
+                bodyMarkdown: row.bodyMarkdown || item.bodyMarkdown,
+                imagePaths: payload.imagePaths.length > 0 ? payload.imagePaths : row.imagePaths,
+                lastDispatchedAt: now,
+                updatedAt: now,
+              }
+            : row,
+        );
+        await persist(next);
+      } catch (err) {
+        console.error("[WorkspaceRequirements] dispatch failed", err);
+        message.error(err instanceof Error ? err.message : "派发失败");
+      } finally {
+        if (mountedRef.current) setDispatchingId(null);
+      }
+    },
+    [persist],
+  );
 
   const handleClose = useCallback(() => {
-    // flush 会立刻触发防抖队列中的自动保存；随后卸载 cleanup 再兜底一次
-    autoSaveRef.current.flush();
     closeWorkspaceMemoPanel();
   }, []);
-
-  const panelRef = useRef<HTMLDivElement | null>(null);
 
   useEffect(() => {
     function handleCloseShortcut(event: KeyboardEvent) {
@@ -201,6 +415,7 @@ export function WorkspaceMemoPanel() {
       const panel = panelRef.current;
       const target = event.target;
       if (!panel || !(target instanceof Node) || !panel.contains(target)) return;
+      if (editorOpen) return;
 
       event.preventDefault();
       event.stopPropagation();
@@ -208,50 +423,35 @@ export function WorkspaceMemoPanel() {
     }
     window.addEventListener("keydown", handleCloseShortcut, { capture: true });
     return () => window.removeEventListener("keydown", handleCloseShortcut, { capture: true });
-  }, [handleClose]);
+  }, [handleClose, editorOpen]);
 
-  const dirty = saveStatus === "dirty" || saveStatus === "saving" || saveStatus === "error";
-  const saving = saveStatus === "saving";
+  const openItems = items.filter((item) => item.status === "open");
+  const doneItems = items.filter((item) => item.status === "done");
+  const draftImageCount = countMarkdownImages(draftBody);
 
   return (
     <div
       ref={panelRef}
-      className="app-file-editor-panel app-workspace-memo-panel"
-      aria-label="备忘录"
+      className="app-file-editor-panel app-workspace-memo-panel app-workspace-requirements-panel"
+      aria-label="需求管理"
     >
       <div className="app-file-editor-header">
         <div className="app-file-editor-tab-bar">
-          <div className="app-file-editor-tabs-scroll" role="tablist" aria-label="备忘录">
+          <div className="app-file-editor-tabs-scroll" role="tablist" aria-label="需求管理">
             <div
               role="tab"
               aria-selected
               className="app-file-editor-tab app-file-editor-tab--active"
             >
-              <span
-                className={`app-file-editor-tab-label${
-                  dirty ? " app-file-editor-tab-label--dirty" : ""
-                }`}
-              >
-                备忘录
-              </span>
+              <span className="app-file-editor-tab-label">需求</span>
             </div>
           </div>
           <div className="app-file-editor-tab-bar-actions">
-            <span
-              className={`app-workspace-memo-panel__save-status${
-                saveStatus === "error" ? " app-workspace-memo-panel__save-status--error" : ""
-              }`}
-            >
-              {saveStatusLabel(saveStatus)}
+            <span className="app-workspace-memo-panel__save-status">
+              {saving ? "保存中…" : `${openItems.length} 项待办`}
             </span>
-            <Button
-              type="primary"
-              size="small"
-              loading={saving}
-              disabled={!dirty && !saving}
-              onClick={handleSaveNow}
-            >
-              保存
+            <Button type="primary" size="small" icon={<PlusOutlined />} onClick={openCreate}>
+              新增
             </Button>
             <Button type="text" size="small" onClick={handleClose}>
               关闭
@@ -265,22 +465,88 @@ export function WorkspaceMemoPanel() {
             <Spin size="small" />
           </div>
         ) : (
-          <Suspense
-            fallback={
-              <div className="app-file-editor-loading">
-                <Spin size="small" />
-              </div>
-            }
-          >
-            <MemoMilkdownEditor
-              editorRef={editorRef}
-              editorKey={editorKey}
-              initialBody={initialBody}
-              onChange={handleChange}
-            />
-          </Suspense>
+          <div className="app-workspace-requirements-panel__content">
+            {items.length === 0 ? (
+              <Empty
+                image={Empty.PRESENTED_IMAGE_SIMPLE}
+                description="暂无需求，点击「新增」编写图文需求后再派发"
+              >
+                <Button type="primary" icon={<PlusOutlined />} onClick={openCreate}>
+                  新增需求
+                </Button>
+              </Empty>
+            ) : (
+              <ul className="app-workspace-requirements-panel__list">
+                {openItems.map((item) => (
+                  <RequirementRow
+                    key={item.id}
+                    item={item}
+                    dispatchingId={dispatchingId}
+                    onToggleDone={(row) => void handleToggleDone(row)}
+                    onEdit={openEdit}
+                    onDelete={handleDelete}
+                    onDispatch={(row) => void handleDispatch(row)}
+                  />
+                ))}
+                {doneItems.length > 0 ? (
+                  <li className="app-workspace-requirements-panel__section-label">已完成</li>
+                ) : null}
+                {doneItems.map((item) => (
+                  <RequirementRow
+                    key={item.id}
+                    item={item}
+                    dispatchingId={dispatchingId}
+                    onToggleDone={(row) => void handleToggleDone(row)}
+                    onEdit={openEdit}
+                    onDelete={handleDelete}
+                    onDispatch={(row) => void handleDispatch(row)}
+                  />
+                ))}
+              </ul>
+            )}
+          </div>
         )}
       </div>
+
+      <Modal
+        title={editingId ? "编辑需求" : "新增需求"}
+        open={editorOpen}
+        onOk={() => void saveEditor()}
+        onCancel={() => {
+          setEditorOpen(false);
+          setEditingId(null);
+        }}
+        okText="保存"
+        cancelText="取消"
+        confirmLoading={saving}
+        destroyOnHidden
+        width={720}
+        mask={{ closable: true }}
+        className="app-workspace-requirements-edit-modal"
+      >
+        <Typography.Paragraph type="secondary" className="app-workspace-requirements-panel__edit-hint">
+          支持粘贴 / 拖入图片。保存后图片会落到本地 `~/.wise/composer-images/`，派发时以
+          `@当前执行环境` + 文字 + 本地路径开 worker，不占主会话。
+          {draftImageCount > 0 ? ` 当前草稿含 ${draftImageCount} 张图。` : null}
+        </Typography.Paragraph>
+        <Suspense
+          fallback={
+            <div className="app-file-editor-loading">
+              <Spin size="small" />
+            </div>
+          }
+        >
+          <RequirementMilkdownEditor
+            editorRef={editorRef}
+            editorKey={editorKey}
+            initialBody={draftBody}
+            onChange={(md) => {
+              draftBodyRef.current = md;
+              setDraftBody(md);
+            }}
+          />
+        </Suspense>
+      </Modal>
     </div>
   );
 }

@@ -1,7 +1,10 @@
 import type { ClaudeSession, ProjectItem, Repository } from "../types";
 import { findSessionByTabOrClaudeId } from "./claudeSessionSelection";
 import { sessionMatchesProjectWorkspaceFocus } from "./projectSessionPanelFilter";
-import { resolveRepositoryForSession } from "./repositoryMainSessionBinding";
+import {
+  resolveRepositoryForSession,
+  sessionMatchesRepositoryScope,
+} from "./repositoryMainSessionBinding";
 import { resolveWorkspaceMainSession } from "./resolveWorkspaceMainSession";
 import type { WorkspaceFocus, WorkspaceMode } from "./workspaceMode";
 import type { WorkspaceLastSelection } from "./startupRepoSelection";
@@ -176,6 +179,7 @@ export interface ResolveClaudePanelActiveSessionInput {
 /**
  * ClaudeSessions 主窗格当前应展示的会话。
  * 工作区焦点：项目主会话；仓库焦点：当前仓库上的 activeSessionId。
+ * 侧栏点选的执行环境 worker 可能不在 panel 过滤后的 `sessions` 中，须回退 `allSessions`。
  */
 export function resolveClaudePanelActiveSession(
   input: ResolveClaudePanelActiveSessionInput,
@@ -217,21 +221,25 @@ export function resolveClaudePanelActiveSession(
   }
 
   const activeKey = activeSessionId?.trim() ?? "";
-  return sessions.find((session) => {
-    if (activeKey && session.id !== activeKey && session.claudeSessionId !== activeKey) {
-      return false;
-    }
-    if (!activeKey) return false;
-    return (
-      resolveRepositoryForSession({
-        session,
-        repositories: [...repositories],
-        bindings: repositoryMainBindings,
-        sessions: [...sessions],
-        preferredRepositoryId: activeRepository.id,
-      })?.id === activeRepository.id
-    );
+  if (!activeKey) return undefined;
+
+  const current =
+    findSessionByTabOrClaudeId(sessions, activeKey) ??
+    findSessionByTabOrClaudeId(allSessions, activeKey);
+  if (!current) return undefined;
+
+  if (sessionMatchesRepositoryScope(current, activeRepository.path)) {
+    return current;
+  }
+
+  const resolvedRepo = resolveRepositoryForSession({
+    session: current,
+    repositories: [...repositories],
+    bindings: repositoryMainBindings,
+    sessions: [...allSessions],
+    preferredRepositoryId: activeRepository.id,
   });
+  return resolvedRepo?.id === activeRepository.id ? current : undefined;
 }
 
 export interface ResolveClaudeWorkspaceMainSessionInput {

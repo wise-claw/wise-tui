@@ -5,6 +5,7 @@ import {
   htmlDocumentToMarkdown,
   llmHtmlFragmentToMarkdown,
   looksLikeLlmHtmlFragment,
+  normalizeInlineHtmlBreakTags,
   normalizeMarkdownForDisplay,
   normalizeInlineMarkdownStructures,
   normalizePipeTables,
@@ -459,5 +460,34 @@ describe("normalizeMarkdownForDisplay", () => {
     expect(html).not.toContain("<head");
     expect(html).not.toContain("<meta");
     expect(html).toContain("分析如下");
+  });
+
+  test("strips inline br tags so ReactMarkdown does not escape them as text", async () => {
+    const React = await import("react");
+    const ReactMarkdown = (await import("react-markdown")).default;
+    const remarkGfm = (await import("remark-gfm")).default;
+    const { renderToStaticMarkup } = await import("react-dom/server");
+
+    const codexDoc =
+      "## Then simply run `codex` to get started. You can also go to the " +
+      "[latest GitHub Release](https://github.com/openai/codex/releases/latest) " +
+      "and download the appropriate binary for your platform. " +
+      "### **Using Codex with your ChatGPT plan** Run `codex` and select **Sign in with ChatGPT**. " +
+      "You can also use Codex with an API key, but this requires " +
+      "[additional setup](https://developers.openai.com/codex/auth#sign-in-with-an-api-key). <br />";
+
+    const normalized = normalizeMarkdownForDisplay(codexDoc);
+    expect(normalized).not.toMatch(/<br\s*\/?>/i);
+    expect(normalized).not.toContain("&lt;br");
+
+    const html = renderToStaticMarkup(
+      React.createElement(ReactMarkdown, { remarkPlugins: [remarkGfm] }, normalized),
+    );
+    expect(html).not.toContain("&lt;br");
+    expect(html).toContain("additional setup");
+  });
+
+  test("normalizeInlineHtmlBreakTags handles entity-encoded br", () => {
+    expect(normalizeInlineHtmlBreakTags("line one &lt;br /&gt; line two")).toBe("line one \n line two");
   });
 });

@@ -53,7 +53,7 @@ function DispatchRecordMessageInner({
         <button
           type="button"
           className="app-system-dispatch-card__sentence-link"
-          title="查看执行会话详情"
+          title="打开执行会话"
           onClick={() => onOpenSessionConversationTaskDetail!(executionEnvironmentTask!)}
         >
           {sentence}
