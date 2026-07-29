@@ -39,6 +39,12 @@
   font-weight: 500;
 }
 
+.app-left-sidebar-quick-actions-popover__header-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 0;
+}
+
 .app-left-sidebar-quick-actions-popover__body {
   flex: 1 1 auto;
   min-height: 0;
@@ -58,29 +64,27 @@
 }
 
 .app-left-sidebar-quick-actions-popover__card {
-  position: relative;
+  display: inline-flex;
   flex: 0 1 auto;
+  align-items: center;
+  gap: 2px;
   width: max-content;
   max-width: 100%;
-  border: 1px solid var(--ant-color-border-secondary);
-  border-radius: 4px;
-  background: var(--ant-color-bg-container);
-}
-
-.app-left-sidebar-quick-actions-popover__card:hover {
-  border-color: var(--ant-color-border);
-  background: var(--ant-color-fill-quaternary);
+  min-width: 0;
 }
 
 .app-left-sidebar-quick-actions-popover__card-main {
-  width: 100%;
+  flex: 0 1 auto;
+  width: max-content;
+  max-width: 100%;
   display: inline-flex;
   flex-direction: row;
   align-items: center;
   justify-content: flex-start;
   gap: 3px;
-  border: none;
-  background: transparent;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 4px;
+  background: var(--ant-color-bg-container);
   text-align: left;
   padding: 1px 5px;
   cursor: pointer;
@@ -88,6 +92,11 @@
   line-height: 1.1;
   min-height: 18px;
   box-sizing: border-box;
+}
+
+.app-left-sidebar-quick-actions-popover__card-main:hover {
+  border-color: var(--ant-color-border);
+  background: var(--ant-color-fill-quaternary);
 }
 
 .app-left-sidebar-quick-actions-popover__card-icon {
@@ -110,21 +119,18 @@
 }
 
 .app-left-sidebar-quick-actions-popover__card-actions {
-  position: absolute;
-  inset: 0 0 0 auto;
   display: none;
+  flex: 0 0 auto;
   align-items: center;
   gap: 0;
-  padding: 0 1px;
+  padding: 0;
   border-radius: 3px;
-  background: color-mix(in srgb, var(--ant-color-bg-container) 94%, transparent);
-  box-shadow: -6px 0 8px 0 color-mix(in srgb, var(--ant-color-bg-container) 90%, transparent);
-  z-index: 1;
+  background: var(--ant-color-bg-elevated, var(--ant-color-bg-container));
+  box-shadow: 0 0 0 1px var(--ant-color-border-secondary);
 }
 
-.app-left-sidebar-quick-actions-popover__card:hover .app-left-sidebar-quick-actions-popover__card-actions,
-.app-left-sidebar-quick-actions-popover__card:focus-within .app-left-sidebar-quick-actions-popover__card-actions {
-  display: flex;
+.app-left-sidebar-quick-actions-popover__list--managing .app-left-sidebar-quick-actions-popover__card-actions {
+  display: inline-flex;
 }
 
 .app-left-sidebar-quick-actions-popover__card-actions .ant-btn {

@@ -80,29 +80,27 @@
 }
 
 .app-workspace-quick-actions-panel__card {
-  position: relative;
+  display: inline-flex;
   flex: 0 1 auto;
+  align-items: center;
+  gap: 2px;
   width: max-content;
   max-width: 100%;
-  border: 1px solid var(--ant-color-border-secondary);
-  border-radius: 4px;
-  background: var(--ant-color-bg-container);
-}
-
-.app-workspace-quick-actions-panel__card:hover {
-  border-color: var(--ant-color-border);
-  background: var(--ant-color-fill-quaternary);
+  min-width: 0;
 }
 
 .app-workspace-quick-actions-panel__card-main {
-  width: 100%;
+  flex: 0 1 auto;
+  width: max-content;
+  max-width: 100%;
   display: inline-flex;
   flex-direction: row;
   align-items: center;
   justify-content: flex-start;
   gap: 3px;
-  border: none;
-  background: transparent;
+  border: 1px solid var(--ant-color-border-secondary);
+  border-radius: 4px;
+  background: var(--ant-color-bg-container);
   text-align: left;
   padding: 1px 5px;
   cursor: pointer;
@@ -110,6 +108,11 @@
   line-height: 1.1;
   min-height: 18px;
   box-sizing: border-box;
+}
+
+.app-workspace-quick-actions-panel__card-main:hover {
+  border-color: var(--ant-color-border);
+  background: var(--ant-color-fill-quaternary);
 }
 
 .app-workspace-quick-actions-panel__card-icon {
@@ -132,21 +135,18 @@
 }
 
 .app-workspace-quick-actions-panel__card-actions {
-  position: absolute;
-  inset: 0 0 0 auto;
   display: none;
+  flex: 0 0 auto;
   align-items: center;
   gap: 0;
-  padding: 0 1px;
+  padding: 0;
   border-radius: 3px;
-  background: color-mix(in srgb, var(--ant-color-bg-container) 94%, transparent);
-  box-shadow: -6px 0 8px 0 color-mix(in srgb, var(--ant-color-bg-container) 90%, transparent);
-  z-index: 1;
+  background: var(--ant-color-bg-elevated, var(--ant-color-bg-container));
+  box-shadow: 0 0 0 1px var(--ant-color-border-secondary);
 }
 
-.app-workspace-quick-actions-panel__card:hover .app-workspace-quick-actions-panel__card-actions,
-.app-workspace-quick-actions-panel__card:focus-within .app-workspace-quick-actions-panel__card-actions {
-  display: flex;
+.app-workspace-quick-actions-panel__list--managing .app-workspace-quick-actions-panel__card-actions {
+  display: inline-flex;
 }
 
 .app-workspace-quick-actions-panel__card-actions .ant-btn {

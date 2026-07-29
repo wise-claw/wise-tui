@@ -64,6 +64,7 @@ export function LeftSidebarQuickActionsPopover({
     additionalRepositoryIds: allRepositoryIds,
   });
   const [open, setOpen] = useState(false);
+  const [managing, setManaging] = useState(false);
   const [editState, setEditState] = useState<EditState | null>(null);
 
   const allowRepositoryScope = repositoryId != null || repositoriesById.size > 0;
@@ -193,7 +194,10 @@ export function LeftSidebarQuickActionsPopover({
   return (
     <Popover
       open={open}
-      onOpenChange={setOpen}
+      onOpenChange={(next) => {
+        setOpen(next);
+        if (!next) setManaging(false);
+      }}
       trigger="click"
       placement="rightTop"
       destroyOnHidden
@@ -204,15 +208,26 @@ export function LeftSidebarQuickActionsPopover({
         <div className="app-left-sidebar-quick-actions-popover">
           <div className="app-left-sidebar-quick-actions-popover__header">
             <span>快捷操作</span>
-            <Button
-              type="text"
-              size="small"
-              icon={<PlusOutlined style={{ fontSize: 12 }} />}
-              aria-label="添加快捷操作"
-              disabled={!quickActions.hasScope && workspaces.length === 0 && repositoriesById.size === 0}
-              onClick={() => setEditState({ mode: "create" })}
-              style={{ width: 20, height: 20, padding: 0 }}
-            />
+            <span className="app-left-sidebar-quick-actions-popover__header-actions">
+              <Button
+                type={managing ? "primary" : "text"}
+                size="small"
+                icon={<EditOutlined style={{ fontSize: 12 }} />}
+                aria-label={managing ? "完成编辑" : "编辑快捷操作"}
+                disabled={quickActions.displayItems.length === 0}
+                onClick={() => setManaging((value) => !value)}
+                style={{ width: 20, height: 20, padding: 0 }}
+              />
+              <Button
+                type="text"
+                size="small"
+                icon={<PlusOutlined style={{ fontSize: 12 }} />}
+                aria-label="添加快捷操作"
+                disabled={!quickActions.hasScope && workspaces.length === 0 && repositoriesById.size === 0}
+                onClick={() => setEditState({ mode: "create" })}
+                style={{ width: 20, height: 20, padding: 0 }}
+              />
+            </span>
           </div>
           <div className="app-left-sidebar-quick-actions-popover__body">
             {quickActions.loading ? (
@@ -237,7 +252,13 @@ export function LeftSidebarQuickActionsPopover({
                 </Button>
               </div>
             ) : (
-              <ul className="app-left-sidebar-quick-actions-popover__list">
+              <ul
+                className={
+                  managing
+                    ? "app-left-sidebar-quick-actions-popover__list app-left-sidebar-quick-actions-popover__list--managing"
+                    : "app-left-sidebar-quick-actions-popover__list"
+                }
+              >
                 {quickActions.displayItems.map((item) => {
                   const itemScopeId = item.scopeId;
                   const pinned = resolveWorkspaceQuickActionPinnedToTopbar(item);

@@ -39,6 +39,7 @@ export function WorkspaceQuickActionsPanel({
 }: WorkspaceQuickActionsPanelProps) {
   const { message, modal } = App.useApp();
   const quickActions = useWorkspaceQuickActions({ projectId, repositoryId });
+  const [managing, setManaging] = useState(false);
   const [editState, setEditState] = useState<EditState | null>(null);
 
   const defaultScope: WorkspaceQuickActionScope =
@@ -169,16 +170,28 @@ export function WorkspaceQuickActionsPanel({
       ariaLabel="快捷操作"
       title="快捷操作"
       headActions={
-        <HoverHint title="添加链接或本地目录">
-          <Button
-            type="text"
-            size="small"
-            icon={<PlusOutlined />}
-            aria-label="添加快捷操作"
-            disabled={!quickActions.hasScope}
-            onClick={() => setEditState({ mode: "create" })}
-          />
-        </HoverHint>
+        <>
+          <HoverHint title={managing ? "完成编辑" : "编辑快捷操作"}>
+            <Button
+              type={managing ? "primary" : "text"}
+              size="small"
+              icon={<EditOutlined />}
+              aria-label={managing ? "完成编辑" : "编辑快捷操作"}
+              disabled={quickActions.displayItems.length === 0}
+              onClick={() => setManaging((value) => !value)}
+            />
+          </HoverHint>
+          <HoverHint title="添加链接或本地目录">
+            <Button
+              type="text"
+              size="small"
+              icon={<PlusOutlined />}
+              aria-label="添加快捷操作"
+              disabled={!quickActions.hasScope}
+              onClick={() => setEditState({ mode: "create" })}
+            />
+          </HoverHint>
+        </>
       }
       trailing={
         <WorkspaceQuickActionsEditModal
@@ -220,7 +233,13 @@ export function WorkspaceQuickActionsPanel({
             </Button>
           </div>
         ) : (
-          <ul className="app-workspace-quick-actions-panel__list">
+          <ul
+            className={
+              managing
+                ? "app-workspace-quick-actions-panel__list app-workspace-quick-actions-panel__list--managing"
+                : "app-workspace-quick-actions-panel__list"
+            }
+          >
             {quickActions.displayItems.map((item) => {
               const itemScopeId = item.scopeId;
               const pinned = resolveWorkspaceQuickActionPinnedToTopbar(item);
