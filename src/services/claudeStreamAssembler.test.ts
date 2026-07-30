@@ -25,6 +25,22 @@ function session(messages: ClaudeSession["messages"]): ClaudeSession {
   };
 }
 
+/** Cursor CLI `--stream-partial-output` 的逐字 text delta（取自真实 cursor-runs jsonl）。 */
+const CURSOR_TEXT_DELTAS = [
+  "你好", "。\n\n", "我是", " Wise", " ", "工作", "区", "里的", " Cursor", " Agent",
+  "，", "可以直接", "读写", "文件", "、", "跑", " shell", "、", "改", "代码",
+  "。", "你想", "先", "聊", "什么", "，", "或者", "要", "我从", "哪",
+  "一块", "开始", "动手", "？",
+] as const;
+
+/** 同一轮结束时 CLI 重发的整轮全文（final flush）。 */
+const CURSOR_FULL_TURN_TEXT =
+  "你好。\n\n我是 Wise 工作区里的 Cursor Agent，可以直接读写文件、跑 shell、改代码。你想先聊什么，或者要我从哪一块开始动手？";
+
+function assistantTextMessage(id: number, text: string): ClaudeMessage {
+  return { id, role: "assistant", content: text, timestamp: id, parts: [{ type: "text", text }] };
+}
+
 describe("reconcileResultFullTextParts", () => {
   test("returns resultParts as fallback when last assistant has no text", () => {
     // result 早于 delta 到达、末条无可见 text -> 原样注入兜底防闪空
@@ -369,6 +385,25 @@ describe("appendAssistantStreamParts", () => {
     expect(next.messages[1]?.role).toBe("assistant");
     expect(next.messages[1]?.content).toBe("你好！👋 有什么我可以帮你的？");
   });
+
+  test("cursor text deltas reassemble into the exact turn text", () => {
+    let current = session([{ role: "user", content: "你好啊", timestamp: 1 }]);
+    for (const text of CURSOR_TEXT_DELTAS) {
+      current = appendAssistantStreamParts(current, [{ type: "text", text }]);
+    }
+    expect(current.messages[1]?.content).toBe(CURSOR_FULL_TURN_TEXT);
+  });
+
+  test("cursor end-of-turn full-text flush does not duplicate the streamed turn", () => {
+    let current = session([{ role: "user", content: "你好啊", timestamp: 1 }]);
+    for (const text of CURSOR_TEXT_DELTAS) {
+      current = appendAssistantStreamParts(current, [{ type: "text", text }]);
+    }
+    current = appendAssistantStreamParts(current, [
+      { type: "text", text: CURSOR_FULL_TURN_TEXT },
+    ]);
+    expect(current.messages[1]?.content).toBe(CURSOR_FULL_TURN_TEXT);
+  });
 });
 
 describe("coalesceConsecutiveAssistantMessages", () => {
@@ -407,6 +442,18 @@ describe("coalesceConsecutiveAssistantMessages", () => {
     expect(coalesced).toHaveLength(2);
     expect(coalesced[1]?.role).toBe("assistant");
     expect(coalesced[1]?.content).toBe("会话已初始化？例如");
+  });
+
+  test("drops cursor end-of-turn full-text flush instead of duplicating the turn", () => {
+    // 真实 jsonl（~/.wise/cursor-runs 落盘）序列：逐字 delta 之后 CLI 又把整轮正文整段重发一次。
+    // 段落边界把 delta 切成两个 text part 后，整段快照与末条 part 无前缀关系，旧逻辑会拼接成翻倍正文。
+    const messages: ClaudeMessage[] = [
+      ...CURSOR_TEXT_DELTAS.map((text, index) => assistantTextMessage(index + 1, text)),
+      assistantTextMessage(CURSOR_TEXT_DELTAS.length + 1, CURSOR_FULL_TURN_TEXT),
+    ];
+    const coalesced = coalesceConsecutiveAssistantMessages(messages);
+    expect(coalesced).toHaveLength(1);
+    expect(coalesced[0]?.content).toBe(CURSOR_FULL_TURN_TEXT);
   });
 
   test("does not merge across user messages", () => {

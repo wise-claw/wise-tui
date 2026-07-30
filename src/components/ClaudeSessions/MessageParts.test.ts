@@ -260,6 +260,18 @@ describe("buildMergedTextGroups", () => {
     };
   }
 
+  test("collapses a full-turn snapshot part into the authoritative text (no duplicate on screen)", () => {
+    // Cursor CLI final flush 被另起为独立 part 后，渲染合并须收敛成整轮全文，而不是把整段再显示一遍。
+    const body = "我是 Wise 工作区里的 Cursor Agent，可以直接读写文件、跑 shell、改代码。你想先聊什么，或者要我从哪一块开始动手？";
+    const fullTurn = `你好。\n\n${body}`;
+    const groups = buildMergedTextGroups([text("你好。\n\n"), text(body), text(fullTurn)]);
+    expect(groups).toHaveLength(1);
+    expect(groups[0]!.type).toBe("merged_text");
+    if (groups[0]!.type === "merged_text") {
+      expect(groups[0]!.joinedText).toBe(fullTurn);
+    }
+  });
+
   test("keeps single text part as is (no merge)", () => {
     const visible: MessagePart[] = [text("单独一段")];
     const groups = buildMergedTextGroups(visible);

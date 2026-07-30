@@ -3,6 +3,7 @@ import type { MessagePart } from "../types";
 import {
   assistantTextJoinedFromParts,
   countAssistantTextParagraphs,
+  isAssistantFullTextSnapshotOfParts,
   isLikelyStreamTextFragment,
   joinAssistantTextPartBodies,
   shouldStartNewAssistantTextPart,
@@ -139,6 +140,56 @@ describe("assistantTextJoinedFromParts", () => {
       { type: "text", text: "- 项一\n- 项二" },
     ];
     expect(assistantTextJoinedFromParts(parts)).toBe("## 总结\n\n- 项一\n- 项二");
+  });
+});
+
+describe("isAssistantFullTextSnapshotOfParts", () => {
+  const intro = "你好。\n\n";
+  const body = "我是 Wise 工作区里的 Cursor Agent，可以直接读写文件、跑 shell、改代码。你想先聊什么，或者要我从哪一块开始动手？";
+  const fullTurn = `${intro.trim()}\n\n${body}`;
+
+  test("detects a full-turn snapshot that repeats accumulated text parts", () => {
+    const parts: MessagePart[] = [
+      { type: "text", text: intro },
+      { type: "text", text: body },
+    ];
+    expect(isAssistantFullTextSnapshotOfParts(parts, fullTurn)).toBe(true);
+  });
+
+  test("sees through separator differences between snapshot and accumulated parts", () => {
+    const parts: MessagePart[] = [
+      { type: "text", text: "你好。" },
+      { type: "text", text: body },
+    ];
+    expect(isAssistantFullTextSnapshotOfParts(parts, `你好。\n${body}`)).toBe(true);
+  });
+
+  test("spans text parts separated by a tool call", () => {
+    const parts: MessagePart[] = [
+      { type: "text", text: "先看一下仓库结构，确认改动落在哪一层，再决定从哪个模块开始动手。" },
+      { type: "tool_use", id: "t1", name: "Read", input: {}, status: "completed" },
+      { type: "text", text: "结构确认完毕，改动集中在流式装配层，我先补上对应的回归测试。" },
+    ];
+    const snapshot =
+      "先看一下仓库结构，确认改动落在哪一层，再决定从哪个模块开始动手。\n\n结构确认完毕，改动集中在流式装配层，我先补上对应的回归测试。";
+    expect(isAssistantFullTextSnapshotOfParts(parts, snapshot)).toBe(true);
+  });
+
+  test("rejects normal delta increments", () => {
+    const parts: MessagePart[] = [{ type: "text", text: `${intro}${body}` }];
+    expect(isAssistantFullTextSnapshotOfParts(parts, "还有一点要补充。")).toBe(false);
+  });
+
+  test("rejects short bodies so legitimate repeats survive", () => {
+    const parts: MessagePart[] = [{ type: "text", text: "好的。" }];
+    expect(isAssistantFullTextSnapshotOfParts(parts, "好的。")).toBe(false);
+  });
+
+  test("rejects a snapshot that diverges from accumulated text", () => {
+    const parts: MessagePart[] = [{ type: "text", text: body }];
+    expect(
+      isAssistantFullTextSnapshotOfParts(parts, "换个说法：我可以帮你读写文件、跑 shell、改代码，你说要做什么就行。"),
+    ).toBe(false);
   });
 });
 

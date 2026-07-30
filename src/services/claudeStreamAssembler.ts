@@ -2,6 +2,7 @@ import type { ClaudeMessage, ClaudeSession, MessagePart } from "../types";
 import { isToolOnlyUserMessage } from "../utils/claudeChatMessageDisplay";
 import {
   assistantTextJoinedFromParts,
+  isAssistantFullTextSnapshotOfParts,
   isLikelyStreamTextFragment,
   shouldStartNewAssistantTextPart,
 } from "../utils/assistantTextParts";
@@ -212,7 +213,16 @@ export function mergeAssistantParts(
         && (lastText === undefined
           || heuristicNew
           || !isLikelyStreamTextFragment(lastText.text, part.text));
-      const keepSeparateTextBlock = blockBoundaryNew || multiSnapshotNew || heuristicNew;
+      // 整轮全文快照（Cursor final flush 等）与末条 part 无前缀关系时，containment 会退化成拼接使正文翻倍。
+      // 另起 part 交给渲染/content 的整段去重收敛；与末条有前缀关系时 containment 已能正确覆盖，无需另起。
+      const fullTextSnapshotNew =
+        lastText !== undefined
+        && lastText.text.length > 0
+        && !part.text.startsWith(lastText.text)
+        && !lastText.text.startsWith(part.text)
+        && isAssistantFullTextSnapshotOfParts(merged, part.text);
+      const keepSeparateTextBlock =
+        blockBoundaryNew || multiSnapshotNew || heuristicNew || fullTextSnapshotNew;
       if (startNewTextBlock) startNewTextBlock = false;
       if (keepSeparateTextBlock) {
         merged.push(part);

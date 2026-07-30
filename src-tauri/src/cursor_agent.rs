@@ -9,7 +9,9 @@ use crate::cursor_binary::{
 use crate::cursor_disk::{
     append_cursor_session_line, build_cursor_user_turn_line, load_cursor_session_jsonl,
 };
-use crate::cursor_stream_adapter::{map_cursor_cli_stdout_line, CursorCliStdoutMap};
+use crate::cursor_stream_adapter::{
+    map_cursor_cli_stdout_line, CursorCliStdoutMap, CursorCliStdoutState,
+};
 
 use crate::agent_registry::{Probe, ProbeResult};
 use crate::child_slot_wait::{wait_child_slot, WaitChildSlotOutcome};
@@ -1138,12 +1140,14 @@ pub(crate) async fn execute_cursor_code(
     tokio::spawn(async move {
         let reader = BufReader::new(stdout);
         let mut lines = reader.lines();
+        // 有状态映射：`--stream-partial-output` 的 final flush 要靠「本轮是否已流过 delta」才能识别为重复。
+        let mut stdout_state = CursorCliStdoutState::default();
         while let Ok(Some(line)) = lines.next_line().await {
             let trimmed = line.trim();
             if trimmed.is_empty() {
                 continue;
             }
-            match map_cursor_cli_stdout_line(trimmed) {
+            match stdout_state.map_line(trimmed) {
                 CursorCliStdoutMap::SessionId(id) => {
                     let mut guard = cursor_agent_id_stdout.lock().await;
                     *guard = Some(id.clone());

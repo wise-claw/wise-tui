@@ -129,6 +129,30 @@ export function assistantTextJoinedFromParts(parts: readonly MessagePart[]): str
   return joinAssistantTextPartBodies(assistantTextBodiesFromParts(parts));
 }
 
+/**
+ * incoming 是否是「已累积正文的整轮全文快照」，而非增量续写。
+ *
+ * Cursor CLI `--stream-partial-output` 的 end-of-turn final flush、result 整轮文本、磁盘快照与内存态
+ * 合并等路径都会把整轮正文整段再送一次。这类整段快照与**末条** text part 通常无前缀关系（增量一旦被
+ * 段落边界切成多个 part 就必然如此），`mergeTextPartsByContainment` 会退化成拼接，整段正文翻倍上屏。
+ *
+ * 判定成立时调用方应另起 text part，交由 {@link joinAssistantTextPartBodies} 的整段去重收敛成权威全文，
+ * 而不是拼进末条 part（拼进去后段落已混在同一个 part 内，整段去重再也看不见重复）。
+ *
+ * 比对抹掉空白以容忍分段位置差异；两侧都需达到 {@link TEXT_DEDUPE_MIN_KEY_LENGTH}，避免把短句的合法
+ * 重复误判成快照。先按 incoming 长度短路，使 token 级增量不触发 O(n) 的 parts 拼接。
+ */
+export function isAssistantFullTextSnapshotOfParts(
+  existingParts: readonly MessagePart[],
+  incoming: string,
+): boolean {
+  const incomingKey = textDedupeKey(incoming);
+  if (incomingKey.length < TEXT_DEDUPE_MIN_KEY_LENGTH) return false;
+  const existingKey = textDedupeKey(assistantTextJoinedFromParts(existingParts));
+  if (existingKey.length < TEXT_DEDUPE_MIN_KEY_LENGTH) return false;
+  return incomingKey.includes(existingKey);
+}
+
 /** 流式/磁盘共用的段数统计（与 looksLikeLongFormChatMarkdown 一致）。 */
 export function countAssistantTextParagraphs(text: string): number {
   return text.split(/\n\s*\n/).filter((block) => block.trim()).length;

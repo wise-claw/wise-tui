@@ -14,27 +14,49 @@ pub enum CursorCliStdoutMap {
     Result { success: bool, session_id: Option<String> },
 }
 
-/// Map one stdout NDJSON line from `agent -p --output-format stream-json`.
-pub fn map_cursor_cli_stdout_line(raw_line: &str) -> CursorCliStdoutMap {
-    let trimmed = raw_line.trim();
-    if trimmed.is_empty() || !trimmed.starts_with('{') {
-        return CursorCliStdoutMap::Skip;
-    }
-    let Ok(value) = serde_json::from_str::<Value>(trimmed) else {
-        return CursorCliStdoutMap::Skip;
-    };
-    let Some(event_type) = value.get("type").and_then(Value::as_str) else {
-        return CursorCliStdoutMap::Skip;
-    };
+/// 跨行状态：判定末尾那条不带 `timestamp_ms` 的 assistant 事件到底是什么，必须知道本轮是否已流过增量。
+///
+/// `--stream-partial-output` 下 CLI 每个 token 发一条带 `timestamp_ms` 的 delta，整轮结束再把**完整正文**
+/// 作为 final flush 重发一次（不带 `timestamp_ms`）；不开 partial 时则只有这一条完整消息。两者事件形状一致，
+/// 逐行纯函数无法区分，只能按「本轮是否已流过 delta」判断：已流过 -> final flush 是重复，丢弃；未流过 -> 它是
+/// 唯一的正文来源，必须放行。`result` 事件视为一轮结束并复位。
+#[derive(Debug, Default)]
+pub struct CursorCliStdoutState {
+    saw_partial_text_delta: bool,
+}
 
-    match event_type {
-        "system" => map_system_event(&value),
-        "assistant" => map_assistant_event(&value),
-        "tool_call" => map_tool_call_event(&value),
-        "result" => map_result_event(&value),
-        "user" => CursorCliStdoutMap::Skip,
-        _ => CursorCliStdoutMap::Skip,
+impl CursorCliStdoutState {
+    /// Map one stdout NDJSON line from `agent -p --output-format stream-json`.
+    pub fn map_line(&mut self, raw_line: &str) -> CursorCliStdoutMap {
+        let trimmed = raw_line.trim();
+        if trimmed.is_empty() || !trimmed.starts_with('{') {
+            return CursorCliStdoutMap::Skip;
+        }
+        let Ok(value) = serde_json::from_str::<Value>(trimmed) else {
+            return CursorCliStdoutMap::Skip;
+        };
+        let Some(event_type) = value.get("type").and_then(Value::as_str) else {
+            return CursorCliStdoutMap::Skip;
+        };
+
+        match event_type {
+            "system" => map_system_event(&value),
+            "assistant" => self.map_assistant_event(&value),
+            "tool_call" => map_tool_call_event(&value),
+            "result" => {
+                self.saw_partial_text_delta = false;
+                map_result_event(&value)
+            }
+            "user" => CursorCliStdoutMap::Skip,
+            _ => CursorCliStdoutMap::Skip,
+        }
     }
+}
+
+/// 无状态映射：仅用于一次性扫描完整 stdout 的探针类场景（不依赖 partial/final flush 区分）。
+/// 流式转发必须用 [`CursorCliStdoutState::map_line`]，否则 final flush 会让正文翻倍。
+pub fn map_cursor_cli_stdout_line(raw_line: &str) -> CursorCliStdoutMap {
+    CursorCliStdoutState::default().map_line(raw_line)
 }
 
 fn map_system_event(value: &Value) -> CursorCliStdoutMap {
@@ -57,67 +79,56 @@ fn map_system_event(value: &Value) -> CursorCliStdoutMap {
     }
 }
 
-fn map_assistant_event(value: &Value) -> CursorCliStdoutMap {
-    // With `--stream-partial-output`, skip duplicate flushes:
-    // - has timestamp_ms + model_call_id → pre-tool buffer flush (duplicate)
-    // - no timestamp_ms → end-of-turn final flush (duplicate)
-    // Keep: timestamp_ms present, model_call_id absent → real text delta
-    // Without partial streaming, events usually lack both fields → keep once.
-    let has_timestamp = value.get("timestamp_ms").is_some();
-    let has_model_call = value.get("model_call_id").is_some();
-    if has_timestamp && has_model_call {
-        return CursorCliStdoutMap::Skip;
-    }
-    if !has_timestamp && value.get("message").is_some() {
-        // Final flush without timestamp: only skip when this looks like a
-        // duplicate of streamed partials (heuristic: empty or missing content).
-        // Keep non-partial complete assistant messages (no timestamp at all in non-partial mode).
-        // Docs: "不存在 timestamp / model_call_id = 最终刷新（重复）" when partial is enabled.
-        // We cannot know if partial was enabled; prefer emitting when content has text.
-    }
-
-    let Some(message) = value.get("message") else {
-        return CursorCliStdoutMap::Skip;
-    };
-    let Some(content) = message.get("content").and_then(Value::as_array) else {
-        return CursorCliStdoutMap::Skip;
-    };
-    if content.is_empty() {
-        return CursorCliStdoutMap::Skip;
-    }
-
-    // If this is a final flush (no timestamp) and all text blocks are empty, skip.
-    let has_text = content.iter().any(|block| {
-        block
-            .get("text")
-            .and_then(Value::as_str)
-            .map(|t| !t.is_empty())
-            .unwrap_or(false)
-            || block.get("type").and_then(Value::as_str) == Some("thinking")
-    });
-    if !has_text {
-        return CursorCliStdoutMap::Skip;
-    }
-
-    // When partial mode final-flush (no timestamp, no model_call): skip to avoid duplicates.
-    // Non-partial mode also has no timestamp — we must still emit.
-    // Heuristic: if `timestamp_ms` never appears in the event, treat as complete message (emit).
-    // Docs say final flush lacks timestamp; partial deltas have timestamp.
-    // So: emit always when has_timestamp; emit when !has_timestamp && !has_model_call
-    // UNLESS we're in partial mode. We detect partial mode via presence of any prior
-    // timestamped events at the process level — not available here.
-    // Safer default for Wise: emit all assistant messages that have text.
-    // Duplicate final flush risk is acceptable vs dropping the only complete message.
-
-    let line = json!({
-        "type": "assistant",
-        "message": {
-            "role": "assistant",
-            "content": content,
+impl CursorCliStdoutState {
+    fn map_assistant_event(&mut self, value: &Value) -> CursorCliStdoutMap {
+        let has_timestamp = value.get("timestamp_ms").is_some();
+        let has_model_call = value.get("model_call_id").is_some();
+        // pre-tool buffer flush：工具调用前把已流过的整段正文再刷一次，恒为重复。
+        if has_timestamp && has_model_call {
+            return CursorCliStdoutMap::Skip;
         }
-    })
-    .to_string();
-    CursorCliStdoutMap::StreamLines(vec![line])
+        // partial 模式的 end-of-turn final flush：整轮正文已由 delta 逐条流完，再放行会让正文翻倍。
+        if !has_timestamp && self.saw_partial_text_delta {
+            return CursorCliStdoutMap::Skip;
+        }
+
+        let Some(message) = value.get("message") else {
+            return CursorCliStdoutMap::Skip;
+        };
+        let Some(content) = message.get("content").and_then(Value::as_array) else {
+            return CursorCliStdoutMap::Skip;
+        };
+        if content.is_empty() {
+            return CursorCliStdoutMap::Skip;
+        }
+
+        let has_text = content.iter().any(|block| {
+            block
+                .get("text")
+                .and_then(Value::as_str)
+                .map(|t| !t.is_empty())
+                .unwrap_or(false)
+                || block.get("type").and_then(Value::as_str) == Some("thinking")
+        });
+        if !has_text {
+            return CursorCliStdoutMap::Skip;
+        }
+
+        // 只有真正放行的 delta 才置位：空 delta 不能让后续 final flush 被误判成重复。
+        if has_timestamp {
+            self.saw_partial_text_delta = true;
+        }
+
+        let line = json!({
+            "type": "assistant",
+            "message": {
+                "role": "assistant",
+                "content": content,
+            }
+        })
+        .to_string();
+        CursorCliStdoutMap::StreamLines(vec![line])
+    }
 }
 
 fn map_tool_call_event(value: &Value) -> CursorCliStdoutMap {
@@ -319,5 +330,71 @@ mod tests {
             map_cursor_cli_stdout_line(line),
             CursorCliStdoutMap::Skip
         );
+    }
+
+    fn assistant_delta(timestamp_ms: u64, text: &str) -> String {
+        format!(
+            r#"{{"type":"assistant","timestamp_ms":{timestamp_ms},"message":{{"role":"assistant","content":[{{"type":"text","text":"{text}"}}]}}}}"#
+        )
+    }
+
+    fn assistant_final_flush(text: &str) -> String {
+        format!(
+            r#"{{"type":"assistant","message":{{"role":"assistant","content":[{{"type":"text","text":"{text}"}}]}}}}"#
+        )
+    }
+
+    #[test]
+    fn skips_end_of_turn_final_flush_after_partial_deltas() {
+        let mut state = CursorCliStdoutState::default();
+        for (ts, text) in [(1u64, "你好"), (2, "。"), (3, "我是 Wise")] {
+            match state.map_line(&assistant_delta(ts, text)) {
+                CursorCliStdoutMap::StreamLines(lines) => assert!(lines[0].contains(text)),
+                other => panic!("expected StreamLines for delta, got {other:?}"),
+            }
+        }
+        assert_eq!(
+            state.map_line(&assistant_final_flush("你好。我是 Wise")),
+            CursorCliStdoutMap::Skip
+        );
+    }
+
+    #[test]
+    fn keeps_complete_assistant_message_without_partial_deltas() {
+        let mut state = CursorCliStdoutState::default();
+        match state.map_line(&assistant_final_flush("完整正文")) {
+            CursorCliStdoutMap::StreamLines(lines) => assert!(lines[0].contains("完整正文")),
+            other => panic!("expected StreamLines, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn result_event_resets_partial_delta_tracking_for_next_turn() {
+        let mut state = CursorCliStdoutState::default();
+        let _ = state.map_line(&assistant_delta(1, "第一轮"));
+        assert_eq!(
+            state.map_line(&assistant_final_flush("第一轮")),
+            CursorCliStdoutMap::Skip
+        );
+        let result = r#"{"type":"result","subtype":"success","is_error":false,"session_id":"abc"}"#;
+        let _ = state.map_line(result);
+        // 下一轮若不开 partial，首条完整消息仍须放行。
+        match state.map_line(&assistant_final_flush("第二轮完整正文")) {
+            CursorCliStdoutMap::StreamLines(lines) => assert!(lines[0].contains("第二轮完整正文")),
+            other => panic!("expected StreamLines after reset, got {other:?}"),
+        }
+    }
+
+    #[test]
+    fn empty_delta_does_not_mark_partial_streaming() {
+        let mut state = CursorCliStdoutState::default();
+        assert_eq!(
+            state.map_line(&assistant_delta(1, "")),
+            CursorCliStdoutMap::Skip
+        );
+        match state.map_line(&assistant_final_flush("唯一正文")) {
+            CursorCliStdoutMap::StreamLines(lines) => assert!(lines[0].contains("唯一正文")),
+            other => panic!("expected StreamLines, got {other:?}"),
+        }
     }
 }
