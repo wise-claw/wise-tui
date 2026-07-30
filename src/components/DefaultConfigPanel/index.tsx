@@ -14,6 +14,11 @@ import { WORKSPACE_LIST_VISIBLE_ROWS_OPTIONS } from "../../constants/workspaceLi
 import { WORKSPACE_SIDEBAR_ROW_PREVIEW_LIMIT_OPTIONS } from "../../constants/workspaceSidebarLayout";
 import { LEFT_SIDEBAR_HUB_QUICK_ENTRY_LABELS } from "../../constants/leftSidebarHubQuickEntries";
 import type { LeftSidebarHubQuickEntryId } from "../../constants/leftSidebarHubQuickEntries";
+import {
+  TERMINAL_THEME_MODES,
+  TERMINAL_THEME_MODE_LABELS,
+  type TerminalThemeMode,
+} from "../../constants/terminalThemeMode";
 import { useClaudeConnectionModeSetting } from "../ClaudeConfigDirPanel/useClaudeConnectionModeSetting";
 import { DefaultConfigOptionPick } from "./DefaultConfigOptionPick";
 import { DefaultConfigRow } from "./DefaultConfigRow";
@@ -29,6 +34,7 @@ import { useTopbarChromeDefaultSetting } from "./useTopbarChromeDefaultSetting";
 import { useComposerFooterChromeDefaultSetting } from "./useComposerFooterChromeDefaultSetting";
 import { useFeaturePanelChromeDefaultSetting } from "./useFeaturePanelChromeDefaultSetting";
 import { useDefaultTerminalSetting } from "./useDefaultTerminalSetting";
+import { useTerminalThemeModeSetting } from "./useTerminalThemeModeSetting";
 import { useClaudeDefaultSettingsSetting } from "./useClaudeDefaultSettingsSetting";
 import { ClaudeSettingsJsonEditor } from "../ClaudeSessions/ClaudeSettingsJsonEditor";
 import { useCodexDefaultSettingsSetting } from "./useCodexDefaultSettingsSetting";
@@ -87,6 +93,7 @@ export function DefaultConfigPanel() {
   const atMentionDefault = useAtMentionDefaultSetting();
   const atMentionShortcuts = useAtMentionShortcuts();
   const defaultTerminal = useDefaultTerminalSetting();
+  const terminalThemeMode = useTerminalThemeModeSetting();
   const fileTreeOpenInNewPane = useFileTreeOpenInNewPaneSetting();
   const feedbackLoop = useSessionFeedbackLoopSetting();
   const openInTerminalShortcut = useOpenInTerminalShortcutSetting();
@@ -659,6 +666,25 @@ export function DefaultConfigPanel() {
               }
             />
           ) : null}
+          <DefaultConfigRow
+            title="内置终端主题"
+            hint="浅色 / 深色 / 跟随应用"
+            detail="内置终端（PTY）配色；可与应用外观解耦。跟随应用时与顶栏外观开关同步"
+            control={
+              <DefaultConfigOptionPick<TerminalThemeMode>
+                aria-label="内置终端主题"
+                disabled={terminalThemeMode.loading || terminalThemeMode.saving}
+                value={terminalThemeMode.mode}
+                options={TERMINAL_THEME_MODES.map((value) => ({
+                  label: TERMINAL_THEME_MODE_LABELS[value],
+                  value,
+                }))}
+                onChange={(value) => {
+                  void terminalThemeMode.save(value);
+                }}
+              />
+            }
+          />
         </>
       ),
     },

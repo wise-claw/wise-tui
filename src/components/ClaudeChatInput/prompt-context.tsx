@@ -104,6 +104,13 @@ interface PromptProviderProps {
 export function PromptProvider({ children, sessionId, draftBucketKey: draftBucketKeyProp }: PromptProviderProps) {
   const bucketKey = (draftBucketKeyProp?.trim() || sessionId).trim();
   const [store, setStoreRaw] = useState<PromptStore>(() => emptyStore());
+  /**
+   * 与 `store` 同步的镜像。落盘必须读它而不是 setState updater 的 `prev`：
+   * 布局重建（1 屏 ↔ 多屏切换）卸载本组件时 React 会丢弃更新、不执行 updater，
+   * 若把保存写在 updater 里，卸载前最后一次输入就再也写不进 app_settings。
+   */
+  const storeRef = useRef(store);
+  storeRef.current = store;
   /** 发送 reset 等本地变更后递增，避免异步 hydration 读盘较慢时在 reset 之后仍用旧草稿覆盖 store。 */
   const mutationEpochRef = useRef(0);
   const debouncedSaveRef = useRef(createDebouncedSaveStore(bucketKey));
@@ -136,19 +143,17 @@ export function PromptProvider({ children, sessionId, draftBucketKey: draftBucke
       }
       try {
         const parsed = JSON.parse(raw);
-        setStoreRaw((current) => {
-          if (mutationEpochRef.current !== epochAtHydrationStart) {
-            return current;
-          }
-          if (!isPromptEqual(current.prompt, DEFAULT_PROMPT) || (current.contextItems?.length ?? 0) > 0) {
-            return current;
-          }
-          return normalizeStore({
-            prompt: parsed.prompt ?? DEFAULT_PROMPT,
-            cursor: parsed.cursor ?? 0,
-            contextItems: parsed.contextItems ?? [],
-          });
+        const current = storeRef.current;
+        if (!isPromptEqual(current.prompt, DEFAULT_PROMPT) || (current.contextItems?.length ?? 0) > 0) {
+          return;
+        }
+        const hydrated = normalizeStore({
+          prompt: parsed.prompt ?? DEFAULT_PROMPT,
+          cursor: parsed.cursor ?? 0,
+          contextItems: parsed.contextItems ?? [],
         });
+        storeRef.current = hydrated;
+        setStoreRaw(hydrated);
       } catch {
         // ignore parse failures
       }
@@ -159,12 +164,12 @@ export function PromptProvider({ children, sessionId, draftBucketKey: draftBucke
   }, [bucketKey, sessionId]);
 
   const setStore = useCallback((updater: (prev: PromptStore) => PromptStore) => {
-    setStoreRaw((prev) => {
-      const next = updater(prev);
-      debouncedSaveRef.current(next);
-      return next;
-    });
-  }, [bucketKey]);
+    const next = updater(storeRef.current);
+    if (next === storeRef.current) return;
+    storeRef.current = next;
+    debouncedSaveRef.current(next);
+    setStoreRaw(next);
+  }, []);
 
   const set = useCallback((prompt: Prompt, cursorPos?: number) => {
     setStore((prev) => ({
@@ -176,17 +181,16 @@ export function PromptProvider({ children, sessionId, draftBucketKey: draftBucke
 
   const reset = useCallback(() => {
     mutationEpochRef.current += 1;
-    setStoreRaw((prev) => {
-      const next = {
-        ...prev,
-        prompt: [...DEFAULT_PROMPT],
-        cursor: 0,
-        contextItems: [],
-      };
-      debouncedSaveRef.current.cancel();
-      saveStore(bucketKey, next);
-      return next;
-    });
+    const next: PromptStore = {
+      ...storeRef.current,
+      prompt: [...DEFAULT_PROMPT],
+      cursor: 0,
+      contextItems: [],
+    };
+    storeRef.current = next;
+    debouncedSaveRef.current.cancel();
+    saveStore(bucketKey, next);
+    setStoreRaw(next);
   }, [bucketKey]);
 
   const setCursor = useCallback((pos: number) => {

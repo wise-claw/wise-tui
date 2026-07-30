@@ -6,8 +6,10 @@
   height: var(--terminal-panel-height, 220px);
   -webkit-app-region: no-drag;
   /*
-   * 终端跟随应用外观：浅色壳配 Catppuccin Latte，深色壳配 Mocha。
-   * 同一色系保证语法高亮/ANSI 观感连续，避免浅色应用里嵌一块纯深色板砖。
+   * 终端主题可独立于应用外观（默认配置：跟随应用 / 浅色 / 深色）。
+   * 浅色壳配 Catppuccin Latte，深色壳配 Mocha。
+   * - 未写 `data-terminal-theme` 时跟随应用（React 挂载前也正确）
+   * - 显式 light/dark 优先，可与应用解耦
    */
   --terminal-background: #eff1f5;
   --terminal-foreground: #4c4f69;
@@ -19,7 +21,8 @@
   --terminal-accent: #1e66f5;
 }
 
-:root[data-wise-theme="dark"] .terminal-panel {
+.terminal-panel[data-terminal-theme="dark"],
+:root[data-wise-theme="dark"] .terminal-panel:not([data-terminal-theme]) {
   --terminal-background: #1e1e2e;
   --terminal-foreground: #cdd6f4;
   --terminal-cursor: #f5e0dc;
@@ -28,6 +31,18 @@
   --terminal-header-fg: rgba(205, 214, 244, 0.78);
   --terminal-border: rgba(205, 214, 244, 0.1);
   --terminal-accent: #89b4fa;
+}
+
+/* 强制浅色时覆盖应用深色（specificity 压过上面的 :root 规则）。 */
+.terminal-panel[data-terminal-theme="light"] {
+  --terminal-background: #eff1f5;
+  --terminal-foreground: #4c4f69;
+  --terminal-cursor: #dc8a78;
+  --terminal-selection: rgba(30, 102, 245, 0.22);
+  --terminal-header-bg: #e6e9ef;
+  --terminal-header-fg: rgba(76, 79, 105, 0.82);
+  --terminal-border: rgba(76, 79, 105, 0.14);
+  --terminal-accent: #1e66f5;
 }
 
 .terminal-panel--fullscreen {

@@ -30,6 +30,7 @@ import type { ClaudeSessionConnectionKind } from "../../constants/claudeConnecti
 import type { SessionExecutionEngine } from "../../types";
 import type { RoleTagOption, RepositoryMentionOption } from "../../utils/projectRoleTagOptions";
 import { MAIN_LAYOUT_MULTI_PANE_MIN_WIDTH_PX, paneGridDimensions, type PaneCount, type PaneSlot, paneSlotRuntimeOverride } from "../../constants/mainLayoutWidths";
+import { paneTerminalWorkspaceId } from "../../constants/terminalWorkspace";
 import { markPaneActive, resetActivePaneIndex } from "../../stores/activePaneIndexStore";
 import { useInViewActive } from "../../hooks/useInView";
 import { useDockSlice } from "../../hooks/useDockSlice";
@@ -111,7 +112,7 @@ function usePaneLocalTerminalPanel(
         }
       >
         <TerminalPanelLazy
-          workspaceId={`pane-${paneIndex}`}
+          workspaceId={paneTerminalWorkspaceId(paneIndex)}
           repositoryPath={repoPath}
           repositoryName={repoName}
           branch={repoBranch}

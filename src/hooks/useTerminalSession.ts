@@ -26,7 +26,7 @@ import {
   TERMINAL_FONT_SIZE,
   wheelDeltaToScrollLines,
 } from "../utils/alacrittyTerminalCanvas";
-import { getAppThemeState, subscribeAppTheme } from "../stores/appThemeStore";
+import { getTerminalThemeState, subscribeTerminalTheme } from "../stores/terminalThemeStore";
 import {
   shouldDeferTerminalKeyToInput,
   shouldIgnoreTerminalKeyDuringIme,
@@ -232,7 +232,7 @@ export function useTerminalSession({
       };
       let cachedPalette = readTerminalPalette(
         container,
-        getAppThemeState().dark,
+        getTerminalThemeState().dark,
       );
 
       const persistSnapshot = (frame: TerminalFrame | null) => {
@@ -349,7 +349,7 @@ export function useTerminalSession({
         );
         cachedPalette = readTerminalPalette(
           liveContainer,
-          getAppThemeState().dark,
+          getTerminalThemeState().dark,
         );
         const cols = clampTerminalDim(
           initialSizeRef.current?.cols ?? metricsRef.current.cols,
@@ -665,12 +665,12 @@ export function useTerminalSession({
         window.addEventListener("pageshow", onVisibilityOrPageShow);
         window.addEventListener("focus", onVisibilityOrPageShow);
 
-        // 外观切换：store 已同步写好 `<html data-wise-theme>`，此时读到的就是新变量。
-        // 后端调色板由 startTerminalThemeSync 单独推送并重发帧。
-        let paintedDark = getAppThemeState().dark;
-        const themeUnsub = subscribeAppTheme(() => {
-          // 显式浅/深模式下系统偏好变化也会通知订阅者，但呈现没变，无需重绘。
-          const { dark } = getAppThemeState();
+        // 终端主题切换：`.terminal-panel[data-terminal-theme]` 已由 TerminalDock 写好，
+        // 此时读到的就是新 `--terminal-*`。后端调色板由 startTerminalThemeSync 单独推送并重发帧。
+        let paintedDark = getTerminalThemeState().dark;
+        const themeUnsub = subscribeTerminalTheme(() => {
+          // 跟随应用模式下应用外观变化会通知；显式浅/深时 dark 不变则跳过重绘。
+          const { dark } = getTerminalThemeState();
           if (dark === paintedDark) return;
           paintedDark = dark;
           const liveContainer = containerRef.current;
@@ -698,7 +698,7 @@ export function useTerminalSession({
             );
             cachedPalette = readTerminalPalette(
               liveContainer,
-              getAppThemeState().dark,
+              getTerminalThemeState().dark,
             );
             const cols = clampTerminalDim(metricsRef.current.cols);
             const rows = clampTerminalDim(metricsRef.current.rows);

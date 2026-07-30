@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { DEFAULT_TERMINAL_WORKSPACE_ID } from "../constants/terminalWorkspace";
 import { subscribeTerminalCreated, subscribeTerminalExit } from "../services/events";
 import { closeTerminalSession } from "../services/terminal";
 import type { TerminalSurfaceSnapshot, TerminalSessionSource } from "../types/terminal";
@@ -16,7 +17,7 @@ type UseTerminalContextOptions = {
 };
 
 export function useTerminalContext({
-  workspaceId = "0",
+  workspaceId = DEFAULT_TERMINAL_WORKSPACE_ID,
   onCloseTerminal,
   autoFocusAgentSessions = true,
 }: UseTerminalContextOptions = {}) {
@@ -30,7 +31,7 @@ export function useTerminalContext({
     closeAllTerminals,
     setActiveTerminal,
     ensureTerminal,
-  } = useTerminalTabs({ onCloseTerminal });
+  } = useTerminalTabs({ workspaceId, onCloseTerminal });
   const [surfaceSnapshots, setSurfaceSnapshots] = useState<
     Record<string, TerminalSurfaceSnapshot>
   >({});

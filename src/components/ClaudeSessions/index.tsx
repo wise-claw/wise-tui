@@ -27,6 +27,7 @@ import {
   useClaudeSessionsStructureKey,
 } from "../../stores/claudeSessionsLiveStore";
 import { WORKSPACE_MEMO_PANEL_NODE } from "../WorkspaceMemoPanel";
+import { paneTerminalWorkspaceId } from "../../constants/terminalWorkspace";
 import { TERMINAL_CENTER_SLOT_SENTINEL } from "../TerminalPanel/terminalCenterSlot";
 import {
   closeTerminalCenterPanelOnPane,
@@ -733,7 +734,7 @@ function ClaudeSessionsShell({
           }
         >
           <TerminalPanelLazy
-            workspaceId={`pane-${paneIndex}`}
+            workspaceId={paneTerminalWorkspaceId(paneIndex)}
             repositoryPath={repo.path}
             repositoryName={repo.name}
             branch={repo.branch}

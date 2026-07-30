@@ -6,11 +6,14 @@ import { useTerminalSession } from "../../hooks/useTerminalSession";
 import type { Repository } from "../../types";
 import { writeTerminalSession } from "../../services/terminal";
 import { buildTerminalQuickCommandInput } from "../../constants/terminalQuickCommands";
+import { DEFAULT_TERMINAL_WORKSPACE_ID } from "../../constants/terminalWorkspace";
+import {
+  clearWorkspaceTerminalsClosing,
+  consumeWorkspaceTerminalsClosing,
+} from "../../stores/terminalWorkspaceTabsStore";
 import { TerminalDock } from "./TerminalDock";
 import { TerminalPanel as TerminalPanelSurface } from "./TerminalPanel";
 import "./index.css";
-
-const TERMINAL_WORKSPACE_ID = "0";
 
 interface Props {
   repositoryPath: string;
@@ -42,7 +45,7 @@ export function TerminalPanel({
   layout = "center",
   fullscreen = false,
   onToggleFullscreen,
-  workspaceId = TERMINAL_WORKSPACE_ID,
+  workspaceId = DEFAULT_TERMINAL_WORKSPACE_ID,
 }: Props) {
   const { message } = App.useApp();
   const {
@@ -125,8 +128,9 @@ export function TerminalPanel({
     activeTerminalId,
     isVisible: !collapsed,
     focusRequestVersion,
-    // 卸挂载即关闭（⌃` / 顶栏关闭）；collapse 保活不卸载本组件，PTY 仍在。
-    closeOnUnmount: true,
+    // 卸载不再一律关闭 PTY：布局重建（1 屏 ↔ 多屏切换）也会卸载本组件，
+    // 那种情况必须保活并在重建后 attach 回来。显式关闭走下方 closing 标记。
+    closeOnUnmount: false,
     surfaceSnapshot: getSurfaceSnapshot(activeTerminalId),
     onSurfaceSnapshot: (snapshot) => {
       if (!activeTerminalId) return;
@@ -151,6 +155,21 @@ export function TerminalPanel({
   useEffect(() => {
     ensureTerminal();
   }, [ensureTerminal]);
+
+  const closeAllTerminalsRef = useRef(closeAllTerminals);
+  closeAllTerminalsRef.current = closeAllTerminals;
+
+  // 显式关闭（⌃` / 关闭按钮 / paneCount 收缩）会先在 store 打标记，这里消费标记并结束
+  // 该屏所有 PTY。布局重建导致的卸载没有标记，PTY 与 tab 状态都保活，重建后 attach 回来。
+  // 挂载时先清标记：只有本次挂载期间发出的关闭才算显式关闭，陈旧标记不得误杀新会话。
+  useEffect(() => {
+    clearWorkspaceTerminalsClosing(workspaceId);
+    return () => {
+      if (consumeWorkspaceTerminalsClosing(workspaceId)) {
+        closeAllTerminalsRef.current();
+      }
+    };
+  }, [workspaceId]);
 
   const runQuickCommand = useCallback(
     async (command: string) => {

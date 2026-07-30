@@ -15,6 +15,10 @@ import {
   toggleTerminalCenterPanel,
 } from "./terminalCenterPanelStore";
 import {
+  consumeWorkspaceTerminalsClosing,
+  resetTerminalWorkspaceTabsStoreForTests,
+} from "./terminalWorkspaceTabsStore";
+import {
   closeWorkspaceMemoPanel,
   getWorkspaceMemoPanelOpen,
   openWorkspaceMemoPanel,
@@ -24,6 +28,7 @@ describe("terminalCenterPanelStore", () => {
   beforeEach(() => {
     closeTerminalCenterPanel();
     closeWorkspaceMemoPanel();
+    resetTerminalWorkspaceTabsStoreForTests();
   });
 
   test("getSnapshot returns stable identity when unchanged", () => {
@@ -155,6 +160,53 @@ describe("terminalCenterPanelStore", () => {
     clampTerminalCenterPanelHost(2);
     expect(isTerminalCenterPanelVisibleOnPane(3)).toBe(false);
     expect(isTerminalCenterPanelVisibleOnPane(0)).toBe(true);
+  });
+
+  // 卸载本身不再代表用户要关终端：只有被标记为「显式关闭」的屏才允许在卸载时结束 PTY，
+  // 否则 1 屏 ↔ 多屏切换会杀掉第一屏正在跑的终端。
+  test("explicit close marks the pane so unmount ends its PTY", () => {
+    openTerminalCenterPanel(0);
+    closeTerminalCenterPanelOnPane(0);
+    expect(consumeWorkspaceTerminalsClosing("pane-0")).toBe(true);
+  });
+
+  test("toggle-off marks the pane as explicitly closed", () => {
+    toggleTerminalCenterPanel(1);
+    toggleTerminalCenterPanel(1);
+    expect(consumeWorkspaceTerminalsClosing("pane-1")).toBe(true);
+  });
+
+  test("collapse never marks the pane, so the PTY stays alive", () => {
+    openTerminalCenterPanel(0);
+    collapseTerminalCenterPanelOnPane(0);
+    expect(consumeWorkspaceTerminalsClosing("pane-0")).toBe(false);
+
+    openTerminalCenterPanel(0);
+    collapseTerminalCenterPanel();
+    expect(consumeWorkspaceTerminalsClosing("pane-0")).toBe(false);
+  });
+
+  test("opening a pane clears a stale closing mark", () => {
+    openTerminalCenterPanel(0);
+    closeTerminalCenterPanelOnPane(0);
+    openTerminalCenterPanel(0);
+    expect(consumeWorkspaceTerminalsClosing("pane-0")).toBe(false);
+  });
+
+  test("clamp marks dropped panes but leaves surviving ones alive", () => {
+    openTerminalCenterPanel(0);
+    openTerminalCenterPanel(3);
+    clampTerminalCenterPanelHost(2);
+    expect(consumeWorkspaceTerminalsClosing("pane-3")).toBe(true);
+    expect(consumeWorkspaceTerminalsClosing("pane-0")).toBe(false);
+  });
+
+  test("closing every pane marks each mounted pane", () => {
+    openTerminalCenterPanel(0);
+    openTerminalCenterPanel(1);
+    closeTerminalCenterPanel();
+    expect(consumeWorkspaceTerminalsClosing("pane-0")).toBe(true);
+    expect(consumeWorkspaceTerminalsClosing("pane-1")).toBe(true);
   });
 
   test("collapse keeps mounted but hides", () => {

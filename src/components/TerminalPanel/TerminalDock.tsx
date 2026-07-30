@@ -6,6 +6,7 @@ import {
 } from "@ant-design/icons";
 import { useEffect, useRef, type MouseEvent as ReactMouseEvent, type ReactNode } from "react";
 import type { TerminalContextTab } from "../../hooks/useTerminalContext";
+import { useTerminalTheme } from "../../stores/terminalThemeStore";
 import { HoverHint } from "../shared/HoverHint";
 import { TerminalQuickCommandsMenu } from "./TerminalQuickCommandsMenu";
 import "./index.css";
@@ -58,6 +59,7 @@ export function TerminalDock({
   quickCommandsDisabled = false,
 }: TerminalDockProps) {
   const panelRef = useRef<HTMLElement | null>(null);
+  const { dark: terminalDark } = useTerminalTheme();
 
   // ⌘W / Ctrl+W：焦点在终端面板内时关闭当前终端标签（与文件编辑器 tab 关闭一致）。
   // 使用 capture，避免 Ctrl+W 先被终端输入当成「删词」发给 PTY。
@@ -94,6 +96,7 @@ export function TerminalDock({
       className={`terminal-panel${centerLayout ? " terminal-panel--fullscreen" : ""}${
         layout === "center" ? " terminal-panel--center" : ""
       }`}
+      data-terminal-theme={terminalDark ? "dark" : "light"}
     >
       {!centerLayout && onResizeStart ? (
         <div

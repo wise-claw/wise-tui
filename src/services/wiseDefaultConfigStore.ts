@@ -46,7 +46,13 @@ import {
   type FeedbackGlobalRuleV1,
 } from "../utils/sessionFeedbackGlobalRules";
 import { normalizeChord } from "../utils/atMentionShortcutChord";
+import {
+  parseTerminalThemeMode,
+  type TerminalThemeMode,
+} from "../constants/terminalThemeMode";
 import { deleteAppSetting, getAppSetting, setAppSetting, setAppSettingJson } from "./appSettingsStore";
+
+export type { TerminalThemeMode };
 
 export type ClaudeSessionConnectionKind = NonNullable<ClaudeSession["connectionKind"]>;
 
@@ -111,6 +117,8 @@ export const WISE_REPO_PANEL_SPLIT_HEIGHT_CHANGED = "wise:repo-panel-split-heigh
 export const WISE_OPEN_IN_TERMINAL_SHORTCUT_CHANGED = "wise:open-in-terminal-shortcut-changed";
 
 export const WISE_OPEN_IN_EDITOR_SHORTCUT_CHANGED = "wise:open-in-editor-shortcut-changed";
+
+export const WISE_TERMINAL_THEME_MODE_CHANGED = "wise:terminal-theme-mode-changed";
 
 export const WISE_SESSION_FEEDBACK_LOOP_CHANGED = "wise:session-feedback-loop-changed";
 
@@ -246,6 +254,8 @@ export interface WiseDefaultConfigV1 {
   openInTerminalShortcut: string;
   /** 在仓库列表中「打开编辑器」的快捷键 chord（如 Mod+Shift+E）；空=未设置。 */
   openInEditorShortcut: string;
+  /** 内置终端主题：跟随应用 / 浅色 / 深色；默认跟随应用。 */
+  terminalThemeMode: TerminalThemeMode;
   /** 会话全链路「反馈神经网」自我优化闭环；开发功能，默认关闭。 */
   sessionFeedbackLoopEnabled: boolean;
   /** 反馈神经网最大自我优化循环次数（1–5）。 */
@@ -336,6 +346,7 @@ const DEFAULT_CONFIG: WiseDefaultConfigV1 = {
   showFeaturePanelScheduledTasks: true,
   openInTerminalShortcut: "",
   openInEditorShortcut: "",
+  terminalThemeMode: "follow",
 };
 
 function normalizeMonitorPanelPlacement(raw: unknown): MonitorPanelPlacement | null {
@@ -357,6 +368,10 @@ function normalizeComposerFooterTriggerDisplayMode(
   return raw === "full" || raw === "icon"
     ? raw
     : DEFAULT_CONFIG.composerFooterTriggerDisplayMode;
+}
+
+function normalizeTerminalThemeMode(raw: unknown): TerminalThemeMode {
+  return parseTerminalThemeMode(raw);
 }
 
 function normalizeConnectionKind(raw: unknown): ClaudeSessionConnectionKind | null {
@@ -394,8 +409,14 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
         parsed.showOpencodeProxyTopbar === undefined
           ? DEFAULT_CONFIG.showOpencodeProxyTopbar
           : normalizeBoolean(parsed.showOpencodeProxyTopbar),
-      showSessionDataLinkTopbar: normalizeBoolean(parsed.showSessionDataLinkTopbar),
-      showSessionFeedbackLoopTopbar: normalizeBoolean(parsed.showSessionFeedbackLoopTopbar),
+      showSessionDataLinkTopbar:
+        parsed.showSessionDataLinkTopbar === undefined
+          ? DEFAULT_CONFIG.showSessionDataLinkTopbar
+          : normalizeBoolean(parsed.showSessionDataLinkTopbar),
+      showSessionFeedbackLoopTopbar:
+        parsed.showSessionFeedbackLoopTopbar === undefined
+          ? DEFAULT_CONFIG.showSessionFeedbackLoopTopbar
+          : normalizeBoolean(parsed.showSessionFeedbackLoopTopbar),
       showRemoteEntryTopbar:
         parsed.showRemoteEntryTopbar === undefined
           ? DEFAULT_CONFIG.showRemoteEntryTopbar
@@ -649,6 +670,10 @@ function parseConfigJson(raw: string | null | undefined): WiseDefaultConfigV1 | 
         typeof parsed.openInEditorShortcut === "string"
           ? normalizeChord(parsed.openInEditorShortcut)
           : DEFAULT_CONFIG.openInEditorShortcut,
+      terminalThemeMode:
+        parsed.terminalThemeMode === undefined
+          ? DEFAULT_CONFIG.terminalThemeMode
+          : normalizeTerminalThemeMode(parsed.terminalThemeMode),
     };
   } catch {
     return null;
@@ -805,6 +830,7 @@ async function migrateLegacyConfig(): Promise<WiseDefaultConfigV1 | null> {
     showFeaturePanelScheduledTasks: DEFAULT_CONFIG.showFeaturePanelScheduledTasks,
     openInTerminalShortcut: DEFAULT_CONFIG.openInTerminalShortcut,
     openInEditorShortcut: DEFAULT_CONFIG.openInEditorShortcut,
+    terminalThemeMode: DEFAULT_CONFIG.terminalThemeMode,
   };
 }
 
@@ -940,6 +966,13 @@ function dispatchOpenInEditorShortcutChanged(chord: string): void {
   );
 }
 
+function dispatchTerminalThemeModeChanged(terminalThemeMode: TerminalThemeMode): void {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent(WISE_TERMINAL_THEME_MODE_CHANGED, { detail: { terminalThemeMode } }),
+  );
+}
+
 function dispatchSessionFeedbackLoopChanged(settings: SessionFeedbackLoopSettings): void {
   if (typeof window === "undefined") return;
   window.dispatchEvent(
@@ -1036,6 +1069,7 @@ export async function saveWiseDefaultConfig(
       | "sessionFeedbackLoopAutoVerifyAfterApply"
       | "openInTerminalShortcut"
       | "openInEditorShortcut"
+      | "terminalThemeMode"
     >
   >,
 ): Promise<WiseDefaultConfigV1> {
@@ -1165,6 +1199,10 @@ export async function saveWiseDefaultConfig(
       patch.openInEditorShortcut !== undefined
         ? normalizeChord(patch.openInEditorShortcut)
         : current.openInEditorShortcut,
+    terminalThemeMode:
+      patch.terminalThemeMode !== undefined
+        ? normalizeTerminalThemeMode(patch.terminalThemeMode)
+        : current.terminalThemeMode,
   };
   if (patch.connectionKind !== undefined) {
     next.connectionKind = normalizeConnectionKind(patch.connectionKind) ?? current.connectionKind;
@@ -1382,6 +1420,9 @@ export async function saveWiseDefaultConfig(
   if (patch.openInEditorShortcut !== undefined) {
     next.openInEditorShortcut = normalizeChord(patch.openInEditorShortcut);
   }
+  if (patch.terminalThemeMode !== undefined) {
+    next.terminalThemeMode = normalizeTerminalThemeMode(patch.terminalThemeMode);
+  }
   await persistConfig(next);
   await deleteLegacyAppSettings();
 
@@ -1568,6 +1609,12 @@ export async function saveWiseDefaultConfig(
     next.openInEditorShortcut !== current.openInEditorShortcut
   ) {
     dispatchOpenInEditorShortcutChanged(next.openInEditorShortcut);
+  }
+  if (
+    patch.terminalThemeMode !== undefined &&
+    next.terminalThemeMode !== current.terminalThemeMode
+  ) {
+    dispatchTerminalThemeModeChanged(next.terminalThemeMode);
   }
   if (
     patch.sessionFeedbackLoopEnabled !== undefined ||
@@ -1776,6 +1823,16 @@ export async function loadOpenInEditorShortcutFromStore(): Promise<string> {
 export async function saveOpenInEditorShortcutToStore(chord: string): Promise<string> {
   const normalized = normalizeChord(chord);
   await saveWiseDefaultConfig({ openInEditorShortcut: normalized });
+  return normalized;
+}
+
+export async function loadTerminalThemeModeFromStore(): Promise<TerminalThemeMode> {
+  return (await loadWiseDefaultConfig()).terminalThemeMode;
+}
+
+export async function saveTerminalThemeModeToStore(mode: TerminalThemeMode): Promise<TerminalThemeMode> {
+  const normalized = normalizeTerminalThemeMode(mode);
+  await saveWiseDefaultConfig({ terminalThemeMode: normalized });
   return normalized;
 }
 

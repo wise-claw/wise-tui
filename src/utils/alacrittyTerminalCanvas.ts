@@ -18,7 +18,7 @@ export type TerminalPalette = {
   selection: string;
 };
 
-/** 深色兜底：与 CSS `:root[data-wise-theme="dark"]` / Rust `DARK_PALETTE` 对齐（Catppuccin Mocha）。 */
+/** 深色兜底：与 CSS `.terminal-panel[data-terminal-theme="dark"]` / Rust `DARK_PALETTE` 对齐（Catppuccin Mocha）。 */
 export const TERMINAL_DARK_PALETTE: TerminalPalette = {
   background: "#1e1e2e",
   foreground: "#cdd6f4",

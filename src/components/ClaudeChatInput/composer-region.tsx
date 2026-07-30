@@ -31,6 +31,7 @@ import type {
   SessionExecutionEngine,
 } from "../../types";
 import { PromptProvider, clearPromptContextSessionKey, usePrompt } from "./prompt-context";
+import { useComposerImageDraft } from "../../stores/composerImageDraftStore";
 import type { TriggerInfo } from "./slash-trigger";
 import type { ComposerPlainSurface } from "./slash-popover";
 import {
@@ -721,9 +722,6 @@ function ComposerInner({
     void loadSlashCatalog(session.repositoryPath?.trim() || null);
   }, [session.repositoryPath, composerDefaultInstruction]);
   const [trigger, setTrigger] = useState<TriggerInfo>({ mode: null, query: "", rect: null });
-  const [images, setImages] = useState<ImageAttachmentPart[]>([]);
-  const imagesRef = useRef(images);
-  imagesRef.current = images;
   const [dragOverNativeFiles, setDragOverNativeFiles] = useState(false);
   const [historyIndex, setHistoryIndex] = useState(-1);
   const isCursorEngine = sessionExecutionEngine === "cursor";
@@ -765,6 +763,11 @@ function ComposerInner({
   const displayPlain = useMemo(() => promptToDisplayPlain(prompt), [prompt]);
   const contextItemsRef = useRef(contextItems);
   contextItemsRef.current = contextItems;
+  // 待发图片与正文同桶：本组件会因布局重建（1 屏 ↔ 多屏切换）整棵卸载，
+  // 附件不能随实例销毁，否则用户贴好的截图会在切屏后消失。
+  const [images, setImages] = useComposerImageDraft(draftBucketKey);
+  const imagesRef = useRef(images);
+  imagesRef.current = images;
   const canSendComposerRef = useRef(false);
   const [canSendComposer, setCanSendComposer] = useState(false);
   const debouncedPromptSyncRef = useRef(

@@ -1,14 +1,23 @@
 import { useSyncExternalStore } from "react";
+import { paneTerminalWorkspaceId } from "../constants/terminalWorkspace";
 import {
   getPaneCenterView,
   requestPaneCenterView,
 } from "./paneCenterViewControlStore";
+import {
+  clearWorkspaceTerminalsClosing,
+  markWorkspaceTerminalsClosing,
+} from "./terminalWorkspaceTabsStore";
 import { closeWorkspaceMemoPanel } from "./workspaceMemoPanelStore";
 
 /**
  * 内置终端中栏面板开关（独立 slot：`panelBelowTerminal` + CenterView「terminal」）。
  * 与文件编辑器（`panelBelowMessages`）并存，由 centerView 互斥显隐。
  * 多屏下每屏各自独立：第二屏打开终端不会关掉第一屏的。
+ *
+ * PTY 生命周期：本 store 的「关闭」是唯一会杀 PTY 的入口，故关闭前必须调用
+ * `markWorkspaceTerminalsClosing`。`TerminalPanel` 卸载时只在读到该标记时才关闭 PTY，
+ * 这样布局重建（1 屏 ↔ 多屏切换会让第一屏整棵子树卸载）不会误杀用户的终端。
  */
 
 type PaneTerminalFlags = {
@@ -150,6 +159,8 @@ export function subscribeTerminalCenterPanel(listener: () => void): () => void {
 
 export function openTerminalCenterPanel(paneIndex: number = 0): void {
   const target = normalizePaneIndex(paneIndex);
+  // 重新打开时撤销尚未被消费的关闭标记，避免误杀刚建立的会话。
+  clearWorkspaceTerminalsClosing(paneTerminalWorkspaceId(target));
   // 备忘录仅占 pane 0：仅当终端挂到 pane 0 时才收起备忘录。
   if (target === 0) {
     closeWorkspaceMemoPanel();
@@ -209,6 +220,9 @@ export function collapseTerminalCenterPanelOnPane(paneIndex: number): void {
 /** 关闭所有屏上的终端面板（卸挂载）。 */
 export function closeTerminalCenterPanel(): void {
   if (paneFlags.size === 0) return;
+  for (const index of paneFlags.keys()) {
+    markWorkspaceTerminalsClosing(paneTerminalWorkspaceId(index));
+  }
   paneFlags.clear();
   emit();
 }
@@ -217,6 +231,7 @@ export function closeTerminalCenterPanel(): void {
 export function closeTerminalCenterPanelOnPane(paneIndex: number): void {
   const target = normalizePaneIndex(paneIndex);
   if (!paneFlags.has(target)) return;
+  markWorkspaceTerminalsClosing(paneTerminalWorkspaceId(target));
   paneFlags.delete(target);
   emit();
   // 卸挂载后 hasTerminal=false；若仍停在 terminal，交给 useCenterView fallback
@@ -244,6 +259,8 @@ export function clampTerminalCenterPanelHost(paneCount: number): void {
   let changed = false;
   for (const index of [...paneFlags.keys()]) {
     if (index > maxIndex) {
+      // 这些屏已不存在，属于显式关闭：允许卸载时关掉它们的 PTY。
+      markWorkspaceTerminalsClosing(paneTerminalWorkspaceId(index));
       paneFlags.delete(index);
       changed = true;
     }

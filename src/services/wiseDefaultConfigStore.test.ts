@@ -25,6 +25,7 @@ import {
   WISE_COMPOSER_FOOTER_CHROME_DEFAULT_CHANGED,
   WISE_WORKSPACE_INSPECTOR_PANELS_CHANGED,
   WISE_WORKSPACE_SIDEBAR_ROW_PREVIEW_LIMIT_CHANGED,
+  WISE_TERMINAL_THEME_MODE_CHANGED,
 } from "./wiseDefaultConfigStore";
 
 function installWindowLocalStorageStub(): Storage {
@@ -109,6 +110,7 @@ describe("wiseDefaultConfigStore", () => {
     expect(config.composerFooterTriggerDisplayMode).toBe("full");
     expect(config.gitPanelPlacement).toBe("left");
     expect(config.filesPanelPlacement).toBe("left");
+    expect(config.terminalThemeMode).toBe("follow");
     expect(setAppSetting).toHaveBeenCalled();
     const payload = JSON.parse(String(setAppSetting.mock.calls[0]?.[1]));
     expect(payload).toMatchObject({
@@ -361,6 +363,47 @@ describe("wiseDefaultConfigStore", () => {
     );
     const config = await loadWiseDefaultConfig();
     expect(config.composerFooterTriggerDisplayMode).toBe("full");
+  });
+
+  test("save terminal theme mode dispatches change event", async () => {
+    getAppSetting.mockImplementation(async (key: string) => {
+      if (key === WISE_DEFAULT_CONFIG_ONESHOT_TO_STREAMING_MIGRATION_KEY) return "1";
+      if (key === WISE_DEFAULT_CONFIG_KEY) {
+        return JSON.stringify({
+          version: 1,
+          connectionKind: "streaming",
+          terminalThemeMode: "follow",
+        });
+      }
+      return null;
+    });
+    const seen: Array<{ terminalThemeMode?: string }> = [];
+    window.addEventListener(WISE_TERMINAL_THEME_MODE_CHANGED, (e: Event) => {
+      const detail = (e as CustomEvent<{ terminalThemeMode?: string }>).detail;
+      if (detail) {
+        seen.push({ terminalThemeMode: detail.terminalThemeMode });
+      }
+    });
+    await saveWiseDefaultConfig({ terminalThemeMode: "light" });
+    expect(seen).toEqual([{ terminalThemeMode: "light" }]);
+    const lastCall = setAppSetting.mock.calls.at(-1);
+    expect(JSON.parse(String(lastCall?.[1]))).toMatchObject({
+      terminalThemeMode: "light",
+    });
+  });
+
+  test("load backfills missing or invalid terminal theme mode with follow", async () => {
+    getAppSetting.mockImplementation(async (key: string) =>
+      key === WISE_DEFAULT_CONFIG_KEY
+        ? JSON.stringify({
+            version: 1,
+            connectionKind: "streaming",
+            terminalThemeMode: "bogus",
+          })
+        : null,
+    );
+    const config = await loadWiseDefaultConfig();
+    expect(config.terminalThemeMode).toBe("follow");
   });
 
   test("load backfills missing workspace inspector panels with product defaults", async () => {
