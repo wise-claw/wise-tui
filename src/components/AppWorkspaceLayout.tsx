@@ -18,8 +18,9 @@ import {
   type RefObject,
 } from "react";
 import type * as React from "react";
-import { App as AntdApp, ConfigProvider, Layout, message, Spin, theme } from "antd";
+import { App as AntdApp, ConfigProvider, Layout, message, Spin } from "antd";
 import zhCN from "antd/locale/zh_CN";
+import { buildAppThemeConfig } from "../constants/appThemeTokens";
 import type { AuthorPanelProps } from "./AuthorPanel/AuthorPanel";
 import type { CockpitOnboardingProps } from "./Cockpit/CockpitOnboarding";
 import type { WorkspaceWelcomeLandingProps } from "./WorkspaceWelcomeLanding";
@@ -791,7 +792,7 @@ export function AppWorkspaceLayout({
   onConsumeRepositoryFileOpenRequest,
   repositoryFileOpenRequest,
 }: AppWorkspaceLayoutProps) {
-  const algorithm = dark ? theme.darkAlgorithm : theme.defaultAlgorithm;
+  const themeConfig = useMemo(() => buildAppThemeConfig(dark), [dark]);
   const claudeSessionsRef = useRef(claudeSessionsProps.sessions);
   claudeSessionsRef.current = claudeSessionsProps.sessions;
   const claudeSessionsPropsRef = useRef(claudeSessionsProps);
@@ -1705,33 +1706,7 @@ export function AppWorkspaceLayout({
           {/* file preview modal 单例：layout 持 `activeLayoutBinaryPreview`（从各 host 上报中
               取第一个非空），modal 通过本 Context 读取。 */}
           <RepositoryFilePreviewModalContext.Provider value={activeLayoutBinaryPreview}>
-          <ConfigProvider
-            locale={zhCN}
-            tooltip={{ unique: true }}
-            theme={{
-              algorithm,
-              /**
-               * 全局设计基线：统一字体、字号、行高、圆角，让 AntD 组件与自定义
-               * 面板向 13px 正文基准收敛，减少「AntD 14px vs 面板 10-11px」的割裂感。
-               * 单点配置即可级联到所有 AntD 组件。
-               */
-              token: {
-                fontFamily:
-                  '-apple-system, BlinkMacSystemFont, "SF Pro SC", "SF Pro Text", "PingFang SC", "Helvetica Neue", "Microsoft YaHei", "Segoe UI", Arial, sans-serif',
-                fontSize: 13,
-                lineHeight: 1.55,
-                borderRadius: 8,
-                borderRadiusLG: 10,
-                borderRadiusSM: 6,
-                wireframe: false,
-              },
-              /** MCP/技能等叠层局部 z-index 较高，避免 Message 被盖住看不见 */
-              components: {
-                Message: { zIndexPopup: 20000 },
-                Notification: { zIndexPopup: 20000 },
-              },
-            }}
-          >
+          <ConfigProvider locale={zhCN} tooltip={{ unique: true }} theme={themeConfig}>
             <AntdApp>
               {workspaceWelcomeFullscreen && workspaceWelcomeProps ? (
                 <div className="app-workspace-welcome-fullscreen">

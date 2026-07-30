@@ -94,6 +94,7 @@
   z-index: 5;
 }
 
+/* 与 .app-main-layout-resize-handle 保持同一套反馈：常态极细，hover 变粗并染主色 */
 .app-claude-sessions__two-pane-resizer::before {
   content: "";
   position: absolute;
@@ -102,11 +103,19 @@
   left: 50%;
   width: 1px;
   transform: translateX(-50%);
-  background: var(--ant-color-border-secondary);
+  background: var(--ant-color-split);
+  opacity: 0.85;
+  transition:
+    background-color var(--wise-motion-fast) var(--wise-ease-out),
+    opacity var(--wise-motion-fast) var(--wise-ease-out),
+    width var(--wise-motion-fast) var(--wise-ease-out);
 }
 
-.app-claude-sessions__two-pane-resizer:hover::before {
+.app-claude-sessions__two-pane-resizer:hover::before,
+.app-claude-sessions__two-pane-resizer:active::before {
   background: var(--ant-color-primary);
+  opacity: 1;
+  width: 2px;
 }
 
 .app-claude-sessions__pane {
@@ -517,7 +526,7 @@
 .app-topbar-center-switcher.ant-segmented .ant-segmented-thumb {
   background: var(--ant-color-bg-container);
   border-radius: 4px;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--wise-elevation-1);
 }
 
 .app-chat-topbar-left > * {
@@ -724,7 +733,7 @@
 .app-topbar-right-panel-default-popover__btn--primary {
   border-color: var(--ant-color-primary);
   background: var(--ant-color-primary);
-  color: #fff;
+  color: var(--ant-color-text-light-solid);
 }
 
 .app-topbar-right-panel-default-popover__btn--primary:hover {
@@ -741,21 +750,27 @@
   height: 24px;
   padding: 0;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--wise-radius-sm);
   background: transparent;
   color: var(--ant-color-text-tertiary);
   cursor: pointer;
-  transition: background 0.15s, color 0.15s;
+  transition:
+    background var(--wise-motion-fast) var(--wise-ease-out),
+    color var(--wise-motion-fast) var(--wise-ease-out),
+    transform var(--wise-motion-fast) var(--wise-ease-out),
+    box-shadow var(--wise-motion-fast) var(--wise-ease-out);
   -webkit-app-region: no-drag;
 }
 
 .app-topbar-btn:hover:not(:disabled) {
-  background: var(--ant-color-fill-content);
+  background: var(--wise-row-hover-bg);
   color: var(--ant-color-text);
 }
 
+/* 轻微下压：桌面端图标按钮缺少边框，靠位移给出「按下去了」的确认 */
 .app-topbar-btn:active:not(:disabled) {
-  background: var(--ant-color-fill);
+  background: var(--wise-row-active-bg);
+  transform: scale(0.92);
 }
 
 .app-topbar-btn:disabled {
@@ -773,13 +788,15 @@
   height: 16px;
 }
 
+/* 激活态加一圈内描边：纯色块在深色下与 hover 区分度不够 */
 .app-topbar-btn.active {
-  background: var(--ant-color-primary-bg);
+  background: var(--wise-row-selected-bg);
   color: var(--ant-color-primary);
+  box-shadow: inset 0 0 0 1px var(--wise-row-selected-border);
 }
 
 .app-topbar-btn.active:hover:not(:disabled) {
-  background: var(--ant-color-primary-bg);
+  background: color-mix(in srgb, var(--ant-color-primary) 18%, transparent);
   color: var(--ant-color-primary);
 }
 
@@ -1325,7 +1342,7 @@
   min-width: 44px;
   border-color: var(--ant-color-primary);
   background: var(--ant-color-primary);
-  color: #fff;
+  color: var(--ant-color-text-light-solid);
   font-weight: 500;
 }
 
@@ -1338,7 +1355,7 @@
   min-width: 44px;
   border-color: var(--ant-color-error);
   background: var(--ant-color-error);
-  color: #fff;
+  color: var(--ant-color-text-light-solid);
   font-weight: 500;
 }
 
@@ -1497,7 +1514,7 @@
   padding: 0 4px;
   border-radius: 999px;
   background: var(--ant-color-error);
-  color: #fff;
+  color: var(--ant-color-text-light-solid);
   font-size: 9px;
   font-weight: 700;
   line-height: 14px;
@@ -1592,7 +1609,7 @@
 
 .app-session-tab--active .app-session-tab-close:hover {
   background: var(--ant-color-primary);
-  color: #fff;
+  color: var(--ant-color-text-light-solid);
 }
 
 .app-session-tab-new {
@@ -2826,7 +2843,7 @@
   padding: 0 4px;
   border-radius: 999px;
   background: var(--ant-color-error);
-  color: #fff;
+  color: var(--ant-color-text-light-solid);
   font-size: 10px;
   font-weight: 600;
   line-height: 16px;
@@ -3939,17 +3956,17 @@
 
 .app-claude-message--user .app-claude-message-avatar {
   background: var(--ant-color-primary);
-  color: #fff;
+  color: var(--ant-color-text-light-solid);
 }
 
 .app-claude-message--tool-user .app-claude-message-avatar {
   background: var(--ant-color-info);
-  color: #fff;
+  color: var(--ant-color-text-light-solid);
 }
 
 .app-claude-message--assistant .app-claude-message-avatar {
   background: var(--ant-color-success);
-  color: #fff;
+  color: var(--ant-color-text-light-solid);
 }
 
 /* 助手回复：缩小与 C 标识间距 */
@@ -3978,7 +3995,7 @@
 
 .app-claude-message--system .app-claude-message-avatar {
   background: var(--ant-color-warning);
-  color: #fff;
+  color: var(--ant-color-text-light-solid);
 }
 
 .app-claude-message-body {
@@ -4591,16 +4608,19 @@
   line-height: 22px;
 }
 
-/* 用户消息：无框纯文本左对齐（同助手：避免 100% 宽度在 WKWebView 塌缩） */
+/* 用户消息：块级浅色底 + 左侧主色条。
+   助手回复保持裸排版（长文阅读优先），用户输入给一层底色，长会话才能快速扫出「我问了什么」。
+   仍保持 display:block / width:auto —— 用 shrink-to-fit 宽度会在 WKWebView 里塌缩。 */
 .app-claude-messages .app-claude-message--user .app-message-part--text {
   display: block;
   width: auto;
   max-width: none;
   min-width: 0;
-  padding: 0;
+  padding: 7px 11px;
   border: none;
-  border-radius: 0;
-  background: transparent;
+  border-left: 2px solid color-mix(in srgb, var(--ant-color-primary) 45%, transparent);
+  border-radius: 0 var(--wise-radius-lg) var(--wise-radius-lg) 0;
+  background: color-mix(in srgb, var(--ant-color-primary) 6%, var(--ant-color-fill-quaternary));
   box-sizing: border-box;
 }
 
@@ -5419,13 +5439,16 @@
   align-items: center;
   gap: 8px; /* Elegant gap spacing */
   padding: 6px 10px; /* Relaxed padding */
-  border-radius: 6px;
+  border-radius: var(--wise-radius-sm);
   background: var(--ant-color-fill-quaternary);
   border: 1px solid var(--ant-color-border-secondary);
   cursor: pointer;
   font-size: 12px; /* Highly readable */
   color: var(--ant-color-text-secondary);
-  transition: all 0.15s ease;
+  /* 一条会话可有上百张工具卡；transition:all 会把每次重排都变成动画开销 */
+  transition:
+    background var(--wise-motion-fast) var(--wise-ease-out),
+    border-color var(--wise-motion-fast) var(--wise-ease-out);
   user-select: none;
   width: 100%;
   margin: 0;
@@ -5794,7 +5817,7 @@ button.app-message-part-header:disabled:hover {
   border-radius: 8px;
   overflow: hidden;
   background: var(--ant-color-bg-container);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.03);
+  box-shadow: var(--wise-elevation-3);
 }
 .app-message-part--tool .app-message-part-header {
   border: none;
@@ -6364,39 +6387,51 @@ button.app-message-part-header:disabled:hover {
   margin-bottom: 0;
 }
 
+/* 标题尺度：原先 16/14.5/13.5 对 13px 正文，级差不足 1.5px，长报告里读不出层级。
+   拉开字号并加大「段前 > 段后」的留白，让章节边界靠留白而非分隔线成立。 */
 .app-markdown h1 {
-  font-size: 16px;
-  font-weight: 600;
-  margin: 12px 0 6px;
+  font-size: 18px;
+  font-weight: 650;
+  margin: 20px 0 8px;
   line-height: 1.3;
+  letter-spacing: -0.01em;
+  text-wrap: pretty;
 }
 
 .app-markdown h2 {
-  font-size: 14.5px;
+  font-size: 15.5px;
   font-weight: 600;
-  margin: 10px 0 5px;
+  margin: 18px 0 7px;
   line-height: 1.35;
+  letter-spacing: -0.005em;
+  text-wrap: pretty;
 }
 
 .app-markdown h3 {
-  font-size: 13.5px;
+  font-size: 14px;
   font-weight: 600;
-  margin: 8px 0 4px;
+  margin: 14px 0 5px;
   line-height: 1.4;
+  text-wrap: pretty;
 }
 
+/* h4 起不再靠字号区分（已到正文尺寸），改用字重 + 次要色 */
 .app-markdown h4,
 .app-markdown h5,
 .app-markdown h6 {
   font-size: 13px;
   font-weight: 600;
-  margin: 8px 0 4px;
+  margin: 12px 0 4px;
   line-height: 1.4;
+  color: var(--ant-color-text-secondary);
 }
 
 .app-markdown h1:first-child,
 .app-markdown h2:first-child,
-.app-markdown h3:first-child {
+.app-markdown h3:first-child,
+.app-markdown h4:first-child,
+.app-markdown h5:first-child,
+.app-markdown h6:first-child {
   margin-top: 0;
 }
 
@@ -6529,10 +6564,10 @@ button.app-message-part-header:disabled:hover {
 .app-markdown-table-wrap {
   max-width: 100%;
   overflow-x: auto;
-  margin: 8px 0;
-  border-radius: 8px;
+  margin: 10px 0;
+  border-radius: var(--wise-radius-lg);
   border: 1px solid var(--ant-color-border-secondary);
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.02);
+  box-shadow: var(--wise-elevation-1);
 }
 
 .app-markdown table {
@@ -6561,11 +6596,14 @@ button.app-message-part-header:disabled:hover {
   transition: background-color 0.2s ease;
 }
 
+/* 表头改中性底：整条蓝色表头会抢走正文注意力，且与主色语义（可交互）冲突。
+   用中性填充 + 更实的下边界表达「这是表头」。 */
 .app-markdown th {
-  background: var(--ant-color-primary-bg) !important;
+  background: var(--ant-color-fill-tertiary) !important;
   color: var(--ant-color-text);
   font-weight: 600;
   white-space: nowrap;
+  border-bottom: 1px solid var(--ant-color-border);
 }
 
 .app-markdown td {
@@ -6585,7 +6623,7 @@ button.app-message-part-header:disabled:hover {
 }
 
 .app-markdown tr:hover td {
-  background: color-mix(in srgb, var(--ant-color-primary-bg) 40%, var(--ant-color-fill-quaternary)) !important;
+  background: var(--wise-row-hover-bg) !important;
 }
 
 .app-markdown hr {
@@ -6718,7 +6756,7 @@ button.app-message-part-header:disabled:hover {
   border-radius: 12px;
   background: var(--ant-color-bg-container);
   overflow: hidden;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.03);
+  box-shadow: var(--wise-elevation-1);
 }
 
 .app-markdown-mermaid__status {
@@ -7099,7 +7137,7 @@ button.app-message-part-header:disabled:hover {
 }
 
 .app-ultracode-chip--interactive:hover {
-  color: #fff;
+  color: var(--ant-color-text-light-solid);
   background: var(--ant-color-purple, #722ed1);
   border-color: var(--ant-color-purple, #722ed1);
 }
@@ -7341,7 +7379,7 @@ button.app-message-part-header:disabled:hover {
   cursor: pointer;
   pointer-events: auto;
   transition: all 0.2s ease;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--wise-elevation-1);
 }
 
 .app-claude-connection-kind-menu-item__probe:hover {
@@ -7413,7 +7451,7 @@ button.app-message-part-header:disabled:hover {
   border: none;
   border-radius: var(--ant-border-radius);
   background: var(--ant-color-primary);
-  color: #fff;
+  color: var(--ant-color-text-light-solid);
   cursor: pointer;
   transition: all 0.15s;
 }

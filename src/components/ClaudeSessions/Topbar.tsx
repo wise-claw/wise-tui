@@ -1,5 +1,6 @@
 import type { ClaudeSession, ProjectItem, Repository } from "../../types";
 import { HoverHint } from "../shared/HoverHint";
+import { AppearanceThemeToggle } from "../AppearanceThemeToggle";
 import { Dropdown, message, Popover, Segmented, Spin } from "antd";
 import { lazy, Suspense, memo, useEffect, useMemo, useState, type MouseEvent, type ReactNode } from "react";
 import { useWiseTopbarChromeVisibility } from "../../hooks/useWiseTopbarChromeVisibility";
@@ -600,6 +601,7 @@ export const Topbar = memo(function Topbar({
             onClick={onToggleTerminal}
           />
         )}
+        <AppearanceThemeToggle />
         <div className="app-topbar-divider" />
         {topbarToolsReady ? (
           <ClaudeChatSessionTopbarOverflow

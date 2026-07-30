@@ -12,16 +12,18 @@
   color: var(--ant-color-text-quaternary);
 }
 
+/* 与 .app-repository-item 同一套内缩圆角行：会话行是最高频点击目标，必须同构 */
 .app-workspace-session-tree__row {
   display: flex;
   align-items: center;
   gap: 4px;
-  width: 100%;
+  /* width:auto 而非 100%：配合 margin-inline 才不会溢出容器 */
+  width: auto;
   min-height: 20px;
-  margin: 0;
-  padding: 1px 10px 1px 28px;
+  margin: 0 6px;
+  padding: 1px 10px 1px 22px;
   border: none;
-  border-radius: 4px;
+  border-radius: var(--wise-radius-sm);
   background: transparent;
   color: var(--ant-color-text-secondary);
   font: inherit;
@@ -32,12 +34,12 @@
 }
 
 .app-workspace-session-tree__row:hover {
-  background: var(--ant-color-fill-tertiary);
+  background: var(--wise-row-hover-bg);
   color: var(--ant-color-text);
 }
 
 .app-workspace-session-tree__row--active {
-  background: color-mix(in srgb, var(--ant-color-primary) 16%, transparent);
+  background: var(--wise-row-selected-bg);
   color: var(--ant-color-text);
   font-weight: 500;
 }

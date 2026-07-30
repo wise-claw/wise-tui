@@ -82,7 +82,7 @@
   margin-bottom: 6px;
   font-size: 12px;
   font-weight: 600;
-  color: #fff;
+  color: var(--ant-color-text-light-solid, #fff);
 }
 
 .app-my-extensions-usage-tip__list {

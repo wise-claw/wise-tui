@@ -6,11 +6,11 @@
 .app-hub {
   background: var(--ant-color-bg-container);
   border: 1px solid var(--ant-color-border-secondary);
-  border-radius: 8px;
+  border-radius: var(--wise-radius-xl);
   padding: 20px 24px;
   position: relative;
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.02);
-  margin-bottom: 16px;
+  box-shadow: var(--wise-elevation-1);
+  margin-bottom: var(--wise-space-6);
 }
 
 .app-hub__head {
@@ -104,31 +104,35 @@
   padding: 12px 14px;
   background: var(--ant-color-bg-container);
   border: 1px solid transparent;
-  border-radius: 8px;
-  transition: background 150ms, border-color 150ms;
+  border-radius: var(--wise-radius-lg);
+  transition:
+    background var(--wise-motion-base) var(--wise-ease-out),
+    border-color var(--wise-motion-base) var(--wise-ease-out),
+    box-shadow var(--wise-motion-base) var(--wise-ease-out);
 }
 
 .app-hub__item:hover {
-  background: var(--ant-color-fill-quaternary);
+  background: var(--wise-row-hover-bg);
   border-color: var(--ant-color-border-secondary);
+  box-shadow: var(--wise-elevation-1);
 }
 
 .app-hub__item--active {
-  border-color: var(--ant-color-primary-border);
-  background: var(--ant-color-primary-bg);
+  border-color: var(--wise-row-selected-border);
+  background: var(--wise-row-selected-bg);
 }
 
 .app-hub__avatar {
   width: 36px;
   height: 36px;
-  border-radius: 8px;
+  border-radius: var(--wise-radius-lg);
   flex-shrink: 0;
   display: inline-flex;
   align-items: center;
   justify-content: center;
   font-weight: 700;
   font-size: 15px;
-  color: #fff;
+  color: var(--ant-color-text-light-solid);
   text-transform: uppercase;
   user-select: none;
 }

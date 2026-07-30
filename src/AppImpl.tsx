@@ -80,6 +80,7 @@ import {
   getStuckOperationsSnapshot,
 } from "./stores/operationWatchdogStore";
 import { openRepositoryRunCommandModal } from "./stores/repositoryRunCommandModalStore";
+import { useAppTheme } from "./stores/appThemeStore";
 import {
   pruneRepositoryRunCommandRuntime,
   setRepositoryRunCommandConfigureHandler,
@@ -320,7 +321,7 @@ export default function App() {
   const [standaloneRepoAddRequest, setStandaloneRepoAddRequest] = useState(0);
   const [repositorySplitTemplate, setRepositorySplitTemplate] = useState("");
   const [projectSplitTemplate, setProjectSplitTemplate] = useState("");
-  const [dark, _setDark] = useState(false);
+  const { dark } = useAppTheme();
   const [collapsed, setCollapsed] = useState(false);
   const {
     mounted: terminalPanelMounted,

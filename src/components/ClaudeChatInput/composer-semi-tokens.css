@@ -13,14 +13,29 @@
   --semi-color-text-0: var(--ant-color-text);
   --semi-color-text-1: var(--ant-color-text-secondary);
   --semi-color-text-2: var(--ant-color-text-tertiary);
+  --semi-color-text-3: var(--ant-color-text-quaternary);
   --semi-color-fill-0: var(--ant-color-fill-tertiary);
   --semi-color-fill-1: var(--ant-color-fill-secondary);
   --semi-color-fill-2: var(--ant-color-fill-secondary);
+  /* bg-0..4 必须全接：漏一档深色下就会露出 Semi 自带的浅色底 */
+  --semi-color-bg-0: var(--ant-color-bg-container);
+  --semi-color-bg-1: var(--ant-color-bg-container);
   --semi-color-bg-2: var(--ant-color-bg-elevated);
+  --semi-color-bg-3: var(--ant-color-bg-elevated);
+  --semi-color-bg-4: var(--ant-color-bg-elevated);
+  --semi-color-disabled-text: var(--ant-color-text-disabled);
+  --semi-color-disabled-bg: var(--ant-color-bg-container-disabled);
+  --semi-color-disabled-border: var(--ant-color-border);
   --semi-color-primary: var(--ant-color-primary);
   --semi-color-primary-hover: var(--ant-color-primary-hover);
   --semi-color-primary-active: var(--ant-color-primary-active);
   --semi-color-primary-light-default: var(--ant-color-primary-bg);
+  --semi-color-primary-light-hover: var(--ant-color-primary-bg-hover);
+  --semi-color-success: var(--ant-color-success);
+  --semi-color-warning: var(--ant-color-warning);
+  --semi-color-danger: var(--ant-color-error);
+  --semi-color-info: var(--ant-color-info);
+  --semi-color-shadow: color-mix(in srgb, var(--ant-color-text) 12%, transparent);
   /* 与下方 `.tiptap` 行高一致，供编辑区 min/max-height 计算 */
   --app-semi-ai-chat-editor-line-px: 20px;
   --app-semi-ai-chat-editor-min-lines: 1;
@@ -78,7 +93,7 @@
 
 .app-claude-semi-chat-input-wrap .semi-aiChatInput-editor-content .tiptap .wise-composer-code-selection-ref:hover {
   border-color: var(--ant-color-primary, #1677ff);
-  background: color-mix(in srgb, var(--ant-color-primary-bg, #e6f4ff) 70%, #fff);
+  background: color-mix(in srgb, var(--ant-color-primary-bg, #e6f4ff) 70%, var(--ant-color-bg-container));
 }
 
 .app-claude-semi-chat-input-wrap
@@ -99,11 +114,25 @@
 
 .app-claude-semi-chat-input-wrap .semi-aiChatInput {
   padding: 6px 8px;
-  border-radius: 8px;
+  border-radius: var(--wise-radius-lg);
   background: var(--ant-color-bg-container);
+  /* 原先无边框无聚焦态：输入区和消息区背景同色，看不出「焦点在不在输入框」。 */
+  border: 1px solid var(--ant-color-border-secondary);
+  transition:
+    border-color var(--wise-motion-base) var(--wise-ease-out),
+    box-shadow var(--wise-motion-base) var(--wise-ease-out);
   min-height: calc(
     var(--app-semi-ai-chat-editor-min-lines) * var(--app-semi-ai-chat-editor-line-px) + 12px
   );
+}
+
+.app-claude-semi-chat-input-wrap .semi-aiChatInput:hover {
+  border-color: var(--ant-color-border);
+}
+
+.app-claude-semi-chat-input-wrap:focus-within .semi-aiChatInput {
+  border-color: var(--ant-color-primary);
+  box-shadow: var(--wise-focus-ring);
 }
 
 /* 编辑区至少 1 行、最多约 3 行（超出由 Semi 自带的 overflow:auto 滚动） */

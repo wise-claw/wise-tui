@@ -496,7 +496,7 @@
   justify-content: center;
   font-size: 10px;
   font-weight: 700;
-  color: #ffffff;
+  color: var(--ant-color-text-light-solid, #fff);
   text-transform: uppercase;
   font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
   flex: 0 0 auto;

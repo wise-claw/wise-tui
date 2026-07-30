@@ -106,7 +106,7 @@
 .app-claude-config-dir-panel__current:hover,
 .app-claude-config-dir-panel__section:hover {
   border-color: color-mix(in srgb, var(--ant-color-border-secondary) 80%, transparent) !important;
-  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.03);
+  box-shadow: var(--wise-elevation-3);
 }
 
 .app-claude-config-dir-panel__current-head,
@@ -914,13 +914,13 @@
   background: var(--ant-color-bg-container);
   border: 1px solid var(--ant-color-border-secondary);
   border-radius: 10px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+  box-shadow: var(--wise-elevation-2);
   transition: all 0.25s cubic-bezier(0.25, 0.8, 0.25, 1);
 }
 
 .app-agent-registry-metric-card:hover {
   transform: translateY(-2px);
-  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--wise-elevation-3);
   border-color: var(--ant-color-primary-border);
 }
 
@@ -1037,7 +1037,7 @@
   background: var(--ant-color-bg-container);
   border: 1px solid var(--ant-color-border-secondary);
   border-radius: 12px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+  box-shadow: var(--wise-elevation-2);
   transition: all 0.3s cubic-bezier(0.25, 0.8, 0.25, 1);
   overflow: hidden;
 }

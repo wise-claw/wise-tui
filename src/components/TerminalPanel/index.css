@@ -1,11 +1,25 @@
 .terminal-panel {
-  border-top: 1px solid rgba(205, 214, 244, 0.08);
+  border-top: 1px solid var(--terminal-border);
   background: var(--terminal-background);
   display: flex;
   flex-direction: column;
   height: var(--terminal-panel-height, 220px);
   -webkit-app-region: no-drag;
-  /* 内置终端固定深色主题（Catppuccin Mocha 取向），不跟 Ant 浅色容器色走。 */
+  /*
+   * 终端跟随应用外观：浅色壳配 Catppuccin Latte，深色壳配 Mocha。
+   * 同一色系保证语法高亮/ANSI 观感连续，避免浅色应用里嵌一块纯深色板砖。
+   */
+  --terminal-background: #eff1f5;
+  --terminal-foreground: #4c4f69;
+  --terminal-cursor: #dc8a78;
+  --terminal-selection: rgba(30, 102, 245, 0.22);
+  --terminal-header-bg: #e6e9ef;
+  --terminal-header-fg: rgba(76, 79, 105, 0.82);
+  --terminal-border: rgba(76, 79, 105, 0.14);
+  --terminal-accent: #1e66f5;
+}
+
+:root[data-wise-theme="dark"] .terminal-panel {
   --terminal-background: #1e1e2e;
   --terminal-foreground: #cdd6f4;
   --terminal-cursor: #f5e0dc;
@@ -13,6 +27,7 @@
   --terminal-header-bg: #181825;
   --terminal-header-fg: rgba(205, 214, 244, 0.78);
   --terminal-border: rgba(205, 214, 244, 0.1);
+  --terminal-accent: #89b4fa;
 }
 
 .terminal-panel--fullscreen {
@@ -47,7 +62,7 @@
 }
 
 .terminal-panel-resizer:hover::after {
-  background: color-mix(in srgb, #89b4fa 70%, transparent);
+  background: color-mix(in srgb, var(--terminal-accent) 70%, transparent);
   opacity: 1;
 }
 
@@ -94,7 +109,7 @@
   border: 1px solid transparent;
   border-radius: 6px;
   background: transparent;
-  color: rgba(205, 214, 244, 0.55);
+  color: color-mix(in srgb, var(--terminal-foreground) 55%, transparent);
   font-size: 11px;
   line-height: 1;
   cursor: pointer;
@@ -102,13 +117,13 @@
 }
 
 .terminal-tab--active {
-  color: rgba(205, 214, 244, 0.95);
-  border-color: rgba(137, 180, 250, 0.28);
-  background: rgba(137, 180, 250, 0.12);
+  color: color-mix(in srgb, var(--terminal-foreground) 95%, transparent);
+  border-color: color-mix(in srgb, var(--terminal-accent) 28%, transparent);
+  background: color-mix(in srgb, var(--terminal-accent) 12%, transparent);
 }
 
 .terminal-tab--agent {
-  color: #89b4fa;
+  color: var(--terminal-accent);
 }
 
 .terminal-tab--add {
@@ -137,7 +152,7 @@
 
 .terminal-tab__close:hover {
   opacity: 1;
-  background: rgba(205, 214, 244, 0.12);
+  background: color-mix(in srgb, var(--terminal-foreground) 12%, transparent);
 }
 
 .terminal-header-title {
@@ -152,10 +167,10 @@
   height: 20px;
   margin: 0;
   padding: 0 6px;
-  border: 1px solid rgba(205, 214, 244, 0.16);
+  border: 1px solid color-mix(in srgb, var(--terminal-foreground) 16%, transparent);
   border-radius: 4px;
   background: transparent;
-  color: rgba(205, 214, 244, 0.72);
+  color: color-mix(in srgb, var(--terminal-foreground) 72%, transparent);
   font-size: 11px;
   font-weight: 500;
   line-height: 1;
@@ -163,9 +178,9 @@
 }
 
 .terminal-header-action:hover:not(:disabled) {
-  color: rgba(205, 214, 244, 0.95);
-  border-color: rgba(137, 180, 250, 0.4);
-  background: rgba(137, 180, 250, 0.12);
+  color: color-mix(in srgb, var(--terminal-foreground) 95%, transparent);
+  border-color: color-mix(in srgb, var(--terminal-accent) 40%, transparent);
+  background: color-mix(in srgb, var(--terminal-accent) 12%, transparent);
 }
 
 .terminal-header-action:disabled {
@@ -301,7 +316,7 @@
   margin: 0;
   border: none;
   background: transparent;
-  color: rgba(205, 214, 244, 0.45);
+  color: color-mix(in srgb, var(--terminal-foreground) 45%, transparent);
   font-size: 12px;
   line-height: 1;
   cursor: pointer;
@@ -309,7 +324,7 @@
 }
 
 .terminal-header-icon-btn:hover {
-  color: rgba(205, 214, 244, 0.95);
+  color: color-mix(in srgb, var(--terminal-foreground) 95%, transparent);
 }
 
 .terminal-header-close {
@@ -322,7 +337,7 @@
   margin: 0;
   border: none;
   background: transparent;
-  color: rgba(205, 214, 244, 0.45);
+  color: color-mix(in srgb, var(--terminal-foreground) 45%, transparent);
   font-size: 14px;
   line-height: 1;
   cursor: pointer;
@@ -330,7 +345,7 @@
 }
 
 .terminal-header-close:hover {
-  color: rgba(205, 214, 244, 0.95);
+  color: color-mix(in srgb, var(--terminal-foreground) 95%, transparent);
 }
 
 .terminal-body {
@@ -417,7 +432,7 @@
   align-items: center;
   justify-content: center;
   border-radius: 10px;
-  color: rgba(205, 214, 244, 0.72);
+  color: color-mix(in srgb, var(--terminal-foreground) 72%, transparent);
   pointer-events: none;
   text-align: center;
   font-size: 12px;
@@ -426,7 +441,7 @@
 
 .terminal-status {
   max-width: 280px;
-  background: rgba(24, 24, 37, 0.92);
+  background: color-mix(in srgb, var(--terminal-header-bg) 92%, transparent);
   border: 1px solid var(--terminal-border);
   border-radius: 10px;
   padding: 8px 12px;

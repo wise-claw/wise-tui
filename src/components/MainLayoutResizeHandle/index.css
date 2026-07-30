@@ -19,16 +19,6 @@
   transition: opacity var(--app-layout-rail-duration, 0.32s) var(--app-layout-rail-easing, cubic-bezier(0.33, 1, 0.68, 1));
 }
 
-/* 命中更宽的不可见扩展：让窄屏 / 触控屏也能稳定抓中。
- * 不接收事件，仅用于占据命中区域。 */
-.app-main-layout-resize-handle::before {
-  content: "";
-  position: absolute;
-  inset: 0;
-  background: transparent;
-  pointer-events: none;
-}
-
 .app-main-layout-resize-handle::after {
   content: "";
   position: absolute;
@@ -48,6 +38,30 @@
   opacity: 1;
   /* hover 时视觉上稍微变粗，更"邀请"用户来拖。 */
   width: 2px;
+}
+
+/* hover 时在中点浮出一个握把：1px 线条本身太隐蔽，用户不知道这里能拖。 */
+.app-main-layout-resize-handle::before {
+  content: "";
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 4px;
+  height: 26px;
+  transform: translate(-50%, -50%);
+  border-radius: var(--wise-radius-pill);
+  background: var(--ant-color-primary);
+  opacity: 0;
+  pointer-events: none;
+  transition:
+    opacity var(--wise-motion-base) var(--wise-ease-out),
+    height var(--wise-motion-base) var(--wise-ease-out);
+}
+
+.app-main-layout-resize-handle:hover::before,
+.app-main-layout-resize-handle--dragging::before {
+  opacity: 0.9;
+  height: 38px;
 }
 
 .app-main-layout-resize-handle:active,

@@ -295,7 +295,7 @@
 }
 
 .app-workspace-welcome-landing__highlight:hover .app-workspace-welcome-landing__highlight-icon {
-  color: #fff;
+  color: var(--ant-color-text-light-solid, #fff);
   background: var(--ant-color-primary);
   transform: scale(1.05);
 }
@@ -423,7 +423,7 @@
   height: 36px;
   border-radius: 8px;
   font-size: 16px;
-  color: #fff;
+  color: var(--ant-color-text-light-solid, #fff);
   background: var(--ant-color-primary);
   box-shadow: 0 2px 8px color-mix(in srgb, var(--ant-color-primary) 20%, transparent);
   transition: all 0.3s cubic-bezier(0.165, 0.84, 0.44, 1);
@@ -440,7 +440,7 @@
 }
 
 .app-workspace-welcome-landing__card:hover .app-workspace-welcome-landing__card-icon--muted {
-  color: #fff;
+  color: var(--ant-color-text-light-solid, #fff);
   background: var(--ant-color-primary);
   box-shadow: 0 2px 8px color-mix(in srgb, var(--ant-color-primary) 20%, transparent);
 }

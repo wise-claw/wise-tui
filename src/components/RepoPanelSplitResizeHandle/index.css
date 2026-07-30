@@ -18,12 +18,28 @@
   transition: opacity var(--app-layout-rail-duration, 0.32s) var(--app-layout-rail-easing, cubic-bezier(0.33, 1, 0.68, 1));
 }
 
+/* 与主三栏手柄同一套：hover 时中点浮出握把，提示此处可拖。 */
 .app-repo-panel-split-resize-handle::before {
   content: "";
   position: absolute;
-  inset: 0;
-  background: transparent;
+  top: 50%;
+  left: 50%;
+  width: 26px;
+  height: 4px;
+  transform: translate(-50%, -50%);
+  border-radius: var(--wise-radius-pill);
+  background: var(--ant-color-primary);
+  opacity: 0;
   pointer-events: none;
+  transition:
+    opacity var(--wise-motion-base) var(--wise-ease-out),
+    width var(--wise-motion-base) var(--wise-ease-out);
+}
+
+.app-repo-panel-split-resize-handle:hover::before,
+.app-repo-panel-split-resize-handle--dragging::before {
+  opacity: 0.9;
+  width: 38px;
 }
 
 .app-repo-panel-split-resize-handle::after {

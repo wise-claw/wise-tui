@@ -973,7 +973,7 @@
   border-color: var(--ant-color-primary-border) !important;
   background: var(--ant-color-primary-bg) !important;
   transform: translateY(-1px);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.08);
+  box-shadow: var(--wise-elevation-2);
 }
 
 .app-hooks-stats-btn:active .ant-tag {
@@ -1739,7 +1739,7 @@
   padding: 8px 12px;
   background: color-mix(in srgb, var(--ant-color-bg-container) 95%, transparent);
   backdrop-filter: blur(12px);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+  box-shadow: var(--wise-elevation-2);
   transition: all 0.25s ease;
 }
 

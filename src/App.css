@@ -49,9 +49,9 @@
   --app-workspace-glass-blur: blur(18px) saturate(120%);
   --app-workspace-glass-base: color-mix(in srgb, var(--ant-color-bg-container) 95%, transparent);
   --app-workspace-glass-border: color-mix(in srgb, var(--ant-color-border-secondary) 45%, transparent);
-  --app-workspace-glass-inset-glow: inset 0 1px 1px 0 color-mix(in srgb, #ffffff 16%, transparent), inset 0 -1px 0px 0 color-mix(in srgb, #ffffff 6%, transparent);
+  --app-workspace-glass-inset-glow: inset 0 1px 1px 0 var(--wise-glass-highlight-soft), inset 0 -1px 0px 0 var(--wise-glass-highlight-faint);
   --app-workspace-glass-shadow: 0 8px 32px 0 color-mix(in srgb, var(--ant-color-text) 5%, transparent);
-  --app-workspace-active-glow: 0 0 12px 0 color-mix(in srgb, var(--ant-color-primary) 22%, transparent), inset 0 1px 1px 0 color-mix(in srgb, #ffffff 18%, transparent);
+  --app-workspace-active-glow: 0 0 12px 0 color-mix(in srgb, var(--ant-color-primary) 22%, transparent), inset 0 1px 1px 0 var(--wise-glass-highlight-strong);
   --app-workspace-rail-left-tint: linear-gradient(
     180deg,
     color-mix(in srgb, var(--ant-color-primary-bg) 10%, transparent) 0%,
@@ -77,6 +77,81 @@
   );
   --app-workspace-chrome-left: color-mix(in srgb, var(--ant-color-primary-bg) 12%, var(--app-workspace-glass-base));
   --app-workspace-chrome-right: color-mix(in srgb, var(--ant-color-fill-tertiary) 10%, var(--app-workspace-glass-base));
+
+  /* ═══ 间距尺度（4px 基准）═══
+     组件 CSS 不要再各写 3px/5px/7px：贴到最近一档，全局节奏才能一致。 */
+  --wise-space-1: 2px;
+  --wise-space-2: 4px;
+  --wise-space-3: 6px;
+  --wise-space-4: 8px;
+  --wise-space-5: 12px;
+  --wise-space-6: 16px;
+  --wise-space-7: 20px;
+  --wise-space-8: 24px;
+  --wise-space-9: 32px;
+
+  /* ═══ 圆角尺度（与 AntD borderRadius* 对齐）═══ */
+  --wise-radius-xs: 4px;
+  --wise-radius-sm: 6px;
+  --wise-radius-md: 8px;
+  --wise-radius-lg: 10px;
+  --wise-radius-xl: 14px;
+  --wise-radius-pill: 999px;
+
+  /* ═══ 层级（elevation）：1 贴地卡片 → 4 浮层 ═══ */
+  --wise-elevation-1: 0 1px 2px color-mix(in srgb, var(--ant-color-text) 5%, transparent);
+  --wise-elevation-2: 0 2px 6px color-mix(in srgb, var(--ant-color-text) 6%, transparent);
+  --wise-elevation-3: 0 6px 18px color-mix(in srgb, var(--ant-color-text) 8%, transparent);
+  --wise-elevation-4: 0 14px 40px color-mix(in srgb, var(--ant-color-text) 12%, transparent);
+
+  /* ═══ 毛玻璃高光基色：浅色用白色提亮，深色需大幅减弱否则发灰 ═══ */
+  --wise-glass-highlight-faint: color-mix(in srgb, #ffffff 6%, transparent);
+  --wise-glass-highlight-soft: color-mix(in srgb, #ffffff 16%, transparent);
+  --wise-glass-highlight-strong: color-mix(in srgb, #ffffff 18%, transparent);
+
+  /* ═══ 动效：交互反馈统一节奏 ═══ */
+  --wise-motion-fast: 0.12s;
+  --wise-motion-base: 0.18s;
+  --wise-motion-slow: 0.28s;
+  --wise-ease-out: cubic-bezier(0.33, 1, 0.68, 1);
+  --wise-ease-spring: cubic-bezier(0.34, 1.36, 0.64, 1);
+
+  /* ═══ 焦点环：键盘可达性统一表达 ═══ */
+  --wise-focus-ring: 0 0 0 2px color-mix(in srgb, var(--ant-color-primary) 32%, transparent);
+  --wise-focus-ring-inset: inset 0 0 0 1px var(--ant-color-primary);
+
+  /* ═══ 可交互行的三态底色（侧栏、列表、Hub 卡片共用）═══ */
+  --wise-row-hover-bg: color-mix(in srgb, var(--ant-color-text) 6%, transparent);
+  --wise-row-active-bg: color-mix(in srgb, var(--ant-color-text) 9%, transparent);
+  --wise-row-selected-bg: color-mix(in srgb, var(--ant-color-primary) 11%, transparent);
+  --wise-row-selected-border: color-mix(in srgb, var(--ant-color-primary) 34%, transparent);
+}
+
+/* ═══════════════════════════════════════════════
+   深色覆盖：AntD 的 --ant-color-* 由 algorithm 自动分叉，
+   这里只修正「假设了浅色底」的自定义变量（白色高光、阴影浓度、玻璃透明度）。
+   ═══════════════════════════════════════════════ */
+:root[data-wise-theme="dark"] {
+  --wise-glass-highlight-faint: color-mix(in srgb, #ffffff 3%, transparent);
+  --wise-glass-highlight-soft: color-mix(in srgb, #ffffff 6%, transparent);
+  --wise-glass-highlight-strong: color-mix(in srgb, #ffffff 8%, transparent);
+
+  /* 深色下需要更浓的阴影才能拉开层级 */
+  --wise-elevation-1: 0 1px 2px rgba(0, 0, 0, 0.36);
+  --wise-elevation-2: 0 2px 8px rgba(0, 0, 0, 0.42);
+  --wise-elevation-3: 0 6px 20px rgba(0, 0, 0, 0.5);
+  --wise-elevation-4: 0 16px 44px rgba(0, 0, 0, 0.58);
+
+  --wise-row-hover-bg: color-mix(in srgb, #ffffff 6%, transparent);
+  --wise-row-active-bg: color-mix(in srgb, #ffffff 10%, transparent);
+  --wise-row-selected-bg: color-mix(in srgb, var(--ant-color-primary) 20%, transparent);
+  --wise-row-selected-border: color-mix(in srgb, var(--ant-color-primary) 46%, transparent);
+
+  --app-workspace-glass-base: color-mix(in srgb, var(--ant-color-bg-container) 88%, transparent);
+  --app-workspace-glass-border: color-mix(in srgb, var(--ant-color-border) 55%, transparent);
+  --app-workspace-glass-shadow: 0 8px 32px 0 rgba(0, 0, 0, 0.45);
+  --mission-shadow: 0 8px 22px rgba(0, 0, 0, 0.45);
+  --mission-shadow-soft: 0 2px 10px rgba(0, 0, 0, 0.32);
 }
 
 /* ── Keyframes ── */
@@ -89,6 +164,32 @@ html,
 body {
   height: 100%;
   margin: 0;
+}
+
+/* 壳外区域（窗口圆角、过渡帧）也要跟随主题，否则深色下露白边 */
+body {
+  background: var(--ant-color-bg-layout, #f4f6f8);
+  color: var(--ant-color-text, inherit);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-rendering: optimizeLegibility;
+}
+
+::selection {
+  background: color-mix(in srgb, var(--ant-color-primary) 26%, transparent);
+}
+
+/*
+ * 键盘焦点统一表达：鼠标点击不出环，Tab 导航必须看得见。
+ * 只覆盖自绘的裸交互元素——AntD 组件自带聚焦阴影，若在此一并接管，
+ * 会与其 CSS-in-JS 规则同特异性相撞（注入顺序不定，输入框聚焦态会随机失效）。
+ */
+.ant-app button:not([class*="ant-"]):focus-visible,
+.ant-app a:not([class*="ant-"]):focus-visible,
+.ant-app [tabindex]:not([class*="ant-"]):focus-visible {
+  outline: none;
+  box-shadow: var(--wise-focus-ring);
+  border-radius: var(--wise-radius-sm);
 }
 
 #root {
@@ -593,7 +694,7 @@ body {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  color: #fff;
+  color: var(--ant-color-text-light-solid, #fff);
   font-size: 12px;
   font-weight: 760;
   letter-spacing: 0;
@@ -1617,7 +1718,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 
 .app-chat-avatar.assistant {
   background: linear-gradient(135deg, #1677ff 0%, #0958d9 100%);
-  color: #fff;
+  color: var(--ant-color-text-light-solid, #fff);
 }
 
 .app-chat-body {
@@ -1662,7 +1763,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   padding: 8px 12px 6px;
   background: var(--ant-color-bg-container);
   transition: border-color 0.2s;
-  box-shadow: 0 1px 6px rgba(0, 0, 0, 0.06);
+  box-shadow: var(--wise-elevation-2);
 }
 
 .app-chat-input-container:focus-within {
@@ -3123,12 +3224,11 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   gap: 6px;
   padding: 6px 12px;
   margin: 0;
-  border-radius: 0;
+  border-radius: var(--wise-radius-sm);
   cursor: pointer;
   font-size: 12px;
   line-height: 1.35;
   border: none;
-  border-left: 3px solid transparent !important;
 }
 
 .app-left-sidebar .app-repository-item {
@@ -3140,12 +3240,26 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   pointer-events: auto;
 }
 
+/* 行操作原本只在 hover 显形，键盘用户永远够不到（pointer-events: none）。
+   窄侧栏里不能常驻显形（会挤掉名称），所以只在聚焦时补上可达性。 */
+.app-repository-item:focus-within .app-repository-action,
+.app-repository-action:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+
 .app-repository-item:hover .app-repository-action--pin.app-repository-action--pin-active {
   color: var(--ant-color-warning);
 }
 
 .app-repository-item:hover {
-  background: color-mix(in srgb, var(--ant-color-text) 6%, transparent);
+  background: var(--wise-row-hover-bg);
+}
+
+/* 工作区树行内缩成圆角行：全出血直角行会让「哪一行被选中」只能靠 3% 的灰度差分辨。
+   内缩后选中态是一个独立色块，层级和当前位置一眼可见。 */
+.app-left-sidebar .app-repository-list .app-repository-item {
+  margin-inline: 6px;
 }
 
 .app-repository-item--project {
@@ -3430,12 +3544,11 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
   background: var(--ant-color-primary-bg);
 }
 
-/* 当前项目：与侧栏 hover 同系、略深的 neutral 高亮 */
+/* 当前项目：neutral 加深（8% vs hover 6%）分辨不出来，改用主色 tint 明确「当前位置」 */
 .app-repository-item--project.app-repository-item--project-active {
-  background: color-mix(in srgb, var(--ant-color-text) 8%, transparent) !important;
+  background: var(--wise-row-selected-bg) !important;
   border-color: transparent !important;
   box-shadow: none !important;
-  border-radius: 0 !important;
 }
 
 .app-repository-item--project.app-repository-item--project-active .app-repository-name {
@@ -3444,15 +3557,14 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 }
 
 .app-repository-item--project.app-repository-item--project-active:hover {
-  background: color-mix(in srgb, var(--ant-color-text) 11%, transparent) !important;
+  background: color-mix(in srgb, var(--ant-color-primary) 17%, transparent) !important;
 }
 
-/* 当前仓库：与侧栏 hover 同系、略深的 neutral 高亮 */
+/* 当前仓库：同上，主色 tint 才能和 hover 区分开 */
 .app-repository-item--repo.app-repository-item--repo-active {
-  background: color-mix(in srgb, var(--ant-color-text) 9%, transparent) !important;
+  background: var(--wise-row-selected-bg) !important;
   border-color: transparent !important;
   box-shadow: none !important;
-  border-radius: 0 !important;
 }
 
 /* 展开且已有活跃会话时：弱化仓库行，突出会话高亮 */
@@ -3468,7 +3580,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 }
 
 .app-repository-item--repo.app-repository-item--repo-active:hover {
-  background: color-mix(in srgb, var(--ant-color-text) 12%, transparent) !important;
+  background: color-mix(in srgb, var(--ant-color-primary) 18%, transparent) !important;
 }
 
 .app-repository-item--repo.app-repository-item--repo-active .app-repository-name {
@@ -3487,7 +3599,7 @@ html.app-host-macos-chrome .app-left-sidebar-topbar-mark {
 }
 
 .app-repository-row:has(.app-repository-item--repo-active) .app-repository-item--project.app-repository-item--project-active:hover {
-  background: color-mix(in srgb, var(--ant-color-text) 6%, transparent) !important;
+  background: var(--wise-row-hover-bg) !important;
 }
 
 .app-repository-row:has(.app-repository-item--repo-active) .app-repository-item--project.app-repository-item--project-active .app-repository-name {

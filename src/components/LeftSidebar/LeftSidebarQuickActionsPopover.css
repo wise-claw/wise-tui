@@ -181,7 +181,7 @@
 .app-left-sidebar-quick-actions-popover__card-main:hover {
   border-color: color-mix(in srgb, var(--ant-color-primary) 35%, var(--ant-color-border));
   background: color-mix(in srgb, var(--ant-color-primary) 6%, var(--ant-color-bg-container));
-  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
+  box-shadow: var(--wise-elevation-1);
   color: var(--ant-color-primary);
 }
 
