@@ -34,3 +34,12 @@ export const CHAT_MESSAGE_LIST_COMPANION_MAX_VISIBLE = 96;
 
 /** 贴底回收阈值（px）：距底部小于该值且 visibleCount 已扩张时，回收到 initialVisible */
 export const CHAT_MESSAGE_LIST_BOTTOM_RECLAIM_PX = 64;
+
+/**
+ * 贴底回收静置延迟（ms）：在底部停稳该时长后才回收窗口。
+ *
+ * 回收一次最多卸载 maxVisible - initialVisible 行。若在滚动过程中同步执行，卸载与随后
+ * 向上滚动的重新挂载（含 Markdown 重新解析）会交替发生，表现为「滚动时消息空白重绘」。
+ * 延后到滚动静置再回收，既保留 DOM 封顶意图，又不在滚动中途拆建 DOM。
+ */
+export const CHAT_MESSAGE_LIST_RECLAIM_IDLE_MS = 900;

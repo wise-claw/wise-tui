@@ -3849,30 +3849,14 @@
   padding-left: 30px;
 }
 
-/* 新消息入场：只动 opacity/transform（合成层属性），不改行高与 scrollHeight，
-   否则会与贴底跟随的 JS 缓动互相打架。
-   仅命中 :last-child —— 消息行是滚动容器的直接子元素，新消息追加时只有它是新节点；
-   加载更早消息在顶部插入、流式 token 复用同一节点，都不会重播动画。 */
-@keyframes app-claude-message-row-in {
-  from {
-    opacity: 0;
-    transform: translateY(3px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.app-claude-messages > .app-claude-messages-virtual-row:last-child {
-  animation: app-claude-message-row-in var(--wise-motion-base) var(--wise-ease-out) both;
-}
-
-@media (prefers-reduced-motion: reduce) {
-  .app-claude-messages > .app-claude-messages-virtual-row:last-child {
-    animation: none;
-  }
-}
+/* 消息行不做入场动画。
+   曾用 `.app-claude-messages-virtual-row:last-child` + 关键帧淡入，两个缺陷都会造成
+   「滚动后消息闪白重绘」：
+   1) 滚动期把 animation 置 none、滚动停止 240ms 后又改回具名动画，animation-name 变化
+      会让 CSS 重播动画 —— 每次停止滚动最后一条消息都从 opacity:0 淡入一次；
+   2) :last-child 表达不了「刚挂载」：流式「思考中」提示行在末尾出现/消失时，相邻那条
+      早已显示的消息会获得/失去该选择器，同样重播。
+   若要恢复入场动效，需由 JS 标记「本次渲染新出现的行 key」，而非依赖元素位置选择器。 */
 
 .app-claude-messages--scrolling .app-claude-message,
 .app-claude-messages--scrolling .app-claude-messages-virtual-row,
@@ -3880,11 +3864,6 @@
 .app-claude-messages--scrolling .app-message-part-header,
 .app-claude-messages--scrolling .app-claude-message-floating-actions {
   transition: none !important;
-}
-
-/* 快速滑动期间不播入场动画：滑动本身已提供位移反馈，叠加动画只增重绘。 */
-.app-claude-messages--scrolling > .app-claude-messages-virtual-row:last-child {
-  animation: none;
 }
 
 .app-claude-messages--scrolling .app-claude-message,
@@ -3927,7 +3906,7 @@
   /* grid + minmax(0,1fr) 比 flex+basis:0% 更能锁住正文列宽，避免中文一字一行 */
   display: grid;
   grid-template-columns: 22px minmax(0, 1fr);
-  column-gap: 10px;
+  column-gap: 8px;
   align-items: start;
   width: 100%;
   max-width: 100%;
@@ -3997,11 +3976,6 @@
   color: var(--ant-color-text-light-solid);
 }
 
-/* 助手回复：缩小与 C 标识间距 */
-.app-claude-message--assistant {
-  column-gap: 6px;
-}
-
 .app-claude-messages .app-claude-message--assistant .app-message-parts > :first-child,
 .app-claude-messages .app-claude-message--assistant .app-claude-message-content > :first-child {
   margin-top: 0;
@@ -4024,6 +3998,17 @@
 .app-claude-message--system .app-claude-message-avatar {
   background: var(--ant-color-warning);
   color: var(--ant-color-text-light-solid);
+}
+
+/* 系统消息：首行行盒与 22px 头像上下对齐（与用户/助手同一规则）。 */
+.app-claude-message--system .app-system-message {
+  line-height: 22px;
+}
+
+.app-claude-message--system .app-system-message-md.app-markdown > :first-child,
+.app-claude-message--system .app-system-message-md.app-markdown p:first-child {
+  margin-top: 0;
+  line-height: 22px;
 }
 
 .app-claude-message-body {
@@ -4219,19 +4204,20 @@
 .app-system-message--error {
   /* 与工具失败的红描边 + error-bg 风格对齐，让系统级错误在对话流中显眼可识别 */
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 6px;
   color: var(--ant-color-error);
   font-weight: 500;
   background: var(--ant-color-error-bg);
   border-left: 2px solid var(--ant-color-error-border);
   border-radius: 0 6px 6px 0;
-  padding: 6px 10px;
+  padding: 0 10px;
+  min-height: 22px;
 }
 
 .app-system-message__icon {
   flex-shrink: 0;
-  margin-top: 2px;
+  margin-top: 0;
   display: inline-flex;
   align-items: center;
   color: var(--ant-color-error);

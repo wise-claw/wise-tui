@@ -3,6 +3,8 @@ import {
   breakCollapsedPipeTableOnLine,
   containsStreamingHtmlMarkup,
   htmlDocumentToMarkdown,
+  isBareShellCommandLine,
+  wrapBareShellCommandLines,
   llmHtmlFragmentToMarkdown,
   looksLikeLlmHtmlFragment,
   normalizeInlineHtmlBreakTags,
@@ -489,5 +491,43 @@ describe("normalizeMarkdownForDisplay", () => {
 
   test("normalizeInlineHtmlBreakTags handles entity-encoded br", () => {
     expect(normalizeInlineHtmlBreakTags("line one &lt;br /&gt; line two")).toBe("line one \n line two");
+  });
+});
+
+describe("isBareShellCommandLine", () => {
+  test("recognizes claude commands with a subcommand or flag", () => {
+    expect(isBareShellCommandLine("claude mcp add exa")).toBe(true);
+    expect(isBareShellCommandLine("claude code --resume")).toBe(true);
+    expect(isBareShellCommandLine("claude -p '写个测试'")).toBe(true);
+  });
+
+  test("does not treat Chinese notices starting with Claude as commands", () => {
+    // 子命令曾写成可选（`claude\s+(?:mcp|code)?`），使分支退化成 `claude\s+`，
+    // 系统错误提示被包成 Bash 代码块卡片。
+    expect(isBareShellCommandLine("Claude 系统错误：请求频率超限，请稍后重试（rate_limit_error）")).toBe(false);
+    expect(isBareShellCommandLine("Claude 已启动")).toBe(false);
+  });
+
+  test("does not treat Chinese notices after other command names as commands", () => {
+    expect(isBareShellCommandLine("git 状态读取失败")).toBe(false);
+    expect(isBareShellCommandLine("npm 安装失败，请检查网络")).toBe(false);
+  });
+
+  test("still recognizes commands whose arguments contain Chinese", () => {
+    expect(isBareShellCommandLine('git commit -m "修复登录问题"')).toBe(true);
+    expect(isBareShellCommandLine("npx -y @modelcontextprotocol/server-github")).toBe(true);
+  });
+});
+
+describe("wrapBareShellCommandLines", () => {
+  test("leaves a Chinese system error notice unfenced", () => {
+    const notice = "Claude 系统错误：请求频率超限，请稍后重试（rate_limit_error）";
+    expect(wrapBareShellCommandLines(notice)).toBe(notice);
+  });
+
+  test("fences consecutive bare shell commands", () => {
+    expect(wrapBareShellCommandLines("claude mcp add exa\nclaude mcp list")).toBe(
+      "```bash\nclaude mcp add exa\nclaude mcp list\n```",
+    );
   });
 });

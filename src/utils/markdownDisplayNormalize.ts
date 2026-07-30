@@ -89,8 +89,35 @@ export function demoteNumberedMarkdownHeadings(text: string): string {
   return text.replace(/^#\s+(\d+\.\s)/gm, "$1");
 }
 
-const BARE_SHELL_LINE_RE =
-  /^(?:claude\s+(?:mcp|code)?|npm\s+|bun\s+|pnpm\s+|yarn\s+|npx\s+|git\s+|curl\s+|sudo\s+)/i;
+/** 行首命令名（需后接子命令/参数才算命令行）。 */
+const SHELL_COMMAND_HEAD_RE = /^(?:npm|bun|pnpm|yarn|npx|git|curl|sudo)\s+/i;
+
+/**
+ * `claude` 必须带子命令或参数才算命令行。
+ *
+ * 曾写作 `claude\s+(?:mcp|code)?`，子命令可选使整个分支退化成 `claude\s+`，
+ * 于是「Claude 系统错误：请求频率超限…」这类中文说明被当成 shell 命令，
+ * 在会话里被包成一个 Bash 代码块卡片（带语言徽标 / 换行 / 复制）。
+ */
+const CLAUDE_COMMAND_RE = /^claude\s+(?:mcp|code|-{1,2}[a-z])/i;
+
+/** CJK 起头说明这是中文说明文字而非命令参数。 */
+const CJK_HEAD_RE = /^[\u3400-\u9fff\u3040-\u30ff]/;
+
+/**
+ * 该行是否是「省略了围栏的裸 shell 命令」。
+ *
+ * 命令名后紧跟中文的一律不算：`git 状态读取失败`、`npm 安装失败` 是说明文字，
+ * 而 `git commit -m "修复问题"` 参数里带中文仍是命令 —— 故只看命令名后首个字符。
+ */
+export function isBareShellCommandLine(line: string): boolean {
+  const trimmed = line.trim();
+  if (!trimmed) return false;
+  if (CLAUDE_COMMAND_RE.test(trimmed)) return true;
+  const head = SHELL_COMMAND_HEAD_RE.exec(trimmed);
+  if (!head) return false;
+  return !CJK_HEAD_RE.test(trimmed.slice(head[0].length));
+}
 
 /** 独立行的 shell 命令自动包进 bash 围栏（模型常省略 ```）。跳过已在围栏内的行。 */
 export function wrapBareShellCommandLines(text: string): string {
@@ -116,7 +143,7 @@ export function wrapBareShellCommandLines(text: string): string {
       continue;
     }
 
-    if (!trimmed || !BARE_SHELL_LINE_RE.test(trimmed)) {
+    if (!isBareShellCommandLine(trimmed)) {
       out.push(line);
       i += 1;
       continue;
@@ -127,7 +154,7 @@ export function wrapBareShellCommandLines(text: string): string {
     while (i < lines.length) {
       const next = lines[i]!.trim();
       if (!next || next.startsWith("```")) break;
-      if (!BARE_SHELL_LINE_RE.test(next) && !/^(?:claude\s+|npx\s+-y\s+)/i.test(next)) break;
+      if (!isBareShellCommandLine(next)) break;
       block.push(next);
       i += 1;
     }

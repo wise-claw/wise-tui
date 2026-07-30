@@ -7,6 +7,7 @@ import {
   CHAT_MESSAGE_LIST_INITIAL_VISIBLE,
   CHAT_MESSAGE_LIST_LOAD_STEP,
   CHAT_MESSAGE_LIST_MAX_VISIBLE,
+  CHAT_MESSAGE_LIST_RECLAIM_IDLE_MS,
   CHAT_MESSAGE_LIST_SCROLL_LOAD_PX,
 } from "../constants/claudeMessageList";
 import type { ChatMessageListRow } from "../utils/claudeChatMessageListRows";
@@ -90,6 +91,8 @@ export function useChatMessageListWindow({
   // 执行时清除定时器，无副作用。
   const loadMoreRafRef = useRef(0);
   const loadMoreUnlockTimerRef = useRef(0);
+  /** 贴底回收静置定时器：滚动停稳后才收窗口，见 schedulePendingReclaim。 */
+  const reclaimTimerRef = useRef(0);
   const prevRowsLengthRef = useRef(rows.length);
 
   useEffect(() => {
@@ -103,6 +106,10 @@ export function useChatMessageListWindow({
       window.clearTimeout(loadMoreUnlockTimerRef.current);
       loadMoreUnlockTimerRef.current = 0;
     }
+    if (reclaimTimerRef.current !== 0) {
+      window.clearTimeout(reclaimTimerRef.current);
+      reclaimTimerRef.current = 0;
+    }
     prevRowsLengthRef.current = rows.length;
   }, [initialVisible, listResetKey]);
 
@@ -111,6 +118,7 @@ export function useChatMessageListWindow({
     return () => {
       if (loadMoreRafRef.current !== 0) window.cancelAnimationFrame(loadMoreRafRef.current);
       if (loadMoreUnlockTimerRef.current !== 0) window.clearTimeout(loadMoreUnlockTimerRef.current);
+      if (reclaimTimerRef.current !== 0) window.clearTimeout(reclaimTimerRef.current);
     };
   }, []);
 
@@ -134,6 +142,42 @@ export function useChatMessageListWindow({
   const suppressReclaimRef = useRef(false);
   const pendingTailExpandRafRef = useRef(0);
   const pendingTailExpandDeltaRef = useRef(0);
+
+  const cancelPendingReclaim = useCallback(() => {
+    if (reclaimTimerRef.current !== 0) {
+      window.clearTimeout(reclaimTimerRef.current);
+      reclaimTimerRef.current = 0;
+    }
+  }, []);
+
+  /**
+   * 贴底回收延后到滚动静置后执行。
+   *
+   * 回收一次最多卸载 maxVisible - initialVisible 行；在滚动过程中同步卸载会掉帧，随后
+   * 向上滚动触发 loadMoreOlder 又要重新挂载并重新解析 Markdown，上下滚动便在拆建之间
+   * 反复横跳，表现为「滚动时消息空白重绘」。延后不改变 DOM 封顶意图。
+   */
+  const schedulePendingReclaim = useCallback(() => {
+    if (reclaimTimerRef.current !== 0) return;
+    reclaimTimerRef.current = window.setTimeout(() => {
+      reclaimTimerRef.current = 0;
+      const el = scrollContainerRef.current;
+      if (!el || loadLockedRef.current) return;
+      // 静置期间用户可能已滚离底部、或窗口已因新消息扩展：按实时几何重新判定再回收。
+      if (
+        !shouldReclaimOnBottom(
+          el.scrollTop,
+          el.clientHeight,
+          el.scrollHeight,
+          visibleCountRef.current,
+          initialVisibleRef.current,
+        )
+      ) {
+        return;
+      }
+      setVisibleCount(initialVisibleRef.current);
+    }, CHAT_MESSAGE_LIST_RECLAIM_IDLE_MS);
+  }, [scrollContainerRef]);
 
   useEffect(() => {
     const prevLength = prevRowsLengthRef.current;
@@ -246,10 +290,14 @@ export function useChatMessageListWindow({
               visibleCountRef.current,
               initialVisibleRef.current,
             );
-          if (reclaimable && suppressReclaimRef.current) {
+          if (!reclaimable) {
+            // 已滚离底部：撤销待执行回收，避免用户回到上方后窗口仍被收回。
+            cancelPendingReclaim();
+          } else if (suppressReclaimRef.current) {
             suppressReclaimRef.current = false;
-          } else if (reclaimable) {
-            setVisibleCount(initialVisibleRef.current);
+            cancelPendingReclaim();
+          } else {
+            schedulePendingReclaim();
           }
         }
       });
@@ -259,8 +307,18 @@ export function useChatMessageListWindow({
     return () => {
       sc.removeEventListener("scroll", onScroll);
       if (raf !== 0) window.cancelAnimationFrame(raf);
+      // 重订阅（hiddenRowCount 变化）或卸载时撤销待执行回收：定时器闭包按实时几何复判，
+      // 但窗口语义可能已变，留着只会在新语义下打出一次意外回收。
+      cancelPendingReclaim();
     };
-  }, [loadMoreOlder, scrollContainerRef, slice.hiddenRowCount, slice.windowActive]);
+  }, [
+    cancelPendingReclaim,
+    loadMoreOlder,
+    schedulePendingReclaim,
+    scrollContainerRef,
+    slice.hiddenRowCount,
+    slice.windowActive,
+  ]);
 
   const ensureMessageVisible = useCallback(
     (messageId: string | number): boolean => {
