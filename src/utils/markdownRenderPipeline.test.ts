@@ -55,6 +55,23 @@ describe("stabilizeStreamingMarkdown", () => {
     expect(html).not.toMatch(/\| 指标 \| 数量 \| 备注 \|/);
   });
 
+  test("does not append a separator to an already-formed table", () => {
+    // 表头 + 分隔行 + 数据行已成形时若再补占位行，remark-gfm 会把它当成
+    // 一行内容为 `---` 的数据行渲染进表格。
+    const input = "| 指标 | 数量 |\n| --- | --- |\n| PV | 12 |\n| UV | 8 |";
+    expect(stabilizeStreamingMarkdown(input)).toBe(input);
+
+    const html = parseMarkdownSourceToHtml(input, { streaming: true });
+    expect(html).toContain("<table");
+    expect(html).not.toContain("<td>---</td>");
+  });
+
+  test("does not append a separator once prose follows the table", () => {
+    // 尾部已是普通正文时，占位行只会变成裸显的 `| --- | --- |` 段落。
+    const input = "| 指标 | 数量 |\n| --- | --- |\n| PV | 12 |\n\n以上为统计结果。";
+    expect(stabilizeStreamingMarkdown(input)).toBe(input);
+  });
+
   test("does not touch fence-internal pipe lines", () => {
     // fence 内的 `| a |` 是普通字符，不应被识别成 pipe 表头而补占位。
     const input = "```bash\n| a | b |\necho ok";

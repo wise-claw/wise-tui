@@ -297,37 +297,20 @@ const ENHANCE_RECURSE_MAX_DEPTH = 4;
 
 /** 流式输出中补全未闭合围栏，避免 marked 把后续正文吞进 code block。 */
 function buildStreamingPipeTablePlaceholder(text: string): string | null {
-  // 扫到非围栏段末段若以单行 `| ... |` 结尾、且段内尚无分隔行或第二行数据，
-  // 说明流式只把表头吐出来就被节流了。补一行占位分隔行，让 remark-gfm 至少
-  // 把表头识别成表格（哪怕列宽暂时错位），避免整段回退成段落、`|` 原文裸显。
+  // 若正文正好以单行 `| ... |` 结尾，说明流式只把表头吐出来就被节流了。
+  // 补一行占位分隔行，让 remark-gfm 至少把表头识别成表格（哪怕列宽暂时错位），
+  // 避免整段回退成段落、`|` 原文裸显。
+  //
+  // 只看尾部连续块：占位行是追加到末尾的，对文本中间的表格无意义，
+  // 而误判会把 `| --- | --- |` 当成数据行渲染进已成形的表格里。
   const lines = text.split("\n");
-  if (lines.length === 0) return null;
-
-  let fenceOpen = false;
-  let lastBlock: { start: number; rows: string[] } | null = null;
-
-  for (let i = 0; i < lines.length; i += 1) {
-    const line = lines[i]!;
-    if (line.trimStart().startsWith("```")) {
-      fenceOpen = !fenceOpen;
-      lastBlock = null;
-      continue;
-    }
-    if (fenceOpen) continue;
-    if (PIPE_TABLE_ROW_RE.test(line)) {
-      lastBlock = lastBlock && lastBlock.start === i - 1
-        ? { start: lastBlock.start, rows: [...lastBlock.rows, line] }
-        : { start: i, rows: [line] };
-    } else if (line.trim() === "") {
-      // 允许空行分隔但要求连续 pipe 行
-    } else {
-      lastBlock = null;
-    }
+  const rows: string[] = [];
+  for (let i = lines.length - 1; i >= 0 && PIPE_TABLE_ROW_RE.test(lines[i]!); i -= 1) {
+    rows.unshift(lines[i]!);
   }
 
-  if (!lastBlock) return null;
-  if (lastBlock.rows.length >= 2) return null; // 已有 ≥2 行，remark-gfm 自行识别
-  const header = lastBlock.rows[0]!;
+  if (rows.length !== 1) return null; // 0 行无需补；≥2 行 remark-gfm 自行识别
+  const header = rows[0]!;
   if (PIPE_TABLE_SEPARATOR_RE.test(header.trim())) return null;
 
   const cells = header.trim().slice(1, -1).split("|").map((c) => c.trim());

@@ -17,12 +17,17 @@ import {
 /** 流式 Markdown 重建最短间隔：偏短以提升贴底展示流畅度；拥堵时仍由 defer 路径让步。 */
 const STREAMING_MIN_REBUILD_MS = 100;
 const STREAMING_MIN_REBUILD_CONGESTED_MS = 220;
+/** 超长正文放宽重建间隔，抵消每 tick 全量重解析的成本（替代此前的纯文本降级）。 */
+const STREAMING_MIN_REBUILD_LARGE_MS = 240;
+const STREAMING_LARGE_TEXT_CHARS = 6000;
 const STREAMING_SHORT_TEXT_FAST_PATH_LIMIT = 600;
-/** 流式长文降级阈值：跳过 prepareMarkdownForDisplay + ReactMarkdown，改纯文本。 */
-const STREAMING_PLAIN_DEGRADE_CHARS = 1800;
+/**
+ * 流式纯文本兜底阈值：仅在主线程已拥堵且正文极长时启用。
+ * 表格、代码围栏等重结构不再降级——降级期间用户看到的是裸源码（`| a | b |`、
+ * ``` 围栏、`###` 等），要等流式收尾才变成表格，观感即「先乱码、后正常」。
+ */
+const STREAMING_PLAIN_DEGRADE_CHARS = 20000;
 const MARKDOWN_STRUCTURE_HINT_RE = /[<|`#>*\-\|\uFF5C]|\]\(|!\[|^\s*\d+\.\s/m;
-/** 代码围栏 / 表格等重结构：流式期直接降级，避免每 tick 跑完整 pipeline。 */
-const STREAMING_HEAVY_STRUCTURE_RE = /```|\n\|.+\||^\|.+\|/m;
 
 function shouldBypassStreamingRebuildThrottle(text: string): boolean {
   if (findHtmlDocumentStartIndex(text) !== null) return true;
@@ -46,9 +51,19 @@ function streamingShortTextFastPath(text: string): boolean {
   return !MARKDOWN_STRUCTURE_HINT_RE.test(text);
 }
 
-function shouldDegradeStreamingToPlain(text: string): boolean {
-  if (text.length >= STREAMING_PLAIN_DEGRADE_CHARS) return true;
-  return STREAMING_HEAVY_STRUCTURE_RE.test(text);
+/**
+ * 流式期是否放弃 Markdown 结构、直出纯文本。
+ * 只在主线程已经拥堵、且正文长到重解析明显伤帧率时才成立。
+ */
+export function shouldDegradeStreamingToPlain(text: string, congested: boolean): boolean {
+  return congested && text.length >= STREAMING_PLAIN_DEGRADE_CHARS;
+}
+
+/** 流式重建节流间隔：拥堵优先让步，其次按正文规模放宽。 */
+export function resolveStreamingRebuildMinMs(textLength: number, congested: boolean): number {
+  if (congested) return STREAMING_MIN_REBUILD_CONGESTED_MS;
+  if (textLength >= STREAMING_LARGE_TEXT_CHARS) return STREAMING_MIN_REBUILD_LARGE_MS;
+  return STREAMING_MIN_REBUILD_MS;
 }
 
 function subscribeCongestionAlways(onStoreChange: () => void): () => void {
@@ -105,18 +120,20 @@ export function useMarkdownDisplaySource(text: string, streaming: boolean): Mark
 
     const prev = lastBuiltRef.current;
     const now = performance.now();
-    const rebuildMinMs = congested ? STREAMING_MIN_REBUILD_CONGESTED_MS : STREAMING_MIN_REBUILD_MS;
+    const rebuildMinMs = resolveStreamingRebuildMinMs(stabilizedText.length, congested);
+    const degradeToPlain = shouldDegradeStreamingToPlain(stabilizedText, congested);
     const withinThrottle =
       prev.text
       && stabilizedText.startsWith(prev.text)
       && prev.source
+      && prev.plain === degradeToPlain
       && now - prev.at < rebuildMinMs
       && !shouldBypassStreamingRebuildThrottle(stabilizedText);
     if (withinThrottle) {
       return { source: prev.source, plain: prev.plain };
     }
 
-    if (shouldDegradeStreamingToPlain(stabilizedText)) {
+    if (degradeToPlain) {
       const plainSource = normalizeInlineHtmlBreakTags(stabilizedText);
       lastBuiltRef.current = { text: stabilizedText, source: plainSource, plain: true, at: now };
       return { source: plainSource, plain: true };
