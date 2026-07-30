@@ -117,6 +117,14 @@ export async function scrollTerminalSession(
   });
 }
 
+/**
+ * 内置终端后端调色板跟随应用外观（浅色 Catppuccin Latte / 深色 Mocha）。
+ * 帧的颜色在后端序列化时解析，所以外观必须推给后端，前端 CSS 变量改不动 ANSI 色。
+ */
+export async function setTerminalTheme(dark: boolean): Promise<void> {
+  return invoke("terminal_set_theme", { dark });
+}
+
 export async function resizeTerminalSession(
   workspaceId: string,
   terminalId: string,

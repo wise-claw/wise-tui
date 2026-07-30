@@ -9,12 +9,34 @@ const FONT_FAMILY =
   '"JetBrainsMono Nerd Font Mono", "JetBrainsMono Nerd Font", "MesloLGS NF", "Hack Nerd Font Mono", "SF Mono", Menlo, Monaco, "Courier New", monospace';
 export const TERMINAL_FONT_SIZE = 13;
 export const TERMINAL_LINE_HEIGHT = 1.35;
-/** 与 CSS `--terminal-background` / Rust `theme_background` 对齐（Catppuccin Mocha）。 */
-export const TERMINAL_DEFAULT_BACKGROUND = "#1e1e2e";
-export const TERMINAL_DEFAULT_FOREGROUND = "#cdd6f4";
-export const TERMINAL_DEFAULT_CURSOR = "#f5e0dc";
-/** 与 CSS `--terminal-selection` 对齐。 */
-export const TERMINAL_DEFAULT_SELECTION = "rgba(137, 180, 250, 0.38)";
+
+/** Canvas 自绘需要的四个颜色；权威来源是 `TerminalPanel/index.css` 的 `--terminal-*`。 */
+export type TerminalPalette = {
+  background: string;
+  foreground: string;
+  cursor: string;
+  selection: string;
+};
+
+/** 深色兜底：与 CSS `:root[data-wise-theme="dark"]` / Rust `DARK_PALETTE` 对齐（Catppuccin Mocha）。 */
+export const TERMINAL_DARK_PALETTE: TerminalPalette = {
+  background: "#1e1e2e",
+  foreground: "#cdd6f4",
+  cursor: "#f5e0dc",
+  selection: "rgba(137, 180, 250, 0.35)",
+};
+
+/** 浅色兜底：与 CSS `.terminal-panel` / Rust `LIGHT_PALETTE` 对齐（Catppuccin Latte）。 */
+export const TERMINAL_LIGHT_PALETTE: TerminalPalette = {
+  background: "#eff1f5",
+  foreground: "#4c4f69",
+  cursor: "#dc8a78",
+  selection: "rgba(30, 102, 245, 0.22)",
+};
+
+export function terminalFallbackPalette(dark: boolean): TerminalPalette {
+  return dark ? TERMINAL_DARK_PALETTE : TERMINAL_LIGHT_PALETTE;
+}
 
 /**
  * 终端 canvas 最大 DPR。Retina 用 2 保持清晰；绘制过慢时由自适应降到 1，
@@ -188,10 +210,11 @@ function paintSelectionOverlay(
   frame: TerminalFrame,
   metrics: Pick<TerminalMetrics, "cellWidth" | "cellHeight">,
   selection: TerminalSelectionRange | null | undefined,
+  selectionColor: string,
 ): void {
   if (!selection || terminalSelectionIsEmpty(selection)) return;
   const norm = normalizeTerminalSelection(selection);
-  ctx.fillStyle = TERMINAL_DEFAULT_SELECTION;
+  ctx.fillStyle = selectionColor;
   for (let row = norm.start.row; row <= norm.end.row; row += 1) {
     if (row < 0 || row >= frame.rows) continue;
     const startCol = row === norm.start.row ? norm.start.col : 0;
@@ -219,34 +242,47 @@ export function renderTerminalFrame(
   canvas: HTMLCanvasElement,
   frame: TerminalFrame,
   metrics: Pick<TerminalMetrics, "cellWidth" | "cellHeight">,
-  background: string,
+  palette: TerminalPalette,
   selection?: TerminalSelectionRange | null,
 ): void {
   const dpr = terminalDevicePixelRatio();
   const width = Math.max(1, Math.floor(frame.cols * metrics.cellWidth));
   const height = Math.max(1, Math.floor(frame.rows * metrics.cellHeight));
-  const ctx = syncTerminalCanvasSize(canvas, width, height, dpr, background);
+  const ctx = syncTerminalCanvasSize(
+    canvas,
+    width,
+    height,
+    dpr,
+    palette.background,
+  );
   if (!ctx) return;
 
-  paintBackground(ctx, width, height, background);
+  paintBackground(ctx, width, height, palette.background);
   ctx.font = `${TERMINAL_FONT_SIZE}px ${FONT_FAMILY}`;
   ctx.textBaseline = "top";
 
+  // 宽字符（CJK）字形会越过自己的格子延伸到右半格，若背景与文字交错绘制，
+  // 右侧 run 的背景会把字形右半边擦掉。整行先铺完背景，再统一画文字。
   for (let row = 0; row < frame.lines.length; row += 1) {
     const runs = frame.lines[row] ?? [];
     let col = 0;
     for (const run of runs) {
-      paintRun(ctx, run, col, row, metrics, background);
+      paintRunBackground(ctx, run, col, row, metrics, palette);
+      col += run.text.length;
+    }
+    col = 0;
+    for (const run of runs) {
+      paintRunText(ctx, run, col, row, metrics, palette);
       col += run.text.length;
     }
   }
 
-  paintSelectionOverlay(ctx, frame, metrics, selection);
+  paintSelectionOverlay(ctx, frame, metrics, selection, palette.selection);
 
   if (frame.cursor.visible) {
     const x = frame.cursor.col * metrics.cellWidth;
     const y = frame.cursor.row * metrics.cellHeight;
-    ctx.fillStyle = TERMINAL_DEFAULT_CURSOR;
+    ctx.fillStyle = palette.cursor;
     ctx.fillRect(x, y, Math.max(1, metrics.cellWidth), metrics.cellHeight);
   }
 }
@@ -263,30 +299,44 @@ function normalizeHexColor(color: string): string {
   return trimmed;
 }
 
-function paintRun(
+function paintRunBackground(
   ctx: CanvasRenderingContext2D,
   run: TerminalCellRun,
   startCol: number,
   row: number,
   metrics: Pick<TerminalMetrics, "cellWidth" | "cellHeight">,
-  canvasBackground: string,
+  palette: TerminalPalette,
+): void {
+  const runBg = normalizeHexColor(run.bg || palette.background);
+  const canvasBg = normalizeHexColor(palette.background);
+  if (!runBg || runBg === canvasBg) return;
+  ctx.fillStyle = run.bg;
+  ctx.fillRect(
+    startCol * metrics.cellWidth,
+    row * metrics.cellHeight,
+    run.text.length * metrics.cellWidth,
+    metrics.cellHeight,
+  );
+}
+
+function paintRunText(
+  ctx: CanvasRenderingContext2D,
+  run: TerminalCellRun,
+  startCol: number,
+  row: number,
+  metrics: Pick<TerminalMetrics, "cellWidth" | "cellHeight">,
+  palette: TerminalPalette,
 ): void {
   const x = startCol * metrics.cellWidth;
   const y = row * metrics.cellHeight;
   const width = run.text.length * metrics.cellWidth;
-  const runBg = normalizeHexColor(run.bg || canvasBackground);
-  const canvasBg = normalizeHexColor(canvasBackground);
-  if (runBg && runBg !== canvasBg) {
-    ctx.fillStyle = run.bg;
-    ctx.fillRect(x, y, width, metrics.cellHeight);
-  }
   let font = `${TERMINAL_FONT_SIZE}px ${FONT_FAMILY}`;
   if (run.bold && run.italic) font = `bold italic ${font}`;
   else if (run.bold) font = `bold ${font}`;
   else if (run.italic) font = `italic ${font}`;
   ctx.font = font;
   ctx.globalAlpha = run.dim ? 0.7 : 1;
-  ctx.fillStyle = run.fg || TERMINAL_DEFAULT_FOREGROUND;
+  ctx.fillStyle = run.fg || palette.foreground;
   const textY = y + 1;
   if (terminalRunNeedsPerGlyphPaint(run.text)) {
     for (let i = 0; i < run.text.length; i += 1) {
@@ -297,7 +347,7 @@ function paintRun(
     ctx.fillText(run.text, x, textY);
   }
   if (run.underline || run.strike) {
-    ctx.strokeStyle = run.fg || TERMINAL_DEFAULT_FOREGROUND;
+    ctx.strokeStyle = run.fg || palette.foreground;
     ctx.beginPath();
     if (run.underline) {
       const uy = y + metrics.cellHeight - 2;
@@ -394,13 +444,32 @@ export function wheelDeltaToScrollLines(
   return -lines;
 }
 
-export function readTerminalBackground(container: HTMLElement): string {
+/**
+ * 从终端容器上读取 `--terminal-*`，让 Canvas 与 CSS 共用同一套外观定义。
+ * `dark` 只用于变量缺失时（测试环境、样式未加载）选兜底色。
+ */
+export function readTerminalPalette(
+  container: HTMLElement,
+  dark: boolean,
+): TerminalPalette {
+  const fallback = terminalFallbackPalette(dark);
   const style = getComputedStyle(container);
-  const fromVar = style.getPropertyValue("--terminal-background").trim();
-  if (fromVar) return fromVar;
-  const fromBg = style.backgroundColor?.trim();
-  if (fromBg && fromBg !== "rgba(0, 0, 0, 0)" && fromBg !== "transparent") {
-    return fromBg;
+  const readVar = (name: string): string =>
+    style.getPropertyValue(name).trim();
+
+  let background = readVar("--terminal-background");
+  if (!background) {
+    const fromBg = style.backgroundColor?.trim();
+    background =
+      fromBg && fromBg !== "rgba(0, 0, 0, 0)" && fromBg !== "transparent"
+        ? fromBg
+        : fallback.background;
   }
-  return TERMINAL_DEFAULT_BACKGROUND;
+
+  return {
+    background,
+    foreground: readVar("--terminal-foreground") || fallback.foreground,
+    cursor: readVar("--terminal-cursor") || fallback.cursor,
+    selection: readVar("--terminal-selection") || fallback.selection,
+  };
 }

@@ -16,7 +16,7 @@ use alacritty_terminal::term::{Config as TermConfig, Term};
 use alacritty_terminal::vte::ansi;
 
 use super::{claude_path_search_prefixes, merge_path_env};
-use frame::{default_indexed_rgb, serialize_frame, TerminalFrameDto};
+use frame::{default_indexed_rgb, serialize_frame, set_palette_is_dark, TerminalFrameDto};
 
 /// PTY reader 线程上限：触发 emit 的字节阈值（保留每次 emit 较小，防止单条 IPC payload 巨大）。
 const TERMINAL_EMIT_FLUSH_BYTES: usize = 16 * 1024;
@@ -840,6 +840,24 @@ impl TerminalManager {
         self.sessions.get(&key).map(|session| session.info.clone())
     }
 
+    /// 调色板变化后重新序列化全部会话：颜色是在序列化时解析的，
+    /// 不重发帧的话已经打印出来的历史内容会停在旧外观。
+    fn broadcast_frames(&self, app: &tauri::AppHandle) {
+        for session in self.sessions.values() {
+            let Ok(emu) = session.emulator.lock() else {
+                continue;
+            };
+            let _ = app.emit(
+                "terminal-frame",
+                serde_json::json!({
+                    "workspaceId": session.info.workspace_id,
+                    "terminalId": session.info.terminal_id,
+                    "frame": emu.frame(),
+                }),
+            );
+        }
+    }
+
     fn update_title(
         &mut self,
         workspace_id: &str,
@@ -1146,6 +1164,24 @@ pub(crate) fn terminal_resize(
         .lock()
         .map_err(|e| e.to_string())?
         .resize(&workspace_id, &terminal_id, cols, rows)
+}
+
+/// 内置终端外观跟随应用（浅色 Latte / 深色 Mocha）。
+/// 前端在启动与系统偏好变化时推送，后端据此解析默认色与 ANSI 调色板。
+#[tauri::command]
+pub(crate) fn terminal_set_theme(
+    manager: tauri::State<std::sync::Mutex<TerminalManager>>,
+    app: tauri::AppHandle,
+    dark: bool,
+) -> Result<(), String> {
+    if !set_palette_is_dark(dark) {
+        return Ok(());
+    }
+    manager
+        .lock()
+        .map_err(|e| e.to_string())?
+        .broadcast_frames(&app);
+    Ok(())
 }
 
 #[tauri::command]

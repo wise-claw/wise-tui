@@ -19,12 +19,13 @@ import {
   encodeTerminalKey,
   measureTerminalMetrics,
   noteTerminalPaintDuration,
-  readTerminalBackground,
+  readTerminalPalette,
   renderTerminalFrame,
   resetTerminalPaintQuality,
   TERMINAL_FONT_SIZE,
   wheelDeltaToScrollLines,
 } from "../utils/alacrittyTerminalCanvas";
+import { getAppThemeState, subscribeAppTheme } from "../stores/appThemeStore";
 import {
   shouldDeferTerminalKeyToInput,
   shouldIgnoreTerminalKeyDuringIme,
@@ -34,8 +35,6 @@ import {
 import { shouldIgnoreTerminalError } from "../utils/terminalErrors";
 import {
   expandTerminalSelectionToAll,
-  expandTerminalSelectionToLine,
-  expandTerminalSelectionToWord,
   extractTerminalSelectionText,
   terminalPointFromOffset,
   terminalSelectionIsEmpty,
@@ -73,6 +72,8 @@ interface UseTerminalSessionOptions {
 const TERMINAL_DIM_MIN = 1;
 const TERMINAL_DIM_MAX = 1024;
 const TERMINAL_RESIZE_DEBOUNCE_MS = 100;
+/** 按住左键后要移动这么多像素才认定是拖选，避免单击时的手抖被当成选中。 */
+const TERMINAL_DRAG_START_THRESHOLD_PX = 4;
 const MAX_CONTAINER_WAIT_FRAMES = 120;
 
 const clampTerminalDim = (n: number) => {
@@ -211,16 +212,18 @@ export function useTerminalSession({
       let selectionRange: TerminalSelectionRange | null = null;
       let selecting = false;
       let selectionAnchor: { col: number; row: number } | null = null;
+      let selectionAnchorClient: { x: number; y: number } | null = null;
       let selectionDragged = false;
-      let lastClickAt = 0;
-      let clickCount = 0;
       let resizeDebounceTimer: number | null = null;
       let paintRaf = 0;
 
       const metricsRef = {
         current: measureTerminalMetrics(container, TERMINAL_FONT_SIZE),
       };
-      let cachedBackground = readTerminalBackground(container);
+      let cachedPalette = readTerminalPalette(
+        container,
+        getAppThemeState().dark,
+      );
 
       const persistSnapshot = (frame: TerminalFrame | null) => {
         onSurfaceSnapshotRef.current?.({
@@ -244,7 +247,7 @@ export function useTerminalSession({
             liveCanvas,
             latestFrame,
             metricsRef.current,
-            cachedBackground,
+            cachedPalette,
             selectionRange,
           );
           if (startedAt > 0) {
@@ -334,7 +337,10 @@ export function useTerminalSession({
           liveContainer,
           TERMINAL_FONT_SIZE,
         );
-        cachedBackground = readTerminalBackground(liveContainer);
+        cachedPalette = readTerminalPalette(
+          liveContainer,
+          getAppThemeState().dark,
+        );
         const cols = clampTerminalDim(
           initialSizeRef.current?.cols ?? metricsRef.current.cols,
         );
@@ -530,41 +536,43 @@ export function useTerminalSession({
           }
         };
 
+        const endSelectionDrag = (pointerId: number | null) => {
+          if (!selecting) return;
+          selecting = false;
+          selectionAnchor = null;
+          selectionAnchorClient = null;
+          if (pointerId !== null) {
+            try {
+              if (input.hasPointerCapture(pointerId)) {
+                input.releasePointerCapture(pointerId);
+              }
+            } catch {
+              // ignore
+            }
+          }
+          // 未越过拖选阈值：按下时已清过选区，这里兜底保证不留高亮。
+          if (!selectionDragged) {
+            clearSelection();
+          } else {
+            // 拖选结束：有有效选区则立即复制。
+            copySelectionAfterSelect();
+          }
+          selectionDragged = false;
+        };
+
         const onPointerDown = (event: PointerEvent) => {
           if (event.button !== 0) return;
           focusInput();
           const point = pointFromClient(event.clientX, event.clientY);
           if (!point || !latestFrame) return;
 
-          const now = Date.now();
-          if (now - lastClickAt <= 400) {
-            clickCount += 1;
-          } else {
-            clickCount = 1;
-          }
-          lastClickAt = now;
-
-          if (clickCount >= 3) {
-            setSelection(expandTerminalSelectionToLine(latestFrame, point));
-            selecting = false;
-            selectionAnchor = null;
-            copySelectionAfterSelect();
-            event.preventDefault();
-            return;
-          }
-          if (clickCount === 2) {
-            setSelection(expandTerminalSelectionToWord(latestFrame, point));
-            selecting = false;
-            selectionAnchor = null;
-            copySelectionAfterSelect();
-            event.preventDefault();
-            return;
-          }
-
+          // 只记锚点，先不建选区：选中必须靠按住左键拖出来，
+          // 单纯按一下（哪怕手抖几像素）只清掉旧选区并聚焦。
           selecting = true;
           selectionDragged = false;
           selectionAnchor = point;
-          setSelection({ start: point, end: point });
+          selectionAnchorClient = { x: event.clientX, y: event.clientY };
+          clearSelection();
           try {
             input.setPointerCapture(event.pointerId);
           } catch {
@@ -575,12 +583,28 @@ export function useTerminalSession({
 
         const onPointerMove = (event: PointerEvent) => {
           if (!selecting || !selectionAnchor) return;
+          // 左键已经不在按下状态：只要没按住就绝不扩选，
+          // 同时收尾掉那次丢失 pointerup 的拖选。
+          if ((event.buttons & 1) === 0) {
+            endSelectionDrag(event.pointerId);
+            return;
+          }
           const point = pointFromClient(event.clientX, event.clientY);
           if (!point) return;
-          if (
-            point.col !== selectionAnchor.col ||
-            point.row !== selectionAnchor.row
-          ) {
+          if (!selectionDragged) {
+            // 越过像素阈值且真的换了格子才开始选：前者滤手抖，
+            // 后者保证选区至少有一格内容，不会在格边界上一碰就选中。
+            const anchorClient = selectionAnchorClient;
+            const movedFarEnough =
+              anchorClient === null ||
+              Math.abs(event.clientX - anchorClient.x) >=
+                TERMINAL_DRAG_START_THRESHOLD_PX ||
+              Math.abs(event.clientY - anchorClient.y) >=
+                TERMINAL_DRAG_START_THRESHOLD_PX;
+            const leftAnchorCell =
+              point.col !== selectionAnchor.col ||
+              point.row !== selectionAnchor.row;
+            if (!movedFarEnough || !leftAnchorCell) return;
             selectionDragged = true;
           }
           setSelection({ start: selectionAnchor, end: point });
@@ -588,24 +612,13 @@ export function useTerminalSession({
         };
 
         const onPointerUp = (event: PointerEvent) => {
-          if (!selecting) return;
-          selecting = false;
-          selectionAnchor = null;
-          try {
-            if (input.hasPointerCapture(event.pointerId)) {
-              input.releasePointerCapture(event.pointerId);
-            }
-          } catch {
-            // ignore
-          }
-          // 单击未拖拽：清空选区，避免残留单格高亮挡住继续输入。
-          if (!selectionDragged) {
-            clearSelection();
-          } else {
-            // 拖选结束：有有效选区则立即复制。
-            copySelectionAfterSelect();
-          }
-          selectionDragged = false;
+          endSelectionDrag(event.pointerId);
+        };
+
+        // 在终端之外松开左键时，input 收不到 pointerup。缺这层兜底，
+        // selecting 会一直停在 true，之后光标一动就继续扩选。
+        const onWindowPointerUp = () => {
+          endSelectionDrag(null);
         };
 
         const onCopy = (event: ClipboardEvent) => {
@@ -628,6 +641,9 @@ export function useTerminalSession({
         input.addEventListener("pointercancel", onPointerUp);
         input.addEventListener("copy", onCopy);
         input.addEventListener("wheel", onWheel, { passive: false });
+        window.addEventListener("pointerup", onWindowPointerUp);
+        window.addEventListener("pointercancel", onWindowPointerUp);
+        window.addEventListener("blur", onWindowPointerUp);
 
         // 内存压力下 WebView 可能回收 canvas backing store；回到前台时强制重绘。
         const onVisibilityOrPageShow = () => {
@@ -638,6 +654,20 @@ export function useTerminalSession({
         document.addEventListener("visibilitychange", onVisibilityOrPageShow);
         window.addEventListener("pageshow", onVisibilityOrPageShow);
         window.addEventListener("focus", onVisibilityOrPageShow);
+
+        // 外观切换：store 已同步写好 `<html data-wise-theme>`，此时读到的就是新变量。
+        // 后端调色板由 startTerminalThemeSync 单独推送并重发帧。
+        let paintedDark = getAppThemeState().dark;
+        const themeUnsub = subscribeAppTheme(() => {
+          // 显式浅/深模式下系统偏好变化也会通知订阅者，但呈现没变，无需重绘。
+          const { dark } = getAppThemeState();
+          if (dark === paintedDark) return;
+          paintedDark = dark;
+          const liveContainer = containerRef.current;
+          if (!liveContainer) return;
+          cachedPalette = readTerminalPalette(liveContainer, dark);
+          schedulePaint();
+        });
 
         const resizeObserver = new ResizeObserver(() => {
           if (resizeDebounceTimer !== null) {
@@ -656,7 +686,10 @@ export function useTerminalSession({
               liveContainer,
               TERMINAL_FONT_SIZE,
             );
-            cachedBackground = readTerminalBackground(liveContainer);
+            cachedPalette = readTerminalPalette(
+              liveContainer,
+              getAppThemeState().dark,
+            );
             const cols = clampTerminalDim(metricsRef.current.cols);
             const rows = clampTerminalDim(metricsRef.current.rows);
             void resizeTerminalSession(
@@ -756,6 +789,7 @@ export function useTerminalSession({
             cancelAnimationFrame(scrollRaf);
           }
           resizeObserver.disconnect();
+          themeUnsub();
           document.removeEventListener("visibilitychange", onVisibilityOrPageShow);
           window.removeEventListener("pageshow", onVisibilityOrPageShow);
           window.removeEventListener("focus", onVisibilityOrPageShow);
@@ -771,6 +805,9 @@ export function useTerminalSession({
           input.removeEventListener("pointercancel", onPointerUp);
           input.removeEventListener("copy", onCopy);
           input.removeEventListener("wheel", onWheel);
+          window.removeEventListener("pointerup", onWindowPointerUp);
+          window.removeEventListener("pointercancel", onWindowPointerUp);
+          window.removeEventListener("blur", onWindowPointerUp);
           frameUnsub();
           exitUnsub();
           persistSnapshot(latestFrame);

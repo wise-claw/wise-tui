@@ -547,6 +547,7 @@ pub fn run() {
             claude_commands::terminal::terminal_write,
             claude_commands::terminal::terminal_scroll,
             claude_commands::terminal::terminal_resize,
+            claude_commands::terminal::terminal_set_theme,
             claude_commands::terminal::terminal_close,
             claude_llm_proxy::list_claude_llm_proxy_records,
             claude_llm_proxy::clear_claude_llm_proxy_records,

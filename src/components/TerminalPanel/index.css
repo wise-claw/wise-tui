@@ -200,6 +200,10 @@
   gap: 4px;
 }
 
+/*
+ * 快捷命令浮层由 AntD Popover 渲染到 body，拿不到 `.terminal-panel` 上的
+ * `--terminal-*`，因此走 AntD 语义色以跟随浅/深外观。
+ */
 .terminal-quick-commands__header {
   display: flex;
   align-items: center;
@@ -208,7 +212,7 @@
   font-size: 12px;
   font-weight: 600;
   line-height: 1.2;
-  color: rgba(0, 0, 0, 0.78);
+  color: var(--ant-color-text);
 }
 
 .terminal-quick-commands__body {
@@ -260,7 +264,7 @@
 }
 
 .terminal-quick-commands__row-main:hover:not(:disabled) {
-  background: rgba(0, 0, 0, 0.04);
+  background: var(--wise-row-hover-bg);
 }
 
 .terminal-quick-commands__row-main:disabled {
@@ -273,7 +277,7 @@
   max-width: 42%;
   font-size: 12px;
   font-weight: 500;
-  color: rgba(0, 0, 0, 0.88);
+  color: var(--ant-color-text);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -283,7 +287,7 @@
   flex: 1;
   min-width: 0;
   font-size: 11px;
-  color: rgba(0, 0, 0, 0.45);
+  color: var(--ant-color-text-tertiary);
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;

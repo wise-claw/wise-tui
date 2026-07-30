@@ -7,6 +7,7 @@ import { ensureTauriEventUnlistenPatched } from "./utils/safeTauriUnlisten";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { ensureMainThreadCongestionProbe } from "./stores/mainThreadCongestionStore";
 import { bootstrapAppTheme, startSystemThemeWatch } from "./stores/appThemeStore";
+import { startTerminalThemeSync } from "./services/terminalThemeSync";
 import { prefetchModule } from "./utils/prefetchModule";
 
 // 拦截全局异步 Promise Rejection 与未捕获异常，防止桌面应用硬崩溃或死锁
@@ -28,6 +29,8 @@ ensureMainThreadCongestionProbe();
 // 在 React 挂载前把外观刷到 <html>，避免深色偏好下首帧闪白。
 bootstrapAppTheme();
 startSystemThemeWatch();
+// 内置终端后端调色板同样跟随外观（帧颜色在 Rust 侧解析，改 CSS 变量改不到 ANSI 色）。
+startTerminalThemeSync();
 
 /** 与 App / AppImpl 解析并行预拉工作区首屏 chunk，缩短壳体出现后的等待。 */
 prefetchModule(() => import("./components/AppWorkspaceLayout.lazy"), "AppWorkspaceLayout.lazy");

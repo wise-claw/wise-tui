@@ -3,10 +3,10 @@ import {
   encodeTerminalKey,
   noteTerminalPaintDuration,
   resetTerminalPaintQuality,
-  TERMINAL_DEFAULT_BACKGROUND,
-  TERMINAL_DEFAULT_CURSOR,
-  TERMINAL_DEFAULT_FOREGROUND,
+  TERMINAL_DARK_PALETTE,
+  TERMINAL_LIGHT_PALETTE,
   terminalDevicePixelRatio,
+  terminalFallbackPalette,
   terminalRunNeedsPerGlyphPaint,
   wheelDeltaToScrollLines,
 } from "./alacrittyTerminalCanvas";
@@ -90,11 +90,22 @@ describe("encodeTerminalKey", () => {
   });
 });
 
-describe("terminal theme constants", () => {
-  test("matches Catppuccin Mocha hex used by Rust palette", () => {
-    expect(TERMINAL_DEFAULT_BACKGROUND).toBe("#1e1e2e");
-    expect(TERMINAL_DEFAULT_FOREGROUND).toBe("#cdd6f4");
-    expect(TERMINAL_DEFAULT_CURSOR).toBe("#f5e0dc");
+describe("terminal palette fallbacks", () => {
+  test("dark matches Catppuccin Mocha hex used by Rust palette", () => {
+    expect(TERMINAL_DARK_PALETTE.background).toBe("#1e1e2e");
+    expect(TERMINAL_DARK_PALETTE.foreground).toBe("#cdd6f4");
+    expect(TERMINAL_DARK_PALETTE.cursor).toBe("#f5e0dc");
+  });
+
+  test("light matches Catppuccin Latte hex used by Rust palette", () => {
+    expect(TERMINAL_LIGHT_PALETTE.background).toBe("#eff1f5");
+    expect(TERMINAL_LIGHT_PALETTE.foreground).toBe("#4c4f69");
+    expect(TERMINAL_LIGHT_PALETTE.cursor).toBe("#dc8a78");
+  });
+
+  test("terminalFallbackPalette follows the resolved appearance", () => {
+    expect(terminalFallbackPalette(true)).toBe(TERMINAL_DARK_PALETTE);
+    expect(terminalFallbackPalette(false)).toBe(TERMINAL_LIGHT_PALETTE);
   });
 });
 
