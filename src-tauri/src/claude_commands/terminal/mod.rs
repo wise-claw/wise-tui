@@ -33,6 +33,9 @@ const TERMINAL_DIM_MIN: u16 = 1;
 const TERMINAL_DIM_MAX: u16 = 1024;
 /// 写入端遇到 Interrupted/WouldBlock 时的最大重试次数。
 const TERMINAL_WRITE_RETRIES: u32 = 5;
+/// 终端事件只推给主窗口。`emit` 是广播：mascot 是另一个 WebView，
+/// 它不渲染终端，却要为每帧整屏 JSON 付出反序列化和 GC 的代价。
+const TERMINAL_EVENT_WINDOW: &str = "main";
 
 #[derive(Clone, Serialize)]
 #[serde(rename_all = "camelCase")]
@@ -236,7 +239,10 @@ impl EmulatorState {
     fn new(cols: u16, rows: u16, proxy: EventProxy) -> Self {
         let size = TermSize::new(cols as usize, rows as usize);
         let config = TermConfig {
-            scrolling_history: 10_000,
+            // 回滚历史是长会话里最大的一笔常驻内存：它随输出增长直到上限，
+            // 满载时单个会话可达数十 MB，多标签下足以在 8GB 机器上触发 OOM。
+            // 2000 行≈40 屏，够日常回看，内存约为 10000 行时的 1/5。
+            scrolling_history: 2_000,
             ..TermConfig::default()
         };
         let term = Term::new(config, &size, proxy);
@@ -395,14 +401,24 @@ impl TerminalManager {
             let mut pending = String::new();
             let mut last_flush = Instant::now();
             let mut dirty = false;
+            let mut last_fingerprint: Option<u64> = None;
             let mut exit_reason: Option<String> = None;
 
-            let emit_frame = |emulator: &Arc<Mutex<EmulatorState>>| {
+            let emit_frame = |emulator: &Arc<Mutex<EmulatorState>>,
+                              last_fingerprint: &mut Option<u64>| {
                 let frame = match emulator.lock() {
                     Ok(emu) => emu.frame(),
                     Err(_) => return,
                 };
-                let _ = app.emit(
+                // 画面没变就别推：整屏 JSON 的序列化和前端反序列化是长会话里
+                // 最持续的一笔开销，而 shell 输出字节不等于可视网格有变化。
+                let fingerprint = frame.fingerprint();
+                if *last_fingerprint == Some(fingerprint) {
+                    return;
+                }
+                *last_fingerprint = Some(fingerprint);
+                let _ = app.emit_to(
+                    TERMINAL_EVENT_WINDOW,
                     "terminal-frame",
                     serde_json::json!({
                         "workspaceId": workspace_id,
@@ -415,7 +431,8 @@ impl TerminalManager {
             let flush_pending = |pending: &mut String,
                                  last_flush: &mut Instant,
                                  dirty: &mut bool,
-                                 emulator: &Arc<Mutex<EmulatorState>>| {
+                                 emulator: &Arc<Mutex<EmulatorState>>,
+                                 last_fingerprint: &mut Option<u64>| {
                 if pending.is_empty() && !*dirty {
                     return;
                 }
@@ -426,7 +443,8 @@ impl TerminalManager {
                             guard.append_output_for_key(&session_key, chunk);
                         }
                     }
-                    let _ = app.emit(
+                    let _ = app.emit_to(
+                        TERMINAL_EVENT_WINDOW,
                         "terminal-output",
                         serde_json::json!({
                             "workspaceId": workspace_id,
@@ -437,7 +455,7 @@ impl TerminalManager {
                     pending.clear();
                 }
                 if *dirty {
-                    emit_frame(emulator);
+                    emit_frame(emulator, last_fingerprint);
                     *dirty = false;
                 }
                 *last_flush = Instant::now();
@@ -460,7 +478,13 @@ impl TerminalManager {
                             last_flush.elapsed(),
                             false,
                         ) {
-                            flush_pending(&mut pending, &mut last_flush, &mut dirty, &emulator);
+                            flush_pending(
+                                &mut pending,
+                                &mut last_flush,
+                                &mut dirty,
+                                &emulator,
+                                &mut last_fingerprint,
+                            );
                         }
                     }
                     Ok(PtyReaderEvent::Error(message)) => {
@@ -475,7 +499,13 @@ impl TerminalManager {
                             last_flush.elapsed(),
                             true,
                         ) {
-                            flush_pending(&mut pending, &mut last_flush, &mut dirty, &emulator);
+                            flush_pending(
+                                &mut pending,
+                                &mut last_flush,
+                                &mut dirty,
+                                &emulator,
+                                &mut last_fingerprint,
+                            );
                         }
                     }
                     Err(RecvTimeoutError::Disconnected) => break,
@@ -484,7 +514,13 @@ impl TerminalManager {
             if !carry.is_empty() {
                 pending.push_str(&String::from_utf8_lossy(&carry));
             }
-            flush_pending(&mut pending, &mut last_flush, &mut dirty, &emulator);
+            flush_pending(
+                &mut pending,
+                &mut last_flush,
+                &mut dirty,
+                &emulator,
+                &mut last_fingerprint,
+            );
 
             let exit_code = child
                 .wait()
@@ -492,7 +528,8 @@ impl TerminalManager {
                 .map(|status| status.exit_code())
                 .unwrap_or(0);
 
-            let _ = app.emit(
+            let _ = app.emit_to(
+                TERMINAL_EVENT_WINDOW,
                 "terminal-exit",
                 serde_json::json!({
                     "workspaceId": workspace_id,
@@ -632,7 +669,8 @@ impl TerminalManager {
             pid: 0,
         };
 
-        let _ = app.emit(
+        let _ = app.emit_to(
+            TERMINAL_EVENT_WINDOW,
             "terminal-created",
             serde_json::json!({
                 "workspaceId": workspace_id,
@@ -749,7 +787,8 @@ impl TerminalManager {
             pid,
         };
 
-        let _ = app.emit(
+        let _ = app.emit_to(
+            TERMINAL_EVENT_WINDOW,
             "terminal-created",
             serde_json::json!({
                 "workspaceId": workspace_id,
@@ -847,7 +886,8 @@ impl TerminalManager {
             let Ok(emu) = session.emulator.lock() else {
                 continue;
             };
-            let _ = app.emit(
+            let _ = app.emit_to(
+                TERMINAL_EVENT_WINDOW,
                 "terminal-frame",
                 serde_json::json!({
                     "workspaceId": session.info.workspace_id,
@@ -906,7 +946,8 @@ impl TerminalManager {
         if snapped_to_bottom {
             if let Ok(emu) = session.emulator.lock() {
                 let frame = emu.frame();
-                let _ = app.emit(
+                let _ = app.emit_to(
+                    TERMINAL_EVENT_WINDOW,
                     "terminal-frame",
                     serde_json::json!({
                         "workspaceId": workspace_id,
@@ -970,7 +1011,8 @@ impl TerminalManager {
             }
             emu.frame()
         };
-        let _ = app.emit(
+        let _ = app.emit_to(
+            TERMINAL_EVENT_WINDOW,
             "terminal-frame",
             serde_json::json!({
                 "workspaceId": workspace_id,

@@ -2,6 +2,7 @@ import { describe, expect, test } from "bun:test";
 import {
   encodeTerminalKey,
   noteTerminalPaintDuration,
+  releaseTerminalCanvas,
   resetTerminalPaintQuality,
   TERMINAL_DARK_PALETTE,
   TERMINAL_LIGHT_PALETTE,
@@ -20,6 +21,27 @@ function keyEvent(partial: Partial<KeyboardEvent> & { key: string }): KeyboardEv
     isComposing: partial.isComposing ?? false,
   } as KeyboardEvent;
 }
+
+describe("releaseTerminalCanvas", () => {
+  test("shrinks backing store and drops inline size on collapse", () => {
+    const removed: string[] = [];
+    const canvas = {
+      width: 2400,
+      height: 1600,
+      style: {
+        removeProperty: (name: string) => {
+          removed.push(name);
+        },
+      },
+    } as unknown as HTMLCanvasElement;
+
+    releaseTerminalCanvas(canvas);
+
+    expect(canvas.width).toBe(1);
+    expect(canvas.height).toBe(1);
+    expect(removed).toEqual(["width", "height"]);
+  });
+});
 
 describe("terminalDevicePixelRatio", () => {
   test("allows retina dpr up to 2 for sharpness", () => {

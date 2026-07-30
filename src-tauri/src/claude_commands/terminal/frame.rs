@@ -10,7 +10,7 @@ use serde::Serialize;
 use std::sync::atomic::{AtomicBool, Ordering};
 
 /// One styled run within a screen row (adjacent cells with identical attrs coalesced).
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Hash, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct TerminalCellRun {
     pub text: String,
@@ -30,7 +30,7 @@ pub(crate) struct TerminalCellRun {
     pub strike: bool,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Hash, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct TerminalCursorDto {
     pub col: u16,
@@ -38,13 +38,26 @@ pub(crate) struct TerminalCursorDto {
     pub visible: bool,
 }
 
-#[derive(Clone, Debug, Serialize)]
+#[derive(Clone, Debug, Hash, Serialize)]
 #[serde(rename_all = "camelCase")]
 pub(crate) struct TerminalFrameDto {
     pub cols: u16,
     pub rows: u16,
     pub cursor: TerminalCursorDto,
     pub lines: Vec<Vec<TerminalCellRun>>,
+}
+
+impl TerminalFrameDto {
+    /// 可视网格的指纹。PTY 经常在画面不变的情况下吐字节（光标查询、
+    /// 重绘同样的内容），据此跳过整屏 JSON 的推送。
+    pub(crate) fn fingerprint(&self) -> u64 {
+        use std::collections::hash_map::DefaultHasher;
+        use std::hash::{Hash, Hasher};
+
+        let mut hasher = DefaultHasher::new();
+        self.hash(&mut hasher);
+        hasher.finish()
+    }
 }
 
 #[derive(Clone, Copy)]

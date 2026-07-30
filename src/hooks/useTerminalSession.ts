@@ -20,6 +20,7 @@ import {
   measureTerminalMetrics,
   noteTerminalPaintDuration,
   readTerminalPalette,
+  releaseTerminalCanvas,
   renderTerminalFrame,
   resetTerminalPaintQuality,
   TERMINAL_FONT_SIZE,
@@ -179,6 +180,15 @@ export function useTerminalSession({
     if (focusRequestVersion <= 0) return;
     focusInput();
   }, [focusRequestVersion, focusInput]);
+
+  // 面板折叠时会话仍要留在 DOM 里维持 PTY，但整屏画布是实打实的常驻内存。
+  // 隐藏期间先释放，重新可见时由首帧绘制按新尺寸重建。
+  useEffect(() => {
+    if (isVisible) return;
+    const canvas = canvasRef.current;
+    if (!canvas) return;
+    releaseTerminalCanvas(canvas);
+  }, [isVisible]);
 
   useEffect(() => {
     if (!workspaceId || !activeTerminalId || !cwd || !isVisible) {

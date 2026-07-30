@@ -173,6 +173,28 @@ export function syncTerminalCanvasSize(
   return state.ctx;
 }
 
+/**
+ * 释放画布的 backing store。面板折叠后 canvas 仍留在 DOM 上（PTY 要继续活着），
+ * 但一块全屏画布在 Retina 下是几十 MB 的常驻占用，多标签会叠加。
+ * 恢复可见时由 `syncTerminalCanvasSize` 按新尺寸重新分配。
+ */
+export function releaseTerminalCanvas(canvas: HTMLCanvasElement): void {
+  try {
+    canvas.width = 1;
+    canvas.height = 1;
+  } catch {
+    return;
+  }
+  canvas.style?.removeProperty("width");
+  canvas.style?.removeProperty("height");
+  const state = canvasStates.get(canvas);
+  if (state) {
+    state.cssWidth = 0;
+    state.cssHeight = 0;
+    state.dpr = 0;
+  }
+}
+
 export function measureTerminalMetrics(
   container: HTMLElement,
   fontSize = TERMINAL_FONT_SIZE,
