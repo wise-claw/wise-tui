@@ -263,13 +263,6 @@ impl EmulatorState {
         }
     }
 
-    fn advance(&mut self, bytes: &[u8]) {
-        if bytes.is_empty() {
-            return;
-        }
-        self.parser.advance(&mut self.term, bytes);
-    }
-
     /// VT 解析吃的是 PTY 原始字节；alacritty 在异常序列上可能 panic。
     /// 捕获后让会话优雅退出，而不是在 `panic=abort`/未捕获时拖垮整进程。
     fn try_advance(&mut self, bytes: &[u8]) -> Result<(), String> {
@@ -1484,7 +1477,7 @@ mod tests {
             for i in 0..40 {
                 payload.push_str(&format!("line-{i}\r\n"));
             }
-            emu.advance(payload.as_bytes());
+            emu.try_advance(payload.as_bytes()).expect("advance");
             assert_eq!(emu.display_offset(), 0);
             emu.scroll_display(Scroll::Delta(5));
             assert_eq!(emu.display_offset(), 5);
